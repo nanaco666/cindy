@@ -926,7 +926,7 @@ SECTION 2: npm packages (595 packages)
 - yaml@2.9.0 — ISC — https://github.com/eemeli/yaml
 - yargs@17.7.3 — MIT — https://github.com/yargs/yargs
 - yargs-parser@21.1.1 — ISC — https://github.com/yargs/yargs-parser
-- zod@3.25.76 — MIT — https://github.com/colinhacks/zod
+- zod@4.3.6 — MIT — https://github.com/colinhacks/zod
 
 ==============================================================================
 SECTION 3: Package license texts
@@ -9339,7 +9339,7 @@ WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION,
 ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ------------------------------------------------------------------------------
-[249] Applies to: npm:zod@3.25.76
+[249] Applies to: npm:zod@4.3.6
 ------------------------------------------------------------------------------
 MIT License
 

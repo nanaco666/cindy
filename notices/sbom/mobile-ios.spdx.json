@@ -3,9 +3,9 @@
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
   "name": "xdt-maker-mobile-ios",
-  "documentNamespace": "https://xdmaker.com/spdx/mobile-ios/0218b6c49275c7c2485495be9a4644170cf50b00cdb3cd5d9000b6ee123e9f4b",
+  "documentNamespace": "https://xdmaker.com/spdx/mobile-ios/259d580b178054c40a260a03587b4b15c42585891a55f2b55e260288a80b7440",
   "creationInfo": {
-    "created": "1970-01-01T00:00:00Z",
+    "created": "2026-07-16T07:14:09Z",
     "creators": [
       "Tool: scripts/generate-third-party-notices.mjs"
     ]
@@ -10141,8 +10141,8 @@
     },
     {
       "name": "zod",
-      "SPDXID": "SPDXRef-Package-3eb99723ac833b71",
-      "versionInfo": "3.25.76",
+      "SPDXID": "SPDXRef-Package-db999faf406e0717",
+      "versionInfo": "4.3.6",
       "downloadLocation": "https://github.com/colinhacks/zod",
       "filesAnalyzed": false,
       "licenseConcluded": "MIT",
@@ -10152,7 +10152,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/zod@3.25.76"
+          "referenceLocator": "pkg:npm/zod@4.3.6"
         }
       ]
     }
@@ -13146,7 +13146,7 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-3eb99723ac833b71"
+      "relatedSpdxElement": "SPDXRef-Package-db999faf406e0717"
     }
   ]
 }

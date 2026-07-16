@@ -586,6 +586,33 @@ function buildDesktopCommonEntries(apacheText, sharpPackageName) {
     /* vendored 目录被移除时自动跳过 */
   }
 
+  // drawio viewer — vendored 进仓库的 .drawio 文件预览脚本(renderer 资源随包分发)
+  try {
+    const drawioDir = path.join(DESKTOP_DIR, "src", "renderer", "vendor", "drawio");
+    const drawioLicense = normalizeNoticeText(
+      fs.readFileSync(path.join(drawioDir, "LICENSE"), "utf8"),
+    );
+    const drawioVersion =
+      /VERSION:"([\d.]+)"/.exec(
+        fs.readFileSync(path.join(drawioDir, "viewer-static.min.js"), "utf8"),
+      )?.[1] || "vendored";
+    entries.push(
+      bundledComponent({
+        name: "drawio viewer (vendored)",
+        version: drawioVersion,
+        license: "Apache-2.0",
+        url: "https://github.com/jgraph/drawio",
+        licenseText:
+          drawioLicense +
+          "\n\nOnly the viewer JavaScript (viewer-static.min.js) is redistributed. " +
+          "Upstream icon sets / stencils / templates carry an additional no-Atlassian-use " +
+          "restriction; none of those assets are redistributed by this product.",
+      }),
+    );
+  } catch {
+    /* vendored 目录被移除时自动跳过 */
+  }
+
   // sqlite-vec — 四个平台均以原生动态库随桌面安装包分发。
   entries.push(
     bundledComponent({
