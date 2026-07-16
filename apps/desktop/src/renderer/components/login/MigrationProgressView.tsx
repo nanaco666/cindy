@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { migrationService, type MigrationProgress } from '@/lib/migrationService';
 import { WindowControls } from '@/components/title-bar/WindowControls';
 import { cn } from '@/lib/utils';
-import splashLogo from '@/assets/splash-logo.png';
+import { useBrandLogo } from '@/hooks/useBrandLogo';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('MigrationProgressView');
@@ -34,6 +34,7 @@ interface LocationStateTotals {
 export function MigrationProgressView() {
   const navigate = useNavigate();
   const location = useLocation();
+  const brandLogo = useBrandLogo();
   const { migration: ctxMigration } = useAuth();
   const { t } = useTranslation();
 
@@ -191,11 +192,11 @@ export function MigrationProgressView() {
             'border border-[var(--login-card-border)] bg-[var(--login-card-bg)]',
           )}
         >
-          {/* Logo — 216×216 cornerRadius:12 per design */}
+          {/* Logo — 横向 wordmark,定宽、高度按比例(与 LoginPage 一致) */}
           <img
-            src={splashLogo}
+            src={brandLogo}
             alt={BRAND_NAME}
-            className="h-[216px] w-[216px] rounded-[12px] object-contain pointer-events-none"
+            className="w-[216px] object-contain pointer-events-none"
             draggable={false}
           />
 

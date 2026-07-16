@@ -5,11 +5,12 @@ import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 import { WindowControls } from '@/components/title-bar/WindowControls';
-import splashLogo from '@/assets/splash-logo.png';
+import { useBrandLogo } from '@/hooks/useBrandLogo';
 import { useLogin } from '@/hooks/useLogin';
 
 export function LoginPage() {
   const { isLoading, error, handleLogin, handleDevLogin } = useLogin();
+  const brandLogo = useBrandLogo();
   const { t } = useTranslation();
   const isMac = window.electronAPI?.platform === 'darwin';
   const showDevLogin = import.meta.env.DEV;
@@ -36,11 +37,11 @@ export function LoginPage() {
             'border border-[var(--login-card-border)] bg-[var(--login-card-bg)]',
           )}
         >
-          {/* Logo */}
+          {/* Logo — 横向 wordmark,定宽、高度按比例 */}
           <img
-            src={splashLogo}
+            src={brandLogo}
             alt={BRAND_NAME}
-            className="h-[216px] w-[216px] rounded-[12px] object-contain pointer-events-none"
+            className="w-[216px] object-contain pointer-events-none"
             draggable={false}
           />
 

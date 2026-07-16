@@ -5,10 +5,11 @@ import { cn } from '@/lib/utils';
 import { useSplash } from '@/hooks/useSplash';
 import { WindowControls } from '@/components/title-bar/WindowControls';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import splashLogo from '@/assets/splash-logo.png';
+import { useBrandLogo } from '@/hooks/useBrandLogo';
 
 export function SplashScreen() {
   const { t } = useTranslation();
+  const brandLogo = useBrandLogo();
   const {
     phase,
     isDownloading,
@@ -70,9 +71,9 @@ export function SplashScreen() {
       <div className="absolute inset-0 flex items-center justify-center">
         <div className="flex h-[490px] w-[490px] items-center justify-center">
           <img
-            src={splashLogo}
+            src={brandLogo}
             alt=""
-            className="h-[464px] w-[464px] rounded-[12px] object-contain"
+            className="w-[464px] object-contain"
             draggable={false}
             onError={skipSplash}
           />
