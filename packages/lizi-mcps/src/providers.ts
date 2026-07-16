@@ -99,6 +99,12 @@ function readSlackThreadTs(ctx: LiziMcpSessionContext): string | null {
   return typeof raw === 'string' && raw.length > 0 ? raw : null;
 }
 
+/** 会话来源(如 'slack'),feishu bot 用它在构建期注入渠道路由提示。 */
+function readSessionSource(ctx: LiziMcpSessionContext): string | undefined {
+  const raw = ctx.vendorOptions?.source;
+  return typeof raw === 'string' && raw.length > 0 ? raw : undefined;
+}
+
 export function createLiziMcpProviders(
   opts: CreateLiziMcpProvidersOptions,
 ): LiziMcpProvider[] {
@@ -227,6 +233,9 @@ export function createLiziMcpProviders(
             readFeishuChatId(ctx) ?? opts.feishuBot!.getOwnerOpenId() ?? null,
           sendFile: opts.feishuBot!.sendFile,
           sendMessage: opts.feishuBot!.sendMessage,
+          // slack 会话里两组 bot 推送工具并存,构建期注入渠道路由提示,
+          // 把「发给我」的默认通道钉死在会话自身渠道(规则 9)。
+          sessionSource: readSessionSource(ctx),
         }),
       }),
     });

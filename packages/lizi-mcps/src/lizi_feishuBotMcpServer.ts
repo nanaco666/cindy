@@ -41,6 +41,28 @@ const D = {
   send_message_to_user: descSendMessageToUser.trim(),
 } as const;
 
+type FeishuBotToolDescriptions = { [K in keyof typeof D]: string };
+
+/**
+ * Slack 会话里追加到全部工具描述末尾的渠道路由提示(规则 9:通道路由的
+ * 确定性用代码保证,不交给模型自由判断)。注意 lizi_slack_bot 只有发文件
+ * 工具,文字回复走会话回复通道,不要把消息类意图也指过去。
+ * 导出仅供测试锁定文案。
+ */
+export const SLACK_SESSION_CHANNEL_NOTE =
+  '\n\n⚠️ 当前是 Slack 会话:文字回复直接输出即可(会自动回贴到当前 Slack thread,无需工具);把文件发给用户用 lizi_slack_bot 的 send_file_to_user,不要用本工具;仅当用户明确说「发飞书 / 飞书通知我」时才走飞书通道。';
+
+/** 按会话来源产出工具描述——非 slack 会话原样返回 D,保证字节级不变。 */
+function buildDescriptions(sessionSource: string | undefined): FeishuBotToolDescriptions {
+  if (sessionSource !== 'slack') return D;
+  return {
+    list_tools: D.list_tools + SLACK_SESSION_CHANNEL_NOTE,
+    call_tool: D.call_tool + SLACK_SESSION_CHANNEL_NOTE,
+    send_file_to_user: D.send_file_to_user + SLACK_SESSION_CHANNEL_NOTE,
+    send_message_to_user: D.send_message_to_user + SLACK_SESSION_CHANNEL_NOTE,
+  };
+}
+
 /**
  * Character upper bound for message text. Enforced via schema `.max()` so the
  * model sees the limit up-front. Note: z.string().max() counts JS characters
@@ -69,6 +91,15 @@ export type FeishuBotMcpDeps = Omit<FeishuBotMcpHostDeps, 'getOwnerOpenId'> & {
    * NO_CHAT_CONTEXT with guidance.
    */
   getChatId: () => string | null | undefined;
+  /**
+   * 会话来源(ctx.vendorOptions.source,session 构建期确定)。'slack' 时给
+   * 本 server 全部工具描述追加渠道路由提示——Slack 会话里 lizi_feishu_bot 与
+   * lizi_slack_bot 工具面并存且描述高度相似,通道选择若交给模型自由判断会随机
+   * 路由错通道(2026-07-16 实踩:Slack 会话里「把文件发给我」被路由到飞书);
+   * 用构建期注入把默认通道钉死在会话自身渠道上。描述在 session 构建期一次确定、
+   * 会话内字节稳定,不影响 prompt cache。
+   */
+  sessionSource?: string;
 };
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -91,11 +122,12 @@ function isImageExt(absPath: string): boolean {
 function registerSendFileToUser(
   registry: FeishuBotToolRegistry,
   deps: FeishuBotMcpDeps,
+  d: FeishuBotToolDescriptions,
 ): void {
   registry.register({
     name: 'send_file_to_user',
     category: 'bot',
-    description: D.send_file_to_user,
+    description: d.send_file_to_user,
     inputShape: {
       absPath: z
         .string()
@@ -165,11 +197,12 @@ function registerSendFileToUser(
 function registerSendMessageToUser(
   registry: FeishuBotToolRegistry,
   deps: FeishuBotMcpDeps,
+  d: FeishuBotToolDescriptions,
 ): void {
   registry.register({
     name: 'send_message_to_user',
     category: 'bot',
-    description: D.send_message_to_user,
+    description: d.send_message_to_user,
     inputShape: {
       text: z
         .string()
@@ -240,10 +273,11 @@ const CATEGORY_ENUM = ['bot'] as const;
 function registerListToolsEntry(
   server: McpServer,
   registry: FeishuBotToolRegistry,
+  d: FeishuBotToolDescriptions,
 ): void {
   server.tool(
     'list_tools',
-    D.list_tools,
+    d.list_tools,
     {
       category: z
         .enum(CATEGORY_ENUM)
@@ -306,10 +340,11 @@ function registerListToolsEntry(
 function registerCallToolEntry(
   server: McpServer,
   registry: FeishuBotToolRegistry,
+  d: FeishuBotToolDescriptions,
 ): void {
   server.tool(
     'call_tool',
-    D.call_tool,
+    d.call_tool,
     {
       name: z
         .string()
@@ -328,12 +363,13 @@ export function createFeishuBotMcpServer(deps: FeishuBotMcpDeps): McpServer {
     version: '1.0.0',
   });
 
+  const d = buildDescriptions(deps.sessionSource);
   const registry = new FeishuBotToolRegistry();
-  registerSendFileToUser(registry, deps);
-  registerSendMessageToUser(registry, deps);
+  registerSendFileToUser(registry, deps, d);
+  registerSendMessageToUser(registry, deps, d);
 
-  registerListToolsEntry(server, registry);
-  registerCallToolEntry(server, registry);
+  registerListToolsEntry(server, registry, d);
+  registerCallToolEntry(server, registry, d);
 
   return server;
 }
