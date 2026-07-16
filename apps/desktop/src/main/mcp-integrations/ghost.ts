@@ -44,6 +44,7 @@ import {
 import { classifyLocalAttachmentPath } from '../cindy-brain/ghostLocalPathGrant.js';
 import { withCardToken } from '../cindy-brain/cardService.js';
 import { getGhostCardService, getGhostManager, getGhostPipeDispatcher } from '../cindy-brain/index.js';
+import { isGhostDisabledForWorkdir } from '../cindy-brain/ghostWorkdirPrefs.js';
 import { FORGE_GUIDE, packGhostDir } from '../cindy-brain/forge.js';
 import { handleIncomingCindyFile } from '../cindy-brain/openFileInstall.js';
 import * as blobStore from '../cindy-media/blobStore.js';
@@ -436,10 +437,23 @@ export function getCindyGhostsMcpDeps(sessionCtx?: LiziMcpSessionContext): Cindy
     // ghost_list/ghost_call 工具描述做语义召回。线索优先 whenToUse(给模型
     // 的场景枚举,可独立调优),缺省回落 description(给人的自我介绍);
     // 两者皆无的意识只列名字与指令(作者该去补——手册已教)。
+    //
+    // 目录级禁用(ghostWorkdirPrefs):被用户在本会话 workdir 停用的意识
+    // 不进花名册——语义召回从源头消失,"当它不存在"。装配时刻 ALS 未必
+    // 生效,workdir 取 ALS 优先、建线闭包兜底;Codex 共享 bridge 建线期
+    // 语境是全局空值(workingDir=''),此时不过滤(已知限制:codex 会话的
+    // 描述花名册全量,运行期 ghost_list / ghost_call 仍按真实 workdir 拦)。
     getRosterItems() {
+      const workdir = resolveSessionContext()?.workingDir ?? null;
       return getGhostManager()
         .list()
-        .filter((g) => g.enabled && g.manifest.kind === 'chip' && (g.manifest.tools?.length ?? 0) > 0)
+        .filter(
+          (g) =>
+            g.enabled &&
+            g.manifest.kind === 'chip' &&
+            (g.manifest.tools?.length ?? 0) > 0 &&
+            !isGhostDisabledForWorkdir(g.manifest.id, workdir),
+        )
         .map((g) => {
           const recall = g.manifest.whenToUse ?? g.manifest.description;
           return {
@@ -451,13 +465,17 @@ export function getCindyGhostsMcpDeps(sessionCtx?: LiziMcpSessionContext): Cindy
         });
     },
     async listAwakeGhosts(): Promise<CindyGhostInfo[]> {
+      // 现查同样按会话 workdir 滤掉目录级禁用的意识(ALS 恢复的真实语境
+      // 优先)——模型主动 ghost_list 也看不到被禁用的条目,清单层面干净。
+      const workdir = resolveSessionContext()?.workingDir ?? null;
       return getGhostManager()
         .list()
         .filter(
           (g) =>
             g.enabled &&
             g.manifest.kind === 'chip' &&
-            (g.manifest.tools?.length ?? 0) > 0,
+            (g.manifest.tools?.length ?? 0) > 0 &&
+            !isGhostDisabledForWorkdir(g.manifest.id, workdir),
         )
         .map((g) => ({
           id: g.manifest.id,
@@ -478,6 +496,16 @@ export function getCindyGhostsMcpDeps(sessionCtx?: LiziMcpSessionContext): Cindy
       let mergedArgs = args;
       const sessionIdForConfirm = resolveSessionContext()?.sessionId ?? null;
       const sessionWorkdir = resolveSessionContext()?.workingDir ?? null;
+      // 目录级禁用兜底(防御线):花名册/ghost_list 已过滤,正常路径走不到
+      // 这里——只有"会话开着时中途被禁"(快照已含自述)或模型凭上文记忆
+      // 硬调才会命中。message 是可直达模型的人话:停手改道,不要自纠重试。
+      if (isGhostDisabledForWorkdir(ghostId, sessionWorkdir)) {
+        return {
+          ok: false,
+          errorCode: 'GHOST_DISABLED_IN_WORKDIR',
+          message: '用户已在当前工作目录停用该意识;不要重试,改用其它可用方式完成任务,必要时如实转告用户。',
+        };
+      }
       // 批量预授权(grant_only):只过户不派发——agent 跑批量任务(逐张图
       // 逐次调用)前先把整批文件申报一次,用户在一张确认卡上批完,后续
       // 逐次调用命中授权记忆零弹卡。上限放宽到 MAX_GRANT_ONLY_ATTACHMENTS。

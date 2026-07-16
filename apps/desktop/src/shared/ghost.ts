@@ -2636,6 +2636,7 @@ export type GhostPipeFetchResult =
 export type GhostToolCallErrorCode =
   | 'GHOST_NOT_FOUND'
   | 'GHOST_ASLEEP'
+  | 'GHOST_DISABLED_IN_WORKDIR'
   | 'TOOL_NOT_FOUND'
   | 'GHOST_CRASHED'
   | 'TIMEOUT'

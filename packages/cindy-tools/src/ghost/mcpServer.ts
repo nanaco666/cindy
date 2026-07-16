@@ -41,6 +41,7 @@ const D_GHOST_CALL = [
   '**必须**先发一次 grant_only:true + attachments 列出整批文件(≤32 张,tool 随便填会被忽略)',
   '——用户只需在一张卡上批一次;跳过预授权会让用户被迫一张张点允许。',
   '结构化错误:GHOST_NOT_FOUND(已抽离)/ GHOST_ASLEEP(沉睡,可提示用户到设置里唤醒)/',
+  'GHOST_DISABLED_IN_WORKDIR(用户在当前工作目录停用了该意识——不要重试,改用其它方式完成)/',
   'TOOL_NOT_FOUND / GHOST_CRASHED / TIMEOUT / ATTACHMENT_INVALID(附件过户失败,查 message)/',
   'DIR_INVALID(目录过户失败,查 message)/ INTERNAL。遇到 NOT_FOUND 类错误先重新 ghost_list。',
 ].join('\n');

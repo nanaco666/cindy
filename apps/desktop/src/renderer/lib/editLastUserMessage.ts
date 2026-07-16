@@ -38,6 +38,7 @@ import {
 } from '@/lib/composerDraftStore';
 import { parseLeadingBlockquotes, type ChatQuote } from '@/lib/chatQuotes';
 import { expandGhostCommand } from '@/cindy-brain/ghostCommand';
+import { filterGhostsForWorkdir } from '@/cindy-brain/ghostWorkdirFilter';
 import {
   buildRewindDraftAttachments,
   type RewindDraftImage,
@@ -86,18 +87,20 @@ export interface CommitEditAndResendDeps {
   /**
    * ghost-summon-card:重发前的"发送期展开"(意识 $指令 硬指令追加段)。
    * 编辑框预填的是剥离机器追加段后的正文(UserMessage 侧),这里在 send
-   * 之前按当前已装意识重新展开——与 ChatInput 的发送语义对齐;fallback
-   * 草稿走未展开文本(草稿重发时 ChatInput 会再展开,避免叠双份指令)。
+   * 之前按当前已装意识重新展开——与 ChatInput 的发送语义对齐(含目录级
+   * 禁用同判,workingDir 与重发落点同源);fallback 草稿走未展开文本
+   * (草稿重发时 ChatInput 会再展开,避免叠双份指令)。
    * 可选:单测缺省时用默认实现(jsdom 无 electronAPI 时安全退化为原文)。
    */
-  expandForSend?: (text: string) => string;
+  expandForSend?: (text: string, workingDir?: string | null) => string;
 }
 
-/** 默认发送期展开:读本机已装意识列表;任何异常安全退化为原文。 */
-function defaultExpandForSend(text: string): string {
+/** 默认发送期展开:读本机已装意识列表(按 workingDir 滤目录级禁用);
+ *  任何异常安全退化为原文。 */
+function defaultExpandForSend(text: string, workingDir?: string | null): string {
   try {
     const ghosts = window.electronAPI?.ghosts?.listSync?.().ghosts ?? [];
-    return expandGhostCommand(text, ghosts);
+    return expandGhostCommand(text, filterGhostsForWorkdir(ghosts, workingDir));
   } catch {
     return text;
   }
@@ -231,7 +234,7 @@ export async function commitEditAndResend(
   // 下方 fallback 草稿——草稿重发经 ChatInput 再展开,不叠双份指令。
   const dispatched = await deps.sendMessage(
     opts.sessionId,
-    (deps.expandForSend ?? defaultExpandForSend)(opts.text),
+    (deps.expandForSend ?? defaultExpandForSend)(opts.text, session.workingDir ?? opts.fallbackWorkingDir ?? null),
     session.model,
     session.effort,
     session.permissionMode,

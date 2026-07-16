@@ -1913,6 +1913,18 @@
       "empty": "No plugins installed yet",
       "emptyHint": "Click \"Install Plugin…\" above and pick a .cindy file",
       "disabledTag": "Disabled",
+      "projectDisabledTag": "Off in this project",
+      "projectSwitchLockedTip": "This plugin is disabled globally; enable it in the Global view first",
+      "projectBanner": {
+        "title": "Configuring project \"{{name}}\"",
+        "desc": "Switches here only affect this project — turned-off plugins won't appear in its new sessions",
+        "backToGlobal": "Back to global"
+      },
+      "scopePicker": {
+        "global": "Global (default)",
+        "ariaLabel": "Choose where plugins take effect",
+        "browse": "Choose another folder…"
+      },
       "enableAria": "Enable {{name}}",
       "uninstall": "Uninstall",
       "uninstallConfirm": {
@@ -1926,7 +1938,9 @@
         "uninstalled": "Uninstalled \"{{name}}\"",
         "installedAsleep": "Installed \"{{name}}\" (disabled — enable it here anytime)",
         "updated": "\"{{name}}\" updated to v{{version}}",
-        "restored": "Restored \"{{name}}\""
+        "restored": "Restored \"{{name}}\"",
+        "projectDisabled": "Turned off \"{{name}}\" for this project (applies to new sessions)",
+        "projectEnabled": "\"{{name}}\" now follows the global setting in this project"
       },
       "panelError": {
         "crashed": "This plugin crashed",

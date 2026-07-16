@@ -132,6 +132,10 @@ import {
   writeGhostCindyOverride,
   type CindyCapabilityKey,
 } from './cindyPrefsStore.js';
+import {
+  listDisabledGhostIdsForWorkdir,
+  setGhostDisabledForWorkdir,
+} from './ghostWorkdirPrefs.js';
 import { getCindyProxyMediaService } from '../mcp-integrations/cindyProxyMedia.js';
 import { getFeishuService } from '../mcp-integrations/feishu.js';
 import type { XdproxyImageModel } from '../cindy-proxy-media/types.js';
@@ -2094,6 +2098,32 @@ export function registerGhostIpc(): void {
       video: byKind(getCatalogVideoConfig()),
     };
   });
+  // ── 目录级禁用(ghostWorkdirPrefs;设置 → 插件 的项目范围视图)──
+  // 读走 sendSync:切换范围时禁用清单要与卡片同帧渲染(规则 7 无跳变),
+  // 文件读取极小且带 mtime 缓存。写走 invoke;写后广播 ghosts:changed
+  // (renderer 复用同一订阅热更,多窗口同步)。
+  ipcMain.on('ghosts:workdir-prefs', (event, workdir: unknown) => {
+    event.returnValue = {
+      disabled: typeof workdir === 'string' ? listDisabledGhostIdsForWorkdir(workdir) : [],
+    };
+  });
+  ipcMain.handle('ghosts:workdir-prefs:set', (_event, workdir: unknown, ghostId: unknown, disabled: unknown) => {
+    if (typeof workdir !== 'string' || workdir.trim().length === 0) {
+      throwIpcError('INVALID_PARAMS', 'workdir must be a non-empty string');
+    }
+    if (typeof ghostId !== 'string' || ghostId.trim().length === 0) {
+      throwIpcError('INVALID_PARAMS', 'ghostId must be a non-empty string');
+    }
+    if (typeof disabled !== 'boolean') {
+      throwIpcError('INVALID_PARAMS', 'disabled must be a boolean');
+    }
+    const next = setGhostDisabledForWorkdir(workdir, ghostId, disabled);
+    // 生效面变了(新会话花名册 / $ 菜单),借 ghosts:changed 通知所有窗口
+    // 重拉——载荷仍是完整已装清单,消费方按需再 sendSync 取目录级清单。
+    broadcastGhostsChanged(manager.list());
+    return { disabled: next };
+  });
+
   ipcMain.handle('ghosts:cindy-prefs:set', (_event, ghostId: unknown, capability: unknown, model: unknown) => {
     if (typeof ghostId !== 'string' || ghostId.trim().length === 0) {
       throwIpcError('INVALID_PARAMS', 'ghostId must be a non-empty string');
