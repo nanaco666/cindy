@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -78,5 +78,34 @@ describe('EAS endpoint injection', () => {
     expect(injected.build['global-child'].env.EXPO_PUBLIC_CINDY_AUTH_BASE_URL).toBe(
       endpointEnvByRegion.global.EXPO_PUBLIC_CINDY_AUTH_BASE_URL,
     );
+  });
+
+  it('reaps a stale reclaim marker before recovering a stale lock', () => {
+    const root = mkdtempSync(join(tmpdir(), 'mobile-eas-stale-reclaim-'));
+    roots.push(root);
+    const easPath = join(root, 'eas.json');
+    const original = '{"build":{"production":{}}}\n';
+    writeFileSync(easPath, original);
+
+    const lockPath = `${easPath}.xdt-lock`;
+    const reclaimPath = `${lockPath}.reclaim`;
+    mkdirSync(lockPath, { recursive: true });
+    writeFileSync(
+      `${lockPath}/owner.json`,
+      JSON.stringify({ pid: 999_999_999, token: 'stale-lock', createdAt: 0 }),
+    );
+    mkdirSync(reclaimPath, { recursive: true });
+    writeFileSync(
+      `${reclaimPath}/owner.json`,
+      JSON.stringify({ pid: 999_999_999, token: 'stale-reclaim', createdAt: 0 }),
+    );
+
+    const restore = injectMobileEndpointsIntoEasFile(easPath, {
+      endpointEnv: { EXPO_PUBLIC_FEISHU_APP_ID: 'cli_testapp' },
+    });
+    expect(readFileSync(easPath, 'utf8')).not.toBe(original);
+    restore();
+    expect(readFileSync(easPath, 'utf8')).toBe(original);
+    expect(() => readFileSync(reclaimPath)).toThrow();
   });
 });

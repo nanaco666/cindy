@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -80,6 +81,10 @@ function acquireEasFileLock(easPath) {
     // Do not create a replacement lock in the small gap between rmSync(lockPath)
     // and the reclaimer releasing the marker.
     if (existsSync(reclaimPath)) {
+      if (isEasReclaimStale(reclaimPath)) {
+        reapStaleEasReclaimMarker(reclaimPath);
+        continue;
+      }
       waitForEasFileLock();
       continue;
     }
@@ -104,6 +109,10 @@ function acquireEasFileLock(easPath) {
         // observed the same stale owner cannot remove a newly-created lock.
         try {
           mkdirSync(reclaimPath);
+          writeFileSync(
+            `${reclaimPath}/owner.json`,
+            JSON.stringify({ pid: process.pid, token, createdAt: Date.now() }),
+          );
         } catch (reclaimError) {
           if (reclaimError?.code !== 'EEXIST') throw reclaimError;
           waitForEasFileLock();
@@ -126,6 +135,45 @@ function acquireEasFileLock(easPath) {
 function waitForEasFileLock() {
   const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
   Atomics.wait(waitBuffer, 0, 0, EAS_LOCK_WAIT_MS);
+}
+
+function isEasReclaimStale(reclaimPath) {
+  const ownerPath = `${reclaimPath}/owner.json`;
+  let owner;
+  try {
+    owner = JSON.parse(readFileSync(ownerPath, 'utf8'));
+  } catch {
+    try {
+      return Date.now() - statSync(reclaimPath).mtimeMs > EAS_LOCK_STALE_MS;
+    } catch {
+      return false;
+    }
+  }
+  if (Number.isInteger(owner.pid)) {
+    try {
+      process.kill(owner.pid, 0);
+      return false;
+    } catch (error) {
+      if (error?.code === 'EPERM') return false;
+    }
+  }
+  return Date.now() - Number(owner.createdAt || 0) > EAS_LOCK_STALE_MS;
+}
+
+/**
+ * Reap only the stale marker that was atomically renamed by this caller.
+ * The tombstone path is unique, so a concurrent publisher can create a new
+ * reclaim marker without being removed by this cleanup.
+ */
+function reapStaleEasReclaimMarker(reclaimPath) {
+  const tombstonePath = `${reclaimPath}.${randomUUID()}.stale`;
+  try {
+    renameSync(reclaimPath, tombstonePath);
+  } catch (error) {
+    if (error?.code === 'ENOENT') return;
+    throw error;
+  }
+  rmSync(tombstonePath, { recursive: true, force: true });
 }
 
 function isEasLockStale(lockPath, ownerPath) {
