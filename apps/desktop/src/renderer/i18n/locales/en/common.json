@@ -2340,10 +2340,13 @@
     }
   },
   "splash": {
-    "relaunch": {
-      "title": "Town updated",
-      "description": "After clicking, the app will restart automatically — please wait. (If it stays unresponsive, double-click the app icon to launch manually.)",
-      "confirm": "Re-enter"
+    "tips": {
+      "checkingUpdate": "Checking for updates...",
+      "updating": "Updating Cindy...",
+      "updateDone": "Update complete, restarting shortly...",
+      "checkingEnv": "Checking runtime environment...",
+      "waking": "Waking Cindy...",
+      "envFailed": "Environment setup failed — click to retry"
     },
     "manifestFailed": {
       "title": "Network connection failed",
