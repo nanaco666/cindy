@@ -90,6 +90,9 @@ describe('内置意识 xd-mivo 视频模型路由', () => {
     ['Seedance_2_0_Fast', 0],
     ['Seedance_2_0_Fast', 1],
     ['Seedance_2_0_Fast', 9],
+    ['Seedance_2_0', 0],
+    ['Seedance_2_0', 1],
+    ['Seedance_2_0', 9],
     ['Seedance_1_0_Pro', 0],
     ['Seedance_1_0_Pro', 2],
     ['kling-v3-omni', 0],
@@ -104,6 +107,7 @@ describe('内置意识 xd-mivo 视频模型路由', () => {
 
   it.each([
     ['Seedance_2_0_Fast', 10, '最多接受 9 张'],
+    ['Seedance_2_0', 10, '最多接受 9 张'],
     ['Seedance_1_0_Pro', 1, '必须提供 2 张'],
     ['Seedance_1_0_Pro', 3, '必须提供 2 张'],
     ['kling-v3-omni', 8, '最多接受 7 张'],
@@ -140,6 +144,66 @@ describe('内置意识 xd-mivo 视频模型路由', () => {
         resolution: '720P',
         firstFrame,
         lastFrame,
+      },
+      title: '作视频',
+    });
+  });
+
+  it.each([
+    [undefined], // 默认不传 → Fast
+    ['seedance'],
+    ['Seedance_2_0_Fast'],
+  ])('Fast 路由(modelVersion=%s)wire 枚举保持 Seedance_2_0_Fast', async (modelVersion) => {
+    const harness = createMivoHarness();
+    const args: Record<string, unknown> = { prompt: '生成一下' };
+    if (modelVersion !== undefined) args.modelVersion = modelVersion;
+    const result = await harness.submit(args);
+
+    expect(result.ok).toBe(true);
+    expect(harness.messageRequest()).toEqual({
+      chatSessionId: 'chat-video-1',
+      messageType: 'video',
+      modelType: 'ARK',
+      modelFormat: { version: 'Seedance_2_0_Fast' },
+      action: 'generate_video',
+      payload: {
+        images: [],
+        videoRatio: '16:9',
+        prompt: '生成一下',
+        duration: 5,
+        video_clips: [],
+        audio_clips: [],
+        audio: false,
+        resolution: '480P',
+      },
+      title: '作视频',
+    });
+  });
+
+  it.each([
+    ['Seedance_2_0'],
+    ['标准模式'],
+    ['standard'],
+  ])('标准模式别名 %s 构造网页兼容请求(modelFormat=Seedance_2_0)', async (modelVersion) => {
+    const harness = createMivoHarness();
+    const result = await harness.submit({ prompt: '生成一下', modelVersion });
+
+    expect(result.ok).toBe(true);
+    expect(harness.messageRequest()).toEqual({
+      chatSessionId: 'chat-video-1',
+      messageType: 'video',
+      modelType: 'ARK',
+      modelFormat: { version: 'Seedance_2_0' },
+      action: 'generate_video',
+      payload: {
+        images: [],
+        videoRatio: '16:9',
+        prompt: '生成一下',
+        duration: 5,
+        video_clips: [],
+        audio_clips: [],
+        audio: false,
+        resolution: '480P',
       },
       title: '作视频',
     });

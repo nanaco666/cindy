@@ -1365,9 +1365,16 @@ async function handleCardAction(msg) {
 /* ── 工具 6:submit_gen_video(规格 §6)──────────────────────────────── */
 
 var SEEDANCE_ALIASES = [
-  'seedance', 'seedance2', 'seedance20', 'seedance20fast', 'seedancefast',
+  'seedance', 'seedance2', 'seedance20fast', 'seedancefast',
   'ark', 'arkvideo', 'doubao', '豆包', '即梦视频',
   'seedance15pro', // legacy Seedance_1_5_Pro 一律落 2.0 Fast(§6.2)
+];
+// Seedance 2.0 标准模式:wire 枚举 Seedance_2_0,payload 形态与 Fast 一致,
+// 只是生成更慢、质量更高。'seedance20' 即 wire 名归一,落标准而非 Fast。
+var SEEDANCE_STD_ALIASES = [
+  'seedance20', // normKey(Seedance_2_0) — wire 枚举本名
+  'standard', 'seedancestandard', 'seedance20standard',
+  '标准', '标准版', '标准模式', 'seedance标准', 'seedance20标准',
 ];
 // Seedance 3.0 Pro 极速版:wire 枚举沿用后端旧名 Seedance_1_0_Pro;
 // 双图请求按网页抓包格式映射为 firstFrame / lastFrame。
@@ -1393,7 +1400,7 @@ function validateVideoImageCount(engine, seedanceVersion, count) {
     return;
   }
   if (engine === 'seedance' && count > SEEDANCE_FAST_MAX_IMAGES) {
-    throw toolError('INVALID_ARGS', 'Seedance 2.0 Fast 最多接受 9 张参考图');
+    throw toolError('INVALID_ARGS', 'Seedance 2.0 最多接受 9 张参考图');
   }
   if (engine === 'kling' && count > KLING_MAX_IMAGES) {
     throw toolError('INVALID_ARGS', 'Kling v3 Omni 最多接受 7 张参考图');
@@ -1405,18 +1412,19 @@ async function submitGenVideo(args, callId) {
   if (!prompt) throw toolError('INVALID_ARGS', 'prompt 不能为空(使用用户原话)');
   var k = normKey(str(args.modelVersion) || 'Seedance_2_0_Fast');
   var engine;
-  var seedanceVersion = 'Seedance_2_0_Fast'; // ARK 通道的 wire 枚举(Fast / 3.0 Pro 极速版)
+  var seedanceVersion = 'Seedance_2_0_Fast'; // ARK 通道的 wire 枚举(Fast / 标准 / 3.0 Pro 极速版)
   if (SEEDANCE_PRO_ALIASES.indexOf(k) >= 0) { engine = 'seedance'; seedanceVersion = 'Seedance_1_0_Pro'; }
+  else if (SEEDANCE_STD_ALIASES.indexOf(k) >= 0) { engine = 'seedance'; seedanceVersion = 'Seedance_2_0'; }
   else if (SEEDANCE_ALIASES.indexOf(k) >= 0) engine = 'seedance';
   else if (KLING_ALIASES.indexOf(k) >= 0) engine = 'kling';
-  else throw toolError('INVALID_ARGS', '不支持的 modelVersion: ' + str(args.modelVersion) + '。支持: Seedance_2_0_Fast(默认), Seedance_1_0_Pro(Seedance 3.0 Pro 极速版), kling-v3-omni');
+  else throw toolError('INVALID_ARGS', '不支持的 modelVersion: ' + str(args.modelVersion) + '。支持: Seedance_2_0_Fast(默认), Seedance_2_0(标准模式), Seedance_1_0_Pro(Seedance 3.0 Pro 极速版), kling-v3-omni');
 
   // 跨引擎误传校验(§6.2):专属参数传错引擎直接 INVALID_ARGS。
   var wrong = [];
   if (engine === 'seedance') {
     ['mode', 'multi_shot', 'sound'].forEach(function (p) { if (args[p] !== undefined) wrong.push([p, 'Kling 引擎(modelVersion=kling-v3-omni)']); });
   } else {
-    ['resolution', 'audio'].forEach(function (p) { if (args[p] !== undefined) wrong.push([p, 'Seedance 引擎(modelVersion=Seedance_2_0_Fast / Seedance_1_0_Pro)']); });
+    ['resolution', 'audio'].forEach(function (p) { if (args[p] !== undefined) wrong.push([p, 'Seedance 引擎(modelVersion=Seedance_2_0_Fast / Seedance_2_0 / Seedance_1_0_Pro)']); });
   }
   if (wrong.length) throw toolError('INVALID_ARGS', wrong[0][0] + ' 仅在 ' + wrong[0][1] + '下有效');
 
@@ -1456,6 +1464,8 @@ async function submitGenVideo(args, callId) {
     }, callId);
     if (seedanceVersion === 'Seedance_1_0_Pro') {
       eta = duration === 10 ? '约 2-4 分钟(Seedance 3.0 Pro 极速版)' : '约 1-3 分钟(Seedance 3.0 Pro 极速版)';
+    } else if (seedanceVersion === 'Seedance_2_0') {
+      eta = duration === 10 ? '约 3-6 分钟(Seedance 2.0 标准模式)' : '约 2-4 分钟(Seedance 2.0 标准模式)';
     } else {
       eta = duration === 10 ? '约 90-150 秒(Seedance Fast)' : '约 60-90 秒(Seedance Fast)';
     }
@@ -1476,7 +1486,9 @@ async function submitGenVideo(args, callId) {
   // 常驻过程卡:钉在本次提交调用的卡位,后续轮询跨卡位刷进度(§JOB_META)。
   registerPersistCard(jobId, callId, 'video', prompt);
   var engineName = engine === 'kling' ? 'Kling'
-    : (seedanceVersion === 'Seedance_1_0_Pro' ? 'Seedance 3.0 Pro 极速版' : 'Seedance');
+    : seedanceVersion === 'Seedance_1_0_Pro' ? 'Seedance 3.0 Pro 极速版'
+    : seedanceVersion === 'Seedance_2_0' ? 'Seedance 2.0 标准模式'
+    : 'Seedance';
   return {
     ok: true, jobId: jobId, engine: engine,
     guidance: engineName + ' 视频生成任务已提交,jobId=' + jobId +
