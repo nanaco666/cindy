@@ -1,0 +1,265 @@
+{
+  "schemaVersion": 2,
+  "id": "xd-mivo",
+  "name": "XD Mivo",
+  "description": "XDMaker 内置的 mivo 意识:用你自己的 mivo key 在 aigc.xindong.com 生成图片(Nano/GPT/MJ/Niji)、视频(Seedance/Kling)、音乐(Suno)、音效(ElevenLabs)、3D 模型(Tripo/Seed3D,可转 FBX/OBJ),以及抠图、超分、MJ 按钮动作。key 在 设置 → 意识 → 本意识详情页 填写,加密存本机、只注入 aigc.xindong.com 的请求。",
+  "whenToUse": "用户明确要用 mivo / MJ / Midjourney / niji 画图,用 Seedance / 豆包视频 / 即梦视频 / 可灵 / kling 生成视频,做音乐 / 写歌(Suno)、做音效,3D 建模(Tripo / Seed3D / 即梦3D)、给 3D 模型绑动作、把 3D 模型转成 FBX / OBJ 格式,以及抠图 / 去背景、超分 / 放大图片、触发 MJ 图片按钮(U/V/Reroll)时找我(需先在意识设置页配置 mivo_ 开头的 key)。日常画图默认走 Cindy Art,只有上述显式触发词才用我。",
+  "version": "1.5.10",
+  "author": "Cindy",
+  "entry": "main.js",
+  "settingsHtml": "settings.html",
+  "slots": ["tool", "network", "card"],
+  "command": "xd-mivo",
+  "network": {
+    "hosts": ["aigc.xindong.com", "*.aliyuncs.com"],
+    "secrets": [
+      {
+        "key": "mivo_api_key",
+        "label": "Mivo API Key",
+        "hint": "mivo_ 开头;在 aigc.xindong.com 登录后点右上角 MCP 按钮获取",
+        "url": "https://aigc.xindong.com/",
+        "inject": {
+          "header": "Authorization",
+          "format": "Bearer {value}",
+          "hosts": ["aigc.xindong.com"]
+        },
+        "exchange": {
+          "url": "https://aigc.xindong.com/api/v1/state/token",
+          "bodyFormat": "{\"id\":\"\",\"sub\":\"{value}\",\"name\":\"\"}",
+          "tokenPath": "session",
+          "ttlSeconds": 86400
+        }
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "submit_gen_image",
+      "description": "提交图片生成任务到 mivo 平台,返回 jobId(需紧接着调 poll_result 拿结果)。模型选择:默认 modelVersion=gemini-3-pro-image-preview(Nanobanana Pro);用户提 GPT/gpt-image-2 → gpt-image-2;提 快/草稿/省 → gemini-3.1-flash-image-preview;提 MJ/Midjourney → mj-v7.0;提 niji → niji-v7(二次元,与 MJ 共用管线)。负向提示词(仅 MJ/Niji 生效):用户说「不要 X / 排除 X / no X」时用 negativePrompt 字段(英文逗号分隔),不要拼进 prompt 文本(MJ 会把排除词当正向 token 反而画出来);不要给 GPT/Nanobanana 传。比例/分辨率:常用 1:1/16:9/9:16 都安全;GPT 忽略 resolution,Nanobanana 支持 512/1K/2K/4K,MJ/Niji 只认 ratio。prompt 用用户原话透传,禁扩写/翻译/堆质量词。返回 { jobId }:拿到后立刻调 poll_result({ jobId })(GPT 模型用 mode:\"gpt_wait\"),不要询问用户是否继续。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "prompt": { "type": "string", "description": "生成图片的文字描述(必填,使用用户原话,不要扩写/翻译/堆质量词)" },
+          "images": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "可选参考图列表。每项可以是 mivo://image/{fileId} URI / aigc.xindong.com 完整 URL / 24 位裸 fileId;用户随消息发来的图片附件会自动作为参考图上传,无需填在这里;不支持本地绝对路径"
+          },
+          "ratio": {
+            "type": "string",
+            "enum": ["1:1", "16:9", "9:16", "4:3", "3:4", "2:3", "3:2", "4:5", "5:4", "1:4", "4:1", "1:8", "8:1", "21:9"],
+            "description": "图片比例,默认 1:1。不同 model 支持不同:GPT 仅 1:1/2:3/3:2/16:9/9:16;Nano Pro 不支持 1:4/4:1/1:8/8:1/21:9;MJ/Niji 全收"
+          },
+          "resolution": {
+            "type": "string",
+            "enum": ["512", "1K", "2K", "4K"],
+            "description": "Nanobanana 模型的分辨率,默认 1K(512 仅 Flash 支持)。GPT/MJ 忽略此参数"
+          },
+          "quality": { "type": "string", "description": "GPT 生图质量:auto/low/medium/high(支持中文别名),默认 auto。Nanobanana/MJ 忽略" },
+          "modelVersion": {
+            "type": "string",
+            "description": "模型版本,默认 gemini-3-pro-image-preview。可选 gemini-3.1-flash-image-preview(求快/草稿)、gpt-image-2(用户提 gpt 时)、mj-v7.0(用户提 mj/Midjourney 时,锁定 v7.0)、niji-v7(用户提 niji 时,二次元风格)"
+          },
+          "negativePrompt": {
+            "type": "string",
+            "description": "反向提示词(仅 MJ/Niji 支持,其它模型忽略)。描述不希望出现的内容,英文逗号分隔,如 low quality, blurry, extra fingers;不要把排除项拼进 prompt"
+          }
+        },
+        "required": ["prompt"]
+      }
+    },
+    {
+      "name": "poll_result",
+      "description": "轮询 submit_gen_image / segment_image / super_resolution_image / submit_gen_video / submit_gen_music / submit_gen_sound_effect / mivo_button_action 的任务。返回当前状态(pending/processing/completed/failed)+ 完成时的媒体。两种模式:mode:\"default\"(默认)单次轮询窗口(默认 30 秒),未完成立刻返回 processing,你需要再次调用本工具;mode:\"gpt_wait\" 内部最长等 105 秒,适合 GPT 生图 / 视频 / 音乐等长任务。收到 processing 时:立刻自动再次调用 poll_result({ jobId }),不要询问用户是否继续,可简短告诉用户「还在生成中,请耐心等待」。收到 completed 时:图片/视频已通过 xdt_image_urls / xdt_video_urls 渲染在聊天气泡里,不要在回复里再用 markdown 嵌入同一媒体(会重复);音频/3D 文件已存入媒体库(见 media 字段)。结果里的 buttons 字段是 MJ/Niji 图片的交互按钮:用户要放大/变体/重roll 时调 mivo_button_action 并原样透传 customId。收到 failed 时:把 message 字段的错误信息原样告诉用户。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "jobId": { "type": "string", "description": "submit_gen_image / submit_gen_video / submit_gen_music / submit_gen_sound_effect / segment_image / super_resolution_image / mivo_button_action 返回的 jobId" },
+          "timeout": { "type": "number", "description": "单次轮询窗口超时(秒),5-120,默认 30。default 模式下用此值;gpt_wait 模式固定 105 秒" },
+          "mode": {
+            "type": "string",
+            "enum": ["default", "gpt_wait"],
+            "description": "default: 单次轮询窗口,未完成立刻返 processing(你自己接力调用)。gpt_wait: 内部循环到 105 秒,适合 GPT(约 60s)/ 视频(1-5 分钟)/ Suno 音乐(90-180s,可能要 2-3 轮)等长任务"
+          }
+        },
+        "required": ["jobId"]
+      }
+    },
+    {
+      "name": "segment_image",
+      "description": "图片抠图 / 去背景 / 分割。返回 jobId,需要 poll_result({ jobId }) 等结果(约 10-30 秒完成)。触发场景:「帮我把这张图的背景抠掉」「把猫从这张图里抠出来」「去背景」「transparent background」。输入:单张图片(image 字段,或用户随消息发来的图片附件)。收到 jobId 后立刻调 poll_result,不要询问用户。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "image": { "type": "string", "description": "待处理图片。可以是 mivo://image/{fileId} URI / aigc.xindong.com URL / 24 位裸 fileId;不传时自动使用用户随消息发来的图片附件;不支持本地绝对路径" }
+        }
+      }
+    },
+    {
+      "name": "super_resolution_image",
+      "description": "图片超分辨率 / 放大 2 倍。返回 jobId,需要 poll_result({ jobId }) 等结果(约 15-45 秒完成)。触发场景:「把这张图超分到 4K」「把这张图放大」「提升分辨率」「图片太糊了,清晰一下」。输入:单张图片(image 字段,或用户随消息发来的图片附件)。收到 jobId 后立刻调 poll_result,不要询问用户。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "image": { "type": "string", "description": "待处理图片。可以是 mivo://image/{fileId} URI / aigc.xindong.com URL / 24 位裸 fileId;不传时自动使用用户随消息发来的图片附件;不支持本地绝对路径" }
+        }
+      }
+    },
+    {
+      "name": "mivo_button_action",
+      "description": "触发 mivo 图片下方的交互按钮(MJ/Niji 的 U1-U4、V1-V2、Reroll、Upscale、Vary、Outpaint、Animate,以及 NANOBANANA 的 imgPrompt 等)生成新图。按钮数据来自 poll_result / 本工具结果里的 buttons 字段:必须原样透传 buttons[i].customId,严禁自己拼接/解析/改写 customId,严禁在没有 buttons 数据来源时凭印象构造参数。prompt 参数:imgPrompt 类按钮(customId 动作段为 imgPrompt)必须附带 prompt(用户输入的提示词原文,不要改写);缺失时返回 PROMPT_REQUIRED 错误——此时向用户询问想怎么改这张图,拿到提示词后再调。其余按钮(U/V/Reroll 等)不要传 prompt。长任务:Outpaint/Animate/Custom Zoom 可能 5-15 分钟,本工具内部最长等 105 秒;若超时返回 status:\"processing\" + jobId,你必须用 poll_result({ jobId }) 继续轮询直到完成,不要询问用户是否继续等待。完成后新图已渲染到聊天气泡,新的按钮也在结果 buttons 里,不要再用 markdown 图片语法嵌入同一张图。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "messageId": { "type": "string", "description": "父图的 mivo messageId。来自按钮所属图片的任务 jobId(上一次 submit_gen_image / mivo_button_action / poll_result 返回的 jobId)" },
+          "customId": { "type": "string", "description": "按钮的 customId,完整透传 buttons[i].customId 字段(形如 MJ::JOB::upsample::1::<uuid>)。不要自己拼接、不要解析后重组" },
+          "title": { "type": "string", "description": "mivo 后端用作 chat session title,默认「作图」。通常不需要传" },
+          "prompt": { "type": "string", "description": "用户输入的提示词原文。imgPrompt 类按钮(customId 动作段为 imgPrompt)必填,其余按钮不要传。不要改写" }
+        },
+        "required": ["messageId", "customId"]
+      }
+    },
+    {
+      "name": "submit_gen_video",
+      "description": "提交视频生成任务到 mivo 平台,返回 jobId(需紧接着调 poll_result({ jobId, mode: \"gpt_wait\" }))。视频普遍需要 1-5 分钟,必须用 gpt_wait 模式,可能要多轮才拿到 completed,中途 processing 立刻继续轮询,不要询问用户。三种模型(modelVersion 切换):Seedance_2_0_Fast(默认;触发词 seedance/豆包视频/即梦视频/ARK;支持 1-9 张参考图)、Seedance_1_0_Pro(即 Seedance 3.0 Pro 极速版;触发词 seedance 3.0/pro/极速版;图生视频必须按顺序提供首帧、尾帧共 2 张)与 kling-v3-omni(触发词 kling/可灵;支持 1-7 张参考图、std/pro 双档 mode、多镜头切镜 multi_shot、AI 配音 sound 默认带声)。三种模型都允许不传图做文生视频。默认走 Seedance Fast,除非用户明确说用 3.0/pro/极速版(→ Seedance_1_0_Pro)或 kling/可灵。通用参数:prompt 必填(用户原话透传,不要扩写、不要堆「高清/4K/电影感」质量词);images 可选;videoRatio 默认 16:9;duration 5 或 10 秒。Seedance 专属:resolution(480P 默认 / 720P 用户说高清)、audio;Kling 专属:mode(std 默认 / pro 高品质)、multi_shot、sound(on 默认 / off 静音)——跨引擎误传会报 INVALID_ARGS。完成后视频经 xdt_video_urls 自动渲染,不要再用 markdown 嵌一遍(会出现两个播放器);基于结果简短点评即可,不要复述 prompt 原文。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "prompt": { "type": "string", "description": "视频内容的自然语言描述(必填,用户原话透传,不要扩写、不要堆质量词)" },
+          "images": {
+            "type": "array",
+            "items": { "type": "string" },
+            "maxItems": 9,
+            "description": "图生视频参考图,按用户给出的顺序透传。Seedance 2.0 支持 1-9 张;Seedance 3.0 图生视频必须恰好 2 张(第 1 张首帧、第 2 张尾帧);Kling v3 支持 1-7 张。可以是 mivo://image/{fileId} / aigc URL / 24 位 fileId;用户随消息发来的图片附件会自动追加;不支持本地绝对路径"
+          },
+          "modelVersion": { "type": "string", "description": "引擎版本,默认 Seedance_2_0_Fast(别名 seedance/ark/豆包/即梦视频);可选 Seedance_1_0_Pro(即 Seedance 3.0 Pro 极速版,别名 seedance3/seedance30pro/pro/极速版,画质更高)、kling-v3-omni(别名 kling/可灵/klingv3)" },
+          "videoRatio": { "type": "string", "enum": ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"], "description": "画幅比例,默认 16:9;9:16 竖屏/抖音" },
+          "duration": { "type": "number", "enum": [5, 10], "description": "时长秒数,5 或 10,默认 5。用户说「长一点/10 秒」→ 10" },
+          "resolution": { "type": "string", "enum": ["480P", "720P"], "description": "仅 Seedance:2.0 默认 480P;3.0 Pro 默认 720P" },
+          "audio": { "type": "boolean", "description": "仅 Seedance 2.0:true = 同步生成 AI 配音/配乐;默认 false(无声视频)。Seedance 3.0 Pro 首尾帧模式不支持此参数" },
+          "mode": { "type": "string", "enum": ["std", "pro"], "description": "仅 Kling:std(默认,标准档快)/ pro(高品质档,生成时间 2-3x)。用户说「高质量/精修/pro」→ pro" },
+          "multi_shot": { "type": "boolean", "description": "仅 Kling:true = 多镜头切镜(电影感分镜);默认 false 单镜头" },
+          "sound": { "type": "string", "enum": ["on", "off"], "description": "仅 Kling:on(默认,带声)/ off(无声)。用户说「静音/无声」→ off" }
+        },
+        "required": ["prompt"]
+      }
+    },
+    {
+      "name": "submit_gen_music",
+      "description": "提交 Suno V5 音乐生成任务到 mivo 平台,返回 jobId(需紧接着调 poll_result({ jobId, mode: \"gpt_wait\" }),Suno 通常 90-180 秒完成,可能要 2-3 轮 gpt_wait)。两种模式:simple(customMode=false,默认)只传 prompt(音乐风格/情绪/主题的自然语言描述),Suno 自动生成 title/style/lyrics,适合「来一首 R&B 慢歌」这类开放式需求;custom(customMode=true)必须同时传 title + style + lyrics(instrumental=true 时 lyrics 可省),Suno 严格按你给的歌词和风格创作,此模式 prompt 被后端忽略、占位写 1 个字符即可(歌词放 lyrics,不是 prompt)。用户说「纯音乐/无人声/instrumental/伴奏」→ instrumental:true。custom 可选控制:vocalGender(\"m\"/\"f\")、styleWeight(0-1)、weirdnessConstraint(0-1)——只在用户明确表达偏好时传,不要无脑全填。prompt 处理:用户给了具体描述就原话透传,不要扩写;用户让你发挥才自己组织。style 英文标签效果最佳,推荐 <genre> with <instruments>, <tempo>, <mood>;lyrics 用 [Verse]/[Chorus]/[Bridge] 等结构标签分段,中英文都支持。完成后音频已存入媒体库(media 字段),不要用 markdown 链接嵌入音频;基于 tracks[] 简短点评(风格/情绪/时长),不复述 style 原文,用户问到歌词再展示 lyrics。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "prompt": { "type": "string", "description": "simple 模式:音乐风格/情绪/主题描述(用户原话透传)。custom 模式被后端忽略,占位 1 个字符即可" },
+          "instrumental": { "type": "boolean", "description": "纯音乐/无人声,默认 false。用户说「纯音乐/instrumental/伴奏」时传 true" },
+          "customMode": { "type": "boolean", "description": "默认 false(simple)。true 时必须同时传 title + style(+ lyrics,除非 instrumental)" },
+          "title": { "type": "string", "description": "歌名(仅 customMode=true 时必填)" },
+          "style": { "type": "string", "description": "风格描述(仅 customMode=true 时必填)。英文标签效果最佳,如 R&B with laid-back swung drums, midtempo, late-night vibe;中文短标签也支持" },
+          "lyrics": { "type": "string", "description": "完整歌词(customMode=true 且 instrumental=false 时必填)。用 [Verse 1]/[Chorus]/[Bridge] 等结构标签分段,约 3-4 段" },
+          "vocalGender": { "type": "string", "enum": ["m", "f"], "description": "仅 custom:m 男声 / f 女声。不传 Suno 自选,只在用户明确要求时传" },
+          "styleWeight": { "type": "number", "description": "仅 custom:0-1,越高越严格遵循 style。只在用户明确要求时传" },
+          "weirdnessConstraint": { "type": "number", "description": "仅 custom:0-1,越低越主流,越高越实验。只在用户明确要求时传" }
+        },
+        "required": ["prompt"]
+      }
+    },
+    {
+      "name": "submit_gen_sound_effect",
+      "description": "提交 ElevenLabs 文生音效任务到 mivo 平台,返回 jobId(需紧接着调 poll_result({ jobId, mode: \"gpt_wait\" }),音效通常 15-25 秒完成,gpt_wait 单轮即可)。适用:短促音效(打击/碰撞/UI 反馈/武器音,duration 1-3s)、中等音效(开关门/翻书/脚步/笑声,3-8s)、环境氛围(森林/雨夜/战场/咖啡店,10-30s 可配 loop=true)、节奏 loop 素材(鼓点/心跳循环,5-15s + loop=true)。不适用:完整歌曲、有人声/旋律/歌词的音乐 → 用 submit_gen_music;单纯朗读文本(TTS 配音)→ mivo 不支持,提示用户走其它渠道。prompt 必填、原话透传,不要翻译用户的中文(ElevenLabs v2 中英文都吃);用户让你发挥时才组织一段具体描述。完成后音效已存入媒体库(media 字段),不要用 markdown 链接嵌入;基于 tracks[] 简短点评(几个变体、duration/loop 配置)即可,不要复述 prompt 原文。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "prompt": { "type": "string", "description": "音效的自然语言描述(必填,原话透传,不要翻译)" },
+          "duration": { "type": "number", "description": "音效时长秒数,0.5-30,默认 5" },
+          "promptInfluence": { "type": "number", "description": "prompt 严格度 0-1,默认 0.3。0.5+ 写实精准,0.1-0.2 自由发挥" },
+          "loop": { "type": "boolean", "description": "是否无缝循环,默认 false。用户说「循环/loop/做成 loop」→ true" },
+          "n": { "type": "number", "description": "生成几个变体,1-4,默认 2" }
+        },
+        "required": ["prompt"]
+      }
+    },
+    {
+      "name": "submit_gen_3d_model",
+      "description": "提交 3D 模型生成任务到 mivo 平台,返回 jobId(需紧接着调 poll_3d_result 拿结果)。模型选择:默认 modelType=\"TRIPO3D\" + modelVersion=\"P1\";用户说「即梦 3D / Seed3D / Seed3D2.0」→ 自动映射 modelType=\"ARK\" + modelVersion=\"Seed3D_2_0\";TRIPO3D 支持 P1 和 3.1/v3.1/V3.1。输入互斥:image(单图)/ referenceImages(TRIPO3D 多视角,front+back 必填,left/right 可选)/ prompt(文生 3D)三选一,不能同时设置;单图也可直接用用户随消息发来的图片附件。输出格式:模型一律先按 GLB 生成入库(可预览);用户要 FBX/OBJ 时传 modelFormat(TRIPO3D 专属),完成后按 guidance 调 convert_3d_model_format 服务端转换(非 GLB 落盘需主 agent 在 ghost_call 顶层传 save_dir);USD 引导用户到 aigc.xindong.com 网页端导出;ARK Seed3D 仅 GLB、产物不支持转换。返回 { jobId, targetFormat }:立刻调 poll_3d_result({ jobId }) 查询,不要询问用户。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "modelType": { "type": "string", "description": "3D 模型通道:TRIPO3D(默认)或 ARK(即梦 Seed3D)" },
+          "image": { "type": "string", "description": "单张参考图。mivo://image/{fileId} / aigc URL / 24 位 fileId;不传且用户发了图片附件时自动使用附件;不支持本地绝对路径" },
+          "referenceImages": {
+            "type": "object",
+            "properties": {
+              "front": { "type": "string", "description": "正视图(多视角必填)" },
+              "back": { "type": "string", "description": "背视图(多视角必填)" },
+              "left": { "type": "string", "description": "左视图(可选)" },
+              "right": { "type": "string", "description": "右视图(可选)" }
+            },
+            "description": "TRIPO3D 多视角结构化参考图(front/back 必填,left/right 可选),不要用扁平 images 数组"
+          },
+          "prompt": { "type": "string", "description": "文生 3D 提示词(仅 TRIPO3D 可用,用户原话透传)" },
+          "generateType": { "type": "string", "description": "生成模式 PBR(默认,纹理)/ WHITE(白模)" },
+          "modelVersion": { "type": "string", "description": "模型版本,TRIPO3D 默认 P1,可选 3.1/v3.1/V3.1" },
+          "pbr": { "type": "boolean", "description": "是否启用 PBR 材质,默认 false" },
+          "quad": { "type": ["boolean", "string"], "description": "拓扑结构:quad(四边面)/ triangle(三角面),默认三角面" },
+          "modelFormat": { "type": "string", "enum": ["glb", "fbx", "obj"], "description": "TRIPO3D 目标格式,默认 glb。fbx/obj 会先生成 GLB 中间产物(可预览),完成后经 convert_3d_model_format 转换落盘" },
+          "fileformat": { "type": "string", "enum": ["glb"], "description": "ARK Seed3D 输出格式;仅支持 glb(Seed3D 产物不支持格式转换,要 FBX/OBJ 请改用 TRIPO3D 或引导用户到网页端导出)" },
+          "subdivisionlevel": { "type": "string", "enum": ["low", "medium", "high"], "description": "ARK Seed3D 细分级别(可选)" },
+          "faceCount": { "type": ["number", "string"], "description": "面数。TRIPO3D 仅数字(支持「N万」写法);ARK 支持数字或 low/medium/high" }
+        }
+      }
+    },
+    {
+      "name": "poll_3d_result",
+      "description": "轮询 3D 模型生成 / 动作绑定任务结果(一次性 HTTP 调用,不是持续等待)。收到 processing/pending:任务还在跑(TRIPO3D 通常 1-3 分钟,ARK Seed3D 30-60 秒),等 5-10 秒后再次调用本工具,不要询问用户。收到 completed + modelFiles 非空:模型(GLB)已自动下载进本机媒体库,用户点击消息流里的预览图即可旋转查看 3D 模型;仅当结果 guidance 提示下载失败时才用 download_file({ fileId }) 补下。收到 completed + modelFiles 空:任务说完成但文件没就绪,稍后再调一次。收到 failed:把 message 原样告诉用户。预览缩略图(如有)会经 xdt_image_urls 自动渲染在消息流中。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "jobId": { "type": "string", "description": "submit_gen_3d_model / animate_3d_model 返回的 jobId" }
+        },
+        "required": ["jobId"]
+      }
+    },
+    {
+      "name": "convert_3d_model_format",
+      "description": "把 TRIPO3D 生成的 3D 模型转换为 FBX / OBJ / GLB(mivo 服务端转换;即梦 Seed3D/ARK 的产物不支持)。originalModelTaskId = 生成任务的 jobId(submit_gen_3d_model 返回;不传自动取本会话最近一次 3D 任务)。本工具内部提交转换并轮询最长 105 秒;超时返回 status:\"processing\" + exportTaskId,你必须带 exportTaskId(与原 format)再次调用本工具继续等待,不要询问用户。产物落地分两路:GLB → 自动存入媒体库;FBX/OBJ → 必须由主 agent 在 ghost_call 顶层传 save_dir(当前会话工作目录内的已存在目录),转换产物由主机直接写进该目录——缺 save_dir 会返回 SAVE_DIR_REQUIRED,带上面给的 exportTaskId 加 save_dir 重调即可(已完成的转换不会重跑,直接落盘)。注意:OBJ 的实际产物是 zip 压缩包(内含 obj/mtl/贴图),写盘后提醒用户解压;转换完成后把文件名与所在目录告诉用户即可,不要展示技术地址。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "format": { "type": "string", "enum": ["GLB", "FBX", "OBJ"], "description": "目标格式(必填)。OBJ 产物实际是 zip 压缩包" },
+          "originalModelTaskId": { "type": "string", "description": "要转换的 3D 生成任务 jobId(submit_gen_3d_model 返回)。不传自动取本会话最近一次 3D 任务" },
+          "exportTaskId": { "type": "string", "description": "上一轮返回 processing / SAVE_DIR_REQUIRED 时带回的转换任务 id:传了就跳过提交、直接续轮询/落盘" },
+          "filename": { "type": "string", "description": "落盘文件名(可选,仅 FBX/OBJ 生效;主机会消毒文件名且不覆盖已有文件)" },
+          "texture_size": { "type": "number", "description": "可选纹理尺寸(如 1024/2048)" },
+          "pivot_to_center_bottom": { "type": "boolean", "description": "可选:把模型轴心移到底部中心" },
+          "fbx_preset": { "type": "string", "enum": ["blender", "3dsmax", "mixamo"], "description": "FBX 目标 DCC 预设(可选)" }
+        },
+        "required": ["format"]
+      }
+    },
+    {
+      "name": "animate_3d_model",
+      "description": "给已生成的 TRIPO3D 模型绑定动作(自动绑骨 + 动作重定向一步完成),返回 jobId(需紧接着调 poll_3d_result 拿结果)。animation 必填:动作预设 id,格式 preset:<骨架>:<动作>。常见:preset:biped:walk(行走)/ preset:biped:run(奔跑)/ preset:biped:idle(待机)/ preset:biped:jump(跳跃)/ preset:biped:look_around(环顾);四足 preset:quadruped:walk 等;动作库持续扩充,用户给出的其它 preset: id 原样透传,不要自己发明不存在的预设。fileId 可选:目标模型文件的 24 位 ObjectId(来自 poll_3d_result 的 modelFiles);不传则自动取本会话最近一次 3D 任务的产物——用户说「给刚才的模型绑个动作」时直接省略。限制:仅支持 TRIPO3D 生成的模型,即梦 Seed3D(ARK)的产物不能绑定;用户用自然语言描述动作(「走路」「跑起来」)时由你映射到预设 id,没把握先和用户确认,不要瞎猜预设名。返回 { jobId, fileId, animation }:立刻调 poll_3d_result({ jobId }) 查询,不要询问用户;完成后绑定后的模型(GLB,含骨骼与动画)会自动存入媒体库,用户点预览图即可查看动作效果。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "animation": { "type": "string", "description": "动作预设 id,preset: 开头,如 preset:biped:walk。原样透传,不要发明预设名" },
+          "fileId": { "type": "string", "description": "目标模型文件的 24 位 ObjectId(来自 poll_3d_result 的 modelFiles)。不传自动取本会话最近一次 3D 任务的产物" },
+          "modelVersion": { "type": "string", "description": "绑骨模型版本,默认 V3.0,一般不要改" }
+        },
+        "required": ["animation"]
+      }
+    },
+    {
+      "name": "download_file",
+      "description": "从 mivo 平台下载文件进媒体库(不落工作目录)。主要用于 poll_3d_result / convert_3d_model_format 完成后下载生成的 3D 模型文件,也可下载任意 mivo fileId 对应的图片/视频/音频。参数:fileId 必填(24 位 ObjectId);filename 可选(展示名)。返回 media: { url, hash, ext, bytes }——url 是 cindy-media:// 地址,文件已存入本机媒体库,告诉用户已存好即可(图片/视频会自动渲染在消息流中)。3D 转换守卫:如果用户原本要求非 GLB 格式但你直接传中间产物 fileId,本工具会拒绝下载并返回 CONVERSION_REQUIRED——按 message 指引先调 convert_3d_model_format 拿到转换后的 fileId 再下载。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "fileId": { "type": "string", "description": "24 位 MongoDB ObjectId" },
+          "filename": { "type": "string", "description": "自定义展示名(可选)" }
+        },
+        "required": ["fileId"]
+      }
+    }
+  ]
+}

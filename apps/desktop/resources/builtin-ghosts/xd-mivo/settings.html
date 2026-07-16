@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<!-- XD Mivo 自定义设置区(意识自绘,cindy-ghost:// 沙箱页):
+     Mivo API Key 收单——观感对齐老基座「网络凭证」行(label + 已保存徽标 +
+     圆角输入框 + 眼睛切换 + 保存/清除 + 「前往控制台获取」外链)。
+     安全模型:这里只是收单;值经协议 /secrets 一次性交给主机保险库
+     (OS 级加密),本页存不下也读不回明文——保存后只有「已保存」状态。 -->
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  /* 底色不自己铺:主机注入基线 = 设置卡片色,与相邻卡片无缝(FORGE_GUIDE §4.8)。 */
+  body {
+    padding: 2px 0 0;
+    color: var(--text-primary, #1a1a1a);
+    font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  /* title 与控制台链接右缩 2px 对齐胶囊输入框的文字视觉边(胶囊圆角 +
+     边框让框内文字比裸文本行看着更靠右)。 */
+  .label-row { display: flex; align-items: center; gap: 8px; padding-left: 2px; }
+  .label-row .name { font-weight: 500; }
+  /* 已保存徽标走反相 CTA 色对(亮色黑底白字/暗色白底黑字):状态徽标是这行
+     唯一要被注意到的信息,灰底灰字一档在暗色下几乎隐形(2026-07-14 实反馈)。 */
+  .badge {
+    /* 上 2 下 0:11px 字在这行高里视觉偏上,文字整体压下 1px 才居中。 */
+    display: none; padding: 2px 8px 0; border-radius: 999px; font-size: 11px; font-weight: 500;
+    background: var(--accent-cta-bg, #262626); color: var(--accent-pure-cta-fg, #ffffff);
+  }
+  .badge.on { display: inline-block; }
+  .input-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  /* 控制台链接:主字色(暗色主题下即白),观感对齐原生设置页「打开控制台 ↗」。
+     href 与身份卡 network.secrets[].url 逐字一致,点击经主机外链闸转系统
+     浏览器打开(声明之外的地址会被主机拦下,链接点了没反应)。 */
+  .console-link {
+    display: inline-block; margin-top: 8px; margin-left: 2px;
+    font-size: 12px; font-weight: 500;
+    color: var(--text-primary, #1a1a1a); text-decoration: none;
+  }
+  .console-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+  .pill {
+    display: flex; flex: 1 1 auto; align-items: center; height: 32px;
+    border: 1px solid var(--border-default, #e4e4e0); border-radius: 999px;
+    background: var(--surface-elevated, #ffffff); padding: 0 4px 0 12px;
+  }
+  .pill:focus-within { border-color: var(--focus-ring, #4c8dff); }
+  .pill input {
+    flex: 1 1 auto; min-width: 0; border: 0; outline: none; background: transparent;
+    color: var(--text-primary, #1a1a1a); font: inherit;
+  }
+  .pill input::placeholder { color: var(--text-placeholder, #a8a8a4); }
+  .icon-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border: 0; border-radius: 999px;
+    background: transparent; color: var(--text-tertiary, #8a8a86); cursor: pointer;
+  }
+  .icon-btn:hover { background: var(--surface-chip, #efefec); }
+  /* 空框时藏眼睛(已存值读不回,点了必没反应);占位不塌,免输入首字符时行内跳动。 */
+  .icon-btn.hidden { visibility: hidden; pointer-events: none; }
+  .icon-btn svg { width: 14px; height: 14px; }
+  .icon-btn .off { display: none; }
+  .icon-btn.revealed .on { display: none; }
+  .icon-btn.revealed .off { display: block; }
+  .btn {
+    padding: 5px 16px; border-radius: 999px; cursor: pointer; flex: 0 0 auto;
+    border: 1px solid var(--border-default, #e4e4e0);
+    background: transparent; color: var(--text-primary, #1a1a1a);
+    font: inherit; font-weight: 500;
+  }
+  .btn:hover { background: var(--surface-chip, #efefec); }
+  #status { margin-top: 8px; font-size: 11px; color: var(--text-tertiary, #8a8a86); min-height: 16px; }
+  /* 空着不占位:没有消息时整行退场,别在卡片底部留一截空白(高度宿主实时跟量)。 */
+  #status:empty { display: none; }
+</style>
+</head>
+<body>
+  <div class="label-row">
+    <span class="name">Mivo API Key</span>
+    <span id="savedBadge" class="badge">✓ 已保存</span>
+  </div>
+  <div class="input-row">
+    <div class="pill">
+      <input id="keyInput" type="password" autocomplete="off" spellcheck="false" placeholder="粘贴 mivo_ 开头的 key">
+      <button id="eye" class="icon-btn" type="button" title="显示或隐藏">
+        <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+        <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3.5 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+      </button>
+    </div>
+    <button id="save" class="btn" type="button">保存</button>
+    <button id="clear" class="btn" type="button">清除</button>
+  </div>
+  <a class="console-link" href="https://aigc.xindong.com/">前往控制台获取 ↗</a>
+  <p id="status"></p>
+
+  <script src="/settings.js"></script>
+</body>
+</html>

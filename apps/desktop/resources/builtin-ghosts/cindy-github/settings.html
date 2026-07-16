@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<!-- GitHub 意识自定义设置区(意识自绘,cindy-ghost:// 沙箱页)。
+     主流程 = 粘贴 Personal Access Token:值经 /secrets 只写通道一次性交给主机
+     保险库(交出后本页只能查回 saved + 尾 4 位指纹,拿不回明文)。
+     「测试连接」由电子脑代跑:本页 fetch('/wake') 叫醒电子脑,经 BroadcastChannel
+     递活,电子脑 cindy.fetch GET /user(PAT 由主机注入)后把用户名广播回来——
+     本页零网络直连,token 字节不经过任何可读回的地方。 -->
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    padding: 2px 0 0;
+    color: var(--text-primary, #1a1a1a);
+    font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  /* title 与控制台链接右缩 2px 对齐胶囊输入框的文字视觉边(同 xd-mivo)。 */
+  .label-row { display: flex; align-items: center; gap: 8px; padding-left: 2px; }
+  .label-row .name { font-weight: 500; }
+  .badge {
+    padding: 1px 8px; border-radius: 6px; font-size: 11px;
+    background: var(--surface-chip, #efefec); color: var(--text-tertiary, #8a8a86);
+  }
+  /* 控制台链接:主字色(暗色主题下即白),观感对齐 xd-mivo 设置页「前往控制台获取 ↗」。
+     href 与身份卡 network.secrets[].url 逐字一致,点击经主机外链闸转系统
+     浏览器打开(声明之外的地址会被主机拦下,链接点了没反应)。 */
+  .console-link {
+    display: inline-block; margin-top: 8px; margin-left: 2px;
+    font-size: 12px; font-weight: 500;
+    color: var(--text-primary, #1a1a1a); text-decoration: none;
+  }
+  .console-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+  .input-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  /* 胶囊输入框 + 眼睛切换,样式与 xd-mivo 设置页逐字对齐。 */
+  .pill {
+    display: flex; flex: 1 1 auto; align-items: center; height: 32px;
+    border: 1px solid var(--border-default, #e4e4e0); border-radius: 999px;
+    background: var(--surface-elevated, #ffffff); padding: 0 4px 0 12px;
+  }
+  .pill:focus-within { border-color: var(--focus-ring, #4c8dff); }
+  .pill input {
+    flex: 1 1 auto; min-width: 0; border: 0; outline: none; background: transparent;
+    color: var(--text-primary, #1a1a1a); font: inherit;
+  }
+  .pill input::placeholder { color: var(--text-placeholder, #a8a8a4); }
+  .icon-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border: 0; border-radius: 999px;
+    background: transparent; color: var(--text-tertiary, #8a8a86); cursor: pointer;
+  }
+  .icon-btn:hover { background: var(--surface-chip, #efefec); }
+  /* 空框时藏眼睛(已存值读不回,点了必没反应);占位不塌,免输入首字符时行内跳动。 */
+  .icon-btn.hidden { visibility: hidden; pointer-events: none; }
+  .icon-btn svg { width: 14px; height: 14px; }
+  .icon-btn .off { display: none; }
+  .icon-btn.revealed .on { display: none; }
+  .icon-btn.revealed .off { display: block; }
+  .btn {
+    padding: 5px 16px; border-radius: 999px; cursor: pointer; flex: 0 0 auto;
+    border: 1px solid var(--border-default, #e4e4e0);
+    background: transparent; color: var(--text-primary, #1a1a1a);
+    font: inherit; font-weight: 500;
+  }
+  .btn:hover { background: var(--surface-chip, #efefec); }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .account {
+    display: flex; align-items: center; gap: 8px; margin-top: 8px;
+    padding: 6px 12px; border: 1px solid var(--border-default, #e4e4e0);
+    border-radius: 10px; background: var(--surface-elevated, #ffffff);
+  }
+  .account .who { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .account .tag { font-size: 11px; color: var(--text-tertiary, #8a8a86); flex: 0 0 auto; }
+  .account .mini {
+    padding: 2px 10px; border-radius: 999px; font-size: 11px; cursor: pointer; flex: 0 0 auto;
+    border: 1px solid var(--border-default, #e4e4e0); background: transparent;
+    color: var(--text-secondary, #55554f); font-family: inherit;
+  }
+  .account .mini:hover { background: var(--surface-chip, #efefec); }
+  #status { margin-top: 8px; font-size: 11px; color: var(--text-tertiary, #8a8a86); min-height: 16px; }
+  #status:empty { display: none; }
+</style>
+</head>
+<body>
+  <div class="label-row">
+    <span class="name">GitHub 账号</span>
+    <span class="badge">github.com</span>
+  </div>
+  <div id="account"></div>
+  <div class="input-row" id="token-row">
+    <div class="pill">
+      <input id="token" type="password" placeholder="ghp_… 或 github_pat_…" autocomplete="off" spellcheck="false">
+      <button id="eye" class="icon-btn" type="button" title="显示或隐藏">
+        <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+        <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3.5 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+      </button>
+    </div>
+    <button id="save" class="btn" type="button">保存</button>
+  </div>
+  <div class="input-row">
+    <button id="test" class="btn" type="button">测试连接</button>
+    <button id="clear" class="btn" type="button">清除</button>
+  </div>
+  <a class="console-link" href="https://github.com/settings/tokens">前往控制台获取 ↗</a>
+  <p id="status"></p>
+  <script src="/settings.js"></script>
+</body>
+</html>

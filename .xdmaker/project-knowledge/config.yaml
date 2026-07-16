@@ -1,0 +1,34 @@
+# project-context configuration. See docs/project-context.md §4.4 for full schema.
+#
+# module_roots: optional. Defaults to package-manager auto-discovery
+#   (pnpm-workspace.yaml / package.json workspaces).
+# module_roots:
+#   - packages/*
+#   - apps/*
+#
+# ignore: extra patterns on top of .gitignore + builtin defaults.
+# ignore:
+#   - apps/landing-page
+#
+small_diff_threshold:
+  files: 5
+  lines: 200
+
+# module_ignore: directory paths that should NOT have an agent-maintained
+# knowledge file even though they are valid workspace packages. Use sparingly
+# — only for self-referential / meta packages where auto-refresh produces
+# wrong-grained content. project-context is the knowledge-base tool itself;
+# its docs are maintained manually in sync with knowledge-base iterations.
+module_ignore:
+  - packages/project-context
+
+agent: claude-code
+agent_options:
+  # Pin to "opus" alias (latest Opus available to the local claude CLI). Avoid
+  # hardcoding a specific version like "opus-4-6" — alias lets Claude Code pick
+  # the current default Opus, which moves forward with releases.
+  model: sonnet
+  timeout: 300
+  # 60min for refresh: large modules (apps/desktop, maker-core) can exceed
+  # 20min; keep enough room for a full client-module rebuild.
+  refreshTimeout: 3600

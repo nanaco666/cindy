@@ -1,0 +1,36 @@
+/**
+ * VENDORED from larksuite/lark-openapi-mcp @ v0.5.1
+ * Source: src/mcp-tool/tools/en/gen-tools/zod/docs_v1.ts
+ * License: MIT — Copyright (c) 2025 Lark Technologies Pte. Ltd.
+ *          (full text in ../LICENSE.lark-openapi-mcp)
+ * DO NOT EDIT BY HAND. Regenerate: node packages/lizi-mcps/scripts/sync-lark-tools.mjs
+ */
+import { z } from 'zod';
+export type docsV1ToolName = 'docs.v1.content.get';
+export const docsV1ContentGet = {
+  project: 'docs',
+  name: 'docs.v1.content.get',
+  sdkName: 'docs.v1.content.get',
+  path: '/open-apis/docs/v1/content',
+  httpMethod: 'GET',
+  description:
+    '[Feishu/Lark]-Docs-Common-Get docs content-You can obtain the docs content. Currently, only upgraded document content in markdown format is supported',
+  accessTokens: ['tenant', 'user'],
+  schema: {
+    params: z.object({
+      doc_token: z
+        .string()
+        .describe('The unique identification of the docs. Click [here] to learn how to get `doc_token`'),
+      doc_type: z.literal('docx').describe('Docs type Options:docx(Upgraded Document)'),
+      content_type: z.literal('markdown').describe('Content type Options:markdown(Markdown format)'),
+      lang: z
+        .enum(['zh', 'en', 'ja'])
+        .describe(
+          'Specifies the language of the user name when the @user element exists in the docs. Default `zh` Options:zh(Chinese),en(English),ja(Japanese)',
+        )
+        .optional(),
+    }),
+    useUAT: z.boolean().describe('Use user access token, otherwise use tenant access token').optional(),
+  },
+};
+export const docsV1Tools = [docsV1ContentGet];

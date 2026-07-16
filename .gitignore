@@ -1,0 +1,125 @@
+# ── 构建 / 依赖 / 缓存 ──────────────────────────────────────
+node_modules/
+dist/
+# browser-control-runtime 的 fs-safe dist 是运行时源码，不是构建产物。
+!packages/browser-control-runtime/src/_generated/vendor/fs-safe/dist/
+!packages/browser-control-runtime/src/_generated/vendor/fs-safe/dist/**
+.output/
+coverage/
+*.tsbuildinfo
+.prototools
+__pycache__/
+*.py[cod]
+
+# ── 环境变量 / 凭证（样例白名单豁免）────────────────────────
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.secret
+*.key
+*.pem
+*.p8
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+
+# ── Electron / desktop 构建与暂存产物 ────────────────────────
+out/
+.vite/
+apps/desktop/release/
+apps/desktop/resources/tools/
+# build-remote-bundles.mjs 会在 dev/package/build 前重新生成这些目录。
+apps/desktop/resources/cc-manager/
+apps/desktop/resources/anthropic-compat-proxy/
+apps/desktop/resources/remote-file-service/
+
+# ── Agent CLI 本地二进制 ─────────────────────────────────────
+# 实体文件按 tools/<kind>/latest.json 的 pin 下载，不进 Git/LFS。
+apps/claude-code-bin/
+apps/codex-bin/
+apps/ripgrep-bin/
+tools/claude/updates/
+tools/codex/updates/
+tools/ripgrep/updates/
+
+# ── 日志 / 下载 / 本地运行态 ─────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+downloads/
+# CODEX_HOME：包含 auth.json 与本机 skill symlink。
+apps/desktop/codex-home/
+# 项目知识正文需要提交，只忽略运行时锁。
+.xdmaker/project-knowledge/.lock
+
+# ── 设计与开发临时产物 ───────────────────────────────────────
+docs/design_docs/.tmp_screenshots/
+docs/superpowers/
+
+# ── IDE / 本地知识工具 ───────────────────────────────────────
+.idea/
+.vscode/
+.codegraph/
+.obsidian/
+
+# ── 系统杂物 ─────────────────────────────────────────────────
+# macOS
+.DS_Store
+._*
+# Windows
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.stackdump
+*:Zone.Identifier
+# POSIX 命令在非 Windows shell 中误写出的 Windows null device 文件。
+nul
+
+# ── AI coding agent 本地状态 ──────────────────────────────────
+# 国际主流
+.claude/
+CLAUDE.local.md
+.codex/
+.cursor/
+.windsurf/
+.gemini/
+.continue/
+.aider*
+.cline/
+.clinerules
+.roo/
+.roomodes
+.opencode/
+.crush/
+.kiro/
+.amazonq/
+.augment/
+.specstory/
+.copilot/
+# 国内主流
+.lingma/
+.qwen/
+.iflow/
+.trae/
+.comate/
+.marscode/
+.codebuddy/
+.codegeex/
+
+# AGENTS.md / CLAUDE.md 等共享 agent 指令有意提交，不在忽略范围。
+# 若以后需要共享某个 agent 的项目配置，用 ! 规则逐项反向豁免。
+
+# ── Cindy/XDMaker 开发者本地工作区 ───────────────────────────
+.xdt-worktrees/
+.xdtworktreeinclude
+/start-claude-clean.bat
+/start-claude-clean.ps1
+/dev-*.bat
+/dev-*.ps1

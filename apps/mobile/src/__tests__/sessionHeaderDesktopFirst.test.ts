@@ -1,0 +1,80 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+// Windows checkout(core.autocrlf)下源码是 CRLF;统一归一成 LF,含 \n 的多行片段断言才跨平台成立。
+const readTextLf = (...args: Parameters<typeof readFileSync>): string =>
+  String(readFileSync(...args)).replace(/\r\n/g, '\n');
+
+describe('mobile session header desktop-first surface', () => {
+  it('releases the new-session handoff heavy topic when the session screen unmounts', () => {
+    const source = readTextLf(resolve(process.cwd(), 'app/sessions/[sessionId].tsx'), 'utf8');
+
+    expect(source).toMatch(
+      /unsubscribe\(`session:\$\{sessionId\}`, deviceId, \['sessions', `session:\$\{sessionId\}`\]\)/,
+    );
+  });
+
+  it('keeps queue state as an icon attention signal instead of extra mobile-only counters', () => {
+    const source = readTextLf(resolve(process.cwd(), 'app/sessions/[sessionId].tsx'), 'utf8');
+
+    expect(source).not.toContain('sessionHeaderActionBadge');
+    expect(source).not.toContain('sessionHeaderIconBadge');
+    expect(source).not.toContain('sessionHeaderIconBadgeText');
+    expect(source).not.toContain('badge={');
+    expect(source).not.toContain("if (queueCount > 0) return `队列 ${queueCount}`;");
+    expect(source).toContain("if (!session) return syncing ? '正在同步会话' : null;\n  if (syncing) return '正在同步';");
+    // 后台静默刷新:同步提示由 showSyncingIndicator gate —— 仅首次加载、还没有任何内容时显示,
+    // 已有 messages(重开已看过的会话)时后台对账静默,不再弹"正在同步"。
+    expect(source).toContain('const showSyncingIndicator = loading && messages.length === 0;');
+    expect(source).toContain("if (queuePaused) return '队列已暂停';\n  return null;");
+    expect(source).toContain('attention ? (');
+  });
+
+  it('keeps the visible header chrome compact while preserving full settings access', () => {
+    const source = readTextLf(resolve(process.cwd(), 'app/sessions/[sessionId].tsx'), 'utf8');
+
+    expect(source).toContain('const goBackToHome = useCallback(() => {');
+    // 空返回栈守卫收敛到共享 helper(见 backGuard.test.ts)
+    expect(source).toContain('goBackGuarded(router);');
+    expect(source).toContain('onBack={goBackToHome}');
+    expect(source).toContain('<Icon color={color} size={iconSize.lg} strokeWidth={iconStroke.regular} />');
+    expect(source).toContain('testID="session.controlsToggle"');
+    expect(source).toContain('const insets = useSafeAreaInsets();');
+    expect(source).toContain('<View style={styles.safeArea} testID="session.screen">');
+    expect(source).not.toContain('<SafeAreaView style={styles.safeArea} testID="session.screen">');
+    expect(source).not.toContain("import { BlurView } from 'expo-blur';");
+    expect(source).toContain("function TranslucentBackdrop()");
+    expect(source).toContain("<TranslucentBackdrop />");
+    expect(source).toContain('<View onLayout={handleTopOverlayLayout} pointerEvents="box-none" style={styles.sessionChrome} testID="session.chrome">');
+    expect(source).toContain('<View style={[styles.sessionChromeContent, { paddingTop: insets.top }]}>');
+    expect(source).toContain("sessionChrome: {\n    left: 0,\n    overflow: 'hidden',\n    position: 'absolute',");
+    expect(source).toContain('sessionChromeContent: {');
+    expect(source).toContain("backgroundColor: colors.surfaceTranslucent");
+    expect(source).not.toContain("colors.glassTint");
+    expect(source).not.toContain("colors.glassHighlight");
+    expect(source).toContain("backgroundColor: 'transparent'");
+    expect(source).toContain("borderBottomColor: colors.borderTranslucent");
+    expect(source).toContain('minHeight: 50');
+    expect(source).toContain("sessionHeaderBackButton: {\n    alignItems: 'center',\n    borderRadius: radius.pill,\n    height: 38,");
+    expect(source).toContain("sessionHeaderIconButton: {\n    alignItems: 'center',\n    borderRadius: radius.pill,\n    height: 34,");
+    expect(source).toContain('fontWeight: fontWeight.medium');
+    expect(source).not.toContain('size={20} strokeWidth={2}');
+    expect(source).not.toContain('minHeight: 54');
+  });
+
+  it('keeps pending history access as a lightweight control without message counters', () => {
+    const source = readTextLf(resolve(process.cwd(), 'app/sessions/[sessionId].tsx'), 'utf8');
+    const start = source.indexOf('function MessageHistoryToggle');
+    const end = source.indexOf('function readRouteParam', start);
+    const toggleSource = source.slice(start, end);
+
+    expect(toggleSource).toContain("expanded ? '收起历史消息' : '查看历史消息'");
+    expect(source).toContain('borderRadius: radius.pill');
+    expect(toggleSource).not.toContain('messageCount');
+    expect(toggleSource).not.toContain('历史消息已展开');
+    expect(toggleSource).not.toContain('历史消息已折叠');
+    expect(toggleSource).not.toContain('当前先处理上方请求');
+    expect(toggleSource).not.toContain('条消息');
+  });
+});

@@ -1,0 +1,181 @@
+/**
+ * providerModelSections —— 手机版 provider-aware 模型下拉的派生逻辑(**纯逻辑,零 react-native**)。
+ *
+ * 复用 `@lizi/model-providers` 的 `buildProviderSections` / `connectedProvidersForAgent` /
+ * `nativeDefaultSourceId`,保证手机和桌面、IM /model 三端「同一 agent 看到同样的供应商 × 模型」。
+ * 可见性口径 = **被控端用户**的「设置 → 模型供应商」显示开关:PROVIDER_LIST 隧道把被控端的
+ * override 快照(modelVisibilityOverrides,key `${agent}:${providerId}:${modelId}`)一并回传,
+ * 这里用共享 isModelVisible(override ?? 目录 defaultEnabled)判定,与被控端本机列表逐模型一致。
+ * 旧被控端不回传该字段 → 不过滤(目录是啥显示啥),优雅降级。注意这**不是**控制端手机自己的
+ * 偏好——手机没有本机模型开关,列表始终跟随被控电脑上的设置。
+ *
+ * 数据源是**被控端**的 `ProviderView[]`(隧道 maker:provider:list,见 useDeviceProviders),
+ * 故 0 供应商 / 旧被控端时调用方应回退到 capabilities 扁平列表。
+ */
+import {
+  connectedProvidersForAgent,
+  getModel,
+  modelSupportsFastMode,
+  nativeDefaultSourceId,
+  type ProviderView,
+} from '@lizi/model-providers/registry';
+import {
+  buildProviderSections,
+  isModelVisible,
+  type ProviderSection,
+  type SectionModel,
+} from '@lizi/model-providers/sections';
+import {
+  resolveEffort,
+  resolveProviderSwitchEffort,
+} from '@lizi/model-providers/effort-resolution';
+import type { AgentKind } from '@lizi/model-providers/types';
+
+import type { MobileModelMemoryAccessors } from './draftModelMemory';
+
+/** 下拉里平铺渲染的一行:某供应商 offer 的某个模型。 */
+export interface ProviderModelRow {
+  provider: ProviderView;
+  model: SectionModel;
+}
+
+export interface MobileModelSections {
+  /** 按已连接供应商分段(catalog 顺序,无二次排序)。 */
+  sections: ProviderSection[];
+  /** 该 agent 已连接的供应商(来源栏)。 */
+  connected: ProviderView[];
+  /** 当前高亮的来源 id:显式选中且在 connected 内则用它,否则取被控端原生默认来源。 */
+  activeSourceId: string | null;
+}
+
+/**
+ * 由被控端供应商目录派生「按供应商分段」的模型列表 + 当前来源高亮。
+ * 可见性按被控端 override + 目录 defaultEnabled 判定(见文件头);当前选中行即使被隐藏也保留
+ * (buildProviderSections 内建豁免,与桌面一致)。
+ */
+export function buildMobileModelSections(args: {
+  providers: readonly ProviderView[];
+  agentKind: AgentKind;
+  selectedModelId?: string;
+  selectedProviderId?: string | null;
+  query?: string;
+  /** 被控端「模型显示/隐藏」override 快照;undefined/null = 旧被控端,不过滤。 */
+  visibilityOverrides?: Record<string, boolean> | null;
+}): MobileModelSections {
+  const connected = connectedProvidersForAgent([...args.providers], args.agentKind);
+
+  const overrides = args.visibilityOverrides;
+  const sections = buildProviderSections({
+    providers: connected,
+    agent: args.agentKind,
+    selectedModelId: args.selectedModelId,
+    selectedProviderId: args.selectedProviderId,
+    // key 形如 `${agent}:${providerId}:${modelId}`,与桌面 modelVisibilityPrefs.keyOf /
+    // main model-visibility-mirror.keyOf 一致(三处需保持同步)。
+    isVisible: overrides
+      ? (pid, mid) => {
+          const p = connected.find((x) => x.id === pid);
+          const cat = p ? getModel(p, mid, args.agentKind) : undefined;
+          return isModelVisible(overrides[`${args.agentKind}:${pid}:${mid}`], cat?.defaultEnabled);
+        }
+      : () => true,
+    query: args.query,
+  });
+
+  const activeSourceId =
+    args.selectedProviderId && connected.some((p) => p.id === args.selectedProviderId)
+      ? args.selectedProviderId
+      : nativeDefaultSourceId(connected, args.agentKind);
+
+  return { sections, connected, activeSourceId };
+}
+
+/** 供应商首字母 monogram(同桌面 providerMonogram:取 name 首字符大写)。 */
+export function providerMonogram(name: string): string {
+  const ch = Array.from(name.trim())[0] ?? '?';
+  return ch.toUpperCase();
+}
+
+/** 把分段平铺成行列表(同供应商行因 builder 顺序天然相邻)。 */
+export function flattenProviderSections(sections: readonly ProviderSection[]): ProviderModelRow[] {
+  return sections.flatMap((section) =>
+    section.models.map((model) => ({ provider: section.provider, model })),
+  );
+}
+
+/**
+ * 选中某模型后把 effort reconcile 到合法档:当前 effort 仍受支持则保留,否则取该模型默认
+ * effort(若在支持集内),再兜底首个支持档,最后空串(模型不支持 effort)。
+ * 口径同 maker-shared `reconcileRuntimeDraftWithCapabilities`。仅供 flat 回退路径
+ * (旧被控端无供应商结构、无记忆可用)消费;分段路径走 resolveRowSelection。
+ */
+export function reconcileEffortForModel(model: SectionModel, currentEffort: string): string {
+  const efforts = model.efforts as readonly string[];
+  if (efforts.length === 0) return '';
+  if (efforts.includes(currentEffort)) return currentEffort;
+  if (model.defaultEffort && efforts.includes(model.defaultEffort)) return model.defaultEffort;
+  return efforts[0] ?? '';
+}
+
+/** resolveRowSelection 的落点:选行后应生效的 model + 来源 + effort + fast 四件套。 */
+export interface RowSelectionResult {
+  model: string;
+  providerId: string;
+  effort: string;
+  fastMode: boolean;
+}
+
+/**
+ * 点选某 (供应商, 模型) 行后解析落点 —— 纯函数,effort 优先级与桌面 ChatInput 完全同源
+ * (共享包 resolveEffort / resolveProviderSwitchEffort):
+ *   - **同模型只切来源**:严格 per-(供应商, 模型),有该来源记忆则恢复,否则模型默认,
+ *     绝不沿用当前档(防跨来源串档,桌面实测 bug 的修复口径);
+ *   - **换模型**:精确记忆 → 沿用当前档(仍受支持时)→ 模型默认。
+ *     手机差异注记:桌面第 3 档 provider-agnostic per-model 记忆手机没有,恒 miss(不传)。
+ *   - **fast**:fastEditable(agent hasFastMode × 该 (供应商, 模型) supportsFastMode)门控,
+ *     恢复该行记忆,缺省 false。
+ */
+export function resolveRowSelection(args: {
+  row: ProviderModelRow;
+  agentKind: AgentKind;
+  currentModelId: string;
+  currentProviderId: string | null;
+  currentEffort: string;
+  hasFastModeCap: boolean;
+  memory?: MobileModelMemoryAccessors;
+}): RowSelectionResult {
+  const { row, agentKind, memory } = args;
+  const efforts = row.model.efforts;
+  const defaultEffort = row.model.defaultEffort;
+  const providerEffort = memory?.getEffort(agentKind, row.provider.id, row.model.id);
+
+  const sameModelSourceSwitch =
+    row.model.id === args.currentModelId &&
+    args.currentProviderId !== null &&
+    row.provider.id !== args.currentProviderId;
+
+  // 手机语义:模型无 effort 档 → 空串(创建/切换时省略该字段),不是桌面的 'low' 占位。
+  const effort = efforts.length === 0
+    ? ''
+    : sameModelSourceSwitch
+    ? resolveProviderSwitchEffort({
+        efforts,
+        defaultEffort,
+        providerEffort,
+        fallbackEffort: args.currentEffort,
+      })
+    : resolveEffort({
+        efforts,
+        defaultEffort,
+        activeEffort: args.currentEffort,
+        providerEffort,
+      });
+
+  const fastEditable =
+    args.hasFastModeCap && modelSupportsFastMode(row.provider, row.model.id, agentKind);
+  const fastMode = fastEditable
+    ? memory?.getFast(agentKind, row.provider.id, row.model.id) ?? false
+    : false;
+
+  return { model: row.model.id, providerId: row.provider.id, effort, fastMode };
+}

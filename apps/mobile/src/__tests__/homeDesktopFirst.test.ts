@@ -1,0 +1,304 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+describe('mobile home desktop-first surface', () => {
+  it('uses the desktop-sidebar Home as the authenticated root instead of a device picker route', () => {
+    const indexSource = readFileSync(resolve(process.cwd(), 'app/index.tsx'), 'utf8');
+    const layoutSource = readFileSync(resolve(process.cwd(), 'app/_layout.tsx'), 'utf8');
+
+    expect(indexSource).toContain("import HomeScreen from './devices';");
+    expect(indexSource).toContain('return <HomeScreen />;');
+    expect(indexSource).not.toContain("auth.isAuthenticated ? '/devices' : '/login'");
+    expect(layoutSource).toContain("router.replace('/');");
+    expect(layoutSource).not.toContain("router.replace('/devices');");
+  });
+
+  it('keeps the home list leaner than device detail surfaces', () => {
+    const source = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
+    const removedListTokenPrefix = 'home' + 'List';
+
+    expect(source).toContain('export default function HomeScreen()');
+    expect(source).not.toContain('export default function DevicesScreen()');
+    expect(source).not.toContain('styles.deviceChipBadge');
+    expect(source).not.toContain('styles.worktreeBadge');
+    expect(source).not.toContain('MonitorSmartphone');
+    expect(source).not.toContain("title: 'Projects'");
+    expect(source).not.toContain("title: 'Chats'");
+    expect(source).not.toContain('placeholder="Search Chats"');
+    expect(source).not.toContain('placeholder="搜索会话"');
+    expect(source).not.toContain('home.searchInput');
+    expect(source).not.toContain('styles.bottomBar');
+    expect(source).not.toContain('styles.newChatText');
+    expect(source).not.toContain('home.projectNewSessionButton');
+    expect(source).not.toContain('styles.projectActionButton');
+    expect(source).not.toContain('relayStatusLabel');
+    expect(source).not.toContain('relayStatusHint');
+    expect(source).not.toContain('Relay 已连接');
+    expect(source).not.toContain('Relay 未连接');
+    expect(source).not.toContain('正在连接 Relay');
+    expect(source).not.toContain('styles.connectionButton');
+    expect(source).not.toContain('Menu,');
+    expect(source).not.toContain('icon={Menu}');
+    expect(source).not.toContain('devices.menuButton');
+    expect(source).not.toContain('打开菜单');
+    expect(source).not.toContain('fontSize: 28');
+    expect(source).not.toContain('height: 50');
+    expect(source).not.toContain('width: 50');
+    expect(source).toContain('RefreshCw');
+    expect(source).toContain('homeConnectionTitle');
+    expect(source).toContain("if (status === 'connecting') return '连接中';");
+    expect(source).toContain("if (status === 'stopped') return '连接断开';");
+    expect(source).toContain('styles.connectionIconButton');
+    expect(source).toContain('const [deviceMenuOpen, setDeviceMenuOpen]');
+    expect(source).toContain('const [groupByProject, setGroupByProject]');
+    expect(source).toContain('testID="home.deviceMenu"');
+    expect(source).toContain('label="所有对话"');
+    expect(source).toContain('label="按项目分组"');
+    // 注:首页分区构造逻辑(buildMixedHomeRows / buildGroupedHomeRows / buildHomeSections)
+    // 已抽到 @/session/homeSections,并由 homeSections.test.ts 做行为测试,这里不再做源码字符串断言。
+    expect(source).toContain('styles.sessionListRow');
+    expect(source).not.toContain('styles.sessionCard');
+    expect(source).not.toContain('styles.sessionBadge');
+    expect(source).toContain('backgroundColor: colors.surface');
+    expect(source).toContain('borderBottomColor: colors.border');
+    expect(source).toContain('colors.homeListFab');
+    expect(source).not.toContain(`colors.${removedListTokenPrefix}Background`);
+    expect(source).not.toContain(`colors.${removedListTokenPrefix}Divider`);
+    expect(source).not.toContain(`colors.${removedListTokenPrefix}Shadow`);
+    expect(source).toContain('fontWeight: fontWeight.medium');
+    expect(source).toContain('testID="home.newChatButton"');
+    expect(source).toContain("position: 'absolute'");
+    expect(source).toContain('bottom: spacing.lg');
+    expect(source).toContain('right: spacing.lg');
+  });
+
+  it('uses TapTap blue for the online dot treatment', () => {
+    const homeSource = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
+    const primitivesSource = readFileSync(resolve(process.cwd(), 'src/components/MobilePrimitives.tsx'), 'utf8');
+    const tokenSource = readFileSync(resolve(process.cwd(), 'src/theme/tokens.ts'), 'utf8');
+    const removedListTokenPrefix = 'home' + 'List';
+
+    expect(tokenSource).toContain("statusReady: '#00D9C5'");
+    expect(tokenSource).toContain("homeListFab: '#ECEDEF'");
+    expect(tokenSource).not.toContain(`${removedListTokenPrefix}Background`);
+    expect(tokenSource).not.toContain(`${removedListTokenPrefix}Divider`);
+    expect(primitivesSource).toContain('tone === \'ready\' && styles.statusDotReady');
+    expect(primitivesSource).toContain('backgroundColor: colors.statusReady');
+    expect(primitivesSource).toContain('pulsing && {');
+    expect(primitivesSource).toContain('scale: pulse.interpolate');
+    expect(primitivesSource).not.toContain('statusDotReady: {\n    backgroundColor: colors.textPrimary');
+    expect(homeSource).toContain("return item.available && (item.state === 'ready' || item.state === 'busy') ? 'online' : 'offline';");
+    expect(homeSource).toContain("tone={status === 'online' ? 'ready' : 'off'}");
+  });
+
+  it('mirrors the desktop sidebar vendor icon slot and running treatment', () => {
+    const homeSource = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
+    const vendorIconSource = readFileSync(resolve(process.cwd(), 'src/components/MobileVendorIcon.tsx'), 'utf8');
+    // 品牌 path 常量已抽到 vendorIconPaths.ts(供 MobileVendorIcon 与 MobileProviderMark 共用)。
+    const vendorPathsSource = readFileSync(resolve(process.cwd(), 'src/components/vendorIconPaths.ts'), 'utf8');
+    const desktopVendorIconSource = readFileSync(
+      resolve(process.cwd(), '../../apps/desktop/src/renderer/components/sidebar/VendorIcon.tsx'),
+      'utf8',
+    );
+
+    expect(desktopVendorIconSource).toContain('VendorIcon — sidebar session 行的 vendor + running 状态指示器');
+    expect(desktopVendorIconSource).toContain('ClaudeMark');
+    expect(desktopVendorIconSource).toContain("vendor === 'cc'");
+    expect(desktopVendorIconSource).toContain('session-status-breathing');
+    expect(vendorIconSource).not.toContain('XD_SYMBOL_PATHS');
+    expect(vendorIconSource).not.toContain('XD_INC_MARK_ASPECT_RATIO');
+    expect(vendorIconSource).not.toContain('iconWidth');
+    expect(vendorIconSource).toContain('width={size}');
+    expect(vendorIconSource).toContain('height={size}');
+    expect(vendorIconSource).toContain('viewBox="0 0 24 24"');
+    expect(vendorPathsSource).toContain("'M13.827 3.52h3.603");
+    expect(vendorIconSource).toContain("import { CLAUDE_PATH, CODEX_PATH } from './vendorIconPaths';");
+    expect(vendorIconSource).not.toContain('viewBox="136 137 282 158"');
+    expect(vendorIconSource).not.toContain('transform="translate(');
+    expect(vendorIconSource).toContain('Easing.inOut(Easing.ease)');
+    expect(homeSource).toContain('remoteSessionStore.isSessionRunning(item.session.id)');
+    expect(homeSource).toContain('<RadioTower');
+    expect(homeSource).toContain('width: 24');
+    expect(homeSource).toContain('size={isClaudeCodeAgentKind(item.session.agentKind) ? 19 : iconSize.lg}');
+    expect(homeSource).toContain("function isClaudeCodeAgentKind(agentKind: string): boolean");
+    expect(homeSource).toContain("return agentKind !== 'codex';");
+    expect(homeSource).not.toContain('sessionAttentionDot: {\n    backgroundColor: colors.statusAccent,\n    borderColor: colors.surface');
+    expect(homeSource).not.toContain('sessionAttentionDot: {\n    backgroundColor: colors.statusAccent,\n    borderRadius: 3,\n    borderWidth: 1');
+  });
+
+  it('uses desktop-style attention dots for unread automation on the home list without extra row text', () => {
+    const source = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
+    const scheduleIndexSource = readFileSync(resolve(process.cwd(), 'src/session/scheduleIndex.ts'), 'utf8');
+
+    expect(source).toContain('const [scheduleIndex, setScheduleIndex]');
+    expect(source).toContain('const [deviceIdentityCacheReady, setDeviceIdentityCacheReady]');
+    expect(source).toContain('loadDeviceIdentityCache()');
+    expect(source).toContain('reconcileDeviceIdentities(');
+    expect(source).toContain('saveDeviceIdentityCache(result.cache)');
+    expect(source).toContain('loadDeviceSessionScheduleIndex(deviceId, invoke)');
+    expect(source).toContain('replaceSessionScheduleIndexEntries(');
+    expect(source).toContain("invoke<unknown[]>(device.deviceId, 'maker:list-active', [])");
+    expect(source).toContain('if (isOptionalActiveSessionSnapshotError(err)) return null;');
+    expect(source).toContain('function isOptionalActiveSessionSnapshotError(error: unknown): boolean');
+    expect(source).toContain('if (isAccessRevokedError(error) || isDeviceOfflineError(error)) return false;');
+    expect(source).toContain("if (text.includes('REMOTE_DISABLED')) return false;");
+    expect(source).toContain('return true;');
+    expect(source).toContain('remoteSessionStore.setActiveSessionSnapshots(device.deviceId, activeSessions)');
+    expect(source).toContain('remoteScheduleEventStore.subscribe(() => {');
+    expect(source).toContain('const snapshot = remoteScheduleEventStore.getSnapshot(deviceId)');
+    expect(source).toContain('const version = snapshot.version');
+    expect(source).toContain('if (version === 0) {');
+    expect(source).toContain('scheduleEventVersionsRef.current.delete(deviceId)');
+    expect(source).toContain("projection?.refresh.sessionIndex !== true && projection?.runPatch.status !== 'running'");
+    expect(source).toContain('scheduleIndex,');
+    expect(source).toContain('const attention = item.pendingInteractionCount > 0');
+    expect(source).toContain('|| (item.scheduleInfo?.unreadCount ?? 0) > 0');
+    expect(source).toContain('|| item.liveActivity?.attention === true;');
+    // 提醒点已从行首 icon 角标移到行右侧状态槽(替代时间位),五档判定与桌面
+    // sidebarRightStatus 对齐:error 红 > awaiting TapTap 蓝 > running spinner > 完成绿 > 时间。
+    expect(source).toContain('resolveMobileSessionRightStatus({');
+    expect(source).toContain('styles.sessionRightDot');
+    expect(source).toContain('<SessionRightSpinner');
+    expect(source).not.toContain('sessionAttentionDot');
+    expect(source).not.toContain('未读 {item.scheduleInfo');
+    expect(scheduleIndexSource).toContain('buildSessionScheduleIndex');
+    expect(scheduleIndexSource).toContain('SCHEDULE_INDEX_RUN_LIMIT = 50');
+  });
+
+  it('gives device chips stable per-device e2e anchors for multi-device local smoke', () => {
+    const source = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
+    const maestroSource = readFileSync(resolve(process.cwd(), 'scripts/maestro-e2e.mjs'), 'utf8');
+    const localSmokeSource = readFileSync(resolve(process.cwd(), 'scripts/local-device-link-smoke.mjs'), 'utf8');
+    const deviceDetailFlow = readFileSync(resolve(process.cwd(), 'e2e/maestro/session_list_controls.yaml'), 'utf8');
+
+    expect(source).toContain('`home.deviceChip.${sanitizeDeviceChipTestId(item.deviceId)}`');
+    expect(source).toContain('function sanitizeDeviceChipTestId');
+    expect(source).toContain("return value.replace(/[^A-Za-z0-9_-]/g, '_');");
+    expect(source).not.toContain("const testID = item.deviceId ? 'home.deviceChip' : 'home.deviceChip.all';");
+    expect(localSmokeSource).toContain('process.env.XDT_MOBILE_E2E_HOST_DEVICE_CHIP_ID = mockHostDeviceChipId;');
+    expect(maestroSource).toContain('XDT_MOBILE_E2E_HOST_DEVICE_CHIP_ID=${hostDeviceChipId}');
+    expect(deviceDetailFlow).toContain('id: "${XDT_MOBILE_E2E_HOST_DEVICE_CHIP_ID}"');
+  });
+
+  it('lets mobile rename account devices through the authoritative device-link API', () => {
+    const source = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
+
+    expect(source).toContain('const [renameTarget, setRenameTarget]');
+    expect(source).toContain('function RenameDeviceModal');
+    expect(source).toContain('onRenameDevice={openRenameDevice}');
+    expect(source).toContain('testID={testID ? `${testID}.rename` : undefined}');
+    expect(source).toContain('testID="home.renameDevice.input"');
+    expect(source).toContain("testID: 'home.renameDevice.save'");
+    expect(source).toContain('`/api/device-link/devices/${encodeURIComponent(target.deviceId)}`');
+    expect(source).toContain("method: 'PATCH'");
+    expect(source).toContain('body: { name }');
+    expect(source).toContain('remoteSessionStore.renameDevice(target.deviceId, nextName)');
+    expect(source).not.toContain('clearManualName');
+  });
+
+  it('scopes multi-device connection feedback to the affected device chip', () => {
+    const source = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
+
+    expect(source).toContain("type HomeDeviceConnectionState = 'idle' | 'syncing' | 'failed';");
+    expect(source).toContain('const [deviceConnectionStates, setDeviceConnectionStates]');
+    expect(source).toContain("updateDeviceConnectionState(device.deviceId, 'syncing');");
+    expect(source).toContain("updateDeviceConnectionState(device.deviceId, 'failed');");
+    expect(source).toContain("updateDeviceConnectionState(device.deviceId, 'idle');");
+    expect(source).toContain("const showConnectionRow = !!connectionError || status !== 'online';");
+    expect(source).toContain("connectionStates={deviceConnectionStates}");
+    expect(source).toContain('function DeviceMenuItem');
+    expect(source).toContain("tone={status === 'online' ? 'ready' : 'off'}");
+    expect(source).not.toContain('function DeviceConnectionSpinner');
+    expect(source).not.toContain("connectionState === 'syncing' ? <DeviceConnectionSpinner /> : null");
+    expect(source).not.toContain('deviceConnectionSpinner');
+    expect(source).toContain("connectionState === 'failed' ? <View style={styles.deviceConnectionFailedRing} /> : null");
+  });
+
+  it('keeps project and session rows at desktop sidebar information density', () => {
+    const source = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
+    const desktopProjectNode = readFileSync(
+      resolve(process.cwd(), '../../apps/desktop/src/renderer/features/cc-agent/sidebar/sections/ProjectNode.tsx'),
+      'utf8',
+    );
+    const projectRowStart = source.indexOf('function ProjectRow');
+    const projectRowEnd = source.indexOf('function HomeSessionRow', projectRowStart);
+    const projectRowSource = source.slice(projectRowStart, projectRowEnd);
+    const sessionRowStart = source.indexOf('function HomeSessionRow');
+    const sessionRowEnd = source.indexOf('function SessionStatusMark', sessionRowStart);
+    const sessionRowSource = source.slice(sessionRowStart, sessionRowEnd);
+    const stylesStart = source.indexOf('const makeStyles');
+    const stylesSource = source.slice(stylesStart);
+
+    expect(desktopProjectNode).toContain('const Chevron = isCollapsed ? ChevronRight : ChevronDown;');
+    expect(projectRowSource).toContain('project.title');
+    // 折叠对齐桌面版:走共享 getRemoteSessionPreviewCollapse(24h 活动 / 需关注 / 运行中豁免),
+    // 不再是 slice 硬截断。
+    expect(projectRowSource).toContain('getRemoteSessionPreviewCollapse(');
+    expect(projectRowSource).toContain('limit: PROJECT_PREVIEW_LIMIT');
+    expect(projectRowSource).not.toContain('project.sessions.slice(0, PROJECT_PREVIEW_LIMIT)');
+    expect(projectRowSource).toContain('<Folder');
+    expect(projectRowSource).toContain('project.sessionCount');
+    expect(projectRowSource).toContain('home.projectViewAll');
+    expect(projectRowSource).not.toContain('<SquarePen');
+    expect(projectRowSource).not.toContain('<Ellipsis');
+    expect(projectRowSource).not.toContain('project.pendingInteractionCount');
+    expect(projectRowSource).not.toContain('project.subtitle');
+    expect(sessionRowSource).toContain('testID={`home.sessionRowTitle.${item.session.id}`}');
+    expect(sessionRowSource).toContain('ellipsizeMode="tail"');
+    expect(sessionRowSource).toContain('numberOfLines={1}');
+    expect(sessionRowSource).toContain('buildRemoteSessionCardPreview(item, { running })');
+    expect(sessionRowSource).toContain('testID={`home.sessionRowPreview.${item.session.id}`}');
+    expect(sessionRowSource).not.toContain('numberOfLines={2}');
+    expect(sessionRowSource).toContain('formatRemoteSessionSidebarTime(item.lastActivityAt)');
+    expect(sessionRowSource).toContain('item.pendingInteractionCount');
+    expect(sessionRowSource).toContain('item.scheduleInfo?.unreadCount');
+    expect(sessionRowSource).toContain('item.session.pinnedAt');
+    expect(sessionRowSource).toContain('styles.sessionTrailingIcons');
+    expect(sessionRowSource).not.toContain('SessionBadge');
+    expect(source).toContain('const HOME_SESSION_ROW_HEIGHT = 78;');
+    expect(stylesSource).toContain('height: HOME_SESSION_ROW_HEIGHT');
+    expect(stylesSource).toContain('height: lineHeight.subtitle');
+  });
+
+  it('keeps presence updates local and refreshes full home sync on every reconnect', () => {
+    const source = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
+
+    expect(source).toContain('void loadHome({ visible: false });');
+    // 重连(connectionEpoch 变化)必须无条件全量刷新:presence 只在变化时广播、无全量重放,
+    // 后台漏掉的上/下线事件只能靠重连重拉 REST 快照兜底,不能再用 hydrated 标记门控挡掉。
+    // homeListCacheHydrated 是一次性 gate(缓存种入完成后永久为 true,种入失败也置 true),
+    // 只影响首次触发顺序(缓存先画、fresh 后覆盖),不会挡掉任何一次重连刷新。
+    expect(source).not.toContain('homeSessionHydratedRef');
+    expect(source).toContain('}, [connectionEpoch, deviceIdentityCacheReady, homeListCacheHydrated, loadHome]);');
+    // REST 快照与飞行期间的 presence 补丁按新鲜度合并,防止过期快照把刚上线的设备改回离线。
+    expect(source).toContain('mergeDeviceViewsWithFreshPresence(');
+    expect(source).toContain('markPresenceFresh(presenceFreshnessRef.current, lastPresenceSnapshot.deviceId);');
+    expect(source).toContain('collectFreshPresenceDeviceIds(presenceFreshnessRef.current, presenceEpochAtFetchStart)');
+    expect(source).toContain('refreshControl={<RefreshControl refreshing={refreshing}');
+    expect(source).toContain('onRefresh={() => void loadHome({ visible: true })}');
+    expect(source).toContain('onPress={() => void loadHome({ visible: true })}');
+    expect(source).toContain('patchDeviceViewsWithPresence(');
+    expect(source).toContain('result.becameControllable');
+    expect(source).toContain('remoteSessionStore.registerReseedHandler(item.device.deviceId');
+    expect(source).toContain('syncInFlightRef');
+    expect(source).not.toContain('presenceVersion');
+    expect(source).not.toContain('refreshControl={<RefreshControl refreshing={loading}');
+  });
+
+  it('does not show the no-device empty state before startup sync settles', () => {
+    const source = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
+
+    expect(source).toContain('const initialHomeSettled = deviceIdentityCacheReady && lastSyncedAt !== null;');
+    expect(source).toContain('const initialHomeLoading = !initialHomeSettled && !connectionError;');
+    expect(source).toContain('const initialHomeError = !initialHomeSettled && !!connectionError;');
+    expect(source).toContain('const hasOpenableLiveDevice = deviceModels.some((item) => item.canOpen);');
+    // 首次 loadHome 落地前(含失败态)FAB 只认 live 设备:首页列表缓存画出的会话会合成出
+    // 「可用」的 primaryDevice,但缓存设备不能当 live 设备开新会话(settle 后回归 primaryDevice 语义)。
+    expect(source).toContain('const newSessionDisabled = !home.primaryDevice || (!initialHomeSettled && !hasOpenableLiveDevice);');
+    expect(source).toContain("const emptyStateTitle = initialHomeError ? '同步失败' : home.emptyTitle;");
+    expect(source).toContain("testID={initialHomeError ? 'home.syncError' : 'home.empty'}");
+    expect(source).toContain('testID="home.loading"');
+    expect(source).toContain('正在读取可控制电脑');
+  });
+});

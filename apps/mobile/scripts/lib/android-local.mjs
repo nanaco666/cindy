@@ -1,0 +1,188 @@
+// 本机 Android 冷更(release-android-local.mjs)的 helper —— 纯函数为主,便于单测。
+// 涉及 buildNumber/versionCode 单调、CDN 基线、release 记录组装的逻辑与平台无关,直接复用
+// ./ios-local.mjs(不重复实现);本文件只放 Android 特有的:committed versionCode 读取、
+// 生成的 android/app/build.gradle 签名 patch、keystore 签名环境解析。
+
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+/** 自建 Android 线默认 release keystore(仓库外,不入仓;可用 env 覆盖)。 */
+export const DEFAULT_KEYSTORE_PATH = '/Users/cn-ios/Documents/xdt/XDMakerMobileCer/Android/xdmaker-release.jks';
+/** 默认 keyAlias(见 XDMakerMobileCer/Android/signing-info.txt)。口令**绝不**写进代码,只从 env 读。 */
+export const DEFAULT_KEY_ALIAS = 'xdmaker-release';
+
+/**
+ * 读 committed android-version.json 的 versionCode(单调递增整数,语义对齐 iOS buildNumber)。
+ * app.config.js 不直接读本文件,由发布脚本读后经 env XDT_ANDROID_VERSION_CODE 注入,
+ * 故本文件对 @expo/fingerprint 不可见(红线 1)。
+ * @param {string} mobileDir apps/mobile 目录
+ * @returns {number} 正整数 versionCode
+ */
+export function readAndroidVersionCode(mobileDir) {
+  const file = resolve(mobileDir, 'android-version.json');
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (err) {
+    throw new Error(`读取/解析 ${file} 失败:${err?.message ?? err}`);
+  }
+  const vc = raw?.versionCode;
+  if (!Number.isInteger(vc) || vc <= 0) {
+    throw new Error(`android-version.json 的 versionCode 必须是正整数,当前为 ${JSON.stringify(vc)}`);
+  }
+  return vc;
+}
+
+/**
+ * 计算下一个 Android 冷更 versionCode:max(current, previous) + 1。
+ * android-version.json 的既有约定是小整数顺序递增(1、2、3…),与 iOS 的日期基 buildNumber
+ * 不同,自动 bump 保持各自惯例。current/previous 必须是正整数(previous 来自 CDN 记录,
+ * 可能是数字串);非整数抛错回退手动 bump,不静默产出错误版号。
+ * @param {string|number} current 本地 android-version.json 当前值
+ * @param {string|number|null} previous 线上冷更基线值(可为空 = 首发)
+ * @returns {number}
+ */
+export function nextSequentialVersionCode(current, previous) {
+  const floors = [current, previous]
+    .filter((v) => v != null && v !== '')
+    .map((v) => {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n <= 0 || !/^\d+$/.test(String(v))) {
+        throw new Error(`无法自动 bump:versionCode ${JSON.stringify(String(v))} 不是正整数,请手动 bump 后重试`);
+      }
+      return n;
+    });
+  if (!floors.length) throw new Error('nextSequentialVersionCode 需要至少一个有效的 current/previous');
+  return Math.max(...floors) + 1;
+}
+
+/**
+ * 在 android-version.json 原文上就地替换 versionCode —— 纯字符串替换而非 parse→stringify,
+ * 保留 _comment 等其余内容与格式零改动、diff 只有一行。
+ * 要求全文恰好一处 "versionCode";0 处或多处一律抛错防误替换。
+ * @param {string} rawText android-version.json 原文
+ * @param {number} nextVersionCode 正整数
+ * @returns {string}
+ */
+export function replaceVersionCodeInAndroidVersionJson(rawText, nextVersionCode) {
+  if (!Number.isInteger(nextVersionCode) || nextVersionCode <= 0) {
+    throw new Error(`replaceVersionCodeInAndroidVersionJson:新 versionCode 必须是正整数,收到 ${JSON.stringify(nextVersionCode)}`);
+  }
+  const matches = String(rawText).match(/"versionCode"\s*:\s*\d+/g) ?? [];
+  if (matches.length !== 1) {
+    throw new Error(`android-version.json 中 "versionCode" 出现 ${matches.length} 处(期望恰好 1 处),拒绝自动替换,请手动 bump`);
+  }
+  return String(rawText).replace(/("versionCode"\s*:\s*)\d+/, `$1${nextVersionCode}`);
+}
+
+/**
+ * 解析 keystore 签名环境(供 gradlew assembleRelease 消费,build.gradle 用 System.getenv 读)。
+ * 路径/alias 有默认值;两个口令**必须**由 env 提供(缺失即抛错,不落任何默认口令)。
+ * 返回的 env 只在构建子进程内传入,绝不落盘、绝不写进 build.gradle。
+ * @param {NodeJS.ProcessEnv} baseEnv
+ * @returns {{ XDT_ANDROID_KEYSTORE_PATH: string, XDT_ANDROID_KEYSTORE_PASSWORD: string, XDT_ANDROID_KEY_ALIAS: string, XDT_ANDROID_KEY_PASSWORD: string }}
+ */
+export function resolveAndroidSigningEnv(baseEnv = process.env) {
+  const keystorePath = String(baseEnv.XDT_ANDROID_KEYSTORE_PATH ?? '').trim() || DEFAULT_KEYSTORE_PATH;
+  const keyAlias = String(baseEnv.XDT_ANDROID_KEY_ALIAS ?? '').trim() || DEFAULT_KEY_ALIAS;
+  const storePassword = String(baseEnv.XDT_ANDROID_KEYSTORE_PASSWORD ?? '').trim();
+  const keyPassword = String(baseEnv.XDT_ANDROID_KEY_PASSWORD ?? '').trim();
+  const missing = [];
+  if (!storePassword) missing.push('XDT_ANDROID_KEYSTORE_PASSWORD');
+  if (!keyPassword) missing.push('XDT_ANDROID_KEY_PASSWORD');
+  if (missing.length) {
+    throw new Error(
+      `缺少 keystore 口令环境变量:${missing.join(', ')}(口令不入仓,须在启动时提供;keystore 路径默认 ${DEFAULT_KEYSTORE_PATH},可用 XDT_ANDROID_KEYSTORE_PATH 覆盖)`,
+    );
+  }
+  return {
+    XDT_ANDROID_KEYSTORE_PATH: keystorePath,
+    XDT_ANDROID_KEYSTORE_PASSWORD: storePassword,
+    XDT_ANDROID_KEY_ALIAS: keyAlias,
+    XDT_ANDROID_KEY_PASSWORD: keyPassword,
+  };
+}
+
+// 注入进 signingConfigs 块的 release 签名(从 System.getenv 读,gradlew 子进程 env 传入,
+// 口令不落盘、不写进被 patch 的文件——文件里只有 property 名)。
+const RELEASE_SIGNING_CONFIG_SNIPPET = `        release {
+            storeFile file(System.getenv("XDT_ANDROID_KEYSTORE_PATH"))
+            storePassword System.getenv("XDT_ANDROID_KEYSTORE_PASSWORD")
+            keyAlias System.getenv("XDT_ANDROID_KEY_ALIAS")
+            keyPassword System.getenv("XDT_ANDROID_KEY_PASSWORD")
+        }
+`;
+
+/**
+ * 幂等 patch 生成的 android/app/build.gradle,使 release 构建用自有 keystore 自签:
+ *   1. 在 signingConfigs { 块内插入 release {...}(env 驱动);
+ *   2. 把 release buildType 的 `signingConfig signingConfigs.debug` 改成 `.release`。
+ * 已 patch(出现 signingConfigs.release)则原样返回。找不到锚点则抛错(不静默出未签名/debug 签名包)。
+ * 纯函数,便于单测。
+ * @param {string} source build.gradle 原文
+ * @returns {string}
+ */
+export function patchBuildGradleSigning(source) {
+  if (typeof source !== 'string' || !source) throw new Error('patchBuildGradleSigning: 空 build.gradle');
+  if (source.includes('signingConfigs.release')) return source; // 幂等:已 patch
+
+  // 1) 在 signingConfigs { 之后插入 release 配置(只认第一处 signingConfigs 块)。
+  const signingBlock = /signingConfigs\s*\{/;
+  if (!signingBlock.test(source)) {
+    throw new Error('patchBuildGradleSigning: 未找到 signingConfigs { 块(Expo prebuild 模板结构变化?)');
+  }
+  let patched = source.replace(signingBlock, (m) => `${m}\n${RELEASE_SIGNING_CONFIG_SNIPPET}`);
+
+  // 2) 把 buildTypes 里 release 块的 signingConfig 从 debug 切到 release。
+  //    lazy 匹配确保停在 release 块内首个 signingConfig 行;模板中 debug buildType 在前、release 在后,
+  //    debug 的 signingConfig 不受影响。\brelease\s*\{ 避免误命中 enableProguardInReleaseBuilds 等。
+  const flip = /(buildTypes\s*\{[\s\S]*?\brelease\s*\{[\s\S]*?signingConfig\s+signingConfigs\.)debug/;
+  if (!flip.test(patched)) {
+    throw new Error('patchBuildGradleSigning: 未找到 release buildType 的 signingConfig signingConfigs.debug(模板结构变化?)');
+  }
+  patched = patched.replace(flip, '$1release');
+  return patched;
+}
+
+// xdt-feishu-login vendored 的 larksso AAR 目录(相对生成的 android/ 根工程)。用单引号 JS 串,
+// 保持 groovy 的 ${rootProject.projectDir} 字面量(不被 JS 模板插值)。
+export const FEISHU_LIBS_DIR_EXPR = '${rootProject.projectDir}/../modules/xdt-feishu-login/android/libs';
+
+/**
+ * 幂等 patch 生成的 android/build.gradle:把 xdt-feishu-login 的 libs flatDir 加进 allprojects.repositories,
+ * 让 :app 能传递解析 vendored 的 larksso AAR(flatDir 无 POM、不跨工程传递,故 :app 侧必须显式声明)。
+ * 只动生成的 android/(prebuild 之后),对 @expo/fingerprint / iOS / EAS 零影响。找不到锚点抛错。
+ * @param {string} source android/build.gradle 原文
+ * @returns {string}
+ */
+export function patchRootBuildGradleFeishuFlatDir(source) {
+  if (typeof source !== 'string' || !source) throw new Error('patchRootBuildGradleFeishuFlatDir: 空 build.gradle');
+  if (source.includes('xdt-feishu-login/android/libs')) return source; // 幂等:已 patch
+  // 只认 allprojects 里的 repositories(避免误伤 buildscript.repositories)。
+  const anchor = /allprojects\s*\{\s*repositories\s*\{/;
+  if (!anchor.test(source)) {
+    throw new Error('patchRootBuildGradleFeishuFlatDir: 未找到 allprojects { repositories { 块(Expo prebuild 模板结构变化?)');
+  }
+  return source.replace(anchor, (m) => `${m}\n    flatDir { dirs "${FEISHU_LIBS_DIR_EXPR}" }`);
+}
+
+/**
+ * 幂等 patch 生成的 android/gradle.properties 的 org.gradle.jvmargs,调大 heap / metaspace,
+ * 避免大型多模块 + KSP 编译时 Metaspace OOM。保留该行其它已有 flag,只 bump 两个数值(缺则补)。
+ * @param {string} source gradle.properties 原文
+ * @param {{ xmxMb?: number, metaspaceMb?: number }} [opts]
+ * @returns {string}
+ */
+export function patchGradlePropertiesMemory(source, { xmxMb = 4096, metaspaceMb = 2048 } = {}) {
+  if (typeof source !== 'string') throw new Error('patchGradlePropertiesMemory: 非字符串');
+  const line = source.match(/^org\.gradle\.jvmargs=.*$/m);
+  if (!line) {
+    return `${source.replace(/\n?$/, '\n')}org.gradle.jvmargs=-Xmx${xmxMb}m -XX:MaxMetaspaceSize=${metaspaceMb}m\n`;
+  }
+  let val = line[0];
+  val = /-Xmx\d+[kmgKMG]/.test(val) ? val.replace(/-Xmx\d+[kmgKMG]/, `-Xmx${xmxMb}m`) : `${val} -Xmx${xmxMb}m`;
+  val = /-XX:MaxMetaspaceSize=\d+[kmgKMG]/.test(val)
+    ? val.replace(/-XX:MaxMetaspaceSize=\d+[kmgKMG]/, `-XX:MaxMetaspaceSize=${metaspaceMb}m`)
+    : `${val} -XX:MaxMetaspaceSize=${metaspaceMb}m`;
+  return source.replace(/^org\.gradle\.jvmargs=.*$/m, val);
+}

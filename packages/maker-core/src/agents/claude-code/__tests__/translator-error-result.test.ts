@@ -1,0 +1,269 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import { createAsyncQueue } from '../../shared/async-queue.js';
+import { UsageTracker } from '../../shared/usage-tracker.js';
+import {
+  newRuntimeState,
+  translateSdkMessage,
+  type TurnState,
+} from '../translator.js';
+import type { AgentEvent } from '../../../types/events.js';
+
+function createTurnState(): TurnState {
+  return {
+    text: '',
+    toolUses: 0,
+    apiCalls: 0,
+    sawCompactBoundary: false,
+    hasEmittedText: false,
+    uiEmittedText: '',
+    pushedTerminalError: false,
+    interruptRequested: false,
+    generation: 0,
+    interruptGeneration: 0,
+    lastAssistantMsgHadSubstance: true,
+  };
+}
+
+function createCtx(tracker: UsageTracker) {
+  return {
+    rt: newRuntimeState(),
+    turn: createTurnState(),
+    log: { debug: vi.fn(), info: vi.fn(), warn: vi.fn() },
+    getModel: () => 'codex/gpt-5.5',
+    getEffort: () => 'high' as const,
+    getPermissionMode: () => 'auto' as const,
+    onSessionId: vi.fn(),
+    getSdkSessionId: () => undefined,
+    getLogTitle: () => undefined,
+    tracker,
+    getModelContextWindow: () => 272_000,
+  };
+}
+
+async function drain(queue: ReturnType<typeof createAsyncQueue<AgentEvent>>): Promise<AgentEvent[]> {
+  queue.end();
+  const events: AgentEvent[] = [];
+  for await (const event of queue) events.push(event);
+  return events;
+}
+
+describe('Claude Code translator is_error result guard', () => {
+  it('surfaces a terminal error AND keeps the Done/done tail when is_error arrives without a prior envelope', async () => {
+    // 原 bug 路径②: result.is_error 但 turn 内没有任何 API-error envelope → 旧实现只发
+    // status Done + done, renderer 的 state.error 不置位, 失败被通知成"已完成"。
+    // 修复后序列 = error → status Done → done, 与 envelope 场景既有失败序列同构;
+    // done 不能砍: main 的花费记账只从 done 的 result payload 读数(Codex review P2)。
+    const tracker = new UsageTracker();
+    const queue = createAsyncQueue<AgentEvent>();
+    const ctx = createCtx(tracker);
+
+    translateSdkMessage(
+      { type: 'stream_event', event: { type: 'message_start', message: { model: 'codex/gpt-5.5', usage: { input_tokens: 100 } } } },
+      queue,
+      ctx,
+    );
+    translateSdkMessage(
+      {
+        type: 'result',
+        is_error: true,
+        result: 'API request failed: model not available',
+        stop_reason: 'end_turn',
+        total_cost_usd: 0,
+        usage: { input_tokens: 100, output_tokens: 2 },
+        modelUsage: { 'codex/gpt-5.5': { inputTokens: 100, outputTokens: 2, costUSD: 0, contextWindow: 272_000 } },
+      },
+      queue,
+      ctx,
+    );
+
+    const events = await drain(queue);
+    const errIdx = events.findIndex((e) => e.type === 'error');
+    const doneIdx = events.findIndex((e) => e.type === 'done');
+    expect(errIdx, 'is_error result must surface a terminal error').toBeGreaterThanOrEqual(0);
+    expect(events[errIdx]?.data).toMatchObject({ message: 'API request failed: model not available', isTerminal: true });
+    // done 尾巴保留(usage 记账依赖), 且在 error 之后。
+    expect(doneIdx, 'done must still be emitted for usage accounting').toBeGreaterThan(errIdx);
+    expect(
+      events.some((e) => e.type === 'status' && (e.data as { status?: string }).status === 'Done'),
+      'Done status preserved',
+    ).toBe(true);
+    // 错误文本只走 error banner: text fallback 的 full 计算源头排除 is_error
+    // (full = !msg.is_error && ...), msg.result 不会被补推成正文气泡 / 落库。
+    expect(events.some((e) => e.type === 'text'), 'error detail must NOT be duplicated as a text event').toBe(false);
+  });
+
+  it('falls back to reason=turn-failed when is_error carries no result text', async () => {
+    const tracker = new UsageTracker();
+    const queue = createAsyncQueue<AgentEvent>();
+    const ctx = createCtx(tracker);
+
+    translateSdkMessage(
+      { type: 'stream_event', event: { type: 'message_start', message: { model: 'codex/gpt-5.5', usage: { input_tokens: 100 } } } },
+      queue,
+      ctx,
+    );
+    translateSdkMessage(
+      {
+        type: 'result',
+        is_error: true,
+        stop_reason: 'end_turn',
+        total_cost_usd: 0,
+        usage: { input_tokens: 100, output_tokens: 0 },
+        modelUsage: { 'codex/gpt-5.5': { inputTokens: 100, outputTokens: 0, costUSD: 0, contextWindow: 272_000 } },
+      },
+      queue,
+      ctx,
+    );
+
+    const events = await drain(queue);
+    const err = events.find((e) => e.type === 'error');
+    expect(err).toBeDefined();
+    expect(err?.data).toMatchObject({ reason: 'turn-failed', isTerminal: true });
+    // done 尾巴保留(usage 记账依赖)。
+    expect(events.some((e) => e.type === 'done')).toBe(true);
+  });
+
+  it('keeps the existing Done/done tail (no second error) when an API-error envelope already closed the turn', async () => {
+    // envelope 场景保持现状: envelope 已推 terminal error(pushedTerminalError=true),
+    // turn-end 照旧发 status Done + done, 不重复推第二条 error(双 banner)。
+    const tracker = new UsageTracker();
+    const queue = createAsyncQueue<AgentEvent>();
+    const ctx = createCtx(tracker);
+
+    translateSdkMessage(
+      { type: 'stream_event', event: { type: 'message_start', message: { model: 'codex/gpt-5.5', usage: { input_tokens: 100 } } } },
+      queue,
+      ctx,
+    );
+    // API-error envelope: assistant 消息带 error tag。
+    translateSdkMessage(
+      {
+        type: 'assistant',
+        error: 'rate_limit',
+        message: {
+          model: 'codex/gpt-5.5',
+          content: [{ type: 'text', text: 'Rate limited — retry later.' }],
+        },
+      },
+      queue,
+      ctx,
+    );
+    translateSdkMessage(
+      {
+        type: 'result',
+        is_error: true,
+        result: 'Rate limited — retry later.',
+        stop_reason: 'end_turn',
+        total_cost_usd: 0,
+        usage: { input_tokens: 100, output_tokens: 2 },
+        modelUsage: { 'codex/gpt-5.5': { inputTokens: 100, outputTokens: 2, costUSD: 0, contextWindow: 272_000 } },
+      },
+      queue,
+      ctx,
+    );
+
+    const events = await drain(queue);
+    const errors = events.filter((e) => e.type === 'error');
+    expect(errors, 'exactly one terminal error (from the envelope)').toHaveLength(1);
+    expect(errors[0]?.data).toMatchObject({ sdkError: 'rate_limit', isTerminal: true });
+    // envelope 场景的既有收尾行为不变。
+    expect(events.some((e) => e.type === 'done'), 'done tail preserved for envelope-closed turns').toBe(true);
+  });
+
+  it('does NOT emit a fallback error for an interrupted turn (user stop / watchdog)', async () => {
+    // 用户点停止(handle.abort)与 watchdog 都走 q.interrupt(), SDK 随后 drain 出
+    // error_during_execution 的 is_error result——这不是上游失败, 不能补 terminal
+    // error, 否则"用户点停止"被误报成"执行失败"通知、watchdog 场景双发 banner
+    // (review P1)。interrupt 发起处已置 interruptRequested。
+    const tracker = new UsageTracker();
+    const queue = createAsyncQueue<AgentEvent>();
+    const ctx = createCtx(tracker);
+
+    translateSdkMessage(
+      { type: 'stream_event', event: { type: 'message_start', message: { model: 'codex/gpt-5.5', usage: { input_tokens: 100 } } } },
+      queue,
+      ctx,
+    );
+    ctx.turn.interruptRequested = true; // abort()/watchdog 在 q.interrupt() 前置位
+    translateSdkMessage(
+      {
+        type: 'result',
+        subtype: 'error_during_execution',
+        is_error: true,
+        stop_reason: null,
+        total_cost_usd: 0,
+        usage: { input_tokens: 100, output_tokens: 2 },
+        modelUsage: { 'codex/gpt-5.5': { inputTokens: 100, outputTokens: 2, costUSD: 0, contextWindow: 272_000 } },
+      },
+      queue,
+      ctx,
+    );
+
+    const events = await drain(queue);
+    expect(events.some((e) => e.type === 'error'), 'interrupted turn must stay quiet (no fallback error)').toBe(false);
+    // 收尾与改动前一致: status Done + done 照发(usage 记账也保留)。
+    expect(events.some((e) => e.type === 'done')).toBe(true);
+    // 标记随 turn 收尾复位, 不污染下一轮。
+    expect(ctx.turn.interruptRequested).toBe(false);
+  });
+
+  it('drops a stale interrupted result entirely when a newer send has taken over', async () => {
+    // interrupt 后用户立刻发新消息(beginNewTurn 代际前进), 被打断 turn 的
+    // error_during_execution result 迟到 drain: 不能发 error(误报), 也不能发
+    // status Done/done(会被 main 当作**当前** turn 边界, 提前终结新 turn),
+    // 必须整条丢弃并消费标记(review P2)。
+    const tracker = new UsageTracker();
+    const queue = createAsyncQueue<AgentEvent>();
+    const ctx = createCtx(tracker);
+
+    ctx.turn.interruptRequested = true;
+    ctx.turn.interruptGeneration = 0; // interrupt 发生在第 0 代
+    ctx.turn.generation = 1; // 新 send 已接管(beginNewTurn 自增)
+    translateSdkMessage(
+      {
+        type: 'result',
+        subtype: 'error_during_execution',
+        is_error: true,
+        stop_reason: null,
+        total_cost_usd: 0,
+        usage: { input_tokens: 100, output_tokens: 2 },
+      },
+      queue,
+      ctx,
+    );
+
+    const events = await drain(queue);
+    expect(events, 'stale interrupted result must be dropped entirely').toEqual([]);
+    // 标记随消费清除, 新 turn 的真实 is_error 兜底不受影响。
+    expect(ctx.turn.interruptRequested).toBe(false);
+  });
+
+  it('does not affect a normal non-error turn (Done/done, no error)', async () => {
+    const tracker = new UsageTracker();
+    const queue = createAsyncQueue<AgentEvent>();
+    const ctx = createCtx(tracker);
+
+    translateSdkMessage(
+      { type: 'stream_event', event: { type: 'message_start', message: { model: 'codex/gpt-5.5', usage: { input_tokens: 100 } } } },
+      queue,
+      ctx,
+    );
+    translateSdkMessage(
+      {
+        type: 'result',
+        result: 'all good',
+        stop_reason: 'end_turn',
+        total_cost_usd: 0,
+        usage: { input_tokens: 100, output_tokens: 5 },
+        modelUsage: { 'codex/gpt-5.5': { inputTokens: 100, outputTokens: 5, costUSD: 0, contextWindow: 272_000 } },
+      },
+      queue,
+      ctx,
+    );
+
+    const events = await drain(queue);
+    expect(events.some((e) => e.type === 'error')).toBe(false);
+    expect(events.some((e) => e.type === 'done')).toBe(true);
+  });
+});

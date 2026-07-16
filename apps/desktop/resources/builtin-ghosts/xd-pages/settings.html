@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<!-- XD Pages 自定义设置区(意识自绘,cindy-ghost:// 沙箱页):
+     只读展示 Pages 身份——值 = 当前登录邮箱,由主机自动派生,不可配置。
+     数据面:GET /secrets 回 [{ key: "pages_token", saved, identity? }]
+     (identity = 登录邮箱;写/删对派生身份一律 405,本页也不提供任何输入)。 -->
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  /* 底色不自己铺:主机注入基线 = 设置卡片色,与相邻卡片无缝(FORGE_GUIDE §4.8)。 */
+  body {
+    padding: 2px 0 0;
+    color: var(--text-primary, #1a1a1a);
+    font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .label-row { display: flex; align-items: center; gap: 8px; }
+  .label-row .name { font-weight: 500; }
+  .badge {
+    padding: 1px 8px; border-radius: 6px; font-size: 11px;
+    background: var(--surface-chip, #efefec); color: var(--text-tertiary, #8a8a86);
+  }
+  .hint { margin-top: 4px; font-size: 11px; color: var(--text-tertiary, #8a8a86); }
+  /* 身份行样式对齐 XD Atlassian 的账号行(.account):同款圆角卡片 + 右侧灰字标签;仍是纯展示,无任何输入。 */
+  #identity {
+    display: flex; align-items: center; gap: 8px; margin-top: 8px;
+    padding: 6px 12px; border: 1px solid var(--border-default, #e4e4e0);
+    border-radius: 10px; background: var(--surface-elevated, #ffffff);
+  }
+  #identity .email { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #identity .tag { font-size: 11px; color: var(--text-tertiary, #8a8a86); flex: 0 0 auto; }
+</style>
+</head>
+<body>
+  <div class="label-row">
+    <span class="name">Pages 身份</span>
+    <span class="badge">登录邮箱</span>
+  </div>
+  <p class="hint">部署与管理站点用 pages_&lt;邮箱&gt; 鉴权;值来自当前登录账号,自动派生、不可修改。</p>
+  <div id="identity">
+    <span class="email" id="identity-email">读取中…</span>
+    <span class="tag">自动派生</span>
+  </div>
+
+  <script src="/settings.js"></script>
+</body>
+</html>

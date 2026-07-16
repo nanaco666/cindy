@@ -1,0 +1,697 @@
+/**
+ * session-runner.test.ts
+ * ---------------------------------------------------------------------------
+ * hook 会话的 userSendAt 落库时序回归(Slack DM / 频道 @ 共用同一条路径)。
+ *
+ * 根因(与 IM 修复 53b999601 同型): 新建 hook 会话广播 sessions:created 触发
+ * renderer 全量重拉, 那一刻 user 消息还没落库(send 被接受后才写), 若 userSendAt
+ * 也为 null, projectGrouping 草稿规则会把会话误判进「未分类」, 且之后没有事件
+ * 再触发重归组 —— 会话永远不出现在工作目录分组下。
+ *
+ * 断言两条不变量:
+ *   1. isNew 路径: touchUserSendInDb 必须发生在 sessions:created 广播**之前**
+ *      (广播后 renderer 重拉必须能读到非空 userSendAt);
+ *   2. 每次 send 被接受(onAccepted)都要 bump userSendAt(复用/接管会话的排序
+ *      时间轴与桌面端 sendMessage 口径一致)。
+ *
+ * mock 方式对齐 touchUserSendBroadcast.test.ts: 捕获数组放 vi.hoisted, 记录
+ * 跨模块调用顺序。
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const h = vi.hoisted(() => {
+  /** 跨模块调用顺序记录: 'touch:<id>' / 'created:<id>' */
+  const calls: string[] = [];
+  return {
+    calls,
+    touchUserSendInDb: vi.fn(async (id: string) => {
+      calls.push(`touch:${id}`);
+    }),
+    tapWindowBroadcast: vi.fn((channel: string, payload: { sessionId?: string }) => {
+      if (channel === 'local-db:sessions:created') {
+        calls.push(`created:${payload.sessionId}`);
+      }
+    }),
+    createMessage: vi.fn(async () => {
+      calls.push('createMessage');
+    }),
+    setSessionProviderIdInDb: vi.fn(async (id: string, providerId: string) => {
+      calls.push(`providerDb:${id}:${providerId}`);
+    }),
+    setSessionProvider: vi.fn(),
+    hydrateSessionProvider: vi.fn(),
+    /** 默认透传(视为来源可用); 校验回落用例里改写返回 null。 */
+    resolveDefaultProviderIdForModel: vi.fn(
+      async (_agentKind: string, _modelId: string, providerId: string | null) => providerId,
+    ),
+    /** 每个 fake session 的事件监听回调(emit done 用)。 */
+    eventCbs: new Map<string, (ev: { type: string; data: unknown }) => void>(),
+    /** 每个 fake session 被装上的 interaction listener(交互测试驱动用)。 */
+    interactionListeners: new Map<string, (req: unknown) => Promise<unknown>>(),
+    installDesktopInteractionListener: vi.fn(),
+    /** mocked resolveHookSessionConfig 的返回值(测试内可改写)。 */
+    resolvedConfig: {
+      agentKind: 'claude-code' as const,
+      model: 'test-model',
+      effort: undefined as string | undefined,
+      permissionMode: 'bypassPermissions',
+      providerId: null as string | null,
+    },
+  };
+});
+
+vi.mock('electron', () => ({
+  BrowserWindow: { getAllWindows: () => [] },
+}));
+vi.mock('@lizi/maker-core', () => ({
+  isTerminalAgentErrorEvent: (ev: { type: string }) => ev.type === 'error',
+}));
+vi.mock('../../device-link/broadcast-tap.js', () => ({
+  tapWindowBroadcast: h.tapWindowBroadcast,
+}));
+vi.mock('../../maker-ipc/register.js', () => ({
+  wireSessionToIpc: vi.fn(),
+  isSessionInTurn: () => false,
+  installDesktopInteractionListener: h.installDesktopInteractionListener,
+  noteSilentStopUserSend: vi.fn(),
+  onSilentStopSettled: vi.fn(() => () => {}),
+}));
+vi.mock('../../maker-host/send-outcome.js', () => ({
+  toDesktopSessionDispatchOutcome: () => ({ dispatched: true as const }),
+}));
+vi.mock('../../localDb/ipc/messages.js', () => ({
+  createMessage: h.createMessage,
+}));
+vi.mock('../../localDb/ipc/sessions.js', () => ({
+  getSessionRowSnapshot: vi.fn(async () => null),
+  setSessionProviderIdInDb: h.setSessionProviderIdInDb,
+  setWorktreePathInDb: vi.fn(async () => undefined),
+  touchUserSendInDb: h.touchUserSendInDb,
+}));
+vi.mock('../../maker-host/session-provider-store.js', () => ({
+  setSessionProvider: h.setSessionProvider,
+  hydrateSessionProvider: h.hydrateSessionProvider,
+}));
+vi.mock('../../im/defaultSessionSettings.js', () => ({
+  resolveDefaultProviderIdForModel: h.resolveDefaultProviderIdForModel,
+}));
+vi.mock('../../imageCacheStore.js', () => ({
+  resolveSafe: vi.fn(),
+}));
+// cindy-media(迁移第 1 步):入站图片写入切到媒体总仓,mock 记调用。
+const cindyMock = vi.hoisted(() => ({
+  ingestMedia: vi.fn(async () => ({
+    hash: 'a'.repeat(64),
+    ext: '.png',
+    mimeType: 'image/png',
+    bytes: 8,
+    url: `cindy-media://blobs/${'a'.repeat(64)}.png`,
+    deduplicated: false,
+    refIds: ['ref-1'],
+  })),
+  resolveSafe: vi.fn((url: string) => ({
+    absPath: `/blobs/${url.slice('cindy-media://blobs/'.length)}`,
+    mimeType: 'image/png',
+    hash: 'a'.repeat(64),
+  })),
+}));
+vi.mock('../../cindy-media/ingest.js', () => ({ ingestMedia: cindyMock.ingestMedia }));
+vi.mock('../../cindy-media/blobStore.js', () => ({ resolveSafe: cindyMock.resolveSafe }));
+vi.mock('../../worktree/index.js', () => ({
+  worktreeStore: { get: () => undefined },
+  WorktreeManager: { removeWorktreeForSession: vi.fn(async () => undefined) },
+}));
+vi.mock('../../im/defaultSettingsStore.js', () => ({
+  readImDefaultSettings: vi.fn(),
+}));
+vi.mock('../defaults.js', () => ({
+  resolveHookSessionConfig: () => ({ ...h.resolvedConfig }),
+}));
+
+/** fake maker: createSession 返回"send 即接受、随后立刻 done"的会话。 */
+function makeFakeSession(id: string) {
+  return {
+    id,
+    onEvent(cb: (ev: { type: string; data: unknown }) => void) {
+      h.eventCbs.set(id, cb);
+      return () => {
+        h.eventCbs.delete(id);
+      };
+    },
+    send: vi.fn(
+      async (
+        _msg: unknown,
+        opts: { onAccepted?: () => Promise<void> },
+      ): Promise<unknown> => {
+        await opts.onAccepted?.();
+        // 收口: 模拟 agent 立刻完成本 turn
+        queueMicrotask(() => h.eventCbs.get(id)?.({ type: 'done', data: null }));
+        return {};
+      },
+    ),
+  };
+}
+
+const fakeMaker = {
+  createSession: vi.fn(async (opts: { id?: string }) => makeFakeSession(opts.id ?? 'sess-x')),
+  getSessionMeta: vi.fn(async () => ({
+    workDir: 'D:/repo',
+    model: 'meta-model',
+    sdkSessionId: 'sdk-1',
+    agentKind: 'claude-code' as const,
+    permissionMode: undefined as 'ask' | 'bypassPermissions' | undefined,
+  })),
+  getSession: vi.fn(),
+  getCapabilities: vi.fn(() => ({ availableModels: [], permissionModes: [] })),
+};
+
+vi.mock('../../maker-host/index.js', () => ({
+  getMaker: () => fakeMaker,
+}));
+
+import { createMakerHookSessionRunner } from '../session-runner.js';
+
+const log = { info: vi.fn(), warn: vi.fn() };
+
+function baseReq(overrides: Partial<Parameters<ReturnType<typeof createMakerHookSessionRunner>['run']>[0]>) {
+  return {
+    sessionId: 'sess-new',
+    isNew: true,
+    workingDir: 'D:/repo/.xdt-worktrees/wt-1',
+    agentKind: null,
+    model: null,
+    effort: null,
+    permissionMode: null,
+    title: '[Hook·slack] dm:U1:g0',
+    prompt: 'hello',
+    origin: { connectionId: 'slack', connectionName: 'XDMaker Slack', externalKey: 'slack:dm:U1:g0' },
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  h.calls.length = 0;
+  h.eventCbs.clear();
+  h.resolvedConfig.permissionMode = 'bypassPermissions';
+  h.resolvedConfig.providerId = null;
+});
+
+describe('hook session-runner 的 userSendAt 时序(未分类误判回归)', () => {
+  it('isNew: touchUserSendInDb 在 sessions:created 广播之前落库, onAccepted 再 bump 一次', async () => {
+    const runner = createMakerHookSessionRunner({ log });
+    const outcome = await runner.run(baseReq({}));
+
+    expect(outcome.status).toBe('ok');
+    // 广播前必须已 touch —— renderer 重拉才能读到非空 userSendAt, 不落「未分类」
+    const touchIdx = h.calls.indexOf('touch:sess-new');
+    const createdIdx = h.calls.indexOf('created:sess-new');
+    expect(touchIdx).toBeGreaterThanOrEqual(0);
+    expect(createdIdx).toBeGreaterThanOrEqual(0);
+    expect(touchIdx).toBeLessThan(createdIdx);
+    // onAccepted 后的第二次 bump(更新为实际发送时刻)
+    expect(h.touchUserSendInDb).toHaveBeenCalledTimes(2);
+    // user 消息仍先于第二次 bump 落库
+    expect(h.calls.indexOf('createMessage')).toBeLessThan(h.calls.lastIndexOf('touch:sess-new'));
+  });
+
+  it('复用/接管(isNew=false): 不广播 created, 但 onAccepted 仍 bump userSendAt', async () => {
+    const runner = createMakerHookSessionRunner({ log });
+    const outcome = await runner.run(baseReq({ sessionId: 'sess-old', isNew: false }));
+
+    expect(outcome.status).toBe('ok');
+    expect(h.calls).not.toContain('created:sess-old');
+    expect(h.touchUserSendInDb).toHaveBeenCalledTimes(1);
+    expect(h.touchUserSendInDb).toHaveBeenCalledWith('sess-old');
+  });
+
+  it('入站图片附件:ingest 进媒体总仓挂 session-attachment 引用,喂 agent 用 blob 绝对路径,落库用 cindy-media url', async () => {
+    const runner = createMakerHookSessionRunner({ log });
+    const outcome = await runner.run(
+      baseReq({
+        attachments: [
+          { name: 'shot.png', mimeType: 'image/png', dataBase64: Buffer.from('png-bytes').toString('base64') },
+        ],
+      } as Partial<Parameters<ReturnType<typeof createMakerHookSessionRunner>['run']>[0]>),
+    );
+    expect(outcome.status).toBe('ok');
+
+    // ingest 一次,入站图无草稿期直接挂 session-attachment 引用(含出生信息)
+    expect(cindyMock.ingestMedia).toHaveBeenCalledTimes(1);
+    const ingestCalls = cindyMock.ingestMedia.mock.calls as unknown as Array<[Record<string, unknown>]>;
+    expect(ingestCalls[0][0]).toMatchObject({
+      mimeType: 'image/png',
+      refs: [
+        { refKind: 'session-attachment', refId: 'sess-new', originSessionId: 'sess-new', originKind: 'user' },
+      ],
+    });
+
+    // 喂 agent:image block 用 blob 仓绝对路径
+    const session = await fakeMaker.createSession.mock.results[0].value;
+    const sendCalls = session.send.mock.calls as unknown as Array<
+      [{ content: Array<{ type: string; path?: string }> }]
+    >;
+    const imgBlock = sendCalls[0][0].content.find((b) => b.type === 'image');
+    expect(imgBlock?.path).toBe(`/blobs/${'a'.repeat(64)}.png`);
+
+    // 落库:images 用 cindy-media:// URL(桌面/手机聊天记录据此渲染)
+    const createCalls = h.createMessage.mock.calls as unknown as Array<
+      [string, { content: { images: Array<{ url: string }> } }]
+    >;
+    expect(createCalls[0][1].content.images[0].url).toBe(`cindy-media://blobs/${'a'.repeat(64)}.png`);
+  });
+
+  it('入站图片 ingest 失败:丢该图不炸 turn(文本照发)', async () => {
+    cindyMock.ingestMedia.mockRejectedValueOnce(new Error('db not ready'));
+    const runner = createMakerHookSessionRunner({ log });
+    const outcome = await runner.run(
+      baseReq({
+        attachments: [
+          { name: 'shot.png', mimeType: 'image/png', dataBase64: Buffer.from('png-bytes').toString('base64') },
+        ],
+      } as Partial<Parameters<ReturnType<typeof createMakerHookSessionRunner>['run']>[0]>),
+    );
+    expect(outcome.status).toBe('ok');
+    const session = await fakeMaker.createSession.mock.results[0].value;
+    // 图被降级丢弃:send 内容回落纯文本
+    expect(session.send.mock.calls[0][0]).toMatchObject({ content: 'hello' });
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('hook image ingest failed'));
+  });
+
+  it('isNew: touchUserSendInDb 失败不阻断建会话与广播(onAccepted 兜底)', async () => {
+    h.touchUserSendInDb.mockImplementationOnce(async () => {
+      throw new Error('db busy');
+    });
+    const runner = createMakerHookSessionRunner({ log });
+    const outcome = await runner.run(baseReq({}));
+
+    expect(outcome.status).toBe('ok');
+    expect(h.calls).toContain('created:sess-new');
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('touchUserSend failed'));
+  });
+});
+
+describe('进度快照(turn.progress 链路)', () => {
+  /** 不自动 done 的 fake session: 测试手动驱动事件流。 */
+  function makeManualSession(id: string) {
+    return {
+      id,
+      onEvent(cb: (ev: { type: string; data: unknown }) => void) {
+        h.eventCbs.set(id, cb);
+        return () => {
+          h.eventCbs.delete(id);
+        };
+      },
+      send: vi.fn(async (_msg: unknown, opts: { onAccepted?: () => Promise<void> }) => {
+        await opts.onAccepted?.();
+        return {};
+      }),
+    };
+  }
+
+  async function flush(times = 30): Promise<void> {
+    for (let i = 0; i < times; i++) await Promise.resolve();
+  }
+
+  it('tool_use/text 驱动过程区快照, 节流发射; done 后不再发射', async () => {
+    vi.useFakeTimers();
+    try {
+      fakeMaker.createSession.mockImplementationOnce(async (opts: { id?: string }) =>
+        makeManualSession(opts.id ?? 'sess-x'),
+      );
+      const emitted: string[] = [];
+      const runner = createMakerHookSessionRunner({ log });
+      const p = runner.run(baseReq({ onProgress: (t: string) => emitted.push(t) }));
+      await flush(); // 走到 send 完成、事件监听已挂
+
+      const cb = h.eventCbs.get('sess-new')!;
+      expect(cb).toBeTypeOf('function');
+
+      // 第一步工具调用 -> 首帧快照(节流窗口内立即发射)
+      cb({ type: 'tool_use', data: { toolName: 'Bash', input: { command: 'pnpm test' } } });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0]).toContain('第 1 步');
+      expect(emitted[0]).toContain('Bash pnpm test');
+
+      // 节流窗口内的密集事件合并成一帧: 第二步 + 正文 delta
+      cb({ type: 'tool_use', data: { toolName: 'Read', input: { file_path: 'D:/repo/a.ts' } } });
+      cb({ type: 'text', data: { text: '结论是……', isFinal: false } });
+      expect(emitted).toHaveLength(1); // 还没到 1.5s, 不发
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(emitted).toHaveLength(2);
+      expect(emitted[1]).toContain('第 2 步');
+      expect(emitted[1]).toContain('结论是……');
+      // 有正文在写 -> 时间线追加"正在书写回复"行
+      expect(emitted[1]).toContain('正在书写回复');
+
+      // 收口: done 之后即使时间继续流逝也不再发射
+      cb({ type: 'done', data: null });
+      await vi.advanceTimersByTimeAsync(20_000);
+      const outcome = await p;
+      expect(outcome.status).toBe('ok');
+      expect(outcome.finalText).toBe('结论是……');
+      expect(emitted).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('未注入 onProgress 时零开销路径: 正常收口无异常', async () => {
+    fakeMaker.createSession.mockImplementationOnce(async (opts: { id?: string }) =>
+      makeManualSession(opts.id ?? 'sess-x'),
+    );
+    const runner = createMakerHookSessionRunner({ log });
+    const p = runner.run(baseReq({}));
+    await new Promise((r) => setTimeout(r, 0));
+    const cb = h.eventCbs.get('sess-new')!;
+    cb({ type: 'tool_use', data: { toolName: 'Bash', input: { command: 'ls' } } });
+    cb({ type: 'done', data: null });
+    const outcome = await p;
+    expect(outcome.status).toBe('ok');
+  });
+});
+
+describe('交互卡链路(interaction listener 覆盖)', () => {
+  /** 带 setInteractionListener 的 fake session(不自动 done)。 */
+  function makeInteractiveSession(id: string) {
+    return {
+      id,
+      onEvent(cb: (ev: { type: string; data: unknown }) => void) {
+        h.eventCbs.set(id, cb);
+        return () => {
+          h.eventCbs.delete(id);
+        };
+      },
+      setInteractionListener(listener: (req: unknown) => Promise<unknown>) {
+        h.interactionListeners.set(id, listener);
+      },
+      send: vi.fn(async (_msg: unknown, opts: { onAccepted?: () => Promise<void> }) => {
+        await opts.onAccepted?.();
+        return {};
+      }),
+    };
+  }
+
+  it('ask 请求 -> 发卡回调 -> 按钮决策回流 resolve; 收口后归还桌面 listener', async () => {
+    fakeMaker.createSession.mockImplementationOnce(async (opts: { id?: string }) =>
+      makeInteractiveSession(opts.id ?? 'sess-x'),
+    );
+    const cards: Array<{ interactionId: string; title: string; buttons: Array<{ id: string }> }> = [];
+    const cancels: Array<{ interactionId: string; reason: string }> = [];
+    const runner = createMakerHookSessionRunner({ log });
+    const p = runner.run(
+      baseReq({
+        onInteraction: (card: { interactionId: string; title: string; buttons: Array<{ id: string }> }) =>
+          void cards.push(card),
+        onInteractionCancel: (interactionId: string, reason: string) =>
+          void cancels.push({ interactionId, reason }),
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+
+    // hook listener 已覆盖桌面版
+    const listener = h.interactionListeners.get('sess-new')!;
+    expect(listener).toBeTypeOf('function');
+
+    // 模型发起提问 -> 卡片经 onInteraction 发出
+    const decisionPromise = listener({
+      kind: 'ask_user_question',
+      requestId: 'int-9',
+      questions: [{ question: '继续重构吗?', options: [{ label: '继续' }, { label: '先停' }] }],
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(cards).toHaveLength(1);
+    expect(cards[0].interactionId).toBe('int-9');
+    expect(cards[0].buttons.map((b) => b.id)).toEqual(['ask:0', 'ask:1']);
+
+    // Slack 按钮回流(dispatcher 会调 resolveHookInteraction)
+    const { resolveHookInteraction } = await import('../interactions.js');
+    expect(resolveHookInteraction('int-9', 'ask:1')).toBe(true);
+    await expect(decisionPromise).resolves.toEqual({
+      kind: 'ask_user_question',
+      answers: { '继续重构吗?': '先停' },
+    });
+
+    // 正常收口: 无未决交互, 不发 cancel, 桌面 listener 归还
+    h.eventCbs.get('sess-new')!({ type: 'done', data: null });
+    const outcome = await p;
+    expect(outcome.status).toBe('ok');
+    expect(cancels).toHaveLength(0);
+    expect(h.installDesktopInteractionListener).toHaveBeenCalledTimes(1);
+  });
+
+  it('permission 请求出三按钮卡, 按钮回流 resolve(允许一次)', async () => {
+    fakeMaker.createSession.mockImplementationOnce(async (opts: { id?: string }) =>
+      makeInteractiveSession(opts.id ?? 'sess-x'),
+    );
+    const cards: Array<{ interactionId: string; kind: string; buttons: Array<{ id: string }> }> = [];
+    const runner = createMakerHookSessionRunner({ log });
+    const p = runner.run(
+      baseReq({
+        onInteraction: (card: { interactionId: string; kind: string; buttons: Array<{ id: string }> }) =>
+          void cards.push(card),
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+
+    const listener = h.interactionListeners.get('sess-new')!;
+    const decisionPromise = listener({
+      kind: 'permission',
+      requestId: 'int-p',
+      toolName: 'Bash',
+      input: { command: 'rm -rf dist' },
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(cards).toHaveLength(1);
+    expect(cards[0].kind).toBe('permission');
+    expect(cards[0].buttons.map((b) => b.id)).toEqual(['perm:allow', 'perm:always', 'perm:deny']);
+
+    const { resolveHookInteraction } = await import('../interactions.js');
+    expect(resolveHookInteraction('int-p', 'perm:allow')).toBe(true);
+    await expect(decisionPromise).resolves.toEqual({ kind: 'permission', behavior: 'allow' });
+
+    h.eventCbs.get('sess-new')!({ type: 'done', data: null });
+    await p;
+  });
+
+  it('permission 未决时 turn 收口: 按默认拒绝收口并发 cancel', async () => {
+    fakeMaker.createSession.mockImplementationOnce(async (opts: { id?: string }) =>
+      makeInteractiveSession(opts.id ?? 'sess-x'),
+    );
+    const cancels: Array<{ interactionId: string; reason: string }> = [];
+    const runner = createMakerHookSessionRunner({ log });
+    const p = runner.run(
+      baseReq({
+        onInteraction: () => undefined,
+        onInteractionCancel: (interactionId: string, reason: string) =>
+          void cancels.push({ interactionId, reason }),
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+
+    const listener = h.interactionListeners.get('sess-new')!;
+    const decisionPromise = listener({
+      kind: 'permission',
+      requestId: 'int-pd',
+      toolName: 'Bash',
+      input: {},
+    });
+    h.eventCbs.get('sess-new')!({ type: 'done', data: null });
+    await p;
+    await expect(decisionPromise).resolves.toEqual({
+      kind: 'permission',
+      behavior: 'deny',
+      reason: 'hook_interaction_timeout',
+    });
+    expect(cancels).toEqual([{ interactionId: 'int-pd', reason: '任务已结束, 此交互已失效' }]);
+  });
+
+  it('turn 收口时未决交互按默认自决并发 cancel(改写 server 卡片)', async () => {
+    fakeMaker.createSession.mockImplementationOnce(async (opts: { id?: string }) =>
+      makeInteractiveSession(opts.id ?? 'sess-x'),
+    );
+    const cancels: Array<{ interactionId: string; reason: string }> = [];
+    const runner = createMakerHookSessionRunner({ log });
+    const p = runner.run(
+      baseReq({
+        onInteraction: () => undefined,
+        onInteractionCancel: (interactionId: string, reason: string) =>
+          void cancels.push({ interactionId, reason }),
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+
+    const listener = h.interactionListeners.get('sess-new')!;
+    const decisionPromise = listener({
+      kind: 'ask_user_question',
+      requestId: 'int-z',
+      questions: [{ question: 'q?', options: [{ label: 'a' }] }],
+    });
+
+    // 交互还挂着, turn 先收口(如模型侧被 abort): 未决交互按默认收口
+    h.eventCbs.get('sess-new')!({ type: 'done', data: null });
+    const outcome = await p;
+    expect(outcome.status).toBe('ok');
+    await expect(decisionPromise).resolves.toEqual({ kind: 'ask_user_question', answers: {} });
+    expect(cancels).toEqual([{ interactionId: 'int-z', reason: '任务已结束, 此交互已失效' }]);
+  });
+});
+
+describe('permissionMode 落 createSession', () => {
+  it('新建: 用 defaults 合成的权限档建会话', async () => {
+    h.resolvedConfig.permissionMode = 'ask';
+    const runner = createMakerHookSessionRunner({ log });
+    const outcome = await runner.run(baseReq({}));
+    expect(outcome.status).toBe('ok');
+    expect(fakeMaker.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ permissionMode: 'ask' }),
+    );
+  });
+
+  it('复用/接管: session meta 的权限档权威, options 不覆盖', async () => {
+    fakeMaker.getSessionMeta.mockImplementationOnce(async () => ({
+      workDir: 'D:/repo',
+      model: 'meta-model',
+      sdkSessionId: 'sdk-1',
+      agentKind: 'claude-code' as const,
+      permissionMode: 'ask' as const,
+    }));
+    const runner = createMakerHookSessionRunner({ log });
+    // options 带 bypass 也不覆盖 meta 的 ask
+    const outcome = await runner.run(
+      baseReq({ sessionId: 'sess-old', isNew: false, permissionMode: 'bypassPermissions' }),
+    );
+    expect(outcome.status).toBe('ok');
+    expect(fakeMaker.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ permissionMode: 'ask' }),
+    );
+  });
+
+  it('chat 伪目录新建: workspaceKind=dialogue 透传给 createSession', async () => {
+    const runner = createMakerHookSessionRunner({ log });
+    const outcome = await runner.run(baseReq({ workspaceKind: 'dialogue' as const }));
+    expect(outcome.status).toBe('ok');
+    expect(fakeMaker.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceKind: 'dialogue' }),
+    );
+    // 普通目录新建不带该字段
+    const outcome2 = await runner.run(baseReq({ sessionId: 'sess-new-2' }));
+    expect(outcome2.status).toBe('ok');
+    const lastCall = fakeMaker.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect('workspaceKind' in lastCall).toBe(false);
+  });
+
+  it('复用/接管: meta 未记录权限档时按历史默认 bypass', async () => {
+    const runner = createMakerHookSessionRunner({ log });
+    const outcome = await runner.run(baseReq({ sessionId: 'sess-old', isNew: false }));
+    expect(outcome.status).toBe('ok');
+    expect(fakeMaker.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ permissionMode: 'bypassPermissions' }),
+    );
+  });
+});
+
+describe('providerId(来源/供应商)贯通 —— issue #854 回归', () => {
+  it('新建: 草稿默认来源经校验后传 createSession + 注入运行时 store + 广播前落库', async () => {
+    h.resolvedConfig.providerId = 'xd';
+    const runner = createMakerHookSessionRunner({ log });
+    const outcome = await runner.run(baseReq({}));
+
+    expect(outcome.status).toBe('ok');
+    // 校验入参: 最终 agentKind + 最终 model + 草稿来源
+    expect(h.resolveDefaultProviderIdForModel).toHaveBeenCalledWith(
+      'claude-code',
+      'test-model',
+      'xd',
+    );
+    expect(fakeMaker.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: 'xd' }),
+    );
+    expect(h.setSessionProvider).toHaveBeenCalledWith('sess-new', 'xd');
+    // 落库必须在 sessions:created 广播之前 —— renderer 重拉才能读到非空来源
+    const providerDbIdx = h.calls.indexOf('providerDb:sess-new:xd');
+    const createdIdx = h.calls.indexOf('created:sess-new');
+    expect(providerDbIdx).toBeGreaterThanOrEqual(0);
+    expect(providerDbIdx).toBeLessThan(createdIdx);
+  });
+
+  it('新建: 来源校验回落 null(未连接/不供该模型)时不传参、不注入、不落库', async () => {
+    h.resolvedConfig.providerId = 'gone-provider';
+    h.resolveDefaultProviderIdForModel.mockResolvedValueOnce(null);
+    const runner = createMakerHookSessionRunner({ log });
+    const outcome = await runner.run(baseReq({}));
+
+    expect(outcome.status).toBe('ok');
+    const opts = fakeMaker.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect('providerId' in opts).toBe(false);
+    expect(h.setSessionProvider).not.toHaveBeenCalled();
+    expect(h.setSessionProviderIdInDb).not.toHaveBeenCalled();
+  });
+
+  it('新建: 默认来源未设置(null)时全程不进 provider 分支(no-break)', async () => {
+    const runner = createMakerHookSessionRunner({ log });
+    const outcome = await runner.run(baseReq({}));
+
+    expect(outcome.status).toBe('ok');
+    const opts = fakeMaker.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect('providerId' in opts).toBe(false);
+    expect(h.setSessionProvider).not.toHaveBeenCalled();
+    expect(h.setSessionProviderIdInDb).not.toHaveBeenCalled();
+  });
+
+  it('复用/接管: sessions.provider_id 权威 -> 传 createSession + hydrate(不显式 set、不重复落库)', async () => {
+    const { getSessionRowSnapshot } = await import('../../localDb/ipc/sessions.js');
+    vi.mocked(getSessionRowSnapshot).mockResolvedValueOnce({
+      status: 'active',
+      title: null,
+      userSendAt: 1,
+      workingDir: 'D:/repo',
+      workspaceKind: 'project',
+      providerId: 'xd',
+    });
+    const runner = createMakerHookSessionRunner({ log });
+    const outcome = await runner.run(baseReq({ sessionId: 'sess-old', isNew: false }));
+
+    expect(outcome.status).toBe('ok');
+    // 冷 resume 时 createSession 必须带上来源 —— agent 首轮凭证形态据此判断
+    expect(fakeMaker.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: 'xd' }),
+    );
+    // hydrate 语义: 仅内存无条目时写, 不盖运行中会话刚切的值
+    expect(h.hydrateSessionProvider).toHaveBeenCalledWith('sess-old', 'xd');
+    expect(h.setSessionProvider).not.toHaveBeenCalled();
+    // 行里本来就有, 不重复写库
+    expect(h.setSessionProviderIdInDb).not.toHaveBeenCalled();
+    // 复用路径不走草稿默认校验
+    expect(h.resolveDefaultProviderIdForModel).not.toHaveBeenCalled();
+  });
+
+  it('复用/接管: 旧会话 provider_id=NULL 时不传 providerId、hydrate(null)、不落库(no-break)', async () => {
+    const { getSessionRowSnapshot } = await import('../../localDb/ipc/sessions.js');
+    vi.mocked(getSessionRowSnapshot).mockResolvedValueOnce({
+      status: 'active',
+      title: null,
+      userSendAt: 1,
+      workingDir: 'D:/repo',
+      workspaceKind: 'project',
+      providerId: null,
+    });
+    const runner = createMakerHookSessionRunner({ log });
+    const outcome = await runner.run(baseReq({ sessionId: 'sess-old', isNew: false }));
+
+    expect(outcome.status).toBe('ok');
+    // providerId=null 时 createSession 不带该字段(走默认路由)
+    const opts = fakeMaker.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+    expect('providerId' in opts).toBe(false);
+    // hydrate 仍被调用(以 null 写入 store, 防后续误 hydrate 覆盖)
+    expect(h.hydrateSessionProvider).toHaveBeenCalledWith('sess-old', null);
+    // 不走显式 set(新建路径专属)
+    expect(h.setSessionProvider).not.toHaveBeenCalled();
+    // 不落库(行本来就是 null, 无需补写)
+    expect(h.setSessionProviderIdInDb).not.toHaveBeenCalled();
+    // 复用路径不走草稿默认校验
+    expect(h.resolveDefaultProviderIdForModel).not.toHaveBeenCalled();
+  });
+});

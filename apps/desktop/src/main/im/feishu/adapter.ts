@@ -1,0 +1,63 @@
+/**
+ * main/im/feishu/adapter.ts
+ * ---------------------------------------------------------------------------
+ * 飞书渠道的 ImChannelAdapter — im/shared 编排层所需的全部渠道差异在此收敛:
+ *   - session 行策略: id `feishu_{botAppId}_{openId}` / source='feishu' /
+ *     feishu 专属列 / im-working-dir/{botAppId} 共享工作目录
+ *   - vendorOptions: { feishuChatId, source:'feishu' } → 注入 lizi_feishu_bot
+ *     MCP (send_file_to_user)
+ *   - ack emoji: REACTION_PROCESSING
+ */
+
+import path from 'node:path';
+import fs from 'node:fs';
+import { app } from 'electron';
+import type { FeishuIM } from 'lizi-im';
+
+import type { ImChannelAdapter, ImOrchestratorConfig } from '../shared/types';
+import { ui, REACTION_PROCESSING } from './uiText';
+
+/**
+ * 飞书 bot 的 workingDir = `userData/im-working-dir/{botAppId}/`
+ * 同 bot 下所有 feishu session 共享这个目录 —— 与老系统对齐
+ * (sessionBridge.ts:200-209)。设计取舍:
+ *   - 共享: 模型可以跨 turn / 跨 session 引用之前生成的文件 ("看下我们刚做的那个")
+ *   - 不分:每个 session 自己一坨工作目录, 跨 session 引用文件需要绝对路径
+ * 在 owner 私聊场景下共享更符合直觉。
+ */
+function ensureWorkingDir(botAppId: string): string {
+  const dir = path.join(app.getPath('userData'), 'im-working-dir', botAppId);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+export function buildFeishuAdapter(
+  feishuIm: FeishuIM,
+  config: ImOrchestratorConfig,
+): ImChannelAdapter {
+  return {
+    channel: 'feishu',
+    im: feishuIm,
+    config,
+    ui,
+    sessions: {
+      source: 'feishu',
+      /**
+       * Deterministic session id derived from feishu identity.
+       *
+       * Stable across restarts and credential save/load cycles: the same
+       * (botAppId, openId) pair always resolves to the same DB row。Format:
+       * `feishu_{botAppId}_{openId}` — long but human-readable, easy to grep。
+       */
+      sessionIdFor: (botAppId, openId) => `feishu_${botAppId}_${openId}`,
+      defaultTitle: (openId) => `飞书 · ${openId.slice(-6)}`,
+      ensureWorkingDir,
+      extraInsertColumns: (botAppId, openId) => ({
+        feishuBotAppId: botAppId,
+        feishuOpenId: openId,
+      }),
+    },
+    processingEmoji: REACTION_PROCESSING,
+    buildVendorOptions: (openId) => ({ feishuChatId: openId, source: 'feishu' }),
+  };
+}

@@ -1,0 +1,14 @@
+==============================================================================
+RESTRICTED AND PROPRIETARY THIRD-PARTY COMPONENTS
+xdt-maker mobile application — Android
+==============================================================================
+
+本文件单列不是开放源代码许可的第三方组件;它们不计入开源包数量。
+This file separately discloses components not distributed under open-source licenses.
+
+------------------------------------------------------------------------------
+Lark SSO Android SDK AAR@3.0.10
+Category: restricted-review-required
+License: NOASSERTION
+Source: https://open.feishu.cn
+Compliance note: AAR 内未携带 LICENSE/NOTICE,发布前需由 SDK owner 提供可分发许可依据。

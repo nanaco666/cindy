@@ -1,0 +1,30 @@
+require 'json'
+
+package = JSON.parse(File.read(File.join(__dir__, '..', 'package.json')))
+
+Pod::Spec.new do |s|
+  s.name           = 'XdtMobileRealtimeAudio'
+  s.version        = package['version']
+  s.summary        = 'Realtime PCM microphone capture for XDMaker mobile voice input.'
+  s.description    = 'Expo module that streams iOS microphone audio as PCM16 chunks for XDMaker mobile realtime dictation.'
+  s.license        = 'UNLICENSED'
+  s.author         = 'XDMaker'
+  s.homepage       = 'https://xdt-maker.local'
+  s.platforms      = {
+    :ios => '16.4'
+  }
+  # 显式钉 Swift 5 语言模式(canonical '5.0'):SDK 56 / Xcode 26 工具链若把工程默认拉到 Swift 6
+  # 严格并发,会对音频线程闭包跨 main actor 的捕获报数据竞争错误。Swift 6 并发改造留 follow-up。
+  s.swift_version  = '5.0'
+  s.source         = { git: 'https://xdt-maker.local/xdt-maker.git' }
+  s.static_framework = true
+
+  s.dependency 'ExpoModulesCore'
+
+  s.pod_target_xcconfig = {
+    'DEFINES_MODULE' => 'YES',
+    'SWIFT_COMPILATION_MODE' => 'wholemodule'
+  }
+
+  s.source_files = '**/*.{h,m,swift}'
+end

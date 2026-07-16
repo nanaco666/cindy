@@ -1,0 +1,123 @@
+{
+  "expo": {
+    "name": "XDMaker",
+    "slug": "xdt-maker-mobile",
+    "scheme": "lizcn",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/a7286e46-6144-494c-bf03-dddd2fe4fbfd",
+      "enabled": true
+    },
+    "ios": {
+      "bundleIdentifier": "com.xd.lizcn",
+      "buildNumber": "2026071401",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "UISupportedInterfaceOrientations": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ],
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ],
+        "LSApplicationQueriesSchemes": [
+          "feishu",
+          "lark"
+        ]
+      },
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.xd.lizcn",
+      "adaptiveIcon": {
+        "backgroundColor": "#F8F8F6",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "./plugins/with-third-party-notices",
+      "expo-router",
+      "expo-secure-store",
+      "expo-web-browser",
+      [
+        "expo-font",
+        {
+          "ios": {
+            "fonts": [
+              "./assets/fonts/JetBrainsMono-Regular.ttf",
+              "./assets/fonts/JetBrainsMono-Medium.ttf"
+            ]
+          },
+          "android": {
+            "fonts": [
+              {
+                "fontFamily": "JetBrains Mono",
+                "fontDefinitions": [
+                  { "path": "./assets/fonts/JetBrainsMono-Regular.ttf", "weight": 400 },
+                  { "path": "./assets/fonts/JetBrainsMono-Medium.ttf", "weight": 500 }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "XDMaker needs microphone access for voice input in remote sessions.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "XDMaker needs photo library access to attach images to remote sessions.",
+          "cameraPermission": "XDMaker needs camera access to attach photos to remote sessions.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "XDMaker needs photo library access to show recent photos and screenshots for quick attaching.",
+          "savePhotosPermission": false,
+          "isAccessMediaLocationEnabled": false
+        }
+      ],
+      [
+        "xdt-feishu-login/plugin",
+        {
+          "appId": "cli_a94d4cf642381cd4",
+          "registerCallbackScheme": true
+        }
+      ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a7286e46-6144-494c-bf03-dddd2fe4fbfd"
+      }
+    },
+    "owner": "dashhuang"
+  }
+}

@@ -1,0 +1,358 @@
+/**
+ * restore.ts 回归(P1):worktree 回收后的状态查询与一键恢复。
+ * 路径存在性走真实 fs(tmp 目录),git/db/store 全 mock。
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import path from 'node:path';
+import fsSync from 'node:fs';
+import os from 'node:os';
+
+const gitExecMock = vi.fn();
+const { MockGitExecError } = vi.hoisted(() => ({
+  MockGitExecError: class extends Error {
+    constructor(public readonly stderr: string) {
+      super(stderr);
+    }
+  },
+}));
+const storeSetMock = vi.fn();
+const storeGetMock = vi.fn();
+const storeDelMock = vi.fn();
+const applyIncludeMock = vi.fn();
+const copyClaudeSiviDirsMock = vi.fn();
+let dbWorktreePath: string | null = null;
+
+vi.mock('../worktree/gitExec', () => ({
+  gitExec: (...args: unknown[]) => gitExecMock(...args),
+  GitExecError: MockGitExecError,
+}));
+
+vi.mock('../worktree/worktreeStore', () => ({
+  set: (...args: unknown[]) => storeSetMock(...args),
+  get: (...args: unknown[]) => storeGetMock(...args),
+  del: (...args: unknown[]) => storeDelMock(...args),
+  getAll: () => [],
+}));
+
+vi.mock('../worktree/includePatternsEngine', () => ({
+  applyWorktreeIncludeFile: (...args: unknown[]) => applyIncludeMock(...args),
+}));
+
+vi.mock('../worktree/WorktreeManager', () => ({
+  copyClaudeSiviDirs: (...args: unknown[]) => copyClaudeSiviDirsMock(...args),
+}));
+
+vi.mock('../localDb/client/current', () => ({
+  getDbClient: () => ({
+    drizzle: {
+      select: () => ({
+        from: () => ({
+          where: () => (dbWorktreePath === undefined ? [] : [{ worktreePath: dbWorktreePath }]),
+        }),
+      }),
+    },
+  }),
+}));
+
+const SHA = 'c'.repeat(40);
+const AUTO_STASH = `${SHA}\tOn xdt/wt1: xdt-auto-stash: session s1 worktree=wt1`;
+
+function argsOf(call: unknown[]): string[] {
+  return call[0] as string[];
+}
+
+describe('worktree restore', () => {
+  let tmpRoot: string;
+  let baseRepo: string;
+  let wtPath: string;
+  let mod: typeof import('../worktree/restore');
+
+  beforeEach(async () => {
+    tmpRoot = fsSync.mkdtempSync(path.join(os.tmpdir(), 'xdt-wt-restore-'));
+    baseRepo = path.join(tmpRoot, 'repo');
+    fsSync.mkdirSync(path.join(baseRepo, '.xdt-worktrees'), { recursive: true });
+    wtPath = path.join(baseRepo, '.xdt-worktrees', 'wt1');
+    dbWorktreePath = wtPath;
+    gitExecMock.mockReset().mockResolvedValue({ stdout: '', stderr: '' });
+    storeSetMock.mockReset().mockResolvedValue(undefined);
+    storeGetMock.mockReset().mockReturnValue(null);
+    storeDelMock.mockReset();
+    applyIncludeMock.mockReset().mockResolvedValue([]);
+    copyClaudeSiviDirsMock.mockReset().mockResolvedValue(undefined);
+    mod = await import('../worktree/restore');
+  });
+
+  afterEach(() => {
+    fsSync.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  it('no worktree_path in DB → no-worktree', async () => {
+    dbWorktreePath = null;
+    await expect(mod.getWorktreeRestoreStatus('s1')).resolves.toEqual({ state: 'no-worktree' });
+  });
+
+  it('non-managed path shape → no-worktree (never touches git)', async () => {
+    dbWorktreePath = path.join(tmpRoot, 'elsewhere', 'dir');
+    await expect(mod.getWorktreeRestoreStatus('s1')).resolves.toEqual({ state: 'no-worktree' });
+    expect(gitExecMock).not.toHaveBeenCalled();
+  });
+
+  it('directory still on disk → present', async () => {
+    fsSync.mkdirSync(wtPath, { recursive: true });
+    await expect(mod.getWorktreeRestoreStatus('s1')).resolves.toEqual({
+      state: 'present',
+      worktreePath: wtPath,
+      hasSnapshot: false,
+    });
+  });
+
+  it('present directory with pending snapshot stays restorable and retries apply', async () => {
+    fsSync.mkdirSync(wtPath, { recursive: true });
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/xdt/snapshots/s1')) {
+        return { stdout: `${SHA}\n`, stderr: '' };
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    await expect(mod.getWorktreeRestoreStatus('s1')).resolves.toEqual({
+      state: 'present',
+      worktreePath: wtPath,
+      hasSnapshot: true,
+    });
+
+    const result = await mod.restoreWorktreeForSession('s1');
+    expect(result).toEqual({ ok: true, snapshotApplied: true });
+
+    const calls = gitExecMock.mock.calls.map(argsOf);
+    expect(calls.some((a) => a[0] === 'stash' && a[1] === 'apply' && a[2] === SHA)).toBe(true);
+    expect(storeSetMock).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({ sessionId: 's1', path: wtPath, branch: 'xdt/wt1' }),
+    );
+  });
+
+  it('branch missing → gone', async () => {
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/heads/xdt/wt1')) {
+        throw new Error('unknown revision');
+      }
+      return { stdout: '', stderr: '' };
+    });
+    await expect(mod.getWorktreeRestoreStatus('s1')).resolves.toEqual({
+      state: 'gone',
+      worktreePath: wtPath,
+    });
+  });
+
+  it('branch present + snapshot present → restorable with hasSnapshot', async () => {
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/heads/xdt/wt1')) {
+        return { stdout: 'deadbeef\n', stderr: '' };
+      }
+      if (args[0] === 'rev-parse' && args.includes('refs/xdt/snapshots/s1')) {
+        return { stdout: `${SHA}\n`, stderr: '' };
+      }
+      return { stdout: '', stderr: '' };
+    });
+    await expect(mod.getWorktreeRestoreStatus('s1')).resolves.toEqual({
+      state: 'restorable',
+      worktreePath: wtPath,
+      hasSnapshot: true,
+    });
+  });
+
+  it('restore: worktree add + snapshot apply + store re-register', async () => {
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/heads/xdt/wt1')) {
+        return { stdout: 'deadbeef\n', stderr: '' };
+      }
+      if (args[0] === 'rev-parse' && args.includes('refs/xdt/snapshots/s1')) {
+        return { stdout: `${SHA}\n`, stderr: '' };
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    const result = await mod.restoreWorktreeForSession('s1');
+    expect(result).toEqual({ ok: true, snapshotApplied: true });
+
+    const calls = gitExecMock.mock.calls.map(argsOf);
+    expect(calls).toContainEqual([
+      '-c',
+      'core.longpaths=true',
+      'worktree',
+      'add',
+      wtPath,
+      'xdt/wt1',
+    ]);
+    expect(copyClaudeSiviDirsMock).toHaveBeenCalledWith(baseRepo, wtPath, {
+      overwriteExisting: false,
+    });
+    expect(applyIncludeMock).toHaveBeenCalledWith(baseRepo, wtPath, {
+      overwriteExisting: false,
+    });
+    expect(calls.some((a) => a[0] === 'stash' && a[1] === 'apply' && a[2] === SHA)).toBe(true);
+    const snapshotApplyOrder = gitExecMock.mock.invocationCallOrder[
+      calls.findIndex((a) => a[0] === 'stash' && a[1] === 'apply' && a[2] === SHA)
+    ];
+    expect(snapshotApplyOrder).toBeLessThan(copyClaudeSiviDirsMock.mock.invocationCallOrder[0]!);
+    expect(snapshotApplyOrder).toBeLessThan(applyIncludeMock.mock.invocationCallOrder[0]!);
+    expect(calls.some((a) => a[0] === 'update-ref' && a[1] === '-d' && a[2] === 'refs/xdt/snapshots/s1')).toBe(true);
+    expect(storeSetMock).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({ sessionId: 's1', path: wtPath, branch: 'xdt/wt1' }),
+    );
+  });
+
+  it('restore: falls back to the session auto-stash when snapshot ref is missing', async () => {
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/heads/xdt/wt1')) {
+        return { stdout: 'deadbeef\n', stderr: '' };
+      }
+      if (args[0] === 'rev-parse' && args.includes('refs/xdt/snapshots/s1')) {
+        throw new Error('unknown revision');
+      }
+      if (args[0] === 'stash' && args[1] === 'list') {
+        return { stdout: `${AUTO_STASH}\n`, stderr: '' };
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    const status = await mod.getWorktreeRestoreStatus('s1');
+    expect(status).toEqual({
+      state: 'restorable',
+      worktreePath: wtPath,
+      hasSnapshot: true,
+    });
+
+    const result = await mod.restoreWorktreeForSession('s1');
+    expect(result).toEqual({ ok: true, snapshotApplied: true });
+
+    const calls = gitExecMock.mock.calls.map(argsOf);
+    expect(calls.some((a) => a[0] === 'stash' && a[1] === 'apply' && a[2] === SHA)).toBe(true);
+    expect(calls.some((a) => a[0] === 'update-ref' && a[1] === '-d')).toBe(false);
+    expect(storeSetMock).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({ sessionId: 's1', path: wtPath, branch: 'xdt/wt1' }),
+    );
+  });
+
+  it('restore: include copy failure does not block worktree recovery', async () => {
+    applyIncludeMock.mockRejectedValueOnce(new Error('env copy failed'));
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/heads/xdt/wt1')) {
+        return { stdout: 'deadbeef\n', stderr: '' };
+      }
+      if (args[0] === 'rev-parse' && args.includes('refs/xdt/snapshots/s1')) {
+        return { stdout: '', stderr: '' };
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    const result = await mod.restoreWorktreeForSession('s1');
+
+    expect(result).toEqual({ ok: true, snapshotApplied: true });
+    expect(applyIncludeMock).toHaveBeenCalledWith(baseRepo, wtPath, {
+      overwriteExisting: false,
+    });
+    expect(storeSetMock).toHaveBeenCalled();
+  });
+
+  it('restore: agent config copy failure does not block worktree recovery', async () => {
+    copyClaudeSiviDirsMock.mockRejectedValueOnce(new Error('config copy failed'));
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/heads/xdt/wt1')) {
+        return { stdout: 'deadbeef\n', stderr: '' };
+      }
+      if (args[0] === 'rev-parse' && args.includes('refs/xdt/snapshots/s1')) {
+        return { stdout: '', stderr: '' };
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    const result = await mod.restoreWorktreeForSession('s1');
+
+    expect(result).toEqual({ ok: true, snapshotApplied: true });
+    expect(copyClaudeSiviDirsMock).toHaveBeenCalledWith(baseRepo, wtPath, {
+      overwriteExisting: false,
+    });
+    expect(storeSetMock).toHaveBeenCalled();
+  });
+
+  it('restore: snapshot apply failure stays unregistered so cleanup cannot overwrite it', async () => {
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/heads/xdt/wt1')) {
+        return { stdout: 'deadbeef\n', stderr: '' };
+      }
+      if (args[0] === 'rev-parse' && args.includes('refs/xdt/snapshots/s1')) {
+        return { stdout: `${SHA}\n`, stderr: '' };
+      }
+      if (args[0] === 'stash' && args[1] === 'apply') throw new Error('conflict');
+      return { stdout: '', stderr: '' };
+    });
+
+    const result = await mod.restoreWorktreeForSession('s1');
+    expect(result).toEqual({ ok: true, snapshotApplied: false });
+    expect(storeDelMock).toHaveBeenCalledWith('s1');
+    expect(storeSetMock).not.toHaveBeenCalled();
+    expect(copyClaudeSiviDirsMock).not.toHaveBeenCalled();
+    expect(applyIncludeMock).not.toHaveBeenCalled();
+  });
+
+  it('restore: retries worktree add after enabling Windows long paths', async () => {
+    let addAttempts = 0;
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/heads/xdt/wt1')) {
+        return { stdout: 'deadbeef\n', stderr: '' };
+      }
+      if (args[0] === 'rev-parse' && args.includes('refs/xdt/snapshots/s1')) {
+        return { stdout: '', stderr: '' };
+      }
+      if (args[0] === '-c' && args[2] === 'worktree' && args[3] === 'add') {
+        addAttempts += 1;
+        if (addAttempts === 1) throw new MockGitExecError('Filename too long');
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    await expect(mod.restoreWorktreeForSession('s1')).resolves.toEqual({
+      ok: true,
+      snapshotApplied: true,
+    });
+
+    const calls = gitExecMock.mock.calls.map(argsOf);
+    expect(calls.filter((args) => args[0] === '-c' && args[3] === 'add')).toHaveLength(2);
+    expect(calls).toContainEqual(['config', '--global', 'core.longpaths', 'true']);
+  });
+
+  it('restore: worktree add failure → ok=false, no store write', async () => {
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/heads/xdt/wt1')) {
+        return { stdout: 'deadbeef\n', stderr: '' };
+      }
+      if (args[0] === 'rev-parse' && args.includes('refs/xdt/snapshots/s1')) {
+        return { stdout: '', stderr: '' };
+      }
+      if (args[0] === '-c' && args[2] === 'worktree' && args[3] === 'add') {
+        throw new Error('branch checked out elsewhere');
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    const result = await mod.restoreWorktreeForSession('s1');
+    expect(result).toMatchObject({
+      ok: false,
+      reason: 'git-error',
+      detail: expect.stringContaining('branch checked out elsewhere'),
+    });
+    expect(storeSetMock).not.toHaveBeenCalled();
+  });
+
+  it('restore: non-restorable state returns stable reason instead of user-facing text', async () => {
+    dbWorktreePath = null;
+
+    const result = await mod.restoreWorktreeForSession('s1');
+
+    expect(result).toEqual({ ok: false, reason: 'no-worktree' });
+  });
+});

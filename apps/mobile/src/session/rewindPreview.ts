@@ -1,0 +1,93 @@
+export interface RewindPreviewPayload {
+  canRewind: boolean;
+  error?: string;
+  filesChanged?: string[];
+  insertions?: number;
+  deletions?: number;
+}
+
+export type RewindPreviewState =
+  | { kind: 'idle' }
+  | { kind: 'loading'; clientId: string; draftText: string }
+  | {
+      kind: 'default';
+      clientId: string;
+      draftText: string;
+      filesChanged: string[];
+      insertions: number;
+      deletions: number;
+    }
+  | { kind: 'empty'; clientId: string; draftText: string; note?: string }
+  | { kind: 'error'; clientId: string; draftText: string; errorText: string };
+
+export type CommitReadyRewindState = Extract<RewindPreviewState, { kind: 'default' | 'empty' }>;
+
+export function buildRewindPreviewState(
+  clientId: string,
+  draftText: string,
+  raw: unknown,
+): RewindPreviewState {
+  const payload = normalizeRewindPreviewPayload(raw);
+  if (!payload) {
+    return {
+      kind: 'error',
+      clientId,
+      draftText,
+      errorText: '无法读取回退预览结果，请重新同步后再试。',
+    };
+  }
+
+  const files = payload.filesChanged ?? [];
+  if (payload.canRewind && files.length > 0) {
+    return {
+      kind: 'default',
+      clientId,
+      draftText,
+      filesChanged: files,
+      insertions: payload.insertions ?? 0,
+      deletions: payload.deletions ?? 0,
+    };
+  }
+
+  if (payload.canRewind) {
+    return { kind: 'empty', clientId, draftText };
+  }
+
+  return {
+    kind: 'empty',
+    clientId,
+    draftText,
+    note: payload.error || '没有可回滚的文件，将只截断这条消息之后的对话历史。',
+  };
+}
+
+export function isCommitReadyRewindState(state: RewindPreviewState): state is CommitReadyRewindState {
+  return state.kind === 'default' || state.kind === 'empty';
+}
+
+function normalizeRewindPreviewPayload(value: unknown): RewindPreviewPayload | null {
+  const record = readRecord(value);
+  if (!record || typeof record.canRewind !== 'boolean') return null;
+  return {
+    canRewind: record.canRewind,
+    error: typeof record.error === 'string' ? record.error : undefined,
+    filesChanged: readStringArray(record.filesChanged),
+    insertions: readFiniteNumber(record.insertions),
+    deletions: readFiniteNumber(record.deletions),
+  };
+}
+
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function readStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.filter((item): item is string => typeof item === 'string');
+}
+
+function readFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}

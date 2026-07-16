@@ -1,0 +1,12 @@
+{
+  "$comment": "生产环境自家部署域名的跨端权威源(2026-07 端点收敛)。改生产域名只改这里:Node 脚本经 scripts/shared/production-endpoints.mjs 直接读取;无法动态读取的客户端消费方(apps/mobile/eas.json、apps/mobile/src/config/env.ts、apps/desktop/src/shared/endpoints.ts 等)由 scripts/check-endpoint-literals.mjs 做一致性校验,值不一致会在 CI 报错并列出需同步的位置。",
+  "apiBaseUrl": "https://xdt-api.magiclizi.com",
+  "deviceLinkApiBaseUrl": "https://xdmaker-device-link.magiclizi.com",
+  "oauthBrokerApiBaseUrl": "https://xdmaker-oauth.magiclizi.com",
+  "heartbeatUrl": "https://xdt-heartbreak.magiclizi.com",
+  "slackHookWsUrl": "wss://xdmaker-slack-hook.magiclizi.com",
+  "xdGatewayBaseUrl": "https://llm-proxy.tapsvc.com",
+  "cdnBaseUrl": "https://dev-cdn.fp.xd.com/xdt-maker",
+  "cdnInternalBaseUrl": "http://xdtown-static-maker.xdcdn.cn:20080/xdt-maker",
+  "npkgBaseUrl": "https://npkg.xindong.com"
+}

@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 2,
+  "id": "cindy-github",
+  "name": "Cindy GitHub",
+  "description": "内置的 GitHub 服务意识:填入 Personal Access Token 即可读写 GitHub(issue / PR / review / 仓库 / Actions / release / 搜索等 117 个操作,两段式目录)。仅支持 github.com;token 由主机加密保管,只注入 GitHub API 请求。",
+  "whenToUse": "需要查/建/改 GitHub issue 或 PR,提交/回复 code review,合并 PR,查仓库/分支/commit/文件内容,触发或查看 GitHub Actions,管理 release,搜索代码/仓库/用户,或下载 Actions 产物与日志时找我(需先在意识设置页填入 GitHub token)。",
+  "version": "1.1.0",
+  "author": "Cindy",
+  "entry": "main.js",
+  "settingsHtml": "settings.html",
+  "slots": [
+    "tool",
+    "network",
+    "notify",
+    "fs"
+  ],
+  "command": "cindy-github",
+  "network": {
+    "hosts": [
+      "api.github.com",
+      "objects.githubusercontent.com",
+      "*.blob.core.windows.net"
+    ],
+    "secrets": [
+      {
+        "key": "github_pat",
+        "label": "GitHub Personal Access Token",
+        "hint": "GitHub → Settings → Developer settings → Personal access tokens 生成后粘贴",
+        "url": "https://github.com/settings/tokens",
+        "inject": {
+          "header": "Authorization",
+          "format": "Bearer {value}",
+          "hosts": [
+            "api.github.com"
+          ]
+        }
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "list_tools",
+      "description": "列出本意识可用的 GitHub 操作(共 117 个,覆盖 issues / pulls / repo / commits / actions / releases / search / users / orgs / events / notifications / gists / git_data / reactions / meta)。不传 category 返回类目概览(类目名+数量+说明);传 category 返回该类目下所有操作的名称、说明与参数。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "类目名,来自概览(如 issues / pulls / actions)"
+          }
+        }
+      }
+    },
+    {
+      "name": "call_tool",
+      "description": "执行一个具体 GitHub 操作。name 来自 list_tools 的返回;args 按该操作的参数说明传 JSON 对象。repo 级操作必须显式传 owner 与 repo(在 git 仓库里工作时可从 `git remote get-url origin` 推导后传入)。响应默认剥掉 API 链接类字段(保留 html_url)以控制体量,传 raw=true 拿原始 JSON;结果超 50KB 时自动写进会话工作目录只返回文件路径(out_file 可指定路径)。下载类操作(Actions 产物 / 日志 zip)需要调用方把目标目录绝对路径放在 ghost_call 顶层 save_dir 参数。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "操作名,来自 list_tools"
+          },
+          "args": {
+            "type": "object",
+            "description": "操作参数;不确定时可传 {} 触发错误反馈拿参数说明"
+          },
+          "raw": {
+            "type": "boolean",
+            "description": "true = 返回 GitHub 原始 JSON(不剥 API 链接字段);默认 false"
+          },
+          "out_file": {
+            "type": "string",
+            "description": "可选:把完整结果 JSON 写进会话工作目录的该相对路径(如 tmp/gh-result.json),只返回文件路径——结果大、要交给脚本处理时用。结果超 50KB 时即使不传也会自动落盘返回路径"
+          }
+        },
+        "required": ["name"]
+      }
+    }
+  ]
+}

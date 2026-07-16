@@ -1,0 +1,67 @@
+/**
+ * usageFormat — usage 相关展示格式化的共用常量与函数。
+ * TodaySpendChip (右下角 chip) 与 HomeUsageDashboard (首页仪表盘) 共用,
+ * 保证两处金额口径 / 文案形态一致。
+ */
+
+/**
+ * 软日限额系数: 月度配额 / 30 * 4.5 = 月度配额 * 0.15。
+ * 给重度使用的"忙日"留 buffer (即把月配额视作可在 1/4.5 ≈ 6.67 个高强度日内集中消耗)。
+ * 不是平台硬限制, 仅展示用。与 web 看板 (console.tapsvc.com) 同公式同口径。
+ */
+export const DAILY_SOFT_LIMIT_FACTOR = 4.5;
+
+/** 紧凑 USD 金额: ≥1k 用 $X.Xk, 否则保留 0 位小数。 */
+export function formatCompactUsd(n: number): string {
+  if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`;
+  return `$${Math.round(n)}`;
+}
+
+/** 精确 USD 金额: < $10 保留 2 位小数 (小额可读), 其余走紧凑格式。 */
+export function formatUsd(n: number): string {
+  if (n < 10) return `$${n.toFixed(2)}`;
+  return formatCompactUsd(n);
+}
+
+/**
+ * Per-turn 小额费用 (MessageActionBar"本轮消耗"):
+ * ≥$10 走紧凑格式; ≥$0.01 两位小数; ≥$0.001 三位小数; 再小显示下限 "<$0.001"。
+ * 单轮费用常在分位以下, formatUsd 的两位小数会把 $0.003 抹成 $0.00, 故单独一档。
+ */
+export function formatTurnCostUsd(n: number): string {
+  if (n >= 10) return formatCompactUsd(n);
+  if (n >= 0.01) return `$${n.toFixed(2)}`;
+  if (n >= 0.001) return `$${n.toFixed(3)}`;
+  return '<$0.001';
+}
+
+/**
+ * 把 SDK / 网关 model id 收成简短可读标签, 供 tooltip「按模型成本明细」展示。
+ * 依次剥掉 SDK 路由后缀 `[..]`、尾部日期 `-YYYYMMDD`、`codex/` 预算前缀, 再美化家族名。
+ * 认不出的安全回退原始 id (绝不返回空串)。
+ *   'claude-opus-4-8[1m]'       → 'Opus 4.8'
+ *   'claude-haiku-4-5-20251001' → 'Haiku 4.5'
+ *   'gpt-5.5' / 'codex/gpt-5.5' → 'GPT-5.5'
+ */
+export function formatModelShort(id: string): string {
+  if (typeof id !== 'string' || !id.trim()) return id;
+  const s = id.trim()
+    .replace(/\[[^\]]*\]\s*$/, '') // 去 [1m] 等 SDK 路由后缀
+    .replace(/-\d{6,8}$/, '')      // 去尾部日期 -YYYYMMDD / -YYMMDD
+    .replace(/^codex\//, '');      // 去预算路由前缀
+  const claude = s.match(/^claude-(opus|sonnet|haiku)-(\d+)-(\d+)$/i);
+  if (claude) {
+    const family = claude[1][0].toUpperCase() + claude[1].slice(1).toLowerCase();
+    return `${family} ${claude[2]}.${claude[3]}`;
+  }
+  if (/^gpt-/i.test(s)) return s.toUpperCase();
+  return s || id;
+}
+
+/** 紧凑 token 数: ≥1B 用 X.XB, ≥1M 用 X.XM, ≥1k 用 X.Xk, 否则原值。 */
+export function formatCompactTokens(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return String(n);
+}

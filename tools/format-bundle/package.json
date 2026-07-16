@@ -1,0 +1,13 @@
+{
+  "name": "format-bundle",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "批量 beautify 反编译/打包后的 JS bundle，让 grep / 阅读变得可能",
+  "scripts": {
+    "format": "node format.mjs"
+  },
+  "dependencies": {
+    "js-beautify": "^1.15.1"
+  }
+}

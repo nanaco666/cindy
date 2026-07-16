@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 2,
+  "id": "xd-pages",
+  "name": "XD Pages",
+  "description": "Cindy 内置的 XD Pages 站点意识:部署与管理你在 workers.xd.team 的内部站点(部署 / 列表 / 详情 / 删除 / Worker 模板)。身份用当前登录邮箱自动派生,无需任何配置;部署目录经主机过户上传,意识摸不到你的文件。",
+  "whenToUse": "需要把本地目录部署成 workers.xd.team 内部站点,或查看 / 管理已部署站点(列站点、查详情、删站点、拿 worker IP 白名单模板)时找我。部署时把构建产物目录的绝对路径放在 ghost_call 顶层 dir 参数交付。",
+  "version": "1.2.1",
+  "author": "Cindy",
+  "entry": "main.js",
+  "settingsHtml": "settings.html",
+  "slots": ["tool", "network"],
+  "command": "xd-pages",
+  "network": {
+    "hosts": ["api.workers.xd.team"],
+    "secrets": [
+      {
+        "key": "pages_token",
+        "label": "Pages 身份(登录邮箱)",
+        "source": "login-email",
+        "hint": "服务端按 pages_<邮箱> 鉴权,值由主机从登录态自动派生",
+        "inject": {
+          "header": "X-Pages-Token",
+          "format": "pages_{value}"
+        }
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "pages_deploy",
+      "description": "把本地目录部署到 {name}.workers.xd.team 内部站点托管。**必须把部署目录的绝对路径放在 ghost_call 顶层 dir 参数**(不是 args;目录须在当前会话工作目录内,主机会过户并注入票据)。name 必须符合 /^[a-z0-9][a-z0-9-]{0,48}[a-z0-9]$/。preset 不传 = 按文件清单自动识别(_worker.js → worker,SPA 构建产物 → spa,其他 → static;识别不确定时返回 needs_user_confirm,请跟用户确认后显式传 preset 重试;你也可以先自行读目录判断后直接传)。public=true 关闭默认 IP 限制允许公网访问,默认仅公司内网。部署成功返回 user_facing_markdown,回复用户时直接整段引用,不要自己拼 URL。常见错误:DIR_INVALID(目录过户失败,按 message 处理)/ INVALID_SITE_NAME / SITE_NAME_TAKEN(换名字)/ DEPOSIT_MISSING(没在 ghost_call 顶层传 dir)。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "站点名(URL 前缀);必须符合命名规则" },
+          "preset": { "type": "string", "enum": ["static", "spa", "worker"], "description": "部署类型;不传 = 自动识别" },
+          "public": { "type": "boolean", "description": "true = 关闭 IP 限制允许公网访问;默认 false(仅公司内网)" }
+        },
+        "required": ["name"]
+      }
+    },
+    {
+      "name": "pages_list",
+      "description": "列出当前用户名下已部署的所有 workers.xd.team 站点。返回 { sites: [...] },每条站点至少含 name 和 url。无入参。常见错误:登录态没有邮箱时会返回重新登录指引,把 message 原样告诉用户。",
+      "parameters": { "type": "object", "properties": {} }
+    },
+    {
+      "name": "pages_info",
+      "description": "查询某个 workers.xd.team 站点的详情(URL、preset、部署时间等)。常见错误:NOT_FOUND(站点不存在)/ PERMISSION_DENIED(站点不属于你)。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "站点名" }
+        },
+        "required": ["name"]
+      }
+    },
+    {
+      "name": "pages_delete",
+      "description": "删除某个 workers.xd.team 站点。**不可逆操作**,必须传 confirm:true 才会真正发请求。建议调用前先向用户复述要删的站点名取得明确同意。常见错误:CONFIRM_REQUIRED(没传 confirm:true,立即返回不发请求)/ NOT_FOUND(站点不存在)/ PERMISSION_DENIED(站点不属于你)。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "要删除的站点名" },
+          "confirm": { "type": "boolean", "description": "必须显式传 true 才会执行删除;false 或缺失 = 返回 CONFIRM_REQUIRED" }
+        },
+        "required": ["name", "confirm"]
+      }
+    },
+    {
+      "name": "pages_get_worker_template",
+      "description": "获取 worker preset 用户可以直接复制到 _worker.js 的代码模板。当前 type=ip-guard 返回内网 IP 白名单实现——worker preset 站点必须自行集成这段才能保留「仅公司内网」语义(static/spa preset 由服务端自动注入,不需要本工具)。返回 { type, description, usage, source, sourced_at }。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "enum": ["ip-guard"], "description": "模板类型,当前仅支持 \"ip-guard\"" }
+        },
+        "required": ["type"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+在已有多维表格(app)里创建一个新数据表(table),可同时声明初始字段。返回 `table_id` + `default_view_id` + 字段 ID 映射。字段类型走友好枚举(text/number/single_select/multi_select/date/checkbox/user/link),稀有类型用 `type='raw'` + `raw_type/raw_property` 透传。

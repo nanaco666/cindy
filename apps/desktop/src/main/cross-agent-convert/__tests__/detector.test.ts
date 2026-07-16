@@ -1,0 +1,161 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { detect, isMissingOrEmptyTextFile, isNonEmptyTextFile } from '../detector.js';
+
+let tmpDir: string;
+
+beforeEach(async () => {
+  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'xagent-detect-'));
+});
+
+afterEach(async () => {
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
+describe('isMissingOrEmptyTextFile / isNonEmptyTextFile', () => {
+  it('missing file → missing=true, nonEmpty=false', async () => {
+    const p = path.join(tmpDir, 'gone.md');
+    expect(await isMissingOrEmptyTextFile(p)).toBe(true);
+    expect(await isNonEmptyTextFile(p)).toBe(false);
+  });
+
+  it('empty file → missing=true, nonEmpty=false', async () => {
+    const p = path.join(tmpDir, 'empty.md');
+    await fs.writeFile(p, '   \n  \t  \n');
+    expect(await isMissingOrEmptyTextFile(p)).toBe(true);
+    expect(await isNonEmptyTextFile(p)).toBe(false);
+  });
+
+  it('non-empty file → missing=false, nonEmpty=true', async () => {
+    const p = path.join(tmpDir, 'real.md');
+    await fs.writeFile(p, '# title');
+    expect(await isMissingOrEmptyTextFile(p)).toBe(false);
+    expect(await isNonEmptyTextFile(p)).toBe(true);
+  });
+});
+
+describe('detect — agents-md kind', () => {
+  it('claude-code session: AGENTS.md non-empty + CLAUDE.md missing → 1 item to-claude', async () => {
+    await fs.writeFile(path.join(tmpDir, 'AGENTS.md'), '# agents');
+    const r = await detect({ workingDir: tmpDir, agentKind: 'claude-code' });
+    expect(r.items).toHaveLength(1);
+    expect(r.items[0]).toMatchObject({
+      kind: 'agents-md',
+      direction: 'to-claude',
+      label: 'AGENTS.md → CLAUDE.md',
+    });
+  });
+
+  it('codex session: CLAUDE.md non-empty + AGENTS.md missing → 1 item to-codex', async () => {
+    await fs.writeFile(path.join(tmpDir, 'CLAUDE.md'), '# claude');
+    const r = await detect({ workingDir: tmpDir, agentKind: 'codex' });
+    expect(r.items).toHaveLength(1);
+    expect(r.items[0]).toMatchObject({ kind: 'agents-md', direction: 'to-codex' });
+  });
+
+  it('双端齐全 → 0 items（不打扰）', async () => {
+    await fs.writeFile(path.join(tmpDir, 'CLAUDE.md'), '# x');
+    await fs.writeFile(path.join(tmpDir, 'AGENTS.md'), '# y');
+    expect((await detect({ workingDir: tmpDir, agentKind: 'claude-code' })).items).toHaveLength(0);
+    expect((await detect({ workingDir: tmpDir, agentKind: 'codex' })).items).toHaveLength(0);
+  });
+
+  it('双端皆无 → 0 items', async () => {
+    expect((await detect({ workingDir: tmpDir, agentKind: 'claude-code' })).items).toHaveLength(0);
+    expect((await detect({ workingDir: tmpDir, agentKind: 'codex' })).items).toHaveLength(0);
+  });
+
+  it('AGENTS.md 是空文件，对 claude session 来说 source 不算"有内容" → 0 items', async () => {
+    await fs.writeFile(path.join(tmpDir, 'AGENTS.md'), '   \n');
+    expect((await detect({ workingDir: tmpDir, agentKind: 'claude-code' })).items).toHaveLength(0);
+  });
+
+  it('CLAUDE.md 是空文件 + AGENTS.md 非空 → 仍然推（codex 语义：目标 trim 为空算缺失）', async () => {
+    await fs.writeFile(path.join(tmpDir, 'CLAUDE.md'), '\n  ');
+    await fs.writeFile(path.join(tmpDir, 'AGENTS.md'), '# real');
+    const r = await detect({ workingDir: tmpDir, agentKind: 'claude-code' });
+    expect(r.items).toHaveLength(1);
+  });
+
+  it('empty workingDir → 0 items', async () => {
+    expect((await detect({ workingDir: '', agentKind: 'claude-code' })).items).toHaveLength(0);
+  });
+});
+
+describe('detect — skills', () => {
+  it('to-codex: claude/skills/ has 2 skills, codex side missing → 1 item with 2 subItems', async () => {
+    await fs.mkdir(path.join(tmpDir, '.claude', 'skills', 'a'), { recursive: true });
+    await fs.mkdir(path.join(tmpDir, '.claude', 'skills', 'b'), { recursive: true });
+    const r = await detect({ workingDir: tmpDir, agentKind: 'codex' });
+    const skill = r.items.find((i) => i.kind === 'skills');
+    expect(skill).toBeDefined();
+    expect(skill!.subItems).toHaveLength(2);
+  });
+
+  it('to-codex: codex side already has same-named skill → that one excluded', async () => {
+    await fs.mkdir(path.join(tmpDir, '.claude', 'skills', 'a'), { recursive: true });
+    await fs.mkdir(path.join(tmpDir, '.claude', 'skills', 'b'), { recursive: true });
+    await fs.mkdir(path.join(tmpDir, '.agents', 'skills', 'a'), { recursive: true });
+    const r = await detect({ workingDir: tmpDir, agentKind: 'codex' });
+    const skill = r.items.find((i) => i.kind === 'skills');
+    expect(skill!.subItems).toHaveLength(1);
+    expect(skill!.subItems![0].name).toBe('b');
+  });
+
+  it('all skills exist on both sides → no skills item', async () => {
+    await fs.mkdir(path.join(tmpDir, '.claude', 'skills', 'a'), { recursive: true });
+    await fs.mkdir(path.join(tmpDir, '.agents', 'skills', 'a'), { recursive: true });
+    const r = await detect({ workingDir: tmpDir, agentKind: 'codex' });
+    expect(r.items.find((i) => i.kind === 'skills')).toBeUndefined();
+  });
+});
+
+describe('detect — agents', () => {
+  it('to-codex: .claude/agents/foo.md → 1 sub item', async () => {
+    await fs.mkdir(path.join(tmpDir, '.claude', 'agents'), { recursive: true });
+    await fs.writeFile(path.join(tmpDir, '.claude', 'agents', 'foo.md'), '---\nname: foo\n---\nbody');
+    const r = await detect({ workingDir: tmpDir, agentKind: 'codex' });
+    const agents = r.items.find((i) => i.kind === 'agents');
+    expect(agents).toBeDefined();
+    expect(agents!.subItems).toHaveLength(1);
+    expect(agents!.subItems![0].targetPath).toMatch(/\.codex[\\/]agents[\\/]foo\.toml$/);
+  });
+});
+
+describe('detect — mcp', () => {
+  it('to-codex: .mcp.json with mcpServers + no codex config.toml → 1 mcp item', async () => {
+    await fs.writeFile(path.join(tmpDir, '.mcp.json'), JSON.stringify({ mcpServers: { x: { command: 'a' } } }));
+    const r = await detect({ workingDir: tmpDir, agentKind: 'codex' });
+    expect(r.items.find((i) => i.kind === 'mcp')).toBeDefined();
+  });
+
+  it('to-codex: target config.toml already has [mcp_servers] → 0 mcp item (detector level skip)', async () => {
+    await fs.writeFile(path.join(tmpDir, '.mcp.json'), JSON.stringify({ mcpServers: { x: { command: 'a' } } }));
+    await fs.mkdir(path.join(tmpDir, '.codex'), { recursive: true });
+    await fs.writeFile(path.join(tmpDir, '.codex', 'config.toml'), '[mcp_servers.existing]\ncommand = "y"\n');
+    const r = await detect({ workingDir: tmpDir, agentKind: 'codex' });
+    expect(r.items.find((i) => i.kind === 'mcp')).toBeUndefined();
+  });
+});
+
+describe('detect — hooks', () => {
+  it('to-codex: claude has hooks dir + settings.json hooks → 1 hooks item', async () => {
+    await fs.mkdir(path.join(tmpDir, '.claude', 'hooks'), { recursive: true });
+    await fs.writeFile(path.join(tmpDir, '.claude', 'hooks', 'p.sh'), 'x');
+    await fs.writeFile(path.join(tmpDir, '.claude', 'settings.json'), JSON.stringify({ hooks: { PreToolUse: [] } }));
+    const r = await detect({ workingDir: tmpDir, agentKind: 'codex' });
+    expect(r.items.find((i) => i.kind === 'hooks')).toBeDefined();
+  });
+
+  it('双端齐全 → 0 hooks item', async () => {
+    await fs.mkdir(path.join(tmpDir, '.claude', 'hooks'), { recursive: true });
+    await fs.writeFile(path.join(tmpDir, '.claude', 'settings.json'), JSON.stringify({ hooks: {} }));
+    await fs.mkdir(path.join(tmpDir, '.codex', 'hooks'), { recursive: true });
+    await fs.writeFile(path.join(tmpDir, '.codex', 'hooks.json'), '{}');
+    const r = await detect({ workingDir: tmpDir, agentKind: 'codex' });
+    expect(r.items.find((i) => i.kind === 'hooks')).toBeUndefined();
+  });
+});

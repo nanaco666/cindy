@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 2,
+  "id": "cindy-gitlab",
+  "name": "Cindy GitLab",
+  "description": "内置的 GitLab 服务意识:支持自建与多实例 GitLab——在设置页添加实例地址与 Personal Access Token(api scope)即可读写 issue / MR / code review / 仓库 / CI / release / 搜索等 107 个操作(两段式目录)。token 由主机加密保管,只注入对应实例的 API 请求。",
+  "whenToUse": "需要查/建/改 GitLab issue 或 MR,提交/回复/发布 code review(discussion / draft note),合并或 rebase MR,查仓库/分支/commit/文件内容,查 CI pipeline 与 job 日志,管理 release / tag / 分支,搜索全实例内容,或下载仓库归档时找我(需先在意识设置页添加 GitLab 实例与 token)。",
+  "version": "1.1.0",
+  "author": "Cindy",
+  "entry": "main.js",
+  "settingsHtml": "settings.html",
+  "slots": [
+    "tool",
+    "network",
+    "notify",
+    "fs"
+  ],
+  "command": "cindy-gitlab",
+  "network": {
+    "connections": [
+      {
+        "key": "gitlab_conn",
+        "label": "GitLab 实例",
+        "hint": "GitLab → User Settings → Access Tokens 生成 PAT(api scope)后,在下方添加实例地址与 token;仅支持 https 默认端口(443)的实例,http 或自定义端口暂不支持",
+        "inject": {
+          "header": "PRIVATE-TOKEN",
+          "format": "{value}"
+        },
+        "maxConnections": 8
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "list_tools",
+      "description": "列出本意识可用的 GitLab 操作(共 107 个,覆盖 issues / merge_requests / repo / commits / events / search / projects / users / pipelines / jobs / discussions / approvals / draft_notes / reactions / groups / environments / wiki / snippets / releases / meta)。不传 category 返回类目概览(类目名+数量+说明);传 category 返回该类目下所有操作的名称、说明与参数。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "类目名,来自概览(如 issues / merge_requests / pipelines)"
+          }
+        }
+      }
+    },
+    {
+      "name": "call_tool",
+      "description": "执行一个具体 GitLab 操作。name 来自 list_tools 的返回;args 按该操作的参数说明传 JSON 对象。project 级操作必须显式传 project_path(如 \"group/subgroup/project\",在 git 仓库里工作时可从 `git remote get-url origin` 推导后传入)。配了多个 GitLab 实例时在 args 里带 instance(连接 id 或实例地址)指定实例,省略走默认连接。响应默认剥掉头像与 _links 字段以控制体量,传 raw=true 拿原始 JSON;结果超 50KB 时自动写进会话工作目录只返回文件路径(out_file 可指定路径)。下载类操作(仓库归档)需要调用方把目标目录绝对路径放在 ghost_call 顶层 save_dir 参数;上传项目附件(upload_project_file)需要用户随消息发图并经 ghost_call 顶层 attachments 过户。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "操作名,来自 list_tools"
+          },
+          "args": {
+            "type": "object",
+            "description": "操作参数;不确定时可传 {} 触发错误反馈拿参数说明"
+          },
+          "raw": {
+            "type": "boolean",
+            "description": "true = 返回 GitLab 原始 JSON(不剥头像 / _links 字段);默认 false"
+          },
+          "out_file": {
+            "type": "string",
+            "description": "可选:把完整结果 JSON 写进会话工作目录的该相对路径(如 tmp/gl-result.json),只返回文件路径——结果大、要交给脚本处理时用。结果超 50KB 时即使不传也会自动落盘返回路径"
+          }
+        },
+        "required": ["name"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<!-- XD Atlassian 自定义设置区(意识自绘,cindy-ghost:// 沙箱页)。
+     主流程 = 直接「连接账号」:应用身份内置、client secret 在 XDMaker 服务端
+     (broker 模式),没有任何需要用户填的凭证——所以本页没有自填 client 区
+     (/oauth/<key>/client 在 broker 模式下是 405)。
+     安全模型:授权由主机拉浏览器执行(回调钉死本机 53682 端口),本页只见
+     账号元数据(邮箱/状态),令牌字节不经过这里。 -->
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    padding: 2px 0 0;
+    color: var(--text-primary, #1a1a1a);
+    font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .label-row { display: flex; align-items: center; gap: 8px; }
+  .label-row .name { font-weight: 500; }
+  .badge {
+    padding: 1px 8px; border-radius: 6px; font-size: 11px;
+    background: var(--surface-chip, #efefec); color: var(--text-tertiary, #8a8a86);
+  }
+  .input-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .btn {
+    padding: 5px 16px; border-radius: 999px; cursor: pointer; flex: 0 0 auto;
+    border: 1px solid var(--border-default, #e4e4e0);
+    background: transparent; color: var(--text-primary, #1a1a1a);
+    font: inherit; font-weight: 500;
+  }
+  .btn:hover { background: var(--surface-chip, #efefec); }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .btn.primary { background: var(--accent-cta-bg, #262626); color: var(--accent-pure-cta-fg, #ffffff); border-color: transparent; }
+  .account {
+    display: flex; align-items: center; gap: 8px; margin-top: 8px;
+    padding: 6px 12px; border: 1px solid var(--border-default, #e4e4e0);
+    border-radius: 10px; background: var(--surface-elevated, #ffffff);
+  }
+  .account .email { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .account .tag { font-size: 11px; color: var(--text-tertiary, #8a8a86); flex: 0 0 auto; }
+  .account .tag.expired { color: var(--error-fg, #b53333); }
+  .account .mini {
+    padding: 2px 10px; border-radius: 999px; font-size: 11px; cursor: pointer; flex: 0 0 auto;
+    border: 1px solid var(--border-default, #e4e4e0); background: transparent;
+    color: var(--text-secondary, #55554f); font-family: inherit;
+  }
+  .account .mini:hover { background: var(--surface-chip, #efefec); }
+  #accounts:empty::after {
+    content: '尚未连接账号';
+    display: block; margin-top: 8px; font-size: 11px; color: var(--text-tertiary, #8a8a86);
+  }
+  #status { margin-top: 10px; font-size: 11px; color: var(--text-tertiary, #8a8a86); min-height: 16px; }
+  /* 空着不占位:没有消息时整行退场,别在卡片底部留一截空白(高度宿主实时跟量)。 */
+  #status:empty { display: none; }
+</style>
+</head>
+<body>
+  <div class="label-row">
+    <span class="name">Atlassian 账号</span>
+    <span class="badge">Jira / Confluence</span>
+  </div>
+  <div id="accounts"></div>
+  <div class="input-row">
+    <button id="connect" class="btn primary" type="button">连接账号</button>
+  </div>
+  <p id="status"></p>
+  <script src="/settings.js"></script>
+</body>
+</html>

@@ -1,0 +1,94 @@
+{
+  "cli": {
+    "version": ">= 15.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "testflight": {
+      "distribution": "store",
+      "channel": "production",
+      "environment": "production",
+      "node": "22.19.0",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "EXPO_PUBLIC_FEISHU_APP_ID": "cli_a94d4cf642381cd4",
+        "EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED": "1",
+        "EXPO_PUBLIC_XDT_API_BASE_URL": "https://xdt-api.magiclizi.com",
+        "EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL": "https://xdmaker-device-link.magiclizi.com",
+        "XDT_SKIP_AGENT_BIN_INSTALL": "1"
+      }
+    },
+    "production": {
+      "distribution": "store",
+      "channel": "production",
+      "environment": "production",
+      "node": "22.19.0",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "EXPO_PUBLIC_FEISHU_APP_ID": "cli_a94d4cf642381cd4",
+        "EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED": "1",
+        "EXPO_PUBLIC_XDT_API_BASE_URL": "https://xdt-api.magiclizi.com",
+        "EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL": "https://xdmaker-device-link.magiclizi.com",
+        "XDT_SKIP_AGENT_BIN_INSTALL": "1"
+      }
+    },
+    "adhoc": {
+      "distribution": "internal",
+      "channel": "staging",
+      "environment": "preview",
+      "node": "22.19.0",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "EXPO_PUBLIC_FEISHU_APP_ID": "cli_a94d4cf642381cd4",
+        "EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED": "1",
+        "EXPO_PUBLIC_XDT_API_BASE_URL": "https://xdt-api.magiclizi.com",
+        "EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL": "https://xdmaker-device-link.magiclizi.com",
+        "XDT_SKIP_AGENT_BIN_INSTALL": "1"
+      }
+    },
+    "beta-base": {
+      "distribution": "store",
+      "environment": "preview",
+      "node": "22.19.0",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "android": {
+        "resourceClass": "medium"
+      },
+      "env": {
+        "EXPO_PUBLIC_FEISHU_APP_ID": "cli_a94d4cf642381cd4",
+        "EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED": "1",
+        "EXPO_PUBLIC_XDT_API_BASE_URL": "https://xdt-api.magiclizi.com",
+        "EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL": "https://xdmaker-device-link.magiclizi.com",
+        "EXPO_PUBLIC_APP_VARIANT": "beta",
+        "XDT_SKIP_AGENT_BIN_INSTALL": "1"
+      }
+    },
+    "beta-dash": {
+      "extends": "beta-base",
+      "channel": "beta-dash",
+      "env": {
+        "EXPO_PUBLIC_BETA_DEV": "dash"
+      }
+    }
+  },
+  "submit": {
+    "testflight": {
+      "ios": {
+        "ascAppId": "6785851372"
+      }
+    },
+    "production": {
+      "ios": {
+        "ascAppId": "6785851372"
+      }
+    }
+  }
+}

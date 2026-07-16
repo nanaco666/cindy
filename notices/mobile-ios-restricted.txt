@@ -1,0 +1,9 @@
+==============================================================================
+RESTRICTED AND PROPRIETARY THIRD-PARTY COMPONENTS
+xdt-maker mobile application — iOS
+==============================================================================
+
+本文件单列不是开放源代码许可的第三方组件;它们不计入开源包数量。
+This file separately discloses components not distributed under open-source licenses.
+
+No restricted or proprietary components are declared for this artifact.

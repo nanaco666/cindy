@@ -1,0 +1,205 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { VoiceInputShortcut } from '../../../shared/voiceInputData.js';
+
+const mocks = vi.hoisted(() => {
+  const handlers = new Map<string, (...args: unknown[]) => unknown>();
+  const registeredShortcuts = new Map<string, () => void>();
+  const focusedWindow = {
+    id: 10,
+    isDestroyed: vi.fn(() => false),
+    isVisible: vi.fn(() => true),
+    webContents: {
+      id: 42,
+      isDestroyed: vi.fn(() => false),
+      send: vi.fn(),
+    },
+  };
+  const modifierSetShortcut = vi.fn();
+  const modifierStop = vi.fn();
+  const modifierIsRunning = vi.fn();
+
+  return {
+    handlers,
+    registeredShortcuts,
+    focusedWindow,
+    modifierSetShortcut,
+    modifierStop,
+    modifierIsRunning,
+  };
+});
+
+vi.mock('electron', () => ({
+  app: {
+    focus: vi.fn(),
+    getPath: vi.fn(() => '/tmp/xdt-maker-test'),
+    isPackaged: false,
+    once: vi.fn(),
+  },
+  BrowserWindow: {
+    getAllWindows: vi.fn(() => [mocks.focusedWindow]),
+    getFocusedWindow: vi.fn(() => mocks.focusedWindow),
+  },
+  clipboard: {},
+  globalShortcut: {
+    register: vi.fn((accelerator: string, callback: () => void) => {
+      mocks.registeredShortcuts.set(accelerator, callback);
+      return true;
+    }),
+    unregister: vi.fn((accelerator: string) => {
+      mocks.registeredShortcuts.delete(accelerator);
+    }),
+  },
+  ipcMain: {
+    handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+      mocks.handlers.set(channel, handler);
+    }),
+    on: vi.fn(),
+  },
+  screen: {
+    getPrimaryDisplay: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } })),
+    getDisplayNearestPoint: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } })),
+  },
+  shell: {
+    openExternal: vi.fn(),
+  },
+  systemPreferences: {
+    isTrustedAccessibilityClient: vi.fn(() => true),
+  },
+}));
+
+vi.mock('../index.js', () => ({
+  prewarmVoiceInputProvider: vi.fn(() => Promise.resolve()),
+}));
+
+vi.mock('../MacModifierShortcutListener.js', () => ({
+  MacModifierShortcutListener: vi.fn().mockImplementation(() => ({
+    setShortcut: mocks.modifierSetShortcut,
+    isRunning: mocks.modifierIsRunning,
+    stop: mocks.modifierStop,
+    stopKeyCapture: vi.fn(),
+    startKeyCapture: vi.fn(() => Promise.resolve({ ok: true })),
+  })),
+  getMacInputMonitoringPermissionSnapshot: vi.fn(() => Promise.resolve({ ok: true, status: 'granted' })),
+  requestMacInputMonitoringPermission: vi.fn(() => Promise.resolve({ ok: true, status: 'granted' })),
+}));
+
+let setTimeoutSpy: { mockRestore: () => void } | null = null;
+const originalPlatform = process.platform;
+
+function setPlatform(value: NodeJS.Platform): void {
+  Object.defineProperty(process, 'platform', { value, configurable: true });
+}
+
+describe('voice input global shortcut registration', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    setTimeoutSpy = vi
+      .spyOn(globalThis, 'setTimeout')
+      .mockImplementation(() => 0 as unknown as ReturnType<typeof setTimeout>);
+    mocks.handlers.clear();
+    mocks.registeredShortcuts.clear();
+    mocks.focusedWindow.webContents.send.mockClear();
+    mocks.modifierSetShortcut.mockReset();
+    mocks.modifierSetShortcut.mockResolvedValue({ ok: true });
+    mocks.modifierIsRunning.mockReset();
+    mocks.modifierIsRunning.mockReturnValue(true);
+    mocks.modifierStop.mockClear();
+  });
+
+  afterEach(() => {
+    setPlatform(originalPlatform);
+    setTimeoutSpy?.mockRestore();
+    setTimeoutSpy = null;
+  });
+
+  it('registers F16 through Electron globalShortcut and routes the press to the focused renderer', async () => {
+    setPlatform('darwin');
+    const { registerGlobalVoiceInputIpc } = await import('../global.js');
+    registerGlobalVoiceInputIpc();
+
+    const setShortcut = mocks.handlers.get('voice-input:global-shortcut:set');
+    expect(setShortcut).toBeTypeOf('function');
+
+    const f16Shortcut: VoiceInputShortcut = {
+      trigger: 'keyboard',
+      code: 'F16',
+      key: 'F16',
+      modifiers: {
+        meta: false,
+        ctrl: false,
+        alt: false,
+        shift: false,
+        fn: false,
+      },
+    };
+
+    await setShortcut?.({}, f16Shortcut);
+
+    expect(mocks.modifierSetShortcut).not.toHaveBeenCalled();
+    expect(mocks.registeredShortcuts.has('F16')).toBe(true);
+
+    mocks.registeredShortcuts.get('F16')?.();
+
+    expect(mocks.focusedWindow.webContents.send).toHaveBeenCalledWith(
+      'voice-input:global-shortcut-trigger',
+      expect.objectContaining({ id: expect.any(String) }),
+    );
+  });
+
+  it('does not re-register an unchanged native macOS shortcut from multiple windows', async () => {
+    setPlatform('darwin');
+    const { registerGlobalVoiceInputIpc } = await import('../global.js');
+    registerGlobalVoiceInputIpc();
+
+    const setShortcut = mocks.handlers.get('voice-input:global-shortcut:set');
+    expect(setShortcut).toBeTypeOf('function');
+
+    const fnShortcut: VoiceInputShortcut = {
+      trigger: 'keyboard',
+      code: 'KeyA',
+      key: 'a',
+      modifiers: {
+        meta: false,
+        ctrl: false,
+        alt: false,
+        shift: false,
+        fn: true,
+      },
+    };
+
+    await setShortcut?.({}, fnShortcut);
+    await setShortcut?.({}, fnShortcut);
+
+    expect(mocks.modifierSetShortcut).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-registers an unchanged native macOS shortcut when the listener is not running', async () => {
+    setPlatform('darwin');
+    const { registerGlobalVoiceInputIpc } = await import('../global.js');
+    registerGlobalVoiceInputIpc();
+
+    const setShortcut = mocks.handlers.get('voice-input:global-shortcut:set');
+    expect(setShortcut).toBeTypeOf('function');
+
+    const fnShortcut: VoiceInputShortcut = {
+      trigger: 'keyboard',
+      code: 'KeyA',
+      key: 'a',
+      modifiers: {
+        meta: false,
+        ctrl: false,
+        alt: false,
+        shift: false,
+        fn: true,
+      },
+    };
+
+    mocks.modifierIsRunning.mockReturnValueOnce(false).mockReturnValueOnce(false);
+
+    await setShortcut?.({}, fnShortcut);
+    await setShortcut?.({}, fnShortcut);
+
+    expect(mocks.modifierSetShortcut).toHaveBeenCalledTimes(2);
+  });
+});

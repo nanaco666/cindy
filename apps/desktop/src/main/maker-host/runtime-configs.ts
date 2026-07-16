@@ -1,0 +1,171 @@
+/**
+ * Desktop AgentRuntimeConfig 实现 ——
+ * 把 vendor/{claude,codex}/authAdapter.ts:getProcessEnv() 里 hardcoded 的 endpoint + behavior flag 提取到这里。
+ *
+ * 详见 doc/agent/xdt-maker-architecture.md §6.5 的迁移映射表。
+ *
+ * 注意：本轮 (stage-1) 这些值实际未被消费 —— ClaudeCodeAgent adapter 仍走 claudeRuntime
+ * 内部的老 env 路径，runtimeConfig 接口仅为下一轮迁移预留。
+ */
+
+import type { AgentRuntimeConfig } from '@lizi/maker-core';
+import { app } from 'electron';
+import fs from 'node:fs';
+import path from 'node:path';
+
+import { XD_GATEWAY_BASE_URL } from '../../shared/endpoints.js';
+import claudeSystemPrompt from './claude-system-prompt.md?raw';
+import codexSystemPrompt from './codex-system-prompt.md?raw';
+import hostSystemPrompt from './host-system-prompt.md?raw';
+import { readCompactionPct } from './compaction-settings-store.js';
+import { readMemorySettings } from './memory-settings-store.js';
+
+// host 层 system prompt 拼接：先 host 共用段 (host-system-prompt.md)，再 agent 专属段
+// (claude-system-prompt.md / codex-system-prompt.md)。空段被过滤，避免出现孤零零的 \n\n。
+function composeHostPrompt(agentSpecific: string): string {
+  return [hostSystemPrompt, agentSpecific]
+    .map(s => s.trim())
+    .filter(s => s.length > 0)
+    .join('\n\n');
+}
+
+function platformKey(): string {
+  return `${process.platform}-${process.arch}`;
+}
+
+function ripgrepBinaryName(): string {
+  return process.platform === 'win32' ? 'rg.exe' : 'rg';
+}
+
+function bundledRipgrepDir(): string {
+  const key = platformKey();
+  const file = ripgrepBinaryName();
+  const candidates = app.isPackaged
+    ? [path.join(process.resourcesPath, 'tools', 'ripgrep')]
+    : [
+        path.join(app.getAppPath(), '..', '..', 'apps', 'ripgrep-bin', key),
+        path.join(process.cwd(), 'apps', 'ripgrep-bin', key),
+        path.join(process.cwd(), '..', 'ripgrep-bin', key),
+      ];
+
+  for (const dir of candidates) {
+    const bin = path.join(dir, file);
+    if (!fs.existsSync(bin)) continue;
+    if (process.platform !== 'win32') {
+      try { fs.chmodSync(bin, 0o755); } catch { /* ignore */ }
+    }
+    return dir;
+  }
+
+  throw new Error(
+    `Bundled ripgrep not found for ${key}. Run "pnpm update:ripgrep" before starting desktop dev or packaging.`,
+  );
+}
+
+/**
+ * Public accessor for the bundled ripgrep executable's full path. Used by
+ * file-browser/search 等需要 spawn rg 子进程的模块。Throws if rg 未找到 ——
+ * 与 bundledRipgrepDir() 同样的找不到时炸开行为(不容许静默退化)。
+ */
+export function getRipgrepBinaryPath(): string {
+  return path.join(bundledRipgrepDir(), ripgrepBinaryName());
+}
+
+// memorySettings 在 main 启动期已 ready (userData 同步可访问)。
+// 原生 auto-memory 与 Maker Memory 都从持久化 store 读, 重启后用户上次设置 100% 恢复。
+// 默认值由 memory-settings-store.ts 维护 (maker=false / claudeCode=true / codex=true)。
+const memorySettings = readMemorySettings();
+
+function readMakerMemoryEnabled(): boolean {
+  return readMemorySettings().maker;
+}
+
+const staticClaudeBehaviorFlags = {
+  CLAUDE_CODE_SKIP_FAST_MODE_NETWORK_ERRORS: '1',
+  CLAUDE_CODE_ATTRIBUTION_HEADER: '0',
+  // llm-proxy.tapsvc.com 透传 tool_reference 块, 显式开启 ToolSearch
+  // 否则 CC 看到非 first-party host 默认 disable, 每次请求都全量塞工具定义。
+  ENABLE_TOOL_SEARCH: 'auto',
+};
+
+/**
+ * Claude Code 真正的上游 endpoint —— 既给本地 anthropic-compat-proxy 做 upstream,
+ * 也给 claudeAccountUsage 等需要直连的旁路调用使用。
+ *
+ * 注意:Claude Code 子进程看到的 ANTHROPIC_BASE_URL 不是这个值,而是本地代理的
+ * loopback URL(由 anthropic-compat-proxy-host 在 splash 阶段启动后注入到
+ * desktopClaudeRuntimeConfig.endpoint)。代理在转发到这里前会按 model 名判断,
+ * 把 Anthropic-only 字段(output_config / thinking / cache_control / betas)从
+ * 非 Claude 模型(gpt-5.4 / kimi 等)的请求里 strip 掉,绕开上游 Azure backend
+ * "Unknown parameter" 400 错误。
+ */
+export const CLAUDE_UPSTREAM_ENDPOINT = XD_GATEWAY_BASE_URL;
+
+/**
+ * Claude 运行时配置工厂 ——
+ *
+ * 对应迁移自 vendor/claude/authAdapter.ts:66-78 的 ANTHROPIC_BASE_URL +
+ * CLAUDE_CODE_SKIP_FAST_MODE_NETWORK_ERRORS, 并额外注入 maker 侧自动压缩阈值。
+ *
+ * @param endpointFn 返回 Claude Code 子进程当前应该用的 ANTHROPIC_BASE_URL 的函数。
+ *   **必须传函数而不是字符串**: 每次 spawn(startSession) 时 env-builder 会读
+ *   `runtimeConfig.endpoint`, 我们用 getter 让它每次都调用这个函数读最新值。
+ *   proxy 在 splash 期异步启动, getter 保证每次新建 session 都拿到当时最新的就绪状态,
+ *   不需要重启 app 或重置 Maker 单例。
+ *
+ *   传 `getClaudeEndpoint`(函数引用)即可。getClaudeEndpoint 内部已经处理:
+ *     proxy ready → loopback URL(请求经 proxy 做 per-model 路由 + 字段适配);
+ *     proxy 没起  → 真上游 + warn(fail-open 兜底)。
+ */
+export function buildDesktopClaudeRuntimeConfig(endpointFn: () => string): AgentRuntimeConfig {
+  // 用 plain object + Object.defineProperty 装 getter, 而不是 class 实例。
+  // 这样 AgentRuntimeConfig 接口(endpoint?: string)在结构类型上仍然成立 ——
+  // 每次访问 runtimeConfig.endpoint 都会执行 endpointFn, 拿到当时最新的兼容模式状态。
+  const config: AgentRuntimeConfig = {
+    // behaviorFlags 现在全是静态值 (压缩阈值已拆到 autoCompactThresholdPct getter),
+    // 直接当普通属性挂; 引用共享无妨 —— env-builder 只读不改。
+    behaviorFlags: staticClaudeBehaviorFlags,
+    // xdt-maker 产品级 system prompt 注入：host 共用段 (host-system-prompt.md)
+    // + Claude 专属段 (claude-system-prompt.md)，按顺序拼接后给 maker-core append。
+    systemPrompt: composeHostPrompt(claudeSystemPrompt),
+    // Maker Memory 需要的 user-data 绝对路径 (maker-core 没 Electron 依赖, 必须 host 注入)。
+    userDataPath: app.getPath('userData'),
+    memoryEnabled: memorySettings.claudeCode,
+    // main-side session starts can omit per-session makerMemoryEnabled. Keep the fallback live
+    // so settings changed after app startup apply without requiring a restart.
+    get makerMemoryEnabled() {
+      return readMakerMemoryEnabled();
+    },
+    // 远端 cc-mgr 会话恒用真上游网关 —— 本地 endpoint 是 loopback proxy(远端够不到)。
+    // 静态值即可:远端从来不走 per-model OAuth↔gateway 拆分(那只在本地 proxy 里有意义)。
+    remoteEndpoint: CLAUDE_UPSTREAM_ENDPOINT,
+  };
+  Object.defineProperty(config, 'endpoint', {
+    get: endpointFn,
+    enumerable: true,
+    configurable: false,
+  });
+  Object.defineProperty(config, 'autoCompactThresholdPct', {
+    get: () => readCompactionPct(),
+    enumerable: true,
+    configurable: false,
+  });
+  return config;
+}
+
+/**
+ * Codex 运行时配置：当前没有 proxy URL 覆盖，也没有业务 flag。
+ * systemPrompt 已接通 —— codex agent 在 thread/start 时跟 engine append 拼成
+ * developerInstructions 注入 codex 子进程 (见 codex/index.ts)。
+ */
+export const desktopCodexRuntimeConfig: AgentRuntimeConfig = {
+  // host 共用段 (host-system-prompt.md) + Codex 专属段 (codex-system-prompt.md)。
+  systemPrompt: composeHostPrompt(codexSystemPrompt),
+  pathPrepends: [bundledRipgrepDir()],
+  userDataPath: app.getPath('userData'),
+  memoryEnabled: memorySettings.codex,
+  // Keep this fallback live for main-side session starts that do not pass CreateOpts.makerMemoryEnabled.
+  get makerMemoryEnabled() {
+    return readMakerMemoryEnabled();
+  },
+};

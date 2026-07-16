@@ -1,0 +1,14 @@
+{
+  "name": "xdt-updater",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tauri-based Windows updater for xdt-maker. Spawned by the main app from %TEMP% to swap appDir/* and relaunch the new exe.",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.1.0"
+  }
+}

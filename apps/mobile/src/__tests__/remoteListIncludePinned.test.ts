@@ -1,0 +1,14 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+describe('mobile remote session bootstrap', () => {
+  it('asks the controlled desktop to include active pinned sessions outside the recent window', () => {
+    const homeSource = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
+    const detailSource = readFileSync(resolve(process.cwd(), 'app/devices/[deviceId].tsx'), 'utf8');
+    const listWithPinned = /local-db:sessions:list'[\s\S]{0,220}\{ includePinned: true \}/;
+
+    expect(homeSource).toMatch(listWithPinned);
+    expect(detailSource).toMatch(listWithPinned);
+  });
+});

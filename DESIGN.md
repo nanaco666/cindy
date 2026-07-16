@@ -1,0 +1,615 @@
+# Design System Inspired by Ollama
+
+## 1. Visual Theme & Atmosphere
+
+Ollama's interface is radical minimalism taken to its logical conclusion — a pure-white void where content floats without decoration, shadow, or color. The design philosophy mirrors the product itself: strip away everything unnecessary until only the essential tool remains. This is the digital equivalent of a Dieter Rams object — every pixel earns its place, and the absence of design IS the design.
+
+The entire page exists in pure grayscale. There is zero chromatic color in the interface — no brand blue, no accent green, no semantic red. The only colors that exist are shades between pure black (`#000000`) and pure white (`#ffffff`), creating a monochrome environment that lets the user's mental model of "open models" remain uncolored by brand opinion. The Ollama llama mascot, rendered in simple black line art, is the only illustration — and even it's monochrome.
+
+What makes this system distinctive is the combination of a single geometric sans-serif (Inter) with an exclusively pill-shaped geometry (9999px radius on everything interactive). The clean letterforms + rounded buttons + rounded containers create a cohesive "softness language" that makes a developer-oriented tool feel approachable and friendly rather than intimidating. This is minimalism with warmth — not cold Swiss-style grid minimalism, but the kind where the edges are literally softened.
+
+**Key Characteristics:**
+
+- Pure white canvas with zero chromatic color — completely grayscale
+- Inter as the single sans family, carrying both display headlines and body text
+- Tight border-radius system: 8px (inner controls) / 12px (containers) / 9999px (pill) — three values, nothing else
+- Zero shadows — depth comes exclusively from background color shifts and borders
+- Pill-shaped geometry on all interactive elements (buttons, tabs, inputs, tags)
+- The Ollama llama as the sole illustration — black line art, no color
+- Extreme content restraint — the homepage is short, focused, and uncluttered
+
+## 2. Color Palette & Roles
+
+> **多主题架构注意**:本节列出的色值是 **Default Light / Default Dark**(默认主题,设计灵感来自 Ollama 官网)的具体值,作为视觉规范的参考样本。运行时**每个色值都通过 token 引用**(见第 10 节 Theme System & Token Reference),所以同一组件在其它主题(如 Eclipse / One Dark Pro / Monokai Pro)下会自动呈现该主题的对应色。**实现组件时永远写 token 不写 hex**——具体规则见 CLAUDE.md 规则 #18。
+
+### Primary Text
+
+- **Pure Black** (`#000000`): Primary headlines, primary links, and the darkest text in Light Mode. The only "color" that demands attention. **Never used as a background** — reserved exclusively for text and icons.
+- **Near Black** (`#262626`): Button text on light-colored surfaces, secondary headline weight.
+
+### Layer System (Light & Dark)
+
+The interface is built from a three-tier layer system that applies symmetrically to both modes — **Surface** as the base, **Card** as the elevated layer, and **Board** as the hairline divider. This is the foundation of every page in every mode.
+
+
+| Role        | Light Mode | Dark Mode | Usage                                                                                                                                                                              |
+| ----------- | ---------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Surface** | `#f8f8f6`  | `#1f1f1e` | The primary page background — every page starts here. In full-window app layouts, this is the single flat background. In centered-card layouts, this is the page beneath the card. |
+| **Card**    | `#ffffff`  | `#2c2c2a` | The elevated layer sitting on top of Surface — login cards, modals, panels, raised containers, and any element that needs to visually lift off the page.                           |
+| **Board**   | `#d7d7d4`  | `#3c3c3a` | The hairline divider color — 1px borders between sections, card outlines, and any separator line within the same layer.                                                            |
+
+
+**Layer rule — flat vs. elevated:**
+
+- **Full-window applications** (e.g. main workspace, chat interface, dashboards): use **Surface** as a single flat background for the entire window — no Card layer at the page-structure level. Section boundaries (sidebar, toolbar, content area) are drawn with 1px **Board** dividers, never with background color shifts.
+- **Centered-card layouts** (e.g. login, modal, empty-state card on a blank page): use **Surface** as the page background and **Card** as the lifted card. The color difference between Surface and Card is what makes the card read as "lifted" — no shadow needed. The card outline is drawn in **Board**.
+
+> **Important — element-level vs. page-level:** The "flat Surface" rule in full-window layouts applies only to the **overall page structure**, not to individual widgets. Lifted widgets *within* a full-window layout — inputs, chat input boxes, raised cards, modal overlays, panel popups — still use **Card** color per their component rules (see Section 4). A full-window chat interface can have a flat Surface page *and* a Card-colored chat input box at the same time; those are two different scopes. "Surface flat" means "don't split the page into Page+Card layers," not "every element on the page must be Surface color."
+
+### Chip & Button Neutrals
+
+Small interactive chips (button backgrounds, tag pills, avatar fills, selected-nav pills) sit outside the layer system — they're foreground elements, not background layers.
+
+- **Light Gray** (`#e5e5e5`): Chip/button backgrounds in Light Mode — the workhorse neutral for pressed states, filled pills, tag backgrounds, and avatar fills.
+- **Dark Chip** (`#2c2c2a`): Chip/button backgrounds in Dark Mode — equal to Dark Card; the lifted-pill color against a `#1f1f1e` Surface. (In Dark Mode, the Card layer color and the chip color collapse to the same value — both represent "one step lifted off Surface.")
+
+> ~~**Border Light** (`#d4d4d4`)~~ —— 已废弃(2026-06,G2)。原称"white-button 专用边框色",但全仓库无真实组件使用(只有 experimental 视图裸 hardcode)。White Pill 次按钮边框统一走 **Board**(`--border-default` `#d7d7d4`)。
+
+### Neutrals & Text
+
+- **Stone** (`#737373`): Secondary body text, footer links, and de-emphasized content. The primary "muted" tone.
+- **Mid Gray** (`#525252`): Emphasized secondary text, slightly darker than Stone.
+- **Silver** (`#a3a3a3`): Tertiary text and deeply de-emphasized metadata. **不要用作 placeholder**——太显眼、读着像已填(见 §4 Inputs + §13 G3,placeholder 走 `--text-placeholder` `#c4c4c4`)。
+
+> ~~**Button Text Dark** (`#404040`)~~ —— 已废弃(2026-06,G1)。原称"white-surface 按钮文字专用色",但全仓库无真实按钮使用(只有 experimental 视图裸 hardcode)。White Pill 次按钮文字统一走 **Near Black**(`--text-primary` `#262626`)。
+
+### Semantic & Accent
+
+The grayscale rule is near-absolute. The following are the **only** sanctioned non-gray colors in the system — each tightly scoped to a specific surface. New semantic colors must not be introduced without being recorded here first.
+
+- **Ring Blue** (`#3b82f6` at 50%): Tailwind's default focus ring, used exclusively for keyboard accessibility. Never visible in normal interaction flow.
+- **Thinking Orange** (`#FF6600`): Used exclusively for the Running Status Bar in ChatView when the Claude Code SDK is actively processing (streaming / tool_use). Applies only to the sparkles icon and status text (e.g. `Spelunking...`); no background fill, no use outside this surface. Reference: `doc/design_docs/cc-agent-view.pen` Running Status Bar.
+
+> **Additional narrowly-scoped exceptions** (documented in their respective component specs, do NOT generalize as system semantic colors):
+>
+> - **Toast Info / Success / Warning / Error** — `#3B82F6` / `#10B981` / `#F59E0B` / `#EF4444` used ONLY on the 16×16 lucide icon inside Toast pill notifications. The pill body (background, text, border, close icon) remains strictly grayscale. Info blue added 2026-07-14 for neutral tips (first consumer: Ghost notify slot); same family as Ring Blue. See `doc/prod_docs/xdt-maker-通用提示条.md` V0.3 F7.
+> - **ConfirmDialog Danger** — `#EF4444` used ONLY on the confirm button background in the Danger variant. The cancel button and rest of the dialog remain grayscale. See `doc/prod_docs/xdt-maker-通用确认弹窗.md` V0.2 F4.
+> - **Permission Selector Mode Highlights** — selected risky permission modes may color only the option text/icon/checkmark and the collapsed trigger text/icon. The selected row background remains grayscale. In **Default Light**, Auto Approval uses Starry Blue `#000050`; in **Default Dark**, it uses teal `#00D9C5`. Full Access uses Heart Orange `#FF6600` in both modes. These hex values are the **default-theme palette only** — other themes may override `--perm-auto-selected-text` and `--perm-bypass-selected-text` with their own accent colors, provided both modes remain color-coded, distinguishable from each other, and visually distinct from neutral text. Tokens: `--perm-auto-selected-text` and `--perm-bypass-selected-text` in `apps/desktop/src/renderer/styles/globals.css`.
+> - **Diff Add Green / Diff Del Red** — GitHub-standard diff syntax colors, used on the `+` / `-` symbol glyph, the changed-line text foreground, **and the full row background** inside code-diff renderings. Applied in three places: (1) the Edit-tool DiffView card (F-MSG-6), (2) markdown ````diff` fenced code blocks in the message stream, and (3) `.diff` / `.patch` files opened in TextLightbox (the document previewer) — there hljs `.hljs-addition` / `.hljs-deletion` are forced `display: block` so the background fills to the right edge instead of stopping at the last glyph. Line-number gutter and ctx (unchanged) lines remain strictly grayscale per the layer system. **Foreground** — Add: `#22863a` Light / `#7ee787` Dark; Del: `#b31d28` Light / `#ff7b72` Dark. **Background** — Add: `#f0fff4` Light / `#033a16` Dark; Del: `#ffeef0` Light / `#67060c` Dark. Tokens: `--diff-add-fg/-bg` and `--diff-del-fg/-bg` in `apps/desktop/src/renderer/styles/globals.css`. Updated 2026-04-21: backgrounds switched from grayscale → GitHub red/green for full-row fill so additions / deletions are unambiguous at a glance. Reference frame: `doc/design_docs/cc-agent-view.pen` "Light/Dark Mode - Markdown Diff Code Block".
+
+*Dark Mode text uses softened neutrals to reduce eye strain: **Soft Gray** (`#d4d4d4`) for primary text, Stone (`#737373`) for secondary, Silver (`#a3a3a3`) for tertiary. Pure White (`#ffffff`) is reserved for button labels and high-contrast UI elements on dark backgrounds.*
+
+### Gradient System
+
+- **None.** Ollama uses absolutely no gradients. Visual separation comes from flat color blocks and single-pixel borders. This is a deliberate, almost philosophical design choice.
+
+## 3. Typography Rules
+
+### Font Family
+
+- **Display / Body / UI**: `Inter`, with fallbacks: `system-ui, -apple-system, "Segoe UI", sans-serif`
+- **Monospace**: `JetBrains Mono`, with fallbacks: `ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace`
+
+*Note: The entire interface uses a single sans font — Inter — for both display headlines and body text. Inter is chosen for (a) its neutral, geometric character that stays out of the way, (b) its excellent legibility at small sizes, and (c) its wide availability in both web and design tooling (including the Pencil .pen editor). A single font keeps the hierarchy clean — separation comes from size and weight, not typeface contrast.*
+
+### Hierarchy
+
+
+| Role            | Font           | Size           | Weight  | Line Height  | Letter Spacing                         | Notes                                                                                                                                                                                                                                                        |
+| --------------- | -------------- | -------------- | ------- | ------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Display / Hero  | Inter          | 48px (3rem)    | 500     | 1.00 (tight) | normal                                 | Maximum impact headline                                                                                                                                                                                                                                      |
+| Section Heading | Inter          | 36px (2.25rem) | 500     | 1.11 (tight) | normal                                 | Feature section titles                                                                                                                                                                                                                                       |
+| Sub-heading     | Inter          | 30px (1.88rem) | 400–500 | 1.20 (tight) | normal                                 | Card headings, feature names                                                                                                                                                                                                                                 |
+| Card Title      | Inter          | 24px (1.5rem)  | 400     | 1.33         | normal                                 | Medium emphasis headings                                                                                                                                                                                                                                     |
+| Body Large      | Inter          | 18px (1.13rem) | 400–500 | 1.56         | normal                                 | Hero descriptions, button text                                                                                                                                                                                                                               |
+| Body / Link     | Inter          | 16px (1rem)    | 400–500 | 1.50         | normal                                 | Standard body text, navigation                                                                                                                                                                                                                               |
+| Caption         | Inter          | 14px (0.88rem) | 400     | 1.43         | normal                                 | Metadata, descriptions                                                                                                                                                                                                                                       |
+| Small           | Inter          | 12px (0.75rem) | 400     | 1.33         | normal                                 | Smallest sans-serif text                                                                                                                                                                                                                                     |
+| Micro Label     | Inter          | 10–13px        | 400–500 | 1.20–1.40    | optional 0.5–1px tracking on uppercase | **Auxiliary / non-reading** labels only — sidebar tree section heads (13px), tree row counts, frontmatter field names, scope chips, tag pills, status badges, breadcrumb segments. Never used for body text or anything the user reads sentence-by-sentence. |
+| Code Body       | JetBrains Mono | 16px (1rem)    | 400     | 1.50         | normal                                 | Inline code, commands                                                                                                                                                                                                                                        |
+| Code Caption    | JetBrains Mono | 14px (0.88rem) | 400     | 1.43         | normal                                 | Code snippets, secondary                                                                                                                                                                                                                                     |
+| Code Small      | JetBrains Mono | 11–12px        | 400–500 | 1.40–1.63    | normal                                 | Tags, labels, in-tree paths                                                                                                                                                                                                                                  |
+
+
+### Principles
+
+- **Single sans family**: Inter carries both display headlines and body text — no typeface switching between hierarchy levels. Size and weight alone create hierarchy, keeping the typographic system maximally simple.
+- **Weight restraint**: Only two weights matter — 400 (regular) for body and 500 (medium) for headings. No bold, no light, no black weight. This extreme restraint reinforces the minimal philosophy.
+- **Tight display, comfortable body**: Headlines compress to 1.0 line-height, while body text relaxes to 1.43–1.56. The contrast creates clear hierarchy without needing weight contrast.
+- **Monospace for code only**: JetBrains Mono is reserved for inline code, terminal commands, and code blocks — never used for UI chrome.
+
+## 4. Component Stylings
+
+### Buttons
+
+**Gray Pill (Primary)**
+
+- Background: Light Gray (`#e5e5e5`)
+- Text: Near Black (`#262626`)
+- Padding: 10px 24px
+- Border: thin solid Light Gray (`1px solid #e5e5e5`)
+- Radius: pill-shaped (9999px)
+- The primary action button — understated, grayscale, always pill-shaped
+
+**White Pill (Secondary)**
+
+- Background: Pure White (`#ffffff`) — `--surface-elevated`
+- Text: Near Black (`#262626`) — `--text-primary`
+- Padding: 10px 24px
+- Border: thin solid Board (`1px solid #d7d7d4`) — `--border-default`
+- Radius: pill-shaped (9999px)
+- Secondary action — visually lighter than Gray Pill
+
+**Black Pill (CTA)**
+
+- Background: Pure Black (`#000000`)
+- Text: Pure White (`#ffffff`)
+- Radius: pill-shaped (9999px)
+- Inferred from "Create account" and "Explore" buttons
+- Maximum emphasis — black on white
+
+### Cards & Containers
+
+- Background: Card (`#ffffff` Light / `#2c2c2a` Dark) or Surface (`#f8f8f6` Light / `#1f1f1e` Dark) depending on layer context
+- Border: thin solid Board (`1px solid #d7d7d4` Light / `1px solid #3c3c3a` Dark) when needed
+- Radius: comfortably rounded (12px) — the container radius (see §5 three-tier scale; 8px is reserved for inner controls like textareas / dropdown rows, pill for interactive elements)
+- Shadow: **none** — zero shadows on any element
+- Hover: likely subtle background shift or border darkening
+
+### Inputs & Forms
+
+- Background: Card (`#ffffff` Light / `#2c2c2a` Dark)
+- Border: `1px solid` Board (`#d7d7d4` Light / `#3c3c3a` Dark)
+- Radius: pill-shaped (9999px) — single-line search inputs and form fields are pill-shaped. **多行输入框(textarea)套不了胶囊**(高框会变形),改用 8px 内层圆角(见 §5 三档圆角)。
+- Focus: Ring Blue (`#3b82f6` at 50%) ring
+- Placeholder: **`--text-placeholder`** slot — **Faded Light** (`#c4c4c4`) Light / **Mid Gray** (`#525252`) Dark — must read as clearly empty, not pre-filled. Silver (`#a3a3a3`) is too prominent against either Card surface (≈5:1 in Dark, ≈2.6:1 in Light) and reads as real input. **所有输入面的 placeholder(chat / ask / settings / plan-action-fb)统一收口于此 slot**(2026-06 G3);非默认主题通过 override `text-placeholder` 表达各自的 placeholder 色。
+
+### Select & Dropdown
+
+- **Trigger**: 同单行输入 —— pill(9999px),Card bg,1px Board 边框,承载当前值 + chevron。
+- **弹出面板**: 是个容器 —— 12px 圆角,Card bg(`--surface-elevated`),1px Board 边框,无阴影(靠 overlay / 层色分隔),内边距 6–8px。
+- **面板宽度必须绑定 trigger 宽度** —— 不许比触发它的控件更窄或更宽。Radix Select 用 `position="popper"` + `width: var(--radix-select-trigger-width)`;其它原语则取 trigger 实测宽度对齐。(反复踩的点:下拉宽度要跟上方一致。)
+- **选项行**: 选中 / 悬浮的高亮底色用 **8px 内层圆角**(见 §5 —— 面板是 12px 容器,行高亮是内层 8px,内层必须比面板小才嵌套协调)。高亮 bg 走 `--surface-hover` / Radix `data-[highlighted]`;选中行给 chip 填充,未选中行透明。
+
+### Dialog & Modal
+
+参照实现 `components/ui/confirm-dialog.tsx`(通用确认弹窗);新建弹窗沿用它的结构,不另起一套。
+
+- **Overlay**: 全屏遮罩走 `--overlay-modal` token(ConfirmDialog 现用 `neutral-900/40` 硬编码 pair 是历史遗留,**新弹窗一律走 token**,别照抄)。
+- **容器**: 是个容器 —— 12px 圆角(`rounded-xl`),`--confirm-bg`,`--confirm-shadow`,16px 内边距(`p-4`),居中。宽度:确认 / 提示类 ≈ 400px(`max-w-[400px]`);带输入 / 表单的可放宽到 ≈ 460px 并随视口收窄(`min(460px, 100vw-32px)`)。
+- **标题 / 描述**: `--confirm-title` / `--confirm-desc`,medium 字重。
+- **按钮**: pill(9999px);主按钮 = 实心 CTA(`--confirm-btn-primary-*`),次按钮 / 取消 = 描边(`--confirm-btn-secondary-*`,透明底 + Board 边框);底部 `justify-end`。
+- **打开时焦点**: 落在该弹窗的**主输入或主按钮**,不要默认停在取消键(见 §14.2 + ConfirmDialog 的 `autoFocusConfirm` / `onOpenAutoFocus`)。
+
+### Navigation
+
+- Clean horizontal nav with minimal elements
+- Logo: Ollama llama icon + wordmark in black
+- Links: "Models", "Docs", "Pricing" in black at 16px, weight 400
+- Search bar: pill-shaped with placeholder text
+- Right side: "Sign in" link + "Download" black pill CTA
+- No borders, no background — transparent nav on white page
+
+### Image Treatment
+
+- The Ollama llama mascot is the only illustration — black line art on white
+- Code screenshots/terminal outputs shown in bordered containers (12px radius)
+- Integration logos displayed as simple icons in a grid
+- No photographs, no gradients, no decorative imagery
+
+### Distinctive Components
+
+**Tab Pills**
+
+- Pill-shaped tab selectors (e.g., "Coding" | "OpenClaw")
+- Active: Light Gray bg; Inactive: transparent
+- All pill-shaped (9999px)
+
+**Model Tags**
+
+- Small pill-shaped tags (e.g., "ollama", "launch", "claude")
+- Light Gray background, dark text
+- The primary way to browse models
+
+**Terminal Command Block**
+
+- Monospace code showing `ollama run` commands
+- Minimal styling — just a bordered 12px-radius container
+- Copy button integrated
+
+**Integration Grid**
+
+- Grid of integration logos (Codex, Claude Code, OpenCode, LangChain, etc.)
+- Each in a bordered pill or card with icon + name
+- Tabbed by category (Coding, Documents & RAG, Automation, Chat)
+
+## 5. Layout Principles
+
+### Spacing System
+
+- Base unit: 8px
+- Scale: 4px, 6px, 8px, 9px, 10px, 12px, 14px, 16px, 20px, 24px, 32px, 40px, 48px, 88px, 112px
+- Button padding: 10px 24px (consistent across all buttons)
+- Card internal padding: approximately 24–32px
+- Section vertical spacing: very generous (88px–112px)
+
+### Grid & Container
+
+- Max container width: approximately 1024–1280px, centered
+- Hero: centered single-column with llama illustration
+- Feature sections: 2-column layout (text left, code right)
+- Integration grid: responsive multi-column
+- Footer: clean single-row
+
+### Whitespace Philosophy
+
+- **Emptiness as luxury**: The page is remarkably short and sparse — no feature section overstays its welcome. Each concept gets minimal but sufficient space.
+- **Content density is low by design**: Where other AI companies pack feature after feature, Ollama presents three ideas (run models, use with apps, integrations) and stops.
+- **The white space IS the brand**: Pure white space with zero decoration communicates "this tool gets out of your way."
+
+### Border Radius Scale
+
+三档圆角,**仅此三档**:
+
+- **Inner control (8px)**: 窄第三档,**只**给"做不成胶囊"的小交互件:多行输入框(textarea)、下拉 / 菜单的选中行高亮、段内小单元格。实现为 Tailwind `rounded-lg`(8px)。
+- **Container (12px)**: 盒子圆角 — 代码块、卡片、面板、弹窗。实现为 Tailwind `rounded-xl`(12px)。
+- **Pill (9999px)**: 能套胶囊的所有交互件 — 按钮、Tab、单行输入、标签、徽标。
+
+*没有 4px / 6px / 10px,也不开放任意圆角。绝大多数元素仍只在 12px 容器和 pill 里二选一;8px 是给"塞不进胶囊的小控件"的窄例外。注意嵌套:8px 行高亮套在 12px 面板里时,内层圆角必须比容器小才协调(所以是 8 而非 12),做成胶囊则会变成药丸、做成 12px 会显得鼓。*
+
+## 6. Depth & Elevation
+
+
+| Level              | Treatment                                                                 | Use                                            |
+| ------------------ | ------------------------------------------------------------------------- | ---------------------------------------------- |
+| Flat (Level 0)     | No shadow, no border                                                      | Surface background, most content               |
+| Bordered (Level 1) | `1px solid` Board (`#d7d7d4` Light / `#3c3c3a` Dark)                      | Cards, code blocks, dividers, section outlines |
+| Lifted (Card)      | Card fill (`#ffffff` Light / `#2c2c2a` Dark) + optional 1px Board outline | Login cards, modals, raised panels             |
+
+
+**Shadow Philosophy**: Ollama uses **zero shadows**. This is not an oversight — it's a deliberate design decision. Every other major AI product site uses at least subtle shadows. Ollama's flat, shadowless approach creates a paper-like experience where elements are distinguished purely by background color and single-pixel borders. Depth is communicated through **content hierarchy and typography weight**, not visual layering.
+
+## 7. Do's and Don'ts
+
+### Do
+
+- Use Surface (`#f8f8f6` Light / `#1f1f1e` Dark) as the page background — every page starts here
+- Use pill-shaped (9999px) radius on all interactive elements — buttons, tabs, inputs, tags
+- Use 12px radius on all non-interactive containers — code blocks, cards, panels
+- Use 8px radius only for inner controls that can't be a pill — multi-line inputs, dropdown/menu rows (see §5)
+- Keep the palette strictly grayscale — no chromatic colors except the blue focus ring
+- Use Inter at weight 500 for display headings — hierarchy comes from size + weight, not typeface switching
+- Maintain zero shadows — depth comes from borders and background shifts only
+- Keep content density low — each section should present one clear idea
+- Use monospace for terminal commands and code — it's primary content, not decoration
+- Keep all buttons at 10px 24px padding with pill shape — consistency is absolute
+
+### Don't
+
+- Don't introduce any chromatic color — no brand blue, no accent green, no warm tones
+- Don't invent arbitrary radii — only three values exist: 8px (inner controls), 12px (containers), 9999px (pill). Nothing in between, nothing else.
+- Don't add shadows to any element — the flat aesthetic is intentional
+- Don't use font weights above 500 — no bold, no black weight
+- Don't add decorative illustrations beyond the llama mascot
+- Don't use gradients anywhere — flat blocks and borders only
+- Don't overcomplicate the layout — two columns maximum, no complex grids
+- Don't use borders heavier than 1px — containment is always the lightest possible touch
+- Don't add decorative or large-motion animation — no bounce, parallax, looping, or gratuitous movement. Short **functional** state transitions (color / background / opacity, ≤150ms) are fine and expected — see §14.4.
+
+## 8. Responsive Behavior
+
+### Breakpoints
+
+
+| Name          | Width       | Key Changes                                      |
+| ------------- | ----------- | ------------------------------------------------ |
+| Mobile        | <640px      | Single column, stacked everything, hamburger nav |
+| Small Tablet  | 640–768px   | Minor adjustments to spacing                     |
+| Tablet        | 768–850px   | 2-column layouts begin                           |
+| Desktop       | 850–1024px  | Standard layout, expanded features               |
+| Large Desktop | 1024–1280px | Maximum content width                            |
+
+
+### Touch Targets
+
+- All buttons are pill-shaped with generous padding (10px 24px)
+- Navigation links at comfortable 16px size
+- Minimum touch area easily exceeds 44x44px
+
+### Collapsing Strategy
+
+- **Navigation**: Collapses to hamburger menu on mobile
+- **Feature sections**: 2-column → stacked single column
+- **Hero text**: 48px → 36px → 30px progressive scaling
+- **Integration grid**: Multi-column → 2-column → single column
+- **Code blocks**: Horizontal scroll maintained
+
+### Image Behavior
+
+- Llama mascot scales proportionally
+- Code blocks maintain monospace formatting
+- Integration icons reflow to fewer columns
+- No art direction changes
+
+## 9. Agent Prompt Guide
+
+### Quick Color Reference
+
+- Primary Text: "Pure Black (#000000)" Light / "Soft Gray (#d4d4d4)" Dark
+- **Surface** (page bg): "Light Surface (#f8f8f6)" / "Dark Surface (#1f1f1e)"
+- **Card** (elevated layer): "Pure White (#ffffff)" / "Dark Card (#2c2c2a)"
+- **Board** (1px dividers/borders): "Light Board (#d7d7d4)" / "Dark Board (#3c3c3a)"
+- Secondary Text: "Dark Gray (#525252)" Light / "Silver (#a3a3a3)" Dark
+- Tertiary Text: "Stone (#737373)" Light / "Stone (#737373)" Dark
+- Near Black: (#262626) — Light primary reading text
+- Chip/Button Background: "Light Gray (#e5e5e5)" Light / "Dark Chip (#2c2c2a)" Dark
+
+### Example Component Prompts
+
+- "Create a hero section on Surface (#f8f8f6) with an illustration centered above a headline at 48px Inter weight 500, line-height 1.0. Use Pure Black (#000000) text. Below, add a black pill-shaped CTA button (9999px radius, 10px 24px padding) and a gray pill button."
+- "Design a code block with a 12px border-radius, 1px solid Board (#d7d7d4 Light / #3c3c3a Dark) border on Card background. Use JetBrains Mono at 16px for the terminal command. No shadow."
+- "Build a tab bar with pill-shaped tabs (9999px radius). Active tab: Light Gray (#e5e5e5) background, Near Black (#262626) text. Inactive: transparent background, Stone (#737373) text."
+- "Create an integration card grid. Each card is a bordered pill (9999px radius) or a 12px-radius card with 1px solid Board (#d7d7d4) border. Icon + name inside. Grid of 4 columns on desktop."
+- "Design a navigation bar: transparent background, no border. Ollama logo on the left, 3 text links (Pure Black, 16px, weight 400), pill search input in the center, 'Sign in' text link and black pill 'Download' button on the right."
+
+### Iteration Guide
+
+1. Focus on ONE component at a time
+2. Keep all values grayscale — "Stone (#737373)" not "use a light color"
+3. Always specify radius from the three tiers — pill (9999px) / container (12px) / inner control (8px, only for textareas & dropdown rows). Nothing else.
+4. Shadows are always zero — never add them
+5. Weight is always 400 or 500 — never bold
+6. If something feels too decorated, remove it — less is always more for Ollama
+
+## 10. Theme System & Token Reference
+
+### 架构
+
+xdt-maker 桌面端用 **VSCode 风格的 ColorRegistry + Theme override** 模型管理颜色。所有颜色都通过 CSS variable 以 token 形式被组件消费,**永远不允许在组件里硬编码 hex / rgba**(违反规则会让该组件在非默认主题下无法切色)。
+
+源码:`apps/desktop/src/renderer/themes/`
+- `color-registry.ts` — `ColorRegistry` 单例和 `registerColor(id, defaults, description)` API
+- `colors.ts` — 注册全部 token(目前 352 个:40 semantic slot + 228 alias + 84 singleton),按"semantic slot 在前,alias 和 singleton 在后"组织
+- `theme-service.ts` — `applyTheme(theme)` 把所有 token 序列化成 `:root{}` 注入 `<style id="theme-vars">`
+- `builtin/ollama-light.ts` / `ollama-dark.ts` / `taptap-dark.ts` — 三套内置主题对象
+- `registry.ts` — `builtinThemes` 注册表 + `listThemesByType('light' | 'dark')`
+
+切主题:`useTheme.ts` 提供 `theme`(System / Light / Dark mode) + `lightThemeId` / `darkThemeId`(具体哪套主题)。Settings → Appearance 是 UI 入口。
+
+### Token 分层
+
+**Tier 1 — Semantic slot (39 个)**:跨语境复用的核心语义槽,加新主题时这一层是 override 的主战场。
+
+| 类目 | Slot | Ollama Light | Ollama Dark | 主要用途 |
+|---|---|---|---|---|
+| **Surface (12)** | `--surface` | `#f8f8f6` | `#1f1f1e` | 页面 Surface(hex 形式) |
+| | `--surface-hsl` | `60 12.5% 97%` | `60 2% 12%` | 同上 HSL 形式,`hsl(var(--xxx))` 消费 |
+| | `--surface-elevated` | `#ffffff` | `#2c2c2a` | Card 抬一层 / 弹窗 / popover |
+| | `--surface-elevated-soft` | `#e5e5e5` | `#2c2c2a` | Disabled 状态 Card |
+| | `--surface-card-ivory` | `#faf9f5` | `#2c2c2a` | Settings 微暖 ivory Card |
+| | `--surface-chip` | `#e5e5e5` | `#3c3c3a` | Chip / pill / 选中行 |
+| | `--surface-chip-alt` | `#e5e5e5` | `#2c2c2a` | Chip 暗态塌缩到 Card 变体 |
+| | `--surface-hover` | `#e5e5e5` | `#3c3c3a` | 通用 hover bg |
+| | `--surface-hover-soft` | `#f8f8f6` | `#3c3c3a` | 柔和 hover bg |
+| | `--surface-hover-hsl` | `0 0% 90%` | `60 2% 17%` | hover HSL 形式 |
+| | `--surface-on-card` | `#ffffff` | `#1f1f1e` | CTA / checked icon 深色前景 |
+| **Border (4)** | `--border-default` | `#d7d7d4` | `#3c3c3a` | DESIGN.md Board 1px 边框 |
+| | `--border-default-hsl` | `60 3% 84%` | `60 2% 23%` | Board HSL 形式 |
+| | `--border-shadcn-hsl` | `0 0% 90%` | `30 4% 28%` | shadcn input/border HSL |
+| | `--border-transparent-mixed` | `transparent` | `#3c3c3a` | progress track 等单边边框 |
+| **Text (16)** | `--text-primary` | `#262626` | `#d4d4d4` | 主标题 / 主正文 |
+| | `--text-primary-hsl` | `0 0% 9%` | `0 0% 83%` | Primary HSL 形式 |
+| | `--text-primary-on-dark` | `#262626` | `#ffffff` | 反相文本(stop button icon 等) |
+| | `--text-primary-emphasis` | `#1a1a1a` | `#d4d4d4` | Plan 强调主文字 |
+| | `--text-primary-inv` | `#1a1a1a` | `#ffffff` | Plan-action approve text |
+| | `--text-primary-body-strong` | `#525252` | `#d4d4d4` | Plan content body 加重 |
+| | `--text-secondary` | `#737373` | `#a3a3a3` | Secondary 文字 / icon |
+| | `--text-secondary-cross` | `#a3a3a3` | `#a3a3a3` | 跨主题更浅 secondary |
+| | `--text-secondary-mid` | `#525252` | `#a3a3a3` | Muted body 文字 |
+| | `--text-tertiary` | `#a3a3a3` | `#737373` | Placeholder / tertiary |
+| | `--text-tertiary-stone` | `#737373` | `#737373` | Stone 跨主题三级 |
+| | `--text-tertiary-mid` | `#525252` | `#737373` | Mid-gray tertiary |
+| | `--text-tertiary-hsl` | `0 0% 45%` | `0 0% 45%` | Tertiary HSL |
+| | `--text-disabled` | `#d4d4d4` | `#525252` | Disabled / failed |
+| | `--text-disabled-tertiary` | `#a3a3a3` | `#737373` | Disabled placeholder 变体 |
+| | `--text-placeholder` | `#c4c4c4` | `#525252` | 统一 placeholder slot(比 tertiary 更淡,读着像空);chat/ask/settings/plan-action-fb 输入框 placeholder 均收口于此 |
+| **Accent (7)** | `--accent-cta-bg` | `#262626` | `#ffffff` | 反相 CTA bg(TapTap → teal) |
+| | `--accent-cta-bg-pure` | `#000000` | `#ffffff` | Pure CTA bg |
+| | `--accent-emphasis` | `#262626` | `#d4d4d4` | settings primary button 等 |
+| | `--accent-soft` | `#262626` | `#ffffff` | Soft accent(folder btn 等) |
+| | `--accent-hover` | `#262626` | `#e5e5e5` | CTA pressed/hover |
+| | `--accent-pure-cta-fg` | `#ffffff` | `#000000` | CTA 文字 pure 反相 |
+| | `--accent-fg-on-pure` | `#ffffff` | `#1f1f1e` | CTA 文字 light 白 / dark 沉 |
+
+**Tier 2 — Alias (228 个)**:大量 component-scoped token(如 `--cmd-palette-bg`、`--msg-tool-card-text`、`--settings-input-border`)的 default 改写为 `var(--slot)`。浏览器自动 forward-resolve。组件不感知,**继续直接消费 alias 名字即可**。
+
+**Tier 3 — Singleton (84 个)**:真独立的色值,无法收敛到 slot:语义豁免色(`--destructive` / `--diff-add-*` / `--status-bar-accent` 等)、平台特定色、splash 时长、`--radius` 等非颜色 token。
+
+### 语义豁免色(跨主题不变)
+
+| Token | Light | Dark | 用途 |
+|---|---|---|---|
+| `--destructive` (HSL) | `0 84% 60%` | `0 72% 63%` | 通用 destructive 文本/边 |
+| `--login-error-text` 等 5 个 | `#ef4444` | `#ef4444` | 错误文本 |
+| `--error-bg/-border/-fg/-fg-strong` | (red) | (red) | Error alert 卡片子系统 |
+| `--diff-add-fg/-bg`, `--diff-del-fg/-bg` | GitHub palette | GitHub palette | Diff 渲染 |
+| `--status-bar-accent` | `#FF6600` | `#FF6600` | Thinking Orange,跨主题统一 |
+| `--plan-action-approve-icon-bg` | `#FF6600` | `#FF6600` | Plan approve,同 thinking 语义 |
+| `--perm-bypass-selected-text` | `#FF6600` | `#FF6600` | Heart Orange,permission 语义 |
+| `--settings-integration-warning` | `#FF6600` | `#FF6600` | warning 语义 |
+| `--warning-bg-soft` | rgba(255,102,0,0.12) | rgba(255,102,0,0.18) | Warning alpha surface |
+| `--focus-ring` / `--focus-ring-soft` | `#3b82f6` / @50% | 同左 | a11y 焦点 ring,跨主题统一 |
+| `--shadow-menu` / `--cmd-palette-shadow` / `--confirm-shadow` | rgba | rgba(更深) | Shadow,跨主题统一 |
+| `--overlay-modal` / `--overlay-lightbox` | rgba | rgba(更深) | Modal / lightbox backdrop |
+| `--perm-auto-selected-text` | `#000050` | `#00D9C5` | Auto Approval accent,permission 语义槽 |
+| Toast `#3B82F6 / #10B981 / #F59E0B / #EF4444` | (在 Toast.tsx hardcode) | 同左 | DESIGN.md §2 明确 16x16 icon 语义豁免(info 蓝 2026-07-14 增) |
+
+实现组件时**永远不要在硬编码 hex 上自由发挥这些语义色**——必须走对应 token。
+
+### 内置主题
+
+当前实现以 `apps/desktop/src/renderer/themes/registry.ts` 的 `builtinThemes` 为准,新增/移除主题不要求同步本文档。默认的 light/dark 主题(基础主题)就是本文 §2 列的色值。
+
+### 新主题怎么加(完整流程)
+
+1. 新建 `apps/desktop/src/renderer/themes/builtin/<id>.ts`,导出 `Theme` 对象:
+   ```ts
+   export const myTheme: Theme = {
+     id: 'my-theme',
+     name: 'My Theme',
+     type: 'light' | 'dark',
+     colors: {
+       // 只 override 跟基础主题不同的 token,空对象 {} 也合法(完全等于基础主题)
+       'surface': '#xxx',
+       'text-primary': '#xxx',
+       // ... 大概率只需要 override 30-90 个 token
+     },
+   };
+   ```
+2. 注册到 `themes/registry.ts` 的 `builtinThemes`
+3. 设置页 Appearance 的 Light/Dark Theme dropdown 自动 pick up
+
+参考 `themes/builtin/` 下任一已存在的非默认主题作为模板。
+
+### Token 命名约定
+
+- **slot**:`{category}-{subkind}[-{variant}]`,如 `text-primary-emphasis` / `surface-chip-alt`。`-hsl` 后缀表示 HSL 三元组形式。
+- **alias**:沿用历史 component-scoped 命名(`--cmd-palette-bg` / `--settings-back-text` 等),无前缀。
+- **singleton**:语义清晰即可,通常带 component 前缀。
+
+CSS variable 名一律 kebab-case。点号风格(如 VSCode 的 `sidebar.itemActive`)由于 CSS variable 不支持暂未采用。
+
+### 实现新 UI 时的 token 选择规则
+
+1. **先 grep `colors.ts`**:你的 UI 类型常对应已有 slot/alias(card bg = `--cmd-palette-bg` / `--surface-elevated`,等)
+2. **slot 优先**:能用 slot 就别用 component-scoped alias(slot 跨主题表现更可控)
+3. **HSL token 必须 wrap**:`hsl(var(--background))` 不能写成 `var(--background)`(后者会得到原始 HSL 字符串,不是合法 CSS color)
+4. **找不到合适 token 时,不要硬塞**:跟用户讨论是否要新增 slot/singleton
+5. **不接受** `bg-[#xxx] dark:bg-[#xxx]` 这种硬编码 pair——这是 P2 前的反模式,已经全量迁移过一次,新代码不允许引入
+
+详见 CLAUDE.md 规则 #18。
+
+## 11. Voice & Content（微文案规范）
+
+> **状态:草案**,2026-06 引入(参考 Vercel Geist `design.md` 的 Voice & Content 一节)。本节规定**界面文案怎么写**,与 CLAUDE.md 规则 #18(i18n 体系)配套——#18 管"文案必须 4 语言对齐、走 token",本节管"每条文案本身的语气/措辞"。本节不新增任何 UI 字符串,只约束写法。
+
+XDMaker 的产品气质和视觉一致:**克制、直接、不自夸**。文案是工具的一部分,不是营销。
+
+### 11.1 语言无关原则(zh-CN / en / ja / ko 全部适用)
+
+- **动作 = 动词 + 宾语,不要裸动词**。按钮/菜单项说清"对什么做什么":`Deploy Project` / `删除会话` / `セッションを削除`,**禁止** `Confirm` / `OK` / `确定` / `提交` 这类无宾语的孤立动词(确认弹窗的主按钮尤其要带宾语,让用户脱离上下文也能看懂)。
+- **错误信息 = 发生了什么 + 怎么办**。只报"出错了 / Failed"不合格;要给出下一步("连接超时,检查网络后重试")。对应规则 #13:IPC 错误码是给代码用的,面向用户的那句话必须人话 + 可操作。
+- **进行中态 = 现在进行时 + 省略号**。`Deploying…` / `正在部署…` / `デプロイ中…`。我们 ChatView 的 Thinking 状态栏(`Spelunking…`,Thinking Orange)已是这个范式,新增加载/处理态沿用。
+- **结果反馈点名对象、不说"成功"**。Toast 说"变了什么"而不是"操作成功了":`会话已删除` 而非 `删除成功`;`Project deleted` 而非 `Deleted successfully`。**禁止** "successfully / 成功了" 这类废话词。(Toast 的视觉规范见 §2,本条只管文案。)
+- **空状态指向第一个动作**,别只画一句"暂无数据"——告诉用户现在能做什么("还没有会话,点 + 新建一个")。
+- **不卑不亢,但分语言**:英文不写 "Please"(界面不是在求用户)。**中文的"请"是地道礼貌用法,不在此列**——"请输入…""请先授权""请选择文件"这类该保留,不要为了套规则把中文改得生硬。两种语言都不写营销级形容词("强大的 / 极致 / 全新")。
+
+### 11.2 各语言的大小写与标点(语言相关,不可照搬)
+
+- **English**:标签 / 按钮 / 标题 / Tab 用 **Title Case**(`Deploy Project`);正文 / 帮助文字 / Toast 用 **sentence case**(只首字母大写)。用弯引号 `" "` 和省略号字符 `…`,不用 `"` 和 `...`。
+- **zh-CN**:**没有 Title Case 概念**,不要逐词首字母大写、不要给中文塞英文式标点;中英混排时英文术语保留原样(`部署 Project`)。句末 Toast / 标签不加句号。
+- **ja / ko**:同样无 Title Case;遵循各自的助词/敬体习惯,术语译法没把握时先查证(对应规则 #18:ja/ko 不许硬凑)。
+- **数字 / 单位**:四语言都用阿拉伯数字 + 半角,数字与单位间距按各语言习惯。
+
+### 11.3 自查清单(改动文案时)
+
+- [ ] 动作按钮带宾语,不是裸 `确定` / `OK`
+- [ ] 错误文案给了"怎么办",不是只报错
+- [ ] 没有 "successfully / 成功" 废话词
+- [ ] 进行中态是"现在进行时 + …"
+- [ ] 4 个 `common.json` 都补齐且符合本语言的大小写/标点(规则 #18)
+
+## 12. Component Spec(结构化样板 — 待定)
+
+> **状态:样板,待你 review。** 本节是把 §4 组件散文规格改写成 **Vercel `design.md` 那种「可机读 / 可执行」结构化键值**的试点,先做 Buttons / Inputs / Cards 三个。**确认采用后,就地替换 §4 的散文描述并删除本节**;不采用则整节删掉,§4 不受影响。
+>
+> 读法:`字段  →  token  →  Default Light / Default Dark 解析值`。token 名以 §10 表为准;`⚠` 标记"规范里有值但 §10 暂无对应 token / 字段在 §4 未定义"的缺口——这正是结构化格式相对散文的价值:把隐性缺口显性化。
+
+```
+button/primary  (Gray Pill — 主按钮)
+  fill      --surface-chip        #e5e5e5 / #3c3c3a
+  text      --text-primary        #262626 / #d4d4d4
+  border    1px solid --surface-chip   (同 fill)
+  radius    9999px (pill)
+  padding   10px 24px
+  height    ⚠ §4 未定义(§4 仅给 padding)
+
+button/secondary  (White Pill — 次按钮)
+  fill      --surface-elevated    #ffffff / #2c2c2a
+  text      --text-primary        #262626 / #d4d4d4   (G1 已解决:原 #404040「Button Text Dark」是漂移)
+  border    --border-default      #d7d7d4 / #3c3c3a   (G2 已解决:原 #d4d4d4「Border Light」是漂移)
+  radius    9999px (pill)
+  padding   10px 24px
+
+button/cta  (Black Pill — 最高强调)
+  fill      --accent-cta-bg-pure  #000000 / #ffffff
+  text      --accent-pure-cta-fg  #ffffff / #000000
+  radius    9999px (pill)
+  padding   10px 24px
+
+input/text
+  fill        --surface-elevated  #ffffff / #2c2c2a
+  text        --text-primary      #262626 / #d4d4d4
+  border      --border-default    #d7d7d4 / #3c3c3a
+  radius      9999px (pill)
+  focus       --focus-ring        #3b82f6 @50%(双层带缝 ring 见外部讨论 ③,待定)
+  placeholder --text-placeholder   #c4c4c4 / #525252   (G3 已解决:新增统一 slot,4 个输入面 alias 全部收口)
+
+card/container
+  fill      --surface-elevated    #ffffff / #2c2c2a   (页面级 flat 布局下改用 --surface,见 §2 layer rule)
+  border    1px solid --border-default   #d7d7d4 / #3c3c3a   (需要分隔时才加)
+  radius    12px (Tailwind rounded-xl,直接量) — 容器档圆角(三档之一,见 §5;8px 仅内层控件 textarea / 下拉行,pill 给交互件)
+            ⚠ 不要用 §10 的 --radius:那是 shadcn 原语用的 0.5rem(8px),与本 12px 容器圆角是两回事
+  shadow    none
+  hover     --surface-hover       #e5e5e5 / #3c3c3a   (§4 原文是「likely」,此处给出可用 token)
+```
+
+## 13. Known Spec / Token Gaps（跟踪中）
+
+> §12 结构化重写过程中暴露的设计系统欠债。本节**持久存在**(独立于 §12 是否被采用),每条解决后打勾并把结论并入 §2 / §4 / §10。下列"现状"均已 grep 源码核实(以源码为准),非臆测。涉及新增/改 token 的(G3 / G4)按规则 #16 须先与 owner 确认再动 `colors.ts`。
+
+- [x] **G1 — 白底次按钮文字 `#404040`「Button Text Dark」是文档漂移,非真 token**(已解决 2026-06)
+  现状:§2 / §4 称其"专用于白底按钮文字",但全仓库只有 `features/maker-experimental/MakerExperimentalView.tsx`(实验视图,裸 hardcode)出现 #404040,**无任何真实次按钮**用它做文字色;§10 也无对应 token。
+  处理:§2 标废弃、§4 White Pill 文字改引 `--text-primary`(#262626)。未动 token,纯文档。
+
+- [x] **G2 — 次按钮边框 `#d4d4d4`「Border Light」同为漂移**(已解决 2026-06)
+  现状:§4 称白底按钮边框 `1px solid #d4d4d4`,但无真实组件这么用;#d4d4d4 的线上出现要么在实验视图(裸 hardcode),要么是**暗色主文字**(`--text-primary` dark = #d4d4d4,如 SchedulerPage CTA 注释),与"边框"无关。真边框 token 是 `--border-default`(#d7d7d4)。
+  处理:§2 标废弃、§4 White Pill 边框改引 `--border-default`(#d7d7d4)。纯文档。
+
+- [x] **G3 — placeholder token 碎片化 + 取值自相矛盾(真欠债)**(已解决 2026-06)
+  现状:4 个 per-surface alias 无统一 slot,且取值打架——`--settings-input-placeholder` = #c4c4c4(§4 认证的"淡到读着像空"),但 `--chat-input-placeholder` = `var(--text-tertiary)` = **#a3a3a3(Silver)**,而 §4 白纸黑字说 Silver **太显眼、读着像已填、不可做 placeholder**。即聊天输入框 placeholder 实际违反了我们自己的 §4 规范。
+  处理:`colors.ts` 新增语义 slot `--text-placeholder`(#c4c4c4 / #525252),4 个 alias(chat/ask/settings/plan-action-fb)default 收口为 `var(--text-placeholder)`;7 套非默认主题原 `settings-input-placeholder` override 就地改名为 `text-placeholder`(沿用原常量,避免回退,符合规则 #16 对每套主题的评估)。默认主题下 chat placeholder 由 #a3a3a3 修正为 #c4c4c4。2 套亮色主题(atom-one-light / solarized-light)的 `text-placeholder` 进一步从 tertiary 改用各自 **disabled 档**(更淡)——亮色背景下 tertiary≈2.6:1 命中 §4 禁用 Silver 的对比度,placeholder 须更淡才读着像空(2026-06 review 反馈)。**本地/复制主题兼容**:slot 引入前创建的本地主题快照只冻结了旧 per-surface placeholder key、无 `text-placeholder`,加载期 `mapWireTheme` 经 `local-themes-normalize.ts` 归一化——缺 `text-placeholder` 时从旧 `settings-input-placeholder`(或任一 per-surface 值)播种并丢弃 4 个旧 per-surface override,使四个输入面统一走新 slot(不改写盘上 JSON、幂等;2026-06 review 反馈)。
+
+- [x] **G4 — `--radius`(8px)与容器圆角同名不同义(已解决 2026-06)**
+  现状:`--radius` 实为 `0.5rem`(8px,shadcn 原语用);容器 12px 圆角实际靠 Tailwind `rounded-xl` 直接量实现。
+  处理:**圆角体系正式从"二元"改为"三档"**(8px 内层控件 / 12px 容器 / 9999px pill,见 §5 + §7 + §1)。8px 这一档窄范围限定多行输入框、下拉 / 菜单选中行、段内小单元,实现为 `rounded-lg`;shadcn `--radius`(8px)与这个内层档数值相同但语义独立(原语专用),容器仍走 `rounded-xl`(12px)。**本次纯文档,未动 token**。是否进一步 token 化为 `--radius-inner`(8px)/ `--radius-container`(12px)/ `--radius-pill`(9999px),收益偏低、**暂缓**,要做走规则 #16。
+
+> **旁注(不在本次范围,仅记录)**:`MakerExperimentalView.tsx` 通篇裸 hardcode hex(#404040 / #d4d4d4 / #262626 / #333),违反规则 #16。因是 experimental 视图、且非本次任务,**不在此清理**,仅备忘。
+
+## 14. Interaction Conventions(交互约定)
+
+> 2026-06 引入。DESIGN.md 此前只规范"长什么样"(色 / 圆角 / 字体 / 间距),不规范"怎么交互"——文本能不能选中、弹窗开了焦点落哪、回车是发送还是换行,这些反复要靠人逐个指出。本节把这些**非视觉的交互行为**钉成全局约定,与 §11(文案语气)互补。能用代码统一保证的就别靠人记(对应 CLAUDE.md 规则 #9)。
+
+### 14.1 文本可选性(user-select)
+
+- **正文内容可选**:消息气泡正文、代码块、文档预览、用户会"读句子 / 想复制"的文字 —— 默认可选,不要动。
+- **Chrome 不可选**:按钮、菜单项、标签 / chip、状态条、徽标、工具条、侧栏项这类**界面骨架文字**一律 `select-none`。它们是控件不是内容,能被选中只会碍事(典型:goal 状态 chip 的文字)。
+- 判断标准:用户会想"复制这段话"吗?会 → 可选;不会(它只是个控件)→ `select-none`。
+
+### 14.2 焦点管理(focus)
+
+- 弹窗 / 抽屉 / popover 打开时,焦点落到**首要输入框**(没有输入框则落主按钮),**不要**默认停在"取消"上。Radix 默认会聚焦第一个可聚焦元素 / Cancel —— 用 `onOpenAutoFocus`(`preventDefault()` + 手动 `focus()`)或 ConfirmDialog 的 `autoFocusConfirm` 覆盖。
+- 关闭后焦点归还触发它的元素(Radix 默认行为,别破坏)。
+
+### 14.3 键盘与输入法(发送型文本框)
+
+适用于"敲完就发"的提交型文本框:聊天 composer、目标输入、ask 输入等。**不含**普通设置项里的单行编辑框 —— 那种 Enter 不应触发提交。
+
+- **Enter = 提交**,**Shift+Enter = 换行**。
+- **输入法组字期间的 Enter 不触发提交** —— 判 `event.nativeEvent.isComposing`(中 / 日 / 韩用户选字按的回车不能被当成发送)。
+- 这套逻辑用代码统一,不要每个框各写一遍导致行为漂移(对应规则 #9)。
+
+### 14.4 动效与过渡(motion)
+
+- 允许**功能性状态过渡**:hover / 选中 / 展开等的颜色、背景、透明度变化,时长 **≤150ms**,目的是让状态变化不突兀(全 app 的 `transition-colors` 即此类,合规)。
+- **禁止装饰性 / 大幅位移动画**:无意义的位移、缩放、弹跳、视差、循环动画。交互仍应"快、直接"(承接 §1 / §7 的克制气质 —— 把原先"零过渡"修正为"零装饰性动效",功能性过渡是允许的)。

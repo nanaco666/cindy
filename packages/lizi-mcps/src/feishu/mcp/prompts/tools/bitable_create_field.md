@@ -1,0 +1,1 @@
+在已有数据表里新增一个字段。`type` 走友好枚举(text/number/single_select/multi_select/date/checkbox/user/link)+ 各自专属参数(`options`/`date_formatter`/`user_multiple`/`number_formatter`),稀有类型(公式、关联、附件…)用 `type='raw'` + `raw_type` + `raw_property` 透传完整 SDK payload。

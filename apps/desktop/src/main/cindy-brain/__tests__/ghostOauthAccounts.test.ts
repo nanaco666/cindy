@@ -1,0 +1,876 @@
+/**
+ * ghostOauthAccounts 单测:账号清单持久化 / access token 缓存与单飞刷新 /
+ * invalid_grant 过期标记 / 断开与默认账号(规则 14,内存假体零 Electron)。
+ */
+import * as http from 'node:http';
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+  GHOST_OAUTH_MAX_ACCOUNTS,
+  GhostOauthAccountManager,
+  type GhostOauthDecl,
+  type GhostOauthVault,
+} from '../ghostOauthAccounts.js';
+
+const GHOST = 'cindy-google';
+const KEY = 'google_account';
+
+const DECL: GhostOauthDecl = {
+  authorizeUrl: 'https://accounts.example.com/authorize',
+  tokenUrl: 'https://accounts.example.com/token',
+  scopes: ['scope.a'],
+  identity: { url: 'https://api.example.com/userinfo', labelPath: 'email' },
+};
+
+function memoryVault(seed?: Record<string, string>): GhostOauthVault & { data: Map<string, string> } {
+  const data = new Map<string, string>(Object.entries(seed ?? {}).map(([k, v]) => [`${GHOST}\u0000${k}`, v]));
+  return {
+    data,
+    read: (ghostId, key) => data.get(`${ghostId}\u0000${key}`) ?? null,
+    store: (ghostId, key, value) => {
+      data.set(`${ghostId}\u0000${key}`, value);
+      return true;
+    },
+    remove: (ghostId, key) => {
+      data.delete(`${ghostId}\u0000${key}`);
+    },
+  };
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+}
+
+/** 模拟浏览器:从授权 URL 提取回调地址与 state 并回打 code。 */
+function autoBrowser(code = 'code-1'): (url: string) => void {
+  return (url) => {
+    const u = new URL(url);
+    const cb = new URL(u.searchParams.get('redirect_uri') ?? '');
+    cb.searchParams.set('code', code);
+    cb.searchParams.set('state', u.searchParams.get('state') ?? '');
+    setImmediate(() => {
+      void fetch(cb.toString()).catch(() => undefined);
+    });
+  };
+}
+
+/** 预置一个"已连接账号"的保险库(绕过交互授权直测刷新链路)。 */
+function seededVault(rt = 'rt-seed'): ReturnType<typeof memoryVault> {
+  return memoryVault({
+    [`${KEY}-client-id`]: 'cid',
+    [`${KEY}-client-secret`]: 'csec',
+    [`${KEY}-accounts`]: JSON.stringify({
+      defaultAccountId: 'acc-1',
+      accounts: [{ id: 'acc-1', label: 'a@b.com', status: 'connected', createdAt: 1 }],
+    }),
+    [`${KEY}-rt-acc-1`]: rt,
+  });
+}
+
+describe('connectAccount', () => {
+  it('端口回收器只对第一方官方意识放行(第三方 redirectPort 不许借刀杀进程)', async () => {
+    const blocker = http.createServer();
+    const heldPort = await new Promise<number>((resolve) => {
+      blocker.listen(0, '127.0.0.1', () => {
+        const addr = blocker.address();
+        resolve(typeof addr === 'object' && addr ? addr.port : 0);
+      });
+    });
+    try {
+      const decl: GhostOauthDecl = {
+        authorizeUrl: DECL.authorizeUrl,
+        tokenUrl: DECL.tokenUrl,
+        scopes: DECL.scopes,
+        clientId: 'cid-baked',
+        redirectPort: heldPort,
+      };
+      const reclaimPort = vi.fn(async () => false);
+      const mkMgr = (): GhostOauthAccountManager =>
+        new GhostOauthAccountManager({
+          vault: memoryVault(),
+          fetchImpl: vi.fn() as unknown as typeof fetch,
+          openExternal: vi.fn(),
+          reclaimPort,
+        });
+      // 第三方 id:门控挡住,占用直接报错,回收器(杀进程)绝不能被调用。
+      await expect(mkMgr().connectAccount('evil-tools', KEY, decl)).resolves.toMatchObject({
+        ok: false,
+        error: 'LISTEN_FAILED',
+      });
+      expect(reclaimPort).not.toHaveBeenCalled();
+      // 官方前缀 id:回收器放行被调用(此处回收失败仍 LISTEN_FAILED,只验门控)。
+      await expect(mkMgr().connectAccount('cindy-google', KEY, decl)).resolves.toMatchObject({
+        ok: false,
+        error: 'LISTEN_FAILED',
+      });
+      expect(reclaimPort).toHaveBeenCalledTimes(1);
+    } finally {
+      await new Promise((r) => blocker.close(r));
+    }
+  });
+
+  it('happy path:授权 + 身份标签 + 清单与 rt 落库 + 默认账号', async () => {
+    const vault = memoryVault({ [`${KEY}-client-id`]: 'cid' });
+    const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url === DECL.tokenUrl) {
+        return jsonResponse({ access_token: 'at-1', refresh_token: 'rt-1', expires_in: 3600 });
+      }
+      if (url === DECL.identity?.url) {
+        expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer at-1');
+        return jsonResponse({ email: 'user@example.com' });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: autoBrowser(),
+    });
+
+    const result = await mgr.connectAccount(GHOST, KEY, DECL);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.account.label).toBe('user@example.com');
+    expect(result.account.isDefault).toBe(true);
+    expect(result.account.status).toBe('connected');
+
+    const listed = mgr.listAccounts(GHOST, KEY);
+    expect(listed).toHaveLength(1);
+    expect(vault.read(GHOST, `${KEY}-rt-${result.account.id}`)).toBe('rt-1');
+    // 清单里不落任何令牌字节。
+    expect(vault.read(GHOST, `${KEY}-accounts`)).not.toContain('rt-1');
+    expect(vault.read(GHOST, `${KEY}-accounts`)).not.toContain('at-1');
+
+    // 授权余温:access token 已进缓存,取用不再走网络。
+    const fetchCalls = fetchImpl.mock.calls.length;
+    const token = await mgr.getFreshAccessToken(GHOST, KEY, DECL);
+    expect(token).toMatchObject({ ok: true, accessToken: 'at-1' });
+    expect(fetchImpl.mock.calls.length).toBe(fetchCalls);
+  });
+
+  it('client 未配置 → NO_CLIENT_CONFIG,不拉浏览器', async () => {
+    const openExternal = vi.fn();
+    const mgr = new GhostOauthAccountManager({
+      vault: memoryVault(),
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      openExternal,
+    });
+    await expect(mgr.connectAccount(GHOST, KEY, DECL)).resolves.toMatchObject({
+      ok: false,
+      error: 'NO_CLIENT_CONFIG',
+    });
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  it('账号数达上限且非同身份 → 授权后拒 ACCOUNT_LIMIT(上限只拦真新增)', async () => {
+    const accounts = Array.from({ length: GHOST_OAUTH_MAX_ACCOUNTS }, (_, i) => ({
+      id: `acc-${i}`,
+      label: `u${i}@x.com`,
+      status: 'connected',
+      createdAt: i,
+    }));
+    const vault = memoryVault({
+      [`${KEY}-client-id`]: 'cid',
+      [`${KEY}-accounts`]: JSON.stringify({ defaultAccountId: 'acc-0', accounts }),
+    });
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      if (String(input) === DECL.tokenUrl) {
+        return jsonResponse({ access_token: 'at-full', refresh_token: 'rt-full', expires_in: 3600 });
+      }
+      return jsonResponse({ email: 'brand-new@x.com' });
+    });
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: autoBrowser(),
+    });
+    await expect(mgr.connectAccount(GHOST, KEY, DECL)).resolves.toMatchObject({
+      ok: false,
+      error: 'ACCOUNT_LIMIT',
+    });
+    // 清单未被污染。
+    expect(mgr.listAccounts(GHOST, KEY)).toHaveLength(GHOST_OAUTH_MAX_ACCOUNTS);
+  });
+
+  it('同身份重复授权 → 合并到既有账号(不新增行,rt 覆盖,expired 复活)', async () => {
+    const vault = memoryVault({
+      [`${KEY}-client-id`]: 'cid',
+      [`${KEY}-accounts`]: JSON.stringify({
+        defaultAccountId: 'acc-1',
+        accounts: [
+          { id: 'acc-1', label: 'a@b.com', status: 'expired', createdAt: 1 },
+          { id: 'acc-2', label: 'other@b.com', status: 'connected', createdAt: 2 },
+        ],
+      }),
+      [`${KEY}-rt-acc-1`]: 'rt-dead',
+    });
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      if (String(input) === DECL.tokenUrl) {
+        return jsonResponse({ access_token: 'at-re', refresh_token: 'rt-fresh', expires_in: 3600 });
+      }
+      return jsonResponse({ email: 'a@b.com' });
+    });
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: autoBrowser(),
+    });
+    const result = await mgr.connectAccount(GHOST, KEY, DECL);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // 复用既有 id,不新增行;状态复活;默认位不变。
+    expect(result.account.id).toBe('acc-1');
+    expect(result.account.status).toBe('connected');
+    expect(result.account.isDefault).toBe(true);
+    const listed = mgr.listAccounts(GHOST, KEY);
+    expect(listed).toHaveLength(2);
+    expect(vault.read(GHOST, `${KEY}-rt-acc-1`)).toBe('rt-fresh');
+    // 授权余温:合并账号的 access token 已进缓存。
+    await expect(mgr.getFreshAccessToken(GHOST, KEY, DECL, 'acc-1')).resolves.toMatchObject({
+      ok: true,
+      accessToken: 'at-re',
+    });
+  });
+
+  it('onAccountConnected 钩子:新连与同身份重连都触发(带标签);钩子抛错不影响连接结果', async () => {
+    // 新连:带身份标签触发一次
+    const onNew = vi.fn();
+    const fetchNew = vi.fn(async (input: string | URL | Request) => {
+      if (String(input) === DECL.tokenUrl) {
+        return jsonResponse({ access_token: 'at-1', refresh_token: 'rt-1', expires_in: 3600 });
+      }
+      return jsonResponse({ email: 'user@example.com' });
+    });
+    const mgrNew = new GhostOauthAccountManager({
+      vault: memoryVault({ [`${KEY}-client-id`]: 'cid' }),
+      fetchImpl: fetchNew as unknown as typeof fetch,
+      openExternal: autoBrowser(),
+      onAccountConnected: onNew,
+    });
+    expect((await mgrNew.connectAccount(GHOST, KEY, DECL)).ok).toBe(true);
+    expect(onNew).toHaveBeenCalledTimes(1);
+    expect(onNew).toHaveBeenCalledWith({ ghostId: GHOST, secretKey: KEY, label: 'user@example.com' });
+
+    // 同身份重连(合并):同样触发;钩子抛错不影响 ok 结果
+    const onMerge = vi.fn(() => {
+      throw new Error('toast down');
+    });
+    const fetchMerge = vi.fn(async (input: string | URL | Request) => {
+      if (String(input) === DECL.tokenUrl) {
+        return jsonResponse({ access_token: 'at-re', refresh_token: 'rt-fresh', expires_in: 3600 });
+      }
+      return jsonResponse({ email: 'a@b.com' });
+    });
+    const mgrMerge = new GhostOauthAccountManager({
+      vault: memoryVault({
+        [`${KEY}-client-id`]: 'cid',
+        [`${KEY}-accounts`]: JSON.stringify({
+          defaultAccountId: 'acc-1',
+          accounts: [{ id: 'acc-1', label: 'a@b.com', status: 'connected', createdAt: 1 }],
+        }),
+        [`${KEY}-rt-acc-1`]: 'rt-old',
+      }),
+      fetchImpl: fetchMerge as unknown as typeof fetch,
+      openExternal: autoBrowser(),
+      onAccountConnected: onMerge,
+    });
+    const merged = await mgrMerge.connectAccount(GHOST, KEY, DECL);
+    expect(merged.ok).toBe(true);
+    expect(onMerge).toHaveBeenCalledWith({ ghostId: GHOST, secretKey: KEY, label: 'a@b.com' });
+
+    // 未声明 identity → label 为 null(接线侧据此落 oauthConnectedNoLabel 文案)
+    const onNoLabel = vi.fn();
+    const noIdentityDecl: GhostOauthDecl = {
+      authorizeUrl: DECL.authorizeUrl,
+      tokenUrl: DECL.tokenUrl,
+      scopes: DECL.scopes,
+    };
+    const mgrNoLabel = new GhostOauthAccountManager({
+      vault: memoryVault({ [`${KEY}-client-id`]: 'cid' }),
+      fetchImpl: vi.fn(async () =>
+        jsonResponse({ access_token: 'at-n', refresh_token: 'rt-n', expires_in: 3600 }),
+      ) as unknown as typeof fetch,
+      openExternal: autoBrowser(),
+      onAccountConnected: onNoLabel,
+    });
+    expect((await mgrNoLabel.connectAccount(GHOST, KEY, noIdentityDecl)).ok).toBe(true);
+    expect(onNoLabel).toHaveBeenCalledWith({ ghostId: GHOST, secretKey: KEY, label: null });
+  });
+
+  it('满员时同身份重连仍放行(上限不拦重连)', async () => {
+    const accounts = Array.from({ length: GHOST_OAUTH_MAX_ACCOUNTS }, (_, i) => ({
+      id: `acc-${i}`,
+      label: `u${i}@x.com`,
+      status: 'connected',
+      createdAt: i,
+    }));
+    const vault = memoryVault({
+      [`${KEY}-client-id`]: 'cid',
+      [`${KEY}-accounts`]: JSON.stringify({ defaultAccountId: 'acc-0', accounts }),
+    });
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      if (String(input) === DECL.tokenUrl) {
+        return jsonResponse({ access_token: 'at-x', refresh_token: 'rt-x', expires_in: 3600 });
+      }
+      return jsonResponse({ email: 'u3@x.com' });
+    });
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: autoBrowser(),
+    });
+    const result = await mgr.connectAccount(GHOST, KEY, DECL);
+    expect(result).toMatchObject({ ok: true });
+    if (result.ok) expect(result.account.id).toBe('acc-3');
+    expect(mgr.listAccounts(GHOST, KEY)).toHaveLength(GHOST_OAUTH_MAX_ACCOUNTS);
+  });
+});
+
+describe('内置 client 回落链', () => {
+  const BAKED: GhostOauthDecl = { ...DECL, clientId: 'baked-cid', clientSecret: 'baked-sec' };
+
+  it('保险库无自填时用清单内置 client(零配置连接)', async () => {
+    const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url === DECL.tokenUrl) {
+        const form = new URLSearchParams(String(init?.body ?? ''));
+        expect(form.get('client_id')).toBe('baked-cid');
+        expect(form.get('client_secret')).toBe('baked-sec');
+        return jsonResponse({ access_token: 'at-b', refresh_token: 'rt-b', expires_in: 3600 });
+      }
+      return jsonResponse({ email: 'b@c.com' });
+    });
+    const mgr = new GhostOauthAccountManager({
+      vault: memoryVault(),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: autoBrowser(),
+    });
+    expect(mgr.clientConfigured(GHOST, KEY, BAKED)).toBe(true);
+    expect(mgr.clientCustomized(GHOST, KEY)).toBe(false);
+    await expect(mgr.connectAccount(GHOST, KEY, BAKED)).resolves.toMatchObject({ ok: true });
+  });
+
+  it('自填成对覆盖内置(不混搭 secret);清除自填回落内置', async () => {
+    const vault = memoryVault({ [`${KEY}-client-id`]: 'custom-cid' });
+    const seen: Array<string | null> = [];
+    const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url === DECL.tokenUrl) {
+        const form = new URLSearchParams(String(init?.body ?? ''));
+        expect(form.get('client_id')).toBe('custom-cid');
+        // 成对语义:自填只有 id 没有 secret = 纯 PKCE,绝不混内置 secret。
+        seen.push(form.get('client_secret'));
+        return jsonResponse({ access_token: 'at-c', expires_in: 3600 });
+      }
+      return jsonResponse({ email: 'c@d.com' });
+    });
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: autoBrowser(),
+    });
+    expect(mgr.clientCustomized(GHOST, KEY)).toBe(true);
+    await expect(mgr.connectAccount(GHOST, KEY, BAKED)).resolves.toMatchObject({ ok: true });
+    expect(seen).toEqual([null]);
+
+    mgr.clearClientConfig(GHOST, KEY);
+    expect(mgr.clientCustomized(GHOST, KEY)).toBe(false);
+    expect(mgr.clientConfigured(GHOST, KEY, BAKED)).toBe(true);
+    expect(mgr.clientConfigured(GHOST, KEY, DECL)).toBe(false);
+  });
+});
+
+describe('getFreshAccessToken', () => {
+  it('缓存冷:走 refresh,轮换 rt 覆盖落库', async () => {
+    const vault = seededVault('rt-old');
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ access_token: 'at-r', refresh_token: 'rt-rotated', expires_in: 3600 }),
+    );
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: vi.fn(),
+    });
+
+    const result = await mgr.getFreshAccessToken(GHOST, KEY, DECL);
+    expect(result).toMatchObject({ ok: true, accessToken: 'at-r', accountId: 'acc-1' });
+    expect(vault.read(GHOST, `${KEY}-rt-acc-1`)).toBe('rt-rotated');
+
+    // 缓存热:第二次不再走网络。
+    await mgr.getFreshAccessToken(GHOST, KEY, DECL);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('并发单飞:两单并发只刷一次', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ access_token: 'at-sf', expires_in: 3600 }));
+    const mgr = new GhostOauthAccountManager({
+      vault: seededVault(),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: vi.fn(),
+    });
+    const [a, b] = await Promise.all([
+      mgr.getFreshAccessToken(GHOST, KEY, DECL),
+      mgr.getFreshAccessToken(GHOST, KEY, DECL),
+    ]);
+    expect(a).toMatchObject({ ok: true, accessToken: 'at-sf' });
+    expect(b).toMatchObject({ ok: true, accessToken: 'at-sf' });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalid_grant → AUTH_EXPIRED + 账号标 expired + rt 清除', async () => {
+    const vault = seededVault('rt-revoked');
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: vi.fn(async () => jsonResponse({ error: 'invalid_grant' }, 400)) as unknown as typeof fetch,
+      openExternal: vi.fn(),
+    });
+    await expect(mgr.getFreshAccessToken(GHOST, KEY, DECL)).resolves.toMatchObject({
+      ok: false,
+      error: 'AUTH_EXPIRED',
+    });
+    expect(mgr.listAccounts(GHOST, KEY)[0]).toMatchObject({ status: 'expired' });
+    expect(vault.read(GHOST, `${KEY}-rt-acc-1`)).toBeNull();
+  });
+
+  it('瞬时刷新失败 → REFRESH_FAILED,账号不标过期', async () => {
+    const mgr = new GhostOauthAccountManager({
+      vault: seededVault(),
+      fetchImpl: vi.fn(async () => jsonResponse({ error: 'server_error' }, 500)) as unknown as typeof fetch,
+      openExternal: vi.fn(),
+    });
+    await expect(mgr.getFreshAccessToken(GHOST, KEY, DECL)).resolves.toMatchObject({
+      ok: false,
+      error: 'REFRESH_FAILED',
+    });
+    expect(mgr.listAccounts(GHOST, KEY)[0]).toMatchObject({ status: 'connected' });
+  });
+
+  it('invalidateAccessToken 作废缓存,下一单强制重刷(401 通道)', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ access_token: 'at-x', expires_in: 3600 }));
+    const mgr = new GhostOauthAccountManager({
+      vault: seededVault(),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: vi.fn(),
+    });
+    await mgr.getFreshAccessToken(GHOST, KEY, DECL);
+    mgr.invalidateAccessToken(GHOST, KEY, 'acc-1');
+    await mgr.getFreshAccessToken(GHOST, KEY, DECL);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('显式 accountId 不存在 / 无任何账号 → NO_ACCOUNT', async () => {
+    const mgr = new GhostOauthAccountManager({
+      vault: seededVault(),
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      openExternal: vi.fn(),
+    });
+    await expect(mgr.getFreshAccessToken(GHOST, KEY, DECL, 'acc-ghost')).resolves.toMatchObject({
+      ok: false,
+      error: 'NO_ACCOUNT',
+    });
+    const empty = new GhostOauthAccountManager({
+      vault: memoryVault({ [`${KEY}-client-id`]: 'cid' }),
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      openExternal: vi.fn(),
+    });
+    await expect(empty.getFreshAccessToken(GHOST, KEY, DECL)).resolves.toMatchObject({
+      ok: false,
+      error: 'NO_ACCOUNT',
+    });
+  });
+});
+
+describe('账号清单操作', () => {
+  it('disconnect:摘行 + 清 rt + 默认账号顺延;setDefault 未知账号 → false', async () => {
+    const vault = memoryVault({
+      [`${KEY}-client-id`]: 'cid',
+      [`${KEY}-accounts`]: JSON.stringify({
+        defaultAccountId: 'acc-1',
+        accounts: [
+          { id: 'acc-1', label: 'a@b.com', status: 'connected', createdAt: 1 },
+          { id: 'acc-2', label: 'c@d.com', status: 'connected', createdAt: 2 },
+        ],
+      }),
+      [`${KEY}-rt-acc-1`]: 'rt-1',
+      [`${KEY}-rt-acc-2`]: 'rt-2',
+    });
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      openExternal: vi.fn(),
+    });
+
+    mgr.disconnectAccount(GHOST, KEY, 'acc-1');
+    expect(vault.read(GHOST, `${KEY}-rt-acc-1`)).toBeNull();
+    const listed = mgr.listAccounts(GHOST, KEY);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]).toMatchObject({ id: 'acc-2', isDefault: true });
+
+    expect(mgr.setDefaultAccount(GHOST, KEY, 'nope')).toBe(false);
+    expect(mgr.setDefaultAccount(GHOST, KEY, 'acc-2')).toBe(true);
+  });
+
+  it('坏清单 JSON 容错为空,不炸', () => {
+    const mgr = new GhostOauthAccountManager({
+      vault: memoryVault({ [`${KEY}-accounts`]: '{broken' }),
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      openExternal: vi.fn(),
+    });
+    expect(mgr.listAccounts(GHOST, KEY)).toEqual([]);
+  });
+
+  it('clientConfigured 只回布尔', () => {
+    const mgr = new GhostOauthAccountManager({
+      vault: memoryVault({ [`${KEY}-client-id`]: 'cid' }),
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      openExternal: vi.fn(),
+    });
+    expect(mgr.clientConfigured(GHOST, KEY)).toBe(true);
+    expect(mgr.clientConfigured(GHOST, 'other_key')).toBe(false);
+  });
+});
+
+describe('tokenBroker 模式', () => {
+  const BROKER_DECL: GhostOauthDecl = {
+    authorizeUrl: 'https://auth.example.com/authorize',
+    tokenUrl: 'https://auth.example.com/token',
+    scopes: ['read:x'],
+    clientId: 'builtin-cid',
+    pkce: false,
+    tokenBroker: 'jira',
+  };
+
+  it('connect 全链走 broker;用户自填 client 被忽略(恒用内置 clientId)', async () => {
+    // 预置"用户自填过 client"的保险库——broker 模式必须无视它。
+    const vault = memoryVault({
+      [`${KEY}-client-id`]: 'custom-cid-should-be-ignored',
+      [`${KEY}-client-secret`]: 'custom-sec-should-be-ignored',
+    });
+    const fetchImpl = vi.fn();
+    const exchange = vi.fn(async () => ({
+      ok: true as const,
+      bundle: { accessToken: 'at-bk', refreshToken: 'rt-bk', expiresAt: Date.now() + 60_000, grantedScope: null },
+    }));
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: (url) => {
+        // 授权 URL 用内置 clientId,而不是用户自填的。
+        expect(new URL(url).searchParams.get('client_id')).toBe('builtin-cid');
+        autoBrowser('c-bk')(url);
+      },
+      broker: { exchange, refresh: vi.fn() },
+    });
+
+    const result = await mgr.connectAccount(GHOST, KEY, BROKER_DECL);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(vault.read(GHOST, `${KEY}-rt-${result.account.id}`)).toBe('rt-bk');
+    expect(exchange).toHaveBeenCalledTimes(1);
+    // token 交换不直连 tokenUrl。
+    expect(fetchImpl.mock.calls.map((c) => String(c[0]))).not.toContain(BROKER_DECL.tokenUrl);
+  });
+
+  it('clientConfigured:brokered + 内置 clientId 恒 true,与保险库无关', () => {
+    const mgr = new GhostOauthAccountManager({
+      vault: memoryVault(),
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      openExternal: vi.fn(),
+    });
+    expect(mgr.clientConfigured(GHOST, KEY, BROKER_DECL)).toBe(true);
+    // brokered 但清单没内置 clientId → false(没有可用的授权身份)。
+    expect(mgr.clientConfigured(GHOST, KEY, { ...BROKER_DECL, clientId: undefined })).toBe(false);
+  });
+
+  it('刷新链路走 broker.refresh;invalidGrant 标 expired 并清 rt', async () => {
+    const vault = memoryVault({
+      [`${KEY}-accounts`]: JSON.stringify({
+        defaultAccountId: 'acc-1',
+        accounts: [{ id: 'acc-1', label: 'a@b.com', status: 'connected', createdAt: 1 }],
+      }),
+      [`${KEY}-rt-acc-1`]: 'rt-dead',
+    });
+    const refresh = vi.fn(async () => ({
+      ok: false as const,
+      error: 'EXCHANGE_FAILED' as const,
+      invalidGrant: true,
+      detail: 'upstream rejected',
+    }));
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      openExternal: vi.fn(),
+      broker: { exchange: vi.fn(), refresh },
+    });
+    await expect(mgr.getFreshAccessToken(GHOST, KEY, BROKER_DECL)).resolves.toMatchObject({
+      ok: false,
+      error: 'AUTH_EXPIRED',
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(vault.read(GHOST, `${KEY}-rt-acc-1`)).toBeNull();
+    expect(mgr.listAccounts(GHOST, KEY)[0]?.status).toBe('expired');
+  });
+});
+
+describe('brokerBounce(双地址弹跳回调)', () => {
+  /** brokerBounce 必与 tokenBroker + redirectPort 成套(校验层约束,这里按同形态构造)。 */
+  function bounceDecl(redirectPort: number): GhostOauthDecl {
+    return {
+      authorizeUrl: 'https://auth.example.com/authorize',
+      tokenUrl: 'https://auth.example.com/token',
+      scopes: ['read:x'],
+      clientId: 'builtin-cid',
+      pkce: false,
+      tokenBroker: 'slack',
+      redirectPort,
+      brokerBounce: { path: '/slack-mcp/bounce', callbackPath: '/slack-mcp/callback' },
+    };
+  }
+
+  it('resolveBrokerPublicUrl 缺失 / 回 null → INVALID_CONFIG,不发起授权流', async () => {
+    // 解析器未注入。
+    const openExternal1 = vi.fn();
+    const mgrNoResolver = new GhostOauthAccountManager({
+      vault: memoryVault(),
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      openExternal: openExternal1,
+      broker: { exchange: vi.fn(), refresh: vi.fn() },
+    });
+    await expect(mgrNoResolver.connectAccount(GHOST, KEY, bounceDecl(53699))).resolves.toMatchObject({
+      ok: false,
+      error: 'INVALID_CONFIG',
+    });
+    expect(openExternal1).not.toHaveBeenCalled();
+
+    // 解析器注入但回 null(broker 基地址未配置)。
+    const openExternal2 = vi.fn();
+    const mgrNullResolver = new GhostOauthAccountManager({
+      vault: memoryVault(),
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      openExternal: openExternal2,
+      broker: { exchange: vi.fn(), refresh: vi.fn() },
+      resolveBrokerPublicUrl: vi.fn(() => null),
+    });
+    await expect(mgrNullResolver.connectAccount(GHOST, KEY, bounceDecl(53699))).resolves.toMatchObject({
+      ok: false,
+      error: 'INVALID_CONFIG',
+    });
+    expect(openExternal2).not.toHaveBeenCalled();
+  });
+
+  it('解析成功:redirect_uri 用解析出的公网地址,本地监听在 brokerBounce.callbackPath', async () => {
+    const probe = http.createServer();
+    const freePort = await new Promise<number>((resolve) => {
+      probe.listen(0, '127.0.0.1', () => {
+        const addr = probe.address();
+        resolve(typeof addr === 'object' && addr ? addr.port : 0);
+      });
+    });
+    await new Promise((r) => probe.close(r));
+
+    const PUBLIC_URI = 'https://broker.example.com/slack-mcp/bounce';
+    const resolveBrokerPublicUrl = vi.fn((p: string) => {
+      expect(p).toBe('/slack-mcp/bounce');
+      return PUBLIC_URI;
+    });
+    const exchange = vi.fn(async (_slug: string, params: { code: string; redirectUri: string }) => {
+      // broker exchange 收到的 redirectUri = 公网弹跳地址(与 authorize 一致)。
+      expect(params.redirectUri).toBe(PUBLIC_URI);
+      return {
+        ok: true as const,
+        bundle: { accessToken: 'at-bb', refreshToken: 'rt-bb', expiresAt: Date.now() + 60_000, grantedScope: null },
+      };
+    });
+    const mgr = new GhostOauthAccountManager({
+      vault: memoryVault(),
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      openExternal: (url) => {
+        const u = new URL(url);
+        expect(u.searchParams.get('redirect_uri')).toBe(PUBLIC_URI);
+        // 模拟弹跳路由的 302:直接回打本机 loopback 的声明 callbackPath。
+        const cb = new URL(`http://127.0.0.1:${freePort}/slack-mcp/callback`);
+        cb.searchParams.set('code', 'c-bb');
+        cb.searchParams.set('state', u.searchParams.get('state') ?? '');
+        setImmediate(() => {
+          void fetch(cb.toString()).catch(() => undefined);
+        });
+      },
+      broker: { exchange, refresh: vi.fn() },
+      resolveBrokerPublicUrl,
+    });
+    const result = await mgr.connectAccount(GHOST, KEY, bounceDecl(freePort));
+    expect(result).toMatchObject({ ok: true });
+    expect(exchange).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('connectAccount · opts.scopes 收窄', () => {
+  const NARROW_DECL: GhostOauthDecl = {
+    authorizeUrl: 'https://accounts.example.com/authorize',
+    tokenUrl: 'https://accounts.example.com/token',
+    scopes: ['read:x', 'write:y'],
+    clientId: 'builtin-cid',
+  };
+
+  it('声明子集 → 授权 URL 的 scope 面收窄为子集', async () => {
+    let capturedScope: string | null = null;
+    const mgr = new GhostOauthAccountManager({
+      vault: memoryVault(),
+      fetchImpl: vi.fn(async () =>
+        jsonResponse({ access_token: 'at-narrow', refresh_token: 'rt-narrow', expires_in: 3600 }),
+      ) as unknown as typeof fetch,
+      openExternal: (url) => {
+        capturedScope = new URL(url).searchParams.get('scope');
+        autoBrowser('c-narrow')(url);
+      },
+    });
+    await expect(
+      mgr.connectAccount(GHOST, KEY, NARROW_DECL, { scopes: ['read:x'] }),
+    ).resolves.toMatchObject({ ok: true });
+    expect(capturedScope).toBe('read:x');
+  });
+
+  it('含未声明条目 / 空数组 → INVALID_CONFIG,不拉浏览器', async () => {
+    const openExternal = vi.fn();
+    const mkMgr = (): GhostOauthAccountManager =>
+      new GhostOauthAccountManager({
+        vault: memoryVault(),
+        fetchImpl: vi.fn() as unknown as typeof fetch,
+        openExternal,
+      });
+    await expect(
+      mkMgr().connectAccount(GHOST, KEY, NARROW_DECL, { scopes: ['read:x', 'admin:z'] }),
+    ).resolves.toMatchObject({ ok: false, error: 'INVALID_CONFIG' });
+    await expect(
+      mkMgr().connectAccount(GHOST, KEY, NARROW_DECL, { scopes: [] }),
+    ).resolves.toMatchObject({ ok: false, error: 'INVALID_CONFIG' });
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+});
+
+describe('identity.displayTemplate 展示名', () => {
+  /** Slack 形态的声明:labelPath 是稳定 user_id,展示名由模板渲染。 */
+  const SLACK_DECL: GhostOauthDecl = {
+    authorizeUrl: 'https://slack.example.com/authorize',
+    tokenUrl: 'https://slack.example.com/token',
+    scopes: ['scope.a'],
+    identity: {
+      url: 'https://slack.example.com/auth.test',
+      labelPath: 'user_id',
+      displayTemplate: '{team} · {user}',
+    },
+  };
+
+  function slackFetch(identityBody: Record<string, unknown>): ReturnType<typeof vi.fn> {
+    return vi.fn(async (input: string | URL | Request) => {
+      if (String(input) === SLACK_DECL.tokenUrl) {
+        return jsonResponse({ access_token: 'at-s', refresh_token: 'rt-s', expires_in: 3600 });
+      }
+      return jsonResponse(identityBody);
+    });
+  }
+
+  it('新连:view.label 展示渲染名,清单里 label 仍是稳定身份键', async () => {
+    const vault = memoryVault({ [`${KEY}-client-id`]: 'cid' });
+    const onConnected = vi.fn();
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: slackFetch({ team: 'xindong', user: 'lizi', user_id: 'U9ZC94EDR' }) as unknown as typeof fetch,
+      openExternal: autoBrowser(),
+      onAccountConnected: onConnected,
+    });
+    const result = await mgr.connectAccount(GHOST, KEY, SLACK_DECL);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.account.label).toBe('xindong · lizi');
+    expect(mgr.listAccounts(GHOST, KEY)[0]?.label).toBe('xindong · lizi');
+    // 清单持久层:合并键 label 仍是稳定 user_id,展示名单独落 displayLabel。
+    const manifest = JSON.parse(vault.read(GHOST, `${KEY}-accounts`) ?? '{}') as {
+      accounts: Array<{ label: string; displayLabel: string }>;
+    };
+    expect(manifest.accounts[0]).toMatchObject({ label: 'U9ZC94EDR', displayLabel: 'xindong · lizi' });
+    // 授权成功提示用展示名。
+    expect(onConnected).toHaveBeenCalledWith({ ghostId: GHOST, secretKey: KEY, label: 'xindong · lizi' });
+  });
+
+  it('同身份重连:按稳定键合并到老账号(旧行 label 是 user_id),并补上展示名', async () => {
+    const vault = memoryVault({
+      [`${KEY}-client-id`]: 'cid',
+      [`${KEY}-accounts`]: JSON.stringify({
+        defaultAccountId: 'acc-legacy',
+        accounts: [{ id: 'acc-legacy', label: 'U9ZC94EDR', status: 'connected', createdAt: 1 }],
+      }),
+      [`${KEY}-rt-acc-legacy`]: 'rt-old',
+    });
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: slackFetch({ team: 'xindong', user: 'lizi', user_id: 'U9ZC94EDR' }) as unknown as typeof fetch,
+      openExternal: autoBrowser(),
+    });
+    const result = await mgr.connectAccount(GHOST, KEY, SLACK_DECL);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // 合并进老行(不新增),展示名刷新。
+    expect(result.account.id).toBe('acc-legacy');
+    expect(result.account.label).toBe('xindong · lizi');
+    expect(mgr.listAccounts(GHOST, KEY)).toHaveLength(1);
+  });
+
+  it('模板占位符取不到值 → 展示名降级,view.label 回落稳定身份键', async () => {
+    const mgr = new GhostOauthAccountManager({
+      vault: memoryVault({ [`${KEY}-client-id`]: 'cid' }),
+      fetchImpl: slackFetch({ user_id: 'U9ZC94EDR' }) as unknown as typeof fetch,
+      openExternal: autoBrowser(),
+    });
+    const result = await mgr.connectAccount(GHOST, KEY, SLACK_DECL);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.account.label).toBe('U9ZC94EDR');
+  });
+
+  it('老账号回填:令牌刷新成功后 best-effort 补展示名(不用重连)', async () => {
+    const vault = memoryVault({
+      [`${KEY}-client-id`]: 'cid',
+      [`${KEY}-accounts`]: JSON.stringify({
+        defaultAccountId: 'acc-legacy',
+        accounts: [{ id: 'acc-legacy', label: 'U9ZC94EDR', status: 'connected', createdAt: 1 }],
+      }),
+      [`${KEY}-rt-acc-legacy`]: 'rt-old',
+    });
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: slackFetch({ team: 'xindong', user: 'lizi', user_id: 'U9ZC94EDR' }) as unknown as typeof fetch,
+      openExternal: vi.fn(),
+    });
+    await expect(mgr.getFreshAccessToken(GHOST, KEY, SLACK_DECL)).resolves.toMatchObject({ ok: true });
+    // 回填是 fire-and-forget,轮询等它落库。
+    await vi.waitFor(() => {
+      expect(mgr.listAccounts(GHOST, KEY)[0]?.label).toBe('xindong · lizi');
+    });
+  });
+
+  it('回填幂等:已有展示名的账号刷新令牌不再拉身份端点', async () => {
+    const vault = memoryVault({
+      [`${KEY}-client-id`]: 'cid',
+      [`${KEY}-accounts`]: JSON.stringify({
+        defaultAccountId: 'acc-1',
+        accounts: [
+          { id: 'acc-1', label: 'U9ZC94EDR', displayLabel: 'xindong · lizi', status: 'connected', createdAt: 1 },
+        ],
+      }),
+      [`${KEY}-rt-acc-1`]: 'rt-old',
+    });
+    const fetchImpl = slackFetch({ team: 'xindong', user: 'lizi', user_id: 'U9ZC94EDR' });
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: vi.fn(),
+    });
+    await expect(mgr.getFreshAccessToken(GHOST, KEY, SLACK_DECL)).resolves.toMatchObject({ ok: true });
+    // 给潜在的异步回填一个宏任务窗口,再断言没有第二次网络调用。
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(mgr.listAccounts(GHOST, KEY)[0]?.label).toBe('xindong · lizi');
+  });
+});

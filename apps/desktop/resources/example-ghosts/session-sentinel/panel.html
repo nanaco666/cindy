@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>会话哨兵</title>
+  <link rel="stylesheet" href="panel.css" />
+</head>
+<body>
+  <!-- 被动画布:只听电子脑广播,无任何输入控件(主循环铁则)。
+       上半统计卡(旁听累计),下半事件流水(倒序,新的在上)。 -->
+  <main id="root">
+    <section id="stats">
+      <div class="stat"><span class="num" id="turns">0</span><span class="label">轮次</span></div>
+      <div class="stat"><span class="num" id="in">0</span><span class="label">输入 tok</span></div>
+      <div class="stat"><span class="num" id="out">0</span><span class="label">输出 tok</span></div>
+    </section>
+    <div id="cursess">台前会话:<span id="cur">—</span></div>
+    <section id="feed">
+      <p class="empty" id="empty">还没收到事件。五种玩法:<br />
+        ① 发条消息 → 看轮次流水;<br />
+        ② 新建 / 归档会话 → 看生命周期;<br />
+        ③ 左侧切换会话 → 上方「台前会话」变化;<br />
+        ④ 发含「机密」的消息被拦;「润色 xxx」被改写;<br />
+        ⑤ 让 AI 在回复末尾原样输出 [[卡片]] / [[润色]] / [[慢处理]]。</p>
+      <ul id="lines"></ul>
+    </section>
+  </main>
+  <script src="panel.js"></script>
+</body>
+</html>

@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SessionCard 新底部 meta 行 · 状态全集</title>
+  <style>
+    :root {
+      --bg: #f6f5f2;
+      --card: #ffffff;
+      --card-active: #ededeb;
+      --border: #d5d2cc;
+      --border-active: #aaa7a1;
+      --text: #242424;
+      --secondary: #565656;
+      --muted: #767676;
+      --tertiary: #8a8a8a;
+      --disabled: #b0b0b0;
+      --accent: #ff7a45;
+      --chip: #f7f6f2;
+      --shadow: 0 1px 0 rgba(0,0,0,.02);
+      --font: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 28px; background: var(--bg); color: var(--text); font-family: var(--font); -webkit-font-smoothing: antialiased; }
+    h1 { margin: 0 0 8px; font-size: 22px; letter-spacing: -.02em; }
+    .intro { margin: 0 0 18px; color: var(--muted); font-size: 13px; line-height: 1.7; max-width: 900px; }
+    .intro b { color: var(--text); }
+    .section-title { margin: 26px 0 12px; font-size: 15px; font-weight: 800; }
+    .page { max-width: 1180px; margin: 0 auto; }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+    .legend span { border: 1px solid var(--border); border-radius: 999px; background: rgba(255,255,255,.6); padding: 4px 9px; font-size: 12px; color: var(--muted); }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 16px; align-items: start; }
+    .case { display: flex; flex-direction: column; gap: 7px; }
+    .case-label { min-height: 30px; color: #5e5e5e; font-size: 11px; line-height: 1.35; }
+
+    .card {
+      width: 150px;
+      display: flex; flex-direction: column;
+      padding: 8px 10px 8px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--card);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .card.active { background: var(--card-active); border-color: var(--border-active); }
+    .card.running { color: var(--muted); }
+    .card.archived { opacity: .78; }
+
+    .title {
+      min-width: 0;
+      font-size: 12.5px; font-weight: 800; line-height: 1.22; letter-spacing: -.005em;
+      display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+      color: var(--text);
+    }
+    .card.running .title { color: var(--muted); }
+
+    .preview {
+      margin-top: 4px; color: var(--secondary); font-size: 11px; line-height: 1.4;
+      display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .preview.lines-1 { -webkit-line-clamp: 1; }
+    .preview.lines-2 { -webkit-line-clamp: 2; }
+    .preview.lines-3 { -webkit-line-clamp: 3; }
+    .card.running .preview { color: var(--disabled); }
+
+    /* ── 底部 meta 行:左图标簇 + 右时间,全部 11px 同一视觉尺寸 ── */
+    .meta {
+      margin-top: 6px;
+      display: flex; align-items: center; gap: 6px;
+      color: var(--tertiary);
+      font-size: 11px; font-weight: 500; line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .card.running .meta { color: var(--disabled); }
+    .meta .ico { position: relative; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .meta svg { display: block; width: 11px; height: 11px; }
+    .meta .time { margin-left: auto; flex-shrink: 0; }
+
+    /* vendor AA(Claude) 用文字标 */
+    .aa { font-size: 11px; font-weight: 900; line-height: 1; color: var(--tertiary); letter-spacing: -.08em; }
+    .aa.running { color: var(--accent); animation: breathe 1.5s ease-in-out infinite; }
+    .running-ico { color: var(--accent); animation: breathe 1.5s ease-in-out infinite; }
+
+    .attention { position: absolute; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); top: -3px; right: -3px; }
+    .pencil { position: absolute; bottom: -3px; right: -3px; width: 8px; height: 8px; color: var(--secondary); }
+    .pencil svg { width: 8px; height: 8px; }
+    .pause-dot {
+      position: absolute; bottom: -3px; right: -3px; width: 8px; height: 8px;
+      border-radius: 50%; background: var(--chip); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 6px; font-weight: 900; line-height: 1;
+    }
+
+    .note { margin-top: 24px; padding: 12px 14px; border: 1px dashed var(--border-active); border-radius: 12px; color: var(--muted); background: rgba(255,255,255,.45); font-size: 12px; line-height: 1.7; }
+    @keyframes breathe { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+  </style>
+</head>
+<body>
+<div class="page">
+  <h1>SessionCard · 新底部 meta 行 · 状态全集</h1>
+  <p class="intro">
+    按黄一孟 review 定稿重排:<b>标题</b>与<b>正文</b>只放文字,不再挂任何状态图标;标题/正文之后<b>另起一整行 meta</b>——
+    左下角图标簇(状态/agent 图标 · 定时任务 · 远程业务 · worktree),右下角业务时间,中间空位由两侧撑开。
+    所有 meta 图标与时间字号<b>统一 11px</b>。running 不再有底部进度条,等待决策不再额外用黄色(整卡走灰)。
+  </p>
+  <div class="legend">
+    <span>标题最多 2 行</span>
+    <span>meta 图标 = 时间字号 = 11px</span>
+    <span>左=图标簇 右=时间</span>
+    <span>running 无进度条 · 整卡灰</span>
+    <span>awaiting 无额外黄色</span>
+    <span>定时 Timer 优先于 Clock</span>
+  </div>
+
+  <div class="section-title">Card 状态全集</div>
+  <div class="grid">
+
+    <!-- 1 -->
+    <div class="case"><div class="case-label">1. 短标题 / Claude / 普通</div>
+      <div class="card">
+        <div class="title">部门QBR制作</div>
+        <div class="preview lines-2">王飞,已经在做了,整理里预计今天出。</div>
+        <div class="meta"><span class="ico aa">AI</span><span class="time">刚刚</span></div>
+      </div>
+    </div>
+
+    <!-- 2 -->
+    <div class="case"><div class="case-label">2. 两行标题 / Codex</div>
+      <div class="card">
+        <div class="title">部门 Token 用量分析与降本建议</div>
+        <div class="preview lines-2">长尾用量分析,定位跑飞 session。</div>
+        <div class="meta"><span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 4v16M4 12h16" stroke="currentColor" stroke-width="1.5"/></svg></span><span class="time">6 天</span></div>
+      </div>
+    </div>
+
+    <!-- 3 -->
+    <div class="case"><div class="case-label">3. 超长标题 / 两行截断</div>
+      <div class="card">
+        <div class="title">这是一个很长很长的标题用于验证置顶卡片两行截断和标题区节奏</div>
+        <div class="preview lines-2">正文保持普通预览长度。</div>
+        <div class="meta"><span class="ico aa">AI</span><span class="time">20 分</span></div>
+      </div>
+    </div>
+
+    <!-- 4 -->
+    <div class="case"><div class="case-label">4. summary / 正文 3 行</div>
+      <div class="card">
+        <div class="title">玩家反馈精华回复整理</div>
+        <div class="preview lines-3">汇总玩家对本周活动、付费礼包、社交体验和长线留存的核心反馈,提炼老板汇报可用的重点结论和行动项。</div>
+        <div class="meta"><span class="ico aa">AI</span><span class="time">1 时</span></div>
+      </div>
+    </div>
+
+    <!-- 5 running -->
+    <div class="case"><div class="case-label">5. 运行中 / 呼吸 icon / 无进度条</div>
+      <div class="card running">
+        <div class="title">实时运营周报生成</div>
+        <div class="preview lines-2">正在分析本周项目数据与异常波动。</div>
+        <div class="meta"><span class="ico running-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 4v16M4 12h16" stroke="currentColor" stroke-width="1.5"/></svg></span><span class="time">刚刚</span></div>
+      </div>
+    </div>
+
+    <!-- 6 attention -->
+    <div class="case"><div class="case-label">6. 需关注 / 红点 / 等待处理</div>
+      <div class="card">
+        <div class="title">审批信息补充</div>
+        <div class="preview lines-2">需要你确认下一步操作。</div>
+        <div class="meta"><span class="ico aa" style="position:relative">AI<span class="attention"></span></span><span class="time">50 分</span></div>
+      </div>
+    </div>
+
+    <!-- 7 automation clock -->
+    <div class="case"><div class="case-label">7. 自动化生成 / Clock / 1 行</div>
+      <div class="card">
+        <div class="title">自动化日报巡检</div>
+        <div class="preview lines-1">自动运行结果摘要,正文一行。</div>
+        <div class="meta">
+          <span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 4v16M4 12h16" stroke="currentColor" stroke-width="1.5"/></svg></span>
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <span class="time">3 时</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 8 schedule timer -->
+    <div class="case"><div class="case-label">8. 绑定 schedule / Timer 优先</div>
+      <div class="card">
+        <div class="title">每小时核心指标监控</div>
+        <div class="preview lines-1">绑定任务优先显示 Timer 徽章。</div>
+        <div class="meta">
+          <span class="ico aa">AI</span>
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M10 2h4"/><path d="M12 14l3-3"/><circle cx="12" cy="14" r="8"/></svg></span>
+          <span class="time">3 时</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 9 schedule paused -->
+    <div class="case"><div class="case-label">9. 暂停 schedule / Pause mini</div>
+      <div class="card">
+        <div class="title">暂停中的自动巡检任务</div>
+        <div class="preview lines-1">暂停状态保持弱化的绑定徽章。</div>
+        <div class="meta">
+          <span class="ico aa">AI</span>
+          <span class="ico" style="opacity:.6"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M10 2h4"/><path d="M12 14l3-3"/><circle cx="12" cy="14" r="8"/></svg><span class="pause-dot">Ⅱ</span></span>
+          <span class="time">4 时</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 10 device-link -->
+    <div class="case"><div class="case-label">10. Device Link / 远程图标</div>
+      <div class="card">
+        <div class="title">远程设备日志排查与复盘</div>
+        <div class="preview lines-2">device-link 图标下沉到 meta 行。</div>
+        <div class="meta">
+          <span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 4v16M4 12h16" stroke="currentColor" stroke-width="1.5"/></svg></span>
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 0 1 0 10h-2"/><path d="M8 12h8"/></svg></span>
+          <span class="time">1 天</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 11 ssh -->
+    <div class="case"><div class="case-label">11. SSH remote / Globe 图标</div>
+      <div class="card">
+        <div class="title">SSH 远端构建问题分析</div>
+        <div class="preview lines-2">ssh 远程标识与 worktree 并列。</div>
+        <div class="meta">
+          <span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 4v16M4 12h16" stroke="currentColor" stroke-width="1.5"/></svg></span>
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18"/></svg></span>
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3v12"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span>
+          <span class="time">2 天</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 12 attached radiotower running -->
+    <div class="case"><div class="case-label">12. 接管中 / RadioTower / Running</div>
+      <div class="card running">
+        <div class="title">远程接管中的任务观察</div>
+        <div class="preview lines-2">attached 优先 RadioTower,运行时呼吸。</div>
+        <div class="meta"><span class="ico running-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4.9 19.1a10 10 0 0 1 0-14.2"/><path d="M7.8 16.2a6 6 0 0 1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 16.2a6 6 0 0 0 0-8.4"/><path d="M19.1 19.1a10 10 0 0 0 0-14.2"/></svg></span><span class="time">40 分</span></div>
+      </div>
+    </div>
+
+    <!-- 13 draft pencil -->
+    <div class="case"><div class="case-label">13. 有草稿 / 右下铅笔</div>
+      <div class="card">
+        <div class="title">未发送草稿的会话</div>
+        <div class="preview lines-2">输入框有草稿时状态图标右下叠铅笔。</div>
+        <div class="meta"><span class="ico aa" style="position:relative">AI<span class="pencil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25"><path d="M12 20h9"/><path d="M16.5 3.5a2 2 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span></span><span class="time">2 分</span></div>
+      </div>
+    </div>
+
+    <!-- 14 archived -->
+    <div class="case"><div class="case-label">14. 归档 / Archive icon</div>
+      <div class="card archived">
+        <div class="title">已归档的历史分析任务</div>
+        <div class="preview lines-2">归档状态使用 Archive 图标。</div>
+        <div class="meta"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11h14V8"/><path d="M10 12h4"/></svg></span><span class="time">9 天</span></div>
+      </div>
+    </div>
+
+    <!-- 15 active selected -->
+    <div class="case"><div class="case-label">15. Active / 当前选中背景</div>
+      <div class="card active">
+        <div class="title">当前正在查看的置顶会话</div>
+        <div class="preview lines-2">验证 active 背景下的对比度。</div>
+        <div class="meta"><span class="ico aa">AI</span><span class="time">5 分</span></div>
+      </div>
+    </div>
+
+    <!-- 16 full house -->
+    <div class="case"><div class="case-label">16. 满配 / 定时+远程+worktree</div>
+      <div class="card">
+        <div class="title">远程定时构建 + worktree 任务</div>
+        <div class="preview lines-2">meta 行同时出现多枚业务属性图标时的密度。</div>
+        <div class="meta">
+          <span class="ico aa">AI</span>
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M10 2h4"/><path d="M12 14l3-3"/><circle cx="12" cy="14" r="8"/></svg></span>
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 0 1 0 10h-2"/><path d="M8 12h8"/></svg></span>
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3v12"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span>
+          <span class="time">1 时</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="note">
+    说明:此为静态 HTML 预览,按新版 SessionCard 规则(底部 meta 行 + 11px 统一图标)手工映射,便于快速验收视觉。
+    真机以 dev 里的实际组件为准;代码级覆盖见 <code>SessionCard.visual.test.ts</code>。
+    图标次序:<b>状态/agent → 定时(Timer/Clock) → 远程(device-link/ssh) → worktree → [弹性空位] → 时间</b>。
+  </div>
+</div>
+</body>
+</html>

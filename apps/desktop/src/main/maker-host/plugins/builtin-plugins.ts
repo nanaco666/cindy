@@ -1,0 +1,160 @@
+/**
+ * 内置 plugin 定义：把现有 LiziMcpProvider factory 包成带 metadata
+ * (name, description, essential flag) 的 Plugin descriptor。
+ *
+ * **Plugin ID 是稳定的用户可见契约**，用于：
+ *   - 项目设置：.claude/settings.json → xdtMaker.builtinTools.{id}
+ *
+ * 所有 ID 都使用短且一致的名字，不带 `lizi_` 前缀：
+ *   browser | computer | feishu | feishu_bot |
+ *   slack_bot | scheduler | ssh | memory | xdt_helper | collab(→ lizi_orca) | lsp
+ *
+ * lizi-mcps/providers.ts 里的 MCP provider `name` 使用 `lizi_` 前缀
+ * (例如 provider name 'lizi_feishu' → plugin id 'feishu')。映射关系由
+ * PROVIDER_NAME_TO_PLUGIN_ID 定义，mcp-providers.ts 包装 isEnabled gate 时消费。
+ */
+
+import type { Plugin, PluginId } from './types.js';
+import { ESSENTIAL_PLUGIN_IDS } from './types.js';
+import type { LiziMcpId } from 'lizi-mcps';
+
+interface BuiltinPluginMeta {
+  id: PluginId;
+  name: string;
+  description: string;
+}
+
+/**
+ * 内置 MCP plugin，按注册顺序排列。
+ * `id` 是面向用户的稳定标识，用在 settings 文件和 IPC 中。
+ */
+const BUILTIN_META: BuiltinPluginMeta[] = [
+  { id: 'android',     name: 'Android Automation', description: 'Android adb automation — screenshots, UI dump, taps, swipes, text input, and app launch on connected devices' },
+  { id: 'browser',     name: 'Browser',      description: 'Browser automation — isolated browsing, snapshots, screenshots, and page actions' },
+  { id: 'computer',    name: 'Computer Use', description: 'Local desktop automation — apps, windows, UI inspection, clicks, and typing via an installed driver' },
+  { id: 'feishu',      name: 'Feishu',       description: 'Feishu IM integration — messaging, docs, wikis, and calendar access' },
+  { id: 'feishu_bot',   name: 'Feishu Bot',   description: 'Send files and notifications to Feishu users via bot messages' },
+  { id: 'slack_bot',    name: 'Slack Bot',    description: 'Send files and notifications to Slack users via bot messages' },
+  { id: 'scheduler',    name: 'Scheduler',    description: 'Task scheduling — cron-based recurring jobs and one-shot reminders' },
+  { id: 'ssh',          name: 'SSH Remote',   description: 'Run commands on configured SSH hosts via the built-in connection pool (aliases, ssh-agent/keys) — nothing installed remotely' },
+  { id: 'memory',       name: 'Maker Memory', description: 'Cross-agent long-term memory for persistent context across sessions' },
+  { id: 'contacts',     name: 'Smart Contacts', description: 'Agent-native contacts — cross-platform identity resolution, relationship context, and timeline events' },
+  { id: 'xdt_helper',   name: 'XDT Helper',   description: 'Host capability disclosure — tells agents what tools and models are available' },
+  { id: 'collab',       name: 'Collab Mode',  description: 'Multi-worker collaboration (Orca team) — start_team / create_worker / send_to_worker etc.' },
+  { id: 'lsp',          name: 'LSP',          description: 'TypeScript LSP queries (Beta — gated by Settings → Experimental → LSP Mode)' },
+  // xd_service 已于 2026-07-13 退役:Pages 能力(含部署)整体迁入内置意识
+  // xd-pages(登录邮箱派生凭证 + 目录过户上传),不再是 MCP 插件。
+  // mivo 已于 2026-07-13 退役:13 工具整体迁入内置意识 xd-mivo(exchange
+  // 二段式凭证 + 双路媒体落地),不再是 MCP 插件。
+  // github 已于 2026-07-14 退役:GitHub 能力整体迁入内置意识 cindy-github
+  // (老 PAT 由 githubAccountsMigration 无感搬账),不再是 MCP 插件。
+  // gitlab 已于 2026-07-14 退役:GitLab 能力整体迁入内置意识 cindy-gitlab
+  // (老 PAT + 实例地址由 gitlabAccountsMigration 无感搬账),不再是 MCP 插件。
+  // slack 已于 2026-07-15 退役:Slack 官方 MCP 能力整体迁入内置意识 cindy-slack
+  // (老账号由 slackAccountsMigration 无感搬账),不再是 MCP 插件。
+];
+
+/**
+ * lizi-mcps/providers.ts 里的已知 MCP provider name。
+ * 每个内置 provider 都必须在 PROVIDER_NAME_TO_PLUGIN_ID 里有映射。
+ */
+export type KnownProviderName =
+  | 'lizi_android'
+  | 'lizi_browser'
+  | 'lizi_computer'
+  | 'lizi_feishu'
+  | 'lizi_feishu_bot'
+  | 'lizi_slack_bot'
+  | 'lizi_scheduler'
+  | 'lizi_ssh'
+  | 'lizi_memory'
+  | 'lizi_contacts'
+  | 'lizi_xdt_helper'
+  | 'lizi_orca'
+  | 'lizi_lsp';
+
+/**
+ * MCP provider `name`(lizi-mcps/providers.ts) → 用户可见 plugin id 的映射。
+ *
+ * lizi-mcps 会给多数 provider name 加 `lizi_` 前缀(如 'lizi_feishu'、'lizi_memory')，
+ * 但用户配置使用短 id('feishu'、'memory')。这张表桥接两者，让 mcp-providers.ts
+ * 可以调用：
+ *
+ *   const pluginId = pluginIdForProviderName(p.name);
+ *   pluginRegistry.isEnabled(pluginId, ctx.workingDir)
+ *
+ * 这里用 Record<KnownProviderName, PluginId> 而不是 Partial；更新 KnownProviderName
+ * 后会由 TypeScript 保证穷尽。真实 provider 列表覆盖由测试从 createLiziMcpProviders
+ * 派生后校验，防止新增 provider 漏映射。
+ */
+export const PROVIDER_NAME_TO_PLUGIN_ID: Record<KnownProviderName, PluginId> = {
+  lizi_android: 'android',
+  lizi_browser: 'browser',
+  lizi_computer: 'computer',
+  lizi_feishu: 'feishu',
+  lizi_feishu_bot: 'feishu_bot',
+  lizi_slack_bot: 'slack_bot',
+  lizi_scheduler: 'scheduler',
+  lizi_ssh: 'ssh',
+  lizi_memory: 'memory',
+  lizi_contacts: 'contacts',
+  lizi_xdt_helper: 'xdt_helper',
+  lizi_orca: 'collab',
+  lizi_lsp: 'lsp',
+};
+
+/**
+ * 把 lizi-mcps 的 MCP provider name 解析成用户可见 plugin id。
+ * 未知 name 原样透传；registry 会按 fail-open 处理为默认启用。
+ */
+export function pluginIdForProviderName(name: string): PluginId {
+  return PROVIDER_NAME_TO_PLUGIN_ID[name as KnownProviderName] ?? name;
+}
+
+/** 从静态 metadata 列表构造 Plugin descriptor。
+ *
+ * Phase 1 约束：descriptor 上的 `capabilities.mcps` 始终是 `[]`。
+ * 真正的 MCP server instance 在 mcp-integrations/mcp-providers.ts 构造，
+ * 再通过 maker-core 的 LiziMcpProvider interface 接进 agent。plugin descriptor
+ * 只承载身份和启用策略 metadata。 */
+export function createBuiltinPlugins(): Plugin[] {
+  return BUILTIN_META.map((meta) => ({
+    id: meta.id,
+    name: meta.name,
+    description: meta.description,
+    version: '1.0.0',
+    source: 'builtin' as const,
+    essential: ESSENTIAL_PLUGIN_IDS.has(meta.id),
+    capabilities: {
+      mcps: [],
+    },
+  }));
+}
+
+/**
+ * plugin id → LiziMcpId 的显式映射，用于 createLiziMcpProviders 的 `enabled` 数组。
+ * 单独维护表，而不是用 `as LiziMcpId` 强转，这样非 MCP plugin id 会在运行时被过滤，
+ * 不会静默生成非法 LiziMcpId。
+ *
+ * 后续如果把 PluginId 收窄成 literal union，这张表也能得到编译期穷尽检查。
+ */
+const PLUGIN_ID_TO_MCP_ID: Record<PluginId, LiziMcpId | undefined> = {
+  android: 'android',
+  browser: 'browser',
+  computer: 'computer',
+  feishu: 'feishu',
+  feishu_bot: 'lizi_feishu_bot',
+  slack_bot: 'lizi_slack_bot',
+  scheduler: 'lizi_scheduler',
+  ssh: 'lizi_ssh',
+  memory: 'lizi_memory',
+  contacts: 'lizi_contacts',
+  xdt_helper: 'lizi_xdt_helper',
+  collab: 'lizi_orca',
+  lsp: 'lizi_lsp',
+};
+
+/** createLiziMcpProviders `enabled` 数组使用的有序 LiziMcpId。模块加载时计算一次，运行期不变。 */
+export const BUILTIN_LIZI_MCP_IDS: readonly LiziMcpId[] = BUILTIN_META
+  .map((m) => PLUGIN_ID_TO_MCP_ID[m.id])
+  .filter((id): id is LiziMcpId => id !== undefined);

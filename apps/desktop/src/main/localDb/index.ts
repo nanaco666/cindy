@@ -1,0 +1,578 @@
+/**
+ * chat-data-localization F1/F5：本地 SQLite 引擎入口（main 进程独占）。
+ *
+ * 职责：
+ *   - 按 userId 切换 db 文件（`<dbFilePrefix>-{userId}.db` 在 userData 目录下）
+ *   - SQLITE_CORRUPT 自动回落（向后兼容旧 `.bak.clean` → `.bak.{ISO}`,详见下）
+ *   - 跑 schema migration（`migrate.ts`）
+ *   - 暴露 `closeDb()` 供 main/index.ts 通过 lifecycle 注册到退出流程
+ *   - 暴露 `getDrizzle()` / `getRawDb()` 给 IPC handlers
+ *
+ * 切账号语义：`logout` / 切到不同 userId 时调用 `closeDb()`，下次 `ensureReady` 重开新 db；不能跨账号串库。
+ *
+ * ── ADR-FE7 修订（cleanExitSnapshot 移除）─────────────────────────────────────
+ * 原 ADR-FE7 在 before-quit 时跑 `runCleanExitSnapshot`（db.backup → .bak.clean）,
+ * 现已移除。理由（参考 commit history + codex desktop 对照）:
+ *   - db.backup 是 SQLite 页级 IO,耗时跟 db 体积线性相关（347MB → ~3.7s）,
+ *     是退出体感慢的最大物理瓶颈,且会随 db 膨胀持续恶化
+ *   - 容灾改由 SQLite WAL crash recovery 兜底（WAL 模式下进程任何方式退出,
+ *     已 commit 事务都能在下次启动 recover）—— 业界主流方案（VSCode/Slack/codex 同款）
+ *
+ * SQLITE_CORRUPT 时仍走 `tryRestoreWithFallback`: 已存在的 `.bak.clean` 文件（来自
+ * 老版本退出）仍作为 Step 1 兜底;新版本不再 refresh 它,只回落到 `.bak.{ISO}`
+ * （schema migration 时生成,较陈旧）作为最后保障。
+ */
+
+import type Database from 'better-sqlite3';
+import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import { app, dialog, BrowserWindow } from 'electron';
+import path from 'node:path';
+import fs from 'node:fs';
+import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
+
+import { createBetterSqliteDatabase } from './betterSqliteFactory';
+import { runMigrations } from './migrate';
+import { tryRestoreWithFallback, backupDb, restrictLegacyBackupPermissions } from './backup';
+import { detectSchemaDrift } from './schemaDriftDetector';
+import { repairSchemaDrift } from './schemaDriftRepair';
+import { reconcileKnownEquivalentMigrationHashes } from './schemaDriftCompatibility';
+import { cleanupStaleOrcaLeadIndex } from './orcaStaleIndexCleanup';
+import { reconcileStrandedOrcaLeads } from './orcaStrandedLeadReconcile';
+import { initializeCodexHistoryPromptState } from './codexHistoryPromptInit';
+import { dialogueWorkspaceRootDir } from './dialogueWorkspace';
+import { repairManagedDialogueWorkspaceSessions } from './managedDialogueWorkspaceRepair';
+import * as schema from './schema';
+import { loadSqliteVec, resetSqliteVecState } from './sqliteVecLoader';
+
+import { createLogger } from '../logger';
+
+const log = createLogger('localDb');
+
+let _db: Database.Database | null = null;
+let _drizzle: BetterSQLite3Database<typeof schema> | null = null;
+let _currentUserId: string | null = null;
+let _currentDbPath: string | null = null;
+let _optimizeTimer: NodeJS.Timeout | null = null;
+
+// PRAGMA optimize 周期 (SQLite 官方对长连接的推荐: 启动一次 + 周期一次 + 关闭前一次)
+const OPTIMIZE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+export function getDrizzle(): BetterSQLite3Database<typeof schema> {
+  if (!_drizzle) {
+    throw new Error('localDb not ready: call ensureReady(userId) first');
+  }
+  return _drizzle;
+}
+
+export function getRawDb(): Database.Database {
+  if (!_db) {
+    throw new Error('localDb not ready');
+  }
+  return _db;
+}
+
+export function getCurrentDbPath(): string | null {
+  return _currentDbPath;
+}
+
+export function getCurrentUserId(): string | null {
+  return _currentUserId;
+}
+
+function dbPath(userId: string): string {
+  return path.join(app.getPath('userData'), `${BRAND_IDENTITY.dbFilePrefix}-${userId}.db`);
+}
+
+export type EnsureReadyResult =
+  | { ready: true }
+  | { ready: false; error: { code: 'DB_INIT_FAILED' | 'DB_CORRUPT_NO_BACKUP' | 'MIGRATE_FAILED'; message: string } };
+
+/**
+ * 按 userId 准备本地 db。
+ *
+ * - 同一 userId 已就绪 → 直接 return
+ * - 切到不同 userId → 先 closeDb 再开新文件
+ * - SQLITE_CORRUPT → 走 `tryRestoreWithFallback` 两级回落；恢复成功后通知所有渲染窗显示 toast
+ * - 任何不可恢复故障 → 弹 OS 对话框 + return `{ ready: false, error }`，由 renderer 阻断 navigate
+ */
+export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
+  if (!userId || typeof userId !== 'string') {
+    return { ready: false, error: { code: 'DB_INIT_FAILED', message: 'invalid userId' } };
+  }
+
+  if (_currentUserId === userId && _db) {
+    log.info(
+      JSON.stringify({ event: 'localDb.ensureReady.already', userId, dbPath: _currentDbPath }),
+    );
+    return { ready: true };
+  }
+
+  if (_currentUserId && _currentUserId !== userId) {
+    log.info(
+      JSON.stringify({
+        event: 'localDb.ensureReady.switchUser',
+        from: _currentUserId,
+        to: userId,
+      }),
+    );
+    closeDb();
+  }
+
+  const filePath = dbPath(userId);
+  log.info(
+    JSON.stringify({
+      event: 'localDb.ensureReady.open',
+      userId,
+      dbPath: filePath,
+      exists: fs.existsSync(filePath),
+    }),
+  );
+
+  try {
+    _db = openWithPragmas(filePath);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const errCode = (err as { code?: string }).code ?? '';
+    if (errCode === 'SQLITE_CORRUPT' || /corrupt/i.test(message)) {
+      const restored = tryRestoreWithFallback(filePath);
+      if (!restored) {
+        showFatalDialog('数据库损坏且无可用备份', message);
+        return { ready: false, error: { code: 'DB_CORRUPT_NO_BACKUP', message } };
+      }
+      try {
+        _db = openWithPragmas(filePath);
+      } catch (reopenErr) {
+        const reopenMsg = reopenErr instanceof Error ? reopenErr.message : String(reopenErr);
+        showFatalDialog('数据库恢复后仍无法打开', reopenMsg);
+        return { ready: false, error: { code: 'DB_CORRUPT_NO_BACKUP', message: reopenMsg } };
+      }
+      // 通知所有渲染窗一次性 toast（M-FE6 useCorruptionRestoredToast 消费）
+      const payload = {
+        source: restored.source,
+        backupMtime: restored.mtime.toISOString(),
+      };
+      for (const w of BrowserWindow.getAllWindows()) {
+        try {
+          w.webContents.send('local-db:corruption-restored', payload);
+        } catch {
+          /* renderer 已销毁等 */
+        }
+      }
+    } else {
+      showFatalDialog('无法初始化本地数据库', message);
+      return { ready: false, error: { code: 'DB_INIT_FAILED', message } };
+    }
+  }
+
+  const db = _db;
+  if (!db) {
+    const message = 'localDb connection missing after open';
+    showFatalDialog('无法初始化本地数据库', message);
+    return { ready: false, error: { code: 'DB_INIT_FAILED', message } };
+  }
+
+  _drizzle = drizzle(db, { schema });
+  _currentUserId = userId;
+  _currentDbPath = filePath;
+  // 安全加固：收紧既有备份文件权限（老版本生成的 .bak.* / .bak.clean 可能保持 umask 默认的 0644）
+  restrictLegacyBackupPermissions(filePath);
+
+  // sqlite-vec 向量扩展必须先于 migration 加载:
+  // 0034_add_chat_embedding_vec.sql 用 `CREATE VIRTUAL TABLE ... USING vec0(...)`,
+  // 加载顺序反了会在迁移阶段抛 "no such module: vec0"。
+  // 加载本身非 fatal —— 失败只记日志,app 仍可启动(用到 vec0 的 migration / 业务自然会报错)。
+  const vecResult = loadSqliteVec(db);
+  if (vecResult.loaded) {
+    log.info(JSON.stringify({ event: 'localDb.sqliteVec.loaded', version: vecResult.version }));
+  } else {
+    log.error(
+      JSON.stringify({
+        event: 'localDb.sqliteVec.failed',
+        error: vecResult.error,
+        platform: process.platform,
+        arch: process.arch,
+        expectedPath: vecResult.expectedPath,
+      }),
+    );
+  }
+
+  try {
+    await runMigrations(db, filePath);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.error(
+      JSON.stringify({ event: 'localDb.ensureReady.migrateFailed', userId, dbPath: filePath, message }),
+    );
+    closeDb();
+    showFatalDialog('本地数据库 schema 迁移失败', message);
+    return { ready: false, error: { code: 'MIGRATE_FAILED', message } };
+  }
+
+  // #37 schema-drift 检测与处置 ─────────────────────────────────────────
+  // 触发场景:多人协作分支冲突后 main 重排了 migration 编号,本地 schema_version
+  // 已推进但物理表实际没跑过新版 sql。dev 端跑反射 repair 自愈;release 端先收敛
+  // 已确认等价的历史 hash 变更,未知 drift 继续 log + toast 提示用户升级或联系支持。
+  await handleSchemaDrift(filePath);
+
+  try {
+    const repaired = repairManagedDialogueWorkspaceSessions(db, dialogueWorkspaceRootDir());
+    if (repaired > 0) {
+      log.info(JSON.stringify({
+        event: 'localDb.ensureReady.managedDialogueWorkspaceRepair',
+        userId,
+        dbPath: filePath,
+        repaired,
+      }));
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.warn(
+      JSON.stringify({
+        event: 'localDb.ensureReady.managedDialogueWorkspaceRepairFailed',
+        userId,
+        dbPath: filePath,
+        message,
+      }),
+    );
+  }
+
+  try {
+    initializeCodexHistoryPromptState(db);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.warn(
+      JSON.stringify({ event: 'localDb.ensureReady.codexHistoryPromptInitFailed', userId, dbPath: filePath, message }),
+    );
+  }
+
+  // F-COLLAB:每次启动幂等清理残留的全表 unique 索引(自愈不变量,见 orcaStaleIndexCleanup.ts)。
+  // 必须在 schema-drift 之后跑 — 如果旧 worktree 的 drift-repair 在别的时刻把它建回来了,
+  // 这里在本进程启动时把它再清掉,保证当前 lead session 协同 toggle 不再撞 stale unique。
+  cleanupStaleOrcaLeadIndex(db);
+
+  // F-COLLAB:每次启动幂等修复「悬空 Lead」——orca_role='lead' 但已无 active team 的会话
+  // (上一次关闭协同被中途打断遗留)。不修的话会被永久困在空 split view 且点 X 也关不掉,
+  // 见 orcaStrandedLeadReconcile.ts。同样必须在 migration / drift-repair 之后跑(依赖 orca_teams)。
+  reconcileStrandedOrcaLeads(db);
+
+  // 启动 optimize: 0x10002 mask 会强制对从未 ANALYZE 过的表跑一次,
+  // 之后挂 24h 周期任务按需更新统计。详见 runOptimize 注释。
+  runOptimize(0x10002);
+  startOptimizeSchedule();
+
+  log.info(
+    JSON.stringify({ event: 'localDb.ensureReady.ok', userId, dbPath: filePath }),
+  );
+  return { ready: true };
+}
+
+function openWithPragmas(filePath: string): Database.Database {
+  const db = createBetterSqliteDatabase(filePath);
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
+  // 性能/并发相关 (社区生产推荐组合):
+  //   synchronous=NORMAL  WAL 下安全; fsync 大幅减少, 仅掉电时可能丢最近一笔事务,
+  //                       进程崩溃不丢
+  //   temp_store=MEMORY   临时表/排序/中间结果走 RAM
+  //   mmap_size=256MB     读热数据零拷贝, 降低系统调用开销
+  //   cache_size=-65536   page cache 64MB (负值=KB)
+  //   busy_timeout=5000   多 writer 时自动重试而非立刻抛 SQLITE_BUSY
+  db.pragma('synchronous = NORMAL');
+  db.pragma('temp_store = MEMORY');
+  db.pragma('mmap_size = 268435456');
+  db.pragma('cache_size = -65536');
+  db.pragma('busy_timeout = 5000');
+  return db;
+}
+
+/**
+ * 跑一次 PRAGMA optimize, 让 query planner 拿到新鲜的索引选择性统计。
+ * - mask=0x10002: 启动时强制对从未 ANALYZE 过的表跑一次 (SQLite 官方推荐启动 mask)
+ * - mask 缺省:    按需 analyze, 没变化时近乎 no-op
+ * 失败仅记日志, 不影响业务。
+ */
+function runOptimize(mask?: number): void {
+  if (!_db) return;
+  const t0 = performance.now();
+  try {
+    _db.pragma(mask !== undefined ? `optimize=${mask}` : 'optimize');
+    log.info(
+      JSON.stringify({
+        event: 'localDb.optimize.ok',
+        mask: mask ?? 'default',
+        elapsedMs: Math.round(performance.now() - t0),
+      }),
+    );
+  } catch (err) {
+    log.error('PRAGMA optimize failed', err);
+  }
+}
+
+function startOptimizeSchedule(): void {
+  if (_optimizeTimer) return;
+  _optimizeTimer = setInterval(() => runOptimize(), OPTIMIZE_INTERVAL_MS);
+  // 不阻止进程退出
+  _optimizeTimer.unref?.();
+}
+
+function stopOptimizeSchedule(): void {
+  if (_optimizeTimer) {
+    clearInterval(_optimizeTimer);
+    _optimizeTimer = null;
+  }
+}
+
+export function closeDb(): void {
+  // 关连接前再跑一次 optimize, 把会话期内积累的统计变化落盘 (官方推荐)
+  stopOptimizeSchedule();
+  runOptimize();
+  try {
+    _db?.close();
+  } catch {
+    /* noop */
+  }
+  _db = null;
+  _drizzle = null;
+  _currentUserId = null;
+  _currentDbPath = null;
+  resetSqliteVecState();
+}
+
+/**
+ * #37 schema-drift 处置流程,在 runMigrations 之后调用。
+ *
+ * 策略分层:
+ *   - 所有环境先收敛已确认 schema 等价的历史 migration hash,只更新 migration_history
+ *     校验元数据,不执行 DDL、不触碰业务数据;未知 hash 不收敛。
+ *   - release (`app.isPackaged`):仍有未知 drift 时只 log + 推一次性 toast 给 renderer,
+ *     不自动改 schema,提示用户升级或联系支持。
+ *   - dev (`!app.isPackaged`):
+ *       1. 先检测 drift,若有则提前备份(`db.backup .bak.drift-{ISO}`),备份失败不阻断
+ *       2. 不管有没有 drift 都跑一次 schemaDriftRepair —— 因为存量 drift(0026 backfill
+ *          之前已经偏掉的)hash 检测不出来,需要靠反射兜底
+ *       3. repair 报 residual(改类型/删列等反射修不了的)→ 弹 dev-only 对话框让用户选 nuke
+ *
+ * 整个流程顶层包 try/catch,自己崩了也不阻塞启动 —— drift 处置本就是辅助路径。
+ */
+async function handleSchemaDrift(filePath: string): Promise<void> {
+  // 捕获当前连接到局部变量:下面有 `await backupDb`,期间可能有并发 ensureReady/closeDb
+  // (切账号 / 登出)把模块级 `_db` 置 null 或换成另一个连接。旧代码在 await 之后仍读
+  // 模块级 `_db` 传给 repairSchemaDrift,拿到 null → 每张表崩 → 误判 residual → nuke
+  // (2026-06-22 事故)。全程只认这个开工时的 db 句柄,并在 await 后校验它没被切走。
+  const db = _db;
+  if (!db) return;
+  try {
+    let drift = detectSchemaDrift(db);
+    if (drift.status === 'unknown') {
+      log.warn(
+        JSON.stringify({
+          event: 'localDb.schemaDrift.unknown',
+        }),
+      );
+    }
+
+    const compatibility = reconcileKnownEquivalentMigrationHashes(db, drift);
+    drift = compatibility.report;
+    if (compatibility.reconciled.length > 0) {
+      log.warn(
+        JSON.stringify({
+          event: 'localDb.schemaDrift.compatibility.reconciled',
+          entries: compatibility.reconciled,
+        }),
+      );
+    }
+    for (const failure of compatibility.failures) {
+      log.error(
+        JSON.stringify({
+          event: 'localDb.schemaDrift.compatibility.failed',
+          seq: failure.entry.seq,
+          fileName: failure.entry.fileName,
+          error: failure.error instanceof Error ? failure.error.message : String(failure.error),
+        }),
+      );
+    }
+
+    if (app.isPackaged) {
+      if (drift.status === 'drifted') {
+        log.warn(
+          JSON.stringify({
+            event: 'localDb.schemaDrift.release.detected',
+            entries: drift.entries.map((e) => ({
+              seq: e.seq,
+              fileName: e.fileName,
+              kind: e.kind,
+            })),
+          }),
+        );
+        const payload = {
+          driftedFiles: drift.entries.map((e) => e.fileName),
+        };
+        for (const w of BrowserWindow.getAllWindows()) {
+          try {
+            w.webContents.send('local-db:schema-drift-warning', payload);
+          } catch {
+            /* renderer 已销毁 */
+          }
+        }
+      }
+      return;
+    }
+
+    // ─── dev 路径 ───────────────────────────────────────────────────────
+    if (drift.status === 'drifted') {
+      log.warn(
+        JSON.stringify({
+          event: 'localDb.schemaDrift.dev.detected',
+          entries: drift.entries.map((e) => ({
+            seq: e.seq,
+            fileName: e.fileName,
+            kind: e.kind,
+            recordedHash: e.recordedHash,
+            currentHash: e.currentHash,
+          })),
+        }),
+      );
+      // best-effort 备份,失败不阻断 repair
+      try {
+        const backupResult = await backupDb(db, filePath);
+        if (typeof backupResult === 'string') {
+          log.warn(
+            JSON.stringify({
+              event: 'localDb.schemaDrift.dev.backup.ok',
+              backupPath: backupResult,
+            }),
+          );
+        }
+      } catch (err) {
+        log.warn(
+          JSON.stringify({
+            event: 'localDb.schemaDrift.dev.backup.failed',
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
+      }
+    }
+
+    // await backupDb 期间若并发 ensureReady/closeDb 切走了连接,`_db` 已不再是开工时
+    // 的 `db`(被置 null 或换成新连接)。此时旧 `db` 句柄要么已关闭、要么属于别的账号,
+    // 继续跑 repair 只会拿到失效连接 → 误判 residual → 把好库 nuke 掉。直接放弃本轮处置。
+    if (_db !== db) {
+      log.warn(
+        JSON.stringify({ event: 'localDb.schemaDrift.connectionChangedDuringDrift' }),
+      );
+      return;
+    }
+
+    // 不管 hash detector 报不报 drift 都跑一次 repair:
+    // 0026 backfill 之前已经偏掉的存量 drift hash 查不出来,只能靠反射兜底。
+    // 无 drift 时 repair 是 no-op(每张表跑一次 PRAGMA 都不缺东西),开销可忽略。
+    const repair = repairSchemaDrift(db);
+
+    if (repair.residual.length > 0) {
+      log.error(
+        JSON.stringify({
+          event: 'localDb.schemaDrift.dev.residual',
+          residual: repair.residual,
+        }),
+      );
+      // dev-only nuke 对话框 —— 反射修不了的 mismatch(改类型/删列/缺 NOT NULL 列)
+      // 让开发者明确决策:接受 nuke 重建 / 自负风险继续。
+      promptDevNukeOnResidual(filePath, repair.residual);
+    }
+  } catch (err) {
+    log.error(
+      JSON.stringify({
+        event: 'localDb.schemaDrift.fatal',
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    );
+  }
+}
+
+/**
+ * dev-only:残留 mismatch 时弹对话框让开发者选是否 nuke DB 重建。
+ *
+ * 同步对话框 — 这是 dev 启动期罕见路径,阻塞几秒可接受。用户选 nuke:
+ *   1. 关 db 连接
+ *   2. 把 dbFile 重命名为 .bak.nuke-{ISO} (永远保留,不进 .bak.{ISO} 配额)
+ *   3. 提示用户重启 app(下次启动 ensureReady 会建空库 + 跑全套 migration)
+ *
+ * 用户选 ignore:继续启动,大概率撞 SqliteError 在业务层,但是是开发者自己的选择。
+ */
+function promptDevNukeOnResidual(
+  filePath: string,
+  residual: { table: string; kind: string; detail: string }[],
+): void {
+  try {
+    const detail = residual
+      .slice(0, 10)
+      .map((r) => `[${r.table}] ${r.kind} — ${r.detail}`)
+      .join('\n');
+    const choice = dialog.showMessageBoxSync({
+      type: 'warning',
+      title: '本地 DB schema 仍有残留不一致',
+      message: '反射自愈无法修复以下不一致(改类型 / 删列 / 缺 NOT NULL 列等):',
+      detail: `${detail}\n\n选「Nuke 重建」会把当前 DB 文件改名为 .bak.nuke-<时间>(永久保留),下次启动建空库重跑迁移。\n选「忽略继续」会带着不一致启动,业务层大概率会报 SqliteError —— 仅推荐用于排查。`,
+      buttons: ['Nuke 重建', '忽略继续'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    if (choice !== 0) {
+      log.warn(
+        JSON.stringify({ event: 'localDb.schemaDrift.dev.nuke.declined' }),
+      );
+      return;
+    }
+    closeDb();
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const nukePath = `${filePath}.bak.nuke-${ts}`;
+    fs.renameSync(filePath, nukePath);
+    // WAL / SHM 边角文件也搬走(避免空库启动时被旧 WAL 串)
+    for (const suffix of ['-wal', '-shm']) {
+      const sidecar = `${filePath}${suffix}`;
+      if (fs.existsSync(sidecar)) {
+        try {
+          fs.renameSync(sidecar, `${nukePath}${suffix}`);
+        } catch {
+          /* noop */
+        }
+      }
+    }
+    log.warn(
+      JSON.stringify({
+        event: 'localDb.schemaDrift.dev.nuke.done',
+        nukePath,
+      }),
+    );
+    dialog.showMessageBoxSync({
+      type: 'info',
+      title: '本地 DB 已 nuke',
+      message: `当前 DB 已重命名为:\n${nukePath}\n\n请重启应用,下次启动会建一个空库并跑全套 migration。`,
+      buttons: ['好的'],
+    });
+    // 强制退出 —— 后续模块若继续跑会 getRawDb() 抛 not ready,体验更糟
+    app.exit(0);
+  } catch (err) {
+    log.error(
+      JSON.stringify({
+        event: 'localDb.schemaDrift.dev.nuke.failed',
+        error: err instanceof Error ? err.message : String(err),
+      }),
+    );
+  }
+}
+
+function showFatalDialog(title: string, detail: string): void {
+  try {
+    dialog.showMessageBoxSync({
+      type: 'error',
+      title,
+      message: title,
+      detail: `${detail}\n\n请重启应用，或在系统资源管理器中打开数据目录手动处理。`,
+      buttons: ['好的'],
+      defaultId: 0,
+    });
+  } catch (err) {
+    log.error('showFatalDialog failed', err);
+  }
+}

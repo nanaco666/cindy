@@ -1,0 +1,76 @@
+name: client-ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: client-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  XDT_SKIP_AGENT_BIN_INSTALL: '1'
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+  ELECTRON_OVERRIDE_DIST_PATH: '${{ github.workspace }}/.electron-stub-dist'
+  NODE_OPTIONS: '--max-old-space-size=4096'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout client and private protocol submodule
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+          submodules: recursive
+          ssh-key: ${{ secrets.CINDY_PROTOCOL_DEPLOY_KEY }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check endpoint literals
+        run: pnpm check:endpoints
+
+      - name: Typecheck desktop
+        run: pnpm --filter desktop typecheck
+
+      - name: Typecheck mobile
+        run: pnpm --filter mobile typecheck
+
+      - name: Validate SQLite migrations
+        env:
+          XDT_MIGRATION_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before || 'origin/main' }}
+        run: pnpm --filter desktop db:validate
+
+      - name: Verify protocol packages
+        run: pnpm --filter @cindy/device-link-protocol build && pnpm --filter @cindy/slack-hook-protocol test
+
+      - name: Run client and package unit tests
+        run: pnpm test:unit
+
+      - name: Run scheduler architecture guard
+        run: pnpm ci:scheduler-guard
+
+      - name: Run mobile scope guard
+        run: pnpm --filter mobile test:scope

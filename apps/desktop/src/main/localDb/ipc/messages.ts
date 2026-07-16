@@ -1,0 +1,813 @@
+/**
+ * chat-data-localization F5：Messages IPC handlers（C7）。
+ *
+ * - `list(sessionId, opts)` —— 按 createdAt/rowid desc，limit 默认 50/上限 100；before 为 cursor message id
+ * - `create(sessionId, body)` —— `(sessionId, clientId)` 唯一索引保证幂等：已存在则返回已有记录
+ * - `updateContent(sessionId, clientId, content)` —— 用于 ask_user 的 answered 状态等
+ */
+
+import { ipcMain, BrowserWindow } from 'electron';
+import { and, asc, eq, lt, gt, desc, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { createId } from '@paralleldrive/cuid2';
+
+import { getDbClient } from '../client/current';
+import { messages, sessions } from '../schema';
+import {
+  messageToCamel,
+  messageCreateToRow,
+  safeStringify,
+} from '../mapper';
+import { throwIpcError, requireString } from '../../utils/ipcValidate';
+import { tapWindowBroadcast } from '../../device-link/broadcast-tap';
+import { createLogger } from '../../logger';
+import { commitMessageMediaRefs } from '../../cindy-media/chatAttachments';
+import { importExternalCodexMessagesForSession } from '../../maker-host/codex-local-sessions';
+import { importExternalClaudeCodeMessagesForSession } from '../../maker-host/claude-local-sessions';
+import { isDeviceLinkInvoke } from '../../device-link/invoke-context';
+import { onMessageCreated as onChatMessageCreatedForEmbedding } from '../../embedders/chat-history-embedder';
+import { recordPrRefsForMessage } from '../../git-context/prRefsStore';
+import { mergeDismissedIntoErrorContent } from '../../../shared/interruptedTurn.js';
+import { resolveStaleCodexSubscriptionValueEstimate } from '../../../shared/codexSubscriptionValue.js';
+import { normalizeTurnUsageDetails } from '../../../shared/turnUsageDetails.js';
+import type {
+  Message,
+  MessageRole,
+  AgentMeta,
+} from '../../../renderer/lib/ccAgent.types';
+
+const log = createLogger('localDb/messages');
+
+const DEFAULT_LIMIT = 50;
+const MAX_LIMIT = 100;
+const messageRowid = sql<number>`rowid`;
+type MessageRow = typeof messages.$inferSelect;
+type MessageRowWithRowid = MessageRow & { rowid: number };
+
+export interface EstimatedSessionValueEntry {
+  clientId: string;
+  costUsd: number;
+}
+
+const VALID_ROLES: ReadonlySet<MessageRole> = new Set([
+  'user',
+  'assistant',
+  'tool_use',
+  'tool_result',
+  'ask_user',
+  'plan_review',
+  'thinking',
+] as const);
+
+export function registerMessageIpc(): void {
+  ipcMain.handle(
+    'local-db:messages:list',
+    async (_e, sessionId: unknown, opts: unknown) => {
+      const sid = requireString(sessionId, 'sessionId');
+      const limit = clampLimit(
+        (opts as { limit?: number } | undefined)?.limit,
+      );
+      const before = (opts as { before?: string } | undefined)?.before;
+      const beforeTs = (opts as { beforeTs?: number } | undefined)?.beforeTs;
+      const db = getDbClient().drizzle;
+
+      // 外部历史导入(Codex rollout / Claude transcript):device-link 隧道调用
+      // 只在首页请求跑(分页跳过,#318 性能语义;首页判定 = 无任何分页游标),
+      // 覆盖「被控端从未本机打开该会话」的导入缺口。
+      await runMessagesListImportSideEffects(sid, {}, {
+        deviceLinkFirstPage: !before && beforeTs == null,
+      });
+
+      let beforeCursor: { createdAt: number; rowid: number } | null = null;
+      let beforeMs: number | null = null;
+      if (typeof before === 'string' && before) {
+        const beforeRow = await db
+          .select({ createdAt: messages.createdAt, rowid: messageRowid })
+          .from(messages)
+          .where(eq(messages.id, before))
+          .limit(1);
+        if (beforeRow.length > 0) {
+          beforeCursor = beforeRow[0];
+        }
+      } else if (typeof beforeTs === 'number' && Number.isFinite(beforeTs)) {
+        beforeMs = beforeTs;
+      }
+
+      // /clear：过滤 createdAt > session.clearedAt，本地 DB 旧消息也遵守 clearedAt 边界
+      const sessionRow = await db
+        .select({ clearedAt: sessions.clearedAt })
+        .from(sessions)
+        .where(eq(sessions.id, sid))
+        .limit(1);
+      const clearedAtMs = sessionRow[0]?.clearedAt ?? null;
+
+      // rewind-session：list 永远过滤 rewind_at IS NULL —— 被 rewind 软删的消息在 UI 上不可见
+      const conds: (SQL<unknown> | undefined)[] = [eq(messages.sessionId, sid), isNull(messages.rewindAt)];
+      if (beforeCursor) {
+        conds.push(
+          or(
+            lt(messages.createdAt, beforeCursor.createdAt),
+            and(
+              eq(messages.createdAt, beforeCursor.createdAt),
+              lt(messageRowid, beforeCursor.rowid),
+            ),
+          ),
+        );
+      } else if (beforeMs !== null) {
+        conds.push(lt(messages.createdAt, beforeMs));
+      }
+      if (clearedAtMs !== null) conds.push(gt(messages.createdAt, clearedAtMs));
+      const whereExpr = and(...conds);
+
+      const rows = await db
+        .select({
+          ...getMessageSelectFields(),
+          rowid: messageRowid,
+        })
+        .from(messages)
+        .where(whereExpr)
+        .orderBy(desc(messages.createdAt), desc(messageRowid))
+        .limit(limit);
+      return rows.map(messageToCamelWithRowid);
+    },
+  );
+
+  ipcMain.handle(
+    'local-db:messages:around',
+    async (_e, sessionId: unknown, messageId: unknown, opts: unknown) => {
+      const sid = requireString(sessionId, 'sessionId');
+      const mid = requireString(messageId, 'messageId');
+      const radius = clampAroundRadius((opts as { radius?: unknown } | undefined)?.radius);
+      const db = getDbClient().drizzle;
+
+      const [sessionRow] = await db
+        .select({ clearedAt: sessions.clearedAt })
+        .from(sessions)
+        .where(eq(sessions.id, sid))
+        .limit(1);
+      if (!sessionRow) throwIpcError('NOT_FOUND', 'Session 不存在');
+
+      const clearedAtMs = sessionRow.clearedAt ?? null;
+      const visibleConds = clearedAtMs === null ? [] : [gt(messages.createdAt, clearedAtMs)];
+
+      const [anchor] = await db
+        .select({
+          ...getMessageSelectFields(),
+          rowid: messageRowid,
+        })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.id, mid),
+            eq(messages.sessionId, sid),
+            isNull(messages.rewindAt),
+            ...visibleConds,
+          ),
+        )
+        .limit(1);
+      if (!anchor) throwIpcError('NOT_FOUND', 'Message 不存在');
+      const anchorRowid = anchor.rowid;
+
+      const before = await db
+        .select({
+          ...getMessageSelectFields(),
+          rowid: messageRowid,
+        })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.sessionId, sid),
+            isNull(messages.rewindAt),
+            ...visibleConds,
+            or(
+              lt(messages.createdAt, anchor.createdAt),
+              and(eq(messages.createdAt, anchor.createdAt), lt(messageRowid, anchorRowid)),
+            ),
+          ),
+        )
+        .orderBy(desc(messages.createdAt), desc(messageRowid))
+        .limit(radius);
+
+      const after = await db
+        .select({
+          ...getMessageSelectFields(),
+          rowid: messageRowid,
+        })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.sessionId, sid),
+            isNull(messages.rewindAt),
+            ...visibleConds,
+            or(
+              gt(messages.createdAt, anchor.createdAt),
+              and(eq(messages.createdAt, anchor.createdAt), gt(messageRowid, anchorRowid)),
+            ),
+          ),
+        )
+        .orderBy(asc(messages.createdAt), asc(messageRowid))
+        .limit(radius);
+
+      return [...before.reverse(), anchor, ...after].map(messageToCamelWithRowid);
+    },
+  );
+
+  ipcMain.handle(
+    'local-db:messages:around-client-id',
+    async (_e, sessionId: unknown, clientId: unknown, opts: unknown) => {
+      const sid = requireString(sessionId, 'sessionId');
+      const cid = requireString(clientId, 'clientId');
+      const radius = clampAroundRadius((opts as { radius?: unknown } | undefined)?.radius);
+      const db = getDbClient().drizzle;
+
+      const [sessionRow] = await db
+        .select({ clearedAt: sessions.clearedAt })
+        .from(sessions)
+        .where(eq(sessions.id, sid))
+        .limit(1);
+      if (!sessionRow) throwIpcError('NOT_FOUND', 'Session 不存在');
+
+      const clearedAtMs = sessionRow.clearedAt ?? null;
+      const visibleConds = clearedAtMs === null ? [] : [gt(messages.createdAt, clearedAtMs)];
+
+      const [anchor] = await db
+        .select({
+          ...getMessageSelectFields(),
+          rowid: messageRowid,
+        })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.clientId, cid),
+            eq(messages.sessionId, sid),
+            isNull(messages.rewindAt),
+            ...visibleConds,
+          ),
+        )
+        .limit(1);
+      if (!anchor) throwIpcError('NOT_FOUND', 'Message 不存在');
+      const anchorRowid = anchor.rowid;
+
+      const before = await db
+        .select({
+          ...getMessageSelectFields(),
+          rowid: messageRowid,
+        })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.sessionId, sid),
+            isNull(messages.rewindAt),
+            ...visibleConds,
+            or(
+              lt(messages.createdAt, anchor.createdAt),
+              and(eq(messages.createdAt, anchor.createdAt), lt(messageRowid, anchorRowid)),
+            ),
+          ),
+        )
+        .orderBy(desc(messages.createdAt), desc(messageRowid))
+        .limit(radius);
+
+      const after = await db
+        .select({
+          ...getMessageSelectFields(),
+          rowid: messageRowid,
+        })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.sessionId, sid),
+            isNull(messages.rewindAt),
+            ...visibleConds,
+            or(
+              gt(messages.createdAt, anchor.createdAt),
+              and(eq(messages.createdAt, anchor.createdAt), gt(messageRowid, anchorRowid)),
+            ),
+          ),
+        )
+        .orderBy(asc(messages.createdAt), asc(messageRowid))
+        .limit(radius);
+
+      return [...before.reverse(), anchor, ...after].map(messageToCamelWithRowid);
+    },
+  );
+
+  ipcMain.handle(
+    'local-db:messages:estimatedSessionValue',
+    async (_e, sessionId: unknown) => {
+      const sid = requireString(sessionId, 'sessionId');
+      const db = getDbClient().drizzle;
+
+      const [sessionRow] = await db
+        .select({ clearedAt: sessions.clearedAt })
+        .from(sessions)
+        .where(eq(sessions.id, sid))
+        .limit(1);
+      const clearedAtMs = sessionRow?.clearedAt ?? null;
+
+      const visibleConds = clearedAtMs === null ? [] : [gt(messages.createdAt, clearedAtMs)];
+      const rows = await db
+        .select({
+          clientId: messages.clientId,
+          agentMeta: messages.agentMeta,
+        })
+        .from(messages)
+        .where(and(
+          eq(messages.sessionId, sid),
+          eq(messages.role, 'assistant'),
+          isNull(messages.rewindAt),
+          ...visibleConds,
+        ));
+      const entries = extractEstimatedSessionValueEntries(rows);
+      return {
+        totalValueUsd: entries.reduce((sum, item) => sum + item.costUsd, 0),
+        entries,
+      };
+    },
+  );
+
+  ipcMain.handle(
+    'local-db:messages:create',
+    async (_e, sessionId: unknown, body: unknown) => {
+      const sid = requireString(sessionId, 'sessionId');
+      if (!body || typeof body !== 'object') {
+        throwIpcError('INVALID_PARAMS', 'body 必须是对象');
+      }
+      const b = body as {
+        clientId?: unknown;
+        role?: unknown;
+        content?: unknown;
+        toolUseId?: unknown;
+        agentMeta?: unknown;
+        createdAt?: unknown;
+      };
+      const cid = requireString(b.clientId, 'clientId');
+      if (typeof b.role !== 'string' || !VALID_ROLES.has(b.role as MessageRole)) {
+        throwIpcError('INVALID_PARAMS', 'role 不合法');
+      }
+      if (
+        b.agentMeta !== undefined &&
+        b.agentMeta !== null &&
+        (typeof b.agentMeta !== 'object' || Array.isArray(b.agentMeta))
+      ) {
+        throwIpcError('INVALID_PARAMS', 'agentMeta 必须是对象或 null');
+      }
+      let createdAt: number | undefined;
+      if (b.createdAt !== undefined) {
+        const parsed = typeof b.createdAt === 'number'
+          ? b.createdAt
+          : (typeof b.createdAt === 'string' ? Date.parse(b.createdAt) : Number.NaN);
+        if (!Number.isFinite(parsed)) {
+          throwIpcError('INVALID_PARAMS', 'createdAt 必须是合法时间');
+        }
+        createdAt = parsed;
+      }
+
+      return createMessage(sid, {
+        clientId: cid,
+        role: b.role as MessageRole,
+        content: b.content,
+        toolUseId: typeof b.toolUseId === 'string' ? b.toolUseId : undefined,
+        agentMeta: (b.agentMeta as AgentMeta | null | undefined) ?? null,
+        createdAt,
+      });
+    },
+  );
+
+  // rewind-session：把 SDK echo 出的 user 消息 cc 元信息（uuid / sdkSessionId）
+  // 回写到那条已存在的 user 消息。renderer 暂时用不到，注册 IPC 仅为对称完整性。
+  ipcMain.handle(
+    'local-db:messages:updateAgentMeta',
+    async (
+      _e,
+      sessionId: unknown,
+      clientId: unknown,
+      agentMeta: unknown,
+    ) => {
+      const sid = requireString(sessionId, 'sessionId');
+      const cid = requireString(clientId, 'clientId');
+      if (
+        agentMeta !== null &&
+        (typeof agentMeta !== 'object' || Array.isArray(agentMeta))
+      ) {
+        throwIpcError('INVALID_PARAMS', 'agentMeta 必须是对象或 null');
+      }
+      await updateAgentMeta(
+        sid,
+        cid,
+        agentMeta === null ? null : JSON.stringify(agentMeta),
+      );
+    },
+  );
+
+  ipcMain.handle(
+    'local-db:messages:updateContent',
+    async (
+      _e,
+      sessionId: unknown,
+      clientId: unknown,
+      content: unknown,
+    ) => {
+      const sid = requireString(sessionId, 'sessionId');
+      const cid = requireString(clientId, 'clientId');
+      const msg = await updateMessageContent(sid, cid, content);
+      if (!msg) throwIpcError('NOT_FOUND', 'Message 不存在');
+      return msg;
+    },
+  );
+
+  // error-tail-banner:「关闭 / 忽略」错误行(merge dismissed:true,main 读原
+  // content,不丢 sdkError 等字段)。中断行与普通错误行共用。
+  ipcMain.handle(
+    'local-db:messages:dismiss-error',
+    async (_e, sessionId: unknown, clientId: unknown) => {
+      const sid = requireString(sessionId, 'sessionId');
+      const cid = requireString(clientId, 'clientId');
+      const msg = await dismissErrorMessage(sid, cid);
+      if (!msg) throwIpcError('NOT_FOUND', 'Error message 不存在');
+      return msg;
+    },
+  );
+}
+
+/**
+ * messages:list 的「按需导入外部 CLI 会话历史」副作用。
+ *
+ * codex / cc importer 各自在会话非对应 agent / 非 import 会话时 early-return，但仍各跑一次
+ * `SELECT FROM sessions`，且二者串行 await 在真正的消息查询之前。device-link 远程读是被控端
+ * 已导入状态的镜像:在每次(含分页)远程 open 上重跑这些「读外部 rollout/JSONL → 写本机 DB」的
+ * 本地副作用,只会把导入延迟串接到消息查询前(见 GitHub issue #318 A3)。故 device-link 路径
+ * 整体跳过这些副作用;非 device-link 路径保持原有的串行顺序、错误吞并与告警语义不变。
+ *
+ * 抽成可注入函数仅为单测(规则 14):默认依赖即生产实现,Electron `ipcMain.handle` 只做 adapter。
+ */
+export async function runMessagesListImportSideEffects(
+  sessionId: string,
+  deps: {
+    isDeviceLink?: () => boolean;
+    importCodex?: (id: string) => Promise<void>;
+    importClaude?: (id: string) => Promise<void>;
+  } = {},
+  opts: { deviceLinkFirstPage?: boolean } = {},
+): Promise<void> {
+  const isDeviceLink = deps.isDeviceLink ?? isDeviceLinkInvoke;
+  // device-link **分页**请求跳过导入(#318 性能语义:每页重跑 importer 会把
+  // 导入延迟串接到查询前,拖慢手机端);**首页**请求照跑(review P2):被控端
+  // 可能从未本机打开该会话,rollout/transcript 从未导入 —— 崩溃前 CLI 已写的
+  // 产出不进 DB,中断行滞留尾部,控制端会看到可「继续」的假中断。首页一次
+  // 导入与本机路径的既有成本同水平。
+  if (isDeviceLink() && !opts.deviceLinkFirstPage) return;
+  const importCodex = deps.importCodex ?? importExternalCodexMessagesForSession;
+  const importClaude = deps.importClaude ?? importExternalClaudeCodeMessagesForSession;
+  await importCodex(sessionId).catch((err) => {
+    log.warn('external Codex message import failed', {
+      sessionId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  });
+  await importClaude(sessionId).catch((err) => {
+    log.warn('external Claude Code message import failed', {
+      sessionId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  });
+}
+
+/**
+ * 内部 API:直接在 main 进程里更新一条 message 的 content（不抛 ipc 错、不 broadcast）。
+ * messagePersistBroadcaster 在 tool_result_full 全文覆盖 / tool_result 摘要→全文增长时
+ * 用它落库;显示更新搭 maker:event 的 resolvedContent 走,故此处刻意不广播(对齐
+ * Option C:单一真相源、避免新增 onUpdated 通道)。
+ *
+ * 行将不存在(clientId 未落库)→ 返回 null,调用方按需处理(IPC handler 转 NOT_FOUND;
+ * broadcaster 忽略)。
+ */
+/**
+ * interrupted-turn-resume / error-tail-banner:把 role='error' 行标记为「已忽略」。
+ *
+ * main 侧读原 content 后 merge dismissed:true 再写回 —— 不让 renderer 用解析后的
+ * 展示字段重建 content(那会丢 sdkError 等未透传字段)。content 非 JSON 对象时包一层
+ * { message: 原文 } 保留原始信息。行不存在或 role 不是 'error' 返回 null(调用方转
+ * NOT_FOUND);幂等:重复 dismiss 只是重写同值。
+ */
+/**
+ * 消息行广播:本机全部窗口 + device-link tap 通道(控制端镜像)。renderer 的
+ * handleMessageCreatedRaw 对已存在 clientId 走 merge/替换语义,因此**更新**行
+ * (如 dismiss)复用同一事件即可让 peer 视图刷新,无需新增 onUpdated 通道。
+ */
+function broadcastMessageRow(sessionId: string, msg: Message): void {
+  tapWindowBroadcast('local-db:messages:created', { sessionId, message: msg });
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed()) continue;
+    try {
+      win.webContents.send('local-db:messages:created', { sessionId, message: msg });
+    } catch {
+      /* swallow per-window broadcast failures */
+    }
+  }
+}
+
+export async function dismissErrorMessage(
+  sessionId: string,
+  clientId: string,
+): Promise<Message | null> {
+  const db = getDbClient().drizzle;
+  const [row] = await db
+    .select()
+    .from(messages)
+    .where(
+      and(
+        eq(messages.sessionId, sessionId),
+        eq(messages.clientId, clientId),
+      ),
+    )
+    .limit(1);
+  if (!row || row.role !== 'error') return null;
+  const updated = await updateMessageContent(sessionId, clientId, mergeDismissedIntoErrorContent(row.content));
+  // 广播更新行(review P2):dismiss 若只写 DB,同会话开在其它窗口/被控端本机
+  // 窗口的内存 errorDismissed 仍为 false,stale 尾部 banner 留着还能对已忽略的
+  // 错误重复 enqueue 续跑。peer 端 handleMessageCreatedRaw 按 clientId merge,
+  // banner 判定即时熄灭;发起端自身的乐观更新早已生效,重复广播幂等。
+  if (updated) broadcastMessageRow(sessionId, updated);
+  return updated;
+}
+
+export async function updateMessageContent(
+  sessionId: string,
+  clientId: string,
+  content: unknown,
+): Promise<Message | null> {
+  const db = getDbClient().drizzle;
+  await db
+    .update(messages)
+    .set({ content: safeStringify(content) })
+    .where(
+      and(
+        eq(messages.sessionId, sessionId),
+        eq(messages.clientId, clientId),
+      ),
+    );
+  const [row] = await db
+    .select()
+    .from(messages)
+    .where(
+      and(
+        eq(messages.sessionId, sessionId),
+        eq(messages.clientId, clientId),
+      ),
+    )
+    .limit(1);
+  if (row) {
+    // 挂账钩子同样覆盖"先摘要 create、后全文 update"的 tool_result 顺序
+    // (review P2:vendor 事件顺序一变,首现于 update 的 blob URL 若不在这里
+    // 挂账就永久零引用);幂等,create 时已挂的 hasRef 跳过。
+    void commitMessageMediaRefs({
+      sessionId,
+      role: row.role,
+      content: row.content,
+    }).catch((err) => {
+      log.warn('message media ref commit failed (update)', {
+        sessionId,
+        clientId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+  return row ? messageToCamel(row) : null;
+}
+
+function clampLimit(raw: unknown): number {
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT_LIMIT;
+  return Math.min(Math.max(Math.floor(n), 1), MAX_LIMIT);
+}
+
+function clampAroundRadius(raw: unknown): number {
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n) || n < 0) return 60;
+  return Math.min(Math.max(Math.floor(n), 0), 200);
+}
+
+/**
+ * Same-ms message ordering must follow SQLite insertion order, not the random
+ * cuid message id. `rowid` is stable for this local table and avoids a schema
+ * migration solely for pagination tie-breaking.
+ */
+function getMessageSelectFields() {
+  return {
+    id: messages.id,
+    clientId: messages.clientId,
+    sessionId: messages.sessionId,
+    role: messages.role,
+    content: messages.content,
+    toolUseId: messages.toolUseId,
+    agentMeta: messages.agentMeta,
+    createdAt: messages.createdAt,
+    rewindAt: messages.rewindAt,
+  };
+}
+
+function messageToCamelWithRowid(row: MessageRowWithRowid): Message {
+  return {
+    ...messageToCamel(row),
+    rowid: row.rowid,
+  };
+}
+
+/**
+ * 内部 API：直接在 main 进程里写一条 message。
+ * agentManager 在 SDK echo 时落 user 消息走的就是这个——不再让 renderer 兜
+ * 一圈 IPC 落库再回推。
+ *
+ * 与 IPC handler 行为完全对齐：
+ *  - (sessionId, clientId) UNIQUE 幂等：已存在则返回已有 row（不报错）
+ *  - 并发命中 UNIQUE 约束时回退读
+ *  - 返回 camelCase Message
+ *
+ * 不抛 ipc 错（无 [CODE] 前缀），调用方按普通 Error 处理。
+ */
+export async function createMessage(
+  sessionId: string,
+  body: {
+    clientId: string;
+    role: MessageRole;
+    content: unknown;
+    toolUseId?: string;
+    agentMeta?: AgentMeta | null;
+    createdAt?: number;
+  },
+  opts?: {
+    /**
+     * Main-side callers that race with /clear can persist an old row whose
+     * createdAt is already behind the clear boundary. The row is harmless for
+     * history queries, but broadcasting it would resurrect the cleared bubble in
+     * every renderer window. Keep this guard next to the broadcast, where the
+     * final "is this still current?" check is actually meaningful.
+     */
+    shouldBroadcast?: () => boolean;
+  },
+): Promise<Message> {
+  const db = getDbClient().drizzle;
+  const existing = await db
+    .select()
+    .from(messages)
+    .where(
+      and(
+        eq(messages.sessionId, sessionId),
+        eq(messages.clientId, body.clientId),
+      ),
+    )
+    .limit(1);
+  if (existing.length > 0) {
+    return messageToCamel(existing[0]);
+  }
+
+  const id = createId();
+  const now = Date.now();
+  const insertRow = messageCreateToRow(id, sessionId, body, now);
+  try {
+    await db.insert(messages).values(insertRow);
+  } catch (err) {
+    const after = await db
+      .select()
+      .from(messages)
+      .where(
+        and(
+          eq(messages.sessionId, sessionId),
+          eq(messages.clientId, body.clientId),
+        ),
+      )
+      .limit(1);
+    if (after.length > 0) return messageToCamel(after[0]);
+    throw err;
+  }
+  const [row] = await db.select().from(messages).where(eq(messages.id, id));
+  if (!row) throw new Error('Message 创建后查询失败');
+  const msg = messageToCamel(row);
+  // 媒体总仓挂账钩子(规则 25,迁移第 2 步):消息落库是"blob 归属本会话"的
+  // 确定时点,覆盖所有落库来源(renderer IPC / hook / im / agent echo / 合成
+  // tool_result)。生成产物(art/mivo/codex)入仓时零引用,在这里补挂
+  // session-attachment 引用;用户附件已在发送链路 commit 过,hasRef 幂等跳过。
+  // 传 insertRow.content(已序列化字符串)避免二次 stringify(review P2)。
+  // fire-and-forget:挂账失败只警告,绝不影响消息落库本身。
+  void commitMessageMediaRefs({
+    sessionId,
+    role: body.role,
+    content: insertRow.content,
+  }).catch((err) => {
+    log.warn('message media ref commit failed', {
+      sessionId,
+      clientId: body.clientId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
+  // Broadcast 给所有 renderer window — 用于 main 端创建消息 (e.g. feishu /ctr
+  // 接管路径下 persistUserMessage / persistAssistantMessage) 时让 renderer
+  // 的 makerChatStore push 到 in-memory state, 让消息流实时刷新。
+  // Renderer 自己调 createMessage IPC 时也会触发这个 broadcast, 但因为它已经
+  // 主动 push 过, 监听端按 (sessionId, clientId) dedupe 就不会重复显示。
+  if (opts?.shouldBroadcast?.() !== false) {
+    broadcastMessageRow(sessionId, msg);
+  }
+  // chat-history-embedder hook (Phase 1.2) —— fire-and-forget, 不 await。
+  // 内部已有 enabled / cutoff / role / size 守卫; 关闭状态下零成本直接 return。
+  // 失败仅 log warn, 绝不传播错让 createMessage 返回值受影响。
+  void onChatMessageCreatedForEmbedding(msg).catch(() => {
+    // 双保险: chat-history-embedder.onMessageCreated 内部已 try/catch,
+    // 此处 .catch 仅防御该函数将来被 refactor 时漏掉的异常路径。
+  });
+  // session-git-pr-context hook —— fire-and-forget。内部限定 user/assistant 角色,
+  // 每条消息跑一次锚定正则线性扫描(开销可忽略);失败仅 log warn。
+  void recordPrRefsForMessage(msg).catch(() => {
+    // recordPrRefsForMessage 内部已 try/catch,此处兜底防御 refactor 漏网异常。
+  });
+  return msg;
+}
+
+/**
+ * rewind-session 内部 API：把已落库消息的 agent_meta 字段更新为 SDK 给的 cc 元信息
+ * （uuid / sdkSessionId / ...）。已是 TEXT JSON 字符串形态，不再做 stringify。
+ *
+ * 用于 agentManager case 'user'：SDK echo user 消息后补 uuid。失败仅 log warn。
+ */
+export async function updateAgentMeta(
+  sessionId: string,
+  clientId: string,
+  agentMetaJson: string | null,
+): Promise<void> {
+  const db = getDbClient().drizzle;
+  await db
+    .update(messages)
+    .set({ agentMeta: agentMetaJson })
+    .where(
+      and(eq(messages.sessionId, sessionId), eq(messages.clientId, clientId)),
+    );
+}
+
+export function extractEstimatedSessionValueEntries(
+  rows: Array<{ clientId: string; agentMeta: string | null }>,
+): EstimatedSessionValueEntry[] {
+  const entries: EstimatedSessionValueEntry[] = [];
+  for (const row of rows) {
+    if (!row.clientId || !row.agentMeta) continue;
+    let meta: AgentMeta | null = null;
+    try {
+      const parsed = JSON.parse(row.agentMeta);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        meta = parsed as AgentMeta;
+      }
+    } catch {
+      continue;
+    }
+    if (meta?.turnCostIsEstimate !== true) continue;
+    if (typeof meta.turnCostUsd !== 'number' || !Number.isFinite(meta.turnCostUsd) || meta.turnCostUsd <= 0) {
+      continue;
+    }
+    const recomputed = resolveStaleCodexSubscriptionValueEstimate(
+      meta.turnCostUsd,
+      normalizeTurnUsageDetails(meta.turnUsageDetails),
+      meta.model,
+    );
+    if (typeof recomputed === 'number' && Number.isFinite(recomputed) && recomputed > 0) {
+      entries.push({ clientId: row.clientId, costUsd: recomputed });
+      continue;
+    }
+    entries.push({ clientId: row.clientId, costUsd: meta.turnCostUsd });
+  }
+  return entries;
+}
+
+/**
+ * 对已落库消息的 agent_meta 做 read-merge-write 补丁(不能整列覆盖——会丢 uuid /
+ * model 等 rewind / fork 锚点字段)。现有 agent_meta 为 null 或 parse 失败时以 {}
+ * 为底。返回 false 表示该行不存在(典型:rewind 已删),调用方据此跳过广播。
+ *
+ * 用于 turnCostBroadcaster:turn 结束后把 per-turn 费用挂到该轮最后一条 assistant。
+ */
+export async function patchMessageAgentMeta(
+  sessionId: string,
+  clientId: string,
+  patch: Record<string, unknown>,
+): Promise<boolean> {
+  const db = getDbClient().drizzle;
+  const rows = await db
+    .select({ agentMeta: messages.agentMeta })
+    .from(messages)
+    .where(
+      and(eq(messages.sessionId, sessionId), eq(messages.clientId, clientId)),
+    )
+    .limit(1);
+  if (rows.length === 0) return false;
+  let existing: Record<string, unknown> = {};
+  if (rows[0].agentMeta) {
+    try {
+      const parsed = JSON.parse(rows[0].agentMeta);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        existing = parsed as Record<string, unknown>;
+      }
+    } catch {
+      // 损坏的 JSON 以 {} 为底重建(补丁字段仍写入,旧字段无法挽救)。
+    }
+  }
+  await updateAgentMeta(sessionId, clientId, JSON.stringify({ ...existing, ...patch }));
+  return true;
+}

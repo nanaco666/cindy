@@ -1,0 +1,78 @@
+/**
+ * customProviders —— 自定义供应商「配置 + per-runtime 密钥」的 renderer 侧写入编排。
+ *
+ * 配置走 maker IPC（入 localDb）；密钥按 runtime 走通用 safeStorage IPC（`provider_key_<id>_<agent>`，
+ * 本地加密，与内置 XD 网关 key 同机制；main 路由 resolve 时按 (id, agent) 读出注入鉴权头）。
+ *
+ * 顺序约定：
+ *   - create：先写配置（IPC 在重名 / 非法时 reject，避免误覆盖既有同 id 的 key），成功后存各 runtime 的密钥。
+ *   - update：先写配置，成功后仅覆盖**用户填了新密钥**的 runtime（留空 = 不改，遵循设计）。
+ *   - delete：先删配置，再清所有 runtime 的密钥（幂等）。
+ */
+
+import { customProviderSecretStorageKey } from '@/../shared/providerSecrets';
+
+import type { AgentKind, CustomProviderConfig } from '@lizi/model-providers';
+
+const ALL_AGENTS: readonly AgentKind[] = ['claude-code', 'codex'];
+
+/** per-runtime 密钥输入：键为 agent，值为该 runtime 的 API key（空串 = 不改 / 不存）。 */
+export type RuntimeKeys = Partial<Record<AgentKind, string>>;
+
+/**
+ * 读取该自定义供应商**某 runtime** 本机已存的明文密钥（用户自己的 key）；无 / 读失败返回 null。
+ * 用于编辑态回填(「能看」)与已保存探测。明文仅在 renderer 本地用于回显 / 核对,不外发。
+ */
+export async function readCustomProviderKey(
+  providerId: string,
+  agent: AgentKind,
+): Promise<string | null> {
+  try {
+    const v = await window.electronAPI.safeStorageRead(
+      customProviderSecretStorageKey(providerId, agent),
+    );
+    return v && v.length > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 写入各 runtime 的密钥（仅非空的）。 */
+async function saveKeys(providerId: string, keys: RuntimeKeys): Promise<void> {
+  for (const agent of ALL_AGENTS) {
+    const key = keys[agent]?.trim();
+    if (key) {
+      await window.electronAPI.safeStorageStore(customProviderSecretStorageKey(providerId, agent), key);
+    }
+  }
+}
+
+/** 新建：先写配置（reject 时不碰密钥），成功后存各 runtime 密钥（非空才存）。 */
+export async function createCustomProvider(
+  config: CustomProviderConfig,
+  keys: RuntimeKeys,
+): Promise<void> {
+  await window.electronAPI.maker.createCustomProvider(config);
+  await saveKeys(config.id, keys);
+}
+
+/** 编辑：先写配置，成功后仅覆盖填了新密钥的 runtime（留空 = 不改）。 */
+export async function updateCustomProvider(
+  config: CustomProviderConfig,
+  keys: RuntimeKeys,
+): Promise<void> {
+  await window.electronAPI.maker.updateCustomProvider(config);
+  await saveKeys(config.id, keys);
+}
+
+/** 删除：先删配置，再清所有 runtime 密钥（幂等，失败忽略）。 */
+export async function deleteCustomProvider(providerId: string): Promise<void> {
+  await window.electronAPI.maker.deleteCustomProvider(providerId);
+  for (const agent of ALL_AGENTS) {
+    try {
+      await window.electronAPI.safeStorageRemove(customProviderSecretStorageKey(providerId, agent));
+    } catch {
+      /* 密钥清理失败无害：孤儿 .enc 不会被任何 provider 引用。 */
+    }
+  }
+}

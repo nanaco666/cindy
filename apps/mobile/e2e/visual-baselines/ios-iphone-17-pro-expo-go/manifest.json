@@ -1,0 +1,151 @@
+{
+  "version": 1,
+  "profile": "ios-iphone-17-pro-expo-go",
+  "updatedAt": "2026-06-18T14:44:46.163Z",
+  "screenshots": {
+    "visual-devices": {
+      "file": "visual-devices.png",
+      "bytes": 277434,
+      "sha256": "9afb4527bb88666e52e433ffe4f9479cb6a6554792d668afbf24b135f2b1b5e5",
+      "updatedAt": "2026-06-18T14:44:46.163Z"
+    },
+    "visual-device-detail": {
+      "file": "visual-device-detail.png",
+      "bytes": 249667,
+      "sha256": "0e3b476e00ce0a77d785ccc2c22f063436ad6507092ea1d78931c23ef13257da",
+      "updatedAt": "2026-06-18T14:44:46.163Z"
+    },
+    "visual-session": {
+      "file": "visual-session.png",
+      "bytes": 348034,
+      "sha256": "77f1a47ba135c8daf663b2d0ee9c0a0f087e07b50c668bdaa0c7976cf7af7fdd",
+      "updatedAt": "2026-06-18T14:44:46.163Z"
+    },
+    "visual-session-controls": {
+      "file": "visual-session-controls.png",
+      "bytes": 249369,
+      "sha256": "68ecc869c0a59b8d173c01778ea5edb8589c0b981e485acd42e431a7b6883d60",
+      "updatedAt": "2026-06-18T14:44:46.163Z"
+    },
+    "visual-session-idle": {
+      "file": "visual-session-idle.png",
+      "bytes": 198444,
+      "sha256": "a8179bdaa5daebba457cd716035baf44769b2c027d8a228e8dc328a35a755a01",
+      "updatedAt": "2026-06-18T14:44:46.163Z"
+    },
+    "visual-session-running": {
+      "file": "visual-session-running.png",
+      "bytes": 232492,
+      "sha256": "ef8118461b688847fa9f1e826e21e71ddd7321261968e3df4188d8d14f5931de",
+      "updatedAt": "2026-06-18T00:53:27.873Z"
+    },
+    "visual-session-pending": {
+      "file": "visual-session-pending.png",
+      "bytes": 351519,
+      "sha256": "ee933412081deb0c92bc923f72db71264d5596005f9479e01d38179911d70e81",
+      "updatedAt": "2026-06-18T00:53:27.873Z"
+    },
+    "visual-session-queue": {
+      "file": "visual-session-queue.png",
+      "bytes": 281851,
+      "sha256": "9c8db6ab457d6edb0959ad4bc36191c096255302b398a9d41e1cfe3ddb2cf6a6",
+      "updatedAt": "2026-06-18T00:53:27.873Z"
+    },
+    "visual-session-offline": {
+      "file": "visual-session-offline.png",
+      "bytes": 213178,
+      "sha256": "5323c99bbd9bcf60f93ae35e615bdad6caa148ef27bcbc3697aed447d744f60e",
+      "updatedAt": "2026-06-18T00:53:27.873Z"
+    },
+    "visual-session-revoked": {
+      "file": "visual-session-revoked.png",
+      "bytes": 148165,
+      "sha256": "73876d497779b210b43f7dc18baa3ce014cba89bab4619202015e9c535689436",
+      "updatedAt": "2026-06-18T00:53:27.873Z"
+    },
+    "visual-settings": {
+      "file": "visual-settings.png",
+      "bytes": 221927,
+      "sha256": "52fcff9985384b9e891dadd46200fb5c1f44b73b87beae2d0331d7d5fa5a3acf",
+      "updatedAt": "2026-06-18T00:53:27.873Z"
+    },
+    "visual-session-payload": {
+      "file": "visual-session-payload.png",
+      "bytes": 201632,
+      "sha256": "b51d3cd3d27af6a36f35af58f84293d24def1fa3705f541c9616e4895992c9d5",
+      "updatedAt": "2026-06-18T00:53:27.873Z"
+    },
+    "visual-session-permission": {
+      "file": "visual-session-permission.png",
+      "bytes": 287447,
+      "sha256": "ebb24e4b99864409967ff3fab7e827f17811862ca804f0f7268f716ff1269388",
+      "updatedAt": "2026-06-18T00:53:27.873Z"
+    },
+    "visual-session-ask": {
+      "file": "visual-session-ask.png",
+      "bytes": 305007,
+      "sha256": "101ae459ff17f4d569e5cc01d4d9a0e2c3f50b0e31a2c74cacd11900c1732ef4",
+      "updatedAt": "2026-06-18T00:53:27.873Z"
+    },
+    "visual-session-controls-session": {
+      "file": "visual-session-controls-session.png",
+      "bytes": 273446,
+      "sha256": "8f3be9a4fe8086b77202b6eb7867317fbaa6a9b0c973bcedfbc6a2108725abcf",
+      "updatedAt": "2026-06-18T00:53:27.873Z"
+    },
+    "visual-session-controls-usage": {
+      "file": "visual-session-controls-usage.png",
+      "bytes": 263158,
+      "sha256": "467615dc0e8a24e73f459f6a6dfd0e75c56895fa6e7a548ff155ec45137f9c8d",
+      "updatedAt": "2026-06-18T00:53:27.873Z"
+    },
+    "visual-new-session": {
+      "file": "visual-new-session.png",
+      "bytes": 250811,
+      "sha256": "7300df731e4a45e56f0c5e2f90237be4f957ff21c23412af4c5741f16186f4c8",
+      "updatedAt": "2026-06-18T00:53:27.873Z"
+    },
+    "visual-files": {
+      "file": "visual-files.png",
+      "bytes": 225404,
+      "sha256": "76f301f13c52d660ab6f0415f869198163bc4633e2c171c12a6311ab04cac866",
+      "updatedAt": "2026-06-18T00:53:27.873Z"
+    },
+    "visual-files-preview": {
+      "file": "visual-files-preview.png",
+      "bytes": 221728,
+      "sha256": "711c22288d770c5a87c3bdb42d732e7f8604e597d0c9413f848432381274cfb5",
+      "updatedAt": "2026-06-18T00:53:27.873Z"
+    },
+    "visual-automations": {
+      "file": "visual-automations.png",
+      "bytes": 246869,
+      "sha256": "55ab3cf58678927b78a17be2c4e4f1c75557d444e53cdfc4aa8bd5c5c03dba43",
+      "updatedAt": "2026-06-18T00:53:27.873Z"
+    },
+    "visual-automations-form": {
+      "file": "visual-automations-form.png",
+      "bytes": 237244,
+      "sha256": "ee2f37f2b39512c9bb6ef192034ae3d0bdf21c7c75f2c04cecbd7aa48adbf095",
+      "updatedAt": "2026-06-18T00:53:27.873Z"
+    },
+    "visual-device-detail-filters": {
+      "file": "visual-device-detail-filters.png",
+      "bytes": 263683,
+      "sha256": "4c3167636918712ec5388563a38b8e8c1dc38793ea21837d3b72939287f7eab0",
+      "updatedAt": "2026-06-18T00:53:27.873Z"
+    },
+    "visual-device-detail-automation-group": {
+      "file": "visual-device-detail-automation-group.png",
+      "bytes": 297269,
+      "sha256": "7d699a86a763542ced49142c8094d07c3b8f12b4c18aee1fb88ba8115c152bd2",
+      "updatedAt": "2026-06-18T00:53:27.873Z"
+    },
+    "visual-device-detail-selection": {
+      "file": "visual-device-detail-selection.png",
+      "bytes": 243579,
+      "sha256": "8ea16469a75294e86a94ed9eea96a531f9696a58119668ccc544ade6d98a5352",
+      "updatedAt": "2026-06-18T00:53:27.873Z"
+    }
+  }
+}

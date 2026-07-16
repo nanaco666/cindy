@@ -1,0 +1,122 @@
+# 手机版开发与发版工作流(apps/mobile)
+
+> 这是手机版「日常开发 → 自测 → 对外发版」的权威工作流。脚本负责确定性流程,文档只说明模型、契约和人工决策边界。
+
+> `release:check` / `release:beta` / `release:prod` 会自检 EAS 登录态;首次使用需 `npx eas-cli login`。升级 `eas-cli` 前必须重新验证 production fingerprint 红线。
+
+## 三条轨道
+
+| 轨道 | 用途 | 跟随哪个版本 | 隔离边界 | 入口 |
+|---|---|---|---|---|
+| 模拟器 | 日常 active 开发 | 当前 worktree,实时 Fast Refresh | 本机 Metro,不走 OTA/channel | `pnpm mobile:sim:start` |
+| 手机 Beta | 真机自测 | 当前研发分支,手动切 | per-dev channel `beta-<dev>` | `pnpm mobile:release:beta -- --dev <dev>` |
+| 正式服 | 对外同事/用户 | `main` 实际状态 | `production` channel,权限和版本受控 | `pnpm mobile:release:prod` |
+
+自测走模拟器 + 手机 Beta;对外走正式服。正式服只从 `main` 手动发,不从 feature 分支直接发。
+
+## 模拟器
+
+模拟器调试已经代码化:
+
+```bash
+pnpm mobile:sim:start
+pnpm mobile:sim:whoami
+pnpm mobile:sim:rebuild
+```
+
+脚本固定 Metro 8081、注入当前 git branch/commit 给新建会话页顶部的 `__DEV__` build label,避免多 worktree 连错 bundle。`mobile:sim:start` / `mobile:sim:rebuild` 会自动补齐 `apps/mobile/.env` 的功能变量(取自 `eas.json` production profile),无需手动复制 `.env.example`。具体排障见 [`simulator-debugging.md`](./simulator-debugging.md)。
+
+## 手机 Beta
+
+Beta 现在就是多开发者模型,不是未来目标:
+
+- build profile、channel、branch 同名:`beta-<dev>`。
+- 已 seed `beta-dash`;新增开发者用 `pnpm mobile:beta:add-dev -- <dev> --execute` 生成 profile,并创建/关联同名 EAS channel -> branch。
+- 同正式服 `bundleIdentifier` / `scheme` / 飞书 appId;当前为 `com.xd.lizcn` + `lizcn://auth`,EAS/TestFlight 默认优先走飞书 App 原生 SSO,超时或失败后退回浏览器 OAuth。
+- 同 bundleId 的代价:一台手机同一时间只能装一个 XDMaker mobile 变体;多个 beta 分支串行切,不能并存。
+- Beta 显示名为 `XDMaker Beta (<dev>)`;缺少 dev 时退回 `XDMaker Beta`。
+
+### Beta 命令
+
+```bash
+pnpm mobile:release:check -- --target beta --dev dash
+pnpm mobile:release:beta -- --dev dash --message "验证输入队列"
+pnpm mobile:release:beta -- --dev dash --message "验证输入队列" --execute
+```
+
+`release:beta` 必须显式传 `--dev`,会强制校验 profile/channel/env,并保证 OTA 作业拿到 `EXPO_PUBLIC_APP_VARIANT=beta` / `EXPO_PUBLIC_BETA_DEV` 与必要的 `EXPO_PUBLIC_*`。Beta OTA 不走 `eas update --environment preview`:Expo 的 `--environment` 只读取 EAS Environment,无法表达每个开发者不同的 `EXPO_PUBLIC_BETA_DEV`,所以脚本从 resolved build profile 注入确定的公开 env。脚本默认 dry-run。
+
+## 正式服
+
+正式服只从 `main` 手动发。`release:prod` 会拒绝:
+
+- 当前分支不是 `main`。
+- worktree 不干净。
+- `HEAD != origin/main`。
+- 无法读取线上最新 build/runtime 基线(除非显式 `--allow-unknown-baseline`,只用于首次发版语义)。
+- production 冷构建传入 Android/all platform(Android 正式服仍 pending)。
+
+默认同时覆盖:
+
+- `production` branch/channel:store/TestFlight/正式服。
+- `staging` branch/channel:内部 adhoc 包。
+
+```bash
+pnpm mobile:release:check -- --target production
+pnpm mobile:release:prod -- --message "发布远控修复"
+pnpm mobile:release:prod -- --message "发布远控修复" --execute
+```
+
+## Android 覆盖
+
+iOS 内部分发走 **NPKG 企业包**:`pnpm mobile:release:ios:npkg -- from-eas` 会取最近一次 finished EAS iOS 构建产物、上传 NPKG、等待企业重签并输出安装链接。细节见 [`npkg-ios-distribution.md`](./npkg-ios-distribution.md)。
+
+Android 发版也计划走 **NPKG 企业包**(不上 Google Play),与 iOS 同一条 NPKG 分发渠道;Beta 脚本和配置已覆盖 Android,正式服 Android 仍 pending:
+
+- `eas.json` beta profiles 带 Android 构建配置。
+- `app.json` 暂不声明 `android.versionCode`,避免在 Android 发版未就绪前改变 production fingerprint。等启用时再有意识加回,脚本会在它存在时检查单调递增。
+- Beta channel 同样适用于 Android 包。
+
+### 自建 Android 线(本机出包 + 自托管 OTA)
+
+除上面的 EAS 线外,现已有一条**与 iOS 自建线对称的 Android 自建分发线**(本机 mac 出**自签 APK**,不走 EAS/企业重签,JS 改动走自托管 OTA)。设计与契约见 [`self-hosted-android-build-and-ota.md`](./self-hosted-android-build-and-ota.md)。命令(默认 dry-run,`--execute` 才真跑):
+
+```bash
+pnpm mobile:release:android:check              # 冷/热更只读预判
+pnpm mobile:release:android:local -- --execute # 冷更:prebuild→gradle 签名 APK→直传 OSS→写 release.json
+pnpm mobile:release:android:ota   -- --execute # JS 热更(自托管 OTA)
+pnpm mobile:release:android:npkg  -- upload <apk>  # 单独上传 APK 取下载链接(APK 不重签)
+```
+
+- **签名**:自有 keystore `xdmaker-release`(仓库外,口令走环境变量,不入仓);Android 自签即终版,NPKG **只上传取下载链接、不重签**。
+- **versionCode**:committed 在 `apps/mobile/android-version.json`;冷更脚本读线上基线后自动校验单调,≤ 基线时**自动 +1 写回该文件**(`--execute` 才写盘,发布完成后把改动 commit 回 main),也可手动 bump;经 env 只在自建分支注入,EAS 指纹不受影响。
+
+外部动作 pending,不要假装已完成:
+
+- EAS/TestFlight 默认启用 native Feishu SSO,失败或未安装飞书时回退浏览器 OAuth;Android 正式启用 native SSO 前仍需确认飞书后台登记 Android 包名 `com.xd.lizcn` 与签名 SHA256。
+- ~~NPKG 的 Android APK 上传路径~~ 已不需要:冷更 APK 自 2026-07-06 起由 `release-android-local.mjs` 直传自有 OSS 取 CDN 直链,不经 NPKG(`release-android-npkg.sh` 仅供手动补传;只构建不上传用 `--skip-upload`)。
+
+## PR 门禁(CI)
+
+`.github/workflows/mobile.yml` 在 PR 触及 `apps/mobile/**`、mobile 依赖的 workspace 包或 lockfile 时自动跑两个 job:
+
+- **checks**(阻断):`typecheck` + `vitest` + scope-guard。
+- **fingerprint-guard**(非阻断):同一 runner 上分别计算 base(main)与 PR 合并结果的原生 runtime fingerprint,变化时在 PR 上发 sticky comment,把"合入后下次发版必须冷更"提前到 review 时可见。哈希用仓库内 `@expo/fingerprint` 计算,与 eas-cli 的值**不可比**,发版判定仍以 `pnpm mobile:release:check` 为准(实现与语义见 `apps/mobile/scripts/ci-fingerprint.mjs` 头注)。
+
+## 代码化边界
+
+可由仓库状态、EAS 状态、app/eas 配置、环境变量、git 状态确定的判断,一律进脚本。会调用外部写操作的脚本默认 dry-run,必须显式 `--execute`。人类只保留意图、时机、风险接受、产品分发范围、合规判断。
+
+## 红线
+
+1. production fingerprint 必须与 `origin/main` 基线一致。beta profile 和 release scripts 不能改变 production OTA runtime。
+2. `bundleIdentifier` / Android package 固定为 `com.xd.lizcn`;`scheme` 固定为 `lizcn`;EAS profiles 默认开启 native Feishu SSO 以满足飞书 App 跳转登录,并必须保留浏览器 OAuth 兜底。
+3. `app.config.js` 在非 beta 环境必须原样返回 Expo config。
+4. 多人禁止共享单个 `beta` channel。
+5. 生产发版禁止绕过 release scripts。
+
+## 相关文档
+
+- [`RELEASING.md`](../RELEASING.md) - 发版脚本命令矩阵和人工 checklist。
+- [`simulator-debugging.md`](./simulator-debugging.md) - 模拟器调试与验证契约。
+- [`npkg-ios-distribution.md`](./npkg-ios-distribution.md) - iOS NPKG 内部分发手册和脚本说明。

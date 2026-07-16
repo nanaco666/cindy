@@ -1,0 +1,69 @@
+appId: ${APP_ID}
+---
+- runFlow: login_mock.yaml
+- tapOn:
+    id: "devices.settingsButton"
+- extendedWaitUntil:
+    visible:
+      id: "settings.screen"
+    timeout: 10000
+# 语音设置默认折叠,Key 表单(voiceLiteLlmKeyInput)仅在展开后挂载,先点开 disclosure。
+- scrollUntilVisible:
+    element:
+      id: "settings.voiceDisclose"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "settings.voiceDisclose"
+- scrollUntilVisible:
+    element:
+      id: "settings.voiceLiteLlmKeyInput"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "settings.voiceLiteLlmKeyInput"
+- inputText: "sk-mock-mobile-voice-key"
+- hideKeyboard
+- tapOn:
+    id: "settings.voiceLiteLlmSaveButton"
+- extendedWaitUntil:
+    visible: "LiteLLM Key 已保存。"
+    timeout: 5000
+- tapOn:
+    id: "settings.backButton"
+- extendedWaitUntil:
+    visible:
+      id: "devices.screen"
+    timeout: 10000
+- runFlow: open_session_no_launch.yaml
+- assertVisible:
+    id: "session.composerInput"
+- tapOn:
+    id: "session.voiceButton"
+- tapOn:
+    text: "^允许$"
+    optional: true
+    label: "Allow microphone permission on Chinese iOS"
+- tapOn:
+    text: "^Allow$"
+    optional: true
+    label: "Allow microphone permission on iOS"
+- tapOn:
+    text: "^OK$"
+    optional: true
+    label: "Allow microphone permission on older iOS dialogs"
+- extendedWaitUntil:
+    visible:
+      id: "session.voiceStatus"
+    timeout: 15000
+- extendedWaitUntil:
+    visible: "mock realtime voice draft"
+    timeout: 15000
+- tapOn:
+    id: "session.composerInput"
+- extendedWaitUntil:
+    visible: "mock refined voice draft"
+    timeout: 15000
+- assertVisible:
+    id: "session.composerInput"
+- assertVisible: "mock refined voice draft"

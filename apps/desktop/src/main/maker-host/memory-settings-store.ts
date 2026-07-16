@@ -1,0 +1,93 @@
+/**
+ * memory-settings-store —— 三个 memory 开关的 main 端持久化 source of truth。
+ *
+ * 背景:
+ *  - Codex 的 enable 走 app-server in-memory enablement (重启即失效)
+ *  - Claude 的 enable 走 BaseAgent.memoryOverride (内存字段)
+ *  - Maker 的 enable 走 MakerMemoryManager.enabled (内存字段)
+ *  三者都不持久化, 重启后用户上次设置丢失 → 这里收口落 JSON。
+ *
+ * 文件: <userData>/memory-settings.json
+ *   { "maker": false, "claudeCode": true, "codex": true }
+ *
+ * 默认值跟原 runtime-configs.ts / maker-memory-host.ts 的硬编码对齐:
+ *  - maker      : false (实验阶段默认关)
+ *  - claudeCode : true  (Claude SDK autoMemoryEnabled 默认 true, host 跟随)
+ *  - codex      : true  (host 强制开 to match Claude — 跟原 runtime-configs.ts:95 一致)
+ *
+ * 同步 R/W —— 文件小 (< 100B), Electron main 已是 background, 不会卡 UI 主线程。
+ * read 失败 (corrupt JSON / 文件不存在) → 走默认值, 同时清掉坏文件避免反复报错。
+ */
+
+import { app } from 'electron';
+import path from 'node:path';
+
+import { desktopMakerLogger } from './logger-adapter.js';
+import {
+  createOverrideSettingsFile,
+  type OverrideSettingsState,
+} from './override-settings-file.js';
+
+const log = desktopMakerLogger.child('memory-settings-store');
+
+export interface MemorySettings {
+  maker: boolean;
+  claudeCode: boolean;
+  codex: boolean;
+}
+
+const DEFAULTS: MemorySettings = {
+  maker: false,
+  claudeCode: true,
+  codex: true,
+};
+
+function settingsFilePath(): string {
+  return path.join(app.getPath('userData'), 'memory-settings.json');
+}
+
+function normalize(raw: unknown): MemorySettings {
+  if (!raw || typeof raw !== 'object') return { ...DEFAULTS };
+  const r = raw as Record<string, unknown>;
+  return {
+    maker: typeof r.maker === 'boolean' ? r.maker : DEFAULTS.maker,
+    claudeCode: typeof r.claudeCode === 'boolean' ? r.claudeCode : DEFAULTS.claudeCode,
+    codex: typeof r.codex === 'boolean' ? r.codex : DEFAULTS.codex,
+  };
+}
+
+const store = createOverrideSettingsFile<MemorySettings>({
+  filePath: settingsFilePath,
+  defaults: DEFAULTS,
+  normalize,
+  log,
+  label: 'memory',
+});
+
+/**
+ * 同步读取持久化设置. 第一次调用时从磁盘读, 后续调用走内存 cache.
+ * IPC handler / runtime-configs.ts module load 都直接用同步读, 不引入 async race。
+ */
+export function readMemorySettings(): MemorySettings {
+  return store.read();
+}
+
+export function readMemorySettingsState(): OverrideSettingsState<MemorySettings> {
+  return store.readState();
+}
+
+/**
+ * 写一个字段, 落盘 + 更新 cache. 失败抛错让 IPC handler 反馈给 UI。
+ */
+export function writeMemorySetting<K extends keyof MemorySettings>(
+  key: K,
+  value: MemorySettings[K],
+): OverrideSettingsState<MemorySettings> {
+  store.writePatch({ [key]: value } as Partial<MemorySettings>);
+  log.info('memory setting written', { key, value });
+  return store.readState();
+}
+
+export function resetMemorySettings(): MemorySettings {
+  return store.reset();
+}

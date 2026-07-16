@@ -1,0 +1,178 @@
+schema_version: 1
+generated_at: '2026-07-16T03:56:17.940Z'
+entries:
+  - id: apps--desktop
+    path: modules/apps--desktop.md
+    type: module
+    covers:
+      - apps/desktop/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: apps--mobile
+    path: modules/apps--mobile.md
+    type: module
+    covers:
+      - apps/mobile/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: cindy-protocol--packages--device-link-protocol
+    path: modules/cindy-protocol--packages--device-link-protocol.md
+    type: module
+    covers:
+      - cindy-protocol/packages/device-link-protocol/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: cindy-protocol--packages--slack-hook-protocol
+    path: modules/cindy-protocol--packages--slack-hook-protocol.md
+    type: module
+    covers:
+      - cindy-protocol/packages/slack-hook-protocol/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--anthropic-compat-proxy
+    path: modules/packages--anthropic-compat-proxy.md
+    type: module
+    covers:
+      - packages/anthropic-compat-proxy/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--anthropic-responses-bridge
+    path: modules/packages--anthropic-responses-bridge.md
+    type: module
+    covers:
+      - packages/anthropic-responses-bridge/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--browser-control-runtime
+    path: modules/packages--browser-control-runtime.md
+    type: module
+    covers:
+      - packages/browser-control-runtime/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--cindy-tools
+    path: modules/packages--cindy-tools.md
+    type: module
+    covers:
+      - packages/cindy-tools/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--device-link
+    path: modules/packages--device-link.md
+    type: module
+    covers:
+      - packages/device-link/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--embedding-client
+    path: modules/packages--embedding-client.md
+    type: module
+    covers:
+      - packages/embedding-client/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--file-browser-core
+    path: modules/packages--file-browser-core.md
+    type: module
+    covers:
+      - packages/file-browser-core/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--github-client
+    path: modules/packages--github-client.md
+    type: module
+    covers:
+      - packages/github-client/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--gitlab-client
+    path: modules/packages--gitlab-client.md
+    type: module
+    covers:
+      - packages/gitlab-client/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--heartbeat-client
+    path: modules/packages--heartbeat-client.md
+    type: module
+    covers:
+      - packages/heartbeat-client/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--lizi-im
+    path: modules/packages--lizi-im.md
+    type: module
+    covers:
+      - packages/lizi-im/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--lizi-mcps
+    path: modules/packages--lizi-mcps.md
+    type: module
+    covers:
+      - packages/lizi-mcps/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--maker-cc-manager
+    path: modules/packages--maker-cc-manager.md
+    type: module
+    covers:
+      - packages/maker-cc-manager/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--maker-core
+    path: modules/packages--maker-core.md
+    type: module
+    covers:
+      - packages/maker-core/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--maker-remote-ssh
+    path: modules/packages--maker-remote-ssh.md
+    type: module
+    covers:
+      - packages/maker-remote-ssh/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--maker-scheduler
+    path: modules/packages--maker-scheduler.md
+    type: module
+    covers:
+      - packages/maker-scheduler/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--maker-shared
+    path: modules/packages--maker-shared.md
+    type: module
+    covers:
+      - packages/maker-shared/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--model-providers
+    path: modules/packages--model-providers.md
+    type: module
+    covers:
+      - packages/model-providers/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--orca-workflow
+    path: modules/packages--orca-workflow.md
+    type: module
+    covers:
+      - packages/orca-workflow/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--remote-file-service
+    path: modules/packages--remote-file-service.md
+    type: module
+    covers:
+      - packages/remote-file-service/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462
+  - id: packages--voice-input-core
+    path: modules/packages--voice-input-core.md
+    type: module
+    covers:
+      - packages/voice-input-core/**
+    stale: false
+    last_synced_commit: 59f566cf71cd4b30742d47a65d9ee3badb417462

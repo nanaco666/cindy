@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 2,
+  "id": "cindy-web-search",
+  "name": "Cindy Web Search",
+  "description": "Cindy 内置的网页搜索意识:用你自己的 Brave / Tavily key 搜索公网。key 在 设置 → 意识 → 本意识详情页 填写,加密存本机、只注入声明域名的请求。",
+  "whenToUse": "需要搜索公网信息、查资料、找网页、看最新动态时找我(需先在意识设置页配置 Brave 或 Tavily key)。",
+  "version": "1.1.4",
+  "author": "Cindy",
+  "entry": "main.js",
+  "settingsHtml": "settings.html",
+  "slots": ["tool", "network"],
+  "command": "cindy-web-search",
+  "network": {
+    "hosts": ["api.search.brave.com", "api.tavily.com"],
+    "secrets": [
+      {
+        "key": "brave_api_key",
+        "label": "Brave Search API Key",
+        "hint": "免费档即可(BSA 开头)",
+        "url": "https://api-dashboard.search.brave.com/app/keys",
+        "inject": {
+          "header": "X-Subscription-Token",
+          "format": "{value}",
+          "hosts": ["api.search.brave.com"]
+        }
+      },
+      {
+        "key": "tavily_api_key",
+        "label": "Tavily API Key",
+        "hint": "tvly- 开头",
+        "url": "https://app.tavily.com/home",
+        "inject": {
+          "header": "Authorization",
+          "format": "Bearer {value}",
+          "hosts": ["api.tavily.com"]
+        }
+      }
+    ]
+  },
+  "tools": [
+    {
+      "name": "search_web",
+      "description": "搜索公网并返回结果列表(标题/链接/摘要)。默认走 Brave;需要网页正文摘录或指定域名过滤时走 Tavily。返回 JSON:{ provider, results: [{ title, url, snippet }] }。两个搜索源的 key 都没配置时会返回指引,把 message 原样告诉用户即可。",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "搜索关键词(用户原话意图,不要扩写)" },
+          "provider": { "type": "string", "enum": ["brave", "tavily"], "description": "指定搜索源;通常省略(自动选可用的)" },
+          "limit": { "type": "number", "description": "结果条数,默认 5,最大 10" }
+        },
+        "required": ["query"]
+      }
+    }
+  ]
+}

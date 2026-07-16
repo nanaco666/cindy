@@ -1,0 +1,1 @@
+上传本地图片到飞书云文档,绑定到一个已存在的图片块(block_type=27)上。完整流程: 1) docx_insert_blocks 插入一个 block_type=27 的空图片块,从返回里拿到新 block_id; 2) 调用本工具,传 url_or_document_id + block_id + file_path; 3) 飞书后端会把图片绑定到该块,文档里就显示出来。支持 JPEG/PNG/WEBP/GIF/TIFF/BMP/ICO,单张不超过 20MB(超过请走分片接口,本工具不处理)。与 im_upload_image 不通用 —— IM 的 image_key 不能放到文档里;文档的 file_token 也不能用于 IM。
