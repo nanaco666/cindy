@@ -45,21 +45,38 @@ type FeishuBotToolDescriptions = { [K in keyof typeof D]: string };
 
 /**
  * Slack 会话里追加到全部工具描述末尾的渠道路由提示(规则 9:通道路由的
- * 确定性用代码保证,不交给模型自由判断)。注意 lizi_slack_bot 只有发文件
- * 工具,文字回复走会话回复通道,不要把消息类意图也指过去。
+ * 确定性用代码保证,不交给模型自由判断)。两个渠道措辞不同:
+ * - 'slack'(organic SlackIM 渠道):发文件走 lizi_slack_bot 的
+ *   send_file_to_user(lizi_slack_bot 只有这一个工具,消息类意图不要指过去);
+ * - 'slack-hook'(官方 hook 渠道):该渠道没有 lizi_slack_bot,文件回传靠
+ *   最终回复文本里的 xdt-file 引用(hook outbound 收集器),提示与
+ *   hook-control/outbound.ts 的 SLACK_HOOK_PROMPT_NOTE 语义对齐。
  * 导出仅供测试锁定文案。
  */
 export const SLACK_SESSION_CHANNEL_NOTE =
   '\n\n⚠️ 当前是 Slack 会话:文字回复直接输出即可(会自动回贴到当前 Slack thread,无需工具);把文件发给用户用 lizi_slack_bot 的 send_file_to_user,不要用本工具;仅当用户明确说「发飞书 / 飞书通知我」时才走飞书通道。';
 
-/** 按会话来源产出工具描述——非 slack 会话原样返回 D,保证字节级不变。 */
+export const SLACK_HOOK_SESSION_CHANNEL_NOTE =
+  '\n\n⚠️ 当前是 Slack 会话:文字回复直接输出即可(会自动回贴到当前 Slack thread,无需工具);把文件发给用户是在最终回复文本里写 `[文件名](xdt-file:///绝对路径)`(文件须位于当前工作目录内,系统自动作为 Slack 附件发回),不要用本工具;仅当用户明确说「发飞书 / 飞书通知我」时才走飞书通道。';
+
+const NOTE_BY_SOURCE: Record<string, string> = {
+  slack: SLACK_SESSION_CHANNEL_NOTE,
+  'slack-hook': SLACK_HOOK_SESSION_CHANNEL_NOTE,
+};
+
+/** 按会话来源产出工具描述——无对应 note 的来源原样返回 D,保证字节级不变。 */
 function buildDescriptions(sessionSource: string | undefined): FeishuBotToolDescriptions {
-  if (sessionSource !== 'slack') return D;
+  // Object.hasOwn 挡原型链键('__proto__' 等),source 虽来自可信 host,防御性收紧
+  const note =
+    sessionSource !== undefined && Object.hasOwn(NOTE_BY_SOURCE, sessionSource)
+      ? NOTE_BY_SOURCE[sessionSource]
+      : undefined;
+  if (note === undefined) return D;
   return {
-    list_tools: D.list_tools + SLACK_SESSION_CHANNEL_NOTE,
-    call_tool: D.call_tool + SLACK_SESSION_CHANNEL_NOTE,
-    send_file_to_user: D.send_file_to_user + SLACK_SESSION_CHANNEL_NOTE,
-    send_message_to_user: D.send_message_to_user + SLACK_SESSION_CHANNEL_NOTE,
+    list_tools: D.list_tools + note,
+    call_tool: D.call_tool + note,
+    send_file_to_user: D.send_file_to_user + note,
+    send_message_to_user: D.send_message_to_user + note,
   };
 }
 

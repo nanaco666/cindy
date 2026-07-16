@@ -15,6 +15,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   createFeishuBotMcpServer,
+  SLACK_HOOK_SESSION_CHANNEL_NOTE,
   SLACK_SESSION_CHANNEL_NOTE,
   type FeishuBotMcpDeps,
 } from '../lizi_feishuBotMcpServer';
@@ -71,21 +72,27 @@ const ALL_TOOL_KEYS = [
 ] as const;
 
 describe('lizi_feishu_bot channel routing note', () => {
-  it('slack description === base description + fixed note, for every tool', async () => {
-    const slack = await makeHarness(makeDeps('slack'));
-    const base = await makeHarness(makeDeps());
-    try {
-      const slackDescs = await readAllDescriptions(slack.client);
-      const baseDescs = await readAllDescriptions(base.client);
-      expect([...slackDescs.keys()].sort()).toEqual([...ALL_TOOL_KEYS].sort());
-      for (const key of ALL_TOOL_KEYS) {
-        expect(slackDescs.get(key)).toBe(baseDescs.get(key) + SLACK_SESSION_CHANNEL_NOTE);
+  it.each([
+    ['slack', SLACK_SESSION_CHANNEL_NOTE],
+    ['slack-hook', SLACK_HOOK_SESSION_CHANNEL_NOTE],
+  ] as const)(
+    '%s description === base description + fixed note, for every tool',
+    async (source, note) => {
+      const withNote = await makeHarness(makeDeps(source));
+      const base = await makeHarness(makeDeps());
+      try {
+        const noteDescs = await readAllDescriptions(withNote.client);
+        const baseDescs = await readAllDescriptions(base.client);
+        expect([...noteDescs.keys()].sort()).toEqual([...ALL_TOOL_KEYS].sort());
+        for (const key of ALL_TOOL_KEYS) {
+          expect(noteDescs.get(key)).toBe(baseDescs.get(key) + note);
+        }
+      } finally {
+        await withNote.cleanup();
+        await base.cleanup();
       }
-    } finally {
-      await slack.cleanup();
-      await base.cleanup();
-    }
-  });
+    },
+  );
 
   it('feishu source keeps descriptions identical to the undefined-source baseline', async () => {
     const feishu = await makeHarness(makeDeps('feishu'));

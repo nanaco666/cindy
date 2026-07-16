@@ -171,8 +171,12 @@ vi.mock('../../maker-host/index.js', () => ({
 }));
 
 import { createMakerHookSessionRunner } from '../session-runner.js';
+import { SLACK_HOOK_PROMPT_NOTE } from '../outbound.js';
 
 const log = { info: vi.fn(), warn: vi.fn() };
+
+/** 喂给 agent 的文本 = 用户原话 + 渠道说明(教模型用 xdt-file 回传文件)。 */
+const HELLO_WITH_NOTE = `hello\n\n${SLACK_HOOK_PROMPT_NOTE}`;
 
 function baseReq(overrides: Partial<Parameters<ReturnType<typeof createMakerHookSessionRunner>['run']>[0]>) {
   return {
@@ -274,9 +278,41 @@ describe('hook session-runner 的 userSendAt 时序(未分类误判回归)', () 
     );
     expect(outcome.status).toBe('ok');
     const session = await fakeMaker.createSession.mock.results[0].value;
-    // 图被降级丢弃:send 内容回落纯文本
-    expect(session.send.mock.calls[0][0]).toMatchObject({ content: 'hello' });
+    // 图被降级丢弃:send 内容回落纯文本(仍带渠道说明后缀)
+    expect(session.send.mock.calls[0][0]).toMatchObject({ content: HELLO_WITH_NOTE });
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('hook image ingest failed'));
+  });
+
+  it('渠道说明与渠道标记:喂 agent 带 xdt-file 说明,落库保持原话,createSession 带 slack-hook 标', async () => {
+    const runner = createMakerHookSessionRunner({ log });
+    const outcome = await runner.run(baseReq({}));
+    expect(outcome.status).toBe('ok');
+
+    // createSession 带渠道标记(lizi_feishu_bot 据此注入路由提示;
+    // 刻意不是 'slack' —— 不能连带注册传输不通的 lizi_slack_bot)
+    expect(fakeMaker.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ vendorOptions: { source: 'slack-hook' } }),
+    );
+
+    // 喂 agent:用户原话 + 渠道说明(教模型 xdt-file 回传契约)
+    const session = await fakeMaker.createSession.mock.results[0].value;
+    expect(session.send.mock.calls[0][0]).toMatchObject({ content: HELLO_WITH_NOTE });
+
+    // 落库的用户消息保持 Slack 原话,不带说明(渲染层展示口径)
+    const createCalls = h.createMessage.mock.calls as unknown as Array<[string, { content: unknown }]>;
+    expect(createCalls[0][1].content).toBe('hello');
+  });
+
+  it('复用/接管(isNew=false):createSession 不带 vendorOptions,不给可能的桌面会话打 Slack 标', async () => {
+    const runner = createMakerHookSessionRunner({ log });
+    const outcome = await runner.run(baseReq({ sessionId: 'sess-old', isNew: false }));
+    expect(outcome.status).toBe('ok');
+
+    const createArgs = fakeMaker.createSession.mock.calls[0][0] as Record<string, unknown>;
+    expect('vendorOptions' in createArgs).toBe(false);
+    // 渠道说明仍逐 turn 生效(不依赖 vendorOptions)
+    const session = await fakeMaker.createSession.mock.results[0].value;
+    expect(session.send.mock.calls[0][0]).toMatchObject({ content: HELLO_WITH_NOTE });
   });
 
   it('isNew: touchUserSendInDb 失败不阻断建会话与广播(onAccepted 兜底)', async () => {
