@@ -19,6 +19,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': new URL('./src', import.meta.url).pathname,
+      'expo-constants': new URL('./src/__tests__/expo-constants.mock.ts', import.meta.url).pathname,
     },
   },
   test: {

@@ -54,6 +54,7 @@ import { buildIosDistTargets, buildItmsManifestPlist, buildItmsUrl, buildInstall
 import { clearBundlerCache } from './lib/bundler-cache.mjs';
 import { readEmbeddedRuntimeVersionFromIpa } from './lib/embedded-runtime.mjs';
 import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, OSS_BUCKET, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
+import { productionMobileEnv } from '../../../scripts/shared/production-endpoints.mjs';
 
 refreshOssConfig();
 
@@ -68,7 +69,12 @@ function log(msg) { console.error(msg); }
 function selfhostEnv(desktopVersion) {
   const otaUrl = process.env.EXPO_PUBLIC_XDT_OTA_URL?.trim();
   if (!otaUrl) throw new Error('release-ios-local 需要 EXPO_PUBLIC_XDT_OTA_URL(mobile-update-server 基址,用于烧进包的 updates.url)');
-  const env = { ...process.env, EXPO_PUBLIC_XDT_OTA_SELFHOST: '1', EXPO_PUBLIC_XDT_OTA_URL: otaUrl };
+  const env = {
+    ...process.env,
+    ...productionMobileEnv(),
+    EXPO_PUBLIC_XDT_OTA_SELFHOST: '1',
+    EXPO_PUBLIC_XDT_OTA_URL: otaUrl,
+  };
   // 二级版本号:自建线包所配对的桌面产品线版本;仅有值时注入(空则设置页不显示该行)。
   if (desktopVersion) env.EXPO_PUBLIC_DESKTOP_VERSION = desktopVersion;
   return env;

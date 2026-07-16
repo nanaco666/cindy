@@ -15,9 +15,17 @@ describe('mobile native app config', () => {
     try {
       delete process.env.EXPO_PUBLIC_APP_VARIANT;
       delete process.env.EXPO_PUBLIC_BETA_DEV;
-      expect(buildConfig()).toEqual(appJson.expo);
-      expect(buildConfig({})).toEqual(appJson.expo);
-      expect(buildConfig({ config: appJson.expo })).toEqual(appJson.expo);
+      const expectedExtra = expect.objectContaining({
+        xdtProductionEnv: expect.objectContaining({
+          EXPO_PUBLIC_FEISHU_APP_ID: expect.any(String),
+          EXPO_PUBLIC_XDT_API_BASE_URL: expect.any(String),
+          EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: expect.any(String),
+          EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: expect.any(String),
+        }),
+      });
+      expect(buildConfig()).toMatchObject({ ...appJson.expo, extra: expectedExtra });
+      expect(buildConfig({})).toMatchObject({ ...appJson.expo, extra: expectedExtra });
+      expect(buildConfig({ config: appJson.expo })).toMatchObject({ ...appJson.expo, extra: expectedExtra });
 
       process.env.EXPO_PUBLIC_APP_VARIANT = 'beta';
       process.env.EXPO_PUBLIC_BETA_DEV = 'dash';

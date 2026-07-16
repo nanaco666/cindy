@@ -22,6 +22,7 @@ import { parseArgs, assertProductionGitGate, assertPublicEnv, resolveDesktopVers
 import { buildAssetEntry, buildManifest, sha256Hex, assertOtaRuntimeMatchesBaseline } from './lib/ota-manifest.mjs';
 import { readAndroidVersionCode } from './lib/android-local.mjs';
 import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
+import { productionMobileEnv } from '../../../scripts/shared/production-endpoints.mjs';
 
 refreshOssConfig();
 
@@ -63,6 +64,7 @@ function selfhostEnv(desktopVersion) {
   if (!otaUrl) throw new Error('release-android-ota 需要 EXPO_PUBLIC_XDT_OTA_URL(mobile-update-server 基址)');
   const env = {
     ...process.env,
+    ...productionMobileEnv(),
     EXPO_PUBLIC_XDT_OTA_SELFHOST: '1',
     EXPO_PUBLIC_XDT_OTA_URL: otaUrl,
     XDT_ANDROID_VERSION_CODE: String(readAndroidVersionCode(MOBILE_DIR)),

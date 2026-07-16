@@ -29,6 +29,7 @@ import crypto from 'node:crypto';
 import { parseArgs, assertProductionGitGate, assertPublicEnv, resolveDesktopVersion } from './release-lib.mjs';
 import { buildAssetEntry, buildManifest, sha256Hex, assertOtaRuntimeMatchesBaseline } from './lib/ota-manifest.mjs';
 import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
+import { productionMobileEnv } from '../../../scripts/shared/production-endpoints.mjs';
 
 refreshOssConfig();
 
@@ -67,7 +68,12 @@ function assertRuntimeMatchesColdBaseline({ runtimeVersion, baselineRuntime, ski
 function selfhostEnv(desktopVersion) {
   const otaUrl = process.env.EXPO_PUBLIC_XDT_OTA_URL?.trim();
   if (!otaUrl) throw new Error('release-ios-ota 需要 EXPO_PUBLIC_XDT_OTA_URL(mobile-update-server 基址)');
-  const env = { ...process.env, EXPO_PUBLIC_XDT_OTA_SELFHOST: '1', EXPO_PUBLIC_XDT_OTA_URL: otaUrl };
+  const env = {
+    ...process.env,
+    ...productionMobileEnv(),
+    EXPO_PUBLIC_XDT_OTA_SELFHOST: '1',
+    EXPO_PUBLIC_XDT_OTA_URL: otaUrl,
+  };
   // 二级版本号:仅 JS 层(不进 @expo/fingerprint,不改 runtimeVersion,与冷更整包同源);空则不注入。
   if (desktopVersion) env.EXPO_PUBLIC_DESKTOP_VERSION = desktopVersion;
   return env;

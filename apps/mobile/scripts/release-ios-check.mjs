@@ -17,6 +17,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, decideReleaseMode, resolveDesktopVersion } from './release-lib.mjs';
 import { CDN_BASE, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
+import { productionMobileEnv } from '../../../scripts/shared/production-endpoints.mjs';
 
 refreshOssConfig();
 
@@ -27,7 +28,12 @@ const RELEASE_RECORD_CDN = `${CDN_BASE}/mobile-ota/ios/release.json`;
 function selfhostEnv() {
   const otaUrl = process.env.EXPO_PUBLIC_XDT_OTA_URL?.trim();
   if (!otaUrl) throw new Error('release-ios-check 需要 EXPO_PUBLIC_XDT_OTA_URL(须与出包时一致,才能算出同源指纹)');
-  return { ...process.env, EXPO_PUBLIC_XDT_OTA_SELFHOST: '1', EXPO_PUBLIC_XDT_OTA_URL: otaUrl };
+  return {
+    ...process.env,
+    ...productionMobileEnv(),
+    EXPO_PUBLIC_XDT_OTA_SELFHOST: '1',
+    EXPO_PUBLIC_XDT_OTA_URL: otaUrl,
+  };
 }
 
 function computeRuntimeVersion(env) {

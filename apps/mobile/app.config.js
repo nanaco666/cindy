@@ -14,6 +14,7 @@
 //       但只在该 env 开启时生效,EAS 路径仍逐字节不变。
 // - 不注入任何按 commit 变化的内容(如 git hash),避免 fingerprint 每次提交漂移。
 const appJson = require('./app.json');
+const { loadProductionMobileEnv } = require('../../scripts/shared/production-mobile-env.cjs');
 
 // iOS 自建线 bundleId,须与 release-ios-local.mjs 的 SELFHOST_BUNDLE_ID 一致。
 const SELFHOST_IOS_BUNDLE_ID = 'com.xd.cindycn';
@@ -21,9 +22,39 @@ const SELFHOST_IOS_BUNDLE_ID = 'com.xd.cindycn';
 // release-android-npkg.sh 的 EXPECT_PACKAGE 一致。
 const SELFHOST_ANDROID_PACKAGE = 'com.xd.cindycn';
 
+function resolveMobileBuildEnv() {
+  try {
+    return loadProductionMobileEnv();
+  } catch (error) {
+    const fallback = {
+      EXPO_PUBLIC_FEISHU_APP_ID: process.env.EXPO_PUBLIC_FEISHU_APP_ID?.trim(),
+      EXPO_PUBLIC_XDT_API_BASE_URL: process.env.EXPO_PUBLIC_XDT_API_BASE_URL?.trim(),
+      EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL:
+        process.env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL?.trim(),
+      EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL:
+        process.env.EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL?.trim(),
+    };
+    if (Object.values(fallback).every(Boolean)) return Object.freeze(fallback);
+    throw error;
+  }
+}
+
 module.exports = (context = {}) => {
   const baseConfig = context.config ?? appJson.expo;
-  let next = baseConfig;
+  const mobileBuildEnv = resolveMobileBuildEnv();
+  // Expo config plugins (notably the native Feishu login plugin) read the
+  // public app id directly from process.env while resolving the config.
+  // Populate only missing values so explicit local/CI overrides keep working.
+  for (const [key, value] of Object.entries(mobileBuildEnv)) {
+    if (!process.env[key]?.trim()) process.env[key] = value;
+  }
+  let next = {
+    ...baseConfig,
+    extra: {
+      ...baseConfig.extra,
+      xdtProductionEnv: mobileBuildEnv,
+    },
+  };
 
   if (process.env.EXPO_PUBLIC_APP_VARIANT === 'beta') {
     const betaDev = process.env.EXPO_PUBLIC_BETA_DEV?.trim();

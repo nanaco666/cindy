@@ -1,14 +1,29 @@
+import Constants from 'expo-constants';
+
 export const APP_SCHEME = 'lizcn';
 export const MOBILE_REDIRECT_URL = `${APP_SCHEME}://auth`;
 export const MOBILE_OAUTH_STATE_PREFIX = `${APP_SCHEME}.`;
 
-// 生产地址由发布脚本从未提交的 config/production-endpoints.json 注入 EXPO_PUBLIC_*；
-// 本模块不保存任何真实 URL，未注入时保持空值并由上层配置校验给出明确错误。
-export const DEFAULT_API_BASE_URL = process.env.EXPO_PUBLIC_XDT_API_BASE_URL?.trim() || '';
+// EXPO_PUBLIC_* 优先使用构建环境；直接执行 EAS build 时由 app.config.js 的 extra 提供同一份配置。
+const configuredBuildEnv = ((Constants.expoConfig?.extra as {
+  xdtProductionEnv?: Record<string, string>;
+} | null)?.xdtProductionEnv ?? {}) as Record<string, string>;
+const configuredApiBaseUrl =
+  process.env.EXPO_PUBLIC_XDT_API_BASE_URL?.trim() || configuredBuildEnv.EXPO_PUBLIC_XDT_API_BASE_URL;
+const configuredDeviceLinkApiBaseUrl =
+  process.env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL?.trim() ||
+  configuredBuildEnv.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL;
+const configuredMobileVoiceBaseUrl =
+  process.env.EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL?.trim() ||
+  configuredBuildEnv.EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL;
+const configuredFeishuAppId =
+  process.env.EXPO_PUBLIC_FEISHU_APP_ID?.trim() || configuredBuildEnv.EXPO_PUBLIC_FEISHU_APP_ID;
+
+export const DEFAULT_API_BASE_URL = configuredApiBaseUrl || '';
 export const DEFAULT_DEVICE_LINK_API_BASE_URL =
-  process.env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL?.trim() || '';
+  configuredDeviceLinkApiBaseUrl || '';
 export const DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL =
-  process.env.EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL?.trim() || '';
+  configuredMobileVoiceBaseUrl || '';
 
 export interface MobileConfigIssue {
   key: string;
@@ -54,7 +69,7 @@ function localRelayBaseForApi(apiBaseUrl: string): string | null {
   }
 }
 
-export const FEISHU_APP_ID = process.env.EXPO_PUBLIC_FEISHU_APP_ID || '';
+export const FEISHU_APP_ID = configuredFeishuAppId || '';
 
 export function resolveEnvFlag(value: string | undefined): boolean {
   const normalized = value?.trim().toLowerCase();
@@ -84,15 +99,15 @@ export function getMobileConfigIssues(
   return issues;
 }
 
-export const API_BASE_URL = normalizeBaseUrl(process.env.EXPO_PUBLIC_XDT_API_BASE_URL);
+export const API_BASE_URL = normalizeBaseUrl(configuredApiBaseUrl);
 
 export const DEVICE_LINK_API_BASE_URL = resolveDeviceLinkApiBaseUrl(
-  process.env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL,
+  configuredDeviceLinkApiBaseUrl,
   API_BASE_URL,
 );
 
 export const MOBILE_VOICE_LITELLM_BASE_URL = normalizeBaseUrlWithDefault(
-  process.env.EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL,
+  configuredMobileVoiceBaseUrl,
   DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL,
 );
 
