@@ -1,8 +1,9 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_FEISHU_APP_ID: string;
   readonly VITE_API_BASE_URL: string;
+  readonly VITE_CINDY_AUTH_REGION: 'cn' | 'global';
+  readonly VITE_CINDY_AUTH_BASE_URL: string;
 }
 
 interface ImportMeta {
@@ -10,6 +11,8 @@ interface ImportMeta {
 }
 
 type RsbWindowCommand = import('../shared/rightSidebarWindow').RsbWindowCommand;
+type DesktopLoginAction = import('../shared/authIpc').DesktopLoginAction;
+type DesktopLoginActionResult = import('../shared/authIpc').DesktopLoginActionResult;
 
 /* ── Environment check ── */
 
@@ -309,6 +312,13 @@ interface AuthUser {
   email: string | null;
   defaultModel: string;
   defaultEffort: string;
+  role?: 'user' | 'admin';
+  isCanary?: boolean;
+  membershipKind: 'personal' | 'org';
+  membershipRole: 'owner' | 'admin' | 'member';
+  orgId: string | null;
+  orgName: string | null;
+  passportId: string;
 }
 
 /* ── Google integration ── */
@@ -1376,24 +1386,8 @@ interface ElectronAPI {
     /** SkillHub 跨设备识别：本机 deviceId，登录前后都有值 */
     deviceId: string;
   }>;
-  authLogin: () => Promise<
-    | {
-        success: true;
-        user: AuthUser;
-        /** chat-data-localization V0.5: server's per-(userId, deviceId) snapshot. */
-        migration: MigrationStatusPayload;
-      }
-    | { success: false; code: string; statusCode: number; message: string }
-  >;
-  authDevLogin: () => Promise<
-    | {
-        success: true;
-        user: AuthUser;
-        /** chat-data-localization V0.5: server's per-(userId, deviceId) snapshot. */
-        migration: MigrationStatusPayload;
-      }
-    | { success: false; code: string; statusCode: number; message: string }
-  >;
+  authGetLoginState: () => Promise<DesktopLoginActionResult>;
+  authDispatchLoginAction: (action: DesktopLoginAction) => Promise<DesktopLoginActionResult>;
   authLogout: () => Promise<void>;
   authRefresh: () => Promise<boolean>;
   onAuthStateChange: (callback: (state: AuthStateChangePayload) => void) => () => void;

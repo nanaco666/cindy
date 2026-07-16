@@ -24,6 +24,7 @@ async function main() {
   const target = resolveTarget(config, {
     kind: args.target ?? (args.dev ? 'beta' : 'production'),
     dev: args.dev,
+    region: args.region,
     environment: args.environment,
   });
   assertPublicEnv(resolveCommandPublicEnv(target.publicEnv), { variant: target.variant });

@@ -14,6 +14,7 @@ export const DEFINITIVE_REFRESH_FAILURE_CODES: ReadonlySet<string> = new Set([
   'REFRESH_TOKEN_EXPIRED',
   'INVALID_REFRESH_TOKEN',
   'DEVICE_MISMATCH',
+  'MEMBERSHIP_DISABLED',
 ]);
 
 /** 只有这个错误码可能来自同机多实例轮换竞态;其它确定性错误换 token 无效。 */

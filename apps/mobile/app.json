@@ -2,7 +2,7 @@
   "expo": {
     "name": "XDMaker",
     "slug": "xdt-maker-mobile",
-    "scheme": "lizcn",
+    "scheme": "cindycn",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -15,7 +15,8 @@
       "enabled": true
     },
     "ios": {
-      "bundleIdentifier": "com.xd.lizcn",
+      "bundleIdentifier": "com.xd.cindycn",
+      "usesAppleSignIn": true,
       "buildNumber": "2026071401",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
@@ -30,16 +31,12 @@
           "UIInterfaceOrientationPortraitUpsideDown",
           "UIInterfaceOrientationLandscapeLeft",
           "UIInterfaceOrientationLandscapeRight"
-        ],
-        "LSApplicationQueriesSchemes": [
-          "feishu",
-          "lark"
         ]
       },
       "supportsTablet": true
     },
     "android": {
-      "package": "com.xd.lizcn",
+      "package": "com.xd.cindycn",
       "adaptiveIcon": {
         "backgroundColor": "#F8F8F6",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -57,6 +54,7 @@
     "plugins": [
       "./plugins/with-third-party-notices",
       "expo-router",
+      "expo-apple-authentication",
       "expo-secure-store",
       "expo-web-browser",
       [
@@ -102,13 +100,6 @@
           "photosPermission": "XDMaker needs photo library access to show recent photos and screenshots for quick attaching.",
           "savePhotosPermission": false,
           "isAccessMediaLocationEnabled": false
-        }
-      ],
-      [
-        "xdt-feishu-login/plugin",
-        {
-          "appId": "cli_a94d4cf642381cd4",
-          "registerCallbackScheme": true
         }
       ]
     ],

@@ -327,17 +327,29 @@ describe('native e2e environment', () => {
   it('clears local mobile voice credentials on logout', () => {
     const authContext = readFileSync(resolve(process.cwd(), 'src/auth/AuthContext.tsx'), 'utf8');
 
-    expect(authContext).toContain('import { clearAllMobileVoiceCredentials } from "@/session/mobileVoiceCredentialStore";');
-    expect(authContext).toContain('import { clearMobileVoiceLiteLlmSettings } from "@/session/mobileVoiceLiteLlmSettings";');
-    expect(authContext).toContain('import { clearAllMobileVoiceInputHistories } from "@/session/mobileVoiceHistoryStore";');
-    expect(authContext).toContain('await clearAllMobileVoiceCredentials().catch(() => undefined);');
-    expect(authContext).toContain('await clearMobileVoiceLiteLlmSettings().catch(() => undefined);');
-    expect(authContext).toContain('await clearAllMobileVoiceInputHistories().catch(() => undefined);');
-    // Scope the ordering check to the logout body: deleteSecureItem(REFRESH_TOKEN_KEY) also
-    // appears in refresh()'s rejected-token path, so a whole-file indexOf would match the wrong one.
+    expect(authContext).toContain(
+      "from '@/session/mobileVoiceCredentialStore'",
+    );
+    expect(authContext).toContain(
+      "from '@/session/mobileVoiceLiteLlmSettings'",
+    );
+    expect(authContext).toContain("from '@/session/mobileVoiceHistoryStore'");
+    expect(authContext).toContain(
+      'await clearAllMobileVoiceCredentials().catch(() => undefined);',
+    );
+    expect(authContext).toContain(
+      'await clearMobileVoiceLiteLlmSettings().catch(() => undefined);',
+    );
+    expect(authContext).toContain(
+      'await clearAllMobileVoiceInputHistories().catch(() => undefined);',
+    );
+    // Scope the ordering check to the logout body: refresh-token deletion is serialized so a
+    // racing refresh cannot restore credentials after logout has begun.
     const logoutStart = authContext.indexOf('const logout = useCallback(async () => {');
     const logoutBody = authContext.slice(logoutStart, authContext.indexOf('}, [', logoutStart));
-    const refreshTokenDelete = logoutBody.indexOf('await deleteSecureItem(REFRESH_TOKEN_KEY).catch(() => undefined);');
+    const refreshTokenDelete = logoutBody.indexOf('await serializeRefreshTokenMutation(() =>');
+    expect(refreshTokenDelete).toBeGreaterThanOrEqual(0);
+    expect(logoutBody).toContain('deleteSecureItem(REFRESH_TOKEN_KEY).catch(() => undefined)');
     expect(logoutBody.indexOf('await clearAllMobileVoiceCredentials().catch(() => undefined);')).toBeLessThan(refreshTokenDelete);
     expect(logoutBody.indexOf('await clearMobileVoiceLiteLlmSettings().catch(() => undefined);')).toBeLessThan(refreshTokenDelete);
     expect(logoutBody.indexOf('await clearAllMobileVoiceInputHistories().catch(() => undefined);')).toBeLessThan(refreshTokenDelete);

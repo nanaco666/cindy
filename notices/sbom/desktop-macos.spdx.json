@@ -3,9 +3,9 @@
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
   "name": "xdt-maker-desktop-macos",
-  "documentNamespace": "https://xdmaker.com/spdx/desktop-macos/8ba564a94410e0d2e3e4885465150f1a15f90e460a63a374d8fc05f0aaa9d4db",
+  "documentNamespace": "https://xdmaker.com/spdx/desktop-macos/a2b50846742316ce59df99237fde9d084a87a98f7a478bdcdc90a018a3ab8524",
   "creationInfo": {
-    "created": "1970-01-01T00:00:00Z",
+    "created": "2026-07-16T07:14:09Z",
     "creators": [
       "Tool: scripts/generate-third-party-notices.mjs"
     ]
@@ -6801,8 +6801,8 @@
     },
     {
       "name": "drizzle-orm",
-      "SPDXID": "SPDXRef-Package-ff2415e6057a6c54",
-      "versionInfo": "0.36.4",
+      "SPDXID": "SPDXRef-Package-bc6d5248a7fbabed",
+      "versionInfo": "0.45.2",
       "downloadLocation": "https://github.com/drizzle-team/drizzle-orm",
       "filesAnalyzed": false,
       "licenseConcluded": "Apache-2.0",
@@ -6812,7 +6812,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/drizzle-orm@0.36.4"
+          "referenceLocator": "pkg:npm/drizzle-orm@0.45.2"
         }
       ]
     },
@@ -9278,23 +9278,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/js-yaml@3.15.0"
-        }
-      ]
-    },
-    {
-      "name": "js-yaml",
-      "SPDXID": "SPDXRef-Package-8f45382471476cce",
-      "versionInfo": "4.1.1",
-      "downloadLocation": "https://github.com/nodeca/js-yaml",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/js-yaml@4.1.1"
         }
       ]
     },
@@ -15063,8 +15046,8 @@
     },
     {
       "name": "zod",
-      "SPDXID": "SPDXRef-Package-ba9ad081296230d2",
-      "versionInfo": "4.4.3",
+      "SPDXID": "SPDXRef-Package-db999faf406e0717",
+      "versionInfo": "4.3.6",
       "downloadLocation": "https://github.com/colinhacks/zod",
       "filesAnalyzed": false,
       "licenseConcluded": "MIT",
@@ -15074,7 +15057,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/zod@4.4.3"
+          "referenceLocator": "pkg:npm/zod@4.3.6"
         }
       ]
     },
@@ -17132,7 +17115,7 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-ff2415e6057a6c54"
+      "relatedSpdxElement": "SPDXRef-Package-bc6d5248a7fbabed"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -17858,11 +17841,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-98f88ff4e5a3d486"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-8f45382471476cce"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -19562,7 +19540,7 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-ba9ad081296230d2"
+      "relatedSpdxElement": "SPDXRef-Package-db999faf406e0717"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",

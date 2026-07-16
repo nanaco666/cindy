@@ -3,9 +3,10 @@ import { relayStatusHint, relayStatusLabel } from '@lizi/maker-shared/device-lin
 
 export interface MobileSettingsOverviewInput {
   apiBaseUrl: string;
+  authBaseUrl: string;
+  authRegion: 'cn' | 'global';
   deviceId: string | null;
   deviceName: string;
-  feishuConfigured: boolean;
   lastSyncedAt?: number | null;
   platform: string;
   relayStatus: DeviceLinkStatus;
@@ -118,9 +119,15 @@ export function buildMobileSettingsOverview(input: MobileSettingsOverviewInput):
             copyValue: input.apiBaseUrl,
           },
           {
-            id: 'debug.feishu',
-            label: '飞书配置',
-            value: input.feishuConfigured ? '已配置' : '缺少 App ID',
+            id: 'debug.authBaseUrl',
+            label: 'Auth Server',
+            value: input.authBaseUrl,
+            copyValue: input.authBaseUrl,
+          },
+          {
+            id: 'debug.authRegion',
+            label: '登录区域',
+            value: input.authRegion === 'global' ? 'Global' : 'CN',
           },
         ]),
       },

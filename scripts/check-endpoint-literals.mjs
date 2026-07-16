@@ -50,6 +50,24 @@ const MONITORED = [
     ],
   },
   {
+    pattern: 'auth.cindy.com.cn',
+    allow: [
+      ENDPOINTS_JSON,
+      'apps/desktop/src/shared/endpoints.ts',
+      'apps/mobile/src/config/env.ts',
+      'apps/mobile/eas.json',
+    ],
+  },
+  {
+    pattern: 'auth.cindy.app',
+    allow: [
+      ENDPOINTS_JSON,
+      'apps/desktop/src/shared/endpoints.ts',
+      'apps/mobile/src/config/env.ts',
+      'apps/mobile/eas.json',
+    ],
+  },
+  {
     pattern: 'xdmaker-device-link.magiclizi.com',
     allow: [
       ENDPOINTS_JSON,
@@ -104,13 +122,14 @@ const MONITORED = [
   {
     // OpenAPI 端点前缀;open.feishu.cn 的文档/控制台外链不受控(不带 /open-apis)
     pattern: 'open.feishu.cn/open-apis',
-    allow: [],
+    allow: [
+      // networkSlot 用真实 host 验证 login-feishu-token 仅向飞书 allowlist 注入。
+      'apps/desktop/src/main/cindy-brain/__tests__/networkSlot.test.ts',
+    ],
   },
   {
     pattern: 'accounts.feishu.cn',
     allow: [
-      'apps/desktop/src/main/authManager.ts',
-      'apps/mobile/src/auth/AuthContext.tsx',
       'packages/lizi-im/src/feishu/appRegistration.ts',
     ],
   },
@@ -162,6 +181,8 @@ function buildConsistencyChecks(ep) {
     { file: 'apps/desktop/src/shared/endpoints.ts', mustContain: `'${ep.cdnInternalBaseUrl}'`, what: 'CDN_INTERNAL_BASE_URL' },
     { file: 'apps/desktop/src/shared/hookControlIpc.ts', mustContain: `'${ep.slackHookWsUrl}'`, what: 'SLACK_HOOK_DEFAULT_URL' },
     { file: 'apps/mobile/src/config/env.ts', mustContain: `'${ep.apiBaseUrl}'`, what: 'DEFAULT_API_BASE_URL' },
+    { file: 'apps/mobile/src/config/env.ts', mustContain: `'${ep.authApiBaseUrlCn}'`, what: 'DEFAULT_AUTH_API_BASE_URL_CN' },
+    { file: 'apps/mobile/src/config/env.ts', mustContain: `'${ep.authApiBaseUrlGlobal}'`, what: 'DEFAULT_AUTH_API_BASE_URL_GLOBAL' },
     { file: 'apps/mobile/src/config/env.ts', mustContain: `'${ep.deviceLinkApiBaseUrl}'`, what: 'DEFAULT_DEVICE_LINK_API_BASE_URL' },
     { file: 'apps/mobile/src/config/env.ts', mustContain: `'${ep.xdGatewayBaseUrl}'`, what: 'DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL' },
     {
@@ -232,6 +253,26 @@ function buildStructuredConsistencyChecks(ep) {
             reason: `期望 ${expected}，实际 ${env[key] ?? '(缺失)'}`,
           });
         }
+      }
+      const region = env.EXPO_PUBLIC_CINDY_AUTH_REGION;
+      const expectedAuthUrl =
+        region === 'cn'
+          ? ep.authApiBaseUrlCn
+          : region === 'global'
+            ? ep.authApiBaseUrlGlobal
+            : null;
+      if (!expectedAuthUrl) {
+        inconsistencies.push({
+          file: easFile,
+          what: `build.${profileName}.env.EXPO_PUBLIC_CINDY_AUTH_REGION`,
+          reason: `期望 cn 或 global，实际 ${region ?? '(缺失)'}`,
+        });
+      } else if (env.EXPO_PUBLIC_CINDY_AUTH_BASE_URL !== expectedAuthUrl) {
+        inconsistencies.push({
+          file: easFile,
+          what: `build.${profileName}.env.EXPO_PUBLIC_CINDY_AUTH_BASE_URL`,
+          reason: `期望 ${expectedAuthUrl}，实际 ${env.EXPO_PUBLIC_CINDY_AUTH_BASE_URL ?? '(缺失)'}`,
+        });
       }
     }
   } catch (error) {

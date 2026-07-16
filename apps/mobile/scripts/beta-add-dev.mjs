@@ -14,7 +14,10 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const dev = args.dev ?? args._[0];
   const config = loadMobileConfig();
-  const result = addBetaDeveloperProfile(config.easJson, dev, { allowExisting: Boolean(args.execute) });
+  const result = addBetaDeveloperProfile(config.easJson, dev, {
+    allowExisting: Boolean(args.execute),
+    region: args.region,
+  });
   if (args.execute) {
     assertEasLoggedIn({ mobileDir: config.mobileDir });
     if (result.created) saveEasJson(config.easJson, config.mobileDir);

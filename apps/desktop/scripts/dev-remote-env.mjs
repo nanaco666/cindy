@@ -2,9 +2,8 @@
 /**
  * dev-remote-env.mjs — dev:remote / dev:inspect 的生产端点注入包装。
  *
- * 历史上 VITE_API_BASE_URL / VITE_DEVICE_LINK_API_BASE_URL / VITE_OAUTH_BROKER_API_BASE_URL
- * 三个值以 cross-env 字面量写死在 package.json 脚本里,是端点收敛后仅存的散写点;
- * 现在改为从 config/production-endpoints.json 权威源读取,统一替换域名只改那份 JSON。
+ * VITE_API_BASE_URL / VITE_CINDY_AUTH_BASE_URL / VITE_DEVICE_LINK_API_BASE_URL /
+ * VITE_OAUTH_BROKER_API_BASE_URL 均从 config/production-endpoints.json 权威源读取。
  *
  * 语义与原 cross-env 字面量完全一致:强制覆盖(allowEnvOverride: false,不吃
  * shell env / .env 的同名变量)——remote 模式从来不看 apps/desktop/.env。

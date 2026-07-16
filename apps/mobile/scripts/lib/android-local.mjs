@@ -144,28 +144,6 @@ export function patchBuildGradleSigning(source) {
   return patched;
 }
 
-// xdt-feishu-login vendored 的 larksso AAR 目录(相对生成的 android/ 根工程)。用单引号 JS 串,
-// 保持 groovy 的 ${rootProject.projectDir} 字面量(不被 JS 模板插值)。
-export const FEISHU_LIBS_DIR_EXPR = '${rootProject.projectDir}/../modules/xdt-feishu-login/android/libs';
-
-/**
- * 幂等 patch 生成的 android/build.gradle:把 xdt-feishu-login 的 libs flatDir 加进 allprojects.repositories,
- * 让 :app 能传递解析 vendored 的 larksso AAR(flatDir 无 POM、不跨工程传递,故 :app 侧必须显式声明)。
- * 只动生成的 android/(prebuild 之后),对 @expo/fingerprint / iOS / EAS 零影响。找不到锚点抛错。
- * @param {string} source android/build.gradle 原文
- * @returns {string}
- */
-export function patchRootBuildGradleFeishuFlatDir(source) {
-  if (typeof source !== 'string' || !source) throw new Error('patchRootBuildGradleFeishuFlatDir: 空 build.gradle');
-  if (source.includes('xdt-feishu-login/android/libs')) return source; // 幂等:已 patch
-  // 只认 allprojects 里的 repositories(避免误伤 buildscript.repositories)。
-  const anchor = /allprojects\s*\{\s*repositories\s*\{/;
-  if (!anchor.test(source)) {
-    throw new Error('patchRootBuildGradleFeishuFlatDir: 未找到 allprojects { repositories { 块(Expo prebuild 模板结构变化?)');
-  }
-  return source.replace(anchor, (m) => `${m}\n    flatDir { dirs "${FEISHU_LIBS_DIR_EXPR}" }`);
-}
-
 /**
  * 幂等 patch 生成的 android/gradle.properties 的 org.gradle.jvmargs,调大 heap / metaspace,
  * 避免大型多模块 + KSP 编译时 Metaspace OOM。保留该行其它已有 flag,只 bump 两个数值(缺则补)。
