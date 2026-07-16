@@ -1053,7 +1053,7 @@ function ScheduleFormCard({
             editable={!busy}
             multiline
             onChangeText={onPromptChange}
-            placeholder="写清楚每次自动执行要让 XDMaker 做什么"
+            placeholder="写清楚每次自动执行要让 Cindy 做什么"
             placeholderTextColor={colors.textTertiary}
             style={[styles.input, styles.textArea]}
             testID="automations.form.promptInput"

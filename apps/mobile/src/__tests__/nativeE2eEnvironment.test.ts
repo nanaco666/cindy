@@ -364,7 +364,7 @@ describe('native e2e environment', () => {
 
     expect(expoModuleConfig).toContain('"platforms": ["apple"]');
     expect(expoModuleConfig).not.toContain('"android"');
-    expect(realtimeAudio).toContain("throw new UnavailabilityError('XDMaker mobile voice input', 'realtime microphone PCM capture')");
+    expect(realtimeAudio).toContain("throw new UnavailabilityError('Cindy mobile voice input', 'realtime microphone PCM capture')");
     expect(realtimeAudio).toContain('EXPO_PUBLIC_XDT_MOBILE_E2E_MOCK_AUDIO');
   });
 

@@ -70,7 +70,7 @@ export async function startMobileRealtimeAudio(
   }
   const binding = getNativeBinding();
   if (!binding) {
-    throw new UnavailabilityError('XDMaker mobile voice input', 'realtime microphone PCM capture');
+    throw new UnavailabilityError('Cindy mobile voice input', 'realtime microphone PCM capture');
   }
   const subscriptions: EventSubscription[] = [
     binding.module.addListener('onAudioChunk', (event) => {

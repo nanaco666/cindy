@@ -1,11 +1,11 @@
 ---
 id: integrations
-title: What XDMaker integrates with
+title: What Cindy integrates with
 summary: Supported external services — FeiShu, Slack, Google, Jira / Confluence, GitHub, GitLab (via ghosts) — and what's not supported.
 tab: connections
 status: draft
 ---
-At a glance, XDMaker integrates with:
+At a glance, Cindy integrates with:
 
 - **FeiShu (Lark)** — sign-in (OAuth) and DM-style bot notifications. See the FeiShu bot topic.
 - **Slack** — search / read / act on Slack via the Cindy Slack ghost (Settings > Ghosts > Cindy Slack), plus the Slack channel bot for receiving tasks (see IM bot settings).

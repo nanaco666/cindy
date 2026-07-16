@@ -3,5 +3,5 @@ export function buildMobileDeviceName(input: {
   platform: string;
 }): string {
   const trimmed = input.constantsDeviceName?.trim();
-  return trimmed || `XDMaker ${input.platform}`;
+  return trimmed || `Cindy ${input.platform}`;
 }

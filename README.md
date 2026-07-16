@@ -1,6 +1,6 @@
 # Cindy 客户端
 
-XDMaker/Cindy 的客户端 monorepo，包含：
+Cindy 的客户端 monorepo，包含：
 
 - `apps/desktop`：Electron 桌面客户端
 - `apps/mobile`：Expo / React Native 手机客户端

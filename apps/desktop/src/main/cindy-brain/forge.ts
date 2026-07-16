@@ -138,7 +138,7 @@ export async function packGhostDir(dir: string): Promise<ForgePackResult> {
  */
 export const FORGE_GUIDE = `# 意识(Ghost)编写手册
 
-意识是 XDMaker(Cindy)的第三方能力包,文件形态是 \`.cindy\`(zip 包)。装入后可给
+意识是 Cindy 的第三方能力包,文件形态是 \`.cindy\`(zip 包)。装入后可给
 主机叠加:AI 可调用的工具、常驻界面面板、模型代办能力。本手册教你(agent)替用户
 写一个意识。**流程:读完本手册 → 在工作目录写源码文件 → ghost_forge_pack 打包 →
 用户在弹窗上确认装入。**
@@ -226,7 +226,7 @@ my-ghost/
       "extraAuthorizeParams": { "access_type": "offline", "prompt": "consent" },  // 可选 ≤8 条:服务商特有授权参数(协议保留参数禁写)
       "identity": { "url": "https://api.example.com/userinfo", "labelPath": "email", "displayTemplate": "{team} · {user}" },  // 可选:授权后拉一次身份端点给账号打标签(设置页"已连接为 xxx";url 域名须命中 hosts)。labelPath 应指向**唯一且稳定**字段(如邮箱 / user_id)——它是重复授权时的同身份合并判定键,选 name 这类可重名可改名字段会误合并。displayTemplate 可选:人类可读展示名模板,\`{点分路径}\` 占位符从同一份身份响应取值(至少一个占位符,≤200 字符),任一占位符取不到值整体降级为空、回落显示 labelPath 的值——labelPath 的稳定字段不可读(如 Slack 的 user_id)时声明它,设置页与账号工具展示的就是渲染后的名字(邮箱这类本身可读的服务商不需要)
       "redirectPort": 53682,                        // 可选:loopback 回调固定端口(1024–65535)。服务商要求回调 URI 与注册值精确匹配(如 Atlassian)时声明,回调恒为 http://127.0.0.1:<端口>/callback;缺省 = 随机端口(Google 等允许任意 loopback 端口的服务商不用声明)
-      "tokenBroker": "jira",                        // 可选:仅第一方官方意识可用(第三方声明拒装)。声明后 code/refresh 交换经 XDMaker 服务端 broker 完成(client secret 在服务端,不随包分发),与 clientSecret 互斥;设置页不再支持自填 client
+      "tokenBroker": "jira",                        // 可选:仅第一方官方意识可用(第三方声明拒装)。声明后 code/refresh 交换经 Cindy 服务端 broker 完成(client secret 在服务端,不随包分发),与 clientSecret 互斥;设置页不再支持自填 client
       "brokerBounce": { "path": "/slack-mcp/bounce", "callbackPath": "/slack-mcp/callback" }  // 可选:双地址弹跳回调(服务商后台只收 https redirect 时用,如 Slack)。必须与 tokenBroker、redirectPort 同时声明;报给服务商的 redirect_uri = broker 服务基地址 + path(主机运行时拼,清单不落域名),浏览器授权后由弹跳路由 302 回 http://127.0.0.1:<redirectPort><callbackPath>
     }
   }],
@@ -805,8 +805,8 @@ identity.displayTemplate 时,\`/oauth\` 回查与连接结果里 account.label �
   ——请选一个不易撞车的端口)。Google 这类允许任意 loopback 端口的服务商不用
   声明。
 - \`tokenBroker\`:**仅第一方官方意识可用**(第三方声明直接拒装)——code/refresh
-  交换改经 XDMaker 服务端 broker 完成,client secret 由服务端持有、不随包分发,
-  且要求用户已登录 XDMaker。声明它时与 clientSecret 互斥、PKCE 强制关闭、设置页
+  交换改经 Cindy 服务端 broker 完成,client secret 由服务端持有、不随包分发,
+  且要求用户已登录 Cindy。声明它时与 clientSecret 互斥、PKCE 强制关闭、设置页
   的 \`/oauth/<key>/client\` 自填通道返回 405(settingsHtml 不要再画 client 输入区)。
 - \`brokerBounce\`:双地址弹跳回调(随 tokenBroker,同样仅第一方)。Slack 这类
   服务商后台只收 https redirect、不收 http loopback——声明后报给服务商的

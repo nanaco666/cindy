@@ -36,5 +36,5 @@ export function agentAuthGateVerdict(input: AgentAuthGateInput): AgentAuthGateVe
 /** 未鉴权时的提示文案(与 describeAgentAuthError 的引导口径一致)。 */
 export function agentAuthGateHint(agentKind: 'claude-code' | 'codex'): string {
   const label = agentKind === 'claude-code' ? 'Claude' : 'Codex';
-  return `${label} 在这台电脑上还没有已连接的模型供应商，发送会失败。请在电脑端 XDMaker 的「设置 → 模型供应商」完成配置。`;
+  return `${label} 在这台电脑上还没有已连接的模型供应商，发送会失败。请在电脑端 Cindy 的「设置 → 模型供应商」完成配置。`;
 }

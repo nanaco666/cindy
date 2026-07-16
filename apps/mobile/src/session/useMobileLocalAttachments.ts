@@ -266,8 +266,8 @@ export function useMobileLocalAttachments(
         : await ImagePicker.requestMediaLibraryPermissionsAsync(false);
       if (!permission.granted) {
         optionsRef.current.onError(source === 'camera'
-          ? '相机权限未开启，请在系统设置里允许 XDMaker 使用相机。'
-          : '照片权限未开启，请在系统设置里允许 XDMaker 访问照片。');
+          ? '相机权限未开启，请在系统设置里允许 Cindy 使用相机。'
+          : '照片权限未开启，请在系统设置里允许 Cindy 访问照片。');
         return;
       }
 

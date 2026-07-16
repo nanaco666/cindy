@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "XDMaker",
+    "name": "Cindy",
     "slug": "xdt-maker-mobile",
     "scheme": "cindycn",
     "version": "1.0.0",
@@ -88,22 +88,22 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "XDMaker needs microphone access for voice input in remote sessions.",
+          "microphonePermission": "Cindy needs microphone access for voice input in remote sessions.",
           "recordAudioAndroid": true
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "XDMaker needs photo library access to attach images to remote sessions.",
-          "cameraPermission": "XDMaker needs camera access to attach photos to remote sessions.",
+          "photosPermission": "Cindy needs photo library access to attach images to remote sessions.",
+          "cameraPermission": "Cindy needs camera access to attach photos to remote sessions.",
           "microphonePermission": false
         }
       ],
       [
         "expo-media-library",
         {
-          "photosPermission": "XDMaker needs photo library access to show recent photos and screenshots for quick attaching.",
+          "photosPermission": "Cindy needs photo library access to show recent photos and screenshots for quick attaching.",
           "savePhotosPermission": false,
           "isAccessMediaLocationEnabled": false
         }

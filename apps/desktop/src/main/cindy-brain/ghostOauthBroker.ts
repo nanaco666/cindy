@@ -23,6 +23,8 @@
  * 零 Electron。
  */
 
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
+
 import {
   EXPIRY_SAFETY_MARGIN_MS,
   type GhostOauthBrokerClient,
@@ -109,7 +111,7 @@ export function createGhostOauthBrokerClient(deps: GhostOauthBrokerDeps): GhostO
         ok: false,
         error: 'EXCHANGE_FAILED',
         invalidGrant: false,
-        detail: '需要先登录 XDMaker(broker 授权经服务端完成)',
+        detail: `需要先登录 ${BRAND_NAME}(broker 授权经服务端完成)`,
       };
     }
     let raw: unknown;

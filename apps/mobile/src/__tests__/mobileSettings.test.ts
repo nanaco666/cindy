@@ -11,7 +11,7 @@ const readTextLf = (...args: Parameters<typeof readFileSync>): string =>
 describe('mobile settings overview', () => {
   it('keeps the device-link hello name and settings device name on one source', () => {
     expect(buildMobileDeviceName({ constantsDeviceName: ' Dash iPhone ', platform: 'ios' })).toBe('Dash iPhone');
-    expect(buildMobileDeviceName({ constantsDeviceName: '   ', platform: 'android' })).toBe('XDMaker android');
+    expect(buildMobileDeviceName({ constantsDeviceName: '   ', platform: 'android' })).toBe('Cindy android');
   });
 
   it('projects an account header plus about and debug sections for the settings screen', () => {

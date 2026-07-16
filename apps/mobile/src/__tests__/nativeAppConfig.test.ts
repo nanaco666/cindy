@@ -52,7 +52,7 @@ describe('mobile native app config', () => {
     process.env.EXPO_PUBLIC_APP_VARIANT = 'beta';
     process.env.EXPO_PUBLIC_BETA_DEV = 'dash';
     expect(buildConfig({ config: appJson.expo }).name).toBe(
-      'XDMaker Beta (dash)',
+      'Cindy Beta (dash)',
     );
   });
 

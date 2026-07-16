@@ -5,7 +5,7 @@ summary: How auto-updates apply; where to find the app and agent versions, the d
 tab: about
 status: draft
 ---
-XDMaker checks for updates automatically and downloads them in the background. When an update is ready, you're prompted to **relaunch** the app to apply it.
+Cindy checks for updates automatically and downloads them in the background. When an update is ready, you're prompted to **relaunch** the app to apply it.
 
 **Settings > About:**
 

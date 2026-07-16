@@ -5,7 +5,7 @@ summary: Scan and import existing Codex or Claude Code chat history from Setting
 tab: import
 status: draft
 ---
-If you already have Codex or Claude Code conversations on disk (from the CLIs), Import brings them into XDMaker so they show up in the sidebar alongside your other sessions.
+If you already have Codex or Claude Code conversations on disk (from the CLIs), Import brings them into Cindy so they show up in the sidebar alongside your other sessions.
 
 **Importing:**
 
@@ -20,5 +20,5 @@ If you already have Codex or Claude Code conversations on disk (from the CLIs), 
 **Notes:**
 
 - Importing is **one-way and non-destructive** — the originals on disk are left in place; nothing is synced back. Re-importing the same session is a no-op.
-- Imported threads are read-only history at first; you can continue them just like any other XDMaker session.
+- Imported threads are read-only history at first; you can continue them just like any other Cindy session.
 - This is for bringing in past conversations — it's unrelated to archiving / deleting sessions (see the Sidebar topic for those).

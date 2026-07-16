@@ -17,6 +17,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import { shell } from 'electron';
 
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
+
 import { desktopMakerLogger } from './logger-adapter.js';
 import { getProviderSecretStore } from '../secrets/providerSecretStore.js';
 
@@ -258,8 +260,8 @@ class CallbackListener {
     this.pendingRes.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     // 浏览器页面够不到 renderer 的 i18n,双语兜底(中文主 + 英文副)。
     this.pendingRes.end(
-      '<html><body style="font-family:sans-serif">xAI 登录成功,可以关闭此页面回到 XDMaker。<br/>'
-      + 'xAI login successful — you can close this page and return to XDMaker.</body></html>',
+      `<html><body style="font-family:sans-serif">xAI 登录成功,可以关闭此页面回到 ${BRAND_NAME}。<br/>`
+      + `xAI login successful — you can close this page and return to ${BRAND_NAME}.</body></html>`,
     );
     this.pendingRes = null;
   }

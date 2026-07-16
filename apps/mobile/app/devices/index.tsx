@@ -1755,7 +1755,7 @@ function RevokedAccessTip({
           </View>
           <Text style={styles.revokedTipTitle}>已撤销访问权限</Text>
           <Text style={styles.revokedTipBody}>
-            {`「${deviceName ?? '这台电脑'}」撤销了本机的远程访问权限。请在该电脑的 XDMaker 设置里重新授权本设备，然后点「重试访问」。`}
+            {`「${deviceName ?? '这台电脑'}」撤销了本机的远程访问权限。请在该电脑的 Cindy 设置里重新授权本设备，然后点「重试访问」。`}
           </Text>
           <Pressable
             accessibilityLabel="重试访问"

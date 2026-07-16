@@ -81,7 +81,7 @@ function RootLayout() {
       <GestureHandlerRootView style={styles.gestureRoot}>
         <SafeAreaProvider>
           <ThemeProvider>
-            <CenteredScreen title="XDMaker" subtitle="正在检查更新" />
+            <CenteredScreen title="Cindy" subtitle="正在检查更新" />
           </ThemeProvider>
         </SafeAreaProvider>
       </GestureHandlerRootView>

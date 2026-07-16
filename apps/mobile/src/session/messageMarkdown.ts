@@ -548,7 +548,7 @@ function findNextInlineToken(
     // 靠 image 的起点(`!`)更靠前在排序里胜出,这里的顺序只是可读性上的强调。
     matchMarkdownImage(input, from, startsInsideHtmlComment),
     matchHtmlImage(input, from, startsInsideHtmlComment),
-    // 链接语法:http(s) 之外放行 XDMaker 深链 xdt-maker://session|project/
+    // 链接语法:http(s) 之外放行 Cindy 深链 xdt-maker://session|project/
     // (session 渲染成会话 chip;project 在 renderInline 里显示 label 纯文本,
     // 不落 Linking.openURL——桌面端粘贴 chip 化后会按 [标题](深链) 发送,
     // 不 tokenize 会把整段渲染成原始 markdown 源码,review P1)。

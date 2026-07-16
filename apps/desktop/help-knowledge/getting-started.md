@@ -1,10 +1,10 @@
 ---
 id: getting-started
-title: Getting started with XDMaker
+title: Getting started with Cindy
 summary: Create a session, choose an agent and working directory, send your first prompt, and iterate.
 status: draft
 ---
-XDMaker is a desktop app that runs AI coding agents (Claude Code and Codex) for you.
+Cindy is a desktop app that runs AI coding agents (Claude Code and Codex) for you.
 
 **Your first session:**
 

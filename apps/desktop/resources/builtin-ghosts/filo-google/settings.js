@@ -23,7 +23,7 @@
   }
 
   var CONNECT_ERROR_TEXT = {
-    NO_CLIENT_CONFIG: '内置应用身份缺失,请升级 XDMaker 后重试',
+    NO_CLIENT_CONFIG: '内置应用身份缺失,请升级 Cindy 后重试',
     TIMEOUT: '授权超时,请重试',
     CANCELLED: '授权已取消',
     CALLBACK_INVALID: '授权回调校验失败,请重试',

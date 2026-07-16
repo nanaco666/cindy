@@ -493,7 +493,7 @@ CSS variable 名一律 kebab-case。点号风格(如 VSCode 的 `sidebar.itemAct
 
 > **状态:草案**,2026-06 引入(参考 Vercel Geist `design.md` 的 Voice & Content 一节)。本节规定**界面文案怎么写**,与 CLAUDE.md 规则 #18(i18n 体系)配套——#18 管"文案必须 4 语言对齐、走 token",本节管"每条文案本身的语气/措辞"。本节不新增任何 UI 字符串,只约束写法。
 
-XDMaker 的产品气质和视觉一致:**克制、直接、不自夸**。文案是工具的一部分,不是营销。
+Cindy 的产品气质和视觉一致:**克制、直接、不自夸**。文案是工具的一部分,不是营销。
 
 ### 11.1 语言无关原则(zh-CN / en / ja / ko 全部适用)
 

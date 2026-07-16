@@ -47,7 +47,7 @@
     TIMEOUT: '授权超时,请重试',
     CANCELLED: '授权已取消',
     CALLBACK_INVALID: '授权回调校验失败,请重试',
-    EXCHANGE_FAILED: '令牌交换失败(需已登录 XDMaker;详情见下方提示)',
+    EXCHANGE_FAILED: '令牌交换失败(需已登录 Cindy;详情见下方提示)',
     NETWORK: '网络失败,请稍后重试',
     ACCOUNT_LIMIT: '账号数量已达上限(8 个)',
     VAULT_WRITE_FAILED: '本机加密存储不可用,保存失败',

@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "id": "xd-atlassian",
   "name": "XD Atlassian",
-  "description": "内置的 Atlassian 服务意识:连上公司 Atlassian 账号即可读写 Jira 与 Confluence(issue / JQL 搜索 / 工作流,页面 / 评论 / 附件)。开箱即用——点「连接账号」完成授权即可;授权由 XDMaker 服务端托管,应用密钥不随包分发。",
+  "description": "内置的 Atlassian 服务意识:连上公司 Atlassian 账号即可读写 Jira 与 Confluence(issue / JQL 搜索 / 工作流,页面 / 评论 / 附件)。开箱即用——点「连接账号」完成授权即可;授权由 Cindy 服务端托管,应用密钥不随包分发。",
   "whenToUse": "需要查/建/改 Jira issue,JQL 搜索,查项目或用户,流转工作流,下载 Jira 附件,或搜索/阅读/创建/更新 Confluence 页面、读写评论、下载 Confluence 附件时找我(需先在意识设置页连接 Atlassian 账号)。",
   "version": "1.1.0",
   "author": "Cindy",
@@ -25,7 +25,7 @@
         "key": "atlassian_account",
         "label": "Atlassian 账号",
         "source": "oauth",
-        "hint": "到设置页点「连接账号」即可;授权与令牌全程由主机与 XDMaker 服务端托管",
+        "hint": "到设置页点「连接账号」即可;授权与令牌全程由主机与 Cindy 服务端托管",
         "inject": {
           "header": "Authorization",
           "format": "Bearer {value}",
