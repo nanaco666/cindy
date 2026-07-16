@@ -6,10 +6,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-/** 自建 Android 线默认 release keystore(打包机上的仓库外路径,不入仓;可用 env 覆盖)。 */
-export const DEFAULT_KEYSTORE_PATH = '/Users/cn-ios/Documents/cindy/CindyMobileCer/Android/Cindy.jks';
-/** 默认 keyAlias(见 CindyMobileCer/Android/signing-info.txt;PKCS12 格式,storePassword 与 keyPassword 相同)。口令**绝不**写进代码,只从 env 读。 */
-export const DEFAULT_KEY_ALIAS = 'Cindy';
+// 签名配置零代码默认值:keystore 路径 / alias / 两个口令全部由 XDT_ANDROID_* 环境变量提供,
+// 缺任一项即抛错(fail-closed)。签名套件本体(CindyMobileCer/Android/,含 signing-info.txt)
+// 在打包机的仓库外目录,口令**绝不**写进代码,只从 env 读。
 
 /**
  * 读 committed android-version.json 的 versionCode(单调递增整数,语义对齐 iOS buildNumber)。
@@ -77,22 +76,24 @@ export function replaceVersionCodeInAndroidVersionJson(rawText, nextVersionCode)
 
 /**
  * 解析 keystore 签名环境(供 gradlew assembleRelease 消费,build.gradle 用 System.getenv 读)。
- * 路径/alias 有默认值;两个口令**必须**由 env 提供(缺失即抛错,不落任何默认口令)。
+ * 路径 / alias / 两个口令**全部必须**由 env 提供(零代码默认值,缺任一项即抛错,fail-closed)。
  * 返回的 env 只在构建子进程内传入,绝不落盘、绝不写进 build.gradle。
  * @param {NodeJS.ProcessEnv} baseEnv
  * @returns {{ XDT_ANDROID_KEYSTORE_PATH: string, XDT_ANDROID_KEYSTORE_PASSWORD: string, XDT_ANDROID_KEY_ALIAS: string, XDT_ANDROID_KEY_PASSWORD: string }}
  */
 export function resolveAndroidSigningEnv(baseEnv = process.env) {
-  const keystorePath = String(baseEnv.XDT_ANDROID_KEYSTORE_PATH ?? '').trim() || DEFAULT_KEYSTORE_PATH;
-  const keyAlias = String(baseEnv.XDT_ANDROID_KEY_ALIAS ?? '').trim() || DEFAULT_KEY_ALIAS;
+  const keystorePath = String(baseEnv.XDT_ANDROID_KEYSTORE_PATH ?? '').trim();
+  const keyAlias = String(baseEnv.XDT_ANDROID_KEY_ALIAS ?? '').trim();
   const storePassword = String(baseEnv.XDT_ANDROID_KEYSTORE_PASSWORD ?? '').trim();
   const keyPassword = String(baseEnv.XDT_ANDROID_KEY_PASSWORD ?? '').trim();
   const missing = [];
+  if (!keystorePath) missing.push('XDT_ANDROID_KEYSTORE_PATH');
   if (!storePassword) missing.push('XDT_ANDROID_KEYSTORE_PASSWORD');
+  if (!keyAlias) missing.push('XDT_ANDROID_KEY_ALIAS');
   if (!keyPassword) missing.push('XDT_ANDROID_KEY_PASSWORD');
   if (missing.length) {
     throw new Error(
-      `缺少 keystore 口令环境变量:${missing.join(', ')}(口令不入仓,须在启动时提供;keystore 路径默认 ${DEFAULT_KEYSTORE_PATH},可用 XDT_ANDROID_KEYSTORE_PATH 覆盖)`,
+      `缺少 Android 签名环境变量:${missing.join(', ')}(签名配置零代码默认值,路径/alias/口令均须在启动时经 env 提供,凭证不入仓)`,
     );
   }
   return {

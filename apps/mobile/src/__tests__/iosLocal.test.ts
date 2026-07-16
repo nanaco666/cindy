@@ -12,6 +12,7 @@ import {
   fetchBaselineBuildNumber,
   nextDateBuildNumber,
   replaceBuildNumberInAppJson,
+  resolveIosSigningEnv,
 } from '../../scripts/lib/ios-local.mjs';
 
 const resp = (status, { json, ok } = {}) => ({
@@ -50,6 +51,29 @@ describe('compareBuildNumbers / assertBuildNumberMonotonic', () => {
     expect(assertBuildNumberMonotonic('2026070102', '2026070101')).toBe(true);
     expect(() => assertBuildNumberMonotonic('2026070101', '2026070101')).toThrow(/必须大于/);
     expect(() => assertBuildNumberMonotonic('', '1')).toThrow();
+  });
+});
+
+describe('resolveIosSigningEnv', () => {
+  const FULL = {
+    XDT_IOS_TEAM_ID: 'TEAM123456',
+    XDT_IOS_PROFILE_NAME: 'some_profile',
+    XDT_IOS_SIGN_IDENTITY: 'Apple Development',
+  };
+  it('三项必填 env 齐全 → 透传;profilePath 可选缺省为空串', () => {
+    expect(resolveIosSigningEnv(FULL)).toEqual({
+      teamId: 'TEAM123456', profileName: 'some_profile', identity: 'Apple Development', profilePath: '',
+    });
+    expect(resolveIosSigningEnv({ ...FULL, XDT_IOS_PROFILE_PATH: '/tmp/p.mobileprovision' }).profilePath)
+      .toBe('/tmp/p.mobileprovision');
+  });
+  it('缺任一必填项 → 抛错并点名缺失的 env(零代码默认值,不回落)', () => {
+    expect(() => resolveIosSigningEnv({ ...FULL, XDT_IOS_TEAM_ID: '' })).toThrow(/XDT_IOS_TEAM_ID/);
+    expect(() => resolveIosSigningEnv({ ...FULL, XDT_IOS_PROFILE_NAME: ' ' })).toThrow(/XDT_IOS_PROFILE_NAME/);
+    expect(() => resolveIosSigningEnv({ ...FULL, XDT_IOS_SIGN_IDENTITY: undefined })).toThrow(/XDT_IOS_SIGN_IDENTITY/);
+  });
+  it('全缺 → 错误信息按序列出全部三项', () => {
+    expect(() => resolveIosSigningEnv({})).toThrow(/XDT_IOS_TEAM_ID, XDT_IOS_PROFILE_NAME, XDT_IOS_SIGN_IDENTITY/);
   });
 });
 

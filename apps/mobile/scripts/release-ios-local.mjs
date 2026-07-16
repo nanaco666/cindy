@@ -21,11 +21,11 @@
 // 默认 dry-run(校验环境 + 解析 workspace/scheme + 打印计划,不构建、不上传);
 // --execute 才跑完整链路(需 macOS + Xcode + 已装 dev 证书/描述文件 + NPKG 白名单)。
 //
-// 签名(见 docs/self-hosted-ios-build-and-ota.md §3/§7):dev profile cindycn_dev /
-// Team NTC4BJ542G / bundle com.xd.cindycn;NPKG strip 后企业重签(UE5H8B62F9.*)。
-// 证书套件(profile + p12)在打包机 /Users/cn-ios/Documents/cindy/CindyMobileCer/iOS/cn/,不进仓库。
-// 可用环境变量覆盖:XDT_IOS_TEAM_ID / XDT_IOS_PROFILE_NAME / XDT_IOS_SIGN_IDENTITY /
-//   XDT_IOS_PROFILE_PATH(描述文件路径,--execute 时会安装到系统目录)。
+// 签名(见 docs/self-hosted-ios-build-and-ota.md §3/§7):dev 签 + NPKG strip 后企业重签
+// (UE5H8B62F9.*)。签名参数**零代码默认值**,一律由环境变量提供(--execute 构建时必填):
+//   XDT_IOS_TEAM_ID / XDT_IOS_PROFILE_NAME / XDT_IOS_SIGN_IDENTITY(缺任一项抛错);
+//   XDT_IOS_PROFILE_PATH 可选(描述文件路径,--execute 时会安装到系统目录;缺省视为已装)。
+// 证书套件(profile + p12,CindyMobileCer/iOS/)在打包机的仓库外目录,不进仓库。
 // =============================================================================
 
 import { spawnSync } from 'node:child_process';
@@ -48,6 +48,7 @@ import {
   compareBuildNumbers,
   nextDateBuildNumber,
   replaceBuildNumberInAppJson,
+  resolveIosSigningEnv,
 } from './lib/ios-local.mjs';
 import { buildIosDistTargets, buildItmsManifestPlist, buildItmsUrl, buildInstallHtml } from './lib/oss-dist.mjs';
 import { clearBundlerCache } from './lib/bundler-cache.mjs';
@@ -59,13 +60,6 @@ const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 const SELFHOST_BUNDLE_ID = 'com.xd.cindycn';
 const RELEASE_RECORD_KEY = `${OSS_PREFIX}/mobile-ota/ios/release.json`;
 const RELEASE_RECORD_CDN = `${CDN_BASE}/mobile-ota/ios/release.json`;
-
-const SIGN = {
-  teamId: process.env.XDT_IOS_TEAM_ID || 'NTC4BJ542G',
-  profileName: process.env.XDT_IOS_PROFILE_NAME || 'cindycn_dev',
-  identity: process.env.XDT_IOS_SIGN_IDENTITY || 'Apple Development',
-  profilePath: process.env.XDT_IOS_PROFILE_PATH || '',
-};
 
 function log(msg) { console.error(msg); }
 
@@ -103,16 +97,16 @@ function findWorkspace() {
   return { path: join(iosDir, ws), scheme: basename(ws, '.xcworkspace') };
 }
 
-function ensureProfileInstalled() {
-  if (!SIGN.profilePath) {
+function ensureProfileInstalled(sign) {
+  if (!sign.profilePath) {
     log('  warn: 未设 XDT_IOS_PROFILE_PATH;假设描述文件已装入系统(~/Library/MobileDevice/Provisioning Profiles)');
     return;
   }
-  if (!existsSync(SIGN.profilePath)) throw new Error(`描述文件不存在:${SIGN.profilePath}`);
+  if (!existsSync(sign.profilePath)) throw new Error(`描述文件不存在:${sign.profilePath}`);
   const dest = join(homedir(), 'Library/MobileDevice/Provisioning Profiles');
   if (!existsSync(dest)) mkdirSync(dest, { recursive: true });
-  copyFileSync(SIGN.profilePath, join(dest, basename(SIGN.profilePath)));
-  log(`  ✓ 已安装描述文件 ${basename(SIGN.profilePath)}`);
+  copyFileSync(sign.profilePath, join(dest, basename(sign.profilePath)));
+  log(`  ✓ 已安装描述文件 ${basename(sign.profilePath)}`);
 }
 
 function run(cmd, args, opts = {}) {
@@ -122,6 +116,8 @@ function run(cmd, args, opts = {}) {
 }
 
 function buildIpa(env) {
+  // 签名参数零默认值,构建时才强制解析(--ipa 复用现成包的路径不需要签名 env)。
+  const sign = resolveIosSigningEnv(process.env);
   run(NPX, ['--yes', 'expo', 'prebuild', '--platform', 'ios', '--clean'], { env });
   run(NPX, ['--yes', 'pod-install'], { env });
 
@@ -133,18 +129,18 @@ function buildIpa(env) {
   const archivePath = join(outDir, 'app.xcarchive');
   const exportDir = join(outDir, 'export');
   const plistPath = join(outDir, 'ExportOptions.plist');
-  writeFileSync(plistPath, buildExportOptionsPlist({ teamId: SIGN.teamId, bundleId: SELFHOST_BUNDLE_ID, profileName: SIGN.profileName }));
+  writeFileSync(plistPath, buildExportOptionsPlist({ teamId: sign.teamId, bundleId: SELFHOST_BUNDLE_ID, profileName: sign.profileName }));
 
   // xcodebuild 的 RN embed 阶段内部触发 expo export:embed 打 JS bundle,无法透传 --clear;
   // 构建前清 Metro/Babel 缓存,确保 EXPO_PUBLIC_ 变更(TAPTAP / API 等)被重新内联,不吃旧缓存。
   clearBundlerCache({ mobileDir: MOBILE_DIR, log });
 
-  ensureProfileInstalled();
+  ensureProfileInstalled(sign);
   run('xcodebuild', [
     '-workspace', ws.path, '-scheme', ws.scheme, '-configuration', 'Release',
     '-archivePath', archivePath, '-sdk', 'iphoneos', 'archive',
-    'CODE_SIGN_STYLE=Manual', `DEVELOPMENT_TEAM=${SIGN.teamId}`,
-    `PROVISIONING_PROFILE_SPECIFIER=${SIGN.profileName}`, `CODE_SIGN_IDENTITY=${SIGN.identity}`,
+    'CODE_SIGN_STYLE=Manual', `DEVELOPMENT_TEAM=${sign.teamId}`,
+    `PROVISIONING_PROFILE_SPECIFIER=${sign.profileName}`, `CODE_SIGN_IDENTITY=${sign.identity}`,
   ], { env });
   run('xcodebuild', ['-exportArchive', '-archivePath', archivePath, '-exportOptionsPlist', plistPath, '-exportPath', exportDir], { env });
 
@@ -259,7 +255,9 @@ async function main() {
   console.log('');
   console.log(`target: mobile 冷更(ios, ${SELFHOST_BUNDLE_ID})`);
   console.log(`version / buildNumber: ${version} / ${buildNumber}${previousBuildNumber ? ` (上一条 ${previousBuildNumber})` : (args.skipRecord ? ' (--skip-record,跳过基线)' : ' (首发)')}`);
-  console.log(`sign: team=${SIGN.teamId} profile=${SIGN.profileName} identity="${SIGN.identity}"`);
+  // 签名参数零代码默认值:此处只预览 env 现值,严格校验在 buildIpa 内(--ipa 复用现成包时不需要)。
+  const preview = (name) => process.env[name]?.trim() || `(${name} 未设,--execute 构建时必填)`;
+  console.log(`sign: team=${preview('XDT_IOS_TEAM_ID')} profile=${preview('XDT_IOS_PROFILE_NAME')} identity="${preview('XDT_IOS_SIGN_IDENTITY')}"(均由 XDT_IOS_* env 提供,无代码默认值)`);
   console.log('steps: prebuild → pod-install → xcodebuild archive/export → 从 .ipa 回读 runtimeVersion → NPKG 企业重签 → 重签 ipa 直传 OSS(manifest.plist + install.html)→ 写 release.json');
   if (!args.execute) {
     console.log('dry-run: 传 --execute 才真正构建 + 上传(需 macOS + Xcode + 证书 + NPKG 白名单 + OSS AK/SK env)');

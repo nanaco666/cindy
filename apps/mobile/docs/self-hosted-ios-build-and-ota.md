@@ -8,6 +8,8 @@
 > dev 签名套件换为 **CindyMobileCer**:profile `cindycn_dev`(Team 仍 `NTC4BJ542G`,App ID
 > `NTC4BJ542G.com.xd.cindycn`,有效期 2027-07-08)+ p12 `Apple Development: Yi Zhou (RQ24UVT6TG)`,
 > 打包机路径 `/Users/cn-ios/Documents/cindy/CindyMobileCer/iOS/cn/`(不进仓库);scheme 仍为 `lizcn`。
+> 签名参数**零代码默认值**:`XDT_IOS_TEAM_ID` / `XDT_IOS_PROFILE_NAME` / `XDT_IOS_SIGN_IDENTITY` 必须经
+> 环境变量提供(构建时缺任一项报错),`XDT_IOS_PROFILE_PATH` 可选(缺省视为描述文件已装入系统)。
 > NPKG 企业重签(`UE5H8B62F9.*`)不变,但 **`com.xd.cindycn` 的 NPKG 白名单与飞书后台登记是新的外部待办**
 > (§13 中针对 `com.xd.lizcn` 的登记不自动覆盖新 bundleId)。现状以 `RELEASING.md` 与脚本头注释为准。
 >
