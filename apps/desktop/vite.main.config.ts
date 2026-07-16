@@ -79,10 +79,10 @@ export default defineConfig(({ mode }) => {
         // better-sqlite3 is a native (.node) addon — must NOT be bundled, must
         // be require()'d at runtime from node_modules. Same for ws transitive
         // optional native deps.
-        // protobufjs uses eval-based dynamic require (`@protobufjs/inquire`)
-        // that rollup-commonjs can't statically resolve, so it leaks
-        // `require("protobufjs/minimal")` into the bundle as-is. Externalize
-        // it explicitly and ship the package via forge's NATIVE_RUNTIME_DEPS.
+        // The compiled lark sdk does `require("protobufjs/minimal")` in a way
+        // rollup-commonjs can't inline, so it leaks into the bundle as-is.
+        // Externalize it explicitly and ship the package via forge's
+        // NATIVE_RUNTIME_DEPS (protobufjs >=7.6 dropped `@protobufjs/inquire`).
         external: [
           'bufferutil',
           'utf-8-validate',

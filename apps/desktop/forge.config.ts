@@ -32,11 +32,12 @@ const DISCORD_RUNTIME_DEPS = [
 // rebuild 完成后 AutoUnpackNativesPlugin 才能在 asar 阶段识别 .node 并 unpack 到
 // app.asar.unpacked/ 下。
 // `@larksuiteoapi/node-sdk` itself is bundled inline by Vite, but its compiled
-// lib does `require("protobufjs/minimal")`, and protobufjs uses eval-based
-// dynamic require (`@protobufjs/inquire`) that rollup-commonjs can't trace.
-// So `require("protobufjs/minimal")` survives into the runtime bundle and
-// must be resolvable from the packaged app's node_modules. Ship the full
-// protobufjs runtime closure (10 `@protobufjs/*` helpers + `long`).
+// lib does `require("protobufjs/minimal")` which rollup-commonjs can't inline,
+// so it survives into the runtime bundle and must be resolvable from the
+// packaged app's node_modules. Ship the full protobufjs runtime closure
+// (9 `@protobufjs/*` helpers + `long`). protobufjs >=7.6 dropped
+// `@protobufjs/inquire` (the eval-based dynamic require was removed in its
+// 2026 security fixes) — don't re-add it, resolvePackageDir would throw.
 const NATIVE_RUNTIME_DEPS = [
   'better-sqlite3',
   'bindings',
@@ -48,7 +49,6 @@ const NATIVE_RUNTIME_DEPS = [
   '@protobufjs/eventemitter',
   '@protobufjs/fetch',
   '@protobufjs/float',
-  '@protobufjs/inquire',
   '@protobufjs/path',
   '@protobufjs/pool',
   '@protobufjs/utf8',
