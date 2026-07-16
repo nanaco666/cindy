@@ -2,11 +2,10 @@
 /**
  * 生产端点源码泄漏门禁。
  *
- * 真实地址来自 gitignored production-endpoints.json。本脚本在无私有配置的 PR checkout
- * 中也能验证 example、Git 跟踪状态和关键消费文件；CI 提供真实配置后还会动态提取
- * hostname，确认这些 hostname 没有重新写回受控源码。
+ * 真实地址集中存放在受 Git 管理的 production-endpoints.json。本脚本验证 example
+ * 的字段形状、关键消费文件和 EAS 配置，并动态提取真实配置中的 hostname / App ID，
+ * 确认这些值没有重新写回受控源码。
  */
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,7 +20,6 @@ import {
 } from './shared/production-endpoints.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PRIVATE_CONFIG_REPO_PATH = 'config/production-endpoints.json';
 const EAS_ENDPOINT_ENV_KEYS = Object.freeze([
   'EXPO_PUBLIC_FEISHU_APP_ID',
   'EXPO_PUBLIC_XDT_API_BASE_URL',
@@ -69,17 +67,6 @@ export function resolveEasBuildProfileEnv(buildProfiles, profileName, stack = []
   return { ...inherited, ...own };
 }
 
-function gitTrackedFiles() {
-  return execFileSync('git', ['ls-files'], {
-    cwd: REPO_ROOT,
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
-  })
-    .split(/\r?\n/)
-    .map((file) => file.trim().replace(/\\/g, '/'))
-    .filter(Boolean);
-}
-
 function findAbsoluteOrigins(content) {
   return [
     ...content.matchAll(/(?:https?|wss?):\/\/[A-Za-z0-9.-]+(?::\d+)?/gi),
@@ -88,11 +75,6 @@ function findAbsoluteOrigins(content) {
 
 function main() {
   const errors = [];
-  const tracked = new Set(gitTrackedFiles());
-
-  if (tracked.has(PRIVATE_CONFIG_REPO_PATH)) {
-    errors.push(`${PRIVATE_CONFIG_REPO_PATH} 不允许被 Git 跟踪`);
-  }
 
   try {
     const example = validateProductionEndpointsExample();

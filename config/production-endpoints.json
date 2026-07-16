@@ -1,0 +1,15 @@
+{
+  "feishuAppId": "cli_a94d4cf642381cd4",
+  "apiBaseUrl": "https://xdt-api.magiclizi.com",
+  "deviceLinkApiBaseUrl": "https://xdmaker-device-link.magiclizi.com",
+  "oauthBrokerApiBaseUrl": "https://xdmaker-oauth.magiclizi.com",
+  "heartbeatUrl": "https://xdt-heartbreak.magiclizi.com",
+  "slackHookWsUrl": "wss://xdmaker-slack-hook.magiclizi.com",
+  "xdGatewayBaseUrl": "https://llm-proxy.tapsvc.com",
+  "cdnBaseUrl": "https://dev-cdn.fp.xd.com/xdt-maker",
+  "cdnInternalBaseUrl": "http://xdtown-static-maker.xdcdn.cn:20080/xdt-maker",
+  "npkgBaseUrl": "https://npkg.xindong.com",
+  "ossBucket": "smash-dev",
+  "ossPrefix": "xdt-maker",
+  "ossRegion": "oss-cn-shanghai"
+}
