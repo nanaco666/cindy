@@ -26,6 +26,9 @@ export const XD_GATEWAY_BASE_URL = 'https://llm-proxy.tapsvc.com';
 /** 主 server API 的 dev 兜底地址(生产由构建期注入 VITE_API_BASE_URL,不走此值)。 */
 export const API_BASE_URL_DEV_FALLBACK = 'http://localhost:3333';
 
+/** Cindy auth-server 的本地开发兜底地址（生产由 VITE_CINDY_AUTH_BASE_URL 注入）。 */
+export const AUTH_BASE_URL_DEV_FALLBACK = 'http://localhost:3344';
+
 /** device-link relay 的 dev 兜底地址(生产由构建期注入 VITE_DEVICE_LINK_API_BASE_URL)。 */
 export const DEVICE_LINK_API_BASE_DEV_FALLBACK = 'http://localhost:3335';
 

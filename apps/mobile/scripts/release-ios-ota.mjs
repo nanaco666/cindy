@@ -9,7 +9,7 @@
 //       复用冷更脚本落盘的 release/ios-runtime.json;缺失才在同一 self-host env 下现算。
 //
 // 默认 dry-run(只算 + export + 打印计划);--execute 才真正上传并翻新 latest.json。
-// --execute 前会先校验必需 public env(assertPublicEnv:缺 EXPO_PUBLIC_FEISHU_APP_ID 等则
+// --execute 前会先校验必需 public env(assertPublicEnv:缺 auth-server 区域/地址等则
 // 中止,避免把空值烤进 bundle 后所有自建用户登录崩),再过两道发布闸门(与 release-ios-local.mjs
 // 对称,均可用逃生开关跳过):
 //   · git 闸门 assertProductionGitGate()(main/clean/HEAD;--skip-git-gate 跳过);
@@ -173,7 +173,7 @@ async function main() {
 
   // 发布闸门只在 --execute 生效,且早于 expo export —— 缺配置/mismatch 快速失败,不白跑一次导出。
   if (args.execute) {
-    // 必需 public env 齐全,否则 expo export 会把空 EXPO_PUBLIC_FEISHU_APP_ID 等烤进 bundle,
+    // 必需 public env 齐全,否则 expo export 会把空 auth-server 配置等烤进 bundle,
     // 发出去后所有自建用户登录崩(与 release-prod/beta 用同一 gate)。建议 eas env:exec production 包裹。
     assertPublicEnv(env, { variant: 'production' });
     if (!args.skipGitGate) assertProductionGitGate();

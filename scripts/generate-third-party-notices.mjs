@@ -721,13 +721,6 @@ function buildMobileEntries(apacheText, platform) {
   if (platform === "ios") {
     entries.push(
       bundledComponent({
-        name: "LarkSSOSDK",
-        version: "1.2.0",
-        license: "MIT",
-        url: "https://open.feishu.cn",
-        licenseText: MIT_TEXT("Copyright (c) Lark Technologies Pte. Ltd."),
-      }),
-      bundledComponent({
         name: "TapTapSDK/Core",
         version: "4.10.5",
         license: "MIT",
@@ -1077,13 +1070,23 @@ function auditArtifact(label, closure, manualEntries) {
 }
 
 function assertNativeDeclarations() {
-  const iosFeishu = fs.readFileSync(
+  const iosWechat = fs.readFileSync(
     path.join(
       MOBILE_DIR,
       "modules",
-      "xdt-feishu-login",
+      "xdt-wechat-login",
       "ios",
-      "XdtFeishuLogin.podspec",
+      "XdtWechatLogin.podspec",
+    ),
+    "utf8",
+  );
+  const androidWechat = fs.readFileSync(
+    path.join(
+      MOBILE_DIR,
+      "modules",
+      "xdt-wechat-login",
+      "android",
+      "build.gradle",
     ),
     "utf8",
   );
@@ -1095,28 +1098,14 @@ function assertNativeDeclarations() {
     path.join(MOBILE_DIR, "modules", "xdt-tapdb", "android", "build.gradle"),
     "utf8",
   );
-  if (!/LarkSSOSDK', '1\.2\.0'/.test(iosFeishu))
-    throw new Error("LarkSSOSDK version changed; update notice policy");
+  if (!/WechatOpenSDK', '2\.0\.5'/.test(iosWechat))
+    throw new Error("WechatOpenSDK iOS version changed; update notice policy");
+  if (!/com\.tencent\.mm\.opensdk:wechat-sdk-android:6\.8\.38/.test(androidWechat))
+    throw new Error("WeChat OpenSDK Android version changed; update notice policy");
   if (!/TapTapSDK\/Core', '4\.10\.5'/.test(iosTap))
     throw new Error("TapTapSDK iOS version changed; update notice policy");
   if (!/com\.taptap\.sdk:tap-core:4\.10\.5/.test(androidTap))
     throw new Error("TapTapSDK Android version changed; update notice policy");
-  if (
-    !fs.existsSync(
-      path.join(
-        MOBILE_DIR,
-        "modules",
-        "xdt-feishu-login",
-        "android",
-        "libs",
-        "larksso-3.0.10.aar",
-      ),
-    )
-  ) {
-    throw new Error(
-      "Lark SSO Android AAR changed; update restricted-component disclosure",
-    );
-  }
 }
 
 function assertTrackedBinariesRegistered() {
@@ -1139,7 +1128,6 @@ function assertTrackedBinariesRegistered() {
     "apps/desktop/resources/xdt-helper.exe",
     "apps/desktop/resources/xdt-updater.exe",
     "apps/mobile/assets/fonts/JetBrainsMono-",
-    "apps/mobile/modules/xdt-feishu-login/android/libs/larksso-3.0.10.aar",
   ];
   const files = execFileSync("git", ["ls-files", "-z"], {
     cwd: REPO_ROOT,
@@ -1280,12 +1268,22 @@ const restrictedManualEntries = [
   },
   {
     ecosystem: "bundled",
-    name: "Lark SSO Android SDK AAR",
-    version: "3.0.10",
+    name: "WeChat OpenSDK for iOS",
+    version: "2.0.5",
     license: "NOASSERTION",
     category: "restricted-review-required",
-    url: "https://open.feishu.cn",
-    note: "AAR 内未携带 LICENSE/NOTICE,发布前需由 SDK owner 提供可分发许可依据。",
+    url: "https://developers.weixin.qq.com/doc/oplatform/Mobile_App/Access_Guide/iOS.html",
+    note: "上游 CocoaPod 声明为 Copyright 且未提供标准开源许可证；发布前需确认微信开放平台 SDK 分发条款。",
+    artifacts: ["mobile-ios"],
+  },
+  {
+    ecosystem: "bundled",
+    name: "WeChat OpenSDK for Android",
+    version: "6.8.38",
+    license: "NOASSERTION",
+    category: "restricted-review-required",
+    url: "https://developers.weixin.qq.com/doc/oplatform/Mobile_App/Access_Guide/Android.html",
+    note: "上游 Maven SDK 未提供标准开源许可证；发布前需确认微信开放平台 SDK 分发条款。",
     artifacts: ["mobile-android"],
   },
 ];

@@ -9,7 +9,6 @@ import {
   replaceVersionCodeInAndroidVersionJson,
   resolveAndroidSigningEnv,
   patchBuildGradleSigning,
-  patchRootBuildGradleFeishuFlatDir,
   patchGradlePropertiesMemory,
 } from '../../scripts/lib/android-local.mjs';
 
@@ -116,39 +115,6 @@ describe('patchBuildGradleSigning', () => {
   it('找不到锚点 → 抛错(不静默出 debug 签名包)', () => {
     expect(() => patchBuildGradleSigning('android {\n  buildTypes { release { minifyEnabled true } }\n}')).toThrow(/signingConfigs/);
     expect(() => patchBuildGradleSigning('')).toThrow();
-  });
-});
-
-// Expo prebuild 生成的 android/build.gradle 根工程代表片段(buildscript + allprojects 两个 repositories)。
-const TEMPLATE_ROOT_GRADLE = `buildscript {
-  repositories {
-    google()
-    mavenCentral()
-  }
-}
-allprojects {
-  repositories {
-    google()
-    mavenCentral()
-    maven { url 'https://www.jitpack.io' }
-  }
-}
-`;
-
-describe('patchRootBuildGradleFeishuFlatDir', () => {
-  it('把 larksso flatDir 加进 allprojects.repositories(不动 buildscript)', () => {
-    const out = patchRootBuildGradleFeishuFlatDir(TEMPLATE_ROOT_GRADLE);
-    expect(out).toContain('flatDir { dirs "${rootProject.projectDir}/../modules/xdt-feishu-login/android/libs" }');
-    // buildscript.repositories 不应被注入(flatDir 只在 allprojects 出现一次)
-    expect(out.match(/flatDir/g)?.length).toBe(1);
-    expect(out.indexOf('flatDir')).toBeGreaterThan(out.indexOf('allprojects'));
-  });
-  it('幂等:再跑原样返回', () => {
-    const once = patchRootBuildGradleFeishuFlatDir(TEMPLATE_ROOT_GRADLE);
-    expect(patchRootBuildGradleFeishuFlatDir(once)).toBe(once);
-  });
-  it('找不到 allprojects.repositories → 抛错', () => {
-    expect(() => patchRootBuildGradleFeishuFlatDir('buildscript { repositories { google() } }')).toThrow(/allprojects/);
   });
 });
 

@@ -11,7 +11,10 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_API_BASE_URL': JSON.stringify(
         env.VITE_API_BASE_URL || 'http://localhost:3333',
       ),
-      'import.meta.env.VITE_FEISHU_APP_ID': JSON.stringify(env.VITE_FEISHU_APP_ID || ''),
+      'import.meta.env.VITE_CINDY_AUTH_REGION': JSON.stringify(env.VITE_CINDY_AUTH_REGION || 'cn'),
+      'import.meta.env.VITE_CINDY_AUTH_BASE_URL': JSON.stringify(
+        env.VITE_CINDY_AUTH_BASE_URL || 'http://localhost:3344',
+      ),
       // Triage bot token (dev only — production 留空，BotTokenStore 走 safeStorage)
       'process.env.TRIAGE_BOT_TOKEN': JSON.stringify(readMainEnv('TRIAGE_BOT_TOKEN')),
       // Filo Google OAuth desktop client（main-only，仓库不保存实际值）。

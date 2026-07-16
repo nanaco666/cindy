@@ -59,6 +59,7 @@ import type {
   RsbWindowCommandRouteRequest,
   RsbWindowCommandRouteResult,
 } from '../shared/rightSidebarWindow';
+import type { DesktopLoginAction, DesktopLoginActionResult } from '../shared/authIpc';
 
 // Codex 元 IPC 全部升级到 maker.* (agentKind 参数化), preload 不再 import vendor/codex/ipcChannels。
 //   auth      → maker:auth:*(agentKind)
@@ -993,14 +994,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ── Auth (delegated to main process authManager) ──
   authInitialize: (): Promise<{ user: unknown; isAuthenticated: boolean }> =>
     ipcRenderer.invoke('auth:initialize'),
-  authLogin: (): Promise<unknown> =>
-    ipcRenderer.invoke('auth:login'),
-  authDevLogin: (): Promise<unknown> =>
-    ipcRenderer.invoke('auth:dev-login'),
-  authLogout: (): Promise<void> =>
-    ipcRenderer.invoke('auth:logout'),
-  authRefresh: (): Promise<boolean> =>
-    ipcRenderer.invoke('auth:refresh'),
+  authGetLoginState: (): Promise<DesktopLoginActionResult> =>
+    ipcRenderer.invoke('auth:get-login-state'),
+  authDispatchLoginAction: (action: DesktopLoginAction): Promise<DesktopLoginActionResult> =>
+    ipcRenderer.invoke('auth:dispatch-login-action', action),
+  authLogout: (): Promise<void> => ipcRenderer.invoke('auth:logout'),
+  authRefresh: (): Promise<boolean> => ipcRenderer.invoke('auth:refresh'),
   onAuthStateChange: fanOutAuthStateChange,
   onAuthSessionExpired: fanOutAuthSessionExpired,
   onTapdbDailyActive: (callback: (payload: { date: string }) => void): (() => void) =>

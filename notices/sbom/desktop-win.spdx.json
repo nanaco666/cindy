@@ -5,7 +5,7 @@
   "name": "xdt-maker-desktop-win",
   "documentNamespace": "https://xdmaker.com/spdx/desktop-win/eed02d9f1f2ba8970bb97adef7e05535cbd9ba4068ddad4941cd409a259d2db4",
   "creationInfo": {
-    "created": "2026-07-16T07:14:09Z",
+    "created": "2026-07-16T10:40:08Z",
     "creators": [
       "Tool: scripts/generate-third-party-notices.mjs"
     ]

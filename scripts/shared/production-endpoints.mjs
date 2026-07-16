@@ -20,6 +20,8 @@ const jsonPath = path.join(
 /**
  * @type {{
  *   apiBaseUrl: string,
+ *   authApiBaseUrlCn: string,
+ *   authApiBaseUrlGlobal: string,
  *   deviceLinkApiBaseUrl: string,
  *   oauthBrokerApiBaseUrl: string,
  *   heartbeatUrl: string,
@@ -51,19 +53,35 @@ export function resolveCdnBaseUrl() {
 }
 
 /**
- * 桌面端生产构建注入的三个 VITE_* 端点 env,spread 进 execSync 的 env 即可:
+ * 桌面端生产构建注入的区域与四个 VITE_* 端点 env,spread 进 execSync 的 env 即可:
  * `env: { ...process.env, ...productionViteEnv() }`。
  *
- * @param {{ allowEnvOverride?: boolean }} [opts]
+ * @param {{ allowEnvOverride?: boolean, authRegion?: 'cn' | 'global' }} [opts]
  *   allowEnvOverride=true(默认,CI 构建脚本用):外部已设同名 env 时尊重外部值;
- *   allowEnvOverride=false(本机正式 release 脚本用):无条件用权威源,防止本机
- *   残留的 .env / shell 变量把正式包指到错误环境。
+ *   allowEnvOverride=false(本机正式 release 脚本用):端点无条件用权威源,防止本机
+ *   残留变量把正式包指到错误环境;区域仍由 authRegion / CINDY_AUTH_REGION 显式选择。
  */
-export function productionViteEnv({ allowEnvOverride = true } = {}) {
+export function productionViteEnv({ allowEnvOverride = true, authRegion } = {}) {
   const pick = (envName, key) =>
     (allowEnvOverride ? process.env[envName] : undefined) || productionEndpoints[key];
+  const region =
+    authRegion ??
+    process.env.CINDY_AUTH_REGION ??
+    (allowEnvOverride ? process.env.VITE_CINDY_AUTH_REGION : undefined) ??
+    'cn';
+  if (region !== 'cn' && region !== 'global') {
+    throw new Error(`Invalid Cindy auth region: ${region}; expected cn or global`);
+  }
+  const authBaseUrl =
+    region === 'global'
+      ? productionEndpoints.authApiBaseUrlGlobal
+      : productionEndpoints.authApiBaseUrlCn;
   return {
     VITE_API_BASE_URL: pick('VITE_API_BASE_URL', 'apiBaseUrl'),
+    VITE_CINDY_AUTH_REGION: region,
+    VITE_CINDY_AUTH_BASE_URL:
+      (allowEnvOverride ? process.env.VITE_CINDY_AUTH_BASE_URL : undefined) ||
+      authBaseUrl,
     VITE_DEVICE_LINK_API_BASE_URL: pick('VITE_DEVICE_LINK_API_BASE_URL', 'deviceLinkApiBaseUrl'),
     VITE_OAUTH_BROKER_API_BASE_URL: pick('VITE_OAUTH_BROKER_API_BASE_URL', 'oauthBrokerApiBaseUrl'),
   };

@@ -4,37 +4,51 @@
     "appVersionSource": "local"
   },
   "build": {
-    "testflight": {
+    "store-cn-base": {
       "distribution": "store",
-      "channel": "production",
       "environment": "production",
       "node": "22.19.0",
       "ios": {
         "resourceClass": "m-medium"
       },
       "env": {
-        "EXPO_PUBLIC_FEISHU_APP_ID": "cli_a94d4cf642381cd4",
-        "EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED": "1",
+        "EXPO_PUBLIC_CINDY_AUTH_REGION": "cn",
+        "EXPO_PUBLIC_CINDY_AUTH_BASE_URL": "https://auth.cindy.com.cn",
         "EXPO_PUBLIC_XDT_API_BASE_URL": "https://xdt-api.magiclizi.com",
         "EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL": "https://xdmaker-device-link.magiclizi.com",
         "XDT_SKIP_AGENT_BIN_INSTALL": "1"
       }
     },
+    "testflight": {
+      "extends": "store-cn-base",
+      "channel": "production"
+    },
     "production": {
+      "extends": "store-cn-base",
+      "channel": "production"
+    },
+    "store-global-base": {
       "distribution": "store",
-      "channel": "production",
       "environment": "production",
       "node": "22.19.0",
       "ios": {
         "resourceClass": "m-medium"
       },
       "env": {
-        "EXPO_PUBLIC_FEISHU_APP_ID": "cli_a94d4cf642381cd4",
-        "EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED": "1",
+        "EXPO_PUBLIC_CINDY_AUTH_REGION": "global",
+        "EXPO_PUBLIC_CINDY_AUTH_BASE_URL": "https://auth.cindy.app",
         "EXPO_PUBLIC_XDT_API_BASE_URL": "https://xdt-api.magiclizi.com",
         "EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL": "https://xdmaker-device-link.magiclizi.com",
         "XDT_SKIP_AGENT_BIN_INSTALL": "1"
       }
+    },
+    "testflight-global": {
+      "extends": "store-global-base",
+      "channel": "production-global"
+    },
+    "production-global": {
+      "extends": "store-global-base",
+      "channel": "production-global"
     },
     "adhoc": {
       "distribution": "internal",
@@ -45,11 +59,19 @@
         "resourceClass": "m-medium"
       },
       "env": {
-        "EXPO_PUBLIC_FEISHU_APP_ID": "cli_a94d4cf642381cd4",
-        "EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED": "1",
+        "EXPO_PUBLIC_CINDY_AUTH_REGION": "cn",
+        "EXPO_PUBLIC_CINDY_AUTH_BASE_URL": "https://auth.cindy.com.cn",
         "EXPO_PUBLIC_XDT_API_BASE_URL": "https://xdt-api.magiclizi.com",
         "EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL": "https://xdmaker-device-link.magiclizi.com",
         "XDT_SKIP_AGENT_BIN_INSTALL": "1"
+      }
+    },
+    "adhoc-global": {
+      "extends": "adhoc",
+      "channel": "staging-global",
+      "env": {
+        "EXPO_PUBLIC_CINDY_AUTH_REGION": "global",
+        "EXPO_PUBLIC_CINDY_AUTH_BASE_URL": "https://auth.cindy.app"
       }
     },
     "beta-base": {
@@ -63,8 +85,8 @@
         "resourceClass": "medium"
       },
       "env": {
-        "EXPO_PUBLIC_FEISHU_APP_ID": "cli_a94d4cf642381cd4",
-        "EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED": "1",
+        "EXPO_PUBLIC_CINDY_AUTH_REGION": "cn",
+        "EXPO_PUBLIC_CINDY_AUTH_BASE_URL": "https://auth.cindy.com.cn",
         "EXPO_PUBLIC_XDT_API_BASE_URL": "https://xdt-api.magiclizi.com",
         "EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL": "https://xdmaker-device-link.magiclizi.com",
         "EXPO_PUBLIC_APP_VARIANT": "beta",
@@ -77,17 +99,19 @@
       "env": {
         "EXPO_PUBLIC_BETA_DEV": "dash"
       }
-    }
-  },
-  "submit": {
-    "testflight": {
-      "ios": {
-        "ascAppId": "6785851372"
+    },
+    "beta-global-base": {
+      "extends": "beta-base",
+      "env": {
+        "EXPO_PUBLIC_CINDY_AUTH_REGION": "global",
+        "EXPO_PUBLIC_CINDY_AUTH_BASE_URL": "https://auth.cindy.app"
       }
     },
-    "production": {
-      "ios": {
-        "ascAppId": "6785851372"
+    "beta-global-dash": {
+      "extends": "beta-global-base",
+      "channel": "beta-global-dash",
+      "env": {
+        "EXPO_PUBLIC_BETA_DEV": "dash"
       }
     }
   }

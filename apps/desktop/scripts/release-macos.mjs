@@ -36,7 +36,6 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { ensureBinary } from '../../../scripts/ensure-agent-binaries.mjs';
-import { FEISHU_APP_ID } from '../../../scripts/shared/feishu.mjs';
 import { productionViteEnv, resolveCdnBaseUrl } from '../../../scripts/shared/production-endpoints.mjs';
 import {
   uploadVersionedGzImmutable,
@@ -69,15 +68,6 @@ refreshOssConfig();
 const PROJECT_ROOT = path.resolve(DESKTOP_ROOT, '../..');
 const RELEASE_DIR = path.join(DESKTOP_ROOT, 'release');
 const CDN_BASE = resolveCdnBaseUrl();
-
-// 生产 OAuth 公共 client id —— 都不是密钥（Jira 走 PKCE，飞书 / Slack MCP 的 secret 都在
-// server 端兑换），直接写死在打包脚本里，避免依赖打包机 .env，换机器构建不会因为漏配而静默
-// 打出登录 / 授权失效的包。临时切测试 app 时直接改这里再打包。
-// VITE_FEISHU_APP_ID 收敛到 scripts/shared/feishu.mjs 单一来源(与 dev 启动脚本共用);
-// 临时切飞书测试 app 时改那个常量即可,dev 与 release 一处生效。
-const RELEASE_PUBLIC_ENV = Object.freeze({
-  VITE_FEISHU_APP_ID: FEISHU_APP_ID,
-});
 
 // Apple signing config(身份默认值单点在 ci/lib.mjs 的 resolveAppleIdentity,此处
 // 在 .env 加载之后调用)。APPLE_APP_PASSWORD 是敏感凭据,绝对不允许 fallback 到源码
@@ -575,7 +565,6 @@ async function main() {
         ...process.env,
         NODE_ENV: 'production',
         ...productionViteEnv({ allowEnvOverride: false }),
-        ...RELEASE_PUBLIC_ENV,
         APP_VERSION: version, // forge.config.ts 读取此变量注入到 packagerConfig.appVersion
       },
     });
