@@ -3,14 +3,14 @@
  * 本意识零配置(凭证 = 主机飞书登录态派生,/secrets 无收单键),页面只有:
  *   GET /kv    → { connectedName? } 上次测试成功的姓名(只读展示)
  *   GET /wake  → 叫醒电子脑(幂等)
- * 测试连接经 BroadcastChannel('cindy-feishu') 递活给电子脑:
+ * 测试连接经 BroadcastChannel('xd-feishu') 递活给电子脑:
  *   发 { type:'test-connection', reqId },按 reqId 每 400ms 重发直到收到
  *   { type:'test-connection-result', reqId, ok, name, message },15s 超时。
  */
 (function () {
   'use strict';
 
-  var bc = new BroadcastChannel('cindy-feishu');
+  var bc = new BroadcastChannel('xd-feishu');
 
   function $(id) { return document.getElementById(id); }
 

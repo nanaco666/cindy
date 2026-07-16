@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "id": "cindy-feishu",
-  "name": "Cindy Feishu",
+  "id": "xd-feishu",
+  "name": "XD Feishu",
   "description": "内置的飞书(Feishu)服务意识:直接复用你的飞书登录身份(零配置),读写云文档 / 知识库 / 多维表格 / 电子表格 / 消息 / 通讯录 / 日历 / 妙记等(40+ 精品操作 + 100+ 只读直通接口,两段式目录)。令牌由主机保管并自动刷新,只注入飞书开放平台请求。",
   "whenToUse": "需要读写飞书云文档(docx)/ 知识库(wiki)/ 多维表格(bitable)/ 电子表格(sheet),搜索或阅读飞书消息、发消息,查通讯录联系人,查/建日程,查会议纪要与妙记,按飞书链接读内容,或上传/下载飞书文件时找我(用飞书登录即用,无需配置)。",
   "version": "1.0.0",
@@ -14,7 +14,7 @@
     "notify",
     "fs"
   ],
-  "command": "cindy-feishu",
+  "command": "xd-feishu",
   "network": {
     "hosts": [
       "open.feishu.cn"

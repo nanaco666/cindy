@@ -31,8 +31,9 @@
     "cindy-slack": {
       "audience": "all"
     },
-    "cindy-feishu": {
-      "audience": "all"
+    "xd-feishu": {
+      "audience": "all",
+      "tier": "enterprise"
     }
   }
 }

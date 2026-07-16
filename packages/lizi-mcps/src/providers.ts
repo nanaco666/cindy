@@ -179,7 +179,7 @@ export function createLiziMcpProviders(
   }
 
   // lizi_feishu 已于 2026-07-16 摘壳:飞书全部能力(44 精品 + 123 只读直通)
-  // 迁入内置意识 cindy-feishu(source:'login-feishu-token' 登录态凭证,主机
+  // 迁入内置意识 xd-feishu(source:'login-feishu-token' 登录态凭证,主机
   // 现取现注入零迁移)。与 web-search/mivo 不同,feishu 后端(feishu/ 目录、
   // FeishuTokenManager、registry)**留任**——scheduler 脚本 capability broker
   // (desktop scheduler-host/script-capability-broker.ts)仍经 registry 直调

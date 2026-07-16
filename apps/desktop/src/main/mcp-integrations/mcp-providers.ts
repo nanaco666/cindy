@@ -72,7 +72,7 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
       isComputerUseEnabled: () => pluginRegistry.isEnabled('computer'),
     }),
     // lizi_feishu 已于 2026-07-16 摘壳:飞书能力(44 精品 + 123 只读直通)迁入
-    // 内置意识 cindy-feishu(登录态凭证 login-feishu-token,零迁移零配置)。
+    // 内置意识 xd-feishu(登录态凭证 login-feishu-token,零迁移零配置)。
     // 后端留任:getFeishuService() 的 token 刷新链(authManager 驱动)与工具
     // registry(scheduler-host/script-capability-broker.ts 直调)不受影响。
     // mivo 已于 2026-07-13 退役:整体迁入内置意识 xd-mivo(见 xd-mivo/ghost.json)。

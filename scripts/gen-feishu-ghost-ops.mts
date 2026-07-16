@@ -1,6 +1,6 @@
 /**
  * gen-feishu-ghost-ops.mts — 把 lizi-mcps vendored 的飞书 OpenAPI 直通面
- * (packages/lizi-mcps/src/feishu/mcp/generated/)烘焙成 cindy-feishu 意识
+ * (packages/lizi-mcps/src/feishu/mcp/generated/)烘焙成 xd-feishu 意识
  * main.js 里的静态 GEN_OPS 表。
  *
  * 过滤策略与 genTools.ts 的 registerGeneratedTools 逐条对齐(只读 GET +
@@ -8,7 +8,7 @@
  * 保证意识直通面 = 老 MCP 直通面(name / method / path / 参数记法)。
  *
  * 运行:node_modules/.bin/tsx scripts/gen-feishu-ghost-ops.mts
- * 产物:替换 apps/desktop/resources/builtin-ghosts/cindy-feishu/main.js 中
+ * 产物:替换 apps/desktop/resources/builtin-ghosts/xd-feishu/main.js 中
  *       "// <GEN_OPS>" 与 "// </GEN_OPS>" 标记行之间的内容。
  */
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -20,7 +20,7 @@ import { GEN_TOOLS } from '../packages/lizi-mcps/src/feishu/mcp/generated/index.
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAIN_JS = path.join(
   ROOT,
-  'apps/desktop/resources/builtin-ghosts/cindy-feishu/main.js',
+  'apps/desktop/resources/builtin-ghosts/xd-feishu/main.js',
 );
 
 /** 与 genTools.ts DEFAULT_GENERATED_PROJECTS 逐字一致。 */

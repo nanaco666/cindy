@@ -1,5 +1,5 @@
 /**
- * Cindy Feishu · 电子脑 —— 内置的飞书服务意识(登录态令牌模式,仅 open.feishu.cn)。
+ * XD Feishu · 电子脑 —— 内置的飞书服务意识(登录态令牌模式,仅 open.feishu.cn)。
  *
  * 工作方式:
  * - 域名白名单代发:cindy.fetch 只能到 ghost.json 声明的 open.feishu.cn,请求由
@@ -3788,7 +3788,7 @@ async function callTool(args, callId) {
 
 /* ── 设置页测试连接(BroadcastChannel;settings.js 先 /wake 再广播) ── */
 
-var bc = new BroadcastChannel('cindy-feishu');
+var bc = new BroadcastChannel('xd-feishu');
 var seenTestReqs = {};
 
 bc.onmessage = function (ev) {
