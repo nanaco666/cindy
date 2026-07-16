@@ -73,8 +73,16 @@ const EAS_LOCK_STALE_MS = 10 * 60 * 1000;
 function acquireEasFileLock(easPath) {
   const lockPath = `${easPath}.xdt-lock`;
   const ownerPath = `${lockPath}/owner.json`;
+  const reclaimPath = `${lockPath}.reclaim`;
   const token = randomUUID();
   for (;;) {
+    // A stale-lock reclaimer owns this marker while it removes the old lock.
+    // Do not create a replacement lock in the small gap between rmSync(lockPath)
+    // and the reclaimer releasing the marker.
+    if (existsSync(reclaimPath)) {
+      waitForEasFileLock();
+      continue;
+    }
     try {
       mkdirSync(lockPath);
       writeFileSync(ownerPath, JSON.stringify({ pid: process.pid, token, createdAt: Date.now() }));
@@ -91,13 +99,33 @@ function acquireEasFileLock(easPath) {
     } catch (error) {
       if (error?.code !== 'EEXIST' || !existsSync(lockPath)) throw error;
       if (isEasLockStale(lockPath, ownerPath)) {
-        rmSync(lockPath, { recursive: true, force: true });
+        // Claim stale-lock cleanup with mkdir (an atomic cross-process
+        // operation), then re-check before removing. A second waiter that
+        // observed the same stale owner cannot remove a newly-created lock.
+        try {
+          mkdirSync(reclaimPath);
+        } catch (reclaimError) {
+          if (reclaimError?.code !== 'EEXIST') throw reclaimError;
+          waitForEasFileLock();
+          continue;
+        }
+        try {
+          if (isEasLockStale(lockPath, ownerPath)) {
+            rmSync(lockPath, { recursive: true, force: true });
+          }
+        } finally {
+          rmSync(reclaimPath, { recursive: true, force: true });
+        }
         continue;
       }
-      const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
-      Atomics.wait(waitBuffer, 0, 0, EAS_LOCK_WAIT_MS);
+      waitForEasFileLock();
     }
   }
+}
+
+function waitForEasFileLock() {
+  const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
+  Atomics.wait(waitBuffer, 0, 0, EAS_LOCK_WAIT_MS);
 }
 
 function isEasLockStale(lockPath, ownerPath) {
