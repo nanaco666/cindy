@@ -50,7 +50,9 @@ export class EmbeddingClient {
   private readonly log: EmbeddingLogger;
 
   constructor(opts: EmbeddingClientOptions) {
-    this.baseUrl = opts.baseUrl.replace(/\/+$/, '');
+    let baseUrl = opts.baseUrl;
+    while (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+    this.baseUrl = baseUrl;
     this.getApiKey = opts.getApiKey;
     this.fetchImpl = opts.fetchImpl ?? globalThis.fetch;
     this.cache = new LruCache<string, number[]>(opts.cacheSize ?? DEFAULT_CACHE_SIZE);
