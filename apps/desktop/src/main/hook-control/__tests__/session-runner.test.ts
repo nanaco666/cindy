@@ -187,7 +187,7 @@ function baseReq(overrides: Partial<Parameters<ReturnType<typeof createMakerHook
     model: null,
     effort: null,
     permissionMode: null,
-    title: '[Hook·slack] dm:U1:g0',
+    title: '[Slack·DM] dm:U1:g0',
     prompt: 'hello',
     origin: { connectionId: 'slack', connectionName: 'XDMaker Slack', externalKey: 'slack:dm:U1:g0' },
     ...overrides,

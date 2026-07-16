@@ -213,7 +213,8 @@ export async function listInterruptedPendingSessionIds(): Promise<string[]> {
     .where(
       and(
         eq(sessions.status, 'active'),
-        // IM(feishu/slack)会话不进桌面 sidebar,红点无处展示也无法清除。
+        // 只统计桌面 sidebar 可见来源(含 feishu/slack 等 IM 渠道)——
+        // 不可见来源的红点无处展示也无法清除。
         inArray(sessions.source, DESKTOP_VISIBLE_SESSION_SOURCES),
         gt(sessions.activeTurnStartedAt, sql`COALESCE(${sessions.lastTurnEndedAt}, 0)`),
         gt(sessions.activeTurnStartedAt, sql`COALESCE(${sessions.clearedAt}, 0)`),

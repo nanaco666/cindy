@@ -1176,4 +1176,73 @@ describe('turnRunner send outcome policy (feishu adapter characterization)', () 
       expect.anything(),
     );
   });
+
+  // ── 非 threadScoped 渠道的新上下文 oneshot 起名 ──────────────────────────────
+  // 触发条件: generatedTitlePrefix 已声明 && row.sdkSessionId == null(首次建行
+  // 或 /new 重置后的新上下文首条消息)。threadScoped(slack)路径的回归在
+  // turnRunnerThreadRouting.test.ts。
+  describe('non-threadScoped generatedTitlePrefix title generation', () => {
+    function makePrefixedRunner(): ImTurnRunner {
+      return createTurnRunner(
+        {
+          ...fakeAdapter,
+          sessions: { ...fakeAdapter.sessions, generatedTitlePrefix: '[飞书·DM] ' },
+        },
+        fakeRepo,
+        fakeCards,
+      );
+    }
+
+    async function runPrefixedTurn(prefixedRunner: ImTurnRunner): Promise<void> {
+      try {
+        await prefixedRunner.runAgentTurn({
+          botContextId: 'cli_test_bot',
+          userId: 'ou_user',
+          userMessageId: 'msg-user',
+          text: '帮我修个 bug',
+          attachments: [],
+        });
+        await flushMicrotasks();
+      } finally {
+        prefixedRunner.disposeAllSessions();
+      }
+    }
+
+    it('sdkSessionId == null(新上下文)触发 oneshot 起名, 前缀透传', async () => {
+      setupSession(async () => ({ accepted: false, reason: 'cancelled-before-dispatch' }));
+      await runPrefixedTurn(makePrefixedRunner());
+
+      expect(mocks.generateAndPersistFbotTitle).toHaveBeenCalledWith(
+        'feishu-session',
+        '帮我修个 bug',
+        '[飞书·DM] ',
+      );
+    });
+
+    it('sdkSessionId 非空(上下文进行中)不重复起名', async () => {
+      mocks.findActiveSession.mockResolvedValue({
+        id: 'feishu-session',
+        agentKind: 'claude-code',
+        workingDir: 'F:\\XDMaker',
+        model: 'claude-opus-4-7',
+        effort: 'xhigh',
+        permissionMode: 'bypassPermissions',
+        fastMode: false,
+        sdkSessionId: 'sdk-ctx-1',
+        providerId: null,
+      });
+      setupSession(async () => ({ accepted: false, reason: 'cancelled-before-dispatch' }));
+      await runPrefixedTurn(makePrefixedRunner());
+
+      expect(mocks.generateAndPersistFbotTitle).not.toHaveBeenCalled();
+    });
+
+    it('渠道未声明 generatedTitlePrefix 时(默认 adapter)不起名', async () => {
+      setupSession(async () => ({ accepted: false, reason: 'cancelled-before-dispatch' }));
+      await runDefaultTurn();
+      await flushMicrotasks();
+
+      expect(mocks.generateAndPersistFbotTitle).not.toHaveBeenCalled();
+    });
+  });
 });

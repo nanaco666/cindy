@@ -48,7 +48,10 @@
  */
 
 import { ipcMain, BrowserWindow, type IpcMainEvent } from 'electron';
+import { and, eq, ne } from 'drizzle-orm';
 
+import { getDbClient } from '../localDb/client/current';
+import { sessions } from '../localDb/schema';
 import { im, feishuIm, slackIm, discordIm } from './host';
 import { wireFeishuOrchestrator, type FeishuOrchestratorConfig } from './feishu';
 import { wireSlackOrchestrator } from './slack';
@@ -290,6 +293,19 @@ export function startImConnection(): void {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       log.error(`bindingStore.preload failed (non-fatal): ${msg}`);
+    }
+    // 存量 feishu 会话行补 workspaceKind='dialogue' —— 2026-07 起 feishu 会话
+    // 进侧边栏「对话」分组(sessionSource.ts 白名单 + feishu adapter 声明),
+    // 此前落库的行还是默认 'project', 不补会以 im-working-dir/{botAppId}
+    // 聚成一个假项目组。幂等一次性 UPDATE; 不 bump updatedAt(避免重排列表)。
+    try {
+      await getDbClient()
+        .drizzle.update(sessions)
+        .set({ workspaceKind: 'dialogue' })
+        .where(and(eq(sessions.source, 'feishu'), ne(sessions.workspaceKind, 'dialogue')));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn(`feishu sessions workspaceKind backfill failed (non-fatal): ${msg}`);
     }
     try {
       await im.init();

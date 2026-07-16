@@ -50,7 +50,13 @@ export function buildFeishuAdapter(
        * `feishu_{botAppId}_{openId}` — long but human-readable, easy to grep。
        */
       sessionIdFor: (botAppId, openId) => `feishu_${botAppId}_${openId}`,
-      defaultTitle: (openId) => `飞书 · ${openId.slice(-6)}`,
+      defaultTitle: (openId) => `[飞书·DM] ${openId.slice(-6)}`,
+      // 首条消息(含每次 /new 后的首条)oneshot 起名的前缀 —— 与 hook Slack 的
+      // `[Slack·DM]` 同款视觉, 在「对话」分组里一眼认出渠道
+      generatedTitlePrefix: '[飞书·DM] ',
+      // 飞书 bot 私聊会话进侧边栏「对话」分组; workingDir 是 app 托管的
+      // im-working-dir, 不该以它聚成假项目组
+      workspaceKind: 'dialogue',
       ensureWorkingDir,
       extraInsertColumns: (botAppId, openId) => ({
         feishuBotAppId: botAppId,

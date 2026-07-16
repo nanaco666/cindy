@@ -209,11 +209,12 @@ export function isPathWithin(base: string, target: string): boolean {
 const TITLE_SNIPPET_MAX = 24;
 
 /**
- * 新建 hook 会话的标题: `[Hook·<provider>] <首条消息摘要>`。
- * 前缀保留 provider 名标明"谁驱动的"; 后半段用消息内容(压平空白后截断),
- * 比"频道 ID + 时间戳"可读。消息为空(如纯图片派发)时回退渠道内标识 bareKey。
+ * 新建 hook 会话的标题: `[<Provider>] <首条消息摘要>`(如 `[Slack] 修登录页`)。
+ * 前缀保留 provider 名标明"谁驱动的"(首字母大写, 不再带 `Hook·` 实现细节);
+ * 后半段用消息内容(压平空白后截断), 比"频道 ID + 时间戳"可读。消息为空
+ * (如纯图片派发)时回退渠道内标识 bareKey。
  * 渠道内标识约定 `dm:` 前缀 = 私聊(见 slack-hook-server externalKeyFor),
- * 私聊会话前缀额外标 `·DM`, 与频道驱动的会话在列表里一眼区分。
+ * 私聊会话前缀额外标 `·DM`(`[Slack·DM]`), 与频道驱动的会话在列表里一眼区分。
  */
 export function buildHookSessionTitle(
   providerName: string,
@@ -228,7 +229,8 @@ export function buildHookSessionTitle(
         ? `${flat.slice(0, TITLE_SNIPPET_MAX)}…`
         : flat;
   const dmTag = bareKey.startsWith('dm:') ? '·DM' : '';
-  return `[Hook·${providerName}${dmTag}] ${snippet}`;
+  const displayProvider = providerName.charAt(0).toUpperCase() + providerName.slice(1);
+  return `[${displayProvider}${dmTag}] ${snippet}`;
 }
 
 /** 待执行任务(定位已完成, 排队即执行参数就绪)。 */

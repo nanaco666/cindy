@@ -55,13 +55,23 @@ export interface ImSessionNamespace {
   sessionIdFor(botContextId: string, userId: string, scopeKey?: string): string;
   /** 新建 session 行的初始 title。 */
   defaultTitle(userId: string): string;
+  /**
+   * 该渠道会话在侧边栏的归属语义(sessions.workspaceKind 列)。缺省 'project'
+   * (按 workingDir 聚成项目组);'dialogue' 落「对话」分组 —— IM 私聊会话的
+   * workingDir 是 app 托管目录(im-working-dir),不该以它聚成假项目组。
+   */
+  workspaceKind?: 'project' | 'dialogue';
   /** 该渠道 session 的工作目录(必须已创建好)。 */
   ensureWorkingDir(botContextId: string): string;
   /** 渠道专属列(feishu: feishuBotAppId/feishuOpenId;slack: imBotContextId/imUserId)。 */
   extraInsertColumns(botContextId: string, userId: string): Record<string, unknown>;
   /**
-   * 首条消息 oneshot 生成正式标题时的前缀(如 'Slack · ')。缺省用 FBot 前缀。
-   * 仅 threadScoped 渠道的非接管 thread session 用到(接管 session 沿用 FBot)。
+   * 非接管会话 oneshot 生成正式标题时的前缀(如 'Slack · ' / '[飞书·DM] ')。
+   *   - threadScoped 渠道(slack): 新 thread 会话的首条消息触发;
+   *   - 非 threadScoped 渠道(feishu/discord): 新上下文(建行 / /new 后)的
+   *     首条消息触发, 标题跟随当前话题。
+   * 缺省时 threadScoped 渠道回落 FBot 前缀, 非 threadScoped 渠道不起名
+   * (保持 defaultTitle)。接管 session 一律沿用 FBot 前缀, 不走这里。
    */
   generatedTitlePrefix?: string;
 }

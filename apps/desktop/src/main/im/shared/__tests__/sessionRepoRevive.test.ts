@@ -228,3 +228,53 @@ describe('sessionRepo.createSession upsert 兜竞态(#748)', () => {
     expect(result).toEqual(preparedDefaults);
   });
 });
+
+describe('sessionRepo workspaceKind(渠道声明 dialogue 归组时)', () => {
+  const dialogueNs = { ...ns, workspaceKind: 'dialogue' } as unknown as ImSessionNamespace;
+
+  function makeDialogueRepo() {
+    return createImSessionRepo(
+      { agentKind: 'claude-code' } as ImOrchestratorConfig,
+      dialogueNs,
+    );
+  }
+
+  beforeEach(() => {
+    mocks.updateSet.mockClear();
+    mocks.insertValues.mockClear();
+    mocks.insertConflict.mockClear();
+    mocks.selectLimit.mockReset();
+    mocks.selectLimit.mockResolvedValue([]);
+  });
+
+  it('INSERT values 与冲突 set 都落 workspaceKind=dialogue(老行随下一条消息校正)', async () => {
+    await makeDialogueRepo().createSession('bot', 'user', undefined, preparedDefaults);
+
+    const values = mocks.insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(values.workspaceKind).toBe('dialogue');
+    const conflictArg = mocks.insertConflict.mock.calls[0][0] as {
+      set: Record<string, unknown>;
+    };
+    expect(conflictArg.set.workspaceKind).toBe('dialogue');
+  });
+
+  it('软删行复活时一并校正 workspaceKind', async () => {
+    mocks.selectLimit.mockResolvedValue([dbRow('archived')]);
+    await makeDialogueRepo().findActiveSession('bot', 'user');
+
+    expect(mocks.updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'active', workspaceKind: 'dialogue' }),
+    );
+  });
+
+  it('渠道未声明 workspaceKind 时不写该列(保持默认 project 语义)', async () => {
+    await makeRepo().createSession('bot', 'user', undefined, preparedDefaults);
+
+    const values = mocks.insertValues.mock.calls[0][0] as Record<string, unknown>;
+    expect(values).not.toHaveProperty('workspaceKind');
+    const conflictArg = mocks.insertConflict.mock.calls[0][0] as {
+      set: Record<string, unknown>;
+    };
+    expect(conflictArg.set).not.toHaveProperty('workspaceKind');
+  });
+});

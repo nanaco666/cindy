@@ -512,10 +512,18 @@ export function createTurnRunner(
         scopeKey: target.scopeKey,
         workingDir: row.workingDir,
       });
-    } else if (target.created && text.trim().length > 0) {
-      // threadScoped 新 thread 会话: 同样用首条消息生成正式标题(渠道前缀),
+    } else if (
+      text.trim().length > 0 &&
+      (adapter.threadScoped
+        ? target.created
+        : adapter.sessions.generatedTitlePrefix !== undefined && row.sdkSessionId == null)
+    ) {
+      // threadScoped 新 thread 会话: 用首条消息生成正式标题(渠道前缀),
       // 完成后把 thread 名片卡升级为「{正式标题}」。
-      void maybeGenerateThreadSessionTitle(row.id, text, threadHeaderCardId);
+      // 非 threadScoped 渠道(feishu/discord, 一 (bot,user) 一行长期复用):
+      // 每条"新对话"的首条消息重新起名 —— sdkSessionId == null 即新上下文
+      // (首次建行 / /new 重置后), 标题跟随当前话题而不是永远停在第一次。
+      void maybeGenerateImSessionTitle(row.id, text, threadHeaderCardId);
     }
 
     const item: QueuedSend = {
@@ -1042,31 +1050,32 @@ export function createTurnRunner(
   }
 
   /**
-   * threadScoped 新 thread 会话的标题生成 — 用首条消息 oneshot 起名(渠道
-   * 前缀, 如 'Slack · '), 落库后把 thread 名片卡升级为正式标题。
-   * 失败 swallow — 名片保持初始文案, 不阻塞主流程。
+   * 渠道默认(非接管)会话的标题生成 — 用首条消息 oneshot 起名(渠道前缀,
+   * 如 'Slack · ' / '[飞书·DM] ')。
+   *   - threadScoped(slack): 新 thread 会话触发, 落库后把 thread 名片卡升级
+   *     为正式标题;
+   *   - 非 threadScoped(feishu/discord): 新上下文(建行 / /new 后)的首条
+   *     消息触发, 只改库不发卡(这类渠道没有 thread 名片)。
+   * 失败 swallow — 标题保持原样, 不阻塞主流程。
    */
-  async function maybeGenerateThreadSessionTitle(
+  async function maybeGenerateImSessionTitle(
     sessionId: string,
     text: string,
     headerCardId: string | null,
   ): Promise<void> {
     const threadUiPack = adapter.ui.thread;
-    if (!adapter.threadScoped || !threadUiPack) return;
+    const prefix = adapter.sessions.generatedTitlePrefix;
+    if (prefix === undefined && !(adapter.threadScoped && threadUiPack)) return;
     try {
-      const title = await generateAndPersistFbotTitle(
-        sessionId,
-        text,
-        adapter.sessions.generatedTitlePrefix,
-      );
-      if (!title || !headerCardId) return;
+      const title = await generateAndPersistFbotTitle(sessionId, text, prefix);
+      if (!title || !headerCardId || !threadUiPack) return;
       await im.updateInteractiveCard(headerCardId, {
         ...threadUiPack.sessionHeaderTitled(title),
         buttons: [],
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      log.warn(`maybeGenerateThreadSessionTitle failed (non-fatal): ${msg}`);
+      log.warn(`maybeGenerateImSessionTitle failed (non-fatal): ${msg}`);
     }
   }
 

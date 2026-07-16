@@ -422,8 +422,9 @@ export function registerSessionIpc(): void {
           })
           .from(sessions)
           .leftJoin(messages, eq(messages.sessionId, sessions.id));
-      // 按 DESKTOP_VISIBLE_SESSION_SOURCES 白名单过滤 — 包含 slack 与本机自动化
-      // (scheduler/learn/shared);feishu 刻意排除,飞书会话只在飞书端操作。
+      // 按 DESKTOP_VISIBLE_SESSION_SOURCES 白名单过滤 — 包含 IM 渠道
+      // (feishu/slack/discord)与本机自动化(scheduler/learn/shared);
+      // feishu 会话以「对话」分组展示(workspaceKind='dialogue')。
       const sourceFilter = inArray(sessions.source, DESKTOP_VISIBLE_SESSION_SOURCES);
       const statusWhere = () =>
         statusFilter

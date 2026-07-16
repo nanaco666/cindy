@@ -148,29 +148,29 @@ describe('isPathWithin', () => {
 
 describe('buildHookSessionTitle', () => {
   it('短消息原样进标题, 换行/连续空白压平成单空格', () => {
-    expect(buildHookSessionTitle('slack', '修一下登录页', 'C1:1.1')).toBe('[Hook·slack] 修一下登录页');
+    expect(buildHookSessionTitle('slack', '修一下登录页', 'C1:1.1')).toBe('[Slack] 修一下登录页');
     expect(buildHookSessionTitle('slack', ' 修一下\n登录页  的样式 ', 'C1:1.1')).toBe(
-      '[Hook·slack] 修一下 登录页 的样式',
+      '[Slack] 修一下 登录页 的样式',
     );
   });
 
   it('超长消息截断到 24 字加省略号', () => {
     const long = '一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十';
     expect(buildHookSessionTitle('slack', long, 'C1:1.1')).toBe(
-      `[Hook·slack] ${long.slice(0, 24)}…`,
+      `[Slack] ${long.slice(0, 24)}…`,
     );
   });
 
   it('空消息(纯图片派发)回退渠道内标识', () => {
-    expect(buildHookSessionTitle('slack', '   \n ', 'C1:1.1')).toBe('[Hook·slack] C1:1.1');
+    expect(buildHookSessionTitle('slack', '   \n ', 'C1:1.1')).toBe('[Slack] C1:1.1');
   });
 
   it('DM 会话(bareKey 带 dm: 前缀)标题前缀标 ·DM', () => {
     expect(buildHookSessionTitle('slack', '帮我看看这个报错', 'dm:U1:g0')).toBe(
-      '[Hook·slack·DM] 帮我看看这个报错',
+      '[Slack·DM] 帮我看看这个报错',
     );
     // 空消息回退 bareKey 时 DM 标同样生效
-    expect(buildHookSessionTitle('slack', '', 'dm:U1:g0')).toBe('[Hook·slack·DM] dm:U1:g0');
+    expect(buildHookSessionTitle('slack', '', 'dm:U1:g0')).toBe('[Slack·DM] dm:U1:g0');
   });
 });
 
@@ -193,7 +193,7 @@ describe('dispatcher 核心语义', () => {
       prompt: '干活',
       // 标题带 provider 名(externalKey 前缀), 不用 desktop 侧连接名;
       // 后半段用首条消息摘要(可读), 不再用"频道 ID:时间戳"
-      title: '[Hook·team-slack] 干活',
+      title: '[Team-slack] 干活',
     });
 
     fr.finish({ finalText: '搞定了' });

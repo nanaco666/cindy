@@ -101,16 +101,18 @@ describe('automation-generated sessions', () => {
   });
 
   it('keeps scheduler sessions in the desktop-visible source contract', () => {
-    // feishu 是合法 source 但不进 desktop sidebar；slack / discord 进入 sidebar。
+    // feishu / slack / discord 三个 IM 渠道均进 desktop sidebar
+    // (feishu 2026-07-16 起以「对话」分组回归, 见 sessionSource.ts 注释)。
     expect(DESKTOP_VISIBLE_SESSION_SOURCES).toEqual([
       'desktop',
+      'feishu',
       'slack',
       'discord',
       'scheduler',
       'learn',
       'shared',
     ]);
-    expect(DESKTOP_VISIBLE_SESSION_SOURCES).not.toContain('feishu');
+    expect(DESKTOP_VISIBLE_SESSION_SOURCES).toContain('feishu');
     expect(DESKTOP_VISIBLE_SESSION_SOURCES).toContain('discord');
 
     expect(normalizeSessionSource('desktop')).toBe('desktop');
