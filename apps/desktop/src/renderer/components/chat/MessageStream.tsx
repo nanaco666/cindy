@@ -172,6 +172,11 @@ import { usePrevUserMessageInView } from './usePrevUserMessageInView';
 import { JumpToBottomChip } from './JumpToBottomChip';
 import { detectScrollAnchoringApplied } from './scrollAnchoringDetect';
 import { decideAutoFillAction, decideUserIntentFillAction, TOP_HISTORY_TRIGGER_PX } from './viewportFillDetect';
+import {
+  resolveNearBottomOnScroll,
+  shouldUnpinOnUpIntent,
+  shouldUnpinOnWheel,
+} from './autoFollowIntent';
 import { useNavigationKeyListener } from './useNavigationKeyListener';
 import { suppressScrollbarActivation } from '@/lib/scrollbarAutoHide';
 
@@ -2171,6 +2176,21 @@ export function MessageStream({
   /** 上一次 render 已见过的 clientId 集合，用于 O(n) diff 出"首次出现"的消息。 */
   const prevMessageIdsRef = useRef<Set<string>>(new Set());
 
+  // ── 意图解除 auto-follow ──
+  // wheel 上滚 / 触摸下拉 / PageUp 等历史导航键只有用户能产生(程序化 scrollTop
+  // 赋值不发这些事件),在事件层直接解除跟随:不经过 scroll 事件,不受
+  // programmaticScrollRef 竞态影响,也不看距离阈值 — 上滚一行(哪怕 1px)立即
+  // 停止自动滚动。距离阈值只保留给「恢复跟随」与滚动条拖拽的解除兜底
+  // (见 autoFollowIntent.ts 模块注释与 handleScroll)。
+  // 是否构成解除条件由各事件路径的纯函数判定(shouldUnpinOnWheel /
+  // shouldUnpinOnUpIntent),本回调只负责翻转:ref 与 state 同步更新(F2 不
+  // 变量);unreadCount 不动 — 它只在回底时清零。
+  const unpinAutoFollowForUserUpIntent = useCallback(() => {
+    if (!isNearBottomRef.current) return;
+    isNearBottomRef.current = false;
+    setIsNearBottom(false);
+  }, []);
+
   // ── jump-to-bottom chip ──
   // 用户向下滚动且未到底时显示扁平的"跳到底部" chip,2s 内无滚动自动隐藏。
   // 与 NewMessageIndicator 互斥(它有未读时优先)。state 用 setter 直接控制,
@@ -2273,6 +2293,16 @@ export function MessageStream({
       clearChipJumpSuppression();
       if (event.deltaY < 0) {
         if (hasNestedScrollableAncestorThatCanScrollUp(root, event.target)) return;
+        if (
+          shouldUnpinOnWheel({
+            deltaX: event.deltaX,
+            deltaY: event.deltaY,
+            scrollHeight: root.scrollHeight,
+            clientHeight: root.clientHeight,
+          })
+        ) {
+          unpinAutoFollowForUserUpIntent();
+        }
         triggerUserIntentFill();
       }
     };
@@ -2287,6 +2317,14 @@ export function MessageStream({
       if (currentY - startY > TOUCH_HISTORY_INTENT_THRESHOLD_PX) {
         userHistoryTouchStartYRef.current = currentY;
         if (hasNestedScrollableAncestorThatCanScrollUp(root, event.target)) return;
+        if (
+          shouldUnpinOnUpIntent({
+            scrollHeight: root.scrollHeight,
+            clientHeight: root.clientHeight,
+          })
+        ) {
+          unpinAutoFollowForUserUpIntent();
+        }
         triggerUserIntentFill();
       }
     };
@@ -2305,20 +2343,27 @@ export function MessageStream({
       root.removeEventListener('touchend', onTouchEnd);
       root.removeEventListener('touchcancel', onTouchEnd);
     };
-  }, [clearChipJumpSuppression, triggerUserIntentFill]);
+  }, [clearChipJumpSuppression, triggerUserIntentFill, unpinAutoFollowForUserUpIntent]);
   useEffect(() => {
     const onHistoryNavigationKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
       if (!HISTORY_NAVIGATION_KEYS.has(event.key)) return;
       if (isEditableKeyboardTarget(event.target)) return;
       clearChipJumpSuppression();
+      const el = scrollRef.current;
+      if (
+        el &&
+        shouldUnpinOnUpIntent({ scrollHeight: el.scrollHeight, clientHeight: el.clientHeight })
+      ) {
+        unpinAutoFollowForUserUpIntent();
+      }
       triggerUserIntentFill();
     };
     window.addEventListener('keydown', onHistoryNavigationKey);
     return () => {
       window.removeEventListener('keydown', onHistoryNavigationKey);
     };
-  }, [clearChipJumpSuppression, triggerUserIntentFill]);
+  }, [clearChipJumpSuppression, triggerUserIntentFill, unpinAutoFollowForUserUpIntent]);
   useNavigationKeyListener(clearChipJumpSuppression);
 
   const pinToBottom = useCallback(() => {
@@ -2562,12 +2607,18 @@ export function MessageStream({
     expandWindow();
   }, [isLoadingMore, windowAtTop, expandWindow]);
 
-  // F-SYNC-2 + F2: Distance-based single source of truth.
+  // F-SYNC-2 + F2: 跟随态的 scroll 事件侧迁移。
   //
-  // "Is the viewport near the bottom?" is decided by one rule and one rule
-  // only: `distanceFromBottom < threshold`. Both `isNearBottomRef` (auto-follow
-  // gate) and `isNearBottom` state (indicator visibility) are updated from this
-  // single boolean, in the same branch, so they can never diverge.
+  // 「解除跟随」的主路径在事件层(wheel / touch / 键盘意图 →
+  // unpinAutoFollowForUserUpIntent,见上),不在这里 — scroll 事件在流式期间
+  // 与 pinToBottom 高频竞态(小幅上滚永远越不过距离阈值就被钉回,且
+  // programmaticScrollRef 窗口会吞掉部分用户 scroll 事件),距离判定对
+  // 「上滚一行就停」不可靠。本 handler 只负责:
+  //   - 离底 >= threshold → 解除(滚动条拖拽等无 wheel 事件路径的兜底);
+  //   - 已解除 + 明确向下滚回阈值带内 → 恢复跟随。
+  // 迁移规则收敛在 resolveNearBottomOnScroll(纯函数,见 autoFollowIntent.ts)。
+  // `isNearBottomRef`(auto-follow gate)与 `isNearBottom` state(指示器显隐)
+  // 仍在同一分支同步更新,不允许失步。
   //
   // Programmatic scrolls (pinToBottom / scrollToBottomSmooth / load-more
   // restore) bypass all state updates — they are our own writes and must not
@@ -2592,20 +2643,28 @@ export function MessageStream({
           saveScrollSnapshot();
         });
       }
-      // F2: 单一真相源——distance < threshold 决定是否在底。
+      // 方向增量 — 比较当前 scrollTop 与 prevScrollTopRef(在本函数末尾才会被
+      // 覆盖,这里读的还是上一次值)。跟随态迁移与 jump-down chip 共用。
+      // programmatic scroll 不进本分支 — auto-follow 自己滚不该参与判定。
+      const delta = currentScrollTop - prevScrollTopRef.current;
+
+      // F2: 跟随态迁移(规则见 resolveNearBottomOnScroll 注释)。恢复跟随要求
+      // 明确向下滚 — 意图解除(wheel 上滚)后紧跟着的上滚 scroll 事件距底仍
+      // < threshold,只看距离会把刚解除的跟随立刻翻回去。
       // ref (auto-follow) 与 state (按钮显隐) 在同一分支同步，永不失步。
       // unreadCount 仅在"从非底 → 底"的翻转瞬间清零，避免已累计未读被吞。
-      const nowNearBottom = distanceFromBottom < threshold;
+      const nowNearBottom = resolveNearBottomOnScroll({
+        wasNearBottom: isNearBottomRef.current,
+        distanceFromBottom,
+        scrollDelta: delta,
+        thresholdPx: threshold,
+        directionDeadZonePx: SCROLL_DIRECTION_DEAD_ZONE_PX,
+      });
       if (nowNearBottom !== isNearBottomRef.current) {
         isNearBottomRef.current = nowNearBottom;
         setIsNearBottom(nowNearBottom);
         if (nowNearBottom) setUnreadCount(0);
       }
-
-      // jump-down chip 方向判定 — 比较当前 scrollTop 与 prevScrollTopRef
-      // (在本函数末尾才会被覆盖,这里读的还是上一次值)。programmatic scroll
-      // 不参与判定 — auto-follow 自己滚不该让 chip 误显示。
-      const delta = currentScrollTop - prevScrollTopRef.current;
       if (nowNearBottom) {
         // 到底了:无论方向都隐藏 chip,清掉 timer
         if (jumpDownIdleTimerRef.current !== null) {
