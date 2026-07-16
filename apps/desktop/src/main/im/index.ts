@@ -48,7 +48,7 @@
  */
 
 import { ipcMain, BrowserWindow, type IpcMainEvent } from 'electron';
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, like, ne, sql } from 'drizzle-orm';
 
 import { getDbClient } from '../localDb/client/current';
 import { sessions } from '../localDb/schema';
@@ -306,6 +306,19 @@ export function startImConnection(): void {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       log.warn(`feishu sessions workspaceKind backfill failed (non-fatal): ${msg}`);
+    }
+    // 存量 feishu 会话的旧默认标题 `飞书 · {后6位}` 迁到新风格 `[飞书·DM] {后6位}`
+    // (与 hook Slack 的 [Slack·DM] 同款)。只动旧默认前缀命中的行, 用户自定义
+    // 标题不受影响; 改名后不再命中 LIKE, 天然幂等。'飞书 · ' 共 5 个字符,
+    // substr 从第 6 个字符起保留后缀。
+    try {
+      await getDbClient()
+        .drizzle.update(sessions)
+        .set({ title: sql`'[飞书·DM] ' || substr(${sessions.title}, 6)` })
+        .where(and(eq(sessions.source, 'feishu'), like(sessions.title, '飞书 · %')));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn(`feishu sessions title backfill failed (non-fatal): ${msg}`);
     }
     try {
       await im.init();
