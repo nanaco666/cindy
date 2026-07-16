@@ -4,7 +4,7 @@
  * 仓库只提交 config/production-endpoints.json.example；真实 JSON 由 CI / 发布环境
  * 在构建前写入 config/production-endpoints.json，或通过
  * CINDY_PRODUCTION_ENDPOINTS_FILE 指向其它绝对/相对路径。任何生产调用缺文件、
- * 缺字段或 URL 非法都立即失败，禁止退回源码内默认地址。
+ * 缺字段、URL 非法或 OSS 配置为空都立即失败，禁止退回源码内默认值。
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,6 +20,15 @@ export const PRODUCTION_ENDPOINT_KEYS = Object.freeze([
   'cdnBaseUrl',
   'cdnInternalBaseUrl',
   'npkgBaseUrl',
+]);
+export const PRODUCTION_OSS_CONFIG_KEYS = Object.freeze([
+  'ossBucket',
+  'ossPrefix',
+  'ossRegion',
+]);
+export const PRODUCTION_CONFIG_KEYS = Object.freeze([
+  ...PRODUCTION_ENDPOINT_KEYS,
+  ...PRODUCTION_OSS_CONFIG_KEYS,
 ]);
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -89,13 +98,13 @@ export function validateProductionEndpoints(value, options = {}) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${source} 必须是 JSON object`);
   }
-  const unknownKeys = Object.keys(value).filter((key) => !PRODUCTION_ENDPOINT_KEYS.includes(key));
+  const unknownKeys = Object.keys(value).filter((key) => !PRODUCTION_CONFIG_KEYS.includes(key));
   if (unknownKeys.length) {
     throw new Error(`${source} 包含未知字段: ${unknownKeys.join(', ')}`);
   }
 
   const result = {};
-  for (const key of PRODUCTION_ENDPOINT_KEYS) {
+  for (const key of PRODUCTION_CONFIG_KEYS) {
     const raw = value[key];
     if (options.allowEmpty && raw === '') {
       result[key] = '';
@@ -103,6 +112,10 @@ export function validateProductionEndpoints(value, options = {}) {
     }
     if (typeof raw !== 'string' || !raw.trim()) {
       throw new Error(`${source} 缺少非空字段: ${key}`);
+    }
+    if (PRODUCTION_OSS_CONFIG_KEYS.includes(key)) {
+      result[key] = raw.trim();
+      continue;
     }
     const normalized = raw.trim().replace(/\/+$/, '');
     let url;

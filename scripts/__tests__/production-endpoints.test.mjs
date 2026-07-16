@@ -10,6 +10,7 @@ import {
   productionViteEnv,
   validateProductionEndpointsExample,
 } from '../shared/production-endpoints.mjs';
+import { resolveOssConfig } from '../shared/oss.mjs';
 
 const tempDirs = [];
 const originalConfigPath = process.env.CINDY_PRODUCTION_ENDPOINTS_FILE;
@@ -36,6 +37,12 @@ test('私有 JSON 是 Desktop/Mobile 构建注入的唯一输入', () => {
     EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: values.deviceLinkApiBaseUrl,
     EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: values.xdGatewayBaseUrl,
   });
+  assert.deepEqual(resolveOssConfig(), {
+    cdnBase: values.cdnBaseUrl,
+    bucket: values.ossBucket,
+    prefix: values.ossPrefix,
+    region: values.ossRegion,
+  });
   assert.deepEqual(productionViteEnv({ allowEnvOverride: false }), {
     VITE_API_BASE_URL: values.apiBaseUrl,
     VITE_DEVICE_LINK_API_BASE_URL: values.deviceLinkApiBaseUrl,
@@ -53,6 +60,11 @@ test('缺字段、非法协议和 URL 内凭据都会 fail closed', () => {
   delete missing.apiBaseUrl;
   process.env.CINDY_PRODUCTION_ENDPOINTS_FILE = writeFixture(missing);
   assert.throws(() => loadProductionEndpoints(), /apiBaseUrl/);
+
+  const missingOss = fixtureEndpoints();
+  delete missingOss.ossBucket;
+  process.env.CINDY_PRODUCTION_ENDPOINTS_FILE = writeFixture(missingOss);
+  assert.throws(() => loadProductionEndpoints(), /ossBucket/);
 
   process.env.CINDY_PRODUCTION_ENDPOINTS_FILE = writeFixture({
     ...fixtureEndpoints(),
@@ -84,6 +96,9 @@ function fixtureEndpoints() {
     cdnBaseUrl: 'https://cdn.example.invalid/app',
     cdnInternalBaseUrl: 'http://cdn-internal.example.invalid/app',
     npkgBaseUrl: 'https://npkg.example.invalid',
+    ossBucket: 'test-bucket',
+    ossPrefix: 'test-prefix',
+    ossRegion: 'oss-test-region',
   };
 }
 

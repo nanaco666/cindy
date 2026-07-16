@@ -53,11 +53,21 @@ test("loadDotenv 刷新在 import 后才注入的 OSS/CDN 配置", () => {
       if (saved[key] === undefined) delete process.env[key];
       else process.env[key] = saved[key];
     }
-    if (!process.env.XDT_CDN_BASE_URL) {
-      process.env.XDT_CDN_BASE_URL = 'https://cdn.example.invalid';
+    const temporaryOverrides = [];
+    const restoreValues = {
+      XDT_CDN_BASE_URL: 'https://cdn.example.invalid',
+      XDT_OSS_BUCKET: 'test-bucket',
+      XDT_OSS_PREFIX: 'test-prefix',
+      XDT_OSS_REGION: 'oss-test-region',
+    };
+    for (const [key, value] of Object.entries(restoreValues)) {
+      if (!process.env[key]) {
+        process.env[key] = value;
+        temporaryOverrides.push(key);
+      }
     }
     refreshOssConfig();
-    if (saved.XDT_CDN_BASE_URL === undefined) delete process.env.XDT_CDN_BASE_URL;
+    for (const key of temporaryOverrides) delete process.env[key];
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });

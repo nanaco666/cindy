@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   DEFAULT_PRODUCTION_ENDPOINTS_PATH,
+  PRODUCTION_CONFIG_KEYS,
   PRODUCTION_ENDPOINT_KEYS,
   loadProductionEndpoints,
   validateProductionEndpointsExample,
@@ -85,7 +86,7 @@ function main() {
 
   try {
     const example = validateProductionEndpointsExample();
-    for (const key of PRODUCTION_ENDPOINT_KEYS) {
+    for (const key of PRODUCTION_CONFIG_KEYS) {
       if (example[key] !== '') errors.push(`production-endpoints.json.example 的 ${key} 必须为空`);
     }
   } catch (error) {
@@ -117,7 +118,9 @@ function main() {
     try {
       const endpoints = loadProductionEndpoints();
       const privateHosts = new Set(
-        Object.values(endpoints).map((value) => new URL(value).hostname.toLowerCase()),
+        PRODUCTION_ENDPOINT_KEYS.map(
+          (key) => new URL(endpoints[key]).hostname.toLowerCase(),
+        ),
       );
       for (const file of CONTROLLED_SOURCE_FILES) {
         const content = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8').toLowerCase();
