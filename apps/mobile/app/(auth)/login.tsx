@@ -196,15 +196,29 @@ export default function LoginScreen() {
     const emailAllowed =
       state.methods.some((method) => method.type === 'email_code') &&
       !ssoMethods.some((method) => method.ssoRequired);
+    // 命中企业域名时按 console 同款框架提示「企业身份 / 个人身份」；无 SSO 时保持纯邮箱确认
+    const orgName = ssoMethods[0]?.orgName;
     return (
       <>
         <BackButton disabled={disabled} onPress={reset} />
-        <StepHeader title={loginText('chooseMethod')} subtitle={state.email} />
+        <StepHeader
+          title={loginText('chooseMethod')}
+          subtitle={
+            orgName
+              ? loginText('orgDetected')
+                  .replace('{org}', orgName)
+                  .replace('{email}', state.email)
+              : state.email
+          }
+        />
         {ssoMethods.map((method) => (
           <MainWindowActionButton
             action={{
               disabled,
-              label: method.connectionName || method.orgName,
+              label:
+                ssoMethods.length > 1
+                  ? `${loginText('enterpriseLogin')} · ${method.connectionName || method.orgName}`
+                  : loginText('enterpriseLogin'),
               onPress: () =>
                 void auth.dispatchLoginAction({
                   type: 'start-sso',
@@ -223,7 +237,7 @@ export default function LoginScreen() {
             action={{
               busy: auth.isBusy,
               disabled,
-              label: loginText('emailCode'),
+              label: loginText(ssoMethods.length > 0 ? 'personalLogin' : 'emailCode'),
               onPress: () =>
                 void auth.dispatchLoginAction({
                   type: 'request-code',

@@ -178,17 +178,29 @@ export function LoginPage() {
     const emailAllowed =
       loginState.methods.some((method) => method.type === 'email_code') &&
       !ssoMethods.some((method) => method.ssoRequired);
+    // 命中企业域名时按 console 同款框架提示「企业身份 / 个人身份」；无 SSO 时保持纯邮箱确认
+    const orgName = ssoMethods[0]?.orgName;
     return (
       <>
         <BackButton disabled={isLoading} onClick={reset} label={t('login.back')} />
-        <Header title={t('login.chooseMethod')} subtitle={loginState.email} />
+        <Header
+          title={t('login.chooseMethod')}
+          subtitle={
+            orgName
+              ? t('login.orgDetected', { email: loginState.email, org: orgName })
+              : loginState.email
+          }
+        />
         <div className="w-full space-y-2">
           {ssoMethods.map((method) => (
             <button
               key={method.connectionId}
               type="button"
               disabled={isLoading}
-              className={primaryButtonClass}
+              className={cn(
+                primaryButtonClass,
+                'h-auto min-h-12 justify-start rounded-xl px-4 py-3 text-left',
+              )}
               onClick={() =>
                 void dispatch({
                   type: 'start-browser',
@@ -198,28 +210,58 @@ export function LoginPage() {
                 })
               }
             >
-              <Building2 size={18} />
-              {method.connectionName || method.orgName}
-              <ExternalLink size={15} />
+              <Building2 className="shrink-0" size={18} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate">{t('login.enterpriseLogin')}</span>
+                <span className="block truncate text-[12px] font-normal opacity-75">
+                  {t('login.enterpriseVia', { name: method.connectionName || method.orgName })}
+                </span>
+              </span>
+              <ExternalLink className="shrink-0" size={15} />
             </button>
           ))}
-          {emailAllowed && (
-            <button
-              type="button"
-              disabled={isLoading}
-              className={ssoMethods.length > 0 ? secondaryButtonClass : primaryButtonClass}
-              onClick={() =>
-                void dispatch({
-                  type: 'request-code',
-                  kind: 'email',
-                  identifier: loginState.email,
-                })
-              }
-            >
-              <Mail size={18} />
-              {t('login.emailCode')}
-            </button>
-          )}
+          {emailAllowed &&
+            (ssoMethods.length > 0 ? (
+              <button
+                type="button"
+                disabled={isLoading}
+                className={cn(
+                  secondaryButtonClass,
+                  'h-auto min-h-12 justify-start rounded-xl px-4 py-3 text-left',
+                )}
+                onClick={() =>
+                  void dispatch({
+                    type: 'request-code',
+                    kind: 'email',
+                    identifier: loginState.email,
+                  })
+                }
+              >
+                <UserRound className="shrink-0" size={18} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{t('login.personalLogin')}</span>
+                  <span className="block truncate text-[12px] font-normal text-[var(--text-secondary)]">
+                    {t('login.personalDesc')}
+                  </span>
+                </span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={isLoading}
+                className={primaryButtonClass}
+                onClick={() =>
+                  void dispatch({
+                    type: 'request-code',
+                    kind: 'email',
+                    identifier: loginState.email,
+                  })
+                }
+              >
+                <Mail size={18} />
+                {t('login.emailCode')}
+              </button>
+            ))}
         </div>
         {ssoMethods.some((method) => method.ssoRequired) && (
           <p className="mt-4 text-center text-[13px] leading-5 text-[var(--text-secondary)]">
