@@ -16,13 +16,15 @@ import type { CindyGhostsMcpDeps } from '../types.js';
 const D_GHOST_LIST = [
   '列出用户当前装入且唤醒的意识(Ghost)及各自提供的工具。',
   '意识是用户自装的第三方能力包(.cindy),清单是实时的:用户随时可能装入/抽离/唤醒/沉睡,',
-  '每次需要用意识工具前都应重新调用本工具获取最新清单,不要依赖会话早前的记忆。',
+  '每次需要用意识工具前都应重新调用本工具获取最新清单,不要依赖会话早前的记忆',
+  '(例外:用户消息的[意识指令]已附带目标意识的工具清单时,可直接 ghost_call 免查)。',
   '返回条目含 id、name、command(用户显式点名用的 /指令)与 tools(名称/说明/参数)。',
   '调用具体工具用 ghost_call({ghost_id, tool, args})。清单为空 = 用户没有可用的意识工具。',
 ].join('\n');
 
 const D_GHOST_CALL = [
-  '调用某段意识(Ghost)提供的工具。ghost_id 与 tool 来自 ghost_list 的返回;',
+  '调用某段意识(Ghost)提供的工具。ghost_id 与 tool 来自 ghost_list 的返回,',
+  '或用户消息[意识指令]附带的工具清单;',
   'args 按该工具声明的参数 schema 传 JSON 对象。',
   '执行发生在该意识的独立沙箱中(无文件/网络访问,用 AI 走主机统一通道)。',
   '用户的图片/媒体文件要交给意识处理时,把其地址放进顶层 attachments',

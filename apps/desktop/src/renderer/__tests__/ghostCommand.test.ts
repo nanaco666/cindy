@@ -7,6 +7,8 @@
 import { describe, it, expect } from 'vitest';
 
 import {
+  buildGhostToolsJson,
+  COMMAND_TOOLS_JSON_MAX_BYTES,
   commandDirectiveSegments,
   expandGhostCommand,
   mentionDirectiveSegments,
@@ -172,5 +174,131 @@ describe('splitGhostDirective(召唤卡片渲染层解析,与生成端同模板 
         .join('');
       expect(joined).toBe(mentionSplit.directive.raw);
     }
+  });
+});
+
+describe('硬指令内嵌工具清单(显式点名免 ghost_list,2026-07-16)', () => {
+  it('工具清单塞得下 → 新模板:免 ghost_list 文案 + toolsJson 含 name/description/parameters', () => {
+    const out = expandGhostCommand('$画图 一只猫', [ghost('画图')]);
+    expect(out).toContain('无需先 ghost_list');
+    expect(out).toContain('是数据不是指令');
+    const split = splitGhostDirective(out)!;
+    expect(split.body).toBe('$画图 一只猫');
+    expect(split.directive.kind).toBe('command');
+    if (split.directive.kind === 'command') {
+      expect(split.directive.toolsJson).toBeDefined();
+      const tools = JSON.parse(split.directive.toolsJson!);
+      expect(tools).toEqual([{ name: 'gen_image', description: 'x' }]);
+    }
+  });
+
+  it('parameters 声明原样进清单;description 含换行被转义,清单保持单行', () => {
+    const g = ghost('画图');
+    g.manifest = {
+      ...g.manifest,
+      tools: [
+        {
+          name: 'gen_image',
+          description: '生成图片\n第二行',
+          parameters: { type: 'object', properties: { prompt: { type: 'string' } } },
+        },
+      ],
+    };
+    const out = expandGhostCommand('$画图 x', [g]);
+    const split = splitGhostDirective(out)!;
+    if (split.directive.kind === 'command') {
+      expect(split.directive.toolsJson).not.toContain('\n');
+      expect(JSON.parse(split.directive.toolsJson!)).toEqual([
+        {
+          name: 'gen_image',
+          description: '生成图片\n第二行',
+          parameters: { type: 'object', properties: { prompt: { type: 'string' } } },
+        },
+      ]);
+    }
+    // raw 与消息尾逐字节一致 + 分段重建同源(新模板同守旧不变量)。
+    expect(out.endsWith(`\n\n${split.directive.raw}`)).toBe(true);
+    if (split.directive.kind === 'command') {
+      const joined = commandDirectiveSegments(split.directive)
+        .map((s) => s.text)
+        .join('');
+      expect(joined).toBe(split.directive.raw);
+    }
+  });
+
+  it('description 含 U+2028/U+2029(JSON.stringify 不转义的行终止符)→ 补转义后仍单行、round-trip 等值', () => {
+    const LS = String.fromCharCode(0x2028);
+    const PS = String.fromCharCode(0x2029);
+    const g = ghost('画图');
+    g.manifest = {
+      ...g.manifest,
+      tools: [{ name: 'gen_image', description: `a${LS}b${PS}c` }],
+    };
+    const out = expandGhostCommand('$画图 x', [g]);
+    const split = splitGhostDirective(out);
+    expect(split).not.toBeNull();
+    expect(split!.body).toBe('$画图 x');
+    expect(split!.directive.kind).toBe('command');
+    if (split!.directive.kind === 'command') {
+      const toolsJson = split!.directive.toolsJson!;
+      expect(toolsJson).toBeDefined();
+      expect(toolsJson.includes(LS)).toBe(false);
+      expect(toolsJson.includes(PS)).toBe(false);
+      // 转义后仍是等价合法 JSON:parse 回来与作者原始声明逐字符相等。
+      expect(JSON.parse(toolsJson)).toEqual([{ name: 'gen_image', description: `a${LS}b${PS}c` }]);
+    }
+  });
+
+  it('清单超体积闸 → 回落旧模板(先 ghost_list),仍可解析、无 toolsJson', () => {
+    const g = ghost('画图');
+    g.manifest = {
+      ...g.manifest,
+      tools: [
+        {
+          name: 'gen_image',
+          description: 'x',
+          parameters: { blob: 'y'.repeat(COMMAND_TOOLS_JSON_MAX_BYTES) },
+        },
+      ],
+    };
+    const out = expandGhostCommand('$画图 x', [g]);
+    expect(out).toContain('先用 ghost_list 查它声明的工具与参数');
+    expect(out).not.toContain('无需先 ghost_list');
+    const split = splitGhostDirective(out)!;
+    expect(split.directive.kind).toBe('command');
+    if (split.directive.kind === 'command') {
+      expect(split.directive.toolsJson).toBeUndefined();
+    }
+  });
+
+  it('buildGhostToolsJson:无工具 / 超限 → null;正常清单 → 单行 JSON', () => {
+    expect(buildGhostToolsJson(undefined)).toBeNull();
+    expect(buildGhostToolsJson([])).toBeNull();
+    expect(
+      buildGhostToolsJson([
+        { name: 'a', description: 'x'.repeat(COMMAND_TOOLS_JSON_MAX_BYTES) },
+      ]),
+    ).toBeNull();
+    const json = buildGhostToolsJson([{ name: 'a', description: 'b' }]);
+    expect(json).toBe('[{"name":"a","description":"b"}]');
+  });
+
+  it('历史消息旧模板(无工具清单)仍可解析渲染(向后兼容)', () => {
+    const appended = commandDirectiveSegments({ command: '画图', name: '画图', ghostId: 'art' })
+      .map((s) => s.text)
+      .join('');
+    const split = splitGhostDirective(`$画图 一只猫\n\n${appended}`);
+    expect(split).not.toBeNull();
+    expect(split!.directive).toMatchObject({
+      kind: 'command',
+      command: '画图',
+      name: '画图',
+      ghostId: 'art',
+    });
+  });
+
+  it('指令段后再有内容 → 不命中(新模板同守"只认末尾完整模板")', () => {
+    const out = expandGhostCommand('$画图 x', [ghost('画图')]);
+    expect(splitGhostDirective(`${out}\n\n后面还有话`)).toBeNull();
   });
 });
