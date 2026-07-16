@@ -2633,12 +2633,10 @@ const registerIpcHandlers = () => {
     return authManager.initialize();
   });
 
-  ipcMain.handle('auth:login', async () => {
-    return authManager.login(getWindow());
-  });
+  ipcMain.handle('auth:get-login-state', async () => authManager.getLoginState());
 
-  ipcMain.handle('auth:dev-login', async () => {
-    return authManager.devLogin();
+  ipcMain.handle('auth:dispatch-login-action', async (_event, action: unknown) => {
+    return authManager.dispatchLoginAction(action);
   });
 
   ipcMain.handle('auth:logout', async () => {

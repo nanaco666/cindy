@@ -50,7 +50,6 @@ import {
   replaceVersionCodeInAndroidVersionJson,
   resolveAndroidSigningEnv,
   patchBuildGradleSigning,
-  patchRootBuildGradleFeishuFlatDir,
   patchGradlePropertiesMemory,
 } from './lib/android-local.mjs';
 import { resolveJavaRuntimeEnv, javaRuntimeDetail } from './java-runtime-env.mjs';
@@ -115,17 +114,12 @@ function patchGradleSigning() {
   log('  ✓ 已 patch android/app/build.gradle:release 用自有 keystore 自签(口令走 env,不落盘)');
 }
 
-// patch 生成的 android/build.gradle(larksso flatDir)+ gradle.properties(bump heap/metaspace)。
-// 均只动生成的 android/(prebuild 之后),对 @expo/fingerprint / iOS / mac / win / EAS 零影响。
-function patchGradleRootAndProps() {
-  const rootGradle = resolve(MOBILE_DIR, 'android/build.gradle');
-  if (!existsSync(rootGradle)) throw new Error(`prebuild 后未找到 ${rootGradle}`);
-  writeFileSync(rootGradle, patchRootBuildGradleFeishuFlatDir(readFileSync(rootGradle, 'utf8')));
-
+// 调大生成工程的 Gradle heap / metaspace。只动 prebuild 产物,不影响 fingerprint。
+function patchGradleProps() {
   const props = resolve(MOBILE_DIR, 'android/gradle.properties');
   if (!existsSync(props)) throw new Error(`prebuild 后未找到 ${props}`);
   writeFileSync(props, patchGradlePropertiesMemory(readFileSync(props, 'utf8')));
-  log('  ✓ 已 patch android/build.gradle(larksso flatDir 传递解析)+ gradle.properties(bump heap/metaspace)');
+  log('  ✓ 已 patch android/gradle.properties(bump heap/metaspace)');
 }
 
 function buildApk(env) {
@@ -136,7 +130,7 @@ function buildApk(env) {
   // prebuild 生成原生工程(注入 SELFHOST env → package=com.xd.cindycn + versionCode)。
   run(NPX, ['--yes', 'expo', 'prebuild', '--platform', 'android', '--clean'], { env });
   patchGradleSigning();
-  patchGradleRootAndProps();
+  patchGradleProps();
 
   // gradle 内部触发 expo export:embed 打 JS bundle,无法透传 --clear;打包前清 Metro/Babel 缓存,
   // 确保 EXPO_PUBLIC_ 变更(TAPTAP / API 等)被重新内联,不吃旧缓存(如 placeholder)。
@@ -282,7 +276,7 @@ async function main() {
     return;
   }
 
-  // 必需 public env 齐全,否则 prebuild/gradle 会把空 EXPO_PUBLIC_FEISHU_APP_ID 等烤进整包,
+  // 必需 public env 齐全,否则 prebuild/gradle 会把空 auth-server 配置等烤进整包,
   // 装机后登录崩(与 release-prod/beta / OTA 脚本用同一 gate)。建议 eas env:exec production 包裹。
   assertPublicEnv(env, { variant: 'production' });
 

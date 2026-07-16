@@ -3,7 +3,6 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FEISHU_APP_ID } from './shared/feishu.mjs';
 import { productionEndpoints } from './shared/production-endpoints.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -12,19 +11,19 @@ const gracefulTimeoutMs = 3000;
 const forceTimeoutMs = 5000;
 const pollIntervalMs = 150;
 const forceKillLabel = process.platform === 'win32' ? 'taskkill /F /T' : 'kill -9';
-// FEISHU_APP_ID(飞书公共 client id,非密钥)统一从 scripts/shared/feishu.mjs 引入,见该文件说明。
 const REMOTE_API_BASE_URL = productionEndpoints.apiBaseUrl;
 const LOCAL_API_BASE_URL = 'http://localhost:3333';
+const LOCAL_AUTH_BASE_URL = 'http://localhost:3344';
 
 // 桌面端 .env 默认值,按启动模式区分 VITE_API_BASE_URL:
 // - remote(默认):dev:desktop:remote 用 cross-env 在运行时强制注入 xdt-api,桌面端不看 .env,
 //   所以 .env 里的 VITE_API_BASE_URL 只是占位,沿用旧策略「文件已存在则不覆盖」即可。
 // - local:dev:desktop 无运行时注入,桌面端直接读 .env,因此必须 force 把 .env 的
 //   VITE_API_BASE_URL 写成本地地址,否则会沿用上一次 remote 留下的远程地址连错服务器。
-// VITE_FEISHU_APP_ID 两种模式都只补空值、保留用户已填的值。
 function desktopEnvSpec(mode) {
   return [
-    { key: 'VITE_FEISHU_APP_ID', value: FEISHU_APP_ID, force: false },
+    { key: 'VITE_CINDY_AUTH_REGION', value: 'cn', force: false },
+    { key: 'VITE_CINDY_AUTH_BASE_URL', value: LOCAL_AUTH_BASE_URL, force: false },
     mode === 'local'
       ? { key: 'VITE_API_BASE_URL', value: LOCAL_API_BASE_URL, force: true }
       : { key: 'VITE_API_BASE_URL', value: REMOTE_API_BASE_URL, force: false },

@@ -271,7 +271,7 @@ async function main() {
 
   if (process.platform !== 'darwin') throw new Error('--execute 需在 macOS 上运行(xcodebuild)');
 
-  // 必需 public env 齐全,否则 prebuild/xcodebuild 会把空 EXPO_PUBLIC_FEISHU_APP_ID 等烤进整包,
+  // 必需 public env 齐全,否则 prebuild/xcodebuild 会把空 auth-server 配置等烤进整包,
   // 装机后登录崩(与 release-prod/beta / OTA 脚本用同一 gate)。建议 eas env:exec production 包裹。
   assertPublicEnv(env, { variant: 'production' });
 
