@@ -24,7 +24,7 @@
 ### 打包 / OS 集成（apps/desktop）
 
 - [ ] `forge.config.ts`：`packagerConfig.name`/`productName: 'XDMaker'`、Windows `shortcutName: 'XDMaker'`、macOS `CFBundleDocumentTypes`/UTType 的 `UTTypeDescription: 'XDMaker Session Share'` 等**显示名**字段。
-- [ ] 应用图标 / splash logo 素材（`apps/desktop/resources/`、`src/renderer/assets/splash-logo.png`）。
+- [ ] 应用图标素材（`apps/desktop/resources/`）。界面 wordmark logo 已于 2026-07 换成 CINDY 深浅双版（`src/renderer/assets/logo-light.png` / `logo-dark.png`，经 `hooks/useBrandLogo.ts` 按主题选用）。
 - [ ] `apps/desktop/help-knowledge/*.md`（内置帮助知识库源文件）→ 全局替换后跑 `pnpm gen:help-kb` 重新生成 `helpKnowledge.generated.ts`。
 
 ### 手机端（apps/mobile）

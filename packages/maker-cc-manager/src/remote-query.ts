@@ -78,6 +78,12 @@ export interface RemoteQuery extends AsyncIterable<unknown> {
   /** Forward to query/interrupt. */
   interrupt(): Promise<void>;
   /**
+   * Forward to query/stopTask — stop a single background task (subagent /
+   * workflow). Old daemons without this method reject the RPC; callers should
+   * degrade gracefully (maker-core catches and warns).
+   */
+  stopTask(taskId: string): Promise<void>;
+  /**
    * Close: ends the local iterator and calls query/close on manager.
    * After close, send/setModel/etc. all reject. Iterator yields done.
    */
@@ -226,6 +232,14 @@ export async function createRemoteQuery(opts: CreateRemoteQueryOptions): Promise
     }, rpcOpts);
   }
 
+  async function stopTask(taskId: string): Promise<void> {
+    if (closed) throw new Error(`RemoteQuery(${opts.sessionId}) is closed`);
+    await opts.client.request(METHODS.QUERY_STOP_TASK, {
+      sessionId: opts.sessionId,
+      taskId,
+    }, rpcOpts);
+  }
+
   async function close(): Promise<void> {
     if (closed) return;
     closed = true;
@@ -257,6 +271,7 @@ export async function createRemoteQuery(opts: CreateRemoteQueryOptions): Promise
     applyFlagSettings,
     getContextUsage,
     interrupt,
+    stopTask,
     close,
     detach,
     [Symbol.asyncIterator]: async function* (): AsyncGenerator<unknown> {

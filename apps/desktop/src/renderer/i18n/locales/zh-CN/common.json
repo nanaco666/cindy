@@ -2404,10 +2404,13 @@
     }
   },
   "splash": {
-    "relaunch": {
-      "title": "小镇已更新",
-      "description": "点击按钮后，应用会自动重启，请耐心等待（如果长时间没反应，请双击应用图标手动启动）",
-      "confirm": "重新进入"
+    "tips": {
+      "checkingUpdate": "检查更新中...",
+      "updating": "Cindy 更新中...",
+      "updateDone": "更新完成，等待自动重启...",
+      "checkingEnv": "运行环境检测中...",
+      "waking": "唤醒 Cindy 中...",
+      "envFailed": "环境初始化失败，点击重试"
     },
     "manifestFailed": {
       "title": "网络连接失败",

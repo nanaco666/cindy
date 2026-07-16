@@ -36,9 +36,11 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { NEW_MAKER_DRAFT_KEY } from './newMakerDraftKeys';
 import { useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 
-import logo from '@/assets/logo.png';
+import { logoDark, logoLight } from '@/hooks/useBrandLogo';
 import { themeService } from '@/themes/theme-service';
+import type { Theme as ColorTheme } from '@/themes/types';
 import { ChatInput } from '@/components/new-chat/ChatInput';
 import { HomeUsageDashboard } from '@/components/new-chat/HomeUsageDashboard';
 import { useHomeUsageDashboardPreference } from '@/hooks/useHomeUsageDashboardPreference';
@@ -243,6 +245,17 @@ function getWorkspacePromptFromRouteState(state: unknown): WorkspacePrompt {
   return 'dialogue';
 }
 
+/**
+ * 默认打包 logo 按主题深浅二选一:深色主题用白字版,浅色主题用黑字版。
+ * theme 尚未 applyTheme(为 null)时退回看 <html> 上的 dark class。
+ */
+function defaultLogoForTheme(theme: ColorTheme | null): string {
+  const isDark = theme
+    ? theme.type === 'dark'
+    : document.documentElement.classList.contains('dark');
+  return isDark ? logoDark : logoLight;
+}
+
 /** 把主题里的 logoScale 规整到 [0.2, 5] 区间,非法值按 1。 */
 function clampLogoScale(value: number | undefined): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return 1;
@@ -352,17 +365,19 @@ export function NewMakerDraftRoute() {
 
   const [logoError, setLogoError] = useState(false);
   // 欢迎页 logo 跟随当前主题:主题对象自带 logo(内置=打包 URL,local=xdt-file URL)
-  // 与 logoScale,缺省回退到默认打包 logo / 1 倍。切主题时由 onDidChangeTheme 实时更新。
-  const [logoSrc, setLogoSrc] = useState<string>(
-    () => themeService.getCurrentTheme()?.logo ?? logo,
-  );
+  // 与 logoScale,缺省回退到默认打包 logo(按深浅二选一)/ 1 倍。切主题时由
+  // onDidChangeTheme 实时更新(含浅色↔深色切换时黑白字版互换)。
+  const [logoSrc, setLogoSrc] = useState<string>(() => {
+    const theme = themeService.getCurrentTheme();
+    return theme?.logo ?? defaultLogoForTheme(theme);
+  });
   const [logoScale, setLogoScale] = useState<number>(
     () => clampLogoScale(themeService.getCurrentTheme()?.logoScale),
   );
   useEffect(() => {
     return themeService.onDidChangeTheme((theme) => {
       setLogoError(false);
-      setLogoSrc(theme.logo ?? logo);
+      setLogoSrc(theme.logo ?? defaultLogoForTheme(theme));
       setLogoScale(clampLogoScale(theme.logoScale));
     });
   }, []);
@@ -1651,31 +1666,21 @@ export function NewMakerDraftRoute() {
           {!logoError && (
             <img
               src={logoSrc}
-              alt="HEARTOPIA"
-              className={cn(
-                'pointer-events-none shrink-0 select-none',
-                // 默认打包 logo 是 512×512 正方形(字标居中+留白),用 object-cover 铺满
-                // 固定框、裁掉上下留白。主题自定义 logo 比例不定,改用「定高 + 宽度按比例
-                // 自适应」并限制最大宽度,整图不裁切、与默认图视觉高度一致。
-                // 尺寸由 logoScale 缩放,故走 inline style 而非固定 tailwind 尺寸类。
-                logoSrc === logo ? 'object-cover' : 'object-contain',
-              )}
-              style={
-                logoSrc === logo
-                  ? {
-                      height: `${LOGO_BASE_HEIGHT * logoScale}px`,
-                      width: `${LOGO_BASE_WIDTH * logoScale}px`,
-                    }
-                  : {
-                      height: `${LOGO_BASE_HEIGHT * logoScale}px`,
-                      width: 'auto',
-                      maxWidth: `${LOGO_BASE_WIDTH * logoScale}px`,
-                    }
-              }
+              alt={BRAND_NAME}
+              // 默认打包 logo 是无留白的横向 wordmark,主题自定义 logo 比例不定:
+              // 统一「定高 + 宽度按比例自适应」并限制最大宽度,整图不裁切。
+              // 尺寸由 logoScale 缩放,故走 inline style 而非固定 tailwind 尺寸类。
+              className="pointer-events-none shrink-0 select-none object-contain"
+              style={{
+                height: `${LOGO_BASE_HEIGHT * logoScale}px`,
+                width: 'auto',
+                maxWidth: `${LOGO_BASE_WIDTH * logoScale}px`,
+              }}
               draggable={false}
               onError={() => {
                 // 主题自定义 logo 读不出 → 回退默认打包图;默认图仍报错才隐藏(防死循环)。
-                if (logoSrc !== logo) setLogoSrc(logo);
+                const fallback = defaultLogoForTheme(themeService.getCurrentTheme());
+                if (logoSrc !== fallback) setLogoSrc(fallback);
                 else setLogoError(true);
               }}
             />

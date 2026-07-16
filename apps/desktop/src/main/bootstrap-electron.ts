@@ -2831,7 +2831,7 @@ const registerIpcHandlers = () => {
 
   // Environment check IPC handler — 顺序检查 claude → codex 两个 vendor binary。
   // 提前 peekNeedsDownload 决定 (x/2) 标签：两个都需要下载时给 step/totalSteps，
-  // 否则不带标签（splash 显示单一 "正在召唤村民..." 文案）。
+  // 否则不带标签（splash 显示单一 "唤醒 Cindy 中..." 文案）。
   ipcMain.handle('check-environment', async () => {
     // splash 首个 invoke = renderer 存活的强信号(与 renderer:log 双保险)。
     rendererBootGuard?.markAlive();

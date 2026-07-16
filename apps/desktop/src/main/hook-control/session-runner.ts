@@ -75,7 +75,11 @@ import {
   composeInteractionCard,
   registerHookInteraction,
 } from './interactions.js';
-import { collectOutboundAttachments, hasOutboundRefs } from './outbound.js';
+import {
+  collectOutboundAttachments,
+  hasOutboundRefs,
+  SLACK_HOOK_PROMPT_NOTE,
+} from './outbound.js';
 
 /**
  * 新会话 agent/model/effort/permissionMode/providerId 合成: Slack 按目录偏好
@@ -338,6 +342,16 @@ export function createMakerHookSessionRunner(deps: {
             ? { workspaceKind: req.workspaceKind }
             : {}),
           title: req.isNew ? (req.title ?? undefined) : undefined,
+          // 渠道标记(仅 hook 亲生新会话): lizi_feishu_bot 据此在构建期给
+          // 工具描述注入渠道路由提示。两个刻意限定:
+          //   - 不用 'slack'(那是 organic SlackIM 渠道的标记,会连带注册
+          //     lizi_slack_bot —— 其传输走 SlackIM link,hook 会话不通);
+          //   - 复用/接管路径(isNew=false,可能是桌面端创建的会话)不传,
+          //     否则冷 resume 时会把桌面会话打上 Slack 渠道描述并存续整个
+          //     进程生命周期(对齐 im/turnRunner「attached 不传 vendorOptions」
+          //     的裁决)。hook turn 本身的渠道说明由逐 turn 的
+          //     SLACK_HOOK_PROMPT_NOTE 全覆盖,不依赖这里。
+          ...(req.isNew ? { vendorOptions: { source: 'slack-hook' } } : {}),
           resumeSessionId,
         });
       } catch (err) {
@@ -619,10 +633,15 @@ export function createMakerHookSessionRunner(deps: {
           log.warn(`hook image ingest failed: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
+      // 渠道说明只进喂给 agent 的内容,不进落库的 userMessageContent ——
+      // 渲染层展示的用户消息保持 Slack 原话。逐 turn 追加固定文本,教模型
+      // 用 xdt-file 引用回传文件而非误用 lizi_feishu_bot(规则 9,实踩背景
+      // 见 outbound.ts 的常量注释)。
+      const promptWithNote = `${req.prompt}\n\n${SLACK_HOOK_PROMPT_NOTE}`;
       const sendContent =
         imageBlocks.length > 0
-          ? [{ type: 'text' as const, text: req.prompt }, ...imageBlocks]
-          : req.prompt;
+          ? [{ type: 'text' as const, text: promptWithNote }, ...imageBlocks]
+          : promptWithNote;
       // 落库形态: 有图用 {text, images(xdt-image URL), files} 对象(createMessage
       // safeStringify 存 JSON, 读回 parseUserContent 提取 images); 无图纯文本 string。
       const userMessageContent =

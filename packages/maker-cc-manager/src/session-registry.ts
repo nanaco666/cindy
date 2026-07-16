@@ -35,6 +35,8 @@ export interface SdkQueryLike extends AsyncIterable<unknown> {
   setPermissionMode(mode: string): Promise<void>;
   applyFlagSettings(settings: Record<string, unknown>): Promise<void>;
   getContextUsage?(): Promise<unknown>;
+  /** Optional — stop a single background task (SDK >= 0.2.x). */
+  stopTask?(taskId: string): Promise<void>;
   // streamInput(stream: AsyncIterable<...>) is implicit — we pass our queue
   // via options.prompt at construction time, not via post-construction call.
 }
@@ -421,6 +423,15 @@ export class SessionRegistry {
   async interrupt(sessionId: string): Promise<void> {
     const s = this.get(sessionId);
     await s.query.interrupt();
+  }
+
+  /** 停止单个后台任务(desktop 用户 Stop 的确定性全停链路,SDK 老版本不支持时报错由客户端降级)。 */
+  async stopTask(sessionId: string, taskId: string): Promise<void> {
+    const s = this.get(sessionId);
+    if (!s.query.stopTask) {
+      throw makeRegistryError('SDK_ERROR', 'query.stopTask is not supported by this SDK');
+    }
+    await s.query.stopTask(taskId);
   }
 
   /**

@@ -7,7 +7,7 @@ import type { SocialProvider, VerificationKind } from '@cindy/auth-client';
 import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 import { WindowControls } from '@/components/title-bar/WindowControls';
-import splashLogo from '@/assets/splash-logo.png';
+import { useBrandLogo } from '@/hooks/useBrandLogo';
 import { useLogin } from '@/hooks/useLogin';
 
 const primaryButtonClass = cn(
@@ -43,6 +43,7 @@ function BusyLabel({ children }: { children: ReactNode }) {
 /** Auth-server login UI. It handles presentation only; main owns all credentials and tickets. */
 export function LoginPage() {
   const { isLoading, errorCode, loginState, dispatch, clearError } = useLogin();
+  const brandLogo = useBrandLogo();
   const { t } = useTranslation();
   const isMac = window.electronAPI?.platform === 'darwin';
   const [identifierKind, setIdentifierKind] = useState<VerificationKind>('email');
@@ -505,10 +506,11 @@ export function LoginPage() {
             'border border-[var(--login-card-border)] bg-[var(--login-card-bg)]',
           )}
         >
+          {/* Logo — 横向 wordmark,定宽、高度按比例 */}
           <img
-            src={splashLogo}
+            src={brandLogo}
             alt={BRAND_NAME}
-            className="pointer-events-none mb-6 h-24 w-24 rounded-xl object-contain"
+            className="pointer-events-none mb-6 w-[216px] object-contain"
             draggable={false}
           />
           {/* 区域标识仅 global 构建显示，国内版不特意标注 */}

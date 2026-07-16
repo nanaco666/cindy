@@ -33,7 +33,7 @@ export const PROTOCOL_VERSION = 1 as const;
  * 无关依赖变化而变。desktop 用这个（而非 bundle sha256）判断远端 daemon
  * 是否需要 upgrade,避免无关的 pnpm install 触发全量远端重装。
  */
-export const CC_MGR_BUNDLE_VERSION = '0.0.3' as const;
+export const CC_MGR_BUNDLE_VERSION = '0.0.4' as const;
 
 export type RpcId = number;
 
@@ -94,6 +94,7 @@ export const METHODS = {
   QUERY_APPLY_FLAG_SETTINGS: 'query/applyFlagSettings',
   QUERY_GET_CONTEXT_USAGE: 'query/getContextUsage',
   QUERY_INTERRUPT: 'query/interrupt',
+  QUERY_STOP_TASK: 'query/stopTask',
   QUERY_CLOSE: 'query/close',
 
   // Session (manager-level — list / attach / kill independent of Query lifecycle)
@@ -216,6 +217,13 @@ export interface QueryGetContextUsageParams {
 
 export interface QueryInterruptParams {
   sessionId: string;
+}
+
+/** query/stopTask — 停止会话内单个后台任务(SDK Query.stopTask 透传)。 */
+export interface QueryStopTaskParams {
+  sessionId: string;
+  /** SDK task_notification 事件里的 task id。 */
+  taskId: string;
 }
 
 export interface QueryCloseParams {
