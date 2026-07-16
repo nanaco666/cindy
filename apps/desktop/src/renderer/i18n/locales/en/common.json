@@ -1935,8 +1935,8 @@
         "close": "Close plugin"
       },
       "installConfirm": {
-        "title": "Install Ghost “{{name}}”?",
-        "confirm": "Install Ghost",
+        "title": "Install plugin “{{name}}”?",
+        "confirm": "Install plugin",
         "cancel": "Cancel",
         "meta": "Version {{version}}. Installs locally and can be uninstalled anytime.",
         "metaWithAuthor": "By {{author}} · Version {{version}}. Installs locally and can be uninstalled anytime.",
@@ -4588,8 +4588,8 @@
           "feishu_read": "List recently-active chats; fetch recent messages from a chat (group or DM)"
         },
         "capabilityWarn": {
-          "ghostMissing": "Requires the \"{{name}}\" ghost, which is not installed — this capability will fail at run time",
-          "ghostAsleep": "Requires the \"{{name}}\" ghost, which is asleep — this capability will fail at run time"
+          "ghostMissing": "Requires the \"{{name}}\" plugin, which is not installed — this capability will fail at run time",
+          "ghostAsleep": "Requires the \"{{name}}\" plugin, which is disabled — this capability will fail at run time"
         }
       },
       "fields": {
@@ -5026,10 +5026,10 @@
     "confirm": {
       "title": "“{{name}}” requests access to your files",
       "count": "{{count}} files",
-      "descriptionAttachments": "The files below are outside this session's working directory. If you allow, they will be handed to this ghost (it only receives content fingerprints, never paths).",
-      "descriptionDir": "The directory/file below is outside this session's working directory. If you allow, its files will be handed to this ghost for upload (it only receives a one-time ticket, never paths).",
-      "descriptionSaveDir": "The directory below is outside this session's working directory. If you allow, this ghost can save downloaded files into it (existing files are never overwritten).",
-      "descriptionFsWrite": "This ghost requests to write the files below into the current session's working directory. If you allow, further writes to the same directory in this session won't ask again.",
+      "descriptionAttachments": "The files below are outside this session's working directory. If you allow, they will be handed to this plugin (it only receives content fingerprints, never paths).",
+      "descriptionDir": "The directory/file below is outside this session's working directory. If you allow, its files will be handed to this plugin for upload (it only receives a one-time ticket, never paths).",
+      "descriptionSaveDir": "The directory below is outside this session's working directory. If you allow, this plugin can save downloaded files into it (existing files are never overwritten).",
+      "descriptionFsWrite": "This plugin requests to write the files below into the current session's working directory. If you allow, further writes to the same directory in this session won't ask again.",
       "dirMeta": "{{count}} files · {{size}}",
       "directory": "Directory",
       "allowDirs": "Also allow their folders (media files in the same folders won't ask again this session)",
