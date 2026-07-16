@@ -5,8 +5,9 @@
 //
 // 真正的内容写在同目录的 system-prompt-append.md，vite 编译时通过 ?raw 内联为字符串。
 //
-// 当前 .md 是空的 —— 所有产品级规则（mermaid 渲染、内部系统 MCP 路由、实时信息查询、
-// 音频播放器、免责声明）都在 host 层维护：
+// 当前 .md 是空的 —— host 层的产品级规则也已全部清空（2026-07-16 经 Lizi 确认：
+// 内部系统 MCP 路由随飞书等迁入意识(Ghost)体系、免责声明随产品对外化、mermaid 渲染
+// 规范与实时信息查询一并移除），host 层注入口保留：
 //   apps/desktop/src/main/maker-host/host-system-prompt.md  (vendor-neutral)
 //   apps/desktop/src/main/maker-host/codex-system-prompt.md (Codex host 专属；当前为空——
 //   原「绘图走 codex imagegen」规则已删，画图路由交给意识(Ghost)触发体系)
