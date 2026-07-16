@@ -56,13 +56,19 @@ const IMAGE_MIME_BY_EXT: Record<string, string> = {
   '.webp': 'image/webp',
 };
 
-function xdtFileUrlToAbsPath(url: string): string {
+export function xdtFileUrlToAbsPath(url: string): string {
   const raw = url.replace(/^xdt-file:\/\//, '');
+  let decoded: string;
   try {
-    return decodeURIComponent(raw);
+    decoded = decodeURIComponent(raw);
   } catch {
-    return raw;
+    decoded = raw;
   }
+  // 约定写法 xdt-file:///<绝对路径>:Unix 下剥掉协议后的首个 `/` 就是根;
+  // Windows 盘符路径剥完协议剩 `/C:\...`(或 /C:/...),多余的前导 `/` 会让
+  // allowedFileRoots 比对必失败 → 附件静默丢失(2026-07-16 实踩,规则 15),
+  // 这里剥掉。与 lizi-im/xdtRefs.ts 同步修改。
+  return decoded.replace(/^\/+([A-Za-z]:[\\/])/, '$1');
 }
 
 export function guessMime(absPath: string): string {
