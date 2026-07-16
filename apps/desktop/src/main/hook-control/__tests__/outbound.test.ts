@@ -23,7 +23,9 @@ function deps(
   } = {},
 ) {
   return {
-    resolveImageUrl: (url: string) => ({ absPath: url.replace('xdt-image://', '/cache/') }),
+    resolveImageUrl: (url: string) => ({
+      absPath: url.replace('xdt-image://', '/cache/').replace('cindy-media://', '/blobs/'),
+    }),
     allowedFileRoots: opts.allowedFileRoots,
     realpath: vi.fn(async (absPath: string) => opts.realpaths?.[path.resolve(absPath)] ?? path.resolve(absPath)),
     readFile: vi.fn(async (absPath: string) => {
@@ -49,6 +51,18 @@ describe('collectOutboundAttachments', () => {
     expect(r.text).toContain('🖼️ _效果图(已作为附件发送)_');
     expect(r.text).not.toContain('xdt-image://');
     expect(r.text).not.toContain('xdt-file://');
+    expect(r.skipped).toBe(0);
+  });
+
+  it('cindy-media 图片引用同样收集(媒体总仓双协议;只认 xdt-image 会让 hook Slack 拿不到生成图)', async () => {
+    const hash = 'b'.repeat(64);
+    const text = `画好了 ![猫](cindy-media://blobs/${hash}.png)`;
+    const r = await collectOutboundAttachments(text, [], deps({
+      [`/blobs/blobs/${hash}.png`]: Buffer.from('png-bytes'),
+    }));
+    expect(r.attachments.map((a) => a.name)).toEqual([`${hash}.png`]);
+    expect(r.attachments[0].mimeType).toBe('image/png');
+    expect(r.text).not.toContain('cindy-media://');
     expect(r.skipped).toBe(0);
   });
 

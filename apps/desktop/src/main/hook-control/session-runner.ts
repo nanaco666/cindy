@@ -143,6 +143,13 @@ const TURN_HARD_TIMEOUT_MS = 60 * 60_000;
  * sentinel: read_by_url 读文档注图但不希望刷屏的场景必须尊重, 否则"总结这篇
  * 文档"会往 Slack 刷一堆插图)。视频本期不外发, 直接忽略。
  */
+/** 双协议:老 xdt-image(历史/未迁移工具)+ 新 cindy-media(媒体总仓,mivo /
+ *  art 等生成图迁移后均为此形态)。与 IM turnRunner 同判据——只认老协议会让
+ *  hook Slack 拿不到任何生成图(2026-07-16 实踩)。 */
+function isRenderableImageUrl(u: string): boolean {
+  return u.startsWith('xdt-image://') || u.startsWith('cindy-media://');
+}
+
 function extractToolResultImageUrls(toolResultText: string): string[] {
   if (!toolResultText.includes('xdt_image_url')) return [];
   let parsed: {
@@ -157,15 +164,20 @@ function extractToolResultImageUrls(toolResultText: string): string[] {
   }
   if (parsed._xdt_render_image === false) return [];
   const urls: string[] = [];
-  if (typeof parsed.xdt_image_url === 'string' && parsed.xdt_image_url.startsWith('xdt-image://')) {
+  if (typeof parsed.xdt_image_url === 'string' && isRenderableImageUrl(parsed.xdt_image_url)) {
     urls.push(parsed.xdt_image_url);
   }
   if (Array.isArray(parsed.xdt_image_urls)) {
     for (const u of parsed.xdt_image_urls) {
-      if (typeof u === 'string' && u.startsWith('xdt-image://')) urls.push(u);
+      if (typeof u === 'string' && isRenderableImageUrl(u)) urls.push(u);
     }
   }
   return Array.from(new Set(urls));
+}
+
+/** 按协议解出图片 absPath(与 IM turnRunner 同语义)。 */
+function resolveRenderableImageUrl(url: string): { absPath: string } {
+  return url.startsWith('cindy-media://') ? resolveCindyMediaUrl(url) : resolveXdtImage(url);
 }
 
 /**
@@ -535,11 +547,11 @@ export function createMakerHookSessionRunner(deps: {
             if (data && typeof data.fullText === 'string') {
               for (const url of extractToolResultImageUrls(data.fullText)) {
                 try {
-                  const { absPath } = resolveXdtImage(url);
+                  const { absPath } = resolveRenderableImageUrl(url);
                   extraImageAbsPaths.push(absPath);
                 } catch (err) {
                   log.warn(
-                    `hook resolve tool_result xdt-image failed: ${err instanceof Error ? err.message : String(err)}`,
+                    `hook resolve tool_result image failed: ${err instanceof Error ? err.message : String(err)}`,
                   );
                 }
               }
@@ -723,7 +735,7 @@ export function createMakerHookSessionRunner(deps: {
       if (hasOutboundRefs(assistantText) || extraImageAbsPaths.length > 0) {
         try {
           const collected = await collectOutboundAttachments(assistantText, extraImageAbsPaths, {
-            resolveImageUrl: resolveXdtImage,
+            resolveImageUrl: resolveRenderableImageUrl,
             allowedFileRoots: [workingDir],
             log,
           });

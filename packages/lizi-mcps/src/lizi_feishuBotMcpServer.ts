@@ -57,7 +57,7 @@ export const SLACK_SESSION_CHANNEL_NOTE =
   '\n\n⚠️ 当前是 Slack 会话:文字回复直接输出即可(会自动回贴到当前 Slack thread,无需工具);把文件发给用户用 lizi_slack_bot 的 send_file_to_user,不要用本工具;仅当用户明确说「发飞书 / 飞书通知我」时才走飞书通道。';
 
 export const SLACK_HOOK_SESSION_CHANNEL_NOTE =
-  '\n\n⚠️ 当前是 Slack 会话:文字回复直接输出即可(会自动回贴到当前 Slack thread,无需工具);把文件发给用户是在最终回复文本里写 `[文件名](xdt-file:///绝对路径)`(文件须位于当前工作目录内,系统自动作为 Slack 附件发回),不要用本工具;仅当用户明确说「发飞书 / 飞书通知我」时才走飞书通道。';
+  '\n\n⚠️ 当前是 Slack 会话:文字回复直接输出即可(会自动回贴到当前 Slack thread,无需工具);把文件发给用户是在最终回复文本里写 `[文件名](xdt-file:///绝对路径)`(文件须位于当前工作目录内),图片直接引用其地址 `![说明](cindy-media://… 或 xdt-image://…)`,系统自动作为 Slack 附件发回,不要用本工具;仅当用户明确说「发飞书 / 飞书通知我」时才走飞书通道。';
 
 const NOTE_BY_SOURCE: Record<string, string> = {
   slack: SLACK_SESSION_CHANNEL_NOTE,

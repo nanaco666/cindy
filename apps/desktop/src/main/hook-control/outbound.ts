@@ -24,7 +24,8 @@ import { promises as fsp } from 'node:fs';
 
 import type { TaskAttachment } from '@cindy/slack-hook-protocol';
 
-const XDT_IMAGE_REGEX = /!\[([^\]]*)\]\((xdt-image:\/\/[^)]+)\)/g;
+// 双协议:老 xdt-image + 新 cindy-media(媒体总仓),与 lizi-im/xdtRefs.ts 对齐
+const XDT_IMAGE_REGEX = /!\[([^\]]*)\]\(((?:xdt-image|cindy-media):\/\/[^)]+)\)/g;
 const XDT_FILE_REGEX = /\[([^\]]*)\]\((xdt-file:\/\/[^)]+)\)/g;
 
 const MAX_OUT_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -42,9 +43,10 @@ const MAX_OUT_TOTAL_BYTES = 30 * 1024 * 1024;
  */
 export const SLACK_HOOK_PROMPT_NOTE =
   '[渠道说明] 本会话来自 Slack。要把文件发给用户:在最终回复文本里写 ' +
-  '`[文件名](xdt-file:///绝对路径)`(图片可用 `![说明](xdt-image://…)`),' +
+  '`[文件名](xdt-file:///绝对路径)`;图片直接引用其地址 ' +
+  '`![说明](cindy-media://… 或 xdt-image://…)`,无需复制文件。' +
   '系统会在回复结束后自动把它们作为 Slack 附件发回,无需调用任何工具;' +
-  '文件必须位于当前工作目录内(目录外的引用会被静默丢弃)。' +
+  'xdt-file 文件必须位于当前工作目录内(目录外的引用会被静默丢弃)。' +
   '不要用 lizi_feishu_bot 发送,除非用户明确要求发到飞书。';
 
 /** 扩展名 -> 图片 MIME(agent 产图只有这几种; 其它按二进制流)。 */
