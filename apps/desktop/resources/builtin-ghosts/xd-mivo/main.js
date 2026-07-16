@@ -1002,7 +1002,20 @@ async function buildFinalResult(jobId, norm, callId) {
   } else if (cardTarget) {
     sendErrorCard(cardTarget, message || '结果文件下载失败,请稍后重试', 'done');
   }
-  if (imageUrls.length && !cardPaintedImages) result.xdt_image_urls = imageUrls;
+  // 契约(2026-07 媒体送达):媒体地址字段是**数据通道**(IM/hook 出站靠它
+  // 把图送到 Slack/飞书),画卡只附 xdt_images_in_card 令牌让桌面基座去重,
+  // 绝不删字段——此前画卡后不下发地址,IM 用户永远收不到生成图(实踩)。
+  if (imageUrls.length) {
+    result.xdt_image_urls = imageUrls;
+    if (cardPaintedImages) {
+      result.xdt_images_in_card = true;
+      // 跨调用画卡(多轮 poll 画回首轮卡位):回锚到持卡调用,渲染层凭锚取卡
+      // 验证含图后才压基座(单轮画在本调用时结果自带 xdt_card_id,无需锚)。
+      if (cardTarget && cardTarget !== callId && !result.xdt_anchor_card_id) {
+        result.xdt_anchor_card_id = cardTarget;
+      }
+    }
+  }
 
   // 常驻卡(视频/音乐/音效)完成收口:音频画 1:1 播放器卡(封面/标题/tags +
   // data-ghost-audio 插槽,宿主注入标准播放器);画成后带 xdt_audio_in_card
@@ -1812,9 +1825,16 @@ async function poll3dResult(args, callId) {
     // 预览 + 模型齐备:完成卡自带可点预览(data-ghost-model → 应用内 3D 查看
     // 器),结果不再下发 xdt_image_urls/_xdt_model_files——内容全在上方卡片,
     // 消息流不重复渲染一份。卡片链路失败(meta 丢失等)回退基座渲染。
+    // finish3dCard 内部会 delete JOB_META,先取持卡调用号供回锚
+    var persistMeta3d = persistMetaOf(jobId);
     var cardDone = await finish3dCard(jobId, previewUrls, modelEntries);
     if (cardDone) {
-      delete result.xdt_image_urls;
+      // 预览图地址保留(数据通道,IM 出站要用),只加入卡令牌去重桌面基座;
+      // _xdt_model_files 仍删(按位配对只服务基座点击路由,卡内已自带)。
+      result.xdt_images_in_card = true;
+      if (persistMeta3d && persistMeta3d.cardCallId && !result.xdt_anchor_card_id) {
+        result.xdt_anchor_card_id = persistMeta3d.cardCallId;
+      }
       delete result._xdt_model_files;
       result.guidance = '3D 模型生成完成!已生成 ' + modelFiles.length + ' 个文件并自动存入本机媒体库。' +
         '预览已画进上方卡片,用户点击预览图即可旋转查看 3D 模型。不要再调用 download_file 重复下载,' +

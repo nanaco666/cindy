@@ -1192,7 +1192,8 @@ export function createTurnRunner(
     if (!toolResultText || typeof toolResultText !== 'string') return [];
     if (
       !toolResultText.includes('xdt_image_url') &&
-      !toolResultText.includes('xdt_video_url')
+      !toolResultText.includes('xdt_video_url') &&
+      !toolResultText.includes('xdt_media_produced')
     ) {
       return [];
     }
@@ -1201,6 +1202,7 @@ export function createTurnRunner(
       xdt_image_urls?: unknown;
       xdt_video_url?: unknown;
       xdt_video_urls?: unknown;
+      xdt_media_produced?: unknown;
       _xdt_render_image?: unknown;
     };
     try {
@@ -1220,6 +1222,19 @@ export function createTurnRunner(
     if (Array.isArray(parsed.xdt_image_urls)) {
       for (const u of parsed.xdt_image_urls) {
         if (typeof u === 'string' && isManagedImageUrl(u)) urls.push(u);
+      }
+    }
+    // 兜底账本(xdt_media_produced,ghost_call 层在意识未声明媒体字段时注入,
+    // 主机记账、意识删不掉):可能混有视频/音频/3D,IM 本期只接走图片。
+    if (Array.isArray(parsed.xdt_media_produced)) {
+      for (const u of parsed.xdt_media_produced) {
+        if (
+          typeof u === 'string' &&
+          isManagedImageUrl(u) &&
+          /\.(png|jpe?g|gif|webp)$/i.test(u)
+        ) {
+          urls.push(u);
+        }
       }
     }
     // 视频:本期不推 IM,只 warn 一下让回查容易。

@@ -150,11 +150,21 @@ function isRenderableImageUrl(u: string): boolean {
   return u.startsWith('xdt-image://') || u.startsWith('cindy-media://');
 }
 
-function extractToolResultImageUrls(toolResultText: string): string[] {
-  if (!toolResultText.includes('xdt_image_url')) return [];
+/** 兜底账本条目是否图片(hook 本期只外发图片):cindy-media 地址按扩展名判。 */
+const PRODUCED_IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp)$/i;
+
+/** 导出仅供单测(纯函数,不碰 electron)。 */
+export function extractToolResultImageUrls(toolResultText: string): string[] {
+  if (
+    !toolResultText.includes('xdt_image_url') &&
+    !toolResultText.includes('xdt_media_produced')
+  ) {
+    return [];
+  }
   let parsed: {
     xdt_image_url?: unknown;
     xdt_image_urls?: unknown;
+    xdt_media_produced?: unknown;
     _xdt_render_image?: unknown;
   };
   try {
@@ -170,6 +180,15 @@ function extractToolResultImageUrls(toolResultText: string): string[] {
   if (Array.isArray(parsed.xdt_image_urls)) {
     for (const u of parsed.xdt_image_urls) {
       if (typeof u === 'string' && isRenderableImageUrl(u)) urls.push(u);
+    }
+  }
+  // 兜底账本(xdt_media_produced,ghost_call 层在意识未声明媒体字段时注入,
+  // 主机记账、意识删不掉):可能混有视频/音频/3D,这里只接走图片。
+  if (Array.isArray(parsed.xdt_media_produced)) {
+    for (const u of parsed.xdt_media_produced) {
+      if (typeof u === 'string' && isRenderableImageUrl(u) && PRODUCED_IMAGE_EXT_RE.test(u)) {
+        urls.push(u);
+      }
     }
   }
   return Array.from(new Set(urls));

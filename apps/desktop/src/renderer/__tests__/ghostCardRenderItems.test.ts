@@ -411,3 +411,57 @@ describe('ghost_card · 行合并(卡片是该次调用的唯一呈现)', () => 
     expect(card && card.type === 'ghost_card' ? card.toolCall.clientId : null).toBe('g1');
   });
 });
+
+describe('ghost_card · 图片入卡令牌(xdt_images_in_card,验证后才压基座)', () => {
+  const IMG = `cindy-media://blobs/${'f'.repeat(64)}.png`;
+  const pollWithImage = (pollGhostId = 'xd-mivo') => [
+    mkGhostCall('g1', 'xd-mivo', 'submit_gen_image'),
+    mkResult('r1', 'tu-g1', { ok: true, xdt_card_id: 'call-1' }),
+    mkGhostCall('g2', pollGhostId, 'poll_result'),
+    mkResult('r2', 'tu-g2', {
+      ok: true,
+      xdt_images_in_card: true,
+      xdt_anchor_card_id: 'call-1',
+      xdt_image_urls: [IMG],
+    }),
+  ];
+  const cardWithImg = (ghostId = 'xd-mivo'): GhostCardEntry => ({
+    status: 'ready',
+    ghostId,
+    html: `<div><img src="${IMG}"></div>`,
+    height: 300,
+  });
+
+  it('锚到的同 ghost 卡真含对应图片 → 基座图卡被压(卡内图是唯一出口)', () => {
+    const items = itemsOf(pollWithImage(), snapshot({ 'call-1': cardWithImg() }));
+    const card = items.find((it) => it.type === 'ghost_card');
+    expect(card && card.type === 'ghost_card' ? card.media : undefined).toBeUndefined();
+    expect(items.some((it) => it.type === 'tool_media')).toBe(false);
+  });
+
+  it('卡 html 不含对应图片(card-update 被拒等)→ 图片保留,挂卡下渲染', () => {
+    const items = itemsOf(pollWithImage(), snapshot({ 'call-1': readyEntry('xd-mivo') }));
+    const card = items.find((it) => it.type === 'ghost_card');
+    expect(card && card.type === 'ghost_card' ? card.media?.map((m) => m.url) : []).toEqual([
+      IMG,
+    ]);
+  });
+
+  it('无卡可锚(远程控制端看不到卡)→ 图片保留在轮询位置 tool_media', () => {
+    const items = itemsOf(pollWithImage(), snapshot({}));
+    const media = items.find((it) => it.type === 'tool_media');
+    expect(media && media.type === 'tool_media' ? media.items.map((m) => m.url) : []).toEqual([
+      IMG,
+    ]);
+  });
+
+  it('异 ghost 伪锚(别的意识拿到 callId)→ 不压,图片照常渲染', () => {
+    const items = itemsOf(pollWithImage('cindy-art'), snapshot({ 'call-1': cardWithImg() }));
+    const hasImage =
+      items.some((it) => it.type === 'tool_media' && it.items.some((m) => m.url === IMG)) ||
+      items.some(
+        (it) => it.type === 'ghost_card' && (it.media ?? []).some((m) => m.url === IMG),
+      );
+    expect(hasImage).toBe(true);
+  });
+});

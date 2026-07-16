@@ -134,6 +134,9 @@ export interface NetworkSlotDeps {
     buffer: Uint8Array;
     mimeType: string;
     label?: string;
+    /** 署名调用的 tool-call callId(记入 ghostMediaLedger 供收口带回);
+     *  未署名('unattributed')不传、不记账。 */
+    callId?: string;
   }): Promise<{ url: string; hash: string; ext: string }>;
   /** 归一化后的 mime 是否可入总仓(生产为 cindy-media 的 supportedMime)。 */
   isSupportedMediaMime(mime: string): boolean;
@@ -909,6 +912,9 @@ export class GhostNetworkSlot {
               buffer: mediaBytes,
               mimeType: mime,
               ...(label !== undefined ? { label } : {}),
+              // 署名调用记账(ghostMediaLedger):产物随 ghost_call 收口带回,
+              // IM/hook 出站兜底送达;未署名不记(避免并发误配)。
+              ...(callId !== 'unattributed' ? { callId } : {}),
             });
             this.deps.log?.info('ghost fetch-request done (media)', {
               ghostId, callId, method, host: url.hostname, status: response.status,

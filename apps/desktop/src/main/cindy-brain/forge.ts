@@ -335,6 +335,15 @@ cindy.send({ type: 'tool-result', callId: msg.callId, ok: true, result: {
   // 3D 产物(GLB 已入媒体库)可另带
   // _xdt_model_files: [{ provider: 'cindy', url: 'cindy-media://….glb', format: 'GLB' }]
   // ——与 xdt_image_urls 按位配对,用户点对应预览图直接进应用内 3D 查看器。
+  //
+  // ⚠️ 媒体字段是**数据通道**,不只是桌面渲染指令:IM/远程会话(Slack/飞书)的
+  // 出站与手机端都靠这些字段把你的产物送到用户手里。**任何情况下都不要删掉/
+  // 省略它们**——包括你把图画进了自己的卡片时(那会让 IM 用户永远收不到图)。
+  // 画卡去重用令牌:图入卡带 xdt_images_in_card: true(音频对应
+  // xdt_audio_in_card),桌面验证锚卡真含对应媒体后才跳过基座渲染,IM/手机
+  // 不受影响。另:主机会对"署名调用"(cindy-request / fetch 带 callId)期间
+  // 入库的媒体独立记账,你没声明媒体字段时以 xdt_media_produced 兜底注入
+  // ——但那是安全网,别依赖它,正路是老实声明字段。
   note: "干完了"
 }});
 // 失败交卷:{ type: 'tool-result', callId, ok: false, message: '原因' }
@@ -449,7 +458,11 @@ cindy.onHostMessage(async function (msg) {
   调用参数),你画不了也冒充不了——它是"这块内容由某意识渲染"的信任签名;chip
   以下整块画布归你,主机不再叠边框/底色/内边距;
 - 供卡的调用,聊天不再渲染 \`xdt_image_urls\` 的通用图卡(被你的卡替换);其它
-  工具/其它调用不受影响。
+  工具/其它调用不受影响。**但 \`xdt_image_urls\` 本身仍必须照发**(数据通道,
+  IM/远程会话出站与手机端靠它),图画进卡时结果带 \`xdt_images_in_card: true\`
+  即可(与 \`xdt_audio_in_card\` 同款令牌,桌面据此去重,删字段=IM 丢图);
+  **跨调用画卡**(如轮询流画回首轮卡位)还需同时回锚 \`xdt_anchor_card_id\`
+  = 持卡调用的 callId,桌面凭锚取卡验证含图后才压基座,锚不上会双渲染。
 
 **交互卡的 card-action 处理**(声明了 card 槽即可收;点击触发你的动作、会花配额):
 

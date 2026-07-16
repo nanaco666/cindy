@@ -4,7 +4,7 @@
   "name": "XD Mivo",
   "description": "XDMaker 内置的 mivo 意识:用你自己的 mivo key 在 aigc.xindong.com 生成图片(Nano/GPT/MJ/Niji)、视频(Seedance/Kling)、音乐(Suno)、音效(ElevenLabs)、3D 模型(Tripo/Seed3D,可转 FBX/OBJ),以及抠图、超分、MJ 按钮动作。key 在 设置 → 意识 → 本意识详情页 填写,加密存本机、只注入 aigc.xindong.com 的请求。",
   "whenToUse": "用户明确要用 mivo / MJ / Midjourney / niji 画图,用 Seedance / 豆包视频 / 即梦视频 / 可灵 / kling 生成视频,做音乐 / 写歌(Suno)、做音效,3D 建模(Tripo / Seed3D / 即梦3D)、给 3D 模型绑动作、把 3D 模型转成 FBX / OBJ 格式,以及抠图 / 去背景、超分 / 放大图片、触发 MJ 图片按钮(U/V/Reroll)时找我(需先在意识设置页配置 mivo_ 开头的 key)。日常画图默认走 Cindy Art,只有上述显式触发词才用我。",
-  "version": "1.5.10",
+  "version": "1.5.11",
   "author": "Cindy",
   "entry": "main.js",
   "settingsHtml": "settings.html",

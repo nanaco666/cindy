@@ -182,6 +182,61 @@ describe('cindy_ghosts · ghost_call(派活透传)', () => {
     expect(String(payload.hint)).toContain('markdown');
   });
 
+  it('图片入卡令牌提升:xdt_images_in_card === true 才上提(与音频令牌同款)', async () => {
+    const withToken = parsePayload(await handleGhostCall(
+      fakeDeps({
+        callGhostTool: async () => ({
+          ok: true,
+          result: { xdt_image_urls: ['cindy-media://blobs/abc.png'], xdt_images_in_card: true },
+        }),
+      }),
+      { ghost_id: 'art', tool: 'gen_image', args: {} },
+    ));
+    expect(withToken.xdt_images_in_card).toBe(true);
+
+    const nonBool = parsePayload(await handleGhostCall(
+      fakeDeps({
+        callGhostTool: async () => ({
+          ok: true,
+          result: { xdt_image_urls: ['cindy-media://blobs/abc.png'], xdt_images_in_card: 'yes' },
+        }),
+      }),
+      { ghost_id: 'art', tool: 'gen_image', args: {} },
+    ));
+    expect(nonBool.xdt_images_in_card).toBeUndefined();
+  });
+
+  it('兜底账本注入:意识未声明媒体字段时 producedMedia → xdt_media_produced', async () => {
+    const payload = parsePayload(await handleGhostCall(
+      fakeDeps({
+        callGhostTool: async () => ({
+          ok: true,
+          result: { note: '画完了但没声明字段' },
+          producedMedia: ['cindy-media://blobs/def.png'],
+        }),
+      }),
+      { ghost_id: 'art', tool: 'gen_image', args: {} },
+    ));
+    expect(payload.xdt_media_produced).toEqual(['cindy-media://blobs/def.png']);
+    // producedMedia 是主机侧信道,不泄漏原始字段名给模型侧 payload
+    expect(payload.producedMedia).toBeUndefined();
+  });
+
+  it('兜底账本不注入:意识声明了媒体字段时以声明为准', async () => {
+    const payload = parsePayload(await handleGhostCall(
+      fakeDeps({
+        callGhostTool: async () => ({
+          ok: true,
+          result: { xdt_image_urls: ['cindy-media://blobs/abc.png'] },
+          producedMedia: ['cindy-media://blobs/def.png', 'cindy-media://blobs/abc.png'],
+        }),
+      }),
+      { ghost_id: 'art', tool: 'gen_image', args: {} },
+    ));
+    expect(payload.xdt_media_produced).toBeUndefined();
+    expect(payload.xdt_image_urls).toEqual(['cindy-media://blobs/abc.png']);
+  });
+
   it('无媒体的返回体不附防重复渲染提示', async () => {
     const result = await handleGhostCall(
       fakeDeps({ callGhostTool: async () => ({ ok: true, result: { done: true } }) }),

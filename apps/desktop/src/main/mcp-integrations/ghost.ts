@@ -43,6 +43,7 @@ import {
 } from '../cindy-brain/ghostGrantConfirmBridge.js';
 import { classifyLocalAttachmentPath } from '../cindy-brain/ghostLocalPathGrant.js';
 import { withCardToken } from '../cindy-brain/cardService.js';
+import { drainGhostCallMedia } from '../cindy-brain/ghostMediaLedger.js';
 import { getGhostCardService, getGhostManager, getGhostPipeDispatcher } from '../cindy-brain/index.js';
 import { isGhostDisabledForWorkdir } from '../cindy-brain/ghostWorkdirPrefs.js';
 import { FORGE_GUIDE, packGhostDir } from '../cindy-brain/forge.js';
@@ -634,7 +635,14 @@ export function getCindyGhostsMcpDeps(sessionCtx?: LiziMcpSessionContext): Cindy
         args: mergedArgs,
         callId,
       });
-      return withCardToken(result, cardService.finalizeCall(callId), callId);
+      // 收口取账(ghostMediaLedger):本次调用期间主机实际入库的媒体地址。
+      // 失败也 drain(清账防泄漏),但只在成功结果上附带——cindy-tools 层
+      // 在意识未声明媒体字段时以 xdt_media_produced 注入,兜底 IM/hook 送达。
+      const producedMedia = drainGhostCallMedia(ghostId, callId);
+      const finalized = withCardToken(result, cardService.finalizeCall(callId), callId);
+      return finalized.ok && producedMedia.length > 0
+        ? { ...finalized, producedMedia }
+        : finalized;
     },
     async forgeGuide(): Promise<string> {
       return FORGE_GUIDE;

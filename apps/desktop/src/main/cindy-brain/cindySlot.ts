@@ -89,6 +89,8 @@ export interface CindySlotDeps {
     mimeType: string;
     /** 人类可读备注(记进账本 label,画廊 caption 用)。 */
     label?: string;
+    /** tool-call callId(记入 ghostMediaLedger 供 ghost_call 收口带回)。 */
+    callId?: string;
   }): Promise<{ url: string; hash: string; ext: string }>;
   log?: {
     info: (msg: string, meta?: Record<string, unknown>) => void;
@@ -286,6 +288,9 @@ export class GhostCindySlot {
         buffer: generated.buffer,
         mimeType: generated.mimeType,
         label: p.prompt.slice(0, 200),
+        // 模型代办产物记账(ghostMediaLedger),随 ghost_call 收口带回;
+        // 未署名('unattributed')不记,与 networkSlot 同契约防并发串账
+        ...(callId !== 'unattributed' ? { callId } : {}),
       });
       this.deps.log?.info(`ghost cindy-request ${kind} done`, {
         ghostId,

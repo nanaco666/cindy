@@ -170,7 +170,7 @@ vi.mock('../../maker-host/index.js', () => ({
   getMaker: () => fakeMaker,
 }));
 
-import { createMakerHookSessionRunner } from '../session-runner.js';
+import { createMakerHookSessionRunner, extractToolResultImageUrls } from '../session-runner.js';
 import { SLACK_HOOK_PROMPT_NOTE } from '../outbound.js';
 
 const log = { info: vi.fn(), warn: vi.fn() };
@@ -729,5 +729,25 @@ describe('providerId(来源/供应商)贯通 —— issue #854 回归', () => {
     expect(h.setSessionProviderIdInDb).not.toHaveBeenCalled();
     // 复用路径不走草稿默认校验
     expect(h.resolveDefaultProviderIdForModel).not.toHaveBeenCalled();
+  });
+});
+
+describe('extractToolResultImageUrls 的兜底账本回落(xdt_media_produced)', () => {
+  const IMG = `cindy-media://blobs/${'d'.repeat(64)}.png`;
+  const MP3 = `cindy-media://blobs/${'e'.repeat(64)}.mp3`;
+
+  it('意识未声明媒体字段时,从 xdt_media_produced 接走图片(过滤非图)', () => {
+    const text = JSON.stringify({ ok: true, xdt_media_produced: [IMG, MP3] });
+    expect(extractToolResultImageUrls(text)).toEqual([IMG]);
+  });
+
+  it('声明字段与账本并存时合并去重', () => {
+    const text = JSON.stringify({ ok: true, xdt_image_urls: [IMG], xdt_media_produced: [IMG] });
+    expect(extractToolResultImageUrls(text)).toEqual([IMG]);
+  });
+
+  it('_xdt_render_image:false 哨兵优先,全部不外发', () => {
+    const text = JSON.stringify({ ok: true, xdt_media_produced: [IMG], _xdt_render_image: false });
+    expect(extractToolResultImageUrls(text)).toEqual([]);
   });
 });

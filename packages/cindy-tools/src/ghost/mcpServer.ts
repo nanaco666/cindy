@@ -179,6 +179,14 @@ const ANCHOR_CARD_ID_HOIST_KEY = 'xdt_anchor_card_id';
  *  (data-ghost-audio 插槽),桌面基座不再重复渲染音频卡;手机端忽略。 */
 const AUDIO_IN_CARD_HOIST_KEY = 'xdt_audio_in_card';
 
+/** 图片入卡令牌(布尔 true 才上提):意识已把图片画进自己的卡片。语义与
+ *  音频令牌一致——**只去重呈现,不掐数据通道**:`xdt_image_urls` 仍必须
+ *  照常下发(IM/hook 出站靠它把图送到 Slack/飞书),桌面渲染层验证锚卡
+ *  真含对应图片后才跳过基座渲染;手机端无卡片体系,忽略令牌照常渲染。
+ *  背景:2026-07-16 实踩——意识画卡后删掉 xdt_image_urls,导致 IM 用户
+ *  永远收不到生成图,只能追问一次让模型手动补发。 */
+const IMAGES_IN_CARD_HOIST_KEY = 'xdt_images_in_card';
+
 function hoistMediaFields(result: unknown): Record<string, unknown> {
   if (!result || typeof result !== 'object' || Array.isArray(result)) return {};
   const out: Record<string, unknown> = {};
@@ -192,11 +200,12 @@ function hoistMediaFields(result: unknown): Record<string, unknown> {
     (result as Record<string, unknown>)[AUDIO_TRACKS_HOIST_KEY],
   );
   if (audioTracks) out[AUDIO_TRACKS_HOIST_KEY] = audioTracks;
-  // 音频入卡令牌(布尔;意识把播放器画进了自己的卡片——data-ghost-audio
-  // 插槽——时置 true):桌面渲染层据此跳过基座音频卡,防同一音频两个播放器;
-  // 手机端无卡片体系,忽略该令牌、继续按 xdt_audio_tracks 渲染基座播放器。
-  if ((result as Record<string, unknown>)[AUDIO_IN_CARD_HOIST_KEY] === true) {
-    out[AUDIO_IN_CARD_HOIST_KEY] = true;
+  // 入卡令牌(布尔;意识把媒体画进了自己的卡片时置 true):桌面渲染层据此
+  // 跳过基座渲染防双份;手机端无卡片体系,忽略令牌照常渲染基座。
+  for (const key of [AUDIO_IN_CARD_HOIST_KEY, IMAGES_IN_CARD_HOIST_KEY]) {
+    if ((result as Record<string, unknown>)[key] === true) {
+      out[key] = true;
+    }
   }
   for (const key of [CARD_ID_HOIST_KEY, ANCHOR_CARD_ID_HOIST_KEY]) {
     const value = (result as Record<string, unknown>)[key];
@@ -245,6 +254,19 @@ export async function handleGhostCall(
       return textResult(result, true);
     }
     const hoisted = hoistMediaFields(result.result);
+    // 兜底账本(规则 9,主机侧事实):意识没声明任何媒体字段、但本次调用
+    // 期间确有媒体入库时,把主机记账的地址以 xdt_media_produced 注入——
+    // IM/hook 出站消费它,保证"意识画卡后删字段"也不影响媒体送达 IM 用户。
+    // 声明了媒体字段(含 xdt_audio_tracks)时以声明为准,账本不注入
+    // (声明是意图表达,能覆盖 render:false 抑制等语义)。
+    const { producedMedia, ...resultForModel } = result;
+    const declaredMedia = ['xdt_image_urls', 'xdt_video_urls', 'xdt_audio_tracks'].some(
+      (k) => k in hoisted,
+    );
+    const producedFallback =
+      !declaredMedia && Array.isArray(producedMedia) && producedMedia.length > 0
+        ? { xdt_media_produced: producedMedia }
+        : {};
     // 带媒体的返回体随附防重复渲染提示(代码级统一注入,不靠意识作者自觉):
     // 模型手里有 cindy-media:// 地址就会想用 markdown 再嵌一遍,而聊天正文
     // markdown 加载不了该协议 → 裂图。卡片由渲染层按顶层媒体字段自动画。
@@ -253,8 +275,12 @@ export async function handleGhostCall(
         ? {
             hint: '媒体已由聊天气泡自动渲染成卡片,不要在回复文本里用 markdown(![](…))重复嵌入这些地址;后续改图引用返回的 hash 指纹即可。xdt_card_id / xdt_anchor_card_id 是渲染层的配对令牌,忽略即可,不要复述。',
           }
-        : {};
-    return textResult({ ...result, ...hoisted, ...mediaHint });
+        : Object.keys(producedFallback).length > 0
+          ? {
+              hint: 'xdt_media_produced 是主机记账的送达通道:这些媒体已自动送达用户(桌面/IM),不要在回复文本里用 markdown 嵌入这些地址,也不要复述它们。',
+            }
+          : {};
+    return textResult({ ...resultForModel, ...hoisted, ...producedFallback, ...mediaHint });
   } catch (err) {
     return textResult(
       { ok: false, errorCode: 'INTERNAL', message: err instanceof Error ? err.message : String(err) },

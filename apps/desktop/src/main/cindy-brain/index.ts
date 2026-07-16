@@ -142,6 +142,7 @@ import type { XdproxyImageModel } from '../cindy-proxy-media/types.js';
 import * as blobStore from '../cindy-media/blobStore.js';
 import * as ledger from '../cindy-media/ledger.js';
 import { ingestMedia, supportedMime } from '../cindy-media/ingest.js';
+import { recordGhostCallMedia } from './ghostMediaLedger.js';
 // ⚠️ 下面三个依赖必须保持模块顶层静态 import,禁止改回函数内 await import():
 // 运行时 import() 会被 Rollup 编译成跨 chunk 的 require(尤其 drizzle-orm 会拆独立
 // chunk),而 bootstrap chunk 因 conf(electron-store 依赖)的模块副作用
@@ -1165,7 +1166,7 @@ export function getGhostCindySlot(): GhostCindySlot {
           return null;
         }
       },
-      saveGhostMedia: async ({ ghostId, buffer, mimeType, label }) => {
+      saveGhostMedia: async ({ ghostId, buffer, mimeType, label, callId }) => {
         const written = await blobStore.writeBlob({ buffer, mimeType });
         await ledger.recordBlob({
           hash: written.hash,
@@ -1185,6 +1186,7 @@ export function getGhostCindySlot(): GhostCindySlot {
           originId: ghostId,
           ...(label ? { label } : {}),
         });
+        recordGhostCallMedia(ghostId, callId, written.url);
         return { url: written.url, hash: written.hash, ext: written.ext };
       },
       log,
@@ -1305,7 +1307,7 @@ export function getGhostNetworkSlot(): GhostNetworkSlot {
       // 意识,与 cindy 槽产物同一记账口径),走统一入库助手 ingestMedia
       // (规则 25)。mime 白名单同一来源(blobStore),槽内归一化后再判。
       isSupportedMediaMime: (mime) => supportedMime(mime),
-      saveGhostMedia: async ({ ghostId, buffer, mimeType, label }) => {
+      saveGhostMedia: async ({ ghostId, buffer, mimeType, label, callId }) => {
         const r = await ingestMedia({
           buffer,
           mimeType,
@@ -1318,6 +1320,7 @@ export function getGhostNetworkSlot(): GhostNetworkSlot {
             ...(label ? { label } : {}),
           }],
         });
+        recordGhostCallMedia(ghostId, callId, r.url);
         return { url: r.url, hash: r.hash, ext: r.ext };
       },
       // 上传通道:归属(ghostCanRead)→ 元数据(账本)→ 读盘,三段式与
