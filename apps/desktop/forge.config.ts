@@ -885,7 +885,7 @@ const makers: ForgeConfig['makers'] = [
       maintainer: 'Lizi <jiali@magiclizi.com>',
       name: 'xdt-maker',
       bin: 'xdt-maker',
-      productName: 'XDMaker',
+      productName: 'Cindy',
     },
   }, ['linux']),
 ];
@@ -909,8 +909,10 @@ if (isWin) {
           createStartMenuShortcut: true,
           // 只覆盖快捷方式显示名，不动 productName/appId/exe/userData，
           // 保证 updater 和老用户数据兼容。
-          // 老 xdt-maker.lnk 由 installer.nsh customInit 提前删除。
-          shortcutName: 'XDMaker',
+          // 更老的 xdt-maker.lnk / 上一代 XDMaker.lnk 由 installer.nsh customInit
+          // 提前删除;差量更新不重跑安装器,存量用户的快捷方式改名由主进程启动
+          // 自愈兜底(main/windowsShortcutSelfHeal.ts)。
+          shortcutName: 'Cindy',
           runAfterFinish: true,
           include: 'resources/installer.nsh',
         },
@@ -940,6 +942,13 @@ const config: ForgeConfig = {
     // 所以这里显式覆盖 loudness / node-pty 整个目录。
     asar: { unpack: '**/{@img/{sharp-libvips-*,sharp-win32-*},loudness,native/sqlite-vec,node-pty}/**' },
     executableName: 'xdt-maker',
+    // exe 资源元数据(任务管理器进程名、文件右键属性的显示层)。只影响展示,
+    // 与 exe 文件名 / AUMID / userData 等标识符解耦(那些等 Cindy 渠道迁移)。
+    win32metadata: {
+      CompanyName: 'XD',
+      ProductName: 'Cindy',
+      FileDescription: 'Cindy',
+    },
     icon: 'resources/icon',
     // 自定义 URL scheme: xdt-maker://session/<id> | xdt-maker://project/<encoded-workingDir>
     // macOS: electron-packager 把这里的项写进 Info.plist 的 CFBundleURLTypes,
@@ -947,7 +956,7 @@ const config: ForgeConfig = {
     // Windows: 不读这个字段(走 app.setAsDefaultProtocolClient 写注册表), 见
     //          main/deepLink.ts registerDeepLinkProtocol()。
     protocols: [
-      { name: 'XDMaker Deep Link', schemes: ['xdt-maker'] },
+      { name: 'Cindy Deep Link', schemes: ['xdt-maker'] },
     ],
     // macOS 文件夹右键 "打开方式 → XDMaker" 入口:
     //   声明 app 能接受 public.folder, Finder 自动把 XDMaker 出现在 "打开方式" 列表。
@@ -963,9 +972,9 @@ const config: ForgeConfig = {
       // 智能通讯录导入: 经 osascript 向"通讯录"发 Apple Events(只读拉取)。
       // 缺这条声明 macOS 会不弹授权窗直接拒绝(-1743), 用户只看到静默失败。
       NSAppleEventsUsageDescription:
-        'XDMaker uses Apple Events to read Contacts you import and to add or update Contacts you explicitly export.',
+        'Cindy uses Apple Events to read Contacts you import and to add or update Contacts you explicitly export.',
       NSContactsUsageDescription:
-        'XDMaker accesses Contacts only when you import them or explicitly export additions or updates.',
+        'Cindy accesses Contacts only when you import them or explicitly export additions or updates.',
       CFBundleDocumentTypes: [
         {
           CFBundleTypeName: 'Folder',
@@ -1004,7 +1013,7 @@ const config: ForgeConfig = {
         },
         {
           UTTypeIdentifier: 'com.magiclizi.xdt-maker.cshare',
-          UTTypeDescription: 'XDMaker Session Share',
+          UTTypeDescription: 'Cindy Session Share',
           UTTypeConformsTo: ['public.data'],
           UTTypeTagSpecification: {
             'public.filename-extension': ['cshare'],

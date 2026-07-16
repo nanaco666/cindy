@@ -362,6 +362,7 @@ import {
   takePendingDeepLink,
 } from './deepLink.js';
 import { registerFolderContextMenu } from './folderContextMenu.js';
+import { healWindowsShortcuts } from './windowsShortcutSelfHeal.js';
 import {
   readWindowBehaviorSettings,
   writeSwallowActivationClick,
@@ -1541,15 +1542,19 @@ if (process.platform !== 'darwin') {
   }
 }
 
-// 启动时尝试自注册 Windows 右键菜单 "通过 XDMaker 打开"。fire-and-forget,
+// 启动时尝试自注册 Windows 右键菜单(显示文案走 BRAND_NAME)。fire-and-forget,
 // 完全不阻塞启动流程;失败仅 warn log。详见 folderContextMenu.ts 模块头注释。
 //
-// 放在 single-instance 锁之后:第二实例 (gotTheLock=false) 走 app.quit(),
-// 不必触发注册流程。
+// 位置在 single-instance 锁之后,但 app.quit() 不中止顶层同步代码,第二实例
+// (gotTheLock=false)仍会执行到这里——三个自愈都是幂等 + 全吞错,重复执行无害,
+// 不为此加门控。
 if (app.isPackaged) {
   void registerFolderContextMenu();
   // Windows .cindy 文件关联自注册(双击装入意识,C2c)。同款 best-effort 口径。
   registerCindyFileAssociation();
+  // 品牌改名快捷方式自愈(XDMaker.lnk → Cindy.lnk;差量更新不重跑安装器,
+  // 存量用户靠这里换名)。同款 best-effort 口径,详见模块头注释。
+  void healWindowsShortcuts();
 }
 
 const createWindow = () => {
