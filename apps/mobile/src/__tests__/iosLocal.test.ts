@@ -12,6 +12,7 @@ import {
   fetchBaselineBuildNumber,
   nextDateBuildNumber,
   replaceBuildNumberInAppJson,
+  resolveIosSigningEnv,
 } from '../../scripts/lib/ios-local.mjs';
 
 const resp = (status, { json, ok } = {}) => ({
@@ -53,14 +54,37 @@ describe('compareBuildNumbers / assertBuildNumberMonotonic', () => {
   });
 });
 
+describe('resolveIosSigningEnv', () => {
+  const FULL = {
+    XDT_IOS_TEAM_ID: 'TEAM123456',
+    XDT_IOS_PROFILE_NAME: 'some_profile',
+    XDT_IOS_SIGN_IDENTITY: 'Apple Development',
+  };
+  it('三项必填 env 齐全 → 透传;profilePath 可选缺省为空串', () => {
+    expect(resolveIosSigningEnv(FULL)).toEqual({
+      teamId: 'TEAM123456', profileName: 'some_profile', identity: 'Apple Development', profilePath: '',
+    });
+    expect(resolveIosSigningEnv({ ...FULL, XDT_IOS_PROFILE_PATH: '/tmp/p.mobileprovision' }).profilePath)
+      .toBe('/tmp/p.mobileprovision');
+  });
+  it('缺任一必填项 → 抛错并点名缺失的 env(零代码默认值,不回落)', () => {
+    expect(() => resolveIosSigningEnv({ ...FULL, XDT_IOS_TEAM_ID: '' })).toThrow(/XDT_IOS_TEAM_ID/);
+    expect(() => resolveIosSigningEnv({ ...FULL, XDT_IOS_PROFILE_NAME: ' ' })).toThrow(/XDT_IOS_PROFILE_NAME/);
+    expect(() => resolveIosSigningEnv({ ...FULL, XDT_IOS_SIGN_IDENTITY: undefined })).toThrow(/XDT_IOS_SIGN_IDENTITY/);
+  });
+  it('全缺 → 错误信息按序列出全部三项', () => {
+    expect(() => resolveIosSigningEnv({})).toThrow(/XDT_IOS_TEAM_ID, XDT_IOS_PROFILE_NAME, XDT_IOS_SIGN_IDENTITY/);
+  });
+});
+
 describe('buildExportOptionsPlist', () => {
   it('含 development / manual / team / profile 映射', () => {
-    const plist = buildExportOptionsPlist({ teamId: 'NTC4BJ542G', bundleId: 'com.xd.lizcn', profileName: 'lizcn_dev' });
+    const plist = buildExportOptionsPlist({ teamId: 'NTC4BJ542G', bundleId: 'com.xd.cindycn', profileName: 'cindycn_dev' });
     expect(plist).toContain('<string>development</string>');
     expect(plist).toContain('<string>manual</string>');
     expect(plist).toContain('<string>NTC4BJ542G</string>');
-    expect(plist).toContain('<key>com.xd.lizcn</key>');
-    expect(plist).toContain('<string>lizcn_dev</string>');
+    expect(plist).toContain('<key>com.xd.cindycn</key>');
+    expect(plist).toContain('<string>cindycn_dev</string>');
   });
   it('缺参抛错', () => {
     expect(() => buildExportOptionsPlist({ teamId: 'x', bundleId: 'y' })).toThrow();

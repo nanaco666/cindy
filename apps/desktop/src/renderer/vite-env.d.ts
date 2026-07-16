@@ -1016,6 +1016,14 @@ interface ElectronAPI {
     uninstall: (id: string) => Promise<{ ok: true }>;
     /** 启用/停用(停用 = 面板休眠,布局位置保留)。 */
     setEnabled: (id: string, enabled: boolean) => Promise<{ ok: true }>;
+    /** 目录级禁用清单(设置 → 插件 项目范围视图;sendSync 切换同帧渲染)。 */
+    workdirPrefsSync: (workdir: string) => { disabled: string[] };
+    /** 写/清一条目录级例外(disabled=false 即清除,回到跟随全局)。 */
+    setWorkdirDisabled: (
+      workdir: string,
+      id: string,
+      disabled: boolean,
+    ) => Promise<{ disabled: string[] }>;
     /** 双击 .cindy 的待装路径,原子取走(取即清空;无则 null)。 */
     takePendingInstall: () => Promise<{ filePath: string | null }>;
     /**

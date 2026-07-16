@@ -82,6 +82,7 @@ import {
 } from './FolderPickerPopover';
 import { SlashCommandPalette } from './SlashCommandPalette';
 import { expandGhostCommand } from '@/cindy-brain/ghostCommand';
+import { filterGhostsForWorkdir } from '@/cindy-brain/ghostWorkdirFilter';
 import { useInstalledGhosts } from '@/cindy-brain/useInstalledGhosts';
 import {
   attachGhostMediaToSession,
@@ -1805,10 +1806,16 @@ export function ChatInput({
 
   // 意识指令确认胶囊:清单推给 GhostCommandDecoration(装/卸/唤醒/沉睡即时
   // 反映;plugin 不自己查 listSync,同步 IPC 不进 keystroke 热路径)。
+  // 目录级禁用同判(ghostWorkdirFilter):被禁用的意识胶囊不亮——渲染层
+  // 绝不比发送层乐观;禁用变更会广播 ghosts:changed,清单引用变化时重滤。
   const installedGhosts = useInstalledGhosts();
+  const ghostsForCommand = useMemo(
+    () => filterGhostsForWorkdir(installedGhosts, workingDir),
+    [installedGhosts, workingDir],
+  );
   useEffect(() => {
-    setGhostCommandRoster(editor, installedGhosts);
-  }, [editor, installedGhosts]);
+    setGhostCommandRoster(editor, ghostsForCommand);
+  }, [editor, ghostsForCommand]);
 
   const handleVoiceInputPermissionRequired = useCallback(async () => {
     const confirmed = await confirmDialog({
@@ -2614,12 +2621,12 @@ export function ChatInput({
   }, [reloadSlashCommands]);
   // 意识指令源($ 触发):已唤醒且声明了 command 的意识,现查现报(同步
   // IPC 极小);构造成 UnifiedCommand 形状喂同一个面板(交互与 / 完全一致)。
+  // 目录级禁用同判:被禁用的意识不进 $ 菜单(与胶囊 / 发送期展开同源)。
   const isGhostSigil = trigger.kind === 'slash' && trigger.sigil === '$';
   const ghostCommandItems = useMemo(() => {
     if (!isGhostSigil) return [];
-    return window.electronAPI.ghosts
-      .listSync()
-      .ghosts.filter((g) => g.enabled && g.manifest.command !== undefined)
+    return filterGhostsForWorkdir(window.electronAPI.ghosts.listSync().ghosts, workingDir)
+      .filter((g) => g.enabled && g.manifest.command !== undefined)
       .map(
         (g) =>
           ({
@@ -2628,7 +2635,7 @@ export function ChatInput({
             description: `${g.manifest.name} · ${t('settings.ghosts.commandPaletteTag')}`,
           }) as UnifiedCommand,
       );
-  }, [isGhostSigil, t]);
+  }, [isGhostSigil, t, workingDir]);
   // 面板显示与键盘导航共用同一份命令源:$ 只列意识,/ 只列技能/命令。
   const paletteCommands = isGhostSigil ? ghostCommandItems : mergedCommands;
   const filteredCommands = useMemo(
@@ -3009,8 +3016,12 @@ export function ChatInput({
     const mentionsToSend = mentions.length > 0 ? mentions : undefined;
     // 意识 $指令展开(C3d 双触发):`$画图 ...` 开头且命中已唤醒意识时,
     // 追加"必须走 cindy 总机"的机器指令;未命中原样发送。
-    // listSync 是既有同步 IPC(首帧同款,极小),每次发送现查,装/卸即时反映。
-    const textToSend = expandGhostCommand(text, window.electronAPI.ghosts.listSync().ghosts);
+    // listSync 是既有同步 IPC(首帧同款,极小),每次发送现查,装/卸即时反映;
+    // 目录级禁用同判(与胶囊 / main 侧生效点同源),被禁用 = 原样发送。
+    const textToSend = expandGhostCommand(
+      text,
+      filterGhostsForWorkdir(window.electronAPI.ghosts.listSync().ghosts, workingDirRef.current),
+    );
     dispatchSendInFlightRef.current = true;
     setSendDispatchInFlight(true);
     let result: boolean | void;

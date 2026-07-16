@@ -1913,6 +1913,18 @@
       "empty": "还没有安装任何插件",
       "emptyHint": "点击右上角「安装插件…」选择一个 .cindy 文件",
       "disabledTag": "未生效",
+      "projectDisabledTag": "本项目未生效",
+      "projectSwitchLockedTip": "该插件已在全局停用;请先切回「全局」视图开启",
+      "projectBanner": {
+        "title": "正在配置项目「{{name}}」",
+        "desc": "开关只影响此项目:关闭的插件不会出现在该项目的新会话里",
+        "backToGlobal": "返回全局"
+      },
+      "scopePicker": {
+        "global": "全局(默认)",
+        "ariaLabel": "选择插件生效范围",
+        "browse": "选择其它目录…"
+      },
       "enableAria": "使 {{name}} 生效",
       "uninstall": "卸载",
       "uninstallConfirm": {
@@ -1926,7 +1938,9 @@
         "uninstalled": "已卸载「{{name}}」",
         "installedAsleep": "已安装「{{name}}」(未生效,可在此开启)",
         "updated": "「{{name}}」已更新到 v{{version}}",
-        "restored": "已恢复「{{name}}」"
+        "restored": "已恢复「{{name}}」",
+        "projectDisabled": "已在此项目停用「{{name}}」(新会话生效)",
+        "projectEnabled": "「{{name}}」在此项目恢复跟随全局"
       },
       "panelError": {
         "crashed": "这个插件崩溃了",

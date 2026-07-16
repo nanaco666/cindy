@@ -5,7 +5,7 @@
 # 流程:  构建 .apk(gradlew,我们自己) → 上传 NPKG → 取下载/安装链接
 #
 # 与 release-ios.sh 的关键差异(见 docs/self-hosted-android-build-and-ota.md §11):
-#   - Android APK 由自有 keystore(xdmaker-release)**自签即终版**,NPKG **不重签**。
+#   - Android APK 由自有 keystore(Cindy.jks / alias Cindy)**自签即终版**,NPKG **不重签**。
 #     因此 **没有** iOS 的"轮询 type=enterprise 企业子包 + 校验签名 Team UE5H8B62F9.*"环节。
 #   - 上传后直接用父包 id 输出安装页 /install/<id> 与直下 /api/v1/packages/<id>/download/。
 #   - 无 itms(那是 iOS OTA manifest 专有);Android 客户端 Linking.openURL(下载链接)触发安装。
@@ -32,8 +32,8 @@ fi
 : "${NPKG_TOKEN:?需要 NPKG_TOKEN:启动时传环境变量(NPKG_TOKEN=...)或放 $NPKG_CONF}"
 : "${NPKG_BASE_URL:=https://npkg.xindong.com}"
 
-# 期望的 Android package(默认自建线 com.xd.lizcn;可用 NPKG_EXPECT_PACKAGE 覆盖)。
-EXPECT_PACKAGE="${NPKG_EXPECT_PACKAGE:-com.xd.lizcn}"
+# 期望的 Android package(默认自建线 com.xd.cindycn;可用 NPKG_EXPECT_PACKAGE 覆盖)。
+EXPECT_PACKAGE="${NPKG_EXPECT_PACKAGE:-com.xd.cindycn}"
 
 die(){ echo "ERROR: $*" >&2; exit 1; }
 have(){ command -v "$1" >/dev/null 2>&1; }

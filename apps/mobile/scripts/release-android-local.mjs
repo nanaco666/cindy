@@ -3,7 +3,7 @@
 // release-android-local.mjs —— 自建线 Android 冷更(本机出签名 APK → 直传自有 OSS → 内部分发)
 //
 // 流程:git 闸门 → 读基线并按需自动 bump versionCode(≤ 基线时自增,写回 android-version.json)
-//       → expo prebuild(com.xd.lizcn,注入 versionCode)→ patch build.gradle 用自有 keystore 自签
+//       → expo prebuild(com.xd.cindycn,注入 versionCode)→ patch build.gradle 用自有 keystore 自签
 //       → gradlew assembleRelease → app-release.apk
 //       → 从 APK 回读内嵌 runtimeVersion(assets/fingerprint,落盘供 OTA 复用)
 //       → APK 直传 OSS(mobile-dist/android/<versionCode>/,installUrl = CDN 直链)
@@ -19,9 +19,11 @@
 // 默认 dry-run(校验环境 + 打印计划,不构建、不上传);--execute 才跑完整链路
 // (需 macOS + Android SDK + JDK 17 + keystore 口令 env + OSS AK/SK env,除非 --skip-upload)。
 //
-// 签名(见 docs/self-hosted-android-build-and-ota.md §7):自有 release keystore
-// xdmaker-release.jks(alias xdmaker-release)自签即终版。keystore 路径/口令
-// 经环境变量供给(XDT_ANDROID_KEYSTORE_PATH / _PASSWORD / _KEY_ALIAS / _KEY_PASSWORD),不入仓。
+// 签名(见 docs/self-hosted-android-build-and-ota.md §7):自有 release keystore 自签即终版。
+// 签名参数**零代码默认值**,路径 / alias / 两个口令全部由环境变量提供(--execute 构建时缺任一项
+// 抛错;--apk 复用现成包时豁免):XDT_ANDROID_KEYSTORE_PATH / XDT_ANDROID_KEY_ALIAS /
+// XDT_ANDROID_KEYSTORE_PASSWORD / XDT_ANDROID_KEY_PASSWORD。
+// 签名套件本体(CindyMobileCer/Android/)在打包机的仓库外目录,不入仓。
 // =============================================================================
 
 import { spawnSync } from 'node:child_process';
@@ -59,7 +61,7 @@ const MOBILE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 // 必须与 app.config.js 自建分支的 SELFHOST_ANDROID_PACKAGE 一致(改身份时两处一起改),
 // 否则出的 APK 包名与 validateApkMetadata 期望不符、校验会被拒。
-const SELFHOST_PACKAGE = 'com.xd.lizcn';
+const SELFHOST_PACKAGE = 'com.xd.cindycn';
 const RELEASE_RECORD_KEY = `${OSS_PREFIX}/mobile-ota/android/release.json`;
 const RELEASE_RECORD_CDN = `${CDN_BASE}/mobile-ota/android/release.json`;
 
@@ -121,7 +123,11 @@ function patchGradleProps() {
 }
 
 function buildApk(env) {
-  // prebuild 生成原生工程(注入 SELFHOST env → package=com.xd.lizcn + versionCode)。
+  // 签名参数零默认值,prebuild 前先强制解析(fail-fast,缺 env 不白跑数分钟 prebuild;
+  // --apk 复用现成包的路径不进本函数,天然豁免)。
+  const signEnv = resolveAndroidSigningEnv(env);
+
+  // prebuild 生成原生工程(注入 SELFHOST env → package=com.xd.cindycn + versionCode)。
   run(NPX, ['--yes', 'expo', 'prebuild', '--platform', 'android', '--clean'], { env });
   patchGradleSigning();
   patchGradleProps();
@@ -130,8 +136,7 @@ function buildApk(env) {
   // 确保 EXPO_PUBLIC_ 变更(TAPTAP / API 等)被重新内联,不吃旧缓存(如 placeholder)。
   clearBundlerCache({ mobileDir: MOBILE_DIR, log });
 
-  // gradlew assembleRelease:需 JDK 17 + keystore 口令 env。
-  const signEnv = resolveAndroidSigningEnv(env);
+  // gradlew assembleRelease:需 JDK 17 + keystore 签名 env。
   const javaEnv = resolveJavaRuntimeEnv({ ...env, ...signEnv });
   log(`  → gradle 用 ${javaRuntimeDetail(javaEnv)}`);
   const androidDir = resolve(MOBILE_DIR, 'android');
@@ -214,6 +219,11 @@ async function main() {
   if (!args.skipGitGate) assertProductionGitGate();
   else log('  warn: --skip-git-gate,跳过 main/clean/HEAD 校验(仅本地迭代用)');
 
+  // 签名 env 预检必须在自动 bump 写盘之前:否则缺 env 时 android-version.json 已被写脏,
+  // 下一次执行会被 git gate 拒绝,得人工收拾未发布的版本号(Greptile P1)。
+  // buildApk 内仍会再解析一次(取用值);--apk 复用现成包不构建,豁免。
+  if (args.execute && !args.apk) resolveAndroidSigningEnv(process.env);
+
   // --skip-record 是"CDN 基线不可读/首发"的逃生开关:此时不写 release.json,versionCode 单调
   // 门禁本就无意义,必须在读基线之前短路(与 iOS 脚本对称,Greptile P1)。
   let previousVersionCode = null;
@@ -255,7 +265,11 @@ async function main() {
   console.log('');
   console.log(`target: mobile 冷更(android, ${SELFHOST_PACKAGE})`);
   console.log(`version / versionCode: ${version} / ${versionCode}${previousVersionCode ? ` (上一条 ${previousVersionCode})` : (args.skipRecord ? ' (--skip-record,跳过基线)' : ' (首发)')}`);
-  console.log('sign: 自有 keystore 自签(xdmaker-release),终版,不经任何重签');
+  // 签名 env 现值预览(pre-flight 信号;口令项只报 set/未设,绝不打印值)。严格校验在 buildApk 内。
+  const signPreview = ['XDT_ANDROID_KEYSTORE_PATH', 'XDT_ANDROID_KEY_ALIAS', 'XDT_ANDROID_KEYSTORE_PASSWORD', 'XDT_ANDROID_KEY_PASSWORD']
+    .map((name) => `${name}=${env[name]?.trim() ? (name.includes('PASSWORD') ? 'set' : env[name].trim()) : '未设'}`)
+    .join(' ');
+  console.log(`sign: 自有 keystore 自签(零代码默认值,--execute 构建时四项 env 必填;${signPreview}),终版,不经任何重签`);
   console.log(`steps: prebuild → patch build.gradle 签名 → gradlew assembleRelease → 从 APK 回读 runtimeVersion → APK 直传 OSS(${CDN_BASE}/mobile-dist/android/)→ 写 release.json`);
   if (!args.execute) {
     console.log('dry-run: 传 --execute 才真正构建 + 上传(需 Android SDK + JDK 17 + keystore 口令 env + OSS AK/SK env)');

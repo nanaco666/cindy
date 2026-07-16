@@ -67,8 +67,8 @@ describe('NPKG Android distribution script', () => {
     const result = runReleaseAndroid(['upload', '<apk>'], `
 last=""; for arg in "$@"; do last="$arg"; done
 case "$last" in
-  */api/v1/packages/) echo '{"id":555,"package":"com.xd.lizcn"}' ;;
-  */api/v1/packages/555/) echo '{"package":"com.xd.lizcn"}' ;;
+  */api/v1/packages/) echo '{"id":555,"package":"com.xd.cindycn"}' ;;
+  */api/v1/packages/555/) echo '{"package":"com.xd.cindycn"}' ;;
   *) echo '{}' ;;
 esac
 `);
@@ -87,7 +87,7 @@ case "$last" in
 esac
 `);
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('com.xd.lizcn');
+    expect(result.stderr).toContain('com.xd.cindycn');
     expect(result.stdout).not.toContain('/install/');
   });
 
@@ -95,8 +95,8 @@ esac
     const result = runReleaseAndroid(['upload', '<apk>'], `
 last=""; for arg in "$@"; do last="$arg"; done
 case "$last" in
-  */api/v1/packages/) echo '{"id":9,"package":"com.xd.lizcn"}' ;;
-  */api/v1/packages/9/) echo '{"package":"com.xd.lizcn"}' ;;
+  */api/v1/packages/) echo '{"id":9,"package":"com.xd.cindycn"}' ;;
+  */api/v1/packages/9/) echo '{"package":"com.xd.cindycn"}' ;;
   *) echo '{}' ;;
 esac
 `, { NPKG_EXPECT_PACKAGE: 'com.other.pkg' });

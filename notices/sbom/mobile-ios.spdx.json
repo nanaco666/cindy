@@ -5,7 +5,7 @@
   "name": "xdt-maker-mobile-ios",
   "documentNamespace": "https://xdmaker.com/spdx/mobile-ios/f7209e7c96aaae80a026cf34c1cb1a5aa4a07268b68f8f64032e3edc04c4c502",
   "creationInfo": {
-    "created": "2026-07-16T07:14:09Z",
+    "created": "2026-07-16T10:40:08Z",
     "creators": [
       "Tool: scripts/generate-third-party-notices.mjs"
     ]

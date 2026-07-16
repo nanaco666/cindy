@@ -26,7 +26,7 @@ XDMaker 手机版(`apps/mobile`,Expo SDK ~56 / React Native 0.85.3 / React 19.2.
 - **会话/UI 层**:`src/session/`(约 120 个文件,是整个 app 最大目录)——消息渲染与 markdown/mermaid/math WebView、composer(附件、命令面板、语音输入)、文件浏览与预览、交互/权限/plan-review 面板、队列面板、日程/自动化模型、rewind 预览、远程媒体磁盘缓存。语音输入(`mobileVoiceController.ts`、`mobileRealtimeAudio.ts` 等)走 LiteLLM 网关(Volcengine SAUC → Qwen realtime → OpenAI 兼容 realtime 兜底链),底层用原生模块 `xdt-mobile-realtime-audio`。
 - **状态管理**:无 Redux/MobX;用 React Context(`AuthContext`/`DeviceLinkContext`/`ThemeProvider`)+ 一批手写单例 store(`remoteSessionStore.ts`、`revokedDevicesStore.ts`、`remoteScheduleEvents.ts`、`composerDraftStore.ts`、`mobileVoiceHistoryStore.ts`、`mobileHomeListCache.ts`),持久化走 `@react-native-async-storage/async-storage` / `expo-secure-store`,另有内存缓存(`deviceModelMetaCache.ts`、`agentCapabilitiesCache.ts`、`remoteMediaDiskCache.ts`)。
 - **三个本地原生 Expo 模块**(`apps/mobile/modules/`):`xdt-feishu-login`(飞书/Lark 原生 SSO,带 Expo config plugin)、`xdt-mobile-realtime-audio`(语音输入实时采集)、`xdt-tapdb`(TapDB/TapTap 分析 SDK,`src/analytics/mobileTapdb.ts` 接入)。app 根目录没有落盘的 `ios/`/`android/` 工程,走标准 managed/prebuild 模式,靠 `app.json` plugins + `app.config.js` 配置。
-- **动态配置**:`app.config.js` 按 `EXPO_PUBLIC_APP_VARIANT=beta` 和 `EXPO_PUBLIC_XDT_OTA_SELFHOST=1` 两个开关分支处理 beta 显示名、自建分发的独立 bundle id(iOS/Android 同为 `com.xd.lizcn`,常量分开维护)与 `updates.url`;非 beta / 非自建时必须原样返回 `app.json` 的 config(逐字节),否则会改变 `@expo/fingerprint`。
+- **动态配置**:`app.config.js` 按 `EXPO_PUBLIC_APP_VARIANT=beta` 和 `EXPO_PUBLIC_XDT_OTA_SELFHOST=1` 两个开关分支处理 beta 显示名、自建分发的独立 bundle id(iOS/Android 同为 `com.xd.cindycn`,2026-07-16 起与 EAS 线的 `com.xd.lizcn` 分离,常量分开维护)与 `updates.url`;非 beta / 非自建时必须原样返回 `app.json` 的 config(逐字节),否则会改变 `@expo/fingerprint`。
 - **OTA / 版本管理**:`src/update/startupOtaUpdate.ts` + `useStartupOtaGate.ts`(自建线运行时 OTA 拉取)、`bundleUpdate.ts` + `useBundleUpdatePrompt.ts`(更新提示)、`fetchLatestRelease.ts`。`android-version.json` 是自建 Android 线的 `versionCode` 台账(commit 管理,发布前手动 bump)。
 - **发版脚本**:`pnpm mobile:release:check|beta|prod`、`mobile:release:ios:{npkg,check,local,ota}`、`mobile:release:android:{npkg,check,local,ota}`、`mobile:beta:add-dev`、`mobile:sim:{start,whoami,rebuild}`——这些命令定义在**仓库根** `package.json`(而非 `apps/mobile/package.json`),因为后者的 `scripts` 字段本身是 `@expo/fingerprint` 的输入源,加脚本会意外拉高 runtime version。所有会调用 EAS 写操作的脚本默认 dry-run,需显式 `--execute`。
 
@@ -43,7 +43,7 @@ XDMaker 手机版(`apps/mobile`,Expo SDK ~56 / React Native 0.85.3 / React 19.2.
 - 不要绕开 `mobile:release:*` 脚本直接跑 `eas build` / `eas update` / `eas submit`——脚本负责注入正确的 EAS environment、过滤除 TapDB 白名单外的环境变量;TapTap client token 绝不能提交进 `eas.json`。
 - 不要往 `apps/mobile/package.json` 加开发脚本,应加到仓库根 `package.json`(理由见上)。
 - 不要用「原生 build number 没变」当作 JS 代码是最新的证据——只有 Metro reload 证据才算;多 worktree 场景下 app 可能悄悄连到另一分支残留的 8081 端口 Metro,先用 `mobile:sim:whoami` 核实。不要用 `CODE_SIGNING_ALLOWED=NO` 编译(会破坏 `expo-secure-store`/keychain)。不要用 Expo Go 或 TestFlight 证明本地源码改动生效——用 `mobile:sim:start` 起的 Metro + iOS development client。
-- 不要改动 `bundleIdentifier` / `scheme` / 飞书 appId(生产与 beta 变体共享;仅自建分发变体有意 fork 出 `com.xd.lizcn`(iOS/Android 自建线同名,常量分开维护))——这是人工决策边界,不能被脚本或改动自动化掉。
+- 不要改动 `bundleIdentifier` / `scheme` / 飞书 appId(生产与 beta 变体共享;仅自建分发变体有意 fork 出 `com.xd.cindycn`(iOS/Android 自建线同名,常量分开维护;2026-07-16 起与 EAS 线的 `com.xd.lizcn` 分离))——这是人工决策边界,不能被脚本或改动自动化掉。
 - 不要再把桌面 `safeStorage` key 当作手机语音输入的运行时凭证来源——现在手机语音走 Settings 里保存的 LiteLLM key;`voice:credential:*` / `test:voice-cloud:*` 系列脚本是历史遗留诊断工具,明确标注不是运行时契约。
 - 正式服发版只能从 `main` 手动发(`mobile:release:prod` 会在非 `main` 分支 / 脏 worktree / `HEAD != origin/main` 时拒绝执行),不要从 feature 分支直接发正式版。
 

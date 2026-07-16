@@ -2,6 +2,17 @@
 
 > 状态:设计稿(待评审 / 未实现)。负责人:dash。最后更新 2026-07-05。
 >
+> ⚠️ **自建线身份切换(2026-07-16,已实现,本文其余章节的 `com.xd.lizcn` / `xdmaker-release` 描述为历史值)**:
+> 自建线 package 改为 **`com.xd.cindycn`**(与 EAS 线的 `com.xd.lizcn` 分离),签名 keystore 换为
+> **`Cindy.jks`**(alias `Cindy`,PKCS12,storePassword 与 keyPassword 相同,证书 SHA256
+> `B0:A5:77:DC:05:DF:60:75:96:47:A6:E5:97:42:B2:C4:A7:82:8A:1F:4C:04:01:B6:A9:BB:B3:EE:42:F0:27:A9`,
+> 有效期至 2053),打包机路径 `/Users/cn-ios/Documents/cindy/CindyMobileCer/Android/`(不进仓库);
+> 签名参数**零代码默认值**:keystore 路径 / alias / 两个口令全部由 `XDT_ANDROID_*` 环境变量提供,
+> `--execute` 缺任一项报错(本文 §7 的"路径/alias 有默认值"描述为历史设计);
+> scheme 仍为 `lizcn`。**换 keystore + 换包名 = 全新安装线**:旧 `com.xd.lizcn` / `com.xd.maker` 包
+> 无法覆盖安装,需重装;飞书后台需按新 package + 新 SHA256 重新登记(§16 待办随之更新对象)。
+> 现状以 `RELEASING.md` 与脚本头注释为准。
+>
 > ⚠️ **分发链路变更(2026-07-06,已实现,本文其余章节的 NPKG 描述为历史设计)**:冷更 APK
 > 不再经 NPKG 取下载链接,由 `release-android-local.mjs` **直传自有 OSS**
 > (`mobile-dist/android/<versionCode>/`,installUrl = CDN 直链;helper 见

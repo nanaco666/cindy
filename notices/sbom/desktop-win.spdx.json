@@ -3,9 +3,9 @@
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
   "name": "xdt-maker-desktop-win",
-  "documentNamespace": "https://xdmaker.com/spdx/desktop-win/c8efeee0ec33130350fbd78130a12e8eac3bf147ab86dc9b56a09abca2d619c5",
+  "documentNamespace": "https://xdmaker.com/spdx/desktop-win/eed02d9f1f2ba8970bb97adef7e05535cbd9ba4068ddad4941cd409a259d2db4",
   "creationInfo": {
-    "created": "2026-07-16T07:14:09Z",
+    "created": "2026-07-16T10:40:08Z",
     "creators": [
       "Tool: scripts/generate-third-party-notices.mjs"
     ]
@@ -29,6 +29,16 @@
       "filesAnalyzed": false,
       "licenseConcluded": "LicenseRef-Android-Platform-Tools-Notice",
       "licenseDeclared": "LicenseRef-Android-Platform-Tools-Notice",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "name": "drawio viewer (vendored)",
+      "SPDXID": "SPDXRef-Package-ef29a7e5a6f64477",
+      "versionInfo": "30.0.4",
+      "downloadLocation": "https://github.com/jgraph/drawio",
+      "filesAnalyzed": false,
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
       "copyrightText": "NOASSERTION"
     },
     {
@@ -19536,6 +19546,11 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-8cc04840a3d0a472"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-ef29a7e5a6f64477"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",

@@ -83,7 +83,7 @@ async function main() {
     : '(无 / 首发)';
 
   console.log('');
-  console.log('target: mobile 自建线(ios, com.xd.lizcn)');
+  console.log('target: mobile 自建线(ios, com.xd.cindycn)');
   console.log(`local runtime : ${local}`);
   console.log(`baseline      : ${baseLabel}   ← 线上冷更 release.json`);
   console.log(`desktop ver   : ${desktopVersion || '(未解析到,设置页将不显示该行)'}   ← 设置页「桌面版」二级版本号`);

@@ -132,6 +132,32 @@ export function replaceBuildNumberInAppJson(rawText, nextBuildNumber) {
   return String(rawText).replace(/("buildNumber"\s*:\s*")[^"]*(")/, `$1${nextBuildNumber}$2`);
 }
 
+/**
+ * 解析 iOS 本地签名环境(供 xcodebuild archive/export 消费)。
+ * teamId / profileName / identity **全部必须**由 env 提供(零代码默认值,缺任一项即抛错,
+ * fail-closed,与 android-local.mjs 的 resolveAndroidSigningEnv 同一口径);profilePath 可选
+ * (空 = 假设描述文件已装入 ~/Library/MobileDevice/Provisioning Profiles)。
+ * 签名套件本体(CindyMobileCer/iOS/,profile + p12)在打包机的仓库外目录,不入仓。
+ * @param {NodeJS.ProcessEnv} baseEnv
+ * @returns {{ teamId: string, profileName: string, identity: string, profilePath: string }}
+ */
+export function resolveIosSigningEnv(baseEnv = process.env) {
+  const teamId = String(baseEnv.XDT_IOS_TEAM_ID ?? '').trim();
+  const profileName = String(baseEnv.XDT_IOS_PROFILE_NAME ?? '').trim();
+  const identity = String(baseEnv.XDT_IOS_SIGN_IDENTITY ?? '').trim();
+  const profilePath = String(baseEnv.XDT_IOS_PROFILE_PATH ?? '').trim();
+  const missing = [];
+  if (!teamId) missing.push('XDT_IOS_TEAM_ID');
+  if (!profileName) missing.push('XDT_IOS_PROFILE_NAME');
+  if (!identity) missing.push('XDT_IOS_SIGN_IDENTITY');
+  if (missing.length) {
+    throw new Error(
+      `缺少 iOS 签名环境变量:${missing.join(', ')}(签名配置零代码默认值,team/profile/identity 均须在启动时经 env 提供;XDT_IOS_PROFILE_PATH 可选,缺省视为描述文件已装入系统)`,
+    );
+  }
+  return { teamId, profileName, identity, profilePath };
+}
+
 /** 生成 xcodebuild -exportArchive 用的 ExportOptions.plist(development 方法 + 手动签名)。 */
 export function buildExportOptionsPlist({ teamId, bundleId, profileName, method = 'development' }) {
   if (!teamId || !bundleId || !profileName) {

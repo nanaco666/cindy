@@ -4360,6 +4360,19 @@ app.on('ready', async () => {
 
   initializeUpdatePresentationRecovery();
 
+  // mac dev 下 Dock 显示的是 Electron 默认图标——macOS 忽略 BrowserWindow.icon,
+  // Dock 图标取自可执行 bundle 的 icns,而 dev 跑的是 node_modules 里的官方
+  // Electron 二进制。这里 dev-only 手动设成 Cindy 图标;packaged 版由
+  // resources/icon.icns 自然生效,不需要也不该动。
+  if (!app.isPackaged && process.platform === 'darwin') {
+    try {
+      app.dock?.setIcon(path.join(__dirname, '../../resources/icon.png'));
+    } catch (err) {
+      // 仅影响 dev Dock 观感,失败不挡启动
+      createLogger('dock-icon').warn('setIcon failed', { error: String(err) });
+    }
+  }
+
   await ensureMainAppPresence('app-ready');
 
   // macOS App Translocation fix: when the user launches the app without

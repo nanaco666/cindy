@@ -704,6 +704,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     restoreBuiltin: (id: string): Promise<{ ok: true }> => ipcRenderer.invoke('ghosts:restore-builtin', id),
     setEnabled: (id: string, enabled: boolean): Promise<{ ok: true }> =>
       ipcRenderer.invoke('ghosts:set-enabled', id, enabled),
+    /** 目录级禁用清单(设置 → 插件 项目范围视图;sendSync 保证切换同帧渲染)。 */
+    workdirPrefsSync: (workdir: string): { disabled: string[] } =>
+      ipcRenderer.sendSync('ghosts:workdir-prefs', workdir),
+    setWorkdirDisabled: (workdir: string, id: string, disabled: boolean): Promise<{ disabled: string[] }> =>
+      ipcRenderer.invoke('ghosts:workdir-prefs:set', workdir, id, disabled),
     takePendingInstall: (): Promise<{ filePath: string | null }> =>
       ipcRenderer.invoke('ghosts:take-pending-install'),
     onChanged: fanOutGhostsChanged,
