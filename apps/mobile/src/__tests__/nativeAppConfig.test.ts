@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
@@ -119,6 +119,26 @@ describe('mobile native app config', () => {
     expect(metroConfig).not.toContain("react: path.join(workspaceNodeModules, 'react')");
     expect(metroConfig).toContain("'auth-client'");
     expect(metroConfig).toContain("'@cindy/device-link-protocol'");
+  });
+
+  it('Metro nodeModulesPaths 覆盖 workspace TS 源码包各自的 node_modules(pnpm hoisted 布局下 workspace: 链接不提升到根,只在消费方包自己的 node_modules)', () => {
+    // 2026-07-16 iOS 冷更实踩:disableHierarchicalLookup 后漏列这些目录,
+    // packages/device-link 引用的 @cindy/device-link-protocol(cindy-protocol submodule)
+    // 在 expo export:embed 打 bundle 时 Unable to resolve → ARCHIVE FAILED。
+    // 期望路径从 metro.config.js 自身位置推导(它内部用 __dirname 计算),不依赖测试进程 cwd。
+    const metroConfigPath = require.resolve('../../metro.config.js');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const metroConfig = require(metroConfigPath);
+    const appDir = dirname(metroConfigPath);
+    const paths: string[] = metroConfig.resolver.nodeModulesPaths;
+    // path.join 产物在 Windows 上是反斜杠,比较前统一归一为 POSIX 分隔符(规则 15)。
+    const posix = (p: string) => p.split(sep).join('/');
+    for (const packageName of ['auth-client', 'device-link', 'maker-shared', 'model-providers']) {
+      expect(paths.some((p) => posix(p).endsWith(`packages/${packageName}/node_modules`))).toBe(true);
+    }
+    // 追加在 app / workspace 根之后:常规依赖命中顺序不变(精确断言前两位,防止顺序被换)。
+    expect(paths[0]).toBe(join(appDir, 'node_modules'));
+    expect(paths[1]).toBe(join(resolve(appDir, '../..'), 'node_modules'));
   });
 
   it('wires first-party Apple, public Google, and the minimal official WeChat bridge', () => {
