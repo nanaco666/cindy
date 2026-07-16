@@ -26,7 +26,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Flame, Check, X } from 'lucide-react';
-import { BRAND_WEBSITE_URL } from '@lizi/maker-shared/branding';
+import { WEBSITE_URL } from '../../../shared/endpoints';
 
 import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
@@ -141,12 +141,12 @@ export function UpdateBanner({ isCollapsed }: UpdateBannerProps) {
 
   const handleManualDownload = () => {
     setShowTranslocatedDialog(false);
-    window.open(BRAND_WEBSITE_URL, '_blank');
+    window.open(WEBSITE_URL, '_blank');
   };
 
   const handleSpawnFailedDownload = () => {
     setShowSpawnFailedDialog(false);
-    window.open(BRAND_WEBSITE_URL, '_blank');
+    window.open(WEBSITE_URL, '_blank');
   };
 
   const versionSuffix = version ? ` (v${version})` : '';

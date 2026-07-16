@@ -14,8 +14,5 @@
  * 完整的改名操作清单（手动项 / 外部协调项 / 标识符边界）见 docs/branding-rename-checklist.md。
  */
 
-/** 产品对用户 / LLM 展示的品牌名（唯一规范写法，不要再派生 "XD Maker" 等变体）。 */
-export const BRAND_NAME = 'XDMaker';
-
-/** 产品官网（下载 / 落地页）。 */
-export const BRAND_WEBSITE_URL = 'https://xdmaker.magiclizi.com';
+/** 产品对用户 / LLM 展示的品牌名（唯一规范写法，不要再派生其它变体）。 */
+export const BRAND_NAME = 'Cindy';

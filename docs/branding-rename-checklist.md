@@ -10,12 +10,13 @@
 
 | 常量 | 当前值 | 覆盖面 |
 |---|---|---|
-| `BRAND_NAME` | `XDMaker` | desktop renderer/main 全部展示层字符串；四语言 locale 的 `{{appName}}`（renderer 走 i18next `interpolation.defaultVariables`，main 走 `apps/desktop/src/main/i18n.ts` 的迷你 `t()` 注入）；`packages/lizi-mcps` 的 MCP 工具描述、错误文案、OAuth 授权成功页 |
-| `BRAND_WEBSITE_URL` | `https://xdmaker.magiclizi.com` | 更新横幅 / splash 的官网跳转（域名本身的注册与重定向是外部协调项，见第三节） |
+| `BRAND_NAME` | `Cindy`（2026-07-16 已翻转） | desktop renderer/main 全部展示层字符串；四语言 locale 的 `{{appName}}`（renderer 走 i18next `interpolation.defaultVariables`，main 走 `apps/desktop/src/main/i18n.ts` 的迷你 `t()` 注入）；`packages/lizi-mcps` 的 MCP 工具描述、错误文案、OAuth 授权成功页 |
+
+官网链接不再是品牌常量：原 `BRAND_WEBSITE_URL` 已删除，改为 `config/production-endpoints.json` 的 `websiteUrl`（消费点 `apps/desktop/src/shared/endpoints.ts` 的 `WEBSITE_URL`，由 `check-endpoint-literals` 门禁校验一致）。国内/海外（`cindy.com.cn` / `cindy.app`）不在代码里分支——未来由各分发渠道（bucket）自带的 `production-endpoints.json` 给出不同值。
 
 改完跑：仓库根 `pnpm test:unit` + `pnpm --filter desktop typecheck` + `pnpm check:brand-terminology`。
 
-同步更新 `scripts/brand-terminology-guard.mjs`：把**旧品牌名及其变体加进 `FORBIDDEN_TERMS`**（`replacement` 指向新名），这样旧名残留会在 CI 里持续红灯；guard 里的 locale 例外（`settings.remote.keys.nameHint` / `settings.computerUse.browser.openForLoginHint` 全路径豁免 / 架构文档路径）对应的是标识符，改名时不动。
+`scripts/brand-terminology-guard.mjs` 的 `FORBIDDEN_TERMS`：把**旧品牌名及其变体加进禁词表**（`replacement` 指向新名）这一步**推迟到第二节手动清单清扫完成之后**——常量翻转时全仓仍有大量合法的旧名残留（forge 显示名、docs、测试夹具），提前加禁词会让 CI 直接红灯。guard 里的 locale 例外（`settings.remote.keys.nameHint` / `settings.computerUse.browser.openForLoginHint` 全路径豁免 / 架构文档路径）对应的是标识符，改名时不动。
 
 ⚠️ **LLM 影响评估（规则 10/11）**：`BRAND_NAME` 会进入 MCP 工具描述（prompt 前缀的一部分），改值会一次性打破 Anthropic prompt cache 前缀并可能影响模型对产品的称呼——这是改名的固有代价，发布前按规则 10 要求做一轮缓存率/行为抽查，并在 PR 里写明。
 
@@ -26,6 +27,10 @@
 - [ ] `forge.config.ts`：`packagerConfig.name`/`productName: 'XDMaker'`、Windows `shortcutName: 'XDMaker'`、macOS `CFBundleDocumentTypes`/UTType 的 `UTTypeDescription: 'XDMaker Session Share'` 等**显示名**字段。
 - [ ] 应用图标素材（`apps/desktop/resources/`）。界面 wordmark logo 已于 2026-07 换成 CINDY 深浅双版（`src/renderer/assets/logo-light.png` / `logo-dark.png`，经 `hooks/useBrandLogo.ts` 按主题选用）。
 - [ ] `apps/desktop/help-knowledge/*.md`（内置帮助知识库源文件）→ 全局替换后跑 `pnpm gen:help-kb` 重新生成 `helpKnowledge.generated.ts`。
+
+### 未接常量层的 package（无法 import maker-shared，需逐处改）
+
+- [ ] `packages/voice-input-core/src/DictationRefiner.ts:87`：LLM system prompt 硬编码「你是 XDMaker 的语音听写文本后处理器」（配套 `DictationRefiner.test.ts` 同步）。voice-input-core 不依赖 maker-shared，改字面量即可。
 
 ### 手机端（apps/mobile）
 
@@ -50,12 +55,13 @@
 - [ ] `apps/landing-page/index.html`：标题、文案、下载按钮。
 - [ ] `apps/notice/*.json` 公告模板（新公告用新名即可，历史公告不动）。
 
-## 三、外部协调项（不在本仓库内，需人工对接）
+## 三、外部协调项（不在本仓库内，需人工对接；状态截至 2026-07-16）
 
-- [ ] 飞书开放平台：OAuth 应用名、bot 显示名（与上面 lizi-mcps prompts 的「xdt-maker bot」文案同步）。
-- [ ] Slack App 名称（apps/server 共享 bot）。
-- [ ] 官网域名 `xdmaker.magiclizi.com`：新域名注册 + 老域名重定向，然后改 `BRAND_WEBSITE_URL`。
-- [ ] GitHub 仓库 `xindong/XDMaker`（issue 提交目标仓）、下载 CDN 路径。
+- [x] Slack App 名称：已改为 Cindy。
+- [x] 官网域名：`cindy.com.cn`（国内）/ `cindy.app`（海外）已持有并接入 `production-endpoints.json`；老域名 `xdmaker.magiclizi.com` 的重定向待处理。
+- [ ] GitHub 仓库（issue 提交目标仓）：待 Lizi 最终确认，暂不动。
+- [ ] 下载 CDN：Cindy 渠道为独立 bucket（与旧渠道 URL 完全不同，不是同 bucket 换 path），随标识符层迁移一起落地。
+- ~~飞书开放平台改名~~：已不再使用飞书登录，此项作废。
 
 ## 四、绝对不要动（标识符层，改了 = 数据迁移事故）
 
@@ -74,9 +80,9 @@
 
 ## 五、执行顺序建议
 
-1. 改 `BRAND_NAME` / `BRAND_WEBSITE_URL` → 跑测试，覆盖 80% 展示面。
-2. 更新 `scripts/brand-terminology-guard.mjs` 的 `FORBIDDEN_TERMS`（旧名进禁词表），让 CI 持续兜底。
-3. 过第二节手动清单（打包 → mobile → server → md/skills → 静态页）。
-4. 外部协调项并行推进（域名 / 飞书 / Slack / GitHub）。
+1. ✅（2026-07-16）改 `BRAND_NAME` 为 `Cindy` + 官网链接抽到 `production-endpoints.json` 的 `websiteUrl` → 跑测试，覆盖 80% 展示面。
+2. 过第二节手动清单（打包显示名 → mobile → md/skills → 静态页；server 文案在 `cindy-server` 仓）。
+3. 清扫完成后更新 `scripts/brand-terminology-guard.mjs` 的 `FORBIDDEN_TERMS`（旧名进禁词表），让 CI 持续兜底。
+4. 外部协调项收口（老域名重定向 / GitHub 仓库确认）。
 5. 全仓 `git grep -i "旧品牌名"` 复核，比对第四节确认剩余命中全部是标识符。
 6. 按规则 10 做缓存率 / 行为抽查，PR 里附结论。

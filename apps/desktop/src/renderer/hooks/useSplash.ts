@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BRAND_WEBSITE_URL } from '@lizi/maker-shared/branding';
+import { WEBSITE_URL } from '../../shared/endpoints';
 
 import { useEnvCheck } from '@/contexts/EnvCheckContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -189,7 +189,7 @@ export function useSplash() {
   }, [phase, checkEnvironment]);
 
   const onSpawnFailedDownload = useCallback(() => {
-    window.open(BRAND_WEBSITE_URL, '_blank');
+    window.open(WEBSITE_URL, '_blank');
   }, []);
 
   // ── Show progress bar during download phases ──

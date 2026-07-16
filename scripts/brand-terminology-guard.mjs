@@ -5,11 +5,11 @@ import process from 'node:process';
 const FORBIDDEN_TERMS = [
   {
     term: 'XDT' + 'Maker',
-    replacement: 'XDMaker',
+    replacement: 'Cindy',
   },
   {
     term: 'XDT' + ' Maker',
-    replacement: 'XDMaker',
+    replacement: 'Cindy',
   },
 ];
 
@@ -142,4 +142,4 @@ if (localeViolations.length > 0) {
   process.exit(1);
 }
 
-console.log('✅ [brand-terminology-guard] PASS — product spelling uses XDMaker, locales use {{appName}}');
+console.log('✅ [brand-terminology-guard] PASS — no forbidden brand spellings, locales use {{appName}}');

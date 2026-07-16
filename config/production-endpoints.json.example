@@ -7,6 +7,7 @@
   "oauthBrokerApiBaseUrl": "",
   "heartbeatUrl": "",
   "slackHookWsUrl": "",
+  "websiteUrl": "",
   "xdGatewayBaseUrl": "",
   "cdnBaseUrl": "",
   "cdnInternalBaseUrl": "",

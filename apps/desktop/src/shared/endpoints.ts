@@ -22,6 +22,9 @@ export const AUTH_BASE_URL_DEV_FALLBACK = 'http://localhost:3344';
 /** device-link relay 的本地开发兜底地址。 */
 export const DEVICE_LINK_API_BASE_DEV_FALLBACK = 'http://localhost:3335';
 
+/** 产品官网(更新横幅 / splash 的手动下载跳转);国内/海外差异由各分发渠道的端点配置承载。 */
+export const WEBSITE_URL = injectedEndpoint(import.meta.env.VITE_WEBSITE_URL);
+
 /** 心跳服务端点。 */
 export const HEARTBEAT_DEFAULT_ENDPOINT = injectedEndpoint(import.meta.env.VITE_HEARTBEAT_URL);
 
