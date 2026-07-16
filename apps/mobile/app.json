@@ -53,6 +53,7 @@
     },
     "plugins": [
       "./plugins/with-third-party-notices",
+      "./plugins/with-google-signin-modular-headers",
       "expo-router",
       "expo-apple-authentication",
       "expo-secure-store",
@@ -71,8 +72,14 @@
               {
                 "fontFamily": "JetBrains Mono",
                 "fontDefinitions": [
-                  { "path": "./assets/fonts/JetBrainsMono-Regular.ttf", "weight": 400 },
-                  { "path": "./assets/fonts/JetBrainsMono-Medium.ttf", "weight": 500 }
+                  {
+                    "path": "./assets/fonts/JetBrainsMono-Regular.ttf",
+                    "weight": 400
+                  },
+                  {
+                    "path": "./assets/fonts/JetBrainsMono-Medium.ttf",
+                    "weight": 500
+                  }
                 ]
               }
             ]
