@@ -97,7 +97,8 @@ describe('EAS endpoint injection', () => {
     mkdirSync(reclaimPath, { recursive: true });
     writeFileSync(
       `${reclaimPath}/owner.json`,
-      JSON.stringify({ pid: 999_999_999, token: 'stale-reclaim', createdAt: 0 }),
+      // Use the current PID to cover PID reuse / false-liveness detection.
+      JSON.stringify({ pid: process.pid, token: 'stale-reclaim', createdAt: 0 }),
     );
 
     const restore = injectMobileEndpointsIntoEasFile(easPath, {

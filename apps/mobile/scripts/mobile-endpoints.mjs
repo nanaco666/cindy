@@ -139,16 +139,22 @@ function waitForEasFileLock() {
 
 function isEasReclaimStale(reclaimPath) {
   const ownerPath = `${reclaimPath}/owner.json`;
+  const now = Date.now();
   let owner;
   try {
     owner = JSON.parse(readFileSync(ownerPath, 'utf8'));
   } catch {
     try {
-      return Date.now() - statSync(reclaimPath).mtimeMs > EAS_LOCK_STALE_MS;
+      return now - statSync(reclaimPath).mtimeMs > EAS_LOCK_STALE_MS;
     } catch {
       return false;
     }
   }
+  // A reclaim section is synchronous and should never legitimately live for
+  // the full stale window. Do not trust PID liveness beyond that bound:
+  // operating systems may reuse the PID after the original process died.
+  const ageMs = now - Number(owner.createdAt || 0);
+  if (ageMs > EAS_LOCK_STALE_MS) return true;
   if (Number.isInteger(owner.pid)) {
     try {
       process.kill(owner.pid, 0);
@@ -157,7 +163,7 @@ function isEasReclaimStale(reclaimPath) {
       if (error?.code === 'EPERM') return false;
     }
   }
-  return Date.now() - Number(owner.createdAt || 0) > EAS_LOCK_STALE_MS;
+  return ageMs > EAS_LOCK_STALE_MS;
 }
 
 /**
