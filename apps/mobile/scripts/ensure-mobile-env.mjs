@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { productionMobileEnv } from '../../../scripts/shared/production-endpoints.mjs';
 
 export const MOBILE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const REQUIRED_MOBILE_ENV_KEYS = [
@@ -8,23 +9,45 @@ export const REQUIRED_MOBILE_ENV_KEYS = [
   'EXPO_PUBLIC_CINDY_AUTH_BASE_URL',
   'EXPO_PUBLIC_XDT_API_BASE_URL',
   'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL',
+  'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL',
 ];
 
+/**
+ * @param {{
+ *   mobileDir?: string,
+ *   envPath?: string,
+ *   easJsonPath?: string,
+ *   envExamplePath?: string,
+ *   endpointEnv?: Record<string, string>,
+ * }} [options]
+ */
 export function ensureMobileEnv({
   mobileDir = MOBILE_DIR,
   envPath = resolve(mobileDir, '.env'),
   easJsonPath = resolve(mobileDir, 'eas.json'),
   envExamplePath = resolve(mobileDir, '.env.example'),
+  endpointEnv,
 } = {}) {
-  const defaults = readProductionEnv(easJsonPath);
+  const easDefaults = readProductionEnv(easJsonPath);
   const exampleValues = existsSync(envExamplePath) ? readEnvFile(envExamplePath) : {};
   let content = existsSync(envPath) ? readFileSync(envPath, 'utf8') : '';
   const created = !existsSync(envPath);
   const addedKeys = [];
+  const needsPrivateConfigDefaults = REQUIRED_MOBILE_ENV_KEYS.some(
+    (key) =>
+      !hasPreservedEnvValue(content, key, exampleValues[key]) &&
+      !String(easDefaults[key] ?? '').trim(),
+  );
+  const defaults = {
+    ...easDefaults,
+    ...(endpointEnv ?? (needsPrivateConfigDefaults ? productionMobileEnv() : {})),
+  };
 
   for (const key of REQUIRED_MOBILE_ENV_KEYS) {
     const value = defaults[key];
-    if (!String(value ?? '').trim()) throw new Error(`Missing ${key} in eas.json production profile env`);
+    if (!String(value ?? '').trim()) {
+      throw new Error(`Missing ${key} in mobile env defaults or production endpoint config`);
+    }
     const next = upsertEnvValue(content, key, value, exampleValues[key]);
     if (next !== content) addedKeys.push(key);
     content = next;
@@ -64,6 +87,14 @@ function upsertEnvValue(content, key, value, placeholderValue) {
 
   if (!found) next.push(`${key}=${value}`);
   return next.join('\n');
+}
+
+function hasPreservedEnvValue(content, key, placeholderValue) {
+  const pattern = new RegExp(`^\\s*${escapeRegExp(key)}\\s*=(.*)$`, 'm');
+  const match = content.match(pattern);
+  if (!match) return false;
+  const current = normalizeEnvValue(match[1]);
+  return Boolean(current && current !== placeholderValue);
 }
 
 function readEnvFile(envPath) {

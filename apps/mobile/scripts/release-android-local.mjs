@@ -55,7 +55,10 @@ import {
 import { resolveJavaRuntimeEnv, javaRuntimeDetail } from './java-runtime-env.mjs';
 import { clearBundlerCache } from './lib/bundler-cache.mjs';
 import { readEmbeddedRuntimeVersionFromApk } from './lib/embedded-runtime.mjs';
-import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, OSS_BUCKET } from '../../../scripts/shared/oss.mjs';
+import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, OSS_BUCKET, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
+import { productionMobileEnv } from '../../../scripts/shared/production-endpoints.mjs';
+
+refreshOssConfig();
 
 const MOBILE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx';
@@ -73,6 +76,7 @@ function selfhostEnv(versionCode, desktopVersion) {
   if (!otaUrl) throw new Error('release-android-local 需要 EXPO_PUBLIC_XDT_OTA_URL(mobile-update-server 基址,用于烧进包的 updates.url)');
   const env = {
     ...process.env,
+    ...productionMobileEnv(),
     EXPO_PUBLIC_XDT_OTA_SELFHOST: '1',
     EXPO_PUBLIC_XDT_OTA_URL: otaUrl,
     XDT_ANDROID_VERSION_CODE: String(versionCode),

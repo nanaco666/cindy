@@ -19,9 +19,15 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': new URL('./src', import.meta.url).pathname,
+      'expo-constants': new URL('./src/__tests__/expo-constants.mock.ts', import.meta.url).pathname,
     },
   },
   test: {
     environment: 'node',
+    env: {
+      EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.invalid',
+      EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.invalid',
+      EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: 'https://gateway.example.invalid',
+    },
   },
 });

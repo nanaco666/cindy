@@ -1,0 +1,17 @@
+{
+  "feishuAppId": "",
+  "apiBaseUrl": "",
+  "authApiBaseUrlCn": "",
+  "authApiBaseUrlGlobal": "",
+  "deviceLinkApiBaseUrl": "",
+  "oauthBrokerApiBaseUrl": "",
+  "heartbeatUrl": "",
+  "slackHookWsUrl": "",
+  "xdGatewayBaseUrl": "",
+  "cdnBaseUrl": "",
+  "cdnInternalBaseUrl": "",
+  "npkgBaseUrl": "",
+  "ossBucket": "",
+  "ossPrefix": "",
+  "ossRegion": ""
+}

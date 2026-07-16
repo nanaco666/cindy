@@ -85,7 +85,7 @@ export interface User {
   /** canary-release V0.1: server-side gray-release flag; mirrored to canaryFlagStore. */
   isCanary?: boolean;
   /**
-   * 当前登录用户的飞书 open_id（来自 xdt 服务端的 feishu app, cli_a94d4cf642381cd4)。
+   * 当前登录用户的飞书 open_id（来自构建配置指定的主飞书应用）。
    * 从 server `/me` 的 `feishuId` 字段映射来——server DB `user.feishuId` 存的是
    * feishu open_id（auth.ts L91）。
    *

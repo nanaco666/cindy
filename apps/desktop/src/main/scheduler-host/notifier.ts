@@ -66,7 +66,7 @@ export class DesktopNotifier implements Notifier {
 
   private async notifyFeishu(schedule: Schedule, run: ScheduleRun): Promise<void> {
     // 必须用 bot owner — 飞书 open_id 是 per-app 的: 用户登录 desktop 时 OAuth
-    // 拿到的 feishuOpenId 属于主 app (cli_a94d4cf642381cd4), 跟用户自建的 bot app
+    // 拿到的 feishuOpenId 属于构建配置指定的主 app，跟用户自建的 bot app
     // 不互通; 拿主 app 的 open_id 调 bot 的 IM API 会 400 (user_not_found)。
     // ownerGuard 在用户私聊 bot 时 TOFU 记录的才是 bot app 内的合法 open_id。
     // 假设用户用同一个飞书账号登录 desktop 又私聊了 bot, 这两个实际是同一个人。

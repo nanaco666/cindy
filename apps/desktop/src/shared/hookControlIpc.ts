@@ -12,7 +12,7 @@
  */
 
 /** 内置服务器地址(系统默认值; slack-hook.json 的 urlOverride 可覆写, 规则 20)。 */
-export const SLACK_HOOK_DEFAULT_URL = 'wss://xdmaker-slack-hook.magiclizi.com';
+export { SLACK_HOOK_DEFAULT_URL } from './endpoints';
 
 /**
  * 由 WS 服务器地址推导 Slack App 安装链接: wss→https / ws→http, 去尾斜杠后拼

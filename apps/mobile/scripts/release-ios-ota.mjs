@@ -17,7 +17,7 @@
 //     release/ios-runtime.json),要它等于 CDN 冷更装机包记录 mobile-ota/ios/release.json
 //     的 runtimeVersion,否则原生层已变、热更会推给跑着不同原生面的客户端,须先出冷更整包;
 //     --skip-runtime-check 跳过,显式 --runtime-version 作人工 override(仍过基线校验)。
-// OSS/CDN 复用 scripts/shared/oss.mjs(bucket smash-dev / dev-cdn.fp.xd.com,prefix xdt-maker)。
+// OSS/CDN 配置统一由 scripts/shared/oss.mjs 在发布环境中解析。
 // 需要的 EXPO_PUBLIC_*(飞书 appId / api base 等)由运行环境提供(建议 eas env:exec production 包裹)。
 // =============================================================================
 
@@ -28,7 +28,10 @@ import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { parseArgs, assertProductionGitGate, assertPublicEnv, resolveDesktopVersion } from './release-lib.mjs';
 import { buildAssetEntry, buildManifest, sha256Hex, assertOtaRuntimeMatchesBaseline } from './lib/ota-manifest.mjs';
-import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX } from '../../../scripts/shared/oss.mjs';
+import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
+import { productionMobileEnv } from '../../../scripts/shared/production-endpoints.mjs';
+
+refreshOssConfig();
 
 const MOBILE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx';
@@ -65,7 +68,12 @@ function assertRuntimeMatchesColdBaseline({ runtimeVersion, baselineRuntime, ski
 function selfhostEnv(desktopVersion) {
   const otaUrl = process.env.EXPO_PUBLIC_XDT_OTA_URL?.trim();
   if (!otaUrl) throw new Error('release-ios-ota 需要 EXPO_PUBLIC_XDT_OTA_URL(mobile-update-server 基址)');
-  const env = { ...process.env, EXPO_PUBLIC_XDT_OTA_SELFHOST: '1', EXPO_PUBLIC_XDT_OTA_URL: otaUrl };
+  const env = {
+    ...process.env,
+    ...productionMobileEnv(),
+    EXPO_PUBLIC_XDT_OTA_SELFHOST: '1',
+    EXPO_PUBLIC_XDT_OTA_URL: otaUrl,
+  };
   // 二级版本号:仅 JS 层(不进 @expo/fingerprint,不改 runtimeVersion,与冷更整包同源);空则不注入。
   if (desktopVersion) env.EXPO_PUBLIC_DESKTOP_VERSION = desktopVersion;
   return env;

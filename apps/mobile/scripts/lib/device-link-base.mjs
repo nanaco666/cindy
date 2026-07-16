@@ -4,25 +4,25 @@
  * 生产域名从 config/production-endpoints.json 权威源派生,不再散写字面量
  * (仓库根 scripts/check-endpoint-literals.mjs 门禁扫描)。
  */
-import { productionEndpoints } from '../../../../scripts/shared/production-endpoints.mjs';
-
-const API_PROD_HOSTNAME = new URL(productionEndpoints.apiBaseUrl).hostname;
-const DEVICE_LINK_PROD_HOSTNAME = new URL(productionEndpoints.deviceLinkApiBaseUrl).hostname;
+import { loadProductionEndpoints } from '../../../../scripts/shared/production-endpoints.mjs';
 
 /** 从主 API base 推导 device-link relay base:生产域名做 hostname 替换,本地 3333 → 3335。 */
 export function deriveDeviceLinkApiBase(baseUrl) {
+  let url;
   try {
-    const url = new URL(baseUrl);
-    if (url.hostname === API_PROD_HOSTNAME) {
-      url.hostname = DEVICE_LINK_PROD_HOSTNAME;
-      return url.toString();
-    }
-    if (url.port === '3333') {
-      url.port = '3335';
-      return url.toString();
-    }
+    url = new URL(baseUrl);
   } catch {
     // Keep the historical single-base behavior for unusual test URLs.
+    return baseUrl;
+  }
+  if (url.port === '3333') {
+    url.port = '3335';
+    return url.toString();
+  }
+  const productionEndpoints = loadProductionEndpoints();
+  if (url.hostname === new URL(productionEndpoints.apiBaseUrl).hostname) {
+    url.hostname = new URL(productionEndpoints.deviceLinkApiBaseUrl).hostname;
+    return url.toString();
   }
   return baseUrl;
 }

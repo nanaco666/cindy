@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import WebSocket from 'ws';
-import { productionEndpoints } from './shared/production-endpoints.mjs';
+import { loadProductionEndpoints } from './shared/production-endpoints.mjs';
 
 const execFile = promisify(execFileCb);
 
@@ -21,7 +21,7 @@ const DEFAULT_PHRASE =
   'Voice input benchmark. Today we test realtime transcription latency for XDMaker.';
 const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime?intent=transcription';
 const DEFAULT_MODEL = 'gpt-realtime-whisper';
-const DEFAULT_LITELLM_BASE_URL = productionEndpoints.xdGatewayBaseUrl;
+const DEFAULT_LITELLM_BASE_URL = loadProductionEndpoints().xdGatewayBaseUrl;
 const DEFAULT_ASR_PROVIDERS = [
   'litellm-qwen3-asr-flash-realtime',
   'litellm-gpt-realtime-whisper',

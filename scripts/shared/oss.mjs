@@ -19,9 +19,12 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const OSS = require('ali-oss');
 
-import { resolveCdnBaseUrl } from './production-endpoints.mjs';
+import {
+  loadProductionEndpoints,
+  resolveProductionEndpointsPath,
+} from './production-endpoints.mjs';
 
-// CDN / OSS 目标(dev 环境)。四项均可被环境变量覆盖(默认值不变,不影响既有发布线):
+// CDN / OSS 目标。四项均可被环境变量显式覆盖；未覆盖时统一读取私有生产配置：
 // XDT_CDN_BASE_URL / XDT_OSS_BUCKET / XDT_OSS_PREFIX / XDT_OSS_REGION。
 //
 // 【存储类别】本文件及所有发布脚本只涉及 Public 类(匿名公开读:安装包/热更/
@@ -34,11 +37,18 @@ import { resolveCdnBaseUrl } from './production-endpoints.mjs';
 // 部分 desktop 发布入口会先静态 import 本模块、再从 apps/desktop/.env 补环境变量。
 // ESM 依赖会先于消费模块求值,所以配置不能永久冻结在首次 import 的时刻。
 export function resolveOssConfig() {
+  let privateConfig;
+  const resolveValue = (envName, configKey) => {
+    const override = process.env[envName]?.trim();
+    if (override) return override;
+    privateConfig ??= loadProductionEndpoints();
+    return privateConfig[configKey];
+  };
   return {
-    cdnBase: resolveCdnBaseUrl(),
-    bucket: process.env.XDT_OSS_BUCKET || 'smash-dev',
-    prefix: process.env.XDT_OSS_PREFIX || 'xdt-maker',
-    region: process.env.XDT_OSS_REGION || 'oss-cn-shanghai',
+    cdnBase: resolveValue('XDT_CDN_BASE_URL', 'cdnBaseUrl'),
+    bucket: resolveValue('XDT_OSS_BUCKET', 'ossBucket'),
+    prefix: resolveValue('XDT_OSS_PREFIX', 'ossPrefix'),
+    region: resolveValue('XDT_OSS_REGION', 'ossRegion'),
   };
 }
 
@@ -58,7 +68,21 @@ export function refreshOssConfig() {
   return config;
 }
 
-refreshOssConfig();
+// 工具库本身会被普通测试和只读脚本 import。没有私有配置时允许完成 import，
+// 但任何真正需要 CDN 的入口仍必须调用 refreshOssConfig()/resolveOssConfig()，
+// 届时会按 production-endpoints 的 fail-closed 规则明确报错。
+const OSS_ENV_KEYS = [
+  'XDT_CDN_BASE_URL',
+  'XDT_OSS_BUCKET',
+  'XDT_OSS_PREFIX',
+  'XDT_OSS_REGION',
+];
+if (
+  OSS_ENV_KEYS.every((key) => process.env[key]?.trim()) ||
+  fs.existsSync(resolveProductionEndpointsPath())
+) {
+  refreshOssConfig();
+}
 
 // ── 哈希 / 压缩 ──────────────────────────────────────────────────────────────
 

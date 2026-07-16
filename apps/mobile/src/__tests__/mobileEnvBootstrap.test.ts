@@ -15,6 +15,7 @@ const productionEnv = {
   EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth-cn.example.com',
   EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.prod.example.com',
   EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.prod.example.com',
+  EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: 'https://gateway.prod.example.com',
 };
 
 afterEach(() => {
@@ -58,6 +59,7 @@ describe('mobile simulator env bootstrap', () => {
       'EXPO_PUBLIC_CINDY_AUTH_BASE_URL',
       'EXPO_PUBLIC_XDT_API_BASE_URL',
       'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL',
+      'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL',
     ]);
     expect(env.EXPO_PUBLIC_CINDY_AUTH_REGION).toBe('global');
     expect(env.EXPO_PUBLIC_CINDY_AUTH_BASE_URL).toBe(
@@ -82,6 +84,7 @@ describe('mobile simulator env bootstrap', () => {
         'EXPO_PUBLIC_CINDY_AUTH_BASE_URL=""',
         'EXPO_PUBLIC_XDT_API_BASE_URL=""',
         "EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL=''",
+        'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL=',
         '',
       ].join('\n'),
     );
@@ -103,6 +106,7 @@ describe('mobile simulator env bootstrap', () => {
         "EXPO_PUBLIC_CINDY_AUTH_BASE_URL='https://auth.custom.example.com'",
         "EXPO_PUBLIC_XDT_API_BASE_URL='https://api.custom.example.com'",
         'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL="https://relay.custom.example.com"',
+        'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL="https://gateway.custom.example.com"',
         '',
       ].join('\n'),
     );

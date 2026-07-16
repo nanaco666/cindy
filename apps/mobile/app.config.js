@@ -13,12 +13,33 @@
 //       但只在该 env 开启时生效,EAS 路径仍逐字节不变。
 // - 不注入任何按 commit 变化的内容(如 git hash),避免 fingerprint 每次提交漂移。
 const appJson = require('./app.json');
+const { loadProductionMobileEnv } = require('../../scripts/shared/production-mobile-env.cjs');
 
 // iOS 自建线 bundleId,须与 release-ios-local.mjs 的 SELFHOST_BUNDLE_ID 一致。
 const SELFHOST_IOS_BUNDLE_ID = 'com.xd.cindycn';
 // Android 自建线 package,须与 release-android-local.mjs 的 SELFHOST_PACKAGE /
 // release-android-npkg.sh 的 EXPECT_PACKAGE 一致。
 const SELFHOST_ANDROID_PACKAGE = 'com.xd.cindycn';
+
+function resolveMobileBuildEnv() {
+  try {
+    return loadProductionMobileEnv();
+  } catch (error) {
+    const keys = [
+      'EXPO_PUBLIC_FEISHU_APP_ID',
+      'EXPO_PUBLIC_CINDY_AUTH_REGION',
+      'EXPO_PUBLIC_CINDY_AUTH_BASE_URL',
+      'EXPO_PUBLIC_XDT_API_BASE_URL',
+      'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL',
+      'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL',
+    ];
+    const fallback = Object.fromEntries(
+      keys.map((key) => [key, process.env[key]?.trim()]),
+    );
+    if (Object.values(fallback).every(Boolean)) return Object.freeze(fallback);
+    throw error;
+  }
+}
 
 const REGION_CONFIG = {
   cn: {
@@ -83,6 +104,10 @@ function withNativeAuthPlugins(plugins, env) {
 module.exports = (context = {}) => {
   const baseConfig = context.config ?? appJson.expo;
   const region = resolveRegion();
+  const mobileBuildEnv = resolveMobileBuildEnv();
+  for (const [key, value] of Object.entries(mobileBuildEnv)) {
+    if (!process.env[key]?.trim()) process.env[key] = value;
+  }
   const regional = REGION_CONFIG[region];
   resolveAppStoreId(region);
   let next = {
@@ -109,6 +134,7 @@ module.exports = (context = {}) => {
       cindy: {
         authRegion: region,
       },
+      xdtProductionEnv: mobileBuildEnv,
     },
   };
 

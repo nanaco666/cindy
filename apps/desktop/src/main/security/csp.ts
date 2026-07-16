@@ -67,7 +67,7 @@ export interface CspContext {
   /** True when the renderer is served by the Vite dev server (needs eval + ws). */
   isDev: boolean;
   /**
-   * Origin of `VITE_API_BASE_URL` (e.g. `https://xdt-api.magiclizi.com` in prod,
+   * Origin of the build-injected `VITE_API_BASE_URL` in production,
    * `http://localhost:3333` in local mode). Added to connect-src so a direct
    * renderer→API request keeps working even in the tightened prod policy.
    * `null` when the URL cannot be parsed.

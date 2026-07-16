@@ -49,7 +49,7 @@
 ## 3. 关键事实(实现前提)
 
 - 工程是 **managed workflow**(无 `ios/` 目录),每次出包需 `expo prebuild` 现生成原生工程。
-- 有 3 个本地原生模块需正确 autolink:`xdt-feishu-login` / `xdt-mobile-realtime-audio` / `xdt-tapdb`,外加飞书 config plugin(`appId=cli_a94d4cf642381cd4`)。
+- 有 3 个本地原生模块需正确 autolink:`xdt-feishu-login` / `xdt-mobile-realtime-audio` / `xdt-tapdb`,外加从私有构建配置读取 App ID 的飞书 config plugin。
 - Expo SDK ~56 / RN 0.85 / `expo-updates ~56` —— 完整支持 Expo Updates Protocol 自建服务器,客户端运行时 OTA 逻辑零改动。
 - NPKG 企业证书 = **`UE5H8B62F9.*`**(Shanghai Xindong Enterprise Development,无设备上限),**只重签不编译**,上传即自动出 `type=enterprise` 子包,并打印 `/install/<id>` 与 `itms-services` 安装链接(详见 [`npkg-ios-distribution.md`](./npkg-ios-distribution.md))。`com.xd.lizcn` 必须在 NPKG 白名单内(§13)。
 - 现成可复用脚本:`apps/mobile/scripts/release-ios.sh`(NPKG 上传/轮询/校验/出安装链接)、`apps/desktop/scripts/ci/lib.mjs`(OSS/CDN helper)。`release-ios.sh` 默认校验 `EXPECT_BUNDLE="com.xd.lizcn"`,需要历史包校验时可用环境变量覆盖。
@@ -212,7 +212,7 @@ bundleId `com.xd.lizcn` 依赖以下仓库外动作 —— 第 1 项是自建冷
 
 1. **NPKG 企业重签白名单**:找明瑞锐(`mingruirui` / @PKG)把 `com.xd.lizcn` 登记进企业自动重签白名单。未登记则上传后**轮询不到企业子包、超时报错**(冷更真实分发的硬前提)。
 2. **飞书后台登记 `com.xd.lizcn`**:EAS/TestFlight 已要求新 bundleId 使用同一飞书 appId 走原生 SSO;发版前必须确认飞书开放平台登记仍覆盖 `com.xd.lizcn`。
-3. **历史共装 URL scheme 冲突的处理口径(2026-07-08)**:浏览器 OAuth 回调已收敛:新包统一使用 `lizcn://auth`,server 通过 `lizcn.` state 前缀回跳新 scheme,无前缀历史包仍回 `xdmaker://auth`。原生飞书 SSO 仍会注册 `cli_a94d4cf642381cd4` 派生 callback scheme,旧包未卸载时可能抢回调;客户端必须对 native SSO 设置超时并回退浏览器 OAuth,真实内测建议先移除旧 `com.xdtmaker.mobile` 包。
+3. **历史共装 URL scheme 冲突的处理口径(2026-07-08)**:浏览器 OAuth 回调已收敛:新包统一使用 `lizcn://auth`,server 通过 `lizcn.` state 前缀回跳新 scheme,无前缀历史包仍回 `xdmaker://auth`。原生飞书 SSO 仍会注册由私有 `feishuAppId` 派生的 callback scheme,旧包未卸载时可能抢回调;客户端必须对 native SSO 设置超时并回退浏览器 OAuth,真实内测建议先移除旧 `com.xdtmaker.mobile` 包。
 
 4. **`--ipa` 传预构建包时校验元数据一致性待硬化(codex review 提出,2026-07-02;代码硬化,非外部登记)**:`release-ios-local.mjs` 的 `--ipa` 逃生路径直接上传操作者给的 ipa,却把**当前 checkout** 现算的 `version` / `buildNumber` / `runtimeVersion` 写进 `release.json`。若传的是旧 ipa 或不同 checkout 构建的包,`/latest` 会宣告一个下载包里并不存在的 runtime/build,误导后续 OTA/runtime 判定。正解:接受 `--ipa` 前解包读 `Info.plist`(`CFBundleShortVersionString` / `CFBundleVersion`)与 Expo 更新元数据(`EXUpdatesRuntimeVersion`),与待写入记录逐一比对、不符即中止。改动较重且属低频路径,交 dash 评估。⚠️ 不带 `--ipa` 的主路径由本机指纹现算,无此风险。
 

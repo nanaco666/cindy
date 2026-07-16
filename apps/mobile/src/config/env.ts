@@ -1,19 +1,30 @@
+import Constants from 'expo-constants';
+
 export type CindyAuthRegion = 'cn' | 'global';
 
+const configuredBuildEnv = ((Constants.expoConfig?.extra as {
+  xdtProductionEnv?: Record<string, string>;
+} | null)?.xdtProductionEnv ?? {}) as Record<string, string>;
+
+function configuredValue(key: string): string {
+  return process.env[key]?.trim() || configuredBuildEnv[key]?.trim() || '';
+}
+
 export const AUTH_REGION: CindyAuthRegion =
-  process.env.EXPO_PUBLIC_CINDY_AUTH_REGION === 'global' ? 'global' : 'cn';
+  configuredValue('EXPO_PUBLIC_CINDY_AUTH_REGION') === 'global' ? 'global' : 'cn';
 export const APP_SCHEME = AUTH_REGION === 'global' ? 'cindy' : 'cindycn';
 export const MOBILE_REDIRECT_URL = `${APP_SCHEME}://auth`;
 
-// ⚠️ 生产域名权威源是仓库根 config/production-endpoints.json,以下默认值必须与其一致
-//    (scripts/check-endpoint-literals.mjs 做一致性校验;eas.json 各 profile 的注入值同理)。
-export const DEFAULT_API_BASE_URL = 'https://xdt-api.magiclizi.com';
-export const DEFAULT_AUTH_API_BASE_URL_CN = 'https://auth.cindy.com.cn';
-export const DEFAULT_AUTH_API_BASE_URL_GLOBAL = 'https://auth.cindy.app';
-export const DEFAULT_DEVICE_LINK_API_BASE_URL =
-  'https://xdmaker-device-link.magiclizi.com';
-export const DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL =
-  'https://llm-proxy.tapsvc.com';
+// 生产值由 app.config.js 从统一 JSON 注入；源码不保留生产 URL fallback。
+export const DEFAULT_API_BASE_URL = configuredValue('EXPO_PUBLIC_XDT_API_BASE_URL');
+export const DEFAULT_AUTH_API_BASE_URL_CN = '';
+export const DEFAULT_AUTH_API_BASE_URL_GLOBAL = '';
+export const DEFAULT_DEVICE_LINK_API_BASE_URL = configuredValue(
+  'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL',
+);
+export const DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL = configuredValue(
+  'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL',
+);
 
 export interface MobileConfigIssue {
   key: string;
@@ -98,11 +109,11 @@ function isHttpUrl(value: string): boolean {
 }
 
 export const API_BASE_URL = normalizeBaseUrl(
-  process.env.EXPO_PUBLIC_XDT_API_BASE_URL,
+  configuredValue('EXPO_PUBLIC_XDT_API_BASE_URL'),
 );
 
 export const AUTH_API_BASE_URL = normalizeBaseUrlWithDefault(
-  process.env.EXPO_PUBLIC_CINDY_AUTH_BASE_URL,
+  configuredValue('EXPO_PUBLIC_CINDY_AUTH_BASE_URL'),
   AUTH_REGION === 'global'
     ? DEFAULT_AUTH_API_BASE_URL_GLOBAL
     : DEFAULT_AUTH_API_BASE_URL_CN,
@@ -120,12 +131,12 @@ export const WECHAT_UNIVERSAL_LINK =
   process.env.EXPO_PUBLIC_CINDY_WECHAT_UNIVERSAL_LINK?.trim() || '';
 
 export const DEVICE_LINK_API_BASE_URL = resolveDeviceLinkApiBaseUrl(
-  process.env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL,
+  configuredValue('EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL'),
   API_BASE_URL,
 );
 
 export const MOBILE_VOICE_LITELLM_BASE_URL = normalizeBaseUrlWithDefault(
-  process.env.EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL,
+  configuredValue('EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL'),
   DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL,
 );
 
