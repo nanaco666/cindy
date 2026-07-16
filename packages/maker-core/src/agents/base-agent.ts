@@ -295,7 +295,8 @@ export interface AgentDeps {
    *
    * 返回的 Query 必须满足 SDK Query interface 的子集 — ClaudeCodeAgent 实际只
    * 调:`for await of` (event 流) / `interrupt` / `setModel` /
-   * `setPermissionMode` / `applyFlagSettings`。`RemoteQuery`
+   * `setPermissionMode` / `applyFlagSettings` / `stopTask`(可选 — 缺失时用户
+   * Stop 退化为 interrupt-only,后台 wake 任务不被连带停止)。`RemoteQuery`
    * (`@lizi/maker-cc-manager`) 全部已实现, host 直接 cast as Query 即可。
    *
    * **MVP 不支持**:rewind / fork 等需要 SDK 内部重建 Query 的操作 — 远端

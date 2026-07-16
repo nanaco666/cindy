@@ -21,6 +21,7 @@ import {
   type QueryEventNotification,
   type QueryGetContextUsageParams,
   type QueryInterruptParams,
+  type QueryStopTaskParams,
   type QuerySendParams,
   type QuerySetModelParams,
   type QuerySetPermissionModeParams,
@@ -237,6 +238,19 @@ export function wireSdkHandlers(server: ManagerServer, registry: SessionRegistry
     }
   };
 
+  /* ----------------------------- query/stopTask ----------------------------- */
+  const queryStopTask: MethodHandler = async (params) => {
+    const p = (params ?? {}) as Partial<QueryStopTaskParams>;
+    requireString(p.sessionId, 'sessionId');
+    requireString(p.taskId, 'taskId');
+    try {
+      await registry.stopTask(p.sessionId!, p.taskId!);
+      return { ok: true };
+    } catch (err) {
+      throw mapRegistryError(err);
+    }
+  };
+
   /* ----------------------------- query/close ----------------------------- */
   const queryClose: MethodHandler = async (params, ctx) => {
     const p = (params ?? {}) as Partial<QueryCloseParams>;
@@ -303,6 +317,7 @@ export function wireSdkHandlers(server: ManagerServer, registry: SessionRegistry
   server.setHandler(METHODS.QUERY_APPLY_FLAG_SETTINGS, queryApplyFlagSettings);
   server.setHandler(METHODS.QUERY_GET_CONTEXT_USAGE, queryGetContextUsage);
   server.setHandler(METHODS.QUERY_INTERRUPT, queryInterrupt);
+  server.setHandler(METHODS.QUERY_STOP_TASK, queryStopTask);
   server.setHandler(METHODS.QUERY_CLOSE, queryClose);
   server.setHandler(METHODS.SESSION_ATTACH, sessionAttach);
   server.setHandler(METHODS.SESSION_LIST, sessionList);
