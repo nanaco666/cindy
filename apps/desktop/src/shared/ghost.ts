@@ -2649,13 +2649,19 @@ export type GhostToolCallResult =
   | { ok: false; errorCode: GhostToolCallErrorCode; message: string };
 
 /**
- * ghost_call 的工具全名(mcp__<server>__<tool>)。2026-07-12 server 由
- * 'cindy_ghosts' 更名 'cindy'(调用名更短);旧名保留用于匹配改名前
- * 持久化的历史消息(召唤行/已召唤卡对老会话不失效)。
+ * ghost_call 的工具全名。两套 agent 的 MCP toolName 形态不同:
+ * Claude Code 是 `mcp__<server>__<tool>`,Codex translator 组装成
+ * `mcp:<server>:<tool>`(见 maker-core codex/translator.ts handleMcpToolCall),
+ * 两种都要认——漏了 Codex 形态时,Codex 会话的意识召唤行/意识卡全部退化成
+ * 通用 MCP 行「cindy · ghost call」。2026-07-12 server 由 'cindy_ghosts'
+ * 更名 'cindy'(调用名更短);旧名保留用于匹配改名前持久化的历史消息
+ * (召唤行/已召唤卡对老会话不失效)。
  */
 export const GHOST_CALL_TOOL_NAMES: readonly string[] = [
   'mcp__cindy__ghost_call',
   'mcp__cindy_ghosts__ghost_call',
+  'mcp:cindy:ghost_call',
+  'mcp:cindy_ghosts:ghost_call',
 ];
 
 /** toolName 是否是 ghost_call(兼容新旧 server 名)。 */

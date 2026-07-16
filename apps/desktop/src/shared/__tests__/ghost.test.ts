@@ -13,6 +13,7 @@ import {
   ghostPartition,
   ghostPermissionItems,
   ghostWebviewEntryPaths,
+  isGhostCallToolName,
   isValidGhostId,
   isOfficialGhostId,
   isValidGhostNetworkHostPattern,
@@ -50,6 +51,26 @@ function goodChipManifest(): Record<string, unknown> {
     panel: { title: 'Hello 芯片', html: 'panel.html', minWidth: 240 },
   };
 }
+
+describe('ghost · ghost_call 工具名匹配(Claude / Codex 双形态)', () => {
+  it('认 Claude Code 形态 mcp__<server>__ghost_call(含旧 server 名)', () => {
+    expect(isGhostCallToolName('mcp__cindy__ghost_call')).toBe(true);
+    expect(isGhostCallToolName('mcp__cindy_ghosts__ghost_call')).toBe(true);
+  });
+
+  it('认 Codex translator 形态 mcp:<server>:ghost_call(含旧 server 名)——漏了会让 Codex 会话退化成通用 MCP 行', () => {
+    expect(isGhostCallToolName('mcp:cindy:ghost_call')).toBe(true);
+    expect(isGhostCallToolName('mcp:cindy_ghosts:ghost_call')).toBe(true);
+  });
+
+  it('不误伤其它工具名', () => {
+    expect(isGhostCallToolName('mcp__cindy__ghost_list')).toBe(false);
+    expect(isGhostCallToolName('mcp:cindy:ghost_list')).toBe(false);
+    expect(isGhostCallToolName('ghost_call')).toBe(false);
+    expect(isGhostCallToolName(undefined)).toBe(false);
+    expect(isGhostCallToolName(null)).toBe(false);
+  });
+});
 
 describe('ghost · id 规则', () => {
   it('合法:小写字母/数字/连字符,1–32 位', () => {
