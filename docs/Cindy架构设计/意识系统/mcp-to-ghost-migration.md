@@ -1,9 +1,9 @@
 # lizi MCP 工具全量盘点与意识(Ghost)迁移评估
 
-> 状态:盘点快照(2026-07-15 更新;工具计数基于 2026-07-12 main 代码实数)。
+> 状态:盘点快照(2026-07-16 更新;工具计数基于 2026-07-12 main 代码实数)。
 > 用途:lizi_art 退役后,逐个评估剩余 MCP server 是否迁移成意识的工作清单。
 > 勾选规则:每处理完一个 server(迁移完成 / 明确不迁),把对应条目勾上并补一行结论。
-> 2026-07-15 大势:第三梯队 6 家已迁 5 家(仅 lizi_feishu 留主机),07-12 的三个「硬性否决项」已被 fs 槽 / 过户票据 / OAuth 槽(直连 + broker)逐一拆解——详见 §1 与各条目结论。
+> 2026-07-16 大势:**第三梯队 6 家全部迁完**——lizi_feishu 于 2026-07-16 改判迁移(cindy-feishu,登录态凭证 login-feishu-token,后端留任服务 scheduler broker 与登录链);可意识化的 MCP 至此清零。
 
 ## 0. 总量口径
 
@@ -63,7 +63,13 @@
 07-12 的三个共同硬障碍((a) 主机 OAuth 登录态凭证;(b) 工具量大;(c) 本地文件读写)后被平台能力逐一拆解:(a) → 老账号一次性搬账 + OAuth 槽(直连 / tokenBroker);(b) → 两段式目录(list_tools/call_tool 元工具 + 意识内 OPS 表,改工具不发应用版本);(c) → fs 槽 + 过户票据。除 lizi_feishu 外全部改判迁移并摘壳:
 
 - [x] **lizi_feishu** — ≈171(48 精品 + ≈123 只读直通);飞书 OpenAPI + 用户 OAuth;上传/下载钳到 session workdir
-  - 结论(2026-07-12,**维持**):**不迁,留主机**。第三梯队唯一留守:工具量最大(≈171,直通面还是运行时浮动的),且飞书是产品核心集成(登录体系同源),不适合下放给沙箱意识。技术障碍虽已被平台能力拆解,产品理由仍然成立;如日后改判,前例(两段式目录 + 搬账 + fs 槽)均可复用。
+  - ~~结论(2026-07-12):不迁,留主机~~ → **结论改判(2026-07-16,Lizi 拍板"全部迁移"):已迁移为内置意识 cindy-feishu 并摘壳(lizi_art 模式:壳下线、后端留任)**。要点:
+    - **凭证 = 新平台契约 `source:'login-feishu-token'`**(login-email 同族第三档派生凭证):主机注入时现取 FeishuTokenManager 的 user access token(自刷新 + 单飞去重都在管理器内),401 时 forceRefresh 整链重试一次;token 明文不进沙箱、不进错误消息;用户零配置零搬账(用飞书登录即用),意识设置页只有「测试连接」。"登录体系同源"的产品顾虑经论证不受影响——登录、IM 长连接(lizi-im)、feishu_bot 出站通道都在 desktop main,迁的只是 OpenAPI 协作套件。
+    - **工具面全量搬迁**:44 个已注册精品工具(4 个老版已禁用项不迁)逐端点对齐移植进意识 OPS 表;≈123 只读直通面由 `scripts/gen-feishu-ghost-ops.mts` 从 vendored 定义静态烘焙(过滤策略与 genTools.ts 逐条一致:GET + 协作域 + user token + 排 task.v1),实烘 123 条,args 固定 path/params/data 三段;list_tools 保留 recommended/more 两组 + q 过滤 + 分页的老外形。
+    - **本地文件语义全走过户票据**:上传本地文件 = ghost_call 顶层 dir 单文件过户(新增 `uploadDir.fileField` 单文件精确字段名,飞书 multipart 字段钉死 'file');上传聊天图 = attachments 指纹(新增 `upload.fields` 随行表单字段 + `{bytes}` 占位,supply drive upload_all 的 size);下载落盘 = save_dir 票据(as:'file');文档/消息图片 = as:'media' 进媒体总仓交回取件地址(**刻意差异**:不再回 base64 图片块);out_file 泄洪 = fs 槽 workdir 档(超 50KB 自动)。
+    - **后端留任(与 web-search/mivo 整删不同)**:`packages/lizi-mcps/src/feishu/` 整目录保留——scheduler 脚本 capability broker(`scheduler-host/script-capability-broker.ts`)仍经 registry 直调工具实现,FeishuTokenManager 刷新链仍由 authManager 驱动(且是意识凭证注入的 token 来源);只摘 providers.ts 注册、desktop mcp-providers 接线、builtin-plugins 'feishu' 插件项(feishu_bot 不受影响)。
+    - **装配级冒烟入仓**:`builtinFeishuGhost.test.ts`(node vm 驱动真 main.js:167 操作注册完整性 + 空参全扫 + 票据话术 + gop 模板 + 泄洪),与 builtinMivoVideo 同范式。
+    - **已知缺口(顺延既有跟踪项)**:意识版 docx 块解析为精简版(图片清单/内嵌块/todo 保留;评论抓取、mention 清单、删除线、折叠章节、drive.meta 补 title 省略);wiki_read 对 bitable/sheet 节点改为指路对应工具(老版内联读);SSH 远程工作区下 dir/save_dir 票据读写本机文件系统的既有缺口(§3 跟踪项 2)同样适用于本意识的上传/下载。
 - [x] **github_lizi** — 117;GitHub REST/GraphQL + PAT
   - 结论改判(2026-07-14,推翻 07-12「不迁」):**已迁移为内置意识 cindy-github 并摘壳**(commit `a8cf7dc60` 初名 XD GitHub,`f5289da5c`/`c1cab6af4` 两度更名收敛到 Cindy GitHub)。PAT 凭证卡槽、两段式目录 117 操作、设置页测试连接(notify 槽);老 PAT 由主机启动时一次性搬账进意识保险库(githubAccountsMigration);「owner/repo 从 git remote 推导」的一票否决改为**主 agent 侧推导后显式传参**;Actions 产物/日志从"只返 302 地址"升级为真下载落盘(as:'file' + save_dir 票据)。out_file 泄洪于 2026-07-15 借 fs 槽回归(call_tool 层 out_file 参数 + 超 50KB 自动落盘,v1.1.0)。
 - [x] **gitlab_lizi** — 107;GitLab REST + PAT
@@ -103,9 +109,9 @@
 
 - [x] **slack** — 远程托管 MCP,本地 0 工具,工具清单在 Slack 官方侧;本身已在进程外,无迁移对象。
 
-## 3. 盘点收口状态(2026-07-15 更新)
+## 3. 盘点收口状态(2026-07-16 更新)
 
-- **已收口 21 / 21**:可迁的全部迁完——已迁并摘壳 **8 家**(lizi_web_search → cindy-web-search、lizi_mivo → xd-mivo、lizi_xd_service → xd-pages、lizi_google → filo-google、lizi_jira + lizi_confluence → xd-atlassian、lizi_github → cindy-github、lizi_gitlab → cindy-gitlab;另 lizi_art 先期退役、图像后端迁 cindy-proxy-media 供 cindy-art);确认留主机 **12 家**(主机本体 11 + lizi_feishu)+ slack(远程托管,无迁移对象)+ 新增 lizi_contacts(本地 SQLite 通讯录,主机本体,不迁)。
+- **已收口 21 / 21,可意识化的清零**:已迁并摘壳 **10 家**(lizi_web_search → cindy-web-search、lizi_mivo → xd-mivo、lizi_xd_service → xd-pages、lizi_google → filo-google、lizi_jira + lizi_confluence → xd-atlassian、lizi_github → cindy-github、lizi_gitlab → cindy-gitlab、slack 官方托管 → cindy-slack(07-15)、**lizi_feishu → cindy-feishu(07-16,后端留任)**;另 lizi_art 先期退役、图像后端迁 cindy-proxy-media 供 cindy-art);确认留主机 **11 家主机本体** + 新增 lizi_contacts(本地 SQLite 通讯录,主机本体,不迁)。
 - **平台能力全景**(逐个迁移过程中沉淀,详见 `capability-permissions.md` §7 / §7.5):network 槽(C4,2026-07-12)→ as:'media' 取件 / exchange 二段式 / upload 上传(07-13)→ OAuth 直连 + as:'file' & save_dir 票据 + dir 目录过户(07-13)→ OAuth tokenBroker 模式 + 53682 端口自愈(`6fe0b2ae6`/`7e32c3729`)、notify 槽(`c5e38c747`)、fs 槽三档守门(`be6c3a19d`)、grant_only 批量预授权(`67f88cd33`)与过户授权记忆(`897b12c05`/`bc1e34ded`/`92723167d`)(07-14)。
 - **out_file 泄洪回归**(07-14/15):老 MCP「大结果落 workdir 只交路径」语义借 fs 槽 workdir 档回归——xd-atlassian 首发(`e1ad35ffe`),cindy-github / cindy-gitlab 同款跟进(call_tool 层 out_file 参数 + 超 50KB 自动泄洪,各 v1.1.0)。
 - **剩余跟踪项(2026-07-15 盘点)**:

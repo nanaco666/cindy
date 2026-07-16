@@ -398,8 +398,14 @@ export const GHOST_OAUTH_BOUNCE_PATH_RE = /^\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)
  *   授权换来的 access token——用户在意识设置页填 client 凭证并点"连接账号",
  *   主机跑授权流程并保管全部令牌,出网时现取新鲜 token 注入(见
  *   GhostSecretOauthDecl;必须同时声明 oauth 详单)。
+ * - 'login-feishu-token'(2026-07-16,lizi_feishu 意识化前置):值 = 主机
+ *   飞书登录态的 user access token——主机注入时现取(FeishuTokenManager
+ *   自刷新,token 明文不进沙箱、不进错误消息);未连接飞书 / 刷新链路判
+ *   AUTH_EXPIRED 时 fail-closed 报错并引导重新登录飞书。适用于"能力面
+ *   直接复用产品飞书登录身份"的第一方服务;与 login-email 同族:用户
+ *   不填值,禁 url / exchange / oauth,settingsHtml 豁免。
  */
-export const GHOST_SECRET_SOURCES = ['user', 'login-email', 'oauth'] as const;
+export const GHOST_SECRET_SOURCES = ['user', 'login-email', 'oauth', 'login-feishu-token'] as const;
 export type GhostSecretSource = (typeof GHOST_SECRET_SOURCES)[number];
 
 /**
@@ -763,6 +769,18 @@ export function ghostPermissionItems(manifest: GhostManifest): GhostPermissionIt
         ...(secret.oauth.scopes && secret.oauth.scopes.length > 0
           ? { detail: secret.oauth.scopes.join('\n') }
           : {}),
+      });
+      continue;
+    }
+    if (secret.source === 'login-feishu-token') {
+      // 飞书登录态令牌:值 = 主机自持的飞书 user access token,用户不填、
+      // 不进保险库;确认框如实告知"以你的飞书身份出网"。
+      items.push({
+        key: `network:secret:${secret.key}`,
+        kind: 'network',
+        labelKey: 'networkSecretFeishuToken',
+        labelArgs: { name: secret.label },
+        detailKey: 'networkSecretFeishuTokenDetail',
       });
       continue;
     }
@@ -1329,6 +1347,7 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
           }
           if (s.source === 'login-email') source = 'login-email';
           if (s.source === 'oauth') source = 'oauth';
+          if (s.source === 'login-feishu-token') source = 'login-feishu-token';
         }
         // 输入面字段已退役(2026-07-13 宿主凭证渲染整体退役):user 凭证
         // 一律意识 settingsHtml 收单。遗留 `input: "ghost"` 接受并忽略
@@ -1339,30 +1358,33 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
             reason: 'network.secrets[].input 已退役:宿主收单不存在,用户填写的凭证一律由意识 settingsHtml 收单(删掉 input 字段即可;唯一可接受的遗留值是 "ghost")',
           };
         }
-        if (s.input === 'ghost' && source === 'login-email') {
+        // login-email / login-feishu-token 同族:值取自主机登录态派生,用户
+        // 不填、没有输入面,禁 url / exchange,settingsHtml 豁免。
+        const loginDerived = source === 'login-email' || source === 'login-feishu-token';
+        if (s.input === 'ghost' && loginDerived) {
           return {
             ok: false,
-            reason: 'source: login-email 的凭证不允许标注 input: ghost(派生凭证没有输入,谈不上谁收单)',
+            reason: `source: ${source} 的凭证不允许标注 input: ghost(派生凭证没有输入,谈不上谁收单)`,
           };
         }
-        if (source !== 'login-email' && raw.settingsHtml === undefined) {
+        if (!loginDerived && raw.settingsHtml === undefined) {
           return {
             ok: false,
             reason: 'network.secrets 声明了用户填写的凭证时必须同时声明 settingsHtml(凭证由意识设置界面收单,没有界面就没人收单;宿主渲染输入行已退役)',
           };
         }
-        if (source === 'login-email' && s.url !== undefined) {
+        if (loginDerived && s.url !== undefined) {
           return {
             ok: false,
-            reason: 'network.secrets[].source 为 login-email 时不允许声明 url(值取自登录邮箱,没有"前往控制台"可去)',
+            reason: `network.secrets[].source 为 ${source} 时不允许声明 url(值取自主机登录态,没有"前往控制台"可去)`,
           };
         }
-        if (source === 'login-email' && s.exchange !== undefined) {
-          // 组合会把登录邮箱作为原始凭证 POST 给交换端点,而确认框文案只
+        if (loginDerived && s.exchange !== undefined) {
+          // 组合会把登录态凭证作为原始值 POST 给交换端点,而确认框文案只
           // 承诺"派生注入请求头"——语义盖不住,结构上禁掉(有真实场景再议)。
           return {
             ok: false,
-            reason: 'network.secrets[].source 为 login-email 时不允许声明 exchange(登录邮箱不外送交换端点)',
+            reason: `network.secrets[].source 为 ${source} 时不允许声明 exchange(登录态凭证不外送交换端点)`,
           };
         }
         if (
@@ -2524,17 +2546,29 @@ export interface GhostPipeFetchRequest {
    * 上传通道(仅 POST;与 body 互斥):把本意识名下的总仓媒体以
    * multipart/form-data 上传给目标——只报指纹,主机验归属、读字节、代组
    * 请求体,Content-Type(boundary)由主机独占。hashes 1–4 条(64 位
-   * 十六进制指纹);field 为每个文件的表单字段名,缺省 'file'。
+   * 十六进制指纹);field 为每个文件的表单字段名,缺省 'file';fields 为
+   * 随行普通表单字段(在文件段之前;值里的字面量 "{bytes}" 由主机替换成
+   * 全部上传文件的总字节数——飞书 upload_all 这类要求 size 字段的服务用,
+   * 2026-07-16 lizi_feishu 意识化前置)。
    */
-  upload?: { hashes: string[]; field?: string };
+  upload?: { hashes: string[]; field?: string; fields?: Record<string, string> };
   /**
    * 目录上传通道(仅 POST;与 body / upload 互斥):把主机过户票据指向的
    * 本地目录整体以 multipart/form-data 上传——token 来自 ghost_call 顶层
    * dir 参数过户后注入的 args.dir_deposit.token(一次性、限本意识、限时);
-   * fields 为随行普通表单字段(如 name / preset);fileFieldPrefix 为文件
-   * 字段名前缀(缺省 'file-',第 N 个文件字段名 `file-N`,filename=相对路径)。
+   * fields 为随行普通表单字段(如 name / preset;值里的字面量 "{bytes}"
+   * 由主机替换成全部上传文件的总字节数);fileFieldPrefix 为文件字段名前缀
+   * (缺省 'file-',第 N 个文件字段名 `file-N`,filename=相对路径);
+   * fileField 为单文件精确字段名(与 fileFieldPrefix 互斥,票据必须恰含
+   * 1 个文件,filename=文件名不含目录——飞书 im 文件上传这类"字段名钉死
+   * file"的服务用,2026-07-16)。
    */
-  uploadDir?: { token: string; fields?: Record<string, string>; fileFieldPrefix?: string };
+  uploadDir?: {
+    token: string;
+    fields?: Record<string, string>;
+    fileFieldPrefix?: string;
+    fileField?: string;
+  };
   /** 超时毫秒(clamp 到 [MIN, MAX];媒体模式与上传用 MEDIA_* 档;缺省各自 DEFAULT)。 */
   timeoutMs?: number;
   /**

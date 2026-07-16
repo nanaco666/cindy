@@ -200,7 +200,7 @@ my-ghost/
   "secrets": [{                                     // 可选 0–4 条:需要用户填的凭证(你只声明名字和注入位置,值用户填、主机保管)
     "key": "api_token",                             // 小写字母开头,小写/数字/下划线,1–32
     "label": "Example API Token",                   // 给用户看的名称(设置页/确认框)
-    "source": "user",                               // 可选:凭证值来源。"user"(缺省)=用户在你的 settingsHtml 里填(声明 user 凭证必须同时声明 settingsHtml,见 §4.7);"login-email"=主机登录邮箱自动派生(用户不填;声明它时不允许再写 url,见 §4.7);"oauth"=主机托管 OAuth 授权,值 = 授权换来的 access token(必须同时声明 oauth 详单,见 §4.7 与下方 oauth 字段)
+    "source": "user",                               // 可选:凭证值来源。"user"(缺省)=用户在你的 settingsHtml 里填(声明 user 凭证必须同时声明 settingsHtml,见 §4.7);"login-email"=主机登录邮箱自动派生(用户不填;声明它时不允许再写 url,见 §4.7);"oauth"=主机托管 OAuth 授权,值 = 授权换来的 access token(必须同时声明 oauth 详单,见 §4.7 与下方 oauth 字段);"login-feishu-token"=主机飞书登录态的 user access token(用户不填;禁 url / exchange,见 §4.7)
     "hint": "在控制台生成后粘贴",                     // 可选提示(建议写进你的 settingsHtml 提示文案)
     "url": "https://example.com/settings/keys",     // 可选:控制台地址(仅 https)。settingsHtml 里可用 <a href> 逐字引用它,点击经主机转系统浏览器打开(见 §4.8「外链」);也供确认框等宿主 UI 引用
     "inject": {                                     // 必填:这条凭证怎么进请求
@@ -722,6 +722,17 @@ BroadcastChannel、日志或任何自存路径(review 必查)。凭证只会注�
 照"请重新登录"画)——确认框已如实披露,除展示外别拿它做别的;对该 key 的
 PUT/DELETE 一律 405(派生身份不可配置)。
 
+**飞书登录态令牌(source:"login-feishu-token",可选)**:适用于"能力面直接复用
+产品飞书登录身份"的第一方服务(调用飞书开放平台 OpenAPI)。凭证声明
+\`"source": "login-feishu-token"\` 后,值不由用户填——主机在每次请求时现取飞书
+登录态的 user access token(主机自己负责缓存与到期刷新),按 \`inject.format\`
+(通常 \`"Bearer {value}"\`)注入请求头;token 明文不进沙箱、不进错误消息。上游
+401 时主机自动强刷一次并整链重试。用户未连接飞书 / 授权已失效时 cindy.fetch
+返回带重新登录指引的结构化错误,把 message 原样告诉用户即可。注意:声明了
+login-feishu-token 就不要再写 \`url\` 也不要配 \`exchange\`(校验都会拒);它没有
+任何输入动作,settingsHtml 可省略;想给用户"测试连接"体验就用 cindy.fetch 打
+一个便宜的只读接口试探。
+
 **key 换令牌二段式(exchange,可选)**:有些服务的 API key 不直接当请求凭证,要先
 POST 一个交换端点换临时令牌(令牌才进 Authorization)。在凭证上声明 \`exchange\`
 (字段见 §2),主机就照单代办整个流程:换取 → 按 ttlSeconds 缓存 → \`inject.format\`
@@ -804,6 +815,9 @@ const r = await cindy.fetch({
   url: 'https://api.example.com/v1/file/',
   method: 'POST',                                   // upload 仅 POST;与 body 互斥;与 as:'media' 互斥
   upload: { hashes: ['<64位指纹>'], field: 'file' }, // 1–4 条;field 缺省 'file'
+  // 可选 fields ≤8 条:随行普通表单字段,在文件段之前;值里的字面量 "{bytes}"
+  // 由主机替换成全部上传文件的总字节数(要求 size 字段的服务用):
+  // upload: { hashes: [...], field: 'file', fields: { parent_type: 'docx_image', size: '{bytes}' } }
   callId: msg.callId,
 });
 // 响应按文本形态返回(服务端的入库回执 JSON 你自己解析)。
@@ -828,8 +842,10 @@ const r = await cindy.fetch({
   method: 'POST',                                   // uploadDir 仅 POST;与 body / upload / as:'media' 互斥
   uploadDir: {
     token: args.dir_deposit.token,                  // 一次性票据:用一次即废,失败重试要主 agent 重新过户
-    fields: { name: 'my-site' },                    // 可选 ≤8 条:随行普通表单字段
+    fields: { name: 'my-site' },                    // 可选 ≤8 条:随行普通表单字段(值里的 "{bytes}" 由主机替换成文件总字节数)
     fileFieldPrefix: 'file-',                       // 可选:文件字段名前缀(第 N 个文件字段名 file-N,filename=相对路径)
+    // fileField: 'file',                           // 可选(与 fileFieldPrefix 互斥):单文件精确字段名——票据必须恰含
+    //                                              // 1 个文件,filename 只取文件名;"字段名钉死 file"的服务(飞书传文件)用
   },
   callId: msg.callId,
 });
@@ -1137,7 +1153,8 @@ await cindy.fs({ op: 'write', root: 'data', path: 'a.txt', content: 'hi' });
 - network 详单格式错(hosts 缺失/裸 TLD/IP/带端口/通配不在最左、secret 缺 inject、
   inject.format 没有 {value} 占位、inject.header 用了 Host/Cookie 等协议关键头、
   inject.hosts 不是 hosts 声明条目的子集、有详单但 slots 没有 "network"、
-  secret.source 不是 "user"/"login-email"/"oauth"、source:"login-email" 还声明了 url、
+  secret.source 不是 "user"/"login-email"/"oauth"/"login-feishu-token"、
+  source:"login-email" / "login-feishu-token" 还声明了 url 或 exchange、
   声明了 user 凭证但没声明 settingsHtml、遗留 input 字段值不是 "ghost")
 - exchange 声明格式错(url 非 https/域名不在 hosts 白名单、bodyFormat 不是恰含一个
   {value}、contentType 不在白名单、tokenPath 不是点分路径、ttlSeconds 越界)

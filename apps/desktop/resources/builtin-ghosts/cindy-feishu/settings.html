@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<!-- 飞书意识自定义设置区(意识自绘,cindy-ghost:// 沙箱页)。
+     本意识零配置:凭证 = 主机飞书登录态的 user access token
+     (source:'login-feishu-token',主机现取现注入并自动刷新),没有任何
+     输入项——本页只做身份说明 + 「测试连接」。测试由电子脑代跑:本页
+     fetch('/wake') 叫醒电子脑,经 BroadcastChannel 递活,电子脑 cindy.fetch
+     GET /open-apis/authen/v1/user_info(令牌由主机注入)后把姓名广播回来
+     ——本页零网络直连,token 字节不经过任何可读回的地方。 -->
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    padding: 2px 0 0;
+    color: var(--text-primary, #1a1a1a);
+    font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .label-row { display: flex; align-items: center; gap: 8px; padding-left: 2px; }
+  .label-row .name { font-weight: 500; }
+  .badge {
+    padding: 1px 8px; border-radius: 6px; font-size: 11px;
+    background: var(--surface-chip, #efefec); color: var(--text-tertiary, #8a8a86);
+  }
+  .note { margin-top: 8px; padding-left: 2px; font-size: 12px; color: var(--text-secondary, #55554f); }
+  .account {
+    display: flex; align-items: center; gap: 8px; margin-top: 8px;
+    padding: 6px 12px; border: 1px solid var(--border-default, #e4e4e0);
+    border-radius: 10px; background: var(--surface-elevated, #ffffff);
+  }
+  .account .who { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .account .tag { font-size: 11px; color: var(--text-tertiary, #8a8a86); flex: 0 0 auto; }
+  .input-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .btn {
+    padding: 5px 16px; border-radius: 999px; cursor: pointer; flex: 0 0 auto;
+    border: 1px solid var(--border-default, #e4e4e0);
+    background: transparent; color: var(--text-primary, #1a1a1a);
+    font: inherit; font-weight: 500;
+  }
+  .btn:hover { background: var(--surface-chip, #efefec); }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  #status { margin-top: 8px; font-size: 11px; color: var(--text-tertiary, #8a8a86); min-height: 16px; }
+  #status:empty { display: none; }
+</style>
+</head>
+<body>
+  <div class="label-row">
+    <span class="name">飞书账号</span>
+    <span class="badge">open.feishu.cn</span>
+  </div>
+  <p class="note">直接使用你的飞书登录身份,无需配置——令牌由主机保管并自动刷新,插件代码接触不到。退出登录或切换账号后,这里跟着变。</p>
+  <div id="account"></div>
+  <div class="input-row">
+    <button id="test" class="btn" type="button">测试连接</button>
+  </div>
+  <p id="status"></p>
+  <script src="/settings.js"></script>
+</body>
+</html>

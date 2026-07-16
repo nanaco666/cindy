@@ -897,6 +897,62 @@ describe('ghost · network 详单校验(C4)', () => {
     ).toBe(false);
   });
 
+  it('secrets.source:login-feishu-token 收入清单;禁 url / exchange;settingsHtml 豁免', () => {
+    // 显式抹掉基座默认的 settingsHtml:派生凭证无输入面,必须豁免收单界面要求。
+    const withSource = (secret: Record<string, unknown>) =>
+      validateGhostManifest(
+        withNet({ hosts: ['open.feishu.cn'], secrets: [secret] }, { settingsHtml: undefined }),
+      );
+    const feishuSecret = {
+      key: 'feishu_uat',
+      label: '飞书登录身份',
+      source: 'login-feishu-token',
+      inject: { header: 'Authorization', format: 'Bearer {value}' },
+    };
+
+    const ok = withSource(feishuSecret);
+    expect(ok.ok).toBe(true);
+    if (ok.ok) expect(ok.manifest.network?.secrets?.[0]?.source).toBe('login-feishu-token');
+
+    // 没有"前往控制台"可去,声明 url 是清单自相矛盾。
+    expect(withSource({ ...feishuSecret, url: 'https://example.com/console' }).ok).toBe(false);
+    // 登录态令牌不外送交换端点。
+    expect(
+      withSource({
+        ...feishuSecret,
+        exchange: {
+          url: 'https://open.feishu.cn/token',
+          bodyFormat: '{"sub":"{value}"}',
+          tokenPath: 'session',
+        },
+      }).ok,
+    ).toBe(false);
+    // 派生凭证没有输入,input:'ghost' 遗留标注同样拒。
+    expect(withSource({ ...feishuSecret, input: 'ghost' }).ok).toBe(false);
+  });
+
+  it('权限清单:login-feishu-token 凭证用"以飞书登录身份出网"分档文案', () => {
+    const r = validateGhostManifest(
+      withNet({
+        hosts: ['open.feishu.cn'],
+        secrets: [
+          {
+            key: 'feishu_uat',
+            label: '飞书登录身份',
+            source: 'login-feishu-token',
+            inject: { header: 'Authorization', format: 'Bearer {value}' },
+          },
+        ],
+      }),
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const items = ghostPermissionItems(r.manifest);
+    const item = items.find((i) => i.key === 'network:secret:feishu_uat');
+    expect(item?.labelKey).toBe('networkSecretFeishuToken');
+    expect(item?.detailKey).toBe('networkSecretFeishuTokenDetail');
+  });
+
   it('权限清单:login-email 凭证用"将使用登录邮箱"分档文案,key 与 user 凭证同构', () => {
     const r = validateGhostManifest(
       withNet({

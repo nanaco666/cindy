@@ -3,7 +3,6 @@ import type {
   BrowserMcpDeps,
   ComputerMcpDeps,
   FeishuBotMcpHostDeps,
-  FeishuMcpDeps,
   LiziMcpId,
   LiziMcpProvider,
   LiziMcpSessionContext,
@@ -13,7 +12,6 @@ import type {
   ContactsMcpDeps,
   LspMcpDeps,
 } from './types.js';
-import { createFeishuMcpServer } from './feishu/mcp/server.js';
 import { createSlackBotMcpServer, type SlackBotMcpDeps } from './lizi_slackBotMcpServer.js';
 import { createFeishuBotMcpServer } from './lizi_feishuBotMcpServer.js';
 import { createSchedulerMcpServer } from './lizi_schedulerMcpServer.js';
@@ -38,7 +36,6 @@ export interface CreateLiziMcpProvidersOptions {
   browser?: BrowserMcpDeps;
   /** Local desktop computer-use tools backed by a host-managed external driver. */
   computer?: ComputerMcpDeps;
-  feishu?: FeishuMcpDeps;
   /** slack bot 通道工具(send_file_to_user)— 仅 source='slack' session 注入。 */
   slackBot?: Pick<SlackBotMcpDeps, 'sendFile' | 'logger'>;
   feishuBot?: FeishuBotMcpHostDeps;
@@ -175,22 +172,13 @@ export function createLiziMcpProviders(
     });
   }
 
-  if (opts.feishu && selected(enabled, 'feishu')) {
-    providers.push({
-      name: 'lizi_feishu',
-      // ctx 注入:上传类工具的 file_path 读盘约束到当前 session workingDir
-      // (阻断 prompt 注入把 ~/.ssh/id_rsa 之类"上传"外泄)。Codex HTTP bridge
-      // 下 tool-call 阶段经 AsyncLocalStorage 恢复。
-      toClaudeSdkConfig: (ctx) => ({
-        type: 'sdk',
-        name: 'lizi_feishu',
-        instance: createFeishuMcpServer({
-          ...opts.feishu!,
-          getSessionContext: () => resolveLiziMcpSessionContext(ctx),
-        }),
-      }),
-    });
-  }
+  // lizi_feishu 已于 2026-07-16 摘壳:飞书全部能力(44 精品 + 123 只读直通)
+  // 迁入内置意识 cindy-feishu(source:'login-feishu-token' 登录态凭证,主机
+  // 现取现注入零迁移)。与 web-search/mivo 不同,feishu 后端(feishu/ 目录、
+  // FeishuTokenManager、registry)**留任**——scheduler 脚本 capability broker
+  // (desktop scheduler-host/script-capability-broker.ts)仍经 registry 直调
+  // 工具实现,登录 token 刷新链仍由 authManager 驱动(与 lizi_art 同模式:
+  // 壳下线、后端留任)。
 
   // lizi_mivo 已于 2026-07-13 退役:mivo 全部 13 工具(图/视频/音乐/音效/3D
   // 生成、格式转换、按钮动作、下载)整体迁入内置意识 xd-mivo(network 槽

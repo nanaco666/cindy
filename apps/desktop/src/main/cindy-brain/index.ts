@@ -133,6 +133,7 @@ import {
   type CindyCapabilityKey,
 } from './cindyPrefsStore.js';
 import { getCindyProxyMediaService } from '../mcp-integrations/cindyProxyMedia.js';
+import { getFeishuService } from '../mcp-integrations/feishu.js';
 import type { XdproxyImageModel } from '../cindy-proxy-media/types.js';
 import * as blobStore from '../cindy-media/blobStore.js';
 import * as ledger from '../cindy-media/ledger.js';
@@ -1335,6 +1336,13 @@ export function getGhostNetworkSlot(): GhostNetworkSlot {
       // workdir 目录(saveDeposit 票据库单例,与过户端同一本账)。
       writeSaveDeposit: (ghostId, token, fileName, bytes) =>
         getSaveDepositVault().write(ghostId, token, fileName, bytes),
+      // 飞书登录态令牌(source:'login-feishu-token'):现取主机 FeishuToken-
+      // Manager 的 user access token(自刷新 + 单飞去重都在管理器内),401
+      // 时 forceRefresh 兜底;token 明文只进请求头,不进沙箱。
+      feishuToken: {
+        ensure: () => getFeishuService().token.ensureToken(),
+        forceRefresh: () => getFeishuService().token.forceRefresh(),
+      },
       // OAuth 凭证(source:'oauth'):出网现取新鲜 access token 注入,401
       // 作废重刷整链重试一次;账号/令牌真身在管理器单例。
       oauthTokens: {
@@ -1568,9 +1576,13 @@ export function registerGhostIpc(): void {
     if (!ghost) return { status: 404 };
     const secretDecls = ghost.manifest.network?.secrets ?? [];
     const userSecretKeys = secretDecls
-      // login-email(派生)与 oauth(主机托管授权)都没有"用户填值"这回事,
-      // 不进 /secrets 收单键集(oauth 的 client 凭证走 /oauth 端点)。
-      .filter((s) => s.source !== 'login-email' && s.source !== 'oauth')
+      // login-email / login-feishu-token(派生)与 oauth(主机托管授权)都
+      // 没有"用户填值"这回事,不进 /secrets 收单键集(oauth 的 client 凭证
+      // 走 /oauth 端点;飞书令牌状态由意识经 cindy.fetch 试探,不走本端点)。
+      .filter(
+        (s) =>
+          s.source !== 'login-email' && s.source !== 'oauth' && s.source !== 'login-feishu-token',
+      )
       .map((s) => s.key);
     // login-email 派生身份:GET 状态回查附 identity(= 当前登录邮箱,设置页
     // 只读展示"用的是哪个身份")。回给意识不算新增泄露面——装入确认框已

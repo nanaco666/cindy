@@ -1975,6 +1975,8 @@
         "networkSecretGhostInputDetail": "凭证由这个插件自己的设置界面收集,录入时会经过插件页面;随后一次性交给主机加密保管,存入后插件无法读回,主机只在请求它声明的域名时注入。",
         "networkSecretIdentity": "将使用你的登录邮箱作为凭证「{{name}}」",
         "networkSecretIdentityDetail": "值取自当前登录账号的邮箱,请求时由主机自动派生注入;无需填写。插件可读取该邮箱,用于在它的设置界面里展示当前身份。",
+        "networkSecretFeishuToken": "将以你的飞书登录身份出网(凭证「{{name}}」)",
+        "networkSecretFeishuTokenDetail": "值取自当前飞书登录态的访问令牌,请求时由主机自动注入;无需填写,令牌明文不会进入插件代码。未连接飞书或授权失效时请求会失败并提示重新登录。",
         "networkSecretOauth": "将引导你在 {{host}} 完成 OAuth 授权({{name}})",
         "networkSecretOauthDetail": "授权流程与全部令牌由主机代管,插件代码无法读取;客户端凭证由你在插件设置页自填。下方为其申请的权限范围(scopes)原文,请确认后再放行。",
         "networkConnections": "可连接你添加的 {{label}}",

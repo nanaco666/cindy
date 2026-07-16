@@ -6,8 +6,8 @@
  *   - 项目设置：.claude/settings.json → xdtMaker.builtinTools.{id}
  *
  * 所有 ID 都使用短且一致的名字，不带 `lizi_` 前缀：
- *   browser | computer | feishu | feishu_bot |
- *   slack_bot | scheduler | ssh | memory | xdt_helper | collab(→ lizi_orca) | lsp
+ *   android | browser | computer | feishu_bot |
+ *   slack_bot | scheduler | ssh | memory | contacts | xdt_helper | collab(→ lizi_orca) | lsp
  *
  * lizi-mcps/providers.ts 里的 MCP provider `name` 使用 `lizi_` 前缀
  * (例如 provider name 'lizi_feishu' → plugin id 'feishu')。映射关系由
@@ -32,7 +32,6 @@ const BUILTIN_META: BuiltinPluginMeta[] = [
   { id: 'android',     name: 'Android Automation', description: 'Android adb automation — screenshots, UI dump, taps, swipes, text input, and app launch on connected devices' },
   { id: 'browser',     name: 'Browser',      description: 'Browser automation — isolated browsing, snapshots, screenshots, and page actions' },
   { id: 'computer',    name: 'Computer Use', description: 'Local desktop automation — apps, windows, UI inspection, clicks, and typing via an installed driver' },
-  { id: 'feishu',      name: 'Feishu',       description: 'Feishu IM integration — messaging, docs, wikis, and calendar access' },
   { id: 'feishu_bot',   name: 'Feishu Bot',   description: 'Send files and notifications to Feishu users via bot messages' },
   { id: 'slack_bot',    name: 'Slack Bot',    description: 'Send files and notifications to Slack users via bot messages' },
   { id: 'scheduler',    name: 'Scheduler',    description: 'Task scheduling — cron-based recurring jobs and one-shot reminders' },
@@ -52,6 +51,11 @@ const BUILTIN_META: BuiltinPluginMeta[] = [
   // (老 PAT + 实例地址由 gitlabAccountsMigration 无感搬账),不再是 MCP 插件。
   // slack 已于 2026-07-15 退役:Slack 官方 MCP 能力整体迁入内置意识 cindy-slack
   // (老账号由 slackAccountsMigration 无感搬账),不再是 MCP 插件。
+  // feishu 已于 2026-07-16 摘壳:飞书 OpenAPI 能力(44 精品 + 123 只读直通)
+  // 迁入内置意识 cindy-feishu(登录态凭证,零配置零迁移),不再是 MCP 插件;
+  // feishu 后端(token 刷新链 + 工具 registry)留任主机,服务 scheduler 脚本
+  // capability broker 与登录体系(与 lizi_art 同模式:壳下线、后端留任)。
+  // 注意 feishu_bot(bot 出站通道)是另一套东西,不受影响、继续留任。
 ];
 
 /**
@@ -62,7 +66,6 @@ export type KnownProviderName =
   | 'lizi_android'
   | 'lizi_browser'
   | 'lizi_computer'
-  | 'lizi_feishu'
   | 'lizi_feishu_bot'
   | 'lizi_slack_bot'
   | 'lizi_scheduler'
@@ -91,7 +94,6 @@ export const PROVIDER_NAME_TO_PLUGIN_ID: Record<KnownProviderName, PluginId> = {
   lizi_android: 'android',
   lizi_browser: 'browser',
   lizi_computer: 'computer',
-  lizi_feishu: 'feishu',
   lizi_feishu_bot: 'feishu_bot',
   lizi_slack_bot: 'slack_bot',
   lizi_scheduler: 'scheduler',
@@ -142,7 +144,6 @@ const PLUGIN_ID_TO_MCP_ID: Record<PluginId, LiziMcpId | undefined> = {
   android: 'android',
   browser: 'browser',
   computer: 'computer',
-  feishu: 'feishu',
   feishu_bot: 'lizi_feishu_bot',
   slack_bot: 'lizi_slack_bot',
   scheduler: 'lizi_scheduler',

@@ -438,11 +438,12 @@ export type SessionSearchFn = (
   options?: SessionSearchOptions,
 ) => Promise<SessionSearchHit[]>;
 
+// 'feishu' 已于 2026-07-16 摘壳(能力迁内置意识 cindy-feishu;后端留任给
+// scheduler capability broker,见 providers.ts 注释),不再是可注册 MCP id。
 export type LiziMcpId =
   | 'android'
   | 'browser'
   | 'computer'
-  | 'feishu'
   | 'lizi_feishu_bot'
   | 'lizi_slack_bot'
   | 'lizi_scheduler'

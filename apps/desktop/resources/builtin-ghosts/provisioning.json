@@ -30,6 +30,9 @@
     },
     "cindy-slack": {
       "audience": "all"
+    },
+    "cindy-feishu": {
+      "audience": "all"
     }
   }
 }
