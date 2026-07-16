@@ -2338,7 +2338,6 @@
     "unavailable": "Sign-in is temporarily unavailable",
     "retry": "Retry",
     "browserWaiting": "Complete verification in your browser",
-    "cnRegion": "Mainland China",
     "globalRegion": "Global",
     "errors": {
       "fallback": "Sign-in failed. Please try again.",

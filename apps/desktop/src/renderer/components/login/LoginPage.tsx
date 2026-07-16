@@ -501,23 +501,22 @@ export function LoginPage() {
       <div className="flex flex-1 items-center justify-center px-6 py-8">
         <main
           className={cn(
-            'flex min-h-[560px] w-[440px] max-w-full flex-col items-center rounded-xl px-10 py-8',
+            'relative flex min-h-[560px] w-[440px] max-w-full flex-col items-center rounded-xl px-10 py-8',
             'border border-[var(--login-card-border)] bg-[var(--login-card-bg)]',
           )}
         >
           <img
             src={splashLogo}
             alt={BRAND_NAME}
-            className="pointer-events-none mb-5 h-24 w-24 rounded-xl object-contain"
+            className="pointer-events-none mb-6 h-24 w-24 rounded-xl object-contain"
             draggable={false}
           />
-          <span className="mb-6 rounded-full bg-[var(--surface-chip)] px-3 py-1 text-[11px] text-[var(--text-secondary)]">
-            {t(
-              import.meta.env.VITE_CINDY_AUTH_REGION === 'global'
-                ? 'login.globalRegion'
-                : 'login.cnRegion',
-            )}
-          </span>
+          {/* 区域标识仅 global 构建显示，国内版不特意标注 */}
+          {import.meta.env.VITE_CINDY_AUTH_REGION === 'global' && (
+            <span className="mb-6 -mt-1 rounded-full bg-[var(--surface-chip)] px-3 py-1 text-[11px] text-[var(--text-secondary)]">
+              {t('login.globalRegion')}
+            </span>
+          )}
           <div className="flex w-full flex-1 flex-col items-center justify-center">
             {renderContent()}
           </div>
@@ -556,6 +555,7 @@ function Divider({ label }: { label: string }) {
   );
 }
 
+/** 固定在登录卡片左上角的图标返回按钮（卡片需 relative）；label 仅作无障碍与 tooltip 文案。 */
 function BackButton({
   disabled,
   label,
@@ -570,10 +570,16 @@ function BackButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="mb-3 inline-flex self-start items-center gap-1 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] disabled:opacity-60"
+      aria-label={label}
+      title={label}
+      className={cn(
+        'absolute left-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full',
+        'text-[var(--text-secondary)] transition-colors',
+        'hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]',
+        'disabled:cursor-not-allowed disabled:opacity-60',
+      )}
     >
-      <ArrowLeft size={15} />
-      {label}
+      <ArrowLeft size={18} />
     </button>
   );
 }

@@ -468,13 +468,14 @@ export default function LoginScreen() {
           <View style={styles.brandBlock}>
             <View style={styles.brandRow}>
               <Text style={styles.product}>{loginText('product')}</Text>
-              <View style={styles.regionBadge}>
-                <Text style={styles.regionText}>
-                  {loginText(
-                    AUTH_REGION === 'global' ? 'regionGlobal' : 'regionCn',
-                  )}
-                </Text>
-              </View>
+              {/* 区域标识仅 global 构建显示，国内版不特意标注 */}
+              {AUTH_REGION === 'global' ? (
+                <View style={styles.regionBadge}>
+                  <Text style={styles.regionText}>
+                    {loginText('regionGlobal')}
+                  </Text>
+                </View>
+              ) : null}
             </View>
             <Text style={styles.title} testID="login.title">
               {loginText('title')}

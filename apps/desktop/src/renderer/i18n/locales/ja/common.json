@@ -2338,7 +2338,6 @@
     "unavailable": "現在ログインできません",
     "retry": "再試行",
     "browserWaiting": "ブラウザで認証を完了してください",
-    "cnRegion": "中国大陸",
     "globalRegion": "Global",
     "errors": {
       "fallback": "ログインに失敗しました。再試行してください。",

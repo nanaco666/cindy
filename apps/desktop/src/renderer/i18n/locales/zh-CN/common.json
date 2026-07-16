@@ -2338,7 +2338,6 @@
     "unavailable": "暂时无法登录",
     "retry": "重试",
     "browserWaiting": "请在浏览器中完成验证",
-    "cnRegion": "中国大陆",
     "globalRegion": "Global",
     "errors": {
       "fallback": "登录失败，请稍后重试",
