@@ -60,6 +60,7 @@ function buildFakeFactory(): SdkQueryFactory {
       async setModel() {},
       async setPermissionMode() {},
       async applyFlagSettings() {},
+      async stopTask() {},
       async getContextUsage() {
         return {
           categories: [{ name: 'Messages', tokens: 42, color: 'inactive' }],
@@ -271,6 +272,13 @@ describe('sdk-handlers end-to-end', () => {
     expect(await ctx!.client.request('query/setPermissionMode', { sessionId: 's1', mode: 'plan' })).toEqual({ ok: true });
     expect(await ctx!.client.request('query/applyFlagSettings', { sessionId: 's1', settings: { effortLevel: 'high' } })).toEqual({ ok: true });
     expect(await ctx!.client.request('query/interrupt', { sessionId: 's1' })).toEqual({ ok: true });
+    expect(await ctx!.client.request('query/stopTask', { sessionId: 's1', taskId: 't1' })).toEqual({ ok: true });
+  });
+
+  it('query/stopTask rejects when taskId is missing', async () => {
+    await ctx!.client.request('query/start', { sessionId: 's1', cwd: '/a', model: 'm', env: {} });
+    await waitFor(() => ctx!.notifications.length >= 1);
+    await expect(ctx!.client.request('query/stopTask', { sessionId: 's1' })).rejects.toThrow(/taskId/);
   });
 
   it('query/getContextUsage returns SDK structured context data', async () => {

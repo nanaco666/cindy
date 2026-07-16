@@ -5,7 +5,7 @@
   "name": "xdt-maker-desktop-macos",
   "documentNamespace": "https://xdmaker.com/spdx/desktop-macos/3ff221eb29a920d5e6128de8dfdd862c5d456376c8db1509d1c82de95848bd67",
   "creationInfo": {
-    "created": "2026-07-16T07:14:09Z",
+    "created": "2026-07-16T10:40:08Z",
     "creators": [
       "Tool: scripts/generate-third-party-notices.mjs"
     ]

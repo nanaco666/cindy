@@ -55,8 +55,15 @@ describe('EAS .easignore covers apps/mobile workspace dependency closure', () =>
     expect(easignore).toMatch(/^!tools\/shared\/fetch-with-timeout\.mjs$/m);
     expect(easignore).toMatch(/^!cindy-protocol$/m);
     expect(easignore).toMatch(/^!cindy-protocol\/\*\*$/m);
-    for (const profile of ['testflight', 'production', 'adhoc', 'beta-base']) {
-      expect(easJson.build?.[profile]?.env?.XDT_SKIP_AGENT_BIN_INSTALL).toBe('1');
+    for (const profile of [
+      'store-cn-base',
+      'store-global-base',
+      'adhoc',
+      'beta-base',
+    ]) {
+      expect(easJson.build?.[profile]?.env?.XDT_SKIP_AGENT_BIN_INSTALL).toBe(
+        '1',
+      );
     }
   });
 

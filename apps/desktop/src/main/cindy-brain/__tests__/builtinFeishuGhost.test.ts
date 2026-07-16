@@ -1,5 +1,5 @@
 /**
- * 内置意识 cindy-feishu 的装配级冒烟(与 builtinMivoVideo.test.ts 同范式:
+ * 内置意识 xd-feishu 的装配级冒烟(与 builtinMivoVideo.test.ts 同范式:
  * node vm 加载真 main.js + 假 cindy 环境驱动)。
  *
  * 护住什么:44 精品 + 123 直通共 167 个操作的注册完整性、两段式目录形态、
@@ -14,7 +14,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { validateGhostManifest } from '../../../shared/ghost.js';
 
-const ghostDir = new URL('../../../../resources/builtin-ghosts/cindy-feishu/', import.meta.url);
+const ghostDir = new URL('../../../../resources/builtin-ghosts/xd-feishu/', import.meta.url);
 const mainSource = readFileSync(new URL('main.js', ghostDir), 'utf8');
 const rawManifest = JSON.parse(readFileSync(new URL('ghost.json', ghostDir), 'utf8')) as Record<string, unknown>;
 
@@ -79,7 +79,7 @@ function createHarness() {
     },
     fetch: async () => ({ json: async () => ({}), status: 204 }),
   });
-  new Script(mainSource, { filename: 'cindy-feishu/main.js' }).runInContext(context);
+  new Script(mainSource, { filename: 'xd-feishu/main.js' }).runInContext(context);
   if (!handler) throw new Error('onHostMessage 未注册');
   const call = async (tool: string, args: Record<string, unknown>) => {
     const before = sent.length;
@@ -91,7 +91,7 @@ function createHarness() {
   return { call, sent, requests };
 }
 
-describe('builtin cindy-feishu ghost', () => {
+describe('builtin xd-feishu ghost', () => {
   it('ghost.json 过 validateGhostManifest,凭证是 login-feishu-token 单条', () => {
     const v = validateGhostManifest(rawManifest);
     expect(v.ok, v.ok ? '' : v.reason).toBe(true);

@@ -12,6 +12,7 @@ const forceTimeoutMs = 5000;
 const pollIntervalMs = 150;
 const forceKillLabel = process.platform === 'win32' ? 'taskkill /F /T' : 'kill -9';
 const LOCAL_API_BASE_URL = 'http://localhost:3333';
+const LOCAL_AUTH_BASE_URL = 'http://localhost:3344';
 
 // 桌面端 .env 默认值,按启动模式区分 VITE_API_BASE_URL:
 // - remote(默认):dev:desktop:remote 用 cross-env 在运行时强制注入 xdt-api,桌面端不看 .env,
@@ -30,6 +31,8 @@ function desktopEnvSpec(mode, content) {
     ? LOCAL_API_BASE_URL
     : configValue('apiBaseUrl');
   return [
+    { key: 'VITE_CINDY_AUTH_REGION', value: 'cn', force: false },
+    { key: 'VITE_CINDY_AUTH_BASE_URL', value: LOCAL_AUTH_BASE_URL, force: false },
     {
       key: 'VITE_FEISHU_APP_ID',
       value: existingFeishuAppId || configValue('feishuAppId'),

@@ -10,7 +10,7 @@ import { productionMobileEnv } from '../../../scripts/shared/production-endpoint
  */
 export function injectMobileEndpointsIntoEasFile(
   easJsonPath,
-  { endpointEnv = productionMobileEnv() } = {},
+  options = {},
 ) {
   const resolvedPath = resolve(easJsonPath);
   const original = readFileSync(resolvedPath, 'utf8');
@@ -18,8 +18,19 @@ export function injectMobileEndpointsIntoEasFile(
   if (!easJson.build || typeof easJson.build !== 'object' || Array.isArray(easJson.build)) {
     throw new Error(`eas.json 缺少 build profiles: ${resolvedPath}`);
   }
-  for (const profile of Object.values(easJson.build)) {
+  const endpointEnvByRegion = options.endpointEnvByRegion ?? (
+    options.endpointEnv
+      ? null
+      : {
+          cn: productionMobileEnv({ authRegion: 'cn' }),
+          global: productionMobileEnv({ authRegion: 'global' }),
+        }
+  );
+  const fallbackEndpointEnv = options.endpointEnv ?? endpointEnvByRegion?.cn;
+  for (const [profileName, profile] of Object.entries(easJson.build)) {
     if (!profile || typeof profile !== 'object' || Array.isArray(profile)) continue;
+    const region = resolveProfileAuthRegion(easJson.build, profileName);
+    const endpointEnv = endpointEnvByRegion?.[region] ?? fallbackEndpointEnv;
     profile.env = { ...(profile.env ?? {}), ...endpointEnv };
   }
 
@@ -30,4 +41,21 @@ export function injectMobileEndpointsIntoEasFile(
     restored = true;
     writeFileSync(resolvedPath, original);
   };
+}
+
+function resolveProfileAuthRegion(buildProfiles, profileName, seen = new Set()) {
+  if (seen.has(profileName)) {
+    throw new Error(`Circular EAS profile extends: ${[...seen, profileName].join(' -> ')}`);
+  }
+  const profile = buildProfiles[profileName];
+  const ownRegion = profile?.env?.EXPO_PUBLIC_CINDY_AUTH_REGION;
+  if (ownRegion === 'cn' || ownRegion === 'global') return ownRegion;
+  if (profile?.extends) {
+    return resolveProfileAuthRegion(
+      buildProfiles,
+      profile.extends,
+      new Set([...seen, profileName]),
+    );
+  }
+  return 'cn';
 }

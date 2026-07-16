@@ -11,18 +11,11 @@ import {
 const roots: string[] = [];
 
 const productionEnv = {
-  EXPO_PUBLIC_FEISHU_APP_ID: 'cli_prod_real',
+  EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+  EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth-cn.example.com',
   EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.prod.example.com',
   EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.prod.example.com',
   EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: 'https://gateway.prod.example.com',
-};
-
-const endpointEnv = {
-  EXPO_PUBLIC_XDT_API_BASE_URL: productionEnv.EXPO_PUBLIC_XDT_API_BASE_URL,
-  EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL:
-    productionEnv.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL,
-  EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL:
-    productionEnv.EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL,
 };
 
 afterEach(() => {
@@ -43,41 +36,60 @@ describe('mobile simulator env bootstrap', () => {
   });
 
   it('preserves existing user values and only fills missing or empty required keys', () => {
-    const mobileDir = createMobileFixture({ production: { env: productionEnv } });
-    writeFileSync(join(mobileDir, '.env'), [
-      '# local overrides',
-      'EXPO_PUBLIC_FEISHU_APP_ID=cli_custom',
-      'EXPO_PUBLIC_XDT_API_BASE_URL=',
-      'EXPO_PUBLIC_XDT_DEV_LOGIN_ENABLED=1',
-      '',
-    ].join('\n'));
+    const mobileDir = createMobileFixture({
+      production: { env: productionEnv },
+    });
+    writeFileSync(
+      join(mobileDir, '.env'),
+      [
+        '# local overrides',
+        'EXPO_PUBLIC_CINDY_AUTH_REGION=global',
+        'EXPO_PUBLIC_CINDY_AUTH_BASE_URL=',
+        'EXPO_PUBLIC_XDT_API_BASE_URL=',
+        'EXPO_PUBLIC_XDT_DEV_LOGIN_ENABLED=1',
+        '',
+      ].join('\n'),
+    );
 
-    const result = ensureMobileEnv({ mobileDir, endpointEnv });
+    const result = ensureMobileEnv({ mobileDir });
     const env = readEnvMap(join(mobileDir, '.env'));
 
     expect(result.created).toBe(false);
     expect(result.addedKeys).toEqual([
+      'EXPO_PUBLIC_CINDY_AUTH_BASE_URL',
       'EXPO_PUBLIC_XDT_API_BASE_URL',
       'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL',
       'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL',
     ]);
-    expect(env.EXPO_PUBLIC_FEISHU_APP_ID).toBe('cli_custom');
-    expect(env.EXPO_PUBLIC_XDT_API_BASE_URL).toBe(productionEnv.EXPO_PUBLIC_XDT_API_BASE_URL);
-    expect(env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL).toBe(productionEnv.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL);
+    expect(env.EXPO_PUBLIC_CINDY_AUTH_REGION).toBe('global');
+    expect(env.EXPO_PUBLIC_CINDY_AUTH_BASE_URL).toBe(
+      productionEnv.EXPO_PUBLIC_CINDY_AUTH_BASE_URL,
+    );
+    expect(env.EXPO_PUBLIC_XDT_API_BASE_URL).toBe(
+      productionEnv.EXPO_PUBLIC_XDT_API_BASE_URL,
+    );
+    expect(env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL).toBe(
+      productionEnv.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL,
+    );
     expect(env.EXPO_PUBLIC_XDT_DEV_LOGIN_ENABLED).toBe('1');
   });
 
   it('replaces copied example placeholders and quoted empty values', () => {
     const mobileDir = createMobileFixture({ production: { env: productionEnv } });
     writeEnvExample(mobileDir);
-    writeFileSync(join(mobileDir, '.env'), [
-      'EXPO_PUBLIC_FEISHU_APP_ID=cli_xxxxxxxxxxxxxxxx',
-      'EXPO_PUBLIC_XDT_API_BASE_URL=""',
-      "EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL=''",
-      '',
-    ].join('\n'));
+    writeFileSync(
+      join(mobileDir, '.env'),
+      [
+        'EXPO_PUBLIC_CINDY_AUTH_REGION=',
+        'EXPO_PUBLIC_CINDY_AUTH_BASE_URL=""',
+        'EXPO_PUBLIC_XDT_API_BASE_URL=""',
+        "EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL=''",
+        'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL=',
+        '',
+      ].join('\n'),
+    );
 
-    const result = ensureMobileEnv({ mobileDir, endpointEnv });
+    const result = ensureMobileEnv({ mobileDir });
     const env = readEnvMap(join(mobileDir, '.env'));
 
     expect(result.addedKeys).toEqual(REQUIRED_MOBILE_ENV_KEYS);
@@ -87,23 +99,31 @@ describe('mobile simulator env bootstrap', () => {
   it('preserves real user values even when they are quoted', () => {
     const mobileDir = createMobileFixture({ production: { env: productionEnv } });
     writeEnvExample(mobileDir);
-    writeFileSync(join(mobileDir, '.env'), [
-      'EXPO_PUBLIC_FEISHU_APP_ID="cli_real_custom"',
-      "EXPO_PUBLIC_XDT_API_BASE_URL='https://api.custom.example.com'",
-      'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL="https://relay.custom.example.com"',
-      'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL="https://gateway.custom.example.com"',
-      '',
-    ].join('\n'));
+    writeFileSync(
+      join(mobileDir, '.env'),
+      [
+        'EXPO_PUBLIC_CINDY_AUTH_REGION="global"',
+        "EXPO_PUBLIC_CINDY_AUTH_BASE_URL='https://auth.custom.example.com'",
+        "EXPO_PUBLIC_XDT_API_BASE_URL='https://api.custom.example.com'",
+        'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL="https://relay.custom.example.com"',
+        'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL="https://gateway.custom.example.com"',
+        '',
+      ].join('\n'),
+    );
 
     const result = ensureMobileEnv({ mobileDir });
     const env = readEnvMap(join(mobileDir, '.env'));
 
     expect(result.addedKeys).toEqual([]);
-    expect(env.EXPO_PUBLIC_FEISHU_APP_ID).toBe('"cli_real_custom"');
-    expect(env.EXPO_PUBLIC_XDT_API_BASE_URL).toBe("'https://api.custom.example.com'");
-    expect(env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL).toBe('"https://relay.custom.example.com"');
-    expect(env.EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL).toBe(
-      '"https://gateway.custom.example.com"',
+    expect(env.EXPO_PUBLIC_CINDY_AUTH_REGION).toBe('"global"');
+    expect(env.EXPO_PUBLIC_CINDY_AUTH_BASE_URL).toBe(
+      "'https://auth.custom.example.com'",
+    );
+    expect(env.EXPO_PUBLIC_XDT_API_BASE_URL).toBe(
+      "'https://api.custom.example.com'",
+    );
+    expect(env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL).toBe(
+      '"https://relay.custom.example.com"',
     );
   });
 });
@@ -126,11 +146,14 @@ function readEnvMap(envPath: string) {
 }
 
 function writeEnvExample(mobileDir: string) {
-  writeFileSync(join(mobileDir, '.env.example'), [
-    'EXPO_PUBLIC_FEISHU_APP_ID=cli_xxxxxxxxxxxxxxxx',
-    `EXPO_PUBLIC_XDT_API_BASE_URL=${DEFAULT_API_BASE_URL}`,
-    `EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL=${DEFAULT_DEVICE_LINK_API_BASE_URL}`,
-    'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL=',
-    '',
-  ].join('\n'));
+  writeFileSync(
+    join(mobileDir, '.env.example'),
+    [
+      'EXPO_PUBLIC_CINDY_AUTH_REGION=cn',
+      'EXPO_PUBLIC_CINDY_AUTH_BASE_URL=',
+      `EXPO_PUBLIC_XDT_API_BASE_URL=${DEFAULT_API_BASE_URL}`,
+      `EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL=${DEFAULT_DEVICE_LINK_API_BASE_URL}`,
+      '',
+    ].join('\n'),
+  );
 }

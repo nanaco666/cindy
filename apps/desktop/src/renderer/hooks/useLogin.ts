@@ -1,70 +1,67 @@
-import { useCallback, useState } from 'react';
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { ApiError } from '@/lib/httpClient';
+import type { DesktopLoginAction } from '@/lib/authService';
 
 interface UseLoginReturn {
   isLoading: boolean;
-  error: string | null;
-  handleLogin: () => void;
-  handleDevLogin: () => void;
+  errorCode: string | null;
+  loginState: ReturnType<typeof useAuth>['loginState'];
+  dispatch: (action: DesktopLoginAction) => Promise<boolean>;
+  clearError: () => void;
 }
 
+/** Coordinates presentation state while all credentials and tickets stay in main. */
 export function useLogin(): UseLoginReturn {
+  const { loginState, loadLoginState, dispatchLoginAction } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { login, devLogin } = useAuth();
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const loadingRef = useRef(false);
 
-  const runLogin = useCallback(async (action: () => Promise<void>, fallbackError: string) => {
-    if (isLoading) return;
+  useEffect(() => {
+    if (loginState || loadingRef.current) return;
+    loadingRef.current = true;
     setIsLoading(true);
-    setError(null);
+    void loadLoginState()
+      .then((result) => {
+        if (!result.success) setErrorCode(result.code);
+      })
+      .catch(() => setErrorCode('AUTH_SERVICE_UNAVAILABLE'))
+      .finally(() => {
+        loadingRef.current = false;
+        setIsLoading(false);
+      });
+  }, [loadLoginState, loginState]);
 
-    try {
-      await action();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        switch (err.code) {
-          case 'USER_CANCELLED':
-            setError(null);
-            break;
-          case 'STATE_MISMATCH':
-            setError('安全验证失败，请重试');
-            break;
-          case 'FEISHU_AUTH_FAILED':
-            setError('飞书授权失败，请重试');
-            break;
-          case 'FEISHU_UNAVAILABLE':
-            setError('飞书服务暂不可用，请稍后重试');
-            break;
-          case 'FEISHU_SCOPE_INCOMPLETE':
-            setError(`登录失败。使用 ${BRAND_NAME} 需要飞书的完整内容访问授权，请重新登录并同意所有授权请求。`);
-            break;
-          case 'NETWORK_ERROR':
-            setError('网络连接失败，请检查网络');
-            break;
-          case 'SERVICE_UNAVAILABLE':
-            setError(err.message || fallbackError);
-            break;
-          default:
-            setError(fallbackError);
+  const dispatch = useCallback(
+    async (action: DesktopLoginAction): Promise<boolean> => {
+      if (loadingRef.current && action.type !== 'cancel-browser') return false;
+      loadingRef.current = true;
+      setIsLoading(true);
+      setErrorCode(null);
+      try {
+        const result = await dispatchLoginAction(action);
+        if (!result.success) {
+          setErrorCode(result.code === 'USER_CANCELLED' ? null : result.code);
+          return false;
         }
-      } else {
-        setError(fallbackError);
+        return true;
+      } catch {
+        setErrorCode('AUTH_REQUEST_FAILED');
+        return false;
+      } finally {
+        loadingRef.current = false;
+        setIsLoading(false);
       }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isLoading]);
+    },
+    [dispatchLoginAction],
+  );
 
-  const handleLogin = useCallback(() => {
-    void runLogin(login, '登录失败，请重试');
-  }, [login, runLogin]);
-
-  const handleDevLogin = useCallback(() => {
-    void runLogin(devLogin, '本地模拟登录失败，请确认本地 server 已启动并开启 XDT_DEV_AUTH_ENABLED=1');
-  }, [devLogin, runLogin]);
-
-  return { isLoading, error, handleLogin, handleDevLogin };
+  return {
+    isLoading,
+    errorCode,
+    loginState,
+    dispatch,
+    clearError: () => setErrorCode(null),
+  };
 }

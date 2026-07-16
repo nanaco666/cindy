@@ -32,6 +32,21 @@ const MAX_OUT_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_OUT_ATTACHMENTS = 8;
 const MAX_OUT_TOTAL_BYTES = 30 * 1024 * 1024;
 
+/**
+ * hook 派发 turn 时附在用户消息末尾的渠道说明(session-runner 消费)。
+ * 本收集器的出站契约只认最终回复文本里的 xdt-file / xdt-image 引用,但
+ * 没有任何提示教模型这个约定 —— 实踩(2026-07-16)里模型两次把「把文件
+ * 发给我」路由到 lizi_feishu_bot(hook 会话里唯一可见的推送工具)并失败。
+ * 固定文本、逐 turn 追加,保证行为确定(规则 9);修改措辞时同步
+ * collectOutboundAttachments 的实际语义,别让说明和收集器漂移。
+ */
+export const SLACK_HOOK_PROMPT_NOTE =
+  '[渠道说明] 本会话来自 Slack。要把文件发给用户:在最终回复文本里写 ' +
+  '`[文件名](xdt-file:///绝对路径)`(图片可用 `![说明](xdt-image://…)`),' +
+  '系统会在回复结束后自动把它们作为 Slack 附件发回,无需调用任何工具;' +
+  '文件必须位于当前工作目录内(目录外的引用会被静默丢弃)。' +
+  '不要用 lizi_feishu_bot 发送,除非用户明确要求发到飞书。';
+
 /** 扩展名 -> 图片 MIME(agent 产图只有这几种; 其它按二进制流)。 */
 const IMAGE_MIME_BY_EXT: Record<string, string> = {
   '.png': 'image/png',
@@ -41,13 +56,19 @@ const IMAGE_MIME_BY_EXT: Record<string, string> = {
   '.webp': 'image/webp',
 };
 
-function xdtFileUrlToAbsPath(url: string): string {
+export function xdtFileUrlToAbsPath(url: string): string {
   const raw = url.replace(/^xdt-file:\/\//, '');
+  let decoded: string;
   try {
-    return decodeURIComponent(raw);
+    decoded = decodeURIComponent(raw);
   } catch {
-    return raw;
+    decoded = raw;
   }
+  // 约定写法 xdt-file:///<绝对路径>:Unix 下剥掉协议后的首个 `/` 就是根;
+  // Windows 盘符路径剥完协议剩 `/C:\...`(或 /C:/...),多余的前导 `/` 会让
+  // allowedFileRoots 比对必失败 → 附件静默丢失(2026-07-16 实踩,规则 15),
+  // 这里剥掉。与 lizi-im/xdtRefs.ts 同步修改。
+  return decoded.replace(/^\/+([A-Za-z]:[\\/])/, '$1');
 }
 
 export function guessMime(absPath: string): string {

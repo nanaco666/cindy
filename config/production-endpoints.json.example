@@ -1,6 +1,8 @@
 {
   "feishuAppId": "",
   "apiBaseUrl": "",
+  "authApiBaseUrlCn": "",
+  "authApiBaseUrlGlobal": "",
   "deviceLinkApiBaseUrl": "",
   "oauthBrokerApiBaseUrl": "",
   "heartbeatUrl": "",

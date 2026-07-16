@@ -2633,12 +2633,10 @@ const registerIpcHandlers = () => {
     return authManager.initialize();
   });
 
-  ipcMain.handle('auth:login', async () => {
-    return authManager.login(getWindow());
-  });
+  ipcMain.handle('auth:get-login-state', async () => authManager.getLoginState());
 
-  ipcMain.handle('auth:dev-login', async () => {
-    return authManager.devLogin();
+  ipcMain.handle('auth:dispatch-login-action', async (_event, action: unknown) => {
+    return authManager.dispatchLoginAction(action);
   });
 
   ipcMain.handle('auth:logout', async () => {
@@ -2833,7 +2831,7 @@ const registerIpcHandlers = () => {
 
   // Environment check IPC handler — 顺序检查 claude → codex 两个 vendor binary。
   // 提前 peekNeedsDownload 决定 (x/2) 标签：两个都需要下载时给 step/totalSteps，
-  // 否则不带标签（splash 显示单一 "正在召唤村民..." 文案）。
+  // 否则不带标签（splash 显示单一 "唤醒 Cindy 中..." 文案）。
   ipcMain.handle('check-environment', async () => {
     // splash 首个 invoke = renderer 存活的强信号(与 renderer:log 双保险)。
     rendererBootGuard?.markAlive();

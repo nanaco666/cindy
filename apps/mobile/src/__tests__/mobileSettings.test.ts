@@ -17,9 +17,10 @@ describe('mobile settings overview', () => {
   it('projects an account header plus about and debug sections for the settings screen', () => {
     const overview = buildMobileSettingsOverview({
       apiBaseUrl: 'http://127.0.0.1:3333',
+      authBaseUrl: 'https://auth-cn.example.com',
+      authRegion: 'cn',
       deviceId: 'mobile-device-1',
       deviceName: 'Dash iPhone',
-      feishuConfigured: true,
       lastSyncedAt: new Date(2026, 0, 1, 3, 4, 5).getTime(),
       platform: 'ios',
       relayStatus: 'online',
@@ -75,9 +76,10 @@ describe('mobile settings overview', () => {
   it('omits the redundant email line when display name equals the email', () => {
     const overview = buildMobileSettingsOverview({
       apiBaseUrl: 'http://localhost:3333',
+      authBaseUrl: 'https://auth-global.example.com',
+      authRegion: 'global',
       deviceId: null,
       deviceName: 'Local Phone',
-      feishuConfigured: false,
       platform: 'android',
       relayStatus: 'stopped',
       userEmail: 'dash@example.com',
@@ -88,12 +90,13 @@ describe('mobile settings overview', () => {
     expect(overview.header.email).toBeUndefined();
   });
 
-  it('keeps missing auth and Feishu config explicit instead of hiding the rows', () => {
+  it('keeps auth-server region and endpoint explicit in debug rows', () => {
     const overview = buildMobileSettingsOverview({
       apiBaseUrl: 'http://localhost:3333',
+      authBaseUrl: 'https://auth-global.example.com',
+      authRegion: 'global',
       deviceId: null,
       deviceName: 'Local Phone',
-      feishuConfigured: false,
       platform: 'android',
       relayStatus: 'stopped',
     });
@@ -102,10 +105,21 @@ describe('mobile settings overview', () => {
     const debugRows = overview.sections.find((section) => section.id === 'debug')?.rows;
 
     expect(overview.header.name).toBe('未登录');
-    expect(aboutRows?.find((row) => row.id === 'about.platform')?.value).toBe('Android');
-    expect(debugRows?.find((row) => row.id === 'debug.userId')?.value).toBe('未同步');
-    expect(debugRows?.find((row) => row.id === 'debug.deviceId')?.value).toBe('初始化中');
-    expect(debugRows?.find((row) => row.id === 'debug.feishu')?.value).toBe('缺少 App ID');
+    expect(aboutRows?.find((row) => row.id === 'about.platform')?.value).toBe(
+      'Android',
+    );
+    expect(debugRows?.find((row) => row.id === 'debug.userId')?.value).toBe(
+      '未同步',
+    );
+    expect(debugRows?.find((row) => row.id === 'debug.deviceId')?.value).toBe(
+      '初始化中',
+    );
+    expect(
+      debugRows?.find((row) => row.id === 'debug.authBaseUrl')?.value,
+    ).toBe('https://auth-global.example.com');
+    expect(debugRows?.find((row) => row.id === 'debug.authRegion')?.value).toBe(
+      'Global',
+    );
   });
 
   it('maps relay status to stable mobile indicator tones', () => {

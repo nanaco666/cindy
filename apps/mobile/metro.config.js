@@ -11,6 +11,10 @@ config.resolver.disableHierarchicalLookup = true;
 config.resolver.nodeModulesPaths = [appNodeModules, workspaceNodeModules];
 config.resolver.extraNodeModules = {
   ...config.resolver.extraNodeModules,
+  '@cindy/device-link-protocol': path.join(
+    workspaceRoot,
+    'cindy-protocol/packages/device-link-protocol',
+  ),
   react: path.join(appNodeModules, 'react'),
   'react-native': path.join(workspaceNodeModules, 'react-native'),
   'react-dom': path.join(appNodeModules, 'react-dom'),
@@ -23,7 +27,12 @@ config.serializer.getPolyfills = (ctx) => [
 ];
 
 const defaultResolveRequest = config.resolver.resolveRequest;
-const workspaceTsSourcePackages = ['device-link', 'maker-shared', 'model-providers'];
+const workspaceTsSourcePackages = [
+  'auth-client',
+  'device-link',
+  'maker-shared',
+  'model-providers',
+];
 const rnDevToolsSettingsManager = '../../src/private/devsupport/rndevtools/ReactDevToolsSettingsManager';
 
 function isWorkspaceTsSourcePackage(originModulePath) {

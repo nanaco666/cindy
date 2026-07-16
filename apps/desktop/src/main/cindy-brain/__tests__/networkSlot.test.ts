@@ -680,7 +680,7 @@ describe('networkSlot · 登录邮箱派生凭证(source:login-email)', () => {
 describe('networkSlot · 飞书登录态令牌凭证(source:login-feishu-token)', () => {
   const FEISHU_URL = 'https://open.feishu.cn/open-apis/im/v1/chats';
 
-  /** cindy-feishu 形态的详单:Authorization = Bearer <主机飞书 user access token>。 */
+  /** xd-feishu 形态的详单:Authorization = Bearer <主机飞书 user access token>。 */
   const feishuNetwork: GhostNetworkNeeds = {
     hosts: ['open.feishu.cn'],
     secrets: [

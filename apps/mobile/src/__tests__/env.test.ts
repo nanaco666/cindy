@@ -24,9 +24,18 @@ describe('mobile env', () => {
     expect(deviceLinkWsUrl('https://relay.example.com')).toBe('wss://relay.example.com/api/device-link/ws');
   });
 
-  it('reports missing login config', () => {
-    expect(getMobileConfigIssues({}).map((issue) => issue.key)).toEqual(['EXPO_PUBLIC_FEISHU_APP_ID']);
-    expect(getMobileConfigIssues({ EXPO_PUBLIC_FEISHU_APP_ID: 'cli_xxx' })).toEqual([]);
+  it('uses region defaults and rejects malformed explicit auth-server URLs', () => {
+    expect(getMobileConfigIssues({})).toEqual([]);
+    expect(
+      getMobileConfigIssues({
+        EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'ftp://auth.example.com',
+      }).map((issue) => issue.key),
+    ).toEqual(['EXPO_PUBLIC_CINDY_AUTH_BASE_URL']);
+    expect(
+      getMobileConfigIssues({
+        EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
+      }),
+    ).toEqual([]);
   });
 
   it('parses boolean env flags for local auth testing', () => {

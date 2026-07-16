@@ -17,7 +17,8 @@ export const RELEASE_ENV_EXEC_COMMANDS = Object.freeze({
 });
 
 export const PUBLIC_ENV_KEYS = [
-  'EXPO_PUBLIC_FEISHU_APP_ID',
+  'EXPO_PUBLIC_CINDY_AUTH_REGION',
+  'EXPO_PUBLIC_CINDY_AUTH_BASE_URL',
   'EXPO_PUBLIC_XDT_API_BASE_URL',
   'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL',
   'EXPO_PUBLIC_TAPTAP_CLIENT_ID',
@@ -25,6 +26,11 @@ export const PUBLIC_ENV_KEYS = [
 ];
 
 export const EXTERNAL_PUBLIC_ENV_KEYS = [
+  'EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID',
+  'EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID',
+  'EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME',
+  'EXPO_PUBLIC_CINDY_WECHAT_APP_ID',
+  'EXPO_PUBLIC_CINDY_WECHAT_UNIVERSAL_LINK',
   'EXPO_PUBLIC_TAPTAP_CLIENT_ID',
   'EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN',
   'EXPO_PUBLIC_TAPDB_CHANNEL',
@@ -126,12 +132,19 @@ export function resolveBuildProfile(easJson, profileName, seen = new Set()) {
 
 export function resolveTarget(config, options = {}) {
   const kind = options.kind ?? options.target ?? 'production';
+  const region = resolveAuthRegion(options.region);
   if (kind === 'beta') {
-    const dev = slugifyDevName(options.dev ?? process.env.XDT_MOBILE_BETA_DEV ?? gitValue(['config', 'user.name']) ?? 'dash');
-    const profile = `beta-${dev}`;
+    const dev = slugifyDevName(
+      options.dev ??
+        process.env.XDT_MOBILE_BETA_DEV ??
+        gitValue(['config', 'user.name']) ??
+        'dash',
+    );
+    const profile = region === 'global' ? `beta-global-${dev}` : `beta-${dev}`;
     const resolved = resolveBuildProfile(config.easJson, profile);
     return {
       kind: 'beta',
+      region,
       dev,
       profile,
       channel: resolved.channel ?? profile,
@@ -142,10 +155,12 @@ export function resolveTarget(config, options = {}) {
     };
   }
   if (kind === 'staging') {
-    const profile = options.profile ?? 'adhoc';
+    const profile =
+      options.profile ?? (region === 'global' ? 'adhoc-global' : 'adhoc');
     const resolved = resolveBuildProfile(config.easJson, profile);
     return {
       kind: 'staging',
+      region,
       profile,
       channel: resolved.channel ?? 'staging',
       branch: options.branch ?? resolved.channel ?? 'staging',
@@ -155,10 +170,13 @@ export function resolveTarget(config, options = {}) {
     };
   }
   if (kind === 'production') {
-    const profile = options.profile ?? 'production';
+    const profile =
+      options.profile ??
+      (region === 'global' ? 'production-global' : 'production');
     const resolved = resolveBuildProfile(config.easJson, profile);
     return {
       kind: 'production',
+      region,
       profile,
       channel: resolved.channel ?? 'production',
       branch: options.branch ?? resolved.channel ?? 'production',
@@ -183,7 +201,19 @@ export function assertTargetProfile(config, target) {
       throw new Error(`Profile ${target.profile} must set EXPO_PUBLIC_BETA_DEV=${target.dev}`);
     }
   }
+  if (profile.env?.EXPO_PUBLIC_CINDY_AUTH_REGION !== target.region) {
+    throw new Error(
+      `Profile ${target.profile} must set EXPO_PUBLIC_CINDY_AUTH_REGION=${target.region}`,
+    );
+  }
   return profile;
+}
+
+export function resolveAuthRegion(value = 'cn') {
+  const region = String(value ?? 'cn').trim() || 'cn';
+  if (region !== 'cn' && region !== 'global')
+    throw new Error('--region must be cn or global');
+  return region;
 }
 
 export function slugifyDevName(value) {
@@ -546,22 +576,37 @@ export function assertProductionPlatformAllowed(target, platform) {
   }
 }
 
-export function assertProductionSubmitTarget({ target, appJson, easJson } = {}) {
+/**
+ * @param {{ target?: { kind: string; region?: string }; env?: Record<string, string | undefined> }} [options]
+ */
+export function assertProductionSubmitTarget({
+  target,
+  env = process.env,
+} = {}) {
   if (target?.kind !== 'production') return true;
-  const bundleId = appJson?.expo?.ios?.bundleIdentifier;
-  const ascAppId = easJson?.submit?.[target.profile]?.ios?.ascAppId;
-  if (bundleId === 'com.xd.lizcn' && ascAppId !== '6785851372') {
-    throw new Error(`Production bundleIdentifier is com.xd.lizcn but eas.json submit.${target.profile}.ios.ascAppId is ${ascAppId ?? 'missing'}; expected App Store Connect app id 6785851372. Configure the com.xd.lizcn ASC app id before TestFlight auto-submit.`);
+  const region = resolveAuthRegion(target.region);
+  const key =
+    region === 'global' ? 'CINDY_GLOBAL_APP_STORE_ID' : 'CINDY_CN_APP_STORE_ID';
+  const appStoreId = String(env[key] ?? '').trim();
+  if (!/^\d+$/.test(appStoreId)) {
+    throw new Error(
+      `Production ${region} build requires numeric ${key} in the release environment`,
+    );
   }
-  return true;
+  return appStoreId;
 }
 
 /**
  * @param {{ target: { kind: string }; mode: string; latest?: { byPlatform?: Record<string, { appBuildVersion?: string | null }> } | null }} options
  */
 export function shouldAutoSubmitColdBuild({ target, mode, latest } = {}) {
-  if (target.kind !== 'production' || mode === 'OTA_OK') return false;
-  return Boolean(latest?.byPlatform?.ios?.appBuildVersion);
+  // CN and Global have separate ASC apps whose numeric IDs live in the release environment.
+  // eas.json cannot safely interpolate those IDs into submit profiles, so builds stay fail-closed
+  // and submission is an explicit App Store Connect step.
+  void target;
+  void mode;
+  void latest;
+  return false;
 }
 
 /**
@@ -764,26 +809,55 @@ export function assertProductionGitGate({
   return true;
 }
 
-export function addBetaDeveloperProfile(easJson, devName, { allowExisting = false } = {}) {
+export function addBetaDeveloperProfile(
+  easJson,
+  devName,
+  { allowExisting = false, region: regionValue = 'cn' } = {},
+) {
   const dev = slugifyDevName(devName);
-  const profile = `beta-${dev}`;
-  if (!easJson.build?.['beta-base']) throw new Error('Missing beta-base profile');
+  const region = resolveAuthRegion(regionValue);
+  const baseProfile = region === 'global' ? 'beta-global-base' : 'beta-base';
+  const profile = region === 'global' ? `beta-global-${dev}` : `beta-${dev}`;
+  if (!easJson.build?.[baseProfile])
+    throw new Error(`Missing ${baseProfile} profile`);
   if (easJson.build[profile]) {
     if (!allowExisting) throw new Error(`Profile already exists: ${profile}`);
     const existing = easJson.build[profile];
-    if (existing.extends !== 'beta-base' || existing.channel !== profile || existing.env?.EXPO_PUBLIC_BETA_DEV !== dev) {
-      throw new Error(`Existing profile ${profile} does not match expected beta developer shape`);
+    if (
+      existing.extends !== baseProfile ||
+      existing.channel !== profile ||
+      existing.env?.EXPO_PUBLIC_BETA_DEV !== dev
+    ) {
+      throw new Error(
+        `Existing profile ${profile} does not match expected beta developer shape`,
+      );
     }
-    return { easJson, profile, channel: profile, branch: profile, dev, created: false };
+    return {
+      easJson,
+      profile,
+      channel: profile,
+      branch: profile,
+      dev,
+      region,
+      created: false,
+    };
   }
   easJson.build[profile] = {
-    extends: 'beta-base',
+    extends: baseProfile,
     channel: profile,
     env: {
       EXPO_PUBLIC_BETA_DEV: dev,
     },
   };
-  return { easJson, profile, channel: profile, branch: profile, dev, created: true };
+  return {
+    easJson,
+    profile,
+    channel: profile,
+    branch: profile,
+    dev,
+    region,
+    created: true,
+  };
 }
 
 function compareVersionParts(a, b) {

@@ -25,7 +25,7 @@ import {
   ScreenHeader,
   StatusDot,
 } from '@/components/MobilePrimitives';
-import { API_BASE_URL, DESKTOP_PACKAGE_VERSION, DEVICE_LINK_API_BASE_URL, FEISHU_APP_ID, IS_OTA_SELFHOST } from '@/config/env';
+import { API_BASE_URL, AUTH_API_BASE_URL, AUTH_REGION, DESKTOP_PACKAGE_VERSION, DEVICE_LINK_API_BASE_URL, IS_OTA_SELFHOST } from '@/config/env';
 import { useDeviceLink } from '@/device-link/DeviceLinkContext';
 import { buildMobileDeviceName } from '@/device-link/mobileDeviceIdentity';
 import { formatRemoteError } from '@/device-link/remoteStatus';
@@ -86,9 +86,10 @@ export default function SettingsScreen() {
   const overview = useMemo(
     () => buildMobileSettingsOverview({
       apiBaseUrl: API_BASE_URL,
+      authBaseUrl: AUTH_API_BASE_URL,
+      authRegion: AUTH_REGION,
       deviceId: auth.deviceId,
       deviceName,
-      feishuConfigured: FEISHU_APP_ID.trim().length > 0,
       platform: Platform.OS,
       relayStatus: status,
       userEmail: auth.user?.email,

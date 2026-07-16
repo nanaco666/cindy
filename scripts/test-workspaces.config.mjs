@@ -101,6 +101,7 @@ export default {
     requiredUnitWorkspace('mobile', 'apps/mobile'),
     requiredUnitWorkspace('@lizi/anthropic-compat-proxy', 'packages/anthropic-compat-proxy'),
     requiredUnitWorkspace('@lizi/anthropic-responses-bridge', 'packages/anthropic-responses-bridge'),
+    requiredUnitWorkspace('@cindy/auth-client', 'packages/auth-client'),
     requiredUnitWorkspace('@lizi/browser-control-runtime', 'packages/browser-control-runtime'),
     requiredUnitWorkspace('cindy-tools', 'packages/cindy-tools'),
     requiredUnitWorkspace('@lizi/device-link', 'packages/device-link'),

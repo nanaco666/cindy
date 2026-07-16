@@ -34,6 +34,8 @@ test('私有 JSON 是 Desktop/Mobile 构建注入的唯一输入', () => {
   assert.deepEqual({ ...loadProductionEndpoints() }, values);
   assert.deepEqual(productionMobileEnv(), {
     EXPO_PUBLIC_FEISHU_APP_ID: values.feishuAppId,
+    EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+    EXPO_PUBLIC_CINDY_AUTH_BASE_URL: values.authApiBaseUrlCn,
     EXPO_PUBLIC_XDT_API_BASE_URL: values.apiBaseUrl,
     EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: values.deviceLinkApiBaseUrl,
     EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: values.xdGatewayBaseUrl,
@@ -47,6 +49,8 @@ test('私有 JSON 是 Desktop/Mobile 构建注入的唯一输入', () => {
   assert.deepEqual(productionViteEnv({ allowEnvOverride: false }), {
     VITE_FEISHU_APP_ID: values.feishuAppId,
     VITE_API_BASE_URL: values.apiBaseUrl,
+    VITE_CINDY_AUTH_REGION: 'cn',
+    VITE_CINDY_AUTH_BASE_URL: values.authApiBaseUrlCn,
     VITE_DEVICE_LINK_API_BASE_URL: values.deviceLinkApiBaseUrl,
     VITE_OAUTH_BROKER_API_BASE_URL: values.oauthBrokerApiBaseUrl,
     VITE_HEARTBEAT_URL: values.heartbeatUrl,
@@ -102,6 +106,8 @@ function fixtureEndpoints() {
   return {
     feishuAppId: 'cli_testapp',
     apiBaseUrl: 'https://api.example.invalid',
+    authApiBaseUrlCn: 'https://auth-cn.example.invalid',
+    authApiBaseUrlGlobal: 'https://auth-global.example.invalid',
     deviceLinkApiBaseUrl: 'https://relay.example.invalid',
     oauthBrokerApiBaseUrl: 'https://oauth.example.invalid',
     heartbeatUrl: 'https://heartbeat.example.invalid',

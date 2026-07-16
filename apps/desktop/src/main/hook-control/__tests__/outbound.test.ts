@@ -7,7 +7,7 @@ import path from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { collectOutboundAttachments, hasOutboundRefs, guessMime } from '../outbound';
+import { collectOutboundAttachments, hasOutboundRefs, guessMime, xdtFileUrlToAbsPath } from '../outbound';
 
 const log = { warn: vi.fn() };
 
@@ -146,6 +146,17 @@ describe('collectOutboundAttachments', () => {
 });
 
 describe('辅助函数', () => {
+  it('xdtFileUrlToAbsPath: Windows 盘符路径剥掉多余前导斜杠(2026-07-16 实踩:附件被判目录外静默丢弃)', () => {
+    expect(xdtFileUrlToAbsPath('xdt-file:///C:\\Users\\x\\wd\\hello.txt')).toBe('C:\\Users\\x\\wd\\hello.txt');
+    expect(xdtFileUrlToAbsPath('xdt-file:///C:/Users/x/wd/hello.txt')).toBe('C:/Users/x/wd/hello.txt');
+    // Unix 绝对路径不受影响(前导 / 就是根)
+    expect(xdtFileUrlToAbsPath('xdt-file:///home/u/f.txt')).toBe('/home/u/f.txt');
+    // URL 编码照常解
+    expect(xdtFileUrlToAbsPath('xdt-file:///C:/Users/x/%E6%8A%A5%E5%91%8A.md')).toBe('C:/Users/x/报告.md');
+    // decode 失败(孤立 %)回落 raw 后仍剥盘符前导斜杠
+    expect(xdtFileUrlToAbsPath('xdt-file:///C:\\dir\\a 50%.txt')).toBe('C:\\dir\\a 50%.txt');
+  });
+
   it('hasOutboundRefs / guessMime', () => {
     expect(hasOutboundRefs('纯文本')).toBe(false);
     expect(hasOutboundRefs('![a](xdt-image://x)')).toBe(true);

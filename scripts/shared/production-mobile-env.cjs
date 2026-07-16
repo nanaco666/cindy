@@ -60,6 +60,27 @@ function loadProductionMobileEnv() {
     }
     env[envKey] = normalized.replace(/\/+$/, '');
   }
+  const authRegion = process.env.EXPO_PUBLIC_CINDY_AUTH_REGION?.trim() || 'cn';
+  if (authRegion !== 'cn' && authRegion !== 'global') {
+    throw new Error(`Invalid Cindy auth region: ${authRegion}; expected cn or global`);
+  }
+  const authConfigKey =
+    authRegion === 'global' ? 'authApiBaseUrlGlobal' : 'authApiBaseUrlCn';
+  const authBaseUrl = parsed?.[authConfigKey];
+  if (typeof authBaseUrl !== 'string' || !authBaseUrl.trim()) {
+    throw new Error(`Missing non-empty production endpoint field: ${authConfigKey}`);
+  }
+  let parsedAuthUrl;
+  try {
+    parsedAuthUrl = new URL(authBaseUrl.trim());
+  } catch {
+    throw new Error(`Invalid URL in production endpoint config: ${authConfigKey}`);
+  }
+  if (parsedAuthUrl.protocol !== 'https:') {
+    throw new Error(`Production mobile endpoint must use HTTPS: ${authConfigKey}`);
+  }
+  env.EXPO_PUBLIC_CINDY_AUTH_REGION = authRegion;
+  env.EXPO_PUBLIC_CINDY_AUTH_BASE_URL = authBaseUrl.trim().replace(/\/+$/, '');
   return Object.freeze(env);
 }
 

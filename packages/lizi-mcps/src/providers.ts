@@ -99,6 +99,12 @@ function readSlackThreadTs(ctx: LiziMcpSessionContext): string | null {
   return typeof raw === 'string' && raw.length > 0 ? raw : null;
 }
 
+/** 会话来源(如 'slack'),feishu bot 用它在构建期注入渠道路由提示。 */
+function readSessionSource(ctx: LiziMcpSessionContext): string | undefined {
+  const raw = ctx.vendorOptions?.source;
+  return typeof raw === 'string' && raw.length > 0 ? raw : undefined;
+}
+
 export function createLiziMcpProviders(
   opts: CreateLiziMcpProvidersOptions,
 ): LiziMcpProvider[] {
@@ -173,7 +179,7 @@ export function createLiziMcpProviders(
   }
 
   // lizi_feishu 已于 2026-07-16 摘壳:飞书全部能力(44 精品 + 123 只读直通)
-  // 迁入内置意识 cindy-feishu(source:'login-feishu-token' 登录态凭证,主机
+  // 迁入内置意识 xd-feishu(source:'login-feishu-token' 登录态凭证,主机
   // 现取现注入零迁移)。与 web-search/mivo 不同,feishu 后端(feishu/ 目录、
   // FeishuTokenManager、registry)**留任**——scheduler 脚本 capability broker
   // (desktop scheduler-host/script-capability-broker.ts)仍经 registry 直调
@@ -227,6 +233,9 @@ export function createLiziMcpProviders(
             readFeishuChatId(ctx) ?? opts.feishuBot!.getOwnerOpenId() ?? null,
           sendFile: opts.feishuBot!.sendFile,
           sendMessage: opts.feishuBot!.sendMessage,
+          // slack 会话里两组 bot 推送工具并存,构建期注入渠道路由提示,
+          // 把「发给我」的默认通道钉死在会话自身渠道(规则 9)。
+          sessionSource: readSessionSource(ctx),
         }),
       }),
     });

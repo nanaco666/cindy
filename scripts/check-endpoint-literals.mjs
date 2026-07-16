@@ -22,6 +22,7 @@ import {
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const EAS_ENDPOINT_ENV_KEYS = Object.freeze([
   'EXPO_PUBLIC_FEISHU_APP_ID',
+  'EXPO_PUBLIC_CINDY_AUTH_BASE_URL',
   'EXPO_PUBLIC_XDT_API_BASE_URL',
   'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL',
   'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL',
@@ -40,10 +41,11 @@ const CONTROLLED_APP_CONFIG_FILES = Object.freeze([
   'apps/desktop/scripts/release-windows.mjs',
   'apps/mobile/eas.json',
   'apps/mobile/app.json',
-  'apps/mobile/modules/xdt-feishu-login/plugin/index.js',
+  'apps/mobile/app.config.js',
 ]);
 const ALLOWED_NON_PRODUCTION_ORIGINS = new Set([
   'http://localhost:3333',
+  'http://localhost:3344',
   'http://localhost:3335',
   'https://e.tapdb.com',
 ]);

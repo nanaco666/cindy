@@ -10,6 +10,7 @@ import {
   classifyXdtOnly,
   collectXdtImageUrls,
   stripXdtForStreaming,
+  xdtFileUrlToAbsPath,
 } from '../xdtRefs.js';
 
 const LEGACY = 'xdt-image://feishu-media-images/tok.png';
@@ -34,5 +35,13 @@ describe('classifyXdtOnly(双协议)', () => {
   it('纯 cindy-media 图片正文归类 image-only(流式期出友好占位)', () => {
     expect(classifyXdtOnly(`![x](${BLOB})`)).toBe('image-only');
     expect(classifyXdtOnly(`![x](${BLOB}) 还有文字`)).toBe('mixed-or-text');
+  });
+});
+
+describe('xdtFileUrlToAbsPath(Windows 盘符,规则 15)', () => {
+  it('剥掉盘符路径的多余前导斜杠,Unix 路径不受影响', () => {
+    expect(xdtFileUrlToAbsPath('xdt-file:///C:\\Users\\x\\f.txt')).toBe('C:\\Users\\x\\f.txt');
+    expect(xdtFileUrlToAbsPath('xdt-file:///C:/Users/x/f.txt')).toBe('C:/Users/x/f.txt');
+    expect(xdtFileUrlToAbsPath('xdt-file:///home/u/f.txt')).toBe('/home/u/f.txt');
   });
 });

@@ -24,7 +24,12 @@ describe('isDefinitiveRefreshFailure', () => {
   });
 
   it('确定性凭据失效码 → 删除 token', () => {
-    for (const code of ['REFRESH_TOKEN_EXPIRED', 'INVALID_REFRESH_TOKEN', 'DEVICE_MISMATCH']) {
+    for (const code of [
+      'REFRESH_TOKEN_EXPIRED',
+      'INVALID_REFRESH_TOKEN',
+      'DEVICE_MISMATCH',
+      'MEMBERSHIP_DISABLED',
+    ]) {
       expect(isDefinitiveRefreshFailure({ ok: false, data: { error: { code } } })).toBe(true);
     }
   });
@@ -55,6 +60,7 @@ describe('isDefinitiveRefreshFailure', () => {
     expect([...DEFINITIVE_REFRESH_FAILURE_CODES].sort()).toEqual([
       'DEVICE_MISMATCH',
       'INVALID_REFRESH_TOKEN',
+      'MEMBERSHIP_DISABLED',
       'REFRESH_TOKEN_EXPIRED',
     ]);
   });
@@ -81,6 +87,11 @@ describe('refresh token replacement detection', () => {
     status: 401,
     data: { error: { code: 'DEVICE_MISMATCH' } },
   };
+  const membershipDisabled: RefreshFetchResult<unknown> = {
+    ok: false,
+    status: 403,
+    data: { error: { code: 'MEMBERSHIP_DISABLED' } },
+  };
 
   it('磁盘 token 与请求 token 不同 → 返回替换候选', () => {
     expect(getRefreshTokenReplacementCandidate('rt-old', 'rt-new')).toBe('rt-new');
@@ -99,11 +110,14 @@ describe('refresh token replacement detection', () => {
     });
   });
 
-  it('只有 INVALID_REFRESH_TOKEN 可触发替换重试,过期和设备不匹配直接清登录态', () => {
+  it('只有 INVALID_REFRESH_TOKEN 可触发替换重试,其余确定性失败直接清登录态', () => {
     expect(resolveRefreshFailureAction(expiredToken, 'rt-old', 'rt-new')).toEqual({
       kind: 'definitive-failure',
     });
     expect(resolveRefreshFailureAction(deviceMismatch, 'rt-old', 'rt-new')).toEqual({
+      kind: 'definitive-failure',
+    });
+    expect(resolveRefreshFailureAction(membershipDisabled, 'rt-old', 'rt-new')).toEqual({
       kind: 'definitive-failure',
     });
   });

@@ -527,7 +527,7 @@ async function main() {
   };
   // release-relogin-on-update: 写入 true 时客户端 updateService 会在下载完
   // 写一个 one-shot 标记文件,新版本第一次启动时把 refresh_token 清掉,把
-  // 用户踢回登录页重新走飞书 OAuth(用于新增 scope / auth 协议变更场景)。
+  // 用户踢回登录页重新走 auth-server 登录(用于新增 scope / auth 协议变更场景)。
   // 不需要时显式删掉字段,避免 CDN 上残留旧标记影响后续 release。
   if (requireRelogin) {
     manifest.app.requireRelogin = true;

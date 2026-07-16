@@ -36,7 +36,11 @@ async function main() {
   const commands = [];
   const summaries = [];
   for (const targetName of targetNames) {
-    const target = resolveTarget(config, { kind: targetName, environment: args.environment });
+    const target = resolveTarget(config, {
+      kind: targetName,
+      environment: args.environment,
+      region: args.region,
+    });
     // 本地校验 profile env + allowlisted 外部 EXPO_PUBLIC_* 齐全(与 release-beta 一致)。
     assertPublicEnv(resolveCommandPublicEnv(target.publicEnv), { variant: target.variant });
 
@@ -63,8 +67,8 @@ async function main() {
     assertBuildPlatformWithinReleasePlatforms(platform, releasePlatform);
     assertProductionPlatformAllowed(target, platform);
     const autoSubmit = shouldAutoSubmitColdBuild({ target, mode, latest });
-    if (autoSubmit) {
-      assertProductionSubmitTarget({ target, appJson: config.appJson, easJson: config.easJson });
+    if (target.kind === 'production' && mode !== 'OTA_OK') {
+      assertProductionSubmitTarget({ target });
     }
     commands.push(mode === 'OTA_OK'
       ? buildUpdateCommand(target, message, { platform: releasePlatform })

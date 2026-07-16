@@ -14,9 +14,7 @@ function main() {
   if (!command) throw new Error('Usage: release-with-env.mjs <check|beta|prod> [...args]');
 
   const mobileBuildEnv = productionMobileEnv();
-  const restoreEasJson = injectMobileEndpointsIntoEasFile(`${MOBILE_DIR}/eas.json`, {
-    endpointEnv: mobileBuildEnv,
-  });
+  const restoreEasJson = injectMobileEndpointsIntoEasFile(`${MOBILE_DIR}/eas.json`);
   const handleSigint = () => {
     restoreEasJson();
     process.exit(130);

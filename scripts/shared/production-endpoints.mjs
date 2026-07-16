@@ -1,8 +1,8 @@
 /**
  * 生产端点私有配置的唯一加载入口。
  *
- * 仓库只提交 config/production-endpoints.json.example；真实 JSON 由 CI / 发布环境
- * 在构建前写入 config/production-endpoints.json，或通过
+ * 仓库保留空值 example；为方便当前 dev，真实 config/production-endpoints.json
+ * 暂时受 Git 管理，CI / 发布环境也可在构建前覆盖它，或通过
  * CINDY_PRODUCTION_ENDPOINTS_FILE 指向其它绝对/相对路径。任何生产调用缺文件、
  * 缺字段、URL 非法或 OSS 配置为空都立即失败，禁止退回源码内默认值。
  */
@@ -12,6 +12,8 @@ import { fileURLToPath } from 'node:url';
 
 export const PRODUCTION_ENDPOINT_KEYS = Object.freeze([
   'apiBaseUrl',
+  'authApiBaseUrlCn',
+  'authApiBaseUrlGlobal',
   'deviceLinkApiBaseUrl',
   'oauthBrokerApiBaseUrl',
   'heartbeatUrl',
@@ -53,6 +55,8 @@ export const PRODUCTION_ENDPOINTS_EXAMPLE_PATH = path.join(
 
 const FIELD_PROTOCOLS = Object.freeze({
   apiBaseUrl: ['https:'],
+  authApiBaseUrlCn: ['https:'],
+  authApiBaseUrlGlobal: ['https:'],
   deviceLinkApiBaseUrl: ['https:'],
   oauthBrokerApiBaseUrl: ['https:'],
   heartbeatUrl: ['https:'],
@@ -96,6 +100,9 @@ export function loadProductionEndpoints(options = {}) {
   }
   return validateProductionEndpoints(parsed, { source: configPath });
 }
+
+// 兼容需要在模块级读取权威配置的构建诊断代码。
+export const productionEndpoints = loadProductionEndpoints();
 
 /**
  * @param {unknown} value
@@ -168,13 +175,26 @@ export function resolveCdnBaseUrl() {
 }
 
 /** Desktop 正式构建所需的全部 Vite 端点变量。 */
-export function productionViteEnv({ allowEnvOverride = true } = {}) {
+export function productionViteEnv({ allowEnvOverride = true, authRegion } = {}) {
   const endpoints = loadProductionEndpoints();
   const pick = (envName, key) =>
     (allowEnvOverride ? process.env[envName]?.trim() : '') || endpoints[key];
+  const region =
+    authRegion ||
+    process.env.CINDY_AUTH_REGION?.trim() ||
+    (allowEnvOverride ? process.env.VITE_CINDY_AUTH_REGION?.trim() : '') ||
+    'cn';
+  if (region !== 'cn' && region !== 'global') {
+    throw new Error(`Invalid Cindy auth region: ${region}; expected cn or global`);
+  }
+  const authBaseUrl =
+    region === 'global' ? endpoints.authApiBaseUrlGlobal : endpoints.authApiBaseUrlCn;
   return {
     VITE_FEISHU_APP_ID: pick('VITE_FEISHU_APP_ID', 'feishuAppId'),
     VITE_API_BASE_URL: pick('VITE_API_BASE_URL', 'apiBaseUrl'),
+    VITE_CINDY_AUTH_REGION: region,
+    VITE_CINDY_AUTH_BASE_URL:
+      (allowEnvOverride ? process.env.VITE_CINDY_AUTH_BASE_URL?.trim() : '') || authBaseUrl,
     VITE_DEVICE_LINK_API_BASE_URL: pick(
       'VITE_DEVICE_LINK_API_BASE_URL',
       'deviceLinkApiBaseUrl',
@@ -192,10 +212,18 @@ export function productionViteEnv({ allowEnvOverride = true } = {}) {
 }
 
 /** Mobile/EAS 构建所需的公开端点变量。 */
-export function productionMobileEnv() {
+export function productionMobileEnv({ authRegion } = {}) {
   const endpoints = loadProductionEndpoints();
+  const region =
+    authRegion || process.env.EXPO_PUBLIC_CINDY_AUTH_REGION?.trim() || 'cn';
+  if (region !== 'cn' && region !== 'global') {
+    throw new Error(`Invalid Cindy auth region: ${region}; expected cn or global`);
+  }
   return {
     EXPO_PUBLIC_FEISHU_APP_ID: endpoints.feishuAppId,
+    EXPO_PUBLIC_CINDY_AUTH_REGION: region,
+    EXPO_PUBLIC_CINDY_AUTH_BASE_URL:
+      region === 'global' ? endpoints.authApiBaseUrlGlobal : endpoints.authApiBaseUrlCn,
     EXPO_PUBLIC_XDT_API_BASE_URL: endpoints.apiBaseUrl,
     EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: endpoints.deviceLinkApiBaseUrl,
     EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: endpoints.xdGatewayBaseUrl,

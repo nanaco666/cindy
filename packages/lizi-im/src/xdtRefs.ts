@@ -20,11 +20,17 @@ export const XDT_FILE_REGEX = /\[([^\]]*)\]\((xdt-file:\/\/[^)]+)\)/g;
 /** xdt-file://<absPath> → absPath (URL-decoded). */
 export function xdtFileUrlToAbsPath(url: string): string {
   const raw = url.replace(/^xdt-file:\/\//, '');
+  let decoded: string;
   try {
-    return decodeURIComponent(raw);
+    decoded = decodeURIComponent(raw);
   } catch {
-    return raw;
+    decoded = raw;
   }
+  // 约定写法 xdt-file:///<绝对路径>:Unix 下剥协议后的首个 `/` 就是根;
+  // Windows 盘符路径剥完剩 `/C:\...`(或 /C:/...),多余前导 `/` 会让下游
+  // 存在性检查 / 目录白名单比对失败 → 文件静默丢失(2026-07-16 hook 渠道
+  // 实踩)。与 hook-control/outbound.ts 的副本同步修改。
+  return decoded.replace(/^\/+([A-Za-z]:[\\/])/, '$1');
 }
 
 /** Replace xdt-* refs with placeholder text suitable for intermediate frames. */

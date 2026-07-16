@@ -63,6 +63,7 @@
   },
   "license": "UNLICENSED",
   "dependencies": {
+    "@cindy/auth-client": "workspace:*",
     "@codemirror/commands": "^6.10.3",
     "@codemirror/lang-cpp": "^6.0.3",
     "@codemirror/lang-css": "^6.3.1",

@@ -1,29 +1,30 @@
 import Constants from 'expo-constants';
 
-export const APP_SCHEME = 'lizcn';
-export const MOBILE_REDIRECT_URL = `${APP_SCHEME}://auth`;
-export const MOBILE_OAUTH_STATE_PREFIX = `${APP_SCHEME}.`;
+export type CindyAuthRegion = 'cn' | 'global';
 
-// EXPO_PUBLIC_* 优先使用构建环境；直接执行 EAS build 时由 app.config.js 的 extra 提供同一份配置。
 const configuredBuildEnv = ((Constants.expoConfig?.extra as {
   xdtProductionEnv?: Record<string, string>;
 } | null)?.xdtProductionEnv ?? {}) as Record<string, string>;
-const configuredApiBaseUrl =
-  process.env.EXPO_PUBLIC_XDT_API_BASE_URL?.trim() || configuredBuildEnv.EXPO_PUBLIC_XDT_API_BASE_URL;
-const configuredDeviceLinkApiBaseUrl =
-  process.env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL?.trim() ||
-  configuredBuildEnv.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL;
-const configuredMobileVoiceBaseUrl =
-  process.env.EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL?.trim() ||
-  configuredBuildEnv.EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL;
-const configuredFeishuAppId =
-  process.env.EXPO_PUBLIC_FEISHU_APP_ID?.trim() || configuredBuildEnv.EXPO_PUBLIC_FEISHU_APP_ID;
 
-export const DEFAULT_API_BASE_URL = configuredApiBaseUrl || '';
-export const DEFAULT_DEVICE_LINK_API_BASE_URL =
-  configuredDeviceLinkApiBaseUrl || '';
-export const DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL =
-  configuredMobileVoiceBaseUrl || '';
+function configuredValue(key: string): string {
+  return process.env[key]?.trim() || configuredBuildEnv[key]?.trim() || '';
+}
+
+export const AUTH_REGION: CindyAuthRegion =
+  configuredValue('EXPO_PUBLIC_CINDY_AUTH_REGION') === 'global' ? 'global' : 'cn';
+export const APP_SCHEME = AUTH_REGION === 'global' ? 'cindy' : 'cindycn';
+export const MOBILE_REDIRECT_URL = `${APP_SCHEME}://auth`;
+
+// 生产值由 app.config.js 从统一 JSON 注入；源码不保留生产 URL fallback。
+export const DEFAULT_API_BASE_URL = configuredValue('EXPO_PUBLIC_XDT_API_BASE_URL');
+export const DEFAULT_AUTH_API_BASE_URL_CN = '';
+export const DEFAULT_AUTH_API_BASE_URL_GLOBAL = '';
+export const DEFAULT_DEVICE_LINK_API_BASE_URL = configuredValue(
+  'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL',
+);
+export const DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL = configuredValue(
+  'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL',
+);
 
 export interface MobileConfigIssue {
   key: string;
@@ -69,8 +70,6 @@ function localRelayBaseForApi(apiBaseUrl: string): string | null {
   }
 }
 
-export const FEISHU_APP_ID = configuredFeishuAppId || '';
-
 export function resolveEnvFlag(value: string | undefined): boolean {
   const normalized = value?.trim().toLowerCase();
   return normalized === '1' || normalized === 'true' || normalized === 'yes';
@@ -80,34 +79,64 @@ export const DEV_LOGIN_ENABLED = resolveEnvFlag(
   process.env.EXPO_PUBLIC_XDT_DEV_LOGIN_ENABLED,
 );
 
-export const NATIVE_FEISHU_LOGIN_ENABLED = resolveEnvFlag(
-  process.env.EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED,
-);
-
 export function getMobileConfigIssues(
   env: Record<string, string | undefined> = {
-    EXPO_PUBLIC_FEISHU_APP_ID: FEISHU_APP_ID,
+    EXPO_PUBLIC_CINDY_AUTH_BASE_URL:
+      process.env.EXPO_PUBLIC_CINDY_AUTH_BASE_URL,
   },
 ): MobileConfigIssue[] {
   const issues: MobileConfigIssue[] = [];
-  if (!env.EXPO_PUBLIC_FEISHU_APP_ID?.trim()) {
+  const explicitBaseUrl = env.EXPO_PUBLIC_CINDY_AUTH_BASE_URL?.trim();
+  if (explicitBaseUrl && !isHttpUrl(explicitBaseUrl)) {
     issues.push({
-      key: 'EXPO_PUBLIC_FEISHU_APP_ID',
-      message: '缺少飞书应用 ID，无法发起登录。',
+      key: 'EXPO_PUBLIC_CINDY_AUTH_BASE_URL',
+      message: '登录服务地址必须是 http(s) URL。',
     });
   }
   return issues;
 }
 
-export const API_BASE_URL = normalizeBaseUrl(configuredApiBaseUrl);
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      Boolean(url.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export const API_BASE_URL = normalizeBaseUrl(
+  configuredValue('EXPO_PUBLIC_XDT_API_BASE_URL'),
+);
+
+export const AUTH_API_BASE_URL = normalizeBaseUrlWithDefault(
+  configuredValue('EXPO_PUBLIC_CINDY_AUTH_BASE_URL'),
+  AUTH_REGION === 'global'
+    ? DEFAULT_AUTH_API_BASE_URL_GLOBAL
+    : DEFAULT_AUTH_API_BASE_URL_CN,
+);
+
+export const GOOGLE_WEB_CLIENT_ID =
+  process.env.EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID?.trim() || '';
+export const GOOGLE_IOS_CLIENT_ID =
+  process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID?.trim() || '';
+export const GOOGLE_IOS_URL_SCHEME =
+  process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME?.trim() || '';
+export const WECHAT_APP_ID =
+  process.env.EXPO_PUBLIC_CINDY_WECHAT_APP_ID?.trim() || '';
+export const WECHAT_UNIVERSAL_LINK =
+  process.env.EXPO_PUBLIC_CINDY_WECHAT_UNIVERSAL_LINK?.trim() || '';
 
 export const DEVICE_LINK_API_BASE_URL = resolveDeviceLinkApiBaseUrl(
-  configuredDeviceLinkApiBaseUrl,
+  configuredValue('EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL'),
   API_BASE_URL,
 );
 
 export const MOBILE_VOICE_LITELLM_BASE_URL = normalizeBaseUrlWithDefault(
-  configuredMobileVoiceBaseUrl,
+  configuredValue('EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL'),
   DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL,
 );
 
@@ -126,12 +155,5 @@ export const IS_OTA_SELFHOST = process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST === '1';
 // 会经 selfhostEnv() 注入该值(取自桌面 CDN manifest 的当前版本),EAS beta/prod 不注入。
 // EXPO_PUBLIC_ 前缀由 Metro 在打包时内联进 JS bundle(不进 @expo/fingerprint,OTA 安全、
 // 不改 runtimeVersion)。空值表示 dev / 非自建 / 未注入,设置页据此不渲染该行。
-export const DESKTOP_PACKAGE_VERSION = process.env.EXPO_PUBLIC_DESKTOP_VERSION?.trim() || '';
-
-// 手机是远程控制端:只需身份,对飞书数据的操作通过控制 desktop 间接完成,故只申请身份级 scope。
-// /authen/v1/user_info 的 name / avatar_url / open_id 无需 scope;email 需 contact:user.email:readonly
-// (保留它是为了避免登录时把用户已有 email 覆盖为 null)。不申请 offline_access —— 控制端不需要
-// 续期飞书 token。此 scope 仅用于浏览器兜底流;原生 LarkSSO 路径的 scope 由飞书后台应用配置决定。
-export const OAUTH_SCOPE = [
-  'contact:user.email:readonly',
-].join(' ');
+export const DESKTOP_PACKAGE_VERSION =
+  process.env.EXPO_PUBLIC_DESKTOP_VERSION?.trim() || '';

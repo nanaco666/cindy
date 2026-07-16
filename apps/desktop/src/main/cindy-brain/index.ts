@@ -231,6 +231,7 @@ function scheduleBuiltinReconcile(reason: string): void {
  */
 const RENAMED_BUILTIN_GHOSTS: ReadonlyArray<readonly [string, string]> = [
   ['cindy-mivo', 'xd-mivo'], // 2026-07-13 更名 XD Mivo
+  ['cindy-feishu', 'xd-feishu'], // 2026-07-16 更名 XD Feishu(企业档)
 ];
 
 /**

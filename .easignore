@@ -34,6 +34,8 @@ apps/mobile/docs
 apps/mobile/visual-*.png
 
 packages/*
+!packages/auth-client
+!packages/auth-client/**
 !packages/device-link
 !packages/device-link/**
 !packages/maker-shared

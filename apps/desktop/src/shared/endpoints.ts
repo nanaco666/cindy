@@ -16,6 +16,9 @@ export const XD_GATEWAY_BASE_URL = injectedEndpoint(import.meta.env.VITE_XDPROXY
 /** 主 server API 的本地开发兜底地址。 */
 export const API_BASE_URL_DEV_FALLBACK = 'http://localhost:3333';
 
+/** Cindy auth-server 的本地开发兜底地址。*/
+export const AUTH_BASE_URL_DEV_FALLBACK = 'http://localhost:3344';
+
 /** device-link relay 的本地开发兜底地址。 */
 export const DEVICE_LINK_API_BASE_DEV_FALLBACK = 'http://localhost:3335';
 

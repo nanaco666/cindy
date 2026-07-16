@@ -38,6 +38,9 @@ function makeIpcPath(): string {
   return path.join(os.tmpdir(), `${uniq}.sock`);
 }
 
+/** 记录 daemon 侧 SDK stopTask 被调到的 taskId(round-trip 断言用)。 */
+const stopTaskCalls: string[] = [];
+
 function buildFakeFactory(): SdkQueryFactory {
   return (opts): SdkQueryLike => {
     async function* gen(): AsyncGenerator<unknown> {
@@ -63,6 +66,9 @@ function buildFakeFactory(): SdkQueryFactory {
       async setModel() {},
       async setPermissionMode() {},
       async applyFlagSettings() {},
+      async stopTask(taskId: string) {
+        stopTaskCalls.push(taskId);
+      },
       async getContextUsage() {
         return {
           categories: [{ name: 'Messages', tokens: 42, color: 'inactive' }],
@@ -84,6 +90,7 @@ function buildFakeFactory(): SdkQueryFactory {
 }
 
 beforeEach(async () => {
+  stopTaskCalls.length = 0;
   const socketPath = makeIpcPath();
   const registry = new SessionRegistry({ sdkQueryFactory: buildFakeFactory() });
   const server = new ManagerServer({
@@ -160,6 +167,18 @@ describe('RemoteQuery', () => {
     await remote.setPermissionMode('plan');
     await remote.applyFlagSettings({ effortLevel: 'high' });
     await remote.interrupt();
+    await remote.close();
+  });
+
+  it('stopTask() round-trips taskId through manager into SDK stopTask', async () => {
+    const remote = await createRemoteQuery({
+      client: ctx!.client,
+      sessionId: 's-stop-task',
+      startParams: { cwd: '/w', model: 'm', env: {} },
+    });
+    await collect(remote, 1);
+    await remote.stopTask('task-abc');
+    expect(stopTaskCalls).toEqual(['task-abc']);
     await remote.close();
   });
 
