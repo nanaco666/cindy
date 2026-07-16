@@ -212,13 +212,14 @@ import type { OrcaCollabCard as OrcaCollabCardModel } from '@/session/orcaCollab
 import {
   buildMessageLoadEarlierAction,
   evaluateMessageWindowUpdate,
-  isNearMobileMessageListBottom,
   mobileMessageListTopPadding,
   MOBILE_MESSAGE_LIST_BOTTOM_PADDING,
   type MessageScrollMetrics,
   mobileMessageListBottomPadding,
   previousUserMessageJumpTarget,
+  resolveMobileNearBottomOnScroll,
   shouldAutoLoadEarlier,
+  shouldUnpinMobileFollowOnDrag,
 } from '@/session/messageScroll';
 import { ImageLightbox, type ImageLightboxAnnotationConfig } from '@/session/ImageLightbox';
 import { MermaidDiagramWebView } from '@/session/mermaidWebView';
@@ -426,6 +427,13 @@ export function MessageRenderer({
     screenWidth: windowDimensions.width,
   }), [windowDimensions.height, windowDimensions.width]);
   const nearBottomRef = useRef(true);
+  // ── 拖动手势追踪(贴底跟随的意图解除用)──
+  // 拖动期间(onScrollBeginDrag ~ onScrollEndDrag)相对起点累计上移超过死区
+  // → 立即解除跟随(shouldUnpinMobileFollowOnDrag),不看近底距离阈值——
+  // 距离阈值(≥228px)在流式期间与 scrollToEnd / maintainScrollAtEnd 竞态,
+  // 慢速小幅上滑会被反复拽回(桌面版同源 bug 的手机版变体,见 messageScroll.ts)。
+  const isDraggingRef = useRef(false);
+  const dragStartOffsetYRef = useRef<number | null>(null);
   // 用户是否主动拖动过(区分「冷开初始布局」与「用户上翻」):自动加载更早只在用户真拖过之后才允许,
   // 否则短会话(只加载了少量最新消息但 hasOlderMessages)冷开时会落在 onStartReachedThreshold 内、
   // 未经用户操作就自动拉历史(review P2)。切会话重置。
@@ -453,6 +461,8 @@ export function MessageRenderer({
   if (prevScrollResetKeyRef.current !== scrollResetKey) {
     prevScrollResetKeyRef.current = scrollResetKey;
     nearBottomRef.current = true;
+    isDraggingRef.current = false;
+    dragStartOffsetYRef.current = null;
     userScrollForOlderRef.current = false;
     lastAutoLoadEarlierKeyRef.current = null;
     readingOlderRef.current = false;
@@ -671,38 +681,80 @@ export function MessageRenderer({
     onLoadEarlier();
   }, [firstItemKey, loadEarlierAction.disabled, loadEarlierAction.visible, onLoadEarlier]);
 
-  // 近底判定驱动「跳到底部」浮标与新消息红点;metrics 也供 DEV harness 读取。
-  // LegendList 贴底/防跳由内置 prop 处理,这里不再触发任何锚定。
+  // 近底/跟随态迁移 + 「跳到底部」浮标与新消息红点;metrics 也供 DEV harness 读取。
+  // 「解除跟随」的主路径是拖动意图(shouldUnpinMobileFollowOnDrag):拖动中相对起点
+  // 上移超过死区立即解除,并同步关掉 LegendList 内置 maintainScrollAtEnd(endPinEnabled),
+  // 否则 0.12 × viewport 内的小幅上滑仍会被内置贴底拽回。
+  // 「恢复跟随」走 resolveMobileNearBottomOnScroll:距离 + 明确向下方向,恢复时把
+  // endPinEnabled 打开。读历史(readingOlderRef)期间禁止方向性恢复——load-earlier
+  // prepend 的 mVCP 补偿会产生程序化向下增量,短会话里会被误判成「用户滑回底部」。
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const metrics = {
       contentHeight: event.nativeEvent.contentSize.height,
       offsetY: event.nativeEvent.contentOffset.y,
       viewportHeight: event.nativeEvent.layoutMeasurement.height,
     };
+    const previousOffsetY = scrollMetricsRef.current.offsetY;
     scrollMetricsRef.current = metrics;
-    const nearBottom = isNearMobileMessageListBottom(metrics, bottomPadding);
-    nearBottomRef.current = nearBottom;
-    setIsAwayFromBottom(!nearBottom);
-    if (nearBottom) setHasNewMessages(false);
+    if (
+      nearBottomRef.current
+      && shouldUnpinMobileFollowOnDrag({
+        dragging: isDraggingRef.current,
+        dragStartOffsetY: dragStartOffsetYRef.current,
+        metrics,
+      })
+    ) {
+      nearBottomRef.current = false;
+      setEndPinEnabled(false);
+      setIsAwayFromBottom(true);
+    } else {
+      const nearBottom = resolveMobileNearBottomOnScroll({
+        wasNearBottom: nearBottomRef.current,
+        metrics,
+        scrollDelta: readingOlderRef.current ? 0 : metrics.offsetY - previousOffsetY,
+        bottomOverlayHeight,
+      });
+      if (nearBottom !== nearBottomRef.current) {
+        nearBottomRef.current = nearBottom;
+        // 方向性恢复跟随 → 重新打开内置贴底(解除时在上面的分支关掉;
+        // scrollToBottom / followLatest / 切会话各自已显式恢复)。
+        if (nearBottom) setEndPinEnabled(true);
+      }
+      setIsAwayFromBottom(!nearBottom);
+      if (nearBottom) setHasNewMessages(false);
+    }
     // 拖动进近顶区时 onStartReached 边沿可能早已被消费(见 attemptAutoLoadEarlier 注释),
     // 滚动事件兜底重评估;前置短路让稳态滚动只付 1~2 次 ref 比较的成本。
     attemptAutoLoadEarlier();
-  }, [attemptAutoLoadEarlier, bottomPadding]);
+  }, [attemptAutoLoadEarlier, bottomOverlayHeight]);
 
   // 用户开始拖动 → 标记「上翻意图」,放行自动加载更早(onScrollBeginDrag 仅用户手势触发,
-  // 程序化 scrollToEnd 不会触发,故不会误置)。
-  const handleScrollBeginDrag = useCallback(() => {
+  // 程序化 scrollToEnd 不会触发,故不会误置);同时记录拖动起点 offset,供
+  // shouldUnpinMobileFollowOnDrag 判「相对起点累计上移」。
+  const handleScrollBeginDrag = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    isDraggingRef.current = true;
+    dragStartOffsetYRef.current = event.nativeEvent.contentOffset.y;
     userScrollForOlderRef.current = true;
     // 新手势 = 允许重新尝试一次自动加载(上次失败 / 无进展的去重记录随手势作废)。
     lastAutoLoadEarlierKeyRef.current = null;
-    // 用户重新拖动 → 交回近底判定决定是否跟随(向下回到底部则恢复贴底,向上读历史则不跟)。
+    // 用户重新拖动 → 结束「读历史」态;内置贴底只在仍处于跟随态时恢复——
+    // 已意图解除的用户开始新一轮上滑时,无条件恢复会让 maintainScrollAtEnd
+    // 在死区被越过前的间隙里与手势打架;解除态下滑回底的恢复由 handleScroll
+    // 的方向判定负责(恢复时会重新打开 endPinEnabled)。
     readingOlderRef.current = false;
-    setEndPinEnabled(true);
+    if (nearBottomRef.current) setEndPinEnabled(true);
     // 翻完 refs 立即补一次电平评估:列表已顶死时(Android 无 bounce 尤甚)这次拖动不产生
     // offset 变化,不会有 onScroll / onStartReached,ref 写入也不驱动 effect——没有这一刀,
     // 「失败后停在顶部再拖一下重试」的信号会整体丢失(review P2)。
     attemptAutoLoadEarlier();
   }, [attemptAutoLoadEarlier]);
+
+  // 拖动结束(手指离开,可能进入惯性滚动)→ 关闭拖动追踪。惯性阶段的上滑不需要再判
+  // 解除:上滑手势的拖动段必然已越过死区完成解除;下滑回底的恢复由 scroll 方向判定接手。
+  const handleScrollEndDrag = useCallback(() => {
+    isDraggingRef.current = false;
+    dragStartOffsetYRef.current = null;
+  }, []);
 
   const handleStartReached = useCallback(() => {
     attemptAutoLoadEarlier();
@@ -780,11 +832,15 @@ export function MessageRenderer({
   }, [focusRunKey, focusedItemKey, listData]);
 
   // 新消息红点:滚离底时来新消息(尾部 append)→ 提示。贴底时由 maintainScrollAtEnd 自动跟随、不提示。
+  // wasNearBottom 只看 nearBottomRef(跟随态唯一真相):以前 || 距离兜底会在
+  // 「意图解除后仍停在近底阈值带内」时把状态判回跟随——标志说在跟、滚动路径
+  // (handleContentSize / maintainScrollAtEnd)却已解除,红点被吞。ref 由
+  // handleScroll / 意图解除 / 跳转路径维护,冷开与切会话初始为 true,无需距离兜底。
   useEffect(() => {
     const decision = evaluateMessageWindowUpdate({
       previousKeys: previousItemKeysRef.current,
       nextKeys: itemKeys,
-      wasNearBottom: nearBottomRef.current || isNearMobileMessageListBottom(scrollMetricsRef.current, bottomPadding),
+      wasNearBottom: nearBottomRef.current,
     });
     if (!focusedItemKey && decision.shouldAutoFollow && decision.autoFollowTarget === 'content-end') {
       setHasNewMessages(false);
@@ -793,7 +849,7 @@ export function MessageRenderer({
       setHasNewMessages(true);
     }
     previousItemKeysRef.current = itemKeys;
-  }, [bottomPadding, focusedItemKey, itemKeys]);
+  }, [focusedItemKey, itemKeys]);
 
   const handleLoadEarlierPress = useCallback(() => {
     readingOlderRef.current = true;
@@ -856,6 +912,7 @@ export function MessageRenderer({
         onContentSizeChange={handleContentSize}
         onScroll={handleScroll}
         onScrollBeginDrag={handleScrollBeginDrag}
+        onScrollEndDrag={handleScrollEndDrag}
         onStartReached={handleStartReached}
         onStartReachedThreshold={2}
         scrollEventThrottle={16}

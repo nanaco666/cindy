@@ -25,6 +25,10 @@ import {
   mobileLoadEarlierPrefetchThreshold,
   mobileMessageListTopPadding,
   mobileTopPaddingCompensationOffset,
+  MOBILE_FOLLOW_REPIN_DIRECTION_DEAD_ZONE,
+  MOBILE_FOLLOW_UNPIN_DRAG_DEAD_ZONE,
+  resolveMobileNearBottomOnScroll,
+  shouldUnpinMobileFollowOnDrag,
 } from '@/session/messageScroll';
 
 function remoteMessage(
@@ -341,5 +345,108 @@ describe('mobileTopPaddingCompensationOffset', () => {
     expect(mobileTopPaddingCompensationOffset({
       ...midReadBase, previousTopPadding: 112, nextTopPadding: 112,
     })).toBeNull();
+  });
+});
+
+describe('shouldUnpinMobileFollowOnDrag', () => {
+  // 可滚容器基准:内容 2000,视口 800;拖动起点 offsetY=1200(内容末端)。
+  const metricsAt = (offsetY: number) => ({ contentHeight: 2000, offsetY, viewportHeight: 800 });
+
+  it('拖动中相对起点上移超过死区 → 解除(主诉求:小幅上滑即停,不看近底阈值)', () => {
+    expect(shouldUnpinMobileFollowOnDrag({
+      dragging: true, dragStartOffsetY: 1200, metrics: metricsAt(1191),
+    })).toBe(true);
+  });
+
+  it('拖动中按住不动 / 死区内抖动 → 不解除', () => {
+    expect(shouldUnpinMobileFollowOnDrag({
+      dragging: true, dragStartOffsetY: 1200, metrics: metricsAt(1200),
+    })).toBe(false);
+    expect(shouldUnpinMobileFollowOnDrag({
+      dragging: true, dragStartOffsetY: 1200, metrics: metricsAt(1200 - MOBILE_FOLLOW_UNPIN_DRAG_DEAD_ZONE),
+    })).toBe(false);
+  });
+
+  it('拖动中向下(offset 增大,含 iOS 底部 bounce)→ 不解除', () => {
+    expect(shouldUnpinMobileFollowOnDrag({
+      dragging: true, dragStartOffsetY: 1200, metrics: metricsAt(1230),
+    })).toBe(false);
+  });
+
+  it('非拖动期(惯性 / 程序化滚动)→ 不解除', () => {
+    expect(shouldUnpinMobileFollowOnDrag({
+      dragging: false, dragStartOffsetY: 1200, metrics: metricsAt(1100),
+    })).toBe(false);
+    expect(shouldUnpinMobileFollowOnDrag({
+      dragging: true, dragStartOffsetY: null, metrics: metricsAt(1100),
+    })).toBe(false);
+  });
+
+  it('内容未撑满一屏 → 不解除(解除后无法用「滑回底部」恢复)', () => {
+    expect(shouldUnpinMobileFollowOnDrag({
+      dragging: true,
+      dragStartOffsetY: 40,
+      metrics: { contentHeight: 600, offsetY: 0, viewportHeight: 800 },
+    })).toBe(false);
+  });
+});
+
+describe('resolveMobileNearBottomOnScroll', () => {
+  // 阈值:96 + 132(无浮层)= 228。内容 2000,视口 800 → end offset 1200,
+  // 阈值带 = offsetY > 972。
+  const metricsAt = (offsetY: number) => ({ contentHeight: 2000, offsetY, viewportHeight: 800 });
+
+  it('距底超出阈值 → false(原有离底解除行为不变)', () => {
+    expect(resolveMobileNearBottomOnScroll({
+      wasNearBottom: true, metrics: metricsAt(900), scrollDelta: -40,
+    })).toBe(false);
+    expect(resolveMobileNearBottomOnScroll({
+      wasNearBottom: false, metrics: metricsAt(500), scrollDelta: 40,
+    })).toBe(false);
+  });
+
+  it('阈值带内 + 原本在跟 → 保持跟随(贴底期间程序化 scrollToEnd 的增量不改状态)', () => {
+    expect(resolveMobileNearBottomOnScroll({
+      wasNearBottom: true, metrics: metricsAt(1000), scrollDelta: -20,
+    })).toBe(true);
+    expect(resolveMobileNearBottomOnScroll({
+      wasNearBottom: true, metrics: metricsAt(1200), scrollDelta: 0,
+    })).toBe(true);
+  });
+
+  it('阈值带内 + 已解除 + 上滑事件 → 保持解除(修复核心:解除后同手势的上滑不得翻回跟随)', () => {
+    expect(resolveMobileNearBottomOnScroll({
+      wasNearBottom: false, metrics: metricsAt(1100), scrollDelta: -30,
+    })).toBe(false);
+    expect(resolveMobileNearBottomOnScroll({
+      wasNearBottom: false, metrics: metricsAt(1100), scrollDelta: 0,
+    })).toBe(false);
+    expect(resolveMobileNearBottomOnScroll({
+      wasNearBottom: false, metrics: metricsAt(1100), scrollDelta: MOBILE_FOLLOW_REPIN_DIRECTION_DEAD_ZONE,
+    })).toBe(false);
+  });
+
+  it('阈值带内 + 已解除 + 明确向下 → 恢复跟随', () => {
+    expect(resolveMobileNearBottomOnScroll({
+      wasNearBottom: false, metrics: metricsAt(1100), scrollDelta: 2,
+    })).toBe(true);
+  });
+
+  it('bottomOverlayHeight 放大阈值(与 isNearMobileMessageListBottom 同口径)', () => {
+    // overlay 400 → 阈值 96 + 400 = 496,阈值带 = offsetY > 704。
+    expect(resolveMobileNearBottomOnScroll({
+      wasNearBottom: true, metrics: metricsAt(750), scrollDelta: -20, bottomOverlayHeight: 400,
+    })).toBe(true);
+    expect(resolveMobileNearBottomOnScroll({
+      wasNearBottom: true, metrics: metricsAt(650), scrollDelta: -20, bottomOverlayHeight: 400,
+    })).toBe(false);
+  });
+
+  it('内容未撑满一屏 → 恒为跟随', () => {
+    expect(resolveMobileNearBottomOnScroll({
+      wasNearBottom: false,
+      metrics: { contentHeight: 600, offsetY: 0, viewportHeight: 800 },
+      scrollDelta: -10,
+    })).toBe(true);
   });
 });

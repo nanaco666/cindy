@@ -51,6 +51,88 @@ export function mobileMessageListEndOffset(metrics: MessageScrollMetrics): numbe
   return Math.max(0, metrics.contentHeight - metrics.viewportHeight);
 }
 
+// ── 贴底跟随的解除 / 恢复判定(对齐桌面版 autoFollowIntent 语义)──
+// 修复背景(桌面版同源 bug 的手机版变体):近底判定原来是纯距离阈值
+// (≥228px),流式期间内容增长会触发 handleContentSize 的 scrollToEnd 与
+// LegendList 内置 maintainScrollAtEnd。用户慢速小幅上滑(未超过阈值)松手后,
+// 距底仍在阈值带内 → 仍被判「近底」→ 下一帧内容增长又被拽回最底。触摸惯性
+// 大多一次就滑出阈值,所以比桌面版难触发,但结构性竞态相同。
+// 修复:「解除」看手势意图(拖动中向上位移超过死区,只有用户能产生),
+// 「恢复」保留距离判定但要求 scroll 方向明确向下——否则解除后紧跟着的上滑
+// scroll 事件(距底仍在阈值带内)会把刚解除的跟随立刻翻回去。
+
+/**
+ * 拖动解除跟随的累计位移死区(px)。手指按住不动也有 ±2-3px 抖动,取 8px
+ * 与桌面版 touch 意图阈值(TOUCH_HISTORY_INTENT_THRESHOLD_PX)同源;
+ * 真实的「上滑一行」轻松超过它,解除仍然是「一滑即停」的体感。
+ */
+export const MOBILE_FOLLOW_UNPIN_DRAG_DEAD_ZONE = 8;
+
+/**
+ * 恢复跟随的单事件方向死区(px)。scroll 事件的 offsetY 是浮点布局值,
+ * 1px 内的增量不算「明确向下」。
+ */
+export const MOBILE_FOLLOW_REPIN_DIRECTION_DEAD_ZONE = 1;
+
+/** 容器「真的可滚」的最小内容富余(px),亚像素圆整内视为不可滚。 */
+const MOBILE_FOLLOW_MIN_SCROLLABLE_PX = 1;
+
+export interface MobileFollowUnpinInput {
+  /** 当前处于用户拖动手势中(onScrollBeginDrag ~ onScrollEndDrag)。 */
+  dragging: boolean;
+  /** 本次拖动起点的 contentOffset.y;非拖动期为 null。 */
+  dragStartOffsetY: number | null;
+  /** 当前滚动 metrics。 */
+  metrics: MessageScrollMetrics;
+}
+
+/**
+ * 用户拖动是否构成「想向上回看、应解除贴底跟随」。
+ *
+ * 条件(全部满足):
+ *  - 处于拖动手势中:拖动期间的 offset 变化只可能由用户产生(原生层在活跃
+ *    手势期基本忽略程序化 scrollTo),不会误伤程序化贴底/补偿滚动;
+ *  - 相对拖动起点累计向上超过死区:按住不动的抖动不算;
+ *  - 内容可滚:未撑满一屏时解除毫无视觉意义,却会在内容长出滚动区后表现为
+ *    「不跟了」且无法用「滑回底部」恢复。
+ */
+export function shouldUnpinMobileFollowOnDrag(input: MobileFollowUnpinInput): boolean {
+  if (!input.dragging || input.dragStartOffsetY === null) return false;
+  const { contentHeight, offsetY, viewportHeight } = input.metrics;
+  if (contentHeight - viewportHeight <= MOBILE_FOLLOW_MIN_SCROLLABLE_PX) return false;
+  return offsetY < input.dragStartOffsetY - MOBILE_FOLLOW_UNPIN_DRAG_DEAD_ZONE;
+}
+
+export interface MobileNearBottomResolveInput {
+  /** scroll 事件前的跟随态(nearBottomRef)。 */
+  wasNearBottom: boolean;
+  /** 当前滚动 metrics。 */
+  metrics: MessageScrollMetrics;
+  /** 本次 scroll 事件的 offsetY 增量(正 = 向内容末端)。 */
+  scrollDelta: number;
+  /** 底部浮层高度(近底阈值随之放大,同 isNearMobileMessageListBottom)。 */
+  bottomOverlayHeight?: number;
+}
+
+/**
+ * scroll 事件驱动的近底/跟随态迁移(handleScroll 消费)。
+ *
+ *  - 内容未撑满一屏 → true(与 isNearMessageListBottom 同口径);
+ *  - 距底超出阈值 → false(离底解除,原行为不变);
+ *  - 阈值带内且原本在跟 → 保持 true(贴底期间程序化 scrollToEnd 产生的
+ *    向下增量、以及被动微小位移都不改变状态);
+ *  - 阈值带内且已解除 → 仅「明确向下」(增量 > 死区)才恢复跟随。**不能只看
+ *    距离**:拖动解除后同一手势内继续到达的上滑 scroll 事件距底仍在阈值带内,
+ *    无方向守卫会立即翻回跟随,解除失效(修复核心)。
+ */
+export function resolveMobileNearBottomOnScroll(input: MobileNearBottomResolveInput): boolean {
+  const { contentHeight, viewportHeight } = input.metrics;
+  if (contentHeight <= viewportHeight) return true;
+  if (!isNearMobileMessageListBottom(input.metrics, input.bottomOverlayHeight)) return false;
+  if (input.wasNearBottom) return true;
+  return input.scrollDelta > MOBILE_FOLLOW_REPIN_DIRECTION_DEAD_ZONE;
+}
+
 /**
  * 贴底锚定校验的判定容差:contentSize / offset 都是浮点布局值,亚像素误差不算落空。
  * 取 2px:小于任何真实遮挡(一行文字 ≥ 20px),大于 Fabric 布局的舍入抖动。
