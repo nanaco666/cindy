@@ -27,13 +27,15 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Flame, Check, X } from 'lucide-react';
 import { WEBSITE_URL } from '../../../shared/endpoints';
-
 import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 import { useUpdateStatus } from '@/hooks/useUpdateStatus';
 import { useUpdateBannerDismiss } from '@/hooks/useUpdateBannerDismiss';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Tip } from '@/components/ui/tooltip';
+
+// 运行期端点清单优先(重启生效),烘焙常量兜底
+const websiteUrl = () => window.electronAPI.clientEndpoints.websiteUrl || WEBSITE_URL;
 
 interface UpdateBannerProps {
   isCollapsed: boolean;
@@ -141,12 +143,12 @@ export function UpdateBanner({ isCollapsed }: UpdateBannerProps) {
 
   const handleManualDownload = () => {
     setShowTranslocatedDialog(false);
-    window.open(WEBSITE_URL, '_blank');
+    window.open(websiteUrl(), '_blank');
   };
 
   const handleSpawnFailedDownload = () => {
     setShowSpawnFailedDialog(false);
-    window.open(WEBSITE_URL, '_blank');
+    window.open(websiteUrl(), '_blank');
   };
 
   const versionSuffix = version ? ` (v${version})` : '';

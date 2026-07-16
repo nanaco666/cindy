@@ -1,0 +1,46 @@
+/**
+ * 仓内清单正本 config/client-endpoints.json 的 CI 守门测试。
+ *
+ * 发布方式是人肉上传 OSS(暂无发布脚本),这条测试是上传前的唯一自动防线:
+ * 改 OSS 前必须先改仓内正本并让本测试通过。客户端语义是**阻断式**——清单
+ * 校验不过启动直接卡错误框,所以这里保证正本永远能被客户端 parser 接受。
+ *
+ * 注意:不校验与 production-endpoints.json 的一致性——清单的意义就是让线上
+ * 端点可以偏离构建期烘焙值(如迁移到新域名);字段也允许缺省(缺省字段客户端
+ * 逐项回退烘焙值)。
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { describe, expect, it } from 'vitest';
+
+import {
+  CLIENT_ENDPOINT_KEYS,
+  CLIENT_ENDPOINTS_SCHEMA_VERSION,
+  parseClientEndpointManifest,
+} from '../clientEndpoints';
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
+const MANIFEST_PATH = path.join(REPO_ROOT, 'config', 'client-endpoints.json');
+
+describe('config/client-endpoints.json 守门', () => {
+  const rawText = fs.readFileSync(MANIFEST_PATH, 'utf8');
+
+  it('必须能被客户端共享 parser 完整接受(阻断语义下坏正本 = 全量启动事故)', () => {
+    const result = parseClientEndpointManifest(rawText);
+    expect(result).toMatchObject({ ok: true });
+  });
+
+  it('schemaVersion 与客户端支持版本一致', () => {
+    const parsed = JSON.parse(rawText) as { schemaVersion?: number };
+    expect(parsed.schemaVersion).toBe(CLIENT_ENDPOINTS_SCHEMA_VERSION);
+  });
+
+  it('无未知字段(字段名拼错会被客户端当未知字段忽略,静默不生效)', () => {
+    const parsed = JSON.parse(rawText) as Record<string, unknown>;
+    const keys = Object.keys(parsed).filter((key) => key !== 'schemaVersion');
+    const allowed = new Set<string>(CLIENT_ENDPOINT_KEYS);
+    expect(keys.filter((key) => !allowed.has(key))).toEqual([]);
+  });
+});

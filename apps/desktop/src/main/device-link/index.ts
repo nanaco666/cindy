@@ -54,22 +54,22 @@ import {
 } from './dispatch';
 import { setBusyProbe, helloBusy, pollBusyChange, resetBusyDedupe } from './busyReporter';
 import { resetAll as resetSubscriptionRefs, snapshotSubscriptions } from './subscriptionRefcount';
-import { DEVICE_LINK_API_BASE_DEV_FALLBACK } from '../../shared/endpoints';
+import { getClientEndpoint } from '../clientEndpointsService';
 
 // register.ts 从 device-link/index 导入 setBusyProbe;改用 busyReporter 后在此 re-export 保持其导入不变。
 export { setBusyProbe };
 
 const log = createLogger('device-link');
 
-// device-link 独立部署后的 relay 地址:优先读 VITE_DEVICE_LINK_API_BASE_URL(relay 域名),
-// 不设时默认 localhost:3335(本地跑 device-link-server 的端口)。
-// 注意:不回退到 VITE_API_BASE_URL —— device-link 已从主 server 摘除,主 server 没有这组端点。
-const DEVICE_LINK_API_BASE =
-  import.meta.env.VITE_DEVICE_LINK_API_BASE_URL || DEVICE_LINK_API_BASE_DEV_FALLBACK;
+// device-link 独立部署后的 relay 地址:走运行期端点清单(烘焙值已含 dev fallback
+// localhost:3335)。惰性函数而非模块级常量——远程清单在 app.ready 内解析。
+// 注意:不回退到 apiBaseUrl —— device-link 已从主 server 摘除,主 server 没有这组端点。
 const WS_PATH = '/api/device-link/ws';
 
 /** relay REST base(media presign / devices 等);供 mediaTransfer / ipc 复用。 */
-export { DEVICE_LINK_API_BASE };
+export function deviceLinkApiBase(): string {
+  return getClientEndpoint('deviceLinkApiBaseUrl');
+}
 
 let client: DeviceLinkClient | null = null;
 let arbiter: DeviceLinkOwnershipArbiter | null = null;
@@ -127,7 +127,7 @@ function normalizeDeviceInfoText(value: string | undefined): string | null {
 
 function wsUrl(): string {
   // WS URL 由 relay HTTP base 推(http→ws / https→wss)
-  return DEVICE_LINK_API_BASE.replace(/^http/, 'ws') + WS_PATH;
+  return deviceLinkApiBase().replace(/^http/, 'ws') + WS_PATH;
 }
 
 export function initDeviceLinkService(): void {

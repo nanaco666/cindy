@@ -13,7 +13,7 @@ import { createLogger } from '../logger.js';
 import * as cindyMediaBlobStore from '../cindy-media/blobStore.js';
 import { integrationCacheKey, integrationCachePut } from '../cindy-media/integrationCache.js';
 import * as authManager from '../authManager.js';
-import { API_BASE_URL_DEV_FALLBACK } from '../../shared/endpoints.js';
+import { getClientEndpoint } from '../clientEndpointsService.js';
 
 const log = createLogger('feishu');
 
@@ -118,7 +118,7 @@ function compressImageWithNativeImage(
 }
 
 function getServerApiBaseUrl(): string {
-  return import.meta.env.VITE_API_BASE_URL || API_BASE_URL_DEV_FALLBACK;
+  return getClientEndpoint('apiBaseUrl');
 }
 
 export function getFeishuService(): FeishuService {

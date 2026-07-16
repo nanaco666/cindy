@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "apiBaseUrl": "https://xdt-api.magiclizi.com",
+  "authApiBaseUrl": "https://auth.cindy.com.cn",
+  "deviceLinkApiBaseUrl": "https://device.cindy.com.cn",
+  "oauthBrokerApiBaseUrl": "https://oauth.cindy.com.cn",
+  "heartbeatUrl": "https://heartbeat.cindy.com.cn",
+  "slackHookWsUrl": "wss://slack-hook.cindy.com.cn",
+  "websiteUrl": "https://cindy.com.cn",
+  "cdnBaseUrl": "https://hotfix.cindy.com.cn/cindy",
+  "xdGatewayBaseUrl": "https://llm-proxy.tapsvc.com"
+}

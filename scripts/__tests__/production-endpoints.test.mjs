@@ -39,6 +39,7 @@ test('私有 JSON 是 Desktop/Mobile 构建注入的唯一输入', () => {
     EXPO_PUBLIC_XDT_API_BASE_URL: values.apiBaseUrl,
     EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: values.deviceLinkApiBaseUrl,
     EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: values.xdGatewayBaseUrl,
+    EXPO_PUBLIC_XDT_CDN_BASE_URL: values.cdnBaseUrl,
   });
   assert.deepEqual(resolveOssConfig(), {
     cdnBase: values.cdnBaseUrl,

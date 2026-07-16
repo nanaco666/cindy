@@ -24,7 +24,7 @@ vi.mock('../../serverApiClient.js', () => ({
 }));
 
 vi.mock('../index.js', () => ({
-  DEVICE_LINK_API_BASE: 'http://relay.test:3335',
+  deviceLinkApiBase: () => 'http://relay.test:3335',
 }));
 
 vi.mock('../../logger.js', () => ({

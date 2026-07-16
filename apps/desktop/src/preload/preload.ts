@@ -542,10 +542,17 @@ const appDisplayVersionInfo = ipcRenderer.sendSync('get-app-display-version-info
   detail: string;
 };
 
+// 运行期端点清单(main 在 createWindow 前解析完成;首帧同步可用)。
+// 只暴露 renderer 实际消费的字段,新增消费点时在此处扩展。
+const clientEndpointsInfo = ipcRenderer.sendSync('client-endpoints:get-sync') as {
+  websiteUrl: string;
+};
+
 contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
   osRelease: ipcRenderer.sendSync('get-os-release') as string,
   appVersion: ipcRenderer.sendSync('get-app-version') as string,
+  clientEndpoints: { websiteUrl: clientEndpointsInfo?.websiteUrl ?? '' },
   preferredSystemLocale: readInitialPreferredSystemLocale(),
   appDisplayVersion: appDisplayVersionInfo.display,
   appDisplayVersionDetail: appDisplayVersionInfo.detail,

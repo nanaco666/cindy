@@ -55,7 +55,7 @@ import {
   setClaudeOAuthInvalidGrantHandler,
 } from './claude-oauth-refresh.js';
 import { isAnthropicCompatProxyHandleReady } from './anthropic-compat-proxy-host.js';
-import { CLAUDE_UPSTREAM_ENDPOINT } from './runtime-configs.js';
+import { claudeUpstreamEndpoint } from './runtime-configs.js';
 import { getProviderSecretStore } from '../secrets/providerSecretStore.js';
 
 const execFileP = promisify(execFile);
@@ -431,7 +431,7 @@ export class DesktopClaudeAuthAdapter implements AuthAdapter {
     if (!hasClaudeAiOAuth()) return null;
     const apiKey = readClaudeApiKey();
     if (!apiKey) return null;
-    return { apiKey, baseURL: CLAUDE_UPSTREAM_ENDPOINT };
+    return { apiKey, baseURL: claudeUpstreamEndpoint() };
   }
 
   /**

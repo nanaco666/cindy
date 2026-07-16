@@ -10,7 +10,11 @@ import type { StoredMobileVoiceCredential } from '@/session/mobileVoiceCredentia
 const STORAGE_KEY = 'xdt.mobileVoiceLiteLlmSettings.v1';
 const STORAGE_VERSION = 1;
 
-export const MOBILE_VOICE_LITELLM_DEFAULT_PROXY_BASE_URL = MOBILE_VOICE_LITELLM_BASE_URL;
+// 惰性函数而非模块级常量:MOBILE_VOICE_LITELLM_BASE_URL 是 env.ts 的 live binding
+// (启动闸门拉远程端点清单后重赋值),顶层 const 拷贝会把默认 proxy base 钉死在烘焙值。
+export function mobileVoiceLiteLlmDefaultProxyBaseUrl(): string {
+  return MOBILE_VOICE_LITELLM_BASE_URL;
+}
 export const MOBILE_VOICE_LITELLM_KEY_MISSING_ERROR =
   '请先在设置里填写 LiteLLM Key，再使用语音输入。';
 
@@ -118,7 +122,7 @@ function parseStoredSettings(raw: string | null): MobileVoiceLiteLlmSettings | n
 }
 
 function normalizeProxyBaseUrl(value: unknown): string {
-  const raw = readNonEmptyString(value) ?? MOBILE_VOICE_LITELLM_DEFAULT_PROXY_BASE_URL;
+  const raw = readNonEmptyString(value) ?? mobileVoiceLiteLlmDefaultProxyBaseUrl();
   const withoutTrailingSlash = raw.replace(/\/+$/, '');
   try {
     const url = new URL(withoutTrailingSlash);
@@ -127,7 +131,7 @@ function normalizeProxyBaseUrl(value: unknown): string {
     }
     return url.toString().replace(/\/+$/, '');
   } catch {
-    return MOBILE_VOICE_LITELLM_DEFAULT_PROXY_BASE_URL;
+    return mobileVoiceLiteLlmDefaultProxyBaseUrl();
   }
 }
 

@@ -34,7 +34,7 @@ import {
   revokeController,
   restoreController,
   broadcast,
-  DEVICE_LINK_API_BASE,
+  deviceLinkApiBase,
 } from './index';
 import { getActiveControllers } from './dispatch';
 import { rewriteOutboundMedia } from './outboundMedia';
@@ -101,7 +101,7 @@ export function defaultDeps(): DeviceLinkIpcDeps {
     },
     setEnabled: setRemoteControlEnabled,
     setKeepAwake: setKeepAwakeEnabled,
-    apiFetch: (path, opts) => serverApiFetch(path, { ...opts, baseUrl: DEVICE_LINK_API_BASE }),
+    apiFetch: (path, opts) => serverApiFetch(path, { ...opts, baseUrl: deviceLinkApiBase() }),
     openLink: openRemoteLink,
     closeLink: closeRemoteLink,
     invoke: remoteInvoke,

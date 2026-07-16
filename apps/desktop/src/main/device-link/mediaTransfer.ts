@@ -30,7 +30,7 @@ import path from 'node:path';
 import { net } from 'electron';
 
 import { serverApiFetch } from '../serverApiClient.js';
-import { DEVICE_LINK_API_BASE } from './index.js';
+import { deviceLinkApiBase } from './index.js';
 import { createLogger } from '../logger.js';
 
 const log = createLogger('device-link:mediaTransfer');
@@ -108,7 +108,7 @@ async function presignPut(size: number, ext: string, contentType: string): Promi
   return serverApiFetch<PresignPutResponse>(PRESIGN_PUT_PATH, {
     method: 'POST',
     body: { size, ext, contentType },
-    baseUrl: DEVICE_LINK_API_BASE,
+    baseUrl: deviceLinkApiBase(),
   });
 }
 
@@ -117,7 +117,7 @@ async function presignGet(key: string): Promise<PresignGetResponse> {
   return serverApiFetch<PresignGetResponse>(PRESIGN_GET_PATH, {
     method: 'POST',
     body: { key },
-    baseUrl: DEVICE_LINK_API_BASE,
+    baseUrl: deviceLinkApiBase(),
   });
 }
 
@@ -284,7 +284,7 @@ export async function removeRemote(key: string): Promise<void> {
     await serverApiFetch<{ deleted: boolean }>(DELETE_PATH, {
       method: 'DELETE',
       body: { key },
-      baseUrl: DEVICE_LINK_API_BASE,
+      baseUrl: deviceLinkApiBase(),
     });
     log.debug(`removed key=${key}`);
   } catch (err) {

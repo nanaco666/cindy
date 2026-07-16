@@ -29,7 +29,7 @@ import { app } from 'electron';
 import { createLogger } from '../logger';
 import { getCurrentDbClientUserId } from '../localDb/client/current';
 import { readClaudeApiKey } from '../maker-host/auth-adapters';
-import { CLAUDE_UPSTREAM_ENDPOINT } from '../maker-host/runtime-configs';
+import { claudeUpstreamEndpoint } from '../maker-host/runtime-configs';
 import { CODEX_SUBSCRIPTION_VALUE_PRICING } from '../../shared/codexSubscriptionValue.js';
 import { providerSecretStorageKey } from '../../shared/providerSecrets';
 import { CHATGPT_MODEL_PREFIX } from '../../shared/subscriptionModels';
@@ -121,7 +121,7 @@ interface PricingScope {
 }
 
 function currentBaseUrl(): string {
-  return CLAUDE_UPSTREAM_ENDPOINT.trim();
+  return claudeUpstreamEndpoint().trim();
 }
 
 function currentKeyCacheIdentity(): string | null {

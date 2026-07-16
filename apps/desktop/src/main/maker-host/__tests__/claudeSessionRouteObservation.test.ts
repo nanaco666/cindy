@@ -23,7 +23,7 @@ vi.mock('../logger-adapter', () => ({
   },
 }));
 vi.mock('../runtime-configs', () => ({
-  CLAUDE_UPSTREAM_ENDPOINT: 'https://gateway.example.com',
+  claudeUpstreamEndpoint: () => 'https://gateway.example.com',
 }));
 vi.mock('../silent-encrypted-retry-store', () => ({
   readSilentEncryptedRetrySettings: () => ({ enabled: false }),

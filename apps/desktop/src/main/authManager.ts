@@ -53,7 +53,7 @@ import {
 import { applyProfileOverride, readOverride } from './profileOverrideStore';
 import { createLogger } from './logger';
 import { getResolvedMainLocale } from './i18n';
-import { API_BASE_URL_DEV_FALLBACK, AUTH_BASE_URL_DEV_FALLBACK } from '../shared/endpoints';
+import { getClientEndpoint } from './clientEndpointsService.js';
 import {
   parseDesktopLoginAction,
   type DesktopLoginAction,
@@ -66,8 +66,15 @@ const log = createLogger('authManager');
 
 const AUTH_REGION: AuthRegion =
   import.meta.env.VITE_CINDY_AUTH_REGION === 'global' ? 'global' : 'cn';
-const AUTH_SERVER_URL = import.meta.env.VITE_CINDY_AUTH_BASE_URL || AUTH_BASE_URL_DEV_FALLBACK;
-const PRODUCT_SERVER_URL = import.meta.env.VITE_API_BASE_URL || API_BASE_URL_DEV_FALLBACK;
+// 端点惰性读取(勿固化成模块级常量):远程清单在 app.ready 内解析,
+// 顶层求值会把值钉死在烘焙值上。clientEndpointsService 的烘焙值已含 dev fallback。
+// auth 清单字段不分 region——国内/海外两条 CDN 各发各的清单,无脑取即可。
+function authServerUrl(): string {
+  return getClientEndpoint('authApiBaseUrl');
+}
+function productServerUrl(): string {
+  return getClientEndpoint('apiBaseUrl');
+}
 const REFRESH_TOKEN_KEY = 'cindy_auth_refresh_token';
 const LEGACY_REFRESH_TOKEN_KEY = 'refresh_token';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -186,7 +193,7 @@ let loginActionPromise: Promise<DesktopLoginActionResult> | null = null;
 
 function createAuthClient(): CindyAuthClient {
   return new CindyAuthClient({
-    baseUrl: AUTH_SERVER_URL,
+    baseUrl: authServerUrl(),
     region: AUTH_REGION,
     deviceId,
     clientType: 'desktop',
@@ -266,7 +273,7 @@ async function apiFetch<T>(
     baseUrl?: string;
   },
 ): Promise<{ ok: boolean; status: number; data: T }> {
-  const url = (options?.baseUrl ?? AUTH_SERVER_URL) + apiPath;
+  const url = (options?.baseUrl ?? authServerUrl()) + apiPath;
   const method = options?.method ?? 'GET';
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (options?.token) {
@@ -297,7 +304,7 @@ function productApiFetch<T>(
   apiPath: string,
   options?: { method?: string; body?: unknown; token?: string | null; timeoutMs?: number },
 ): Promise<{ ok: boolean; status: number; data: T }> {
-  return apiFetch<T>(apiPath, { ...options, baseUrl: PRODUCT_SERVER_URL });
+  return apiFetch<T>(apiPath, { ...options, baseUrl: productServerUrl() });
 }
 
 function requestAuthRefresh(refreshToken: string): Promise<AuthRefreshResult> {

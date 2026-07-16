@@ -39,6 +39,8 @@ export interface SlackHookStoreDeps {
   legacyFilePath?: string;
   /** 旧 secret 加密文件清理钩子(best-effort; 生产传 safe-storage 目录清理)。 */
   cleanupLegacySecrets?: (legacyIds: string[]) => void;
+  /** 无覆写时的默认服务器地址(生产注入运行期端点清单读取; 缺省用烘焙常量)。 */
+  defaultUrl?: () => string;
   log: { info(msg: string): void; warn(msg: string): void };
 }
 
@@ -187,7 +189,7 @@ export function createSlackHookStore(deps: SlackHookStoreDeps): SlackHookStore {
   return {
     get: () => read(),
     effectiveUrl() {
-      return read().urlOverride ?? SLACK_HOOK_DEFAULT_URL;
+      return read().urlOverride ?? deps.defaultUrl?.() ?? SLACK_HOOK_DEFAULT_URL;
     },
     setEnabled(enabled) {
       const next = { ...read(), enabled };

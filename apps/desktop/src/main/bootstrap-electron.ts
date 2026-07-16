@@ -384,7 +384,11 @@ import {
   type ImDefaultSettingsPatch,
 } from '../shared/imDefaultSettings.js';
 import { isBrowserOpenablePath } from '../shared/browserOpenableExts.js';
-import { XD_GATEWAY_BASE_URL, API_BASE_URL_DEV_FALLBACK } from '../shared/endpoints.js';
+import {
+  getClientEndpoint,
+  initClientEndpoints,
+  registerClientEndpointsIpc,
+} from './clientEndpointsService.js';
 import type { ApplicationMenuCommand } from '../shared/applicationMenuCommands.js';
 import {
   comboToElectronAccelerator,
@@ -572,7 +576,7 @@ function attemptStartEmbeddingHost(): void {
       },
       // xdproxy /v1/embeddings 走 Bearer ANTHROPIC_API_KEY (与 art / claude 同源)
       getApiKey: () => readClaudeApiKey(),
-      xdproxyBaseUrl: import.meta.env.VITE_XDPROXY_BASE_URL || undefined,
+      xdproxyBaseUrl: getClientEndpoint('xdGatewayBaseUrl') || undefined,
       log: createSchedulerLogger('embeddingHost'),
     });
     // chat-history-embedder consumer 注册 + setEnabled(true) 触发 cutoff 落盘。
@@ -1244,6 +1248,11 @@ function isPathAllowed(filePath: string): boolean {
 // BrowserWindow，[0] 拿到它再 .focus() 等于啥也没干，用户视觉上以为
 // "双击启动不了"。
 let mainWindowRef: BrowserWindow | null = null;
+// 端点清单阻断门:ready 流程走到正常 createWindow() 前置 true。在此之前
+// second-instance / activate 一律不许建窗——阻断循环(错误框重试)期间用户
+// 双击图标 / 点 Dock 若能建窗,preload 的模块级 sendSync 会因 handler 未注册
+// 而白屏,且窗口会带着烘焙端点绕过"拉不到清单不放行"的语义。
+let startupWindowCreationAllowed = false;
 let appFocusSyncTimer: ReturnType<typeof setTimeout> | null = null;
 let mainWindowBackgroundThrottlingAllowed = true;
 const isUpdateRelaunchCandidate =
@@ -1507,7 +1516,11 @@ if (app.isPackaged) {
           }
         }
       }
-      if (!focusMainWindow()) {
+      // 端点清单阻断期间(startupWindowCreationAllowed=false)禁止建窗:
+      // 否则 preload 的模块级 sendSync 找不到 handler 直接白屏,且窗口会带着
+      // 烘焙端点绕过"拉不到清单不放行"的阻断语义。deep-link 分发不受影响
+      // (deepLink 只向已有窗口投递/排队,不建窗)。
+      if (startupWindowCreationAllowed && !focusMainWindow()) {
         createWindow();
       }
     });
@@ -3330,7 +3343,7 @@ const registerIpcHandlers = () => {
     'api-key:test-connection',
     async (_event: Electron.IpcMainInvokeEvent, key: string): Promise<{ success: boolean; error?: string }> => {
       try {
-        const response = await net.fetch(`${XD_GATEWAY_BASE_URL}/v1/models`, {
+        const response = await net.fetch(`${getClientEndpoint('xdGatewayBaseUrl')}/v1/models`, {
           method: 'GET',
           headers: { Authorization: `Bearer ${key}` },
         });
@@ -3351,7 +3364,7 @@ const registerIpcHandlers = () => {
   // All backend HTTP calls go through this handler so the renderer never
   // uses fetch() directly. Token is auto-attached from authManager.
   // On 401 TOKEN_EXPIRED, auto-refreshes and retries once.
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || API_BASE_URL_DEV_FALLBACK;
+  const API_BASE_URL = getClientEndpoint('apiBaseUrl');
 
   async function doApiFetch(
     apiPath: string,
@@ -4392,6 +4405,16 @@ app.on('ready', async () => {
     brandMigrationBootstrapLog.error('legacy startup handling threw', { error: String(err) });
   }
 
+  // 客户端远程端点清单:启动第一步、先于一切更新检查,**阻断式**拉取(拉不到 /
+  // 清单非法 → 系统错误框重试/退出,无缓存与超时兜底;dev 零网络用烘焙值)。
+  // 必须早于一切端点消费方初始化、且在 createWindow() 前注册 sendSync IPC
+  // (preload 模块级同步读取依赖它)。用户在错误框选"退出"时 app.exit 已调用,
+  // 这里直接 return 不再继续启动。
+  if (!(await initClientEndpoints())) {
+    return; // 用户在错误框选择退出,app.exit 已调用
+  }
+  registerClientEndpointsIpc();
+
   // 身份锚埋点(账号系统切换前置,identityAnchor.ts 顶注):登录成功 / 恢复
   // 登录态时把 { userId, email, feishuOpenId } 持久化到 userData,供切换后优先按
   // email、零命中时按 feishuOpenId 认领老库;登出不清。auth 由 renderer 经 auth:initialize 触发,此处
@@ -4484,7 +4507,7 @@ app.on('ready', async () => {
   const cspDevServerUrl = MAIN_WINDOW_VITE_DEV_SERVER_URL || null;
   installContentSecurityPolicy(session.defaultSession, {
     isDev: Boolean(cspDevServerUrl),
-    apiOrigin: parseOrigin(import.meta.env.VITE_API_BASE_URL),
+    apiOrigin: parseOrigin(getClientEndpoint('apiBaseUrl')),
     devServerOrigin: parseOrigin(cspDevServerUrl),
   });
 
@@ -4644,6 +4667,8 @@ app.on('ready', async () => {
   });
   // 强制引用避免 tree-shaking 干掉 feishuIm（imHost 已通过 im 间接持有，但 main/im 也直接用它）
   void feishuIm;
+  // 端点清单已就绪、IPC 已注册,此后 second-instance / activate 允许按需建窗。
+  startupWindowCreationAllowed = true;
   createWindow();
   initUpdateService();
   // 在线人数心跳:App 启动即上报,内部走 deviceId / userId 兜底,登录前后都活
@@ -4778,7 +4803,8 @@ app.on('activate', () => {
   if (isGlobalVoiceInputOverlayVisible()) return;
   // focusMainWindow() 在 hide-on-close 模式下天然把藏起来的窗口 show 回来,
   // renderer 不重载;返回 false 表示主窗口真没了(异常或首次启动),才 createWindow。
-  if (!focusMainWindow()) {
+  // 端点清单阻断期间禁止建窗(同 second-instance,防绕过阻断门 + preload 白屏)。
+  if (startupWindowCreationAllowed && !focusMainWindow()) {
     createWindow();
   }
 });
