@@ -42,6 +42,9 @@ const mocks = vi.hoisted(() => ({
   persistUserMessage: vi.fn(),
   persistAssistantMessage: vi.fn(),
   wireSessionToIpcExternal: vi.fn(),
+  noteSilentStopUserSend: vi.fn(),
+  noteSilentStopSessionReset: vi.fn(),
+  onSilentStopSettled: vi.fn(() => vi.fn()),
   installDesktopInteractionListener: vi.fn(),
   takePendingInteractionsForSession: vi.fn(),
   rejectAllPending: vi.fn(),
@@ -109,6 +112,9 @@ vi.mock('../../../maker-ipc/register', () => ({
   wireSessionToIpcExternal: mocks.wireSessionToIpcExternal,
   installDesktopInteractionListener: mocks.installDesktopInteractionListener,
   takePendingInteractionsForSession: mocks.takePendingInteractionsForSession,
+  noteSilentStopUserSend: mocks.noteSilentStopUserSend,
+  noteSilentStopSessionReset: mocks.noteSilentStopSessionReset,
+  onSilentStopSettled: mocks.onSilentStopSettled,
 }));
 
 vi.mock('../pendingInteractions', () => ({
@@ -696,10 +702,10 @@ describe('turnRunner send outcome policy (feishu adapter characterization)', () 
     expect(firstComplete).toHaveBeenCalledTimes(1);
     expect(mocks.feishuIm.removeMessageReaction).toHaveBeenCalledWith('msg-first', 'reaction-msg-first');
     expect(mocks.persistUserMessage).toHaveBeenCalledTimes(2);
-    expect(mocks.persistAssistantMessage).toHaveBeenCalledWith({
-      sessionId: 'feishu-session',
-      text: 'first final',
-    });
+    // assistant 落库收口在 messagePersistBroadcaster(经 wireSessionToIpcExternal),
+    // turnRunner 不再自写 — 自写会与 broadcaster 双份落库。
+    expect(mocks.persistAssistantMessage).not.toHaveBeenCalled();
+    expect(mocks.wireSessionToIpcExternal).toHaveBeenCalledTimes(1);
 
     h.emit({ type: 'text', data: { text: 'second final', isFinal: true } });
     h.emit({ type: 'done', data: {} });
@@ -793,9 +799,123 @@ describe('turnRunner send outcome policy (feishu adapter characterization)', () 
 
     expect(onTurnComplete).toHaveBeenCalledTimes(1);
     expect(mocks.feishuIm.removeMessageReaction).toHaveBeenCalledTimes(1);
-    expect(mocks.persistAssistantMessage).toHaveBeenCalledWith({
-      sessionId: 'feishu-session',
-      text: 'final answer',
+    // 渠道默认(非接管)session 也必须 wire 进 desktop 事件管线 — 过程消息
+    // (tool_use / thinking)与 assistant 文本由 messagePersistBroadcaster 落库,
+    // desktop 聊天流才能像 Slack hook 会话一样看到完整过程。
+    expect(mocks.wireSessionToIpcExternal).toHaveBeenCalledTimes(1);
+    expect(mocks.persistAssistantMessage).not.toHaveBeenCalled();
+    // 顺序不变量: wire(装 desktop interaction listener)必须先于渠道版
+    // setInteractionListener 覆盖 — 颠倒会让渠道会话的 permission 卡死等 desktop。
+    const wireOrder = mocks.wireSessionToIpcExternal.mock.invocationCallOrder[0];
+    const listenerMock = h.session.setInteractionListener as unknown as ReturnType<typeof vi.fn>;
+    expect(wireOrder).toBeLessThan(listenerMock.mock.invocationCallOrder[0]);
+    // 真实用户消息给 silent-stop 守卫充值(scheduler / hook runner 同款 parity)。
+    expect(mocks.noteSilentStopUserSend).toHaveBeenCalledWith('feishu-session');
+  });
+
+  it('holds the turn open on silentStop done and finalizes only when the guard settles without resume', async () => {
+    const handle = {
+      messageId: 'stream-ss',
+      append: vi.fn(),
+      replace: vi.fn(),
+      finalize: vi.fn(),
+      close: vi.fn(),
+    };
+    mocks.feishuIm.startStreamingText.mockResolvedValue(handle);
+    const h = setupSession(async () => ({ accepted: true }));
+    const { onTurnComplete } = await runDefaultTurn();
+
+    h.emit({ type: 'text', data: { text: 'partial answer', isFinal: false } });
+    h.emit({ type: 'done', data: { silentStop: true } });
+    await flushMicrotasks();
+
+    // silentStop done 不当普通 done 收口 — 挂起等守卫 settle。
+    expect(onTurnComplete).not.toHaveBeenCalled();
+    expect(handle.finalize).not.toHaveBeenCalled();
+    expect(mocks.onSilentStopSettled).toHaveBeenCalledTimes(1);
+    expect(mocks.onSilentStopSettled).toHaveBeenCalledWith('feishu-session', expect.any(Function));
+
+    // 守卫决定不续跑(exhausted / skip)→ 此时才按 done 收口。
+    const settleCb = (mocks.onSilentStopSettled.mock.calls[0] as unknown[])[1] as (
+      sessionId: string,
+      reason: string,
+    ) => void;
+    settleCb('feishu-session', 'exhausted');
+    await waitForAssertion(() => {
+      expect(onTurnComplete).toHaveBeenCalledTimes(1);
+      expect(handle.finalize).toHaveBeenCalledTimes(1);
+    });
+    // settle 回调自身退订,不留陈旧监听。
+    const unsub = mocks.onSilentStopSettled.mock.results[0].value as ReturnType<typeof vi.fn>;
+    expect(unsub).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps streaming resumed-turn output into the same turn after a silentStop resume', async () => {
+    const handle = {
+      messageId: 'stream-resume',
+      append: vi.fn(),
+      replace: vi.fn(),
+      finalize: vi.fn(),
+      close: vi.fn(),
+    };
+    mocks.feishuIm.startStreamingText.mockResolvedValue(handle);
+    const h = setupSession(async () => ({ accepted: true }));
+    const { onTurnComplete } = await runDefaultTurn();
+
+    h.emit({ type: 'text', data: { text: 'first half', isFinal: false } });
+    h.emit({ type: 'done', data: { silentStop: true } });
+    await flushMicrotasks();
+    expect(onTurnComplete).not.toHaveBeenCalled();
+
+    // 守卫自动续跑(不 settle),续跑轮输出继续路由到同一 turn/卡片。
+    h.emit({ type: 'text', data: { text: ' second half', isFinal: false } });
+    h.emit({ type: 'done', data: {} });
+    await waitForAssertion(() => {
+      expect(onTurnComplete).toHaveBeenCalledTimes(1);
+      expect(handle.finalize).toHaveBeenCalledTimes(1);
+    });
+    expect(String(handle.finalize.mock.calls[0][0])).toContain('first half second half');
+    // 真 done 收口时清掉挂着的 settle 订阅,防陈旧回调二次收口。
+    const unsub = mocks.onSilentStopSettled.mock.results[0].value as ReturnType<typeof vi.fn>;
+    expect(unsub).toHaveBeenCalledTimes(1);
+  });
+
+  it('resets the silent-stop guard on !stop during the suspension window and closes the turn on settle', async () => {
+    const handle = {
+      messageId: 'stream-stop',
+      append: vi.fn(),
+      replace: vi.fn(),
+      finalize: vi.fn(),
+      close: vi.fn(),
+    };
+    mocks.feishuIm.startStreamingText.mockResolvedValue(handle);
+    const h = setupSession(async () => ({ accepted: true }));
+    const { onTurnComplete } = await runDefaultTurn();
+
+    h.emit({ type: 'text', data: { text: 'half done', isFinal: false } });
+    h.emit({ type: 'done', data: { silentStop: true } });
+    await flushMicrotasks();
+    expect(onTurnComplete).not.toHaveBeenCalled();
+
+    // 挂起窗口内 !stop: 必须重置守卫(不重置的话守卫 1.5s 后照样自动续跑,
+    // 用户喊停后 agent 原地复活)。abort 对早已收尾的 SDK turn 无事件产出,
+    // 收口依赖守卫 reset → superseded → settle('skip') 这条链。
+    const result = await getRunner().stopActiveTurn({
+      botContextId: 'cli_test_bot',
+      userId: 'ou_user',
+    });
+    expect(result.stopped).toBe(true);
+    expect(mocks.noteSilentStopSessionReset).toHaveBeenCalledWith('feishu-session');
+    expect(h.abort).toHaveBeenCalledTimes(1);
+
+    const settleCb = (mocks.onSilentStopSettled.mock.calls[0] as unknown[])[1] as (
+      sessionId: string,
+      reason: string,
+    ) => void;
+    settleCb('feishu-session', 'skip');
+    await waitForAssertion(() => {
+      expect(onTurnComplete).toHaveBeenCalledTimes(1);
+      expect(handle.finalize).toHaveBeenCalledTimes(1);
     });
   });
 

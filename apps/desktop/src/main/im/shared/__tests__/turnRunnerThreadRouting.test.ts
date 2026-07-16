@@ -38,6 +38,9 @@ const mocks = vi.hoisted(() => ({
   wireSessionToIpcExternal: vi.fn(),
   installDesktopInteractionListener: vi.fn(),
   takePendingInteractionsForSession: vi.fn(() => []),
+  noteSilentStopUserSend: vi.fn(),
+  noteSilentStopSessionReset: vi.fn(),
+  onSilentStopSettled: vi.fn(() => vi.fn()),
   rejectAllPending: vi.fn(),
   registerPending: vi.fn(),
   registerPendingExternal: vi.fn(),
@@ -78,6 +81,9 @@ vi.mock('../../../maker-ipc/register', () => ({
   wireSessionToIpcExternal: mocks.wireSessionToIpcExternal,
   installDesktopInteractionListener: mocks.installDesktopInteractionListener,
   takePendingInteractionsForSession: mocks.takePendingInteractionsForSession,
+  noteSilentStopUserSend: mocks.noteSilentStopUserSend,
+  noteSilentStopSessionReset: mocks.noteSilentStopSessionReset,
+  onSilentStopSettled: mocks.onSilentStopSettled,
 }));
 vi.mock('../pendingInteractions', () => ({
   registerPending: mocks.registerPending,

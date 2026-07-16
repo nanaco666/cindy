@@ -9,8 +9,9 @@
  * 后, 用户能直接看到 agent 上轮 final 说了啥, 自行决定下一步。
  *
  * 数据来源: SQLite messages 表中 role='assistant' 且未被 rewind 软删的最新一行
- * (assistant 行就是 turn end 写入的 final text, 见 runAgentTurn.ts 的
- * handleTurnDoneAsync 调用 persistAssistantMessage)。
+ * (由 messagePersistBroadcaster 在 text isFinal / tool_use / done 等边界落库;
+ * 注意 broadcaster 按 tool_use 边界分块, 一个 turn 可能有多行 assistant,
+ * 这里取到的是最后一个文本块)。
  */
 
 import { and, desc, eq, isNull } from 'drizzle-orm';

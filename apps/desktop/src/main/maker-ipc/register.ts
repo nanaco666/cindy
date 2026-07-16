@@ -350,6 +350,15 @@ export function noteSilentStopUserSend(sessionId: string): void {
 }
 
 /**
+ * 非 renderer 中止路径(IM `!stop` 等)调用:重置 silent-stop 守卫,让挂在
+ * 1.5s 决策窗里的自动续跑判为 superseded(经 settle('skip') 收口),不在用户
+ * 明确喊停后"原地复活"。renderer 走 ABORT_SESSION handler 内的同名调用。
+ */
+export function noteSilentStopSessionReset(sessionId: string): void {
+  silentStopAutoResumeGuard.noteSessionReset(sessionId);
+}
+
+/**
  * silent-stop 决策结果通知:scheduler/hook runner 等 in-process 监听方无法从
  * session.onEvent 收到合成的 settle 信号,通过本回调获知非续跑决策已做出,
  * 以便结束被 silentStop done 挂起的 turnFinished promise。
