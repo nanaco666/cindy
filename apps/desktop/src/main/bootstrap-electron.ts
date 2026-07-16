@@ -109,6 +109,13 @@ import matter from 'gray-matter';
 import type { Maker } from '@lizi/maker-core';
 import { im, feishuIm, startImOrchestrators, startImConnection } from './im';
 import * as authManager from './authManager';
+import * as profileEdit from './profileEdit';
+import * as profileOverrideStore from './profileOverrideStore';
+import { ingestMedia as ingestCindyMedia } from './cindy-media/ingest';
+import {
+  removeRefs as removeMediaRefs,
+  removeRefsExceptHash as removeMediaRefsExceptHash,
+} from './cindy-media/ledger';
 import { installWebviewHardener } from './webview-security';
 import {
   installSelectionContextMenu,
@@ -2647,6 +2654,37 @@ const registerIpcHandlers = () => {
   ipcMain.handle('auth:refresh', async () => {
     return authManager.refresh();
   });
+
+  // ── Profile local override IPC(设置 → 用户卡片编辑;业务体在 profileEdit.ts) ──
+
+  const profileEditLog = createLogger('profileEdit');
+  const profileEditDeps: profileEdit.ProfileEditDeps = {
+    getCurrentUserId: () => authManager.getCurrentUserId(),
+    getServerProfile: () => authManager.getServerProfile(),
+    showAvatarOpenDialog: async () => {
+      const result = await dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [{ name: 'Images', extensions: profileEdit.AVATAR_FILE_EXTENSIONS }],
+      });
+      return result.canceled || !result.filePaths[0] ? null : result.filePaths[0];
+    },
+    readFile: (filePath) => fs.promises.readFile(filePath),
+    ingestMedia: ingestCindyMedia,
+    removeRefsExceptHash: removeMediaRefsExceptHash,
+    removeRefs: removeMediaRefs,
+    readOverride: profileOverrideStore.readOverride,
+    writeOverride: profileOverrideStore.writeOverride,
+    notifyChanged: () => authManager.notifyProfileOverrideChanged(),
+    logWarn: (message, err) => profileEditLog.warn(message, err),
+  };
+
+  ipcMain.handle('profile:get-state', async () => profileEdit.getProfileEditState(profileEditDeps));
+
+  ipcMain.handle('profile:choose-avatar', async () => profileEdit.chooseAvatarFile(profileEditDeps));
+
+  ipcMain.handle('profile:update', async (_event, params: unknown) =>
+    profileEdit.updateProfile(profileEditDeps, params),
+  );
 
   // Google OAuth 集成已于 2026-07-13 随 lizi_google 退役——Google 能力整体
   // 迁入内置意识 filo-google(设置入口在 意识 → Filo Google)。

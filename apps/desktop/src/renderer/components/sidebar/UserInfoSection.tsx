@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Flame, Shield } from 'lucide-react';
@@ -28,6 +28,13 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
   const { dismissed, restore } = useUpdateBannerDismiss();
   const hasPendingUpdate = status === 'ready' || status === 'superseding';
   const isFlameReopen = hasPendingUpdate && dismissed;
+
+  // 头像地址变化(设置页改头像 / 服务端资料更新)时重置加载失败标记,
+  // 让新地址有机会渲染,而不是永远停在首字母兜底。
+  const avatarUrl = user?.avatar ?? null;
+  useEffect(() => {
+    setAvatarError(false);
+  }, [avatarUrl]);
 
   if (!user) return null;
 
@@ -74,6 +81,8 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
               className={cn(
                 'flex h-9 w-9 items-center justify-center rounded-full',
                 'bg-sidebar-item-hover text-base font-medium text-foreground',
+                // 无头像兜底加一圈细描边(与侧边栏分隔线同 token),admin 描边照旧叠加
+                'border border-sidebar-border',
                 isAdmin && 'ring-[1.5px] ring-foreground',
               )}
             >

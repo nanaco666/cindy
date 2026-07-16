@@ -18,7 +18,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, lt, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, lt, ne, or, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
 import { getDbClient } from '../localDb/client/current';
@@ -42,6 +42,9 @@ function defaultDb(): LedgerDb {
  * 不再是 token,没这行就只能重下);(b) 标明该 blob 归缓存策略管(总量上限 +
  * LRU 可清,即使有此引用),不是零引用孤儿。删会话不清它(removeSessionRefs
  * 不含此类),生死由回收器的 cache 策略决定。
+ * 'profile-avatar':用户自定义头像(设置 → 用户卡片编辑),refId = 登录用户
+ * id。跨会话持久(removeSessionRefs 不碰),同 refId 只保留最新指纹——换头像时
+ * 由 profileEdit 用 removeRefsExceptHash 清旧引用,恢复默认头像时 removeRefs 清空。
  */
 export type MediaRefKind =
   | 'message'
@@ -49,7 +52,8 @@ export type MediaRefKind =
   | 'ghost-gallery'
   | 'ghost-grant'
   | 'import'
-  | 'integration-cache';
+  | 'integration-cache'
+  | 'profile-avatar';
 /** 出生来源类型。 */
 export type MediaOriginKind = 'ghost' | 'tool' | 'user' | 'integration';
 
@@ -197,6 +201,30 @@ export async function removeSessionRefs(
         and(eq(mediaRefs.refKind, 'session-attachment'), eq(mediaRefs.refId, sessionId)),
         and(eq(mediaRefs.refKind, 'import'), eq(mediaRefs.refId, sessionId)),
         and(eq(mediaRefs.refKind, 'message'), eq(mediaRefs.originSessionId, sessionId)),
+      ),
+    )
+    .run();
+  return result.changes;
+}
+
+/**
+ * 替换型引用清理:删除某引用方名下、指纹**不等于** keepHash 的引用行。
+ * 「同 refId 只保留最新内容」的业务(个人头像等)换内容时用。调用方的顺序
+ * 契约:ingest 新指纹挂引用 → 业务侧提交新地址 → 最后调本函数清旧指纹,
+ * 使任何失败点都只留"多余引用行"的无害泄漏(下次替换清掉),业务地址永远
+ * 不会指向零引用指纹(完整分析见 profileEdit.updateProfile 头注释)。
+ */
+export async function removeRefsExceptHash(
+  params: { refKind: MediaRefKind; refId: string; keepHash: string },
+  db: LedgerDb = defaultDb(),
+): Promise<number> {
+  const result = await db
+    .delete(mediaRefs)
+    .where(
+      and(
+        eq(mediaRefs.refKind, params.refKind),
+        eq(mediaRefs.refId, params.refId),
+        ne(mediaRefs.hash, params.keepHash),
       ),
     )
     .run();

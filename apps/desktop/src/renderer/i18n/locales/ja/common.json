@@ -502,7 +502,20 @@
     },
     "userProfile": {
       "fallbackName": "ユーザー",
-      "avatarAlt": "{{name}} のアバター"
+      "avatarAlt": "{{name}} のアバター",
+      "edit": {
+        "open": "名前とアバターを編集",
+        "title": "プロフィールを編集",
+        "nameLabel": "名前",
+        "nameHint": "空欄にするとデフォルトの名前に戻ります",
+        "changeAvatar": "アバターを変更",
+        "resetAvatar": "デフォルトのアバターに戻す",
+        "save": "保存",
+        "cancel": "キャンセル",
+        "localOnlyHint": "カスタムの名前とアバターはこのデバイスでのみ有効です。",
+        "avatarInvalid": "5MB 以下の PNG / JPG / GIF / WebP 画像を選択してください",
+        "saveFailed": "保存に失敗しました。もう一度お試しください"
+      }
     },
     "help": {
       "title": "ヘルプ",

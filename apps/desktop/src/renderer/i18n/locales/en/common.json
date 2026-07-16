@@ -502,7 +502,20 @@
     },
     "userProfile": {
       "fallbackName": "User",
-      "avatarAlt": "{{name}} avatar"
+      "avatarAlt": "{{name}} avatar",
+      "edit": {
+        "open": "Edit name and avatar",
+        "title": "Edit profile",
+        "nameLabel": "Name",
+        "nameHint": "Leave empty to restore the default name",
+        "changeAvatar": "Change avatar",
+        "resetAvatar": "Restore default avatar",
+        "save": "Save",
+        "cancel": "Cancel",
+        "localOnlyHint": "Your custom name and avatar only apply on this device.",
+        "avatarInvalid": "Please choose a PNG / JPG / GIF / WebP image under 5MB",
+        "saveFailed": "Failed to save, please try again"
+      }
     },
     "help": {
       "title": "Help",

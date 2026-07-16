@@ -1402,6 +1402,23 @@ interface ElectronAPI {
   onAuthSessionExpired: (callback: (state: AuthSessionExpiredPayload) => void) => () => void;
   onTapdbDailyActive: (callback: (payload: { date: string }) => void) => () => void;
 
+  // ── Profile local override(设置 → 用户卡片编辑名字 / 头像,仅本设备生效) ──
+  profileGetState: () => Promise<{
+    serverName: string;
+    serverAvatar: string | null;
+    overrideName: string | null;
+    overrideAvatarUrl: string | null;
+  }>;
+  profileChooseAvatar: () => Promise<{
+    canceled: boolean;
+    filePath?: string;
+    previewDataUrl?: string;
+  }>;
+  profileUpdate: (params: {
+    name: string | null;
+    avatar: { type: 'keep' } | { type: 'set'; filePath: string } | { type: 'reset' };
+  }) => Promise<{ ok: true }>;
+
   // Slack 官方 MCP(slackOfficial)已于 2026-07-15 退役(能力迁入内置意识 cindy-slack);
   // github / gitlab bridge 已于 2026-07-14 退役(GitHub 能力迁入内置意识
   // cindy-github,GitLab 能力迁入内置意识 cindy-gitlab)

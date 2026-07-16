@@ -1000,6 +1000,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('auth:dispatch-login-action', action),
   authLogout: (): Promise<void> => ipcRenderer.invoke('auth:logout'),
   authRefresh: (): Promise<boolean> => ipcRenderer.invoke('auth:refresh'),
+
+  // ── Profile local override(设置 → 用户卡片编辑名字 / 头像,仅本设备生效) ──
+  profileGetState: (): Promise<{
+    serverName: string;
+    serverAvatar: string | null;
+    overrideName: string | null;
+    overrideAvatarUrl: string | null;
+  }> => ipcRenderer.invoke('profile:get-state'),
+  profileChooseAvatar: (): Promise<{
+    canceled: boolean;
+    filePath?: string;
+    previewDataUrl?: string;
+  }> => ipcRenderer.invoke('profile:choose-avatar'),
+  profileUpdate: (params: {
+    name: string | null;
+    avatar: { type: 'keep' } | { type: 'set'; filePath: string } | { type: 'reset' };
+  }): Promise<{ ok: true }> => ipcRenderer.invoke('profile:update', params),
   onAuthStateChange: fanOutAuthStateChange,
   onAuthSessionExpired: fanOutAuthSessionExpired,
   onTapdbDailyActive: (callback: (payload: { date: string }) => void): (() => void) =>

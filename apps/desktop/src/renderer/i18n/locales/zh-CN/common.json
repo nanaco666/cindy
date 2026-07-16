@@ -502,7 +502,20 @@
     },
     "userProfile": {
       "fallbackName": "用户",
-      "avatarAlt": "{{name}} 的头像"
+      "avatarAlt": "{{name}} 的头像",
+      "edit": {
+        "open": "编辑名字和头像",
+        "title": "编辑个人资料",
+        "nameLabel": "名字",
+        "nameHint": "留空则恢复默认名字",
+        "changeAvatar": "更换头像",
+        "resetAvatar": "恢复默认头像",
+        "save": "保存",
+        "cancel": "取消",
+        "localOnlyHint": "自定义的名字和头像仅在本设备生效。",
+        "avatarInvalid": "请选择 5MB 以内的 PNG / JPG / GIF / WebP 图片",
+        "saveFailed": "保存失败,请重试"
+      }
     },
     "help": {
       "title": "帮助",

@@ -50,6 +50,7 @@ import {
   parseAuthLoopbackCallback,
 } from './authLoopbackCallback';
 
+import { applyProfileOverride, readOverride } from './profileOverrideStore';
 import { createLogger } from './logger';
 import { getResolvedMainLocale } from './i18n';
 import { API_BASE_URL_DEV_FALLBACK, AUTH_BASE_URL_DEV_FALLBACK } from '../shared/endpoints';
@@ -602,14 +603,29 @@ function broadcastToRenderers(channel: string, payload: unknown): void {
   }
 }
 
-function notifyRenderer(): void {
-  const state: AuthState = {
-    user: currentUser,
+/**
+ * 当前登录态快照(所有状态出口共用)。
+ *
+ * `currentUser` 永远保持服务端真值;用户在本机自定义的名字 / 头像
+ * (profileOverrideStore)只在这里出口处合并——login / refresh / /me 水合
+ * 怎么覆写 currentUser 都不会把本地自定义冲掉,反之本地自定义也永远
+ * 不会回写进服务端真值(规则 20:默认值与 override 分离)。
+ */
+function snapshotAuthState(): AuthState {
+  const user =
+    currentUser !== null
+      ? applyProfileOverride(currentUser, readOverride(currentUser.id))
+      : null;
+  return {
+    user,
     isAuthenticated: accessToken !== null && currentUser !== null,
     migration: currentMigration,
     deviceId,
   };
-  broadcastToRenderers('auth:state-change', state);
+}
+
+function notifyRenderer(): void {
+  broadcastToRenderers('auth:state-change', snapshotAuthState());
 }
 
 function notifyRendererAuthBoundaryPending(): void {
@@ -642,12 +658,7 @@ export function onAuthStateChange(listener: AuthListener): () => void {
 }
 
 function notifyAuthListeners(): void {
-  const state: AuthState = {
-    user: currentUser,
-    isAuthenticated: accessToken !== null && currentUser !== null,
-    migration: currentMigration,
-    deviceId,
-  };
+  const state = snapshotAuthState();
   for (const l of authStateListeners) {
     try {
       l(state);
@@ -805,12 +816,26 @@ export function getDeviceId(): string {
 }
 
 export function getAuthState(): AuthState {
-  return {
-    user: currentUser,
-    isAuthenticated: accessToken !== null && currentUser !== null,
-    migration: currentMigration,
-    deviceId,
-  };
+  return snapshotAuthState();
+}
+
+/**
+ * 服务端资料真值(profileEdit 判断「输入值 == 默认值 → 清 override 而非存快照」用)。
+ * 未登录返回 null。
+ */
+export function getServerProfile(): { name: string; avatar: string | null } | null {
+  if (!currentUser) return null;
+  return { name: currentUser.name, avatar: currentUser.avatar };
+}
+
+/**
+ * 本地资料覆写变更后的重广播口(profileEdit 保存成功时调用):
+ * 把合并了最新覆写的登录态推给所有 renderer 窗口与 main 内订阅者。
+ */
+export function notifyProfileOverrideChanged(): void {
+  if (!currentUser) return;
+  notifyRenderer();
+  notifyAuthListeners();
 }
 
 /** chat-data-localization V0.5: snapshot getter for IPC return paths. */
@@ -827,12 +852,7 @@ export async function initialize(): Promise<AuthState> {
   // 冷启动时 accessToken/currentUser 必为空,不影响下方完整初始化流程
   // (relogin marker 消费、持久化 refresh_token 校验)。
   if (accessToken && currentUser) {
-    return {
-      user: currentUser,
-      isAuthenticated: true,
-      migration: currentMigration,
-      deviceId,
-    };
+    return snapshotAuthState();
   }
 
   // release-relogin-on-update: if the auto-updater dropped a relogin marker
@@ -991,12 +1011,7 @@ async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> 
     // 广播拿到冷启动状态——不广播就永远收不到 auto-login 事件。
     notifyRenderer();
     notifyAuthListeners();
-    return {
-      user: currentUser,
-      isAuthenticated: true,
-      migration: currentMigration,
-      deviceId,
-    };
+    return snapshotAuthState();
   } catch (err) {
     // 网络类失败都在 apiFetch 内部消化(返回 status 0),能走到这里的是 refresh 成功
     // **之后**的本地状态同步代码(writeSafe / feishu token / canary sync 等)抛异常——
