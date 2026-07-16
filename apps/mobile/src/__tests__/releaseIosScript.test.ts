@@ -66,6 +66,13 @@ describe('NPKG iOS distribution script safety gates', () => {
     expect(source).toContain('build:list --platform ios --status finished --build-profile "$profile" --limit 30');
   });
 
+  it('from-eas 未显式设 NPKG_EXPECT_BUNDLE 时按 EAS 线身份(com.xd.lizcn)校验,不被自建线默认值误拒', () => {
+    const source = readFileSync(scriptPath, 'utf8');
+    expect(source).toContain('EAS_LINE_BUNDLE="com.xd.lizcn"');
+    // fallback 必须发生在 cmd_from_eas 内部、且以"未显式设 NPKG_EXPECT_BUNDLE"为前提。
+    expect(source).toMatch(/cmd_from_eas\(\)\{[\s\S]{0,600}?\[ -z "\$\{NPKG_EXPECT_BUNDLE:-\}" \][\s\S]{0,200}?EXPECT_BUNDLE="\$EAS_LINE_BUNDLE"/);
+  });
+
   itWithBash('fails upload before emitting install links when bundle id is unexpected', () => {
     const result = runReleaseIos(['upload', '<ipa>'], `
 echo '{"id":123,"package":"com.example.wrong"}'

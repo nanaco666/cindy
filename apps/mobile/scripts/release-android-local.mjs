@@ -225,6 +225,11 @@ async function main() {
   if (!args.skipGitGate) assertProductionGitGate();
   else log('  warn: --skip-git-gate,跳过 main/clean/HEAD 校验(仅本地迭代用)');
 
+  // 签名 env 预检必须在自动 bump 写盘之前:否则缺 env 时 android-version.json 已被写脏,
+  // 下一次执行会被 git gate 拒绝,得人工收拾未发布的版本号(Greptile P1)。
+  // buildApk 内仍会再解析一次(取用值);--apk 复用现成包不构建,豁免。
+  if (args.execute && !args.apk) resolveAndroidSigningEnv(process.env);
+
   // --skip-record 是"CDN 基线不可读/首发"的逃生开关:此时不写 release.json,versionCode 单调
   // 门禁本就无意义,必须在读基线之前短路(与 iOS 脚本对称,Greptile P1)。
   let previousVersionCode = null;

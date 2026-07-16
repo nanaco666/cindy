@@ -217,6 +217,11 @@ async function main() {
   if (!args.skipGitGate) assertProductionGitGate();
   else log('  warn: --skip-git-gate,跳过 main/clean/HEAD 校验(仅本地迭代用)');
 
+  // 签名 env 预检必须在自动 bump 写盘之前:否则缺 env 时 app.json 的 buildNumber 已被写脏,
+  // 下一次执行会被 git gate 拒绝(与 Android 脚本同一口径,Greptile P1)。
+  // buildIpa 内仍会再解析一次(取用值);--ipa 复用现成包不构建,豁免。
+  if (args.execute && !args.ipa) resolveIosSigningEnv(process.env);
+
   // --skip-record 是"CDN 基线不可读/首发"的逃生开关:此时不写 release.json,buildNumber 单调
   // 门禁本就无意义,必须在读基线之前短路——否则 fetchBaselineBuildNumber 的 fail-closed 抛错会
   // 让 --skip-record --execute 也走不下去,逃生开关名不副实(Greptile P1)。

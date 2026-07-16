@@ -36,9 +36,12 @@ fi
 : "${NPKG_TOKEN:?需要 NPKG_TOKEN:启动时传环境变量(NPKG_TOKEN=...)或放 $NPKG_CONF}"
 : "${NPKG_BASE_URL:=https://npkg.xindong.com}"
 
-# 期望的 bundle id。默认 com.xd.cindycn;需要校验历史包时可通过 NPKG_EXPECT_BUNDLE 覆盖。
+# 期望的 bundle id。默认 com.xd.cindycn(自建线);可通过 NPKG_EXPECT_BUNDLE 覆盖(校验历史包等)。
+# 例外:from-eas 子命令在未显式设 NPKG_EXPECT_BUNDLE 时自动改用 EAS 线身份 com.xd.lizcn——
+# EAS 构建产物本就是 lizcn 包,按自建线默认值校验会被误拒(见 cmd_from_eas)。
 # 企业签 Team 校验(UE5H8B62F9.*)不随之变。
 EXPECT_BUNDLE="${NPKG_EXPECT_BUNDLE:-com.xd.cindycn}"
+EAS_LINE_BUNDLE="com.xd.lizcn"
 POLL_TRIES=60          # 轮询次数
 POLL_INTERVAL=5        # 每次间隔秒
 
@@ -167,6 +170,12 @@ cmd_resolve(){
 # 把 beta 包当成正式企业包重签下发(或反之)。query 先用 --build-profile 过滤,
 # Python 再按 buildProfile 双保险。
 cmd_from_eas(){
+  # EAS 产物是 EAS 线身份(com.xd.lizcn),不是自建线的 com.xd.cindycn;未显式指定
+  # NPKG_EXPECT_BUNDLE 时把校验目标切到 EAS 线,否则 from-eas 上传必被默认值误拒。
+  if [ -z "${NPKG_EXPECT_BUNDLE:-}" ]; then
+    EXPECT_BUNDLE="$EAS_LINE_BUNDLE"
+    echo "→ from-eas:未设 NPKG_EXPECT_BUNDLE,按 EAS 线身份校验 bundle id = $EXPECT_BUNDLE"
+  fi
   local profile="production"; local pass=()
   while [ $# -gt 0 ]; do case "$1" in
     --profile) profile="$2"; shift 2;;
