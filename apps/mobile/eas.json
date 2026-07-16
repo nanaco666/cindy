@@ -13,7 +13,6 @@
         "resourceClass": "m-medium"
       },
       "env": {
-        "EXPO_PUBLIC_FEISHU_APP_ID": "cli_a94d4cf642381cd4",
         "EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED": "1",
         "XDT_SKIP_AGENT_BIN_INSTALL": "1"
       }
@@ -27,7 +26,6 @@
         "resourceClass": "m-medium"
       },
       "env": {
-        "EXPO_PUBLIC_FEISHU_APP_ID": "cli_a94d4cf642381cd4",
         "EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED": "1",
         "XDT_SKIP_AGENT_BIN_INSTALL": "1"
       }
@@ -41,7 +39,6 @@
         "resourceClass": "m-medium"
       },
       "env": {
-        "EXPO_PUBLIC_FEISHU_APP_ID": "cli_a94d4cf642381cd4",
         "EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED": "1",
         "XDT_SKIP_AGENT_BIN_INSTALL": "1"
       }
@@ -57,7 +54,6 @@
         "resourceClass": "medium"
       },
       "env": {
-        "EXPO_PUBLIC_FEISHU_APP_ID": "cli_a94d4cf642381cd4",
         "EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED": "1",
         "EXPO_PUBLIC_APP_VARIANT": "beta",
         "XDT_SKIP_AGENT_BIN_INSTALL": "1"

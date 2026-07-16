@@ -56,7 +56,7 @@ const easJson = {
     base: {
       node: '22.19.0',
       env: {
-        EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
+        EXPO_PUBLIC_FEISHU_APP_ID: 'cli_testapp',
         EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
         EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
         EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
@@ -96,7 +96,7 @@ describe('mobile release scripts core logic', () => {
       distribution: 'store',
       channel: 'beta-dash',
       env: {
-        EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
+        EXPO_PUBLIC_FEISHU_APP_ID: 'cli_testapp',
         EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
         EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
         EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
@@ -120,7 +120,7 @@ describe('mobile release scripts core logic', () => {
       publicEnv: {
         EXPO_PUBLIC_APP_VARIANT: 'beta',
         EXPO_PUBLIC_BETA_DEV: 'dash',
-        EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
+        EXPO_PUBLIC_FEISHU_APP_ID: 'cli_testapp',
         EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
         EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
         EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
@@ -258,7 +258,7 @@ describe('mobile release scripts core logic', () => {
     expect(buildUpdateCommand(target, 'beta update', { platform: 'ios' })).toMatchObject({
       args: ['--yes', EAS_CLI_SPEC, 'update', '--branch', 'beta-dash', '--platform', 'ios', '--message', 'beta update', '--environment', 'preview', '--non-interactive'],
       env: {
-        EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
+        EXPO_PUBLIC_FEISHU_APP_ID: 'cli_testapp',
         EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
         EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
         EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
@@ -269,7 +269,7 @@ describe('mobile release scripts core logic', () => {
     });
     const prodCmd = buildUpdateCommand(resolveTarget({ easJson }, { kind: 'production' }), 'prod update', { platform: 'ios' });
     expect(prodCmd.bin.endsWith('npx') || prodCmd.bin.endsWith('npx.cmd')).toBe(true);
-    expect(prodCmd.env).toMatchObject({ EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4' });
+    expect(prodCmd.env).toMatchObject({ EXPO_PUBLIC_FEISHU_APP_ID: 'cli_testapp' });
     expect(prodCmd.env).not.toHaveProperty('EXPO_PUBLIC_APP_VARIANT');
     expect(prodCmd.env).not.toHaveProperty('EXPO_PUBLIC_BETA_DEV');
     expect(prodCmd.args).toContain('--environment');
@@ -300,7 +300,7 @@ describe('mobile release scripts core logic', () => {
     expect(productionEnv).toMatchObject({
       KEEP_ME: 'yes',
       EXPO_NO_DOTENV: '1',
-      EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
+      EXPO_PUBLIC_FEISHU_APP_ID: 'cli_testapp',
     });
     expect(productionEnv).not.toHaveProperty('EXPO_PUBLIC_APP_VARIANT');
     expect(productionEnv).not.toHaveProperty('EXPO_PUBLIC_BETA_DEV');
@@ -323,7 +323,7 @@ describe('mobile release scripts core logic', () => {
       EXPO_NO_DOTENV: '1',
       EXPO_PUBLIC_APP_VARIANT: 'beta',
       EXPO_PUBLIC_BETA_DEV: 'dash',
-      EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
+      EXPO_PUBLIC_FEISHU_APP_ID: 'cli_testapp',
       EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
       EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
       EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
@@ -713,7 +713,6 @@ describe('mobile release scripts core logic', () => {
           node: '22.19.0',
           ios: { resourceClass: 'm-medium' },
           env: {
-            EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
             EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED: '1',
             XDT_SKIP_AGENT_BIN_INSTALL: '1',
           },
@@ -725,7 +724,6 @@ describe('mobile release scripts core logic', () => {
           node: '22.19.0',
           ios: { resourceClass: 'm-medium' },
           env: {
-            EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
             EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED: '1',
             XDT_SKIP_AGENT_BIN_INSTALL: '1',
           },
@@ -737,7 +735,6 @@ describe('mobile release scripts core logic', () => {
           node: '22.19.0',
           ios: { resourceClass: 'm-medium' },
           env: {
-            EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
             EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED: '1',
             XDT_SKIP_AGENT_BIN_INSTALL: '1',
           },

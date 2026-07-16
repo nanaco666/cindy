@@ -33,6 +33,7 @@ test('私有 JSON 是 Desktop/Mobile 构建注入的唯一输入', () => {
 
   assert.deepEqual({ ...loadProductionEndpoints() }, values);
   assert.deepEqual(productionMobileEnv(), {
+    EXPO_PUBLIC_FEISHU_APP_ID: values.feishuAppId,
     EXPO_PUBLIC_XDT_API_BASE_URL: values.apiBaseUrl,
     EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: values.deviceLinkApiBaseUrl,
     EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: values.xdGatewayBaseUrl,
@@ -44,6 +45,7 @@ test('私有 JSON 是 Desktop/Mobile 构建注入的唯一输入', () => {
     region: values.ossRegion,
   });
   assert.deepEqual(productionViteEnv({ allowEnvOverride: false }), {
+    VITE_FEISHU_APP_ID: values.feishuAppId,
     VITE_API_BASE_URL: values.apiBaseUrl,
     VITE_DEVICE_LINK_API_BASE_URL: values.deviceLinkApiBaseUrl,
     VITE_OAUTH_BROKER_API_BASE_URL: values.oauthBrokerApiBaseUrl,
@@ -60,6 +62,17 @@ test('缺字段、非法协议和 URL 内凭据都会 fail closed', () => {
   delete missing.apiBaseUrl;
   process.env.CINDY_PRODUCTION_ENDPOINTS_FILE = writeFixture(missing);
   assert.throws(() => loadProductionEndpoints(), /apiBaseUrl/);
+
+  const missingApp = fixtureEndpoints();
+  delete missingApp.feishuAppId;
+  process.env.CINDY_PRODUCTION_ENDPOINTS_FILE = writeFixture(missingApp);
+  assert.throws(() => loadProductionEndpoints(), /feishuAppId/);
+
+  process.env.CINDY_PRODUCTION_ENDPOINTS_FILE = writeFixture({
+    ...fixtureEndpoints(),
+    feishuAppId: 'invalid-app-id',
+  });
+  assert.throws(() => loadProductionEndpoints(), /feishuAppId/);
 
   const missingOss = fixtureEndpoints();
   delete missingOss.ossBucket;
@@ -87,6 +100,7 @@ test('缺字段、非法协议和 URL 内凭据都会 fail closed', () => {
 
 function fixtureEndpoints() {
   return {
+    feishuAppId: 'cli_testapp',
     apiBaseUrl: 'https://api.example.invalid',
     deviceLinkApiBaseUrl: 'https://relay.example.invalid',
     oauthBrokerApiBaseUrl: 'https://oauth.example.invalid',
@@ -103,7 +117,7 @@ function fixtureEndpoints() {
 }
 
 function writeFixture(value) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cindy-endpoints-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'production-endpoints-'));
   tempDirs.push(dir);
   const filePath = path.join(dir, 'production-endpoints.json');
   fs.writeFileSync(filePath, JSON.stringify(value));

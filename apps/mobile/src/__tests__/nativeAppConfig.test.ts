@@ -68,7 +68,7 @@ describe('mobile native app config', () => {
     expect(appJson.expo.plugins).not.toContain('expo-status-bar');
     expect(appJson.expo.plugins).toContainEqual([
       'xdt-feishu-login/plugin',
-      { appId: 'cli_a94d4cf642381cd4', registerCallbackScheme: true },
+      { registerCallbackScheme: true },
     ]);
 
     // The generated ios/ is gitignored and only present after a prebuild; when it exists it must
@@ -110,7 +110,8 @@ describe('mobile native app config', () => {
     expect(pluginSource).not.toContain("source 'https://github.com/volcengine/volcengine-specs.git'");
     expect(pluginSource).toContain('CFBundleURLTypes');
     expect(pluginSource).toContain('registerCallbackScheme');
-    expect(pluginSource).toContain("const DEFAULT_APP_ID = 'cli_a94d4cf642381cd4'");
+    expect(pluginSource).toContain('process.env.EXPO_PUBLIC_FEISHU_APP_ID');
+    expect(pluginSource).toContain('requires EXPO_PUBLIC_FEISHU_APP_ID');
     expect(pluginSource).toContain("replace(/_/g, '')");
     expect(pluginSource).toContain("'android:scheme': 'lark'");
     expect(pluginSource).toContain("'android:host': 'ssoclient'");

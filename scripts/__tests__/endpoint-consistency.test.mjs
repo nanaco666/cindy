@@ -11,6 +11,7 @@ test('提交的 EAS build profiles 不包含生产端点 env（含 extends）', 
 
   for (const profileName of Object.keys(eas.build)) {
     const env = resolveEasBuildProfileEnv(eas.build, profileName);
+    assert.equal(env.EXPO_PUBLIC_FEISHU_APP_ID, undefined, profileName);
     assert.equal(env.EXPO_PUBLIC_XDT_API_BASE_URL, undefined, profileName);
     assert.equal(env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL, undefined, profileName);
     assert.equal(env.EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL, undefined, profileName);

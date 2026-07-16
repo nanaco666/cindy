@@ -32,15 +32,14 @@ export function ensureMobileEnv({
   let content = existsSync(envPath) ? readFileSync(envPath, 'utf8') : '';
   const created = !existsSync(envPath);
   const addedKeys = [];
-  const needsEndpointDefaults = REQUIRED_MOBILE_ENV_KEYS.some(
+  const needsPrivateConfigDefaults = REQUIRED_MOBILE_ENV_KEYS.some(
     (key) =>
-      key !== 'EXPO_PUBLIC_FEISHU_APP_ID' &&
       !hasPreservedEnvValue(content, key, exampleValues[key]) &&
       !String(easDefaults[key] ?? '').trim(),
   );
   const defaults = {
     ...easDefaults,
-    ...(endpointEnv ?? (needsEndpointDefaults ? productionMobileEnv() : {})),
+    ...(endpointEnv ?? (needsPrivateConfigDefaults ? productionMobileEnv() : {})),
   };
 
   for (const key of REQUIRED_MOBILE_ENV_KEYS) {

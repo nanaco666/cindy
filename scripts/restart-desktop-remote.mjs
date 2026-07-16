@@ -3,7 +3,6 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FEISHU_APP_ID } from './shared/feishu.mjs';
 import { loadProductionEndpoints } from './shared/production-endpoints.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -12,7 +11,6 @@ const gracefulTimeoutMs = 3000;
 const forceTimeoutMs = 5000;
 const pollIntervalMs = 150;
 const forceKillLabel = process.platform === 'win32' ? 'taskkill /F /T' : 'kill -9';
-// FEISHU_APP_ID(飞书公共 client id,非密钥)统一从 scripts/shared/feishu.mjs 引入,见该文件说明。
 const LOCAL_API_BASE_URL = 'http://localhost:3333';
 
 // 桌面端 .env 默认值,按启动模式区分 VITE_API_BASE_URL:
@@ -21,12 +19,22 @@ const LOCAL_API_BASE_URL = 'http://localhost:3333';
 // - local:dev:desktop 无运行时注入,桌面端直接读 .env,因此必须 force 把 .env 的
 //   VITE_API_BASE_URL 写成本地地址,否则会沿用上一次 remote 留下的远程地址连错服务器。
 // VITE_FEISHU_APP_ID 两种模式都只补空值、保留用户已填的值。
-function desktopEnvSpec(mode) {
+function desktopEnvSpec(mode, content) {
+  let productionConfig;
+  const configValue = (key) => {
+    productionConfig ??= loadProductionEndpoints();
+    return productionConfig[key];
+  };
+  const existingFeishuAppId = readEnvValue(content, 'VITE_FEISHU_APP_ID');
   const apiBaseUrl = mode === 'local'
     ? LOCAL_API_BASE_URL
-    : loadProductionEndpoints().apiBaseUrl;
+    : configValue('apiBaseUrl');
   return [
-    { key: 'VITE_FEISHU_APP_ID', value: FEISHU_APP_ID, force: false },
+    {
+      key: 'VITE_FEISHU_APP_ID',
+      value: existingFeishuAppId || configValue('feishuAppId'),
+      force: false,
+    },
     mode === 'local'
       ? { key: 'VITE_API_BASE_URL', value: apiBaseUrl, force: true }
       : { key: 'VITE_API_BASE_URL', value: apiBaseUrl, force: false },
@@ -138,7 +146,7 @@ function ensureDesktopEnv(mode) {
       : '';
   }
 
-  for (const { key, value, force } of desktopEnvSpec(mode)) {
+  for (const { key, value, force } of desktopEnvSpec(mode, content)) {
     content = upsertEnvValue(content, key, value, { overwrite: created || force });
   }
 
@@ -150,6 +158,11 @@ function ensureDesktopEnv(mode) {
   } else {
     console.log(`==> Checked desktop env: ${path.relative(rootDir, envPath)}`);
   }
+}
+
+function readEnvValue(content, key) {
+  const pattern = new RegExp(`^\\s*${escapeRegExp(key)}\\s*=\\s*(.*?)\\s*$`, 'm');
+  return content.match(pattern)?.[1]?.trim() ?? '';
 }
 
 function upsertEnvValue(content, key, value, options = {}) {

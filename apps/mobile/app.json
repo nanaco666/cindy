@@ -107,7 +107,6 @@
       [
         "xdt-feishu-login/plugin",
         {
-          "appId": "cli_a94d4cf642381cd4",
           "registerCallbackScheme": true
         }
       ]

@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   DEFAULT_PRODUCTION_ENDPOINTS_PATH,
+  PRODUCTION_APP_CONFIG_KEYS,
   PRODUCTION_CONFIG_KEYS,
   PRODUCTION_ENDPOINT_KEYS,
   loadProductionEndpoints,
@@ -22,6 +23,7 @@ import {
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PRIVATE_CONFIG_REPO_PATH = 'config/production-endpoints.json';
 const EAS_ENDPOINT_ENV_KEYS = Object.freeze([
+  'EXPO_PUBLIC_FEISHU_APP_ID',
   'EXPO_PUBLIC_XDT_API_BASE_URL',
   'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL',
   'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL',
@@ -33,6 +35,14 @@ const CONTROLLED_SOURCE_FILES = Object.freeze([
   'apps/mobile/eas.json',
   'packages/embedding-client/src/client.ts',
   'packages/embedding-client/src/types.ts',
+]);
+const CONTROLLED_APP_CONFIG_FILES = Object.freeze([
+  'scripts/restart-desktop-remote.mjs',
+  'apps/desktop/scripts/release-macos.mjs',
+  'apps/desktop/scripts/release-windows.mjs',
+  'apps/mobile/eas.json',
+  'apps/mobile/app.json',
+  'apps/mobile/modules/xdt-feishu-login/plugin/index.js',
 ]);
 const ALLOWED_NON_PRODUCTION_ORIGINS = new Set([
   'http://localhost:3333',
@@ -101,6 +111,12 @@ function main() {
       }
     }
   }
+  for (const file of CONTROLLED_APP_CONFIG_FILES) {
+    const content = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8');
+    if (/\bcli_[a-z0-9]{8,}\b/i.test(content)) {
+      errors.push(`${file} 不允许包含飞书 App ID 字面量`);
+    }
+  }
 
   try {
     const eas = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'apps/mobile/eas.json'), 'utf8'));
@@ -122,10 +138,19 @@ function main() {
           (key) => new URL(endpoints[key]).hostname.toLowerCase(),
         ),
       );
+      const privateAppValues = new Set(
+        PRODUCTION_APP_CONFIG_KEYS.map((key) => endpoints[key].toLowerCase()),
+      );
       for (const file of CONTROLLED_SOURCE_FILES) {
         const content = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8').toLowerCase();
         for (const hostname of privateHosts) {
           if (content.includes(hostname)) errors.push(`${file} 泄漏私有端点 hostname: ${hostname}`);
+        }
+      }
+      for (const file of CONTROLLED_APP_CONFIG_FILES) {
+        const content = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8').toLowerCase();
+        for (const value of privateAppValues) {
+          if (content.includes(value)) errors.push(`${file} 泄漏私有应用配置值`);
         }
       }
     } catch (error) {

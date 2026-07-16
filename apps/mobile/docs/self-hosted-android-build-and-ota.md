@@ -57,7 +57,7 @@
 ## 3. 关键事实(实现前提)
 
 - 工程是 **managed workflow**(无 `android/` 目录),每次出包需 `expo prebuild -p android` 现生成原生工程。
-- 有 3 个本地原生模块需正确 autolink:`xdt-feishu-login` / `xdt-mobile-realtime-audio` / `xdt-tapdb`,外加飞书 config plugin(`appId=cli_a94d4cf642381cd4`)。
+- 有 3 个本地原生模块需正确 autolink:`xdt-feishu-login` / `xdt-mobile-realtime-audio` / `xdt-tapdb`,外加从私有构建配置读取 App ID 的飞书 config plugin。
 - Expo SDK ~56 / RN 0.85 / `expo-updates ~56`——完整支持 Expo Updates Protocol 自建服务器,客户端运行时 OTA 逻辑零改动。
 - **工具链**:mac 上需 **Android SDK**(`ANDROID_HOME` / `sdkmanager` / build-tools 含 `apksigner`)+ **JDK 17**。JDK 17 解析**复用 `scripts/java-runtime-env.mjs` 的 `resolveJavaRuntimeEnv()`**(已在 sim/e2e 脚本使用,自动探测 `/usr/libexec/java_home -v 17`、homebrew openjdk@17)。
 - **签名 keystore(已就绪)**:`xdmaker-release.jks`(alias `xdmaker-release`,storeType JKS,RSA 2048,证书 SHA256 `AD:73:7E:7E:13:1A:63:C6:B2:2B:43:D2:E6:76:9C:48:E5:C5:4C:65:25:32:85:A0:43:55:07:11:44:59:92:E4`,有效期至 2053)。文件在**仓库外** `/Users/cn-ios/Documents/xdt/XDMakerMobileCer/Android/`,**不进仓库**;口令同目录 `signing-info.txt`(明文,**严禁复制进仓库工作区**,红线 23)。脚本通过环境变量读取路径与口令(§7),自签即最终生产签名——**NPKG 不重签**,故无 iOS 的证书 Team 校验环节。
@@ -231,7 +231,7 @@ smash-dev/xdt-maker/mobile-ota/
 
 1. **NPKG APK 上传路径确认**:确认 NPKG 支持"上传 APK → 取下载/安装链接"(Android 不重签)。未确认前 `--skip-npkg` 兜底。
 2. **飞书后台登记 `com.xd.lizcn` Android**:EAS/TestFlight 已要求新 package 使用同一飞书 appId 走原生 SSO;发版前必须确认飞书开放平台登记覆盖 package + 签名 SHA256(§3 的 `AD:73:...:E4`)。
-3. **历史共装 URL scheme 冲突的处理口径(2026-07-08)**:浏览器 OAuth 回调已收敛:新包统一使用 `lizcn://auth`,server 通过 `lizcn.` state 前缀回跳新 scheme,无前缀历史包仍回 `xdmaker://auth`。原生飞书 SSO 仍会注册 `cli_a94d4cf642381cd4` 派生 callback scheme,旧包未卸载时可能抢回调;客户端必须对 native SSO 设置超时并回退浏览器 OAuth,真实内测建议先移除旧 `com.xdtmaker.mobile` 包。
+3. **历史共装 URL scheme 冲突的处理口径(2026-07-08)**:浏览器 OAuth 回调已收敛:新包统一使用 `lizcn://auth`,server 通过 `lizcn.` state 前缀回跳新 scheme,无前缀历史包仍回 `xdmaker://auth`。原生飞书 SSO 仍会注册由私有 `feishuAppId` 派生的 callback scheme,旧包未卸载时可能抢回调;客户端必须对 native SSO 设置超时并回退浏览器 OAuth,真实内测建议先移除旧 `com.xdtmaker.mobile` 包。
 
 ## 17. 实现状态(2026-07-05,代码已落地,真实构建/上传待外部依赖)
 

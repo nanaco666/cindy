@@ -1,14 +1,16 @@
 const { AndroidConfig, createRunOncePlugin, withAndroidManifest, withInfoPlist, withPodfile } = require('@expo/config-plugins');
 
-const DEFAULT_APP_ID = 'cli_a94d4cf642381cd4';
 const PACKAGE_NAME = 'xdt-feishu-login';
 
 function normalizeAppScheme(appId) {
-  return String(appId || DEFAULT_APP_ID).replace(/_/g, '');
+  return String(appId).replace(/_/g, '');
 }
 
 function withFeishuLogin(config, options = {}) {
-  const appId = options.appId || DEFAULT_APP_ID;
+  const appId = String(process.env.EXPO_PUBLIC_FEISHU_APP_ID || '').trim();
+  if (!appId) {
+    throw new Error('xdt-feishu-login requires EXPO_PUBLIC_FEISHU_APP_ID');
+  }
   const scheme = normalizeAppScheme(appId);
   const registerCallbackScheme = options.registerCallbackScheme !== false;
   config = withFeishuInfoPlist(config, scheme, registerCallbackScheme);

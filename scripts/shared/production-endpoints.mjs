@@ -26,7 +26,15 @@ export const PRODUCTION_OSS_CONFIG_KEYS = Object.freeze([
   'ossPrefix',
   'ossRegion',
 ]);
+export const PRODUCTION_APP_CONFIG_KEYS = Object.freeze([
+  'feishuAppId',
+]);
+export const PRODUCTION_SCALAR_CONFIG_KEYS = Object.freeze([
+  ...PRODUCTION_APP_CONFIG_KEYS,
+  ...PRODUCTION_OSS_CONFIG_KEYS,
+]);
 export const PRODUCTION_CONFIG_KEYS = Object.freeze([
+  ...PRODUCTION_APP_CONFIG_KEYS,
   ...PRODUCTION_ENDPOINT_KEYS,
   ...PRODUCTION_OSS_CONFIG_KEYS,
 ]);
@@ -113,7 +121,10 @@ export function validateProductionEndpoints(value, options = {}) {
     if (typeof raw !== 'string' || !raw.trim()) {
       throw new Error(`${source} 缺少非空字段: ${key}`);
     }
-    if (PRODUCTION_OSS_CONFIG_KEYS.includes(key)) {
+    if (key === 'feishuAppId' && !/^cli_[a-z0-9]+$/i.test(raw.trim())) {
+      throw new Error(`${source} 字段 feishuAppId 格式非法`);
+    }
+    if (PRODUCTION_SCALAR_CONFIG_KEYS.includes(key)) {
       result[key] = raw.trim();
       continue;
     }
@@ -162,6 +173,7 @@ export function productionViteEnv({ allowEnvOverride = true } = {}) {
   const pick = (envName, key) =>
     (allowEnvOverride ? process.env[envName]?.trim() : '') || endpoints[key];
   return {
+    VITE_FEISHU_APP_ID: pick('VITE_FEISHU_APP_ID', 'feishuAppId'),
     VITE_API_BASE_URL: pick('VITE_API_BASE_URL', 'apiBaseUrl'),
     VITE_DEVICE_LINK_API_BASE_URL: pick(
       'VITE_DEVICE_LINK_API_BASE_URL',
@@ -183,6 +195,7 @@ export function productionViteEnv({ allowEnvOverride = true } = {}) {
 export function productionMobileEnv() {
   const endpoints = loadProductionEndpoints();
   return {
+    EXPO_PUBLIC_FEISHU_APP_ID: endpoints.feishuAppId,
     EXPO_PUBLIC_XDT_API_BASE_URL: endpoints.apiBaseUrl,
     EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: endpoints.deviceLinkApiBaseUrl,
     EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: endpoints.xdGatewayBaseUrl,

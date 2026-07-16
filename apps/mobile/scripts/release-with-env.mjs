@@ -7,12 +7,16 @@ import {
   resolveReleaseEnvExecRunPlan,
 } from './release-lib.mjs';
 import { injectMobileEndpointsIntoEasFile } from './mobile-endpoints.mjs';
+import { productionMobileEnv } from '../../../scripts/shared/production-endpoints.mjs';
 
 function main() {
   const [command, ...forwardedArgs] = process.argv.slice(2);
   if (!command) throw new Error('Usage: release-with-env.mjs <check|beta|prod> [...args]');
 
-  const restoreEasJson = injectMobileEndpointsIntoEasFile(`${MOBILE_DIR}/eas.json`);
+  const mobileBuildEnv = productionMobileEnv();
+  const restoreEasJson = injectMobileEndpointsIntoEasFile(`${MOBILE_DIR}/eas.json`, {
+    endpointEnv: mobileBuildEnv,
+  });
   const handleSigint = () => {
     restoreEasJson();
     process.exit(130);
@@ -28,7 +32,7 @@ function main() {
       const shellCommand = buildReleaseEnvExecShellCommand(command, run.forwardedArgs);
       const result = runCommandSync(buildReleaseEnvExecCommand(run.environment, shellCommand), {
         cwd: MOBILE_DIR,
-        env: process.env,
+        env: { ...process.env, ...mobileBuildEnv },
         stdio: 'inherit',
       });
 
