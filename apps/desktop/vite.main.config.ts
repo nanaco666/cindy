@@ -1,8 +1,16 @@
 import { defineConfig, loadEnv } from 'vite';
+import { productionViteEnv } from '../../scripts/shared/production-endpoints.mjs';
 
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');
+  // Local dev does not go through dev-remote-env.mjs, so provide the same
+  // production service endpoints from the shared config at bundle time. An
+  // explicit .env/process override still wins, while API/Auth keep their
+  // localhost defaults below.
+  const configuredProductionEnv = productionViteEnv({ allowEnvOverride: false });
+  const readViteEnv = (key: keyof typeof configuredProductionEnv): string =>
+    env[key] || process.env[key] || configuredProductionEnv[key];
   // 非 VITE_* 的 main-only 变量（不暴露到 renderer/preload；编译期注入）
   const allEnv = loadEnv(mode, process.cwd(), '');
   const readMainEnv = (key: string): string => allEnv[key] || process.env[key] || '';
@@ -14,6 +22,21 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_CINDY_AUTH_REGION': JSON.stringify(env.VITE_CINDY_AUTH_REGION || 'cn'),
       'import.meta.env.VITE_CINDY_AUTH_BASE_URL': JSON.stringify(
         env.VITE_CINDY_AUTH_BASE_URL || 'http://localhost:3344',
+      ),
+      'import.meta.env.VITE_HEARTBEAT_URL': JSON.stringify(
+        readViteEnv('VITE_HEARTBEAT_URL'),
+      ),
+      'import.meta.env.VITE_SLACK_HOOK_WS_URL': JSON.stringify(
+        readViteEnv('VITE_SLACK_HOOK_WS_URL'),
+      ),
+      'import.meta.env.VITE_XDPROXY_BASE_URL': JSON.stringify(
+        readViteEnv('VITE_XDPROXY_BASE_URL'),
+      ),
+      'import.meta.env.VITE_CDN_BASE_URL': JSON.stringify(
+        readViteEnv('VITE_CDN_BASE_URL'),
+      ),
+      'import.meta.env.VITE_CDN_INTERNAL_BASE_URL': JSON.stringify(
+        readViteEnv('VITE_CDN_INTERNAL_BASE_URL'),
       ),
       // Triage bot token (dev only — production 留空，BotTokenStore 走 safeStorage)
       'process.env.TRIAGE_BOT_TOKEN': JSON.stringify(readMainEnv('TRIAGE_BOT_TOKEN')),
