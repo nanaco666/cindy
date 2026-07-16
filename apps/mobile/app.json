@@ -38,9 +38,8 @@
     "android": {
       "package": "com.xd.cindycn",
       "adaptiveIcon": {
-        "backgroundColor": "#F8F8F6",
+        "backgroundColor": "#F70121",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
