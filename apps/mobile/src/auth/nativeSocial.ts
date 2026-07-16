@@ -18,11 +18,24 @@ export type NativeSocialCredential =
   | { identityToken: string; rawNonce: string; user?: { name?: string } }
   | { code: string };
 
-/** Apple exposes a native credential API only on iOS; Google and WeChat support both apps. */
+/**
+ * Mirrors the acquire* preconditions below so the login page never renders a
+ * provider whose credential acquisition would deterministically fail
+ * (unsupported platform, or build-time client IDs not injected).
+ */
 export function isNativeSocialProviderSupported(
   provider: SocialProvider,
 ): boolean {
-  return provider !== 'apple' || Platform.OS === 'ios';
+  if (provider === 'apple') return Platform.OS === 'ios';
+  if (Platform.OS !== 'ios' && Platform.OS !== 'android') return false;
+  if (provider === 'google') {
+    if (!GOOGLE_WEB_CLIENT_ID) return false;
+    return (
+      Platform.OS !== 'ios' ||
+      (!!GOOGLE_IOS_CLIENT_ID && !!GOOGLE_IOS_URL_SCHEME)
+    );
+  }
+  return !!WECHAT_APP_ID && !!WECHAT_UNIVERSAL_LINK;
 }
 
 /** Acquires a short-lived native SDK credential. Token exchange always happens in auth-server. */

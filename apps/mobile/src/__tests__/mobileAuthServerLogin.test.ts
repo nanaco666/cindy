@@ -35,8 +35,16 @@ describe('mobile auth-server login', () => {
     expect(nativeSource).toContain('createNativeWechatLoginTimeout()');
     expect(nativeSource).toContain('cancelWechatAuthRequest().catch');
     expect(nativeSource).toContain("AppState.addEventListener('change'");
+    // 社交入口可见性必须镜像 acquire* 的配置前置条件：缺 client ID / app ID 的构建不渲染必然失败的按钮
     expect(nativeSource).toContain(
-      "return provider !== 'apple' || Platform.OS === 'ios';",
+      "if (provider === 'apple') return Platform.OS === 'ios';",
+    );
+    expect(nativeSource).toContain('if (!GOOGLE_WEB_CLIENT_ID) return false;');
+    expect(nativeSource).toContain(
+      '(!!GOOGLE_IOS_CLIENT_ID && !!GOOGLE_IOS_URL_SCHEME)',
+    );
+    expect(nativeSource).toContain(
+      'return !!WECHAT_APP_ID && !!WECHAT_UNIVERSAL_LINK;',
     );
     expect(nativeSource).toContain('!GOOGLE_IOS_URL_SCHEME');
     expect(nativeSource).toMatch(/\|\|\s*!WECHAT_UNIVERSAL_LINK/);

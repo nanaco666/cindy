@@ -70,7 +70,10 @@ export class CindyAuthClient {
   private readonly timeoutMs: number;
 
   constructor(private readonly options: AuthClientOptions) {
-    this.baseUrl = options.baseUrl.replace(/\/+$/, "");
+    // 逐字符去尾斜杠（不用 /\/+$/ 正则：CodeQL 判其在长 '/' 串上有多项式回溯）
+    let baseUrl = options.baseUrl;
+    while (baseUrl.endsWith("/")) baseUrl = baseUrl.slice(0, -1);
+    this.baseUrl = baseUrl;
     this.timeoutMs = options.timeoutMs ?? 15_000;
     authRegionSchema.parse(options.region);
   }
