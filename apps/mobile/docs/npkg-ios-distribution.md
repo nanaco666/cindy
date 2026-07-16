@@ -1,8 +1,13 @@
 # XDMaker 手机版 iOS 内部分发(NPKG)
 
 > 团队运维手册,**无任何密钥**(token 只在本地 `~/.config/xdt-maker/npkg/credentials.env`,不进仓库)。
-> 平台:NPKG(心动内部应用分发 + iOS 签名) · 负责人 明瑞锐(`mingruirui` / @PKG Slack) · 更新 2026-06-26。
+> 平台:NPKG(心动内部应用分发 + iOS 签名) · 负责人 明瑞锐(`mingruirui` / @PKG Slack) · 更新 2026-07-16。
 > 脚本是 bash;Windows 开发者需在 WSL / git-bash 下运行。
+>
+> ⚠️ **自建线身份切换(2026-07-16)**:自建线 bundleId 已从 `com.xd.lizcn` 改为 **`com.xd.cindycn`**,
+> `release-ios.sh` 默认校验值随之切换。本文下方「已完成」的白名单/profile 登记均是**针对 `com.xd.lizcn` 的历史状态**;
+> **`com.xd.cindycn` 的企业 wildcard profile 白名单登记是新的外部待办(找明瑞锐)**,未登记前上传会在
+> 「轮询企业子包」处超时报错。校验历史 lizcn 包时用 `NPKG_EXPECT_BUNDLE=com.xd.lizcn` 覆盖。
 
 ## 一句话
 

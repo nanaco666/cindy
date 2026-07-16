@@ -5,8 +5,9 @@
 //   @expo/fingerprint 不变 → EAS 正式版 OTA 链路不受 app.config.js 影响。
 // - beta 变体只改 name(→ iOS CFBundleDisplayName / 图标名),不动 bundleIdentifier / scheme / 飞书 appId。
 // - 自建分发变体(`EXPO_PUBLIC_XDT_OTA_SELFHOST=1`,详见 docs/self-hosted-ios-build-and-ota.md):
-//     · 沿用统一 app 身份(iOS `com.xd.lizcn` / Android `com.xd.lizcn`);iOS 与 Android 是两条独立自建线,bundleId / package
-//       各自维护、不共用同一常量(否则改一端会静默改另一端);当前两端取值同为 com.xd.lizcn,
+//     · 自建线 app 身份(iOS `com.xd.cindycn` / Android `com.xd.cindycn`,2026-07-16 起,与 EAS 线
+//       的 com.xd.lizcn 分离);iOS 与 Android 是两条独立自建线,bundleId / package
+//       各自维护、不共用同一常量(否则改一端会静默改另一端);当前两端取值同为 com.xd.cindycn,
 //       仍分开两个常量,以便任一端未来单独调整时不影响另一端。
 //     · updates.url 指向 mobile-update-server 的 /manifest(自托管 JS 热更);
 //     · **不额外改 scheme / 飞书 appId**。此变体有意改变指纹(它是独立 runtimeVersion 线),
@@ -15,10 +16,10 @@
 const appJson = require('./app.json');
 
 // iOS 自建线 bundleId,须与 release-ios-local.mjs 的 SELFHOST_BUNDLE_ID 一致。
-const SELFHOST_IOS_BUNDLE_ID = 'com.xd.lizcn';
+const SELFHOST_IOS_BUNDLE_ID = 'com.xd.cindycn';
 // Android 自建线 package,须与 release-android-local.mjs 的 SELFHOST_PACKAGE /
 // release-android-npkg.sh 的 EXPECT_PACKAGE 一致。
-const SELFHOST_ANDROID_PACKAGE = 'com.xd.lizcn';
+const SELFHOST_ANDROID_PACKAGE = 'com.xd.cindycn';
 
 module.exports = (context = {}) => {
   const baseConfig = context.config ?? appJson.expo;

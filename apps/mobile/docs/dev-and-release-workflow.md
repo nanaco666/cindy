@@ -88,12 +88,12 @@ pnpm mobile:release:android:ota   -- --execute # JS 热更(自托管 OTA)
 pnpm mobile:release:android:npkg  -- upload <apk>  # 单独上传 APK 取下载链接(APK 不重签)
 ```
 
-- **签名**:自有 keystore `xdmaker-release`(仓库外,口令走环境变量,不入仓);Android 自签即终版,NPKG **只上传取下载链接、不重签**。
+- **签名**:自有 keystore `Cindy.jks`(alias `Cindy`,PKCS12,2026-07-16 起替换旧 `xdmaker-release`;套件在打包机 `/Users/cn-ios/Documents/cindy/CindyMobileCer/Android/`,不入仓)。签名参数**零代码默认值**,路径/alias/口令全部由 `XDT_ANDROID_KEYSTORE_PATH` / `XDT_ANDROID_KEY_ALIAS` / `XDT_ANDROID_KEYSTORE_PASSWORD` / `XDT_ANDROID_KEY_PASSWORD` 环境变量提供(`--execute` 构建时缺任一项报错;`--apk` 复用现成包时豁免);Android 自签即终版,NPKG **只上传取下载链接、不重签**。换 keystore + 换包名 = 全新安装线,旧 `com.xd.lizcn` 自建包无法覆盖安装。
 - **versionCode**:committed 在 `apps/mobile/android-version.json`;冷更脚本读线上基线后自动校验单调,≤ 基线时**自动 +1 写回该文件**(`--execute` 才写盘,发布完成后把改动 commit 回 main),也可手动 bump;经 env 只在自建分支注入,EAS 指纹不受影响。
 
 外部动作 pending,不要假装已完成:
 
-- EAS/TestFlight 默认启用 native Feishu SSO,失败或未安装飞书时回退浏览器 OAuth;Android 正式启用 native SSO 前仍需确认飞书后台登记 Android 包名 `com.xd.lizcn` 与签名 SHA256。
+- EAS/TestFlight 默认启用 native Feishu SSO,失败或未安装飞书时回退浏览器 OAuth;自建线 Android 正式启用 native SSO 前仍需确认飞书后台登记 Android 包名 `com.xd.cindycn` 与新 keystore 签名 SHA256(`B0:A5:77:…:27:A9`,2026-07-16 换 Cindy.jks 后旧登记不适用);iOS 侧 `com.xd.cindycn` 的 NPKG 企业重签白名单与飞书登记同为新的外部待办。
 - ~~NPKG 的 Android APK 上传路径~~ 已不需要:冷更 APK 自 2026-07-06 起由 `release-android-local.mjs` 直传自有 OSS 取 CDN 直链,不经 NPKG(`release-android-npkg.sh` 仅供手动补传;只构建不上传用 `--skip-upload`)。
 
 ## PR 门禁(CI)
@@ -110,7 +110,7 @@ pnpm mobile:release:android:npkg  -- upload <apk>  # 单独上传 APK 取下载�
 ## 红线
 
 1. production fingerprint 必须与 `origin/main` 基线一致。beta profile 和 release scripts 不能改变 production OTA runtime。
-2. `bundleIdentifier` / Android package 固定为 `com.xd.lizcn`;`scheme` 固定为 `lizcn`;EAS profiles 默认开启 native Feishu SSO 以满足飞书 App 跳转登录,并必须保留浏览器 OAuth 兜底。
+2. `bundleIdentifier` / Android package:EAS/TestFlight 线固定为 `com.xd.lizcn`,自建线固定为 `com.xd.cindycn`(2026-07-16 起两线身份分离);`scheme` 两线统一固定为 `lizcn`;EAS profiles 默认开启 native Feishu SSO 以满足飞书 App 跳转登录,并必须保留浏览器 OAuth 兜底。⚠️ 两线同机共装时 `lizcn://` scheme 重复注册,浏览器 OAuth 回调可能被另一条线的 app 抢走(iOS 对重复 scheme 的路由不确定),内测机建议只装一条线。
 3. `app.config.js` 在非 beta 环境必须原样返回 Expo config。
 4. 多人禁止共享单个 `beta` channel。
 5. 生产发版禁止绕过 release scripts。

@@ -11,8 +11,6 @@ import {
   patchBuildGradleSigning,
   patchRootBuildGradleFeishuFlatDir,
   patchGradlePropertiesMemory,
-  DEFAULT_KEYSTORE_PATH,
-  DEFAULT_KEY_ALIAS,
 } from '../../scripts/lib/android-local.mjs';
 
 function withMobileDir(json: unknown, fn: (dir: string) => void) {
@@ -45,30 +43,29 @@ describe('readAndroidVersionCode', () => {
 });
 
 describe('resolveAndroidSigningEnv', () => {
-  it('两个口令齐全 → 应用默认路径/alias', () => {
-    const env = resolveAndroidSigningEnv({
-      XDT_ANDROID_KEYSTORE_PASSWORD: 's3cret',
-      XDT_ANDROID_KEY_PASSWORD: 'k3y',
-    });
-    expect(env.XDT_ANDROID_KEYSTORE_PATH).toBe(DEFAULT_KEYSTORE_PATH);
-    expect(env.XDT_ANDROID_KEY_ALIAS).toBe(DEFAULT_KEY_ALIAS);
-    expect(env.XDT_ANDROID_KEYSTORE_PASSWORD).toBe('s3cret');
-    expect(env.XDT_ANDROID_KEY_PASSWORD).toBe('k3y');
-  });
-  it('env 覆盖路径/alias', () => {
-    const env = resolveAndroidSigningEnv({
-      XDT_ANDROID_KEYSTORE_PATH: '/tmp/x.jks',
-      XDT_ANDROID_KEY_ALIAS: 'custom',
-      XDT_ANDROID_KEYSTORE_PASSWORD: 'a',
-      XDT_ANDROID_KEY_PASSWORD: 'b',
-    });
+  const FULL = {
+    XDT_ANDROID_KEYSTORE_PATH: '/tmp/x.jks',
+    XDT_ANDROID_KEY_ALIAS: 'custom',
+    XDT_ANDROID_KEYSTORE_PASSWORD: 'a',
+    XDT_ANDROID_KEY_PASSWORD: 'b',
+  };
+  it('四项 env 齐全 → 原样透传(零代码默认值)', () => {
+    const env = resolveAndroidSigningEnv(FULL);
     expect(env.XDT_ANDROID_KEYSTORE_PATH).toBe('/tmp/x.jks');
     expect(env.XDT_ANDROID_KEY_ALIAS).toBe('custom');
+    expect(env.XDT_ANDROID_KEYSTORE_PASSWORD).toBe('a');
+    expect(env.XDT_ANDROID_KEY_PASSWORD).toBe('b');
   });
-  it('缺口令 → 抛错且不落任何默认口令', () => {
-    expect(() => resolveAndroidSigningEnv({ XDT_ANDROID_KEY_PASSWORD: 'b' })).toThrow(/XDT_ANDROID_KEYSTORE_PASSWORD/);
-    expect(() => resolveAndroidSigningEnv({ XDT_ANDROID_KEYSTORE_PASSWORD: 'a' })).toThrow(/XDT_ANDROID_KEY_PASSWORD/);
-    expect(() => resolveAndroidSigningEnv({})).toThrow(/XDT_ANDROID_KEYSTORE_PASSWORD, XDT_ANDROID_KEY_PASSWORD/);
+  it('缺任一项 → 抛错并点名缺失的 env(不回落任何默认值)', () => {
+    expect(() => resolveAndroidSigningEnv({ ...FULL, XDT_ANDROID_KEYSTORE_PATH: '' })).toThrow(/XDT_ANDROID_KEYSTORE_PATH/);
+    expect(() => resolveAndroidSigningEnv({ ...FULL, XDT_ANDROID_KEY_ALIAS: ' ' })).toThrow(/XDT_ANDROID_KEY_ALIAS/);
+    expect(() => resolveAndroidSigningEnv({ ...FULL, XDT_ANDROID_KEYSTORE_PASSWORD: undefined })).toThrow(/XDT_ANDROID_KEYSTORE_PASSWORD/);
+    expect(() => resolveAndroidSigningEnv({ ...FULL, XDT_ANDROID_KEY_PASSWORD: undefined })).toThrow(/XDT_ANDROID_KEY_PASSWORD/);
+  });
+  it('全缺 → 错误信息按序列出全部四项', () => {
+    expect(() => resolveAndroidSigningEnv({})).toThrow(
+      /XDT_ANDROID_KEYSTORE_PATH, XDT_ANDROID_KEYSTORE_PASSWORD, XDT_ANDROID_KEY_ALIAS, XDT_ANDROID_KEY_PASSWORD/,
+    );
   });
 });
 
