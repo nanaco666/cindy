@@ -26,7 +26,14 @@ function isDerivedWindow(): boolean {
  * Startup phases (parallel since #26):
  * Phase 1 (background): update check — checking_update → updating → update_done
  * Phase 2 (foreground): binary check — checking → downloading → passed/failed
- * Phase 2 drives splash progress; Phase 1 can interrupt with relaunch dialog.
+ *
+ * 进度显示模型(2026-07 重构):两条下载在 main 侧共用单槽(maxConcurrent=1)
+ * FIFO 调度器,物理上串行——同一时刻只有一段在真实下载。splash 进度条跟随
+ * "当前真正在下载的那一段":热更段(app-update-progress → 'updating')与
+ * 二进制段(binary-download-progress → 'downloading')按事件到达顺序交替
+ * 接管,段切换时 bump resetSignal 让进度条无动画归零。二进制段活跃期间
+ * (Phase 2 IPC 在途且已收到二进制进度)丢弃热更事件、Phase 2 返回后丢弃
+ * 二进制尾包,用于抵御 webContents.send 与 invoke reply 跨通道乱序。
  */
 export type EnvCheckStatus =
   | 'idle'
@@ -57,7 +64,11 @@ export interface EnvCheckContextValue {
   step?: 1 | 2;
   /** D 场景固定为 2；B/C 场景未定义。 */
   totalSteps?: 2;
-  /** 自增 token——每次主进程发 reset payload 时 +1，供 SplashScreen 触发无动画归零。 */
+  /**
+   * 自增 token——进度条需要无动画归零时 +1,供 SplashScreen 关闭 transition。
+   * 触发时机:主进程发 reset payload(D 场景 claude→codex 切段),以及
+   * 热更段⇄二进制段互相切换(进度从上一段的高位跳回新段起点)。
+   */
   resetSignal: number;
   checkEnvironment: () => Promise<void>;
 }
@@ -91,8 +102,13 @@ export function EnvCheckProvider({ children }: { children: ReactNode }) {
   const [totalSteps, setTotalSteps] = useState<2 | undefined>(undefined);
   const [resetSignal, setResetSignal] = useState(0);
 
-  // Phase 2 活跃期间抑制 Phase 1 的 progress 事件，避免 splash 状态跳变（#26）
-  const suppressUpdateProgressRef = useRef(false);
+  // Phase 2 IPC 在途标记:二进制进度事件只在这个窗口内合法(prepare 的所有广播
+  // 都发生在 check-environment 返回之前),窗口外到达的一律是乱序尾包,丢弃。
+  const phase2InFlightRef = useRef(false);
+  // 当前驱动进度条的下载段:'update' = 热更 zip,'binary' = agent 二进制。
+  // 底层单槽串行,两段不会真并发;该 ref 用于 (a) 段切换时 bump resetSignal
+  // 无动画归零,(b) 二进制段活跃期间丢弃热更事件(挡跨通道乱序交错)。
+  const lastProgressSourceRef = useRef<'update' | 'binary' | null>(null);
   // Retry 防护：递增 callId，Phase 1 返回后校验是否仍为当前调用，避免旧 promise 干扰新流程
   const callIdRef = useRef(0);
   // Mirror status to ref so the grace-period tick (delayed setTimeout) can see
@@ -105,6 +121,12 @@ export function EnvCheckProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubCCD = window.electronAPI.onBinaryDownloadProgress((payload) => {
       if (!payload) return;
+      // Phase 2 已返回后到达的二进制尾包(webContents.send 与 invoke reply 走
+      // 不同通道,不保证 FIFO)一律丢弃——此后 splash 由热更段 / 终态接管,
+      // 尾包会把 status 错误地拉回 'downloading'。失败场景不受影响:失败时
+      // check-environment 的 reply 本身就是 allPassed=false,checkEnvironment
+      // 会兜底 setStatus('failed')。
+      if (!phase2InFlightRef.current) return;
       // Terminal failure: escape splash immediately so the user sees retry,
       // instead of waiting for the (synchronous) checkEnvironment IPC to return.
       if (payload.failed === true) {
@@ -120,6 +142,12 @@ export function EnvCheckProvider({ children }: { children: ReactNode }) {
         setResetSignal((n) => n + 1);
       }
       if (typeof payload.progress === 'number') {
+        // 热更段 → 二进制段切换:进度条要从热更段的高位跳回二进制段起点,
+        // 必须无动画归零(reset payload 已 bump 过的不重复)。
+        if (lastProgressSourceRef.current === 'update' && payload.reset !== true) {
+          setResetSignal((n) => n + 1);
+        }
+        lastProgressSourceRef.current = 'binary';
         setDownloadProgress(payload.progress);
         setDownloadInfo({
           progress: payload.progress,
@@ -139,15 +167,28 @@ export function EnvCheckProvider({ children }: { children: ReactNode }) {
         // Ignore progress events after env check has passed — background poll only.
         if (prev === 'passed') return prev;
         if (!payload) return prev;
-        // Phase 2 活跃期间抑制 Phase 1 progress，避免 splash 状态跳变（#26）
-        if (suppressUpdateProgressRef.current) return prev;
-        // Phase-1 终态保护：update_done / download_failed / manifest_failed 一旦确定就不再被
-        // 后到的 app-update-progress 事件（progress 或 failed）刷掉。Electron `webContents.send`
-        // 和 `ipcMain.handle` 的 invoke reply 走不同内部通道，到渲染端不保证 FIFO——
-        // 若 invoke reply 先到、progress 事件后到，progress=100 的尾包会把 update_done
-        // 覆盖回 'updating'，splash 卡在 100% 不再切到重启对话框；同理 failed 事件也不应
-        // 翻动已经定好的终态。
-        if (prev === 'update_done' || prev === 'download_failed' || prev === 'manifest_failed') {
+        // Phase-1 终态保护：update_done / download_failed / manifest_failed / failed
+        // 一旦确定就不再被后到的 app-update-progress 事件（progress 或 failed）刷掉。
+        // Electron `webContents.send` 和 `ipcMain.handle` 的 invoke reply 走不同内部
+        // 通道，到渲染端不保证 FIFO——若 invoke reply 先到、progress 事件后到，
+        // progress=100 的尾包会把 update_done 覆盖回 'updating'，splash 卡在 100%
+        // 不再切到重启对话框；同理 failed 事件也不应翻动已经定好的终态。
+        // 'failed'（二进制检查失败）也必须在列：热更包可能仍在后台下载，其进度
+        // 事件不能把重试提示刷回 'updating'（否则热更下完后 splash 永久卡死——
+        // checkEnvironment 在 Phase 2 失败时已 return，没有人再消费 updatePromise）。
+        if (
+          prev === 'update_done' ||
+          prev === 'download_failed' ||
+          prev === 'manifest_failed' ||
+          prev === 'failed'
+        ) {
+          return prev;
+        }
+        // 二进制段活跃期间(Phase 2 在途且二进制已在推进度)丢弃热更事件。
+        // 底层单槽串行,真实交错不存在;这里只挡热更段收尾时被延迟送达的尾包
+        // (典型:热更 100% 事件在二进制段开始后才到,会把进度条从二进制段
+        // 起点拉回 100 造成闪烁)。
+        if (phase2InFlightRef.current && lastProgressSourceRef.current === 'binary') {
           return prev;
         }
         // Terminal failure during startup: drop into download_failed so the splash
@@ -156,6 +197,11 @@ export function EnvCheckProvider({ children }: { children: ReactNode }) {
           return 'download_failed';
         }
         if (typeof payload.progress === 'number') {
+          // 二进制段 → 热更段切换(此时 Phase 2 已结束):无动画归零。
+          if (lastProgressSourceRef.current === 'binary') {
+            setResetSignal((n) => n + 1);
+          }
+          lastProgressSourceRef.current = 'update';
           setDownloadProgress(payload.progress);
           setDownloadInfo({
             progress: payload.progress,
@@ -179,6 +225,7 @@ export function EnvCheckProvider({ children }: { children: ReactNode }) {
     const thisCallId = ++callIdRef.current;
     setDownloadProgress(0);
     setDownloadInfo({ progress: 0 });
+    lastProgressSourceRef.current = null;
 
     // ── Phase 1 (background): update check — fire-and-forget promise ──
     const updatePromise = (async () => {
@@ -189,8 +236,11 @@ export function EnvCheckProvider({ children }: { children: ReactNode }) {
       }
     })();
 
-    // ── Phase 2 (foreground): binary check — drives splash state ──
-    suppressUpdateProgressRef.current = true;
+    // ── Phase 2 (foreground): binary check ──
+    // 注意:Phase 2 在途期间热更事件【不再】被整体抑制——两条下载底层单槽
+    // 串行,先开下的那段(通常是热更 zip)直接驱动进度条;二进制段一旦开始
+    // 推进度,事件处理器按 lastProgressSourceRef 切段(见上方两个 listener)。
+    phase2InFlightRef.current = true;
     setStatus('checking');
 
     let phase2Passed = false;
@@ -199,12 +249,15 @@ export function EnvCheckProvider({ children }: { children: ReactNode }) {
       setResult(res);
       phase2Passed = res.allPassed;
     } catch {
+      // 清 flag 必须做 callId 守卫:用户可能在本调用 Phase 2 在途时点了重试,
+      // 新调用已把 flag 置 true;旧调用返回时无脑清 false 会让新调用的二进制
+      // 进度事件被当成乱序尾包丢弃(splash 卡在 checking)。
+      if (thisCallId === callIdRef.current) phase2InFlightRef.current = false;
       setStatus('failed');
-      suppressUpdateProgressRef.current = false;
       return;
     }
 
-    suppressUpdateProgressRef.current = false;
+    if (thisCallId === callIdRef.current) phase2InFlightRef.current = false;
 
     if (!phase2Passed) {
       setStatus('failed');
@@ -234,8 +287,15 @@ export function EnvCheckProvider({ children }: { children: ReactNode }) {
 
       const tick = () => {
         if (settled) return;
-        // 正在下补丁/已下完待重启 → 继续等 updatePromise,不超时
-        if (statusRef.current === 'updating' || statusRef.current === 'update_done') {
+        // 正在下补丁/已下完待重启 → 继续等 updatePromise,不超时。
+        // 'download_failed'(failed 事件先于 reply 到达)也要等:此时
+        // update-check-startup 已经/即将返回,以 null 结算会让下面的兜底
+        // setStatus('passed') 把重试弹窗冲掉。
+        if (
+          statusRef.current === 'updating' ||
+          statusRef.current === 'update_done' ||
+          statusRef.current === 'download_failed'
+        ) {
           setTimeout(tick, 500);
           return;
         }
@@ -253,8 +313,19 @@ export function EnvCheckProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // No update / manifest failed / download failed / grace timeout expired
-    // → enter app. Background 30-min poll will catch updates later.
+    // 热更下载失败:manifest 已确认存在新版本、只是文件没拉下来(或校验失败)。
+    // 留在 splash 弹重试对话框,与 main 侧 update-check-startup 的意图对齐
+    // (避免带着旧二进制静默进 app)。此前这里无条件 setStatus('passed'),会把
+    // failed 事件先行设置的 'download_failed' 冲掉——弹窗闪一下就消失(race)。
+    // 不会锁死离线用户:彻底断网时重试会命中 manifest_failed,走下面的放行分支。
+    if (updateResult?.hasUpdate && updateResult?.error === 'download_failed') {
+      setStatus('download_failed');
+      return;
+    }
+
+    // No update / manifest failed / grace timeout expired → enter app.
+    // manifest_failed 刻意不弹窗拦截:完全离线的用户必须能正常进 app
+    // (后台 30min 轮询会在网络恢复后接管)。
     setStatus('passed');
   }, []);
 

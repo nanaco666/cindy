@@ -705,6 +705,16 @@ async function doCheckForUpdate(manifestOverride?: Manifest | null): Promise<Che
   let lastTotal = typeof asset.size === 'number' ? asset.size : 0;
   let lastSpeed: string | undefined;
 
+  // 显式广播一次 0%:ProgressNormalizer 只在进度上升时才 emit,首个 ≥1% 事件
+  // 在大补丁/慢速网络下可能要等数秒,这期间 splash 不知道热更下载已经开始
+  // (会停留在 'checking',grace 定时器也看不到 'updating' 而提前放行进 app)。
+  // 启动态热更包几乎总是队首(入队即开下),这条 0% 就是"真实开始"的信号;
+  // 极少数排在二进制下载之后的场景,renderer 侧会在二进制段活跃期间丢弃它,
+  // 不会产生假进度条。后台轮询场景 renderer 以 status==='passed' 挡掉,不受影响。
+  if (!wasReady) {
+    broadcastUpdateProgress({ progress: 0, received: 0, total: lastTotal });
+  }
+
   // Caller-side progress normalization (clamp + monotonic + throttle).
   const normalizer = new ProgressNormalizer({
     onIpc: (progress) => {

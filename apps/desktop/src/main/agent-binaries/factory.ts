@@ -158,11 +158,14 @@ export function createBinaryProvisioner(config: BinaryProvisionerConfig): Binary
         );
 
         // 6. 下载（含 SHA256 校验，由 downloader 内部完成）
-        emit({
-          status: 'downloading',
-          downloadProgress: { received: 0, total: asset.size, speedBps: 0 },
-        }, onProgress);
-
+        //
+        // 注意：这里刻意【不】在 download() 之前 emit 'downloading' 状态——
+        // 统一下载器是单槽 (maxConcurrent=1) FIFO 串行的，本任务可能要在队列里
+        // 等其它下载（典型：启动时热更 zip 先入队）。提前 emit 会让 splash 在
+        // 排队期间显示一根冻结在 0% 的假进度条（2026-07 实测回归），且 fromCache
+        // 命中时会闪一次 0→100 的假进度。'downloading' 状态与进度广播完全由
+        // 传输层真实的 onProgress 事件驱动（transport 在收到 HTTP response 后
+        // 才发首个事件 = 下载真正开始）。
         await download({
           url,
           targetPath: downloadDest,

@@ -393,6 +393,83 @@ describe('startup update relaunch safety', () => {
   });
 });
 
+describe('splash 启动下载 0% 显式广播', () => {
+  interface SentIpc {
+    channel: string;
+    payload: { progress?: number; received?: number; total?: number };
+  }
+
+  function makeProgressCollector() {
+    const sends: SentIpc[] = [];
+    const win = {
+      isDestroyed: () => false,
+      webContents: {
+        send: (channel: string, payload: SentIpc['payload']) => {
+          sends.push({ channel, payload });
+        },
+      },
+    };
+    browserWindowGetAllWindows.mockReturnValue([win as never]);
+    const progressSends = () => sends.filter((s) => s.channel === 'app-update-progress');
+    return { sends, progressSends };
+  }
+
+  function mockDownloadSuccess(onInvoke?: () => void) {
+    download.mockImplementation(async ({ targetPath }: { targetPath: string }) => {
+      onInvoke?.();
+      fs.mkdirSync(path.join(TEST_USER_DATA, 'updates'), { recursive: true });
+      fs.writeFileSync(targetPath, 'update');
+      return { path: targetPath, size: 123 };
+    });
+  }
+
+  beforeEach(() => {
+    // setStatus('ready') 会触发 evaluateAutoRelaunch;关掉无人值守开关,
+    // 避免测试进程里真的走到 executeRelaunch(spawn + process.exit)。
+    readAutoUpdateSettings.mockReturnValue({ autoRelaunchOnIdle: false });
+  });
+
+  it('启动(非 wasReady)路径:download() 之前恰好广播一次 progress:0', async () => {
+    const { progressSends } = makeProgressCollector();
+    // ProgressNormalizer 只在进度上升时 emit,首个 ≥1% 事件在大补丁/慢网下
+    // 可能要等数秒;没有这条显式 0%,splash 会停留在 'checking'、grace 定时器
+    // 也看不到 'updating' 而提前放行进 app —— 这里锁死"下载真正开始前恰好
+    // 已广播一次 0%"的契约。
+    let progressCountWhenDownloadStarted = -1;
+    mockDownloadSuccess(() => {
+      progressCountWhenDownloadStarted = progressSends().length;
+    });
+
+    const { checkForUpdate } = await freshUpdateService('darwin');
+    expect(await checkForUpdate(updateManifest())).toBe('ready');
+
+    expect(progressCountWhenDownloadStarted).toBe(1);
+    const payloads = progressSends().map((s) => s.payload);
+    expect(payloads[0]).toMatchObject({ progress: 0, received: 0, total: 123 });
+    expect(payloads[payloads.length - 1]).toMatchObject({ progress: 100 });
+  });
+
+  it('superseding(wasReady)路径:下载前不向 splash 通道广播 0%', async () => {
+    const { sends, progressSends } = makeProgressCollector();
+    mockDownloadSuccess();
+
+    const service = await freshUpdateService('darwin');
+    expect(await service.checkForUpdate(updateManifest('0.0.65'))).toBe('ready');
+
+    // 清空第一轮的广播,只观察 superseding 轮。
+    sends.length = 0;
+    let progressCountWhenDownloadStarted = -1;
+    mockDownloadSuccess(() => {
+      progressCountWhenDownloadStarted = progressSends().length;
+    });
+
+    // banner 已 ready(a=0.0.65),后台轮询发现更高的 b=0.0.66 → superseding。
+    // 此时用户在主界面,启动 splash 早已结束;0% 广播只属于启动态。
+    expect(await service.checkForUpdate(updateManifest('0.0.66'))).toBe('ready');
+    expect(progressCountWhenDownloadStarted).toBe(0);
+  });
+});
+
 describe('brand migration update routing', () => {
   const migrationManifest = {
     app: {
