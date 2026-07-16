@@ -1,8 +1,6 @@
 // @ts-nocheck —— 被测对象是 .mjs 发布工具模块,vitest 跑其纯函数。
 import { describe, expect, it } from 'vitest';
-import { productionEndpoints } from '../../../../scripts/shared/production-endpoints.mjs';
-
-const NPKG_INSTALL_URL = `${productionEndpoints.npkgBaseUrl}/install/4567`;
+const NPKG_INSTALL_URL = 'https://npkg.example.invalid/install/4567';
 import {
   parseNpkgInstallLinks,
   compareBuildNumbers,

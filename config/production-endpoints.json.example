@@ -1,0 +1,11 @@
+{
+  "apiBaseUrl": "",
+  "deviceLinkApiBaseUrl": "",
+  "oauthBrokerApiBaseUrl": "",
+  "heartbeatUrl": "",
+  "slackHookWsUrl": "",
+  "xdGatewayBaseUrl": "",
+  "cdnBaseUrl": "",
+  "cdnInternalBaseUrl": "",
+  "npkgBaseUrl": ""
+}

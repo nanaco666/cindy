@@ -30,7 +30,7 @@ export interface StartEmbeddingHostDeps {
   getDbClient: () => DbClient;
   isVecAvailable: () => boolean;
   getApiKey: () => string | null | undefined;
-  /** 可选: 覆盖 xdproxy base url (默认 https://llm-proxy.tapsvc.com)。 */
+  /** 可选：覆盖由构建配置注入的 xdproxy base URL。 */
   xdproxyBaseUrl?: string;
   log: ReturnType<typeof createLogger>;
   /** 可选: 注入 fetch (测试用) */

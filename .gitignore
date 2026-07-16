@@ -26,6 +26,9 @@ __pycache__/
 *.keystore
 *.mobileprovision
 
+# 生产服务端点由 CI / 发布环境在构建前提供；仓库只提交无实际地址的 example。
+config/production-endpoints.json
+
 # ── Electron / desktop 构建与暂存产物 ────────────────────────
 out/
 .vite/

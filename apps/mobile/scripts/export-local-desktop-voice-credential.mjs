@@ -10,10 +10,10 @@ const scriptDir = resolve(fileURLToPath(import.meta.url), '..');
 const mobileRoot = resolve(scriptDir, '..');
 const repoRoot = resolve(mobileRoot, '..', '..');
 const preflightScript = resolve(scriptDir, 'mobile-voice-cloud-preflight.mjs');
-const { productionEndpoints } = await import(
+const { loadProductionEndpoints } = await import(
   new URL('../../../scripts/shared/production-endpoints.mjs', import.meta.url)
 );
-const DEFAULT_PROXY_BASE_URL = productionEndpoints.xdGatewayBaseUrl;
+const DEFAULT_PROXY_BASE_URL = loadProductionEndpoints().xdGatewayBaseUrl;
 const DEFAULT_OUTPUT = resolve(tmpdir(), `xdt-mobile-local-desktop-voice-${process.pid}.json`);
 const LITELLM_REALTIME_TRANSCRIPTION_PATH = '/openai/passthrough/v1/realtime?intent=transcription';
 const LITELLM_CHAT_COMPLETIONS_PATH = '/v1/chat/completions';

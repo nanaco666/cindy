@@ -27,7 +27,6 @@ import {
   type EmbeddingModelMeta,
 } from './types.js';
 
-const DEFAULT_BASE_URL = 'https://llm-proxy.tapsvc.com';
 const DEFAULT_CACHE_SIZE = 1000;
 // 重试间隔 (ms): 1s / 5s / 15s. 共最多 4 次尝试 (initial + 3 retries)。
 const RETRY_DELAYS_MS = [1_000, 5_000, 15_000];
@@ -51,7 +50,7 @@ export class EmbeddingClient {
   private readonly log: EmbeddingLogger;
 
   constructor(opts: EmbeddingClientOptions) {
-    this.baseUrl = (opts.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
+    this.baseUrl = opts.baseUrl.replace(/\/+$/, '');
     this.getApiKey = opts.getApiKey;
     this.fetchImpl = opts.fetchImpl ?? globalThis.fetch;
     this.cache = new LruCache<string, number[]>(opts.cacheSize ?? DEFAULT_CACHE_SIZE);

@@ -21,7 +21,9 @@ import crypto from 'node:crypto';
 import { parseArgs, assertProductionGitGate, assertPublicEnv, resolveDesktopVersion } from './release-lib.mjs';
 import { buildAssetEntry, buildManifest, sha256Hex, assertOtaRuntimeMatchesBaseline } from './lib/ota-manifest.mjs';
 import { readAndroidVersionCode } from './lib/android-local.mjs';
-import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX } from '../../../scripts/shared/oss.mjs';
+import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
+
+refreshOssConfig();
 
 const MOBILE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx';

@@ -2,11 +2,13 @@ export const APP_SCHEME = 'lizcn';
 export const MOBILE_REDIRECT_URL = `${APP_SCHEME}://auth`;
 export const MOBILE_OAUTH_STATE_PREFIX = `${APP_SCHEME}.`;
 
-// ⚠️ 生产域名权威源是仓库根 config/production-endpoints.json,以下默认值必须与其一致
-//    (scripts/check-endpoint-literals.mjs 做一致性校验;eas.json 各 profile 的注入值同理)。
-export const DEFAULT_API_BASE_URL = 'https://xdt-api.magiclizi.com';
-export const DEFAULT_DEVICE_LINK_API_BASE_URL = 'https://xdmaker-device-link.magiclizi.com';
-export const DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL = 'https://llm-proxy.tapsvc.com';
+// 生产地址由发布脚本从未提交的 config/production-endpoints.json 注入 EXPO_PUBLIC_*；
+// 本模块不保存任何真实 URL，未注入时保持空值并由上层配置校验给出明确错误。
+export const DEFAULT_API_BASE_URL = process.env.EXPO_PUBLIC_XDT_API_BASE_URL?.trim() || '';
+export const DEFAULT_DEVICE_LINK_API_BASE_URL =
+  process.env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL?.trim() || '';
+export const DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL =
+  process.env.EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL?.trim() || '';
 
 export interface MobileConfigIssue {
   key: string;

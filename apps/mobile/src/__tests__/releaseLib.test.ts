@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_API_BASE_URL, DEFAULT_DEVICE_LINK_API_BASE_URL } from '@/config/env';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -716,8 +715,6 @@ describe('mobile release scripts core logic', () => {
           env: {
             EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
             EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED: '1',
-            EXPO_PUBLIC_XDT_API_BASE_URL: DEFAULT_API_BASE_URL,
-            EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: DEFAULT_DEVICE_LINK_API_BASE_URL,
             XDT_SKIP_AGENT_BIN_INSTALL: '1',
           },
         },
@@ -730,8 +727,6 @@ describe('mobile release scripts core logic', () => {
           env: {
             EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
             EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED: '1',
-            EXPO_PUBLIC_XDT_API_BASE_URL: DEFAULT_API_BASE_URL,
-            EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: DEFAULT_DEVICE_LINK_API_BASE_URL,
             XDT_SKIP_AGENT_BIN_INSTALL: '1',
           },
         },
@@ -744,8 +739,6 @@ describe('mobile release scripts core logic', () => {
           env: {
             EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
             EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED: '1',
-            EXPO_PUBLIC_XDT_API_BASE_URL: DEFAULT_API_BASE_URL,
-            EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: DEFAULT_DEVICE_LINK_API_BASE_URL,
             XDT_SKIP_AGENT_BIN_INSTALL: '1',
           },
         },

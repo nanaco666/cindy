@@ -1,70 +1,177 @@
 /**
- * production-endpoints.mjs — 生产域名权威源(config/production-endpoints.json)的
- * Node 脚本读取入口。构建 / 发布 / 运维脚本需要生产域名默认值时一律 import 本模块,
- * 不要再各自写 URL 字面量(scripts/check-endpoint-literals.mjs 门禁扫描)。
+ * 生产端点私有配置的唯一加载入口。
  *
- * 用 import.meta.url 定位 JSON,不依赖 cwd —— 各脚本从任意目录执行都能读到。
+ * 仓库只提交 config/production-endpoints.json.example；真实 JSON 由 CI / 发布环境
+ * 在构建前写入 config/production-endpoints.json，或通过
+ * CINDY_PRODUCTION_ENDPOINTS_FILE 指向其它绝对/相对路径。任何生产调用缺文件、
+ * 缺字段或 URL 非法都立即失败，禁止退回源码内默认地址。
  */
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const jsonPath = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..',
-  '..',
+export const PRODUCTION_ENDPOINT_KEYS = Object.freeze([
+  'apiBaseUrl',
+  'deviceLinkApiBaseUrl',
+  'oauthBrokerApiBaseUrl',
+  'heartbeatUrl',
+  'slackHookWsUrl',
+  'xdGatewayBaseUrl',
+  'cdnBaseUrl',
+  'cdnInternalBaseUrl',
+  'npkgBaseUrl',
+]);
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+export const DEFAULT_PRODUCTION_ENDPOINTS_PATH = path.join(
+  REPO_ROOT,
   'config',
   'production-endpoints.json',
 );
+export const PRODUCTION_ENDPOINTS_EXAMPLE_PATH = path.join(
+  REPO_ROOT,
+  'config',
+  'production-endpoints.json.example',
+);
 
-/**
- * @type {{
- *   apiBaseUrl: string,
- *   deviceLinkApiBaseUrl: string,
- *   oauthBrokerApiBaseUrl: string,
- *   heartbeatUrl: string,
- *   slackHookWsUrl: string,
- *   xdGatewayBaseUrl: string,
- *   cdnBaseUrl: string,
- *   cdnInternalBaseUrl: string,
- *   npkgBaseUrl: string,
- * }}
- */
-export const productionEndpoints = JSON.parse(readFileSync(jsonPath, 'utf8'));
+const FIELD_PROTOCOLS = Object.freeze({
+  apiBaseUrl: ['https:'],
+  deviceLinkApiBaseUrl: ['https:'],
+  oauthBrokerApiBaseUrl: ['https:'],
+  heartbeatUrl: ['https:'],
+  slackHookWsUrl: ['wss:'],
+  xdGatewayBaseUrl: ['https:'],
+  cdnBaseUrl: ['https:'],
+  cdnInternalBaseUrl: ['http:', 'https:'],
+  npkgBaseUrl: ['https:'],
+});
 
-/**
- * 通用 resolver:`process.env[envVarName] || productionEndpoints[key]`。
- * env 在每次调用时读取(不缓存),便于测试注入与运行中切换。
- *
- * @param {keyof typeof productionEndpoints} key
- * @param {string} [envVarName] 允许覆盖该端点的环境变量名;省略则不接受 env 覆盖
- * @returns {string}
- */
-export function resolveEndpoint(key, envVarName) {
-  const override = envVarName ? process.env[envVarName] : undefined;
-  return override || productionEndpoints[key];
+/** 解析配置路径；相对路径统一以仓库根目录为基准。 */
+export function resolveProductionEndpointsPath(filePath = process.env.CINDY_PRODUCTION_ENDPOINTS_FILE) {
+  if (!filePath?.trim()) return DEFAULT_PRODUCTION_ENDPOINTS_PATH;
+  return path.resolve(REPO_ROOT, filePath.trim());
 }
 
-/** CDN 基址:XDT_CDN_BASE_URL 可覆盖(发布/兜底下载脚本的统一入口)。 */
+/**
+ * 读取并严格校验真实生产端点文件。返回值只存在内存中，不打印配置内容。
+ * @param {{ filePath?: string }} [options]
+ */
+export function loadProductionEndpoints(options = {}) {
+  const configPath = resolveProductionEndpointsPath(options.filePath);
+  let raw;
+  try {
+    raw = fs.readFileSync(configPath, 'utf8');
+  } catch (error) {
+    if (error && typeof error === 'object' && error.code === 'ENOENT') {
+      throw new Error(
+        `缺少生产端点配置: ${configPath}。请复制 production-endpoints.json.example，` +
+          '或由 CI 设置 CINDY_PRODUCTION_ENDPOINTS_FILE。',
+      );
+    }
+    throw error;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`生产端点配置不是合法 JSON: ${configPath}`);
+  }
+  return validateProductionEndpoints(parsed, { source: configPath });
+}
+
+/**
+ * @param {unknown} value
+ * @param {{ source?: string, allowEmpty?: boolean }} [options]
+ */
+export function validateProductionEndpoints(value, options = {}) {
+  const source = options.source ?? 'production endpoints';
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${source} 必须是 JSON object`);
+  }
+  const unknownKeys = Object.keys(value).filter((key) => !PRODUCTION_ENDPOINT_KEYS.includes(key));
+  if (unknownKeys.length) {
+    throw new Error(`${source} 包含未知字段: ${unknownKeys.join(', ')}`);
+  }
+
+  const result = {};
+  for (const key of PRODUCTION_ENDPOINT_KEYS) {
+    const raw = value[key];
+    if (options.allowEmpty && raw === '') {
+      result[key] = '';
+      continue;
+    }
+    if (typeof raw !== 'string' || !raw.trim()) {
+      throw new Error(`${source} 缺少非空字段: ${key}`);
+    }
+    const normalized = raw.trim().replace(/\/+$/, '');
+    let url;
+    try {
+      url = new URL(normalized);
+    } catch {
+      throw new Error(`${source} 字段 ${key} 不是合法绝对 URL`);
+    }
+    if (!FIELD_PROTOCOLS[key].includes(url.protocol)) {
+      throw new Error(`${source} 字段 ${key} 协议必须是 ${FIELD_PROTOCOLS[key].join(' 或 ')}`);
+    }
+    if (url.username || url.password) {
+      throw new Error(`${source} 字段 ${key} 不允许在 URL 中携带凭据`);
+    }
+    result[key] = normalized;
+  }
+  return Object.freeze(result);
+}
+
+/** 读取 example 并校验字段集合；空值是 example 的预期格式。 */
+export function validateProductionEndpointsExample() {
+  const parsed = JSON.parse(fs.readFileSync(PRODUCTION_ENDPOINTS_EXAMPLE_PATH, 'utf8'));
+  return validateProductionEndpoints(parsed, {
+    source: PRODUCTION_ENDPOINTS_EXAMPLE_PATH,
+    allowEmpty: true,
+  });
+}
+
+/** 单个端点解析；显式环境变量仅作为开发/诊断覆盖。 */
+export function resolveEndpoint(key, envVarName) {
+  if (!PRODUCTION_ENDPOINT_KEYS.includes(key)) throw new Error(`未知生产端点字段: ${key}`);
+  const override = envVarName ? process.env[envVarName]?.trim() : '';
+  return override || loadProductionEndpoints()[key];
+}
+
+/** CDN 基址；发布诊断仍允许 XDT_CDN_BASE_URL 显式覆盖。 */
 export function resolveCdnBaseUrl() {
   return resolveEndpoint('cdnBaseUrl', 'XDT_CDN_BASE_URL');
 }
 
-/**
- * 桌面端生产构建注入的三个 VITE_* 端点 env,spread 进 execSync 的 env 即可:
- * `env: { ...process.env, ...productionViteEnv() }`。
- *
- * @param {{ allowEnvOverride?: boolean }} [opts]
- *   allowEnvOverride=true(默认,CI 构建脚本用):外部已设同名 env 时尊重外部值;
- *   allowEnvOverride=false(本机正式 release 脚本用):无条件用权威源,防止本机
- *   残留的 .env / shell 变量把正式包指到错误环境。
- */
+/** Desktop 正式构建所需的全部 Vite 端点变量。 */
 export function productionViteEnv({ allowEnvOverride = true } = {}) {
+  const endpoints = loadProductionEndpoints();
   const pick = (envName, key) =>
-    (allowEnvOverride ? process.env[envName] : undefined) || productionEndpoints[key];
+    (allowEnvOverride ? process.env[envName]?.trim() : '') || endpoints[key];
   return {
     VITE_API_BASE_URL: pick('VITE_API_BASE_URL', 'apiBaseUrl'),
-    VITE_DEVICE_LINK_API_BASE_URL: pick('VITE_DEVICE_LINK_API_BASE_URL', 'deviceLinkApiBaseUrl'),
-    VITE_OAUTH_BROKER_API_BASE_URL: pick('VITE_OAUTH_BROKER_API_BASE_URL', 'oauthBrokerApiBaseUrl'),
+    VITE_DEVICE_LINK_API_BASE_URL: pick(
+      'VITE_DEVICE_LINK_API_BASE_URL',
+      'deviceLinkApiBaseUrl',
+    ),
+    VITE_OAUTH_BROKER_API_BASE_URL: pick(
+      'VITE_OAUTH_BROKER_API_BASE_URL',
+      'oauthBrokerApiBaseUrl',
+    ),
+    VITE_HEARTBEAT_URL: pick('VITE_HEARTBEAT_URL', 'heartbeatUrl'),
+    VITE_SLACK_HOOK_WS_URL: pick('VITE_SLACK_HOOK_WS_URL', 'slackHookWsUrl'),
+    VITE_XDPROXY_BASE_URL: pick('VITE_XDPROXY_BASE_URL', 'xdGatewayBaseUrl'),
+    VITE_CDN_BASE_URL: pick('VITE_CDN_BASE_URL', 'cdnBaseUrl'),
+    VITE_CDN_INTERNAL_BASE_URL: pick('VITE_CDN_INTERNAL_BASE_URL', 'cdnInternalBaseUrl'),
+  };
+}
+
+/** Mobile/EAS 构建所需的公开端点变量。 */
+export function productionMobileEnv() {
+  const endpoints = loadProductionEndpoints();
+  return {
+    EXPO_PUBLIC_XDT_API_BASE_URL: endpoints.apiBaseUrl,
+    EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: endpoints.deviceLinkApiBaseUrl,
+    EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: endpoints.xdGatewayBaseUrl,
   };
 }

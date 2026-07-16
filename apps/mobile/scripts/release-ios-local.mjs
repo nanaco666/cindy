@@ -53,7 +53,9 @@ import {
 import { buildIosDistTargets, buildItmsManifestPlist, buildItmsUrl, buildInstallHtml } from './lib/oss-dist.mjs';
 import { clearBundlerCache } from './lib/bundler-cache.mjs';
 import { readEmbeddedRuntimeVersionFromIpa } from './lib/embedded-runtime.mjs';
-import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, OSS_BUCKET } from '../../../scripts/shared/oss.mjs';
+import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, OSS_BUCKET, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
+
+refreshOssConfig();
 
 const MOBILE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx';

@@ -19,7 +19,10 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const OSS = require('ali-oss');
 
-import { resolveCdnBaseUrl } from './production-endpoints.mjs';
+import {
+  resolveCdnBaseUrl,
+  resolveProductionEndpointsPath,
+} from './production-endpoints.mjs';
 
 // CDN / OSS 目标(dev 环境)。四项均可被环境变量覆盖(默认值不变,不影响既有发布线):
 // XDT_CDN_BASE_URL / XDT_OSS_BUCKET / XDT_OSS_PREFIX / XDT_OSS_REGION。
@@ -45,9 +48,9 @@ export function resolveOssConfig() {
 // 保留既有 named export 面,但改为 live binding；任何晚加载 .env 的入口必须在加载后
 // 调 refreshOssConfig()。createOSSClient() 自身仍会在调用时重新解析,避免连错 bucket。
 export let CDN_BASE;
-export let OSS_BUCKET;
-export let OSS_PREFIX;
-export let OSS_REGION;
+export let OSS_BUCKET = process.env.XDT_OSS_BUCKET || 'smash-dev';
+export let OSS_PREFIX = process.env.XDT_OSS_PREFIX || 'cindy';
+export let OSS_REGION = process.env.XDT_OSS_REGION || 'oss-cn-shanghai';
 
 export function refreshOssConfig() {
   const config = resolveOssConfig();
@@ -58,7 +61,15 @@ export function refreshOssConfig() {
   return config;
 }
 
-refreshOssConfig();
+// 工具库本身会被普通测试和只读脚本 import。没有私有配置时允许完成 import，
+// 但任何真正需要 CDN 的入口仍必须调用 refreshOssConfig()/resolveOssConfig()，
+// 届时会按 production-endpoints 的 fail-closed 规则明确报错。
+if (
+  process.env.XDT_CDN_BASE_URL?.trim() ||
+  fs.existsSync(resolveProductionEndpointsPath())
+) {
+  refreshOssConfig();
+}
 
 // ── 哈希 / 压缩 ──────────────────────────────────────────────────────────────
 

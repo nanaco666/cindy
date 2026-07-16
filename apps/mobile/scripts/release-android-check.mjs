@@ -18,7 +18,9 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs, decideReleaseMode, resolveDesktopVersion } from './release-lib.mjs';
 import { readAndroidVersionCode } from './lib/android-local.mjs';
-import { CDN_BASE } from '../../../scripts/shared/oss.mjs';
+import { CDN_BASE, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
+
+refreshOssConfig();
 
 const MOBILE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx';

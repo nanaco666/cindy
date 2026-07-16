@@ -2,6 +2,13 @@ import { defineConfig } from 'vitest/config';
 import path from 'node:path';
 
 export default defineConfig({
+  define: {
+    'import.meta.env.VITE_XDPROXY_BASE_URL': JSON.stringify('https://gateway.example.invalid'),
+    'import.meta.env.VITE_HEARTBEAT_URL': JSON.stringify('https://heartbeat.example.invalid'),
+    'import.meta.env.VITE_CDN_BASE_URL': JSON.stringify('https://cdn.example.invalid/app'),
+    'import.meta.env.VITE_CDN_INTERNAL_BASE_URL': JSON.stringify('http://cdn-internal.example.invalid/app'),
+    'import.meta.env.VITE_SLACK_HOOK_WS_URL': JSON.stringify('wss://hook.example.invalid'),
+  },
   plugins: [
     {
       // 仓库根 scripts/*.mjs 带 shebang(#!/usr/bin/env node)。vite-node 内联

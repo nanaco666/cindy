@@ -35,8 +35,8 @@ export interface EmbeddingModelMeta {
 }
 
 export interface EmbeddingClientOptions {
-  /** xdproxy base URL, 末尾不带斜杠。默认 'https://llm-proxy.tapsvc.com'。 */
-  baseUrl?: string;
+  /** OpenAI-compatible embeddings base URL，由上层宿主显式注入。 */
+  baseUrl: string;
   /** 动态读 API key (避免写死, 切账号生效)。返 undefined / 空字符串 = 未登录。 */
   getApiKey: () => string | undefined | null;
   /** 可注入用于单元测试; 缺省走全局 fetch。 */

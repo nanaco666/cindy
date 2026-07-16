@@ -17,7 +17,7 @@
 //     release/ios-runtime.json),要它等于 CDN 冷更装机包记录 mobile-ota/ios/release.json
 //     的 runtimeVersion,否则原生层已变、热更会推给跑着不同原生面的客户端,须先出冷更整包;
 //     --skip-runtime-check 跳过,显式 --runtime-version 作人工 override(仍过基线校验)。
-// OSS/CDN 复用 scripts/shared/oss.mjs(bucket smash-dev / dev-cdn.fp.xd.com,prefix xdt-maker)。
+// OSS/CDN 配置统一由 scripts/shared/oss.mjs 在发布环境中解析。
 // 需要的 EXPO_PUBLIC_*(飞书 appId / api base 等)由运行环境提供(建议 eas env:exec production 包裹)。
 // =============================================================================
 
@@ -28,7 +28,9 @@ import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { parseArgs, assertProductionGitGate, assertPublicEnv, resolveDesktopVersion } from './release-lib.mjs';
 import { buildAssetEntry, buildManifest, sha256Hex, assertOtaRuntimeMatchesBaseline } from './lib/ota-manifest.mjs';
-import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX } from '../../../scripts/shared/oss.mjs';
+import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
+
+refreshOssConfig();
 
 const MOBILE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx';

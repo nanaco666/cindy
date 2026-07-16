@@ -172,7 +172,7 @@ export default function LoginScreen() {
                   autoCorrect={false}
                   multiline
                   onChangeText={setCallbackUrl}
-                  placeholder="https://xdt-api.magiclizi.com/api/auth/callback?code=..."
+                  placeholder="Callback URL"
                   placeholderTextColor={colors.textTertiary}
                   style={styles.devInput}
                   testID="login.callbackInput"

@@ -33,8 +33,6 @@ export const EXTERNAL_PUBLIC_ENV_KEYS = [
 
 // 桌面产品线 CDN manifest 基址 —— 与桌面发版脚本(apps/desktop/scripts/release-macos.mjs
 // 的 CDN_BASE)读同一 Source of Truth。桌面版本(app.version)是唯一真实来源。
-export const DESKTOP_CDN_BASE = resolveCdnBaseUrl();
-
 /**
  * 解析本次自建线打包要显示的「桌面包版本」(二级版本号,注入 EXPO_PUBLIC_DESKTOP_VERSION)。
  * 取值优先级:
@@ -49,7 +47,7 @@ export const DESKTOP_CDN_BASE = resolveCdnBaseUrl();
 export async function resolveDesktopVersion(opts = {}) {
   const explicit = typeof opts.explicit === 'string' ? opts.explicit.trim() : '';
   if (explicit) return explicit;
-  const cdnBase = (opts.cdnBase ?? DESKTOP_CDN_BASE).replace(/\/+$/, '');
+  const cdnBase = (opts.cdnBase ?? resolveCdnBaseUrl()).replace(/\/+$/, '');
   const platformKey = opts.platformKey ?? 'darwin-arm64';
   const timeoutMs = opts.timeoutMs ?? 8000;
   const url = `${cdnBase}/manifest-${platformKey}.json?t=${Date.now()}`;

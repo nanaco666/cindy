@@ -30,7 +30,6 @@ test("loadDotenv 刷新在 import 后才注入的 OSS/CDN 配置", () => {
 
   try {
     for (const key of CONFIG_ENV_KEYS) delete process.env[key];
-    refreshOssConfig();
 
     fs.writeFileSync(
       envFile,
@@ -54,7 +53,11 @@ test("loadDotenv 刷新在 import 后才注入的 OSS/CDN 配置", () => {
       if (saved[key] === undefined) delete process.env[key];
       else process.env[key] = saved[key];
     }
+    if (!process.env.XDT_CDN_BASE_URL) {
+      process.env.XDT_CDN_BASE_URL = 'https://cdn.example.invalid';
+    }
     refreshOssConfig();
+    if (saved.XDT_CDN_BASE_URL === undefined) delete process.env.XDT_CDN_BASE_URL;
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });

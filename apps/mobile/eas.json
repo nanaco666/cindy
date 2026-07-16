@@ -15,8 +15,6 @@
       "env": {
         "EXPO_PUBLIC_FEISHU_APP_ID": "cli_a94d4cf642381cd4",
         "EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED": "1",
-        "EXPO_PUBLIC_XDT_API_BASE_URL": "https://xdt-api.magiclizi.com",
-        "EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL": "https://xdmaker-device-link.magiclizi.com",
         "XDT_SKIP_AGENT_BIN_INSTALL": "1"
       }
     },
@@ -31,8 +29,6 @@
       "env": {
         "EXPO_PUBLIC_FEISHU_APP_ID": "cli_a94d4cf642381cd4",
         "EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED": "1",
-        "EXPO_PUBLIC_XDT_API_BASE_URL": "https://xdt-api.magiclizi.com",
-        "EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL": "https://xdmaker-device-link.magiclizi.com",
         "XDT_SKIP_AGENT_BIN_INSTALL": "1"
       }
     },
@@ -47,8 +43,6 @@
       "env": {
         "EXPO_PUBLIC_FEISHU_APP_ID": "cli_a94d4cf642381cd4",
         "EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED": "1",
-        "EXPO_PUBLIC_XDT_API_BASE_URL": "https://xdt-api.magiclizi.com",
-        "EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL": "https://xdmaker-device-link.magiclizi.com",
         "XDT_SKIP_AGENT_BIN_INSTALL": "1"
       }
     },
@@ -65,8 +59,6 @@
       "env": {
         "EXPO_PUBLIC_FEISHU_APP_ID": "cli_a94d4cf642381cd4",
         "EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED": "1",
-        "EXPO_PUBLIC_XDT_API_BASE_URL": "https://xdt-api.magiclizi.com",
-        "EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL": "https://xdmaker-device-link.magiclizi.com",
         "EXPO_PUBLIC_APP_VARIANT": "beta",
         "XDT_SKIP_AGENT_BIN_INSTALL": "1"
       }
