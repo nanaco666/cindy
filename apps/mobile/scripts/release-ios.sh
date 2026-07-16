@@ -7,7 +7,7 @@
 # 关键事实(2026-06-26 实测):
 #   - NPKG 不编译源码,只对我们已构建好的 .ipa **重签名**(企业 In-House wildcard 证书
 #     UE5H8B62F9.* / Shanghai Xindong Enterprise Development Co., Ltd. → 无设备上限)。
-#   - bundle id `com.xd.lizcn` 的企业 provisioning profile 一旦配好(“白名单”),
+#   - bundle id `com.xd.cindycn` 的企业 provisioning profile 一旦配好(“白名单”),
 #     **每次上传 NPKG 会自动产出 type=enterprise 的兄弟包**(秒级),父包 `enterprise`
 #     字段指向子包 id。无需手动点“打包”、无触发 API。
 #   - 安装走前端路由 `/install/<子包id>`(免 token / 免登记 UDID,iPhone Safari 打开即装)。
@@ -36,9 +36,9 @@ fi
 : "${NPKG_TOKEN:?需要 NPKG_TOKEN:启动时传环境变量(NPKG_TOKEN=...)或放 $NPKG_CONF}"
 : "${NPKG_BASE_URL:=https://npkg.xindong.com}"
 
-# 期望的 bundle id。默认 com.xd.lizcn;需要校验历史包时可通过 NPKG_EXPECT_BUNDLE 覆盖。
+# 期望的 bundle id。默认 com.xd.cindycn;需要校验历史包时可通过 NPKG_EXPECT_BUNDLE 覆盖。
 # 企业签 Team 校验(UE5H8B62F9.*)不随之变。
-EXPECT_BUNDLE="${NPKG_EXPECT_BUNDLE:-com.xd.lizcn}"
+EXPECT_BUNDLE="${NPKG_EXPECT_BUNDLE:-com.xd.cindycn}"
 POLL_TRIES=60          # 轮询次数
 POLL_INTERVAL=5        # 每次间隔秒
 

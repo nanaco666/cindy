@@ -6,10 +6,10 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-/** 自建 Android 线默认 release keystore(仓库外,不入仓;可用 env 覆盖)。 */
-export const DEFAULT_KEYSTORE_PATH = '/Users/cn-ios/Documents/xdt/XDMakerMobileCer/Android/xdmaker-release.jks';
-/** 默认 keyAlias(见 XDMakerMobileCer/Android/signing-info.txt)。口令**绝不**写进代码,只从 env 读。 */
-export const DEFAULT_KEY_ALIAS = 'xdmaker-release';
+/** 自建 Android 线默认 release keystore(打包机上的仓库外路径,不入仓;可用 env 覆盖)。 */
+export const DEFAULT_KEYSTORE_PATH = '/Users/cn-ios/Documents/cindy/CindyMobileCer/Android/Cindy.jks';
+/** 默认 keyAlias(见 CindyMobileCer/Android/signing-info.txt;PKCS12 格式,storePassword 与 keyPassword 相同)。口令**绝不**写进代码,只从 env 读。 */
+export const DEFAULT_KEY_ALIAS = 'Cindy';
 
 /**
  * 读 committed android-version.json 的 versionCode(单调递增整数,语义对齐 iOS buildNumber)。

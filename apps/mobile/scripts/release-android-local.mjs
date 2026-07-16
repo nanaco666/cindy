@@ -3,7 +3,7 @@
 // release-android-local.mjs —— 自建线 Android 冷更(本机出签名 APK → 直传自有 OSS → 内部分发)
 //
 // 流程:git 闸门 → 读基线并按需自动 bump versionCode(≤ 基线时自增,写回 android-version.json)
-//       → expo prebuild(com.xd.lizcn,注入 versionCode)→ patch build.gradle 用自有 keystore 自签
+//       → expo prebuild(com.xd.cindycn,注入 versionCode)→ patch build.gradle 用自有 keystore 自签
 //       → gradlew assembleRelease → app-release.apk
 //       → 从 APK 回读内嵌 runtimeVersion(assets/fingerprint,落盘供 OTA 复用)
 //       → APK 直传 OSS(mobile-dist/android/<versionCode>/,installUrl = CDN 直链)
@@ -20,8 +20,9 @@
 // (需 macOS + Android SDK + JDK 17 + keystore 口令 env + OSS AK/SK env,除非 --skip-upload)。
 //
 // 签名(见 docs/self-hosted-android-build-and-ota.md §7):自有 release keystore
-// xdmaker-release.jks(alias xdmaker-release)自签即终版。keystore 路径/口令
-// 经环境变量供给(XDT_ANDROID_KEYSTORE_PATH / _PASSWORD / _KEY_ALIAS / _KEY_PASSWORD),不入仓。
+// Cindy.jks(alias Cindy,PKCS12,打包机 /Users/cn-ios/Documents/cindy/CindyMobileCer/Android/)
+// 自签即终版。keystore 路径/口令经环境变量供给
+// (XDT_ANDROID_KEYSTORE_PATH / _PASSWORD / _KEY_ALIAS / _KEY_PASSWORD),不入仓。
 // =============================================================================
 
 import { spawnSync } from 'node:child_process';
@@ -60,7 +61,7 @@ const MOBILE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 // 必须与 app.config.js 自建分支的 SELFHOST_ANDROID_PACKAGE 一致(改身份时两处一起改),
 // 否则出的 APK 包名与 validateApkMetadata 期望不符、校验会被拒。
-const SELFHOST_PACKAGE = 'com.xd.lizcn';
+const SELFHOST_PACKAGE = 'com.xd.cindycn';
 const RELEASE_RECORD_KEY = `${OSS_PREFIX}/mobile-ota/android/release.json`;
 const RELEASE_RECORD_CDN = `${CDN_BASE}/mobile-ota/android/release.json`;
 
@@ -127,7 +128,7 @@ function patchGradleRootAndProps() {
 }
 
 function buildApk(env) {
-  // prebuild 生成原生工程(注入 SELFHOST env → package=com.xd.lizcn + versionCode)。
+  // prebuild 生成原生工程(注入 SELFHOST env → package=com.xd.cindycn + versionCode)。
   run(NPX, ['--yes', 'expo', 'prebuild', '--platform', 'android', '--clean'], { env });
   patchGradleSigning();
   patchGradleRootAndProps();
@@ -261,7 +262,7 @@ async function main() {
   console.log('');
   console.log(`target: mobile 冷更(android, ${SELFHOST_PACKAGE})`);
   console.log(`version / versionCode: ${version} / ${versionCode}${previousVersionCode ? ` (上一条 ${previousVersionCode})` : (args.skipRecord ? ' (--skip-record,跳过基线)' : ' (首发)')}`);
-  console.log('sign: 自有 keystore 自签(xdmaker-release),终版,不经任何重签');
+  console.log('sign: 自有 keystore 自签(Cindy.jks / alias Cindy),终版,不经任何重签');
   console.log(`steps: prebuild → patch build.gradle 签名 → gradlew assembleRelease → 从 APK 回读 runtimeVersion → APK 直传 OSS(${CDN_BASE}/mobile-dist/android/)→ 写 release.json`);
   if (!args.execute) {
     console.log('dry-run: 传 --execute 才真正构建 + 上传(需 Android SDK + JDK 17 + keystore 口令 env + OSS AK/SK env)');

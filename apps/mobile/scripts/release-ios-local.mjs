@@ -3,9 +3,9 @@
 // release-ios-local.mjs —— 自建线 iOS 冷更(本机出整包 → NPKG 企业重签 → 自有 OSS 分发)
 //
 // 流程:git 闸门 → 读基线并按需自动 bump ios.buildNumber(≤ 基线时自增,写回 app.json)
-//       → expo prebuild(com.xd.lizcn)→ pod install → xcodebuild archive/export(dev 签)→ .ipa
+//       → expo prebuild(com.xd.cindycn)→ pod install → xcodebuild archive/export(dev 签)→ .ipa
 //       → 从 .ipa 回读内嵌 runtimeVersion(EXUpdates.bundle/fingerprint,落盘供 OTA 复用)
-//       → release-ios.sh upload(NPKG_EXPECT_BUNDLE=com.xd.lizcn,借 NPKG 企业重签)
+//       → release-ios.sh upload(NPKG_EXPECT_BUNDLE=com.xd.cindycn,借 NPKG 企业重签)
 //       → release-ios.sh download 拉回重签后的 .ipa → 直传 OSS(ipa + manifest.plist + install.html)
 //       → 写整包版本记录 release.json 到 OSS(供 mobile-update-server /latest)。
 //
@@ -21,8 +21,9 @@
 // 默认 dry-run(校验环境 + 解析 workspace/scheme + 打印计划,不构建、不上传);
 // --execute 才跑完整链路(需 macOS + Xcode + 已装 dev 证书/描述文件 + NPKG 白名单)。
 //
-// 签名(见 docs/self-hosted-ios-build-and-ota.md §3/§7):dev profile lizcn_dev /
-// Team NTC4BJ542G / bundle com.xd.lizcn;NPKG strip 后企业重签(UE5H8B62F9.*)。
+// 签名(见 docs/self-hosted-ios-build-and-ota.md §3/§7):dev profile cindycn_dev /
+// Team NTC4BJ542G / bundle com.xd.cindycn;NPKG strip 后企业重签(UE5H8B62F9.*)。
+// 证书套件(profile + p12)在打包机 /Users/cn-ios/Documents/cindy/CindyMobileCer/iOS/cn/,不进仓库。
 // 可用环境变量覆盖:XDT_IOS_TEAM_ID / XDT_IOS_PROFILE_NAME / XDT_IOS_SIGN_IDENTITY /
 //   XDT_IOS_PROFILE_PATH(描述文件路径,--execute 时会安装到系统目录)。
 // =============================================================================
@@ -55,13 +56,13 @@ import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, OSS_BUCKET } from '
 
 const MOBILE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-const SELFHOST_BUNDLE_ID = 'com.xd.lizcn';
+const SELFHOST_BUNDLE_ID = 'com.xd.cindycn';
 const RELEASE_RECORD_KEY = `${OSS_PREFIX}/mobile-ota/ios/release.json`;
 const RELEASE_RECORD_CDN = `${CDN_BASE}/mobile-ota/ios/release.json`;
 
 const SIGN = {
   teamId: process.env.XDT_IOS_TEAM_ID || 'NTC4BJ542G',
-  profileName: process.env.XDT_IOS_PROFILE_NAME || 'lizcn_dev',
+  profileName: process.env.XDT_IOS_PROFILE_NAME || 'cindycn_dev',
   identity: process.env.XDT_IOS_SIGN_IDENTITY || 'Apple Development',
   profilePath: process.env.XDT_IOS_PROFILE_PATH || '',
 };

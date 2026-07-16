@@ -2,6 +2,15 @@
 
 > 状态:设计稿(待评审 / 未实现)。负责人:dash。最后更新 2026-07-01。
 >
+> ⚠️ **自建线身份切换(2026-07-16,已实现,本文其余章节的 `com.xd.lizcn` / `lizcn_dev` 描述为历史值)**:
+> 自建线 bundleId 改为 **`com.xd.cindycn`**(与 EAS/TestFlight 线的 `com.xd.lizcn` 分离,可同机共装;
+> 但两线 scheme 仍统一为 `lizcn`,共装时 scheme 重复注册、浏览器 OAuth 回调可能被另一条线抢走,内测机建议只装一条线),
+> dev 签名套件换为 **CindyMobileCer**:profile `cindycn_dev`(Team 仍 `NTC4BJ542G`,App ID
+> `NTC4BJ542G.com.xd.cindycn`,有效期 2027-07-08)+ p12 `Apple Development: Yi Zhou (RQ24UVT6TG)`,
+> 打包机路径 `/Users/cn-ios/Documents/cindy/CindyMobileCer/iOS/cn/`(不进仓库);scheme 仍为 `lizcn`。
+> NPKG 企业重签(`UE5H8B62F9.*`)不变,但 **`com.xd.cindycn` 的 NPKG 白名单与飞书后台登记是新的外部待办**
+> (§13 中针对 `com.xd.lizcn` 的登记不自动覆盖新 bundleId)。现状以 `RELEASING.md` 与脚本头注释为准。
+>
 > ⚠️ **分发链路变更(2026-07-06,已实现,本文其余章节"引导跳 NPKG 下载"的描述为历史设计)**:
 > 企业重签仍走 NPKG(证书在 NPKG 侧,不可绕开),但 `release-ios-local.mjs` 会把重签后的
 > `.ipa` 经 `release-ios.sh download` 拉回,连同自生成的 `manifest.plist` / `install.html`

@@ -55,12 +55,12 @@ describe('compareBuildNumbers / assertBuildNumberMonotonic', () => {
 
 describe('buildExportOptionsPlist', () => {
   it('含 development / manual / team / profile 映射', () => {
-    const plist = buildExportOptionsPlist({ teamId: 'NTC4BJ542G', bundleId: 'com.xd.lizcn', profileName: 'lizcn_dev' });
+    const plist = buildExportOptionsPlist({ teamId: 'NTC4BJ542G', bundleId: 'com.xd.cindycn', profileName: 'cindycn_dev' });
     expect(plist).toContain('<string>development</string>');
     expect(plist).toContain('<string>manual</string>');
     expect(plist).toContain('<string>NTC4BJ542G</string>');
-    expect(plist).toContain('<key>com.xd.lizcn</key>');
-    expect(plist).toContain('<string>lizcn_dev</string>');
+    expect(plist).toContain('<key>com.xd.cindycn</key>');
+    expect(plist).toContain('<string>cindycn_dev</string>');
   });
   it('缺参抛错', () => {
     expect(() => buildExportOptionsPlist({ teamId: 'x', bundleId: 'y' })).toThrow();
