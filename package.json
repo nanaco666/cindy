@@ -67,6 +67,7 @@
     "mobile:beta:add-dev": "node apps/mobile/scripts/beta-add-dev.mjs",
     "ensure-deps": "node scripts/ensure-deps.mjs",
     "sync:browser-runtime": "node scripts/browser-runtime/sync.mjs",
+    "sync:agent-instructions": "node agent-use/scripts/sync-agent-instructions.mjs",
     "repo:worktrees": "node scripts/repo-worktrees.mjs",
     "update:claude": "node tools/claude/update.mjs",
     "update:codex": "node tools/codex/update.mjs",

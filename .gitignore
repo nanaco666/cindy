@@ -84,7 +84,10 @@ nul
 
 # ── AI coding agent 本地状态 ──────────────────────────────────
 # 国际主流
-.claude/
+# .claude 整体忽略,但共享 skill(review-pr 等,由 agent-use/ 单源生成)反向豁免——
+# 用 `.claude/*` 而非 `.claude/`:gitignore 排除整个目录后 `!` 无法重新包含其子项。
+.claude/*
+!.claude/skills/
 CLAUDE.local.md
 .codex/
 .cursor/
@@ -123,3 +126,15 @@ CLAUDE.local.md
 /start-claude-clean.ps1
 /dev-*.bat
 /dev-*.ps1
+
+# ── review-pr skill 运行时状态(auto 模式落盘,per-machine) ──────────
+# thread-resolve 提醒去重状态
+scripts/review-pr/.reminded.json
+# 停滞飞书催办去重状态
+scripts/review-pr/.remind-feishu.json
+# 空转指纹(context.mjs --scan-all 落盘、pre-check.mjs 比对)
+scripts/review-pr/.last-scan.json
+# 自动跟进修复(fix-handoff)的 PR→跟进会话绑定与投递去重状态
+scripts/review-pr/.fix-sessions.json
+# auto 模式并发锁(prepare.mjs 写 .lock / .lock.takeover)
+scripts/review-pr/.lock*
