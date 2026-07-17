@@ -4,8 +4,9 @@
  * 身份翻转(2026-07-17)后 userData 目录从 `xdt-maker` 变为 `Cindy`,老用户的
  * 主库与媒体总仓留在同级的老目录里。本模块在「用户首次登录成功、db 尚未打开」
  * 时(registerLocalDbIpc 的 beforeEnsureReady 钩子)做一次**只读老目录**的简单
- * 迁移:复制主库(+wal/shm 附属文件)与 `cindy-media` 目录到新 userData,完成后
- * 写 marker 文件 `<userData>/mToc` 防重入。
+ * 迁移:复制主库(+wal/shm 附属文件)、`cindy-media` 目录、agent 浏览器 profile
+ * (`browser-runtime/browser/XDMaker` → `browser/Cindy`,登录态随迁)到新 userData,
+ * 完成后写 marker 文件 `<userData>/mToc` 防重入。
  *
  * 设计要点:
  *  - 与渠道迁移(migration/ 目录的品牌迁移状态机)完全无关,不复用其状态。
@@ -34,6 +35,37 @@ export const LEGACY_MIGRATION_MARKER_FILENAME = 'mToc';
 
 /** 老目录里媒体总仓的目录名(与新 userData 下同名,原样平移)。 */
 const CINDY_MEDIA_DIR_NAME = 'cindy-media';
+
+/**
+ * agent 浏览器登录态的搬运路径:老 `<legacy>/browser-runtime/browser/XDMaker` →
+ * 新 `<userData>/browser-runtime/browser/Cindy`(搬运即完成 profile 目录的品牌
+ * 改名;Chrome 窗口显示名由 runtime 启动时的 decoration 自愈刷新)。两端字面量
+ * 与 mcp-integrations/browser.ts 的 LEGACY_MANAGED_PROFILE / MANAGED_PROFILE
+ * 保持一致(那边的注释交叉引用了这里)。
+ */
+const BROWSER_RUNTIME_DIR_NAME = 'browser-runtime';
+const BROWSER_PROFILES_SUBDIR = 'browser';
+const LEGACY_BROWSER_PROFILE_NAME = 'XDMaker';
+const CURRENT_BROWSER_PROFILE_NAME = 'Cindy';
+
+/**
+ * profile 搬运时跳过的目录名(任意层级命中即整棵跳过):Chrome 的重建型缓存,
+ * 体积大且丢了无害——登录态在 Cookies / Login Data / Local State 等小文件里。
+ */
+const BROWSER_PROFILE_SKIP_DIR_NAMES: ReadonlySet<string> = new Set([
+  'Cache',
+  'Code Cache',
+  'GPUCache',
+  'ShaderCache',
+  'GrShaderCache',
+  'GraphiteDawnCache',
+  'DawnGraphiteCache',
+  'DawnWebGPUCache',
+  'Crashpad',
+  'Crash Reports',
+]);
+/** profile 搬运时跳过的文件名前缀:Chrome 单实例锁,复制过去只会挡住新端启动。 */
+const BROWSER_PROFILE_SKIP_FILE_PREFIXES: readonly string[] = ['Singleton'];
 
 /** 推送给 renderer 的弹窗阶段。 */
 export type LegacyMigrationPhase = 'confirm' | 'running' | 'done' | 'failed';
@@ -88,7 +120,12 @@ export interface LegacyUserDataMigrationDeps {
 export type LegacyUserDataMigrationResult =
   | { status: 'marker-exists' }
   | { status: 'no-legacy-dir' }
-  | { status: 'migrated'; sourceDb: string | null; mediaCopied: boolean }
+  | {
+      status: 'migrated';
+      sourceDb: string | null;
+      mediaCopied: boolean;
+      browserProfileCopied: boolean;
+    }
   | { status: 'failed'; error: string };
 
 /** wal / shm 附属文件后缀(SQLite sidecar 命名:`<db 文件全名><后缀>`)。 */
@@ -152,15 +189,23 @@ async function mergeCopyDir(
   fs: LegacyMigrationFsDeps,
   srcDir: string,
   destDir: string,
+  skip?: {
+    /** 任意层级命中目录名即整棵跳过(浏览器 profile 的 Chrome 缓存目录)。 */
+    dirNames?: ReadonlySet<string>;
+    /** 任意层级命中文件名前缀即跳过(Chrome Singleton 锁)。 */
+    filePrefixes?: readonly string[];
+  },
 ): Promise<void> {
   await fs.mkdirp(destDir);
   for (const entry of await fs.listDirEntries(srcDir)) {
     const src = path.join(srcDir, entry.name);
     const dest = path.join(destDir, entry.name);
     if (entry.isDirectory) {
-      await mergeCopyDir(fs, src, dest);
+      if (skip?.dirNames?.has(entry.name)) continue;
+      await mergeCopyDir(fs, src, dest, skip);
       continue;
     }
+    if (skip?.filePrefixes?.some((prefix) => entry.name.startsWith(prefix))) continue;
     if (entry.name.endsWith(COPY_TMP_SUFFIX)) continue; // 防御:源侧不应有
     if (await fs.pathExists(dest)) {
       const srcSize = await fs.statSize(src);
@@ -210,6 +255,7 @@ async function writeMarker(
   userId: string,
   sourceDb: string | null,
   mediaCopied: boolean,
+  browserProfileCopied: boolean,
 ): Promise<void> {
   await deps.fs.writeFile(
     path.join(deps.userDataDir, LEGACY_MIGRATION_MARKER_FILENAME),
@@ -220,6 +266,7 @@ async function writeMarker(
         userId,
         sourceDb,
         mediaCopied,
+        browserProfileCopied,
       },
       null,
       2,
@@ -252,7 +299,7 @@ export async function runLegacyUserDataMigration(
     }
     if (legacyDir == null) {
       // 全新用户:无可迁,静默写 marker,不打扰。
-      await writeMarker(deps, userId, null, false);
+      await writeMarker(deps, userId, null, false, false);
       deps.log.info('legacy userData migration: no legacy dir, marker written silently');
       return { status: 'no-legacy-dir' };
     }
@@ -305,12 +352,41 @@ export async function runLegacyUserDataMigration(
         mediaCopied = true;
       }
 
-      // 3d. 全部成功 → 写 marker → done。
-      await writeMarker(deps, userId, copiedSourceDb, mediaCopied);
+      // 3d. agent 浏览器 profile(登录态):老 browser/XDMaker → 新 browser/Cindy,
+      // 搬运即完成品牌改名。Chrome 重建型缓存目录与 Singleton 锁跳过(登录态在
+      // Cookies / Login Data / Local State 等小文件里);老目录没有则跳过。
+      let browserProfileCopied = false;
+      const legacyProfileDir = path.join(
+        legacyDir,
+        BROWSER_RUNTIME_DIR_NAME,
+        BROWSER_PROFILES_SUBDIR,
+        LEGACY_BROWSER_PROFILE_NAME,
+      );
+      if (await deps.fs.pathExists(legacyProfileDir)) {
+        await mergeCopyDir(
+          deps.fs,
+          legacyProfileDir,
+          path.join(
+            deps.userDataDir,
+            BROWSER_RUNTIME_DIR_NAME,
+            BROWSER_PROFILES_SUBDIR,
+            CURRENT_BROWSER_PROFILE_NAME,
+          ),
+          {
+            dirNames: BROWSER_PROFILE_SKIP_DIR_NAMES,
+            filePrefixes: BROWSER_PROFILE_SKIP_FILE_PREFIXES,
+          },
+        );
+        browserProfileCopied = true;
+        deps.log.info('legacy userData migration: browser profile copied (XDMaker -> Cindy)');
+      }
+
+      // 3e. 全部成功 → 写 marker → done。
+      await writeMarker(deps, userId, copiedSourceDb, mediaCopied, browserProfileCopied);
       deps.ui.publish('done');
-      return { status: 'migrated', sourceDb: copiedSourceDb, mediaCopied };
+      return { status: 'migrated', sourceDb: copiedSourceDb, mediaCopied, browserProfileCopied };
     } catch (err) {
-      // 3e. 复制阶段失败:不写 marker(下次登录重试),failed 弹窗,不阻塞登录。
+      // 3f. 复制阶段失败:不写 marker(下次登录重试),failed 弹窗,不阻塞登录。
       const message = err instanceof Error ? err.message : String(err);
       deps.log.warn('legacy userData migration failed (will retry next login): %s', message);
       deps.ui.publish('failed');

@@ -1410,7 +1410,7 @@
           "openForLoginFailed": "打开浏览器失败"
         },
         "openForLogin": "打开 Agent 专用浏览器",
-        "openForLoginHint": "这是 agent 专用的独立浏览器：基于你本机的 Chrome，但用一份独立配置（右上角显示为 XDMaker），不会动你日常 Chrome 的标签页、书签和登录态。agent 会在这里替你打开网页、阅读内容、点击和截图。需要登录的网站，点上面「打开 Agent 专用浏览器」手动登录一次即可——登录态会长期保留，之后 agent 就能以你的身份继续操作。"
+        "openForLoginHint": "这是 agent 专用的独立浏览器：基于你本机的 Chrome，但用一份独立配置（右上角显示为 Cindy），不会动你日常 Chrome 的标签页、书签和登录态。agent 会在这里替你打开网页、阅读内容、点击和截图。需要登录的网站，点上面「打开 Agent 专用浏览器」手动登录一次即可——登录态会长期保留，之后 agent 就能以你的身份继续操作。"
       },
       "browserBackend": {
         "title": "浏览器自动化目标",

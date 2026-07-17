@@ -33,12 +33,13 @@ const ALLOWED_LEGACY_OCCURRENCES = new Set([
 const LOCALE_FILE_RE = /^apps\/desktop\/src\/renderer\/i18n\/locales\/[^/]+\/common\.json$/;
 const LOCALE_BRAND_RE = /XDMaker|XD Maker|xdt-maker/;
 /**
- * key 级豁免:值是标识符而非品牌展示名(ssh 默认密钥名 / Chrome 受管 profile 标签)。
+ * key 级豁免:值是标识符而非品牌展示名(ssh 默认密钥名)。
  * 按完整 key 路径精确匹配——不能只按末段 key 名,否则任意嵌套下同名 key 都会被静默放过。
+ * (openForLoginHint 曾因 Chrome 受管 profile 显示名"XDMaker"豁免;2026-07 profile
+ * 翻转为 Cindy 后文案已同步,豁免移除。)
  */
 const LOCALE_EXEMPT_KEY_PATHS = new Set([
   'settings.remote.keys.nameHint',
-  'settings.computerUse.browser.openForLoginHint',
 ]);
 /** 值级豁免:文档路径引用。 */
 const LOCALE_EXEMPT_VALUE_SUBSTRINGS = ['xdt-maker-architecture.md'];
@@ -138,7 +139,7 @@ if (localeViolations.length > 0) {
     console.error(`  ${hit.file} → key "${hit.key}"`);
   }
   console.error('\nlocale 文案里的品牌名必须写 {{appName}}(由 i18next defaultVariables 注入 BRAND_NAME)。');
-  console.error('标识符例外(settings.remote.keys.nameHint / settings.computerUse.browser.openForLoginHint / 架构文档路径)见 docs/branding-rename-checklist.md。');
+  console.error('标识符例外(settings.remote.keys.nameHint / 架构文档路径)见 docs/branding-rename-checklist.md。');
   process.exit(1);
 }
 

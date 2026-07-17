@@ -16,7 +16,7 @@
 
 改完跑：仓库根 `pnpm test:unit` + `pnpm --filter desktop typecheck` + `pnpm check:brand-terminology`。
 
-`scripts/brand-terminology-guard.mjs` 的 `FORBIDDEN_TERMS`：把**旧品牌名及其变体加进禁词表**（`replacement` 指向新名）这一步**推迟到第二节手动清单清扫完成之后**——常量翻转时全仓仍有大量合法的旧名残留（forge 显示名、docs、测试夹具），提前加禁词会让 CI 直接红灯。guard 里的 locale 例外（`settings.remote.keys.nameHint` / `settings.computerUse.browser.openForLoginHint` 全路径豁免 / 架构文档路径）对应的是标识符，改名时不动。
+`scripts/brand-terminology-guard.mjs` 的 `FORBIDDEN_TERMS`：把**旧品牌名及其变体加进禁词表**（`replacement` 指向新名）这一步**推迟到第二节手动清单清扫完成之后**——常量翻转时全仓仍有大量合法的旧名残留（forge 显示名、docs、测试夹具），提前加禁词会让 CI 直接红灯。guard 里的 locale 例外（`settings.remote.keys.nameHint` 全路径豁免 / 架构文档路径）对应的是标识符，改名时不动。（`openForLoginHint` 的豁免已随 2026-07-17 浏览器 profile 翻转移除——profile 显示名已是 Cindy，文案同步后不再含旧品牌。）
 
 ⚠️ **LLM 影响评估（规则 10/11）**：`BRAND_NAME` 会进入 MCP 工具描述（prompt 前缀的一部分），改值会一次性打破 Anthropic prompt cache 前缀并可能影响模型对产品的称呼——这是改名的固有代价，发布前按规则 10 要求做一轮缓存率/行为抽查，并在 PR 里写明。
 
@@ -56,7 +56,7 @@
 - [ ] `packages/lizi-mcps/src/prompts/**/*.md`：飞书 bot 工具说明里的「私聊 xdt-maker bot」——指向飞书平台上的真实 bot 账号名（外部标识），平台侧未改名前保持原文，避免指引失效。
 - [x]（2026-07-17）`.claude/skills/**`、`.agents/skills/**`：grep 无品牌残留（`agent-use/scripts/sync-agent-instructions.mjs` 仅历史对比注释，保留）。
 - [x]（2026-07-17）`AGENTS.md` / `README.md` / `DESIGN.md` / `docs/**`：README/DESIGN 现行引用已改；AGENTS.md「由原 XDMaker 单仓迁出」为历史记录保留；`docs/**` 历史/迁移文档不动。
-- [ ] 例外：`packages/lizi-mcps/src/browser/prompts/rules/browser-workflow.md` 里的「名为 "XDMaker" 的 profile」**跟随 `MANAGED_PROFILE` 而非品牌名**（见第四节），只有 profile 迁移方案落地后才一起改。
+- [x]（2026-07-17）`packages/lizi-mcps/src/browser/prompts/rules/browser-workflow.md` 里的 profile 名**跟随 `MANAGED_PROFILE`**——profile 已翻转为 `'Cindy'`（老登录态经 mToc 迁移 `browser/XDMaker → browser/Cindy` 接续 + dev 实例就地改名自愈），文案已同步。
 
 ### 静态页面 / 公告
 
@@ -78,7 +78,7 @@
 |---|---|---|
 | 深链协议 `xdt-maker://` | forge.config.ts protocols、renderer 深链解析、OAuth 唤回 | 所有历史会话链接 / 系统协议注册失效 |
 | userData 目录（`package.json` 的 `productName: "xdt-maker"`、`xdt-maker-dev*` 沙箱目录） | Electron `app.getPath('userData')` | 用户本地 DB / 登录态 / 会话全部"消失" |
-| `MANAGED_PROFILE = 'XDMaker'` | `apps/desktop/src/main/mcp-integrations/browser.ts` | 自动化浏览器指向全新空 profile，丢登录态 |
+| `MANAGED_PROFILE = 'Cindy'`（2026-07-17 已随身份翻转定格，老 profile 由 mToc 迁移接续） | `apps/desktop/src/main/mcp-integrations/browser.ts` | 再改名会指向全新空 profile，丢登录态 |
 | `PROG_ID 'XDMaker.CindyGhost'`、HKCU `Directory\shell\xdt-maker` 注册表键名 | `brain/fileAssociation.ts`、`folderContextMenu.ts` | 文件关联 / 右键菜单重复注册或失效（菜单**显示文案**已走 `BRAND_NAME`，键名不用动） |
 | `WINDOWS_APP_USER_MODEL_ID 'com.magiclizi.xdt-maker'`、macOS `appId com.magiclizi.xdt-maker` | bootstrap-electron.ts、forge.config.ts | 通知归属 / 系统身份断裂（如需更换按平台迁移指引单独做） |
 | `clientInfo: { name: 'xdt-maker' }` | maker-core codex、lizi-mcps slack-official | 协议握手标识，非展示名 |

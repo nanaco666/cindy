@@ -168,6 +168,7 @@ describe('runLegacyUserDataMigration', () => {
       userId: 'u1',
       sourceDb: null,
       mediaCopied: false,
+      browserProfileCopied: false,
     });
   });
 
@@ -180,7 +181,12 @@ describe('runLegacyUserDataMigration', () => {
 
     const result = await runLegacyUserDataMigration('u1', deps);
 
-    expect(result).toEqual({ status: 'migrated', sourceDb: 'xdt-maker-u1.db', mediaCopied: false });
+    expect(result).toEqual({
+      status: 'migrated',
+      sourceDb: 'xdt-maker-u1.db',
+      mediaCopied: false,
+      browserProfileCopied: false,
+    });
     expect(memfs.read(path.join(USER_DATA, 'cindy-u1.db'))).toBe('db-u1');
     expect(phases).toEqual(['confirm', 'running', 'done']);
     expect(readMarker(memfs)).toMatchObject({ sourceDb: 'xdt-maker-u1.db', mediaCopied: false });
@@ -227,7 +233,12 @@ describe('runLegacyUserDataMigration', () => {
 
     const result = await runLegacyUserDataMigration('u1', deps);
 
-    expect(result).toEqual({ status: 'migrated', sourceDb: null, mediaCopied: true });
+    expect(result).toEqual({
+      status: 'migrated',
+      sourceDb: null,
+      mediaCopied: true,
+      browserProfileCopied: false,
+    });
     expect(memfs.read(path.join(USER_DATA, 'cindy-u1.db'))).toBe('existing-new-db');
     expect(memfs.read(path.join(USER_DATA, 'cindy-media', 'a.png'))).toBe('legacy-a');
     expect(phases).toEqual(['confirm', 'running', 'done']);
@@ -243,7 +254,12 @@ describe('runLegacyUserDataMigration', () => {
 
     const result = await runLegacyUserDataMigration('u1', deps);
 
-    expect(result).toEqual({ status: 'migrated', sourceDb: null, mediaCopied: true });
+    expect(result).toEqual({
+      status: 'migrated',
+      sourceDb: null,
+      mediaCopied: true,
+      browserProfileCopied: false,
+    });
     expect(memfs.has(path.join(USER_DATA, 'cindy-u1.db'))).toBe(false);
     expect(memfs.read(path.join(USER_DATA, 'cindy-media', 'b.mp4'))).toBe('video');
   });
@@ -340,6 +356,46 @@ describe('runLegacyUserDataMigration', () => {
     expect(memfs.has(path.join(USER_DATA, 'cindy-u1.db'))).toBe(false);
     expect(phases).toEqual(['confirm', 'running', 'failed']);
     expect(deps.log.warn).toHaveBeenCalled();
+  });
+
+  it('agent 浏览器 profile:browser/XDMaker 复制为 browser/Cindy,缓存目录与 Singleton 锁跳过', async () => {
+    const memfs = createMemFs();
+    memfs.addDir(USER_DATA);
+    memfs.addDir(LEGACY);
+    const legacyProfile = path.join(LEGACY, 'browser-runtime', 'browser', 'XDMaker');
+    memfs.addFile(path.join(legacyProfile, 'user-data', 'Local State'), 'local-state');
+    memfs.addFile(path.join(legacyProfile, 'user-data', 'Default', 'Cookies'), 'cookies');
+    memfs.addFile(path.join(legacyProfile, 'user-data', 'Default', 'Cache', 'blob0'), 'cache-bytes');
+    memfs.addFile(path.join(legacyProfile, 'user-data', 'Default', 'Code Cache', 'js0'), 'code-cache');
+    memfs.addFile(path.join(legacyProfile, 'user-data', 'SingletonLock'), 'lock');
+    const { deps } = makeDeps(memfs);
+
+    const result = await runLegacyUserDataMigration('u1', deps);
+
+    expect(result).toMatchObject({ status: 'migrated', browserProfileCopied: true });
+    const newProfile = path.join(USER_DATA, 'browser-runtime', 'browser', 'Cindy');
+    // 登录态文件随迁到新品牌目录名下。
+    expect(memfs.read(path.join(newProfile, 'user-data', 'Local State'))).toBe('local-state');
+    expect(memfs.read(path.join(newProfile, 'user-data', 'Default', 'Cookies'))).toBe('cookies');
+    // Chrome 重建型缓存与单实例锁不搬。
+    expect(memfs.has(path.join(newProfile, 'user-data', 'Default', 'Cache', 'blob0'))).toBe(false);
+    expect(memfs.has(path.join(newProfile, 'user-data', 'Default', 'Code Cache', 'js0'))).toBe(false);
+    expect(memfs.has(path.join(newProfile, 'user-data', 'SingletonLock'))).toBe(false);
+    // 老目录只读:源 profile 原样保留。
+    expect(memfs.read(path.join(legacyProfile, 'user-data', 'Default', 'Cookies'))).toBe('cookies');
+    expect(readMarker(memfs)).toMatchObject({ browserProfileCopied: true });
+  });
+
+  it('老目录无 browser-runtime → profile 步骤跳过,browserProfileCopied=false', async () => {
+    const memfs = createMemFs();
+    memfs.addDir(USER_DATA);
+    memfs.addFile(path.join(LEGACY, 'xdt-maker-u1.db'), 'db', 1);
+    const { deps } = makeDeps(memfs);
+
+    const result = await runLegacyUserDataMigration('u1', deps);
+
+    expect(result).toMatchObject({ status: 'migrated', browserProfileCopied: false });
+    expect(memfs.has(path.join(USER_DATA, 'browser-runtime'))).toBe(false);
   });
 
   it('确认流程时序:confirm 先推送并阻塞,resolver 放行后才 running', async () => {
