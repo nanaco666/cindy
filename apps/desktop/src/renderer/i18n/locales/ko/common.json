@@ -624,6 +624,7 @@
     "voiceInput": {
       "title": "음성 입력",
       "description": "인식 언어, 마이크, 단축키, 음성 정리, 음성 입력 중 음소거를 설정합니다.",
+      "saveFailed": "음성 입력 설정을 저장하지 못했습니다: {{message}}",
       "sections": {
         "basics": "기본",
         "refinement": "정리",

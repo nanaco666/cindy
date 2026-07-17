@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { DictationDictionaryLearningAction } from '@lizi/voice-input-core';
 
 import { createLogger } from '@/lib/logger';
+import { toast } from '@/lib/toast';
+import { extractIpcError } from '@/utils/ipcError';
 import {
   DEFAULT_VOICE_INPUT_REFINEMENT_INSTRUCTIONS,
   MAX_VOICE_INPUT_DICTIONARY_CSV_BYTES,
@@ -157,6 +160,7 @@ export function useVoiceInputSettings(): {
   recordDictionaryLearningActions: (actions: DictationDictionaryLearningAction[]) => void;
   setShortcut: (shortcut: VoiceInputShortcut | null) => void;
 } {
+  const { t } = useTranslation();
   const [settings, setSettings] = useState<VoiceInputSettings>(getVoiceInputSettings);
 
   const updateSettings = useCallback((patch: Partial<VoiceInputSettings>) => {
@@ -171,8 +175,9 @@ export function useVoiceInputSettings(): {
       })
       .catch((error) => {
         log.warn('voice input settings update failed:', error instanceof Error ? error.message : String(error));
+        toast.error(formatVoiceInputPersistenceError(t, error));
       });
-  }, []);
+  }, [t]);
 
   const setLanguage = useCallback(
     (language: VoiceInputLanguage) => updateSettings({ language }),
@@ -225,8 +230,9 @@ export function useVoiceInputSettings(): {
       .then(setSettings)
       .catch((error) => {
         log.warn('voice input dictionary delete failed:', error instanceof Error ? error.message : String(error));
+        toast.error(formatVoiceInputPersistenceError(t, error));
       });
-  }, []);
+  }, [t]);
 
   const recordDictionaryLearningActions = useCallback((actions: DictationDictionaryLearningAction[]) => {
     void recordVoiceInputDictionaryLearningActions(actions);
@@ -258,6 +264,15 @@ export function useVoiceInputSettings(): {
     recordDictionaryLearningActions,
     setShortcut,
   };
+}
+
+function formatVoiceInputPersistenceError(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  error: unknown,
+): string {
+  const message =
+    extractIpcError(error)?.message ?? (error instanceof Error ? error.message : String(error));
+  return t('settings.voiceInput.saveFailed', { message });
 }
 
 function areVoiceInputShortcutsEqual(

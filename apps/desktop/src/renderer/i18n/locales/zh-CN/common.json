@@ -624,6 +624,7 @@
     "voiceInput": {
       "title": "语音输入",
       "description": "设置识别语言、麦克风、快捷键、语音润色和语音输入时静音。",
+      "saveFailed": "语音输入设置保存失败：{{message}}",
       "sections": {
         "basics": "基础",
         "refinement": "润色",

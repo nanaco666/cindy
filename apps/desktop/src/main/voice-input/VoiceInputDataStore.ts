@@ -5,6 +5,7 @@ import path from 'node:path';
 import type { DictationDictionaryLearningAction } from '@lizi/voice-input-core';
 
 import { createLogger } from '../logger.js';
+import { throwIpcError } from '../utils/ipcValidate.js';
 import {
   applyVoiceInputDictionaryLearningActions,
   compactVoiceInputHistoryIfNeeded,
@@ -19,6 +20,7 @@ import {
   type VoiceInputDictionaryEntry,
   type VoiceInputHistoryEntry,
   type VoiceInputSettings,
+  type VoiceInputSyncErrorResult,
 } from '../../shared/voiceInputData.js';
 
 const log = createLogger('voice-input:data-store');
@@ -40,7 +42,7 @@ type DataChangedPayload = {
   history: VoiceInputHistoryEntry[];
 };
 
-class VoiceInputDataStore {
+export class VoiceInputDataStore {
   private state: StoredVoiceInputData | null = null;
 
   getSnapshot(): VoiceInputDataSnapshot {
@@ -225,32 +227,42 @@ class VoiceInputDataStore {
   }
 
   private replaceState(next: StoredVoiceInputData): void {
-    this.state = {
+    const normalizedState: StoredVoiceInputData = {
       version: 1,
       legacyRendererStorageMigrated: next.legacyRendererStorageMigrated,
       settings: normalizeVoiceInputSettings(next.settings, process.platform),
       history: compactVoiceInputHistoryIfNeeded(normalizeVoiceInputHistory(next.history)),
     };
-    this.save();
+    // 只有文件替换成功后才能提交内存状态和广播，避免 UI 显示未持久化的数据。
+    this.save(normalizedState);
+    this.state = normalizedState;
     broadcastVoiceInputDataChanged({
-      settings: this.state.settings,
-      history: this.state.history,
+      settings: normalizedState.settings,
+      history: normalizedState.history,
     });
   }
 
-  private save(): void {
-    if (!this.state) return;
+  private save(state: StoredVoiceInputData): void {
     const filePath = getDataFilePath();
     try {
       fs.mkdirSync(path.dirname(filePath), { recursive: true });
       const tmp = `${filePath}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify(this.state, null, 2), 'utf-8');
+      fs.writeFileSync(tmp, JSON.stringify(state, null, 2), 'utf-8');
       fs.renameSync(tmp, filePath);
     } catch (error) {
       log.warn('voice input data write failed', {
         error: error instanceof Error ? error.message : String(error),
       });
+      throw new VoiceInputDataStoreWriteError(error);
     }
+  }
+}
+
+/** 语音数据写盘失败，供 IPC 层转换为标准 INTERNAL 错误。 */
+export class VoiceInputDataStoreWriteError extends Error {
+  constructor(cause: unknown) {
+    super(`voice input data write failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = 'VoiceInputDataStoreWriteError';
   }
 }
 
@@ -265,42 +277,90 @@ export function registerVoiceInputDataStoreIpc(): void {
   });
 
   ipcMain.on('voice-input:data:migrate-legacy', (event, payload: LegacyRendererDataPayload | undefined) => {
-    event.returnValue = voiceInputDataStore.migrateLegacyRendererStorage(payload);
+    try {
+      event.returnValue = voiceInputDataStore.migrateLegacyRendererStorage(payload);
+    } catch (error) {
+      event.returnValue = voiceInputDataStoreIpcErrorResult(error);
+    }
   });
 
-  ipcMain.handle('voice-input:settings:update', (_event, patch: unknown): VoiceInputSettings =>
-    voiceInputDataStore.updateSettings(patch),
-  );
+  ipcMain.handle('voice-input:settings:update', (_event, patch: unknown): VoiceInputSettings => {
+    try {
+      return voiceInputDataStore.updateSettings(patch);
+    } catch (error) {
+      throwVoiceInputDataStoreIpcError(error);
+    }
+  });
 
-  ipcMain.handle('voice-input:dictionary:delete-entries', (_event, entryIds: string[]): VoiceInputSettings =>
-    voiceInputDataStore.deleteDictionaryEntries(entryIds),
-  );
+  ipcMain.handle('voice-input:dictionary:delete-entries', (_event, entryIds: string[]): VoiceInputSettings => {
+    try {
+      return voiceInputDataStore.deleteDictionaryEntries(entryIds);
+    } catch (error) {
+      throwVoiceInputDataStoreIpcError(error);
+    }
+  });
 
-  ipcMain.handle('voice-input:dictionary-learning:record-actions', (_event, actions: DictationDictionaryLearningAction[]) =>
-    voiceInputDataStore.recordDictionaryLearningActions(actions),
-  );
+  ipcMain.handle('voice-input:dictionary-learning:record-actions', (_event, actions: DictationDictionaryLearningAction[]) => {
+    try {
+      return voiceInputDataStore.recordDictionaryLearningActions(actions);
+    } catch (error) {
+      throwVoiceInputDataStoreIpcError(error);
+    }
+  });
 
   ipcMain.on('voice-input:history:get', (event, limit?: number) => {
     event.returnValue = voiceInputDataStore.getHistory(limit);
   });
 
   ipcMain.on('voice-input:history:get-for-refinement', (event) => {
-    event.returnValue = voiceInputDataStore.getHistoryForRefinement();
-  });
-
-  ipcMain.on('voice-input:history:record', (event, text: string) => {
-    event.returnValue = voiceInputDataStore.recordHistory(text);
-  });
-
-  ipcMain.on('voice-input:history:update', (_event, payload: { id?: string; text?: string }) => {
-    if (typeof payload?.id === 'string' && typeof payload.text === 'string') {
-      voiceInputDataStore.updateHistoryEntry(payload.id, payload.text);
+    try {
+      event.returnValue = voiceInputDataStore.getHistoryForRefinement();
+    } catch (error) {
+      event.returnValue = voiceInputDataStoreIpcErrorResult(error);
     }
   });
 
-  ipcMain.on('voice-input:history:delete', (_event, id: string) => {
-    if (typeof id === 'string') voiceInputDataStore.deleteHistoryEntry(id);
+  ipcMain.on('voice-input:history:record', (event, text: string) => {
+    try {
+      event.returnValue = voiceInputDataStore.recordHistory(text);
+    } catch (error) {
+      event.returnValue = voiceInputDataStoreIpcErrorResult(error);
+    }
   });
+
+  ipcMain.on('voice-input:history:update', (event, payload: { id?: string; text?: string }) => {
+    if (typeof payload?.id === 'string' && typeof payload.text === 'string') {
+      try {
+        voiceInputDataStore.updateHistoryEntry(payload.id, payload.text);
+      } catch (error) {
+        event.returnValue = voiceInputDataStoreIpcErrorResult(error);
+      }
+    }
+  });
+
+  ipcMain.on('voice-input:history:delete', (event, id: string) => {
+    if (typeof id === 'string') {
+      try {
+        voiceInputDataStore.deleteHistoryEntry(id);
+      } catch (error) {
+        event.returnValue = voiceInputDataStoreIpcErrorResult(error);
+      }
+    }
+  });
+}
+
+function throwVoiceInputDataStoreIpcError(error: unknown): never {
+  if (error instanceof VoiceInputDataStoreWriteError) {
+    throwIpcError('INTERNAL', error.message);
+  }
+  throw error;
+}
+
+function voiceInputDataStoreIpcErrorResult(error: unknown): VoiceInputSyncErrorResult {
+  if (error instanceof VoiceInputDataStoreWriteError) {
+    return { ok: false, code: 'INTERNAL', message: error.message };
+  }
+  throw error;
 }
 
 function getDataFilePath(): string {
