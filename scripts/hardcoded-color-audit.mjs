@@ -46,8 +46,9 @@ function diffAddedHits(ref) {
   const hits = [];
   let file = "";
   for (const line of out.split("\n")) {
-    if (line.startsWith("+++ ")) file = line.slice(4).replace(/^b\//, "");
+    if (line.startsWith("+++ ")) { file = line.slice(4).replace(/^b\//, ""); }
     else if (line.startsWith("+") && !line.startsWith("+++")) {
+      if (file.endsWith("hardcoded-color-exemptions.json")) continue;
       const text = line.slice(1);
       const all = [
         ...text.matchAll(HEX_RE),
