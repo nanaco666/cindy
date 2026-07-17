@@ -708,7 +708,14 @@ export const SessionItem = memo(function SessionItem({
           ) : null}
           <span className="min-w-0 truncate">
             {matchIndices && matchIndices.length > 0 && canHighlightDisplayTitle
-              ? highlightSegments(session.title, matchIndices)
+              ? highlightSegments(session.title, matchIndices, {
+                  highlightClassName: cn(
+                    'bg-transparent font-semibold',
+                    isActive
+                      ? 'text-[var(--sidebar-item-active-foreground)]'
+                      : 'text-[var(--msg-assistant-text)]',
+                  ),
+                })
               : displayTitle}
           </span>
           {remoteIconKind && (

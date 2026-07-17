@@ -65,7 +65,7 @@ export const SendButton = forwardRef<HTMLButtonElement, SendButtonProps>(functio
         disabled &&
           !isStreaming &&
           (isCreateAgentVariant
-            ? 'cursor-not-allowed bg-[var(--create-agent-send-disabled-bg)] text-[var(--create-agent-send-disabled-icon)]'
+            ? 'cursor-not-allowed bg-[var(--create-agent-send-bg)] text-[var(--create-agent-send-icon)] opacity-40'
             : 'cursor-not-allowed bg-[var(--send-btn-disabled-bg)] text-[var(--send-btn-disabled-icon)] opacity-40'),
       )}
       aria-label={ariaLabel ?? (isStreaming ? t('newChat.sendButton.stop') : t('newChat.sendButton.send'))}
