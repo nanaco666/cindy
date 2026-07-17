@@ -18,6 +18,7 @@ import { isSecondaryWindow } from '@/lib/secondaryWindow';
 import { isSidebarWindow } from '@/lib/sidebarWindow';
 import { ToastContainer } from '@/components/ui/toast';
 import { BuiltinGhostProvisioningTip } from '@/components/cindy-brain/BuiltinGhostProvisioningTip';
+import { LegacyMigrationDialog } from '@/components/auth/LegacyMigrationDialog';
 import { Tooltip } from '@/components/ui/tooltip';
 import { ConfirmDialogProvider } from '@/components/ui/confirm-dialog-provider';
 import { FindInPageBar } from '@/components/find-in-page/FindInPageBar';
@@ -241,6 +242,8 @@ export function App() {
                         <FindInPageBar />
                         <ToastContainer />
                         <BuiltinGhostProvisioningTip />
+                        {/* 首登轻量数据迁移弹窗:只挂主窗(副窗/侧栏窗不重复弹) */}
+                        {!isSecondaryWindow() && !isSidebarWindow() && <LegacyMigrationDialog />}
                       </Tooltip.Provider>
                     </PrRefsProvider>
                   </WorktreeProvider>

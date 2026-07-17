@@ -166,6 +166,10 @@ import { cindyGhostSchemePrivilege } from './cindy-brain/runtime/electronSandbox
 import { fetchReleaseNotes, fetchReleaseNotesIndex } from './releaseNotesService';
 import { resolveWorkspacePathCached, resolveWorkspacePathBatchCached } from './pathResolver';
 import { registerLocalDbIpc } from './localDb/ipc/registerAll';
+import {
+  registerLegacyMigrationIpc,
+  runLegacyUserDataMigrationForUser,
+} from './legacyUserDataMigration';
 import { registerFsBrowseIpc } from './fsBrowse/ipc';
 import {
   ensureReady as localDbEnsureReady,
@@ -4524,10 +4528,16 @@ app.on('ready', async () => {
   // onReady 回调 → scheduler-host 启动重试入口 (Phase 3)：splash 跑早于 user login
   // 的话第一次 startScheduler 会因为 localDb 未 ready 而失败；这里在 ensureReady
   // 完成后再触发一次幂等的 startScheduler，谁后到谁负责真正启动。
+  // 首登轻量数据迁移(mToc)的确认弹窗 IPC —— 必须先于 registerLocalDbIpc 注册,
+  // 保证 beforeEnsureReady 推送 confirm 态时 renderer 已能 invoke 确认通道。
+  registerLegacyMigrationIpc();
   registerLocalDbIpc({
     beforeEnsureReady: async (userId) => {
       const user = authManager.getAuthState().user;
       if (user == null || user.id !== userId) return;
+      // 首登轻量迁移(老 xdt-maker userData → Cindy):内部自带 marker 防重入与
+      // 全量兜底,绝不 throw,失败不阻塞登录(ensureReady 照常建新库)。
+      await runLegacyUserDataMigrationForUser(user.id);
       await brandMigrationRuntime.claimLegacyLocalDbBeforeEnsureReady(user);
     },
     onReady: async (userId) => {

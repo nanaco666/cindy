@@ -220,6 +220,8 @@ const fanOutFullscreenChange = createIpcFanOut('fullscreen-change');
 const fanOutApplicationMenuCommand = createIpcFanOut('app-menu:command');
 // chat-data-localization F4 / F1
 const fanOutMigrationProgress = createIpcFanOut('local-db:migration:progress');
+// 首登轻量数据迁移(mToc)弹窗阶段推送(confirm / running / done / failed)
+const fanOutLegacyMigrationState = createIpcFanOut('legacy-migration:state');
 const fanOutCorruptionRestored = createIpcFanOut('local-db:corruption-restored');
 // #37: release 端检测到 schema drift 时一次性 toast 提示开发者切回 dev 自动修复
 const fanOutSchemaDriftWarning = createIpcFanOut('local-db:schema-drift-warning');
@@ -2853,6 +2855,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUsageSessionTokensChanged: fanOutUsageSessionTokensChanged,
   /** 订阅单条消息的 per-turn 费用推送。payload: { sessionId, clientId, turnCostUsd, turnCostIsEstimate }。 */
   onUsageMessageTurnCost: fanOutUsageMessageTurnCost,
+
+  // ── 首登轻量数据迁移(mToc):老 userData → Cindy 的一次性复制迁移 ──
+  // main 在 ensureReady 前推送弹窗阶段;renderer 全局弹窗组件消费。
+  legacyMigration: {
+    /** 订阅迁移弹窗阶段推送。payload: { phase: 'confirm'|'running'|'done'|'failed' } */
+    onState: fanOutLegacyMigrationState,
+    /** 组件挂载时补拉当前阶段(避免 main 先推送、renderer 后订阅丢事件)。 */
+    getState: (): Promise<{ phase: 'confirm' | 'running' | 'done' | 'failed' | null }> =>
+      ipcRenderer.invoke('legacy-migration:get-state'),
+    /** 用户点「确定」(confirm 态放行迁移)或「继续」(failed 态清态关窗)。 */
+    confirm: (): Promise<void> => ipcRenderer.invoke('legacy-migration:confirm'),
+  },
 
   // ── chat-data-localization (M-FE2)：本地 SQLite IPC 桥接 ──
   // 所有 db 操作 main 独占；renderer 仅通过这里间接访问。

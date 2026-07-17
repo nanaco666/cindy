@@ -2819,6 +2819,18 @@ interface ElectronAPI {
     }) => void,
   ) => () => void;
 
+  // ── 首登轻量数据迁移(mToc) — 老 userData → Cindy 一次性复制迁移弹窗 ──
+  legacyMigration: {
+    /** 订阅弹窗阶段推送。payload: { phase } */
+    onState: (
+      cb: (data: { phase: 'confirm' | 'running' | 'done' | 'failed' }) => void,
+    ) => () => void;
+    /** 挂载时补拉当前阶段(main 先推送、renderer 后订阅时不丢态)。 */
+    getState: () => Promise<{ phase: 'confirm' | 'running' | 'done' | 'failed' | null }>;
+    /** confirm 态点「确定」放行迁移;failed 态点「继续」清态。 */
+    confirm: () => Promise<void>;
+  };
+
   // ── chat-data-localization (M-FE2) — local SQLite IPC bridge ──
   localDb: {
     /** Open / migrate the per-user db file. Failure → fatal dialog + ready:false. */
