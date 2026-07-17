@@ -2409,35 +2409,6 @@
     "failedDescription": "The data migration could not be completed this time. You can keep using {{appName}} — it will retry automatically the next time you sign in.",
     "continue": "Continue"
   },
-  "migration": {
-    "title": "Downloading your chat history",
-    "subtitle": "First-time localization takes a moment, please keep the window open",
-    "detail": {
-      "idle": "Preparing…",
-      "paused": "{{synced}} / {{total}} sessions · paused",
-      "running": "{{synced}} / {{total}} sessions",
-      "runningWithEta": "{{synced}} / {{total}} sessions · ~{{eta}}",
-      "done": "{{synced}} / {{total}} sessions"
-    },
-    "retryNotice": "Network unstable, retry attempt {{attempt}}…",
-    "eta": {
-      "seconds": "{{seconds}}s",
-      "minutes": "{{m}}m",
-      "minutesSeconds": "{{m}}m {{s}}s"
-    },
-    "failedDialog": {
-      "title": "Migration failed",
-      "description": "Localization could not complete after several attempts. Check your network and retry, or skip migration and enter the app — already-downloaded data is preserved locally.",
-      "skip": "Skip now",
-      "retry": "Retry later"
-    },
-    "skipConfirm": {
-      "title": "Confirm skip migration?",
-      "description": "After confirming, the client cannot auto-recover. You'll need to contact support. Continue?",
-      "back": "Back",
-      "confirm": "Confirm skip"
-    }
-  },
   "splash": {
     "tips": {
       "checkingUpdate": "Checking for updates...",

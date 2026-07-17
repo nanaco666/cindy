@@ -371,18 +371,10 @@ interface FeishuBotRegistrationStatusPayload {
   error?: string;
 }
 
-/* ── chat-data-localization (V0.5: 2-state migration) ── */
-
-type MigrationStatusPayload =
-  | { status: 'none' }
-  | { status: 'pending'; totalSessions: number; totalMessages: number };
-
 /** Auth state pushed from main → renderer via 'auth:state-change'. */
 interface AuthStateChangePayload {
   user: AuthUser | null;
   isAuthenticated: boolean;
-  /** Latest migration snapshot from login/refresh response (V0.5 2-state). */
-  migration?: MigrationStatusPayload;
   /** SkillHub 跨设备识别：本机 deviceId（machineIdSync 结果），登录前后都有值 */
   deviceId: string;
 }
@@ -390,30 +382,6 @@ interface AuthStateChangePayload {
 interface AuthSessionExpiredPayload {
   message: string;
 }
-
-/** chat-data-localization F4: progress event payload (C8). */
-type MigrationProgressPayload =
-  | { phase: 'idle' }
-  | {
-      phase: 'running';
-      synced: number;
-      total: number;
-      etaSeconds: number | null;
-    }
-  | {
-      phase: 'retrying';
-      synced: number;
-      total: number;
-      attempt: number;
-      nextDelayMs: number;
-    }
-  | {
-      phase: 'failed';
-      synced: number;
-      total: number;
-      batchAttempts: number;
-    }
-  | { phase: 'done'; synced: number; total: number };
 
 /** chat-data-localization F1 V0.4: corruption-restored toast payload (C10). */
 interface CorruptionRestoredPayload {
@@ -1404,8 +1372,6 @@ interface ElectronAPI {
   authInitialize: () => Promise<{
     user: AuthUser | null;
     isAuthenticated: boolean;
-    /** chat-data-localization V0.5: present when refresh succeeded on cold start. */
-    migration?: MigrationStatusPayload;
     /** SkillHub 跨设备识别：本机 deviceId，登录前后都有值 */
     deviceId: string;
   }>;
@@ -3119,24 +3085,6 @@ interface ElectronAPI {
           sessionId: string;
           patch: Partial<import('@/lib/ccAgent.types').Session>;
         }) => void,
-      ) => () => void;
-    };
-    migration: {
-      getStatus: () => Promise<
-        'pending' | 'in_progress' | 'done' | 'skipped' | null
-      >;
-      setStatus: (s: 'done' | 'skipped') => Promise<void>;
-      start: (totals: {
-        totalSessions: number;
-        totalMessages: number;
-      }) => Promise<void>;
-      resume: () => Promise<void>;
-      abort: () => Promise<void>;
-      markDone: (
-        deviceName: string,
-      ) => Promise<{ ok: true; alreadyMigrated?: boolean }>;
-      onProgress: (
-        cb: (p: MigrationProgressPayload) => void,
       ) => () => void;
     };
     /** V0.4 (C10): one-shot toast trigger when ensureReady ran two-level fallback. */

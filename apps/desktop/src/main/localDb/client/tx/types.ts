@@ -1,5 +1,4 @@
 export type DbTxName =
-  | 'migration.writePage'
   | 'codex.importMessages'
   | 'claude.importMessages'
   | 'rewind.commit'
@@ -15,39 +14,6 @@ export type DbTxName =
   | 'sessions.renameTitles'
   | 'sessions.setStatus'
   | 'session.importShare';
-
-export interface MigrationWritePageArgs {
-  sessions: Array<{
-    id: string;
-    title: string;
-    workingDir: string | null;
-    model: string;
-    effort: string;
-    permissionMode: string;
-    status: string;
-    sdkSessionId: string | null;
-    totalTokenUsage: number;
-    totalCostUsd: number;
-    contextTokens: number;
-    contextWindow: number;
-    fastMode: boolean;
-    clearedAt: string | null;
-    pinnedAt: string | null;
-    createdAt: string;
-    updatedAt: string;
-    messages?: Array<{
-      id: string;
-      clientId: string;
-      sessionId: string;
-      role: string;
-      content: unknown;
-      toolUseId: string | null;
-      createdAt: string;
-    }>;
-  }>;
-  nextAfter?: string | null;
-  hasMore: boolean;
-}
 
 export interface CodexImportMessagesArgs {
   sessionId: string;
@@ -285,7 +251,6 @@ export interface SessionImportShareArgs {
 }
 
 export type DbTxArgsByName = {
-  'migration.writePage': MigrationWritePageArgs;
   'codex.importMessages': CodexImportMessagesArgs;
   'claude.importMessages': ClaudeImportMessagesArgs;
   'rewind.commit': RewindCommitArgs;
@@ -304,7 +269,6 @@ export type DbTxArgsByName = {
 };
 
 export type DbTxResultByName = {
-  'migration.writePage': undefined;
   'codex.importMessages': { changed: number };
   'claude.importMessages': { changed: number };
   'rewind.commit': undefined;

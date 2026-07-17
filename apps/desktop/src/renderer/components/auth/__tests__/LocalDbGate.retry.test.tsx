@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * MigrationGate.retry.test.tsx
+ * LocalDbGate.retry.test.tsx
  * ---------------------------------------------------------------------------
  * gate decision 失败的有限重试链路(睡醒白屏修复的防御层):
  * transient 失败(如跨睡眠 db RPC 假超时)重试 2 次后成功 → 正常放行;
@@ -25,22 +25,18 @@ vi.mock('@/lib/logger', () => ({
 }));
 
 const authState = vi.hoisted(() => ({
-  current: { user: { id: 'user-1' }, migration: { status: 'none' } as unknown },
+  current: { user: { id: 'user-1' } },
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => authState.current,
 }));
 
-import { MigrationGate } from '../MigrationGate';
+import { LocalDbGate } from '../LocalDbGate';
 
 type ElectronApiStub = {
   localDb: {
     ensureReady: ReturnType<typeof vi.fn>;
-    migration: {
-      getStatus: ReturnType<typeof vi.fn>;
-      setStatus: ReturnType<typeof vi.fn>;
-    };
   };
   appReadyForBot: ReturnType<typeof vi.fn>;
 };
@@ -49,10 +45,6 @@ function stubElectronApi(): ElectronApiStub {
   const api: ElectronApiStub = {
     localDb: {
       ensureReady: vi.fn().mockResolvedValue({ ready: true }),
-      migration: {
-        getStatus: vi.fn().mockResolvedValue('done'),
-        setStatus: vi.fn().mockResolvedValue(undefined),
-      },
     },
     appReadyForBot: vi.fn().mockResolvedValue(undefined),
   };
@@ -64,7 +56,7 @@ function gateTree() {
   return (
     <MemoryRouter initialEntries={['/']}>
       <Routes>
-        <Route element={<MigrationGate />}>
+        <Route element={<LocalDbGate />}>
           <Route index element={<div data-testid="main-content" />} />
         </Route>
       </Routes>
@@ -92,11 +84,11 @@ async function advanceRetryDelay(): Promise<void> {
   await flushAsync();
 }
 
-describe('MigrationGate 有限重试', () => {
+describe('LocalDbGate 有限重试', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
-    authState.current = { user: { id: 'user-1' }, migration: { status: 'none' } };
+    authState.current = { user: { id: 'user-1' } };
   });
 
   afterEach(() => {
@@ -113,10 +105,10 @@ describe('MigrationGate 有限重试', () => {
 
   it('transient 失败 2 次后成功 → 重试后放行,不落 fatal', async () => {
     const api = stubElectronApi();
-    api.localDb.migration.getStatus
+    api.localDb.ensureReady
       .mockRejectedValueOnce(new Error('db worker RPC timeout: op="queryOne" (sleep)'))
       .mockRejectedValueOnce(new Error('db worker RPC timeout: op="queryOne" (sleep)'))
-      .mockResolvedValue('done');
+      .mockResolvedValue({ ready: true });
 
     renderGate();
     await flushAsync();
@@ -134,24 +126,21 @@ describe('MigrationGate 有限重试', () => {
     );
   });
 
-  it('重试等待期 migrationKey 变化 → 新决策重置重试额度,不继承已消耗计数', async () => {
+  it('重试等待期 user 变化 → 新决策重置重试额度,不继承已消耗计数', async () => {
     const api = stubElectronApi();
-    // 4 次 getStatus:决策#1 失败(消耗 1 次额度)→ key 变化重置 → 决策#2/#3 失败
+    // 4 次 ensureReady:决策#1 失败(消耗 1 次额度)→ user 变化重置 → 决策#2/#3 失败
     // (若额度未重置,第 3 次失败时计数已达上限,会提前 fatal)→ 决策#4 成功
-    api.localDb.migration.getStatus
+    api.localDb.ensureReady
       .mockRejectedValueOnce(new Error('transient #1'))
       .mockRejectedValueOnce(new Error('transient #2'))
       .mockRejectedValueOnce(new Error('transient #3'))
-      .mockResolvedValue('done');
+      .mockResolvedValue({ ready: true });
 
     const view = renderGate();
     await flushAsync(); // 决策#1 失败,count=1,等待重试
 
-    // 重试等待期 auth 状态更新导致 migrationKey 变化 → 触发全新决策
-    authState.current = {
-      user: { id: 'user-1' },
-      migration: { status: 'pending', totalSessions: 0, totalMessages: 0 },
-    };
+    // 重试等待期切换账号 → 触发全新决策
+    authState.current = { user: { id: 'user-2' } };
     await act(async () => {
       view.rerender(gateTree());
     });
@@ -160,14 +149,14 @@ describe('MigrationGate 有限重试', () => {
     await advanceRetryDelay(); // 决策#3 失败,count=2,仍有重试
     await advanceRetryDelay(); // 决策#4 成功
 
-    expect(api.localDb.migration.getStatus).toHaveBeenCalledTimes(4);
+    expect(api.localDb.ensureReady).toHaveBeenCalledTimes(4);
     expect(loggerMock.error).not.toHaveBeenCalled(); // 未提前 fatal
     view.unmount();
   });
 
   it('持续失败耗尽重试 → 落 fatal 阻断渲染', async () => {
     const api = stubElectronApi();
-    api.localDb.migration.getStatus.mockRejectedValue(
+    api.localDb.ensureReady.mockRejectedValue(
       new Error('db worker RPC timeout: op="queryOne"'),
     );
 
@@ -179,10 +168,10 @@ describe('MigrationGate 有限重试', () => {
 
     expect(screen.queryByTestId('main-content')).toBeNull();
     expect(loggerMock.error).toHaveBeenCalledWith(
-      'migration gate decision failed after retries',
+      'local-db gate decision failed after retries',
       expect.anything(),
     );
     // 恰好尝试 3 次(1 次原始 + 2 次重试),没有无限重试
-    expect(api.localDb.migration.getStatus).toHaveBeenCalledTimes(3);
+    expect(api.localDb.ensureReady).toHaveBeenCalledTimes(3);
   });
 });

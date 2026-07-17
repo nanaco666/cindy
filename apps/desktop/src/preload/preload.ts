@@ -237,8 +237,6 @@ const fanOutAuthSessionExpired = createIpcFanOut('auth:session-expired');
 const fanOutTapdbDailyActive = createIpcFanOut('tapdb:daily-active');
 const fanOutFullscreenChange = createIpcFanOut('fullscreen-change');
 const fanOutApplicationMenuCommand = createIpcFanOut('app-menu:command');
-// chat-data-localization F4 / F1
-const fanOutMigrationProgress = createIpcFanOut('local-db:migration:progress');
 // 首登轻量数据迁移(mToc)弹窗阶段推送(confirm / running / done / failed)
 const fanOutLegacyMigrationState = createIpcFanOut('legacy-migration:state');
 const fanOutCorruptionRestored = createIpcFanOut('local-db:corruption-restored');
@@ -1187,7 +1185,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onStatusChange: fanOutDiscordBotStatusChange,
   },
 
-  // Renderer → main 的 "用户已登录 + localDb 已就绪" 信号。MigrationGate 在
+  // Renderer → main 的 "用户已登录 + localDb 已就绪" 信号。LocalDbGate 在
   // ensureReady 成功之后 fire-and-forget 调一次。main 收到后才启动 FeishuBot
   // 的 WS 长连接 —— 在此之前 bot 不上线,避免"bot 已上线但 db/auth 未就绪,
   // 用户回消息撞 localDb not ready" 的 race。幂等,多次调用无副作用。
@@ -3105,24 +3103,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
       onCreated: createIpcFanOut('local-db:sessions:created'),
       /** Broadcast: main 端更新 session 字段后通知 (e.g. feishu /ctr New 自动命名)。 */
       onPatched: createIpcFanOut('local-db:sessions:patched'),
-    },
-    migration: {
-      getStatus: (): Promise<
-        'pending' | 'in_progress' | 'done' | 'skipped' | null
-      > => ipcRenderer.invoke('local-db:migration:getStatus'),
-      setStatus: (s: 'done' | 'skipped'): Promise<void> =>
-        ipcRenderer.invoke('local-db:migration:setStatus', s),
-      start: (totals: {
-        totalSessions: number;
-        totalMessages: number;
-      }): Promise<void> => ipcRenderer.invoke('local-db:migration:start', totals),
-      resume: (): Promise<void> => ipcRenderer.invoke('local-db:migration:resume'),
-      abort: (): Promise<void> => ipcRenderer.invoke('local-db:migration:abort'),
-      markDone: (
-        deviceName: string,
-      ): Promise<{ ok: true; alreadyMigrated?: boolean }> =>
-        ipcRenderer.invoke('local-db:migration:markDone', deviceName),
-      onProgress: fanOutMigrationProgress,
     },
     // V0.4：corruption 恢复后一次性 toast 事件
     onCorruptionRestored: fanOutCorruptionRestored,

@@ -5,10 +5,9 @@ import { RouteErrorFallback } from '@/components/error/RouteErrorFallback';
 import { SidebarWindowLayout } from '@/components/layout/SidebarWindowLayout';
 import { SettingsView } from '@/components/settings/SettingsView';
 import { LoginPage } from '@/components/login/LoginPage';
-import { MigrationProgressView } from '@/components/login/MigrationProgressView';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { GuestRoute } from '@/components/auth/GuestRoute';
-import { MigrationGate } from '@/components/auth/MigrationGate';
+import { LocalDbGate } from '@/components/auth/LocalDbGate';
 import { CCAgentFeatureLayout } from '@/features/cc-agent/CCAgentFeatureLayout';
 import { CCAgentIndexRedirect } from '@/features/cc-agent/CCAgentIndexRedirect';
 import { SecondaryWindowBootGate } from '@/features/cc-agent/SecondaryWindowBootGate';
@@ -31,17 +30,13 @@ import { SchedulerPage } from '@/features/scheduler';
  *    └── /login                    → LoginPage
  *
  *   ProtectedRoute (已登录) — 仅校验 isAuthenticated
- *    ├── /login/migration          → MigrationProgressView（chat-data-localization V0.5）
- *    │                                不挂 MigrationGate，避免无限重定向
- *    └── MigrationGate              → 检查 ensureReady + 本地 migration 状态
+ *    └── LocalDbGate               → 等 localDb.ensureReady（按 userId 切库）
  *         └── MainLayout            → 主功能区
  *              ├── /                → Navigate to /cc-agent
  *              ├── /cc-agent/...    → CCAgentFeatureLayout
  *              └── /settings        → SettingsView
  *
- * MigrationGate 的等价 spec：原文档放在 AuthContext.handleLoginResponse；
- * 本项目 AuthProvider 在 RouterProvider 之外，无法 useNavigate，所以下沉到
- * 路由层。两者结果完全等价。
+ * LocalDbGate 下沉在路由层：AuthProvider 在 RouterProvider 之外无法 useNavigate。
  */
 export const router = createHashRouter([
   {
@@ -58,11 +53,9 @@ export const router = createHashRouter([
     // 冒泡到这里,全屏展示可恢复错误页(2026-07-09 React #130 事故的直接止血层)。
     errorElement: <RouteErrorFallback />,
     children: [
-      // 迁移过渡页 —— 必须在 MigrationGate 之外，否则会无限重定向
-      { path: 'login/migration', element: <MigrationProgressView /> },
       {
-        // 主功能区入口 —— 经过 MigrationGate 才能进
-        element: <MigrationGate />,
+        // 主功能区入口 —— 经过 LocalDbGate（localDb 就绪）才能进
+        element: <LocalDbGate />,
         children: [
           // 右侧栏独立子窗口(?sidebarWindow=1)的根路由 —— 与 MainLayout 平级,
           // 只挂 SidebarWindowLayout(50px chrome + RightSidebarShell),不挂完整壳。

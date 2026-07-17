@@ -4620,7 +4620,7 @@ app.on('ready', async () => {
   // handler。bot 的 WS 长连接此处不启动 —— 由 renderer 在用户登录 + localDb 就绪
   // 后通过 'app:ready-for-bot' IPC 触发(见下方 handler)。
   startImOrchestrators();
-  // Renderer → main 的 "应用真正就绪" 信号。MigrationGate 在 localDb.ensureReady
+  // Renderer → main 的 "应用真正就绪" 信号。LocalDbGate 在 localDb.ensureReady
   // 成功之后调一次。在此之前 bot 不上线 —— 否则会出现"bot 已上线但 localDb 未
   // ready, 用户回消息直接 500"的 race(2026-05-07 王韬反馈)。
   // 多次调用是幂等的(startImConnection 内部 connectionStarted 守卫),

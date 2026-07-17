@@ -426,7 +426,7 @@ export function MainLayout() {
   useDeviceLinkRemoteProjects();
 
   // 系统通知点击回调：主进程把窗口拉到前台后广播 sessionId，这里跳路由。
-  // 挂在 MainLayout 而不是 App 顶层——这里在 ProtectedRoute + MigrationGate 之内，
+  // 挂在 MainLayout 而不是 App 顶层——这里在 ProtectedRoute + LocalDbGate 之内，
   // 用户必然已登录、可以安全 navigate 到 /cc-agent。
   //
   // 用 ref 转当前 route 给闭包读，避免每次路由变化都重订阅 IPC；同时做 dedupe
@@ -780,7 +780,7 @@ export function MainLayout() {
   }, [rsbDetached]);
 
   // 3) 重启恢复:detached && lastOpen(上次退出时窗口开着)→ 自动重开子窗口。
-  //    时机对齐 takePendingDeepLink 的 pull-on-mount(ProtectedRoute + MigrationGate
+  //    时机对齐 takePendingDeepLink 的 pull-on-mount(ProtectedRoute + LocalDbGate
   //    之内,登录态天然就绪);ref 守护 strict-mode 双跑。open 幂等,已开则 focus。
   const rsbWindowRestoredRef = useRef(false);
   useEffect(() => {

@@ -19,14 +19,9 @@ export interface User {
   passportId: string;
 }
 
-export type MigrationStatus =
-  | { status: 'none' }
-  | { status: 'pending'; totalSessions: number; totalMessages: number };
-
 export interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
-  migration?: MigrationStatus;
   deviceId: string;
 }
 
@@ -39,24 +34,6 @@ export interface AuthService {
   dispose(): void;
 }
 
-/** Client compatibility: missing or malformed legacy migration data means no migration. */
-function normalizeMigration(raw: unknown): MigrationStatus {
-  if (!raw || typeof raw !== 'object') return { status: 'none' };
-  const value = raw as { status?: unknown; totalSessions?: unknown; totalMessages?: unknown };
-  if (value.status !== 'pending') return { status: 'none' };
-  return {
-    status: 'pending',
-    totalSessions:
-      typeof value.totalSessions === 'number' && Number.isFinite(value.totalSessions)
-        ? Math.max(0, Math.floor(value.totalSessions))
-        : 0,
-    totalMessages:
-      typeof value.totalMessages === 'number' && Number.isFinite(value.totalMessages)
-        ? Math.max(0, Math.floor(value.totalMessages))
-        : 0,
-  };
-}
-
 /** Thin IPC wrapper. Tokens and transient login tickets never enter the renderer. */
 export function createAuthService(): AuthService {
   const listeners = new Set<(state: AuthState) => void>();
@@ -64,9 +41,6 @@ export function createAuthService(): AuthService {
     const normalized: AuthState = {
       user: rawState.user as User | null,
       isAuthenticated: rawState.isAuthenticated,
-      migration: rawState.migration
-        ? normalizeMigration(rawState.migration)
-        : undefined,
       deviceId: rawState.deviceId,
     };
     listeners.forEach((listener) => listener(normalized));
@@ -78,7 +52,6 @@ export function createAuthService(): AuthService {
       return {
         user: raw.user as User | null,
         isAuthenticated: raw.isAuthenticated,
-        migration: raw.migration ? normalizeMigration(raw.migration) : undefined,
         deviceId: raw.deviceId,
       };
     },
