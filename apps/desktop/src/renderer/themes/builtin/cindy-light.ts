@@ -128,6 +128,10 @@ const overrides = {
   'surface-translucent-main': 'rgba(255, 255, 255, 0.93)', // E4D R1 模式2 主面板半透明
   'surface-translucent-overlay': 'rgba(246, 246, 246, 0.90)', // E4D R1 模式3 浮层半透明
   'glass-pill-bg': 'rgba(255, 255, 255, 0.05)', // E3 D6 glass-pill(light 从 Figma 取后调)
+  'send-btn-bg': '#3C3F43', // R4 D1/D2 反相中性可用底(不用红,用户裁决)
+  'send-btn-icon': '#FCFCFC', // R4 反相中性字
+  'send-btn-disabled-bg': '#444242', // R4 唤醒态禁用灰底(§2.6)
+  'send-btn-disabled-icon': '#585555', // R4 禁用灰字(§2.6 send 图标)
 } as const;
 
 export const cindyLight: Theme = {
