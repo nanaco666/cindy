@@ -1124,19 +1124,12 @@ body.resizing-pane [data-ghost-webview] {
 [data-theme="cindy-dark"] .h-screen.bg-content-area {
   background: transparent;
 }
-/* 模式1 侧栏:blur 50px + surface-translucent-sidebar;light 叠玻璃渐变覆盖层(补编 §1,仅 light,dark 无) */
-[data-theme="cindy-light"] {
-  --sidebar-glass-accent: #F70121;
-}
+/* 模式1 侧栏(light):半透底,壁纸模糊由原生 vibrancy sidebar 材质提供。
+   红渐变覆盖层已拆除(用户裁决 2026-07-18:Figma 该两块渐变矩形按装饰废稿处理,不实现);
+   CSS backdrop-filter 已撤(A/B 实证:blur 会把透明窗背衬黑箱)。 */
 [data-theme="cindy-light"] .bg-\[var\(--panel-bg\)\],
 [data-theme="cindy-light"] aside.bg-sidebar {
-  /* 渐变强度按 Figma fill opacity 实测(lead 勘误 2026-07-17):linear 0→0.15,radial 0.07→0@60% */
-  background:
-    linear-gradient(rgba(247, 1, 33, 0), rgba(247, 1, 33, 0.15)),
-    radial-gradient(circle, rgba(247, 1, 33, 0.07), transparent 60%),
-    var(--surface-translucent-sidebar);
-  backdrop-filter: blur(50px);
-  -webkit-backdrop-filter: blur(50px);
+  background: var(--surface-translucent-sidebar);
 }
 [data-theme="cindy-dark"] .bg-\[var\(--panel-bg\)\],
 [data-theme="cindy-dark"] aside.bg-sidebar {
