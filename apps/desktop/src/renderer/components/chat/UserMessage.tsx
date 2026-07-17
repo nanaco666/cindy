@@ -65,6 +65,7 @@ import {
   type GhostSummonDisplay,
 } from './GhostSummonCard';
 import { AutomationOriginBadge } from './AutomationOriginBadge';
+import { UserMessageUrlLink } from './UserMessageUrlLink';
 
 /**
  * image-local-cache: a user-message image can be in two shapes:
@@ -225,7 +226,7 @@ function UserFileChip({
 
 /**
  * Render a plain-text segment, converting:
- *   - http(s) URLs into <a> that open in the system browser
+ *   - http(s) URLs into links that follow the user's opening preference
  *   - bare absolute image paths into clickable buttons that open the
  *     ImageLightbox via the xdt-file:// custom protocol
  * Everything else is returned as-is string fragments.
@@ -234,6 +235,7 @@ function renderTextWithLinks(
   text: string,
   keyPrefix: string,
   onImageClick: (xdtFileUrl: string) => void,
+  sessionId?: string,
 ): React.ReactNode[] {
   const result: React.ReactNode[] = [];
   const matches = findLinkifyMatches(text);
@@ -246,17 +248,11 @@ function renderTextWithLinks(
     if (match.kind === 'url') {
       const url = match.text;
       result.push(
-        <a
+        <UserMessageUrlLink
           key={`${keyPrefix}-url-${match.index}`}
-          href={url}
-          className="text-[var(--msg-link)] hover:underline cursor-pointer"
-          onClick={(e) => {
-            e.preventDefault();
-            window.electronAPI.openExternal(url);
-          }}
-        >
-          {url}
-        </a>,
+          url={url}
+          sessionId={sessionId}
+        />,
       );
     } else if (match.kind === 'session') {
       // 会话深链 → chip(显式 label / 标题 / 短 ID),点击跳会话、带锚点定位
@@ -360,6 +356,7 @@ function renderContent(
   onFileChipClick: (abs: string, name: string, btn: HTMLButtonElement) => void | Promise<void>,
   onImageClick: (xdtFileUrl: string) => void,
   t: TFunction,
+  sessionId?: string,
   /** remote 会话:@-chip 点击跳过本机 smart resolve,按 workdir 风格直接 join。 */
   remoteJoin = false,
 ): React.ReactNode[] {
@@ -395,14 +392,14 @@ function renderContent(
         // A real mention is always preceded by whitespace or sits at line start.
         const prev = parts[pi - 1];
         if (prev && prev.length > 0 && !/\s$/.test(prev)) {
-          nodes.push(...renderTextWithLinks(part, `${li}-${pi}`, onImageClick));
+          nodes.push(...renderTextWithLinks(part, `${li}-${pi}`, onImageClick, sessionId));
           continue;
         }
 
         // Only render as chip if it looks like a real path
         if (!looksLikePath(ref)) {
           // Not a path — render as plain text
-          nodes.push(...renderTextWithLinks(part, `${li}-${pi}`, onImageClick));
+          nodes.push(...renderTextWithLinks(part, `${li}-${pi}`, onImageClick, sessionId));
           continue;
         }
 
@@ -465,7 +462,7 @@ function renderContent(
           );
         }
       } else {
-        nodes.push(...renderTextWithLinks(part, `${li}-${pi}`, onImageClick));
+        nodes.push(...renderTextWithLinks(part, `${li}-${pi}`, onImageClick, sessionId));
       }
     }
   }
@@ -1085,6 +1082,7 @@ export function UserMessage({
                     },
                     (xdtFileUrl) => setLightboxSrc(xdtFileUrl),
                     t,
+                    sessionId,
                     isRemoteFileOrigin(sessionFileCtx.origin),
                   )}
             </div>
@@ -1136,6 +1134,7 @@ export function UserMessage({
                     },
                     (xdtFileUrl) => setLightboxSrc(xdtFileUrl),
                     t,
+                    sessionId,
                     isRemoteFileOrigin(sessionFileCtx.origin),
                   )
                 : undefined
