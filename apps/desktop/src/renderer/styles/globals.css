@@ -620,6 +620,14 @@ body.resizing-pane [data-ghost-webview] {
   color: #1f6feb;
   font-weight: bold;
 }
+
+/* CINDY dark hljs 整改(D 裁决 2026-07-17,§15.4 双门槛):
+   github-dark .hljs-section #1f6feb × CINDY surface-elevated #312F2F = 2.87 <3:1(语法色门槛);
+   保持色相(蓝 H212 S84%),仅提亮度 L52%→53.5% → #2573ec × #312F2F = 3.00 ≥3:1。
+   -punctuation/-tag dark 无单独选择器,继承 .dark .hljs text #c9d1d9(× #312F2F=8.62 ≥3,无需整改)。 */
+[data-theme="cindy-dark"] .hljs-section {
+  color: #2573ec;
+}
 .dark .hljs-bullet {
   color: #f2cc60;
 }

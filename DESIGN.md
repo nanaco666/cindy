@@ -652,6 +652,9 @@ card/container
 - `focus-ring` `#3b82f6`(蓝,不染红);diff 红绿;modal scrim/阴影;`overlay-lightbox`。
 - `destructive`/`search-match-bg` 语义色不纳入 HSL_FORMAT_IDS 覆盖。
 - **hljs 语法高亮色**(light=highlight.js/styles/github.css;dark=globals.css `.dark .hljs-*` mirror github-dark):hljs 主题色为 default 代码块底设计,CINDY 代码块底(surface-elevated #F8F8F8/#312F2F)接近 default(#ffffff/#2c2c2a),边缘不达标(light -keyword 4.31/-built_in 3.29/-name 4.36;dark -punctuation 2.47/-tag 2.99/-section 2.87)是 hljs 既有折损(用 design surface 而非 github 默认 #ffffff/#0d1117),非 CINDY 引入——default 同源也不达标。CINDY 不补 [data-theme] 整改(与 default 同源,补整改值需重新过用户关卡);落档见 cindyCodeBlockContrast.test.ts(≥2 基线 + text ≥4.5 守卫)。
+**双门槛口径(D 裁决 2026-07-17)**:hljs 语法高亮色属辅助性视觉编码,对齐 selection/边界 3:1 口径——语法色 ≥3:1、正文文本 ≥4.5:1。CINDY 代码块底(surface-elevated)接近 default,hljs 主题色为 github 默认底(#ffffff/#0d1117)设计,固有折损非 CINDY 引入(default 同源)。
+- light:语法色全 ≥3(4.31/3.29/4.36),<4.5 但 ≥3 门槛通过,**不整改**,逐项落豁免档(default 同源折损);
+- dark:`.hljs-section` #1f6feb × #312F2F = 2.87 <3,补 `[data-theme="cindy-dark"] .hljs-section` 提亮到 `#2573ec`(保持蓝 H212 S84%,L52%→53.5%,× #312F2F=3.00 ≥3);-punctuation/-tag dark 无单独选择器,继承 .dark .hljs text #c9d1d9(× #312F2F=8.62 ≥3,无需整改)。
 - model-budget 光谱条 / GhostTool shimmer:显式豁免(中性 shimmer,跨主题统一)。
 
 ### 8.5 U2 显式例外记录(二级信息色忠于 Figma 原值)
@@ -671,7 +674,7 @@ card/container
 cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cindy-logo-dark.png`),经 `theme.logo` 机制注入(`logoScale=1` 对齐默认 logo 视觉大小;NewMakerDraftRoute/欢迎页按 `theme.logo ?? defaultLogoForTheme` 消费)。
 
 > logo 资产红 `#F70121` 是官方品牌资产固有色(WORD MARK frame 红箭头符号),与 UI 品牌红 `#DF0C27` **并存、不同值**——logo 是图片资产不进 token 体系,保持原色不改色。后人勿误改为 `#DF0C27`。
-### 15.8 status-badge-fg(§7 必炸点,lead 裁决 2026-07-17)
+### 15.8 status-badge-fg(§7 必炸点,用户确认 2026-07-17)
 
 橙徽章(bg `status-bar-accent` `#FF6600`)此前借用 `accent-pure-cta-fg`(白字)→ `#FFFFFF`×`#FF6600`=2.94:1 不达标。拆独立 `status-badge-fg`:
 - **default 镜像 `accent-pure-cta-fg`**(light 白 / dark 黑),既有 9 主题行为零变化;

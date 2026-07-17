@@ -47,6 +47,17 @@ describe('CINDY · D2-6 hljs 兜底(代码块对比度落档)', () => {
       expect(r, `dark ${name} ${color} × ${DARK_BG} = ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(2);
     }
   });
+  it('D 裁决:CINDY dark -section 提亮 #2573ec × 背景 ≥3:1(保持色相调亮度,default #1f6feb=2.87<3 整改)', () => {
+    expect(contrast('#2573ec', DARK_BG), 'dark -section 提亮后').toBeGreaterThanOrEqual(3);
+  });
+  it('D 裁决:light 语法色 ≥3:1 门槛通过(default 同源折损,<4.5 但 ≥3 不整改,落豁免档)', () => {
+    // light -keyword/-doctag/-meta/-type 4.31、-built_in/-symbol 3.29、-name/-selector-tag 4.36 均 ≥3(语法色门槛)
+    for (const name of ['-keyword', '-doctag', '-meta', '-type', '-built_in', '-symbol', '-name', '-selector-tag', '-selector-pseudo', '-addition']) {
+      const color = HLJS_LIGHT[name];
+      if (!color) continue;
+      expect(contrast(color, LIGHT_BG), `light ${name} ${color}`).toBeGreaterThanOrEqual(3);
+    }
+  });
   it('普通文本(text)×背景 ≥4.5:1(正文守卫)', () => {
     expect(contrast(HLJS_LIGHT['text']!, LIGHT_BG)).toBeGreaterThanOrEqual(4.5);
     expect(contrast(HLJS_DARK['text']!, DARK_BG)).toBeGreaterThanOrEqual(4.5);

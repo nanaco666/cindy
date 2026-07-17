@@ -19,7 +19,7 @@ const overrides = {
   'surface-hover-soft': '#2B2929', // 插值: 20%
   'surface-hover-hsl': '0.0 2.2% 18.0%', // 插值: hover -> HSL
   'surface-on-card': '#2A2828', // 裁决: 中性反相前景,不作红 CTA 专用
-  'status-badge-fg': '#1F1F1F', // §7 必炸点(lead 裁决 2026-07-17):× status-bar-accent #FF6600=5.93 ≥4.5
+  'status-badge-fg': '#1F1F1F', // §7 必炸点(用户确认 2026-07-17):× status-bar-accent #FF6600=5.93 ≥4.5
   'border-default': '#434343', // 直映: 边框
   'border-default-hsl': '0.0 0.0% 26.3%', // 边框 -> HSL
   'border-shadcn-hsl': '0.0 0.0% 26.3%', // 边框 -> HSL

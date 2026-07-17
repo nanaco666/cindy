@@ -118,7 +118,7 @@ export const CINDY_REQUIRED_COLOR_IDS = [
   'sidebar-item-hover',
   'sidebar-search-bg',
   'sidebar-muted',
-  'status-badge-fg', // D2 期新增(lead 裁决 2026-07-17,源自决策表 §7 必炸点方案),115→116
+  'status-badge-fg', // D2 期新增(用户确认 2026-07-17,源自决策表 §7 必炸点方案),115→116
 ] as const;
 
 export const HSL_FORMAT_IDS = [
