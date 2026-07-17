@@ -135,10 +135,17 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(modelSelectorSource).toContain('border-[var(--create-agent-control-border)]');
 
     expect(colorsSource).toContain("registerColor('create-agent-send-bg'");
+    expect(colorsSource).toContain("light: '#3C3F43'");
     expect(colorsSource).toContain("dark: '#EEEEEE'");
+    expect(colorsSource).toContain("registerColor('create-agent-send-icon'");
+    expect(colorsSource).toContain("light: '#FCFCFC'");
     expect(colorsSource).toContain("registerColor('create-agent-segment-inactive-text'");
+    expect(colorsSource).toContain("light: '#9A9DA3'");
     expect(colorsSource).toContain("dark: '#6F6F6F'");
     expect(colorsSource).toContain("registerColor('create-agent-control-border'");
+    expect(colorsSource).toContain("light: '#DCDFE3'");
     expect(colorsSource).toContain("dark: '#434343'");
+    expect(colorsSource).toContain("registerColor('create-agent-control-icon'");
+    expect(colorsSource).toContain("light: '#3C3F43'");
   });
 });
