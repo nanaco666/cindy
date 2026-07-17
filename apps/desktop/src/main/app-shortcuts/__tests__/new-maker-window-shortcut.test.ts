@@ -119,6 +119,18 @@ describe('installNewMakerWindowShortcut', () => {
     expect(target.send).toHaveBeenCalledOnce();
   });
 
+  it('ignores auto-repeat keydown events while a matching combo is held', () => {
+    const target = fakeWindow();
+    installNewMakerWindowShortcut(target.window, 'win32');
+
+    const repeated = press(target, input('KeyN', { control: true, isAutoRepeat: true }));
+    expect(repeated).not.toHaveBeenCalled();
+    expect(target.send).not.toHaveBeenCalled();
+
+    press(target, input('KeyN', { control: true }));
+    expect(target.send).toHaveBeenCalledOnce();
+  });
+
   it('does not install a competing handler on macOS', () => {
     const target = fakeWindow();
     installNewMakerWindowShortcut(target.window, 'darwin');

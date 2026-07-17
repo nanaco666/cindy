@@ -19,7 +19,7 @@ export function installNewMakerWindowShortcut(
   installedWebContents.add(window.webContents);
 
   window.webContents.on('before-input-event', (event, input) => {
-    if (input.type !== 'keyDown') return;
+    if (input.type !== 'keyDown' || input.isAutoRepeat) return;
     if (isAppShortcutRecordingActive()) return;
 
     const combos = getAppShortcutStore().getEffectiveCombos('new-maker');
