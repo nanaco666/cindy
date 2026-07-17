@@ -309,7 +309,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'sidebar-search-bg': { light: '0.0 0.0% 92.9%', dark: '0.0 2.4% 16.1%' },
   'sidebar-muted': { light: '220.0 4.7% 62.2%', dark: '0 0% 43.5%' }, // E1D 侧栏层级 #9A9DA3/#6F6F6F
   'status-badge-fg': { light: '#1F1F1F', dark: '#1F1F1F' }, // §7 必炸点(lead 裁决)
-  'surface-translucent-sidebar': { light: 'rgba(246, 246, 246, 0.80)', dark: 'rgba(18, 15, 15, 0.60)' }, // 用户观感定稿 2026-07-18
+  'surface-translucent-sidebar': { light: 'rgba(246, 246, 246, 0.90)', dark: 'rgba(18, 15, 15, 0.60)' }, // 用户观感定稿 2026-07-18
   'surface-translucent-main': { light: '#EDEDED', dark: '#2A2828' }, // E4D 主面板:用户勘误 2026-07-17 撤销毛玻璃,改不透明等价 surface(原 rgba 半透明)
   'surface-translucent-overlay': { light: 'rgba(246, 246, 246, 0.90)', dark: 'rgba(37, 35, 35, 0.80)' }, // E4D R1 模式3
   'composer-pill-bg': { light: '#FCFCFC', dark: '#393838' }, // E2 composer pill 底(取代 glass-pill-bg)
