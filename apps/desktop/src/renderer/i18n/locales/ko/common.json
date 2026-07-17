@@ -2647,7 +2647,7 @@
         "browserSub": "Browser",
         "openTerminal": "터미널 열기",
         "terminalSub": "Terminal",
-        "addMoreHint": "위쪽 + 버튼으로 다른 패널 유형을 추가할 수 있어요"
+        "addMoreHint": "위쪽 + 버튼에서 다른 패널 유형을 선택할 수 있어요"
       },
       "placeholderHint": "{{kind}} — 콘텐츠는 이후 단계에서 추가됩니다"
     },

@@ -6,7 +6,7 @@
  * 严格走 token(规则 16),不写 hex。
  */
 
-import { ChevronRight, FileDiff, FolderOpen, Globe, Plus, Terminal } from 'lucide-react';
+import { ChevronRight, FileDiff, FolderOpen, Globe, Terminal } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -66,10 +66,9 @@ export function EmptyState({
           onClick={onAddTerminalTab}
         />
       </div>
-      <div className="flex items-center gap-2 px-1 text-[var(--text-tertiary)]">
-        <Plus size={12} />
-        <span className="text-[11px]">{t('rightSidebar.tabs.empty.addMoreHint')}</span>
-      </div>
+      <p className="px-1 text-[11px] text-[var(--text-tertiary)]">
+        {t('rightSidebar.tabs.empty.addMoreHint')}
+      </p>
     </div>
   );
 }
