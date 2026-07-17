@@ -1059,7 +1059,7 @@ export function ModelSelector({
               />
               <span
                 className={cn(
-                  'min-w-0 truncate font-normal text-[var(--model-trigger-text)]',
+                  'min-w-0 truncate font-normal text-[var(--text-primary)]',
                   isFieldTrigger ? 'max-w-[260px]' : 'max-w-[160px]',
                   dense ? 'text-[12.5px]' : 'text-[13px]',
                 )}
@@ -1090,7 +1090,7 @@ export function ModelSelector({
                 className={cn(
                   'min-w-0 truncate font-normal',
                   isFieldTrigger ? 'max-w-[260px]' : 'max-w-[160px]',
-                  !isBudget && 'text-[var(--model-trigger-text)]',
+                  !isBudget && 'text-[var(--text-primary)]',
                   dense ? 'text-[12.5px]' : 'text-[13px]',
                 )}
                 style={budgetGradientStyle}
@@ -1110,7 +1110,7 @@ export function ModelSelector({
                   </span>
                   <span
                     className={cn(
-                      'min-w-0 truncate font-normal text-[var(--model-trigger-text)]',
+                      'min-w-0 truncate font-normal text-[var(--text-primary)]',
                       isFieldTrigger ? 'max-w-[120px]' : 'max-w-[88px]',
                       dense ? 'text-[12.5px]' : 'text-[13px]',
                     )}
@@ -1122,7 +1122,7 @@ export function ModelSelector({
               {triggerFastOn && (
                 <Zap
                   size={dense ? 12 : 13}
-                  className="ml-0.5 shrink-0 text-[var(--model-trigger-text)]"
+                  className="ml-0.5 shrink-0 text-[var(--composer-pill-icon,#3C3F43)] dark:text-[var(--composer-pill-icon,#D9D9D9)]"
                   aria-label="Fast"
                 />
               )}
@@ -1130,7 +1130,7 @@ export function ModelSelector({
           )}
           <ChevronDown
             size={dense ? 13 : 14}
-            className={cn('shrink-0 text-[var(--model-trigger-arrow)]', isFieldTrigger && 'ml-auto')}
+            className={cn('shrink-0 text-[var(--composer-pill-icon,#3C3F43)] dark:text-[var(--composer-pill-icon,#D9D9D9)]' /* spec 2026-07-17, token by 一哥 */, isFieldTrigger && 'ml-auto')}
           />
         </button>
       </PopoverTrigger>

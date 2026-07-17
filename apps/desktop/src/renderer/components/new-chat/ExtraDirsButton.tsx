@@ -182,12 +182,12 @@ export function ExtraDirsButton({
           >
             <Plus
               size={dense ? 15 : 16}
-              className="shrink-0 text-[var(--model-trigger-text)]"
+              className="shrink-0"
             />
             {count > 0 && isCc && (
               <span
                 className={cn(
-                  'font-normal tabular-nums text-[var(--model-trigger-text)]',
+                  'font-normal tabular-nums',
                   dense ? 'text-[12.5px]' : 'text-[13px]',
                 )}
               >
