@@ -230,6 +230,26 @@ describe('CINDY · ⑤ E1D 红色体系重构(中性 exact map + 红例外白名
       expect(rgbEqual(toRgb(theme.colors['msg-link']), redRgb, 5), 'msg-link 不得染红').toBe(false);
     }
   });
+
+  it('状态色全局 registry 默认 = 设计定稿值 2026-07-17(取代冻结红线)', () => {
+    // 状态色全局(colors.ts light/dark 同值;9 builtin 主题无一 override → 默认皮肤同变)。
+    // 设计定稿 2026-07-17:running/awaiting/error(状态族)/done + 警示橙 accent + warning 前景。
+    const FINAL: Record<string, string> = {
+      'warning-accent': '#EA6B17',
+      'card-status-awaiting': '#19D2C1',
+      'card-status-error': '#D91F37',
+      'card-status-done': '#2AAE5B',
+      'remote-status-ready': '#2AAE5B',
+      'remote-status-failed': '#D91F37',
+      'warning-fg': '#F3A115',
+    };
+    for (const [id, hex] of Object.entries(FINAL)) {
+      const lv = colorRegistry.resolveDefault(id, 'light') ?? '';
+      const dv = colorRegistry.resolveDefault(id, 'dark') ?? '';
+      expect(rgbEqual(toRgb(lv), toRgb(hex), 1), `${id} light = 定稿 ${hex}`).toBe(true);
+      expect(rgbEqual(toRgb(dv), toRgb(hex), 1), `${id} dark = 定稿 ${hex}`).toBe(true);
+    }
+  });
 });
 
 // ===== ⑥ family =====
@@ -376,7 +396,7 @@ describe('CINDY · ⑧ 可证伪自检(注入错值后断言必须变红,还原�
 
   it('注入豁免篡改(warning-accent 染红) → ⑤ 排除断言变红', () => {
     const redRgb = toRgb(BRAND_RED_HEX);
-    // warning-accent cindy 不 override,registry 默认 #FF6600,非品牌红
+    // warning-accent cindy 不 override,registry 默认 #EA6B17(设计定稿 2026-07-17),非品牌红
     const warnDefault = colorRegistry.resolveDefault('warning-accent', 'light') ?? '';
     expect(rgbEqual(toRgb(warnDefault), redRgb, 2), 'warning-accent 默认非品牌红').toBe(false);
     // 强行注入品牌红到 cindy 的 warning-accent override → ⑤ 排除断言(排除项染红即红)变红
@@ -404,7 +424,7 @@ describe('CINDY · ⑧ 可证伪自检(注入错值后断言必须变红,还原�
   it('§7 必炸点对比度(橙徽章/红 CTA/Fast toggle,§7 矩阵)', () => {
     const L = cindyLight.colors as unknown as Record<string, string>;
     const D = cindyDark.colors as unknown as Record<string, string>;
-    const orange = '#FF6600'; // status-bar-accent registry 默认(cindy 不 override)
+    const orange = '#EA6B17'; // status-bar-accent registry 默认(设计定稿 2026-07-17,cindy 不 override);× status-badge-fg #1F1F1F = 5.19:1 ≥4.5
     expect(contrast(L['status-badge-fg']!, orange), 'light 橙徽章 fg×橙').toBeGreaterThanOrEqual(4.5);
     expect(contrast(D['status-badge-fg']!, orange), 'dark 橙徽章 fg×橙').toBeGreaterThanOrEqual(4.5);
     expect(contrast('#FCFCFC', L['accent-cta-bg']!), 'light 中性 CTA').toBeGreaterThanOrEqual(4.5);

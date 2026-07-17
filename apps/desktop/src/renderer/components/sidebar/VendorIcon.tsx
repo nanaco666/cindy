@@ -7,7 +7,7 @@
  *
  * 状态(不变):
  *   - idle (默认)   : Stone 灰 #737373 / dark #a3a3a3
- *   - running=true  : Thinking Orange #FF6600(== --status-bar-accent)+ session-breathing 呼吸
+ *   - running=true  : Thinking Orange(== --status-bar-accent,E5D 定稿 2026-07-17)+ session-breathing 呼吸
  *
  * 设计参考:doc/design_docs/cc-agent-view.pen 节点 ugsrn (方案 C)。
  */

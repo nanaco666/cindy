@@ -186,9 +186,9 @@ registerColor('error-flat', {
   dark: '#ef4444',
 }, '扁平 danger 前景');
 registerColor('warning-accent', {
-  light: '#FF6600',
-  dark: '#FF6600',
-}, 'Thinking orange / warning accent');
+  light: '#EA6B17',
+  dark: '#EA6B17',
+}, 'Thinking orange / warning accent — running 状态色,设计定稿 2026-07-17(取代 #FF6600 冻结红线);全局同值,9 主题无 override 自动跟随');
 registerColor('shadow-soft-panel', {
   light: '0 4px 12px rgb(0 0 0 / 0.08)',
   dark: '0 4px 12px rgb(0 0 0 / 0.3)',
@@ -1266,16 +1266,16 @@ registerColor('settings-integration-warning', {
 // small enough that saturation issues don't arise; legibility comes from
 // the dot's high-contrast position against surface, not from luminance.
 registerColor('remote-status-ready', {
-  light: '#22c55e',
-  dark: '#22c55e',
+  light: '#2AAE5B',
+  dark: '#2AAE5B',
 }, 'Status — connected / ready (green)');
 registerColor('remote-status-progress', {
   light: '#f59e0b',
   dark: '#f59e0b',
 }, 'Status — connecting/authenticating/reconnecting (amber-500, 偏黄不容易在小圆点上被误读为红)');
 registerColor('remote-status-failed', {
-  light: '#ef4444',
-  dark: '#ef4444',
+  light: '#D91F37',
+  dark: '#D91F37',
 }, 'Status — connect failed (red)');
 
 // 会话状态点(AttentionDot / 列表行右槽 / 灵动岛)三态语义色 —— 同 remote-status 走
@@ -1283,17 +1283,17 @@ registerColor('remote-status-failed', {
 // 全端统一色表(与灵动岛 native 对齐):running=Thinking Orange(status-bar-accent)、
 // awaiting=TapTap 蓝、error=红、完成未读=绿。
 registerColor('card-status-awaiting', {
-  light: '#00D9C5',
-  dark: '#00D9C5',
-}, '状态点 — 待用户回复/选择 (TapTap 蓝 #00D9C5,与灵动岛 needs-interaction 同值;light/dark 同色,2026-07 Dash 真机确认浅底可辨)');
+  light: '#19D2C1',
+  dark: '#19D2C1',
+}, '状态点 — 待用户回复/选择 (设计定稿 2026-07-17 #19D2C1,取代 #00D9C5 冻结红线;light/dark 同值)');
 registerColor('card-status-error', {
-  light: '#ef4444',
-  dark: '#ef4444',
-}, '状态点 — 任务出错 (red,与灵动岛 error 同值)');
+  light: '#D91F37',
+  dark: '#D91F37',
+}, '状态点 — 任务出错 (设计定稿 2026-07-17 #D91F37,取代 #ef4444;状态族 error,非 error-flat 正文文案)');
 registerColor('card-status-done', {
-  light: '#22c55e',
-  dark: '#22c55e',
-}, '状态点 — 完成未读 (green;普通/定时任务完成统一,橙专职 running)');
+  light: '#2AAE5B',
+  dark: '#2AAE5B',
+}, '状态点 — 完成未读 (设计定稿 2026-07-17 #2AAE5B,取代 #22c55e;普通/定时任务完成统一,橙专职 running)');
 registerColor('remote-status-disconnected', {
   light: 'var(--text-tertiary)',
   dark: 'var(--text-tertiary)',
@@ -1641,13 +1641,13 @@ registerColor('error-fg-strong', {
   dark: '#fca5a5',
 }, '错误卡片强调文字');
 registerColor('warning-bg-soft', {
-  light: 'rgba(255, 102, 0, 0.12)',
-  dark: 'rgba(255, 102, 0, 0.18)',
-}, 'Warning alpha surface (FeishuConflictDialog 类警告 badge)');
+  light: 'rgba(234, 107, 23, 0.12)',
+  dark: 'rgba(234, 107, 23, 0.18)',
+}, 'Warning alpha surface (FeishuConflictDialog 类警告 badge;alpha 随 warning-accent #EA6B17 同步重算 2026-07-17)');
 registerColor('warning-fg', {
-  light: '#F59E0B',
-  dark: '#F59E0B',
-}, 'Toast warning amber 同款,用于需要 warning 语义的强调文字/图标(跨主题统一,语义豁免)');
+  light: '#F3A115',
+  dark: '#F3A115',
+}, '警示强调文字/图标(设计定稿 2026-07-17 #F3A115;与 Toast amber #F59E0B 解耦——Toast 维持 B 组现状,本 token 走定稿前景)');
 // cc-mgr 远端升级 banner (UpgradeBanner.tsx) — amber warning 语义,跨主题统一、语义豁免
 // (规则 15:warning/amber 在豁免范围,不被非默认主题 override,但仍走 token)。
 registerColor('upgrade-banner-bg', {
