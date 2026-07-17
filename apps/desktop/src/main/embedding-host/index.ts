@@ -18,9 +18,6 @@ import { EmbeddingClient, type EmbeddingClientOptions } from '@lizi/embedding-cl
 import type { createLogger } from '../logger';
 import type { DbClient } from '../localDb/client/DbClient';
 import { EmbeddingService } from './EmbeddingService';
-import { getClientEndpoint } from '../clientEndpointsService';
-
-/** 兜底常量(仅 deps 未注入时);生产接线一律注入运行期函数(bootstrap-electron)。 */
 
 export type { EmbeddingProvider, EmbeddingJobForProvider } from './providers';
 export type { EmbeddingService } from './EmbeddingService';
@@ -30,8 +27,11 @@ export interface StartEmbeddingHostDeps {
   getDbClient: () => DbClient;
   isVecAvailable: () => boolean;
   getApiKey: () => string | null | undefined;
-  /** 可选:覆盖 xdproxy base URL;函数形态 = 每次请求现取(endpoint 运行期可变)。 */
-  xdproxyBaseUrl?: string | (() => string);
+  /**
+   * xdproxy base URL(生产接线注入 effectiveXdGatewayBaseUrl,见 bootstrap-electron);
+   * 函数形态 = 每次请求现取(model-access 下发的 endpoint 运行期可变)。
+   */
+  xdproxyBaseUrl: string | (() => string);
   log: ReturnType<typeof createLogger>;
   /** 可选: 注入 fetch (测试用) */
   fetchImpl?: typeof fetch;
@@ -46,9 +46,7 @@ export function startEmbeddingHost(deps: StartEmbeddingHostDeps): EmbeddingServi
     return _service;
   }
   const clientOpts: EmbeddingClientOptions = {
-    // startEmbeddingHost 在 localDb ready 之后调用,晚于 initClientEndpoints,
-    // 此处读清单值安全(init 前读会抛,启动时序 bug 直接炸出来)。
-    baseUrl: deps.xdproxyBaseUrl ?? getClientEndpoint('xdGatewayBaseUrl'),
+    baseUrl: deps.xdproxyBaseUrl,
     getApiKey: deps.getApiKey,
     fetchImpl: deps.fetchImpl,
     logger: {

@@ -31,12 +31,11 @@ vi.mock('node:fs', async () => {
   };
 });
 
-// runtime-configs 运行期读端点清单;单测里没有 initClientEndpoints,mock 成 fixture 直读。
-vi.mock('../../clientEndpointsService.js', async () => {
-  const { TEST_CLIENT_ENDPOINTS } = await import('../../../test/vitest/clientEndpointsFixture');
-  return {
-    getClientEndpoint: (key: keyof typeof TEST_CLIENT_ENDPOINTS) => TEST_CLIENT_ENDPOINTS[key],
-  };
+// runtime-configs 经 effectiveXdGatewayBaseUrl 读 model-access 下发的 endpoint;
+// 本测试不断言端点,mock 成 fixture 值只为隔离 credentialsStore 的文件 IO。
+vi.mock('../../model-access/effectiveEndpoint.js', async () => {
+  const { TEST_XD_GATEWAY_BASE_URL } = await import('../../../test/vitest/clientEndpointsFixture');
+  return { effectiveXdGatewayBaseUrl: () => TEST_XD_GATEWAY_BASE_URL };
 });
 
 describe('runtime-configs', () => {

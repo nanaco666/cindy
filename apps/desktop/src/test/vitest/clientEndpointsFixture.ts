@@ -13,6 +13,11 @@
  */
 import type { ClientEndpointMap } from '@lizi/maker-shared/client-endpoints';
 
+/**
+ * XD 网关测试值:清单已不承载网关端点(2026-07-17 退役 xdGatewayBaseUrl),
+ * 运行期一律来自 model-access server 下发(effectiveXdGatewayBaseUrl)。测试里
+ * 需要网关 URL 时,mock `model-access/effectiveEndpoint.js` 返回本常量。
+ */
 export const TEST_XD_GATEWAY_BASE_URL = 'https://gateway.test.invalid';
 export const TEST_CDN_BASE_URL = 'https://cdn.test.invalid/app';
 
@@ -25,7 +30,6 @@ export const TEST_CLIENT_ENDPOINTS: ClientEndpointMap = {
   heartbeatUrl: 'https://heartbeat.test.invalid',
   slackHookWsUrl: 'wss://slack-hook.test.invalid',
   websiteUrl: 'https://website.test.invalid',
-  xdGatewayBaseUrl: TEST_XD_GATEWAY_BASE_URL,
   modelAccessApiBaseUrl: 'https://model-access.test.invalid',
   cdnBaseUrl: TEST_CDN_BASE_URL,
   mobileUpdateBaseUrl: 'https://mobile-update.test.invalid',

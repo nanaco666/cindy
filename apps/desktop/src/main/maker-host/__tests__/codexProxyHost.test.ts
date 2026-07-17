@@ -68,6 +68,12 @@ vi.mock('../../clientEndpointsService.js', async () => {
   };
 });
 
+// 网关端点运行期来自 model-access 下发(effectiveXdGatewayBaseUrl),mock 成 fixture 值。
+vi.mock('../../model-access/effectiveEndpoint.js', async () => {
+  const { TEST_XD_GATEWAY_BASE_URL } = await import('../../../test/vitest/clientEndpointsFixture');
+  return { effectiveXdGatewayBaseUrl: () => TEST_XD_GATEWAY_BASE_URL };
+});
+
 vi.mock('@lizi/anthropic-compat-proxy', () => ({
   createAnthropicCompatProxy: mockState.createAnthropicCompatProxy,
   createInstructionsInjectionTransform: mockState.createInstructionsInjectionTransform,

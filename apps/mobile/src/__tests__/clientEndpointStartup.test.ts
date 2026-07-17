@@ -28,7 +28,6 @@ const FULL_MANIFEST_OBJECT = {
   heartbeatUrl: 'https://heartbeat-next.example.com',
   slackHookWsUrl: 'wss://hook-next.example.com',
   websiteUrl: 'https://www.next.example.com',
-  xdGatewayBaseUrl: 'https://gateway-next.example.com',
   modelAccessApiBaseUrl: 'https://model-access-next.example.com',
   cdnBaseUrl: 'https://cdn-next.example.com/app',
   mobileUpdateBaseUrl: 'https://mobile-update-next.example.com',
@@ -49,7 +48,8 @@ describe('runStartupEndpointResolve(清单即唯一事实源)', () => {
     expect(env.API_BASE_URL).toBe('https://api-next.example.com');
     expect(env.AUTH_API_BASE_URL).toBe('https://auth-next.example.com'); // 单一字段无脑取
     expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay-next.example.com');
-    expect(env.MOBILE_VOICE_LITELLM_BASE_URL).toBe('https://gateway-next.example.com');
+    // 语音网关地址与清单解耦(xdGatewayBaseUrl 已退役):保持构建期 env 值不动
+    expect(env.MOBILE_VOICE_LITELLM_BASE_URL).toBe('https://gateway.example.invalid');
     // 非自建变体(IS_OTA_SELFHOST=false):mobileUpdateBaseUrl 不覆写,恒空串
     expect(env.OTA_SERVER_BASE_URL).toBe('');
   });

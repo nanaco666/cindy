@@ -3860,6 +3860,7 @@
       "REMOTE_DAEMON_CLOSED": "远端连接已中断（daemon 可能正在升级或重启）。本轮已结束 — 请重新发送。",
       "REMOTE_LOCAL_ATTACHMENT_UNSUPPORTED": "远端会话无法访问本地文件/图片附件。请直接粘贴内容。",
       "REMOTE_COMPAT_MODE_UNSUPPORTED": "远端 Claude Code 会话无法通过本地兼容代理路由(内部错误,请反馈)。",
+      "REMOTE_GATEWAY_ENDPOINT_UNAVAILABLE": "网关凭据尚未就绪(登录后由服务端自动下发)。请稍候重试;若持续出现,请到 设置 → 模型供应商 检查 XD Gateway 连接状态。",
       "DEVICE_LINK_CONTROL_DISABLED": "已关闭对该设备的控制,消息未发送。",
       "DEVICE_LINK_MEDIA_TRANSFER_FAILED": "附件传输失败,消息未发送。请重试。"
     },

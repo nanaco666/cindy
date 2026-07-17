@@ -1419,6 +1419,19 @@ export class ClaudeCodeAgent extends BaseAgent {
           remoteHostId: opts.remoteHostId,
           sessionId: opts.sessionId,
         });
+        // 远端真上游由 host 经 runtimeConfig.remoteEndpoint 提供(model-access 下发的
+        // 网关 endpoint)。host 定义了该字段但值为空 = 网关凭据尚未就绪 / 已失效——
+        // 此时 env-builder 会回落到本地 endpoint,下面的 loopback guard 虽也能拦,
+        // 但错误归因是「内部错误」,按它排查会走进死胡同。这里先按真实原因拒绝。
+        // (`!== undefined` 区分未注入该字段的旧 host:保持其原有回落行为。)
+        if (
+          this.deps.runtimeConfig.remoteEndpoint !== undefined &&
+          !this.deps.runtimeConfig.remoteEndpoint.trim()
+        ) {
+          throw new Error(
+            '[REMOTE_GATEWAY_ENDPOINT_UNAVAILABLE] Remote Claude Code sessions need the XD gateway endpoint issued after sign-in; gateway credentials are not ready on this desktop yet.',
+          );
+        }
         // Defense-in-depth: a remote machine can't reach the host's local loopback
         // compat-proxy. The host guarantees remote env uses the real upstream gateway
         // via runtimeConfig.remoteEndpoint (see desktop runtime-configs.ts +

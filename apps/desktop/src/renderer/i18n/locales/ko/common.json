@@ -3860,6 +3860,7 @@
       "REMOTE_DAEMON_CLOSED": "원격 연결이 중단되었습니다(daemon이 업그레이드 또는 재시작 중일 수 있습니다). 턴이 종료되었습니다 — 다시 전송하세요.",
       "REMOTE_LOCAL_ATTACHMENT_UNSUPPORTED": "원격 세션에서는 로컬 파일/이미지 첨부에 접근할 수 없습니다. 내용을 직접 붙여넣으세요.",
       "REMOTE_COMPAT_MODE_UNSUPPORTED": "원격 Claude Code 세션은 로컬 호환 프록시를 통해 라우팅할 수 없습니다(내부 오류).",
+      "REMOTE_GATEWAY_ENDPOINT_UNAVAILABLE": "게이트웨이 자격 증명이 아직 준비되지 않았습니다(로그인 후 자동 발급됩니다). 잠시 후 다시 시도해 주세요. 계속되면 설정 → 모델 제공자에서 XD Gateway 연결 상태를 확인하세요.",
       "DEVICE_LINK_CONTROL_DISABLED": "이 기기의 제어가 꺼져 있어 메시지가 전송되지 않았습니다.",
       "DEVICE_LINK_MEDIA_TRANSFER_FAILED": "첨부 파일 전송에 실패했습니다. 메시지가 전송되지 않았습니다. 다시 시도하세요."
     },

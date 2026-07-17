@@ -16,7 +16,6 @@ const VALID_MANIFEST = {
   heartbeatUrl: 'https://heartbeat.example.com',
   slackHookWsUrl: 'wss://slack-hook.example.com',
   websiteUrl: 'https://www.example.com',
-  xdGatewayBaseUrl: 'https://gateway.example.com',
   modelAccessApiBaseUrl: 'https://model-access.example.com',
   cdnBaseUrl: 'https://cdn.example.com/app',
   mobileUpdateBaseUrl: 'https://mobile-update.example.com',
@@ -97,16 +96,18 @@ describe('parseClientEndpointManifest(全字段必填)', () => {
     expect(parseClientEndpointManifest(raw)).toEqual({ ok: false, reason });
   });
 
-  it('忽略已退役字段 cdnInternalBaseUrl(老清单向前兼容)', () => {
+  it('忽略已退役字段 cdnInternalBaseUrl / xdGatewayBaseUrl(老清单向前兼容)', () => {
     const result = parseClientEndpointManifest(
       JSON.stringify({
         ...VALID_MANIFEST,
         cdnInternalBaseUrl: 'http://cdn-internal.example.com:20080/app',
+        xdGatewayBaseUrl: 'https://gateway.example.com',
       }),
     );
     expect(result).toMatchObject({ ok: true });
     if (!result.ok) throw new Error('unreachable');
     expect('cdnInternalBaseUrl' in result.endpoints).toBe(false);
+    expect('xdGatewayBaseUrl' in result.endpoints).toBe(false);
   });
 });
 

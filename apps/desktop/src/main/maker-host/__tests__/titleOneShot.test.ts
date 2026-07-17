@@ -12,18 +12,11 @@
  * 无 electron 的 vitest 里加载;真正的凭证 / fetch / 会话 provider 全部经 deps 注入,不碰真实实现。
  */
 
-import fs from 'node:fs';
-
 import { describe, expect, it, vi } from 'vitest';
 
-// xd 网关上游的交叉校验源:catalog(providers.json)的 xd routing.upstream 必须与
-// 端点清单正本 config/endpoint.json 的 xdGatewayBaseUrl 同源(原实现对照构建期
-// 烘焙值,清单重构后烘焙值退役,改对照仓内清单正本——两份配置漂移时在此炸出)。
-const XD_GATEWAY_BASE_URL = (
-  JSON.parse(
-    fs.readFileSync(new URL('../../../../../../config/endpoint.json', import.meta.url), 'utf8'),
-  ) as { xdGatewayBaseUrl: string }
-).xdGatewayBaseUrl;
+// xd 网关上游运行期来自 model-access server 下发(effectiveXdGatewayBaseUrl),
+// 端点清单已不承载网关端点(2026-07-17 退役)——单测 mock 成 fixture 值。
+import { TEST_XD_GATEWAY_BASE_URL as XD_GATEWAY_BASE_URL } from '../../../test/vitest/clientEndpointsFixture';
 
 vi.mock('electron', () => ({
   app: {
@@ -39,13 +32,11 @@ vi.mock('@lizi/maker-core', () => ({
   toSdkModelString: (m: string) => (m === 'claude-haiku-4-5' ? 'claude-haiku-4-5-20251001' : m),
 }));
 
-// SUT 链(runtime-configs.claudeUpstreamEndpoint)运行期读端点清单;单测里没有
-// initClientEndpoints,mock 成 fixture 直读(与 XD_GATEWAY_BASE_URL 断言值同源)。
-vi.mock('../../clientEndpointsService.js', async () => {
-  const { TEST_CLIENT_ENDPOINTS } = await import('../../../test/vitest/clientEndpointsFixture');
-  return {
-    getClientEndpoint: (key: keyof typeof TEST_CLIENT_ENDPOINTS) => TEST_CLIENT_ENDPOINTS[key],
-  };
+// SUT 链(runtime-configs.claudeUpstreamEndpoint → effectiveXdGatewayBaseUrl)运行期读
+// model-access 下发的 endpoint;单测 mock 成 fixture 值(与 XD_GATEWAY_BASE_URL 断言值同源)。
+vi.mock('../../model-access/effectiveEndpoint.js', async () => {
+  const { TEST_XD_GATEWAY_BASE_URL } = await import('../../../test/vitest/clientEndpointsFixture');
+  return { effectiveXdGatewayBaseUrl: () => TEST_XD_GATEWAY_BASE_URL };
 });
 
 import {

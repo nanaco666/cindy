@@ -1,11 +1,12 @@
 /**
  * env live binding 顶层捕获守门(静态断言,desktop endpointEnvUsageGuard 同款思路)。
  *
- * env.ts 的四个运行期端点是 `export let` live binding:启动闸门拉到远程端点清单后
+ * env.ts 的三个运行期端点是 `export let` live binding:启动闸门拉到远程端点清单后
  * 重赋值,消费点必须**调用时读取**。任何模块顶层 `const X = <binding>` 派生都会在
  * bundle 求值期拷贝烘焙值、永远吃不到远程覆写——不报错、typecheck 拦不住,只有改
- * OSS 清单时才暴露(P1 实例:mobileVoiceLiteLlmSettings 曾顶层拷贝
- * MOBILE_VOICE_LITELLM_BASE_URL)。
+ * OSS 清单时才暴露(P1 实例:mobileVoiceLiteLlmSettings 曾顶层拷贝当时还是 live
+ * binding 的 MOBILE_VOICE_LITELLM_BASE_URL;该值已随清单 xdGatewayBaseUrl 退役
+ * 改为构建期常量,不再入列)。
  *
  * 启发式:凡 import 了这些 binding 的源码文件,顶层(非缩进)const 声明行不得引用
  * binding 名。需要顶层派生时改成惰性函数(参考 mobileVoiceLiteLlmDefaultProxyBaseUrl)。
@@ -24,7 +25,6 @@ const LIVE_BINDINGS = [
   'API_BASE_URL',
   'AUTH_API_BASE_URL',
   'DEVICE_LINK_API_BASE_URL',
-  'MOBILE_VOICE_LITELLM_BASE_URL',
 ];
 
 // 顶层 const 声明行(无缩进),初始化器引用了任一 live binding(词边界,排除

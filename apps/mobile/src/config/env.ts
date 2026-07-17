@@ -41,10 +41,11 @@ export const DEFAULT_DEVICE_LINK_API_BASE_URL =
   configuredValue('EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL') ||
   DEV_MANIFEST.deviceLinkApiBaseUrl ||
   '';
+// 语音网关(litellm)地址不再有清单默认值(2026-07-17 退役 xdGatewayBaseUrl):
+// 正常链路由桌面端经 device-link 凭据同步下发 proxyBaseUrl(desktop 侧来自
+// model-access server 下发的 endpoint);本值仅供本地 e2e / dev 显式覆写。
 export const DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL =
-  configuredValue('EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL') ||
-  DEV_MANIFEST.xdGatewayBaseUrl ||
-  '';
+  configuredValue('EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL') || '';
 
 export interface MobileConfigIssue {
   key: string;
@@ -161,10 +162,11 @@ export let DEVICE_LINK_API_BASE_URL = resolveDeviceLinkApiBaseUrl(
   API_BASE_URL,
 );
 
-export let MOBILE_VOICE_LITELLM_BASE_URL = normalizeBaseUrlWithDefault(
-  configuredValue('EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL'),
-  DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL,
-);
+// 非 live binding(清单不再承载语音网关地址,启动闸门无覆写路径):env 覆写为空时
+// 即空串,真实地址走桌面端凭据同步(mobileVoiceCredentialStore 的 proxyBaseUrl)。
+export const MOBILE_VOICE_LITELLM_BASE_URL = DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL
+  ? normalizeBaseUrlWithDefault(DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL, '')
+  : '';
 
 // 端点清单(endpoint.json)的自举拉取基址(启动闸门专用),按 region 构建期二选一
 // 烘焙(EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL ← production-endpoints.json 的
@@ -185,7 +187,6 @@ export function applyResolvedClientEndpoints(resolved: {
   apiBaseUrl?: string;
   authApiBaseUrl?: string;
   deviceLinkApiBaseUrl?: string;
-  xdGatewayBaseUrl?: string;
   mobileUpdateBaseUrl?: string;
 }): void {
   if (resolved.apiBaseUrl) {
@@ -200,12 +201,6 @@ export function applyResolvedClientEndpoints(resolved: {
     DEVICE_LINK_API_BASE_URL = resolveDeviceLinkApiBaseUrl(
       configuredValue('EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL'),
       API_BASE_URL,
-    );
-  }
-  if (resolved.xdGatewayBaseUrl) {
-    MOBILE_VOICE_LITELLM_BASE_URL = normalizeBaseUrlWithDefault(
-      resolved.xdGatewayBaseUrl,
-      MOBILE_VOICE_LITELLM_BASE_URL,
     );
   }
   // 仅自建变体吃清单覆写,保住「非自建 ⇒ OTA_SERVER_BASE_URL 恒空串」不变量

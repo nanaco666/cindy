@@ -32,7 +32,6 @@ const CN_MANIFEST = JSON.stringify({
   heartbeatUrl: 'https://heartbeat.example.invalid',
   slackHookWsUrl: 'wss://hook.example.invalid',
   websiteUrl: 'https://website.example.invalid',
-  xdGatewayBaseUrl: 'https://gateway.example.invalid',
   cdnBaseUrl: 'https://cdn.example.invalid/app',
   mobileUpdateBaseUrl: 'https://mobile-update.example.invalid',
 });
@@ -81,7 +80,6 @@ test('生成物能过客户端 parser 的 allowHttp 校验(与仓内正本同一
     'heartbeatUrl',
     'slackHookWsUrl',
     'websiteUrl',
-    'xdGatewayBaseUrl',
     'cdnBaseUrl',
     'mobileUpdateBaseUrl',
   ];

@@ -16,8 +16,9 @@ const log = createLogger('modelAccessStore');
  *  - endpoint:source='server' 时服务端下发的推理入口。
  *
  * 核心不变量:**endpoint 与 key 同源**——server 下发的 key 配 server 下发的
- * endpoint;手填 key 一律配编译期常量 XD_GATEWAY_BASE_URL(见 runtime-configs
- * 的 getClaudeUpstreamEndpoint)。杜绝「手填旧 key + 新 endpoint」的撕裂组合。
+ * endpoint;无 server 标记(存量手填 key / 从未同步)时 effectiveEndpoint 返回
+ * 空串 = 网关不可用(2026-07-17 定案,端点清单的 xdGatewayBaseUrl 已退役)。
+ * 杜绝「手填旧 key + 新 endpoint」的撕裂组合。
  *
  * 账号切换:key 由 providerSecretStore.reconcileOwner 负责清理;本 store 的
  * endpoint 残留在无 key 时是惰性数据(所有消费都要求 key 存在),新账号登录后
@@ -36,7 +37,7 @@ export interface ModelAccessCredentialsStore {
   getServerEndpoint(): string | null;
   /** 服务端下发成功后记录(覆盖旧标记)。 */
   setServerCredentials(endpoint: string): void;
-  /** 用户手填保存成功后记录(endpoint 回落常量,不存)。 */
+  /** 用户手填保存成功后记录(manual 无配套 endpoint,effectiveEndpoint 视为网关不可用)。 */
   setManualSource(): void;
   /** 清除标记(手填 key 被删除等)。 */
   clear(): void;
@@ -110,7 +111,7 @@ export function createModelAccessCredentialsStore(
       if (state === null) io.remove();
       else io.write(JSON.stringify(state));
     } catch (err) {
-      // 落盘失败只影响下次冷启动的 endpoint 记忆(回落常量),不阻断主流程。
+      // 落盘失败只影响下次冷启动的 endpoint 记忆(冷启动首轮同步前网关暂不可用),不阻断主流程。
       log.warn(
         { err: err instanceof Error ? err.message : String(err) },
         'persist model-access credentials meta failed',

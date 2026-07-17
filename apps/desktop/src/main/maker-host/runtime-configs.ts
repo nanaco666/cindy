@@ -99,9 +99,9 @@ const staticClaudeBehaviorFlags = {
  * 非 Claude 模型(gpt-5.4 / kimi 等)的请求里 strip 掉,绕开上游 Azure backend
  * "Unknown parameter" 400 错误。
  */
-// 惰性函数而非模块级常量:远程端点清单在 app.ready 内解析,顶层求值会钉死在烘焙值。
-// model-access 自动下发生效时(source='server')返回下发的租户 endpoint,否则回落
-// 端点清单值——保证 key 与 endpoint 永远同租户(见 model-access/effectiveEndpoint.ts)。
+// 惰性函数而非模块级常量:model-access 凭据同步在登录后才写入 endpoint,顶层求值会钉死空值。
+// 只认 server 随凭据成对下发的租户 endpoint,同步成功前返回空串(网关不可用)——
+// 保证 key 与 endpoint 永远同租户(见 model-access/effectiveEndpoint.ts)。
 export function claudeUpstreamEndpoint(): string {
   return effectiveXdGatewayBaseUrl();
 }

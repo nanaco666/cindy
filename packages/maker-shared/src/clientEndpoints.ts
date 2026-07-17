@@ -42,6 +42,11 @@
  *    cdnBaseUrl)同样没有 bump:删必填字段对**新客户端**是纯放松(清单里多出
  *    的该字段按未知字段忽略);退役时新路径清单尚无已发布的 packaged 消费者,
  *    线上清单已同步删除,无兼容包袱。
+ *  - 2026-07-17 退役 xdGatewayBaseUrl(同样不 bump,理由同上):XD 网关推理
+ *    入口一律由 model-access server 随凭据成对下发(desktop
+ *    model-access/effectiveEndpoint.ts),清单不再承载网关端点,杜绝
+ *    「key 与 endpoint 不同租户」的撕裂组合;mobile 语音的网关地址经桌面端
+ *    device-link 凭据同步获得,不再吃清单默认值。
  */
 
 /** 当前客户端支持的清单 schema 版本;清单里更大的版本号会被整份拒绝。 */
@@ -64,7 +69,6 @@ export const CLIENT_ENDPOINT_KEYS = [
   'heartbeatUrl',
   'slackHookWsUrl',
   'websiteUrl',
-  'xdGatewayBaseUrl',
   // model-access-server(登录后自动下发 LLM 网关凭据)的 API 基址。
   'modelAccessApiBaseUrl',
   // 更新/hotfix 链的 CDN base(manifest-*.json / hotfix 包 / agent 二进制)。
@@ -91,7 +95,6 @@ const FIELD_PROTOCOLS: Record<ClientEndpointKey, readonly string[]> = {
   heartbeatUrl: ['https:'],
   slackHookWsUrl: ['wss:'],
   websiteUrl: ['https:'],
-  xdGatewayBaseUrl: ['https:'],
   modelAccessApiBaseUrl: ['https:'],
   cdnBaseUrl: ['https:'],
   mobileUpdateBaseUrl: ['https:'],
