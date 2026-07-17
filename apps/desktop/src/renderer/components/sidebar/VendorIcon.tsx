@@ -7,7 +7,7 @@
  *
  * 状态(不变):
  *   - idle (默认)   : Stone 灰 #737373 / dark #a3a3a3
- *   - running=true  : 品牌红系(== --sidebar-item-active,E1D 侧栏强调态;与 E5D 状态点橙 #EA6B17 解耦——状态点归橙,行首强调箭头归红)+ session-breathing 呼吸
+ *   - running=true  : 品牌红系(== --sidebar-item-active,E1D 侧栏强调态;与 E5D 状态点新橙解耦——状态点归橙,行首强调箭头归红)+ session-breathing 呼吸
  *
  * 设计参考:doc/design_docs/cc-agent-view.pen 节点 ugsrn (方案 C)。
  */
@@ -29,7 +29,7 @@ export function VendorIcon({ vendor, size = 12, running = false, className }: Ve
   const wrapperClassName = cn(
     'inline-flex shrink-0',
     running
-      ? 'text-[hsl(var(--sidebar-item-active))] session-status-breathing'
+      ? 'text-sidebar-item-active session-status-breathing'
       : 'text-[hsl(var(--sidebar-muted))]',
     className,
   );
