@@ -226,6 +226,130 @@ describe('session import IPC', () => {
     });
   });
 
+  it('normalizes candidate cwd without replacing it with the grouped project directory', async () => {
+    vi.mocked(scanExternalCodexSessions).mockResolvedValue({
+      homes: [path.join('/tmp', 'external-codex-home')],
+      candidates: [
+        {
+          source: 'codex',
+          id: 'codex-dialogue',
+          title: 'Codex Dialogue',
+          cwd: '\\\\?\\C:\\Users\\a\\dialogue',
+          workspaceKind: 'dialogue',
+          updatedAt: 1_779_200_001_000,
+          archived: false,
+          sourceHome: path.join('/tmp', 'external-codex-home'),
+        },
+        {
+          source: 'codex',
+          id: 'codex-worktree',
+          title: 'Codex Worktree',
+          cwd: '\\\\?\\D:\\projects\\demo\\.worktrees\\fix-51',
+          workspaceKind: 'project',
+          updatedAt: 1_779_200_002_000,
+          archived: false,
+          sourceHome: path.join('/tmp', 'external-codex-home'),
+        },
+        {
+          source: 'codex',
+          id: 'codex-windows',
+          title: 'Codex Windows',
+          cwd: 'E:\\projects\\plain',
+          workspaceKind: 'project',
+          updatedAt: 1_779_200_003_000,
+          archived: false,
+          sourceHome: path.join('/tmp', 'external-codex-home'),
+        },
+        {
+          source: 'codex',
+          id: 'codex-posix',
+          title: 'Codex POSIX',
+          cwd: '/Users/a/projects/plain',
+          workspaceKind: 'project',
+          updatedAt: 1_779_200_004_000,
+          archived: false,
+          sourceHome: path.join('/tmp', 'external-codex-home'),
+        },
+      ],
+      rejectedCount: 0,
+    });
+    vi.mocked(scanExternalClaudeCodeSessions).mockResolvedValue({
+      roots: [path.join('/tmp', 'external-claude-projects')],
+      candidates: [
+        {
+          source: 'claude',
+          id: 'claude-drive',
+          title: 'Claude Drive',
+          cwd: '\\\\?\\F:\\projects\\demo',
+          updatedAt: 1_779_200_005_000,
+          archived: false,
+          sourceFile: path.join('/tmp', 'drive.jsonl'),
+        },
+        {
+          source: 'claude',
+          id: 'claude-extended-unc',
+          title: 'Claude Extended UNC',
+          cwd: '\\\\?\\UNC\\server\\share\\repo',
+          updatedAt: 1_779_200_006_000,
+          archived: false,
+          sourceFile: path.join('/tmp', 'extended-unc.jsonl'),
+        },
+        {
+          source: 'claude',
+          id: 'claude-unc',
+          title: 'Claude UNC',
+          cwd: '\\\\server\\share\\plain',
+          updatedAt: 1_779_200_007_000,
+          archived: false,
+          sourceFile: path.join('/tmp', 'unc.jsonl'),
+        },
+      ],
+      rejectedCount: 0,
+    });
+
+    const scan = mocks.handlers.get('local-db:session-import:scan');
+    const result = await scan?.() as { candidates: unknown[] };
+
+    expect(result.candidates).toHaveLength(7);
+    expect(result.candidates).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'codex:codex-dialogue',
+        cwd: 'C:/Users/a/dialogue',
+        projectDir: null,
+      }),
+      expect.objectContaining({
+        key: 'codex:codex-worktree',
+        cwd: 'D:/projects/demo/.worktrees/fix-51',
+        projectDir: 'D:/projects/demo',
+      }),
+      expect.objectContaining({
+        key: 'codex:codex-windows',
+        cwd: 'E:/projects/plain',
+        projectDir: 'E:/projects/plain',
+      }),
+      expect.objectContaining({
+        key: 'codex:codex-posix',
+        cwd: '/Users/a/projects/plain',
+        projectDir: '/Users/a/projects/plain',
+      }),
+      expect.objectContaining({
+        key: 'claude:claude-drive',
+        cwd: 'F:/projects/demo',
+        projectDir: 'F:/projects/demo',
+      }),
+      expect.objectContaining({
+        key: 'claude:claude-extended-unc',
+        cwd: '//server/share/repo',
+        projectDir: '//server/share/repo',
+      }),
+      expect.objectContaining({
+        key: 'claude:claude-unc',
+        cwd: '//server/share/plain',
+        projectDir: '//server/share/plain',
+      }),
+    ]));
+  });
+
   it('reuses automatic scan results, allows forced refresh, and invalidates after import', async () => {
     vi.mocked(scanExternalCodexSessions).mockResolvedValue({
       homes: [path.join('/tmp', 'external-codex-home')],

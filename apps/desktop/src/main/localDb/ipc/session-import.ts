@@ -19,7 +19,10 @@ import {
   scanExternalClaudeCodeSessions,
 } from '../../maker-host/claude-local-sessions.js';
 import { dialogueWorkspaceRootDir } from '../dialogueWorkspace.js';
-import { normalizeWorkingDirForGrouping } from '../../../shared/workingDir.js';
+import {
+  normalizeWorkingDirForGrouping,
+  normalizeWorkingDirForStorage,
+} from '../../../shared/workingDir.js';
 
 const log = createLogger('session-import');
 
@@ -191,26 +194,26 @@ async function runSessionImportScan(): Promise<SessionImportScanResult> {
         existingCount += 1;
         return [];
       }
-      const normalizedDir = normalizeWorkingDir(item.cwd);
-      if (isManagedDialogueWorkingDir(normalizedDir)) {
+      const cwd = normalizeWorkingDirForStorage(item.cwd) ?? item.cwd;
+      const projectDir = normalizeWorkingDir(cwd);
+      if (isManagedDialogueWorkingDir(projectDir)) {
         existingCount += 1;
         managedDialogueCount += 1;
         return [];
       }
       // 无项目 Codex 会话仍保留原 cwd 供 resume / 文件访问使用，
       // 但这个 cwd 不应该作为侧边栏项目根目录。
-      const projectDir = item.workspaceKind === 'project' ? normalizedDir : null;
       return [{
         key: `codex:${item.id}`,
         source: 'codex',
         id: item.id,
         title: item.title,
-        cwd: item.cwd,
+        cwd,
         updatedAt: new Date(item.updatedAt).toISOString(),
         archived: item.archived,
         workspaceKind: item.workspaceKind,
         sidebarBucket: item.workspaceKind,
-        projectDir,
+        projectDir: item.workspaceKind === 'project' ? projectDir : null,
       }];
     }),
     ...claude.candidates.flatMap((item): ImportCandidate[] => {
@@ -223,19 +226,19 @@ async function runSessionImportScan(): Promise<SessionImportScanResult> {
         existingCount += 1;
         return [];
       }
-      const normalizedDir = normalizeWorkingDir(item.cwd);
-      if (isManagedDialogueWorkingDir(normalizedDir)) {
+      const cwd = normalizeWorkingDirForStorage(item.cwd) ?? item.cwd;
+      const projectDir = normalizeWorkingDir(cwd);
+      if (isManagedDialogueWorkingDir(projectDir)) {
         existingCount += 1;
         managedDialogueCount += 1;
         return [];
       }
-      const projectDir = normalizedDir;
       return [{
         key: `claude:${item.id}`,
         source: 'claude',
         id: item.id,
         title: item.title,
-        cwd: item.cwd,
+        cwd,
         updatedAt: new Date(item.updatedAt).toISOString(),
         archived: item.archived,
         workspaceKind: 'project',
