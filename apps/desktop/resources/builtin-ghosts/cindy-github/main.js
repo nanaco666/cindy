@@ -1131,14 +1131,21 @@ op('get_ref', 'git_data', '取单个 ref(如 heads/main、tags/v1.0.0)', REPO_DO
     return api({ url: r.base + '/git/ref/' + encPath(a.ref), callId: c });
   });
 
-op('create_branch', 'git_data', '建分支(from_sha 或 from_ref 二选一,都省略从 main 拉)',
-  REPO_DOC + ', branch*:string, from_sha?:string, from_ref?:string(默认 main)',
+op('create_branch', 'git_data', '建分支(from_sha 或 from_ref 二选一,都省略时从仓库默认分支拉)',
+  REPO_DOC + ', branch*:string, from_sha?:string, from_ref?:string(默认仓库 default_branch)',
   async function (a, c) {
     var r = repoBase(a); if (r.err) return r;
     if (!a.branch) return { err: '需要 branch' };
     var sha = a.from_sha;
     if (!sha) {
-      var got = await api({ url: r.base + '/git/ref/heads/' + encPath(a.from_ref || 'main'), callId: c });
+      var fromRef = a.from_ref;
+      if (!fromRef) {
+        var repo = await api({ url: r.base, callId: c });
+        if (repo.err) return repo;
+        fromRef = repo.data && repo.data.default_branch;
+        if (!fromRef) return { err: '取不到仓库默认分支' };
+      }
+      var got = await api({ url: r.base + '/git/ref/heads/' + encPath(fromRef), callId: c });
       if (got.err) return got;
       sha = got.data && got.data.object && got.data.object.sha;
       if (!sha) return { err: '取不到起点分支的 sha' };
