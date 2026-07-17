@@ -1,5 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, protocol, safeStorage, screen, session, shell } from 'electron';
 import { resolveVibrancyConfig } from './vibrancyConfig';
+import { applyVibrancyToSecondaryWindows } from './secondary-windows';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -1939,6 +1940,7 @@ function applyWindowVibrancy(familyId: string, isDark: boolean): void {
     win.setVibrancy(config.vibrancy as 'under-window' | null);
   }
   win.setBackgroundColor(config.backgroundColor);
+  applyVibrancyToSecondaryWindows(familyId, isDark);
 }
 
 ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark: boolean }) => {
