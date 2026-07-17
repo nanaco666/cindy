@@ -197,6 +197,29 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     };
   }, [theme]);
 
+  // 跨窗口主题同步:其他窗口切 theme/familyId 时(localStorage storage 事件,
+  // 本窗口 setItem 不触发 storage)刷新本窗口 state + 重应用主题,否则已打开的
+  // sidebar-window/副窗在主窗切 CINDY/亮暗时不跟随(B 实证 bug,计划 D2-3)。
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY) {
+        const next = e.newValue;
+        if (next === 'light' || next === 'dark' || next === 'system') {
+          setThemeState(next);
+          applyThemeClass(next);
+        }
+      } else if (e.key === FAMILY_KEY) {
+        const next = e.newValue;
+        if (next && tryGetFamily(next)) {
+          setFamilyIdState(next);
+          applyThemeClass(getStoredTheme());
+        }
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
   const fallbackFromType = useMemo<ThemeType | null>(() => {
     const family = getFamily(familyId);
     const isDarkRequested =

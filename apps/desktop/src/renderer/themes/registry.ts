@@ -7,6 +7,8 @@ import { materialOceanHC } from './builtin/material-ocean-hc';
 import { monokaiPro } from './builtin/monokai-pro';
 import { oneDarkPro } from './builtin/one-dark-pro';
 import { solarizedLight } from './builtin/solarized-light';
+import { cindyDark } from './builtin/cindy-dark';
+import { cindyLight } from './builtin/cindy-light';
 import { getLocalThemes } from './local-themes';
 import {
   ATOM_ONE_LIGHT_ID,
@@ -18,6 +20,8 @@ import {
   SOLARIZED_LIGHT_ID,
   THEME_DARK_ID,
   THEME_LIGHT_ID,
+  CINDY_LIGHT_ID,
+  CINDY_DARK_ID,
 } from './theme-ids';
 import type { Theme, ThemeType } from './types';
 
@@ -25,6 +29,8 @@ export const builtinThemes: Record<string, Theme> = {
   [defaultLight.id]: defaultLight,
   [atomOneLight.id]: atomOneLight,
   [solarizedLight.id]: solarizedLight,
+  [cindyLight.id]: cindyLight,
+  [cindyDark.id]: cindyDark,
   [defaultDark.id]: defaultDark,
   [eclipse.id]: eclipse,
   [oneDarkPro.id]: oneDarkPro,
@@ -74,4 +80,6 @@ export {
   SOLARIZED_LIGHT_ID,
   THEME_DARK_ID,
   THEME_LIGHT_ID,
+  CINDY_LIGHT_ID,
+  CINDY_DARK_ID,
 };
