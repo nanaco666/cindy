@@ -39,6 +39,15 @@ describe('mermaidWebView', () => {
     expect(html).toContain('setTimeout(fail, 6000)');
   });
 
+  it('parse 失败兜底:注入 mermaidAutofix 修复版;合法源码注入空串跳过重试', () => {
+    const broken = buildMermaidWebViewHtml('flowchart TD\nA → B');
+    expect(broken).toContain('const repairedSource = "flowchart TD\\nA --\\u003e B"');
+    expect(broken).toContain('mobile-mermaid-diagram-fixed');
+
+    const ok = buildMermaidWebViewHtml('graph TD\nA --> B');
+    expect(ok).toContain('const repairedSource = ""');
+  });
+
   it('首屏源码经 HTML 转义(escapeHtmlText),不给注入留口', () => {
     const html = buildMermaidWebViewHtml('graph TD\nA["<b>x</b>"] --> B');
     expect(html).toContain('A[&quot;'.replace('&quot;', '"')); // 引号不转义,尖括号必须转义

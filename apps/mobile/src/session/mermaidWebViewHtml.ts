@@ -5,6 +5,8 @@
 // 2. mermaid JS 由内联脚本动态注入,带超时;
 // 3. CDN 按顺序 failover(jsdelivr → npmmirror,后者大陆可达性好),
 //    全部失败就停留在源码展示,永不长时间空转。
+import { repairMermaidSource } from '@lizi/maker-shared/mermaid-autofix';
+
 import { lightColors } from '@/theme/tokens';
 
 export const MOBILE_MERMAID_VERSION = '11.14.0';
@@ -38,6 +40,10 @@ export function buildMermaidWebViewHtml(source: string, theme: MermaidWebViewCol
   const mermaidTheme = theme.dark ? 'dark' : 'default';
   const trimmed = source.trim();
   const serializedSource = serializeForScript(trimmed);
+  // RN 侧预计算确定性修复版(mermaidAutofix):原文 parse 失败时 WebView 内用它
+  // 重试一次。无可修项时注入空串,WebView 侧跳过重试直接走源码降级。
+  const repaired = repairMermaidSource(trimmed);
+  const serializedRepaired = serializeForScript(repaired === trimmed ? '' : repaired);
   const cdnsJson = JSON.stringify(MOBILE_MERMAID_SCRIPT_URLS);
   return `<!doctype html>
 <html>
@@ -91,6 +97,7 @@ export function buildMermaidWebViewHtml(source: string, theme: MermaidWebViewCol
   <div id="root" class="source"><pre>${escapeHtmlText(trimmed) || '空 Mermaid 图表。'}</pre></div>
   <script>
     const source = ${serializedSource};
+    const repairedSource = ${serializedRepaired};
     const root = document.getElementById('root');
 
     function showSource(label) {
@@ -130,6 +137,18 @@ export function buildMermaidWebViewHtml(source: string, theme: MermaidWebViewCol
         root.className = '';
         root.innerHTML = rendered.svg;
       } catch (error) {
+        // 原文失败 → 用 RN 侧预算好的修复版重试一次;再失败才降级源码展示。
+        if (repairedSource) {
+          try {
+            await window.mermaid.parse(repairedSource);
+            const rendered = await window.mermaid.render('mobile-mermaid-diagram-fixed', repairedSource);
+            root.className = '';
+            root.innerHTML = rendered.svg;
+            return;
+          } catch (retryError) {
+            // fall through
+          }
+        }
         showSource('render failed');
       }
     }

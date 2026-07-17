@@ -13,6 +13,7 @@ export * from './deviceLinkContract.js';
 export * from './expandedBlockMemory.js';
 export * from './interaction.js';
 export * from './mathMarkdown.js';
+export * from './mermaidAutofix.js';
 export * from './messageRender.js';
 export * from './messageNormalize.js';
 export * from './messagePresentation.js';
