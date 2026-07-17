@@ -203,6 +203,8 @@ interface ModelSelectorProps {
   dense?: boolean;
   /** Trigger presentation: toolbar keeps the compact chat pill; field renders a settings input-like control. */
   triggerVariant?: 'toolbar' | 'field';
+  /** CREATE AGENT 首页按 Figma 185:2724 使用独立私有 token。 */
+  visualVariant?: 'default' | 'create-agent';
   /** Popover 弹出方向,默认 "top"（底部工具栏向上弹），dialog 内嵌场景传 "bottom"。 */
   popoverSide?: 'top' | 'bottom';
 }
@@ -898,6 +900,7 @@ export function ModelSelector({
   disabled = false,
   dense = false,
   triggerVariant = 'toolbar',
+  visualVariant = 'default',
   popoverSide = 'top',
   currentProviderId,
   sourceDisconnected = false,
@@ -999,6 +1002,7 @@ export function ModelSelector({
         : `Select model. Current: ${displayLabel}`;
   const isBudget = modelId.startsWith('codex/');
   const isFieldTrigger = triggerVariant === 'field';
+  const isCreateAgentVariant = visualVariant === 'create-agent';
   const budgetGradientStyle: CSSProperties | undefined = isBudget
     ? {
         background: 'var(--model-budget-gradient)',
@@ -1024,10 +1028,19 @@ export function ModelSelector({
                 )
               : cn(
                   'rounded-full',
-                  dense ? 'h-6' : 'h-7',
-                  noSource
-                    ? 'bg-[var(--surface-chip)] px-2.5 hover:bg-[var(--surface-hover)]'
-                    : 'bg-transparent px-2 hover:bg-[var(--model-trigger-hover)]',
+                  isCreateAgentVariant
+                    ? [
+                        'h-[30px] max-w-[100px] border border-[var(--create-agent-control-border)]',
+                        'bg-[var(--create-agent-control-bg)] px-2 text-[var(--create-agent-control-text)]',
+                        'hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)]',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
+                      ]
+                    : [
+                        dense ? 'h-6' : 'h-7',
+                        noSource
+                          ? 'bg-[var(--surface-chip)] px-2.5 hover:bg-[var(--surface-hover)]'
+                          : 'bg-transparent px-2 hover:bg-[var(--model-trigger-hover)]',
+                      ],
                 ),
             // device-link 远程切换 in-flight:置灰 + 禁用点击(复用本文件 disabled 行的 opacity-50 习惯)。
             (switching || disabled) && 'pointer-events-none opacity-50',
@@ -1036,12 +1049,19 @@ export function ModelSelector({
         >
           {noSource ? (
             <>
-              <PlugZap size={13} className="mr-0.5 shrink-0 text-[var(--text-primary)]" />
+              <PlugZap
+                size={isCreateAgentVariant ? 11 : 13}
+                className={cn(
+                  'mr-0.5 shrink-0',
+                  isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : 'text-[var(--text-primary)]',
+                )}
+              />
               <span
                 className={cn(
-                  'min-w-0 truncate font-medium text-[var(--text-primary)]',
+                  'min-w-0 truncate font-medium',
+                  isCreateAgentVariant ? 'text-[var(--create-agent-control-text)]' : 'text-[var(--text-primary)]',
                   isFieldTrigger ? 'max-w-[260px]' : 'max-w-[160px]',
-                  dense ? 'text-[12.5px]' : 'text-[13px]',
+                  isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
                 )}
               >
                 {t('newChat.modelSelector.source.connect')}
@@ -1061,7 +1081,7 @@ export function ModelSelector({
                 className={cn(
                   'min-w-0 truncate font-normal text-[var(--model-trigger-text)]',
                   isFieldTrigger ? 'max-w-[260px]' : 'max-w-[160px]',
-                  dense ? 'text-[12.5px]' : 'text-[13px]',
+                  isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
                 )}
               >
                 {/* 断开来源可能是该模型的唯一提供方 → visibleModels 查不到,回落显示原始 id,
@@ -1084,14 +1104,15 @@ export function ModelSelector({
                 <ProviderMark
                   providerId={activeSourceId}
                   name={providers.find((p) => p.id === activeSourceId)?.name}
+                  colorClass={isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : undefined}
                 />
               )}
               <span
                 className={cn(
                   'min-w-0 truncate font-normal',
                   isFieldTrigger ? 'max-w-[260px]' : 'max-w-[160px]',
-                  !isBudget && 'text-[var(--model-trigger-text)]',
-                  dense ? 'text-[12.5px]' : 'text-[13px]',
+                  !isBudget && (isCreateAgentVariant ? 'text-[var(--create-agent-control-text)]' : 'text-[var(--model-trigger-text)]'),
+                  isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
                 )}
                 style={budgetGradientStyle}
               >
@@ -1101,8 +1122,9 @@ export function ModelSelector({
                 <>
                   <span
                     className={cn(
-                      'font-normal text-[var(--model-trigger-meta)]',
-                      dense ? 'text-[12.5px]' : 'text-[13px]',
+                      'font-normal',
+                      isCreateAgentVariant ? 'text-[var(--create-agent-control-text)]' : 'text-[var(--model-trigger-meta)]',
+                      isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
                     )}
                     aria-hidden="true"
                   >
@@ -1110,9 +1132,10 @@ export function ModelSelector({
                   </span>
                   <span
                     className={cn(
-                      'min-w-0 truncate font-normal text-[var(--model-trigger-text)]',
+                      'min-w-0 truncate font-normal',
+                      isCreateAgentVariant ? 'text-[var(--create-agent-control-text)]' : 'text-[var(--model-trigger-text)]',
                       isFieldTrigger ? 'max-w-[120px]' : 'max-w-[88px]',
-                      dense ? 'text-[12.5px]' : 'text-[13px]',
+                      isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
                     )}
                   >
                     {effortLabel}
@@ -1121,16 +1144,23 @@ export function ModelSelector({
               )}
               {triggerFastOn && (
                 <Zap
-                  size={dense ? 12 : 13}
-                  className="ml-0.5 shrink-0 text-[var(--model-trigger-text)]"
+                  size={isCreateAgentVariant ? 11 : dense ? 12 : 13}
+                  className={cn(
+                    'ml-0.5 shrink-0',
+                    isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : 'text-[var(--model-trigger-text)]',
+                  )}
                   aria-label="Fast"
                 />
               )}
             </>
           )}
           <ChevronDown
-            size={dense ? 13 : 14}
-            className={cn('shrink-0 text-[var(--model-trigger-arrow)]', isFieldTrigger && 'ml-auto')}
+            size={isCreateAgentVariant ? 8 : dense ? 13 : 14}
+            className={cn(
+              'shrink-0',
+              isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : 'text-[var(--model-trigger-arrow)]',
+              isFieldTrigger && 'ml-auto',
+            )}
           />
         </button>
       </PopoverTrigger>

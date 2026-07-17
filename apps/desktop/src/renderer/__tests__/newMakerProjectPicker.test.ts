@@ -1,10 +1,9 @@
 /**
  * Shared create project picker invariants.
  *
- * Static checks keep the architecture boundary explicit: the new-chat page
- * lists existing sidebar projects for convenience, while arbitrary-folder
- * browsing remains a fallback and project-option selection does not write
- * another recent-folder entry.
+ * Static checks keep the architecture boundary explicit: shared picker
+ * primitives still support project selection, while the CREATE AGENT route
+ * no longer renders its own project/sidebar chrome inside the app shell.
  */
 
 import { readFileSync } from 'node:fs';
@@ -54,17 +53,19 @@ describe('Shared create project picker', () => {
     expect(projectPickerOptionsHookSource).toContain('useRecentWorkdirs()');
     expect(projectPickerOptionsHookSource).toContain('extractDisplayName(');
     expect(projectPickerOptionsHookSource).toContain('getProjectPickerEmptyLabelKey');
-    expect(newMakerDraftRouteSource).toContain('const projectPickerOptions = useProjectPickerOptions()');
+    expect(newMakerDraftRouteSource).not.toContain('const projectPickerOptions = useProjectPickerOptions()');
     // 反向防回退:旧的从 sessions 反推路径已下线,不要再被引入。
     expect(newMakerDraftRouteSource).not.toContain('groupSessions(projectCandidates).projects');
     expect(newMakerDraftRouteSource).not.toContain('sortProjectsForSidebar(');
   });
 
-  it('renders the shared create workdir chip in project-picker mode', () => {
-    expect(newMakerDraftRouteSource).toContain('folderPickerMode="project"');
-    expect(newMakerDraftRouteSource).toContain('projectOptions={projectPickerOptions}');
-    expect(newMakerDraftRouteSource).toContain('emptyProjectLabel={emptyProjectLabel}');
-    expect(newMakerDraftRouteSource).toContain('getProjectPickerEmptyLabelKey(workspacePrompt)');
+  it('keeps the CREATE AGENT route from rendering an internal project picker/sidebar', () => {
+    expect(newMakerDraftRouteSource).not.toContain('folderPickerMode="project"');
+    expect(newMakerDraftRouteSource).not.toContain('projectOptions={projectPickerOptions}');
+    expect(newMakerDraftRouteSource).not.toContain('emptyProjectLabel={emptyProjectLabel}');
+    expect(newMakerDraftRouteSource).not.toContain('getProjectPickerEmptyLabelKey(workspacePrompt)');
+    expect(newMakerDraftRouteSource).not.toContain('<WorktreeChipsRow');
+    expect(newMakerDraftRouteSource).not.toContain('data-testid="create-agent-sidebar"');
     expect(worktreeChipsSource).toContain("t('newChat.folderPicker.dialogue')");
     expect(worktreeChipsSource).toContain('emptyProjectLabel ??');
     expect(folderPickerPopoverSource).toContain("handleSelectPath('', 'dialogue')");
@@ -98,11 +99,11 @@ describe('Shared create project picker', () => {
     expect(folderPickerPopoverSource).toContain("t('newChat.folderPicker.browseProjectFolder')");
   });
 
-  it('uses the generic placeholder only for the top-level create entry', () => {
-    expect(newMakerDraftRouteSource).toContain('getWorkspacePromptFromRouteState(location.state)');
-    expect(newMakerDraftRouteSource).toContain("setWorkspacePrompt('dialogue')");
-    expect(newMakerDraftRouteSource).toContain("workspacePrompt === 'generic'");
-    expect(newMakerDraftRouteSource).toContain('[location.key, location.state, routeWorkspacePrompt]');
+  it('keeps route-local placeholder state out of CREATE AGENT after sidebar ownership moved to the app shell', () => {
+    expect(newMakerDraftRouteSource).not.toContain('getWorkspacePromptFromRouteState(location.state)');
+    expect(newMakerDraftRouteSource).not.toContain("setWorkspacePrompt('dialogue')");
+    expect(newMakerDraftRouteSource).not.toContain("workspacePrompt === 'generic'");
+    expect(newMakerDraftRouteSource).not.toContain('[location.key, location.state, routeWorkspacePrompt]');
   });
 
   it('hides Advanced worktree controls for pure-dialogue drafts without a selected project', () => {
@@ -127,20 +128,17 @@ describe('Shared create project picker', () => {
     );
   });
 
-  it('shows the remote project entry for connected SSH hosts or controllable devices', () => {
-    // device-link 接入:入口 gate 改成 useHasAnyRemoteTarget(SSH ready 或 可控被控设备)。
-    expect(newMakerDraftRouteSource).toContain("import { useHasAnyRemoteTarget }");
-    expect(newMakerDraftRouteSource).toContain('const hasAnyRemoteTarget = useHasAnyRemoteTarget()');
-    expect(newMakerDraftRouteSource).toContain('onAddRemoteProject={hasAnyRemoteTarget ?');
+  it('keeps remote project entry UI out of the CREATE AGENT route body', () => {
+    // device-link / SSH 入口属于应用外壳或共享弹窗,CREATE AGENT 路由不能再内绘入口。
+    expect(newMakerDraftRouteSource).not.toContain("import { useHasAnyRemoteTarget }");
+    expect(newMakerDraftRouteSource).not.toContain('const hasAnyRemoteTarget = useHasAnyRemoteTarget()');
+    expect(newMakerDraftRouteSource).not.toContain('onAddRemoteProject={hasAnyRemoteTarget ?');
     // 弹窗统一两类来源:SSH ready hosts + device-link 可控设备(optgroup 区分)。
     expect(addRemoteProjectDialogSource).toContain("res.hosts.filter((h) => h.status === 'ready')");
     expect(addRemoteProjectDialogSource).toContain('useControllableDevices()');
     expect(addRemoteProjectDialogSource).toContain('sourceGroupSsh');
     expect(addRemoteProjectDialogSource).toContain('sourceGroupDevice');
     expect(addRemoteProjectDialogSource).not.toContain('res.hosts.filter((h) => h.autoConnect)');
-    // 结果分流:device-link 进草稿(不立即建会话,避免被控端留空会话),SSH 维持立即 create + navigate。
-    expect(newMakerDraftRouteSource).toContain("target.kind === 'device-link'");
-    expect(newMakerDraftRouteSource).toContain('deviceLinkDeviceId: target.deviceId');
     // 归属一致:device-link 建会话参数走纯函数 buildDeviceLinkCreateArgs(workspaceKind:'project'),
     // 行为由 deviceLinkCreateArgs.test.ts 断言;此处锁「route 确实经该纯函数」,防有人再内联错 workspaceKind。
     expect(newMakerDraftRouteSource).toContain('buildDeviceLinkCreateArgs({');

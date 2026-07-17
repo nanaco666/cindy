@@ -3,7 +3,7 @@
  * ---------------------------------------------------------------------------
  * 职责:
  *   1. 从 newMakerDraft store 读取 vendor / workingDir / lastByVendor
- *   2. 渲染 Logo + VendorSegmentedSwitcher + ChatInput(sessionId=undefined)
+ *   2. 渲染 CREATE AGENT 主区:lockup + ChatInput(sessionId=undefined) + 快速开始
  *   3. 用户切 vendor → switchVendor() 把当前 prefs 落地 lastByVendor[oldVendor]
  *      + 切到新 vendor 后 ChatInput 的 initialModel/Effort/PermissionMode 自动
  *      由 lastByVendor[newVendor] 提供
@@ -12,8 +12,8 @@
  *
  * workspace 选择:
  *   - workingDir=null 表示"对话",仍在同一个创建界面内
- *   - 用户可通过 workspace chip 在"对话 / 项目 / 其它文件夹"之间切换
- *   - 项目行内 + / 对话段 + / 顶部新建都只是预填不同默认选项
+ *   - 项目/远程/device-link 上下文由应用外壳或进入路由前的 draft 状态提供,
+ *     本路由不再内绘全局侧栏或项目选择器
  *   6. 用户按 Send:
  *        a. vendorAuthGate.checkAndConfirm(vendor)
  *           - 未就绪 → 弹通用 confirmDialog → 跳 settings → 中止
@@ -34,7 +34,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { NEW_MAKER_DRAFT_KEY } from './newMakerDraftKeys';
-import { useLocation, useNavigate, useOutletContext } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { BRAND_NAME } from '@lizi/maker-shared/branding';
 
@@ -42,19 +42,12 @@ import { logoDark, logoLight } from '@/hooks/useBrandLogo';
 import { themeService } from '@/themes/theme-service';
 import type { Theme as ColorTheme } from '@/themes/types';
 import { ChatInput } from '@/components/new-chat/ChatInput';
-import { WorktreeChipsRow } from '@/components/new-chat/WorktreeChipsRow';
 import { RightSidebarToggle } from '@/components/layout/RightSidebarToggle';
 import { buildDeviceLinkCreateArgs } from './deviceLinkCreateArgs';
-import { AddRemoteProjectDialog, type RemoteProjectTarget } from '@/components/new-chat/AddRemoteProjectDialog';
-import { useHasAnyRemoteTarget } from '@/hooks/useHasAnyReadyRemoteHost';
 import { VendorSegmentedSwitcher } from '@/components/new-chat/VendorSegmentedSwitcher';
 import { TopRightChipStack, TopRightChipStackProvider } from '@/components/chat/TopRightChipStack';
 import { useProportionalWidth } from '@/hooks/useProportionalWidth';
 import { useCCSessions } from '@/hooks/useCCSessions';
-import {
-  getProjectPickerEmptyLabelKey,
-  useProjectPickerOptions,
-} from '@/hooks/useProjectPickerOptions';
 import { useVendorAuthGate } from '@/hooks/useVendorAuthGate';
 import { useAttachments } from '@/hooks/useAttachments';
 import {
@@ -94,19 +87,12 @@ import { CrossAgentConvertDialog } from '@/components/ui/cross-agent-convert-dia
 import type { MakerVendor, Session } from '@/lib/ccAgent.types';
 import { remoteProjectsStore } from '@/features/device-link/remoteProjectsStore';
 import {
-  Box,
   ChevronDown,
-  Clock3,
   Code2,
-  Flame,
-  Folder,
   Hammer,
-  Laptop,
   MessageSquare,
   MessageSquareCode,
   MonitorSmartphone,
-  PlusCircle,
-  Search,
   SearchCode,
 } from 'lucide-react';
 import type { Effort, PermissionMode } from '@/lib/userPreferences.types';
@@ -121,10 +107,9 @@ import {
 import { isGlobalDropIntercepted } from '@/lib/globalDropIntercept';
 import { createLogger } from '@/lib/logger';
 import { matchNavigationCommandName, tryHandleNavigationCommand } from '@/lib/navigationCommands';
-import { useAgentCapabilities, evictDeviceCapabilities } from '@/hooks/useAgentCapabilities';
+import { useAgentCapabilities } from '@/hooks/useAgentCapabilities';
 import { useProviders } from '@/hooks/useProviders';
-import { evictDeviceProviders, useDeviceProviders } from '@/hooks/useDeviceProviders';
-import { evictDeviceGitSafetySettings } from '@/hooks/useGitSafetySettings';
+import { useDeviceProviders } from '@/hooks/useDeviceProviders';
 import { resolveFastSupported } from '@/lib/providerModels';
 import {
   connectedProvidersForAgent,
@@ -147,7 +132,7 @@ import {
 } from './newMakerDraftRightSidebar';
 import { closeAllTabs as closeRightSidebarTabs } from '@/features/right-sidebar/store';
 import { revealOrcaWorkersTab } from '@/features/right-sidebar/plugins/orca-workers/actions';
-import cindyAvatar from '@/assets/agent-island-annie.png';
+import cindyAvatarLockup from '@/assets/cindy-avatar-lockup.png';
 
 const log = createLogger('NewMakerDraftRoute');
 const IS_MAC_PLATFORM =
@@ -173,9 +158,6 @@ export { NEW_MAKER_DRAFT_KEY };
 /** 草稿命名空间图片缓存 URL 前缀(浏览器页面评论截图等草稿期缓存落这里)。 */
 const DRAFT_IMAGE_URL_PREFIX = `xdt-image://${NEW_MAKER_DRAFT_KEY}/`;
 
-const CREATE_AGENT_SIDEBAR_BG =
-  'var(--surface-translucent-sidebar, var(--surface-elevated))'; // TODO-E4D: rebase to E4D translucent sidebar token once registered.
-
 const createAgentQuickStarts = [
   {
     key: 'explore',
@@ -197,36 +179,6 @@ const createAgentQuickStarts = [
     labelKey: 'newChat.createAgent.quickStarts.fix',
     icon: Hammer,
   },
-] as const;
-
-const createAgentSidebarNav = [
-  { key: 'new', labelKey: 'newChat.createAgent.sidebar.new', icon: PlusCircle, hasChevron: false },
-  { key: 'automation', labelKey: 'newChat.createAgent.sidebar.automation', icon: Clock3, hasChevron: false },
-  { key: 'skills', labelKey: 'newChat.createAgent.sidebar.skills', icon: Box, hasChevron: false },
-  { key: 'search', labelKey: 'newChat.createAgent.sidebar.search', icon: Search, hasChevron: false },
-  { key: 'local', labelKey: 'newChat.createAgent.sidebar.local', icon: Laptop, hasChevron: true },
-] as const;
-
-const createAgentSidebarProjects = [
-  {
-    name: 'Project CINDY',
-    tasks: [
-      { name: 'Task 1', time: '' },
-      { name: 'Task 2', time: '1h' },
-      { name: 'Task 3', time: '2h' },
-      { name: 'Task 4', time: '5h' },
-      { name: 'Task 5', time: '1d' },
-    ],
-  },
-  {
-    name: 'Project MIVO',
-    tasks: [
-      { name: 'Task 1', time: '30m' },
-      { name: 'Task 2', time: '1h' },
-      { name: 'Task 3', time: '2h' },
-    ],
-  },
-  { name: 'Project AKB2', tasks: [] },
 ] as const;
 
 /**
@@ -303,19 +255,6 @@ function getCurrentRoutePath(): string {
 const LOGO_BASE_HEIGHT = 114.3;
 const LOGO_BASE_WIDTH = 348.3;
 
-type WorkspacePrompt = 'generic' | 'dialogue';
-
-function getWorkspacePromptFromRouteState(state: unknown): WorkspacePrompt {
-  if (
-    state &&
-    typeof state === 'object' &&
-    (state as { workspacePrompt?: unknown }).workspacePrompt === 'generic'
-  ) {
-    return 'generic';
-  }
-  return 'dialogue';
-}
-
 /**
  * 默认打包 logo 按主题深浅二选一:深色主题用白字版,浅色主题用黑字版。
  * theme 尚未 applyTheme(为 null)时退回看 <html> 上的 dark class。
@@ -347,10 +286,8 @@ export function NewMakerDraftRoute() {
   const { t } = useTranslation();
   const draft = useNewMakerDraft();
   const navigate = useNavigate();
-  const location = useLocation();
   const { containerRef, inputWidth } = useProportionalWidth(914);
   const { createSession } = useCCSessions();
-  const projectPickerOptions = useProjectPickerOptions();
   const vendorAuthGate = useVendorAuthGate();
   const refreshWorktrees = useRefreshWorktrees();
   const outletContext = useOutletContext<{
@@ -370,62 +307,6 @@ export function NewMakerDraftRoute() {
   const setRightSidebarWorkdir = outletContext?.setRightSidebarWorkdir;
   // 用户终裁(2026-07-17):Figma 185:2724 CREATE AGENT 没有首页用量仪表盘,
   // 新建页彻底解除挂载,不迁移、不新增入口。
-  // Phase D — 远程项目入口可见性 + 弹窗 state. hook 自带 STATUS_CHANGED 订阅,
-  // 用户在 Settings 里连接 / 断开远端机器后这里实时反映。
-  const hasAnyRemoteTarget = useHasAnyRemoteTarget();
-  const [addRemoteProjectOpen, setAddRemoteProjectOpen] = useState(false);
-  const handleRemoteProjectAdded = useCallback(
-    async (target: RemoteProjectTarget) => {
-      // vendor 由外层 VendorSegmentedSwitcher (draft.vendor) 单一决策 — dialog 不再让用户选。
-      // lastByVendor[draftVendor] 提供该 vendor 上次的 model / effort / permission / fast 偏好作初始值。
-      const draftVendor: 'cc' | 'codex' = draft.vendor === 'codex' ? 'codex' : 'cc';
-
-      if (target.kind === 'device-link') {
-        // device-link:**不**像 SSH 立即建会话(会在被控端留空会话)。改为把当前草稿指向该被控
-        // 设备项目,用户发首条消息时走既有 device-link create-on-send 链路(与侧边栏「+新建」同款,
-        // 见本文件下方 isDeviceLinkDraft 分支)。我们已在 /cc-agent/new,无需 navigate。
-        //
-        // 打开远程草稿前先驱逐该设备的能力 / 供应商 / Git safety 缓存:这些是「订阅时拉一次、
-        // 无 TTL、只在设备下线才 evict」的快照,被控端在线期间改了模型目录或 Rewind safety
-        // 设置控制端不会自动刷新。这里同步 evict → 紧接着 patchDraft 触发的 ChatInput /
-        // ModelSelector 重渲染会 cache-miss 重新拉取,保证草稿打开时信息 = 被控端「当下」状态。
-        evictDeviceCapabilities(target.deviceId);
-        evictDeviceProviders(target.deviceId);
-        evictDeviceGitSafetySettings(target.deviceId);
-        patchDraft({
-          workingDir: target.path,
-          remoteHostId: null,
-          deviceLinkDeviceId: target.deviceId,
-          deviceLinkDeviceName: target.deviceName,
-        });
-        return;
-      }
-
-      // SSH:维持现状 —— lazy-create(workspaceKind='project',第一条消息发出时才真正起 session),
-      // navigate 到会话。
-      const prefs = draft.lastByVendor[draftVendor];
-      const fastMode = getFastModeForModel(prefs.model);
-      try {
-        const session = await sessionService.create({
-          agentKind: draftVendor,
-          workingDir: target.path,
-          workspaceKind: 'project',
-          permissionMode: prefs.permissionMode,
-          model: prefs.model,
-          effort: prefs.effort,
-          fastMode,
-          remoteHostId: target.hostId,
-        });
-        // copy-on-create:新会话内所有供应商模型 effort/fast 默认 = 草稿当前状态。
-        seedSession(session.id, snapshotForSeed());
-        navigate(`/cc-agent/${session.id}`);
-      } catch (err) {
-        // sessionService.create 内部已通过 toast 报错, 这里再 catch 避免 unhandled.
-        log.warn('add remote project failed', { error: String(err), vendor: draftVendor });
-      }
-    },
-    [draft.vendor, draft.lastByVendor, navigate],
-  );
   // 当前 vendor 对应的 prefs(切 vendor 后这里自动重算 → 透传到 ChatInput initial*)
   const currentPrefs = draft.lastByVendor[draft.vendor];
   const chatPrefs = currentPrefs;
@@ -456,11 +337,6 @@ export function NewMakerDraftRoute() {
   // 配对驱动 isDragOver,亮全区虚线遮罩 + 透传 ChatInput 卡内提示文案。
   const pageDragCounterRef = useRef(0);
   const [pageDragOver, setPageDragOver] = useState(false);
-  const routeWorkspacePrompt = useMemo(
-    () => getWorkspacePromptFromRouteState(location.state),
-    [location.state],
-  );
-  const [workspacePrompt, setWorkspacePrompt] = useState<WorkspacePrompt>(routeWorkspacePrompt);
   const [wtCreating, setWtCreating] = useState(false);
   // 首页「+」→「新建目标」弹窗开关 + 打开时输入框已有文字(作默认目标内容)。
   const [newGoalOpen, setNewGoalOpen] = useState(false);
@@ -474,7 +350,7 @@ export function NewMakerDraftRoute() {
   // 互斥约束(本组件 enforce):
   //   - draft.workingDir == null (对话模式) → 不向 ChatInput 传 collaboration prop,
   //     CollaborationModeToggle 不渲染
-  //   - draft.collab.enabled = true → WorktreeChipsRow / FolderPickerPopover 隐藏
+  //   - draft.collab.enabled = true → 工作区选择入口隐藏
   //     "对话(不在项目中)"入口,workdir 不可能切到 null
   // 兜底见 patchDraft: 任何把 workingDir 设回 null 的路径会自动关 collab。
   const collab = draft.collab;
@@ -500,7 +376,6 @@ export function NewMakerDraftRoute() {
     effectiveCollab.enabled && effectiveWorkingDir != null && effectiveRemoteHostId == null;
   const canToggleCreateAgentMode =
     effectiveWorkingDir != null && effectiveRemoteHostId == null && !isDeviceLinkDraft;
-  const emptyProjectLabel = t(getProjectPickerEmptyLabelKey(workspacePrompt));
   const draftRightSidebar = useMemo(
     () =>
       resolveNewMakerDraftRightSidebar({
@@ -539,11 +414,6 @@ export function NewMakerDraftRoute() {
     }
     return () => setRightSidebarWorkdir?.('');
   }, [draftRightSidebar.workdir, draftRightSidebar.remoteHostId, setRightSidebarWorkdir]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 同值 route state 重新进入也要按 location.key 重新同步占位文案。
-  useEffect(() => {
-    setWorkspacePrompt(routeWorkspacePrompt);
-  }, [location.key, location.state, routeWorkspacePrompt]);
 
   // 跨 Agent 工作区迁移弹窗：detect → ask → run → 等关闭 → 才创建会话
   const crossAgentDialog = useCrossAgentMigrationDialog();
@@ -934,7 +804,6 @@ export function NewMakerDraftRoute() {
   // 上一个项目的 extra 目录上下文。
   const handleWorkingDirChange = useCallback((dir: string | null) => {
     if (dir == null) {
-      setWorkspacePrompt('dialogue');
       patchDraft({ workingDir: null, remoteHostId: null, extraDirs: [] });
       return;
     }
@@ -1746,117 +1615,21 @@ export function NewMakerDraftRoute() {
             </div>
           )
         )}
-        <div className="flex h-[min(1049px,calc(100vh-64px))] min-h-[620px] w-[min(910px,calc(100vw-48px))] overflow-hidden rounded-[9px] border-2 border-[var(--border-default)] bg-[var(--surface)]">
-          <aside
-            data-testid="create-agent-sidebar"
-            className="hidden w-[214px] shrink-0 flex-col border-r border-[var(--border-default)] px-3 py-2 md:flex"
-            style={{ background: CREATE_AGENT_SIDEBAR_BG }}
+          <main
+            data-testid="create-agent-main"
+            className="relative flex h-full min-w-0 w-full flex-col items-start justify-start px-[26px] pt-[268px]"
           >
-            <div className="flex h-5 items-center gap-1.5 px-0.5" aria-hidden="true">
-              <span className="h-2.5 w-2.5 rounded-full bg-[var(--text-secondary)] opacity-50" />
-              <span className="h-2.5 w-2.5 rounded-full bg-[var(--text-secondary)] opacity-35" />
-              <span className="h-2.5 w-2.5 rounded-full bg-[var(--text-secondary)] opacity-25" />
-              <span className="ml-3 h-3 w-3 rounded-[3px] border border-[var(--border-default)]" />
-              <span className="h-3 w-3 rounded-[3px] border border-[var(--border-default)]" />
-            </div>
-            <div className="mt-7 flex flex-col gap-3">
-              {createAgentSidebarNav.map(({ key, labelKey, icon: Icon, hasChevron }) => (
-                <button
-                  key={key}
-                  type="button"
-                  className="flex h-[14px] items-center gap-[9px] rounded-[4px] text-left text-[12px] font-medium leading-[14px] text-[var(--text-primary)] transition-colors hover:text-[var(--text-secondary)]"
-                >
-                  <Icon size={12} strokeWidth={2} className="shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">{t(labelKey)}</span>
-                  {hasChevron && <ChevronDown size={12} strokeWidth={2} className="shrink-0" />}
-                </button>
-              ))}
-            </div>
-            <div className="mt-7 w-full overflow-hidden rounded-[6px] border border-[var(--border-default)] bg-[color-mix(in_srgb,var(--surface-elevated)_70%,transparent)] p-1">
-              <WorktreeChipsRow
-                cwd={effectiveWorkingDir ?? null}
-                onSelectFolder={handleWorkingDirChange}
-                folderPickerOpen={folderPickerOpen}
-                onFolderPickerOpenChange={handleFolderPickerOpenChange}
-                folderPickerMode="project"
-                projectOptions={projectPickerOptions}
-                onAddRemoteProject={hasAnyRemoteTarget ? () => setAddRemoteProjectOpen(true) : undefined}
-                emptyProjectLabel={emptyProjectLabel}
-                enabled={wtEnabled}
-                onEnabledChange={handleWtEnabledChange}
-                sourceBranch={wtSourceBranch}
-                onSourceBranchChange={handleWtSourceBranchChange}
-                onBaseRepoChange={handleWtBaseRepoChange}
-                onSuggestedNameChange={handleWtNameChange}
-                worktreeDisabled={isRemoteProjectDraft}
-                deviceLinkDeviceId={effectiveDeviceLinkDeviceId ?? null}
-                disabled={wtCreating}
-              />
-            </div>
-            <div className="mt-8 text-[10px] font-medium leading-[12px] text-[var(--text-secondary)]">
-              {t('newChat.createAgent.sidebar.projects')}
-            </div>
-            <div className="mt-3 flex min-h-0 flex-1 flex-col gap-[15px] overflow-hidden">
-              {createAgentSidebarProjects.map((project, projectIndex) => (
-                <div key={project.name} className="flex flex-col gap-[6px]">
-                  <div className="flex h-[23px] items-center gap-[9px] text-[12px] leading-[14px] text-[var(--text-primary)]">
-                    <Folder size={12} strokeWidth={2} className="shrink-0" />
-                    <span className="min-w-0 truncate font-medium">{project.name}</span>
-                  </div>
-                  {project.tasks.map((task, taskIndex) => (
-                    <div
-                      key={`${project.name}-${task.name}`}
-                      className={cn(
-                        'ml-[6px] flex h-[23px] items-center gap-[9px] rounded-full px-[9px] text-[12px] leading-[14px]',
-                        projectIndex === 0 && taskIndex === 0
-                          ? 'border border-[var(--border-default)] bg-[var(--surface-chip)] text-[var(--text-primary)]'
-                          : 'text-[var(--text-secondary)]',
-                      )}
-                    >
-                      <MessageSquare size={12} strokeWidth={2} className="shrink-0" />
-                      <span className="min-w-0 flex-1 truncate">{task.name}</span>
-                      {task.time && <span className="shrink-0 text-[var(--text-secondary)]">{task.time}</span>}
-                    </div>
-                  ))}
-                </div>
-              ))}
-              <div className="mt-1 text-[10px] font-medium leading-[12px] text-[var(--text-secondary)]">
-                {t('newChat.createAgent.sidebar.conversations')}
-              </div>
-            </div>
-            <div className="mt-auto flex h-10 items-center gap-2 rounded-full border border-[var(--border-default)] bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] px-2">
-              <img
-                src={cindyAvatar}
-                alt=""
-                className="h-[25px] w-[25px] rounded-full object-cover"
-                draggable={false}
-              />
-              <div className="min-w-0">
-                <div className="text-[12px] font-semibold leading-[14px] text-[var(--text-primary)]">
-                  {BRAND_NAME}
-                </div>
-                <div className="text-[9px] leading-[11px] text-[var(--text-primary)] opacity-70">
-                  XD.Inc - 0.0.150
-                </div>
-              </div>
-              <span className="ml-auto grid h-[19px] w-[19px] place-items-center rounded-full border border-[var(--border-default)] text-[var(--text-primary)]">
-                <Flame size={11} strokeWidth={2} />
-              </span>
-            </div>
-          </aside>
-
-          <main className="relative flex min-w-0 flex-1 flex-col items-start justify-start px-[26px] pt-[268px]">
             <button
               type="button"
               data-testid="create-agent-mode-pill"
               disabled={!canToggleCreateAgentMode}
               onClick={() => patchCollab({ enabled: !effectiveCollab.enabled })}
-              className="absolute right-[30px] top-[290px] inline-flex h-[30px] w-20 items-center justify-center gap-1.5 rounded-full border border-[var(--border-default)] bg-[var(--chat-input-chip-bg)] text-[12px] font-medium leading-[14px] text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-chip)] disabled:cursor-not-allowed disabled:opacity-60"
+              className="absolute right-[30px] top-[290px] inline-flex h-[30px] w-20 items-center justify-center gap-1.5 rounded-full border border-[var(--create-agent-control-border)] bg-[var(--create-agent-control-bg)] text-[12px] font-medium leading-[14px] text-[var(--create-agent-control-text)] transition-colors hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
               aria-label={t('newChat.collaboration.modeLabel')}
             >
-              <MessageSquare size={12} strokeWidth={2} />
+              <MessageSquare size={12} strokeWidth={2} className="text-[var(--create-agent-control-icon)]" />
               <span>{effectiveCollab.enabled ? t('newChat.collaboration.pillLabel') : t('newChat.folderPicker.dialogue')}</span>
-              <ChevronDown size={12} strokeWidth={2} />
+              <ChevronDown size={12} strokeWidth={2} className="text-[var(--create-agent-control-icon)]" />
             </button>
             <div
               className="flex w-full flex-col items-start"
@@ -1867,7 +1640,7 @@ export function NewMakerDraftRoute() {
                 className="mb-[15px] flex h-[50px] items-center gap-[9px]"
               >
                 <img
-                  src={cindyAvatar}
+                  src={cindyAvatarLockup}
                   alt=""
                   className="h-[50px] w-[50px] rounded-full object-cover"
                   draggable={false}
@@ -1917,7 +1690,7 @@ export function NewMakerDraftRoute() {
                     </span>
                   </div>
                 )}
-                <div className="w-full [--confirm-btn-primary-hover:#2F3236] [--send-btn-bg:#3C3F43] [--send-btn-icon:#FCFCFC] dark:[--confirm-btn-primary-hover:#DADADA] dark:[--send-btn-bg:#EEEEEE] dark:[--send-btn-icon:#252222]">
+                <div className="w-full">
                   <ChatInput
                 onSend={handleSend}
                 onBeforeVoiceInputStart={handleBeforeVoiceInputStart}
@@ -1954,6 +1727,7 @@ export function NewMakerDraftRoute() {
                     onChange={handleVendorChange}
                     width={150}
                     dense
+                    visualVariant="create-agent"
                     className="shrink-0"
                     disabled={wtCreating}
                   />
@@ -2010,7 +1784,6 @@ export function NewMakerDraftRoute() {
           </div>
             </div>
           </main>
-        </div>
       </div>
 
       {/* 跨 Agent 工作区互转 (5 项独立判断 + 步骤式进度) —— send 流程会 await 等它关闭 */}
@@ -2022,16 +1795,6 @@ export function NewMakerDraftRoute() {
         onOpenChange={crossAgentDialog.onOpenChange}
         onConfirm={crossAgentDialog.onConfirm}
         onCancel={crossAgentDialog.onCancel}
-      />
-      {/* 添加远程项目弹窗 (入口在 FolderPickerPopover 中, gate 走 hasAnyRemoteTarget =
-          SSH ready 主机 或 device-link 可控设备)。onProjectAdded 带 kind:SSH 立即建会话 +
-          navigate;device-link 把当前草稿指向被控设备项目,发首条消息时 create-on-send。 */}
-      <AddRemoteProjectDialog
-        open={addRemoteProjectOpen}
-        onOpenChange={setAddRemoteProjectOpen}
-        onProjectAdded={(target) => {
-          void handleRemoteProjectAdded(target);
-        }}
       />
     </div>
     </TopRightChipStackProvider>

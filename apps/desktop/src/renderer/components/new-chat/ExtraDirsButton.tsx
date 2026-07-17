@@ -50,6 +50,8 @@ export interface ExtraDirsButtonProps {
   disabled?: boolean;
   /** 窄容器下把 trigger 字号/图标各压一档,默认 false。 */
   dense?: boolean;
+  /** CREATE AGENT 首页按 Figma 185:2724 使用独立私有 token。 */
+  visualVariant?: 'default' | 'create-agent';
 }
 
 function normalizedPathForComparison(raw: string | null | undefined): string | null {
@@ -109,6 +111,7 @@ export function ExtraDirsButton({
   planMode,
   disabled,
   dense = false,
+  visualVariant = 'default',
 }: ExtraDirsButtonProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -121,6 +124,7 @@ export function ExtraDirsButton({
 
   const count = extraDirs.length;
   const atLimit = count >= MAX_EXTRA_DIRS;
+  const isCreateAgentVariant = visualVariant === 'create-agent';
 
   const handleAdd = async () => {
     if (atLimit) return;
@@ -172,19 +176,31 @@ export function ExtraDirsButton({
             type="button"
             disabled={disabled}
             className={cn(
-              'flex items-center gap-1 rounded-full',
-              'px-1.5 py-1',
-              'bg-transparent transition-colors',
-              'hover:bg-[var(--model-trigger-hover)]',
+              'flex items-center rounded-full transition-colors',
+              isCreateAgentVariant
+                ? [
+                    'h-[30px] w-[30px] justify-center border border-[var(--create-agent-control-border)]',
+                    'bg-[var(--create-agent-control-bg)] p-0 text-[var(--create-agent-control-icon)]',
+                    'hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)]',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
+                  ]
+                : [
+                    'gap-1 px-1.5 py-1',
+                    'bg-transparent',
+                    'hover:bg-[var(--model-trigger-hover)]',
+                  ],
               'disabled:cursor-not-allowed disabled:opacity-50',
             )}
             aria-label={t('extraDirs.menuAria')}
           >
             <Plus
-              size={dense ? 15 : 16}
-              className="shrink-0 text-[var(--model-trigger-text)]"
+              size={isCreateAgentVariant ? 11 : dense ? 15 : 16}
+              className={cn(
+                'shrink-0',
+                isCreateAgentVariant ? 'text-current' : 'text-[var(--model-trigger-text)]',
+              )}
             />
-            {count > 0 && isCc && (
+            {count > 0 && isCc && !isCreateAgentVariant && (
               <span
                 className={cn(
                   'font-normal tabular-nums text-[var(--model-trigger-text)]',
