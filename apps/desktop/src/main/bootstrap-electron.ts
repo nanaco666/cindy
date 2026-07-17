@@ -911,6 +911,8 @@ type ApplicationMenuLocale = SupportedLocale;
 
 interface ApplicationMenuLabels {
   about: string;
+  hide: string;
+  quit: string;
   settings: string;
   checkForUpdates: string;
   fileMenu: string;
@@ -927,6 +929,8 @@ interface ApplicationMenuLabels {
 const APPLICATION_MENU_LABELS: Record<ApplicationMenuLocale, ApplicationMenuLabels> = {
   'zh-CN': {
     about: '关于 {{appName}}',
+    hide: '隐藏 {{appName}}',
+    quit: '退出 {{appName}}',
     settings: '设置...',
     checkForUpdates: '检查更新...',
     fileMenu: '文件',
@@ -941,6 +945,8 @@ const APPLICATION_MENU_LABELS: Record<ApplicationMenuLocale, ApplicationMenuLabe
   },
   en: {
     about: 'About {{appName}}',
+    hide: 'Hide {{appName}}',
+    quit: 'Quit {{appName}}',
     settings: 'Settings...',
     checkForUpdates: 'Check for Updates...',
     fileMenu: 'File',
@@ -955,6 +961,8 @@ const APPLICATION_MENU_LABELS: Record<ApplicationMenuLocale, ApplicationMenuLabe
   },
   ja: {
     about: '{{appName}} について',
+    hide: '{{appName}}を隠す',
+    quit: '{{appName}}を終了',
     settings: '設定...',
     checkForUpdates: 'アップデートを確認...',
     fileMenu: 'ファイル',
@@ -969,6 +977,8 @@ const APPLICATION_MENU_LABELS: Record<ApplicationMenuLocale, ApplicationMenuLabe
   },
   ko: {
     about: '{{appName}} 정보',
+    hide: '{{appName}} 가리기',
+    quit: '{{appName}} 종료',
     settings: '설정...',
     checkForUpdates: '업데이트 확인...',
     fileMenu: '파일',
@@ -1087,12 +1097,17 @@ function installApplicationMenu(
         ],
       };
 
+  // 应用名相关文案一律走 BRAND_NAME(展示名),不用 app.getName():后者返回
+  // package.json productName(过渡期仍是 xdt-maker,机器身份不许跟随改名,
+  // 见 maker-shared/branding.ts 顶注)。hide/quit role 的默认标签也吃 app.name,
+  // 所以显式给 label。macOS 菜单栏第一项的粗体标题不吃这里的 label(系统取自
+  // 可执行 bundle 的 Info.plist CFBundleName),dev 下恒为 "Electron",无法运行时修改。
   const template: Electron.MenuItemConstructorOptions[] = [
     {
-      label: app.getName(),
+      label: BRAND_NAME,
       submenu: [
         {
-          label: labels.about.replace('{{appName}}', app.getName()),
+          label: labels.about.replace('{{appName}}', BRAND_NAME),
           click: () => dispatchApplicationMenuCommand(mainWindow, 'open-about'),
         },
         { type: 'separator' },
@@ -1117,11 +1132,19 @@ function installApplicationMenu(
         // ⌘Q/⌘H/⌘M 会先触发原生 role, 用户看不到"系统保留"校验提示就把
         // 应用退出/隐藏了。(close 已改为永不注册 accelerator, 不在此列,
         // 见下方 Window 菜单注释。)
-        { role: 'hide', registerAccelerator: registerMenuAccelerators },
+        {
+          role: 'hide',
+          label: labels.hide.replace('{{appName}}', BRAND_NAME),
+          registerAccelerator: registerMenuAccelerators,
+        },
         { role: 'hideOthers', registerAccelerator: registerMenuAccelerators },
         { role: 'unhide' },
         { type: 'separator' },
-        { role: 'quit', registerAccelerator: registerMenuAccelerators },
+        {
+          role: 'quit',
+          label: labels.quit.replace('{{appName}}', BRAND_NAME),
+          registerAccelerator: registerMenuAccelerators,
+        },
       ],
     },
     {
@@ -4407,9 +4430,11 @@ app.on('ready', async () => {
   // Dock 图标取自可执行 bundle 的 icns,而 dev 跑的是 node_modules 里的官方
   // Electron 二进制。这里 dev-only 手动设成 Cindy 图标;packaged 版由
   // resources/icon.icns 自然生效,不需要也不该动。
+  // 必须用 icon-dock.png(generate-mac-icns.mjs 产出,已套 Apple 圆角网格):
+  // setIcon 原样显示不加遮罩,满幅方图 icon.png 会显示成无圆角方块。
   if (!app.isPackaged && process.platform === 'darwin') {
     try {
-      app.dock?.setIcon(path.join(__dirname, '../../resources/icon.png'));
+      app.dock?.setIcon(path.join(__dirname, '../../resources/icon-dock.png'));
     } catch (err) {
       // 仅影响 dev Dock 观感,失败不挡启动
       createLogger('dock-icon').warn('setIcon failed', { error: String(err) });

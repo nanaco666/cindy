@@ -17,6 +17,11 @@
  *   - ARGB 块(icns RLE 压缩): ic04(16) ic05(32) —— 老版本 macOS 的
  *     Finder 小图标取这两块。
  *
+ * 同时在 out.icns 同目录产出 icon-dock.png(512x512,已套圆角+边距):
+ * mac dev 跑的是 node_modules 里的官方 Electron 二进制,icns 用不上,
+ * bootstrap-electron.ts 里 dev-only 的 app.dock.setIcon 需要一张平铺 PNG,
+ * setIcon 原样显示不加遮罩,给它满幅方图 Dock 就是方块,必须用这张。
+ *
  * 用法(仓库根或 apps/desktop 下执行均可):
  *   node apps/desktop/scripts/generate-mac-icns.mjs [master.png] [out.icns]
  *   默认: master = apps/desktop/resources/icon-master-1024.png
@@ -172,6 +177,11 @@ async function main() {
 
   const sizeKb = (fs.statSync(outPath).size / 1024).toFixed(0);
   console.log(`[generate-mac-icns] wrote ${outPath} (${sizeKb} KB, ${chunks.length} chunks)`);
+
+  // 3. dev Dock 用的平铺 PNG(见文件顶注)
+  const dockPngPath = path.join(path.dirname(outPath), 'icon-dock.png');
+  fs.writeFileSync(dockPngPath, await sizePng(512));
+  console.log(`[generate-mac-icns] wrote ${dockPngPath}`);
 }
 
 main().catch((err) => {

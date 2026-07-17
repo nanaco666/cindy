@@ -587,6 +587,43 @@ function signPackagedExes(buildPath: string): void {
   }
 }
 
+/**
+ * macOS 打包显示名(品牌迁移显示层,与 win32metadata 同构):packaged 后把
+ * .app 的 Info.plist 里 CFBundleName / CFBundleDisplayName 改成 Cindy——
+ * Dock 名、菜单栏粗体标题、Cmd+Tab、系统通知读的都是这两个字段。
+ *
+ * 为什么在 postPackage 改而不是 packagerConfig:electron-packager 在
+ * updatePlistFiles 里先合并 extendInfo、后用 appName/executableName 覆写
+ * CFBundleName / CFBundleDisplayName,extendInfo 改不动这两个键;而给
+ * packagerConfig.name 设 'Cindy' 会连 .app 目录名一起改,踩标识符红线。
+ *
+ * 标识符零触碰:.app 目录名 / CFBundleExecutable / CFBundleIdentifier /
+ * userData 均保持 xdt-maker 系,updater 与存量用户数据不受影响(.app 名与
+ * Finder 列表显示等渠道迁移)。正式签名/公证在 release-macos.mjs 里发生在
+ * postPackage 之后,本改动会被签名一起封印,不存在破坏签名问题。
+ */
+function applyMacPackagedDisplayName(buildPath: string, platform: string): void {
+  if (platform !== 'darwin') return;
+  const apps = fs.readdirSync(buildPath).filter((n) => n.endsWith('.app'));
+  for (const appDir of apps) {
+    const plistPath = path.join(buildPath, appDir, 'Contents', 'Info.plist');
+    if (!fs.existsSync(plistPath)) {
+      throw new Error(`[forge:postPackage] Info.plist missing at ${plistPath}`);
+    }
+    for (const key of ['CFBundleName', 'CFBundleDisplayName']) {
+      // packager 必写这两个键,Set 即可;Add 兜底防未来 packager 行为变化。
+      const set = spawnSync('/usr/libexec/PlistBuddy', ['-c', `Set :${key} Cindy`, plistPath]);
+      if (set.status !== 0) {
+        const add = spawnSync('/usr/libexec/PlistBuddy', ['-c', `Add :${key} string Cindy`, plistPath]);
+        if (add.status !== 0) {
+          throw new Error(`[forge:postPackage] PlistBuddy failed to set ${key} in ${plistPath}`);
+        }
+      }
+    }
+    console.log(`[forge:postPackage] mac display name → Cindy (${appDir}/Contents/Info.plist)`);
+  }
+}
+
 function targetPlatformKey(targetPlatform: string, targetArch: string): string {
   return `${targetPlatform}-${targetArch}`;
 }
@@ -1083,6 +1120,7 @@ const config: ForgeConfig = {
         const noticeName = stagePackagedThirdPartyNotices(buildPath, opts.platform);
         console.log(`[forge:postPackage] staged ${noticeName} + restricted component disclosure`);
         signPackagedExes(buildPath);
+        applyMacPackagedDisplayName(buildPath, opts.platform);
       }
     },
   },

@@ -25,7 +25,8 @@
 ### 打包 / OS 集成（apps/desktop）
 
 - [x]（2026-07-17）打包**显示名**字段全套：NSIS `shortcutName: 'Cindy'`、deb `productName: 'Cindy'`、UTType `Cindy Session Share`、深链 label、mac 权限描述文案、新增 `win32metadata`（CompanyName=XD / ProductName=FileDescription=Cindy，任务管理器显示层）；`installer.nsh` 运行提示与右键菜单**显示文案**改 Cindy，三代快捷方式名（xdt-maker / XDMaker / Cindy）安装与卸载全清理。⚠️ 标识符字段（`executableName`/`appId`/mac `.app` 名）不动，等渠道迁移。
-- [x]（2026-07-17）**存量用户快捷方式启动自愈**：`main/windowsShortcutSelfHeal.ts`——差量更新不重跑安装器，win32 packaged 启动时把指向本 exe 的旧名 .lnk 换名为 Cindy.lnk（AUMID 保持 `BRAND_IDENTITY.appId` 三位一体），任务栏固定项只原地刷 icon/AUMID 不改名（改名会掉钉）。macOS 不做运行时自愈（改自身 bundle 破坏签名），图标随下一次整包更新自然生效，Dock 名等渠道迁移。
+- [x]（2026-07-17）**存量用户快捷方式启动自愈**：`main/windowsShortcutSelfHeal.ts`——差量更新不重跑安装器，win32 packaged 启动时把指向本 exe 的旧名 .lnk 换名为 Cindy.lnk（AUMID 保持 `BRAND_IDENTITY.appId` 三位一体），任务栏固定项只原地刷 icon/AUMID 不改名（改名会掉钉）。macOS 不做运行时自愈（改自身 bundle 破坏签名），图标随下一次整包更新自然生效。
+- [x]（2026-07-17）**macOS 打包显示名**（win32metadata 的 mac 同构）：forge `postPackage` 钩子用 PlistBuddy 把包内 `Info.plist` 的 `CFBundleName` / `CFBundleDisplayName` 改 Cindy——Dock 名 / 菜单栏粗体标题 / Cmd+Tab / 系统通知即显示 Cindy。为什么不走 packagerConfig:`extendInfo` 在 packager 里先合并、后被 appName 覆写改不动这两个键;`packagerConfig.name` 会连 `.app` 目录名一起改踩标识符红线。签名/公证在 release-macos.mjs、发生在 postPackage 之后,plist 改动被一起封印。⚠️ `.app` 目录名（Finder 里 /Applications 列表显示）仍是 xdt-maker，等渠道迁移;应用菜单里 About/Hide/Quit 文案已在 bootstrap-electron 菜单模板切 `BRAND_NAME`（dev 菜单栏粗体 "Electron" 是官方 dev 二进制 CFBundleName，无解，仅 dev 可见）。
 - [x] 应用图标素材：desktop 已于 2026-07-16 换 CINDY 全套（`99349c77a`，ico/icns/png 重生成）；界面 wordmark logo 已换 CINDY 深浅双版（经 `hooks/useBrandLogo.ts` 按主题选用）。
 - [x]（2026-07-17）`apps/desktop/help-knowledge/*.md`（内置帮助知识库源文件）→ 全局替换后跑 `pnpm gen:help-kb` 重新生成 `helpKnowledge.generated.ts`。另:`cindy-brain/forge.ts` 的 FORGE_GUIDE（意识编写手册）品牌串同批改完。
 - 注:`feishu-bot.md` 提及「FeiShu OAuth sign-in 登录」的内容已过时（登录已迁 Cindy auth），品牌串已改但内容重写不属于改名范畴，待帮助文档内容更新时处理。
