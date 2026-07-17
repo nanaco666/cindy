@@ -25,8 +25,10 @@ var API_BASE = 'https://api.atlassian.com';
 /**
  * 交卷体量护栏:超过即经 fs 槽落盘工作目录只交路径(deliver 内),写盘不可用
  * 时才回落截断——沿袭老 MCP out_file 的泄洪语义(2026-07-14 fs 槽上线后回归)。
+ * 2026-07-17 Lizi 要求放宽到 50M:上游 cindy.fetch 有 1MB 响应截断在前,
+ * 该阈值实际不再触发自动落盘(结果一律内联交卷),点名 out_file 落盘仍可用。
  */
-var RESULT_MAX_CHARS = 50 * 1000;
+var RESULT_MAX_CHARS = 50 * 1000 * 1000;
 var IMAGE_MIME = { 'image/png': 1, 'image/jpeg': 1, 'image/jpg': 1, 'image/gif': 1, 'image/webp': 1 };
 
 /* ── 基础工具 ───────────────────────────────────────────────────────── */
