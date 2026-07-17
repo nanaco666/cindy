@@ -16,7 +16,7 @@
  * 让路, 避免录制 ⌘B 时误触发侧边栏切换。
  */
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pencil, RotateCcw, Trash2 } from 'lucide-react';
 
@@ -67,6 +67,7 @@ export function KeyboardShortcutsSection() {
   const [recordingId, setRecordingId] = useState<AppShortcutId | null>(null);
   const [error, setError] = useState<RecordingError | null>(null);
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const mutationRequestIdRef = useRef(0);
 
   const mutationErrorMessage = useCallback(
     (err: unknown) => {
@@ -79,6 +80,26 @@ export function KeyboardShortcutsSection() {
       );
     },
     [t],
+  );
+
+  const beginMutation = useCallback(() => {
+    const requestId = ++mutationRequestIdRef.current;
+    setError(null);
+    setGlobalError(null);
+    return requestId;
+  }, []);
+
+  const reportMutationError = useCallback(
+    (requestId: number, err: unknown, id?: AppShortcutId) => {
+      if (requestId !== mutationRequestIdRef.current) return;
+      const message = mutationErrorMessage(err);
+      if (id) {
+        setError({ id, message });
+      } else {
+        setGlobalError(message);
+      }
+    },
+    [mutationErrorMessage],
   );
 
   const visibleDefs = APP_SHORTCUT_DEFINITIONS.filter(
@@ -167,17 +188,13 @@ export function KeyboardShortcutsSection() {
         cancel();
         return;
       }
-      setError(null);
-      setGlobalError(null);
+      const requestId = beginMutation();
       window.electronAPI.appShortcuts
         .setOverride(recordingId, combo)
         .catch((err: unknown) => {
           // main 侧校验兜底失败 (理论上 renderer 已前置校验)
           log.warn('setOverride failed', err);
-          setError({
-            id: recordingId,
-            message: mutationErrorMessage(err),
-          });
+          reportMutationError(requestId, err, recordingId);
         });
       cancel();
     };
@@ -189,34 +206,31 @@ export function KeyboardShortcutsSection() {
       window.removeEventListener('keydown', handler, true);
       window.removeEventListener('blur', cancel);
     };
-  }, [mutationErrorMessage, recordingId, t, validateCombo]);
+  }, [beginMutation, recordingId, reportMutationError, t, validateCombo]);
 
   const handleResetAll = useCallback(() => {
-    setError(null);
-    setGlobalError(null);
+    const requestId = beginMutation();
     setRecordingId(null);
     void window.electronAPI.appShortcuts.resetAll().catch((err: unknown) => {
-      setGlobalError(mutationErrorMessage(err));
+      reportMutationError(requestId, err);
     });
-  }, [mutationErrorMessage]);
+  }, [beginMutation, reportMutationError]);
 
   const handleResetOne = useCallback((id: AppShortcutId) => {
-    setError(null);
-    setGlobalError(null);
+    const requestId = beginMutation();
     void window.electronAPI.appShortcuts.clearOverride(id).catch((err: unknown) => {
-      setError({ id, message: mutationErrorMessage(err) });
+      reportMutationError(requestId, err, id);
     });
-  }, [mutationErrorMessage]);
+  }, [beginMutation, reportMutationError]);
 
   /** 删除绑定 = override 置 null, 该快捷键禁用 (显示"未设置")。 */
   const handleDeleteOne = useCallback((id: AppShortcutId) => {
-    setError(null);
-    setGlobalError(null);
+    const requestId = beginMutation();
     setRecordingId(null);
     void window.electronAPI.appShortcuts.setOverride(id, null).catch((err: unknown) => {
-      setError({ id, message: mutationErrorMessage(err) });
+      reportMutationError(requestId, err, id);
     });
-  }, [mutationErrorMessage]);
+  }, [beginMutation, reportMutationError]);
 
   const iconButtonClass =
     'inline-flex h-[26px] w-[26px] items-center justify-center rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-chip)] transition-colors';
