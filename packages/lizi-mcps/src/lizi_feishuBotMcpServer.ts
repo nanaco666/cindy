@@ -18,7 +18,6 @@
  *      the bot once before agent can push notifications).
  */
 
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { jsonObjectArg } from './json-object-arg.js';
@@ -165,7 +164,7 @@ function registerSendFileToUser(
             ok: false,
             errorCode: 'NO_CHAT_CONTEXT',
             error:
-              `既没有当前飞书 session 的 chatId,bot 也没有绑定过 owner(用户从未私聊过 bot)。请让用户先在飞书里私聊 ${BRAND_NAME} bot 一次完成绑定,再重试。`,
+              `既没有当前飞书 session 的 chatId,bot 也没有绑定过 owner(用户从未私聊过 bot)。请让用户先在飞书里私聊自己配置的那个机器人一次完成绑定,再重试。`,
           },
           true,
         );
@@ -237,7 +236,7 @@ function registerSendMessageToUser(
             ok: false,
             errorCode: 'NO_CHAT_CONTEXT',
             error:
-              `既没有当前飞书 session 的 chatId,bot 也没有绑定过 owner(用户从未私聊过 bot)。请让用户先在飞书里私聊 ${BRAND_NAME} bot 一次完成绑定,再重试。`,
+              `既没有当前飞书 session 的 chatId,bot 也没有绑定过 owner(用户从未私聊过 bot)。请让用户先在飞书里私聊自己配置的那个机器人一次完成绑定,再重试。`,
           },
           true,
         );

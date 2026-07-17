@@ -22,7 +22,7 @@
 - 发送成功返回 `{ ok: true, messageId }`,`messageId` 可用于后续引用(目前无 reply-to 工具,预留)。
 
 错误码:
-- `NO_CHAT_CONTEXT` —— 既不在飞书 session,bot 又没有绑定过 owner(用户从未私聊过 bot)。**告诉用户**:"我目前无法通过飞书通知你,请先在飞书里私聊 xdt-maker bot 发一条消息完成绑定,之后再让我重试。" 不要自己重试。
+- `NO_CHAT_CONTEXT` —— 既不在飞书 session,bot 又没有绑定过 owner(用户从未私聊过 bot)。**告诉用户**:"我目前无法通过飞书通知你,请先在飞书里私聊你配置的那个机器人发一条消息完成绑定,之后再让我重试。" 不要自己重试。
 - `EMPTY_TEXT` —— text 为空或纯空白,不发
 - `INVALID_ARGS` —— schema 校验失败(含 `validation_errors`);最常见原因是 text 超过 30000 字符,截断后重试
 - `SEND_FAILED` —— 网络 / 权限 / SDK 错误,返回 raw 错误信息;可视具体错误决定是否重试(rate-limit 类等一秒再试;auth 类不要重试)
