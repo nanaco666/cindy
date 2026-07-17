@@ -20,8 +20,12 @@ export interface ThemeColors {
   surface: string;
   /** 抬一层的 Card / 弹窗 / 输入框 */
   surfaceElevated: string;
-  /** Surface 半透明(吸顶栏等) */
+  /** Surface 半透明(吸顶栏等,solid 非模糊——chrome/composer 热路径专用,守护测试禁 BlurView) */
   surfaceTranslucent: string;
+  /** 侧栏/抽屉类面板毛玻璃底色(R1 audit 模式1,blur≈50 等效;BlurView tint 用) */
+  surfaceTranslucentSidebar: string;
+  /** 浮层卡 sheet surface 底色(R1 audit 模式3,solid 玻璃感由 backdrop blur 承担,surface 不叠 blur 规避 Android 滚动热路径) */
+  surfaceGlassPanel: string;
   /** Chip / pill / 选中行填充 */
   surfaceChip: string;
   /** 1px 分隔线 / 边框(桌面 Board) */
@@ -100,6 +104,8 @@ export const lightColors: ThemeColors = {
   surface: '#EDEDED',
   surfaceElevated: '#F8F8F8',
   surfaceTranslucent: 'rgba(237, 237, 237, 0.78)',
+  surfaceTranslucentSidebar: 'rgba(246, 246, 246, 0.90)',
+  surfaceGlassPanel: '#F8F8F8',
   surfaceChip: '#F1F1F1',
   border: '#DCDFE3',
   borderTranslucent: 'rgba(220, 223, 227, 0.62)',
@@ -140,6 +146,8 @@ export const darkColors: ThemeColors = {
   surface: '#2A2828',
   surfaceElevated: '#312F2F',
   surfaceTranslucent: 'rgba(42, 40, 40, 0.78)',
+  surfaceTranslucentSidebar: 'rgba(18, 15, 15, 0.85)',
+  surfaceGlassPanel: 'rgba(59, 59, 59, 0.95)',
   surfaceChip: '#2F2D2D',
   border: '#434343',
   borderTranslucent: 'rgba(67, 67, 67, 0.62)',

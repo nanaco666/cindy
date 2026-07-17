@@ -77,6 +77,7 @@
   ],
   "notes": [
     "webview HTML 生成器(mathWebViewHtml/mermaidWebViewHtml/mediaPlayerWebViewHtml/selectableMarkdownHtml)经 grep 无 hex 字面量——主题色运行时由 useTheme 注入,无需豁免,无需迁移,CINDY 后自动跟随。",
-    "app.json android.adaptiveIcon.backgroundColor #F70121 属原生层,U9 不做原生品牌化,不改不迁,仅事实登记(见 M2 报告 §4)。"
+    "app.json android.adaptiveIcon.backgroundColor #F70121 属原生层,U9 不做原生品牌化,不改不迁,仅事实登记(见 M2 报告 §4)。",
+    "E4M 毛玻璃:BlurBackdrop(BlurView + surfaceTranslucentSidebar tint)用于 SheetModal/SessionActionSheet backdrop;sheet surface 用 surfaceGlassPanel token。全部走 token,无新增硬编码色字面量,本豁免文件无需追加条目。session chrome/composer 刻意 blur-free(守护测试禁 BlurView,走 solid surfaceTranslucent);ImageLightbox 保持纯黑(媒体查看器惯例)。"
   ]
 }

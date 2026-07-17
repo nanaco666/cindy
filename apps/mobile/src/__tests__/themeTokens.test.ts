@@ -66,8 +66,7 @@ describe('theme tokens', () => {
     expect(lightColors.statusRecording).toBe('#ef4444');
   });
 
-  it('CTA 契约:品牌红 #DF0C27 底 + #FFFFFF 字,L=D 同值,对比度 ≥4.5:1(U3+U8 批准)', () => {
-    // 契约变更依据:CINDY 色板经 U3(全量替换语义)+U8(token 决策表)批准——
+  it('CTA 契约:品牌红 #DF0C27 底 + #FFFFFF 字,L=D 同值,对比度 ≥4.5:1(U3+U8 批准)', () => {    // 契约变更依据:CINDY 色板经 U3(全量替换语义)+U8(token 决策表)批准——
     // 此前"dark CTA 反相为白 pill"守护作废,改为红底白字 L=D 同值。
     // 这是对旧反相断言的显式契约改写,不是绕过;PR 描述须写明依据。
     expect(lightColors.cta).toBe('#DF0C27');
@@ -78,6 +77,15 @@ describe('theme tokens', () => {
     for (const palette of [lightColors, darkColors]) {
       expect(contrastRatio(palette.ctaText, palette.cta)).toBeGreaterThanOrEqual(4.5);
     }
+  });
+
+  it('毛玻璃 token 契约(R1 audit 模式1/3,E4M 新增 surfaceTranslucentSidebar / surfaceGlassPanel)', () => {
+    // R1 audit:@2x 稿折半;模式1 侧栏 blur≈50 dark #120F0F@0.85 / light #F6F6F6@0.90;
+    // 模式3 浮层卡 light #F8F8F8 / dark #3B3B3B@0.95。surface 不叠 blur 规避 Android 热路径。
+    expect(lightColors.surfaceTranslucentSidebar).toBe('rgba(246, 246, 246, 0.90)');
+    expect(darkColors.surfaceTranslucentSidebar).toBe('rgba(18, 15, 15, 0.85)');
+    expect(lightColors.surfaceGlassPanel).toBe('#F8F8F8');
+    expect(darkColors.surfaceGlassPanel).toBe('rgba(59, 59, 59, 0.95)');
   });
 
   it('typeScale 严格单调递增', () => {

@@ -22,6 +22,7 @@ import {
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
+import { BlurBackdrop } from '@/session/BlurBackdrop';
 import { useModalFadeLifecycle } from '@/session/useModalFadeLifecycle';
 import { useThemedStyles, type ThemeColors } from '@/theme';
 
@@ -115,6 +116,7 @@ export function SheetModal({
       visible={mounted}
     >
       <Animated.View style={backdropStyle}>
+        <BlurBackdrop />
         <Pressable
           accessibilityLabel="关闭面板"
           accessibilityRole="button"
@@ -143,7 +145,6 @@ function makeStyles(colors: ThemeColors) {
   return {
     backdrop: {
       ...StyleSheet.absoluteFill,
-      backgroundColor: colors.overlay,
     },
     backdropPressable: {
       flex: 1,

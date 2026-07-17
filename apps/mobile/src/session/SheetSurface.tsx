@@ -142,7 +142,9 @@ function makeSheetSurfaceStyles(colors: ThemeColors) {
     // 水平 padding 不加在 sheet 容器上,而是下放到 dragZone / pinnedTop / 滚动内容 / footer:
     // ScrollView 需要撑满面板宽,否则竖向滚动指示条会内缩 20px、悬在内容右缘。
     sheet: {
-      backgroundColor: colors.surfaceElevated,
+      // surfaceGlassPanel(R1 模式3 浮层卡底色);玻璃感由 SheetModal backdrop 的 BlurBackdrop 承担,
+      // surface 不叠 blur 规避 Android 滚动热路径(lead 裁决)。
+      backgroundColor: colors.surfaceGlassPanel,
       borderTopLeftRadius: radius.container,
       borderTopRightRadius: radius.container,
       overflow: 'hidden' as const,

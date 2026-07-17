@@ -28,6 +28,7 @@ import {
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/AppText';
+import { BlurBackdrop } from '@/session/BlurBackdrop';
 import {
   buildSessionActionMenu,
   type SessionSwipeAction,
@@ -109,6 +110,7 @@ export function SessionActionSheet({
     <Modal animationType="none" onRequestClose={onClose} transparent visible={mounted}>
       <View style={styles.overlay}>
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: progress }]}>
+          <BlurBackdrop />
           <Pressable
             accessibilityLabel="关闭会话操作菜单"
             onPress={onClose}
@@ -165,7 +167,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'flex-end',
   },
   backdrop: {
-    backgroundColor: colors.overlay,
+    // 背板玻璃色由 BlurBackdrop 承担(absoluteFill 在本 Pressable 之下);Pressable 透明,
+    // 仅占触摸区接收点按关闭。
     flex: 1,
   },
   cardArea: {
@@ -173,7 +176,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   actionCard: {
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: colors.surfaceGlassPanel,
     borderColor: colors.border,
     borderRadius: radius.container,
     borderWidth: StyleSheet.hairlineWidth,
@@ -196,7 +199,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   cancelCard: {
     alignItems: 'center',
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: colors.surfaceGlassPanel,
     borderColor: colors.border,
     borderRadius: radius.container,
     borderWidth: StyleSheet.hairlineWidth,
