@@ -161,7 +161,7 @@ fn run_inner<F: FnMut(InstallerEvent)>(
     //    parent's `{ts}` suffix so a copy-out for support still carries the
     //    attempt timestamp regardless of whether the parent context survives.
     let ts = workdir_ts(&args.workdir);
-    let extract_dir = args.workdir.join(format!("xdt-update-extract-{ts}"));
+    let extract_dir = args.workdir.join(format!("cindy-update-extract-{ts}"));
     fs::create_dir_all(&extract_dir)?;
     logger::info(format!("[installer] extract_dir={}", extract_dir.display()));
     extract_zip(&args.zip, &extract_dir, |done, total| {
@@ -182,7 +182,7 @@ fn run_inner<F: FnMut(InstallerEvent)>(
         Phase::BackingUp,
         "备份当前版本…".into(),
     ));
-    let backup_dir = args.workdir.join(format!("xdt-update-rollback-{ts}"));
+    let backup_dir = args.workdir.join(format!("cindy-update-rollback-{ts}"));
     fs::create_dir_all(&backup_dir)?;
     logger::info(format!("[installer] backup_dir={}", backup_dir.display()));
     snapshot_overwritten_files(&extract_dir, &args.app_dir, &backup_dir, |done, total| {
@@ -316,12 +316,13 @@ fn run_inner<F: FnMut(InstallerEvent)>(
 /// Best-effort: any IO failure is ignored — sweeping is purely housekeeping.
 pub fn sweep_stale_temp_dirs() {
     const MAX_AGE_SECS: u64 = 7 * 24 * 60 * 60; // 7 days
-    // Single broad prefix catches:
-    //   - xdt-update-{ts}/             current workdir layout
+    // Broad prefixes catch:
+    //   - cindy-update-{ts}/           current workdir layout (2026-07 rebrand)
+    //   - xdt-update-{ts}/             legacy workdir layout
     //   - xdt-update-extract-{ts}/     legacy (pre-workdir refactor)
     //   - xdt-update-rollback-{ts}/    legacy
     //   - xdt-updater-{ts}.exe         legacy standalone updater binary
-    let prefixes = ["xdt-update"];
+    let prefixes = ["cindy-update", "xdt-update"];
     let now = std::time::SystemTime::now();
     let temp = std::env::temp_dir();
     let entries = match fs::read_dir(&temp) {
@@ -375,7 +376,7 @@ fn workdir_ts(workdir: &Path) -> String {
     workdir
         .file_name()
         .and_then(|n| n.to_str())
-        .and_then(|n| n.strip_prefix("xdt-update-"))
+        .and_then(|n| n.strip_prefix("cindy-update-").or_else(|| n.strip_prefix("xdt-update-")))
         .map(|s| s.to_string())
         .unwrap_or_else(|| chrono::Local::now().timestamp_millis().to_string())
 }
@@ -756,7 +757,7 @@ mod tests {
 fn needs_elevation(app_dir: &Path) -> io::Result<bool> {
     // Unique per-process so concurrent updaters (defensive — shouldn't happen)
     // never collide on the same probe path.
-    let probe = app_dir.join(format!(".xdt-update-write-probe-{}", std::process::id()));
+    let probe = app_dir.join(format!(".cindy-update-write-probe-{}", std::process::id()));
     match fs::OpenOptions::new()
         .write(true)
         .create(true)

@@ -26,6 +26,8 @@ import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 
+import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
+
 import { fetchManifest, getBaseUrl, isDev } from './manifestService';
 import type { Manifest } from './manifestService';
 import { download, DownloadError } from './downloader/index';
@@ -500,13 +502,14 @@ function incrementApplyAttempts(): void {
 }
 
 /**
- * Sweep stale `xdt-update*` leftovers from %TEMP% older than MAX_AGE_DAYS.
- * Mirrors the Rust updater's `sweep_stale_temp_dirs` (installer.rs:300) but
+ * Sweep stale `cindy-update*` / legacy `xdt-update*` leftovers from %TEMP%
+ * older than MAX_AGE_DAYS.
+ * Mirrors the Rust updater's `sweep_stale_temp_dirs` (installer.rs) but
  * runs in the main process at app startup — so users who never trigger
  * another update still get their disk cleaned up. The Rust sweep only
  * fires when the updater itself is launched; without this counterpart a
  * user on the latest version would keep the post-update workdir + the
- * `xdt-updater-{ts}.exe` binary inside it forever.
+ * `cindy-updater-{ts}.exe` binary inside it forever.
  *
  * Best-effort: any IO failure is swallowed — sweeping is housekeeping, not
  * correctness. 7-day threshold matches the Rust side so the two sweeps
@@ -524,7 +527,7 @@ function sweepStaleUpdateTempDirs(): void {
     return;
   }
   for (const name of entries) {
-    if (!name.startsWith('xdt-update')) continue;
+    if (!name.startsWith('cindy-update') && !name.startsWith('xdt-update')) continue;
     const full = path.join(tmp, name);
     let stat: fs.Stats;
     try {
@@ -885,15 +888,15 @@ function executeUpdateWindows(zipPath: string, theme: 'light' | 'dark'): void {
   // inside the same workdir, so a single rm wipes everything for one attempt.
   // Reason for copying out of resources/ at all: the in-resources copy must
   // itself be replaceable when the updater swaps appDir/* with the new
-  // release. Running it from %TEMP% means resources/xdt-updater.exe is no
+  // release. Running it from %TEMP% means the in-resources updater copy is no
   // longer file-locked. (electron-updater uses the same trick for elevate.exe.)
-  const updaterSrc = path.join(process.resourcesPath, 'xdt-updater.exe');
-  const workDir = path.join(os.tmpdir(), `xdt-update-${ts}`);
+  const updaterSrc = path.join(process.resourcesPath, `${BRAND_IDENTITY.updaterName}.exe`);
+  const workDir = path.join(os.tmpdir(), `cindy-update-${ts}`);
   // Keep `{ts}` on the binary too so a copy-out for support still carries
   // the attempt timestamp in its filename.
-  const updaterRun = path.join(workDir, `xdt-updater-${ts}.exe`);
+  const updaterRun = path.join(workDir, `${BRAND_IDENTITY.updaterName}-${ts}.exe`);
   if (!fs.existsSync(updaterSrc) || fs.statSync(updaterSrc).size === 0) {
-    log.error('xdt-updater.exe missing at %s — cannot apply update', maskPath(updaterSrc));
+    log.error('updater binary missing at %s — cannot apply update', maskPath(updaterSrc));
     handleApplyFailure('updater_missing');
     return;
   }
@@ -920,7 +923,7 @@ function executeUpdateWindows(zipPath: string, theme: 'light' | 'dark'): void {
     '--theme', theme,
     '--workdir', workDir,
   ];
-  log.info('Spawning xdt-updater: %s', maskPath(updaterRun));
+  log.info('Spawning updater: %s', maskPath(updaterRun));
   log.info('  args: %s', JSON.stringify(args));
 
   const child = spawn(updaterRun, args, {
@@ -930,7 +933,7 @@ function executeUpdateWindows(zipPath: string, theme: 'light' | 'dark'): void {
   });
 
   const spawnTimeout = setTimeout(() => {
-    log.error('xdt-updater spawn timed out after 5 s');
+    log.error('updater spawn timed out after 5 s');
     handleApplyFailure('spawn_timeout');
   }, 5_000);
 
@@ -942,7 +945,7 @@ function executeUpdateWindows(zipPath: string, theme: 'light' | 'dark'): void {
 
   child.on('error', (err: NodeJS.ErrnoException) => {
     clearTimeout(spawnTimeout);
-    log.error('xdt-updater spawn failed: %s (code=%s)', err.message, err.code);
+    log.error('updater spawn failed: %s (code=%s)', err.message, err.code);
     handleApplyFailure(err.code ?? 'unknown');
   });
 }
@@ -1080,7 +1083,7 @@ function executeRelaunch(theme: 'light' | 'dark'): void {
 // ── Public API ─────────────────────────────────────────────────────────────
 
 export function initUpdateService(): void {
-  // Best-effort cleanup of >7-day-old `xdt-update*` leftovers in %TEMP%.
+  // Best-effort cleanup of >7-day-old `cindy-update*`/`xdt-update*` leftovers in %TEMP%.
   // Counterpart to the Rust updater's own sweep — covers the case where the
   // user stays on the latest version and never triggers another updater run.
   sweepStaleUpdateTempDirs();

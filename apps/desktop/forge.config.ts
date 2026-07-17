@@ -38,6 +38,8 @@ const CINDY_APP_ID = brandAppId(CINDY_REGION);
 const CINDY_UTI_PREFIX = brandBundleIdPrefix(CINDY_REGION);
 /** 可执行文件基名('Cindy' → Cindy.exe / mac Mach-O 名)。 */
 const CINDY_EXE = BRAND_IDENTITY.executableName;
+/** 更新器二进制文件名(cindy-updater.exe;源目录仍叫 xdt-updater/)。 */
+const UPDATER_EXE = `${BRAND_IDENTITY.updaterName}.exe`;
 
 // discord.js is externalized from the main Vite bundle because its circular
 // CommonJS graph crashes when Rollup reorders it. Its dependency tree contains
@@ -421,7 +423,7 @@ const isWin = process.platform === 'win32';
  */
 function buildXdtUpdater(): void {
   if (process.platform !== 'win32') return;
-  console.log('[forge:prePackage] Building xdt-updater.exe (Rust + Tauri)...');
+  console.log(`[forge:prePackage] Building ${UPDATER_EXE} (Rust + Tauri)...`);
 
   const updaterRoot = path.join(__dirname, 'xdt-updater', 'src-tauri');
   if (!fs.existsSync(updaterRoot)) {
@@ -448,8 +450,8 @@ function buildXdtUpdater(): void {
     throw new Error(`[forge] cargo build --release failed with exit code ${r.status}`);
   }
 
-  const builtExe = path.join(updaterRoot, 'target', 'release', 'xdt-updater.exe');
-  const destExe = path.join(__dirname, 'resources', 'xdt-updater.exe');
+  const builtExe = path.join(updaterRoot, 'target', 'release', UPDATER_EXE);
+  const destExe = path.join(__dirname, 'resources', UPDATER_EXE);
   if (!fs.existsSync(builtExe)) {
     throw new Error(`[forge] cargo build succeeded but ${builtExe} is missing`);
   }
@@ -464,7 +466,7 @@ function buildXdtUpdater(): void {
 
   fs.copyFileSync(builtExe, destExe);
   const sizeMb = (fs.statSync(destExe).size / (1024 * 1024)).toFixed(2);
-  console.log(`[forge:prePackage] xdt-updater.exe → ${destExe} (${sizeMb} MB, ${Date.now() - t0}ms)`);
+  console.log(`[forge:prePackage] ${UPDATER_EXE} → ${destExe} (${sizeMb} MB, ${Date.now() - t0}ms)`);
 }
 
 /**
@@ -512,7 +514,7 @@ function patchUpdaterManifest(exePath: string): void {
   ], { stdio: 'inherit' });
   if (r.error) throw new Error(`[forge] mt.exe spawn failed: ${r.error.message}`);
   if (r.status !== 0) throw new Error(`[forge] mt.exe exited ${r.status} when patching manifest`);
-  console.log(`[forge:prePackage] manifest patched into xdt-updater.exe (PCA bypass)`);
+  console.log(`[forge:prePackage] manifest patched into ${UPDATER_EXE} (PCA bypass)`);
 }
 
 /**
@@ -561,7 +563,7 @@ function signPackagedExes(buildPath: string): void {
   // 把它当未知未签名第三方进程拦下,影响"录音时静音"功能。
   const exes = [
     path.join(buildPath, `${CINDY_EXE}.exe`),
-    path.join(buildPath, 'resources', 'xdt-updater.exe'),
+    path.join(buildPath, 'resources', UPDATER_EXE),
     path.join(buildPath, 'resources', 'xdt-helper.exe'),
     path.join(
       buildPath,
@@ -726,7 +728,7 @@ function extraResourcesForTarget(targetPlatform: string): string[] {
   ];
 
   if (targetPlatform === 'win32') {
-    base.unshift('resources/xdt-helper.exe', 'resources/xdt-updater.exe');
+    base.unshift('resources/xdt-helper.exe', `resources/${UPDATER_EXE}`);
   }
 
   return base;
@@ -1126,7 +1128,7 @@ const config: ForgeConfig = {
   },
   rebuildConfig: {},
   hooks: {
-    // Builds xdt-updater.exe before electron-packager copies resources/ into
+    // Builds cindy-updater.exe before electron-packager copies resources/ into
     // the package — guarantees the shipped updater matches HEAD.
     prePackage: async (_forgeConfig, platform, arch) => {
       const targetPlatform = requestedTargetPlatform();

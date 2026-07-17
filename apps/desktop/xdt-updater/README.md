@@ -1,4 +1,7 @@
-# xdt-updater
+# cindy-updater
+
+> 源目录沿用历史名 `apps/desktop/xdt-updater/`;二进制与产物已随 2026-07 品牌
+> 翻转改名为 `cindy-updater.exe`(经 owner 确认,AGENTS.md 规则 21)。
 
 Tauri-based Windows updater for `Cindy`. Replaces the inline `.cmd` script
 that the Electron main process previously generated in `executeUpdateWindows`
@@ -9,13 +12,13 @@ that the Electron main process previously generated in `executeUpdateWindows`
 - Real UI (progress / errors / log button) instead of a hidden cmd window.
 - Structured error handling — no `if %ERRORLEVEL% GEQ 8` dance.
 - Self-update via copy-to-%TEMP% pattern: the updater is copied to
-  `%TEMP%\xdt-updater-{ts}.exe` before launch, so the in-`resources/` copy is
+  `%TEMP%\cindy-updater-{ts}.exe` before launch, so the in-`resources/` copy is
   no longer file-locked and the new release's updater can overwrite it.
 
 ## CLI contract
 
 ```
-xdt-updater.exe \
+cindy-updater.exe \
   --zip       <path-to-downloaded-patch.zip> \
   --app-dir   <electron-install-dir> \
   --exe-name  Cindy.exe \
@@ -60,7 +63,7 @@ The Electron main process owns argument construction; see
 ```
 cd apps/desktop/xdt-updater
 pnpm install              # pulls @tauri-apps/cli
-pnpm tauri build          # produces target/release/xdt-updater.exe
+pnpm tauri build          # produces target/release/cindy-updater.exe
 ```
 
 `tauri.conf.json` has `bundle.active = false` — we ship the raw exe, not an

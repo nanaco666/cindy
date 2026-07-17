@@ -21,8 +21,10 @@
  *    `lizi_xdt_helper`、`xdt-image://` 等进程内 scheme、`.cshare` 扩展名、
  *    localStorage 键等)见 docs/cindy-rebrand/inventory.md §2 的 B 类清单,
  *    不要试图从这里派生它们。
- *  - `updaterName` 维持 `xdt-updater`:更新器二进制改名属 xdt-updater 模块
- *    改动(AGENTS.md 规则 21,需与 owner 单独确认),不随本次翻转。
+ *  - `updaterName` = `cindy-updater`(2026-07-17 经 owner 确认随品牌翻转改名,
+ *    AGENTS.md 规则 21;老渠道已冻结、新应用未发过版,无自更新兼容包袱)。
+ *    消费方:updateService(resources 源名 + %TEMP% 运行名)、forge prePackage
+ *    构建/签名/extraResource、notices 脚本登记路径。
  *
  * 消费方:
  *  - apps/desktop forge.config.ts(executableName / appId / protocols / UTI)
@@ -103,7 +105,7 @@ export const BRAND_IDENTITY: BrandIdentity = Object.freeze({
   userDataDirName: 'Cindy',
   legacyUserDataDirNames: Object.freeze(['xdt-maker']),
   cdnPrefix: 'cindy',
-  updaterName: 'xdt-updater',
+  updaterName: 'cindy-updater',
   dbFilePrefix: 'cindy',
   legacyDbFilePrefixes: Object.freeze(['xdt-maker']),
   uninstallDisplayNamePrefix: 'Cindy',

@@ -1126,7 +1126,7 @@ function assertTrackedBinariesRegistered() {
     "apps/android-platform-tools-bin/",
     "apps/desktop/native/sqlite-vec/",
     "apps/desktop/resources/xdt-helper.exe",
-    "apps/desktop/resources/xdt-updater.exe",
+    "apps/desktop/resources/cindy-updater.exe",
     "apps/mobile/assets/fonts/JetBrainsMono-",
   ];
   const files = execFileSync("git", ["ls-files", "-z"], {
