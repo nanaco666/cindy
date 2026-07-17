@@ -3177,6 +3177,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
       latencyMs: number;
       detail?: string;
     }> => ipcRenderer.invoke('maker:provider:test-connection', input),
+    /**
+     * 供应商「获取模型列表」—— 用表单值 GET 该供应商的列模型端点（key 仅内存透传）。
+     * 结构化结果：ok=true 带 models；失败 code 走 providerError.* i18n。
+     */
+    fetchProviderModels: (input: {
+      agent: 'claude-code' | 'codex';
+      baseUrl: string;
+      modelsUrl?: string | null;
+      apiKey?: string | null;
+      headers?: Record<string, string>;
+    }): Promise<{
+      ok: boolean;
+      models?: { id: string; name: string }[];
+      code?: import('../shared/providerErrors').ProviderErrorCode;
+      status?: number;
+      detail?: string;
+    }> => ipcRenderer.invoke('maker:provider:models-fetch', input),
     /** 自定义供应商变更广播订阅（返回 off）。 */
     onProvidersChanged: fanOutMakerProvidersChanged,
 

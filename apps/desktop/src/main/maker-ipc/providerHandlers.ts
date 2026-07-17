@@ -25,6 +25,10 @@ import {
   validateCustomProviderConfig,
 } from '../maker-host/custom-provider-store.js';
 import type { ProviderTestInput, ProviderTestResult } from '../maker-host/provider-diagnostics.js';
+import type {
+  ProviderModelsFetchResult,
+  ProviderModelsFetchSpec,
+} from '../maker-host/provider-model-fetch.js';
 import { MAKER_INVOKE } from './channels.js';
 import type { IpcHandlerRegistry } from './ipcHandlerRegistry.js';
 
@@ -47,6 +51,8 @@ export interface ProviderHandlerDeps {
   listPresets(): ProviderPreset[];
   /** 测试连接（生产 = testProviderConnection；单测注入 stub 不联网）。 */
   testConnection(input: ProviderTestInput): Promise<ProviderTestResult>;
+  /** 获取模型列表（生产 = fetchProviderModels；单测注入 stub 不联网）。 */
+  fetchModels(spec: ProviderModelsFetchSpec): Promise<ProviderModelsFetchResult>;
   /**
    * 通用 OAuth 登录 / 登出 / 取消（生产接 generic-oauth Runner + 目录描述符解析；
    * login 成功后由生产 deps 负责模型发现与 PROVIDER_CHANGED 广播）。
@@ -97,6 +103,38 @@ function parseTestInput(input: unknown): ProviderTestInput | null {
     };
   }
   return null;
+}
+
+/** 校验 PROVIDER_MODELS_FETCH 入参形状（确定性代码校验，非法直接 INVALID_PARAMS）。 */
+function parseModelsFetchInput(input: unknown): ProviderModelsFetchSpec | null {
+  if (!input || typeof input !== 'object') return null;
+  const spec = input as Record<string, unknown>;
+  if (typeof spec.agent !== 'string' || !VALID_AGENTS.includes(spec.agent)) return null;
+  if (typeof spec.baseUrl !== 'string' || spec.baseUrl.length === 0) return null;
+  const httpUrlOk = (v: string): boolean => {
+    try {
+      const u = new URL(v);
+      return u.protocol === 'http:' || u.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+  if (!httpUrlOk(spec.baseUrl)) return null;
+  if (spec.modelsUrl !== undefined && spec.modelsUrl !== null) {
+    if (typeof spec.modelsUrl !== 'string' || !httpUrlOk(spec.modelsUrl)) return null;
+  }
+  if (spec.apiKey !== undefined && spec.apiKey !== null && typeof spec.apiKey !== 'string') return null;
+  if (spec.headers !== undefined) {
+    if (!spec.headers || typeof spec.headers !== 'object' || Array.isArray(spec.headers)) return null;
+    if (Object.values(spec.headers as Record<string, unknown>).some((v) => typeof v !== 'string')) return null;
+  }
+  return {
+    agent: spec.agent as AgentKind,
+    baseUrl: spec.baseUrl,
+    modelsUrl: (spec.modelsUrl as string | null | undefined) ?? null,
+    apiKey: (spec.apiKey as string | null | undefined) ?? null,
+    headers: spec.headers as Record<string, string> | undefined,
+  };
 }
 
 export function registerProviderHandlers(
@@ -171,6 +209,13 @@ export function registerProviderHandlers(
       // resolveSavedProbeSpec 的解析错误（provider 不存在 / 无该 runtime）→ INVALID_PARAMS。
       throwIpcError('INVALID_PARAMS', err instanceof Error ? err.message : String(err));
     }
+  });
+
+  // 获取模型列表：查询型结构化返回（同上例外条款）；网络/上游失败在结果 code 里，不抛。
+  registry.handle(MAKER_INVOKE.PROVIDER_MODELS_FETCH, async (_event, input: unknown) => {
+    const parsed = parseModelsFetchInput(input);
+    if (!parsed) throwIpcError('INVALID_PARAMS', 'invalid models-fetch input');
+    return deps.fetchModels(parsed);
   });
 
   // 通用 OAuth 登录 / 登出 / 取消。login 是查询型返回（{ok, reason}——取消/超时是正常流程

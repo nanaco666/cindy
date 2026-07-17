@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronDown, Eye, EyeOff, Plug, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, Eye, EyeOff, Plug, Plus, RefreshCw, Sparkles, Trash2, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
@@ -69,6 +69,8 @@ interface RuntimeFields {
   apiKey: string;
   models: ModelRow[];
   headers: HeaderRow[];
+  /** 隐藏字段：列模型端点（预设 / 已存配置快照进来），「获取模型列表」用；不在表单展示。 */
+  modelsUrl: string;
 }
 
 /** 每个 runtime Tab 的「测试连接」状态（idle → testing → ok/fail）。 */
@@ -81,7 +83,13 @@ interface TestState {
 const IDLE_TEST: TestState = { status: 'idle' };
 
 function emptyRuntime(): RuntimeFields {
-  return { baseUrl: '', apiKey: '', models: [{ id: '', name: '' }], headers: [{ name: '', value: '' }] };
+  return {
+    baseUrl: '',
+    apiKey: '',
+    models: [{ id: '', name: '' }],
+    headers: [{ name: '', value: '' }],
+    modelsUrl: '',
+  };
 }
 
 function initRuntimes(initial?: CustomProviderConfig): Record<AgentKind, RuntimeFields> {
@@ -101,6 +109,7 @@ function initRuntimes(initial?: CustomProviderConfig): Record<AgentKind, Runtime
           rc.headers && Object.keys(rc.headers).length > 0
             ? Object.entries(rc.headers).map(([n, v]) => ({ name: n, value: v }))
             : [{ name: '', value: '' }],
+        modelsUrl: rc.modelsUrl ?? '',
       };
     }
   }
@@ -290,6 +299,18 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
     'claude-code': IDLE_TEST,
     codex: IDLE_TEST,
   });
+  // per-runtime「获取模型列表」进行中标记（按钮瞬态 spinner）。
+  const [fetchingModels, setFetchingModels] = useState<Record<AgentKind, boolean>>({
+    'claude-code': false,
+    codex: false,
+  });
+  // 拉取成功后的勾选弹层：行集合 = 拉取结果 ∪ 表单已填（后者默认勾选、保留用户显示名）。
+  const [picker, setPicker] = useState<{
+    agent: AgentKind;
+    models: ModelRow[];
+    selected: Set<string>;
+    query: string;
+  } | null>(null);
 
   // 新建态拉取预设模板（本地 IPC 极快返回；失败静默 —— 没有预设也不影响手填，规则 7 不做 loading）。
   // 区域感知排序：zh-CN 用户国内端点预设靠前、其它语言国际端点靠前（只排序不过滤，
@@ -330,6 +351,7 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
             rc.headers && Object.keys(rc.headers).length > 0
               ? Object.entries(rc.headers).map(([n, v]) => ({ name: n, value: v }))
               : [{ name: '', value: '' }],
+          modelsUrl: rc.modelsUrl ?? '',
         };
       }
       return next;
@@ -416,6 +438,64 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
     }
   }, [activeTab, rt, t]);
 
+  /** 获取模型列表：用当前 Tab 表单值 GET 列模型端点（key 仅内存透传），成功后开勾选弹层。 */
+  const handleFetchModels = useCallback(async () => {
+    const agent = activeTab;
+    const rf = rt[agent];
+    const baseUrl = rf.baseUrl.trim();
+    if (!baseUrl) {
+      toast.error(t('settings.providers.custom.fetch.needBaseUrl'));
+      return;
+    }
+    const headers: Record<string, string> = {};
+    for (const h of rf.headers) {
+      const n = h.name.trim();
+      if (n) headers[n] = h.value.trim();
+    }
+    setFetchingModels((prev) => ({ ...prev, [agent]: true }));
+    try {
+      const result = await window.electronAPI.maker.fetchProviderModels({
+        agent,
+        baseUrl,
+        modelsUrl: rf.modelsUrl.trim() || null,
+        apiKey: rf.apiKey.trim() || null,
+        ...(Object.keys(headers).length > 0 ? { headers } : {}),
+      });
+      if (result.ok && result.models && result.models.length > 0) {
+        const current = rf.models
+          .map((m) => ({ id: m.id.trim(), name: m.name.trim() }))
+          .filter((m) => m.id.length > 0);
+        const currentById = new Map(current.map((m) => [m.id, m]));
+        const fetchedIds = new Set(result.models.map((m) => m.id));
+        // 行集合 = 表单已填但不在拉取结果里的（置顶保留）+ 拉取结果（撞 id 时保留用户显示名）。
+        const rows: ModelRow[] = [
+          ...current.filter((m) => !fetchedIds.has(m.id)).map((m) => ({ id: m.id, name: m.name || m.id })),
+          ...result.models.map((m) => {
+            const cur = currentById.get(m.id);
+            return { id: m.id, name: cur?.name || m.name };
+          }),
+        ];
+        setPicker({ agent, models: rows, selected: new Set(currentById.keys()), query: '' });
+      } else {
+        toast.error(t(`providerError.${result.code ?? 'UNKNOWN'}`));
+      }
+    } catch (e) {
+      const ipc = extractIpcError(e);
+      toast.error(ipc?.message ?? t('settings.providers.custom.fetch.failed'));
+    } finally {
+      setFetchingModels((prev) => ({ ...prev, [agent]: false }));
+    }
+  }, [activeTab, rt, t]);
+
+  /** 勾选弹层确认：所选集合写回该 runtime 的模型行（替换语义——未勾选即移除）。 */
+  const applyPicker = useCallback(() => {
+    if (!picker) return;
+    const chosen = picker.models.filter((m) => picker.selected.has(m.id));
+    if (chosen.length === 0) return;
+    patch(picker.agent, (x) => ({ ...x, models: chosen.map((m) => ({ ...m })) }));
+    setPicker(null);
+  }, [picker, patch]);
+
   const handleSave = useCallback(async () => {
     // 校验失败统一走 toast(规则 7:不在弹窗里塞会撑高/缩回的内联错误条,避免布局抖动闪烁)。
     const trimmedName = name.trim();
@@ -454,7 +534,12 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
         const n = h.name.trim();
         if (n) headers[n] = h.value.trim();
       }
-      runtimes[a] = { baseUrl: rf.baseUrl.trim(), models, ...(Object.keys(headers).length > 0 ? { headers } : {}) };
+      runtimes[a] = {
+        baseUrl: rf.baseUrl.trim(),
+        models,
+        ...(Object.keys(headers).length > 0 ? { headers } : {}),
+        ...(rf.modelsUrl.trim() ? { modelsUrl: rf.modelsUrl.trim() } : {}),
+      };
       // OAuth 形态不收集 per-runtime API key（鉴权走 Runner 的 Bearer）。
       if (authMode === 'apiKey' && rf.apiKey.trim()) keys[a] = rf.apiKey.trim();
     }
@@ -857,7 +942,7 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
             {/* 测试连接：用当前 Tab 表单值发最小探测请求（与真实会话同路由口径，未保存也能测）。
                 OAuth 形态隐藏——登录前无凭证可测，保存并授权后可在供应商行验证。 */}
             {authMode === 'apiKey' && (
-            <div className="flex min-h-[32px] items-center gap-2.5">
+            <div className="flex min-h-[32px] flex-wrap items-center gap-2.5">
               <button
                 type="button"
                 onClick={() => void handleTest()}
@@ -876,6 +961,26 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
                 {test[activeTab].status === 'testing'
                   ? t('settings.providers.custom.test.testing')
                   : t('settings.providers.custom.test.button')}
+              </button>
+              {/* 获取模型列表：GET 该供应商的列模型端点，成功后开勾选弹层填进上方模型行。 */}
+              <button
+                type="button"
+                onClick={() => void handleFetchModels()}
+                disabled={fetchingModels[activeTab]}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-12 font-medium transition-colors active:scale-[0.98]',
+                  'border-[var(--settings-input-border)] text-[var(--settings-section-title)] hover:bg-[var(--surface-hover)]',
+                  fetchingModels[activeTab] && 'cursor-not-allowed opacity-60',
+                )}
+              >
+                {fetchingModels[activeTab] ? (
+                  <Spinner size={13} />
+                ) : (
+                  <RefreshCw size={13} />
+                )}
+                {fetchingModels[activeTab]
+                  ? t('settings.providers.custom.fetch.fetching')
+                  : t('settings.providers.custom.fetch.button')}
               </button>
               {test[activeTab].status === 'ok' && (
                 <span className="flex items-center gap-1 text-12" style={{ color: 'var(--remote-status-ready)' }}>
@@ -919,6 +1024,181 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
           >
             {saving && <Spinner size={14} className="absolute left-[18px]" />}
             {t('settings.providers.custom.save')}
+          </button>
+        </div>
+      </div>
+
+      {/* 「获取模型列表」勾选弹层：可搜索多选，确认后替换该 runtime 的模型行。 */}
+      {picker && (
+        <ModelPickerOverlay
+          picker={picker}
+          onChange={setPicker}
+          onConfirm={applyPicker}
+          onClose={() => setPicker(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 勾选弹层内容（搜索 + 全选/清空 + 逐行勾选；> 8 项才显示搜索框，结构对齐 ModelListPanel）。 */
+function ModelPickerOverlay({
+  picker,
+  onChange,
+  onConfirm,
+  onClose,
+}: {
+  picker: { agent: AgentKind; models: ModelRow[]; selected: Set<string>; query: string };
+  onChange: (next: { agent: AgentKind; models: ModelRow[]; selected: Set<string>; query: string }) => void;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const q = picker.query.trim().toLowerCase();
+  const filtered = q
+    ? picker.models.filter(
+        (m) => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q),
+      )
+    : picker.models;
+  const toggle = (id: string) => {
+    const next = new Set(picker.selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onChange({ ...picker, selected: next });
+  };
+  const setAllFiltered = (on: boolean) => {
+    const next = new Set(picker.selected);
+    for (const m of filtered) {
+      if (on) next.add(m.id);
+      else next.delete(m.id);
+    }
+    onChange({ ...picker, selected: next });
+  };
+  return (
+    <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-[var(--overlay-modal)]">
+      <div
+        className={cn(
+          'flex max-h-[72vh] w-[460px] flex-col rounded-[16px]',
+          'border border-[var(--login-card-border)] bg-[var(--login-card-bg)]',
+          'shadow-[var(--shadow-menu)]',
+        )}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pb-1 pt-4">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <h3 className="text-15 font-semibold text-[var(--settings-section-title)]">
+              {t('settings.providers.custom.fetch.pickerTitle')}
+            </h3>
+            <span className="text-12 text-[var(--text-tertiary)]">
+              {t('settings.providers.custom.fetch.pickerCount', {
+                selected: picker.selected.size,
+                total: picker.models.length,
+              })}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t('settings.providers.custom.cancel')}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover)]"
+          >
+            <X size={16} />
+          </button>
+        </div>
+        {/* 搜索（项目多才显示）+ 全选/清空（作用于当前过滤结果） */}
+        <div className="flex flex-col gap-2 px-5 pt-2">
+          {picker.models.length > 8 && (
+            <input
+              value={picker.query}
+              onChange={(e) => onChange({ ...picker, query: e.target.value })}
+              placeholder={t('settings.providers.custom.fetch.searchPlaceholder')}
+              className={cn(
+                'h-[34px] w-full rounded-[9px] px-[11px] text-13 outline-none transition-colors',
+                'text-[var(--settings-input-text)] placeholder:text-[var(--settings-input-placeholder)]',
+                'border border-[var(--settings-input-border)] bg-[var(--settings-input-bg)] focus:border-[var(--settings-input-border-focus)]',
+              )}
+              style={{ userSelect: 'text', WebkitUserSelect: 'text' }}
+            />
+          )}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setAllFiltered(true)}
+              className="text-12 font-medium text-[var(--settings-section-title)] hover:underline"
+            >
+              {t('settings.providers.custom.fetch.selectAll')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setAllFiltered(false)}
+              className="text-12 font-medium text-[var(--text-secondary)] hover:underline"
+            >
+              {t('settings.providers.custom.fetch.clearAll')}
+            </button>
+          </div>
+        </div>
+        {/* 列表 */}
+        <div className="mt-2 flex-1 overflow-y-auto px-3 pb-2">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-6 text-center text-13 text-[var(--text-tertiary)]">
+              {t('settings.providers.custom.fetch.empty')}
+            </div>
+          ) : (
+            filtered.map((m) => {
+              const isSelected = picker.selected.has(m.id);
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={isSelected}
+                  onClick={() => toggle(m.id)}
+                  className="flex w-full items-center gap-2.5 rounded-[8px] px-3 py-2 text-left hover:bg-[var(--surface-hover)]"
+                >
+                  <span
+                    className={cn(
+                      'flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors',
+                      isSelected
+                        ? 'border-[var(--settings-input-border-focus)] bg-[var(--surface-elevated)] text-[var(--settings-section-title)]'
+                        : 'border-[var(--settings-input-border)] text-transparent',
+                    )}
+                  >
+                    <Check size={12} strokeWidth={3} />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-13 text-[var(--settings-input-text)]">
+                    {m.name}
+                  </span>
+                  {m.name !== m.id && (
+                    <span className="max-w-[45%] truncate text-11 text-[var(--text-tertiary)]">{m.id}</span>
+                  )}
+                </button>
+              );
+            })
+          )}
+        </div>
+        {/* Footer */}
+        <div className="flex justify-end gap-2.5 px-5 py-3.5">
+          <button
+            type="button"
+            onClick={onClose}
+            className={cn(
+              'inline-flex items-center justify-center rounded-full border bg-transparent px-5 py-2 text-13 font-medium transition-colors active:scale-[0.98]',
+              'border-[var(--confirm-btn-secondary-border)] text-[var(--confirm-btn-secondary-text)] hover:bg-[var(--confirm-btn-secondary-hover)]',
+            )}
+          >
+            {t('settings.providers.custom.cancel')}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={picker.selected.size === 0}
+            className={cn(
+              'inline-flex items-center justify-center rounded-full px-5 py-2 text-13 font-medium transition-colors active:scale-[0.98]',
+              'bg-[var(--confirm-btn-primary-bg)] text-[var(--confirm-btn-primary-text)] hover:bg-[var(--confirm-btn-primary-hover)]',
+              picker.selected.size === 0 && 'cursor-not-allowed opacity-50',
+            )}
+          >
+            {t('settings.providers.custom.fetch.confirm', { count: picker.selected.size })}
           </button>
         </div>
       </div>

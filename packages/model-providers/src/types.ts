@@ -292,6 +292,12 @@ export interface ProviderPresetRuntime {
   models: { id: string; name: string }[];
   /** 可选预填请求头。 */
   headers?: Record<string, string>;
+  /**
+   * 可选的「列模型」端点（表单「获取模型列表」用；缺省由 baseUrl 推导 `…/v1/models`）。
+   * 用于推理 baseUrl 与列模型端点不同源的厂商——如 Moonshot 的 cc baseUrl 是
+   * `…/anthropic`，但列模型接口只在 `https://api.moonshot.cn/v1/models`（同一 key 可用）。
+   */
+  modelsUrl?: string;
 }
 
 /**
@@ -346,6 +352,11 @@ export interface CustomProviderRuntimeConfig {
   models: { id: string; name: string }[];
   /** 可选自定义请求头（非密钥鉴权头可放这里；API key 走 safeStorage，不放这里）。 */
   headers?: Record<string, string>;
+  /**
+   * 可选的「列模型」端点（「获取模型列表」按钮用；缺省由 baseUrl 推导 `…/v1/models`）。
+   * 从预设创建时随 `ProviderPresetRuntime.modelsUrl` 快照进来并持久化，编辑态仍可再拉。
+   */
+  modelsUrl?: string;
 }
 
 /**

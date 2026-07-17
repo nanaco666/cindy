@@ -1058,6 +1058,19 @@
           "ok": "Connected ({{ms}} ms)",
           "needFields": "Fill in the base URL and at least one model ID first"
         },
+        "fetch": {
+          "button": "Fetch model list",
+          "fetching": "Fetching models…",
+          "needBaseUrl": "Fill in the base URL first",
+          "failed": "Failed to fetch the model list",
+          "pickerTitle": "Select models to add",
+          "pickerCount": "{{selected}} of {{total}} selected",
+          "searchPlaceholder": "Search models…",
+          "selectAll": "Select all",
+          "clearAll": "Clear",
+          "empty": "No matching models",
+          "confirm": "Add selected models ({{count}})"
+        },
         "authMode": {
           "label": "Authentication",
           "apiKey": "API key",

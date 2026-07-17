@@ -3248,6 +3248,20 @@ interface ElectronAPI {
       latencyMs: number;
       detail?: string;
     }>;
+    /** 供应商「获取模型列表」—— 表单值透传，结构化结果（code 走 providerError.* i18n）。 */
+    fetchProviderModels: (input: {
+      agent: 'claude-code' | 'codex';
+      baseUrl: string;
+      modelsUrl?: string | null;
+      apiKey?: string | null;
+      headers?: Record<string, string>;
+    }) => Promise<{
+      ok: boolean;
+      models?: { id: string; name: string }[];
+      code?: import('../shared/providerErrors').ProviderErrorCode;
+      status?: number;
+      detail?: string;
+    }>;
     /** 自定义供应商变更广播订阅（返回 off）。 */
     onProvidersChanged: (cb: () => void) => () => void;
 
