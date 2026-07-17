@@ -52,6 +52,7 @@ describe('project bulk archive action', () => {
       session('active', 'active'),
       session('archived', 'archived'),
       session('legacy-pinned-archived', 'archived', 'project-a', '2026-07-17T00:00:00.000Z'),
+      session('deleted-during-confirmation', 'deleted'),
       session('other-project', 'archived', 'project-b'),
     ];
 

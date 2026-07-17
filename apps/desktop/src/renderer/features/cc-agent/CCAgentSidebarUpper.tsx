@@ -1908,8 +1908,21 @@ function ExpandedView({
         const failed: string[] = [];
         for (const session of candidates) {
           try {
-            await sessionService.setStatus(session.id, 'active');
-            patchLocal(session.id, { status: 'active' });
+            // 确认框是异步边界：期间会话可能已被删除、恢复或移出当前 Project。
+            // 写入前重新读取并按同一候选规则校验，避免用确认前的陈旧快照覆盖新状态。
+            const latest = await sessionService.get(session.id);
+            const [revalidated] = selectProjectBulkArchiveCandidates(
+              [latest],
+              'unarchive',
+              runningSessionIds,
+              belongsToProject,
+            ).candidates;
+            if (!revalidated) {
+              failed.push(session.id);
+              continue;
+            }
+            await sessionService.setStatus(revalidated.id, 'active');
+            patchLocal(revalidated.id, { status: 'active' });
           } catch (err) {
             log.error('[unarchive all]', err);
             failed.push(session.id);
