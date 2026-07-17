@@ -618,14 +618,8 @@
       }
     },
     "apiKey": {
-      "title": "ツールキー",
-      "inputAria": "API キー",
       "showKey": "キーを表示",
-      "hideKey": "キーを非表示",
-      "openConsole": "コンソールを開く ↗",
-      "save": "保存",
-      "saved": "保存済み",
-      "saving": "保存中..."
+      "hideKey": "キーを非表示"
     },
     "voiceInput": {
       "title": "音声入力",
@@ -987,17 +981,27 @@
         "subtitle": "すべてのモデル · Claude Code / Codex 共通 · トークン課金",
         "modelLabel": "すべてのモデル",
         "billingLabel": "トークン課金",
-        "manageKey": "キーを変更 ↗",
         "disconnectConfirm": {
           "title": "XD ゲートウェイを切断しますか?",
           "description": "切断するとローカルに保存されたゲートウェイキーが削除されます。ゲートウェイのモデルを引き続き使うには再接続が必要です。"
         },
-        "keyDialog": {
-          "title": "XD ゲートウェイのキーを設定",
-          "description": "XD ゲートウェイ API キーを入力すると、トークン課金のすべてのモデルが利用できます。キーは本端末で暗号化して保存され、サインイン中の端末間で自動的に同期されます。",
-          "placeholder": "sk-...",
-          "close": "閉じる"
-        }
+        "sync": {
+          "syncing": "認証情報を取得中…",
+          "retry": "再試行",
+          "refresh": "認証情報を再取得",
+          "rotate": "キーをローテーション",
+          "rotating": "ローテーション中…",
+          "unsupported": "所属組織では利用できません",
+          "autoProvision": "サインイン後に自動取得",
+          "disabled": "モデルアクセスサービスは未提供です"
+        },
+        "rotateConfirm": {
+          "title": "ゲートウェイキーをローテーションしますか?",
+          "description": "現在のキーを失効させ、新しいキーを発行します。旧キーは即時無効になります:旧キーを使用中のセッション、リモートセッション、モバイル音声はやり直しが必要です。",
+          "confirm": "ローテーション"
+        },
+        "rotateSuccess": "キーをローテーションしました",
+        "rotateFailed": "ローテーションに失敗しました。後でもう一度お試しください"
       },
       "addCustom": {
         "title": "カスタムプロバイダーを追加",
@@ -5697,8 +5701,6 @@
       "discordBotSaveFailed": "保存に失敗しました：{{message}}",
       "discordBotDisconnected": "Discord ボットの連携を解除しました",
       "discordBotDisconnectFailed": "連携解除に失敗しました：{{message}}",
-      "apiKeySaved": "API Key を保存しました",
-      "apiKeyConnectionTestSuccess": "接続テストに成功しました",
       "attachmentLocalOnly": "ローカルファイルのみ対応：{{name}}",
       "attachmentReadError": "{{name}}：{{reason}}",
       "attachmentReadFailed": "読み込みに失敗：{{name}} - {{error}}",
@@ -5723,15 +5725,10 @@
       "steerFailed": "割り込み送信に失敗：{{message}}",
       "qrExpired": "QR コードが期限切れです。最初からやり直してください",
       "registrationFailed": "作成に失敗しました。後でもう一度お試しください",
-      "apiKeySafeStorageFailed": "保存に失敗しました。システムのセキュアストレージを確認してください",
-      "apiKeyTestFailed": "接続テストに失敗しました",
-      "apiKeyTestFailedNotSaved": "接続テストに失敗しました。Key は保存されていません",
-      "apiKeyNetworkFailed": "ネットワーク接続に失敗しました。ネットワークを確認してください",
       "silentStopExhausted": "モデルが空の応答を繰り返し返したため、自動再開を一時停止しました。「続行」をクリックしてタスクを再開してください。",
       "permissionTightenInterruptFailed": "権限を厳格化する際に実行中のタスクを停止できませんでした。タスクは終了まで確認なしで実行され続ける可能性があります。必要に応じて手動で停止してください。"
     },
     "validation": {
-      "apiKeyFormat": "Key の形式が不正です。sk- で始める必要があります",
       "feishuFieldsRequired": "App ID と App Secret の両方を入力してください",
       "feishuAppIdFormat": "App ID の形式は cli_xxxxxxxxxxxxxxxx である必要があります",
       "discordFieldsRequired": "Bot Token と Discord ユーザー ID の両方を入力してください",

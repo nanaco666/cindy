@@ -9,11 +9,13 @@ import {
 } from '../cindy-media/generatedMedia.js';
 import { createLogger } from '../logger.js';
 import { getProviderSecretStore } from '../secrets/providerSecretStore.js';
-import { getClientEndpoint } from '../clientEndpointsService.js';
+import { effectiveXdGatewayBaseUrl } from '../model-access/effectiveEndpoint.js';
 
 const log = createLogger('art');
 
 let artService: CindyProxyMediaService | null = null;
+/** 构建单例时捕获的 baseUrl;model-access 下发切换 endpoint 后据此重建。 */
+let artServiceBaseUrl: string | null = null;
 
 function readApiKey(): string | null {
   // 本地 only:经统一的 providerSecretStore 读 XD 网关 key。
@@ -21,7 +23,8 @@ function readApiKey(): string | null {
 }
 
 function getXdproxyBaseUrl(): string {
-  return getClientEndpoint('xdGatewayBaseUrl');
+  // 与 key 同源的生效 endpoint(model-access 下发值优先,回落端点清单)。
+  return effectiveXdGatewayBaseUrl();
 }
 
 /**
@@ -31,7 +34,13 @@ function getXdproxyBaseUrl(): string {
  * (mivo 装配已随 lizi_mivo MCP 退役移除,2026-07-13,能力在意识 xd-mivo。)
  */
 export function getCindyProxyMediaService(): CindyProxyMediaService {
+  // provider 装配在构造期捕获 baseUrl 字符串;endpoint 变化(登录后 model-access
+  // 下发 / 手填回落)时重建单例,构造无 IO 成本可忽略。
+  if (artService && artServiceBaseUrl !== getXdproxyBaseUrl()) {
+    artService = null;
+  }
   if (!artService) {
+    artServiceBaseUrl = getXdproxyBaseUrl();
     // 产物存储走 cindy-media 媒体总仓(规则 25;内容寻址 blob,
     // URL = cindy-media://blobs/<hash>.<ext>)。老 lizi-art-media 目录冻结只读,
     // 历史 xdt-image:// 地址由 resolveLegacyImageRef 继续服务(改历史图场景)。

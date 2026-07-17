@@ -35,8 +35,12 @@ export interface EmbeddingModelMeta {
 }
 
 export interface EmbeddingClientOptions {
-  /** 必填；OpenAI-compatible embeddings base URL，由上层宿主显式注入，不再提供生产默认值。 */
-  baseUrl: string;
+  /**
+   * 必填；OpenAI-compatible embeddings base URL，由上层宿主显式注入，不再提供
+   * 生产默认值。函数形态 = 每次请求现取(宿主 endpoint 运行期可变,如登录后由
+   * 服务端下发网关地址)。
+   */
+  baseUrl: string | (() => string);
   /** 动态读 API key (避免写死, 切账号生效)。返 undefined / 空字符串 = 未登录。 */
   getApiKey: () => string | undefined | null;
   /** 可注入用于单元测试; 缺省走全局 fetch。 */

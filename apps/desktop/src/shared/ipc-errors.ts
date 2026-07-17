@@ -92,6 +92,10 @@ export type IpcErrorCode =
   | 'GHOST_FILE_INVALID' // 不是合法 zip / 缺 ghost.json / 清单不合格 / 超限
   | 'GHOST_COMMAND_CONFLICT' // 显式指令与已装意识撞名(装入拒绝)
   | 'GHOST_ID_RESERVED' // id 属官方保留前缀(cindy-),用户通道拒装(防抢注蹭凭证别名)
+  // 网关凭据自动下发(model-access)
+  | 'MODEL_ACCESS_FAILED' // 拉取/轮换失败(网络或服务端错误),可重试
+  | 'MODEL_ACCESS_DISABLED' // 服务端灰度未启用(503)——走手填兜底
+  | 'MODEL_ACCESS_UNSUPPORTED' // 企业未接入(403)——XD 网关不可用,不重试
   // 个人资料自助修改(settings → 用户卡片;服务端直写)
   | 'PROFILE_AVATAR_UPLOAD_FAILED' // 头像经 oss-server 预签名直传失败(presign 或 PUT 阶段)
   | 'PROFILE_UPDATE_FAILED' // PATCH /api/me/profile 失败(网络 / 服务端拒绝)
@@ -180,6 +184,9 @@ const IPC_ERROR_CODES: ReadonlySet<IpcErrorCode> = new Set<IpcErrorCode>([
   'GHOST_FILE_INVALID',
   'GHOST_COMMAND_CONFLICT',
   'GHOST_ID_RESERVED',
+  'MODEL_ACCESS_FAILED',
+  'MODEL_ACCESS_DISABLED',
+  'MODEL_ACCESS_UNSUPPORTED',
   'PROFILE_AVATAR_UPLOAD_FAILED',
   'PROFILE_UPDATE_FAILED',
   'SHARE_FILE_INVALID',

@@ -618,14 +618,8 @@
       }
     },
     "apiKey": {
-      "title": "工具密钥",
-      "inputAria": "API Key",
       "showKey": "显示密钥",
-      "hideKey": "隐藏密钥",
-      "openConsole": "打开控制台 ↗",
-      "save": "保存",
-      "saved": "已保存",
-      "saving": "保存中..."
+      "hideKey": "隐藏密钥"
     },
     "voiceInput": {
       "title": "语音输入",
@@ -987,17 +981,27 @@
         "subtitle": "全部模型 · Claude Code / Codex 通用 · 按 token 计费",
         "modelLabel": "全部模型",
         "billingLabel": "按 token 计费",
-        "manageKey": "更换 key ↗",
         "disconnectConfirm": {
           "title": "断开 XD 网关?",
           "description": "断开后将清除本地保存的网关 key,需要重新连接才能继续使用网关模型。"
         },
-        "keyDialog": {
-          "title": "配置 XD 网关 Key",
-          "description": "填入 XD 网关 API Key 以启用按 token 计费的全部模型。Key 加密存储在本地,并在登录设备间自动同步。",
-          "placeholder": "sk-...",
-          "close": "关闭"
-        }
+        "sync": {
+          "syncing": "获取凭据中…",
+          "retry": "重试",
+          "refresh": "重新获取凭据",
+          "rotate": "轮换密钥",
+          "rotating": "轮换中…",
+          "unsupported": "当前企业未开通",
+          "autoProvision": "登录后自动获取",
+          "disabled": "模型访问服务未启用"
+        },
+        "rotateConfirm": {
+          "title": "轮换网关密钥?",
+          "description": "将撤销当前密钥并签发新密钥。旧密钥立即失效:使用旧密钥的进行中会话、远程会话与手机语音需要重新发起。",
+          "confirm": "轮换"
+        },
+        "rotateSuccess": "密钥已轮换",
+        "rotateFailed": "轮换失败,请稍后重试"
       },
       "addCustom": {
         "title": "添加自定义供应商",
@@ -5697,8 +5701,6 @@
       "discordBotSaveFailed": "保存失败：{{message}}",
       "discordBotDisconnected": "已解绑 Discord 机器人",
       "discordBotDisconnectFailed": "解绑失败：{{message}}",
-      "apiKeySaved": "API Key 已保存",
-      "apiKeyConnectionTestSuccess": "连接测试成功",
       "attachmentLocalOnly": "仅支持本地文件：{{name}}",
       "attachmentReadError": "{{name}}：{{reason}}",
       "attachmentReadFailed": "读取失败：{{name}} - {{error}}",
@@ -5723,15 +5725,10 @@
       "steerFailed": "插话失败：{{message}}",
       "qrExpired": "二维码已过期，请重新开始",
       "registrationFailed": "创建失败，请稍后重试",
-      "apiKeySafeStorageFailed": "存储失败，请检查系统安全存储功能",
-      "apiKeyTestFailed": "测试连接失败",
-      "apiKeyTestFailedNotSaved": "测试连接失败，Key 未保存",
-      "apiKeyNetworkFailed": "网络连接失败，请检查网络",
       "silentStopExhausted": "模型连续多次返回空响应，自动续跑已暂停。点击「继续」恢复任务。",
       "permissionTightenInterruptFailed": "收紧权限时未能停止正在运行的任务，它可能会继续免确认执行直到结束；如有需要请手动停止。"
     },
     "validation": {
-      "apiKeyFormat": "Key 格式错误，应以 sk- 开头",
       "feishuFieldsRequired": "App ID 和 App Secret 都需要填写",
       "feishuAppIdFormat": "App ID 格式应为 cli_xxxxxxxxxxxxxxxx",
       "discordFieldsRequired": "Bot Token 和 Discord 用户 ID 都需要填写",

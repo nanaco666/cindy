@@ -227,7 +227,9 @@ export async function ensureAnthropicCompatProxyReady(): Promise<void> {
 
   try {
     _handle = await createAnthropicCompatProxy({
-      upstream: claudeUpstreamEndpoint(),
+      // 函数形态:model-access 凭据同步可能在 proxy 启动(splash)后才把 endpoint
+      // 换成下发值;每请求现取才能保证与当前 key 同租户(proxy 内部按值 memoize)。
+      upstream: () => claudeUpstreamEndpoint(),
       // 'oauth' 模式按 model 分流(claude-* → api.anthropic.com 走订阅;其余 → gateway 换 key)。
       // 'gateway' 模式恒返 null,字节级行为与扩展前一致。
       routingTransform: createModelRoutingTransform(),

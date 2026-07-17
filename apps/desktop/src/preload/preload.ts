@@ -30,6 +30,10 @@ import type {
   LocalThemeWriteResult,
 } from '../shared/local-themes';
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type SupportedLocale } from '../shared/locale';
+import {
+  MODEL_ACCESS_STATUS_CHANNEL,
+  type ModelAccessStatus as ModelAccessStatusPayload,
+} from '../shared/modelAccess';
 import type {
   ImDefaultSettingsPatch,
   ImDefaultSettingsState,
@@ -1000,6 +1004,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   safeStorageRemove: (key: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('safe-storage-remove', key),
 
+  // ── 网关凭据自动下发(model-access,shared/modelAccess.ts) ──
+  modelAccess: {
+    getStatus: (): Promise<ModelAccessStatusPayload> =>
+      ipcRenderer.invoke('model-access:get-status'),
+    retry: (): Promise<ModelAccessStatusPayload> => ipcRenderer.invoke('model-access:retry'),
+    rotate: (): Promise<ModelAccessStatusPayload> => ipcRenderer.invoke('model-access:rotate'),
+    onStatusChange: (callback: (status: ModelAccessStatusPayload) => void): (() => void) => {
+      const listener = (_e: unknown, status: ModelAccessStatusPayload) => callback(status);
+      ipcRenderer.on(MODEL_ACCESS_STATUS_CHANNEL, listener);
+      return () => ipcRenderer.removeListener(MODEL_ACCESS_STATUS_CHANNEL, listener);
+    },
+  },
+
   // ── Auth (delegated to main process authManager) ──
   authInitialize: (): Promise<{ user: unknown; isAuthenticated: boolean }> =>
     ipcRenderer.invoke('auth:initialize'),
@@ -1447,8 +1464,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // API Key test connection
-  testApiKeyConnection: (key: string): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke('api-key:test-connection', key),
 
   // Show native directory picker dialog
   showOpenDirectoryDialog: (): Promise<{ canceled: boolean; path?: string }> =>

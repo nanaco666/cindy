@@ -666,7 +666,8 @@ export async function ensureCodexProxyReady(): Promise<void> {
     try {
       const handle = await createAnthropicCompatProxy({
         // 默认上游 = gateway(含 /v1); 「普通模型 + oauth」由 routingTransform override 到 ChatGPT。
-        upstream: buildCodexGatewayBaseUrl(),
+        // 函数形态:model-access 下发切换网关 endpoint 后,常驻 proxy 每请求现取(按值 memoize)。
+        upstream: () => buildCodexGatewayBaseUrl(),
         transformRequest: createTransformRequestChain(),
         routingTransform: createModelRoutingTransform(),
         // 组合两个只读观察器:service-tier 抽取 + 自定义供应商上游错误分类广播

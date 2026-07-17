@@ -618,14 +618,8 @@
       }
     },
     "apiKey": {
-      "title": "Tool Key",
-      "inputAria": "API Key",
       "showKey": "Show key",
-      "hideKey": "Hide key",
-      "openConsole": "Open Console ↗",
-      "save": "Save",
-      "saved": "Saved",
-      "saving": "Saving..."
+      "hideKey": "Hide key"
     },
     "voiceInput": {
       "title": "Voice input",
@@ -987,17 +981,27 @@
         "subtitle": "All models · Claude Code / Codex · billed per token",
         "modelLabel": "All models",
         "billingLabel": "billed per token",
-        "manageKey": "Change key ↗",
         "disconnectConfirm": {
           "title": "Disconnect XD Gateway?",
           "description": "Disconnecting clears the gateway key saved locally. You will need to reconnect to keep using gateway models."
         },
-        "keyDialog": {
-          "title": "Configure XD Gateway key",
-          "description": "Enter your XD Gateway API Key to enable all pay-per-token models. The key is stored encrypted on this device and synced across your signed-in devices.",
-          "placeholder": "sk-...",
-          "close": "Close"
-        }
+        "sync": {
+          "syncing": "Fetching credentials…",
+          "retry": "Retry",
+          "refresh": "Refresh credentials",
+          "rotate": "Rotate key",
+          "rotating": "Rotating…",
+          "unsupported": "Not enabled for your organization",
+          "autoProvision": "Provisioned automatically after sign-in",
+          "disabled": "Model access service not enabled"
+        },
+        "rotateConfirm": {
+          "title": "Rotate gateway key?",
+          "description": "This revokes the current key and issues a new one. The old key stops working immediately: in-flight sessions, remote sessions, and mobile voice using it will need to restart.",
+          "confirm": "Rotate"
+        },
+        "rotateSuccess": "Key rotated",
+        "rotateFailed": "Rotation failed, please try again later"
       },
       "addCustom": {
         "title": "Add a custom provider",
@@ -5706,8 +5710,6 @@
       "discordBotSaveFailed": "Save failed: {{message}}",
       "discordBotDisconnected": "Discord bot unbound",
       "discordBotDisconnectFailed": "Unbind failed: {{message}}",
-      "apiKeySaved": "API Key saved",
-      "apiKeyConnectionTestSuccess": "Connection test succeeded",
       "attachmentLocalOnly": "Local files only: {{name}}",
       "attachmentReadError": "{{name}}: {{reason}}",
       "attachmentReadFailed": "Read failed: {{name}} - {{error}}",
@@ -5732,15 +5734,10 @@
       "steerFailed": "Steer failed: {{message}}",
       "qrExpired": "QR code expired, please start again",
       "registrationFailed": "Creation failed, please retry later",
-      "apiKeySafeStorageFailed": "Storage failed, please check the system secure storage feature",
-      "apiKeyTestFailed": "Connection test failed",
-      "apiKeyTestFailedNotSaved": "Connection test failed; Key not saved",
-      "apiKeyNetworkFailed": "Network connection failed, please check your network",
       "silentStopExhausted": "The model returned empty responses repeatedly; auto-resume is paused. Click \"Continue\" to resume the task.",
       "permissionTightenInterruptFailed": "Failed to stop the running task while tightening permissions; it may keep running without approval prompts until it finishes. Stop it manually if needed."
     },
     "validation": {
-      "apiKeyFormat": "Key format invalid; should start with sk-",
       "feishuFieldsRequired": "App ID and App Secret are both required",
       "feishuAppIdFormat": "App ID format should be cli_xxxxxxxxxxxxxxxx",
       "discordFieldsRequired": "Bot Token and Discord user ID are both required",

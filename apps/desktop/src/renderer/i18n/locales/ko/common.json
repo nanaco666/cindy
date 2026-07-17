@@ -618,14 +618,8 @@
       }
     },
     "apiKey": {
-      "title": "도구 키",
-      "inputAria": "API 키",
       "showKey": "키 표시",
-      "hideKey": "키 숨기기",
-      "openConsole": "콘솔 열기 ↗",
-      "save": "저장",
-      "saved": "저장됨",
-      "saving": "저장 중..."
+      "hideKey": "키 숨기기"
     },
     "voiceInput": {
       "title": "음성 입력",
@@ -987,17 +981,27 @@
         "subtitle": "모든 모델 · Claude Code / Codex 공용 · 토큰 단위 과금",
         "modelLabel": "모든 모델",
         "billingLabel": "토큰 단위 과금",
-        "manageKey": "키 변경 ↗",
         "disconnectConfirm": {
           "title": "XD 게이트웨이 연결을 해제할까요?",
           "description": "연결을 해제하면 로컬에 저장된 게이트웨이 키가 삭제됩니다. 게이트웨이 모델을 계속 사용하려면 다시 연결해야 합니다."
         },
-        "keyDialog": {
-          "title": "XD 게이트웨이 키 설정",
-          "description": "XD 게이트웨이 API Key를 입력하면 토큰 단위 과금의 모든 모델을 사용할 수 있습니다. 키는 본 기기에 암호화되어 저장되며, 로그인된 기기 간에 자동으로 동기화됩니다.",
-          "placeholder": "sk-...",
-          "close": "닫기"
-        }
+        "sync": {
+          "syncing": "자격 증명 가져오는 중…",
+          "retry": "다시 시도",
+          "refresh": "자격 증명 새로 고침",
+          "rotate": "키 교체",
+          "rotating": "교체 중…",
+          "unsupported": "소속 조직에서 사용할 수 없음",
+          "autoProvision": "로그인 후 자동으로 발급됩니다",
+          "disabled": "모델 액세스 서비스가 비활성화되어 있습니다"
+        },
+        "rotateConfirm": {
+          "title": "게이트웨이 키를 교체할까요?",
+          "description": "현재 키를 폐기하고 새 키를 발급합니다. 이전 키는 즉시 무효화됩니다. 이전 키를 사용 중인 세션, 원격 세션, 모바일 음성은 다시 시작해야 합니다.",
+          "confirm": "교체"
+        },
+        "rotateSuccess": "키를 교체했습니다",
+        "rotateFailed": "교체에 실패했습니다. 나중에 다시 시도해 주세요"
       },
       "addCustom": {
         "title": "사용자 지정 제공자 추가",
@@ -5697,8 +5701,6 @@
       "discordBotSaveFailed": "저장 실패: {{message}}",
       "discordBotDisconnected": "Discord 봇 연동이 해제됨",
       "discordBotDisconnectFailed": "연동 해제 실패: {{message}}",
-      "apiKeySaved": "API Key 저장됨",
-      "apiKeyConnectionTestSuccess": "연결 테스트 성공",
       "attachmentLocalOnly": "로컬 파일만 지원: {{name}}",
       "attachmentReadError": "{{name}}: {{reason}}",
       "attachmentReadFailed": "읽기 실패: {{name}} - {{error}}",
@@ -5723,15 +5725,10 @@
       "steerFailed": "끼어들기 실패: {{message}}",
       "qrExpired": "QR 코드가 만료됨. 다시 시작하세요",
       "registrationFailed": "생성 실패. 잠시 후 다시 시도하세요",
-      "apiKeySafeStorageFailed": "저장 실패. 시스템 보안 저장소를 확인하세요",
-      "apiKeyTestFailed": "연결 테스트 실패",
-      "apiKeyTestFailedNotSaved": "연결 테스트 실패. Key가 저장되지 않음",
-      "apiKeyNetworkFailed": "네트워크 연결 실패. 네트워크를 확인하세요",
       "silentStopExhausted": "모델이 빈 응답을 반복해서 반환하여 자동 재개가 일시 중지되었습니다. \"계속\"을 클릭하여 작업을 재개하세요.",
       "permissionTightenInterruptFailed": "권한을 강화하는 동안 실행 중인 작업을 중지하지 못했습니다. 작업이 끝날 때까지 확인 없이 계속 실행될 수 있습니다. 필요하면 수동으로 중지하세요."
     },
     "validation": {
-      "apiKeyFormat": "Key 형식이 잘못됨. sk-로 시작해야 합니다",
       "feishuFieldsRequired": "App ID와 App Secret 둘 다 입력해야 합니다",
       "feishuAppIdFormat": "App ID 형식은 cli_xxxxxxxxxxxxxxxx여야 합니다",
       "discordFieldsRequired": "Bot Token과 Discord 사용자 ID 둘 다 입력해야 합니다",

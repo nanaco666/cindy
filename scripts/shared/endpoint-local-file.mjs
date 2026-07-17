@@ -3,8 +3,9 @@
  *
  * 背景:dev 默认读仓内 cn 正本 config/endpoint.json(远程生产/测试值);
  * 「连本地 server」的 local 模式改由本文件生成的 endpoint.local.json 承载——
- * api / auth / device-link / oss 指向 localhost 四件套(oss 必须跟 auth 同侧:
- * oss-server 用 AUTH_ISSUER 验签,本地 auth 签发的 token 过不了生产 oss 验签),
+ * api / auth / device-link / oss / model-access 指向 localhost 五件套
+ * (oss 与 model-access 必须跟 auth 同侧:两者都用 AUTH_ISSUER 验签,
+ * 本地 auth 签发的 token 过不了生产侧验签),
  * 其余字段(oauth broker / heartbeat / slack hook / website / 网关 / 更新链
  * CDN)照抄 cn 正本(本地不起这些服务,沿用远程值,消费方各自的
  * "连不上就跳过"分支继续生效)。
@@ -21,6 +22,7 @@ const LOCAL_API_BASE_URL = 'http://localhost:3333';
 const LOCAL_AUTH_BASE_URL = 'http://localhost:3344';
 const LOCAL_DEVICE_LINK_BASE_URL = 'http://localhost:3335';
 const LOCAL_OSS_BASE_URL = 'http://localhost:3340';
+const LOCAL_MODEL_ACCESS_BASE_URL = 'http://localhost:3339';
 
 /**
  * 从 cn 正本生成 endpoint.local.json,返回生成文件的绝对路径。
@@ -40,6 +42,7 @@ export function generateEndpointLocalFile({ repoRoot }) {
     authApiBaseUrl: LOCAL_AUTH_BASE_URL,
     deviceLinkApiBaseUrl: LOCAL_DEVICE_LINK_BASE_URL,
     ossApiBaseUrl: LOCAL_OSS_BASE_URL,
+    modelAccessApiBaseUrl: LOCAL_MODEL_ACCESS_BASE_URL,
   };
   fs.writeFileSync(targetPath, `${JSON.stringify(local, null, 2)}\n`);
   return targetPath;
