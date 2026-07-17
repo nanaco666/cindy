@@ -1823,6 +1823,7 @@
       "recording": "Press new shortcut…",
       "editAria": "Change shortcut for {{name}}",
       "errors": {
+        "saveFailed": "Failed to save shortcut settings",
         "notBindable": "This key combination cannot be used",
         "systemReserved": "Reserved by the operating system",
         "conflict": "Conflicts with \"{{name}}\"",

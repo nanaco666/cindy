@@ -1823,6 +1823,7 @@
       "recording": "新しいショートカットを入力…",
       "editAria": "{{name}} のショートカットを変更",
       "errors": {
+        "saveFailed": "ショートカット設定の保存に失敗しました",
         "notBindable": "このキーの組み合わせは使用できません",
         "systemReserved": "OS によって予約されています",
         "conflict": "「{{name}}」と競合しています",

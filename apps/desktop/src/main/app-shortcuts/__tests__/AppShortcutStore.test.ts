@@ -42,6 +42,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -148,6 +149,59 @@ describe('AppShortcutStore', () => {
     store.setOverride('save-file', combo('KeyO', { meta: true }));
     store.resetAll();
     expect(store.getOverrides()).toEqual({});
+  });
+
+  it('keeps memory, disk, and notifications unchanged when writing fails', () => {
+    const onChanged = vi.fn();
+    const subscriber = vi.fn();
+    const store = makeStore('darwin', onChanged);
+    store.subscribe(subscriber);
+    store.setOverride('toggle-sidebar', combo('KeyJ', { meta: true }));
+    onChanged.mockClear();
+    subscriber.mockClear();
+    vi.spyOn(fs, 'renameSync').mockImplementation(() => {
+      throw new Error('disk full');
+    });
+
+    expect(() => store.setOverride('toggle-sidebar', combo('KeyK', { meta: true }))).toThrow(
+      'disk full',
+    );
+    expect(store.getOverrides()['toggle-sidebar']).toEqual(combo('KeyJ', { meta: true }));
+    expect(onChanged).not.toHaveBeenCalled();
+    expect(subscriber).not.toHaveBeenCalled();
+    expect(JSON.parse(fs.readFileSync(filePath(), 'utf-8')).overrides['toggle-sidebar']).toEqual(
+      combo('KeyJ', { meta: true }),
+    );
+    expect(fs.existsSync(`${filePath()}.tmp`)).toBe(false);
+    expect(makeStore('darwin').getOverrides()['toggle-sidebar']).toEqual(
+      combo('KeyJ', { meta: true }),
+    );
+  });
+
+  it('keeps a deleted override when clearOverride cannot be persisted', () => {
+    const store = makeStore('darwin');
+    store.setOverride('toggle-sidebar', combo('KeyJ', { meta: true }));
+    vi.spyOn(fs, 'renameSync').mockImplementation(() => {
+      throw new Error('read-only');
+    });
+
+    expect(() => store.clearOverride('toggle-sidebar')).toThrow('read-only');
+    expect(store.getOverrides()['toggle-sidebar']).toEqual(combo('KeyJ', { meta: true }));
+    expect(JSON.parse(fs.readFileSync(filePath(), 'utf-8')).overrides['toggle-sidebar']).toEqual(
+      combo('KeyJ', { meta: true }),
+    );
+  });
+
+  it('keeps all overrides when resetAll cannot be persisted', () => {
+    const store = makeStore('darwin');
+    store.setOverride('toggle-sidebar', combo('KeyJ', { meta: true }));
+    store.setOverride('save-file', combo('KeyO', { meta: true }));
+    vi.spyOn(fs, 'renameSync').mockImplementation(() => {
+      throw new Error('permission denied');
+    });
+
+    expect(() => store.resetAll()).toThrow('permission denied');
+    expect(Object.keys(store.getOverrides())).toEqual(['toggle-sidebar', 'save-file']);
   });
 
   it('drops unknown ids and corrupt combos on load (self-healing)', () => {

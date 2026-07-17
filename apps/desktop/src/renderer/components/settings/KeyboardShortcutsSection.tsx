@@ -16,7 +16,7 @@
  * 让路, 避免录制 ⌘B 时误触发侧边栏切换。
  */
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pencil, RotateCcw, Trash2 } from 'lucide-react';
 
@@ -44,6 +44,7 @@ import {
 } from '@/lib/appShortcutStore';
 import { getVoiceInputSettings } from '@/hooks/useVoiceInputSettings';
 import { createLogger } from '@/lib/logger';
+import { extractIpcError } from '@/utils/ipcError';
 
 const log = createLogger('settings:keyboard-shortcuts');
 
@@ -65,6 +66,41 @@ export function KeyboardShortcutsSection() {
   >;
   const [recordingId, setRecordingId] = useState<AppShortcutId | null>(null);
   const [error, setError] = useState<RecordingError | null>(null);
+  const [globalError, setGlobalError] = useState<string | null>(null);
+  const mutationRequestIdRef = useRef(0);
+
+  const mutationErrorMessage = useCallback(
+    (err: unknown) => {
+      // Decode the IPC envelope so persistence failures never look successful.
+      const ipcError = extractIpcError(err);
+      return t(
+        ipcError?.code === 'INVALID_PARAMS'
+          ? 'settings.shortcuts.errors.notBindable'
+          : 'settings.shortcuts.errors.saveFailed',
+      );
+    },
+    [t],
+  );
+
+  const beginShortcutAction = useCallback(() => {
+    const requestId = ++mutationRequestIdRef.current;
+    setError(null);
+    setGlobalError(null);
+    return requestId;
+  }, []);
+
+  const reportMutationError = useCallback(
+    (requestId: number, err: unknown, id?: AppShortcutId) => {
+      if (requestId !== mutationRequestIdRef.current) return;
+      const message = mutationErrorMessage(err);
+      if (id) {
+        setError({ id, message });
+      } else {
+        setGlobalError(message);
+      }
+    },
+    [mutationErrorMessage],
+  );
 
   const visibleDefs = APP_SHORTCUT_DEFINITIONS.filter(
     (def) => !def.hiddenInSettings && isAppShortcutAvailableOnPlatform(def.id, platform),
@@ -148,20 +184,18 @@ export function KeyboardShortcutsSection() {
       }
       const message = validateCombo(recordingId, combo);
       if (message) {
+        beginShortcutAction();
         setError({ id: recordingId, message });
         cancel();
         return;
       }
-      setError(null);
+      const requestId = beginShortcutAction();
       window.electronAPI.appShortcuts
         .setOverride(recordingId, combo)
         .catch((err: unknown) => {
           // main 侧校验兜底失败 (理论上 renderer 已前置校验)
           log.warn('setOverride failed', err);
-          setError({
-            id: recordingId,
-            message: t('settings.shortcuts.errors.notBindable'),
-          });
+          reportMutationError(requestId, err, recordingId);
         });
       cancel();
     };
@@ -173,25 +207,31 @@ export function KeyboardShortcutsSection() {
       window.removeEventListener('keydown', handler, true);
       window.removeEventListener('blur', cancel);
     };
-  }, [recordingId, t, validateCombo]);
+  }, [beginShortcutAction, recordingId, reportMutationError, t, validateCombo]);
 
   const handleResetAll = useCallback(() => {
-    setError(null);
+    const requestId = beginShortcutAction();
     setRecordingId(null);
-    void window.electronAPI.appShortcuts.resetAll();
-  }, []);
+    void window.electronAPI.appShortcuts.resetAll().catch((err: unknown) => {
+      reportMutationError(requestId, err);
+    });
+  }, [beginShortcutAction, reportMutationError]);
 
   const handleResetOne = useCallback((id: AppShortcutId) => {
-    setError(null);
-    void window.electronAPI.appShortcuts.clearOverride(id);
-  }, []);
+    const requestId = beginShortcutAction();
+    void window.electronAPI.appShortcuts.clearOverride(id).catch((err: unknown) => {
+      reportMutationError(requestId, err, id);
+    });
+  }, [beginShortcutAction, reportMutationError]);
 
   /** 删除绑定 = override 置 null, 该快捷键禁用 (显示"未设置")。 */
   const handleDeleteOne = useCallback((id: AppShortcutId) => {
-    setError(null);
+    const requestId = beginShortcutAction();
     setRecordingId(null);
-    void window.electronAPI.appShortcuts.setOverride(id, null);
-  }, []);
+    void window.electronAPI.appShortcuts.setOverride(id, null).catch((err: unknown) => {
+      reportMutationError(requestId, err, id);
+    });
+  }, [beginShortcutAction, reportMutationError]);
 
   const iconButtonClass =
     'inline-flex h-[26px] w-[26px] items-center justify-center rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-chip)] transition-colors';
@@ -212,6 +252,7 @@ export function KeyboardShortcutsSection() {
           </button>
         )}
       </div>
+      {globalError && <span className="text-12 text-[var(--error-fg)]">{globalError}</span>}
 
       <div
         className={cn(
@@ -278,7 +319,7 @@ export function KeyboardShortcutsSection() {
                     type="button"
                     disabled={!def.rebindable}
                     onClick={() => {
-                      setError(null);
+                      beginShortcutAction();
                       setRecordingId(def.id);
                     }}
                     className={cn(iconButtonClass, !def.rebindable && 'opacity-50 pointer-events-none')}
