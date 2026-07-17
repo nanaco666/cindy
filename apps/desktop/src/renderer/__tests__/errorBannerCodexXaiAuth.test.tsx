@@ -69,3 +69,26 @@ describe('ErrorBanner Codex xAI auth classification', () => {
     expect(screen.getByText('chat.errorBanner.codexAuthMissingLocal')).toBeTruthy();
   });
 });
+
+describe('ErrorBanner network retry guidance', () => {
+  it('does not tell the user to click Retry when no safe retry target exists', () => {
+    render(createElement(ErrorBanner, {
+      error: 'Request timed out.',
+      onRetry: vi.fn(),
+    }));
+
+    expect(screen.getByText('chat.errorBanner.networkUnreachableNoRetry')).toBeTruthy();
+    expect(screen.queryByTitle('chat.errorBanner.retryTitle')).toBeNull();
+  });
+
+  it('keeps the actionable guidance and button when a retry target exists', () => {
+    render(createElement(ErrorBanner, {
+      error: 'Request timed out.',
+      retryText: 'retry-token',
+      onRetry: vi.fn(),
+    }));
+
+    expect(screen.getByText('chat.errorBanner.networkUnreachable')).toBeTruthy();
+    expect(screen.getByTitle('chat.errorBanner.retryTitle')).toBeTruthy();
+  });
+});
