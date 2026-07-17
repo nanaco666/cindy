@@ -1823,6 +1823,7 @@
       "recording": "새 단축키를 누르세요…",
       "editAria": "{{name}} 단축키 변경",
       "errors": {
+        "saveFailed": "단축키 설정 저장에 실패했습니다",
         "notBindable": "이 키 조합은 사용할 수 없습니다",
         "systemReserved": "운영 체제에서 예약된 조합입니다",
         "conflict": "\"{{name}}\"과(와) 충돌합니다",
