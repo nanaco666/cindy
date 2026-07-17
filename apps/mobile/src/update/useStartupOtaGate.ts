@@ -9,10 +9,11 @@ import { runStartupOtaUpdate } from './startupOtaUpdate';
 
 export function useStartupOtaGate(): boolean {
   // 仅自建变体 + 非 dev + expo-updates 运行时可用才走热更门;其余一律直接放行。
-  // 审核模式(清单 review=true)本门关闭:启动不走 JS 显式 check→fetch→reload,
-  // 直接进主界面(expo-updates 原生层的后台静默检查是 build-time 配置,不受此
-  // 字段控制,边界见 maker-shared clientEndpoints 的 CLIENT_ENDPOINT_REVIEW_KEY)。
-  // REVIEW_MODE 是 live binding,本 hook 挂载在端点闸门 ready 之后,读到的必是清单值。
+  // 审核模式(清单 review 送审版本号命中当前二进制版本)本门关闭:启动不走 JS
+  // 显式 check→fetch→reload,直接进主界面(expo-updates 原生层的后台静默检查是
+  // build-time 配置,不受此字段控制,边界见 maker-shared clientEndpoints 的
+  // CLIENT_ENDPOINT_REVIEW_KEY)。REVIEW_MODE 是 live binding,本 hook 挂载在
+  // 端点闸门 ready 之后,读到的必是清单匹配结果。
   const enabled = IS_OTA_SELFHOST && !__DEV__ && Updates.isEnabled && !REVIEW_MODE;
   const [ready, setReady] = useState(!enabled);
   const started = useRef(false);

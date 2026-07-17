@@ -163,14 +163,38 @@ export let DEVICE_LINK_API_BASE_URL = resolveDeviceLinkApiBaseUrl(
   API_BASE_URL,
 );
 
-// 手机版审核模式(清单可选字段 review,缺失 = false):App 审核期间线上清单置
-// true → 关闭全部 JS 显式更新检查(启动 JS 热更门 / 整包检查 / resume 静默检查),
-// 设置页隐藏「检查更新 / 检查整包更新」。覆盖边界与全量影响面(原生层后台检查
-// 管不到、region 级全量开关)见 maker-shared clientEndpoints 的
-// CLIENT_ENDPOINT_REVIEW_KEY 注释。live binding:prod 由启动闸门回填,闸门 ready
-// 前业务树不挂载,消费点(更新 hooks / 设置页)读到的一定是清单值;dev 读仓内
-// 正本。仅 mobile 消费,desktop 忽略该字段。
-export let REVIEW_MODE = DEV_MANIFEST_PARSED?.review ?? false;
+// 二进制版本号:审核模式匹配基准。优先原生层版本(iOS CFBundleShortVersionString /
+// Android versionName,OTA 热更后不漂移),expoConfig.version 兜底(dev / 测试环境
+// 拿不到原生值)。与 mobileTapdb 的版本上报取值口径一致。
+export const APP_BINARY_VERSION =
+  (Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? '').trim();
+
+/**
+ * 纯函数:清单 review(送审版本号)与二进制版本号严格相等才进入审核模式;
+ * 任一侧为空恒 false(清单没填 = 关闭;拿不到版本号 = 宁可不进审核模式,
+ * 也不能让线上用户误失去更新通道)。
+ */
+export function isReviewModeActive(
+  reviewVersion: string | null | undefined,
+  appBinaryVersion: string,
+): boolean {
+  const review = reviewVersion?.trim();
+  const binary = appBinaryVersion.trim();
+  return Boolean(review) && review === binary;
+}
+
+// 手机版审核模式(清单可选字段 review = 送审版本号,缺失/空串 = 关闭):App 审核
+// 期间线上清单填送审构建的二进制版本号,仅版本命中的构建关闭全部 JS 显式更新检查
+// (启动 JS 热更门 / 整包检查 / resume 静默检查)、设置页隐藏「检查更新 / 检查整包
+// 更新」;存量其它版本用户不受影响。覆盖边界与运维义务(原生层后台检查管不到、
+// 过审发布后须清空字段)见 maker-shared clientEndpoints 的 CLIENT_ENDPOINT_REVIEW_KEY
+// 注释。live binding:prod 由启动闸门回填,闸门 ready 前业务树不挂载,消费点
+// (更新 hooks / 设置页)读到的一定是清单值;dev 读仓内正本。仅 mobile 消费,
+// desktop 忽略该字段。
+export let REVIEW_MODE = isReviewModeActive(
+  DEV_MANIFEST_PARSED?.reviewVersion,
+  APP_BINARY_VERSION,
+);
 
 // 非 live binding(清单不再承载语音网关地址,启动闸门无覆写路径):env 覆写为空时
 // 即空串,真实地址走桌面端凭据同步(mobileVoiceCredentialStore 的 proxyBaseUrl)。
@@ -198,8 +222,8 @@ export function applyResolvedClientEndpoints(resolved: {
   authApiBaseUrl?: string;
   deviceLinkApiBaseUrl?: string;
   mobileUpdateBaseUrl?: string;
-  /** 审核模式开关(parser 产出的布尔;缺失不改动,保持当前值)。 */
-  review?: boolean;
+  /** 审核模式送审版本号(parser 产出,null = 清单未填;undefined = 不改动)。 */
+  reviewVersion?: string | null;
 }): void {
   if (resolved.apiBaseUrl) {
     API_BASE_URL = normalizeBaseUrl(resolved.apiBaseUrl);
@@ -220,8 +244,8 @@ export function applyResolvedClientEndpoints(resolved: {
   if (resolved.mobileUpdateBaseUrl && IS_OTA_SELFHOST) {
     OTA_SERVER_BASE_URL = resolved.mobileUpdateBaseUrl.replace(/\/+$/, '');
   }
-  if (typeof resolved.review === 'boolean') {
-    REVIEW_MODE = resolved.review;
+  if (resolved.reviewVersion !== undefined) {
+    REVIEW_MODE = isReviewModeActive(resolved.reviewVersion, APP_BINARY_VERSION);
   }
 }
 

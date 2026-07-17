@@ -42,8 +42,8 @@
  *    cdnBaseUrl)同样没有 bump:删必填字段对**新客户端**是纯放松(清单里多出
  *    的该字段按未知字段忽略);退役时新路径清单尚无已发布的 packaged 消费者,
  *    线上清单已同步删除,无兼容包袱。
- *  - 2026-07-17 追加可选布尔字段 review(手机版审核模式开关,见
- *    CLIENT_ENDPOINT_REVIEW_KEY)同样没有 bump:可选字段、缺失即 false,
+ *  - 2026-07-17 追加可选字符串字段 review(手机版审核模式的送审版本号,见
+ *    CLIENT_ENDPOINT_REVIEW_KEY)同样没有 bump:可选字段、缺失/空串即关闭,
  *    老清单不受影响;老客户端按未知字段忽略。
  *  - 2026-07-17 退役 xdGatewayBaseUrl(同样不 bump,理由同上):XD 网关推理
  *    入口一律由 model-access server 随凭据成对下发(desktop
@@ -91,19 +91,25 @@ export type ClientEndpointKey = (typeof CLIENT_ENDPOINT_KEYS)[number];
 export type ClientEndpointMap = Record<ClientEndpointKey, string>;
 
 /**
- * 可选布尔开关字段:`review` = 手机版审核模式(App 审核期间置 true:mobile
- * 关闭全部 **JS 显式更新检查路径**——启动 JS 热更门 / 整包检查 / resume 静默
- * 检查,设置页隐藏「检查更新 / 检查整包更新」;desktop 不消费)。
- * **可选、缺失即 false**——线上已发布的清单没有该字段,若设为必填会让新客户端
- * 对老清单启动阻断;可选纯增量也是不 bump schemaVersion 的前提(见上方版本注释)。
- * 存在但非 boolean 视为配置错,整份拒绝(阻断语义:配置错要炸出来,不静默猜测)。
- * 覆盖边界与影响面(置 true 前必须知晓):
+ * 可选字符串字段:`review` = 手机版审核模式的**送审版本号**(App 审核期间填
+ * 送审构建的二进制版本号,如 "1.4.0")。mobile 启动时用它与自身二进制版本号
+ * **严格相等匹配**,命中才进入审核模式:关闭全部 JS 显式更新检查路径(启动
+ * JS 热更门 / 整包检查 / resume 静默检查)直接进主界面,设置页隐藏「检查更新 /
+ * 检查整包更新」;desktop 不消费。按版本定向的意义:清单是 region 级共享文件,
+ * 版本匹配把影响面从"全量用户"收窄到"同版本号的构建"——存量其它版本用户的
+ * 更新检查与强更通道不受影响。注意命中粒度是**版本号而非送审构建本身**:
+ * app.json 的 version 为 iOS/Android 各变体共用,若送审版本号与其它平台/变体
+ * 正在线上跑的版本号相同,这些同版本用户会一并进入审核模式;填写前需确认
+ * 送审版本号未与其它线上线重叠,或接受重叠期影响。
+ * **可选、缺失或空串即关闭**——线上已发布的清单没有该字段,若设为必填会让新
+ * 客户端对老清单启动阻断;可选纯增量也是不 bump schemaVersion 的前提(见上方
+ * 版本注释)。存在但非 string 视为配置错,整份拒绝(配置错要炸出来,不静默猜测)。
+ * 覆盖边界与运维义务(填写前必须知晓):
  *  - **管不到 expo-updates 原生层**:CheckOnLaunch 是 build-time 原生配置
  *    (当前烘焙 ALWAYS),冷启动仍会后台静默 check+下载、下次启动生效——
  *    该缺口无法用运行时清单字段封,审核窗口内需同时冻结热更发布;
- *  - **region 级全量开关**:清单被该 region 所有存量 mobile 客户端共享,置
- *    true 期间全量用户(不只送审构建)的 JS 更新检查与强更弹窗一并停摆,
- *    审核结束必须及时改回 false。
+ *  - 送审版本过审对外发布后必须及时把该字段清回 ""(或删除),否则线上同
+ *    版本用户会一直处于审核模式、收不到后续 JS 更新检查与强更提示。
  */
 export const CLIENT_ENDPOINT_REVIEW_KEY = 'review';
 
@@ -139,13 +145,14 @@ function allowedProtocols(key: ClientEndpointKey, allowHttp: boolean): readonly 
 }
 
 export type ParseClientEndpointManifestResult =
-  | { ok: true; endpoints: ClientEndpointMap; review: boolean }
+  | { ok: true; endpoints: ClientEndpointMap; reviewVersion: string | null }
   | { ok: false; reason: string };
 
 /**
  * 解析并校验一份清单原文。纯函数,输入任意文本都不会抛出。
  * 端点全字段必填:缺失 / 非法 / 协议不符 / 带凭据,任一命中整份拒绝;
- * `review` 可选布尔,缺失 = false(语义见 CLIENT_ENDPOINT_REVIEW_KEY)。
+ * `review` 可选字符串(送审版本号),缺失 / 空白 = null 即审核模式关闭
+ * (语义见 CLIENT_ENDPOINT_REVIEW_KEY)。
  */
 export function parseClientEndpointManifest(
   rawText: string,
@@ -200,15 +207,17 @@ export function parseClientEndpointManifest(
   }
 
   const rawReview = record[CLIENT_ENDPOINT_REVIEW_KEY];
-  if (rawReview !== undefined && typeof rawReview !== 'boolean') {
+  if (rawReview !== undefined && typeof rawReview !== 'string') {
     return { ok: false, reason: `invalid-field:${CLIENT_ENDPOINT_REVIEW_KEY}` };
   }
+  const reviewVersion =
+    typeof rawReview === 'string' && rawReview.trim() ? rawReview.trim() : null;
 
-  return { ok: true, endpoints, review: rawReview === true };
+  return { ok: true, endpoints, reviewVersion };
 }
 
 export type ResolveClientEndpointsResult =
-  | { ok: true; endpoints: ClientEndpointMap; review: boolean }
+  | { ok: true; endpoints: ClientEndpointMap; reviewVersion: string | null }
   | { ok: false; reason: string };
 
 /**

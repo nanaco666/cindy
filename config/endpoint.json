@@ -12,5 +12,5 @@
   "githubApiBaseUrl": "https://github.cindy.com.cn",
   "cdnBaseUrl": "https://hotfix.cindy.com.cn/cindy",
   "mobileUpdateBaseUrl": "https://mobile-update.cindy.com.cn",
-  "review": false
+  "review": ""
 }

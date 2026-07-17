@@ -460,7 +460,7 @@ export default function SettingsScreen() {
                   <Text style={styles.rowDetail} numberOfLines={1}>开发版，热更不可用</Text>
                 ) : null}
               </View>
-              {/* 审核模式(清单 review=true):隐藏检查更新入口,版本号照常展示 */}
+              {/* 审核模式(清单 review 命中当前二进制版本):隐藏检查更新入口,版本号照常展示 */}
               {!REVIEW_MODE ? (
                 <MainWindowActionButton
                   action={{

@@ -97,24 +97,34 @@ describe('parseClientEndpointManifest(全字段必填)', () => {
     expect(parseClientEndpointManifest(raw)).toEqual({ ok: false, reason });
   });
 
-  describe('review 可选布尔字段(手机版审核模式)', () => {
-    it('缺失 → review=false(线上老清单不受影响,不阻断)', () => {
+  describe('review 可选字符串字段(手机版审核模式的送审版本号)', () => {
+    it('缺失 → reviewVersion=null(线上老清单不受影响,不阻断)', () => {
       const result = parseClientEndpointManifest(JSON.stringify(VALID_MANIFEST));
-      expect(result).toMatchObject({ ok: true, review: false });
-    });
-
-    it.each([true, false])('显式 %s → 原样透出', (value) => {
-      const result = parseClientEndpointManifest(
-        JSON.stringify({ ...VALID_MANIFEST, review: value }),
-      );
-      expect(result).toMatchObject({ ok: true, review: value });
+      expect(result).toMatchObject({ ok: true, reviewVersion: null });
     });
 
     it.each([
-      ['字符串 "true"', 'true'],
+      ['空串', ''],
+      ['纯空白', '   '],
+    ])('%s → reviewVersion=null(审核模式关闭)', (_label, value) => {
+      const result = parseClientEndpointManifest(
+        JSON.stringify({ ...VALID_MANIFEST, review: value }),
+      );
+      expect(result).toMatchObject({ ok: true, reviewVersion: null });
+    });
+
+    it('版本号字符串 → trim 后原样透出', () => {
+      const result = parseClientEndpointManifest(
+        JSON.stringify({ ...VALID_MANIFEST, review: ' 1.4.0 ' }),
+      );
+      expect(result).toMatchObject({ ok: true, reviewVersion: '1.4.0' });
+    });
+
+    it.each([
+      ['boolean true', true],
       ['数字 1', 1],
       ['null', null],
-    ])('存在但非 boolean(%s)→ 整份拒绝(配置错要炸出来)', (_label, value) => {
+    ])('存在但非 string(%s)→ 整份拒绝(配置错要炸出来)', (_label, value) => {
       expect(
         parseClientEndpointManifest(JSON.stringify({ ...VALID_MANIFEST, review: value })),
       ).toEqual({ ok: false, reason: 'invalid-field:review' });

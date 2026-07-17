@@ -57,20 +57,51 @@ describe('runStartupEndpointResolve(清单即唯一事实源)', () => {
     expect(env.REVIEW_MODE).toBe(false);
   });
 
-  it('清单 review=true → REVIEW_MODE live binding 置 true(审核模式)', async () => {
-    const { env, startup } = await freshModules();
-    expect(env.REVIEW_MODE).toBe(false);
-    const outcome = await startup.runStartupEndpointResolve({
-      fetchManifestText: async () => JSON.stringify({ ...FULL_MANIFEST_OBJECT, review: true }),
-    });
-    expect(outcome).toEqual({ ok: true });
-    expect(env.REVIEW_MODE).toBe(true);
+  it('清单 review 命中二进制版本号 → REVIEW_MODE=true;不命中 → false', async () => {
+    vi.resetModules();
+    // 注入二进制版本号(默认 mock 无版本字段,APP_BINARY_VERSION 为空串恒不命中)
+    vi.doMock('expo-constants', () => ({
+      default: { expoConfig: { version: '9.9.9' }, nativeAppVersion: '9.9.9' },
+    }));
+    try {
+      const env = await import('@/config/env');
+      const startup = await import('@/config/clientEndpointStartup');
+      expect(env.APP_BINARY_VERSION).toBe('9.9.9');
+      expect(env.REVIEW_MODE).toBe(false);
+
+      // 版本不一致:不进审核模式
+      let outcome = await startup.runStartupEndpointResolve({
+        fetchManifestText: async () =>
+          JSON.stringify({ ...FULL_MANIFEST_OBJECT, review: '9.9.8' }),
+      });
+      expect(outcome).toEqual({ ok: true });
+      expect(env.REVIEW_MODE).toBe(false);
+
+      // 版本一致:进审核模式
+      outcome = await startup.runStartupEndpointResolve({
+        fetchManifestText: async () =>
+          JSON.stringify({ ...FULL_MANIFEST_OBJECT, review: '9.9.9' }),
+      });
+      expect(outcome).toEqual({ ok: true });
+      expect(env.REVIEW_MODE).toBe(true);
+
+      // 审核结束清单清空字段:退出审核模式(重新拉清单即恢复)
+      outcome = await startup.runStartupEndpointResolve({
+        fetchManifestText: async () =>
+          JSON.stringify({ ...FULL_MANIFEST_OBJECT, review: '' }),
+      });
+      expect(outcome).toEqual({ ok: true });
+      expect(env.REVIEW_MODE).toBe(false);
+    } finally {
+      vi.doUnmock('expo-constants');
+      vi.resetModules();
+    }
   });
 
-  it('清单 review 非 boolean → 整份拒绝(阻断),env 不动', async () => {
+  it('清单 review 非 string(布尔等)→ 整份拒绝(阻断),env 不动', async () => {
     const { env, startup } = await freshModules();
     const outcome = await startup.runStartupEndpointResolve({
-      fetchManifestText: async () => JSON.stringify({ ...FULL_MANIFEST_OBJECT, review: 'true' }),
+      fetchManifestText: async () => JSON.stringify({ ...FULL_MANIFEST_OBJECT, review: true }),
     });
     expect(outcome).toEqual({ ok: false, reason: 'invalid-field:review' });
     expect(env.REVIEW_MODE).toBe(false);
@@ -141,6 +172,21 @@ describe('runStartupEndpointResolve(清单即唯一事实源)', () => {
       startup.runStartupEndpointResolve({ fetchManifestText }),
     ).resolves.toEqual({ ok: true });
     expect(env.API_BASE_URL).toBe('https://api-next.example.com');
+  });
+});
+
+describe('isReviewModeActive(送审版本号匹配纯函数)', () => {
+  it('严格相等(含 trim)才命中;任一侧为空恒 false', async () => {
+    const { env } = await freshModules();
+    expect(env.isReviewModeActive('1.4.0', '1.4.0')).toBe(true);
+    expect(env.isReviewModeActive(' 1.4.0 ', '1.4.0')).toBe(true);
+    expect(env.isReviewModeActive('1.4.1', '1.4.0')).toBe(false);
+    expect(env.isReviewModeActive(null, '1.4.0')).toBe(false);
+    expect(env.isReviewModeActive(undefined, '1.4.0')).toBe(false);
+    expect(env.isReviewModeActive('', '1.4.0')).toBe(false);
+    // 拿不到二进制版本号(空串)时宁可不进审核模式
+    expect(env.isReviewModeActive('1.4.0', '')).toBe(false);
+    expect(env.isReviewModeActive('', '')).toBe(false);
   });
 });
 
