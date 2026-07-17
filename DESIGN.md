@@ -678,7 +678,7 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 
 橙徽章(bg `status-bar-accent` `#FF6600`)此前借用 `accent-pure-cta-fg`(白字)→ `#FFFFFF`×`#FF6600`=2.94:1 不达标。拆独立 `status-badge-fg`:
 - **default 镜像 `accent-pure-cta-fg`**(light 白 / dark 黑),既有 9 主题行为零变化;
-- **CINDY 两模式 override `#1F1F1F`**(深色近黑),× `status-bar-accent` `#FF6600` = **5.61:1 ≥4.5**(不达 4.5 则加深 `#000000`);
+- **CINDY 两模式 override `#2A2828`**(深色近黑),× `status-bar-accent` `#FF6600` = **5.61:1 ≥4.5**(用户亲批方案+值由实算确定 2026-07-17);
 - 覆盖数组 115→116(`cindyDecisionData` 注明 D2 期新增,源自 §7 必炸点方案);
 - 消费点(`ContactsListPane:150`)从 `accent-pure-cta-fg` 切到 `status-badge-fg`;红 CTA 上的 `surface-on-card` 消费者(`RolePillDropdown:543/544`、`SkillhubDetailView:504`)迁到 `accent-pure-cta-fg`(白),`surface-on-card` 保留中性反相(Fast toggle thumb)。
 
