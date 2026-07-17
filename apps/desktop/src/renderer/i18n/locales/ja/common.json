@@ -2409,35 +2409,6 @@
     "failedDescription": "今回はデータ移行を完了できませんでした。{{appName}} はそのまま利用できます。次回のログイン時に自動的に再試行されます。",
     "continue": "続行"
   },
-  "migration": {
-    "title": "チャット履歴をダウンロード中",
-    "subtitle": "初回のローカル化には時間がかかります。ウィンドウを開いたままにしてください",
-    "detail": {
-      "idle": "準備中…",
-      "paused": "{{synced}} / {{total}} セッション · 一時停止",
-      "running": "{{synced}} / {{total}} セッション",
-      "runningWithEta": "{{synced}} / {{total}} セッション · 約 {{eta}}",
-      "done": "{{synced}} / {{total}} セッション"
-    },
-    "retryNotice": "ネットワークが不安定です。{{attempt}} 回目の再試行中…",
-    "eta": {
-      "seconds": "{{seconds}} 秒",
-      "minutes": "{{m}} 分",
-      "minutesSeconds": "{{m}} 分 {{s}} 秒"
-    },
-    "failedDialog": {
-      "title": "移行に失敗しました",
-      "description": "何度試行してもローカル化を完了できませんでした。ネットワークを確認してから再試行するか、移行をスキップしてアプリに入ることができます — ダウンロード済みのデータはローカルに保持されます。",
-      "skip": "今すぐスキップ",
-      "retry": "後で再試行"
-    },
-    "skipConfirm": {
-      "title": "移行をスキップしますか？",
-      "description": "確認後はクライアントから自動回復できなくなり、サポートに連絡する必要があります。続行しますか？",
-      "back": "戻る",
-      "confirm": "スキップを確認"
-    }
-  },
   "splash": {
     "tips": {
       "checkingUpdate": "更新を確認中...",

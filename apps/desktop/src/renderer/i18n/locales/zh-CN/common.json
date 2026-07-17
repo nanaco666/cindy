@@ -2409,35 +2409,6 @@
     "failedDescription": "本次数据迁移未能完成。你可以继续使用 {{appName}}，下次登录时会自动重试。",
     "continue": "继续"
   },
-  "migration": {
-    "title": "正在为你下载历史聊天数据",
-    "subtitle": "首次本地化需要一些时间，请保持窗口打开",
-    "detail": {
-      "idle": "准备开始...",
-      "paused": "{{synced}} / {{total}} 个会话 · 已暂停",
-      "running": "{{synced}} / {{total}} 个会话",
-      "runningWithEta": "{{synced}} / {{total}} 个会话 · 约 {{eta}}",
-      "done": "{{synced}} / {{total}} 个会话"
-    },
-    "retryNotice": "网络不稳定，第 {{attempt}} 次重试中...",
-    "eta": {
-      "seconds": "{{seconds}} 秒",
-      "minutes": "{{m}} 分",
-      "minutesSeconds": "{{m}} 分 {{s}} 秒"
-    },
-    "failedDialog": {
-      "title": "迁移失败",
-      "description": "已多次尝试仍未能完成本地化。请检查网络后重试，或选择跳过迁移直接进入应用——已下载的数据会保留在本地。",
-      "skip": "现在跳过",
-      "retry": "稍后再试"
-    },
-    "skipConfirm": {
-      "title": "确认跳过迁移？",
-      "description": "确认后无法在客户端自动恢复，仅可联系支持。继续？",
-      "back": "返回",
-      "confirm": "确认跳过"
-    }
-  },
   "splash": {
     "tips": {
       "checkingUpdate": "检查更新中...",

@@ -18,7 +18,7 @@
  *   │ App boot                        │ im.registerIpc + startImOrch         │
  *   │                                 │   (orchestrators only — NO connect)  │
  *   │ User login + localDb ready      │ app:ready-for-bot IPC →              │
- *   │   (MigrationGate, renderer)     │   startImConnection() → im.init()    │
+ *   │   (LocalDbGate, renderer)       │   startImConnection() → im.init()    │
  *   │                                 │   (auto-connect if creds)            │
  *   │ App quit (before-quit)          │ im.dispose (in bootstrap)            │
  *   │ Save credentials (renderer)     │ feishuBot:save IPC → wsClient.start  │

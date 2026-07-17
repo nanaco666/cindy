@@ -2409,35 +2409,6 @@
     "failedDescription": "이번에는 데이터 마이그레이션을 완료하지 못했습니다. {{appName}}은(는) 계속 사용할 수 있으며, 다음 로그인 시 자동으로 다시 시도합니다.",
     "continue": "계속"
   },
-  "migration": {
-    "title": "채팅 기록을 다운로드하는 중",
-    "subtitle": "최초 로컬화에 시간이 걸립니다. 창을 열어 두세요",
-    "detail": {
-      "idle": "준비 중…",
-      "paused": "{{synced}} / {{total}} 세션 · 일시 중지",
-      "running": "{{synced}} / {{total}} 세션",
-      "runningWithEta": "{{synced}} / {{total}} 세션 · 약 {{eta}}",
-      "done": "{{synced}} / {{total}} 세션"
-    },
-    "retryNotice": "네트워크가 불안정합니다. {{attempt}}번째 재시도 중…",
-    "eta": {
-      "seconds": "{{seconds}}초",
-      "minutes": "{{m}}분",
-      "minutesSeconds": "{{m}}분 {{s}}초"
-    },
-    "failedDialog": {
-      "title": "마이그레이션 실패",
-      "description": "여러 번 시도했으나 로컬화를 완료하지 못했습니다. 네트워크를 확인 후 다시 시도하거나 마이그레이션을 건너뛰고 앱에 진입할 수 있습니다 — 이미 다운로드된 데이터는 로컬에 유지됩니다.",
-      "skip": "지금 건너뛰기",
-      "retry": "나중에 다시 시도"
-    },
-    "skipConfirm": {
-      "title": "마이그레이션을 건너뛰시겠습니까?",
-      "description": "확인 후에는 클라이언트에서 자동으로 복구할 수 없으며 지원팀에 문의해야 합니다. 계속하시겠습니까?",
-      "back": "뒤로",
-      "confirm": "건너뛰기 확인"
-    }
-  },
   "splash": {
     "tips": {
       "checkingUpdate": "업데이트 확인 중...",

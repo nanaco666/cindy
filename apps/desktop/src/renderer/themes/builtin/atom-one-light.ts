@@ -90,8 +90,6 @@ const singletonOverrides = {
   'file-chip-bg': CHIP_BG,
   'file-remove-bg': TEXT_TERTIARY,
   'info-700': BLUE_DEEP,
-  'migration-bar-fill': BLUE_PRIMARY,
-  'migration-bar-track': CHIP_BG,
   'model-trigger-hover': HOVER_BG,
   'msg-link': BLUE_PRIMARY,
   'msg-scrollbar-hover': TEXT_TERTIARY,

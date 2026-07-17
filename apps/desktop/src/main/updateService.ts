@@ -605,8 +605,25 @@ export async function checkForUpdate(
   }
 }
 
+/**
+ * 版本无关打包(scripts/package-desktop.mjs 缺省模式)写入的占位版本。
+ * 这类包(占位 0.0.0)不参与热更新:任何 CDN manifest 版本与它都不相等,
+ * 不做豁免的话 packaged 版本无关包启动即被拉去下载线上版本自更——
+ * 与"开源社区拉仓即可打包试用"的定位相悖。'0.0.0-*' 前缀一并覆盖,
+ * 兼容历史脚本注释里的 0.0.0-dev 形态。
+ */
+export function isVersionlessAppVersion(version: string): boolean {
+  return version === '0.0.0' || version.startsWith('0.0.0-');
+}
+
 async function doCheckForUpdate(manifestOverride?: Manifest | null): Promise<CheckForUpdateResult> {
   log.info('checkForUpdate() called, currentStatus=%s', currentStatus);
+
+  if (isVersionlessAppVersion(app.getVersion())) {
+    log.info('Versionless build (placeholder %s) — in-app update disabled', app.getVersion());
+    currentStatus = 'idle';
+    return 'idle';
+  }
 
   if (process.platform === 'linux') {
     log.info('Linux first-release guard: skipping in-app update flow');
@@ -1138,6 +1155,16 @@ export function initUpdateService(): void {
     startupUpdateCheckInProgress = true;
     try {
       if (isDev()) {
+        return { hasUpdate: false, action: 'none' as const };
+      }
+
+      // 版本无关包(占位 0.0.0)整条启动更新链都豁免——不只 doCheckForUpdate:
+      // 本 handler 在调 checkForUpdate() 之前还有"本地 patch 直接 relaunch"的
+      // 快路径(下方 Step 1/2)。版本无关包与正式版同 userData,一台跑过正式版
+      // 的机器 updates/ 里可能残留已下好的 patch,不在这里挡住会把 0.0.0 安装体
+      // 启动即替换成线上版本。
+      if (isVersionlessAppVersion(app.getVersion())) {
+        log.info('Versionless build (placeholder %s) — skipping startup update flow', app.getVersion());
         return { hasUpdate: false, action: 'none' as const };
       }
 

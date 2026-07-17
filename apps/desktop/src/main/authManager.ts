@@ -98,19 +98,9 @@ export interface User {
   passportId: string;
 }
 
-/**
- * chat-data-localization V0.5: 2-state migration snapshot.
- * V0.4 之前的 'migrated_elsewhere' 已删除——按 (userId, deviceId) 切片隔离后该状态自洽不再需要。
- */
-export type MigrationStatus =
-  | { status: 'none' }
-  | { status: 'pending'; totalSessions: number; totalMessages: number };
-
 export interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
-  /** chat-data-localization V0.5: latest migration snapshot from login/refresh response. */
-  migration?: MigrationStatus;
   /** SkillHub 跨设备识别：本机 deviceId（machineIdSync 结果），登录前后都会有值 */
   deviceId: string;
 }
@@ -147,8 +137,6 @@ let refreshPromise: Promise<boolean> | null = null;
  * 同账号下区分设备的标识、非鉴权凭证(鉴权走 auth-server 签发的 JWT),覆盖无安全风险。
  */
 const deviceId = process.env.XDT_DEVICE_ID_OVERRIDE?.trim() || machineIdSync();
-/** chat-data-localization V0.5: most recent migration snapshot from server. */
-let currentMigration: MigrationStatus | undefined;
 
 let loginFlowState: AuthFlowState | null = null;
 let providerConfig: ProviderConfig | null = null;
@@ -562,7 +550,6 @@ function snapshotAuthState(): AuthState {
   return {
     user: currentUser,
     isAuthenticated: accessToken !== null && currentUser !== null,
-    migration: currentMigration,
     deviceId,
   };
 }
@@ -674,7 +661,6 @@ function clearAuth(opts: { notify?: boolean } = {}): void {
   authStateEpoch += 1; // 迟到的冷启动流程从此作废(见 authStateEpoch 注释)
   accessToken = null;
   currentUser = null;
-  currentMigration = undefined;
   resetLoginFlowState();
   persistedRefreshTokenNeedsIdentityCheck = false;
   lastAcceptedRefreshToken = null;
@@ -787,11 +773,6 @@ export async function updateServerProfile(
       avatar: membership?.avatarUrl ?? null,
     },
   };
-}
-
-/** chat-data-localization V0.5: snapshot getter for IPC return paths. */
-export function getMigrationSnapshot(): MigrationStatus | undefined {
-  return currentMigration;
 }
 
 export async function initialize(): Promise<AuthState> {
@@ -930,7 +911,6 @@ async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> 
     accessToken = refreshData.accessToken;
     // 2026-07 起身份完全以 auth membership 为准(产品 /api/user/me 已退役)。
     currentUser = mapMembershipToAuthUser(refreshData.membership);
-    currentMigration = { status: 'none' };
     persistedRefreshTokenNeedsIdentityCheck = false;
     clearReplacementIntegrationReloadTimers();
     // canary 分发已与登录态解耦(isCanary 字段退役):登录路径恒清本地标记,
@@ -957,7 +937,6 @@ async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> 
     if (!epochChanged('catch')) {
       accessToken = null;
       currentUser = null;
-      currentMigration = undefined;
       if (refreshTimer !== null) {
         clearTimeout(refreshTimer);
         refreshTimer = null;
@@ -1012,7 +991,6 @@ async function completeLogin(
   lastAcceptedRefreshToken = outcome.refreshToken;
   clearReloginFlag();
   currentUser = mapMembershipToAuthUser(outcome.membership);
-  currentMigration = { status: 'none' };
   canaryFlagStore.sync(false);
   scheduleRefresh(outcome.accessToken);
   getProviderSecretStore().reconcileOwner(outcome.membership.id);
@@ -1320,7 +1298,6 @@ export async function refresh(): Promise<boolean> {
 
         accessToken = data.accessToken;
         currentUser = nextUser;
-        currentMigration = { status: 'none' };
         persistedRefreshTokenNeedsIdentityCheck = false;
         getProviderSecretStore().reconcileOwner(currentUser.id);
         if (accountSwitched) {
@@ -1348,9 +1325,7 @@ export async function refresh(): Promise<boolean> {
       persistedRefreshTokenNeedsIdentityCheck = false;
       writeSafe(REFRESH_TOKEN_KEY, data.refreshToken);
       lastAcceptedRefreshToken = data.refreshToken;
-      currentMigration = { status: 'none' };
       scheduleRefresh(data.accessToken);
-      // Push updated migration snapshot down to renderer via auth:state-change
       notifyRenderer();
       return true;
     } catch (err) {

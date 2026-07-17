@@ -246,6 +246,61 @@ describe('checkForUpdate Linux first-release guard', () => {
   });
 });
 
+describe('checkForUpdate 版本无关(占位 0.0.0)打包豁免', () => {
+  it('占位版本 0.0.0 时直接 idle,不拉 manifest 不下载(即便传入含热更的 manifest)', async () => {
+    appGetVersion.mockReturnValue('0.0.0');
+    const { checkForUpdate, getUpdateStatus } = await freshUpdateService('darwin');
+
+    const result = await checkForUpdate(updateManifest('9.9.9'));
+
+    expect(result).toBe('idle');
+    expect(getUpdateStatus()).toBe('idle');
+    expect(fetchManifest).not.toHaveBeenCalled();
+    expect(download).not.toHaveBeenCalled();
+  });
+
+  it('update-check-startup 同样豁免:即便本地残留已下好的 patch 也不触发 relaunch', async () => {
+    // 版本无关包与正式版同 userData,updates/ 里可能残留正式版下好的 patch;
+    // startup 快路径(manifest 拉不到 → 本地 patch 直接 relaunch)必须一并短路。
+    appGetVersion.mockReturnValue('0.0.0');
+    fetchManifest.mockResolvedValue(null);
+    const updatesDir = path.join(TEST_USER_DATA, 'updates');
+    fs.mkdirSync(updatesDir, { recursive: true });
+    fs.writeFileSync(path.join(updatesDir, 'stale.zip'), 'zip');
+    fs.writeFileSync(
+      path.join(updatesDir, 'patch-info.json'),
+      JSON.stringify({ version: '9.9.9', fileName: 'stale.zip', sha256: 'abc' }),
+    );
+
+    const service = await freshUpdateService('win32');
+    service.initUpdateService();
+    try {
+      const handler = ipcHandlers.get('update-check-startup');
+      if (!handler) throw new Error('update-check-startup handler not registered');
+      const reply = (await handler()) as { hasUpdate: boolean; action: string };
+      expect(reply.hasUpdate).toBe(false);
+      expect(reply.action).toBe('none');
+      expect(service.getUpdateStatus()).toBe('idle');
+      expect(download).not.toHaveBeenCalled();
+    } finally {
+      service.stopUpdateService();
+      fs.rmSync(updatesDir, { recursive: true, force: true });
+    }
+  });
+
+  it('0.0.0-dev 形态同样豁免;真实版本不受影响', async () => {
+    appGetVersion.mockReturnValue('0.0.0-dev');
+    const service = await freshUpdateService('win32');
+    expect(await service.checkForUpdate(updateManifest('9.9.9'))).toBe('idle');
+    expect(download).not.toHaveBeenCalled();
+
+    expect(service.isVersionlessAppVersion('0.0.0')).toBe(true);
+    expect(service.isVersionlessAppVersion('0.0.0-dev')).toBe(true);
+    expect(service.isVersionlessAppVersion('0.0.1')).toBe(false);
+    expect(service.isVersionlessAppVersion('1.0.0')).toBe(false);
+  });
+});
+
 describe('startup update relaunch safety', () => {
   it('allows a staged startup update only when the unattended policy is satisfied', async () => {
     await expect(runStartupUpdate()).resolves.toMatchObject({

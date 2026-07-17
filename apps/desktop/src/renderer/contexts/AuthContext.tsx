@@ -19,28 +19,23 @@ import {
   type AuthFlowState,
   type DesktopLoginAction,
   type DesktopLoginActionResult,
-  type MigrationStatus,
   type User,
 } from '@/lib/authService';
 import { setCurrentUserName } from '@/lib/makerChatStore';
 import { sessionsStore } from '@/lib/sessionsStore';
 
 /**
- * chat-data-localization V0.5: AuthContext 暴露 `migration` 字段——最近一次
- * login/refresh 响应里的迁移摘要。MigrationGate / MigrationProgressView 用它
- * 决定路由分发与进度分母。
+ * 登录态上下文：user / isAuthenticated / deviceId 全部来自 main 的
+ * authManager 推送（auth:state-change）与 initialize() 返回值。
  *
  * 注意：本项目的 `AuthProvider` 在 `App.tsx` 中位于 `RouterProvider` **之外**，
- * 因此此处不能用 `useNavigate()`——分发逻辑下沉到路由层的 `<MigrationGate />`
- * 包装组件（在 ProtectedRoute 内消费 useAuth().migration）。这是与 spec 的
- * 实现差异，结果等价。
+ * 因此此处不能用 `useNavigate()`——需要路由分发的逻辑（localDb 就绪门）下沉到
+ * 路由层的 `<LocalDbGate />` 包装组件。
  */
 export interface AuthContextValue {
   user: User | null;
   isAuthenticated: boolean;
   isInitializing: boolean;
-  /** 最近一次响应的 migration（V0.5 2 态）。null = 还没拿过任何响应。 */
-  migration: MigrationStatus | null;
   /** SkillHub 跨设备识别：本机 deviceId（machineIdSync），登录前后都有值；初始化前为 null */
   deviceId: string | null;
   /** Renderer-safe login screen state; auth tickets remain in main. */
@@ -56,7 +51,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
-  const [migration, setMigration] = useState<MigrationStatus | null>(null);
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [loginState, setLoginState] = useState<AuthFlowState | null>(null);
   const { confirm } = useConfirmDialog();
@@ -100,12 +94,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearWorkersCache();
         setUser(null);
       }
-      // V0.5：refresh 推送的 migration 也要同步进 context；缺失（logout）→ null
-      if (state.migration !== undefined) {
-        setMigration(state.migration);
-      } else if (!state.isAuthenticated) {
-        setMigration(null);
-      }
     });
 
     void service
@@ -123,7 +111,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           clearWorkersCache();
           setUser(null);
         }
-        if (state.migration !== undefined) setMigration(state.migration);
       })
       .finally(() => setIsInitializing(false));
 
@@ -149,7 +136,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearWorkersCache();
         setUser(null);
         setIsAuthenticated(false);
-        setMigration(null);
         setLoginState(null);
         handling = false;
       });
@@ -180,7 +166,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await authServiceRef.current!.logout();
     sessionsStore.reset();
     clearWorkersCache();
-    setMigration(null);
   }, []);
 
   // 同步用户名到 makerChatStore 模块级 cache — dispatchToSdk 把它透传给 maker.send
@@ -194,7 +179,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       isAuthenticated,
       isInitializing,
-      migration,
       deviceId,
       loginState,
       loadLoginState,
@@ -205,7 +189,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       isAuthenticated,
       isInitializing,
-      migration,
       deviceId,
       loginState,
       loadLoginState,
