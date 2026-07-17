@@ -9,7 +9,6 @@
   "heartbeatUrl": "https://heartbeat.cindy.com.cn",
   "slackHookWsUrl": "wss://slack-hook.cindy.com.cn",
   "websiteUrl": "https://cindy.com.cn",
-  "xdGatewayBaseUrl": "https://llm-proxy.tapsvc.com",
   "modelAccessApiBaseUrl": "https://xdmaker-model-access.magiclizi.com",
   "cdnBaseUrl": "https://dev-cdn.fp.xd.com/xdt-maker",
   "mobileUpdateBaseUrl": "https://mobile-update.cindy.com.cn"
