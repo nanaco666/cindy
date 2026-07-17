@@ -373,27 +373,37 @@ export class ScriptScheduleRunner {
       }
       let frame: ScriptFrame;
       try {
-        const parsed = JSON.parse(line) as Record<string, unknown>;
-        if (parsed.protocol !== PROTOCOL) {
-          protocolError = new Error('unsupported script protocol version');
+        const parsed = JSON.parse(line) as unknown;
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          protocolError = new Error(
+            'script stdout must contain JSONL protocol frames only; each line must be a complete xdt-maker-script/1 JSON object, and logs belong on stderr',
+          );
           killTree();
           return;
         }
-        if (parsed.type === 'call') {
-          frame = parsed as unknown as CallFrame;
-        } else if (parsed.type === 'complete') {
-          frame = parsed as unknown as CompleteFrame;
+        const record = parsed as Record<string, unknown>;
+        if (record.protocol !== PROTOCOL) {
+          protocolError = new Error(
+            `script stdout frame has an unsupported protocol; expected "${PROTOCOL}"`,
+          );
+          killTree();
+          return;
+        }
+        if (record.type === 'call') {
+          frame = record as unknown as CallFrame;
+        } else if (record.type === 'complete') {
+          frame = record as unknown as CompleteFrame;
         } else {
-          // Helper subprocesses in legacy pipelines can still print diagnostics.
-          // Keep them out of persisted results without making the whole run fail.
-          this.deps.logger.warn?.('[script-runner] ignored non-protocol JSON stdout', {
-            scheduleId: schedule.id,
-            type: parsed.type,
-          });
+          protocolError = new Error(
+            'script stdout frame has an invalid or missing type; expected "call" or "complete"',
+          );
+          killTree();
           return;
         }
       } catch {
-        protocolError = new Error('script stdout must contain JSONL protocol frames only');
+        protocolError = new Error(
+          'script stdout must contain JSONL protocol frames only; each line must be valid JSON for an xdt-maker-script/1 frame, and logs belong on stderr',
+        );
         killTree();
         return;
       }
@@ -598,7 +608,11 @@ export class ScriptScheduleRunner {
       );
     }
     const finished = completed as CompleteFrame | null;
-    if (!finished) throw new Error('script exited without a complete frame');
+    if (!finished) {
+      throw new Error(
+        'script exited without a complete frame; it must finish with an xdt-maker-script/1 "complete" frame',
+      );
+    }
 
     // 脚本上报的 primarySessionId 是不可信输入:schedule_runs.session_id 对
     // sessions.id 有外键,笔误/过期/编造的 id 会让引擎在 run 已经成功之后的

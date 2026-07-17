@@ -4677,6 +4677,9 @@
         "script": "Script only"
       },
       "script": {
+        "protocolSummary": "stdout must emit one complete xdt-maker-script/1 JSON object per line (JSONL); type must be call or complete. Write regular logs to stderr, and always finish with a complete frame.",
+        "protocolCapabilities": "When using granted capabilities, the script must also read the host's start and call_result JSONL frames from stdin, then wait for each call result before continuing or emitting complete.",
+        "protocolExample": "View minimal Python example without capabilities",
         "command": "Script command",
         "commandPlaceholder": "python scripts/auto.py",
         "timeout": "Timeout (seconds, optional)",
