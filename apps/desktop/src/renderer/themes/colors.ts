@@ -1715,9 +1715,13 @@ registerColor('create-agent-send-icon', {
   dark: '#252222',
 }, 'CREATE AGENT send button inverse neutral icon');
 registerColor('create-agent-send-bg-hover', {
-  light: 'var(--text-primary-emphasis)',
-  dark: '#DADADA',
+  light: '#2E3237',
+  dark: '#E2E2E2',
 }, 'CREATE AGENT send button neutral hover bg');
+registerColor('create-agent-send-bg-pressed', {
+  light: '#25282C',
+  dark: '#D4D4D4',
+}, 'CREATE AGENT send button neutral pressed bg');
 registerColor('create-agent-focus-ring', {
   light: '#417CDD',
   dark: '#417CDD',
