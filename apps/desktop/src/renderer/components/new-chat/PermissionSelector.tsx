@@ -110,7 +110,7 @@ export function PermissionSelector({
             className={cn(
               'flex min-w-0 items-center gap-1 rounded-full',
               'py-1 pl-0 pr-2',
-              'bg-transparent text-[var(--model-trigger-text)] transition-colors',
+              'bg-[var(--glass-pill-bg)] backdrop-blur-[6px] text-[var(--model-trigger-text)] transition-colors',
               'hover:bg-[var(--model-trigger-hover)]',
               triggerTone === 'auto' && 'text-[var(--perm-auto-selected-text)]',
               triggerTone === 'bypassPermissions' &&

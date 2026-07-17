@@ -174,7 +174,7 @@ export function ExtraDirsButton({
             className={cn(
               'flex items-center gap-1 rounded-full',
               'px-1.5 py-1',
-              'bg-transparent transition-colors',
+              'bg-[var(--glass-pill-bg)] backdrop-blur-[6px] transition-colors',
               'hover:bg-[var(--model-trigger-hover)]',
               'disabled:cursor-not-allowed disabled:opacity-50',
             )}

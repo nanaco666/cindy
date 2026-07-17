@@ -4713,7 +4713,7 @@ function VoiceInputButton({
         type="button"
         className={cn(
           'flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
-          'bg-transparent text-[var(--model-trigger-text)]',
+          'bg-[var(--glass-pill-bg)] backdrop-blur-[6px] text-[var(--model-trigger-text)]',
           'transition-colors hover:bg-[var(--model-trigger-hover)]',
           'focus-visible:outline-none',
           disabledOrBusy && 'cursor-not-allowed opacity-40',

@@ -97,7 +97,7 @@ export function CollaborationModeToggle({
           aria-pressed
           className={cn(
             'flex shrink-0 items-center gap-1.5 rounded-full font-medium transition-colors',
-            'bg-transparent text-[var(--status-bar-accent)]',
+            'bg-[var(--glass-pill-bg)] backdrop-blur-[6px] text-[var(--status-bar-accent)]',
             !iconOnly && 'border border-[var(--status-bar-accent)]',
             'hover:bg-[var(--status-bar-accent)]/15',
             pillSizeCn,
@@ -127,7 +127,7 @@ export function CollaborationModeToggle({
           aria-pressed={false}
           className={cn(
             'flex shrink-0 items-center gap-1.5 rounded-full font-medium transition-colors',
-            'bg-transparent text-[var(--cmd-palette-item-meta)]',
+            'bg-[var(--glass-pill-bg)] backdrop-blur-[6px] text-[var(--cmd-palette-item-meta)]',
             !iconOnly && 'border border-[var(--cmd-palette-border)]',
             'hover:bg-[var(--cmd-palette-item-hover)]',
             pillSizeCn,
@@ -156,7 +156,7 @@ export function CollaborationModeToggle({
             aria-pressed={false}
             className={cn(
               'flex shrink-0 items-center gap-1.5 rounded-full font-medium transition-colors',
-              'bg-transparent text-[var(--cmd-palette-item-meta)]',
+              'bg-[var(--glass-pill-bg)] backdrop-blur-[6px] text-[var(--cmd-palette-item-meta)]',
               !iconOnly && 'border border-[var(--cmd-palette-border)]',
               'hover:bg-[var(--cmd-palette-item-hover)]',
               pillSizeCn,
