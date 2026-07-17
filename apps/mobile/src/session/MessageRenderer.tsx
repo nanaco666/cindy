@@ -212,8 +212,11 @@ import { logUnhandledRenderItem } from '@/session/assertNever';
 import type { OrcaCollabCard as OrcaCollabCardModel } from '@/session/orcaCollab';
 import {
   buildMessageLoadEarlierAction,
+  createMobileFollowEndPinState,
   evaluateMessageWindowUpdate,
+  evaluateMobileFollowEndContentSizePin,
   mobileMessageListTopPadding,
+  MOBILE_FOLLOW_END_PIN_SUPPRESS_MS,
   MOBILE_MESSAGE_LIST_BOTTOM_PADDING,
   type MessageScrollMetrics,
   mobileMessageListBottomPadding,
@@ -453,6 +456,12 @@ export function MessageRenderer({
     offsetY: 0,
     viewportHeight: 0,
   });
+  // 贴底补滚护栏状态(死区 + 振荡断路器,语义见 messageScroll.ts 的护栏段注释):
+  // 掐断 onContentSizeChange → scrollToEnd → 重测 的洪泛环(JS 忙死、消息区空白)。
+  const followEndPinStateRef = useRef(createMobileFollowEndPinState());
+  // 断路到期后的 one-shot 贴底清账 timer:断路窗内错过的最终高度可能停在半空且
+  // 之后再无 contentSize 事件,到期补一次(仍在贴底跟随时)把账清平(review P1)。
+  const followEndPinRecoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 会话切换(scrollResetKey)的 ref 复位必须在渲染期同步完成,不能只靠下方的 reset effect:
   // effect 在 paint 后异步执行,而重挂的新列表(key={scrollResetKey})的首批 scroll /
   // onStartReached 回调、以及先于 reset effect 定义的 eligibility effect,都可能带着上个会话的
@@ -469,6 +478,7 @@ export function MessageRenderer({
     readingOlderRef.current = false;
     previousItemKeysRef.current = [];
     scrollMetricsRef.current = { contentHeight: 0, offsetY: 0, viewportHeight: 0 };
+    followEndPinStateRef.current = createMobileFollowEndPinState();
   }
   // DEV-only:把列表控制器 + 滚动 metrics 暴露给性能 harness(临时,profiling/回归测量用)。
   useEffect(() => {
@@ -611,6 +621,14 @@ export function MessageRenderer({
   const scrollToBottom = useCallback(() => {
     nearBottomRef.current = true;
     readingOlderRef.current = false;
+    // 用户主动跳底是明确的重锚意图:重建补滚护栏(清掉可能仍开着的断路窗,
+    // 让跳底后的贴底跟随立即恢复;振荡若还在会重新跳闸,review P2)。在飞的
+    // 断路清账 timer 一并作废——本次显式跳底就是清账。
+    followEndPinStateRef.current = createMobileFollowEndPinState();
+    if (followEndPinRecoveryTimerRef.current) {
+      clearTimeout(followEndPinRecoveryTimerRef.current);
+      followEndPinRecoveryTimerRef.current = null;
+    }
     setEndPinEnabled(true);
     setIsAwayFromBottom(false);
     setHasNewMessages(false);
@@ -640,6 +658,12 @@ export function MessageRenderer({
     if (followLatestRequestKey === null || followLatestRequestKey === undefined) return;
     nearBottomRef.current = true;
     readingOlderRef.current = false;
+    // 与 scrollToBottom 同语义:显式重锚清掉补滚护栏的断路窗与在飞清账 timer。
+    followEndPinStateRef.current = createMobileFollowEndPinState();
+    if (followEndPinRecoveryTimerRef.current) {
+      clearTimeout(followEndPinRecoveryTimerRef.current);
+      followEndPinRecoveryTimerRef.current = null;
+    }
     setEndPinEnabled(true);
     setHasNewMessages(false);
     setIsAwayFromBottom(false);
@@ -786,7 +810,36 @@ export function MessageRenderer({
     // readingOlderRef:load-earlier 的 prepend 也会撑高 contentHeight,但那是顶部增长、不该贴底(review P1)。
     if (readingOlderRef.current) return;
     if (nearBottomRef.current && viewportHeight > 0 && height > viewportHeight) {
-      void listRef.current?.scrollToEnd({ animated: false });
+      // 补滚护栏:死区去噪 + 振荡断路,掐断「scrollToEnd → 重测 → onContentSizeChange」
+      // 洪泛环(JS 忙死、冷开消息区空白;语义与参数见 messageScroll.ts 护栏段)。
+      // 单调增长(流式/冷开/回填)不限流——内置 maintainScrollAtEnd 对大块单帧撑高
+      // 不兜底,手动补滚必须保持原有的每次跟进;只有高度往返振荡才跳闸。
+      const decision = evaluateMobileFollowEndContentSizePin(followEndPinStateRef.current, {
+        now: Date.now(),
+        contentHeight: height,
+      });
+      if (decision.trippedNow) {
+        // 诊断告警(每个护栏周期一次——护栏状态随会话切换/显式跳底重建后可再报):
+        // 现场无日志通道,这条 warn 是洪泛环被触发的唯一取证点。
+        console.warn(
+          '[message-list] contentSize follow-pin circuit tripped: '
+          + `oscillating item measurements suspected (height=${Math.round(height)}, viewport=${Math.round(viewportHeight)})`,
+        );
+      }
+      if (decision.suppressionStarted) {
+        // 断路到期 + 缓冲一帧后清账:仍在贴底跟随(用户没上翻)时补一次落底,
+        // 覆盖「振荡在断路窗内自然停息、最终高度停在半空」的收尾状态。
+        if (followEndPinRecoveryTimerRef.current) clearTimeout(followEndPinRecoveryTimerRef.current);
+        followEndPinRecoveryTimerRef.current = setTimeout(() => {
+          followEndPinRecoveryTimerRef.current = null;
+          if (nearBottomRef.current && !readingOlderRef.current) {
+            void listRef.current?.scrollToEnd({ animated: false });
+          }
+        }, MOBILE_FOLLOW_END_PIN_SUPPRESS_MS + 50);
+      }
+      if (decision.shouldScroll) {
+        void listRef.current?.scrollToEnd({ animated: false });
+      }
     }
   }, []);
 
@@ -795,11 +848,21 @@ export function MessageRenderer({
   // 已在渲染期同步块完成(见 prevScrollResetKeyRef,防切会话竞态误触发自动拉历史),此处不重复。
   useEffect(() => {
     lastAppliedFocusKeyRef.current = null;
+    // 上个会话遗留的断路清账 timer 作废(护栏状态本体已在渲染期同步块重建)。
+    if (followEndPinRecoveryTimerRef.current) {
+      clearTimeout(followEndPinRecoveryTimerRef.current);
+      followEndPinRecoveryTimerRef.current = null;
+    }
     setEndPinEnabled(true);
     setIsAwayFromBottom(false);
     setFirstVisibleIndex(0);
     setHasNewMessages(false);
   }, [scrollResetKey]);
+  // 卸载时清掉在飞的断路清账 timer(闭包引用 listRef,卸载后触发是无害 no-op,
+  // 但不留悬挂定时器)。
+  useEffect(() => () => {
+    if (followEndPinRecoveryTimerRef.current) clearTimeout(followEndPinRecoveryTimerRef.current);
+  }, []);
 
   // 顶部 chrome(如连接横幅)出现/消失 → topPadding 变 → contentContainerStyle.paddingTop 变 →
   // 所有 item 随之上下移。LegendList 的 maintainVisibleContentPosition 只跟 data / item 尺寸变化、
