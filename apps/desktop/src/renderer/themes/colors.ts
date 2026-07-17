@@ -512,6 +512,10 @@ registerColor('chat-input-border-focus', {
   light: 'var(--text-tertiary)',
   dark: 'var(--text-tertiary)',
 }, 'Silver — focus hint, still grayscale');
+registerColor('chat-input-placeholder-subtle', {
+  light: 'color-mix(in srgb, var(--chat-input-placeholder) 40%, transparent)',
+  dark: 'color-mix(in srgb, var(--chat-input-placeholder) 40%, transparent)',
+}, 'Chat input placeholder at 40% opacity');
 registerColor('chat-input-text', {
   light: '#000000',
   dark: '#d4d4d4',
@@ -1680,11 +1684,11 @@ registerColor('create-agent-control-bg', {
 }, 'CREATE AGENT pill / icon button background');
 registerColor('create-agent-control-bg-hover', {
   light: 'var(--surface-hover)',
-  dark: '#2E3237',
+  dark: '#444242',
 }, 'CREATE AGENT neutral hover background');
 registerColor('create-agent-control-bg-pressed', {
   light: 'var(--surface-hover-soft)',
-  dark: '#25282C',
+  dark: '#504F4F',
 }, 'CREATE AGENT neutral pressed background');
 registerColor('create-agent-control-border', {
   light: '#DCDFE3',
@@ -1731,9 +1735,9 @@ registerColor('create-agent-send-disabled-icon', {
   dark: '#585555',
 }, 'CREATE AGENT send button disabled icon');
 registerColor('create-agent-focus-ring', {
-  light: '#417CDD',
-  dark: '#417CDD',
-}, 'CREATE AGENT control focus ring');
+  light: 'var(--text-tertiary)',
+  dark: 'var(--text-tertiary)',
+}, 'CREATE AGENT neutral focus border');
 registerColor('create-agent-quick-card-bg', {
   light: '#F8F8F8',
   dark: '#312F2F',
@@ -1754,6 +1758,10 @@ registerColor('create-agent-quick-card-icon', {
   light: '#3C3F43',
   dark: '#D4D4D4',
 }, 'CREATE AGENT quick-start icon');
+registerColor('create-agent-quick-card-bg-hover', {
+  light: '#FCFCFC',
+  dark: '#3B3A3A',
+}, 'CREATE AGENT quick-start card neutral hover background');
 registerColor('create-agent-avatar-ring', {
   light: 'rgba(255, 255, 255, 0.08)',
   dark: 'rgba(255, 255, 255, 0.08)',
@@ -1778,6 +1786,10 @@ registerColor('sidebar-list-muted', {
   light: '#9A9DA3',
   dark: '#6F6F6F',
 }, 'CINDY sidebar section and project list muted text');
+registerColor('sidebar-item-active-foreground', {
+  light: 'var(--foreground)',
+  dark: 'var(--foreground)',
+}, 'Sidebar selected row text and icon');
 registerColor('sidebar-user-card-bg', {
   light: 'rgba(255, 255, 255, 0.20)',
   dark: 'rgba(255, 255, 255, 0.05)',

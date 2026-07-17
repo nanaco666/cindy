@@ -96,6 +96,7 @@ const overrides = {
   'settings-theme-auto-dark': '#2A2828', // Auto 预览 dark 固定
   'sidebar-action-icon': '222.0 4.6% 42.7%', // AA action icon
   'sidebar-item-active': '352.3 89.8% 46.1%', // active 品牌红
+  'sidebar-item-active-foreground': '#FCFCFC', // active 红底前景
   'splash-bg': '0.0 0.0% 92.9%', // 背景 -> HSL
   'splash-text': '222.0 4.6% 42.7%', // AA splash text
   'splash-text-destructive': '214.3 5.5% 24.9%', // destructive splash text

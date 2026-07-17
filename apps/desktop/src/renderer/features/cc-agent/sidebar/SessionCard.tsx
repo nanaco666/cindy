@@ -476,14 +476,14 @@ export function SessionCard({
           ? cn(
               // 扁平行(类 Telegram / 对话列表):无描边、无卡片底色,仅 hover/active 行底色。
               'rounded-lg',
-              isActive ? 'bg-sidebar-item-active' : 'hover:bg-sidebar-item-hover',
+              isActive ? 'bg-sidebar-item-active text-[var(--sidebar-item-active-foreground)]' : 'hover:bg-sidebar-item-hover',
             )
           : cn(
               // 卡片:白底 + 描边 + 圆角。多列瀑布由 CardMasonry/DraggableCardColumns
               // 负责分配列;卡片高度随标题/摘要自然变化。
               'rounded-xl bg-[var(--surface-elevated)] border',
               isActive
-                ? 'border-[var(--text-tertiary)] !bg-sidebar-item-active'
+                ? 'border-[var(--text-tertiary)] !bg-sidebar-item-active text-[var(--sidebar-item-active-foreground)]'
                 : 'border-sidebar-border hover:!bg-sidebar-item-hover',
             ),
         // 多选选中态(与列表 SessionItem 同款):内描边软高亮,不与 active 互斥。
@@ -539,7 +539,11 @@ export function SessionCard({
                     'min-w-0 truncate',
                     'text-13 font-semibold leading-[1.3] tracking-[-0.005em]',
                     'transition-[color] duration-500',
-                    isMuted ? 'text-[var(--cmd-palette-item-meta)]' : 'text-foreground',
+                    isActive
+                      ? 'text-[var(--sidebar-item-active-foreground)]'
+                      : isMuted
+                        ? 'text-[var(--cmd-palette-item-meta)]'
+                        : 'text-foreground',
                   )}
                 >
                   {titlePrefixNode}
@@ -565,6 +569,7 @@ export function SessionCard({
               <TimeActionsSlot
                 sessionId={session.id}
                 activityIso={activityIso}
+                isActive={isActive}
                 isMuted={isMuted}
                 isArchived={isArchived}
                 canQuickArchive={canQuickArchive}
@@ -698,6 +703,7 @@ export function SessionCard({
               '[display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden',
               'transition-[color] duration-500',
               isMuted ? 'text-[var(--cmd-palette-item-meta)]' : 'text-foreground',
+              isActive && 'text-[var(--sidebar-item-active-foreground)]',
             )}
             style={{ textIndent: 0, paddingLeft: 0 }}
           >
@@ -894,6 +900,7 @@ export function SessionCard({
 function TimeActionsSlot({
   sessionId,
   activityIso,
+  isActive,
   isMuted,
   isArchived,
   canQuickArchive,
@@ -908,6 +915,7 @@ function TimeActionsSlot({
 }: {
   sessionId: string;
   activityIso: string;
+  isActive: boolean;
   isMuted: boolean;
   isArchived: boolean;
   canQuickArchive: boolean;
@@ -938,7 +946,11 @@ function TimeActionsSlot({
           title={formatSidebarTimeAbsolute(activityIso)}
           className={cn(
             'text-[10.5px] font-medium leading-none tabular-nums',
-            isMuted ? 'text-[var(--text-disabled)]' : 'text-[var(--text-tertiary)]',
+            isActive
+              ? 'text-[var(--sidebar-item-active-foreground)]'
+              : isMuted
+                ? 'text-[var(--text-disabled)]'
+                : 'text-[var(--text-tertiary)]',
           )}
         >
           {formatSidebarTime(activityIso, t)}

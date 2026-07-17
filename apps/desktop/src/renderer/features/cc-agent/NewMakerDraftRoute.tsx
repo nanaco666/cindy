@@ -1874,7 +1874,7 @@ export function NewMakerDraftRoute() {
                         key={key}
                         type="button"
                         onClick={() => handleQuickStart(labelKey)}
-                        className="flex h-20 items-start gap-[7px] rounded-[6px] border border-[var(--create-agent-quick-card-border)] bg-[var(--create-agent-quick-card-bg)] p-[7px] text-left text-[var(--create-agent-quick-card-text)] transition-colors hover:bg-[var(--create-agent-control-bg-hover)]"
+                        className="flex h-20 items-start gap-[7px] rounded-[6px] border border-[var(--create-agent-quick-card-border)] bg-[var(--create-agent-quick-card-bg)] p-[7px] text-left text-[var(--create-agent-quick-card-text)] transition-colors hover:bg-[var(--create-agent-quick-card-bg-hover)]"
                       >
                         <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-[var(--create-agent-quick-card-icon-bg)]">
                           <Icon

@@ -1,5 +1,4 @@
 import { forwardRef } from 'react';
-import { ArrowUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
@@ -73,10 +72,8 @@ export const SendButton = forwardRef<HTMLButtonElement, SendButtonProps>(functio
           className="block h-[10px] w-[10px] rounded-[1.5px] bg-[var(--stop-btn-icon)]"
           aria-hidden
         />
-      ) : isCreateAgentVariant ? (
-        <CreateAgentSendIcon />
       ) : (
-        <ArrowUp size={16} />
+        <CreateAgentSendIcon />
       )}
     </button>
   );
