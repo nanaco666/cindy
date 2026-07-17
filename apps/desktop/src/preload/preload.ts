@@ -1261,6 +1261,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setUpdateRelaunchTheme: (theme: 'light' | 'dark'): void => {
     ipcRenderer.send('update-set-relaunch-theme', theme);
   },
+
+  // E4D 毛玻璃:family 切换/启动时通知 main 开关 macOS vibrancy(仅 CINDY 透壁纸)
+  theme: {
+    applyVibrancy: (familyId: string, isDark: boolean): void => {
+      ipcRenderer.send('theme:apply-vibrancy', { familyId, isDark });
+    },
+  },
   onAppUpdateProgress: fanOutAppUpdateProgress,
 
   // Generic API request proxy — all backend HTTP calls go through main process.

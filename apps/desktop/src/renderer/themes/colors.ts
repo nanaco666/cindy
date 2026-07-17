@@ -952,6 +952,24 @@ registerColor('status-badge-fg', {
   light: 'var(--accent-pure-cta-fg)',
   dark: 'var(--accent-pure-cta-fg)',
 }, '状态徽章前景(§7 必炸点;default 镜像 accent-pure-cta-fg 保证既有 9 主题零变化,CINDY override #1F1F1F)');
+// E4D 毛玻璃(R1 audit,用户裁决透壁纸 2026-07-17):半透明底色,仅 CINDY override 生效;
+// default 不透明等价色(其他 family 行为零变化)。blur 在 CSS backdrop-filter(50px/6px)。
+registerColor('surface-translucent-sidebar', {
+  light: 'var(--surface)',
+  dark: 'var(--surface)',
+}, 'E4D 侧栏半透明底(default 等价 surface;CINDY override rgba #F6F6F6@90%/#120F0F@85% R1 模式1)');
+registerColor('surface-translucent-main', {
+  light: 'var(--surface-elevated)',
+  dark: 'var(--surface-elevated)',
+}, 'E4D 主面板半透明底(default surface-elevated;CINDY override rgba #FFFFFF@93%/#120F0F@85% R1 模式2)');
+registerColor('surface-translucent-overlay', {
+  light: 'var(--surface-elevated)',
+  dark: 'var(--surface-elevated)',
+}, 'E4D 浮层半透明底(default surface-elevated;CINDY override rgba #F6F6F6@90%/#252323@80% R1 模式3)');
+registerColor('glass-pill-bg', {
+  light: 'transparent',
+  dark: 'transparent',
+}, 'E3 D6 glass-pill 底(default 透明;CINDY override rgba #FFFFFF@5% light/#D9D9D9@5% dark R4 §2.6)');
 registerColor('status-bar-meta', {
   light: 'var(--text-secondary)',
   dark: 'var(--text-secondary)',

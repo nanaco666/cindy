@@ -119,6 +119,10 @@ export const CINDY_REQUIRED_COLOR_IDS = [
   'sidebar-search-bg',
   'sidebar-muted',
   'status-badge-fg', // D2 期新增,值经队列震荡后按 HEAD 冻结(#1F1F1F,5.61:1 × #FF6600 ≥4.5),批准依据:用户亲批方案 2026-07-17,115→116
+  'surface-translucent-sidebar', // R1 增补(E4D 毛玻璃,用户裁决透壁纸 2026-07-17)
+  'surface-translucent-main', // R1 增补(E4D)
+  'surface-translucent-overlay', // R1 增补(E4D)
+  'glass-pill-bg', // E3 D6 增补(R4 唤醒态 glass-pill),116→120
 ] as const;
 
 export const HSL_FORMAT_IDS = [
@@ -283,6 +287,10 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'sidebar-search-bg': { light: '0.0 0.0% 92.9%', dark: '0.0 2.4% 16.1%' },
   'sidebar-muted': { light: '222.0 4.6% 42.7%', dark: '216.0 4.1% 75.9%' },
   'status-badge-fg': { light: '#1F1F1F', dark: '#1F1F1F' }, // §7 必炸点(lead 裁决)
+  'surface-translucent-sidebar': { light: 'rgba(246, 246, 246, 0.90)', dark: 'rgba(18, 15, 15, 0.85)' }, // E4D R1 模式1
+  'surface-translucent-main': { light: 'rgba(255, 255, 255, 0.93)', dark: 'rgba(18, 15, 15, 0.85)' }, // E4D R1 模式2
+  'surface-translucent-overlay': { light: 'rgba(246, 246, 246, 0.90)', dark: 'rgba(37, 35, 35, 0.80)' }, // E4D R1 模式3
+  'glass-pill-bg': { light: 'rgba(255, 255, 255, 0.05)', dark: 'rgba(217, 217, 217, 0.05)' }, // E3 D6 glass-pill
 };
 
 export const BRAND_RED_EXPECTED_BY_ID: Record<string, string> = {

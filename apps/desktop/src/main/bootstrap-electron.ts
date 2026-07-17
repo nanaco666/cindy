@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, protocol, safeStorage, screen, session, shell } from 'electron';
+import { resolveVibrancyConfig } from './vibrancyConfig';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -1926,6 +1927,23 @@ const registerIpcHandlers = () => {
     }
     openSessionInNewWindow(sessionId, mainWindowRef);
   });
+
+// E4D 毛玻璃(R1 audit,用户裁决透壁纸 2026-07-17):仅 CINDY family 启用 macOS vibrancy
+// + 透明底(透出桌面壁纸);其他 family 恢复不透明。Windows 无 vibrancy 等价,本轮回退
+// 不透明(留 TODO backgroundMaterial acrylic/mica)。family 切换运行时动态调用。
+function applyWindowVibrancy(familyId: string, isDark: boolean): void {
+  const win = mainWindowRef;
+  if (!win || win.isDestroyed()) return;
+  const config = resolveVibrancyConfig(familyId, isDark, process.platform);
+  if (process.platform === 'darwin') {
+    win.setVibrancy(config.vibrancy as 'under-window' | null);
+  }
+  win.setBackgroundColor(config.backgroundColor);
+}
+
+ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark: boolean }) => {
+  applyWindowVibrancy(payload.familyId, payload.isDark);
+});
 
   ipcMain.on('get-app-version', (event) => {
     event.returnValue = app.getVersion();
