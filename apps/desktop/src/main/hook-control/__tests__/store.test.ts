@@ -10,7 +10,6 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { SLACK_HOOK_DEFAULT_URL } from '../../../shared/hookControlIpc';
 import {
   createSlackHookStore,
   HookConnectionValidationError,
@@ -18,6 +17,9 @@ import {
 } from '../store';
 
 const noopLog = { info: () => {}, warn: () => {} };
+// 生产的 defaultUrl 来自运行期端点清单(getClientEndpoint('slackHookWsUrl'));
+// 测试注入中性 fixture,断言"无覆写时回落注入默认值"的语义。
+const TEST_DEFAULT_URL = 'wss://hook-default.example.invalid';
 
 let dir: string;
 const filePath = (): string => path.join(dir, 'slack-hook.json');
@@ -36,6 +38,7 @@ function makeStore(cleanup?: (ids: string[]) => void) {
     filePath: filePath(),
     legacyFilePath: legacyPath(),
     cleanupLegacySecrets: cleanup,
+    defaultUrl: () => TEST_DEFAULT_URL,
     log: noopLog,
   });
 }
@@ -44,7 +47,7 @@ describe('默认态与持久化', () => {
   it('无文件: 关闭 + 空目录清单 + 内置默认地址', () => {
     const store = makeStore();
     expect(store.get()).toEqual({ enabled: false, urlOverride: null, workspaces: {} });
-    expect(store.effectiveUrl()).toBe(SLACK_HOOK_DEFAULT_URL);
+    expect(store.effectiveUrl()).toBe(TEST_DEFAULT_URL);
   });
 
   it('setEnabled / setWorkspaces 落盘, 重建实例仍在', () => {
@@ -66,7 +69,7 @@ describe('默认态与持久化', () => {
       filePath(),
       JSON.stringify({ enabled: true, urlOverride: 'http://not-ws', workspaces: {} }),
     );
-    expect(makeStore().effectiveUrl()).toBe(SLACK_HOOK_DEFAULT_URL);
+    expect(makeStore().effectiveUrl()).toBe(TEST_DEFAULT_URL);
   });
 });
 

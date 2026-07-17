@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { WEBSITE_URL } from '../../shared/endpoints';
 import { useEnvCheck } from '@/contexts/EnvCheckContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUpdateStatus } from '@/hooks/useUpdateStatus';
 
-// 运行期端点清单优先(重启生效),烘焙常量兜底
-const websiteUrl = () => window.electronAPI.clientEndpoints.websiteUrl || WEBSITE_URL;
+// 运行期端点清单(dev/packaged 都在启动阻断后有真值,烘焙兜底已退役)
+const websiteUrl = () => window.electronAPI.clientEndpoints.websiteUrl;
 
 /* ── Types ── */
 

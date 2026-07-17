@@ -47,21 +47,20 @@ export interface BuiltinProvisionerLogger {
 export interface ProvisionIdentity {
   userId: string;
   email: string | null;
-  role: 'user' | 'admin';
 }
 
 /**
  * 受众规则:'all' = 人人都装(不需要登录);对象形态 = 登录后任一维度命中
- * 即命中(userIds 精确匹配 / emails 大小写不敏感 / roles)。将来的企业 key
- * 等新维度在这里加字段即可。空对象 / 不认识的形态一律不命中(fail-closed,
- * 配错了宁可不装,不把定向意识误发给所有人)。
+ * 即命中(userIds 精确匹配 / emails 大小写不敏感)。将来的企业 key 等新维度
+ * 在这里加字段即可(原 roles 维度随产品级 role 退役,2026-07,当时零使用)。
+ * 空对象 / 不认识的形态一律不命中(fail-closed,配错了宁可不装,不把定向
+ * 意识误发给所有人)。
  */
 export type AudienceRule =
   | 'all'
   | {
       userIds?: string[];
       emails?: string[];
-      roles?: Array<'user' | 'admin'>;
     };
 
 /**
@@ -192,7 +191,6 @@ export function matchesAudience(rule: AudienceRule | undefined, identity: Provis
     const emailFold = identity.email.toLowerCase();
     if (rule.emails.some((e) => typeof e === 'string' && e.toLowerCase() === emailFold)) return true;
   }
-  if (Array.isArray(rule.roles) && rule.roles.includes(identity.role)) return true;
   return false;
 }
 

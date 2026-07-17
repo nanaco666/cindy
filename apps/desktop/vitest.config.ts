@@ -6,11 +6,11 @@ const productionEnv = productionViteEnv({ allowEnvOverride: false });
 
 export default defineConfig({
   define: {
-    'import.meta.env.VITE_XDPROXY_BASE_URL': JSON.stringify(productionEnv.VITE_XDPROXY_BASE_URL),
-    'import.meta.env.VITE_HEARTBEAT_URL': JSON.stringify(productionEnv.VITE_HEARTBEAT_URL),
-    'import.meta.env.VITE_CDN_BASE_URL': JSON.stringify(productionEnv.VITE_CDN_BASE_URL),
-    'import.meta.env.VITE_CDN_INTERNAL_BASE_URL': JSON.stringify(productionEnv.VITE_CDN_INTERNAL_BASE_URL),
-    'import.meta.env.VITE_SLACK_HOOK_WS_URL': JSON.stringify(productionEnv.VITE_SLACK_HOOK_WS_URL),
+    // 业务端点烘焙 define 已随端点清单重构退役;测试固定值统一走
+    // src/test/vitest/clientEndpointsFixture.ts,不再从生产配置取"真值"。
+    'import.meta.env.VITE_ENDPOINT_MANIFEST_BASE_URL': JSON.stringify(
+      productionEnv.VITE_ENDPOINT_MANIFEST_BASE_URL,
+    ),
   },
   plugins: [
     {

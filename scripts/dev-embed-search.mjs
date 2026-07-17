@@ -9,12 +9,12 @@
  * 例:
  *   pnpm dev:embed:search "测试一下记忆"
  *   pnpm dev:embed:search "Phase 1.2 实现" --top 5
- *   pnpm dev:embed:search "embedding" --workdir "/Users/me/projects/xdt-maker"
+ *   pnpm dev:embed:search "embedding" --workdir "/Users/me/projects/cindy"
  *
  * 数据来源:
  *   - 嵌入: xdproxy /v1/embeddings (model=voyage/voyage-4, 直接 HTTP, 不走 EmbeddingClient
  *     的 LRU 缓存 — CLI 调用频率低, 每次 query 都打一次 fresh API 是 ok 的)
- *   - 数据库: <userData>/xdt-maker-<userId>.db (与 desktop dev 同一份文件; WAL 模式
+ *   - 数据库: <userData>/cindy-<userId>.db (与 desktop dev 同一份文件; WAL 模式
  *     下并发读取安全, 不影响 desktop 实时写入)
  *   - vec extension: apps/desktop/native/sqlite-vec/<platform-arch>/vec0.<dylib|dll>
  *
@@ -111,22 +111,26 @@ function fail(msg) {
 /**
  * Electron app.getPath('userData') 在不同平台的等价路径 — 与
  * apps/desktop/src/main/localDb/index.ts 中 dbPath() 的拼接逻辑一致。
- * APPNAME 在 package.json 中是 'desktop', 但 productName 是 'xdt-maker'
- * (electron-forge 包装后会用 productName 作为 userData 子目录)。
+ * userData 子目录名来自 productName(2026-07-17 身份翻转后为 'Cindy',
+ * 与 @lizi/maker-shared/brand-identity 的 userDataDirName 同源;本脚本是
+ * 零依赖 dev CLI,不 import TS 包,字面量与之保持一致)。
  */
+const USER_DATA_DIR_NAME = 'Cindy';
+const DB_FILE_PREFIX = 'cindy';
+
 function userDataDir() {
   switch (process.platform) {
     case 'darwin':
-      return path.join(os.homedir(), 'Library', 'Application Support', 'xdt-maker');
+      return path.join(os.homedir(), 'Library', 'Application Support', USER_DATA_DIR_NAME);
     case 'win32':
       return path.join(
         process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming'),
-        'xdt-maker',
+        USER_DATA_DIR_NAME,
       );
     case 'linux':
       return path.join(
         process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), '.config'),
-        'xdt-maker',
+        USER_DATA_DIR_NAME,
       );
     default:
       fail(`unsupported platform: ${process.platform}`);
@@ -146,22 +150,22 @@ function resolveDbPath(args) {
     );
   }
   if (args.userId) {
-    const file = path.join(dir, `xdt-maker-${args.userId}.db`);
+    const file = path.join(dir, `${DB_FILE_PREFIX}-${args.userId}.db`);
     if (!fs.existsSync(file)) fail(`db not found for userId=${args.userId}: ${file}`);
     return file;
   }
-  // glob 匹配 xdt-maker-*.db (排除 -wal/-shm)
+  // glob 匹配 cindy-*.db (排除 -wal/-shm)
   const entries = fs
     .readdirSync(dir)
-    .filter((f) => /^xdt-maker-[^/\\]+\.db$/.test(f) && !f.endsWith('-wal') && !f.endsWith('-shm'));
+    .filter((f) => new RegExp(`^${DB_FILE_PREFIX}-[^/\\\\]+\\.db$`).test(f) && !f.endsWith('-wal') && !f.endsWith('-shm'));
   if (entries.length === 0) {
-    fail(`no xdt-maker-*.db found under ${dir}\n请先 pnpm restart:desktop:remote 登录建库。`);
+    fail(`no ${DB_FILE_PREFIX}-*.db found under ${dir}\n请先 pnpm restart:desktop:remote 登录建库。`);
   }
   if (entries.length > 1) {
     fail(
       `multiple DBs found under ${dir}:\n` +
         entries.map((e) => `  - ${e}`).join('\n') +
-        `\n请用 --user-id 或环境变量 XDT_USER_ID 指定要查哪一个 (从文件名 xdt-maker-<userId>.db 取 userId)。`,
+        `\n请用 --user-id 或环境变量 XDT_USER_ID 指定要查哪一个 (从文件名 cindy-<userId>.db 取 userId)。`,
     );
   }
   return path.join(dir, entries[0]);

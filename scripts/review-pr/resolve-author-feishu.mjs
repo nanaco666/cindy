@@ -13,7 +13,7 @@
 //
 // 名录读取顺序(fine-grained PAT 的坑:它绑定单一 resource owner + 勾选仓库,gh api 读不到
 // taptap/org 这类跨 org 仓库,而本机 git 的 SSH key / 用户凭证读得到):
-//   1. 本地 roster clone(~/.xdmaker/org-rosters/<owner>-<repo>,仓库工作区之外):存在则先
+//   1. 本地 roster clone(~/.cindy/org-rosters/<owner>-<repo>,仓库工作区之外):存在则先
 //      `git pull --ff-only`(30s 超时,拉失败用现存副本并标 stale),读 README.md;
 //   2. 本地没有 → `git clone --depth 1 git@github.com:<slug>.git`(走本机 SSH key);
 //   3. clone 失败 → 兜底 gh api(PAT 授权过的仓库仍可用);

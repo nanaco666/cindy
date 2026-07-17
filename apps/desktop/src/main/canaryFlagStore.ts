@@ -12,11 +12,10 @@
  * with safeStorage encryption. Plain file also means the value survives
  * safeStorage being unavailable (rare edge case on Linux without keyring).
  *
- * Lifecycle:
- *   - Written by authManager after login / token-refresh / startup-resume when
- *     the server-side User.isCanary === true
- *   - Cleared by authManager when the server returns isCanary === false, AND
- *     on logout (via clearAuth)
+ * Lifecycle(2026-07 起):
+ *   - 服务端 isCanary 字段已随产品 /api/user/me 退役——登录 / 刷新 / 冷启动
+ *     恢复路径现在**恒 sync(false) 清标记**(存量 canary 用户回稳定通道);
+ *     后续灰度由其它分发方式接管,届时由新机制负责 write()
  *   - Read by manifestService.fetchManifest() to switch URL between
  *     manifest-{platform}.json and manifest-{platform}-canary.json
  *
@@ -70,8 +69,9 @@ export function clear(): void {
 }
 
 /**
- * Convenience: sync local flag to a server-provided value in one call.
- * Used by authManager on every login/refresh/me response that carries isCanary.
+ * Convenience: sync local flag to a desired value in one call.
+ * 2026-07 起 authManager 在登录/刷新/冷启动恢复路径恒调 sync(false) 清标记;
+ * true 分支留给未来的新灰度分发机制。
  */
 export function sync(isCanary: boolean): void {
   if (isCanary) write();

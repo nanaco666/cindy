@@ -11,7 +11,7 @@
  *
  * ⚠️ 边界:这里只管**深链**(OS 级注册的 `<scheme>://session|project|focus/...`)。
  * `xdt-image://` / `xdt-file://` 等进程内资源 scheme 是 B 类永久标识符,与品牌
- * 无关,不从这里派生(见 docs/cindy-rebrand/inventory.md §2)。
+ * 无关,不从这里派生。
  */
 
 import { BRAND_IDENTITY, allDeepLinkSchemes } from '@lizi/maker-shared/brand-identity';

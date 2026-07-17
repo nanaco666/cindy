@@ -101,7 +101,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 | Command | Description |
 |---------|-------------|
 | `pnpm restart:desktop:remote` | **默认**；Agent 启动 / 重启桌面端连**远程 API**；补 `.env`、停所有 Cindy Electron dev 进程、在真 TTY 下启动 |
-| `pnpm restart:desktop:local` | **仅用户明确要求本地时**；连**本地 server**（`http://localhost:3333`）；同样停旧进程、真 TTY 启动，并**强制**把 `.env` 的 `VITE_API_BASE_URL` 写成本地地址；agent 只起客户端，本地 server 仍由用户自己起 |
+| `pnpm restart:desktop:local` | **仅用户明确要求本地时**；连**本地 server**（`http://localhost:3333`）；同样停旧进程、真 TTY 启动;local 端点由 dev 脚本链自动生成的 `config/endpoint.local.json`(gitignored)承载;agent 只起客户端，本地 server 仍由用户自己起 |
 | `pnpm dev:desktop:remote` | ⚠️ human-only；**agent 禁止直接调**（无 TTY 兜底、不杀旧进程、不补 `.env`，agent 环境下必失败）——agent 走 `restart:desktop:remote` |
 | `pnpm dev:desktop` | ⚠️ human-only；连本地 server 的底层命令，**agent 禁止直接调**——agent 走 `restart:desktop:local` |
 | `pnpm dev:server` | ⚠️ human-only；到相邻 `cindy-server` checkout（或 `XDT_SERVER_REPO`）启动本地 server，**agent 禁止** |
@@ -109,7 +109,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 ### 可选启动参数 `--passive` / `--isolated`（仅用户显式要求时加）
 
-两个 restart 命令都支持；human 直跑的 `pnpm dev:desktop` / `pnpm dev:desktop:remote` / `pnpm dev:desktop:inspect` 也支持同名参数（desktop dev 脚本以 `electron-forge start -- ` 收尾，pnpm 追加的参数会透传进主进程解析）。agent 仍然只走 restart 命令。
+两个 restart 命令都支持；human 直跑的 `pnpm dev:desktop` / `pnpm dev:desktop:remote` / `pnpm dev:desktop:inspect` 也支持同名参数（desktop dev 脚本以 `electron-forge start -- ` 收尾，pnpm 追加的参数会透传进主进程解析）。agent 仍然只走 restart 命令。另有 `--endpoints-cdn`(或 env `XDT_ENDPOINTS_CDN=1`):dev 不读仓内 `config/endpoint.json`,改走与 packaged 相同的线上 CDN 端点清单拉取链路(测线上清单;mobile 对应 `EXPO_PUBLIC_ENDPOINTS_CDN=1`),同样仅用户显式要求时加。
 
 背景：dev 和 release（正式安装版）默认共用同一个 userData / SQLite 数据库；双开时定时任务靠 DB 级原子认领互斥，但**旧 release 包没有认领逻辑**，过渡期需要下面的参数配合。
 
@@ -129,7 +129,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 `restart:desktop:local` **只起客户端**——即便用户提到"服务器"，也不要因此去跑 `dev:server` / `dev:all` / 起 Postgres，本地 server 始终由用户自己起。Remote 跑不通时先排查 `.env` 和登录态，不要自动升级到本地。
 
-- `apps/desktop/.env` 是 gitignored、per checkout/worktree 的。两个 restart 命令缺失时都会创建并填 `VITE_FEISHU_APP_ID` / `VITE_API_BASE_URL`、文件已存在时只补空值，**唯一区别**：`restart:desktop:local` 会**强制覆盖** `VITE_API_BASE_URL` 为 `http://localhost:3333`（因为 local 模式桌面端直接读 `.env`；而 remote 模式由 `scripts/dev-remote-env.mjs` 包装在运行时强制注入生产端点(值来自 `config/production-endpoints.json` 权威源)、根本不看 `.env`——所以只有 local 必须保证 `.env` 是本地地址）。
+- **运行期端点来源(2026-07 端点清单重构)**:业务端点不再走 `.env` / 构建期烘焙——dev 默认读仓内 `config/endpoint.json`(cn 正本,与 CDN 上 `<hotfix base>/endpoint.json` 同格式);local 模式(`pnpm dev:desktop` 脚本链里的 `apps/desktop/scripts/dev-local-env.mjs`)自动生成并读 `config/endpoint.local.json`(gitignored,api/auth/device-link 指 localhost,每次启动整文件重写);packaged 与 `--endpoints-cdn` 从烘焙的 region 化 hotfix CDN 基址阻断式拉取。`apps/desktop/.env` 仍是 gitignored、per checkout/worktree 的,但只剩构建身份字段(`VITE_FEISHU_APP_ID` / `VITE_CINDY_AUTH_REGION`),restart 命令缺失时创建、只补空值;remote 模式由 `scripts/dev-remote-env.mjs` 注入身份字段、不看 `.env`。
 - 本地 server 位于相邻的 `cindy-server` 仓（`pnpm dev:server` 会定位并启动它），其 `.env` 与启动要求以该仓文档为准。
 
 ### 启动 → 测试 → 结束

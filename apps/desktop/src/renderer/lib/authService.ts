@@ -2,9 +2,9 @@ import type { AuthFlowState } from '@cindy/auth-client';
 import type { DesktopLoginAction, DesktopLoginActionResult } from '../../shared/authIpc';
 import type { Effort } from '@/lib/userPreferences.types';
 
-export type UserRole = 'user' | 'admin';
-
 /** Renderer-safe projection of the authenticated auth-server membership. */
+// 产品增强字段(role/isCanary)已随 /api/user/me、/api/me 退役(2026-07):
+// 身份即 auth-server membership,renderer 不再有二段式 role 水合。
 export interface User {
   id: string;
   name: string;
@@ -12,8 +12,6 @@ export interface User {
   email: string | null;
   defaultModel: string;
   defaultEffort: Effort;
-  role?: UserRole;
-  isCanary?: boolean;
   membershipKind: 'personal' | 'org';
   membershipRole: 'owner' | 'admin' | 'member';
   orgId: string | null;

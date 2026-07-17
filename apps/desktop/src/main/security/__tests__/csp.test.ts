@@ -1,8 +1,8 @@
 /**
  * csp.test.ts — regression guard for the main-window Content-Security-Policy.
  *
- * Covers the pure policy builder (dev vs prod divergence, custom-scheme /
- * API-origin allow-listing, hardened defaults) and the header injector
+ * Covers the pure policy builder (dev vs prod divergence, custom-scheme
+ * allow-listing, hardened defaults) and the header injector
  * (mainFrame-only rewrite, pre-existing CSP stripping, subresource passthrough).
  */
 
@@ -29,13 +29,11 @@ function parsePolicy(policy: string): Record<string, string[]> {
 
 const PROD_CTX: CspContext = {
   isDev: false,
-  apiOrigin: 'https://api.example.com',
   devServerOrigin: null,
 };
 
 const DEV_CTX: CspContext = {
   isDev: true,
-  apiOrigin: 'http://localhost:3333',
   devServerOrigin: 'http://localhost:5173',
 };
 
@@ -95,9 +93,8 @@ describe('buildContentSecurityPolicy — shared invariants', () => {
       expect(d['worker-src']).toEqual(expect.arrayContaining(["'self'", 'blob:']));
     });
 
-    it(`[${label}] includes the API origin + xdt-model: / cindy-media: in connect-src`, () => {
+    it(`[${label}] includes xdt-model: / cindy-media: in connect-src`, () => {
       const d = parsePolicy(buildContentSecurityPolicy(ctx));
-      expect(d['connect-src']).toContain(ctx.apiOrigin);
       // <model-viewer> fetch()es models over the privileged xdt-model: scheme
       // (mivo 老缓存) and cindy-media: (媒体总仓 GLB,意识 3D 链路).
       expect(d['connect-src']).toContain('xdt-model:');
@@ -142,11 +139,13 @@ describe('buildContentSecurityPolicy — prod', () => {
     expect(d['script-src']).toContain("'unsafe-eval'");
   });
 
-  it('connect-src has no ws:/http: scheme wildcards (only self + api + https/wss)', () => {
+  it('connect-src has no ws:/http: scheme wildcards (only self + https/wss)', () => {
     const d = parsePolicy(buildContentSecurityPolicy(PROD_CTX));
     expect(d['connect-src']).toEqual(
-      expect.arrayContaining(["'self'", 'https://api.example.com', 'https:', 'wss:']),
+      expect.arrayContaining(["'self'", 'https:', 'wss:']),
     );
+    // API 域名不再单列(2026-07 apiBaseUrl 清理):https: 通配本就覆盖,
+    // 主 server 请求全部经 main 进程 IPC 代理发出,renderer 无直连。
     expect(d['connect-src']).not.toContain('ws:');
     expect(d['connect-src']).not.toContain('http:');
   });

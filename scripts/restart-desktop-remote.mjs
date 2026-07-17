@@ -11,8 +11,6 @@ const gracefulTimeoutMs = 3000;
 const forceTimeoutMs = 5000;
 const pollIntervalMs = 150;
 const forceKillLabel = process.platform === 'win32' ? 'taskkill /F /T' : 'kill -9';
-const LOCAL_API_BASE_URL = 'http://localhost:3333';
-const LOCAL_AUTH_BASE_URL = 'http://localhost:3344';
 
 /**
  * 产品 userData 目录基名(--isolated 沙箱目录 `<BRAND_USER_DATA_DIR_NAME>-dev[-<名字>]`
@@ -24,33 +22,24 @@ const LOCAL_AUTH_BASE_URL = 'http://localhost:3344';
  */
 export const BRAND_USER_DATA_DIR_NAME = 'Cindy';
 
-// 桌面端 .env 默认值,按启动模式区分 VITE_API_BASE_URL:
-// - remote(默认):dev:desktop:remote 用 cross-env 在运行时强制注入 xdt-api,桌面端不看 .env,
-//   所以 .env 里的 VITE_API_BASE_URL 只是占位,沿用旧策略「文件已存在则不覆盖」即可。
-// - local:dev:desktop 无运行时注入,桌面端直接读 .env,因此必须 force 把 .env 的
-//   VITE_API_BASE_URL 写成本地地址,否则会沿用上一次 remote 留下的远程地址连错服务器。
-// VITE_FEISHU_APP_ID 两种模式都只补空值、保留用户已填的值。
-function desktopEnvSpec(mode, content) {
+// 桌面端 .env 默认值。2026-07 端点清单重构后 .env 不再承载任何端点 URL
+// (运行期端点全部来自清单:dev 默认读仓内 config/endpoint.json,local 模式读
+// 生成的 config/endpoint.local.json,--endpoints-cdn 走线上 CDN),这里只剩
+// 构建身份字段:VITE_FEISHU_APP_ID / VITE_CINDY_AUTH_REGION 补空值、保留用户已填的值。
+function desktopEnvSpec(content) {
   let productionConfig;
   const configValue = (key) => {
     productionConfig ??= loadProductionEndpoints();
     return productionConfig[key];
   };
   const existingFeishuAppId = readEnvValue(content, 'VITE_FEISHU_APP_ID');
-  const apiBaseUrl = mode === 'local'
-    ? LOCAL_API_BASE_URL
-    : configValue('apiBaseUrl');
   return [
     { key: 'VITE_CINDY_AUTH_REGION', value: 'cn', force: false },
-    { key: 'VITE_CINDY_AUTH_BASE_URL', value: LOCAL_AUTH_BASE_URL, force: false },
     {
       key: 'VITE_FEISHU_APP_ID',
       value: existingFeishuAppId || configValue('feishuAppId'),
       force: false,
     },
-    mode === 'local'
-      ? { key: 'VITE_API_BASE_URL', value: apiBaseUrl, force: true }
-      : { key: 'VITE_API_BASE_URL', value: apiBaseUrl, force: false },
   ];
 }
 const closeDarwinTerminalTtyScript = Object.freeze([
@@ -144,7 +133,7 @@ function run(command, args, options = {}) {
   });
 }
 
-function ensureDesktopEnv(mode) {
+function ensureDesktopEnv() {
   const envPath = path.join(rootDir, 'apps', 'desktop', '.env');
   const examplePath = path.join(rootDir, 'apps', 'desktop', '.env.example');
   let content = '';
@@ -159,7 +148,7 @@ function ensureDesktopEnv(mode) {
       : '';
   }
 
-  for (const { key, value, force } of desktopEnvSpec(mode, content)) {
+  for (const { key, value, force } of desktopEnvSpec(content)) {
     content = upsertEnvValue(content, key, value, { overwrite: created || force });
   }
 
@@ -462,6 +451,10 @@ function devEnvPrefix() {
     ['XDT_SCHEDULER_PASSIVE', process.env.XDT_SCHEDULER_PASSIVE],
     ['XDT_ISOLATED', process.env.XDT_ISOLATED],
     ['XDT_ISOLATED_NAME', process.env.XDT_ISOLATED_NAME],
+    // 端点清单来源覆写:--endpoints-cdn(dev 走线上 CDN)/ local 模式的
+    // endpoint.local.json 文件路径,均由主进程 clientEndpointsService 消费。
+    ['XDT_ENDPOINTS_CDN', process.env.XDT_ENDPOINTS_CDN],
+    ['XDT_ENDPOINT_MANIFEST_FILE', process.env.XDT_ENDPOINT_MANIFEST_FILE],
     // 启动即自动打开 DevTools(main 的 ready-to-show 里消费;见 bootstrap-electron)。
     // 给"快捷键/菜单打不开 DevTools"的环境兜底,QA 控制台验证依赖它。
     ['OPEN_DEVTOOLS', process.env.OPEN_DEVTOOLS],
@@ -555,6 +548,15 @@ async function main() {
     process.env.XDT_SCHEDULER_PASSIVE = '1';
     console.log('==> Scheduler passive mode: this instance will not auto-fire schedules.');
   }
+  // --endpoints-cdn: dev 不读仓内 config/endpoint.json,改走与 packaged 相同的
+  // 线上 CDN 端点清单拉取链路(测线上清单)。实现方式是置 XDT_ENDPOINTS_CDN=1,
+  // 经 devEnvPrefix 白名单透传,主进程 devCliFlags/clientEndpointsService 消费。
+  // 注意 local 模式的 endpoint.local.json 生成不在本脚本——dev(local)脚本链里的
+  // apps/desktop/scripts/dev-local-env.mjs 统一负责(human 直跑与 restart 同路径)。
+  if (argv.includes('--endpoints-cdn')) {
+    process.env.XDT_ENDPOINTS_CDN = '1';
+    console.log('==> Endpoints via CDN: dev will fetch the online endpoint manifest.');
+  }
   // --isolated[=<名字>]: dev 使用独立的 userData 目录(数据库/登录态/会话全部与
   // 正式版隔离,首次要重新走飞书登录)。不带名字 = 默认沙箱(Cindy-dev);
   // 带名字 = 独立命名沙箱(Cindy-dev-<名字>),每个名字一条,可同时多开。
@@ -586,7 +588,7 @@ async function main() {
     fs.mkdirSync(process.env.XDT_USER_DATA_DIR, { recursive: true });
     console.log(`==> Isolated dev user data${isolationName ? ` (sandbox "${isolationName}")` : ''}: ${process.env.XDT_USER_DATA_DIR}`);
   }
-  if (!killOnly) ensureDesktopEnv(mode);
+  if (!killOnly) ensureDesktopEnv();
 
   const devAncestor = findDevAncestor();
   if (devAncestor) {

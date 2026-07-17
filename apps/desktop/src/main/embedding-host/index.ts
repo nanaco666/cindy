@@ -18,15 +18,13 @@ import { EmbeddingClient, type EmbeddingClientOptions } from '@lizi/embedding-cl
 import type { createLogger } from '../logger';
 import type { DbClient } from '../localDb/client/DbClient';
 import { EmbeddingService } from './EmbeddingService';
-import { XD_GATEWAY_BASE_URL } from '../../shared/endpoints';
+import { getClientEndpoint } from '../clientEndpointsService';
 
 /** 兜底常量(仅 deps 未注入时);生产接线一律注入运行期函数(bootstrap-electron)。 */
 
 export type { EmbeddingProvider, EmbeddingJobForProvider } from './providers';
 export type { EmbeddingService } from './EmbeddingService';
 export type { VecTableSpec } from './VecTableRegistry';
-
-const DEFAULT_XDPROXY_BASE_URL = XD_GATEWAY_BASE_URL;
 
 export interface StartEmbeddingHostDeps {
   getDbClient: () => DbClient;
@@ -48,7 +46,9 @@ export function startEmbeddingHost(deps: StartEmbeddingHostDeps): EmbeddingServi
     return _service;
   }
   const clientOpts: EmbeddingClientOptions = {
-    baseUrl: deps.xdproxyBaseUrl ?? DEFAULT_XDPROXY_BASE_URL,
+    // startEmbeddingHost 在 localDb ready 之后调用,晚于 initClientEndpoints,
+    // 此处读清单值安全(init 前读会抛,启动时序 bug 直接炸出来)。
+    baseUrl: deps.xdproxyBaseUrl ?? getClientEndpoint('xdGatewayBaseUrl'),
     getApiKey: deps.getApiKey,
     fetchImpl: deps.fetchImpl,
     logger: {

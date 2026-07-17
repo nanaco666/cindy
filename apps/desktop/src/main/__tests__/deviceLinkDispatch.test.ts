@@ -3,7 +3,7 @@
  * 与 invoke-registry 的 dispatchLocalInvoke。
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { XD_GATEWAY_BASE_URL } from '../../shared/endpoints';
+import { TEST_XD_GATEWAY_BASE_URL as XD_GATEWAY_BASE_URL } from '../../test/vitest/clientEndpointsFixture';
 
 let remoteControlEnabled = true;
 let revokedControllers: string[] = [];

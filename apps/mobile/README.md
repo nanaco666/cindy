@@ -1,6 +1,6 @@
-# XDMaker Mobile
+# Cindy Mobile
 
-Mobile controller for XDMaker device link. The app logs in with the same Feishu account as desktop, discovers controllable desktop devices, mirrors active sessions, sends messages, and resolves pending remote interactions.
+Mobile controller for Cindy device link. The app logs in with the same Cindy account as desktop, discovers controllable desktop devices, mirrors active sessions, sends messages, and resolves pending remote interactions.
 
 ## Planning
 
@@ -22,7 +22,7 @@ Expo Go or TestFlight as proof that local source changes are running.
 Required Expo public env:
 
 - `EXPO_PUBLIC_FEISHU_APP_ID`: Feishu OAuth app id used by the XDMaker backend.
-- `EXPO_PUBLIC_XDT_API_BASE_URL`: XDMaker API base URL. Defaults to `https://xdt-api.magiclizi.com` when omitted.
+- `EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL`: endpoint manifest bootstrap base (per-region hotfix CDN). Runtime business endpoints (API / auth / device-link / gateway) are resolved from `<base>/endpoint.json` at startup; in dev they default to the repo's `config/endpoint.json` and can still be overridden with explicit `EXPO_PUBLIC_XDT_API_BASE_URL` etc. Set `EXPO_PUBLIC_ENDPOINTS_CDN=1` to make dev fetch the online manifest like production.
 - TapDB mobile analytics env: `EXPO_PUBLIC_TAPTAP_CLIENT_ID` and `EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN`. Optional `EXPO_PUBLIC_TAPDB_CHANNEL` overrides the default `AppStore` / `NPKG` channel; optional `EXPO_PUBLIC_TAPDB_REGION` defaults to `cn`.
 
 Release env:

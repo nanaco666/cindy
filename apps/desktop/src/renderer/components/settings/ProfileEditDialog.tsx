@@ -8,12 +8,14 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 /**
  * ProfileEditDialog — 设置页用户卡片的「编辑名字 / 头像」弹窗。
  *
- * 业务全在 main(profileEdit.ts):这里只收集输入并经 IPC 提交,保存成功后
- * main 会重广播 auth:state-change,卡片 / 侧边栏经 AuthContext 自动刷新。
- * 覆写仅本设备生效(服务端资料仍是默认真源),弹窗内有文案说明。
+ * 业务全在 main(profileEdit.ts):这里只收集输入并经 IPC 提交。2026-07 起
+ * 资料**直写服务端**(auth-server PATCH /api/me/profile,头像先经 oss-server
+ * 预签名直传),跨设备生效;保存成功后 main 重广播 auth:state-change,
+ * 卡片 / 侧边栏经 AuthContext 自动刷新。
  *
- * 头像动作三态:keep(没动)/ set(选了新图,预览用 data URL)/ reset(恢复默认)。
- * 名字输入留空 = 恢复默认名字(placeholder 展示服务端名字)。
+ * 头像动作三态:keep(没动)/ set(选了新图,预览用 data URL)/ reset(清除
+ * 自定义头像,回落产品默认)。名字输入预填当前名字,留空 = 不改名
+ * (服务端不允许清空名字)。
  */
 interface ProfileEditDialogProps {
   open: boolean;
@@ -26,10 +28,8 @@ type AvatarDraft =
   | { type: 'reset' };
 
 interface ProfileState {
-  serverName: string;
-  serverAvatar: string | null;
-  overrideName: string | null;
-  overrideAvatarUrl: string | null;
+  name: string;
+  avatarUrl: string | null;
 }
 
 export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps) {
@@ -53,7 +53,7 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
       .then((s) => {
         if (stale) return;
         setState(s);
-        setName(s.overrideName ?? '');
+        setName(s.name);
         setAvatarDraft({ type: 'keep' });
       })
       .catch(() => {
@@ -103,18 +103,18 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
 
   if (!state) return null;
 
-  // 预览优先级:新选的图 > 现有覆写(未 reset 时)> 服务端头像 > 首字母。
+  // 预览优先级:新选的图 > 现有头像(reset 时回首字母兜底)。
   const previewUrl =
     avatarDraft.type === 'set'
       ? avatarDraft.previewDataUrl
       : avatarDraft.type === 'reset'
-        ? state.serverAvatar
-        : (state.overrideAvatarUrl ?? state.serverAvatar);
+        ? null
+        : state.avatarUrl;
   const effectiveName =
-    name.trim() !== '' ? name.trim() : state.serverName || t('settings.userProfile.fallbackName');
+    name.trim() !== '' ? name.trim() : state.name || t('settings.userProfile.fallbackName');
   const initial = effectiveName.charAt(0).toUpperCase();
-  const hasCustomAvatar =
-    avatarDraft.type === 'set' || (avatarDraft.type === 'keep' && state.overrideAvatarUrl !== null);
+  const canResetAvatar =
+    avatarDraft.type === 'set' || (avatarDraft.type === 'keep' && state.avatarUrl !== null);
 
   return (
     <ConfirmDialog
@@ -131,7 +131,7 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
       onConfirm={() => void handleSave()}
       content={
         <div className="flex flex-col gap-4">
-          {/* 头像行:预览 + 更换 / 恢复默认 */}
+          {/* 头像行:预览 + 更换 / 清除自定义 */}
           <div className="flex items-center gap-4">
             {previewUrl ? (
               <img
@@ -167,7 +167,7 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
               >
                 {t('settings.userProfile.edit.changeAvatar')}
               </button>
-              {hasCustomAvatar && (
+              {canResetAvatar && (
                 <button
                   type="button"
                   onClick={() => setAvatarDraft({ type: 'reset' })}
@@ -183,7 +183,7 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
             </div>
           </div>
 
-          {/* 名字行:留空 = 恢复默认(placeholder 即服务端名字) */}
+          {/* 名字行:预填当前名字,留空 = 不改名 */}
           <label className="flex flex-col gap-1.5">
             <span className="text-12 text-[var(--text-secondary)]">
               {t('settings.userProfile.edit.nameLabel')}
@@ -192,7 +192,7 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
               type="text"
               value={name}
               maxLength={40}
-              placeholder={state.serverName}
+              placeholder={state.name}
               onChange={(e) => setName(e.target.value)}
               className={cn(
                 'h-8 rounded-lg border border-[var(--settings-input-border)]',
@@ -205,9 +205,9 @@ export function ProfileEditDialog({ open, onOpenChange }: ProfileEditDialogProps
             </span>
           </label>
 
-          {/* 覆写只在本设备生效的透明化说明 */}
+          {/* 资料跨设备同步的透明化说明 */}
           <p className="text-11 leading-relaxed text-[var(--text-tertiary)]">
-            {t('settings.userProfile.edit.localOnlyHint')}
+            {t('settings.userProfile.edit.syncHint')}
           </p>
         </div>
       }

@@ -1,5 +1,7 @@
 import Constants from 'expo-constants';
 
+import { parseClientEndpointManifest } from '@lizi/maker-shared/client-endpoints';
+
 export type CindyAuthRegion = 'cn' | 'global';
 
 const configuredBuildEnv = ((Constants.expoConfig?.extra as {
@@ -15,16 +17,34 @@ export const AUTH_REGION: CindyAuthRegion =
 export const APP_SCHEME = AUTH_REGION === 'global' ? 'cindy' : 'cindycn';
 export const MOBILE_REDIRECT_URL = `${APP_SCHEME}://auth`;
 
-// 生产值由 app.config.js 从统一 JSON 注入；源码不保留生产 URL fallback。
-export const DEFAULT_API_BASE_URL = configuredValue('EXPO_PUBLIC_XDT_API_BASE_URL');
-export const DEFAULT_AUTH_API_BASE_URL_CN = '';
-export const DEFAULT_AUTH_API_BASE_URL_GLOBAL = '';
-export const DEFAULT_DEVICE_LINK_API_BASE_URL = configuredValue(
-  'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL',
-);
-export const DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL = configuredValue(
-  'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL',
-);
+// __DEV__ 端点初值来源:metro 构建期把仓内 cn 正本 config/endpoint.json require
+// 进 dev bundle(__DEV__ 常量折叠 + DCE 后 prod bundle 不含该 JSON)。与 desktop
+// dev 读同一份文件同语义;正本非法直接抛错红屏(阻断语义:配置错要炸出来)。
+// 显式 EXPO_PUBLIC_* env 仍然优先——「手机连本地 server」的既有工作流不变。
+// prod(非 __DEV__)此处为空:生效端点由启动闸门拉取的 endpoint.json 回填
+// live binding,闸门放行前业务树不挂载,初值空串不会被真实消费。
+const DEV_MANIFEST: Partial<Record<string, string>> = (() => {
+  if (!__DEV__) return {};
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const raw: unknown = require('../../../../config/endpoint.json');
+  const parsed = parseClientEndpointManifest(JSON.stringify(raw), { allowHttp: true });
+  if (!parsed.ok) {
+    throw new Error(`config/endpoint.json invalid (${parsed.reason}) — dev 端点正本必须能过客户端 parser`);
+  }
+  return parsed.endpoints;
+})();
+
+// 显式 env 优先,dev 回落仓内正本;prod 为空串(闸门回填,见上)。
+export const DEFAULT_API_BASE_URL =
+  configuredValue('EXPO_PUBLIC_XDT_API_BASE_URL') || DEV_MANIFEST.apiBaseUrl || '';
+export const DEFAULT_DEVICE_LINK_API_BASE_URL =
+  configuredValue('EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL') ||
+  DEV_MANIFEST.deviceLinkApiBaseUrl ||
+  '';
+export const DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL =
+  configuredValue('EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL') ||
+  DEV_MANIFEST.xdGatewayBaseUrl ||
+  '';
 
 export interface MobileConfigIssue {
   key: string;
@@ -118,11 +138,11 @@ export let API_BASE_URL = normalizeBaseUrl(
   configuredValue('EXPO_PUBLIC_XDT_API_BASE_URL'),
 );
 
+// auth 不分 cn/global 字段:dev 读 cn 正本(dev 默认 region=cn);prod 由 region 化
+// 清单回填。显式 env 覆写仍最高优先。
 export let AUTH_API_BASE_URL = normalizeBaseUrlWithDefault(
   configuredValue('EXPO_PUBLIC_CINDY_AUTH_BASE_URL'),
-  AUTH_REGION === 'global'
-    ? DEFAULT_AUTH_API_BASE_URL_GLOBAL
-    : DEFAULT_AUTH_API_BASE_URL_CN,
+  DEV_MANIFEST.authApiBaseUrl ?? '',
 );
 
 export const GOOGLE_WEB_CLIENT_ID =
@@ -146,9 +166,14 @@ export let MOBILE_VOICE_LITELLM_BASE_URL = normalizeBaseUrlWithDefault(
   DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL,
 );
 
-// 远程端点清单的拉取基址(启动闸门专用)。**烘焙常量、不接受远程覆盖**——
-// 拉清单的地址若吃清单自己的 cdnBaseUrl,配错一次就把自己锁死(与 desktop 同则)。
-export const CDN_BASE_URL = configuredValue('EXPO_PUBLIC_XDT_CDN_BASE_URL').replace(/\/+$/, '');
+// 端点清单(endpoint.json)的自举拉取基址(启动闸门专用),按 region 构建期二选一
+// 烘焙(EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL ← production-endpoints.json 的
+// endpointManifestBaseUrlCn/Global)。**烘焙常量、不接受远程覆盖**——拉清单的
+// 地址若吃清单自己的字段,配错一次就把自己锁死(与 desktop 同则)。这是客户端
+// 唯一"有感"的烘焙远程 URL。
+export const ENDPOINT_MANIFEST_BASE_URL = configuredValue(
+  'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL',
+).replace(/\/+$/, '');
 
 /**
  * 启动闸门拉到远程端点清单后回写运行期端点(仅覆盖清单中出现的字段;

@@ -168,7 +168,7 @@
         "unlockSubmit": "Unlock",
         "generateTitle": "Generate a new SSH key",
         "nameLabel": "Name (optional)",
-        "nameHint": "Saved as ~/.ssh/<name>. Defaults to \"xdt-maker\", suffixes with -1, -2... on collision.",
+        "nameHint": "Saved as ~/.ssh/<name>. Defaults to \"cindy\", suffixes with -1, -2... on collision.",
         "encryptLabel": "Encrypt with a passphrase (recommended)",
         "encryptHint": "Passphrase is typed once now, then ssh-add caches the decrypted key in your system's ssh-agent. macOS also persists the passphrase in Keychain so it survives reboots.",
         "passLabel": "Passphrase",
@@ -507,13 +507,13 @@
         "open": "Edit name and avatar",
         "title": "Edit profile",
         "nameLabel": "Name",
-        "nameHint": "Leave empty to restore the default name",
+        "nameHint": "Leave empty to keep the current name",
         "changeAvatar": "Change avatar",
         "resetAvatar": "Restore default avatar",
         "save": "Save",
         "cancel": "Cancel",
-        "localOnlyHint": "Your custom name and avatar only apply on this device.",
-        "avatarInvalid": "Please choose a PNG / JPG / GIF / WebP image under 5MB",
+        "syncHint": "Your name and avatar are saved to your account and sync across all devices.",
+        "avatarInvalid": "Please choose a PNG / JPG / WebP image under 5MB",
         "saveFailed": "Failed to save, please try again"
       }
     },
@@ -1128,7 +1128,7 @@
     "gitSafety": {
       "title": "Git Safety",
       "autoSnapshotTitle": "Git safety snapshots",
-      "description": "Create automatic XDT savepoint commits after agent edits. Codex rewind is shown only when this is enabled.",
+      "description": "Create automatic savepoint commits after agent edits. Codex rewind is shown only when this is enabled.",
       "toggleAria": "Toggle Git safety snapshots",
       "saveFailed": "Failed to save Git safety setting"
     },
@@ -1414,7 +1414,7 @@
           "openForLoginFailed": "Failed to open the browser"
         },
         "openForLogin": "Open agent browser",
-        "openForLoginHint": "This is a dedicated browser for agents: it runs on your installed Chrome but with a separate profile (shown as “XDMaker”), so it never touches your everyday Chrome's tabs, bookmarks, or logins. Agents open pages, read, click, and take screenshots here on your behalf. For sites that need a login, click “Open agent browser” above and sign in once — your session is kept, so the agent can keep acting as you afterward."
+        "openForLoginHint": "This is a dedicated browser for agents: it runs on your installed Chrome but with a separate profile (shown as “Cindy”), so it never touches your everyday Chrome's tabs, bookmarks, or logins. Agents open pages, read, click, and take screenshots here on your behalf. For sites that need a login, click “Open agent browser” above and sign in once — your session is kept, so the agent can keep acting as you afterward."
       },
       "browserBackend": {
         "title": "Automation browser target",
@@ -1605,7 +1605,7 @@
           "description": "Cross-agent long-term memory for persistent context across sessions"
         },
         "xdt_helper": {
-          "name": "XDT Helper",
+          "name": "Cindy Helper",
           "description": "Host capability disclosure — tells agents what tools and models are available"
         },
         "collab": {
@@ -1668,7 +1668,7 @@
           "workspaces": "Working directory mapping (alias → local absolute path)",
           "workspacesBoundCount_one": "{{count}} local working directory bound",
           "workspacesBoundCount_other": "{{count}} local working directories bound",
-          "aliasPlaceholder": "Alias, e.g. xdmaker",
+          "aliasPlaceholder": "Alias, e.g. my-server",
           "addWorkspace": "Add working directory",
           "removeWorkspace": "Remove this working directory",
           "changeDir": "Click to change directory (alias and preferences kept)"
@@ -2391,6 +2391,15 @@
       "REGION_MISMATCH": "The sign-in service region does not match this app."
     }
   },
+  "legacyMigration": {
+    "title": "Migrate data from the previous version",
+    "description": "Data from a previous version was found on this device. Your chat history and media files will be migrated to the new data location. If the old app is still running, please quit it completely first, and keep {{appName}} open during the migration. Note: authorized third-party keys and credentials cannot be migrated — after the migration you will need to re-authorize or re-enter them in Settings.",
+    "confirm": "OK",
+    "migrating": "Migrating data, please wait…",
+    "failedTitle": "Migration incomplete",
+    "failedDescription": "The data migration could not be completed this time. You can keep using {{appName}} — it will retry automatically the next time you sign in.",
+    "continue": "Continue"
+  },
   "migration": {
     "title": "Downloading your chat history",
     "subtitle": "First-time localization takes a moment, please keep the window open",
@@ -3039,7 +3048,6 @@
     },
     "user": {
       "settingsLink": "Settings, current user: {{name}}",
-      "adminBadge": "Admin",
       "viewReleaseNotes": "View release notes",
       "reopenUpdateBanner": "Update ready — click to review"
     },
@@ -5719,7 +5727,6 @@
       "openFileFailed": "Cannot open file in system",
       "emptyResponse": "The model returned an empty response — please retry. (Nothing was produced this turn; this often happens when the model gateway short-circuits under large context or high load.)",
       "turnFailed": "The task failed (the model returned no error detail) — please retry.",
-      "requestFailed": "Request failed",
       "sendFailed": "Send failed: {{message}}",
       "steerNoActiveTurn": "No task is currently running, so this message cannot be steered",
       "steerRequiresRestart": "Steer needs a desktop restart before it can take effect; this message was not cleared",

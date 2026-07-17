@@ -1,6 +1,6 @@
 ==============================================================================
 THIRD-PARTY SOFTWARE NOTICES AND INFORMATION
-xdt-maker desktop application — all supported platforms
+Cindy desktop application — all supported platforms
 ==============================================================================
 
 Windows、macOS 与 Linux 桌面产物的保守合并声明。

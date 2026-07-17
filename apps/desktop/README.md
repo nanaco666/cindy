@@ -1,6 +1,6 @@
-# XDMaker Desktop
+# Cindy Desktop
 
-Electron + React + TypeScript desktop client for XDMaker.
+Electron + React + TypeScript desktop client for Cindy.
 
 ## Development
 

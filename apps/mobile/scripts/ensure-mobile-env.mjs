@@ -4,12 +4,12 @@ import { fileURLToPath } from 'node:url';
 import { productionMobileEnv } from '../../../scripts/shared/production-endpoints.mjs';
 
 export const MOBILE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// 2026-07 端点清单重构后收缩:dev 业务端点初值来自仓内 config/endpoint.json
+// (env.ts __DEV__ require;显式 EXPO_PUBLIC_* env 仍可覆写但不再是必填),
+// .env 只需构建身份 + 清单自举基址(EXPO_PUBLIC_ENDPOINTS_CDN=1 测线上清单时用)。
 export const REQUIRED_MOBILE_ENV_KEYS = [
   'EXPO_PUBLIC_CINDY_AUTH_REGION',
-  'EXPO_PUBLIC_CINDY_AUTH_BASE_URL',
-  'EXPO_PUBLIC_XDT_API_BASE_URL',
-  'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL',
-  'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL',
+  'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL',
 ];
 
 /**

@@ -3,13 +3,11 @@ const path = require('node:path');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const CONFIG_FILE_NAME = 'production-endpoints.json';
+// 2026-07 端点清单重构后收缩:业务端点不再构建期烘焙(运行期由启动闸门从
+// `<manifest base>/endpoint.json` 回填;dev 读仓内 config/endpoint.json)。
+// 与 ESM 侧 productionMobileEnv 输出键集保持一致。
 const MOBILE_ENV_FIELDS = Object.freeze({
   EXPO_PUBLIC_FEISHU_APP_ID: 'feishuAppId',
-  EXPO_PUBLIC_XDT_API_BASE_URL: 'apiBaseUrl',
-  EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'deviceLinkApiBaseUrl',
-  EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: 'xdGatewayBaseUrl',
-  // 客户端远程端点清单的拉取基址(启动第一步从 `${cdn}/config/client-endpoints.json` 拉取)
-  EXPO_PUBLIC_XDT_CDN_BASE_URL: 'cdnBaseUrl',
 });
 
 function resolveConfigPath() {
@@ -66,23 +64,27 @@ function loadProductionMobileEnv() {
   if (authRegion !== 'cn' && authRegion !== 'global') {
     throw new Error(`Invalid Cindy auth region: ${authRegion}; expected cn or global`);
   }
-  const authConfigKey =
-    authRegion === 'global' ? 'authApiBaseUrlGlobal' : 'authApiBaseUrlCn';
-  const authBaseUrl = parsed?.[authConfigKey];
-  if (typeof authBaseUrl !== 'string' || !authBaseUrl.trim()) {
-    throw new Error(`Missing non-empty production endpoint field: ${authConfigKey}`);
-  }
-  let parsedAuthUrl;
-  try {
-    parsedAuthUrl = new URL(authBaseUrl.trim());
-  } catch {
-    throw new Error(`Invalid URL in production endpoint config: ${authConfigKey}`);
-  }
-  if (parsedAuthUrl.protocol !== 'https:') {
-    throw new Error(`Production mobile endpoint must use HTTPS: ${authConfigKey}`);
-  }
+  const readHttpsField = (configKey) => {
+    const raw = parsed?.[configKey];
+    if (typeof raw !== 'string' || !raw.trim()) {
+      throw new Error(`Missing non-empty production endpoint field: ${configKey}`);
+    }
+    let url;
+    try {
+      url = new URL(raw.trim());
+    } catch {
+      throw new Error(`Invalid URL in production endpoint config: ${configKey}`);
+    }
+    if (url.protocol !== 'https:') {
+      throw new Error(`Production mobile endpoint must use HTTPS: ${configKey}`);
+    }
+    return raw.trim().replace(/\/+$/, '');
+  };
   env.EXPO_PUBLIC_CINDY_AUTH_REGION = authRegion;
-  env.EXPO_PUBLIC_CINDY_AUTH_BASE_URL = authBaseUrl.trim().replace(/\/+$/, '');
+  // 端点清单(endpoint.json)自举基址,按 region 二选一(与 ESM 侧 productionMobileEnv 对齐)。
+  env.EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL = readHttpsField(
+    authRegion === 'global' ? 'endpointManifestBaseUrlGlobal' : 'endpointManifestBaseUrlCn',
+  );
   return Object.freeze(env);
 }
 

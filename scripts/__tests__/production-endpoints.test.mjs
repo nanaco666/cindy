@@ -32,15 +32,17 @@ test('私有 JSON 是 Desktop/Mobile 构建注入的唯一输入', () => {
   process.env.CINDY_PRODUCTION_ENDPOINTS_FILE = filePath;
 
   assert.deepEqual({ ...loadProductionEndpoints() }, values);
+  // 2026-07 端点清单重构:mobile 构建注入收缩为身份 + 清单自举基址,
+  // 业务端点运行期由启动闸门回填。
   assert.deepEqual(productionMobileEnv(), {
     EXPO_PUBLIC_FEISHU_APP_ID: values.feishuAppId,
     EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
-    EXPO_PUBLIC_CINDY_AUTH_BASE_URL: values.authApiBaseUrlCn,
-    EXPO_PUBLIC_XDT_API_BASE_URL: values.apiBaseUrl,
-    EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: values.deviceLinkApiBaseUrl,
-    EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: values.xdGatewayBaseUrl,
-    EXPO_PUBLIC_XDT_CDN_BASE_URL: values.cdnBaseUrl,
+    EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: values.endpointManifestBaseUrlCn,
   });
+  assert.equal(
+    productionMobileEnv({ authRegion: 'global' }).EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL,
+    values.endpointManifestBaseUrlGlobal,
+  );
   assert.deepEqual(resolveOssConfig(), {
     cdnBase: values.cdnBaseUrl,
     bucket: values.ossBucket,
@@ -49,19 +51,14 @@ test('私有 JSON 是 Desktop/Mobile 构建注入的唯一输入', () => {
   });
   assert.deepEqual(productionViteEnv({ allowEnvOverride: false }), {
     VITE_FEISHU_APP_ID: values.feishuAppId,
-    VITE_API_BASE_URL: values.apiBaseUrl,
     VITE_CINDY_AUTH_REGION: 'cn',
-    VITE_CINDY_AUTH_BASE_URL: values.authApiBaseUrlCn,
-    VITE_DEVICE_LINK_API_BASE_URL: values.deviceLinkApiBaseUrl,
-    VITE_OAUTH_BROKER_API_BASE_URL: values.oauthBrokerApiBaseUrl,
-    VITE_HEARTBEAT_URL: values.heartbeatUrl,
-    VITE_SLACK_HOOK_WS_URL: values.slackHookWsUrl,
-    VITE_WEBSITE_URL: values.websiteUrl,
-    VITE_XDPROXY_BASE_URL: values.xdGatewayBaseUrl,
-    VITE_MODEL_ACCESS_API_BASE_URL: values.modelAccessApiBaseUrl,
-    VITE_CDN_BASE_URL: values.cdnBaseUrl,
-    VITE_CDN_INTERNAL_BASE_URL: values.cdnInternalBaseUrl,
+    VITE_ENDPOINT_MANIFEST_BASE_URL: values.endpointManifestBaseUrlCn,
   });
+  assert.equal(
+    productionViteEnv({ allowEnvOverride: false, authRegion: 'global' })
+      .VITE_ENDPOINT_MANIFEST_BASE_URL,
+    values.endpointManifestBaseUrlGlobal,
+  );
 });
 
 test('缺字段、非法协议和 URL 内凭据都会 fail closed', () => {
@@ -94,9 +91,9 @@ test('缺字段、非法协议和 URL 内凭据都会 fail closed', () => {
 
   process.env.CINDY_PRODUCTION_ENDPOINTS_FILE = writeFixture({
     ...fixtureEndpoints(),
-    slackHookWsUrl: 'https://hook.example.invalid',
+    endpointManifestBaseUrlCn: 'http://hotfix-cn.example.invalid/app',
   });
-  assert.throws(() => loadProductionEndpoints(), /slackHookWsUrl/);
+  assert.throws(() => loadProductionEndpoints(), /endpointManifestBaseUrlCn/);
 
   process.env.CINDY_PRODUCTION_ENDPOINTS_FILE = writeFixture({
     ...fixtureEndpoints(),
@@ -112,15 +109,11 @@ function fixtureEndpoints() {
     authApiBaseUrlCn: 'https://auth-cn.example.invalid',
     authApiBaseUrlGlobal: 'https://auth-global.example.invalid',
     deviceLinkApiBaseUrl: 'https://relay.example.invalid',
-    oauthBrokerApiBaseUrl: 'https://oauth.example.invalid',
-    heartbeatUrl: 'https://heartbeat.example.invalid',
-    slackHookWsUrl: 'wss://hook.example.invalid',
-    websiteUrl: 'https://website.example.invalid',
     xdGatewayBaseUrl: 'https://gateway.example.invalid',
-    modelAccessApiBaseUrl: 'https://model-access.example.invalid',
     cdnBaseUrl: 'https://cdn.example.invalid/app',
-    cdnInternalBaseUrl: 'http://cdn-internal.example.invalid/app',
     npkgBaseUrl: 'https://npkg.example.invalid',
+    endpointManifestBaseUrlCn: 'https://hotfix-cn.example.invalid/app',
+    endpointManifestBaseUrlGlobal: 'https://hotfix-global.example.invalid/app',
     ossBucket: 'test-bucket',
     ossPrefix: 'test-prefix',
     ossRegion: 'oss-test-region',

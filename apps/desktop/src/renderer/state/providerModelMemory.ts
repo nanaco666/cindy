@@ -6,7 +6,7 @@
  *   用户在不同来源(provider)下、对不同模型偏好不同的 effort —— 例如在 Anthropic 给 opus 用
  *   high、在 XD 网关给同一个 opus 用 medium;同一来源里 opus 用 high、haiku 用 low。此前 renderer
  *   的模型记忆都没有「按 (来源, 模型) 分别记 effort」这一维度:
- *     1) 全局单槽默认(服务端 UserPreferences.defaultModel/defaultEffort);
+ *     1) per-vendor 草稿默认(newMakerDraft.lastByVendor,历史上还有服务端全局单槽,已移除);
  *     2) per-session(sessions 表 model/effort/providerId 各一份);
  *     3) per-model effort(effortByModel,只按 modelId 记,跨来源会串)。
  *   本 store 补「(agent, provider, model) → effort」这一维度,并保留「该来源上次用过哪个模型」

@@ -1,6 +1,6 @@
 ==============================================================================
 THIRD-PARTY SOFTWARE NOTICES AND INFORMATION
-xdt-maker desktop application — Windows x64
+Cindy desktop application — Windows x64
 ==============================================================================
 
 Windows x64 桌面安装包的第三方开源组件声明。

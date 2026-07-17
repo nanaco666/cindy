@@ -291,8 +291,9 @@ export class GhostOauthAccountManager {
     }
     if (!clientId) return null;
     // brokerBounce → 双地址模型:公网弹跳地址由接线处解析器现拼(broker 基
-    // 地址不进清单);解析不出(env 缺失)时不带 publicRedirectUri,由
-    // connectAccount 结构化拒绝(refresh 不需要 redirect_uri,照常可用)。
+    // 地址来自端点清单,生产恒非空)。null 仅剩一种来源:宿主未接线
+    // resolveBrokerPublicUrl(测试/精简宿主)——此时不带 publicRedirectUri,
+    // 由 connectAccount 结构化拒绝(refresh 不需要 redirect_uri,照常可用)。
     const publicRedirectUri = decl.brokerBounce
       ? (this.deps.resolveBrokerPublicUrl?.(decl.brokerBounce.path) ?? null)
       : null;
@@ -376,7 +377,7 @@ export class GhostOauthAccountManager {
       return {
         ok: false,
         error: 'INVALID_CONFIG',
-        detail: '授权 broker 基地址未配置(VITE_OAUTH_BROKER_API_BASE_URL),无法拼出弹跳回调地址',
+        detail: '授权 broker 基地址未配置(端点清单 oauthBrokerApiBaseUrl),无法拼出弹跳回调地址',
       };
     }
     if (opts?.scopes !== undefined) {

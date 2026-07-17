@@ -19,10 +19,12 @@
  *    承载,只增不减:老用户机器上的存量注册与文件可能永远带着旧值。
  *  - 永久不随本配置变化的标识符(settings 键名 `xdtMaker.*`、MCP server 名
  *    `lizi_xdt_helper`、`xdt-image://` 等进程内 scheme、`.cshare` 扩展名、
- *    localStorage 键等)见 docs/cindy-rebrand/inventory.md §2 的 B 类清单,
+ *    localStorage 键等)由各自协议/存储模块维护,
  *    不要试图从这里派生它们。
- *  - `updaterName` 维持 `xdt-updater`:更新器二进制改名属 xdt-updater 模块
- *    改动(AGENTS.md 规则 21,需与 owner 单独确认),不随本次翻转。
+ *  - `updaterName` = `cindy-updater`(2026-07-17 经 owner 确认随品牌翻转改名,
+ *    AGENTS.md 规则 21;老渠道已冻结、新应用未发过版,无自更新兼容包袱)。
+ *    消费方:updateService(resources 源名 + %TEMP% 运行名)、forge prePackage
+ *    构建/签名/extraResource、notices 脚本登记路径。
  *
  * 消费方:
  *  - apps/desktop forge.config.ts(executableName / appId / protocols / UTI)
@@ -81,10 +83,8 @@ export interface BrandIdentity {
   readonly updaterName: string;
   /** 本地主库文件名前缀(`<dbFilePrefix>-<userId>.db`)。 */
   readonly dbFilePrefix: string;
-  /** 历史主库文件名前缀；账号/品牌迁移认领旧 UID 库时只增不减。 */
+  /** 历史主库文件名前缀；首登本地迁移扫描旧库时只增不减。 */
   readonly legacyDbFilePrefixes: readonly string[];
-  /** Windows 卸载注册表条目 DisplayName 前缀(迁移时定位老卸载键用)。 */
-  readonly uninstallDisplayNamePrefix: string;
 }
 
 /**
@@ -103,10 +103,9 @@ export const BRAND_IDENTITY: BrandIdentity = Object.freeze({
   userDataDirName: 'Cindy',
   legacyUserDataDirNames: Object.freeze(['xdt-maker']),
   cdnPrefix: 'cindy',
-  updaterName: 'xdt-updater',
+  updaterName: 'cindy-updater',
   dbFilePrefix: 'cindy',
   legacyDbFilePrefixes: Object.freeze(['xdt-maker']),
-  uninstallDisplayNamePrefix: 'Cindy',
 });
 
 /** 按区域取 appId(AUMID / bundle id);默认 cn。 */
@@ -133,9 +132,4 @@ export function allDeepLinkSchemes(identity: BrandIdentity = BRAND_IDENTITY): re
 /** 按路径识别本产品 userData 的全部目录名(当前 + 历史),主目录名恒为首位。 */
 export function allUserDataDirNames(identity: BrandIdentity = BRAND_IDENTITY): readonly string[] {
   return [identity.userDataDirName, ...identity.legacyUserDataDirNames];
-}
-
-/** 主库认领需要扫描的当前 + 历史文件名前缀，顺序稳定且去重。 */
-export function allDbFilePrefixes(identity: BrandIdentity = BRAND_IDENTITY): readonly string[] {
-  return Array.from(new Set([identity.dbFilePrefix, ...identity.legacyDbFilePrefixes]));
 }

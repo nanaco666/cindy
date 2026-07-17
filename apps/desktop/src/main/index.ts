@@ -62,11 +62,17 @@ const devFlags = resolveDevCliFlags({
   envIsolated: process.env.XDT_ISOLATED,
   envIsolationName: process.env.XDT_ISOLATED_NAME,
   envDeviceIdOverride: process.env.XDT_DEVICE_ID_OVERRIDE,
+  envEndpointsCdn: process.env.XDT_ENDPOINTS_CDN,
 });
 if (devFlags.schedulerPassive) {
   // 统一收敛到 env:scheduler-host 只认 XDT_SCHEDULER_PASSIVE,不重复解析 argv。
   process.env.XDT_SCHEDULER_PASSIVE = '1';
   stderr.write('[cindy] dev scheduler passive mode (--passive)\n');
+}
+if (devFlags.endpointsCdn) {
+  // 统一收敛到 env:clientEndpointsService 只认 XDT_ENDPOINTS_CDN,不重复解析 argv。
+  process.env.XDT_ENDPOINTS_CDN = '1';
+  stderr.write('[cindy] dev endpoints via CDN (--endpoints-cdn)\n');
 }
 if (devFlags.userDataDirOverride) {
   // 同步回 env,让读 env 的下游(日志、诊断)与实际生效目录一致。

@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it, vi } from 'vitest';
-import { XD_GATEWAY_BASE_URL } from '../../../shared/endpoints';
+import { TEST_XD_GATEWAY_BASE_URL as XD_GATEWAY_BASE_URL } from '../../../test/vitest/clientEndpointsFixture';
 
 import {
   createClaudeFastModeRequestTransform,

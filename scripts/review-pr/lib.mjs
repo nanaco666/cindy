@@ -171,7 +171,8 @@ export function probeBranchProtection(slug, branch) {
  * 拉公司 org 名录 README(共享底座:resolve-author-feishu.mjs 私聊映射、context.mjs
  * 产品门 Slack 同步评论发送者归属都用它)。读取顺序(fine-grained PAT 读不到跨 org 仓库,
  * 本机 SSH key 读得到):
- *   1. 本地 roster clone(~/.xdmaker/org-rosters/<owner>-<repo>,仓库工作区之外):存在则先
+ *   1. 本地 roster clone(~/.cindy/org-rosters/<owner>-<repo>,仓库工作区之外;老
+ *      ~/.xdmaker/org-rosters 副本弃用,首跑自动重新 clone):存在则先
  *      `git pull --ff-only`(30s 超时,拉失败用现存副本并标 stale),读 README.md;
  *   2. 本地没有 → `git clone --depth 1 git@github.com:<slug>.git`(走本机 SSH key);
  *   3. clone 失败 → 兜底 gh api(PAT 授权过的仓库仍可用);
@@ -179,7 +180,7 @@ export function probeBranchProtection(slug, branch) {
  * 返回 { rosters: [{repo, source, text}], fetchErrors: [{repo, error}] }。
  */
 export function loadOrgRosters(mappingRepos) {
-  const ROSTER_BASE = join(homedir(), '.xdmaker', 'org-rosters');
+  const ROSTER_BASE = join(homedir(), '.cindy', 'org-rosters');
   const GIT_TIMEOUT = 30_000; // 网络 git 操作硬超时,绝不挂死 auto 轮
   const rosters = [];
   const fetchErrors = [];

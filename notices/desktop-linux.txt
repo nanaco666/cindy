@@ -1,6 +1,6 @@
 ==============================================================================
 THIRD-PARTY SOFTWARE NOTICES AND INFORMATION
-xdt-maker desktop application — Linux x64 glibc
+Cindy desktop application — Linux x64 glibc
 ==============================================================================
 
 Linux x64 glibc 桌面安装包的第三方开源组件声明。

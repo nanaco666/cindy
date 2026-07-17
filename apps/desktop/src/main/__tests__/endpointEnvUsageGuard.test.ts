@@ -21,6 +21,10 @@ import { describe, expect, it } from 'vitest';
 const SRC_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 const ENDPOINT_ENV_KEYS = [
+  // 现役:端点清单自举基址(唯一烘焙远程 URL)。
+  'VITE_ENDPOINT_MANIFEST_BASE_URL',
+  // 以下为已退役键(2026-07 端点清单重构后不再注入)——保留在名单里防复活:
+  // 谁重新读它们,拿到的永远是空串/漂移值。
   'VITE_API_BASE_URL',
   'VITE_CINDY_AUTH_BASE_URL',
   'VITE_DEVICE_LINK_API_BASE_URL',
@@ -33,10 +37,9 @@ const ENDPOINT_ENV_KEYS = [
   'VITE_CDN_INTERNAL_BASE_URL',
 ];
 
-const ALLOWED_FILES = new Set([
-  path.join('shared', 'endpoints.ts'),
-  path.join('main', 'clientEndpointsService.ts'),
-]);
+// clientEndpointsService 已不再读 import.meta.env(烘焙 map 随 baked 兜底退役),
+// 白名单收缩为唯一的烘焙适配层。
+const ALLOWED_FILES = new Set([path.join('shared', 'endpoints.ts')]);
 
 const PATTERN = new RegExp(`import\\.meta\\.env\\.(?:${ENDPOINT_ENV_KEYS.join('|')})\\b`);
 

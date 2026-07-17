@@ -1,6 +1,9 @@
-# xdt-updater
+# cindy-updater
 
-Tauri-based Windows updater for `XDMaker`. Replaces the inline `.cmd` script
+> 源目录沿用历史名 `apps/desktop/xdt-updater/`;二进制与产物已随 2026-07 品牌
+> 翻转改名为 `cindy-updater.exe`(经 owner 确认,AGENTS.md 规则 21)。
+
+Tauri-based Windows updater for `Cindy`. Replaces the inline `.cmd` script
 that the Electron main process previously generated in `executeUpdateWindows`
 (see `apps/desktop/src/main/updateService.ts`).
 
@@ -9,26 +12,26 @@ that the Electron main process previously generated in `executeUpdateWindows`
 - Real UI (progress / errors / log button) instead of a hidden cmd window.
 - Structured error handling — no `if %ERRORLEVEL% GEQ 8` dance.
 - Self-update via copy-to-%TEMP% pattern: the updater is copied to
-  `%TEMP%\xdt-updater-{ts}.exe` before launch, so the in-`resources/` copy is
+  `%TEMP%\cindy-updater-{ts}.exe` before launch, so the in-`resources/` copy is
   no longer file-locked and the new release's updater can overwrite it.
 
 ## CLI contract
 
 ```
-xdt-updater.exe \
+cindy-updater.exe \
   --zip       <path-to-downloaded-patch.zip> \
   --app-dir   <electron-install-dir> \
-  --exe-name  xdt-maker.exe \
+  --exe-name  Cindy.exe \
   --pid       <main-process-pid> \
   --log       <userData>/logs/cindy-update.log \
   --lock      <userData>/updates/.updating \
   --theme     light|dark|auto      # default: auto
 ```
 
-`--theme` mirrors the user's current XDMaker theme preference into the
+`--theme` mirrors the user's current Cindy theme preference into the
 updater's WebView. `auto` falls back to the OS color scheme. Without this
 the in-app theme override would be lost during the relaunch — e.g. a user
-on a light OS who has selected dark mode in XDMaker would briefly see a
+on a light OS who has selected dark mode in Cindy would briefly see a
 light updater window.
 
 The Electron main process owns argument construction; see
@@ -60,7 +63,7 @@ The Electron main process owns argument construction; see
 ```
 cd apps/desktop/xdt-updater
 pnpm install              # pulls @tauri-apps/cli
-pnpm tauri build          # produces target/release/xdt-updater.exe
+pnpm tauri build          # produces target/release/cindy-updater.exe
 ```
 
 `tauri.conf.json` has `bundle.active = false` — we ship the raw exe, not an

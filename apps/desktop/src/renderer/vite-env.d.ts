@@ -1,9 +1,9 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_API_BASE_URL: string;
   readonly VITE_CINDY_AUTH_REGION: 'cn' | 'global';
-  readonly VITE_CINDY_AUTH_BASE_URL: string;
+  /** 端点清单自举基址(唯一烘焙远程 URL);业务端点走 electronAPI.clientEndpoints。 */
+  readonly VITE_ENDPOINT_MANIFEST_BASE_URL: string;
 }
 
 interface ImportMeta {
@@ -1413,12 +1413,10 @@ interface ElectronAPI {
   onAuthSessionExpired: (callback: (state: AuthSessionExpiredPayload) => void) => () => void;
   onTapdbDailyActive: (callback: (payload: { date: string }) => void) => () => void;
 
-  // ── Profile local override(设置 → 用户卡片编辑名字 / 头像,仅本设备生效) ──
+  // ── Profile 编辑(设置 → 用户卡片编辑名字 / 头像;直写服务端,跨设备生效) ──
   profileGetState: () => Promise<{
-    serverName: string;
-    serverAvatar: string | null;
-    overrideName: string | null;
-    overrideAvatarUrl: string | null;
+    name: string;
+    avatarUrl: string | null;
   }>;
   profileChooseAvatar: () => Promise<{
     canceled: boolean;
@@ -1602,18 +1600,6 @@ interface ElectronAPI {
     error?: 'manifest_failed' | 'download_failed';
   }>;
   onAppUpdateProgress: (callback: (payload: AppUpdateProgressPayload) => void) => () => void;
-  apiRequest: (params: {
-    path: string;
-    method?: string;
-    body?: unknown;
-  }) => Promise<{ ok: boolean; status: number; data: unknown }>;
-  imageUpload: {
-    putToOss: (params: {
-      putUrl: string;
-      contentType: string;
-      bytes: ArrayBuffer;
-    }) => Promise<{ ok: boolean; status: number; error?: string }>;
-  };
   fileBrowser: {
     listDir: (params: {
       /** 非空 = SSH remote 会话,操作经远端 file-service 执行(main 侧路由)。 */
@@ -2826,6 +2812,18 @@ interface ElectronAPI {
       turnUsageDetails?: import('../shared/turnUsageDetails').TurnUsageDetails;
     }) => void,
   ) => () => void;
+
+  // ── 首登轻量数据迁移(mToc) — 老 userData → Cindy 一次性复制迁移弹窗 ──
+  legacyMigration: {
+    /** 订阅弹窗阶段推送。payload: { phase } */
+    onState: (
+      cb: (data: { phase: 'confirm' | 'running' | 'done' | 'failed' }) => void,
+    ) => () => void;
+    /** 挂载时补拉当前阶段(main 先推送、renderer 后订阅时不丢态)。 */
+    getState: () => Promise<{ phase: 'confirm' | 'running' | 'done' | 'failed' | null }>;
+    /** confirm 态点「确定」放行迁移;failed 态点「继续」清态。 */
+    confirm: () => Promise<void>;
+  };
 
   // ── chat-data-localization (M-FE2) — local SQLite IPC bridge ──
   localDb: {

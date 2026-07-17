@@ -150,13 +150,12 @@ describe('mobile release scripts core logic', () => {
   });
 
   it('requires OTA public env and beta variant env', () => {
+    // 2026-07 端点清单重构:发版闸门必填集收缩为身份 + 清单自举基址 + TapTap。
     expect(() =>
       assertPublicEnv(
         {
           EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
-          EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
-          EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
-          EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
+          EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://hotfix.example.invalid/app',
           EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
           EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
           EXPO_PUBLIC_APP_VARIANT: 'beta',
@@ -169,18 +168,17 @@ describe('mobile release scripts core logic', () => {
       assertPublicEnv(
         {
           EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
-          EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
         },
         { variant: 'beta' },
       ),
-    ).toThrow(/EXPO_PUBLIC_XDT_API_BASE_URL/);
+    ).toThrow(/EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL/);
     expect(() =>
       assertPublicEnv(
         {
           EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
-          EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
-          EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
-          EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
+          EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://hotfix.example.invalid/app',
+          EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
+          EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
           EXPO_PUBLIC_APP_VARIANT: 'beta',
         },
         { variant: 'beta' },
@@ -190,9 +188,9 @@ describe('mobile release scripts core logic', () => {
       assertPublicEnv(
         {
           EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
-          EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
-          EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
-          EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
+          EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://hotfix.example.invalid/app',
+          EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
+          EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
           EXPO_PUBLIC_APP_VARIANT: 'beta',
         },
         { variant: 'production' },
@@ -203,9 +201,7 @@ describe('mobile release scripts core logic', () => {
   it('allows only TapDB public env to come from the external release environment', () => {
     const profileEnv = {
       EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
-      EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
-      EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
-      EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
+      EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://hotfix.example.invalid/app',
       EXPO_PUBLIC_APP_VARIANT: 'beta',
       EXPO_PUBLIC_BETA_DEV: 'dash',
     };

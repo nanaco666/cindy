@@ -79,12 +79,12 @@ async function main() {
   console.log('='.repeat(60));
 
   // 0. 必须有 NPKG_TOKEN——forge.config.ts 的 postPackage 钩子用它给
-  //    Cindy.exe / xdt-updater.exe / xdt-helper.exe 签名。没签名的
+  //    Cindy.exe / cindy-updater.exe / xdt-helper.exe 签名。没签名的
   //    内部 exe 会让严格策略 Win 机器在 hot-update 后 spawn updater 时
   //    EACCES。允许 ALLOW_UNSIGNED_BUILD=1 显式跳过(本地调试用)。
   if (!process.env.NPKG_TOKEN && process.env.ALLOW_UNSIGNED_BUILD !== '1') {
     console.error('ERROR: NPKG_TOKEN is required for CI Windows builds.');
-    console.error('       Without it, internal exes (Cindy, xdt-updater, xdt-helper) ship unsigned,');
+    console.error('       Without it, internal exes (Cindy, cindy-updater, xdt-helper) ship unsigned,');
     console.error('       breaking hot-update on machines that block unsigned exes from %TEMP%.');
     console.error('       Set NPKG_TOKEN=xxx, or ALLOW_UNSIGNED_BUILD=1 to override (local debug only).');
     process.exit(1);

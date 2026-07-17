@@ -4,7 +4,13 @@
  * Fetches and caches the CDN manifest.json that drives both app hot-updates
  * and Claude Code binary management.
  *
- * - Single source of truth: https://dev-cdn.fp.xd.com/xdt-maker/manifest.json
+ * - The CDN base URL comes from the client endpoint manifest
+ *   (`getClientEndpoint('cdnBaseUrl')`) — the endpoint manifest is resolved
+ *   blocking-style BEFORE any update check (bootstrap-electron:
+ *   initClientEndpoints → …later… update chain), so all reads here happen
+ *   strictly after init. The base URL is therefore read lazily inside
+ *   functions — NEVER capture it in module-level constants (module
+ *   evaluation happens before initClientEndpoints and would throw).
  * - In dev mode (app.isPackaged === false), fetching is skipped entirely.
  */
 
@@ -12,7 +18,7 @@ import { app, net } from 'electron';
 import * as canaryFlagStore from './canaryFlagStore';
 
 import { createLogger } from './logger';
-import { CDN_EXTERNAL_BASE_URL, CDN_INTERNAL_BASE_URL } from '../shared/endpoints';
+import { getClientEndpoint } from './clientEndpointsService';
 
 const log = createLogger('manifestService');
 
@@ -38,23 +44,6 @@ export interface AppManifest {
    * Consumed once on the first launch of the new version, then cleared.
    */
   requireRelogin?: boolean;
-  /**
-   * 品牌迁移块(docs/cindy-rebrand/migration-state-machine.md §8):老渠道
-   * manifest 钉在过渡版后携带,指向目标品牌(Cindy)完整安装包。仅当客户端
-   * 本体版本已对齐 manifest.app.version(即已是过渡版)时才会被消费——
-   * 版本未对齐时先走普通热更抵达过渡版。消费方:updateService →
-   * migration/electronRuntime.handleMigrationBlock。
-   */
-  migration?: {
-    /** 目标品牌短名(如 'cindy'),客户端与内置 campaign 目标比对防误发。 */
-    targetApp: string;
-    /** 目标品牌版本(如 '1.0.0')。 */
-    version: string;
-    /** 完整安装包相对 baseUrl 路径(win NSIS Setup.exe / mac .app zip)。 */
-    file: string;
-    sha256: string;
-    size: number;
-  };
 }
 
 export interface ClaudeCodeManifest {
@@ -92,91 +81,26 @@ export interface Manifest {
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
-const EXTERNAL_BASE_URL = CDN_EXTERNAL_BASE_URL;
-const INTERNAL_BASE_URL = CDN_INTERNAL_BASE_URL;
-const INTERNAL_PROBE_URL = `${INTERNAL_BASE_URL}/internal_test.txt`;
-const INTERNAL_PROBE_TIMEOUT_MS = 1500;
-
 // ── State ──────────────────────────────────────────────────────────────────
 
 let cached: Manifest | null = null;
-let internalProbeResult: 'internal' | 'external' | null = null;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-/**
- * Probe internal_test.txt on the intranet CDN to decide if we're inside the
- * company network. Re-runs on every fetchManifest() so a "home → office" move
- * mid-session flips over on the next 30-min poll without needing a restart.
- *
- * - In-memory only (no disk cache).
- * - Tight timeout so external networks pay at most INTERNAL_PROBE_TIMEOUT_MS
- *   per poll cycle.
- * - XDT_CDN_BASE_URL env override skips the probe entirely.
- */
-function probeInternalNetwork(): Promise<void> {
-  if (process.env.XDT_CDN_BASE_URL) {
-    internalProbeResult = 'external';
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (result: 'internal' | 'external') => {
-      if (settled) return;
-      settled = true;
-      internalProbeResult = result;
-      log.info('Internal probe result: %s', result);
-      resolve();
-    };
-
-    try {
-      const request = net.request(`${INTERNAL_PROBE_URL}?t=${Date.now()}`);
-      const timeout = setTimeout(() => {
-        request.abort();
-        finish('external');
-      }, INTERNAL_PROBE_TIMEOUT_MS);
-
-      request.on('response', (response) => {
-        clearTimeout(timeout);
-        finish(response.statusCode === 200 ? 'internal' : 'external');
-        response.on('data', () => {});
-        response.on('end', () => {});
-      });
-      request.on('error', () => {
-        clearTimeout(timeout);
-        finish('external');
-      });
-      request.end();
-    } catch {
-      finish('external');
-    }
-  });
-}
-
+// 惰性读取(见文件顶注):清单在 initClientEndpoints 之后才可读,模块级捕获会炸。
+// 2026-07 退役 cdnInternalBaseUrl:内网加速镜像与 internal_test.txt 探测已下线,
+// 更新/hotfix 链一律直连 cdnBaseUrl。
 export function getBaseUrl(): string {
   if (process.env.XDT_CDN_BASE_URL) return process.env.XDT_CDN_BASE_URL;
-  if (internalProbeResult === 'internal') return INTERNAL_BASE_URL;
-  return EXTERNAL_BASE_URL;
+  return getClientEndpoint('cdnBaseUrl');
 }
 
 /**
- * Async variant of getBaseUrl(): guarantees the internal-network probe has
- * run at least once before returning. Use this on code paths that depend on
- * intranet routing but are NOT downstream of fetchManifest() (e.g. skill
- * install in dev mode, where fetchManifest() short-circuits).
- *
- * Concurrent callers share a single in-flight probe promise; once the probe
- * settles, all subsequent calls hit the cached result synchronously.
+ * Async variant of getBaseUrl(), kept for callers that predate the intranet
+ * probe removal (e.g. skillhub auto-sync). No async work remains — it simply
+ * resolves with getBaseUrl().
  */
-let probePromise: Promise<void> | null = null;
-
 export async function ensureBaseUrl(): Promise<string> {
-  if (process.env.XDT_CDN_BASE_URL) return process.env.XDT_CDN_BASE_URL;
-  if (internalProbeResult === null) {
-    if (!probePromise) probePromise = probeInternalNetwork().finally(() => { probePromise = null; });
-    await probePromise;
-  }
   return getBaseUrl();
 }
 
@@ -202,11 +126,6 @@ export function isDev(): boolean {
  */
 export async function fetchManifest(timeoutMs?: number): Promise<Manifest | null> {
   if (isDev()) return null;
-
-  // Re-probe before every manifest fetch so 30-min poll cycles can switch
-  // base URL when the user moves between intranet and external networks
-  // without restarting the app.
-  await probeInternalNetwork();
 
   const isCanary = canaryFlagStore.read();
   const channelSuffix = isCanary ? '-canary' : '';

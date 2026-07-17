@@ -95,6 +95,9 @@ export type IpcErrorCode =
   | 'MODEL_ACCESS_FAILED' // 拉取/轮换失败(网络或服务端错误),可重试
   | 'MODEL_ACCESS_DISABLED' // 服务端灰度未启用(503)——走手填兜底
   | 'MODEL_ACCESS_UNSUPPORTED' // 企业未接入(403)——XD 网关不可用,不重试
+  // 个人资料自助修改(settings → 用户卡片;服务端直写)
+  | 'PROFILE_AVATAR_UPLOAD_FAILED' // 头像经 oss-server 预签名直传失败(presign 或 PUT 阶段)
+  | 'PROFILE_UPDATE_FAILED' // PATCH /api/me/profile 失败(网络 / 服务端拒绝)
   // 会话分享(.cshare 导出/导入)
   | 'SHARE_FILE_INVALID' // 不是 .cshare / 头或 manifest 损坏 / payload 不是 zip
   | 'SHARE_PASSWORD_REQUIRED' // 文件已加密但未提供密码
@@ -182,6 +185,8 @@ const IPC_ERROR_CODES: ReadonlySet<IpcErrorCode> = new Set<IpcErrorCode>([
   'MODEL_ACCESS_FAILED',
   'MODEL_ACCESS_DISABLED',
   'MODEL_ACCESS_UNSUPPORTED',
+  'PROFILE_AVATAR_UPLOAD_FAILED',
+  'PROFILE_UPDATE_FAILED',
   'SHARE_FILE_INVALID',
   'SHARE_PASSWORD_REQUIRED',
   'SHARE_PASSWORD_WRONG',

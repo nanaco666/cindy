@@ -1,6 +1,6 @@
 ==============================================================================
 THIRD-PARTY SOFTWARE NOTICES AND INFORMATION
-xdt-maker mobile application — Android
+Cindy mobile application — Android
 ==============================================================================
 
 Android JS 生产依赖及仓库显式声明的原生 SDK/字体组件。

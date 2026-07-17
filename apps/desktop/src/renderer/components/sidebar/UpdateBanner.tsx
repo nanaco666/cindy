@@ -26,7 +26,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Flame, Check, X } from 'lucide-react';
-import { WEBSITE_URL } from '../../../shared/endpoints';
 import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 import { useUpdateStatus } from '@/hooks/useUpdateStatus';
@@ -34,8 +33,8 @@ import { useUpdateBannerDismiss } from '@/hooks/useUpdateBannerDismiss';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Tip } from '@/components/ui/tooltip';
 
-// 运行期端点清单优先(重启生效),烘焙常量兜底
-const websiteUrl = () => window.electronAPI.clientEndpoints.websiteUrl || WEBSITE_URL;
+// 运行期端点清单(dev/packaged 都在启动阻断后有真值,烘焙兜底已退役)
+const websiteUrl = () => window.electronAPI.clientEndpoints.websiteUrl;
 
 interface UpdateBannerProps {
   isCollapsed: boolean;

@@ -16,7 +16,7 @@
 
 改完跑：仓库根 `pnpm test:unit` + `pnpm --filter desktop typecheck` + `pnpm check:brand-terminology`。
 
-`scripts/brand-terminology-guard.mjs` 的 `FORBIDDEN_TERMS`：把**旧品牌名及其变体加进禁词表**（`replacement` 指向新名）这一步**推迟到第二节手动清单清扫完成之后**——常量翻转时全仓仍有大量合法的旧名残留（forge 显示名、docs、测试夹具），提前加禁词会让 CI 直接红灯。guard 里的 locale 例外（`settings.remote.keys.nameHint` / `settings.computerUse.browser.openForLoginHint` 全路径豁免 / 架构文档路径）对应的是标识符，改名时不动。
+`scripts/brand-terminology-guard.mjs` 的 `FORBIDDEN_TERMS`：把**旧品牌名及其变体加进禁词表**（`replacement` 指向新名）这一步**推迟到第二节手动清单清扫完成之后**——常量翻转时全仓仍有大量合法的旧名残留（forge 显示名、docs、测试夹具），提前加禁词会让 CI 直接红灯。guard 里的 locale 例外（`settings.remote.keys.nameHint` 全路径豁免 / 架构文档路径）对应的是标识符，改名时不动。（`openForLoginHint` 的豁免已随 2026-07-17 浏览器 profile 翻转移除——profile 显示名已是 Cindy，文案同步后不再含旧品牌。）
 
 ⚠️ **LLM 影响评估（规则 10/11）**：`BRAND_NAME` 会进入 MCP 工具描述（prompt 前缀的一部分），改值会一次性打破 Anthropic prompt cache 前缀并可能影响模型对产品的称呼——这是改名的固有代价，发布前按规则 10 要求做一轮缓存率/行为抽查，并在 PR 里写明。
 
@@ -25,7 +25,8 @@
 ### 打包 / OS 集成（apps/desktop）
 
 - [x]（2026-07-17）打包**显示名**字段全套：NSIS `shortcutName: 'Cindy'`、deb `productName: 'Cindy'`、UTType `Cindy Session Share`、深链 label、mac 权限描述文案、新增 `win32metadata`（CompanyName=XD / ProductName=FileDescription=Cindy，任务管理器显示层）；`installer.nsh` 运行提示与右键菜单**显示文案**改 Cindy，三代快捷方式名（xdt-maker / XDMaker / Cindy）安装与卸载全清理。⚠️ 标识符字段（`executableName`/`appId`/mac `.app` 名）不动，等渠道迁移。
-- [x]（2026-07-17）**存量用户快捷方式启动自愈**：`main/windowsShortcutSelfHeal.ts`——差量更新不重跑安装器，win32 packaged 启动时把指向本 exe 的旧名 .lnk 换名为 Cindy.lnk（AUMID 保持 `BRAND_IDENTITY.appId` 三位一体），任务栏固定项只原地刷 icon/AUMID 不改名（改名会掉钉）。macOS 不做运行时自愈（改自身 bundle 破坏签名），图标随下一次整包更新自然生效，Dock 名等渠道迁移。
+- [x]（2026-07-17）**存量用户快捷方式启动自愈**：`main/windowsShortcutSelfHeal.ts`——差量更新不重跑安装器，win32 packaged 启动时把指向本 exe 的旧名 .lnk 换名为 Cindy.lnk（AUMID 保持 `BRAND_IDENTITY.appId` 三位一体），任务栏固定项只原地刷 icon/AUMID 不改名（改名会掉钉）。macOS 不做运行时自愈（改自身 bundle 破坏签名），图标随下一次整包更新自然生效。
+- [x]（2026-07-17）**macOS 打包显示名**（win32metadata 的 mac 同构）：forge `postPackage` 钩子用 PlistBuddy 把包内 `Info.plist` 的 `CFBundleName` / `CFBundleDisplayName` 改 Cindy——Dock 名 / 菜单栏粗体标题 / Cmd+Tab / 系统通知即显示 Cindy。为什么不走 packagerConfig:`extendInfo` 在 packager 里先合并、后被 appName 覆写改不动这两个键;`packagerConfig.name` 会连 `.app` 目录名一起改踩标识符红线。签名/公证在 release-macos.mjs、发生在 postPackage 之后,plist 改动被一起封印。⚠️ `.app` 目录名（Finder 里 /Applications 列表显示）仍是 xdt-maker，等渠道迁移;应用菜单里 About/Hide/Quit 文案已在 bootstrap-electron 菜单模板切 `BRAND_NAME`（dev 菜单栏粗体 "Electron" 是官方 dev 二进制 CFBundleName，无解，仅 dev 可见）。
 - [x] 应用图标素材：desktop 已于 2026-07-16 换 CINDY 全套（`99349c77a`，ico/icns/png 重生成）；界面 wordmark logo 已换 CINDY 深浅双版（经 `hooks/useBrandLogo.ts` 按主题选用）。
 - [x]（2026-07-17）`apps/desktop/help-knowledge/*.md`（内置帮助知识库源文件）→ 全局替换后跑 `pnpm gen:help-kb` 重新生成 `helpKnowledge.generated.ts`。另:`cindy-brain/forge.ts` 的 FORGE_GUIDE（意识编写手册）品牌串同批改完。
 - 注:`feishu-bot.md` 提及「FeiShu OAuth sign-in 登录」的内容已过时（登录已迁 Cindy auth），品牌串已改但内容重写不属于改名范畴，待帮助文档内容更新时处理。
@@ -55,7 +56,7 @@
 - [ ] `packages/lizi-mcps/src/prompts/**/*.md`：飞书 bot 工具说明里的「私聊 xdt-maker bot」——指向飞书平台上的真实 bot 账号名（外部标识），平台侧未改名前保持原文，避免指引失效。
 - [x]（2026-07-17）`.claude/skills/**`、`.agents/skills/**`：grep 无品牌残留（`agent-use/scripts/sync-agent-instructions.mjs` 仅历史对比注释，保留）。
 - [x]（2026-07-17）`AGENTS.md` / `README.md` / `DESIGN.md` / `docs/**`：README/DESIGN 现行引用已改；AGENTS.md「由原 XDMaker 单仓迁出」为历史记录保留；`docs/**` 历史/迁移文档不动。
-- [ ] 例外：`packages/lizi-mcps/src/browser/prompts/rules/browser-workflow.md` 里的「名为 "XDMaker" 的 profile」**跟随 `MANAGED_PROFILE` 而非品牌名**（见第四节），只有 profile 迁移方案落地后才一起改。
+- [x]（2026-07-17）`packages/lizi-mcps/src/browser/prompts/rules/browser-workflow.md` 里的 profile 名**跟随 `MANAGED_PROFILE`**——profile 已翻转为 `'Cindy'`（老登录态经 mToc 迁移 `browser/XDMaker → browser/Cindy` 接续 + dev 实例就地改名自愈），文案已同步。
 
 ### 静态页面 / 公告
 
@@ -77,7 +78,7 @@
 |---|---|---|
 | 深链协议 `xdt-maker://` | forge.config.ts protocols、renderer 深链解析、OAuth 唤回 | 所有历史会话链接 / 系统协议注册失效 |
 | userData 目录（`package.json` 的 `productName: "xdt-maker"`、`xdt-maker-dev*` 沙箱目录） | Electron `app.getPath('userData')` | 用户本地 DB / 登录态 / 会话全部"消失" |
-| `MANAGED_PROFILE = 'XDMaker'` | `apps/desktop/src/main/mcp-integrations/browser.ts` | 自动化浏览器指向全新空 profile，丢登录态 |
+| `MANAGED_PROFILE = 'Cindy'`（2026-07-17 已随身份翻转定格，老 profile 由 mToc 迁移接续） | `apps/desktop/src/main/mcp-integrations/browser.ts` | 再改名会指向全新空 profile，丢登录态 |
 | `PROG_ID 'XDMaker.CindyGhost'`、HKCU `Directory\shell\xdt-maker` 注册表键名 | `brain/fileAssociation.ts`、`folderContextMenu.ts` | 文件关联 / 右键菜单重复注册或失效（菜单**显示文案**已走 `BRAND_NAME`，键名不用动） |
 | `WINDOWS_APP_USER_MODEL_ID 'com.magiclizi.xdt-maker'`、macOS `appId com.magiclizi.xdt-maker` | bootstrap-electron.ts、forge.config.ts | 通知归属 / 系统身份断裂（如需更换按平台迁移指引单独做） |
 | `clientInfo: { name: 'xdt-maker' }` | maker-core codex、lizi-mcps slack-official | 协议握手标识，非展示名 |

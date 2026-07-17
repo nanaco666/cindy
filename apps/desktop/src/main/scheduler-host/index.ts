@@ -41,8 +41,6 @@ export interface StartSchedulerDeps {
   getDb: () => SchedulerDrizzleDb;
   getMainWindow: () => BrowserWindow | null;
   feishuIm: FeishuIM;
-  /** lazy: notifyFeishu 被触发时再读 (登录态可能在 schedule 创建后才完成)。 */
-  getCurrentUserFeishuOpenId: () => string | null;
   logger: Logger;
   beforeDispatchUserTurn?: (sessionId: string) => void | Promise<void>;
   onUndispatchedUserTurn?: (sessionId: string) => void;
@@ -60,7 +58,6 @@ export async function startScheduler(deps: StartSchedulerDeps): Promise<Schedule
   const notifier = new DesktopNotifier({
     getMainWindow: deps.getMainWindow,
     feishuIm: deps.feishuIm,
-    getCurrentUserFeishuOpenId: deps.getCurrentUserFeishuOpenId,
     logger: deps.logger,
   });
   const promptRunner = new MakerScheduleRunner({

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { CDN_EXTERNAL_BASE_URL } from '../../shared/endpoints';
+import { TEST_CDN_BASE_URL as CDN_EXTERNAL_BASE_URL } from '../../test/vitest/clientEndpointsFixture';
 
 const originalPlatform = process.platform;
 const TEST_ROOT = path.join(os.tmpdir(), 'xdt-maker-update-service-test');
@@ -25,17 +25,11 @@ const appGetPath = vi.fn((name: string) => {
   if (name === 'exe') return TEST_EXE;
   return TEST_ROOT;
 });
-
 const fetchManifest = vi.fn();
 const getBaseUrl = vi.fn(() => CDN_EXTERNAL_BASE_URL);
 const isDev = vi.fn(() => false);
 const download = vi.fn();
 const readAutoUpdateSettings = vi.fn(() => ({ autoRelaunchOnIdle: true }));
-const initMigrationRuntime = vi.fn();
-const handleMigrationBlock = vi.fn(async () => {});
-const isHotUpdateSuppressedNow = vi.fn(() => false);
-const isMigrationRelaunchReady = vi.fn(() => false);
-const executeMigrationRelaunch = vi.fn(async () => false);
 
 const logInfo = vi.fn();
 const logWarn = vi.fn();
@@ -74,14 +68,6 @@ vi.mock('../auto-update-settings-store', () => ({
   }),
   resetAutoUpdateSettings: () => ({ autoRelaunchOnIdle: false }),
   writeAutoRelaunchOnIdle: vi.fn(),
-}));
-
-vi.mock('../migration/electronRuntime', () => ({
-  initMigrationRuntime,
-  handleMigrationBlock,
-  isHotUpdateSuppressedNow,
-  isMigrationRelaunchReady,
-  executeMigrationRelaunch,
 }));
 
 vi.mock('../manifestService', () => ({
@@ -158,22 +144,12 @@ beforeEach(() => {
   download.mockReset();
   readAutoUpdateSettings.mockReset();
   readAutoUpdateSettings.mockReturnValue({ autoRelaunchOnIdle: true });
-  initMigrationRuntime.mockReset();
-  handleMigrationBlock.mockReset();
-  handleMigrationBlock.mockResolvedValue(undefined);
-  isHotUpdateSuppressedNow.mockReset();
-  isHotUpdateSuppressedNow.mockReturnValue(false);
-  isMigrationRelaunchReady.mockReset();
-  isMigrationRelaunchReady.mockReturnValue(false);
-  executeMigrationRelaunch.mockReset();
-  executeMigrationRelaunch.mockResolvedValue(false);
   logInfo.mockReset();
   logWarn.mockReset();
   logError.mockReset();
   logDebug.mockReset();
   fs.rmSync(TEST_ROOT, { recursive: true, force: true });
 });
-
 afterEach(() => {
   vi.clearAllTimers();
   vi.useRealTimers();
@@ -305,7 +281,9 @@ describe('startup update relaunch safety', () => {
   });
 
   it('preserves locked-idle startup auto apply on Windows', async () => {
-    await expect(runStartupUpdate({ idleState: 'locked', platform: 'win32' })).resolves.toMatchObject({
+    await expect(
+      runStartupUpdate({ idleState: 'locked', platform: 'win32' }),
+    ).resolves.toMatchObject({
       action: 'relaunch',
     });
   });
@@ -467,80 +445,5 @@ describe('splash 启动下载 0% 显式广播', () => {
     // 此时用户在主界面,启动 splash 早已结束;0% 广播只属于启动态。
     expect(await service.checkForUpdate(updateManifest('0.0.66'))).toBe('ready');
     expect(progressCountWhenDownloadStarted).toBe(0);
-  });
-});
-
-describe('brand migration update routing', () => {
-  const migrationManifest = {
-    app: {
-      version: '0.0.64',
-      migration: {
-        targetApp: 'cindy',
-        version: '1.0.0',
-        file: 'migration/cindy-setup.exe',
-        sha256: 'a'.repeat(64),
-        size: 123,
-      },
-    },
-    claudeCode: {
-      version: '1.0.0',
-      file: 'claude-code/1.0.0/darwin-arm64/claude.gz',
-      sha256: 'b'.repeat(64),
-      size: 456,
-    },
-  };
-
-  it('macOS App Translocation 下不 stage 品牌迁移', async () => {
-    appIsInApplicationsFolder.mockReturnValue(false);
-    const { checkForUpdate } = await freshUpdateService('darwin');
-
-    expect(await checkForUpdate(migrationManifest)).toBe('idle');
-    expect(handleMigrationBlock).not.toHaveBeenCalled();
-  });
-
-  it('macOS 已在 Applications 时正常 stage 品牌迁移', async () => {
-    const { checkForUpdate } = await freshUpdateService('darwin');
-
-    expect(await checkForUpdate(migrationManifest)).toBe('idle');
-    expect(handleMigrationBlock).toHaveBeenCalledWith(migrationManifest.app.migration);
-  });
-
-  it('macOS App Translocation 下拒绝执行品牌迁移 relaunch', async () => {
-    vi.useFakeTimers();
-    try {
-      appIsInApplicationsFolder.mockReturnValue(false);
-      isMigrationRelaunchReady.mockReturnValue(true);
-      const { getUpdateStatus, initUpdateService, stopUpdateService } =
-        await freshUpdateService('darwin');
-      initUpdateService();
-      const relaunchListener = ipcMainOn.mock.calls.find(([channel]) => channel === 'update-relaunch')?.[1] as
-        | ((event: unknown, theme: 'light' | 'dark') => void)
-        | undefined;
-
-      relaunchListener?.({}, 'dark');
-      expect(getUpdateStatus()).toBe('error');
-      expect(executeMigrationRelaunch).not.toHaveBeenCalled();
-      stopUpdateService();
-    } finally {
-      vi.clearAllTimers();
-      vi.useRealTimers();
-    }
-  });
-
-  it('迁移执行 Promise reject 后恢复 relaunch 状态，后续点击可重试', async () => {
-    isDev.mockReturnValue(true);
-    isMigrationRelaunchReady.mockReturnValue(true);
-    executeMigrationRelaunch.mockRejectedValue(new Error('atomic rename failed'));
-    const { getUpdateStatus, initUpdateService } = await freshUpdateService('win32');
-    initUpdateService();
-    const relaunchListener = ipcMainOn.mock.calls.find(([channel]) => channel === 'update-relaunch')?.[1] as
-      | ((event: unknown, theme: 'light' | 'dark') => void)
-      | undefined;
-    expect(relaunchListener).toBeTypeOf('function');
-
-    relaunchListener?.({}, 'dark');
-    await vi.waitFor(() => expect(getUpdateStatus()).toBe('error'));
-    relaunchListener?.({}, 'dark');
-    await vi.waitFor(() => expect(executeMigrationRelaunch).toHaveBeenCalledTimes(2));
   });
 });

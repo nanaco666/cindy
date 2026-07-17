@@ -43,7 +43,6 @@ import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/lib/toast';
 import { mapIpcErrorToI18nKey } from '@/utils/ipcError';
 import { Tip } from '@/components/ui/tooltip';
-import { useUserPreferences } from '@/contexts/UserPreferencesContext';
 import type { AttachedFile, MentionedResource, ImageAnnotationStroke } from '@/lib/fileTypes';
 import {
   formatQuotesForSend,
@@ -138,6 +137,7 @@ import {
   setProviderModelFast,
 } from '@/state/providerModelMemory';
 import {
+  getDraft,
   patchVendorPrefsPreservingModelChoice,
   setEffortForModel,
   setFastModeForModel,
@@ -945,7 +945,6 @@ export function ChatInput({
   }, [sessionId, t]);
   // F-QUEUE-1 — preserve prior semantics
   const showStopButton = isAgentBusy ?? isStreaming;
-  const { preferences, updatePreferences } = useUserPreferences();
   const { confirm: confirmDialog } = useConfirmDialog();
 
   // ── ESC / history ref bridges for Tiptap handleKeyDown ────────────
@@ -1133,8 +1132,12 @@ export function ChatInput({
   // 会一直 settle 不了、selector 置灰吃满 5s 兜底。乐观显示(chip 不回落默认)仍由 pendingRemoteSwitch 承接。
   const [remoteSwitchInFlight, setRemoteSwitchInFlight] = useState(false);
 
-  const activeModel = pendingRemoteSwitch?.model ?? initialModel ?? preferences.defaultModel;
-  const activeEffort = pendingRemoteSwitch?.effort ?? initialEffort ?? preferences.defaultEffort;
+  // initialModel/initialEffort 缺失的瞬态(会话快照未加载)兜底:读本地草稿 lastByVendor
+  // (localStorage,按 agent 分槽、sanitize 恒有种子值)。默认模型/档位偏好已全量本地化,
+  // 不再依赖服务端 UserPreferences(登录态失效/离线时模型与档位选择必须照常工作)。
+  const localVendorDefaults = getDraft().lastByVendor[vendorKey === 'codex' ? 'codex' : 'cc'];
+  const activeModel = pendingRemoteSwitch?.model ?? initialModel ?? localVendorDefaults.model;
+  const activeEffort = pendingRemoteSwitch?.effort ?? initialEffort ?? localVendorDefaults.effort;
   const activePermissionMode: PermissionMode = initialPermissionMode ?? 'acceptEdits';
 
   // per-session 来源(供应商)选择。session.providerId 尚未在 Session 类型回流前,
@@ -3372,7 +3375,7 @@ export function ChatInput({
             // 新 model/effort)保证正确。Fast 恢复成功后再写穿被控端草稿默认;控制端本地默认仍不被污染。
             // New-K:await 而非 fire-and-forget —— relay 重连中 / 已被撤销 / effort 那半失败时,被控端
             // 运行时/DB 根本没变(或只变一半),不能照报成功、污染 controller 默认偏好。失败 → toast 提示
-            // 并 return,不跑下方 onModelDidChange/onEffortDidChange/updatePreferences 成功收尾。
+            // 并 return,不跑下方 onModelDidChange/onEffortDidChange 成功收尾。
             // Fast 恢复失败只代表 restoredFast 未落盘:不回滚已经成功的 model/effort 切换,也不向
             // 用户展示「远程切换失败」。草稿默认仍同步已落盘的 model/effort,Fast 保留当前真实值。
             // 乐观显示目标 (model, effort) + 置灰 selector,等被控端 echo 回流;失败回滚。
@@ -3447,21 +3450,14 @@ export function ChatInput({
           // state track that lagged the props track — see model-selector-xhigh-ui-stale.)
           onModelDidChange?.(newModelId);
           onEffortDidChange?.(newEffort);
-          // device-link(控制端纯镜像)不写控制端自身 server 默认偏好——远程会话 / 草稿的选择属被控端,
-          // 不应污染控制端本地新会话默认。仅本地上下文才落 defaultModel/defaultEffort。
-          if (!deviceLinkDeviceId) {
-            void updatePreferences({ defaultModel: newModelId, defaultEffort: newEffort }).catch((err) => {
-              log.warn('model preference update failed:', err);
-            });
-          }
           // 记进当前来源的槽:切回该来源时恢复这次选的 (model, effort)。
           rememberProviderChoice(newModelId, newEffort);
           return;
         }
 
-        if (!deviceLinkDeviceId) {
-          await updatePreferences({ defaultModel: newModelId, defaultEffort: newEffort });
-        }
+        // 草稿态:全本地生效。onModelDidChange/onEffortDidChange → 父级 patchVendorPrefs 落
+        // lastByVendor(localStorage,按 agent 分槽);per-(供应商,模型) 记忆走 rememberProviderChoice。
+        // 不再写服务端默认偏好——离线 / 登录态失效时草稿选择必须照常工作。
         onModelDidChange?.(newModelId);
         onEffortDidChange?.(newEffort);
         rememberProviderChoice(newModelId, newEffort);
@@ -3484,7 +3480,7 @@ export function ChatInput({
         );
       }
     },
-    [activeModel, activeEffort, sessionId, deviceLinkDeviceId, selectedProviderId, updatePreferences, onModelDidChange, onEffortDidChange, handleFastModeChange, persistFastModeChange, t, getRememberedEffort, setRememberedEffort, rememberProviderChoice, resolveModelEfforts, resolveFast, currentModelAgentKind, effectiveSourceId, modelMemory, modelFastSupported, syncSessionDraftModelPrefs, fastMode, confirmModelSwitchContextGuard],
+    [activeModel, activeEffort, sessionId, selectedProviderId, onModelDidChange, onEffortDidChange, handleFastModeChange, persistFastModeChange, t, getRememberedEffort, setRememberedEffort, rememberProviderChoice, resolveModelEfforts, resolveFast, currentModelAgentKind, effectiveSourceId, modelMemory, modelFastSupported, syncSessionDraftModelPrefs, fastMode, confirmModelSwitchContextGuard],
   );
 
   const handleEffortChange = useCallback(
@@ -3498,7 +3494,7 @@ export function ChatInput({
           if (getSessionDeviceId(sessionId)) {
             // 控制端纯镜像:**await** 运行时隧道 setEffort,被控端持久化后广播回流更新分片。
             // New-K:await 而非 fire-and-forget —— 失败时被控端没真改,不能照报成功、污染默认偏好;
-            // toast 提示并 return,不跑下方 onEffortDidChange/updatePreferences 成功收尾。
+            // toast 提示并 return,不跑下方 onEffortDidChange 成功收尾。
             // 乐观显示目标 effort + 置灰 selector(model/provider 不变),等被控端 echo 回流;失败回滚。
             setPendingRemoteSwitch({ model: activeModel, effort: newEffort, providerId: selectedProviderId });
             setRemoteSwitchInFlight(true);
@@ -3522,28 +3518,21 @@ export function ChatInput({
           }
           // SSoT: notify parent so it refreshes `session.effort` → props update.
           onEffortDidChange?.(newEffort);
-          // device-link 不写控制端自身 server 默认偏好(纯镜像,同 handleModelChange)。
-          if (!deviceLinkDeviceId) {
-            void updatePreferences({ defaultEffort: newEffort }).catch((err) => {
-              log.warn('effort preference update failed:', err);
-            });
-          }
           // 记进当前来源的槽:effort 与 model 同维度记忆。
           if (activeModel) rememberProviderChoice(activeModel, newEffort);
           return;
         }
 
-        if (!deviceLinkDeviceId) {
-          await updatePreferences({ defaultEffort: newEffort });
-        }
-        // SSoT: notify parent so it refreshes `session.effort` → props update.
+        // 草稿态:全本地生效(同 handleModelChange 草稿分支)。onEffortDidChange → 父级
+        // patchVendorPrefs 落 lastByVendor;per-(供应商,模型) 记忆走 rememberProviderChoice。
+        // 不再写服务端默认偏好——此前 await 服务端成功才刷 UI,token 失效时表现为"档位点不动"。
         onEffortDidChange?.(newEffort);
         if (activeModel) rememberProviderChoice(activeModel, newEffort);
       } catch (err) {
         log.warn('effort change failed:', err);
       }
     },
-    [activeModel, sessionId, deviceLinkDeviceId, selectedProviderId, updatePreferences, onEffortDidChange, setRememberedEffort, t, rememberProviderChoice, syncSessionDraftModelPrefs, fastMode],
+    [activeModel, sessionId, selectedProviderId, onEffortDidChange, setRememberedEffort, t, rememberProviderChoice, syncSessionDraftModelPrefs, fastMode],
   );
 
   // per-session 来源切换。镜像 model 持久化路径(handleModelChange 里的
@@ -3655,8 +3644,8 @@ export function ChatInput({
         if (kind && newProviderId && modelId) modelMemory?.setEffort(kind, newProviderId, modelId, eff);
       };
       // 应用「目标 model + effort」:会话态落盘 sessions.{model,effort,providerId} + 即时切运行时路由;
-      // 草稿态(无 sessionId)providerId 本就不持久化,只通知父级刷新 SSoT(草稿 vendor prefs)+ 全局默认。
-      // 两态都更新全局默认偏好(与 handleModelChange 同口径,源切换等效于一次 model/effort 变更)+ 记忆。
+      // 草稿态(无 sessionId)providerId 本就不持久化,只通知父级刷新 SSoT(草稿 vendor prefs)。
+      // 两态都写本地记忆(lastByVendor 经父级回调 + per-(供应商,模型) 的 remember),无服务端偏好写入。
       const applyModelAndEffort = async (modelId: string, eff: Effort) => {
         if (sessionId) {
           // 切来源+模型:fast 恢复目标 (供应商, 模型) 的记忆值(对齐 effort);不支持 → false。
@@ -3704,12 +3693,6 @@ export function ChatInput({
         }
         onModelDidChange?.(modelId);
         onEffortDidChange?.(eff);
-        // device-link(含远程草稿切来源)不写控制端自身 server 默认偏好(纯镜像,同 handleModelChange)。
-        if (!deviceLinkDeviceId) {
-          void updatePreferences({ defaultModel: modelId, defaultEffort: eff }).catch((err) => {
-            log.warn('model preference update failed:', err);
-          });
-        }
         remember(modelId, eff);
       };
       try {
@@ -3787,7 +3770,6 @@ export function ChatInput({
       handleFastModeChange,
       persistFastModeChange,
       onProviderDidChange,
-      updatePreferences,
       modelMemory,
       syncSessionDraftModelPrefs,
       fastMode,

@@ -25,14 +25,12 @@ function resolveMobileBuildEnv() {
   try {
     return loadProductionMobileEnv();
   } catch (error) {
+    // 与 production-mobile-env.cjs 输出键集一致(2026-07 端点清单重构后收缩:
+    // 业务端点运行期由启动闸门从 endpoint.json 回填,不再构建期烘焙)。
     const keys = [
       'EXPO_PUBLIC_FEISHU_APP_ID',
       'EXPO_PUBLIC_CINDY_AUTH_REGION',
-      'EXPO_PUBLIC_CINDY_AUTH_BASE_URL',
-      'EXPO_PUBLIC_XDT_API_BASE_URL',
-      'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL',
-      'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL',
-      'EXPO_PUBLIC_XDT_CDN_BASE_URL',
+      'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL',
     ];
     const fallback = Object.fromEntries(
       keys.map((key) => [key, process.env[key]?.trim()]),

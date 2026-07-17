@@ -1588,7 +1588,9 @@ export class CodexAgent extends BaseAgent {
     const host = new AppServerHost({
       createTransport,
       logger: this.deps.logger,
-      clientInfo: { name: 'xdt-maker', version: '0.0.0' },
+      // 自报名只进 codex app-server 的 userAgent 展示串,无门控消费
+      // (2026-07-17 随品牌翻转改 cindy;上游 gating 走 originator,与此无关)。
+      clientInfo: { name: 'cindy', version: '0.0.0' },
       codexProxyActive,
       // codex CLI 的 cloud_requirements 模块在 stderr 报 "refresh token was already used"
       // 时, 当前 host 持有的 token 已彻底失效 (OAuth refresh token 一次性, 已被旋转)。

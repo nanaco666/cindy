@@ -20,9 +20,6 @@
  *     非媒体散件/回落的老目录;
  *   - cindy-media/legacyDeadDirs.ts:死目录清退(第 5 步)——对老世界的唯一
  *     允许删除操作,只认三个死目录名单,不新增任何写入;
- *   - migration/copyExcludes.ts:Cindy 品牌迁移的 userData 拷贝保留清单
- *     (COPY_MUST_KEEP_PREFIXES)把 'cc-agent' 列为必迁目录名——纯字符串
- *     常量供拷贝排除测试比对,零读写。
  */
 
 import { describe, it, expect } from 'vitest';
@@ -37,7 +34,6 @@ const ALLOWED_FILES = new Set([
   'im/host.ts',
   'imageCacheStore.ts',
   'mcp-integrations/feishu.ts',
-  'migration/copyExcludes.ts',
   'modelCacheStore.ts',
   'session-share/sessionShareExport.ts',
   'session-share/sessionShareImport.ts',

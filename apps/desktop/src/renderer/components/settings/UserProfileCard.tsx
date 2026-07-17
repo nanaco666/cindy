@@ -12,7 +12,7 @@ export function UserProfileCard() {
   const [editOpen, setEditOpen] = useState(false);
   const { t } = useTranslation();
 
-  // 换头像(本地覆写保存 / 服务端资料更新)后给新地址重试的机会,
+  // 换头像(服务端资料更新)后给新地址重试的机会,
   // 不让一次历史加载失败永远钉死在首字母兜底上。
   const avatarUrl = user?.avatar ?? null;
   useEffect(() => {
@@ -61,7 +61,7 @@ export function UserProfileCard() {
         {displayName}
       </p>
 
-      {/* 编辑名字 / 头像(本地覆写,弹窗见 ProfileEditDialog) */}
+      {/* 编辑名字 / 头像(直写服务端,弹窗见 ProfileEditDialog) */}
       <button
         type="button"
         onClick={() => setEditOpen(true)}

@@ -1,7 +1,5 @@
 import { BRAND_IDENTITY, allDeepLinkSchemes } from '@lizi/maker-shared/brand-identity';
 
-import type { RemoteSession } from './types';
-
 // 深链双 scheme(身份单点派生):cindy 主 + xdt-maker 永久兼容(存量消息里的
 // 老链接不能死);生成一律用主 scheme。与桌面端 shared/deepLinkSchemes 同源镜像。
 const DEEP_LINK_SCHEMES = allDeepLinkSchemes();
@@ -153,32 +151,4 @@ export function extractSessionLinkIds(text: string): string[] {
     if (target) ids.add(target.sessionId);
   }
   return [...ids];
-}
-
-export function buildSessionCopyTargets(session: Pick<RemoteSession, 'id' | 'sdkSessionId'>): Array<{
-  key: 'deepLink' | 'xdtId' | 'sdkId';
-  label: string;
-  testID: 'session.copy.deepLink' | 'session.copy.xdtId' | 'session.copy.sdkId';
-  value: string | null;
-}> {
-  return [
-    {
-      key: 'deepLink',
-      label: '深度链接',
-      testID: 'session.copy.deepLink',
-      value: buildMobileSessionDeepLink(session.id),
-    },
-    {
-      key: 'xdtId',
-      label: 'XDT ID',
-      testID: 'session.copy.xdtId',
-      value: session.id,
-    },
-    {
-      key: 'sdkId',
-      label: 'Agent ID',
-      testID: 'session.copy.sdkId',
-      value: session.sdkSessionId ?? null,
-    },
-  ];
 }

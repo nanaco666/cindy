@@ -13,7 +13,6 @@ export type AutoRelaunchBlockReason =
   | 'dev'
   | 'not-ready'
   | 'relaunching'
-  | 'migration-requires-confirmation'
   | 'busy'
   | 'recent-busy'
   | 'recent-resume'
@@ -25,8 +24,6 @@ export interface AutoRelaunchReadinessInput {
   isDev: boolean;
   status: string;
   isRelaunching: boolean;
-  /** 品牌迁移必须由用户点击“重启完成升级”，不能走空闲自动重启。 */
-  requiresUserConfirmation: boolean;
   hasBusyTasks: boolean;
   idleTimeSeconds: number;
   idleState: UpdateSystemIdleState;
@@ -51,7 +48,6 @@ export function getAutoRelaunchBlockReason(
   if (input.isDev) return 'dev';
   if (input.status !== 'ready') return 'not-ready';
   if (input.isRelaunching) return 'relaunching';
-  if (input.requiresUserConfirmation) return 'migration-requires-confirmation';
   if (input.hasBusyTasks) return 'busy';
   if (input.lastBusyAtMs !== null && input.nowMs - input.lastBusyAtMs < busyQuietPeriodMs) {
     return 'recent-busy';

@@ -168,7 +168,7 @@
         "unlockSubmit": "アンロック",
         "generateTitle": "新しい SSH 鍵を生成",
         "nameLabel": "名前(省略可)",
-        "nameHint": "~/.ssh/<name> に保存。デフォルトは \"xdt-maker\"、衝突時は -1 / -2 ... を付与。",
+        "nameHint": "~/.ssh/<name> に保存。デフォルトは \"cindy\"、衝突時は -1 / -2 ... を付与。",
         "encryptLabel": "passphrase で暗号化する(推奨)",
         "encryptHint": "passphrase は今一度だけ入力し、ssh-add が復号した鍵をシステム ssh-agent にキャッシュします。macOS では Keychain にも保存されるため再起動後も自動復帰します。",
         "passLabel": "Passphrase",
@@ -507,13 +507,13 @@
         "open": "名前とアバターを編集",
         "title": "プロフィールを編集",
         "nameLabel": "名前",
-        "nameHint": "空欄にするとデフォルトの名前に戻ります",
+        "nameHint": "空欄にすると現在の名前を維持します",
         "changeAvatar": "アバターを変更",
         "resetAvatar": "デフォルトのアバターに戻す",
         "save": "保存",
         "cancel": "キャンセル",
-        "localOnlyHint": "カスタムの名前とアバターはこのデバイスでのみ有効です。",
-        "avatarInvalid": "5MB 以下の PNG / JPG / GIF / WebP 画像を選択してください",
+        "syncHint": "名前とアバターはアカウントに保存され、すべてのデバイスに同期されます。",
+        "avatarInvalid": "5MB 以下の PNG / JPG / WebP 画像を選択してください",
         "saveFailed": "保存に失敗しました。もう一度お試しください"
       }
     },
@@ -1128,7 +1128,7 @@
     "gitSafety": {
       "title": "Git セーフティ",
       "autoSnapshotTitle": "Git セーフティ保存点",
-      "description": "Agent の編集後に XDT 保存点 commit を自動作成します。有効な場合のみ Codex rewind を表示します。",
+      "description": "Agent の編集後に保存点 commit を自動作成します。有効な場合のみ Codex rewind を表示します。",
       "toggleAria": "Git セーフティ保存点を切り替え",
       "saveFailed": "Git セーフティ設定の保存に失敗しました"
     },
@@ -1414,7 +1414,7 @@
           "openForLoginFailed": "ブラウザを開けませんでした"
         },
         "openForLogin": "Agent 専用ブラウザを開く",
-        "openForLoginHint": "これはエージェント専用の独立したブラウザです。お使いの Chrome を利用しますが、プロファイルは完全に独立しており（右上に「XDMaker」と表示）、普段の Chrome のタブ・ブックマーク・ログイン状態には一切影響しません。エージェントはこのブラウザであなたの代わりにページを開き、読み、クリックし、スクリーンショットを撮ります。ログインが必要なサイトは、上の「Agent 専用ブラウザを開く」から一度ログインすれば、ログイン状態が保持され、以降はエージェントがあなたとして操作を続けられます。"
+        "openForLoginHint": "これはエージェント専用の独立したブラウザです。お使いの Chrome を利用しますが、プロファイルは完全に独立しており（右上に「Cindy」と表示）、普段の Chrome のタブ・ブックマーク・ログイン状態には一切影響しません。エージェントはこのブラウザであなたの代わりにページを開き、読み、クリックし、スクリーンショットを撮ります。ログインが必要なサイトは、上の「Agent 専用ブラウザを開く」から一度ログインすれば、ログイン状態が保持され、以降はエージェントがあなたとして操作を続けられます。"
       },
       "browserBackend": {
         "title": "自動操作のブラウザ対象",
@@ -1605,7 +1605,7 @@
           "description": "セッションをまたいでコンテキストを保持する agent 横断の長期メモリ"
         },
         "xdt_helper": {
-          "name": "XDT Helper",
+          "name": "Cindy Helper",
           "description": "ホスト機能の開示 — 利用可能なツールとモデルを agent に伝える"
         },
         "collab": {
@@ -1668,7 +1668,7 @@
           "workspaces": "作業ディレクトリのマッピング(エイリアス → ローカル絶対パス)",
           "workspacesBoundCount_one": "ローカル作業ディレクトリを {{count}} 個バインド済み",
           "workspacesBoundCount_other": "ローカル作業ディレクトリを {{count}} 個バインド済み",
-          "aliasPlaceholder": "エイリアス(例: xdmaker)",
+          "aliasPlaceholder": "エイリアス(例: my-server)",
           "addWorkspace": "作業ディレクトリを追加",
           "removeWorkspace": "この作業ディレクトリを削除",
           "changeDir": "クリックしてディレクトリを変更(別名と設定は保持)"
@@ -2391,6 +2391,15 @@
       "REGION_MISMATCH": "ログインサービスの地域がこのアプリと一致しません。"
     }
   },
+  "legacyMigration": {
+    "title": "旧バージョンのデータを移行",
+    "description": "このデバイスに旧バージョンのデータが見つかりました。チャット履歴とメディアファイルを新しいデータ保存先に移行します。旧バージョンのアプリが起動中の場合は、先に完全に終了してください。移行中は {{appName}} を閉じないでください。ご注意:認証済みのサードパーティのキーや資格情報は移行できません。移行完了後、設定で再認証または再入力が必要です。",
+    "confirm": "OK",
+    "migrating": "データを移行しています。しばらくお待ちください…",
+    "failedTitle": "移行が完了しませんでした",
+    "failedDescription": "今回はデータ移行を完了できませんでした。{{appName}} はそのまま利用できます。次回のログイン時に自動的に再試行されます。",
+    "continue": "続行"
+  },
   "migration": {
     "title": "チャット履歴をダウンロード中",
     "subtitle": "初回のローカル化には時間がかかります。ウィンドウを開いたままにしてください",
@@ -3039,7 +3048,6 @@
     },
     "user": {
       "settingsLink": "設定, 現在のユーザー: {{name}}",
-      "adminBadge": "管理者",
       "viewReleaseNotes": "リリースノートを表示",
       "reopenUpdateBanner": "更新の準備完了 — クリックして確認"
     },
@@ -5710,7 +5718,6 @@
       "openFileFailed": "システムでファイルを開けません",
       "emptyResponse": "モデルが空の応答を返しました。再試行してください。(今回は何も生成されませんでした。大きなコンテキストや高負荷時にモデルゲートウェイが空のストリームを返すことがあります)",
       "turnFailed": "タスクの実行に失敗しました（モデルからエラーの詳細が返されませんでした）。再試行してください。",
-      "requestFailed": "リクエストに失敗しました",
       "sendFailed": "送信に失敗：{{message}}",
       "steerNoActiveTurn": "実行中のタスクがないため、割り込み送信できません",
       "steerRequiresRestart": "割り込み送信を有効にするにはデスクトップ端末の再起動が必要です。このメッセージは消去されていません",

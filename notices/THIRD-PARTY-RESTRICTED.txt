@@ -1,6 +1,6 @@
 ==============================================================================
 RESTRICTED AND PROPRIETARY THIRD-PARTY COMPONENTS
-xdt-maker project distributions
+Cindy project distributions
 ==============================================================================
 
 本文件单列不是开放源代码许可的第三方组件;它们不计入开源包数量。

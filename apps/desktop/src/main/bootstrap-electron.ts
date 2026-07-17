@@ -110,12 +110,8 @@ import type { Maker } from '@lizi/maker-core';
 import { im, feishuIm, startImOrchestrators, startImConnection } from './im';
 import * as authManager from './authManager';
 import * as profileEdit from './profileEdit';
-import * as profileOverrideStore from './profileOverrideStore';
-import { ingestMedia as ingestCindyMedia } from './cindy-media/ingest';
-import {
-  removeRefs as removeMediaRefs,
-  removeRefsExceptHash as removeMediaRefsExceptHash,
-} from './cindy-media/ledger';
+import { uploadPublicAsset } from './ossPublicUpload';
+import { removeRefs as removeMediaRefs } from './cindy-media/ledger';
 import { installWebviewHardener } from './webview-security';
 import {
   installSelectionContextMenu,
@@ -166,6 +162,10 @@ import { cindyGhostSchemePrivilege } from './cindy-brain/runtime/electronSandbox
 import { fetchReleaseNotes, fetchReleaseNotesIndex } from './releaseNotesService';
 import { resolveWorkspacePathCached, resolveWorkspacePathBatchCached } from './pathResolver';
 import { registerLocalDbIpc } from './localDb/ipc/registerAll';
+import {
+  registerLegacyMigrationIpc,
+  runLegacyUserDataMigrationForUser,
+} from './legacyUserDataMigration';
 import { registerFsBrowseIpc } from './fsBrowse/ipc';
 import {
   ensureReady as localDbEnsureReady,
@@ -338,7 +338,6 @@ import { registerMakerUsageIpc, syncClaudeSubscriptionUsageForAuthChange } from 
 import { prewarmModelPricing } from './usage/modelPricing.js';
 import { registerMakerBinaryVersionIpc } from './maker-ipc/binary-version.js';
 import { registerCrossAgentConvertIpc } from './cross-agent-convert/ipc.js';
-import { registerImageUploadIpc } from './imageUploadIpc.js';
 import { registerFileBrowserIpc } from './file-browser/index.js';
 import { disposeRemoteFileBrowser } from './file-browser/remote-deps.js';
 import { registerFileBrowserDeviceOp } from './file-browser/device-op.js';
@@ -415,7 +414,6 @@ import { handleIncomingCindyFile } from './cindy-brain/openFileInstall.js';
 import { registerCindyFileAssociation } from './cindy-brain/fileAssociation.js';
 import { setMainLocale, t } from './i18n.js';
 import { throwIpcError } from './utils/ipcValidate.js';
-import * as brandMigrationRuntime from './migration/electronRuntime.js';
 // Scheduler (Phase 3) — 启动单例需要 maker / localDb / mainWindow 都 ready，但
 // splash check-environment / user login (触发 ensureReady) 谁先到不固定。
 // 通过 attemptStartScheduler 在两个就绪事件源各调一次幂等 startScheduler，最后到的
@@ -486,8 +484,6 @@ async function attemptStartScheduler(): Promise<void> {
       getDb: () => getDbClient().drizzle,
       getMainWindow: () => mainWindowRef,
       feishuIm,
-      // lazy: notifyFeishu 触发时才读 (登录状态可能晚于 scheduler 启动)
-      getCurrentUserFeishuOpenId: () => authManager.getAuthState().user?.feishuOpenId ?? null,
       logger: createSchedulerLogger('scheduler-host'),
       ...automationGitBaselineHooks,
     });
@@ -618,12 +614,9 @@ function attemptStartEmbeddingHost(): void {
 // 走 packaged 分支,但 logStream 还是 null —— 所有日志都会被静默吞掉。
 // dev: 直接 console;packaged: 写 userData/logs/main.log。
 import { initLogger, writeFromRenderer, setLogLevel, getLogLevel, keepRecentSync, keepRecentSessionCcDebugSync, createLogger, writeCcDebugLine, type LogLevel } from './logger.js';
-import { buildApiUrl } from './apiUrl.js';
 initLogger();
 const dbClientLog = createLogger('DbClient');
-const apiRequestLog = createLogger('api-request');
 const authBoundaryLog = createLogger('auth-boundary');
-const brandMigrationBootstrapLog = createLogger('brand-migration-bootstrap');
 // 主窗 renderer 加载失败可观测性 + dev 启动看门狗(见 renderer-boot-guard.ts 顶部注释)。
 const rendererGuardLog = createLogger('renderer-guard');
 const updatePresentationLog = createLogger('update-presentation');
@@ -923,6 +916,8 @@ type ApplicationMenuLocale = SupportedLocale;
 
 interface ApplicationMenuLabels {
   about: string;
+  hide: string;
+  quit: string;
   settings: string;
   checkForUpdates: string;
   fileMenu: string;
@@ -939,6 +934,8 @@ interface ApplicationMenuLabels {
 const APPLICATION_MENU_LABELS: Record<ApplicationMenuLocale, ApplicationMenuLabels> = {
   'zh-CN': {
     about: '关于 {{appName}}',
+    hide: '隐藏 {{appName}}',
+    quit: '退出 {{appName}}',
     settings: '设置...',
     checkForUpdates: '检查更新...',
     fileMenu: '文件',
@@ -953,6 +950,8 @@ const APPLICATION_MENU_LABELS: Record<ApplicationMenuLocale, ApplicationMenuLabe
   },
   en: {
     about: 'About {{appName}}',
+    hide: 'Hide {{appName}}',
+    quit: 'Quit {{appName}}',
     settings: 'Settings...',
     checkForUpdates: 'Check for Updates...',
     fileMenu: 'File',
@@ -967,6 +966,8 @@ const APPLICATION_MENU_LABELS: Record<ApplicationMenuLocale, ApplicationMenuLabe
   },
   ja: {
     about: '{{appName}} について',
+    hide: '{{appName}}を隠す',
+    quit: '{{appName}}を終了',
     settings: '設定...',
     checkForUpdates: 'アップデートを確認...',
     fileMenu: 'ファイル',
@@ -981,6 +982,8 @@ const APPLICATION_MENU_LABELS: Record<ApplicationMenuLocale, ApplicationMenuLabe
   },
   ko: {
     about: '{{appName}} 정보',
+    hide: '{{appName}} 가리기',
+    quit: '{{appName}} 종료',
     settings: '설정...',
     checkForUpdates: '업데이트 확인...',
     fileMenu: '파일',
@@ -1099,12 +1102,17 @@ function installApplicationMenu(
         ],
       };
 
+  // 应用名相关文案一律走 BRAND_NAME(展示名),不用 app.getName():后者返回
+  // package.json productName(过渡期仍是 xdt-maker,机器身份不许跟随改名,
+  // 见 maker-shared/branding.ts 顶注)。hide/quit role 的默认标签也吃 app.name,
+  // 所以显式给 label。macOS 菜单栏第一项的粗体标题不吃这里的 label(系统取自
+  // 可执行 bundle 的 Info.plist CFBundleName),dev 下恒为 "Electron",无法运行时修改。
   const template: Electron.MenuItemConstructorOptions[] = [
     {
-      label: app.getName(),
+      label: BRAND_NAME,
       submenu: [
         {
-          label: labels.about.replace('{{appName}}', app.getName()),
+          label: labels.about.replace('{{appName}}', BRAND_NAME),
           click: () => dispatchApplicationMenuCommand(mainWindow, 'open-about'),
         },
         { type: 'separator' },
@@ -1129,11 +1137,19 @@ function installApplicationMenu(
         // ⌘Q/⌘H/⌘M 会先触发原生 role, 用户看不到"系统保留"校验提示就把
         // 应用退出/隐藏了。(close 已改为永不注册 accelerator, 不在此列,
         // 见下方 Window 菜单注释。)
-        { role: 'hide', registerAccelerator: registerMenuAccelerators },
+        {
+          role: 'hide',
+          label: labels.hide.replace('{{appName}}', BRAND_NAME),
+          registerAccelerator: registerMenuAccelerators,
+        },
         { role: 'hideOthers', registerAccelerator: registerMenuAccelerators },
         { role: 'unhide' },
         { type: 'separator' },
-        { role: 'quit', registerAccelerator: registerMenuAccelerators },
+        {
+          role: 'quit',
+          label: labels.quit.replace('{{appName}}', BRAND_NAME),
+          registerAccelerator: registerMenuAccelerators,
+        },
       ],
     },
     {
@@ -2688,7 +2704,8 @@ const registerIpcHandlers = () => {
     return authManager.refresh();
   });
 
-  // ── Profile local override IPC(设置 → 用户卡片编辑;业务体在 profileEdit.ts) ──
+  // ── Profile 编辑 IPC(设置 → 用户卡片编辑;业务体在 profileEdit.ts,
+  //    资料直写 auth-server,头像经 oss-server 预签名直传) ──
 
   const profileEditLog = createLogger('profileEdit');
   const profileEditDeps: profileEdit.ProfileEditDeps = {
@@ -2702,12 +2719,16 @@ const registerIpcHandlers = () => {
       return result.canceled || !result.filePaths[0] ? null : result.filePaths[0];
     },
     readFile: (filePath) => fs.promises.readFile(filePath),
-    ingestMedia: ingestCindyMedia,
-    removeRefsExceptHash: removeMediaRefsExceptHash,
-    removeRefs: removeMediaRefs,
-    readOverride: profileOverrideStore.readOverride,
-    writeOverride: profileOverrideStore.writeOverride,
-    notifyChanged: () => authManager.notifyProfileOverrideChanged(),
+    uploadAvatar: ({ buffer, mimeType }) =>
+      uploadPublicAsset(
+        {
+          fetchImpl: (input, init) => net.fetch(input, init),
+          getBaseUrl: () => getClientEndpoint('ossApiBaseUrl'),
+          getToken: () => authManager.getAccessToken(),
+        },
+        { scene: 'avatar', contentType: mimeType, body: buffer },
+      ),
+    patchProfile: (patch) => authManager.updateServerProfile(patch),
     logWarn: (message, err) => profileEditLog.warn(message, err),
   };
 
@@ -2790,7 +2811,6 @@ const registerIpcHandlers = () => {
       registerMakerUsageIpc();
       registerMakerBinaryVersionIpc();
       registerCrossAgentConvertIpc();
-      registerImageUploadIpc();
       // Workdir File Browser (vscode-style lazy file tree + content viewer for
       // a session's working directory). Pure local fs IO, no Maker dependency,
       // but lives in this block to keep splash-gating simple.
@@ -3356,70 +3376,10 @@ const registerIpcHandlers = () => {
   // (api-key:test-connection 已随手填录入链路移除,2026-07-17:XD 网关 key 一律由
   //  model-access 自动下发,连通性由同步状态机负责。)
 
-  // ── Generic API request proxy (renderer → main → server) ──
-  // All backend HTTP calls go through this handler so the renderer never
-  // uses fetch() directly. Token is auto-attached from authManager.
-  // On 401 TOKEN_EXPIRED, auto-refreshes and retries once.
-  const API_BASE_URL = getClientEndpoint('apiBaseUrl');
-
-  async function doApiFetch(
-    apiPath: string,
-    method: string,
-    body: unknown | undefined,
-  ): Promise<{ ok: boolean; status: number; data: unknown }> {
-    // Never let a renderer-supplied path escape the API origin — the request
-    // carries the user's bearer token, so an off-origin target would leak it.
-    let url: string;
-    try {
-      url = buildApiUrl(API_BASE_URL, apiPath);
-    } catch (err) {
-      apiRequestLog.warn('rejected api:request with unsafe path', {
-        path: apiPath,
-        error: (err as Error).message,
-      });
-      return { ok: false, status: 0, data: null };
-    }
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    const token = authManager.getAccessToken();
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-    try {
-      const response = await net.fetch(url, {
-        method,
-        headers,
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-      });
-      const data = await response.json();
-      return { ok: response.ok, status: response.status, data };
-    } catch {
-      return { ok: false, status: 0, data: null };
-    }
-  }
-
-  ipcMain.handle(
-    'api:request',
-    async (
-      _event: Electron.IpcMainInvokeEvent,
-      params: { path: string; method?: string; body?: unknown },
-    ): Promise<{ ok: boolean; status: number; data: unknown }> => {
-      const method = params.method ?? 'GET';
-      const result = await doApiFetch(params.path, method, params.body);
-
-      // Auto-refresh on TOKEN_EXPIRED and retry once
-      if (result.status === 401) {
-        const errData = result.data as { error?: { code?: string } } | null;
-        if (errData?.error?.code === 'TOKEN_EXPIRED') {
-          const refreshed = await authManager.refresh();
-          if (refreshed) {
-            return doApiFetch(params.path, method, params.body);
-          }
-        }
-      }
-
-      return result;
-    },
-  );
+  // ── Generic API request proxy: 已移除(2026-07 apiBaseUrl 清理)──
+  // 曾经的 `api:request`(renderer → main → 主 server)通用代理随最后一个
+  // 调用者(meService GET /api/me,产品 role 已退役)一起拆除。renderer 从此
+  // 对业务 server 零请求;main 内部调用走 serverApiClient.serverApiFetch。
 
   // ── API Key refresh from server: 已移除 ──
   // XD 网关 key / Mivo key 均为本地 only(safeStorage),没有服务器副本,
@@ -4378,34 +4338,9 @@ app.on('ready', async () => {
     return;
   }
 
-  // 品牌迁移(docs/cindy-rebrand/migration-state-machine.md)——两个分支平时
-  // 均惰性(无 marker / 无迁移 argv 时零副作用),必须在建窗口前执行:
-  //  1. 新 app 身份:--migrated-from 首启健康检查失败 → 退出拉回老 app;
-  //  2. 老 app 身份:marker=confirmed 跳板拉起新 app 成功 → 静默退出。
-  try {
-    if ((await brandMigrationRuntime.maybeRunCindyFirstRun()) === 'quit') {
-      app.exit(1);
-      return;
-    }
-  } catch (err) {
-    // Cindy 首启异常意味着自拷/健康检查未完成，绝不能 fail-open 后创建主窗口并使用
-    // 未验证的新 profile。退出后保留老数据，等待老 app / 下次迁移重入。
-    brandMigrationBootstrapLog.error('Cindy first-run handling threw', { error: String(err) });
-    app.exit(1);
-    return;
-  }
-  try {
-    if ((await brandMigrationRuntime.runTransitionStartupElectron()) === 'quit') {
-      app.exit(0);
-      return;
-    }
-  } catch (err) {
-    // 旧 app 跳板编排异常不挡正常启动；用户仍可继续使用逃生舱。
-    brandMigrationBootstrapLog.error('legacy startup handling threw', { error: String(err) });
-  }
-
-  // 客户端远程端点清单:启动第一步、先于一切更新检查,**阻断式**拉取(拉不到 /
-  // 清单非法 → 系统错误框重试/退出,无缓存与超时兜底;dev 零网络用烘焙值)。
+  // 客户端端点清单:启动第一步、先于一切更新检查,**阻断式**解析(packaged 走
+  // 烘焙 hotfix CDN 基址;dev 默认读仓内 config/endpoint.json,--endpoints-cdn
+  // 时同 packaged;失败 → 系统错误框重试/退出,无缓存与烘焙兜底)。
   // 必须早于一切端点消费方初始化、且在 createWindow() 前注册 sendSync IPC
   // (preload 模块级同步读取依赖它)。用户在错误框选"退出"时 app.exit 已调用,
   // 这里直接 return 不再继续启动。
@@ -4413,15 +4348,6 @@ app.on('ready', async () => {
     return; // 用户在错误框选择退出,app.exit 已调用
   }
   registerClientEndpointsIpc();
-
-  // 身份锚埋点(账号系统切换前置,identityAnchor.ts 顶注):登录成功 / 恢复
-  // 登录态时把 { userId, email, feishuOpenId } 持久化到 userData,供切换后优先按
-  // email、零命中时按 feishuOpenId 认领老库;登出不清。auth 由 renderer 经 auth:initialize 触发,此处
-  // (建窗口前)装订阅必然先于首次 auth 状态就绪。
-  authManager.onAuthStateChange((state) => {
-    if (!state.isAuthenticated || state.user == null) return;
-    brandMigrationRuntime.recordIdentityAnchor(state.user);
-  });
 
   // 网关凭据自动下发:订阅登录态(登录后向 model-access-server 拉 endpoint +
   // 用户专属 key)+ 注册 model-access:* IPC。须在 initClientEndpoints 之后
@@ -4434,9 +4360,11 @@ app.on('ready', async () => {
   // Dock 图标取自可执行 bundle 的 icns,而 dev 跑的是 node_modules 里的官方
   // Electron 二进制。这里 dev-only 手动设成 Cindy 图标;packaged 版由
   // resources/icon.icns 自然生效,不需要也不该动。
+  // 必须用 icon-dock.png(generate-mac-icns.mjs 产出,已套 Apple 圆角网格):
+  // setIcon 原样显示不加遮罩,满幅方图 icon.png 会显示成无圆角方块。
   if (!app.isPackaged && process.platform === 'darwin') {
     try {
-      app.dock?.setIcon(path.join(__dirname, '../../resources/icon.png'));
+      app.dock?.setIcon(path.join(__dirname, '../../resources/icon-dock.png'));
     } catch (err) {
       // 仅影响 dev Dock 观感,失败不挡启动
       createLogger('dock-icon').warn('setIcon failed', { error: String(err) });
@@ -4511,7 +4439,6 @@ app.on('ready', async () => {
   const cspDevServerUrl = MAIN_WINDOW_VITE_DEV_SERVER_URL || null;
   installContentSecurityPolicy(session.defaultSession, {
     isDev: Boolean(cspDevServerUrl),
-    apiOrigin: parseOrigin(getClientEndpoint('apiBaseUrl')),
     devServerOrigin: parseOrigin(cspDevServerUrl),
   });
 
@@ -4524,11 +4451,16 @@ app.on('ready', async () => {
   // onReady 回调 → scheduler-host 启动重试入口 (Phase 3)：splash 跑早于 user login
   // 的话第一次 startScheduler 会因为 localDb 未 ready 而失败；这里在 ensureReady
   // 完成后再触发一次幂等的 startScheduler，谁后到谁负责真正启动。
+  // 首登轻量数据迁移(mToc)的确认弹窗 IPC —— 必须先于 registerLocalDbIpc 注册,
+  // 保证 beforeEnsureReady 推送 confirm 态时 renderer 已能 invoke 确认通道。
+  registerLegacyMigrationIpc();
   registerLocalDbIpc({
     beforeEnsureReady: async (userId) => {
       const user = authManager.getAuthState().user;
       if (user == null || user.id !== userId) return;
-      await brandMigrationRuntime.claimLegacyLocalDbBeforeEnsureReady(user);
+      // 首登轻量迁移(老 xdt-maker userData → Cindy):内部自带 marker 防重入与
+      // 全量兜底,绝不 throw,失败不阻塞登录(ensureReady 照常建新库)。
+      await runLegacyUserDataMigrationForUser(user.id);
     },
     onReady: async (userId) => {
       // 必须先 await ensureLifecycleDbClient(内部 await createDbClient → worker
@@ -4570,6 +4502,37 @@ app.on('ready', async () => {
       }
       attemptStartScheduler();
       attemptStartEmbeddingHost();
+      // 旧「资料本地覆写」方案退役(2026-07)的一次性清理:清当前账号名下的
+      // profile-avatar 媒体引用与 override 条目(文件条目即幂等标记,失败下次登录重试)。
+      void (async () => {
+        const overridePath = path.join(app.getPath('userData'), 'profile-override.json');
+        const legacyProfileLog = createLogger('profileEdit');
+        await profileEdit.cleanupLegacyProfileOverride(
+          {
+            readOverrideFile: () => {
+              try {
+                return fs.readFileSync(overridePath, 'utf-8');
+              } catch {
+                return null;
+              }
+            },
+            // tmp+rename 原子写:写一半崩溃不会把剩余账号的条目变成损坏 JSON
+            // (损坏文件会被清理逻辑当"无从定位"整体删除,其引用回到泄漏状态)。
+            writeOverrideFile: (content) => {
+              const tmp = `${overridePath}.tmp`;
+              fs.writeFileSync(tmp, content, 'utf-8');
+              fs.renameSync(tmp, overridePath);
+            },
+            deleteOverrideFile: () => fs.unlinkSync(overridePath),
+            removeRefs: removeMediaRefs,
+            logInfo: (message) => legacyProfileLog.info(message),
+            logWarn: (message, err) => legacyProfileLog.warn(message, err),
+          },
+          userId,
+        );
+      })().catch((err) => {
+        dbClientLog.warn('legacy profile override cleanup threw (non-fatal)', err);
+      });
       // 价格表作用域依赖当前 localDb 用户与 provider-secret owner;必须等用户 DB ready 后再预热。
       void prewarmModelPricing();
       // 自定义供应商配置在按 userId 切片的 localDb 里：DB ready / 换账号后重新加载并

@@ -1,17 +1,20 @@
 /**
  * clientEndpointsService 单测(规则 14:依赖注入 + 内存 harness)。
  *
- * 校验/合并语义在 @lizi/maker-shared 侧已覆盖;这里只测 desktop 宿主层:
- * 烘焙 map 组装、阻断式重试循环(失败 → prompt → 重试/退出,无静默降级)、
- * sendSync IPC 形状、init 前 getter 的烘焙值旁路。
+ * 校验语义(全字段必填/协议白名单/allowHttp)在 @lizi/maker-shared 侧已覆盖;
+ * 这里只测 desktop 宿主层:清单来源解析(resolveEndpointSource 表驱动)、
+ * 阻断式重试循环(失败 → prompt → 重试/退出,无静默降级、无烘焙合并)、
+ * file 模式的 allowHttp 放行、init 前 getter 抛错(启动时序守卫)、sendSync IPC 形状。
  */
+import path from 'node:path';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { CLIENT_ENDPOINT_KEYS } from '@lizi/maker-shared/client-endpoints';
+import { TEST_CLIENT_ENDPOINTS } from '../../test/vitest/clientEndpointsFixture';
 
 const ipcOn = vi.hoisted(() => vi.fn());
 vi.mock('electron', () => ({
-  app: { getPath: vi.fn(), isPackaged: false, exit: vi.fn() },
+  app: { getPath: vi.fn(), getAppPath: vi.fn(() => '/repo/apps/desktop'), isPackaged: false, exit: vi.fn() },
   dialog: { showMessageBoxSync: vi.fn() },
   ipcMain: { on: ipcOn },
   net: { request: vi.fn() },
@@ -22,12 +25,12 @@ vi.mock('../logger', () => ({
 }));
 
 import {
-  bakedClientEndpoints,
   getClientEndpoint,
   getResolvedClientEndpoints,
   registerClientEndpointsIpc,
   resetClientEndpointsForTest,
   resolveClientEndpointsBlocking,
+  resolveEndpointSource,
   CLIENT_ENDPOINTS_SYNC_CHANNEL,
 } from '../clientEndpointsService';
 
@@ -36,31 +39,87 @@ afterEach(() => {
   ipcOn.mockClear();
 });
 
-const MANIFEST = JSON.stringify({ schemaVersion: 1, apiBaseUrl: 'https://remote.example.com' });
+const FULL_MANIFEST = JSON.stringify({
+  schemaVersion: 1,
+  apiBaseUrl: 'https://api.remote.example.com',
+  authApiBaseUrl: 'https://auth.remote.example.com',
+  deviceLinkApiBaseUrl: 'https://device.remote.example.com',
+  oauthBrokerApiBaseUrl: 'https://oauth.remote.example.com',
+  ossApiBaseUrl: 'https://oss.remote.example.com',
+  heartbeatUrl: 'https://heartbeat.remote.example.com',
+  slackHookWsUrl: 'wss://hook.remote.example.com',
+  websiteUrl: 'https://www.remote.example.com',
+  xdGatewayBaseUrl: 'https://gateway.remote.example.com',
+  cdnBaseUrl: 'https://cdn.remote.example.com/app',
+});
 
-describe('bakedClientEndpoints', () => {
-  // 具体值随测试环境注入的 VITE_* 变化(vitest 可能带真实生产 env),
-  // 只断言环境无关的不变量:全键齐备、核心端点非空(dev fallback 兜底)。
-  it('全键齐备,核心端点非空', () => {
-    const baked = bakedClientEndpoints();
-    expect(Object.keys(baked).sort()).toEqual([...CLIENT_ENDPOINT_KEYS].sort());
-    expect(baked.apiBaseUrl).toBeTruthy();
-    expect(baked.authApiBaseUrl).toBeTruthy();
-    expect(baked.deviceLinkApiBaseUrl).toBeTruthy();
+/** localhost http 清单(local 模式 endpoint.local.json 形态)。 */
+const LOCAL_MANIFEST = JSON.stringify({
+  ...(JSON.parse(FULL_MANIFEST) as Record<string, unknown>),
+  apiBaseUrl: 'http://localhost:3333',
+  authApiBaseUrl: 'http://localhost:3344',
+  deviceLinkApiBaseUrl: 'http://localhost:3335',
+});
+
+describe('resolveEndpointSource(清单来源三选一)', () => {
+  const REPO_ROOT = path.join('/repo');
+  const DEFAULT_FILE = path.join(REPO_ROOT, 'config', 'endpoint.json');
+
+  it.each([
+    ['packaged 恒 CDN', { isPackaged: true, env: {} }, { kind: 'cdn' }],
+    [
+      'packaged 下 dev 覆写全部忽略',
+      {
+        isPackaged: true,
+        env: { XDT_ENDPOINTS_CDN: '1', XDT_ENDPOINT_MANIFEST_FILE: '/x/y.json' },
+      },
+      { kind: 'cdn' },
+    ],
+    ['dev 默认读仓内 cn 正本', { isPackaged: false, env: {} }, { kind: 'file', filePath: DEFAULT_FILE }],
+    [
+      'dev + XDT_ENDPOINTS_CDN=1 走 CDN',
+      { isPackaged: false, env: { XDT_ENDPOINTS_CDN: '1' } },
+      { kind: 'cdn' },
+    ],
+    [
+      'dev + 开关非 1 不生效',
+      { isPackaged: false, env: { XDT_ENDPOINTS_CDN: 'true' } },
+      { kind: 'file', filePath: DEFAULT_FILE },
+    ],
+    [
+      'dev + 文件覆写(绝对路径原样)',
+      { isPackaged: false, env: { XDT_ENDPOINT_MANIFEST_FILE: path.join('/tmp', 'e.json') } },
+      { kind: 'file', filePath: path.resolve(REPO_ROOT, path.join('/tmp', 'e.json')) },
+    ],
+    [
+      'dev + 文件覆写(相对路径以仓根为基准)',
+      { isPackaged: false, env: { XDT_ENDPOINT_MANIFEST_FILE: 'config/endpoint.local.json' } },
+      // path.resolve 在 Windows 上会给 '/repo' 补当前盘符,期望值同样经 resolve 归一。
+      { kind: 'file', filePath: path.resolve(REPO_ROOT, 'config', 'endpoint.local.json') },
+    ],
+    [
+      'dev + CDN 开关优先于文件覆写',
+      {
+        isPackaged: false,
+        env: { XDT_ENDPOINTS_CDN: '1', XDT_ENDPOINT_MANIFEST_FILE: 'config/endpoint.local.json' },
+      },
+      { kind: 'cdn' },
+    ],
+  ] as const)('%s', (_label, input, expected) => {
+    expect(resolveEndpointSource({ ...input, repoRoot: REPO_ROOT })).toEqual(expected);
   });
 });
 
-describe('resolveClientEndpointsBlocking(阻断循环)', () => {
-  it('首次成功:不进 prompt,清单字段覆盖、缺省回退烘焙', async () => {
+describe('resolveClientEndpointsBlocking(阻断循环,清单即唯一事实源)', () => {
+  it('首次成功:不进 prompt,所有值来自清单', async () => {
     const promptRetry = vi.fn();
     const result = await resolveClientEndpointsBlocking({
-      bakedDefaults: bakedClientEndpoints(),
-      fetchManifestText: async () => MANIFEST,
+      fetchManifestText: async () => FULL_MANIFEST,
       promptRetry,
       exitApp: vi.fn(),
     });
-    expect(result?.apiBaseUrl).toBe('https://remote.example.com');
-    expect(result?.websiteUrl).toBe(bakedClientEndpoints().websiteUrl);
+    expect(result?.apiBaseUrl).toBe('https://api.remote.example.com');
+    expect(result?.cdnBaseUrl).toBe('https://cdn.remote.example.com/app');
     expect(promptRetry).not.toHaveBeenCalled();
   });
 
@@ -68,11 +127,10 @@ describe('resolveClientEndpointsBlocking(阻断循环)', () => {
     const fetchManifestText = vi
       .fn<(timeoutMs: number) => Promise<string | null>>()
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(MANIFEST);
+      .mockResolvedValueOnce(FULL_MANIFEST);
     const promptRetry = vi.fn().mockReturnValue('retry');
     const exitApp = vi.fn();
     const result = await resolveClientEndpointsBlocking({
-      bakedDefaults: bakedClientEndpoints(),
       fetchManifestText,
       promptRetry,
       exitApp,
@@ -80,21 +138,22 @@ describe('resolveClientEndpointsBlocking(阻断循环)', () => {
     expect(promptRetry).toHaveBeenCalledTimes(1);
     expect(promptRetry).toHaveBeenCalledWith('fetch-failed');
     expect(fetchManifestText).toHaveBeenCalledTimes(2);
-    expect(result?.apiBaseUrl).toBe('https://remote.example.com');
+    expect(result?.apiBaseUrl).toBe('https://api.remote.example.com');
     expect(exitApp).not.toHaveBeenCalled();
   });
 
-  it('清单非法同样阻断(坏清单不降级),prompt 带 reason', async () => {
+  it('清单缺字段同样阻断(无烘焙回退),prompt 带 reason', async () => {
+    const manifest = JSON.parse(FULL_MANIFEST) as Record<string, unknown>;
+    delete manifest.heartbeatUrl;
     const promptRetry = vi.fn().mockReturnValue('exit');
     const exitApp = vi.fn();
     const result = await resolveClientEndpointsBlocking({
-      bakedDefaults: bakedClientEndpoints(),
-      fetchManifestText: async () => '{"schemaVersion":1,"apiBaseUrl":"ftp://bad"}',
+      fetchManifestText: async () => JSON.stringify(manifest),
       promptRetry,
       exitApp,
     });
     expect(result).toBeNull();
-    expect(promptRetry).toHaveBeenCalledWith('invalid-protocol:apiBaseUrl');
+    expect(promptRetry).toHaveBeenCalledWith('missing-field:heartbeatUrl');
     expect(exitApp).toHaveBeenCalledTimes(1);
   });
 
@@ -102,7 +161,6 @@ describe('resolveClientEndpointsBlocking(阻断循环)', () => {
     const promptRetry = vi.fn().mockReturnValue('exit');
     const exitApp = vi.fn();
     const result = await resolveClientEndpointsBlocking({
-      bakedDefaults: bakedClientEndpoints(),
       fetchManifestText: async () => {
         throw new Error('boom');
       },
@@ -112,27 +170,52 @@ describe('resolveClientEndpointsBlocking(阻断循环)', () => {
     expect(result).toBeNull();
     expect(exitApp).toHaveBeenCalledTimes(1);
   });
+
+  it('localhost http 清单:默认拒绝(CDN 路径零放松),allowHttp(file 模式)放行', async () => {
+    const rejected = await resolveClientEndpointsBlocking({
+      fetchManifestText: async () => LOCAL_MANIFEST,
+      promptRetry: vi.fn().mockReturnValue('exit'),
+      exitApp: vi.fn(),
+    });
+    expect(rejected).toBeNull();
+
+    const accepted = await resolveClientEndpointsBlocking({
+      fetchManifestText: async () => LOCAL_MANIFEST,
+      promptRetry: vi.fn(),
+      exitApp: vi.fn(),
+      allowHttp: true,
+    });
+    expect(accepted?.apiBaseUrl).toBe('http://localhost:3333');
+  });
+
+  it('文件缺失(读取返回 null)进同一条阻断链路', async () => {
+    const promptRetry = vi.fn().mockReturnValue('exit');
+    const result = await resolveClientEndpointsBlocking({
+      fetchManifestText: async () => null, // file 模式读不到文件即返回 null
+      promptRetry,
+      exitApp: vi.fn(),
+      allowHttp: true,
+    });
+    expect(result).toBeNull();
+    expect(promptRetry).toHaveBeenCalledWith('fetch-failed');
+  });
 });
 
 describe('getter / IPC', () => {
-  it('init 之前(dev / smoke 旁路)getClientEndpoint 返回烘焙值', () => {
-    expect(getClientEndpoint('apiBaseUrl')).toBe(bakedClientEndpoints().apiBaseUrl);
+  it('init 之前 getClientEndpoint / getResolvedClientEndpoints 直接抛错(启动时序守卫)', () => {
+    expect(() => getClientEndpoint('apiBaseUrl')).toThrow(/not initialized/);
+    expect(() => getResolvedClientEndpoints()).toThrow(/not initialized/);
   });
 
   it('注入解析结果后,sendSync handler 返回完整 map', () => {
-    resetClientEndpointsForTest({
-      ...bakedClientEndpoints(),
-      websiteUrl: 'https://site.example.com',
-    });
+    const resolved = { ...TEST_CLIENT_ENDPOINTS, websiteUrl: 'https://site.example.com' };
+    resetClientEndpointsForTest(resolved);
     registerClientEndpointsIpc();
     expect(ipcOn).toHaveBeenCalledWith(CLIENT_ENDPOINTS_SYNC_CHANNEL, expect.any(Function));
     const handler = ipcOn.mock.calls[0][1] as (event: { returnValue?: unknown }) => void;
     const event: { returnValue?: unknown } = {};
     handler(event);
-    expect(event.returnValue).toMatchObject({
-      websiteUrl: 'https://site.example.com',
-      apiBaseUrl: bakedClientEndpoints().apiBaseUrl,
-    });
+    expect(event.returnValue).toMatchObject({ websiteUrl: 'https://site.example.com' });
     expect(getResolvedClientEndpoints().websiteUrl).toBe('https://site.example.com');
     expect(getClientEndpoint('websiteUrl')).toBe('https://site.example.com');
   });

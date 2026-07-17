@@ -168,7 +168,7 @@
         "unlockSubmit": "解锁",
         "generateTitle": "生成新的 SSH 密钥",
         "nameLabel": "名字(可选)",
-        "nameHint": "保存为 ~/.ssh/<名字>。默认 \"xdt-maker\",有重名时自动加 -1 / -2 ...",
+        "nameHint": "保存为 ~/.ssh/<名字>。默认 \"cindy\",有重名时自动加 -1 / -2 ...",
         "encryptLabel": "用 passphrase 加密(推荐)",
         "encryptHint": "passphrase 现在输入一次,然后 ssh-add 会把解密后的密钥缓存在系统 ssh-agent 里。macOS 还会把 passphrase 存到 Keychain,重启后自动恢复。",
         "passLabel": "Passphrase",
@@ -507,13 +507,13 @@
         "open": "编辑名字和头像",
         "title": "编辑个人资料",
         "nameLabel": "名字",
-        "nameHint": "留空则恢复默认名字",
+        "nameHint": "留空则保持当前名字",
         "changeAvatar": "更换头像",
         "resetAvatar": "恢复默认头像",
         "save": "保存",
         "cancel": "取消",
-        "localOnlyHint": "自定义的名字和头像仅在本设备生效。",
-        "avatarInvalid": "请选择 5MB 以内的 PNG / JPG / GIF / WebP 图片",
+        "syncHint": "名字和头像保存在你的账号中,所有设备同步生效。",
+        "avatarInvalid": "请选择 5MB 以内的 PNG / JPG / WebP 图片",
         "saveFailed": "保存失败,请重试"
       }
     },
@@ -1128,7 +1128,7 @@
     "gitSafety": {
       "title": "Git 安全",
       "autoSnapshotTitle": "Git 安全保存点",
-      "description": "Agent 修改后自动创建 XDT 保存点 commit。只有开启后才显示 Codex rewind 入口。",
+      "description": "Agent 修改后自动创建保存点 commit。只有开启后才显示 Codex rewind 入口。",
       "toggleAria": "切换 Git 安全保存点",
       "saveFailed": "保存 Git 安全设置失败"
     },
@@ -1414,7 +1414,7 @@
           "openForLoginFailed": "打开浏览器失败"
         },
         "openForLogin": "打开 Agent 专用浏览器",
-        "openForLoginHint": "这是 agent 专用的独立浏览器：基于你本机的 Chrome，但用一份独立配置（右上角显示为 XDMaker），不会动你日常 Chrome 的标签页、书签和登录态。agent 会在这里替你打开网页、阅读内容、点击和截图。需要登录的网站，点上面「打开 Agent 专用浏览器」手动登录一次即可——登录态会长期保留，之后 agent 就能以你的身份继续操作。"
+        "openForLoginHint": "这是 agent 专用的独立浏览器：基于你本机的 Chrome，但用一份独立配置（右上角显示为 Cindy），不会动你日常 Chrome 的标签页、书签和登录态。agent 会在这里替你打开网页、阅读内容、点击和截图。需要登录的网站，点上面「打开 Agent 专用浏览器」手动登录一次即可——登录态会长期保留，之后 agent 就能以你的身份继续操作。"
       },
       "browserBackend": {
         "title": "浏览器自动化目标",
@@ -1605,7 +1605,7 @@
           "description": "跨 agent 的长期记忆，让上下文在会话之间持续"
         },
         "xdt_helper": {
-          "name": "XDT Helper",
+          "name": "Cindy Helper",
           "description": "宿主能力自省 —— 告诉 agent 当前可用的工具与模型"
         },
         "collab": {
@@ -1668,7 +1668,7 @@
           "workspaces": "工作目录映射(别名 → 本地绝对路径)",
           "workspacesBoundCount_one": "已绑定 {{count}} 个本地工作目录",
           "workspacesBoundCount_other": "已绑定 {{count}} 个本地工作目录",
-          "aliasPlaceholder": "别名, 如 xdmaker",
+          "aliasPlaceholder": "别名, 如 my-server",
           "addWorkspace": "添加工作目录",
           "removeWorkspace": "删除此工作目录",
           "changeDir": "点击更换目录(别名与偏好保留)"
@@ -2391,6 +2391,15 @@
       "REGION_MISMATCH": "登录服务区域与当前客户端不匹配"
     }
   },
+  "legacyMigration": {
+    "title": "迁移旧版本数据",
+    "description": "检测到本机存有旧版本的数据。历史会话和媒体文件将迁移到新的数据位置。若旧版应用正在运行，请先完全退出它；迁移期间请保持 {{appName}} 打开。注意：已授权的第三方密钥与凭证无法随数据迁移，迁移完成后需要在设置中重新授权或重新填写。",
+    "confirm": "确定",
+    "migrating": "正在迁移数据，请稍候…",
+    "failedTitle": "迁移未完成",
+    "failedDescription": "本次数据迁移未能完成。你可以继续使用 {{appName}}，下次登录时会自动重试。",
+    "continue": "继续"
+  },
   "migration": {
     "title": "正在为你下载历史聊天数据",
     "subtitle": "首次本地化需要一些时间，请保持窗口打开",
@@ -3039,7 +3048,6 @@
     },
     "user": {
       "settingsLink": "设置, 当前用户: {{name}}",
-      "adminBadge": "管理员",
       "viewReleaseNotes": "查看版本日志",
       "reopenUpdateBanner": "有更新待重启,点击查看"
     },
@@ -5710,7 +5718,6 @@
       "openFileFailed": "无法在系统中打开文件",
       "emptyResponse": "模型返回了空响应,请重试。(本轮未产出任何内容,常见于模型网关在大上下文 / 高负载下返回空流)",
       "turnFailed": "任务执行失败（模型未返回错误详情），请重试。",
-      "requestFailed": "请求失败",
       "sendFailed": "发送失败：{{message}}",
       "steerNoActiveTurn": "当前没有正在执行的任务，无法插话",
       "steerRequiresRestart": "插话功能需要重启桌面端后生效；这条消息未被清空",

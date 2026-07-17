@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   buildMobileSessionDeepLink,
   buildMobileSessionMessageDeepLink,
-  buildSessionCopyTargets,
   extractSessionLinkIds,
   parseSessionDeepLinkUrl,
   shortSessionId,
@@ -13,37 +12,6 @@ describe('session links', () => {
     expect(buildMobileSessionDeepLink('session/with space')).toBe(
       'cindy://session/session%2Fwith%20space',
     );
-  });
-
-  it('builds stable copy targets for session diagnostics', () => {
-    expect(buildSessionCopyTargets({
-      id: 's1',
-      sdkSessionId: 'sdk-1',
-    })).toEqual([
-      {
-        key: 'deepLink',
-        label: '深度链接',
-        testID: 'session.copy.deepLink',
-        value: 'cindy://session/s1',
-      },
-      {
-        key: 'xdtId',
-        label: 'XDT ID',
-        testID: 'session.copy.xdtId',
-        value: 's1',
-      },
-      {
-        key: 'sdkId',
-        label: 'Agent ID',
-        testID: 'session.copy.sdkId',
-        value: 'sdk-1',
-      },
-    ]);
-
-    expect(buildSessionCopyTargets({
-      id: 's1',
-      sdkSessionId: null,
-    })[2]).toMatchObject({ key: 'sdkId', value: null });
   });
 
   it('parses session deep links with optional message anchor', () => {

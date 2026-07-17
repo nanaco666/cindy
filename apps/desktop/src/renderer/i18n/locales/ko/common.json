@@ -168,7 +168,7 @@
         "unlockSubmit": "잠금 해제",
         "generateTitle": "새 SSH 키 생성",
         "nameLabel": "이름(선택)",
-        "nameHint": "~/.ssh/<name> 에 저장. 기본값은 \"xdt-maker\", 충돌 시 -1 / -2 ... 자동 부여.",
+        "nameHint": "~/.ssh/<name> 에 저장. 기본값은 \"cindy\", 충돌 시 -1 / -2 ... 자동 부여.",
         "encryptLabel": "passphrase 로 암호화(권장)",
         "encryptHint": "passphrase 는 지금 한 번만 입력하면 ssh-add 가 복호화한 키를 시스템 ssh-agent 에 캐시합니다. macOS 는 Keychain 에도 저장되어 재부팅 후 자동 복원됩니다.",
         "passLabel": "Passphrase",
@@ -507,13 +507,13 @@
         "open": "이름과 아바타 편집",
         "title": "프로필 편집",
         "nameLabel": "이름",
-        "nameHint": "비워 두면 기본 이름으로 돌아갑니다",
+        "nameHint": "비워 두면 현재 이름이 유지됩니다",
         "changeAvatar": "아바타 변경",
         "resetAvatar": "기본 아바타로 복원",
         "save": "저장",
         "cancel": "취소",
-        "localOnlyHint": "사용자 지정 이름과 아바타는 이 기기에서만 적용됩니다.",
-        "avatarInvalid": "5MB 이하의 PNG / JPG / GIF / WebP 이미지를 선택해 주세요",
+        "syncHint": "이름과 아바타는 계정에 저장되어 모든 기기에서 동기화됩니다.",
+        "avatarInvalid": "5MB 이하의 PNG / JPG / WebP 이미지를 선택해 주세요",
         "saveFailed": "저장에 실패했습니다. 다시 시도해 주세요"
       }
     },
@@ -1128,7 +1128,7 @@
     "gitSafety": {
       "title": "Git 안전",
       "autoSnapshotTitle": "Git 안전 저장점",
-      "description": "Agent 편집 후 XDT 저장점 commit을 자동으로 만듭니다. 켜져 있을 때만 Codex rewind를 표시합니다.",
+      "description": "Agent 편집 후 저장점 commit을 자동으로 만듭니다. 켜져 있을 때만 Codex rewind를 표시합니다.",
       "toggleAria": "Git 안전 저장점 전환",
       "saveFailed": "Git 안전 설정 저장에 실패했습니다"
     },
@@ -1414,7 +1414,7 @@
           "openForLoginFailed": "브라우저를 열지 못했습니다"
         },
         "openForLogin": "Agent 전용 브라우저 열기",
-        "openForLoginHint": "에이전트 전용 독립 브라우저입니다. 설치된 Chrome을 사용하지만 프로필이 완전히 분리되어 있어(오른쪽 위에 “XDMaker”로 표시) 평소 Chrome의 탭·북마크·로그인 상태에 전혀 영향을 주지 않습니다. 에이전트가 이 브라우저에서 사용자를 대신해 페이지를 열고 읽고 클릭하고 스크린샷을 찍습니다. 로그인이 필요한 사이트는 위의 “Agent 전용 브라우저 열기”에서 한 번 로그인하면 로그인 상태가 유지되어, 이후 에이전트가 사용자 명의로 계속 작업할 수 있습니다."
+        "openForLoginHint": "에이전트 전용 독립 브라우저입니다. 설치된 Chrome을 사용하지만 프로필이 완전히 분리되어 있어(오른쪽 위에 “Cindy”로 표시) 평소 Chrome의 탭·북마크·로그인 상태에 전혀 영향을 주지 않습니다. 에이전트가 이 브라우저에서 사용자를 대신해 페이지를 열고 읽고 클릭하고 스크린샷을 찍습니다. 로그인이 필요한 사이트는 위의 “Agent 전용 브라우저 열기”에서 한 번 로그인하면 로그인 상태가 유지되어, 이후 에이전트가 사용자 명의로 계속 작업할 수 있습니다."
       },
       "browserBackend": {
         "title": "자동화 브라우저 대상",
@@ -1605,7 +1605,7 @@
           "description": "세션 간 컨텍스트를 유지하는 agent 공통 장기 메모리"
         },
         "xdt_helper": {
-          "name": "XDT Helper",
+          "name": "Cindy Helper",
           "description": "호스트 기능 공개 — 사용 가능한 도구와 모델을 agent에 알림"
         },
         "collab": {
@@ -1668,7 +1668,7 @@
           "workspaces": "작업 디렉터리 매핑(별칭 → 로컬 절대 경로)",
           "workspacesBoundCount_one": "로컬 작업 디렉터리 {{count}}개 바인딩됨",
           "workspacesBoundCount_other": "로컬 작업 디렉터리 {{count}}개 바인딩됨",
-          "aliasPlaceholder": "별칭, 예: xdmaker",
+          "aliasPlaceholder": "별칭, 예: my-server",
           "addWorkspace": "작업 디렉터리 추가",
           "removeWorkspace": "이 작업 디렉터리 삭제",
           "changeDir": "클릭하여 디렉터리 변경(별명과 설정은 유지)"
@@ -2391,6 +2391,15 @@
       "REGION_MISMATCH": "로그인 서비스 지역이 이 앱과 일치하지 않습니다."
     }
   },
+  "legacyMigration": {
+    "title": "이전 버전 데이터 마이그레이션",
+    "description": "이 기기에서 이전 버전의 데이터가 발견되었습니다. 채팅 기록과 미디어 파일을 새 데이터 위치로 마이그레이션합니다. 이전 버전 앱이 실행 중이라면 먼저 완전히 종료해 주세요. 마이그레이션 중에는 {{appName}}을(를) 닫지 마세요.참고: 승인된 서드파티 키와 자격 증명은 마이그레이션할 수 없습니다. 마이그레이션 완료 후 설정에서 다시 승인하거나 다시 입력해야 합니다.",
+    "confirm": "확인",
+    "migrating": "데이터를 마이그레이션하는 중입니다. 잠시 기다려 주세요…",
+    "failedTitle": "마이그레이션이 완료되지 않았습니다",
+    "failedDescription": "이번에는 데이터 마이그레이션을 완료하지 못했습니다. {{appName}}은(는) 계속 사용할 수 있으며, 다음 로그인 시 자동으로 다시 시도합니다.",
+    "continue": "계속"
+  },
   "migration": {
     "title": "채팅 기록을 다운로드하는 중",
     "subtitle": "최초 로컬화에 시간이 걸립니다. 창을 열어 두세요",
@@ -3039,7 +3048,6 @@
     },
     "user": {
       "settingsLink": "설정, 현재 사용자: {{name}}",
-      "adminBadge": "관리자",
       "viewReleaseNotes": "릴리즈 노트 보기",
       "reopenUpdateBanner": "업데이트 준비됨 — 클릭하여 확인"
     },
@@ -5710,7 +5718,6 @@
       "openFileFailed": "시스템에서 파일을 열 수 없습니다",
       "emptyResponse": "모델이 빈 응답을 반환했습니다. 다시 시도해 주세요. (이번 턴에는 생성된 내용이 없습니다. 큰 컨텍스트나 높은 부하에서 모델 게이트웨이가 빈 스트림을 반환할 때 종종 발생합니다)",
       "turnFailed": "작업 실행에 실패했습니다(모델이 오류 상세 정보를 반환하지 않았습니다). 다시 시도해 주세요.",
-      "requestFailed": "요청 실패",
       "sendFailed": "전송 실패: {{message}}",
       "steerNoActiveTurn": "현재 실행 중인 작업이 없어 끼어들어 보낼 수 없습니다",
       "steerRequiresRestart": "끼어들기 기능은 데스크톱을 재시작해야 적용됩니다. 이 메시지는 지워지지 않았습니다",

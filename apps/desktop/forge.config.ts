@@ -38,6 +38,8 @@ const CINDY_APP_ID = brandAppId(CINDY_REGION);
 const CINDY_UTI_PREFIX = brandBundleIdPrefix(CINDY_REGION);
 /** 可执行文件基名('Cindy' → Cindy.exe / mac Mach-O 名)。 */
 const CINDY_EXE = BRAND_IDENTITY.executableName;
+/** 更新器二进制文件名(cindy-updater.exe;源目录仍叫 xdt-updater/)。 */
+const UPDATER_EXE = `${BRAND_IDENTITY.updaterName}.exe`;
 
 // discord.js is externalized from the main Vite bundle because its circular
 // CommonJS graph crashes when Rollup reorders it. Its dependency tree contains
@@ -421,7 +423,7 @@ const isWin = process.platform === 'win32';
  */
 function buildXdtUpdater(): void {
   if (process.platform !== 'win32') return;
-  console.log('[forge:prePackage] Building xdt-updater.exe (Rust + Tauri)...');
+  console.log(`[forge:prePackage] Building ${UPDATER_EXE} (Rust + Tauri)...`);
 
   const updaterRoot = path.join(__dirname, 'xdt-updater', 'src-tauri');
   if (!fs.existsSync(updaterRoot)) {
@@ -448,8 +450,8 @@ function buildXdtUpdater(): void {
     throw new Error(`[forge] cargo build --release failed with exit code ${r.status}`);
   }
 
-  const builtExe = path.join(updaterRoot, 'target', 'release', 'xdt-updater.exe');
-  const destExe = path.join(__dirname, 'resources', 'xdt-updater.exe');
+  const builtExe = path.join(updaterRoot, 'target', 'release', UPDATER_EXE);
+  const destExe = path.join(__dirname, 'resources', UPDATER_EXE);
   if (!fs.existsSync(builtExe)) {
     throw new Error(`[forge] cargo build succeeded but ${builtExe} is missing`);
   }
@@ -464,7 +466,7 @@ function buildXdtUpdater(): void {
 
   fs.copyFileSync(builtExe, destExe);
   const sizeMb = (fs.statSync(destExe).size / (1024 * 1024)).toFixed(2);
-  console.log(`[forge:prePackage] xdt-updater.exe → ${destExe} (${sizeMb} MB, ${Date.now() - t0}ms)`);
+  console.log(`[forge:prePackage] ${UPDATER_EXE} → ${destExe} (${sizeMb} MB, ${Date.now() - t0}ms)`);
 }
 
 /**
@@ -512,7 +514,7 @@ function patchUpdaterManifest(exePath: string): void {
   ], { stdio: 'inherit' });
   if (r.error) throw new Error(`[forge] mt.exe spawn failed: ${r.error.message}`);
   if (r.status !== 0) throw new Error(`[forge] mt.exe exited ${r.status} when patching manifest`);
-  console.log(`[forge:prePackage] manifest patched into xdt-updater.exe (PCA bypass)`);
+  console.log(`[forge:prePackage] manifest patched into ${UPDATER_EXE} (PCA bypass)`);
 }
 
 /**
@@ -561,7 +563,7 @@ function signPackagedExes(buildPath: string): void {
   // 把它当未知未签名第三方进程拦下,影响"录音时静音"功能。
   const exes = [
     path.join(buildPath, `${CINDY_EXE}.exe`),
-    path.join(buildPath, 'resources', 'xdt-updater.exe'),
+    path.join(buildPath, 'resources', UPDATER_EXE),
     path.join(buildPath, 'resources', 'xdt-helper.exe'),
     path.join(
       buildPath,
@@ -608,6 +610,45 @@ function signPackagedExes(buildPath: string): void {
     });
     if (r.error) throw new Error(`[forge:postPackage] sign.py spawn failed: ${r.error.message}`);
     if (r.status !== 0) throw new Error(`[forge:postPackage] sign.py exited ${r.status} for ${exe}`);
+  }
+}
+
+/**
+ * macOS 打包显示名(与 win32metadata 同构):packaged 后把
+ * .app 的 Info.plist 里 CFBundleName / CFBundleDisplayName 改成 Cindy——
+ * Dock 名、菜单栏粗体标题、Cmd+Tab、系统通知读的都是这两个字段。
+ *
+ * 为什么在 postPackage 改而不是 packagerConfig:electron-packager 在
+ * updatePlistFiles 里先合并 extendInfo、后用 appName/executableName 覆写
+ * CFBundleName / CFBundleDisplayName,extendInfo 改不动这两个键;而给
+ * packagerConfig.name 设 'Cindy' 会连 .app 目录名一起改,踩标识符红线。
+ *
+ * 历史沿革:本步骤诞生于身份翻转前(当时 .app/CFBundleExecutable/bundle id/
+ * userData 均为 xdt-maker 系,这里是唯一的显示名来源)。2026-07-17 身份翻转后
+ * executableName/appBundleId/productName 已全部是 Cindy 系,packager 本身就会把
+ * CFBundleName/CFBundleDisplayName 写成 Cindy——本步骤降级为冗余兜底(Set 幂等,
+ * 防 packager 行为回退),保留无害。正式签名/公证在 release-macos.mjs 里发生在
+ * postPackage 之后,本改动会被签名一起封印,不存在破坏签名问题。
+ */
+function applyMacPackagedDisplayName(buildPath: string, platform: string): void {
+  if (platform !== 'darwin') return;
+  const apps = fs.readdirSync(buildPath).filter((n) => n.endsWith('.app'));
+  for (const appDir of apps) {
+    const plistPath = path.join(buildPath, appDir, 'Contents', 'Info.plist');
+    if (!fs.existsSync(plistPath)) {
+      throw new Error(`[forge:postPackage] Info.plist missing at ${plistPath}`);
+    }
+    for (const key of ['CFBundleName', 'CFBundleDisplayName']) {
+      // packager 必写这两个键,Set 即可;Add 兜底防未来 packager 行为变化。
+      const set = spawnSync('/usr/libexec/PlistBuddy', ['-c', `Set :${key} Cindy`, plistPath]);
+      if (set.status !== 0) {
+        const add = spawnSync('/usr/libexec/PlistBuddy', ['-c', `Add :${key} string Cindy`, plistPath]);
+        if (add.status !== 0) {
+          throw new Error(`[forge:postPackage] PlistBuddy failed to set ${key} in ${plistPath}`);
+        }
+      }
+    }
+    console.log(`[forge:postPackage] mac display name → Cindy (${appDir}/Contents/Info.plist)`);
   }
 }
 
@@ -689,7 +730,7 @@ function extraResourcesForTarget(targetPlatform: string): string[] {
   ];
 
   if (targetPlatform === 'win32') {
-    base.unshift('resources/xdt-helper.exe', 'resources/xdt-updater.exe');
+    base.unshift('resources/xdt-helper.exe', `resources/${UPDATER_EXE}`);
   }
 
   return base;
@@ -1089,7 +1130,7 @@ const config: ForgeConfig = {
   },
   rebuildConfig: {},
   hooks: {
-    // Builds xdt-updater.exe before electron-packager copies resources/ into
+    // Builds cindy-updater.exe before electron-packager copies resources/ into
     // the package — guarantees the shipped updater matches HEAD.
     prePackage: async (_forgeConfig, platform, arch) => {
       const targetPlatform = requestedTargetPlatform();
@@ -1111,6 +1152,7 @@ const config: ForgeConfig = {
         const noticeName = stagePackagedThirdPartyNotices(buildPath, opts.platform);
         console.log(`[forge:postPackage] staged ${noticeName} + restricted component disclosure`);
         signPackagedExes(buildPath);
+        applyMacPackagedDisplayName(buildPath, opts.platform);
       }
     },
   },

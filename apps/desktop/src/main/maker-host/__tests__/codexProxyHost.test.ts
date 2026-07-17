@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { XD_GATEWAY_BASE_URL } from '../../../shared/endpoints';
+import { TEST_XD_GATEWAY_BASE_URL as XD_GATEWAY_BASE_URL } from '../../../test/vitest/clientEndpointsFixture';
 
 type Registry = {
   set(threadId: string, text: string): void;
@@ -58,6 +58,15 @@ vi.mock('../../logger.js', () => ({
 vi.mock('../../usageBroadcaster.js', () => ({
   recordXaiRateLimitSnapshot: mockState.recordXaiRateLimitSnapshot,
 }));
+
+// SUT 链(codex-gateway-config → runtime-configs)运行期读端点清单;单测里没有
+// initClientEndpoints,mock 成 fixture 直读(与 XD_GATEWAY_BASE_URL 断言值同源)。
+vi.mock('../../clientEndpointsService.js', async () => {
+  const { TEST_CLIENT_ENDPOINTS } = await import('../../../test/vitest/clientEndpointsFixture');
+  return {
+    getClientEndpoint: (key: keyof typeof TEST_CLIENT_ENDPOINTS) => TEST_CLIENT_ENDPOINTS[key],
+  };
+});
 
 vi.mock('@lizi/anthropic-compat-proxy', () => ({
   createAnthropicCompatProxy: mockState.createAnthropicCompatProxy,

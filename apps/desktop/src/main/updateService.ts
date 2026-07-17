@@ -26,6 +26,8 @@ import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 
+import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
+
 import { fetchManifest, getBaseUrl, isDev } from './manifestService';
 import type { Manifest } from './manifestService';
 import { download, DownloadError } from './downloader/index';
@@ -47,7 +49,6 @@ import { throwIpcError } from './utils/ipcValidate';
 import { noteExpectedExit } from './startup-diagnostics';
 import { buildMacOSUpdateScript } from './updateScriptMacOS';
 import { disposeAndroidAdb } from './mcp-integrations/android';
-import * as brandMigration from './migration/electronRuntime';
 import { cleanOldUpdateFiles } from './updateArtifacts';
 
 const log = createLogger('updateService');
@@ -226,7 +227,6 @@ async function getAutoRelaunchBlockReasonForCurrentState(): Promise<AutoRelaunch
     isDev: dev,
     status,
     isRelaunching: relaunching,
-    requiresUserConfirmation: brandMigration.isMigrationRelaunchReady(),
     hasBusyTasks: hasBusyTasksNow,
     idleTimeSeconds: readSystemIdleTimeSeconds(),
     idleState: readSystemIdleState(),
@@ -500,13 +500,14 @@ function incrementApplyAttempts(): void {
 }
 
 /**
- * Sweep stale `xdt-update*` leftovers from %TEMP% older than MAX_AGE_DAYS.
- * Mirrors the Rust updater's `sweep_stale_temp_dirs` (installer.rs:300) but
+ * Sweep stale `cindy-update*` / legacy `xdt-update*` leftovers from %TEMP%
+ * older than MAX_AGE_DAYS.
+ * Mirrors the Rust updater's `sweep_stale_temp_dirs` (installer.rs) but
  * runs in the main process at app startup — so users who never trigger
  * another update still get their disk cleaned up. The Rust sweep only
  * fires when the updater itself is launched; without this counterpart a
  * user on the latest version would keep the post-update workdir + the
- * `xdt-updater-{ts}.exe` binary inside it forever.
+ * `cindy-updater-{ts}.exe` binary inside it forever.
  *
  * Best-effort: any IO failure is swallowed — sweeping is housekeeping, not
  * correctness. 7-day threshold matches the Rust side so the two sweeps
@@ -524,7 +525,7 @@ function sweepStaleUpdateTempDirs(): void {
     return;
   }
   for (const name of entries) {
-    if (!name.startsWith('xdt-update')) continue;
+    if (!name.startsWith('cindy-update') && !name.startsWith('xdt-update')) continue;
     const full = path.join(tmp, name);
     let stat: fs.Stats;
     try {
@@ -568,7 +569,7 @@ function cleanOldFiles(keepFileName: string): void {
 
 /**
  * packaged macOS 从 App Translocation 临时挂载运行时，安装根不是可持久化
- * 身份；普通热更与品牌迁移都必须等用户移入 Applications 后再 stage/apply。
+ * 身份；普通热更必须等用户移入 Applications 后再 stage/apply。
  */
 function isMacAppTranslocated(): boolean {
   return !isDev() && process.platform === 'darwin' && !app.isInApplicationsFolder();
@@ -626,32 +627,11 @@ async function doCheckForUpdate(manifestOverride?: Manifest | null): Promise<Che
     setStatus('checking');
   }
 
-  // 品牌迁移抑制窗口(§3.5):执行器正在推进(in-progress + 锁活)时,过渡版
-  // 不做任何热更动作,避免和迁移执行器抢安装目录/自动重启。
-  if (brandMigration.isHotUpdateSuppressedNow()) {
-    log.info('Brand migration in progress — hot update suppressed this cycle');
-    if (!wasReady) currentStatus = 'idle';
-    return 'idle';
-  }
-
   const manifest = manifestOverride ?? await fetchManifest();
   if (!manifest) {
     log.info('Manifest fetch failed');
     if (!wasReady) currentStatus = 'idle';
     return 'manifest_failed';
-  }
-
-  // 品牌迁移触发:manifest 带 migration 块且本体版本已对齐(= 已是钉住的
-  // 过渡版)→ 交给迁移编排(内置 in-flight 去重与决策跳过)。版本未对齐时
-  // 不触发——先经下面的普通热更抵达过渡版,下一轮再迁(两段式)。
-  if (manifest.app.migration && manifest.app.version === app.getVersion()) {
-    if (isMacAppTranslocated()) {
-      log.warn('Brand migration staging skipped while macOS App Translocation is active');
-    } else {
-      void brandMigration.handleMigrationBlock(manifest.app.migration).catch((err) => {
-        log.error('migration block handling threw:', err);
-      });
-    }
   }
 
   const asset = manifest.app.hotfix;
@@ -885,15 +865,15 @@ function executeUpdateWindows(zipPath: string, theme: 'light' | 'dark'): void {
   // inside the same workdir, so a single rm wipes everything for one attempt.
   // Reason for copying out of resources/ at all: the in-resources copy must
   // itself be replaceable when the updater swaps appDir/* with the new
-  // release. Running it from %TEMP% means resources/xdt-updater.exe is no
+  // release. Running it from %TEMP% means the in-resources updater copy is no
   // longer file-locked. (electron-updater uses the same trick for elevate.exe.)
-  const updaterSrc = path.join(process.resourcesPath, 'xdt-updater.exe');
-  const workDir = path.join(os.tmpdir(), `xdt-update-${ts}`);
+  const updaterSrc = path.join(process.resourcesPath, `${BRAND_IDENTITY.updaterName}.exe`);
+  const workDir = path.join(os.tmpdir(), `cindy-update-${ts}`);
   // Keep `{ts}` on the binary too so a copy-out for support still carries
   // the attempt timestamp in its filename.
-  const updaterRun = path.join(workDir, `xdt-updater-${ts}.exe`);
+  const updaterRun = path.join(workDir, `${BRAND_IDENTITY.updaterName}-${ts}.exe`);
   if (!fs.existsSync(updaterSrc) || fs.statSync(updaterSrc).size === 0) {
-    log.error('xdt-updater.exe missing at %s — cannot apply update', maskPath(updaterSrc));
+    log.error('updater binary missing at %s — cannot apply update', maskPath(updaterSrc));
     handleApplyFailure('updater_missing');
     return;
   }
@@ -920,7 +900,7 @@ function executeUpdateWindows(zipPath: string, theme: 'light' | 'dark'): void {
     '--theme', theme,
     '--workdir', workDir,
   ];
-  log.info('Spawning xdt-updater: %s', maskPath(updaterRun));
+  log.info('Spawning updater: %s', maskPath(updaterRun));
   log.info('  args: %s', JSON.stringify(args));
 
   const child = spawn(updaterRun, args, {
@@ -930,7 +910,7 @@ function executeUpdateWindows(zipPath: string, theme: 'light' | 'dark'): void {
   });
 
   const spawnTimeout = setTimeout(() => {
-    log.error('xdt-updater spawn timed out after 5 s');
+    log.error('updater spawn timed out after 5 s');
     handleApplyFailure('spawn_timeout');
   }, 5_000);
 
@@ -942,7 +922,7 @@ function executeUpdateWindows(zipPath: string, theme: 'light' | 'dark'): void {
 
   child.on('error', (err: NodeJS.ErrnoException) => {
     clearTimeout(spawnTimeout);
-    log.error('xdt-updater spawn failed: %s (code=%s)', err.message, err.code);
+    log.error('updater spawn failed: %s (code=%s)', err.message, err.code);
     handleApplyFailure(err.code ?? 'unknown');
   });
 }
@@ -1013,33 +993,13 @@ function executeRelaunch(theme: 'light' | 'dark'): void {
   }
   isRelaunching = true;
 
-  // 必须先于品牌迁移分支：translocated bundle 的临时路径不能写入 marker
-  // 作为 rollback/uninstall 身份，也不能从该只读位置执行普通热更。
+  // translocated bundle 的临时路径不能写入 updater marker，也不能从该只读位置
+  // 执行普通热更。
   if (isMacAppTranslocated()) {
     log.error('macOS App Translocation detected — update cannot be applied from read-only path');
     isRelaunching = false;
     autoRelaunchInProgress = false;
     setStatus('error', { errorCode: 'translocated' });
-    return;
-  }
-
-  // 品牌迁移执行窗口:staged 的迁移优先于普通热更重启(ready 状态由迁移编排
-  // 广播,readyFilePath 为空)。B′:老 app 进程内安装 + 拉起 Cindy,成功即
-  // forceQuit;失败时回滚 isRelaunching,静默等下轮。
-  if (brandMigration.isMigrationRelaunchReady()) {
-    log.info('executeRelaunch() routed to brand migration window');
-    void brandMigration.executeMigrationRelaunch().then((ok) => {
-      if (!ok) {
-        isRelaunching = false;
-        autoRelaunchInProgress = false;
-        setStatus('error', { errorCode: 'updater_spawn_failed' });
-      }
-    }).catch((err) => {
-      log.error('brand migration relaunch threw:', err);
-      isRelaunching = false;
-      autoRelaunchInProgress = false;
-      setStatus('error', { errorCode: 'updater_spawn_failed' });
-    });
     return;
   }
 
@@ -1080,20 +1040,10 @@ function executeRelaunch(theme: 'light' | 'dark'): void {
 // ── Public API ─────────────────────────────────────────────────────────────
 
 export function initUpdateService(): void {
-  // Best-effort cleanup of >7-day-old `xdt-update*` leftovers in %TEMP%.
+  // Best-effort cleanup of >7-day-old `cindy-update*`/`xdt-update*` leftovers in %TEMP%.
   // Counterpart to the Rust updater's own sweep — covers the case where the
   // user stays on the latest version and never triggers another updater run.
   sweepStaleUpdateTempDirs();
-
-  // 品牌迁移编排的 host 注入:复用热更的 ready banner / 强退 / CDN base。
-  brandMigration.initMigrationRuntime({
-    notifyReady: (version) => {
-      readyVersion = version;
-      setStatus('ready', { version });
-    },
-    forceQuit,
-    getBaseUrl,
-  });
 
   ipcMain.on('update-relaunch', (_event, theme: 'light' | 'dark') => {
     // Defensive default: if an old preload is somehow loaded (or theme is
