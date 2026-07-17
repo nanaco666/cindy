@@ -57,7 +57,7 @@ describe('SessionCard review regressions', () => {
     // 时间固定在底部 meta 行右端(ml-auto),不再依赖 overlay/block 双态测量。
     expect(sessionCardSource).not.toContain('cardTimeLayout');
     expect(sessionCardSource).toContain('{cardTimeText}');
-    expect(sessionCardSource).toContain('className="ml-auto shrink-0"');
+    expect(sessionCardSource).toContain('ml-auto shrink-0'); // E1D 侧栏层级:time 色 conditional via cn,ml-auto shrink-0 保留
   });
 
   it('keeps running card previews stable instead of streaming compact activity text', () => {

@@ -94,7 +94,9 @@ const overrides = {
   'settings-menu-bg-selected': '#2F2D2D', // menu selected
   'settings-source-link': '#93C5FD', // 可访问链接蓝
   'settings-theme-auto-dark': '#2A2828', // Auto 预览 dark 固定
-  'sidebar-action-icon': '216.0 4.1% 75.9%', // AA action icon
+  'sidebar-action-icon': '0 0% 43.5%', // E1D 侧栏层级:二级暗灰 #6F6F6F(时间戳/RemoteProjectIcon)
+  'cmd-palette-item-meta': '#6F6F6F', // E1D 侧栏层级:二级暗灰(分组标签/meta)
+  'sidebar-item-active-foreground': '#D4D4D4', // E1D 选中胶囊反白前景(近白)
   'sidebar-item-active': '352.1 76.6% 36.9%', // E1D C 类裁决 4:dark 深红 #A61629(light 保持红)
   'splash-bg': '0.0 2.4% 16.1%', // 背景 -> HSL
   'splash-text': '216.0 4.1% 75.9%', // AA splash text
@@ -123,7 +125,7 @@ const overrides = {
   'sidebar-border': '0.0 0.0% 26.3%', // alias closure: border
   'sidebar-item-hover': '0.0 2.2% 18.0%', // alias closure: hover
   'sidebar-search-bg': '0.0 2.4% 16.1%', // alias closure: surface
-  'sidebar-muted': '216.0 4.1% 75.9%', // alias closure: tertiary
+  'sidebar-muted': '0 0% 43.5%', // E1D 侧栏层级:二级暗灰 #6F6F6F(行首图标普通态)
   'surface-translucent-sidebar': 'rgba(18, 15, 15, 0.85)', // E4D R1 模式1
   'surface-translucent-main': '#2A2828', // E4D 主面板:用户勘误 2026-07-17 撤销毛玻璃,改不透明等价 surface(原 rgba(18,15,15,0.85))
   'surface-translucent-overlay': 'rgba(37, 35, 35, 0.80)', // E4D R1 模式3

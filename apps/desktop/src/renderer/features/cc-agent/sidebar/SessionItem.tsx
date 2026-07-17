@@ -632,7 +632,7 @@ export const SessionItem = memo(function SessionItem({
         // 用 ProjectAction 同款瞬时反馈,跟 Cursor / Codex sidebar 的体感一致。
         'text-sm font-medium text-left cursor-pointer',
         isActive
-          ? 'bg-sidebar-item-active text-foreground'
+          ? 'bg-sidebar-item-active text-sidebar-item-active-foreground'
           : isSelected
             ? 'bg-[var(--chat-input-chip-bg)] text-foreground'
             : 'text-foreground hover:bg-sidebar-item-hover',
@@ -711,7 +711,7 @@ export const SessionItem = memo(function SessionItem({
               size={12}
               strokeWidth={1.8}
               connectionStatus={remoteIconConnectionStatus}
-              className="text-sidebar-action-icon"
+              className={cn(isActive ? 'text-sidebar-item-active-foreground' : 'text-sidebar-action-icon')}
             />
           )}
         </span>
@@ -802,7 +802,7 @@ export const SessionItem = memo(function SessionItem({
                 title={formatSidebarTimeAbsolute(activityIso)}
                 className={cn(
                   'min-w-0 truncate text-right text-xs font-medium tabular-nums',
-                  'text-sidebar-action-icon',
+                  isActive ? 'text-sidebar-item-active-foreground' : 'text-sidebar-action-icon',
                 )}
               >
                 {formatSidebarTime(activityIso, t)}

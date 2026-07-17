@@ -713,5 +713,11 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 - **C 类裁决**:confirm(普通中性,danger 另设)、perm-allow(中性,警示橙 chip)、primary(中性)、sidebar-item-active(light 红胶囊/dark 深红)、migration-bar-fill(保留红)、drop-overlay(保留红10%)、brand-login-cta(不动);
 - **中性按钮四态**:light 底`#3C3F43`/字`#FCFCFC`、hover`#2E3237`、pressed`#25282C`;dark 底`#EEEEEE`/字`#252222`、hover`#E2E2E2`、pressed`#D4D4D4`。
 - **send-btn 族纳入值表(E1D 扩,lead 裁决 2026-07-17)**:`send-btn-bg`(default alias `--accent-cta-bg`)/`-icon`/`-hover-bg`/`-pressed-bg`/`-disabled-bg`/`-disabled-icon` CINDY override 全族走上述四态反相中性 + disabled 灰 `#444242`/`#585555`(R4 D1 实证);hover/pressed 为 E1D 新增 token(default 同 bg,默认皮肤维持 opacity-85 hover,膘叔 E3 组件层消费 var() 即全局生效);全族入 cindyDecisionData REQUIRED_IDS + CINDY_EXPECTED,③ 断言守。
+- **侧栏颜色层级整改(E1D 扩,用户并排指错 2026-07-17,lead 钉死 light/dark 同套)**:
+  - 正文(会话标题)= `text-foreground`(=`text-primary` light `#3C3F43`/dark `#D4D4D4`,不动);
+  - 二级暗灰(行首图标普通态/时间戳/meta/分组标签)= light `#9A9DA3`/dark `#6F6F6F`(与 `text-secondary` 同值);CINDY override `sidebar-muted`/`sidebar-action-icon`(HSL `220.0 4.7% 62.2%`/`0 0% 43.5%`)+ 新增 `cmd-palette-item-meta` CINDY override(hex);
+  - 选中胶囊 = `sidebar-item-active`(light `#DF0C27`/dark `#A61629`,E1D 第 4 项裁决)反白前景 = 新增 `sidebar-item-active-foreground` token(light `#FCFCFC`/dark `#D4D4D4`,× 红底 5.33/4.91 ≥4.5);SessionItem/SessionCard isActive 容器+title+time+RemoteProjectIcon 条件切反白;
+  - 强调行(running)行首箭头 = 品牌红系 `sidebar-item-active`(light `#DF0C27`/dark `#A61629`,D4-1 Figma 三态实证),VendorIcon running 从 `status-bar-accent`(橙)切 `hsl(var(--sidebar-item-active))`;**与 E5D 状态点新橙 `#EA6B17` 解耦——状态点归橙,行首强调箭头归红**。
+  - 断言:③ CINDY_EXPECTED 守 4 token 值;⑦ 新增层级断言(二级暗灰 contrast 明显弱于正文 + 选中胶囊前景×红底 ≥4.5)。
 
 三份新 map(`NEUTRAL_PRIMARY_EXPECTED_BY_ID`/`FOREGROUND` + `RED_EXCEPTION_ALLOWED_IDS`)替代旧 `BRAND_RED_*`。D2T ⑤/⑦/⑧ 改用新 map(中性 exact + 红例外白名单 + 中性对比度 + 可证伪)。

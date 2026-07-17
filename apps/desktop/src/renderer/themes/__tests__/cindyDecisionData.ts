@@ -90,6 +90,8 @@ export const CINDY_REQUIRED_COLOR_IDS = [
   'settings-source-link',
   'settings-theme-auto-dark',
   'sidebar-action-icon',
+  'sidebar-item-active-foreground', // E1D 新增(选中胶囊反白前景)
+  'cmd-palette-item-meta', // E1D 侧栏层级(分组标签/meta 二级暗灰)
   'sidebar-item-active',
   'splash-bg',
   'splash-text',
@@ -271,7 +273,9 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'settings-menu-bg-selected': { light: '#F1F1F1', dark: '#2F2D2D' },
   'settings-source-link': { light: '#1D4ED8', dark: '#93C5FD' },
   'settings-theme-auto-dark': { light: '#2A2828', dark: '#2A2828' },
-  'sidebar-action-icon': { light: '222.0 4.6% 42.7%', dark: '216.0 4.1% 75.9%' },
+  'sidebar-action-icon': { light: '220.0 4.7% 62.2%', dark: '0 0% 43.5%' }, // E1D 侧栏层级 #9A9DA3/#6F6F6F
+  'cmd-palette-item-meta': { light: '#9A9DA3', dark: '#6F6F6F' }, // E1D 侧栏二级暗灰
+  'sidebar-item-active-foreground': { light: '#FCFCFC', dark: '#D4D4D4' }, // E1D 选中胶囊反白
   'sidebar-item-active': { light: '352.3 89.8% 46.1%', dark: '352.1 76.6% 36.9%' }, // E1D
   'splash-bg': { light: '0.0 0.0% 92.9%', dark: '0.0 2.4% 16.1%' },
   'splash-text': { light: '222.0 4.6% 42.7%', dark: '216.0 4.1% 75.9%' },
@@ -300,7 +304,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'sidebar-border': { light: '214.3 11.1% 87.6%', dark: '0.0 0.0% 26.3%' },
   'sidebar-item-hover': { light: '0.0 0.0% 94.5%', dark: '0.0 2.2% 18.0%' },
   'sidebar-search-bg': { light: '0.0 0.0% 92.9%', dark: '0.0 2.4% 16.1%' },
-  'sidebar-muted': { light: '222.0 4.6% 42.7%', dark: '216.0 4.1% 75.9%' },
+  'sidebar-muted': { light: '220.0 4.7% 62.2%', dark: '0 0% 43.5%' }, // E1D 侧栏层级 #9A9DA3/#6F6F6F
   'status-badge-fg': { light: '#1F1F1F', dark: '#1F1F1F' }, // §7 必炸点(lead 裁决)
   'surface-translucent-sidebar': { light: 'rgba(246, 246, 246, 0.90)', dark: 'rgba(18, 15, 15, 0.85)' }, // E4D R1 模式1
   'surface-translucent-main': { light: '#EDEDED', dark: '#2A2828' }, // E4D 主面板:用户勘误 2026-07-17 撤销毛玻璃,改不透明等价 surface(原 rgba 半透明)

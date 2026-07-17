@@ -476,14 +476,14 @@ export function SessionCard({
           ? cn(
               // 扁平行(类 Telegram / 对话列表):无描边、无卡片底色,仅 hover/active 行底色。
               'rounded-lg',
-              isActive ? 'bg-sidebar-item-active' : 'hover:bg-sidebar-item-hover',
+              isActive ? 'bg-sidebar-item-active text-sidebar-item-active-foreground' : 'hover:bg-sidebar-item-hover',
             )
           : cn(
               // 卡片:白底 + 描边 + 圆角。多列瀑布由 CardMasonry/DraggableCardColumns
               // 负责分配列;卡片高度随标题/摘要自然变化。
               'rounded-xl bg-[var(--surface-elevated)] border',
               isActive
-                ? 'border-[var(--text-tertiary)] !bg-sidebar-item-active'
+                ? 'border-[var(--text-tertiary)] !bg-sidebar-item-active text-sidebar-item-active-foreground'
                 : 'border-sidebar-border hover:!bg-sidebar-item-hover',
             ),
         // 多选选中态(与列表 SessionItem 同款):内描边软高亮,不与 active 互斥。
@@ -539,7 +539,7 @@ export function SessionCard({
                     'min-w-0 truncate',
                     'text-13 font-semibold leading-[1.3] tracking-[-0.005em]',
                     'transition-[color] duration-500',
-                    isMuted ? 'text-[var(--cmd-palette-item-meta)]' : 'text-foreground',
+                    isActive ? 'text-sidebar-item-active-foreground' : isMuted ? 'text-[var(--cmd-palette-item-meta)]' : 'text-foreground',
                   )}
                 >
                   {titlePrefixNode}
@@ -757,7 +757,7 @@ export function SessionCard({
           <time
             dateTime={activityIso}
             title={formatSidebarTimeAbsolute(activityIso)}
-            className="ml-auto shrink-0"
+            className={cn('ml-auto shrink-0', isActive ? 'text-sidebar-item-active-foreground' : 'text-[var(--cmd-palette-item-meta)]')}
           >
             {cardTimeText}
           </time>

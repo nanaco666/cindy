@@ -368,6 +368,10 @@ registerColor('sidebar-item-active', {
   light: '0 0% 90%',
   dark: '60 2% 17%',
 }, 'Light Gray #e5e5e5 — selected pill');
+registerColor('sidebar-item-active-foreground', {
+  light: 'var(--foreground)',
+  dark: 'var(--foreground)',
+}, 'Selected pill 文字/图标前景(default=foreground 正文;CINDY override 反白 #FCFCFC/#D4D4D4,E1D 侧栏层级)');
 registerColor('sidebar-search-bg', {
   light: 'var(--surface-hsl)',
   dark: 'var(--surface-hsl)',
