@@ -34,6 +34,7 @@ const CN_MANIFEST = JSON.stringify({
   websiteUrl: 'https://website.example.invalid',
   xdGatewayBaseUrl: 'https://gateway.example.invalid',
   cdnBaseUrl: 'https://cdn.example.invalid/app',
+  mobileUpdateBaseUrl: 'https://mobile-update.example.invalid',
 });
 
 test('localhost 四件套覆写,其余字段照抄 cn 正本,返回绝对路径', () => {
@@ -82,6 +83,7 @@ test('生成物能过客户端 parser 的 allowHttp 校验(与仓内正本同一
     'websiteUrl',
     'xdGatewayBaseUrl',
     'cdnBaseUrl',
+    'mobileUpdateBaseUrl',
   ];
   for (const key of requiredKeys) {
     assert.ok(typeof local[key] === 'string' && local[key].length > 0, key);

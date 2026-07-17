@@ -234,7 +234,7 @@ bundleId `com.xd.lizcn` 依赖以下仓库外动作 —— 第 1 项是自建冷
 > 注:上述 2026-07-02 实跑记录是 iOS 自建线**改名前**的产物(当时 bundleId=`com.xd.maker` / profile=`maker_dev`);现已改为 `com.xd.lizcn` / `lizcn_dev`(见 §3、§13),历史记录保留其真实产出值不改写。OTA 端到端(含包内 runtimeVersion 与 `/latest` 一致性)待 mobile-update-server 部署后验。
 
 实现中的细化(相对前文设计):
-- **OTA 服务地址用单一 env `EXPO_PUBLIC_XDT_OTA_URL`**(mobile-update-server 基址)。build 时 `app.config.js` 拼 `updates.url = ${base}/manifest`;运行时 JS 用 `${base}/latest` 做整包发现。`EXPO_PUBLIC_XDT_OTA_SELFHOST=1` 作显式 build 门控。空值即"非自建变体",整包发现整体跳过。
+- **OTA 服务地址 env `EXPO_PUBLIC_XDT_OTA_URL`**(mobile-update-server 基址)。build 时 `app.config.js` 拼 `updates.url = ${base}/manifest`;运行时 JS 用 `${base}/latest` 做整包发现。`EXPO_PUBLIC_XDT_OTA_SELFHOST=1` 作显式 build 门控。空值即"非自建变体",整包发现整体跳过。**2026-07 端点清单接入**:`/latest` 整包发现的基址运行期由端点清单 `mobileUpdateBaseUrl` 覆写(启动闸门回填 `OTA_SERVER_BASE_URL` live binding,清单值优先于烧包 env,已发自建包可远程迁域名);热更 `updates.url` 仍烧原生层不受清单影响,出包时两者仍应同源。
 - **`ali-oss` 已 hoist 到仓库根**,`scripts/shared/oss.mjs` 直接 `require('ali-oss')`,`apps/mobile` **无需**新增依赖。
 - `release-ios.sh` 默认校验 `com.xd.lizcn`;`NPKG_EXPECT_BUNDLE` 仅用于历史包校验。
 - 真实运行需带 `EXPO_PUBLIC_XDT_OTA_URL` 及其它 `EXPO_PUBLIC_*`(建议 `eas env:exec production` 包裹);冷更 `--execute` 需 macOS+Xcode+已装 `lizcn_dev` 描述文件 + NPKG 白名单。

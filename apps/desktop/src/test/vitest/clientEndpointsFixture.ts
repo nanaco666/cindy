@@ -27,4 +27,5 @@ export const TEST_CLIENT_ENDPOINTS: ClientEndpointMap = {
   websiteUrl: 'https://website.test.invalid',
   xdGatewayBaseUrl: TEST_XD_GATEWAY_BASE_URL,
   cdnBaseUrl: TEST_CDN_BASE_URL,
+  mobileUpdateBaseUrl: 'https://mobile-update.test.invalid',
 };

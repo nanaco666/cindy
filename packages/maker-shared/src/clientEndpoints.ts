@@ -67,6 +67,11 @@ export const CLIENT_ENDPOINT_KEYS = [
   'xdGatewayBaseUrl',
   // 更新/hotfix 链的 CDN base(manifest-*.json / hotfix 包 / agent 二进制)。
   'cdnBaseUrl',
+  // 自建线手机整包发现的 mobile-update-server 基址(`${base}/latest`)。仅
+  // mobile 自建变体(IS_OTA_SELFHOST)消费,desktop 与 EAS 线不读;清单值
+  // 优先于烧包的 EXPO_PUBLIC_XDT_OTA_URL,让已发自建包可远程迁域名。
+  // 注意热更通道的 updates.url 仍烧在原生层(expo-updates 架构),不吃本字段。
+  'mobileUpdateBaseUrl',
 ] as const;
 
 export type ClientEndpointKey = (typeof CLIENT_ENDPOINT_KEYS)[number];
@@ -86,6 +91,7 @@ const FIELD_PROTOCOLS: Record<ClientEndpointKey, readonly string[]> = {
   websiteUrl: ['https:'],
   xdGatewayBaseUrl: ['https:'],
   cdnBaseUrl: ['https:'],
+  mobileUpdateBaseUrl: ['https:'],
 };
 
 /** 解析选项;allowHttp 仅供 dev 本地文件路径(endpoint.local.json 等)开启。 */

@@ -18,6 +18,7 @@ const VALID_MANIFEST = {
   websiteUrl: 'https://www.example.com',
   xdGatewayBaseUrl: 'https://gateway.example.com',
   cdnBaseUrl: 'https://cdn.example.com/app',
+  mobileUpdateBaseUrl: 'https://mobile-update.example.com',
 };
 
 describe('parseClientEndpointManifest(全字段必填)', () => {
