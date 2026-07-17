@@ -9,7 +9,6 @@ import { ThemeProvider } from '@/hooks/useTheme';
 import { FontSettingsProvider } from '@/hooks/useFontSettings';
 import { LocaleProvider } from '@/hooks/useLocale';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
-import { UserPreferencesProvider } from '@/contexts/UserPreferencesContext';
 import { EnvCheckProvider, EnvCheckGuard } from '@/contexts/EnvCheckContext';
 import { WorktreeProvider } from '@/contexts/WorktreeContext';
 import { PrRefsProvider } from '@/contexts/PrRefsContext';
@@ -226,28 +225,26 @@ export function App() {
           <ConfirmDialogProvider>
             <EnvCheckProvider>
               <AuthProvider>
-                <UserPreferencesProvider>
-                  <WorktreeProvider>
-                    <PrRefsProvider>
-                      <Tooltip.Provider>
-                        {/* 副窗口(「在新窗口打开」)/ 右侧栏子窗口跳过 splash:env/热更检查
-                            由主窗启动时完成,附属窗 EnvCheckProvider 初始即 'passed',
-                            不需要也不应再走 splash 流程。 */}
-                        {!isSecondaryWindow() && !isSidebarWindow() && <SplashScreen />}
-                        <EnvCheckGuard>
-                          <MakerBootstrap />
-                          <ProjectAutomationNotifyBridge />
-                          <RouterProvider router={router} />
-                        </EnvCheckGuard>
-                        <FindInPageBar />
-                        <ToastContainer />
-                        <BuiltinGhostProvisioningTip />
-                        {/* 首登轻量数据迁移弹窗:只挂主窗(副窗/侧栏窗不重复弹) */}
-                        {!isSecondaryWindow() && !isSidebarWindow() && <LegacyMigrationDialog />}
-                      </Tooltip.Provider>
-                    </PrRefsProvider>
-                  </WorktreeProvider>
-                </UserPreferencesProvider>
+                <WorktreeProvider>
+                  <PrRefsProvider>
+                    <Tooltip.Provider>
+                      {/* 副窗口(「在新窗口打开」)/ 右侧栏子窗口跳过 splash:env/热更检查
+                          由主窗启动时完成,附属窗 EnvCheckProvider 初始即 'passed',
+                          不需要也不应再走 splash 流程。 */}
+                      {!isSecondaryWindow() && !isSidebarWindow() && <SplashScreen />}
+                      <EnvCheckGuard>
+                        <MakerBootstrap />
+                        <ProjectAutomationNotifyBridge />
+                        <RouterProvider router={router} />
+                      </EnvCheckGuard>
+                      <FindInPageBar />
+                      <ToastContainer />
+                      <BuiltinGhostProvisioningTip />
+                      {/* 首登轻量数据迁移弹窗:只挂主窗(副窗/侧栏窗不重复弹) */}
+                      {!isSecondaryWindow() && !isSidebarWindow() && <LegacyMigrationDialog />}
+                    </Tooltip.Provider>
+                  </PrRefsProvider>
+                </WorktreeProvider>
               </AuthProvider>
             </EnvCheckProvider>
           </ConfirmDialogProvider>
