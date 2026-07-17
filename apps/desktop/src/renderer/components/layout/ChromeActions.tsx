@@ -40,6 +40,7 @@ import { useMacFullscreen } from '@/hooks/useMacFullscreen';
 import { cn } from '@/lib/utils';
 
 import type { SidebarPeekTriggerProps } from '@/hooks/useSidebarPeek';
+import { CHROME_ACTIONS_GEOMETRY } from './chromeActionsGeometry';
 
 interface ChromeActionsProps {
   isSidebarCollapsed: boolean;
@@ -60,7 +61,10 @@ export function ChromeActions({
   const { isMac, isFullscreen } = useMacFullscreen();
 
   // 钉死左上角:mac 非全屏让位红绿灯(78),其余 8。不随侧栏状态变化。
-  const x = isMac && !isFullscreen ? 78 : 8;
+  const x =
+    isMac && !isFullscreen
+      ? CHROME_ACTIONS_GEOMETRY.macTrafficLightLeft
+      : CHROME_ACTIONS_GEOMETRY.defaultLeft;
 
   return (
     <div
