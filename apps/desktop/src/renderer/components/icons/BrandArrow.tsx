@@ -23,7 +23,10 @@ export function BrandArrow({ size = 12, className }: BrandArrowProps) {
       className={className}
       aria-hidden
     >
-      <path d="M19 10.7224V13.2775L7 22V15.1088L11.2366 11.9974L7 8.8859V2L19 10.7224Z" fill="currentColor" />
+      <path
+        d="M19 10.7224V13.2775L7 22V15.1088L11.2366 11.9974L7 8.8859V2L19 10.7224Z"
+        fill="currentColor"
+      />
     </svg>
   );
 }
