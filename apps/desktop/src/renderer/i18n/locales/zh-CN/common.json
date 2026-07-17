@@ -1823,6 +1823,7 @@
       "recording": "按下新快捷键…",
       "editAria": "修改 {{name}} 的快捷键",
       "errors": {
+        "saveFailed": "保存快捷键设置失败",
         "notBindable": "该组合键不可用",
         "systemReserved": "该组合键被系统保留",
         "conflict": "与「{{name}}」冲突",

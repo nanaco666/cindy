@@ -44,6 +44,7 @@ import {
 } from '@/lib/appShortcutStore';
 import { getVoiceInputSettings } from '@/hooks/useVoiceInputSettings';
 import { createLogger } from '@/lib/logger';
+import { extractIpcError } from '@/utils/ipcError';
 
 const log = createLogger('settings:keyboard-shortcuts');
 
@@ -65,6 +66,20 @@ export function KeyboardShortcutsSection() {
   >;
   const [recordingId, setRecordingId] = useState<AppShortcutId | null>(null);
   const [error, setError] = useState<RecordingError | null>(null);
+  const [globalError, setGlobalError] = useState<string | null>(null);
+
+  const mutationErrorMessage = useCallback(
+    (err: unknown) => {
+      // Decode the IPC envelope so persistence failures never look successful.
+      const ipcError = extractIpcError(err);
+      return t(
+        ipcError?.code === 'INVALID_PARAMS'
+          ? 'settings.shortcuts.errors.notBindable'
+          : 'settings.shortcuts.errors.saveFailed',
+      );
+    },
+    [t],
+  );
 
   const visibleDefs = APP_SHORTCUT_DEFINITIONS.filter(
     (def) => !def.hiddenInSettings && isAppShortcutAvailableOnPlatform(def.id, platform),
@@ -153,6 +168,7 @@ export function KeyboardShortcutsSection() {
         return;
       }
       setError(null);
+      setGlobalError(null);
       window.electronAPI.appShortcuts
         .setOverride(recordingId, combo)
         .catch((err: unknown) => {
@@ -160,7 +176,7 @@ export function KeyboardShortcutsSection() {
           log.warn('setOverride failed', err);
           setError({
             id: recordingId,
-            message: t('settings.shortcuts.errors.notBindable'),
+            message: mutationErrorMessage(err),
           });
         });
       cancel();
@@ -173,25 +189,34 @@ export function KeyboardShortcutsSection() {
       window.removeEventListener('keydown', handler, true);
       window.removeEventListener('blur', cancel);
     };
-  }, [recordingId, t, validateCombo]);
+  }, [mutationErrorMessage, recordingId, t, validateCombo]);
 
   const handleResetAll = useCallback(() => {
     setError(null);
+    setGlobalError(null);
     setRecordingId(null);
-    void window.electronAPI.appShortcuts.resetAll();
-  }, []);
+    void window.electronAPI.appShortcuts.resetAll().catch((err: unknown) => {
+      setGlobalError(mutationErrorMessage(err));
+    });
+  }, [mutationErrorMessage]);
 
   const handleResetOne = useCallback((id: AppShortcutId) => {
     setError(null);
-    void window.electronAPI.appShortcuts.clearOverride(id);
-  }, []);
+    setGlobalError(null);
+    void window.electronAPI.appShortcuts.clearOverride(id).catch((err: unknown) => {
+      setError({ id, message: mutationErrorMessage(err) });
+    });
+  }, [mutationErrorMessage]);
 
   /** 删除绑定 = override 置 null, 该快捷键禁用 (显示"未设置")。 */
   const handleDeleteOne = useCallback((id: AppShortcutId) => {
     setError(null);
+    setGlobalError(null);
     setRecordingId(null);
-    void window.electronAPI.appShortcuts.setOverride(id, null);
-  }, []);
+    void window.electronAPI.appShortcuts.setOverride(id, null).catch((err: unknown) => {
+      setError({ id, message: mutationErrorMessage(err) });
+    });
+  }, [mutationErrorMessage]);
 
   const iconButtonClass =
     'inline-flex h-[26px] w-[26px] items-center justify-center rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-chip)] transition-colors';
@@ -212,6 +237,7 @@ export function KeyboardShortcutsSection() {
           </button>
         )}
       </div>
+      {globalError && <span className="text-12 text-[var(--error-fg)]">{globalError}</span>}
 
       <div
         className={cn(

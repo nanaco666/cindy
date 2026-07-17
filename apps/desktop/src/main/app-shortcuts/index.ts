@@ -73,7 +73,7 @@ export function registerAppShortcutIpc(): void {
   });
 
   ipcMain.handle('app-shortcuts:set-override', (_event, id: unknown, combo: unknown) => {
-    const rejection = store.setOverride(id, combo);
+    const rejection = runStoreMutation(() => store.setOverride(id, combo));
     if (rejection) {
       throwIpcError('INVALID_PARAMS', rejectionMessage(rejection, id));
     }
@@ -81,12 +81,12 @@ export function registerAppShortcutIpc(): void {
   });
 
   ipcMain.handle('app-shortcuts:clear-override', (_event, id: unknown) => {
-    store.clearOverride(id);
+    runStoreMutation(() => store.clearOverride(id));
     return { overrides: store.getOverrides() };
   });
 
   ipcMain.handle('app-shortcuts:reset-all', () => {
-    store.resetAll();
+    runStoreMutation(() => store.resetAll());
     return { overrides: store.getOverrides() };
   });
 
@@ -103,6 +103,17 @@ export function registerAppShortcutIpc(): void {
       event.sender.once('render-process-gone', reset);
     }
   });
+}
+
+function runStoreMutation<T>(mutation: () => T): T {
+  try {
+    return mutation();
+  } catch (error) {
+    throwIpcError(
+      'APP_SHORTCUTS_WRITE_FAILED',
+      `failed to save app shortcut overrides: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 const recordingResetHooked = new WeakSet<Electron.WebContents>();
