@@ -4416,7 +4416,7 @@
         "revealFolder": "Show in folder"
       },
       "fileBody": {
-        "selectFile": "Select a file from the left to preview",
+        "selectFile": "Select a file to preview",
         "readFailed": "Read file failed: {{message}}",
         "truncatedNotice": "File is large, only the first 2 MB are shown — open in system to view the full content",
         "editLabel": "Edit",

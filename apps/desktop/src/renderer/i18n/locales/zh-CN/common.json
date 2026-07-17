@@ -4407,7 +4407,7 @@
         "revealFolder": "显示所在文件夹"
       },
       "fileBody": {
-        "selectFile": "从左侧选择一个文件预览",
+        "selectFile": "选择一个文件进行预览",
         "readFailed": "读取文件失败：{{message}}",
         "truncatedNotice": "文件较大，已截断显示前 2 MB —— 在系统中打开查看完整内容",
         "editLabel": "编辑",
