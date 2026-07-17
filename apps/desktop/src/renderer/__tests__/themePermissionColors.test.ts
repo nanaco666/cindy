@@ -8,8 +8,8 @@ import type { Theme } from '../themes/types';
 
 describe('default theme permission colors', () => {
   it('pins Auto Approval to readable accents in both default variants', () => {
-    expect(defaultLight.colors['perm-auto-selected-text']).toBe('#000050');
-    expect(defaultDark.colors['perm-auto-selected-text']).toBe('#00D9C5');
+    expect(defaultLight.colors['perm-auto-selected-text']).toBe('#417CDD'); // E5D 定稿 2026-07-17
+    expect(defaultDark.colors['perm-auto-selected-text']).toBe('#417CDD'); // E5D 定稿 2026-07-17
   });
 
   it('resolves Auto Approval from registry fallback instead of neutral text', () => {
@@ -22,7 +22,7 @@ describe('default theme permission colors', () => {
       colors: {},
     };
 
-    expect(resolveThemeValue(lightFallbackTheme, 'perm-auto-selected-text')).toBe('#000050');
-    expect(resolveThemeValue(darkFallbackTheme, 'perm-auto-selected-text')).toBe('#00D9C5');
+    expect(resolveThemeValue(lightFallbackTheme, 'perm-auto-selected-text')).toBe('#417CDD'); // E5D
+    expect(resolveThemeValue(darkFallbackTheme, 'perm-auto-selected-text')).toBe('#417CDD'); // E5D
   });
 });

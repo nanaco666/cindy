@@ -10,29 +10,29 @@ interface VariantMeta {
   ariaLive: 'polite' | 'assertive';
 }
 
-const VARIANT_MAP: Record<ToastVariant, VariantMeta> = {
-  // info 与三个既有状态色同为语义豁免色(DESIGN.md §2 Toast 豁免条,跨主题一致)
+export const VARIANT_MAP: Record<ToastVariant, VariantMeta> = {
+  // E5D 定稿 2026-07-17(Toast 豁免解除):info/success/warning/error 四色定稿,跨主题一致
   info: {
     icon: Info,
-    color: '#3B82F6',
+    color: '#417CDD',
     role: 'status',
     ariaLive: 'polite',
   },
   success: {
     icon: CircleCheck,
-    color: '#10B981',
+    color: '#2AAE5B',
     role: 'status',
     ariaLive: 'polite',
   },
   warning: {
     icon: TriangleAlert,
-    color: '#F59E0B',
+    color: '#F3A115',
     role: 'status',
     ariaLive: 'polite',
   },
   error: {
     icon: CircleX,
-    color: '#EF4444',
+    color: '#D91F37',
     role: 'alert',
     ariaLive: 'assertive',
   },

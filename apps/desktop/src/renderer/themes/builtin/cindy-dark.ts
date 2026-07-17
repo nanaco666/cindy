@@ -72,7 +72,7 @@ const overrides = {
   'msg-user-bg': '#312F2F', // 卡片
   muted: '0.0 2.2% 18.0%', // muted surface
   'muted-foreground': '216.0 4.1% 75.9%', // AA muted 前景
-  'perm-auto-selected-text': '#00D9C5', // auto approval 功能色
+  'perm-auto-selected-text': '#417CDD', // auto approval 功能色(E5D 定稿 2026-07-17,light/dark 同值)
   'perm-allow-btn-bg': '#EEEEEE', // E1D C 类裁决 2:反相中性
   'perm-allow-btn-text': '#252222', // E1D 反相中性字
   'perm-allow-kbd-bg': '#2F2D2D', // kbd bg
@@ -108,7 +108,7 @@ const overrides = {
   'accent-foreground': '0.0 0.0% 83.1%', // 裁决: accent 成对中性前景
   'panel-bg': '#2A2828', // 依赖 D1: 注册后直映背景
   primary: '0.0 0.0% 93.3%', // E1D C 类裁决 3:反相中性 HSL
-  ring: '217.2 91.2% 59.8%', // 固定蓝
+  ring: '217.3 69.7% 56.1%', // 固定蓝(E5D 定稿 2026-07-17 #417CDD HSL,取代 #3b82f6)
   'settings-theme-auto-light': '#EDEDED', // Auto 预览 light 固定
   foreground: '0.0 0.0% 83.1%', // alias closure 直接值
   border: '0.0 0.0% 26.3%', // alias closure

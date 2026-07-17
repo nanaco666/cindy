@@ -721,9 +721,9 @@ registerColor('perm-item-selected-bg', {
 
 // Narrow scoped text hints: only selected risky permission modes use color.
 registerColor('perm-auto-selected-text', {
-  light: '#000050',
-  dark: '#00D9C5',
-}, 'Auto Approval accent');
+  light: '#417CDD',
+  dark: '#417CDD',
+}, 'Auto Approval accent(设计定稿 2026-07-17 #417CDD,light/dark 同值;原 light #000050/dark #00D9C5)');
 registerColor('perm-bypass-selected-text', {
   light: 'var(--warning-accent)',
   dark: 'var(--warning-accent)',
@@ -1583,13 +1583,13 @@ registerColor('color-error-700', {
 
 /* === P3.1: focus / shadow / overlay / error / warning 语义槽 === */
 registerColor('focus-ring', {
-  light: '#3b82f6',
-  dark: '#3b82f6',
-}, 'Opaque a11y focus border (Tailwind blue-500)');
+  light: '#417CDD',
+  dark: '#417CDD',
+}, 'Opaque a11y focus border(设计定稿 2026-07-17 #417CDD,取代 blue-500 #3b82f6)');
 registerColor('focus-ring-soft', {
-  light: 'rgba(59, 130, 246, 0.5)',
-  dark: 'rgba(59, 130, 246, 0.5)',
-}, '50% alpha focus ring — 替代 ring-[#xxx]/50 写法');
+  light: 'rgba(65, 124, 221, 0.5)',
+  dark: 'rgba(65, 124, 221, 0.5)',
+}, '50% alpha focus ring(随 focus-ring #417CDD,定稿 2026-07-17)— 替代 ring-[#xxx]/50 写法');
 registerColor('shadow-menu', {
   light: '0 4px 16px rgba(0, 0, 0, 0.15)',
   dark: '0 4px 16px rgba(0, 0, 0, 0.5)',

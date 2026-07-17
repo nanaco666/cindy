@@ -235,7 +235,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'msg-user-bg': { light: '#F8F8F8', dark: '#312F2F' },
   muted: { light: '0.0 0.0% 94.5%', dark: '0.0 2.2% 18.0%' },
   'muted-foreground': { light: '222.0 4.6% 42.7%', dark: '216.0 4.1% 75.9%' },
-  'perm-auto-selected-text': { light: '#1D4ED8', dark: '#00D9C5' },
+  'perm-auto-selected-text': { light: '#417CDD', dark: '#417CDD' }, // E5D 定稿 2026-07-17
   'perm-allow-btn-bg': { light: '#3C3F43', dark: '#EEEEEE' }, // E1D
   'perm-allow-btn-text': { light: '#FCFCFC', dark: '#252222' }, // E1D
   'perm-allow-kbd-bg': { light: '#F4F4F4', dark: '#2F2D2D' },
@@ -271,7 +271,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'accent-foreground': { light: '214.3 5.5% 24.9%', dark: '0.0 0.0% 83.1%' },
   'panel-bg': { light: '#EDEDED', dark: '#2A2828' },
   primary: { light: '214.3 5.5% 24.9%', dark: '0.0 0.0% 93.3%' }, // E1D
-  ring: { light: '217.2 91.2% 59.8%', dark: '217.2 91.2% 59.8%' },
+  ring: { light: '217.3 69.7% 56.1%', dark: '217.3 69.7% 56.1%' }, // E5D 定稿 2026-07-17 #417CDD HSL(取代 #3b82f6)
   'settings-theme-auto-light': { light: '#EDEDED', dark: '#EDEDED' },
   foreground: { light: '214.3 5.5% 24.9%', dark: '0.0 0.0% 83.1%' },
   border: { light: '214.3 11.1% 87.6%', dark: '0.0 0.0% 26.3%' },

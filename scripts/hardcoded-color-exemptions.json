@@ -73,5 +73,30 @@
     "glob": "apps/desktop/src/main/bootstrap-electron.ts",
     "reason": "E4D applyWindowVibrancy 配置色(opaqueBg/透明底)+注释",
     "owner": "E4D"
+  },
+  {
+    "glob": "apps/desktop/src/renderer/themes/builtin/default-light.ts",
+    "reason": "E5D 默认皮肤 Auto Approval palette override(perm-auto-selected-text #417CDD)",
+    "owner": "E5D"
+  },
+  {
+    "glob": "apps/desktop/src/renderer/themes/builtin/default-dark.ts",
+    "reason": "E5D 默认皮肤 Auto Approval palette override(perm-auto-selected-text #417CDD)",
+    "owner": "E5D"
+  },
+  {
+    "glob": "apps/desktop/src/renderer/components/ui/toast/Toast.tsx",
+    "reason": "E5D Toast 四色定稿 hardcode(DESIGN.md §2 sanctioned,info #417CDD/success #2AAE5B/warning #F3A115/error #D91F37;VARIANT_MAP 已导出供 toastColors 守)",
+    "owner": "E5D"
+  },
+  {
+    "glob": "apps/desktop/src/renderer/__tests__/toastColors.test.ts",
+    "reason": "E5D Toast 四色定稿单测(期望 hex)",
+    "owner": "E5D"
+  },
+  {
+    "glob": "apps/desktop/src/renderer/__tests__/themePermissionColors.test.ts",
+    "reason": "E5D Auto Approval 默认值单测(期望 hex #417CDD)",
+    "owner": "E5D"
   }
 ]

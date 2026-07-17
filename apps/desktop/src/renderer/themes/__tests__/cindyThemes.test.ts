@@ -231,9 +231,9 @@ describe('CINDY · ⑤ E1D 红色体系重构(中性 exact map + 红例外白名
     }
   });
 
-  it('状态色全局 registry 默认 = 设计定稿值 2026-07-17(取代冻结红线)', () => {
+  it('状态/Auto/focus 全局 registry 默认 = 设计定稿值 2026-07-17(取代冻结红线;扩簇含 info/focus/Auto Approval)', () => {
     // 状态色全局(colors.ts light/dark 同值;9 builtin 主题无一 override → 默认皮肤同变)。
-    // 设计定稿 2026-07-17:running/awaiting/error(状态族)/done + 警示橙 accent + warning 前景。
+    // E5D 定稿 2026-07-17:状态四色 + 警示橙 accent + warning 前景 + focus-ring + Auto Approval。
     const FINAL: Record<string, string> = {
       'warning-accent': '#EA6B17',
       'card-status-awaiting': '#19D2C1',
@@ -242,6 +242,8 @@ describe('CINDY · ⑤ E1D 红色体系重构(中性 exact map + 红例外白名
       'remote-status-ready': '#2AAE5B',
       'remote-status-failed': '#D91F37',
       'warning-fg': '#F3A115',
+      'focus-ring': '#417CDD',
+      'perm-auto-selected-text': '#417CDD',
     };
     for (const [id, hex] of Object.entries(FINAL)) {
       const lv = colorRegistry.resolveDefault(id, 'light') ?? '';
@@ -249,6 +251,9 @@ describe('CINDY · ⑤ E1D 红色体系重构(中性 exact map + 红例外白名
       expect(rgbEqual(toRgb(lv), toRgb(hex), 1), `${id} light = 定稿 ${hex}`).toBe(true);
       expect(rgbEqual(toRgb(dv), toRgb(hex), 1), `${id} dark = 定稿 ${hex}`).toBe(true);
     }
+    // ring:CINDY override HSL(固定蓝),定稿 #417CDD;resolveDefault 为 text-primary-hsl 故查 CINDY 值
+    expect(rgbEqual(toRgb(cindyLight.colors['ring'] ?? ''), toRgb('#417CDD'), 1), 'cindy-light ring = #417CDD').toBe(true);
+    expect(rgbEqual(toRgb(cindyDark.colors['ring'] ?? ''), toRgb('#417CDD'), 1), 'cindy-dark ring = #417CDD').toBe(true);
   });
 });
 
@@ -320,7 +325,7 @@ describe('CINDY · ⑦ WCAG 复算 + U2 例外 allowlist + text-secondary 反向
   it('E1D 中性 CTA 对比度:#FCFCFC×#3C3F43=10.32(light)、#252222×#EEEEEE=13.60(dark) ≥4.5', () => {
     expect(contrast('#FCFCFC', light['accent-cta-bg'])).toBeGreaterThanOrEqual(4.5);
     expect(contrast('#252222', dark['accent-cta-bg'])).toBeGreaterThanOrEqual(4.5);
-    // focus-ring cindy 不 override(用 registry 默认 #3b82f6,决策表 §6 矩阵同值)
+    // focus-ring cindy 不 override(用 registry 默认 #417CDD,E5D 定稿 2026-07-17 取代 #3b82f6)
     const frLight = colorRegistry.resolveDefault('focus-ring', 'light') ?? '';
     const frDark = colorRegistry.resolveDefault('focus-ring', 'dark') ?? '';
     expect(contrast(frLight, light['surface'])).toBeGreaterThanOrEqual(3);
