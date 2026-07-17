@@ -40,7 +40,7 @@ export const ui = {
     runtimeError: (errMsg: string) => `⚠️ Agent 翻车了：${errMsg.slice(0, 200)}`,
     sendInternalError: (errMsg: string) => `❌ 内部出 bug 了：${errMsg}`,
     apiKeyMissing:
-      '⚠️ XD 网关 Key 还没配呢~\n去 desktop 的 Settings → 模型供应商里连接 XD 网关，再来 ping 我',
+      '⚠️ Cindy AI Key 还没配呢~\n去 desktop 的 Settings → 模型供应商里连接 Cindy AI，再来 ping 我',
     controlInProgress:
       '🖥️ 远程连接还在选择中呢 — 先把 thread 里那张卡片操作完（或点 🚪 退出），再来发别的~',
     credentialBusy:

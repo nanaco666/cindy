@@ -28,7 +28,7 @@ describe('requireCodexOAuthLoginState', () => {
       requireCodexOAuthLoginState({
         authenticated: true,
         authSource: 'api-key',
-        identity: 'API Key · AI Gateway',
+        identity: 'API Key · Cindy AI',
       }),
     ).toEqual({ authenticated: false, errorReason: 'no_oauth' });
   });

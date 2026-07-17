@@ -12,7 +12,7 @@ At a glance, Cindy integrates with:
 - **Google** — Gmail / Calendar / Drive / Sheets, via the Filo Google ghost (Settings > Ghosts > Filo Google).
 - **Jira / Confluence** — via the XD Atlassian ghost (Settings > Ghosts > XD Atlassian; one OAuth covers both).
 - **GitHub / GitLab** — via the Cindy GitHub and Cindy GitLab ghosts (Settings > Ghosts).
-- **The coding agents** — Claude Code and Codex can reach Gateway-backed models through **XD Gateway** in Settings > Model Providers.
+- **The coding agents** — Claude Code and Codex can reach pay-per-token models through **Cindy AI** in Settings > Model Providers.
 - **Mivo** (optional) — image / video / music / 3D generation via the built-in XD Mivo ghost; add your Mivo key on its ghost detail page under Settings > Ghosts.
 
 **Not supported:**

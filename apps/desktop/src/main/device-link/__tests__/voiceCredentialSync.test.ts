@@ -321,11 +321,11 @@ describe('voiceCredentialSync', () => {
     ]);
   });
 
-  it('throws when the desktop has no XD Gateway key to sync', async () => {
+  it('throws when the desktop has no Cindy AI key to sync', async () => {
     apiKey.value = null;
     const { syncMobileVoiceCredential } = await import('../voiceCredentialSync');
 
-    expect(() => syncMobileVoiceCredential()).toThrow('XD Gateway API key is not configured');
+    expect(() => syncMobileVoiceCredential()).toThrow('Cindy AI key is not configured');
   });
 
   it('redacts proxyApiKey for logs without mutating the result', async () => {

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 /**
- * XD 网关实时模型清单不可用时的设置页交互契约:
- * 来源行仍保留,但不渲染静态模型;点击展开入口给出明确错误提示。
+ * Cindy AI 固定在模型供应商列表首位;实时模型清单不可用时来源行仍保留,
+ * 但不渲染静态模型,点击展开入口给出明确错误提示。
  */
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -20,6 +20,26 @@ vi.mock('react-i18next', () => ({
 vi.mock('@/hooks/useProviders', () => ({
   useProviders: () => ({
     providers: [
+      {
+        id: 'anthropic',
+        name: 'Anthropic',
+        source: 'builtin',
+        agents: ['claude-code'],
+        auth: { method: 'oauth' },
+        routing: {},
+        models: {
+          'claude-code': [
+            {
+              id: 'claude-sonnet-5',
+              name: 'Sonnet 5',
+              contextWindow: 200_000,
+              efforts: [],
+              defaultEffort: null,
+            },
+          ],
+        },
+        connected: false,
+      } satisfies ProviderView,
       {
         id: 'xd',
         name: 'XD Gateway',
@@ -92,14 +112,15 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('ProvidersSection — XD 网关模型拉取失败', () => {
-  it('保留展开入口,点击后报错且不渲染静态模型列表', () => {
+describe('ProvidersSection — Cindy AI', () => {
+  it('固定置顶;模型拉取失败时保留展开入口并给出错误提示', () => {
     render(React.createElement(ProvidersSection));
 
-    const expand = screen.getByRole('button', {
+    const expandButtons = screen.getAllByRole('button', {
       name: 'settings.providers.models.expandAria',
     });
-    fireEvent.click(expand);
+    expect(expandButtons).toHaveLength(2);
+    fireEvent.click(expandButtons[0]);
 
     expect(toastError).toHaveBeenCalledWith('settings.providers.xd.sync.modelsFetchFailed');
     expect(screen.queryByText('settings.providers.models.available')).toBeNull();

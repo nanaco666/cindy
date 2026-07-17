@@ -1206,11 +1206,8 @@ export function ProvidersSection() {
     const p = byId.get(id);
     if (p && providerHasModels(p)) providerRows.push({ key: id, node: render(p) });
   };
-  pushBuiltin('anthropic', (p) => <AnthropicRow provider={p} onChanged={refetch} />);
-  pushBuiltin('openai', (p) => <OpenAiRow provider={p} onChanged={refetch} />);
-  pushBuiltin('xai', (p) => <XaiRow provider={p} onChanged={refetch} />);
-  // XD 行即使实时模型清单为空也保留:用户仍需要看到凭据状态 / 重试入口,点击展开
-  // 则由 XdGatewayRow 给出明确的「模型列表拉取失败」提示。
+  // Cindy AI 行固定置顶,即使实时模型清单为空也保留:用户仍需要看到凭据状态 / 重试入口,
+  // 点击展开则由 XdGatewayRow 给出明确的「模型列表拉取失败」提示。
   const xdProvider = byId.get('xd');
   if (xdProvider) {
     providerRows.push({
@@ -1218,6 +1215,9 @@ export function ProvidersSection() {
       node: <XdGatewayRow provider={xdProvider} onChanged={refetch} />,
     });
   }
+  pushBuiltin('anthropic', (p) => <AnthropicRow provider={p} onChanged={refetch} />);
+  pushBuiltin('openai', (p) => <OpenAiRow provider={p} onChanged={refetch} />);
+  pushBuiltin('xai', (p) => <XaiRow provider={p} onChanged={refetch} />);
   // 通用 OAuth 供应商(目录 auth.oauth 描述符驱动、非上面 bespoke 四家):目录推数据即出现。
   // OAuth 形态**不要求已有模型**:模型在授权成功后动态发现,零模型时行必须保留,
   // 否则用户没有「授权」按钮可点,发现永远无法发生(鸡生蛋死锁)。自定义 OAuth 行同理。

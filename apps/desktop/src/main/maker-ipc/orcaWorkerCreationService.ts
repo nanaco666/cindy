@@ -274,7 +274,7 @@ export function budgetModelRequiresApiKey(agent: AgentKind, model: string, hasAp
 }
 
 export function budgetModelRequiresApiKeyMessage(model: string): string {
-  return `骨折版（codex/ 低价路由）需要先在设置里配置 AI Gateway API key 才能使用 "${model}"。`;
+  return `骨折版（codex/ 低价路由）需要先在设置里连接 Cindy AI 才能使用 "${model}"。`;
 }
 
 /** agent 的人类可读名,用于 preflight 失败信息。 */

@@ -874,12 +874,12 @@
           "binaryMissing": "Codex component is unavailable, please restart the app"
         },
         "apiMode": {
-          "label": "API mode (via AI Gateway)",
-          "description": "When on, Codex uses the XD Gateway key from Model Providers instead of your subscription.",
-          "noKey": "No XD Gateway key configured — connect XD Gateway in Model Providers",
+          "label": "API mode (via Cindy AI)",
+          "description": "When on, Codex uses the Cindy AI key from Model Providers instead of your subscription.",
+          "noKey": "No Cindy AI key configured — connect Cindy AI in Model Providers",
           "noKeyDialog": {
             "title": "API Key not configured",
-            "description": "API mode reuses the XD Gateway key, which is not set yet. Connect XD Gateway in Model Providers to enable API mode."
+            "description": "API mode reuses the Cindy AI key, which is not set yet. Connect Cindy AI in Model Providers to enable API mode."
           },
           "badge": {
             "api": "● API",
@@ -887,7 +887,7 @@
           },
           "expandAria": "Expand / collapse Codex API mode settings",
           "toggleAria": "Toggle Codex API mode",
-          "sharedKeyWarning": "Shares one key with XD Gateway — deleting/changing it also affects Claude",
+          "sharedKeyWarning": "Shares one key with Cindy AI — deleting/changing it also affects Claude",
           "toast": {
             "toggleFailed": "Failed to switch API mode, please retry"
           }
@@ -922,7 +922,7 @@
         },
         "logoutConfirm": {
           "title": "Disconnect Claude.ai subscription?",
-          "description": "Disconnecting clears this machine's Claude Code login credential (your local `claude` CLI is signed out too); if you're currently in subscription mode it falls back to the AI Gateway. You'll need to authorize again to restore it.",
+          "description": "Disconnecting clears this machine's Claude Code login credential (your local `claude` CLI is signed out too); if you're currently in subscription mode it falls back to Cindy AI. You'll need to authorize again to restore it.",
           "confirm": "Disconnect",
           "cancel": "Cancel"
         },
@@ -935,13 +935,13 @@
           "needAuth": "Authorize and sign in to Claude.ai first"
         },
         "apiMode": {
-          "label": "API mode (via AI Gateway)",
-          "description": "When on, Claude uses the XD AI Gateway shared key (default); when off, native Anthropic models (Claude) connect directly to api.anthropic.com using your subscription, while other models still go through the Gateway.",
+          "label": "API mode (via Cindy AI)",
+          "description": "When on, Claude uses the Cindy AI shared key (default); when off, native Anthropic models (Claude) connect directly to api.anthropic.com using your subscription, while other models still use Cindy AI.",
           "toggleAria": "Toggle Claude API mode",
-          "sharedKeyWarning": "Shares one key with XD Gateway — with API mode off, non-Claude models still use the Gateway and need it",
+          "sharedKeyWarning": "Shares one key with Cindy AI — with API mode off, non-Claude models still need Cindy AI",
           "noKeyDialog": {
             "title": "No API Key configured",
-            "description": "With API mode off (subscription), non-Claude models (gpt / deepseek, etc.) still reuse the XD Gateway key, which is not configured yet. Connect XD Gateway in Model Providers to continue."
+            "description": "With API mode off (subscription), non-Claude models (gpt / deepseek, etc.) still reuse the Cindy AI key, which is not configured yet. Connect Cindy AI in Model Providers to continue."
           },
           "toast": {
             "toggleFailed": "Failed to switch API mode, please retry"
@@ -979,13 +979,13 @@
         "billingLabel": "SuperGrok subscription (direct)"
       },
       "xd": {
-        "title": "XD Gateway",
+        "title": "Cindy AI",
         "subtitle": "All models · Claude Code / Codex · billed per token",
         "modelLabel": "All models",
         "billingLabel": "billed per token",
         "disconnectConfirm": {
-          "title": "Disconnect XD Gateway?",
-          "description": "Disconnecting clears the gateway key saved locally. You will need to reconnect to keep using gateway models."
+          "title": "Disconnect Cindy AI?",
+          "description": "Disconnecting clears the Cindy AI key saved locally. You will need to reconnect to keep using models provided by Cindy AI."
         },
         "sync": {
           "syncing": "Fetching credentials…",
@@ -999,7 +999,7 @@
           "modelsFetchFailed": "Couldn’t fetch the model list. Check your network and try again."
         },
         "rotateConfirm": {
-          "title": "Rotate gateway key?",
+          "title": "Rotate Cindy AI Key?",
           "description": "This revokes the current key and issues a new one. The old key stops working immediately: in-flight sessions, remote sessions, and mobile voice using it will need to restart.",
           "confirm": "Rotate"
         },
@@ -3860,7 +3860,7 @@
       "REMOTE_DAEMON_CLOSED": "Remote connection interrupted (the daemon may be upgrading or restarting). The turn has ended — please resend.",
       "REMOTE_LOCAL_ATTACHMENT_UNSUPPORTED": "Local file/image attachments aren't accessible in remote sessions. Paste the content directly instead.",
       "REMOTE_COMPAT_MODE_UNSUPPORTED": "Remote Claude Code sessions can't route through the local compat proxy (internal error).",
-      "REMOTE_GATEWAY_ENDPOINT_UNAVAILABLE": "Gateway credentials are not ready yet (issued automatically after sign-in). Please retry shortly; if this persists, check the XD Gateway status in Settings → Model Providers.",
+      "REMOTE_GATEWAY_ENDPOINT_UNAVAILABLE": "Cindy AI credentials are not ready yet (issued automatically after sign-in). Please retry shortly; if this persists, check the Cindy AI status in Settings → Model Providers.",
       "DEVICE_LINK_CONTROL_DISABLED": "Control for this device is off; the message was not sent.",
       "DEVICE_LINK_MEDIA_TRANSFER_FAILED": "Attachment transfer failed; the message was not sent. Please try again."
     },
@@ -3992,8 +3992,8 @@
       "markedAsRead_other": "Marked {{count}} runs as read",
       "markAllReadFailed": "Failed to mark all read: {{error}}",
       "apiKeyDialog": {
-        "title": "XD Gateway required",
-        "description": "Connect XD Gateway in Model Providers before sending messages — tap below to open settings",
+        "title": "Cindy AI required",
+        "description": "Connect Cindy AI in Model Providers before sending messages — tap below to open settings",
         "confirm": "Open Settings",
         "cancel": "Cancel"
       },
@@ -5777,8 +5777,8 @@
       "sessionExpiredTitle": "Login expired",
       "sessionExpiredDescription": "Your login has expired, please log in again.",
       "sessionExpiredConfirm": "Log in again",
-      "voiceApiKeyAuthTitle": "XD Gateway required",
-      "voiceApiKeyAuthDescription": "The current voice input provider uses AI Gateway. XD Gateway is not connected yet, so voice input cannot start. Open Model Providers to connect it?",
+      "voiceApiKeyAuthTitle": "Cindy AI required",
+      "voiceApiKeyAuthDescription": "The current voice input provider uses Cindy AI. Cindy AI is not connected yet, so voice input cannot start. Open Model Providers to connect it?",
       "voiceDirectApiKeyAuthTitle": "Voice input API key required",
       "voiceDirectApiKeyAuthDescription": "The current voice input provider requires a direct API key. Add it in API Keys to start voice input?",
       "codexVoiceAuthTitle": "Codex connection required",

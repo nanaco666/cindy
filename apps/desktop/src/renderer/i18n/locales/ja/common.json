@@ -874,12 +874,12 @@
           "binaryMissing": "Codex コンポーネントが利用できません。アプリを再起動してください"
         },
         "apiMode": {
-          "label": "API モード (AI Gateway 経由)",
-          "description": "オンにすると Codex はサブスクではなく、モデルプロバイダーの XD Gateway Key を使用します。",
-          "noKey": "XD Gateway Key が未設定です。モデルプロバイダーで XD Gateway を接続してください",
+          "label": "API モード (Cindy AI 経由)",
+          "description": "オンにすると Codex はサブスクではなく、モデルプロバイダーの Cindy AI Key を使用します。",
+          "noKey": "Cindy AI Key が未設定です。モデルプロバイダーで Cindy AI を接続してください",
           "noKeyDialog": {
             "title": "API Key が未設定です",
-            "description": "API モードは XD Gateway Key を再利用しますが、まだ設定されていません。モデルプロバイダーで XD Gateway を接続すると有効化できます。"
+            "description": "API モードは Cindy AI Key を再利用しますが、まだ設定されていません。モデルプロバイダーで Cindy AI を接続すると有効化できます。"
           },
           "badge": {
             "api": "● API",
@@ -887,7 +887,7 @@
           },
           "expandAria": "Codex API モード設定を展開 / 折りたたむ",
           "toggleAria": "Codex API モードを切り替え",
-          "sharedKeyWarning": "XD Gateway と Key を共有 — 削除/変更すると Claude にも影響します",
+          "sharedKeyWarning": "Cindy AI と Key を共有 — 削除/変更すると Claude にも影響します",
           "toast": {
             "toggleFailed": "API モードの切り替えに失敗しました。再試行してください"
           }
@@ -922,7 +922,7 @@
         },
         "logoutConfirm": {
           "title": "Claude.ai サブスクリプションを切断しますか？",
-          "description": "切断するとこの端末の Claude Code のログイン資格情報が削除されます（ローカルの `claude` CLI もログアウトされます）。サブスクリプションモード中の場合は AI Gateway に自動的に戻ります。復元するには再度認証が必要です。",
+          "description": "切断するとこの端末の Claude Code のログイン資格情報が削除されます（ローカルの `claude` CLI もログアウトされます）。サブスクリプションモード中の場合は Cindy AI に自動的に戻ります。復元するには再度認証が必要です。",
           "confirm": "切断",
           "cancel": "キャンセル"
         },
@@ -935,13 +935,13 @@
           "needAuth": "先に Claude.ai にログイン認証してください"
         },
         "apiMode": {
-          "label": "API モード（AI Gateway 経由）",
-          "description": "オンにすると Claude は XD AI Gateway の共有 Key を使用します（デフォルト）。オフにすると Anthropic ネイティブモデル（Claude）はあなたのサブスクリプションで api.anthropic.com に直接接続し、それ以外のモデルは引き続き Gateway を経由します。",
+          "label": "API モード（Cindy AI 経由）",
+          "description": "オンにすると Claude は Cindy AI の共有 Key を使用します（デフォルト）。オフにすると Anthropic ネイティブモデル（Claude）はあなたのサブスクリプションで api.anthropic.com に直接接続し、それ以外のモデルは引き続き Cindy AI を使用します。",
           "toggleAria": "Claude API モードを切り替え",
-          "sharedKeyWarning": "XD Gateway と Key を共有 — API モードをオフにしても Claude 以外のモデルは Gateway を使うため必要です",
+          "sharedKeyWarning": "Cindy AI と Key を共有 — API モードをオフにしても Claude 以外のモデルには Cindy AI が必要です",
           "noKeyDialog": {
             "title": "API Key が未設定です",
-            "description": "API モードをオフ（サブスクリプション）にしても、Claude 以外のモデル（gpt / deepseek など）には XD Gateway Key を再利用しますが、まだ設定されていません。モデルプロバイダーで XD Gateway を接続してください。"
+            "description": "API モードをオフ（サブスクリプション）にしても、Claude 以外のモデル（gpt / deepseek など）には Cindy AI Key を再利用しますが、まだ設定されていません。モデルプロバイダーで Cindy AI を接続してください。"
           },
           "toast": {
             "toggleFailed": "API モードの切り替えに失敗しました。再試行してください"
@@ -979,13 +979,13 @@
         "billingLabel": "SuperGrok サブスク直結"
       },
       "xd": {
-        "title": "XD ゲートウェイ",
+        "title": "Cindy AI",
         "subtitle": "すべてのモデル · Claude Code / Codex 共通 · トークン課金",
         "modelLabel": "すべてのモデル",
         "billingLabel": "トークン課金",
         "disconnectConfirm": {
-          "title": "XD ゲートウェイを切断しますか?",
-          "description": "切断するとローカルに保存されたゲートウェイキーが削除されます。ゲートウェイのモデルを引き続き使うには再接続が必要です。"
+          "title": "Cindy AI を切断しますか?",
+          "description": "切断するとローカルに保存された Cindy AI Key が削除されます。Cindy AI のモデルを引き続き使うには再接続が必要です。"
         },
         "sync": {
           "syncing": "認証情報を取得中…",
@@ -999,7 +999,7 @@
           "modelsFetchFailed": "モデル一覧を取得できませんでした。ネットワークを確認して、もう一度お試しください。"
         },
         "rotateConfirm": {
-          "title": "ゲートウェイキーをローテーションしますか?",
+          "title": "Cindy AI Key をローテーションしますか?",
           "description": "現在のキーを失効させ、新しいキーを発行します。旧キーは即時無効になります:旧キーを使用中のセッション、リモートセッション、モバイル音声はやり直しが必要です。",
           "confirm": "ローテーション"
         },
@@ -3860,7 +3860,7 @@
       "REMOTE_DAEMON_CLOSED": "リモート接続が中断されました（daemon がアップグレードまたは再起動中の可能性があります）。ターンが終了しました — 再送信してください。",
       "REMOTE_LOCAL_ATTACHMENT_UNSUPPORTED": "リモートセッションではローカルのファイル/画像の添付にアクセスできません。内容を直接貼り付けてください。",
       "REMOTE_COMPAT_MODE_UNSUPPORTED": "リモート Claude Code セッションはローカル互換プロキシ経由でルーティングできません(内部エラー)。",
-      "REMOTE_GATEWAY_ENDPOINT_UNAVAILABLE": "ゲートウェイ資格情報がまだ準備できていません(サインイン後に自動発行されます)。しばらくしてから再試行してください。続く場合は 設定 → モデルプロバイダー で XD Gateway の接続状態を確認してください。",
+      "REMOTE_GATEWAY_ENDPOINT_UNAVAILABLE": "Cindy AI の資格情報がまだ準備できていません(サインイン後に自動発行されます)。しばらくしてから再試行してください。続く場合は 設定 → モデルプロバイダー で Cindy AI の接続状態を確認してください。",
       "DEVICE_LINK_CONTROL_DISABLED": "このデバイスの操作はオフです。メッセージは送信されていません。",
       "DEVICE_LINK_MEDIA_TRANSFER_FAILED": "添付ファイルの転送に失敗しました。メッセージは送信されていません。もう一度お試しください。"
     },
@@ -3983,8 +3983,8 @@
       "markedAsRead_other": "{{count}} 件の実行を既読にしました",
       "markAllReadFailed": "すべて既読の処理に失敗：{{error}}",
       "apiKeyDialog": {
-        "title": "XD Gateway の接続が必要です",
-        "description": "メッセージを送信する前に、モデルプロバイダーで XD Gateway に接続してください。下のボタンで設定画面を開きます",
+        "title": "Cindy AI の接続が必要です",
+        "description": "メッセージを送信する前に、モデルプロバイダーで Cindy AI に接続してください。下のボタンで設定画面を開きます",
         "confirm": "設定を開く",
         "cancel": "キャンセル"
       },
@@ -5768,8 +5768,8 @@
       "sessionExpiredTitle": "ログインの有効期限が切れました",
       "sessionExpiredDescription": "ログインの有効期限が切れました。再度ログインしてください。",
       "sessionExpiredConfirm": "再ログイン",
-      "voiceApiKeyAuthTitle": "XD Gateway の設定が必要です",
-      "voiceApiKeyAuthDescription": "現在の音声入力プロバイダーは AI Gateway を使用します。XD Gateway が未接続のため音声入力を開始できません。モデルプロバイダーを開いて接続しますか？",
+      "voiceApiKeyAuthTitle": "Cindy AI の設定が必要です",
+      "voiceApiKeyAuthDescription": "現在の音声入力プロバイダーは Cindy AI を使用します。Cindy AI が未接続のため音声入力を開始できません。モデルプロバイダーを開いて接続しますか？",
       "voiceDirectApiKeyAuthTitle": "音声入力の API Key が必要です",
       "voiceDirectApiKeyAuthDescription": "現在の音声入力プロバイダーには直接接続用の API Key が必要です。API Keys で追加しますか？",
       "codexVoiceAuthTitle": "Codex への接続が必要です",

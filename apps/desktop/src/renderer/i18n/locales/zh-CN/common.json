@@ -874,12 +874,12 @@
           "binaryMissing": "Codex 组件不可用，请重启应用"
         },
         "apiMode": {
-          "label": "API 模式（走 AI Gateway）",
-          "description": "开启后 Codex 不走订阅，复用「模型供应商」里的 XD 网关 Key。",
-          "noKey": "未配置 XD 网关 Key，请在「模型供应商」里连接 XD 网关",
+          "label": "API 模式（走 Cindy AI）",
+          "description": "开启后 Codex 不走订阅，复用「模型供应商」里的 Cindy AI Key。",
+          "noKey": "未配置 Cindy AI Key，请在「模型供应商」里连接 Cindy AI",
           "noKeyDialog": {
             "title": "尚未配置 API Key",
-            "description": "API 模式需要复用 XD 网关 Key，当前还没有配置。前往「模型供应商」连接 XD 网关后即可开启。"
+            "description": "API 模式需要复用 Cindy AI Key，当前还没有配置。前往「模型供应商」连接 Cindy AI 后即可开启。"
           },
           "badge": {
             "api": "● API",
@@ -887,7 +887,7 @@
           },
           "expandAria": "展开 / 收起 Codex API 模式设置",
           "toggleAria": "切换 Codex API 模式",
-          "sharedKeyWarning": "和 XD 网关共用一把 Key，删除/修改会同时影响 Claude",
+          "sharedKeyWarning": "和 Cindy AI 共用一把 Key，删除/修改会同时影响 Claude",
           "toast": {
             "toggleFailed": "切换 API 模式失败，请重试"
           }
@@ -922,7 +922,7 @@
         },
         "logoutConfirm": {
           "title": "断开 Claude.ai 订阅？",
-          "description": "断开会清除本机 Claude Code 的登录凭证（本地 `claude` 命令行也会一起登出）；若当前在订阅模式会自动切回 AI Gateway。需要重新授权才能恢复。",
+          "description": "断开会清除本机 Claude Code 的登录凭证（本地 `claude` 命令行也会一起登出）；若当前在订阅模式会自动切回 Cindy AI。需要重新授权才能恢复。",
           "confirm": "断开",
           "cancel": "取消"
         },
@@ -935,13 +935,13 @@
           "needAuth": "请先授权登录 Claude.ai"
         },
         "apiMode": {
-          "label": "API 模式（走 AI Gateway）",
-          "description": "开启后 Claude 走 XD AI Gateway 共享 Key（默认）；关闭后 Anthropic 原生模型（Claude）直连 api.anthropic.com 走你的订阅，其余模型仍走 Gateway。",
+          "label": "API 模式（走 Cindy AI）",
+          "description": "开启后 Claude 走 Cindy AI 共享 Key（默认）；关闭后 Anthropic 原生模型（Claude）直连 api.anthropic.com 走你的订阅，其余模型仍走 Cindy AI。",
           "toggleAria": "切换 Claude API 模式",
-          "sharedKeyWarning": "和 XD 网关共用一把 Key，关闭 API 模式后非 Claude 模型仍走 Gateway 需要它",
+          "sharedKeyWarning": "和 Cindy AI 共用一把 Key，关闭 API 模式后非 Claude 模型仍需 Cindy AI",
           "noKeyDialog": {
             "title": "尚未配置 API Key",
-            "description": "关闭 API 模式（走订阅）后，非 Claude 模型（gpt / deepseek 等）仍需复用 XD 网关 Key，当前还没有配置。前往「模型供应商」连接 XD 网关后即可。"
+            "description": "关闭 API 模式（走订阅）后，非 Claude 模型（gpt / deepseek 等）仍需复用 Cindy AI Key，当前还没有配置。前往「模型供应商」连接 Cindy AI 后即可。"
           },
           "toast": {
             "toggleFailed": "切换 API 模式失败，请重试"
@@ -979,13 +979,13 @@
         "billingLabel": "SuperGrok 订阅直连"
       },
       "xd": {
-        "title": "XD 网关",
+        "title": "Cindy AI",
         "subtitle": "全部模型 · Claude Code / Codex 通用 · 按 token 计费",
         "modelLabel": "全部模型",
         "billingLabel": "按 token 计费",
         "disconnectConfirm": {
-          "title": "断开 XD 网关?",
-          "description": "断开后将清除本地保存的网关 key,需要重新连接才能继续使用网关模型。"
+          "title": "断开 Cindy AI?",
+          "description": "断开后将清除本地保存的 Cindy AI Key,需要重新连接才能继续使用 Cindy AI 提供的模型。"
         },
         "sync": {
           "syncing": "获取凭据中…",
@@ -999,7 +999,7 @@
           "modelsFetchFailed": "拉取模型列表失败,请检查网络后重试"
         },
         "rotateConfirm": {
-          "title": "轮换网关密钥?",
+          "title": "轮换 Cindy AI 密钥?",
           "description": "将撤销当前密钥并签发新密钥。旧密钥立即失效:使用旧密钥的进行中会话、远程会话与手机语音需要重新发起。",
           "confirm": "轮换"
         },
@@ -3860,7 +3860,7 @@
       "REMOTE_DAEMON_CLOSED": "远端连接已中断（daemon 可能正在升级或重启）。本轮已结束 — 请重新发送。",
       "REMOTE_LOCAL_ATTACHMENT_UNSUPPORTED": "远端会话无法访问本地文件/图片附件。请直接粘贴内容。",
       "REMOTE_COMPAT_MODE_UNSUPPORTED": "远端 Claude Code 会话无法通过本地兼容代理路由(内部错误,请反馈)。",
-      "REMOTE_GATEWAY_ENDPOINT_UNAVAILABLE": "网关凭据尚未就绪(登录后由服务端自动下发)。请稍候重试;若持续出现,请到 设置 → 模型供应商 检查 XD Gateway 连接状态。",
+      "REMOTE_GATEWAY_ENDPOINT_UNAVAILABLE": "Cindy AI 凭据尚未就绪(登录后由服务端自动下发)。请稍候重试;若持续出现,请到 设置 → 模型供应商 检查 Cindy AI 连接状态。",
       "DEVICE_LINK_CONTROL_DISABLED": "已关闭对该设备的控制,消息未发送。",
       "DEVICE_LINK_MEDIA_TRANSFER_FAILED": "附件传输失败,消息未发送。请重试。"
     },
@@ -3983,8 +3983,8 @@
       "markedAsRead_other": "已标记 {{count}} 条运行为已读",
       "markAllReadFailed": "全部标记已读失败：{{error}}",
       "apiKeyDialog": {
-        "title": "需要连接 XD 网关",
-        "description": "发送消息前需要先在「模型供应商」连接 XD 网关，点击下方前往设置",
+        "title": "需要连接 Cindy AI",
+        "description": "发送消息前需要先在「模型供应商」连接 Cindy AI，点击下方前往设置",
         "confirm": "前往设置",
         "cancel": "取消"
       },
@@ -5768,8 +5768,8 @@
       "sessionExpiredTitle": "登录已过期",
       "sessionExpiredDescription": "登录状态已过期，请重新登录。",
       "sessionExpiredConfirm": "重新登录",
-      "voiceApiKeyAuthTitle": "需要配置 XD 网关",
-      "voiceApiKeyAuthDescription": "语音输入当前使用 AI Gateway 语音识别服务。尚未连接 XD 网关，无法开始语音输入。是否前往「模型供应商」连接？",
+      "voiceApiKeyAuthTitle": "需要配置 Cindy AI",
+      "voiceApiKeyAuthDescription": "语音输入当前使用 Cindy AI 语音识别服务。尚未连接 Cindy AI，无法开始语音输入。是否前往「模型供应商」连接？",
       "voiceDirectApiKeyAuthTitle": "需要配置语音输入 API Key",
       "voiceDirectApiKeyAuthDescription": "语音输入当前使用直连供应商，需要先配置对应 API Key。是否前往「API Keys」添加？",
       "codexVoiceAuthTitle": "需要连接 Codex",
