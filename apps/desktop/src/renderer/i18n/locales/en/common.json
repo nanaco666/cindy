@@ -1612,7 +1612,7 @@
         },
         "collab": {
           "name": "Collab Mode",
-          "description": "Multi-worker collaboration (Orca Team) — start_team / create_worker and other team orchestration tools"
+          "description": "Turning it off only affects newly created sessions and does not stop active workers; supports multi-worker team orchestration"
         },
         "lsp": {
           "name": "LSP",

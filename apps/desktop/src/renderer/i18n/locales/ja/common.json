@@ -1612,7 +1612,7 @@
         },
         "collab": {
           "name": "コラボモード",
-          "description": "マルチ Worker 協調 (Orca Team) — start_team / create_worker 等チーム編成ツール"
+          "description": "オフにしても今後作成するセッションにのみ反映され、現在の Worker は停止しません。マルチ Worker のチーム編成に使用します"
         },
         "lsp": {
           "name": "LSP",

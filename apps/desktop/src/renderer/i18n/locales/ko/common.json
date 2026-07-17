@@ -1612,7 +1612,7 @@
         },
         "collab": {
           "name": "협동 모드",
-          "description": "멀티 Worker 협동 (Orca Team) — start_team / create_worker 등 팀 편성 도구"
+          "description": "끄면 이후 새로 만드는 세션에만 적용되며 현재 Worker는 중지되지 않습니다. 멀티 Worker 팀 편성에 사용합니다"
         },
         "lsp": {
           "name": "LSP",
