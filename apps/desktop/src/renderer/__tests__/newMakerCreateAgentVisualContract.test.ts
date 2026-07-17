@@ -139,8 +139,9 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(sendButtonSource).toContain('active:bg-[var(--create-agent-send-bg-pressed)]');
     expect(sendButtonSource).toContain('function CreateAgentSendIcon');
     expect(sendButtonSource).toContain('fill="currentColor"');
-    expect(sendButtonSource).toContain('bg-[var(--create-agent-send-disabled-bg)]');
-    expect(sendButtonSource).toContain('text-[var(--create-agent-send-disabled-icon)]');
+    expect(sendButtonSource).toContain("'cursor-not-allowed bg-[var(--create-agent-send-bg)] text-[var(--create-agent-send-icon)] opacity-40'");
+    expect(sendButtonSource).not.toContain('bg-[var(--create-agent-send-disabled-bg)]');
+    expect(sendButtonSource).not.toContain('text-[var(--create-agent-send-disabled-icon)]');
 
     expect(vendorSwitcherSource).toContain('bg-[var(--create-agent-segment-track-bg)]');
     expect(vendorSwitcherSource).toContain('text-[var(--create-agent-segment-inactive-text)]');

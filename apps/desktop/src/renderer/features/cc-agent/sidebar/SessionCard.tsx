@@ -544,7 +544,14 @@ export function SessionCard({
                 >
                   {titlePrefixNode}
                   {matchIndices && matchIndices.length > 0 && canHighlightDisplayTitle
-                    ? highlightSegments(session.title, matchIndices)
+                    ? highlightSegments(session.title, matchIndices, {
+                        highlightClassName: cn(
+                          'bg-transparent font-semibold',
+                          isActive
+                            ? 'text-[var(--sidebar-item-active-foreground)]'
+                            : 'text-[var(--msg-assistant-text)]',
+                        ),
+                      })
                     : displayTitle}
                 </span>
                 {remoteIconKind && (
@@ -703,7 +710,14 @@ export function SessionCard({
             style={{ textIndent: 0, paddingLeft: 0 }}
           >
             {matchIndices && matchIndices.length > 0 && canHighlightDisplayTitle
-              ? highlightSegments(session.title, matchIndices)
+              ? highlightSegments(session.title, matchIndices, {
+                  highlightClassName: cn(
+                    'bg-transparent font-semibold',
+                    isActive
+                      ? 'text-[var(--sidebar-item-active-foreground)]'
+                      : 'text-[var(--msg-assistant-text)]',
+                  ),
+                })
               : displayTitle}
           </div>
         )}
