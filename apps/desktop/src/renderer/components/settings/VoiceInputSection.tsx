@@ -12,6 +12,7 @@ import {
   MAX_VOICE_INPUT_REFINEMENT_INSTRUCTIONS_CHARS,
   MAX_VOICE_INPUT_DICTIONARY_CSV_BYTES,
   createManualVoiceInputDictionaryEntry,
+  getVoiceInputSettings,
   mergeVoiceInputDictionaryCsvTerms,
   normalizeVoiceInputDictionaryEntryText,
   parseVoiceInputDictionaryCsv,
@@ -527,6 +528,7 @@ export function VoiceInputSection() {
   const editingDictionaryEntryInputRef = useRef<HTMLInputElement | null>(null);
   const pendingModifierShortcutCodeRef = useRef<string | null>(null);
   const pendingKeyboardShortcutRef = useRef<VoiceInputShortcut | null>(null);
+  const shortcutSuspendPromiseRef = useRef<Promise<void> | null>(null);
   const nativeFnShortcutActiveRef = useRef(false);
   const nativeFnComboSeenRef = useRef(false);
   const externalDictionaryLearningSupported = window.electronAPI.platform === 'darwin';
@@ -657,7 +659,9 @@ export function VoiceInputSection() {
 
   const commitRecordedShortcut = useCallback(
     (shortcut: VoiceInputShortcut | null) => {
-      void setShortcut(shortcut).then((result) => {
+      void (async () => {
+        await shortcutSuspendPromiseRef.current;
+        const result = await setShortcut(shortcut);
         if (!result.ok) {
           toast.error(t('settings.voiceInput.shortcut.toast.registrationFailed', { error: result.error }));
           if (shortcut) setRecordingShortcutPreview(shortcut);
@@ -665,7 +669,7 @@ export function VoiceInputSection() {
         }
         setRecordingShortcutPreview(null);
         setRecordingShortcut(false);
-      });
+      })();
     },
     [setShortcut, t],
   );
@@ -876,7 +880,7 @@ export function VoiceInputSection() {
     document.body.dataset.appShortcutRecording = '1';
     window.electronAPI.appShortcuts.setRecording(true);
     let cancelled = false;
-    void syncVoiceInputGlobalShortcut(null).then(() => {
+    const suspendPromise = syncVoiceInputGlobalShortcut(null).then(() => {
       if (!cancelled && window.electronAPI.platform === 'darwin') {
         void window.electronAPI.voiceInput.startModifierShortcutRecording()
           .then((result) => {
@@ -886,16 +890,18 @@ export function VoiceInputSection() {
           });
       }
     });
+    shortcutSuspendPromiseRef.current = suspendPromise;
     return () => {
       cancelled = true;
+      shortcutSuspendPromiseRef.current = null;
       delete document.body.dataset.appShortcutRecording;
       window.electronAPI.appShortcuts.setRecording(false);
       if (window.electronAPI.platform === 'darwin') {
         void window.electronAPI.voiceInput.stopModifierShortcutRecording();
       }
-      void syncVoiceInputGlobalShortcut(settings.shortcut);
+      void syncVoiceInputGlobalShortcut(getVoiceInputSettings().shortcut);
     };
-  }, [recordingShortcut, settings.shortcut]);
+  }, [recordingShortcut]);
 
   useEffect(() => {
     if (!settings.refinementEnabled) {
