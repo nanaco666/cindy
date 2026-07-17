@@ -2640,7 +2640,7 @@
         "browserSub": "Browser",
         "openTerminal": "打开终端",
         "terminalSub": "Terminal",
-        "addMoreHint": "或点击顶部 + 按钮选择更多面板类型"
+        "addMoreHint": "可通过顶部 + 按钮选择更多面板类型"
       },
       "placeholderHint": "{{kind}} — 内容将在后续阶段加入"
     },

@@ -2640,7 +2640,7 @@
         "browserSub": "Browser",
         "openTerminal": "ターミナルを開く",
         "terminalSub": "Terminal",
-        "addMoreHint": "上部の + ボタンからほかのパネルタイプも追加できます"
+        "addMoreHint": "上部の + ボタンからほかのパネルタイプを選択できます"
       },
       "placeholderHint": "{{kind}} — コンテンツは後続フェーズで追加されます"
     },
