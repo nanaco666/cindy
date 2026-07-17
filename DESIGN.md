@@ -719,5 +719,6 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
   - 选中胶囊 = `sidebar-item-active`(light `#DF0C27`/dark `#A61629`,E1D 第 4 项裁决)反白前景 = 新增 `sidebar-item-active-foreground` token(light `#FCFCFC`/dark `#D4D4D4`,× 红底 5.33/4.91 ≥4.5);SessionItem/SessionCard isActive 容器+title+time+RemoteProjectIcon 条件切反白;
   - 强调行(running)行首箭头 = 品牌红系 `sidebar-item-active`(light `#DF0C27`/dark `#A61629`,D4-1 Figma 三态实证),VendorIcon running 从 `status-bar-accent`(橙)切 `hsl(var(--sidebar-item-active))`;**与 E5D 状态点新橙 `#EA6B17` 解耦——状态点归橙,行首强调箭头归红**。
   - 断言:③ CINDY_EXPECTED 守 4 token 值;⑦ 新增层级断言(二级暗灰 contrast 明显弱于正文 + 选中胶囊前景×红底 ≥4.5)。
+- **backlog(R2 §4.3 五点差异,lead 裁决 2026-07-17 本轮不做,入 backlog)**:Project_List 三态拆分(active-task-pill/project-card/flat-list-row 不共用 `sidebar-item-active`);项目 header/list card 选中应中性底(#312F2F/#F6F6F6 非 #DF0C27 大红);去 Project_List 选中组 `focus-ring-soft` 蓝 ring,改 card stroke #DCDFE3/#434343;小箭头 #A61629 强调(非整行红底)。详见 `2026-07-17-r2-ui-specs.md` §4.3。本轮收敛不扩战线,后续另开。
 
 三份新 map(`NEUTRAL_PRIMARY_EXPECTED_BY_ID`/`FOREGROUND` + `RED_EXCEPTION_ALLOWED_IDS`)替代旧 `BRAND_RED_*`。D2T ⑤/⑦/⑧ 改用新 map(中性 exact + 红例外白名单 + 中性对比度 + 可证伪)。
