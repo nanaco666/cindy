@@ -661,7 +661,8 @@
         "toast": {
           "needsModifier": "请使用组合键、F1-F24 单键，或左/右 Command、Option、Control、Fn。",
           "fnUnavailable": "请使用组合键、F1-F24 单键，或左/右 Command、Option、Control、Fn。",
-          "systemReserved": "这个快捷键会和系统或常用编辑快捷键冲突"
+          "systemReserved": "这个快捷键会和系统或常用编辑快捷键冲突",
+          "registrationFailed": "无法注册此快捷键：{{error}}"
         }
       },
       "permissions": {

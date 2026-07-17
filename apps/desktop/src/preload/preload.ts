@@ -123,6 +123,9 @@ type VoiceInputShortcutWire = {
 type VoiceInputGlobalResult =
   | { ok: true }
   | { ok: false; error: string; errorCode?: 'empty' | 'unavailable' | 'unconfirmed' | 'permission' | 'failed' };
+type VoiceInputSettingsUpdateResult =
+  | { ok: true; settings: import('../shared/voiceInputData').VoiceInputSettings }
+  | { ok: false; error: string; errorCode?: 'empty' | 'unavailable' | 'unconfirmed' | 'permission' | 'failed' };
 type VoiceInputReadinessWire = {
   ok: boolean;
   provider: VoiceInputProviderKind;
@@ -861,6 +864,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     updateSettings: (patch: unknown): Promise<unknown> =>
       ipcRenderer.invoke('voice-input:settings:update', patch),
+    updateShortcutSetting: (shortcut: VoiceInputShortcutWire | null): Promise<VoiceInputSettingsUpdateResult> =>
+      ipcRenderer.invoke('voice-input:settings:update-shortcut', shortcut),
     deleteDictionaryEntries: (entryIds: string[]): Promise<unknown> =>
       ipcRenderer.invoke('voice-input:dictionary:delete-entries', entryIds),
     recordDictionaryLearningActions: (actions: unknown[]): Promise<unknown> =>

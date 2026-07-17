@@ -661,7 +661,8 @@
         "toast": {
           "needsModifier": "조합 키, F1-F24 단일 키, 또는 왼쪽/오른쪽 Command, Option, Control, Fn을 사용하세요.",
           "fnUnavailable": "조합 키, F1-F24 단일 키, 또는 왼쪽/오른쪽 Command, Option, Control, Fn을 사용하세요.",
-          "systemReserved": "이 단축키는 시스템 또는 일반 편집 단축키와 충돌합니다"
+          "systemReserved": "이 단축키는 시스템 또는 일반 편집 단축키와 충돌합니다",
+          "registrationFailed": "단축키를 등록할 수 없습니다: {{error}}"
         }
       },
       "permissions": {

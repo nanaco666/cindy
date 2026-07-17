@@ -661,7 +661,8 @@
         "toast": {
           "needsModifier": "Use a key combo, a standalone F1-F24 key, or Left/Right Command, Option, Control, Fn.",
           "fnUnavailable": "Use a key combo, a standalone F1-F24 key, or Left/Right Command, Option, Control, Fn.",
-          "systemReserved": "This shortcut conflicts with a system or common editing shortcut"
+          "systemReserved": "This shortcut conflicts with a system or common editing shortcut",
+          "registrationFailed": "Could not register this shortcut: {{error}}"
         }
       },
       "permissions": {
