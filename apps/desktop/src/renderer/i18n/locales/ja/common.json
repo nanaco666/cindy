@@ -3525,6 +3525,7 @@
       "forkStripEncryptedTitle": "暗号化推論を除いた新しいセッションを Fork で作成",
       "codexSessionExpiredLogin": "再ログイン",
       "networkUnreachable": "ネットワークエラー:サービスに一時的に接続できません。「再試行」を押してください。",
+      "networkUnreachableNoRetry": "ネットワークエラー:サービスに一時的に接続できません。",
       "networkAutoRetrying": "ネットワークエラー:自動的に再試行しています…",
       "networkShowRaw": "元のエラーを表示",
       "networkHideRaw": "元のエラーを隠す",

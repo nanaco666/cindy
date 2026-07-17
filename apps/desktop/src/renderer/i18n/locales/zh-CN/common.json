@@ -3525,6 +3525,7 @@
       "forkStripEncryptedTitle": "Fork 并剥离出新会话(去掉加密推理内容)",
       "codexSessionExpiredLogin": "重新登录",
       "networkUnreachable": "网络异常，服务暂时不可达，可点击「重试」。",
+      "networkUnreachableNoRetry": "网络异常，服务暂时不可达。",
       "networkAutoRetrying": "网络异常，正在自动重试…",
       "networkShowRaw": "查看原始错误",
       "networkHideRaw": "收起原始错误",

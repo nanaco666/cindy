@@ -3525,6 +3525,7 @@
       "forkStripEncryptedTitle": "암호화 추론을 제거한 새 세션으로 Fork",
       "codexSessionExpiredLogin": "다시 로그인",
       "networkUnreachable": "네트워크 오류: 서비스에 일시적으로 연결할 수 없습니다. ‘다시 시도’를 눌러 주세요.",
+      "networkUnreachableNoRetry": "네트워크 오류: 서비스에 일시적으로 연결할 수 없습니다.",
       "networkAutoRetrying": "네트워크 오류: 자동으로 다시 시도하는 중…",
       "networkShowRaw": "원본 오류 보기",
       "networkHideRaw": "원본 오류 숨기기",
