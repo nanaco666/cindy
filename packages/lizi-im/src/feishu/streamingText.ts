@@ -167,6 +167,10 @@ class FeishuStreamingTextHandle implements StreamingTextHandle {
     //    加载失败" placeholder in the final card.
     const imageUrls = collectXdtImageUrls(text);
     const imageMap = new Map<string, string>();
+    // 正文图 absPath 集合:1b 用它对 extras 求差——同一张图既被模型 markdown
+    // 内联进正文、又经 tool_result 账本 sidechannel 送来时(ghost 读文档
+    // xdt_media_inline 内联场景),只保留正文内联位,不在卡片尾部再挂一份。
+    const bodyImageAbsPaths = new Set<string>();
     if (imageUrls.length > 0) {
       log.debug(`[feishu/streamingText] uploading ${imageUrls.length} xdt-image(s)`);
       const results = await Promise.all(
@@ -190,6 +194,7 @@ class FeishuStreamingTextHandle implements StreamingTextHandle {
             );
             return null;
           }
+          bodyImageAbsPaths.add(absPath);
           const key = await uploadImage(absPath);
           return key ? ([url, key] as const) : null;
         }),
@@ -202,13 +207,15 @@ class FeishuStreamingTextHandle implements StreamingTextHandle {
     // 1b. Upload extras (来自 tool_result event 的图片). 跟文本里 xdt-image 走
     //     同一条 uploadImage 通道, 但 path 由 host 主进程已经解好直接传 absPath,
     //     这里不再过 resolveFeishuMediaUrl (lizi-im 包对其它 host namespace 不感知)。
+    //     正文里已内联的同图(按 absPath)跳过,防"正文一张 + 尾部一张"双份。
     const extraImageKeys: string[] = [];
-    if (this.extraImageAbsPaths.length > 0) {
+    const extrasToUpload = this.extraImageAbsPaths.filter((p) => !bodyImageAbsPaths.has(p));
+    if (extrasToUpload.length > 0) {
       log.debug(
-        `[feishu/streamingText] uploading ${this.extraImageAbsPaths.length} extra image(s) from tool_result`,
+        `[feishu/streamingText] uploading ${extrasToUpload.length} extra image(s) from tool_result`,
       );
       const results = await Promise.all(
-        this.extraImageAbsPaths.map(async (absPath) => {
+        extrasToUpload.map(async (absPath) => {
           try {
             return await uploadImage(absPath);
           } catch (err) {

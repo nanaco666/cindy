@@ -40,7 +40,7 @@ interface FetchRequest {
   [k: string]: unknown;
 }
 
-function createHarness() {
+function createHarness(fetchOverride?: (request: FetchRequest) => unknown | undefined) {
   let handler: HostMessageHandler | undefined;
   const sent: SentMessage[] = [];
   const requests: FetchRequest[] = [];
@@ -55,6 +55,8 @@ function createHarness() {
     }),
     fetch: vi.fn(async (request: FetchRequest) => {
       requests.push(request);
+      const overridden = fetchOverride?.(request);
+      if (overridden !== undefined) return overridden;
       if (request.as === 'media') {
         return { ok: true, status: 200, media: { url: 'cindy-media://blobs/x.png', hash: 'a'.repeat(64), ext: '.png' } };
       }
@@ -216,9 +218,12 @@ describe('builtin xd-feishu ghost', () => {
       args: { file_token: 'tok123' },
     });
     expect(r.ok).toBe(true);
-    const result = r.result as { media_url?: string; hash?: string };
+    const result = r.result as { media_url?: string; xdt_image_url?: string; hash?: string; xdt_media_inline?: boolean };
     expect(result.media_url).toBe('cindy-media://blobs/x.png');
+    expect(result.xdt_image_url).toBe('cindy-media://blobs/x.png');
     expect(result.hash).toBe('a'.repeat(64));
+    // 内联意图令牌:主机层据此把"别嵌 markdown"禁令换成内联指引(图文并茂)。
+    expect(result.xdt_media_inline).toBe(true);
   });
 
   it('票据语义:下载缺 save_dir / 上传缺 dir·attachments 时报引导话术,不出网', async () => {
@@ -266,6 +271,124 @@ describe('builtin xd-feishu ghost', () => {
     expect((r.result as { saved_to?: string }).saved_to).toBe('tmp/feishu-user.json');
     const fsReq = harness.sent.find((m) => m.type === 'fs-request');
     expect(fsReq?.root).toBe('workdir');
+  });
+
+  it('list_tools 随类目打包共享使用规则(老 MCP bundledRules 同款)', async () => {
+    const r = await harness.call('list_tools', { category: 'docx' });
+    expect(r.ok).toBe(true);
+    const result = r.result as {
+      recommended: Array<{ name: string; rules?: string[] }>;
+      rules?: Record<string, string>;
+    };
+    // 精品工具条目引用规则 key。
+    const docxRead = result.recommended.find((t) => t.name === 'docx_read');
+    expect(docxRead?.rules).toEqual(['read']);
+    const docxAppend = result.recommended.find((t) => t.name === 'docx_append_blocks');
+    expect(docxAppend?.rules).toEqual(['docx-edit', 'mutation-confirm']);
+    // 顶层 rules 打包全文:read(读取行为规范)+ 写约定 + 直通说明。
+    expect(Object.keys(result.rules ?? {}).sort()).toEqual(
+      ['docx-edit', 'generated-tools', 'mutation-confirm', 'read'],
+    );
+    expect(result.rules!.read).toContain('总原则:文字 + 附件 并茂');
+    expect(result.rules!.read).toContain('完整性硬规矩');
+    expect(result.rules!.read).toContain('display_hints');
+    expect(result.rules!['mutation-confirm']).toContain('AskUserQuestion');
+    // im 类目:read 规则经 im_read_messages 带入,generated-tools 经直通面带入。
+    const im = await harness.call('list_tools', { category: 'im' });
+    const imRules = (im.result as { rules?: Record<string, string> }).rules ?? {};
+    expect(Object.keys(imRules)).toContain('read');
+    expect(Object.keys(imRules)).toContain('mutation-confirm');
+  });
+
+  it('docx_read 返回对齐老 MCP:评论/user_map/available_images/五套清单/display_hints', async () => {
+    const blocks = [
+      { block_id: 'b1', block_type: 3, heading1: { elements: [{ text_run: { content: '第一节' } }], style: { folded: true } } },
+      {
+        block_id: 'b2', block_type: 2,
+        text: {
+          elements: [
+            { text_run: { content: '旧规则', text_element_style: { strikethrough: true } } },
+            { text_run: { content: '新规则' } },
+            { mention_user: { user_id: 'ou_abc' } },
+            { mention_doc: { token: 'doxAAA', obj_type: 22, url: 'https://feishu.cn/docx/doxAAA', title: '引用文档' } },
+          ],
+        },
+      },
+      { block_id: 'b3', block_type: 27, image: { token: 'imgTok1' } },
+      { block_id: 'b4', block_type: 30, sheet: { token: 'shtX_tab1' } },
+      { block_id: 'b5', block_type: 17, todo: { elements: [{ text_run: { content: '待办一' } }], style: { done: true } } },
+    ];
+    const env = (data: unknown) => ({
+      ok: true, status: 200, headers: {},
+      body: JSON.stringify({ code: 0, msg: 'ok', data }),
+    });
+    const h2 = createHarness((req) => {
+      if (req.url.includes('/raw_content')) return env({ content: '正文 @ou_abc 测试' });
+      if (req.url.includes('/blocks')) return env({ items: blocks, has_more: false });
+      if (/\/documents\/D1$/.test(req.url.split('?')[0])) return env({ document: { title: '测试文档' } });
+      if (req.url.includes('/comments')) {
+        return env({
+          items: [{
+            comment_id: 'c1', user_id: 'ou_abc', quote: '引用段', is_solved: false,
+            reply_list: {
+              replies: [{
+                reply_id: 'r1', user_id: 'ou_def',
+                content: { elements: [{ type: 'text_run', text_run: { text: '同意 ' } }, { type: 'person', person: { user_id: 'ou_abc' } }] },
+              }],
+            },
+          }],
+          has_more: false,
+        });
+      }
+      if (req.url.includes('/contact/v3/users/batch')) {
+        return env({ items: [{ open_id: 'ou_abc', name: '张三' }, { open_id: 'ou_def', name: '李四' }] });
+      }
+      if (req.url.includes('/metas/batch_query')) {
+        return env({
+          metas: [
+            { doc_token: 'shtX', title: '数据表', url: 'https://xindong.feishu.cn/sheets/shtX' },
+            { doc_token: 'doxAAA', title: '引用文档' },
+          ],
+          failed_list: [],
+        });
+      }
+      return undefined;
+    });
+    const r = await h2.call('call_tool', { name: 'docx_read', args: { document_id: 'D1', max_images: 1 } });
+    expect(r.ok).toBe(true);
+    const doc = (r.result as { data: Record<string, any> }).data;
+    // 正文与老字段名。
+    expect(doc.text).toBe('正文 @ou_abc 测试');
+    expect(doc.text_truncated).toBe(false);
+    // 评论:user_name 已解析,回复里 @ou_xxx → @姓名(ou_xxx)。
+    expect(doc.comment_count).toBe(1);
+    expect(doc.comments[0].user_name).toBe('张三');
+    expect(doc.comments[0].replies[0].user_name).toBe('李四');
+    expect(doc.comments[0].replies[0].text).toBe('同意 @张三(ou_abc)');
+    expect(doc.user_map).toEqual({ ou_abc: '张三', ou_def: '李四' });
+    // 图片清单 + 下载标记。
+    expect(doc.image_count).toBe(1);
+    expect(doc.available_images[0]).toMatchObject({
+      index: 1, file_token: 'imgTok1', section_hint: '第一节', downloaded: true,
+    });
+    expect(doc.images[0].xdt_image_url).toBe('cindy-media://blobs/x.png');
+    expect(doc.xdt_image_urls).toEqual(['cindy-media://blobs/x.png']);
+    // 五套清单。
+    expect(doc.strikethroughs[0]).toMatchObject({ text: '~~旧规则~~新规则', section_hint: '第一节' });
+    expect(doc.mentioned_docs[0]).toMatchObject({ token: 'doxAAA', obj_type: 'docx', title: '引用文档' });
+    expect(doc.folded_sections[0]).toMatchObject({ level: 1, text: '第一节' });
+    expect(doc.todos[0]).toMatchObject({ done: true, text: '待办一', section_hint: '第一节' });
+    // 内嵌 sheet:drive.meta 回填标题,canonical URL 补回 ?sheet= 子定位。
+    expect(doc.embedded_blocks[0]).toMatchObject({
+      type_name: 'sheet', ref: 'shtX_tab1', title: '数据表',
+      url: 'https://xindong.feishu.cn/sheets/shtX?sheet=tab1',
+    });
+    // 预格式化清单(老版第二 text block → display_hints 字段)。
+    expect(doc.display_hints).toContain('📊 本文档总览');
+    expect(doc.display_hints).toContain('删除线内容');
+    expect(doc.display_hints).toContain('`shtX_tab1`');
+    // 读文档操作声明内联意图令牌(交卷体顶层,与 data 平级)。
+    expect((r.result as { xdt_media_inline?: boolean }).xdt_media_inline).toBe(true);
   });
 
   it('元工具边界:未知操作/未知类目报错并给指路', async () => {

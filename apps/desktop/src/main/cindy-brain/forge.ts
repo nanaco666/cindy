@@ -344,6 +344,12 @@ cindy.send({ type: 'tool-result', callId: msg.callId, ok: true, result: {
   // 不受影响。另:主机会对"署名调用"(cindy-request / fetch 带 callId)期间
   // 入库的媒体独立记账,你没声明媒体字段时以 xdt_media_produced 兜底注入
   // ——但那是安全网,别依赖它,正路是老实声明字段。
+  // 内联意图令牌(读取类意识用):结果顶层带 xdt_media_inline: true = 这些
+  // 媒体是"从文档/消息里读出来的素材",桌面呈现应由主 agent 在最终回复里
+  // markdown 内联(![](cindy-media://…)),主机不画卡、也不注"别嵌 markdown"
+  // 禁令;IM/远程出站仍按账本自动送图。仅在你**没有**声明 xdt_image_urls 等
+  // 复数媒体字段时有意义——声明了媒体字段一律走卡片语义,别两个都带。
+  // 生成类意识(画图/做视频)不要用它:生成产物走卡片语义体验才对。
   note: "干完了"
 }});
 // 失败交卷:{ type: 'tool-result', callId, ok: false, message: '原因' }

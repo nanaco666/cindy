@@ -222,6 +222,44 @@ describe('cindy_ghosts · ghost_call(派活透传)', () => {
     expect(payload.producedMedia).toBeUndefined();
   });
 
+  it('内联意图令牌:xdt_media_inline + 账本媒体 → hint 改为鼓励 markdown 内联', async () => {
+    const payload = parsePayload(await handleGhostCall(
+      fakeDeps({
+        callGhostTool: async () => ({
+          ok: true,
+          result: { xdt_image_url: 'cindy-media://blobs/def.png', xdt_media_inline: true },
+          producedMedia: ['cindy-media://blobs/def.png'],
+        }),
+      }),
+      { ghost_id: 'xd-feishu', tool: 'call_tool', args: {} },
+    ));
+    // 账本注入照旧(IM/hook 出站靠它),但禁令换成内联指引。
+    expect(payload.xdt_media_produced).toEqual(['cindy-media://blobs/def.png']);
+    expect(String(payload.hint)).toContain('markdown');
+    expect(String(payload.hint)).toContain('![](');
+    expect(String(payload.hint)).not.toContain('不要在回复文本里用 markdown');
+    // 无账本媒体时令牌不触发任何 hint(读了文档但没下图的常态)。
+    const noMedia = parsePayload(await handleGhostCall(
+      fakeDeps({
+        callGhostTool: async () => ({ ok: true, result: { data: { text: '正文' }, xdt_media_inline: true } }),
+      }),
+      { ghost_id: 'xd-feishu', tool: 'call_tool', args: {} },
+    ));
+    expect(noMedia.hint).toBeUndefined();
+    // 声明了复数媒体字段时令牌无效,仍走卡片语义禁令。
+    const declared = parsePayload(await handleGhostCall(
+      fakeDeps({
+        callGhostTool: async () => ({
+          ok: true,
+          result: { xdt_image_urls: ['cindy-media://blobs/abc.png'], xdt_media_inline: true },
+          producedMedia: ['cindy-media://blobs/abc.png'],
+        }),
+      }),
+      { ghost_id: 'art', tool: 'gen_image', args: {} },
+    ));
+    expect(String(declared.hint)).toContain('不要在回复文本里用 markdown');
+  });
+
   it('兜底账本不注入:意识声明了媒体字段时以声明为准', async () => {
     const payload = parsePayload(await handleGhostCall(
       fakeDeps({

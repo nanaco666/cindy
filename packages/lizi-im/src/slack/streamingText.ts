@@ -184,6 +184,10 @@ class SlackStreamingTextHandle implements StreamingTextHandle {
     //    图片一律走独立文件消息, 正文里的引用替换成提示。
     const imageUrls = collectXdtImageUrls(text);
     const sentImageCount = { n: 0 };
+    // 正文图 absPath 集合:1b 用它对 extras 求差——同一张图既被模型 markdown
+    // 内联进正文、又经 tool_result 账本 sidechannel 送来时(ghost 读文档
+    // xdt_media_inline 内联场景),只传一份,不发两条重复文件消息。
+    const bodyImageAbsPaths = new Set<string>();
     if (imageUrls.length > 0) {
       log.debug(`[slack/streamingText] uploading ${imageUrls.length} xdt-image(s)`);
       await Promise.all(
@@ -196,6 +200,7 @@ class SlackStreamingTextHandle implements StreamingTextHandle {
             log.warn(`[slack/streamingText] resolve xdt-image failed for ${url}: ${msg}`);
             return;
           }
+          bodyImageAbsPaths.add(absPath);
           const r = await transport.uploadFile({
             absPath,
             filename: path.basename(absPath),
@@ -207,13 +212,14 @@ class SlackStreamingTextHandle implements StreamingTextHandle {
       );
     }
 
-    // 1b. tool_result 带来的图片 — 同一上传通道。
-    if (this.extraImageAbsPaths.length > 0) {
+    // 1b. tool_result 带来的图片 — 同一上传通道;正文里已内联的同图跳过。
+    const extrasToUpload = this.extraImageAbsPaths.filter((p) => !bodyImageAbsPaths.has(p));
+    if (extrasToUpload.length > 0) {
       log.debug(
-        `[slack/streamingText] uploading ${this.extraImageAbsPaths.length} extra image(s) from tool_result`,
+        `[slack/streamingText] uploading ${extrasToUpload.length} extra image(s) from tool_result`,
       );
       await Promise.all(
-        this.extraImageAbsPaths.map(async (absPath) => {
+        extrasToUpload.map(async (absPath) => {
           const r = await transport.uploadFile({
             absPath,
             filename: path.basename(absPath),
@@ -245,8 +251,10 @@ class SlackStreamingTextHandle implements StreamingTextHandle {
     }
 
     // 3. 正文: 剥 file 链接;image 引用替换为"图片已作为附件发送"提示。
+    //    双协议(老 xdt-image + 媒体总仓 cindy-media,与 xdtRefs 口径一致)——
+    //    只认 xdt-image 会让 cindy-media 引用残留字面量 markdown。
     let cardText = stripXdtFileLinks(text).replace(
-      /!\[([^\]]*)\]\(xdt-image:\/\/[^)]+\)/g,
+      /!\[([^\]]*)\]\((?:xdt-image|cindy-media):\/\/[^)]+\)/g,
       (_m, alt) => (alt ? `🖼️ _${alt}(已作为附件发送)_` : ''),
     );
     const trimmed = cardText.trim();

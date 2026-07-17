@@ -107,9 +107,15 @@ export interface OutboundResult {
   skipped: number;
 }
 
-/** 文本里是否存在任何 xdt 出站引用(快速前置判断, 避免无谓的收集开销)。 */
+/** 文本里是否存在任何托管媒体出站引用(快速前置判断, 避免无谓的收集开销)。 */
 export function hasOutboundRefs(text: string): boolean {
-  return text.includes('xdt-image://') || text.includes('xdt-file://');
+  // 双协议:老 xdt-image + 媒体总仓 cindy-media(XDT_IMAGE_REGEX 同口径)——
+  // 漏了 cindy-media 会让只含总仓图的回帖跳过附件收集,图静默丢失。
+  return (
+    text.includes('xdt-image://') ||
+    text.includes('cindy-media://') ||
+    text.includes('xdt-file://')
+  );
 }
 
 /**
