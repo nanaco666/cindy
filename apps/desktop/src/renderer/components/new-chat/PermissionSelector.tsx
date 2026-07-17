@@ -121,8 +121,8 @@ export function PermissionSelector({
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
                   ]
                 : [
-                    'py-1 pl-0 pr-2',
-                    'bg-transparent text-[var(--model-trigger-text)]',
+                    'h-[30px] min-w-max shrink-0 px-2.5',
+                    'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] border border-[var(--border-default)] text-[var(--text-primary)]' /* spec 2026-07-17, token by 一哥; fallback 待注册后删 */,
                     'hover:bg-[var(--model-trigger-hover)]',
                   ],
               triggerTone === 'auto' && 'text-[var(--perm-auto-selected-text)]',
@@ -141,7 +141,7 @@ export function PermissionSelector({
                 'min-w-0 font-normal text-current',
                 isCreateAgentVariant
                   ? 'whitespace-nowrap'
-                  : 'max-w-[160px] truncate',
+                  : 'whitespace-nowrap',
                 isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
               )}
             >

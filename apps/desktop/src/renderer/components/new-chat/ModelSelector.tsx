@@ -124,6 +124,57 @@ export function ProviderMark({
   }
 }
 
+function ModelBrandMark({
+  modelId,
+  agentKind,
+  fallbackProviderId,
+  fallbackProviderName,
+  colorClass = 'text-[var(--model-trigger-text)]',
+  withMargin = true,
+  dense = false,
+}: {
+  modelId: string;
+  agentKind: AgentKind | null;
+  fallbackProviderId?: string | null;
+  fallbackProviderName?: string;
+  colorClass?: string;
+  withMargin?: boolean;
+  dense?: boolean;
+}) {
+  const common = cn(withMargin && 'mr-1.5', 'shrink-0', colorClass);
+  const markSize = dense ? 12.3 : 13;
+  const normalized = modelId.toLowerCase();
+  if (
+    agentKind === 'claude-code' ||
+    normalized.startsWith('claude-') ||
+    normalized.startsWith('opus') ||
+    normalized.startsWith('sonnet') ||
+    normalized.startsWith('haiku') ||
+    normalized.startsWith('fable')
+  ) {
+    return <ClaudeMark size={markSize} className={common} />;
+  }
+  if (
+    agentKind === 'codex' ||
+    normalized.startsWith('codex/') ||
+    normalized.startsWith('gpt-') ||
+    normalized.startsWith('chatgpt/') ||
+    normalized.startsWith('openai/')
+  ) {
+    return <CodexMark size={markSize} className={common} />;
+  }
+  if (!fallbackProviderId) return null;
+  return (
+    <ProviderMark
+      providerId={fallbackProviderId}
+      name={fallbackProviderName}
+      colorClass={colorClass}
+      withMargin={withMargin}
+      dense={dense}
+    />
+  );
+}
+
 // 上下文窗口 tokens → 紧凑展示("1M" / "272K" / "8192")。
 function formatContextWindow(tokens: number): string {
   if (tokens >= 1_000_000) {
@@ -1073,10 +1124,10 @@ export function ModelSelector({
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
                       ]
                     : [
-                        dense ? 'h-6' : 'h-7',
+                        'h-[30px] min-w-max shrink-0',
                         noSource
                           ? 'bg-[var(--surface-chip)] px-2.5 hover:bg-[var(--surface-hover)]'
-                          : 'bg-transparent px-2 hover:bg-[var(--model-trigger-hover)]',
+                          : 'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] px-2.5 border border-[var(--border-default)] hover:bg-[var(--model-trigger-hover)]' /* spec 2026-07-17, token by 一哥 */,
                       ],
                 ),
             // device-link 远程切换 in-flight:置灰 + 禁用点击(复用本文件 disabled 行的 opacity-50 习惯)。
@@ -1115,15 +1166,17 @@ export function ModelSelector({
             // ——回落图标会让用户以为在用默认来源,而发送实际按 DB 里的断开来源走(no_oauth 事故)。
             // 错误态用语义豁免 error token(规则 16);trigger 保持可点击,下拉换源即恢复。
             <>
-              <ProviderMark
-                providerId={currentProviderId}
-                name={providers.find((p) => p.id === currentProviderId)?.name}
+              <ModelBrandMark
+                modelId={modelId}
+                agentKind={currentAgentKind}
+                fallbackProviderId={currentProviderId}
+                fallbackProviderName={providers.find((p) => p.id === currentProviderId)?.name}
                 colorClass="text-[var(--error-fg)]"
               />
               <span
                 className={cn(
-                  'min-w-0 truncate font-normal text-[var(--model-trigger-text)]',
-                  isCreateAgentVariant ? 'whitespace-nowrap' : isFieldTrigger ? 'max-w-[260px]' : 'max-w-[160px]',
+                  'min-w-0 font-normal text-[var(--text-primary)]',
+                  isCreateAgentVariant ? 'whitespace-nowrap' : isFieldTrigger ? 'max-w-[260px] truncate' : 'whitespace-nowrap',
                   isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
                 )}
               >
@@ -1148,9 +1201,11 @@ export function ModelSelector({
           ) : (
             <>
               {activeSourceId && (
-                <ProviderMark
-                  providerId={activeSourceId}
-                  name={providers.find((p) => p.id === activeSourceId)?.name}
+                <ModelBrandMark
+                  modelId={modelId}
+                  agentKind={currentAgentKind}
+                  fallbackProviderId={activeSourceId}
+                  fallbackProviderName={providers.find((p) => p.id === activeSourceId)?.name}
                   colorClass={
                     isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : undefined
                   }
@@ -1161,7 +1216,7 @@ export function ModelSelector({
                   'min-w-0 font-normal',
                   isCreateAgentVariant
                     ? 'whitespace-nowrap'
-                    : cn('truncate', isFieldTrigger ? 'max-w-[260px]' : 'max-w-[160px]'),
+                    : isFieldTrigger ? 'max-w-[260px] truncate' : 'whitespace-nowrap',
                   !isBudget &&
                     (isCreateAgentVariant
                       ? 'text-[var(--create-agent-control-text)]'
@@ -1198,7 +1253,7 @@ export function ModelSelector({
                         : 'text-[var(--model-trigger-text)]',
                       isCreateAgentVariant
                         ? 'whitespace-nowrap'
-                        : cn('truncate', isFieldTrigger ? 'max-w-[120px]' : 'max-w-[88px]'),
+                        : isFieldTrigger ? 'max-w-[120px] truncate' : 'whitespace-nowrap',
                       isCreateAgentVariant
                         ? 'text-[12px]'
                         : dense

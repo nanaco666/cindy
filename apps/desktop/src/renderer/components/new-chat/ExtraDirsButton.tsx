@@ -185,8 +185,9 @@ export function ExtraDirsButton({
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
                   ]
                 : [
-                    'gap-1 px-1.5 py-1',
-                    'bg-transparent',
+                    'h-[30px]',
+                    count > 0 && isCc ? 'min-w-max justify-center gap-1 px-2.5' : 'w-[30px] justify-center p-0',
+                    'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] border border-[var(--border-default)] text-[var(--composer-pill-icon,#3C3F43)] dark:text-[var(--composer-pill-icon,#D9D9D9)]' /* spec 2026-07-17, token by 一哥 */,
                     'hover:bg-[var(--model-trigger-hover)]',
                   ],
               'disabled:cursor-not-allowed disabled:opacity-50',
@@ -194,11 +195,8 @@ export function ExtraDirsButton({
             aria-label={t('extraDirs.menuAria')}
           >
             <Plus
-              size={isCreateAgentVariant ? 11 : dense ? 15 : 16}
-              className={cn(
-                'shrink-0',
-                isCreateAgentVariant ? 'text-current' : 'text-[var(--model-trigger-text)]',
-              )}
+              size={isCreateAgentVariant ? 11 : dense ? 14 : 14}
+              className="shrink-0"
             />
             {count > 0 && isCc && !isCreateAgentVariant && (
               <span

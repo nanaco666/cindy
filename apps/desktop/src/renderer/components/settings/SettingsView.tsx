@@ -237,9 +237,9 @@ export function SettingsView() {
                   aria-controls={`settings-panel-${tabId}`}
                   onClick={() => handleSelectTab(tabId)}
                   className={cn(
-                    'flex h-9 items-center rounded-lg px-3 text-sm transition-colors',
+                    'flex h-9 items-center rounded-full px-3 text-sm transition-colors',
                     selected
-                      ? 'bg-sidebar-item-active font-medium text-[var(--sidebar-item-active-foreground)] border border-transparent'
+                      ? 'border border-[var(--sidebar-item-active-border)] bg-sidebar-item-active font-medium text-[var(--sidebar-item-active-foreground)]'
                       : 'border border-transparent text-[var(--settings-menu-text)] hover:bg-[var(--settings-menu-bg-hover)]',
                   )}
                 >
