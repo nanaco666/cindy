@@ -92,8 +92,6 @@ export const CINDY_REQUIRED_COLOR_IDS = [
   'sidebar-action-icon',
   'sidebar-item-active-foreground', // E1D 新增(选中胶囊反白前景)
   'sidebar-item-active-border', // 补编 §3(选中 pill 描边)
-  'sidebar-top-card-bg', // 补编 §2(顶部玻璃卡底)
-  'sidebar-top-card-border', // 补编 §2(顶部玻璃卡描边)
   'cmd-palette-item-meta', // E1D 侧栏层级(分组标签/meta 二级暗灰)
   'sidebar-item-active',
   'splash-bg',
@@ -281,8 +279,6 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'cmd-palette-item-meta': { light: '#9A9DA3', dark: '#6F6F6F' }, // E1D 侧栏二级暗灰
   'sidebar-item-active-foreground': { light: '#FCFCFC', dark: '#D4D4D4' }, // E1D 选中胶囊反白
   'sidebar-item-active-border': { light: '#A00A1D', dark: '#C24152' }, // 补编 §3(light 深红/dark 浅红)
-  'sidebar-top-card-bg': { light: 'rgba(255, 255, 255, 0.20)', dark: 'rgba(255, 255, 255, 0.05)' }, // 补编 §2
-  'sidebar-top-card-border': { light: 'rgba(60, 63, 67, 0.10)', dark: 'rgba(255, 255, 255, 0.13)' }, // 补编 §2
   'sidebar-item-active': { light: '352.3 89.8% 46.1%', dark: '352.1 76.6% 36.9%' }, // E1D
   'splash-bg': { light: '0.0 0.0% 92.9%', dark: '0.0 2.4% 16.1%' },
   'splash-text': { light: '222.0 4.6% 42.7%', dark: '216.0 4.1% 75.9%' },

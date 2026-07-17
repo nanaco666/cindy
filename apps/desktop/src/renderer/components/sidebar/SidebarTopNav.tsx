@@ -57,7 +57,7 @@ export function SidebarTopNav(): React.ReactElement {
 
   return (
     // pt-1(原 2.5):顶行 chrome 收窄到 46px 后,列表整体上提贴近顶行(对齐 Codex)。
-    <div className="flex flex-col gap-0.5 pt-1 pr-3 pb-2.5 pl-3 bg-[var(--sidebar-top-card-bg)] border border-[var(--sidebar-top-card-border)] rounded-lg">
+    <div className="flex flex-col gap-0.5 pt-1 pr-3 pb-2.5 pl-3">
       {/* 1. 新建 —— 图标 15/1.8 + meta 灰:与项目行的文件夹图标同规格同色
           (2026-07 用户定稿,对齐 Codex;文字仍用 foreground)。 */}
       <button onClick={handleNew} className={ROW_CLASS} aria-label={t('ccAgent.layout.new')}>

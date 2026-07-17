@@ -130,7 +130,8 @@ import {
 } from './newMakerDraftRightSidebar';
 import { closeAllTabs as closeRightSidebarTabs } from '@/features/right-sidebar/store';
 import { revealOrcaWorkersTab } from '@/features/right-sidebar/plugins/orca-workers/actions';
-import cindyAvatarLockup from '@/assets/cindy-avatar-lockup.png';
+import headImageDark from '@/assets/head-image-dark.png';
+import headImageLight from '@/assets/head-image-light.png';
 
 const log = createLogger('NewMakerDraftRoute');
 const IS_MAC_PLATFORM = typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin';
@@ -1735,25 +1736,23 @@ export function NewMakerDraftRoute() {
                 className="mb-[15px] flex h-[50px] items-center gap-[9px]"
               >
                 <span
-                  className="relative grid h-[50px] w-[50px] shrink-0 place-items-center overflow-hidden rounded-full border border-[var(--create-agent-avatar-ring)] bg-[var(--create-agent-avatar-glass-bg)] backdrop-blur-[18px]"
-                  style={{ backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)' } as React.CSSProperties}
+                  data-testid="create-agent-head-image"
+                  className="relative h-[50px] w-[50px] shrink-0"
                 >
+                  {/* head_image 切图(Figma 185:1720/185:2911,边框玻璃圈已烧入);投影按设计 fx 0 4 7.3 @2x 折半 */}
                   <img
-                    src={cindyAvatarLockup}
+                    src={headImageLight}
                     alt=""
-                    className="h-[44.55px] w-[44.55px] rounded-full object-cover"
+                    className="h-full w-full dark:hidden"
+                    style={{ filter: 'drop-shadow(0 2px 3.65px rgba(0, 0, 0, 0.15))' }}
                     draggable={false}
                   />
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute inset-[2.73px] rounded-full p-px"
-                    style={{
-                      background:
-                        'linear-gradient(180deg, var(--create-agent-avatar-inner-ring-start), var(--create-agent-avatar-inner-ring-end))',
-                      WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-                      WebkitMaskComposite: 'xor',
-                      maskComposite: 'exclude',
-                    }}
+                  <img
+                    src={headImageDark}
+                    alt=""
+                    className="hidden h-full w-full dark:block"
+                    style={{ filter: 'drop-shadow(0 2px 3.65px rgba(0, 0, 0, 0.15))' }}
+                    draggable={false}
                   />
                 </span>
                 {!logoError && (

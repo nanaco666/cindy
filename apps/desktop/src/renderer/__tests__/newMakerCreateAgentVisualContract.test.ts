@@ -35,7 +35,7 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(source).not.toContain('h-2.5 w-2.5 rounded-full');
     expect(source).not.toContain('surface-translucent-sidebar');
     expect(source).not.toContain('agent-island-annie');
-    expect(source).toContain('cindy-avatar-lockup.png');
+    expect(source).toContain('head-image-dark.png');
   });
 
   it('centers the CREATE AGENT content group without reintroducing route chrome', () => {
@@ -96,12 +96,11 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
   });
 
   it('uses exact CREATE AGENT quick-start and avatar tokens from the Figma slices', () => {
-    expect(source).toContain('border-[var(--create-agent-avatar-ring)]');
-    expect(source).toContain('bg-[var(--create-agent-avatar-glass-bg)]');
-    expect(source).toContain('var(--create-agent-avatar-inner-ring-start)');
-    expect(source).toContain('var(--create-agent-avatar-inner-ring-end)');
-    expect(source).toContain('WebkitMaskComposite');
-    expect(source).toContain('h-[44.55px] w-[44.55px]');
+    // head_image 切图方案(用户裁决 2026-07-17):边框烧入图,仅投影走 CSS
+    expect(source).toContain('head-image-dark.png');
+    expect(source).toContain('head-image-light.png');
+    expect(source).toContain("drop-shadow(0 2px 3.65px rgba(0, 0, 0, 0.15))");
+    expect(source).not.toContain('create-agent-avatar-glass-bg');
     expect(source).toContain('bg-[var(--create-agent-quick-card-bg)]');
     expect(source).toContain('border-[var(--create-agent-quick-card-border)]');
     expect(source).toContain('text-[var(--create-agent-quick-card-text)]');
@@ -111,10 +110,6 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(colorsSource).toContain("'create-agent-quick-card-icon-bg'");
     expect(colorsSource).toContain("light: '#EDEDED'");
     expect(colorsSource).toContain("dark: '#2A2828'");
-    expect(colorsSource).toContain("'create-agent-avatar-ring'");
-    expect(colorsSource).toContain("'create-agent-avatar-glass-bg'");
-    expect(colorsSource).toContain("'create-agent-avatar-inner-ring-start'");
-    expect(colorsSource).toContain("'create-agent-avatar-inner-ring-end'");
   });
 
   it('keeps global sidebar chrome out of the route body', () => {

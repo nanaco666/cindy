@@ -1121,15 +1121,18 @@ body.resizing-pane [data-ghost-webview] {
 [data-theme="cindy-light"] {
   --sidebar-glass-accent: #F70121;
 }
-[data-theme="cindy-light"] .bg-\[var\(--panel-bg\)\] {
+[data-theme="cindy-light"] .bg-\[var\(--panel-bg\)\],
+[data-theme="cindy-light"] aside.bg-sidebar {
+  /* 渐变强度按 Figma fill opacity 实测(lead 勘误 2026-07-17):linear 0→0.15,radial 0.07→0@60% */
   background:
-    linear-gradient(transparent, var(--sidebar-glass-accent)),
-    radial-gradient(circle, var(--sidebar-glass-accent), transparent 70%),
+    linear-gradient(rgba(247, 1, 33, 0), rgba(247, 1, 33, 0.15)),
+    radial-gradient(circle, rgba(247, 1, 33, 0.07), transparent 60%),
     var(--surface-translucent-sidebar);
   backdrop-filter: blur(50px);
   -webkit-backdrop-filter: blur(50px);
 }
-[data-theme="cindy-dark"] .bg-\[var\(--panel-bg\)\] {
+[data-theme="cindy-dark"] .bg-\[var\(--panel-bg\)\],
+[data-theme="cindy-dark"] aside.bg-sidebar {
   background: var(--surface-translucent-sidebar);
   backdrop-filter: blur(50px);
   -webkit-backdrop-filter: blur(50px);

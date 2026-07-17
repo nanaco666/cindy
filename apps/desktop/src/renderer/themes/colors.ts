@@ -376,14 +376,6 @@ registerColor('sidebar-item-active-border', {
   light: 'var(--sidebar-item-active)',
   dark: 'var(--sidebar-item-active)',
 }, 'Selected pill 1px 描边(default=invisible 同 pill bg;CINDY override light 深红 #A00A1D/dark 浅红 #C24152,补编 §3,别装反)');
-registerColor('sidebar-top-card-bg', {
-  light: 'transparent',
-  dark: 'transparent',
-}, '侧栏顶部玻璃卡底(default 透明;CINDY override light rgba(255,255,255,0.20)/dark rgba(255,255,255,0.05),补编 §2)');
-registerColor('sidebar-top-card-border', {
-  light: 'transparent',
-  dark: 'transparent',
-}, '侧栏顶部玻璃卡 1px 描边(default 透明;CINDY override light rgba(60,63,67,0.10)/dark rgba(255,255,255,0.13),补编 §2)');
 registerColor('sidebar-search-bg', {
   light: 'var(--surface-hsl)',
   dark: 'var(--surface-hsl)',
@@ -1800,22 +1792,6 @@ registerColor('create-agent-quick-card-icon', {
   light: '#3C3F43',
   dark: '#D4D4D4',
 }, 'CREATE AGENT quick-start icon');
-registerColor('create-agent-avatar-ring', {
-  light: 'rgba(255, 255, 255, 0.08)',
-  dark: 'rgba(255, 255, 255, 0.08)',
-}, 'CREATE AGENT lockup avatar outer ring');
-registerColor('create-agent-avatar-glass-bg', {
-  light: 'rgba(0, 0, 0, 0.004)',
-  dark: 'rgba(0, 0, 0, 0.004)',
-}, 'CREATE AGENT lockup avatar GLASS fill');
-registerColor('create-agent-avatar-inner-ring-start', {
-  light: 'rgba(255, 255, 255, 0.29)',
-  dark: 'rgba(255, 255, 255, 0.29)',
-}, 'CREATE AGENT lockup avatar inner gradient ring start');
-registerColor('create-agent-avatar-inner-ring-end', {
-  light: 'rgba(255, 255, 255, 0.24)',
-  dark: 'rgba(255, 255, 255, 0.24)',
-}, 'CREATE AGENT lockup avatar inner gradient ring end');
 registerColor('sidebar-nav-text', {
   light: '#3C3F43',
   dark: '#D4D4D4',
