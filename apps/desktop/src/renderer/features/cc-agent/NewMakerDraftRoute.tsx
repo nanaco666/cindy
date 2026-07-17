@@ -75,6 +75,7 @@ import { seedSession } from '@/state/sessionModelMemory';
 import { setPending, setPendingGoal } from '@/state/pendingFirstMessage';
 import {
   clearDraftAndNotify as clearComposerDraftAndNotify,
+  getDraft as getComposerDraft,
   plainTextToTiptapDoc,
   saveDraft as saveComposerDraft,
 } from '@/lib/composerDraftStore';
@@ -94,7 +95,7 @@ import { getCollaborationStartErrorMessage } from './collaborationErrors';
 import { CrossAgentConvertDialog } from '@/components/ui/cross-agent-convert-dialog';
 import type { MakerVendor, Session } from '@/lib/ccAgent.types';
 import { remoteProjectsStore } from '@/features/device-link/remoteProjectsStore';
-import { MonitorSmartphone } from 'lucide-react';
+import { Code2, Hammer, MessageSquareCode, MonitorSmartphone, SearchCode } from 'lucide-react';
 import type { Effort, PermissionMode } from '@/lib/userPreferences.types';
 import type { AttachedFile, MentionedResource } from '@/lib/fileTypes';
 import { toast } from '@/lib/toast';
@@ -133,6 +134,7 @@ import {
 } from './newMakerDraftRightSidebar';
 import { closeAllTabs as closeRightSidebarTabs } from '@/features/right-sidebar/store';
 import { revealOrcaWorkersTab } from '@/features/right-sidebar/plugins/orca-workers/actions';
+import cindyAvatar from '@/assets/agent-island-annie.png';
 
 const log = createLogger('NewMakerDraftRoute');
 const IS_MAC_PLATFORM =
@@ -157,6 +159,32 @@ export { NEW_MAKER_DRAFT_KEY };
 
 /** 草稿命名空间图片缓存 URL 前缀(浏览器页面评论截图等草稿期缓存落这里)。 */
 const DRAFT_IMAGE_URL_PREFIX = `xdt-image://${NEW_MAKER_DRAFT_KEY}/`;
+
+const CREATE_AGENT_SIDEBAR_BG =
+  'var(--surface-translucent-sidebar, var(--surface-elevated))'; // TODO-E4D: rebase to E4D translucent sidebar token once registered.
+
+const createAgentQuickStarts = [
+  {
+    key: 'explore',
+    labelKey: 'newChat.createAgent.quickStarts.explore',
+    icon: SearchCode,
+  },
+  {
+    key: 'build',
+    labelKey: 'newChat.createAgent.quickStarts.build',
+    icon: Code2,
+  },
+  {
+    key: 'review',
+    labelKey: 'newChat.createAgent.quickStarts.review',
+    icon: MessageSquareCode,
+  },
+  {
+    key: 'fix',
+    labelKey: 'newChat.createAgent.quickStarts.fix',
+    icon: Hammer,
+  },
+] as const;
 
 /**
  * 草稿态没有 sessionId,附件有两种"寄居"形态,lazy-create 出 sessionId 之后
@@ -1550,6 +1578,17 @@ export function NewMakerDraftRoute() {
     return proceed;
   }, [vendorAuthGate]);
 
+  const handleQuickStart = useCallback((labelKey: (typeof createAgentQuickStarts)[number]['labelKey']) => {
+    const text = t(labelKey);
+    const currentDraft = getComposerDraft(NEW_MAKER_DRAFT_KEY);
+    saveComposerDraft(NEW_MAKER_DRAFT_KEY, {
+      text: plainTextToTiptapDoc(text),
+      attachments: currentDraft?.attachments ?? attachmentState.attachments,
+      quotes: currentDraft?.quotes,
+      browserComments: currentDraft?.browserComments,
+    });
+  }, [attachmentState.attachments, t]);
+
   // 注意:不要给 ChatInput 加 key 强制 remount。ChatInput 内部 activeModel /
   // activeEffort / activePermissionMode 都是每次 render 直接从 props 派生
   // (见 ChatInput.tsx 第 459 行注释 "derive directly from props every render"),
@@ -1616,8 +1655,9 @@ export function NewMakerDraftRoute() {
       }}
     >
       <div
+        data-testid="create-agent-shell"
         className={cn(
-          'relative flex h-full w-full flex-col items-center justify-center bg-content-area pb-[28px]',
+          'relative flex h-full w-full items-center justify-center overflow-hidden bg-[var(--surface)] px-6 py-8',
         )}
       >
         {/* 整页拖入遮罩(与 CCAgentSessionView 聊天区同款 token):提示文案由
@@ -1662,33 +1702,96 @@ export function NewMakerDraftRoute() {
             </div>
           )
         )}
-        <div className="flex flex-col items-center gap-[50px]" style={{ width: inputWidth ?? 914 }}>
-          {!logoError && (
-            <img
-              src={logoSrc}
-              alt={BRAND_NAME}
-              // 默认打包 logo 是无留白的横向 wordmark,主题自定义 logo 比例不定:
-              // 统一「定高 + 宽度按比例自适应」并限制最大宽度,整图不裁切。
-              // 尺寸由 logoScale 缩放,故走 inline style 而非固定 tailwind 尺寸类。
-              className="pointer-events-none shrink-0 select-none object-contain"
-              style={{
-                height: `${LOGO_BASE_HEIGHT * logoScale}px`,
-                width: 'auto',
-                maxWidth: `${LOGO_BASE_WIDTH * logoScale}px`,
-              }}
-              draggable={false}
-              onError={() => {
-                // 主题自定义 logo 读不出 → 回退默认打包图;默认图仍报错才隐藏(防死循环)。
-                const fallback = defaultLogoForTheme(themeService.getCurrentTheme());
-                if (logoSrc !== fallback) setLogoSrc(fallback);
-                else setLogoError(true);
-              }}
-            />
-          )}
+        <div className="flex h-[min(1049px,calc(100vh-64px))] min-h-[620px] w-[min(910px,calc(100vw-48px))] overflow-hidden rounded-[9px] border-2 border-[var(--border-default)] bg-[var(--surface)]">
+          <aside
+            className="hidden w-[214px] shrink-0 flex-col border-r border-[var(--border-default)] px-3 py-4 md:flex"
+            style={{ background: CREATE_AGENT_SIDEBAR_BG }}
+            aria-hidden="true"
+          >
+            <div className="flex items-center gap-2 px-1">
+              <img
+                src={cindyAvatar}
+                alt=""
+                className="h-9 w-9 rounded-full object-cover"
+                draggable={false}
+              />
+              <div className="min-w-0">
+                <div className="text-[12px] font-semibold leading-[14px] text-[var(--text-primary)]">
+                  {BRAND_NAME}
+                </div>
+                <div className="mt-1 h-1.5 w-20 rounded-full bg-[var(--text-secondary)] opacity-40" />
+              </div>
+            </div>
+            <div className="mt-8 flex flex-col gap-2">
+              <div className="h-8 rounded-full bg-[var(--surface-chip)]" />
+              <div className="h-8 rounded-full border border-[var(--border-default)] bg-[#DF0C27]" />
+              <div className="mx-2 h-7 rounded-full bg-[var(--surface-chip)]" />
+              <div className="mx-2 h-7 rounded-full bg-[var(--surface-chip)]" />
+              <div className="mx-2 h-7 rounded-full bg-[var(--surface-chip)]" />
+            </div>
+            <div className="mt-auto flex h-10 items-center gap-2 rounded-full border border-[var(--border-default)] bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] px-2">
+              <img
+                src={cindyAvatar}
+                alt=""
+                className="h-8 w-8 rounded-full object-cover"
+                draggable={false}
+              />
+              <div className="min-w-0">
+                <div className="text-[12px] font-semibold leading-[14px] text-[var(--text-primary)]">
+                  {BRAND_NAME}
+                </div>
+                <div className="mt-1 h-1 w-16 rounded-full bg-[var(--text-secondary)] opacity-50" />
+              </div>
+            </div>
+          </aside>
 
-          {/* InputGroup:vendor switcher + ChatInputBox + WorkDir Row,gap 16(ChatInput 自带 gap-4=16) */}
-          <div className="flex w-full flex-col items-center gap-4">
-            <VendorSegmentedSwitcher value={draft.vendor} onChange={handleVendorChange} />
+          <main className="flex min-w-0 flex-1 flex-col items-center justify-center px-5 py-10 sm:px-8">
+            <div
+              className="flex w-full flex-col items-center"
+              style={{ maxWidth: Math.min(inputWidth ?? 637, 637) }}
+            >
+              <div
+                data-testid="create-agent-brand-lockup"
+                className="mb-9 flex flex-col items-center gap-5"
+              >
+                <img
+                  src={cindyAvatar}
+                  alt=""
+                  className="h-[74px] w-[74px] rounded-full object-cover"
+                  draggable={false}
+                />
+                {!logoError && (
+                  <img
+                    src={logoSrc}
+                    alt={BRAND_NAME}
+                    // 默认打包 logo 是无留白的横向 wordmark,主题自定义 logo 比例不定:
+                    // 统一「定高 + 宽度按比例自适应」并限制最大宽度,整图不裁切。
+                    // 尺寸由 logoScale 缩放,故走 inline style 而非固定 tailwind 尺寸类。
+                    className="pointer-events-none shrink-0 select-none object-contain"
+                    style={{
+                      height: `${Math.min(LOGO_BASE_HEIGHT * logoScale, 42)}px`,
+                      width: 'auto',
+                      maxWidth: `${Math.min(LOGO_BASE_WIDTH * logoScale, 150)}px`,
+                    }}
+                    draggable={false}
+                    onError={() => {
+                      // 主题自定义 logo 读不出 → 回退默认打包图;默认图仍报错才隐藏(防死循环)。
+                      const fallback = defaultLogoForTheme(themeService.getCurrentTheme());
+                      if (logoSrc !== fallback) setLogoSrc(fallback);
+                      else setLogoError(true);
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* InputGroup:vendor switcher + ChatInputBox + WorkDir Row,gap 16(ChatInput 自带 gap-4=16) */}
+              <div className="flex w-full flex-col items-center gap-4">
+                <VendorSegmentedSwitcher
+                  value={draft.vendor}
+                  onChange={handleVendorChange}
+                  width={150}
+                  dense
+                />
             {/* device-link:为远程设备项目新建对话时的明显标识。让用户清楚这条对话会建在
                 被控设备上、属于那台机器的项目,而不是本机。 */}
             {isDeviceLinkDraft && (
@@ -1709,10 +1812,14 @@ export function NewMakerDraftRoute() {
                 </span>
               </div>
             )}
-            <ChatInput
+                <div className="w-full [--confirm-btn-primary-hover:#2F3236] [--send-btn-bg:#3C3F43] [--send-btn-icon:#FCFCFC] dark:[--confirm-btn-primary-hover:#DADADA] dark:[--send-btn-bg:#EEEEEE] dark:[--send-btn-icon:#252222]">
+                  <ChatInput
                 onSend={handleSend}
                 onBeforeVoiceInputStart={handleBeforeVoiceInputStart}
                 externalDragOver={pageDragOver}
+                visualVariant="create-agent"
+                compactToolbar
+                denseToolbar
                 sessionId={undefined}
                 initialWorkingDir={effectiveWorkingDir}
                 remoteHostId={draft.remoteHostId ?? null}
@@ -1793,7 +1900,36 @@ export function NewMakerDraftRoute() {
                       }
                     : undefined
                 }
-              />
+                  />
+                </div>
+            <div data-testid="create-agent-quick-starts" className="mt-8 w-full">
+              <div className="mb-3 flex items-center justify-between px-0.5">
+                <div className="text-[12px] font-medium leading-[14px] text-[var(--text-secondary)]">
+                  {t('newChat.createAgent.quickStart')}
+                </div>
+                <button
+                  type="button"
+                  className="rounded-full px-2 py-1 text-[12px] leading-[14px] text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
+                >
+                  {t('newChat.createAgent.more')}
+                </button>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {createAgentQuickStarts.map(({ key, labelKey, icon: Icon }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => handleQuickStart(labelKey)}
+                    className="flex h-20 flex-col justify-between rounded-[6px] border border-[var(--border-default)] bg-[var(--chat-input-bg)] p-3 text-left text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-chip)]"
+                  >
+                    <Icon size={18} strokeWidth={2} className="text-[var(--text-primary)]" />
+                    <span className="text-[11px] font-semibold leading-[14px]">
+                      {t(labelKey)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
             {/* 首页「新建目标」弹窗:无 sessionId → onCreate 建会话并 setGoal(见 handleCreateGoal)。
                 initialObjective = 点「新建目标」时输入框里已有的文字。 */}
             <NewGoalDialog
@@ -1804,8 +1940,14 @@ export function NewMakerDraftRoute() {
             />
             {/* 用量仪表盘: 热力图 + 按模型拆分 + 异常提示。无历史数据时自渲染 null, 布局同现状。
                 受 usageDashboardEnabled 隐性偏好控制 (默认开启, 无设置页开关, 见上)。 */}
-            {usageDashboardEnabled && <HomeUsageDashboard />}
+            {usageDashboardEnabled && (
+              <div className="mt-6 w-full">
+                <HomeUsageDashboard />
+              </div>
+            )}
           </div>
+            </div>
+          </main>
         </div>
       </div>
 
