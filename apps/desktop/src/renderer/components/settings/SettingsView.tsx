@@ -239,7 +239,7 @@ export function SettingsView() {
                   className={cn(
                     'flex h-9 items-center rounded-lg px-3 text-sm transition-colors',
                     selected
-                      ? 'bg-[var(--settings-menu-bg-selected)] font-medium text-[var(--settings-menu-text-selected)] border border-[var(--settings-menu-border-selected)]'
+                      ? 'bg-sidebar-item-active font-medium text-[var(--sidebar-item-active-foreground)] border border-transparent'
                       : 'border border-transparent text-[var(--settings-menu-text)] hover:bg-[var(--settings-menu-bg-hover)]',
                   )}
                 >

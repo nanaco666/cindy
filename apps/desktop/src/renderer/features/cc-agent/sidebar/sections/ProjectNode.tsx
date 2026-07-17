@@ -536,7 +536,7 @@ function ProjectAction({ label, onClick, disabled = false, children }: ProjectAc
         className={cn(
           'shrink-0 size-5 flex items-center justify-center rounded-md',
           'text-sidebar-action-icon hover:text-foreground',
-          'hover:bg-sidebar-item-active focus:outline-none',
+          'hover:bg-sidebar-item-hover focus:outline-none',
           'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent',
         )}
       >

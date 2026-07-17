@@ -125,12 +125,8 @@ export function PermissionSelector({
                     'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] border border-[var(--border-default)] text-[var(--text-primary)]' /* spec 2026-07-17, token by 一哥; fallback 待注册后删 */,
                     'hover:bg-[var(--model-trigger-hover)]',
                   ],
-              !isCreateAgentVariant &&
-                triggerTone === 'auto' &&
-                'text-[var(--perm-auto-selected-text)]',
-              !isCreateAgentVariant &&
-                triggerTone === 'bypassPermissions' &&
-                'text-[var(--perm-bypass-selected-text)]',
+              triggerTone === 'auto' && 'text-[var(--perm-auto-selected-text)]',
+              triggerTone === 'bypassPermissions' && 'text-[var(--perm-bypass-selected-text)]',
               disabled && 'pointer-events-none opacity-50',
             )}
             aria-label={t('newChat.permissionSelector.triggerAria', { label: triggerLabel })}
@@ -156,7 +152,7 @@ export function PermissionSelector({
                 size={isCreateAgentVariant ? 8 : dense ? 13 : 14}
                 className={cn(
                   'shrink-0',
-                  isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : 'text-current',
+                  'text-current',
                 )}
               />
             </div>

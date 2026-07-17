@@ -520,6 +520,10 @@ registerColor('chat-input-border-focus', {
   light: 'var(--text-tertiary)',
   dark: 'var(--text-tertiary)',
 }, 'Silver — focus hint, still grayscale');
+registerColor('chat-input-placeholder-subtle', {
+  light: 'color-mix(in srgb, var(--chat-input-placeholder) 40%, transparent)',
+  dark: 'color-mix(in srgb, var(--chat-input-placeholder) 40%, transparent)',
+}, 'Chat input placeholder at 40% opacity');
 registerColor('chat-input-text', {
   light: '#000000',
   dark: '#d4d4d4',
@@ -1718,11 +1722,11 @@ registerColor('create-agent-control-bg', {
 }, 'CREATE AGENT pill / icon button background');
 registerColor('create-agent-control-bg-hover', {
   light: 'var(--surface-hover)',
-  dark: '#2E3237',
+  dark: '#444242',
 }, 'CREATE AGENT neutral hover background');
 registerColor('create-agent-control-bg-pressed', {
   light: 'var(--surface-hover-soft)',
-  dark: '#25282C',
+  dark: '#504F4F',
 }, 'CREATE AGENT neutral pressed background');
 registerColor('create-agent-control-border', {
   light: '#DCDFE3',
@@ -1769,9 +1773,9 @@ registerColor('create-agent-send-disabled-icon', {
   dark: '#585555',
 }, 'CREATE AGENT send button disabled icon');
 registerColor('create-agent-focus-ring', {
-  light: '#417CDD',
-  dark: '#417CDD',
-}, 'CREATE AGENT control focus ring');
+  light: 'var(--text-tertiary)',
+  dark: 'var(--text-tertiary)',
+}, 'CREATE AGENT neutral focus border');
 registerColor('create-agent-quick-card-bg', {
   light: '#F8F8F8',
   dark: '#312F2F',
@@ -1792,6 +1796,26 @@ registerColor('create-agent-quick-card-icon', {
   light: '#3C3F43',
   dark: '#D4D4D4',
 }, 'CREATE AGENT quick-start icon');
+registerColor('create-agent-quick-card-bg-hover', {
+  light: '#FCFCFC',
+  dark: '#3B3A3A',
+}, 'CREATE AGENT quick-start card neutral hover background');
+registerColor('create-agent-avatar-ring', {
+  light: 'rgba(255, 255, 255, 0.08)',
+  dark: 'rgba(255, 255, 255, 0.08)',
+}, 'CREATE AGENT lockup avatar outer ring');
+registerColor('create-agent-avatar-glass-bg', {
+  light: 'rgba(0, 0, 0, 0.004)',
+  dark: 'rgba(0, 0, 0, 0.004)',
+}, 'CREATE AGENT lockup avatar GLASS fill');
+registerColor('create-agent-avatar-inner-ring-start', {
+  light: 'rgba(255, 255, 255, 0.29)',
+  dark: 'rgba(255, 255, 255, 0.29)',
+}, 'CREATE AGENT lockup avatar inner gradient ring start');
+registerColor('create-agent-avatar-inner-ring-end', {
+  light: 'rgba(255, 255, 255, 0.24)',
+  dark: 'rgba(255, 255, 255, 0.24)',
+}, 'CREATE AGENT lockup avatar inner gradient ring end');
 registerColor('sidebar-nav-text', {
   light: '#3C3F43',
   dark: '#D4D4D4',

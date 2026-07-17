@@ -833,7 +833,7 @@ export const SessionItem = memo(function SessionItem({
           )}
           {/* Action 按钮组（hover/menu open 时浮现，archivePending 期间整组让位给红色 pill）。
               尺寸/视觉与 Project Header 的 ProjectAction 同套（size-5 / icon 14 /
-              strokeWidth 2 / gap-0.5 / hover:bg-sidebar-item-active），唯一差异
+              strokeWidth 2 / gap-0.5 / hover:bg-sidebar-item-hover），唯一差异
               是 session 行的三个按钮**故意不挂 Tip 浮层** —— 图标语义已足够直观,
               tooltip 在密集 sidebar 列表里反而干扰视觉。
               组装顺序固定为 [Run(automation only), More, Archive | Undo]：
@@ -1089,7 +1089,7 @@ function SessionAction({
       className={cn(
         'shrink-0 size-5 flex items-center justify-center rounded-md',
         'text-sidebar-action-icon hover:text-foreground',
-        'hover:bg-sidebar-item-active focus:outline-none',
+        'hover:bg-sidebar-item-hover focus:outline-none',
       )}
     >
       {children}
