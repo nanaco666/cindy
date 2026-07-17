@@ -1,5 +1,14 @@
 import { useState, useMemo, useEffect, useRef, type CSSProperties } from 'react';
-import { Check, ChevronDown, PlugZap, Plus, Search, SlidersHorizontal, Unplug, Zap } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  PlugZap,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  Unplug,
+  Zap,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
@@ -90,7 +99,12 @@ export function ProviderMark({
     case 'openai':
       return <CodexMark size={markSize} className={common} />;
     case 'xd':
-      return <XDIncMark size={markSize} className={cn(dense ? 'h-[8.4px] w-[14.2px]' : 'h-[9px] w-[15px]', common)} />;
+      return (
+        <XDIncMark
+          size={markSize}
+          className={cn(dense ? 'h-[8.4px] w-[14.2px]' : 'h-[9px] w-[15px]', common)}
+        />
+      );
     default:
       if (!name) return null;
       // 自定义供应商:首字母描边方盒(border 跟随 currentColor = colorClass 设定的文字色)。
@@ -159,7 +173,11 @@ interface ModelSelectorProps {
    * 三者都不传 → 单栏纯列表(无供应商分段),选行只 onModelChange(老入口 / CreateWorkerPopover)。
    */
   currentProviderId?: string | null;
-  onProviderChange?: (providerId: string | null, reconciledModelId?: string, reconciledEffort?: Effort) => void;
+  onProviderChange?: (
+    providerId: string | null,
+    reconciledModelId?: string,
+    reconciledEffort?: Effort,
+  ) => void;
   onNavigateToProviders?: () => void;
   /**
    * 会话显式选中的来源已断开(由 ChatInput 按 sessionId / deviceLink scoping 计算,见
@@ -216,7 +234,11 @@ interface ModelSelectorContentProps {
   /** 选中后是否自动关闭。Popover 场景传入,内嵌场景不传。 */
   onDismiss?: () => void;
   currentProviderId?: string | null;
-  onProviderChange?: (providerId: string | null, reconciledModelId?: string, reconciledEffort?: Effort) => void;
+  onProviderChange?: (
+    providerId: string | null,
+    reconciledModelId?: string,
+    reconciledEffort?: Effort,
+  ) => void;
   onNavigateToProviders?: () => void;
   /**
    * 可选「跟随会话」行(opt-in)。仅 scheduler 的 heartbeat(绑定会话)任务传入:
@@ -266,14 +288,20 @@ export function ModelSelectorContent({
   const visibilityVersion = useModelVisibilityVersion();
   const [query, setQuery] = useState('');
   // 当前展开 Edit 配置列的目标(供应商id + 模型id)。null = 配置列收起(单栏)。
-  const [editing, setEditing] = useState<{ providerId: string | null; modelId: string } | null>(null);
+  const [editing, setEditing] = useState<{ providerId: string | null; modelId: string } | null>(
+    null,
+  );
   // 非选中模型的 effort/fast 改动写进记忆(localStorage),不反映在 props —— 用 tick 触发重渲染读新值。
   const [editTick, setEditTick] = useState(0);
   const bump = () => setEditTick((n) => n + 1);
   // 跨进程 / 远程改动:device-link push 会直接改底层记忆 store(providerModelMemory / sessionModelMemory /
   // deviceLinkModelMirror),不经本组件的 editTick。订阅三个 store 的版本号,任一变化即重渲染、重算行
   // effort/fast 显示(本地草稿用 providerModelMemory,本地会话用 sessionModelMemory,远程用镜像)。
-  const storeVersion = editTick + useProviderModelMemoryVersion() + useSessionModelMemoryVersion() + useDeviceLinkModelMirrorVersion();
+  const storeVersion =
+    editTick +
+    useProviderModelMemoryVersion() +
+    useSessionModelMemoryVersion() +
+    useDeviceLinkModelMirrorVersion();
   void storeVersion;
 
   const listRef = useRef<HTMLDivElement>(null);
@@ -291,7 +319,14 @@ export function ModelSelectorContent({
         deviceCodexModels: codex.capabilities?.availableModels ?? [],
         excludeSubscriptionDirect,
       }),
-    [agentKind, deviceId, providers, cc.capabilities, codex.capabilities, excludeSubscriptionDirect],
+    [
+      agentKind,
+      deviceId,
+      providers,
+      cc.capabilities,
+      codex.capabilities,
+      excludeSubscriptionDirect,
+    ],
   );
 
   const currentModel = visibleModels.find((m) => m.id === modelId);
@@ -333,12 +368,21 @@ export function ModelSelectorContent({
   // 远程切来源经隧道 set-model(providerId)生效(见 ChatInput.handleProviderChange 的远程分支)。
   const sourcesEnabled = !!onProviderChange;
   const connected = useMemo(
-    () => (sourcesEnabled && currentAgentKind ? connectedProvidersForAgent(providers, currentAgentKind) : []),
+    () =>
+      sourcesEnabled && currentAgentKind
+        ? connectedProvidersForAgent(providers, currentAgentKind)
+        : [],
     [sourcesEnabled, providers, currentAgentKind],
   );
-  const nativeDefaultId = useMemo(() => nativeDefaultSourceId(connected, currentAgentKind), [connected, currentAgentKind]);
+  const nativeDefaultId = useMemo(
+    () => nativeDefaultSourceId(connected, currentAgentKind),
+    [connected, currentAgentKind],
+  );
   // 显式选中(且仍在已连接列表)→ 它;否则原生默认来源(= 未显式选时路由实际命中那家)。
-  const activeSourceId = currentProviderId && connected.some((p) => p.id === currentProviderId) ? currentProviderId : nativeDefaultId;
+  const activeSourceId =
+    currentProviderId && connected.some((p) => p.id === currentProviderId)
+      ? currentProviderId
+      : nativeDefaultId;
 
   // 行级 Fast 可编辑性 = agent 能力 × 该(供应商, 模型)条目的 supportsFastMode。
   // Fast 能力是 per-(provider, agent) 的(见 CatalogModel)：按该行供应商现查它自己的模型条目,
@@ -371,7 +415,9 @@ export function ModelSelectorContent({
     const meta = modelById.get(id);
     const parts: string[] = [];
     if (meta && meta.contextWindow > 0) {
-      parts.push(t('newChat.modelSelector.meta.context', { value: formatContextWindow(meta.contextWindow) }));
+      parts.push(
+        t('newChat.modelSelector.meta.context', { value: formatContextWindow(meta.contextWindow) }),
+      );
     }
     const price = priceTipOf(id);
     if (price) parts.push(price);
@@ -411,13 +457,24 @@ export function ModelSelectorContent({
       query,
     });
     // visibilityVersion 仅作刷新触发器(设置页改显示开关后强制重算);deviceId 切换需重算分段。
-  }, [sourcesEnabled, connected, currentAgentKind, modelId, activeSourceId, query, visibilityVersion, deviceId]);
+  }, [
+    sourcesEnabled,
+    connected,
+    currentAgentKind,
+    modelId,
+    activeSourceId,
+    query,
+    visibilityVersion,
+    deviceId,
+  ]);
 
   const flatModels = useMemo(() => {
     if (sections) return null;
     const q = query.trim().toLowerCase();
     if (!q) return visibleModels;
-    return visibleModels.filter((m) => m.displayName.toLowerCase().includes(q) || m.id.toLowerCase().includes(q));
+    return visibleModels.filter(
+      (m) => m.displayName.toLowerCase().includes(q) || m.id.toLowerCase().includes(q),
+    );
   }, [sections, visibleModels, query]);
 
   // 选中判定:flat 模式只比模型 id;分段模式还要比供应商(同模型多供应商下只高亮当前来源那行)。
@@ -443,7 +500,10 @@ export function ModelSelectorContent({
     if (isSelectedRow(providerId, m.id)) {
       return m.efforts.includes(effort) ? effort : (m.defaultEffort ?? m.efforts[0]);
     }
-    const pe = currentAgentKind && providerId ? modelMemory?.getEffort(currentAgentKind, providerId, m.id) : undefined;
+    const pe =
+      currentAgentKind && providerId
+        ? modelMemory?.getEffort(currentAgentKind, providerId, m.id)
+        : undefined;
     const cand = pe ?? m.defaultEffort ?? undefined;
     return cand && m.efforts.includes(cand) ? cand : (m.defaultEffort ?? m.efforts[0] ?? null);
   };
@@ -479,7 +539,11 @@ export function ModelSelectorContent({
     onDismiss?.();
   };
   const toggleEdit = (providerId: string | null, id: string) => {
-    setEditing((prev) => (prev && prev.modelId === id && prev.providerId === providerId ? null : { providerId, modelId: id }));
+    setEditing((prev) =>
+      prev && prev.modelId === id && prev.providerId === providerId
+        ? null
+        : { providerId, modelId: id },
+    );
   };
 
   // ── Edit 配置列目标 ──────────────────────────────────────────────────────
@@ -493,19 +557,24 @@ export function ModelSelectorContent({
   }, [editing, sections, flatModels]);
 
   const editingIsActive =
-    !!editing && editing.modelId === modelId && (editing.providerId === null || editing.providerId === activeSourceId);
+    !!editing &&
+    editing.modelId === modelId &&
+    (editing.providerId === null || editing.providerId === activeSourceId);
   const editShowFast = !!editingModel && fastEditable(editing?.providerId ?? null, editingModel);
   const editHasEfforts = (editingModel?.efforts.length ?? 0) > 0;
   const showConfig = !!editingModel && (editHasEfforts || editShowFast);
 
   // 配置列当前 effort 值(选中 → live;否则记忆/默认)。
   const editingProviderId = editing?.providerId ?? null;
-  const editEffortValue: Effort | null = editingModel ? rowEffortOf(editingProviderId, editingModel) : null;
+  const editEffortValue: Effort | null = editingModel
+    ? rowEffortOf(editingProviderId, editingModel)
+    : null;
   const editFastValue: boolean = editingModel
     ? editingIsActive
       ? fastMode
-      : ((currentAgentKind && editingProviderId ? modelMemory?.getFast(currentAgentKind, editingProviderId, editingModel.id) : undefined) ??
-        false)
+      : ((currentAgentKind && editingProviderId
+          ? modelMemory?.getFast(currentAgentKind, editingProviderId, editingModel.id)
+          : undefined) ?? false)
     : false;
 
   const handleEditEffort = (e: Effort) => {
@@ -546,7 +615,8 @@ export function ModelSelectorContent({
     const rowEffort = rowEffortOf(providerId, model);
     const rowFastOn = fastOnOf(providerId, model);
     const hasEdit = !disabled && (model.efforts.length > 0 || fastEditable(providerId, model));
-    const isEditingThis = !!editing && editing.modelId === model.id && editing.providerId === providerId;
+    const isEditingThis =
+      !!editing && editing.modelId === model.id && editing.providerId === providerId;
     // hover tooltip:最前面拼供应商完整名(分段模式有 provider),再接上下文 / 价格 / 快速。
     const supplierName = provider ? providerDisplayName(provider, t) : null;
     const tipText = disabled
@@ -589,7 +659,9 @@ export function ModelSelectorContent({
               />
             )}
             <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-14 font-medium text-[var(--model-item-text)]">{model.displayName}</span>
+              <span className="truncate text-14 font-medium text-[var(--model-item-text)]">
+                {model.displayName}
+              </span>
               {isSubscriptionModel && (
                 <span className="inline-flex shrink-0 items-center rounded-full bg-[var(--surface-chip)] px-2 py-[1px] text-[11px] font-medium text-[var(--text-secondary)]">
                   {t('settings.providers.models.subscription')}
@@ -601,9 +673,13 @@ export function ModelSelectorContent({
                 </span>
               )}
               {rowEffort && (
-                <span className="shrink-0 text-13 font-normal text-[var(--text-tertiary)]">{effortLabelFor(model, rowEffort)}</span>
+                <span className="shrink-0 text-13 font-normal text-[var(--text-tertiary)]">
+                  {effortLabelFor(model, rowEffort)}
+                </span>
               )}
-              {rowFastOn && <Zap size={13} className="shrink-0 text-[var(--text-tertiary)]" aria-label="Fast" />}
+              {rowFastOn && (
+                <Zap size={13} className="shrink-0 text-[var(--text-tertiary)]" aria-label="Fast" />
+              )}
             </span>
           </span>
           {hasEdit && (
@@ -630,7 +706,11 @@ export function ModelSelectorContent({
   // 0 个可连来源:整张引导卡取代列表(仅 providers 加载完成后判,避免拉取期闪空态)。
   // device-link 远程会话不显示该引导(控制端无法替被控端连来源)→ 退化为扁平兜底列表。
   const emptyState =
-    sourcesEnabled && !deviceId && currentAgentKind && !providersLoading && connected.length === 0 ? (
+    sourcesEnabled &&
+    !deviceId &&
+    currentAgentKind &&
+    !providersLoading &&
+    connected.length === 0 ? (
       <div className="flex flex-col gap-[14px] p-2">
         <div className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[var(--model-item-hover)]">
@@ -640,7 +720,9 @@ export function ModelSelectorContent({
             <span className="truncate text-sm font-medium text-[var(--model-item-text)]">
               {t('newChat.modelSelector.source.emptyTitle')}
             </span>
-            <span className="text-12 font-normal text-[var(--text-secondary)]">{t('newChat.modelSelector.source.emptyDesc')}</span>
+            <span className="text-12 font-normal text-[var(--text-secondary)]">
+              {t('newChat.modelSelector.source.emptyDesc')}
+            </span>
           </div>
         </div>
         {onNavigateToProviders && (
@@ -652,7 +734,9 @@ export function ModelSelectorContent({
               'bg-[var(--accent-cta-bg)] transition-opacity hover:opacity-90',
             )}
           >
-            <span className="text-13 font-medium text-[var(--accent-pure-cta-fg)]">{t('newChat.modelSelector.source.connectCta')}</span>
+            <span className="text-13 font-medium text-[var(--accent-pure-cta-fg)]">
+              {t('newChat.modelSelector.source.connectCta')}
+            </span>
           </button>
         )}
       </div>
@@ -668,12 +752,16 @@ export function ModelSelectorContent({
       <div className="flex w-[196px] shrink-0 flex-col gap-0.5 self-stretch bg-[var(--model-dropdown-bg)] p-2">
         <div className="flex items-center gap-1.5 px-2 py-1.5">
           <SlidersHorizontal size={14} className="shrink-0 text-[var(--text-secondary)]" />
-          <span className="min-w-0 truncate text-[13.5px] font-medium text-[var(--model-item-text)]">{editingModel.displayName}</span>
+          <span className="min-w-0 truncate text-[13.5px] font-medium text-[var(--model-item-text)]">
+            {editingModel.displayName}
+          </span>
         </div>
         {editShowFast && (
           <>
             <div className="px-2 py-1.5">
-              <span className="text-11 font-medium text-[var(--text-tertiary)]">{t('newChat.modelSelector.options')}</span>
+              <span className="text-11 font-medium text-[var(--text-tertiary)]">
+                {t('newChat.modelSelector.options')}
+              </span>
             </div>
             <div className="px-0.5">
               {/* 遵循设计稿:单色反色(轨/文字 --text-primary,钮 --surface-on-card),不用品牌橙。 */}
@@ -687,11 +775,15 @@ export function ModelSelectorContent({
             </div>
           </>
         )}
-        {editShowFast && editHasEfforts && <div className="mx-1 my-1 h-px bg-[var(--model-dropdown-border)]" />}
+        {editShowFast && editHasEfforts && (
+          <div className="mx-1 my-1 h-px bg-[var(--model-dropdown-border)]" />
+        )}
         {editHasEfforts && (
           <>
             <div className="px-2 py-1.5">
-              <span className="text-11 font-medium text-[var(--text-tertiary)]">{t('newChat.modelSelector.effortLabel')}</span>
+              <span className="text-11 font-medium text-[var(--text-tertiary)]">
+                {t('newChat.modelSelector.effortLabel')}
+              </span>
             </div>
             {editingModel.efforts.map((e) => {
               const selected = editEffortValue === e;
@@ -708,10 +800,17 @@ export function ModelSelectorContent({
                     selected && 'bg-[var(--surface-chip)]',
                   )}
                 >
-                  <span className={cn('truncate text-[13.5px] text-[var(--model-item-text)]', selected ? 'font-medium' : 'font-normal')}>
+                  <span
+                    className={cn(
+                      'truncate text-[13.5px] text-[var(--model-item-text)]',
+                      selected ? 'font-medium' : 'font-normal',
+                    )}
+                  >
                     {effortLabelFor(editingModel, e)}
                   </span>
-                  {selected && <Check size={15} className="ml-2 shrink-0 text-[var(--model-item-check)]" />}
+                  {selected && (
+                    <Check size={15} className="ml-2 shrink-0 text-[var(--model-item-check)]" />
+                  )}
                 </button>
               );
             })}
@@ -740,8 +839,12 @@ export function ModelSelectorContent({
               followSession.active && 'bg-[var(--model-item-hover)]',
             )}
           >
-            <span className="text-14 font-medium text-[var(--model-item-text)]">{followSession.label}</span>
-            {followSession.active && <Check size={16} className="ml-2 shrink-0 text-[var(--model-item-check)]" />}
+            <span className="text-14 font-medium text-[var(--model-item-text)]">
+              {followSession.label}
+            </span>
+            {followSession.active && (
+              <Check size={16} className="ml-2 shrink-0 text-[var(--model-item-check)]" />
+            )}
           </button>
           <div className="mx-1 h-px bg-[var(--model-dropdown-border)]" />
         </>
@@ -760,9 +863,16 @@ export function ModelSelectorContent({
       </div>
 
       {/* 模型列表 —— 单栏;分段(供应商)或 flat。 */}
-      <div ref={listRef} className="flex max-h-[300px] flex-col gap-0.5 overflow-y-auto" role="listbox" aria-label="Model list">
+      <div
+        ref={listRef}
+        className="flex max-h-[300px] flex-col gap-0.5 overflow-y-auto"
+        role="listbox"
+        aria-label="Model list"
+      >
         {!hasAnyModel ? (
-          <div className="px-3 py-6 text-center text-13 text-[var(--text-tertiary)]">{t('newChat.modelSelector.search.noResults')}</div>
+          <div className="px-3 py-6 text-center text-13 text-[var(--text-tertiary)]">
+            {t('newChat.modelSelector.search.noResults')}
+          </div>
         ) : sections ? (
           // 平铺:每行带来源 mark 前缀,无分组标题(同供应商行仍因 buildProviderSections 顺序而相邻)。
           sections.flatMap((sec) => sec.models.map((m) => renderModelItem(sec.provider, m)))
@@ -784,7 +894,9 @@ export function ModelSelectorContent({
             )}
           >
             <Plus size={14} className="shrink-0 text-[var(--text-tertiary)]" />
-            <span className="truncate text-13 font-normal text-[var(--text-tertiary)]">{t('newChat.modelSelector.source.connect')}</span>
+            <span className="truncate text-13 font-normal text-[var(--text-tertiary)]">
+              {t('newChat.modelSelector.source.connect')}
+            </span>
           </button>
         </>
       )}
@@ -845,7 +957,14 @@ export function ModelSelector({
         deviceCodexModels: codex.capabilities?.availableModels ?? [],
         excludeSubscriptionDirect,
       }),
-    [agentKind, deviceId, providers, cc.capabilities, codex.capabilities, excludeSubscriptionDirect],
+    [
+      agentKind,
+      deviceId,
+      providers,
+      cc.capabilities,
+      codex.capabilities,
+      excludeSubscriptionDirect,
+    ],
   );
 
   const currentModel = visibleModels.find((m) => m.id === modelId);
@@ -888,14 +1007,21 @@ export function ModelSelector({
   // 空態:当前 agent 一个已连接来源都没有 → trigger 改「连接来源」CTA。
   // device-link 远程会话不走此 CTA(控制端无法替被控端连来源;hasConnectedSource 是本机口径)。
   const noSource =
-    !!onProviderChange && !!onNavigateToProviders && !deviceId && !!currentAgentKind && !providersLoading && !hasConnectedSource;
+    !!onProviderChange &&
+    !!onNavigateToProviders &&
+    !deviceId &&
+    !!currentAgentKind &&
+    !providersLoading &&
+    !hasConnectedSource;
   // trigger 上仍展示当前模型的 effort(模型支持时)。
   const showEffort = efforts.length > 0 && efforts.includes(effort);
   const effortLabel = showEffort ? labelOf(effort) : null;
   // Fast 工具栏按钮已移除 → trigger 上用闪电标出当前是否 Fast(模型支持 + 已开启时)。
   // 支持性按「当前生效来源」现查 per-provider 条目;无法解析来源(flat / device-link 退化)时
   // 回退拍平值,避免误隐藏闪电。
-  const triggerActiveProvider = activeSourceId ? providers.find((p) => p.id === activeSourceId) : undefined;
+  const triggerActiveProvider = activeSourceId
+    ? providers.find((p) => p.id === activeSourceId)
+    : undefined;
   const triggerFastSupported =
     triggerActiveProvider && currentAgentKind
       ? modelSupportsFastMode(triggerActiveProvider, modelId, currentAgentKind)
@@ -964,14 +1090,20 @@ export function ModelSelector({
                 size={isCreateAgentVariant ? 11 : 13}
                 className={cn(
                   'mr-0.5 shrink-0',
-                  isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : 'text-[var(--text-primary)]',
+                  isCreateAgentVariant
+                    ? 'text-[var(--create-agent-control-icon)]'
+                    : 'text-[var(--text-primary)]',
                 )}
               />
               <span
                 className={cn(
                   'min-w-0 font-medium',
-                  isCreateAgentVariant ? 'text-[var(--create-agent-control-text)]' : 'text-[var(--text-primary)]',
-                  isCreateAgentVariant ? 'whitespace-nowrap' : cn('truncate', isFieldTrigger ? 'max-w-[260px]' : 'max-w-[160px]'),
+                  isCreateAgentVariant
+                    ? 'text-[var(--create-agent-control-text)]'
+                    : 'text-[var(--text-primary)]',
+                  isCreateAgentVariant
+                    ? 'whitespace-nowrap'
+                    : cn('truncate', isFieldTrigger ? 'max-w-[260px]' : 'max-w-[160px]'),
                   isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
                 )}
               >
@@ -999,8 +1131,17 @@ export function ModelSelector({
                     比 "Select model" 占位更能说明「哪个模型的来源断了」。 */}
                 {currentModel?.displayName ?? modelId}
               </span>
-              <Unplug size={dense ? 11 : 12} className="ml-0.5 shrink-0 text-[var(--error-fg)]" aria-hidden />
-              <span className={cn('shrink-0 font-medium text-[var(--error-fg)]', dense ? 'text-[11.5px]' : 'text-[12px]')}>
+              <Unplug
+                size={dense ? 11 : 12}
+                className="ml-0.5 shrink-0 text-[var(--error-fg)]"
+                aria-hidden
+              />
+              <span
+                className={cn(
+                  'shrink-0 font-medium text-[var(--error-fg)]',
+                  dense ? 'text-[11.5px]' : 'text-[12px]',
+                )}
+              >
                 {t('newChat.modelSelector.source.disconnected')}
               </span>
             </>
@@ -1010,14 +1151,21 @@ export function ModelSelector({
                 <ProviderMark
                   providerId={activeSourceId}
                   name={providers.find((p) => p.id === activeSourceId)?.name}
-                  colorClass={isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : undefined}
+                  colorClass={
+                    isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : undefined
+                  }
                 />
               )}
               <span
                 className={cn(
                   'min-w-0 font-normal',
-                  isCreateAgentVariant ? 'whitespace-nowrap' : cn('truncate', isFieldTrigger ? 'max-w-[260px]' : 'max-w-[160px]'),
-                  !isBudget && (isCreateAgentVariant ? 'text-[var(--create-agent-control-text)]' : 'text-[var(--model-trigger-text)]'),
+                  isCreateAgentVariant
+                    ? 'whitespace-nowrap'
+                    : cn('truncate', isFieldTrigger ? 'max-w-[260px]' : 'max-w-[160px]'),
+                  !isBudget &&
+                    (isCreateAgentVariant
+                      ? 'text-[var(--create-agent-control-text)]'
+                      : 'text-[var(--model-trigger-text)]'),
                   isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
                 )}
                 style={budgetGradientStyle}
@@ -1029,8 +1177,14 @@ export function ModelSelector({
                   <span
                     className={cn(
                       'font-normal',
-                      isCreateAgentVariant ? 'text-[var(--create-agent-control-text)]' : 'text-[var(--model-trigger-meta)]',
-                      isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
+                      isCreateAgentVariant
+                        ? 'text-[var(--create-agent-control-text)]'
+                        : 'text-[var(--model-trigger-meta)]',
+                      isCreateAgentVariant
+                        ? 'text-[12px]'
+                        : dense
+                          ? 'text-[12.5px]'
+                          : 'text-[13px]',
                     )}
                     aria-hidden="true"
                   >
@@ -1039,9 +1193,17 @@ export function ModelSelector({
                   <span
                     className={cn(
                       'min-w-0 font-normal',
-                      isCreateAgentVariant ? 'text-[var(--create-agent-control-text)]' : 'text-[var(--model-trigger-text)]',
-                      isCreateAgentVariant ? 'whitespace-nowrap' : cn('truncate', isFieldTrigger ? 'max-w-[120px]' : 'max-w-[88px]'),
-                      isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
+                      isCreateAgentVariant
+                        ? 'text-[var(--create-agent-control-text)]'
+                        : 'text-[var(--model-trigger-text)]',
+                      isCreateAgentVariant
+                        ? 'whitespace-nowrap'
+                        : cn('truncate', isFieldTrigger ? 'max-w-[120px]' : 'max-w-[88px]'),
+                      isCreateAgentVariant
+                        ? 'text-[12px]'
+                        : dense
+                          ? 'text-[12.5px]'
+                          : 'text-[13px]',
                     )}
                   >
                     {effortLabel}
@@ -1053,7 +1215,9 @@ export function ModelSelector({
                   size={isCreateAgentVariant ? 11 : dense ? 12 : 13}
                   className={cn(
                     'ml-0.5 shrink-0',
-                    isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : 'text-[var(--model-trigger-text)]',
+                    isCreateAgentVariant
+                      ? 'text-[var(--create-agent-control-icon)]'
+                      : 'text-[var(--model-trigger-text)]',
                   )}
                   aria-label="Fast"
                 />
@@ -1064,7 +1228,9 @@ export function ModelSelector({
             size={isCreateAgentVariant ? 8 : dense ? 13 : 14}
             className={cn(
               'shrink-0',
-              isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : 'text-[var(--model-trigger-arrow)]',
+              isCreateAgentVariant
+                ? 'text-[var(--create-agent-control-icon)]'
+                : 'text-[var(--model-trigger-arrow)]',
               isFieldTrigger && 'ml-auto',
             )}
           />

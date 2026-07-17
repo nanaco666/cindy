@@ -1,2383 +1,1245 @@
 import { registerColor } from './color-registry';
 
 function createNotAllowedCursor(stroke: string): string {
-  const encodedStroke = stroke.startsWith('#') ? `%23${stroke.slice(1)}` : encodeURIComponent(stroke);
+  const encodedStroke = stroke.startsWith('#')
+    ? `%23${stroke.slice(1)}`
+    : encodeURIComponent(stroke);
   return `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='${encodedStroke}' stroke-width='2.6'/%3E%3Cpath d='M9.2 22.8 22.8 9.2' fill='none' stroke='${encodedStroke}' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E") 16 16, not-allowed`;
 }
 
 /* === P3.2: Semantic slot tokens === */
-registerColor(
-  'surface',
-  {
-    light: '#f8f8f6',
-    dark: '#1f1f1e',
-  },
-  'Surface 页面背景 (hex 形式)',
-);
-registerColor(
-  'surface-hsl',
-  {
-    light: '60 12.5% 97%',
-    dark: '60 2% 12%',
-  },
-  'Surface 页面背景 (HSL 形式)',
-);
-registerColor(
-  'surface-elevated',
-  {
-    light: '#ffffff',
-    dark: '#2c2c2a',
-  },
-  'Card 抬一层 / 弹窗 / popover 背景',
-);
-registerColor(
-  'surface-elevated-soft',
-  {
-    light: '#e5e5e5',
-    dark: '#2c2c2a',
-  },
-  'Disabled / dimmed 卡片背景',
-);
-registerColor(
-  'surface-card-ivory',
-  {
-    light: '#faf9f5',
-    dark: '#2c2c2a',
-  },
-  'Settings 微暖 ivory Card',
-);
-registerColor(
-  'surface-chip',
-  {
-    light: '#e5e5e5',
-    dark: '#3c3c3a',
-  },
-  'Chip / pill / 选中行背景',
-);
-registerColor(
-  'surface-chip-alt',
-  {
-    light: '#e5e5e5',
-    dark: '#2c2c2a',
-  },
-  'Chip 暗态塌缩到 Card 的变体',
-);
-registerColor(
-  'surface-hover',
-  {
-    light: '#e5e5e5',
-    dark: '#3c3c3a',
-  },
-  '通用 hover 背景',
-);
-registerColor(
-  'surface-hover-soft',
-  {
-    light: '#f8f8f6',
-    dark: '#3c3c3a',
-  },
-  '柔和 hover 背景',
-);
-registerColor(
-  'surface-hover-hsl',
-  {
-    light: '0 0% 90%',
-    dark: '60 2% 17%',
-  },
-  'Hover 背景 HSL 形式',
-);
-registerColor(
-  'surface-on-card',
-  {
-    light: '#ffffff',
-    dark: '#1f1f1e',
-  },
-  'CTA/checked icon 的深色前景',
-);
+registerColor('surface', {
+  light: '#f8f8f6',
+  dark: '#1f1f1e',
+}, 'Surface 页面背景 (hex 形式)');
+registerColor('surface-hsl', {
+  light: '60 12.5% 97%',
+  dark: '60 2% 12%',
+}, 'Surface 页面背景 (HSL 形式)');
+registerColor('surface-elevated', {
+  light: '#ffffff',
+  dark: '#2c2c2a',
+}, 'Card 抬一层 / 弹窗 / popover 背景');
+registerColor('surface-elevated-soft', {
+  light: '#e5e5e5',
+  dark: '#2c2c2a',
+}, 'Disabled / dimmed 卡片背景');
+registerColor('surface-card-ivory', {
+  light: '#faf9f5',
+  dark: '#2c2c2a',
+}, 'Settings 微暖 ivory Card');
+registerColor('surface-chip', {
+  light: '#e5e5e5',
+  dark: '#3c3c3a',
+}, 'Chip / pill / 选中行背景');
+registerColor('surface-chip-alt', {
+  light: '#e5e5e5',
+  dark: '#2c2c2a',
+}, 'Chip 暗态塌缩到 Card 的变体');
+registerColor('surface-hover', {
+  light: '#e5e5e5',
+  dark: '#3c3c3a',
+}, '通用 hover 背景');
+registerColor('surface-hover-soft', {
+  light: '#f8f8f6',
+  dark: '#3c3c3a',
+}, '柔和 hover 背景');
+registerColor('surface-hover-hsl', {
+  light: '0 0% 90%',
+  dark: '60 2% 17%',
+}, 'Hover 背景 HSL 形式');
+registerColor('surface-on-card', {
+  light: '#ffffff',
+  dark: '#1f1f1e',
+}, 'CTA/checked icon 的深色前景');
 // 历史幽灵 token 补注册:--panel-bg 被 9 处宿主组件裸引用(PanelChrome / TabBar
 // / RightSidebarShell / ReviewTabBody / ghostPanels / RightSidebar / SidebarWindowLayout,
 // 均 bg-[var(--panel-bg)] 无 fallback)但 colors.ts 从未注册,:root 读不到值 → 面板/
 // 侧边栏头部背景失效。语义 = 面板背景 = surface(与 ghostPanelTheme.ts 沙箱 body
 // fallback var(--panel-bg, var(--surface)) 兜底一致),故 alias 到 --surface,
 // 注册后宿主消费点显式取到 surface 值。
-registerColor(
-  'panel-bg',
-  {
-    light: 'var(--surface)',
-    dark: 'var(--surface)',
-  },
-  '面板 / 侧边栏 / 工具面板头部背景(历史幽灵 token 补注册,alias 到 surface)',
-);
-registerColor(
-  'md-table-bg',
-  {
-    light: 'rgba(236, 236, 234, 0.55)',
-    dark: 'rgba(44, 44, 42, 0.55)',
-  },
-  'Markdown 编辑器表格行 / 表头半透明背景',
-);
-registerColor(
-  'border-default',
-  {
-    light: '#d7d7d4',
-    dark: '#3c3c3a',
-  },
-  'DESIGN.md Board 1px 边框',
-);
-registerColor(
-  'border-default-hsl',
-  {
-    light: '60 3% 84%',
-    dark: '60 2% 23%',
-  },
-  'Board HSL 形式',
-);
-registerColor(
-  'border-shadcn-hsl',
-  {
-    light: '0 0% 90%',
-    dark: '30 4% 28%',
-  },
-  'shadcn input/border HSL',
-);
-registerColor(
-  'border-transparent-mixed',
-  {
-    light: 'transparent',
-    dark: '#3c3c3a',
-  },
-  'Light transparent / dark board border',
-);
+registerColor('panel-bg', {
+  light: 'var(--surface)',
+  dark: 'var(--surface)',
+}, '面板 / 侧边栏 / 工具面板头部背景(历史幽灵 token 补注册,alias 到 surface)');
+registerColor('md-table-bg', {
+  light: 'rgba(236, 236, 234, 0.55)',
+  dark: 'rgba(44, 44, 42, 0.55)',
+}, 'Markdown 编辑器表格行 / 表头半透明背景');
+registerColor('border-default', {
+  light: '#d7d7d4',
+  dark: '#3c3c3a',
+}, 'DESIGN.md Board 1px 边框');
+registerColor('border-default-hsl', {
+  light: '60 3% 84%',
+  dark: '60 2% 23%',
+}, 'Board HSL 形式');
+registerColor('border-shadcn-hsl', {
+  light: '0 0% 90%',
+  dark: '30 4% 28%',
+}, 'shadcn input/border HSL');
+registerColor('border-transparent-mixed', {
+  light: 'transparent',
+  dark: '#3c3c3a',
+}, 'Light transparent / dark board border');
 // 历史幽灵 token 补注册:--board 被 RewindPreviewDialog 4 处 border-[var(--board)]
 // 裸引用(无 fallback)但从未注册,边框读不到值。名字泛但消费点全是边框,语义 =
 // 边框,alias 到 --border-default。
-registerColor(
-  'board',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  '通用边框(历史幽灵 token --board 补注册,alias 到 border-default)',
-);
-registerColor(
-  'text-primary',
-  {
-    light: '#262626',
-    dark: '#d4d4d4',
-  },
-  '主标题 / 主正文',
-);
-registerColor(
-  'text-primary-on-dark',
-  {
-    light: '#262626',
-    dark: '#ffffff',
-  },
-  '深色按钮上的主前景',
-);
-registerColor(
-  'text-primary-emphasis',
-  {
-    light: '#1a1a1a',
-    dark: '#d4d4d4',
-  },
-  '强调主文字',
-);
-registerColor(
-  'text-primary-inv',
-  {
-    light: '#1a1a1a',
-    dark: '#ffffff',
-  },
-  '反相强调文字',
-);
-registerColor(
-  'text-primary-body-strong',
-  {
-    light: '#525252',
-    dark: '#d4d4d4',
-  },
-  '加重正文',
-);
-registerColor(
-  'text-primary-hsl',
-  {
-    light: '0 0% 9%',
-    dark: '0 0% 83%',
-  },
-  'Primary text HSL 形式',
-);
-registerColor(
-  'text-secondary',
-  {
-    light: '#737373',
-    dark: '#a3a3a3',
-  },
-  'Secondary 文字 / meta / icon',
-);
-registerColor(
-  'text-secondary-cross',
-  {
-    light: '#a3a3a3',
-    dark: '#a3a3a3',
-  },
-  '跨主题 secondary 文字',
-);
-registerColor(
-  'text-secondary-mid',
-  {
-    light: '#525252',
-    dark: '#a3a3a3',
-  },
-  '偏深 secondary 文字',
-);
-registerColor(
-  'text-tertiary',
-  {
-    light: '#a3a3a3',
-    dark: '#737373',
-  },
-  'Tertiary / placeholder 文字',
-);
-registerColor(
-  'text-tertiary-stone',
-  {
-    light: '#737373',
-    dark: '#737373',
-  },
-  'Stone 跨主题三级文字',
-);
-registerColor(
-  'text-tertiary-mid',
-  {
-    light: '#525252',
-    dark: '#737373',
-  },
-  'Mid Gray 三级文字',
-);
-registerColor(
-  'text-tertiary-hsl',
-  {
-    light: '0 0% 45%',
-    dark: '0 0% 45%',
-  },
-  'Sidebar / welcome muted HSL',
-);
-registerColor(
-  'text-disabled',
-  {
-    light: '#d4d4d4',
-    dark: '#525252',
-  },
-  'Disabled 文字 / failed dimmed',
-);
-registerColor(
-  'text-disabled-tertiary',
-  {
-    light: '#a3a3a3',
-    dark: '#737373',
-  },
-  'Disabled tertiary 文字',
-);
-registerColor(
-  'text-placeholder',
-  {
-    light: '#c4c4c4',
-    dark: '#525252',
-  },
-  'Placeholder 文字 — 必须读着像空(比 tertiary 更淡);统一 slot,各输入面 placeholder alias 均收口于此',
-);
-registerColor(
-  'cursor-not-allowed',
-  {
-    light: createNotAllowedCursor('#373737'),
-    dark: createNotAllowedCursor('#d4d4d4'),
-  },
-  'Windows disabled cursor SVG (完整 cursor 值,可由主题覆盖)',
-);
-registerColor(
-  'accent-cta-bg',
-  {
-    light: '#262626',
-    dark: '#ffffff',
-  },
-  '反相 CTA 背景',
-);
-registerColor(
-  'accent-cta-bg-pure',
-  {
-    light: '#000000',
-    dark: '#ffffff',
-  },
-  'Pure CTA 背景',
-);
-registerColor(
-  'accent-emphasis',
-  {
-    light: '#262626',
-    dark: '#d4d4d4',
-  },
-  '强调品牌前景 / ring',
-);
-registerColor(
-  'accent-soft',
-  {
-    light: '#262626',
-    dark: '#ffffff',
-  },
-  'Soft accent 前景',
-);
-registerColor(
-  'accent-hover',
-  {
-    light: '#262626',
-    dark: '#e5e5e5',
-  },
-  'CTA pressed / hover',
-);
-registerColor(
-  'accent-pure-cta-fg',
-  {
-    light: '#ffffff',
-    dark: '#000000',
-  },
-  'Pure CTA 文字',
-);
-registerColor(
-  'error-flat',
-  {
-    light: '#ef4444',
-    dark: '#ef4444',
-  },
-  '扁平 danger 前景',
-);
-registerColor(
-  'warning-accent',
-  {
-    light: '#FF6600',
-    dark: '#FF6600',
-  },
-  'Thinking orange / warning accent',
-);
-registerColor(
-  'shadow-soft-panel',
-  {
-    light: '0 4px 12px rgb(0 0 0 / 0.08)',
-    dark: '0 4px 12px rgb(0 0 0 / 0.3)',
-  },
-  '中型弹层 shadow',
-);
+registerColor('board', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, '通用边框(历史幽灵 token --board 补注册,alias 到 border-default)');
+registerColor('text-primary', {
+  light: '#262626',
+  dark: '#d4d4d4',
+}, '主标题 / 主正文');
+registerColor('text-primary-on-dark', {
+  light: '#262626',
+  dark: '#ffffff',
+}, '深色按钮上的主前景');
+registerColor('text-primary-emphasis', {
+  light: '#1a1a1a',
+  dark: '#d4d4d4',
+}, '强调主文字');
+registerColor('text-primary-inv', {
+  light: '#1a1a1a',
+  dark: '#ffffff',
+}, '反相强调文字');
+registerColor('text-primary-body-strong', {
+  light: '#525252',
+  dark: '#d4d4d4',
+}, '加重正文');
+registerColor('text-primary-hsl', {
+  light: '0 0% 9%',
+  dark: '0 0% 83%',
+}, 'Primary text HSL 形式');
+registerColor('text-secondary', {
+  light: '#737373',
+  dark: '#a3a3a3',
+}, 'Secondary 文字 / meta / icon');
+registerColor('text-secondary-cross', {
+  light: '#a3a3a3',
+  dark: '#a3a3a3',
+}, '跨主题 secondary 文字');
+registerColor('text-secondary-mid', {
+  light: '#525252',
+  dark: '#a3a3a3',
+}, '偏深 secondary 文字');
+registerColor('text-tertiary', {
+  light: '#a3a3a3',
+  dark: '#737373',
+}, 'Tertiary / placeholder 文字');
+registerColor('text-tertiary-stone', {
+  light: '#737373',
+  dark: '#737373',
+}, 'Stone 跨主题三级文字');
+registerColor('text-tertiary-mid', {
+  light: '#525252',
+  dark: '#737373',
+}, 'Mid Gray 三级文字');
+registerColor('text-tertiary-hsl', {
+  light: '0 0% 45%',
+  dark: '0 0% 45%',
+}, 'Sidebar / welcome muted HSL');
+registerColor('text-disabled', {
+  light: '#d4d4d4',
+  dark: '#525252',
+}, 'Disabled 文字 / failed dimmed');
+registerColor('text-disabled-tertiary', {
+  light: '#a3a3a3',
+  dark: '#737373',
+}, 'Disabled tertiary 文字');
+registerColor('text-placeholder', {
+  light: '#c4c4c4',
+  dark: '#525252',
+}, 'Placeholder 文字 — 必须读着像空(比 tertiary 更淡);统一 slot,各输入面 placeholder alias 均收口于此');
+registerColor('cursor-not-allowed', {
+  light: createNotAllowedCursor('#373737'),
+  dark: createNotAllowedCursor('#d4d4d4'),
+}, 'Windows disabled cursor SVG (完整 cursor 值,可由主题覆盖)');
+registerColor('accent-cta-bg', {
+  light: '#262626',
+  dark: '#ffffff',
+}, '反相 CTA 背景');
+registerColor('accent-cta-bg-pure', {
+  light: '#000000',
+  dark: '#ffffff',
+}, 'Pure CTA 背景');
+registerColor('accent-emphasis', {
+  light: '#262626',
+  dark: '#d4d4d4',
+}, '强调品牌前景 / ring');
+registerColor('accent-soft', {
+  light: '#262626',
+  dark: '#ffffff',
+}, 'Soft accent 前景');
+registerColor('accent-hover', {
+  light: '#262626',
+  dark: '#e5e5e5',
+}, 'CTA pressed / hover');
+registerColor('accent-pure-cta-fg', {
+  light: '#ffffff',
+  dark: '#000000',
+}, 'Pure CTA 文字');
+registerColor('error-flat', {
+  light: '#ef4444',
+  dark: '#ef4444',
+}, '扁平 danger 前景');
+registerColor('warning-accent', {
+  light: '#FF6600',
+  dark: '#FF6600',
+}, 'Thinking orange / warning accent');
+registerColor('shadow-soft-panel', {
+  light: '0 4px 12px rgb(0 0 0 / 0.08)',
+  dark: '0 4px 12px rgb(0 0 0 / 0.3)',
+}, '中型弹层 shadow');
 // Base
-registerColor(
-  'background',
-  {
-    light: '0 0% 100%',
-    dark: '60 3% 14%',
-  },
-  'background',
-);
-registerColor(
-  'foreground',
-  {
-    light: 'var(--text-primary-hsl)',
-    dark: 'var(--text-primary-hsl)',
-  },
-  'foreground',
-);
-registerColor(
-  'muted',
-  {
-    light: '0 0% 96%',
-    dark: '30 6% 20%',
-  },
-  'muted',
-);
-registerColor(
-  'muted-foreground',
-  {
-    light: '0 0% 45%',
-    dark: '24 5% 64%',
-  },
-  'muted-foreground',
-);
-registerColor(
-  'border',
-  {
-    light: 'var(--border-shadcn-hsl)',
-    dark: 'var(--border-shadcn-hsl)',
-  },
-  'border',
-);
-registerColor(
-  'input',
-  {
-    light: 'var(--border-shadcn-hsl)',
-    dark: 'var(--border-shadcn-hsl)',
-  },
-  'input',
-);
-registerColor(
-  'ring',
-  {
-    light: 'var(--text-primary-hsl)',
-    dark: 'var(--text-primary-hsl)',
-  },
-  'ring',
-);
-registerColor(
-  'primary',
-  {
-    light: 'var(--text-primary-hsl)',
-    dark: 'var(--text-primary-hsl)',
-  },
-  'primary',
-);
-registerColor(
-  'primary-foreground',
-  {
-    light: '0 0% 98%',
-    dark: '60 3% 14%',
-  },
-  'primary-foreground',
-);
-registerColor(
-  'secondary',
-  {
-    light: '0 0% 96%',
-    dark: '30 6% 20%',
-  },
-  'secondary',
-);
-registerColor(
-  'secondary-foreground',
-  {
-    light: 'var(--text-primary-hsl)',
-    dark: 'var(--text-primary-hsl)',
-  },
-  'secondary-foreground',
-);
-registerColor(
-  'accent',
-  {
-    light: '0 0% 96%',
-    dark: '30 6% 20%',
-  },
-  'accent',
-);
-registerColor(
-  'accent-foreground',
-  {
-    light: 'var(--text-primary-hsl)',
-    dark: 'var(--text-primary-hsl)',
-  },
-  'accent-foreground',
-);
-registerColor(
-  'popover',
-  {
-    light: '0 0% 100%',
-    dark: '60 3% 15%',
-  },
-  'popover',
-);
-registerColor(
-  'popover-foreground',
-  {
-    light: 'var(--text-primary-hsl)',
-    dark: 'var(--text-primary-hsl)',
-  },
-  'popover-foreground',
-);
-registerColor(
-  'radius',
-  {
-    light: '0.5rem',
-    dark: null,
-  },
-  'radius Light only in source CSS; dark mode inherits the root value.',
-);
+registerColor('background', {
+  light: '0 0% 100%',
+  dark: '60 3% 14%',
+}, 'background');
+registerColor('foreground', {
+  light: 'var(--text-primary-hsl)',
+  dark: 'var(--text-primary-hsl)',
+}, 'foreground');
+registerColor('muted', {
+  light: '0 0% 96%',
+  dark: '30 6% 20%',
+}, 'muted');
+registerColor('muted-foreground', {
+  light: '0 0% 45%',
+  dark: '24 5% 64%',
+}, 'muted-foreground');
+registerColor('border', {
+  light: 'var(--border-shadcn-hsl)',
+  dark: 'var(--border-shadcn-hsl)',
+}, 'border');
+registerColor('input', {
+  light: 'var(--border-shadcn-hsl)',
+  dark: 'var(--border-shadcn-hsl)',
+}, 'input');
+registerColor('ring', {
+  light: 'var(--text-primary-hsl)',
+  dark: 'var(--text-primary-hsl)',
+}, 'ring');
+registerColor('primary', {
+  light: 'var(--text-primary-hsl)',
+  dark: 'var(--text-primary-hsl)',
+}, 'primary');
+registerColor('primary-foreground', {
+  light: '0 0% 98%',
+  dark: '60 3% 14%',
+}, 'primary-foreground');
+registerColor('secondary', {
+  light: '0 0% 96%',
+  dark: '30 6% 20%',
+}, 'secondary');
+registerColor('secondary-foreground', {
+  light: 'var(--text-primary-hsl)',
+  dark: 'var(--text-primary-hsl)',
+}, 'secondary-foreground');
+registerColor('accent', {
+  light: '0 0% 96%',
+  dark: '30 6% 20%',
+}, 'accent');
+registerColor('accent-foreground', {
+  light: 'var(--text-primary-hsl)',
+  dark: 'var(--text-primary-hsl)',
+}, 'accent-foreground');
+registerColor('popover', {
+  light: '0 0% 100%',
+  dark: '60 3% 15%',
+}, 'popover');
+registerColor('popover-foreground', {
+  light: 'var(--text-primary-hsl)',
+  dark: 'var(--text-primary-hsl)',
+}, 'popover-foreground');
+registerColor('radius', {
+  light: '0.5rem',
+  dark: null,
+}, 'radius Light only in source CSS; dark mode inherits the root value.');
 
 // Titlebar — Ollama layer system (Light)
-registerColor(
-  'titlebar',
-  {
-    light: 'var(--surface-hsl)',
-    dark: 'var(--surface-hsl)',
-  },
-  'Light Surface #f8f8f6',
-);
-registerColor(
-  'titlebar-border',
-  {
-    light: 'var(--border-default-hsl)',
-    dark: 'var(--border-default-hsl)',
-  },
-  'Light Board #d7d7d4',
-);
-registerColor(
-  'titlebar-icon',
-  {
-    light: '0 0% 45%',
-    dark: '0 0% 63.92%',
-  },
-  'Stone #737373',
-);
-registerColor(
-  'titlebar-button-hover',
-  {
-    light: 'var(--surface-hover-hsl)',
-    dark: 'var(--surface-hover-hsl)',
-  },
-  'Light Gray #e5e5e5',
-);
-registerColor(
-  'titlebar-control-hover',
-  {
-    light: 'var(--surface-hover-hsl)',
-    dark: 'var(--surface-hover-hsl)',
-  },
-  'Light Gray #e5e5e5',
-);
-registerColor(
-  'splash-bg',
-  {
-    light: '60 12.45% 96.86%',
-    dark: '60 1.64% 11.96%',
-  },
-  'Light Surface #f8f8f6 — DESIGN.md layer system (high-precision HSL for exact hex match)',
-);
-registerColor(
-  'splash-text',
-  {
-    light: '0 0% 45.1%',
-    dark: '0 0% 63.92%',
-  },
-  'Stone #737373 — DESIGN.md secondary text',
-);
-registerColor(
-  'splash-text-muted',
-  {
-    light: '30 3.6% 62.55%',
-    dark: '30 2.78% 43.73%',
-  },
-  'Warm Gray #a39e98 — DESIGN.md muted text',
-);
-registerColor(
-  'splash-text-destructive',
-  {
-    light: '0 0% 14.9%',
-    dark: '0 0% 100%',
-  },
-  'Near Black #262626 — DESIGN.md max emphasis (grayscale)',
-);
-registerColor(
-  'splash-fade-duration',
-  {
-    light: '400ms',
-    dark: null,
-  },
-  'Titlebar — Ollama layer system (Light) Light only in source CSS; dark mode inherits the root value.',
-);
-registerColor(
-  'splash-fade-easing',
-  {
-    light: 'cubic-bezier(0.4, 0, 1, 1)',
-    dark: null,
-  },
-  'Titlebar — Ollama layer system (Light) Light only in source CSS; dark mode inherits the root value.',
-);
-registerColor(
-  'destructive',
-  {
-    light: '0 84% 60%',
-    dark: '0 72% 63%',
-  },
-  'Titlebar — Ollama layer system (Light)',
-);
+registerColor('titlebar', {
+  light: 'var(--surface-hsl)',
+  dark: 'var(--surface-hsl)',
+}, 'Light Surface #f8f8f6');
+registerColor('titlebar-border', {
+  light: 'var(--border-default-hsl)',
+  dark: 'var(--border-default-hsl)',
+}, 'Light Board #d7d7d4');
+registerColor('titlebar-icon', {
+  light: '0 0% 45%',
+  dark: '0 0% 63.92%',
+}, 'Stone #737373');
+registerColor('titlebar-button-hover', {
+  light: 'var(--surface-hover-hsl)',
+  dark: 'var(--surface-hover-hsl)',
+}, 'Light Gray #e5e5e5');
+registerColor('titlebar-control-hover', {
+  light: 'var(--surface-hover-hsl)',
+  dark: 'var(--surface-hover-hsl)',
+}, 'Light Gray #e5e5e5');
+registerColor('splash-bg', {
+  light: '60 12.45% 96.86%',
+  dark: '60 1.64% 11.96%',
+}, 'Light Surface #f8f8f6 — DESIGN.md layer system (high-precision HSL for exact hex match)');
+registerColor('splash-text', {
+  light: '0 0% 45.1%',
+  dark: '0 0% 63.92%',
+}, 'Stone #737373 — DESIGN.md secondary text');
+registerColor('splash-text-muted', {
+  light: '30 3.6% 62.55%',
+  dark: '30 2.78% 43.73%',
+}, 'Warm Gray #a39e98 — DESIGN.md muted text');
+registerColor('splash-text-destructive', {
+  light: '0 0% 14.9%',
+  dark: '0 0% 100%',
+}, 'Near Black #262626 — DESIGN.md max emphasis (grayscale)');
+registerColor('splash-fade-duration', {
+  light: '400ms',
+  dark: null,
+}, 'Titlebar — Ollama layer system (Light) Light only in source CSS; dark mode inherits the root value.');
+registerColor('splash-fade-easing', {
+  light: 'cubic-bezier(0.4, 0, 1, 1)',
+  dark: null,
+}, 'Titlebar — Ollama layer system (Light) Light only in source CSS; dark mode inherits the root value.');
+registerColor('destructive', {
+  light: '0 84% 60%',
+  dark: '0 72% 63%',
+}, 'Titlebar — Ollama layer system (Light)');
 
 // confirm-dialog
-registerColor(
-  'confirm-bg',
-  {
-    light: '#fafafa',
-    dark: '#2c2c2a',
-  },
-  'confirm-dialog',
-);
-registerColor(
-  'confirm-shadow',
-  {
-    light: 'var(--shadow-soft-panel)',
-    dark: 'var(--shadow-soft-panel)',
-  },
-  'confirm-dialog',
-);
-registerColor(
-  'confirm-title',
-  {
-    light: '#171717',
-    dark: '#fafafa',
-  },
-  'confirm-dialog',
-);
-registerColor(
-  'confirm-desc',
-  {
-    light: 'var(--text-tertiary-stone)',
-    dark: 'var(--text-tertiary-stone)',
-  },
-  'confirm-dialog',
-);
-registerColor(
-  'confirm-btn-primary-bg',
-  {
-    light: '#171717',
-    dark: '#fafafa',
-  },
-  'confirm-dialog',
-);
-registerColor(
-  'confirm-btn-primary-text',
-  {
-    light: '#fafafa',
-    dark: '#171717',
-  },
-  'confirm-dialog',
-);
-registerColor(
-  'confirm-btn-primary-hover',
-  {
-    light: 'var(--accent-hover)',
-    dark: 'var(--accent-hover)',
-  },
-  'confirm-dialog',
-);
-registerColor(
-  'confirm-btn-secondary-text',
-  {
-    light: '#262626',
-    dark: '#fafafa',
-  },
-  'confirm-dialog',
-);
-registerColor(
-  'confirm-btn-secondary-border',
-  {
-    light: '#d4d4d4',
-    dark: '#3c3c3a',
-  },
-  'confirm-dialog',
-);
-registerColor(
-  'confirm-btn-secondary-hover',
-  {
-    light: 'rgba(0, 0, 0, 0.04)',
-    dark: 'rgba(255, 255, 255, 0.06)',
-  },
-  'confirm-dialog',
-);
+registerColor('confirm-bg', {
+  light: '#fafafa',
+  dark: '#2c2c2a',
+}, 'confirm-dialog');
+registerColor('confirm-shadow', {
+  light: 'var(--shadow-soft-panel)',
+  dark: 'var(--shadow-soft-panel)',
+}, 'confirm-dialog');
+registerColor('confirm-title', {
+  light: '#171717',
+  dark: '#fafafa',
+}, 'confirm-dialog');
+registerColor('confirm-desc', {
+  light: 'var(--text-tertiary-stone)',
+  dark: 'var(--text-tertiary-stone)',
+}, 'confirm-dialog');
+registerColor('confirm-btn-primary-bg', {
+  light: '#171717',
+  dark: '#fafafa',
+}, 'confirm-dialog');
+registerColor('confirm-btn-primary-text', {
+  light: '#fafafa',
+  dark: '#171717',
+}, 'confirm-dialog');
+registerColor('confirm-btn-primary-hover', {
+  light: 'var(--accent-hover)',
+  dark: 'var(--accent-hover)',
+}, 'confirm-dialog');
+registerColor('confirm-btn-secondary-text', {
+  light: '#262626',
+  dark: '#fafafa',
+}, 'confirm-dialog');
+registerColor('confirm-btn-secondary-border', {
+  light: '#d4d4d4',
+  dark: '#3c3c3a',
+}, 'confirm-dialog');
+registerColor('confirm-btn-secondary-hover', {
+  light: 'rgba(0, 0, 0, 0.04)',
+  dark: 'rgba(255, 255, 255, 0.06)',
+}, 'confirm-dialog');
 
 // Sidebar — Ollama layer system (Light)
-registerColor(
-  'sidebar',
-  {
-    light: 'var(--surface-hsl)',
-    dark: 'var(--surface-hsl)',
-  },
-  'Light Surface #f8f8f6',
-);
-registerColor(
-  'sidebar-border',
-  {
-    light: 'var(--border-default-hsl)',
-    dark: 'var(--border-default-hsl)',
-  },
-  'Light Board #d7d7d4',
-);
-registerColor(
-  'sidebar-item-hover',
-  {
-    light: 'var(--surface-hover-hsl)',
-    dark: 'var(--surface-hover-hsl)',
-  },
-  'Light Gray #e5e5e5',
-);
-registerColor(
-  'sidebar-item-active',
-  {
-    light: '0 0% 90%',
-    dark: '60 2% 17%',
-  },
-  'Light Gray #e5e5e5 — selected pill',
-);
-registerColor(
-  'sidebar-search-bg',
-  {
-    light: 'var(--surface-hsl)',
-    dark: 'var(--surface-hsl)',
-  },
-  'Light Surface',
-);
-registerColor(
-  'sidebar-muted',
-  {
-    light: 'var(--text-tertiary-hsl)',
-    dark: 'var(--text-tertiary-hsl)',
-  },
-  'Stone #737373',
-);
-registerColor(
-  'sidebar-action-icon',
-  {
-    light: '0 0% 64%',
-    dark: '0 0% 45%',
-  },
-  'Silver #a3a3a3 — hover action icons',
-);
-registerColor(
-  'search-match-bg',
-  {
-    light: '53 100% 89%',
-    dark: '40 33% 16%',
-  },
-  '#fff8c5 — Primer attention-muted',
-);
-registerColor(
-  'search-match-fg',
-  {
-    light: '0 0% 15%',
-    dark: '0 0% 90%',
-  },
-  'Near-black #262626 — text inherit',
-);
+registerColor('sidebar', {
+  light: 'var(--surface-hsl)',
+  dark: 'var(--surface-hsl)',
+}, 'Light Surface #f8f8f6');
+registerColor('sidebar-border', {
+  light: 'var(--border-default-hsl)',
+  dark: 'var(--border-default-hsl)',
+}, 'Light Board #d7d7d4');
+registerColor('sidebar-item-hover', {
+  light: 'var(--surface-hover-hsl)',
+  dark: 'var(--surface-hover-hsl)',
+}, 'Light Gray #e5e5e5');
+registerColor('sidebar-item-active', {
+  light: '0 0% 90%',
+  dark: '60 2% 17%',
+}, 'Light Gray #e5e5e5 — selected pill');
+registerColor('sidebar-search-bg', {
+  light: 'var(--surface-hsl)',
+  dark: 'var(--surface-hsl)',
+}, 'Light Surface');
+registerColor('sidebar-muted', {
+  light: 'var(--text-tertiary-hsl)',
+  dark: 'var(--text-tertiary-hsl)',
+}, 'Stone #737373');
+registerColor('sidebar-action-icon', {
+  light: '0 0% 64%',
+  dark: '0 0% 45%',
+}, 'Silver #a3a3a3 — hover action icons');
+registerColor('search-match-bg', {
+  light: '53 100% 89%',
+  dark: '40 33% 16%',
+}, '#fff8c5 — Primer attention-muted');
+registerColor('search-match-fg', {
+  light: '0 0% 15%',
+  dark: '0 0% 90%',
+}, 'Near-black #262626 — text inherit');
 
 // UpdateBanner — Relaunch button (White Pill variant)
-registerColor(
-  'update-btn-border',
-  {
-    light: '#d4d4d4',
-    dark: '#3c3c3a',
-  },
-  'Border Light — per DESIGN.md White Pill',
-);
-registerColor(
-  'update-btn-text',
-  {
-    light: '#404040',
-    dark: '#ffffff',
-  },
-  'Button Text Dark — per DESIGN.md White Pill',
-);
-registerColor(
-  'update-btn-hover',
-  {
-    light: 'rgba(0, 0, 0, 0.04)',
-    dark: 'rgba(255, 255, 255, 0.06)',
-  },
-  'Alpha-blended overlay — intentionally not an HSL token; needs transparency over variable backgrounds',
-);
+registerColor('update-btn-border', {
+  light: '#d4d4d4',
+  dark: '#3c3c3a',
+}, 'Border Light — per DESIGN.md White Pill');
+registerColor('update-btn-text', {
+  light: '#404040',
+  dark: '#ffffff',
+}, 'Button Text Dark — per DESIGN.md White Pill');
+registerColor('update-btn-hover', {
+  light: 'rgba(0, 0, 0, 0.04)',
+  dark: 'rgba(255, 255, 255, 0.06)',
+}, 'Alpha-blended overlay — intentionally not an HSL token; needs transparency over variable backgrounds');
 
 // Content area — Surface single-flat background per full-window rule
-registerColor(
-  'content-area',
-  {
-    light: 'var(--surface-hsl)',
-    dark: 'var(--surface-hsl)',
-  },
-  'Light Surface #f8f8f6',
-);
+registerColor('content-area', {
+  light: 'var(--surface-hsl)',
+  dark: 'var(--surface-hsl)',
+}, 'Light Surface #f8f8f6');
 
 // Welcome text
-registerColor(
-  'welcome-text',
-  {
-    light: 'var(--text-tertiary-hsl)',
-    dark: 'var(--text-tertiary-hsl)',
-  },
-  'Stone #737373',
-);
+registerColor('welcome-text', {
+  light: 'var(--text-tertiary-hsl)',
+  dark: 'var(--text-tertiary-hsl)',
+}, 'Stone #737373');
 
 // Login page — Ollama layer system (Light)
-registerColor(
-  'login-bg',
-  {
-    light: 'var(--surface)',
-    dark: 'var(--surface)',
-  },
-  'Surface — page background',
-);
-registerColor(
-  'login-card-bg',
-  {
-    light: 'var(--surface-elevated)',
-    dark: 'var(--surface-elevated)',
-  },
-  'Card — elevated login card',
-);
-registerColor(
-  'login-card-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board — 1px card outline',
-);
-registerColor(
-  'login-divider',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board — hairline divider',
-);
-registerColor(
-  'login-btn-bg',
-  {
-    light: 'var(--accent-cta-bg-pure)',
-    dark: 'var(--accent-cta-bg-pure)',
-  },
-  'Black Pill CTA',
-);
-registerColor(
-  'login-btn-text',
-  {
-    light: 'var(--accent-pure-cta-fg)',
-    dark: 'var(--accent-pure-cta-fg)',
-  },
-  'Login page — Ollama layer system (Light)',
-);
-registerColor(
-  'login-btn-hover',
-  {
-    light: 'var(--accent-hover)',
-    dark: 'var(--accent-hover)',
-  },
-  'Near Black — pressed/hover',
-);
-registerColor(
-  'login-help-text',
-  {
-    light: 'var(--text-tertiary-stone)',
-    dark: 'var(--text-tertiary-stone)',
-  },
-  'Stone — secondary text',
-);
-registerColor(
-  'login-error-text',
-  {
-    light: 'var(--error-flat)',
-    dark: 'var(--error-flat)',
-  },
-  'Functional error — not in design spec, kept for runtime error state',
-);
+registerColor('login-bg', {
+  light: 'var(--surface)',
+  dark: 'var(--surface)',
+}, 'Surface — page background');
+registerColor('login-card-bg', {
+  light: 'var(--surface-elevated)',
+  dark: 'var(--surface-elevated)',
+}, 'Card — elevated login card');
+registerColor('login-card-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board — 1px card outline');
+registerColor('login-divider', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board — hairline divider');
+registerColor('login-btn-bg', {
+  light: 'var(--accent-cta-bg-pure)',
+  dark: 'var(--accent-cta-bg-pure)',
+}, 'Black Pill CTA');
+registerColor('login-btn-text', {
+  light: 'var(--accent-pure-cta-fg)',
+  dark: 'var(--accent-pure-cta-fg)',
+}, 'Login page — Ollama layer system (Light)');
+registerColor('login-btn-hover', {
+  light: 'var(--accent-hover)',
+  dark: 'var(--accent-hover)',
+}, 'Near Black — pressed/hover');
+registerColor('login-help-text', {
+  light: 'var(--text-tertiary-stone)',
+  dark: 'var(--text-tertiary-stone)',
+}, 'Stone — secondary text');
+registerColor('login-error-text', {
+  light: 'var(--error-flat)',
+  dark: 'var(--error-flat)',
+}, 'Functional error — not in design spec, kept for runtime error state');
 
 // chat-data-localization Migration Progress (Light) — see doc/design_docs/login.pen Migration frames
-registerColor(
-  'migration-bar-track',
-  {
-    light: '#e5e5e5',
-    dark: '#1f1f1e',
-  },
-  'Light Gray — progress track bg',
-);
-registerColor(
-  'migration-bar-track-border',
-  {
-    light: 'var(--border-transparent-mixed)',
-    dark: 'var(--border-transparent-mixed)',
-  },
-  'light mode has no stroke',
-);
-registerColor(
-  'migration-bar-fill',
-  {
-    light: '#262626',
-    dark: '#e5e5e5',
-  },
-  'Near Black — running fill',
-);
-registerColor(
-  'migration-bar-fill-retry',
-  {
-    light: 'var(--text-tertiary)',
-    dark: 'var(--text-tertiary)',
-  },
-  'Silver — paused/retrying fill',
-);
-registerColor(
-  'migration-bar-fill-failed',
-  {
-    light: 'var(--text-disabled)',
-    dark: 'var(--text-disabled)',
-  },
-  'Border Light — failed dimmed fill',
-);
-registerColor(
-  'migration-detail-text',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone — caption',
-);
-registerColor(
-  'migration-retry-text',
-  {
-    light: 'var(--error-flat)',
-    dark: 'var(--error-flat)',
-  },
-  'Functional error — retry notice (single-purpose, mirrors --login-error-text)',
-);
-registerColor(
-  'migration-overlay',
-  {
-    light: 'rgba(0, 0, 0, 0.6)',
-    dark: 'rgba(0, 0, 0, 0.7)',
-  },
-  'AlertDialog overlay (matches design #00000099)',
-);
-registerColor(
-  'lightbox-cta-bg',
-  {
-    light: 'var(--accent-cta-bg-pure)',
-    dark: 'var(--accent-cta-bg-pure)',
-  },
-  'Black Pill — Light',
-);
-registerColor(
-  'lightbox-cta-fg',
-  {
-    light: 'var(--accent-pure-cta-fg)',
-    dark: 'var(--accent-pure-cta-fg)',
-  },
-  'chat-data-localization Migration Progress (Light) — see doc/design_docs/login.pen Migration frames',
-);
-registerColor(
-  'lightbox-cta-hover',
-  {
-    light: 'var(--accent-hover)',
-    dark: 'var(--accent-hover)',
-  },
-  'Near Black — pressed/hover',
-);
+registerColor('migration-bar-track', {
+  light: '#e5e5e5',
+  dark: '#1f1f1e',
+}, 'Light Gray — progress track bg');
+registerColor('migration-bar-track-border', {
+  light: 'var(--border-transparent-mixed)',
+  dark: 'var(--border-transparent-mixed)',
+}, 'light mode has no stroke');
+registerColor('migration-bar-fill', {
+  light: '#262626',
+  dark: '#e5e5e5',
+}, 'Near Black — running fill');
+registerColor('migration-bar-fill-retry', {
+  light: 'var(--text-tertiary)',
+  dark: 'var(--text-tertiary)',
+}, 'Silver — paused/retrying fill');
+registerColor('migration-bar-fill-failed', {
+  light: 'var(--text-disabled)',
+  dark: 'var(--text-disabled)',
+}, 'Border Light — failed dimmed fill');
+registerColor('migration-detail-text', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone — caption');
+registerColor('migration-retry-text', {
+  light: 'var(--error-flat)',
+  dark: 'var(--error-flat)',
+}, 'Functional error — retry notice (single-purpose, mirrors --login-error-text)');
+registerColor('migration-overlay', {
+  light: 'rgba(0, 0, 0, 0.6)',
+  dark: 'rgba(0, 0, 0, 0.7)',
+}, 'AlertDialog overlay (matches design #00000099)');
+registerColor('lightbox-cta-bg', {
+  light: 'var(--accent-cta-bg-pure)',
+  dark: 'var(--accent-cta-bg-pure)',
+}, 'Black Pill — Light');
+registerColor('lightbox-cta-fg', {
+  light: 'var(--accent-pure-cta-fg)',
+  dark: 'var(--accent-pure-cta-fg)',
+}, 'chat-data-localization Migration Progress (Light) — see doc/design_docs/login.pen Migration frames');
+registerColor('lightbox-cta-hover', {
+  light: 'var(--accent-hover)',
+  dark: 'var(--accent-hover)',
+}, 'Near Black — pressed/hover');
 
 // Chat input — Ollama layer system (Light)
-registerColor(
-  'chat-input-bg',
-  {
-    light: 'var(--surface-elevated)',
-    dark: 'var(--surface-elevated)',
-  },
-  'Card — elevated input box on Surface',
-);
-registerColor(
-  'chat-input-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board — 1px outline',
-);
-registerColor(
-  'chat-input-border-focus',
-  {
-    light: 'var(--text-tertiary)',
-    dark: 'var(--text-tertiary)',
-  },
-  'Silver — focus hint, still grayscale',
-);
-registerColor(
-  'chat-input-text',
-  {
-    light: '#000000',
-    dark: '#d4d4d4',
-  },
-  'Pure Black — primary text',
-);
-registerColor(
-  'chat-input-placeholder',
-  {
-    light: 'var(--text-placeholder)',
-    dark: 'var(--text-placeholder)',
-  },
-  'Placeholder — 收口至 --text-placeholder slot',
-);
+registerColor('chat-input-bg', {
+  light: 'var(--surface-elevated)',
+  dark: 'var(--surface-elevated)',
+}, 'Card — elevated input box on Surface');
+registerColor('chat-input-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board — 1px outline');
+registerColor('chat-input-border-focus', {
+  light: 'var(--text-tertiary)',
+  dark: 'var(--text-tertiary)',
+}, 'Silver — focus hint, still grayscale');
+registerColor('chat-input-text', {
+  light: '#000000',
+  dark: '#d4d4d4',
+}, 'Pure Black — primary text');
+registerColor('chat-input-placeholder', {
+  light: 'var(--text-placeholder)',
+  dark: 'var(--text-placeholder)',
+}, 'Placeholder — 收口至 --text-placeholder slot');
 
 // File attachment tokens (F-FI-3/4) — Light
-registerColor(
-  'file-chip-bg',
-  {
-    light: '#a3a3a3',
-    dark: '#525252',
-  },
-  'Silver — non-image thumbnail bg',
-);
-registerColor(
-  'drop-overlay-bg',
-  {
-    light: 'rgba(163, 163, 163, 0.08)',
-    dark: 'rgba(115, 115, 115, 0.1)',
-  },
-  'chat-input-border-focus @ 8%',
-);
-registerColor(
-  'drop-overlay-border',
-  {
-    light: 'var(--text-tertiary)',
-    dark: 'var(--text-tertiary)',
-  },
-  'chat-input-border-focus',
-);
-registerColor(
-  'tooltip-bg',
-  {
-    light: '#262626',
-    dark: '#1f1f1e',
-  },
-  'Near Black',
-);
-registerColor(
-  'tooltip-text',
-  {
-    light: '#ffffff',
-    dark: '#ffffff',
-  },
-  'Pure White',
-);
-registerColor(
-  'file-remove-bg',
-  {
-    light: '#525252',
-    dark: '#737373',
-  },
-  'Mid Gray',
-);
-registerColor(
-  'chat-input-chip-bg',
-  {
-    light: 'var(--surface-chip)',
-    dark: 'var(--surface-chip)',
-  },
-  'Light Gray — DESIGN.md Chip',
-);
-registerColor(
-  'chat-input-chip-border',
-  {
-    light: '#d7d7d4',
-    dark: '#525250',
-  },
-  'Board — 1px outline',
-);
-registerColor(
-  'chat-input-chip-text',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
-registerColor(
-  'chat-input-chip-icon',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
+registerColor('file-chip-bg', {
+  light: '#a3a3a3',
+  dark: '#525252',
+}, 'Silver — non-image thumbnail bg');
+registerColor('drop-overlay-bg', {
+  light: 'rgba(163, 163, 163, 0.08)',
+  dark: 'rgba(115, 115, 115, 0.1)',
+}, 'chat-input-border-focus @ 8%');
+registerColor('drop-overlay-border', {
+  light: 'var(--text-tertiary)',
+  dark: 'var(--text-tertiary)',
+}, 'chat-input-border-focus');
+registerColor('tooltip-bg', {
+  light: '#262626',
+  dark: '#1f1f1e',
+}, 'Near Black');
+registerColor('tooltip-text', {
+  light: '#ffffff',
+  dark: '#ffffff',
+}, 'Pure White');
+registerColor('file-remove-bg', {
+  light: '#525252',
+  dark: '#737373',
+}, 'Mid Gray');
+registerColor('chat-input-chip-bg', {
+  light: 'var(--surface-chip)',
+  dark: 'var(--surface-chip)',
+}, 'Light Gray — DESIGN.md Chip');
+registerColor('chat-input-chip-border', {
+  light: '#d7d7d4',
+  dark: '#525250',
+}, 'Board — 1px outline');
+registerColor('chat-input-chip-text', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
+registerColor('chat-input-chip-icon', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
 
 // Command Palette shared tokens — panel + tooltip (light)
-registerColor(
-  'cmd-palette-bg',
-  {
-    light: 'var(--surface-elevated)',
-    dark: 'var(--surface-elevated)',
-  },
-  'Card',
-);
-registerColor(
-  'cmd-palette-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'cmd-palette-shadow',
-  {
-    light: 'var(--shadow-soft-panel)',
-    dark: 'var(--shadow-soft-panel)',
-  },
-  'Command Palette shared tokens — panel + tooltip (light)',
-);
-registerColor(
-  'cmd-palette-item-hover',
-  {
-    light: 'var(--surface-hover)',
-    dark: 'var(--surface-hover)',
-  },
-  'Light Gray',
-);
-registerColor(
-  'cmd-palette-item-text',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
-registerColor(
-  'cmd-palette-item-meta',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone — source tag / path / Agent',
-);
-registerColor(
-  'cmd-palette-item-icon',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone',
-);
-registerColor(
-  'cmd-palette-empty',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone — "No matching commands"',
-);
-registerColor(
-  'cmd-palette-tooltip-body',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone — description body',
-);
+registerColor('cmd-palette-bg', {
+  light: 'var(--surface-elevated)',
+  dark: 'var(--surface-elevated)',
+}, 'Card');
+registerColor('cmd-palette-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('cmd-palette-shadow', {
+  light: 'var(--shadow-soft-panel)',
+  dark: 'var(--shadow-soft-panel)',
+}, 'Command Palette shared tokens — panel + tooltip (light)');
+registerColor('cmd-palette-item-hover', {
+  light: 'var(--surface-hover)',
+  dark: 'var(--surface-hover)',
+}, 'Light Gray');
+registerColor('cmd-palette-item-text', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
+registerColor('cmd-palette-item-meta', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone — source tag / path / Agent');
+registerColor('cmd-palette-item-icon', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone');
+registerColor('cmd-palette-empty', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone — "No matching commands"');
+registerColor('cmd-palette-tooltip-body', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone — description body');
 
 // Send button — grayscale pill
-registerColor(
-  'send-btn-bg',
-  {
-    light: 'var(--accent-cta-bg)',
-    dark: 'var(--accent-cta-bg)',
-  },
-  'Near Black — per cc-agent-view spec',
-);
-registerColor(
-  'send-btn-icon',
-  {
-    light: 'var(--surface-on-card)',
-    dark: 'var(--surface-on-card)',
-  },
-  'Send button — grayscale pill',
-);
-registerColor(
-  'send-btn-disabled-bg',
-  {
-    light: 'var(--surface-elevated-soft)',
-    dark: 'var(--surface-elevated-soft)',
-  },
-  'Light Gray',
-);
-registerColor(
-  'send-btn-disabled-icon',
-  {
-    light: 'var(--text-disabled-tertiary)',
-    dark: 'var(--text-disabled-tertiary)',
-  },
-  'Silver',
-);
+registerColor('send-btn-bg', {
+  light: 'var(--accent-cta-bg)',
+  dark: 'var(--accent-cta-bg)',
+}, 'Near Black — per cc-agent-view spec');
+registerColor('send-btn-icon', {
+  light: 'var(--surface-on-card)',
+  dark: 'var(--surface-on-card)',
+}, 'Send button — grayscale pill');
+registerColor('send-btn-disabled-bg', {
+  light: 'var(--surface-elevated-soft)',
+  dark: 'var(--surface-elevated-soft)',
+}, 'Light Gray');
+registerColor('send-btn-disabled-icon', {
+  light: 'var(--text-disabled-tertiary)',
+  dark: 'var(--text-disabled-tertiary)',
+}, 'Silver');
 
 // Stop button — per cc-agent-view Streaming variant
-registerColor(
-  'stop-btn-bg',
-  {
-    light: 'var(--surface-chip)',
-    dark: 'var(--surface-chip)',
-  },
-  'Light Gray',
-);
-registerColor(
-  'stop-btn-icon',
-  {
-    light: 'var(--text-primary-on-dark)',
-    dark: 'var(--text-primary-on-dark)',
-  },
-  'Near Black',
-);
+registerColor('stop-btn-bg', {
+  light: 'var(--surface-chip)',
+  dark: 'var(--surface-chip)',
+}, 'Light Gray');
+registerColor('stop-btn-icon', {
+  light: 'var(--text-primary-on-dark)',
+  dark: 'var(--text-primary-on-dark)',
+}, 'Near Black');
 
 // Permission prompt (F-PERM-2)
-registerColor(
-  'perm-code-bg',
-  {
-    light: '#f5f5f5',
-    dark: '#1f1f1e',
-  },
-  'Light code block bg',
-);
-registerColor(
-  'perm-code-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board — code block outline',
-);
-registerColor(
-  'perm-allow-btn-bg',
-  {
-    light: '#ffffff',
-    dark: '#ffffff',
-  },
-  'Allow once — white bg per ref',
-);
-registerColor(
-  'perm-allow-btn-text',
-  {
-    light: '#262626',
-    dark: '#262626',
-  },
-  'Allow once — dark text',
-);
-registerColor(
-  'perm-allow-kbd-bg',
-  {
-    light: '#f5f5f5',
-    dark: '#e5e5e5',
-  },
-  'Allow once kbd bg',
-);
-registerColor(
-  'perm-allow-kbd-border',
-  {
-    light: '#d7d7d4',
-    dark: '#d7d7d4',
-  },
-  'Allow once kbd border',
-);
+registerColor('perm-code-bg', {
+  light: '#f5f5f5',
+  dark: '#1f1f1e',
+}, 'Light code block bg');
+registerColor('perm-code-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board — code block outline');
+registerColor('perm-allow-btn-bg', {
+  light: '#ffffff',
+  dark: '#ffffff',
+}, 'Allow once — white bg per ref');
+registerColor('perm-allow-btn-text', {
+  light: '#262626',
+  dark: '#262626',
+}, 'Allow once — dark text');
+registerColor('perm-allow-kbd-bg', {
+  light: '#f5f5f5',
+  dark: '#e5e5e5',
+}, 'Allow once kbd bg');
+registerColor('perm-allow-kbd-border', {
+  light: '#d7d7d4',
+  dark: '#d7d7d4',
+}, 'Allow once kbd border');
 
 // Model selector
-registerColor(
-  'model-trigger-hover',
-  {
-    light: '#e5e5e5',
-    dark: '#2c2c2a',
-  },
-  'Light Gray — pill hover',
-);
-registerColor(
-  'model-trigger-text',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone — model name + effort name',
-);
-registerColor(
-  'model-trigger-meta',
-  {
-    light: 'var(--text-tertiary)',
-    dark: 'var(--text-tertiary)',
-  },
-  'Silver — middle dot separator (·)',
-);
-registerColor(
-  'model-trigger-arrow',
-  {
-    light: 'var(--text-secondary-cross)',
-    dark: 'var(--text-secondary-cross)',
-  },
-  'Silver',
-);
-registerColor(
-  'thinking-body-text',
-  {
-    light: 'var(--text-tertiary)',
-    dark: 'var(--text-tertiary)',
-  },
-  'Silver — one tier below title',
-);
-registerColor(
-  'model-dropdown-bg',
-  {
-    light: 'var(--surface-elevated)',
-    dark: 'var(--surface-elevated)',
-  },
-  'Card',
-);
-registerColor(
-  'model-dropdown-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'model-item-hover',
-  {
-    light: 'var(--surface-hover)',
-    dark: 'var(--surface-hover)',
-  },
-  'Light Gray',
-);
-registerColor(
-  'model-item-text',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
-registerColor(
-  'model-item-check',
-  {
-    light: 'var(--accent-cta-bg-pure)',
-    dark: 'var(--accent-cta-bg-pure)',
-  },
-  'Pure Black',
-);
-registerColor(
-  'model-item-desc',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone — model description',
-);
-registerColor(
-  'model-section-label',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone — "Effort" header',
-);
-registerColor(
-  'model-budget-badge-bg',
-  {
-    light: '#dcfce7',
-    dark: '#14532d',
-  },
-  'Budget model badge background',
-);
-registerColor(
-  'model-budget-badge-text',
-  {
-    light: '#16a34a',
-    dark: '#86efac',
-  },
-  'Budget model badge text',
-);
+registerColor('model-trigger-hover', {
+  light: '#e5e5e5',
+  dark: '#2c2c2a',
+}, 'Light Gray — pill hover');
+registerColor('model-trigger-text', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone — model name + effort name');
+registerColor('model-trigger-meta', {
+  light: 'var(--text-tertiary)',
+  dark: 'var(--text-tertiary)',
+}, 'Silver — middle dot separator (·)');
+registerColor('model-trigger-arrow', {
+  light: 'var(--text-secondary-cross)',
+  dark: 'var(--text-secondary-cross)',
+}, 'Silver');
+registerColor('thinking-body-text', {
+  light: 'var(--text-tertiary)',
+  dark: 'var(--text-tertiary)',
+}, 'Silver — one tier below title');
+registerColor('model-dropdown-bg', {
+  light: 'var(--surface-elevated)',
+  dark: 'var(--surface-elevated)',
+}, 'Card');
+registerColor('model-dropdown-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('model-item-hover', {
+  light: 'var(--surface-hover)',
+  dark: 'var(--surface-hover)',
+}, 'Light Gray');
+registerColor('model-item-text', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
+registerColor('model-item-check', {
+  light: 'var(--accent-cta-bg-pure)',
+  dark: 'var(--accent-cta-bg-pure)',
+}, 'Pure Black');
+registerColor('model-item-desc', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone — model description');
+registerColor('model-section-label', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone — "Effort" header');
+registerColor('model-budget-badge-bg', {
+  light: '#dcfce7',
+  dark: '#14532d',
+}, 'Budget model badge background');
+registerColor('model-budget-badge-text', {
+  light: '#16a34a',
+  dark: '#86efac',
+}, 'Budget model badge text');
 
 // Permission selector
-registerColor(
-  'perm-item-selected-bg',
-  {
-    light: '#f8f8f6',
-    dark: '#3c3c3a',
-  },
-  'Warm White — selected item bg',
-);
+registerColor('perm-item-selected-bg', {
+  light: '#f8f8f6',
+  dark: '#3c3c3a',
+}, 'Warm White — selected item bg');
 
 // Narrow scoped text hints: only selected risky permission modes use color.
-registerColor(
-  'perm-auto-selected-text',
-  {
-    light: '#000050',
-    dark: '#00D9C5',
-  },
-  'Auto Approval accent',
-);
-registerColor(
-  'perm-bypass-selected-text',
-  {
-    light: 'var(--warning-accent)',
-    dark: 'var(--warning-accent)',
-  },
-  'Heart Orange',
-);
+registerColor('perm-auto-selected-text', {
+  light: '#000050',
+  dark: '#00D9C5',
+}, 'Auto Approval accent');
+registerColor('perm-bypass-selected-text', {
+  light: 'var(--warning-accent)',
+  dark: 'var(--warning-accent)',
+}, 'Heart Orange');
 
 // Folder picker
-registerColor(
-  'folder-picker-bg',
-  {
-    light: 'var(--surface-elevated)',
-    dark: 'var(--surface-elevated)',
-  },
-  'Card',
-);
-registerColor(
-  'folder-picker-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'folder-item-hover',
-  {
-    light: 'var(--surface-hover)',
-    dark: 'var(--surface-hover)',
-  },
-  'Light Gray — DESIGN.md Chip',
-);
-registerColor(
-  'folder-item-name',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
-registerColor(
-  'folder-item-path',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone',
-);
-registerColor(
-  'folder-item-icon',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone',
-);
-registerColor(
-  'folder-label',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone — "Recent" label',
-);
-registerColor(
-  'folder-btn-bg',
-  {
-    light: 'var(--chat-input-bg)',
-    dark: 'var(--chat-input-bg)',
-  },
-  'Match input box',
-);
-registerColor(
-  'folder-btn-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'folder-btn-text',
-  {
-    light: 'var(--accent-soft)',
-    dark: 'var(--accent-soft)',
-  },
-  'Near Black',
-);
-registerColor(
-  'folder-btn-icon',
-  {
-    light: 'var(--accent-soft)',
-    dark: 'var(--accent-soft)',
-  },
-  'Near Black — per cc-agent-view spec',
-);
+registerColor('folder-picker-bg', {
+  light: 'var(--surface-elevated)',
+  dark: 'var(--surface-elevated)',
+}, 'Card');
+registerColor('folder-picker-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('folder-item-hover', {
+  light: 'var(--surface-hover)',
+  dark: 'var(--surface-hover)',
+}, 'Light Gray — DESIGN.md Chip');
+registerColor('folder-item-name', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
+registerColor('folder-item-path', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone');
+registerColor('folder-item-icon', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone');
+registerColor('folder-label', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone — "Recent" label');
+registerColor('folder-btn-bg', {
+  light: 'var(--chat-input-bg)',
+  dark: 'var(--chat-input-bg)',
+}, 'Match input box');
+registerColor('folder-btn-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('folder-btn-text', {
+  light: 'var(--accent-soft)',
+  dark: 'var(--accent-soft)',
+}, 'Near Black');
+registerColor('folder-btn-icon', {
+  light: 'var(--accent-soft)',
+  dark: 'var(--accent-soft)',
+}, 'Near Black — per cc-agent-view spec');
 
 // WorkingDir bar
-registerColor(
-  'workingdir-text',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone',
-);
-registerColor(
-  'workingdir-icon',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone',
-);
+registerColor('workingdir-text', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone');
+registerColor('workingdir-icon', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone');
 
 // FastToggle (F1)
-registerColor(
-  'fast-toggle-off',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone — OFF icon/text',
-);
-registerColor(
-  'fast-toggle-track',
-  {
-    light: 'var(--text-disabled)',
-    dark: 'var(--text-disabled)',
-  },
-  'Border Light — OFF switch track',
-);
+registerColor('fast-toggle-off', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone — OFF icon/text');
+registerColor('fast-toggle-track', {
+  light: 'var(--text-disabled)',
+  dark: 'var(--text-disabled)',
+}, 'Border Light — OFF switch track');
 
 // Chat placeholder
-registerColor(
-  'chat-placeholder-text',
-  {
-    light: 'var(--text-tertiary)',
-    dark: 'var(--text-tertiary)',
-  },
-  'Silver',
-);
+registerColor('chat-placeholder-text', {
+  light: 'var(--text-tertiary)',
+  dark: 'var(--text-tertiary)',
+}, 'Silver');
 
 // Message stream (F-MSG-1/2/4)
-registerColor(
-  'msg-user-bg',
-  {
-    light: 'var(--surface-elevated)',
-    dark: 'var(--surface-elevated)',
-  },
-  'Card',
-);
-registerColor(
-  'msg-user-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'msg-user-text',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
-registerColor(
-  'msg-assistant-text',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
-registerColor(
-  'msg-tool-text',
-  {
-    light: 'var(--text-secondary-mid)',
-    dark: 'var(--text-secondary-mid)',
-  },
-  'Dark Gray — secondary',
-);
-registerColor(
-  'msg-code-block-bg',
-  {
-    light: 'var(--surface-elevated)',
-    dark: 'var(--surface-elevated)',
-  },
-  'Card',
-);
-registerColor(
-  'msg-code-block-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'msg-code-inline-bg',
-  {
-    light: 'var(--surface-chip)',
-    dark: 'var(--surface-chip)',
-  },
-  'Light Gray',
-);
-registerColor(
-  'msg-table-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'msg-table-header-bg',
-  {
-    light: 'var(--surface)',
-    dark: 'var(--surface)',
-  },
-  'Surface',
-);
-registerColor(
-  'msg-blockquote-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'msg-blockquote-text',
-  {
-    light: 'var(--text-secondary-mid)',
-    dark: 'var(--text-secondary-mid)',
-  },
-  'Dark Gray — secondary',
-);
-registerColor(
-  'msg-hr-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'msg-scrollbar',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'msg-scrollbar-hover',
-  {
-    light: '#b0b0ae',
-    dark: '#555553',
-  },
-  'Board darker — scrollbar hover',
-);
-registerColor(
-  'msg-cursor',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
-registerColor(
-  'msg-link',
-  {
-    light: '#2563eb',
-    dark: '#60a5fa',
-  },
-  'Blue 600 — clickable link',
-);
+registerColor('msg-user-bg', {
+  light: 'var(--surface-elevated)',
+  dark: 'var(--surface-elevated)',
+}, 'Card');
+registerColor('msg-user-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('msg-user-text', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
+registerColor('msg-assistant-text', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
+registerColor('msg-tool-text', {
+  light: 'var(--text-secondary-mid)',
+  dark: 'var(--text-secondary-mid)',
+}, 'Dark Gray — secondary');
+registerColor('msg-code-block-bg', {
+  light: 'var(--surface-elevated)',
+  dark: 'var(--surface-elevated)',
+}, 'Card');
+registerColor('msg-code-block-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('msg-code-inline-bg', {
+  light: 'var(--surface-chip)',
+  dark: 'var(--surface-chip)',
+}, 'Light Gray');
+registerColor('msg-table-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('msg-table-header-bg', {
+  light: 'var(--surface)',
+  dark: 'var(--surface)',
+}, 'Surface');
+registerColor('msg-blockquote-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('msg-blockquote-text', {
+  light: 'var(--text-secondary-mid)',
+  dark: 'var(--text-secondary-mid)',
+}, 'Dark Gray — secondary');
+registerColor('msg-hr-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('msg-scrollbar', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('msg-scrollbar-hover', {
+  light: '#b0b0ae',
+  dark: '#555553',
+}, 'Board darker — scrollbar hover');
+registerColor('msg-cursor', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
+registerColor('msg-link', {
+  light: '#2563eb',
+  dark: '#60a5fa',
+}, 'Blue 600 — clickable link');
 
 // Tool Call Card (F-MSG-3)
-registerColor(
-  'msg-tool-card-bg',
-  {
-    light: 'var(--surface-elevated)',
-    dark: 'var(--surface-elevated)',
-  },
-  'Card',
-);
-registerColor(
-  'msg-tool-card-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'msg-tool-card-chevron',
-  {
-    light: 'var(--text-secondary-mid)',
-    dark: 'var(--text-secondary-mid)',
-  },
-  'Dark Gray — secondary',
-);
-registerColor(
-  'msg-tool-card-text',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
+registerColor('msg-tool-card-bg', {
+  light: 'var(--surface-elevated)',
+  dark: 'var(--surface-elevated)',
+}, 'Card');
+registerColor('msg-tool-card-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('msg-tool-card-chevron', {
+  light: 'var(--text-secondary-mid)',
+  dark: 'var(--text-secondary-mid)',
+}, 'Dark Gray — secondary');
+registerColor('msg-tool-card-text', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
 
 // Todo Checklist Card
-registerColor(
-  'todo-bar-track',
-  {
-    light: 'var(--surface-chip)',
-    dark: 'var(--surface-chip)',
-  },
-  'Progress bar track',
-);
-registerColor(
-  'diff-del-fg',
-  {
-    light: '#b31d28',
-    dark: '#ff7b72',
-  },
-  'GitHub Diff Red (Light)',
-);
-registerColor(
-  'diff-del-bg',
-  {
-    light: '#ffeef0',
-    dark: '#67060c',
-  },
-  'GitHub Diff Red BG (Light)',
-);
-registerColor(
-  'diff-del-emphasis',
-  {
-    light: '#ffd7d5',
-    dark: 'rgba(248, 81, 73, 0.42)',
-  },
-  'GitHub Diff Red inline emphasis',
-);
-registerColor(
-  'diff-add-fg',
-  {
-    light: '#22863a',
-    dark: '#7ee787',
-  },
-  'GitHub Diff Green (Light)',
-);
-registerColor(
-  'diff-add-bg',
-  {
-    light: '#f0fff4',
-    dark: '#033a16',
-  },
-  'GitHub Diff Green BG (Light)',
-);
-registerColor(
-  'diff-add-emphasis',
-  {
-    light: '#acf2bd',
-    dark: 'rgba(46, 160, 67, 0.42)',
-  },
-  'GitHub Diff Green inline emphasis',
-);
-registerColor(
-  'diff-line-num',
-  {
-    light: 'var(--text-tertiary-stone)',
-    dark: 'var(--text-tertiary-stone)',
-  },
-  'Stone',
-);
-registerColor(
-  'info-700',
-  {
-    light: '#1D4ED8',
-    dark: '#60a5fa',
-  },
-  'blue-700 — file/param highlight (Light)',
-);
-registerColor(
-  'agent-actions-rail',
-  {
-    light: '#DDD6CB',
-    dark: '#404040',
-  },
-  'warm neutral — left rail (Light)',
-);
+registerColor('todo-bar-track', {
+  light: 'var(--surface-chip)',
+  dark: 'var(--surface-chip)',
+}, 'Progress bar track');
+registerColor('diff-del-fg', {
+  light: '#b31d28',
+  dark: '#ff7b72',
+}, 'GitHub Diff Red (Light)');
+registerColor('diff-del-bg', {
+  light: '#ffeef0',
+  dark: '#67060c',
+}, 'GitHub Diff Red BG (Light)');
+registerColor('diff-del-emphasis', {
+  light: '#ffd7d5',
+  dark: 'rgba(248, 81, 73, 0.42)',
+}, 'GitHub Diff Red inline emphasis');
+registerColor('diff-add-fg', {
+  light: '#22863a',
+  dark: '#7ee787',
+}, 'GitHub Diff Green (Light)');
+registerColor('diff-add-bg', {
+  light: '#f0fff4',
+  dark: '#033a16',
+}, 'GitHub Diff Green BG (Light)');
+registerColor('diff-add-emphasis', {
+  light: '#acf2bd',
+  dark: 'rgba(46, 160, 67, 0.42)',
+}, 'GitHub Diff Green inline emphasis');
+registerColor('diff-line-num', {
+  light: 'var(--text-tertiary-stone)',
+  dark: 'var(--text-tertiary-stone)',
+}, 'Stone');
+registerColor('info-700', {
+  light: '#1D4ED8',
+  dark: '#60a5fa',
+}, 'blue-700 — file/param highlight (Light)');
+registerColor('agent-actions-rail', {
+  light: '#DDD6CB',
+  dark: '#404040',
+}, 'warm neutral — left rail (Light)');
 
 // 图片标注(image-annotation):托盘缩略图"带标注"角标底色。语义豁免色——
 // 必须与烧进图片位图的笔迹红(lightboxAnnotations.ANNOTATION_STROKE_COLOR
 // #FF3B30)保持一致,笔迹是图片内容的一部分不随主题变,角标作为它的指示器
 // 同样跨主题恒定;走 token 只为满足规则 16 的可寻址性,不期望被主题 override。
-registerColor(
-  'annotation-accent',
-  {
-    light: '#FF3B30',
-    dark: '#FF3B30',
-  },
-  'Annotation Red — 与烧录笔迹同色,语义豁免',
-);
+registerColor('annotation-accent', {
+  light: '#FF3B30',
+  dark: '#FF3B30',
+}, 'Annotation Red — 与烧录笔迹同色,语义豁免');
 
 // Running Status Bar (F-SDK-3)
-registerColor(
-  'status-bar-accent',
-  {
-    light: 'var(--warning-accent)',
-    dark: 'var(--warning-accent)',
-  },
-  'Thinking Orange — DESIGN.md',
-);
+registerColor('status-bar-accent', {
+  light: 'var(--warning-accent)',
+  dark: 'var(--warning-accent)',
+}, 'Thinking Orange — DESIGN.md');
 // 状态徽章前景(§7 必炸点):橙底(status-bar-accent #FF6600)深字。
 // 此前橙徽章借用 accent-pure-cta-fg(白字)→ #FFFFFF×#FF6600=2.94:1 不达标;
 // 拆独立 token 走深字(=text-primary/text-primary-inv),× status-bar-accent ≥4.5:1。
-registerColor(
-  'status-badge-fg',
-  {
-    light: 'var(--accent-pure-cta-fg)',
-    dark: 'var(--accent-pure-cta-fg)',
-  },
-  '状态徽章前景(§7 必炸点;default 镜像 accent-pure-cta-fg 保证既有 9 主题零变化,CINDY override #1F1F1F)',
-);
-registerColor(
-  'status-bar-meta',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone',
-);
+registerColor('status-badge-fg', {
+  light: 'var(--accent-pure-cta-fg)',
+  dark: 'var(--accent-pure-cta-fg)',
+}, '状态徽章前景(§7 必炸点;default 镜像 accent-pure-cta-fg 保证既有 9 主题零变化,CINDY override #1F1F1F)');
+registerColor('status-bar-meta', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone');
 
 // Settings page — Ollama layer system (Light)
-registerColor(
-  'settings-bg',
-  {
-    light: 'var(--surface)',
-    dark: 'var(--surface)',
-  },
-  'Surface',
-);
-registerColor(
-  'settings-divider',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board — hairline',
-);
-registerColor(
-  'settings-back-icon',
-  {
-    light: 'var(--text-tertiary-mid)',
-    dark: 'var(--text-tertiary-mid)',
-  },
-  'Mid Gray — arrow glyph',
-);
-registerColor(
-  'settings-back-text',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black — "Settings" title',
-);
-registerColor(
-  'settings-back-hover',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black — subtle hover',
-);
+registerColor('settings-bg', {
+  light: 'var(--surface)',
+  dark: 'var(--surface)',
+}, 'Surface');
+registerColor('settings-divider', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board — hairline');
+registerColor('settings-back-icon', {
+  light: 'var(--text-tertiary-mid)',
+  dark: 'var(--text-tertiary-mid)',
+}, 'Mid Gray — arrow glyph');
+registerColor('settings-back-text', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black — "Settings" title');
+registerColor('settings-back-hover', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black — subtle hover');
 
 // Settings - inner sidebar menu items
-registerColor(
-  'settings-menu-text',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone — unselected label',
-);
-registerColor(
-  'settings-menu-text-selected',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black — selected label',
-);
-registerColor(
-  'settings-menu-bg-selected',
-  {
-    light: '#e8e8e6',
-    dark: '#2c2c2a',
-  },
-  'Soft tint — selected pill',
-);
-registerColor(
-  'settings-menu-border-selected',
-  {
-    light: 'var(--border-transparent-mixed)',
-    dark: 'var(--border-transparent-mixed)',
-  },
-  'Settings - inner sidebar menu items',
-);
-registerColor(
-  'settings-menu-bg-hover',
-  {
-    light: '#ececea',
-    dark: '#2c2c2a',
-  },
-  'Subtle hover',
-);
-registerColor(
-  'settings-section-title',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black — section heading',
-);
-registerColor(
-  'settings-section-desc',
-  {
-    light: 'var(--text-tertiary-mid)',
-    dark: 'var(--text-tertiary-mid)',
-  },
-  'Mid Gray — description body',
-);
-registerColor(
-  'settings-section-sublabel',
-  {
-    light: 'var(--text-tertiary-mid)',
-    dark: 'var(--text-tertiary-mid)',
-  },
-  'Mid Gray — "Theme" sublabel',
-);
+registerColor('settings-menu-text', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone — unselected label');
+registerColor('settings-menu-text-selected', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black — selected label');
+registerColor('settings-menu-bg-selected', {
+  light: '#e8e8e6',
+  dark: '#2c2c2a',
+}, 'Soft tint — selected pill');
+registerColor('settings-menu-border-selected', {
+  light: 'var(--border-transparent-mixed)',
+  dark: 'var(--border-transparent-mixed)',
+}, 'Settings - inner sidebar menu items');
+registerColor('settings-menu-bg-hover', {
+  light: '#ececea',
+  dark: '#2c2c2a',
+}, 'Subtle hover');
+registerColor('settings-section-title', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black — section heading');
+registerColor('settings-section-desc', {
+  light: 'var(--text-tertiary-mid)',
+  dark: 'var(--text-tertiary-mid)',
+}, 'Mid Gray — description body');
+registerColor('settings-section-sublabel', {
+  light: 'var(--text-tertiary-mid)',
+  dark: 'var(--text-tertiary-mid)',
+}, 'Mid Gray — "Theme" sublabel');
 
 // Settings - User card (elevated on Surface)
-registerColor(
-  'settings-profile-card-bg',
-  {
-    light: 'var(--surface-card-ivory)',
-    dark: 'var(--surface-card-ivory)',
-  },
-  'Card',
-);
-registerColor(
-  'settings-profile-card-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'settings-profile-avatar-bg',
-  {
-    light: 'var(--surface-chip-alt)',
-    dark: 'var(--surface-chip-alt)',
-  },
-  'Light Gray chip',
-);
-registerColor(
-  'settings-profile-avatar-text',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
-registerColor(
-  'settings-profile-name',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
+registerColor('settings-profile-card-bg', {
+  light: 'var(--surface-card-ivory)',
+  dark: 'var(--surface-card-ivory)',
+}, 'Card');
+registerColor('settings-profile-card-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('settings-profile-avatar-bg', {
+  light: 'var(--surface-chip-alt)',
+  dark: 'var(--surface-chip-alt)',
+}, 'Light Gray chip');
+registerColor('settings-profile-avatar-text', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
+registerColor('settings-profile-name', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
 
 // Settings - API Key input (pill input on Card)
-registerColor(
-  'settings-input-bg',
-  {
-    light: 'var(--surface-card-ivory)',
-    dark: 'var(--surface-card-ivory)',
-  },
-  'Card',
-);
-registerColor(
-  'settings-input-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'settings-input-border-focus',
-  {
-    light: 'var(--text-tertiary-stone)',
-    dark: 'var(--text-tertiary-stone)',
-  },
-  'Stone — focus hint',
-);
-registerColor(
-  'settings-input-text',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
-registerColor(
-  'settings-input-placeholder',
-  {
-    light: 'var(--text-placeholder)',
-    dark: 'var(--text-placeholder)',
-  },
-  'Placeholder — 收口至 --text-placeholder slot',
-);
-registerColor(
-  'settings-eye-icon',
-  {
-    light: 'var(--text-tertiary-stone)',
-    dark: 'var(--text-tertiary-stone)',
-  },
-  'Stone',
-);
-registerColor(
-  'settings-eye-icon-hover',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
-registerColor(
-  'settings-trash-icon',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone — API Key clear button',
-);
-registerColor(
-  'settings-trash-icon-hover',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
-registerColor(
-  'settings-source-meta',
-  {
-    light: 'var(--text-secondary-cross)',
-    dark: 'var(--text-secondary-cross)',
-  },
-  'Silver — "Source: ..." meta',
-);
-registerColor(
-  'settings-source-link',
-  {
-    light: '#262626',
-    dark: '#d4d4d4',
-  },
-  'Near Black — "Open Console" link',
-);
-registerColor(
-  'settings-error-text',
-  {
-    light: 'var(--error-flat)',
-    dark: 'var(--error-flat)',
-  },
-  'Functional only',
-);
+registerColor('settings-input-bg', {
+  light: 'var(--surface-card-ivory)',
+  dark: 'var(--surface-card-ivory)',
+}, 'Card');
+registerColor('settings-input-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('settings-input-border-focus', {
+  light: 'var(--text-tertiary-stone)',
+  dark: 'var(--text-tertiary-stone)',
+}, 'Stone — focus hint');
+registerColor('settings-input-text', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
+registerColor('settings-input-placeholder', {
+  light: 'var(--text-placeholder)',
+  dark: 'var(--text-placeholder)',
+}, 'Placeholder — 收口至 --text-placeholder slot');
+registerColor('settings-eye-icon', {
+  light: 'var(--text-tertiary-stone)',
+  dark: 'var(--text-tertiary-stone)',
+}, 'Stone');
+registerColor('settings-eye-icon-hover', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
+registerColor('settings-trash-icon', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone — API Key clear button');
+registerColor('settings-trash-icon-hover', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
+registerColor('settings-source-meta', {
+  light: 'var(--text-secondary-cross)',
+  dark: 'var(--text-secondary-cross)',
+}, 'Silver — "Source: ..." meta');
+registerColor('settings-source-link', {
+  light: '#262626',
+  dark: '#d4d4d4',
+}, 'Near Black — "Open Console" link');
+registerColor('settings-error-text', {
+  light: 'var(--error-flat)',
+  dark: 'var(--error-flat)',
+}, 'Functional only');
 
 // Settings - StatusBadge (pill on Card) — grayscale per-status ladder
-registerColor(
-  'settings-badge-bg',
-  {
-    light: 'var(--surface-card-ivory)',
-    dark: 'var(--surface-card-ivory)',
-  },
-  'Card',
-);
-registerColor(
-  'settings-badge-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
+registerColor('settings-badge-bg', {
+  light: 'var(--surface-card-ivory)',
+  dark: 'var(--surface-card-ivory)',
+}, 'Card');
+registerColor('settings-badge-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
 
 // Per-status text/dot — Light ladder: Silver (weakest) → Stone → Pure Black (strongest)
-registerColor(
-  'settings-badge-needs-config',
-  {
-    light: 'var(--text-tertiary)',
-    dark: 'var(--text-tertiary)',
-  },
-  'Silver — de-emphasized "empty" state',
-);
-registerColor(
-  'settings-badge-saved',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone — neutral default once persisted',
-);
-registerColor(
-  'settings-badge-connected',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black — maximum emphasis for success',
-);
-registerColor(
-  'settings-badge-error',
-  {
-    light: 'var(--error-flat)',
-    dark: 'var(--error-flat)',
-  },
-  'Functional error only — grayscale exception',
-);
+registerColor('settings-badge-needs-config', {
+  light: 'var(--text-tertiary)',
+  dark: 'var(--text-tertiary)',
+}, 'Silver — de-emphasized "empty" state');
+registerColor('settings-badge-saved', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone — neutral default once persisted');
+registerColor('settings-badge-connected', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black — maximum emphasis for success');
+registerColor('settings-badge-error', {
+  light: 'var(--error-flat)',
+  dark: 'var(--error-flat)',
+}, 'Functional error only — grayscale exception');
 
 // Settings - Primary button (Save) = Black Pill CTA
-registerColor(
-  'settings-btn-primary-bg',
-  {
-    light: 'var(--accent-emphasis)',
-    dark: 'var(--accent-emphasis)',
-  },
-  'Near Black',
-);
-registerColor(
-  'settings-btn-primary-text',
-  {
-    light: '#faf9f5',
-    dark: '#262626',
-  },
-  'Surface ivory',
-);
-registerColor(
-  'settings-btn-primary-border',
-  {
-    light: 'var(--accent-emphasis)',
-    dark: 'var(--accent-emphasis)',
-  },
-  'Settings - Primary button (Save) = Black Pill CTA',
-);
-registerColor(
-  'settings-btn-primary-hover-bg',
-  {
-    light: 'var(--accent-hover)',
-    dark: 'var(--accent-hover)',
-  },
-  'Near Black',
-);
+registerColor('settings-btn-primary-bg', {
+  light: 'var(--accent-emphasis)',
+  dark: 'var(--accent-emphasis)',
+}, 'Near Black');
+registerColor('settings-btn-primary-text', {
+  light: '#faf9f5',
+  dark: '#262626',
+}, 'Surface ivory');
+registerColor('settings-btn-primary-border', {
+  light: 'var(--accent-emphasis)',
+  dark: 'var(--accent-emphasis)',
+}, 'Settings - Primary button (Save) = Black Pill CTA');
+registerColor('settings-btn-primary-hover-bg', {
+  light: 'var(--accent-hover)',
+  dark: 'var(--accent-hover)',
+}, 'Near Black');
 
 // Settings - Secondary button (Test / Logout) = Gray Pill
-registerColor(
-  'settings-btn-secondary-bg',
-  {
-    light: 'var(--surface-chip-alt)',
-    dark: 'var(--surface-chip-alt)',
-  },
-  'Light Gray',
-);
-registerColor(
-  'settings-btn-secondary-text',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
-registerColor(
-  'settings-btn-secondary-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'settings-btn-secondary-hover-bg',
-  {
-    light: '#d7d7d4',
-    dark: '#3c3c3a',
-  },
-  'Board',
-);
+registerColor('settings-btn-secondary-bg', {
+  light: 'var(--surface-chip-alt)',
+  dark: 'var(--surface-chip-alt)',
+}, 'Light Gray');
+registerColor('settings-btn-secondary-text', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
+registerColor('settings-btn-secondary-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('settings-btn-secondary-hover-bg', {
+  light: '#d7d7d4',
+  dark: '#3c3c3a',
+}, 'Board');
 
 // Settings - Theme cards
-registerColor(
-  'settings-theme-card-bg',
-  {
-    light: 'var(--surface-card-ivory)',
-    dark: 'var(--surface-card-ivory)',
-  },
-  'Card',
-);
-registerColor(
-  'settings-theme-card-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'settings-theme-preview-bg',
-  {
-    light: 'var(--surface)',
-    dark: 'var(--surface)',
-  },
-  'Surface — inside preview',
-);
-registerColor(
-  'settings-theme-preview-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board — unselected border',
-);
-registerColor(
-  'settings-theme-preview-border-active',
-  {
-    light: 'var(--accent-emphasis)',
-    dark: 'var(--accent-emphasis)',
-  },
-  'Near Black — selected 2px ring',
-);
-registerColor(
-  'settings-theme-icon',
-  {
-    light: 'var(--text-tertiary-stone)',
-    dark: 'var(--text-tertiary-stone)',
-  },
-  'Stone — unselected',
-);
-registerColor(
-  'settings-theme-icon-active',
-  {
-    light: 'var(--accent-emphasis)',
-    dark: 'var(--accent-emphasis)',
-  },
-  'Near Black — selected',
-);
-registerColor(
-  'settings-theme-label',
-  {
-    light: 'var(--text-tertiary-stone)',
-    dark: 'var(--text-tertiary-stone)',
-  },
-  'Stone — unselected',
-);
-registerColor(
-  'settings-theme-label-active',
-  {
-    light: 'var(--accent-emphasis)',
-    dark: 'var(--accent-emphasis)',
-  },
-  'Near Black — selected',
-);
+registerColor('settings-theme-card-bg', {
+  light: 'var(--surface-card-ivory)',
+  dark: 'var(--surface-card-ivory)',
+}, 'Card');
+registerColor('settings-theme-card-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('settings-theme-preview-bg', {
+  light: 'var(--surface)',
+  dark: 'var(--surface)',
+}, 'Surface — inside preview');
+registerColor('settings-theme-preview-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board — unselected border');
+registerColor('settings-theme-preview-border-active', {
+  light: 'var(--accent-emphasis)',
+  dark: 'var(--accent-emphasis)',
+}, 'Near Black — selected 2px ring');
+registerColor('settings-theme-icon', {
+  light: 'var(--text-tertiary-stone)',
+  dark: 'var(--text-tertiary-stone)',
+}, 'Stone — unselected');
+registerColor('settings-theme-icon-active', {
+  light: 'var(--accent-emphasis)',
+  dark: 'var(--accent-emphasis)',
+}, 'Near Black — selected');
+registerColor('settings-theme-label', {
+  light: 'var(--text-tertiary-stone)',
+  dark: 'var(--text-tertiary-stone)',
+}, 'Stone — unselected');
+registerColor('settings-theme-label-active', {
+  light: 'var(--accent-emphasis)',
+  dark: 'var(--accent-emphasis)',
+}, 'Near Black — selected');
 
 // Auto preview gradient halves
-registerColor(
-  'settings-theme-auto-light',
-  {
-    light: '#f8f8f6',
-    dark: '#f8f8f6',
-  },
-  'Auto preview gradient halves',
-);
-registerColor(
-  'settings-theme-auto-dark',
-  {
-    light: '#1f1f1e',
-    dark: '#1f1f1e',
-  },
-  'Auto preview gradient halves',
-);
+registerColor('settings-theme-auto-light', {
+  light: '#f8f8f6',
+  dark: '#f8f8f6',
+}, 'Auto preview gradient halves');
+registerColor('settings-theme-auto-dark', {
+  light: '#1f1f1e',
+  dark: '#1f1f1e',
+}, 'Auto preview gradient halves');
 
 // Settings - Logout button (Card surface pill)
-registerColor(
-  'settings-logout-bg',
-  {
-    light: '#faf9f5',
-    dark: '#2c2c2a',
-  },
-  'Card',
-);
-registerColor(
-  'settings-logout-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'settings-logout-text',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
-registerColor(
-  'settings-logout-icon',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
-registerColor(
-  'settings-logout-hover-bg',
-  {
-    light: 'var(--surface-hover-soft)',
-    dark: 'var(--surface-hover-soft)',
-  },
-  'Surface — gentle hover',
-);
+registerColor('settings-logout-bg', {
+  light: '#faf9f5',
+  dark: '#2c2c2a',
+}, 'Card');
+registerColor('settings-logout-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('settings-logout-text', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
+registerColor('settings-logout-icon', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
+registerColor('settings-logout-hover-bg', {
+  light: 'var(--surface-hover-soft)',
+  dark: 'var(--surface-hover-soft)',
+}, 'Surface — gentle hover');
 
 // Settings - Integrations row (Google + future providers)
-registerColor(
-  'settings-integration-avatar-bg',
-  {
-    light: '#faf9f5',
-    dark: '#3c3c3a',
-  },
-  'Card on Card — neutral chip',
-);
-registerColor(
-  'settings-integration-avatar-border',
-  {
-    light: '#e8e8e6',
-    dark: 'transparent',
-  },
-  'Hairline',
-);
-registerColor(
-  'settings-integration-avatar-icon',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Mono Google G',
-);
-registerColor(
-  'settings-integration-subtitle',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone — email / "Not connected"',
-);
-registerColor(
-  'settings-integration-warning',
-  {
-    light: 'var(--warning-accent)',
-    dark: 'var(--warning-accent)',
-  },
-  'Thinking Orange — "Reconnect required" (DESIGN.md §2 sanctioned brand orange)',
-);
+registerColor('settings-integration-avatar-bg', {
+  light: '#faf9f5',
+  dark: '#3c3c3a',
+}, 'Card on Card — neutral chip');
+registerColor('settings-integration-avatar-border', {
+  light: '#e8e8e6',
+  dark: 'transparent',
+}, 'Hairline');
+registerColor('settings-integration-avatar-icon', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Mono Google G');
+registerColor('settings-integration-subtitle', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone — email / "Not connected"');
+registerColor('settings-integration-warning', {
+  light: 'var(--warning-accent)',
+  dark: 'var(--warning-accent)',
+}, 'Thinking Orange — "Reconnect required" (DESIGN.md §2 sanctioned brand orange)');
 
 // Remote SSH host status dot — semantic colors (sanctioned exception to the
 // "no hue" rule for this widget specifically: user explicitly asked for
@@ -2385,1058 +1247,546 @@ registerColor(
 // DESIGN.md §2). Hues are kept identical across light/dark — the dot is
 // small enough that saturation issues don't arise; legibility comes from
 // the dot's high-contrast position against surface, not from luminance.
-registerColor(
-  'remote-status-ready',
-  {
-    light: '#22c55e',
-    dark: '#22c55e',
-  },
-  'Status — connected / ready (green)',
-);
-registerColor(
-  'remote-status-progress',
-  {
-    light: '#f59e0b',
-    dark: '#f59e0b',
-  },
-  'Status — connecting/authenticating/reconnecting (amber-500, 偏黄不容易在小圆点上被误读为红)',
-);
-registerColor(
-  'remote-status-failed',
-  {
-    light: '#ef4444',
-    dark: '#ef4444',
-  },
-  'Status — connect failed (red)',
-);
+registerColor('remote-status-ready', {
+  light: '#22c55e',
+  dark: '#22c55e',
+}, 'Status — connected / ready (green)');
+registerColor('remote-status-progress', {
+  light: '#f59e0b',
+  dark: '#f59e0b',
+}, 'Status — connecting/authenticating/reconnecting (amber-500, 偏黄不容易在小圆点上被误读为红)');
+registerColor('remote-status-failed', {
+  light: '#ef4444',
+  dark: '#ef4444',
+}, 'Status — connect failed (red)');
 
 // 会话状态点(AttentionDot / 列表行右槽 / 灵动岛)三态语义色 —— 同 remote-status 走
 // DESIGN.md §2 "小状态点 hue 豁免":跨主题同色,靠位置高对比区分。
 // 全端统一色表(与灵动岛 native 对齐):running=Thinking Orange(status-bar-accent)、
 // awaiting=TapTap 蓝、error=红、完成未读=绿。
-registerColor(
-  'card-status-awaiting',
-  {
-    light: '#00D9C5',
-    dark: '#00D9C5',
-  },
-  '状态点 — 待用户回复/选择 (TapTap 蓝 #00D9C5,与灵动岛 needs-interaction 同值;light/dark 同色,2026-07 Dash 真机确认浅底可辨)',
-);
-registerColor(
-  'card-status-error',
-  {
-    light: '#ef4444',
-    dark: '#ef4444',
-  },
-  '状态点 — 任务出错 (red,与灵动岛 error 同值)',
-);
-registerColor(
-  'card-status-done',
-  {
-    light: '#22c55e',
-    dark: '#22c55e',
-  },
-  '状态点 — 完成未读 (green;普通/定时任务完成统一,橙专职 running)',
-);
-registerColor(
-  'remote-status-disconnected',
-  {
-    light: 'var(--text-tertiary)',
-    dark: 'var(--text-tertiary)',
-  },
-  'Status — never connected / manually disconnected (grey, neutral)',
-);
+registerColor('card-status-awaiting', {
+  light: '#00D9C5',
+  dark: '#00D9C5',
+}, '状态点 — 待用户回复/选择 (TapTap 蓝 #00D9C5,与灵动岛 needs-interaction 同值;light/dark 同色,2026-07 Dash 真机确认浅底可辨)');
+registerColor('card-status-error', {
+  light: '#ef4444',
+  dark: '#ef4444',
+}, '状态点 — 任务出错 (red,与灵动岛 error 同值)');
+registerColor('card-status-done', {
+  light: '#22c55e',
+  dark: '#22c55e',
+}, '状态点 — 完成未读 (green;普通/定时任务完成统一,橙专职 running)');
+registerColor('remote-status-disconnected', {
+  light: 'var(--text-tertiary)',
+  dark: 'var(--text-tertiary)',
+}, 'Status — never connected / manually disconnected (grey, neutral)');
 
 // AskUserQuestion card (F7.3) — Light
-registerColor(
-  'ask-card-bg',
-  {
-    light: 'var(--surface-elevated)',
-    dark: 'var(--surface-elevated)',
-  },
-  'Card',
-);
-registerColor(
-  'ask-card-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'ask-header-text',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
-registerColor(
-  'ask-page-text',
-  {
-    light: 'var(--text-tertiary)',
-    dark: 'var(--text-tertiary)',
-  },
-  'Silver',
-);
-registerColor(
-  'ask-option-label',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
-registerColor(
-  'ask-option-desc',
-  {
-    light: 'var(--text-tertiary-stone)',
-    dark: 'var(--text-tertiary-stone)',
-  },
-  'Stone',
-);
-registerColor(
-  'ask-option-custom',
-  {
-    light: 'var(--text-tertiary)',
-    dark: 'var(--text-tertiary)',
-  },
-  'Silver — "Type something else..."',
-);
-registerColor(
-  'ask-option-divider',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'ask-option-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board — options container outline',
-);
-registerColor(
-  'ask-badge-bg',
-  {
-    light: 'var(--surface-chip)',
-    dark: 'var(--surface-chip)',
-  },
-  'Light Gray',
-);
-registerColor(
-  'ask-badge-text',
-  {
-    light: 'var(--text-primary-on-dark)',
-    dark: 'var(--text-primary-on-dark)',
-  },
-  'Near Black',
-);
-registerColor(
-  'ask-skip-bg',
-  {
-    light: 'var(--surface-chip)',
-    dark: 'var(--surface-chip)',
-  },
-  'Light Gray',
-);
-registerColor(
-  'ask-skip-text',
-  {
-    light: 'var(--text-primary-on-dark)',
-    dark: 'var(--text-primary-on-dark)',
-  },
-  'Near Black',
-);
-registerColor(
-  'ask-input-bg',
-  {
-    light: 'var(--surface-elevated)',
-    dark: 'var(--surface-elevated)',
-  },
-  'Card',
-);
-registerColor(
-  'ask-input-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'ask-input-text',
-  {
-    light: 'var(--text-primary)',
-    dark: 'var(--text-primary)',
-  },
-  'Near Black',
-);
-registerColor(
-  'ask-input-placeholder',
-  {
-    light: 'var(--text-placeholder)',
-    dark: 'var(--text-placeholder)',
-  },
-  'Placeholder — 收口至 --text-placeholder slot',
-);
-registerColor(
-  'ask-send-bg',
-  {
-    light: 'var(--accent-cta-bg)',
-    dark: 'var(--accent-cta-bg)',
-  },
-  'Near Black',
-);
-registerColor(
-  'ask-send-text',
-  {
-    light: 'var(--surface-on-card)',
-    dark: 'var(--surface-on-card)',
-  },
-  'Pure White',
-);
-registerColor(
-  'ask-send-disabled-bg',
-  {
-    light: 'var(--surface-elevated-soft)',
-    dark: 'var(--surface-elevated-soft)',
-  },
-  'Light Gray',
-);
-registerColor(
-  'ask-send-disabled-text',
-  {
-    light: 'var(--text-disabled-tertiary)',
-    dark: 'var(--text-disabled-tertiary)',
-  },
-  'Silver',
-);
-registerColor(
-  'ask-answered-text',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone',
-);
-registerColor(
-  'ask-expired-text',
-  {
-    light: 'var(--text-tertiary)',
-    dark: 'var(--text-tertiary)',
-  },
-  'Silver',
-);
-registerColor(
-  'ask-option-hover',
-  {
-    light: 'var(--surface-hover-soft)',
-    dark: 'var(--surface-hover-soft)',
-  },
-  'Surface — option hover',
-);
+registerColor('ask-card-bg', {
+  light: 'var(--surface-elevated)',
+  dark: 'var(--surface-elevated)',
+}, 'Card');
+registerColor('ask-card-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('ask-header-text', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
+registerColor('ask-page-text', {
+  light: 'var(--text-tertiary)',
+  dark: 'var(--text-tertiary)',
+}, 'Silver');
+registerColor('ask-option-label', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
+registerColor('ask-option-desc', {
+  light: 'var(--text-tertiary-stone)',
+  dark: 'var(--text-tertiary-stone)',
+}, 'Stone');
+registerColor('ask-option-custom', {
+  light: 'var(--text-tertiary)',
+  dark: 'var(--text-tertiary)',
+}, 'Silver — "Type something else..."');
+registerColor('ask-option-divider', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('ask-option-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board — options container outline');
+registerColor('ask-badge-bg', {
+  light: 'var(--surface-chip)',
+  dark: 'var(--surface-chip)',
+}, 'Light Gray');
+registerColor('ask-badge-text', {
+  light: 'var(--text-primary-on-dark)',
+  dark: 'var(--text-primary-on-dark)',
+}, 'Near Black');
+registerColor('ask-skip-bg', {
+  light: 'var(--surface-chip)',
+  dark: 'var(--surface-chip)',
+}, 'Light Gray');
+registerColor('ask-skip-text', {
+  light: 'var(--text-primary-on-dark)',
+  dark: 'var(--text-primary-on-dark)',
+}, 'Near Black');
+registerColor('ask-input-bg', {
+  light: 'var(--surface-elevated)',
+  dark: 'var(--surface-elevated)',
+}, 'Card');
+registerColor('ask-input-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('ask-input-text', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black');
+registerColor('ask-input-placeholder', {
+  light: 'var(--text-placeholder)',
+  dark: 'var(--text-placeholder)',
+}, 'Placeholder — 收口至 --text-placeholder slot');
+registerColor('ask-send-bg', {
+  light: 'var(--accent-cta-bg)',
+  dark: 'var(--accent-cta-bg)',
+}, 'Near Black');
+registerColor('ask-send-text', {
+  light: 'var(--surface-on-card)',
+  dark: 'var(--surface-on-card)',
+}, 'Pure White');
+registerColor('ask-send-disabled-bg', {
+  light: 'var(--surface-elevated-soft)',
+  dark: 'var(--surface-elevated-soft)',
+}, 'Light Gray');
+registerColor('ask-send-disabled-text', {
+  light: 'var(--text-disabled-tertiary)',
+  dark: 'var(--text-disabled-tertiary)',
+}, 'Silver');
+registerColor('ask-answered-text', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone');
+registerColor('ask-expired-text', {
+  light: 'var(--text-tertiary)',
+  dark: 'var(--text-tertiary)',
+}, 'Silver');
+registerColor('ask-option-hover', {
+  light: 'var(--surface-hover-soft)',
+  dark: 'var(--surface-hover-soft)',
+}, 'Surface — option hover');
 
 // Checkbox — inverted/反色: Light mode = dark border unchecked, dark bg checked
-registerColor(
-  'ask-checkbox-border',
-  {
-    light: '#525250',
-    dark: '#525250',
-  },
-  'Mid Gray — unchecked border',
-);
-registerColor(
-  'ask-checkbox-checked-bg',
-  {
-    light: 'var(--accent-cta-bg)',
-    dark: 'var(--accent-cta-bg)',
-  },
-  'Near Black — checked fill',
-);
-registerColor(
-  'ask-checkbox-checked-icon',
-  {
-    light: 'var(--surface-on-card)',
-    dark: 'var(--surface-on-card)',
-  },
-  'Pure White — checkmark',
-);
+registerColor('ask-checkbox-border', {
+  light: '#525250',
+  dark: '#525250',
+}, 'Mid Gray — unchecked border');
+registerColor('ask-checkbox-checked-bg', {
+  light: 'var(--accent-cta-bg)',
+  dark: 'var(--accent-cta-bg)',
+}, 'Near Black — checked fill');
+registerColor('ask-checkbox-checked-icon', {
+  light: 'var(--surface-on-card)',
+  dark: 'var(--surface-on-card)',
+}, 'Pure White — checkmark');
 
 // Next button — inverted/反色: Light mode = dark bg + white text
-registerColor(
-  'ask-next-bg',
-  {
-    light: 'var(--accent-cta-bg)',
-    dark: 'var(--accent-cta-bg)',
-  },
-  'Near Black',
-);
-registerColor(
-  'ask-next-text',
-  {
-    light: 'var(--surface-on-card)',
-    dark: 'var(--surface-on-card)',
-  },
-  'Pure White',
-);
+registerColor('ask-next-bg', {
+  light: 'var(--accent-cta-bg)',
+  dark: 'var(--accent-cta-bg)',
+}, 'Near Black');
+registerColor('ask-next-text', {
+  light: 'var(--surface-on-card)',
+  dark: 'var(--surface-on-card)',
+}, 'Pure White');
 
 // Plan Viewer / Plan Action cards (FP-5/FP-6) — Light
-registerColor(
-  'plan-card-bg',
-  {
-    light: 'var(--surface-elevated)',
-    dark: 'var(--surface-elevated)',
-  },
-  'Card',
-);
-registerColor(
-  'plan-card-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'plan-header-title',
-  {
-    light: 'var(--text-primary-emphasis)',
-    dark: 'var(--text-primary-emphasis)',
-  },
-  'pen: title color',
-);
-registerColor(
-  'plan-header-hint',
-  {
-    light: 'var(--text-tertiary)',
-    dark: 'var(--text-tertiary)',
-  },
-  'Silver',
-);
-registerColor(
-  'plan-header-divider',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'plan-toolbar-btn-icon',
-  {
-    light: 'var(--text-tertiary-stone)',
-    dark: 'var(--text-tertiary-stone)',
-  },
-  'Stone',
-);
-registerColor(
-  'plan-toolbar-btn-hover-bg',
-  {
-    light: '#e8e8e5',
-    dark: '#3c3c3a',
-  },
-  'Light Chip hover',
-);
-registerColor(
-  'plan-outline-bg',
-  {
-    light: 'var(--surface-elevated)',
-    dark: 'var(--surface-elevated)',
-  },
-  'Card',
-);
-registerColor(
-  'plan-outline-border',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board right divider',
-);
-registerColor(
-  'plan-outline-label',
-  {
-    light: 'var(--text-tertiary-stone)',
-    dark: 'var(--text-tertiary-stone)',
-  },
-  'Stone',
-);
-registerColor(
-  'plan-outline-item-text',
-  {
-    light: 'var(--text-tertiary-stone)',
-    dark: 'var(--text-tertiary-stone)',
-  },
-  'Stone',
-);
-registerColor(
-  'plan-outline-active-bg',
-  {
-    light: '#e8e8e5',
-    dark: '#3c3c3a',
-  },
-  'pen: Light Chip',
-);
-registerColor(
-  'plan-outline-active-text',
-  {
-    light: 'var(--text-primary-emphasis)',
-    dark: 'var(--text-primary-emphasis)',
-  },
-  'Near Black',
-);
-registerColor(
-  'plan-content-bg',
-  {
-    light: 'var(--surface-elevated)',
-    dark: 'var(--surface-elevated)',
-  },
-  'Card',
-);
-registerColor(
-  'plan-content-section',
-  {
-    light: 'var(--text-primary-emphasis)',
-    dark: 'var(--text-primary-emphasis)',
-  },
-  'Near Black heading',
-);
-registerColor(
-  'plan-content-body',
-  {
-    light: 'var(--text-primary-body-strong)',
-    dark: 'var(--text-primary-body-strong)',
-  },
-  'Mid Gray body',
-);
-registerColor(
-  'plan-content-divider',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'plan-edit-body',
-  {
-    light: 'var(--text-primary-body-strong)',
-    dark: 'var(--text-primary-body-strong)',
-  },
-  'Mid Gray JetBrains Mono',
-);
+registerColor('plan-card-bg', {
+  light: 'var(--surface-elevated)',
+  dark: 'var(--surface-elevated)',
+}, 'Card');
+registerColor('plan-card-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('plan-header-title', {
+  light: 'var(--text-primary-emphasis)',
+  dark: 'var(--text-primary-emphasis)',
+}, 'pen: title color');
+registerColor('plan-header-hint', {
+  light: 'var(--text-tertiary)',
+  dark: 'var(--text-tertiary)',
+}, 'Silver');
+registerColor('plan-header-divider', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('plan-toolbar-btn-icon', {
+  light: 'var(--text-tertiary-stone)',
+  dark: 'var(--text-tertiary-stone)',
+}, 'Stone');
+registerColor('plan-toolbar-btn-hover-bg', {
+  light: '#e8e8e5',
+  dark: '#3c3c3a',
+}, 'Light Chip hover');
+registerColor('plan-outline-bg', {
+  light: 'var(--surface-elevated)',
+  dark: 'var(--surface-elevated)',
+}, 'Card');
+registerColor('plan-outline-border', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board right divider');
+registerColor('plan-outline-label', {
+  light: 'var(--text-tertiary-stone)',
+  dark: 'var(--text-tertiary-stone)',
+}, 'Stone');
+registerColor('plan-outline-item-text', {
+  light: 'var(--text-tertiary-stone)',
+  dark: 'var(--text-tertiary-stone)',
+}, 'Stone');
+registerColor('plan-outline-active-bg', {
+  light: '#e8e8e5',
+  dark: '#3c3c3a',
+}, 'pen: Light Chip');
+registerColor('plan-outline-active-text', {
+  light: 'var(--text-primary-emphasis)',
+  dark: 'var(--text-primary-emphasis)',
+}, 'Near Black');
+registerColor('plan-content-bg', {
+  light: 'var(--surface-elevated)',
+  dark: 'var(--surface-elevated)',
+}, 'Card');
+registerColor('plan-content-section', {
+  light: 'var(--text-primary-emphasis)',
+  dark: 'var(--text-primary-emphasis)',
+}, 'Near Black heading');
+registerColor('plan-content-body', {
+  light: 'var(--text-primary-body-strong)',
+  dark: 'var(--text-primary-body-strong)',
+}, 'Mid Gray body');
+registerColor('plan-content-divider', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('plan-edit-body', {
+  light: 'var(--text-primary-body-strong)',
+  dark: 'var(--text-primary-body-strong)',
+}, 'Mid Gray JetBrains Mono');
 
 // Action card
-registerColor(
-  'plan-action-approve-text',
-  {
-    light: 'var(--text-primary-inv)',
-    dark: 'var(--text-primary-inv)',
-  },
-  'Near Black',
-);
-registerColor(
-  'plan-action-approve-enter',
-  {
-    light: 'var(--text-secondary-cross)',
-    dark: 'var(--text-secondary-cross)',
-  },
-  'Silver',
-);
-registerColor(
-  'plan-action-row-divider',
-  {
-    light: 'var(--border-default)',
-    dark: 'var(--border-default)',
-  },
-  'Board',
-);
-registerColor(
-  'plan-action-fb-icon',
-  {
-    light: 'var(--text-secondary-cross)',
-    dark: 'var(--text-secondary-cross)',
-  },
-  'Silver',
-);
-registerColor(
-  'plan-action-fb-placeholder',
-  {
-    light: 'var(--text-placeholder)',
-    dark: 'var(--text-placeholder)',
-  },
-  'Placeholder — 收口至 --text-placeholder slot',
-);
-registerColor(
-  'plan-action-fb-text',
-  {
-    light: 'var(--text-primary-inv)',
-    dark: 'var(--text-primary-inv)',
-  },
-  'Near Black',
-);
-registerColor(
-  'plan-action-row-hover-bg',
-  {
-    light: 'var(--surface-hover-soft)',
-    dark: 'var(--surface-hover-soft)',
-  },
-  'Surface hover',
-);
-registerColor(
-  'plan-action-approve-icon-bg',
-  {
-    light: 'var(--warning-accent)',
-    dark: 'var(--warning-accent)',
-  },
-  'Action card',
-);
-registerColor(
-  'plan-action-approve-icon-fg',
-  {
-    light: '#ffffff',
-    dark: '#ffffff',
-  },
-  'Action card',
-);
+registerColor('plan-action-approve-text', {
+  light: 'var(--text-primary-inv)',
+  dark: 'var(--text-primary-inv)',
+}, 'Near Black');
+registerColor('plan-action-approve-enter', {
+  light: 'var(--text-secondary-cross)',
+  dark: 'var(--text-secondary-cross)',
+}, 'Silver');
+registerColor('plan-action-row-divider', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, 'Board');
+registerColor('plan-action-fb-icon', {
+  light: 'var(--text-secondary-cross)',
+  dark: 'var(--text-secondary-cross)',
+}, 'Silver');
+registerColor('plan-action-fb-placeholder', {
+  light: 'var(--text-placeholder)',
+  dark: 'var(--text-placeholder)',
+}, 'Placeholder — 收口至 --text-placeholder slot');
+registerColor('plan-action-fb-text', {
+  light: 'var(--text-primary-inv)',
+  dark: 'var(--text-primary-inv)',
+}, 'Near Black');
+registerColor('plan-action-row-hover-bg', {
+  light: 'var(--surface-hover-soft)',
+  dark: 'var(--surface-hover-soft)',
+}, 'Surface hover');
+registerColor('plan-action-approve-icon-bg', {
+  light: 'var(--warning-accent)',
+  dark: 'var(--warning-accent)',
+}, 'Action card');
+registerColor('plan-action-approve-icon-fg', {
+  light: '#ffffff',
+  dark: '#ffffff',
+}, 'Action card');
 
 // Minimized bar
-registerColor(
-  'plan-min-title',
-  {
-    light: 'var(--text-primary-emphasis)',
-    dark: 'var(--text-primary-emphasis)',
-  },
-  'Minimized bar',
-);
-registerColor(
-  'plan-min-icon',
-  {
-    light: 'var(--text-secondary-cross)',
-    dark: 'var(--text-secondary-cross)',
-  },
-  'Minimized bar',
-);
+registerColor('plan-min-title', {
+  light: 'var(--text-primary-emphasis)',
+  dark: 'var(--text-primary-emphasis)',
+}, 'Minimized bar');
+registerColor('plan-min-icon', {
+  light: 'var(--text-secondary-cross)',
+  dark: 'var(--text-secondary-cross)',
+}, 'Minimized bar');
 
 // History bubbles (FP-8) — grayscale per DESIGN.md
-registerColor(
-  'plan-bubble-badge-bg',
-  {
-    light: 'var(--surface-chip)',
-    dark: 'var(--surface-chip)',
-  },
-  'Light Gray chip',
-);
-registerColor(
-  'plan-bubble-badge-text',
-  {
-    light: 'var(--text-primary-on-dark)',
-    dark: 'var(--text-primary-on-dark)',
-  },
-  'Near Black',
-);
-registerColor(
-  'plan-bubble-body-text',
-  {
-    light: 'var(--text-primary-body-strong)',
-    dark: 'var(--text-primary-body-strong)',
-  },
-  'Mid Gray',
-);
-registerColor(
-  'plan-bubble-summary-text',
-  {
-    light: 'var(--text-secondary)',
-    dark: 'var(--text-secondary)',
-  },
-  'Stone',
-);
-registerColor(
-  'color-primary',
-  {
-    light: '#171717',
-    dark: '#d4d4d4',
-  },
-  '= foreground',
-);
-registerColor(
-  'color-neutral-300',
-  {
-    light: 'var(--text-disabled)',
-    dark: 'var(--text-disabled)',
-  },
-  'History bubbles (FP-8) — grayscale per DESIGN.md',
-);
-registerColor(
-  'color-neutral-400',
-  {
-    light: 'var(--text-tertiary)',
-    dark: 'var(--text-tertiary)',
-  },
-  'Silver',
-);
-registerColor(
-  'color-error-600',
-  {
-    light: 'var(--error-flat)',
-    dark: 'var(--error-flat)',
-  },
-  'Danger',
-);
-registerColor(
-  'color-error-700',
-  {
-    light: '#dc2626',
-    dark: '#dc2626',
-  },
-  'Danger hover',
-);
+registerColor('plan-bubble-badge-bg', {
+  light: 'var(--surface-chip)',
+  dark: 'var(--surface-chip)',
+}, 'Light Gray chip');
+registerColor('plan-bubble-badge-text', {
+  light: 'var(--text-primary-on-dark)',
+  dark: 'var(--text-primary-on-dark)',
+}, 'Near Black');
+registerColor('plan-bubble-body-text', {
+  light: 'var(--text-primary-body-strong)',
+  dark: 'var(--text-primary-body-strong)',
+}, 'Mid Gray');
+registerColor('plan-bubble-summary-text', {
+  light: 'var(--text-secondary)',
+  dark: 'var(--text-secondary)',
+}, 'Stone');
+registerColor('color-primary', {
+  light: '#171717',
+  dark: '#d4d4d4',
+}, '= foreground');
+registerColor('color-neutral-300', {
+  light: 'var(--text-disabled)',
+  dark: 'var(--text-disabled)',
+}, 'History bubbles (FP-8) — grayscale per DESIGN.md');
+registerColor('color-neutral-400', {
+  light: 'var(--text-tertiary)',
+  dark: 'var(--text-tertiary)',
+}, 'Silver');
+registerColor('color-error-600', {
+  light: 'var(--error-flat)',
+  dark: 'var(--error-flat)',
+}, 'Danger');
+registerColor('color-error-700', {
+  light: '#dc2626',
+  dark: '#dc2626',
+}, 'Danger hover');
 
 /* === P3.1: focus / shadow / overlay / error / warning 语义槽 === */
-registerColor(
-  'focus-ring',
-  {
-    light: '#3b82f6',
-    dark: '#3b82f6',
-  },
-  'Opaque a11y focus border (Tailwind blue-500)',
-);
-registerColor(
-  'focus-ring-soft',
-  {
-    light: 'rgba(59, 130, 246, 0.5)',
-    dark: 'rgba(59, 130, 246, 0.5)',
-  },
-  '50% alpha focus ring — 替代 ring-[#xxx]/50 写法',
-);
-registerColor(
-  'shadow-menu',
-  {
-    light: '0 4px 16px rgba(0, 0, 0, 0.15)',
-    dark: '0 4px 16px rgba(0, 0, 0, 0.5)',
-  },
-  'Dropdown / context menu / 中型悬浮卡 shadow',
-);
-registerColor(
-  'overlay-modal',
-  {
-    light: 'rgba(0, 0, 0, 0.5)',
-    dark: 'rgba(0, 0, 0, 0.7)',
-  },
-  '常规模态 backdrop',
-);
-registerColor(
-  'overlay-lightbox',
-  {
-    light: 'rgba(0, 0, 0, 0.85)',
-    dark: 'rgba(0, 0, 0, 0.85)',
-  },
-  '图片/视频/mermaid lightbox 深 backdrop',
-);
+registerColor('focus-ring', {
+  light: '#3b82f6',
+  dark: '#3b82f6',
+}, 'Opaque a11y focus border (Tailwind blue-500)');
+registerColor('focus-ring-soft', {
+  light: 'rgba(59, 130, 246, 0.5)',
+  dark: 'rgba(59, 130, 246, 0.5)',
+}, '50% alpha focus ring — 替代 ring-[#xxx]/50 写法');
+registerColor('shadow-menu', {
+  light: '0 4px 16px rgba(0, 0, 0, 0.15)',
+  dark: '0 4px 16px rgba(0, 0, 0, 0.5)',
+}, 'Dropdown / context menu / 中型悬浮卡 shadow');
+registerColor('overlay-modal', {
+  light: 'rgba(0, 0, 0, 0.5)',
+  dark: 'rgba(0, 0, 0, 0.7)',
+}, '常规模态 backdrop');
+registerColor('overlay-lightbox', {
+  light: 'rgba(0, 0, 0, 0.85)',
+  dark: 'rgba(0, 0, 0, 0.85)',
+}, '图片/视频/mermaid lightbox 深 backdrop');
 // lightbox chrome(胶囊工具栏):浮在恒黑 backdrop 上,跨主题恒定,语义豁免类
 // (同 overlay-lightbox);仍注册为 token 保留主题 override 能力(规则 16)。
-registerColor(
-  'lightbox-toolbar-bg',
-  {
-    light: 'rgba(0, 0, 0, 0.6)',
-    dark: 'rgba(0, 0, 0, 0.6)',
-  },
-  'lightbox 胶囊工具栏底色(恒黑 backdrop 上)',
-);
-registerColor(
-  'lightbox-toolbar-border',
-  {
-    light: 'rgba(255, 255, 255, 0.2)',
-    dark: 'rgba(255, 255, 255, 0.2)',
-  },
-  'lightbox 胶囊工具栏描边/分隔线',
-);
-registerColor(
-  'lightbox-toolbar-fg',
-  {
-    light: 'rgba(255, 255, 255, 0.8)',
-    dark: 'rgba(255, 255, 255, 0.8)',
-  },
-  'lightbox 胶囊工具栏图标默认色(语义豁免,理由同 lightbox-toolbar-bg)',
-);
-registerColor(
-  'lightbox-toolbar-fg-hover',
-  {
-    light: '#ffffff',
-    dark: '#ffffff',
-  },
-  'lightbox 胶囊工具栏图标 hover 色(语义豁免,理由同上)',
-);
-registerColor(
-  'lightbox-toolbar-hover-bg',
-  {
-    light: 'rgba(255, 255, 255, 0.1)',
-    dark: 'rgba(255, 255, 255, 0.1)',
-  },
-  'lightbox 胶囊工具栏按钮 hover 背景(语义豁免,理由同上)',
-);
-registerColor(
-  'error-bg',
-  {
-    light: '#fef2f2',
-    dark: '#3a2222',
-  },
-  '错误警告卡片背景',
-);
-registerColor(
-  'error-border',
-  {
-    light: 'rgba(220, 38, 38, 0.4)',
-    dark: '#7f1d1d',
-  },
-  '错误卡片边框',
-);
-registerColor(
-  'error-fg',
-  {
-    light: '#dc2626',
-    dark: '#f87171',
-  },
-  '错误卡片正文/图标',
-);
-registerColor(
-  'error-fg-strong',
-  {
-    light: '#991b1b',
-    dark: '#fca5a5',
-  },
-  '错误卡片强调文字',
-);
-registerColor(
-  'warning-bg-soft',
-  {
-    light: 'rgba(255, 102, 0, 0.12)',
-    dark: 'rgba(255, 102, 0, 0.18)',
-  },
-  'Warning alpha surface (FeishuConflictDialog 类警告 badge)',
-);
-registerColor(
-  'warning-fg',
-  {
-    light: '#F59E0B',
-    dark: '#F59E0B',
-  },
-  'Toast warning amber 同款,用于需要 warning 语义的强调文字/图标(跨主题统一,语义豁免)',
-);
+registerColor('lightbox-toolbar-bg', {
+  light: 'rgba(0, 0, 0, 0.6)',
+  dark: 'rgba(0, 0, 0, 0.6)',
+}, 'lightbox 胶囊工具栏底色(恒黑 backdrop 上)');
+registerColor('lightbox-toolbar-border', {
+  light: 'rgba(255, 255, 255, 0.2)',
+  dark: 'rgba(255, 255, 255, 0.2)',
+}, 'lightbox 胶囊工具栏描边/分隔线');
+registerColor('lightbox-toolbar-fg', {
+  light: 'rgba(255, 255, 255, 0.8)',
+  dark: 'rgba(255, 255, 255, 0.8)',
+}, 'lightbox 胶囊工具栏图标默认色(语义豁免,理由同 lightbox-toolbar-bg)');
+registerColor('lightbox-toolbar-fg-hover', {
+  light: '#ffffff',
+  dark: '#ffffff',
+}, 'lightbox 胶囊工具栏图标 hover 色(语义豁免,理由同上)');
+registerColor('lightbox-toolbar-hover-bg', {
+  light: 'rgba(255, 255, 255, 0.1)',
+  dark: 'rgba(255, 255, 255, 0.1)',
+}, 'lightbox 胶囊工具栏按钮 hover 背景(语义豁免,理由同上)');
+registerColor('error-bg', {
+  light: '#fef2f2',
+  dark: '#3a2222',
+}, '错误警告卡片背景');
+registerColor('error-border', {
+  light: 'rgba(220, 38, 38, 0.4)',
+  dark: '#7f1d1d',
+}, '错误卡片边框');
+registerColor('error-fg', {
+  light: '#dc2626',
+  dark: '#f87171',
+}, '错误卡片正文/图标');
+registerColor('error-fg-strong', {
+  light: '#991b1b',
+  dark: '#fca5a5',
+}, '错误卡片强调文字');
+registerColor('warning-bg-soft', {
+  light: 'rgba(255, 102, 0, 0.12)',
+  dark: 'rgba(255, 102, 0, 0.18)',
+}, 'Warning alpha surface (FeishuConflictDialog 类警告 badge)');
+registerColor('warning-fg', {
+  light: '#F59E0B',
+  dark: '#F59E0B',
+}, 'Toast warning amber 同款,用于需要 warning 语义的强调文字/图标(跨主题统一,语义豁免)');
 // cc-mgr 远端升级 banner (UpgradeBanner.tsx) — amber warning 语义,跨主题统一、语义豁免
 // (规则 15:warning/amber 在豁免范围,不被非默认主题 override,但仍走 token)。
-registerColor(
-  'upgrade-banner-bg',
-  {
-    light: 'rgba(255, 102, 0, 0.10)',
-    dark: 'rgba(255, 102, 0, 0.16)',
-  },
-  'cc-mgr 升级 banner 背景 (amber warning, 语义豁免)',
-);
-registerColor(
-  'upgrade-banner-border',
-  {
-    light: 'rgba(245, 158, 11, 0.45)',
-    dark: 'rgba(245, 158, 11, 0.55)',
-  },
-  'cc-mgr 升级 banner 边框 (amber warning, 语义豁免)',
-);
-registerColor(
-  'upgrade-banner-fg',
-  {
-    light: '#92400e',
-    dark: '#FBBF24',
-  },
-  'cc-mgr 升级 banner 正文/图标/按钮 (amber warning, 语义豁免)',
-);
+registerColor('upgrade-banner-bg', {
+  light: 'rgba(255, 102, 0, 0.10)',
+  dark: 'rgba(255, 102, 0, 0.16)',
+}, 'cc-mgr 升级 banner 背景 (amber warning, 语义豁免)');
+registerColor('upgrade-banner-border', {
+  light: 'rgba(245, 158, 11, 0.45)',
+  dark: 'rgba(245, 158, 11, 0.55)',
+}, 'cc-mgr 升级 banner 边框 (amber warning, 语义豁免)');
+registerColor('upgrade-banner-fg', {
+  light: '#92400e',
+  dark: '#FBBF24',
+}, 'cc-mgr 升级 banner 正文/图标/按钮 (amber warning, 语义豁免)');
 // Skill Hub 审核状态 badge (publishedStatus.ts) — warning 语义豁免,跨主题统一。
 // 机审中 (pending/scanning) 橙色 / 人工复核中 (quarantine) 黄色;审核未通过 (rejected) 复用 error-* token。
-registerColor(
-  'skillhub-review-pending-bg',
-  {
-    light: '#fff7ed',
-    dark: 'rgba(251, 146, 60, 0.14)',
-  },
-  'Skill Hub 机审中 badge 背景 (orange warning, 语义豁免)',
-);
-registerColor(
-  'skillhub-review-pending-border',
-  {
-    light: '#fed7aa',
-    dark: 'rgba(251, 146, 60, 0.35)',
-  },
-  'Skill Hub 机审中 badge 边框 (orange warning, 语义豁免)',
-);
-registerColor(
-  'skillhub-review-pending-fg',
-  {
-    light: '#ea580c',
-    dark: '#fb923c',
-  },
-  'Skill Hub 机审中 badge 文字 (orange warning, 语义豁免)',
-);
-registerColor(
-  'skillhub-review-quarantine-bg',
-  {
-    light: '#fefce8',
-    dark: 'rgba(250, 204, 21, 0.12)',
-  },
-  'Skill Hub 人工复核中 badge 背景 (yellow warning, 语义豁免)',
-);
-registerColor(
-  'skillhub-review-quarantine-border',
-  {
-    light: '#fef08a',
-    dark: 'rgba(250, 204, 21, 0.35)',
-  },
-  'Skill Hub 人工复核中 badge 边框 (yellow warning, 语义豁免)',
-);
-registerColor(
-  'skillhub-review-quarantine-fg',
-  {
-    light: '#a16207',
-    dark: '#facc15',
-  },
-  'Skill Hub 人工复核中 badge 文字 (yellow warning, 语义豁免)',
-);
+registerColor('skillhub-review-pending-bg', {
+  light: '#fff7ed',
+  dark: 'rgba(251, 146, 60, 0.14)',
+}, 'Skill Hub 机审中 badge 背景 (orange warning, 语义豁免)');
+registerColor('skillhub-review-pending-border', {
+  light: '#fed7aa',
+  dark: 'rgba(251, 146, 60, 0.35)',
+}, 'Skill Hub 机审中 badge 边框 (orange warning, 语义豁免)');
+registerColor('skillhub-review-pending-fg', {
+  light: '#ea580c',
+  dark: '#fb923c',
+}, 'Skill Hub 机审中 badge 文字 (orange warning, 语义豁免)');
+registerColor('skillhub-review-quarantine-bg', {
+  light: '#fefce8',
+  dark: 'rgba(250, 204, 21, 0.12)',
+}, 'Skill Hub 人工复核中 badge 背景 (yellow warning, 语义豁免)');
+registerColor('skillhub-review-quarantine-border', {
+  light: '#fef08a',
+  dark: 'rgba(250, 204, 21, 0.35)',
+}, 'Skill Hub 人工复核中 badge 边框 (yellow warning, 语义豁免)');
+registerColor('skillhub-review-quarantine-fg', {
+  light: '#a16207',
+  dark: '#facc15',
+}, 'Skill Hub 人工复核中 badge 文字 (yellow warning, 语义豁免)');
 
 // CREATE AGENT composer controls — Figma 185:1495 / 185:2724, E2-S 2026-07-17.
 // These private tokens are exact light/dark values for the new-page solid
 // composer controls. Do not reuse for the session-view glass composer pills.
-registerColor(
-  'create-agent-control-bg',
-  {
-    light: '#FCFCFC',
-    dark: '#393838',
-  },
-  'CREATE AGENT pill / icon button background',
-);
-registerColor(
-  'create-agent-control-bg-hover',
-  {
-    light: 'var(--surface-hover)',
-    dark: '#2E3237',
-  },
-  'CREATE AGENT neutral hover background',
-);
-registerColor(
-  'create-agent-control-bg-pressed',
-  {
-    light: 'var(--surface-hover-soft)',
-    dark: '#25282C',
-  },
-  'CREATE AGENT neutral pressed background',
-);
-registerColor(
-  'create-agent-control-border',
-  {
-    light: '#DCDFE3',
-    dark: '#434343',
-  },
-  'CREATE AGENT pill / icon button border',
-);
-registerColor(
-  'create-agent-control-text',
-  {
-    light: '#3C3F43',
-    dark: '#D4D4D4',
-  },
-  'CREATE AGENT pill text',
-);
-registerColor(
-  'create-agent-control-icon',
-  {
-    light: '#3C3F43',
-    dark: '#D9D9D9',
-  },
-  'CREATE AGENT icon / chevron',
-);
-registerColor(
-  'create-agent-segment-track-bg',
-  {
-    light: '#EDEDED',
-    dark: '#2A2828',
-  },
-  'CREATE AGENT Claude/Codex segmented track',
-);
-registerColor(
-  'create-agent-segment-inactive-text',
-  {
-    light: '#9A9DA3',
-    dark: '#6F6F6F',
-  },
-  'CREATE AGENT segmented inactive text',
-);
-registerColor(
-  'create-agent-send-bg',
-  {
-    light: '#3C3F43',
-    dark: '#EEEEEE',
-  },
-  'CREATE AGENT send button inverse neutral bg',
-);
-registerColor(
-  'create-agent-send-icon',
-  {
-    light: '#FCFCFC',
-    dark: '#252222',
-  },
-  'CREATE AGENT send button inverse neutral icon',
-);
-registerColor(
-  'create-agent-send-bg-hover',
-  {
-    light: '#2E3237',
-    dark: '#E2E2E2',
-  },
-  'CREATE AGENT send button neutral hover bg',
-);
-registerColor(
-  'create-agent-send-bg-pressed',
-  {
-    light: '#25282C',
-    dark: '#D4D4D4',
-  },
-  'CREATE AGENT send button neutral pressed bg',
-);
-registerColor(
-  'create-agent-send-disabled-bg',
-  {
-    light: '#EDEDED',
-    dark: '#444242',
-  },
-  'CREATE AGENT send button disabled bg',
-);
-registerColor(
-  'create-agent-send-disabled-icon',
-  {
-    light: '#9A9DA3',
-    dark: '#585555',
-  },
-  'CREATE AGENT send button disabled icon',
-);
-registerColor(
-  'create-agent-focus-ring',
-  {
-    light: '#417CDD',
-    dark: '#417CDD',
-  },
-  'CREATE AGENT control focus ring',
-);
-registerColor(
-  'create-agent-quick-card-bg',
-  {
-    light: '#F8F8F8',
-    dark: '#312F2F',
-  },
-  'CREATE AGENT quick-start card background',
-);
-registerColor(
-  'create-agent-quick-card-border',
-  {
-    light: '#DCDFE3',
-    dark: '#434343',
-  },
-  'CREATE AGENT quick-start card border',
-);
-registerColor(
-  'create-agent-quick-card-text',
-  {
-    light: '#3C3F43',
-    dark: '#D4D4D4',
-  },
-  'CREATE AGENT quick-start card text',
-);
-registerColor(
-  'create-agent-quick-card-icon-bg',
-  {
-    light: '#EDEDED',
-    dark: '#2A2828',
-  },
-  'CREATE AGENT quick-start icon circle background',
-);
-registerColor(
-  'create-agent-quick-card-icon',
-  {
-    light: '#3C3F43',
-    dark: '#D4D4D4',
-  },
-  'CREATE AGENT quick-start icon',
-);
-registerColor(
-  'create-agent-avatar-ring',
-  {
-    light: 'rgba(255, 255, 255, 0.08)',
-    dark: 'rgba(255, 255, 255, 0.08)',
-  },
-  'CREATE AGENT lockup avatar outer ring',
-);
-registerColor(
-  'create-agent-avatar-glass-bg',
-  {
-    light: 'rgba(0, 0, 0, 0.004)',
-    dark: 'rgba(0, 0, 0, 0.004)',
-  },
-  'CREATE AGENT lockup avatar GLASS fill',
-);
-registerColor(
-  'create-agent-avatar-inner-ring-start',
-  {
-    light: 'rgba(255, 255, 255, 0.29)',
-    dark: 'rgba(255, 255, 255, 0.29)',
-  },
-  'CREATE AGENT lockup avatar inner gradient ring start',
-);
-registerColor(
-  'create-agent-avatar-inner-ring-end',
-  {
-    light: 'rgba(255, 255, 255, 0.24)',
-    dark: 'rgba(255, 255, 255, 0.24)',
-  },
-  'CREATE AGENT lockup avatar inner gradient ring end',
-);
-registerColor(
-  'sidebar-nav-text',
-  {
-    light: '#3C3F43',
-    dark: '#D4D4D4',
-  },
-  'CINDY sidebar top nav icon / text',
-);
-registerColor(
-  'sidebar-list-muted',
-  {
-    light: '#9A9DA3',
-    dark: '#6F6F6F',
-  },
-  'CINDY sidebar section and project list muted text',
-);
-registerColor(
-  'sidebar-user-card-bg',
-  {
-    light: 'rgba(255, 255, 255, 0.20)',
-    dark: 'rgba(255, 255, 255, 0.05)',
-  },
-  'CINDY sidebar user capsule background',
-);
-registerColor(
-  'sidebar-user-card-border',
-  {
-    light: 'rgba(60, 63, 67, 0.10)',
-    dark: 'rgba(255, 255, 255, 0.13)',
-  },
-  'CINDY sidebar user capsule border',
-);
-registerColor(
-  'sidebar-user-card-text',
-  {
-    light: '#3C3F43',
-    dark: '#D4D4D4',
-  },
-  'CINDY sidebar user capsule text and icon',
-);
+registerColor('create-agent-control-bg', {
+  light: '#FCFCFC',
+  dark: '#393838',
+}, 'CREATE AGENT pill / icon button background');
+registerColor('create-agent-control-bg-hover', {
+  light: 'var(--surface-hover)',
+  dark: '#2E3237',
+}, 'CREATE AGENT neutral hover background');
+registerColor('create-agent-control-bg-pressed', {
+  light: 'var(--surface-hover-soft)',
+  dark: '#25282C',
+}, 'CREATE AGENT neutral pressed background');
+registerColor('create-agent-control-border', {
+  light: '#DCDFE3',
+  dark: '#434343',
+}, 'CREATE AGENT pill / icon button border');
+registerColor('create-agent-control-text', {
+  light: '#3C3F43',
+  dark: '#D4D4D4',
+}, 'CREATE AGENT pill text');
+registerColor('create-agent-control-icon', {
+  light: '#3C3F43',
+  dark: '#D9D9D9',
+}, 'CREATE AGENT icon / chevron');
+registerColor('create-agent-segment-track-bg', {
+  light: '#EDEDED',
+  dark: '#2A2828',
+}, 'CREATE AGENT Claude/Codex segmented track');
+registerColor('create-agent-segment-inactive-text', {
+  light: '#9A9DA3',
+  dark: '#6F6F6F',
+}, 'CREATE AGENT segmented inactive text');
+registerColor('create-agent-send-bg', {
+  light: '#3C3F43',
+  dark: '#EEEEEE',
+}, 'CREATE AGENT send button inverse neutral bg');
+registerColor('create-agent-send-icon', {
+  light: '#FCFCFC',
+  dark: '#252222',
+}, 'CREATE AGENT send button inverse neutral icon');
+registerColor('create-agent-send-bg-hover', {
+  light: '#2E3237',
+  dark: '#E2E2E2',
+}, 'CREATE AGENT send button neutral hover bg');
+registerColor('create-agent-send-bg-pressed', {
+  light: '#25282C',
+  dark: '#D4D4D4',
+}, 'CREATE AGENT send button neutral pressed bg');
+registerColor('create-agent-send-disabled-bg', {
+  light: '#EDEDED',
+  dark: '#444242',
+}, 'CREATE AGENT send button disabled bg');
+registerColor('create-agent-send-disabled-icon', {
+  light: '#9A9DA3',
+  dark: '#585555',
+}, 'CREATE AGENT send button disabled icon');
+registerColor('create-agent-focus-ring', {
+  light: '#417CDD',
+  dark: '#417CDD',
+}, 'CREATE AGENT control focus ring');
+registerColor('create-agent-quick-card-bg', {
+  light: '#F8F8F8',
+  dark: '#312F2F',
+}, 'CREATE AGENT quick-start card background');
+registerColor('create-agent-quick-card-border', {
+  light: '#DCDFE3',
+  dark: '#434343',
+}, 'CREATE AGENT quick-start card border');
+registerColor('create-agent-quick-card-text', {
+  light: '#3C3F43',
+  dark: '#D4D4D4',
+}, 'CREATE AGENT quick-start card text');
+registerColor('create-agent-quick-card-icon-bg', {
+  light: '#EDEDED',
+  dark: '#2A2828',
+}, 'CREATE AGENT quick-start icon circle background');
+registerColor('create-agent-quick-card-icon', {
+  light: '#3C3F43',
+  dark: '#D4D4D4',
+}, 'CREATE AGENT quick-start icon');
+registerColor('create-agent-avatar-ring', {
+  light: 'rgba(255, 255, 255, 0.08)',
+  dark: 'rgba(255, 255, 255, 0.08)',
+}, 'CREATE AGENT lockup avatar outer ring');
+registerColor('create-agent-avatar-glass-bg', {
+  light: 'rgba(0, 0, 0, 0.004)',
+  dark: 'rgba(0, 0, 0, 0.004)',
+}, 'CREATE AGENT lockup avatar GLASS fill');
+registerColor('create-agent-avatar-inner-ring-start', {
+  light: 'rgba(255, 255, 255, 0.29)',
+  dark: 'rgba(255, 255, 255, 0.29)',
+}, 'CREATE AGENT lockup avatar inner gradient ring start');
+registerColor('create-agent-avatar-inner-ring-end', {
+  light: 'rgba(255, 255, 255, 0.24)',
+  dark: 'rgba(255, 255, 255, 0.24)',
+}, 'CREATE AGENT lockup avatar inner gradient ring end');
+registerColor('sidebar-nav-text', {
+  light: '#3C3F43',
+  dark: '#D4D4D4',
+}, 'CINDY sidebar top nav icon / text');
+registerColor('sidebar-list-muted', {
+  light: '#9A9DA3',
+  dark: '#6F6F6F',
+}, 'CINDY sidebar section and project list muted text');
+registerColor('sidebar-user-card-bg', {
+  light: 'rgba(255, 255, 255, 0.20)',
+  dark: 'rgba(255, 255, 255, 0.05)',
+}, 'CINDY sidebar user capsule background');
+registerColor('sidebar-user-card-border', {
+  light: 'rgba(60, 63, 67, 0.10)',
+  dark: 'rgba(255, 255, 255, 0.13)',
+}, 'CINDY sidebar user capsule border');
+registerColor('sidebar-user-card-text', {
+  light: '#3C3F43',
+  dark: '#D4D4D4',
+}, 'CINDY sidebar user capsule text and icon');
