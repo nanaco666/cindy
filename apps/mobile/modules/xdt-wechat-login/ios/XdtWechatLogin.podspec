@@ -21,12 +21,14 @@ Pod::Spec.new do |s|
 
   # WechatOpenSDK is a pure ObjC static lib without a modulemap.
   # Provide one so Swift can `import WechatOpenSDK` under Xcode's explicit-modules mode.
-  # SWIFT_INCLUDE_PATHS tells swiftc where to find the modulemap directory;
-  # OTHER_SWIFT_FLAGS passes -Xcc -I so clang (used by swiftc to parse the modulemap)
-  # can resolve the bare header names (WXApi.h etc.) from the SDK's actual location.
+  # clang resolves a modulemap's relative `header` paths ONLY against the modulemap's own
+  # directory (-I / -Xcc -I are never consulted), so the modulemap must sit next to the SDK
+  # headers: plugins/with-wechat-opensdk-modulemap.js injects a Podfile post_install hook
+  # that copies WechatOpenSDK/module.modulemap into $(PODS_ROOT)/WechatOpenSDK/OpenSDK2.0.5,
+  # and SWIFT_INCLUDE_PATHS points swiftc at that directory (keep the version segment in
+  # sync with the s.dependency pin above).
   s.preserve_paths = 'WechatOpenSDK/module.modulemap'
   s.pod_target_xcconfig = {
-    'SWIFT_INCLUDE_PATHS' => '$(PODS_TARGET_SRCROOT)/WechatOpenSDK',
-    'OTHER_SWIFT_FLAGS' => '-Xcc -I$(PODS_ROOT)/WechatOpenSDK/OpenSDK2.0.5'
+    'SWIFT_INCLUDE_PATHS' => '$(PODS_ROOT)/WechatOpenSDK/OpenSDK2.0.5'
   }
 end
