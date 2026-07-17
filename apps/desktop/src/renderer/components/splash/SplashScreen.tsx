@@ -7,7 +7,7 @@ import { WindowControls } from '@/components/title-bar/WindowControls';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 // E6 品牌素材(少女立绘底部渐隐 + CINDY 白字标 + 手写体 Dream it Create it)。
 // 来自 figma-login-assets/(splash-illustration-fade@2x / splash-wordmark@2x / desktop-script@2x)。
-import splashIllustration from '@/assets/splash/illustration.png';
+import splashIllustration from '@/assets/splash/illustration.webp';
 import splashWordmark from '@/assets/splash/wordmark.png';
 import splashScript from '@/assets/splash/script.png';
 
