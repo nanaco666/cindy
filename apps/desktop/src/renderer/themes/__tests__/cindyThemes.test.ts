@@ -69,7 +69,8 @@ function parseRgb(v: string): RGB {
 }
 
 /** 把任意 CSS 色值归一成 RGB(hex / HSL 三元组 / rgb() / rgba())。 */
-function toRgb(v: string): RGB {
+function toRgb(v: string | undefined): RGB {
+  if (!v) throw new Error("empty color literal");
   const t = v.trim();
   if (t.startsWith('#')) return parseHex(t);
   if (/^[\d.]+\s+[\d.]+%\s+[\d.]+%$/.test(t)) return parseHslTriplet(t);
@@ -92,7 +93,7 @@ function luminance(rgb: RGB): number {
   return 0.2126 * f[0] + 0.7152 * f[1] + 0.0722 * f[2];
 }
 
-function contrast(c1: string, c2: string): number {
+function contrast(c1: string | undefined, c2: string | undefined): number {
   const l1 = luminance(toRgb(c1));
   const l2 = luminance(toRgb(c2));
   const [hi, lo] = l1 > l2 ? [l1, l2] : [l2, l1];
@@ -100,9 +101,10 @@ function contrast(c1: string, c2: string): number {
 }
 
 const BRAND_RED_HEX = '#DF0C27';
-const THEMES = [
-  ['cindy-light', cindyLight, 'light'] as const,
-  ['cindy-dark', cindyDark, 'dark'] as const,
+type CindyTheme = { colors: Record<string, string> };
+const THEMES: ReadonlyArray<readonly [string, CindyTheme]> = [
+  ['cindy-light', { colors: cindyLight.colors as unknown as Record<string, string> }],
+  ['cindy-dark', { colors: cindyDark.colors as unknown as Record<string, string> }],
 ];
 
 // ===== ① key 合法 =====
@@ -129,7 +131,7 @@ describe('CINDY · ② 覆盖完备(分母=决策表冻结 exact id 数组)', ()
 // ===== ③ 值格式按消费契约 =====
 describe('CINDY · ③ 值格式按消费契约', () => {
   const HSL_PAT = /^[\d.]+\s+[\d.]+%\s+[\d.]+%$/;
-  const hslSet = new Set(HSL_FORMAT_IDS);
+  const hslSet = new Set<string>(HSL_FORMAT_IDS);
 
   it('HSL_FORMAT_IDS(42)的 override 必须 HSL 三元组;其余 id 不得误填 HSL', () => {
     for (const [name, theme] of THEMES) {
@@ -189,7 +191,7 @@ describe('CINDY · ⑤ 红线三份 exact map + 排除断言', () => {
   });
 
   it('BRAND_RED_ALLOWED_IDS 之外的 token 不得出现品牌红(单向禁止越界)', () => {
-    const allowed = new Set(BRAND_RED_ALLOWED_IDS);
+    const allowed = new Set<string>(BRAND_RED_ALLOWED_IDS);
     const redRgb = toRgb(BRAND_RED_HEX);
     for (const [name, theme] of THEMES) {
       for (const [id, val] of Object.entries(theme.colors)) {
@@ -282,8 +284,8 @@ describe('CINDY · ⑥ family(cindy 存在 / DEFAULT 不变 / 9 主题快照)', 
 
 // ===== ⑦ WCAG + U2 例外 + text-secondary 反向冻结 =====
 describe('CINDY · ⑦ WCAG 复算 + U2 例外 allowlist + text-secondary 反向冻结', () => {
-  const light = cindyLight.colors;
-  const dark = cindyDark.colors;
+  const light = cindyLight.colors as unknown as Record<string, string>;
+  const dark = cindyDark.colors as unknown as Record<string, string>;
 
   it('text-primary × surface/elevated/chip 全部 ≥4.5:1', () => {
     const cases: Array<[string, string, string]> = [
@@ -370,7 +372,7 @@ describe('CINDY · ⑧ 可证伪自检(注入错值后断言必须变红,还原�
   });
 
   it('注入错格式(HSL 槽填 hex) → ③ 变红', () => {
-    const hslSet = new Set(HSL_FORMAT_IDS);
+    const hslSet = new Set<string>(HSL_FORMAT_IDS);
     const bad = { ...cindyLight.colors, primary: '#DF0C27' }; // primary 应 HSL,塞 hex
     const isHslSlot = hslSet.has('primary');
     const isHslVal = /^[\d.]+\s+[\d.]+%\s+[\d.]+%$/.test(bad['primary'] ?? '');
@@ -378,7 +380,7 @@ describe('CINDY · ⑧ 可证伪自检(注入错值后断言必须变红,还原�
   });
 
   it('注入品牌红越界(非 allowed id 染红) → ⑤ 变红', () => {
-    const allowed = new Set(BRAND_RED_ALLOWED_IDS);
+    const allowed = new Set<string>(BRAND_RED_ALLOWED_IDS);
     const badId = 'text-primary'; // 不在 allowed
     expect(allowed.has(badId), 'text-primary 不在 ALLOWED,染红应被 ⑤ 抓').toBe(false);
     const badRgb = toRgb('#DF0C27');
@@ -399,7 +401,7 @@ describe('CINDY · ⑧ 可证伪自检(注入错值后断言必须变红,还原�
       colors: { ...cindyLight.colors, 'warning-accent': '#DF0C27' },
     };
     expect(
-      rgbEqual(toRgb(tainted.colors['warning-accent'] ?? ''), redRgb, 2),
+      rgbEqual(toRgb((tainted.colors as Record<string, string>)['warning-accent'] ?? ''), redRgb, 2),
       '注入后 warning-accent 染红,⑤ 排除断言变红',
     ).toBe(true);
   });

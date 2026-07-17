@@ -664,3 +664,10 @@ card/container
 ### 8.6 HSL 格式合约
 
 42 个 `HSL_FORMAT_IDS` 必须 HSL 三元组(`h s% l%`,`h∈[0,360)`、灰色 `hue=0`、1 位小数);其余 token 走 hex/rgba。round-trip HSL→RGB 通道误差 ≤1。HSL_FORMAT_IDS 之外不得误填 HSL 三元组。
+
+### 15.7 logo 资产(品牌 wordmark)
+
+cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cindy-logo-dark.png`),经 `theme.logo` 机制注入(`logoScale=1` 对齐默认 logo 视觉大小;NewMakerDraftRoute/欢迎页按 `theme.logo ?? defaultLogoForTheme` 消费)。
+
+> logo 资产红 `#F70121` 是官方品牌资产固有色(WORD MARK frame 红箭头符号),与 UI 品牌红 `#DF0C27` **并存、不同值**——logo 是图片资产不进 token 体系,保持原色不改色。后人勿误改为 `#DF0C27`。
+

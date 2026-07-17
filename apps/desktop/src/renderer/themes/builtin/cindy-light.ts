@@ -1,4 +1,5 @@
 import type { Theme } from '../types';
+import cindyLogoLight from '../../assets/cindy-logo-light.png';
 
 /*
  * CINDY Light — 品牌红 CTA + 中性灰底(#EDEDED)+ AA 正文;U2 二级信息色忠于 Figma 原值。
@@ -129,4 +130,7 @@ export const cindyLight: Theme = {
   name: 'CINDY Light',
   type: 'light',
   colors: overrides,
+  // U5 品牌版 logo:黑字+红箭头 wordmark(浅底可见),logoScale=1 对齐默认 logo 视觉大小。
+  logo: cindyLogoLight,
+  logoScale: 1,
 };

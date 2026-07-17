@@ -1,4 +1,5 @@
 import type { Theme } from '../types';
+import cindyLogoDark from '../../assets/cindy-logo-dark.png';
 
 /*
  * CINDY Dark — 品牌红 CTA + 深灰底(#2A2828)+ AA 正文;U2 二级信息色忠于 Figma 原值。
@@ -129,4 +130,7 @@ export const cindyDark: Theme = {
   name: 'CINDY Dark',
   type: 'dark',
   colors: overrides,
+  // U5 品牌版 logo:白字+红箭头 wordmark(深底可见),logoScale=1 对齐默认 logo 视觉大小。
+  logo: cindyLogoDark,
+  logoScale: 1,
 };
