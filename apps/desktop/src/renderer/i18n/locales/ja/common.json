@@ -4396,7 +4396,7 @@
         "revealFolder": "フォルダで表示"
       },
       "fileBody": {
-        "selectFile": "左からファイルを選択してプレビュー",
+        "selectFile": "ファイルを選択してプレビュー",
         "readFailed": "ファイルの読み取りに失敗：{{message}}",
         "truncatedNotice": "ファイルが大きすぎるため、先頭 2 MB のみ表示しています。完全な内容はシステムで開いてください",
         "editLabel": "編集",

@@ -4396,7 +4396,7 @@
         "revealFolder": "폴더에서 보기"
       },
       "fileBody": {
-        "selectFile": "왼쪽에서 파일을 선택하여 미리 봅니다",
+        "selectFile": "미리 볼 파일을 선택하세요",
         "readFailed": "파일 읽기 실패: {{message}}",
         "truncatedNotice": "파일이 너무 큽니다. 처음 2 MB만 표시 — 전체 내용은 시스템에서 여세요",
         "editLabel": "편집",
