@@ -978,10 +978,14 @@ registerColor('surface-translucent-overlay', {
   light: 'var(--surface-elevated)',
   dark: 'var(--surface-elevated)',
 }, 'E4D 浮层半透明底(default surface-elevated;CINDY override rgba #F6F6F6@90%/#252323@80% R1 模式3)');
-registerColor('glass-pill-bg', {
-  light: 'transparent',
-  dark: 'transparent',
-}, 'E3 D6 glass-pill 底(default 透明;CINDY override rgba #FFFFFF@5% light/#D9D9D9@5% dark R4 §2.6)');
+registerColor('composer-pill-bg', {
+  light: '#FCFCFC',
+  dark: '#393838',
+}, 'E2 composer pill/圆钮底(输入条 pill/圆钮,比卡面浅一档刻意对比;lead Figma 实测 spec §2-3;取代错稿 glass-pill-bg)');
+registerColor('composer-pill-icon', {
+  light: '#3C3F43',
+  dark: '#D9D9D9',
+}, 'E2 composer pill 图标(light=text-primary #3C3F43;dark #D9D9D9;spec §2-3)');
 registerColor('status-bar-meta', {
   light: 'var(--text-secondary)',
   dark: 'var(--text-secondary)',

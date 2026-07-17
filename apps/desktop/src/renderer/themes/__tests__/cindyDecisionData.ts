@@ -125,7 +125,8 @@ export const CINDY_REQUIRED_COLOR_IDS = [
   'surface-translucent-sidebar', // R1 增补(E4D 毛玻璃,用户裁决透壁纸 2026-07-17)
   'surface-translucent-main', // R1 增补(E4D)
   'surface-translucent-overlay', // R1 增补(E4D)
-  'glass-pill-bg', // E3 D6 增补(R4 唤醒态 glass-pill),116→120
+  'composer-pill-bg', // E2 composer pill 底(取代错稿 glass-pill-bg,玻璃质感已废)
+  'composer-pill-icon', // E2 composer pill 图标
   // E1D send-btn 族纳入值表(lead 裁决反相中性四态 + disabled #444242 系):
   'send-btn-bg',
   'send-btn-icon',
@@ -309,7 +310,8 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'surface-translucent-sidebar': { light: 'rgba(246, 246, 246, 0.90)', dark: 'rgba(18, 15, 15, 0.85)' }, // E4D R1 模式1
   'surface-translucent-main': { light: '#EDEDED', dark: '#2A2828' }, // E4D 主面板:用户勘误 2026-07-17 撤销毛玻璃,改不透明等价 surface(原 rgba 半透明)
   'surface-translucent-overlay': { light: 'rgba(246, 246, 246, 0.90)', dark: 'rgba(37, 35, 35, 0.80)' }, // E4D R1 模式3
-  'glass-pill-bg': { light: 'rgba(255, 255, 255, 0.05)', dark: 'rgba(217, 217, 217, 0.05)' }, // E3 D6 glass-pill
+  'composer-pill-bg': { light: '#FCFCFC', dark: '#393838' }, // E2 composer pill 底(取代 glass-pill-bg)
+  'composer-pill-icon': { light: '#3C3F43', dark: '#D9D9D9' }, // E2 composer pill 图标
 };
 
 // E1D 红色体系重构(用户批准 2026-07-17):三份新 map 替代旧 BRAND_RED_*。

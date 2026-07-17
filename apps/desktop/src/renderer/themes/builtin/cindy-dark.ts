@@ -129,7 +129,8 @@ const overrides = {
   'surface-translucent-sidebar': 'rgba(18, 15, 15, 0.85)', // E4D R1 模式1
   'surface-translucent-main': '#2A2828', // E4D 主面板:用户勘误 2026-07-17 撤销毛玻璃,改不透明等价 surface(原 rgba(18,15,15,0.85))
   'surface-translucent-overlay': 'rgba(37, 35, 35, 0.80)', // E4D R1 模式3
-  'glass-pill-bg': 'rgba(217, 217, 217, 0.05)', // E3 D6 glass-pill(R4 dark)
+  'composer-pill-bg': '#393838', // E2 composer pill 底(dark,lead Figma 实测 §2-3;取代错稿 glass-pill)
+  'composer-pill-icon': '#D9D9D9', // E2 composer pill 图标(dark)
   'send-btn-bg': '#EEEEEE', // R4 D1/D2 反相中性可用底
   'send-btn-icon': '#252222', // R4 反相中性字
   'send-btn-disabled-bg': '#444242', // R4 禁用灰底
