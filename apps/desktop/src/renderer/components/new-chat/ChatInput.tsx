@@ -4303,7 +4303,7 @@ export function ChatInput({
             // "在元素上起选",从相邻可选区起拖再划入时按钮文字仍会被刷蓝
             // (同 sortable.css 侧栏行修过的 selection bleed),容器级禁选才挡得住。
             'mt-[2px] flex select-none items-center justify-between',
-            effectiveCompactToolbar && (isCreateAgentVariant ? 'gap-2' : 'min-w-0 gap-1'),
+            effectiveCompactToolbar && (isCreateAgentVariant ? 'flex-wrap gap-2' : 'min-w-0 gap-1'),
           )}
         >
           <div
@@ -4362,12 +4362,12 @@ export function ChatInput({
             className={cn(
               effectiveCompactToolbar
                 ? isCreateAgentVariant
-                  ? 'flex shrink-0 items-center gap-2'
+                  ? 'flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2'
                   : 'flex items-center gap-1'
                 : 'flex items-center gap-2',
-              // compact 模式下右侧(fast/collab/model/voice/send)保持完整宽度,
-              // shrink-0 把所有挤压让给左侧的 permission, 避免出现两行 wrap。
-              effectiveCompactToolbar && 'shrink-0 justify-end',
+              // compact 模式下默认会话右侧(fast/collab/model/voice/send)保持完整宽度;
+              // create-agent 允许右侧在卡内 wrap/收缩,避免窄窗口时溢出输入框边界。
+              effectiveCompactToolbar && (isCreateAgentVariant ? 'justify-end' : 'shrink-0 justify-end'),
             )}
           >
             {middleToolbarSlot}
