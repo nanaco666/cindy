@@ -2,10 +2,10 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "xdt-maker-desktop-win",
-  "documentNamespace": "https://xdmaker.com/spdx/desktop-win/eed02d9f1f2ba8970bb97adef7e05535cbd9ba4068ddad4941cd409a259d2db4",
+  "name": "cindy-desktop-win",
+  "documentNamespace": "https://cindy.app/spdx/desktop-win/eed02d9f1f2ba8970bb97adef7e05535cbd9ba4068ddad4941cd409a259d2db4",
   "creationInfo": {
-    "created": "2026-07-16T10:40:08Z",
+    "created": "2026-07-17T05:10:01Z",
     "creators": [
       "Tool: scripts/generate-third-party-notices.mjs"
     ]

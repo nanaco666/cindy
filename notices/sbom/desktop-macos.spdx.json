@@ -2,10 +2,10 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "xdt-maker-desktop-macos",
-  "documentNamespace": "https://xdmaker.com/spdx/desktop-macos/3ff221eb29a920d5e6128de8dfdd862c5d456376c8db1509d1c82de95848bd67",
+  "name": "cindy-desktop-macos",
+  "documentNamespace": "https://cindy.app/spdx/desktop-macos/3ff221eb29a920d5e6128de8dfdd862c5d456376c8db1509d1c82de95848bd67",
   "creationInfo": {
-    "created": "2026-07-16T10:40:08Z",
+    "created": "2026-07-17T05:10:01Z",
     "creators": [
       "Tool: scripts/generate-third-party-notices.mjs"
     ]

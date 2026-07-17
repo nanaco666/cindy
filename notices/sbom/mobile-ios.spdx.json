@@ -2,10 +2,10 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "xdt-maker-mobile-ios",
-  "documentNamespace": "https://xdmaker.com/spdx/mobile-ios/f7209e7c96aaae80a026cf34c1cb1a5aa4a07268b68f8f64032e3edc04c4c502",
+  "name": "cindy-mobile-ios",
+  "documentNamespace": "https://cindy.app/spdx/mobile-ios/f7209e7c96aaae80a026cf34c1cb1a5aa4a07268b68f8f64032e3edc04c4c502",
   "creationInfo": {
-    "created": "2026-07-16T10:40:08Z",
+    "created": "2026-07-17T05:10:01Z",
     "creators": [
       "Tool: scripts/generate-third-party-notices.mjs"
     ]

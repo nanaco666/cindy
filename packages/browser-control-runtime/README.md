@@ -1,6 +1,6 @@
 # @lizi/browser-control-runtime
 
-Neutral, in-process browser-automation runtime for XDMaker. Exposes a small,
+Neutral, in-process browser-automation runtime for Cindy. Exposes a small,
 stable contract (`BrowserControlRuntime`) that the `lizi_browser` MCP and the
 desktop host drive — without depending on any upstream product API or surfacing
 an upstream product name in product code.

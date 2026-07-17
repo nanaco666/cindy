@@ -2,7 +2,7 @@
 
 同账号跨设备远程控制的**传输/协议层**。当前消费者是 desktop(`apps/desktop`),既可作控制端也可作被控端。
 
-> **为什么有这份文档**:未来的**手机版 App = 纯控制端**(本地无 AI agent / 无会话 / 无 DB),完全经本协议连到桌面端 XDMaker 驱动。手机版照着这份契约实现自己的客户端即可 —— 不需要本地 maker。本文件是「远程控制面」的 single source of truth;具体值以源码为准(见各节引用),改协议先读本文件的「兼容性」一节。
+> **为什么有这份文档**:未来的**手机版 App = 纯控制端**(本地无 AI agent / 无会话 / 无 DB),完全经本协议连到桌面端 Cindy 驱动。手机版照着这份契约实现自己的客户端即可 —— 不需要本地 maker。本文件是「远程控制面」的 single source of truth;具体值以源码为准(见各节引用),改协议先读本文件的「兼容性」一节。
 
 本包**严格 host 无关**:WebSocket 实现、token、设备信息全部由 host 注入(见 `DeviceLinkClientOptions`,`src/client.ts`),不依赖 Electron / 渲染层。手机端注入自己的 WS + token 即可复用同一个 `DeviceLinkClient`,或用任意语言按本协议另写客户端。
 

@@ -1,6 +1,6 @@
-# XDMaker Mobile
+# Cindy Mobile
 
-Mobile controller for XDMaker device link. The app logs in with the same Feishu account as desktop, discovers controllable desktop devices, mirrors active sessions, sends messages, and resolves pending remote interactions.
+Mobile controller for Cindy device link. The app logs in with the same Cindy account as desktop, discovers controllable desktop devices, mirrors active sessions, sends messages, and resolves pending remote interactions.
 
 ## Planning
 

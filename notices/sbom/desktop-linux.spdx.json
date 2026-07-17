@@ -2,10 +2,10 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "xdt-maker-desktop-linux",
-  "documentNamespace": "https://xdmaker.com/spdx/desktop-linux/a5f125c4533602ff8bbd8de4ddb7a10322336dda5a6ccbc8a99ffb3defee137b",
+  "name": "cindy-desktop-linux",
+  "documentNamespace": "https://cindy.app/spdx/desktop-linux/a5f125c4533602ff8bbd8de4ddb7a10322336dda5a6ccbc8a99ffb3defee137b",
   "creationInfo": {
-    "created": "2026-07-16T10:40:08Z",
+    "created": "2026-07-17T05:10:01Z",
     "creators": [
       "Tool: scripts/generate-third-party-notices.mjs"
     ]

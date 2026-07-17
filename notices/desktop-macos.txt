@@ -1,6 +1,6 @@
 ==============================================================================
 THIRD-PARTY SOFTWARE NOTICES AND INFORMATION
-xdt-maker desktop application — macOS x64/arm64
+Cindy desktop application — macOS x64/arm64
 ==============================================================================
 
 macOS Intel 与 Apple Silicon 桌面安装包的第三方开源组件声明。

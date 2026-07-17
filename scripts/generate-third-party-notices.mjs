@@ -888,7 +888,7 @@ function mergeComponents(...groups) {
 
 function buildRestrictedOutput(
   components,
-  productName = "xdt-maker project distributions",
+  productName = "Cindy project distributions",
 ) {
   const lines = [
     "=".repeat(78),
@@ -1005,8 +1005,8 @@ function buildSpdxDocument(artifact, components) {
     spdxVersion: "SPDX-2.3",
     dataLicense: "CC0-1.0",
     SPDXID: "SPDXRef-DOCUMENT",
-    name: `xdt-maker-${artifact}`,
-    documentNamespace: `https://xdmaker.com/spdx/${artifact}/${digest}`,
+    name: `cindy-${artifact}`,
+    documentNamespace: `https://cindy.app/spdx/${artifact}/${digest}`,
     creationInfo: {
       created: stableCreationTime(),
       creators: ["Tool: scripts/generate-third-party-notices.mjs"],
@@ -1192,7 +1192,7 @@ const artifactDefinitions = {
       ...buildDesktopCommonEntries(apacheText, "@img/sharp-win32-x64"),
       ...buildWindowsEntries(),
     ],
-    productName: "xdt-maker desktop application — Windows x64",
+    productName: "Cindy desktop application — Windows x64",
     description: ["Windows x64 桌面安装包的第三方开源组件声明。"],
     notes: [
       "包含 Rust/Tauri updater 运行时 crate 闭包和随包 Android Platform-Tools。",
@@ -1204,7 +1204,7 @@ const artifactDefinitions = {
       apacheText,
       "@img/sharp-libvips-darwin-arm64",
     ),
-    productName: "xdt-maker desktop application — macOS x64/arm64",
+    productName: "Cindy desktop application — macOS x64/arm64",
     description: [
       "macOS Intel 与 Apple Silicon 桌面安装包的第三方开源组件声明。",
     ],
@@ -1218,14 +1218,14 @@ const artifactDefinitions = {
       apacheText,
       "@img/sharp-libvips-linux-x64",
     ),
-    productName: "xdt-maker desktop application — Linux x64 glibc",
+    productName: "Cindy desktop application — Linux x64 glibc",
     description: ["Linux x64 glibc 桌面安装包的第三方开源组件声明。"],
     notes: ["不包含运行时按需下载的 Android Platform-Tools。"],
   },
   "mobile-ios": {
     closure: mobileNpm,
     manual: buildMobileEntries(apacheText, "ios"),
-    productName: "xdt-maker mobile application — iOS",
+    productName: "Cindy mobile application — iOS",
     description: ["iOS JS 生产依赖及仓库显式声明的原生 SDK/字体组件。"],
     notes: [
       "Expo managed 工程的完整 Pod 闭包在构建时生成;本文件不声称替代具体构建产物的 Podfile.lock 审计。",
@@ -1234,7 +1234,7 @@ const artifactDefinitions = {
   "mobile-android": {
     closure: mobileNpm,
     manual: buildMobileEntries(apacheText, "android"),
-    productName: "xdt-maker mobile application — Android",
+    productName: "Cindy mobile application — Android",
     description: ["Android JS 生产依赖及仓库显式声明的原生 SDK/字体组件。"],
     notes: [
       "Expo managed 工程的完整 Gradle 闭包在构建时生成;本文件不声称替代具体 APK/AAB 的依赖报告。",
@@ -1356,7 +1356,7 @@ outputs.push(
     buildOutput({
       packages: projectClosure.packages,
       manualEntries: projectManual,
-      productName: "xdt-maker project aggregate",
+      productName: "Cindy project aggregate",
       description: ["全工程各已定义分发产物的第三方开源组件聚合声明。"],
       coverageNotes: ["各产物精确范围见 notices/*.txt;受限组件见独立清单。"],
     }),
@@ -1366,7 +1366,7 @@ outputs.push(
     buildOutput({
       packages: desktopCombined.packages,
       manualEntries: desktopManual,
-      productName: "xdt-maker desktop application — all supported platforms",
+      productName: "Cindy desktop application — all supported platforms",
       description: ["Windows、macOS 与 Linux 桌面产物的保守合并声明。"],
       coverageNotes: [
         "发布包可按 notices/desktop-<platform>.txt 使用平台精确版本。",
@@ -1381,7 +1381,7 @@ outputs.push(
     path.join(DESKTOP_DIR, "resources", "THIRD-PARTY-RESTRICTED.txt"),
     buildRestrictedOutput(
       desktopRestricted,
-      "xdt-maker desktop application — all supported platforms",
+      "Cindy desktop application — all supported platforms",
     ),
   ],
 );

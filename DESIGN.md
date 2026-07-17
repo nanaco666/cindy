@@ -365,7 +365,7 @@ The grayscale rule is near-absolute. The following are the **only** sanctioned n
 
 ### 架构
 
-xdt-maker 桌面端用 **VSCode 风格的 ColorRegistry + Theme override** 模型管理颜色。所有颜色都通过 CSS variable 以 token 形式被组件消费,**永远不允许在组件里硬编码 hex / rgba**(违反规则会让该组件在非默认主题下无法切色)。
+Cindy 桌面端用 **VSCode 风格的 ColorRegistry + Theme override** 模型管理颜色。所有颜色都通过 CSS variable 以 token 形式被组件消费,**永远不允许在组件里硬编码 hex / rgba**(违反规则会让该组件在非默认主题下无法切色)。
 
 源码:`apps/desktop/src/renderer/themes/`
 - `color-registry.ts` — `ColorRegistry` 单例和 `registerColor(id, defaults, description)` API

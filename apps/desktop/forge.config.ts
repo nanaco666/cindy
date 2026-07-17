@@ -623,9 +623,11 @@ function signPackagedExes(buildPath: string): void {
  * CFBundleName / CFBundleDisplayName,extendInfo 改不动这两个键;而给
  * packagerConfig.name 设 'Cindy' 会连 .app 目录名一起改,踩标识符红线。
  *
- * 标识符零触碰:.app 目录名 / CFBundleExecutable / CFBundleIdentifier /
- * userData 均保持 xdt-maker 系,updater 与存量用户数据不受影响(.app 名与
- * Finder 列表显示等渠道迁移)。正式签名/公证在 release-macos.mjs 里发生在
+ * 历史沿革:本步骤诞生于身份翻转前(当时 .app/CFBundleExecutable/bundle id/
+ * userData 均为 xdt-maker 系,这里是唯一的显示名来源)。2026-07-17 身份翻转后
+ * executableName/appBundleId/productName 已全部是 Cindy 系,packager 本身就会把
+ * CFBundleName/CFBundleDisplayName 写成 Cindy——本步骤降级为冗余兜底(Set 幂等,
+ * 防 packager 行为回退),保留无害。正式签名/公证在 release-macos.mjs 里发生在
  * postPackage 之后,本改动会被签名一起封印,不存在破坏签名问题。
  */
 function applyMacPackagedDisplayName(buildPath: string, platform: string): void {

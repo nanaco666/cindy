@@ -50,9 +50,10 @@ pnpm restart:desktop:local
 XDT_SERVER_REPO=/path/to/cindy-server pnpm dev:server
 ```
 
-默认 dev 继续使用历史 `xdt-maker` userData，因此会读取现有登录态、设置、会话和
-`xdt-maker-<userId>.db`。不要给普通开发启动加 `--isolated`，也不要设置
-`XDT_USER_DATA_DIR`；这两个入口只用于明确需要数据隔离的调试场景。
+dev 数据目录为 `Cindy` userData（2026-07-17 身份翻转起由 `productName: Cindy` 派生，
+从空开始；主库为 `cindy-<userId>.db`，不再沿用老 `xdt-maker` 目录的历史数据）。
+不要给普通开发启动加 `--isolated`，也不要设置 `XDT_USER_DATA_DIR`；这两个入口
+只用于明确需要数据隔离的调试场景。
 
 ## 手机端开发
 
