@@ -9,9 +9,12 @@
  */
 
 const GHOST_THEME_TOKENS = [
-  // 注意:没有 '--panel-bg'——它是宿主里的历史幽灵 token(被消费但 colors.ts
-  // 从未注册,:root 永远读不到值),放进白名单只会误导;基线里对它的引用
-  // 全部走 fallback 链落到真实注册的 --surface。
+  // --panel-bg 已补注册(colors.ts,alias 到 --surface):此前是宿主里的历史
+  // 幽灵 token(被 9 处组件裸引用但 colors.ts 从未注册,:root 读不到值),
+  // 故曾刻意排除在白名单外、只让 body 走 fallback 链兜底。注册后白名单
+  // 注入真实 panel-bg 值,沙箱面板背景与宿主面板同源;body 的 fallback 链
+  // 保留作纵深兜底(见下方 buildGhostThemeCss)。
+  '--panel-bg',
   '--surface',
   '--surface-elevated',
   '--surface-chip',
@@ -82,10 +85,10 @@ export function buildGhostThemeCss(): string {
     buildGhostThemeVarsBlock(),
     // 沙箱页的基线外观:主机面板底色 + 主字色 + 同款字体;意识不写一行
     // 样式也能"看起来属于这个应用"。
-    // --panel-bg 是历史"幽灵 token"(宿主里被消费但 colors.ts 从未注册,
-    // :root 读不到值 → 白名单过滤后不进注入块),单独引用会让 background
-    // 整条声明失效、沙箱页掉回 webview 默认白底(2026-07-13 mivo 设置区
-    // 实撞)——fallback 链到真实注册的 --surface 兜底。
+    // --panel-bg 已注册(alias 到 --surface),白名单注入其现值;fallback 链
+    // `var(--panel-bg, var(--surface))` 作纵深兜底——panel-bg 值缺失或被未来
+    // 某主题置空时仍落到 --surface,不掉回 webview 默认白底(历史 2026-07-13
+    // mivo 设置区实撞的根因,注册后双重保险)。
     `body { margin: 0; background: var(--panel-bg, var(--surface)); color: var(--text-primary); font-family: ${GHOST_FONT_STACK}; font-size: 13px; }`,
   ].join('\n');
 }

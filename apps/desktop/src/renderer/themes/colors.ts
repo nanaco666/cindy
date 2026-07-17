@@ -52,6 +52,16 @@ registerColor('surface-on-card', {
   light: '#ffffff',
   dark: '#1f1f1e',
 }, 'CTA/checked icon 的深色前景');
+// 历史幽灵 token 补注册:--panel-bg 被 9 处宿主组件裸引用(PanelChrome / TabBar
+// / RightSidebarShell / ReviewTabBody / ghostPanels / RightSidebar / SidebarWindowLayout,
+// 均 bg-[var(--panel-bg)] 无 fallback)但 colors.ts 从未注册,:root 读不到值 → 面板/
+// 侧边栏头部背景失效。语义 = 面板背景 = surface(与 ghostPanelTheme.ts 沙箱 body
+// fallback var(--panel-bg, var(--surface)) 兜底一致),故 alias 到 --surface,
+// 注册后宿主消费点显式取到 surface 值。
+registerColor('panel-bg', {
+  light: 'var(--surface)',
+  dark: 'var(--surface)',
+}, '面板 / 侧边栏 / 工具面板头部背景(历史幽灵 token 补注册,alias 到 surface)');
 registerColor('md-table-bg', {
   light: 'rgba(236, 236, 234, 0.55)',
   dark: 'rgba(44, 44, 42, 0.55)',
@@ -72,6 +82,13 @@ registerColor('border-transparent-mixed', {
   light: 'transparent',
   dark: '#3c3c3a',
 }, 'Light transparent / dark board border');
+// 历史幽灵 token 补注册:--board 被 RewindPreviewDialog 4 处 border-[var(--board)]
+// 裸引用(无 fallback)但从未注册,边框读不到值。名字泛但消费点全是边框,语义 =
+// 边框,alias 到 --border-default。
+registerColor('board', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, '通用边框(历史幽灵 token --board 补注册,alias 到 border-default)');
 registerColor('text-primary', {
   light: '#262626',
   dark: '#d4d4d4',

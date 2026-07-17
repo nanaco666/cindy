@@ -1126,8 +1126,10 @@ await cindy.fs({ op: 'write', root: 'data', path: 'a.txt', content: 'hi' });
   建议同时 \`e.dataTransfer.setDragImage(imgEl, offsetX, offsetY)\` 用缩略图当拖影
   ——不设的话拖链接的默认拖影是一条 URL 文字,很丑。视频缩略的拖影把首帧画进
   canvas(\`<video>\` 元素直接当拖影常拍成黑块)。
-- 主题:直接用主机注入的 CSS 变量并给回退值,如 \`var(--surface, #f7f7f5)\`、
-  \`var(--text-primary, #1a1a1a)\`、\`var(--border-default, #e4e4e0)\`;
+- 主题:直接用主机注入的 CSS 变量并给回退值,如 \`var(--panel-bg, #f7f7f5)\`、
+  \`var(--surface, #f7f7f5)\`、\`var(--text-primary, #1a1a1a)\`、
+  \`var(--border-default, #e4e4e0)\`;面板/侧边栏背景用 \`--panel-bg\`(已注册,
+  alias 到 --surface,与宿主面板同源);
 - 滚动条统一规范:12px 槽 + 6px 圆角 thumb,滚动时加 \`.is-scrolling\` 显形
   (颜色用 \`var(--msg-scrollbar)\` / \`var(--msg-scrollbar-hover)\`),2 秒无活动移除。
 

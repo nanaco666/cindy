@@ -99,10 +99,24 @@ describe('注入基线 CSS(幽灵 token 防线 + 设置区卡片色对齐)', () 
     }
   }
 
-  it('面板基线:背景 fallback 链 --panel-bg → --surface(--panel-bg 全局无定义,单独引用会整条声明失效掉回白底)', () => {
+  it('面板基线:背景 fallback 链 --panel-bg → --surface(--panel-bg 已注册 alias 到 surface,fallback 作纵深兜底)', () => {
     withDomStubs(() => {
       expect(buildGhostThemeCss()).toContain('background: var(--panel-bg, var(--surface))');
     });
+  });
+
+  it('panel-bg 已进 Ghost 注入白名单:读到现值时注入块含 --panel-bg(历史幽灵补注册后,沙箱面板与宿主同源)', () => {
+    vi.stubGlobal('document', { documentElement: {} });
+    vi.stubGlobal('getComputedStyle', () => ({
+      getPropertyValue: (token: string) => (token === '--panel-bg' ? 'var(--surface)' : ''),
+    }));
+    try {
+      const css = buildGhostThemeCss();
+      // panel-bg 在白名单 → 注入块显式下发(此前被刻意排除,沙箱只能靠 body fallback)
+      expect(css).toContain('--panel-bg: var(--surface)');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('设置区基线:背景 = 宿主设置卡片色(与相邻卡片无缝),fallback --surface', () => {
