@@ -82,7 +82,7 @@ export function KeyboardShortcutsSection() {
     [t],
   );
 
-  const beginMutation = useCallback(() => {
+  const beginShortcutAction = useCallback(() => {
     const requestId = ++mutationRequestIdRef.current;
     setError(null);
     setGlobalError(null);
@@ -184,11 +184,12 @@ export function KeyboardShortcutsSection() {
       }
       const message = validateCombo(recordingId, combo);
       if (message) {
+        beginShortcutAction();
         setError({ id: recordingId, message });
         cancel();
         return;
       }
-      const requestId = beginMutation();
+      const requestId = beginShortcutAction();
       window.electronAPI.appShortcuts
         .setOverride(recordingId, combo)
         .catch((err: unknown) => {
@@ -206,31 +207,31 @@ export function KeyboardShortcutsSection() {
       window.removeEventListener('keydown', handler, true);
       window.removeEventListener('blur', cancel);
     };
-  }, [beginMutation, recordingId, reportMutationError, t, validateCombo]);
+  }, [beginShortcutAction, recordingId, reportMutationError, t, validateCombo]);
 
   const handleResetAll = useCallback(() => {
-    const requestId = beginMutation();
+    const requestId = beginShortcutAction();
     setRecordingId(null);
     void window.electronAPI.appShortcuts.resetAll().catch((err: unknown) => {
       reportMutationError(requestId, err);
     });
-  }, [beginMutation, reportMutationError]);
+  }, [beginShortcutAction, reportMutationError]);
 
   const handleResetOne = useCallback((id: AppShortcutId) => {
-    const requestId = beginMutation();
+    const requestId = beginShortcutAction();
     void window.electronAPI.appShortcuts.clearOverride(id).catch((err: unknown) => {
       reportMutationError(requestId, err, id);
     });
-  }, [beginMutation, reportMutationError]);
+  }, [beginShortcutAction, reportMutationError]);
 
   /** 删除绑定 = override 置 null, 该快捷键禁用 (显示"未设置")。 */
   const handleDeleteOne = useCallback((id: AppShortcutId) => {
-    const requestId = beginMutation();
+    const requestId = beginShortcutAction();
     setRecordingId(null);
     void window.electronAPI.appShortcuts.setOverride(id, null).catch((err: unknown) => {
       reportMutationError(requestId, err, id);
     });
-  }, [beginMutation, reportMutationError]);
+  }, [beginShortcutAction, reportMutationError]);
 
   const iconButtonClass =
     'inline-flex h-[26px] w-[26px] items-center justify-center rounded-md text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-chip)] transition-colors';
@@ -318,7 +319,7 @@ export function KeyboardShortcutsSection() {
                     type="button"
                     disabled={!def.rebindable}
                     onClick={() => {
-                      setError(null);
+                      beginShortcutAction();
                       setRecordingId(def.id);
                     }}
                     className={cn(iconButtonClass, !def.rebindable && 'opacity-50 pointer-events-none')}

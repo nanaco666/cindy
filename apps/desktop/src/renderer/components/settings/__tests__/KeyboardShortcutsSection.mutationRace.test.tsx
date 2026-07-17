@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const combo = {
   code: 'KeyJ',
@@ -38,6 +38,10 @@ vi.mock('@/hooks/useVoiceInputSettings', () => ({
 import { KeyboardShortcutsSection } from '../KeyboardShortcutsSection';
 
 describe('KeyboardShortcutsSection mutation ordering', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   afterEach(() => {
     Reflect.deleteProperty(window, 'electronAPI');
     vi.restoreAllMocks();
@@ -74,6 +78,44 @@ describe('KeyboardShortcutsSection mutation ordering', () => {
       await Promise.resolve();
     });
 
+    expect(screen.queryByText('settings.shortcuts.errors.saveFailed')).toBeNull();
+  });
+
+  it('keeps a newer local validation error when an older mutation fails', async () => {
+    let rejectOlder!: (reason: unknown) => void;
+    const olderRequest = new Promise<{ overrides: Record<string, unknown> }>((_resolve, reject) => {
+      rejectOlder = reject;
+    });
+    const setOverride = vi.fn(() => olderRequest);
+    mocks.getOverrides.mockReturnValue({ 'toggle-sidebar': combo });
+    mocks.getCombos.mockReturnValue([combo]);
+    Object.defineProperty(window, 'electronAPI', {
+      configurable: true,
+      value: {
+        appShortcuts: {
+          setOverride,
+          clearOverride: vi.fn(async () => ({ overrides: {} })),
+          resetAll: vi.fn(async () => ({ overrides: {} })),
+          setRecording: vi.fn(),
+        },
+      },
+    });
+
+    render(<KeyboardShortcutsSection />);
+    fireEvent.click(screen.getAllByTitle('settings.shortcuts.delete')[0]!);
+    fireEvent.click(screen.getAllByTitle('settings.shortcuts.edit')[1]!);
+    await vi.waitFor(() => expect(document.body.dataset.appShortcutRecording).toBe('1'));
+    fireEvent.keyDown(window, { key: 'q', code: 'KeyQ' });
+    await vi.waitFor(() => {
+      expect(screen.getByText('settings.shortcuts.errors.notBindable')).toBeTruthy();
+    });
+
+    await act(async () => {
+      rejectOlder(new Error('[APP_SHORTCUTS_WRITE_FAILED] older request failed'));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText('settings.shortcuts.errors.notBindable')).toBeTruthy();
     expect(screen.queryByText('settings.shortcuts.errors.saveFailed')).toBeNull();
   });
 });
