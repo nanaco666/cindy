@@ -20,7 +20,7 @@ vi.mock('../../maker-host/auth-adapters.js', () => ({
 vi.mock('../../maker-host/runtime-configs.js', async () => {
   // 动态 import 避开 vi.mock 工厂提升导致的 TDZ;值即 XD 网关单点常量
   const { XD_GATEWAY_BASE_URL: gateway } = await import('../../../shared/endpoints');
-  return { CLAUDE_UPSTREAM_ENDPOINT: gateway };
+  return { claudeUpstreamEndpoint: () => gateway };
 });
 
 vi.mock('../../voice-input/VoiceInputModelSelection.js', () => ({

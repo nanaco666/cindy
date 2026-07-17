@@ -108,11 +108,17 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
-export const API_BASE_URL = normalizeBaseUrl(
+// ── 运行期可覆写端点(ESM live binding)─────────────────────────────────────
+// 下面四个端点用 `export let`:启动闸门(useStartupEndpointGate)拉取远程端点
+// 清单后经 applyResolvedClientEndpoints 重赋值,importer 通过 live binding 看到
+// 新值(消费点全部是调用时读取,无模块顶层捕获——新增顶层派生前先想清楚)。
+// 初始值即构建期烘焙值;__DEV__ 下闸门不拉取,行为与现状完全一致。
+
+export let API_BASE_URL = normalizeBaseUrl(
   configuredValue('EXPO_PUBLIC_XDT_API_BASE_URL'),
 );
 
-export const AUTH_API_BASE_URL = normalizeBaseUrlWithDefault(
+export let AUTH_API_BASE_URL = normalizeBaseUrlWithDefault(
   configuredValue('EXPO_PUBLIC_CINDY_AUTH_BASE_URL'),
   AUTH_REGION === 'global'
     ? DEFAULT_AUTH_API_BASE_URL_GLOBAL
@@ -130,15 +136,53 @@ export const WECHAT_APP_ID =
 export const WECHAT_UNIVERSAL_LINK =
   process.env.EXPO_PUBLIC_CINDY_WECHAT_UNIVERSAL_LINK?.trim() || '';
 
-export const DEVICE_LINK_API_BASE_URL = resolveDeviceLinkApiBaseUrl(
+export let DEVICE_LINK_API_BASE_URL = resolveDeviceLinkApiBaseUrl(
   configuredValue('EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL'),
   API_BASE_URL,
 );
 
-export const MOBILE_VOICE_LITELLM_BASE_URL = normalizeBaseUrlWithDefault(
+export let MOBILE_VOICE_LITELLM_BASE_URL = normalizeBaseUrlWithDefault(
   configuredValue('EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL'),
   DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL,
 );
+
+// 远程端点清单的拉取基址(启动闸门专用)。**烘焙常量、不接受远程覆盖**——
+// 拉清单的地址若吃清单自己的 cdnBaseUrl,配错一次就把自己锁死(与 desktop 同则)。
+export const CDN_BASE_URL = configuredValue('EXPO_PUBLIC_XDT_CDN_BASE_URL').replace(/\/+$/, '');
+
+/**
+ * 启动闸门拉到远程端点清单后回写运行期端点(仅覆盖清单中出现的字段;
+ * 空值忽略,烘焙值兜底)。auth 字段不分 region——国内/海外两条 CDN 各发
+ * 各的清单,无脑取;派生端点同步重算:device-link 未显式给出时按新 apiBase
+ * 走 localRelay 派生链。
+ */
+export function applyResolvedClientEndpoints(resolved: {
+  apiBaseUrl?: string;
+  authApiBaseUrl?: string;
+  deviceLinkApiBaseUrl?: string;
+  xdGatewayBaseUrl?: string;
+}): void {
+  if (resolved.apiBaseUrl) {
+    API_BASE_URL = normalizeBaseUrl(resolved.apiBaseUrl);
+  }
+  if (resolved.authApiBaseUrl) {
+    AUTH_API_BASE_URL = normalizeBaseUrlWithDefault(resolved.authApiBaseUrl, AUTH_API_BASE_URL);
+  }
+  if (resolved.deviceLinkApiBaseUrl) {
+    DEVICE_LINK_API_BASE_URL = resolved.deviceLinkApiBaseUrl.replace(/\/$/, '');
+  } else if (resolved.apiBaseUrl) {
+    DEVICE_LINK_API_BASE_URL = resolveDeviceLinkApiBaseUrl(
+      configuredValue('EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL'),
+      API_BASE_URL,
+    );
+  }
+  if (resolved.xdGatewayBaseUrl) {
+    MOBILE_VOICE_LITELLM_BASE_URL = normalizeBaseUrlWithDefault(
+      resolved.xdGatewayBaseUrl,
+      MOBILE_VOICE_LITELLM_BASE_URL,
+    );
+  }
+}
 
 // 自建分发(自托管 OTA)服务基址。仅自建变体的包会注入 EXPO_PUBLIC_XDT_OTA_URL,
 // 运行时用它拼 `${base}/latest` 做整包发现(runtimeVersion 不同则引导跳 NPKG)。

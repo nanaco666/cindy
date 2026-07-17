@@ -220,6 +220,8 @@ const fanOutFullscreenChange = createIpcFanOut('fullscreen-change');
 const fanOutApplicationMenuCommand = createIpcFanOut('app-menu:command');
 // chat-data-localization F4 / F1
 const fanOutMigrationProgress = createIpcFanOut('local-db:migration:progress');
+// 首登轻量数据迁移(mToc)弹窗阶段推送(confirm / running / done / failed)
+const fanOutLegacyMigrationState = createIpcFanOut('legacy-migration:state');
 const fanOutCorruptionRestored = createIpcFanOut('local-db:corruption-restored');
 // #37: release 端检测到 schema drift 时一次性 toast 提示开发者切回 dev 自动修复
 const fanOutSchemaDriftWarning = createIpcFanOut('local-db:schema-drift-warning');
@@ -235,7 +237,7 @@ const fanOutNotificationFocusSession = createIpcFanOut('notification:focus-sessi
 // device-link 远程控制端(手机看完会话),renderer 的 sessionAttentionStore 靠这条
 // 把本机侧栏红绿点一并清掉(本机自己发起的清除收到回声做幂等 no-op)。
 const fanOutSessionAttentionCleared = createIpcFanOut(SESSION_ATTENTION_CLEARED_CHANNEL);
-// xdt-maker:// 深度链接：main 端解析出 sessionId / workingDir 后广播,
+// cindy://(+ 历史 xdt-maker://)深度链接：main 端解析出 sessionId / workingDir 后广播,
 // renderer 端 MainLayout 订阅 → 路由 / 聚焦 project。
 const fanOutDeepLinkNavigate = createIpcFanOut('deep-link:navigate');
 // RSB web-browser plugin:guest webview 内 window.open / target=_blank 路由。
@@ -542,10 +544,17 @@ const appDisplayVersionInfo = ipcRenderer.sendSync('get-app-display-version-info
   detail: string;
 };
 
+// 运行期端点清单(main 在 createWindow 前解析完成;首帧同步可用)。
+// 只暴露 renderer 实际消费的字段,新增消费点时在此处扩展。
+const clientEndpointsInfo = ipcRenderer.sendSync('client-endpoints:get-sync') as {
+  websiteUrl: string;
+};
+
 contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
   osRelease: ipcRenderer.sendSync('get-os-release') as string,
   appVersion: ipcRenderer.sendSync('get-app-version') as string,
+  clientEndpoints: { websiteUrl: clientEndpointsInfo?.websiteUrl ?? '' },
   preferredSystemLocale: readInitialPreferredSystemLocale(),
   appDisplayVersion: appDisplayVersionInfo.display,
   appDisplayVersionDetail: appDisplayVersionInfo.detail,
@@ -1994,7 +2003,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       }
     }),
 
-  // xdt-maker:// deep link / --open-folder 推送 — main 端解析后通过此 channel 通知 renderer。
+  // cindy://(+ 历史 xdt-maker://)deep link / --open-folder 推送 — main 端解析后通过此 channel 通知 renderer。
   // payload 形态在 vite-env.d.ts 上声明:
   //   - { type: 'session', id, messageClientId? } : 跳路由到指定 session(可带消息锚点)
   //   - { type: 'project', workingDir }    : 聚焦已有 project 节点
@@ -2846,6 +2855,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUsageSessionTokensChanged: fanOutUsageSessionTokensChanged,
   /** 订阅单条消息的 per-turn 费用推送。payload: { sessionId, clientId, turnCostUsd, turnCostIsEstimate }。 */
   onUsageMessageTurnCost: fanOutUsageMessageTurnCost,
+
+  // ── 首登轻量数据迁移(mToc):老 userData → Cindy 的一次性复制迁移 ──
+  // main 在 ensureReady 前推送弹窗阶段;renderer 全局弹窗组件消费。
+  legacyMigration: {
+    /** 订阅迁移弹窗阶段推送。payload: { phase: 'confirm'|'running'|'done'|'failed' } */
+    onState: fanOutLegacyMigrationState,
+    /** 组件挂载时补拉当前阶段(避免 main 先推送、renderer 后订阅丢事件)。 */
+    getState: (): Promise<{ phase: 'confirm' | 'running' | 'done' | 'failed' | null }> =>
+      ipcRenderer.invoke('legacy-migration:get-state'),
+    /** 用户点「确定」(confirm 态放行迁移)或「继续」(failed 态清态关窗)。 */
+    confirm: (): Promise<void> => ipcRenderer.invoke('legacy-migration:confirm'),
+  },
 
   // ── chat-data-localization (M-FE2)：本地 SQLite IPC 桥接 ──
   // 所有 db 操作 main 独占；renderer 仅通过这里间接访问。

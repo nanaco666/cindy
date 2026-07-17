@@ -13,7 +13,7 @@ import type {
   MobileVoiceCredentialSyncResult,
 } from '@lizi/maker-shared/device-link-contract';
 
-import { CLAUDE_UPSTREAM_ENDPOINT } from '../maker-host/runtime-configs.js';
+import { claudeUpstreamEndpoint } from '../maker-host/runtime-configs.js';
 import { readClaudeApiKey } from '../maker-host/auth-adapters.js';
 import {
   LITELLM_REALTIME_TRANSCRIPTION_PATH,
@@ -36,7 +36,7 @@ export function syncMobileVoiceCredential(): MobileVoiceCredentialSyncResult {
   if (!proxyApiKey) {
     throw new Error('XD Gateway API key is not configured on this desktop.');
   }
-  const proxyBaseUrl = CLAUDE_UPSTREAM_ENDPOINT.trim();
+  const proxyBaseUrl = claudeUpstreamEndpoint().trim();
   if (!proxyBaseUrl) {
     throw new Error('XD Gateway base URL is not configured.');
   }

@@ -21,6 +21,7 @@ import * as authManager from './authManager';
 import { createLogger } from './logger';
 import { onQuit } from './lifecycle';
 import { HEARTBEAT_DEFAULT_ENDPOINT } from '../shared/endpoints';
+import { getClientEndpoint } from './clientEndpointsService';
 
 const log = createLogger('heartbeat');
 
@@ -38,8 +39,8 @@ export function initHeartbeatService(): void {
     return;
   }
 
-  // import.meta.env 在 Electron main 的 Vite bundle 里可用
-  const endpoint = (import.meta.env.VITE_HEARTBEAT_URL as string | undefined) || DEFAULT_ENDPOINT;
+  // 运行期端点清单(init 在 app.ready 内早于本服务,烘焙值兜底)
+  const endpoint = getClientEndpoint('heartbeatUrl') || DEFAULT_ENDPOINT;
 
   handle = createHeartbeatClient({
     endpoint,

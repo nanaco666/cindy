@@ -1,12 +1,13 @@
 /**
- * remarkSessionLinks — 把正文纯文本里裸写的 XDMaker 深链切成 mdast `link`
- * 节点,让它进入 `a` 渲染器的对应分支:
- *   - `xdt-maker://session/<id>[?message=<clientId>]` → SessionLinkChip
- *   - `xdt-maker://project/<urlencoded-workingDir>`   → ProjectLinkChip
+ * remarkSessionLinks — 把正文纯文本里裸写的 Cindy 深链切成 mdast `link`
+ * 节点(cindy:// 主 scheme + 历史 xdt-maker:// 都认),让它进入 `a` 渲染器
+ * 的对应分支:
+ *   - `<scheme>://session/<id>[?message=<clientId>]` → SessionLinkChip
+ *   - `<scheme>://project/<urlencoded-workingDir>`   → ProjectLinkChip
  *
  * 背景:remark-gfm 的 autolink 只识别 http(s) / www / mailto,自定义 scheme
  * 的裸 URL(用户 / agent 直接把复制来的深链粘进正文)会被当普通文字渲染,
- * 点不动。显式 `[label](xdt-maker://session/...)` 语法不受影响、本插件也不碰
+ * 点不动。显式 `[label](<scheme>://session/...)` 语法不受影响、本插件也不碰
  * (跳过 link 内 text,避免嵌套)。
  *
  * 匹配策略:ASCII 白名单正则(id 段 + 可选 query 段),CJK / 空白 / 中文标点
@@ -28,8 +29,7 @@ import {
   SESSION_DEEP_LINK_RE_SOURCE,
   PROJECT_DEEP_LINK_RE_SOURCE,
 } from '@/lib/deepLink';
-
-const DEEP_LINK_PREFIX = 'xdt-maker://';
+import { textContainsDeepLink } from '../../../shared/deepLinkSchemes';
 
 interface SessionLinkMatch {
   start: number;
@@ -87,7 +87,8 @@ const remarkSessionLinks: Plugin<[], Root> = () => {
       if (!parent || index == null) return;
       // 已在链接里的 text 不动:避免把链接 label 再切成嵌套链接。
       if (parent.type === 'link') return;
-      if (!node.value || !node.value.includes(DEEP_LINK_PREFIX)) return;
+      // 快速预筛:双 scheme(cindy:// / xdt-maker://)任一出现才进正则。
+      if (!node.value || !textContainsDeepLink(node.value)) return;
 
       const matches = findSessionLinkMatches(node.value);
       if (matches.length === 0) return;

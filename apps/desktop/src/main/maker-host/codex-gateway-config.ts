@@ -19,7 +19,7 @@
  * (见 auth-adapters.ts getAuthEnv 的 API 模式分支)。
  */
 
-import { CLAUDE_UPSTREAM_ENDPOINT } from './runtime-configs.js';
+import { claudeUpstreamEndpoint } from './runtime-configs.js';
 
 /** 内部 provider id(codex config 里的 key)。 */
 export const CODEX_GATEWAY_PROVIDER_ID = 'tapsvc';
@@ -32,11 +32,8 @@ export const CODEX_GATEWAY_ENV_KEY = 'XDT_CODEX_API_KEY';
 export const CODEX_PROVIDER_OAUTH_PLACEHOLDER_KEY = 'xdt-provider-oauth-placeholder-key';
 export type CodexProxySpawnAuthMode = 'oauth-bearer' | 'env-key' | 'provider-oauth';
 
-/**
- * AI Gateway 的 OpenAI 兼容入口。复用 Claude 上游 endpoint 常量(同一个 gateway 主机),
- * 追加 OpenAI Responses API 的 `/v1` 前缀。
- */
-export const CODEX_GATEWAY_BASE_URL = `${CLAUDE_UPSTREAM_ENDPOINT}/v1`;
+// AI Gateway 的 OpenAI 兼容入口不再提供模块级常量(会把远程端点清单钉死在烘焙值),
+// 统一走 buildCodexGatewayBaseUrl() 现取。
 
 /**
  * Codex ChatGPT 订阅后端(从 codex 二进制确认: codex 订阅模式默认打这里)。
@@ -45,7 +42,7 @@ export const CODEX_GATEWAY_BASE_URL = `${CLAUDE_UPSTREAM_ENDPOINT}/v1`;
  */
 export const CODEX_OAUTH_UPSTREAM = 'https://chatgpt.com/backend-api/codex';
 
-export function buildCodexGatewayBaseUrl(upstream = CLAUDE_UPSTREAM_ENDPOINT): string {
+export function buildCodexGatewayBaseUrl(upstream = claudeUpstreamEndpoint()): string {
   return `${upstream.replace(/\/+$/, '')}/v1`;
 }
 

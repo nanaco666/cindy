@@ -12,11 +12,9 @@ import { net } from 'electron';
 import * as authManager from './authManager';
 
 import { createLogger } from './logger';
-import { API_BASE_URL_DEV_FALLBACK } from '../shared/endpoints';
+import { getClientEndpoint } from './clientEndpointsService';
 
 const log = createLogger('serverApiClient');
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || API_BASE_URL_DEV_FALLBACK;
 
 export class ServerApiError extends Error {
   constructor(
@@ -49,7 +47,7 @@ interface RawResponse<T> {
 }
 
 async function rawFetch<T>(apiPath: string, opts: ApiFetchOptions): Promise<RawResponse<T>> {
-  const url = (opts.baseUrl ?? API_BASE_URL) + apiPath;
+  const url = (opts.baseUrl ?? getClientEndpoint('apiBaseUrl')) + apiPath;
   const method = opts.method ?? 'GET';
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

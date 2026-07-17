@@ -230,5 +230,6 @@ export function productionMobileEnv({ authRegion } = {}) {
     EXPO_PUBLIC_XDT_API_BASE_URL: endpoints.apiBaseUrl,
     EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: endpoints.deviceLinkApiBaseUrl,
     EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: endpoints.xdGatewayBaseUrl,
+    EXPO_PUBLIC_XDT_CDN_BASE_URL: endpoints.cdnBaseUrl,
   };
 }

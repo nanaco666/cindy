@@ -1,8 +1,8 @@
 {
   "name": "desktop",
-  "productName": "xdt-maker",
-  "version": "0.0.64",
-  "description": "xdt-maker desktop client (真实版本号在 release 时由脚本通过 APP_VERSION 注入,见 forge.config.ts)",
+  "productName": "Cindy",
+  "version": "1.0.0",
+  "description": "Cindy desktop client (真实版本号在 release 时由脚本通过 APP_VERSION 注入,见 forge.config.ts)",
   "main": ".vite/build/index.js",
   "private": true,
   "scripts": {

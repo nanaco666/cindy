@@ -46,7 +46,7 @@ import {
   OSS_PREFIX,
   OSS_REGION,
   refreshOssConfig,
-} from './ci/lib.mjs';
+  PACKAGED_APP_NAME, assertNotPublishingCindyToLegacyChannel } from './ci/lib.mjs';
 
 const require = createRequire(import.meta.url);
 const OSS = require('ali-oss');
@@ -64,6 +64,8 @@ try {
 } catch { /* no .env file, that's fine */ }
 
 refreshOssConfig();
+// 渠道冻结硬闸:Cindy 布局产物禁止发布到老 /xdt-maker 前缀(见 lib.mjs)。
+assertNotPublishingCindyToLegacyChannel(OSS_PREFIX);
 
 const PROJECT_ROOT = path.resolve(DESKTOP_ROOT, '../..');
 const RELEASE_DIR = path.join(DESKTOP_ROOT, 'release');
@@ -570,8 +572,8 @@ async function main() {
     });
 
     // 3. Find .app
-    const packagedDir = path.join(DESKTOP_ROOT, 'out', `xdt-maker-darwin-${arch}`);
-    const appPath = path.join(packagedDir, 'xdt-maker.app');
+    const packagedDir = path.join(DESKTOP_ROOT, 'out', `${PACKAGED_APP_NAME}-darwin-${arch}`);
+    const appPath = path.join(packagedDir, `${PACKAGED_APP_NAME}.app`);
     if (!fs.existsSync(appPath)) {
       console.error(`ERROR: ${appPath} not found`);
       process.exit(1);

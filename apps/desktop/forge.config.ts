@@ -11,9 +11,33 @@ import { AutoUnpackNativesPlugin } from '@electron-forge/plugin-auto-unpack-nati
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import type { ForgeArch, ForgeConfig, ForgePlatform } from '@electron-forge/shared-types';
+import {
+  BRAND_IDENTITY,
+  allDeepLinkSchemes,
+  brandAppId,
+  brandBundleIdPrefix,
+  resolveCindyRegion,
+} from '@lizi/maker-shared/brand-identity';
 import { stagePackagedThirdPartyNotices } from './forge-third-party-notices';
 
 const _require = createRequire(__filename);
+
+// ── 构建期身份(2026-07-17 Cindy 渠道分叉) ─────────────────────────────────────
+// 区域默认 cn;打海外包时由发布脚本注入 CINDY_AUTH_REGION=global。appId 随区域
+// 派生(com.xd.cindycn / com.xd.cindy),必须与运行时 shared/brandRegion
+// (经 vite.main.config 的 VITE_CINDY_AUTH_REGION define 烘焙)同源——AUMID
+// 三位一体:NSIS appId = 运行时 setAppUserModelId = 快捷方式 AUMID。
+const CINDY_REGION = resolveCindyRegion(
+  process.env.CINDY_AUTH_REGION?.trim() || process.env.VITE_CINDY_AUTH_REGION,
+);
+// 把归一化后的区域回写给 vite 构建(plugin-vite 与 forge 同进程,loadEnv 读
+// process.env):防止「只设 CINDY_AUTH_REGION 直跑 forge」时 NSIS appId 用
+// global 而 main 烘焙的 CURRENT_APP_ID 落回 cn——AUMID 漂移 = toast 静默丢失。
+process.env.VITE_CINDY_AUTH_REGION = CINDY_REGION;
+const CINDY_APP_ID = brandAppId(CINDY_REGION);
+const CINDY_UTI_PREFIX = brandBundleIdPrefix(CINDY_REGION);
+/** 可执行文件基名('Cindy' → Cindy.exe / mac Mach-O 名)。 */
+const CINDY_EXE = BRAND_IDENTITY.executableName;
 
 // discord.js is externalized from the main Vite bundle because its circular
 // CommonJS graph crashes when Rollup reorders it. Its dependency tree contains
@@ -536,7 +560,7 @@ function signPackagedExes(buildPath: string): void {
   // loudness 自带的 .exe 也在这里签:不签的话企业 EDR / Smart App Control 可能
   // 把它当未知未签名第三方进程拦下,影响"录音时静音"功能。
   const exes = [
-    path.join(buildPath, 'xdt-maker.exe'),
+    path.join(buildPath, `${CINDY_EXE}.exe`),
     path.join(buildPath, 'resources', 'xdt-updater.exe'),
     path.join(buildPath, 'resources', 'xdt-helper.exe'),
     path.join(
@@ -918,10 +942,12 @@ const makers: ForgeConfig['makers'] = [
     options: {
       categories: ['Development'],
       icon: path.join(__dirname, 'resources', 'icon.png'),
-      mimeType: ['x-scheme-handler/xdt-maker'],
+      // 双 scheme:cindy 主 + xdt-maker 兼容(老分享链接不死)。
+      mimeType: allDeepLinkSchemes().map((s) => `x-scheme-handler/${s}`),
       maintainer: 'Lizi <jiali@magiclizi.com>',
-      name: 'xdt-maker',
-      bin: 'xdt-maker',
+      // deb 包名规范要求小写。
+      name: BRAND_IDENTITY.executableName.toLowerCase(),
+      bin: CINDY_EXE,
       productName: 'Cindy',
     },
   }, ['linux']),
@@ -935,8 +961,8 @@ if (isWin) {
         // appId 决定 NSIS 写到 Start Menu 快捷方式上的 System.AppUserModel.ID 属性。
         // Electron 主进程必须用 app.setAppUserModelId() 设同一个值，Windows 通知中枢
         // 才会接收 toast；否则原生 Notification 被静默丢弃。
-        // 详见 src/main/notificationService.ts 顶部注释 + src/main/index.ts AUMID 块。
-        appId: 'com.magiclizi.xdt-maker',
+        // 值按构建区域派生(shared/brandRegion 运行时同源),见文件头身份块。
+        appId: CINDY_APP_ID,
         nsis: {
           oneClick: false,
           allowToChangeInstallationDirectory: true,
@@ -944,11 +970,9 @@ if (isWin) {
           uninstallerIcon: 'resources/icon.ico',
           createDesktopShortcut: 'always',
           createStartMenuShortcut: true,
-          // 只覆盖快捷方式显示名，不动 productName/appId/exe/userData，
-          // 保证 updater 和老用户数据兼容。
-          // 更老的 xdt-maker.lnk / 上一代 XDMaker.lnk 由 installer.nsh customInit
-          // 提前删除;差量更新不重跑安装器,存量用户的快捷方式改名由主进程启动
-          // 自愈兜底(main/windowsShortcutSelfHeal.ts)。
+          // 快捷方式显示名。installer.nsh 只清理/重建自家 Cindy.lnk——同机可能
+          // 并存老 XDMaker 安装,它的 xdt-maker.lnk / XDMaker.lnk 属于老 app,
+          // 绝不能删(共存红线,见 installer.nsh customInit 注释)。
           shortcutName: 'Cindy',
           runAfterFinish: true,
           include: 'resources/installer.nsh',
@@ -978,7 +1002,10 @@ const config: ForgeConfig = {
     // 到 asar 外才能被 spawn / 动态加载。AutoUnpackNativesPlugin 只 unpack .node,
     // 所以这里显式覆盖 loudness / node-pty 整个目录。
     asar: { unpack: '**/{@img/{sharp-libvips-*,sharp-win32-*},loudness,native/sqlite-vec,node-pty}/**' },
-    executableName: 'xdt-maker',
+    executableName: CINDY_EXE,
+    // mac bundle id(与 Windows AUMID 同值,按区域派生;cn/global 是两个可并存
+    // 的系统身份,与 mobile 的 com.xd.cindycn / com.xd.cindy 同一套)。
+    appBundleId: CINDY_APP_ID,
     // exe 资源元数据(任务管理器进程名、文件右键属性的显示层)。只影响展示,
     // 与 exe 文件名 / AUMID / userData 等标识符解耦(那些等 Cindy 渠道迁移)。
     win32metadata: {
@@ -993,7 +1020,8 @@ const config: ForgeConfig = {
     // Windows: 不读这个字段(走 app.setAsDefaultProtocolClient 写注册表), 见
     //          main/deepLink.ts registerDeepLinkProtocol()。
     protocols: [
-      { name: 'Cindy Deep Link', schemes: ['xdt-maker'] },
+      // 双 scheme 注册:cindy:// 主 + xdt-maker:// 永久兼容(存量分享链接不死)。
+      { name: 'Cindy Deep Link', schemes: [...allDeepLinkSchemes()] },
     ],
     // macOS 文件夹右键 "打开方式 → XDMaker" 入口:
     //   声明 app 能接受 public.folder, Finder 自动把 XDMaker 出现在 "打开方式" 列表。
@@ -1029,7 +1057,7 @@ const config: ForgeConfig = {
           CFBundleTypeName: 'Cindy Cartridge',
           CFBundleTypeRole: 'Viewer',
           LSHandlerRank: 'Owner',
-          LSItemContentTypes: ['com.magiclizi.xdt-maker.cindy'],
+          LSItemContentTypes: [`${CINDY_UTI_PREFIX}.cindy`],
           CFBundleTypeExtensions: ['cindy'],
         },
       ],
@@ -1040,7 +1068,7 @@ const config: ForgeConfig = {
       // 打开行为;导入入口仍是拖入窗口 / 设置页按钮。
       UTExportedTypeDeclarations: [
         {
-          UTTypeIdentifier: 'com.magiclizi.xdt-maker.cindy',
+          UTTypeIdentifier: `${CINDY_UTI_PREFIX}.cindy`,
           UTTypeDescription: 'Cindy Cartridge',
           UTTypeConformsTo: ['public.data'],
           UTTypeTagSpecification: {
@@ -1049,7 +1077,7 @@ const config: ForgeConfig = {
           },
         },
         {
-          UTTypeIdentifier: 'com.magiclizi.xdt-maker.cshare',
+          UTTypeIdentifier: `${CINDY_UTI_PREFIX}.cshare`,
           UTTypeDescription: 'Cindy Session Share',
           UTTypeConformsTo: ['public.data'],
           UTTypeTagSpecification: {

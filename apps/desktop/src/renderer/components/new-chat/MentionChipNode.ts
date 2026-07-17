@@ -11,11 +11,11 @@
  *   - 'agent'   → lucide:sparkles + bare agent name
  *   - 'slash'   → no icon, text only (e.g. `/compact`)
  *   - 'session' → lucide:corner-down-right + session title (pasted
- *                 `xdt-maker://session/…` deep link; label starts as the
+ *                 `cindy://session/…`(或历史 xdt-maker://)deep link; label starts as the
  *                 short session id and is patched in place once the title
  *                 resolves — see sessionLinkPaste.ts)
  *   - 'project' → lucide:folder-open + project dir basename (pasted
- *                 `xdt-maker://project/…` deep link — see pastePipeline.ts)
+ *                 `cindy://project/…`(或历史 xdt-maker://)deep link — see pastePipeline.ts)
  *
  * We intentionally keep the node spec minimal — the *visual* chip is
  * rendered in `toDOM` as plain HTML because:

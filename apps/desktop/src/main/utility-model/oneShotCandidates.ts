@@ -4,7 +4,7 @@ import type { AgentKind, Maker } from '@lizi/maker-core';
 
 import { createLogger } from '../logger.js';
 import { readClaudeApiKey } from '../maker-host/auth-adapters.js';
-import { CLAUDE_UPSTREAM_ENDPOINT } from '../maker-host/runtime-configs.js';
+import { claudeUpstreamEndpoint } from '../maker-host/runtime-configs.js';
 import { getUtilityModelChainProfiles } from './UtilityModelSelection.js';
 import type { UtilityModelProfile, UtilityModelTransport } from '../../shared/utilityModelProfiles.js';
 
@@ -137,7 +137,7 @@ async function resolveCodexCandidate(
 
 function resolveLiteLlmCandidate(profile: UtilityModelProfile): UtilityTextCandidate | null {
   const apiKey = readClaudeApiKey();
-  const baseUrl = CLAUDE_UPSTREAM_ENDPOINT.trim();
+  const baseUrl = claudeUpstreamEndpoint().trim();
   if (!apiKey || !baseUrl) {
     log.debug('utility text candidate skipped: LiteLLM credentials missing', {
       providerId: profile.id,

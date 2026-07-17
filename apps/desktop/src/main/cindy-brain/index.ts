@@ -32,6 +32,7 @@ import {
 } from './builtinGhostProvisioner.js';
 import { getAccessToken, getAuthState, onAuthStateChange } from '../authManager.js';
 import { serverApiFetch } from '../serverApiClient.js';
+import { getClientEndpoint } from '../clientEndpointsService.js';
 import { createGhostOauthBrokerClient } from './ghostOauthBroker.js';
 import { resolveGhostRepoRoot } from './repoRoot.js';
 import { takePendingCindyInstall } from './openFileInstall.js';
@@ -1221,14 +1222,14 @@ function getGhostOauthAccountManager(): GhostOauthAccountManager {
       // 与 device-link 的"不回退"不同:broker 老端点还活着,回退让独立服务
       // 的部署节奏与客户端发版完全解耦。
       broker: createGhostOauthBrokerClient({
-        apiPost: (path, body) =>
-          serverApiFetch(path, {
+        apiPost: (path, body) => {
+          const brokerBaseUrl = getClientEndpoint('oauthBrokerApiBaseUrl');
+          return serverApiFetch(path, {
             method: 'POST',
             body,
-            ...(import.meta.env.VITE_OAUTH_BROKER_API_BASE_URL
-              ? { baseUrl: import.meta.env.VITE_OAUTH_BROKER_API_BASE_URL }
-              : {}),
-          }),
+            ...(brokerBaseUrl ? { baseUrl: brokerBaseUrl } : {}),
+          });
+        },
         hasLoginToken: () => getAccessToken() !== null,
         logger: log,
       }),
@@ -1237,9 +1238,9 @@ function getGhostOauthAccountManager(): GhostOauthAccountManager {
       // 不回退主 server——弹跳路由只存在于独立 oauth-broker(slack provider
       // 同款约束:绝不跨服务回退,见 mcp-integrations 迁移前的同名纪律)。
       resolveBrokerPublicUrl: (path) => {
-        const base = import.meta.env.VITE_OAUTH_BROKER_API_BASE_URL;
+        const base = getClientEndpoint('oauthBrokerApiBaseUrl');
         if (!base) return null;
-        return `${String(base).replace(/\/+$/, '')}${path}`;
+        return `${base.replace(/\/+$/, '')}${path}`;
       },
       logger: log,
       // 钉死回调端口(如 xd-atlassian 的 53682)被外部进程占用时自动查杀

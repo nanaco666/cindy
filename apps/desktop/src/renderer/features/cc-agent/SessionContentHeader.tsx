@@ -247,7 +247,7 @@ export function SessionContentHeader({
     t,
   ]);
 
-  /* ---- 复制对话链接(xdt-maker://session/<id> 深链,与 SessionItem 同语义) ---- */
+  /* ---- 复制对话链接(cindy://session/<id> 深链,与 SessionItem 同语义) ---- */
   const handleCopyDeepLink = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(buildSessionDeepLink(session.id));

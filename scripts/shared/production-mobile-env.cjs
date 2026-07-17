@@ -8,6 +8,8 @@ const MOBILE_ENV_FIELDS = Object.freeze({
   EXPO_PUBLIC_XDT_API_BASE_URL: 'apiBaseUrl',
   EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'deviceLinkApiBaseUrl',
   EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: 'xdGatewayBaseUrl',
+  // 客户端远程端点清单的拉取基址(启动第一步从 `${cdn}/config/client-endpoints.json` 拉取)
+  EXPO_PUBLIC_XDT_CDN_BASE_URL: 'cdnBaseUrl',
 });
 
 function resolveConfigPath() {

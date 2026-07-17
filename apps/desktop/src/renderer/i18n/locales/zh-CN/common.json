@@ -1124,7 +1124,7 @@
     "gitSafety": {
       "title": "Git 安全",
       "autoSnapshotTitle": "Git 安全保存点",
-      "description": "Agent 修改后自动创建 XDT 保存点 commit。只有开启后才显示 Codex rewind 入口。",
+      "description": "Agent 修改后自动创建保存点 commit。只有开启后才显示 Codex rewind 入口。",
       "toggleAria": "切换 Git 安全保存点",
       "saveFailed": "保存 Git 安全设置失败"
     },
@@ -1601,7 +1601,7 @@
           "description": "跨 agent 的长期记忆，让上下文在会话之间持续"
         },
         "xdt_helper": {
-          "name": "XDT Helper",
+          "name": "Cindy Helper",
           "description": "宿主能力自省 —— 告诉 agent 当前可用的工具与模型"
         },
         "collab": {
@@ -1664,7 +1664,7 @@
           "workspaces": "工作目录映射(别名 → 本地绝对路径)",
           "workspacesBoundCount_one": "已绑定 {{count}} 个本地工作目录",
           "workspacesBoundCount_other": "已绑定 {{count}} 个本地工作目录",
-          "aliasPlaceholder": "别名, 如 xdmaker",
+          "aliasPlaceholder": "别名, 如 my-server",
           "addWorkspace": "添加工作目录",
           "removeWorkspace": "删除此工作目录",
           "changeDir": "点击更换目录(别名与偏好保留)"
@@ -2386,6 +2386,15 @@
       "INVALID_BIND_TICKET": "绑定会话已过期，请重新登录",
       "REGION_MISMATCH": "登录服务区域与当前客户端不匹配"
     }
+  },
+  "legacyMigration": {
+    "title": "迁移旧版本数据",
+    "description": "检测到本机存有旧版本的数据。历史会话和媒体文件将迁移到新的数据位置。若旧版应用正在运行，请先完全退出它；迁移期间请保持 {{appName}} 打开。注意：已授权的第三方密钥与凭证无法随数据迁移，迁移完成后需要在设置中重新授权或重新填写。",
+    "confirm": "确定",
+    "migrating": "正在迁移数据，请稍候…",
+    "failedTitle": "迁移未完成",
+    "failedDescription": "本次数据迁移未能完成。你可以继续使用 {{appName}}，下次登录时会自动重试。",
+    "continue": "继续"
   },
   "migration": {
     "title": "正在为你下载历史聊天数据",

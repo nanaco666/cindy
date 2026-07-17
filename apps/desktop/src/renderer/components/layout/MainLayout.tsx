@@ -483,7 +483,7 @@ export function MainLayout() {
     return unsubscribe;
   }, [navigateToSession]);
 
-  // xdt-maker:// 深度链接 + --open-folder 右键菜单订阅 —— main 端解析后推 payload,
+  // cindy://(+ 历史 xdt-maker://)深度链接 + --open-folder 右键菜单订阅 —— main 端解析后推 payload,
   // 这里按 type 分发。
   // session:     canonicalize 后 navigate 到对应路由(与 onNotificationFocusSession 同语义)
   // project:     fire pendingProjectFocus 信号给 sidebar (CCAgentSidebarUpper) 去做

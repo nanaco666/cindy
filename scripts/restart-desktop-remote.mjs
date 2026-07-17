@@ -14,6 +14,16 @@ const forceKillLabel = process.platform === 'win32' ? 'taskkill /F /T' : 'kill -
 const LOCAL_API_BASE_URL = 'http://localhost:3333';
 const LOCAL_AUTH_BASE_URL = 'http://localhost:3344';
 
+/**
+ * 产品 userData 目录基名(--isolated 沙箱目录 `<BRAND_USER_DATA_DIR_NAME>-dev[-<名字>]`
+ * 的派生基座)。⚠️ 值必须与 packages/maker-shared/src/brandIdentity.ts 的
+ * BRAND_IDENTITY.userDataDirName 一致——.mjs 无法 import TS 单点,只能镜像字面量;
+ * 一致性由 scripts/__tests__/brand-identity-sync.test.mjs 断言兜底。
+ * 主进程侧(devCliFlags.ts)以 app.getPath('userData') 为基座派生同名目录,两边
+ * 必须落在同一路径,否则 restart 脚本创建的沙箱目录与实际生效目录分家。
+ */
+export const BRAND_USER_DATA_DIR_NAME = 'Cindy';
+
 // 桌面端 .env 默认值,按启动模式区分 VITE_API_BASE_URL:
 // - remote(默认):dev:desktop:remote 用 cross-env 在运行时强制注入 xdt-api,桌面端不看 .env,
 //   所以 .env 里的 VITE_API_BASE_URL 只是占位,沿用旧策略「文件已存在则不覆盖」即可。
@@ -230,8 +240,8 @@ function listPosixProcesses() {
     .filter(Boolean);
 }
 
-// 沿 ppid 链向上找祖先里有没有 xdt-maker desktop dev 进程。
-// 用途：拦住"agent 跑在 xdt-maker desktop dev 进程内还调 restart"这种自杀场景——
+// 沿 ppid 链向上找祖先里有没有 Cindy desktop dev 进程。
+// 用途：拦住"agent 跑在 Cindy desktop dev 进程内还调 restart"这种自杀场景——
 // 一旦 taskkill /T 走到祖先 dev 进程，整棵树（包括正在跑的本脚本）都会被收掉，
 // 新 cmd 要么没机会起、要么撞上未释放的端口/文件锁，结果是看不懂的 ELIFECYCLE。
 // 检测到就直接 exit 1 + 清晰提示，让 agent 把控制权交回给开发者。
@@ -381,14 +391,14 @@ function closeDarwinTerminalTtys(ttys) {
 }
 
 /**
- * --isolated 的默认独立 userData 目录:与正式版的 `xdt-maker` 平级、名字带 -dev 后缀,
+ * --isolated 的默认独立 userData 目录:与正式版的 `Cindy` 平级、名字带 -dev 后缀,
  * 稳定不随 checkout 变(多个 worktree 共享同一个 dev 沙箱,想再细分用命名沙箱
  * `--isolated=<名字>` 或自己设 XDT_USER_DATA_DIR 覆盖)。命名沙箱目录再追加
  * `-<名字>` 后缀,每个名字一条完全独立的沙箱。只在 dev 生效——主进程入口只在
  * 非 packaged 时应用该覆写。
  */
 function defaultIsolatedUserDataDir(isolationName) {
-  const dirName = `xdt-maker-dev${isolationName ? `-${isolationName}` : ''}`;
+  const dirName = `${BRAND_USER_DATA_DIR_NAME}-dev${isolationName ? `-${isolationName}` : ''}`;
   if (process.platform === 'win32') {
     const appData = process.env.APPDATA || path.join(process.env.USERPROFILE || '', 'AppData', 'Roaming');
     return path.join(appData, dirName);
@@ -546,8 +556,8 @@ async function main() {
     console.log('==> Scheduler passive mode: this instance will not auto-fire schedules.');
   }
   // --isolated[=<名字>]: dev 使用独立的 userData 目录(数据库/登录态/会话全部与
-  // 正式版隔离,首次要重新走飞书登录)。不带名字 = 默认沙箱(xdt-maker-dev);
-  // 带名字 = 独立命名沙箱(xdt-maker-dev-<名字>),每个名字一条,可同时多开。
+  // 正式版隔离,首次要重新走飞书登录)。不带名字 = 默认沙箱(Cindy-dev);
+  // 带名字 = 独立命名沙箱(Cindy-dev-<名字>),每个名字一条,可同时多开。
   // 实现:置 XDT_USER_DATA_DIR(主进程入口只在非 packaged 时应用,见
   // apps/desktop/src/main/index.ts),经 devEnvPrefix 白名单透传给 dev 进程。
   // 已手动设了 XDT_USER_DATA_DIR 时尊重用户的值,不覆盖。
@@ -580,7 +590,7 @@ async function main() {
 
   const devAncestor = findDevAncestor();
   if (devAncestor) {
-    console.error('==> Detected this script is running inside an xdt-maker desktop dev process tree:');
+    console.error('==> Detected this script is running inside an Cindy desktop dev process tree:');
     console.error(`    ancestor pid ${devAncestor.pid}: ${devAncestor.command.slice(0, 180)}`);
     console.error('==> Refusing to restart from within. Killing the ancestor would terminate this');
     console.error('    script mid-flight and leave ports / file locks held by the dying process,');
@@ -595,9 +605,9 @@ async function main() {
   const darwinTerminalTtys = darwinTerminalTtysForProcesses(targets);
 
   if (targets.length === 0) {
-    console.log('==> No existing xdt-maker desktop dev processes found.');
+    console.log('==> No existing Cindy desktop dev processes found.');
   } else {
-    console.log(`==> Stopping ${targets.length} existing xdt-maker desktop dev process(es)...`);
+    console.log(`==> Stopping ${targets.length} existing Cindy desktop dev process(es)...`);
     for (const target of targets) {
       console.log(`    kill ${target.pid}: ${target.command.slice(0, 180)}`);
       killProcess(target.pid);
@@ -605,7 +615,7 @@ async function main() {
 
     const remainingAfterTerm = await waitForDesktopDevProcessesToExit(gracefulTimeoutMs);
     if (remainingAfterTerm.length > 0) {
-      console.log(`==> Force stopping ${remainingAfterTerm.length} stubborn xdt-maker desktop dev process(es)...`);
+      console.log(`==> Force stopping ${remainingAfterTerm.length} stubborn Cindy desktop dev process(es)...`);
       for (const target of remainingAfterTerm) {
         console.log(`    ${forceKillLabel} ${target.pid}: ${target.command.slice(0, 180)}`);
         forceKillProcess(target.pid);
@@ -614,7 +624,7 @@ async function main() {
 
     const remainingAfterForce = await waitForDesktopDevProcessesToExit(forceTimeoutMs);
     if (remainingAfterForce.length > 0) {
-      console.error(`==> Failed to stop ${remainingAfterForce.length} xdt-maker desktop dev process(es); aborting restart.`);
+      console.error(`==> Failed to stop ${remainingAfterForce.length} Cindy desktop dev process(es); aborting restart.`);
       for (const target of remainingAfterForce) {
         console.error(`    still running ${target.pid}: ${target.command.slice(0, 180)}`);
       }

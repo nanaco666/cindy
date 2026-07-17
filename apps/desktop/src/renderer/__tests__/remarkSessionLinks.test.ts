@@ -84,4 +84,34 @@ describe('remarkSessionLinks', () => {
       { type: 'text', value: 'xdt-maker://session/%ZZ' },
     ]);
   });
+
+  // 双 scheme 收敛:主 scheme cindy:// 链接与历史 xdt-maker://(上方全部用例)
+  // 同一口径切 link 节点。
+  it('converts primary-scheme cindy:// session and project URLs', () => {
+    const cindySession = 'cindy://session/03e0c22d-19db-4ac5-814f-1ea04040b471';
+    expect(runOnText(`见 ${cindySession}?message=m1。`)).toEqual([
+      { type: 'text', value: '见 ' },
+      {
+        type: 'link',
+        url: `${cindySession}?message=m1`,
+        children: [{ type: 'text', value: `${cindySession}?message=m1` }],
+      },
+      { type: 'text', value: '。' },
+    ]);
+    const cindyProject = 'cindy://project/%2Ftmp%2Fx';
+    expect(runOnText(cindyProject)).toEqual([
+      { type: 'link', url: cindyProject, children: [{ type: 'text', value: cindyProject }] },
+    ]);
+    expect(runOnText('cindy://other/foo')).toEqual([
+      { type: 'text', value: 'cindy://other/foo' },
+    ]);
+  });
+
+  it('handles both schemes mixed in one text node', () => {
+    const legacy = 'xdt-maker://session/aaa-111';
+    const primary = 'cindy://session/bbb-222';
+    const children = runOnText(`${legacy} 与 ${primary}`);
+    expect(children.filter((node) => node.type === 'link').map((n) => (n as { url: string }).url))
+      .toEqual([legacy, primary]);
+  });
 });

@@ -144,7 +144,7 @@ describe('sessionMenu info model', () => {
 
 describe('sessionMenu navigation', () => {
   it('copies the mobile deep link for the session', () => {
-    expect(sessionMenuCopyLink(session({ id: 'abc' }))).toBe('xdt-maker://session/abc');
+    expect(sessionMenuCopyLink(session({ id: 'abc' }))).toBe('cindy://session/abc');
   });
 
   it('settles back navigation in two stages', () => {

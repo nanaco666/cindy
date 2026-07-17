@@ -7,6 +7,9 @@
     "cindy-web-search": {
       "audience": "all"
     },
+    "cindy-mermaid": {
+      "audience": "all"
+    },
     "xd-pages": {
       "audience": "all",
       "tier": "enterprise"

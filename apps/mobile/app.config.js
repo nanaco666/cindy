@@ -32,6 +32,7 @@ function resolveMobileBuildEnv() {
       'EXPO_PUBLIC_XDT_API_BASE_URL',
       'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL',
       'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL',
+      'EXPO_PUBLIC_XDT_CDN_BASE_URL',
     ];
     const fallback = Object.fromEntries(
       keys.map((key) => [key, process.env[key]?.trim()]),

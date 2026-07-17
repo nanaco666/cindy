@@ -1124,7 +1124,7 @@
     "gitSafety": {
       "title": "Git 안전",
       "autoSnapshotTitle": "Git 안전 저장점",
-      "description": "Agent 편집 후 XDT 저장점 commit을 자동으로 만듭니다. 켜져 있을 때만 Codex rewind를 표시합니다.",
+      "description": "Agent 편집 후 저장점 commit을 자동으로 만듭니다. 켜져 있을 때만 Codex rewind를 표시합니다.",
       "toggleAria": "Git 안전 저장점 전환",
       "saveFailed": "Git 안전 설정 저장에 실패했습니다"
     },
@@ -1601,7 +1601,7 @@
           "description": "세션 간 컨텍스트를 유지하는 agent 공통 장기 메모리"
         },
         "xdt_helper": {
-          "name": "XDT Helper",
+          "name": "Cindy Helper",
           "description": "호스트 기능 공개 — 사용 가능한 도구와 모델을 agent에 알림"
         },
         "collab": {
@@ -1664,7 +1664,7 @@
           "workspaces": "작업 디렉터리 매핑(별칭 → 로컬 절대 경로)",
           "workspacesBoundCount_one": "로컬 작업 디렉터리 {{count}}개 바인딩됨",
           "workspacesBoundCount_other": "로컬 작업 디렉터리 {{count}}개 바인딩됨",
-          "aliasPlaceholder": "별칭, 예: xdmaker",
+          "aliasPlaceholder": "별칭, 예: my-server",
           "addWorkspace": "작업 디렉터리 추가",
           "removeWorkspace": "이 작업 디렉터리 삭제",
           "changeDir": "클릭하여 디렉터리 변경(별명과 설정은 유지)"
@@ -2386,6 +2386,15 @@
       "INVALID_BIND_TICKET": "확인 세션이 만료되었습니다.",
       "REGION_MISMATCH": "로그인 서비스 지역이 이 앱과 일치하지 않습니다."
     }
+  },
+  "legacyMigration": {
+    "title": "이전 버전 데이터 마이그레이션",
+    "description": "이 기기에서 이전 버전의 데이터가 발견되었습니다. 채팅 기록과 미디어 파일을 새 데이터 위치로 마이그레이션합니다. 이전 버전 앱이 실행 중이라면 먼저 완전히 종료해 주세요. 마이그레이션 중에는 {{appName}}을(를) 닫지 마세요.참고: 승인된 서드파티 키와 자격 증명은 마이그레이션할 수 없습니다. 마이그레이션 완료 후 설정에서 다시 승인하거나 다시 입력해야 합니다.",
+    "confirm": "확인",
+    "migrating": "데이터를 마이그레이션하는 중입니다. 잠시 기다려 주세요…",
+    "failedTitle": "마이그레이션이 완료되지 않았습니다",
+    "failedDescription": "이번에는 데이터 마이그레이션을 완료하지 못했습니다. {{appName}}은(는) 계속 사용할 수 있으며, 다음 로그인 시 자동으로 다시 시도합니다.",
+    "continue": "계속"
   },
   "migration": {
     "title": "채팅 기록을 다운로드하는 중",

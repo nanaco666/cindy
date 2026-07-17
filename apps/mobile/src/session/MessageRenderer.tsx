@@ -123,6 +123,7 @@ import {
 } from '@/session/messageMarkdown';
 import {
   extractSessionLinkIds,
+  isCindyDeepLinkUrl,
   parseProjectDeepLinkUrl,
   parseSessionDeepLinkUrl,
   projectDisplayName,
@@ -2744,13 +2745,13 @@ function renderInline(
           </SpanText>
         );
       }
-      // 非 session 的 xdt-maker:// 深链(project 等,桌面端粘贴 chip 化后按
-      // `[标题](深链)` / 裸链接发送):手机端没有对应跳转目标,渲染 label
-      // 纯文本;绝不落 Linking.openURL(app 注册的 OS scheme 是 'xdmaker',
-      // openURL 必失败,还会在部分 Android 上弹系统报错)。裸项目链接
-      // (text === url,侧边栏复制的无标题形态)推导目录名展示,不给用户看
-      // percent-encoded 原串(review P2)。
-      if (inline.url.startsWith('xdt-maker://')) {
+      // 非 session 的 Cindy 深链(project 等,双 scheme:cindy 主 + xdt-maker
+      // 兼容存量;桌面端粘贴 chip 化后按 `[标题](深链)` / 裸链接发送):手机端
+      // 没有对应跳转目标,渲染 label 纯文本;绝不落 Linking.openURL(这些
+      // scheme 未注册到手机 OS,openURL 必失败,还会在部分 Android 上弹系统
+      // 报错)。裸项目链接(text === url,侧边栏复制的无标题形态)推导目录名
+      // 展示,不给用户看 percent-encoded 原串(review P2)。
+      if (isCindyDeepLinkUrl(inline.url)) {
         const explicitLabel =
           inline.text.trim() && inline.text.trim() !== inline.url ? inline.text.trim() : null;
         const projectTarget = explicitLabel ? null : parseProjectDeepLinkUrl(inline.url);

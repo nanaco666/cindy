@@ -27,11 +27,14 @@ import type {
 import * as authManager from '../../authManager';
 import { serverApiFetch, ServerApiError } from '../../serverApiClient';
 import { createLogger } from '../../logger';
-import { API_BASE_URL_DEV_FALLBACK } from '../../../shared/endpoints';
+import { getClientEndpoint } from '../../clientEndpointsService';
 
 const log = createLogger('im:slack:transport');
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || API_BASE_URL_DEV_FALLBACK;
+// 惰性读取(勿固化模块级常量):远程端点清单在 app.ready 内解析。
+function apiBaseUrl(): string {
+  return getClientEndpoint('apiBaseUrl');
+}
 
 /**
  * 多设备支持: 本机稳定标识(machineIdSync)+ hostname, SSE 注册与出站代理都
@@ -109,7 +112,7 @@ export function createSlackRelayTransport(): SlackRelayTransport {
             'X-XDM-Device-Name': device.deviceName,
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           });
-          let res = await net.fetch(`${API_BASE_URL}/api/slack/events`, {
+          let res = await net.fetch(`${apiBaseUrl()}/api/slack/events`, {
             headers: sseHeaders(authManager.getAccessToken()),
             signal: abort.signal,
           });
@@ -117,7 +120,7 @@ export function createSlackRelayTransport(): SlackRelayTransport {
             // token 过期 — refresh 一次再连
             const refreshed = await authManager.refresh();
             if (refreshed) {
-              res = await net.fetch(`${API_BASE_URL}/api/slack/events`, {
+              res = await net.fetch(`${apiBaseUrl()}/api/slack/events`, {
                 headers: sseHeaders(authManager.getAccessToken()),
                 signal: abort.signal,
               });
@@ -213,7 +216,7 @@ export function createSlackRelayTransport(): SlackRelayTransport {
         const qs = new URLSearchParams({ filename });
         if (title) qs.set('title', title);
         if (threadTs) qs.set('thread_ts', threadTs);
-        const res = await fetchWithAuthRetry(`${API_BASE_URL}/api/slack/upload?${qs}`, {
+        const res = await fetchWithAuthRetry(`${apiBaseUrl()}/api/slack/upload?${qs}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/octet-stream' },
           body: new Uint8Array(bytes),
@@ -233,7 +236,7 @@ export function createSlackRelayTransport(): SlackRelayTransport {
     async downloadFile(fileId, destAbsPath) {
       try {
         const res = await fetchWithAuthRetry(
-          `${API_BASE_URL}/api/slack/files/${encodeURIComponent(fileId)}`,
+          `${apiBaseUrl()}/api/slack/files/${encodeURIComponent(fileId)}`,
           {},
         );
         if (!res.ok || !res.body) {

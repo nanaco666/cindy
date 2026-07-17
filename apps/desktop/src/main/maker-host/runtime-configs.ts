@@ -13,7 +13,7 @@ import { app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { XD_GATEWAY_BASE_URL } from '../../shared/endpoints.js';
+import { getClientEndpoint } from '../clientEndpointsService.js';
 import claudeSystemPrompt from './claude-system-prompt.md?raw';
 import codexSystemPrompt from './codex-system-prompt.md?raw';
 import hostSystemPrompt from './host-system-prompt.md?raw';
@@ -99,7 +99,10 @@ const staticClaudeBehaviorFlags = {
  * 非 Claude 模型(gpt-5.4 / kimi 等)的请求里 strip 掉,绕开上游 Azure backend
  * "Unknown parameter" 400 错误。
  */
-export const CLAUDE_UPSTREAM_ENDPOINT = XD_GATEWAY_BASE_URL;
+// 惰性函数而非模块级常量:远程端点清单在 app.ready 内解析,顶层求值会钉死在烘焙值。
+export function claudeUpstreamEndpoint(): string {
+  return getClientEndpoint('xdGatewayBaseUrl');
+}
 
 /**
  * Claude 运行时配置工厂 ——
@@ -138,7 +141,7 @@ export function buildDesktopClaudeRuntimeConfig(endpointFn: () => string): Agent
     },
     // 远端 cc-mgr 会话恒用真上游网关 —— 本地 endpoint 是 loopback proxy(远端够不到)。
     // 静态值即可:远端从来不走 per-model OAuth↔gateway 拆分(那只在本地 proxy 里有意义)。
-    remoteEndpoint: CLAUDE_UPSTREAM_ENDPOINT,
+    remoteEndpoint: claudeUpstreamEndpoint(),
   };
   Object.defineProperty(config, 'endpoint', {
     get: endpointFn,

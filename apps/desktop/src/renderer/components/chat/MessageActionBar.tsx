@@ -44,7 +44,7 @@ interface MessageActionBarProps {
   /** Plaintext that will hit the clipboard on copy click. */
   copyText: string;
   /** When provided, the time text becomes clickable and copies this deep
-   *  link (`xdt-maker://session/<id>?message=<clientId>`) — the tooltip
+   *  link (`cindy://session/<id>?message=<clientId>`) — the tooltip
    *  gains a hint line, and the time text briefly swaps to a "link copied"
    *  confirmation after a successful copy. No extra button is rendered. */
   copyLinkText?: string;

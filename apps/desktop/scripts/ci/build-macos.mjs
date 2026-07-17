@@ -13,7 +13,7 @@
 //   5. ad-hoc 签名，附带本地测试所需 entitlements
 //   6. 运行 packaged smoke test
 //
-// 输出: out/xdt-maker-darwin-<arch>/xdt-maker.app (ad-hoc signed)
+// 输出: out/<PACKAGED_APP_NAME>-darwin-<arch>/<PACKAGED_APP_NAME>.app (ad-hoc signed)
 //
 // 这一步不使用开发者证书、不公证、不上传 OSS。后续由 publish-macos.mjs
 // 用真实证书重新签名。这里的 ad-hoc 签名是为了让本地 packaged app
@@ -33,6 +33,7 @@ import {
   runSmokeTest,
   writeMacEntitlements,
   adhocSignMacApp,
+  PACKAGED_APP_NAME,
 } from './lib.mjs';
 import { productionViteEnv } from '../../../../scripts/shared/production-endpoints.mjs';
 
@@ -94,8 +95,8 @@ async function main() {
   });
 
   // 4. 验证 .app 存在
-  const packagedDir = path.join(DESKTOP_ROOT, 'out', `xdt-maker-darwin-${arch}`);
-  const appPath = path.join(packagedDir, 'xdt-maker.app');
+  const packagedDir = path.join(DESKTOP_ROOT, 'out', `${PACKAGED_APP_NAME}-darwin-${arch}`);
+  const appPath = path.join(packagedDir, `${PACKAGED_APP_NAME}.app`);
   if (!fs.existsSync(appPath)) {
     console.error(`ERROR: ${appPath} not found`);
     process.exit(1);

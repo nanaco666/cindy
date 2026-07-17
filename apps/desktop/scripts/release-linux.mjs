@@ -8,6 +8,7 @@ import {
   DESKTOP_ROOT,
   LINUX_PLATFORM_KEY,
   OSS_PREFIX,
+  PACKAGED_APP_NAME,
   RELEASE_DIR,
   createLinuxFirstReleaseManifest,
   createOSSClient,
@@ -24,11 +25,12 @@ import {
   uploadToOSS,
   uploadVersionedGzImmutable,
   writePackageVersion,
-  writeReleaseManifest,
-} from './ci/lib.mjs';
+  writeReleaseManifest, assertNotPublishingCindyToLegacyChannel } from './ci/lib.mjs';
 import { productionViteEnv } from '../../../scripts/shared/production-endpoints.mjs';
 
 loadDotenv();
+// 渠道冻结硬闸:Cindy 布局产物禁止发布到老 /xdt-maker 前缀(见 lib.mjs)。
+assertNotPublishingCindyToLegacyChannel(OSS_PREFIX);
 
 const PLATFORM_KEY = LINUX_PLATFORM_KEY;
 const INSTALLER_EXT = 'deb';
@@ -107,7 +109,7 @@ async function main() {
     },
   });
 
-  const packagedDir = path.join(DESKTOP_ROOT, 'out', `xdt-maker-${PLATFORM_KEY}`);
+  const packagedDir = path.join(DESKTOP_ROOT, 'out', `${PACKAGED_APP_NAME}-${PLATFORM_KEY}`);
   if (!fs.existsSync(packagedDir)) {
     console.error(`ERROR: packaged dir not found: ${packagedDir}`);
     process.exit(1);

@@ -36,7 +36,7 @@ import { installInvokeCapture } from './device-link/invoke-registry.js';
 
 const stripped = stripSensitiveAnthropicEnv();
 if (stripped.length > 0) {
-  stderr.write(`[xdt-maker] stripped user-level Anthropic env: ${stripped.join(', ')}\n`);
+  stderr.write(`[cindy] stripped user-level Anthropic env: ${stripped.join(', ')}\n`);
 }
 
 installInvokeCapture();
@@ -66,19 +66,19 @@ const devFlags = resolveDevCliFlags({
 if (devFlags.schedulerPassive) {
   // 统一收敛到 env:scheduler-host 只认 XDT_SCHEDULER_PASSIVE,不重复解析 argv。
   process.env.XDT_SCHEDULER_PASSIVE = '1';
-  stderr.write('[xdt-maker] dev scheduler passive mode (--passive)\n');
+  stderr.write('[cindy] dev scheduler passive mode (--passive)\n');
 }
 if (devFlags.userDataDirOverride) {
   // 同步回 env,让读 env 的下游(日志、诊断)与实际生效目录一致。
   process.env.XDT_USER_DATA_DIR = devFlags.userDataDirOverride;
   app.setPath('userData', devFlags.userDataDirOverride);
-  stderr.write(`[xdt-maker] dev userData override → ${devFlags.userDataDirOverride}\n`);
+  stderr.write(`[cindy] dev userData override → ${devFlags.userDataDirOverride}\n`);
 }
 if (devFlags.invalidIsolationName !== null) {
   // 名字不合法(字符集 / 长度)→ 已按默认沙箱处理(回落到不隔离会混进正式版
   // 数据,更危险),这里只大声警告,让用户发现自己起错了名字。
   stderr.write(
-    `[xdt-maker] WARN: invalid --isolated name "${devFlags.invalidIsolationName}"` +
+    `[cindy] WARN: invalid --isolated name "${devFlags.invalidIsolationName}"` +
       ' (allowed: A-Za-z0-9_-, max 32 chars); falling back to the DEFAULT sandbox\n',
   );
 }
@@ -100,7 +100,7 @@ if (devFlags.needsIsolatedDeviceId) {
     isolatedDeviceId = `isolated-dev${devFlags.isolationName ? `-${devFlags.isolationName}` : ''}`;
   }
   process.env.XDT_DEVICE_ID_OVERRIDE = isolatedDeviceId;
-  stderr.write(`[xdt-maker] dev isolated deviceId → ${isolatedDeviceId}\n`);
+  stderr.write(`[cindy] dev isolated deviceId → ${isolatedDeviceId}\n`);
 }
 
 async function dispatch(): Promise<void> {
@@ -109,6 +109,6 @@ async function dispatch(): Promise<void> {
 }
 
 dispatch().catch((err) => {
-  stderr.write(`[xdt-maker] fatal: ${(err as Error).stack ?? err}\n`);
+  stderr.write(`[cindy] fatal: ${(err as Error).stack ?? err}\n`);
   exit(1);
 });

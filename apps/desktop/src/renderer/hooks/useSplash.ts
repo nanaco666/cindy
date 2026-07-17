@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { WEBSITE_URL } from '../../shared/endpoints';
-
 import { useEnvCheck } from '@/contexts/EnvCheckContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUpdateStatus } from '@/hooks/useUpdateStatus';
+
+// 运行期端点清单优先(重启生效),烘焙常量兜底
+const websiteUrl = () => window.electronAPI.clientEndpoints.websiteUrl || WEBSITE_URL;
 
 /* ── Types ── */
 
@@ -189,7 +191,7 @@ export function useSplash() {
   }, [phase, checkEnvironment]);
 
   const onSpawnFailedDownload = useCallback(() => {
-    window.open(WEBSITE_URL, '_blank');
+    window.open(websiteUrl(), '_blank');
   }, []);
 
   // ── Show progress bar during download phases ──

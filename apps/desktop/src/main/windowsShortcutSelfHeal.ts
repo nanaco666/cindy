@@ -13,14 +13,14 @@
  *
  * 行为分两类位置:
  *   - 桌面 / 开始菜单:旧名 .lnk 且 target 是本 exe → 以新名重建(继承原参数,
- *     icon 指回当前 exe 索引 0,AUMID 写 BRAND_IDENTITY.appId)后删除旧文件。
+ *     icon 指回当前 exe 索引 0,AUMID 写 CURRENT_APP_ID)后删除旧文件。
  *     新名 .lnk 已存在时只删旧文件(重复项),不覆盖用户现有的新名快捷方式。
  *   - 任务栏固定(User Pinned\TaskBar):**只原地刷新属性,绝不改文件名**——
  *     重命名固定项会让图钉失效;文件名(悬停提示)保持旧名,等用户重新固定。
  *
  * ⚠️ AUMID 三位一体(NSIS appId = 运行时 setAppUserModelId = 快捷方式 AUMID,
  * 见 bootstrap-electron.ts AUMID 块):这里写入的 appUserModelId 必须与
- * BRAND_IDENTITY.appId 逐字符一致,否则 Windows toast 通知被静默丢弃。
+ * CURRENT_APP_ID 逐字符一致,否则 Windows toast 通知被静默丢弃。
  *
  * 只校验 target 是本 exe 才动手:多版本共存 / 指向其它安装目录的快捷方式不碰。
  * dev 模式跳过(process.execPath 是 electron.exe,桌面上也不会有本产品快捷方式)。
@@ -30,7 +30,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { app, shell } from 'electron';
 import { BRAND_NAME } from '@lizi/maker-shared/branding';
-import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
+import { CURRENT_APP_ID } from '../shared/brandRegion.js';
 import { createLogger } from './logger';
 
 const log = createLogger('shortcutSelfHeal');
@@ -121,7 +121,7 @@ async function healRenameable(deps: ShortcutSelfHealDeps, dir: string): Promise<
         target: deps.execPath,
         icon: deps.execPath,
         iconIndex: 0,
-        appUserModelId: BRAND_IDENTITY.appId,
+        appUserModelId: CURRENT_APP_ID,
       });
       // 新名写失败就保留旧快捷方式(用户至少还有入口),下次启动重试。
       if (!ok) continue;
@@ -147,12 +147,12 @@ async function healPinnedInPlace(deps: ShortcutSelfHealDeps, dir: string): Promi
     }
     // 幂等:icon 已指向当前 exe 且 AUMID 正确就不再写盘。
     const iconOk = typeof prev.icon === 'string' && isSameWindowsPath(prev.icon, deps.execPath);
-    if (iconOk && prev.appUserModelId === BRAND_IDENTITY.appId) continue;
+    if (iconOk && prev.appUserModelId === CURRENT_APP_ID) continue;
     const ok = deps.writeShortcut(lnkPath, 'update', {
       ...prev,
       icon: deps.execPath,
       iconIndex: 0,
-      appUserModelId: BRAND_IDENTITY.appId,
+      appUserModelId: CURRENT_APP_ID,
     });
     if (ok) changed = true;
   }

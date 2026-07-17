@@ -9,10 +9,9 @@ import {
 } from '../cindy-media/generatedMedia.js';
 import { createLogger } from '../logger.js';
 import { getProviderSecretStore } from '../secrets/providerSecretStore.js';
-import { XD_GATEWAY_BASE_URL } from '../../shared/endpoints.js';
+import { getClientEndpoint } from '../clientEndpointsService.js';
 
 const log = createLogger('art');
-const DEFAULT_XDPROXY_BASE_URL = XD_GATEWAY_BASE_URL;
 
 let artService: CindyProxyMediaService | null = null;
 
@@ -22,7 +21,7 @@ function readApiKey(): string | null {
 }
 
 function getXdproxyBaseUrl(): string {
-  return import.meta.env.VITE_XDPROXY_BASE_URL || DEFAULT_XDPROXY_BASE_URL;
+  return getClientEndpoint('xdGatewayBaseUrl');
 }
 
 /**

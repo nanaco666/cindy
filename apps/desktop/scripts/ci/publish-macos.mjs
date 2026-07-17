@@ -15,7 +15,7 @@
 //   APPLE_SIGN_IDENTITY            — 默认 Developer ID Application: Jiali Liu (WJ6LYABL8Z)
 //
 // 前置条件:
-//   build-macos.mjs 已执行成功，out/xdt-maker-darwin-<arch>/xdt-maker.app 存在
+//   build-macos.mjs 已执行成功，out/<PACKAGED_APP_NAME>-darwin-<arch>/<PACKAGED_APP_NAME>.app 存在
 // =============================================================================
 
 import fs from 'node:fs';
@@ -37,9 +37,11 @@ import {
   writeMacEntitlements,
   verifyMacContactsPermissions,
   resolveAppleIdentity,
-} from './lib.mjs';
+  PACKAGED_APP_NAME, assertNotPublishingCindyToLegacyChannel } from './lib.mjs';
 
 loadDotenv();
+// 渠道冻结硬闸:Cindy 布局产物禁止发布到老 /xdt-maker 前缀(见 lib.mjs)。
+assertNotPublishingCindyToLegacyChannel(OSS_PREFIX);
 
 // ── 参数解析 ──────────────────────────────────────────────────────────────
 
@@ -176,8 +178,8 @@ async function main() {
   console.log('='.repeat(60));
 
   // 0. 前置：确保 build 阶段产物存在
-  const packagedDir = path.join(DESKTOP_ROOT, 'out', `xdt-maker-darwin-${arch}`);
-  const appPath = path.join(packagedDir, 'xdt-maker.app');
+  const packagedDir = path.join(DESKTOP_ROOT, 'out', `${PACKAGED_APP_NAME}-darwin-${arch}`);
+  const appPath = path.join(packagedDir, `${PACKAGED_APP_NAME}.app`);
   if (!fs.existsSync(appPath)) {
     console.error(`ERROR: ${appPath} not found.`);
     console.error(`       Run: node scripts/ci/build-macos.mjs --arch ${arch} --version ${version}`);

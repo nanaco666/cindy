@@ -1124,7 +1124,7 @@
     "gitSafety": {
       "title": "Git セーフティ",
       "autoSnapshotTitle": "Git セーフティ保存点",
-      "description": "Agent の編集後に XDT 保存点 commit を自動作成します。有効な場合のみ Codex rewind を表示します。",
+      "description": "Agent の編集後に保存点 commit を自動作成します。有効な場合のみ Codex rewind を表示します。",
       "toggleAria": "Git セーフティ保存点を切り替え",
       "saveFailed": "Git セーフティ設定の保存に失敗しました"
     },
@@ -1601,7 +1601,7 @@
           "description": "セッションをまたいでコンテキストを保持する agent 横断の長期メモリ"
         },
         "xdt_helper": {
-          "name": "XDT Helper",
+          "name": "Cindy Helper",
           "description": "ホスト機能の開示 — 利用可能なツールとモデルを agent に伝える"
         },
         "collab": {
@@ -1664,7 +1664,7 @@
           "workspaces": "作業ディレクトリのマッピング(エイリアス → ローカル絶対パス)",
           "workspacesBoundCount_one": "ローカル作業ディレクトリを {{count}} 個バインド済み",
           "workspacesBoundCount_other": "ローカル作業ディレクトリを {{count}} 個バインド済み",
-          "aliasPlaceholder": "エイリアス(例: xdmaker)",
+          "aliasPlaceholder": "エイリアス(例: my-server)",
           "addWorkspace": "作業ディレクトリを追加",
           "removeWorkspace": "この作業ディレクトリを削除",
           "changeDir": "クリックしてディレクトリを変更(別名と設定は保持)"
@@ -2386,6 +2386,15 @@
       "INVALID_BIND_TICKET": "確認セッションの期限が切れました。",
       "REGION_MISMATCH": "ログインサービスの地域がこのアプリと一致しません。"
     }
+  },
+  "legacyMigration": {
+    "title": "旧バージョンのデータを移行",
+    "description": "このデバイスに旧バージョンのデータが見つかりました。チャット履歴とメディアファイルを新しいデータ保存先に移行します。旧バージョンのアプリが起動中の場合は、先に完全に終了してください。移行中は {{appName}} を閉じないでください。ご注意:認証済みのサードパーティのキーや資格情報は移行できません。移行完了後、設定で再認証または再入力が必要です。",
+    "confirm": "OK",
+    "migrating": "データを移行しています。しばらくお待ちください…",
+    "failedTitle": "移行が完了しませんでした",
+    "failedDescription": "今回はデータ移行を完了できませんでした。{{appName}} はそのまま利用できます。次回のログイン時に自動的に再試行されます。",
+    "continue": "続行"
   },
   "migration": {
     "title": "チャット履歴をダウンロード中",
