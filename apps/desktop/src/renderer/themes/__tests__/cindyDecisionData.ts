@@ -282,7 +282,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'sidebar-item-hover': { light: '0.0 0.0% 94.5%', dark: '0.0 2.2% 18.0%' },
   'sidebar-search-bg': { light: '0.0 0.0% 92.9%', dark: '0.0 2.4% 16.1%' },
   'sidebar-muted': { light: '222.0 4.6% 42.7%', dark: '216.0 4.1% 75.9%' },
-  'status-badge-fg': { light: '#2A2828', dark: '#2A2828' }, // §7 必炸点(lead 裁决)
+  'status-badge-fg': { light: '#1F1F1F', dark: '#1F1F1F' }, // §7 必炸点(lead 裁决)
 };
 
 export const BRAND_RED_EXPECTED_BY_ID: Record<string, string> = {
