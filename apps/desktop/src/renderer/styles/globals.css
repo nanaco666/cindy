@@ -1117,6 +1117,13 @@ body.resizing-pane [data-ghost-webview] {
 [data-theme="cindy-dark"] body {
   background: transparent;
 }
+/* CINDY 根容器让路(2026-07-18 真凶修复):MainLayout 根 div(h-screen bg-content-area)整窗
+   不透明垫底,把侧栏毛玻璃与窗外壁纸隔死——主区 <main> 自带 bg-content-area,根层职责冗余,
+   CINDY 下透明化;其他 family 不受影响。 */
+[data-theme="cindy-light"] .h-screen.bg-content-area,
+[data-theme="cindy-dark"] .h-screen.bg-content-area {
+  background: transparent;
+}
 /* 模式1 侧栏:blur 50px + surface-translucent-sidebar;light 叠玻璃渐变覆盖层(补编 §1,仅 light,dark 无) */
 [data-theme="cindy-light"] {
   --sidebar-glass-accent: #F70121;
@@ -1134,8 +1141,7 @@ body.resizing-pane [data-ghost-webview] {
 [data-theme="cindy-dark"] .bg-\[var\(--panel-bg\)\],
 [data-theme="cindy-dark"] aside.bg-sidebar {
   background: var(--surface-translucent-sidebar);
-  backdrop-filter: blur(50px);
-  -webkit-backdrop-filter: blur(50px);
+  /* backdrop-filter 移除:CSS blur 采样不到窗外壁纸,且已知会把透明窗背衬渲染成黑;壁纸模糊由原生 vibrancy 材质提供 */
 }
 /* 模式2 主面板:用户勘误 2026-07-17 — 主内容区不透壁纸(macOS 标准范式),撤销 blur。
    content-area 回落 --content-area(=var(--surface-hsl) 不透明 #EDEDED/#2A2828),无 blur。

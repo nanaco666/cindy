@@ -1593,7 +1593,8 @@ const createWindow = () => {
 
   // Use nativeTheme to pick initial background color matching OS preference,
   // avoiding white flash on startup for dark mode users.
-  const bgColor = nativeTheme.shouldUseDarkColors ? '#1f1f1e' : '#f8f8f6';
+  // mac:创建期即透明底+sidebar 材质(Electron setBackgroundColor 运行时改 alpha 不可靠,是 vibrancy 不透壁纸的根因;非 CINDY 皮肤 body 不透明会自然盖住,视觉无影响)
+  const bgColor = process.platform === 'darwin' ? '#00000000' : (nativeTheme.shouldUseDarkColors ? '#1f1f1e' : '#f8f8f6');
 
   // Window state persistence (F-WST-1): remembers position / size / maximized
   // / fullscreen across launches. Falls back to the defaults below on first
@@ -1621,6 +1622,7 @@ const createWindow = () => {
     autoHideMenuBar: true,
     show: false,
     backgroundColor: bgColor,
+    ...(process.platform === 'darwin' ? { vibrancy: 'sidebar' as const } : {}),
     acceptFirstMouse: !swallowActivationClick,
     ...platformOptions,
     webPreferences: {
