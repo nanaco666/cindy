@@ -33,7 +33,6 @@ import {
   type ProviderConfig,
   type SocialProvider,
 } from '@cindy/auth-client';
-import { getFeishuService } from './mcp-integrations/feishu.js';
 import { closeDb as closeLocalDb } from './localDb';
 import { readReloginFlag, clearReloginFlag } from './updateService';
 import * as canaryFlagStore from './canaryFlagStore';
@@ -616,30 +615,13 @@ function notifyAuthListeners(): void {
 async function clearPerAccountIntegrations(): Promise<void> {
   // canary-release V0.1: 登出清理灰度标记，下次未登录直接走 stable manifest
   canaryFlagStore.clear();
-  const errors: unknown[] = [];
-  const clearOne = async (name: string, clear: () => Promise<void>): Promise<void> => {
-    try {
-      await clear();
-    } catch (err) {
-      log.error(`clear ${name} integration failed`, err);
-      errors.push(err);
-    }
-  };
-
-  await clearOne('feishu', () => getFeishuService().token.clearFeishuTokens());
-  // Jira/Confluence 的 per-account 清理已随 lizi_jira 退役(2026-07-14):
-  // Atlassian 账号迁入 xd-atlassian 意识保险库,是机器级而非登录账号级凭证,
-  // 与 Google 意识同语义,登出不清。
-  // Slack 官方 MCP 的 per-account 清理已随 slack-official 退役(2026-07-15):
-  // Slack 账号迁入 cindy-slack 意识保险库,是机器级而非登录账号级凭证,与
-  // Atlassian / Google 意识同语义,登出不清。
-
-  if (errors.length > 0) {
-    throw new AggregateError(
-      errors,
-      `failed to clear ${errors.length} per-account integration(s)`,
-    );
-  }
+  // 登录账号级集成清单当前为空(2026-07-17 起):
+  // - 飞书 token 链随 refresh-feishu 退役——xd-feishu 意识改走 OAuth broker,
+  //   凭证是机器级意识保险库,登出不清(与 Atlassian / Slack / Google 同语义);
+  // - Jira/Confluence 清理已随 lizi_jira 退役(2026-07-14);
+  // - Slack 官方 MCP 清理已随 slack-official 退役(2026-07-15)。
+  // 骨架保留:未来出现真正跟登录账号绑定的集成时在此登记,refresh() 的
+  // 账号切换 teardown 守卫链依赖本函数的调用位。
 }
 
 function clearPerAccountIntegrationsInBackground(): void {
@@ -657,32 +639,10 @@ function resetLoginFlowState(): void {
   pendingBindTicket = null;
 }
 
-async function reloadPerAccountIntegrationsFromDisk(feishuJwt: string | null): Promise<void> {
-  const errors: unknown[] = [];
-  const reloadOne = async (name: string, reload: () => Promise<void>): Promise<void> => {
-    try {
-      await reload();
-    } catch (err) {
-      log.error(`reload ${name} integration from disk failed`, err);
-      errors.push(err);
-    }
-  };
-
-  await reloadOne('feishu', async () => {
-    const feishuAuth = getFeishuService().token;
-    feishuAuth.dispose();
-    await feishuAuth.init();
-    if (feishuJwt) {
-      feishuAuth.setJwt(feishuJwt);
-    }
-  });
-
-  if (errors.length > 0) {
-    throw new AggregateError(
-      errors,
-      `failed to reload ${errors.length} per-account integration(s) from disk`,
-    );
-  }
+async function reloadPerAccountIntegrationsFromDisk(_accessToken: string | null): Promise<void> {
+  // 登录账号级集成清单当前为空(见 clearPerAccountIntegrations 顶注)。
+  // 骨架与重试调度保留:替换式刷新的账号切换路径依赖本函数的调用位与
+  // 'after-integration-reload' 守卫点。
 }
 
 function scheduleReplacementIntegrationReloadRetries(userId: string): void {
@@ -859,7 +819,6 @@ export async function initialize(): Promise<AuthState> {
     lastAcceptedRefreshToken = null;
     removeSafe(REFRESH_TOKEN_KEY);
     removeSafe(LEGACY_REFRESH_TOKEN_KEY);
-    void getFeishuService().token.clearFeishuTokens();
     clearReloginFlag();
     return { user: null, isAuthenticated: false, deviceId };
   }
@@ -976,7 +935,6 @@ async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> 
     // canary 分发已与登录态解耦(isCanary 字段退役):登录路径恒清本地标记,
     // 存量 canary 用户回稳定通道;后续灰度由其它分发方式接管。
     canaryFlagStore.sync(false);
-    getFeishuService().token.setJwt(refreshData.accessToken);
     scheduleRefresh(refreshData.accessToken);
     // XD / Mivo key 均为本地 only,不再在冷启动从服务器同步到本地。
     // 账号边界对账:换账号则清掉上一个账号留在本机的 provider key,同账号保留(不必重填)。
@@ -999,7 +957,6 @@ async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> 
       accessToken = null;
       currentUser = null;
       currentMigration = undefined;
-      getFeishuService().token.setJwt(null);
       if (refreshTimer !== null) {
         clearTimeout(refreshTimer);
         refreshTimer = null;
@@ -1036,12 +993,8 @@ async function completeLogin(
   outcome: Extract<LoginOutcome, { status: 'ok' }>,
 ): Promise<AuthFlowState> {
   const loginEpoch = ++authStateEpoch;
-  try {
-    await getFeishuService().token.clearFeishuTokens();
-  } catch (error) {
-    // Legacy integration cleanup is independent from Cindy identity.
-    log.error('clear legacy Feishu integration before login failed (non-fatal)', error);
-  }
+  // legacy 飞书集成清理已随主机 token 链退役(2026-07-17):这里不再有登录前
+  // 的异步清理窗口,epoch 守卫保留给未来在提交前重新引入 await 的改动兜底。
   if (authStateEpoch !== loginEpoch) {
     throw new AuthApiError(
       'AUTH_FLOW_SUPERSEDED',
@@ -1060,7 +1013,6 @@ async function completeLogin(
   currentUser = mapMembershipToAuthUser(outcome.membership);
   currentMigration = { status: 'none' };
   canaryFlagStore.sync(false);
-  getFeishuService().token.setJwt(outcome.accessToken);
   scheduleRefresh(outcome.accessToken);
   getProviderSecretStore().reconcileOwner(outcome.membership.id);
   pendingLoginTicket = null;
@@ -1369,7 +1321,6 @@ export async function refresh(): Promise<boolean> {
         }
         // canary 分发已与登录态解耦(isCanary 字段退役),恒清本地标记。
         canaryFlagStore.sync(false);
-        getFeishuService().token.setJwt(data.accessToken);
         scheduleRefresh(data.accessToken);
         notifyRenderer();
         if (previousUserId !== currentUser.id) {
@@ -1384,7 +1335,6 @@ export async function refresh(): Promise<boolean> {
       writeSafe(REFRESH_TOKEN_KEY, data.refreshToken);
       lastAcceptedRefreshToken = data.refreshToken;
       currentMigration = { status: 'none' };
-      getFeishuService().token.setJwt(data.accessToken);
       scheduleRefresh(data.accessToken);
       // Push updated migration snapshot down to renderer via auth:state-change
       notifyRenderer();

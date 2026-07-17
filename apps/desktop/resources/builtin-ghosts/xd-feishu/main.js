@@ -1,11 +1,11 @@
 /**
- * XD Feishu · 电子脑 —— 内置的飞书服务意识(登录态令牌模式,仅 open.feishu.cn)。
+ * XD Feishu · 电子脑 —— 内置的飞书服务意识(OAuth 授权模式,仅 open.feishu.cn)。
  *
  * 工作方式:
  * - 域名白名单代发:cindy.fetch 只能到 ghost.json 声明的 open.feishu.cn,请求由
- *   主机代发,沙箱零直连;user access token 取自主机飞书登录态
- *   (source:'login-feishu-token',主机自动刷新),本文件没有也不可能有任何
- *   token 字节——用户用飞书登录即用,零配置;
+ *   主机代发,沙箱零直连;user access token 来自设置页「连接账号」的 OAuth 授权
+ *   (source:'oauth' + tokenBroker:'feishu',code 换 token 与刷新经 Cindy 服务端
+ *   broker,app secret 不随包分发),本文件没有也不可能有任何 token 字节;
  * - 工具面 = 两段式目录(FORGE_GUIDE §3.5):只声明 list_tools / call_tool 两个
  *   元工具,44 个精品操作 + 100+ 只读直通接口按类目放在本文件的 OPS 表里——与老
  *   lizi_feishu MCP 的渐进式外形一致(recommended / more 两组),主 agent 零学习
@@ -60,7 +60,7 @@ function sleep(ms) {
  */
 function classifyFeishu(status, code, msg) {
   if (code === 99991668 || code === 99991672 || status === 401) {
-    return '飞书登录态已失效——请用户退出登录后重新用飞书登录(主机会自动刷新令牌,若反复出现请重新登录)';
+    return '飞书授权已失效——请到本意识设置页重新点「连接账号」完成飞书授权(令牌平时由主机自动刷新,反复出现说明授权已被撤销或过期)';
   }
   if (code === 99991400 || status === 429) {
     return '飞书接口限流,请稍后重试';

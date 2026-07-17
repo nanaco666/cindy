@@ -1,12 +1,6 @@
 import type { Schedule, ScriptCapability } from '@lizi/maker-scheduler';
-import {
-  createFeishuMcpServerWithRegistry,
-  type FeishuToolRegistry,
-  type FeishuToolResult,
-} from 'lizi-mcps';
 
 import { getGhostPipeDispatcher } from '../cindy-brain/index.js';
-import { getFeishuService } from '../mcp-integrations/feishu.js';
 import { tryGetOrcaCollabService } from '../maker-ipc/register.js';
 import type { ScriptCapabilityBroker, ScriptCapabilityCall } from './script-runner';
 // model 兜底与 runner 同源(2026-06 曾因多份拷贝不同步导致 UI 显示与实跑模型不一致)
@@ -54,33 +48,22 @@ function rejectHostOwnedParams(params: Record<string, unknown>, keys: string[]):
   }
 }
 
-// 惰性单例:与 agent 会话走的 lizi_feishu MCP 完全同源(同一 FeishuService deps、
-// 同一工具实现与 zod 校验),只是绕过 MCP transport 直接 registry.call。
-let feishuRegistry: FeishuToolRegistry | null = null;
-function getFeishuToolRegistry(): FeishuToolRegistry {
-  if (!feishuRegistry) {
-    feishuRegistry = createFeishuMcpServerWithRegistry(getFeishuService().toMcpDeps()).registry;
-  }
-  return feishuRegistry;
-}
-
-/** 把 FeishuToolResult(MCP content 形态)解包回 JSON;isError 时抛结构化错误。 */
-function unwrapFeishuResult(result: FeishuToolResult): unknown {
-  const text = result.content.find((block) => block.type === 'text') as { text?: string } | undefined;
-  let parsed: unknown = undefined;
-  try {
-    parsed = text?.text ? JSON.parse(text.text) : undefined;
-  } catch {
-    parsed = text?.text;
-  }
-  if (result.isError) {
-    const body = parsed as { errorCode?: string; message?: string; data?: { message?: string } } | undefined;
-    fail(
-      typeof body?.errorCode === 'string' ? body.errorCode : 'FEISHU_ERROR',
-      body?.message ?? body?.data?.message ?? 'feishu tool call failed',
-    );
-  }
-  return parsed;
+/**
+ * 飞书能力走 xd-feishu 意识 ghost pipe(2026-07-17 起,与 callJira 同套路):
+ * 主机飞书 token 链已随 refresh-feishu 退役,工具真身与凭证(OAuth broker)
+ * 都在意识侧。意识 call_tool 的交付形状是 { data } 包裹(超大结果为
+ * saved_to / truncated 形态)——这里解开 data,保持脚本可见形状与老
+ * registry 直调一致;非 data 形态原样透传(自带 hint,脚本能看懂)。
+ */
+async function callFeishu(name: string, args: Record<string, unknown>): Promise<unknown> {
+  const result = await getGhostPipeDispatcher().callGhostTool({
+    ghostId: 'xd-feishu',
+    tool: 'call_tool',
+    args: { name, args },
+  });
+  if (!result.ok) fail(result.errorCode, result.message);
+  const payload = result.result as { data?: unknown } | null | undefined;
+  return payload && typeof payload === 'object' && 'data' in payload ? payload.data : payload;
 }
 
 async function callJira(args: Record<string, unknown>): Promise<unknown> {
@@ -185,15 +168,14 @@ export class SchedulerScriptCapabilityBroker implements ScriptCapabilityBroker {
         ) {
           fail('INVALID_ARGS', 'count must be an integer between 1 and 50');
         }
-        const result = await getFeishuToolRegistry().call('im_list_chats', {
+        return callFeishu('im_list_chats', {
           sort_type: 'ByActiveTimeDesc',
           page_size: chatCount ?? 20,
         });
-        return unwrapFeishuResult(result);
       }
       case 'feishu.recent_messages': {
-        // 拉某个飞书会话(群/单聊)最近 N 条消息,新→旧;实现直调 lizi_feishu 的
-        // im_read_messages(含 sender_name 解析),供轮询型脚本按消息驱动后续动作。
+        // 拉某个飞书会话(群/单聊)最近 N 条消息,新→旧;实现走 xd-feishu 意识
+        // 的 im_read_messages(含 sender_name 解析),供轮询型脚本按消息驱动后续动作。
         requireCapability(granted, 'feishu.read');
         const count = params.count;
         if (
@@ -206,13 +188,12 @@ export class SchedulerScriptCapabilityBroker implements ScriptCapabilityBroker {
         if (startTime !== undefined && typeof startTime !== 'string' && typeof startTime !== 'number') {
           fail('INVALID_ARGS', 'start_time must be a Unix timestamp or ISO string');
         }
-        const result = await getFeishuToolRegistry().call('im_read_messages', {
+        return callFeishu('im_read_messages', {
           container_id: requireString(params, 'chat_id'),
           ...(count === undefined ? {} : { page_size: count }),
           // 增量扫描游标:只取该时刻之后的消息(配本地已处理游标去重)
           ...(startTime === undefined ? {} : { start_time: String(startTime) }),
         });
-        return unwrapFeishuResult(result);
       }
       case 'sessions.dispatch': {
         requireCapability(granted, 'sessions.dispatch');

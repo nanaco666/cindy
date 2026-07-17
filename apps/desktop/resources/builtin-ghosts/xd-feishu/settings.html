@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <!-- 飞书意识自定义设置区(意识自绘,cindy-ghost:// 沙箱页)。
-     本意识零配置:凭证 = 主机飞书登录态的 user access token
-     (source:'login-feishu-token',主机现取现注入并自动刷新),没有任何
-     输入项——本页只做身份说明 + 「测试连接」。测试由电子脑代跑:本页
+     凭证 = 设置页凭证区「连接账号」的 OAuth 授权(source:'oauth' +
+     tokenBroker:'feishu',授权/换 token/刷新全在主机与 Cindy 服务端,
+     本页没有任何输入项——只做说明 + 「测试连接」。测试由电子脑代跑:本页
      fetch('/wake') 叫醒电子脑,经 BroadcastChannel 递活,电子脑 cindy.fetch
      GET /open-apis/authen/v1/user_info(令牌由主机注入)后把姓名广播回来
      ——本页零网络直连,token 字节不经过任何可读回的地方。 -->
@@ -48,7 +48,7 @@
     <span class="name">飞书账号</span>
     <span class="badge">open.feishu.cn</span>
   </div>
-  <p class="note">直接使用你的飞书登录身份,无需配置——令牌由主机保管并自动刷新,插件代码接触不到。退出登录或切换账号后,这里跟着变。</p>
+  <p class="note">在上方凭证区点「连接账号」完成飞书授权即可使用——令牌由主机与 Cindy 服务端托管并自动刷新,插件代码接触不到。断开或重新授权后,这里跟着变。</p>
   <div id="account"></div>
   <div class="input-row">
     <button id="test" class="btn" type="button">测试连接</button>

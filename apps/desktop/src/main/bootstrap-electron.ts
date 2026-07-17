@@ -123,7 +123,6 @@ import {
   registerRsbBrowserBridgeIpc,
   registerTabOpResultHandler,
 } from './rsb-browser-bridge';
-import { getFeishuService } from './mcp-integrations/feishu.js';
 import { disposeAndroidAdb } from './mcp-integrations/android.js';
 import { shutdownCodexEnvironment } from './mcp-integrations/codexEnvironment.js';
 import { fetchRemoteMediaImageBytes } from './device-link/remoteMediaProtocol';
@@ -4610,9 +4609,19 @@ app.on('ready', async () => {
   registerGlobalVoiceInputIpc();
   // 老 'usage:get-today-spend' 已退役 —— renderer 走 maker:usage:today('claude-code') 拉。
   // readTodaySpend 仍在 main/usageBroadcaster.ts 内部被 readAgentTodayUsage 用。
-  // feishu service: token init reads disk RT (lazy-creates singleton; the
-  // onJwtRefreshNeeded callback is wired at construction in mcp-integrations/feishu.ts)
-  await getFeishuService().token.init();
+  // 主机飞书 token 链已退役(2026-07-17):飞书授权改由 xd-feishu 意识经
+  // OAuth broker 自持。老登录链留在磁盘的飞书 refresh token 一次性清掉
+  // (凭证卫生:该 RT 已无任何消费方,不留死凭证)。幂等,失败仅告警。
+  try {
+    fs.unlinkSync(path.join(app.getPath('userData'), 'safe-storage', 'feishu_refresh_token.enc'));
+    createLogger('feishu-legacy-cleanup').info('legacy feishu refresh token removed (host feishu token chain retired)');
+  } catch (err) {
+    // ENOENT = 从未有过或已清,静默;其它错误(Windows EPERM/EBUSY 等)告警,
+    // 下次启动重试(best-effort,不阻断)。
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      createLogger('feishu-legacy-cleanup').warn('legacy feishu refresh token removal failed:', err);
+    }
+  }
   // IM channels (lizi-im): 完全独立 workspace 包，跟随 app 生命周期。
   // 注册 IPC handlers 必须在 init 之前——init 失败时 emit 的状态事件依赖 IPC bridge 转发。
   // IPC handlers 必须无条件注册:用户在 Settings 页保存凭证时, renderer 走这些
@@ -4653,12 +4662,7 @@ app.on('ready', async () => {
 
   // ── System resume: refresh tokens after sleep/hibernate ──
   powerMonitor.on('resume', () => {
-    // JWT first — feishu refresh depends on a valid JWT
     authManager.handleResume();
-    // Give JWT refresh a moment to complete, then refresh feishu token.
-    // doRefresh() internally also has a fallback (401 → JWT callback → retry),
-    // so even if timing is imperfect it will still recover.
-    setTimeout(() => getFeishuService().token.handleResume(), 2000);
   });
 
   // Memory diagnostics — dev only, log per-process memory every 30s
@@ -4688,7 +4692,7 @@ app.on('ready', async () => {
 // Sync 阶段: 同步触发, 不等结果。只放真正同步的清理 (释放本地句柄 / 取消定时器)。
 //   - reap-claude-children: 必须在 shutdown-maker 之前同步完成；SDK abort 掐掉
 //     claude.exe 后 Windows 上子进程会被 reparent 到 System, PPID 链断了就无法安全识别。
-//   - authManager / feishu token / google auth: 同步释放定时器+回调引用。
+//   - authManager / google auth: 同步释放定时器+回调引用。
 //     注意 token.dispose() 只清内存状态, 不删盘上的 refresh token (那是 logout 干的)。
 // interrupted-turn-resume:退出编排一启动就冻结「turn 在飞」标记的写入 —— 否则
 // 下方 shutdown-maker 关 session 触发的 markSessionTurnEnded 会把"退出时还在飞
@@ -4697,7 +4701,6 @@ app.on('ready', async () => {
 onQuit('session-active-turn-freeze', () => { freezeSessionActiveTurnMarkers(); }, 'sync');
 onQuit('reap-claude-children', () => { reapClaudeOrphansSync(); }, 'sync');
 onQuit('auth-manager', () => authManager.dispose(), 'sync');
-onQuit('feishu-token', () => getFeishuService().token.dispose(), 'sync');
 onQuit('app-badge-clear', () => clearAllSessionAttention(), 'sync');
 // 自带 adb 的常驻 server 守护进程随退出收掉(fire-and-forget detached spawn,
 // 不阻塞)。不收会一直锁安装目录里的 adb.exe,弄挂增量更新(os error 32)。

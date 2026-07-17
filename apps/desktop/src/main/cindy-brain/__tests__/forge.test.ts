@@ -162,8 +162,6 @@ describe('FORGE_GUIDE', () => {
       'exchange',
       'tokenPath',
       'login-email',
-      // 飞书登录态令牌(2026-07-16,lizi_feishu 意识化前置):主机现取注入。
-      'login-feishu-token',
       // 多连接(connections,2026-07-14):声明形态 / 设置页协议 / 主机受信确认。
       'connections',
       '/connections',

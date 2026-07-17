@@ -179,12 +179,11 @@ export function createLiziMcpProviders(
   }
 
   // lizi_feishu 已于 2026-07-16 摘壳:飞书全部能力(44 精品 + 123 只读直通)
-  // 迁入内置意识 xd-feishu(source:'login-feishu-token' 登录态凭证,主机
-  // 现取现注入零迁移)。与 web-search/mivo 不同,feishu 后端(feishu/ 目录、
-  // FeishuTokenManager、registry)**留任**——scheduler 脚本 capability broker
-  // (desktop scheduler-host/script-capability-broker.ts)仍经 registry 直调
-  // 工具实现,登录 token 刷新链仍由 authManager 驱动(与 lizi_art 同模式:
-  // 壳下线、后端留任)。
+  // 迁入内置意识 xd-feishu。2026-07-17 起授权也切到意识 OAuth broker
+  // (source:'oauth' + tokenBroker:'feishu'),主机 token 刷新链与 scheduler
+  // registry 直调均已退役——feishu/ 目录只剩死代码待整删,唯一仍有用的是
+  // mcp/generated 的 vendored OpenAPI 定义(scripts/gen-feishu-ghost-ops.mts
+  // 烘焙意识直通面的源),整删时注意保留或搬家。
 
   // lizi_mivo 已于 2026-07-13 退役:mivo 全部 13 工具(图/视频/音乐/音效/3D
   // 生成、格式转换、按钮动作、下载)整体迁入内置意识 xd-mivo(network 槽

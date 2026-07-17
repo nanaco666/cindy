@@ -92,12 +92,21 @@ function createHarness() {
 }
 
 describe('builtin xd-feishu ghost', () => {
-  it('ghost.json 过 validateGhostManifest,凭证是 login-feishu-token 单条', () => {
+  it('ghost.json 过 validateGhostManifest,凭证是 oauth + tokenBroker:feishu 单条', () => {
     const v = validateGhostManifest(rawManifest);
     expect(v.ok, v.ok ? '' : v.reason).toBe(true);
     if (!v.ok) return;
-    expect(v.manifest.network?.hosts).toEqual(['open.feishu.cn']);
-    expect(v.manifest.network?.secrets?.map((s) => s.source)).toEqual(['login-feishu-token']);
+    // accounts.feishu.cn 只为 oauth.authorizeUrl 的白名单校验而列;Bearer 注入
+    // 仍由 inject.hosts 钳在 open.feishu.cn。
+    expect(v.manifest.network?.hosts).toEqual(['open.feishu.cn', 'accounts.feishu.cn']);
+    const secret = v.manifest.network?.secrets?.[0];
+    expect(v.manifest.network?.secrets).toHaveLength(1);
+    expect(secret?.source).toBe('oauth');
+    expect(secret?.oauth?.tokenBroker).toBe('feishu');
+    // PKCE 缺省开(飞书 broker exchange 吃 codeVerifier);refresh token 依赖
+    // offline_access scope,漏了会被 server 按 502 打回。
+    expect(secret?.oauth?.pkce).not.toBe(false);
+    expect(secret?.oauth?.scopes).toContain('offline_access');
     expect(v.manifest.tools?.map((t) => t.name)).toEqual(['list_tools', 'call_tool']);
   });
 

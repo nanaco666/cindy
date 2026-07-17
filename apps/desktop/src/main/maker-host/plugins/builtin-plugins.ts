@@ -52,9 +52,9 @@ const BUILTIN_META: BuiltinPluginMeta[] = [
   // slack 已于 2026-07-15 退役:Slack 官方 MCP 能力整体迁入内置意识 cindy-slack
   // (老账号由 slackAccountsMigration 无感搬账),不再是 MCP 插件。
   // feishu 已于 2026-07-16 摘壳:飞书 OpenAPI 能力(44 精品 + 123 只读直通)
-  // 迁入内置意识 xd-feishu(登录态凭证,零配置零迁移),不再是 MCP 插件;
-  // feishu 后端(token 刷新链 + 工具 registry)留任主机,服务 scheduler 脚本
-  // capability broker 与登录体系(与 lizi_art 同模式:壳下线、后端留任)。
+  // 迁入内置意识 xd-feishu,不再是 MCP 插件;2026-07-17 起授权也切到意识
+  // OAuth broker(tokenBroker:'feishu'),主机 token 刷新链与 scheduler
+  // registry 直调一并退役(scheduler 飞书方法改走 ghost pipe)。
   // 注意 feishu_bot(bot 出站通道)是另一套东西,不受影响、继续留任。
 ];
 
