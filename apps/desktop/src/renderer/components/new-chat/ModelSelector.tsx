@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tip } from '@/components/ui/tooltip';
 import { ClaudeMark } from '@/components/icons/ClaudeMark';
 import { CodexMark } from '@/components/icons/CodexMark';
-import { CindyAIMark } from '@/components/icons/CindyAIMark';
+import { XDIncMark } from '@/components/icons/XDIncMark';
 import { FastModeToggle } from './FastModeToggle';
 import { useAgentCapabilities, type AgentKind } from '@/hooks/useAgentCapabilities';
 import { useApiKey } from '@/hooks/useApiKey';
@@ -90,7 +90,12 @@ export function ProviderMark({
     case 'openai':
       return <CodexMark size={markSize} className={common} />;
     case 'xd':
-      return <CindyAIMark size={markSize} className={common} />;
+      return (
+        <XDIncMark
+          size={markSize}
+          className={cn(dense ? 'h-[8.4px] w-[14.2px]' : 'h-[9px] w-[15px]', common)}
+        />
+      );
     default:
       if (!name) return null;
       // 自定义供应商:首字母描边方盒(border 跟随 currentColor = colorClass 设定的文字色)。
