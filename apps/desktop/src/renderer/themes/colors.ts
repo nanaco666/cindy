@@ -1722,7 +1722,59 @@ registerColor('create-agent-send-bg-pressed', {
   light: '#25282C',
   dark: '#D4D4D4',
 }, 'CREATE AGENT send button neutral pressed bg');
+registerColor('create-agent-send-disabled-bg', {
+  light: '#EDEDED',
+  dark: '#444242',
+}, 'CREATE AGENT send button disabled bg');
+registerColor('create-agent-send-disabled-icon', {
+  light: '#9A9DA3',
+  dark: '#585555',
+}, 'CREATE AGENT send button disabled icon');
 registerColor('create-agent-focus-ring', {
   light: '#417CDD',
   dark: '#417CDD',
 }, 'CREATE AGENT control focus ring');
+registerColor('create-agent-quick-card-bg', {
+  light: '#F8F8F8',
+  dark: '#312F2F',
+}, 'CREATE AGENT quick-start card background');
+registerColor('create-agent-quick-card-border', {
+  light: '#DCDFE3',
+  dark: '#434343',
+}, 'CREATE AGENT quick-start card border');
+registerColor('create-agent-quick-card-text', {
+  light: '#3C3F43',
+  dark: '#D4D4D4',
+}, 'CREATE AGENT quick-start card text');
+registerColor('create-agent-quick-card-icon-bg', {
+  light: '#EDEDED',
+  dark: '#2A2828',
+}, 'CREATE AGENT quick-start icon circle background');
+registerColor('create-agent-quick-card-icon', {
+  light: '#3C3F43',
+  dark: '#D4D4D4',
+}, 'CREATE AGENT quick-start icon');
+registerColor('create-agent-avatar-ring', {
+  light: 'rgba(255, 255, 255, 0.08)',
+  dark: 'rgba(255, 255, 255, 0.08)',
+}, 'CREATE AGENT lockup avatar outer ring');
+registerColor('sidebar-nav-text', {
+  light: '#3C3F43',
+  dark: '#D4D4D4',
+}, 'CINDY sidebar top nav icon / text');
+registerColor('sidebar-list-muted', {
+  light: '#9A9DA3',
+  dark: '#6F6F6F',
+}, 'CINDY sidebar section and project list muted text');
+registerColor('sidebar-user-card-bg', {
+  light: 'rgba(255, 255, 255, 0.20)',
+  dark: 'rgba(255, 255, 255, 0.05)',
+}, 'CINDY sidebar user capsule background');
+registerColor('sidebar-user-card-border', {
+  light: 'rgba(60, 63, 67, 0.10)',
+  dark: 'rgba(255, 255, 255, 0.13)',
+}, 'CINDY sidebar user capsule border');
+registerColor('sidebar-user-card-text', {
+  light: '#3C3F43',
+  dark: '#D4D4D4',
+}, 'CINDY sidebar user capsule text and icon');

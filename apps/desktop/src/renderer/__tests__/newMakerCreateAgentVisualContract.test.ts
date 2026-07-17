@@ -27,10 +27,19 @@ const modelSelectorSource = readFileSync(
   resolve(__dirname, '..', 'components', 'new-chat', 'ModelSelector.tsx'),
   'utf8',
 );
-const colorsSource = readFileSync(
-  resolve(__dirname, '..', 'themes', 'colors.ts'),
+const userInfoSectionSource = readFileSync(
+  resolve(__dirname, '..', 'components', 'sidebar', 'UserInfoSection.tsx'),
   'utf8',
 );
+const sidebarTopNavSource = readFileSync(
+  resolve(__dirname, '..', 'components', 'sidebar', 'SidebarTopNav.tsx'),
+  'utf8',
+);
+const vendorIconSource = readFileSync(
+  resolve(__dirname, '..', 'components', 'sidebar', 'VendorIcon.tsx'),
+  'utf8',
+);
+const colorsSource = readFileSync(resolve(__dirname, '..', 'themes', 'colors.ts'), 'utf8');
 
 describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
   it('keeps the approved CREATE AGENT shell while preserving the functional composer', () => {
@@ -54,6 +63,13 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(source).not.toContain('surface-translucent-sidebar');
     expect(source).not.toContain('agent-island-annie');
     expect(source).toContain('cindy-avatar-lockup.png');
+  });
+
+  it('centers the CREATE AGENT content group without reintroducing route chrome', () => {
+    expect(source).toContain('items-center justify-start');
+    expect(source).toContain('pt-[clamp(96px,25.5vh,268px)]');
+    expect(source).toContain('relative flex w-full max-w-[637px] flex-col items-start');
+    expect(source).toContain('absolute right-0 top-[22px]');
   });
 
   it('preserves New Maker behavior-critical props on ChatInput', () => {
@@ -91,7 +107,8 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
       'onExtraDirsChange={handleExtraDirsChange}',
       'onNewGoal={(text) =>',
       'rememberedEffortByModel={isDeviceLinkDraft ? undefined : draft.effortByModel}',
-      'onRememberedEffortChange={isDeviceLinkDraft ? undefined : handleRememberedEffortChange}',
+      'onRememberedEffortChange={',
+      'isDeviceLinkDraft ? undefined : handleRememberedEffortChange',
       'placeholder="Hi Cindy!"',
       'middleToolbarSlot={',
     ]) {
@@ -108,6 +125,21 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(source).not.toContain('boxShadow');
   });
 
+  it('uses exact CREATE AGENT quick-start and avatar tokens from the Figma slices', () => {
+    expect(source).toContain('border-[var(--create-agent-avatar-ring)]');
+    expect(source).toContain('h-[44.55px] w-[44.55px]');
+    expect(source).toContain('bg-[var(--create-agent-quick-card-bg)]');
+    expect(source).toContain('border-[var(--create-agent-quick-card-border)]');
+    expect(source).toContain('text-[var(--create-agent-quick-card-text)]');
+    expect(source).toContain('bg-[var(--create-agent-quick-card-icon-bg)]');
+    expect(source).toContain('text-[var(--create-agent-quick-card-icon)]');
+
+    expect(colorsSource).toContain("'create-agent-quick-card-icon-bg'");
+    expect(colorsSource).toContain("light: '#EDEDED'");
+    expect(colorsSource).toContain("dark: '#2A2828'");
+    expect(colorsSource).toContain("'create-agent-avatar-ring'");
+  });
+
   it('keeps global sidebar chrome out of the route body', () => {
     expect(source).not.toContain('TODO-E4D');
     expect(source).not.toContain('cindy-avatar-account.png');
@@ -120,39 +152,76 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(source).toContain('text-[var(--create-agent-control-icon)]');
     expect(source).toContain('visualVariant="create-agent"');
 
-    expect(chatInputSource).toContain("visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}");
+    expect(chatInputSource).toContain(
+      "visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}",
+    );
     expect(chatInputSource).toContain('focus-within:border-[var(--create-agent-focus-ring)]');
+    const permissionSelectorIndex = chatInputSource.indexOf('<PermissionSelector');
+    const middleToolbarSlotIndex = chatInputSource.indexOf('{middleToolbarSlot}');
+    const modelSelectorIndex = chatInputSource.indexOf('<ModelSelector');
+    expect(middleToolbarSlotIndex).toBeGreaterThan(permissionSelectorIndex);
+    expect(middleToolbarSlotIndex).toBeLessThan(modelSelectorIndex);
 
     expect(sendButtonSource).toContain('bg-[var(--create-agent-send-bg)]');
     expect(sendButtonSource).toContain('text-[var(--create-agent-send-icon)]');
     expect(sendButtonSource).toContain('hover:bg-[var(--create-agent-send-bg-hover)]');
     expect(sendButtonSource).toContain('active:bg-[var(--create-agent-send-bg-pressed)]');
+    expect(sendButtonSource).toContain('function CreateAgentSendIcon');
+    expect(sendButtonSource).toContain('fill="currentColor"');
+    expect(sendButtonSource).toContain('bg-[var(--create-agent-send-disabled-bg)]');
+    expect(sendButtonSource).toContain('text-[var(--create-agent-send-disabled-icon)]');
 
     expect(vendorSwitcherSource).toContain('bg-[var(--create-agent-segment-track-bg)]');
     expect(vendorSwitcherSource).toContain('text-[var(--create-agent-segment-inactive-text)]');
     expect(vendorSwitcherSource).toContain('border-[var(--create-agent-control-border)]');
 
     expect(permissionSelectorSource).toContain('border-[var(--create-agent-control-border)]');
+    expect(permissionSelectorSource).toContain('min-w-[90px] w-fit max-w-[220px]');
+    expect(permissionSelectorSource).toContain('max-w-[172px] whitespace-nowrap');
     expect(modelSelectorSource).toContain('border-[var(--create-agent-control-border)]');
+    expect(modelSelectorSource).toContain('min-w-[100px] w-fit max-w-[260px]');
+    expect(modelSelectorSource).toContain('max-w-[148px] whitespace-nowrap');
+    expect(modelSelectorSource).toContain('max-w-[72px] whitespace-nowrap');
 
-    expect(colorsSource).toContain("registerColor('create-agent-send-bg'");
+    expect(colorsSource).toContain("'create-agent-send-bg'");
     expect(colorsSource).toContain("light: '#3C3F43'");
     expect(colorsSource).toContain("dark: '#EEEEEE'");
-    expect(colorsSource).toContain("registerColor('create-agent-send-icon'");
+    expect(colorsSource).toContain("'create-agent-send-icon'");
     expect(colorsSource).toContain("light: '#FCFCFC'");
-    expect(colorsSource).toContain("registerColor('create-agent-send-bg-hover'");
+    expect(colorsSource).toContain("'create-agent-send-bg-hover'");
     expect(colorsSource).toContain("light: '#2E3237'");
     expect(colorsSource).toContain("dark: '#E2E2E2'");
-    expect(colorsSource).toContain("registerColor('create-agent-send-bg-pressed'");
+    expect(colorsSource).toContain("'create-agent-send-bg-pressed'");
     expect(colorsSource).toContain("light: '#25282C'");
     expect(colorsSource).toContain("dark: '#D4D4D4'");
-    expect(colorsSource).toContain("registerColor('create-agent-segment-inactive-text'");
+    expect(colorsSource).toContain("'create-agent-send-disabled-bg'");
+    expect(colorsSource).toContain("dark: '#444242'");
+    expect(colorsSource).toContain("'create-agent-send-disabled-icon'");
+    expect(colorsSource).toContain("dark: '#585555'");
+    expect(colorsSource).toContain("'create-agent-segment-inactive-text'");
     expect(colorsSource).toContain("light: '#9A9DA3'");
     expect(colorsSource).toContain("dark: '#6F6F6F'");
-    expect(colorsSource).toContain("registerColor('create-agent-control-border'");
+    expect(colorsSource).toContain("'create-agent-control-border'");
     expect(colorsSource).toContain("light: '#DCDFE3'");
     expect(colorsSource).toContain("dark: '#434343'");
-    expect(colorsSource).toContain("registerColor('create-agent-control-icon'");
+    expect(colorsSource).toContain("'create-agent-control-icon'");
     expect(colorsSource).toContain("light: '#3C3F43'");
+  });
+
+  it('aligns the real sidebar colors and user capsule with the CREATE AGENT Figma frame', () => {
+    expect(sidebarTopNavSource).toContain('text-[var(--sidebar-nav-text)]');
+    expect(vendorIconSource).toContain('text-[var(--sidebar-list-muted)]');
+
+    expect(userInfoSectionSource).toContain(
+      'rounded-full border border-[var(--sidebar-user-card-border)]',
+    );
+    expect(userInfoSectionSource).toContain('bg-[var(--sidebar-user-card-bg)]');
+    expect(userInfoSectionSource).toContain('text-[var(--sidebar-user-card-text)]');
+
+    expect(colorsSource).toContain("'sidebar-nav-text'");
+    expect(colorsSource).toContain("'sidebar-list-muted'");
+    expect(colorsSource).toContain("'sidebar-user-card-bg'");
+    expect(colorsSource).toContain('rgba(255, 255, 255, 0.20)');
+    expect(colorsSource).toContain('rgba(255, 255, 255, 0.05)');
   });
 });

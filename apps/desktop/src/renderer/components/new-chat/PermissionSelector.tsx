@@ -115,7 +115,7 @@ export function PermissionSelector({
               'flex min-w-0 items-center gap-1 rounded-full transition-colors',
               isCreateAgentVariant
                 ? [
-                    'h-[30px] max-w-[90px] border border-[var(--create-agent-control-border)]',
+                    'h-[30px] min-w-[90px] w-fit max-w-[220px] border border-[var(--create-agent-control-border)]',
                     'bg-[var(--create-agent-control-bg)] py-0 pl-2.5 pr-2 text-[var(--create-agent-control-text)]',
                     'hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)]',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
@@ -125,18 +125,27 @@ export function PermissionSelector({
                     'bg-transparent text-[var(--model-trigger-text)]',
                     'hover:bg-[var(--model-trigger-hover)]',
                   ],
-              !isCreateAgentVariant && triggerTone === 'auto' && 'text-[var(--perm-auto-selected-text)]',
-              !isCreateAgentVariant && triggerTone === 'bypassPermissions' &&
+              !isCreateAgentVariant &&
+                triggerTone === 'auto' &&
+                'text-[var(--perm-auto-selected-text)]',
+              !isCreateAgentVariant &&
+                triggerTone === 'bypassPermissions' &&
                 'text-[var(--perm-bypass-selected-text)]',
               disabled && 'pointer-events-none opacity-50',
             )}
             aria-label={t('newChat.permissionSelector.triggerAria', { label: triggerLabel })}
           >
-            <TriggerIcon size={isCreateAgentVariant ? 11 : dense ? 13 : 14} className="shrink-0 text-current" />
+            <TriggerIcon
+              size={isCreateAgentVariant ? 11 : dense ? 13 : 14}
+              className="shrink-0 text-current"
+            />
             <span
               className={cn(
                 // min-w-0 让 span 能在 flex 容器里跌破内容宽度,truncate 才能在窄宽下出现 "完..."
-                'min-w-0 max-w-[160px] truncate font-normal text-current',
+                'min-w-0 font-normal text-current',
+                isCreateAgentVariant
+                  ? 'max-w-[172px] whitespace-nowrap'
+                  : 'max-w-[160px] truncate',
                 isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
               )}
             >

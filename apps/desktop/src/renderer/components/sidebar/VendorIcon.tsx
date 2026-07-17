@@ -30,7 +30,7 @@ export function VendorIcon({ vendor, size = 12, running = false, className }: Ve
     'inline-flex shrink-0',
     running
       ? 'text-[var(--status-bar-accent)] session-status-breathing'
-      : 'text-[hsl(var(--sidebar-muted))]',
+      : 'text-[var(--sidebar-list-muted)]',
     className,
   );
 

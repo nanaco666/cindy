@@ -17,6 +17,19 @@ interface SendButtonProps {
   visualVariant?: 'default' | 'create-agent';
 }
 
+function CreateAgentSendIcon() {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      className="h-3.5 w-3.5"
+      fill="currentColor"
+    >
+      <path d="M2.6 3.35a1 1 0 0 1 1.08-.13l17.2 8a.88.88 0 0 1 0 1.56l-17.2 8A1 1 0 0 1 2.3 19.6l2.04-6.44L13 12 4.34 10.84 2.3 4.4a1 1 0 0 1 .3-1.05Z" />
+    </svg>
+  );
+}
+
 /**
  * Send / Stop button — 对标 cc-agent-view.pen
  *
@@ -49,7 +62,9 @@ export const SendButton = forwardRef<HTMLButtonElement, SendButtonProps>(functio
         highlighted && !disabled && !isStreaming && 'opacity-85',
         disabled &&
           !isStreaming &&
-          'cursor-not-allowed bg-[var(--send-btn-disabled-bg)] text-[var(--send-btn-disabled-icon)] opacity-40',
+          (isCreateAgentVariant
+            ? 'cursor-not-allowed bg-[var(--create-agent-send-disabled-bg)] text-[var(--create-agent-send-disabled-icon)]'
+            : 'cursor-not-allowed bg-[var(--send-btn-disabled-bg)] text-[var(--send-btn-disabled-icon)] opacity-40'),
       )}
       aria-label={ariaLabel ?? (isStreaming ? t('newChat.sendButton.stop') : t('newChat.sendButton.send'))}
     >
@@ -58,8 +73,10 @@ export const SendButton = forwardRef<HTMLButtonElement, SendButtonProps>(functio
           className="block h-[10px] w-[10px] rounded-[1.5px] bg-[var(--stop-btn-icon)]"
           aria-hidden
         />
+      ) : isCreateAgentVariant ? (
+        <CreateAgentSendIcon />
       ) : (
-        <ArrowUp size={isCreateAgentVariant ? 11 : 16} />
+        <ArrowUp size={16} />
       )}
     </button>
   );

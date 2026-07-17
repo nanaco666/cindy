@@ -4355,7 +4355,6 @@ export function ChatInput({
               dense={effectiveDenseToolbar}
               visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
             />
-            {middleToolbarSlot}
           </div>
           <div
             className={cn(
@@ -4365,6 +4364,7 @@ export function ChatInput({
               effectiveCompactToolbar && 'shrink-0 justify-end',
             )}
           >
+            {middleToolbarSlot}
             {collaboration && (
               <CollaborationModeToggle
                 enabled={collaboration.enabled}

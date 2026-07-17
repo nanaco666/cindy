@@ -254,7 +254,7 @@ export function ProjectNode({
           // h-8 + rounded-full:hover 底与顶部导航行 / 会话行同款药丸形,三处
           // 高度、圆角、左右边界(同容器 w-full)完全一致(2026-07 用户定稿)。
           'group flex h-8 w-full items-center gap-2.5 rounded-full pl-3 pr-1',
-          'text-sm font-normal text-[var(--cmd-palette-item-meta)]',
+          'text-sm font-normal text-[var(--sidebar-list-muted)]',
           // 整行点击 = toggle 折叠，常态用 pointer。即便支持手动拖拽排序也不显示
           // grab 光标——只有真正进入拖拽时（SortableList onStart 给 body 挂
           // .xdt-sorting → 全局 grabbing）才切到拖动光标，避免"hover 上去就像在拖动"。
@@ -266,7 +266,7 @@ export function ProjectNode({
         <FolderIcon
           size={15}
           strokeWidth={1.8}
-          className="shrink-0 text-[var(--cmd-palette-item-meta)]"
+          className="shrink-0 text-[var(--sidebar-list-muted)]"
         />
         {/* 名字 + remote icon 同组占据 flex-1：名字截断在前、icon 紧跟其后，
             hover 工具组仍被推到行右端。icon 悬浮显示 host / device（能力不变）。 */}
