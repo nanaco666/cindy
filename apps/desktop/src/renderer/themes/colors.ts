@@ -949,9 +949,9 @@ registerColor('status-bar-accent', {
 // 此前橙徽章借用 accent-pure-cta-fg(白字)→ #FFFFFF×#FF6600=2.94:1 不达标;
 // 拆独立 token 走深字(=text-primary/text-primary-inv),× status-bar-accent ≥4.5:1。
 registerColor('status-badge-fg', {
-  light: 'var(--text-primary)',
-  dark: 'var(--text-primary-inv)',
-}, '状态徽章前景(橙底深字,§7 必炸点:× status-bar-accent ≥4.5:1)');
+  light: 'var(--accent-pure-cta-fg)',
+  dark: 'var(--accent-pure-cta-fg)',
+}, '状态徽章前景(§7 必炸点;default 镜像 accent-pure-cta-fg 保证既有 9 主题零变化,CINDY override #1F1F1F)');
 registerColor('status-bar-meta', {
   light: 'var(--text-secondary)',
   dark: 'var(--text-secondary)',
