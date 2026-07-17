@@ -17,6 +17,7 @@ const VALID_MANIFEST = {
   slackHookWsUrl: 'wss://slack-hook.example.com',
   websiteUrl: 'https://www.example.com',
   modelAccessApiBaseUrl: 'https://model-access.example.com',
+  githubApiBaseUrl: 'https://github-api.example.com',
   cdnBaseUrl: 'https://cdn.example.com/app',
   mobileUpdateBaseUrl: 'https://mobile-update.example.com',
 };

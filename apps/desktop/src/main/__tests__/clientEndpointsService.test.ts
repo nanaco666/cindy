@@ -50,6 +50,7 @@ const FULL_MANIFEST = JSON.stringify({
   slackHookWsUrl: 'wss://hook.remote.example.com',
   websiteUrl: 'https://www.remote.example.com',
   modelAccessApiBaseUrl: 'https://model-access.remote.example.com',
+  githubApiBaseUrl: 'https://github-api.remote.example.com',
   cdnBaseUrl: 'https://cdn.remote.example.com/app',
   mobileUpdateBaseUrl: 'https://mobile-update.remote.example.com',
 });

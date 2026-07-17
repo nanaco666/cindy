@@ -29,6 +29,7 @@ const FULL_MANIFEST_OBJECT = {
   slackHookWsUrl: 'wss://hook-next.example.com',
   websiteUrl: 'https://www.next.example.com',
   modelAccessApiBaseUrl: 'https://model-access-next.example.com',
+  githubApiBaseUrl: 'https://github-api-next.example.com',
   cdnBaseUrl: 'https://cdn-next.example.com/app',
   mobileUpdateBaseUrl: 'https://mobile-update-next.example.com',
 };

@@ -9,6 +9,7 @@
   "slackHookWsUrl": "wss://slack-hook.cindy.com.cn",
   "websiteUrl": "https://cindy.com.cn",
   "modelAccessApiBaseUrl": "https://model-access.cindy.com.cn",
+  "githubApiBaseUrl": "https://github.cindy.com.cn",
   "cdnBaseUrl": "https://hotfix.cindy.com.cn/cindy",
   "mobileUpdateBaseUrl": "https://mobile-update.cindy.com.cn",
   "review": false

@@ -74,6 +74,8 @@ export const CLIENT_ENDPOINT_KEYS = [
   'websiteUrl',
   // model-access-server(登录后自动下发 LLM 网关凭据)的 API 基址。
   'modelAccessApiBaseUrl',
+  // github-server(用户反馈 → 官方仓 GitHub issue 的薄代理)的 API 基址。
+  'githubApiBaseUrl',
   // 更新/hotfix 链的 CDN base(manifest-*.json / hotfix 包 / agent 二进制)。
   'cdnBaseUrl',
   // 自建线手机整包发现的 mobile-update-server 基址(`${base}/latest`)。仅
@@ -116,6 +118,7 @@ const FIELD_PROTOCOLS: Record<ClientEndpointKey, readonly string[]> = {
   slackHookWsUrl: ['wss:'],
   websiteUrl: ['https:'],
   modelAccessApiBaseUrl: ['https:'],
+  githubApiBaseUrl: ['https:'],
   cdnBaseUrl: ['https:'],
   mobileUpdateBaseUrl: ['https:'],
 };

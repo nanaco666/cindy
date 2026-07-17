@@ -11,6 +11,7 @@ import os from 'node:os';
 import { app } from 'electron';
 
 import { serverApiFetch } from '../serverApiClient';
+import { getClientEndpoint } from '../clientEndpointsService';
 import type { IssueConfirmBridge } from './issueConfirmBridge';
 import {
   submitGithubIssueWithConfirm,
@@ -44,7 +45,13 @@ export async function submitGithubIssueForSession(
       postIssue: (body) =>
         serverApiFetch<{ githubIssue: { number: number; url: string } }>(
           '/api/github/issues',
-          { method: 'POST', body },
+          {
+            method: 'POST',
+            body,
+            // 独立部署的 github-server(cindy-server 仓);登录 JWT 验签与
+            // auth-server 同侧,serverApiFetch 的 Bearer 注入/401 刷新照常生效。
+            baseUrl: getClientEndpoint('githubApiBaseUrl'),
+          },
         ),
       getAppVersion: () => app.getVersion(),
       getOsInfo: () => ({
