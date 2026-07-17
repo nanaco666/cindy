@@ -9,7 +9,7 @@
 
 - **本仓没有 `apps/server` / `apps/heartbeat-server`**。下文规则 17 的 server（Prisma）段与规则 19（docker compose 白名单）仅在 `cindy-server` 仓工作时适用，保留在此作为同一套工程口径的参照。
 - **本地 server 由相邻的 `cindy-server` checkout 提供**：`pnpm dev:server` 会定位 `../cindy-server`（或 `XDT_SERVER_REPO` 指定的路径）并执行其 `dev:server`；server 侧 `.env` 配置以该仓文档为准。原单仓的 `pnpm dev:all` 在本仓不存在。
-- **工作流**：默认直接在当前分支工作，不主动开分支；先保留用户已有改动，禁止用破坏性 Git 命令覆盖工作区；功能完成后跑与风险匹配的验证、提交前对整体 diff review 一次；验证和 review 通过后创建本地 commit，把结果与 commit 信息交给用户确认，**只有用户明确确认后才能 push**（「提 PR」节的测试与对抗性 review 门禁仍然适用，push 本身必须经用户确认）。
+- **工作流**：尊重宿主和开发者选择的 Git 隔离方式。cwd 已是会话级 / 任务级 worktree 时直接复用，禁止再嵌套创建；cwd 不是任务 worktree 时按用户级 Git workflow 决定是否另建；未配置该 workflow 时先向用户确认，不要直接修改 checkout。不要把新任务混进已有脏 checkout，也不要用破坏性 Git 命令覆盖用户改动。功能完成后跑与风险匹配的验证、提交前对整体 diff review 一次；验证和 review 通过后创建本地 commit，把结果与 commit 信息交给用户确认，**只有用户明确确认后才能 push**（「提 PR」节的测试与对抗性 review 门禁仍然适用，push 本身必须经用户确认）。
 - **SQLite migration 迁移基线**：从旧仓迁入的 SQL 由 `drizzle/migration-baseline.json` 固定 SHA256；数据库变化只能追加新 migration，并运行 `pnpm --filter desktop db:validate` 与 migration replay。本地数据库查询必须使用异步 API；不要对异步 DB client 使用同步 `.all()`。
 - **main 进程禁止运行时动态 `import()`**；依赖使用顶层静态 import。
 - **协议 submodule**：`cindy-protocol` 是协议权威来源。desktop 使用 `@cindy/slack-hook-protocol`，客户端 device-link 包复用 `@cindy/device-link-protocol` 的 relay 层定义；客户端重连、IPC allowlist 与隧道 payload 留在 `packages/device-link`。**升级 submodule 指针前必须确认 `cindy-server` 同步升级**，避免两端 wire protocol 漂移。
