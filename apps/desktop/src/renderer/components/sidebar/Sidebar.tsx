@@ -24,6 +24,7 @@ import type { SidebarPeekDrawerProps, SidebarPeekState } from '@/hooks/useSideba
 import { useMacFullscreen } from '@/hooks/useMacFullscreen';
 import { useFeatureSidebarUpper } from '@/features/feature-context';
 import { ConversationSearchProvider } from '@/features/cc-agent/sidebar/conversationSearchContext';
+import { CHROME_ACTIONS_GEOMETRY } from '@/components/layout/chromeActionsGeometry';
 import { SidebarTopNav } from './SidebarTopNav';
 import { UpdateBanner } from './UpdateBanner';
 import { UserInfoSection } from './UserInfoSection';
@@ -77,7 +78,10 @@ export function Sidebar({
   // 按钮簇钉死左上角(mac 非全屏 78 让位红绿灯,其余 8),不随侧栏状态移动,
   // 洞跟随同一坐标(见 ChromeActions 的 x 计算)。
   const { isMac, isFullscreen } = useMacFullscreen();
-  const chromeClusterX = isMac && !isFullscreen ? 78 : 8;
+  const chromeClusterX =
+    isMac && !isFullscreen
+      ? CHROME_ACTIONS_GEOMETRY.macTrafficLightLeft
+      : CHROME_ACTIONS_GEOMETRY.defaultLeft;
 
   // peek 抽屉态(fixed overlay,不占流内布局)。矩形与正常展开态逐像素一致,
   // 因此 pin 时(pinning → idle)fixed↔static 的交换帧不产生视觉跳变。
@@ -179,8 +183,14 @@ export function Sidebar({
         <div
           aria-hidden
           // 60px = 折叠按钮 28 + gap 4 + 菜单 28(ChromeActions 簇宽)。
-          className="h-full w-[60px] shrink-0"
-          style={{ marginLeft: chromeClusterX, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+          className="h-full shrink-0"
+          style={
+            {
+              width: CHROME_ACTIONS_GEOMETRY.clusterWidth,
+              marginLeft: chromeClusterX,
+              WebkitAppRegion: 'no-drag',
+            } as React.CSSProperties
+          }
         />
       </div>
 
