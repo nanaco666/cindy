@@ -311,7 +311,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'status-badge-fg': { light: '#1F1F1F', dark: '#1F1F1F' }, // §7 必炸点(lead 裁决)
   'surface-translucent-sidebar': { light: 'rgba(255, 255, 255, 0.80)', dark: 'rgba(18, 15, 15, 0.60)' }, // 用户观感定稿 2026-07-18
   'surface-translucent-main': { light: '#EDEDED', dark: '#2A2828' }, // E4D 主面板:用户勘误 2026-07-17 撤销毛玻璃,改不透明等价 surface(原 rgba 半透明)
-  'surface-translucent-overlay': { light: 'rgba(255, 255, 255, 0.80)', dark: 'rgba(37, 35, 35, 0.80)' }, // E4D R1 模式3
+  'surface-translucent-overlay': { light: 'rgba(246, 246, 246, 0.90)', dark: 'rgba(37, 35, 35, 0.80)' }, // E4D R1 模式3
   'composer-pill-bg': { light: '#FCFCFC', dark: '#393838' }, // E2 composer pill 底(取代 glass-pill-bg)
   'composer-pill-icon': { light: '#3C3F43', dark: '#D9D9D9' }, // E2 composer pill 图标
 };
