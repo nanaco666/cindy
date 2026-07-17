@@ -24,6 +24,7 @@ import {
   AuthApiError,
   CindyAuthClient,
   reduceAuthFlow,
+  ssoOrgDiscoveryToMethods,
   type AuthFlowState,
   type AuthMembership,
   type AuthRegion,
@@ -1056,6 +1057,19 @@ async function runLoginAction(action: DesktopLoginAction): Promise<DesktopLoginA
       loginFlowState = reduceAuthFlow(loginFlowState, {
         type: 'discovery-loaded',
         email,
+        methods: discoveredMethods,
+      });
+      return { success: true, state: loginFlowState };
+    }
+
+    // 企业 SSO 入口（按企业 ID/组织 slug）：结果映射进 method-choice，
+    // 使 start-browser 的 connectionId 白名单校验与连接选择 UI 直接复用。
+    if (action.type === 'discover-sso-org') {
+      const discovery = await client.discoverSsoOrg(action.org.trim().toLowerCase());
+      discoveredMethods = ssoOrgDiscoveryToMethods(discovery);
+      loginFlowState = reduceAuthFlow(loginFlowState, {
+        type: 'discovery-loaded',
+        email: '',
         methods: discoveredMethods,
       });
       return { success: true, state: loginFlowState };

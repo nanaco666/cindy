@@ -23,6 +23,12 @@ const messages = {
     personalLogin: '以个人身份登录',
     emailCode: '发送邮箱验证码',
     ssoRequired: '该组织要求使用企业 SSO 登录。',
+    ssoEntry: '使用企业 SSO 登录',
+    ssoOrgTitle: '企业 SSO 登录',
+    ssoOrgSubtitle: '输入企业 ID，跳转到你所在企业的单点登录。',
+    ssoOrgPlaceholder: '请输入企业 ID',
+    ssoOrgHint: '不知道企业 ID？请联系企业管理员。',
+    ssoOrgDetected: '选择企业「{org}」的单点登录方式',
     enterCode: '输入验证码',
     codeSentTo: '验证码已发送至',
     codePlaceholder: '6 位验证码',
@@ -65,6 +71,12 @@ const messages = {
     personalLogin: 'Sign in with a personal account',
     emailCode: 'Send an email code',
     ssoRequired: 'Your organization requires enterprise SSO.',
+    ssoEntry: 'Sign in with enterprise SSO',
+    ssoOrgTitle: 'Enterprise SSO',
+    ssoOrgSubtitle: 'Enter your company ID to continue with single sign-on.',
+    ssoOrgPlaceholder: 'Enter your company ID',
+    ssoOrgHint: "Don't know your company ID? Ask your admin.",
+    ssoOrgDetected: 'Choose a single sign-on connection for "{org}"',
     enterCode: 'Enter verification code',
     codeSentTo: 'We sent a code to',
     codePlaceholder: '6-digit code',
@@ -156,6 +168,10 @@ const authErrorMessages: Record<string, { zh: string; en: string }> = {
   AUTH_REQUEST_FAILED: {
     zh: '登录服务暂时不可用，请稍后重试。',
     en: 'The sign-in service is temporarily unavailable.',
+  },
+  ORG_SSO_NOT_FOUND: {
+    zh: '未找到该企业，或该企业未启用 SSO 登录。',
+    en: 'Company not found, or it has no SSO connection enabled.',
   },
 };
 

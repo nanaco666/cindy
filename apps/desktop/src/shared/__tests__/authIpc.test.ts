@@ -30,6 +30,13 @@ describe('desktop auth IPC validation', () => {
         email: 'a'.repeat(321),
       }),
     ).toBeNull();
+    expect(
+      parseDesktopLoginAction({
+        type: 'discover-sso-org',
+        org: 'a'.repeat(65),
+      }),
+    ).toBeNull();
+    expect(parseDesktopLoginAction({ type: 'discover-sso-org', org: '' })).toBeNull();
   });
 
   it('accepts each non-browser action shape', () => {
@@ -38,6 +45,9 @@ describe('desktop auth IPC validation', () => {
       type: 'cancel-browser',
     });
     expect(parseDesktopLoginAction({ type: 'discover', email: 'user@example.com' })).not.toBeNull();
+    expect(
+      parseDesktopLoginAction({ type: 'discover-sso-org', org: 'acme', extra: 'x' }),
+    ).toEqual({ type: 'discover-sso-org', org: 'acme' });
     expect(
       parseDesktopLoginAction({
         type: 'request-code',

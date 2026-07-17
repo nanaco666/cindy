@@ -30,6 +30,20 @@ export const providerConfigSchema = z.object({
 });
 export type ProviderConfig = z.infer<typeof providerConfigSchema>;
 
+/** 企业 SSO discovery（POST /api/auth/sso/discovery，按企业 ID/组织 slug 探测）。 */
+export const ssoOrgConnectionSchema = z.object({
+  connectionId: z.string().min(1),
+  protocol: z.enum(["oidc", "saml", "cas"]),
+  connectionName: z.string(),
+});
+export type SsoOrgConnection = z.infer<typeof ssoOrgConnectionSchema>;
+
+export const ssoOrgDiscoverySchema = z.object({
+  orgName: z.string(),
+  connections: z.array(ssoOrgConnectionSchema).min(1),
+});
+export type SsoOrgDiscovery = z.infer<typeof ssoOrgDiscoverySchema>;
+
 export const loginMethodSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("email_code") }),
   z.object({
@@ -42,6 +56,23 @@ export const loginMethodSchema = z.discriminatedUnion("type", [
   }),
 ]);
 export type LoginMethod = z.infer<typeof loginMethodSchema>;
+
+/**
+ * 把企业 SSO discovery 结果映射成 LoginMethod 列表，复用 method-choice 步骤
+ * 渲染连接选择（ssoRequired=false：入口本身即用户主动选 SSO，无需再提示强制）。
+ */
+export function ssoOrgDiscoveryToMethods(
+  discovery: SsoOrgDiscovery,
+): LoginMethod[] {
+  return discovery.connections.map((connection) => ({
+    type: "sso" as const,
+    connectionId: connection.connectionId,
+    protocol: connection.protocol,
+    orgName: discovery.orgName,
+    connectionName: connection.connectionName,
+    ssoRequired: false,
+  }));
+}
 
 export const tokenPairSchema = z.object({
   accessToken: z.string().min(1),

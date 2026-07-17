@@ -34,6 +34,17 @@ describe('auth login-flow reset', () => {
     expect(source).not.toContain('setJwt(');
   });
 
+  it('registers enterprise-id SSO discovery into the start-browser connection whitelist', () => {
+    // 企业 ID discovery 的连接必须写入 discoveredMethods:start-browser 的
+    // connectionId 校验以它为白名单,漏写会让该入口发起的 SSO 全部 404。
+    const start = source.indexOf("if (action.type === 'discover-sso-org') {");
+    expect(start).toBeGreaterThan(-1);
+    const body = source.slice(start, source.indexOf('\n    }', start));
+    expect(body).toContain('discoveredMethods = ssoOrgDiscoveryToMethods(discovery)');
+    expect(body).toContain("type: 'discovery-loaded'");
+    expect(body).toContain("email: ''");
+  });
+
   it('does not leave expired private tickets on a screen that can only reuse them', () => {
     expect(source).toContain("'INVALID_LOGIN_TICKET',");
     expect(source).toContain("'INVALID_BIND_TICKET',");
