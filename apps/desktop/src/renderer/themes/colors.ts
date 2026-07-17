@@ -614,6 +614,14 @@ registerColor('send-btn-icon', {
   light: 'var(--surface-on-card)',
   dark: 'var(--surface-on-card)',
 }, 'Send button — grayscale pill');
+registerColor('send-btn-hover-bg', {
+  light: 'var(--send-btn-bg)',
+  dark: 'var(--send-btn-bg)',
+}, 'Send button hover background');
+registerColor('send-btn-pressed-bg', {
+  light: 'var(--send-btn-bg)',
+  dark: 'var(--send-btn-bg)',
+}, 'Send button pressed background');
 registerColor('send-btn-disabled-bg', {
   light: 'var(--surface-elevated-soft)',
   dark: 'var(--surface-elevated-soft)',

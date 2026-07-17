@@ -94,6 +94,10 @@ const overrides = {
   'settings-menu-bg-selected': '#2F2D2D', // menu selected
   'settings-source-link': '#93C5FD', // 可访问链接蓝
   'settings-theme-auto-dark': '#2A2828', // Auto 预览 dark 固定
+  'send-btn-bg': '#EEEEEE', // 红色新规:常规发送按钮反相中性
+  'send-btn-icon': '#252222', // 反相中性图标
+  'send-btn-hover-bg': '#E2E2E2', // 反相中性 hover
+  'send-btn-pressed-bg': '#D4D4D4', // 反相中性 pressed
   'sidebar-action-icon': '216.0 4.1% 75.9%', // AA action icon
   'sidebar-item-active': '352.3 89.8% 46.1%', // active 品牌红
   'sidebar-item-active-foreground': '#D4D4D4', // active 红底前景
