@@ -14,7 +14,9 @@ const HOOK = `
     # ${HOOK_MARKER}(clang 只按 modulemap 所在目录解析 header 相对路径,拷到 SDK 头文件旁)
     require 'fileutils'
     wechat_mm = File.expand_path('../../modules/xdt-wechat-login/ios/WechatOpenSDK/module.modulemap', installer.sandbox.root.to_s)
-    Dir[File.join(installer.sandbox.root.to_s, 'WechatOpenSDK', '*', 'WXApi.h')].each do |header|
+    wechat_headers = Dir[File.join(installer.sandbox.root.to_s, 'WechatOpenSDK', '*', 'WXApi.h')]
+    raise 'xdt-wechat-login: Pods/WechatOpenSDK 下未找到 WXApi.h,无法落位 module.modulemap(SDK 目录布局变了?)' if wechat_headers.empty?
+    wechat_headers.each do |header|
       FileUtils.cp(wechat_mm, File.join(File.dirname(header), 'module.modulemap'))
     end
 `;
