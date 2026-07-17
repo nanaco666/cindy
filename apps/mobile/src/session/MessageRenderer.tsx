@@ -3379,6 +3379,12 @@ function MessagePayloadModal({
   const styles = useThemedStyles(makeStyles);
   const [payloadCopyState, setPayloadCopyState] = useState<PayloadHeaderCopyState>('idle');
   const payloadCopySeqRef = useRef(0);
+  // iOS 上 presentationStyle="fullScreen" 的 Modal 在独立 UIWindow + slide 呈现动画期间
+  // 就挂载 body,此刻 WKWebView 尚未稳定 attach,页面内的网络加载(mermaid 的 CDN 注入
+  // 脚本、媒体播放器资源)会失败——mermaid 停在源码不渲染。故把 body 内的 WebView
+  // (mermaid / 音视频播放器分支)延迟到 onShow(呈现动画完成、WebView 已 attach)之后
+  // 再挂载;关闭时复位,保证每次打开重新 gate。
+  const [contentReady, setContentReady] = useState(false);
   const payloadSummary = useMemo(
     () => payload ? summarizeMessagePayload(payload) : null,
     [payload],
@@ -3412,6 +3418,11 @@ function MessagePayloadModal({
   }, [payloadSummary?.copyableText]);
 
   useEffect(() => {
+    // Modal 关闭(payload 清空)后复位 gating,下次打开经 onShow 重新置 true。
+    if (!payload) setContentReady(false);
+  }, [payload]);
+
+  useEffect(() => {
     if (payloadCopyState === 'idle' || payloadCopyState === 'copying') return;
     const timer = setTimeout(() => setPayloadCopyState('idle'), 1500);
     return () => clearTimeout(timer);
@@ -3441,6 +3452,9 @@ function MessagePayloadModal({
     <Modal
       animationType="slide"
       onRequestClose={onClose}
+      // onShow 与 visible 翻 false 有竞态窗口(极快开关,同 useModalFadeLifecycle):
+      // 已经在关就别再置 ready,否则迟到事件会让下一次打开跳过 gating。
+      onShow={() => { if (payload) setContentReady(true); }}
       presentationStyle="fullScreen"
       visible={!!payload}
     >
@@ -3546,6 +3560,7 @@ function MessagePayloadModal({
         {payload ? (
           <View style={styles.payloadViewerBody} testID="message.payloadViewerBody">
             <MessagePayloadBody
+              contentReady={contentReady}
               onReadTextFilePreview={onReadTextFilePreview}
               onReleaseRemoteMedia={onReleaseRemoteMedia}
               onResolveRemoteMedia={onResolveRemoteMedia}
@@ -3612,11 +3627,15 @@ function payloadHeaderDetailText(
 }
 
 function MessagePayloadBody({
+  contentReady,
   payload,
   onReadTextFilePreview,
   onReleaseRemoteMedia,
   onResolveRemoteMedia,
 }: {
+  // Modal 呈现动画完成(onShow)后才为 true;mermaid / 音视频播放器的 WebView 延迟到
+  // 此刻再挂载,规避 iOS fullScreen Modal 独立 UIWindow 未 attach 时页内网络加载失败。
+  contentReady: boolean;
   payload: MessagePayload;
   onReadTextFilePreview?: (filePath: string) => Promise<RemoteTextFilePreviewResult>;
   onReleaseRemoteMedia?: (sourceUrl: string, media: MobileResolvedRemoteMedia) => void;
@@ -3695,15 +3714,22 @@ function MessagePayloadBody({
       <View style={styles.payloadBody}>
         {canInlinePlayer && playerKind ? (
           <View style={[styles.payloadMediaPlayerFrame, { minHeight: payloadLayout.mediaFrameMinHeight }]}>
-            <RemoteMediaPlayerWebView
-              kind={playerKind}
-              mimeType={resolved?.mimeType}
-              onStatusChange={setPlayerStatus}
-              style={[styles.payloadMediaPlayer, { minHeight: payloadLayout.mediaPlayerMinHeight }]}
-              testID="message.remoteMediaPlayer"
-              title={payload.title}
-              url={displayUrl}
-            />
+            {/* 与 mermaid 分支同一问题:iOS fullScreen Modal 呈现动画期 WebView 未 attach,
+                内页资源加载会失败。延迟到 onShow 后挂载;占位 View 撑住同一 minHeight,
+                状态文案位置不跳变。 */}
+            {contentReady ? (
+              <RemoteMediaPlayerWebView
+                kind={playerKind}
+                mimeType={resolved?.mimeType}
+                onStatusChange={setPlayerStatus}
+                style={[styles.payloadMediaPlayer, { minHeight: payloadLayout.mediaPlayerMinHeight }]}
+                testID="message.remoteMediaPlayer"
+                title={payload.title}
+                url={displayUrl}
+              />
+            ) : (
+              <View style={[styles.payloadMediaPlayer, { minHeight: payloadLayout.mediaPlayerMinHeight }]} />
+            )}
             <Text style={styles.payloadMediaPlayerStatus} testID="message.remoteMediaPlayerStatus">
               {formatMediaPlayerStatus(playerStatus, playerKind)}
             </Text>
@@ -3780,11 +3806,18 @@ function MessagePayloadBody({
             padding: payloadLayout.bodyPadding,
           },
         ]}>
-          <MermaidDiagramWebView
-            height={payloadLayout.mermaidHeight}
-            source={payload.body}
-            testID="message.payloadMermaidDiagram"
-          />
+          {/* 延迟到 Modal onShow(WebView 已 attach)后挂载,否则 iOS 上 CDN 注入失败
+              停在源码。未就绪时用同尺寸同 chip 面的静态占位盒,挂载瞬间无跳变;
+              源码 ScrollView 始终可见,等待仅一次呈现动画时长。 */}
+          {contentReady ? (
+            <MermaidDiagramWebView
+              height={payloadLayout.mermaidHeight}
+              source={payload.body}
+              testID="message.payloadMermaidDiagram"
+            />
+          ) : (
+            <View style={[styles.payloadMermaidPlaceholder, { height: payloadLayout.mermaidHeight }]} />
+          )}
         </View>
         <ScrollView
           style={[styles.payloadScroll, { maxHeight: payloadLayout.textScrollMaxHeight }]}
@@ -5163,6 +5196,14 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     flex: 1,
     minHeight: 360,
     padding: spacing.lg,
+  },
+  // contentReady 前的静态占位:复刻 MermaidDiagramWebView 容器的 chip 面
+  // (背景/hairline 边框/圆角),挂载瞬间只有内容出现、表面不凭空冒出。
+  payloadMermaidPlaceholder: {
+    backgroundColor: colors.surfaceChip,
+    borderColor: colors.border,
+    borderRadius: radius.container,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   payloadMediaPlayerFrame: {
     backgroundColor: colors.surfaceChip,
