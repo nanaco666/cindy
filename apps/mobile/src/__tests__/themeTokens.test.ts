@@ -66,17 +66,20 @@ describe('theme tokens', () => {
     expect(lightColors.statusRecording).toBe('#ef4444');
   });
 
-  it('CTA 契约:品牌红 #DF0C27 底 + #FFFFFF 字,L=D 同值,对比度 ≥4.5:1(U3+U8 批准)', () => {    // 契约变更依据:CINDY 色板经 U3(全量替换语义)+U8(token 决策表)批准——
-    // 此前"dark CTA 反相为白 pill"守护作废,改为红底白字 L=D 同值。
-    // 这是对旧反相断言的显式契约改写,不是绕过;PR 描述须写明依据。
-    expect(lightColors.cta).toBe('#DF0C27');
-    expect(darkColors.cta).toBe('#DF0C27');
-    expect(lightColors.ctaText).toBe('#FFFFFF');
-    expect(darkColors.ctaText).toBe('#FFFFFF');
-    // 红底白字实测 4.98:1,过 AA 普通文本门槛 4.5:1。
-    for (const palette of [lightColors, darkColors]) {
-      expect(contrastRatio(palette.ctaText, palette.cta)).toBeGreaterThanOrEqual(4.5);
-    }
+  it('CTA 契约:中性反相(light 深底浅字 / dark 浅底深字),对比度 ≥4.5:1(用户红色新规 2026-07-17)', () => {
+    // 契约第二次改写依据:用户红色新规 2026-07-17——常规按钮不用红,红只留警告/报错。
+    // 取代 U3+U8 时期的全态红契约(M2 的 cta=#DF0C27 L=D 红底白字作废),CTA 回归中性反相。
+    // 这是显式契约改写,非绕过;PR 描述须写明依据。
+    expect(lightColors.cta).toBe('#3C3F43');
+    expect(darkColors.cta).toBe('#EEEEEE');
+    expect(lightColors.ctaText).toBe('#FCFCFC');
+    expect(darkColors.ctaText).toBe('#252222');
+    // 亮暗反相回归:dark cta ≠ light cta(深底 ↔ 浅底)。
+    expect(darkColors.cta).not.toBe(lightColors.cta);
+    expect(darkColors.ctaText).not.toBe(lightColors.ctaText);
+    // 中性反相对比度:light 10.32:1 / dark 13.60:1,过 AA 普通文本门槛 4.5:1。
+    expect(contrastRatio(lightColors.ctaText, lightColors.cta)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(darkColors.ctaText, darkColors.cta)).toBeGreaterThanOrEqual(4.5);
   });
 
   it('毛玻璃 token 契约(R1 audit 模式1/3,E4M 新增 surfaceTranslucentSidebar / surfaceGlassPanel)', () => {

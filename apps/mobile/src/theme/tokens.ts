@@ -40,7 +40,7 @@ export interface ThemeColors {
   textSecondary: string;
   /** 三级文字 / placeholder / metadata */
   textTertiary: string;
-  /** CTA / 主操作填充 —— 品牌红 #DF0C27,L=D 同值(U3+U8 批准,不再 dark 反相) */
+  /** CTA / 主操作填充 —— 中性反相(常规按钮非红;红只留警告/报错。用户红色新规 2026-07-17,取代 U3+U8 全态红契约) */
   cta: string;
   /** CTA 上的文字 */
   ctaText: string;
@@ -95,7 +95,7 @@ export interface ThemeColors {
 
 /**
  * Default Light —— CINDY 色板(决策表 PRE-2 / U3+U8 批准)。
- * 直映:背景/卡片/边框/正文/二级信息/品牌红 CTA;插值档按决策表 §2(sRGB 每通道 round)。
+ * 直映:背景/卡片/边框/正文/二级信息;CTA 中性反相(常规按钮非红,红只留警告/报错)。插值档按决策表 §2(sRGB 每通道 round)。
  * 二级信息色 #9A9DA3 为 U2 裁决忠于 Figma 原值,实测 2.32-2.56:1 低于 AA,进显式例外。
  * borderStrong/errorBorder 取表内 AA 中性强调灰 #686B72(与 text-tertiary/ask-checkbox-border/
  * file-remove-bg 同源,非表内直落 id;lead 2026-07-17 确认采纳,errorBorder 跟随)。
@@ -113,8 +113,8 @@ export const lightColors: ThemeColors = {
   textPrimary: '#3C3F43',
   textSecondary: '#9A9DA3',
   textTertiary: '#686B72',
-  cta: '#DF0C27',
-  ctaText: '#FFFFFF',
+  cta: '#3C3F43',
+  ctaText: '#FCFCFC',
   statusReady: '#00D9C5',
   statusRecording: '#ef4444',
   statusAccent: '#FF6600',
@@ -137,8 +137,9 @@ export const lightColors: ThemeColors = {
 
 /**
  * Default Dark —— CINDY 色板(决策表 PRE-2 / U3+U8 批准)。
- * CTA 不再反相为白 pill,改为品牌红 #DF0C27 + 白字(L=D 同值,4.98:1 过 AA)——
- * 打破此前 dark/light CTA 反相守护,themeTokens.test.ts 契约已同步改写(见 M2)。
+ * CTA 回归中性反相:light 深底 #3C3F43 + 浅字 #FCFCFC / dark 浅底 #EEEEEE + 深字 #252222
+ * (对比度 10.32/13.60 过 AA)——用户红色新规 2026-07-17:常规按钮非红,红只留警告/报错,
+ * 取代 U3+U8 时期的全态红契约;themeTokens.test.ts 契约第二次改写(见 E1M)。
  * borderStrong/errorBorder 取表内 AA 中性强调灰 #BFC1C4(与 text-tertiary/ask-checkbox-border
  * 同源,非表内直落 id;lead 2026-07-17 确认采纳,errorBorder 跟随)。
  */
@@ -155,8 +156,8 @@ export const darkColors: ThemeColors = {
   textPrimary: '#D4D4D4',
   textSecondary: '#6F6F6F',
   textTertiary: '#BFC1C4',
-  cta: '#DF0C27',
-  ctaText: '#FFFFFF',
+  cta: '#EEEEEE',
+  ctaText: '#252222',
   statusReady: '#00D9C5',
   statusRecording: '#ef4444',
   statusAccent: '#FF6600',

@@ -78,6 +78,7 @@
   "notes": [
     "webview HTML 生成器(mathWebViewHtml/mermaidWebViewHtml/mediaPlayerWebViewHtml/selectableMarkdownHtml)经 grep 无 hex 字面量——主题色运行时由 useTheme 注入,无需豁免,无需迁移,CINDY 后自动跟随。",
     "app.json android.adaptiveIcon.backgroundColor #F70121 属原生层,U9 不做原生品牌化,不改不迁,仅事实登记(见 M2 报告 §4)。",
-    "E4M 毛玻璃:BlurBackdrop(BlurView + surfaceTranslucentSidebar tint)用于 SheetModal/SessionActionSheet backdrop;sheet surface 用 surfaceGlassPanel token。全部走 token,无新增硬编码色字面量,本豁免文件无需追加条目。session chrome/composer 刻意 blur-free(守护测试禁 BlurView,走 solid surfaceTranslucent);ImageLightbox 保持纯黑(媒体查看器惯例)。"
+    "E4M 毛玻璃:BlurBackdrop(BlurView + surfaceTranslucentSidebar tint)用于 SheetModal/SessionActionSheet backdrop;sheet surface 用 surfaceGlassPanel token。全部走 token,无新增硬编码色字面量,本豁免文件无需追加条目。session chrome/composer 刻意 blur-free(守护测试禁 BlurView,走 solid surfaceTranslucent);ImageLightbox 保持纯黑(媒体查看器惯例)。",
+    "E1M CTA 翻转:cta 由 M2 的品牌红 #DF0C27 改回中性反相(light #3C3F43/#FCFCFC、dark #EEEEEE/#252222),常规按钮不再用红(用户红色新规 2026-07-17)。本豁免文件的红项(ANNOTATION_STROKE_COLOR #FF3B30 标注、listperf #fbbf24 debug、adaptiveIcon #F70121 原生)逐条复核:均为标注/debug/原生,非常规按钮,维持红不变;warning/error 类(destructive #f43d3f、statusError #ef4444)走 token 保留红。无新增/移除豁免条目。"
   ]
 }
