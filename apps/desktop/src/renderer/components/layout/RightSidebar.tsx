@@ -222,21 +222,23 @@ export const RightSidebar = forwardRef<RightSidebarHandle, RightSidebarProps>(fu
             className="h-[46px] shrink-0 flex-none border-b border-[var(--border-default)] bg-[var(--panel-bg)]"
             style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
           >
-            {/* 工具面板位于布局树首位且会话侧栏收起时，本顶带会落在
-                ChromeActions 浮层下方。no-drag 必须是 drag 元素的后代，才能
-                为两个左上按钮可靠挖洞；位置和宽度与浮层共用同一几何约束。 */}
-            <div
-              aria-hidden
-              data-testid="right-sidebar-chrome-actions-hit-hole"
-              className="h-full shrink-0"
-              style={
-                {
-                  width: CHROME_ACTIONS_GEOMETRY.clusterWidth,
-                  marginLeft: CHROME_ACTIONS_GEOMETRY.defaultLeft,
-                  WebkitAppRegion: 'no-drag',
-                } as React.CSSProperties
-              }
-            />
+            {/* 仅当工具面板位于布局树首位时，本顶带才会落在 ChromeActions
+                浮层下方。no-drag 必须是 drag 元素的后代，才能为两个左上按钮
+                可靠挖洞；常规右侧布局不渲染，保留整条顶栏的窗口拖拽能力。 */}
+            {panelSide === 'left' && (
+              <div
+                aria-hidden
+                data-testid="right-sidebar-chrome-actions-hit-hole"
+                className="h-full shrink-0"
+                style={
+                  {
+                    width: CHROME_ACTIONS_GEOMETRY.clusterWidth,
+                    marginLeft: CHROME_ACTIONS_GEOMETRY.defaultLeft,
+                    WebkitAppRegion: 'no-drag',
+                  } as React.CSSProperties
+                }
+              />
+            )}
           </div>
         )}
         <RightSidebarShell
