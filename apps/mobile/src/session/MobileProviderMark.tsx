@@ -1,22 +1,20 @@
 /**
  * MobileProviderMark —— provider-aware 模型下拉里每行前缀 / trigger 药丸的「来源徽标」。
  *
- * 对齐桌面 ProviderMark:三个内置供应商用**官方单色 mark**(Claude / Codex / XD,path 与桌面
- * 同源,见 components/vendorIconPaths),其它(自定义供应商)回退首字母 monogram。与桌面的
+ * 对齐桌面 ProviderMark:三个内置供应商用**官方单色 mark**(Claude / Codex / CindyAI,path 与
+ * 桌面同源,见 components/vendorIconPaths),其它(自定义供应商)回退首字母 monogram。与桌面的
  * 一处刻意差异:monogram 容器沿用 pill 圆角(桌面是 4px 方盒)——手机圆角走二元规则
- * (container/pill),不引入中间值。XD mark 非正方形(158:282),渲染时在 size×size 盒内
- * 垂直居中,保证与正方形 mark 同行对齐。
+ * (container/pill),不引入中间值。
  */
 import { StyleSheet, View } from 'react-native';
 import { Text } from '@/components/AppText';
 import Svg, { Path } from 'react-native-svg';
 
 import {
+  CINDYAI_PATH,
+  CINDYAI_VIEW_BOX,
   CLAUDE_PATH,
   CODEX_PATH,
-  XD_ASPECT,
-  XD_SYMBOL_PATHS,
-  XD_VIEW_BOX,
 } from '@/components/vendorIconPaths';
 import { useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 import { fontWeight as fontWeightToken, radius, typeScale } from '@/theme/tokens';
@@ -86,18 +84,14 @@ export function MobileProviderMark({ providerId, name, color }: MobileProviderMa
           </Svg>
         </View>
       );
-    case 'xd': {
-      const w = glyph + 2; // XD mark 横长,宽给一点补偿才与正方形 mark 视觉等重。
+    case 'xd':
       return (
         <View accessible={false} style={styles.markBox}>
-          <Svg width={w} height={w * XD_ASPECT} viewBox={XD_VIEW_BOX}>
-            {XD_SYMBOL_PATHS.map((p) => (
-              <Path key={p} d={p} fill={fill} />
-            ))}
+          <Svg width={glyph} height={glyph} viewBox={CINDYAI_VIEW_BOX}>
+            <Path d={CINDYAI_PATH} fill={fill} />
           </Svg>
         </View>
       );
-    }
     default:
       return (
         <View style={styles.monogram}>

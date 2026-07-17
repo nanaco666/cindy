@@ -35,7 +35,7 @@ import { CustomProviderDialog } from './CustomProviderDialog';
 import { Switch } from '@/components/ui/switch';
 import { ClaudeMark } from '@/components/icons/ClaudeMark';
 import { CodexMark } from '@/components/icons/CodexMark';
-import { XDIncMark } from '@/components/icons/XDIncMark';
+import { CindyAIMark } from '@/components/icons/CindyAIMark';
 import { groupModelsForDisplay, CATEGORY_LABEL_KEY } from '@/components/new-chat/sourceSwitch';
 import {
   isModelEnabled,
@@ -956,7 +956,7 @@ function XdGatewayRow({ provider, onChanged }: { provider?: ProviderView; onChan
 
   return (
     <ProviderCell
-      icon={<XDIncMark size={18} />}
+      icon={<CindyAIMark size={18} />}
       title={t('settings.providers.xd.title')}
       subtitle={providerSubtitleForDisplay(provider, t('settings.providers.xd.modelLabel'), {
         suffix: t('settings.providers.xd.billingLabel'),
