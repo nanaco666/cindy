@@ -26,8 +26,8 @@ describe('sidebar remote project icon', () => {
 
   it('maps device-link sessions to the device-link project icon and SSH sessions to the SSH project icon', () => {
     expect(remoteProjectIconSource).toContain("kind === 'device-link' ? MonitorSmartphone : Globe");
-    expect(sessionItemSource).toContain(
-      "const remoteIconKind = session.deviceLinkDeviceId ? 'device-link' : session.remoteHostId ? 'ssh' : null",
+    expect(sessionItemSource).toMatch(
+      /const remoteIconKind = session\.deviceLinkDeviceId\s+\?\s+'device-link'\s+:\s+session\.remoteHostId\s+\?\s+'ssh'\s+:\s+null/,
     );
     expect(sessionCardSource).toContain(
       "const remoteIconKind = session.deviceLinkDeviceId ? 'device-link' : session.remoteHostId ? 'ssh' : null",

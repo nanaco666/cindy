@@ -39,7 +39,14 @@
  */
 
 import { useRef, type ReactNode, type Ref } from 'react';
-import { Ban, Check, ChevronDown, EllipsisVertical, Monitor, MonitorSmartphone } from 'lucide-react';
+import {
+  Ban,
+  Check,
+  ChevronDown,
+  EllipsisVertical,
+  Monitor,
+  MonitorSmartphone,
+} from 'lucide-react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -133,7 +140,7 @@ export function MachineSwitcherMenu(): ReactNode {
           className={cn(
             // 与 SidebarTopNav 的 ROW_CLASS 同款 pill 行:h-8 全宽、图标 meta 灰、
             // 文字 foreground、hover 灰底;truncate 兜住过长设备名。
-            'flex h-8 w-full min-w-0 items-center gap-2.5 rounded-full px-3 text-sm font-normal text-foreground',
+            'flex h-8 w-full min-w-0 items-center gap-2.5 rounded-full px-3 text-sm font-normal text-[var(--sidebar-nav-text)]',
             'transition-colors hover:bg-sidebar-item-hover focus:outline-none',
             // 菜单展开期间保持行高亮(data-state=open):否则鼠标移进下方菜单后本行
             // :hover 即失效、高亮消失,菜单像悬空没了锚点(2026-07-12 用户反馈)。
@@ -144,13 +151,13 @@ export function MachineSwitcherMenu(): ReactNode {
           <MonitorSmartphone
             size={15}
             strokeWidth={1.8}
-            className="shrink-0 text-[var(--cmd-palette-item-meta)]"
+            className="shrink-0 text-[var(--sidebar-nav-text)]"
           />
           <span className="truncate leading-none">{triggerText}</span>
           <ChevronDown
             size={14}
             strokeWidth={1.8}
-            className="shrink-0 text-[var(--cmd-palette-item-meta)]"
+            className="shrink-0 text-[var(--sidebar-nav-text)]"
           />
         </button>
       </DropdownMenuTrigger>
@@ -249,7 +256,11 @@ function MachineMenuItem({
   const modifierHeldRef = useRef(false);
   return (
     <DropdownMenuItem
-      className={cn(MENU_ITEM_CLASS, 'group/machine-item', rejected && 'text-[var(--text-tertiary)]')}
+      className={cn(
+        MENU_ITEM_CLASS,
+        'group/machine-item',
+        rejected && 'text-[var(--text-tertiary)]',
+      )}
       onClick={(event) => {
         if (event.isTrusted) modifierHeldRef.current = event.metaKey || event.ctrlKey;
       }}

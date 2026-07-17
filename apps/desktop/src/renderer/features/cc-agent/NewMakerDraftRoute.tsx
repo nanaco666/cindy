@@ -61,7 +61,11 @@ import {
   setEffortForModel,
   type VendorPrefs,
 } from '@/state/newMakerDraft';
-import { snapshotForSeed, getProviderModelFast, setProviderModelFast } from '@/state/providerModelMemory';
+import {
+  snapshotForSeed,
+  getProviderModelFast,
+  setProviderModelFast,
+} from '@/state/providerModelMemory';
 import { seedSession } from '@/state/sessionModelMemory';
 import { setPending, setPendingGoal } from '@/state/pendingFirstMessage';
 import {
@@ -111,20 +115,13 @@ import { useAgentCapabilities } from '@/hooks/useAgentCapabilities';
 import { useProviders } from '@/hooks/useProviders';
 import { useDeviceProviders } from '@/hooks/useDeviceProviders';
 import { resolveFastSupported } from '@/lib/providerModels';
-import {
-  connectedProvidersForAgent,
-  nativeDefaultSourceId,
-} from '@lizi/model-providers';
+import { connectedProvidersForAgent, nativeDefaultSourceId } from '@lizi/model-providers';
 import {
   resolveDeviceLinkDraftDefaults,
   type DeviceLinkDraftSelection,
   type RemoteDraftDefaults,
 } from './deviceLinkDraftDefaults';
-import {
-  makeMirrorAccessors,
-  replaceScope,
-  clearScope,
-} from '@/state/deviceLinkModelMirror';
+import { makeMirrorAccessors, replaceScope, clearScope } from '@/state/deviceLinkModelMirror';
 import type { ModelMemoryAccessors } from '@/components/new-chat/ModelSelector';
 import {
   DRAFT_RIGHT_SIDEBAR_TOGGLE_DRAG_STYLE,
@@ -135,8 +132,7 @@ import { revealOrcaWorkersTab } from '@/features/right-sidebar/plugins/orca-work
 import cindyAvatarLockup from '@/assets/cindy-avatar-lockup.png';
 
 const log = createLogger('NewMakerDraftRoute');
-const IS_MAC_PLATFORM =
-  typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin';
+const IS_MAC_PLATFORM = typeof window !== 'undefined' && window.electronAPI?.platform === 'darwin';
 // F-COLLAB (2026-05): 老的 vendor='orca' 入口已退役,OrcaHeaderStrip 组件随之
 // 删除(它是给 isOrca 分支的 ChatInput.topSlot 用的)。Lead/Worker 协作组合现在
 // 由 ChatInput 底部 CollaborationModeToggle 控制,Lead 是当前 vendor 本身,
@@ -244,9 +240,10 @@ async function rehomeDraftAttachments(
 }
 
 function getCurrentRoutePath(): string {
-  const raw = window.location.hash.startsWith('#') && window.location.hash.length > 1
-    ? window.location.hash.slice(1)
-    : window.location.pathname;
+  const raw =
+    window.location.hash.startsWith('#') && window.location.hash.length > 1
+      ? window.location.hash.slice(1)
+      : window.location.pathname;
   const pathOnly = raw.split(/[?#]/)[0] || '/';
   return pathOnly.startsWith('/') ? pathOnly : `/${pathOnly}`;
 }
@@ -322,8 +319,8 @@ export function NewMakerDraftRoute() {
     const theme = themeService.getCurrentTheme();
     return theme?.logo ?? defaultLogoForTheme(theme);
   });
-  const [logoScale, setLogoScale] = useState<number>(
-    () => clampLogoScale(themeService.getCurrentTheme()?.logoScale),
+  const [logoScale, setLogoScale] = useState<number>(() =>
+    clampLogoScale(themeService.getCurrentTheme()?.logoScale),
   );
   useEffect(() => {
     return themeService.onDidChangeTheme((theme) => {
@@ -502,7 +499,13 @@ export function NewMakerDraftRoute() {
     if (dlSeedKeyRef.current === key) return;
     dlSeedKeyRef.current = key;
     setDlSel(resolveDeviceLinkDraftDefaults(capabilities, remoteDraftState.value));
-  }, [isDeviceLinkDraft, effectiveDeviceLinkDeviceId, capabilityAgentKind, capabilities, remoteDraftState]);
+  }, [
+    isDeviceLinkDraft,
+    effectiveDeviceLinkDeviceId,
+    capabilityAgentKind,
+    capabilities,
+    remoteDraftState,
+  ]);
 
   // 远程草稿展示用:已 seed 用 dlSel;seed 完成前(等隧道 / 能力)先用 capabilities 默认占位,
   // 绝不回落控制端本地(仅 capabilities 未就绪的极早期暂为 null,此时与改造前行为一致)。
@@ -517,9 +520,10 @@ export function NewMakerDraftRoute() {
   // scopeKey 按设备隔离。镜像 = 被控端 providerModelMemory 全量快照(草稿列表行的真实读源),
   // 由 remoteDraftState(pull + push 回流)喂;ModelSelector 经 modelMemoryOverride 读它显示每个供应商
   // 每个模型的 effort/fast(req1),改动经隧道写穿被控端(req2),绝不碰控制端本地 providerModelMemory。
-  const mirrorScopeKey = isDeviceLinkDraft && effectiveDeviceLinkDeviceId
-    ? `draft:${effectiveDeviceLinkDeviceId}`
-    : null;
+  const mirrorScopeKey =
+    isDeviceLinkDraft && effectiveDeviceLinkDeviceId
+      ? `draft:${effectiveDeviceLinkDeviceId}`
+      : null;
 
   // 用被控端快照刷新镜像(初始 pull + 后续 push 都经 remoteDraftState.value 流入)。
   // 仅在 loaded 时刷:重拉期间(loaded=false, value 暂为 null)**保留旧镜像**,避免非选中行闪默认再收敛
@@ -598,12 +602,13 @@ export function NewMakerDraftRoute() {
       const model = dlSel?.model ?? deviceLinkInitial?.model;
       if (!model) return;
       const activeEffort =
-        patch.effort ?? (patch.fast !== undefined ? dlSel?.effort ?? deviceLinkInitial?.effort : undefined);
+        patch.effort ??
+        (patch.fast !== undefined ? dlSel?.effort ?? deviceLinkInitial?.effort : undefined);
       window.electronAPI.deviceLink
         .invoke(effectiveDeviceLinkDeviceId, 'maker:apply-new-maker-draft-pref', [
           {
             agent: capabilityAgentKind,
-            providerId: (dlSel?.providerId ?? deviceLinkInitial?.providerId) ?? '',
+            providerId: dlSel?.providerId ?? deviceLinkInitial?.providerId ?? '',
             modelId: model,
             active: true,
             markModelChoice: false,
@@ -621,10 +626,10 @@ export function NewMakerDraftRoute() {
   // (dlSel live > deviceLinkInitial seed),本地取 chatPrefs —— 即"被控端会话实际会路由到的来源"。
   const supportsFastMode = useMemo(() => {
     const providerId = isDeviceLinkDraft
-      ? dlSel?.providerId ?? deviceLinkInitial?.providerId ?? null
-      : chatPrefs.providerId ?? null;
+      ? (dlSel?.providerId ?? deviceLinkInitial?.providerId ?? null)
+      : (chatPrefs.providerId ?? null);
     const modelId = isDeviceLinkDraft
-      ? dlSel?.model ?? deviceLinkInitial?.model ?? chatPrefs.model
+      ? (dlSel?.model ?? deviceLinkInitial?.model ?? chatPrefs.model)
       : chatPrefs.model;
     return resolveFastSupported({
       deviceId: effectiveDeviceLinkDeviceId,
@@ -652,7 +657,7 @@ export function NewMakerDraftRoute() {
   // 拍平值在未来分叉下泄漏(seed 函数 deviceLinkDraftDefaults 保持纯/不依赖 ProviderView)。本地走原逻辑。
   const effectiveFastMode = isDeviceLinkDraft
     ? supportsFastMode
-      ? deviceLinkInitial?.fastMode ?? false
+      ? (deviceLinkInitial?.fastMode ?? false)
       : false
     : supportsFastMode
       ? fastMode
@@ -673,11 +678,11 @@ export function NewMakerDraftRoute() {
 
   // 远程草稿的权限档 / 来源同样取镜像 holder;本地走 chatPrefs。
   const chatInitialPermissionMode = isDeviceLinkDraft
-    ? deviceLinkInitial?.permissionMode ?? chatPrefs.permissionMode
+    ? (deviceLinkInitial?.permissionMode ?? chatPrefs.permissionMode)
     : chatPrefs.permissionMode;
   const chatInitialProviderId = isDeviceLinkDraft
-    ? deviceLinkInitial?.providerId ?? null
-    : chatPrefs.providerId ?? null;
+    ? (deviceLinkInitial?.providerId ?? null)
+    : (chatPrefs.providerId ?? null);
 
   useEffect(() => {
     // device-link 的 fast 由 dlSel 持有,不走本地 fastMode state(避免与镜像值打架)。
@@ -705,38 +710,55 @@ export function NewMakerDraftRoute() {
     patchCurrentVendorPrefs(patch);
   }, []);
 
-  const handleModelDidChange = useCallback((newModelId: string) => {
-    if (isDeviceLinkDraft) {
-      // 远程草稿:只改 dlSel,绝不写本地 newMakerDraft。capabilities 未就绪时退化为仅换 model。
-      if (!capabilities) {
-        setDlSel((prev) => (prev ? { ...prev, model: newModelId } : prev));
+  const handleModelDidChange = useCallback(
+    (newModelId: string) => {
+      if (isDeviceLinkDraft) {
+        // 远程草稿:只改 dlSel,绝不写本地 newMakerDraft。capabilities 未就绪时退化为仅换 model。
+        if (!capabilities) {
+          setDlSel((prev) => (prev ? { ...prev, model: newModelId } : prev));
+          return;
+        }
+        // 切到 newModelId:从被控端整张草稿(含 per-model 记忆 effort/fastModeByModel)按目标模型解析,
+        // 即「还原被控端为该模型记的 effort/fast」,而非沿用上一个模型 / capabilities 默认。
+        // permission/source 非按模型记 → 保留草稿里的当前选择(prev),不被切模型重置。
+        const resolved = resolveDeviceLinkDraftDefaults(
+          capabilities,
+          remoteDraftState.value,
+          newModelId,
+        );
+        setDlSel((prev) => ({
+          ...resolved,
+          permissionMode: prev?.permissionMode,
+          providerId: prev?.providerId ?? null,
+        }));
         return;
       }
-      // 切到 newModelId:从被控端整张草稿(含 per-model 记忆 effort/fastModeByModel)按目标模型解析,
-      // 即「还原被控端为该模型记的 effort/fast」,而非沿用上一个模型 / capabilities 默认。
-      // permission/source 非按模型记 → 保留草稿里的当前选择(prev),不被切模型重置。
-      const resolved = resolveDeviceLinkDraftDefaults(capabilities, remoteDraftState.value, newModelId);
-      setDlSel((prev) => ({
-        ...resolved,
-        permissionMode: prev?.permissionMode,
-        providerId: prev?.providerId ?? null,
-      }));
-      return;
-    }
-    patchActivePrefs({ model: newModelId });
-    // 本地草稿(已在上方对 device-link 早返回):走统一 helper 现查目标模型的 per-provider supportsFastMode
-    // (与 supportsFastMode memo 同口径)。deviceId=undefined 强制本地 providers。
-    const supportsFast = resolveFastSupported({
-      deviceId: undefined,
+      patchActivePrefs({ model: newModelId });
+      // 本地草稿(已在上方对 device-link 早返回):走统一 helper 现查目标模型的 per-provider supportsFastMode
+      // (与 supportsFastMode memo 同口径)。deviceId=undefined 强制本地 providers。
+      const supportsFast = resolveFastSupported({
+        deviceId: undefined,
+        deviceProviders,
+        localProviders,
+        capabilities,
+        providerId: chatPrefs.providerId ?? null,
+        modelId: newModelId,
+        agentKind: capabilityAgentKind,
+      });
+      setFastModeState(supportsFast ? resolveDraftFast(newModelId) : false);
+    },
+    [
+      isDeviceLinkDraft,
+      capabilities,
+      remoteDraftState,
+      patchActivePrefs,
+      resolveDraftFast,
       deviceProviders,
       localProviders,
-      capabilities,
-      providerId: chatPrefs.providerId ?? null,
-      modelId: newModelId,
-      agentKind: capabilityAgentKind,
-    });
-    setFastModeState(supportsFast ? resolveDraftFast(newModelId) : false);
-  }, [isDeviceLinkDraft, capabilities, remoteDraftState, patchActivePrefs, resolveDraftFast, deviceProviders, localProviders, chatPrefs.providerId, capabilityAgentKind]);
+      chatPrefs.providerId,
+      capabilityAgentKind,
+    ],
+  );
   const handleFastModeChange = useCallback(
     (enabled: boolean) => {
       if (isDeviceLinkDraft) {
@@ -757,46 +779,68 @@ export function NewMakerDraftRoute() {
       // per-model 旧库:保留为兜底(retire 计划单列),写入维持向后兼容。
       setFastModeForModel(chatPrefs.model, enabled);
     },
-    [isDeviceLinkDraft, chatPrefs.model, supportsFastMode, effectiveSourceId, capabilityAgentKind, pushActiveDraftPref],
+    [
+      isDeviceLinkDraft,
+      chatPrefs.model,
+      supportsFastMode,
+      effectiveSourceId,
+      capabilityAgentKind,
+      pushActiveDraftPref,
+    ],
   );
-  const handleEffortDidChange = useCallback((newEffort: Effort) => {
-    if (isDeviceLinkDraft) {
-      setDlSel((prev) => (prev ? { ...prev, effort: newEffort } : prev));
-      pushActiveDraftPref({ effort: newEffort }); // 选中模型 effort 写穿被控端
-      return;
-    }
-    patchActivePrefs({ effort: newEffort });
-  }, [isDeviceLinkDraft, patchActivePrefs, pushActiveDraftPref]);
+  const handleEffortDidChange = useCallback(
+    (newEffort: Effort) => {
+      if (isDeviceLinkDraft) {
+        setDlSel((prev) => (prev ? { ...prev, effort: newEffort } : prev));
+        pushActiveDraftPref({ effort: newEffort }); // 选中模型 effort 写穿被控端
+        return;
+      }
+      patchActivePrefs({ effort: newEffort });
+    },
+    [isDeviceLinkDraft, patchActivePrefs, pushActiveDraftPref],
+  );
   // ChatInput 内部决策完 newEffort 时回写这里, 让"每个 modelId 上次的 effort"
   // 跨 ChatInput 实例 / 跨重启保留 (修复: New Maker 先选 Haiku 发完, 再 New Maker
   // 切回 Opus 4.7 默认 Effort 退化成 Low 的问题)。device-link 不写本地 per-model 记忆。
-  const handleRememberedEffortChange = useCallback((modelId: string, effort: Effort) => {
-    if (isDeviceLinkDraft) return;
-    setEffortForModel(modelId, effort);
-  }, [isDeviceLinkDraft]);
-  const handlePermissionModeDidChange = useCallback((newMode: PermissionMode) => {
-    if (isDeviceLinkDraft) {
-      setDlSel((prev) => (prev ? { ...prev, permissionMode: newMode } : prev));
-      return;
-    }
-    patchActivePrefs({ permissionMode: newMode });
-  }, [isDeviceLinkDraft, patchActivePrefs]);
+  const handleRememberedEffortChange = useCallback(
+    (modelId: string, effort: Effort) => {
+      if (isDeviceLinkDraft) return;
+      setEffortForModel(modelId, effort);
+    },
+    [isDeviceLinkDraft],
+  );
+  const handlePermissionModeDidChange = useCallback(
+    (newMode: PermissionMode) => {
+      if (isDeviceLinkDraft) {
+        setDlSel((prev) => (prev ? { ...prev, permissionMode: newMode } : prev));
+        return;
+      }
+      patchActivePrefs({ permissionMode: newMode });
+    },
+    [isDeviceLinkDraft, patchActivePrefs],
+  );
   // 计划模式草稿开关:写当前 vendor prefs(发送建会话时经 planModeEnabled 落库)。
   // device-link 远程草稿不显示入口(onPlanModeChange 不下发),这里只处理本地。
-  const handlePlanModeChange = useCallback((enabled: boolean) => {
-    if (isDeviceLinkDraft) return;
-    patchActivePrefs({ planMode: enabled });
-  }, [isDeviceLinkDraft, patchActivePrefs]);
+  const handlePlanModeChange = useCallback(
+    (enabled: boolean) => {
+      if (isDeviceLinkDraft) return;
+      patchActivePrefs({ planMode: enabled });
+    },
+    [isDeviceLinkDraft, patchActivePrefs],
+  );
   // 用户在草稿里切来源 → 记进当前 vendor 的 prefs(切 vendor / 重启后由 initialProviderId 回填,
   // 发送时也以此为准)。null = 清除显式选择,回落默认路由。与 model/effort 同口径。
   // device-link 远程草稿:只改 dlSel(临时),不写本地 prefs。
-  const handleProviderDidChange = useCallback((newProviderId: string | null) => {
-    if (isDeviceLinkDraft) {
-      setDlSel((prev) => (prev ? { ...prev, providerId: newProviderId } : prev));
-      return;
-    }
-    patchActivePrefs({ providerId: newProviderId });
-  }, [isDeviceLinkDraft, patchActivePrefs]);
+  const handleProviderDidChange = useCallback(
+    (newProviderId: string | null) => {
+      if (isDeviceLinkDraft) {
+        setDlSel((prev) => (prev ? { ...prev, providerId: newProviderId } : prev));
+        return;
+      }
+      patchActivePrefs({ providerId: newProviderId });
+    },
+    [isDeviceLinkDraft, patchActivePrefs],
+  );
 
   // ─── 用户改 workingDir(FolderPicker)→ 写回 draft ─────────────────────
   // picker 选 "对话(不在项目中)" 时 dir=null,此时一并清掉 extraDirs,行为对齐
@@ -926,14 +970,18 @@ export function NewMakerDraftRoute() {
               presetSessionId = makeDraftSessionId();
               setWtCreating(true);
               try {
-                const resp = (await window.electronAPI.deviceLink.invoke(deviceId, 'worktree:create', [
-                  {
-                    sessionId: presetSessionId,
-                    baseRepo,
-                    name,
-                    sourceBranch: wt.sourceBranch.trim() || 'main',
-                  },
-                ])) as CreateWorktreeResp | null;
+                const resp = (await window.electronAPI.deviceLink.invoke(
+                  deviceId,
+                  'worktree:create',
+                  [
+                    {
+                      sessionId: presetSessionId,
+                      baseRepo,
+                      name,
+                      sourceBranch: wt.sourceBranch.trim() || 'main',
+                    },
+                  ],
+                )) as CreateWorktreeResp | null;
                 if (!resp || !resp.ok) {
                   showWorktreeError(
                     resp && !resp.ok
@@ -954,38 +1002,42 @@ export function NewMakerDraftRoute() {
                 setWtCreating(false);
               }
             }
-            const createResult = await window.electronAPI.deviceLink.invoke(deviceId, 'maker:create-session', [
-              // workspaceKind 恒 'project'(归属一致)+ agentKind 归一,见 buildDeviceLinkCreateArgs。
-              // extraDirs 一并透传(与本地 create 对齐):被控端 bootstrapSession 按 set-extra-dirs
-              // 同款 validateExtraDirs 校验后只存通过的子集,控制端镜像随被控端真相回流。
-              buildDeviceLinkCreateArgs({
-                agentKind: persistedAgentKind,
-                // 远程 worktree:workingDir 换成刚建好的 worktree 路径(真实存在,被控端
-                // remote-workdir-guard 按"存在的目录"放行);id 与 worktree 绑定同值。
-                // 非 worktree 流程两者保持原值 / 缺省。
-                id: presetSessionId,
-                workingDir: remoteWorkingDir,
-                model,
-                effort,
-                permissionMode,
-                fastMode: effectiveFastMode,
-                extraDirs: effectiveExtraDirs,
-                // 草稿选定的来源(被控端供应商;null=跟随默认路由)。被控端 create 时落 sessions.provider_id,
-                // 使新远程会话首个请求即按所选来源路由(P2)。
-                providerId,
-              }),
-            ]);
+            const createResult = await window.electronAPI.deviceLink.invoke(
+              deviceId,
+              'maker:create-session',
+              [
+                // workspaceKind 恒 'project'(归属一致)+ agentKind 归一,见 buildDeviceLinkCreateArgs。
+                // extraDirs 一并透传(与本地 create 对齐):被控端 bootstrapSession 按 set-extra-dirs
+                // 同款 validateExtraDirs 校验后只存通过的子集,控制端镜像随被控端真相回流。
+                buildDeviceLinkCreateArgs({
+                  agentKind: persistedAgentKind,
+                  // 远程 worktree:workingDir 换成刚建好的 worktree 路径(真实存在,被控端
+                  // remote-workdir-guard 按"存在的目录"放行);id 与 worktree 绑定同值。
+                  // 非 worktree 流程两者保持原值 / 缺省。
+                  id: presetSessionId,
+                  workingDir: remoteWorkingDir,
+                  model,
+                  effort,
+                  permissionMode,
+                  fastMode: effectiveFastMode,
+                  extraDirs: effectiveExtraDirs,
+                  // 草稿选定的来源(被控端供应商;null=跟随默认路由)。被控端 create 时落 sessions.provider_id,
+                  // 使新远程会话首个请求即按所选来源路由(P2)。
+                  providerId,
+                }),
+              ],
+            );
             const remoteSessionId = (createResult as { sessionId?: string } | null)?.sessionId;
             if (!remoteSessionId) {
               toast.error(t('ccAgent.draft.createSessionFailed'));
               return;
             }
             // 重拉该设备会话列表(含字段完整的新会话)→ 注册 origin + 出现在项目下。
-            const list = await window.electronAPI.deviceLink.invoke(deviceId, 'local-db:sessions:list', [
-              200,
-              'active',
-              { includePinned: true },
-            ]);
+            const list = await window.electronAPI.deviceLink.invoke(
+              deviceId,
+              'local-db:sessions:list',
+              [200, 'active', { includePinned: true }],
+            );
             if (Array.isArray(list)) {
               remoteProjectsStore.setDeviceSessions(deviceId, deviceName, list as Session[]);
             }
@@ -1015,10 +1067,10 @@ export function NewMakerDraftRoute() {
                 // 重扫一次,让新 session 进去 / 立刻能看到迁移后的 skills。
                 // claude-code 端不消费 forceReload(每次重扫),传了无副作用。
                 await window.electronAPI.maker
-                  .listAgentSkills(
-                    persistedAgentKind === 'codex' ? 'codex' : 'claude-code',
-                    { workingDir: wd, forceReload: true },
-                  )
+                  .listAgentSkills(persistedAgentKind === 'codex' ? 'codex' : 'claude-code', {
+                    workingDir: wd,
+                    forceReload: true,
+                  })
                   .catch(() => {});
               }
             }
@@ -1176,7 +1228,8 @@ export function NewMakerDraftRoute() {
 
                 if (effectiveCollabEnabled) {
                   try {
-                    const workerAgent = effectiveCollab.worker === 'codex' ? 'codex' : 'claude-code';
+                    const workerAgent =
+                      effectiveCollab.worker === 'codex' ? 'codex' : 'claude-code';
                     const result = await window.electronAPI.maker.enableOrca(newSession.id, {
                       workerAgent,
                     });
@@ -1189,8 +1242,13 @@ export function NewMakerDraftRoute() {
                       navigate(`/cc-agent/${newSession.id}`, { replace: true });
                     }
                   } catch (err) {
-                    log.error('[draft worktree send] enableOrca failed (continuing as single session)', err);
-                    toast.error(getCollaborationStartErrorMessage(err, t, { continueAsSingleSession: true }));
+                    log.error(
+                      '[draft worktree send] enableOrca failed (continuing as single session)',
+                      err,
+                    );
+                    toast.error(
+                      getCollaborationStartErrorMessage(err, t, { continueAsSingleSession: true }),
+                    );
                   }
                 }
 
@@ -1283,7 +1341,9 @@ export function NewMakerDraftRoute() {
               orcaWorkersRevealState = { focusWorkerSessionId: result.workerSessionId };
             } catch (err) {
               log.error('[draft send] enableOrca failed (continuing as single session)', err);
-              toast.error(getCollaborationStartErrorMessage(err, t, { continueAsSingleSession: true }));
+              toast.error(
+                getCollaborationStartErrorMessage(err, t, { continueAsSingleSession: true }),
+              );
             }
           }
 
@@ -1371,28 +1431,32 @@ export function NewMakerDraftRoute() {
         }
         const deviceId = effectiveDeviceLinkDeviceId;
         const deviceName = effectiveDeviceLinkDeviceName ?? deviceId;
-        const createResult = await window.electronAPI.deviceLink.invoke(deviceId, 'maker:create-session', [
-          buildDeviceLinkCreateArgs({
-            agentKind: persistedAgentKind,
-            workingDir: effectiveWorkingDir,
-            model: draftInitialModel,
-            effort: draftInitialEffort,
-            permissionMode: chatInitialPermissionMode,
-            fastMode: effectiveFastMode,
-            extraDirs: effectiveExtraDirs,
-            providerId: chatInitialProviderId ?? null,
-          }),
-        ]);
+        const createResult = await window.electronAPI.deviceLink.invoke(
+          deviceId,
+          'maker:create-session',
+          [
+            buildDeviceLinkCreateArgs({
+              agentKind: persistedAgentKind,
+              workingDir: effectiveWorkingDir,
+              model: draftInitialModel,
+              effort: draftInitialEffort,
+              permissionMode: chatInitialPermissionMode,
+              fastMode: effectiveFastMode,
+              extraDirs: effectiveExtraDirs,
+              providerId: chatInitialProviderId ?? null,
+            }),
+          ],
+        );
         const remoteSessionId = (createResult as { sessionId?: string } | null)?.sessionId;
         if (!remoteSessionId) {
           throw new Error(t('ccAgent.draft.createSessionFailed'));
         }
         // 重拉该设备会话列表 → 注册 origin(后续 goalApiFor / useGoalStatus 依赖它路由)。
-        const list = await window.electronAPI.deviceLink.invoke(deviceId, 'local-db:sessions:list', [
-          200,
-          'active',
-          { includePinned: true },
-        ]);
+        const list = await window.electronAPI.deviceLink.invoke(
+          deviceId,
+          'local-db:sessions:list',
+          [200, 'active', { includePinned: true }],
+        );
         if (Array.isArray(list)) {
           remoteProjectsStore.setDeviceSessions(deviceId, deviceName, list as Session[]);
         }
@@ -1408,15 +1472,18 @@ export function NewMakerDraftRoute() {
         const titleAgentKind = persistedAgentKind === 'codex' ? 'codex' : 'claude-code';
         void (async () => {
           try {
-            const gen = (await window.electronAPI.deviceLink.invoke(deviceId, 'maker:generate-title', [
-              { message: objective, agentKind: titleAgentKind, sessionId: remoteSessionId },
-            ])) as { title: string | null } | null;
-            const title =
-              gen?.title?.trim() || objective.replace(/\n/g, ' ').slice(0, 40).trim();
+            const gen = (await window.electronAPI.deviceLink.invoke(
+              deviceId,
+              'maker:generate-title',
+              [{ message: objective, agentKind: titleAgentKind, sessionId: remoteSessionId }],
+            )) as { title: string | null } | null;
+            const title = gen?.title?.trim() || objective.replace(/\n/g, ' ').slice(0, 40).trim();
             if (!title) return;
-            const current = (await window.electronAPI.deviceLink.invoke(deviceId, 'local-db:sessions:get', [
-              remoteSessionId,
-            ])) as { title?: string | null } | null;
+            const current = (await window.electronAPI.deviceLink.invoke(
+              deviceId,
+              'local-db:sessions:get',
+              [remoteSessionId],
+            )) as { title?: string | null } | null;
             const existingTitle = current?.title?.trim();
             // 'New Maker' 是 maker:create-session 的默认占位符标题,允许覆写;
             // 用户已手动改过的真实标题则保留(user rename wins)。
@@ -1491,16 +1558,19 @@ export function NewMakerDraftRoute() {
     return proceed;
   }, [vendorAuthGate]);
 
-  const handleQuickStart = useCallback((labelKey: (typeof createAgentQuickStarts)[number]['labelKey']) => {
-    const text = t(labelKey);
-    const currentDraft = getComposerDraft(NEW_MAKER_DRAFT_KEY);
-    saveComposerDraft(NEW_MAKER_DRAFT_KEY, {
-      text: plainTextToTiptapDoc(text),
-      attachments: currentDraft?.attachments ?? attachmentState.attachments,
-      quotes: currentDraft?.quotes,
-      browserComments: currentDraft?.browserComments,
-    });
-  }, [attachmentState.attachments, t]);
+  const handleQuickStart = useCallback(
+    (labelKey: (typeof createAgentQuickStarts)[number]['labelKey']) => {
+      const text = t(labelKey);
+      const currentDraft = getComposerDraft(NEW_MAKER_DRAFT_KEY);
+      saveComposerDraft(NEW_MAKER_DRAFT_KEY, {
+        text: plainTextToTiptapDoc(text),
+        attachments: currentDraft?.attachments ?? attachmentState.attachments,
+        quotes: currentDraft?.quotes,
+        browserComments: currentDraft?.browserComments,
+      });
+    },
+    [attachmentState.attachments, t],
+  );
 
   // 注意:不要给 ChatInput 加 key 强制 remount。ChatInput 内部 activeModel /
   // activeEffort / activePermissionMode 都是每次 render 直接从 props 派生
@@ -1510,141 +1580,154 @@ export function NewMakerDraftRoute() {
 
   return (
     <TopRightChipStackProvider>
-    <div
-      ref={containerRef}
-      className="h-full w-full"
-      // 整页 drop(与 CCAgentSessionView 的聊天区同语义):拖到草稿页任意位置
-      // 都算数,不必精准落在输入框上。dragover 必须自己 preventDefault——
-      // 链接型拖拽(意识媒体是 text/uri-list)不阻止默认行为时光标是"禁止
-      // 落下"、drop 压根不触发,不能指望窗口级兜底的时序。消费规则:
-      // - 意识面板媒体(cindy-ghost:// 地址)→ 引渡链路,键用 NEW_MAKER_DRAFT_KEY
-      //   (草稿命名空间,发送时 rehomeDraftAttachments 迁移进真实会话);
-      // - 普通文件 → 落附件托盘;
-      // - 纯文件夹**不消费**,留给窗口级兜底(拖文件夹 = 设为工作目录的既有行为)。
-      // ChatInput 自己的 onDrop 有 stopPropagation,落在输入框上不会到这里。
-      onDragEnter={(e) => {
-        e.preventDefault();
-        pageDragCounterRef.current += 1;
-        if (pageDragCounterRef.current === 1) setPageDragOver(true);
-      }}
-      onDragLeave={(e) => {
-        e.preventDefault();
-        if (pageDragCounterRef.current > 0) pageDragCounterRef.current -= 1;
-        if (pageDragCounterRef.current === 0) setPageDragOver(false);
-      }}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'copy';
-      }}
-      onDrop={(e) => {
-        pageDragCounterRef.current = 0;
-        setPageDragOver(false);
-        // .cindy / .cshare 已被窗口级 capture 接管(装入 / 导入链路),不当附件消费。
-        if (isGlobalDropIntercepted(e.nativeEvent)) return;
-        const ghostMediaUri = getGhostMediaUriFromDataTransfer(e.dataTransfer);
-        if (ghostMediaUri) {
+      <div
+        ref={containerRef}
+        className="h-full w-full"
+        // 整页 drop(与 CCAgentSessionView 的聊天区同语义):拖到草稿页任意位置
+        // 都算数,不必精准落在输入框上。dragover 必须自己 preventDefault——
+        // 链接型拖拽(意识媒体是 text/uri-list)不阻止默认行为时光标是"禁止
+        // 落下"、drop 压根不触发,不能指望窗口级兜底的时序。消费规则:
+        // - 意识面板媒体(cindy-ghost:// 地址)→ 引渡链路,键用 NEW_MAKER_DRAFT_KEY
+        //   (草稿命名空间,发送时 rehomeDraftAttachments 迁移进真实会话);
+        // - 普通文件 → 落附件托盘;
+        // - 纯文件夹**不消费**,留给窗口级兜底(拖文件夹 = 设为工作目录的既有行为)。
+        // ChatInput 自己的 onDrop 有 stopPropagation,落在输入框上不会到这里。
+        onDragEnter={(e) => {
           e.preventDefault();
-          e.stopPropagation();
-          void attachGhostMediaToSession(ghostMediaUri, NEW_MAKER_DRAFT_KEY, t);
-          return;
-        }
-        if (e.dataTransfer.files.length > 0) {
-          const files: File[] = [];
-          for (let i = 0; i < e.dataTransfer.items.length; i++) {
-            const item = e.dataTransfer.items[i];
-            const entry = item.webkitGetAsEntry?.();
-            const file = e.dataTransfer.files[i];
-            if (!file) continue;
-            if (!entry?.isDirectory) files.push(file);
-          }
-          if (files.length > 0) {
+          pageDragCounterRef.current += 1;
+          if (pageDragCounterRef.current === 1) setPageDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          if (pageDragCounterRef.current > 0) pageDragCounterRef.current -= 1;
+          if (pageDragCounterRef.current === 0) setPageDragOver(false);
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+        }}
+        onDrop={(e) => {
+          pageDragCounterRef.current = 0;
+          setPageDragOver(false);
+          // .cindy / .cshare 已被窗口级 capture 接管(装入 / 导入链路),不当附件消费。
+          if (isGlobalDropIntercepted(e.nativeEvent)) return;
+          const ghostMediaUri = getGhostMediaUriFromDataTransfer(e.dataTransfer);
+          if (ghostMediaUri) {
             e.preventDefault();
             e.stopPropagation();
-            const dt = new DataTransfer();
-            for (const f of files) dt.items.add(f);
-            attachmentState.addFiles(dt.files);
+            void attachGhostMediaToSession(ghostMediaUri, NEW_MAKER_DRAFT_KEY, t);
+            return;
           }
-        }
-      }}
-    >
-      <div
-        data-testid="create-agent-shell"
-        className={cn(
-          'relative flex h-full w-full items-center justify-center overflow-hidden bg-[var(--surface)] px-6 py-8',
-        )}
+          if (e.dataTransfer.files.length > 0) {
+            const files: File[] = [];
+            for (let i = 0; i < e.dataTransfer.items.length; i++) {
+              const item = e.dataTransfer.items[i];
+              const entry = item.webkitGetAsEntry?.();
+              const file = e.dataTransfer.files[i];
+              if (!file) continue;
+              if (!entry?.isDirectory) files.push(file);
+            }
+            if (files.length > 0) {
+              e.preventDefault();
+              e.stopPropagation();
+              const dt = new DataTransfer();
+              for (const f of files) dt.items.add(f);
+              attachmentState.addFiles(dt.files);
+            }
+          }
+        }}
       >
-        {/* 整页拖入遮罩(与 CCAgentSessionView 聊天区同款 token):提示文案由
+        <div
+          data-testid="create-agent-shell"
+          className={cn(
+            'relative flex h-full w-full items-center justify-center overflow-hidden bg-[var(--surface)] px-6 py-8',
+          )}
+        >
+          {/* 整页拖入遮罩(与 CCAgentSessionView 聊天区同款 token):提示文案由
             ChatInput 卡内渲染(externalDragOver),遮罩只描边界。 */}
-        {pageDragOver && (
-          <div
-            className="pointer-events-none absolute inset-0 z-50"
-            style={{
-              backgroundColor: 'var(--drop-overlay-bg)',
-              border: '2px dashed var(--drop-overlay-border)',
-            }}
-          />
-        )}
-        {/* mac 上本页不渲染通用 ContentHeader 且顶部无交互元素,垫一条透明
+          {pageDragOver && (
+            <div
+              className="pointer-events-none absolute inset-0 z-50"
+              style={{
+                backgroundColor: 'var(--drop-overlay-bg)',
+                border: '2px dashed var(--drop-overlay-border)',
+              }}
+            />
+          )}
+          {/* mac 上本页不渲染通用 ContentHeader 且顶部无交互元素,垫一条透明
           窗口拖拽条(windowDrag.tsx 约定) */}
-        <InvisibleWindowDragStrip />
-        {/* B2b:常驻 toggle(收起/展开都是它),面板贴右在右上、贴左镜像左上,
+          <InvisibleWindowDragStrip />
+          {/* B2b:常驻 toggle(收起/展开都是它),面板贴右在右上、贴左镜像左上,
             与 CCAgentSessionView 同规则。mac 不渲染(2026-07-09 Lizi 口径):
             折叠 toggle 无论面板贴哪侧都恒钉窗口右上角(MainLayout 浮层)。 */}
-        {!IS_MAC_PLATFORM &&
-          draftRightSidebar.available &&
-          onToggleRightSidebar && (
-          rightSidebarSide === 'right' ? (
-            <TopRightChipStack>
-              <div style={DRAFT_RIGHT_SIDEBAR_TOGGLE_DRAG_STYLE}>
-                <RightSidebarToggle
-                  collapsed={rightSidebarCollapsed}
-                  onToggle={onToggleRightSidebar}
-                  side="right"
-                />
+          {!IS_MAC_PLATFORM &&
+            draftRightSidebar.available &&
+            onToggleRightSidebar &&
+            (rightSidebarSide === 'right' ? (
+              <TopRightChipStack>
+                <div style={DRAFT_RIGHT_SIDEBAR_TOGGLE_DRAG_STYLE}>
+                  <RightSidebarToggle
+                    collapsed={rightSidebarCollapsed}
+                    onToggle={onToggleRightSidebar}
+                    side="right"
+                  />
+                </div>
+              </TopRightChipStack>
+            ) : (
+              <div className="pointer-events-none absolute left-3 top-3 z-20">
+                <div style={DRAFT_RIGHT_SIDEBAR_TOGGLE_DRAG_STYLE}>
+                  <RightSidebarToggle
+                    collapsed={rightSidebarCollapsed}
+                    onToggle={onToggleRightSidebar}
+                    side="left"
+                  />
+                </div>
               </div>
-            </TopRightChipStack>
-          ) : (
-            <div className="pointer-events-none absolute left-3 top-3 z-20">
-              <div style={DRAFT_RIGHT_SIDEBAR_TOGGLE_DRAG_STYLE}>
-                <RightSidebarToggle
-                  collapsed={rightSidebarCollapsed}
-                  onToggle={onToggleRightSidebar}
-                  side="left"
-                />
-              </div>
-            </div>
-          )
-        )}
+            ))}
           <main
             data-testid="create-agent-main"
-            className="relative flex h-full min-w-0 w-full flex-col items-start justify-start px-[26px] pt-[268px]"
+            className="relative flex h-full min-w-0 w-full flex-col items-center justify-start px-[26px] pt-[clamp(96px,25.5vh,268px)]"
           >
-            <button
-              type="button"
-              data-testid="create-agent-mode-pill"
-              disabled={!canToggleCreateAgentMode}
-              onClick={() => patchCollab({ enabled: !effectiveCollab.enabled })}
-              className="absolute right-[30px] top-[290px] inline-flex h-[30px] w-20 items-center justify-center gap-1.5 rounded-full border border-[var(--create-agent-control-border)] bg-[var(--create-agent-control-bg)] text-[12px] font-medium leading-[14px] text-[var(--create-agent-control-text)] transition-colors hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
-              aria-label={t('newChat.collaboration.modeLabel')}
-            >
-              <MessageSquare size={12} strokeWidth={2} className="text-[var(--create-agent-control-icon)]" />
-              <span>{effectiveCollab.enabled ? t('newChat.collaboration.pillLabel') : t('newChat.folderPicker.dialogue')}</span>
-              <ChevronDown size={12} strokeWidth={2} className="text-[var(--create-agent-control-icon)]" />
-            </button>
             <div
-              className="flex w-full flex-col items-start"
+              className="relative flex w-full max-w-[637px] flex-col items-start"
               style={{ maxWidth: Math.min(inputWidth ?? 637, 637) }}
             >
+              <button
+                type="button"
+                data-testid="create-agent-mode-pill"
+                disabled={!canToggleCreateAgentMode}
+                onClick={() => patchCollab({ enabled: !effectiveCollab.enabled })}
+                className="absolute right-0 top-[22px] inline-flex h-[30px] min-w-20 items-center justify-center gap-1.5 rounded-full border border-[var(--create-agent-control-border)] bg-[var(--create-agent-control-bg)] px-3 text-[12px] font-medium leading-[14px] text-[var(--create-agent-control-text)] transition-colors hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label={t('newChat.collaboration.modeLabel')}
+              >
+                <MessageSquare
+                  size={12}
+                  strokeWidth={2}
+                  className="text-[var(--create-agent-control-icon)]"
+                />
+                <span>
+                  {effectiveCollab.enabled
+                    ? t('newChat.collaboration.pillLabel')
+                    : t('newChat.folderPicker.dialogue')}
+                </span>
+                <ChevronDown
+                  size={12}
+                  strokeWidth={2}
+                  className="text-[var(--create-agent-control-icon)]"
+                />
+              </button>
               <div
                 data-testid="create-agent-brand-lockup"
                 className="mb-[15px] flex h-[50px] items-center gap-[9px]"
               >
-                <img
-                  src={cindyAvatarLockup}
-                  alt=""
-                  className="h-[50px] w-[50px] rounded-full object-cover"
-                  draggable={false}
-                />
+                <span className="grid h-[50px] w-[50px] shrink-0 place-items-center rounded-full border border-[var(--create-agent-avatar-ring)]">
+                  <img
+                    src={cindyAvatarLockup}
+                    alt=""
+                    className="h-[44.55px] w-[44.55px] rounded-full object-cover"
+                    draggable={false}
+                  />
+                </span>
                 {!logoError && (
                   <img
                     src={logoSrc}
@@ -1692,111 +1775,117 @@ export function NewMakerDraftRoute() {
                 )}
                 <div className="w-full">
                   <ChatInput
-                onSend={handleSend}
-                onBeforeVoiceInputStart={handleBeforeVoiceInputStart}
-                externalDragOver={pageDragOver}
-                visualVariant="create-agent"
-                compactToolbar
-                denseToolbar
-                placeholder="Hi Cindy!"
-                sessionId={undefined}
-                initialWorkingDir={effectiveWorkingDir}
-                remoteHostId={draft.remoteHostId ?? null}
-                deviceLinkDeviceId={effectiveDeviceLinkDeviceId}
-                modelMemoryOverride={deviceLinkDraftMemory}
-                initialModel={draftInitialModel}
-                initialEffort={draftInitialEffort}
-                initialPermissionMode={chatInitialPermissionMode}
-                initialProviderId={chatInitialProviderId}
-                planModeEnabled={effectivePlanMode}
-                onPlanModeChange={isDeviceLinkDraft ? undefined : handlePlanModeChange}
-                fastMode={effectiveFastMode}
-                onFastModeChange={handleFastModeChange}
-                onWorkingDirChange={handleWorkingDirChange}
-                onModelDidChange={handleModelDidChange}
-                onEffortDidChange={handleEffortDidChange}
-                onPermissionModeDidChange={handlePermissionModeDidChange}
-                onProviderDidChange={handleProviderDidChange}
-                vendorKey={draft.vendor === 'codex' ? 'codex' : 'cc'}
-                folderPickerOpen={folderPickerOpen}
-                onFolderPickerOpenChange={handleFolderPickerOpenChange}
-                showFolderPicker={false}
-                middleToolbarSlot={
-                  <VendorSegmentedSwitcher
-                    value={draft.vendor}
-                    onChange={handleVendorChange}
-                    width={150}
-                    dense
+                    onSend={handleSend}
+                    onBeforeVoiceInputStart={handleBeforeVoiceInputStart}
+                    externalDragOver={pageDragOver}
                     visualVariant="create-agent"
-                    className="shrink-0"
-                    disabled={wtCreating}
-                  />
-                }
-                paletteMaxHeight={240}
-                attachmentState={attachmentState}
-                draftKey={NEW_MAKER_DRAFT_KEY}
-                // 「+」始终显示(与对话界面一致):无项目裸态也可加引用目录,作为本次对话的上下文。
-                // createSession 各路径都会带上 extraDirs;workingDir=null 时 ExtraDirsButton 跳过重叠校验。
-                extraDirs={effectiveExtraDirs}
-                onExtraDirsChange={handleExtraDirsChange}
-                // 首页「新建目标」入口:草稿态没有 sessionId,由本组件 createSession→setGoal。
-                // ChatInput 把输入框当前文字传上来作默认目标内容。
-                onNewGoal={(text) => {
-                  setNewGoalInitialObjective(text);
-                  setNewGoalOpen(true);
-                }}
-                rememberedEffortByModel={isDeviceLinkDraft ? undefined : draft.effortByModel}
-                onRememberedEffortChange={isDeviceLinkDraft ? undefined : handleRememberedEffortChange}
+                    compactToolbar
+                    denseToolbar
+                    placeholder="Hi Cindy!"
+                    sessionId={undefined}
+                    initialWorkingDir={effectiveWorkingDir}
+                    remoteHostId={draft.remoteHostId ?? null}
+                    deviceLinkDeviceId={effectiveDeviceLinkDeviceId}
+                    modelMemoryOverride={deviceLinkDraftMemory}
+                    initialModel={draftInitialModel}
+                    initialEffort={draftInitialEffort}
+                    initialPermissionMode={chatInitialPermissionMode}
+                    initialProviderId={chatInitialProviderId}
+                    planModeEnabled={effectivePlanMode}
+                    onPlanModeChange={isDeviceLinkDraft ? undefined : handlePlanModeChange}
+                    fastMode={effectiveFastMode}
+                    onFastModeChange={handleFastModeChange}
+                    onWorkingDirChange={handleWorkingDirChange}
+                    onModelDidChange={handleModelDidChange}
+                    onEffortDidChange={handleEffortDidChange}
+                    onPermissionModeDidChange={handlePermissionModeDidChange}
+                    onProviderDidChange={handleProviderDidChange}
+                    vendorKey={draft.vendor === 'codex' ? 'codex' : 'cc'}
+                    folderPickerOpen={folderPickerOpen}
+                    onFolderPickerOpenChange={handleFolderPickerOpenChange}
+                    showFolderPicker={false}
+                    middleToolbarSlot={
+                      <VendorSegmentedSwitcher
+                        value={draft.vendor}
+                        onChange={handleVendorChange}
+                        width={150}
+                        dense
+                        visualVariant="create-agent"
+                        className="shrink-0"
+                        disabled={wtCreating}
+                      />
+                    }
+                    paletteMaxHeight={240}
+                    attachmentState={attachmentState}
+                    draftKey={NEW_MAKER_DRAFT_KEY}
+                    // 「+」始终显示(与对话界面一致):无项目裸态也可加引用目录,作为本次对话的上下文。
+                    // createSession 各路径都会带上 extraDirs;workingDir=null 时 ExtraDirsButton 跳过重叠校验。
+                    extraDirs={effectiveExtraDirs}
+                    onExtraDirsChange={handleExtraDirsChange}
+                    // 首页「新建目标」入口:草稿态没有 sessionId,由本组件 createSession→setGoal。
+                    // ChatInput 把输入框当前文字传上来作默认目标内容。
+                    onNewGoal={(text) => {
+                      setNewGoalInitialObjective(text);
+                      setNewGoalOpen(true);
+                    }}
+                    rememberedEffortByModel={isDeviceLinkDraft ? undefined : draft.effortByModel}
+                    onRememberedEffortChange={
+                      isDeviceLinkDraft ? undefined : handleRememberedEffortChange
+                    }
                   />
                 </div>
-            <div data-testid="create-agent-quick-starts" className="mt-[42px] w-full">
-              <div className="mb-4 px-0.5">
-                <div className="text-[12px] font-medium leading-[14px] text-[var(--text-secondary)]">
-                  {t('newChat.createAgent.quickStart')}
+                <div data-testid="create-agent-quick-starts" className="mt-[42px] w-full">
+                  <div className="mb-4 px-0.5">
+                    <div className="text-[12px] font-medium leading-[14px] text-[var(--text-secondary)]">
+                      {t('newChat.createAgent.quickStart')}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 gap-3">
+                    {createAgentQuickStarts.map(({ key, labelKey, icon: Icon }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => handleQuickStart(labelKey)}
+                        className="flex h-20 items-start gap-[7px] rounded-[6px] border border-[var(--create-agent-quick-card-border)] bg-[var(--create-agent-quick-card-bg)] p-[7px] text-left text-[var(--create-agent-quick-card-text)] transition-colors hover:bg-[var(--create-agent-control-bg-hover)]"
+                      >
+                        <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-[var(--create-agent-quick-card-icon-bg)]">
+                          <Icon
+                            size={15}
+                            strokeWidth={2}
+                            className="text-[var(--create-agent-quick-card-icon)]"
+                          />
+                        </span>
+                        <span className="min-w-0 pt-0.5 text-[11px] font-semibold leading-[14px]">
+                          {t(labelKey)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <div className="grid grid-cols-4 gap-3">
-                {createAgentQuickStarts.map(({ key, labelKey, icon: Icon }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => handleQuickStart(labelKey)}
-                    className="flex h-20 items-start gap-[7px] rounded-[6px] border border-[var(--border-default)] bg-[var(--chat-input-bg)] p-[7px] text-left text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-chip)]"
-                  >
-                    <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full border border-[var(--border-default)] bg-[var(--chat-input-chip-bg)]">
-                      <Icon size={15} strokeWidth={2} className="text-[var(--text-primary)]" />
-                    </span>
-                    <span className="min-w-0 pt-0.5 text-[11px] font-semibold leading-[14px]">
-                      {t(labelKey)}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/* 首页「新建目标」弹窗:无 sessionId → onCreate 建会话并 setGoal(见 handleCreateGoal)。
+                {/* 首页「新建目标」弹窗:无 sessionId → onCreate 建会话并 setGoal(见 handleCreateGoal)。
                 initialObjective = 点「新建目标」时输入框里已有的文字。 */}
-            <NewGoalDialog
-              open={newGoalOpen}
-              onOpenChange={setNewGoalOpen}
-              onCreate={handleCreateGoal}
-              initialObjective={newGoalInitialObjective}
-            />
-          </div>
+                <NewGoalDialog
+                  open={newGoalOpen}
+                  onOpenChange={setNewGoalOpen}
+                  onCreate={handleCreateGoal}
+                  initialObjective={newGoalInitialObjective}
+                />
+              </div>
             </div>
           </main>
-      </div>
+        </div>
 
-      {/* 跨 Agent 工作区互转 (5 项独立判断 + 步骤式进度) —— send 流程会 await 等它关闭 */}
-      <CrossAgentConvertDialog
-        open={crossAgentDialog.open}
-        phase={crossAgentDialog.phase}
-        items={crossAgentDialog.items}
-        stepMap={crossAgentDialog.stepMap}
-        onOpenChange={crossAgentDialog.onOpenChange}
-        onConfirm={crossAgentDialog.onConfirm}
-        onCancel={crossAgentDialog.onCancel}
-      />
-    </div>
+        {/* 跨 Agent 工作区互转 (5 项独立判断 + 步骤式进度) —— send 流程会 await 等它关闭 */}
+        <CrossAgentConvertDialog
+          open={crossAgentDialog.open}
+          phase={crossAgentDialog.phase}
+          items={crossAgentDialog.items}
+          stepMap={crossAgentDialog.stepMap}
+          onOpenChange={crossAgentDialog.onOpenChange}
+          onConfirm={crossAgentDialog.onConfirm}
+          onCancel={crossAgentDialog.onCancel}
+        />
+      </div>
     </TopRightChipStackProvider>
   );
 }

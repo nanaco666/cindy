@@ -245,7 +245,7 @@ export function ProjectsSection({
             type="button"
             onClick={() => setIsSectionCollapsed((value) => !value)}
             aria-expanded={!isSectionCollapsed}
-            className="text-sm font-medium text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
+            className="text-sm font-medium text-[var(--sidebar-list-muted)] transition-colors hover:text-[var(--sidebar-nav-text)]"
           >
             {t('ccAgent.sidebar.projects')}
           </button>
@@ -259,8 +259,8 @@ export function ProjectsSection({
                 className={cn(
                   'flex h-5 w-5 shrink-0 items-center justify-center rounded-md',
                   // 无灰底 hover(2026-07 用户定稿):纯色加深反馈,与段标题一致。
-                  'text-[var(--text-tertiary)]',
-                  'transition-colors hover:text-[var(--text-secondary)]',
+                  'text-[var(--sidebar-list-muted)]',
+                  'transition-colors hover:text-[var(--sidebar-nav-text)]',
                 )}
               >
                 <SectionToggleIcon size={13} strokeWidth={2} />
@@ -274,40 +274,40 @@ export function ProjectsSection({
         {/* 右侧:hover 才浮现的工具组(远程机器切换入口已移到侧栏顶部固定行,不在段头)。 */}
         <div className="flex items-center gap-0.5 -mt-px">
           <div className={HEADER_ACTIONS_CLASS}>
-          {!isSectionCollapsed && (
-            <Tip text={projectNodesToggleLabel} side="bottom">
+            {!isSectionCollapsed && (
+              <Tip text={projectNodesToggleLabel} side="bottom">
+                <button
+                  type="button"
+                  onClick={handleToggleAllProjectNodes}
+                  disabled={projectNodesToggleDisabled}
+                  aria-label={projectNodesToggleLabel}
+                  className={cn(
+                    'flex h-7 w-7 items-center justify-center rounded-md',
+                    'text-[var(--sidebar-list-muted)]',
+                    'transition-colors hover:text-[var(--sidebar-nav-text)]',
+                    'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent',
+                  )}
+                >
+                  <ProjectNodesToggleIcon size={14} strokeWidth={2} />
+                </button>
+              </Tip>
+            )}
+            {/* F-PJ-10：Filter Popover 入口。allKnownProjects 是未过滤前的 Project 全集。 */}
+            <SidebarFilterPopover filter={filter} allKnownProjects={allKnownProjects} />
+            <Tip text={t('ccAgent.sidebar.newProject')} side="bottom">
               <button
                 type="button"
-                onClick={handleToggleAllProjectNodes}
-                disabled={projectNodesToggleDisabled}
-                aria-label={projectNodesToggleLabel}
+                onClick={onCreateProject}
+                aria-label={t('ccAgent.sidebar.newProject')}
                 className={cn(
                   'flex h-7 w-7 items-center justify-center rounded-md',
-                  'text-[var(--text-tertiary)]',
-                  'transition-colors hover:text-[var(--text-secondary)]',
-                  'disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent',
+                  'text-[var(--sidebar-list-muted)]',
+                  'transition-colors hover:text-[var(--sidebar-nav-text)]',
                 )}
               >
-                <ProjectNodesToggleIcon size={14} strokeWidth={2} />
+                <Plus size={14} strokeWidth={2} />
               </button>
             </Tip>
-          )}
-          {/* F-PJ-10：Filter Popover 入口。allKnownProjects 是未过滤前的 Project 全集。 */}
-          <SidebarFilterPopover filter={filter} allKnownProjects={allKnownProjects} />
-          <Tip text={t('ccAgent.sidebar.newProject')} side="bottom">
-            <button
-              type="button"
-              onClick={onCreateProject}
-              aria-label={t('ccAgent.sidebar.newProject')}
-              className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-md',
-                'text-[var(--text-tertiary)]',
-                'transition-colors hover:text-[var(--text-secondary)]',
-              )}
-            >
-              <Plus size={14} strokeWidth={2} />
-            </button>
-          </Tip>
           </div>
         </div>
       </div>
