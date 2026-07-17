@@ -103,8 +103,9 @@ describe('mobile home desktop-first surface', () => {
     );
 
     expect(desktopVendorIconSource).toContain('VendorIcon — sidebar session 行的 vendor + running 状态指示器');
-    expect(desktopVendorIconSource).toContain('ClaudeMark');
-    expect(desktopVendorIconSource).toContain("vendor === 'cc'");
+    // D4-1:Claude/Codex glyph 统一为品牌箭头(BrandArrow),vendor prop 保留兼容。
+    expect(desktopVendorIconSource).toContain('BrandArrow');
+    expect(desktopVendorIconSource).toContain("vendor: 'cc' | 'codex'");
     expect(desktopVendorIconSource).toContain('session-status-breathing');
     expect(vendorIconSource).not.toContain('XD_SYMBOL_PATHS');
     expect(vendorIconSource).not.toContain('XD_INC_MARK_ASPECT_RATIO');
