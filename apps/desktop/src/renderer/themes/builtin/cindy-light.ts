@@ -127,7 +127,7 @@ const overrides = {
   'sidebar-item-hover': '0.0 0.0% 94.5%', // alias closure: hover
   'sidebar-search-bg': '0.0 0.0% 92.9%', // alias closure: surface
   'sidebar-muted': '220.0 4.7% 62.2%', // E1D 侧栏层级:二级暗灰 #9A9DA3(行首图标普通态)
-  'surface-translucent-sidebar': 'rgba(246, 246, 246, 0.90)', // E4D R1 模式1 侧栏半透明
+  'surface-translucent-sidebar': 'rgba(246, 246, 246, 0.60)', // 用户观感定稿 0.60(2026-07-18;设计静态值 0.90 实机偏闷)
   'surface-translucent-main': '#EDEDED', // E4D 主面板:用户勘误 2026-07-17 撤销毛玻璃,改不透明等价 surface(原 rgba(255,255,255,0.93))
   'surface-translucent-overlay': 'rgba(246, 246, 246, 0.90)', // E4D R1 模式3 浮层半透明
   'composer-pill-bg': '#FCFCFC', // E2 composer pill 底(light,lead Figma 实测 §2-3;取代错稿 glass-pill)
