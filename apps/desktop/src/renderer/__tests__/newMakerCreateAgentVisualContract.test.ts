@@ -9,6 +9,9 @@ const sendButtonSource = readFileSync(resolve(__dirname, '..', 'components', 'ne
 const vendorSwitcherSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'VendorSegmentedSwitcher.tsx'), 'utf8');
 const permissionSelectorSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'PermissionSelector.tsx'), 'utf8');
 const modelSelectorSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'ModelSelector.tsx'), 'utf8');
+const userInfoSectionSource = readFileSync(resolve(__dirname, '..', 'components', 'sidebar', 'UserInfoSection.tsx'), 'utf8');
+const sidebarTopNavSource = readFileSync(resolve(__dirname, '..', 'components', 'sidebar', 'SidebarTopNav.tsx'), 'utf8');
+const vendorIconSource = readFileSync(resolve(__dirname, '..', 'components', 'sidebar', 'VendorIcon.tsx'), 'utf8');
 const colorsSource = readFileSync(resolve(__dirname, '..', 'themes', 'colors.ts'), 'utf8');
 
 describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
