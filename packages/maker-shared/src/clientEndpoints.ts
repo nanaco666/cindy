@@ -35,6 +35,8 @@ export const CLIENT_ENDPOINT_KEYS = [
   'slackHookWsUrl',
   'websiteUrl',
   'xdGatewayBaseUrl',
+  // model-access-server(登录后自动下发 LLM 网关凭据)的 API 基址。
+  'modelAccessApiBaseUrl',
   'cdnBaseUrl',
   'cdnInternalBaseUrl',
 ] as const;
@@ -54,6 +56,7 @@ const FIELD_PROTOCOLS: Record<ClientEndpointKey, readonly string[]> = {
   slackHookWsUrl: ['wss:'],
   websiteUrl: ['https:'],
   xdGatewayBaseUrl: ['https:'],
+  modelAccessApiBaseUrl: ['https:'],
   cdnBaseUrl: ['https:'],
   cdnInternalBaseUrl: ['http:', 'https:'],
 };

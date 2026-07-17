@@ -43,6 +43,23 @@ let discoveredCodex: CatalogModel[] = [];
  * 空/坏数据绝不抹掉静态兜底。由 generic-oauth 的 models 发现流程写入。
  */
 const discoveredByProvider = new Map<string, Partial<Record<AgentKind, CatalogModel[]>>>();
+/** 服务端下发的 XD 网关聊天模型条目(shared/modelAccess ModelAccessGatewayModel 同形)。 */
+export interface XdGatewayModelInfo {
+  id: string;
+  contextWindow?: number;
+}
+
+/**
+ * XD 网关(内置 xd 供应商)的**权威模型清单**(model-access-server 透传 AIGateway
+ * /model-groups 的 mode=chat 投影;2026-07-17 定案:XD 模型列表完全以网关为准,
+ * 不再由 OSS 产品目录决定)。null = 未拉到(未登录/拉取失败)→ fail-open 回落
+ * 目录静态清单。有值时 xd 供应商的模型列表整体重建:
+ *  - 网关 id 在目录里有同名条目 → 沿用目录条目(展示名/分组/effort/排序等产品元数据);
+ *  - 网关 id 目录没有 → 合成默认条目(id 当展示名,口径同自定义 OAuth 供应商的
+ *    模型发现,见 maker-ipc/register.ts oauthLogin);
+ *  - 目录里有、网关没有 → 不展示。
+ */
+let xdGatewayModels: XdGatewayModelInfo[] | null = null;
 /** base + custom + discovered augment 的合并缓存;null = 待重算(惰性)。 */
 let merged: Catalog | null = null;
 
@@ -130,6 +147,40 @@ function computeMerged(): Catalog {
       return next;
     });
   }
+  // XD 网关权威模型清单重建(fail-open 见 xdGatewayModels 注释)。
+  // 放在所有 augment 之后:重建的是最终展示清单;只影响 xd 供应商自己的模型列表,
+  // 同 id 模型经其它供应商(如 anthropic 订阅直连)仍照常可用。
+  if (xdGatewayModels !== null && xdGatewayModels.length > 0) {
+    const gwModels = xdGatewayModels;
+    const gatewayIds = new Set(gwModels.map((m) => m.id));
+    providers = providers.map((p) => {
+      if (p.id !== 'xd') return p;
+      const catalogIds = new Set(
+        Object.values(p.models).flatMap((list) => list.map((m) => m.id)),
+      );
+      // 目录没有的网关模型 → 合成默认条目(口径同自定义 OAuth 模型发现)。
+      // 只进 claude-code tab:网关对 /v1/messages 做跨供应商翻译,覆盖面最广;
+      // codex tab 保持目录已知条目(Responses 协议覆盖面不确定,不猜)。
+      const synthesized: CatalogModel[] = gwModels
+        .filter((m) => !catalogIds.has(m.id))
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .map((m) => ({
+          id: m.id,
+          name: m.id,
+          contextWindow: m.contextWindow ?? 200_000,
+          efforts: [],
+          defaultEffort: null,
+          group: `custom:xd`,
+        }));
+      const models: Provider['models'] = {};
+      for (const [agent, list] of Object.entries(p.models) as [AgentKind, CatalogModel[]][]) {
+        const known = list.filter((m) => gatewayIds.has(m.id));
+        models[agent] = agent === 'claude-code' ? [...known, ...synthesized] : known;
+      }
+      return { ...p, models };
+    });
+  }
+
   if (providers === b.providers) return b; // 无 augment、无 custom → 原样返回
   return { ...b, providers }; // spread 保留 presets 等目录顶层字段
 }
@@ -179,5 +230,15 @@ export function setDiscoveredProviderModels(
   const byAgent = discoveredByProvider.get(providerId) ?? {};
   byAgent[agent] = [...models];
   discoveredByProvider.set(providerId, byAgent);
+  merged = null;
+}
+
+/**
+ * 注入 XD 网关权威模型清单(model-access 拉取流程写入,重建逻辑见 computeMerged)。
+ * null = 清除(回到目录静态清单);调用方对「拉取失败 / 空列表」不应传值,
+ * 保持现状(fail-open,空列表按失败处理——清空清单会让供应商行整个消失)。
+ */
+export function setXdGatewayModels(models: XdGatewayModelInfo[] | null): void {
+  xdGatewayModels = models === null ? null : [...models];
   merged = null;
 }

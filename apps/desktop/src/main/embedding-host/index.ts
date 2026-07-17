@@ -20,6 +20,8 @@ import type { DbClient } from '../localDb/client/DbClient';
 import { EmbeddingService } from './EmbeddingService';
 import { XD_GATEWAY_BASE_URL } from '../../shared/endpoints';
 
+/** 兜底常量(仅 deps 未注入时);生产接线一律注入运行期函数(bootstrap-electron)。 */
+
 export type { EmbeddingProvider, EmbeddingJobForProvider } from './providers';
 export type { EmbeddingService } from './EmbeddingService';
 export type { VecTableSpec } from './VecTableRegistry';
@@ -30,8 +32,8 @@ export interface StartEmbeddingHostDeps {
   getDbClient: () => DbClient;
   isVecAvailable: () => boolean;
   getApiKey: () => string | null | undefined;
-  /** 可选：覆盖由构建配置注入的 xdproxy base URL。 */
-  xdproxyBaseUrl?: string;
+  /** 可选:覆盖 xdproxy base URL;函数形态 = 每次请求现取(endpoint 运行期可变)。 */
+  xdproxyBaseUrl?: string | (() => string);
   log: ReturnType<typeof createLogger>;
   /** 可选: 注入 fetch (测试用) */
   fetchImpl?: typeof fetch;

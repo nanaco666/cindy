@@ -32,6 +32,9 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_XDPROXY_BASE_URL': JSON.stringify(
         readViteEnv('VITE_XDPROXY_BASE_URL'),
       ),
+      'import.meta.env.VITE_MODEL_ACCESS_API_BASE_URL': JSON.stringify(
+        readViteEnv('VITE_MODEL_ACCESS_API_BASE_URL'),
+      ),
       'import.meta.env.VITE_CDN_BASE_URL': JSON.stringify(
         readViteEnv('VITE_CDN_BASE_URL'),
       ),

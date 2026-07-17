@@ -10,6 +10,7 @@ interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
 
+type ModelAccessStatusPayload = import('../shared/modelAccess').ModelAccessStatus;
 type RsbWindowCommand = import('../shared/rightSidebarWindow').RsbWindowCommand;
 type DesktopLoginAction = import('../shared/authIpc').DesktopLoginAction;
 type DesktopLoginActionResult = import('../shared/authIpc').DesktopLoginActionResult;
@@ -1387,6 +1388,14 @@ interface ElectronAPI {
   safeStorageRemove: (key: string) => Promise<{ success: boolean; error?: string }>;
   /** CC 网络调试日志开关 (admin experimental). main 端 mutate process.env.XDT_CC_DEBUG_NET。 */
   ccSetDebugNet: (enabled: boolean) => Promise<{ ok: true }>;
+  /** 网关凭据自动下发(model-access,类型见 shared/modelAccess.ts)。 */
+  modelAccess: {
+    getStatus: () => Promise<ModelAccessStatusPayload>;
+    retry: () => Promise<ModelAccessStatusPayload>;
+    /** 轮换密钥;失败 reject(IPC 错误经 extractIpcError 解码)。 */
+    rotate: () => Promise<ModelAccessStatusPayload>;
+    onStatusChange: (callback: (status: ModelAccessStatusPayload) => void) => () => void;
+  };
   // ── Auth (delegated to main process authManager) ──
   authInitialize: () => Promise<{
     user: AuthUser | null;
@@ -1764,7 +1773,6 @@ interface ElectronAPI {
       ) => void,
     ) => () => void;
   };
-  testApiKeyConnection: (key: string) => Promise<{ success: boolean; error?: string }>;
   showOpenDirectoryDialog: () => Promise<{ canceled: boolean; path?: string }>;
   openExternal: (url: string) => Promise<{ success: boolean }>;
 

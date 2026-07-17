@@ -164,8 +164,11 @@ export interface ProxyLogger {
  * createAnthropicCompatProxy 入参。
  */
 export interface ProxyOptions {
-  /** 真正的 Anthropic-compatible 上游 (例: https://llm-proxy.tapsvc.com) */
-  upstream: string;
+  /**
+   * 真正的 Anthropic-compatible 上游 (例: https://llm-proxy.tapsvc.com)。
+   * 函数形态 = 每个请求现取(宿主网关 endpoint 运行期可变,如登录后由服务端下发)。
+   */
+  upstream: string | (() => string);
   /**
    * 请求 transform 链。不传时 = [stripNonAnthropicFields](默认行为)。
    * 传空数组 [] = 显式禁用所有 transform,纯透传。

@@ -880,7 +880,26 @@ function forward(
  * 启动代理。返回 ProxyHandle —— url 给 host 用作 ANTHROPIC_BASE_URL。
  */
 export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<ProxyHandle> {
-  const target = parseUpstream(opts.upstream);
+  // 默认上游支持函数形态:宿主的网关 endpoint 运行期可变(如登录后由服务端下发),
+  // 每个请求现取。字符串形态保持构造期一次 parse;函数形态按返回值 memoize,
+  // endpoint 未变化时零重复 parse(热路径,规则 10)。
+  const resolveTarget = ((): (() => UpstreamTarget) => {
+    const raw = opts.upstream;
+    if (typeof raw === 'string') {
+      const fixed = parseUpstream(raw);
+      return () => fixed;
+    }
+    let cachedRaw: string | null = null;
+    let cachedTarget: UpstreamTarget | null = null;
+    return () => {
+      const current = raw();
+      if (cachedTarget === null || current !== cachedRaw) {
+        cachedTarget = parseUpstream(current);
+        cachedRaw = current;
+      }
+      return cachedTarget;
+    };
+  })();
   const transforms = opts.transformRequest ?? [stripNonAnthropicFields];
   const logger = opts.logger ?? {};
   const host = opts.host ?? '127.0.0.1';
@@ -902,6 +921,8 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
 
     const method = req.method ?? 'GET';
     const url = req.url ?? '/';
+    // per-request 解析默认上游(函数形态的 upstream 可能在运行期变化)。
+    const target = resolveTarget();
     const headers = flattenRequestHeaders(req.headers);
     const contentType = headers['content-type'] ?? '';
 

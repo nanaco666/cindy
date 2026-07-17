@@ -13,6 +13,14 @@ function injectedEndpoint(value: string | undefined): string {
 /** XD 网关 base URL。 */
 export const XD_GATEWAY_BASE_URL = injectedEndpoint(import.meta.env.VITE_XDPROXY_BASE_URL);
 
+/** model-access-server(登录后自动下发网关凭据)API base URL。 */
+export const MODEL_ACCESS_API_BASE_URL = injectedEndpoint(
+  import.meta.env.VITE_MODEL_ACCESS_API_BASE_URL,
+);
+
+/** model-access-server 的本地开发兜底地址(cindy-server 仓 model-access-server,端口 3339)。 */
+export const MODEL_ACCESS_API_BASE_DEV_FALLBACK = 'http://localhost:3339';
+
 /** 主 server API 的本地开发兜底地址。 */
 export const API_BASE_URL_DEV_FALLBACK = 'http://localhost:3333';
 

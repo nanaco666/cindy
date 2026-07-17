@@ -43,6 +43,8 @@ export function bakedMobileClientEndpoints(): ClientEndpointMap {
     slackHookWsUrl: '',
     websiteUrl: '',
     xdGatewayBaseUrl: MOBILE_VOICE_LITELLM_BASE_URL,
+    // mobile 本期不消费 model-access(手机语音凭据仍经 device-link 穿透),占位回退。
+    modelAccessApiBaseUrl: '',
     cdnBaseUrl: CDN_BASE_URL,
     cdnInternalBaseUrl: '',
   };

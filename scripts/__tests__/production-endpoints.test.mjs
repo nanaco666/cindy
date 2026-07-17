@@ -58,6 +58,7 @@ test('私有 JSON 是 Desktop/Mobile 构建注入的唯一输入', () => {
     VITE_SLACK_HOOK_WS_URL: values.slackHookWsUrl,
     VITE_WEBSITE_URL: values.websiteUrl,
     VITE_XDPROXY_BASE_URL: values.xdGatewayBaseUrl,
+    VITE_MODEL_ACCESS_API_BASE_URL: values.modelAccessApiBaseUrl,
     VITE_CDN_BASE_URL: values.cdnBaseUrl,
     VITE_CDN_INTERNAL_BASE_URL: values.cdnInternalBaseUrl,
   });
@@ -116,6 +117,7 @@ function fixtureEndpoints() {
     slackHookWsUrl: 'wss://hook.example.invalid',
     websiteUrl: 'https://website.example.invalid',
     xdGatewayBaseUrl: 'https://gateway.example.invalid',
+    modelAccessApiBaseUrl: 'https://model-access.example.invalid',
     cdnBaseUrl: 'https://cdn.example.invalid/app',
     cdnInternalBaseUrl: 'http://cdn-internal.example.invalid/app',
     npkgBaseUrl: 'https://npkg.example.invalid',

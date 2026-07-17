@@ -390,6 +390,12 @@ import {
   initClientEndpoints,
   registerClientEndpointsIpc,
 } from './clientEndpointsService.js';
+import {
+  initModelAccess,
+  noteManualXdKeySaved,
+  noteManualXdKeyRemoved,
+} from './model-access/index.js';
+import { effectiveXdGatewayBaseUrl } from './model-access/effectiveEndpoint.js';
 import type { ApplicationMenuCommand } from '../shared/applicationMenuCommands.js';
 import {
   comboToElectronAccelerator,
@@ -577,7 +583,8 @@ function attemptStartEmbeddingHost(): void {
       },
       // xdproxy /v1/embeddings 走 Bearer ANTHROPIC_API_KEY (与 art / claude 同源)
       getApiKey: () => readClaudeApiKey(),
-      xdproxyBaseUrl: getClientEndpoint('xdGatewayBaseUrl') || undefined,
+      // 函数形态:model-access 下发切换 endpoint 后,常驻的 embedding host 无需重启。
+      xdproxyBaseUrl: () => effectiveXdGatewayBaseUrl(),
       log: createSchedulerLogger('embeddingHost'),
     });
     // chat-history-embedder consumer 注册 + setEnabled(true) 触发 cutoff 落盘。
@@ -2566,7 +2573,12 @@ const registerIpcHandlers = () => {
           mutated = true;
           const restartResult = await finalizeApiKeyChangeMaybeRestartCodex(key);
           finalized = restartResult.ok;
-          if (restartResult.ok) return true;
+          if (restartResult.ok) {
+            // 手填 XD key 保存成功:来源标记翻 manual(endpoint 回落编译期常量,
+            // 与 model-access 自动下发的 endpoint 解耦,见 credentialsStore 注释)。
+            if (key === 'api_key') noteManualXdKeySaved();
+            return true;
+          }
           if (hadPrevious && previousContent !== null) fs.writeFileSync(filepath, previousContent, 'utf-8');
           else if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
           return false;
@@ -2641,6 +2653,8 @@ const registerIpcHandlers = () => {
           }
           return { success: false, error: 'codex_restart_failed' };
         }
+        // 手填 XD key 被删除(断开):清来源标记,endpoint 回落编译期常量。
+        if (key === 'api_key') noteManualXdKeyRemoved();
         return { success: true };
       } catch (err: unknown) {
         console.error('[safe-storage-remove]', err);
@@ -3339,27 +3353,8 @@ const registerIpcHandlers = () => {
     },
   );
 
-  // API Key test connection IPC handler
-  ipcMain.handle(
-    'api-key:test-connection',
-    async (_event: Electron.IpcMainInvokeEvent, key: string): Promise<{ success: boolean; error?: string }> => {
-      try {
-        const response = await net.fetch(`${getClientEndpoint('xdGatewayBaseUrl')}/v1/models`, {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${key}` },
-        });
-        if (response.ok) {
-          return { success: true };
-        }
-        if (response.status === 401) {
-          return { success: false, error: 'Key 无效，请检查' };
-        }
-        return { success: false, error: `服务异常 (HTTP ${response.status})` };
-      } catch {
-        return { success: false, error: '网络连接失败，请检查网络' };
-      }
-    },
-  );
+  // (api-key:test-connection 已随手填录入链路移除,2026-07-17:XD 网关 key 一律由
+  //  model-access 自动下发,连通性由同步状态机负责。)
 
   // ── Generic API request proxy (renderer → main → server) ──
   // All backend HTTP calls go through this handler so the renderer never
@@ -4427,6 +4422,11 @@ app.on('ready', async () => {
     if (!state.isAuthenticated || state.user == null) return;
     brandMigrationRuntime.recordIdentityAnchor(state.user);
   });
+
+  // 网关凭据自动下发:订阅登录态(登录后向 model-access-server 拉 endpoint +
+  // 用户专属 key)+ 注册 model-access:* IPC。须在 initClientEndpoints 之后
+  // (依赖 modelAccessApiBaseUrl 端点)、renderer auth:initialize 之前装订阅。
+  initModelAccess();
 
   initializeUpdatePresentationRecovery();
 

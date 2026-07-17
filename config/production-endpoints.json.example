@@ -9,6 +9,7 @@
   "slackHookWsUrl": "",
   "websiteUrl": "",
   "xdGatewayBaseUrl": "",
+  "modelAccessApiBaseUrl": "",
   "cdnBaseUrl": "",
   "cdnInternalBaseUrl": "",
   "npkgBaseUrl": "",

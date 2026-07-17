@@ -20,6 +20,7 @@ export const PRODUCTION_ENDPOINT_KEYS = Object.freeze([
   'slackHookWsUrl',
   'websiteUrl',
   'xdGatewayBaseUrl',
+  'modelAccessApiBaseUrl',
   'cdnBaseUrl',
   'cdnInternalBaseUrl',
   'npkgBaseUrl',
@@ -64,6 +65,7 @@ const FIELD_PROTOCOLS = Object.freeze({
   slackHookWsUrl: ['wss:'],
   websiteUrl: ['https:'],
   xdGatewayBaseUrl: ['https:'],
+  modelAccessApiBaseUrl: ['https:'],
   cdnBaseUrl: ['https:'],
   cdnInternalBaseUrl: ['http:', 'https:'],
   npkgBaseUrl: ['https:'],
@@ -209,6 +211,10 @@ export function productionViteEnv({ allowEnvOverride = true, authRegion } = {}) 
     VITE_SLACK_HOOK_WS_URL: pick('VITE_SLACK_HOOK_WS_URL', 'slackHookWsUrl'),
     VITE_WEBSITE_URL: pick('VITE_WEBSITE_URL', 'websiteUrl'),
     VITE_XDPROXY_BASE_URL: pick('VITE_XDPROXY_BASE_URL', 'xdGatewayBaseUrl'),
+    VITE_MODEL_ACCESS_API_BASE_URL: pick(
+      'VITE_MODEL_ACCESS_API_BASE_URL',
+      'modelAccessApiBaseUrl',
+    ),
     VITE_CDN_BASE_URL: pick('VITE_CDN_BASE_URL', 'cdnBaseUrl'),
     VITE_CDN_INTERNAL_BASE_URL: pick('VITE_CDN_INTERNAL_BASE_URL', 'cdnInternalBaseUrl'),
   };

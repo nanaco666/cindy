@@ -8,5 +8,6 @@
   "slackHookWsUrl": "wss://slack-hook.cindy.com.cn",
   "websiteUrl": "https://cindy.com.cn",
   "cdnBaseUrl": "https://hotfix.cindy.com.cn/cindy",
-  "xdGatewayBaseUrl": "https://llm-proxy.tapsvc.com"
+  "xdGatewayBaseUrl": "https://llm-proxy.tapsvc.com",
+  "modelAccessApiBaseUrl": "https://xdmaker-model-access.magiclizi.com"
 }

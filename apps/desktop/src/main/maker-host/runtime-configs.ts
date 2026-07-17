@@ -13,7 +13,7 @@ import { app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { getClientEndpoint } from '../clientEndpointsService.js';
+import { effectiveXdGatewayBaseUrl } from '../model-access/effectiveEndpoint.js';
 import claudeSystemPrompt from './claude-system-prompt.md?raw';
 import codexSystemPrompt from './codex-system-prompt.md?raw';
 import hostSystemPrompt from './host-system-prompt.md?raw';
@@ -100,8 +100,10 @@ const staticClaudeBehaviorFlags = {
  * "Unknown parameter" 400 错误。
  */
 // 惰性函数而非模块级常量:远程端点清单在 app.ready 内解析,顶层求值会钉死在烘焙值。
+// model-access 自动下发生效时(source='server')返回下发的租户 endpoint,否则回落
+// 端点清单值——保证 key 与 endpoint 永远同租户(见 model-access/effectiveEndpoint.ts)。
 export function claudeUpstreamEndpoint(): string {
-  return getClientEndpoint('xdGatewayBaseUrl');
+  return effectiveXdGatewayBaseUrl();
 }
 
 /**
@@ -139,10 +141,15 @@ export function buildDesktopClaudeRuntimeConfig(endpointFn: () => string): Agent
     get makerMemoryEnabled() {
       return readMakerMemoryEnabled();
     },
-    // 远端 cc-mgr 会话恒用真上游网关 —— 本地 endpoint 是 loopback proxy(远端够不到)。
-    // 静态值即可:远端从来不走 per-model OAuth↔gateway 拆分(那只在本地 proxy 里有意义)。
-    remoteEndpoint: claudeUpstreamEndpoint(),
   };
+  // 远端 cc-mgr 会话恒用真上游网关 —— 本地 endpoint 是 loopback proxy(远端够不到)。
+  // 用 getter 而非构建期快照:model-access 凭据同步可能在 maker 构建后才把
+  // endpoint 换成下发值,远端 spawn 期读 getter 才能拿到与 key 配套的上游。
+  Object.defineProperty(config, 'remoteEndpoint', {
+    get: () => claudeUpstreamEndpoint(),
+    enumerable: true,
+    configurable: false,
+  });
   Object.defineProperty(config, 'endpoint', {
     get: endpointFn,
     enumerable: true,

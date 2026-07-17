@@ -339,7 +339,9 @@ describe('codex proxy host', () => {
     expect(host.getCodexProxyEndpoint()).toBe('http://127.0.0.1:43210');
     expect(mockState.createAnthropicCompatProxy).toHaveBeenCalledWith(
       expect.objectContaining({
-        upstream: `${XD_GATEWAY_BASE_URL}/v1`,
+        // upstream 是函数形态(每请求现取,model-access 下发可运行期换 endpoint);
+        // 断言其当前求值 = 网关 base + /v1
+        upstream: expect.any(Function),
         // [encrypted activeStrip, image generation activeStrip, instructions 注入, xAI Responses 兼容, provider model rewrite, stripNonAnthropicFields]
         transformRequest: [expect.any(Function), expect.any(Function), expect.any(Function), expect.any(Function), expect.any(Function), mockState.stripNonAnthropicFields],
         routingTransform: expect.any(Function),
@@ -349,6 +351,10 @@ describe('codex proxy host', () => {
         ]),
       }),
     );
+    const proxyOpts = mockState.createAnthropicCompatProxy.mock.calls[0][0] as {
+      upstream: () => string;
+    };
+    expect(proxyOpts.upstream()).toBe(`${XD_GATEWAY_BASE_URL}/v1`);
   });
 
   it('falls back to direct gateway /v1 endpoint when proxy is not ready', async () => {
