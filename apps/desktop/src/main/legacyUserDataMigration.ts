@@ -27,6 +27,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
+import { CURRENT_CINDY_REGION } from '../shared/brandRegion.js';
 
 import { createLogger } from './logger';
 
@@ -494,6 +495,10 @@ export function registerLegacyMigrationIpc(): void {
  * 幂等 + 防重入;marker 已写时零开销。绝不 throw。
  */
 export async function runLegacyUserDataMigrationForUser(userId: string): Promise<void> {
+  // 仅 cn 构建迁移:老 xdt-maker 数据属于 cn 身份(老渠道只有国内版),
+  // global 构建(同机双装)是全新身份,把 cn 的历史数据导进 global 库会
+  // 跨区域串台(两边 auth 后端不同,会话 / 凭证对不上)。
+  if (CURRENT_CINDY_REGION !== 'cn') return;
   if (inFlight != null) {
     await inFlight;
     return;

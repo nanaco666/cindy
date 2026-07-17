@@ -15,7 +15,8 @@ import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 
-import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
+import { brandUserDataDirName } from '@lizi/maker-shared/brand-identity';
+import { CURRENT_CINDY_REGION } from '../../shared/brandRegion.js';
 
 import { getCurrentDbClientUserId, getDbClient } from '../localDb/client/current.js';
 import { createBetterSqliteDatabase } from '../localDb/betterSqliteFactory.js';
@@ -881,7 +882,8 @@ function getDesktopCodexHome(): string {
     /* fallback for non-Electron test runners */
   }
 
-  const dirName = BRAND_IDENTITY.userDataDirName;
+  // 兜底路径按区域取目录名(global 构建的 userData 是 CindyGlobal,同机双装分库)。
+  const dirName = brandUserDataDirName(CURRENT_CINDY_REGION);
   if (process.platform === 'darwin') {
     return path.join(os.homedir(), 'Library', 'Application Support', dirName, 'codex-home');
   }

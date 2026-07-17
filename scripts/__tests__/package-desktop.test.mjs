@@ -101,6 +101,10 @@ test('artifactRelDir / artifactBaseName: region-channel 目录 + cindy-* 命名'
   );
   assert.equal(artifactBaseName({ version: '0.0.0', versionless: true }), 'cindy-dev');
   assert.equal(artifactBaseName({ version: '1.2.3', versionless: false }), 'cindy-1.2.3');
+  // 区域化(同机双装):global 产物文件名带 cindy-global- 前缀,与 cn 可区分。
+  assert.equal(artifactBaseName({ version: '1.2.3', versionless: false, region: 'global' }), 'cindy-global-1.2.3');
+  assert.equal(artifactBaseName({ version: '0.0.0', versionless: true, region: 'global' }), 'cindy-global-dev');
+  assert.throws(() => artifactBaseName({ version: '1.2.3', versionless: false, region: 'us' }), /unknown region/);
 });
 
 test('buildBuildInfo: 版本无关时 version 记 null,platformKey 拼装正确', () => {

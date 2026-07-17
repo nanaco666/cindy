@@ -34,11 +34,13 @@ const __dirname = path.dirname(__filename);
 const DESKTOP_ROOT = path.resolve(__dirname, '..');
 
 /**
- * electron-forge 打包产物基名(out 目录 / exe / .app / linux 二进制同名)。
+ * electron-forge 打包产物基名默认值(out 目录 / exe / .app / linux 二进制同名)。
  * ⚠️ 值必须与 packages/maker-shared/src/brandIdentity.ts 的
  * BRAND_IDENTITY.executableName 及 ci/lib.mjs 的 PACKAGED_APP_NAME 一致
  * (本脚本刻意零外部依赖,不 import lib.mjs;一致性由
  * scripts/__tests__/brand-identity-sync.test.mjs 断言兜底)。
+ * 区域化(同机双装):global 产物基名是 CindyGlobal,由调用方
+ * (ci/lib.mjs runSmokeTest)经 --app-name= 传入覆盖,本默认值只服务 cn / 手跑。
  */
 const PACKAGED_APP_NAME = 'Cindy';
 
@@ -55,10 +57,11 @@ function parseArgs() {
   const platform = out.platform || process.platform;
   const arch = out.arch || process.arch;
   const outDir = out['out-dir'] || null;
-  return { platform, arch, outDir };
+  const appName = out['app-name'] || PACKAGED_APP_NAME;
+  return { platform, arch, outDir, appName };
 }
 
-const { platform, arch, outDir } = parseArgs();
+const { platform, arch, outDir, appName } = parseArgs();
 
 if (!['win32', 'darwin', 'linux'].includes(platform)) {
   console.error(`[smoke] ERROR: unsupported --platform=${platform}`);
@@ -83,32 +86,32 @@ console.log(`[smoke] platform=${platform} arch=${arch}`);
 function resolveExePath() {
   const baseDir = outDir
     ? path.resolve(outDir)
-    : path.join(DESKTOP_ROOT, 'out', `${PACKAGED_APP_NAME}-${platform}-${arch}`);
+    : path.join(DESKTOP_ROOT, 'out', `${appName}-${platform}-${arch}`);
   if (!fs.existsSync(baseDir)) {
     console.error(`[smoke] ERROR: packaged dir not found: ${baseDir}`);
     console.error(`[smoke]        run 'pnpm --filter ./apps/desktop package' first, or pass --out-dir=<path>`);
     process.exit(1);
   }
   if (platform === 'win32') {
-    const exe = path.join(baseDir, `${PACKAGED_APP_NAME}.exe`);
+    const exe = path.join(baseDir, `${appName}.exe`);
     if (!fs.existsSync(exe)) {
-      console.error(`[smoke] ERROR: ${PACKAGED_APP_NAME}.exe not found under ${baseDir}`);
+      console.error(`[smoke] ERROR: ${appName}.exe not found under ${baseDir}`);
       process.exit(1);
     }
     return exe;
   }
   if (platform === 'darwin') {
-    const exe = path.join(baseDir, `${PACKAGED_APP_NAME}.app`, 'Contents', 'MacOS', PACKAGED_APP_NAME);
+    const exe = path.join(baseDir, `${appName}.app`, 'Contents', 'MacOS', appName);
     if (!fs.existsSync(exe)) {
-      console.error(`[smoke] ERROR: ${PACKAGED_APP_NAME} binary not found at ${exe}`);
+      console.error(`[smoke] ERROR: ${appName} binary not found at ${exe}`);
       process.exit(1);
     }
     return exe;
   }
   // linux
-  const exe = path.join(baseDir, PACKAGED_APP_NAME);
+  const exe = path.join(baseDir, appName);
   if (!fs.existsSync(exe)) {
-    console.error(`[smoke] ERROR: ${PACKAGED_APP_NAME} binary not found at ${exe}`);
+    console.error(`[smoke] ERROR: ${appName} binary not found at ${exe}`);
     process.exit(1);
   }
   return exe;

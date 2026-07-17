@@ -39,6 +39,18 @@ const USER_DATA_DIR_NAME = extractLiteral(
   /userDataDirName:\s*'([^']+)'/,
   'brandIdentity.ts userDataDirName',
 );
+// 区域派生值(2026-07-18 同机双装):从 ByRegion 块里抽 global 值,
+// 供 .mjs 镜像(ci/lib.mjs / package-lib.mjs)一致性断言。
+const EXECUTABLE_NAME_GLOBAL = extractLiteral(
+  brandIdentitySource,
+  /executableNameByRegion:\s*Object\.freeze\(\{[^}]*global:\s*'([^']+)'/,
+  'brandIdentity.ts executableNameByRegion.global',
+);
+const CDN_PREFIX_GLOBAL = extractLiteral(
+  brandIdentitySource,
+  /cdnPrefixByRegion:\s*Object\.freeze\(\{[^}]*global:\s*'([^']+)'/,
+  'brandIdentity.ts cdnPrefixByRegion.global',
+);
 
 test('ci/lib.mjs PACKAGED_APP_NAME mirrors brandIdentity.executableName', () => {
   const libSource = readSource('apps/desktop/scripts/ci/lib.mjs');
@@ -68,6 +80,32 @@ test('restart-desktop-remote.mjs BRAND_USER_DATA_DIR_NAME mirrors brandIdentity.
     'restart-desktop-remote.mjs BRAND_USER_DATA_DIR_NAME',
   );
   assert.equal(value, USER_DATA_DIR_NAME);
+});
+
+test('ci/lib.mjs PACKAGED_APP_NAME_BY_REGION mirrors brandIdentity.executableNameByRegion', () => {
+  const libSource = readSource('apps/desktop/scripts/ci/lib.mjs');
+  const cnValue = extractLiteral(
+    libSource,
+    /PACKAGED_APP_NAME_BY_REGION = Object\.freeze\(\{[^}]*cn:\s*'([^']+)'/,
+    'ci/lib.mjs PACKAGED_APP_NAME_BY_REGION.cn',
+  );
+  const globalValue = extractLiteral(
+    libSource,
+    /PACKAGED_APP_NAME_BY_REGION = Object\.freeze\(\{[^}]*global:\s*'([^']+)'/,
+    'ci/lib.mjs PACKAGED_APP_NAME_BY_REGION.global',
+  );
+  assert.equal(cnValue, EXECUTABLE_NAME);
+  assert.equal(globalValue, EXECUTABLE_NAME_GLOBAL);
+});
+
+test('package-lib.mjs ARTIFACT_PREFIX_BY_REGION mirrors brandIdentity.cdnPrefixByRegion', () => {
+  const pkgLibSource = readSource('apps/desktop/scripts/ci/package-lib.mjs');
+  const globalValue = extractLiteral(
+    pkgLibSource,
+    /ARTIFACT_PREFIX_BY_REGION = Object\.freeze\(\{[^}]*global:\s*'([^']+)'/,
+    'package-lib.mjs ARTIFACT_PREFIX_BY_REGION.global',
+  );
+  assert.equal(globalValue, CDN_PREFIX_GLOBAL);
 });
 
 test('desktop package.json productName mirrors brandIdentity.userDataDirName', () => {

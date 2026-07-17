@@ -3,7 +3,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
-import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
+import { brandUserDataDirName } from '@lizi/maker-shared/brand-identity';
+import { CURRENT_CINDY_REGION } from '../../shared/brandRegion.js';
 
 import { getRawDb } from '../localDb';
 
@@ -377,7 +378,8 @@ function defaultXdtUserDataDir(
   appDataDir: string,
   env: NodeJS.ProcessEnv,
 ): string {
-  const dirName = BRAND_IDENTITY.userDataDirName;
+  // 按区域取目录名(global 构建的 userData 是 CindyGlobal,同机双装分库)。
+  const dirName = brandUserDataDirName(CURRENT_CINDY_REGION);
   if (platform === 'darwin') return path.join(homeDir, 'Library', 'Application Support', dirName);
   if (platform === 'win32') return path.join(appDataDir, dirName);
   return path.join(env.XDG_CONFIG_HOME ?? path.join(homeDir, '.config'), dirName);

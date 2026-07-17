@@ -16,12 +16,13 @@ vi.mock('../logger', () => ({
 }));
 
 import { healWindowsShortcuts, type ShortcutSelfHealDeps } from '../windowsShortcutSelfHeal';
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
-import { brandAppId } from '@lizi/maker-shared/brand-identity';
+import { brandAppId, brandExecutableName } from '@lizi/maker-shared/brand-identity';
 
-// 被测模块经 shared/brandRegion 消费 CURRENT_APP_ID;vitest 下无
-// VITE_CINDY_AUTH_REGION → 区域回落 cn → brandAppId('cn')。
+// 被测模块经 shared/brandRegion 消费 CURRENT_APP_ID / 区域快捷方式名;vitest 下无
+// VITE_CINDY_AUTH_REGION → 区域回落 cn → brandAppId('cn') / brandExecutableName('cn')。
 const EXPECTED_APP_ID = brandAppId('cn');
+// 重建目标 .lnk 基名(与实现的 SHORTCUT_BASENAME 同源;cn = 'Cindy')。
+const NEW_SHORTCUT_NAME = brandExecutableName('cn');
 
 const EXE = 'C:\\Program Files\\xdt-maker\\xdt-maker.exe';
 const DESKTOP = 'C:\\Users\\u\\Desktop';
@@ -66,14 +67,14 @@ const lnk = (target: string, extra?: Partial<Electron.ShortcutDetails>): Electro
 describe('healWindowsShortcuts', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('桌面旧名 XDMaker.lnk → 以 BRAND_NAME 重建并删除旧文件,AUMID/icon 强制刷新', async () => {
+  it('桌面旧名 XDMaker.lnk → 以 NEW_SHORTCUT_NAME 重建并删除旧文件,AUMID/icon 强制刷新', async () => {
     const { files, writes, deps } = makeHarness({
       [at(DESKTOP, 'XDMaker')]: lnk(EXE, { args: '', appUserModelId: EXPECTED_APP_ID }),
     });
     await healWindowsShortcuts(deps);
 
     expect(files.has(at(DESKTOP, 'XDMaker'))).toBe(false);
-    const created = files.get(at(DESKTOP, BRAND_NAME));
+    const created = files.get(at(DESKTOP, NEW_SHORTCUT_NAME));
     expect(created).toBeDefined();
     expect(created?.target).toBe(EXE);
     expect(created?.icon).toBe(EXE);
@@ -89,7 +90,7 @@ describe('healWindowsShortcuts', () => {
     });
     await healWindowsShortcuts(deps);
     expect(files.has(at(START_MENU, 'xdt-maker'))).toBe(false);
-    expect(files.has(at(START_MENU, BRAND_NAME))).toBe(true);
+    expect(files.has(at(START_MENU, NEW_SHORTCUT_NAME))).toBe(true);
   });
 
   it('target 指向其它安装目录的旧名快捷方式不碰(多版本共存)', async () => {
@@ -105,12 +106,12 @@ describe('healWindowsShortcuts', () => {
   it('新名 .lnk 已存在时只删旧重复项,不覆盖用户现有快捷方式', async () => {
     const userOwned = lnk(EXE, { args: '--my-flag' });
     const { files, writes, deps } = makeHarness({
-      [at(DESKTOP, BRAND_NAME)]: userOwned,
+      [at(DESKTOP, NEW_SHORTCUT_NAME)]: userOwned,
       [at(DESKTOP, 'XDMaker')]: lnk(EXE),
     });
     await healWindowsShortcuts(deps);
     expect(files.has(at(DESKTOP, 'XDMaker'))).toBe(false);
-    expect(files.get(at(DESKTOP, BRAND_NAME))).toEqual(userOwned);
+    expect(files.get(at(DESKTOP, NEW_SHORTCUT_NAME))).toEqual(userOwned);
     expect(writes).toHaveLength(0);
   });
 
@@ -136,7 +137,7 @@ describe('healWindowsShortcuts', () => {
       [at(DESKTOP, 'XDMaker')]: lnk(EXE.toUpperCase()),
     });
     await healWindowsShortcuts(deps);
-    expect(files.has(at(DESKTOP, BRAND_NAME))).toBe(true);
+    expect(files.has(at(DESKTOP, NEW_SHORTCUT_NAME))).toBe(true);
   });
 
   it('非 win32 / 非 packaged 直接 no-op', async () => {
@@ -156,7 +157,7 @@ describe('healWindowsShortcuts', () => {
     deps.writeShortcut = () => false;
     await expect(healWindowsShortcuts(deps)).resolves.toBeUndefined();
     expect(files.has(at(DESKTOP, 'XDMaker'))).toBe(true);
-    expect(files.has(at(DESKTOP, BRAND_NAME))).toBe(false);
+    expect(files.has(at(DESKTOP, NEW_SHORTCUT_NAME))).toBe(false);
   });
 
   it('读取快捷方式抛错时跳过该文件且整体不抛', async () => {

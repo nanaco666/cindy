@@ -43,6 +43,7 @@ import {
   DESKTOP_ROOT,
   RELEASE_DIR,
   PACKAGED_APP_NAME,
+  packagedAppName,
   loadDotenv,
   exec,
   sha256,
@@ -193,7 +194,7 @@ function findSetupExe(makeBaseDir) {
   return walk(makeBaseDir);
 }
 
-async function finishWindows({ artifactDir, baseName, versionless, allowUnsigned, noSign }) {
+async function finishWindows({ artifactDir, baseName, appName, versionless, allowUnsigned, noSign }) {
   const makeBaseDir = path.join(DESKTOP_ROOT, 'out', 'make');
   const setupExe = findSetupExe(makeBaseDir);
   if (!setupExe) {
@@ -229,7 +230,7 @@ async function finishWindows({ artifactDir, baseName, versionless, allowUnsigned
 
   // 热更 ZIP 只对有版本的包有意义(版本无关包不参与热更新)。
   if (!versionless) {
-    const packagedDir = path.join(DESKTOP_ROOT, 'out', `${PACKAGED_APP_NAME}-win32-x64`);
+    const packagedDir = path.join(DESKTOP_ROOT, 'out', `${appName}-win32-x64`);
     const hotfixZipPath = path.join(artifactDir, `${baseName}-hotfix.zip`);
     console.log('==> Creating hotfix ZIP from packaged app...');
     if (fs.existsSync(hotfixZipPath)) fs.unlinkSync(hotfixZipPath);
@@ -243,9 +244,9 @@ async function finishWindows({ artifactDir, baseName, versionless, allowUnsigned
   return { files, signing: { installerSigned, internalExesSigned: Boolean(npkgToken) } };
 }
 
-async function finishDarwin({ artifactDir, baseName, arch, versionless, allowUnsigned, noSign, version }) {
-  const packagedDir = path.join(DESKTOP_ROOT, 'out', `${PACKAGED_APP_NAME}-darwin-${arch}`);
-  const appPath = path.join(packagedDir, `${PACKAGED_APP_NAME}.app`);
+async function finishDarwin({ artifactDir, baseName, appName, arch, versionless, allowUnsigned, noSign, version }) {
+  const packagedDir = path.join(DESKTOP_ROOT, 'out', `${appName}-darwin-${arch}`);
+  const appPath = path.join(packagedDir, `${appName}.app`);
   if (!fs.existsSync(appPath)) {
     console.error(`ERROR: ${appPath} not found`);
     process.exit(1);
@@ -278,7 +279,9 @@ async function finishDarwin({ artifactDir, baseName, arch, versionless, allowUns
 
     const dmgPath = path.join(artifactDir, `${baseName}-${arch}.dmg`);
     console.log('==> Creating DMG...');
-    createMacDMG(appPath, dmgPath, `Cindy ${version}`, identity);
+    // DMG 卷名带区域产物基名(cn 'Cindy x.y.z' 不变,global 'CindyGlobal x.y.z'
+    // 便于双装机器上区分挂载卷)。
+    createMacDMG(appPath, dmgPath, `${appName} ${version}`, identity);
     files.push(fileEntry('installer', dmgPath));
 
     const hotfixZipPath = path.join(artifactDir, `${baseName}-${arch}-hotfix.zip`);
@@ -361,17 +364,21 @@ async function main() {
   cleanOutDir();
   runForgeMake({ platform, arch, region, version, noSign });
 
+  // 产物基名按区域派生(cn 'Cindy' / global 'CindyGlobal',out 目录 / exe /
+  // .app 同名;forge.config 的 packagerConfig.name 同源)。
+  const appName = packagedAppName(region);
+
   // drizzle 资源校验(平台差异只在 packaged 内路径)。
   const drizzleOut =
     platform === 'darwin'
-      ? path.join(DESKTOP_ROOT, 'out', `${PACKAGED_APP_NAME}-darwin-${arch}`, `${PACKAGED_APP_NAME}.app`, 'Contents', 'Resources', 'drizzle')
-      : path.join(DESKTOP_ROOT, 'out', `${PACKAGED_APP_NAME}-${platformKey}`, 'resources', 'drizzle');
+      ? path.join(DESKTOP_ROOT, 'out', `${appName}-darwin-${arch}`, `${appName}.app`, 'Contents', 'Resources', 'drizzle')
+      : path.join(DESKTOP_ROOT, 'out', `${appName}-${platformKey}`, 'resources', 'drizzle');
   verifyPackagedDrizzle(drizzleOut);
 
   if (skipSmoke) {
     console.log('==> Skipping packaged smoke test (--skip-smoke)');
   } else {
-    runSmokeTest(platform, arch);
+    runSmokeTest(platform, arch, region);
   }
 
   // 产物目录
@@ -381,12 +388,13 @@ async function main() {
   );
   fs.rmSync(artifactDir, { recursive: true, force: true });
   fs.mkdirSync(artifactDir, { recursive: true });
-  const baseName = artifactBaseName({ version, versionless });
+  const baseName = artifactBaseName({ version, versionless, region });
 
   const finishers = { win32: finishWindows, darwin: finishDarwin, linux: finishLinux };
   const { files, signing } = await finishers[platform]({
     artifactDir,
     baseName,
+    appName,
     arch,
     version,
     versionless,

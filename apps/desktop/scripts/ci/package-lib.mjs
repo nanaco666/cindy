@@ -138,9 +138,21 @@ export function artifactRelDir({ region, channel, version, versionless, platform
   return ['artifacts', `${region}-${channel}`, versionSeg, platformKey].join('/');
 }
 
-/** 新渠道产物文件基名(老 release 脚本的 xdt-maker-* 命名不动,新产物统一 cindy-*)。 */
-export function artifactBaseName({ version, versionless }) {
-  return `cindy-${versionless ? 'dev' : version}`;
+/**
+ * 新渠道产物文件基名(老 release 脚本的 xdt-maker-* 命名不动):
+ * cn `cindy-*` / global `cindy-global-*`——与 brandIdentity.ts 的
+ * cdnPrefixByRegion 同源(镜像字面量,双装后两条发布渠道的产物文件名
+ * 也要能区分,避免下载目录里同名混淆)。
+ */
+const ARTIFACT_PREFIX_BY_REGION = Object.freeze({
+  cn: 'cindy',
+  global: 'cindy-global',
+});
+
+export function artifactBaseName({ version, versionless, region = 'cn' }) {
+  const prefix = ARTIFACT_PREFIX_BY_REGION[region];
+  if (!prefix) throw new Error(`unknown region: ${region}`);
+  return `${prefix}-${versionless ? 'dev' : version}`;
 }
 
 /**

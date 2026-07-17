@@ -1,9 +1,26 @@
 // Entry: Electron startup → bootstrap-electron.ts (dynamic import).
 import fixPath from 'fix-path';
 import { app } from 'electron';
+import path from 'node:path';
 import { setDefaultAutoSelectFamilyAttemptTimeout } from 'node:net';
 import { exit, stderr } from 'node:process';
+import { CURRENT_CINDY_REGION } from '../shared/brandRegion.js';
+import { resolveRegionUserDataDirName } from './regionUserData.js';
 import { createLogger, initLogger } from './logger.js';
+
+// 同机双装(cn/global):global 构建把 userData 切到区域目录(CindyGlobal),
+// 与 cn 版(productName 默认 'Cindy')彻底分库;数据库 / 登录态 / 单实例锁 /
+// sessionData 随 userData 目录天然隔离。必须在 initLogger()(packaged 日志
+// 目录)、crashReporter、单实例锁与一切 userData 读取之前执行。cn 构建与
+// dev 返回 null,零行为变化(dev 隔离语义由下方 devCliFlags 的 --isolated 承载)。
+const regionUserDataDirName = resolveRegionUserDataDirName({
+  isPackaged: app.isPackaged,
+  region: CURRENT_CINDY_REGION,
+  argv: process.argv,
+});
+if (regionUserDataDirName) {
+  app.setPath('userData', path.join(app.getPath('appData'), regionUserDataDirName));
+}
 
 // Node happy-eyeballs(autoSelectFamily)默认每个地址只给 250ms 完成 TCP 握手,
 // VPN/高 RTT 链路上直连海外端点(platform.claude.com 换 token、订阅模式模型流量等)

@@ -3,7 +3,9 @@ import { promisify } from 'node:util';
 
 import { app } from 'electron';
 
+import { brandExecutableName } from '@lizi/maker-shared/brand-identity';
 import { CINDY_MIME_TYPE, SHARE_MIME_TYPE } from '../../shared/fileTypes.js';
+import { CURRENT_CINDY_REGION } from '../../shared/brandRegion.js';
 import { createLogger } from '../logger.js';
 
 /**
@@ -29,12 +31,16 @@ const execFileAsync = promisify(execFile);
 const REG_TIMEOUT_MS = 5_000;
 
 /**
- * 新身份 ProgId(2026-07-17 品牌翻转:XDMaker.CindyGhost → Cindy.CindyGhost)。
- * 与并存的老 XDMaker 安装写的 `XDMaker.CindyGhost` ProgId 各自独立,互不覆盖;
- * `.cindy` 扩展名的默认 handler 归后启动的那个 app(它把 KEY_EXT 默认值改写成
- * 自己的 ProgId),可接受——两代 app 双击 .cindy 的行为语义一致。
+ * 新身份 ProgId(2026-07-17 品牌翻转:XDMaker.CindyGhost → Cindy.CindyGhost;
+ * 2026-07-18 双装区域化:按区域 exe 基名派生,cn 'Cindy.CindyGhost' 不变 /
+ * global 'CindyGlobal.CindyGhost')。与并存的老 XDMaker 安装写的
+ * `XDMaker.CindyGhost` ProgId、以及另一区域的 ProgId 各自独立,互不覆盖
+ * (共用 ProgId 会让两个区域实例每次启动都把 open command 改写回自己,
+ * 幂等检查永远不命中,反复写注册表);`.cindy` 扩展名的默认 handler 归
+ * 后启动的那个 app(它把 KEY_EXT 默认值改写成自己的 ProgId),可接受——
+ * 各 app 双击 .cindy 的行为语义一致。
  */
-const PROG_ID = 'Cindy.CindyGhost';
+const PROG_ID = `${brandExecutableName(CURRENT_CINDY_REGION)}.CindyGhost`;
 const KEY_EXT = 'HKCU\\Software\\Classes\\.cindy';
 const KEY_PROG = `HKCU\\Software\\Classes\\${PROG_ID}`;
 const KEY_EXT_SHARE = 'HKCU\\Software\\Classes\\.cshare';

@@ -16,6 +16,7 @@ import {
   allDeepLinkSchemes,
   brandAppId,
   brandBundleIdPrefix,
+  brandExecutableName,
   resolveCindyRegion,
 } from '@lizi/maker-shared/brand-identity';
 import { stagePackagedThirdPartyNotices } from './forge-third-party-notices';
@@ -36,8 +37,13 @@ const CINDY_REGION = resolveCindyRegion(
 process.env.VITE_CINDY_AUTH_REGION = CINDY_REGION;
 const CINDY_APP_ID = brandAppId(CINDY_REGION);
 const CINDY_UTI_PREFIX = brandBundleIdPrefix(CINDY_REGION);
-/** 可执行文件基名('Cindy' → Cindy.exe / mac Mach-O 名)。 */
-const CINDY_EXE = BRAND_IDENTITY.executableName;
+/**
+ * 可执行文件基名,按区域派生(cn 'Cindy' / global 'CindyGlobal'):同机双装时
+ * exe / mac .app 包名 / NSIS 安装目录与快捷方式若同名,第二个安装会覆盖第一个,
+ * 更新器按 exe 名杀进程也会误伤另一区域。运行时 userData 目录由 main 入口按
+ * 同一区域切换(src/main/regionUserData.ts),两端从 brand-identity 同源派生。
+ */
+const CINDY_EXE = brandExecutableName(CINDY_REGION);
 /** 更新器二进制文件名(cindy-updater.exe;源目录仍叫 xdt-updater/)。 */
 const UPDATER_EXE = `${BRAND_IDENTITY.updaterName}.exe`;
 
@@ -625,10 +631,12 @@ function signPackagedExes(buildPath: string): void {
  *
  * 历史沿革:本步骤诞生于身份翻转前(当时 .app/CFBundleExecutable/bundle id/
  * userData 均为 xdt-maker 系,这里是唯一的显示名来源)。2026-07-17 身份翻转后
- * executableName/appBundleId/productName 已全部是 Cindy 系,packager 本身就会把
- * CFBundleName/CFBundleDisplayName 写成 Cindy——本步骤降级为冗余兜底(Set 幂等,
- * 防 packager 行为回退),保留无害。正式签名/公证在 release-macos.mjs 里发生在
- * postPackage 之后,本改动会被签名一起封印,不存在破坏签名问题。
+ * cn 构建的 packager 本身就会把 CFBundleName/CFBundleDisplayName 写成 Cindy,
+ * 对 cn 是冗余兜底;2026-07-18 双装支持后 global 构建的 packager name 是
+ * 'CindyGlobal'(.app 目录名 / 标识符层),本步骤把 Dock 名、菜单栏粗体标题、
+ * Cmd+Tab、系统通知的**显示层**统一拉回 Cindy(BRAND_NAME 两区共用)——对
+ * global 不再冗余,是显示名的唯一来源。正式签名/公证在 release-macos.mjs 里
+ * 发生在 postPackage 之后,本改动会被签名一起封印,不存在破坏签名问题。
  */
 function applyMacPackagedDisplayName(buildPath: string, platform: string): void {
   if (platform !== 'darwin') return;
@@ -949,10 +957,10 @@ const makers: ForgeConfig['makers'] = [
       // 双 scheme:cindy 主 + xdt-maker 兼容(老分享链接不死)。
       mimeType: allDeepLinkSchemes().map((s) => `x-scheme-handler/${s}`),
       maintainer: 'Lizi <jiali@magiclizi.com>',
-      // deb 包名规范要求小写。
-      name: BRAND_IDENTITY.executableName.toLowerCase(),
+      // deb 包名规范要求小写;跟随区域 exe 名(cn cindy / global cindyglobal)。
+      name: CINDY_EXE.toLowerCase(),
       bin: CINDY_EXE,
-      productName: 'Cindy',
+      productName: CINDY_EXE,
     },
   }, ['linux']),
 ];
@@ -967,6 +975,10 @@ if (isWin) {
         // 才会接收 toast；否则原生 Notification 被静默丢弃。
         // 值按构建区域派生(shared/brandRegion 运行时同源),见文件头身份块。
         appId: CINDY_APP_ID,
+        // 安装目录名跟随区域(默认装到 …\Programs\<productName>):cn 'Cindy' /
+        // global 'CindyGlobal'。不设的话 app-builder 回落 package.json 的
+        // productName('Cindy'),两个区域会装进同一目录互相覆盖(双装红线)。
+        productName: CINDY_EXE,
         nsis: {
           oneClick: false,
           allowToChangeInstallationDirectory: true,
@@ -974,10 +986,11 @@ if (isWin) {
           uninstallerIcon: 'resources/icon.ico',
           createDesktopShortcut: 'always',
           createStartMenuShortcut: true,
-          // 快捷方式显示名。installer.nsh 只清理/重建自家 Cindy.lnk——同机可能
+          // 快捷方式显示名,跟随区域 exe 名(cn 'Cindy' / global 'CindyGlobal',
+          // 同名 .lnk 双装互抢)。installer.nsh 只清理/重建自家 .lnk——同机可能
           // 并存老 XDMaker 安装,它的 xdt-maker.lnk / XDMaker.lnk 属于老 app,
           // 绝不能删(共存红线,见 installer.nsh customInit 注释)。
-          shortcutName: 'Cindy',
+          shortcutName: CINDY_EXE,
           runAfterFinish: true,
           include: 'resources/installer.nsh',
         },
@@ -1006,12 +1019,19 @@ const config: ForgeConfig = {
     // 到 asar 外才能被 spawn / 动态加载。AutoUnpackNativesPlugin 只 unpack .node,
     // 所以这里显式覆盖 loudness / node-pty 整个目录。
     asar: { unpack: '**/{@img/{sharp-libvips-*,sharp-win32-*},loudness,native/sqlite-vec,node-pty}/**' },
+    // 打包名(out 目录 / mac .app 包名)按区域派生:不设的话 packager 回落
+    // package.json productName('Cindy'),global 的 .app 会与 cn 撞名(双装
+    // 时拖进 /Applications 直接覆盖)。mac 的 Dock/菜单栏**显示名**由
+    // postPackage 的 applyMacPackagedDisplayName 统一拉回 Cindy(显示层共用
+    // BRAND_NAME,标识符层分区域)。
+    name: CINDY_EXE,
     executableName: CINDY_EXE,
     // mac bundle id(与 Windows AUMID 同值,按区域派生;cn/global 是两个可并存
     // 的系统身份,与 mobile 的 com.xd.cindycn / com.xd.cindy 同一套)。
     appBundleId: CINDY_APP_ID,
     // exe 资源元数据(任务管理器进程名、文件右键属性的显示层)。只影响展示,
-    // 与 exe 文件名 / AUMID / userData 等标识符解耦(那些等 Cindy 渠道迁移)。
+    // 与 exe 文件名 / AUMID / userData 等标识符解耦;显示层两区共用 Cindy
+    // (与 mac 显示名口径一致)。
     win32metadata: {
       CompanyName: 'XD',
       ProductName: 'Cindy',

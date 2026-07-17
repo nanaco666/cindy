@@ -29,14 +29,22 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { app, shell } from 'electron';
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
-import { CURRENT_APP_ID } from '../shared/brandRegion.js';
+import { brandExecutableName } from '@lizi/maker-shared/brand-identity';
+import { CURRENT_APP_ID, CURRENT_CINDY_REGION } from '../shared/brandRegion.js';
 import { createLogger } from './logger';
 
 const log = createLogger('shortcutSelfHeal');
 
 /** 历代快捷方式名(不含扩展名),按出现顺序:最早的 exe 名 → 上一代品牌名。 */
 const LEGACY_SHORTCUT_BASENAMES = ['xdt-maker', 'XDMaker'] as const;
+
+/**
+ * 重建目标快捷方式名 = 本区域 NSIS shortcutName(cn 'Cindy' / global
+ * 'CindyGlobal',与 forge.config 同源)。不能用共享的 BRAND_NAME:同机双装时
+ * global 实例若写出 Cindy.lnk 会与 cn 安装的快捷方式互抢(实际上 legacy lnk
+ * 的 target 只可能是 cn 系老安装,global 侧本函数天然 no-op,这里是防御性对齐)。
+ */
+const SHORTCUT_BASENAME = brandExecutableName(CURRENT_CINDY_REGION);
 
 /** 依赖注入面(规则 14:测试用内存假体直接调用,不起 Electron)。 */
 export interface ShortcutSelfHealDeps {
@@ -108,7 +116,7 @@ function targetsThisExe(deps: ShortcutSelfHealDeps, lnkPath: string): boolean {
 /** 桌面 / 开始菜单:旧名 → 新名重建。返回是否发生了改动(日志用)。 */
 async function healRenameable(deps: ShortcutSelfHealDeps, dir: string): Promise<boolean> {
   let changed = false;
-  const newPath = path.join(dir, `${BRAND_NAME}.lnk`);
+  const newPath = path.join(dir, `${SHORTCUT_BASENAME}.lnk`);
   for (const base of LEGACY_SHORTCUT_BASENAMES) {
     const oldPath = path.join(dir, `${base}.lnk`);
     if (!(await deps.exists(oldPath))) continue;
