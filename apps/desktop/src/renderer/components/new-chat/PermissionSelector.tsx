@@ -115,7 +115,7 @@ export function PermissionSelector({
               'flex min-w-0 items-center gap-1 rounded-full transition-colors',
               isCreateAgentVariant
                 ? [
-                    'h-[30px] min-w-[90px] w-fit max-w-[220px] border border-[var(--create-agent-control-border)]',
+                    'h-[30px] min-w-[90px] max-w-none shrink-0 border border-[var(--create-agent-control-border)]',
                     'bg-[var(--create-agent-control-bg)] py-0 pl-2.5 pr-2 text-[var(--create-agent-control-text)]',
                     'hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)]',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
@@ -144,7 +144,7 @@ export function PermissionSelector({
                 // min-w-0 让 span 能在 flex 容器里跌破内容宽度,truncate 才能在窄宽下出现 "完..."
                 'min-w-0 font-normal text-current',
                 isCreateAgentVariant
-                  ? 'max-w-[172px] whitespace-nowrap'
+                  ? 'whitespace-nowrap'
                   : 'max-w-[160px] truncate',
                 isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
               )}

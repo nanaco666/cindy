@@ -1067,7 +1067,7 @@ export function ModelSelector({
                   'rounded-full',
                   isCreateAgentVariant
                     ? [
-                        'h-[30px] min-w-[100px] w-fit max-w-[260px] border border-[var(--create-agent-control-border)]',
+                        'h-[30px] min-w-[100px] max-w-none shrink-0 border border-[var(--create-agent-control-border)]',
                         'bg-[var(--create-agent-control-bg)] px-2 text-[var(--create-agent-control-text)]',
                         'hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)]',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
@@ -1102,7 +1102,7 @@ export function ModelSelector({
                     ? 'text-[var(--create-agent-control-text)]'
                     : 'text-[var(--text-primary)]',
                   isCreateAgentVariant
-                    ? 'max-w-[212px] whitespace-nowrap'
+                    ? 'whitespace-nowrap'
                     : cn('truncate', isFieldTrigger ? 'max-w-[260px]' : 'max-w-[160px]'),
                   isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
                 )}
@@ -1123,7 +1123,7 @@ export function ModelSelector({
               <span
                 className={cn(
                   'min-w-0 truncate font-normal text-[var(--text-primary)]',
-                  isCreateAgentVariant ? 'max-w-[212px]' : isFieldTrigger ? 'max-w-[260px]' : 'max-w-[160px]',
+                  isCreateAgentVariant ? 'whitespace-nowrap' : isFieldTrigger ? 'max-w-[260px]' : 'max-w-[160px]',
                   isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
                 )}
               >
@@ -1160,7 +1160,7 @@ export function ModelSelector({
                 className={cn(
                   'min-w-0 font-normal',
                   isCreateAgentVariant
-                    ? 'max-w-[148px] whitespace-nowrap'
+                    ? 'whitespace-nowrap'
                     : cn('truncate', isFieldTrigger ? 'max-w-[260px]' : 'max-w-[160px]'),
                   !isBudget &&
                     (isCreateAgentVariant
@@ -1197,7 +1197,7 @@ export function ModelSelector({
                         ? 'text-[var(--create-agent-control-text)]'
                         : 'text-[var(--text-primary)]',
                       isCreateAgentVariant
-                        ? 'max-w-[72px] whitespace-nowrap'
+                        ? 'whitespace-nowrap'
                         : cn('truncate', isFieldTrigger ? 'max-w-[120px]' : 'max-w-[88px]'),
                       isCreateAgentVariant
                         ? 'text-[12px]'

@@ -42,6 +42,7 @@ import { logoDark, logoLight } from '@/hooks/useBrandLogo';
 import { themeService } from '@/themes/theme-service';
 import type { Theme as ColorTheme } from '@/themes/types';
 import { ChatInput } from '@/components/new-chat/ChatInput';
+import { FolderPickerPopover, type FolderPickerSelectSource } from '@/components/new-chat/FolderPickerPopover';
 import { RightSidebarToggle } from '@/components/layout/RightSidebarToggle';
 import { buildDeviceLinkCreateArgs } from './deviceLinkCreateArgs';
 import { VendorSegmentedSwitcher } from '@/components/new-chat/VendorSegmentedSwitcher';
@@ -54,7 +55,6 @@ import {
   useNewMakerDraft,
   switchVendor,
   patchDraft,
-  patchCollab,
   patchCurrentVendorPrefs,
   getFastModeForModel,
   setFastModeForModel,
@@ -114,6 +114,7 @@ import { matchNavigationCommandName, tryHandleNavigationCommand } from '@/lib/na
 import { useAgentCapabilities } from '@/hooks/useAgentCapabilities';
 import { useProviders } from '@/hooks/useProviders';
 import { useDeviceProviders } from '@/hooks/useDeviceProviders';
+import { getProjectPickerDisplayName, useProjectPickerOptions } from '@/hooks/useProjectPickerOptions';
 import { resolveFastSupported } from '@/lib/providerModels';
 import { connectedProvidersForAgent, nativeDefaultSourceId } from '@lizi/model-providers';
 import {
@@ -371,8 +372,9 @@ export function NewMakerDraftRoute() {
   const effectiveCollab = collab;
   const effectiveCollabEnabled =
     effectiveCollab.enabled && effectiveWorkingDir != null && effectiveRemoteHostId == null;
-  const canToggleCreateAgentMode =
-    effectiveWorkingDir != null && effectiveRemoteHostId == null && !isDeviceLinkDraft;
+  const projectPickerOptions = useProjectPickerOptions();
+  const createAgentModeLabel =
+    getProjectPickerDisplayName(effectiveWorkingDir, projectPickerOptions) ?? t('newChat.folderPicker.dialogue');
   const draftRightSidebar = useMemo(
     () =>
       resolveNewMakerDraftRightSidebar({
@@ -864,6 +866,12 @@ export function NewMakerDraftRoute() {
   const handleFolderPickerOpenChange = useCallback((open: boolean) => {
     setFolderPickerOpen(open);
   }, []);
+  const handleModePickerSelect = useCallback(
+    (path: string, source: FolderPickerSelectSource) => {
+      handleWorkingDirChange(source === 'dialogue' ? null : path);
+    },
+    [handleWorkingDirChange],
+  );
 
   const handleWtEnabledChange = useCallback((enabled: boolean) => {
     setWtEnabled(enabled);
@@ -1692,40 +1700,60 @@ export function NewMakerDraftRoute() {
               className="relative flex w-full max-w-[637px] flex-col items-start"
               style={{ maxWidth: Math.min(inputWidth ?? 637, 637) }}
             >
-              <button
-                type="button"
-                data-testid="create-agent-mode-pill"
-                disabled={!canToggleCreateAgentMode}
-                onClick={() => patchCollab({ enabled: !effectiveCollab.enabled })}
-                className="absolute right-0 top-[22px] inline-flex h-[30px] min-w-20 items-center justify-center gap-1.5 rounded-full border border-[var(--create-agent-control-border)] bg-[var(--create-agent-control-bg)] px-3 text-[12px] font-medium leading-[14px] text-[var(--create-agent-control-text)] transition-colors hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
-                aria-label={t('newChat.collaboration.modeLabel')}
+              <FolderPickerPopover
+                open={folderPickerOpen}
+                onOpenChange={handleFolderPickerOpenChange}
+                onSelect={handleModePickerSelect}
+                projectOptions={projectPickerOptions}
+                side="bottom"
+                align="end"
+                sideOffset={6}
               >
-                <MessageSquare
-                  size={12}
-                  strokeWidth={2}
-                  className="text-[var(--create-agent-control-icon)]"
-                />
-                <span>
-                  {effectiveCollab.enabled
-                    ? t('newChat.collaboration.pillLabel')
-                    : t('newChat.folderPicker.dialogue')}
-                </span>
-                <ChevronDown
-                  size={12}
-                  strokeWidth={2}
-                  className="text-[var(--create-agent-control-icon)]"
-                />
-              </button>
+                <button
+                  type="button"
+                  data-testid="create-agent-mode-pill"
+                  className="absolute right-0 top-[22px] inline-flex h-[30px] min-w-20 max-w-[220px] items-center justify-center gap-1.5 rounded-full border border-[var(--create-agent-control-border)] bg-[var(--create-agent-control-bg)] px-3 text-[12px] font-medium leading-[14px] text-[var(--create-agent-control-text)] transition-colors hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]"
+                  aria-label={t('newChat.collaboration.modeLabel')}
+                >
+                  <MessageSquare
+                    size={12}
+                    strokeWidth={2}
+                    className="shrink-0 text-[var(--create-agent-control-icon)]"
+                  />
+                  <span className="min-w-0 truncate">
+                    {effectiveCollab.enabled ? t('newChat.collaboration.pillLabel') : createAgentModeLabel}
+                  </span>
+                  <ChevronDown
+                    size={12}
+                    strokeWidth={2}
+                    className="shrink-0 text-[var(--create-agent-control-icon)]"
+                  />
+                </button>
+              </FolderPickerPopover>
               <div
                 data-testid="create-agent-brand-lockup"
                 className="mb-[15px] flex h-[50px] items-center gap-[9px]"
               >
-                <span className="grid h-[50px] w-[50px] shrink-0 place-items-center rounded-full border border-[var(--create-agent-avatar-ring)]">
+                <span
+                  className="relative grid h-[50px] w-[50px] shrink-0 place-items-center overflow-hidden rounded-full border border-[var(--create-agent-avatar-ring)] bg-[var(--create-agent-avatar-glass-bg)] backdrop-blur-[18px]"
+                  style={{ backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)' } as React.CSSProperties}
+                >
                   <img
                     src={cindyAvatarLockup}
                     alt=""
                     className="h-[44.55px] w-[44.55px] rounded-full object-cover"
                     draggable={false}
+                  />
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-[2.73px] rounded-full p-px"
+                    style={{
+                      background:
+                        'linear-gradient(180deg, var(--create-agent-avatar-inner-ring-start), var(--create-agent-avatar-inner-ring-end))',
+                      WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+                      WebkitMaskComposite: 'xor',
+                      maskComposite: 'exclude',
+                    }}
                   />
                 </span>
                 {!logoError && (

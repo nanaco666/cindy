@@ -4303,15 +4303,17 @@ export function ChatInput({
             // "在元素上起选",从相邻可选区起拖再划入时按钮文字仍会被刷蓝
             // (同 sortable.css 侧栏行修过的 selection bleed),容器级禁选才挡得住。
             'mt-[2px] flex select-none items-center justify-between',
-            effectiveCompactToolbar && 'min-w-0 gap-1',
+            effectiveCompactToolbar && (isCreateAgentVariant ? 'gap-2' : 'min-w-0 gap-1'),
           )}
         >
           <div
             className={cn(
-              effectiveCompactToolbar ? 'flex items-center gap-1' : 'flex items-center gap-2',
-              // compact 模式下左侧(permission/extraDirs)是唯一可压缩的区域:
-              // min-w-0 让它能跌破内容宽度, PermissionSelector 内的 truncate 才会触发 "完..."
-              effectiveCompactToolbar && 'min-w-0 shrink',
+              effectiveCompactToolbar
+                ? isCreateAgentVariant
+                  ? 'flex shrink-0 items-center gap-2'
+                  : 'flex min-w-0 shrink items-center gap-1'
+                : 'flex items-center gap-2',
+              // create-agent 按 Figma 使用 hug-content pills;默认会话页仍保留左侧优先压缩。
             )}
           >
             {/* composer 「+」菜单(权限左侧):新建目标 + 计划模式(两端通用、同级)+ 引用目录(仅 cc)。
@@ -4358,7 +4360,11 @@ export function ChatInput({
           </div>
           <div
             className={cn(
-              effectiveCompactToolbar ? 'flex items-center gap-1' : 'flex items-center gap-2',
+              effectiveCompactToolbar
+                ? isCreateAgentVariant
+                  ? 'flex shrink-0 items-center gap-2'
+                  : 'flex items-center gap-1'
+                : 'flex items-center gap-2',
               // compact 模式下右侧(fast/collab/model/voice/send)保持完整宽度,
               // shrink-0 把所有挤压让给左侧的 permission, 避免出现两行 wrap。
               effectiveCompactToolbar && 'shrink-0 justify-end',
@@ -4410,6 +4416,7 @@ export function ChatInput({
               releaseToSendActive={voiceReleaseToSendActive}
               onReleaseToSendChange={setVoiceReleaseToSendActive}
               visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
+              className={isCreateAgentVariant ? 'ml-[7px]' : undefined}
             />
             {/* Send / Stop 双槽语义:
                  - 主槽 (最右, 永远占位, sendButtonRef 钉在这里):
@@ -4601,6 +4608,7 @@ function VoiceInputButton({
   releaseToSendActive,
   onReleaseToSendChange,
   visualVariant,
+  className,
 }: {
   state: import('@lizi/voice-input-core').VoiceInputState;
   disabled: boolean;
@@ -4613,6 +4621,7 @@ function VoiceInputButton({
   releaseToSendActive: boolean;
   onReleaseToSendChange: (active: boolean) => void;
   visualVariant?: 'default' | 'create-agent';
+  className?: string;
 }) {
   const { t } = useTranslation();
   const [longPressActive, setLongPressActive] = useState(false);
@@ -4755,6 +4764,7 @@ function VoiceInputButton({
           'focus-visible:outline-none',
           disabledOrBusy && 'cursor-not-allowed opacity-40',
           activeRecording && 'text-[var(--settings-badge-error)]',
+          className,
         )}
         disabled={disabledOrBusy}
         aria-label={label}

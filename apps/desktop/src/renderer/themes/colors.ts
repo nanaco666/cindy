@@ -1804,6 +1804,18 @@ registerColor('create-agent-avatar-ring', {
   light: 'rgba(255, 255, 255, 0.08)',
   dark: 'rgba(255, 255, 255, 0.08)',
 }, 'CREATE AGENT lockup avatar outer ring');
+registerColor('create-agent-avatar-glass-bg', {
+  light: 'rgba(0, 0, 0, 0.004)',
+  dark: 'rgba(0, 0, 0, 0.004)',
+}, 'CREATE AGENT lockup avatar GLASS fill');
+registerColor('create-agent-avatar-inner-ring-start', {
+  light: 'rgba(255, 255, 255, 0.29)',
+  dark: 'rgba(255, 255, 255, 0.29)',
+}, 'CREATE AGENT lockup avatar inner gradient ring start');
+registerColor('create-agent-avatar-inner-ring-end', {
+  light: 'rgba(255, 255, 255, 0.24)',
+  dark: 'rgba(255, 255, 255, 0.24)',
+}, 'CREATE AGENT lockup avatar inner gradient ring end');
 registerColor('sidebar-nav-text', {
   light: '#3C3F43',
   dark: '#D4D4D4',
