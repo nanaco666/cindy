@@ -3,10 +3,7 @@ import path from 'node:path';
 import { app } from 'electron';
 
 import { createLogger } from '../logger.js';
-import type {
-  ModelAccessCredentialSource,
-  ModelAccessGatewayModel,
-} from '../../shared/modelAccess.js';
+import type { ModelAccessCredentialSource } from '../../shared/modelAccess.js';
 
 const log = createLogger('modelAccessStore');
 
@@ -31,22 +28,16 @@ interface PersistedState {
   source: ModelAccessCredentialSource;
   /** 仅 source='server' 时有值。 */
   endpoint?: string;
-  /** 服务端下发的网关聊天模型目录快照(冷启动首帧防跳变,规则 7)。 */
-  models?: ModelAccessGatewayModel[];
 }
 
 export interface ModelAccessCredentialsStore {
   getSource(): ModelAccessCredentialSource | null;
   /** source='server' 时返回下发的 endpoint;否则 null。 */
   getServerEndpoint(): string | null;
-  /** 服务端下发成功后记录(覆盖旧标记;保留已存模型目录快照)。 */
+  /** 服务端下发成功后记录(覆盖旧标记)。 */
   setServerCredentials(endpoint: string): void;
   /** 用户手填保存成功后记录(endpoint 回落常量,不存)。 */
   setManualSource(): void;
-  /** 上次成功拉取的网关模型目录;从未拉到过 → null。 */
-  getGatewayModels(): ModelAccessGatewayModel[] | null;
-  /** 记录网关模型目录快照(拉取成功后)。 */
-  setGatewayModels(models: ModelAccessGatewayModel[]): void;
   /** 清除标记(手填 key 被删除等)。 */
   clear(): void;
 }
@@ -96,17 +87,10 @@ export function createModelAccessCredentialsStore(
     }
     try {
       const parsed = JSON.parse(raw) as Partial<PersistedState>;
-      const models = Array.isArray(parsed.models)
-        ? parsed.models.filter(
-            (m): m is ModelAccessGatewayModel =>
-              typeof m === 'object' && m !== null && typeof m.id === 'string' && !!m.id,
-          )
-        : undefined;
       if (parsed.source === 'server' && typeof parsed.endpoint === 'string' && parsed.endpoint) {
         cached = {
           source: 'server',
           endpoint: parsed.endpoint.replace(/\/+$/, ''),
-          ...(models && models.length > 0 ? { models } : {}),
         };
       } else if (parsed.source === 'manual') {
         cached = { source: 'manual' };
@@ -143,24 +127,13 @@ export function createModelAccessCredentialsStore(
       return state?.source === 'server' ? (state.endpoint ?? null) : null;
     },
     setServerCredentials(endpoint) {
-      const prev = load();
       persist({
         source: 'server',
         endpoint: endpoint.replace(/\/+$/, ''),
-        // 保留已有模型目录快照:凭据刷新(同租户)时模型列表不闪空,拉取成功后再覆盖。
-        ...(prev?.models ? { models: prev.models } : {}),
       });
     },
     setManualSource() {
       persist({ source: 'manual' });
-    },
-    getGatewayModels() {
-      return load()?.models ?? null;
-    },
-    setGatewayModels(models) {
-      const prev = load();
-      if (!prev || prev.source !== 'server') return; // 目录快照只依附于 server 凭据
-      persist({ ...prev, models: [...models] });
     },
     clear() {
       persist(null);

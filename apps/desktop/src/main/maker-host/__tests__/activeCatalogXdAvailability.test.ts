@@ -1,6 +1,6 @@
 /**
  * active-catalog XD 网关权威模型清单重建单测。
- * 不变量:null / 空列表 = fail-open(目录静态清单);有值时网关清单为准——
+ * 不变量:空列表 = 不展示任何 XD 模型;有值时网关清单为准——
  * 目录同 id 条目沿用产品元数据,目录没有的合成默认条目(仅 claude-code tab),
  * 目录有、网关没有的不展示;其它供应商永不受影响。
  */
@@ -22,20 +22,22 @@ const staticXd = BUNDLED_CATALOG.providers.find((p) => p.id === 'xd');
 const staticCcIds = (staticXd?.models['claude-code'] ?? []).map((m) => m.id);
 
 afterEach(() => {
-  setXdGatewayModels(null);
+  setXdGatewayModels([]);
   setActiveCatalog(BUNDLED_CATALOG);
 });
 
 describe('XD 网关权威模型清单重建', () => {
-  it('未设置(null)= fail-open,目录静态清单原样生效', () => {
+  it('未拉到实时清单时不暴露目录静态模型', () => {
     setActiveCatalog(BUNDLED_CATALOG);
-    expect(xdModels('claude-code').map((m) => m.id)).toEqual(staticCcIds);
+    expect(xdModels('claude-code')).toEqual([]);
+    expect(xdModels('codex')).toEqual([]);
   });
 
-  it('空列表同样 fail-open(清空会让供应商行整个消失)', () => {
+  it('显式空列表保持 XD 模型不可用', () => {
     setActiveCatalog(BUNDLED_CATALOG);
     setXdGatewayModels([]);
-    expect(xdModels('claude-code').map((m) => m.id)).toEqual(staticCcIds);
+    expect(xdModels('claude-code')).toEqual([]);
+    expect(xdModels('codex')).toEqual([]);
   });
 
   it('网关清单为准:目录同 id 沿用元数据,目录没有的合成条目进 claude-code tab', () => {
@@ -123,11 +125,11 @@ describe('XD 网关权威模型清单重建', () => {
     expect(cc[0].group).toBeTruthy(); // 服务端没给的字段回落目录值
   });
 
-  it('传 null 清除,回到静态清单', () => {
+  it('清除实时清单后不回退静态模型', () => {
     setActiveCatalog(BUNDLED_CATALOG);
     setXdGatewayModels([{ id: 'claude-opus-4-6' }]);
     expect(xdModels('claude-code')).toHaveLength(1);
-    setXdGatewayModels(null);
-    expect(xdModels('claude-code').map((m) => m.id)).toEqual(staticCcIds);
+    setXdGatewayModels([]);
+    expect(xdModels('claude-code')).toEqual([]);
   });
 });

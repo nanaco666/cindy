@@ -105,12 +105,11 @@ function broadcastStatus(status: ModelAccessStatus): void {
   }
 }
 
-// ─── XD 网关模型目录同步(网关为准,目录仅补元数据;fail-open)──────────────
+// ─── XD 网关模型目录同步(网关为准,目录仅补元数据)────────────────────
 // 凭据同步成功后从 model-access-server 拉 GET /models(AIGateway /model-groups
 // 的 mode=chat 投影),整体重建 xd 供应商的模型列表(active-catalog
-// setXdGatewayModels)。拉取失败保持现状(上次快照或目录静态清单),不影响主链路。
-// 快照持久化在 credentialsStore:冷启动首帧即用上次目录,防「静态清单 → 网关
-// 清单」的可见跳变(规则 7)。
+// setXdGatewayModels)。拉取失败或返回空列表时立即清空 XD 模型:产品目录与历史快照
+// 都不能证明模型当前可用,不得继续显示。
 
 let modelsSyncInflight: Promise<void> | null = null;
 /** 在途目录请求所属的认证世代。 */
@@ -146,20 +145,20 @@ async function runModelsSync(myGen: number): Promise<void> {
       baseUrl: getClientEndpoint('modelAccessApiBaseUrl'),
     });
   } catch (err) {
-    log.warn('xd gateway models fetch failed (keeping current list)', {
+    log.warn('xd gateway models fetch failed (clearing current list)', {
       error: err instanceof Error ? err.message : String(err),
     });
+    if (myGen === authGeneration) applyGatewayModels([]);
     return;
   }
   if (myGen !== authGeneration) return; // 响应归属旧账号,丢弃
   const models = (payload.models ?? []).filter((m) => typeof m?.id === 'string' && m.id);
   if (models.length === 0) {
-    // 空目录按失败处理:清空会让供应商行整个消失,展示上次快照/静态清单伤害更小。
-    log.warn('xd gateway models fetch returned empty list; keeping current list');
+    log.warn('xd gateway models fetch returned empty list; clearing current list');
+    applyGatewayModels([]);
     return;
   }
   log.info(`xd gateway models synced: ${models.length}`);
-  getModelAccessCredentialsStore().setGatewayModels(models);
   applyGatewayModels(models);
 }
 
@@ -204,6 +203,11 @@ function getSync(): CredentialsSync {
         broadcastStatus(status);
         // 凭据就绪(下发/轮换成功)→ 拉取网关模型目录(XD 模型列表的权威来源)。
         if (status.state === 'ok') scheduleModelsSync();
+        // 凭据明确不可用时,旧模型清单也不再具备可用性证明。syncing 期间先保留
+        // 已成功拉到的清单,最终成功会覆盖、失败会走这里清空。
+        else if (['failed', 'disabled', 'unsupported', 'idle'].includes(status.state)) {
+          applyGatewayModels([]);
+        }
       },
       log: {
         info: (msg) => log.info(msg),
@@ -254,6 +258,8 @@ export function initModelAccess(): void {
     // 认证世代:登出或换号自增,作废旧账号在途的目录请求(runModelsSync 世代闸)。
     if (!isAuthenticated || (userId !== null && lastAuthUserId !== null && userId !== lastAuthUserId)) {
       authGeneration++;
+      // 旧账号模型清单不能跨账号继续显示;新账号凭据 / 模型拉取成功后再注入。
+      applyGatewayModels([]);
     }
     lastAuthUserId = isAuthenticated ? (userId ?? lastAuthUserId) : null;
     sync.handleAuthChange({ isAuthenticated, userId });
@@ -267,13 +273,6 @@ export function initModelAccess(): void {
   if (initial.isAuthenticated) {
     noteAuthState(true, initial.user?.id ?? null);
   }
-  // 冷启动首帧:直接应用上次持久化的网关模型目录快照(防「静态清单 → 网关清单」
-  // 的可见跳变,规则 7);登录同步成功后会拉最新覆盖。
-  const persistedModels = getModelAccessCredentialsStore().getGatewayModels();
-  if (persistedModels && persistedModels.length > 0) {
-    applyGatewayModels(persistedModels);
-  }
-
   ipcMain.handle('model-access:get-status', () => sync.getStatus());
 
   ipcMain.handle('model-access:retry', async (): Promise<ModelAccessStatus> => {
@@ -297,4 +296,5 @@ export function resetModelAccessForTest(): void {
   modelsSyncRerunQueued = false;
   authGeneration = 0;
   lastAuthUserId = null;
+  setXdGatewayModels([]);
 }

@@ -995,7 +995,8 @@
           "rotating": "Rotating…",
           "unsupported": "Not enabled for your organization",
           "autoProvision": "Provisioned automatically after sign-in",
-          "disabled": "Model access service not enabled"
+          "disabled": "Model access service not enabled",
+          "modelsFetchFailed": "Couldn’t fetch the model list. Check your network and try again."
         },
         "rotateConfirm": {
           "title": "Rotate gateway key?",

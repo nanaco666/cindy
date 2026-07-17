@@ -995,7 +995,8 @@
           "rotating": "교체 중…",
           "unsupported": "소속 조직에서 사용할 수 없음",
           "autoProvision": "로그인 후 자동으로 발급됩니다",
-          "disabled": "모델 액세스 서비스가 비활성화되어 있습니다"
+          "disabled": "모델 액세스 서비스가 비활성화되어 있습니다",
+          "modelsFetchFailed": "모델 목록을 가져오지 못했습니다. 네트워크를 확인한 후 다시 시도하세요."
         },
         "rotateConfirm": {
           "title": "게이트웨이 키를 교체할까요?",

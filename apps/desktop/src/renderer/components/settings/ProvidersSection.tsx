@@ -367,6 +367,7 @@ function ProviderCell({
   provider,
   detail,
   badge,
+  onUnavailableExpand,
 }: {
   icon: ReactNode;
   title: string;
@@ -376,11 +377,15 @@ function ProviderCell({
   detail?: ReactNode;
   /** 标题旁的额外徽标（自定义供应商的「自定义」tag）。 */
   badge?: ReactNode;
+  /** 来源行需要保留展开入口、但实时模型清单不可用时的点击反馈。 */
+  onUnavailableExpand?: () => void;
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
-  const expandable = !!provider && providerHasModels(provider);
-  const counts = expandable && provider ? combinedCount(provider) : null;
+  const hasModels = !!provider && providerHasModels(provider);
+  const expandable = hasModels || !!onUnavailableExpand;
+  const effectiveExpanded = hasModels && expanded;
+  const counts = hasModels && provider ? combinedCount(provider) : null;
   const subscriptionProduct =
     provider?.access?.kind === 'subscription' ? provider.access.product : null;
 
@@ -430,16 +435,22 @@ function ProviderCell({
           {expandable && (
             <button
               type="button"
-              onClick={() => setExpanded((v) => !v)}
-              aria-expanded={expanded}
+              onClick={() => {
+                if (!hasModels) {
+                  onUnavailableExpand?.();
+                  return;
+                }
+                setExpanded((v) => !v);
+              }}
+              aria-expanded={effectiveExpanded}
               aria-label={t(
-                expanded
+                effectiveExpanded
                   ? 'settings.providers.models.collapseAria'
                   : 'settings.providers.models.expandAria',
               )}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-[var(--surface-hover)]"
             >
-              {expanded ? (
+              {effectiveExpanded ? (
                 <ChevronUp size={18} style={{ color: 'var(--text-tertiary)' }} />
               ) : (
                 <ChevronDown size={18} style={{ color: 'var(--text-tertiary)' }} />
@@ -451,7 +462,7 @@ function ProviderCell({
         {detail}
       </div>
 
-      {expandable && expanded && provider && <ModelListPanel provider={provider} />}
+      {effectiveExpanded && provider && <ModelListPanel provider={provider} />}
     </div>
   );
 }
@@ -831,6 +842,10 @@ function XdGatewayRow({ provider, onChanged }: { provider?: ProviderView; onChan
       .catch(() => undefined);
   }, [onChanged]);
 
+  const handleUnavailableExpand = useCallback(() => {
+    toast.error(t('settings.providers.xd.sync.modelsFetchFailed'));
+  }, [t]);
+
   // 轮换密钥(泄露自救):旧 key 立即失效,进行中的会话 / 远端会话 / 手机语音
   // 会用旧 key 收到 401,新会话自动用新 key —— 确认文案明示这一影响。
   const handleRotate = useCallback(async () => {
@@ -950,6 +965,7 @@ function XdGatewayRow({ provider, onChanged }: { provider?: ProviderView; onChan
       trailing={trailing}
       provider={provider}
       detail={detail}
+      onUnavailableExpand={handleUnavailableExpand}
     />
   );
 }
@@ -1193,7 +1209,15 @@ export function ProvidersSection() {
   pushBuiltin('anthropic', (p) => <AnthropicRow provider={p} onChanged={refetch} />);
   pushBuiltin('openai', (p) => <OpenAiRow provider={p} onChanged={refetch} />);
   pushBuiltin('xai', (p) => <XaiRow provider={p} onChanged={refetch} />);
-  pushBuiltin('xd', (p) => <XdGatewayRow provider={p} onChanged={refetch} />);
+  // XD 行即使实时模型清单为空也保留:用户仍需要看到凭据状态 / 重试入口,点击展开
+  // 则由 XdGatewayRow 给出明确的「模型列表拉取失败」提示。
+  const xdProvider = byId.get('xd');
+  if (xdProvider) {
+    providerRows.push({
+      key: 'xd',
+      node: <XdGatewayRow provider={xdProvider} onChanged={refetch} />,
+    });
+  }
   // 通用 OAuth 供应商(目录 auth.oauth 描述符驱动、非上面 bespoke 四家):目录推数据即出现。
   // OAuth 形态**不要求已有模型**:模型在授权成功后动态发现,零模型时行必须保留,
   // 否则用户没有「授权」按钮可点,发现永远无法发生(鸡生蛋死锁)。自定义 OAuth 行同理。

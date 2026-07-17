@@ -995,7 +995,8 @@
           "rotating": "轮换中…",
           "unsupported": "当前企业未开通",
           "autoProvision": "登录后自动获取",
-          "disabled": "模型访问服务未启用"
+          "disabled": "模型访问服务未启用",
+          "modelsFetchFailed": "拉取模型列表失败,请检查网络后重试"
         },
         "rotateConfirm": {
           "title": "轮换网关密钥?",

@@ -60,15 +60,16 @@ export interface XdGatewayModelInfo {
 /**
  * XD 网关(内置 xd 供应商)的**权威模型清单**(model-access-server GET /models:
  * AIGateway /model-groups 投影 + 服务端内置常量表富化;2026-07-17 定案:XD 模型
- * 列表完全以网关为准,不再由 OSS 产品目录决定)。null = 未拉到(未登录/拉取失败)
- * → fail-open 回落目录静态清单。有值时 xd 供应商的模型列表整体重建,每个条目:
+ * 列表完全以网关为准,不再由 OSS 产品目录决定)。未登录 / 拉取失败 / 空响应时
+ * 保持空数组,绝不把产品目录里的静态模型冒充成网关实时可用模型。有值时 xd
+ * 供应商的模型列表整体重建,每个条目:
  *  - tab 归属:服务端 `agents` > 目录同 id 条目的归属 > 仅 claude-code 兜底
  *    (网关 /v1/messages 跨供应商翻译覆盖面最广;Responses 协议不猜);
  *  - 展示元数据逐字段:服务端条目 > 目录同 id 条目 > 合成默认(id 当展示名,
  *    口径同自定义 OAuth 模型发现,见 maker-ipc/register.ts oauthLogin);
  *  - 目录里有、网关没有 → 不展示。
  */
-let xdGatewayModels: XdGatewayModelInfo[] | null = null;
+let xdGatewayModels: XdGatewayModelInfo[] = [];
 
 const VALID_EFFORTS: ReadonlySet<string> = new Set([
   'minimal',
@@ -167,78 +168,77 @@ function computeMerged(): Catalog {
       return next;
     });
   }
-  // XD 网关权威模型清单重建(fail-open / 优先级见 xdGatewayModels 注释)。
+  // XD 网关权威模型清单重建(优先级见 xdGatewayModels 注释)。即使实时清单为空也
+  // 必须重建为空:产品目录只补展示元数据,不能证明某个模型当前在网关可用。
   // 放在所有 augment 之后:重建的是最终展示清单;只影响 xd 供应商自己的模型列表,
   // 同 id 模型经其它供应商(如 anthropic 订阅直连)仍照常可用。
-  if (xdGatewayModels !== null && xdGatewayModels.length > 0) {
-    const gwModels = xdGatewayModels;
-    providers = providers.map((p) => {
-      if (p.id !== 'xd') return p;
-      // 目录条目索引:per-agent(tab 归属兜底)+ 任一 agent(元数据补全,cc 优先)。
-      const catalogByAgent = new Map<AgentKind, Map<string, CatalogModel>>();
-      const catalogAny = new Map<string, CatalogModel>();
-      for (const [agent, list] of Object.entries(p.models) as [AgentKind, CatalogModel[]][]) {
-        catalogByAgent.set(agent, new Map(list.map((m) => [m.id, m])));
-        for (const m of list) if (!catalogAny.has(m.id)) catalogAny.set(m.id, m);
-      }
-      const agentKeys = Object.keys(p.models) as AgentKind[];
+  const gwModels = xdGatewayModels;
+  providers = providers.map((p) => {
+    if (p.id !== 'xd') return p;
+    // 目录条目索引:per-agent(tab 归属兜底)+ 任一 agent(元数据补全,cc 优先)。
+    const catalogByAgent = new Map<AgentKind, Map<string, CatalogModel>>();
+    const catalogAny = new Map<string, CatalogModel>();
+    for (const [agent, list] of Object.entries(p.models) as [AgentKind, CatalogModel[]][]) {
+      catalogByAgent.set(agent, new Map(list.map((m) => [m.id, m])));
+      for (const m of list) if (!catalogAny.has(m.id)) catalogAny.set(m.id, m);
+    }
+    const agentKeys = Object.keys(p.models) as AgentKind[];
 
-      const models: Provider['models'] = {};
-      for (const agent of agentKeys) models[agent] = [];
-      for (const gm of gwModels) {
-        const catalogEntry = catalogAny.get(gm.id);
-        // tab 归属:服务端 agents > 目录归属 > 仅 claude-code 兜底
-        const targetAgents: AgentKind[] =
-          gm.agents && gm.agents.length > 0
-            ? gm.agents
-            : catalogEntry
-              ? agentKeys.filter((a) => catalogByAgent.get(a)?.has(gm.id))
-              : ['claude-code'];
-        // 元数据逐字段:服务端 > 目录 > 合成默认(efforts 白名单过滤防坏档位)
-        const efforts = gm.efforts?.filter((e): e is Effort => VALID_EFFORTS.has(e));
-        const defaultEffort =
-          gm.defaultEffort && VALID_EFFORTS.has(gm.defaultEffort)
-            ? (gm.defaultEffort as Effort)
-            : undefined;
-        for (const agent of targetAgents) {
-          if (!models[agent]) continue; // 未知 agent 键防御(wire 数据)
-          const agentEntry = catalogByAgent.get(agent)?.get(gm.id) ?? catalogEntry;
-          const merged: CatalogModel = {
-            ...(agentEntry ?? {}),
-            id: gm.id,
-            name: gm.name ?? agentEntry?.name ?? gm.id,
-            group: gm.group ?? agentEntry?.group ?? 'custom:xd',
-            contextWindow: gm.contextWindow ?? agentEntry?.contextWindow ?? 200_000,
-            efforts: efforts && efforts.length > 0 ? efforts : (agentEntry?.efforts ?? []),
-            defaultEffort: defaultEffort ?? agentEntry?.defaultEffort ?? null,
-            ...(gm.description !== undefined
-              ? { description: gm.description }
-              : agentEntry?.description !== undefined
-                ? { description: agentEntry.description }
-                : {}),
-            ...(gm.sortOrder !== undefined
-              ? { sortOrder: gm.sortOrder }
-              : agentEntry?.sortOrder !== undefined
-                ? { sortOrder: agentEntry.sortOrder }
-                : {}),
-          };
-          models[agent]!.push(merged);
-        }
+    const models: Provider['models'] = {};
+    for (const agent of agentKeys) models[agent] = [];
+    for (const gm of gwModels) {
+      const catalogEntry = catalogAny.get(gm.id);
+      // tab 归属:服务端 agents > 目录归属 > 仅 claude-code 兜底
+      const targetAgents: AgentKind[] =
+        gm.agents && gm.agents.length > 0
+          ? gm.agents
+          : catalogEntry
+            ? agentKeys.filter((a) => catalogByAgent.get(a)?.has(gm.id))
+            : ['claude-code'];
+      // 元数据逐字段:服务端 > 目录 > 合成默认(efforts 白名单过滤防坏档位)
+      const efforts = gm.efforts?.filter((e): e is Effort => VALID_EFFORTS.has(e));
+      const defaultEffort =
+        gm.defaultEffort && VALID_EFFORTS.has(gm.defaultEffort)
+          ? (gm.defaultEffort as Effort)
+          : undefined;
+      for (const agent of targetAgents) {
+        if (!models[agent]) continue; // 未知 agent 键防御(wire 数据)
+        const agentEntry = catalogByAgent.get(agent)?.get(gm.id) ?? catalogEntry;
+        const merged: CatalogModel = {
+          ...(agentEntry ?? {}),
+          id: gm.id,
+          name: gm.name ?? agentEntry?.name ?? gm.id,
+          group: gm.group ?? agentEntry?.group ?? 'custom:xd',
+          contextWindow: gm.contextWindow ?? agentEntry?.contextWindow ?? 200_000,
+          efforts: efforts && efforts.length > 0 ? efforts : (agentEntry?.efforts ?? []),
+          defaultEffort: defaultEffort ?? agentEntry?.defaultEffort ?? null,
+          ...(gm.description !== undefined
+            ? { description: gm.description }
+            : agentEntry?.description !== undefined
+              ? { description: agentEntry.description }
+              : {}),
+          ...(gm.sortOrder !== undefined
+            ? { sortOrder: gm.sortOrder }
+            : agentEntry?.sortOrder !== undefined
+              ? { sortOrder: agentEntry.sortOrder }
+              : {}),
+        };
+        models[agent]!.push(merged);
       }
-      // 每个 tab 内按 sortOrder 稳定排序(无 sortOrder 的合成条目排最后,按进入序)。
-      for (const agent of agentKeys) {
-        models[agent] = models[agent]!
-          .map((model, index) => ({ model, index }))
-          .sort(
-            (a, b) =>
-              (a.model.sortOrder ?? Number.MAX_SAFE_INTEGER) -
-                (b.model.sortOrder ?? Number.MAX_SAFE_INTEGER) || a.index - b.index,
-          )
-          .map(({ model }) => model);
-      }
-      return { ...p, models };
-    });
-  }
+    }
+    // 每个 tab 内按 sortOrder 稳定排序(无 sortOrder 的合成条目排最后,按进入序)。
+    for (const agent of agentKeys) {
+      models[agent] = models[agent]!
+        .map((model, index) => ({ model, index }))
+        .sort(
+          (a, b) =>
+            (a.model.sortOrder ?? Number.MAX_SAFE_INTEGER) -
+              (b.model.sortOrder ?? Number.MAX_SAFE_INTEGER) || a.index - b.index,
+        )
+        .map(({ model }) => model);
+    }
+    return { ...p, models };
+  });
 
   if (providers === b.providers) return b; // 无 augment、无 custom → 原样返回
   return { ...b, providers }; // spread 保留 presets 等目录顶层字段
@@ -294,10 +294,9 @@ export function setDiscoveredProviderModels(
 
 /**
  * 注入 XD 网关权威模型清单(model-access 拉取流程写入,重建逻辑见 computeMerged)。
- * null = 清除(回到目录静态清单);调用方对「拉取失败 / 空列表」不应传值,
- * 保持现状(fail-open,空列表按失败处理——清空清单会让供应商行整个消失)。
+ * 传空数组 = 实时清单不可用,此时 XD 供应商保留但不暴露任何模型。
  */
-export function setXdGatewayModels(models: XdGatewayModelInfo[] | null): void {
-  xdGatewayModels = models === null ? null : [...models];
+export function setXdGatewayModels(models: XdGatewayModelInfo[]): void {
+  xdGatewayModels = [...models];
   merged = null;
 }
