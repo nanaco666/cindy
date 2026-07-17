@@ -126,6 +126,7 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(sendButtonSource).toContain('bg-[var(--create-agent-send-bg)]');
     expect(sendButtonSource).toContain('text-[var(--create-agent-send-icon)]');
     expect(sendButtonSource).toContain('hover:bg-[var(--create-agent-send-bg-hover)]');
+    expect(sendButtonSource).toContain('active:bg-[var(--create-agent-send-bg-pressed)]');
 
     expect(vendorSwitcherSource).toContain('bg-[var(--create-agent-segment-track-bg)]');
     expect(vendorSwitcherSource).toContain('text-[var(--create-agent-segment-inactive-text)]');
@@ -139,6 +140,12 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(colorsSource).toContain("dark: '#EEEEEE'");
     expect(colorsSource).toContain("registerColor('create-agent-send-icon'");
     expect(colorsSource).toContain("light: '#FCFCFC'");
+    expect(colorsSource).toContain("registerColor('create-agent-send-bg-hover'");
+    expect(colorsSource).toContain("light: '#2E3237'");
+    expect(colorsSource).toContain("dark: '#E2E2E2'");
+    expect(colorsSource).toContain("registerColor('create-agent-send-bg-pressed'");
+    expect(colorsSource).toContain("light: '#25282C'");
+    expect(colorsSource).toContain("dark: '#D4D4D4'");
     expect(colorsSource).toContain("registerColor('create-agent-segment-inactive-text'");
     expect(colorsSource).toContain("light: '#9A9DA3'");
     expect(colorsSource).toContain("dark: '#6F6F6F'");
