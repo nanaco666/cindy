@@ -45,6 +45,7 @@ import {
   parseResponsesSse,
   type TitleOneShotDeps,
 } from '../title-one-shot.js';
+import { setXdGatewayModels } from '../active-catalog.js';
 import type { ProviderView } from '@lizi/model-providers';
 
 /** 造一个 fetch 替身:按传入 handler 返回类 Response 对象,并记录调用。 */
@@ -180,13 +181,20 @@ describe('buildTitleTarget(锁定 catalog titleModel 配置)', () => {
     });
   });
   it('xd → gpt-5.4-mini / 网关 chat-completions(/v1 upstream)', () => {
-    expect(buildTitleTarget('xd')).toEqual({
-      providerId: 'xd',
-      model: 'gpt-5.4-mini',
-      effort: 'low',
-      wire: 'gateway-chat',
-      upstream: `${XD_GATEWAY_BASE_URL}/v1`,
-    });
+    // xd 模型以网关实时清单为准(默认空):注入 titleModel 同 id 条目,
+    // 元数据(efforts)回落目录静态条目 → 最低 effort = low。
+    setXdGatewayModels([{ id: 'gpt-5.4-mini' }]);
+    try {
+      expect(buildTitleTarget('xd')).toEqual({
+        providerId: 'xd',
+        model: 'gpt-5.4-mini',
+        effort: 'low',
+        wire: 'gateway-chat',
+        upstream: `${XD_GATEWAY_BASE_URL}/v1`,
+      });
+    } finally {
+      setXdGatewayModels([]);
+    }
   });
   it('未知 provider → null', () => {
     expect(buildTitleTarget('does-not-exist')).toBeNull();
