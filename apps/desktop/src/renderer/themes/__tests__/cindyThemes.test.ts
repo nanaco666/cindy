@@ -25,7 +25,13 @@ type RGB = [number, number, number];
 
 function parseHex(v: string): RGB {
   const h = v.replace('#', '');
-  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const full =
+    h.length === 3
+      ? h
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : h;
   const n = parseInt(full, 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
@@ -73,7 +79,9 @@ function toRgb(v: string): RGB {
 }
 
 function rgbEqual(a: RGB, b: RGB, tol = 1): boolean {
-  return Math.abs(a[0] - b[0]) <= tol && Math.abs(a[1] - b[1]) <= tol && Math.abs(a[2] - b[2]) <= tol;
+  return (
+    Math.abs(a[0] - b[0]) <= tol && Math.abs(a[1] - b[1]) <= tol && Math.abs(a[2] - b[2]) <= tol
+  );
 }
 
 function luminance(rgb: RGB): number {
@@ -171,7 +179,10 @@ describe('CINDY · ⑤ 红线三份 exact map + 排除断言', () => {
       for (const [id, expectedRaw] of Object.entries(BRAND_RED_EXPECTED_BY_ID)) {
         const actual = theme.colors[id];
         // expectedRaw 可能是 hex(#DF0C27) 或 HSL 三元组(352.3 89.8% 46.1%)
-        expect(rgbEqual(toRgb(actual), toRgb(expectedRaw), 1), `${name}.${id} 应等于品牌红,实际 ${actual}`).toBe(true);
+        expect(
+          rgbEqual(toRgb(actual), toRgb(expectedRaw), 1),
+          `${name}.${id} 应等于品牌红,实际 ${actual}`,
+        ).toBe(true);
         expect(rgbEqual(toRgb(actual), redRgb, 1), `${name}.${id} RGB 未归一到品牌红`).toBe(true);
       }
     }
@@ -195,7 +206,9 @@ describe('CINDY · ⑤ 红线三份 exact map + 排除断言', () => {
     const white = toRgb('#FFFFFF');
     for (const [name, theme] of THEMES) {
       for (const id of CTA_FOREGROUND_WHITE_IDS) {
-        expect(rgbEqual(toRgb(theme.colors[id]), white, 1), `${name}.${id} CTA 前景应白`).toBe(true);
+        expect(rgbEqual(toRgb(theme.colors[id]), white, 1), `${name}.${id} CTA 前景应白`).toBe(
+          true,
+        );
       }
     }
   });
@@ -221,7 +234,9 @@ describe('CINDY · ⑤ 红线三份 exact map + 排除断言', () => {
       for (const id of EXCLUDED) {
         const val = theme.colors[id];
         if (!val || !val.startsWith('#')) continue;
-        expect(rgbEqual(toRgb(val), redRgb, 2), `${name}.${id} 排除项被品牌红接管: ${val}`).toBe(false);
+        expect(rgbEqual(toRgb(val), redRgb, 2), `${name}.${id} 排除项被品牌红接管: ${val}`).toBe(
+          false,
+        );
       }
     }
     // msg-link 明确非红(链接蓝)
@@ -321,15 +336,24 @@ describe('CINDY · ⑦ WCAG 复算 + U2 例外 allowlist + text-secondary 反向
   });
 
   it('反向冻结:text-secondary 必须恰等于 Figma 原值 #9A9DA3(light)/#6F6F6F(dark),RGB 归一', () => {
-    expect(rgbEqual(toRgb(light['text-secondary']), toRgb('#9A9DA3'), 1), 'light text-secondary 须恰等 #9A9DA3').toBe(true);
-    expect(rgbEqual(toRgb(dark['text-secondary']), toRgb('#6F6F6F'), 1), 'dark text-secondary 须恰等 #6F6F6F').toBe(true);
+    expect(
+      rgbEqual(toRgb(light['text-secondary']), toRgb('#9A9DA3'), 1),
+      'light text-secondary 须恰等 #9A9DA3',
+    ).toBe(true);
+    expect(
+      rgbEqual(toRgb(dark['text-secondary']), toRgb('#6F6F6F'), 1),
+      'dark text-secondary 须恰等 #6F6F6F',
+    ).toBe(true);
   });
 });
 
 // ===== ⑧ 可证伪自检 =====
 describe('CINDY · ⑧ 可证伪自检(注入错值后断言必须变红,还原后转绿)', () => {
   it('注入 typo key → ① key 合法变红', () => {
-    const typoTheme = { ...cindyLight, colors: { ...cindyLight.colors, 'this-key-does-not-exist': '#000' } };
+    const typoTheme = {
+      ...cindyLight,
+      colors: { ...cindyLight.colors, 'this-key-does-not-exist': '#000' },
+    };
     const registered = new Set(colorRegistry.getColors().map((c) => c.id));
     const unregistered = Object.keys(typoTheme.colors).filter((k) => !registered.has(k));
     expect(unregistered.length, 'typo key 应被 ① 抓出').toBeGreaterThan(0);
@@ -359,7 +383,9 @@ describe('CINDY · ⑧ 可证伪自检(注入错值后断言必须变红,还原�
     expect(allowed.has(badId), 'text-primary 不在 ALLOWED,染红应被 ⑤ 抓').toBe(false);
     const badRgb = toRgb('#DF0C27');
     const textRgb = toRgb(cindyLight.colors['text-primary']);
-    expect(rgbEqual(textRgb, badRgb, 2), '注入后 text-primary 染红会被 ⑤ 单向禁止越界抓').toBe(false);
+    expect(rgbEqual(textRgb, badRgb, 2), '注入后 text-primary 染红会被 ⑤ 单向禁止越界抓').toBe(
+      false,
+    );
   });
 
   it('注入豁免篡改(warning-accent 染红) → ⑤ 排除断言变红', () => {
@@ -383,6 +409,9 @@ describe('CINDY · ⑧ 可证伪自检(注入错值后断言必须变红,还原�
     const injected = toRgb('#686B72');
     expect(rgbEqual(injected, figma, 1), '#686B72 ≠ #9A9DA3,注入后 ⑦ 反向冻结断言必红').toBe(false);
     // 正常值仍恰等
-    expect(rgbEqual(toRgb(cindyLight.colors['text-secondary']), figma, 1), '还原后恰等 Figma 原值').toBe(true);
+    expect(
+      rgbEqual(toRgb(cindyLight.colors['text-secondary']), figma, 1),
+      '还原后恰等 Figma 原值',
+    ).toBe(true);
   });
 });

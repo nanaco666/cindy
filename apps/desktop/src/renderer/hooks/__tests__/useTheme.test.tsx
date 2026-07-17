@@ -36,9 +36,7 @@ describe('useTheme 跨窗口主题同步(D2-3)', () => {
     const { result } = renderHook(() => useTheme(), { wrapper });
     expect(result.current.theme).toBe('system');
     act(() => {
-      window.dispatchEvent(
-        new StorageEvent('storage', { key: 'theme', newValue: 'dark' }),
-      );
+      window.dispatchEvent(new StorageEvent('storage', { key: 'theme', newValue: 'dark' }));
     });
     expect(result.current.theme).toBe('dark');
     expect(themeService.applyTheme).toHaveBeenCalled();
@@ -59,9 +57,7 @@ describe('useTheme 跨窗口主题同步(D2-3)', () => {
     const { result } = renderHook(() => useTheme(), { wrapper });
     const before = result.current.theme;
     act(() => {
-      window.dispatchEvent(
-        new StorageEvent('storage', { key: 'theme', newValue: 'garbage' }),
-      );
+      window.dispatchEvent(new StorageEvent('storage', { key: 'theme', newValue: 'garbage' }));
     });
     expect(result.current.theme).toBe(before);
   });
@@ -87,9 +83,7 @@ describe('useTheme 跨窗口主题同步(D2-3)', () => {
     const beforeTheme = result.current.theme;
     const beforeFamily = result.current.familyId;
     act(() => {
-      window.dispatchEvent(
-        new StorageEvent('storage', { key: 'unrelated.key', newValue: 'x' }),
-      );
+      window.dispatchEvent(new StorageEvent('storage', { key: 'unrelated.key', newValue: 'x' }));
     });
     expect(result.current.theme).toBe(beforeTheme);
     expect(result.current.familyId).toBe(beforeFamily);

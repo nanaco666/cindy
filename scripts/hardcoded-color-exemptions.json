@@ -1,0 +1,37 @@
+[
+  {
+    "glob": "apps/desktop/src/renderer/themes/builtin/cindy-light.ts",
+    "reason": "CINDY token override(决策表 §3 落值,U8 批准)",
+    "owner": "D2"
+  },
+  {
+    "glob": "apps/desktop/src/renderer/themes/builtin/cindy-dark.ts",
+    "reason": "CINDY token override(决策表 §3 落值,U8 批准)",
+    "owner": "D2"
+  },
+  {
+    "glob": "apps/desktop/src/renderer/themes/__tests__/cindyDecisionData.ts",
+    "reason": "决策数据冻结(含期望 hex/HSL)",
+    "owner": "D2T"
+  },
+  {
+    "glob": "apps/desktop/src/renderer/themes/__tests__/cindyThemes.test.ts",
+    "reason": "D2T 单测期望值与 helper(含 hex)",
+    "owner": "D2T"
+  },
+  {
+    "glob": "apps/desktop/src/renderer/themes/__tests__/tokenRegistry.test.ts",
+    "reason": "D1 注册守卫单测(含 hex 期望)",
+    "owner": "D1"
+  },
+  {
+    "glob": "apps/desktop/src/renderer/cindy-brain/__tests__/ghostPanelTheme.test.ts",
+    "reason": "D1 Ghost 注入单测(含 hex 样例)",
+    "owner": "D1"
+  },
+  {
+    "glob": "DESIGN.md",
+    "reason": "§15 CINDY 色板/三份红 map 文档示例",
+    "owner": "D2"
+  }
+]

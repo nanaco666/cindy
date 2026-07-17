@@ -613,3 +613,54 @@ card/container
 
 - 允许**功能性状态过渡**:hover / 选中 / 展开等的颜色、背景、透明度变化,时长 **≤150ms**,目的是让状态变化不突兀(全 app 的 `transition-colors` 即此类,合规)。
 - **禁止装饰性 / 大幅位移动画**:无意义的位移、缩放、弹跳、视差、循环动画。交互仍应"快、直接"(承接 §1 / §7 的克制气质 —— 把原先"零过渡"修正为"零装饰性动效",功能性过渡是允许的)。
+
+
+## 15. CINDY 皮肤族(品牌化可选 family)
+
+> 本节为 CINDY 皮肤族的规范记录,**不改写 §1-7 默认皮肤规范**。值的唯一权威:
+> `2026-07-17-cindy-token-decision-table.md`(用户 U8 批准),零自由裁量。
+
+### 8.1 色板(Figma 文本节点提取)
+
+| 语义 | Light | Dark |
+|---|---|---|
+| 品牌红 | `#DF0C27` | `#DF0C27` |
+| 品牌深红(hover/pressed) | `#A61629` | `#A61629` |
+| 背景 | `#EDEDED` | `#2A2828` |
+| 卡片/输入框 | `#F8F8F8` | `#312F2F` |
+| 边框 | `#DCDFE3` | `#434343` |
+| 二级信息 | `#9A9DA3` | `#6F6F6F` |
+| 正文 | `#3C3F43` | `#D4D4D4` |
+| 纯白 | `#FFFFFF` | `#FFFFFF` |
+
+### 8.2 三份红 exact map(品牌红边界)
+
+- **BRAND_RED_EXPECTED_BY_ID**(必须等于品牌红/深红):`accent-cta-bg`/`accent-cta-bg-pure`/`accent-emphasis`/`confirm-btn-primary-bg`/`migration-bar-fill`/`perm-allow-btn-bg`/`update-btn-border`/`update-btn-text`(均 `#DF0C27`);`primary`/`sidebar-item-active`(HSL `352.3 89.8% 46.1%`,RGB 归一等价品牌红)。
+- **BRAND_RED_ALLOWED_IDS**(允许含红全集 = EXPECTED ∪ 派生):上述 + `accent-soft`/`accent-hover`/`drop-overlay-bg`/`confirm-btn-primary-hover`/`settings-btn-primary-bg`/`settings-btn-primary-border`/`settings-btn-primary-hover-bg`。
+- **CTA_FOREGROUND_WHITE_IDS**(红底白前景):`accent-pure-cta-fg`/`confirm-btn-primary-text`/`perm-allow-btn-text`/`primary-foreground`/`settings-btn-primary-text`。
+
+单向禁止:`ALLOWED` 之外任何 token 出现 `#DF0C27`/`#A61629` = 测试红。
+
+### 8.3 插值表(sRGB 每通道 `round(A+(B-A)*t)`)
+
+详见决策表 §2。Light/Dark 各 20/40/65/75% 档已冻结精确值进单测(`#EFEFEF/#F1F1F1/#F4F4F4/#F5F5F5`、`#2B2929/#2D2B2B/#2F2D2D/#2F2D2D`)。
+
+### 8.4 豁免(不纳入 CINDY 覆盖,跨主题统一)
+
+- 语义色:`warning-accent` `#FF6600` / `annotation-accent` `#FF3B30` / `status-bar-accent`(alias warning orange)。
+- 状态四色:running `#FF6600` / awaiting `#00D9C5` / error `#ef4444` / done `#22c55e`。
+- `focus-ring` `#3b82f6`(蓝,不染红);diff 红绿;modal scrim/阴影;`overlay-lightbox`。
+- `destructive`/`search-match-bg` 语义色不纳入 HSL_FORMAT_IDS 覆盖。
+- model-budget 光谱条 / GhostTool shimmer:显式豁免(中性 shimmer,跨主题统一)。
+
+### 8.5 U2 显式例外记录(二级信息色忠于 Figma 原值)
+
+- token:`text-secondary` / `text-secondary-cross`(light `#9A9DA3` / dark `#6F6F6F`)。
+- 实测对比度(WCAG):× surface `2.32/2.92:1`、× elevated `2.56/2.65:1`、× chip `2.41/2.72:1`,均低于普通文本 AA `4.5:1`。
+- 裁决:用户 **U2(2026-07-16 拍板)=(b) 忠于 Figma 原值**,接受可读性折损,作为记录在案的显式偏离。
+- 约束:**不得擅自调深**(如 `#686B72` 已证伪且仅存档备查),改值须重新过用户关卡。
+- 反向冻结单测:`cindyThemes.test.ts` 第 ⑦ 组断言该值必须恰等 Figma 原值,注入 `#686B72` 必须变红。
+
+### 8.6 HSL 格式合约
+
+42 个 `HSL_FORMAT_IDS` 必须 HSL 三元组(`h s% l%`,`h∈[0,360)`、灰色 `hue=0`、1 位小数);其余 token 走 hex/rgba。round-trip HSL→RGB 通道误差 ≤1。HSL_FORMAT_IDS 之外不得误填 HSL 三元组。
