@@ -27,6 +27,8 @@ interface VendorSegmentedSwitcherProps {
   /** disabled 状态(发送中等);整体降透明且不响应点击。 */
   disabled?: boolean;
   className?: string;
+  width?: number;
+  dense?: boolean;
 }
 
 interface SegmentOption {
@@ -46,16 +48,19 @@ export function VendorSegmentedSwitcher({
   onChange,
   disabled,
   className,
+  width = 220,
+  dense = false,
 }: VendorSegmentedSwitcherProps) {
   return (
     <div
       className={cn(
-        'flex h-9 items-center gap-0.5 rounded-full p-[3px]',
+        'flex items-center gap-0.5 rounded-full p-[3px]',
+        dense ? 'h-[30px]' : 'h-9',
         'bg-[var(--chat-input-bg)] dark:border dark:border-[var(--cmd-palette-border)]',
         disabled && 'opacity-60 pointer-events-none',
         className,
       )}
-      style={{ width: 220 }}
+      style={{ width }}
       role="tablist"
       aria-label="Vendor switcher"
     >
@@ -77,7 +82,7 @@ export function VendorSegmentedSwitcher({
             }}
             className={cn(
               'flex h-full flex-1 items-center justify-center gap-1.5 rounded-full',
-              'text-[14px] leading-none transition-colors',
+              dense ? 'text-[12px] leading-none transition-colors' : 'text-[14px] leading-none transition-colors',
               isActive
                 ? cn(
                     'font-medium',
@@ -91,7 +96,7 @@ export function VendorSegmentedSwitcher({
                   ),
             )}
           >
-            <opt.Mark size={14} className={cn('shrink-0', opt.iconClassName)} />
+            <opt.Mark size={dense ? 13 : 14} className={cn('shrink-0', opt.iconClassName)} />
             {/* 文字下沉 0.5px —— Inter 在 leading-none 下视觉重心偏上,与 vendor mark
                 光学居中对齐微调,见 NewChat 视觉走查 2026-05-03。 */}
             <span className="translate-y-[0.5px] whitespace-nowrap">{opt.label}</span>

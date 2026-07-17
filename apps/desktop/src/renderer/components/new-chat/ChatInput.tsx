@@ -469,6 +469,7 @@ interface ChatInputProps {
    * 默认 false (保持主会话视图的舒适字号)。
    */
   denseToolbar?: boolean;
+  visualVariant?: 'default' | 'create-agent';
   /**
    * Slot rendered INSIDE the input card, above the textarea, sharing the same
    * rounded border / focus-within highlight. Used by Orca mode for the
@@ -898,6 +899,7 @@ export function ChatInput({
   onRememberedEffortChange,
   compactToolbar = false,
   denseToolbar = false,
+  visualVariant = 'default',
   topSlot,
   collaboration,
 }: ChatInputProps) {
@@ -3865,6 +3867,7 @@ export function ChatInput({
   // 内部 topSlot 与 textarea 用 1px hairline 分隔但看起来是一张卡。
   const showTopSlot = !!topSlot;
   const showFusedWrapper = showQueuePanel || showTopSlot;
+  const isCreateAgentVariant = visualVariant === 'create-agent';
 
   return (
     <div className="relative flex w-full flex-col items-center gap-4" data-chat-input-root>
@@ -3914,7 +3917,8 @@ export function ChatInput({
         className={cn(
           'flex w-full flex-col gap-0',
           showFusedWrapper && [
-            'overflow-hidden rounded-[12px] border transition-colors',
+            'overflow-hidden border transition-colors',
+            isCreateAgentVariant ? 'rounded-[6px]' : 'rounded-[12px]',
             'bg-[var(--chat-input-bg)]',
             'border-[var(--chat-input-border)]',
             'focus-within:border-[var(--chat-input-border-focus)]',
@@ -3948,13 +3952,15 @@ export function ChatInput({
         {/* biome-ignore lint/a11y/noStaticElementInteractions: this area handles drag/drop; keyboard attachment flow uses the picker controls. */}
         <div
           className={cn(
-            'relative flex min-h-[86px] max-h-[300px] w-full flex-col justify-between px-[11px] pt-[11px] pb-[6px]',
+            'relative flex max-h-[300px] w-full flex-col justify-between px-[11px] pt-[11px] pb-[6px]',
+            isCreateAgentVariant ? 'min-h-[110px]' : 'min-h-[86px]',
             // Standalone mode: own border + bg + focus-within. Fused mode:
             // outer wrapper handles all of that, we render flat.
             showFusedWrapper
               ? null
               : [
-                  'rounded-[12px] border transition-colors',
+                  'border transition-colors',
+                  isCreateAgentVariant ? 'rounded-[6px]' : 'rounded-[12px]',
                   'bg-[var(--chat-input-bg)]',
                   'border-[var(--chat-input-border)]',
                   'focus-within:border-[var(--chat-input-border-focus)]',
@@ -4055,7 +4061,10 @@ export function ChatInput({
         {/* Drop overlay (F-FI-1) */}
         {(isDragOver || externalDragOver) && (
           <div
-            className="pointer-events-none absolute inset-0 z-10 rounded-[12px]"
+            className={cn(
+              'pointer-events-none absolute inset-0 z-10',
+              isCreateAgentVariant ? 'rounded-[6px]' : 'rounded-[12px]',
+            )}
             style={{
               backgroundColor: 'var(--drop-overlay-bg)',
               border: '2px dashed var(--drop-overlay-border)',

@@ -3122,6 +3122,16 @@
       "queueTooltip": "Click to queue; press {{shortcut}} to steer without interrupting the task",
       "stop": "Stop generating"
     },
+    "createAgent": {
+      "quickStart": "Quick start",
+      "more": "More",
+      "quickStarts": {
+        "explore": "Explore and understand code",
+        "build": "Build a feature, app, or tool",
+        "review": "Review code and suggest changes",
+        "fix": "Fix issues and failures"
+      }
+    },
     "addRemoteProject": {
       "title": "Add remote project",
       "hint": "Pick a connected remote host or controllable device, then choose this project's folder.",
