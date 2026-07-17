@@ -3124,12 +3124,20 @@
     },
     "createAgent": {
       "quickStart": "빠른 시작",
-      "more": "더 보기",
       "quickStarts": {
         "explore": "코드 탐색 및 이해",
         "build": "새 기능, 앱 또는 도구 만들기",
         "review": "코드 검토 및 수정 제안",
         "fix": "문제와 실패 수정"
+      },
+      "sidebar": {
+        "new": "새로 만들기",
+        "automation": "자동화",
+        "skills": "스킬",
+        "search": "검색",
+        "local": "로컬",
+        "projects": "프로젝트",
+        "conversations": "대화"
       }
     },
     "addRemoteProject": {

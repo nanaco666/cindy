@@ -3124,12 +3124,20 @@
     },
     "createAgent": {
       "quickStart": "クイックスタート",
-      "more": "その他",
       "quickStarts": {
         "explore": "コードを探索して理解",
         "build": "新機能、アプリ、ツールを構築",
         "review": "コードをレビューして修正を提案",
         "fix": "問題や失敗を修正"
+      },
+      "sidebar": {
+        "new": "新規",
+        "automation": "自動化",
+        "skills": "スキル",
+        "search": "検索",
+        "local": "ローカル",
+        "projects": "プロジェクト",
+        "conversations": "会話"
       }
     },
     "addRemoteProject": {
