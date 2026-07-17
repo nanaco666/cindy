@@ -4,13 +4,13 @@
  * Fetches and caches the CDN manifest.json that drives both app hot-updates
  * and Claude Code binary management.
  *
- * - CDN base URLs (external + intranet mirror) come from the client endpoint
- *   manifest (`getClientEndpoint('cdnBaseUrl' / 'cdnInternalBaseUrl')`) — the
- *   endpoint manifest is resolved blocking-style BEFORE any update check
- *   (bootstrap-electron: initClientEndpoints → …later… update chain), so all
- *   reads here happen strictly after init. Base URLs are therefore read
- *   lazily inside functions — NEVER capture them in module-level constants
- *   (module evaluation happens before initClientEndpoints and would throw).
+ * - The CDN base URL comes from the client endpoint manifest
+ *   (`getClientEndpoint('cdnBaseUrl')`) — the endpoint manifest is resolved
+ *   blocking-style BEFORE any update check (bootstrap-electron:
+ *   initClientEndpoints → …later… update chain), so all reads here happen
+ *   strictly after init. The base URL is therefore read lazily inside
+ *   functions — NEVER capture it in module-level constants (module
+ *   evaluation happens before initClientEndpoints and would throw).
  * - In dev mode (app.isPackaged === false), fetching is skipped entirely.
  */
 
@@ -81,95 +81,26 @@ export interface Manifest {
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
-// 惰性读取(见文件顶注):清单在 initClientEndpoints 之后才可读,模块级捕获会炸。
-function externalBaseUrl(): string {
-  return getClientEndpoint('cdnBaseUrl');
-}
-function internalBaseUrl(): string {
-  return getClientEndpoint('cdnInternalBaseUrl');
-}
-const INTERNAL_PROBE_TIMEOUT_MS = 1500;
-
 // ── State ──────────────────────────────────────────────────────────────────
 
 let cached: Manifest | null = null;
-let internalProbeResult: 'internal' | 'external' | null = null;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-/**
- * Probe internal_test.txt on the intranet CDN to decide if we're inside the
- * company network. Re-runs on every fetchManifest() so a "home → office" move
- * mid-session flips over on the next 30-min poll without needing a restart.
- *
- * - In-memory only (no disk cache).
- * - Tight timeout so external networks pay at most INTERNAL_PROBE_TIMEOUT_MS
- *   per poll cycle.
- * - XDT_CDN_BASE_URL env override skips the probe entirely.
- */
-function probeInternalNetwork(): Promise<void> {
-  if (process.env.XDT_CDN_BASE_URL) {
-    internalProbeResult = 'external';
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (result: 'internal' | 'external') => {
-      if (settled) return;
-      settled = true;
-      internalProbeResult = result;
-      log.info('Internal probe result: %s', result);
-      resolve();
-    };
-
-    try {
-      const request = net.request(`${internalBaseUrl()}/internal_test.txt?t=${Date.now()}`);
-      const timeout = setTimeout(() => {
-        request.abort();
-        finish('external');
-      }, INTERNAL_PROBE_TIMEOUT_MS);
-
-      request.on('response', (response) => {
-        clearTimeout(timeout);
-        finish(response.statusCode === 200 ? 'internal' : 'external');
-        response.on('data', () => {});
-        response.on('end', () => {});
-      });
-      request.on('error', () => {
-        clearTimeout(timeout);
-        finish('external');
-      });
-      request.end();
-    } catch {
-      finish('external');
-    }
-  });
-}
-
+// 惰性读取(见文件顶注):清单在 initClientEndpoints 之后才可读,模块级捕获会炸。
+// 2026-07 退役 cdnInternalBaseUrl:内网加速镜像与 internal_test.txt 探测已下线,
+// 更新/hotfix 链一律直连 cdnBaseUrl。
 export function getBaseUrl(): string {
   if (process.env.XDT_CDN_BASE_URL) return process.env.XDT_CDN_BASE_URL;
-  if (internalProbeResult === 'internal') return internalBaseUrl();
-  return externalBaseUrl();
+  return getClientEndpoint('cdnBaseUrl');
 }
 
 /**
- * Async variant of getBaseUrl(): guarantees the internal-network probe has
- * run at least once before returning. Use this on code paths that depend on
- * intranet routing but are NOT downstream of fetchManifest() (e.g. skill
- * install in dev mode, where fetchManifest() short-circuits).
- *
- * Concurrent callers share a single in-flight probe promise; once the probe
- * settles, all subsequent calls hit the cached result synchronously.
+ * Async variant of getBaseUrl(), kept for callers that predate the intranet
+ * probe removal (e.g. skillhub auto-sync). No async work remains — it simply
+ * resolves with getBaseUrl().
  */
-let probePromise: Promise<void> | null = null;
-
 export async function ensureBaseUrl(): Promise<string> {
-  if (process.env.XDT_CDN_BASE_URL) return process.env.XDT_CDN_BASE_URL;
-  if (internalProbeResult === null) {
-    if (!probePromise) probePromise = probeInternalNetwork().finally(() => { probePromise = null; });
-    await probePromise;
-  }
   return getBaseUrl();
 }
 
@@ -195,11 +126,6 @@ export function isDev(): boolean {
  */
 export async function fetchManifest(timeoutMs?: number): Promise<Manifest | null> {
   if (isDev()) return null;
-
-  // Re-probe before every manifest fetch so 30-min poll cycles can switch
-  // base URL when the user moves between intranet and external networks
-  // without restarting the app.
-  await probeInternalNetwork();
 
   const isCanary = canaryFlagStore.read();
   const channelSuffix = isCanary ? '-canary' : '';

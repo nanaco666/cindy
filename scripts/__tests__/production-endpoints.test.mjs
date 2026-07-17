@@ -111,7 +111,6 @@ function fixtureEndpoints() {
     deviceLinkApiBaseUrl: 'https://relay.example.invalid',
     xdGatewayBaseUrl: 'https://gateway.example.invalid',
     cdnBaseUrl: 'https://cdn.example.invalid/app',
-    cdnInternalBaseUrl: 'http://cdn-internal.example.invalid/app',
     npkgBaseUrl: 'https://npkg.example.invalid',
     endpointManifestBaseUrlCn: 'https://hotfix-cn.example.invalid/app',
     endpointManifestBaseUrlGlobal: 'https://hotfix-global.example.invalid/app',

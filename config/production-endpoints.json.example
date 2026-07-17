@@ -6,7 +6,6 @@
   "deviceLinkApiBaseUrl": "",
   "xdGatewayBaseUrl": "",
   "cdnBaseUrl": "",
-  "cdnInternalBaseUrl": "",
   "npkgBaseUrl": "",
   "endpointManifestBaseUrlCn": "",
   "endpointManifestBaseUrlGlobal": "",

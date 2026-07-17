@@ -9,6 +9,5 @@
   "slackHookWsUrl": "wss://slack-hook.cindy.com.cn",
   "websiteUrl": "https://cindy.com.cn",
   "xdGatewayBaseUrl": "https://llm-proxy.tapsvc.com",
-  "cdnBaseUrl": "https://hotfix.cindy.com.cn/cindy",
-  "cdnInternalBaseUrl": "http://xdtown-static-maker.xdcdn.cn:20080/xdt-maker"
+  "cdnBaseUrl": "https://hotfix.cindy.com.cn/cindy"
 }

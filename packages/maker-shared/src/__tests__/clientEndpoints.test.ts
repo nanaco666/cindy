@@ -18,7 +18,6 @@ const VALID_MANIFEST = {
   websiteUrl: 'https://www.example.com',
   xdGatewayBaseUrl: 'https://gateway.example.com',
   cdnBaseUrl: 'https://cdn.example.com/app',
-  cdnInternalBaseUrl: 'http://cdn-internal.example.com:20080/app',
 };
 
 describe('parseClientEndpointManifest(全字段必填)', () => {
@@ -96,9 +95,16 @@ describe('parseClientEndpointManifest(全字段必填)', () => {
     expect(parseClientEndpointManifest(raw)).toEqual({ ok: false, reason });
   });
 
-  it('cdnInternalBaseUrl 白名单天然含 http(内网镜像,无需 allowHttp)', () => {
-    const result = parseClientEndpointManifest(JSON.stringify(VALID_MANIFEST));
+  it('忽略已退役字段 cdnInternalBaseUrl(老清单向前兼容)', () => {
+    const result = parseClientEndpointManifest(
+      JSON.stringify({
+        ...VALID_MANIFEST,
+        cdnInternalBaseUrl: 'http://cdn-internal.example.com:20080/app',
+      }),
+    );
     expect(result).toMatchObject({ ok: true });
+    if (!result.ok) throw new Error('unreachable');
+    expect('cdnInternalBaseUrl' in result.endpoints).toBe(false);
   });
 });
 

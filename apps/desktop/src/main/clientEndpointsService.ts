@@ -11,8 +11,7 @@
  *
  * 清单来源按运行形态三选一(resolveEndpointSource,纯函数可单测):
  *  - packaged / dev + --endpoints-cdn:从烘焙自举基址 ENDPOINT_MANIFEST_BASE_URL
- *    (region 化 hotfix 域名,客户端唯一"有感"的烘焙远程 URL)直连拉取,
- *    **不做内网探测**(内外网探测是更新链自己的事,见 manifestService);
+ *    (region 化 hotfix 域名,客户端唯一"有感"的烘焙远程 URL)直连拉取;
  *  - dev 默认:读仓内 `config/endpoint.json`(XDT_ENDPOINT_MANIFEST_FILE 可
  *    指定其它文件,restart:desktop:local 用它指到 config/endpoint.local.json),
  *    同一条阻断循环,文件缺失 / 非法同样弹框——配置错要炸出来,不静默猜测;
@@ -22,8 +21,8 @@
  * 本文件负责 desktop 侧 IO 与 renderer 消费(sendSync IPC,首帧同步可用)。
  *
  * 依赖方向(2026-07 重构后):manifestService(更新链)经 getClientEndpoint
- * 读清单的 cdnBaseUrl / cdnInternalBaseUrl——本文件**不得** import
- * manifestService(会成环);isDev 语义在此内联为 !app.isPackaged。
+ * 读清单的 cdnBaseUrl——本文件**不得** import manifestService(会成环);
+ * isDev 语义在此内联为 !app.isPackaged。
  */
 
 import fs from 'node:fs';

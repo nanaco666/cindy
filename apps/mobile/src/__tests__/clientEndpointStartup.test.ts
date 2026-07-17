@@ -30,7 +30,6 @@ const FULL_MANIFEST_OBJECT = {
   websiteUrl: 'https://www.next.example.com',
   xdGatewayBaseUrl: 'https://gateway-next.example.com',
   cdnBaseUrl: 'https://cdn-next.example.com/app',
-  cdnInternalBaseUrl: 'http://cdn-internal-next.example.com:20080/app',
 };
 const FULL_MANIFEST = JSON.stringify(FULL_MANIFEST_OBJECT);
 

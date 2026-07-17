@@ -12,9 +12,9 @@
  *  - **没有缓存回退、没有超时后静默继续、没有逐字段烘焙回退**——任何本地兜底
  *    都会把 CDN 配置错误静默掩盖成"部分端点漂移",这里要的是配置错就立刻炸出来;
  *  - 客户端唯一烘焙的远程 URL 是拉清单用的 CDN 基址(自举必需,且防"清单配错
- *    CDN 把自己锁死");**更新/hotfix 链的 CDN base 也来自清单**(cdnBaseUrl /
- *    cdnInternalBaseUrl)——清单阻断在一切更新检查之前,更新链拿到的一定是
- *    已解析的清单值,无鸡生蛋问题;
+ *    CDN 把自己锁死");**更新/hotfix 链的 CDN base 也来自清单**(cdnBaseUrl)
+ *    ——清单阻断在一切更新检查之前,更新链拿到的一定是已解析的清单值,
+ *    无鸡生蛋问题;
  *  - dev(desktop 未打包 / mobile __DEV__)默认不走 CDN,改读仓内正本文件
  *    (同一套解析,allowHttp 宽松协议见下);`--endpoints-cdn` /
  *    EXPO_PUBLIC_ENDPOINTS_CDN=1 可让 dev 走完整 CDN 链路。
@@ -33,11 +33,15 @@
  *    接受 http:、wss 字段追加 ws:,让 endpoint.local.json 能填 localhost;
  *    packaged / CDN 路径一律不开,打包校验零放松;
  *  - schemaVersion 缺失、非正整数或大于当前支持版本 → 整份拒绝(breaking change
- *    才 bump 版本)。2026-07 追加 cdnBaseUrl / cdnInternalBaseUrl 时**没有** bump:
- *    新字段随全新的 hotfix CDN 域名 + `/endpoint.json` 路径发布,老客户端读的是
- *    老 CDN 老路径(`/config/client-endpoints.json`)看不到新清单;即使把新正本
- *    内容双写到老路径,多出的字段也会被老 parser 按"未知字段"忽略——bump 的
- *    语义是"同一文件的不兼容重释义",纯增字段 + 换发布地址不构成。
+ *    才 bump 版本)。2026-07 追加 cdnBaseUrl 时**没有** bump:新字段随全新的
+ *    hotfix CDN 域名 + `/endpoint.json` 路径发布,老客户端读的是老 CDN 老路径
+ *    (`/config/client-endpoints.json`)看不到新清单;即使把新正本内容双写到
+ *    老路径,多出的字段也会被老 parser 按"未知字段"忽略——bump 的语义是
+ *    "同一文件的不兼容重释义",纯增字段 + 换发布地址不构成。
+ *  - 2026-07 稍后退役 cdnInternalBaseUrl(内网加速镜像下线,更新链只走
+ *    cdnBaseUrl)同样没有 bump:删必填字段对**新客户端**是纯放松(清单里多出
+ *    的该字段按未知字段忽略);退役时新路径清单尚无已发布的 packaged 消费者,
+ *    线上清单已同步删除,无兼容包袱。
  */
 
 /** 当前客户端支持的清单 schema 版本;清单里更大的版本号会被整份拒绝。 */
@@ -62,10 +66,7 @@ export const CLIENT_ENDPOINT_KEYS = [
   'websiteUrl',
   'xdGatewayBaseUrl',
   // 更新/hotfix 链的 CDN base(manifest-*.json / hotfix 包 / agent 二进制)。
-  // cdnInternalBaseUrl 是公司内网加速镜像,允许 http(内网探测语义,见
-  // desktop manifestService);两者进清单 = 更新链也由清单全权。
   'cdnBaseUrl',
-  'cdnInternalBaseUrl',
 ] as const;
 
 export type ClientEndpointKey = (typeof CLIENT_ENDPOINT_KEYS)[number];
@@ -85,8 +86,6 @@ const FIELD_PROTOCOLS: Record<ClientEndpointKey, readonly string[]> = {
   websiteUrl: ['https:'],
   xdGatewayBaseUrl: ['https:'],
   cdnBaseUrl: ['https:'],
-  // 内网加速镜像天然是 http(与 scripts/shared/production-endpoints.mjs 现状对齐)。
-  cdnInternalBaseUrl: ['http:', 'https:'],
 };
 
 /** 解析选项;allowHttp 仅供 dev 本地文件路径(endpoint.local.json 等)开启。 */

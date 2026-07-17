@@ -20,7 +20,6 @@ export const PRODUCTION_ENDPOINT_KEYS = Object.freeze([
   'deviceLinkApiBaseUrl',
   'xdGatewayBaseUrl',
   'cdnBaseUrl',
-  'cdnInternalBaseUrl',
   'npkgBaseUrl',
   // 端点清单(endpoint.json)的自举拉取基址,按 region 打包烘焙进客户端——
   // 这是客户端唯一"有感"的烘焙远程 URL,其余业务端点全部来自清单本身。
@@ -64,7 +63,6 @@ const FIELD_PROTOCOLS = Object.freeze({
   deviceLinkApiBaseUrl: ['https:'],
   xdGatewayBaseUrl: ['https:'],
   cdnBaseUrl: ['https:'],
-  cdnInternalBaseUrl: ['http:', 'https:'],
   npkgBaseUrl: ['https:'],
   endpointManifestBaseUrlCn: ['https:'],
   endpointManifestBaseUrlGlobal: ['https:'],
