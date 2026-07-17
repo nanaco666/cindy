@@ -301,4 +301,34 @@ describe('mobile home desktop-first surface', () => {
     expect(source).toContain('testID="home.loading"');
     expect(source).toContain('正在读取可控制电脑');
   });
+
+  it('renders the remote-access onboarding guide for the no-device empty state', () => {
+    const source = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
+
+    // 无可控制电脑时不再是一句话空态,而是产品模式引导(按 reason 分场景 + 云端 Cindy 预告);
+    // 启动同步失败(initialHomeError)仍走同步失败空态,不冒充引导。
+    expect(source).toContain('&& !initialHomeError');
+    expect(source).toContain("&& home.emptyKind === 'noDevice'");
+    expect(source).toContain('showRemoteGuide && home.emptyNoDevice ? (');
+    expect(source).toContain('<RemoteAccessGuide');
+    expect(source).toContain('testID="home.remoteAccessGuide"');
+    // 引导态没有可筛选的对话:表头退化为纯品牌标题(无下拉菜单),新建 FAB 不渲染。
+    expect(source).toContain('{showRemoteGuide ? (');
+    expect(source).toContain('{showRemoteGuide ? null : (');
+
+    const guideSource = readFileSync(resolve(process.cwd(), 'src/components/RemoteAccessGuide.tsx'), 'utf8');
+    // 步骤三的开关名必须与桌面端设置页 devices.allowControl 文案一致,避免用户按指引找不到开关。
+    expect(guideSource).toContain('在电脑上安装并打开 Cindy');
+    expect(guideSource).toContain('用与手机相同的账号登录');
+    expect(guideSource).toContain('「设置 → 设备互联」');
+    expect(guideSource).toContain('允许同账号设备控制本机');
+    // 分场景交互:离线/开关未开可手动重新检查,被撤销访问有重试 CTA(Lock 图标对齐设备列表语义)。
+    expect(guideSource).toContain("reason === 'firstRun'");
+    expect(guideSource).toContain('home.remoteGuide.recheck');
+    expect(guideSource).toContain('home.remoteGuide.retryAccess');
+    expect(guideSource).toContain('<Lock');
+    // 未来形态预告:云端 Cindy 上线后手机版可脱离电脑直接使用。
+    expect(guideSource).toContain('云端 Cindy 筹备中');
+    expect(guideSource).toContain('上线后无需电脑，手机版即可直接使用。');
+  });
 });

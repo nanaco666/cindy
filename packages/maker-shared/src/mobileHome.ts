@@ -17,6 +17,8 @@ export interface MobileHomeDeviceLike {
   deviceId: string;
   name: string;
   state?: string;
+  /** 设备状态明细(deviceList statusDetail,带 lastSeen 相对时间等),noDevice 引导态展示用。 */
+  statusDetail?: string;
   statusLabel?: string;
 }
 
@@ -61,10 +63,39 @@ export interface MobileHomeOverview {
   waiting: number;
 }
 
+/**
+ * 首页空态的语义分类,供客户端按场景选择渲染形态:
+ * - noDevice 是「首次使用 / 产品模式说明」级空态(手机版当前仅远程访问电脑端 Cindy),
+ *   客户端应渲染带连接指引的引导态(细分场景见 MobileHomeNoDeviceReason),而非普通一句话空态;
+ * - 其余分类都是常规筛选/搜索空态,一句话说明即可。
+ */
+export type MobileHomeEmptyKind = 'search' | 'noDevice' | 'waiting' | 'automation' | 'archived' | 'noSession';
+
+/**
+ * noDevice 空态的细分场景 —— 按「离目标还差什么」给不同引导,优先挑最可行动的:
+ * - firstRun:账号下没有任何桌面设备 → 完整产品说明 + 三步连接指引;
+ * - accessRevoked:有设备但撤销了这台手机的访问 → 指名设备,引导重试访问 / 电脑端重新允许;
+ * - remoteDisabled:电脑在线但未开远程控制 → 只差设置开关一步,给精确路径;
+ * - offline:有绑定过的设备但都不在线 → 引导打开电脑上的 Cindy。
+ * 多设备状态混合时按 accessRevoked > remoteDisabled > offline 的优先级归类
+ * (撤销是用户显式动作需正面回应;「在线只差开关」比「先去开机」更可行动)。
+ */
+export type MobileHomeNoDeviceReason = 'firstRun' | 'accessRevoked' | 'remoteDisabled' | 'offline';
+
+/** noDevice 空态的设备上下文,供引导态指名道姓地展示设备与状态。 */
+export interface MobileHomeNoDeviceContext {
+  reason: MobileHomeNoDeviceReason;
+  /** 归类到该 reason 的设备(名字 + 状态说明),firstRun 恒为空。 */
+  devices: Array<{ deviceId: string; name: string; statusDetail: string }>;
+}
+
 export interface MobileHomePresentation {
   chats: RemoteSessionListItem[];
   deviceFilters: MobileHomeDeviceFilterItem[];
   emptyCopy: string;
+  emptyKind: MobileHomeEmptyKind;
+  /** emptyKind === 'noDevice' 时的细分场景;其余空态为 null。 */
+  emptyNoDevice: MobileHomeNoDeviceContext | null;
   emptyTitle: string;
   overview: MobileHomeOverview;
   pinned: RemoteSessionListItem[];
@@ -159,6 +190,7 @@ export function buildMobileHomePresentation({
   const primaryDevice = pickPrimaryDevice(deviceFilters, normalizedSelectedDeviceId);
   const empty = mobileHomeEmptyState({
     deviceCount: deviceFilters.filter((item) => item.deviceId && item.available).length,
+    devices,
     searchQuery,
     statusFilter,
   });
@@ -167,6 +199,8 @@ export function buildMobileHomePresentation({
     chats,
     deviceFilters: markSelectedFilter(deviceFilters, normalizedSelectedDeviceId),
     emptyCopy: empty.copy,
+    emptyKind: empty.kind,
+    emptyNoDevice: empty.noDevice,
     emptyTitle: empty.title,
     overview,
     pinned,
@@ -586,45 +620,121 @@ function lastActivityTime(session: RemoteSessionListSessionLike): string {
 
 function mobileHomeEmptyState({
   deviceCount,
+  devices,
   searchQuery,
   statusFilter,
 }: {
   deviceCount: number;
+  devices: readonly MobileHomeDeviceLike[];
   searchQuery: string;
   statusFilter: RemoteSessionStatusFilter;
-}): { title: string; copy: string } {
+}): { kind: MobileHomeEmptyKind; noDevice: MobileHomeNoDeviceContext | null; title: string; copy: string } {
   if (searchQuery.trim()) {
     return {
+      kind: 'search',
+      noDevice: null,
       title: '没有匹配结果',
       copy: '换一个项目名、对话标题、电脑名或消息关键词再试。',
     };
   }
   if (deviceCount === 0) {
-    return {
-      title: '没有可控制电脑',
-      copy: '确保桌面端已登录同一账号，并在设置里打开允许远程控制。',
-    };
+    // 首次使用 / 连接受阻的产品模式说明:手机版当前定位是电脑端 Cindy 的远程入口,而非独立客户端。
+    // 客户端按 emptyKind=noDevice + reason 渲染对应引导(连接步骤 / 精确开关 / 重试访问 + 云端预告)。
+    const noDevice = classifyNoDevice(devices);
+    return { kind: 'noDevice', noDevice, ...noDeviceEmptyText(noDevice) };
   }
   if (statusFilter === 'waiting') {
     return {
+      kind: 'waiting',
+      noDevice: null,
       title: '没有待处理请求',
       copy: '权限确认、计划审阅和问题选择会在这里集中出现。',
     };
   }
   if (statusFilter === 'automation') {
     return {
+      kind: 'automation',
+      noDevice: null,
       title: '没有自动化会话',
       copy: '自动化任务运行后，对应会话会按项目聚合到这里。',
     };
   }
   if (statusFilter === 'archived') {
     return {
+      kind: 'archived',
+      noDevice: null,
       title: '没有归档会话',
       copy: '切到全部或活跃筛选，继续查看当前项目和对话。',
     };
   }
   return {
+    kind: 'noSession',
+    noDevice: null,
     title: '还没有会话',
     copy: '先在桌面端创建或继续一个会话，手机端会直接显示对应项目和对话。',
   };
+}
+
+/**
+ * 无可用设备时的场景归类。按 accessRevoked > remoteDisabled > offline 优先挑最可行动的
+ * 一类设备作引导对象(撤销需正面回应;「在线只差开关」比「先去开机」更近一步);
+ * 完全没有设备则是 firstRun。
+ */
+function classifyNoDevice(devices: readonly MobileHomeDeviceLike[]): MobileHomeNoDeviceContext {
+  const byReason = (state: string): MobileHomeNoDeviceContext['devices'] => devices
+    .filter((device) => device.state === state)
+    .map((device) => ({
+      deviceId: device.deviceId,
+      name: device.name,
+      statusDetail: device.statusDetail ?? device.statusLabel ?? '',
+    }));
+  const revoked = byReason('access_revoked');
+  if (revoked.length > 0) return { reason: 'accessRevoked', devices: revoked };
+  const remoteDisabled = byReason('remote_disabled');
+  if (remoteDisabled.length > 0) return { reason: 'remoteDisabled', devices: remoteDisabled };
+  if (devices.length > 0) {
+    // 剩余不可用设备统一按 offline 引导(含 unknown 等边缘态,「去电脑上打开 Cindy」总是对的下一步)。
+    return {
+      reason: 'offline',
+      devices: devices.map((device) => ({
+        deviceId: device.deviceId,
+        name: device.name,
+        statusDetail: device.statusDetail ?? device.statusLabel ?? '',
+      })),
+    };
+  }
+  return { reason: 'firstRun', devices: [] };
+}
+
+/** 「A」/「A」和「B」/「A」等 N 台:引导文案里的设备称呼。 */
+function joinDeviceNames(devices: MobileHomeNoDeviceContext['devices']): string {
+  const names = devices.map((device) => `「${device.name}」`);
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]}和${names[1]}`;
+  return `${names[0]}等 ${names.length} 台电脑`;
+}
+
+function noDeviceEmptyText(context: MobileHomeNoDeviceContext): { title: string; copy: string } {
+  switch (context.reason) {
+    case 'accessRevoked':
+      return {
+        title: '访问权限已被撤销',
+        copy: `${joinDeviceNames(context.devices)}撤销了这台手机的远程访问。可以重试申请，或在电脑上重新允许后自动恢复。`,
+      };
+    case 'remoteDisabled':
+      return {
+        title: '在电脑上允许远程控制',
+        copy: `${joinDeviceNames(context.devices)}已经在线，还差最后一步：在电脑上打开允许手机控制的开关。`,
+      };
+    case 'offline':
+      return {
+        title: '打开电脑上的 Cindy',
+        copy: '连接过的电脑现在都不在线。在电脑上打开 Cindy 并保持登录，手机会自动连上。',
+      };
+    default:
+      return {
+        title: '连接你电脑上的 Cindy',
+        copy: '目前 Cindy 都运行在你的电脑上，手机版通过远程访问来让你使用电脑上的 Agent。',
+      };
+  }
 }

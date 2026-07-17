@@ -49,6 +49,7 @@ import {
   MainWindowEmptyState,
   StatusDot,
 } from '@/components/MobilePrimitives';
+import { RemoteAccessGuide } from '@/components/RemoteAccessGuide';
 import { buildMainWindowLayout } from '@/components/mainWindowLayout';
 import { useScreenEdgePadding } from '@/components/screenEdgeInsets';
 import { isAccessRevokedError } from '@/device-link/accessRevoked';
@@ -688,6 +689,7 @@ export default function HomeScreen() {
     deviceId: item.device.deviceId,
     name: item.device.name,
     state: item.state,
+    statusDetail: item.statusDetail,
     statusLabel: item.statusLabel,
   })), [deviceRows]);
   const revokedTipDeviceName = useMemo(
@@ -786,6 +788,20 @@ export default function HomeScreen() {
     : connectionError;
   const emptyStateTitle = initialHomeError ? '同步失败' : home.emptyTitle;
   const emptyStateCopy = initialHomeError ? (connectionError ?? '请求失败') : home.emptyCopy;
+  // 无可控制电脑的引导态(landing)可见性,与 ListEmptyComponent 的分支同口径。
+  // 引导态下首页没有可筛选的对话:表头「所有对话 ▾」退化为纯品牌标题、新建 FAB 隐藏,
+  // 避免在产品说明页上摆一堆无意义的入口。
+  const homeListItemCount = sections.reduce((count, section) => count + section.data.length, 0);
+  const showRemoteGuide = homeListItemCount === 0
+    && !initialHomeLoading
+    && !initialHomeError
+    && home.pinned.length === 0
+    && home.emptyKind === 'noDevice'
+    && home.emptyNoDevice !== null;
+  const retryRevokedGuideDevices = useCallback(() => {
+    const revoked = home.emptyNoDevice?.reason === 'accessRevoked' ? home.emptyNoDevice.devices : [];
+    for (const device of revoked) void retryRevokedDevice(device.deviceId);
+  }, [home.emptyNoDevice, retryRevokedDevice]);
   const hasOpenableLiveDevice = deviceModels.some((item) => item.canOpen);
   // 首次 loadHome 落地前(含失败态)FAB 只认 live 设备:缓存画出的会话会让 primaryDevice 合成出
   // 「可用」项,但缓存设备不能当 live 设备直接开新会话——列表先画出来,新建入口等 live 数据。
@@ -1195,17 +1211,24 @@ export default function HomeScreen() {
         style={styles.homeHeader}
         onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
       >
-        <Pressable
-          accessibilityLabel="选择对话范围"
-          accessibilityRole="button"
-          onPress={openDeviceMenu}
-          onPressIn={openDeviceMenu}
-          style={({ pressed }) => [styles.headerDropdown, pressed && styles.pressed]}
-          testID="devices.title"
-        >
-          <Text style={styles.headerTitle} numberOfLines={1}>{selectedDeviceLabel}</Text>
-          <ChevronDown color={colors.textSecondary} size={iconSize.md} strokeWidth={iconStroke.medium} />
-        </Pressable>
+        {showRemoteGuide ? (
+          // 引导态(无可控制电脑)没有可筛选的对话:表头退化为纯品牌标题,不挂下拉菜单。
+          <View style={styles.headerDropdown} testID="devices.title">
+            <Text style={styles.headerTitle} numberOfLines={1}>Cindy</Text>
+          </View>
+        ) : (
+          <Pressable
+            accessibilityLabel="选择对话范围"
+            accessibilityRole="button"
+            onPress={openDeviceMenu}
+            onPressIn={openDeviceMenu}
+            style={({ pressed }) => [styles.headerDropdown, pressed && styles.pressed]}
+            testID="devices.title"
+          >
+            <Text style={styles.headerTitle} numberOfLines={1}>{selectedDeviceLabel}</Text>
+            <ChevronDown color={colors.textSecondary} size={iconSize.md} strokeWidth={iconStroke.medium} />
+          </Pressable>
+        )}
         <Pressable
           accessibilityLabel="打开设置"
           accessibilityRole="button"
@@ -1301,6 +1324,24 @@ export default function HomeScreen() {
           ) : home.pinned.length > 0 ? (
             // 仅剩置顶且被收起时 item 数为 0,但用户并非"无对话",不显示空状态插画。
             null
+          ) : showRemoteGuide && home.emptyNoDevice ? (
+            // 无可控制电脑是「首次使用 / 产品模式说明」级空态:按 reason 渲染远程访问引导
+            // (首跑三步 / 离线设备卡 / 精确开关 / 重试访问 + 云端 Cindy 预告),而非一句话空态。
+            <RemoteAccessGuide
+              context={home.emptyNoDevice}
+              copy={emptyStateCopy}
+              onRecheck={() => void loadHome({ visible: true })}
+              onRetryAccess={retryRevokedGuideDevices}
+              rechecking={refreshing}
+              retrying={revokedTipRetryingId !== null}
+              style={{
+                marginTop: spacing.xxl,
+                minHeight: windowLayout.emptyMinHeight,
+                padding: windowLayout.emptyPadding,
+              }}
+              testID="home.remoteAccessGuide"
+              title={emptyStateTitle}
+            />
           ) : (
             <MainWindowEmptyState
               centered
@@ -1318,22 +1359,25 @@ export default function HomeScreen() {
         renderItem={renderHomeRow}
       />
 
-      <Pressable
-        accessibilityLabel="新建远程对话"
-        accessibilityRole="button"
-        accessibilityState={{ busy: initialHomeLoading || undefined, disabled: newSessionDisabled }}
-        disabled={newSessionDisabled}
-        onPress={() => openNewSession()}
-        style={({ pressed }) => [
-          styles.newChatButton,
-          { bottom: spacing.lg + insets.bottom },
-          pressed && styles.pressed,
-          newSessionDisabled && styles.disabled,
-        ]}
-        testID="home.newChatButton"
-      >
-        <SquarePen color={colors.ctaText} size={iconSize.xxl} strokeWidth={iconStroke.regular} />
-      </Pressable>
+      {showRemoteGuide ? null : (
+        // 引导态(无可控制电脑)下没有可发起对话的设备,置灰 FAB 也是噪音,直接不渲染。
+        <Pressable
+          accessibilityLabel="新建远程对话"
+          accessibilityRole="button"
+          accessibilityState={{ busy: initialHomeLoading || undefined, disabled: newSessionDisabled }}
+          disabled={newSessionDisabled}
+          onPress={() => openNewSession()}
+          style={({ pressed }) => [
+            styles.newChatButton,
+            { bottom: spacing.lg + insets.bottom },
+            pressed && styles.pressed,
+            newSessionDisabled && styles.disabled,
+          ]}
+          testID="home.newChatButton"
+        >
+          <SquarePen color={colors.ctaText} size={iconSize.xxl} strokeWidth={iconStroke.regular} />
+        </Pressable>
+      )}
 
       <RevokedAccessTip
         deviceName={revokedTipDeviceName}
