@@ -1,6 +1,6 @@
 # xdt-updater
 
-Tauri-based Windows updater for `XDMaker`. Replaces the inline `.cmd` script
+Tauri-based Windows updater for `Cindy`. Replaces the inline `.cmd` script
 that the Electron main process previously generated in `executeUpdateWindows`
 (see `apps/desktop/src/main/updateService.ts`).
 
@@ -18,17 +18,17 @@ that the Electron main process previously generated in `executeUpdateWindows`
 xdt-updater.exe \
   --zip       <path-to-downloaded-patch.zip> \
   --app-dir   <electron-install-dir> \
-  --exe-name  xdt-maker.exe \
+  --exe-name  Cindy.exe \
   --pid       <main-process-pid> \
   --log       <userData>/logs/cindy-update.log \
   --lock      <userData>/updates/.updating \
   --theme     light|dark|auto      # default: auto
 ```
 
-`--theme` mirrors the user's current XDMaker theme preference into the
+`--theme` mirrors the user's current Cindy theme preference into the
 updater's WebView. `auto` falls back to the OS color scheme. Without this
 the in-app theme override would be lost during the relaunch — e.g. a user
-on a light OS who has selected dark mode in XDMaker would briefly see a
+on a light OS who has selected dark mode in Cindy would briefly see a
 light updater window.
 
 The Electron main process owns argument construction; see

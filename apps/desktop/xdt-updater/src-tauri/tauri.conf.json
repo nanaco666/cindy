@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "xdt-updater",
+  "productName": "Cindy Updater",
   "version": "0.1.0",
-  "identifier": "com.lizi.xdt.updater",
+  "identifier": "com.xd.cindy.updater",
   "build": {
     "frontendDist": "../ui"
   },
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "xdt-maker 更新",
+        "title": "Cindy 更新",
         "width": 480,
         "height": 220,
         "resizable": false,
@@ -29,6 +29,7 @@
     }
   },
   "bundle": {
-    "active": false
+    "active": false,
+    "publisher": "XD"
   }
 }

@@ -2,7 +2,7 @@
 name = "xdt-updater"
 version = "0.1.0"
 edition = "2021"
-description = "Windows updater for xdt-maker"
+description = "Windows updater for Cindy"
 
 [[bin]]
 name = "xdt-updater"
