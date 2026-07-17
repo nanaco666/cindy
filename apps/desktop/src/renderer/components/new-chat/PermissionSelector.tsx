@@ -1,23 +1,11 @@
 import { useState } from 'react';
-import {
-  Hand,
-  CodeXml,
-  ClipboardList,
-  Sparkles,
-  TriangleAlert,
-  ChevronDown,
-  Check,
-} from 'lucide-react';
+import { Hand, CodeXml, ClipboardList, Sparkles, TriangleAlert, ChevronDown, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tip } from '@/components/ui/tooltip';
-import {
-  useAgentCapabilities,
-  type AgentKind,
-  type PermissionModeDescriptor,
-} from '@/hooks/useAgentCapabilities';
+import { useAgentCapabilities, type AgentKind, type PermissionModeDescriptor } from '@/hooks/useAgentCapabilities';
 import type { PermissionMode } from '@/lib/userPreferences.types';
 
 interface PermissionSelectorProps {
@@ -79,8 +67,7 @@ export function PermissionSelector({
   const { capabilities } = useAgentCapabilities(agentKind, deviceId);
 
   const options: PermissionModeDescriptor[] = capabilities?.permissionModes ?? [];
-  const effectiveMode =
-    options.length > 0 ? normalizeMode(permissionMode, options) : permissionMode;
+  const effectiveMode = options.length > 0 ? normalizeMode(permissionMode, options) : permissionMode;
   const current = options.find((o) => o.id === effectiveMode);
   const TriggerIcon = PERMISSION_ICONS[effectiveMode] ?? Hand;
   const triggerTone = getModeTone(effectiveMode);
@@ -103,11 +90,7 @@ export function PermissionSelector({
   return (
     <Popover open={open && !disabled} onOpenChange={(next) => setOpen(disabled ? false : next)}>
       <PopoverTrigger asChild>
-        <Tip
-          text={triggerDescription}
-          side="top"
-          contentClassName="max-w-[280px] whitespace-normal break-words text-left"
-        >
+        <Tip text={triggerDescription} side="top" contentClassName="max-w-[280px] whitespace-normal break-words text-left">
           <button
             type="button"
             disabled={disabled}
@@ -115,37 +98,24 @@ export function PermissionSelector({
               'flex min-w-0 items-center gap-1 rounded-full transition-colors',
               isCreateAgentVariant
                 ? [
-                    'h-[30px] min-w-[90px] w-fit max-w-[220px] border border-[var(--create-agent-control-border)]',
+                    'h-[30px] min-w-[90px] max-w-none shrink-0 border border-[var(--create-agent-control-border)]',
                     'bg-[var(--create-agent-control-bg)] py-0 pl-2.5 pr-2 text-[var(--create-agent-control-text)]',
                     'hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)]',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
                   ]
-                : [
-                    'py-1 pl-0 pr-2',
-                    'bg-transparent text-[var(--model-trigger-text)]',
-                    'hover:bg-[var(--model-trigger-hover)]',
-                  ],
-              !isCreateAgentVariant &&
-                triggerTone === 'auto' &&
-                'text-[var(--perm-auto-selected-text)]',
-              !isCreateAgentVariant &&
-                triggerTone === 'bypassPermissions' &&
-                'text-[var(--perm-bypass-selected-text)]',
+                : ['py-1 pl-0 pr-2', 'bg-transparent text-[var(--model-trigger-text)]', 'hover:bg-[var(--model-trigger-hover)]'],
+              !isCreateAgentVariant && triggerTone === 'auto' && 'text-[var(--perm-auto-selected-text)]',
+              !isCreateAgentVariant && triggerTone === 'bypassPermissions' && 'text-[var(--perm-bypass-selected-text)]',
               disabled && 'pointer-events-none opacity-50',
             )}
             aria-label={t('newChat.permissionSelector.triggerAria', { label: triggerLabel })}
           >
-            <TriggerIcon
-              size={isCreateAgentVariant ? 11 : dense ? 13 : 14}
-              className="shrink-0 text-current"
-            />
+            <TriggerIcon size={isCreateAgentVariant ? 11 : dense ? 13 : 14} className="shrink-0 text-current" />
             <span
               className={cn(
                 // min-w-0 让 span 能在 flex 容器里跌破内容宽度,truncate 才能在窄宽下出现 "完..."
                 'min-w-0 font-normal text-current',
-                isCreateAgentVariant
-                  ? 'max-w-[172px] whitespace-nowrap'
-                  : 'max-w-[160px] truncate',
+                isCreateAgentVariant ? 'whitespace-nowrap' : 'max-w-[160px] truncate',
                 isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
               )}
             >
@@ -154,10 +124,7 @@ export function PermissionSelector({
             <div className="pt-[2px]">
               <ChevronDown
                 size={isCreateAgentVariant ? 8 : dense ? 13 : 14}
-                className={cn(
-                  'shrink-0',
-                  isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : 'text-current',
-                )}
+                className={cn('shrink-0', isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : 'text-current')}
               />
             </div>
           </button>
@@ -166,11 +133,7 @@ export function PermissionSelector({
       <PopoverContent
         align="start"
         sideOffset={4}
-        className={cn(
-          'w-[300px] rounded-[12px] p-2',
-          'bg-[var(--model-dropdown-bg)]',
-          'border border-[var(--model-dropdown-border)]',
-        )}
+        className={cn('w-[300px] rounded-[12px] p-2', 'bg-[var(--model-dropdown-bg)]', 'border border-[var(--model-dropdown-border)]')}
       >
         <div role="listbox" aria-label={t('newChat.permissionSelector.listAria')}>
           {options.map((option) => {
@@ -180,12 +143,7 @@ export function PermissionSelector({
             const label = labelOf(option, option.id);
             const description = descriptionOf(option, option.id);
             return (
-              <Tip
-                key={option.id}
-                text={description}
-                side="right"
-                contentClassName="max-w-[280px] whitespace-normal break-words text-left"
-              >
+              <Tip key={option.id} text={description} side="right" contentClassName="max-w-[280px] whitespace-normal break-words text-left">
                 <button
                   onClick={() => {
                     onPermissionModeChange(option.id);
@@ -199,17 +157,10 @@ export function PermissionSelector({
                     'hover:bg-[var(--model-item-hover)]',
                     isSelected && 'bg-[var(--perm-item-selected-bg)]',
                     selectedTone === 'auto' && 'text-[var(--perm-auto-selected-text)]',
-                    selectedTone === 'bypassPermissions' &&
-                      'text-[var(--perm-bypass-selected-text)]',
+                    selectedTone === 'bypassPermissions' && 'text-[var(--perm-bypass-selected-text)]',
                   )}
                 >
-                  <Icon
-                    size={17}
-                    className={cn(
-                      'shrink-0',
-                      selectedTone ? 'text-current' : 'text-[var(--model-item-text)]',
-                    )}
-                  />
+                  <Icon size={17} className={cn('shrink-0', selectedTone ? 'text-current' : 'text-[var(--model-item-text)]')} />
                   <span
                     className={cn(
                       'min-w-0 flex-1 truncate text-left text-[14px] font-medium',
@@ -219,13 +170,7 @@ export function PermissionSelector({
                     {label}
                   </span>
                   {isSelected && (
-                    <Check
-                      size={13}
-                      className={cn(
-                        'shrink-0',
-                        selectedTone ? 'text-current' : 'text-[var(--model-item-check)]',
-                      )}
-                    />
+                    <Check size={13} className={cn('shrink-0', selectedTone ? 'text-current' : 'text-[var(--model-item-check)]')} />
                   )}
                 </button>
               </Tip>

@@ -95,7 +95,7 @@ const overrides = {
   'settings-source-link': '#93C5FD', // 可访问链接蓝
   'settings-theme-auto-dark': '#2A2828', // Auto 预览 dark 固定
   'sidebar-action-icon': '216.0 4.1% 75.9%', // AA action icon
-  'sidebar-item-active': '352.3 89.8% 46.1%', // active 品牌红
+  'sidebar-item-active': '352.1 76.6% 36.9%', // Figma 185:2799: Dark selected deep red
   'splash-bg': '0.0 2.4% 16.1%', // 背景 -> HSL
   'splash-text': '216.0 4.1% 75.9%', // AA splash text
   'splash-text-destructive': '0.0 0.0% 100.0%', // destructive splash text
@@ -120,10 +120,15 @@ const overrides = {
   'titlebar-button-hover': '0.0 2.2% 18.0%', // alias closure: hover
   'titlebar-control-hover': '0.0 2.2% 18.0%', // alias closure: hover
   sidebar: '0.0 2.4% 16.1%', // alias closure: surface
+  'sidebar-glass-bg': 'rgba(18, 15, 15, 0.85)', // Figma 185:2734: sidebar glass base
+  'sidebar-glass-overlay-linear': 'linear-gradient(180deg, rgba(175, 54, 70, 0) 0%, rgba(178, 52, 69, 1) 100%)', // Figma 185:2750
+  'sidebar-glass-overlay-radial': 'transparent', // Dark frame has no separate radial overlay
   'sidebar-border': '0.0 0.0% 26.3%', // alias closure: border
   'sidebar-item-hover': '0.0 2.2% 18.0%', // alias closure: hover
   'sidebar-search-bg': '0.0 2.4% 16.1%', // alias closure: surface
   'sidebar-muted': '216.0 4.1% 75.9%', // alias closure: tertiary
+  'sidebar-item-active-border': '#C24152', // Figma 185:2799 selected border
+  'sidebar-item-active-text': '#D4D4D4', // Figma 185:2801 selected text/icon
 } as const;
 
 export const cindyDark: Theme = {

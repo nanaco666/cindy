@@ -3,42 +3,17 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(
-  resolve(__dirname, '..', 'features', 'cc-agent', 'NewMakerDraftRoute.tsx'),
-  'utf8',
-);
-const chatInputSource = readFileSync(
-  resolve(__dirname, '..', 'components', 'new-chat', 'ChatInput.tsx'),
-  'utf8',
-);
-const sendButtonSource = readFileSync(
-  resolve(__dirname, '..', 'components', 'new-chat', 'SendButton.tsx'),
-  'utf8',
-);
-const vendorSwitcherSource = readFileSync(
-  resolve(__dirname, '..', 'components', 'new-chat', 'VendorSegmentedSwitcher.tsx'),
-  'utf8',
-);
-const permissionSelectorSource = readFileSync(
-  resolve(__dirname, '..', 'components', 'new-chat', 'PermissionSelector.tsx'),
-  'utf8',
-);
-const modelSelectorSource = readFileSync(
-  resolve(__dirname, '..', 'components', 'new-chat', 'ModelSelector.tsx'),
-  'utf8',
-);
-const userInfoSectionSource = readFileSync(
-  resolve(__dirname, '..', 'components', 'sidebar', 'UserInfoSection.tsx'),
-  'utf8',
-);
-const sidebarTopNavSource = readFileSync(
-  resolve(__dirname, '..', 'components', 'sidebar', 'SidebarTopNav.tsx'),
-  'utf8',
-);
-const vendorIconSource = readFileSync(
-  resolve(__dirname, '..', 'components', 'sidebar', 'VendorIcon.tsx'),
-  'utf8',
-);
+const source = readFileSync(resolve(__dirname, '..', 'features', 'cc-agent', 'NewMakerDraftRoute.tsx'), 'utf8');
+const chatInputSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'ChatInput.tsx'), 'utf8');
+const sendButtonSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'SendButton.tsx'), 'utf8');
+const vendorSwitcherSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'VendorSegmentedSwitcher.tsx'), 'utf8');
+const permissionSelectorSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'PermissionSelector.tsx'), 'utf8');
+const modelSelectorSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'ModelSelector.tsx'), 'utf8');
+const userInfoSectionSource = readFileSync(resolve(__dirname, '..', 'components', 'sidebar', 'UserInfoSection.tsx'), 'utf8');
+const sidebarTopNavSource = readFileSync(resolve(__dirname, '..', 'components', 'sidebar', 'SidebarTopNav.tsx'), 'utf8');
+const sidebarSource = readFileSync(resolve(__dirname, '..', 'components', 'sidebar', 'Sidebar.tsx'), 'utf8');
+const vendorIconSource = readFileSync(resolve(__dirname, '..', 'components', 'sidebar', 'VendorIcon.tsx'), 'utf8');
+const sessionItemSource = readFileSync(resolve(__dirname, '..', 'features', 'cc-agent', 'sidebar', 'SessionItem.tsx'), 'utf8');
 const colorsSource = readFileSync(resolve(__dirname, '..', 'themes', 'colors.ts'), 'utf8');
 
 describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
@@ -75,10 +50,7 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
   it('preserves New Maker behavior-critical props on ChatInput', () => {
     const chatInputIndex = source.indexOf('<ChatInput');
     expect(chatInputIndex).toBeGreaterThan(-1);
-    const chatInputBlock = source.slice(
-      chatInputIndex,
-      source.indexOf('<NewGoalDialog', chatInputIndex),
-    );
+    const chatInputBlock = source.slice(chatInputIndex, source.indexOf('<NewGoalDialog', chatInputIndex));
 
     for (const invariant of [
       'onSend={handleSend}',
@@ -127,6 +99,10 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
 
   it('uses exact CREATE AGENT quick-start and avatar tokens from the Figma slices', () => {
     expect(source).toContain('border-[var(--create-agent-avatar-ring)]');
+    expect(source).toContain('bg-[var(--create-agent-avatar-glass-bg)]');
+    expect(source).toContain('var(--create-agent-avatar-inner-ring-start)');
+    expect(source).toContain('var(--create-agent-avatar-inner-ring-end)');
+    expect(source).toContain('WebkitMaskComposite');
     expect(source).toContain('h-[44.55px] w-[44.55px]');
     expect(source).toContain('bg-[var(--create-agent-quick-card-bg)]');
     expect(source).toContain('border-[var(--create-agent-quick-card-border)]');
@@ -138,6 +114,9 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(colorsSource).toContain("light: '#EDEDED'");
     expect(colorsSource).toContain("dark: '#2A2828'");
     expect(colorsSource).toContain("'create-agent-avatar-ring'");
+    expect(colorsSource).toContain("'create-agent-avatar-glass-bg'");
+    expect(colorsSource).toContain("'create-agent-avatar-inner-ring-start'");
+    expect(colorsSource).toContain("'create-agent-avatar-inner-ring-end'");
   });
 
   it('keeps global sidebar chrome out of the route body', () => {
@@ -152,9 +131,7 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(source).toContain('text-[var(--create-agent-control-icon)]');
     expect(source).toContain('visualVariant="create-agent"');
 
-    expect(chatInputSource).toContain(
-      "visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}",
-    );
+    expect(chatInputSource).toContain("visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}");
     expect(chatInputSource).toContain('focus-within:border-[var(--create-agent-focus-ring)]');
     const permissionSelectorIndex = chatInputSource.indexOf('<PermissionSelector');
     const middleToolbarSlotIndex = chatInputSource.indexOf('{middleToolbarSlot}');
@@ -164,6 +141,7 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
 
     expect(sendButtonSource).toContain('bg-[var(--create-agent-send-bg)]');
     expect(sendButtonSource).toContain('text-[var(--create-agent-send-icon)]');
+    expect(sendButtonSource).toContain('border-[var(--create-agent-send-border)]');
     expect(sendButtonSource).toContain('hover:bg-[var(--create-agent-send-bg-hover)]');
     expect(sendButtonSource).toContain('active:bg-[var(--create-agent-send-bg-pressed)]');
     expect(sendButtonSource).toContain('function CreateAgentSendIcon');
@@ -176,18 +154,19 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(vendorSwitcherSource).toContain('border-[var(--create-agent-control-border)]');
 
     expect(permissionSelectorSource).toContain('border-[var(--create-agent-control-border)]');
-    expect(permissionSelectorSource).toContain('min-w-[90px] w-fit max-w-[220px]');
-    expect(permissionSelectorSource).toContain('max-w-[172px] whitespace-nowrap');
+    expect(permissionSelectorSource).toContain('min-w-[90px] max-w-none shrink-0');
+    expect(permissionSelectorSource).toContain('whitespace-nowrap');
     expect(modelSelectorSource).toContain('border-[var(--create-agent-control-border)]');
-    expect(modelSelectorSource).toContain('min-w-[100px] w-fit max-w-[260px]');
-    expect(modelSelectorSource).toContain('max-w-[148px] whitespace-nowrap');
-    expect(modelSelectorSource).toContain('max-w-[72px] whitespace-nowrap');
+    expect(modelSelectorSource).toContain('min-w-[100px] max-w-none shrink-0');
+    expect(modelSelectorSource).toContain('whitespace-nowrap');
 
     expect(colorsSource).toContain("'create-agent-send-bg'");
     expect(colorsSource).toContain("light: '#3C3F43'");
     expect(colorsSource).toContain("dark: '#EEEEEE'");
     expect(colorsSource).toContain("'create-agent-send-icon'");
     expect(colorsSource).toContain("light: '#FCFCFC'");
+    expect(colorsSource).toContain("'create-agent-send-border'");
+    expect(colorsSource).toContain("dark: '#FFFFFF'");
     expect(colorsSource).toContain("'create-agent-send-bg-hover'");
     expect(colorsSource).toContain("light: '#2E3237'");
     expect(colorsSource).toContain("dark: '#E2E2E2'");
@@ -206,20 +185,31 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(colorsSource).toContain("dark: '#434343'");
     expect(colorsSource).toContain("'create-agent-control-icon'");
     expect(colorsSource).toContain("light: '#3C3F43'");
+
+    expect(chatInputSource).toContain("isCreateAgentVariant ? 'gap-2' : 'min-w-0 gap-1'");
+    expect(chatInputSource).toContain("className={isCreateAgentVariant ? 'ml-[7px]' : undefined}");
   });
 
   it('aligns the real sidebar colors and user capsule with the CREATE AGENT Figma frame', () => {
     expect(sidebarTopNavSource).toContain('text-[var(--sidebar-nav-text)]');
+    expect(sidebarTopNavSource).toContain('bg-sidebar-item-active');
+    expect(sidebarTopNavSource).toContain('text-[var(--sidebar-item-active-text)]');
     expect(vendorIconSource).toContain('text-[var(--sidebar-list-muted)]');
+    expect(sidebarSource).toContain('bg-[var(--sidebar-glass-bg)]');
+    expect(sidebarSource).toContain('before:bg-[var(--sidebar-glass-overlay-linear)]');
+    expect(sidebarSource).toContain('after:bg-[var(--sidebar-glass-overlay-radial)]');
+    expect(sidebarSource).toContain("backdropFilter: 'blur(50px)'");
+    expect(sessionItemSource).toContain('border-[var(--sidebar-item-active-border)]');
+    expect(sessionItemSource).toContain('text-[var(--sidebar-item-active-text)]');
 
-    expect(userInfoSectionSource).toContain(
-      'rounded-full border border-[var(--sidebar-user-card-border)]',
-    );
+    expect(userInfoSectionSource).toContain('rounded-full border border-[var(--sidebar-user-card-border)]');
     expect(userInfoSectionSource).toContain('bg-[var(--sidebar-user-card-bg)]');
     expect(userInfoSectionSource).toContain('text-[var(--sidebar-user-card-text)]');
 
     expect(colorsSource).toContain("'sidebar-nav-text'");
     expect(colorsSource).toContain("'sidebar-list-muted'");
+    expect(colorsSource).toContain("'sidebar-glass-bg'");
+    expect(colorsSource).toContain("'sidebar-item-active-border'");
     expect(colorsSource).toContain("'sidebar-user-card-bg'");
     expect(colorsSource).toContain('rgba(255, 255, 255, 0.20)');
     expect(colorsSource).toContain('rgba(255, 255, 255, 0.05)');

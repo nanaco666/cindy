@@ -96,28 +96,14 @@ export function Sidebar({
   // 宽度三态：完全隐藏 0（toggle/⌘B，旧版语义）→ rail 64（拖到最窄）→ 展开 width。
   // 拖拽中宽度直接跟手（useHorizontalResize 已把下限放宽到 railWidth）。
   // peek 抽屉恒用展开宽 —— peek 的语义就是「预览完整展开列表」。
-  const visualWidth = isPeek
-    ? width ?? 260
-    : isCollapsed
-      ? 0
-      : isDragging
-        ? width ?? 260
-        : isRail
-          ? RAIL_WIDTH
-          : width ?? 260;
+  const visualWidth = isPeek ? (width ?? 260) : isCollapsed ? 0 : isDragging ? (width ?? 260) : isRail ? RAIL_WIDTH : (width ?? 260);
 
   // 内容层宽度:与 visualWidth 唯一的区别是**收起态不归零** —— 收起/展开动画期间
   // 内容保持展开宽度被 aside 的 overflow-hidden 从右侧裁切,而不是跟随 aside 宽度
   // 连续 reflow(否则文字换行/挤压,视觉很难受)。同时内容层做透明度渐隐/渐显,
   // 对齐 Codex 的「文字淡出的同时侧栏收起」手感(2026-07 用户定稿;与右栏
   // RightSidebar 的定宽内容层同一套路,规则 7)。
-  const contentWidth = isPeek
-    ? width ?? 260
-    : isDragging
-      ? width ?? 260
-      : isRail
-        ? RAIL_WIDTH
-        : width ?? 260;
+  const contentWidth = isPeek ? (width ?? 260) : isDragging ? (width ?? 260) : isRail ? RAIL_WIDTH : (width ?? 260);
 
   return (
     <aside
@@ -125,7 +111,7 @@ export function Sidebar({
       aria-label={t('sidebar.ariaLabel')}
       aria-hidden={isCollapsed && !isPeek}
       className={cn(
-        'flex flex-col bg-sidebar overflow-hidden',
+        'relative isolate flex flex-col overflow-hidden bg-[var(--sidebar-glass-bg)] backdrop-blur-[50px] before:pointer-events-none before:absolute before:inset-0 before:bg-[var(--sidebar-glass-overlay-linear)] before:backdrop-blur-[50px] after:pointer-events-none after:absolute after:inset-0 after:bg-[var(--sidebar-glass-overlay-radial)] after:backdrop-blur-[50px]',
         isPeek
           ? cn(
               // 抽屉:fixed overlay 通顶,不挤压主区;z 低于 ChromeActions(z-20),
@@ -133,8 +119,7 @@ export function Sidebar({
               // 同色 Surface 上的辅助分离),1px hairline 仍是主分隔手段(DESIGN.md)。
               'fixed inset-y-0 left-0 z-[15]',
               'border-r border-sidebar-border shadow-[var(--shadow-menu)]',
-              peekState === 'peeking' &&
-                'animate-[sidebar-peek-in_200ms_cubic-bezier(0.22,1,0.36,1)] motion-reduce:animate-none',
+              peekState === 'peeking' && 'animate-[sidebar-peek-in_200ms_cubic-bezier(0.22,1,0.36,1)] motion-reduce:animate-none',
               peekState === 'peekClosing' &&
                 '-translate-x-full opacity-0 transition-[transform,opacity] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:duration-0',
               // pinning:不加任何动画类 = 冻结在原位,等流内 spacer 跑完宽度动画。
@@ -148,13 +133,13 @@ export function Sidebar({
                 'transition-[width] duration-[250ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:duration-0',
             ),
       )}
-      style={{ width: visualWidth }}
+      style={{ width: visualWidth, backdropFilter: 'blur(50px)', WebkitBackdropFilter: 'blur(50px)' } as React.CSSProperties}
     >
       {/* 定宽内容层(见 contentWidth 注释):收起/展开动画期间内容不随 aside 宽度
           reflow,只被右侧裁切 + 整层渐隐/渐显。 */}
       <div
         className={cn(
-          'flex min-h-0 flex-1 flex-col',
+          'relative z-[1] flex min-h-0 flex-1 flex-col',
           // visibility 参与过渡:渐隐播完后才真正隐藏(阻止 Tab 焦点进入收起的
           // 侧栏),展开瞬间恢复 —— 与 SectionCollapse 同口径。
           'transition-[opacity,visibility] duration-[200ms] ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:duration-0',
@@ -162,7 +147,7 @@ export function Sidebar({
         )}
         style={{ width: contentWidth }}
       >
-      {/* Top chrome 行: Sidebar 通顶后窗口左上角的空白 chrome 行（Codex 风格）。
+        {/* Top chrome 行: Sidebar 通顶后窗口左上角的空白 chrome 行（Codex 风格）。
           - mac 非全屏：红绿灯悬浮在本行左侧。
           - 折叠 + 菜单按钮**不在本行** —— 它们是 MainLayout 的 ChromeActions
             浮层（浮在本行之上），钉死左上角红绿灯旁,不随侧栏状态移动。
@@ -171,45 +156,45 @@ export function Sidebar({
             上可靠生效，浮层自身的 no-drag 不算数）。洞与按钮簇同坐标:
             mac 非全屏 78（红绿灯右侧）,mac 全屏 / Windows 8。
           - 不画下边框 —— 顶行与列表区是一块连续表面（对齐 Codex）。 */}
-      <div
-        // 46px 与 ContentHeader / ChromeActions 行高一致(红绿灯心 y=23 同轴)。
-        className="flex h-[46px] w-full shrink-0 items-center"
-        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
-      >
         <div
-          aria-hidden
-          // 60px = 折叠按钮 28 + gap 4 + 菜单 28(ChromeActions 簇宽)。
-          className="h-full w-[60px] shrink-0"
-          style={{ marginLeft: chromeClusterX, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
-        />
-      </div>
+          // 46px 与 ContentHeader / ChromeActions 行高一致(红绿灯心 y=23 同轴)。
+          className="flex h-[46px] w-full shrink-0 items-center"
+          style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+        >
+          <div
+            aria-hidden
+            // 60px = 折叠按钮 28 + gap 4 + 菜单 28(ChromeActions 簇宽)。
+            className="h-full w-[60px] shrink-0"
+            style={{ marginLeft: chromeClusterX, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+          />
+        </div>
 
-      {/* ConversationSearchProvider:在顶部导航行(SidebarTopNav 的「搜索」行)与功能槽
+        {/* ConversationSearchProvider:在顶部导航行(SidebarTopNav 的「搜索」行)与功能槽
           (CCAgentSidebarUpper 的结果 overlay)这两个兄弟子树的共同祖先处,只实例化一次
           会话搜索状态,经 context 共享。外壳本身仍不感知搜索细节,只负责放置 Provider。 */}
-      <ConversationSearchProvider>
-        {/* 顶部常驻动作/导航列表(新建 / 自动任务 / Skill / 搜索)。
+        <ConversationSearchProvider>
+          {/* 顶部常驻动作/导航列表(新建 / 自动任务 / Skill / 搜索)。
             取代原 HorizontalTabbar:同级等权列表行,无单独项目 Tab。
             rail（收窄）态放不下,隐藏——rail 自身承担入口;展开后回归。
             完全隐藏态 w-0 自然裁掉。 */}
-        {!isRail && <SidebarTopNav />}
+          {!isRail && <SidebarTopNav />}
 
-        {/* Upper: feature-injected content slot.
+          {/* Upper: feature-injected content slot.
             The current Feature Layout injects either an expanded or collapsed
             sidebar tree through the FeatureSidebarSlotContext. Shell renders
             whatever it's given. If no feature is active (e.g. /settings with
             the intentionally empty SettingsSidebarUpper), this simply leaves
             the upper area blank. */}
-        <div className="flex flex-1 flex-col overflow-hidden">{upperContent}</div>
-      </ConversationSearchProvider>
+          <div className="flex flex-1 flex-col overflow-hidden">{upperContent}</div>
+        </ConversationSearchProvider>
 
-      {/* Update banner: shown only when a verified update is ready
+        {/* Update banner: shown only when a verified update is ready
           peek 抽屉视同展开(否则横幅在抽屉里消失,与「预览完整列表」语义相悖)。 */}
-      <UpdateBanner isCollapsed={(isCollapsed && !isPeek) || isRail} />
+        <UpdateBanner isCollapsed={(isCollapsed && !isPeek) || isRail} />
 
-      {/* Bottom: User info (Shell-level, shared across all features)
+        {/* Bottom: User info (Shell-level, shared across all features)
           isCollapsed 在这里表达"窄布局"（rail 居中头像）；完全隐藏态 w-0 整体裁掉。 */}
-      <UserInfoSection isCollapsed={isRail} onOpenUpdateNotice={onOpenUpdateNotice} />
+        <UserInfoSection isCollapsed={isRail} onOpenUpdateNotice={onOpenUpdateNotice} />
       </div>
 
       {/* Resize handle — expanded 和 rail 态都保留（rail 靠拖拽进出，F1 / F6）。

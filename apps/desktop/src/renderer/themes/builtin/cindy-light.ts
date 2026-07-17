@@ -120,10 +120,15 @@ const overrides = {
   'titlebar-button-hover': '0.0 0.0% 94.5%', // alias closure: hover
   'titlebar-control-hover': '0.0 0.0% 94.5%', // alias closure: hover
   sidebar: '0.0 0.0% 92.9%', // alias closure: surface
+  'sidebar-glass-bg': 'rgba(246, 246, 246, 0.90)', // Figma 185:1541: sidebar glass base
+  'sidebar-glass-overlay-linear': 'linear-gradient(180deg, rgba(247, 1, 33, 0) 0%, rgba(247, 1, 33, 0.15) 100%)', // Figma 185:1542
+  'sidebar-glass-overlay-radial': 'radial-gradient(circle at 52% 46%, rgba(247, 1, 33, 0.07) 0%, rgba(247, 1, 33, 0) 60.3%)', // Figma 185:1543
   'sidebar-border': '214.3 11.1% 87.6%', // alias closure: border
   'sidebar-item-hover': '0.0 0.0% 94.5%', // alias closure: hover
   'sidebar-search-bg': '0.0 0.0% 92.9%', // alias closure: surface
   'sidebar-muted': '222.0 4.6% 42.7%', // alias closure: tertiary
+  'sidebar-item-active-border': '#A00A1D', // Figma 185:1606 selected border
+  'sidebar-item-active-text': '#FCFCFC', // Figma 185:1609 selected text/icon
 } as const;
 
 export const cindyLight: Theme = {

@@ -54,29 +54,16 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  MENU_CONTENT_CLASS,
-  MENU_ITEM_CLASS,
-  MENU_ROW_CLASS,
-  MENU_SEPARATOR_CLASS,
-  MENU_SUB_CONTENT_CLASS,
-} from './menuStyles';
+import { MENU_CONTENT_CLASS, MENU_ITEM_CLASS, MENU_ROW_CLASS, MENU_SEPARATOR_CLASS, MENU_SUB_CONTENT_CLASS } from './menuStyles';
 import { toast } from '@/lib/toast';
 import { buildSessionDeepLink } from '@/lib/deepLink';
 import { createLogger } from '@/lib/logger';
 import { formatSidebarTime, formatSidebarTimeAbsolute } from '../lib/formatSidebarTime';
 import { highlightSegments } from '../lib/highlightSegments';
 import { scrollIntoNearestView } from '../lib/scrollIntoNearestView';
-import {
-  getAutomationSessionDisplayTitle,
-  isAutomationGeneratedSession,
-  isScheduledSession,
-} from '../lib/scheduledSessionGrouping';
+import { getAutomationSessionDisplayTitle, isAutomationGeneratedSession, isScheduledSession } from '../lib/scheduledSessionGrouping';
 import { useSessionBoundSchedules } from '@/features/scheduler/lib/scheduleSessionBinding';
-import {
-  loadScheduleSidebarIndexRuns,
-  type ScheduleSidebarIndexRun,
-} from '@/features/scheduler/lib/scheduleSidebarIndexRuns';
+import { loadScheduleSidebarIndexRuns, type ScheduleSidebarIndexRun } from '@/features/scheduler/lib/scheduleSidebarIndexRuns';
 import { useSchedulesSnapshot } from '@/features/scheduler/lib/schedulesStore';
 import { scheduleFocusPath } from '@/features/scheduler/lib/scheduleSessionBinding';
 import { ScheduleBindingBadge } from './ScheduleBindingBadge';
@@ -200,10 +187,7 @@ export const SessionItem = memo(function SessionItem({
   const isEmpty = session.title === 'New Maker' && (session._count?.messages ?? 0) === 0;
   // 取 userSendAt 与 updatedAt 中较新的值，兼容存量 DB 行（旧版只写 userSendAt），
   // 与 projectGrouping/dateSessionGrouping 的排序时间轴保持一致。
-  const activityIso =
-    session.userSendAt && session.userSendAt > session.updatedAt
-      ? session.userSendAt
-      : session.updatedAt;
+  const activityIso = session.userSendAt && session.userSendAt > session.updatedAt ? session.userSendAt : session.updatedAt;
   // 右侧状态指示器五档优先级(高→低),色表全端统一(侧栏 / 卡片 / 灵动岛同一张表):
   //   1. error(出错终止 / 定时任务失败未读)→ 红点   —— 红专职表示"坏了"
   //   2. awaiting(等待回复/权限/计划审阅)→ TapTap 蓝点 —— "在等你",邀请而非告警
@@ -252,14 +236,8 @@ export const SessionItem = memo(function SessionItem({
       hasAttentionNotification,
     });
   const showRightStatus = rightStatusKind !== 'time';
-  const remoteIconKind = session.deviceLinkDeviceId
-    ? 'device-link'
-    : session.remoteHostId
-      ? 'ssh'
-      : null;
-  const remoteIconConnectionStatus = session.deviceLinkDeviceId
-    ? (session.deviceLinkConnectionStatus ?? 'connected')
-    : null;
+  const remoteIconKind = session.deviceLinkDeviceId ? 'device-link' : session.remoteHostId ? 'ssh' : null;
+  const remoteIconConnectionStatus = session.deviceLinkDeviceId ? (session.deviceLinkConnectionStatus ?? 'connected') : null;
   const remoteWritesBlocked = isRemoteSessionWriteBlocked(session);
   const isAutomationGenerated = isAutomationGeneratedSession(session);
   // heartbeat schedule 绑定标识(targetSessionId 指向本会话);schedule 删除/过期后
@@ -288,9 +266,7 @@ export const SessionItem = memo(function SessionItem({
   // 组件卸载后 setState。null 明确表示「查过但没映射」,undefined 表示「还没查」——
   // 两者都不显示按钮,避免闪现。
   const shouldResolveSchedule = isAutomationGenerated && !insideAutomationGroup;
-  const [resolvedScheduleId, setResolvedScheduleId] = useState<string | null | undefined>(
-    undefined,
-  );
+  const [resolvedScheduleId, setResolvedScheduleId] = useState<string | null | undefined>(undefined);
   useEffect(() => {
     if (!shouldResolveSchedule) return;
     let cancelled = false;
@@ -315,8 +291,7 @@ export const SessionItem = memo(function SessionItem({
   // 这次订阅零边际成本(同一 hook 的多次调用会合并到一次 useSyncExternalStore)。
   const schedulesSnapshot = useSchedulesSnapshot();
   const scheduleStillExists =
-    resolvedScheduleId != null &&
-    (schedulesSnapshot == null || schedulesSnapshot.some((s) => s.id === resolvedScheduleId));
+    resolvedScheduleId != null && (schedulesSnapshot == null || schedulesSnapshot.some((s) => s.id === resolvedScheduleId));
   const effectiveScheduleId = scheduleStillExists ? resolvedScheduleId : null;
   const handleAutomationRunClick = useCallback(async () => {
     if (!effectiveScheduleId) {
@@ -553,16 +528,11 @@ export const SessionItem = memo(function SessionItem({
   );
 
   const canMoveToProject =
-    Boolean(onMoveSession) &&
-    !isEmpty &&
-    !session.remoteHostId &&
-    !session.deviceLinkDeviceId &&
-    session.status !== 'archived';
+    Boolean(onMoveSession) && !isEmpty && !session.remoteHostId && !session.deviceLinkDeviceId && session.status !== 'archived';
 
   // 导出 .cshare 的可见性:draft 无内容、remote 转录在远端、orca 协同关系
   // 不可移植、device-link 数据在被控端 —— 全部隐藏入口。
-  const canExportShare =
-    !isEmpty && !session.remoteHostId && !session.orcaRole && !session.deviceLinkDeviceId;
+  const canExportShare = !isEmpty && !session.remoteHostId && !session.orcaRole && !session.deviceLinkDeviceId;
 
   const exportShareMenuItem = canExportShare ? (
     <DropdownMenuItem onSelect={handleExportShareSelect} className={MENU_ITEM_CLASS}>
@@ -576,10 +546,7 @@ export const SessionItem = memo(function SessionItem({
         <span className="flex-1">{t('ccAgent.sidebar.sessionMenu.moveToProject')}</span>
         <ChevronRight size={14} className="ml-2 shrink-0 text-[var(--cmd-palette-item-meta)]" />
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent
-        sideOffset={4}
-        className={cn(MENU_SUB_CONTENT_CLASS, 'w-[320px] overflow-hidden')}
-      >
+      <DropdownMenuSubContent sideOffset={4} className={cn(MENU_SUB_CONTENT_CLASS, 'w-[320px] overflow-hidden')}>
         <SessionProjectMoveSubmenu
           projectOptions={projectOptions}
           currentWorkingDir={session.workspaceKind === 'project' ? session.workingDir : null}
@@ -624,7 +591,7 @@ export const SessionItem = memo(function SessionItem({
         // 基础几何：高 32 / 圆角 8 / 横向间距与设计稿对齐
         // gap-2.5(10px)与顶部导航行 / 项目行的图标-文字间距同款(2026-07 用户定稿)。
         // rounded-full:hover/active 底与顶部导航行、项目行同款药丸形。
-        'group relative flex h-8 w-full items-center gap-2.5 rounded-full',
+        'group relative flex h-8 w-full items-center gap-2.5 rounded-full border border-transparent',
         'select-none',
         // 缩进 + padding(见文件头注释的文字列对齐口径):
         //   indented=true → 左 22px（Project Sessions 缩进,比顶层深一档;
@@ -638,7 +605,7 @@ export const SessionItem = memo(function SessionItem({
         // 用 ProjectAction 同款瞬时反馈,跟 Cursor / Codex sidebar 的体感一致。
         'text-sm font-medium text-left cursor-pointer',
         isActive
-          ? 'bg-sidebar-item-active text-foreground'
+          ? 'border-[var(--sidebar-item-active-border)] bg-sidebar-item-active text-[var(--sidebar-item-active-text)]'
           : isSelected
             ? 'bg-[var(--chat-input-chip-bg)] text-foreground'
             : 'text-foreground hover:bg-sidebar-item-hover',
@@ -760,11 +727,7 @@ export const SessionItem = memo(function SessionItem({
                   aria-label={t('ccAgent.sidebar.status.error', 'Failed — click to view')}
                   title={t('ccAgent.sidebar.status.error', 'Failed — click to view')}
                 >
-                  <span
-                    className="size-2 rounded-full"
-                    style={{ backgroundColor: 'var(--card-status-error)' }}
-                    aria-hidden
-                  />
+                  <span className="size-2 rounded-full" style={{ backgroundColor: 'var(--card-status-error)' }} aria-hidden />
                 </span>
               ) : rightStatusKind === 'awaiting' ? (
                 <span
@@ -773,11 +736,7 @@ export const SessionItem = memo(function SessionItem({
                   aria-label={t('ccAgent.sidebar.status.needsAttention', 'Awaiting your input')}
                   title={t('ccAgent.sidebar.status.needsAttention', 'Awaiting your input')}
                 >
-                  <span
-                    className="size-2 rounded-full"
-                    style={{ backgroundColor: 'var(--card-status-awaiting)' }}
-                    aria-hidden
-                  />
+                  <span className="size-2 rounded-full" style={{ backgroundColor: 'var(--card-status-awaiting)' }} aria-hidden />
                 </span>
               ) : rightStatusKind === 'running' ? (
                 <Spinner
@@ -795,21 +754,14 @@ export const SessionItem = memo(function SessionItem({
                   aria-label={t('ccAgent.sidebar.status.done', 'Completed — click to view')}
                   title={t('ccAgent.sidebar.status.done', 'Completed — click to view')}
                 >
-                  <span
-                    className="size-2 rounded-full"
-                    style={{ backgroundColor: 'var(--card-status-done)' }}
-                    aria-hidden
-                  />
+                  <span className="size-2 rounded-full" style={{ backgroundColor: 'var(--card-status-done)' }} aria-hidden />
                 </span>
               )
             ) : (
               <time
                 dateTime={activityIso}
                 title={formatSidebarTimeAbsolute(activityIso)}
-                className={cn(
-                  'min-w-0 truncate text-right text-xs font-medium tabular-nums',
-                  'text-[var(--sidebar-list-muted)]',
-                )}
+                className={cn('min-w-0 truncate text-right text-xs font-medium tabular-nums', 'text-[var(--sidebar-list-muted)]')}
               >
                 {formatSidebarTime(activityIso, t)}
               </time>
@@ -873,10 +825,7 @@ export const SessionItem = memo(function SessionItem({
                 !isEmpty &&
                 !remoteWritesBlocked &&
                 effectiveScheduleId && (
-                  <SessionAction
-                    label={t('ccAgent.sidebar.automationGroup.menu.runNow')}
-                    onClick={() => void handleAutomationRunClick()}
-                  >
+                  <SessionAction label={t('ccAgent.sidebar.automationGroup.menu.runNow')} onClick={() => void handleAutomationRunClick()}>
                     <Play size={14} strokeWidth={2} />
                   </SessionAction>
                 )}
@@ -890,17 +839,11 @@ export const SessionItem = memo(function SessionItem({
                 <EllipsisVertical size={14} strokeWidth={2} />
               </SessionAction>
               {isArchived && !remoteWritesBlocked ? (
-                <SessionAction
-                  label={t('ccAgent.sidebar.sessionMenu.unarchive')}
-                  onClick={() => handleUnarchiveSelect()}
-                >
+                <SessionAction label={t('ccAgent.sidebar.sessionMenu.unarchive')} onClick={() => handleUnarchiveSelect()}>
                   <Undo size={14} strokeWidth={2} />
                 </SessionAction>
               ) : canQuickArchive ? (
-                <SessionAction
-                  label={t('ccAgent.sidebar.sessionMenu.archived')}
-                  onClick={() => setArchivePending(true)}
-                >
+                <SessionAction label={t('ccAgent.sidebar.sessionMenu.archived')} onClick={() => setArchivePending(true)}>
                   <Archive size={14} strokeWidth={2} />
                 </SessionAction>
               ) : null}
@@ -943,94 +886,52 @@ export const SessionItem = memo(function SessionItem({
             {isArchived ? (
               <>
                 {/* Archived 变体：Rename / Unarchive / [Copy Session ID submenu] / Delete */}
-                <DropdownMenuItem
-                  disabled={remoteWritesBlocked}
-                  onSelect={handleRenameSelect}
-                  className={MENU_ITEM_CLASS}
-                >
+                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handleRenameSelect} className={MENU_ITEM_CLASS}>
                   {t('ccAgent.sidebar.sessionMenu.rename')}
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={remoteWritesBlocked}
-                  onSelect={handleUnarchiveSelect}
-                  className={MENU_ITEM_CLASS}
-                >
+                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handleUnarchiveSelect} className={MENU_ITEM_CLASS}>
                   {t('ccAgent.sidebar.sessionMenu.unarchive')}
                 </DropdownMenuItem>
                 {exportShareMenuItem}
                 {copySessionIdSubmenu}
                 <DropdownMenuSeparator className={MENU_SEPARATOR_CLASS} />
-                <DropdownMenuItem
-                  disabled={remoteWritesBlocked}
-                  onSelect={handleDeleteSelect}
-                  className={MENU_ITEM_CLASS}
-                >
+                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handleDeleteSelect} className={MENU_ITEM_CLASS}>
                   {t('ccAgent.sidebar.sessionMenu.delete')}
                 </DropdownMenuItem>
               </>
             ) : isEmpty ? (
               <>
                 {/* Draft 变体：Rename / [Copy Session ID submenu] / Delete */}
-                <DropdownMenuItem
-                  disabled={remoteWritesBlocked}
-                  onSelect={handleRenameSelect}
-                  className={MENU_ITEM_CLASS}
-                >
+                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handleRenameSelect} className={MENU_ITEM_CLASS}>
                   {t('ccAgent.sidebar.sessionMenu.rename')}
                 </DropdownMenuItem>
                 {copySessionIdSubmenu}
                 <DropdownMenuSeparator className={MENU_SEPARATOR_CLASS} />
-                <DropdownMenuItem
-                  disabled={remoteWritesBlocked}
-                  onSelect={handleDeleteSelect}
-                  className={MENU_ITEM_CLASS}
-                >
+                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handleDeleteSelect} className={MENU_ITEM_CLASS}>
                   {t('ccAgent.sidebar.sessionMenu.delete')}
                 </DropdownMenuItem>
               </>
             ) : (
               <>
                 {/* 标准 / Pinned 变体：Pin↔Unpin / Rename / [Copy Session ID submenu] / Archived / Delete */}
-                <DropdownMenuItem
-                  disabled={remoteWritesBlocked}
-                  onSelect={handlePinSelect}
-                  className={MENU_ITEM_CLASS}
-                >
-                  {isPinned
-                    ? t('ccAgent.sidebar.sessionMenu.unpin')
-                    : t('ccAgent.sidebar.sessionMenu.pin')}
+                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handlePinSelect} className={MENU_ITEM_CLASS}>
+                  {isPinned ? t('ccAgent.sidebar.sessionMenu.unpin') : t('ccAgent.sidebar.sessionMenu.pin')}
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={remoteWritesBlocked}
-                  onSelect={handleRenameSelect}
-                  className={MENU_ITEM_CLASS}
-                >
+                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handleRenameSelect} className={MENU_ITEM_CLASS}>
                   {t('ccAgent.sidebar.sessionMenu.rename')}
                 </DropdownMenuItem>
                 {moveToProjectSubmenu}
                 <DropdownMenuSeparator className={MENU_SEPARATOR_CLASS} />
                 {copySessionIdSubmenu}
-                <DropdownMenuItem
-                  disabled={remoteWritesBlocked}
-                  onSelect={handleOpenInNewWindowSelect}
-                  className={MENU_ITEM_CLASS}
-                >
+                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handleOpenInNewWindowSelect} className={MENU_ITEM_CLASS}>
                   {t('ccAgent.sidebar.sessionMenu.openInNewWindow')}
                 </DropdownMenuItem>
                 {exportShareMenuItem}
                 <DropdownMenuSeparator className={MENU_SEPARATOR_CLASS} />
-                <DropdownMenuItem
-                  disabled={remoteWritesBlocked}
-                  onSelect={handleArchiveSelect}
-                  className={MENU_ITEM_CLASS}
-                >
+                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handleArchiveSelect} className={MENU_ITEM_CLASS}>
                   {t('ccAgent.sidebar.sessionMenu.archived')}
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={remoteWritesBlocked}
-                  onSelect={handleDeleteSelect}
-                  className={MENU_ITEM_CLASS}
-                >
+                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handleDeleteSelect} className={MENU_ITEM_CLASS}>
                   {t('ccAgent.sidebar.sessionMenu.delete')}
                 </DropdownMenuItem>
               </>
@@ -1040,13 +941,7 @@ export const SessionItem = memo(function SessionItem({
       )}
 
       {/* 导出 .cshare 弹窗:仅打开时挂载,避免侧栏每行常驻 Dialog 实例。 */}
-      {shareExportOpen && (
-        <SessionShareExportDialog
-          open={shareExportOpen}
-          sessionId={session.id}
-          onOpenChange={setShareExportOpen}
-        />
-      )}
+      {shareExportOpen && <SessionShareExportDialog open={shareExportOpen} sessionId={session.id} onOpenChange={setShareExportOpen} />}
     </div>
   );
 
@@ -1061,12 +956,7 @@ export const SessionItem = memo(function SessionItem({
   // (insideAutomationGroup=true)由组头承担,这里不再挂 automation 浮层。
   const showAutomationTooltip = isAutomationGenerated && !insideAutomationGroup;
   return (
-    <SessionTooltip
-      sessionId={session.id}
-      prRefs={prRefs}
-      sourceLabel={sourceLabel}
-      isAutomationSession={showAutomationTooltip}
-    >
+    <SessionTooltip sessionId={session.id} prRefs={prRefs} sourceLabel={sourceLabel} isAutomationSession={showAutomationTooltip}>
       {row}
     </SessionTooltip>
   );
