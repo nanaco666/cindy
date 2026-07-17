@@ -47,7 +47,7 @@ export interface ThemeColors {
   /** 就绪 / 在线状态点(品牌 teal,语义不变) */
   statusReady: string;
   /**
-   * 录音中状态指示红(#ef4444,与 statusError 同值、对齐桌面;区分「停止录音」与中性色的
+   * 录音中状态指示红(#D91F37,与 statusError 同值、对齐桌面;区分「停止录音」与中性色的
    * 「停止任务」)。红色系分工:状态指示(点/波形)用 statusError / statusRecording;
    * 破坏性按钮文字用 destructive;错误说明文案用 errorText(黑白系)。
    */
@@ -57,7 +57,7 @@ export interface ThemeColors {
   /** 会话状态点 — 等待用户回复/选择(TapTap 蓝,对齐桌面 --card-status-awaiting 与灵动岛 needs-interaction) */
   statusAwaiting: string;
   /**
-   * 会话状态点 — 任务出错(状态指示红 #ef4444,对齐桌面 --card-status-error;红专职表示出错)。
+   * 会话状态点 — 任务出错(状态指示红 #D91F37,对齐桌面 --card-status-error;红专职表示出错)。
    * 仅用于状态指示(状态点/徽标),不用于按钮文字(那是 destructive)也不用于成段错误文案
    * (那是 errorText,黑白系)。
    */
@@ -74,7 +74,7 @@ export interface ThemeColors {
   errorText: string;
   /**
    * 破坏性操作按钮(退出登录/删除等)的**文字红**(#f43d3f),跨主题一致。只上按钮/菜单项
-   * 文字;状态指示红是另一档 #ef4444(statusError / statusRecording),不要混用。
+   * 文字;状态指示红是另一档 #D91F37(statusError / statusRecording),不要混用。
    */
   destructive: string;
   /** 错误边框(跟随 borderStrong) */
@@ -115,12 +115,12 @@ export const lightColors: ThemeColors = {
   textTertiary: '#686B72',
   cta: '#3C3F43',
   ctaText: '#FCFCFC',
-  statusReady: '#00D9C5',
-  statusRecording: '#ef4444',
-  statusAccent: '#FF6600',
-  statusAwaiting: '#00D9C5',
-  statusError: '#ef4444',
-  statusDone: '#22c55e',
+  statusReady: '#19D2C1',
+  statusRecording: '#D91F37',
+  statusAccent: '#EA6B17',
+  statusAwaiting: '#19D2C1',
+  statusError: '#D91F37',
+  statusDone: '#2AAE5B',
   permAutoAccent: '#1D4ED8',
   errorText: '#3C3F43',
   destructive: '#f43d3f',
@@ -129,7 +129,7 @@ export const lightColors: ThemeColors = {
   // homeListFab:反相中性,不染品牌红(lead 裁决 2026-07-17:染红=扩张红名单,超 U8
   // 已批决策表范围;日后要红 FAB 须单独过用户关卡)。light 对齐 textPrimary 深灰 #3C3F43。
   homeListFab: '#3C3F43',
-  swipeActionPin: '#ff6600',
+  swipeActionPin: '#EA6B17',
   swipeActionNeutral: '#8e8e93',
   swipeActionArchive: '#3b82f6',
   swipeActionText: '#fbfbfa',
@@ -158,20 +158,20 @@ export const darkColors: ThemeColors = {
   textTertiary: '#BFC1C4',
   cta: '#EEEEEE',
   ctaText: '#252222',
-  statusReady: '#00D9C5',
-  statusRecording: '#ef4444',
-  statusAccent: '#FF6600',
-  statusAwaiting: '#00D9C5',
-  statusError: '#ef4444',
-  statusDone: '#22c55e',
-  permAutoAccent: '#00D9C5',
+  statusReady: '#19D2C1',
+  statusRecording: '#D91F37',
+  statusAccent: '#EA6B17',
+  statusAwaiting: '#19D2C1',
+  statusError: '#D91F37',
+  statusDone: '#2AAE5B',
+  permAutoAccent: '#19D2C1',
   errorText: '#D4D4D4',
   destructive: '#f43d3f',
   errorBorder: '#BFC1C4',
   overlay: 'rgba(0, 0, 0, 0.45)',
   // homeListFab:反相中性(lead 裁决,见 lightColors 注释);dark 维持 #ECEDEF 柔白(非纯白 cta)。
   homeListFab: '#ECEDEF',
-  swipeActionPin: '#ff6600',
+  swipeActionPin: '#EA6B17',
   swipeActionNeutral: '#636366',
   swipeActionArchive: '#3b82f6',
   swipeActionText: '#fbfbfa',

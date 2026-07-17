@@ -51,19 +51,20 @@ describe('theme tokens', () => {
     }
   });
 
-  it('状态四色跨 light / dark 一致且不被 CINDY 接管(running/awaiting/error/done/recording)', () => {
+  it('状态四色跨 light / dark 一致(设计定稿 2026-07-17:running #EA6B17 / awaiting #19D2C1 / error #D91F37 / done #2AAE5B)', () => {
     expect(darkColors.statusReady).toBe(lightColors.statusReady);
     expect(darkColors.statusAccent).toBe(lightColors.statusAccent);
     expect(darkColors.statusRecording).toBe(lightColors.statusRecording);
     expect(darkColors.statusAwaiting).toBe(lightColors.statusAwaiting);
     expect(darkColors.statusError).toBe(lightColors.statusError);
     expect(darkColors.statusDone).toBe(lightColors.statusDone);
-    // 状态四色冻结值(CINDY 不接管状态语义色,与桌面/灵动岛三端同值)。
-    expect(lightColors.statusAccent).toBe('#FF6600');
-    expect(lightColors.statusAwaiting).toBe('#00D9C5');
-    expect(lightColors.statusError).toBe('#ef4444');
-    expect(lightColors.statusDone).toBe('#22c55e');
-    expect(lightColors.statusRecording).toBe('#ef4444');
+    // 状态色设计定稿(2026-07-17),L=D 同值,与桌面 E5D 三端一致;CINDY 不接管状态语义色。
+    expect(lightColors.statusAccent).toBe('#EA6B17');
+    expect(lightColors.statusAwaiting).toBe('#19D2C1');
+    expect(lightColors.statusError).toBe('#D91F37');
+    expect(lightColors.statusDone).toBe('#2AAE5B');
+    expect(lightColors.statusRecording).toBe('#D91F37');
+    expect(lightColors.statusReady).toBe('#19D2C1');
   });
 
   it('CTA 契约:中性反相(light 深底浅字 / dark 浅底深字),对比度 ≥4.5:1(用户红色新规 2026-07-17)', () => {

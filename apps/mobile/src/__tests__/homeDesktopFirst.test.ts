@@ -79,7 +79,8 @@ describe('mobile home desktop-first surface', () => {
     const tokenSource = readFileSync(resolve(process.cwd(), 'src/theme/tokens.ts'), 'utf8');
     const removedListTokenPrefix = 'home' + 'List';
 
-    expect(tokenSource).toContain("statusReady: '#00D9C5'");
+    // E5M 状态色设计定稿(2026-07-17):teal 族 #00D9C5 → #19D2C1,statusReady 随 awaiting 同步。
+    expect(tokenSource).toContain("statusReady: '#19D2C1'");
     expect(tokenSource).toContain("homeListFab: '#ECEDEF'");
     expect(tokenSource).not.toContain(`${removedListTokenPrefix}Background`);
     expect(tokenSource).not.toContain(`${removedListTokenPrefix}Divider`);
