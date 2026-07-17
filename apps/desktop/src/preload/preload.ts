@@ -2865,6 +2865,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('local-db:sessions:create', body),
       get: (id: string): Promise<unknown> =>
         ipcRenderer.invoke('local-db:sessions:get', id),
+      restoreIfArchived: (id: string, expected: unknown): Promise<unknown> =>
+        ipcRenderer.invoke('local-db:sessions:restore-if-archived', id, expected),
       update: (id: string, patch: unknown): Promise<unknown> =>
         ipcRenderer.invoke('local-db:sessions:update', id, patch),
       touchUserSend: (id: string, atMs?: number): Promise<void> =>
