@@ -16,7 +16,10 @@ import {
 import { VendorIcon } from '@/components/sidebar/VendorIcon';
 import type { Session } from '@/lib/ccAgent.types';
 import type { AutomationScheduleAction, AutomationSessionGroup } from '../lib/automationSidebarGrouping';
-import { getAutomationGroupChildView, getAutomationGroupLatestSession } from '../lib/automationSidebarGrouping';
+import {
+  getAutomationGroupChildView,
+  getAutomationGroupLatestSession,
+} from '../lib/automationSidebarGrouping';
 import { useAutomationGroupCollapsed } from '../hooks/useAutomationGroupCollapsed';
 import { formatSidebarFutureTime, formatSidebarTime } from '../lib/formatSidebarTime';
 import { scheduleFocusPath } from '@/features/scheduler/lib/scheduleSessionBinding';
@@ -116,7 +119,8 @@ export function AutomationSessionGroupItem({
   // 「已停止」= paused(用户主动暂停)+ expired(计划到期不再触发);两者对用户体验
   // 而言都是「不会再自动跑」,视觉上都在 Clock chip 上叠 Pause 徽标,并在 tooltip
   // 里显示「已停止」文案,避免用户误判为普通空闲态。
-  const isScheduleStopped = group.scheduleStatus === 'paused' || group.scheduleStatus === 'expired';
+  const isScheduleStopped =
+    group.scheduleStatus === 'paused' || group.scheduleStatus === 'expired';
   const hasVisibleChildren = visibleSessions.length > 0;
   // running / loading 也只看最新那条:组头 vendor mark 呼吸 + Clock chip 呼吸 + 右侧
   // spinner 都据此,与最新 session 子行一致(需求:「loading 状态和最新的 session 保持一致」)。
@@ -184,7 +188,10 @@ export function AutomationSessionGroupItem({
       }
       return;
     }
-    if (frozen.hasBeenActive || (activeSessionId ?? null) !== frozen.originActiveSessionId) {
+    if (
+      frozen.hasBeenActive ||
+      (activeSessionId ?? null) !== frozen.originActiveSessionId
+    ) {
       setFrozen(null);
     }
   }, [activeSessionId, frozen, group.sessions]);
@@ -210,7 +217,8 @@ export function AutomationSessionGroupItem({
 
     const anchor = expandAnchorRef.current;
     if (!showAll || !anchor) return;
-    const activeInGroup = activeSessionId != null && group.sessions.some((session) => session.id === activeSessionId);
+    const activeInGroup =
+      activeSessionId != null && group.sessions.some((session) => session.id === activeSessionId);
     if (activeInGroup) {
       anchor.hasFocusedGroup = true;
       return;
@@ -244,9 +252,15 @@ export function AutomationSessionGroupItem({
   // 空时返回 null,Tip 会在 text 为空时直接透传 children,不挂 tooltip。
   // useMemo:countdownNowMs 每秒 tick,内联 JSX 会每秒重建 element ref,Radix Tooltip
   // 可能因此重挂内容;memo 后仅在文案实际变化时才刷新。
-  const countdownText = shouldTickCountdown ? formatSidebarFutureTime(group.nextFireAt, t, new Date(countdownNowMs)) : '';
-  const stoppedText = isScheduleStopped ? t('ccAgent.sidebar.automationGroup.stopped') : '';
-  const runCountText = group.sessions.length > 0 ? t('ccAgent.sidebar.automationGroup.runCount', { count: group.sessions.length }) : '';
+  const countdownText = shouldTickCountdown
+    ? formatSidebarFutureTime(group.nextFireAt, t, new Date(countdownNowMs))
+    : '';
+  const stoppedText = isScheduleStopped
+    ? t('ccAgent.sidebar.automationGroup.stopped')
+    : '';
+  const runCountText = group.sessions.length > 0
+    ? t('ccAgent.sidebar.automationGroup.runCount', { count: group.sessions.length })
+    : '';
   const rowTooltip = useMemo(
     () =>
       countdownText || stoppedText || runCountText ? (
@@ -281,8 +295,7 @@ export function AutomationSessionGroupItem({
         contentClassName={cn(
           'bg-[var(--surface-elevated)] text-[var(--text-primary)]',
           'border-[var(--border-default)] dark:border-[var(--border-default)] shadow-sm',
-        )}
-      >
+        )}>
         {/* 行 onClick 只承担鼠标点击空白 = 点击标题的转发;不加 role="button" / tabIndex /
             onKeyDown —— ARIA 不允许 role=button widget 内嵌可交互 <button>,且键盘 keydown
             会冒泡穿过内部按钮的 stopPropagation(click 语义)造成双触发。键盘可达性由内部
@@ -292,11 +305,11 @@ export function AutomationSessionGroupItem({
           className={cn(
             // rounded-full + 22px 缩进:与同列表的 SessionItem 行同款药丸形/缩进
             // (2026-07 侧栏视觉统一)。
-            'group relative flex h-8 w-full items-center gap-1.5 rounded-full border border-transparent',
+            'group relative flex h-8 w-full items-center gap-1.5 rounded-full',
             indented ? 'pl-[22px] pr-2' : 'pl-3 pr-2',
             'text-left text-sm font-medium text-foreground',
             'hover:bg-sidebar-item-hover',
-            hasActiveHidden && 'border-[var(--sidebar-item-active-border)] bg-sidebar-item-active text-[var(--sidebar-item-active-text)]',
+            hasActiveHidden && 'bg-sidebar-item-active',
             latestSession && 'cursor-pointer',
           )}
         >
@@ -313,7 +326,11 @@ export function AutomationSessionGroupItem({
                 承担 agent 身份识别(Claude=AA / Codex=六瓣)+ running 状态呼吸。分组
                 agentKind 取最新一条 run(同一 schedule 所有 run 走同一 agent),
                 缺失时退化为 'cc'。isRunning 只看最新那条,与其子行一致。 */}
-            <VendorIcon vendor={latestSession?.agentKind === 'codex' ? 'codex' : 'cc'} size={12} running={isRunning} />
+            <VendorIcon
+              vendor={latestSession?.agentKind === 'codex' ? 'codex' : 'cc'}
+              size={12}
+              running={isRunning}
+            />
             {/* Clock 点击跳自动化页对应条目。宿主已是 title <button>,不能嵌套
                 button,用 span role="button" + stopPropagation 拦下行点击。 */}
             <span
@@ -323,7 +340,11 @@ export function AutomationSessionGroupItem({
               title={t('ccAgent.sidebar.scheduleBinding.viewTask')}
               onClick={(e) => {
                 e.stopPropagation();
-                navigate(group.scheduleId ? scheduleFocusPath(group.scheduleId) : '/cc-agent/scheduled');
+                navigate(
+                  group.scheduleId
+                    ? scheduleFocusPath(group.scheduleId)
+                    : '/cc-agent/scheduled',
+                );
               }}
               onPointerDown={(e) => e.stopPropagation()}
               className="relative inline-flex size-3 shrink-0 cursor-pointer items-center justify-center"
@@ -399,7 +420,11 @@ export function AutomationSessionGroupItem({
                     aria-label={t('ccAgent.sidebar.status.error', 'Failed — click to view')}
                     title={t('ccAgent.sidebar.status.error', 'Failed — click to view')}
                   >
-                    <span className="size-2 rounded-full" style={{ backgroundColor: 'var(--card-status-error)' }} aria-hidden />
+                    <span
+                      className="size-2 rounded-full"
+                      style={{ backgroundColor: 'var(--card-status-error)' }}
+                      aria-hidden
+                    />
                   </span>
                 ) : groupRightStatusKind === 'awaiting' ? (
                   <span
@@ -408,7 +433,11 @@ export function AutomationSessionGroupItem({
                     aria-label={t('ccAgent.sidebar.status.needsAttention', 'Awaiting your input')}
                     title={t('ccAgent.sidebar.status.needsAttention', 'Awaiting your input')}
                   >
-                    <span className="size-2 rounded-full" style={{ backgroundColor: 'var(--card-status-awaiting)' }} aria-hidden />
+                    <span
+                      className="size-2 rounded-full"
+                      style={{ backgroundColor: 'var(--card-status-awaiting)' }}
+                      aria-hidden
+                    />
                   </span>
                 ) : groupRightStatusKind === 'running' ? (
                   <Spinner
@@ -426,7 +455,11 @@ export function AutomationSessionGroupItem({
                     aria-label={t('ccAgent.sidebar.status.done', 'Completed — click to view')}
                     title={t('ccAgent.sidebar.status.done', 'Completed — click to view')}
                   >
-                    <span className="size-2 rounded-full" style={{ backgroundColor: 'var(--card-status-done)' }} aria-hidden />
+                    <span
+                      className="size-2 rounded-full"
+                      style={{ backgroundColor: 'var(--card-status-done)' }}
+                      aria-hidden
+                    />
                   </span>
                 )
               ) : (
@@ -438,7 +471,9 @@ export function AutomationSessionGroupItem({
                 className={cn(
                   'absolute right-0 top-0 flex h-6 items-center gap-0.5',
                   'opacity-0 transition-opacity',
-                  menuOpen ? 'opacity-100' : 'group-hover:opacity-100 group-focus-within/slot:opacity-100',
+                  menuOpen
+                    ? 'opacity-100'
+                    : 'group-hover:opacity-100 group-focus-within/slot:opacity-100',
                 )}
               >
                 {/* 高频 Run 继续直点;Edit/Pause/Resume/Delete 收进 More 菜单,避免 Edit
@@ -489,11 +524,17 @@ export function AutomationSessionGroupItem({
                     onClick={(event) => event.stopPropagation()}
                     className={cn(MENU_CONTENT_CLASS, 'min-w-36 overflow-hidden')}
                   >
-                    <DropdownMenuItem onSelect={() => onScheduleAction(group, 'edit')} className={MENU_ITEM_CLASS}>
+                    <DropdownMenuItem
+                      onSelect={() => onScheduleAction(group, 'edit')}
+                      className={MENU_ITEM_CLASS}
+                    >
                       {t('ccAgent.sidebar.automationGroup.menu.edit')}
                     </DropdownMenuItem>
                     {group.scheduleStatus !== 'expired' && (
-                      <DropdownMenuItem onSelect={() => onScheduleAction(group, 'toggle-pause')} className={MENU_ITEM_CLASS}>
+                      <DropdownMenuItem
+                        onSelect={() => onScheduleAction(group, 'toggle-pause')}
+                        className={MENU_ITEM_CLASS}
+                      >
                         {group.scheduleStatus === 'paused'
                           ? t('ccAgent.sidebar.automationGroup.menu.resume')
                           : t('ccAgent.sidebar.automationGroup.menu.pause')}

@@ -43,14 +43,24 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { MENU_CONTENT_CLASS, MENU_ITEM_CLASS, MENU_ROW_CLASS, MENU_SEPARATOR_CLASS, MENU_SUB_CONTENT_CLASS } from './menuStyles';
+import {
+  MENU_CONTENT_CLASS,
+  MENU_ITEM_CLASS,
+  MENU_ROW_CLASS,
+  MENU_SEPARATOR_CLASS,
+  MENU_SUB_CONTENT_CLASS,
+} from './menuStyles';
 import { toast } from '@/lib/toast';
 import { buildSessionDeepLink } from '@/lib/deepLink';
 import { createLogger } from '@/lib/logger';
 import { formatSidebarTime, formatSidebarTimeAbsolute } from '../lib/formatSidebarTime';
 import { highlightSegments } from '../lib/highlightSegments';
 import { scrollIntoNearestView } from '../lib/scrollIntoNearestView';
-import { getAutomationSessionDisplayTitle, isAutomationGeneratedSession, isScheduledSession } from '../lib/scheduledSessionGrouping';
+import {
+  getAutomationSessionDisplayTitle,
+  isAutomationGeneratedSession,
+  isScheduledSession,
+} from '../lib/scheduledSessionGrouping';
 import { SessionProjectMoveSubmenu } from './SessionProjectMoveSubmenu';
 import { SessionRenameInput } from '../SessionRenameInput';
 import type { SessionItemProps } from './SessionItem';
@@ -69,7 +79,9 @@ const CARD_TITLE_META_SLOT_CLASS = 'ml-1 inline-flex h-[1em] w-3 items-center ju
  * 只在 macOS Sonoma+ 可用的 Agent Island。返回精确三态('permission' / 'plan_review' /
  * 'ask_user'),非待交互态返回 ''(基本类型,适配 useSyncExternalStore 的稳定比较)。
  */
-function getNeutralAwaitingKind(sessionId: string): 'permission' | 'plan_review' | 'ask_user' | '' {
+function getNeutralAwaitingKind(
+  sessionId: string,
+): 'permission' | 'plan_review' | 'ask_user' | '' {
   const info = makerChatStore.getRunningSnapshot().get(sessionId);
   if (info?.hasPendingPermission) return 'permission';
   if (info?.hasPendingPlanReview) return 'plan_review';
@@ -117,7 +129,9 @@ export function SessionCard({
   const isEmpty = session.title === 'New Maker' && (session._count?.messages ?? 0) === 0;
   const activityIso = session.updatedAt;
   const remoteIconKind = session.deviceLinkDeviceId ? 'device-link' : session.remoteHostId ? 'ssh' : null;
-  const remoteIconConnectionStatus = session.deviceLinkDeviceId ? (session.deviceLinkConnectionStatus ?? 'connected') : null;
+  const remoteIconConnectionStatus = session.deviceLinkDeviceId
+    ? session.deviceLinkConnectionStatus ?? 'connected'
+    : null;
   const remoteWritesBlocked = isRemoteSessionWriteBlocked(session);
   const isAutomationGenerated = isAutomationGeneratedSession(session);
   const boundSchedules = useSessionBoundSchedules(session.id);
@@ -135,9 +149,12 @@ export function SessionCard({
   // macOS Sonoma+ 可用(service 在其它平台 return null),故非 mac / 旧系统平台中立兜底
   // —— 直接读 maker session 的待交互态(makerChatStore,全平台同源),保证 awaiting
   // 角标不再只在 mac 显示(PR #246 review)。两边都给精确三态,沿用同一组 i18n。
-  const neutralAwaitingKind = useSyncExternalStore(makerChatStore.subscribeAll, () => getNeutralAwaitingKind(session.id));
+  const neutralAwaitingKind = useSyncExternalStore(makerChatStore.subscribeAll, () =>
+    getNeutralAwaitingKind(session.id),
+  );
   const awaitingKind =
-    (islandActivity?.phase === 'needs-interaction' ? islandActivity.interactionKind : null) ?? (neutralAwaitingKind || null);
+    (islandActivity?.phase === 'needs-interaction' ? islandActivity.interactionKind : null) ??
+    (neutralAwaitingKind || null);
   const awaitingText =
     awaitingKind == null
       ? null
@@ -146,7 +163,10 @@ export function SessionCard({
         : awaitingKind === 'plan_review'
           ? t('ccAgent.sidebar.card.awaitingPlan')
           : t('ccAgent.sidebar.card.awaitingQuestion');
-  const runningDetail = islandActivity?.phase === 'running' && islandActivity.compactDetail ? islandActivity.compactDetail : null;
+  const runningDetail =
+    islandActivity?.phase === 'running' && islandActivity.compactDetail
+      ? islandActivity.compactDetail
+      : null;
   const listPreview = awaitingText ?? runningDetail ?? summaryPreview;
   const cardPreview = awaitingText ?? summaryPreview;
   const cardPreviewLineClamp = session.summary ? 3 : isRunning ? 2 : isAutomationGenerated ? 1 : 2;
@@ -233,6 +253,7 @@ export function SessionCard({
     if (isActive) scrollIntoNearestView(cardRef.current);
   }, [isActive]);
 
+
   // archive 两步确认生命周期（redesign 稿：3s 超时 + 点外面撤回）
   useEffect(() => {
     if (!archivePending) return;
@@ -285,13 +306,16 @@ export function SessionCard({
     }
     onAction(session.id, 'delete');
   }, [remoteWritesBlocked, session.id, onAction, t]);
-  const handlePinSelect = useCallback(() => {
-    if (remoteWritesBlocked) {
-      toast.warning(t('ccAgent.remoteSession.actionsUnavailable'));
-      return;
-    }
-    onTogglePin(session.id, isPinned);
-  }, [remoteWritesBlocked, session.id, isPinned, onTogglePin, t]);
+  const handlePinSelect = useCallback(
+    () => {
+      if (remoteWritesBlocked) {
+        toast.warning(t('ccAgent.remoteSession.actionsUnavailable'));
+        return;
+      }
+      onTogglePin(session.id, isPinned);
+    },
+    [remoteWritesBlocked, session.id, isPinned, onTogglePin, t],
+  );
   const handleMoveToProjectSelect = useCallback(
     (workingDir: string) => {
       onMoveSession?.(session.id, { kind: 'project', workingDir });
@@ -312,19 +336,16 @@ export function SessionCard({
     void window.electronAPI.maker.openSessionInNewWindow(session.id);
   }, [remoteWritesBlocked, session.id, t]);
 
-  const handleAutomationIconClick = useCallback(
-    async (e: React.MouseEvent) => {
-      e.stopPropagation();
-      try {
-        const runs = await loadScheduleSidebarIndexRuns();
-        const hit = runs.find((r) => r.sessionId === session.id);
-        navigate(hit ? scheduleFocusPath(hit.scheduleId) : '/cc-agent/scheduled');
-      } catch {
-        navigate('/cc-agent/scheduled');
-      }
-    },
-    [session.id, navigate],
-  );
+  const handleAutomationIconClick = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const runs = await loadScheduleSidebarIndexRuns();
+      const hit = runs.find((r) => r.sessionId === session.id);
+      navigate(hit ? scheduleFocusPath(hit.scheduleId) : '/cc-agent/scheduled');
+    } catch {
+      navigate('/cc-agent/scheduled');
+    }
+  }, [session.id, navigate]);
 
   const handleCopyDeepLinkSelect = useCallback(async () => {
     const link = buildSessionDeepLink(session.id);
@@ -348,7 +369,11 @@ export function SessionCard({
 
   // 「移动到项目」子菜单(main 既有功能;本次侧栏重设保留)。
   const canMoveToProject =
-    Boolean(onMoveSession) && !isEmpty && !session.remoteHostId && !session.deviceLinkDeviceId && session.status !== 'archived';
+    Boolean(onMoveSession) &&
+    !isEmpty &&
+    !session.remoteHostId &&
+    !session.deviceLinkDeviceId &&
+    session.status !== 'archived';
 
   const moveToProjectSubmenu = canMoveToProject ? (
     <DropdownMenuSub>
@@ -356,7 +381,10 @@ export function SessionCard({
         <span className="flex-1">{t('ccAgent.sidebar.sessionMenu.moveToProject')}</span>
         <ChevronRight size={14} className="ml-2 shrink-0 text-[var(--cmd-palette-item-meta)]" />
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent sideOffset={4} className={cn(MENU_SUB_CONTENT_CLASS, 'w-[320px] overflow-hidden')}>
+      <DropdownMenuSubContent
+        sideOffset={4}
+        className={cn(MENU_SUB_CONTENT_CLASS, 'w-[320px] overflow-hidden')}
+      >
         <SessionProjectMoveSubmenu
           projectOptions={projectOptions}
           currentWorkingDir={session.workspaceKind === 'project' ? session.workingDir : null}
@@ -411,7 +439,11 @@ export function SessionCard({
       {showScheduleBindingBadge || showAutomationClock ? (
         <span className={CARD_TITLE_META_SLOT_CLASS}>{renderAutomationMeta(10)}</span>
       ) : null}
-      <span className="inline-block" style={{ width: showScheduleBindingBadge || showAutomationClock ? 7 : 6 }} aria-hidden />
+      <span
+        className="inline-block"
+        style={{ width: showScheduleBindingBadge || showAutomationClock ? 7 : 6 }}
+        aria-hidden
+      />
     </>
   );
 
@@ -444,14 +476,14 @@ export function SessionCard({
           ? cn(
               // 扁平行(类 Telegram / 对话列表):无描边、无卡片底色,仅 hover/active 行底色。
               'rounded-lg',
-              isActive ? 'bg-sidebar-item-active text-[var(--sidebar-item-active-text)]' : 'hover:bg-sidebar-item-hover',
+              isActive ? 'bg-sidebar-item-active' : 'hover:bg-sidebar-item-hover',
             )
           : cn(
               // 卡片:白底 + 描边 + 圆角。多列瀑布由 CardMasonry/DraggableCardColumns
               // 负责分配列;卡片高度随标题/摘要自然变化。
               'rounded-xl bg-[var(--surface-elevated)] border',
               isActive
-                ? 'border-[var(--sidebar-item-active-border)] !bg-sidebar-item-active text-[var(--sidebar-item-active-text)]'
+                ? 'border-[var(--text-tertiary)] !bg-sidebar-item-active'
                 : 'border-sidebar-border hover:!bg-sidebar-item-hover',
             ),
         // 多选选中态(与列表 SessionItem 同款):内描边软高亮,不与 active 互斥。
@@ -571,156 +603,166 @@ export function SessionCard({
           </p>
         </div>
       ) : (
-        <div className="relative flex h-full flex-col px-[10px] pt-[8px] pb-[8px]">
-          {/* 右上角 hover 操作钮(More + Archive/Undo);archivePending 时换成红色确认胶囊。
+      <div className="relative flex h-full flex-col px-[10px] pt-[8px] pb-[8px]">
+        {/* 右上角 hover 操作钮(More + Archive/Undo);archivePending 时换成红色确认胶囊。
             时间在右下角(见下),操作钮放右上角空位、不和时间挤在一起。 */}
-          {!isEditing && !archivePending && (
-            <div
-              className={cn(
-                'absolute right-[6px] top-[6px] z-10 flex items-center gap-0.5',
-                menuPos !== null ? 'opacity-100' : 'opacity-0 group-hover/card:opacity-100 focus-within:opacity-100',
-              )}
-            >
-              <CardAction
-                label={t('ccAgent.sidebar.sessionMenu.moreActions')}
-                onClick={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  setMenuPos({ x: rect.left, y: rect.bottom + 2 });
-                }}
-              >
-                <EllipsisVertical size={13} strokeWidth={2} />
-              </CardAction>
-              {isArchived && !remoteWritesBlocked ? (
-                <CardAction label={t('ccAgent.sidebar.sessionMenu.unarchive')} onClick={() => handleUnarchiveSelect()}>
-                  <Undo size={13} strokeWidth={2} />
-                </CardAction>
-              ) : canQuickArchive ? (
-                <CardAction label={t('ccAgent.sidebar.sessionMenu.archived')} onClick={() => setArchivePending(true)}>
-                  <Archive size={13} strokeWidth={2} />
-                </CardAction>
-              ) : null}
-            </div>
-          )}
-          {canQuickArchive && archivePending && (
-            <button
-              ref={confirmPillRef}
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setArchivePending(false);
-                onAction(session.id, 'archive-now');
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              onDoubleClick={(e) => e.stopPropagation()}
-              className={cn(
-                'absolute right-[6px] top-[6px] z-10 flex h-[22px] items-center justify-center rounded-full px-[9px]',
-                'text-11 font-semibold',
-                'bg-[color-mix(in_srgb,hsl(var(--destructive))_15%,transparent)] text-[hsl(var(--destructive))]',
-                'hover:bg-[color-mix(in_srgb,hsl(var(--destructive))_25%,transparent)]',
-                'transition-colors focus:outline-none',
-              )}
-              aria-label={t('ccAgent.sidebar.sessionMenu.archived')}
-            >
-              {t('ccAgent.sidebar.sessionMenu.archived')}
-            </button>
-          )}
-
-          {/* 第 1 行:状态 / 自动化前缀在 list 与 card 变体共用同一段 titlePrefixNode，
-            保证 SessionStatusIcon、Timer/Clock 与标题在不同模式下的横向间距和基线一致。 */}
-          {isEditing ? (
-            <div className="flex items-start gap-1.5">
-              <span className="mt-[2px] shrink-0">
-                <SessionStatusIcon
-                  session={session}
-                  isRunning={isRunning}
-                  isAttached={isAttached}
-                  hasAttentionNotification={hasAttentionNotification}
-                  isActive={isActive}
-                />
-              </span>
-              <SessionRenameInput
-                sessionId={session.id}
-                value={editValue}
-                onValueChange={setEditValue}
-                onCommit={commitTitle}
-                onCancel={() => {
-                  // Esc 取消视为终态:置 committedRef 拦掉 input 卸载触发的 blur 提交
-                  // 与生成中迟到的 AI 结果(Codex review P2:取消后不应再被 AI 改名)。
-                  committedRef.current = true;
-                  setIsEditing(false);
-                }}
-                containerClassName="min-w-0 flex-1"
-                inputClassName="h-6 text-[12.5px] font-bold text-foreground"
-              />
-            </div>
-          ) : (
-            <div
-              className={cn(
-                'min-w-0 text-[12.5px] font-bold leading-[1.22] tracking-[-0.005em]',
-                '[display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden',
-                'transition-[color] duration-500',
-                isMuted ? 'text-[var(--cmd-palette-item-meta)]' : 'text-foreground',
-              )}
-              style={{ textIndent: 0, paddingLeft: 0 }}
-            >
-              {matchIndices && matchIndices.length > 0 && canHighlightDisplayTitle
-                ? highlightSegments(session.title, matchIndices)
-                : displayTitle}
-            </div>
-          )}
-
-          {/* 预览:等待交互文案优先,否则显示稳定任务总结 / 最近消息。图标全部下沉到底部 meta 行,
-            此处只放正文文字。 */}
-          {cardPreview && (
-            <p
-              className={cn(
-                'mt-[4px] text-11 leading-[1.4]',
-                '[display:-webkit-box] [-webkit-box-orient:vertical] overflow-hidden',
-                'transition-[color] duration-500',
-                // 黄一孟 review:等待决策不再额外多出一种黄色,与 running 同口径走 muted/次级色。
-                isMuted ? 'text-[var(--text-disabled)]' : 'text-[var(--text-secondary)]',
-              )}
-              style={{ WebkitLineClamp: cardPreviewLineClamp }}
-            >
-              {cardPreview}
-            </p>
-          )}
-
-          {/* 底部 meta 行(黄一孟 review 定稿):标题 / 正文之后另起整整一行。
-            左侧图标簇——状态/agent 图标(含运行呼吸 + 需关注红点 + 草稿)、定时任务标识、
-            远程业务标识、worktree;右下角业务时间。中间空位自然由图标簇与时间撑开。 */}
+        {!isEditing && !archivePending && (
           <div
             className={cn(
-              'mt-[6px] flex items-center gap-1.5',
-              'text-11 font-medium leading-none tabular-nums',
-              'transition-[color] duration-500',
-              isMuted ? 'text-[var(--text-disabled)]' : 'text-[var(--text-tertiary)]',
+              'absolute right-[6px] top-[6px] z-10 flex items-center gap-0.5',
+              menuPos !== null ? 'opacity-100' : 'opacity-0 group-hover/card:opacity-100 focus-within:opacity-100',
             )}
           >
-            <SessionStatusIcon
-              session={session}
-              isRunning={isRunning}
-              isAttached={isAttached}
-              hasAttentionNotification={hasAttentionNotification}
-              isActive={isActive}
-              size={11}
-            />
-            {renderAutomationMeta(11)}
-            {remoteIconKind && (
-              <RemoteProjectIcon
-                kind={remoteIconKind}
-                size={11}
-                strokeWidth={1.8}
-                connectionStatus={remoteIconConnectionStatus}
-                className={isMuted ? 'text-[var(--text-disabled)]' : 'text-[var(--text-tertiary)]'}
-              />
-            )}
-            <WorktreeBadge sessionId={session.id} size={11} className="size-3.5" />
-            <time dateTime={activityIso} title={formatSidebarTimeAbsolute(activityIso)} className="ml-auto shrink-0">
-              {cardTimeText}
-            </time>
+            <CardAction
+              label={t('ccAgent.sidebar.sessionMenu.moreActions')}
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setMenuPos({ x: rect.left, y: rect.bottom + 2 });
+              }}
+            >
+              <EllipsisVertical size={13} strokeWidth={2} />
+            </CardAction>
+            {isArchived && !remoteWritesBlocked ? (
+              <CardAction
+                label={t('ccAgent.sidebar.sessionMenu.unarchive')}
+                onClick={() => handleUnarchiveSelect()}
+              >
+                <Undo size={13} strokeWidth={2} />
+              </CardAction>
+            ) : canQuickArchive ? (
+              <CardAction
+                label={t('ccAgent.sidebar.sessionMenu.archived')}
+                onClick={() => setArchivePending(true)}
+              >
+                <Archive size={13} strokeWidth={2} />
+              </CardAction>
+            ) : null}
           </div>
+        )}
+        {canQuickArchive && archivePending && (
+          <button
+            ref={confirmPillRef}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setArchivePending(false);
+              onAction(session.id, 'archive-now');
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+            className={cn(
+              'absolute right-[6px] top-[6px] z-10 flex h-[22px] items-center justify-center rounded-full px-[9px]',
+              'text-11 font-semibold',
+              'bg-[color-mix(in_srgb,hsl(var(--destructive))_15%,transparent)] text-[hsl(var(--destructive))]',
+              'hover:bg-[color-mix(in_srgb,hsl(var(--destructive))_25%,transparent)]',
+              'transition-colors focus:outline-none',
+            )}
+            aria-label={t('ccAgent.sidebar.sessionMenu.archived')}
+          >
+            {t('ccAgent.sidebar.sessionMenu.archived')}
+          </button>
+        )}
+
+        {/* 第 1 行:状态 / 自动化前缀在 list 与 card 变体共用同一段 titlePrefixNode，
+            保证 SessionStatusIcon、Timer/Clock 与标题在不同模式下的横向间距和基线一致。 */}
+        {isEditing ? (
+          <div className="flex items-start gap-1.5">
+            <span className="mt-[2px] shrink-0">
+              <SessionStatusIcon
+                session={session}
+                isRunning={isRunning}
+                isAttached={isAttached}
+                hasAttentionNotification={hasAttentionNotification}
+                isActive={isActive}
+              />
+            </span>
+            <SessionRenameInput
+              sessionId={session.id}
+              value={editValue}
+              onValueChange={setEditValue}
+              onCommit={commitTitle}
+              onCancel={() => {
+                // Esc 取消视为终态:置 committedRef 拦掉 input 卸载触发的 blur 提交
+                // 与生成中迟到的 AI 结果(Codex review P2:取消后不应再被 AI 改名)。
+                committedRef.current = true;
+                setIsEditing(false);
+              }}
+              containerClassName="min-w-0 flex-1"
+              inputClassName="h-6 text-[12.5px] font-bold text-foreground"
+            />
+          </div>
+        ) : (
+          <div
+            className={cn(
+              'min-w-0 text-[12.5px] font-bold leading-[1.22] tracking-[-0.005em]',
+              '[display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden',
+              'transition-[color] duration-500',
+              isMuted ? 'text-[var(--cmd-palette-item-meta)]' : 'text-foreground',
+            )}
+            style={{ textIndent: 0, paddingLeft: 0 }}
+          >
+            {matchIndices && matchIndices.length > 0 && canHighlightDisplayTitle
+              ? highlightSegments(session.title, matchIndices)
+              : displayTitle}
+          </div>
+        )}
+
+        {/* 预览:等待交互文案优先,否则显示稳定任务总结 / 最近消息。图标全部下沉到底部 meta 行,
+            此处只放正文文字。 */}
+        {cardPreview && (
+          <p
+            className={cn(
+              'mt-[4px] text-11 leading-[1.4]',
+              '[display:-webkit-box] [-webkit-box-orient:vertical] overflow-hidden',
+              'transition-[color] duration-500',
+              // 黄一孟 review:等待决策不再额外多出一种黄色,与 running 同口径走 muted/次级色。
+              isMuted ? 'text-[var(--text-disabled)]' : 'text-[var(--text-secondary)]',
+            )}
+            style={{ WebkitLineClamp: cardPreviewLineClamp }}
+          >
+            {cardPreview}
+          </p>
+        )}
+
+        {/* 底部 meta 行(黄一孟 review 定稿):标题 / 正文之后另起整整一行。
+            左侧图标簇——状态/agent 图标(含运行呼吸 + 需关注红点 + 草稿)、定时任务标识、
+            远程业务标识、worktree;右下角业务时间。中间空位自然由图标簇与时间撑开。 */}
+        <div
+          className={cn(
+            'mt-[6px] flex items-center gap-1.5',
+            'text-11 font-medium leading-none tabular-nums',
+            'transition-[color] duration-500',
+            isMuted ? 'text-[var(--text-disabled)]' : 'text-[var(--text-tertiary)]',
+          )}
+        >
+          <SessionStatusIcon
+            session={session}
+            isRunning={isRunning}
+            isAttached={isAttached}
+            hasAttentionNotification={hasAttentionNotification}
+            isActive={isActive}
+            size={11}
+          />
+          {renderAutomationMeta(11)}
+          {remoteIconKind && (
+            <RemoteProjectIcon
+              kind={remoteIconKind}
+              size={11}
+              strokeWidth={1.8}
+              connectionStatus={remoteIconConnectionStatus}
+              className={isMuted ? 'text-[var(--text-disabled)]' : 'text-[var(--text-tertiary)]'}
+            />
+          )}
+          <WorktreeBadge sessionId={session.id} size={11} className="size-3.5" />
+          <time
+            dateTime={activityIso}
+            title={formatSidebarTimeAbsolute(activityIso)}
+            className="ml-auto shrink-0"
+          >
+            {cardTimeText}
+          </time>
         </div>
+      </div>
       )}
 
       {/* 右键菜单——与 SessionItem 同款 coordinate-anchored DropdownMenu */}
@@ -752,48 +794,88 @@ export function SessionCard({
           >
             {isArchived ? (
               <>
-                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handleRenameSelect} className={MENU_ITEM_CLASS}>
+                <DropdownMenuItem
+                  disabled={remoteWritesBlocked}
+                  onSelect={handleRenameSelect}
+                  className={MENU_ITEM_CLASS}
+                >
                   {t('ccAgent.sidebar.sessionMenu.rename')}
                 </DropdownMenuItem>
-                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handleUnarchiveSelect} className={MENU_ITEM_CLASS}>
+                <DropdownMenuItem
+                  disabled={remoteWritesBlocked}
+                  onSelect={handleUnarchiveSelect}
+                  className={MENU_ITEM_CLASS}
+                >
                   {t('ccAgent.sidebar.sessionMenu.unarchive')}
                 </DropdownMenuItem>
                 {copySessionIdSubmenu}
                 <DropdownMenuSeparator className={MENU_SEPARATOR_CLASS} />
-                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handleDeleteSelect} className={MENU_ITEM_CLASS}>
+                <DropdownMenuItem
+                  disabled={remoteWritesBlocked}
+                  onSelect={handleDeleteSelect}
+                  className={MENU_ITEM_CLASS}
+                >
                   {t('ccAgent.sidebar.sessionMenu.delete')}
                 </DropdownMenuItem>
               </>
             ) : isEmpty ? (
               <>
-                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handleRenameSelect} className={MENU_ITEM_CLASS}>
+                <DropdownMenuItem
+                  disabled={remoteWritesBlocked}
+                  onSelect={handleRenameSelect}
+                  className={MENU_ITEM_CLASS}
+                >
                   {t('ccAgent.sidebar.sessionMenu.rename')}
                 </DropdownMenuItem>
                 {copySessionIdSubmenu}
                 <DropdownMenuSeparator className={MENU_SEPARATOR_CLASS} />
-                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handleDeleteSelect} className={MENU_ITEM_CLASS}>
+                <DropdownMenuItem
+                  disabled={remoteWritesBlocked}
+                  onSelect={handleDeleteSelect}
+                  className={MENU_ITEM_CLASS}
+                >
                   {t('ccAgent.sidebar.sessionMenu.delete')}
                 </DropdownMenuItem>
               </>
             ) : (
               <>
-                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handlePinSelect} className={MENU_ITEM_CLASS}>
+                <DropdownMenuItem
+                  disabled={remoteWritesBlocked}
+                  onSelect={handlePinSelect}
+                  className={MENU_ITEM_CLASS}
+                >
                   {isPinned ? t('ccAgent.sidebar.sessionMenu.unpin') : t('ccAgent.sidebar.sessionMenu.pin')}
                 </DropdownMenuItem>
-                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handleRenameSelect} className={MENU_ITEM_CLASS}>
+                <DropdownMenuItem
+                  disabled={remoteWritesBlocked}
+                  onSelect={handleRenameSelect}
+                  className={MENU_ITEM_CLASS}
+                >
                   {t('ccAgent.sidebar.sessionMenu.rename')}
                 </DropdownMenuItem>
                 {moveToProjectSubmenu}
                 <DropdownMenuSeparator className={MENU_SEPARATOR_CLASS} />
                 {copySessionIdSubmenu}
-                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handleOpenInNewWindowSelect} className={MENU_ITEM_CLASS}>
+                <DropdownMenuItem
+                  disabled={remoteWritesBlocked}
+                  onSelect={handleOpenInNewWindowSelect}
+                  className={MENU_ITEM_CLASS}
+                >
                   {t('ccAgent.sidebar.sessionMenu.openInNewWindow')}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className={MENU_SEPARATOR_CLASS} />
-                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handleArchiveSelect} className={MENU_ITEM_CLASS}>
+                <DropdownMenuItem
+                  disabled={remoteWritesBlocked}
+                  onSelect={handleArchiveSelect}
+                  className={MENU_ITEM_CLASS}
+                >
                   {t('ccAgent.sidebar.sessionMenu.archived')}
                 </DropdownMenuItem>
-                <DropdownMenuItem disabled={remoteWritesBlocked} onSelect={handleDeleteSelect} className={MENU_ITEM_CLASS}>
+                <DropdownMenuItem
+                  disabled={remoteWritesBlocked}
+                  onSelect={handleDeleteSelect}
+                  className={MENU_ITEM_CLASS}
+                >
                   {t('ccAgent.sidebar.sessionMenu.delete')}
                 </DropdownMenuItem>
               </>
@@ -907,7 +989,10 @@ function TimeActionsSlot({
               <Undo size={13} strokeWidth={2} />
             </CardAction>
           ) : canQuickArchive ? (
-            <CardAction label={t('ccAgent.sidebar.sessionMenu.archived')} onClick={() => setArchivePending(true)}>
+            <CardAction
+              label={t('ccAgent.sidebar.sessionMenu.archived')}
+              onClick={() => setArchivePending(true)}
+            >
               <Archive size={13} strokeWidth={2} />
             </CardAction>
           ) : null}

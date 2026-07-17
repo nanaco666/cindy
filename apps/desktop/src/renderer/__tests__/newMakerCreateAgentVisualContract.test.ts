@@ -9,11 +9,6 @@ const sendButtonSource = readFileSync(resolve(__dirname, '..', 'components', 'ne
 const vendorSwitcherSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'VendorSegmentedSwitcher.tsx'), 'utf8');
 const permissionSelectorSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'PermissionSelector.tsx'), 'utf8');
 const modelSelectorSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'ModelSelector.tsx'), 'utf8');
-const userInfoSectionSource = readFileSync(resolve(__dirname, '..', 'components', 'sidebar', 'UserInfoSection.tsx'), 'utf8');
-const sidebarTopNavSource = readFileSync(resolve(__dirname, '..', 'components', 'sidebar', 'SidebarTopNav.tsx'), 'utf8');
-const sidebarSource = readFileSync(resolve(__dirname, '..', 'components', 'sidebar', 'Sidebar.tsx'), 'utf8');
-const vendorIconSource = readFileSync(resolve(__dirname, '..', 'components', 'sidebar', 'VendorIcon.tsx'), 'utf8');
-const sessionItemSource = readFileSync(resolve(__dirname, '..', 'features', 'cc-agent', 'sidebar', 'SessionItem.tsx'), 'utf8');
 const colorsSource = readFileSync(resolve(__dirname, '..', 'themes', 'colors.ts'), 'utf8');
 
 describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
@@ -141,7 +136,7 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
 
     expect(sendButtonSource).toContain('bg-[var(--create-agent-send-bg)]');
     expect(sendButtonSource).toContain('text-[var(--create-agent-send-icon)]');
-    expect(sendButtonSource).toContain('border-[var(--create-agent-send-border)]');
+    expect(sendButtonSource).not.toContain('create-agent-send-border');
     expect(sendButtonSource).toContain('hover:bg-[var(--create-agent-send-bg-hover)]');
     expect(sendButtonSource).toContain('active:bg-[var(--create-agent-send-bg-pressed)]');
     expect(sendButtonSource).toContain('function CreateAgentSendIcon');
@@ -165,8 +160,7 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(colorsSource).toContain("dark: '#EEEEEE'");
     expect(colorsSource).toContain("'create-agent-send-icon'");
     expect(colorsSource).toContain("light: '#FCFCFC'");
-    expect(colorsSource).toContain("'create-agent-send-border'");
-    expect(colorsSource).toContain("dark: '#FFFFFF'");
+    expect(colorsSource).not.toContain("'create-agent-send-border'");
     expect(colorsSource).toContain("'create-agent-send-bg-hover'");
     expect(colorsSource).toContain("light: '#2E3237'");
     expect(colorsSource).toContain("dark: '#E2E2E2'");
@@ -190,28 +184,11 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(chatInputSource).toContain("className={isCreateAgentVariant ? 'ml-[7px]' : undefined}");
   });
 
-  it('aligns the real sidebar colors and user capsule with the CREATE AGENT Figma frame', () => {
-    expect(sidebarTopNavSource).toContain('text-[var(--sidebar-nav-text)]');
-    expect(sidebarTopNavSource).toContain('bg-sidebar-item-active');
-    expect(sidebarTopNavSource).toContain('text-[var(--sidebar-item-active-text)]');
-    expect(vendorIconSource).toContain('text-[var(--sidebar-list-muted)]');
-    expect(sidebarSource).toContain('bg-[var(--sidebar-glass-bg)]');
-    expect(sidebarSource).toContain('before:bg-[var(--sidebar-glass-overlay-linear)]');
-    expect(sidebarSource).toContain('after:bg-[var(--sidebar-glass-overlay-radial)]');
-    expect(sidebarSource).toContain("backdropFilter: 'blur(50px)'");
-    expect(sessionItemSource).toContain('border-[var(--sidebar-item-active-border)]');
-    expect(sessionItemSource).toContain('text-[var(--sidebar-item-active-text)]');
-
-    expect(userInfoSectionSource).toContain('rounded-full border border-[var(--sidebar-user-card-border)]');
-    expect(userInfoSectionSource).toContain('bg-[var(--sidebar-user-card-bg)]');
-    expect(userInfoSectionSource).toContain('text-[var(--sidebar-user-card-text)]');
-
-    expect(colorsSource).toContain("'sidebar-nav-text'");
-    expect(colorsSource).toContain("'sidebar-list-muted'");
-    expect(colorsSource).toContain("'sidebar-glass-bg'");
-    expect(colorsSource).toContain("'sidebar-item-active-border'");
-    expect(colorsSource).toContain("'sidebar-user-card-bg'");
-    expect(colorsSource).toContain('rgba(255, 255, 255, 0.20)');
-    expect(colorsSource).toContain('rgba(255, 255, 255, 0.05)');
+  it('does not own global sidebar glass or selected-state tokens', () => {
+    expect(colorsSource).not.toContain("'sidebar-glass-bg'");
+    expect(colorsSource).not.toContain("'sidebar-glass-overlay-linear'");
+    expect(colorsSource).not.toContain("'sidebar-glass-overlay-radial'");
+    expect(colorsSource).not.toContain("'sidebar-item-active-border'");
+    expect(colorsSource).not.toContain("'sidebar-item-active-text'");
   });
 });

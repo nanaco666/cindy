@@ -31,10 +31,9 @@ import { useConversationSearchContext } from '@/features/cc-agent/sidebar/conver
 
 /** 列表行通用样式 —— 各行同款 pill 行。 */
 const ROW_CLASS =
-  'flex h-8 w-full items-center gap-2.5 rounded-full border border-transparent px-3 text-sm font-normal text-[var(--sidebar-nav-text)] transition-colors hover:bg-sidebar-item-hover';
+  'flex h-8 w-full items-center gap-2.5 rounded-full px-3 text-sm font-normal text-[var(--sidebar-nav-text)] transition-colors hover:bg-sidebar-item-hover';
 /** 命中当前视图(自动任务 / Skill / issue)时的高亮。 */
-const ROW_ACTIVE_CLASS =
-  'border-[var(--sidebar-item-active-border)] bg-sidebar-item-active font-medium text-[var(--sidebar-item-active-text)]';
+const ROW_ACTIVE_CLASS = 'bg-[var(--chat-input-chip-bg)] font-medium';
 
 export function SidebarTopNav(): React.ReactElement {
   const { t } = useTranslation();

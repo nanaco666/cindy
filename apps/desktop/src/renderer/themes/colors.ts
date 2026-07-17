@@ -3289,14 +3289,6 @@ registerColor(
   'CREATE AGENT send button inverse neutral icon',
 );
 registerColor(
-  'create-agent-send-border',
-  {
-    light: 'transparent',
-    dark: '#FFFFFF',
-  },
-  'CREATE AGENT send button border',
-);
-registerColor(
   'create-agent-send-bg-hover',
   {
     light: '#2E3237',
@@ -3393,14 +3385,6 @@ registerColor(
   'CREATE AGENT lockup avatar GLASS fill',
 );
 registerColor(
-  'create-agent-avatar-inner-ring',
-  {
-    light: 'rgba(255, 255, 255, 0.088)',
-    dark: 'rgba(255, 255, 255, 0.088)',
-  },
-  'CREATE AGENT lockup avatar inner gradient ring midpoint',
-);
-registerColor(
   'create-agent-avatar-inner-ring-start',
   {
     light: 'rgba(255, 255, 255, 0.29)',
@@ -3415,46 +3399,6 @@ registerColor(
     dark: 'rgba(255, 255, 255, 0.24)',
   },
   'CREATE AGENT lockup avatar inner gradient ring end',
-);
-registerColor(
-  'sidebar-glass-bg',
-  {
-    light: 'hsl(var(--sidebar))',
-    dark: 'hsl(var(--sidebar))',
-  },
-  'Sidebar glass base background; CINDY overrides use Figma alpha fills',
-);
-registerColor(
-  'sidebar-glass-overlay-linear',
-  {
-    light: 'transparent',
-    dark: 'transparent',
-  },
-  'Sidebar glass linear tint overlay',
-);
-registerColor(
-  'sidebar-glass-overlay-radial',
-  {
-    light: 'transparent',
-    dark: 'transparent',
-  },
-  'Sidebar glass radial tint overlay',
-);
-registerColor(
-  'sidebar-item-active-border',
-  {
-    light: 'transparent',
-    dark: 'transparent',
-  },
-  'Sidebar selected row border',
-);
-registerColor(
-  'sidebar-item-active-text',
-  {
-    light: '#ffffff',
-    dark: '#ffffff',
-  },
-  'Sidebar selected row text/icon',
 );
 registerColor(
   'sidebar-nav-text',
