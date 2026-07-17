@@ -1027,7 +1027,7 @@ export function ModelSelector({
                   dense ? 'h-6' : 'h-7',
                   noSource
                     ? 'bg-[var(--surface-chip)] px-2.5 hover:bg-[var(--surface-hover)]'
-                    : 'bg-[var(--glass-pill-bg)] px-2 backdrop-blur-[6px] hover:bg-[var(--model-trigger-hover)]',
+                    : 'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] px-2 border border-[var(--border-default)] hover:bg-[var(--model-trigger-hover)]' /* spec 2026-07-17, token by 一哥 */,
                 ),
             // device-link 远程切换 in-flight:置灰 + 禁用点击(复用本文件 disabled 行的 opacity-50 习惯)。
             (switching || disabled) && 'pointer-events-none opacity-50',

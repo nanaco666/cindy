@@ -110,7 +110,7 @@ export function PermissionSelector({
             className={cn(
               'flex min-w-0 items-center gap-1 rounded-full',
               'py-1 pl-0 pr-2',
-              'bg-[var(--glass-pill-bg)] backdrop-blur-[6px] text-[var(--model-trigger-text)] transition-colors',
+              'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] border border-[var(--border-default)] text-[var(--text-primary)] transition-colors' /* spec 2026-07-17, token by 一哥; fallback 待注册后删 */,
               'hover:bg-[var(--model-trigger-hover)]',
               triggerTone === 'auto' && 'text-[var(--perm-auto-selected-text)]',
               triggerTone === 'bypassPermissions' &&
