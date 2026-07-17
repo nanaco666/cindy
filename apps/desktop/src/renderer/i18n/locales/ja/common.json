@@ -630,6 +630,7 @@
     "voiceInput": {
       "title": "音声入力",
       "description": "認識言語、マイク、ショートカット、音声の整え方、音声入力中のミュートを設定します。",
+      "saveFailed": "音声入力設定の保存に失敗しました：{{message}}",
       "sections": {
         "basics": "基本",
         "refinement": "整え方",

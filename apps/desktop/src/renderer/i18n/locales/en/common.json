@@ -630,6 +630,7 @@
     "voiceInput": {
       "title": "Voice input",
       "description": "Set language, microphone, shortcut, refinement, and muting during voice input.",
+      "saveFailed": "Could not save voice input settings: {{message}}",
       "sections": {
         "basics": "Basics",
         "refinement": "Refinement",
