@@ -20,6 +20,7 @@ import path from 'node:path';
 import { BRAND_NAME } from '@lizi/maker-shared/branding';
 
 import { createLogger } from './logger.js';
+import { installNewMakerWindowShortcut } from './app-shortcuts/new-maker-window-shortcut.js';
 import { markAppContentWindow } from './windowFocusClassifier.js';
 import { readWindowBehaviorSettings } from './window-behavior-settings-store.js';
 import { installSelectionContextMenu } from './selection-context-menu.js';
@@ -115,6 +116,7 @@ export function openSessionInNewWindow(
     },
   });
   markAppContentWindow(win);
+  installNewMakerWindowShortcut(win);
   installSelectionContextMenu(win);
 
   installExternalLinkGuards(win);

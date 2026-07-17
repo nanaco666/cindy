@@ -13,6 +13,9 @@ export {
   providerConfigSchema,
   reduceAuthFlow,
   socialProviderSchema,
+  ssoOrgConnectionSchema,
+  ssoOrgDiscoverySchema,
+  ssoOrgDiscoveryToMethods,
   tokenPairSchema,
 } from "./types.js";
 export type {
@@ -28,5 +31,7 @@ export type {
   LoginOutcome,
   ProviderConfig,
   SocialProvider,
+  SsoOrgConnection,
+  SsoOrgDiscovery,
   VerificationKind,
 } from "./types.js";

@@ -2348,6 +2348,12 @@
     "personalLogin": "以个人身份登录",
     "personalDesc": "向邮箱发送验证码",
     "ssoRequired": "该企业要求通过 SSO 登录",
+    "ssoEntry": "使用企业 SSO 登录",
+    "ssoOrgTitle": "企业 SSO 登录",
+    "ssoOrgSubtitle": "输入企业 ID，跳转到你所在企业的单点登录",
+    "ssoOrgPlaceholder": "请输入企业 ID",
+    "ssoOrgHint": "不知道企业 ID？请联系企业管理员",
+    "ssoOrgDetected": "选择企业「{{org}}」的单点登录方式",
     "enterCode": "输入验证码",
     "codeSentTo": "验证码已发送至 {{identifier}}",
     "codePlaceholder": "6 位验证码",
@@ -2382,6 +2388,7 @@
       "CODE_ATTEMPTS_EXCEEDED": "验证码错误次数过多，请重新获取",
       "RATE_LIMITED": "操作过于频繁，请稍后再试",
       "SSO_LOGIN_REQUIRED": "该邮箱所属企业要求通过 SSO 登录",
+      "ORG_SSO_NOT_FOUND": "未找到该企业，或该企业未启用 SSO 登录",
       "SOCIAL_TOKEN_INVALID": "第三方授权已失效，请重试",
       "SOCIAL_PROVIDER_DISABLED": "该登录方式当前不可用",
       "USER_CANCELLED": "已取消登录",
@@ -3525,6 +3532,7 @@
       "forkStripEncryptedTitle": "Fork 并剥离出新会话(去掉加密推理内容)",
       "codexSessionExpiredLogin": "重新登录",
       "networkUnreachable": "网络异常，服务暂时不可达，可点击「重试」。",
+      "networkUnreachableNoRetry": "网络异常，服务暂时不可达。",
       "networkAutoRetrying": "网络异常，正在自动重试…",
       "networkShowRaw": "查看原始错误",
       "networkHideRaw": "收起原始错误",
@@ -4197,6 +4205,16 @@
         "allRunning": "该 Project 下所有会话都在执行中，请先停止后再归档",
         "empty": "该 Project 下没有可归档的会话"
       },
+      "unarchiveAll": {
+        "title": "取消归档全部会话",
+        "confirm": "全部取消归档",
+        "cancel": "取消",
+        "description": "将恢复该 Project 下 {{count}} 个已归档会话。恢复后将从“已归档”列表移除，并回到“活跃”列表。",
+        "unarchived_one": "已恢复 {{count}} 个会话",
+        "unarchived_other": "已恢复 {{count}} 个会话",
+        "partialFailure": "已恢复 {{ok}} 个，{{fail}} 个失败，请重试",
+        "empty": "该 Project 下没有可取消归档的会话"
+      },
       "bulkSelection": {
         "selected": "已选 {{count}} 个",
         "archive": "归档所选会话",
@@ -4257,6 +4275,7 @@
         "rename": "重命名项目",
         "showFiles": "查看文件",
         "archivedAll": "全部归档",
+        "unarchiveAll": "全部取消归档",
         "openInExplorer": "在文件管理器中打开",
         "newInDirectory": "在此目录新建会话",
         "copyDeepLink": "复制深度链接",
@@ -4388,7 +4407,7 @@
         "revealFolder": "显示所在文件夹"
       },
       "fileBody": {
-        "selectFile": "从左侧选择一个文件预览",
+        "selectFile": "选择一个文件进行预览",
         "readFailed": "读取文件失败：{{message}}",
         "truncatedNotice": "文件较大，已截断显示前 2 MB —— 在系统中打开查看完整内容",
         "editLabel": "编辑",
@@ -4668,6 +4687,9 @@
         "script": "仅运行脚本"
       },
       "script": {
+        "protocolSummary": "stdout 必须逐行输出 xdt-maker-script/1 的完整 JSON 对象（JSONL）；type 只能是 call 或 complete。普通日志请写入 stderr，并且脚本必须最终输出一个 complete 帧。",
+        "protocolCapabilities": "如需调用已授权能力，脚本还必须逐行读取 stdin 中 host 发送的 start 和 call_result JSONL 帧，并等待对应调用结果后再继续或输出 complete。",
+        "protocolExample": "查看不调用能力的最小 Python 示例",
         "command": "脚本命令",
         "commandPlaceholder": "python scripts/auto.py",
         "timeout": "超时（秒，可选）",

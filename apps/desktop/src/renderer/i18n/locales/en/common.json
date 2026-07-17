@@ -2348,6 +2348,12 @@
     "personalLogin": "Sign in with a personal account",
     "personalDesc": "Send a verification code to your email",
     "ssoRequired": "This organization requires SSO sign-in",
+    "ssoEntry": "Sign in with enterprise SSO",
+    "ssoOrgTitle": "Enterprise SSO",
+    "ssoOrgSubtitle": "Enter your company ID to continue with single sign-on",
+    "ssoOrgPlaceholder": "Enter your company ID",
+    "ssoOrgHint": "Don't know your company ID? Ask your admin",
+    "ssoOrgDetected": "Choose a single sign-on connection for \"{{org}}\"",
     "enterCode": "Enter verification code",
     "codeSentTo": "We sent a code to {{identifier}}",
     "codePlaceholder": "6-digit code",
@@ -2382,6 +2388,7 @@
       "CODE_ATTEMPTS_EXCEEDED": "Too many incorrect attempts. Request a new code.",
       "RATE_LIMITED": "Too many attempts. Please wait and try again.",
       "SSO_LOGIN_REQUIRED": "This organization requires SSO sign-in.",
+      "ORG_SSO_NOT_FOUND": "Company not found, or it has no SSO connection enabled",
       "SOCIAL_TOKEN_INVALID": "The provider authorization expired. Please try again.",
       "SOCIAL_PROVIDER_DISABLED": "This sign-in method is not currently available.",
       "USER_CANCELLED": "Sign-in was cancelled.",
@@ -3525,6 +3532,7 @@
       "forkStripEncryptedTitle": "Fork and strip into a new session",
       "codexSessionExpiredLogin": "Log in again",
       "networkUnreachable": "Network error: the service is temporarily unreachable. Click \"Retry\" to try again.",
+      "networkUnreachableNoRetry": "Network error: the service is temporarily unreachable.",
       "networkAutoRetrying": "Network error — retrying automatically…",
       "networkShowRaw": "Show raw error",
       "networkHideRaw": "Hide raw error",
@@ -4206,6 +4214,16 @@
         "allRunning": "All sessions in this Project are running, please stop them before archiving",
         "empty": "No sessions to archive in this Project"
       },
+      "unarchiveAll": {
+        "title": "Restore all archived sessions",
+        "confirm": "Restore all",
+        "cancel": "Cancel",
+        "description": "Restore {{count}} archived sessions in this Project? They'll leave the Archived list and return to Active.",
+        "unarchived_one": "Restored {{count}} session",
+        "unarchived_other": "Restored {{count}} sessions",
+        "partialFailure": "Restored {{ok}}, {{fail}} failed, please retry",
+        "empty": "No archived sessions to restore in this Project"
+      },
       "bulkSelection": {
         "selected": "{{count}} selected",
         "archive": "Archive selected sessions",
@@ -4265,7 +4283,8 @@
       "projectAction": {
         "rename": "Rename project",
         "showFiles": "Show Files",
-        "archivedAll": "Archived All",
+        "archivedAll": "Archive all",
+        "unarchiveAll": "Restore all",
         "openInExplorer": "Open in file manager",
         "newInDirectory": "New session in this directory",
         "copyDeepLink": "Copy deep link",
@@ -4397,7 +4416,7 @@
         "revealFolder": "Show in folder"
       },
       "fileBody": {
-        "selectFile": "Select a file from the left to preview",
+        "selectFile": "Select a file to preview",
         "readFailed": "Read file failed: {{message}}",
         "truncatedNotice": "File is large, only the first 2 MB are shown — open in system to view the full content",
         "editLabel": "Edit",
@@ -4677,6 +4696,9 @@
         "script": "Script only"
       },
       "script": {
+        "protocolSummary": "stdout must emit one complete xdt-maker-script/1 JSON object per line (JSONL); type must be call or complete. Write regular logs to stderr, and always finish with a complete frame.",
+        "protocolCapabilities": "When using granted capabilities, the script must also read the host's start and call_result JSONL frames from stdin, then wait for each call result before continuing or emitting complete.",
+        "protocolExample": "View minimal Python example without capabilities",
         "command": "Script command",
         "commandPlaceholder": "python scripts/auto.py",
         "timeout": "Timeout (seconds, optional)",

@@ -14,6 +14,7 @@ import {
   AuthApiError,
   CindyAuthClient,
   reduceAuthFlow,
+  ssoOrgDiscoveryToMethods,
   type AuthFlowState,
   type AuthMembership,
   type LoginOutcome,
@@ -80,6 +81,7 @@ export interface MobileUser {
 export type MobileLoginAction =
   | { type: 'reset' }
   | { type: 'discover'; email: string }
+  | { type: 'discover-sso-org'; org: string }
   | { type: 'request-code'; kind: VerificationKind; identifier: string }
   | {
       type: 'verify-code';
@@ -540,6 +542,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 type: 'discovery-loaded',
                 email,
                 methods,
+              }),
+            );
+            return true;
+          }
+          // 企业 SSO 入口（按企业 ID/组织 slug）：结果映射进 method-choice，
+          // 复用连接选择 UI 与 start-sso 流程。
+          if (action.type === 'discover-sso-org') {
+            const discovery = await client.discoverSsoOrg(
+              action.org.trim().toLowerCase(),
+            );
+            updateLoginState(
+              reduceAuthFlow(loginStateRef.current, {
+                type: 'discovery-loaded',
+                email: '',
+                methods: ssoOrgDiscoveryToMethods(discovery),
               }),
             );
             return true;
