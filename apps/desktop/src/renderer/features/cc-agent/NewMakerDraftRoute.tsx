@@ -112,10 +112,7 @@ import { useProviders } from '@/hooks/useProviders';
 import { evictDeviceProviders, useDeviceProviders } from '@/hooks/useDeviceProviders';
 import { evictDeviceGitSafetySettings } from '@/hooks/useGitSafetySettings';
 import { resolveFastSupported } from '@/lib/providerModels';
-import {
-  connectedProvidersForAgent,
-  nativeDefaultSourceId,
-} from '@lizi/model-providers';
+import { effectiveSourceIdForModel } from '@lizi/model-providers';
 import {
   resolveDeviceLinkDraftDefaults,
   type DeviceLinkDraftSelection,
@@ -486,15 +483,18 @@ export function NewMakerDraftRoute() {
   const providers = effectiveDeviceLinkDeviceId ? deviceProviders : localProviders;
 
   // 草稿当前**生效来源 id**(= ModelSelector 高亮 / ChatInput effectiveSourceId 同口径):显式选中且
-  // 仍可连 → 它;否则该 agent 原生默认来源。fast/effort 的 per-(供应商,模型) 记忆按它做 key —— 多供应商
+  // 仍可连、并提供当前模型 → 它;否则只在当前模型的可用来源中取原生默认。fast/effort 的
+  // per-(供应商,模型) 记忆按它做 key —— 多供应商
   // 同名模型(如 Anthropic 与 XD 网关都有 Opus)各记各的,切来源 / 选回不串。仅本地草稿用;device-link
   // 走 dlSel 镜像、不读本机记忆(下方 resolveDraftFast 只在本地分支调用)。
   const effectiveSourceId = useMemo<string | null>(() => {
-    const rail = connectedProvidersForAgent(providers, capabilityAgentKind);
-    const sel = chatPrefs.providerId ?? null;
-    if (sel && rail.some((p) => p.id === sel)) return sel;
-    return nativeDefaultSourceId(rail, capabilityAgentKind);
-  }, [providers, capabilityAgentKind, chatPrefs.providerId]);
+    return effectiveSourceIdForModel(
+      providers,
+      chatPrefs.providerId ?? null,
+      chatPrefs.model,
+      capabilityAgentKind,
+    );
+  }, [providers, capabilityAgentKind, chatPrefs.providerId, chatPrefs.model]);
 
   // 草稿 live fast 读 per-(agent, 来源, 模型) 记忆(与下拉行 fastOnOf / 会话 resolveFast 同口径,
   // 多供应商同名模型不串);该三元组无记录时回退 per-model 旧库 getFastModeForModel —— 仅兜底,

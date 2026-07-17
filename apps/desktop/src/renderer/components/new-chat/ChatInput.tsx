@@ -66,7 +66,6 @@ import {
 } from '@/lib/composerDraftStore';
 import { ModelSelector, type ModelMemoryAccessors } from './ModelSelector';
 import { isSelectedSourceDisconnected, resolveEffort, resolveProviderSwitchEffort } from './sourceSwitch';
-import { nativeDefaultSourceId } from '@lizi/model-providers';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { PermissionSelector } from './PermissionSelector';
 import { ExtraDirsButton } from './ExtraDirsButton';
@@ -128,7 +127,11 @@ import { useAgentCapabilities, type AgentKind } from '@/hooks/useAgentCapabiliti
 import { useConnectedSource } from '@/hooks/useConnectedSource';
 import { useProviders } from '@/hooks/useProviders';
 import { useDeviceProviders } from '@/hooks/useDeviceProviders';
-import { connectedProvidersForAgent, sourcesForModel } from '@lizi/model-providers';
+import {
+  connectedProvidersForAgent,
+  effectiveSourceIdForModel,
+  sourcesForModel,
+} from '@lizi/model-providers';
 import { deriveModelsFromProviders, resolveFastSupported } from '@/lib/providerModels';
 import {
   getProviderModelEffort,
@@ -1219,13 +1222,14 @@ export function ChatInput({
   const remoteProviders = useDeviceProviders(deviceLinkDeviceId);
   const providers = deviceLinkDeviceId ? remoteProviders.providers : localProviders.providers;
 
-  // 空態(设计 Q7NYAD「ChatInput 空态 · 模型选择器」):当前 agent 一个已连接来源都没有 →
+  // 空態(设计 Q7NYAD「ChatInput 空态 · 模型选择器」):当前模型一个已连接来源都没有 →
   // 模型选择器 trigger 化成「连接来源」CTA、Send 禁用。「有没有来源」走统一判定 hook
   // useConnectedSource —— 与 ModelSelector trigger / send 门禁同一条规则,不再各算(避免漂移)。
   // providersLoading 期间不判,避免有缓存的老用户首帧闪 CTA / 禁用态(规则 7)。
-  // 注:这是 agent 维度;更细的「该模型无来源」由下方 dispatchSend 的 sourcesForModel 预检兜底
-  // (覆盖"有连接来源但不 offer 当前模型"的罕见 case)。
-  const { hasConnectedSource, loading: providersLoading } = useConnectedSource(currentModelAgentKind);
+  const { hasConnectedSource, loading: providersLoading } = useConnectedSource(
+    currentModelAgentKind,
+    activeModel,
+  );
   const noConnectedSource = !!currentModelAgentKind && !providersLoading && !hasConnectedSource;
 
   // 会话显式选中的来源已断开(如外部删除订阅 OAuth 凭证):trigger 显示「已断开」错误态 +
@@ -1240,20 +1244,19 @@ export function ChatInput({
     isSelectedSourceDisconnected({
       providers,
       agent: currentModelAgentKind,
+      modelId: activeModel,
       selectedProviderId,
       providersLoading,
     });
 
-  // 当前**生效来源 id**(= ModelSelector 高亮的 activeSourceId 同口径):显式选中且仍可连
-  // → 用它;否则落到该 agent 的原生默认来源(cc→xd / codex→openai|xd)。providerModelMemory
+  // 当前**生效来源 id**(= ModelSelector 高亮的 activeSourceId 同口径):显式选中且仍可连、
+  // 且提供当前模型 → 用它;否则只在“提供当前模型”的来源里取原生默认。providerModelMemory
   // 按 (agent, 来源) 分槽记 (model, effort),写入 / 恢复都以这个 id 为 key,保证对称。
   const effectiveSourceId = useMemo<string | null>(() => {
     const kind = currentModelAgentKind;
     if (!kind) return null;
-    const rail = connectedProvidersForAgent(providers, kind);
-    if (selectedProviderId && rail.some((p) => p.id === selectedProviderId)) return selectedProviderId;
-    return nativeDefaultSourceId(rail, kind);
-  }, [providers, currentModelAgentKind, selectedProviderId]);
+    return effectiveSourceIdForModel(providers, selectedProviderId, activeModel, kind);
+  }, [providers, currentModelAgentKind, selectedProviderId, activeModel]);
 
   // 发送(草稿态建会话)时携带的**显式来源**:仅当本地选择仍在已连接来源栏内才带上
   // (与 effectiveSourceId 的高亮口径一致,即"所见即所得");否则带 null。
@@ -1263,9 +1266,10 @@ export function ChatInput({
   const sendProviderId = useMemo<string | null>(() => {
     const kind = currentModelAgentKind;
     if (!kind || !selectedProviderId) return null;
-    const rail = connectedProvidersForAgent(providers, kind);
-    return rail.some((p) => p.id === selectedProviderId) ? selectedProviderId : null;
-  }, [providers, currentModelAgentKind, selectedProviderId]);
+    return effectiveSourceIdForModel(providers, selectedProviderId, activeModel, kind) === selectedProviderId
+      ? selectedProviderId
+      : null;
+  }, [providers, currentModelAgentKind, selectedProviderId, activeModel]);
 
   // 非选中模型行的 effort/fast 记忆按上下文路由(隔离草稿与各会话,见 ModelMemoryAccessors /
   // pickMemoryScope)。这是「草稿默认值被会话内修改污染」bug 的核心隔离点:

@@ -19,6 +19,7 @@ import {
   providerOffersModel,
   getModel,
   sourcesForModel,
+  effectiveSourceIdForModel,
   resolveRoute,
 } from '../registry.js';
 import type { Catalog } from '../types.js';
@@ -190,6 +191,37 @@ describe('registry visibility & sources', () => {
     expect(sourcesForModel(all, 'gpt-5.5', 'codex').map((p) => p.id).sort()).toEqual(['openai', 'xd']);
     expect(sourcesForModel(all, 'gpt-5.5', 'claude-code').map((p) => p.id)).toEqual(['xd']);
     expect(sourcesForModel(all, 'xai/grok-4.3', 'codex').map((p) => p.id)).toEqual(['xai']);
+  });
+
+  it('effectiveSourceIdForModel 只在真正提供当前模型的已连接来源里选默认', () => {
+    const openaiOnly = buildRegistry(BUNDLED_CATALOG, {
+      xd: false,
+      anthropic: false,
+      openai: true,
+      xai: false,
+    });
+    // OpenAI 虽支持 claude-code agent，但不提供 Opus；不能拼成 OpenAI + Opus。
+    expect(
+      effectiveSourceIdForModel(openaiOnly, null, 'claude-opus-4-8', 'claude-code'),
+    ).toBeNull();
+    expect(
+      effectiveSourceIdForModel(openaiOnly, null, 'chatgpt/gpt-5.5', 'claude-code'),
+    ).toBe('openai');
+  });
+
+  it('effectiveSourceIdForModel 保留有效显式来源，失效时回落到同模型默认来源', () => {
+    const all = buildRegistry(BUNDLED_CATALOG, {
+      xd: true,
+      anthropic: true,
+      openai: true,
+      xai: true,
+    });
+    expect(
+      effectiveSourceIdForModel(all, 'anthropic', 'claude-opus-4-8', 'claude-code'),
+    ).toBe('anthropic');
+    expect(
+      effectiveSourceIdForModel(all, 'openai', 'claude-opus-4-8', 'claude-code'),
+    ).toBe('xd');
   });
 });
 

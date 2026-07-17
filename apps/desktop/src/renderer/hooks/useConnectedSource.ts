@@ -1,9 +1,8 @@
 /**
- * useConnectedSource —— 单一判定：某 agent「有没有已连接（link 上）的可选来源」。
+ * useConnectedSource —— 单一判定：某 `(agent, model?)`「有没有已连接（link 上）的可选来源」。
  *
  * 这是整个产品「是否进入『连接来源』空態」的**唯一真相**，与 agent 类型无关（agent 只是入参）：
- *   provider.json 声明每个 provider 支持哪些 agent；这里据其中**已连接**的那部分算
- *   `connectedProvidersForAgent(providers, agent).length > 0`。
+ *   传 modelId 时必须进一步确认来源真的提供该模型；不传时只按 agent 判断（旧入口兼容）。
  *
  * 所有渲染期消费方都从这一处取值，避免各自重算导致漂移：
  *   - ModelSelector trigger：无来源 → 化成「连接来源」CTA
@@ -17,7 +16,7 @@
 
 import { useMemo } from 'react';
 
-import { connectedProvidersForAgent, type AgentKind } from '@lizi/model-providers';
+import { connectedProvidersForAgent, sourcesForModel, type AgentKind } from '@lizi/model-providers';
 
 import { useProviders } from './useProviders';
 
@@ -28,11 +27,16 @@ export interface UseConnectedSourceReturn {
   loading: boolean;
 }
 
-export function useConnectedSource(agent: AgentKind | null): UseConnectedSourceReturn {
+export function useConnectedSource(agent: AgentKind | null, modelId?: string): UseConnectedSourceReturn {
   const { providers, loading } = useProviders();
   const hasConnectedSource = useMemo(
-    () => (agent ? connectedProvidersForAgent(providers, agent).length > 0 : false),
-    [providers, agent],
+    () => {
+      if (!agent) return false;
+      return modelId
+        ? sourcesForModel(providers, modelId, agent).length > 0
+        : connectedProvidersForAgent(providers, agent).length > 0;
+    },
+    [providers, agent, modelId],
   );
   return { hasConnectedSource, loading };
 }

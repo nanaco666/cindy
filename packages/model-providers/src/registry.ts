@@ -86,6 +86,25 @@ export function nativeDefaultSourceId(rail: ProviderView[], agent: AgentKind | n
 }
 
 /**
+ * 解析某个会话当前 `(agent, model)` 真正可用的来源 id。
+ *
+ * 来源选择必须先收窄到「已连接且确实提供当前模型」的集合，再应用显式选择 / 原生默认：
+ * 否则当 XD key 被清除、但 OpenAI 仍连接时，Claude 会话会把 OpenAI 当成 agent 级兜底，
+ * 拼出「OpenAI 图标 + Opus」这种不可能路由。显式来源失效时返回同模型的默认可用来源；
+ * 当前模型没有任何已连接来源时返回 null。
+ */
+export function effectiveSourceIdForModel(
+  views: ProviderView[],
+  providerId: string | null | undefined,
+  modelId: string,
+  agent: AgentKind,
+): string | null {
+  const sources = sourcesForModel(views, modelId, agent);
+  if (providerId && sources.some((provider) => provider.id === providerId)) return providerId;
+  return nativeDefaultSourceId(sources, agent);
+}
+
+/**
  * 某 (provider, model, agent) 是否支持 Fast 模式 —— 纯函数,**Fast 能力的唯一真相**。
  * 直接读该供应商在该 agent 下那个模型条目的 `supportsFastMode`（per-provider，见 CatalogModel）。
  * 缺省 / 取不到 provider / 该来源不提供此模型 ⇒ false（不显示开关）。
@@ -116,23 +135,8 @@ export function sessionModelSupportsFastMode(
   modelId: string,
   agent: AgentKind,
 ): boolean {
-  const rail = connectedProvidersForAgent(views, agent);
-  // 显式选中的来源已连接且确实提供该模型 → 用它(用户明确选了这家)。
-  if (providerId) {
-    const explicit = rail.find((p) => p.id === providerId);
-    if (explicit && providerOffersModel(explicit, modelId, agent)) {
-      return modelSupportsFastMode(explicit, modelId, agent);
-    }
-  }
-  // 否则取「实际会路由到」的来源 = 提供该模型的连接来源,优先 nativeDefault,再退首个提供它的。
-  // 关键:nativeDefault 不一定提供该模型(如 codex 的 nativeDefault=openai 不提供 codex/ 骨折模型,
-  // 那类只在 xd)——必须回退到真正提供它的来源,否则会误判不支持 fast。
-  const nativeId = nativeDefaultSourceId(rail, agent);
-  const native = nativeId ? rail.find((p) => p.id === nativeId) : undefined;
-  const effective =
-    native && providerOffersModel(native, modelId, agent)
-      ? native
-      : rail.find((p) => providerOffersModel(p, modelId, agent));
+  const sourceId = effectiveSourceIdForModel(views, providerId, modelId, agent);
+  const effective = sourceId ? views.find((provider) => provider.id === sourceId) : undefined;
   return modelSupportsFastMode(effective, modelId, agent);
 }
 
