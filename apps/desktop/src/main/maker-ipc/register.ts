@@ -209,6 +209,7 @@ import { runAcceptedCallback } from './acceptedCallbackRunner.js';
 import { createElectronIpcHandlerRegistry } from './electronIpcRegistry.js';
 import { validateExtraDirs } from './extraDirsValidator.js';
 import { prepareHandoffWorktree, shouldRecycleHandoffWorktreeOnFailure } from './handoffWorktree.js';
+import { registerProjectPluginPolicyHandlers } from './projectPluginPolicyHandlers.js';
 import { WorktreeManager as worktreeManager, worktreeStore } from '../worktree/index.js';
 import type { WorktreeMeta } from '../worktree/types.js';
 import {
@@ -5963,24 +5964,8 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     await restartCodexAfterAuthModeChange();
   });
 
-  ipcMain.handle(MAKER_INVOKE.PLUGINS_SET_PROJECT_ENABLED, async (_e, workingDir: unknown, id: unknown, enabled: unknown) => {
-    if (typeof workingDir !== 'string' || typeof id !== 'string' || typeof enabled !== 'boolean') {
-      throwIpcError('INVALID_PARAMS', 'workingDir (string) + id (string) + enabled (boolean) required');
-    }
-    const ok = await getPluginRegistry().setProjectEnabled(id, workingDir, enabled);
-    if (!ok) {
-      throwIpcError('PERMISSION_DENIED', `Cannot modify essential plugin: ${id}`);
-    }
-  });
-
-  ipcMain.handle(MAKER_INVOKE.PLUGINS_CLEAR_PROJECT_ENABLED, async (_e, workingDir: unknown, id: unknown) => {
-    if (typeof workingDir !== 'string' || typeof id !== 'string') {
-      throwIpcError('INVALID_PARAMS', 'workingDir (string) + id (string) required');
-    }
-    const ok = await getPluginRegistry().clearProjectEnabled(id, workingDir);
-    if (!ok) {
-      throwIpcError('PERMISSION_DENIED', `Cannot modify essential plugin: ${id}`);
-    }
+  registerProjectPluginPolicyHandlers(createElectronIpcHandlerRegistry(), {
+    getPluginRegistry,
   });
 
   // ── Android automation (Settings →「电脑使用」) ──────────────────────────
