@@ -222,6 +222,8 @@ interface ModelSelectorContentProps {
   excludeSubscriptionDirect?: boolean;
   /** 选中后是否自动关闭。Popover 场景传入,内嵌场景不传。 */
   onDismiss?: () => void;
+  /** 模型行 Tooltip 的额外样式。供嵌套在高层级 overlay 中的调用方覆盖默认 z-index。 */
+  tooltipContentClassName?: string;
   currentProviderId?: string | null;
   onProviderChange?: (
     providerId: string | null,
@@ -254,6 +256,7 @@ export function ModelSelectorContent({
   deviceId,
   excludeSubscriptionDirect,
   onDismiss,
+  tooltipContentClassName,
   currentProviderId,
   onProviderChange,
   onNavigateToProviders,
@@ -590,6 +593,7 @@ export function ModelSelectorContent({
         key={`${providerId ?? ''}::${model.id}`}
         text={tipText}
         side="left"
+        contentClassName={tooltipContentClassName}
       >
         <div
           role="option"
