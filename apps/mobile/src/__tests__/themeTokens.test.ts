@@ -65,6 +65,9 @@ describe('theme tokens', () => {
     expect(lightColors.statusDone).toBe('#2AAE5B');
     expect(lightColors.statusRecording).toBe('#D91F37');
     expect(lightColors.statusReady).toBe('#19D2C1');
+    // permAutoAccent:Auto Approval 蓝 #417CDD,L=D 同值(设计定稿 2026-07-17,取代 M2 拆值)。
+    expect(lightColors.permAutoAccent).toBe('#417CDD');
+    expect(darkColors.permAutoAccent).toBe('#417CDD');
   });
 
   it('CTA 契约:中性反相(light 深底浅字 / dark 浅底深字),对比度 ≥4.5:1(用户红色新规 2026-07-17)', () => {

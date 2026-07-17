@@ -64,7 +64,7 @@ export interface ThemeColors {
   statusError: string;
   /** 会话状态点 — 完成未读(绿,对齐桌面 --card-status-done;橙专职 running) */
   statusDone: string;
-  /** 自动审批权限模式强调色(TapTap 星蓝 light / teal dark,对齐桌面 --perm-auto-selected-text) */
+  /** 自动审批权限模式强调色(Auto Approval 蓝 #417CDD,L=D 同值,设计定稿 2026-07-17;取代 M2 的 #1D4ED8/#19D2C1 拆值) */
   permAutoAccent: string;
   /**
    * 错误说明文案的黑白系前景 —— **刻意跟随 textPrimary,不是红色**(黑白反色设计里成段
@@ -121,7 +121,7 @@ export const lightColors: ThemeColors = {
   statusAwaiting: '#19D2C1',
   statusError: '#D91F37',
   statusDone: '#2AAE5B',
-  permAutoAccent: '#1D4ED8',
+  permAutoAccent: '#417CDD',
   errorText: '#3C3F43',
   destructive: '#f43d3f',
   errorBorder: '#686B72',
@@ -164,7 +164,7 @@ export const darkColors: ThemeColors = {
   statusAwaiting: '#19D2C1',
   statusError: '#D91F37',
   statusDone: '#2AAE5B',
-  permAutoAccent: '#19D2C1',
+  permAutoAccent: '#417CDD',
   errorText: '#D4D4D4',
   destructive: '#f43d3f',
   errorBorder: '#BFC1C4',
