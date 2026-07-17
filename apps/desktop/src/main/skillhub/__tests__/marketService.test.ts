@@ -22,11 +22,11 @@ vi.mock('../../serverApiClient', async () => {
   };
 });
 
-type FetchCall = { path: string; opts?: ApiFetchOptions };
+type FetchCall = { path: string; opts?: Omit<ApiFetchOptions, 'baseUrl'> };
 
 function makeFetch(responses: unknown[]) {
   const calls: FetchCall[] = [];
-  const impl: SkillhubMarketFetcher = async <T,>(path: string, opts?: ApiFetchOptions): Promise<T> => {
+  const impl: SkillhubMarketFetcher = async <T,>(path: string, opts?: Omit<ApiFetchOptions, 'baseUrl'>): Promise<T> => {
     calls.push({ path, opts });
     if (responses.length === 0) throw new Error(`unexpected fetch: ${path}`);
     const next = responses.shift();

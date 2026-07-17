@@ -61,7 +61,11 @@ export const CLIENT_ENDPOINTS_SCHEMA_VERSION = 1;
  * 线上清单补字段再发版(老清单缺新字段会让新版客户端启动阻断)。
  */
 export const CLIENT_ENDPOINT_KEYS = [
-  'apiBaseUrl',
+  // apiBaseUrl(老主 server xdt-api)已于 2026-07-18 退役(不 bump,删必填字段
+  // 对新客户端是纯放松):四块业务消费方分批迁至独立服务(chat-data 删除 /
+  // SlackIM→slack-hook / GitHub 反馈→githubApiBaseUrl / Skillhub→
+  // skillhubApiBaseUrl)。⚠️ 线上 CDN 清单与仓内正本仍保留该字段喂存量老客户端
+  // (老 parser 必填),等老版本消亡后才能从清单删值。
   // auth 不分 cn/global:国内/海外是两条 CDN 各发各的清单,清单本身已 region 化,
   // 客户端无脑取本字段即可。
   'authApiBaseUrl',
@@ -117,7 +121,6 @@ export const CLIENT_ENDPOINT_REVIEW_KEY = 'review';
 
 /** 各字段允许的 URL 协议白名单。 */
 const FIELD_PROTOCOLS: Record<ClientEndpointKey, readonly string[]> = {
-  apiBaseUrl: ['https:'],
   authApiBaseUrl: ['https:'],
   deviceLinkApiBaseUrl: ['https:'],
   oauthBrokerApiBaseUrl: ['https:'],

@@ -121,7 +121,7 @@ describe('resolveClientEndpointsBlocking(阻断循环,清单即唯一事实源)'
       promptRetry,
       exitApp: vi.fn(),
     });
-    expect(result?.apiBaseUrl).toBe('https://api.remote.example.com');
+    expect(result?.authApiBaseUrl).toBe('https://auth.remote.example.com');
     expect(result?.cdnBaseUrl).toBe('https://cdn.remote.example.com/app');
     expect(promptRetry).not.toHaveBeenCalled();
   });
@@ -141,7 +141,7 @@ describe('resolveClientEndpointsBlocking(阻断循环,清单即唯一事实源)'
     expect(promptRetry).toHaveBeenCalledTimes(1);
     expect(promptRetry).toHaveBeenCalledWith('fetch-failed');
     expect(fetchManifestText).toHaveBeenCalledTimes(2);
-    expect(result?.apiBaseUrl).toBe('https://api.remote.example.com');
+    expect(result?.authApiBaseUrl).toBe('https://auth.remote.example.com');
     expect(exitApp).not.toHaveBeenCalled();
   });
 
@@ -188,7 +188,7 @@ describe('resolveClientEndpointsBlocking(阻断循环,清单即唯一事实源)'
       exitApp: vi.fn(),
       allowHttp: true,
     });
-    expect(accepted?.apiBaseUrl).toBe('http://localhost:3333');
+    expect(accepted?.authApiBaseUrl).toBe('http://localhost:3344');
   });
 
   it('文件缺失(读取返回 null)进同一条阻断链路', async () => {
@@ -206,7 +206,7 @@ describe('resolveClientEndpointsBlocking(阻断循环,清单即唯一事实源)'
 
 describe('getter / IPC', () => {
   it('init 之前 getClientEndpoint / getResolvedClientEndpoints 直接抛错(启动时序守卫)', () => {
-    expect(() => getClientEndpoint('apiBaseUrl')).toThrow(/not initialized/);
+    expect(() => getClientEndpoint('authApiBaseUrl')).toThrow(/not initialized/);
     expect(() => getResolvedClientEndpoints()).toThrow(/not initialized/);
   });
 

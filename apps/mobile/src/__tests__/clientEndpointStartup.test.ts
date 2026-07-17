@@ -46,8 +46,9 @@ describe('runStartupEndpointResolve(清单即唯一事实源)', () => {
     });
 
     expect(outcome).toEqual({ ok: true });
+    // apiBaseUrl 已退役:清单里的残留值(喂老客户端)不再回填,保持 env 初值
+    expect(env.API_BASE_URL).toBe('https://api.example.invalid');
     // 跨模块 live binding:本模块持有的 env 命名空间看到重赋值后的新值
-    expect(env.API_BASE_URL).toBe('https://api-next.example.com');
     expect(env.AUTH_API_BASE_URL).toBe('https://auth-next.example.com'); // 单一字段无脑取
     expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay-next.example.com');
     // 语音网关地址与清单解耦(xdGatewayBaseUrl 已退役):保持构建期 env 值不动
@@ -172,7 +173,7 @@ describe('runStartupEndpointResolve(清单即唯一事实源)', () => {
     await expect(
       startup.runStartupEndpointResolve({ fetchManifestText }),
     ).resolves.toEqual({ ok: true });
-    expect(env.API_BASE_URL).toBe('https://api-next.example.com');
+    expect(env.AUTH_API_BASE_URL).toBe('https://auth-next.example.com');
   });
 });
 
@@ -192,21 +193,6 @@ describe('isReviewModeActive(送审版本号匹配纯函数)', () => {
 });
 
 describe('applyResolvedClientEndpoints', () => {
-  it('device-link 未显式给出时按新 apiBase 走 localRelay 派生链', async () => {
-    vi.resetModules();
-    // 本用例需要"构建 env 未显式配置 device-link"的前提,清掉 vitest 注入的显式值
-    const originalRelay = process.env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL;
-    delete process.env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL;
-    try {
-      const env = await import('@/config/env');
-      env.applyResolvedClientEndpoints({ apiBaseUrl: 'http://192.168.1.2:3333' });
-      expect(env.API_BASE_URL).toBe('http://192.168.1.2:3333');
-      expect(env.DEVICE_LINK_API_BASE_URL).toBe('http://192.168.1.2:3335');
-    } finally {
-      process.env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL = originalRelay;
-    }
-  });
-
   it('auth 单一字段无脑取,空值忽略', async () => {
     const { env } = await freshModules();
     env.applyResolvedClientEndpoints({ authApiBaseUrl: 'https://auth-new.example.com' });

@@ -22,7 +22,6 @@ export const TEST_XD_GATEWAY_BASE_URL = 'https://gateway.test.invalid';
 export const TEST_CDN_BASE_URL = 'https://cdn.test.invalid/app';
 
 export const TEST_CLIENT_ENDPOINTS: ClientEndpointMap = {
-  apiBaseUrl: 'https://api.test.invalid',
   authApiBaseUrl: 'https://auth.test.invalid',
   deviceLinkApiBaseUrl: 'https://device.test.invalid',
   oauthBrokerApiBaseUrl: 'https://oauth.test.invalid',

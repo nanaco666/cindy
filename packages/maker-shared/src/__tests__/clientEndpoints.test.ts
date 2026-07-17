@@ -26,11 +26,11 @@ const VALID_MANIFEST = {
 describe('parseClientEndpointManifest(全字段必填)', () => {
   it('接受合法全量清单并归一尾斜杠', () => {
     const result = parseClientEndpointManifest(
-      JSON.stringify({ ...VALID_MANIFEST, apiBaseUrl: 'https://api.example.com///' }),
+      JSON.stringify({ ...VALID_MANIFEST, authApiBaseUrl: 'https://auth.example.com///' }),
     );
     expect(result).toMatchObject({ ok: true });
     if (!result.ok) throw new Error('unreachable');
-    expect(result.endpoints.apiBaseUrl).toBe('https://api.example.com');
+    expect(result.endpoints.authApiBaseUrl).toBe('https://auth.example.com');
     expect(result.endpoints.slackHookWsUrl).toBe('wss://slack-hook.example.com');
     expect(Object.keys(result.endpoints).sort()).toEqual([...CLIENT_ENDPOINT_KEYS].sort());
   });
@@ -82,7 +82,7 @@ describe('parseClientEndpointManifest(全字段必填)', () => {
   });
 
   it.each([
-    ['https 字段给 http', { apiBaseUrl: 'http://api.example.com' }, 'invalid-protocol:apiBaseUrl'],
+    ['https 字段给 http', { authApiBaseUrl: 'http://auth.example.com' }, 'invalid-protocol:authApiBaseUrl'],
     ['wss 字段给 ws', { slackHookWsUrl: 'ws://hook.example.com' }, 'invalid-protocol:slackHookWsUrl'],
     ['cdnBaseUrl 给 http', { cdnBaseUrl: 'http://cdn.example.com' }, 'invalid-protocol:cdnBaseUrl'],
     ['非 URL', { websiteUrl: 'not a url' }, 'invalid-field:websiteUrl'],
@@ -90,8 +90,8 @@ describe('parseClientEndpointManifest(全字段必填)', () => {
     ['非字符串', { websiteUrl: 42 }, 'invalid-field:websiteUrl'],
     [
       'URL 带凭据',
-      { apiBaseUrl: 'https://user:pass@api.example.com' },
-      'credentials-in-url:apiBaseUrl',
+      { authApiBaseUrl: 'https://user:pass@auth.example.com' },
+      'credentials-in-url:authApiBaseUrl',
     ],
   ])('单字段非法整份拒绝:%s', (_label, patch, reason) => {
     const raw = JSON.stringify({ ...VALID_MANIFEST, ...patch });
@@ -132,7 +132,7 @@ describe('parseClientEndpointManifest(全字段必填)', () => {
     });
   });
 
-  it('忽略已退役字段 cdnInternalBaseUrl / xdGatewayBaseUrl(老清单向前兼容)', () => {
+  it('忽略已退役字段 apiBaseUrl / cdnInternalBaseUrl / xdGatewayBaseUrl(老清单向前兼容)', () => {
     const result = parseClientEndpointManifest(
       JSON.stringify({
         ...VALID_MANIFEST,
@@ -142,6 +142,7 @@ describe('parseClientEndpointManifest(全字段必填)', () => {
     );
     expect(result).toMatchObject({ ok: true });
     if (!result.ok) throw new Error('unreachable');
+    expect('apiBaseUrl' in result.endpoints).toBe(false);
     expect('cdnInternalBaseUrl' in result.endpoints).toBe(false);
     expect('xdGatewayBaseUrl' in result.endpoints).toBe(false);
   });
@@ -159,7 +160,7 @@ describe('allowHttp 宽松模式(仅 dev 本地文件路径)', () => {
   it('默认(不传 options)拒绝 http/ws——packaged 校验零放松', () => {
     expect(parseClientEndpointManifest(JSON.stringify(LOCAL_MANIFEST))).toEqual({
       ok: false,
-      reason: 'invalid-protocol:apiBaseUrl',
+      reason: 'invalid-protocol:authApiBaseUrl',
     });
   });
 
@@ -169,7 +170,7 @@ describe('allowHttp 宽松模式(仅 dev 本地文件路径)', () => {
     });
     expect(result).toMatchObject({ ok: true });
     if (!result.ok) throw new Error('unreachable');
-    expect(result.endpoints.apiBaseUrl).toBe('http://localhost:3333');
+    expect(result.endpoints.authApiBaseUrl).toBe('http://localhost:3344');
     expect(result.endpoints.slackHookWsUrl).toBe('ws://localhost:3346');
   });
 
@@ -186,19 +187,19 @@ describe('allowHttp 宽松模式(仅 dev 本地文件路径)', () => {
     });
     expect(
       parseClientEndpointManifest(
-        JSON.stringify({ ...LOCAL_MANIFEST, apiBaseUrl: 'http://user:pass@localhost:3333' }),
+        JSON.stringify({ ...LOCAL_MANIFEST, authApiBaseUrl: 'http://user:pass@localhost:3344' }),
         { allowHttp: true },
       ),
-    ).toEqual({ ok: false, reason: 'credentials-in-url:apiBaseUrl' });
+    ).toEqual({ ok: false, reason: 'credentials-in-url:authApiBaseUrl' });
   });
 
   it('allowHttp:true 仍拒绝非 http/https 协议(如 file:)', () => {
     expect(
       parseClientEndpointManifest(
-        JSON.stringify({ ...LOCAL_MANIFEST, apiBaseUrl: 'file:///etc/hosts' }),
+        JSON.stringify({ ...LOCAL_MANIFEST, authApiBaseUrl: 'file:///etc/hosts' }),
         { allowHttp: true },
       ),
-    ).toEqual({ ok: false, reason: 'invalid-protocol:apiBaseUrl' });
+    ).toEqual({ ok: false, reason: 'invalid-protocol:authApiBaseUrl' });
   });
 
   it('resolveClientEndpointsStrict 透传 options', () => {

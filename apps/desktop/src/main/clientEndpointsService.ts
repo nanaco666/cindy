@@ -237,10 +237,10 @@ export async function initClientEndpoints(): Promise<boolean> {
   if (endpoints === null) return false; // 用户选择退出,app.exit 已调用
   resolvedEndpoints = endpoints;
   log.info(
-    'resolved from %s (%s): api=%s cdn=%s',
+    'resolved from %s (%s): auth=%s cdn=%s',
     source.kind === 'cdn' ? 'remote manifest' : 'local manifest file',
     sourceLabel,
-    endpoints.apiBaseUrl,
+    endpoints.authApiBaseUrl,
     endpoints.cdnBaseUrl,
   );
   return true;

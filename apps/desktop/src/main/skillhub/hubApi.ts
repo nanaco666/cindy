@@ -11,7 +11,7 @@ import { getClientEndpoint } from '../clientEndpointsService';
 
 export function skillhubApiFetch<T>(
   apiPath: string,
-  opts: ApiFetchOptions = {},
+  opts: Omit<ApiFetchOptions, 'baseUrl'> = {},
 ): Promise<T> {
   return serverApiFetch<T>(apiPath, {
     ...opts,

@@ -36,8 +36,9 @@ const DEV_MANIFEST_PARSED = (() => {
 const DEV_MANIFEST: Partial<Record<string, string>> = DEV_MANIFEST_PARSED?.endpoints ?? {};
 
 // 显式 env 优先,dev 回落仓内正本;prod 为空串(闸门回填,见上)。
+// apiBaseUrl 已退役出清单 parser(不再产出该键),本默认值只剩 env 覆写语义。
 export const DEFAULT_API_BASE_URL =
-  configuredValue('EXPO_PUBLIC_XDT_API_BASE_URL') || DEV_MANIFEST.apiBaseUrl || '';
+  configuredValue('EXPO_PUBLIC_XDT_API_BASE_URL') || '';
 export const DEFAULT_DEVICE_LINK_API_BASE_URL =
   configuredValue('EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL') ||
   DEV_MANIFEST.deviceLinkApiBaseUrl ||
@@ -136,6 +137,9 @@ function isHttpUrl(value: string): boolean {
 // 新值(消费点全部是调用时读取,无模块顶层捕获——新增顶层派生前先想清楚)。
 // 初始值即构建期烘焙值;__DEV__ 下闸门不拉取,行为与现状完全一致。
 
+// apiBaseUrl(老主 server)已于 2026-07-18 从端点清单退役,本值不再被启动闸门
+// 回填,只剩 env/dev 语义:「手机连本地 server」工作流的显式覆写入口 +
+// dev relay 3333→3335 派生输入 + 设置页调试展示。业务请求一律显式 baseUrl。
 export let API_BASE_URL = normalizeBaseUrl(
   configuredValue('EXPO_PUBLIC_XDT_API_BASE_URL'),
 );
@@ -214,30 +218,20 @@ export const ENDPOINT_MANIFEST_BASE_URL = configuredValue(
 /**
  * 启动闸门拉到远程端点清单后回写运行期端点(仅覆盖清单中出现的字段;
  * 空值忽略,烘焙值兜底)。auth 字段不分 region——国内/海外两条 CDN 各发
- * 各的清单,无脑取;派生端点同步重算:device-link 未显式给出时按新 apiBase
- * 走 localRelay 派生链。
+ * 各的清单,无脑取。deviceLinkApiBaseUrl 是清单必填字段,恒被覆写。
  */
 export function applyResolvedClientEndpoints(resolved: {
-  apiBaseUrl?: string;
   authApiBaseUrl?: string;
   deviceLinkApiBaseUrl?: string;
   mobileUpdateBaseUrl?: string;
   /** 审核模式送审版本号(parser 产出,null = 清单未填;undefined = 不改动)。 */
   reviewVersion?: string | null;
 }): void {
-  if (resolved.apiBaseUrl) {
-    API_BASE_URL = normalizeBaseUrl(resolved.apiBaseUrl);
-  }
   if (resolved.authApiBaseUrl) {
     AUTH_API_BASE_URL = normalizeBaseUrlWithDefault(resolved.authApiBaseUrl, AUTH_API_BASE_URL);
   }
   if (resolved.deviceLinkApiBaseUrl) {
     DEVICE_LINK_API_BASE_URL = resolved.deviceLinkApiBaseUrl.replace(/\/$/, '');
-  } else if (resolved.apiBaseUrl) {
-    DEVICE_LINK_API_BASE_URL = resolveDeviceLinkApiBaseUrl(
-      configuredValue('EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL'),
-      API_BASE_URL,
-    );
   }
   // 仅自建变体吃清单覆写,保住「非自建 ⇒ OTA_SERVER_BASE_URL 恒空串」不变量
   // (调用点虽都有 IS_OTA_SELFHOST 门控,这里再挡一层,变体身份始终由烧包决定)。

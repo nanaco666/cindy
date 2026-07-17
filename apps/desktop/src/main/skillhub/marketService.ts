@@ -6,7 +6,7 @@ import { buildSkillhubSyncResponse, type SkillhubBatchDetailResponse } from './s
 const SKILLHUB_SYNC_BATCH_SIZE = 100;
 const HUB_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,127}$/;
 
-export type SkillhubMarketFetcher = <T>(apiPath: string, opts?: ApiFetchOptions) => Promise<T>;
+export type SkillhubMarketFetcher = <T>(apiPath: string, opts?: Omit<ApiFetchOptions, 'baseUrl'>) => Promise<T>;
 
 interface SkillhubInstalledSkillForHub {
   slug: string;

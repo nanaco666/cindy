@@ -43,7 +43,8 @@ test('localhost 七件套覆写,其余字段照抄 cn 正本,返回绝对路径'
   const target = generateEndpointLocalFile({ repoRoot });
   assert.equal(target, path.join(repoRoot, 'config', 'endpoint.local.json'));
   const local = JSON.parse(fs.readFileSync(target, 'utf8'));
-  assert.equal(local.apiBaseUrl, 'http://localhost:3333');
+  // apiBaseUrl 已退役:不再 localhost 覆写,正本残留值原样透传(喂老 parser)
+  assert.equal(local.apiBaseUrl, 'https://api.example.invalid');
   assert.equal(local.authApiBaseUrl, 'http://localhost:3344');
   assert.equal(local.deviceLinkApiBaseUrl, 'http://localhost:3335');
   assert.equal(local.ossApiBaseUrl, 'http://localhost:3340');
@@ -59,10 +60,10 @@ test('幂等:重复生成整文件重写,手改会丢', () => {
   const repoRoot = makeRepoRoot(CN_MANIFEST);
   const target = generateEndpointLocalFile({ repoRoot });
   const manual = JSON.parse(fs.readFileSync(target, 'utf8'));
-  manual.apiBaseUrl = 'http://localhost:9999';
+  manual.authApiBaseUrl = 'http://localhost:9999';
   fs.writeFileSync(target, JSON.stringify(manual));
   generateEndpointLocalFile({ repoRoot });
-  assert.equal(JSON.parse(fs.readFileSync(target, 'utf8')).apiBaseUrl, 'http://localhost:3333');
+  assert.equal(JSON.parse(fs.readFileSync(target, 'utf8')).authApiBaseUrl, 'http://localhost:3344');
 });
 
 test('cn 正本缺失 / 非法直接抛错(fail closed,不造半截配置)', () => {
@@ -76,7 +77,6 @@ test('生成物能过客户端 parser 的 allowHttp 校验(与仓内正本同一
   const repoRoot = makeRepoRoot(CN_MANIFEST);
   const local = JSON.parse(fs.readFileSync(generateEndpointLocalFile({ repoRoot }), 'utf8'));
   const requiredKeys = [
-    'apiBaseUrl',
     'authApiBaseUrl',
     'deviceLinkApiBaseUrl',
     'oauthBrokerApiBaseUrl',
