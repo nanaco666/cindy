@@ -105,10 +105,23 @@ export class CindyAuthClient {
   }
 
   /** 企业 SSO 入口：企业 ID（组织 slug）→ 该组织已启用的 SSO 连接。 */
-  discoverSsoOrg(org: string): Promise<SsoOrgDiscovery> {
-    return this.request("/api/auth/sso/discovery", ssoOrgDiscoverySchema, {
-      org,
-    });
+  async discoverSsoOrg(org: string): Promise<SsoOrgDiscovery> {
+    const discovery = await this.request(
+      "/api/auth/sso/discovery",
+      ssoOrgDiscoverySchema,
+      { org },
+    );
+    // 企业存在但未启用任何 SSO 连接（服务端可能以 200 + connections:[] 表达）：
+    // 映射成精确的 ORG_SSO_NOT_FOUND（其文案已覆盖「未启用 SSO」语义），
+    // 避免落到 INVALID_RESPONSE 的通用错误，也拦住空 methods 进入 method-choice。
+    if (discovery.connections.length === 0) {
+      throw new AuthApiError(
+        "ORG_SSO_NOT_FOUND",
+        200,
+        "Enterprise exists but has no SSO connection enabled",
+      );
+    }
+    return discovery;
   }
 
   async requestCode(kind: VerificationKind, identifier: string): Promise<void> {

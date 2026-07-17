@@ -140,12 +140,12 @@ describe("CindyAuthClient", () => {
     ]);
   });
 
-  it("rejects an empty SSO discovery result as an invalid response", async () => {
+  it("maps an empty SSO connection list to the precise ORG_SSO_NOT_FOUND error", async () => {
     const fetch = vi.fn(async () =>
       response(200, { orgName: "Empty Corp", connections: [] }),
     );
     await expect(client(fetch).discoverSsoOrg("empty-corp")).rejects.toMatchObject(
-      { code: "INVALID_RESPONSE" },
+      { code: "ORG_SSO_NOT_FOUND" },
     );
   });
 
