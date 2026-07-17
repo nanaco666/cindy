@@ -48,6 +48,9 @@ export function LoginPage() {
   const isMac = window.electronAPI?.platform === 'darwin';
   const [identifierKind, setIdentifierKind] = useState<VerificationKind>('email');
   const [identifier, setIdentifier] = useState('');
+  // 企业 SSO 入口子视图：在 identifier 步骤内输入企业 ID（本地展示态，不进 main）
+  const [ssoOrgMode, setSsoOrgMode] = useState(false);
+  const [ssoOrg, setSsoOrg] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [bindingContact, setBindingContact] = useState('');
   const [bindingCode, setBindingCode] = useState('');
@@ -55,6 +58,7 @@ export function LoginPage() {
   useEffect(() => {
     if (loginState?.step !== 'identifier') return;
     setIdentifierKind(loginState.providers.attribution);
+    setSsoOrgMode(false);
     setVerificationCode('');
     setBindingContact('');
     setBindingCode('');
@@ -86,10 +90,55 @@ export function LoginPage() {
     }
   };
 
+  const submitSsoOrg = (event: FormEvent) => {
+    event.preventDefault();
+    const value = ssoOrg.trim();
+    if (!value) return;
+    void dispatch({ type: 'discover-sso-org', org: value });
+  };
+
   const renderIdentifier = () => {
     if (!loginState || loginState.step !== 'identifier') return null;
     const providers = loginState.providers;
     const showTabs = providers.email && providers.phone;
+    if (ssoOrgMode) {
+      return (
+        <>
+          <BackButton
+            disabled={isLoading}
+            onClick={() => {
+              clearError();
+              setSsoOrgMode(false);
+            }}
+            label={t('login.back')}
+          />
+          <Header title={t('login.ssoOrgTitle')} subtitle={t('login.ssoOrgSubtitle')} />
+          <form className="w-full space-y-3" onSubmit={submitSsoOrg}>
+            <input
+              autoFocus
+              required
+              disabled={isLoading}
+              maxLength={64}
+              autoComplete="off"
+              value={ssoOrg}
+              onChange={(event) => setSsoOrg(event.target.value)}
+              placeholder={t('login.ssoOrgPlaceholder')}
+              className={inputClass}
+            />
+            <button
+              className={primaryButtonClass}
+              disabled={isLoading || !ssoOrg.trim()}
+              type="submit"
+            >
+              {isLoading ? <BusyLabel>{t('login.working')}</BusyLabel> : t('login.continue')}
+            </button>
+          </form>
+          <p className="mt-4 text-center text-[13px] leading-5 text-[var(--text-secondary)]">
+            {t('login.ssoOrgHint')}
+          </p>
+        </>
+      );
+    }
     return (
       <>
         <Header title={t('login.title')} subtitle={t('login.subtitle')} />
@@ -169,6 +218,23 @@ export function LoginPage() {
             </div>
           </>
         )}
+
+        {/* 企业 SSO 入口：输入企业 ID 发起单点登录（国内版隐藏邮箱后企业用户的登录路径） */}
+        <button
+          type="button"
+          disabled={isLoading}
+          onClick={() => {
+            clearError();
+            setSsoOrgMode(true);
+          }}
+          className={cn(
+            'mt-5 w-full text-center text-[13px] text-[var(--text-secondary)]',
+            'transition-colors hover:text-[var(--text-primary)]',
+            'disabled:cursor-not-allowed disabled:opacity-60',
+          )}
+        >
+          {t('login.ssoEntry')}
+        </button>
       </>
     );
   };
@@ -188,7 +254,10 @@ export function LoginPage() {
           title={t('login.chooseMethod')}
           subtitle={
             orgName
-              ? t('login.orgDetected', { email: loginState.email, org: orgName })
+              ? loginState.email
+                ? t('login.orgDetected', { email: loginState.email, org: orgName })
+                : // 企业 SSO 入口路径没有邮箱上下文，只提示命中的企业
+                  t('login.ssoOrgDetected', { org: orgName })
               : loginState.email
           }
         />

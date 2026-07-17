@@ -44,6 +44,9 @@ export default function LoginScreen() {
   const [identifierKind, setIdentifierKind] =
     useState<VerificationKind>('email');
   const [identifier, setIdentifier] = useState('');
+  // 企业 SSO 入口子视图：在 identifier 步骤内输入企业 ID（本地展示态）
+  const [ssoOrgMode, setSsoOrgMode] = useState(false);
+  const [ssoOrg, setSsoOrg] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [bindingContact, setBindingContact] = useState('');
   const [bindingCode, setBindingCode] = useState('');
@@ -64,6 +67,7 @@ export default function LoginScreen() {
   useEffect(() => {
     if (auth.loginState?.step !== 'identifier') return;
     setIdentifierKind(auth.loginState.providers.attribution);
+    setSsoOrgMode(false);
     setVerificationCode('');
     setBindingContact('');
     setBindingCode('');
@@ -87,6 +91,55 @@ export default function LoginScreen() {
       isNativeSocialProviderSupported,
     );
     const showTabs = providers.email && providers.phone;
+    if (ssoOrgMode) {
+      const submitSsoOrg = () => {
+        const value = ssoOrg.trim();
+        if (!value) return;
+        void auth.dispatchLoginAction({ type: 'discover-sso-org', org: value });
+      };
+      return (
+        <>
+          <BackButton
+            disabled={disabled}
+            onPress={() => {
+              auth.clearAuthError();
+              setSsoOrgMode(false);
+            }}
+          />
+          <StepHeader
+            title={loginText('ssoOrgTitle')}
+            subtitle={loginText('ssoOrgSubtitle')}
+          />
+          <TextInput
+            autoCapitalize="none"
+            autoComplete="off"
+            autoCorrect={false}
+            editable={!disabled}
+            maxLength={64}
+            onChangeText={setSsoOrg}
+            onSubmitEditing={submitSsoOrg}
+            placeholder={loginText('ssoOrgPlaceholder')}
+            placeholderTextColor={colors.textTertiary}
+            returnKeyType="go"
+            style={styles.input}
+            testID="login.ssoOrgInput"
+            value={ssoOrg}
+          />
+          <MainWindowActionButton
+            action={{
+              busy: auth.isBusy,
+              disabled: disabled || !ssoOrg.trim(),
+              label: loginText('continue'),
+              onPress: submitSsoOrg,
+              testID: 'login.ssoOrgContinueButton',
+              tone: 'primary',
+            }}
+            style={styles.fullButton}
+          />
+          <Text style={styles.helper}>{loginText('ssoOrgHint')}</Text>
+        </>
+      );
+    }
     const submit = () => {
       const value = identifier.trim();
       if (!value) return;
@@ -185,6 +238,20 @@ export default function LoginScreen() {
             ))}
           </>
         ) : null}
+        {/* 企业 SSO 入口：输入企业 ID 发起单点登录（国内版隐藏邮箱后企业用户的登录路径） */}
+        <MainWindowActionButton
+          action={{
+            disabled,
+            label: loginText('ssoEntry'),
+            onPress: () => {
+              auth.clearAuthError();
+              setSsoOrgMode(true);
+            },
+            testID: 'login.ssoEntryButton',
+          }}
+          density="compact"
+          style={styles.fullButton}
+        />
       </>
     );
   };
@@ -205,9 +272,12 @@ export default function LoginScreen() {
           title={loginText('chooseMethod')}
           subtitle={
             orgName
-              ? loginText('orgDetected')
-                  .replace('{org}', orgName)
-                  .replace('{email}', state.email)
+              ? state.email
+                ? loginText('orgDetected')
+                    .replace('{org}', orgName)
+                    .replace('{email}', state.email)
+                : // 企业 SSO 入口路径没有邮箱上下文，只提示命中的企业
+                  loginText('ssoOrgDetected').replace('{org}', orgName)
               : state.email
           }
         />

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CindyAuthClient,
   reduceAuthFlow,
+  ssoOrgDiscoveryToMethods,
   type AuthFetchResponse,
 } from "../index.js";
 
@@ -110,6 +111,41 @@ describe("CindyAuthClient", () => {
       client(fetch).verifyCode("email", "a@example.com", "000000"),
     ).rejects.toEqual(
       expect.objectContaining({ code: "INVALID_CODE", statusCode: 401 }),
+    );
+  });
+
+  it("discovers enterprise SSO connections by org id and maps to login methods", async () => {
+    const fetch = vi.fn(async () =>
+      response(200, {
+        orgName: "Disco Corp",
+        connections: [
+          { connectionId: "conn-1", protocol: "saml", connectionName: "Okta" },
+        ],
+      }),
+    );
+    const discovery = await client(fetch).discoverSsoOrg("disco-corp");
+    expect(fetch).toHaveBeenCalledWith(
+      "https://auth.example.com/api/auth/sso/discovery",
+      expect.objectContaining({ body: JSON.stringify({ org: "disco-corp" }) }),
+    );
+    expect(ssoOrgDiscoveryToMethods(discovery)).toEqual([
+      {
+        type: "sso",
+        connectionId: "conn-1",
+        protocol: "saml",
+        orgName: "Disco Corp",
+        connectionName: "Okta",
+        ssoRequired: false,
+      },
+    ]);
+  });
+
+  it("rejects an empty SSO discovery result as an invalid response", async () => {
+    const fetch = vi.fn(async () =>
+      response(200, { orgName: "Empty Corp", connections: [] }),
+    );
+    await expect(client(fetch).discoverSsoOrg("empty-corp")).rejects.toMatchObject(
+      { code: "INVALID_RESPONSE" },
     );
   });
 

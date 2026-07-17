@@ -5,6 +5,7 @@ export type DesktopLoginAction =
   | { type: 'reset' }
   | { type: 'cancel-browser' }
   | { type: 'discover'; email: string }
+  | { type: 'discover-sso-org'; org: string }
   | { type: 'request-code'; kind: VerificationKind; identifier: string }
   | { type: 'verify-code'; kind: VerificationKind; identifier: string; code: string }
   | {
@@ -24,6 +25,8 @@ export type DesktopLoginActionResult =
 const MAX_IDENTIFIER_LENGTH = 320;
 const MAX_OPAQUE_ID_LENGTH = 256;
 const MAX_CODE_LENGTH = 32;
+// 与 auth-server 的组织 slug 上限对齐（POST /api/auth/sso/discovery）
+const MAX_ORG_SLUG_LENGTH = 64;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -52,6 +55,10 @@ export function parseDesktopLoginAction(value: unknown): DesktopLoginAction | nu
     case 'discover':
       return isBoundedString(value.email, MAX_IDENTIFIER_LENGTH)
         ? { type: 'discover', email: value.email }
+        : null;
+    case 'discover-sso-org':
+      return isBoundedString(value.org, MAX_ORG_SLUG_LENGTH)
+        ? { type: 'discover-sso-org', org: value.org }
         : null;
     case 'request-code':
       return isVerificationKind(value.kind) &&

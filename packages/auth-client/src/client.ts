@@ -6,6 +6,7 @@ import {
   loginOutcomeSchema,
   meResponseSchema,
   providerConfigSchema,
+  ssoOrgDiscoverySchema,
   tokenPairSchema,
   type AuthClientType,
   type AuthMe,
@@ -15,6 +16,7 @@ import {
   type LoginOutcome,
   type ProviderConfig,
   type SocialProvider,
+  type SsoOrgDiscovery,
   type VerificationKind,
 } from "./types.js";
 
@@ -100,6 +102,13 @@ export class CindyAuthClient {
       { email },
     );
     return result.methods;
+  }
+
+  /** 企业 SSO 入口：企业 ID（组织 slug）→ 该组织已启用的 SSO 连接。 */
+  discoverSsoOrg(org: string): Promise<SsoOrgDiscovery> {
+    return this.request("/api/auth/sso/discovery", ssoOrgDiscoverySchema, {
+      org,
+    });
   }
 
   async requestCode(kind: VerificationKind, identifier: string): Promise<void> {
