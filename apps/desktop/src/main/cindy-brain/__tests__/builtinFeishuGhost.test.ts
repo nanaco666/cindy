@@ -106,7 +106,43 @@ describe('builtin xd-feishu ghost', () => {
     // PKCE 缺省开(飞书 broker exchange 吃 codeVerifier);refresh token 依赖
     // offline_access scope,漏了会被 server 按 502 打回。
     expect(secret?.oauth?.pkce).not.toBe(false);
-    expect(secret?.oauth?.scopes).toContain('offline_access');
+    // scope 全集 = 老客户端飞书登录链的申请串逐字搬入(276a55b3f~1
+    // authManager 的 authorize scope,生产验证过、控制台必然已开通)——
+    // 能力面与迁移前零差别的 parity 契约。改动它 = 改动新用户权限面,且
+    // 混入未开通 scope 会 20027 整页拒绝,必须有意为之。
+    expect(secret?.oauth?.scopes).toEqual([
+      'offline_access',
+      'docx:document',
+      'bitable:app',
+      'wiki:wiki',
+      'drive:drive',
+      'im:message',
+      'im:message.send_as_user',
+      'im:message:readonly',
+      'im:chat:readonly',
+      'im:resource',
+      'search:message',
+      'calendar:calendar',
+      'contact:contact.base:readonly',
+      'contact:user.email:readonly',
+      'contact:user.department:readonly',
+      'contact:user.department_path:readonly',
+      'contact:department.base:readonly',
+      'contact:user:search',
+      'minutes:minutes:readonly',
+      'minutes:minutes.artifacts:read',
+      'minutes:minutes.search:read',
+      'vc:meeting.meetingevent:read',
+      'vc:meeting.meetingid:read',
+      'vc:record:readonly',
+      'vc:reserve:readonly',
+      'task:task:read',
+      'task:tasklist:read',
+      'task:section:read',
+      'task:custom_field:read',
+      'task:comment:read',
+      'task:attachment:read',
+    ]);
     expect(v.manifest.tools?.map((t) => t.name)).toEqual(['list_tools', 'call_tool']);
   });
 
