@@ -400,6 +400,7 @@ import {
   registerAppShortcutIpc,
   subscribeAppShortcutRecording,
 } from './app-shortcuts/index.js';
+import { installNewMakerWindowShortcut } from './app-shortcuts/new-maker-window-shortcut.js';
 import { registerLayoutIpc } from './layout/index.js';
 import { registerGhostIpc } from './cindy-brain/index.js';
 import { findCindyFileInArgv } from './cindy-brain/argv.js';
@@ -1692,22 +1693,9 @@ const createWindow = () => {
     currentApplicationMenuLocale ?? getPreferredApplicationLocale(),
   );
 
-  // Windows / Linux: 没有 Mac 应用菜单, accelerator 不会被系统分发。
-  // 用 before-input-event 在主进程侧拦截 New Maker 快捷键, 与 Mac 的菜单项
-  // 走同一条 'new-maker' 命令通道, 双端体验一致。
-  // Mac 不挂这个监听 — 菜单 accelerator 已经覆盖, 避免重复触发。
-  // 组合键在 handler 内实时读 store, 用户改绑后无需重挂监听即时生效。
-  if (process.platform !== 'darwin') {
-    mainWindow.webContents.on('before-input-event', (event, input) => {
-      if (input.type !== 'keyDown') return;
-      // 设置页录制快捷键期间让路, 与 renderer 的录制态互斥保持一致。
-      if (isAppShortcutRecordingActive()) return;
-      const combos = getAppShortcutStore().getEffectiveCombos('new-maker');
-      if (!combos.some((c) => matchesElectronInput(input, c))) return;
-      event.preventDefault();
-      dispatchApplicationMenuCommand(mainWindow, 'new-maker');
-    });
-  }
+  // Windows / Linux 没有 Mac 应用菜单 accelerator。主窗口和会话副窗口都走
+  // 同一个窗口级安装器，命令发回实际接收按键的窗口；Mac 安装器会直接 no-op。
+  installNewMakerWindowShortcut(mainWindow);
 
   // Wire resize / move / maximize / fullscreen listeners that persist the
   // state to disk on `close`. Must run before any user resize event fires.
