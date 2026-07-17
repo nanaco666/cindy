@@ -553,7 +553,7 @@ export function SessionCard({
                     size={11}
                     strokeWidth={1.8}
                     connectionStatus={remoteIconConnectionStatus}
-                    className={isMuted ? 'text-[var(--text-disabled)]' : 'text-[var(--text-tertiary)]'}
+                    className={isActive ? 'text-sidebar-item-active-foreground' : isMuted ? 'text-[var(--text-disabled)]' : 'text-[var(--text-tertiary)]'}
                   />
                 )}
               </div>
@@ -566,6 +566,7 @@ export function SessionCard({
                 sessionId={session.id}
                 activityIso={activityIso}
                 isMuted={isMuted}
+                isActive={isActive}
                 isArchived={isArchived}
                 canQuickArchive={canQuickArchive}
                 archivePending={archivePending}
@@ -697,7 +698,7 @@ export function SessionCard({
               'min-w-0 text-[12.5px] font-bold leading-[1.22] tracking-[-0.005em]',
               '[display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden',
               'transition-[color] duration-500',
-              isMuted ? 'text-[var(--cmd-palette-item-meta)]' : 'text-foreground',
+              isActive ? 'text-sidebar-item-active-foreground' : isMuted ? 'text-[var(--cmd-palette-item-meta)]' : 'text-foreground',
             )}
             style={{ textIndent: 0, paddingLeft: 0 }}
           >
@@ -732,7 +733,7 @@ export function SessionCard({
             'mt-[6px] flex items-center gap-1.5',
             'text-11 font-medium leading-none tabular-nums',
             'transition-[color] duration-500',
-            isMuted ? 'text-[var(--text-disabled)]' : 'text-[var(--text-tertiary)]',
+            isActive ? 'text-sidebar-item-active-foreground' : isMuted ? 'text-[var(--text-disabled)]' : 'text-[var(--text-tertiary)]',
           )}
         >
           <SessionStatusIcon
@@ -750,7 +751,7 @@ export function SessionCard({
               size={11}
               strokeWidth={1.8}
               connectionStatus={remoteIconConnectionStatus}
-              className={isMuted ? 'text-[var(--text-disabled)]' : 'text-[var(--text-tertiary)]'}
+              className={isActive ? 'text-sidebar-item-active-foreground' : isMuted ? 'text-[var(--text-disabled)]' : 'text-[var(--text-tertiary)]'}
             />
           )}
           <WorktreeBadge sessionId={session.id} size={11} className="size-3.5" />
@@ -895,6 +896,7 @@ function TimeActionsSlot({
   sessionId,
   activityIso,
   isMuted,
+  isActive,
   isArchived,
   canQuickArchive,
   canUnarchive,
@@ -909,6 +911,7 @@ function TimeActionsSlot({
   sessionId: string;
   activityIso: string;
   isMuted: boolean;
+  isActive: boolean;
   isArchived: boolean;
   canQuickArchive: boolean;
   canUnarchive: boolean;
@@ -938,7 +941,7 @@ function TimeActionsSlot({
           title={formatSidebarTimeAbsolute(activityIso)}
           className={cn(
             'text-[10.5px] font-medium leading-none tabular-nums',
-            isMuted ? 'text-[var(--text-disabled)]' : 'text-[var(--text-tertiary)]',
+            isActive ? 'text-sidebar-item-active-foreground' : isMuted ? 'text-[var(--text-disabled)]' : 'text-[var(--text-tertiary)]',
           )}
         >
           {formatSidebarTime(activityIso, t)}

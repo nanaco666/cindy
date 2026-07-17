@@ -70,4 +70,12 @@ describe('SessionCard review regressions', () => {
     expect(sessionCardSource).toContain("'rounded-xl bg-[var(--surface-elevated)] border'");
     expect(sessionCardSource).not.toContain("'h-full rounded-xl bg-[var(--surface-elevated)] border'");
   });
+
+  it('E1D 任务C: SessionCard active 反白链收全(title/time/RemoteProjectIcon 全切 sidebar-item-active-foreground)', () => {
+    // 阿梅 SIDEBAR-R 打回:SessionCard 漏网(title 700 + RemoteProjectIcon 556/735/753/941)未切反白,现收全
+    const re = /isActive \? 'text-sidebar-item-active-foreground'/g;
+    const count = (sessionCardSource.match(re) || []).length;
+    expect(count, 'isActive conditional active-foreground ≥7(title×2+time+RemoteProjectIcon×4)').toBeGreaterThanOrEqual(7);
+    expect(sessionCardSource).toContain("isActive ? 'text-sidebar-item-active-foreground' : isMuted ? 'text-[var(--text-disabled)]' : 'text-[var(--text-tertiary)]'");
+  });
 });
