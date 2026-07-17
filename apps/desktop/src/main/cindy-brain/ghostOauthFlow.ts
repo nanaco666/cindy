@@ -631,6 +631,11 @@ async function runGhostOauthFlow(
       logger?.info('ghost oauth 授权完成(broker)', {
         slug: config.tokenBroker,
         hasRefreshToken: brokered.bundle.refreshToken !== null,
+        // scope 名单非敏感(不含令牌字节)。飞书权限累积语义下,老用户(v1
+        // 登录时代授过全量)首连时这里回显的就是应用已开通用户权限全集——
+        // 用于校准 ghost.json 的 scopes 声明(声明不全会让新用户缺权限,
+        // 声明未开通的会 20027 整页拒绝,两头都靠这个回显对账)。
+        grantedScope: brokered.bundle.grantedScope,
       });
       return { ok: true, bundle: brokered.bundle };
     }
