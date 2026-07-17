@@ -28,6 +28,10 @@ vi.mock('../../authManager', () => ({
   getCurrentUserId: vi.fn(),
 }));
 
+vi.mock('../../clientEndpointsService', () => ({
+  getClientEndpoint: vi.fn(() => 'https://skillhub.test.invalid'),
+}));
+
 vi.mock('../../serverApiClient', () => ({
   serverApiFetch: vi.fn(),
 }));

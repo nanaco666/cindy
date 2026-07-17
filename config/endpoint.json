@@ -10,6 +10,7 @@
   "websiteUrl": "https://cindy.com.cn",
   "modelAccessApiBaseUrl": "https://model-access.cindy.com.cn",
   "githubApiBaseUrl": "https://github.cindy.com.cn",
+  "skillhubApiBaseUrl": "https://xdskillhub.cindy.com.cn",
   "cdnBaseUrl": "https://hotfix.cindy.com.cn/cindy",
   "mobileUpdateBaseUrl": "https://mobile-update.cindy.com.cn",
   "review": "0.0.1"

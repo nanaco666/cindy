@@ -30,6 +30,7 @@ const FULL_MANIFEST_OBJECT = {
   websiteUrl: 'https://www.next.example.com',
   modelAccessApiBaseUrl: 'https://model-access-next.example.com',
   githubApiBaseUrl: 'https://github-api-next.example.com',
+  skillhubApiBaseUrl: 'https://skillhub-next.example.com',
   cdnBaseUrl: 'https://cdn-next.example.com/app',
   mobileUpdateBaseUrl: 'https://mobile-update-next.example.com',
 };

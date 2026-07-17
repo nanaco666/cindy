@@ -32,6 +32,7 @@ export const TEST_CLIENT_ENDPOINTS: ClientEndpointMap = {
   websiteUrl: 'https://website.test.invalid',
   modelAccessApiBaseUrl: 'https://model-access.test.invalid',
   githubApiBaseUrl: 'https://github-api.test.invalid',
+  skillhubApiBaseUrl: 'https://skillhub.test.invalid',
   cdnBaseUrl: TEST_CDN_BASE_URL,
   mobileUpdateBaseUrl: 'https://mobile-update.test.invalid',
 };

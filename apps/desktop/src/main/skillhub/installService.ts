@@ -27,7 +27,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { app, net } from 'electron';
 import JSZip from 'jszip';
-import { serverApiFetch } from '../serverApiClient';
+import { skillhubApiFetch } from './hubApi';
 import { getCurrentUserId } from '../authManager';
 import { registryService } from './registry';
 import type { StoredInstall } from './registry/types';
@@ -335,13 +335,13 @@ export async function install(
     try {
       // 如果没传版本号，先查 hub 拿最新版本
       if (!downloadVersion) {
-        const detail = await serverApiFetch<{ version: string }>(
+        const detail = await skillhubApiFetch<{ version: string }>(
           `/api/skills-hub/skills/${encodeURIComponent(p.name)}`,
         );
         downloadVersion = detail.version;
       }
       const versionQs = downloadVersion ? `?version=${encodeURIComponent(downloadVersion)}` : '';
-      info = await serverApiFetch<DownloadInfoResponse>(
+      info = await skillhubApiFetch<DownloadInfoResponse>(
         `/api/skills-hub/skills/${encodeURIComponent(p.name)}/download${versionQs}`,
       );
     } catch (err) {
@@ -514,7 +514,7 @@ export async function install(
     // 否则存 slug（不会与 currentUserId 匹配 → 正确识别为 foreign）。
     let authorId = '';
     try {
-      const resp = await serverApiFetch<{
+      const resp = await skillhubApiFetch<{
         items: Array<{ slug: string; owner: { slug: string }; isMine: boolean }>;
         availableCount?: number;
       }>('/api/skills-hub/skills/batch-detail', {

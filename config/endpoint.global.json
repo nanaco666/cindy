@@ -11,6 +11,7 @@
   "websiteUrl": "https://cindy.com.cn",
   "modelAccessApiBaseUrl": "https://xdmaker-model-access.magiclizi.com",
   "githubApiBaseUrl": "https://github.cindy.com.cn",
+  "skillhubApiBaseUrl": "https://xdskillhub.cindy.com.cn",
   "cdnBaseUrl": "https://dev-cdn.fp.xd.com/xdt-maker",
   "mobileUpdateBaseUrl": "https://mobile-update.cindy.com.cn",
   "review": ""

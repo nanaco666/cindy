@@ -1,4 +1,5 @@
-import { ServerApiError, serverApiFetch, type ApiFetchOptions } from '../serverApiClient';
+import { ServerApiError, type ApiFetchOptions } from '../serverApiClient';
+import { skillhubApiFetch } from './hubApi';
 import { mapHubSkillInfoToDesktopInfo, type HubSkillInfoForDesktop } from './infoMapping';
 import { buildSkillhubSyncResponse, type SkillhubBatchDetailResponse } from './syncMapping';
 
@@ -54,7 +55,7 @@ export class SkillhubMarketService {
   private readonly fetch: SkillhubMarketFetcher;
 
   constructor(options: SkillhubMarketServiceOptions = {}) {
-    this.fetch = options.fetch ?? serverApiFetch;
+    this.fetch = options.fetch ?? skillhubApiFetch;
   }
 
   async sync(params: { slugs?: string[] } | undefined) {
