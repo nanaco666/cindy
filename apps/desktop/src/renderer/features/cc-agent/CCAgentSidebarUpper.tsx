@@ -90,6 +90,10 @@ import {
   pinnedSessionIdsInDisplayOrder,
   type ProjectNode,
 } from './lib/projectGrouping';
+import {
+  projectBulkArchiveActionForStatus,
+  selectProjectBulkArchiveCandidates,
+} from './lib/projectBulkArchiveAction';
 import { sessionActivityMs } from './lib/dateSessionGrouping';
 import { sortProjectsForSidebar, sortSessionsForSidebar } from './lib/sidebarProjectSorting';
 import { isOrcaWorkerSession, resolveSessionRoute } from '@/lib/orcaSessionIdentity';
@@ -1858,9 +1862,10 @@ function ExpandedView({
     t,
   ]);
 
-  /* ---- Archived All：右键 Project cell → 一次性归档该 project 下所有非执行中的 active session ----
-   * 与单条 archive 共用相同副作用：close SDK query / purge in-memory / clear composer draft，
-   * 但这里只 await 后端写入，所有 local cleanup 同步走完再统一 refresh。
+  /* ---- Project 批量归档动作 ----
+   * active / all 筛选：归档该 project 下所有可归档的 active session；
+   * archived 筛选：恢复该 project 下所有 archived session。
+   * 两个方向都逐条写入，单条失败不会阻断其余会话，最后统一 refresh。
    */
   const handleArchiveAllInProject = useCallback(
     async (project: ProjectNode) => {
@@ -1869,8 +1874,9 @@ function ExpandedView({
         return;
       }
       const targetProjectKey = project.projectKey;
-      const inProject = (s: Session): boolean =>
-        projectIdentityKeyForSession(s) === targetProjectKey && s.status === 'active';
+      const action = projectBulkArchiveActionForStatus(filter.status);
+      const belongsToProject = (session: Session): boolean =>
+        projectIdentityKeyForSession(session) === targetProjectKey;
 
       // 只对**本地** sessions 归档:device-link 远程会话的运行态不在本渲染进程(runningSessionIds 是
       // 本地 makerChatStore 的),无法像本地那样把「正在运行」的排除掉 —— 批量归档时可能把被控端正在
@@ -1878,13 +1884,62 @@ function ExpandedView({
       // 要安全支持远程批量归档需被控端侧的「运行态感知批量归档」命令,留作 follow-up。
       // pinned 是用户主动表达 "留住这个会话"，archive all 必须排除（跟 running 是两个独立维度）。
       // 既 pinned 又 running 的：归到 pinned 那类（用户意图明确，running 只是临时状态）。
-      const candidates = sessions.filter(
-        (s) => inProject(s) && !runningSessionIds.has(s.id) && !s.pinnedAt,
+      const { candidates, skippedPinned, skippedRunning } = selectProjectBulkArchiveCandidates(
+        sessions,
+        action,
+        runningSessionIds,
+        belongsToProject,
       );
-      const skippedPinned = sessions.filter((s) => inProject(s) && !!s.pinnedAt).length;
-      const skippedRunning = sessions.filter(
-        (s) => inProject(s) && runningSessionIds.has(s.id) && !s.pinnedAt,
-      ).length;
+
+      if (action === 'unarchive') {
+        if (candidates.length === 0) {
+          toast.warning(t('ccAgent.sidebar.unarchiveAll.empty'));
+          return;
+        }
+
+        const ok = await confirmDialog({
+          title: t('ccAgent.sidebar.unarchiveAll.title'),
+          description: t('ccAgent.sidebar.unarchiveAll.description', { count: candidates.length }),
+          confirmText: t('ccAgent.sidebar.unarchiveAll.confirm'),
+          cancelText: t('ccAgent.sidebar.unarchiveAll.cancel'),
+        });
+        if (!ok) return;
+
+        const failed: string[] = [];
+        for (const session of candidates) {
+          try {
+            // 确认框是异步边界：由持久层在单条 UPDATE 中同时校验 archived 状态和
+            // 原项目身份，避免 get + update 在两次异步调用之间仍可被并发写穿。
+            const restored = await sessionService.restoreIfArchived(session.id, session);
+            if (!restored) {
+              failed.push(session.id);
+              continue;
+            }
+            patchLocal(restored.id, { status: 'active' });
+          } catch (err) {
+            log.error('[unarchive all]', err);
+            failed.push(session.id);
+          }
+        }
+
+        const succeededCount = candidates.length - failed.length;
+        await refreshSessions();
+        // 批量恢复跨 archived → active 桶，强制刷新其余缓存桶，确保 active / all
+        // 视图切换后立即看到恢复结果。
+        emitRefresh();
+
+        if (failed.length === 0) {
+          toast.success(t('ccAgent.sidebar.unarchiveAll.unarchived', { count: succeededCount }));
+        } else {
+          toast.error(
+            t('ccAgent.sidebar.unarchiveAll.partialFailure', {
+              ok: succeededCount,
+              fail: failed.length,
+            }),
+          );
+        }
+        return;
+      }
 
       if (candidates.length === 0) {
         if (skippedPinned > 0 && skippedRunning > 0) {
@@ -1980,6 +2035,7 @@ function ExpandedView({
       activeSessionId,
       navigate,
       patchLocal,
+      filter.status,
       t,
     ],
   );

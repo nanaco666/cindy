@@ -2864,6 +2864,14 @@ interface ElectronAPI {
         extraDirs?: string[];
       }) => Promise<import('@/lib/ccAgent.types').Session>;
       get: (id: string) => Promise<import('@/lib/ccAgent.types').Session>;
+      restoreIfArchived: (
+        id: string,
+        expected: {
+          workingDir: string | null;
+          workspaceKind: import('@/lib/ccAgent.types').WorkspaceKind;
+          remoteHostId: string | null;
+        },
+      ) => Promise<import('@/lib/ccAgent.types').Session | null>;
       update: (
         id: string,
         patch: {

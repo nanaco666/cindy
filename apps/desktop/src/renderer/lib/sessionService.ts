@@ -76,6 +76,23 @@ export async function get(id: string): Promise<Session> {
   return wrap(window.electronAPI.localDb.sessions.get(id));
 }
 
+/**
+ * 仅当会话仍为 archived 且项目身份未变时原子恢复；条件不匹配返回 null。
+ * 用于跨确认框的批量恢复，避免 get + update 的 TOCTOU 竞态。
+ */
+export async function restoreIfArchived(
+  id: string,
+  expected: Pick<Session, 'workingDir' | 'workspaceKind' | 'remoteHostId'>,
+): Promise<Session | null> {
+  return wrap(
+    window.electronAPI.localDb.sessions.restoreIfArchived(id, {
+      workingDir: expected.workingDir,
+      workspaceKind: expected.workspaceKind,
+      remoteHostId: expected.remoteHostId ?? null,
+    }),
+  );
+}
+
 export async function update(
   id: string,
   patch: {
