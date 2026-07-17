@@ -34,7 +34,12 @@ import { WINDOW_DRAG_STYLE, WINDOW_NO_DRAG_STYLE } from '@/components/layout/win
 import { toast } from '@/lib/toast';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { normalizeWorkingDir } from '@/features/cc-agent/lib/projectGrouping';
-import type { Schedule, CreateScheduleInput, ScheduleTemplate, UpdateScheduleInput } from '@lizi/maker-scheduler';
+import type {
+  Schedule,
+  CreateScheduleInput,
+  ScheduleTemplate,
+  UpdateScheduleInput,
+} from '@lizi/maker-scheduler';
 
 import { useHorizontalResize } from '@/hooks/useHorizontalResize';
 
@@ -129,8 +134,11 @@ export function SchedulerPage() {
   // 跨 pane 共享的 runNow「派发窗口」busy 守卫：TaskListCell(行按钮) 与 RunHistoryPane
   // (detail 按钮)共用同一份,防止同一 schedule 在派发窗口内被双发。守卫只覆盖"点击 →
   // run 真正 fire"这段派发窗口,不覆盖整个 run 时长(详见 useRunNowBusyGuard)。
-  const { busyIds: runNowBusyIds, begin: beginRunNowBusy, release: releaseRunNowBusy } =
-    useRunNowBusyGuard();
+  const {
+    busyIds: runNowBusyIds,
+    begin: beginRunNowBusy,
+    release: releaseRunNowBusy,
+  } = useRunNowBusyGuard();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Schedule | null>(null);
@@ -247,10 +255,8 @@ export function SchedulerPage() {
     [sorted, selectedId],
   );
   const unreadRunCounts = useScheduleUnreadRunCounts(sorted);
-  const {
-    summaries: costSummaries,
-    loaded: costSummariesLoaded,
-  } = useScheduleCostSummaries(sorted);
+  const { summaries: costSummaries, loaded: costSummariesLoaded } =
+    useScheduleCostSummaries(sorted);
 
   // 仅用户在 TaskListFilterPopover 主动切换时持久化;focus 同步 / 新建任务的
   // 程序性 setStatusFilter 不写入,避免覆盖用户偏好(详见 statusFilterStorage)。
@@ -310,94 +316,121 @@ export function SchedulerPage() {
     [editing, refresh, statusFilter, t],
   );
 
-  const handleRunNow = useCallback(async (s: Schedule) => {
-    // begin 同步门控：已在派发窗口内(begin 返回 false)直接忽略，防止首帧 setState
-    // 重渲染前的双击/并发点击。
-    if (!beginRunNowBusy(s.id)) return;
-    try {
-      // 注意：这个 promise 要等 run 跑完才 resolve —— busy 的正常释放走 'fired' 事件
-      // (见 useRunNowBusyGuard 内的 onEvent 订阅)，不在这里。
-      await window.electronAPI.maker.schedule.runNow(s.id);
-    } catch (e) {
-      toast.error(t('scheduler.toast.runFailed', { error: e instanceof Error ? e.message : String(e) }));
-    } finally {
-      // 安全网：catch 路径（fire 前抛错，'fired' 不会到达）在此首次 release；正常路径
-      // 若 IPC 事件通道偶发丢包导致 'fired'/终态均未到达，release 仍会在 promise settle
-      // 后兜底执行。guard 已 release 时本调用为 no-op（幂等）。
-      releaseRunNowBusy(s.id);
-    }
-  }, [t, beginRunNowBusy, releaseRunNowBusy]);
+  const handleRunNow = useCallback(
+    async (s: Schedule) => {
+      // begin 同步门控：已在派发窗口内(begin 返回 false)直接忽略，防止首帧 setState
+      // 重渲染前的双击/并发点击。
+      if (!beginRunNowBusy(s.id)) return;
+      try {
+        // 注意：这个 promise 要等 run 跑完才 resolve —— busy 的正常释放走 'fired' 事件
+        // (见 useRunNowBusyGuard 内的 onEvent 订阅)，不在这里。
+        await window.electronAPI.maker.schedule.runNow(s.id);
+      } catch (e) {
+        toast.error(
+          t('scheduler.toast.runFailed', { error: e instanceof Error ? e.message : String(e) }),
+        );
+      } finally {
+        // 安全网：catch 路径（fire 前抛错，'fired' 不会到达）在此首次 release；正常路径
+        // 若 IPC 事件通道偶发丢包导致 'fired'/终态均未到达，release 仍会在 promise settle
+        // 后兜底执行。guard 已 release 时本调用为 no-op（幂等）。
+        releaseRunNowBusy(s.id);
+      }
+    },
+    [t, beginRunNowBusy, releaseRunNowBusy],
+  );
 
-  const handleTogglePause = useCallback(async (s: Schedule) => {
-    try {
-      if (s.status === 'paused') {
-        await window.electronAPI.maker.schedule.resume(s.id);
-        return;
+  const handleTogglePause = useCallback(
+    async (s: Schedule) => {
+      try {
+        if (s.status === 'paused') {
+          await window.electronAPI.maker.schedule.resume(s.id);
+          return;
+        }
+        // pause 路径:有 in-flight 时弹合并文案确认 —— "暂停将立即停止 N 次正在进行的执行"。
+        // 无 in-flight 时跳过 confirm 保持原 UX(用户主动点暂停不需要二次确认)。
+        const inflight = await window.electronAPI.maker.schedule
+          .getInflightCount(s.id)
+          .catch(() => 0);
+        if (inflight > 0) {
+          const ok = await confirm({
+            title: t('scheduler.confirm.pause.title', { name: s.name }),
+            description: t('scheduler.confirm.pause.withInflight', { count: inflight }),
+            confirmText: t('scheduler.confirm.pause.confirm'),
+            cancelText: t('scheduler.confirm.pause.cancel'),
+          });
+          if (!ok) return;
+        }
+        await window.electronAPI.maker.schedule.pause(s.id);
+      } catch (e) {
+        toast.error(
+          t('scheduler.toast.actionFailed', { error: e instanceof Error ? e.message : String(e) }),
+        );
       }
-      // pause 路径:有 in-flight 时弹合并文案确认 —— "暂停将立即停止 N 次正在进行的执行"。
-      // 无 in-flight 时跳过 confirm 保持原 UX(用户主动点暂停不需要二次确认)。
-      const inflight = await window.electronAPI.maker.schedule.getInflightCount(s.id).catch(() => 0);
-      if (inflight > 0) {
-        const ok = await confirm({
-          title: t('scheduler.confirm.pause.title', { name: s.name }),
-          description: t('scheduler.confirm.pause.withInflight', { count: inflight }),
-          confirmText: t('scheduler.confirm.pause.confirm'),
-          cancelText: t('scheduler.confirm.pause.cancel'),
-        });
-        if (!ok) return;
-      }
-      await window.electronAPI.maker.schedule.pause(s.id);
-    } catch (e) {
-      toast.error(t('scheduler.toast.actionFailed', { error: e instanceof Error ? e.message : String(e) }));
-    }
-  }, [confirm, t]);
+    },
+    [confirm, t],
+  );
 
   // 双击 cell 改名：与 SessionItem 同款 — 走通用的 schedule.update({ name })
   // 引擎 update 后会广播 'changed'，useSchedules 自动刷新，无需手动 refresh。
-  const handleRename = useCallback(async (s: Schedule, newName: string) => {
-    try {
-      await window.electronAPI.maker.schedule.update(s.id, { name: newName });
-    } catch (e) {
-      toast.error(t('scheduler.toast.renameFailed', { error: e instanceof Error ? e.message : String(e) }));
-    }
-  }, [t]);
+  const handleRename = useCallback(
+    async (s: Schedule, newName: string) => {
+      try {
+        await window.electronAPI.maker.schedule.update(s.id, { name: newName });
+      } catch (e) {
+        toast.error(
+          t('scheduler.toast.renameFailed', { error: e instanceof Error ? e.message : String(e) }),
+        );
+      }
+    },
+    [t],
+  );
 
-  const handleOpenProjectConfig = useCallback(async (workingDir: string) => {
-    const filePath = projectAutomationConfigPath(workingDir);
-    try {
-      const result = await window.electronAPI.openPath(filePath);
-      if (!result.success) toast.error(result.error || t('scheduler.list.section.openConfigFailed'));
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    }
-  }, [t]);
+  const handleOpenProjectConfig = useCallback(
+    async (workingDir: string) => {
+      const filePath = projectAutomationConfigPath(workingDir);
+      try {
+        const result = await window.electronAPI.openPath(filePath);
+        if (!result.success)
+          toast.error(result.error || t('scheduler.list.section.openConfigFailed'));
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [t],
+  );
 
-  const handleReloadProject = useCallback(async (workingDir: string) => {
-    try {
-      await window.electronAPI.maker.projectAutomation.reconcile({ workingDir });
-      void refresh();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    }
-  }, [refresh]);
+  const handleReloadProject = useCallback(
+    async (workingDir: string) => {
+      try {
+        await window.electronAPI.maker.projectAutomation.reconcile({ workingDir });
+        void refresh();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [refresh],
+  );
 
-  const handlePromoteToProject = useCallback(async (s: Schedule) => {
-    if (!s.workingDir) {
-      toast.warning(t('scheduler.list.promote.noWorkingDir'));
-      return;
-    }
-    try {
-      await window.electronAPI.maker.projectAutomation.upsertSchedule({
-        workingDir: s.workingDir,
-        config: scheduleToProjectConfig(s, generateProjectScheduleId()),
-      });
-      await window.electronAPI.maker.schedule.delete(s.id);
-      void refresh();
-      toast.success(t('scheduler.list.promote.success'));
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    }
-  }, [refresh, t]);
+  const handlePromoteToProject = useCallback(
+    async (s: Schedule) => {
+      if (!s.workingDir) {
+        toast.warning(t('scheduler.list.promote.noWorkingDir'));
+        return;
+      }
+      try {
+        await window.electronAPI.maker.projectAutomation.upsertSchedule({
+          workingDir: s.workingDir,
+          config: scheduleToProjectConfig(s, generateProjectScheduleId()),
+        });
+        await window.electronAPI.maker.schedule.delete(s.id);
+        void refresh();
+        toast.success(t('scheduler.list.promote.success'));
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [refresh, t],
+  );
 
   const handleEditProjectSchedule = useCallback((s: Schedule) => {
     setCreatePrefillWorkingDir(null);
@@ -406,44 +439,52 @@ export function SchedulerPage() {
     setFormOpen(true);
   }, []);
 
-  const handleCloneToUser = useCallback(async (s: Schedule) => {
-    try {
-      await window.electronAPI.maker.schedule.create(scheduleToUserCreateInput(s, {
-        name: t('scheduler.list.cloneToUser.namePrefix', { name: s.name }),
-      }));
-      void refresh();
-      toast.success(t('scheduler.list.cloneToUser.success'));
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    }
-  }, [refresh, t]);
+  const handleCloneToUser = useCallback(
+    async (s: Schedule) => {
+      try {
+        await window.electronAPI.maker.schedule.create(
+          scheduleToUserCreateInput(s, {
+            name: t('scheduler.list.cloneToUser.namePrefix', { name: s.name }),
+          }),
+        );
+        void refresh();
+        toast.success(t('scheduler.list.cloneToUser.success'));
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [refresh, t],
+  );
 
-  const handleRemoveProjectSchedule = useCallback(async (s: Schedule) => {
-    if (!s.workingDir || !s.projectConfigId) return;
-    const result = await confirmThree({
-      title: t('scheduler.list.removeProject.confirmTitle'),
-      description: t('scheduler.list.removeProject.confirmDescription', { name: s.name }),
-      confirmText: t('scheduler.list.removeProject.confirm'),
-      tertiaryText: t('scheduler.list.removeProject.demote'),
-      cancelText: t('scheduler.confirm.delete.cancel'),
-    });
-    if (result === 'cancel') return;
-    try {
-      if (result === 'tertiary') {
-        await window.electronAPI.maker.schedule.create(scheduleToUserCreateInput(s));
-      }
-      await window.electronAPI.maker.projectAutomation.removeSchedule({
-        workingDir: s.workingDir,
-        id: s.projectConfigId,
+  const handleRemoveProjectSchedule = useCallback(
+    async (s: Schedule) => {
+      if (!s.workingDir || !s.projectConfigId) return;
+      const result = await confirmThree({
+        title: t('scheduler.list.removeProject.confirmTitle'),
+        description: t('scheduler.list.removeProject.confirmDescription', { name: s.name }),
+        confirmText: t('scheduler.list.removeProject.confirm'),
+        tertiaryText: t('scheduler.list.removeProject.demote'),
+        cancelText: t('scheduler.confirm.delete.cancel'),
       });
-      void refresh();
-      if (result === 'tertiary') {
-        toast.success(t('scheduler.list.removeProject.demoteSuccess'));
+      if (result === 'cancel') return;
+      try {
+        if (result === 'tertiary') {
+          await window.electronAPI.maker.schedule.create(scheduleToUserCreateInput(s));
+        }
+        await window.electronAPI.maker.projectAutomation.removeSchedule({
+          workingDir: s.workingDir,
+          id: s.projectConfigId,
+        });
+        void refresh();
+        if (result === 'tertiary') {
+          toast.success(t('scheduler.list.removeProject.demoteSuccess'));
+        }
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : String(e));
       }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    }
-  }, [confirmThree, refresh, t]);
+    },
+    [confirmThree, refresh, t],
+  );
 
   const handleDelete = useCallback(
     (s: Schedule) => {
@@ -473,14 +514,21 @@ export function SchedulerPage() {
         style={WINDOW_DRAG_STYLE}
       >
         <div className="flex min-w-0 items-center gap-3">
-          <Clock size={18} strokeWidth={1.75} className="shrink-0 text-[var(--settings-section-desc)]" />
+          <Clock
+            size={18}
+            strokeWidth={1.75}
+            className="shrink-0 text-[var(--settings-section-desc)]"
+          />
           <div className="flex items-baseline gap-2.5">
             <h1 className="text-lg font-medium leading-none text-[var(--msg-assistant-text)]">
               {t('scheduler.page.title')}
             </h1>
             <span className="text-xs leading-none text-[var(--cmd-palette-item-meta)]">
               {filterWorkingDir
-                ? t('scheduler.page.totalCountWithDir', { dir: filterWorkingDir, count: sorted.length })
+                ? t('scheduler.page.totalCountWithDir', {
+                    dir: filterWorkingDir,
+                    count: sorted.length,
+                  })
                 : t('scheduler.page.totalCount', { count: sorted.length })}
             </span>
           </div>
@@ -496,17 +544,18 @@ export function SchedulerPage() {
       {/* Body — 无 loading 态显示（CLAUDE.md §12：本地数据走完异步取数再刷界面，
           loading 期间不显示任何 placeholder，避免视觉上的空白帧/跳变）。 */}
       <div className="min-h-0 flex-1 overflow-hidden">
-        {error && <p className="px-6 py-5 text-sm text-[var(--cmd-palette-item-meta)]">{t('scheduler.page.loadFailed', { error })}</p>}
-        {isEmpty && <EmptyState onCreate={handleCreate} onCreateFromTemplate={handleCreateFromTemplate} />}
+        {error && (
+          <p className="px-6 py-5 text-sm text-[var(--cmd-palette-item-meta)]">
+            {t('scheduler.page.loadFailed', { error })}
+          </p>
+        )}
+        {isEmpty && (
+          <EmptyState onCreate={handleCreate} onCreateFromTemplate={handleCreateFromTemplate} />
+        )}
         {!error && !isEmpty && (
           // 拖拽中给整行加 select-none + col-resize cursor，避免误选中文字、
           // 鼠标越过 RunHistoryPane 时 cursor 跳变（与 MainLayout 包住 sidebar 的处理一致）。
-          <div
-            className={cn(
-              'flex h-full',
-              isResizing && 'cursor-col-resize select-none',
-            )}
-          >
+          <div className={cn('flex h-full', isResizing && 'cursor-col-resize select-none')}>
             <TaskListPane
               schedules={sorted}
               selectedId={selectedId}
@@ -539,6 +588,7 @@ export function SchedulerPage() {
                 onTogglePause={handleTogglePause}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
+                costSummary={costSummaries.get(selected.id)}
                 runNowBusy={runNowBusyIds.has(selected.id)}
               />
             )}

@@ -4597,6 +4597,7 @@
       "tagOnce": "1回",
       "tagManual": "手動",
       "totalCost": "コスト {{cost}}",
+      "totalValue": "価値 {{value}}",
       "menu": {
         "rename": "名前を変更",
         "resume": "再開",
@@ -4631,6 +4632,7 @@
       "openSession": "セッションを開く",
       "markReadTitle": "クリックして既読にする",
       "sessionCost": "セッションコスト {{cost}}",
+      "sessionValue": "セッション価値 {{value}}",
       "restart": "再実行",
       "moreAria": "その他の操作",
       "delete": "削除",

@@ -4597,6 +4597,7 @@
       "tagOnce": "1회",
       "tagManual": "수동",
       "totalCost": "비용 {{cost}}",
+      "totalValue": "가치 {{value}}",
       "menu": {
         "rename": "이름 변경",
         "resume": "재개",
@@ -4631,6 +4632,7 @@
       "openSession": "세션 열기",
       "markReadTitle": "클릭하여 읽음으로 표시",
       "sessionCost": "세션 비용 {{cost}}",
+      "sessionValue": "세션 가치 {{value}}",
       "restart": "재실행",
       "moreAria": "추가 작업",
       "delete": "삭제",

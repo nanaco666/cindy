@@ -4606,6 +4606,7 @@
       "tagOnce": "Once",
       "tagManual": "Manual",
       "totalCost": "Cost {{cost}}",
+      "totalValue": "Value {{value}}",
       "menu": {
         "rename": "Rename",
         "resume": "Resume",
@@ -4640,6 +4641,7 @@
       "openSession": "Open session",
       "markReadTitle": "Click to mark as read",
       "sessionCost": "Session cost {{cost}}",
+      "sessionValue": "Session value {{value}}",
       "restart": "Restart",
       "moreAria": "More actions",
       "delete": "Delete",

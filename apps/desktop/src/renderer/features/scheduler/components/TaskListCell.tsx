@@ -14,7 +14,16 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { ArrowUpToLine, Copy, FolderGit2, FolderMinus, Pause, Pencil, Play, Trash2 } from 'lucide-react';
+import {
+  ArrowUpToLine,
+  Copy,
+  FolderGit2,
+  FolderMinus,
+  Pause,
+  Pencil,
+  Play,
+  Trash2,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
@@ -35,6 +44,7 @@ interface Props {
   selected: boolean;
   unreadCount?: number;
   totalCostUsd?: number;
+  totalEstimatedValueUsd?: number;
   onSelect: (s: Schedule) => void;
   /** 右键菜单的 Pause/Resume 动作；与 RunHistoryPane ⋯ 菜单同行为。 */
   onTogglePause?: (s: Schedule) => void | Promise<void>;
@@ -68,6 +78,7 @@ export function TaskListCell({
   selected,
   unreadCount = 0,
   totalCostUsd,
+  totalEstimatedValueUsd = 0,
   onSelect,
   onTogglePause,
   onDelete,
@@ -96,12 +107,29 @@ export function TaskListCell({
   const handleContextMenu = useCallback(
     (e: React.MouseEvent) => {
       // 任一动作回调都没传就不弹菜单（外层未启用右键功能时直接走默认浏览器菜单）
-      if (!onTogglePause && !canDelete && !canRename && !canPromote && !canEditProject && !canCloneToUser && !canRemoveProject) return;
+      if (
+        !onTogglePause &&
+        !canDelete &&
+        !canRename &&
+        !canPromote &&
+        !canEditProject &&
+        !canCloneToUser &&
+        !canRemoveProject
+      )
+        return;
       e.preventDefault();
       e.stopPropagation();
       setMenuPos({ x: e.clientX, y: e.clientY });
     },
-    [onTogglePause, canDelete, canRename, canPromote, canEditProject, canCloneToUser, canRemoveProject],
+    [
+      onTogglePause,
+      canDelete,
+      canRename,
+      canPromote,
+      canEditProject,
+      canCloneToUser,
+      canRemoveProject,
+    ],
   );
   const isPaused = s.status === 'paused';
   // 副标题取值优先级：
@@ -127,9 +155,19 @@ export function TaskListCell({
   } else {
     subtitle = lastText ?? nextText;
   }
-  const costText = totalCostUsd == null
-    ? null
-    : t('scheduler.cell.totalCost', { cost: formatUsd(totalCostUsd) });
+  const costText =
+    totalCostUsd == null
+      ? null
+      : [
+          totalCostUsd > 0
+            ? t('scheduler.cell.totalCost', { cost: formatUsd(totalCostUsd) })
+            : null,
+          totalEstimatedValueUsd > 0
+            ? t('scheduler.cell.totalValue', { value: formatUsd(totalEstimatedValueUsd) })
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') || t('scheduler.cell.totalCost', { cost: formatUsd(0) });
   // 副标题行是否渲染:决定右下角 Run 按钮的"预留位"落在哪一行(见下方两处 pr-3.5)。
   const hasMetaRow = Boolean(subtitle || costText);
 
@@ -165,11 +203,14 @@ export function TaskListCell({
     }
   }, [isEditing]);
 
-  const handleClick = useCallback((e: React.MouseEvent) => {
-    if (isEditing) return;
-    if (e.detail > 1) return;
-    onSelect(s);
-  }, [isEditing, s, onSelect]);
+  const handleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (isEditing) return;
+      if (e.detail > 1) return;
+      onSelect(s);
+    },
+    [isEditing, s, onSelect],
+  );
 
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -310,9 +351,7 @@ export function TaskListCell({
           <span className="flex min-w-0 flex-1 items-center gap-1.5">
             {/* 未读点走全端统一"完成未读=绿"(失败结局的红色语义由运行历史卡与
                 侧栏组头表达,本 cell 只有未读计数,不做失败聚合)。 */}
-            {hasUnreadRuns && (
-              <AttentionDot size={6} className="shrink-0" />
-            )}
+            {hasUnreadRuns && <AttentionDot size={6} className="shrink-0" />}
             <span className="min-w-0 truncate text-sm font-medium text-[var(--msg-assistant-text)]">
               {s.name}
             </span>
@@ -380,7 +419,8 @@ export function TaskListCell({
                 // 键盘可达性:按钮经 Tab 聚焦(focus-visible)显示时 cost 同样让位。
                 // 精确匹配"按钮自身 focus-visible"而非 group-focus-within——行本身也
                 // focusable,点选/Tab 到行时按钮并不显示,不应误藏 cost。
-                onRunNow && 'transition-opacity group-hover:opacity-0 group-has-[button:focus-visible]:opacity-0',
+                onRunNow &&
+                  'transition-opacity group-hover:opacity-0 group-has-[button:focus-visible]:opacity-0',
               )}
             >
               {costText}
