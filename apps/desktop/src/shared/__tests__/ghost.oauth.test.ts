@@ -234,6 +234,36 @@ describe('ghost · oauth 凭证声明校验', () => {
     expect(validateGhostManifest(withTemplate(`{user}${'x'.repeat(200)}`)).ok).toBe(false);
   });
 
+  it('identity.avatarPath:合法点分路径通过并保留;坏路径 / 非字符串 / 超长 → 拒', () => {
+    const base = {
+      authorizeUrl: 'https://accounts.example.com/authorize',
+      tokenUrl: 'https://accounts.example.com/token',
+    };
+    const withAvatarPath = (avatarPath: unknown): ReturnType<typeof oauthManifest> =>
+      oauthManifest({
+        oauth: {
+          ...base,
+          identity: { url: 'https://api.example.com/me', labelPath: 'user_id', avatarPath },
+        },
+      });
+    const ok = validateGhostManifest(withAvatarPath('data.avatar_thumb'));
+    expect(ok.ok).toBe(true);
+    if (ok.ok) {
+      expect(ok.manifest.network?.secrets?.[0]?.oauth?.identity?.avatarPath).toBe('data.avatar_thumb');
+    }
+    // 未声明 = 归一化后不带该字段(账号无头像,设置页回落首字圆片)。
+    const plain = validateGhostManifest(
+      oauthManifest({ oauth: { ...base, identity: { url: 'https://api.example.com/me', labelPath: 'email' } } }),
+    );
+    expect(plain.ok).toBe(true);
+    if (plain.ok) {
+      expect(plain.manifest.network?.secrets?.[0]?.oauth?.identity?.avatarPath).toBeUndefined();
+    }
+    expect(validateGhostManifest(withAvatarPath('a..b')).ok).toBe(false);
+    expect(validateGhostManifest(withAvatarPath(42)).ok).toBe(false);
+    expect(validateGhostManifest(withAvatarPath('x'.repeat(129))).ok).toBe(false);
+  });
+
   it('oauth 凭证同样要求 settingsHtml(client 凭证与连接按钮由意识设置页收单)', () => {
     const m = oauthManifest();
     delete m.settingsHtml;

@@ -5,7 +5,8 @@
  *
  * 协议(意识 settingsHtml 页面用,`fetch('/oauth')`):
  * - GET  /oauth                          → 200 + [{ key, clientConfigured, accounts }]
- *   (仅 source:'oauth' 的凭证;accounts 只含 {id,label,status,isDefault},零令牌字节);
+ *   (仅 source:'oauth' 的凭证;accounts 只含 {id,label,status,isDefault,
+ *   avatarDataUrl},零令牌字节——avatarDataUrl 是主机下载转码的头像小图);
  * - PUT  /oauth/<key>/client             → body {"clientId":"...","clientSecret":"..."}
  *   写入用户自填的 OAuth 客户端凭证(clientSecret 可省略 = 纯 PKCE),204;
  * - DELETE /oauth/<key>/client           → 清除 client 凭证,204(幂等);

@@ -224,7 +224,7 @@ my-ghost/
       "scopeDelimiter": ",",                        // 可选:authorize URL 的 scope 拼接分隔符;缺省空格(OAuth 标准),Slack 这类逗号分隔的服务商声明 ","(目前只认这一个值)
       "pkce": true,                                 // 可选:PKCE(S256)开关,缺省 true
       "extraAuthorizeParams": { "access_type": "offline", "prompt": "consent" },  // 可选 ≤8 条:服务商特有授权参数(协议保留参数禁写)
-      "identity": { "url": "https://api.example.com/userinfo", "labelPath": "email", "displayTemplate": "{team} · {user}" },  // 可选:授权后拉一次身份端点给账号打标签(设置页"已连接为 xxx";url 域名须命中 hosts)。labelPath 应指向**唯一且稳定**字段(如邮箱 / user_id)——它是重复授权时的同身份合并判定键,选 name 这类可重名可改名字段会误合并。displayTemplate 可选:人类可读展示名模板,\`{点分路径}\` 占位符从同一份身份响应取值(至少一个占位符,≤200 字符),任一占位符取不到值整体降级为空、回落显示 labelPath 的值——labelPath 的稳定字段不可读(如 Slack 的 user_id)时声明它,设置页与账号工具展示的就是渲染后的名字(邮箱这类本身可读的服务商不需要)
+      "identity": { "url": "https://api.example.com/userinfo", "labelPath": "email", "displayTemplate": "{team} · {user}", "avatarPath": "data.avatar_thumb" },  // 可选:授权后拉一次身份端点给账号打标签(设置页"已连接为 xxx";url 域名须命中 hosts)。labelPath 应指向**唯一且稳定**字段(如邮箱 / user_id)——它是重复授权时的同身份合并判定键,选 name 这类可重名可改名字段会误合并。displayTemplate 可选:人类可读展示名模板,\`{点分路径}\` 占位符从同一份身份响应取值(至少一个占位符,≤200 字符),任一占位符取不到值整体降级为空、回落显示 labelPath 的值——labelPath 的稳定字段不可读(如 Slack 的 user_id)时声明它,设置页与账号工具展示的就是渲染后的名字(邮箱这类本身可读的服务商不需要)。avatarPath 可选:头像 URL 在身份响应里的点分路径(如飞书的 "data.avatar_thumb")——主机取 https 地址后**不带凭证**下载小图(仅 png/jpeg/webp/gif、≤256KB)转 data URL 存库,\`/oauth\` 回查里以 account.avatarDataUrl 给你的 settingsHtml 展示(<img> 直接用)。**下载仅对第一方官方意识生效**(头像地址不受 hosts 白名单约束,第三方声明合法但恒降级 null)——所以页面必须能没头像也好看(如回落姓名首字圆片)
       "redirectPort": 53682,                        // 可选:loopback 回调固定端口(1024–65535)。服务商要求回调 URI 与注册值精确匹配(如 Atlassian)时声明,回调恒为 http://127.0.0.1:<端口>/callback;缺省 = 随机端口(Google 等允许任意 loopback 端口的服务商不用声明)
       "tokenBroker": "jira",                        // 可选:仅第一方官方意识可用(第三方声明拒装)。声明后 code/refresh 交换经 Cindy 服务端 broker 完成(client secret 在服务端,不随包分发),与 clientSecret 互斥;设置页不再支持自填 client
       "brokerBounce": { "path": "/slack-mcp/bounce", "callbackPath": "/slack-mcp/callback" }  // 可选:双地址弹跳回调(服务商后台只收 https redirect 时用,如 Slack)。必须与 tokenBroker、redirectPort 同时声明;报给服务商的 redirect_uri = broker 服务基地址 + path(主机运行时拼,清单不落域名),浏览器授权后由弹跳路由 302 回 http://127.0.0.1:<redirectPort><callbackPath>
@@ -767,7 +767,8 @@ settingsHtml 里自填**(用户用自己注册的 OAuth 应用,配额风控归�
 \`\`\`js
 // 状态回查(哪些 oauth 凭证槽、client 配没配、连了哪些账号;零令牌字节):
 const list = await (await fetch('/oauth')).json();
-// → [{ key:'acct', clientConfigured:true, clientCustom:false, accounts:[{ id, label, status:'connected'|'expired', isDefault, createdAt }] }]
+// → [{ key:'acct', clientConfigured:true, clientCustom:false, accounts:[{ id, label, status:'connected'|'expired', isDefault, createdAt, avatarDataUrl }] }]
+// avatarDataUrl = 头像 data URL(声明了 identity.avatarPath 且主机下载成功才有,否则 null;<img src> 直接用)
 // clientConfigured = 自填或内置任一在场;clientCustom = 用户自填过(UI 显示"内置应用身份/已自定义")
 // client 凭证只写入库(和 /secrets 同纪律,存入后拿不回;clientSecret 可省略 = 纯 PKCE):
 await fetch('/oauth/acct/client', { method:'PUT', body: JSON.stringify({ clientId, clientSecret }) });  // 204 即入库

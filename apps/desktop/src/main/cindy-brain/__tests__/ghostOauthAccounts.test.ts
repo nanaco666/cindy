@@ -149,6 +149,105 @@ describe('connectAccount', () => {
     expect(fetchImpl.mock.calls.length).toBe(fetchCalls);
   });
 
+  it('声明 avatarPath → 连接时下载头像存库(不带凭证),listAccounts 带 avatarDataUrl,断开清掉', async () => {
+    const avatarDecl: GhostOauthDecl = {
+      ...DECL,
+      identity: { url: 'https://api.example.com/userinfo', labelPath: 'email', avatarPath: 'picture' },
+    };
+    const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const expectedDataUrl = `data:image/png;base64,${pngBytes.toString('base64')}`;
+    const vault = memoryVault({ [`${KEY}-client-id`]: 'cid' });
+    const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url === DECL.tokenUrl) {
+        return jsonResponse({ access_token: 'at-1', refresh_token: 'rt-1', expires_in: 3600 });
+      }
+      if (url === 'https://api.example.com/userinfo') {
+        return jsonResponse({ email: 'user@example.com', picture: 'https://cdn.example.com/a.png' });
+      }
+      if (url === 'https://cdn.example.com/a.png') {
+        // 头像下载绝不带 Authorization(CDN 域名不在凭证注入白名单)。
+        expect(new Headers(init?.headers).get('Authorization')).toBeNull();
+        return new Response(new Uint8Array(pngBytes), { status: 200, headers: { 'Content-Type': 'image/png' } });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: autoBrowser(),
+    });
+
+    const result = await mgr.connectAccount(GHOST, KEY, avatarDecl);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.account.avatarDataUrl).toBe(expectedDataUrl);
+    expect(vault.read(GHOST, `${KEY}-avatar-${result.account.id}`)).toBe(expectedDataUrl);
+    expect(mgr.listAccounts(GHOST, KEY)[0]?.avatarDataUrl).toBe(expectedDataUrl);
+
+    // 断开:头像键随账号一起清。
+    mgr.disconnectAccount(GHOST, KEY, result.account.id);
+    expect(vault.read(GHOST, `${KEY}-avatar-${result.account.id}`)).toBeNull();
+  });
+
+  it('第三方意识声明 avatarPath → 不触发头像下载(SSRF 门控,恒无头像)', async () => {
+    // client 凭证内置在详单里(memoryVault 的种子键挂在 GHOST 命名空间下,
+    // 第三方 ghostId 读不到)。
+    const avatarDecl: GhostOauthDecl = {
+      ...DECL,
+      clientId: 'cid-baked',
+      identity: { url: 'https://api.example.com/userinfo', labelPath: 'email', avatarPath: 'picture' },
+    };
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === DECL.tokenUrl) {
+        return jsonResponse({ access_token: 'at-1', refresh_token: 'rt-1', expires_in: 3600 });
+      }
+      if (url === 'https://api.example.com/userinfo') {
+        return jsonResponse({ email: 'user@example.com', picture: 'https://internal.example/secret.png' });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const mgr = new GhostOauthAccountManager({
+      vault: memoryVault(),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: autoBrowser(),
+    });
+    const result = await mgr.connectAccount('evil-tools', KEY, avatarDecl);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.account.avatarDataUrl).toBeNull();
+    // 头像地址从未被主机请求过(fetch 只打过 token 与身份端点)。
+    expect(fetchImpl.mock.calls.map((c) => String(c[0]))).not.toContain('https://internal.example/secret.png');
+  });
+
+  it('头像下载失败 → 连接照常成功,avatarDataUrl 为 null(best-effort)', async () => {
+    const avatarDecl: GhostOauthDecl = {
+      ...DECL,
+      identity: { url: 'https://api.example.com/userinfo', labelPath: 'email', avatarPath: 'picture' },
+    };
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === DECL.tokenUrl) {
+        return jsonResponse({ access_token: 'at-1', refresh_token: 'rt-1', expires_in: 3600 });
+      }
+      if (url === 'https://api.example.com/userinfo') {
+        return jsonResponse({ email: 'user@example.com', picture: 'https://cdn.example.com/a.png' });
+      }
+      throw new Error('avatar cdn down');
+    });
+    const mgr = new GhostOauthAccountManager({
+      vault: memoryVault({ [`${KEY}-client-id`]: 'cid' }),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: autoBrowser(),
+    });
+    const result = await mgr.connectAccount(GHOST, KEY, avatarDecl);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.account.avatarDataUrl).toBeNull();
+    expect(result.account.label).toBe('user@example.com');
+  });
+
   it('client 未配置 → NO_CLIENT_CONFIG,不拉浏览器', async () => {
     const openExternal = vi.fn();
     const mgr = new GhostOauthAccountManager({
@@ -872,5 +971,130 @@ describe('identity.displayTemplate 展示名', () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(mgr.listAccounts(GHOST, KEY)[0]?.label).toBe('xindong · lizi');
+  });
+});
+
+describe('identity.avatarPath 头像回填', () => {
+  const AVATAR_DECL: GhostOauthDecl = {
+    ...DECL,
+    identity: { url: 'https://api.example.com/userinfo', labelPath: 'email', avatarPath: 'picture' },
+  };
+  const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+  const PNG_DATA_URL = `data:image/png;base64,${PNG_BYTES.toString('base64')}`;
+
+  /** avatarPath 上线前连的老账号(库里有 rt、无头像键)。 */
+  function legacyVault(): ReturnType<typeof memoryVault> {
+    return memoryVault({
+      [`${KEY}-client-id`]: 'cid',
+      [`${KEY}-accounts`]: JSON.stringify({
+        defaultAccountId: 'acc-1',
+        accounts: [{ id: 'acc-1', label: 'user@example.com', status: 'connected', createdAt: 1 }],
+      }),
+      [`${KEY}-rt-acc-1`]: 'rt-old',
+    });
+  }
+
+  function avatarFetch(): ReturnType<typeof vi.fn> {
+    return vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === DECL.tokenUrl) return jsonResponse({ access_token: 'at-2', expires_in: 3600 });
+      if (url === 'https://api.example.com/userinfo') {
+        return jsonResponse({ email: 'user@example.com', picture: 'https://cdn.example.com/a.png' });
+      }
+      if (url === 'https://cdn.example.com/a.png') {
+        return new Response(new Uint8Array(PNG_BYTES), { status: 200, headers: { 'Content-Type': 'image/png' } });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+  }
+
+  it('老账号回填:令牌刷新成功后 best-effort 补头像(不用重连)', async () => {
+    const vault = legacyVault();
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: avatarFetch() as unknown as typeof fetch,
+      openExternal: vi.fn(),
+    });
+    await expect(mgr.getFreshAccessToken(GHOST, KEY, AVATAR_DECL)).resolves.toMatchObject({ ok: true });
+    // 回填是 fire-and-forget,轮询等它落库。
+    await vi.waitFor(() => {
+      expect(vault.read(GHOST, `${KEY}-avatar-acc-1`)).toBe(PNG_DATA_URL);
+    });
+    expect(mgr.listAccounts(GHOST, KEY)[0]?.avatarDataUrl).toBe(PNG_DATA_URL);
+  });
+
+  it('第三方意识回填不下载头像(SSRF 门控与 connect 同口径)', async () => {
+    // displayTemplate 让第三方的回填仍会拉一次身份端点(展示名回填不设官方门),
+    // 但身份响应里的头像地址绝不能被主机请求。
+    // 模板刻意渲染出与种子 label 不同的值:waitFor 锚在"displayLabel 确已
+    // 回填"上才不恒真——patchAccount(同步)之后若门被删,cdn fetch 在同一
+    // 同步段内已发生,下面的负断言是确定性的,不与 backfill 微任务链竞态。
+    const decl: GhostOauthDecl = {
+      ...AVATAR_DECL,
+      clientId: 'cid-baked',
+      identity: { ...AVATAR_DECL.identity!, displayTemplate: '{email}·bf' },
+    };
+    const vault = memoryVault();
+    vault.store(
+      'evil-tools',
+      `${KEY}-accounts`,
+      JSON.stringify({
+        defaultAccountId: 'acc-1',
+        accounts: [{ id: 'acc-1', label: 'user@example.com', status: 'connected', createdAt: 1 }],
+      }),
+    );
+    vault.store('evil-tools', `${KEY}-rt-acc-1`, 'rt-old');
+    const fetchImpl = avatarFetch();
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: vi.fn(),
+    });
+    await expect(mgr.getFreshAccessToken('evil-tools', KEY, decl)).resolves.toMatchObject({ ok: true });
+    // 等展示名回填落库,证明身份端点确实拉过了(而不是回填整体没跑)。
+    await vi.waitFor(() => {
+      expect(mgr.listAccounts('evil-tools', KEY)[0]?.label).toBe('user@example.com·bf');
+    });
+    expect(fetchImpl.mock.calls.map((c) => String(c[0]))).not.toContain('https://cdn.example.com/a.png');
+    expect(vault.read('evil-tools', `${KEY}-avatar-acc-1`)).toBeNull();
+  });
+
+  it('头像下载期间账号被断开 → 不写孤儿头像键', async () => {
+    const vault = legacyVault();
+    let releaseAvatar!: () => void;
+    const gate = new Promise<void>((r) => {
+      releaseAvatar = r;
+    });
+    let avatarRequestedResolve!: () => void;
+    const avatarRequested = new Promise<void>((r) => {
+      avatarRequestedResolve = r;
+    });
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === DECL.tokenUrl) return jsonResponse({ access_token: 'at-2', expires_in: 3600 });
+      if (url === 'https://api.example.com/userinfo') {
+        return jsonResponse({ email: 'user@example.com', picture: 'https://cdn.example.com/a.png' });
+      }
+      if (url === 'https://cdn.example.com/a.png') {
+        avatarRequestedResolve();
+        await gate;
+        return new Response(new Uint8Array(PNG_BYTES), { status: 200, headers: { 'Content-Type': 'image/png' } });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: vi.fn(),
+    });
+    await expect(mgr.getFreshAccessToken(GHOST, KEY, AVATAR_DECL)).resolves.toMatchObject({ ok: true });
+    // 等回填走到头像下载(此时被 gate 卡住),断开账号后再放行下载。
+    await avatarRequested;
+    mgr.disconnectAccount(GHOST, KEY, 'acc-1');
+    releaseAvatar();
+    await new Promise((r) => setTimeout(r, 20));
+    // 下载完成但账号已不在清单:不许写孤儿头像键。
+    expect(vault.read(GHOST, `${KEY}-avatar-acc-1`)).toBeNull();
+    expect([...vault.data.keys()].some((k) => k.includes('-avatar-'))).toBe(false);
   });
 });

@@ -75,7 +75,8 @@
           "identity": {
             "url": "https://open.feishu.cn/open-apis/authen/v1/user_info",
             "labelPath": "data.union_id",
-            "displayTemplate": "{data.name}"
+            "displayTemplate": "{data.name}",
+            "avatarPath": "data.avatar_thumb"
           }
         }
       }

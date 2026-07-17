@@ -350,8 +350,15 @@ export interface GhostSecretOauthDecl {
    * 只管展示(设置页 / 账号工具看到的名字),任一占位符取不到值时整体降级
    * 为空(回落显示 labelPath 标签)。不声明 = 展示名就用 labelPath 的值
    * (邮箱这类本身可读的服务商不需要它)。
+   *
+   * avatarPath(可选,2026-07-17 xd-feishu 设置页前置):头像 URL 在身份
+   * 响应里的点分路径(如飞书 user_info 的 "data.avatar_thumb")。主机连接
+   * 时按该路径取 https 地址、**不带任何凭证**地下载小图(mime / 体积硬顶),
+   * 转 data URL 存主机保险库,经 /oauth 只读回给意识自绘设置页展示——图片
+   * 字节不出主机、沙箱 CSP(img-src data:)恰好放行。取不到 / 下载失败一律
+   * 降级无头像,不阻断授权。
    */
-  identity?: { url: string; labelPath: string; displayTemplate?: string };
+  identity?: { url: string; labelPath: string; displayTemplate?: string; avatarPath?: string };
   /**
    * 可选:loopback 回调固定端口(1024–65535)。Atlassian 这类服务商要求回调
    * URI 与应用注册值精确匹配(含端口),声明后主机授权引擎钉死
@@ -1595,7 +1602,9 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
             }
             oaBounce = { path: bb.path as string, callbackPath: bb.callbackPath as string };
           }
-          let oaIdentity: { url: string; labelPath: string; displayTemplate?: string } | undefined;
+          let oaIdentity:
+            | { url: string; labelPath: string; displayTemplate?: string; avatarPath?: string }
+            | undefined;
           if (oa.identity !== undefined) {
             if (!isPlainObject(oa.identity)) {
               return { ok: false, reason: 'network.secrets[].oauth.identity 必须是对象' };
@@ -1646,10 +1655,26 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
               }
               idnTemplate = idn.displayTemplate;
             }
+            // avatarPath(可选):头像 URL 的点分路径,形状同 labelPath。
+            let idnAvatarPath: string | undefined;
+            if (idn.avatarPath !== undefined) {
+              if (
+                typeof idn.avatarPath !== 'string' ||
+                idn.avatarPath.length > 128 ||
+                !GHOST_SECRET_EXCHANGE_TOKEN_PATH_RE.test(idn.avatarPath)
+              ) {
+                return {
+                  ok: false,
+                  reason: 'network.secrets[].oauth.identity.avatarPath 必须是 ≤128 字符的点分路径(段名限字母/数字/_/-,如 "data.avatar_thumb")',
+                };
+              }
+              idnAvatarPath = idn.avatarPath;
+            }
             oaIdentity = {
               url: idnUrl.url,
               labelPath: idn.labelPath,
               ...(idnTemplate !== undefined ? { displayTemplate: idnTemplate } : {}),
+              ...(idnAvatarPath !== undefined ? { avatarPath: idnAvatarPath } : {}),
             };
           }
           oauth = {
