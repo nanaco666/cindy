@@ -61,6 +61,13 @@ import { getProviderSecretStore } from '../secrets/providerSecretStore.js';
 const execFileP = promisify(execFile);
 const log = createLogger('auth-adapters');
 
+/**
+ * Host-injected provider sessions only need a non-empty credential to pass Claude Code's
+ * local auth preflight. The loopback proxy replaces it with the selected provider's real
+ * API key / OAuth token before forwarding the request.
+ */
+export const CLAUDE_PROVIDER_AUTH_PLACEHOLDER_KEY = 'xdt-provider-auth-placeholder-key';
+
 /** Codex CLI 的 HOME 目录, auth.json 放在根, sessions 子目录放会话 jsonl。 */
 function getCodexHome(): string {
   return path.join(app.getPath('userData'), 'codex-home');
@@ -316,6 +323,12 @@ export class DesktopClaudeAuthAdapter implements AuthAdapter {
         ? { authenticated: true, identity: 'API Key · AI Gateway', authSource: 'api-key' }
         : { authenticated: false, errorReason: 'no_key' };
     }
+    if (options?.credentialMode === 'provider-oauth') {
+      if (!isAnthropicCompatProxyHandleReady()) {
+        return { authenticated: false, errorReason: 'proxy_not_ready' };
+      }
+      return { authenticated: true, identity: 'Provider · Proxy', authSource: 'api-key' };
+    }
     // 连了 Claude.ai 订阅(系统 Claude Code 凭证库有 OAuth 登录,或经本 app 浏览器授权写入)
     // → cc 走 oauth-spawn:子进程携带订阅 OAuth token,因此「Anthropic 订阅」成为本会话可
     // per-session 选中的来源(选中即直连 api.anthropic.com)。默认仍走网关(网关 key 由 proxy
@@ -368,6 +381,9 @@ export class DesktopClaudeAuthAdapter implements AuthAdapter {
     if (options?.credentialMode === 'gateway-key') {
       const apiKey = readClaudeApiKey();
       if (apiKey) env.ANTHROPIC_API_KEY = apiKey;
+    } else if (options?.credentialMode === 'provider-oauth') {
+      // 真实供应商凭证只留在 host/proxy;占位 key 仅用于通过 CC CLI 本地鉴权检查。
+      env.ANTHROPIC_API_KEY = CLAUDE_PROVIDER_AUTH_PLACEHOLDER_KEY;
     } else if (hasClaudeAiOAuth()) {
       // 连了订阅(oauth-spawn):经 CLAUDE_CODE_OAUTH_TOKEN 显式把订阅 access token 递给
       // cc 子进程(官方桌面宿主协议)。cc 2.1.198 起 CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST

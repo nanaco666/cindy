@@ -20,6 +20,8 @@ const h = vi.hoisted(() => ({
   /** getValidClaudeAiOAuth 的可注入延迟(测回调超时用)。 */
   refreshDelayMs: 0,
   lastRefreshOpts: null as { staleToken?: string; forceRefresh?: boolean } | null,
+  encryptionAvailable: true,
+  proxyReady: true,
 }));
 
 vi.mock('electron', () => ({
@@ -30,7 +32,7 @@ vi.mock('electron', () => ({
     // 依赖 process.resourcesPath(测试进程为 undefined,直接抛)——走 dev 分支绕开。
     isPackaged: false,
   },
-  safeStorage: { isEncryptionAvailable: () => false },
+  safeStorage: { isEncryptionAvailable: () => h.encryptionAvailable },
 }));
 
 vi.mock('@lizi/maker-core', () => ({}));
@@ -74,6 +76,10 @@ vi.mock('../shared-global-skills.js', () => ({
   prepareSharedGlobalSkillLinks: async () => ({ warnings: [] }),
 }));
 
+vi.mock('../anthropic-compat-proxy-host.js', () => ({
+  isAnthropicCompatProxyHandleReady: () => h.proxyReady,
+}));
+
 describe('DesktopClaudeAuthAdapter.getAuthEnv — 订阅 OAuth env 注入', () => {
   beforeEach(() => {
     h.hasOAuth = true;
@@ -89,6 +95,8 @@ describe('DesktopClaudeAuthAdapter.getAuthEnv — 订阅 OAuth env 注入', () =
     h.cleared = 0;
     h.refresherInvalidated = 0;
     h.refreshDelayMs = 0;
+    h.encryptionAvailable = true;
+    h.proxyReady = true;
   });
 
   async function makeAdapter() {
@@ -131,6 +139,33 @@ describe('DesktopClaudeAuthAdapter.getAuthEnv — 订阅 OAuth env 注入', () =
     const env = await adapter.getAuthEnv({ credentialMode: 'gateway-key' });
     expect(env.ANTHROPIC_API_KEY).toBe('sk-xd-gateway');
     expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
+  });
+
+  it('provider-oauth 模式:无网关 key / Claude OAuth 也可用,且只注入占位 key', async () => {
+    h.hasOAuth = false;
+    h.oauth = null;
+    h.gatewayKey = null;
+    const mod = await import('../auth-adapters.js');
+    const adapter = new mod.DesktopClaudeAuthAdapter();
+
+    await expect(adapter.getState({ credentialMode: 'provider-oauth' })).resolves.toMatchObject({
+      authenticated: true,
+    });
+    await expect(adapter.getAuthEnv({ credentialMode: 'provider-oauth' })).resolves.toMatchObject({
+      ANTHROPIC_API_KEY: mod.CLAUDE_PROVIDER_AUTH_PLACEHOLDER_KEY,
+    });
+  });
+
+  it('provider-oauth 模式在 loopback proxy 未就绪时保持 fail-closed', async () => {
+    h.hasOAuth = false;
+    h.gatewayKey = null;
+    h.proxyReady = false;
+    const adapter = await makeAdapter();
+
+    await expect(adapter.getState({ credentialMode: 'provider-oauth' })).resolves.toEqual({
+      authenticated: false,
+      errorReason: 'proxy_not_ready',
+    });
   });
 
   it('getFreshSubscriptionToken:透传刷新结果的 accessToken 与 staleToken 基线', async () => {

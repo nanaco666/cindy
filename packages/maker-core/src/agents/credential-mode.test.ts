@@ -29,9 +29,32 @@ describe('resolveAgentCredentialMode', () => {
       providerId: 'anthropic',
       model: 'claude-sonnet-4.5',
     })).toBe('oauth-bearer');
+    expect(resolveAgentCredentialMode({
+      agentKind: 'claude-code',
+      providerId: 'openai',
+      model: 'chatgpt/gpt-5.5',
+    })).toBe('provider-oauth');
+    expect(resolveAgentCredentialMode({
+      agentKind: 'claude-code',
+      providerId: 'xai',
+      model: 'xai/grok-4.5',
+    })).toBe('provider-oauth');
   });
 
-  it('infers credential mode from namespaced codex model prefixes when provider id is absent', () => {
+  it('uses host-injected auth for explicit third-party providers on either runtime', () => {
+    expect(resolveAgentCredentialMode({
+      agentKind: 'claude-code',
+      providerId: 'custom-anthropic-compatible',
+      model: 'custom-model',
+    })).toBe('provider-oauth');
+    expect(resolveAgentCredentialMode({
+      agentKind: 'codex',
+      providerId: 'custom-openai-compatible',
+      model: 'custom-model',
+    })).toBe('provider-oauth');
+  });
+
+  it('infers credential mode from uniquely-owned model prefixes when provider id is absent', () => {
     expect(resolveAgentCredentialMode({
       agentKind: 'codex',
       model: 'codex/gpt-5.5',
@@ -41,10 +64,13 @@ describe('resolveAgentCredentialMode', () => {
       model: 'xai/grok-4.3',
     })).toBe('provider-oauth');
     expect(resolveAgentCredentialMode({
-      agentKind: 'codex',
-      providerId: 'custom-openai-compatible',
-      model: 'codex/gpt-5.5',
-    })).toBeUndefined();
+      agentKind: 'claude-code',
+      model: 'chatgpt/gpt-5.5',
+    })).toBe('provider-oauth');
+    expect(resolveAgentCredentialMode({
+      agentKind: 'claude-code',
+      model: 'xai/grok-4.5',
+    })).toBe('provider-oauth');
   });
 });
 

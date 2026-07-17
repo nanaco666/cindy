@@ -636,7 +636,7 @@ export class ClaudeCodeAgent extends BaseAgent {
     // process.env 里其他字段(已被 boot strip 兜底) / `~/.claude/.credentials.json`
     // (用户单独装过 Claude Code 时存在),用上别人的 OAuth 通道 → 既泄漏隔离,也
     // 让用户莫名其妙"用上了不属于本 app 的 key"。
-    // renderer 接到 AgentNotAuthenticatedError 引导用户去 settings 完成 API key 设置。
+    // renderer 接到 AgentNotAuthenticatedError 后据 reason 引导用户补齐当前来源的鉴权。
     const credentialMode = opts.remoteHostId
       ? 'gateway-key'
       : resolveAgentCredentialMode({

@@ -10,10 +10,12 @@ export interface ResolveAgentCredentialModeOptions {
 /**
  * 根据本次会话的显式来源推导子进程凭证形态。
  *
- * 只对内建来源下结论:XD 一律走网关 key,官方订阅来源一律走 OAuth。
- * xAI 这类供应商 OAuth 由 host/proxy 注入,子进程只需要占位凭证。
- * 未指定来源时只按有命名空间的模型前缀推断(codex/、xai/);其它返回 undefined,
- * 由各 adapter 保持既有 fallback。
+ * XD 一律走网关 key,官方订阅来源走各自 runtime 的 OAuth。
+ * 其它显式来源(内建 xAI、跨 runtime 的 OpenAI、自定义 API Key / OAuth)
+ * 均由 host/proxy 按会话注入真实凭证,子进程只需要占位凭证。
+ *
+ * 未指定来源时只按有唯一归属的命名空间模型前缀推断;其它返回
+ * undefined,由各 adapter 保持既有 fallback。
  */
 export function resolveAgentCredentialMode(
   options: ResolveAgentCredentialModeOptions,
@@ -22,11 +24,11 @@ export function resolveAgentCredentialMode(
   if (providerId === 'xd') return 'gateway-key';
   if (options.agentKind === 'claude-code' && providerId === 'anthropic') return 'oauth-bearer';
   if (options.agentKind === 'codex' && providerId === 'openai') return 'oauth-bearer';
-  if (options.agentKind === 'codex' && providerId === 'xai') return 'provider-oauth';
+  if (providerId) return 'provider-oauth';
 
   const model = options.model?.trim() ?? '';
-  if (!providerId && options.agentKind === 'codex' && model.startsWith('codex/')) return 'gateway-key';
-  if (!providerId && options.agentKind === 'codex' && model.startsWith('xai/')) return 'provider-oauth';
+  if (model.startsWith('codex/')) return 'gateway-key';
+  if (model.startsWith('chatgpt/') || model.startsWith('xai/')) return 'provider-oauth';
   return undefined;
 }
 
@@ -58,7 +60,8 @@ export function resolveEffectiveCredentialModeFromAuthSource(
  * 保守语义:宁可要求重建,也不把意图不明的会话挂到显式凭证进程上(safety 不变量,
  * 见 codex/index.test.ts "does not reuse an explicit credential host")。
  *
- * provider-oauth 是特例:子进程凭证只作占位,真实供应商 token 由 proxy 按 session 覆盖,
+ * provider-oauth 是特例(历史命名,亦包含 host 注入的 API key):子进程凭证只作
+ * 占位,真实供应商凭证由 proxy 按 session 覆盖,
  * 所以 credential family 上可复用任意已存在的明确凭证 host;反过来不允许 provider-oauth
  * host 承载其它凭证形态。实际 Codex host 复用还必须额外确认该 host 的 loopback proxy
  * 可用,否则 provider-oauth 所需的 token 注入 / model rewrite 无法发生。
