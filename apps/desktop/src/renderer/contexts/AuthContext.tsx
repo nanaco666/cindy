@@ -24,6 +24,7 @@ import {
 } from '@/lib/authService';
 import { setCurrentUserName } from '@/lib/makerChatStore';
 import * as meService from '@/lib/meService';
+import { sessionsStore } from '@/lib/sessionsStore';
 
 /**
  * chat-data-localization V0.5: AuthContext 暴露 `migration` 字段——最近一次
@@ -80,6 +81,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const mergeRoleIntoUser = useCallback(async (incoming: User) => {
     const revision = ++activeUserRevisionRef.current;
+    if (activeUserIdRef.current !== incoming.id) {
+      // Auth transitions can leave an old request in flight. Clear the
+      // renderer session snapshot before exposing the new identity so that
+      // neither the old response nor the old mounted hook state can leak.
+      sessionsStore.reset();
+    }
     activeUserIdRef.current = incoming.id;
     // Identity changes should render immediately. Product-role hydration is a
     // non-blocking enhancement and may never overwrite a newer account/logout.
@@ -117,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoginState(null);
         void mergeRoleIntoUser(state.user);
       } else {
+        sessionsStore.reset();
         activeUserIdRef.current = null;
         setLoginState(null);
         fetchedRoleForUserRef.current.clear();
@@ -172,6 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         activeUserIdRef.current = null;
         fetchedRoleForUserRef.current.clear();
         roleByUserRef.current.clear();
+        sessionsStore.reset();
         clearWorkersCache();
         setUser(null);
         setIsAuthenticated(false);
@@ -204,6 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await authServiceRef.current!.logout();
+    sessionsStore.reset();
     clearWorkersCache();
     setMigration(null);
   }, []);

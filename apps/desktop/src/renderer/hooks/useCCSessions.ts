@@ -104,8 +104,22 @@ export function useCCSessions(options?: UseCCSessionsOptions): UseCCSessionsRetu
     // else: 切桶但旧桶有数据 → 保留旧 snapshotState (含旧 filter), 不动 isLoading,
     //       等新桶 IPC 回来再由下面 subscribe 一次性 swap, 杜绝中间空白帧。
 
-    const unsub = sessionsStore.subscribe(() => {
+    const unsub = sessionsStore.subscribe((change) => {
       const next = sessionsStore.getByFilter(filter);
+      if (change === 'reset') {
+        hasAnySnapshotRef.current = false;
+        setSnapshotState({ data: null, filter });
+        setIsLoading(true);
+        setError(null);
+        void sessionsStore
+          .ensureByFilter(filter)
+          .then(() => setError(null))
+          .catch((e: unknown) => {
+            setError(e instanceof Error ? e : new Error(String(e)));
+            setIsLoading(false);
+          });
+        return;
+      }
       // 只在新桶有确切数据时才覆盖, 否则其它桶的变化不应擦掉当前视图。
       if (next !== null) {
         setSnapshotState({ data: next, filter });
