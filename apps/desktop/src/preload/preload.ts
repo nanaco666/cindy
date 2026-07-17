@@ -297,8 +297,6 @@ const fanOutUsageMessageTurnCost = createIpcFanOut('usage:message-turn-cost');
 const fanOutFeishuBotStatusChange = createIpcFanOut('feishuBot:status-change');
 const fanOutFeishuBotConflict = createIpcFanOut('feishuBot:conflict');
 const fanOutFeishuBotRegistrationStatus = createIpcFanOut('feishuBot:registration-status');
-// Slack Bot：transport 状态/绑定身份变化 push channel(lizi-im SlackIM 广播)。
-const fanOutSlackBotStatusChange = createIpcFanOut('slackBot:status-change');
 // Discord Bot：本机凭证模式；这里只暴露 lizi-im DiscordIM 的 transport 状态。
 const fanOutDiscordBotStatusChange = createIpcFanOut('discordBot:status-change');
 const fanOutVoiceInputEvent = createIpcFanOut('voice-input:event');
@@ -1124,25 +1122,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onStatusChange: fanOutFeishuBotStatusChange,
     onConflict: fanOutFeishuBotConflict,
     onRegistrationStatus: fanOutFeishuBotRegistrationStatus,
-  },
-
-  // ── Slack Bot (Settings → Slack Bot tab) ──
-  // 公司共享 Slack App;绑定/解绑由 main 侧 SlackIM transport 打 server,
-  // 这里只暴露 lizi-im SlackIM 的 transport 状态(SSE 连接 + 绑定身份快照)。
-  slackBot: {
-    getStatus: (): Promise<{
-      status:
-        | { kind: 'idle' }
-        | { kind: 'connecting' }
-        | { kind: 'connected'; appId: string }
-        | { kind: 'conflict'; appId: string }
-        | { kind: 'error'; reason: string };
-      linked: boolean;
-      teamId: string | null;
-      slackUserId: string | null;
-      slackName: string | null;
-    }> => ipcRenderer.invoke('slackBot:get-status'),
-    onStatusChange: fanOutSlackBotStatusChange,
   },
 
   // ── Discord Bot (Settings → IM Bot tab) ──

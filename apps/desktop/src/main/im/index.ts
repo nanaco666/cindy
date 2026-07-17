@@ -52,9 +52,8 @@ import { and, eq, like, ne, sql } from 'drizzle-orm';
 
 import { getDbClient } from '../localDb/client/current';
 import { sessions } from '../localDb/schema';
-import { im, feishuIm, slackIm, discordIm } from './host';
+import { im, feishuIm, discordIm } from './host';
 import { wireFeishuOrchestrator, type FeishuOrchestratorConfig } from './feishu';
-import { wireSlackOrchestrator } from './slack';
 import { wireDiscordOrchestrator } from './discord';
 import { getImOrchestrator } from './shared/orchestrator';
 import type { ImOrchestratorConfig } from './shared/types';
@@ -65,7 +64,7 @@ import { getUpdateStatus } from '../updateService';
 
 import { createLogger } from '../logger';
 
-export { im, feishuIm, slackIm, discordIm } from './host';
+export { im, feishuIm, discordIm } from './host';
 
 const log = createLogger('main:im');
 
@@ -118,16 +117,7 @@ const FEISHU_CONFIG: FeishuOrchestratorConfig = {
   effortOverrides: IM_DEFAULT_EFFORT_OVERRIDES,
 };
 
-// Slack 渠道的产品默认与 feishu 完全一致 — 两个渠道是同一产品能力的两个入口,
-// 默认体验不该有差异。需要分渠道调参时在这里各自改。
-const SLACK_CONFIG: ImOrchestratorConfig = {
-  agentKind: IM_DEFAULT_SETTINGS.agentKind,
-  defaultModel: IM_DEFAULT_SETTINGS.agents[IM_DEFAULT_SETTINGS.agentKind].model,
-  defaultPermissionMode: 'auto',
-  effortOverrides: IM_DEFAULT_EFFORT_OVERRIDES,
-};
-
-// Discord P1 DM 渠道与 Slack/Feishu 共享同一套产品默认值。
+// Discord P1 DM 渠道与 Feishu 共享同一套产品默认值。
 const DISCORD_CONFIG: ImOrchestratorConfig = {
   agentKind: IM_DEFAULT_SETTINGS.agentKind,
   defaultModel: IM_DEFAULT_SETTINGS.agents[IM_DEFAULT_SETTINGS.agentKind].model,
@@ -146,7 +136,6 @@ export function startImOrchestrators(): void {
   });
 
   wireFeishuOrchestrator(feishuIm, FEISHU_CONFIG);
-  wireSlackOrchestrator(slackIm, SLACK_CONFIG);
   wireDiscordOrchestrator(discordIm, DISCORD_CONFIG);
 
   // bindingStore.preload() 故意不在这里跑 —— 它要 DbClient, 而 localDb 在

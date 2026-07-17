@@ -103,7 +103,7 @@ import { createTurnRunner, type ImTurnRunner } from '../turnRunner';
 import type { ImCardBuilders } from '../cardBuilders';
 import type { ImSessionRepo, ImSessionRow } from '../sessionRepo';
 import type { ImChannelAdapter } from '../types';
-import { ui as slackUi } from '../../slack/uiText';
+import { ui as slackUi } from './threadUiFixture';
 
 interface SessionHarness {
   session: Session;

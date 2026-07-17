@@ -41,8 +41,6 @@ export interface IMHost {
   paths: {
     /** Root for downloaded feishu media (images / files). MUST equal the `mediaService.rootDir` passed to `lizi-mcps`'s `createFeishuService` so xdt-image:// URLs resolve in both contexts. */
     feishuMediaDir: string;
-    /** Root for downloaded slack media. Optional — only hosts that wire the slack channel provide it. */
-    slackMediaDir?: string;
     /** Root for downloaded discord media. Optional — only hosts that wire the discord channel provide it. */
     discordMediaDir?: string;
   };
@@ -70,15 +68,15 @@ export interface IMHost {
 export interface IMHostMediaCache {
   /** 图片字节入 host 总仓;返回仓内绝对路径(喂 agent)+ 渲染 URL(cindy-media://)。 */
   cacheImage(params: {
-    integration: 'feishu' | 'slack' | 'discord';
-    /** 平台侧稳定 token(feishu image_key / slack fileId / discord attachment id),host 据此免重下。 */
+    integration: 'feishu' | 'discord';
+    /** 平台侧稳定 token(feishu image_key / discord attachment id),host 据此免重下。 */
     token: string;
     buffer: Uint8Array;
     mimeType: string;
   }): Promise<{ absPath: string; url: string }>;
   /** 按 token 查已缓存图片;未缓存返回 null(调用方去真下载)。 */
   getCachedImage(
-    integration: 'feishu' | 'slack' | 'discord',
+    integration: 'feishu' | 'discord',
     token: string,
   ): Promise<{ absPath: string; url: string; mimeType: string } | null>;
   /** host 托管媒体 URL(cindy-media://)→ 绝对路径;认不出返回 null(出站上传用)。 */

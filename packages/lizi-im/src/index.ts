@@ -30,16 +30,6 @@ export type {
 
 export { FeishuIM, createFeishuIM } from './feishu/index.js';
 
-export { SlackIM, createSlackIM } from './slack/index.js';
-export type {
-  SlackIMOptions,
-  SlackRelayTransport,
-  SlackRelayInboundEvent,
-  SlackRelayStatus,
-  SlackLinkStatus,
-  SlackProxyMethod,
-} from './slack/index.js';
-
 export { DiscordIM, createDiscordIM } from './discord/index.js';
 export type { DiscordIMOptions } from './discord/index.js';
 

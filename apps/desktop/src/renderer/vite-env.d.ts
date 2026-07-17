@@ -328,14 +328,6 @@ type GoogleAuthStatus = 'not_connected' | 'connecting' | 'connected' | 'reconnec
 
 type FeishuBotStatus = 'idle' | 'testing' | 'connected' | 'reconnecting' | 'conflict' | 'error';
 
-/** lizi-im SlackIM 的 transport 状态(IMStatus union 的 mirror)。 */
-type SlackBotTransportStatus =
-  | { kind: 'idle' }
-  | { kind: 'connecting' }
-  | { kind: 'connected'; appId: string }
-  | { kind: 'conflict'; appId: string }
-  | { kind: 'error'; reason: string };
-
 /** lizi-im DiscordIM 的 transport 状态(IMStatus union 的 mirror)。 */
 type DiscordBotTransportStatus =
   | { kind: 'idle' }
@@ -1430,24 +1422,6 @@ interface ElectronAPI {
     onConflict: (callback: (payload: { appId: string }) => void) => () => void;
     onRegistrationStatus: (
       callback: (payload: FeishuBotRegistrationStatusPayload) => void,
-    ) => () => void;
-  };
-
-  // ── Slack Bot (Settings → Slack Bot tab) ──
-  slackBot: {
-    getStatus: () => Promise<{
-      status: SlackBotTransportStatus;
-      linked: boolean;
-      teamId: string | null;
-      slackUserId: string | null;
-      slackName: string | null;
-    }>;
-    onStatusChange: (
-      callback: (update: {
-        status: SlackBotTransportStatus;
-        linked: boolean;
-        slackName: string | null;
-      }) => void,
     ) => () => void;
   };
 

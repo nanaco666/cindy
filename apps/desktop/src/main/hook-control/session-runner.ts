@@ -375,8 +375,8 @@ export function createMakerHookSessionRunner(deps: {
           title: req.isNew ? (req.title ?? undefined) : undefined,
           // 渠道标记(仅 hook 亲生新会话): lizi_feishu_bot 据此在构建期给
           // 工具描述注入渠道路由提示。两个刻意限定:
-          //   - 不用 'slack'(那是 organic SlackIM 渠道的标记,会连带注册
-          //     lizi_slack_bot —— 其传输走 SlackIM link,hook 会话不通);
+          //   - 不用 'slack'(那是已退役的 organic SlackIM relay 渠道的历史
+          //     标记,留给存量会话的侧边栏显示,新会话不再产生);
           //   - 复用/接管路径(isNew=false,可能是桌面端创建的会话)不传,
           //     否则冷 resume 时会把桌面会话打上 Slack 渠道描述并存续整个
           //     进程生命周期(对齐 im/turnRunner「attached 不传 vendorOptions」

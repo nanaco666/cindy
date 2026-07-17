@@ -3,8 +3,8 @@
  * ---------------------------------------------------------------------------
  * 单条 hook 连接的 WS 传输层: desktop 主动拨出到中心 slack-hook-server。
  *
- *   - 拨出方向: 本机不开任何监听端口(与 slack/transport.ts 的 SSE、feishu
- *     WSClient 同一模型), 鉴权用 Authorization: Bearer <登录 accessToken> 头
+ *   - 拨出方向: 本机不开任何监听端口(与 feishu WSClient 同一模型),
+ *     鉴权用 Authorization: Bearer <登录 accessToken> 头
  *     (与 device-link 同模型; token 每次重连实时取, 刷新天然兼容)。
  *   - 协议帧: 全部经 @cindy/slack-hook-protocol —— 出帧走构造器 + serialize, 入帧
  *     一律先过 parseHookMessage, 坏帧记日志丢弃(规则 9)。

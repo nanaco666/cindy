@@ -12,7 +12,6 @@ import type {
   ContactsMcpDeps,
   LspMcpDeps,
 } from './types.js';
-import { createSlackBotMcpServer, type SlackBotMcpDeps } from './lizi_slackBotMcpServer.js';
 import { createFeishuBotMcpServer } from './lizi_feishuBotMcpServer.js';
 import { createSchedulerMcpServer } from './lizi_schedulerMcpServer.js';
 import { createSshMcpServer } from './lizi_sshMcpServer.js';
@@ -36,8 +35,6 @@ export interface CreateLiziMcpProvidersOptions {
   browser?: BrowserMcpDeps;
   /** Local desktop computer-use tools backed by a host-managed external driver. */
   computer?: ComputerMcpDeps;
-  /** slack bot 通道工具(send_file_to_user)— 仅 source='slack' session 注入。 */
-  slackBot?: Pick<SlackBotMcpDeps, 'sendFile' | 'logger'>;
   feishuBot?: FeishuBotMcpHostDeps;
   scheduler?: SchedulerMcpDeps;
   /**
@@ -88,18 +85,7 @@ function readFeishuChatId(ctx: LiziMcpSessionContext): string | null {
   return typeof raw === 'string' && raw.length > 0 ? raw : null;
 }
 
-function readSlackChatId(ctx: LiziMcpSessionContext): string | null {
-  const raw = ctx.vendorOptions?.slackChatId;
-  return typeof raw === 'string' && raw.length > 0 ? raw : null;
-}
-
-/** thread = session 模型: organic slack session 的 thread root ts(可缺省)。 */
-function readSlackThreadTs(ctx: LiziMcpSessionContext): string | null {
-  const raw = ctx.vendorOptions?.slackThreadTs;
-  return typeof raw === 'string' && raw.length > 0 ? raw : null;
-}
-
-/** 会话来源(如 'slack'),feishu bot 用它在构建期注入渠道路由提示。 */
+/** 会话来源(如 'slack-hook'),feishu bot 用它在构建期注入渠道路由提示。 */
 function readSessionSource(ctx: LiziMcpSessionContext): string | undefined {
   const raw = ctx.vendorOptions?.source;
   return typeof raw === 'string' && raw.length > 0 ? raw : undefined;
@@ -232,27 +218,9 @@ export function createLiziMcpProviders(
             readFeishuChatId(ctx) ?? opts.feishuBot!.getOwnerOpenId() ?? null,
           sendFile: opts.feishuBot!.sendFile,
           sendMessage: opts.feishuBot!.sendMessage,
-          // slack 会话里两组 bot 推送工具并存,构建期注入渠道路由提示,
+          // slack-hook 会话里按来源在构建期注入渠道路由提示,
           // 把「发给我」的默认通道钉死在会话自身渠道(规则 9)。
           sessionSource: readSessionSource(ctx),
-        }),
-      }),
-    });
-  }
-
-  // slack bot 通道工具 — 与 feishu 版平行, 仅 source='slack' session 注入。
-  // 不动 lizi_feishu_bot(其 tool 面对在跑的 feishu 会话是 prompt/cache 相邻物)。
-  if (opts.slackBot && selected(enabled, 'lizi_slack_bot')) {
-    providers.push({
-      name: 'lizi_slack_bot',
-      isEnabled: (ctx) => ctx.vendorOptions?.source === 'slack',
-      toClaudeSdkConfig: (ctx) => ({
-        type: 'sdk',
-        name: 'lizi_slack_bot',
-        instance: createSlackBotMcpServer({
-          getChatId: () => readSlackChatId(ctx),
-          getThreadTs: () => readSlackThreadTs(ctx),
-          sendFile: opts.slackBot!.sendFile,
         }),
       }),
     });

@@ -13,7 +13,7 @@ import { getCindyGhostsMcpDeps } from './ghost.js';
 import { getAndroidMcpDeps } from './android.js';
 import { getBrowserMcpDeps } from './browser.js';
 import { getComputerMcpDeps } from './computer.js';
-import { feishuIm, slackIm } from '../im';
+import { feishuIm } from '../im';
 import { createLogger } from '../logger.js';
 import { getScheduler } from '../scheduler-host/index.js';
 import { searchSessionsFn } from '../maker-host/session-search.js';
@@ -127,11 +127,6 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
         }
       },
       logger: createLogger('mcp/lizi_feishu_bot'),
-    },
-    slackBot: {
-      sendFile: (chatId: string, absPath: string, displayName?: string, threadTs?: string) =>
-        slackIm.sendFile(chatId, absPath, displayName, { threadTs }),
-      logger: createLogger('mcp/lizi_slack_bot'),
     },
     scheduler: {
       getScheduler: () => getScheduler(),

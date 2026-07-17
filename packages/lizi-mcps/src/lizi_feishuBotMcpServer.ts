@@ -43,23 +43,16 @@ const D = {
 type FeishuBotToolDescriptions = { [K in keyof typeof D]: string };
 
 /**
- * Slack 会话里追加到全部工具描述末尾的渠道路由提示(规则 9:通道路由的
- * 确定性用代码保证,不交给模型自由判断)。两个渠道措辞不同:
- * - 'slack'(organic SlackIM 渠道):发文件走 lizi_slack_bot 的
- *   send_file_to_user(lizi_slack_bot 只有这一个工具,消息类意图不要指过去);
- * - 'slack-hook'(官方 hook 渠道):该渠道没有 lizi_slack_bot,文件回传靠
- *   最终回复文本里的 xdt-file 引用(hook outbound 收集器),提示与
- *   hook-control/outbound.ts 的 SLACK_HOOK_PROMPT_NOTE 语义对齐。
- * 导出仅供测试锁定文案。
+ * Slack hook 会话里追加到全部工具描述末尾的渠道路由提示(规则 9:通道路由的
+ * 确定性用代码保证,不交给模型自由判断)。hook 渠道的文件回传靠最终回复文本里
+ * 的 xdt-file 引用(hook outbound 收集器),提示与 hook-control/outbound.ts 的
+ * SLACK_HOOK_PROMPT_NOTE 语义对齐。导出仅供测试锁定文案。
+ * (organic SlackIM 渠道及其 lizi_slack_bot 已于 2026-07-17 随老 relay 退役。)
  */
-export const SLACK_SESSION_CHANNEL_NOTE =
-  '\n\n⚠️ 当前是 Slack 会话:文字回复直接输出即可(会自动回贴到当前 Slack thread,无需工具);把文件发给用户用 lizi_slack_bot 的 send_file_to_user,不要用本工具;仅当用户明确说「发飞书 / 飞书通知我」时才走飞书通道。';
-
 export const SLACK_HOOK_SESSION_CHANNEL_NOTE =
   '\n\n⚠️ 当前是 Slack 会话:文字回复直接输出即可(会自动回贴到当前 Slack thread,无需工具);把文件发给用户是在最终回复文本里写 `[文件名](xdt-file:///绝对路径)`(文件须位于当前工作目录内),图片直接引用其地址 `![说明](cindy-media://… 或 xdt-image://…)`,系统自动作为 Slack 附件发回,不要用本工具;仅当用户明确说「发飞书 / 飞书通知我」时才走飞书通道。';
 
 const NOTE_BY_SOURCE: Record<string, string> = {
-  slack: SLACK_SESSION_CHANNEL_NOTE,
   'slack-hook': SLACK_HOOK_SESSION_CHANNEL_NOTE,
 };
 
@@ -108,12 +101,11 @@ export type FeishuBotMcpDeps = Omit<FeishuBotMcpHostDeps, 'getOwnerOpenId'> & {
    */
   getChatId: () => string | null | undefined;
   /**
-   * 会话来源(ctx.vendorOptions.source,session 构建期确定)。'slack' 时给
-   * 本 server 全部工具描述追加渠道路由提示——Slack 会话里 lizi_feishu_bot 与
-   * lizi_slack_bot 工具面并存且描述高度相似,通道选择若交给模型自由判断会随机
-   * 路由错通道(2026-07-16 实踩:Slack 会话里「把文件发给我」被路由到飞书);
-   * 用构建期注入把默认通道钉死在会话自身渠道上。描述在 session 构建期一次确定、
-   * 会话内字节稳定,不影响 prompt cache。
+   * 会话来源(ctx.vendorOptions.source,session 构建期确定)。'slack-hook' 时给
+   * 本 server 全部工具描述追加渠道路由提示——Slack 会话里若通道选择交给模型
+   * 自由判断会随机路由错通道(2026-07-16 实踩:Slack 会话里「把文件发给我」被
+   * 路由到飞书);用构建期注入把默认通道钉死在会话自身渠道上。描述在 session
+   * 构建期一次确定、会话内字节稳定,不影响 prompt cache。
    */
   sessionSource?: string;
 };

@@ -289,7 +289,7 @@ describe('hook session-runner 的 userSendAt 时序(未分类误判回归)', () 
     expect(outcome.status).toBe('ok');
 
     // createSession 带渠道标记(lizi_feishu_bot 据此注入路由提示;
-    // 刻意不是 'slack' —— 不能连带注册传输不通的 lizi_slack_bot)
+    // 刻意不是 'slack' —— 那是已退役 organic SlackIM 渠道的历史标记)
     expect(fakeMaker.createSession).toHaveBeenCalledWith(
       expect.objectContaining({ vendorOptions: { source: 'slack-hook' } }),
     );

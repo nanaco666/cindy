@@ -1,15 +1,15 @@
 /**
- * main/im/slack/uiText.ts
- * ---------------------------------------------------------------------------
- * Slack 渠道的用户文案包(ImUiTextPack 完整实现)。
+ * threadUiFixture.ts — threadScoped 渠道文案包测试样本。
  *
- * 与 feishu/uiText.ts 同语气(有温度、带点游戏味), 仅渠道措辞差异:
- * "飞书"→"Slack"。markdown 标记照写 — SlackIM 出站统一过 markdownToMrkdwn。
+ * 老 SlackIM relay 渠道 2026-07-17 退役后,生产代码已没有 threadScoped 渠道,
+ * 但 shared/ 的 thread = session 路由机制(turnRunner / cardActionHandler /
+ * controlFlow)保留给未来渠道。本 fixture 保存原 slack uiText 的完整
+ * ImUiTextPack,供 thread 路由类测试当自洽样本断言,不进产品包。
  */
 
 import type { IMUnsupportedEntry } from 'lizi-im';
 
-import type { ImUiTextPack } from '../shared/types';
+import type { ImUiTextPack } from '../types';
 
 export const ui = {
   // ── slash command replies ──────────────────────────────────────────────────
@@ -40,7 +40,7 @@ export const ui = {
     runtimeError: (errMsg: string) => `⚠️ Agent 翻车了：${errMsg.slice(0, 200)}`,
     sendInternalError: (errMsg: string) => `❌ 内部出 bug 了：${errMsg}`,
     apiKeyMissing:
-      '⚠️ Cindy AI Key 还没配呢~\n去 desktop 的 Settings → 模型供应商里连接 Cindy AI，再来 ping 我',
+      '⚠️ XD 网关 Key 还没配呢~\n去 desktop 的 Settings → 模型供应商里连接 XD 网关，再来 ping 我',
     controlInProgress:
       '🖥️ 远程连接还在选择中呢 — 先把 thread 里那张卡片操作完（或点 🚪 退出），再来发别的~',
     credentialBusy:
