@@ -131,14 +131,21 @@ export function subscribeVoiceInputSettings(
   });
 }
 
-export async function syncVoiceInputGlobalShortcut(shortcut: VoiceInputShortcut | null): Promise<void> {
+export type VoiceInputShortcutUpdateResult =
+  | { ok: true; settings: VoiceInputSettings }
+  | { ok: false; error: string; errorCode?: string };
+
+export async function syncVoiceInputGlobalShortcut(shortcut: VoiceInputShortcut | null): Promise<{ ok: boolean; error?: string }> {
   try {
     const result = await window.electronAPI.voiceInput.setGlobalShortcut(shortcut);
     if (!result.ok) {
       log.warn('global voice input shortcut sync failed:', result.error);
     }
+    return result;
   } catch (error) {
-    log.warn('global voice input shortcut sync failed:', error instanceof Error ? error.message : String(error));
+    const message = error instanceof Error ? error.message : String(error);
+    log.warn('global voice input shortcut sync failed:', message);
+    return { ok: false, error: message };
   }
 }
 
@@ -155,7 +162,7 @@ export function useVoiceInputSettings(): {
   setDictionaryEntries: (entries: VoiceInputDictionaryEntry[]) => void;
   deleteDictionaryEntry: (entryId: string) => void;
   recordDictionaryLearningActions: (actions: DictationDictionaryLearningAction[]) => void;
-  setShortcut: (shortcut: VoiceInputShortcut | null) => void;
+  setShortcut: (shortcut: VoiceInputShortcut | null) => Promise<VoiceInputShortcutUpdateResult>;
 } {
   const [settings, setSettings] = useState<VoiceInputSettings>(getVoiceInputSettings);
 
@@ -233,8 +240,18 @@ export function useVoiceInputSettings(): {
   }, []);
 
   const setShortcut = useCallback(
-    (shortcut: VoiceInputShortcut | null) => updateSettings({ shortcut }),
-    [updateSettings],
+    async (shortcut: VoiceInputShortcut | null): Promise<VoiceInputShortcutUpdateResult> => {
+      try {
+        const result = await window.electronAPI.voiceInput.updateShortcutSetting(shortcut);
+        if (!result.ok) log.warn('voice input shortcut setting update failed:', result.error);
+        return result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log.warn('voice input shortcut setting update failed:', message);
+        return { ok: false, error: message };
+      }
+    },
+    [],
   );
 
   useEffect(() => {

@@ -666,7 +666,8 @@
         "toast": {
           "needsModifier": "組み合わせキー、F1-F24 単独、または左右の Command / Option / Control / Fn を使ってください。",
           "fnUnavailable": "組み合わせキー、F1-F24 単独、または左右の Command / Option / Control / Fn を使ってください。",
-          "systemReserved": "このショートカットはシステムまたは一般的な編集ショートカットと競合します"
+          "systemReserved": "このショートカットはシステムまたは一般的な編集ショートカットと競合します",
+          "registrationFailed": "ショートカットを登録できませんでした: {{error}}"
         }
       },
       "permissions": {

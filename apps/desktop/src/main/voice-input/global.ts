@@ -25,6 +25,7 @@ import {
 } from '../../shared/voiceInputDictionaryLearning.js';
 import {
   voiceInputShortcutNeedsMacNativeListener,
+  type VoiceInputSettings,
   type VoiceInputShortcut,
 } from '../../shared/voiceInputData.js';
 import {
@@ -39,6 +40,7 @@ import {
   type OverlayPlacementDisplay,
 } from './overlayPlacement.js';
 import { voiceInputOverlayPositionStore } from './overlayPositionStore.js';
+import { voiceInputDataStore } from './VoiceInputDataStore.js';
 
 const log = createLogger('voice-input-global');
 type GlobalVoiceInputShortcutPhase = 'start' | 'tap' | 'end';
@@ -72,6 +74,10 @@ const macModifierShortcutListener = new MacModifierShortcutListener({
 
 type VoiceInputGlobalResult =
   | { ok: true }
+  | { ok: false; error: string; errorCode?: VoiceInputGlobalErrorCode };
+
+type VoiceInputSettingsUpdateResult =
+  | { ok: true; settings: VoiceInputSettings }
   | { ok: false; error: string; errorCode?: VoiceInputGlobalErrorCode };
 
 type VoiceInputGlobalErrorCode = 'empty' | 'unavailable' | 'unconfirmed' | 'permission' | 'failed';
@@ -194,6 +200,7 @@ const MAC_TEXT_INSERTION_HELPER_SOURCE_RELATIVE = path.join('native', 'voice-inp
 
 let registered = false;
 let registeredAccelerator: string | null = null;
+let registeredShortcut: VoiceInputShortcut | null = null;
 let registeredNativeShortcutLabel: string | null = null;
 let registeredNativeShortcutKey: string | null = null;
 let overlayCancelRegistered = false;
@@ -391,6 +398,19 @@ export function registerGlobalVoiceInputIpc(): void {
     'voice-input:global-shortcut:set',
     async (_event, shortcut: VoiceInputShortcut | null | undefined): Promise<VoiceInputGlobalResult> => {
       return setVoiceInputGlobalShortcut(shortcut ?? null);
+    },
+  );
+
+  ipcMain.handle(
+    'voice-input:settings:update-shortcut',
+    async (_event, shortcut: VoiceInputShortcut | null | undefined): Promise<VoiceInputSettingsUpdateResult> => {
+      const nextShortcut = shortcut ?? null;
+      const registration = await setVoiceInputGlobalShortcut(nextShortcut);
+      if (!registration.ok) return registration;
+      return {
+        ok: true,
+        settings: voiceInputDataStore.updateSettings({ shortcut: nextShortcut }),
+      };
     },
   );
 
@@ -675,6 +695,7 @@ export function registerGlobalVoiceInputIpc(): void {
       globalShortcut.unregister(registeredAccelerator);
       registeredAccelerator = null;
     }
+    registeredShortcut = null;
     registeredNativeShortcutLabel = null;
     registeredNativeShortcutKey = null;
     macModifierShortcutListener.stop();
@@ -697,6 +718,7 @@ async function setVoiceInputGlobalShortcut(shortcut: VoiceInputShortcut | null):
       globalShortcut.unregister(registeredAccelerator);
       registeredAccelerator = null;
     }
+    registeredShortcut = null;
     registeredNativeShortcutLabel = null;
     registeredNativeShortcutKey = null;
     macModifierShortcutListener.stop();
@@ -709,16 +731,15 @@ async function setVoiceInputGlobalShortcut(shortcut: VoiceInputShortcut | null):
     if (process.platform !== 'darwin') {
       return { ok: false, error: 'Function/modifier voice input shortcuts are only available on macOS.' };
     }
-    if (registeredAccelerator) {
-      globalShortcut.unregister(registeredAccelerator);
-      registeredAccelerator = null;
-    }
     const nativeShortcutKey = stableVoiceInputShortcutKey(shortcut);
     if (registeredNativeShortcutKey === nativeShortcutKey && macModifierShortcutListener.isRunning()) {
       return { ok: true };
     }
     const result = await macModifierShortcutListener.setShortcut(shortcut);
     if (!result.ok) {
+      if (registeredShortcut && voiceInputShortcutNeedsMacNativeListener(registeredShortcut, process.platform)) {
+        await macModifierShortcutListener.setShortcut(registeredShortcut);
+      }
       log.warn('native global shortcut registration failed', {
         code: shortcut.code,
         modifiers: shortcut.modifiers,
@@ -726,6 +747,11 @@ async function setVoiceInputGlobalShortcut(shortcut: VoiceInputShortcut | null):
       });
       return result;
     }
+    if (registeredAccelerator) {
+      globalShortcut.unregister(registeredAccelerator);
+      registeredAccelerator = null;
+    }
+    registeredShortcut = shortcut;
     registeredNativeShortcutLabel = getNativeShortcutLogLabel(shortcut);
     registeredNativeShortcutKey = nativeShortcutKey;
     log.info('native global shortcut registered', {
@@ -738,35 +764,30 @@ async function setVoiceInputGlobalShortcut(shortcut: VoiceInputShortcut | null):
     return { ok: true };
   }
 
-  registeredNativeShortcutLabel = null;
-  registeredNativeShortcutKey = null;
-  macModifierShortcutListener.stop();
   const accelerator = toElectronAccelerator(shortcut);
   if (!accelerator) {
     return { ok: false, error: 'Unsupported voice input shortcut.' };
   }
   if (isReservedGlobalShortcut(shortcut)) {
-    if (registeredAccelerator === accelerator) {
-      globalShortcut.unregister(registeredAccelerator);
-      registeredAccelerator = null;
-    }
     return { ok: false, error: 'This shortcut conflicts with a system or common editing shortcut.' };
   }
   if (registeredAccelerator === accelerator) {
     return { ok: true };
   }
-  if (registeredAccelerator) {
-    globalShortcut.unregister(registeredAccelerator);
-    registeredAccelerator = null;
-  }
-
   const ok = globalShortcut.register(accelerator, handleGlobalVoiceInputShortcut);
   if (!ok) {
     log.warn('global shortcut registration failed', { accelerator });
     return { ok: false, error: `Global shortcut is already in use: ${accelerator}` };
   }
 
+  if (registeredAccelerator && registeredAccelerator !== accelerator) {
+    globalShortcut.unregister(registeredAccelerator);
+  }
   registeredAccelerator = accelerator;
+  registeredShortcut = shortcut;
+  registeredNativeShortcutLabel = null;
+  registeredNativeShortcutKey = null;
+  macModifierShortcutListener.stop();
   log.info('global shortcut registered', { accelerator });
   // First-press warmup: read auth.json now so the very first shortcut press
   // does not pay for it on the critical path.

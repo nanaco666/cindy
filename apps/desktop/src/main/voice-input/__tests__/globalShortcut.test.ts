@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => {
   const modifierSetShortcut = vi.fn();
   const modifierStop = vi.fn();
   const modifierIsRunning = vi.fn();
+  const registerShortcut = vi.fn((_accelerator: string) => true);
 
   return {
     handlers,
@@ -26,6 +27,7 @@ const mocks = vi.hoisted(() => {
     modifierSetShortcut,
     modifierStop,
     modifierIsRunning,
+    registerShortcut,
   };
 });
 
@@ -43,6 +45,7 @@ vi.mock('electron', () => ({
   clipboard: {},
   globalShortcut: {
     register: vi.fn((accelerator: string, callback: () => void) => {
+      if (!mocks.registerShortcut(accelerator)) return false;
       mocks.registeredShortcuts.set(accelerator, callback);
       return true;
     }),
@@ -105,6 +108,8 @@ describe('voice input global shortcut registration', () => {
     mocks.modifierIsRunning.mockReset();
     mocks.modifierIsRunning.mockReturnValue(true);
     mocks.modifierStop.mockClear();
+    mocks.registerShortcut.mockReset();
+    mocks.registerShortcut.mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -201,5 +206,33 @@ describe('voice input global shortcut registration', () => {
     await setShortcut?.({}, fnShortcut);
 
     expect(mocks.modifierSetShortcut).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the previous Electron shortcut registered when the replacement is rejected', async () => {
+    setPlatform('darwin');
+    const { registerGlobalVoiceInputIpc } = await import('../global.js');
+    registerGlobalVoiceInputIpc();
+    const setShortcut = mocks.handlers.get('voice-input:global-shortcut:set');
+
+    const first: VoiceInputShortcut = {
+      trigger: 'keyboard',
+      code: 'F16',
+      key: 'F16',
+      modifiers: { meta: false, ctrl: false, alt: false, shift: false, fn: false },
+    };
+    const replacement: VoiceInputShortcut = {
+      trigger: 'keyboard',
+      code: 'F17',
+      key: 'F17',
+      modifiers: { meta: false, ctrl: false, alt: false, shift: false, fn: false },
+    };
+
+    await setShortcut?.({}, first);
+    mocks.registerShortcut.mockReturnValueOnce(false);
+    const result = await setShortcut?.({}, replacement);
+
+    expect(result).toMatchObject({ ok: false });
+    expect(mocks.registeredShortcuts.has('F16')).toBe(true);
+    expect(mocks.registeredShortcuts.has('F17')).toBe(false);
   });
 });

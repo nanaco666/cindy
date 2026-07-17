@@ -1261,6 +1261,10 @@ interface ElectronAPI {
       historyRaw?: string | null;
     }) => VoiceInputDataSnapshot;
     updateSettings: (patch: Partial<VoiceInputSettingsData>) => Promise<VoiceInputSettingsData>;
+    updateShortcutSetting: (shortcut: VoiceInputShortcut | null) => Promise<
+      | { ok: true; settings: VoiceInputSettingsData }
+      | { ok: false; error: string; errorCode?: VoiceInputGlobalErrorCode }
+    >;
     deleteDictionaryEntries: (entryIds: string[]) => Promise<VoiceInputSettingsData>;
     recordDictionaryLearningActions: (actions: VoiceInputDictionaryLearningAction[]) => Promise<{
       settings: VoiceInputSettingsData;

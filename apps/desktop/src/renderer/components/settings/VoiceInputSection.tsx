@@ -655,6 +655,21 @@ export function VoiceInputSection() {
     [t],
   );
 
+  const commitRecordedShortcut = useCallback(
+    (shortcut: VoiceInputShortcut | null) => {
+      void setShortcut(shortcut).then((result) => {
+        if (!result.ok) {
+          toast.error(t('settings.voiceInput.shortcut.toast.registrationFailed', { error: result.error }));
+          if (shortcut) setRecordingShortcutPreview(shortcut);
+          return;
+        }
+        setRecordingShortcutPreview(null);
+        setRecordingShortcut(false);
+      });
+    },
+    [setShortcut, t],
+  );
+
   const getAppShortcutEntries = useCallback(
     (): AppShortcutComboEntry[] =>
       APP_SHORTCUT_DEFINITIONS.map((def) => ({
@@ -685,8 +700,7 @@ export function VoiceInputSection() {
         nativeFnShortcutActiveRef.current = false;
         nativeFnComboSeenRef.current = false;
         setRecordingShortcutPreview(null);
-        setShortcut(null);
-        setRecordingShortcut(false);
+        commitRecordedShortcut(null);
         return;
       }
 
@@ -731,7 +745,7 @@ export function VoiceInputSection() {
       pendingKeyboardShortcutRef.current = shortcut;
       setRecordingShortcutPreview(shortcut);
     },
-    [getAppShortcutEntries, recordingShortcut, setShortcut, showAppShortcutConflict, t],
+    [commitRecordedShortcut, getAppShortcutEntries, recordingShortcut, showAppShortcutConflict, t],
   );
 
   const handleShortcutKeyUp = useCallback(
@@ -750,8 +764,7 @@ export function VoiceInputSection() {
         nativeFnShortcutActiveRef.current = false;
         nativeFnComboSeenRef.current = false;
         setRecordingShortcutPreview(null);
-        setShortcut(pendingKeyboardShortcut);
-        setRecordingShortcut(false);
+        commitRecordedShortcut(pendingKeyboardShortcut);
         return;
       }
 
@@ -765,10 +778,9 @@ export function VoiceInputSection() {
       nativeFnShortcutActiveRef.current = false;
       nativeFnComboSeenRef.current = false;
       setRecordingShortcutPreview(null);
-      setShortcut(shortcut);
-      setRecordingShortcut(false);
+      commitRecordedShortcut(shortcut);
     },
-    [recordingShortcut, setShortcut],
+    [commitRecordedShortcut, recordingShortcut],
   );
 
   const handleNativeModifierShortcutKeys = useCallback(
@@ -793,8 +805,7 @@ export function VoiceInputSection() {
             showAppShortcutConflict(conflictId);
             return;
           }
-          setShortcut(shortcut);
-          setRecordingShortcut(false);
+          commitRecordedShortcut(shortcut);
         }
         return;
       }
@@ -826,7 +837,7 @@ export function VoiceInputSection() {
       pendingKeyboardShortcutRef.current = null;
       setRecordingShortcutPreview(null);
     },
-    [getAppShortcutEntries, recordingShortcut, setShortcut, showAppShortcutConflict],
+    [commitRecordedShortcut, getAppShortcutEntries, recordingShortcut, showAppShortcutConflict],
   );
 
   useEffect(() => {
@@ -1230,7 +1241,7 @@ export function VoiceInputSection() {
               <button
                 type="button"
                 disabled={!settings.shortcut}
-                onClick={() => setShortcut(null)}
+                onClick={() => commitRecordedShortcut(null)}
                 className={cn(
                   'h-8 shrink-0 rounded-full px-3 text-12 font-medium transition-colors',
                   'border border-[var(--settings-btn-secondary-border)]',
