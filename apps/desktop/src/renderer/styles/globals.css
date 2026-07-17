@@ -1045,6 +1045,10 @@ body.resizing-pane [data-ghost-webview] {
 }
 
 @layer utilities {
+  .text-sidebar-item-active-foreground {
+    color: var(--sidebar-item-active-foreground);
+  }
+
   html[data-platform='win32'] .cursor-not-allowed,
   html[data-platform='win32'] .disabled\:cursor-not-allowed:disabled,
   html[data-platform='win32'] .data-\[disabled\]\:cursor-not-allowed[data-disabled] {

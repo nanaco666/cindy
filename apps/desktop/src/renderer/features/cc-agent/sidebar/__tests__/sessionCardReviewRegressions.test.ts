@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 const sidebarDir = resolve(__dirname, '..');
 const sessionCardSource = readFileSync(resolve(sidebarDir, 'SessionCard.tsx'), 'utf8');
+const sessionItemSource = readFileSync(resolve(sidebarDir, 'SessionItem.tsx'), 'utf8');
 const globalsSource = readFileSync(resolve(__dirname, '..', '..', '..', '..', 'styles', 'globals.css'), 'utf8');
 
 describe('SessionCard review regressions', () => {
@@ -77,5 +78,12 @@ describe('SessionCard review regressions', () => {
     const count = (sessionCardSource.match(re) || []).length;
     expect(count, 'isActive conditional active-foreground ≥7(title×2+time+RemoteProjectIcon×4)').toBeGreaterThanOrEqual(7);
     expect(sessionCardSource).toContain("isActive ? 'text-sidebar-item-active-foreground' : isMuted ? 'text-[var(--text-disabled)]' : 'text-[var(--text-tertiary)]'");
+  });
+
+  it('keeps selected sidebar text bound to the active foreground token', () => {
+    expect(globalsSource).toContain('.text-sidebar-item-active-foreground');
+    expect(globalsSource).toContain('color: var(--sidebar-item-active-foreground);');
+    expect(sessionItemSource).toContain('text-[var(--sidebar-item-active-foreground)]');
+    expect(sessionCardSource).toContain('text-[var(--sidebar-item-active-foreground)]');
   });
 });
