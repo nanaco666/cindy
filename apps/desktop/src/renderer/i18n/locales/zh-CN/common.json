@@ -4190,6 +4190,16 @@
         "allRunning": "该 Project 下所有会话都在执行中，请先停止后再归档",
         "empty": "该 Project 下没有可归档的会话"
       },
+      "unarchiveAll": {
+        "title": "取消归档全部会话",
+        "confirm": "全部取消归档",
+        "cancel": "取消",
+        "description": "将恢复该 Project 下 {{count}} 个已归档会话。恢复后将从“已归档”列表移除，并回到“活跃”列表。",
+        "unarchived_one": "已恢复 {{count}} 个会话",
+        "unarchived_other": "已恢复 {{count}} 个会话",
+        "partialFailure": "已恢复 {{ok}} 个，{{fail}} 个失败，请重试",
+        "empty": "该 Project 下没有可取消归档的会话"
+      },
       "bulkSelection": {
         "selected": "已选 {{count}} 个",
         "archive": "归档所选会话",
@@ -4250,6 +4260,7 @@
         "rename": "重命名项目",
         "showFiles": "查看文件",
         "archivedAll": "全部归档",
+        "unarchiveAll": "全部取消归档",
         "openInExplorer": "在文件管理器中打开",
         "newInDirectory": "在此目录新建会话",
         "copyDeepLink": "复制深度链接",

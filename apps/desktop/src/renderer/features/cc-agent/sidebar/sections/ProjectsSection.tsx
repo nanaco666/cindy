@@ -349,6 +349,7 @@ export function ProjectsSection({
             renderItem={(project) => (
               <ProjectNode
                 project={project}
+                statusFilter={filter.status}
                 isCollapsed={collapsed.has(project.projectKey)}
                 parentSectionCollapsed={isSectionCollapsed}
                 activeSessionId={activeSessionId}

@@ -4190,6 +4190,16 @@
         "allRunning": "この Project のすべてのセッションが実行中です。停止してからアーカイブしてください",
         "empty": "この Project にはアーカイブできるセッションがありません"
       },
+      "unarchiveAll": {
+        "title": "すべてのセッションのアーカイブを解除",
+        "confirm": "すべてアーカイブ解除",
+        "cancel": "キャンセル",
+        "description": "この Project のアーカイブ済みセッション {{count}} 件を復元します。復元後は「アーカイブ済み」リストから消え、「アクティブ」リストに戻ります。",
+        "unarchived_one": "{{count}} 件のセッションを復元しました",
+        "unarchived_other": "{{count}} 件のセッションを復元しました",
+        "partialFailure": "{{ok}} 件を復元、{{fail}} 件が失敗しました。再試行してください",
+        "empty": "この Project にはアーカイブを解除できるセッションがありません"
+      },
       "bulkSelection": {
         "selected": "{{count}} 件選択中",
         "archive": "選択したセッションをアーカイブ",
@@ -4255,6 +4265,7 @@
         "syncCodexFailed": "Codex 同期に失敗しました:{{error}}",
         "showFiles": "ファイルを表示",
         "archivedAll": "すべてアーカイブ",
+        "unarchiveAll": "すべてアーカイブ解除",
         "openInExplorer": "ファイルマネージャーで開く",
         "newInDirectory": "このディレクトリで新規セッション",
         "copyDeepLink": "ディープリンクをコピー",
