@@ -3,7 +3,6 @@ import { BRAND_NAME } from '../branding.js';
 import {
   BRAND_IDENTITY,
   DEFAULT_CINDY_REGION,
-  allDbFilePrefixes,
   allDeepLinkSchemes,
   allUserDataDirNames,
   brandAppId,
@@ -116,15 +115,6 @@ describe('派生 helper', () => {
     expect(allUserDataDirNames()).toEqual(['Cindy', 'xdt-maker']);
   });
 
-  it('allDbFilePrefixes 当前前缀恒为首位并去重历史值', () => {
-    expect(allDbFilePrefixes({
-      ...BRAND_IDENTITY,
-      dbFilePrefix: 'cindy',
-      legacyDbFilePrefixes: ['xdt-maker', 'cindy'],
-    })).toEqual(['cindy', 'xdt-maker']);
-    expect(allDbFilePrefixes()).toEqual(['cindy', 'xdt-maker']);
-  });
-
   it('helper 接受显式档案参数(历史身份回放用)', () => {
     const legacyLike = {
       ...BRAND_IDENTITY,
@@ -137,6 +127,5 @@ describe('派生 helper', () => {
     };
     expect(allDeepLinkSchemes(legacyLike)).toEqual(['xdt-maker']);
     expect(allUserDataDirNames(legacyLike)).toEqual(['xdt-maker']);
-    expect(allDbFilePrefixes(legacyLike)).toEqual(['xdt-maker']);
   });
 });

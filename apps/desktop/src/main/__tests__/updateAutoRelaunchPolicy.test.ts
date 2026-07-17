@@ -12,7 +12,6 @@ const BASE: AutoRelaunchReadinessInput = {
   isDev: false,
   status: 'ready',
   isRelaunching: false,
-  requiresUserConfirmation: false,
   hasBusyTasks: false,
   idleTimeSeconds: AUTO_UPDATE_IDLE_THRESHOLD_SECONDS,
   idleState: 'idle',
@@ -41,10 +40,6 @@ describe('update auto relaunch policy', () => {
 
   it('blocks while any task is busy', () => {
     expect(check({ hasBusyTasks: true })).toBe('busy');
-  });
-
-  it('blocks brand migration until the user explicitly confirms relaunch', () => {
-    expect(check({ requiresUserConfirmation: true })).toBe('migration-requires-confirmation');
   });
 
   it('blocks briefly after busy tasks clear so terminal cleanup can drain', () => {

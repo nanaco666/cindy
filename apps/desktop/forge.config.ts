@@ -614,7 +614,7 @@ function signPackagedExes(buildPath: string): void {
 }
 
 /**
- * macOS 打包显示名(品牌迁移显示层,与 win32metadata 同构):packaged 后把
+ * macOS 打包显示名(与 win32metadata 同构):packaged 后把
  * .app 的 Info.plist 里 CFBundleName / CFBundleDisplayName 改成 Cindy——
  * Dock 名、菜单栏粗体标题、Cmd+Tab、系统通知读的都是这两个字段。
  *

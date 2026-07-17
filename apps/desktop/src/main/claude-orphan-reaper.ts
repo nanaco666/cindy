@@ -41,7 +41,7 @@ const log = createLogger('claude-orphan-reaper');
  * the packaged Claude binary ever moves out of `userData/claude-code/`.
  *
  * Markers cover every current + historical userData dir name (brand-identity
- * `legacyUserDataDirNames`): during a brand-rename migration window, orphans
+ * `legacyUserDataDirNames`): while retaining compatibility with legacy profiles, orphans
  * spawned by the pre-rename install still carry the old dir name in their
  * command line and must keep being recognized.
  */

@@ -49,7 +49,6 @@ import { throwIpcError } from './utils/ipcValidate';
 import { noteExpectedExit } from './startup-diagnostics';
 import { buildMacOSUpdateScript } from './updateScriptMacOS';
 import { disposeAndroidAdb } from './mcp-integrations/android';
-import * as brandMigration from './migration/electronRuntime';
 import { cleanOldUpdateFiles } from './updateArtifacts';
 
 const log = createLogger('updateService');
@@ -228,7 +227,6 @@ async function getAutoRelaunchBlockReasonForCurrentState(): Promise<AutoRelaunch
     isDev: dev,
     status,
     isRelaunching: relaunching,
-    requiresUserConfirmation: brandMigration.isMigrationRelaunchReady(),
     hasBusyTasks: hasBusyTasksNow,
     idleTimeSeconds: readSystemIdleTimeSeconds(),
     idleState: readSystemIdleState(),
@@ -571,7 +569,7 @@ function cleanOldFiles(keepFileName: string): void {
 
 /**
  * packaged macOS 从 App Translocation 临时挂载运行时，安装根不是可持久化
- * 身份；普通热更与品牌迁移都必须等用户移入 Applications 后再 stage/apply。
+ * 身份；普通热更必须等用户移入 Applications 后再 stage/apply。
  */
 function isMacAppTranslocated(): boolean {
   return !isDev() && process.platform === 'darwin' && !app.isInApplicationsFolder();
@@ -629,32 +627,11 @@ async function doCheckForUpdate(manifestOverride?: Manifest | null): Promise<Che
     setStatus('checking');
   }
 
-  // 品牌迁移抑制窗口(§3.5):执行器正在推进(in-progress + 锁活)时,过渡版
-  // 不做任何热更动作,避免和迁移执行器抢安装目录/自动重启。
-  if (brandMigration.isHotUpdateSuppressedNow()) {
-    log.info('Brand migration in progress — hot update suppressed this cycle');
-    if (!wasReady) currentStatus = 'idle';
-    return 'idle';
-  }
-
   const manifest = manifestOverride ?? await fetchManifest();
   if (!manifest) {
     log.info('Manifest fetch failed');
     if (!wasReady) currentStatus = 'idle';
     return 'manifest_failed';
-  }
-
-  // 品牌迁移触发:manifest 带 migration 块且本体版本已对齐(= 已是钉住的
-  // 过渡版)→ 交给迁移编排(内置 in-flight 去重与决策跳过)。版本未对齐时
-  // 不触发——先经下面的普通热更抵达过渡版,下一轮再迁(两段式)。
-  if (manifest.app.migration && manifest.app.version === app.getVersion()) {
-    if (isMacAppTranslocated()) {
-      log.warn('Brand migration staging skipped while macOS App Translocation is active');
-    } else {
-      void brandMigration.handleMigrationBlock(manifest.app.migration).catch((err) => {
-        log.error('migration block handling threw:', err);
-      });
-    }
   }
 
   const asset = manifest.app.hotfix;
@@ -1016,33 +993,13 @@ function executeRelaunch(theme: 'light' | 'dark'): void {
   }
   isRelaunching = true;
 
-  // 必须先于品牌迁移分支：translocated bundle 的临时路径不能写入 marker
-  // 作为 rollback/uninstall 身份，也不能从该只读位置执行普通热更。
+  // translocated bundle 的临时路径不能写入 updater marker，也不能从该只读位置
+  // 执行普通热更。
   if (isMacAppTranslocated()) {
     log.error('macOS App Translocation detected — update cannot be applied from read-only path');
     isRelaunching = false;
     autoRelaunchInProgress = false;
     setStatus('error', { errorCode: 'translocated' });
-    return;
-  }
-
-  // 品牌迁移执行窗口:staged 的迁移优先于普通热更重启(ready 状态由迁移编排
-  // 广播,readyFilePath 为空)。B′:老 app 进程内安装 + 拉起 Cindy,成功即
-  // forceQuit;失败时回滚 isRelaunching,静默等下轮。
-  if (brandMigration.isMigrationRelaunchReady()) {
-    log.info('executeRelaunch() routed to brand migration window');
-    void brandMigration.executeMigrationRelaunch().then((ok) => {
-      if (!ok) {
-        isRelaunching = false;
-        autoRelaunchInProgress = false;
-        setStatus('error', { errorCode: 'updater_spawn_failed' });
-      }
-    }).catch((err) => {
-      log.error('brand migration relaunch threw:', err);
-      isRelaunching = false;
-      autoRelaunchInProgress = false;
-      setStatus('error', { errorCode: 'updater_spawn_failed' });
-    });
     return;
   }
 
@@ -1087,16 +1044,6 @@ export function initUpdateService(): void {
   // Counterpart to the Rust updater's own sweep — covers the case where the
   // user stays on the latest version and never triggers another updater run.
   sweepStaleUpdateTempDirs();
-
-  // 品牌迁移编排的 host 注入:复用热更的 ready banner / 强退 / CDN base。
-  brandMigration.initMigrationRuntime({
-    notifyReady: (version) => {
-      readyVersion = version;
-      setStatus('ready', { version });
-    },
-    forceQuit,
-    getBaseUrl,
-  });
 
   ipcMain.on('update-relaunch', (_event, theme: 'light' | 'dark') => {
     // Defensive default: if an old preload is somehow loaded (or theme is
