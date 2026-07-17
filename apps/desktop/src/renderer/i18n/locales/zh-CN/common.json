@@ -4659,6 +4659,8 @@
         "script": "仅运行脚本"
       },
       "script": {
+        "protocolSummary": "stdout 必须逐行输出 xdt-maker-script/1 的完整 JSON 对象（JSONL）；type 只能是 call 或 complete。普通日志请写入 stderr，并且脚本必须最终输出一个 complete 帧。",
+        "protocolExample": "查看最小 Python 示例",
         "command": "脚本命令",
         "commandPlaceholder": "python scripts/auto.py",
         "timeout": "超时（秒，可选）",

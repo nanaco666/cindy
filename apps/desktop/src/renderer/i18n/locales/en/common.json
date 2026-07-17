@@ -4668,6 +4668,8 @@
         "script": "Script only"
       },
       "script": {
+        "protocolSummary": "stdout must emit one complete xdt-maker-script/1 JSON object per line (JSONL); type must be call or complete. Write regular logs to stderr, and always finish with a complete frame.",
+        "protocolExample": "View minimal Python example",
         "command": "Script command",
         "commandPlaceholder": "python scripts/auto.py",
         "timeout": "Timeout (seconds, optional)",
