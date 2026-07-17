@@ -703,4 +703,14 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 
 `--slate-*` 同理对应中性档。`--base*`/`--accent*` 按 Token map。`:root`/`.dark` 原两套一字不动。
 
+### 15.10 E1D 红色体系重构(用户批准 2026-07-17)
 
+常规主操作不再用品牌红,改反相中性(light 底 `#3C3F43`/字 `#FCFCFC`,dark 底 `#EEEEEE`/字 `#252222`;WCAG 10.32/13.60:1)。红色仅限语义例外:
+- **A 类(保留红)**:`brand-login-bg`/`brand-login-error-border`/`brand-login-error-text`(品牌海报/错误);
+- **C 类(保留红)**:`migration-bar-fill`(进度)、`drop-overlay-bg`(红10%)、`sidebar-item-active`(light `#DF0C27`/dark `#A61629` 选中);
+- **语义色**:`destructive`/delete、`error-*`、warning、diff 红、status 点;
+- **B 类(改中性 11 项)**:`accent-cta-bg`/`-pure`/`-emphasis`/`-soft`/`-hover`、`update-btn-border`/`-text`、`confirm-btn-primary`、`perm-allow-btn`、`primary`、`settings-btn-primary`(alias)、`accent-pure-cta-fg`/`settings-btn-primary-text`(中性字);
+- **C 类裁决**:confirm(普通中性,danger 另设)、perm-allow(中性,警示橙 chip)、primary(中性)、sidebar-item-active(light 红胶囊/dark 深红)、migration-bar-fill(保留红)、drop-overlay(保留红10%)、brand-login-cta(不动);
+- **中性按钮四态**:light 底`#3C3F43`/字`#FCFCFC`、hover`#2E3237`、pressed`#25282C`;dark 底`#EEEEEE`/字`#252222`、hover`#E2E2E2`、pressed`#D4D4D4`。
+
+三份新 map(`NEUTRAL_PRIMARY_EXPECTED_BY_ID`/`FOREGROUND` + `RED_EXCEPTION_ALLOWED_IDS`)替代旧 `BRAND_RED_*`。D2T ⑤/⑦/⑧ 改用新 map(中性 exact + 红例外白名单 + 中性对比度 + 可证伪)。

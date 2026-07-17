@@ -363,8 +363,8 @@ describe('CINDY · ⑧ 可证伪自检(注入错值后断言必须变红,还原�
     expect(isHslSlot && !isHslVal, 'HSL 槽填 hex 应被 ③ 抓').toBe(true);
   });
 
-  it('注入品牌红越界(非 allowed id 染红) → ⑤ 变红', () => {
-    const allowed = new Set<string>(BRAND_RED_ALLOWED_IDS);
+  it('注入品牌红越界(非 RED_EXCEPTION_ALLOWED id 染红) → ⑤ 变红', () => {
+    const allowed = new Set<string>(RED_EXCEPTION_ALLOWED_IDS);
     const badId = 'text-primary'; // 不在 allowed
     expect(allowed.has(badId), 'text-primary 不在 ALLOWED,染红应被 ⑤ 抓').toBe(false);
     const badRgb = toRgb('#DF0C27');
