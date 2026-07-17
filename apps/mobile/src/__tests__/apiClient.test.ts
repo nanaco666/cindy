@@ -12,7 +12,7 @@ describe('apiFetchRaw', () => {
     // 历史实现匹配不到,英文原文一路透传到 UI。
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Network request failed')));
 
-    const err = await apiFetchRaw('/api/auth/login').catch((e: unknown) => e);
+    const err = await apiFetchRaw('/api/auth/login', { baseUrl: 'https://auth.example.invalid' }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).code).toBe('NETWORK_UNAVAILABLE');
     expect((err as ApiError).message).toContain('网络连接不可用');
@@ -25,7 +25,7 @@ describe('apiFetchRaw', () => {
     // Web 预览环境(存在 document)才附加 CORS 排查提示
     vi.stubGlobal('document', {});
 
-    const err = await apiFetchRaw('/api/auth/login').catch((e: unknown) => e);
+    const err = await apiFetchRaw('/api/auth/login', { baseUrl: 'https://auth.example.invalid' }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).code).toBe('NETWORK_UNAVAILABLE');
     expect((err as ApiError).message).toContain('Web 预览可能被浏览器 CORS 拦截');

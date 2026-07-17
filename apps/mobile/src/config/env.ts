@@ -36,9 +36,6 @@ const DEV_MANIFEST_PARSED = (() => {
 const DEV_MANIFEST: Partial<Record<string, string>> = DEV_MANIFEST_PARSED?.endpoints ?? {};
 
 // 显式 env 优先,dev 回落仓内正本;prod 为空串(闸门回填,见上)。
-// apiBaseUrl 已退役出清单 parser(不再产出该键),本默认值只剩 env 覆写语义。
-export const DEFAULT_API_BASE_URL =
-  configuredValue('EXPO_PUBLIC_XDT_API_BASE_URL') || '';
 export const DEFAULT_DEVICE_LINK_API_BASE_URL =
   configuredValue('EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL') ||
   DEV_MANIFEST.deviceLinkApiBaseUrl ||
@@ -54,43 +51,21 @@ export interface MobileConfigIssue {
   message: string;
 }
 
-export function normalizeBaseUrl(value: string | undefined): string {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed.replace(/\/$/, '') : DEFAULT_API_BASE_URL;
-}
-
 export function normalizeBaseUrlWithDefault(value: string | undefined, fallback: string): string {
   const trimmed = value?.trim();
   return trimmed ? trimmed.replace(/\/$/, '') : fallback;
 }
 
-export function resolveDeviceLinkApiBaseUrl(
-  value: string | undefined,
-  apiBaseUrl = API_BASE_URL,
-): string {
+// 老 3333→3335 的"从主 API base 派生 relay"逻辑已随 apiBaseUrl 退役删除
+// (本地没有 3333 主 server 了):连本地 relay 直接设
+// EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL。
+export function resolveDeviceLinkApiBaseUrl(value: string | undefined): string {
   const trimmed = value?.trim();
-  if (trimmed) return trimmed.replace(/\/$/, '');
-  const localRelayBase = localRelayBaseForApi(apiBaseUrl);
-  return localRelayBase ?? DEFAULT_DEVICE_LINK_API_BASE_URL;
+  return trimmed ? trimmed.replace(/\/$/, '') : DEFAULT_DEVICE_LINK_API_BASE_URL;
 }
 
 export function deviceLinkWsUrl(apiBaseUrl = DEVICE_LINK_API_BASE_URL): string {
   return apiBaseUrl.replace(/^http/, 'ws') + '/api/device-link/ws';
-}
-
-function localRelayBaseForApi(apiBaseUrl: string): string | null {
-  try {
-    const url = new URL(apiBaseUrl);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-    if (url.port !== '3333') return null;
-    url.port = '3335';
-    url.pathname = '';
-    url.search = '';
-    url.hash = '';
-    return url.toString().replace(/\/$/, '');
-  } catch {
-    return null;
-  }
 }
 
 export function resolveEnvFlag(value: string | undefined): boolean {
@@ -137,13 +112,6 @@ function isHttpUrl(value: string): boolean {
 // 新值(消费点全部是调用时读取,无模块顶层捕获——新增顶层派生前先想清楚)。
 // 初始值即构建期烘焙值;__DEV__ 下闸门不拉取,行为与现状完全一致。
 
-// apiBaseUrl(老主 server)已于 2026-07-18 从端点清单退役,本值不再被启动闸门
-// 回填,只剩 env/dev 语义:「手机连本地 server」工作流的显式覆写入口 +
-// dev relay 3333→3335 派生输入 + 设置页调试展示。业务请求一律显式 baseUrl。
-export let API_BASE_URL = normalizeBaseUrl(
-  configuredValue('EXPO_PUBLIC_XDT_API_BASE_URL'),
-);
-
 // auth 不分 cn/global 字段:dev 读 cn 正本(dev 默认 region=cn);prod 由 region 化
 // 清单回填。显式 env 覆写仍最高优先。
 export let AUTH_API_BASE_URL = normalizeBaseUrlWithDefault(
@@ -164,7 +132,6 @@ export const WECHAT_UNIVERSAL_LINK =
 
 export let DEVICE_LINK_API_BASE_URL = resolveDeviceLinkApiBaseUrl(
   configuredValue('EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL'),
-  API_BASE_URL,
 );
 
 // 二进制版本号:审核模式匹配基准。优先原生层版本(iOS CFBundleShortVersionString /

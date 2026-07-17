@@ -63,9 +63,9 @@ test('私有 JSON 是 Desktop/Mobile 构建注入的唯一输入', () => {
 
 test('缺字段、非法协议和 URL 内凭据都会 fail closed', () => {
   const missing = fixtureEndpoints();
-  delete missing.apiBaseUrl;
+  delete missing.deviceLinkApiBaseUrl;
   process.env.CINDY_PRODUCTION_ENDPOINTS_FILE = writeFixture(missing);
-  assert.throws(() => loadProductionEndpoints(), /apiBaseUrl/);
+  assert.throws(() => loadProductionEndpoints(), /deviceLinkApiBaseUrl/);
 
   const missingApp = fixtureEndpoints();
   delete missingApp.feishuAppId;
@@ -97,7 +97,7 @@ test('缺字段、非法协议和 URL 内凭据都会 fail closed', () => {
 
   process.env.CINDY_PRODUCTION_ENDPOINTS_FILE = writeFixture({
     ...fixtureEndpoints(),
-    apiBaseUrl: 'https://user:pass@api.example.invalid',
+    deviceLinkApiBaseUrl: 'https://user:pass@relay.example.invalid',
   });
   assert.throws(() => loadProductionEndpoints(), /携带凭据/);
 });
@@ -105,7 +105,6 @@ test('缺字段、非法协议和 URL 内凭据都会 fail closed', () => {
 function fixtureEndpoints() {
   return {
     feishuAppId: 'cli_testapp',
-    apiBaseUrl: 'https://api.example.invalid',
     authApiBaseUrlCn: 'https://auth-cn.example.invalid',
     authApiBaseUrlGlobal: 'https://auth-global.example.invalid',
     deviceLinkApiBaseUrl: 'https://relay.example.invalid',

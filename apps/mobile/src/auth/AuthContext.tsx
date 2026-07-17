@@ -116,7 +116,7 @@ export interface AuthContextValue {
   completeOAuthCallback(callbackUrl: string): Promise<void>;
   logout(): Promise<void>;
   getAccessToken(): Promise<string | null>;
-  apiFetch<T>(path: string, opts?: Omit<ApiFetchOptions, 'token'>): Promise<T>;
+  apiFetch<T>(path: string, opts: Omit<ApiFetchOptions, 'token'>): Promise<T>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -744,11 +744,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return refresh();
   }, [refresh]);
 
-  // Product APIs stay on xdt-api; only identity/token lifecycle moved to auth-server.
+  // 带 Bearer + 401 自动 refresh 的业务请求封装;目标服务由调用方经
+  // opts.baseUrl 显式指定(老主 server xdt-api 已退役,没有默认业务 server)。
   const apiFetch = useCallback(
     async <T,>(
       path: string,
-      opts: Omit<ApiFetchOptions, 'token'> = {},
+      opts: Omit<ApiFetchOptions, 'token'>,
     ): Promise<T> => {
       const token = await getAccessToken();
       if (!token) throw new Error('UNAUTHENTICATED');

@@ -22,13 +22,12 @@ const SRC_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const APP_ROOT = path.resolve(SRC_ROOT, '..', 'app');
 
 const LIVE_BINDINGS = [
-  'API_BASE_URL',
   'AUTH_API_BASE_URL',
   'DEVICE_LINK_API_BASE_URL',
 ];
 
 // 顶层 const 声明行(无缩进),初始化器引用了任一 live binding(词边界,排除
-// DEFAULT_API_BASE_URL 这类更长标识符的子串误报由 \b + 前缀负向断言保证)。
+// DEFAULT_DEVICE_LINK_API_BASE_URL 这类更长标识符的子串误报由 \b + 前缀负向断言保证)。
 const TOP_LEVEL_CAPTURE = new RegExp(
   `^(?:export )?const [^=\\n]+=[^\\n]*(?<![A-Za-z0-9_$])(?:${LIVE_BINDINGS.join('|')})\\b`,
   'm',

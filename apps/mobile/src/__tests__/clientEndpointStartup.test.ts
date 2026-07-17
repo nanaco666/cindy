@@ -40,15 +40,13 @@ const FULL_MANIFEST = JSON.stringify(FULL_MANIFEST_OBJECT);
 describe('runStartupEndpointResolve(清单即唯一事实源)', () => {
   it('拉取成功:回写 env live binding,跨模块可见', async () => {
     const { env, startup } = await freshModules();
-    expect(env.API_BASE_URL).toBe('https://api.example.invalid');
+    expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay.example.invalid');
 
     const outcome = await startup.runStartupEndpointResolve({
       fetchManifestText: async () => FULL_MANIFEST,
     });
 
     expect(outcome).toEqual({ ok: true });
-    // apiBaseUrl 已退役:清单里出现该键按未知字段忽略,不回填 env,保持初值
-    expect(env.API_BASE_URL).toBe('https://api.example.invalid');
     // 跨模块 live binding:本模块持有的 env 命名空间看到重赋值后的新值
     expect(env.AUTH_API_BASE_URL).toBe('https://auth-next.example.com'); // 单一字段无脑取
     expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay-next.example.com');
@@ -108,7 +106,7 @@ describe('runStartupEndpointResolve(清单即唯一事实源)', () => {
     });
     expect(outcome).toEqual({ ok: false, reason: 'invalid-field:review' });
     expect(env.REVIEW_MODE).toBe(false);
-    expect(env.API_BASE_URL).toBe('https://api.example.invalid');
+    expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay.example.invalid');
   });
 
   it('自建变体(IS_OTA_SELFHOST=1):mobileUpdateBaseUrl 覆写整包发现基址(可远程迁域名)', async () => {
@@ -136,7 +134,7 @@ describe('runStartupEndpointResolve(清单即唯一事实源)', () => {
       fetchManifestText: async () => null,
     });
     expect(outcome).toEqual({ ok: false, reason: 'fetch-failed' });
-    expect(env.API_BASE_URL).toBe('https://api.example.invalid');
+    expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay.example.invalid');
   });
 
   it('清单缺字段 → ok:false(无烘焙回退),env 不动', async () => {
@@ -150,7 +148,7 @@ describe('runStartupEndpointResolve(清单即唯一事实源)', () => {
     });
     expect(outcome).toEqual({ ok: false, reason: 'missing-field:heartbeatUrl' });
     expect(apply).not.toHaveBeenCalled();
-    expect(env.API_BASE_URL).toBe('https://api.example.invalid');
+    expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay.example.invalid');
   });
 
   it('清单非法 → ok:false(坏清单不静默降级),env 不动', async () => {
@@ -159,7 +157,7 @@ describe('runStartupEndpointResolve(清单即唯一事实源)', () => {
       fetchManifestText: async () => 'not-json{',
     });
     expect(outcome).toEqual({ ok: false, reason: 'invalid-json' });
-    expect(env.API_BASE_URL).toBe('https://api.example.invalid');
+    expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay.example.invalid');
   });
 
   it('fetch 抛错视同失败,永不 reject;重试 = 再调一次可成功', async () => {

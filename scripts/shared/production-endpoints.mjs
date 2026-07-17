@@ -13,8 +13,9 @@ import { fileURLToPath } from 'node:url';
 // 2026-07 端点清单重构:客户端运行期业务端点全部来自 config/endpoint*.json 清单,
 // 本文件只保留仍有构建/发版/dev 工具消费的字段(oauthBroker / heartbeat /
 // slackHook / website 四个纯运行期字段已随烘焙注入退役,从此处删除)。
+// apiBaseUrl(老主 server xdt-api)已于 2026-07-18 整体退役,最后的构建工具
+// 消费方(device-link-base.mjs 的生产域名替换分支)一并删除,此处不再声明。
 export const PRODUCTION_ENDPOINT_KEYS = Object.freeze([
-  'apiBaseUrl',
   'authApiBaseUrlCn',
   'authApiBaseUrlGlobal',
   'deviceLinkApiBaseUrl',
@@ -57,7 +58,6 @@ export const PRODUCTION_ENDPOINTS_EXAMPLE_PATH = path.join(
 );
 
 const FIELD_PROTOCOLS = Object.freeze({
-  apiBaseUrl: ['https:'],
   authApiBaseUrlCn: ['https:'],
   authApiBaseUrlGlobal: ['https:'],
   deviceLinkApiBaseUrl: ['https:'],

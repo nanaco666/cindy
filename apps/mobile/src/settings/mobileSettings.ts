@@ -2,7 +2,6 @@ import type { DeviceLinkStatus } from '@lizi/device-link';
 import { relayStatusHint, relayStatusLabel } from '@lizi/maker-shared/device-link-contract';
 
 export interface MobileSettingsOverviewInput {
-  apiBaseUrl: string;
   authBaseUrl: string;
   authRegion: 'cn' | 'global';
   deviceId: string | null;
@@ -111,12 +110,6 @@ export function buildMobileSettingsOverview(input: MobileSettingsOverviewInput):
             label: '设备 ID',
             value: input.deviceId?.trim() || '初始化中',
             copyValue: input.deviceId?.trim() || undefined,
-          },
-          {
-            id: 'debug.apiBaseUrl',
-            label: 'API Base',
-            value: input.apiBaseUrl,
-            copyValue: input.apiBaseUrl,
           },
           {
             id: 'debug.authBaseUrl',

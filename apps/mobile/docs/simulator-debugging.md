@@ -169,11 +169,11 @@ change.
 `mobile:sim:start` / `mobile:sim:rebuild` create or repair the required
 functional values automatically from `eas.json`, without enabling dev-only flags.
 
-Required online-login values:
+Required online-login values (business endpoints come from the repo's
+`config/endpoint.json` manifest in dev; no API base env is needed):
 
 ```bash
 EXPO_PUBLIC_FEISHU_APP_ID=...
-EXPO_PUBLIC_XDT_API_BASE_URL=https://xdt-api.magiclizi.com
 ```
 
 If the simulator starts already logged in, app data is still present. Use the app

@@ -16,7 +16,6 @@ describe('mobile settings overview', () => {
 
   it('projects an account header plus about and debug sections for the settings screen', () => {
     const overview = buildMobileSettingsOverview({
-      apiBaseUrl: 'http://127.0.0.1:3333',
       authBaseUrl: 'https://auth-cn.example.com',
       authRegion: 'cn',
       deviceId: 'mobile-device-1',
@@ -65,17 +64,10 @@ describe('mobile settings overview', () => {
       label: '设备 ID',
       value: 'mobile-device-1',
     });
-    expect(overview.sections.find((section) => section.id === 'debug')?.rows).toContainEqual({
-      copyValue: 'http://127.0.0.1:3333',
-      id: 'debug.apiBaseUrl',
-      label: 'API Base',
-      value: 'http://127.0.0.1:3333',
-    });
   });
 
   it('omits the redundant email line when display name equals the email', () => {
     const overview = buildMobileSettingsOverview({
-      apiBaseUrl: 'http://localhost:3333',
       authBaseUrl: 'https://auth-global.example.com',
       authRegion: 'global',
       deviceId: null,
@@ -92,7 +84,6 @@ describe('mobile settings overview', () => {
 
   it('keeps auth-server region and endpoint explicit in debug rows', () => {
     const overview = buildMobileSettingsOverview({
-      apiBaseUrl: 'http://localhost:3333',
       authBaseUrl: 'https://auth-global.example.com',
       authRegion: 'global',
       deviceId: null,

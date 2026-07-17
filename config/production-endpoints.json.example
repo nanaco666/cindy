@@ -1,6 +1,5 @@
 {
   "feishuAppId": "",
-  "apiBaseUrl": "",
   "authApiBaseUrlCn": "",
   "authApiBaseUrlGlobal": "",
   "deviceLinkApiBaseUrl": "",

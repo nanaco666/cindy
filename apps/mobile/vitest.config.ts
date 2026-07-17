@@ -30,7 +30,6 @@ export default defineConfig({
   test: {
     environment: 'node',
     env: {
-      EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.invalid',
       EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.invalid',
       EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: 'https://gateway.example.invalid',
     },
