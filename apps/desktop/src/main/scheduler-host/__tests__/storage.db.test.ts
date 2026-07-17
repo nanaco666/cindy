@@ -174,9 +174,7 @@ describe('DrizzleScheduleStorage (in-memory)', () => {
       expect(inserted).toEqual(schedule);
 
       expect(await harness.storage.get(schedule.id)).toEqual(schedule);
-      expect((await harness.storage.listActive()).map((item) => item.id)).toEqual([
-        schedule.id,
-      ]);
+      expect((await harness.storage.listActive()).map((item) => item.id)).toEqual([schedule.id]);
 
       const updated = await harness.storage.update(schedule.id, {
         nextFireAt: undefined,
@@ -244,9 +242,7 @@ describe('DrizzleScheduleStorage (in-memory)', () => {
     const due = 1_700_000_060_000;
     try {
       for (const statement of SCHEDULER_DDL) await client.exec(statement);
-      const storage = new DrizzleScheduleStorage(
-        () => client.drizzle as SchedulerDrizzleDb,
-      );
+      const storage = new DrizzleScheduleStorage(() => client.drizzle as SchedulerDrizzleDb);
       await storage.insert(baseSchedule({ id: 'sch-proxy', nextFireAt: due }));
 
       // 期望值不匹配 → 判负返回 null(而不是 throw)
@@ -273,35 +269,52 @@ describe('DrizzleScheduleStorage (in-memory)', () => {
       await harness.storage.insert(baseSchedule({ id: 'sch-b', name: 'other' }));
       // 另一活实例正在跑:心跳新鲜 → 不许动
       await harness.storage.insertRun({
-        id: 'run-alive', scheduleId: 'sch-a', firedAt: now - 300_000,
-        status: 'running', heartbeatAt: now - 5_000,
+        id: 'run-alive',
+        scheduleId: 'sch-a',
+        firedAt: now - 300_000,
+        status: 'running',
+        heartbeatAt: now - 5_000,
       });
       // 真僵尸:心跳过期 → 回收
       await harness.storage.insertRun({
-        id: 'run-dead', scheduleId: 'sch-a', firedAt: now - 300_000,
-        status: 'running', heartbeatAt: now - 120_000,
+        id: 'run-dead',
+        scheduleId: 'sch-a',
+        firedAt: now - 300_000,
+        status: 'running',
+        heartbeatAt: now - 120_000,
       });
       // 老版本行(无心跳):按 fired_at 兜底 → 回收
       await harness.storage.insertRun({
-        id: 'run-legacy', scheduleId: 'sch-b', firedAt: now - 120_000, status: 'running',
+        id: 'run-legacy',
+        scheduleId: 'sch-b',
+        firedAt: now - 120_000,
+        status: 'running',
       });
       // 本进程 in-flight(心跳虽然过期也在排除名单里)→ 不许动
       await harness.storage.insertRun({
-        id: 'run-mine', scheduleId: 'sch-b', firedAt: now - 300_000,
-        status: 'running', heartbeatAt: now - 120_000,
+        id: 'run-mine',
+        scheduleId: 'sch-b',
+        firedAt: now - 300_000,
+        status: 'running',
+        heartbeatAt: now - 120_000,
       });
       // 终态行无论心跳如何都不受影响
       await harness.storage.insertRun({
-        id: 'run-done', scheduleId: 'sch-a', firedAt: now - 300_000,
-        finishedAt: now - 200_000, status: 'success',
+        id: 'run-done',
+        scheduleId: 'sch-a',
+        firedAt: now - 300_000,
+        finishedAt: now - 200_000,
+        status: 'success',
       });
 
       const affected = await harness.storage.markRunningAsInterrupted(stale, ['run-mine']);
       expect(affected.sort()).toEqual(['sch-a', 'sch-b']);
 
       const byId = new Map(
-        [...(await harness.storage.listRuns('sch-a')), ...(await harness.storage.listRuns('sch-b'))]
-          .map((r) => [r.id, r]),
+        [
+          ...(await harness.storage.listRuns('sch-a')),
+          ...(await harness.storage.listRuns('sch-b')),
+        ].map((r) => [r.id, r]),
       );
       expect(byId.get('run-alive')?.status).toBe('running');
       expect(byId.get('run-mine')?.status).toBe('running');
@@ -317,7 +330,10 @@ describe('DrizzleScheduleStorage (in-memory)', () => {
       // fired_at 走独立宽窗口 —— 窗口内跳过(可能是跨版本活实例正在跑),
       // 窗口外照收(否则老版本崩溃残留永久卡死 busy probe)。
       await harness.storage.insertRun({
-        id: 'run-old-version', scheduleId: 'sch-a', firedAt: now - 300_000, status: 'running',
+        id: 'run-old-version',
+        scheduleId: 'sch-a',
+        firedAt: now - 300_000,
+        status: 'running',
       });
       expect(
         await harness.storage.markRunningAsInterrupted(stale, ['run-mine'], {
@@ -342,13 +358,19 @@ describe('DrizzleScheduleStorage (in-memory)', () => {
       await harness.storage.insert(baseSchedule({ id: 'sch-y', name: 'other' }));
       // sch-x:一条最老的活 run + 大量更新的终态行(挤出任何展示窗口都不影响)
       await harness.storage.insertRun({
-        id: 'run-live', scheduleId: 'sch-x', firedAt: now - 900_000,
-        status: 'running', heartbeatAt: now,
+        id: 'run-live',
+        scheduleId: 'sch-x',
+        firedAt: now - 900_000,
+        status: 'running',
+        heartbeatAt: now,
       });
       for (let i = 0; i < 15; i++) {
         await harness.storage.insertRun({
-          id: `run-done-${i}`, scheduleId: 'sch-x', firedAt: now - 500_000 + i * 1_000,
-          finishedAt: now - 499_000 + i * 1_000, status: 'success',
+          id: `run-done-${i}`,
+          scheduleId: 'sch-x',
+          firedAt: now - 500_000 + i * 1_000,
+          finishedAt: now - 499_000 + i * 1_000,
+          status: 'success',
         });
       }
       expect(await harness.storage.hasRunningRuns('sch-x')).toBe(true);
@@ -365,12 +387,19 @@ describe('DrizzleScheduleStorage (in-memory)', () => {
     try {
       await harness.storage.insert(baseSchedule({ id: 'sch-hb' }));
       await harness.storage.insertRun({
-        id: 'run-going', scheduleId: 'sch-hb', firedAt: now - 30_000,
-        status: 'running', heartbeatAt: now - 30_000,
+        id: 'run-going',
+        scheduleId: 'sch-hb',
+        firedAt: now - 30_000,
+        status: 'running',
+        heartbeatAt: now - 30_000,
       });
       await harness.storage.insertRun({
-        id: 'run-over', scheduleId: 'sch-hb', firedAt: now - 30_000,
-        finishedAt: now - 10_000, status: 'success', heartbeatAt: now - 30_000,
+        id: 'run-over',
+        scheduleId: 'sch-hb',
+        firedAt: now - 30_000,
+        finishedAt: now - 10_000,
+        status: 'success',
+        heartbeatAt: now - 30_000,
       });
       await harness.storage.touchRunHeartbeats(['run-going', 'run-over'], now);
       const byId = new Map((await harness.storage.listRuns('sch-hb')).map((r) => [r.id, r]));
@@ -430,6 +459,10 @@ describe('DrizzleScheduleStorage (in-memory)', () => {
     const harness = createStorageHarness();
     const schedule = baseSchedule({ id: 'sch-no-provider' });
     try {
+      harness.db.run(sql`
+        INSERT INTO sessions (id, title, source, workspace_kind, created_at, updated_at, total_cost_usd)
+        VALUES ('sess-subscription', 'Subscription session', 'desktop', 'dialogue', 1, 1, 0)
+      `);
       await harness.storage.insert(schedule);
       const got = await harness.storage.get(schedule.id);
       expect(got?.providerId).toBeUndefined();
@@ -479,7 +512,107 @@ describe('DrizzleScheduleStorage (in-memory)', () => {
         {
           scheduleId: schedule.id,
           totalCostUsd: 0.75,
+          totalEstimatedValueUsd: 9.99,
           sessionCount: 1,
+          sessions: [
+            {
+              sessionId: 'sess-bound',
+              totalCostUsd: 0.75,
+              totalEstimatedValueUsd: 9.99,
+            },
+          ],
+        },
+      ]);
+    } finally {
+      harness.close();
+    }
+  });
+
+  it('summarizes subscription value separately from billable cost', async () => {
+    const harness = createStorageHarness();
+    const schedule = baseSchedule({ id: 'sch-subscription', targetSessionId: 'sess-subscription' });
+    try {
+      harness.db.run(sql`
+        INSERT INTO sessions (id, title, source, workspace_kind, created_at, updated_at, total_cost_usd)
+        VALUES ('sess-subscription', 'Subscription session', 'desktop', 'dialogue', 1, 1, 0)
+      `);
+      await harness.storage.insert(schedule);
+      await harness.storage.insertRun({
+        id: 'run-subscription',
+        scheduleId: schedule.id,
+        sessionId: 'sess-subscription',
+        firedAt: 10,
+        finishedAt: 20,
+        status: 'success',
+      });
+      harness.db.run(sql`
+        INSERT INTO messages (id, client_id, session_id, role, content, agent_meta, created_at)
+        VALUES
+          ('subscription-user', 'subscription-user', 'sess-subscription', 'user', '{}',
+            '{"origin":{"kind":"scheduler","scheduleId":"sch-subscription"}}', 10),
+          ('subscription-assistant', 'subscription-assistant', 'sess-subscription', 'assistant', '{}',
+            '{"turnCostUsd":0.29,"turnCostIsEstimate":true}', 11)
+      `);
+
+      await expect(harness.storage.listCostSummaries()).resolves.toEqual([
+        {
+          scheduleId: schedule.id,
+          totalCostUsd: 0,
+          totalEstimatedValueUsd: 0.29,
+          sessionCount: 1,
+          sessions: [
+            {
+              sessionId: 'sess-subscription',
+              totalCostUsd: 0,
+              totalEstimatedValueUsd: 0.29,
+            },
+          ],
+        },
+      ]);
+    } finally {
+      harness.close();
+    }
+  });
+
+  it('keeps API cost in the billable field', async () => {
+    const harness = createStorageHarness();
+    const schedule = baseSchedule({ id: 'sch-api', targetSessionId: 'sess-api' });
+    try {
+      harness.db.run(sql`
+        INSERT INTO sessions (id, title, source, workspace_kind, created_at, updated_at, total_cost_usd)
+        VALUES ('sess-api', 'API session', 'desktop', 'dialogue', 1, 1, 0)
+      `);
+      await harness.storage.insert(schedule);
+      await harness.storage.insertRun({
+        id: 'run-api',
+        scheduleId: schedule.id,
+        sessionId: 'sess-api',
+        firedAt: 10,
+        finishedAt: 20,
+        status: 'success',
+      });
+      harness.db.run(sql`
+        INSERT INTO messages (id, client_id, session_id, role, content, agent_meta, created_at)
+        VALUES
+          ('api-user', 'api-user', 'sess-api', 'user', '{}',
+            '{"origin":{"kind":"scheduler","scheduleId":"sch-api"}}', 10),
+          ('api-assistant', 'api-assistant', 'sess-api', 'assistant', '{}',
+            '{"turnCostUsd":0.42}', 11)
+      `);
+
+      await expect(harness.storage.listCostSummaries()).resolves.toEqual([
+        {
+          scheduleId: schedule.id,
+          totalCostUsd: 0.42,
+          totalEstimatedValueUsd: 0,
+          sessionCount: 1,
+          sessions: [
+            {
+              sessionId: 'sess-api',
+              totalCostUsd: 0.42,
+              totalEstimatedValueUsd: 0,
+            },
+          ],
         },
       ]);
     } finally {
@@ -517,7 +650,15 @@ describe('DrizzleScheduleStorage (in-memory)', () => {
         {
           scheduleId: schedule.id,
           totalCostUsd: 2.25,
+          totalEstimatedValueUsd: 0,
           sessionCount: 1,
+          sessions: [
+            {
+              sessionId: 'sess-legacy',
+              totalCostUsd: 2.25,
+              totalEstimatedValueUsd: 0,
+            },
+          ],
         },
       ]);
     } finally {
@@ -553,7 +694,15 @@ describe('DrizzleScheduleStorage (in-memory)', () => {
         {
           scheduleId: schedule.id,
           totalCostUsd: 1.5,
+          totalEstimatedValueUsd: 0,
           sessionCount: 1,
+          sessions: [
+            {
+              sessionId: 'sess-unlinked',
+              totalCostUsd: 1.5,
+              totalEstimatedValueUsd: 0,
+            },
+          ],
         },
       ]);
     } finally {

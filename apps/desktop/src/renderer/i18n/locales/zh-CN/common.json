@@ -4598,6 +4598,7 @@
       "tagOnce": "一次",
       "tagManual": "手动",
       "totalCost": "开销 {{cost}}",
+      "totalValue": "价值 {{value}}",
       "menu": {
         "rename": "重命名",
         "resume": "恢复",
@@ -4632,6 +4633,7 @@
       "openSession": "打开会话",
       "markReadTitle": "点击标记为已读",
       "sessionCost": "会话开销 {{cost}}",
+      "sessionValue": "会话价值 {{value}}",
       "restart": "重新运行",
       "moreAria": "更多操作",
       "delete": "删除",

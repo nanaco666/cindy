@@ -18,12 +18,7 @@ import { eq, desc, and, isNull, isNotNull, inArray, notInArray, or, sql } from '
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { broadcastSessionPatched } from '../localDb/ipc/sessions.js';
 
-import type {
-  Schedule,
-  ScheduleRun,
-  ScheduleStorage,
-  ListFilter,
-} from '@lizi/maker-scheduler';
+import type { Schedule, ScheduleRun, ScheduleStorage, ListFilter } from '@lizi/maker-scheduler';
 
 import * as schema from '../localDb/schema';
 import { messages, schedules, scheduleRuns, sessions } from '../localDb/schema';
@@ -55,12 +50,22 @@ export interface ScheduleSidebarIndexRun {
 export interface ScheduleCostSummary {
   scheduleId: string;
   totalCostUsd: number;
+  totalEstimatedValueUsd: number;
   sessionCount: number;
+  sessions: ScheduleSessionCostSummary[];
+}
+
+export interface ScheduleSessionCostSummary {
+  sessionId: string;
+  totalCostUsd: number;
+  totalEstimatedValueUsd: number;
 }
 
 interface ScheduleTurnCostState {
   totalCostUsd: number;
+  totalEstimatedValueUsd: number;
   sessionIds: Set<string>;
+  sessionCosts: Map<string, { totalCostUsd: number; totalEstimatedValueUsd: number }>;
 }
 
 // Keep IN (...) bind counts well below SQLite's historical 999 variable limit.
@@ -120,9 +125,10 @@ function legacyScheduleKey(input: {
   workspaceKind: Schedule['workspaceKind'];
   workingDir?: string | null;
 }): string {
-  const dir = input.workspaceKind === 'dialogue'
-    ? '__dialogue__'
-    : input.workingDir ?? '__no_working_dir__';
+  const dir =
+    input.workspaceKind === 'dialogue'
+      ? '__dialogue__'
+      : (input.workingDir ?? '__no_working_dir__');
   return `${input.workspaceKind}\u0000${dir}\u0000${input.name}`;
 }
 
@@ -140,18 +146,25 @@ function scheduleOriginIdFromAgentMeta(agentMeta: string | null): string | null 
   }
 }
 
-function billableTurnCostUsdFromAgentMeta(agentMeta: string | null): number {
-  if (!agentMeta) return 0;
+function turnCostFromAgentMeta(agentMeta: string | null): {
+  costUsd: number;
+  estimatedValueUsd: number;
+} {
+  if (!agentMeta) return { costUsd: 0, estimatedValueUsd: 0 };
   try {
     const parsed = JSON.parse(agentMeta) as {
       turnCostUsd?: unknown;
       turnCostIsEstimate?: unknown;
     };
-    if (parsed.turnCostIsEstimate === true) return 0;
     const cost = parsed.turnCostUsd;
-    return typeof cost === 'number' && Number.isFinite(cost) && cost > 0 ? cost : 0;
+    if (typeof cost !== 'number' || !Number.isFinite(cost) || cost <= 0) {
+      return { costUsd: 0, estimatedValueUsd: 0 };
+    }
+    return parsed.turnCostIsEstimate === true
+      ? { costUsd: 0, estimatedValueUsd: cost }
+      : { costUsd: cost, estimatedValueUsd: 0 };
   } catch {
-    return 0;
+    return { costUsd: 0, estimatedValueUsd: 0 };
   }
 }
 
@@ -203,20 +216,13 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
 
   async listActive(): Promise<Schedule[]> {
     const db = this.getDb();
-    const rows = await db
-      .select()
-      .from(schedules)
-      .where(eq(schedules.status, 'active'));
+    const rows = await db.select().from(schedules).where(eq(schedules.status, 'active'));
     return rows.map(scheduleToCamel);
   }
 
   async get(id: string): Promise<Schedule | null> {
     const db = this.getDb();
-    const [row] = await db
-      .select()
-      .from(schedules)
-      .where(eq(schedules.id, id))
-      .limit(1);
+    const [row] = await db.select().from(schedules).where(eq(schedules.id, id)).limit(1);
     return row ? scheduleToCamel(row) : null;
   }
 
@@ -291,39 +297,22 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
   async insertRun(run: ScheduleRun): Promise<ScheduleRun> {
     const db = this.getDb();
     await db.insert(scheduleRuns).values(scheduleRunCreateToRow(run));
-    const [row] = await db
-      .select()
-      .from(scheduleRuns)
-      .where(eq(scheduleRuns.id, run.id))
-      .limit(1);
+    const [row] = await db.select().from(scheduleRuns).where(eq(scheduleRuns.id, run.id)).limit(1);
     if (!row) {
-      throw new Error(
-        `DrizzleScheduleStorage: insertRun verify failed for id=${run.id}`,
-      );
+      throw new Error(`DrizzleScheduleStorage: insertRun verify failed for id=${run.id}`);
     }
     return scheduleRunToCamel(row);
   }
 
-  async updateRun(
-    id: string,
-    patch: Partial<ScheduleRun>,
-  ): Promise<ScheduleRun | null> {
+  async updateRun(id: string, patch: Partial<ScheduleRun>): Promise<ScheduleRun | null> {
     const db = this.getDb();
     const setObj = scheduleRunPatchToRow(patch);
     if (Object.keys(setObj).length === 0) {
-      const [row] = await db
-        .select()
-        .from(scheduleRuns)
-        .where(eq(scheduleRuns.id, id))
-        .limit(1);
+      const [row] = await db.select().from(scheduleRuns).where(eq(scheduleRuns.id, id)).limit(1);
       return row ? scheduleRunToCamel(row) : null;
     }
     await db.update(scheduleRuns).set(setObj).where(eq(scheduleRuns.id, id));
-    const [row] = await db
-      .select()
-      .from(scheduleRuns)
-      .where(eq(scheduleRuns.id, id))
-      .limit(1);
+    const [row] = await db.select().from(scheduleRuns).where(eq(scheduleRuns.id, id)).limit(1);
     // 联动:run 终态落 finishedAt 时,把绑定 session 的 updatedAt 一并推到该时刻。
     // 侧栏时间轴统一读 sessions.updatedAt,"任务结束"作为一次会话被推进的动作,
     // 必须进入这个时间轴 —— 否则用户看到的会话时间在 run 结束后停在 fire 触发那刻,
@@ -366,19 +355,14 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
     const linkedSessionIds = new Set(
       runs.map((run) => run.sessionId).filter((id): id is string => Boolean(id)),
     );
-    const legacyAliases = await this.listLegacyAliasesForSchedule(
-      db,
-      scheduleToCamel(scheduleRow),
-    );
+    const legacyAliases = await this.listLegacyAliasesForSchedule(db, scheduleToCamel(scheduleRow));
     const legacyRuns = await this.listLegacySessionRuns(
       db,
       scheduleRow.id,
       linkedSessionIds,
       legacyAliases,
     );
-    return [...runs, ...legacyRuns]
-      .sort((a, b) => b.firedAt - a.firedAt)
-      .slice(0, cap);
+    return [...runs, ...legacyRuns].sort((a, b) => b.firedAt - a.firedAt).slice(0, cap);
   }
 
   /**
@@ -448,11 +432,13 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
       if (linkedSessionIds.has(session.id)) continue;
       const name = legacyScheduleNameFromSessionTitle(session.title);
       if (!name) continue;
-      const schedule = scheduleByLegacyKey.get(legacyScheduleKey({
-        name,
-        workspaceKind: session.workspaceKind,
-        workingDir: session.workingDir,
-      }));
+      const schedule = scheduleByLegacyKey.get(
+        legacyScheduleKey({
+          name,
+          workspaceKind: session.workspaceKind,
+          workingDir: session.workingDir,
+        }),
+      );
       if (!schedule) continue;
 
       legacyRuns.push({
@@ -517,48 +503,51 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
     for (const session of legacySessions) {
       const name = legacyScheduleNameFromSessionTitle(session.title);
       if (!name) continue;
-      const schedule = scheduleByLegacyKey.get(legacyScheduleKey({
-        name,
-        workspaceKind: session.workspaceKind,
-        workingDir: session.workingDir,
-      }));
+      const schedule = scheduleByLegacyKey.get(
+        legacyScheduleKey({
+          name,
+          workspaceKind: session.workspaceKind,
+          workingDir: session.workingDir,
+        }),
+      );
       if (!schedule) continue;
       legacySessionScheduleIds.set(session.id, schedule.id);
       scanSessionIds.add(session.id);
       linkedScheduleIds.add(schedule.id);
     }
 
-    const messageRows = scanSessionIds.size === 0
-      ? []
-      : (
-        await Promise.all(
-          chunkArray([...scanSessionIds], SQLITE_IN_CHUNK_SIZE).map((sessionIdChunk) =>
-            db
-              .select({
-                sessionId: messages.sessionId,
-                role: messages.role,
-                agentMeta: messages.agentMeta,
-                createdAt: messages.createdAt,
-                id: messages.id,
-              })
-              .from(messages)
-              .where(
-                and(
-                  inArray(messages.sessionId, sessionIdChunk),
-                  inArray(messages.role, ['user', 'assistant']),
-                ),
-              )
-              .orderBy(
-                messages.sessionId,
-                messages.createdAt,
-                // If a scheduler user message and its assistant result land in the
-                // same millisecond, the user row must establish activeScheduleId first.
-                sql`case ${messages.role} when 'user' then 0 else 1 end`,
-                messages.id,
+    const messageRows =
+      scanSessionIds.size === 0
+        ? []
+        : (
+            await Promise.all(
+              chunkArray([...scanSessionIds], SQLITE_IN_CHUNK_SIZE).map((sessionIdChunk) =>
+                db
+                  .select({
+                    sessionId: messages.sessionId,
+                    role: messages.role,
+                    agentMeta: messages.agentMeta,
+                    createdAt: messages.createdAt,
+                    id: messages.id,
+                  })
+                  .from(messages)
+                  .where(
+                    and(
+                      inArray(messages.sessionId, sessionIdChunk),
+                      inArray(messages.role, ['user', 'assistant']),
+                    ),
+                  )
+                  .orderBy(
+                    messages.sessionId,
+                    messages.createdAt,
+                    // If a scheduler user message and its assistant result land in the
+                    // same millisecond, the user row must establish activeScheduleId first.
+                    sql`case ${messages.role} when 'user' then 0 else 1 end`,
+                    messages.id,
+                  ),
               ),
-          ),
-        )
-      ).flat();
+            )
+          ).flat();
 
     let activeSessionId: string | null = null;
     let activeScheduleId: string | null = null;
@@ -573,21 +562,34 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
         continue;
       }
       if (row.role !== 'assistant') continue;
-      const cost = billableTurnCostUsdFromAgentMeta(row.agentMeta);
-      if (cost <= 0) continue;
-      billableMessageCostBySessionId.set(
-        row.sessionId,
-        (billableMessageCostBySessionId.get(row.sessionId) ?? 0) + cost,
-      );
+      const turnCost = turnCostFromAgentMeta(row.agentMeta);
+      const cost = turnCost.costUsd;
+      if (cost <= 0 && turnCost.estimatedValueUsd <= 0) continue;
+      if (cost > 0) {
+        billableMessageCostBySessionId.set(
+          row.sessionId,
+          (billableMessageCostBySessionId.get(row.sessionId) ?? 0) + cost,
+        );
+      }
       if (!activeScheduleId || !linkedScheduleIds.has(activeScheduleId)) {
         continue;
       }
       const entry = bySchedule.get(activeScheduleId) ?? {
         totalCostUsd: 0,
+        totalEstimatedValueUsd: 0,
         sessionIds: new Set<string>(),
+        sessionCosts: new Map(),
       };
       entry.sessionIds.add(row.sessionId);
       entry.totalCostUsd += cost;
+      entry.totalEstimatedValueUsd += turnCost.estimatedValueUsd;
+      const sessionCost = entry.sessionCosts.get(row.sessionId) ?? {
+        totalCostUsd: 0,
+        totalEstimatedValueUsd: 0,
+      };
+      sessionCost.totalCostUsd += cost;
+      sessionCost.totalEstimatedValueUsd += turnCost.estimatedValueUsd;
+      entry.sessionCosts.set(row.sessionId, sessionCost);
       bySchedule.set(activeScheduleId, entry);
     }
 
@@ -597,13 +599,22 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
 
       const entry = bySchedule.get(scheduleId) ?? {
         totalCostUsd: 0,
+        totalEstimatedValueUsd: 0,
         sessionIds: new Set<string>(),
+        sessionCosts: new Map(),
       };
       entry.sessionIds.add(session.id);
       const cost = Number(session.totalCostUsd ?? 0);
       if (Number.isFinite(cost) && cost > 0) {
         const alreadyCountedMessageCost = billableMessageCostBySessionId.get(session.id) ?? 0;
-        entry.totalCostUsd += Math.max(0, cost - alreadyCountedMessageCost);
+        const legacyCost = Math.max(0, cost - alreadyCountedMessageCost);
+        entry.totalCostUsd += legacyCost;
+        const sessionCost = entry.sessionCosts.get(session.id) ?? {
+          totalCostUsd: 0,
+          totalEstimatedValueUsd: 0,
+        };
+        sessionCost.totalCostUsd += legacyCost;
+        entry.sessionCosts.set(session.id, sessionCost);
       }
       bySchedule.set(scheduleId, entry);
     }
@@ -611,7 +622,12 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
     return [...bySchedule.entries()].map(([scheduleId, summary]) => ({
       scheduleId,
       totalCostUsd: summary.totalCostUsd,
+      totalEstimatedValueUsd: summary.totalEstimatedValueUsd,
       sessionCount: summary.sessionIds.size,
+      sessions: [...summary.sessionCosts.entries()].map(([sessionId, costs]) => ({
+        sessionId,
+        ...costs,
+      })),
     }));
   }
 
@@ -619,11 +635,7 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
     const db = this.getDb();
     // 先 select 一次拿到 scheduleId（callers 需要它来定位 'changed' 事件目标 schedule）；
     // 找不到直接返回 null，不抛错（与 update/updateRun 的契约对齐）。
-    const [row] = await db
-      .select()
-      .from(scheduleRuns)
-      .where(eq(scheduleRuns.id, id))
-      .limit(1);
+    const [row] = await db.select().from(scheduleRuns).where(eq(scheduleRuns.id, id)).limit(1);
     if (!row) return null;
     await db.delete(scheduleRuns).where(eq(scheduleRuns.id, id));
     return scheduleRunToCamel(row);
@@ -632,9 +644,10 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
   async deleteOrphanRuns(): Promise<number> {
     const db = this.getDb();
     // 显式 .run() 才能经 drizzleProxy 拿到 changes(见 claimDueFire 注释)
-    const result = await db.delete(scheduleRuns).where(
-      sql`${scheduleRuns.scheduleId} NOT IN (SELECT ${schedules.id} FROM ${schedules})`,
-    ).run();
+    const result = await db
+      .delete(scheduleRuns)
+      .where(sql`${scheduleRuns.scheduleId} NOT IN (SELECT ${schedules.id} FROM ${schedules})`)
+      .run();
     const changes = (result as unknown as { changes?: number }).changes;
     return typeof changes === 'number' ? changes : 0;
   }
@@ -782,10 +795,7 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
     ) {
       return null;
     }
-    await db
-      .update(scheduleRuns)
-      .set({ readAt: Date.now() })
-      .where(eq(scheduleRuns.id, runId));
+    await db.update(scheduleRuns).set({ readAt: Date.now() }).where(eq(scheduleRuns.id, runId));
     return row.scheduleId;
   }
 
@@ -872,11 +882,13 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
         if (linkedSessionIds.has(row.id)) return false;
         const name = legacyScheduleNameFromSessionTitle(row.title);
         if (!name) return false;
-        return legacyAliases.has(legacyScheduleKey({
-          name,
-          workspaceKind: row.workspaceKind,
-          workingDir: row.workingDir,
-        }));
+        return legacyAliases.has(
+          legacyScheduleKey({
+            name,
+            workspaceKind: row.workspaceKind,
+            workingDir: row.workingDir,
+          }),
+        );
       })
       .map((row) => legacyRunFromSession(scheduleId, row));
   }
@@ -907,12 +919,7 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
       })
       .from(scheduleRuns)
       .innerJoin(sessions, eq(scheduleRuns.sessionId, sessions.id))
-      .where(
-        and(
-          eq(scheduleRuns.scheduleId, schedule.id),
-          legacyTitleWhere(),
-        ),
-      );
+      .where(and(eq(scheduleRuns.scheduleId, schedule.id), legacyTitleWhere()));
 
     for (const row of linkedRows) {
       const name = legacyScheduleNameFromSessionTitle(row.title);

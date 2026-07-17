@@ -93,9 +93,10 @@ export function TaskListPane({
   const groups = useMemo(() => {
     const grouped = new Map<string, Schedule[]>();
     for (const schedule of schedules) {
-      const key = schedule.workspaceKind === 'dialogue'
-        ? DIALOGUE_GROUP_KEY
-        : normalizeScheduleWorkingDir(schedule.workingDir);
+      const key =
+        schedule.workspaceKind === 'dialogue'
+          ? DIALOGUE_GROUP_KEY
+          : normalizeScheduleWorkingDir(schedule.workingDir);
       const bucket = grouped.get(key);
       if (bucket) bucket.push(schedule);
       else grouped.set(key, [schedule]);
@@ -104,11 +105,12 @@ export function TaskListPane({
     return [...grouped.entries()]
       .map(([key, items]) => ({
         workingDir: key,
-        displayName: key === DIALOGUE_GROUP_KEY
-          ? t('newChat.folderPicker.dialogue')
-          : key === OTHER_GROUP_KEY
-            ? t('scheduler.list.section.otherGroup')
-            : lastPathSegment(items[0].workingDir ?? key),
+        displayName:
+          key === DIALOGUE_GROUP_KEY
+            ? t('newChat.folderPicker.dialogue')
+            : key === OTHER_GROUP_KEY
+              ? t('scheduler.list.section.otherGroup')
+              : lastPathSegment(items[0].workingDir ?? key),
         schedules: sortWithinGroup(items),
         hasProjectSchedules: items.some((s) => s.source === 'project'),
       }))
@@ -147,53 +149,66 @@ export function TaskListPane({
                 onClick={() => toggleCollapsed(group.workingDir)}
               >
                 {isCollapsed ? (
-                  <ChevronRight size={12} strokeWidth={2} className="shrink-0 text-[var(--cmd-palette-item-meta)]" />
+                  <ChevronRight
+                    size={12}
+                    strokeWidth={2}
+                    className="shrink-0 text-[var(--cmd-palette-item-meta)]"
+                  />
                 ) : (
-                  <ChevronDown size={12} strokeWidth={2} className="shrink-0 text-[var(--cmd-palette-item-meta)]" />
+                  <ChevronDown
+                    size={12}
+                    strokeWidth={2}
+                    className="shrink-0 text-[var(--cmd-palette-item-meta)]"
+                  />
                 )}
                 <span className="min-w-0 flex-1 truncate">{group.displayName}</span>
-                {!isCollapsed && group.workingDir !== OTHER_GROUP_KEY && group.workingDir !== DIALOGUE_GROUP_KEY && (
-                  <button
-                    type="button"
-                    aria-label={t('scheduler.list.section.createProjectAria')}
-                    title={t('scheduler.list.section.createProject')}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onCreateProjectSchedule(group.workingDir);
-                    }}
-                    className="flex h-6 w-6 items-center justify-center rounded-[6px] text-[var(--cmd-palette-item-meta)] hover:bg-[var(--confirm-btn-secondary-hover)] hover:text-[var(--msg-assistant-text)]"
-                  >
-                    <SquarePen size={14} strokeWidth={2} />
-                  </button>
-                )}
-                {group.hasProjectSchedules && !isCollapsed && group.workingDir !== OTHER_GROUP_KEY && group.workingDir !== DIALOGUE_GROUP_KEY && (
-                  <>
+                {!isCollapsed &&
+                  group.workingDir !== OTHER_GROUP_KEY &&
+                  group.workingDir !== DIALOGUE_GROUP_KEY && (
                     <button
                       type="button"
-                      aria-label={t('scheduler.list.section.openConfigAria')}
-                      title={t('scheduler.list.section.openConfig')}
+                      aria-label={t('scheduler.list.section.createProjectAria')}
+                      title={t('scheduler.list.section.createProject')}
                       onClick={(e) => {
                         e.stopPropagation();
-                        void onOpenProjectConfig(group.workingDir);
+                        onCreateProjectSchedule(group.workingDir);
                       }}
                       className="flex h-6 w-6 items-center justify-center rounded-[6px] text-[var(--cmd-palette-item-meta)] hover:bg-[var(--confirm-btn-secondary-hover)] hover:text-[var(--msg-assistant-text)]"
                     >
-                      <ExternalLink size={12} strokeWidth={2} />
+                      <SquarePen size={14} strokeWidth={2} />
                     </button>
-                    <button
-                      type="button"
-                      aria-label={t('scheduler.list.section.reloadAria')}
-                      title={t('scheduler.list.section.reload')}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void onReloadProject(group.workingDir);
-                      }}
-                      className="flex h-6 w-6 items-center justify-center rounded-[6px] text-[var(--cmd-palette-item-meta)] hover:bg-[var(--confirm-btn-secondary-hover)] hover:text-[var(--msg-assistant-text)]"
-                    >
-                      <RefreshCw size={12} strokeWidth={2} />
-                    </button>
-                  </>
-                )}
+                  )}
+                {group.hasProjectSchedules &&
+                  !isCollapsed &&
+                  group.workingDir !== OTHER_GROUP_KEY &&
+                  group.workingDir !== DIALOGUE_GROUP_KEY && (
+                    <>
+                      <button
+                        type="button"
+                        aria-label={t('scheduler.list.section.openConfigAria')}
+                        title={t('scheduler.list.section.openConfig')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void onOpenProjectConfig(group.workingDir);
+                        }}
+                        className="flex h-6 w-6 items-center justify-center rounded-[6px] text-[var(--cmd-palette-item-meta)] hover:bg-[var(--confirm-btn-secondary-hover)] hover:text-[var(--msg-assistant-text)]"
+                      >
+                        <ExternalLink size={12} strokeWidth={2} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={t('scheduler.list.section.reloadAria')}
+                        title={t('scheduler.list.section.reload')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void onReloadProject(group.workingDir);
+                        }}
+                        className="flex h-6 w-6 items-center justify-center rounded-[6px] text-[var(--cmd-palette-item-meta)] hover:bg-[var(--confirm-btn-secondary-hover)] hover:text-[var(--msg-assistant-text)]"
+                      >
+                        <RefreshCw size={12} strokeWidth={2} />
+                      </button>
+                    </>
+                  )}
               </div>
               {!isCollapsed && (
                 <ul className="flex flex-col gap-1 pt-1 pl-[18px]">
@@ -205,7 +220,12 @@ export function TaskListPane({
                         unreadCount={unreadRunCounts.get(s.id) ?? 0}
                         totalCostUsd={
                           costSummariesLoaded
-                            ? costSummaries.get(s.id)?.totalCostUsd ?? 0
+                            ? (costSummaries.get(s.id)?.totalCostUsd ?? 0)
+                            : undefined
+                        }
+                        totalEstimatedValueUsd={
+                          costSummariesLoaded
+                            ? (costSummaries.get(s.id)?.totalEstimatedValueUsd ?? 0)
                             : undefined
                         }
                         onSelect={onSelect}
@@ -213,9 +233,13 @@ export function TaskListPane({
                         onDelete={s.source === 'project' ? undefined : onDelete}
                         onRename={s.source === 'project' ? undefined : onRename}
                         onPromoteToProject={s.source === 'project' ? undefined : onPromoteToProject}
-                        onEditProjectSchedule={s.source === 'project' ? onEditProjectSchedule : undefined}
+                        onEditProjectSchedule={
+                          s.source === 'project' ? onEditProjectSchedule : undefined
+                        }
                         onCloneToUser={s.source === 'project' ? onCloneToUser : undefined}
-                        onRemoveProjectSchedule={s.source === 'project' ? onRemoveProjectSchedule : undefined}
+                        onRemoveProjectSchedule={
+                          s.source === 'project' ? onRemoveProjectSchedule : undefined
+                        }
                         onRunNow={onRunNow}
                         runBusy={runNowBusyIds?.has(s.id) ?? false}
                       />
