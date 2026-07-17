@@ -186,9 +186,9 @@ registerColor('error-flat', {
   dark: '#ef4444',
 }, '扁平 danger 前景');
 registerColor('warning-accent', {
-  light: '#FF6600',
-  dark: '#FF6600',
-}, 'Thinking orange / warning accent');
+  light: '#EA6B17',
+  dark: '#EA6B17',
+}, 'Thinking orange / warning accent — running 状态色,设计定稿 2026-07-17(取代 #FF6600 冻结红线);全局同值,9 主题无 override 自动跟随');
 registerColor('shadow-soft-panel', {
   light: '0 4px 12px rgb(0 0 0 / 0.08)',
   dark: '0 4px 12px rgb(0 0 0 / 0.3)',
@@ -368,6 +368,10 @@ registerColor('sidebar-item-active', {
   light: '0 0% 90%',
   dark: '60 2% 17%',
 }, 'Light Gray #e5e5e5 — selected pill');
+registerColor('sidebar-item-active-foreground', {
+  light: 'var(--foreground)',
+  dark: 'var(--foreground)',
+}, 'Selected pill 文字/图标前景(default=foreground 正文;CINDY override 反白 #FCFCFC/#D4D4D4,E1D 侧栏层级)');
 registerColor('sidebar-search-bg', {
   light: 'var(--surface-hsl)',
   dark: 'var(--surface-hsl)',
@@ -618,6 +622,14 @@ registerColor('send-btn-disabled-icon', {
   light: 'var(--text-disabled-tertiary)',
   dark: 'var(--text-disabled-tertiary)',
 }, 'Silver');
+registerColor('send-btn-hover-bg', {
+  light: 'var(--send-btn-bg)',
+  dark: 'var(--send-btn-bg)',
+}, 'Send button hover bg(default 同 bg,默认皮肤维持 opacity-85 hover;CINDY override 反相中性 hover #2E3237/#E2E2E2,E1D 纳入值表)');
+registerColor('send-btn-pressed-bg', {
+  light: 'var(--send-btn-bg)',
+  dark: 'var(--send-btn-bg)',
+}, 'Send button pressed bg(default 同 bg;CINDY override 反相中性 pressed #25282C/#D4D4D4,E1D 纳入值表)');
 
 // Stop button — per cc-agent-view Streaming variant
 registerColor('stop-btn-bg', {
@@ -721,9 +733,9 @@ registerColor('perm-item-selected-bg', {
 
 // Narrow scoped text hints: only selected risky permission modes use color.
 registerColor('perm-auto-selected-text', {
-  light: '#000050',
-  dark: '#00D9C5',
-}, 'Auto Approval accent');
+  light: '#417CDD',
+  dark: '#417CDD',
+}, 'Auto Approval accent(设计定稿 2026-07-17 #417CDD,light/dark 同值;原 light #000050/dark #00D9C5)');
 registerColor('perm-bypass-selected-text', {
   light: 'var(--warning-accent)',
   dark: 'var(--warning-accent)',
@@ -966,10 +978,14 @@ registerColor('surface-translucent-overlay', {
   light: 'var(--surface-elevated)',
   dark: 'var(--surface-elevated)',
 }, 'E4D 浮层半透明底(default surface-elevated;CINDY override rgba #F6F6F6@90%/#252323@80% R1 模式3)');
-registerColor('glass-pill-bg', {
-  light: 'transparent',
-  dark: 'transparent',
-}, 'E3 D6 glass-pill 底(default 透明;CINDY override rgba #FFFFFF@5% light/#D9D9D9@5% dark R4 §2.6)');
+registerColor('composer-pill-bg', {
+  light: '#FCFCFC',
+  dark: '#393838',
+}, 'E2 composer pill/圆钮底(输入条 pill/圆钮,比卡面浅一档刻意对比;lead Figma 实测 spec §2-3;取代错稿 glass-pill-bg)');
+registerColor('composer-pill-icon', {
+  light: '#3C3F43',
+  dark: '#D9D9D9',
+}, 'E2 composer pill 图标(light=text-primary #3C3F43;dark #D9D9D9;spec §2-3)');
 registerColor('status-bar-meta', {
   light: 'var(--text-secondary)',
   dark: 'var(--text-secondary)',
@@ -1266,16 +1282,16 @@ registerColor('settings-integration-warning', {
 // small enough that saturation issues don't arise; legibility comes from
 // the dot's high-contrast position against surface, not from luminance.
 registerColor('remote-status-ready', {
-  light: '#22c55e',
-  dark: '#22c55e',
+  light: '#2AAE5B',
+  dark: '#2AAE5B',
 }, 'Status — connected / ready (green)');
 registerColor('remote-status-progress', {
   light: '#f59e0b',
   dark: '#f59e0b',
 }, 'Status — connecting/authenticating/reconnecting (amber-500, 偏黄不容易在小圆点上被误读为红)');
 registerColor('remote-status-failed', {
-  light: '#ef4444',
-  dark: '#ef4444',
+  light: '#D91F37',
+  dark: '#D91F37',
 }, 'Status — connect failed (red)');
 
 // 会话状态点(AttentionDot / 列表行右槽 / 灵动岛)三态语义色 —— 同 remote-status 走
@@ -1283,17 +1299,17 @@ registerColor('remote-status-failed', {
 // 全端统一色表(与灵动岛 native 对齐):running=Thinking Orange(status-bar-accent)、
 // awaiting=TapTap 蓝、error=红、完成未读=绿。
 registerColor('card-status-awaiting', {
-  light: '#00D9C5',
-  dark: '#00D9C5',
-}, '状态点 — 待用户回复/选择 (TapTap 蓝 #00D9C5,与灵动岛 needs-interaction 同值;light/dark 同色,2026-07 Dash 真机确认浅底可辨)');
+  light: '#19D2C1',
+  dark: '#19D2C1',
+}, '状态点 — 待用户回复/选择 (设计定稿 2026-07-17 #19D2C1,取代 #00D9C5 冻结红线;light/dark 同值)');
 registerColor('card-status-error', {
-  light: '#ef4444',
-  dark: '#ef4444',
-}, '状态点 — 任务出错 (red,与灵动岛 error 同值)');
+  light: '#D91F37',
+  dark: '#D91F37',
+}, '状态点 — 任务出错 (设计定稿 2026-07-17 #D91F37,取代 #ef4444;状态族 error,非 error-flat 正文文案)');
 registerColor('card-status-done', {
-  light: '#22c55e',
-  dark: '#22c55e',
-}, '状态点 — 完成未读 (green;普通/定时任务完成统一,橙专职 running)');
+  light: '#2AAE5B',
+  dark: '#2AAE5B',
+}, '状态点 — 完成未读 (设计定稿 2026-07-17 #2AAE5B,取代 #22c55e;普通/定时任务完成统一,橙专职 running)');
 registerColor('remote-status-disconnected', {
   light: 'var(--text-tertiary)',
   dark: 'var(--text-tertiary)',
@@ -1583,13 +1599,13 @@ registerColor('color-error-700', {
 
 /* === P3.1: focus / shadow / overlay / error / warning 语义槽 === */
 registerColor('focus-ring', {
-  light: '#3b82f6',
-  dark: '#3b82f6',
-}, 'Opaque a11y focus border (Tailwind blue-500)');
+  light: '#417CDD',
+  dark: '#417CDD',
+}, 'Opaque a11y focus border(设计定稿 2026-07-17 #417CDD,取代 blue-500 #3b82f6)');
 registerColor('focus-ring-soft', {
-  light: 'rgba(59, 130, 246, 0.5)',
-  dark: 'rgba(59, 130, 246, 0.5)',
-}, '50% alpha focus ring — 替代 ring-[#xxx]/50 写法');
+  light: 'rgba(65, 124, 221, 0.5)',
+  dark: 'rgba(65, 124, 221, 0.5)',
+}, '50% alpha focus ring(随 focus-ring #417CDD,定稿 2026-07-17)— 替代 ring-[#xxx]/50 写法');
 registerColor('shadow-menu', {
   light: '0 4px 16px rgba(0, 0, 0, 0.15)',
   dark: '0 4px 16px rgba(0, 0, 0, 0.5)',
@@ -1641,13 +1657,13 @@ registerColor('error-fg-strong', {
   dark: '#fca5a5',
 }, '错误卡片强调文字');
 registerColor('warning-bg-soft', {
-  light: 'rgba(255, 102, 0, 0.12)',
-  dark: 'rgba(255, 102, 0, 0.18)',
-}, 'Warning alpha surface (FeishuConflictDialog 类警告 badge)');
+  light: 'rgba(234, 107, 23, 0.12)',
+  dark: 'rgba(234, 107, 23, 0.18)',
+}, 'Warning alpha surface (FeishuConflictDialog 类警告 badge;alpha 随 warning-accent #EA6B17 同步重算 2026-07-17)');
 registerColor('warning-fg', {
-  light: '#F59E0B',
-  dark: '#F59E0B',
-}, 'Toast warning amber 同款,用于需要 warning 语义的强调文字/图标(跨主题统一,语义豁免)');
+  light: '#F3A115',
+  dark: '#F3A115',
+}, '警示强调文字/图标(设计定稿 2026-07-17 #F3A115;与 Toast amber #F59E0B 解耦——Toast 维持 B 组现状,本 token 走定稿前景)');
 // cc-mgr 远端升级 banner (UpgradeBanner.tsx) — amber warning 语义,跨主题统一、语义豁免
 // (规则 15:warning/amber 在豁免范围,不被非默认主题 override,但仍走 token)。
 registerColor('upgrade-banner-bg', {

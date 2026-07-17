@@ -5,6 +5,6 @@ export const defaultDark: Theme = {
   name: 'Default Dark',
   type: 'dark',
   colors: {
-    'perm-auto-selected-text': '#00D9C5',
+    'perm-auto-selected-text': '#417CDD', // E5D 定稿 2026-07-17
   },
 };

@@ -13,6 +13,9 @@ import {
   BRAND_RED_ALLOWED_IDS,
   BRAND_RED_EXPECTED_BY_ID,
   HSL_FORMAT_IDS,
+  NEUTRAL_PRIMARY_EXPECTED_BY_ID,
+  NEUTRAL_PRIMARY_FOREGROUND_BY_ID,
+  RED_EXCEPTION_ALLOWED_IDS,
 } from './cindyDecisionData';
 
 /**
@@ -173,78 +176,84 @@ describe('CINDY · ④ round-trip HSL→RGB(每通道误差≤1)', () => {
   });
 });
 
-// ===== ⑤ 红线三份 exact map + 排除 =====
-describe('CINDY · ⑤ 红线三份 exact map + 排除断言', () => {
-  it('BRAND_RED_EXPECTED_BY_ID:这些 id 的值 RGB 归一后必须等于品牌红', () => {
-    const redRgb = toRgb(BRAND_RED_HEX);
+// ===== ⑤ E1D 红色体系重构(中性 exact map + 红例外白名单) =====
+describe('CINDY · ⑤ E1D 红色体系重构(中性 exact map + 红例外白名单)', () => {
+  it('NEUTRAL_PRIMARY_EXPECTED_BY_ID:常规主操作底必须等于中性值(light #3C3F43/dark #EEEEEE 等)', () => {
     for (const [name, theme] of THEMES) {
-      for (const [id, expectedRaw] of Object.entries(BRAND_RED_EXPECTED_BY_ID)) {
+      for (const [id, expected] of Object.entries(NEUTRAL_PRIMARY_EXPECTED_BY_ID)) {
         const actual = theme.colors[id];
-        // expectedRaw 可能是 hex(#DF0C27) 或 HSL 三元组(352.3 89.8% 46.1%)
-        expect(
-          rgbEqual(toRgb(actual), toRgb(expectedRaw), 1),
-          `${name}.${id} 应等于品牌红,实际 ${actual}`,
-        ).toBe(true);
-        expect(rgbEqual(toRgb(actual), redRgb, 1), `${name}.${id} RGB 未归一到品牌红`).toBe(true);
+        const exp = name === 'cindy-light' ? expected.light : expected.dark;
+        expect(rgbEqual(toRgb(actual), toRgb(exp), 1), `${name}.${id} 应中性,实际 ${actual}`).toBe(true);
       }
     }
   });
 
-  it('BRAND_RED_ALLOWED_IDS 之外的 token 不得出现品牌红(单向禁止越界)', () => {
-    const allowed = new Set<string>(BRAND_RED_ALLOWED_IDS);
-    const redRgb = toRgb(BRAND_RED_HEX);
+  it('RED_EXCEPTION_ALLOWED_IDS 之外不得出现品牌红 #DF0C27/#A61629', () => {
+    const allowed = new Set<string>(RED_EXCEPTION_ALLOWED_IDS);
+    const redRgb = toRgb('#DF0C27');
+    const darkRedRgb = toRgb('#A61629');
     for (const [name, theme] of THEMES) {
       for (const [id, val] of Object.entries(theme.colors)) {
         if (allowed.has(id)) continue;
-        // 跳过非纯色(rgba/transparent 无法简单比)
         if (!val.startsWith('#')) continue;
-        const isRed = rgbEqual(toRgb(val), redRgb, 2);
-        expect(isRed, `${name}.${id} 不在 ALLOWED 但出现品牌红: ${val}`).toBe(false);
+        expect(rgbEqual(toRgb(val), redRgb, 2), `${name}.${id} 出现品牌红: ${val}`).toBe(false);
+        expect(rgbEqual(toRgb(val), darkRedRgb, 2), `${name}.${id} 出现深红: ${val}`).toBe(false);
       }
     }
   });
 
-  it('CTA_FOREGROUND_WHITE_IDS 的前景必须白(RGB 归一)', () => {
-    const white = toRgb('#FFFFFF');
+  it('NEUTRAL_PRIMARY_FOREGROUND_BY_ID 前景必须中性字(light #FCFCFC/dark #252222,非全局白)', () => {
     for (const [name, theme] of THEMES) {
-      for (const id of CTA_FOREGROUND_WHITE_IDS) {
-        expect(rgbEqual(toRgb(theme.colors[id]), white, 1), `${name}.${id} CTA 前景应白`).toBe(
-          true,
-        );
+      const expFg = name === 'cindy-light' ? '#FCFCFC' : '#252222';
+      for (const id of NEUTRAL_PRIMARY_FOREGROUND_BY_ID) {
+        expect(rgbEqual(toRgb(theme.colors[id]), toRgb(expFg), 1), `${name}.${id} 前景应中性字`).toBe(true);
       }
     }
   });
 
-  it('排除:warning-accent/annotation-accent/status-bar-accent/状态四色/focus-ring/diff/msg-link 不被品牌红接管', () => {
-    const redRgb = toRgb(BRAND_RED_HEX);
-    const EXCLUDED = [
-      'warning-accent',
-      'annotation-accent',
-      'status-bar-accent',
-      'card-status-awaiting',
-      'card-status-error',
-      'card-status-done',
-      'remote-status-ready',
-      'remote-status-progress',
-      'remote-status-failed',
-      'focus-ring',
-      'diff-del-fg',
-      'diff-add-fg',
-      'msg-link',
-    ];
+  it('排除:warning/annotation/status-bar/状态四色/focus/diff/msg-link 不被红接管 + migration-bar-fill 保留红', () => {
+    const redRgb = toRgb('#DF0C27');
+    const EXCLUDED = ['warning-accent','annotation-accent','status-bar-accent','card-status-awaiting','card-status-error','card-status-done','remote-status-ready','remote-status-progress','remote-status-failed','focus-ring','diff-del-fg','diff-add-fg','msg-link'];
     for (const [name, theme] of THEMES) {
       for (const id of EXCLUDED) {
         const val = theme.colors[id];
         if (!val || !val.startsWith('#')) continue;
-        expect(rgbEqual(toRgb(val), redRgb, 2), `${name}.${id} 排除项被品牌红接管: ${val}`).toBe(
-          false,
-        );
+        expect(rgbEqual(toRgb(val), redRgb, 2), `${name}.${id} 排除项被红接管: ${val}`).toBe(false);
       }
     }
-    // msg-link 明确非红(链接蓝)
+    // migration-bar-fill 保留红(C 类裁决 5)
+    for (const [, theme] of THEMES) {
+      expect(rgbEqual(toRgb(theme.colors['migration-bar-fill']), redRgb, 1), 'migration-bar-fill 应保留红').toBe(true);
+    }
+    // msg-link 非红
     for (const [, theme] of THEMES) {
       expect(rgbEqual(toRgb(theme.colors['msg-link']), redRgb, 5), 'msg-link 不得染红').toBe(false);
     }
+  });
+
+  it('状态/Auto/focus 全局 registry 默认 = 设计定稿值 2026-07-17(取代冻结红线;扩簇含 info/focus/Auto Approval)', () => {
+    // 状态色全局(colors.ts light/dark 同值;9 builtin 主题无一 override → 默认皮肤同变)。
+    // E5D 定稿 2026-07-17:状态四色 + 警示橙 accent + warning 前景 + focus-ring + Auto Approval。
+    const FINAL: Record<string, string> = {
+      'warning-accent': '#EA6B17',
+      'card-status-awaiting': '#19D2C1',
+      'card-status-error': '#D91F37',
+      'card-status-done': '#2AAE5B',
+      'remote-status-ready': '#2AAE5B',
+      'remote-status-failed': '#D91F37',
+      'warning-fg': '#F3A115',
+      'focus-ring': '#417CDD',
+      'perm-auto-selected-text': '#417CDD',
+    };
+    for (const [id, hex] of Object.entries(FINAL)) {
+      const lv = colorRegistry.resolveDefault(id, 'light') ?? '';
+      const dv = colorRegistry.resolveDefault(id, 'dark') ?? '';
+      expect(rgbEqual(toRgb(lv), toRgb(hex), 1), `${id} light = 定稿 ${hex}`).toBe(true);
+      expect(rgbEqual(toRgb(dv), toRgb(hex), 1), `${id} dark = 定稿 ${hex}`).toBe(true);
+    }
+    // ring:CINDY override HSL(固定蓝),定稿 #417CDD;resolveDefault 为 text-primary-hsl 故查 CINDY 值
+    expect(rgbEqual(toRgb(cindyLight.colors['ring'] ?? ''), toRgb('#417CDD'), 1), 'cindy-light ring = #417CDD').toBe(true);
+    expect(rgbEqual(toRgb(cindyDark.colors['ring'] ?? ''), toRgb('#417CDD'), 1), 'cindy-dark ring = #417CDD').toBe(true);
   });
 });
 
@@ -313,10 +322,10 @@ describe('CINDY · ⑦ WCAG 复算 + U2 例外 allowlist + text-secondary 反向
     }
   });
 
-  it('CTA 白字 × 品牌红 ≥4.5:1;focus-ring × surface/card ≥3:1', () => {
-    expect(contrast('#FFFFFF', light['accent-cta-bg'])).toBeGreaterThanOrEqual(4.5);
-    expect(contrast('#FFFFFF', dark['accent-cta-bg'])).toBeGreaterThanOrEqual(4.5);
-    // focus-ring cindy 不 override(用 registry 默认 #3b82f6,决策表 §6 矩阵同值)
+  it('E1D 中性 CTA 对比度:#FCFCFC×#3C3F43=10.32(light)、#252222×#EEEEEE=13.60(dark) ≥4.5', () => {
+    expect(contrast('#FCFCFC', light['accent-cta-bg'])).toBeGreaterThanOrEqual(4.5);
+    expect(contrast('#252222', dark['accent-cta-bg'])).toBeGreaterThanOrEqual(4.5);
+    // focus-ring cindy 不 override(用 registry 默认 #417CDD,E5D 定稿 2026-07-17 取代 #3b82f6)
     const frLight = colorRegistry.resolveDefault('focus-ring', 'light') ?? '';
     const frDark = colorRegistry.resolveDefault('focus-ring', 'dark') ?? '';
     expect(contrast(frLight, light['surface'])).toBeGreaterThanOrEqual(3);
@@ -346,6 +355,19 @@ describe('CINDY · ⑦ WCAG 复算 + U2 例外 allowlist + text-secondary 反向
       rgbEqual(toRgb(dark['text-secondary']), toRgb('#6F6F6F'), 1),
       'dark text-secondary 须恰等 #6F6F6F',
     ).toBe(true);
+  });
+
+  it('E1D 侧栏层级:二级暗灰(sidebar-muted)明显弱于正文(text-primary)×surface + 选中胶囊反白', () => {
+    // lead 侧栏层级整改 2026-07-17:标题正文 > 图标/时间戳/分组(二级暗灰) > 选中胶囊红反白 > 强调箭头红
+    for (const [name, theme] of THEMES) {
+      const c = theme.colors as unknown as Record<string, string>;
+      const sec = contrast(c['sidebar-muted'], c['surface']);
+      const pri = contrast(c['text-primary-hsl'], c['surface']);
+      expect(sec, `${name} 二级暗灰 ${sec.toFixed(2)} 应明显弱于正文 ${pri.toFixed(2)}`).toBeLessThan(pri);
+    }
+    // 选中胶囊前景反白(light #FCFCFC/dark #D4D4D4)— ③ exact 已守,此处补层级:前景×红底 ≥4.5
+    expect(contrast(cindyLight.colors['sidebar-item-active-foreground']!, cindyLight.colors['sidebar-item-active']!), 'light 选中胶囊 前景×红底').toBeGreaterThanOrEqual(4.5);
+    expect(contrast(cindyDark.colors['sidebar-item-active-foreground']!, cindyDark.colors['sidebar-item-active']!), 'dark 选中胶囊 前景×红底').toBeGreaterThanOrEqual(4.5);
   });
 });
 
@@ -379,8 +401,8 @@ describe('CINDY · ⑧ 可证伪自检(注入错值后断言必须变红,还原�
     expect(isHslSlot && !isHslVal, 'HSL 槽填 hex 应被 ③ 抓').toBe(true);
   });
 
-  it('注入品牌红越界(非 allowed id 染红) → ⑤ 变红', () => {
-    const allowed = new Set<string>(BRAND_RED_ALLOWED_IDS);
+  it('注入品牌红越界(非 RED_EXCEPTION_ALLOWED id 染红) → ⑤ 变红', () => {
+    const allowed = new Set<string>(RED_EXCEPTION_ALLOWED_IDS);
     const badId = 'text-primary'; // 不在 allowed
     expect(allowed.has(badId), 'text-primary 不在 ALLOWED,染红应被 ⑤ 抓').toBe(false);
     const badRgb = toRgb('#DF0C27');
@@ -392,7 +414,7 @@ describe('CINDY · ⑧ 可证伪自检(注入错值后断言必须变红,还原�
 
   it('注入豁免篡改(warning-accent 染红) → ⑤ 排除断言变红', () => {
     const redRgb = toRgb(BRAND_RED_HEX);
-    // warning-accent cindy 不 override,registry 默认 #FF6600,非品牌红
+    // warning-accent cindy 不 override,registry 默认 #EA6B17(设计定稿 2026-07-17),非品牌红
     const warnDefault = colorRegistry.resolveDefault('warning-accent', 'light') ?? '';
     expect(rgbEqual(toRgb(warnDefault), redRgb, 2), 'warning-accent 默认非品牌红').toBe(false);
     // 强行注入品牌红到 cindy 的 warning-accent override → ⑤ 排除断言(排除项染红即红)变红
@@ -420,11 +442,11 @@ describe('CINDY · ⑧ 可证伪自检(注入错值后断言必须变红,还原�
   it('§7 必炸点对比度(橙徽章/红 CTA/Fast toggle,§7 矩阵)', () => {
     const L = cindyLight.colors as unknown as Record<string, string>;
     const D = cindyDark.colors as unknown as Record<string, string>;
-    const orange = '#FF6600'; // status-bar-accent registry 默认(cindy 不 override)
+    const orange = '#EA6B17'; // status-bar-accent registry 默认(设计定稿 2026-07-17,cindy 不 override);× status-badge-fg #1F1F1F = 5.19:1 ≥4.5
     expect(contrast(L['status-badge-fg']!, orange), 'light 橙徽章 fg×橙').toBeGreaterThanOrEqual(4.5);
     expect(contrast(D['status-badge-fg']!, orange), 'dark 橙徽章 fg×橙').toBeGreaterThanOrEqual(4.5);
-    expect(contrast('#FFFFFF', L['accent-cta-bg']!), 'light 红 CTA 白字×品牌红').toBeGreaterThanOrEqual(4.5);
-    expect(contrast('#FFFFFF', D['accent-cta-bg']!), 'dark 红 CTA 白字×品牌红').toBeGreaterThanOrEqual(4.5);
+    expect(contrast('#FCFCFC', L['accent-cta-bg']!), 'light 中性 CTA').toBeGreaterThanOrEqual(4.5);
+    expect(contrast('#252222', D['accent-cta-bg']!), 'dark 中性 CTA').toBeGreaterThanOrEqual(4.5);
     // Fast toggle: thumb(surface-on-card) × track(fast-toggle-track = text-disabled)
     expect(contrast(L['surface-on-card']!, L['text-disabled']!), 'light Fast toggle thumb×track').toBeGreaterThanOrEqual(3);
     expect(contrast(D['surface-on-card']!, D['text-disabled']!), 'dark Fast toggle thumb×track').toBeGreaterThanOrEqual(3);

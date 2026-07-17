@@ -68,13 +68,13 @@ Small interactive chips (button backgrounds, tag pills, avatar fills, selected-n
 The grayscale rule is near-absolute. The following are the **only** sanctioned non-gray colors in the system — each tightly scoped to a specific surface. New semantic colors must not be introduced without being recorded here first.
 
 - **Ring Blue** (`#3b82f6` at 50%): Tailwind's default focus ring, used exclusively for keyboard accessibility. Never visible in normal interaction flow.
-- **Thinking Orange** (`#FF6600`): Used exclusively for the Running Status Bar in ChatView when the Claude Code SDK is actively processing (streaming / tool_use). Applies only to the sparkles icon and status text (e.g. `Spelunking...`); no background fill, no use outside this surface. Reference: `doc/design_docs/cc-agent-view.pen` Running Status Bar.
+- **Thinking Orange** (`#EA6B17`,设计定稿 2026-07-17 取代 `#FF6600` 冻结红线): Used exclusively for the Running Status Bar in ChatView when the Claude Code SDK is actively processing (streaming / tool_use). Applies only to the sparkles icon and status text (e.g. `Spelunking...`); no background fill, no use outside this surface. Reference: `doc/design_docs/cc-agent-view.pen` Running Status Bar.
 
 > **Additional narrowly-scoped exceptions** (documented in their respective component specs, do NOT generalize as system semantic colors):
 >
-> - **Toast Info / Success / Warning / Error** — `#3B82F6` / `#10B981` / `#F59E0B` / `#EF4444` used ONLY on the 16×16 lucide icon inside Toast pill notifications. The pill body (background, text, border, close icon) remains strictly grayscale. Info blue added 2026-07-14 for neutral tips (first consumer: Ghost notify slot); same family as Ring Blue. See `doc/prod_docs/xdt-maker-通用提示条.md` V0.3 F7.
+> - **Toast Info / Success / Warning / Error** — `#417CDD` / `#2AAE5B` / `#F3A115` / `#D91F37`(E5D 定稿 2026-07-17 扩簇,Toast 豁免解除)used ONLY on the 16×16 lucide icon inside Toast pill notifications. The pill body (background, text, border, close icon) remains strictly grayscale. info 蓝 #417CDD 与 focus-ring/Auto Approval 同值(原 #3B82F6 2026-07-14 增,现定稿);success/warning/error 与全局状态色同值(done 绿/状态 error/warning 前景)。 See `doc/prod_docs/xdt-maker-通用提示条.md` V0.3 F7.
 > - **ConfirmDialog Danger** — `#EF4444` used ONLY on the confirm button background in the Danger variant. The cancel button and rest of the dialog remain grayscale. See `doc/prod_docs/xdt-maker-通用确认弹窗.md` V0.2 F4.
-> - **Permission Selector Mode Highlights** — selected risky permission modes may color only the option text/icon/checkmark and the collapsed trigger text/icon. The selected row background remains grayscale. In **Default Light**, Auto Approval uses Starry Blue `#000050`; in **Default Dark**, it uses teal `#00D9C5`. Full Access uses Heart Orange `#FF6600` in both modes. These hex values are the **default-theme palette only** — other themes may override `--perm-auto-selected-text` and `--perm-bypass-selected-text` with their own accent colors, provided both modes remain color-coded, distinguishable from each other, and visually distinct from neutral text. Tokens: `--perm-auto-selected-text` and `--perm-bypass-selected-text` in `apps/desktop/src/renderer/styles/globals.css`.
+> - **Permission Selector Mode Highlights** — selected risky permission modes may color only the option text/icon/checkmark and the collapsed trigger text/icon. The selected row background remains grayscale. Auto Approval uses `#417CDD` in both modes(设计定稿 2026-07-17 扩簇,light/dark 同值;取代 light #000050/dark #00D9C5). Full Access uses Heart Orange `#EA6B17` in both modes(随 warning-accent 自动跟随,定稿 2026-07-17). These hex values are the **default-theme palette only** — other themes may override `--perm-auto-selected-text` and `--perm-bypass-selected-text` with their own accent colors, provided both modes remain color-coded, distinguishable from each other, and visually distinct from neutral text. Tokens: `--perm-auto-selected-text` and `--perm-bypass-selected-text` in `apps/desktop/src/renderer/styles/globals.css`.
 > - **Diff Add Green / Diff Del Red** — GitHub-standard diff syntax colors, used on the `+` / `-` symbol glyph, the changed-line text foreground, **and the full row background** inside code-diff renderings. Applied in three places: (1) the Edit-tool DiffView card (F-MSG-6), (2) markdown ````diff` fenced code blocks in the message stream, and (3) `.diff` / `.patch` files opened in TextLightbox (the document previewer) — there hljs `.hljs-addition` / `.hljs-deletion` are forced `display: block` so the background fills to the right edge instead of stopping at the last glyph. Line-number gutter and ctx (unchanged) lines remain strictly grayscale per the layer system. **Foreground** — Add: `#22863a` Light / `#7ee787` Dark; Del: `#b31d28` Light / `#ff7b72` Dark. **Background** — Add: `#f0fff4` Light / `#033a16` Dark; Del: `#ffeef0` Light / `#67060c` Dark. Tokens: `--diff-add-fg/-bg` and `--diff-del-fg/-bg` in `apps/desktop/src/renderer/styles/globals.css`. Updated 2026-04-21: backgrounds switched from grayscale → GitHub red/green for full-row fill so additions / deletions are unambiguous at a glance. Reference frame: `doc/design_docs/cc-agent-view.pen` "Light/Dark Mode - Markdown Diff Code Block".
 
 *Dark Mode text uses softened neutrals to reduce eye strain: **Soft Gray** (`#d4d4d4`) for primary text, Stone (`#737373`) for secondary, Silver (`#a3a3a3`) for tertiary. Pure White (`#ffffff`) is reserved for button labels and high-contrast UI elements on dark backgrounds.*
@@ -433,16 +433,16 @@ xdt-maker 桌面端用 **VSCode 风格的 ColorRegistry + Theme override** 模�
 | `--login-error-text` 等 5 个 | `#ef4444` | `#ef4444` | 错误文本 |
 | `--error-bg/-border/-fg/-fg-strong` | (red) | (red) | Error alert 卡片子系统 |
 | `--diff-add-fg/-bg`, `--diff-del-fg/-bg` | GitHub palette | GitHub palette | Diff 渲染 |
-| `--status-bar-accent` | `#FF6600` | `#FF6600` | Thinking Orange,跨主题统一 |
-| `--plan-action-approve-icon-bg` | `#FF6600` | `#FF6600` | Plan approve,同 thinking 语义 |
-| `--perm-bypass-selected-text` | `#FF6600` | `#FF6600` | Heart Orange,permission 语义 |
-| `--settings-integration-warning` | `#FF6600` | `#FF6600` | warning 语义 |
+| `--status-bar-accent` | `#EA6B17` | `#EA6B17` | Thinking Orange,跨主题统一(定稿 2026-07-17) |
+| `--plan-action-approve-icon-bg` | `#EA6B17` | `#EA6B17` | Plan approve,同 thinking 语义(随 warning-accent,定稿 2026-07-17) |
+| `--perm-bypass-selected-text` | `#EA6B17` | `#EA6B17` | Heart Orange,permission 语义(var(--warning-accent) 自动跟随,定稿 2026-07-17) |
+| `--settings-integration-warning` | `#EA6B17` | `#EA6B17` | warning 语义(var(--warning-accent) 自动跟随,定稿 2026-07-17) |
 | `--warning-bg-soft` | rgba(255,102,0,0.12) | rgba(255,102,0,0.18) | Warning alpha surface |
-| `--focus-ring` / `--focus-ring-soft` | `#3b82f6` / @50% | 同左 | a11y 焦点 ring,跨主题统一 |
+| `--focus-ring` / `--focus-ring-soft` | `#417CDD` / @50% | 同左 | a11y 焦点 ring,定稿 2026-07-17(取代 #3b82f6),跨主题统一 |
 | `--shadow-menu` / `--cmd-palette-shadow` / `--confirm-shadow` | rgba | rgba(更深) | Shadow,跨主题统一 |
 | `--overlay-modal` / `--overlay-lightbox` | rgba | rgba(更深) | Modal / lightbox backdrop |
-| `--perm-auto-selected-text` | `#000050` | `#00D9C5` | Auto Approval accent,permission 语义槽 |
-| Toast `#3B82F6 / #10B981 / #F59E0B / #EF4444` | (在 Toast.tsx hardcode) | 同左 | DESIGN.md §2 明确 16x16 icon 语义豁免(info 蓝 2026-07-14 增) |
+| `--perm-auto-selected-text` | `#417CDD` | `#417CDD` | Auto Approval accent,定稿 2026-07-17(light/dark 同值,取代 #000050/#00D9C5) |
+| Toast `#417CDD / #2AAE5B / #F3A115 / #D91F37` | (在 Toast.tsx hardcode,已导出 VARIANT_MAP) | 同左 | E5D 定稿 2026-07-17(Toast 豁免解除,并入状态色族) |
 
 实现组件时**永远不要在硬编码 hex 上自由发挥这些语义色**——必须走对应 token。
 
@@ -647,9 +647,9 @@ card/container
 
 ### 8.4 豁免(不纳入 CINDY 覆盖,跨主题统一)
 
-- 语义色:`warning-accent` `#FF6600` / `annotation-accent` `#FF3B30` / `status-bar-accent`(alias warning orange)。
-- 状态四色:running `#FF6600` / awaiting `#00D9C5` / error `#ef4444` / done `#22c55e`。
-- `focus-ring` `#3b82f6`(蓝,不染红);diff 红绿;modal scrim/阴影;`overlay-lightbox`。
+- 语义色:`warning-accent` `#EA6B17`(定稿 2026-07-17,取代 `#FF6600`)/ `annotation-accent` `#FF3B30`(图片标注烧录笔迹色,语义豁免,不改)/ `status-bar-accent`(alias warning orange,自动跟随)。
+- 状态四色(设计定稿 2026-07-17,取代冻结红线;全局 light/dark 同值,9 主题无 override 自动跟随):running `#EA6B17` / awaiting `#19D2C1` / error(状态族)`#D91F37` / done `#2AAE5B`;warning 前景 `warning-fg` `#F3A115`(与 Toast amber `#F59E0B` 解耦,Toast 维持 B 组现状)。
+- `focus-ring` `#417CDD`(蓝,E5D 定稿 2026-07-17 取代 #3b82f6,不染红);diff 红绿;modal scrim/阴影;`overlay-lightbox`;Toast 四色定稿(豁免解除)。
 - `destructive`/`search-match-bg` 语义色不纳入 HSL_FORMAT_IDS 覆盖。
 - **hljs 语法高亮色**(light=highlight.js/styles/github.css;dark=globals.css `.dark .hljs-*` mirror github-dark):hljs 主题色为 default 代码块底设计,CINDY 代码块底(surface-elevated #F8F8F8/#312F2F)接近 default(#ffffff/#2c2c2a),边缘不达标(light -keyword 4.31/-built_in 3.29/-name 4.36;dark -punctuation 2.47/-tag 2.99/-section 2.87)是 hljs 既有折损(用 design surface 而非 github 默认 #ffffff/#0d1117),非 CINDY 引入——default 同源也不达标。CINDY 不补 [data-theme] 整改(与 default 同源,补整改值需重新过用户关卡);落档见 cindyCodeBlockContrast.test.ts(≥2 基线 + text ≥4.5 守卫)。
 **双门槛口径(D 裁决 2026-07-17)**:hljs 语法高亮色属辅助性视觉编码,对齐 selection/边界 3:1 口径——语法色 ≥3:1、正文文本 ≥4.5:1。CINDY 代码块底(surface-elevated)接近 default,hljs 主题色为 github 默认底(#ffffff/#0d1117)设计,固有折损非 CINDY 引入(default 同源)。
@@ -676,9 +676,9 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 > logo 资产红 `#F70121` 是官方品牌资产固有色(WORD MARK frame 红箭头符号),与 UI 品牌红 `#DF0C27` **并存、不同值**——logo 是图片资产不进 token 体系,保持原色不改色。后人勿误改为 `#DF0C27`。
 ### 15.8 status-badge-fg(§7 必炸点,用户确认 2026-07-17)
 
-橙徽章(bg `status-bar-accent` `#FF6600`)此前借用 `accent-pure-cta-fg`(白字)→ `#FFFFFF`×`#FF6600`=2.94:1 不达标。拆独立 `status-badge-fg`:
+橙徽章(bg `status-bar-accent` `#EA6B17`,设计定稿 2026-07-17 取代 `#FF6600`)此前借用 `accent-pure-cta-fg`(白字)→ `#FFFFFF`×`#FF6600`=2.94:1 不达标(历史值,旧橙 #FF6600)。拆独立 `status-badge-fg`:
 - **default 镜像 `accent-pure-cta-fg`**(light 白 / dark 黑),既有 9 主题行为零变化;
-- **CINDY 两模式 override `#1F1F1F`**(深色近黑),× `status-bar-accent` `#FF6600` = **5.61:1 ≥4.5**(用户亲批方案,值 #1F1F1F 实算 5.61:1 × #FF6600,2026-07-17;不达 4.5 则加深 #000000);
+- **CINDY 两模式 override `#1F1F1F`**(深色近黑),× `status-bar-accent` `#EA6B17` = **5.19:1 ≥4.5**(用户亲批方案 #1F1F1F;设计定稿 2026-07-17 新橙 #EA6B17 实算 5.19:1,取代旧 #FF6600×5.61:1;不达 4.5 则加深 #000000);
 - 覆盖数组 115→116(`cindyDecisionData` 注明 D2 期新增,源自 §7 必炸点方案);
 - 消费点(`ContactsListPane:150`)从 `accent-pure-cta-fg` 切到 `status-badge-fg`;红 CTA 上的 `surface-on-card` 消费者(`RolePillDropdown:543/544`、`SkillhubDetailView:504`)迁到 `accent-pure-cta-fg`(白),`surface-on-card` 保留中性反相(Fast toggle thumb)。
 
@@ -703,4 +703,21 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 
 `--slate-*` 同理对应中性档。`--base*`/`--accent*` 按 Token map。`:root`/`.dark` 原两套一字不动。
 
+### 15.10 E1D 红色体系重构(用户批准 2026-07-17)
 
+常规主操作不再用品牌红,改反相中性(light 底 `#3C3F43`/字 `#FCFCFC`,dark 底 `#EEEEEE`/字 `#252222`;WCAG 10.32/13.60:1)。红色仅限语义例外:
+- **A 类(保留红)**:`brand-login-bg`/`brand-login-error-border`/`brand-login-error-text`(品牌海报/错误);
+- **C 类(保留红)**:`migration-bar-fill`(进度)、`drop-overlay-bg`(红10%)、`sidebar-item-active`(light `#DF0C27`/dark `#A61629` 选中);
+- **语义色**:`destructive`/delete、`error-*`、warning、diff 红、status 点;
+- **B 类(改中性 11 项)**:`accent-cta-bg`/`-pure`/`-emphasis`/`-soft`/`-hover`、`update-btn-border`/`-text`、`confirm-btn-primary`、`perm-allow-btn`、`primary`、`settings-btn-primary`(alias)、`accent-pure-cta-fg`/`settings-btn-primary-text`(中性字);
+- **C 类裁决**:confirm(普通中性,danger 另设)、perm-allow(中性,警示橙 chip)、primary(中性)、sidebar-item-active(light 红胶囊/dark 深红)、migration-bar-fill(保留红)、drop-overlay(保留红10%)、brand-login-cta(不动);
+- **中性按钮四态**:light 底`#3C3F43`/字`#FCFCFC`、hover`#2E3237`、pressed`#25282C`;dark 底`#EEEEEE`/字`#252222`、hover`#E2E2E2`、pressed`#D4D4D4`。
+- **send-btn 族纳入值表(E1D 扩,lead 裁决 2026-07-17)**:`send-btn-bg`(default alias `--accent-cta-bg`)/`-icon`/`-hover-bg`/`-pressed-bg`/`-disabled-bg`/`-disabled-icon` CINDY override 全族走上述四态反相中性 + disabled 灰 `#444242`/`#585555`(R4 D1 实证);hover/pressed 为 E1D 新增 token(default 同 bg,默认皮肤维持 opacity-85 hover,膘叔 E3 组件层消费 var() 即全局生效);全族入 cindyDecisionData REQUIRED_IDS + CINDY_EXPECTED,③ 断言守。
+- **侧栏颜色层级整改(E1D 扩,用户并排指错 2026-07-17,lead 钉死 light/dark 同套)**:
+  - 正文(会话标题)= `text-foreground`(=`text-primary` light `#3C3F43`/dark `#D4D4D4`,不动);
+  - 二级暗灰(行首图标普通态/时间戳/meta/分组标签)= light `#9A9DA3`/dark `#6F6F6F`(与 `text-secondary` 同值);CINDY override `sidebar-muted`/`sidebar-action-icon`(HSL `220.0 4.7% 62.2%`/`0 0% 43.5%`)+ 新增 `cmd-palette-item-meta` CINDY override(hex);
+  - 选中胶囊 = `sidebar-item-active`(light `#DF0C27`/dark `#A61629`,E1D 第 4 项裁决)反白前景 = 新增 `sidebar-item-active-foreground` token(light `#FCFCFC`/dark `#D4D4D4`,× 红底 5.33/4.91 ≥4.5);SessionItem/SessionCard isActive 容器+title+time+RemoteProjectIcon 条件切反白;
+  - 强调行(running)行首箭头 = 品牌红系 `sidebar-item-active`(light `#DF0C27`/dark `#A61629`,D4-1 Figma 三态实证),VendorIcon running 从 `status-bar-accent`(橙)切 `hsl(var(--sidebar-item-active))`;**与 E5D 状态点新橙 `#EA6B17` 解耦——状态点归橙,行首强调箭头归红**。
+  - 断言:③ CINDY_EXPECTED 守 4 token 值;⑦ 新增层级断言(二级暗灰 contrast 明显弱于正文 + 选中胶囊前景×红底 ≥4.5)。
+
+三份新 map(`NEUTRAL_PRIMARY_EXPECTED_BY_ID`/`FOREGROUND` + `RED_EXCEPTION_ALLOWED_IDS`)替代旧 `BRAND_RED_*`。D2T ⑤/⑦/⑧ 改用新 map(中性 exact + 红例外白名单 + 中性对比度 + 可证伪)。
