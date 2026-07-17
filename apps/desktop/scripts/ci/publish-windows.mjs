@@ -12,7 +12,7 @@
 //   NPKG_TOKEN                     — Windows 代码签名令牌 (不设置则跳过签名)
 //
 // 前置条件:
-//   build-windows.mjs 已执行成功，out/xdt-maker-win32-x64/ 与 out/make/.../*Setup.exe 存在
+//   build-windows.mjs 已执行成功，out/<PACKAGED_APP_NAME>-win32-x64/ 与 out/make/.../*Setup.exe 存在
 // =============================================================================
 
 import { execSync } from 'node:child_process';
@@ -32,9 +32,11 @@ import {
   createOSSClient,
   uploadToOSS,
   uploadVersionedGzImmutable,
-} from './lib.mjs';
+  PACKAGED_APP_NAME, assertNotPublishingCindyToLegacyChannel } from './lib.mjs';
 
 loadDotenv();
+// 渠道冻结硬闸:Cindy 布局产物禁止发布到老 /xdt-maker 前缀(见 lib.mjs)。
+assertNotPublishingCindyToLegacyChannel(OSS_PREFIX);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPTS_DIR = path.resolve(__dirname, '..');
@@ -92,7 +94,7 @@ async function main() {
   console.log('='.repeat(60));
 
   // 0. 前置：确保 build 阶段产物存在
-  const packagedDir = path.join(DESKTOP_ROOT, 'out', 'xdt-maker-win32-x64');
+  const packagedDir = path.join(DESKTOP_ROOT, 'out', `${PACKAGED_APP_NAME}-win32-x64`);
   if (!fs.existsSync(packagedDir)) {
     console.error(`ERROR: ${packagedDir} not found.`);
     console.error(`       Run: node scripts/ci/build-windows.mjs --version ${version}`);

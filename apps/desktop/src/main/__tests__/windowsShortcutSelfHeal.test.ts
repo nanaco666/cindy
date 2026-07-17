@@ -17,7 +17,11 @@ vi.mock('../logger', () => ({
 
 import { healWindowsShortcuts, type ShortcutSelfHealDeps } from '../windowsShortcutSelfHeal';
 import { BRAND_NAME } from '@lizi/maker-shared/branding';
-import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
+import { brandAppId } from '@lizi/maker-shared/brand-identity';
+
+// 被测模块经 shared/brandRegion 消费 CURRENT_APP_ID;vitest 下无
+// VITE_CINDY_AUTH_REGION → 区域回落 cn → brandAppId('cn')。
+const EXPECTED_APP_ID = brandAppId('cn');
 
 const EXE = 'C:\\Program Files\\xdt-maker\\xdt-maker.exe';
 const DESKTOP = 'C:\\Users\\u\\Desktop';
@@ -64,7 +68,7 @@ describe('healWindowsShortcuts', () => {
 
   it('桌面旧名 XDMaker.lnk → 以 BRAND_NAME 重建并删除旧文件,AUMID/icon 强制刷新', async () => {
     const { files, writes, deps } = makeHarness({
-      [at(DESKTOP, 'XDMaker')]: lnk(EXE, { args: '', appUserModelId: BRAND_IDENTITY.appId }),
+      [at(DESKTOP, 'XDMaker')]: lnk(EXE, { args: '', appUserModelId: EXPECTED_APP_ID }),
     });
     await healWindowsShortcuts(deps);
 
@@ -74,7 +78,7 @@ describe('healWindowsShortcuts', () => {
     expect(created?.target).toBe(EXE);
     expect(created?.icon).toBe(EXE);
     expect(created?.iconIndex).toBe(0);
-    expect(created?.appUserModelId).toBe(BRAND_IDENTITY.appId);
+    expect(created?.appUserModelId).toBe(EXPECTED_APP_ID);
     expect(writes).toHaveLength(1);
     expect(writes[0]!.op).toBe('create');
   });
@@ -118,7 +122,7 @@ describe('healWindowsShortcuts', () => {
     await healWindowsShortcuts(deps);
     expect(files.has(pinned)).toBe(true); // 不改名
     expect(files.get(pinned)?.icon).toBe(EXE);
-    expect(files.get(pinned)?.appUserModelId).toBe(BRAND_IDENTITY.appId);
+    expect(files.get(pinned)?.appUserModelId).toBe(EXPECTED_APP_ID);
     expect(writes).toHaveLength(1);
     expect(writes[0]!.op).toBe('update');
 

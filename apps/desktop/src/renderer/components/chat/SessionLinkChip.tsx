@@ -1,10 +1,10 @@
 /**
- * SessionLinkChip — 聊天正文里 `xdt-maker://session/<id>[?message=<clientId>]`
+ * SessionLinkChip — 聊天正文里 `cindy://session/<id>[?message=<clientId>]`(历史 xdt-maker:// 同)
  * 深链的行内 chip 渲染(图标 + 会话标题),点击跳转到对应会话;带 `?message=`
  * 锚点时进一步定位并高亮目标消息(复用会话搜索的 searchJump 机制)。
  *
  * 标题解析三级降级:
- *   1. 作者显式给的 label(`[自定义文案](xdt-maker://…)`)——作者意图优先,不查库;
+ *   1. 作者显式给的 label(`[自定义文案](cindy://…)`)——作者意图优先,不查库;
  *   2. 异步查本地库(sessionService.get),miss 再查 device-link 远程会话镜像;
  *   3. 都查不到 → shortSessionId 短 ID(未知 / 离线设备的会话)。
  * 查询期间先显示短 ID,拿到标题后原地刷新——chip 宽度变化是行内文本流的自然

@@ -1,9 +1,10 @@
 /**
- * deepLink — xdt-maker:// custom URL scheme + folder-context-menu handoff
+ * deepLink — cindy:// (+ 历史 xdt-maker://) custom URL scheme + folder-context-menu handoff
  * ---------------------------------------------------------------------------
- * URL 形态:
- *   xdt-maker://session/<sessionId>             —— sessionId 直接是 string id
- *   xdt-maker://project/<urlencoded-workingDir> —— workingDir 全路径 URL-encoded
+ * URL 形态(scheme 单点在 shared/deepLinkSchemes.ts:生成一律主 scheme cindy://,
+ * 解析主 + 历史 scheme 都认——存量消息里的 xdt-maker:// 老链接不能死):
+ *   cindy://session/<sessionId>             —— sessionId 直接是 string id
+ *   cindy://project/<urlencoded-workingDir> —— workingDir 全路径 URL-encoded
  *
  * 命令行参数形态 (右键菜单 / 命令行):
  *   --open-folder <absolute-path>   或   --open-folder=<absolute-path>
@@ -19,8 +20,8 @@
  * 跨平台行为:
  *   - macOS LaunchServices: 注册靠 Info.plist 的 CFBundleURLTypes (打包时由
  *     electron-packager 写入,见 forge.config.ts packagerConfig.protocols)
- *   - Windows / Linux: 运行时调 app.setAsDefaultProtocolClient('xdt-maker')
- *     写注册表 / .desktop entry
+ *   - Windows / Linux: 运行时对每个 scheme(cindy / xdt-maker)各调一次
+ *     app.setAsDefaultProtocolClient 写注册表 / .desktop entry
  *
  * Pending 缓存 + pull-on-mount:
  *   - 冷启动期间 mainWindow 还没 ready / renderer 还没挂 listener → 进 pendingDeepLink
@@ -39,11 +40,19 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'node:path';
 import { createLogger } from './logger';
+import {
+  DEEP_LINK_PRIMARY_SCHEME,
+  DEEP_LINK_SCHEMES,
+  DEEP_LINK_URL_PREFIX,
+  matchDeepLinkPrefix,
+} from '../shared/deepLinkSchemes';
 
 const log = createLogger('deepLink');
 
-export const DEEP_LINK_PROTOCOL = 'xdt-maker';
-const URL_PREFIX = `${DEEP_LINK_PROTOCOL}://`;
+/** 主 scheme(生成 / OS 注册首选)。历史消费点保留此导出名。 */
+export const DEEP_LINK_PROTOCOL = DEEP_LINK_PRIMARY_SCHEME;
+/** 生成侧前缀(cindy://)。解析侧不要用它做 startsWith——走 matchDeepLinkPrefix。 */
+const URL_PREFIX = DEEP_LINK_URL_PREFIX;
 
 /** Windows 右键菜单 / 命令行入口的 flag。值是绝对路径,argv 透传不编解码。 */
 export const OPEN_FOLDER_FLAG = '--open-folder';
@@ -67,16 +76,19 @@ export type DeepLinkPayload =
   | { type: 'focus' };
 
 /**
- * 解析 xdt-maker:// URL 为 typed payload。
+ * 解析 cindy:// / xdt-maker:// URL 为 typed payload(两种 scheme 都认,
+ * 按实际命中的前缀长度切片)。
  * 非本协议、格式残缺或 id/workingDir 为空 → null(让调用方静默丢弃)。
  *
  * 不用 `new URL()` 是因为 WHATWG URL 对 non-special scheme 的 host/pathname
- * 切分行为在不同 Node 版本上有差异(`xdt-maker://session/abc` 的 host 可能
+ * 切分行为在不同 Node 版本上有差异(`cindy://session/abc` 的 host 可能
  * 为空、pathname 可能含 `//session/abc`)。手解最稳。
  */
 export function parseDeepLink(url: string): DeepLinkPayload | null {
-  if (typeof url !== 'string' || !url.startsWith(URL_PREFIX)) return null;
-  const rest = url.slice(URL_PREFIX.length);
+  if (typeof url !== 'string') return null;
+  const prefix = matchDeepLinkPrefix(url);
+  if (prefix === null) return null;
+  const rest = url.slice(prefix.length);
   const slashIdx = rest.indexOf('/');
   if (slashIdx <= 0) return null;
   const type = rest.slice(0, slashIdx);
@@ -178,7 +190,7 @@ export function buildFocusDeepLink(source: string): string {
 // ─── pending buffer:冷启动 / 主窗口未 ready / renderer 未挂 listener 期间暂存 ──
 //
 // 冷启动 case:
-//   1. 用户点 xdt-maker://... 或右键"通过 XDMaker 打开" → OS 启动 app
+//   1. 用户点 cindy://...(或历史 xdt-maker://...)或右键"通过 Cindy 打开" → OS 启动 app
 //      → main 进程跑到 app.on('open-url') 或扫 process.argv
 //   2. 此时 mainWindow 还没 create / ready-to-show,即使 send 出去 renderer 端
 //      MainLayout 也还没 mount + 挂 listener (要等 OAuth 通过 ProtectedRoute)
@@ -329,7 +341,8 @@ export function takePendingDeepLink(): DeepLinkPayload | null {
 }
 
 /**
- * Windows 第二实例 / 冷启动 argv 解析:从命令行参数末尾找形如 xdt-maker://... 的项。
+ * Windows 第二实例 / 冷启动 argv 解析:从命令行参数末尾找形如 cindy://... /
+ * xdt-maker://... 的项(两种 scheme 都认)。
  * Electron 在 Windows 上把协议 URL 作为 argv 最后一项追加;macOS 不走 argv,走
  * app.on('open-url')。Linux 依赖 .desktop 的 Exec 参数传递协议 URL;首版只做
  * 打包 metadata,实际导航行为仍需要 Ubuntu 真机验收。
@@ -337,7 +350,7 @@ export function takePendingDeepLink(): DeepLinkPayload | null {
 export function findDeepLinkInArgv(argv: readonly string[]): string | null {
   for (let i = argv.length - 1; i >= 0; i--) {
     const arg = argv[i];
-    if (typeof arg === 'string' && arg.startsWith(URL_PREFIX)) return arg;
+    if (typeof arg === 'string' && matchDeepLinkPrefix(arg) !== null) return arg;
   }
   return null;
 }
@@ -404,24 +417,28 @@ function isWindowsSlashSwitch(value: string): boolean {
 }
 
 /**
- * 把当前 packaged / unpackaged 状态下的 client 注册给 OS。
+ * 把当前 packaged / unpackaged 状态下的 client 注册给 OS。主 + 历史 scheme
+ * 逐个注册(Windows/Linux 运行时写注册表 / .desktop;macOS 以 Info.plist 的
+ * CFBundleURLTypes 双注册为准,此调用是兜底,同样遍历保持行为一致)。
  * - packaged:直接 setAsDefaultProtocolClient(scheme) 即可
  * - dev:需要带 execPath + argv 让系统知道怎么把链接路由回当前 Electron 解释器
  *
  * 必须在 app.whenReady 之前调用一次(Electron 文档要求)。重复调用幂等。
  */
 export function registerDeepLinkProtocol(): void {
-  if (process.defaultApp) {
-    // dev:用 Electron 解释器跑 main 入口
-    if (process.argv.length >= 2) {
-      app.setAsDefaultProtocolClient(DEEP_LINK_PROTOCOL, process.execPath, [
-        path.resolve(process.argv[1]),
-      ]);
+  for (const scheme of DEEP_LINK_SCHEMES) {
+    if (process.defaultApp) {
+      // dev:用 Electron 解释器跑 main 入口
+      if (process.argv.length >= 2) {
+        app.setAsDefaultProtocolClient(scheme, process.execPath, [
+          path.resolve(process.argv[1]),
+        ]);
+      } else {
+        app.setAsDefaultProtocolClient(scheme);
+      }
     } else {
-      app.setAsDefaultProtocolClient(DEEP_LINK_PROTOCOL);
+      // packaged:直接调,OS 用 app bundle 路径
+      app.setAsDefaultProtocolClient(scheme);
     }
-  } else {
-    // packaged:直接调,OS 用 app bundle 路径
-    app.setAsDefaultProtocolClient(DEEP_LINK_PROTOCOL);
   }
 }

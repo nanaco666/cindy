@@ -13,7 +13,7 @@
 - **SQLite migration 迁移基线**：从旧仓迁入的 SQL 由 `drizzle/migration-baseline.json` 固定 SHA256；数据库变化只能追加新 migration，并运行 `pnpm --filter desktop db:validate` 与 migration replay。本地数据库查询必须使用异步 API；不要对异步 DB client 使用同步 `.all()`。
 - **main 进程禁止运行时动态 `import()`**；依赖使用顶层静态 import。
 - **协议 submodule**：`cindy-protocol` 是协议权威来源。desktop 使用 `@cindy/slack-hook-protocol`，客户端 device-link 包复用 `@cindy/device-link-protocol` 的 relay 层定义；客户端重连、IPC allowlist 与隧道 payload 留在 `packages/device-link`。**升级 submodule 指针前必须确认 `cindy-server` 同步升级**，避免两端 wire protocol 漂移。
-- **dev 数据沿用 `xdt-maker` userData** 以读取历史数据；用户未明确要求隔离时，不加 `--isolated`、不设置 `XDT_USER_DATA_DIR`（参数语义见下文启动参数表）。
+- **dev 数据目录为 `Cindy` userData**（2026-07-17 身份翻转起由 `productName: Cindy` 派生；从空开始，不再沿用老 `xdt-maker` 目录的历史数据）；用户未明确要求隔离时，不加 `--isolated`、不设置 `XDT_USER_DATA_DIR`（参数语义见下文启动参数表）。
 
 ## 外部关联
 

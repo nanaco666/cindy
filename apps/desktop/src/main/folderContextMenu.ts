@@ -1,5 +1,5 @@
 /**
- * folderContextMenu — Windows 文件夹右键菜单 "通过 XDMaker 打开" 自注册
+ * folderContextMenu — Windows 文件夹右键菜单 "通过 Cindy 打开" 自注册
  * ---------------------------------------------------------------------------
  * 设计目标:
  *   1. **存量用户也能用上**:不仅在 installer 跑时写一次注册表,app 启动时也尝试
@@ -10,13 +10,13 @@
  *      Windows shell 缓存失效。
  *
  * 注册表项:
- *   HKCU\Software\Classes\Directory\shell\xdt-maker
- *     (Default) = "通过 XDMaker 打开"       ; 菜单 label
+ *   HKCU\Software\Classes\Directory\shell\cindy
+ *     (Default) = "通过 Cindy 打开"          ; 菜单 label(BRAND_NAME 派生)
  *     Icon      = "<exe>,0"                  ; 从 exe 资源取
  *     \command
  *       (Default) = "\"<exe>\" --open-folder \"%V\""
  *
- *   HKCU\Software\Classes\Directory\Background\shell\xdt-maker
+ *   HKCU\Software\Classes\Directory\Background\shell\cindy
  *     同上 (覆盖 "在此处右键空白区域" 场景, %V 取当前文件夹路径)
  *
  * 为什么用 HKCU 而不是 HKLM:
@@ -35,7 +35,7 @@
  *   本期不做。Cursor / VS Code / Sublime Text 目前都是此行为,用户已习惯。
  *
  * dev 模式:
- *   process.execPath 指向 Electron 解释器而不是 xdt-maker.exe,即使写进去也无法
+ *   process.execPath 指向 Electron 解释器而不是 Cindy.exe,即使写进去也无法
  *   正常启动 app。dev 模式直接跳过,只在 packaged 模式生效。
  */
 
@@ -53,12 +53,21 @@ const log = createLogger('folderContextMenu');
  * argv 转 utf16 传给 reg.exe,无需额外编码处理。
  *
  * 文案故意全中文 / 不做 i18n:Windows 注册表 MUIVerb 多语言切换需要 .mui 资源
- * 文件,成本高。绝大多数 xdt-maker 用户是中文环境,英文用户能看懂 "XDMaker" 即可。
+ * 文件,成本高。绝大多数用户是中文环境,英文用户能看懂品牌名即可。
  */
 const MENU_LABEL = `通过 ${BRAND_NAME} 打开`;
 
-const KEY_DIRECTORY = 'HKCU\\Software\\Classes\\Directory\\shell\\xdt-maker';
-const KEY_DIRECTORY_BG = 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\xdt-maker';
+/**
+ * shell 子键名(2026-07-17 品牌翻转:xdt-maker → cindy)。
+ * 必须与老 XDMaker 安装的 `...\shell\xdt-maker` 键**并存而不复用**:两代 app 若抢
+ * 同一个键,后启动方会把 command 改回指向自己的 exe,互相覆盖没完。老键由老 app /
+ * 其卸载器负责,本模块只管 `cindy` 键。字面量与 brandIdentity.ts 的 primaryScheme
+ * 同值纯属巧合,语义上这是独立的注册表键名,不从身份单点派生。
+ */
+const SHELL_KEY_NAME = 'cindy';
+
+const KEY_DIRECTORY = `HKCU\\Software\\Classes\\Directory\\shell\\${SHELL_KEY_NAME}`;
+const KEY_DIRECTORY_BG = `HKCU\\Software\\Classes\\Directory\\Background\\shell\\${SHELL_KEY_NAME}`;
 const FILE_CONTEXT_EXTENSIONS = ['.cshare', '.xdtshare'] as const;
 
 const REG_TIMEOUT_MS = 5000;
@@ -169,7 +178,7 @@ export async function registerFolderContextMenu(): Promise<void> {
     const wroteBg = await ensureMenuEntry(KEY_DIRECTORY_BG, MENU_LABEL, iconValue, command);
     const fileUpdates: string[] = [];
     for (const ext of FILE_CONTEXT_EXTENSIONS) {
-      const fileKey = `HKCU\\Software\\Classes\\SystemFileAssociations\\${ext}\\shell\\xdt-maker`;
+      const fileKey = `HKCU\\Software\\Classes\\SystemFileAssociations\\${ext}\\shell\\${SHELL_KEY_NAME}`;
       const fileCommand = `"${exePath}" --open-share-file "%1"`;
       if (await ensureMenuEntry(fileKey, MENU_LABEL, iconValue, fileCommand)) {
         fileUpdates.push(ext);
@@ -199,7 +208,7 @@ export async function registerFolderContextMenu(): Promise<void> {
 export async function unregisterFolderContextMenu(): Promise<void> {
   if (process.platform !== 'win32') return;
   const fileKeys = FILE_CONTEXT_EXTENSIONS.map(
-    (ext) => `HKCU\\Software\\Classes\\SystemFileAssociations\\${ext}\\shell\\xdt-maker`,
+    (ext) => `HKCU\\Software\\Classes\\SystemFileAssociations\\${ext}\\shell\\${SHELL_KEY_NAME}`,
   );
   for (const key of [KEY_DIRECTORY, KEY_DIRECTORY_BG, ...fileKeys]) {
     try {

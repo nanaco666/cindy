@@ -598,7 +598,7 @@ function hasFocusMovedToInteractiveElement(
  *   - dir chip   → `@{relPath}/`
  *   - agent chip → `@.claude/agents/{name}.md` (falls back to `@{name}` when
  *                  the host tells us the mapping is stale — see submit handler)
- *   - session chip → `[title](xdt-maker://session/…)` / bare deep link href
+ *   - session chip → `[title](cindy://session/…)` / bare deep link href
  *   - plain text → as-is
  * Paragraphs are joined with `\n`.
  */

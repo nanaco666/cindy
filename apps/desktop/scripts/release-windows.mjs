@@ -33,7 +33,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { ensureBinary } from '../../../scripts/ensure-agent-binaries.mjs';
 import { productionViteEnv, resolveCdnBaseUrl } from '../../../scripts/shared/production-endpoints.mjs';
-import { uploadVersionedGzImmutable, OSS_BUCKET, OSS_PREFIX, OSS_REGION, refreshOssConfig } from './ci/lib.mjs';
+import { uploadVersionedGzImmutable, OSS_BUCKET, OSS_PREFIX, OSS_REGION, refreshOssConfig, PACKAGED_APP_NAME, assertNotPublishingCindyToLegacyChannel } from './ci/lib.mjs';
 
 const require = createRequire(import.meta.url);
 const OSS = require('ali-oss');
@@ -50,6 +50,8 @@ try {
   }
 } catch { /* no .env file, that's fine */ }
 refreshOssConfig();
+// 渠道冻结硬闸:Cindy 布局产物禁止发布到老 /xdt-maker 前缀(见 lib.mjs)。
+assertNotPublishingCindyToLegacyChannel(OSS_PREFIX);
 const PROJECT_ROOT = path.resolve(DESKTOP_ROOT, '../..');
 const RELEASE_DIR = path.join(DESKTOP_ROOT, 'release');
 const PLATFORM_KEY = 'win32-x64';
@@ -229,7 +231,7 @@ async function uploadToOSS(client, ossKey, localPath, options = {}) {
 /**
  * 校验 packaged 目录下 resources/drizzle/ 包含 _journal.json + 所有 NNNN_*.sql。
  * packagedDir 对应 electron-forge 产物根目录（含 resources/ 子目录）。
- * macOS 调用方传入 `<packagedDir>/xdt-maker.app/Contents/Resources` 的父路径方案略有不同，
+ * macOS 调用方传入 `<packagedDir>/<PACKAGED_APP_NAME>.app/Contents/Resources` 的父路径方案略有不同，
  * 本 helper 只管 Windows 的 `<packagedDir>/resources/drizzle/`。
  */
 function verifyPackagedDrizzle(packagedDir) {
@@ -400,7 +402,7 @@ async function main() {
     try {
       fs.rmSync(outDir, { recursive: true, force: true });
     } catch (err) {
-      console.error(`ERROR: Cannot remove ${outDir} — is xdt-maker.exe still running or is antivirus scanning it?`);
+      console.error(`ERROR: Cannot remove ${outDir} — is ${PACKAGED_APP_NAME}.exe still running or is antivirus scanning it?`);
       console.error(err.message);
       process.exit(1);
     }
@@ -452,10 +454,10 @@ async function main() {
   console.log(`==> Found installer: ${exeFile}`);
 
   // 3.5 Post-build verify: resources/drizzle/ contains all sql + journal
-  // NSIS installer wraps the packaged dir verbatim, so verifying out/xdt-maker-win32-x64/
+  // NSIS installer wraps the packaged dir verbatim, so verifying out/<PACKAGED_APP_NAME>-win32-x64/
   // is the accurate way to check drizzle files landed. Verifying inside the .exe
   // would require unpacking NSIS, and the installer just copies this dir.
-  const packagedForVerify = path.join(DESKTOP_ROOT, 'out', 'xdt-maker-win32-x64');
+  const packagedForVerify = path.join(DESKTOP_ROOT, 'out', `${PACKAGED_APP_NAME}-win32-x64`);
   verifyPackagedDrizzle(packagedForVerify);
 
   // 3.6 Post-build smoke test: launch packaged exe with --smoke-test
@@ -497,7 +499,7 @@ async function main() {
   console.log(`    Size:   ${(size / 1024 / 1024).toFixed(1)} MB`);
 
   // 5. Create hotfix ZIP from packaged app (for auto-update, no installer overhead)
-  const packagedDir = path.join(DESKTOP_ROOT, 'out', 'xdt-maker-win32-x64');
+  const packagedDir = path.join(DESKTOP_ROOT, 'out', `${PACKAGED_APP_NAME}-win32-x64`);
   const hotfixZipName = `xdt-maker-${version}.zip`;
   const hotfixZipPath = path.join(RELEASE_DIR, hotfixZipName);
   console.log('==> Creating hotfix ZIP from packaged app...');

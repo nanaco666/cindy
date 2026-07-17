@@ -363,6 +363,7 @@ import {
 } from './deepLink.js';
 import { registerFolderContextMenu } from './folderContextMenu.js';
 import { healWindowsShortcuts } from './windowsShortcutSelfHeal.js';
+import { CURRENT_APP_ID } from '../shared/brandRegion.js';
 import {
   readWindowBehaviorSettings,
   writeSwallowActivationClick,
@@ -1443,7 +1444,7 @@ function adjustPageZoomLevel(mainWindow: BrowserWindow, delta: number): number {
   return applyPageZoomLevel(mainWindow, getPageZoomLevel(mainWindow) + delta);
 }
 
-// ── Custom URL scheme (xdt-maker://...) ──────────────────────────────────
+// ── Custom URL scheme (cindy://... + 历史 xdt-maker://...) ───────────────
 // 必须在 app.whenReady() 之前注册:
 //   - registerDeepLinkProtocol() 调 setAsDefaultProtocolClient (Windows/Linux
 //     写注册表 / .desktop entry; macOS 走 Info.plist, 此调用是兜底)
@@ -1489,7 +1490,7 @@ if (app.isPackaged) {
     app.quit();
   } else {
     app.on('second-instance', (_event, argv) => {
-      // Windows: 用户点 xdt-maker:// 链接 / 右键 "通过 XDMaker 打开" 时,
+      // Windows: 用户点 cindy://(或历史 xdt-maker://)链接 / 右键 "通过 Cindy 打开" 时,
       // OS 会再起一个本 app 实例; 单例锁把它 redirect 成 second-instance 事件,
       // URL 或 --open-folder 参数都在 argv 里。macOS 不走这个路径(走 open-url),
       // Linux 由 .desktop 决定。
@@ -4295,7 +4296,10 @@ async function runSmokeTest(userId: string): Promise<void> {
   }
 }
 
-const WINDOWS_APP_USER_MODEL_ID = 'com.magiclizi.xdt-maker';
+// AUMID 三位一体:必须与 NSIS appId(forge.config 按构建区域从 brandAppId() 取)
+// 与快捷方式 AUMID 逐字符一致。值经 shared/brandRegion 按构建期区域烘焙
+// (cn=com.xd.cindycn / global=com.xd.cindy,dev 默认 cn)。
+const WINDOWS_APP_USER_MODEL_ID = CURRENT_APP_ID;
 
 /**
  * 清理 Start Menu 里指向 dev `node_modules\electron\dist\electron.exe` 的残留 .lnk。

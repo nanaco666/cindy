@@ -50,6 +50,11 @@ import {
   type MarkdownTarget,
 } from '@/lib/markdownTarget';
 import { isBrowserOpenablePath } from '../../../shared/browserOpenableExts';
+import {
+  hasDeepLinkPathPrefix,
+  isDeepLinkProtocol,
+  isDeepLinkUrl,
+} from '../../../shared/deepLinkSchemes';
 import { rewriteToRemoteMediaOrigin, type RemoteMediaOrigin } from '../../../shared/remoteMediaUrl';
 import { useChatSessionFile } from './ChatSessionFileContext';
 import { toRemoteMediaOrigin } from '@/lib/sessionFileOrigin';
@@ -147,7 +152,7 @@ function isMermaidCodeChild(child: ReactNode): boolean {
 // remarkLocalPathLinks 排在 remarkGfm 之后:gfm 已把裸 URL autolink 成 link 节点,
 // 路径 tokenizer 只扫剩下的纯 text 节点,天然不会去碰已成链接的 URL。
 // remarkSessionLinks 只进受信任内容(privileged)的插件链:把正文裸写的
-// xdt-maker://session/ 深链切成 link 节点 → `a` 渲染器升级成 SessionLinkChip。
+// cindy://session/(+ 历史 xdt-maker://)深链切成 link 节点 → `a` 渲染器升级成 SessionLinkChip。
 // 顺序:在 remarkTruncateCjkUrls 之后(它只回收 gfm autolink 的 CJK 误吞,不碰
 // 之后生成的 link)、remarkLocalPathLinks 之前(session URL 先成 link,路径插件
 // 跳过 link 内 text,不会把 `session/<uuid>` 误当相对路径)。两个数组都是模块级
@@ -197,9 +202,9 @@ const WINDOWS_ABSOLUTE_HREF_RE = /^[A-Za-z]:[\\/]/;
 // react-markdown's defaultUrlTransform whitelists only http(s)/ircs/mailto/xmpp
 // and strips everything else to "" (broken <img>). We render local-cache images
 // via the privileged xdt-image:// and xdt-file:// schemes registered in main.
-// xdt-maker:// is our internal deep-link protocol (session / project navigation),
-// handled in-renderer by the <a> onClick below — must pass through unsanitized
-// so href reaches the click handler intact.
+// cindy:// (+ 历史 xdt-maker://) is our internal deep-link protocol (session /
+// project navigation), handled in-renderer by the <a> onClick below — must pass
+// through unsanitized so href reaches the click handler intact.
 const trustedUrlTransform: UrlTransform = (url, key) => {
   if (
     url.startsWith('xdt-image://') ||
@@ -208,7 +213,7 @@ const trustedUrlTransform: UrlTransform = (url, key) => {
     url.startsWith('xdt-audio://') ||
     // device-link 入方向远程媒体:远程会话里的媒体 URL 被改写成此 scheme,经 OSS 中转取字节。
     url.startsWith('xdt-remote-media://') ||
-    url.startsWith('xdt-maker://') ||
+    isDeepLinkUrl(url) ||
     url.startsWith('file://') ||
     WINDOWS_ABSOLUTE_HREF_RE.test(url) ||
     (key === 'src' && url.startsWith('data:'))
@@ -264,7 +269,8 @@ function parseSessionCardHref(href: string): {
 } | null {
   try {
     const url = new URL(href);
-    if (url.protocol !== 'xdt-maker:' || url.hostname !== 'session-card') return null;
+    // 双 scheme:cindy: 主 + 历史 xdt-maker: 都认(存量消息里的老卡片链接不死)。
+    if (!isDeepLinkProtocol(url.protocol) || url.hostname !== 'session-card') return null;
     const sessionId = decodeURIComponent(url.pathname.replace(/^\/+/, '')).trim();
     if (!sessionId) return null;
     const wake = url.searchParams.get('wake');
@@ -1577,7 +1583,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         // Explicit drop guarantees our link styling is never overridden by an
         // upstream change. `node` is the mdast node — not a valid DOM prop.
         const safeProps = omitMarkdownInternalProps(props as Record<string, unknown>);
-        if (allowPrivilegedLinks && href?.startsWith('xdt-maker://session-card/')) {
+        if (allowPrivilegedLinks && href != null && hasDeepLinkPathPrefix(href, 'session-card/')) {
           const parsed = parseSessionCardHref(href);
           if (parsed) {
             return (
@@ -1589,7 +1595,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             );
           }
         }
-        if (allowPrivilegedLinks && href?.startsWith('xdt-maker://session/')) {
+        if (allowPrivilegedLinks && href != null && hasDeepLinkPathPrefix(href, 'session/')) {
           // 深链 → 会话 chip:显示会话标题(查不到降级短 ID),点击跳转;
           // 带 ?message= 锚点时进一步定位并高亮目标消息。作者显式写的
           // `[label](…)` 文案(≠ href 本身)作为 chip 文本,不查标题。
@@ -1601,7 +1607,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
             />
           );
         }
-        if (allowPrivilegedLinks && href?.startsWith('xdt-maker://project/')) {
+        if (allowPrivilegedLinks && href != null && hasDeepLinkPathPrefix(href, 'project/')) {
           // 项目深链 → 项目 chip(目录名 / 显式 label),点击聚焦侧边栏节点。
           const childrenText = nodeToText(children).trim();
           return (

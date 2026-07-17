@@ -1,6 +1,27 @@
+import { BRAND_IDENTITY, allDeepLinkSchemes } from '@lizi/maker-shared/brand-identity';
+
 import type { RemoteSession } from './types';
 
-const SESSION_LINK_PREFIX = 'xdt-maker://session/';
+// 深链双 scheme(身份单点派生):cindy 主 + xdt-maker 永久兼容(存量消息里的
+// 老链接不能死);生成一律用主 scheme。与桌面端 shared/deepLinkSchemes 同源镜像。
+const DEEP_LINK_SCHEMES = allDeepLinkSchemes();
+export const DEEP_LINK_SCHEME_GROUP = DEEP_LINK_SCHEMES.join('|');
+
+const SESSION_LINK_PREFIX = `${BRAND_IDENTITY.primaryScheme}://session/`;
+const SESSION_LINK_PREFIXES = DEEP_LINK_SCHEMES.map((s) => `${s}://session/`);
+
+/** 返回 url 命中的前缀(任一 scheme),未命中 → null。 */
+function matchPrefix(url: string, prefixes: readonly string[]): string | null {
+  for (const prefix of prefixes) {
+    if (url.startsWith(prefix)) return prefix;
+  }
+  return null;
+}
+
+/** url 是否任一 scheme 的 Cindy 深链(session/project 等一切形态)。 */
+export function isCindyDeepLinkUrl(url: string): boolean {
+  return typeof url === 'string' && DEEP_LINK_SCHEMES.some((s) => url.startsWith(`${s}://`));
+}
 
 export function buildMobileSessionDeepLink(sessionId: string): string {
   return `${SESSION_LINK_PREFIX}${encodeURIComponent(sessionId)}`;
@@ -27,8 +48,10 @@ export interface SessionDeepLinkTarget {
  * 跨引擎(Hermes / Node)不稳,split 最稳——与桌面端实现同源镜像。
  */
 export function parseSessionDeepLinkUrl(url: string): SessionDeepLinkTarget | null {
-  if (typeof url !== 'string' || !url.startsWith(SESSION_LINK_PREFIX)) return null;
-  const rest = url.slice(SESSION_LINK_PREFIX.length);
+  if (typeof url !== 'string') return null;
+  const prefix = matchPrefix(url, SESSION_LINK_PREFIXES);
+  if (!prefix) return null;
+  const rest = url.slice(prefix.length);
   const hashIdx = rest.indexOf('#');
   const noHash = hashIdx >= 0 ? rest.slice(0, hashIdx) : rest;
   const queryIdx = noHash.indexOf('?');
@@ -67,7 +90,10 @@ export function parseSessionDeepLinkUrl(url: string): SessionDeepLinkTarget | nu
  * 这里每次调用都新建实例避免共享状态。
  */
 export function createSessionLinkPattern(): RegExp {
-  return /xdt-maker:\/\/session\/[A-Za-z0-9%~_-]+(?:\?[A-Za-z0-9%&=~._-]*)?/g;
+  return new RegExp(
+    `(?:${DEEP_LINK_SCHEME_GROUP})://session/[A-Za-z0-9%~_-]+(?:\\?[A-Za-z0-9%&=~._-]*)?`,
+    'g',
+  );
 }
 
 /** 剥掉裸链接匹配尾部粘连的英文标点(句尾 `.` `,` 等),返回修剪后的 URL。 */
@@ -75,7 +101,8 @@ export function trimSessionLinkMatch(match: string): string {
   return match.replace(/[.,;:!?]+$/, '');
 }
 
-const PROJECT_LINK_PREFIX = 'xdt-maker://project/';
+const PROJECT_LINK_PREFIX = `${BRAND_IDENTITY.primaryScheme}://project/`;
+const PROJECT_LINK_PREFIXES = DEEP_LINK_SCHEMES.map((s) => `${s}://project/`);
 
 /**
  * 解析 `xdt-maker://project/<urlencoded-workingDir>` → workingDir(目标端
@@ -83,8 +110,10 @@ const PROJECT_LINK_PREFIX = 'xdt-maker://project/';
  * renderer/lib/deepLink.ts 的 parseProjectDeepLinkHref 等价镜像。
  */
 export function parseProjectDeepLinkUrl(url: string): { workingDir: string } | null {
-  if (typeof url !== 'string' || !url.startsWith(PROJECT_LINK_PREFIX)) return null;
-  const rest = url.slice(PROJECT_LINK_PREFIX.length);
+  if (typeof url !== 'string') return null;
+  const prefix = matchPrefix(url, PROJECT_LINK_PREFIXES);
+  if (!prefix) return null;
+  const rest = url.slice(prefix.length);
   const hashIdx = rest.indexOf('#');
   const noHash = hashIdx >= 0 ? rest.slice(0, hashIdx) : rest;
   const queryIdx = noHash.indexOf('?');
@@ -115,7 +144,7 @@ export function shortSessionId(sessionId: string): string {
 
 /** 从一段消息文本里抽出全部 session 深链的 sessionId(去重),给标题 map 预取用。 */
 export function extractSessionLinkIds(text: string): string[] {
-  if (!text || !text.includes(SESSION_LINK_PREFIX)) return [];
+  if (!text || !SESSION_LINK_PREFIXES.some((p) => text.includes(p))) return [];
   const ids = new Set<string>();
   const pattern = createSessionLinkPattern();
   let match: RegExpExecArray | null;

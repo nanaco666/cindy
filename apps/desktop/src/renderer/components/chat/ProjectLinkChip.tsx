@@ -1,5 +1,5 @@
 /**
- * ProjectLinkChip — 聊天正文里 `xdt-maker://project/<urlencoded-workingDir>`
+ * ProjectLinkChip — 聊天正文里 `cindy://project/<urlencoded-workingDir>`(历史 xdt-maker:// 同)
  * 深链的行内 chip 渲染(FolderOpen 图标 + 项目目录名),点击聚焦侧边栏对应
  * project 节点(展开 + 滚动;不在 ExpandedView 路由时先跳回 /cc-agent——
  * 与 MainLayout 处理 OS 级 project 深链完全同一套信号:pendingProjectFocus)。

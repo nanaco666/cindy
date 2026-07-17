@@ -864,7 +864,7 @@ function ExpandedView({
     [projectUniverse.projects],
   );
 
-  /* ---- xdt-maker://project/<workingDir> 深度链接消费 ----
+  /* ---- cindy://project/<workingDir>(历史 xdt-maker:// 同)深度链接消费 ----
    * MainLayout 在收到 deep-link payload 后调 requestProjectFocus(workingDir),
    * 这里订阅 pending 信号, 等 sessions 加载到位再决定 expand / scroll / toast。
    *

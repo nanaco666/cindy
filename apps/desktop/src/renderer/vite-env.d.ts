@@ -1834,7 +1834,7 @@ interface ElectronAPI {
   ) => () => void;
 
   /**
-   * xdt-maker:// 深度链接 + --open-folder 右键菜单订阅:main 端在 open-url /
+   * cindy://(+ 历史 xdt-maker://)深度链接 + --open-folder 右键菜单订阅:main 端在 open-url /
    * second-instance / 冷启动 argv 解析后通过此 channel 推 payload。
    * renderer 端 MainLayout 订阅 → navigate (session) / requestProjectFocus
    * (project) / patchDraft+navigate('/cc-agent/new') (new-session)。

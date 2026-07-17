@@ -119,6 +119,26 @@ describe('segmentPastedContent — deep links', () => {
     expect(segmentPastedContent('xdt-maker://project/')).toBeNull();
   });
 
+  // 双 scheme 收敛:主 scheme cindy:// 与历史 xdt-maker://(上方全部用例)
+  // 走同一条分段管线。
+  it('segments primary-scheme cindy:// links (bare + markdown, mixed with legacy)', () => {
+    const cindySession = 'cindy://session/ee59672a-5591-48a7-a44d-aa97e3808c64';
+    const cindyProject = 'cindy://project/%2Ftmp%2Fx';
+    expect(segmentPastedContent(`看 ${cindySession} 和 [主仓](${cindyProject})`)).toEqual([
+      { kind: 'text', text: '看 ' },
+      { kind: 'session', href: cindySession, label: null },
+      { kind: 'text', text: ' 和 ' },
+      { kind: 'project', href: cindyProject, label: '主仓' },
+    ]);
+    expect(segmentPastedContent(`${SESSION_URL} 与 ${cindySession}`)).toEqual([
+      { kind: 'session', href: SESSION_URL, label: null },
+      { kind: 'text', text: ' 与 ' },
+      { kind: 'session', href: cindySession, label: null },
+    ]);
+    expect(segmentPastedContent('cindy://session/')).toBeNull();
+    expect(segmentPastedContent('cindy://other/foo')).toBeNull();
+  });
+
   it('rejects legacy project links with raw delimiters instead of prefix-matching (review P2)', () => {
     // 旧编码(普通 encodeURIComponent)放行 `'()`,历史已复制的链接可能含
     // 裸字符;白名单在此截断会得到「合法但指错项目」的前缀——整段降级纯文本。

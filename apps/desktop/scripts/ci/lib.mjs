@@ -49,7 +49,41 @@ export const DESKTOP_ROOT = path.resolve(SCRIPTS_DIR, '..');
 export const PROJECT_ROOT = path.resolve(DESKTOP_ROOT, '../..');
 export const RELEASE_DIR = path.join(DESKTOP_ROOT, 'release');
 
+/**
+ * electron-forge 打包产物基名(2026-07-17 品牌翻转 xdt-maker → Cindy):
+ *   - packaged 目录  out/<PACKAGED_APP_NAME>-<platform>-<arch>/
+ *   - Windows exe    <packaged>/<PACKAGED_APP_NAME>.exe
+ *   - macOS .app     <packaged>/<PACKAGED_APP_NAME>.app(Mach-O 同名)
+ *   - Linux 二进制   <packaged>/<PACKAGED_APP_NAME>
+ * ⚠️ 值必须与 packages/maker-shared/src/brandIdentity.ts 的
+ * BRAND_IDENTITY.executableName(= apps/desktop/package.json productName)一致
+ * ——.mjs 无法 import TS 单点,只能镜像字面量;一致性由
+ * scripts/__tests__/brand-identity-sync.test.mjs 断言兜底。
+ * ⚠️ 只描述「本地构建产物路径」。OSS/CDN 渠道前缀与发布产物文件名
+ * (xdt-maker-<version>-Setup.exe / .dmg / .zip 等)仍留在老值:新渠道 bucket
+ * 未就绪,发布目标另议,不随本次翻转。
+ */
+export const PACKAGED_APP_NAME = 'Cindy';
+
 // CDN_BASE / OSS_BUCKET / OSS_PREFIX / OSS_REGION 由 scripts/shared/oss.mjs 提供并在顶部 re-export。
+
+/**
+ * 渠道冻结硬闸(2026-07-17 身份翻转):老 /xdt-maker 渠道已冻结,存量 0.0.x
+ * 用户的更新器按 --exe-name xdt-maker.exe 工作——把 Cindy 布局(Cindy.exe)
+ * 的产物/manifest 发上老前缀,会让所有存量安装的自动更新当场断裂。
+ * 在任何 desktop 发布/上传动作前调用;新渠道 bucket 就绪并把 OSS 前缀切走
+ * 之前,发布一律拒绝。确需覆盖(如演练)显式设 XDT_ALLOW_LEGACY_CHANNEL_RELEASE=1。
+ */
+export function assertNotPublishingCindyToLegacyChannel(ossPrefix) {
+  if (process.env.XDT_ALLOW_LEGACY_CHANNEL_RELEASE === '1') return;
+  if (PACKAGED_APP_NAME === 'Cindy' && ossPrefix === 'xdt-maker') {
+    throw new Error(
+      '[channel-freeze] 拒绝把 Cindy 身份的产物发布到已冻结的 /xdt-maker 渠道:'
+      + '存量用户更新器会因 exe 布局变化(Cindy.exe)当场断裂。'
+      + '等新渠道 OSS 前缀就绪后再发布;演练可设 XDT_ALLOW_LEGACY_CHANNEL_RELEASE=1 覆盖。',
+    );
+  }
+}
 
 // ── Apple 公证/签名身份(macOS release / publish 共用;单点定义)────────────
 // 均为公开身份信息(非密钥;APPLE_APP_PASSWORD 才是密钥,只从 env 读、无默认)。

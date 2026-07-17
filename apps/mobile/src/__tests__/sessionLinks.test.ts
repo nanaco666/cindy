@@ -11,7 +11,7 @@ import {
 describe('session links', () => {
   it('matches the desktop xdt-maker session deep link format', () => {
     expect(buildMobileSessionDeepLink('session/with space')).toBe(
-      'xdt-maker://session/session%2Fwith%20space',
+      'cindy://session/session%2Fwith%20space',
     );
   });
 
@@ -24,7 +24,7 @@ describe('session links', () => {
         key: 'deepLink',
         label: '深度链接',
         testID: 'session.copy.deepLink',
-        value: 'xdt-maker://session/s1',
+        value: 'cindy://session/s1',
       },
       {
         key: 'xdtId',
@@ -47,6 +47,11 @@ describe('session links', () => {
   });
 
   it('parses session deep links with optional message anchor', () => {
+    // 双 scheme:cindy 主 + xdt-maker 兼容存量消息,两种都必须解析。
+    expect(parseSessionDeepLinkUrl('cindy://session/abc-123')).toEqual({
+      sessionId: 'abc-123',
+      messageClientId: null,
+    });
     expect(parseSessionDeepLinkUrl('xdt-maker://session/abc-123')).toEqual({
       sessionId: 'abc-123',
       messageClientId: null,

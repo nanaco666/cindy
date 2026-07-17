@@ -14,8 +14,8 @@
 //   6. 运行 packaged smoke test
 //
 // 输出:
-//   out/xdt-maker-win32-x64/                              (packaged 目录)
-//   out/make/.../xdt-maker-...-Setup.exe                  (NSIS 安装包，未签名)
+//   out/<PACKAGED_APP_NAME>-win32-x64/                    (packaged 目录)
+//   out/make/.../*Setup.exe                                (NSIS 安装包，未签名)
 //
 // 这一步不签名、不上传 OSS。后续由 publish-windows.mjs 接手。
 // =============================================================================
@@ -30,6 +30,7 @@ import {
   runDbValidate,
   verifyPackagedDrizzle,
   runSmokeTest,
+  PACKAGED_APP_NAME,
 } from './lib.mjs';
 import { productionViteEnv } from '../../../../scripts/shared/production-endpoints.mjs';
 
@@ -78,12 +79,12 @@ async function main() {
   console.log('='.repeat(60));
 
   // 0. 必须有 NPKG_TOKEN——forge.config.ts 的 postPackage 钩子用它给
-  //    xdt-maker.exe / xdt-updater.exe / xdt-helper.exe 签名。没签名的
+  //    Cindy.exe / xdt-updater.exe / xdt-helper.exe 签名。没签名的
   //    内部 exe 会让严格策略 Win 机器在 hot-update 后 spawn updater 时
   //    EACCES。允许 ALLOW_UNSIGNED_BUILD=1 显式跳过(本地调试用)。
   if (!process.env.NPKG_TOKEN && process.env.ALLOW_UNSIGNED_BUILD !== '1') {
     console.error('ERROR: NPKG_TOKEN is required for CI Windows builds.');
-    console.error('       Without it, internal exes (xdt-maker, xdt-updater, xdt-helper) ship unsigned,');
+    console.error('       Without it, internal exes (Cindy, xdt-updater, xdt-helper) ship unsigned,');
     console.error('       breaking hot-update on machines that block unsigned exes from %TEMP%.');
     console.error('       Set NPKG_TOKEN=xxx, or ALLOW_UNSIGNED_BUILD=1 to override (local debug only).');
     process.exit(1);
@@ -102,7 +103,7 @@ async function main() {
     try {
       fs.rmSync(outDir, { recursive: true, force: true });
     } catch (err) {
-      console.error(`ERROR: Cannot remove ${outDir} — is xdt-maker.exe running or AV scanning it?`);
+      console.error(`ERROR: Cannot remove ${outDir} — is ${PACKAGED_APP_NAME}.exe running or AV scanning it?`);
       console.error(err.message);
       process.exit(1);
     }
@@ -130,7 +131,7 @@ async function main() {
   console.log(`==> Found installer: ${path.basename(exePath)}`);
 
   // 5. 验证 drizzle 资源 (NSIS 直接打包 packagedDir，验证它即可)
-  const packagedDir = path.join(DESKTOP_ROOT, 'out', 'xdt-maker-win32-x64');
+  const packagedDir = path.join(DESKTOP_ROOT, 'out', `${PACKAGED_APP_NAME}-win32-x64`);
   const drizzleOut = path.join(packagedDir, 'resources', 'drizzle');
   verifyPackagedDrizzle(drizzleOut);
 

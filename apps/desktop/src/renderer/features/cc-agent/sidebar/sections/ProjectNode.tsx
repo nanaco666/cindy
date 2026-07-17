@@ -172,7 +172,7 @@ export function ProjectNode({
     }
   }, [isEditingName]);
 
-  // 复制 xdt-maker://project/<urlencoded-workingDir> 到剪贴板。
+  // 复制 cindy://project/<urlencoded-workingDir> 到剪贴板。
   // workingDir 是 POSIX 全路径,会被 encodeURIComponent 编码进 URL,跨机粘贴
   // 时若对方没这个 workingDir 会在 sidebar 那侧 toast "project not found"。
   const handleCopyDeepLink = useCallback(async () => {

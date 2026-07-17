@@ -33,6 +33,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DESKTOP_ROOT = path.resolve(__dirname, '..');
 
+/**
+ * electron-forge 打包产物基名(out 目录 / exe / .app / linux 二进制同名)。
+ * ⚠️ 值必须与 packages/maker-shared/src/brandIdentity.ts 的
+ * BRAND_IDENTITY.executableName 及 ci/lib.mjs 的 PACKAGED_APP_NAME 一致
+ * (本脚本刻意零外部依赖,不 import lib.mjs;一致性由
+ * scripts/__tests__/brand-identity-sync.test.mjs 断言兜底)。
+ */
+const PACKAGED_APP_NAME = 'Cindy';
+
 // ── Arg parsing ───────────────────────────────────────────────────────────
 
 function parseArgs() {
@@ -65,41 +74,41 @@ console.log(`[smoke] platform=${platform} arch=${arch}`);
 // ── Locate packaged executable ───────────────────────────────────────────
 
 /**
- * electron-forge 把 packaged 应用放在 `out/xdt-maker-<platform>-<arch>/`。
+ * electron-forge 把 packaged 应用放在 `out/<PACKAGED_APP_NAME>-<platform>-<arch>/`。
  * 入口 exe 位置：
- *   - Windows: <packaged>/xdt-maker.exe
- *   - macOS:   <packaged>/xdt-maker.app/Contents/MacOS/xdt-maker
- *   - Linux:   <packaged>/xdt-maker
+ *   - Windows: <packaged>/<PACKAGED_APP_NAME>.exe
+ *   - macOS:   <packaged>/<PACKAGED_APP_NAME>.app/Contents/MacOS/<PACKAGED_APP_NAME>
+ *   - Linux:   <packaged>/<PACKAGED_APP_NAME>
  */
 function resolveExePath() {
   const baseDir = outDir
     ? path.resolve(outDir)
-    : path.join(DESKTOP_ROOT, 'out', `xdt-maker-${platform}-${arch}`);
+    : path.join(DESKTOP_ROOT, 'out', `${PACKAGED_APP_NAME}-${platform}-${arch}`);
   if (!fs.existsSync(baseDir)) {
     console.error(`[smoke] ERROR: packaged dir not found: ${baseDir}`);
     console.error(`[smoke]        run 'pnpm --filter ./apps/desktop package' first, or pass --out-dir=<path>`);
     process.exit(1);
   }
   if (platform === 'win32') {
-    const exe = path.join(baseDir, 'xdt-maker.exe');
+    const exe = path.join(baseDir, `${PACKAGED_APP_NAME}.exe`);
     if (!fs.existsSync(exe)) {
-      console.error(`[smoke] ERROR: xdt-maker.exe not found under ${baseDir}`);
+      console.error(`[smoke] ERROR: ${PACKAGED_APP_NAME}.exe not found under ${baseDir}`);
       process.exit(1);
     }
     return exe;
   }
   if (platform === 'darwin') {
-    const exe = path.join(baseDir, 'xdt-maker.app', 'Contents', 'MacOS', 'xdt-maker');
+    const exe = path.join(baseDir, `${PACKAGED_APP_NAME}.app`, 'Contents', 'MacOS', PACKAGED_APP_NAME);
     if (!fs.existsSync(exe)) {
-      console.error(`[smoke] ERROR: xdt-maker binary not found at ${exe}`);
+      console.error(`[smoke] ERROR: ${PACKAGED_APP_NAME} binary not found at ${exe}`);
       process.exit(1);
     }
     return exe;
   }
   // linux
-  const exe = path.join(baseDir, 'xdt-maker');
+  const exe = path.join(baseDir, PACKAGED_APP_NAME);
   if (!fs.existsSync(exe)) {
-    console.error(`[smoke] ERROR: xdt-maker binary not found at ${exe}`);
+    console.error(`[smoke] ERROR: ${PACKAGED_APP_NAME} binary not found at ${exe}`);
     process.exit(1);
   }
   return exe;

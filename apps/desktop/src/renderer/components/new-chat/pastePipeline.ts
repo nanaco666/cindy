@@ -22,6 +22,7 @@ import {
   SESSION_DEEP_LINK_RE_SOURCE,
   PROJECT_DEEP_LINK_RE_SOURCE,
 } from '@/lib/deepLink';
+import { textContainsDeepLink } from '../../../shared/deepLinkSchemes';
 
 import type { MentionChipAttrs } from './MentionChipNode';
 import { sanitizeSessionChipTitle } from './sessionLinkPaste';
@@ -198,7 +199,8 @@ export function segmentPastedContent(
 
 /** 深链(session + project,裸 / markdown 两形态)分段;无命中 → null。 */
 function segmentDeepLinks(text: string): PastedContentSegment[] | null {
-  if (!text.includes('xdt-maker://')) return null;
+  // 快速预筛:双 scheme(cindy:// / xdt-maker://)任一出现才进正则。
+  if (!textContainsDeepLink(text)) return null;
   interface Candidate {
     start: number;
     end: number; // 不含
