@@ -213,7 +213,10 @@ export default function HomeScreen() {
   const [groupByProject, setGroupByProject] = useState(false);
   // deviceId of the revoked-access device whose explanation tip is open (null = closed).
   const [revokedTipDeviceId, setRevokedTipDeviceId] = useState<string | null>(null);
-  const [revokedTipRetryingId, setRevokedTipRetryingId] = useState<string | null>(null);
+  // 重试申请访问的 in-flight 设备集合(状态供 UI,ref 供并发去重)。用 Set 而非单值:
+  // 引导页可对多台被撤销设备并发重试,单值会被后完成的请求提前清掉、还允许重复触发。
+  const [retryingDeviceIds, setRetryingDeviceIds] = useState<ReadonlySet<string>>(new Set());
+  const retryingDeviceIdsRef = useRef<Set<string>>(new Set());
   const [statusFilter] = useState<RemoteSessionStatusFilter>('active');
   const [collapsedProjectKeys, setCollapsedProjectKeys] = useState<string[]>([]);
   const [pinnedCollapsed, setPinnedCollapsed] = useState(false);
@@ -583,12 +586,16 @@ export default function HomeScreen() {
   const retryRevokedDevice = useCallback(async (deviceId: string) => {
     const device = devicesRef.current.find((item) => item.deviceId === deviceId);
     if (!device) return;
-    setRevokedTipRetryingId(deviceId);
+    // 同设备重试仍在飞行中时直接忽略,防止连点/引导页重复触发叠加请求。
+    if (retryingDeviceIdsRef.current.has(deviceId)) return;
+    retryingDeviceIdsRef.current.add(deviceId);
+    setRetryingDeviceIds(new Set(retryingDeviceIdsRef.current));
     try {
       await hydrateDeviceSessions(device);
     } finally {
       // Retry state is scoped per device; only clear this request to avoid clearing another in-flight retry.
-      setRevokedTipRetryingId((current) => (current === deviceId ? null : current));
+      retryingDeviceIdsRef.current.delete(deviceId);
+      setRetryingDeviceIds(new Set(retryingDeviceIdsRef.current));
     }
     // hydrate's invoke clears the revoked mark on success; the tip-close effect handles dismissal.
   }, [hydrateDeviceSessions]);
@@ -1333,7 +1340,7 @@ export default function HomeScreen() {
               onRecheck={() => void loadHome({ visible: true })}
               onRetryAccess={retryRevokedGuideDevices}
               rechecking={refreshing}
-              retrying={revokedTipRetryingId !== null}
+              retrying={retryingDeviceIds.size > 0}
               style={{
                 marginTop: spacing.xxl,
                 minHeight: windowLayout.emptyMinHeight,
@@ -1381,7 +1388,7 @@ export default function HomeScreen() {
 
       <RevokedAccessTip
         deviceName={revokedTipDeviceName}
-        retrying={revokedTipDeviceId !== null && revokedTipRetryingId === revokedTipDeviceId}
+        retrying={revokedTipDeviceId !== null && retryingDeviceIds.has(revokedTipDeviceId)}
         onClose={() => setRevokedTipDeviceId(null)}
         onRetry={() => {
           if (revokedTipDeviceId) void retryRevokedDevice(revokedTipDeviceId);
