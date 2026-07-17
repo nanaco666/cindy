@@ -5,7 +5,12 @@ export const commands = [
   ['dev:desktop',        '启动桌面端（本地 API）'],
   ['dev:desktop:remote', '启动桌面端（远程 API）'],
   ['dev:desktop:inspect','启动桌面端 + Chrome DevTools 内存分析'],
-  ['build',              '打包桌面端'],
+  ['build',              '打包桌面端（electron-forge make 裸调,human-only）'],
+  ['package:desktop',          '桌面端打包（当前平台,默认版本无关 + cn + dev,不发布）'],
+  ['package:win',              'Windows x64 打包（同上,只打包不发布）'],
+  ['package:mac:arm64',        'macOS Apple Silicon 打包（只打包不发布）'],
+  ['package:mac:x64',          'macOS Intel 打包（只打包不发布）'],
+  ['package:linux',            'Linux x64 打包（只打包不发布）'],
   ['release:mac',              'macOS 发布（arm64 + x64,默认进 canary 通道）'],
   ['release:mac:arm64',        'macOS 发布（仅 Apple Silicon,canary 通道）'],
   ['release:mac:x64',          'macOS 发布（仅 Intel,canary 通道）'],
@@ -39,6 +44,11 @@ export function printHelp(log = console.log) {
   for (const [name, desc] of commands) {
     log(`  pnpm ${name.padEnd(28)} ${desc}`);
   }
+  log('\n  打包/发布拆分 (2026-07):');
+  log('    package:* 只产出本地产物 + build-info.json,不碰 OSS/CDN');
+  log('    可选参数: --region cn|global  --channel dev|release  --version x.y.z|major|minor|patch');
+  log('              --skip-smoke  --allow-unsigned;缺省 = 版本无关包(不参与热更新)');
+  log('    release:* 是旧的打包+发布一体流程,待发布侧重构后退役');
   log('\n  release 可选参数:');
   log('    --require-relogin    强制用户更新后重新授权飞书 (release:win / release:mac 系列)');
   log('\n  灰度通道 (canary-release V0.1):');
