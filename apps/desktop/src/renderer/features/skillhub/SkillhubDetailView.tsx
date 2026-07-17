@@ -501,7 +501,7 @@ function SkillUsagePanel({
               disabled={diagnoseDisabled || diagnoseLoading}
               className={cn(
                 'inline-flex h-8 w-full items-center justify-center gap-2 rounded-full px-2 text-xs font-medium',
-                'bg-[var(--accent-cta-bg)] text-[var(--surface-on-card)]',
+                'bg-[var(--accent-cta-bg)] text-[var(--accent-pure-cta-fg)]',
                 'hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60',
               )}
             >

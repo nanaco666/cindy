@@ -945,6 +945,13 @@ registerColor('status-bar-accent', {
   light: 'var(--warning-accent)',
   dark: 'var(--warning-accent)',
 }, 'Thinking Orange — DESIGN.md');
+// 状态徽章前景(§7 必炸点):橙底(status-bar-accent #FF6600)深字。
+// 此前橙徽章借用 accent-pure-cta-fg(白字)→ #FFFFFF×#FF6600=2.94:1 不达标;
+// 拆独立 token 走深字(=text-primary/text-primary-inv),× status-bar-accent ≥4.5:1。
+registerColor('status-badge-fg', {
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary-inv)',
+}, '状态徽章前景(橙底深字,§7 必炸点:× status-bar-accent ≥4.5:1)');
 registerColor('status-bar-meta', {
   light: 'var(--text-secondary)',
   dark: 'var(--text-secondary)',

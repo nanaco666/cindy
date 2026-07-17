@@ -416,4 +416,17 @@ describe('CINDY · ⑧ 可证伪自检(注入错值后断言必须变红,还原�
       '还原后恰等 Figma 原值',
     ).toBe(true);
   });
+
+  it('§7 必炸点对比度(橙徽章/红 CTA/Fast toggle,§7 矩阵)', () => {
+    const L = cindyLight.colors as unknown as Record<string, string>;
+    const D = cindyDark.colors as unknown as Record<string, string>;
+    const orange = '#FF6600'; // status-bar-accent registry 默认(cindy 不 override)
+    expect(contrast(L['status-badge-fg']!, orange), 'light 橙徽章 fg×橙').toBeGreaterThanOrEqual(4.5);
+    expect(contrast(D['status-badge-fg']!, orange), 'dark 橙徽章 fg×橙').toBeGreaterThanOrEqual(4.5);
+    expect(contrast('#FFFFFF', L['accent-cta-bg']!), 'light 红 CTA 白字×品牌红').toBeGreaterThanOrEqual(4.5);
+    expect(contrast('#FFFFFF', D['accent-cta-bg']!), 'dark 红 CTA 白字×品牌红').toBeGreaterThanOrEqual(4.5);
+    // Fast toggle: thumb(surface-on-card) × track(fast-toggle-track = text-disabled)
+    expect(contrast(L['surface-on-card']!, L['text-disabled']!), 'light Fast toggle thumb×track').toBeGreaterThanOrEqual(3);
+    expect(contrast(D['surface-on-card']!, D['text-disabled']!), 'dark Fast toggle thumb×track').toBeGreaterThanOrEqual(3);
+  });
 });
