@@ -7,7 +7,6 @@ import {
   allUserDataDirNames,
   brandAppId,
   brandBundleIdPrefix,
-  brandCdnPrefix,
   brandExecutableName,
   brandUserDataDirName,
   resolveCindyRegion,
@@ -28,8 +27,6 @@ describe('BRAND_IDENTITY invariants', () => {
     // 要进 OSS key(大小写敏感)与文件路径,统一小写规避平台差异。
     const fileSafe = /^[a-z0-9][a-z0-9-]*$/;
     expect(BRAND_IDENTITY.cdnPrefix).toMatch(fileSafe);
-    expect(BRAND_IDENTITY.cdnPrefixByRegion.cn).toMatch(fileSafe);
-    expect(BRAND_IDENTITY.cdnPrefixByRegion.global).toMatch(fileSafe);
     expect(BRAND_IDENTITY.dbFilePrefix).toMatch(fileSafe);
     for (const prefix of BRAND_IDENTITY.legacyDbFilePrefixes) {
       expect(prefix).toMatch(fileSafe);
@@ -54,21 +51,19 @@ describe('BRAND_IDENTITY invariants', () => {
     }
   });
 
-  it('双装身份四组区域字段两区互不相同(同机并存的硬前提)', () => {
-    // exe / userData 目录 / CDN 前缀 / appId 任何一组撞名,同机双装都会
-    // 互相覆盖(安装目录、数据库、发布渠道、系统身份)。
+  it('双装身份区域字段两区互不相同(同机并存的硬前提)', () => {
+    // exe / userData 目录 / appId 任何一组撞名,同机双装都会互相覆盖
+    // (安装目录、数据库、系统身份)。cdnPrefix 两区共用是 owner 决策:
+    // 发布渠道靠不同 OSS bucket 区分,不靠路径前缀。
     expect(BRAND_IDENTITY.executableNameByRegion.cn)
       .not.toBe(BRAND_IDENTITY.executableNameByRegion.global);
     expect(BRAND_IDENTITY.userDataDirNameByRegion.cn)
       .not.toBe(BRAND_IDENTITY.userDataDirNameByRegion.global);
-    expect(BRAND_IDENTITY.cdnPrefixByRegion.cn)
-      .not.toBe(BRAND_IDENTITY.cdnPrefixByRegion.global);
   });
 
   it('cn 区域值 = 基线标量字段(dev / legacy 消费点与 cn 构建同一身份)', () => {
     expect(BRAND_IDENTITY.executableNameByRegion.cn).toBe(BRAND_IDENTITY.executableName);
     expect(BRAND_IDENTITY.userDataDirNameByRegion.cn).toBe(BRAND_IDENTITY.userDataDirName);
-    expect(BRAND_IDENTITY.cdnPrefixByRegion.cn).toBe(BRAND_IDENTITY.cdnPrefix);
   });
 
   it('scheme 符合 RFC 3986(字母开头,字母/数字/+/-/. 组成)且主 scheme 不在 legacy 里', () => {
@@ -107,7 +102,6 @@ describe('BRAND_IDENTITY invariants', () => {
     expect(Object.isFrozen(BRAND_IDENTITY.appIdByRegion)).toBe(true);
     expect(Object.isFrozen(BRAND_IDENTITY.executableNameByRegion)).toBe(true);
     expect(Object.isFrozen(BRAND_IDENTITY.userDataDirNameByRegion)).toBe(true);
-    expect(Object.isFrozen(BRAND_IDENTITY.cdnPrefixByRegion)).toBe(true);
     expect(Object.isFrozen(BRAND_IDENTITY.legacySchemes)).toBe(true);
     expect(Object.isFrozen(BRAND_IDENTITY.legacyUserDataDirNames)).toBe(true);
     expect(Object.isFrozen(BRAND_IDENTITY.legacyDbFilePrefixes)).toBe(true);
@@ -134,13 +128,11 @@ describe('区域解析与派生', () => {
     expect(brandBundleIdPrefix('global')).toBe('com.xd.cindy');
   });
 
-  it('brandExecutableName / brandUserDataDirName / brandCdnPrefix 按区域取值,默认 cn', () => {
+  it('brandExecutableName / brandUserDataDirName 按区域取值,默认 cn', () => {
     expect(brandExecutableName()).toBe('Cindy');
     expect(brandExecutableName('global')).toBe('CindyGlobal');
     expect(brandUserDataDirName()).toBe('Cindy');
     expect(brandUserDataDirName('global')).toBe('CindyGlobal');
-    expect(brandCdnPrefix()).toBe('cindy');
-    expect(brandCdnPrefix('global')).toBe('cindy-global');
   });
 });
 

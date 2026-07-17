@@ -13,8 +13,8 @@
  * ⚠️ 语义边界:
  *  - 这是**构建期单点,不是运行时开关**。区域(cn/global)是唯一的构建期维度,
  *    经打包命令的 CINDY_AUTH_REGION 选择,默认 cn。appId / exe 名 / userData
- *    目录名 / CDN 前缀按区域派生(cn 与 global 是两个可同机并存的系统身份,
- *    appId 与 mobile 的 com.xd.cindycn / com.xd.cindy 同一套)。
+ *    目录名按区域派生(cn 与 global 是两个可同机并存的系统身份,appId 与
+ *    mobile 的 com.xd.cindycn / com.xd.cindy 同一套)。
  *  - 历史兼容锚点(旧 scheme 解析、旧 userData / DB 文件识别)由
  *    `legacySchemes` / `legacyUserDataDirNames` / `legacyDbFilePrefixes`
  *    承载,只增不减:老用户机器上的存量注册与文件可能永远带着旧值。
@@ -97,12 +97,11 @@ export interface BrandIdentity {
   readonly legacyUserDataDirNames: readonly string[];
   /**
    * 更新分发 CDN / OSS 的一级路径前缀(渠道身份,老客户端永远只看自己的前缀)。
-   * cn / dev 基线值;区域值走 `brandCdnPrefix(region)`(cn 与 global 是两条
-   * 独立发布渠道,产物文件基名同源)。
+   * ⚠️ 两区共用(owner 决策 2026-07-18):cn / global 的发布渠道靠**不同
+   * OSS bucket** 区分,不靠路径前缀——本字段不做区域派生,发布侧矩阵按
+   * region 选 bucket。
    */
   readonly cdnPrefix: string;
-  /** 按区域派生的 CDN / OSS 渠道前缀(cn 'cindy',global 'cindy-global')。 */
-  readonly cdnPrefixByRegion: Readonly<Record<CindyRegion, string>>;
   /** 更新器/迁移执行器产物基名(`<updaterName>.exe`)。 */
   readonly updaterName: string;
   /** 本地主库文件名前缀(`<dbFilePrefix>-<userId>.db`)。 */
@@ -116,10 +115,10 @@ export interface BrandIdentity {
  * 旧 xdt-maker 值全部下沉 legacy 数组。
  *
  * 区域差异字段(2026-07-18 起支持 cn / global 同机双装):appId、
- * executableName、userDataDirName、cdnPrefix 四组按区域派生;深链 scheme、
- * 展示名 BRAND_NAME、dbFilePrefix、updaterName 两区共用(scheme 共用是
- * owner 决策:双装时后注册者赢,单装用户无感;db 前缀因 userData 已分目录
- * 无需再区分)。
+ * executableName、userDataDirName 三组按区域派生;深链 scheme、展示名
+ * BRAND_NAME、cdnPrefix、dbFilePrefix、updaterName 两区共用(scheme 共用是
+ * owner 决策:双装时后注册者赢,单装用户无感;cdnPrefix 共用因发布渠道靠
+ * 不同 OSS bucket 区分;db 前缀因 userData 已分目录无需再区分)。
  */
 export const BRAND_IDENTITY: BrandIdentity = Object.freeze({
   displayName: BRAND_NAME,
@@ -141,10 +140,6 @@ export const BRAND_IDENTITY: BrandIdentity = Object.freeze({
   }),
   legacyUserDataDirNames: Object.freeze(['xdt-maker']),
   cdnPrefix: 'cindy',
-  cdnPrefixByRegion: Object.freeze({
-    cn: 'cindy',
-    global: 'cindy-global',
-  }),
   updaterName: 'cindy-updater',
   dbFilePrefix: 'cindy',
   legacyDbFilePrefixes: Object.freeze(['xdt-maker']),
@@ -180,14 +175,6 @@ export function brandUserDataDirName(
   identity: BrandIdentity = BRAND_IDENTITY,
 ): string {
   return identity.userDataDirNameByRegion[region];
-}
-
-/** 按区域取 CDN / OSS 渠道前缀(也是发布产物文件基名);默认 cn。 */
-export function brandCdnPrefix(
-  region: CindyRegion = DEFAULT_CINDY_REGION,
-  identity: BrandIdentity = BRAND_IDENTITY,
-): string {
-  return identity.cdnPrefixByRegion[region];
 }
 
 /** 深链需要注册/解析的全部 scheme(主 + 历史),顺序稳定:主 scheme 恒为首位。 */

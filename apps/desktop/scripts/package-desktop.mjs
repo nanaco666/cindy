@@ -388,7 +388,7 @@ async function main() {
   );
   fs.rmSync(artifactDir, { recursive: true, force: true });
   fs.mkdirSync(artifactDir, { recursive: true });
-  const baseName = artifactBaseName({ version, versionless, region });
+  const baseName = artifactBaseName({ version, versionless });
 
   const finishers = { win32: finishWindows, darwin: finishDarwin, linux: finishLinux };
   const { files, signing } = await finishers[platform]({
