@@ -124,6 +124,10 @@ const overrides = {
   'sidebar-item-hover': '0.0 2.2% 18.0%', // alias closure: hover
   'sidebar-search-bg': '0.0 2.4% 16.1%', // alias closure: surface
   'sidebar-muted': '216.0 4.1% 75.9%', // alias closure: tertiary
+  'surface-translucent-sidebar': 'rgba(18, 15, 15, 0.85)', // E4D R1 模式1
+  'surface-translucent-main': 'rgba(18, 15, 15, 0.85)', // E4D R1 模式2
+  'surface-translucent-overlay': 'rgba(37, 35, 35, 0.80)', // E4D R1 模式3
+  'glass-pill-bg': 'rgba(217, 217, 217, 0.05)', // E3 D6 glass-pill(R4 dark)
 } as const;
 
 export const cindyDark: Theme = {

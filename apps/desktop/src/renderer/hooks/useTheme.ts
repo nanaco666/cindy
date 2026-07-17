@@ -220,6 +220,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
+  // E4D 毛玻璃(R1 audit,用户裁决透壁纸 2026-07-17):family/theme 变化或 mount 时
+  // 通知 main 开关 macOS vibrancy(仅 CINDY family 启用,其他恢复不透明)。覆盖
+  // setFamily/storage 跨窗口同步/mount 三个场景(任一变化都重应用)。
+  useEffect(() => {
+    window.electronAPI?.theme?.applyVibrancy?.(familyId, resolveIsDark(theme));
+  }, [familyId, theme, systemPrefersDark]);
+
   const fallbackFromType = useMemo<ThemeType | null>(() => {
     const family = getFamily(familyId);
     const isDarkRequested =
