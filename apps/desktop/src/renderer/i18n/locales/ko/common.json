@@ -168,7 +168,7 @@
         "unlockSubmit": "잠금 해제",
         "generateTitle": "새 SSH 키 생성",
         "nameLabel": "이름(선택)",
-        "nameHint": "~/.ssh/<name> 에 저장. 기본값은 \"xdt-maker\", 충돌 시 -1 / -2 ... 자동 부여.",
+        "nameHint": "~/.ssh/<name> 에 저장. 기본값은 \"cindy\", 충돌 시 -1 / -2 ... 자동 부여.",
         "encryptLabel": "passphrase 로 암호화(권장)",
         "encryptHint": "passphrase 는 지금 한 번만 입력하면 ssh-add 가 복호화한 키를 시스템 ssh-agent 에 캐시합니다. macOS 는 Keychain 에도 저장되어 재부팅 후 자동 복원됩니다.",
         "passLabel": "Passphrase",

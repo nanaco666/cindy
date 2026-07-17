@@ -168,7 +168,7 @@
         "unlockSubmit": "アンロック",
         "generateTitle": "新しい SSH 鍵を生成",
         "nameLabel": "名前(省略可)",
-        "nameHint": "~/.ssh/<name> に保存。デフォルトは \"xdt-maker\"、衝突時は -1 / -2 ... を付与。",
+        "nameHint": "~/.ssh/<name> に保存。デフォルトは \"cindy\"、衝突時は -1 / -2 ... を付与。",
         "encryptLabel": "passphrase で暗号化する(推奨)",
         "encryptHint": "passphrase は今一度だけ入力し、ssh-add が復号した鍵をシステム ssh-agent にキャッシュします。macOS では Keychain にも保存されるため再起動後も自動復帰します。",
         "passLabel": "Passphrase",

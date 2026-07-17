@@ -168,7 +168,7 @@
         "unlockSubmit": "Unlock",
         "generateTitle": "Generate a new SSH key",
         "nameLabel": "Name (optional)",
-        "nameHint": "Saved as ~/.ssh/<name>. Defaults to \"xdt-maker\", suffixes with -1, -2... on collision.",
+        "nameHint": "Saved as ~/.ssh/<name>. Defaults to \"cindy\", suffixes with -1, -2... on collision.",
         "encryptLabel": "Encrypt with a passphrase (recommended)",
         "encryptHint": "Passphrase is typed once now, then ssh-add caches the decrypted key in your system's ssh-agent. macOS also persists the passphrase in Keychain so it survives reboots.",
         "passLabel": "Passphrase",
