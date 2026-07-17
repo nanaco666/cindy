@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { resolveVibrancyConfig } from '../vibrancyConfig';
 
 describe('E4D resolveVibrancyConfig(familyId→vibrancy/backgroundColor 映射)', () => {
-  it('CINDY mac light → vibrancy under-window + 透明底', () => {
+  it('CINDY mac light → vibrancy sidebar + 透明底', () => {
     const c = resolveVibrancyConfig('cindy', false, 'darwin');
-    expect(c.vibrancy).toBe('under-window');
+    expect(c.vibrancy).toBe('sidebar');
     expect(c.backgroundColor).toBe('#00000000');
   });
-  it('CINDY mac dark → vibrancy under-window + 透明底', () => {
+  it('CINDY mac dark → vibrancy sidebar + 透明底', () => {
     const c = resolveVibrancyConfig('cindy', true, 'darwin');
-    expect(c.vibrancy).toBe('under-window');
+    expect(c.vibrancy).toBe('sidebar');
     expect(c.backgroundColor).toBe('#00000000');
   });
   it('其他 family(default)mac → vibrancy null + 不透明底', () => {

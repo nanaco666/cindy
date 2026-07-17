@@ -17,7 +17,7 @@ export function resolveVibrancyConfig(
   const opaqueBg = isDark ? '#1f1f1e' : '#f8f8f6';
   if (platform === 'darwin') {
     return {
-      vibrancy: isCindy ? 'under-window' : null,
+      vibrancy: isCindy ? 'sidebar' : null,
       backgroundColor: isCindy ? '#00000000' : opaqueBg,
     };
   }
