@@ -110,20 +110,21 @@ describe('AuthContext session cache boundaries', () => {
   it('resets sessions when auth state switches accounts or logs out', async () => {
     const view = renderHook(() => useAuth(), { wrapper });
     await waitFor(() => expect(view.result.current.user?.id).toBe('account-a'));
-
-    act(() => mocks.emitAuth(authState('account-b')));
     expect(mocks.reset).toHaveBeenCalledTimes(1);
 
     act(() => mocks.emitAuth(authState('account-b')));
-    expect(mocks.reset).toHaveBeenCalledTimes(1);
+    expect(mocks.reset).toHaveBeenCalledTimes(2);
+
+    act(() => mocks.emitAuth(authState('account-b')));
+    expect(mocks.reset).toHaveBeenCalledTimes(2);
 
     act(() => mocks.emitAuth(authState(null)));
-    expect(mocks.reset).toHaveBeenCalledTimes(2);
+    expect(mocks.reset).toHaveBeenCalledTimes(3);
 
     await act(async () => {
       await view.result.current.logout();
     });
-    expect(mocks.reset).toHaveBeenCalledTimes(3);
+    expect(mocks.reset).toHaveBeenCalledTimes(4);
   });
 
   it('resets sessions when authentication expires', async () => {

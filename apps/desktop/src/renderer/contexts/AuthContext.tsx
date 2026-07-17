@@ -81,6 +81,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const mergeRoleIntoUser = useCallback(async (incoming: User) => {
     const revision = ++activeUserRevisionRef.current;
+    if (activeUserIdRef.current !== incoming.id) {
+      // Auth transitions can leave an old request in flight. Clear the
+      // renderer session snapshot before exposing the new identity so that
+      // neither the old response nor the old mounted hook state can leak.
+      sessionsStore.reset();
+    }
     activeUserIdRef.current = incoming.id;
     // Identity changes should render immediately. Product-role hydration is a
     // non-blocking enhancement and may never overwrite a newer account/logout.
@@ -115,14 +121,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setDeviceId(state.deviceId);
       // V0.3：user 设置走 mergeRoleIntoUser，登出时清空 role 缓存
       if (state.user) {
-        // sessionsStore 是 renderer 进程级单例；切换账号时必须丢弃上一个
-        // 账号的快照，避免新账号短暂显示旧账号的 session。
-        if (
-          activeUserIdRef.current !== null &&
-          activeUserIdRef.current !== state.user.id
-        ) {
-          sessionsStore.reset();
-        }
         setLoginState(null);
         void mergeRoleIntoUser(state.user);
       } else {
