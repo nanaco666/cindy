@@ -4544,7 +4544,6 @@ app.on('ready', async () => {
   const cspDevServerUrl = MAIN_WINDOW_VITE_DEV_SERVER_URL || null;
   installContentSecurityPolicy(session.defaultSession, {
     isDev: Boolean(cspDevServerUrl),
-    apiOrigin: parseOrigin(getClientEndpoint('apiBaseUrl')),
     devServerOrigin: parseOrigin(cspDevServerUrl),
   });
 
