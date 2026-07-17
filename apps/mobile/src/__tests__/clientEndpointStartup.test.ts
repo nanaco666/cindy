@@ -1,13 +1,13 @@
 /**
- * 远程端点清单启动解析(clientEndpointStartup,阻断语义)+ env live binding
- * 回写的单测。
+ * 远程端点清单启动解析(clientEndpointStartup,清单即唯一事实源)+ env
+ * live binding 回写的单测。
  *
  * 关键覆盖:
  *  - 「跨模块 live binding 可见性」:applyResolvedClientEndpoints 对 `export let`
  *    重赋值后,另一个模块(本测试文件)经命名空间导入看到新值——这是 mobile
  *    不改 26 个消费文件的前提假设,用测试钉死;
- *  - 阻断语义:拉取失败 / 清单非法 → 返回 ok:false 且 env 不被改动(没有缓存
- *    回退、没有静默降级),重试 = 调用方再跑一次。
+ *  - 阻断语义:拉取失败 / 清单非法 / 缺字段 → 返回 ok:false 且 env 不被改动
+ *    (没有缓存回退、没有逐字段烘焙回退),重试 = 调用方再跑一次。
  */
 import { describe, expect, it, vi } from 'vitest';
 
@@ -18,21 +18,26 @@ async function freshModules() {
   return { env, startup };
 }
 
-const REMOTE_MANIFEST = JSON.stringify({
+const FULL_MANIFEST_OBJECT = {
   schemaVersion: 1,
   apiBaseUrl: 'https://api-next.example.com',
   authApiBaseUrl: 'https://auth-next.example.com',
   deviceLinkApiBaseUrl: 'https://relay-next.example.com',
+  oauthBrokerApiBaseUrl: 'https://oauth-next.example.com',
+  heartbeatUrl: 'https://heartbeat-next.example.com',
+  slackHookWsUrl: 'wss://hook-next.example.com',
+  websiteUrl: 'https://www.next.example.com',
   xdGatewayBaseUrl: 'https://gateway-next.example.com',
-});
+};
+const FULL_MANIFEST = JSON.stringify(FULL_MANIFEST_OBJECT);
 
-describe('runStartupEndpointResolve(阻断语义)', () => {
+describe('runStartupEndpointResolve(清单即唯一事实源)', () => {
   it('拉取成功:回写 env live binding,跨模块可见', async () => {
     const { env, startup } = await freshModules();
     expect(env.API_BASE_URL).toBe('https://api.example.invalid');
 
     const outcome = await startup.runStartupEndpointResolve({
-      fetchManifestText: async () => REMOTE_MANIFEST,
+      fetchManifestText: async () => FULL_MANIFEST,
     });
 
     expect(outcome).toEqual({ ok: true });
@@ -43,18 +48,7 @@ describe('runStartupEndpointResolve(阻断语义)', () => {
     expect(env.MOBILE_VOICE_LITELLM_BASE_URL).toBe('https://gateway-next.example.com');
   });
 
-  it('清单缺省字段维持烘焙值(清单本身必须成功拉到)', async () => {
-    const { env, startup } = await freshModules();
-    const outcome = await startup.runStartupEndpointResolve({
-      fetchManifestText: async () =>
-        JSON.stringify({ schemaVersion: 1, apiBaseUrl: 'https://api-next.example.com' }),
-    });
-    expect(outcome).toEqual({ ok: true });
-    expect(env.API_BASE_URL).toBe('https://api-next.example.com');
-    expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay.example.invalid');
-  });
-
-  it('拉取失败 → ok:false(fetch-failed),env 保持烘焙值不动', async () => {
+  it('拉取失败 → ok:false(fetch-failed),env 保持构建期值不动', async () => {
     const { env, startup } = await freshModules();
     const outcome = await startup.runStartupEndpointResolve({
       fetchManifestText: async () => null,
@@ -63,15 +57,26 @@ describe('runStartupEndpointResolve(阻断语义)', () => {
     expect(env.API_BASE_URL).toBe('https://api.example.invalid');
   });
 
-  it('清单非法 → ok:false(坏清单不静默降级),env 不动', async () => {
+  it('清单缺字段 → ok:false(无烘焙回退),env 不动', async () => {
     const { env, startup } = await freshModules();
+    const manifest: Record<string, unknown> = { ...FULL_MANIFEST_OBJECT };
+    delete manifest.heartbeatUrl;
     const apply = vi.fn();
     const outcome = await startup.runStartupEndpointResolve({
-      fetchManifestText: async () => 'not-json{',
+      fetchManifestText: async () => JSON.stringify(manifest),
       apply,
     });
-    expect(outcome).toEqual({ ok: false, reason: 'invalid-json' });
+    expect(outcome).toEqual({ ok: false, reason: 'missing-field:heartbeatUrl' });
     expect(apply).not.toHaveBeenCalled();
+    expect(env.API_BASE_URL).toBe('https://api.example.invalid');
+  });
+
+  it('清单非法 → ok:false(坏清单不静默降级),env 不动', async () => {
+    const { env, startup } = await freshModules();
+    const outcome = await startup.runStartupEndpointResolve({
+      fetchManifestText: async () => 'not-json{',
+    });
+    expect(outcome).toEqual({ ok: false, reason: 'invalid-json' });
     expect(env.API_BASE_URL).toBe('https://api.example.invalid');
   });
 
@@ -80,7 +85,7 @@ describe('runStartupEndpointResolve(阻断语义)', () => {
     const fetchManifestText = vi
       .fn<(timeoutMs: number) => Promise<string | null>>()
       .mockRejectedValueOnce(new Error('boom'))
-      .mockResolvedValueOnce(REMOTE_MANIFEST);
+      .mockResolvedValueOnce(FULL_MANIFEST);
     await expect(
       startup.runStartupEndpointResolve({ fetchManifestText }),
     ).resolves.toEqual({ ok: false, reason: 'fetch-failed' });
@@ -112,6 +117,6 @@ describe('applyResolvedClientEndpoints', () => {
     env.applyResolvedClientEndpoints({ authApiBaseUrl: 'https://auth-new.example.com' });
     expect(env.AUTH_API_BASE_URL).toBe('https://auth-new.example.com');
     env.applyResolvedClientEndpoints({});
-    expect(env.AUTH_API_BASE_URL).toBe('https://auth-new.example.com'); // 空清单不回退
+    expect(env.AUTH_API_BASE_URL).toBe('https://auth-new.example.com'); // 空对象不回退
   });
 });

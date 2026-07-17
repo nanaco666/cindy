@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CLIENT_ENDPOINT_KEYS,
-  type ClientEndpointMap,
   parseClientEndpointManifest,
   resolveClientEndpointsStrict,
 } from '../clientEndpoints';
@@ -17,17 +16,9 @@ const VALID_MANIFEST = {
   slackHookWsUrl: 'wss://slack-hook.example.com',
   websiteUrl: 'https://www.example.com',
   xdGatewayBaseUrl: 'https://gateway.example.com',
-  cdnBaseUrl: 'https://cdn.example.com/app',
-  cdnInternalBaseUrl: 'http://cdn-internal.example.com:20080/app',
 };
 
-function bakedDefaults(): ClientEndpointMap {
-  const map = {} as ClientEndpointMap;
-  for (const key of CLIENT_ENDPOINT_KEYS) map[key] = `https://baked.example.com/${key}`;
-  return map;
-}
-
-describe('parseClientEndpointManifest', () => {
+describe('parseClientEndpointManifest(全字段必填)', () => {
   it('接受合法全量清单并归一尾斜杠', () => {
     const result = parseClientEndpointManifest(
       JSON.stringify({ ...VALID_MANIFEST, apiBaseUrl: 'https://api.example.com///' }),
@@ -36,36 +27,49 @@ describe('parseClientEndpointManifest', () => {
     if (!result.ok) throw new Error('unreachable');
     expect(result.endpoints.apiBaseUrl).toBe('https://api.example.com');
     expect(result.endpoints.slackHookWsUrl).toBe('wss://slack-hook.example.com');
-  });
-
-  it('接受部分字段的清单(缺省字段不出现在结果里)', () => {
-    const result = parseClientEndpointManifest(
-      JSON.stringify({ schemaVersion: 1, apiBaseUrl: 'https://api.example.com' }),
-    );
-    expect(result).toMatchObject({ ok: true });
-    if (!result.ok) throw new Error('unreachable');
-    expect(result.endpoints).toEqual({ apiBaseUrl: 'https://api.example.com' });
+    expect(Object.keys(result.endpoints).sort()).toEqual([...CLIENT_ENDPOINT_KEYS].sort());
   });
 
   it('忽略未知字段(向前兼容)', () => {
     const result = parseClientEndpointManifest(
-      JSON.stringify({ schemaVersion: 1, apiBaseUrl: 'https://api.example.com', futureKey: 'x' }),
+      JSON.stringify({ ...VALID_MANIFEST, futureKey: 'x', cdnBaseUrl: 'https://cdn.example.com' }),
     );
     expect(result).toMatchObject({ ok: true });
     if (!result.ok) throw new Error('unreachable');
-    expect(Object.keys(result.endpoints)).toEqual(['apiBaseUrl']);
+    expect(Object.keys(result.endpoints).sort()).toEqual([...CLIENT_ENDPOINT_KEYS].sort());
+  });
+
+  it.each(CLIENT_ENDPOINT_KEYS)('缺失字段 %s → 整份拒绝(无烘焙回退)', (key) => {
+    const manifest: Record<string, unknown> = { ...VALID_MANIFEST };
+    delete manifest[key];
+    expect(parseClientEndpointManifest(JSON.stringify(manifest))).toEqual({
+      ok: false,
+      reason: `missing-field:${key}`,
+    });
   });
 
   it.each([
     ['非法 JSON', 'not-json{', 'invalid-json'],
     ['数组', '[]', 'not-an-object'],
     ['null', 'null', 'not-an-object'],
-    ['schemaVersion 缺失', JSON.stringify({ apiBaseUrl: 'https://a.com' }), 'invalid-schema-version'],
-    ['schemaVersion 非整数', JSON.stringify({ schemaVersion: 1.5 }), 'invalid-schema-version'],
-    ['schemaVersion 字符串', JSON.stringify({ schemaVersion: '1' }), 'invalid-schema-version'],
+    [
+      'schemaVersion 缺失',
+      JSON.stringify({ ...VALID_MANIFEST, schemaVersion: undefined }),
+      'invalid-schema-version',
+    ],
+    [
+      'schemaVersion 非整数',
+      JSON.stringify({ ...VALID_MANIFEST, schemaVersion: 1.5 }),
+      'invalid-schema-version',
+    ],
+    [
+      'schemaVersion 字符串',
+      JSON.stringify({ ...VALID_MANIFEST, schemaVersion: '1' }),
+      'invalid-schema-version',
+    ],
     [
       'schemaVersion 超前',
-      JSON.stringify({ schemaVersion: 2, apiBaseUrl: 'https://a.com' }),
+      JSON.stringify({ ...VALID_MANIFEST, schemaVersion: 2 }),
       'unsupported-schema-version:2',
     ],
   ])('拒绝:%s', (_label, raw, reason) => {
@@ -84,54 +88,31 @@ describe('parseClientEndpointManifest', () => {
       'credentials-in-url:apiBaseUrl',
     ],
   ])('单字段非法整份拒绝:%s', (_label, patch, reason) => {
-    const raw = JSON.stringify({ schemaVersion: 1, ...patch });
+    const raw = JSON.stringify({ ...VALID_MANIFEST, ...patch });
     expect(parseClientEndpointManifest(raw)).toEqual({ ok: false, reason });
-  });
-
-  it('cdnInternalBaseUrl 允许 http', () => {
-    const result = parseClientEndpointManifest(
-      JSON.stringify({ schemaVersion: 1, cdnInternalBaseUrl: 'http://internal.example.com/app' }),
-    );
-    expect(result).toMatchObject({ ok: true });
   });
 });
 
-describe('resolveClientEndpointsStrict(阻断语义)', () => {
+describe('resolveClientEndpointsStrict(清单即唯一事实源)', () => {
   it('拉取失败(null)→ ok:false,不产出任何端点', () => {
-    expect(resolveClientEndpointsStrict(null, bakedDefaults())).toEqual({
-      ok: false,
-      reason: 'fetch-failed',
-    });
+    expect(resolveClientEndpointsStrict(null)).toEqual({ ok: false, reason: 'fetch-failed' });
   });
 
-  it('清单非法 → ok:false(坏清单不静默降级)', () => {
-    expect(resolveClientEndpointsStrict('broken{{', bakedDefaults())).toEqual({
+  it('清单非法 / 缺字段 → ok:false(不静默降级)', () => {
+    expect(resolveClientEndpointsStrict('broken{{')).toEqual({
       ok: false,
       reason: 'invalid-json',
     });
-    expect(
-      resolveClientEndpointsStrict(
-        JSON.stringify({ schemaVersion: 1, apiBaseUrl: 'ftp://bad' }),
-        bakedDefaults(),
-      ),
-    ).toEqual({ ok: false, reason: 'invalid-protocol:apiBaseUrl' });
+    const missing: Record<string, unknown> = { ...VALID_MANIFEST };
+    delete missing.heartbeatUrl;
+    expect(resolveClientEndpointsStrict(JSON.stringify(missing))).toEqual({
+      ok: false,
+      reason: 'missing-field:heartbeatUrl',
+    });
   });
 
-  it('成功:清单字段覆盖烘焙值,缺省字段逐项回退烘焙值', () => {
-    const baked = bakedDefaults();
-    const result = resolveClientEndpointsStrict(
-      JSON.stringify({ schemaVersion: 1, apiBaseUrl: 'https://remote.example.com' }),
-      baked,
-    );
-    expect(result).toMatchObject({ ok: true });
-    if (!result.ok) throw new Error('unreachable');
-    expect(result.endpoints.apiBaseUrl).toBe('https://remote.example.com');
-    expect(result.endpoints.websiteUrl).toBe(baked.websiteUrl);
-    expect(Object.keys(result.endpoints).sort()).toEqual([...CLIENT_ENDPOINT_KEYS].sort());
-  });
-
-  it('全量清单:所有字段来自清单', () => {
-    const result = resolveClientEndpointsStrict(JSON.stringify(VALID_MANIFEST), bakedDefaults());
+  it('成功:所有字段来自清单本身', () => {
+    const result = resolveClientEndpointsStrict(JSON.stringify(VALID_MANIFEST));
     expect(result).toMatchObject({ ok: true });
     if (!result.ok) throw new Error('unreachable');
     for (const key of CLIENT_ENDPOINT_KEYS) {

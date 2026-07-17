@@ -3,21 +3,21 @@
  * ---------------------------------------------------------------------------
  * 客户端远程端点清单(OSS `config/client-endpoints.json`)的 desktop 宿主层。
  *
- * 语义是**强一致阻断式**(2026-07 与 Lizi 定案):app.ready 内、createWindow /
- * 一切更新检查之前拉取清单;拉不到或清单非法 → 弹系统错误框(重试 / 退出),
- * 用户不重试成功就不放行启动。**没有缓存回退、没有超时后静默继续**——单次
- * 请求的网络超时只用来触发错误框,不是降级通道。
+ * 语义是**清单即唯一事实源 + 阻断式**(2026-07 与 Lizi 定案,两次收紧):
+ * app.ready 内、createWindow / 一切更新检查之前拉取清单;拉不到 / 清单非法 /
+ * 任一字段缺失 → 弹系统错误框(重试 / 退出),用户不重试成功就不放行启动。
+ * **没有缓存回退、没有超时后静默继续、没有逐字段烘焙回退**——packaged 下生效
+ * 的端点全部来自清单,CDN 配置错任何一点都在启动时立刻暴露,不被本地值掩盖。
  *
- * 共享逻辑(schema / 校验 / 严格合并)在 @lizi/maker-shared/client-endpoints;
+ * 共享逻辑(schema / 全字段必填校验)在 @lizi/maker-shared/client-endpoints;
  * 本文件负责 desktop 侧 IO:
- *  - 烘焙默认值:构建期 import.meta.env.VITE_*(仅两用途:dev 跳过拉取时全量
- *    使用;拉取成功后清单缺省字段逐项回退);
  *  - CDN 拉取:复用 manifestService.ensureBaseUrl()(内外网探测)+ net.request。
- *    **拉清单的 CDN base 永远用烘焙常量,不吃清单自己的 cdnBaseUrl**,结构上
- *    杜绝"清单配错 CDN 把自己锁死";
+ *    **拉清单的 CDN base 是烘焙常量**——自举必需,也防"清单配错把自己锁死";
  *  - renderer 消费:sendSync IPC `client-endpoints:get-sync`(首帧同步可用)。
  *
- * dev 模式(app 未打包)跳过拉取,直接用烘焙值,.env 行为与现状完全一致。
+ * 烘焙值(bakedClientEndpoints)仅服务 dev 路径:dev 模式(app 未打包)跳过
+ * 拉取,直接用构建期 .env 值,行为与引入清单前完全一致;packaged 正常流程
+ * 永远读清单解析结果。
  *
  * 有意不接入:manifestService / updateService 的更新链继续用烘焙 CDN 常量——
  * 更新基础设施是"逃生舱",清单事故时仍能靠热更修复(且本服务先于更新检查阻断,
@@ -37,8 +37,6 @@ import { ensureBaseUrl, isDev } from './manifestService';
 import {
   API_BASE_URL_DEV_FALLBACK,
   AUTH_BASE_URL_DEV_FALLBACK,
-  CDN_EXTERNAL_BASE_URL,
-  CDN_INTERNAL_BASE_URL,
   DEVICE_LINK_API_BASE_DEV_FALLBACK,
   HEARTBEAT_DEFAULT_ENDPOINT,
   SLACK_HOOK_DEFAULT_URL,
@@ -59,8 +57,10 @@ function trimEndpoint(value: string | undefined): string {
 }
 
 /**
- * 构建期烘焙的端点全集。空值语义与现状一致:该能力在当前构建未配置,
- * 消费点自己的"空则跳过"分支继续生效(如 oauthBroker 回退主 server 老路由)。
+ * dev 专用:构建期 .env 值组装的端点全集(packaged 正常流程不消费本函数,
+ * 生效值全部来自清单)。空值语义与引入清单前一致:该能力在当前 dev 构建
+ * 未配置,消费点自己的"空则跳过"分支继续生效(如 oauthBroker 回退主 server
+ * 老路由)。
  */
 export function bakedClientEndpoints(): ClientEndpointMap {
   return {
@@ -76,8 +76,6 @@ export function bakedClientEndpoints(): ClientEndpointMap {
     slackHookWsUrl: SLACK_HOOK_DEFAULT_URL,
     websiteUrl: WEBSITE_URL,
     xdGatewayBaseUrl: XD_GATEWAY_BASE_URL,
-    cdnBaseUrl: CDN_EXTERNAL_BASE_URL,
-    cdnInternalBaseUrl: CDN_INTERNAL_BASE_URL,
   };
 }
 
@@ -127,7 +125,6 @@ async function fetchManifestTextViaCdn(timeoutMs: number): Promise<string | null
 
 /** 阻断循环的依赖注入面(规则 14:测试用内存 harness 驱动,不起 Electron)。 */
 export interface BlockingResolveDeps {
-  bakedDefaults: ClientEndpointMap;
   fetchManifestText(timeoutMs: number): Promise<string | null>;
   /** 拉取/校验失败时问用户;生产实现是系统模态错误框。 */
   promptRetry(reason: string): 'retry' | 'exit';
@@ -150,7 +147,7 @@ export async function resolveClientEndpointsBlocking(
     } catch {
       rawText = null;
     }
-    const result = resolveClientEndpointsStrict(rawText, deps.bakedDefaults);
+    const result = resolveClientEndpointsStrict(rawText);
     if (result.ok) return result.endpoints;
     log.warn(`client endpoints manifest unavailable (${result.reason}), prompting user`);
     if (deps.promptRetry(result.reason) === 'exit') {
@@ -198,7 +195,6 @@ export async function initClientEndpoints(): Promise<boolean> {
     return true;
   }
   const endpoints = await resolveClientEndpointsBlocking({
-    bakedDefaults: baked(),
     fetchManifestText: fetchManifestTextViaCdn,
     promptRetry: promptRetryDialog,
     exitApp: () => app.exit(1),

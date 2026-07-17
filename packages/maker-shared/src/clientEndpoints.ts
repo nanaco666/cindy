@@ -5,17 +5,23 @@
  * 存放一份公开读的清单(仓内正本 `config/client-endpoints.json`,人肉上传),
  * 应用启动第一步、**先于检查更新**从 CDN 拉取;OSS 清单修改后重启应用生效。
  *
- * 语义是**强一致阻断式**(2026-07 与 Lizi 定案):清单拉不到 / 校验不过 = 启动
- * 阻断,宿主必须报错并提供重试,**没有缓存回退、没有超时后静默继续**。烘焙值只在
- * 两种场景使用:(a) dev 构建(desktop 未打包 / mobile __DEV__)整个跳过拉取;
- * (b) 清单里**缺省**的字段逐项回退烘焙值(清单本身必须成功拉到并整份合法)。
+ * 语义是**清单即唯一事实源**(2026-07 与 Lizi 定案,两次收紧):
+ *  - 拉不到 / 清单非法 / **任一字段缺失** → 启动阻断,宿主报错并提供重试;
+ *  - **没有缓存回退、没有超时后静默继续、没有逐字段烘焙回退**——任何本地兜底
+ *    都会把 CDN 配置错误静默掩盖成"部分端点漂移",这里要的是配置错就立刻炸出来;
+ *  - 构建期烘焙值仅存在于两个无法消除的位置:拉清单用的 CDN 基址(自举必需,
+ *    且防"清单配错 CDN 把自己锁死"),以及 dev 构建(desktop 未打包 / mobile
+ *    __DEV__)整个跳过拉取的开发路径。
  *
  * 职责边界(仓规则 2):本模块是纯逻辑层,不做任何 IO——fetch / 报错交互由宿主
- * (desktop main / mobile 启动闸门)实现,这里只提供确定性的解析与合并(仓规则 9)。
+ * (desktop main / mobile 启动闸门)实现,这里只提供确定性的解析与校验(仓规则 9)。
  *
- * 校验语义(与 scripts/shared/production-endpoints.mjs 的协议白名单对齐):
- *  - 未知字段忽略(向前兼容,新增字段不 bump schemaVersion);
- *  - 任一【存在】字段非法(协议不符 / 带凭据 / 非字符串)→ 整份拒绝;
+ * 校验语义:
+ *  - **全字段必填**:CLIENT_ENDPOINT_KEYS 每个字段都必须出现且合法,缺一个整份拒绝;
+ *  - 未知字段忽略(向前兼容:新客户端加字段后,老清单先补字段再发新客户端;
+ *    新清单多出的字段老客户端不认识但不报错);
+ *  - 协议白名单(与 scripts/shared/production-endpoints.mjs 对齐)、禁 URL 凭据、
+ *    尾斜杠归一;
  *  - schemaVersion 缺失、非正整数或大于当前支持版本 → 整份拒绝(breaking change
  *    才 bump 版本)。
  */
@@ -23,11 +29,15 @@
 /** 当前客户端支持的清单 schema 版本;清单里更大的版本号会被整份拒绝。 */
 export const CLIENT_ENDPOINTS_SCHEMA_VERSION = 1;
 
-/** 清单允许携带的端点字段(与 config/production-endpoints.json 同名的客户端子集)。 */
+/**
+ * 清单字段全集 = 客户端实际消费的端点集合,**每个都是必填**。
+ * 不放没有消费方的字段(死配置也是故障点);新增消费点时同步扩这里 + 先给
+ * 线上清单补字段再发版(老清单缺新字段会让新版客户端启动阻断)。
+ */
 export const CLIENT_ENDPOINT_KEYS = [
   'apiBaseUrl',
   // auth 不分 cn/global:国内/海外是两条 CDN 各发各的清单,清单本身已 region 化,
-  // 客户端无脑取本字段即可(2026-07 与 Lizi 定案)。
+  // 客户端无脑取本字段即可。
   'authApiBaseUrl',
   'deviceLinkApiBaseUrl',
   'oauthBrokerApiBaseUrl',
@@ -35,13 +45,11 @@ export const CLIENT_ENDPOINT_KEYS = [
   'slackHookWsUrl',
   'websiteUrl',
   'xdGatewayBaseUrl',
-  'cdnBaseUrl',
-  'cdnInternalBaseUrl',
 ] as const;
 
 export type ClientEndpointKey = (typeof CLIENT_ENDPOINT_KEYS)[number];
 
-/** 解析完成后的端点全集(每个 key 都有值,清单缺省字段已回退烘焙值)。 */
+/** 解析成功后的端点全集(全字段必有值,值全部来自清单)。 */
 export type ClientEndpointMap = Record<ClientEndpointKey, string>;
 
 /** 各字段允许的 URL 协议白名单。 */
@@ -54,17 +62,15 @@ const FIELD_PROTOCOLS: Record<ClientEndpointKey, readonly string[]> = {
   slackHookWsUrl: ['wss:'],
   websiteUrl: ['https:'],
   xdGatewayBaseUrl: ['https:'],
-  cdnBaseUrl: ['https:'],
-  cdnInternalBaseUrl: ['http:', 'https:'],
 };
 
 export type ParseClientEndpointManifestResult =
-  | { ok: true; endpoints: Partial<ClientEndpointMap> }
+  | { ok: true; endpoints: ClientEndpointMap }
   | { ok: false; reason: string };
 
 /**
  * 解析并校验一份清单原文。纯函数,输入任意文本都不会抛出。
- * 返回的 endpoints 只含清单中实际出现且合法的字段(缺省回退由 resolve 负责)。
+ * 全字段必填:缺失 / 非法 / 协议不符 / 带凭据,任一命中整份拒绝。
  */
 export function parseClientEndpointManifest(rawText: string): ParseClientEndpointManifestResult {
   let parsed: unknown;
@@ -90,9 +96,11 @@ export function parseClientEndpointManifest(rawText: string): ParseClientEndpoin
     return { ok: false, reason: `unsupported-schema-version:${schemaVersion}` };
   }
 
-  const endpoints: Partial<ClientEndpointMap> = {};
+  const endpoints = {} as ClientEndpointMap;
   for (const key of CLIENT_ENDPOINT_KEYS) {
-    if (!(key in record)) continue;
+    if (!(key in record)) {
+      return { ok: false, reason: `missing-field:${key}` };
+    }
     const raw = record[key];
     if (typeof raw !== 'string' || !raw.trim()) {
       return { ok: false, reason: `invalid-field:${key}` };
@@ -120,28 +128,14 @@ export type ResolveClientEndpointsResult =
   | { ok: false; reason: string };
 
 /**
- * 严格解析:清单原文 → 完整端点 map。
- *
- *  - rawText 为 null(拉取失败/超时)→ ok:false('fetch-failed'),宿主必须阻断并重试;
- *  - 清单非法 → ok:false(带 parse reason),同样阻断——**坏清单不静默降级**,
- *    否则发布事故会被回退链掩盖成"部分用户端点漂移";
- *  - 成功 → 清单字段覆盖烘焙值,缺省字段逐项回退烘焙值。
+ * 严格解析:清单原文 → 完整端点 map(值全部来自清单,无任何本地合并)。
+ * rawText 为 null(拉取失败/超时)→ ok:false('fetch-failed'),宿主必须阻断并重试。
  */
 export function resolveClientEndpointsStrict(
   rawText: string | null,
-  bakedDefaults: ClientEndpointMap,
 ): ResolveClientEndpointsResult {
   if (rawText === null) {
     return { ok: false, reason: 'fetch-failed' };
   }
-  const parsed = parseClientEndpointManifest(rawText);
-  if (!parsed.ok) {
-    return { ok: false, reason: parsed.reason };
-  }
-  const endpoints = { ...bakedDefaults };
-  for (const key of CLIENT_ENDPOINT_KEYS) {
-    const value = parsed.endpoints[key];
-    if (value) endpoints[key] = value;
-  }
-  return { ok: true, endpoints };
+  return parseClientEndpointManifest(rawText);
 }
