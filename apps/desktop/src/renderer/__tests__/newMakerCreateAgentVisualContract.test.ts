@@ -151,8 +151,8 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(permissionSelectorSource).toContain('min-w-[90px] max-w-none shrink-0');
     expect(permissionSelectorSource).toContain('whitespace-nowrap');
     expect(modelSelectorSource).toContain('border-[var(--create-agent-control-border)]');
-    expect(modelSelectorSource).toContain('min-w-[100px] max-w-none shrink-0');
-    expect(modelSelectorSource).toContain('whitespace-nowrap');
+    expect(modelSelectorSource).toContain('min-w-[128px] max-w-full shrink');
+    expect(modelSelectorSource).toContain('max-w-[180px] truncate');
 
     expect(colorsSource).toContain("'create-agent-send-bg'");
     expect(colorsSource).toContain("light: '#3C3F43'");
@@ -179,7 +179,8 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(colorsSource).toContain("'create-agent-control-icon'");
     expect(colorsSource).toContain("light: '#3C3F43'");
 
-    expect(chatInputSource).toContain("isCreateAgentVariant ? 'gap-2' : 'min-w-0 gap-1'");
+    expect(chatInputSource).toContain("isCreateAgentVariant ? 'flex-wrap gap-2' : 'min-w-0 gap-1'");
+    expect(chatInputSource).toContain("'flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2'");
     expect(chatInputSource).toContain("className={isCreateAgentVariant ? 'ml-[7px]' : undefined}");
   });
 
