@@ -21,12 +21,6 @@ import { stripTrailingPathSeparators } from '../../shared/pathText';
 export interface DesktopNotifierDeps {
   getMainWindow: () => BrowserWindow | null;
   feishuIm: FeishuIM;
-  /**
-   * 当前登录用户的飞书 open_id (来自 authManager.getAuthState().user?.feishuOpenId)。
-   * 用于把 schedule 完成通知**精准发给登录用户本人**，而不是 bot 的 TOFU owner
-   * (绝大多数场景下两者是同一人,但概念上独立 — 切账号场景必须走登录用户)。
-   */
-  getCurrentUserFeishuOpenId: () => string | null;
   logger: Logger;
 }
 
@@ -65,11 +59,10 @@ export class DesktopNotifier implements Notifier {
   }
 
   private async notifyFeishu(schedule: Schedule, run: ScheduleRun): Promise<void> {
-    // 必须用 bot owner — 飞书 open_id 是 per-app 的: 用户登录 desktop 时 OAuth
-    // 拿到的 feishuOpenId 属于构建配置指定的主 app，跟用户自建的 bot app
-    // 不互通; 拿主 app 的 open_id 调 bot 的 IM API 会 400 (user_not_found)。
-    // ownerGuard 在用户私聊 bot 时 TOFU 记录的才是 bot app 内的合法 open_id。
-    // 假设用户用同一个飞书账号登录 desktop 又私聊了 bot, 这两个实际是同一个人。
+    // 通知目标 = bot owner(用户私聊 bot 时 ownerGuard TOFU 记录的 open_id)。
+    // 飞书 open_id 是 per-app 的,只有 bot 自己 app 内的 open_id 能调它的 IM API;
+    // 历史上曾注入登录用户的主 app feishuOpenId 作参考,该字段已随飞书登录
+    // 下线一并退役(2026-07)。
     const ownerOpenId = this.deps.feishuIm.getOwnerOpenId();
     if (!ownerOpenId) {
       this.deps.logger.warn?.(

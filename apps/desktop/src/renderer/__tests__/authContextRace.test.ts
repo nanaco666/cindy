@@ -2,18 +2,25 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-/** Guards renderer auth state against late product-role responses. */
-describe('AuthContext role hydration race', () => {
+/**
+ * Guards renderer auth state transitions. 产品 role 二段式水合已随 /api/me
+ * 退役(2026-07):身份即 auth-server membership,不再有"迟到 role 响应"竞态,
+ * 这里守住剩余的账号边界语义(切号清会话快照、迟到 initialize 丢弃)。
+ */
+describe('AuthContext auth-state races', () => {
   const source = readFileSync(
     resolve(process.cwd(), 'src/renderer/contexts/AuthContext.tsx'),
     'utf8',
   );
 
-  it('renders identity immediately and rejects stale same-account and cross-account responses', () => {
-    expect(source).toContain('const revision = ++activeUserRevisionRef.current;');
-    expect(source).toContain('setUser(visibleUser);');
+  it('applies identity synchronously and resets session snapshot on account switch', () => {
     expect(source).toContain('activeUserIdRef.current !== incoming.id');
-    expect(source).toContain('activeUserRevisionRef.current !== revision');
+    expect(source).toContain('sessionsStore.reset();');
+    expect(source).toContain('setUser(incoming);');
+    // 防复活:renderer 不得再对业务 server 发起 role/资料水合请求。
+    expect(source).not.toContain('meService');
+    expect(source).not.toContain("apiRequest<");
+    expect(source).not.toContain('getMe(');
   });
 
   it('ignores initialize results after a newer pushed auth event', () => {
@@ -21,9 +28,9 @@ describe('AuthContext role hydration race', () => {
     expect(source).toContain('authStateVersionRef.current !== initializeVersion');
   });
 
-  it('clears login progress and cached product roles at auth boundaries', () => {
-    expect(source).toContain('roleByUserRef.current.clear();');
+  it('clears login progress at auth boundaries', () => {
     expect(source).toContain('setLoginState(null);');
+    expect(source).toContain('clearWorkersCache();');
   });
 
   it('projects browser waiting state before the main-process loopback request settles', () => {

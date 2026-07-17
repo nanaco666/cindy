@@ -338,7 +338,6 @@ import { registerMakerUsageIpc, syncClaudeSubscriptionUsageForAuthChange } from 
 import { prewarmModelPricing } from './usage/modelPricing.js';
 import { registerMakerBinaryVersionIpc } from './maker-ipc/binary-version.js';
 import { registerCrossAgentConvertIpc } from './cross-agent-convert/ipc.js';
-import { registerImageUploadIpc } from './imageUploadIpc.js';
 import { registerFileBrowserIpc } from './file-browser/index.js';
 import { disposeRemoteFileBrowser } from './file-browser/remote-deps.js';
 import { registerFileBrowserDeviceOp } from './file-browser/device-op.js';
@@ -480,8 +479,6 @@ async function attemptStartScheduler(): Promise<void> {
       getDb: () => getDbClient().drizzle,
       getMainWindow: () => mainWindowRef,
       feishuIm,
-      // lazy: notifyFeishu 触发时才读 (登录状态可能晚于 scheduler 启动)
-      getCurrentUserFeishuOpenId: () => authManager.getAuthState().user?.feishuOpenId ?? null,
       logger: createSchedulerLogger('scheduler-host'),
       ...automationGitBaselineHooks,
     });
@@ -611,10 +608,8 @@ function attemptStartEmbeddingHost(): void {
 // 走 packaged 分支,但 logStream 还是 null —— 所有日志都会被静默吞掉。
 // dev: 直接 console;packaged: 写 userData/logs/main.log。
 import { initLogger, writeFromRenderer, setLogLevel, getLogLevel, keepRecentSync, keepRecentSessionCcDebugSync, createLogger, writeCcDebugLine, type LogLevel } from './logger.js';
-import { buildApiUrl } from './apiUrl.js';
 initLogger();
 const dbClientLog = createLogger('DbClient');
-const apiRequestLog = createLogger('api-request');
 const authBoundaryLog = createLogger('auth-boundary');
 const brandMigrationBootstrapLog = createLogger('brand-migration-bootstrap');
 // 主窗 renderer 加载失败可观测性 + dev 启动看门狗(见 renderer-boot-guard.ts 顶部注释)。
@@ -2804,7 +2799,6 @@ const registerIpcHandlers = () => {
       registerMakerUsageIpc();
       registerMakerBinaryVersionIpc();
       registerCrossAgentConvertIpc();
-      registerImageUploadIpc();
       // Workdir File Browser (vscode-style lazy file tree + content viewer for
       // a session's working directory). Pure local fs IO, no Maker dependency,
       // but lives in this block to keep splash-gating simple.
@@ -3389,70 +3383,10 @@ const registerIpcHandlers = () => {
     },
   );
 
-  // ── Generic API request proxy (renderer → main → server) ──
-  // All backend HTTP calls go through this handler so the renderer never
-  // uses fetch() directly. Token is auto-attached from authManager.
-  // On 401 TOKEN_EXPIRED, auto-refreshes and retries once.
-  const API_BASE_URL = getClientEndpoint('apiBaseUrl');
-
-  async function doApiFetch(
-    apiPath: string,
-    method: string,
-    body: unknown | undefined,
-  ): Promise<{ ok: boolean; status: number; data: unknown }> {
-    // Never let a renderer-supplied path escape the API origin — the request
-    // carries the user's bearer token, so an off-origin target would leak it.
-    let url: string;
-    try {
-      url = buildApiUrl(API_BASE_URL, apiPath);
-    } catch (err) {
-      apiRequestLog.warn('rejected api:request with unsafe path', {
-        path: apiPath,
-        error: (err as Error).message,
-      });
-      return { ok: false, status: 0, data: null };
-    }
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    const token = authManager.getAccessToken();
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-    try {
-      const response = await net.fetch(url, {
-        method,
-        headers,
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-      });
-      const data = await response.json();
-      return { ok: response.ok, status: response.status, data };
-    } catch {
-      return { ok: false, status: 0, data: null };
-    }
-  }
-
-  ipcMain.handle(
-    'api:request',
-    async (
-      _event: Electron.IpcMainInvokeEvent,
-      params: { path: string; method?: string; body?: unknown },
-    ): Promise<{ ok: boolean; status: number; data: unknown }> => {
-      const method = params.method ?? 'GET';
-      const result = await doApiFetch(params.path, method, params.body);
-
-      // Auto-refresh on TOKEN_EXPIRED and retry once
-      if (result.status === 401) {
-        const errData = result.data as { error?: { code?: string } } | null;
-        if (errData?.error?.code === 'TOKEN_EXPIRED') {
-          const refreshed = await authManager.refresh();
-          if (refreshed) {
-            return doApiFetch(params.path, method, params.body);
-          }
-        }
-      }
-
-      return result;
-    },
-  );
+  // ── Generic API request proxy: 已移除(2026-07 apiBaseUrl 清理)──
+  // 曾经的 `api:request`(renderer → main → 主 server)通用代理随最后一个
+  // 调用者(meService GET /api/me,产品 role 已退役)一起拆除。renderer 从此
+  // 对业务 server 零请求;main 内部调用走 serverApiClient.serverApiFetch。
 
   // ── API Key refresh from server: 已移除 ──
   // XD 网关 key / Mivo key 均为本地 only(safeStorage),没有服务器副本,
@@ -4451,8 +4385,10 @@ app.on('ready', async () => {
   registerClientEndpointsIpc();
 
   // 身份锚埋点(账号系统切换前置,identityAnchor.ts 顶注):登录成功 / 恢复
-  // 登录态时把 { userId, email, feishuOpenId } 持久化到 userData,供切换后优先按
-  // email、零命中时按 feishuOpenId 认领老库;登出不清。auth 由 renderer 经 auth:initialize 触发,此处
+  // 登录态时把 { userId, email } 持久化到 userData,供切换后按 email 认领老库
+  // (历史锚里的 feishuOpenId 仍可作零命中兜底;新登录不再产生该字段——飞书
+  // 登录已下线,User.feishuOpenId 随 2026-07 产品 me 退役)。登出不清。
+  // auth 由 renderer 经 auth:initialize 触发,此处
   // (建窗口前)装订阅必然先于首次 auth 状态就绪。
   authManager.onAuthStateChange((state) => {
     if (!state.isAuthenticated || state.user == null) return;

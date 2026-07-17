@@ -44,7 +44,9 @@ describe('auth login-flow reset', () => {
     const refreshBody = source.slice(refreshStart, refreshEnd);
     expect(refreshBody).toContain('const refreshEpoch = authStateEpoch;');
     expect(refreshBody).toContain("refreshWasSuperseded('after-refresh')");
-    expect(refreshBody).toContain("refreshWasSuperseded('after-product-me')");
+    // 'after-product-me' 守卫点已随产品 /api/user/me 退役(2026-07):refresh
+    // 与提交之间不再有产品资料网络往返,该迟到窗口不存在了。
+    expect(refreshBody).not.toContain('/api/user/me');
     expect(refreshBody).toContain("refreshWasSuperseded('after-account-switch-teardown')");
     expect(refreshBody).toContain("refreshWasSuperseded('after-integration-reload')");
     expect(refreshBody).toContain("refreshWasSuperseded('catch')");

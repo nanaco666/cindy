@@ -71,9 +71,6 @@ const AUTH_REGION: AuthRegion =
 function authServerUrl(): string {
   return getClientEndpoint('authApiBaseUrl');
 }
-function productServerUrl(): string {
-  return getClientEndpoint('apiBaseUrl');
-}
 const REFRESH_TOKEN_KEY = 'cindy_auth_refresh_token';
 const LEGACY_REFRESH_TOKEN_KEY = 'refresh_token';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -81,6 +78,11 @@ const DEFAULT_EFFORT = 'medium';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
+// 2026-07 产品侧 me 路由退役:身份完全以 auth-server membership 为准,不再
+// 请求主 server `/api/user/me`。原产品增强字段的去向:
+//  - isCanary → 退役,canary 通道后续由其它分发方式管理(见 canaryFlagStore.sync 注释);
+//  - feishuOpenId → 退役,飞书登录已整体下线,身份锚(identityAnchor)只写 email;
+//  - role(产品级 admin)→ 退役,唯一消费是侧栏头像角标(纯装饰),一并移除。
 export interface User {
   id: string;
   name: string;
@@ -88,28 +90,7 @@ export interface User {
   email: string | null;
   defaultModel: string;
   defaultEffort: string;
-  /** canary-release V0.1: server-side gray-release flag; mirrored to canaryFlagStore. */
-  isCanary?: boolean;
-  /**
-   * 当前登录用户的飞书 open_id（来自构建配置指定的主飞书应用）。
-   * 从 server `/me` 的 `feishuId` 字段映射来——server DB `user.feishuId` 存的是
-   * feishu open_id（auth.ts L91）。
-   *
-   * 注意：**不**用于 lizi-im 的 bot 白名单——bot 用的是用户自己的 feishu app，
-   * open_id 跨 app 不通用，所以白名单走 TOFU（feishu/ownerGuard.ts）。这个字段
-   * 仅供未来跨服务身份关联（如 SkillHub 部门同步）使用。
-   *
-   * **可能 null**：auth-server 登录不要求飞书身份；仅当产品 server 已关联飞书账号时，
-   * `/api/user/me` 才会返回该字段。
-   */
-  feishuOpenId?: string | null;
-  /**
-   * 服务器侧用户角色。'user' 默认；'admin' 有额外权限。
-   * 登录与 initialize() 时从 server 拉一次后缓存到进程生命周期内。
-   * 不实时同步 —— promote/demote 后用户重启 app 才生效（按设计）。
-   */
-  role?: 'user' | 'admin';
-  /** auth-server membership context. This is not the product-admin role above. */
+  /** auth-server membership context. */
   membershipKind: 'personal' | 'org';
   membershipRole: 'owner' | 'admin' | 'member';
   orgId: string | null;
@@ -152,20 +133,6 @@ type AccountSwitchTeardown = (context: {
 
 let accountSwitchTeardown: AccountSwitchTeardown | null = null;
 
-interface ProductMeResponse {
-  user: {
-    id: string;
-    name: string;
-    avatar: string | null;
-    email: string | null;
-    defaultModel: string;
-    defaultEffort: string;
-    isCanary?: boolean;
-    feishuId?: string | null;
-    role?: 'user' | 'admin';
-  };
-}
-
 // ── Module-level state ──────────────────────────────────────────────────────
 
 let accessToken: string | null = null;
@@ -182,13 +149,6 @@ let refreshPromise: Promise<boolean> | null = null;
 const deviceId = process.env.XDT_DEVICE_ID_OVERRIDE?.trim() || machineIdSync();
 /** chat-data-localization V0.5: most recent migration snapshot from server. */
 let currentMigration: MigrationStatus | undefined;
-/**
- * 最近一次 product /api/user/me 水合到的产品头像(飞书头像等)。
- * membership.avatarUrl 为 null(用户未自定义 / 恢复默认)时的显示回落值;
- * 单独留存是因为 currentUser.avatar 是合并后的展示值,恢复默认头像时
- * 需要能回到产品默认,而不是清成首字母兜底。
- */
-let productAvatarFallback: string | null = null;
 
 let loginFlowState: AuthFlowState | null = null;
 let providerConfig: ProviderConfig | null = null;
@@ -306,13 +266,6 @@ async function apiFetch<T>(
   }
 }
 
-function productApiFetch<T>(
-  apiPath: string,
-  options?: { method?: string; body?: unknown; token?: string | null; timeoutMs?: number },
-): Promise<{ ok: boolean; status: number; data: T }> {
-  return apiFetch<T>(apiPath, { ...options, baseUrl: productServerUrl() });
-}
-
 function requestAuthRefresh(refreshToken: string): Promise<AuthRefreshResult> {
   // refresh 是 token-rotating 端点,禁用 abort timeout——若服务端已轮换但
   // 客户端 abort,重试旧 token 会触发 INVALID_REFRESH_TOKEN。
@@ -331,14 +284,12 @@ function mapMembershipToAuthUser(membership: AuthMembership, passportId?: string
   return {
     id: membership.id,
     name: membership.displayName || membership.email || 'Cindy',
-    // auth-server 自助头像(PATCH /api/me/profile);null = 未设置,
-    // 后续 product /me 水合时回落产品资料头像(mergeProductProfile)。
+    // auth-server 自助头像(PATCH /api/me/profile);null = 未设置(UI 首字母兜底)。
+    // 产品资料头像回落已随 /api/user/me 退役(2026-07)。
     avatar: membership.avatarUrl ?? null,
     email: membership.email,
     defaultModel: DEFAULT_MODEL,
     defaultEffort: DEFAULT_EFFORT,
-    isCanary: false,
-    feishuOpenId: null,
     membershipKind: membership.kind,
     membershipRole: membership.role,
     orgId: membership.orgId,
@@ -352,33 +303,11 @@ function mergeMembershipWithExisting(membership: AuthMembership, existing: User 
   if (!existing || existing.id !== mapped.id) return mapped;
   return {
     ...mapped,
-    // membership 自助头像优先;未设置时保留既有值(product /me 水合来的产品头像)。
+    // membership 自助头像优先;未设置时保留既有展示值。
     avatar: mapped.avatar ?? existing.avatar,
     defaultModel: existing.defaultModel,
     defaultEffort: existing.defaultEffort,
-    isCanary: existing.isCanary,
-    feishuOpenId: existing.feishuOpenId,
-    role: existing.role,
     passportId: mapped.passportId || existing.passportId,
-  };
-}
-
-function mergeProductProfile(membership: AuthMembership, response: ProductMeResponse): User {
-  const identity = mapMembershipToAuthUser(membership);
-  const product = response.user;
-  // 2026-07 自助资料上线后,昵称/头像以 auth-server membership 为真源
-  // (displayName / avatarUrl),产品资料只作头像未设置时的默认值回落;
-  // 产品资料继续供给 defaultModel / isCanary / feishuId / role 等增强字段。
-  // productAvatarFallback 由各提交点显式维护(本函数保持纯函数)。
-  return {
-    ...identity,
-    avatar: identity.avatar ?? product.avatar,
-    email: product.email ?? identity.email,
-    defaultModel: product.defaultModel || identity.defaultModel,
-    defaultEffort: product.defaultEffort || identity.defaultEffort,
-    isCanary: product.isCanary === true,
-    feishuOpenId: product.feishuId ?? null,
-    role: product.role === 'admin' ? 'admin' : product.role === 'user' ? 'user' : undefined,
   };
 }
 
@@ -785,7 +714,6 @@ function clearAuth(opts: { notify?: boolean } = {}): void {
   accessToken = null;
   currentUser = null;
   currentMigration = undefined;
-  productAvatarFallback = null;
   resetLoginFlowState();
   persistedRefreshTokenNeedsIdentityCheck = false;
   lastAcceptedRefreshToken = null;
@@ -816,13 +744,6 @@ export function getAccessToken(): string | null {
 /** SkillHub v0.2.1: 返回当前登录用户 id（cuid），未登录时返回 null */
 export function getCurrentUserId(): string | null {
   return currentUser?.id ?? null;
-}
-
-/**
- * 返回当前登录用户的 role。未登录或缺字段视为 'user'。
- */
-export function getCurrentUserRole(): 'user' | 'admin' {
-  return currentUser?.role === 'admin' ? 'admin' : 'user';
 }
 
 /** SkillHub 跨设备识别：本机 deviceId（machineIdSync 结果），登录前后都可用 */
@@ -860,7 +781,8 @@ export type UpdateServerProfileResult =
 /**
  * 自助修改昵称/头像:PATCH auth-server /api/me/profile(2026-07 上线,替代
  * 旧的本地覆写方案)。成功后用响应 membership 就地更新 currentUser 并广播
- * 登录态;头像清除(avatarUrl:null)时回落最近一次产品资料头像。
+ * 登录态;头像清除(avatarUrl:null)后 UI 回落首字母兜底(产品资料头像
+ * 回落已随 /api/user/me 退役)。
  * 网络/服务端失败返回 ok:false(status 0 = 网络层失败),不抛异常——
  * IPC 错误语义由调用方 profileEdit 统一映射。
  */
@@ -891,7 +813,7 @@ export async function updateServerProfile(
     currentUser = {
       ...currentUser,
       name: membership.displayName || currentUser.name,
-      avatar: membership.avatarUrl ?? productAvatarFallback,
+      avatar: membership.avatarUrl ?? null,
     };
     notifyRenderer();
     notifyAuthListeners();
@@ -1044,31 +966,16 @@ async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> 
     const refreshData = refreshResult.data as RefreshResponse;
     writeSafe(REFRESH_TOKEN_KEY, refreshData.refreshToken);
     lastAcceptedRefreshToken = refreshData.refreshToken;
-    const meResult = await productApiFetch<ProductMeResponse>('/api/user/me', {
-      token: refreshData.accessToken,
-    });
-    // 迟到守卫②:产品资料请求期间用户手动登录 / 登出过 → 不再提交本轮身份。
-    if (epochChanged('after-me')) {
-      return { user: null, isAuthenticated: false, deviceId };
-    }
-    if (!meResult.ok) {
-      // Product profile is an enhancement over the auth-server membership. Keep
-      // the valid identity online and retry profile hydration on a later refresh.
-      log.warn(
-        `cold-start product /api/user/me failed status=${meResult.status} — using auth membership fallback`,
-      );
-    }
 
     accessToken = refreshData.accessToken;
-    currentUser = meResult.ok
-      ? mergeProductProfile(refreshData.membership, meResult.data)
-      : mapMembershipToAuthUser(refreshData.membership);
-    productAvatarFallback = meResult.ok ? meResult.data.user.avatar : null;
+    // 2026-07 起身份完全以 auth membership 为准(产品 /api/user/me 已退役)。
+    currentUser = mapMembershipToAuthUser(refreshData.membership);
     currentMigration = { status: 'none' };
     persistedRefreshTokenNeedsIdentityCheck = false;
     clearReplacementIntegrationReloadTimers();
-    // canary-release V0.1: 用 server 返回的状态覆盖本地标记（true 写、false 清）
-    canaryFlagStore.sync(currentUser.isCanary === true);
+    // canary 分发已与登录态解耦(isCanary 字段退役):登录路径恒清本地标记,
+    // 存量 canary 用户回稳定通道;后续灰度由其它分发方式接管。
+    canaryFlagStore.sync(false);
     getFeishuService().token.setJwt(refreshData.accessToken);
     scheduleRefresh(refreshData.accessToken);
     // XD / Mivo key 均为本地 only,不再在冷启动从服务器同步到本地。
@@ -1125,23 +1032,6 @@ export async function getLoginState(): Promise<DesktopLoginActionResult> {
   }
 }
 
-async function hydrateCurrentProductProfile(
-  token: string,
-  membership: AuthMembership,
-  expectedEpoch: number,
-): Promise<void> {
-  const result = await productApiFetch<ProductMeResponse>('/api/user/me', { token });
-  if (!result.ok) {
-    log.warn(`product profile hydration failed status=${result.status}`);
-    return;
-  }
-  if (authStateEpoch !== expectedEpoch || currentUser?.id !== membership.id) return;
-  currentUser = mergeProductProfile(membership, result.data);
-  productAvatarFallback = result.data.user.avatar;
-  canaryFlagStore.sync(currentUser.isCanary === true);
-  notifyRenderer();
-}
-
 async function completeLogin(
   outcome: Extract<LoginOutcome, { status: 'ok' }>,
 ): Promise<AuthFlowState> {
@@ -1168,8 +1058,6 @@ async function completeLogin(
   lastAcceptedRefreshToken = outcome.refreshToken;
   clearReloginFlag();
   currentUser = mapMembershipToAuthUser(outcome.membership);
-  // 上一账号的产品头像回落不带入本次登录(product /me 水合后重建)。
-  productAvatarFallback = null;
   currentMigration = { status: 'none' };
   canaryFlagStore.sync(false);
   getFeishuService().token.setJwt(outcome.accessToken);
@@ -1180,9 +1068,6 @@ async function completeLogin(
   loginFlowState = reduceAuthFlow(loginFlowState, { type: 'outcome', outcome });
   notifyRenderer();
   notifyAuthListeners();
-  void hydrateCurrentProductProfile(outcome.accessToken, outcome.membership, loginEpoch).catch(
-    (error) => log.error('product profile hydration after login failed', error),
-  );
   return loginFlowState;
 }
 
@@ -1440,20 +1325,9 @@ export async function refresh(): Promise<boolean> {
         persistedRefreshTokenNeedsIdentityCheck = true;
         writeSafe(REFRESH_TOKEN_KEY, data.refreshToken);
         lastAcceptedRefreshToken = data.refreshToken;
-        const meResult = await productApiFetch<ProductMeResponse>('/api/user/me', {
-          token: data.accessToken,
-        });
-        if (refreshWasSuperseded('after-product-me')) return false;
-        if (!meResult.ok) {
-          log.warn(
-            `runtime replacement refresh product /api/user/me failed status=${meResult.status} — using auth membership fallback`,
-          );
-        }
 
         const previousUserId = currentUser?.id ?? null;
-        const nextUser = meResult.ok
-          ? mergeProductProfile(data.membership, meResult.data)
-          : mergeMembershipWithExisting(data.membership, currentUser);
+        const nextUser = mergeMembershipWithExisting(data.membership, currentUser);
         const accountSwitched = previousUserId !== null && previousUserId !== nextUser.id;
         if (accountSwitched) {
           log.warn(
@@ -1480,12 +1354,6 @@ export async function refresh(): Promise<boolean> {
 
         accessToken = data.accessToken;
         currentUser = nextUser;
-        if (meResult.ok) {
-          productAvatarFallback = meResult.data.user.avatar;
-        } else if (accountSwitched) {
-          // 换号且产品资料未拉到:旧账号的回落头像不能带给新账号。
-          productAvatarFallback = null;
-        }
         currentMigration = { status: 'none' };
         persistedRefreshTokenNeedsIdentityCheck = false;
         getProviderSecretStore().reconcileOwner(currentUser.id);
@@ -1499,7 +1367,8 @@ export async function refresh(): Promise<boolean> {
           if (refreshWasSuperseded('after-integration-reload')) return false;
           scheduleReplacementIntegrationReloadRetries(currentUser.id);
         }
-        canaryFlagStore.sync(currentUser.isCanary === true);
+        // canary 分发已与登录态解耦(isCanary 字段退役),恒清本地标记。
+        canaryFlagStore.sync(false);
         getFeishuService().token.setJwt(data.accessToken);
         scheduleRefresh(data.accessToken);
         notifyRenderer();
@@ -1517,10 +1386,6 @@ export async function refresh(): Promise<boolean> {
       currentMigration = { status: 'none' };
       getFeishuService().token.setJwt(data.accessToken);
       scheduleRefresh(data.accessToken);
-      const hydrationEpoch = authStateEpoch;
-      void hydrateCurrentProductProfile(data.accessToken, data.membership, hydrationEpoch).catch(
-        (error) => log.error('product profile hydration after refresh failed', error),
-      );
       // Push updated migration snapshot down to renderer via auth:state-change
       notifyRenderer();
       return true;

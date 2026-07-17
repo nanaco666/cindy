@@ -3044,7 +3044,6 @@
     },
     "user": {
       "settingsLink": "设置, 当前用户: {{name}}",
-      "adminBadge": "管理员",
       "viewReleaseNotes": "查看版本日志",
       "reopenUpdateBanner": "有更新待重启,点击查看"
     },
@@ -5717,7 +5716,6 @@
       "openFileFailed": "无法在系统中打开文件",
       "emptyResponse": "模型返回了空响应,请重试。(本轮未产出任何内容,常见于模型网关在大上下文 / 高负载下返回空流)",
       "turnFailed": "任务执行失败（模型未返回错误详情），请重试。",
-      "requestFailed": "请求失败",
       "sendFailed": "发送失败：{{message}}",
       "steerNoActiveTurn": "当前没有正在执行的任务，无法插话",
       "steerRequiresRestart": "插话功能需要重启桌面端后生效；这条消息未被清空",

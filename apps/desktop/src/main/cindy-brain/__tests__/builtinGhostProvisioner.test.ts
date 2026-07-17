@@ -72,8 +72,8 @@ async function writeConfig(config: unknown): Promise<void> {
   await fs.promises.writeFile(path.join(seedRootDir, PROVISIONING_CONFIG_FILE), content);
 }
 
-const alice: ProvisionIdentity = { userId: 'u-alice', email: 'Alice@XD.com', role: 'user' };
-const bob: ProvisionIdentity = { userId: 'u-bob', email: null, role: 'admin' };
+const alice: ProvisionIdentity = { userId: 'u-alice', email: 'Alice@XD.com' };
+const bob: ProvisionIdentity = { userId: 'u-bob', email: null };
 
 function installedFile(id: string, rel: string): string {
   return fs.readFileSync(path.join(repoRootDir, id, rel), 'utf-8');
@@ -196,8 +196,9 @@ describe('matchesAudience · 受众命中判定', () => {
   it('对象规则:任一维度命中即命中;email 大小写不敏感', () => {
     expect(matchesAudience({ userIds: ['u-alice'] }, alice)).toBe(true);
     expect(matchesAudience({ emails: ['alice@xd.com'] }, alice)).toBe(true);
-    expect(matchesAudience({ roles: ['admin'] }, bob)).toBe(true);
-    expect(matchesAudience({ userIds: ['u-x'], emails: ['x@xd.com'], roles: ['admin'] }, alice)).toBe(false);
+    expect(matchesAudience({ userIds: ['u-x'], emails: ['x@xd.com'] }, alice)).toBe(false);
+    // 已退役的 roles 维度按"不认识的字段"处理:其它维度不命中即不装(fail-closed)。
+    expect(matchesAudience({ roles: ['admin'] } as never, bob)).toBe(false);
   });
 
   it('fail-closed:登出 / 空对象 / 不认识的形态一律不命中', () => {

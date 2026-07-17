@@ -36,11 +36,7 @@ import {
   parseOAuthCallbackUrl,
 } from '@/auth/oauthCallback';
 import { createPkcePair, createState } from '@/auth/pkce';
-import {
-  mergeMembershipWithExisting,
-  mergeProductProfile,
-  type ProductMeUser,
-} from '@/auth/profileMerge';
+import { mergeMembershipWithExisting } from '@/auth/profileMerge';
 import {
   deleteSecureItem,
   getSecureItem,
@@ -65,6 +61,8 @@ const PENDING_OAUTH_KEY = 'cindy.mobile.auth.pendingOAuth';
 const LEGACY_PENDING_OAUTH_KEY = 'xdt.mobile.pendingOAuth';
 const PENDING_OAUTH_MAX_AGE_MS = 10 * 60 * 1000;
 const AUTH_STARTUP_GATE_TIMEOUT_MS = 20 * 1000;
+// 2026-07 产品 /api/user/me 退役:身份完全以 auth-server membership 为准,
+// 原产品增强字段(role/isCanary/feishuId)一并下线(与 desktop 同步)。
 export interface MobileUser {
   id: string;
   name: string;
@@ -72,16 +70,11 @@ export interface MobileUser {
   email: string | null;
   defaultModel: string;
   defaultEffort: string;
-  role?: 'user' | 'admin';
   membershipKind: 'personal' | 'org';
   membershipRole: 'owner' | 'admin' | 'member';
   orgId: string | null;
   orgName: string | null;
   passportId: string;
-}
-
-interface ProductMeResponse {
-  user: ProductMeUser;
 }
 
 export type MobileLoginAction =
@@ -205,32 +198,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       did: string,
       expectedGeneration = authGenerationRef.current,
     ): Promise<void> => {
-      const [identityResult, productResult] = await Promise.allSettled([
-        authClientFor(did).getMe(token),
-        apiFetchRaw<ProductMeResponse>('/api/user/me', { token }),
-      ]);
+      // 2026-07 起只拉 auth-server 身份(产品 /api/user/me 已退役)。
+      const identityResult = await authClientFor(did)
+        .getMe(token)
+        .then(
+          (value) => ({ status: 'fulfilled' as const, value }),
+          () => ({ status: 'rejected' as const }),
+        );
       if (authGenerationRef.current !== expectedGeneration) return;
 
-      let next = userRef.current;
       if (identityResult.status === 'fulfilled') {
-        next = mergeMembershipWithExisting(
+        const next = mergeMembershipWithExisting(
           identityResult.value.membership,
-          next,
+          userRef.current,
           identityResult.value.passportId,
         );
+        applyUser(next);
       }
-      if (next && productResult.status === 'fulfilled') {
-        // 头像收敛必须用本轮新鲜 membership 的 avatarUrl(null=明确未设置),
-        // 不能拿合并态 next.avatar 判断(见 profileMerge.mergeProductProfile 注释)。
-        next = mergeProductProfile(
-          next,
-          productResult.value.user,
-          identityResult.status === 'fulfilled'
-            ? (identityResult.value.membership.avatarUrl ?? null)
-            : undefined,
-        );
-      }
-      if (next) applyUser(next);
     },
     [applyUser],
   );
@@ -817,7 +801,7 @@ function authClientFor(deviceId: string): CindyAuthClient {
   });
 }
 
-// mapMembershipToMobileUser / mergeMembershipWithExisting / mergeProductProfile
+// mapMembershipToMobileUser / mergeMembershipWithExisting
 // 已抽至 @/auth/profileMerge(纯函数,便于单测)。
 
 /** Unblocks initial rendering without aborting a rotating refresh-token request. */

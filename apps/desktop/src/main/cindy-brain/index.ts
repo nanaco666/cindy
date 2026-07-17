@@ -204,7 +204,6 @@ function currentProvisionIdentity(): ProvisionIdentity | null {
   return {
     userId: state.user.id,
     email: state.user.email,
-    role: state.user.role ?? 'user',
   };
 }
 

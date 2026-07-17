@@ -124,7 +124,7 @@ describe('mobile auth-server login', () => {
     expect(loginSource).not.toContain('bindTicket');
   });
 
-  it('serializes rotated-token writes and keeps product profile hydration', () => {
+  it('serializes rotated-token writes and keeps identity on auth-server only', () => {
     const authSource = readFileSync(
       resolve(process.cwd(), 'src/auth/AuthContext.tsx'),
       'utf8',
@@ -137,9 +137,8 @@ describe('mobile auth-server login', () => {
     expect(authSource).toMatch(
       /if \(authGenerationRef\.current !== generation\) return null;\s+setToken\(pair\.accessToken\)/,
     );
-    expect(authSource).toContain(
-      "apiFetchRaw<ProductMeResponse>('/api/user/me', { token })",
-    );
+    // 2026-07 产品 /api/user/me 退役:身份只经 auth-server getMe,防复活。
+    expect(authSource).not.toContain("'/api/user/me'");
     expect(authSource).toContain("throw authCodeError('AUTH_FLOW_SUPERSEDED')");
     expect(authSource).toMatch(
       /code === 'INVALID_LOGIN_TICKET'\s*\|\|\s*code === 'INVALID_BIND_TICKET'/,

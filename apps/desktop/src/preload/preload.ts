@@ -1077,7 +1077,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // ── Slack Bot (Settings → Slack Bot tab) ──
-  // 公司共享 Slack App;绑定/解绑直接走 apiRequest 打 server(oauth / link),
+  // 公司共享 Slack App;绑定/解绑由 main 侧 SlackIM transport 打 server,
   // 这里只暴露 lizi-im SlackIM 的 transport 状态(SSE 连接 + 绑定身份快照)。
   slackBot: {
     getStatus: (): Promise<{
@@ -1261,26 +1261,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onAppUpdateProgress: fanOutAppUpdateProgress,
 
-  // Generic API request proxy — all backend HTTP calls go through main process.
-  // Auth token is auto-attached by main process; 401 auto-refreshes.
-  apiRequest: (params: {
-    path: string;
-    method?: string;
-    body?: unknown;
-  }): Promise<{ ok: boolean; status: number; data: unknown }> =>
-    ipcRenderer.invoke('api:request', params),
-
-  // ── 图片上传：渲染端转码后把字节交给 main，由 main PUT 到 OSS ──
-  // 流程：renderer 用 apiRequest 调 /api/image-upload/presign 拿 putUrl + publicUrl，
-  //      再调本桥把字节 PUT 到 OSS（main 进程负责网络通讯，符合 CLAUDE.md 设计规范 #1）。
-  imageUpload: {
-    putToOss: (params: {
-      putUrl: string;
-      contentType: string;
-      bytes: ArrayBuffer;
-    }): Promise<{ ok: boolean; status: number; error?: string }> =>
-      ipcRenderer.invoke('image-upload:put-to-oss', params),
-  },
+  // apiRequest(renderer → main → 主 server 通用代理)与 imageUpload.putToOss
+  // (presign 直传桥)已随 2026-07 apiBaseUrl 清理退役:renderer 对业务 server
+  // 零请求;头像等上传走 main 侧 profileEdit 链路。
 
   // ── Workdir File Browser (vscode-style file tree + content viewer) ──
   // All paths in/out are workdir-relative POSIX. Main side blocks traversal.

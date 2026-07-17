@@ -23,7 +23,6 @@ import {
   type User,
 } from '@/lib/authService';
 import { setCurrentUserName } from '@/lib/makerChatStore';
-import * as meService from '@/lib/meService';
 import { sessionsStore } from '@/lib/sessionsStore';
 
 /**
@@ -68,47 +67,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authServiceRef.current = createAuthService();
   }
 
-  /** 已合并 role 的用户 id 集合（去抖：避免 onAuthStateChange 多次触发重复请求）。 */
-  const fetchedRoleForUserRef = useRef<Set<string>>(new Set());
-  const roleByUserRef = useRef<Map<string, User['role']>>(new Map());
   const activeUserIdRef = useRef<string | null>(null);
-  const activeUserRevisionRef = useRef(0);
   const authStateVersionRef = useRef(0);
 
   /**
-   * V0.3：合并 role 进 user。失败不阻断（视为 user）。
-   * 同一 user.id 只拉一次（用 fetchedRoleForUserRef 去抖）。
+   * 身份即 auth-server membership(产品 role 水合已随 /api/me 退役,2026-07)。
+   * 这里只负责账号切换时清 renderer 会话快照,防旧账号的在途响应/挂载态泄漏。
    */
-  const mergeRoleIntoUser = useCallback(async (incoming: User) => {
-    const revision = ++activeUserRevisionRef.current;
+  const applyIncomingUser = useCallback((incoming: User) => {
     if (activeUserIdRef.current !== incoming.id) {
-      // Auth transitions can leave an old request in flight. Clear the
-      // renderer session snapshot before exposing the new identity so that
-      // neither the old response nor the old mounted hook state can leak.
       sessionsStore.reset();
     }
     activeUserIdRef.current = incoming.id;
-    // Identity changes should render immediately. Product-role hydration is a
-    // non-blocking enhancement and may never overwrite a newer account/logout.
-    const cachedRole = incoming.role ?? roleByUserRef.current.get(incoming.id);
-    const visibleUser = cachedRole ? { ...incoming, role: cachedRole } : incoming;
-    setUser(visibleUser);
-    if (cachedRole) {
-      return;
-    }
-    if (fetchedRoleForUserRef.current.has(incoming.id)) {
-      return;
-    }
-    fetchedRoleForUserRef.current.add(incoming.id);
-    try {
-      const me = await meService.getMe();
-      roleByUserRef.current.set(incoming.id, me.role);
-      if (activeUserIdRef.current !== incoming.id || activeUserRevisionRef.current !== revision)
-        return;
-      setUser({ ...incoming, role: me.role });
-    } catch {
-      // The identity was already rendered above; product role defaults to user.
-    }
+    setUser(incoming);
   }, []);
 
   useEffect(() => {
@@ -119,16 +90,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authStateVersionRef.current += 1;
       setIsAuthenticated(state.isAuthenticated);
       setDeviceId(state.deviceId);
-      // V0.3：user 设置走 mergeRoleIntoUser，登出时清空 role 缓存
       if (state.user) {
         setLoginState(null);
-        void mergeRoleIntoUser(state.user);
+        applyIncomingUser(state.user);
       } else {
         sessionsStore.reset();
         activeUserIdRef.current = null;
         setLoginState(null);
-        fetchedRoleForUserRef.current.clear();
-        roleByUserRef.current.clear();
         clearWorkersCache();
         setUser(null);
       }
@@ -148,11 +116,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsAuthenticated(state.isAuthenticated);
         setDeviceId(state.deviceId);
         if (state.user) {
-          await mergeRoleIntoUser(state.user);
+          applyIncomingUser(state.user);
         } else {
           activeUserIdRef.current = null;
           setLoginState(null);
-          roleByUserRef.current.clear();
           clearWorkersCache();
           setUser(null);
         }
@@ -164,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       unsubscribe();
       service.dispose();
     };
-  }, [mergeRoleIntoUser]);
+  }, [applyIncomingUser]);
 
   useEffect(() => {
     let handling = false;
@@ -178,8 +145,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         showCancel: false,
       }).then(() => {
         activeUserIdRef.current = null;
-        fetchedRoleForUserRef.current.clear();
-        roleByUserRef.current.clear();
         sessionsStore.reset();
         clearWorkersCache();
         setUser(null);

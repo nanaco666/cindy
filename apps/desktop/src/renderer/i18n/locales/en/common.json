@@ -3044,7 +3044,6 @@
     },
     "user": {
       "settingsLink": "Settings, current user: {{name}}",
-      "adminBadge": "Admin",
       "viewReleaseNotes": "View release notes",
       "reopenUpdateBanner": "Update ready — click to review"
     },
@@ -5726,7 +5725,6 @@
       "openFileFailed": "Cannot open file in system",
       "emptyResponse": "The model returned an empty response — please retry. (Nothing was produced this turn; this often happens when the model gateway short-circuits under large context or high load.)",
       "turnFailed": "The task failed (the model returned no error detail) — please retry.",
-      "requestFailed": "Request failed",
       "sendFailed": "Send failed: {{message}}",
       "steerNoActiveTurn": "No task is currently running, so this message cannot be steered",
       "steerRequiresRestart": "Steer needs a desktop restart before it can take effect; this message was not cleared",

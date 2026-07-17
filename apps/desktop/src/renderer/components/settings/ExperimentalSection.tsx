@@ -4,6 +4,8 @@
  * 风格对齐 NotificationSection：rounded-xl card、相同的 settings CSS variables。
  *
  * LSP 这类实验能力有专用 IPC 行；普通实验功能由 EXPERIMENTAL_FEATURES 驱动。
+ * 全员可见(2026-07 与 Lizi 定案):原 admin 门控随产品级 role 退役——实验
+ * 开关都是本地 flag、默认关闭,对普通用户无破坏性。
  */
 
 import { useNavigate } from 'react-router-dom';
@@ -11,7 +13,6 @@ import { useTranslation } from 'react-i18next';
 
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/contexts/AuthContext';
 import {
   EXPERIMENTAL_FEATURES,
   useExperimentalFlag,
@@ -20,9 +21,7 @@ import {
 import { LspBetaCell } from './LspBetaCell';
 
 export function ExperimentalSection() {
-  const { user } = useAuth();
   const { t } = useTranslation();
-  if (user?.role !== 'admin') return null;
 
   return (
     <div className="flex flex-col gap-[14px]">

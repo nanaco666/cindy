@@ -1591,18 +1591,6 @@ interface ElectronAPI {
     error?: 'manifest_failed' | 'download_failed';
   }>;
   onAppUpdateProgress: (callback: (payload: AppUpdateProgressPayload) => void) => () => void;
-  apiRequest: (params: {
-    path: string;
-    method?: string;
-    body?: unknown;
-  }) => Promise<{ ok: boolean; status: number; data: unknown }>;
-  imageUpload: {
-    putToOss: (params: {
-      putUrl: string;
-      contentType: string;
-      bytes: ArrayBuffer;
-    }) => Promise<{ ok: boolean; status: number; error?: string }>;
-  };
   fileBrowser: {
     listDir: (params: {
       /** 非空 = SSH remote 会话,操作经远端 file-service 执行(main 侧路由)。 */
