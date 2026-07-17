@@ -69,8 +69,9 @@ final class XdtWechatAuthCoordinator: NSObject, WXApiDelegate {
       rejectPending(code: "ERR_WECHAT_STATE_MISMATCH", message: "WeChat state verification failed.")
       return
     }
-    guard auth.errCode == WXSuccess, let code = auth.code, !code.isEmpty else {
-      let errorCode = auth.errCode == WXErrCodeUserCancel
+    // SDK 的 errCode 是 Int32,WXSuccess / WXErrCodeUserCancel 桥进 Swift 是 WXErrCode 枚举,须取 rawValue 比较。
+    guard auth.errCode == WXSuccess.rawValue, let code = auth.code, !code.isEmpty else {
+      let errorCode = auth.errCode == WXErrCodeUserCancel.rawValue
         ? "ERR_WECHAT_CANCELLED"
         : "ERR_WECHAT_LOGIN_FAILED"
       rejectPending(code: errorCode, message: "WeChat authorization did not complete.")

@@ -17,7 +17,7 @@
     "ios": {
       "bundleIdentifier": "com.xd.cindycn",
       "usesAppleSignIn": true,
-      "buildNumber": "2026071401",
+      "buildNumber": "2026071701",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "UISupportedInterfaceOrientations": [
@@ -53,6 +53,7 @@
     "plugins": [
       "./plugins/with-third-party-notices",
       "./plugins/with-google-signin-modular-headers",
+      "./plugins/with-wechat-opensdk-modulemap",
       "expo-router",
       "expo-apple-authentication",
       "expo-secure-store",
