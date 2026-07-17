@@ -22,6 +22,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CLIENT_ENDPOINT_KEYS,
+  CLIENT_ENDPOINT_REVIEW_KEY,
   CLIENT_ENDPOINTS_SCHEMA_VERSION,
   parseClientEndpointManifest,
 } from '../clientEndpoints';
@@ -51,7 +52,7 @@ describe.each(MANIFESTS)('config/endpoint*.json 守门($label)', ({ filePath }) 
     const keys = Object.keys(parsed).filter(
       (key) => key !== 'schemaVersion' && !key.startsWith('_'),
     );
-    const allowed = new Set<string>(CLIENT_ENDPOINT_KEYS);
+    const allowed = new Set<string>([...CLIENT_ENDPOINT_KEYS, CLIENT_ENDPOINT_REVIEW_KEY]);
     expect(keys.filter((key) => !allowed.has(key))).toEqual([]);
   });
 });

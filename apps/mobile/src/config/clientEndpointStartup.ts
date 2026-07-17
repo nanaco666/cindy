@@ -49,7 +49,7 @@ async function fetchManifestTextViaCdn(timeoutMs: number): Promise<string | null
 /** 测试注入点;生产走默认实现。 */
 export interface StartupEndpointResolveDeps {
   fetchManifestText?: (timeoutMs: number) => Promise<string | null>;
-  apply?: (resolved: ClientEndpointMap) => void;
+  apply?: (resolved: ClientEndpointMap & { review: boolean }) => void;
   timeoutMs?: number;
 }
 
@@ -74,7 +74,7 @@ export async function runStartupEndpointResolve(
     }
     const result = resolveClientEndpointsStrict(rawText);
     if (!result.ok) return { ok: false, reason: result.reason };
-    (deps.apply ?? applyResolvedClientEndpoints)(result.endpoints);
+    (deps.apply ?? applyResolvedClientEndpoints)({ ...result.endpoints, review: result.review });
     return { ok: true };
   } catch {
     return { ok: false, reason: 'internal-error' };

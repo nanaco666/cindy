@@ -52,6 +52,28 @@ describe('runStartupEndpointResolve(清单即唯一事实源)', () => {
     expect(env.MOBILE_VOICE_LITELLM_BASE_URL).toBe('https://gateway.example.invalid');
     // 非自建变体(IS_OTA_SELFHOST=false):mobileUpdateBaseUrl 不覆写,恒空串
     expect(env.OTA_SERVER_BASE_URL).toBe('');
+    // 清单未带 review 字段 → 审核模式保持默认 false
+    expect(env.REVIEW_MODE).toBe(false);
+  });
+
+  it('清单 review=true → REVIEW_MODE live binding 置 true(审核模式)', async () => {
+    const { env, startup } = await freshModules();
+    expect(env.REVIEW_MODE).toBe(false);
+    const outcome = await startup.runStartupEndpointResolve({
+      fetchManifestText: async () => JSON.stringify({ ...FULL_MANIFEST_OBJECT, review: true }),
+    });
+    expect(outcome).toEqual({ ok: true });
+    expect(env.REVIEW_MODE).toBe(true);
+  });
+
+  it('清单 review 非 boolean → 整份拒绝(阻断),env 不动', async () => {
+    const { env, startup } = await freshModules();
+    const outcome = await startup.runStartupEndpointResolve({
+      fetchManifestText: async () => JSON.stringify({ ...FULL_MANIFEST_OBJECT, review: 'true' }),
+    });
+    expect(outcome).toEqual({ ok: false, reason: 'invalid-field:review' });
+    expect(env.REVIEW_MODE).toBe(false);
+    expect(env.API_BASE_URL).toBe('https://api.example.invalid');
   });
 
   it('自建变体(IS_OTA_SELFHOST=1):mobileUpdateBaseUrl 覆写整包发现基址(可远程迁域名)', async () => {

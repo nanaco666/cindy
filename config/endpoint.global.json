@@ -11,5 +11,6 @@
   "websiteUrl": "https://cindy.com.cn",
   "modelAccessApiBaseUrl": "https://xdmaker-model-access.magiclizi.com",
   "cdnBaseUrl": "https://dev-cdn.fp.xd.com/xdt-maker",
-  "mobileUpdateBaseUrl": "https://mobile-update.cindy.com.cn"
+  "mobileUpdateBaseUrl": "https://mobile-update.cindy.com.cn",
+  "review": false
 }

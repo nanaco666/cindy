@@ -42,6 +42,9 @@
  *    cdnBaseUrl)同样没有 bump:删必填字段对**新客户端**是纯放松(清单里多出
  *    的该字段按未知字段忽略);退役时新路径清单尚无已发布的 packaged 消费者,
  *    线上清单已同步删除,无兼容包袱。
+ *  - 2026-07-17 追加可选布尔字段 review(手机版审核模式开关,见
+ *    CLIENT_ENDPOINT_REVIEW_KEY)同样没有 bump:可选字段、缺失即 false,
+ *    老清单不受影响;老客户端按未知字段忽略。
  *  - 2026-07-17 退役 xdGatewayBaseUrl(同样不 bump,理由同上):XD 网关推理
  *    入口一律由 model-access server 随凭据成对下发(desktop
  *    model-access/effectiveEndpoint.ts),清单不再承载网关端点,杜绝
@@ -85,6 +88,23 @@ export type ClientEndpointKey = (typeof CLIENT_ENDPOINT_KEYS)[number];
 /** 解析成功后的端点全集(全字段必有值,值全部来自清单)。 */
 export type ClientEndpointMap = Record<ClientEndpointKey, string>;
 
+/**
+ * 可选布尔开关字段:`review` = 手机版审核模式(App 审核期间置 true:mobile
+ * 关闭全部 **JS 显式更新检查路径**——启动 JS 热更门 / 整包检查 / resume 静默
+ * 检查,设置页隐藏「检查更新 / 检查整包更新」;desktop 不消费)。
+ * **可选、缺失即 false**——线上已发布的清单没有该字段,若设为必填会让新客户端
+ * 对老清单启动阻断;可选纯增量也是不 bump schemaVersion 的前提(见上方版本注释)。
+ * 存在但非 boolean 视为配置错,整份拒绝(阻断语义:配置错要炸出来,不静默猜测)。
+ * 覆盖边界与影响面(置 true 前必须知晓):
+ *  - **管不到 expo-updates 原生层**:CheckOnLaunch 是 build-time 原生配置
+ *    (当前烘焙 ALWAYS),冷启动仍会后台静默 check+下载、下次启动生效——
+ *    该缺口无法用运行时清单字段封,审核窗口内需同时冻结热更发布;
+ *  - **region 级全量开关**:清单被该 region 所有存量 mobile 客户端共享,置
+ *    true 期间全量用户(不只送审构建)的 JS 更新检查与强更弹窗一并停摆,
+ *    审核结束必须及时改回 false。
+ */
+export const CLIENT_ENDPOINT_REVIEW_KEY = 'review';
+
 /** 各字段允许的 URL 协议白名单。 */
 const FIELD_PROTOCOLS: Record<ClientEndpointKey, readonly string[]> = {
   apiBaseUrl: ['https:'],
@@ -116,12 +136,13 @@ function allowedProtocols(key: ClientEndpointKey, allowHttp: boolean): readonly 
 }
 
 export type ParseClientEndpointManifestResult =
-  | { ok: true; endpoints: ClientEndpointMap }
+  | { ok: true; endpoints: ClientEndpointMap; review: boolean }
   | { ok: false; reason: string };
 
 /**
  * 解析并校验一份清单原文。纯函数,输入任意文本都不会抛出。
- * 全字段必填:缺失 / 非法 / 协议不符 / 带凭据,任一命中整份拒绝。
+ * 端点全字段必填:缺失 / 非法 / 协议不符 / 带凭据,任一命中整份拒绝;
+ * `review` 可选布尔,缺失 = false(语义见 CLIENT_ENDPOINT_REVIEW_KEY)。
  */
 export function parseClientEndpointManifest(
   rawText: string,
@@ -174,11 +195,17 @@ export function parseClientEndpointManifest(
     }
     endpoints[key] = normalized;
   }
-  return { ok: true, endpoints };
+
+  const rawReview = record[CLIENT_ENDPOINT_REVIEW_KEY];
+  if (rawReview !== undefined && typeof rawReview !== 'boolean') {
+    return { ok: false, reason: `invalid-field:${CLIENT_ENDPOINT_REVIEW_KEY}` };
+  }
+
+  return { ok: true, endpoints, review: rawReview === true };
 }
 
 export type ResolveClientEndpointsResult =
-  | { ok: true; endpoints: ClientEndpointMap }
+  | { ok: true; endpoints: ClientEndpointMap; review: boolean }
   | { ok: false; reason: string };
 
 /**

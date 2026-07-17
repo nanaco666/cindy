@@ -23,16 +23,17 @@ export const MOBILE_REDIRECT_URL = `${APP_SCHEME}://auth`;
 // 显式 EXPO_PUBLIC_* env 仍然优先——「手机连本地 server」的既有工作流不变。
 // prod(非 __DEV__)此处为空:生效端点由启动闸门拉取的 endpoint.json 回填
 // live binding,闸门放行前业务树不挂载,初值空串不会被真实消费。
-const DEV_MANIFEST: Partial<Record<string, string>> = (() => {
-  if (!__DEV__) return {};
+const DEV_MANIFEST_PARSED = (() => {
+  if (!__DEV__) return null;
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const raw: unknown = require('../../../../config/endpoint.json');
   const parsed = parseClientEndpointManifest(JSON.stringify(raw), { allowHttp: true });
   if (!parsed.ok) {
     throw new Error(`config/endpoint.json invalid (${parsed.reason}) — dev 端点正本必须能过客户端 parser`);
   }
-  return parsed.endpoints;
+  return parsed;
 })();
+const DEV_MANIFEST: Partial<Record<string, string>> = DEV_MANIFEST_PARSED?.endpoints ?? {};
 
 // 显式 env 优先,dev 回落仓内正本;prod 为空串(闸门回填,见上)。
 export const DEFAULT_API_BASE_URL =
@@ -162,6 +163,15 @@ export let DEVICE_LINK_API_BASE_URL = resolveDeviceLinkApiBaseUrl(
   API_BASE_URL,
 );
 
+// 手机版审核模式(清单可选字段 review,缺失 = false):App 审核期间线上清单置
+// true → 关闭全部 JS 显式更新检查(启动 JS 热更门 / 整包检查 / resume 静默检查),
+// 设置页隐藏「检查更新 / 检查整包更新」。覆盖边界与全量影响面(原生层后台检查
+// 管不到、region 级全量开关)见 maker-shared clientEndpoints 的
+// CLIENT_ENDPOINT_REVIEW_KEY 注释。live binding:prod 由启动闸门回填,闸门 ready
+// 前业务树不挂载,消费点(更新 hooks / 设置页)读到的一定是清单值;dev 读仓内
+// 正本。仅 mobile 消费,desktop 忽略该字段。
+export let REVIEW_MODE = DEV_MANIFEST_PARSED?.review ?? false;
+
 // 非 live binding(清单不再承载语音网关地址,启动闸门无覆写路径):env 覆写为空时
 // 即空串,真实地址走桌面端凭据同步(mobileVoiceCredentialStore 的 proxyBaseUrl)。
 export const MOBILE_VOICE_LITELLM_BASE_URL = DEFAULT_MOBILE_VOICE_LITELLM_BASE_URL
@@ -188,6 +198,8 @@ export function applyResolvedClientEndpoints(resolved: {
   authApiBaseUrl?: string;
   deviceLinkApiBaseUrl?: string;
   mobileUpdateBaseUrl?: string;
+  /** 审核模式开关(parser 产出的布尔;缺失不改动,保持当前值)。 */
+  review?: boolean;
 }): void {
   if (resolved.apiBaseUrl) {
     API_BASE_URL = normalizeBaseUrl(resolved.apiBaseUrl);
@@ -207,6 +219,9 @@ export function applyResolvedClientEndpoints(resolved: {
   // (调用点虽都有 IS_OTA_SELFHOST 门控,这里再挡一层,变体身份始终由烧包决定)。
   if (resolved.mobileUpdateBaseUrl && IS_OTA_SELFHOST) {
     OTA_SERVER_BASE_URL = resolved.mobileUpdateBaseUrl.replace(/\/+$/, '');
+  }
+  if (typeof resolved.review === 'boolean') {
+    REVIEW_MODE = resolved.review;
   }
 }
 

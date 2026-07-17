@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Linking, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
-import { IS_OTA_SELFHOST } from '@/config/env';
+import { IS_OTA_SELFHOST, REVIEW_MODE } from '@/config/env';
 import { fetchLatestRelease } from './fetchLatestRelease';
 import { evaluateBundleUpdate, preferredInstallUrl } from './bundleUpdate';
 import { markForcedPrompted } from './resumeUpdateCheck';
@@ -70,7 +70,8 @@ export function useBundleUpdatePrompt({ auto = true, notifyWhenUpToDate = false 
   const inFlight = useRef(false);
 
   const checkNow = useCallback(async () => {
-    if (!IS_OTA_SELFHOST || inFlight.current) return;
+    // 审核模式:入口按钮已隐藏,这里再挡一层(状态由代码保证,不依赖 UI 层记得隐藏)。
+    if (!IS_OTA_SELFHOST || REVIEW_MODE || inFlight.current) return;
     inFlight.current = true;
     setState('checking');
     try {
