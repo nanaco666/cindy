@@ -217,6 +217,48 @@ describe('credentialsSync', () => {
     expect(h.store.getSource()).toBeNull();
   });
 
+  it('异常 2xx 响应(空 key / 坏 endpoint)不覆盖本地凭据,按可重试失败处理', async () => {
+    const h = makeHarness();
+    h.setLocalKey('sk-old');
+    h.fetchMock.mockResolvedValue({ endpoint: 'not-a-url', apiKey: '' });
+
+    const result = await h.sync.sync();
+    expect(result.state).toBe('failed');
+    expect(h.written).toEqual([]); // 本地 key 原样保留
+    expect(h.store.getSource()).toBeNull(); // endpoint 不落盘
+  });
+
+  it('换号(A→B,不经过登出)作废 A 的在途响应:不写盘,并为 B 发起新请求', async () => {
+    const h = makeHarness();
+    const resolvers: Array<(v: CredentialsPayload) => void> = [];
+    h.fetchMock.mockImplementation(
+      () => new Promise<CredentialsPayload>((r) => resolvers.push(r)),
+    );
+
+    h.sync.handleAuthChange({ isAuthenticated: true, userId: 'user-a' });
+    await Promise.resolve();
+    expect(h.fetchMock).toHaveBeenCalledTimes(1);
+
+    // A 的请求在途时切到 B —— 必须作废旧请求并新发一轮
+    h.sync.handleAuthChange({ isAuthenticated: true, userId: 'user-b' });
+    await Promise.resolve();
+    expect(h.fetchMock).toHaveBeenCalledTimes(2);
+
+    // A 的响应迟到:绝不写盘
+    resolvers[0]({ endpoint: 'https://tenant-a.test.invalid', apiKey: 'sk-a' });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(h.written).toEqual([]);
+
+    // B 的响应正常落盘
+    resolvers[1]({ endpoint: 'https://tenant-b.test.invalid', apiKey: 'sk-b' });
+    await vi.waitFor(() => {
+      expect(h.sync.getStatus().state).toBe('ok');
+    });
+    expect(h.written).toEqual(['sk-b']);
+    expect(h.store.getServerEndpoint()).toBe('https://tenant-b.test.invalid');
+  });
+
   it('登录触发 handleAuthChange(true) 自动同步', async () => {
     const h = makeHarness();
     h.fetchMock.mockResolvedValue({ endpoint: 'https://laxa.test.invalid', apiKey: 'sk-u1' });

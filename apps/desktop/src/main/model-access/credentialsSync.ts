@@ -42,6 +42,24 @@ export interface CredentialsPayload {
   apiKey: string;
 }
 
+/**
+ * 下发凭据的落盘前校验:serverApiFetch 不做运行时字段验证,服务端/中间层异常
+ * 地以 2xx 返回空 key / 非法 endpoint 时,绝不能覆盖本机可用凭据(PR review
+ * P1)。不合法按可重试失败处理,保留既有凭据。
+ */
+export function isValidCredentialsPayload(p: unknown): p is CredentialsPayload {
+  if (typeof p !== 'object' || p === null) return false;
+  const { apiKey, endpoint } = p as { apiKey?: unknown; endpoint?: unknown };
+  if (typeof apiKey !== 'string' || apiKey.trim() === '') return false;
+  if (typeof endpoint !== 'string' || endpoint.trim() === '') return false;
+  try {
+    const url = new URL(endpoint);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export interface CredentialsSyncDeps {
   /** GET /api/model-access/credentials(失败抛 ServerApiError 形状)。 */
   fetchCredentials(): Promise<CredentialsPayload>;
@@ -74,8 +92,13 @@ export interface CredentialsSync {
   retry(): Promise<ModelAccessStatus>;
   /** 轮换:成功返回新状态;失败抛 CredentialsFetchError 形状(IPC 层映射错误码)。 */
   rotate(): Promise<ModelAccessStatus>;
-  /** 登录/登出/切账号入口(authManager.onAuthStateChange)。 */
-  handleAuthChange(state: { isAuthenticated: boolean }): void;
+  /**
+   * 登录/登出/切账号入口(authManager.onAuthStateChange)。
+   * userId 用于账号边界:runtime refresh 换号**不经过** isAuthenticated:false,
+   * 只有携带身份才能作废旧账号的在途请求(PR review P1:A 的在途凭据请求
+   * 不得在切到 B 后写回)。
+   */
+  handleAuthChange(state: { isAuthenticated: boolean; userId?: string | null }): void;
   /** 手填保存成功(safe-storage IPC 层通知):source 翻 manual。 */
   noteManualKeySaved(): void;
   /** 手填 key 被删除:清来源标记。 */
@@ -90,8 +113,16 @@ export function createCredentialsSync(deps: CredentialsSyncDeps): CredentialsSyn
 
   let status: ModelAccessStatus = snapshot('idle');
   let inflight: Promise<ModelAccessStatus> | null = null;
-  /** 本轮登录期内的世代号:登出/换账号自增,作废在途重试循环。 */
+  /**
+   * 认证世代号:登出/**换账号**(userId 变化)自增。所有写盘(key/endpoint/状态)
+   * 都以发起时捕获的世代为闸——旧账号的在途请求在世代变更后一律作废,绝不写回
+   * (PR review P1:runtime refresh 换号不经过 isAuthenticated:false)。
+   */
   let epoch = 0;
+  /** 在途同步所属的世代;世代变更后旧 inflight 不再被复用。 */
+  let inflightEpoch = -1;
+  /** 当前登录身份(handleAuthChange 维护),null = 未登录/未知。 */
+  let currentUserId: string | null = null;
 
   function snapshot(
     state: ModelAccessStatus['state'],
@@ -111,32 +142,53 @@ export function createCredentialsSync(deps: CredentialsSyncDeps): CredentialsSyn
     return status;
   }
 
-  /** 单次拉取 + 落盘。返回终局状态;'retryable' 表示可进入下一次退避重试。 */
-  async function attemptOnce(): Promise<ModelAccessStatus | 'retryable'> {
+  /** 世代闸下的状态写入:发起世代已过期则不动状态(旧请求的余波不得污染新账号)。 */
+  function setStatusIfFresh(
+    myEpoch: number,
+    state: ModelAccessStatus['state'],
+    errorCode?: string,
+  ): ModelAccessStatus {
+    if (myEpoch !== epoch) return status;
+    return setStatus(state, errorCode);
+  }
+
+  /** 单次拉取 + 落盘。返回终局状态;'retryable' 可退避重试;'stale' = 世代已过期。 */
+  async function attemptOnce(myEpoch: number): Promise<ModelAccessStatus | 'retryable' | 'stale'> {
     let payload: CredentialsPayload;
     try {
       payload = await deps.fetchCredentials();
     } catch (err) {
+      if (myEpoch !== epoch) return 'stale';
       const e = asFetchError(err);
       if (e.statusCode === 503 || e.code === 'MODEL_ACCESS_DISABLED') {
         deps.log?.info('model-access disabled on server, falling back to manual key flow');
-        return setStatus('disabled');
+        return setStatusIfFresh(myEpoch, 'disabled');
       }
       if (e.statusCode === 403 || e.code === 'ORG_NOT_SUPPORTED') {
         deps.log?.info('org not supported by model-access, xd provider unavailable');
-        return setStatus('unsupported');
+        return setStatusIfFresh(myEpoch, 'unsupported');
       }
       deps.log?.warn(`model-access credentials fetch failed: ${e.code} (${e.statusCode})`);
       return 'retryable';
     }
-    return applyPayload(payload);
+    if (myEpoch !== epoch) return 'stale'; // 响应归属旧账号,丢弃
+    if (!isValidCredentialsPayload(payload)) {
+      deps.log?.warn('model-access credentials response invalid (empty key / bad endpoint), kept local');
+      return 'retryable';
+    }
+    return applyPayload(payload, myEpoch);
   }
 
-  /** 下发结果落盘(sync 与 rotate 共用)。值未变不写 key,不触发 codex 重启。 */
-  async function applyPayload(payload: CredentialsPayload): Promise<ModelAccessStatus> {
+  /** 下发结果落盘(sync 与 rotate 共用,世代闸)。值未变不写 key,不触发 codex 重启。 */
+  async function applyPayload(
+    payload: CredentialsPayload,
+    myEpoch: number,
+  ): Promise<ModelAccessStatus> {
+    if (myEpoch !== epoch) return status;
     const current = deps.readXdKey();
     if (current !== payload.apiKey) {
       const ok = await deps.writeXdKey(payload.apiKey);
+      if (myEpoch !== epoch) return status;
       if (!ok) {
         deps.log?.warn('model-access key write failed (safeStorage unavailable?)');
         return setStatus('failed', 'SAFE_STORAGE_UNAVAILABLE');
@@ -146,15 +198,15 @@ export function createCredentialsSync(deps: CredentialsSyncDeps): CredentialsSyn
     return setStatus('ok');
   }
 
-  async function runSync(): Promise<ModelAccessStatus> {
-    const myEpoch = epoch;
+  async function runSync(myEpoch: number): Promise<ModelAccessStatus> {
+    if (myEpoch !== epoch) return status;
     setStatus('syncing');
     for (let attempt = 0; ; attempt++) {
-      const result = await attemptOnce();
-      if (myEpoch !== epoch) return status; // 登出/换账号,放弃本轮
+      const result = await attemptOnce(myEpoch);
+      if (result === 'stale' || myEpoch !== epoch) return status; // 登出/换账号,放弃本轮
       if (result !== 'retryable') return result;
       if (attempt >= retryDelays.length) {
-        return setStatus('failed', 'SYNC_FAILED');
+        return setStatusIfFresh(myEpoch, 'failed', 'SYNC_FAILED');
       }
       await sleep(retryDelays[attempt]);
       if (myEpoch !== epoch) return status;
@@ -162,11 +214,16 @@ export function createCredentialsSync(deps: CredentialsSyncDeps): CredentialsSyn
   }
 
   function startSync(): Promise<ModelAccessStatus> {
-    if (inflight) return inflight;
-    inflight = runSync().finally(() => {
-      inflight = null;
+    // 只复用**同世代**的在途请求;旧世代 inflight 会因世代闸自行作废,
+    // 这里直接为当前账号发起新一轮(短暂并行无害,旧轮零写盘)。
+    if (inflight && inflightEpoch === epoch) return inflight;
+    const myEpoch = epoch;
+    inflightEpoch = myEpoch;
+    const run = runSync(myEpoch).finally(() => {
+      if (inflight === run) inflight = null;
     });
-    return inflight;
+    inflight = run;
+    return run;
   }
 
   return {
@@ -183,24 +240,45 @@ export function createCredentialsSync(deps: CredentialsSyncDeps): CredentialsSyn
     },
 
     retry() {
-      if (inflight) return inflight;
-      // 手动重试允许从任何状态(含 disabled——灰度可能刚打开)重新发起。
+      // 手动重试允许从任何状态(含 disabled——灰度可能刚打开)重新发起;
+      // 同世代在途请求由 startSync 内部复用。
       return startSync();
     },
 
     async rotate() {
       // rotate 不与 sync 合并:等待在途同步完成后执行,语义上必须真的轮换。
       if (inflight) await inflight.catch(() => undefined);
+      const myEpoch = epoch;
       const payload = await deps.rotateCredentials(); // 失败原样抛给 IPC 层映射
-      return applyPayload(payload);
+      if (myEpoch !== epoch) {
+        // 轮换响应归属旧账号(期间登出/换号),不落盘。
+        throw Object.assign(new Error('rotate outcome discarded: account changed'), {
+          code: 'STALE_ACCOUNT',
+          statusCode: 0,
+        });
+      }
+      if (!isValidCredentialsPayload(payload)) {
+        throw Object.assign(new Error('rotate response invalid'), {
+          code: 'INVALID_RESPONSE',
+          statusCode: 0,
+        });
+      }
+      return applyPayload(payload, myEpoch);
     },
 
     handleAuthChange(state) {
       if (state.isAuthenticated) {
+        const userId = state.userId ?? null;
+        if (userId !== null && currentUserId !== null && userId !== currentUserId) {
+          // runtime refresh 换号(A→B 不经过登出):作废 A 的在途请求与终态。
+          epoch++;
+        }
+        if (userId !== null) currentUserId = userId;
         void startSync().catch(() => undefined);
       } else {
         // 登出/会话失效:复位状态机(含 unsupported 终态),不动本地 key/元数据。
         epoch++;
+        currentUserId = null;
         setStatus('idle');
       }
     },

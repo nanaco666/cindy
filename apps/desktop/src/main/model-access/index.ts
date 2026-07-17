@@ -113,6 +113,17 @@ function broadcastStatus(status: ModelAccessStatus): void {
 // 清单」的可见跳变(规则 7)。
 
 let modelsSyncInflight: Promise<void> | null = null;
+/** 在途目录请求所属的认证世代。 */
+let modelsSyncGen = -1;
+/** 旧世代请求在途时新账号的补发标记。 */
+let modelsSyncRerunQueued = false;
+/**
+ * 认证世代:登出或 userId 变化时自增(与 credentialsSync 的 epoch 同语义)。
+ * 目录请求以发起时世代为闸——A 账号的在途 /models 响应在切到 B 后一律丢弃,
+ * 且 B 会补发自己的请求(PR review P1:旧账号目录不得覆盖新账号)。
+ */
+let authGeneration = 0;
+let lastAuthUserId: string | null = null;
 
 function applyGatewayModels(models: ModelAccessGatewayModel[]): void {
   setXdGatewayModels(models);
@@ -128,7 +139,7 @@ function applyGatewayModels(models: ModelAccessGatewayModel[]): void {
   }
 }
 
-async function runModelsSync(): Promise<void> {
+async function runModelsSync(myGen: number): Promise<void> {
   let payload: { models: ModelAccessGatewayModel[] };
   try {
     payload = await serverApiFetch<{ models: ModelAccessGatewayModel[] }>(MODELS_PATH, {
@@ -140,6 +151,7 @@ async function runModelsSync(): Promise<void> {
     });
     return;
   }
+  if (myGen !== authGeneration) return; // 响应归属旧账号,丢弃
   const models = (payload.models ?? []).filter((m) => typeof m?.id === 'string' && m.id);
   if (models.length === 0) {
     // 空目录按失败处理:清空会让供应商行整个消失,展示上次快照/静态清单伤害更小。
@@ -151,10 +163,23 @@ async function runModelsSync(): Promise<void> {
   applyGatewayModels(models);
 }
 
-/** 触发一次模型目录同步(single-flight,fire-and-forget 语义)。 */
+/** 触发一次模型目录同步(同世代 single-flight;旧世代在途时为新账号排队补发)。 */
 function scheduleModelsSync(): void {
-  if (modelsSyncInflight) return;
-  modelsSyncInflight = runModelsSync()
+  const gen = authGeneration;
+  if (modelsSyncInflight) {
+    if (modelsSyncGen === gen) return; // 同账号在途,复用
+    if (!modelsSyncRerunQueued) {
+      // 旧账号请求在途:等它结束(其结果会被世代闸丢弃)后为当前账号补发。
+      modelsSyncRerunQueued = true;
+      void modelsSyncInflight.finally(() => {
+        modelsSyncRerunQueued = false;
+        scheduleModelsSync();
+      });
+    }
+    return;
+  }
+  modelsSyncGen = gen;
+  modelsSyncInflight = runModelsSync(gen)
     .catch((err) => {
       log.warn('xd gateway models sync threw', {
         error: err instanceof Error ? err.message : String(err),
@@ -225,12 +250,22 @@ function mapServerError(err: unknown): never {
 export function initModelAccess(): void {
   const sync = getSync();
 
+  const noteAuthState = (isAuthenticated: boolean, userId: string | null) => {
+    // 认证世代:登出或换号自增,作废旧账号在途的目录请求(runModelsSync 世代闸)。
+    if (!isAuthenticated || (userId !== null && lastAuthUserId !== null && userId !== lastAuthUserId)) {
+      authGeneration++;
+    }
+    lastAuthUserId = isAuthenticated ? (userId ?? lastAuthUserId) : null;
+    sync.handleAuthChange({ isAuthenticated, userId });
+  };
+
   authManager.onAuthStateChange((state) => {
-    sync.handleAuthChange({ isAuthenticated: state.isAuthenticated });
+    noteAuthState(state.isAuthenticated, state.user?.id ?? null);
   });
   // 订阅挂载时可能已错过冷启动的首次 notify(初始化顺序取决于 bootstrap),补一次。
-  if (authManager.getAuthState().isAuthenticated) {
-    sync.handleAuthChange({ isAuthenticated: true });
+  const initial = authManager.getAuthState();
+  if (initial.isAuthenticated) {
+    noteAuthState(true, initial.user?.id ?? null);
   }
   // 冷启动首帧:直接应用上次持久化的网关模型目录快照(防「静态清单 → 网关清单」
   // 的可见跳变,规则 7);登录同步成功后会拉最新覆盖。
@@ -258,4 +293,8 @@ export function initModelAccess(): void {
 export function resetModelAccessForTest(): void {
   syncInstance = null;
   modelsSyncInflight = null;
+  modelsSyncGen = -1;
+  modelsSyncRerunQueued = false;
+  authGeneration = 0;
+  lastAuthUserId = null;
 }
