@@ -97,6 +97,9 @@ const overrides = {
   'sidebar-action-icon': '220.0 4.7% 62.2%', // E1D 侧栏层级:二级暗灰 #9A9DA3(时间戳/RemoteProjectIcon)
   'cmd-palette-item-meta': '#9A9DA3', // E1D 侧栏层级:二级暗灰(分组标签/meta)
   'sidebar-item-active-foreground': '#FCFCFC', // E1D 选中胶囊反白前景(近白)
+  'sidebar-item-active-border': '#A00A1D', // 补编 §3:light 深红描边(dark 浅红,别装反)
+  'sidebar-top-card-bg': 'rgba(255, 255, 255, 0.20)', // 补编 §2:顶部玻璃卡底
+  'sidebar-top-card-border': 'rgba(60, 63, 67, 0.10)', // 补编 §2:顶部玻璃卡描边
   'sidebar-item-active': '352.3 89.8% 46.1%', // active 品牌红
   'splash-bg': '0.0 0.0% 92.9%', // 背景 -> HSL
   'splash-text': '222.0 4.6% 42.7%', // AA splash text

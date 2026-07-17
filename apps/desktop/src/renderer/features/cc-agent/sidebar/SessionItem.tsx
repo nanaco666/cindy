@@ -632,7 +632,7 @@ export const SessionItem = memo(function SessionItem({
         // 用 ProjectAction 同款瞬时反馈,跟 Cursor / Codex sidebar 的体感一致。
         'text-sm font-medium text-left cursor-pointer',
         isActive
-          ? 'bg-sidebar-item-active text-sidebar-item-active-foreground'
+          ? 'bg-sidebar-item-active text-sidebar-item-active-foreground border border-[var(--sidebar-item-active-border)]'
           : isSelected
             ? 'bg-[var(--chat-input-chip-bg)] text-foreground'
             : 'text-foreground hover:bg-sidebar-item-hover',

@@ -1117,8 +1117,18 @@ body.resizing-pane [data-ghost-webview] {
 [data-theme="cindy-dark"] body {
   background: transparent;
 }
-/* 模式1 侧栏:blur 50px + surface-translucent-sidebar */
-[data-theme="cindy-light"] .bg-\[var\(--panel-bg\)\],
+/* 模式1 侧栏:blur 50px + surface-translucent-sidebar;light 叠玻璃渐变覆盖层(补编 §1,仅 light,dark 无) */
+[data-theme="cindy-light"] {
+  --sidebar-glass-accent: #F70121;
+}
+[data-theme="cindy-light"] .bg-\[var\(--panel-bg\)\] {
+  background:
+    linear-gradient(transparent, var(--sidebar-glass-accent)),
+    radial-gradient(circle, var(--sidebar-glass-accent), transparent 70%),
+    var(--surface-translucent-sidebar);
+  backdrop-filter: blur(50px);
+  -webkit-backdrop-filter: blur(50px);
+}
 [data-theme="cindy-dark"] .bg-\[var\(--panel-bg\)\] {
   background: var(--surface-translucent-sidebar);
   backdrop-filter: blur(50px);
