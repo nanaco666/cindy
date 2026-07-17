@@ -44,23 +44,6 @@ export interface AppManifest {
    * Consumed once on the first launch of the new version, then cleared.
    */
   requireRelogin?: boolean;
-  /**
-   * 品牌迁移块(docs/cindy-rebrand/migration-state-machine.md §8):老渠道
-   * manifest 钉在过渡版后携带,指向目标品牌(Cindy)完整安装包。仅当客户端
-   * 本体版本已对齐 manifest.app.version(即已是过渡版)时才会被消费——
-   * 版本未对齐时先走普通热更抵达过渡版。消费方:updateService →
-   * migration/electronRuntime.handleMigrationBlock。
-   */
-  migration?: {
-    /** 目标品牌短名(如 'cindy'),客户端与内置 campaign 目标比对防误发。 */
-    targetApp: string;
-    /** 目标品牌版本(如 '1.0.0')。 */
-    version: string;
-    /** 完整安装包相对 baseUrl 路径(win NSIS Setup.exe / mac .app zip)。 */
-    file: string;
-    sha256: string;
-    size: number;
-  };
 }
 
 export interface ClaudeCodeManifest {

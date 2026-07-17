@@ -408,7 +408,6 @@ import { handleIncomingCindyFile } from './cindy-brain/openFileInstall.js';
 import { registerCindyFileAssociation } from './cindy-brain/fileAssociation.js';
 import { setMainLocale, t } from './i18n.js';
 import { throwIpcError } from './utils/ipcValidate.js';
-import * as brandMigrationRuntime from './migration/electronRuntime.js';
 // Scheduler (Phase 3) — 启动单例需要 maker / localDb / mainWindow 都 ready，但
 // splash check-environment / user login (触发 ensureReady) 谁先到不固定。
 // 通过 attemptStartScheduler 在两个就绪事件源各调一次幂等 startScheduler，最后到的
@@ -611,7 +610,6 @@ import { initLogger, writeFromRenderer, setLogLevel, getLogLevel, keepRecentSync
 initLogger();
 const dbClientLog = createLogger('DbClient');
 const authBoundaryLog = createLogger('auth-boundary');
-const brandMigrationBootstrapLog = createLogger('brand-migration-bootstrap');
 // 主窗 renderer 加载失败可观测性 + dev 启动看门狗(见 renderer-boot-guard.ts 顶部注释)。
 const rendererGuardLog = createLogger('renderer-guard');
 const updatePresentationLog = createLogger('update-presentation');
@@ -4345,34 +4343,6 @@ app.on('ready', async () => {
     return;
   }
 
-  // 品牌迁移(docs/cindy-rebrand/migration-state-machine.md)——两个分支平时
-  // 均惰性(无 marker / 无迁移 argv 时零副作用),必须在建窗口前执行:
-  //  1. 新 app 身份:--migrated-from 首启健康检查失败 → 退出拉回老 app;
-  //  2. 老 app 身份:marker=confirmed 跳板拉起新 app 成功 → 静默退出。
-  // ⚠️ 时序钉子:这两个调用跑在 initClientEndpoints() **之前**,禁止在其调用链里
-  // 触达 getClientEndpoint / manifestService 的 CDN base(init 前读取会直接抛错)。
-  try {
-    if ((await brandMigrationRuntime.maybeRunCindyFirstRun()) === 'quit') {
-      app.exit(1);
-      return;
-    }
-  } catch (err) {
-    // Cindy 首启异常意味着自拷/健康检查未完成，绝不能 fail-open 后创建主窗口并使用
-    // 未验证的新 profile。退出后保留老数据，等待老 app / 下次迁移重入。
-    brandMigrationBootstrapLog.error('Cindy first-run handling threw', { error: String(err) });
-    app.exit(1);
-    return;
-  }
-  try {
-    if ((await brandMigrationRuntime.runTransitionStartupElectron()) === 'quit') {
-      app.exit(0);
-      return;
-    }
-  } catch (err) {
-    // 旧 app 跳板编排异常不挡正常启动；用户仍可继续使用逃生舱。
-    brandMigrationBootstrapLog.error('legacy startup handling threw', { error: String(err) });
-  }
-
   // 客户端端点清单:启动第一步、先于一切更新检查,**阻断式**解析(packaged 走
   // 烘焙 hotfix CDN 基址;dev 默认读仓内 config/endpoint.json,--endpoints-cdn
   // 时同 packaged;失败 → 系统错误框重试/退出,无缓存与烘焙兜底)。
@@ -4383,17 +4353,6 @@ app.on('ready', async () => {
     return; // 用户在错误框选择退出,app.exit 已调用
   }
   registerClientEndpointsIpc();
-
-  // 身份锚埋点(账号系统切换前置,identityAnchor.ts 顶注):登录成功 / 恢复
-  // 登录态时把 { userId, email } 持久化到 userData,供切换后按 email 认领老库
-  // (历史锚里的 feishuOpenId 仍可作零命中兜底;新登录不再产生该字段——飞书
-  // 登录已下线,User.feishuOpenId 随 2026-07 产品 me 退役)。登出不清。
-  // auth 由 renderer 经 auth:initialize 触发,此处
-  // (建窗口前)装订阅必然先于首次 auth 状态就绪。
-  authManager.onAuthStateChange((state) => {
-    if (!state.isAuthenticated || state.user == null) return;
-    brandMigrationRuntime.recordIdentityAnchor(state.user);
-  });
 
   initializeUpdatePresentationRecovery();
 
@@ -4502,7 +4461,6 @@ app.on('ready', async () => {
       // 首登轻量迁移(老 xdt-maker userData → Cindy):内部自带 marker 防重入与
       // 全量兜底,绝不 throw,失败不阻塞登录(ensureReady 照常建新库)。
       await runLegacyUserDataMigrationForUser(user.id);
-      await brandMigrationRuntime.claimLegacyLocalDbBeforeEnsureReady(user);
     },
     onReady: async (userId) => {
       // 必须先 await ensureLifecycleDbClient(内部 await createDbClient → worker

@@ -9,7 +9,7 @@
  * 完成后写 marker 文件 `<userData>/mToc` 防重入。
  *
  * 设计要点:
- *  - 与渠道迁移(migration/ 目录的品牌迁移状态机)完全无关,不复用其状态。
+ *  - 使用独立的 mToc marker，不复用更新器状态。
  *  - 全程绝不写/删老目录任何内容;目标已存在的文件一律跳过不覆盖。
  *  - 任一步失败:不写 marker(下次登录重试)、warn 日志、通知 renderer failed,
  *    然后正常返回 —— 不阻塞登录,ensureReady 会照常建新库。
