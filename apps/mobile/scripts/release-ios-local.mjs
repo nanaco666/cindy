@@ -37,6 +37,7 @@ import {
   parseArgs,
   assertProductionGitGate,
   assertPublicEnv,
+  formatBakedEnvLines,
   resolveDesktopVersion,
 } from './release-lib.mjs';
 import {
@@ -272,6 +273,7 @@ async function main() {
   const preview = (name) => process.env[name]?.trim() || `(${name} 未设,--execute 构建时必填)`;
   console.log(`sign: team=${preview('XDT_IOS_TEAM_ID')} profile=${preview('XDT_IOS_PROFILE_NAME')} identity="${preview('XDT_IOS_SIGN_IDENTITY')}"(均由 XDT_IOS_* env 提供,无代码默认值)`);
   console.log('steps: prebuild → pod-install → xcodebuild archive/export → 从 .ipa 回读 runtimeVersion → NPKG 企业重签 → 重签 ipa 直传 OSS(manifest.plist + install.html)→ 写 release.json');
+  for (const line of formatBakedEnvLines(env)) console.log(line);
   if (!args.execute) {
     console.log('dry-run: 传 --execute 才真正构建 + 上传(需 macOS + Xcode + 证书 + NPKG 白名单 + OSS AK/SK env)');
     return;

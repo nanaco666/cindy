@@ -23,6 +23,7 @@ import {
   buildUpdateCommand,
   buildWindowsCmdCommand,
   decideReleaseMode,
+  formatBakedEnvLines,
   decideTargetReleaseMode,
   easBuildPlatformForReleasePlatforms,
   EAS_CLI_SPEC,
@@ -842,5 +843,57 @@ describe('resolveDesktopVersion（自建线设置页二级版本号取值）', (
 
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
     await expect(resolveDesktopVersion({ cdnBase: 'https://cdn.example.com' })).resolves.toBe('');
+  });
+});
+
+describe('formatBakedEnvLines(自建冷更计划输出:实际烘焙注入清单)', () => {
+  const normalize = (lines: string[]) => lines.map((line) => line.replace(/ +/g, ' '));
+
+  it('只列 EXPO_PUBLIC_* 与 extraKeys,凭据类构建 env 不出现,空值标注', () => {
+    const lines = formatBakedEnvLines(
+      {
+        PATH: '/usr/bin',
+        FP_DEV_OSS_ACCESS_KEY_ID: 'secret',
+        XDT_IOS_TEAM_ID: 'TEAMID',
+        EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+        EXPO_PUBLIC_TAPTAP_CLIENT_ID: ' ',
+        XDT_ANDROID_VERSION_CODE: '42',
+      },
+      { extraKeys: ['XDT_ANDROID_VERSION_CODE', 'XDT_NOT_SET'] },
+    );
+    const body = normalize(lines).join('\n');
+    expect(body).toContain('EXPO_PUBLIC_CINDY_AUTH_REGION = cn');
+    expect(body).toContain('EXPO_PUBLIC_TAPTAP_CLIENT_ID = (空)'); // 空值要能被一眼发现
+    expect(body).toContain('XDT_ANDROID_VERSION_CODE = 42'); // extraKeys 存在才列
+    expect(body).not.toContain('XDT_NOT_SET'); // extraKeys 未设不列
+    expect(body).not.toContain('secret'); // 凭据类 env 不进包也不打印
+    expect(body).not.toContain('TEAMID');
+    expect(body).not.toContain('PATH');
+  });
+
+  it('每行带用途注释;未登记键打「未登记」提醒', () => {
+    const lines = normalize(
+      formatBakedEnvLines({
+        EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+        EXPO_PUBLIC_SOMETHING_NEW: 'x',
+      }),
+    );
+    const regionLine = lines.find((line) => line.includes('EXPO_PUBLIC_CINDY_AUTH_REGION'));
+    expect(regionLine).toContain('# 构建区域 cn/global');
+    const unknownLine = lines.find((line) => line.includes('EXPO_PUBLIC_SOMETHING_NEW'));
+    expect(unknownLine).toContain('未登记键');
+  });
+
+  it('键名排序稳定,首尾是标题与口径说明', () => {
+    const lines = normalize(
+      formatBakedEnvLines({
+        EXPO_PUBLIC_B: '2',
+        EXPO_PUBLIC_A: '1',
+      }),
+    );
+    expect(lines[0]).toContain('baked env');
+    expect(lines[1]).toContain('EXPO_PUBLIC_A = 1');
+    expect(lines[2]).toContain('EXPO_PUBLIC_B = 2');
+    expect(lines[lines.length - 1]).toContain('不进包');
   });
 });

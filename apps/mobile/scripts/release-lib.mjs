@@ -37,6 +37,64 @@ export const EXTERNAL_PUBLIC_ENV_KEYS = [
   'EXPO_PUBLIC_TAPDB_REGION',
 ];
 
+/**
+ * 已知烘焙键的用途注释(打印在每行值后面,发版者不用翻代码就知道每个键干嘛的)。
+ * 新增烘焙键时同步补一条;不在表里的键会打印「未登记」提示,提醒确认它该不该进包。
+ */
+const BAKED_ENV_KEY_NOTES = {
+  EXPO_PUBLIC_CINDY_AUTH_REGION: '构建区域 cn/global:决定登录线、appScheme 与端点清单基址',
+  EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL:
+    '端点清单自举基址:启动第一步拉 <此地址>/endpoint.json 回填业务端点(唯一不可远程覆盖的烘焙远程 URL)',
+  EXPO_PUBLIC_FEISHU_APP_ID: '飞书 OAuth 应用 ID(登录构建身份)',
+  EXPO_PUBLIC_XDT_OTA_SELFHOST: '自建分发变体标志:=1 开启自建 /latest 整包发现(与 EAS 线隔离)',
+  EXPO_PUBLIC_XDT_OTA_URL:
+    '自建 mobile-update-server 基址:整包发现可被清单 mobileUpdateBaseUrl 远程覆盖;热更通道 updates.url 同源烧原生、清单管不到',
+  EXPO_PUBLIC_DESKTOP_VERSION: '配对的桌面产品线版本(二级版本号,设置页展示;空则该行不显示)',
+  EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'TapDB 统计 client id(公开键,随包分发)',
+  EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'TapDB 统计 client token(公开键,随包分发)',
+  EXPO_PUBLIC_TAPDB_CHANNEL: 'TapDB 上报渠道标识',
+  EXPO_PUBLIC_TAPDB_REGION: 'TapDB 上报区域',
+  EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID: 'Google 登录 Web client id',
+  EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID: 'Google 登录 iOS client id',
+  EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME: 'Google 登录 iOS 回跳 URL scheme',
+  EXPO_PUBLIC_CINDY_WECHAT_APP_ID: '微信登录 AppID',
+  EXPO_PUBLIC_CINDY_WECHAT_UNIVERSAL_LINK: '微信登录 Universal Link',
+  EXPO_PUBLIC_APP_VARIANT: '构建变体(beta = per-dev Beta 线;不设 = production)',
+  EXPO_PUBLIC_BETA_DEV: 'Beta 线开发者名(per-dev 轨道标识)',
+  XDT_ANDROID_VERSION_CODE: 'Android 原生 versionCode(app.config.js 写入,冷更单调号)',
+};
+
+/**
+ * 把「实际会内联进 JS bundle 的注入内容」整理成可打印行(自建冷更脚本的
+ * dry-run / execute 计划输出共用)。口径:
+ *  - metro 只内联 `EXPO_PUBLIC_*` 前缀的 env,构建 env 里全部该前缀键都列出
+ *    (值本身随包公开分发,打印无泄密面);值为空串标注 `(空)` 便于发现漏配;
+ *  - 每行尾部带 BAKED_ENV_KEY_NOTES 的用途注释;未登记键打「未登记」提醒;
+ *  - `extraKeys` 列非 EXPO_PUBLIC 但同样影响包体的构建键(如 android 的
+ *    XDT_ANDROID_VERSION_CODE 经 app.config.js 写进原生 versionCode);
+ *  - 签名口令 / OSS AK 等其余 env 只驱动构建过程、不进包,不在此列。
+ * @param {Record<string, string | undefined>} env 最终传给 prebuild/构建的 env
+ * @param {{ extraKeys?: string[] }} [options]
+ * @returns {string[]} 打印行(含节标题与说明,直接逐行 console.log)
+ */
+export function formatBakedEnvLines(env, { extraKeys = [] } = {}) {
+  const keys = [
+    ...Object.keys(env).filter((key) => key.startsWith('EXPO_PUBLIC_')),
+    ...extraKeys.filter((key) => env[key] !== undefined),
+  ].sort();
+  const width = Math.max(0, ...keys.map((key) => key.length));
+  const lines = ['baked env(将内联进 JS bundle 的全部注入内容,EXPO_PUBLIC_* 前缀):'];
+  for (const key of keys) {
+    const value = String(env[key] ?? '').trim();
+    const note = BAKED_ENV_KEY_NOTES[key] ?? '⚠ 未登记键:确认它该不该进包,并补 BAKED_ENV_KEY_NOTES';
+    lines.push(`  ${key.padEnd(width)} = ${value || '(空)'}  # ${note}`);
+  }
+  lines.push(
+    '  (运行期业务端点来自 CDN endpoint.json + 包内正本兜底,不在烘焙列;签名/OSS 凭据只驱动构建、不进包)',
+  );
+  return lines;
+}
+
 // 桌面产品线 CDN manifest 基址 —— 与桌面发版脚本(apps/desktop/scripts/release-macos.mjs
 // 的 CDN_BASE)读同一 Source of Truth。桌面版本(app.version)是唯一真实来源。
 /**

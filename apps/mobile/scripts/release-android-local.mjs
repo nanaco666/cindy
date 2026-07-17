@@ -35,6 +35,7 @@ import {
   parseArgs,
   assertProductionGitGate,
   assertPublicEnv,
+  formatBakedEnvLines,
   resolveDesktopVersion,
 } from './release-lib.mjs';
 import {
@@ -275,6 +276,8 @@ async function main() {
     .join(' ');
   console.log(`sign: 自有 keystore 自签(零代码默认值,--execute 构建时四项 env 必填;${signPreview}),终版,不经任何重签`);
   console.log(`steps: prebuild → patch build.gradle 签名 → gradlew assembleRelease → 从 APK 回读 runtimeVersion → APK 直传 OSS(${CDN_BASE}/mobile-dist/android/)→ 写 release.json`);
+  // XDT_ANDROID_VERSION_CODE 非 EXPO_PUBLIC 前缀,但经 app.config.js 写进原生 versionCode,一并列出
+  for (const line of formatBakedEnvLines(env, { extraKeys: ['XDT_ANDROID_VERSION_CODE'] })) console.log(line);
   if (!args.execute) {
     console.log('dry-run: 传 --execute 才真正构建 + 上传(需 Android SDK + JDK 17 + keystore 口令 env + OSS AK/SK env)');
     return;
