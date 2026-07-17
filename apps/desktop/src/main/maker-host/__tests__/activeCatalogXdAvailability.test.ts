@@ -80,6 +80,49 @@ describe('XD 网关权威模型清单重建', () => {
     expect(anthropicAfter?.models).toEqual(anthropicBefore?.models);
   });
 
+  it('服务端 agents 决定 tab 归属:标了 codex 的合成条目两个 tab 都进,元数据以服务端为准', () => {
+    setActiveCatalog(BUNDLED_CATALOG);
+    setXdGatewayModels([
+      {
+        id: 'gpt-5.6-sol',
+        agents: ['claude-code', 'codex'],
+        name: 'GPT-5.6-Sol',
+        group: 'gpt-budget',
+        contextWindow: 372_000,
+        efforts: ['low', 'medium', 'high', 'xhigh'],
+        defaultEffort: 'high',
+        sortOrder: 8,
+      },
+    ]);
+
+    for (const agent of ['claude-code', 'codex'] as const) {
+      const list = xdModels(agent);
+      expect(list.map((m) => m.id)).toEqual(['gpt-5.6-sol']);
+      expect(list[0]).toMatchObject({
+        name: 'GPT-5.6-Sol',
+        group: 'gpt-budget',
+        contextWindow: 372_000,
+        efforts: ['low', 'medium', 'high', 'xhigh'],
+        defaultEffort: 'high',
+      });
+    }
+  });
+
+  it('服务端字段优先于目录同 id 条目;非法 effort 档位被白名单过滤', () => {
+    setActiveCatalog(BUNDLED_CATALOG);
+    setXdGatewayModels([
+      {
+        id: 'claude-opus-4-6',
+        name: '服务端改名',
+        efforts: ['high', 'bogus-effort'],
+      },
+    ]);
+    const cc = xdModels('claude-code');
+    expect(cc[0].name).toBe('服务端改名'); // 服务端 > 目录
+    expect(cc[0].efforts).toEqual(['high']); // 非法档位滤除
+    expect(cc[0].group).toBeTruthy(); // 服务端没给的字段回落目录值
+  });
+
   it('传 null 清除,回到静态清单', () => {
     setActiveCatalog(BUNDLED_CATALOG);
     setXdGatewayModels([{ id: 'claude-opus-4-6' }]);

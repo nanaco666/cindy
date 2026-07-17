@@ -39,12 +39,22 @@ export interface ModelAccessStatus {
 export const MODEL_ACCESS_STATUS_CHANNEL = 'model-access:status-change';
 
 /**
- * 服务端下发的网关聊天模型条目(model-access-server GET /models,
- * AIGateway /model-groups 的 mode=chat 投影)。XD 供应商模型列表的权威来源;
- * 产品目录仅做展示元数据补全(active-catalog setXdGatewayModels)。
+ * 服务端下发的网关聊天模型条目(model-access-server GET /models):
+ * AIGateway /model-groups 的 mode=chat 投影(存在性 + token 上限权威)+
+ * 服务端内置常量表富化(agents/展示元数据)。XD 供应商模型列表的权威来源。
+ * 客户端字段优先级:本条目 > 产品目录同 id 条目 > 合成默认
+ * (active-catalog setXdGatewayModels)。
  */
 export interface ModelAccessGatewayModel {
   id: string;
+  /** 进哪些 runtime tab;缺省 = 目录归属 → 仅 claude-code 兜底。 */
+  agents?: ('claude-code' | 'codex')[];
+  name?: string;
+  group?: string;
+  description?: string;
   contextWindow?: number;
   maxOutputTokens?: number;
+  efforts?: string[];
+  defaultEffort?: string;
+  sortOrder?: number;
 }
