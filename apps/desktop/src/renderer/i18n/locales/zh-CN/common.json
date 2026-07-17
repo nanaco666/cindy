@@ -1612,7 +1612,7 @@
         },
         "collab": {
           "name": "协同模式",
-          "description": "多 worker 协同 (Orca Team) — start_team / create_worker 等团队编排工具"
+          "description": "关闭后仅影响后续新建的会话，不会中止当前 Worker；用于多 Worker 团队编排"
         },
         "lsp": {
           "name": "LSP",
