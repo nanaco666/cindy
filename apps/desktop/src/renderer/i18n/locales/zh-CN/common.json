@@ -3124,12 +3124,20 @@
     },
     "createAgent": {
       "quickStart": "快速开始",
-      "more": "更多",
       "quickStarts": {
         "explore": "探索并理解代码",
         "build": "构建新功能、应用或工具",
         "review": "审查代码并提出修改建议",
         "fix": "修复问题和失败"
+      },
+      "sidebar": {
+        "new": "新建",
+        "automation": "自动化",
+        "skills": "技能",
+        "search": "搜索",
+        "local": "本机",
+        "projects": "项目",
+        "conversations": "对话"
       }
     },
     "addRemoteProject": {

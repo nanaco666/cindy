@@ -8,6 +8,7 @@ import {
   type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
+  type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
@@ -470,6 +471,7 @@ interface ChatInputProps {
    */
   denseToolbar?: boolean;
   visualVariant?: 'default' | 'create-agent';
+  middleToolbarSlot?: ReactNode;
   /**
    * Slot rendered INSIDE the input card, above the textarea, sharing the same
    * rounded border / focus-within highlight. Used by Orca mode for the
@@ -900,6 +902,7 @@ export function ChatInput({
   compactToolbar = false,
   denseToolbar = false,
   visualVariant = 'default',
+  middleToolbarSlot,
   topSlot,
   collaboration,
 }: ChatInputProps) {
@@ -4346,6 +4349,7 @@ export function ChatInput({
               disabled={disabled}
               dense={effectiveDenseToolbar}
             />
+            {middleToolbarSlot}
           </div>
           <div
             className={cn(

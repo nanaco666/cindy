@@ -3124,12 +3124,20 @@
     },
     "createAgent": {
       "quickStart": "Quick start",
-      "more": "More",
       "quickStarts": {
         "explore": "Explore and understand code",
         "build": "Build a feature, app, or tool",
         "review": "Review code and suggest changes",
         "fix": "Fix issues and failures"
+      },
+      "sidebar": {
+        "new": "New",
+        "automation": "Automation",
+        "skills": "Skills",
+        "search": "Search",
+        "local": "Local",
+        "projects": "Projects",
+        "conversations": "Conversations"
       }
     },
     "addRemoteProject": {

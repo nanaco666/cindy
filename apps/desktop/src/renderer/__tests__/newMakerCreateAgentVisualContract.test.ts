@@ -11,13 +11,19 @@ const source = readFileSync(
 describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
   it('keeps the approved CREATE AGENT shell while preserving the functional composer', () => {
     expect(source).toContain('data-testid="create-agent-shell"');
+    expect(source).toContain('data-testid="create-agent-sidebar"');
+    expect(source).toContain('data-testid="create-agent-mode-pill"');
     expect(source).toContain('data-testid="create-agent-brand-lockup"');
     expect(source).toContain('data-testid="create-agent-quick-starts"');
+    expect(source).toContain('createAgentSidebarNav.map');
+    expect(source).toContain('createAgentSidebarProjects.map');
     expect(source).toContain('createAgentQuickStarts.map');
     expect(source).toContain('<ChatInput');
-    expect(source).toContain('leftOfFolderPicker={');
     expect(source).toContain('<WorktreeChipsRow');
     expect(source).toContain('<VendorSegmentedSwitcher');
+    expect(source).toContain('middleToolbarSlot={');
+    expect(source).not.toContain('<HomeUsageDashboard');
+    expect(source).not.toContain('newChat.createAgent.more');
   });
 
   it('preserves New Maker behavior-critical props on ChatInput', () => {
@@ -56,7 +62,8 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
       'onNewGoal={(text) =>',
       'rememberedEffortByModel={isDeviceLinkDraft ? undefined : draft.effortByModel}',
       'onRememberedEffortChange={isDeviceLinkDraft ? undefined : handleRememberedEffortChange}',
-      'collaboration={',
+      'placeholder="Hi Cindy!"',
+      'middleToolbarSlot={',
     ]) {
       expect(chatInputBlock).toContain(invariant);
     }
