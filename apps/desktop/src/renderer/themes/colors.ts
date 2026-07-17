@@ -1689,12 +1689,11 @@ registerColor('skillhub-review-quarantine-fg', {
   dark: '#facc15',
 }, 'Skill Hub 人工复核中 badge 文字 (yellow warning, 语义豁免)');
 
-// CREATE AGENT composer controls — Figma 185:2724, E2-S 2026-07-17.
-// Light values intentionally point at existing CINDY neutral tokens; dark defaults
-// are the extracted Figma values. Route/components consume these private tokens
-// so the regular chat composer is unaffected.
+// CREATE AGENT composer controls — Figma 185:1495 / 185:2724, E2-S 2026-07-17.
+// These private tokens are exact light/dark values for the new-page solid
+// composer controls. Do not reuse for the session-view glass composer pills.
 registerColor('create-agent-control-bg', {
-  light: 'var(--surface-chip)',
+  light: '#FCFCFC',
   dark: '#393838',
 }, 'CREATE AGENT pill / icon button background');
 registerColor('create-agent-control-bg-hover', {
@@ -1706,31 +1705,31 @@ registerColor('create-agent-control-bg-pressed', {
   dark: '#25282C',
 }, 'CREATE AGENT neutral pressed background');
 registerColor('create-agent-control-border', {
-  light: 'var(--border-default)',
+  light: '#DCDFE3',
   dark: '#434343',
 }, 'CREATE AGENT pill / icon button border');
 registerColor('create-agent-control-text', {
-  light: 'var(--text-primary)',
+  light: '#3C3F43',
   dark: '#D4D4D4',
 }, 'CREATE AGENT pill text');
 registerColor('create-agent-control-icon', {
-  light: 'var(--text-primary)',
+  light: '#3C3F43',
   dark: '#D9D9D9',
 }, 'CREATE AGENT icon / chevron');
 registerColor('create-agent-segment-track-bg', {
-  light: 'var(--surface)',
+  light: '#EDEDED',
   dark: '#2A2828',
 }, 'CREATE AGENT Claude/Codex segmented track');
 registerColor('create-agent-segment-inactive-text', {
-  light: 'var(--text-secondary)',
+  light: '#9A9DA3',
   dark: '#6F6F6F',
 }, 'CREATE AGENT segmented inactive text');
 registerColor('create-agent-send-bg', {
-  light: 'var(--text-primary)',
+  light: '#3C3F43',
   dark: '#EEEEEE',
 }, 'CREATE AGENT send button inverse neutral bg');
 registerColor('create-agent-send-icon', {
-  light: 'var(--text-primary-inv)',
+  light: '#FCFCFC',
   dark: '#252222',
 }, 'CREATE AGENT send button inverse neutral icon');
 registerColor('create-agent-send-bg-hover', {
