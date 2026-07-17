@@ -781,6 +781,35 @@ describe('parseClaudeCodeMessageLine', () => {
     }
   });
 
+  it('continues within the byte window when IDE-only rows exceed the normal scan line cap', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-scan-ide-extension-'));
+    const file = path.join(dir, `${sdkSessionId}.jsonl`);
+    const ideContext = '<ide_opened_file>The user opened /tmp/a.ts in the IDE.</ide_opened_file>';
+    const ideOnlyRows = Array.from({ length: 401 }, (_, index) => line({
+      type: 'user',
+      uuid: `user-ide-${index}`,
+      cwd: '/tmp/project',
+      message: { role: 'user', content: ideContext },
+    }));
+    fs.writeFileSync(file, [
+      ...ideOnlyRows,
+      line({
+        type: 'user',
+        uuid: 'user-real-after-cap',
+        cwd: '/tmp/project',
+        message: { role: 'user', content: 'Please fix the parser after the normal line cap' },
+      }),
+    ].join('\n'));
+
+    try {
+      const summary = await readClaudeCodeSessionScanSummary(file);
+
+      expect(summary?.title).toBe('Please fix the parser after the normal line cap');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('scan summary is cached by (mtime, size) and re-parsed when the file changes', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-scan-cache-'));
     const file = path.join(dir, `${sdkSessionId}.jsonl`);

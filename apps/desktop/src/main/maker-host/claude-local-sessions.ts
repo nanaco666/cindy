@@ -34,9 +34,10 @@ const claudeMessageImportFileCache = new Map<string, ExternalImportFileCacheEntr
 
 // 扫描摘要只读文件头部:候选列表只需要 sessionId / 标题 / cwd / 更新时间,
 // 前三者几乎总在最前几行,更新时间直接用 mtime。全文遍历(算 tokens、追踪
-// 最新 cwd)只属于导入路径(readClaudeCodeSessionSummary)。这个上限同时是
-// 单文件扫描成本的硬顶——绝不能回到"扫描期把 ~/.claude/projects 全量读完
-// 并逐行 JSON.parse"的行为,那会在 main 进程上把整个窗口卡到未响应。
+// 最新 cwd)只属于导入路径(readClaudeCodeSessionSummary)。字节上限是单文件
+// 扫描成本的硬顶;行数上限是正常快速路径。只有在窗口内确实过滤过 IDE 上下文
+// 且尚未找到标题时,才允许越过行数上限继续读到字节硬顶,避免提前回退默认标题。
+// 绝不能回到"扫描期把 ~/.claude/projects 全量读完并逐行 JSON.parse"的行为。
 const SCAN_SUMMARY_MAX_BYTES = 384 * 1024;
 const SCAN_SUMMARY_MAX_LINES = 400;
 // 按 (mtimeMs, size) 复用扫描摘要:30s TTL 的 IPC 缓存过期后重扫时,未变化
@@ -394,12 +395,13 @@ async function readScanSummaryFromHead(file: string, mtimeMs: number): Promise<C
   let title = '';
   let cwd = projectDirFromClaudeStorageDir(path.basename(path.dirname(file))) ?? '';
   let sawTopLevelEvent = false;
+  let removedIdeContextWithoutTitle = false;
   let lineCount = 0;
 
   try {
     for await (const line of rl) {
       lineCount += 1;
-      if (lineCount > SCAN_SUMMARY_MAX_LINES) break;
+      if (lineCount > SCAN_SUMMARY_MAX_LINES && !removedIdeContextWithoutTitle) break;
       const obj = parseJsonObject(line);
       if (!obj || obj.isSidechain === true) continue;
       const lineCwd = stringValue(obj.cwd);
@@ -412,8 +414,10 @@ async function readScanSummaryFromHead(file: string, mtimeMs: number): Promise<C
       const lineSessionId = firstNonEmpty(stringValue(obj.sessionId), stringValue(obj.session_id));
       if (lineSessionId) sdkSessionId = lineSessionId;
       if (type === 'user' && !title && isRecord(obj.message)) {
-        const text = extractUserText(obj.message.content).trim();
+        const content = obj.message.content;
+        const text = extractUserText(content).trim();
         if (text) title = makeTitle(text);
+        else if (hasCompleteIdeOpenedFileBlock(content)) removedIdeContextWithoutTitle = true;
       }
       // 需要的字段已齐,提前停读——大文件只消耗前几行。
       if (title) break;
@@ -791,6 +795,20 @@ function extractUserText(content: unknown): string {
     }
   }
   return parts.join('\n\n');
+}
+
+/** Whether imported user content contains at least one removable IDE context block. */
+function hasCompleteIdeOpenedFileBlock(content: unknown): boolean {
+  if (typeof content === 'string') {
+    return stripCompleteIdeOpenedFileBlocks(content) !== content;
+  }
+  if (!Array.isArray(content)) return false;
+  return content.some((block) => (
+    isRecord(block) &&
+    (block.type === 'text' || block.type === 'input_text') &&
+    typeof block.text === 'string' &&
+    stripCompleteIdeOpenedFileBlocks(block.text) !== block.text
+  ));
 }
 
 async function extractClaudeUserImages(
