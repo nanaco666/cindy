@@ -1061,6 +1061,7 @@ export function ModelEffortChip({
           // 宽度由内容自适应(单栏 320;Edit 展开 ~517 向左加宽),与聊天选择器同口径。
           'w-auto',
         )}
+        onWheel={stopWheel}
       >
         {/* 直接复用聊天的下拉内容本体(唯一真源:聊天选择器改了这里跟着变)。
             来源轨 / 模型分组 / 搜索 / effort / 空态全套自带;followSession 行为 opt-in。 */}
@@ -1080,6 +1081,7 @@ export function ModelEffortChip({
             if (reconciledEffort) onChangeEffort(reconciledEffort as EffortValue);
           }}
           onNavigateToProviders={onNavigateToProviders}
+          tooltipContentClassName="z-[10020]"
           followSession={
             followSession
               ? {
