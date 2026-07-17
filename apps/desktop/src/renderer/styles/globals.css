@@ -1109,9 +1109,10 @@ body.resizing-pane [data-ghost-webview] {
 
 
 /* E4D 毛玻璃(R1 audit,用户裁决透壁纸 2026-07-17):仅 CINDY family,窗口 vibrancy
-   透壁纸(main 设置)+ 应用内 backdrop-filter 互透。surface-translucent token 半透明
-   底 + blur(50px 侧栏/主面板、6px 浮层)。属性选择器覆盖 Tailwind 任意值 class
-   (.bg-[var(--panel-bg)] 等)。其他 family 不命中,行为零变化。 */
+   透壁纸(main 设置)+ 应用内 backdrop-filter 互透。**仅侧栏 + 浮层 blur;主内容区
+   不透明(macOS 标准范式;用户勘误 2026-07-17:主区不透壁纸,content-area 回落
+   --content-area=--surface-hsl 不透明 #EDEDED/#2A2828)**。blur(50px 侧栏、6px 浮层)。
+   属性选择器覆盖 Tailwind 任意值 class(.bg-[var(--panel-bg)] 等)。其他 family 不命中,行为零变化。 */
 [data-theme="cindy-light"] body,
 [data-theme="cindy-dark"] body {
   background: transparent;
@@ -1123,13 +1124,9 @@ body.resizing-pane [data-ghost-webview] {
   backdrop-filter: blur(50px);
   -webkit-backdrop-filter: blur(50px);
 }
-/* 模式2 主面板:blur 50px + surface-translucent-main */
-[data-theme="cindy-light"] [class*="content-area"],
-[data-theme="cindy-dark"] [class*="content-area"] {
-  background: var(--surface-translucent-main);
-  backdrop-filter: blur(50px);
-  -webkit-backdrop-filter: blur(50px);
-}
+/* 模式2 主面板:用户勘误 2026-07-17 — 主内容区不透壁纸(macOS 标准范式),撤销 blur。
+   content-area 回落 --content-area(=var(--surface-hsl) 不透明 #EDEDED/#2A2828),无 blur。
+   surface-translucent-main token 保留注册但 CINDY override 改不透明等价值(见 cindy themes)。 */
 /* 模式3 浮层卡:blur 6px + surface-translucent-overlay(cmd-palette/popover 类) */
 [data-theme="cindy-light"] [class*="cmd-palette-bg"],
 [data-theme="cindy-dark"] [class*="cmd-palette-bg"] {

@@ -125,7 +125,7 @@ const overrides = {
   'sidebar-search-bg': '0.0 0.0% 92.9%', // alias closure: surface
   'sidebar-muted': '222.0 4.6% 42.7%', // alias closure: tertiary
   'surface-translucent-sidebar': 'rgba(246, 246, 246, 0.90)', // E4D R1 模式1 侧栏半透明
-  'surface-translucent-main': 'rgba(255, 255, 255, 0.93)', // E4D R1 模式2 主面板半透明
+  'surface-translucent-main': '#EDEDED', // E4D 主面板:用户勘误 2026-07-17 撤销毛玻璃,改不透明等价 surface(原 rgba(255,255,255,0.93))
   'surface-translucent-overlay': 'rgba(246, 246, 246, 0.90)', // E4D R1 模式3 浮层半透明
   'glass-pill-bg': 'rgba(255, 255, 255, 0.05)', // E3 D6 glass-pill(light 从 Figma 取后调)
   'send-btn-bg': '#3C3F43', // R4 D1/D2 反相中性可用底(不用红,用户裁决)

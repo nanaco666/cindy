@@ -303,7 +303,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'sidebar-muted': { light: '222.0 4.6% 42.7%', dark: '216.0 4.1% 75.9%' },
   'status-badge-fg': { light: '#1F1F1F', dark: '#1F1F1F' }, // §7 必炸点(lead 裁决)
   'surface-translucent-sidebar': { light: 'rgba(246, 246, 246, 0.90)', dark: 'rgba(18, 15, 15, 0.85)' }, // E4D R1 模式1
-  'surface-translucent-main': { light: 'rgba(255, 255, 255, 0.93)', dark: 'rgba(18, 15, 15, 0.85)' }, // E4D R1 模式2
+  'surface-translucent-main': { light: '#EDEDED', dark: '#2A2828' }, // E4D 主面板:用户勘误 2026-07-17 撤销毛玻璃,改不透明等价 surface(原 rgba 半透明)
   'surface-translucent-overlay': { light: 'rgba(246, 246, 246, 0.90)', dark: 'rgba(37, 35, 35, 0.80)' }, // E4D R1 模式3
   'glass-pill-bg': { light: 'rgba(255, 255, 255, 0.05)', dark: 'rgba(217, 217, 217, 0.05)' }, // E3 D6 glass-pill
 };
