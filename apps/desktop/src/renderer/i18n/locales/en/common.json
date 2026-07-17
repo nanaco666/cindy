@@ -1124,7 +1124,7 @@
     "gitSafety": {
       "title": "Git Safety",
       "autoSnapshotTitle": "Git safety snapshots",
-      "description": "Create automatic XDT savepoint commits after agent edits. Codex rewind is shown only when this is enabled.",
+      "description": "Create automatic savepoint commits after agent edits. Codex rewind is shown only when this is enabled.",
       "toggleAria": "Toggle Git safety snapshots",
       "saveFailed": "Failed to save Git safety setting"
     },
@@ -1601,7 +1601,7 @@
           "description": "Cross-agent long-term memory for persistent context across sessions"
         },
         "xdt_helper": {
-          "name": "XDT Helper",
+          "name": "Cindy Helper",
           "description": "Host capability disclosure — tells agents what tools and models are available"
         },
         "collab": {
@@ -1664,7 +1664,7 @@
           "workspaces": "Working directory mapping (alias → local absolute path)",
           "workspacesBoundCount_one": "{{count}} local working directory bound",
           "workspacesBoundCount_other": "{{count}} local working directories bound",
-          "aliasPlaceholder": "Alias, e.g. xdmaker",
+          "aliasPlaceholder": "Alias, e.g. my-server",
           "addWorkspace": "Add working directory",
           "removeWorkspace": "Remove this working directory",
           "changeDir": "Click to change directory (alias and preferences kept)"

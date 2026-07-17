@@ -1124,7 +1124,7 @@
     "gitSafety": {
       "title": "Git 안전",
       "autoSnapshotTitle": "Git 안전 저장점",
-      "description": "Agent 편집 후 XDT 저장점 commit을 자동으로 만듭니다. 켜져 있을 때만 Codex rewind를 표시합니다.",
+      "description": "Agent 편집 후 저장점 commit을 자동으로 만듭니다. 켜져 있을 때만 Codex rewind를 표시합니다.",
       "toggleAria": "Git 안전 저장점 전환",
       "saveFailed": "Git 안전 설정 저장에 실패했습니다"
     },
@@ -1601,7 +1601,7 @@
           "description": "세션 간 컨텍스트를 유지하는 agent 공통 장기 메모리"
         },
         "xdt_helper": {
-          "name": "XDT Helper",
+          "name": "Cindy Helper",
           "description": "호스트 기능 공개 — 사용 가능한 도구와 모델을 agent에 알림"
         },
         "collab": {
@@ -1664,7 +1664,7 @@
           "workspaces": "작업 디렉터리 매핑(별칭 → 로컬 절대 경로)",
           "workspacesBoundCount_one": "로컬 작업 디렉터리 {{count}}개 바인딩됨",
           "workspacesBoundCount_other": "로컬 작업 디렉터리 {{count}}개 바인딩됨",
-          "aliasPlaceholder": "별칭, 예: xdmaker",
+          "aliasPlaceholder": "별칭, 예: my-server",
           "addWorkspace": "작업 디렉터리 추가",
           "removeWorkspace": "이 작업 디렉터리 삭제",
           "changeDir": "클릭하여 디렉터리 변경(별명과 설정은 유지)"

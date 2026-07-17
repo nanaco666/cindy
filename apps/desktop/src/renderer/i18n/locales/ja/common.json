@@ -1124,7 +1124,7 @@
     "gitSafety": {
       "title": "Git セーフティ",
       "autoSnapshotTitle": "Git セーフティ保存点",
-      "description": "Agent の編集後に XDT 保存点 commit を自動作成します。有効な場合のみ Codex rewind を表示します。",
+      "description": "Agent の編集後に保存点 commit を自動作成します。有効な場合のみ Codex rewind を表示します。",
       "toggleAria": "Git セーフティ保存点を切り替え",
       "saveFailed": "Git セーフティ設定の保存に失敗しました"
     },
@@ -1601,7 +1601,7 @@
           "description": "セッションをまたいでコンテキストを保持する agent 横断の長期メモリ"
         },
         "xdt_helper": {
-          "name": "XDT Helper",
+          "name": "Cindy Helper",
           "description": "ホスト機能の開示 — 利用可能なツールとモデルを agent に伝える"
         },
         "collab": {
@@ -1664,7 +1664,7 @@
           "workspaces": "作業ディレクトリのマッピング(エイリアス → ローカル絶対パス)",
           "workspacesBoundCount_one": "ローカル作業ディレクトリを {{count}} 個バインド済み",
           "workspacesBoundCount_other": "ローカル作業ディレクトリを {{count}} 個バインド済み",
-          "aliasPlaceholder": "エイリアス(例: xdmaker)",
+          "aliasPlaceholder": "エイリアス(例: my-server)",
           "addWorkspace": "作業ディレクトリを追加",
           "removeWorkspace": "この作業ディレクトリを削除",
           "changeDir": "クリックしてディレクトリを変更(別名と設定は保持)"
