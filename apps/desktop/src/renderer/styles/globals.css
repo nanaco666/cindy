@@ -1106,3 +1106,34 @@ body.resizing-pane [data-ghost-webview] {
 .hidden + .layout-divider-v {
   display: none;
 }
+
+
+/* E4D 毛玻璃(R1 audit,用户裁决透壁纸 2026-07-17):仅 CINDY family,窗口 vibrancy
+   透壁纸(main 设置)+ 应用内 backdrop-filter 互透。surface-translucent token 半透明
+   底 + blur(50px 侧栏/主面板、6px 浮层)。属性选择器覆盖 Tailwind 任意值 class
+   (.bg-[var(--panel-bg)] 等)。其他 family 不命中,行为零变化。 */
+[data-theme="cindy-light"] body,
+[data-theme="cindy-dark"] body {
+  background: transparent;
+}
+/* 模式1 侧栏:blur 50px + surface-translucent-sidebar */
+[data-theme="cindy-light"] [class*="panel-bg"],
+[data-theme="cindy-dark"] [class*="panel-bg"] {
+  background: var(--surface-translucent-sidebar);
+  backdrop-filter: blur(50px);
+  -webkit-backdrop-filter: blur(50px);
+}
+/* 模式2 主面板:blur 50px + surface-translucent-main */
+[data-theme="cindy-light"] [class*="content-area"],
+[data-theme="cindy-dark"] [class*="content-area"] {
+  background: var(--surface-translucent-main);
+  backdrop-filter: blur(50px);
+  -webkit-backdrop-filter: blur(50px);
+}
+/* 模式3 浮层卡:blur 6px + surface-translucent-overlay(cmd-palette/popover 类) */
+[data-theme="cindy-light"] [class*="cmd-palette-bg"],
+[data-theme="cindy-dark"] [class*="cmd-palette-bg"] {
+  background: var(--surface-translucent-overlay);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
