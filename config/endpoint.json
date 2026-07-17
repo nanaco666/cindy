@@ -13,5 +13,5 @@
   "skillhubApiBaseUrl": "https://xdskillhub.cindy.com.cn",
   "cdnBaseUrl": "https://hotfix.cindy.com.cn/cindy",
   "mobileUpdateBaseUrl": "https://mobile-update.cindy.com.cn",
-  "review": "0.0.1"
+  "review": "0.1.0"
 }
