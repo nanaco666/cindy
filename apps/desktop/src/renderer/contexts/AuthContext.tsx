@@ -24,6 +24,7 @@ import {
 } from '@/lib/authService';
 import { setCurrentUserName } from '@/lib/makerChatStore';
 import * as meService from '@/lib/meService';
+import { sessionsStore } from '@/lib/sessionsStore';
 
 /**
  * chat-data-localization V0.5: AuthContext 暴露 `migration` 字段——最近一次
@@ -114,9 +115,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setDeviceId(state.deviceId);
       // V0.3：user 设置走 mergeRoleIntoUser，登出时清空 role 缓存
       if (state.user) {
+        // sessionsStore 是 renderer 进程级单例；切换账号时必须丢弃上一个
+        // 账号的快照，避免新账号短暂显示旧账号的 session。
+        if (
+          activeUserIdRef.current !== null &&
+          activeUserIdRef.current !== state.user.id
+        ) {
+          sessionsStore.reset();
+        }
         setLoginState(null);
         void mergeRoleIntoUser(state.user);
       } else {
+        sessionsStore.reset();
         activeUserIdRef.current = null;
         setLoginState(null);
         fetchedRoleForUserRef.current.clear();
@@ -172,6 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         activeUserIdRef.current = null;
         fetchedRoleForUserRef.current.clear();
         roleByUserRef.current.clear();
+        sessionsStore.reset();
         clearWorkersCache();
         setUser(null);
         setIsAuthenticated(false);
@@ -204,6 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await authServiceRef.current!.logout();
+    sessionsStore.reset();
     clearWorkersCache();
     setMigration(null);
   }, []);
