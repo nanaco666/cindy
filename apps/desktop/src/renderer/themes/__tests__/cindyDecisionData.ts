@@ -124,6 +124,13 @@ export const CINDY_REQUIRED_COLOR_IDS = [
   'surface-translucent-main', // R1 增补(E4D)
   'surface-translucent-overlay', // R1 增补(E4D)
   'glass-pill-bg', // E3 D6 增补(R4 唤醒态 glass-pill),116→120
+  // E1D send-btn 族纳入值表(lead 裁决反相中性四态 + disabled #444242 系):
+  'send-btn-bg',
+  'send-btn-icon',
+  'send-btn-hover-bg', // E1D 新增(反相中性 hover)
+  'send-btn-pressed-bg', // E1D 新增(反相中性 pressed)
+  'send-btn-disabled-bg',
+  'send-btn-disabled-icon', // 120→126
 ] as const;
 
 export const HSL_FORMAT_IDS = [
@@ -238,6 +245,13 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'perm-auto-selected-text': { light: '#417CDD', dark: '#417CDD' }, // E5D 定稿 2026-07-17
   'perm-allow-btn-bg': { light: '#3C3F43', dark: '#EEEEEE' }, // E1D
   'perm-allow-btn-text': { light: '#FCFCFC', dark: '#252222' }, // E1D
+  // E1D send-btn 族(lead 反相中性四态 + disabled #444242 系;default send-btn-bg aliases accent-cta-bg,CINDY override 全族)
+  'send-btn-bg': { light: '#3C3F43', dark: '#EEEEEE' },
+  'send-btn-icon': { light: '#FCFCFC', dark: '#252222' },
+  'send-btn-hover-bg': { light: '#2E3237', dark: '#E2E2E2' },
+  'send-btn-pressed-bg': { light: '#25282C', dark: '#D4D4D4' },
+  'send-btn-disabled-bg': { light: '#444242', dark: '#444242' },
+  'send-btn-disabled-icon': { light: '#585555', dark: '#585555' },
   'perm-allow-kbd-bg': { light: '#F4F4F4', dark: '#2F2D2D' },
   'perm-allow-kbd-border': { light: '#DCDFE3', dark: '#434343' },
   'perm-code-bg': { light: '#F5F5F5', dark: '#2B2929' },

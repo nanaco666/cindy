@@ -712,5 +712,6 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 - **B 类(改中性 11 项)**:`accent-cta-bg`/`-pure`/`-emphasis`/`-soft`/`-hover`、`update-btn-border`/`-text`、`confirm-btn-primary`、`perm-allow-btn`、`primary`、`settings-btn-primary`(alias)、`accent-pure-cta-fg`/`settings-btn-primary-text`(中性字);
 - **C 类裁决**:confirm(普通中性,danger 另设)、perm-allow(中性,警示橙 chip)、primary(中性)、sidebar-item-active(light 红胶囊/dark 深红)、migration-bar-fill(保留红)、drop-overlay(保留红10%)、brand-login-cta(不动);
 - **中性按钮四态**:light 底`#3C3F43`/字`#FCFCFC`、hover`#2E3237`、pressed`#25282C`;dark 底`#EEEEEE`/字`#252222`、hover`#E2E2E2`、pressed`#D4D4D4`。
+- **send-btn 族纳入值表(E1D 扩,lead 裁决 2026-07-17)**:`send-btn-bg`(default alias `--accent-cta-bg`)/`-icon`/`-hover-bg`/`-pressed-bg`/`-disabled-bg`/`-disabled-icon` CINDY override 全族走上述四态反相中性 + disabled 灰 `#444242`/`#585555`(R4 D1 实证);hover/pressed 为 E1D 新增 token(default 同 bg,默认皮肤维持 opacity-85 hover,膘叔 E3 组件层消费 var() 即全局生效);全族入 cindyDecisionData REQUIRED_IDS + CINDY_EXPECTED,③ 断言守。
 
 三份新 map(`NEUTRAL_PRIMARY_EXPECTED_BY_ID`/`FOREGROUND` + `RED_EXCEPTION_ALLOWED_IDS`)替代旧 `BRAND_RED_*`。D2T ⑤/⑦/⑧ 改用新 map(中性 exact + 红例外白名单 + 中性对比度 + 可证伪)。

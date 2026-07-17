@@ -618,6 +618,14 @@ registerColor('send-btn-disabled-icon', {
   light: 'var(--text-disabled-tertiary)',
   dark: 'var(--text-disabled-tertiary)',
 }, 'Silver');
+registerColor('send-btn-hover-bg', {
+  light: 'var(--send-btn-bg)',
+  dark: 'var(--send-btn-bg)',
+}, 'Send button hover bg(default 同 bg,默认皮肤维持 opacity-85 hover;CINDY override 反相中性 hover #2E3237/#E2E2E2,E1D 纳入值表)');
+registerColor('send-btn-pressed-bg', {
+  light: 'var(--send-btn-bg)',
+  dark: 'var(--send-btn-bg)',
+}, 'Send button pressed bg(default 同 bg;CINDY override 反相中性 pressed #25282C/#D4D4D4,E1D 纳入值表)');
 
 // Stop button — per cc-agent-view Streaming variant
 registerColor('stop-btn-bg', {

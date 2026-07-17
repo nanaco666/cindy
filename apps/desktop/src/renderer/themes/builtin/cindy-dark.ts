@@ -132,6 +132,8 @@ const overrides = {
   'send-btn-icon': '#252222', // R4 反相中性字
   'send-btn-disabled-bg': '#444242', // R4 禁用灰底
   'send-btn-disabled-icon': '#585555', // R4 禁用灰字
+  'send-btn-hover-bg': '#E2E2E2', // E1D 反相中性 hover(lead 四态)
+  'send-btn-pressed-bg': '#D4D4D4', // E1D 反相中性 pressed(lead 四态)
 } as const;
 
 export const cindyDark: Theme = {
