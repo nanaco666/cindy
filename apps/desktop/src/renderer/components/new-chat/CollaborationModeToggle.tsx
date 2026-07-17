@@ -97,9 +97,9 @@ export function CollaborationModeToggle({
           aria-pressed
           className={cn(
             'flex shrink-0 items-center gap-1.5 rounded-full font-medium transition-colors',
-            'bg-transparent text-[var(--status-bar-accent)]',
-            !iconOnly && 'border border-[var(--status-bar-accent)]',
-            'hover:bg-[var(--status-bar-accent)]/15',
+            'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] text-[var(--text-primary)]' /* spec 2026-07-17, 去橙中性, token by 一哥 */,
+            !iconOnly && 'border border-[var(--border-default)]',
+            'hover:bg-[var(--model-trigger-hover)]',
             pillSizeCn,
             disabled && 'cursor-not-allowed opacity-50',
           )}
@@ -127,9 +127,9 @@ export function CollaborationModeToggle({
           aria-pressed={false}
           className={cn(
             'flex shrink-0 items-center gap-1.5 rounded-full font-medium transition-colors',
-            'bg-transparent text-[var(--cmd-palette-item-meta)]',
-            !iconOnly && 'border border-[var(--cmd-palette-border)]',
-            'hover:bg-[var(--cmd-palette-item-hover)]',
+            'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] text-[var(--text-primary)]' /* spec 2026-07-17, token by 一哥 */,
+            !iconOnly && 'border border-[var(--border-default)]',
+            'hover:bg-[var(--model-trigger-hover)]',
             pillSizeCn,
             disabled && 'cursor-not-allowed opacity-50',
           )}
@@ -156,9 +156,9 @@ export function CollaborationModeToggle({
             aria-pressed={false}
             className={cn(
               'flex shrink-0 items-center gap-1.5 rounded-full font-medium transition-colors',
-              'bg-transparent text-[var(--cmd-palette-item-meta)]',
-              !iconOnly && 'border border-[var(--cmd-palette-border)]',
-              'hover:bg-[var(--cmd-palette-item-hover)]',
+              'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] text-[var(--text-primary)]' /* spec 2026-07-17, token by 一哥 */,
+              !iconOnly && 'border border-[var(--border-default)]',
+              'hover:bg-[var(--model-trigger-hover)]',
               pillSizeCn,
               disabled && 'cursor-not-allowed opacity-50',
             )}

@@ -1039,7 +1039,7 @@ export function ModelSelector({
                         dense ? 'h-6' : 'h-7',
                         noSource
                           ? 'bg-[var(--surface-chip)] px-2.5 hover:bg-[var(--surface-hover)]'
-                          : 'bg-transparent px-2 hover:bg-[var(--model-trigger-hover)]',
+                          : 'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] px-2 border border-[var(--border-default)] hover:bg-[var(--model-trigger-hover)]' /* spec 2026-07-17, token by 一哥 */,
                       ],
                 ),
             // device-link 远程切换 in-flight:置灰 + 禁用点击(复用本文件 disabled 行的 opacity-50 习惯)。
@@ -1079,7 +1079,7 @@ export function ModelSelector({
               />
               <span
                 className={cn(
-                  'min-w-0 truncate font-normal text-[var(--model-trigger-text)]',
+                  'min-w-0 truncate font-normal text-[var(--text-primary)]',
                   isFieldTrigger ? 'max-w-[260px]' : 'max-w-[160px]',
                   isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
                 )}
@@ -1111,7 +1111,7 @@ export function ModelSelector({
                 className={cn(
                   'min-w-0 truncate font-normal',
                   isFieldTrigger ? 'max-w-[260px]' : 'max-w-[160px]',
-                  !isBudget && (isCreateAgentVariant ? 'text-[var(--create-agent-control-text)]' : 'text-[var(--model-trigger-text)]'),
+                  !isBudget && (isCreateAgentVariant ? 'text-[var(--create-agent-control-text)]' : 'text-[var(--text-primary)]'),
                   isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
                 )}
                 style={budgetGradientStyle}
@@ -1133,7 +1133,7 @@ export function ModelSelector({
                   <span
                     className={cn(
                       'min-w-0 truncate font-normal',
-                      isCreateAgentVariant ? 'text-[var(--create-agent-control-text)]' : 'text-[var(--model-trigger-text)]',
+                      isCreateAgentVariant ? 'text-[var(--create-agent-control-text)]' : 'text-[var(--text-primary)]',
                       isFieldTrigger ? 'max-w-[120px]' : 'max-w-[88px]',
                       isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
                     )}
@@ -1147,7 +1147,7 @@ export function ModelSelector({
                   size={isCreateAgentVariant ? 11 : dense ? 12 : 13}
                   className={cn(
                     'ml-0.5 shrink-0',
-                    isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : 'text-[var(--model-trigger-text)]',
+                    isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : 'text-[var(--composer-pill-icon,#3C3F43)] dark:text-[var(--composer-pill-icon,#D9D9D9)]',
                   )}
                   aria-label="Fast"
                 />
@@ -1158,7 +1158,7 @@ export function ModelSelector({
             size={isCreateAgentVariant ? 8 : dense ? 13 : 14}
             className={cn(
               'shrink-0',
-              isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : 'text-[var(--model-trigger-arrow)]',
+              isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : 'text-[var(--composer-pill-icon,#3C3F43)] dark:text-[var(--composer-pill-icon,#D9D9D9)]' /* spec 2026-07-17, token by 一哥 */,
               isFieldTrigger && 'ml-auto',
             )}
           />

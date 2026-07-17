@@ -186,7 +186,7 @@ export function ExtraDirsButton({
                   ]
                 : [
                     'gap-1 px-1.5 py-1',
-                    'bg-transparent',
+                    'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] border border-[var(--border-default)] text-[var(--composer-pill-icon,#3C3F43)] dark:text-[var(--composer-pill-icon,#D9D9D9)]' /* spec 2026-07-17, token by 一哥 */,
                     'hover:bg-[var(--model-trigger-hover)]',
                   ],
               'disabled:cursor-not-allowed disabled:opacity-50',
@@ -195,15 +195,12 @@ export function ExtraDirsButton({
           >
             <Plus
               size={isCreateAgentVariant ? 11 : dense ? 15 : 16}
-              className={cn(
-                'shrink-0',
-                isCreateAgentVariant ? 'text-current' : 'text-[var(--model-trigger-text)]',
-              )}
+              className="shrink-0"
             />
             {count > 0 && isCc && !isCreateAgentVariant && (
               <span
                 className={cn(
-                  'font-normal tabular-nums text-[var(--model-trigger-text)]',
+                  'font-normal tabular-nums',
                   dense ? 'text-[12.5px]' : 'text-[13px]',
                 )}
               >

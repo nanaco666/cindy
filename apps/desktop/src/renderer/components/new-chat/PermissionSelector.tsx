@@ -122,7 +122,7 @@ export function PermissionSelector({
                   ]
                 : [
                     'py-1 pl-0 pr-2',
-                    'bg-transparent text-[var(--model-trigger-text)]',
+                    'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] border border-[var(--border-default)] text-[var(--text-primary)]' /* spec 2026-07-17, token by 一哥; fallback 待注册后删 */,
                     'hover:bg-[var(--model-trigger-hover)]',
                   ],
               !isCreateAgentVariant && triggerTone === 'auto' && 'text-[var(--perm-auto-selected-text)]',
