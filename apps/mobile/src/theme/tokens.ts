@@ -9,7 +9,7 @@
  *    `useTheme().colors` 或 `useThemedStyles(makeStyles)` 消费,**永远写 token 不写 hex**。
  *  - spacing / radius / typeScale / lineHeight / fontWeight / iconSize:主题无关的不变量阶梯。
  *
- * 色值对齐桌面 `DESIGN.md` 的 Ollama Light / Dark,保证跨端一致。
+ * 色值对齐 CINDY 色板(决策表 PRE-2 / U3+U8 批准),与桌面 D2 落地同源。
  */
 
 export type ThemeMode = 'light' | 'dark';
@@ -36,7 +36,7 @@ export interface ThemeColors {
   textSecondary: string;
   /** 三级文字 / placeholder / metadata */
   textTertiary: string;
-  /** CTA / 主操作填充(dark 下反相为白) */
+  /** CTA / 主操作填充 —— 品牌红 #DF0C27,L=D 同值(U3+U8 批准,不再 dark 反相) */
   cta: string;
   /** CTA 上的文字 */
   ctaText: string;
@@ -89,64 +89,78 @@ export interface ThemeColors {
   swipeActionText: string;
 }
 
-/** Default Light —— 对齐桌面 Ollama Light。 */
+/**
+ * Default Light —— CINDY 色板(决策表 PRE-2 / U3+U8 批准)。
+ * 直映:背景/卡片/边框/正文/二级信息/品牌红 CTA;插值档按决策表 §2(sRGB 每通道 round)。
+ * 二级信息色 #9A9DA3 为 U2 裁决忠于 Figma 原值,实测 2.32-2.56:1 低于 AA,进显式例外。
+ * borderStrong/errorBorder 取表内 AA 中性强调灰 #686B72(与 text-tertiary/ask-checkbox-border/
+ * file-remove-bg 同源,非表内直落 id;lead 2026-07-17 确认采纳,errorBorder 跟随)。
+ */
 export const lightColors: ThemeColors = {
-  surface: '#f8f8f6',
-  surfaceElevated: '#ffffff',
-  surfaceTranslucent: 'rgba(248, 248, 246, 0.78)',
-  surfaceChip: '#e5e5e5',
-  border: '#d7d7d4',
-  borderTranslucent: 'rgba(215, 215, 212, 0.62)',
-  borderStrong: '#a3a3a3',
-  textPrimary: '#262626',
-  textSecondary: '#525252',
-  textTertiary: '#737373',
-  cta: '#1f1f1f',
-  ctaText: '#fbfbfa',
+  surface: '#EDEDED',
+  surfaceElevated: '#F8F8F8',
+  surfaceTranslucent: 'rgba(237, 237, 237, 0.78)',
+  surfaceChip: '#F1F1F1',
+  border: '#DCDFE3',
+  borderTranslucent: 'rgba(220, 223, 227, 0.62)',
+  borderStrong: '#686B72',
+  textPrimary: '#3C3F43',
+  textSecondary: '#9A9DA3',
+  textTertiary: '#686B72',
+  cta: '#DF0C27',
+  ctaText: '#FFFFFF',
   statusReady: '#00D9C5',
   statusRecording: '#ef4444',
-  statusAccent: '#ff6600',
+  statusAccent: '#FF6600',
   statusAwaiting: '#00D9C5',
   statusError: '#ef4444',
   statusDone: '#22c55e',
-  permAutoAccent: '#000050',
-  errorText: '#262626',
+  permAutoAccent: '#1D4ED8',
+  errorText: '#3C3F43',
   destructive: '#f43d3f',
-  errorBorder: '#a3a3a3',
+  errorBorder: '#686B72',
   overlay: 'rgba(38, 38, 38, 0.24)',
-  homeListFab: '#262626',
+  // homeListFab:反相中性,不染品牌红(lead 裁决 2026-07-17:染红=扩张红名单,超 U8
+  // 已批决策表范围;日后要红 FAB 须单独过用户关卡)。light 对齐 textPrimary 深灰 #3C3F43。
+  homeListFab: '#3C3F43',
   swipeActionPin: '#ff6600',
   swipeActionNeutral: '#8e8e93',
   swipeActionArchive: '#3b82f6',
   swipeActionText: '#fbfbfa',
 };
 
-/** Default Dark —— 对齐桌面 Ollama Dark。 */
+/**
+ * Default Dark —— CINDY 色板(决策表 PRE-2 / U3+U8 批准)。
+ * CTA 不再反相为白 pill,改为品牌红 #DF0C27 + 白字(L=D 同值,4.98:1 过 AA)——
+ * 打破此前 dark/light CTA 反相守护,themeTokens.test.ts 契约已同步改写(见 M2)。
+ * borderStrong/errorBorder 取表内 AA 中性强调灰 #BFC1C4(与 text-tertiary/ask-checkbox-border
+ * 同源,非表内直落 id;lead 2026-07-17 确认采纳,errorBorder 跟随)。
+ */
 export const darkColors: ThemeColors = {
-  surface: '#1f1f1e',
-  surfaceElevated: '#2c2c2a',
-  surfaceTranslucent: 'rgba(31, 31, 30, 0.78)',
-  surfaceChip: '#3c3c3a',
-  border: '#3c3c3a',
-  borderTranslucent: 'rgba(60, 60, 58, 0.62)',
-  borderStrong: '#525252',
-  textPrimary: '#d4d4d4',
-  textSecondary: '#a3a3a3',
-  textTertiary: '#737373',
-  // CTA 在 dark 反相为白 pill + 深色文字(同桌面 inverted CTA)。
-  cta: '#ffffff',
-  ctaText: '#1f1f1e',
+  surface: '#2A2828',
+  surfaceElevated: '#312F2F',
+  surfaceTranslucent: 'rgba(42, 40, 40, 0.78)',
+  surfaceChip: '#2F2D2D',
+  border: '#434343',
+  borderTranslucent: 'rgba(67, 67, 67, 0.62)',
+  borderStrong: '#BFC1C4',
+  textPrimary: '#D4D4D4',
+  textSecondary: '#6F6F6F',
+  textTertiary: '#BFC1C4',
+  cta: '#DF0C27',
+  ctaText: '#FFFFFF',
   statusReady: '#00D9C5',
   statusRecording: '#ef4444',
-  statusAccent: '#ff6600',
+  statusAccent: '#FF6600',
   statusAwaiting: '#00D9C5',
   statusError: '#ef4444',
   statusDone: '#22c55e',
   permAutoAccent: '#00D9C5',
-  errorText: '#d4d4d4',
+  errorText: '#D4D4D4',
   destructive: '#f43d3f',
-  errorBorder: '#525252',
+  errorBorder: '#BFC1C4',
   overlay: 'rgba(0, 0, 0, 0.45)',
+  // homeListFab:反相中性(lead 裁决,见 lightColors 注释);dark 维持 #ECEDEF 柔白(非纯白 cta)。
   homeListFab: '#ECEDEF',
   swipeActionPin: '#ff6600',
   swipeActionNeutral: '#636366',

@@ -10,6 +10,28 @@ import {
   type ThemeColors,
 } from '@/theme/tokens';
 
+// WCAG 2.1 对比度工具 —— 仅用于本文件 CTA 契约断言(sRGB 相对亮度法)。
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function channel(c: number): number {
+  const s = c / 255;
+  return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+}
+function luminance(hex: string): number {
+  const [r, g, b] = hexToRgb(hex);
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+function contrastRatio(fg: string, bg: string): number {
+  const l1 = luminance(fg);
+  const l2 = luminance(bg);
+  const [hi, lo] = l1 >= l2 ? [l1, l2] : [l2, l1];
+  return (hi + 0.05) / (lo + 0.05);
+}
+
 describe('theme tokens', () => {
   it('light / dark 色板 key 集合完全一致', () => {
     expect(Object.keys(lightColors).sort()).toEqual(Object.keys(darkColors).sort());
@@ -29,14 +51,33 @@ describe('theme tokens', () => {
     }
   });
 
-  it('语义不变色跨 light / dark 一致(statusReady / statusAccent)', () => {
+  it('状态四色跨 light / dark 一致且不被 CINDY 接管(running/awaiting/error/done/recording)', () => {
     expect(darkColors.statusReady).toBe(lightColors.statusReady);
     expect(darkColors.statusAccent).toBe(lightColors.statusAccent);
+    expect(darkColors.statusRecording).toBe(lightColors.statusRecording);
+    expect(darkColors.statusAwaiting).toBe(lightColors.statusAwaiting);
+    expect(darkColors.statusError).toBe(lightColors.statusError);
+    expect(darkColors.statusDone).toBe(lightColors.statusDone);
+    // 状态四色冻结值(CINDY 不接管状态语义色,与桌面/灵动岛三端同值)。
+    expect(lightColors.statusAccent).toBe('#FF6600');
+    expect(lightColors.statusAwaiting).toBe('#00D9C5');
+    expect(lightColors.statusError).toBe('#ef4444');
+    expect(lightColors.statusDone).toBe('#22c55e');
+    expect(lightColors.statusRecording).toBe('#ef4444');
   });
 
-  it('CTA 在 dark 下相对 light 反相(避免误用旧深色)', () => {
-    expect(darkColors.cta).not.toBe(lightColors.cta);
-    expect(darkColors.ctaText).not.toBe(lightColors.ctaText);
+  it('CTA 契约:品牌红 #DF0C27 底 + #FFFFFF 字,L=D 同值,对比度 ≥4.5:1(U3+U8 批准)', () => {
+    // 契约变更依据:CINDY 色板经 U3(全量替换语义)+U8(token 决策表)批准——
+    // 此前"dark CTA 反相为白 pill"守护作废,改为红底白字 L=D 同值。
+    // 这是对旧反相断言的显式契约改写,不是绕过;PR 描述须写明依据。
+    expect(lightColors.cta).toBe('#DF0C27');
+    expect(darkColors.cta).toBe('#DF0C27');
+    expect(lightColors.ctaText).toBe('#FFFFFF');
+    expect(darkColors.ctaText).toBe('#FFFFFF');
+    // 红底白字实测 4.98:1,过 AA 普通文本门槛 4.5:1。
+    for (const palette of [lightColors, darkColors]) {
+      expect(contrastRatio(palette.ctaText, palette.cta)).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it('typeScale 严格单调递增', () => {
