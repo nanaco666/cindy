@@ -39,6 +39,8 @@ export interface DevCliFlagsInput {
   envIsolationName: string | undefined;
   /** 已显式设置的 XDT_DEVICE_ID_OVERRIDE;非空时隔离模式不再派生独立设备标识。 */
   envDeviceIdOverride: string | undefined;
+  /** XDT_ENDPOINTS_CDN 环境变量:严格 '1' = dev 也走完整 CDN 清单拉取(restart 脚本路径)。 */
+  envEndpointsCdn: string | undefined;
 }
 
 export interface DevCliFlags {
@@ -63,6 +65,12 @@ export interface DevCliFlags {
    * 此时按**默认沙箱**处理(仍隔离——回落到不隔离会直接混进正式版数据,更危险)。
    */
   invalidIsolationName: string | null;
+  /**
+   * --endpoints-cdn / XDT_ENDPOINTS_CDN=1:dev 下不读本地 config/endpoint.json,
+   * 走与 packaged 完全相同的 CDN 阻断拉取链路(测线上清单用)。packaged 恒 false
+   * (本来就走 CDN,该标志无意义)。
+   */
+  endpointsCdn: boolean;
 }
 
 export function resolveDevCliFlags(input: DevCliFlagsInput): DevCliFlags {
@@ -73,6 +81,7 @@ export function resolveDevCliFlags(input: DevCliFlagsInput): DevCliFlags {
       needsIsolatedDeviceId: false,
       isolationName: null,
       invalidIsolationName: null,
+      endpointsCdn: false,
     };
   }
 
@@ -112,5 +121,7 @@ export function resolveDevCliFlags(input: DevCliFlagsInput): DevCliFlags {
     needsIsolatedDeviceId: isolated && !input.envDeviceIdOverride?.trim(),
     isolationName,
     invalidIsolationName,
+    // argv 优先(human 直跑),env 兜底(restart 脚本路径);与 --passive 同款双通道。
+    endpointsCdn: input.argv.includes('--endpoints-cdn') || input.envEndpointsCdn === '1',
   };
 }

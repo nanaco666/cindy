@@ -4414,6 +4414,8 @@ app.on('ready', async () => {
   // 均惰性(无 marker / 无迁移 argv 时零副作用),必须在建窗口前执行:
   //  1. 新 app 身份:--migrated-from 首启健康检查失败 → 退出拉回老 app;
   //  2. 老 app 身份:marker=confirmed 跳板拉起新 app 成功 → 静默退出。
+  // ⚠️ 时序钉子:这两个调用跑在 initClientEndpoints() **之前**,禁止在其调用链里
+  // 触达 getClientEndpoint / manifestService 的 CDN base(init 前读取会直接抛错)。
   try {
     if ((await brandMigrationRuntime.maybeRunCindyFirstRun()) === 'quit') {
       app.exit(1);
@@ -4436,8 +4438,9 @@ app.on('ready', async () => {
     brandMigrationBootstrapLog.error('legacy startup handling threw', { error: String(err) });
   }
 
-  // 客户端远程端点清单:启动第一步、先于一切更新检查,**阻断式**拉取(拉不到 /
-  // 清单非法 → 系统错误框重试/退出,无缓存与超时兜底;dev 零网络用烘焙值)。
+  // 客户端端点清单:启动第一步、先于一切更新检查,**阻断式**解析(packaged 走
+  // 烘焙 hotfix CDN 基址;dev 默认读仓内 config/endpoint.json,--endpoints-cdn
+  // 时同 packaged;失败 → 系统错误框重试/退出,无缓存与烘焙兜底)。
   // 必须早于一切端点消费方初始化、且在 createWindow() 前注册 sendSync IPC
   // (preload 模块级同步读取依赖它)。用户在错误框选"退出"时 app.exit 已调用,
   // 这里直接 return 不再继续启动。

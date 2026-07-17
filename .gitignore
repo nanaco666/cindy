@@ -120,6 +120,8 @@ CLAUDE.local.md
 # 若以后需要共享某个 agent 的项目配置，用 ! 规则逐项反向豁免。
 
 # ── Cindy/XDMaker 开发者本地工作区 ───────────────────────────
+# local 模式的端点清单(restart:desktop:local 从 config/endpoint.json 生成,api/auth/device-link 指 localhost)
+config/endpoint.local.json
 .xdt-worktrees/
 .xdtworktreeinclude
 /start-claude-clean.bat

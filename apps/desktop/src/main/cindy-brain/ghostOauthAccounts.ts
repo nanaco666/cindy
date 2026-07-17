@@ -376,7 +376,7 @@ export class GhostOauthAccountManager {
       return {
         ok: false,
         error: 'INVALID_CONFIG',
-        detail: '授权 broker 基地址未配置(VITE_OAUTH_BROKER_API_BASE_URL),无法拼出弹跳回调地址',
+        detail: '授权 broker 基地址未配置(端点清单 oauthBrokerApiBaseUrl),无法拼出弹跳回调地址',
       };
     }
     if (opts?.scopes !== undefined) {

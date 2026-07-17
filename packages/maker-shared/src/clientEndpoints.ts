@@ -1,20 +1,27 @@
 /**
  * clientEndpoints — 客户端远程端点清单的共享 schema / 校验 / 严格解析。
  *
- * 背景:desktop / mobile 的生产端点在构建期内联进包体,发版后无法变更。OSS 上
- * 存放一份公开读的清单(仓内正本 `config/client-endpoints.json`,人肉上传),
- * 应用启动第一步、**先于检查更新**从 CDN 拉取;OSS 清单修改后重启应用生效。
+ * 背景:desktop / mobile 的生产端点在构建期内联进包体,发版后无法变更。CDN 上
+ * 存放一份公开读的清单(仓内正本 `config/endpoint.json` = cn、
+ * `config/endpoint.global.json` = global,人肉上传各自 region 的 CDN),
+ * 应用启动第一步、**先于检查更新**从 CDN 拉取;CDN 清单修改后重启应用生效。
+ * 完整拉取地址 = `<烘焙的 region 化 hotfix base>/endpoint.json`。
  *
- * 语义是**清单即唯一事实源**(2026-07 与 Lizi 定案,两次收紧):
+ * 语义是**清单即唯一事实源**(2026-07 与 Lizi 定案,三次收紧):
  *  - 拉不到 / 清单非法 / **任一字段缺失** → 启动阻断,宿主报错并提供重试;
  *  - **没有缓存回退、没有超时后静默继续、没有逐字段烘焙回退**——任何本地兜底
  *    都会把 CDN 配置错误静默掩盖成"部分端点漂移",这里要的是配置错就立刻炸出来;
- *  - 构建期烘焙值仅存在于两个无法消除的位置:拉清单用的 CDN 基址(自举必需,
- *    且防"清单配错 CDN 把自己锁死"),以及 dev 构建(desktop 未打包 / mobile
- *    __DEV__)整个跳过拉取的开发路径。
+ *  - 客户端唯一烘焙的远程 URL 是拉清单用的 CDN 基址(自举必需,且防"清单配错
+ *    CDN 把自己锁死");**更新/hotfix 链的 CDN base 也来自清单**(cdnBaseUrl /
+ *    cdnInternalBaseUrl)——清单阻断在一切更新检查之前,更新链拿到的一定是
+ *    已解析的清单值,无鸡生蛋问题;
+ *  - dev(desktop 未打包 / mobile __DEV__)默认不走 CDN,改读仓内正本文件
+ *    (同一套解析,allowHttp 宽松协议见下);`--endpoints-cdn` /
+ *    EXPO_PUBLIC_ENDPOINTS_CDN=1 可让 dev 走完整 CDN 链路。
  *
- * 职责边界(仓规则 2):本模块是纯逻辑层,不做任何 IO——fetch / 报错交互由宿主
- * (desktop main / mobile 启动闸门)实现,这里只提供确定性的解析与校验(仓规则 9)。
+ * 职责边界(仓规则 2):本模块是纯逻辑层,不做任何 IO——fetch / 读文件 / 报错
+ * 交互由宿主(desktop main / mobile 启动闸门)实现,这里只提供确定性的解析与
+ * 校验(仓规则 9)。
  *
  * 校验语义:
  *  - **全字段必填**:CLIENT_ENDPOINT_KEYS 每个字段都必须出现且合法,缺一个整份拒绝;
@@ -22,8 +29,15 @@
  *    新清单多出的字段老客户端不认识但不报错);
  *  - 协议白名单(与 scripts/shared/production-endpoints.mjs 对齐)、禁 URL 凭据、
  *    尾斜杠归一;
+ *  - `allowHttp` 宽松模式(仅 dev 本地文件路径允许开启):https-only 字段追加
+ *    接受 http:、wss 字段追加 ws:,让 endpoint.local.json 能填 localhost;
+ *    packaged / CDN 路径一律不开,打包校验零放松;
  *  - schemaVersion 缺失、非正整数或大于当前支持版本 → 整份拒绝(breaking change
- *    才 bump 版本)。
+ *    才 bump 版本)。2026-07 追加 cdnBaseUrl / cdnInternalBaseUrl 时**没有** bump:
+ *    新字段随全新的 hotfix CDN 域名 + `/endpoint.json` 路径发布,老客户端读的是
+ *    老 CDN 老路径(`/config/client-endpoints.json`)看不到新清单;即使把新正本
+ *    内容双写到老路径,多出的字段也会被老 parser 按"未知字段"忽略——bump 的
+ *    语义是"同一文件的不兼容重释义",纯增字段 + 换发布地址不构成。
  */
 
 /** 当前客户端支持的清单 schema 版本;清单里更大的版本号会被整份拒绝。 */
@@ -45,6 +59,11 @@ export const CLIENT_ENDPOINT_KEYS = [
   'slackHookWsUrl',
   'websiteUrl',
   'xdGatewayBaseUrl',
+  // 更新/hotfix 链的 CDN base(manifest-*.json / hotfix 包 / agent 二进制)。
+  // cdnInternalBaseUrl 是公司内网加速镜像,允许 http(内网探测语义,见
+  // desktop manifestService);两者进清单 = 更新链也由清单全权。
+  'cdnBaseUrl',
+  'cdnInternalBaseUrl',
 ] as const;
 
 export type ClientEndpointKey = (typeof CLIENT_ENDPOINT_KEYS)[number];
@@ -62,7 +81,25 @@ const FIELD_PROTOCOLS: Record<ClientEndpointKey, readonly string[]> = {
   slackHookWsUrl: ['wss:'],
   websiteUrl: ['https:'],
   xdGatewayBaseUrl: ['https:'],
+  cdnBaseUrl: ['https:'],
+  // 内网加速镜像天然是 http(与 scripts/shared/production-endpoints.mjs 现状对齐)。
+  cdnInternalBaseUrl: ['http:', 'https:'],
 };
+
+/** 解析选项;allowHttp 仅供 dev 本地文件路径(endpoint.local.json 等)开启。 */
+export interface ParseClientEndpointManifestOptions {
+  /** true 时 https-only 字段追加接受 http:、wss 字段追加 ws:(localhost 场景)。 */
+  allowHttp?: boolean;
+}
+
+function allowedProtocols(key: ClientEndpointKey, allowHttp: boolean): readonly string[] {
+  const base = FIELD_PROTOCOLS[key];
+  if (!allowHttp) return base;
+  const relaxed = [...base];
+  if (base.includes('https:') && !base.includes('http:')) relaxed.push('http:');
+  if (base.includes('wss:') && !base.includes('ws:')) relaxed.push('ws:');
+  return relaxed;
+}
 
 export type ParseClientEndpointManifestResult =
   | { ok: true; endpoints: ClientEndpointMap }
@@ -72,7 +109,10 @@ export type ParseClientEndpointManifestResult =
  * 解析并校验一份清单原文。纯函数,输入任意文本都不会抛出。
  * 全字段必填:缺失 / 非法 / 协议不符 / 带凭据,任一命中整份拒绝。
  */
-export function parseClientEndpointManifest(rawText: string): ParseClientEndpointManifestResult {
+export function parseClientEndpointManifest(
+  rawText: string,
+  options?: ParseClientEndpointManifestOptions,
+): ParseClientEndpointManifestResult {
   let parsed: unknown;
   try {
     parsed = JSON.parse(rawText);
@@ -112,7 +152,7 @@ export function parseClientEndpointManifest(rawText: string): ParseClientEndpoin
     } catch {
       return { ok: false, reason: `invalid-field:${key}` };
     }
-    if (!FIELD_PROTOCOLS[key].includes(url.protocol)) {
+    if (!allowedProtocols(key, options?.allowHttp === true).includes(url.protocol)) {
       return { ok: false, reason: `invalid-protocol:${key}` };
     }
     if (url.username || url.password) {
@@ -133,9 +173,10 @@ export type ResolveClientEndpointsResult =
  */
 export function resolveClientEndpointsStrict(
   rawText: string | null,
+  options?: ParseClientEndpointManifestOptions,
 ): ResolveClientEndpointsResult {
   if (rawText === null) {
     return { ok: false, reason: 'fetch-failed' };
   }
-  return parseClientEndpointManifest(rawText);
+  return parseClientEndpointManifest(rawText, options);
 }

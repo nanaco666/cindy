@@ -16,6 +16,8 @@ const VALID_MANIFEST = {
   slackHookWsUrl: 'wss://slack-hook.example.com',
   websiteUrl: 'https://www.example.com',
   xdGatewayBaseUrl: 'https://gateway.example.com',
+  cdnBaseUrl: 'https://cdn.example.com/app',
+  cdnInternalBaseUrl: 'http://cdn-internal.example.com:20080/app',
 };
 
 describe('parseClientEndpointManifest(全字段必填)', () => {
@@ -32,7 +34,7 @@ describe('parseClientEndpointManifest(全字段必填)', () => {
 
   it('忽略未知字段(向前兼容)', () => {
     const result = parseClientEndpointManifest(
-      JSON.stringify({ ...VALID_MANIFEST, futureKey: 'x', cdnBaseUrl: 'https://cdn.example.com' }),
+      JSON.stringify({ ...VALID_MANIFEST, futureKey: 'x', _note: '正本内注释' }),
     );
     expect(result).toMatchObject({ ok: true });
     if (!result.ok) throw new Error('unreachable');
@@ -79,6 +81,7 @@ describe('parseClientEndpointManifest(全字段必填)', () => {
   it.each([
     ['https 字段给 http', { apiBaseUrl: 'http://api.example.com' }, 'invalid-protocol:apiBaseUrl'],
     ['wss 字段给 ws', { slackHookWsUrl: 'ws://hook.example.com' }, 'invalid-protocol:slackHookWsUrl'],
+    ['cdnBaseUrl 给 http', { cdnBaseUrl: 'http://cdn.example.com' }, 'invalid-protocol:cdnBaseUrl'],
     ['非 URL', { websiteUrl: 'not a url' }, 'invalid-field:websiteUrl'],
     ['空串', { websiteUrl: '   ' }, 'invalid-field:websiteUrl'],
     ['非字符串', { websiteUrl: 42 }, 'invalid-field:websiteUrl'],
@@ -90,6 +93,73 @@ describe('parseClientEndpointManifest(全字段必填)', () => {
   ])('单字段非法整份拒绝:%s', (_label, patch, reason) => {
     const raw = JSON.stringify({ ...VALID_MANIFEST, ...patch });
     expect(parseClientEndpointManifest(raw)).toEqual({ ok: false, reason });
+  });
+
+  it('cdnInternalBaseUrl 白名单天然含 http(内网镜像,无需 allowHttp)', () => {
+    const result = parseClientEndpointManifest(JSON.stringify(VALID_MANIFEST));
+    expect(result).toMatchObject({ ok: true });
+  });
+});
+
+describe('allowHttp 宽松模式(仅 dev 本地文件路径)', () => {
+  const LOCAL_MANIFEST = {
+    ...VALID_MANIFEST,
+    apiBaseUrl: 'http://localhost:3333',
+    authApiBaseUrl: 'http://localhost:3344',
+    deviceLinkApiBaseUrl: 'http://localhost:3335',
+    slackHookWsUrl: 'ws://localhost:3346',
+  };
+
+  it('默认(不传 options)拒绝 http/ws——packaged 校验零放松', () => {
+    expect(parseClientEndpointManifest(JSON.stringify(LOCAL_MANIFEST))).toEqual({
+      ok: false,
+      reason: 'invalid-protocol:apiBaseUrl',
+    });
+  });
+
+  it('allowHttp:true 时接受 http localhost 与 ws', () => {
+    const result = parseClientEndpointManifest(JSON.stringify(LOCAL_MANIFEST), {
+      allowHttp: true,
+    });
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) throw new Error('unreachable');
+    expect(result.endpoints.apiBaseUrl).toBe('http://localhost:3333');
+    expect(result.endpoints.slackHookWsUrl).toBe('ws://localhost:3346');
+  });
+
+  it('allowHttp:true 仍拒绝垃圾输入 / 缺字段 / 带凭据', () => {
+    expect(parseClientEndpointManifest('broken{{', { allowHttp: true })).toEqual({
+      ok: false,
+      reason: 'invalid-json',
+    });
+    const missing: Record<string, unknown> = { ...LOCAL_MANIFEST };
+    delete missing.cdnBaseUrl;
+    expect(parseClientEndpointManifest(JSON.stringify(missing), { allowHttp: true })).toEqual({
+      ok: false,
+      reason: 'missing-field:cdnBaseUrl',
+    });
+    expect(
+      parseClientEndpointManifest(
+        JSON.stringify({ ...LOCAL_MANIFEST, apiBaseUrl: 'http://user:pass@localhost:3333' }),
+        { allowHttp: true },
+      ),
+    ).toEqual({ ok: false, reason: 'credentials-in-url:apiBaseUrl' });
+  });
+
+  it('allowHttp:true 仍拒绝非 http/https 协议(如 file:)', () => {
+    expect(
+      parseClientEndpointManifest(
+        JSON.stringify({ ...LOCAL_MANIFEST, apiBaseUrl: 'file:///etc/hosts' }),
+        { allowHttp: true },
+      ),
+    ).toEqual({ ok: false, reason: 'invalid-protocol:apiBaseUrl' });
+  });
+
+  it('resolveClientEndpointsStrict 透传 options', () => {
+    const result = resolveClientEndpointsStrict(JSON.stringify(LOCAL_MANIFEST), {
+      allowHttp: true,
+    });
+    expect(result).toMatchObject({ ok: true });
   });
 });
 

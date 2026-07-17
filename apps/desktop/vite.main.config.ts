@@ -16,27 +16,12 @@ export default defineConfig(({ mode }) => {
   const readMainEnv = (key: string): string => allEnv[key] || process.env[key] || '';
   return {
     define: {
-      'import.meta.env.VITE_API_BASE_URL': JSON.stringify(
-        env.VITE_API_BASE_URL || 'http://localhost:3333',
-      ),
       'import.meta.env.VITE_CINDY_AUTH_REGION': JSON.stringify(env.VITE_CINDY_AUTH_REGION || 'cn'),
-      'import.meta.env.VITE_CINDY_AUTH_BASE_URL': JSON.stringify(
-        env.VITE_CINDY_AUTH_BASE_URL || 'http://localhost:3344',
-      ),
-      'import.meta.env.VITE_HEARTBEAT_URL': JSON.stringify(
-        readViteEnv('VITE_HEARTBEAT_URL'),
-      ),
-      'import.meta.env.VITE_SLACK_HOOK_WS_URL': JSON.stringify(
-        readViteEnv('VITE_SLACK_HOOK_WS_URL'),
-      ),
-      'import.meta.env.VITE_XDPROXY_BASE_URL': JSON.stringify(
-        readViteEnv('VITE_XDPROXY_BASE_URL'),
-      ),
-      'import.meta.env.VITE_CDN_BASE_URL': JSON.stringify(
-        readViteEnv('VITE_CDN_BASE_URL'),
-      ),
-      'import.meta.env.VITE_CDN_INTERNAL_BASE_URL': JSON.stringify(
-        readViteEnv('VITE_CDN_INTERNAL_BASE_URL'),
+      // 端点清单自举基址(唯一烘焙远程 URL;业务端点已全部改走运行期清单,
+      // 旧的 VITE_API_BASE_URL 等端点 define 随之退役)。dev 构建也注入 cn 值,
+      // `--endpoints-cdn` 才能零配置直连线上清单。
+      'import.meta.env.VITE_ENDPOINT_MANIFEST_BASE_URL': JSON.stringify(
+        readViteEnv('VITE_ENDPOINT_MANIFEST_BASE_URL'),
       ),
       // Triage bot token (dev only — production 留空，BotTokenStore 走 safeStorage)
       'process.env.TRIAGE_BOT_TOKEN': JSON.stringify(readMainEnv('TRIAGE_BOT_TOKEN')),

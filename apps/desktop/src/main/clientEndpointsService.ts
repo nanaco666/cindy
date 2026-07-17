@@ -1,28 +1,33 @@
 /**
  * clientEndpointsService.ts
  * ---------------------------------------------------------------------------
- * 客户端远程端点清单(OSS `config/client-endpoints.json`)的 desktop 宿主层。
+ * 客户端远程端点清单(`<hotfix CDN base>/endpoint.json`)的 desktop 宿主层。
  *
- * 语义是**清单即唯一事实源 + 阻断式**(2026-07 与 Lizi 定案,两次收紧):
- * app.ready 内、createWindow / 一切更新检查之前拉取清单;拉不到 / 清单非法 /
+ * 语义是**清单即唯一事实源 + 阻断式**(2026-07 与 Lizi 定案,三次收紧):
+ * app.ready 内、createWindow / 一切更新检查之前解析清单;拉不到 / 清单非法 /
  * 任一字段缺失 → 弹系统错误框(重试 / 退出),用户不重试成功就不放行启动。
- * **没有缓存回退、没有超时后静默继续、没有逐字段烘焙回退**——packaged 下生效
- * 的端点全部来自清单,CDN 配置错任何一点都在启动时立刻暴露,不被本地值掩盖。
+ * **没有缓存回退、没有超时后静默继续、没有逐字段烘焙回退**——生效的端点
+ * (含更新链 CDN base)全部来自清单,配置错任何一点都在启动时立刻暴露。
+ *
+ * 清单来源按运行形态三选一(resolveEndpointSource,纯函数可单测):
+ *  - packaged / dev + --endpoints-cdn:从烘焙自举基址 ENDPOINT_MANIFEST_BASE_URL
+ *    (region 化 hotfix 域名,客户端唯一"有感"的烘焙远程 URL)直连拉取,
+ *    **不做内网探测**(内外网探测是更新链自己的事,见 manifestService);
+ *  - dev 默认:读仓内 `config/endpoint.json`(XDT_ENDPOINT_MANIFEST_FILE 可
+ *    指定其它文件,restart:desktop:local 用它指到 config/endpoint.local.json),
+ *    同一条阻断循环,文件缺失 / 非法同样弹框——配置错要炸出来,不静默猜测;
+ *    仅本地文件路径放开 allowHttp(localhost 场景),CDN 路径校验零放松。
  *
  * 共享逻辑(schema / 全字段必填校验)在 @lizi/maker-shared/client-endpoints;
- * 本文件负责 desktop 侧 IO:
- *  - CDN 拉取:复用 manifestService.ensureBaseUrl()(内外网探测)+ net.request。
- *    **拉清单的 CDN base 是烘焙常量**——自举必需,也防"清单配错把自己锁死";
- *  - renderer 消费:sendSync IPC `client-endpoints:get-sync`(首帧同步可用)。
+ * 本文件负责 desktop 侧 IO 与 renderer 消费(sendSync IPC,首帧同步可用)。
  *
- * 烘焙值(bakedClientEndpoints)仅服务 dev 路径:dev 模式(app 未打包)跳过
- * 拉取,直接用构建期 .env 值,行为与引入清单前完全一致;packaged 正常流程
- * 永远读清单解析结果。
- *
- * 有意不接入:manifestService / updateService 的更新链继续用烘焙 CDN 常量——
- * 更新基础设施是"逃生舱",清单事故时仍能靠热更修复(且本服务先于更新检查阻断,
- * 更新链拿不到清单值也不需要)。
+ * 依赖方向(2026-07 重构后):manifestService(更新链)经 getClientEndpoint
+ * 读清单的 cdnBaseUrl / cdnInternalBaseUrl——本文件**不得** import
+ * manifestService(会成环);isDev 语义在此内联为 !app.isPackaged。
  */
+
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { app, dialog, ipcMain, net } from 'electron';
 
@@ -33,51 +38,50 @@ import {
 } from '@lizi/maker-shared/client-endpoints';
 
 import { createLogger } from './logger';
-import { ensureBaseUrl, isDev } from './manifestService';
-import {
-  API_BASE_URL_DEV_FALLBACK,
-  AUTH_BASE_URL_DEV_FALLBACK,
-  DEVICE_LINK_API_BASE_DEV_FALLBACK,
-  HEARTBEAT_DEFAULT_ENDPOINT,
-  SLACK_HOOK_DEFAULT_URL,
-  WEBSITE_URL,
-  XD_GATEWAY_BASE_URL,
-} from '../shared/endpoints';
+import { ENDPOINT_MANIFEST_BASE_URL } from '../shared/endpoints';
 
 const log = createLogger('clientEndpoints');
 
-const MANIFEST_RELATIVE_PATH = '/config/client-endpoints.json';
+const MANIFEST_FILE_NAME = 'endpoint.json';
 /** 单次请求的网络超时——只用于触发错误框,不是静默降级。 */
 const ATTEMPT_TIMEOUT_MS = 15_000;
 
 export const CLIENT_ENDPOINTS_SYNC_CHANNEL = 'client-endpoints:get-sync';
 
-function trimEndpoint(value: string | undefined): string {
-  return value?.trim().replace(/\/+$/, '') ?? '';
+// ── 清单来源解析(纯函数,规则 14:内存 harness 可测) ─────────────────────
+
+export type EndpointSource =
+  | { kind: 'cdn' }
+  | { kind: 'file'; filePath: string };
+
+export interface ResolveEndpointSourceInput {
+  isPackaged: boolean;
+  env: {
+    /** '1' = dev 也走完整 CDN 拉取(index.ts 已把 --endpoints-cdn 收敛到该 env)。 */
+    XDT_ENDPOINTS_CDN?: string;
+    /** dev 本地清单文件覆盖(restart:desktop:local 指到 endpoint.local.json)。 */
+    XDT_ENDPOINT_MANIFEST_FILE?: string;
+  };
+  /** 仓库根(dev 下 app.getAppPath() = apps/desktop,向上两级)。 */
+  repoRoot: string;
 }
 
 /**
- * dev 专用:构建期 .env 值组装的端点全集(packaged 正常流程不消费本函数,
- * 生效值全部来自清单)。空值语义与引入清单前一致:该能力在当前 dev 构建
- * 未配置,消费点自己的"空则跳过"分支继续生效(如 oauthBroker 回退主 server
- * 老路由)。
+ * 决定清单从哪来:packaged 恒 CDN;dev 默认读仓内 config/endpoint.json,
+ * XDT_ENDPOINT_MANIFEST_FILE 覆盖文件路径(相对路径以仓根为基准),
+ * XDT_ENDPOINTS_CDN='1' 切回完整 CDN 链路。
  */
-export function bakedClientEndpoints(): ClientEndpointMap {
-  return {
-    apiBaseUrl: trimEndpoint(import.meta.env.VITE_API_BASE_URL) || API_BASE_URL_DEV_FALLBACK,
-    // 构建期已按 region 解析出单一 auth 地址;清单同样是 region 化下发的单一字段。
-    authApiBaseUrl:
-      trimEndpoint(import.meta.env.VITE_CINDY_AUTH_BASE_URL) || AUTH_BASE_URL_DEV_FALLBACK,
-    deviceLinkApiBaseUrl:
-      trimEndpoint(import.meta.env.VITE_DEVICE_LINK_API_BASE_URL) ||
-      DEVICE_LINK_API_BASE_DEV_FALLBACK,
-    oauthBrokerApiBaseUrl: trimEndpoint(import.meta.env.VITE_OAUTH_BROKER_API_BASE_URL),
-    heartbeatUrl: HEARTBEAT_DEFAULT_ENDPOINT,
-    slackHookWsUrl: SLACK_HOOK_DEFAULT_URL,
-    websiteUrl: WEBSITE_URL,
-    xdGatewayBaseUrl: XD_GATEWAY_BASE_URL,
-  };
+export function resolveEndpointSource(input: ResolveEndpointSourceInput): EndpointSource {
+  if (input.isPackaged) return { kind: 'cdn' };
+  if (input.env.XDT_ENDPOINTS_CDN === '1') return { kind: 'cdn' };
+  const override = input.env.XDT_ENDPOINT_MANIFEST_FILE?.trim();
+  const filePath = override
+    ? path.resolve(input.repoRoot, override)
+    : path.join(input.repoRoot, 'config', MANIFEST_FILE_NAME);
+  return { kind: 'file', filePath };
 }
+
+// ── IO:CDN 拉取 / 本地文件读取 ─────────────────────────────────────────────
 
 /** net.request 拉清单原文;任何失败(非 200 / 超时 / 异常)返回 null。 */
 function fetchTextViaNet(url: string, timeoutMs: number): Promise<string | null> {
@@ -117,11 +121,30 @@ function fetchTextViaNet(url: string, timeoutMs: number): Promise<string | null>
   });
 }
 
-async function fetchManifestTextViaCdn(timeoutMs: number): Promise<string | null> {
-  // ensureBaseUrl 只读 shared/endpoints 烘焙常量(内网探测 1500ms 上限)。
-  const base = await ensureBaseUrl();
-  return fetchTextViaNet(`${base}${MANIFEST_RELATIVE_PATH}?t=${Date.now()}`, timeoutMs);
+function fetchManifestTextViaCdn(timeoutMs: number): Promise<string | null> {
+  if (!ENDPOINT_MANIFEST_BASE_URL) {
+    // 烘焙基址缺失属打包/构建配置事故,同样走阻断暴露(fetch-failed → 弹框)。
+    log.error('ENDPOINT_MANIFEST_BASE_URL is empty (build misconfiguration)');
+    return Promise.resolve(null);
+  }
+  // cache-bust:防 Chromium / CDN 复用陈旧清单。
+  return fetchTextViaNet(
+    `${ENDPOINT_MANIFEST_BASE_URL}/${MANIFEST_FILE_NAME}?t=${Date.now()}`,
+    timeoutMs,
+  );
 }
+
+/** dev 本地清单文件读取;缺失 / 读失败返回 null(→ 同一条阻断弹框链路)。 */
+function readManifestTextFromFile(filePath: string): string | null {
+  try {
+    return fs.readFileSync(filePath, 'utf8');
+  } catch (err) {
+    log.warn('failed to read local endpoint manifest %s: %s', filePath, String(err));
+    return null;
+  }
+}
+
+// ── 阻断式解析循环 ──────────────────────────────────────────────────────────
 
 /** 阻断循环的依赖注入面(规则 14:测试用内存 harness 驱动,不起 Electron)。 */
 export interface BlockingResolveDeps {
@@ -130,6 +153,8 @@ export interface BlockingResolveDeps {
   promptRetry(reason: string): 'retry' | 'exit';
   exitApp(): void;
   timeoutMs?: number;
+  /** 仅 dev 本地文件路径为 true(localhost http);CDN 路径一律不传。 */
+  allowHttp?: boolean;
 }
 
 /**
@@ -140,6 +165,7 @@ export async function resolveClientEndpointsBlocking(
   deps: BlockingResolveDeps,
 ): Promise<ClientEndpointMap | null> {
   const timeoutMs = deps.timeoutMs ?? ATTEMPT_TIMEOUT_MS;
+  const options = deps.allowHttp ? { allowHttp: true } : undefined;
   for (;;) {
     let rawText: string | null = null;
     try {
@@ -147,7 +173,7 @@ export async function resolveClientEndpointsBlocking(
     } catch {
       rawText = null;
     }
-    const result = resolveClientEndpointsStrict(rawText);
+    const result = resolveClientEndpointsStrict(rawText, options);
     if (result.ok) return result.endpoints;
     log.warn(`client endpoints manifest unavailable (${result.reason}), prompting user`);
     if (deps.promptRetry(result.reason) === 'exit') {
@@ -157,7 +183,7 @@ export async function resolveClientEndpointsBlocking(
   }
 }
 
-function promptRetryDialog(reason: string): 'retry' | 'exit' {
+function promptRetryDialog(reason: string, sourceLabel: string): 'retry' | 'exit' {
   // createWindow 之前无父窗口,showMessageBoxSync 直接系统模态。
   const choice = dialog.showMessageBoxSync({
     type: 'error',
@@ -165,6 +191,7 @@ function promptRetryDialog(reason: string): 'retry' | 'exit' {
     message: '无法获取服务器配置',
     detail:
       `启动所需的服务器端点清单获取失败(${reason})。\n` +
+      `来源 source: ${sourceLabel}\n` +
       '请检查网络连接后重试;无法联网时应用不能继续启动。\n\n' +
       `Failed to load the server endpoint manifest (${reason}). ` +
       'Please check your network connection and retry.',
@@ -176,49 +203,69 @@ function promptRetryDialog(reason: string): 'retry' | 'exit' {
   return choice === 0 ? 'retry' : 'exit';
 }
 
-let resolvedEndpoints: ClientEndpointMap | null = null;
-let bakedCache: ClientEndpointMap | null = null;
+// ── 模块状态与启动入口 ──────────────────────────────────────────────────────
 
-function baked(): ClientEndpointMap {
-  bakedCache ??= bakedClientEndpoints();
-  return bakedCache;
-}
+let resolvedEndpoints: ClientEndpointMap | null = null;
 
 /**
- * 启动第一步(先于一切更新检查):阻断式解析远程清单。
- * 返回 true = 可以继续启动(dev 跳过或清单已拿到);false = 用户在错误框
- * 选择退出(app.exit 已调用,调用方必须立即 return,不再继续启动流程)。
+ * 启动第一步(先于一切更新检查):阻断式解析清单(packaged=CDN;dev=本地文件,
+ * --endpoints-cdn 时同 packaged)。返回 true = 可以继续启动;false = 用户在
+ * 错误框选择退出(app.exit 已调用,调用方必须立即 return,不再继续启动流程)。
  */
 export async function initClientEndpoints(): Promise<boolean> {
-  if (isDev()) {
-    log.info('dev mode: using baked endpoints (remote manifest skipped)');
-    return true;
-  }
+  const source = resolveEndpointSource({
+    isPackaged: app.isPackaged,
+    env: {
+      XDT_ENDPOINTS_CDN: process.env.XDT_ENDPOINTS_CDN,
+      XDT_ENDPOINT_MANIFEST_FILE: process.env.XDT_ENDPOINT_MANIFEST_FILE,
+    },
+    // dev 下 app.getAppPath() = apps/desktop;packaged 不走 file 分支,该值无消费。
+    repoRoot: path.resolve(app.getAppPath(), '..', '..'),
+  });
+  const sourceLabel =
+    source.kind === 'cdn'
+      ? `${ENDPOINT_MANIFEST_BASE_URL}/${MANIFEST_FILE_NAME}`
+      : source.filePath;
   const endpoints = await resolveClientEndpointsBlocking({
-    fetchManifestText: fetchManifestTextViaCdn,
-    promptRetry: promptRetryDialog,
+    fetchManifestText:
+      source.kind === 'cdn'
+        ? fetchManifestTextViaCdn
+        : () => Promise.resolve(readManifestTextFromFile(source.filePath)),
+    promptRetry: (reason) => promptRetryDialog(reason, sourceLabel),
     exitApp: () => app.exit(1),
+    allowHttp: source.kind === 'file',
   });
   if (endpoints === null) return false; // 用户选择退出,app.exit 已调用
   resolvedEndpoints = endpoints;
   log.info(
-    'resolved from remote manifest: api=%s gateway=%s',
+    'resolved from %s (%s): api=%s gateway=%s cdn=%s',
+    source.kind === 'cdn' ? 'remote manifest' : 'local manifest file',
+    sourceLabel,
     endpoints.apiBaseUrl,
     endpoints.xdGatewayBaseUrl,
+    endpoints.cdnBaseUrl,
   );
   return true;
 }
 
 /**
- * 运行期端点读取入口(main 进程)。packaged 下 init 成功后为清单解析值;
- * dev / init 前(smoke-test 等旁路)为烘焙值。
+ * 运行期端点读取入口(main 进程)。init 成功前调用 = 启动时序 bug,直接抛错
+ * 炸出来(没有任何烘焙兜底可回落;--smoke-test 旁路只碰 localDb,不消费端点)。
  */
 export function getClientEndpoint(key: ClientEndpointKey): string {
-  return (resolvedEndpoints ?? baked())[key];
+  if (resolvedEndpoints === null) {
+    throw new Error(
+      `client endpoints not initialized (getClientEndpoint('${key}') called before initClientEndpoints)`,
+    );
+  }
+  return resolvedEndpoints[key];
 }
 
 export function getResolvedClientEndpoints(): ClientEndpointMap {
-  return { ...(resolvedEndpoints ?? baked()) };
+  if (resolvedEndpoints === null) {
+    throw new Error('client endpoints not initialized');
+  }
+  return { ...resolvedEndpoints };
 }
 
 /** renderer 首帧同步读取(preload 模块级 sendSync);必须在 createWindow() 前注册。 */
@@ -231,5 +278,4 @@ export function registerClientEndpointsIpc(): void {
 /** 仅测试:重置/注入模块状态。 */
 export function resetClientEndpointsForTest(resolved?: ClientEndpointMap): void {
   resolvedEndpoints = resolved ?? null;
-  bakedCache = null;
 }

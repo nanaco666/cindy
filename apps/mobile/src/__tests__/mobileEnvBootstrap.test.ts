@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { DEFAULT_API_BASE_URL, DEFAULT_DEVICE_LINK_API_BASE_URL } from '@/config/env';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,12 +9,11 @@ import {
 
 const roots: string[] = [];
 
+// 2026-07 端点清单重构后,.env 必填键收缩为构建身份 + 清单自举基址;
+// 业务端点初值 dev 走仓内 config/endpoint.json,不再进 .env 必填集。
 const productionEnv = {
   EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
-  EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth-cn.example.com',
-  EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.prod.example.com',
-  EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.prod.example.com',
-  EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: 'https://gateway.prod.example.com',
+  EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://hotfix.example.invalid/app',
 };
 
 afterEach(() => {
@@ -44,8 +42,7 @@ describe('mobile simulator env bootstrap', () => {
       [
         '# local overrides',
         'EXPO_PUBLIC_CINDY_AUTH_REGION=global',
-        'EXPO_PUBLIC_CINDY_AUTH_BASE_URL=',
-        'EXPO_PUBLIC_XDT_API_BASE_URL=',
+        'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL=',
         'EXPO_PUBLIC_XDT_DEV_LOGIN_ENABLED=1',
         '',
       ].join('\n'),
@@ -55,21 +52,10 @@ describe('mobile simulator env bootstrap', () => {
     const env = readEnvMap(join(mobileDir, '.env'));
 
     expect(result.created).toBe(false);
-    expect(result.addedKeys).toEqual([
-      'EXPO_PUBLIC_CINDY_AUTH_BASE_URL',
-      'EXPO_PUBLIC_XDT_API_BASE_URL',
-      'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL',
-      'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL',
-    ]);
+    expect(result.addedKeys).toEqual(['EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL']);
     expect(env.EXPO_PUBLIC_CINDY_AUTH_REGION).toBe('global');
-    expect(env.EXPO_PUBLIC_CINDY_AUTH_BASE_URL).toBe(
-      productionEnv.EXPO_PUBLIC_CINDY_AUTH_BASE_URL,
-    );
-    expect(env.EXPO_PUBLIC_XDT_API_BASE_URL).toBe(
-      productionEnv.EXPO_PUBLIC_XDT_API_BASE_URL,
-    );
-    expect(env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL).toBe(
-      productionEnv.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL,
+    expect(env.EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL).toBe(
+      productionEnv.EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL,
     );
     expect(env.EXPO_PUBLIC_XDT_DEV_LOGIN_ENABLED).toBe('1');
   });
@@ -81,10 +67,7 @@ describe('mobile simulator env bootstrap', () => {
       join(mobileDir, '.env'),
       [
         'EXPO_PUBLIC_CINDY_AUTH_REGION=',
-        'EXPO_PUBLIC_CINDY_AUTH_BASE_URL=""',
-        'EXPO_PUBLIC_XDT_API_BASE_URL=""',
-        "EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL=''",
-        'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL=',
+        'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL=""',
         '',
       ].join('\n'),
     );
@@ -103,10 +86,7 @@ describe('mobile simulator env bootstrap', () => {
       join(mobileDir, '.env'),
       [
         'EXPO_PUBLIC_CINDY_AUTH_REGION="global"',
-        "EXPO_PUBLIC_CINDY_AUTH_BASE_URL='https://auth.custom.example.com'",
-        "EXPO_PUBLIC_XDT_API_BASE_URL='https://api.custom.example.com'",
-        'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL="https://relay.custom.example.com"',
-        'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL="https://gateway.custom.example.com"',
+        'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL="https://hotfix.custom.example.invalid/app"',
         '',
       ].join('\n'),
     );
@@ -116,14 +96,8 @@ describe('mobile simulator env bootstrap', () => {
 
     expect(result.addedKeys).toEqual([]);
     expect(env.EXPO_PUBLIC_CINDY_AUTH_REGION).toBe('"global"');
-    expect(env.EXPO_PUBLIC_CINDY_AUTH_BASE_URL).toBe(
-      "'https://auth.custom.example.com'",
-    );
-    expect(env.EXPO_PUBLIC_XDT_API_BASE_URL).toBe(
-      "'https://api.custom.example.com'",
-    );
-    expect(env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL).toBe(
-      '"https://relay.custom.example.com"',
+    expect(env.EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL).toBe(
+      '"https://hotfix.custom.example.invalid/app"',
     );
   });
 });
@@ -150,9 +124,7 @@ function writeEnvExample(mobileDir: string) {
     join(mobileDir, '.env.example'),
     [
       'EXPO_PUBLIC_CINDY_AUTH_REGION=cn',
-      'EXPO_PUBLIC_CINDY_AUTH_BASE_URL=',
-      `EXPO_PUBLIC_XDT_API_BASE_URL=${DEFAULT_API_BASE_URL}`,
-      `EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL=${DEFAULT_DEVICE_LINK_API_BASE_URL}`,
+      'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL=',
       '',
     ].join('\n'),
   );

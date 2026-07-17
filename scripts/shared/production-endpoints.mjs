@@ -10,19 +10,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// 2026-07 端点清单重构:客户端运行期业务端点全部来自 config/endpoint*.json 清单,
+// 本文件只保留仍有构建/发版/dev 工具消费的字段(oauthBroker / heartbeat /
+// slackHook / website 四个纯运行期字段已随烘焙注入退役,从此处删除)。
 export const PRODUCTION_ENDPOINT_KEYS = Object.freeze([
   'apiBaseUrl',
   'authApiBaseUrlCn',
   'authApiBaseUrlGlobal',
   'deviceLinkApiBaseUrl',
-  'oauthBrokerApiBaseUrl',
-  'heartbeatUrl',
-  'slackHookWsUrl',
-  'websiteUrl',
   'xdGatewayBaseUrl',
   'cdnBaseUrl',
   'cdnInternalBaseUrl',
   'npkgBaseUrl',
+  // 端点清单(endpoint.json)的自举拉取基址,按 region 打包烘焙进客户端——
+  // 这是客户端唯一"有感"的烘焙远程 URL,其余业务端点全部来自清单本身。
+  'endpointManifestBaseUrlCn',
+  'endpointManifestBaseUrlGlobal',
 ]);
 export const PRODUCTION_OSS_CONFIG_KEYS = Object.freeze([
   'ossBucket',
@@ -59,14 +62,12 @@ const FIELD_PROTOCOLS = Object.freeze({
   authApiBaseUrlCn: ['https:'],
   authApiBaseUrlGlobal: ['https:'],
   deviceLinkApiBaseUrl: ['https:'],
-  oauthBrokerApiBaseUrl: ['https:'],
-  heartbeatUrl: ['https:'],
-  slackHookWsUrl: ['wss:'],
-  websiteUrl: ['https:'],
   xdGatewayBaseUrl: ['https:'],
   cdnBaseUrl: ['https:'],
   cdnInternalBaseUrl: ['http:', 'https:'],
   npkgBaseUrl: ['https:'],
+  endpointManifestBaseUrlCn: ['https:'],
+  endpointManifestBaseUrlGlobal: ['https:'],
 });
 
 /** 解析配置路径；相对路径统一以仓库根目录为基准。 */
@@ -176,7 +177,13 @@ export function resolveCdnBaseUrl() {
   return resolveEndpoint('cdnBaseUrl', 'XDT_CDN_BASE_URL');
 }
 
-/** Desktop 正式构建所需的全部 Vite 端点变量。 */
+/**
+ * Desktop 正式构建所需的 Vite 变量。
+ * 2026-07 端点清单重构后收缩为构建身份 + 清单自举基址三件套——业务端点
+ * (api / auth / device-link / heartbeat / slack hook / website / 网关 / 更新链
+ * CDN)不再构建期烘焙,运行期由 clientEndpointsService 阻断式解析清单
+ * (packaged 拉 `<manifest base>/endpoint.json`,dev 读仓内 config/endpoint.json)。
+ */
 export function productionViteEnv({ allowEnvOverride = true, authRegion } = {}) {
   const endpoints = loadProductionEndpoints();
   const pick = (envName, key) =>
@@ -189,32 +196,25 @@ export function productionViteEnv({ allowEnvOverride = true, authRegion } = {}) 
   if (region !== 'cn' && region !== 'global') {
     throw new Error(`Invalid Cindy auth region: ${region}; expected cn or global`);
   }
-  const authBaseUrl =
-    region === 'global' ? endpoints.authApiBaseUrlGlobal : endpoints.authApiBaseUrlCn;
+  const endpointManifestBaseUrl =
+    region === 'global'
+      ? endpoints.endpointManifestBaseUrlGlobal
+      : endpoints.endpointManifestBaseUrlCn;
   return {
     VITE_FEISHU_APP_ID: pick('VITE_FEISHU_APP_ID', 'feishuAppId'),
-    VITE_API_BASE_URL: pick('VITE_API_BASE_URL', 'apiBaseUrl'),
     VITE_CINDY_AUTH_REGION: region,
-    VITE_CINDY_AUTH_BASE_URL:
-      (allowEnvOverride ? process.env.VITE_CINDY_AUTH_BASE_URL?.trim() : '') || authBaseUrl,
-    VITE_DEVICE_LINK_API_BASE_URL: pick(
-      'VITE_DEVICE_LINK_API_BASE_URL',
-      'deviceLinkApiBaseUrl',
-    ),
-    VITE_OAUTH_BROKER_API_BASE_URL: pick(
-      'VITE_OAUTH_BROKER_API_BASE_URL',
-      'oauthBrokerApiBaseUrl',
-    ),
-    VITE_HEARTBEAT_URL: pick('VITE_HEARTBEAT_URL', 'heartbeatUrl'),
-    VITE_SLACK_HOOK_WS_URL: pick('VITE_SLACK_HOOK_WS_URL', 'slackHookWsUrl'),
-    VITE_WEBSITE_URL: pick('VITE_WEBSITE_URL', 'websiteUrl'),
-    VITE_XDPROXY_BASE_URL: pick('VITE_XDPROXY_BASE_URL', 'xdGatewayBaseUrl'),
-    VITE_CDN_BASE_URL: pick('VITE_CDN_BASE_URL', 'cdnBaseUrl'),
-    VITE_CDN_INTERNAL_BASE_URL: pick('VITE_CDN_INTERNAL_BASE_URL', 'cdnInternalBaseUrl'),
+    VITE_ENDPOINT_MANIFEST_BASE_URL:
+      (allowEnvOverride ? process.env.VITE_ENDPOINT_MANIFEST_BASE_URL?.trim() : '') ||
+      endpointManifestBaseUrl,
   };
 }
 
-/** Mobile/EAS 构建所需的公开端点变量。 */
+/**
+ * Mobile/EAS 构建所需的公开端点变量。
+ * 2026-07 端点清单重构后收缩为构建身份 + 清单自举基址三件套——业务端点
+ * (api / auth / device-link / 网关)不再构建期烘焙,运行期由启动闸门从
+ * `<manifest base>/endpoint.json` 拉取回填(dev 读仓内 config/endpoint.json)。
+ */
 export function productionMobileEnv({ authRegion } = {}) {
   const endpoints = loadProductionEndpoints();
   const region =
@@ -225,11 +225,9 @@ export function productionMobileEnv({ authRegion } = {}) {
   return {
     EXPO_PUBLIC_FEISHU_APP_ID: endpoints.feishuAppId,
     EXPO_PUBLIC_CINDY_AUTH_REGION: region,
-    EXPO_PUBLIC_CINDY_AUTH_BASE_URL:
-      region === 'global' ? endpoints.authApiBaseUrlGlobal : endpoints.authApiBaseUrlCn,
-    EXPO_PUBLIC_XDT_API_BASE_URL: endpoints.apiBaseUrl,
-    EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: endpoints.deviceLinkApiBaseUrl,
-    EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: endpoints.xdGatewayBaseUrl,
-    EXPO_PUBLIC_XDT_CDN_BASE_URL: endpoints.cdnBaseUrl,
+    EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL:
+      region === 'global'
+        ? endpoints.endpointManifestBaseUrlGlobal
+        : endpoints.endpointManifestBaseUrlCn,
   };
 }

@@ -4,7 +4,13 @@
  * Fetches and caches the CDN manifest.json that drives both app hot-updates
  * and Claude Code binary management.
  *
- * - Single source of truth: https://dev-cdn.fp.xd.com/xdt-maker/manifest.json
+ * - CDN base URLs (external + intranet mirror) come from the client endpoint
+ *   manifest (`getClientEndpoint('cdnBaseUrl' / 'cdnInternalBaseUrl')`) — the
+ *   endpoint manifest is resolved blocking-style BEFORE any update check
+ *   (bootstrap-electron: initClientEndpoints → …later… update chain), so all
+ *   reads here happen strictly after init. Base URLs are therefore read
+ *   lazily inside functions — NEVER capture them in module-level constants
+ *   (module evaluation happens before initClientEndpoints and would throw).
  * - In dev mode (app.isPackaged === false), fetching is skipped entirely.
  */
 
@@ -12,7 +18,7 @@ import { app, net } from 'electron';
 import * as canaryFlagStore from './canaryFlagStore';
 
 import { createLogger } from './logger';
-import { CDN_EXTERNAL_BASE_URL, CDN_INTERNAL_BASE_URL } from '../shared/endpoints';
+import { getClientEndpoint } from './clientEndpointsService';
 
 const log = createLogger('manifestService');
 
@@ -92,9 +98,13 @@ export interface Manifest {
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
-const EXTERNAL_BASE_URL = CDN_EXTERNAL_BASE_URL;
-const INTERNAL_BASE_URL = CDN_INTERNAL_BASE_URL;
-const INTERNAL_PROBE_URL = `${INTERNAL_BASE_URL}/internal_test.txt`;
+// 惰性读取(见文件顶注):清单在 initClientEndpoints 之后才可读,模块级捕获会炸。
+function externalBaseUrl(): string {
+  return getClientEndpoint('cdnBaseUrl');
+}
+function internalBaseUrl(): string {
+  return getClientEndpoint('cdnInternalBaseUrl');
+}
 const INTERNAL_PROBE_TIMEOUT_MS = 1500;
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -131,7 +141,7 @@ function probeInternalNetwork(): Promise<void> {
     };
 
     try {
-      const request = net.request(`${INTERNAL_PROBE_URL}?t=${Date.now()}`);
+      const request = net.request(`${internalBaseUrl()}/internal_test.txt?t=${Date.now()}`);
       const timeout = setTimeout(() => {
         request.abort();
         finish('external');
@@ -156,8 +166,8 @@ function probeInternalNetwork(): Promise<void> {
 
 export function getBaseUrl(): string {
   if (process.env.XDT_CDN_BASE_URL) return process.env.XDT_CDN_BASE_URL;
-  if (internalProbeResult === 'internal') return INTERNAL_BASE_URL;
-  return EXTERNAL_BASE_URL;
+  if (internalProbeResult === 'internal') return internalBaseUrl();
+  return externalBaseUrl();
 }
 
 /**

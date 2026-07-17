@@ -1,12 +1,15 @@
 // 启动端点清单闸门 hook(阻断式):冷启动时跑 runStartupEndpointResolve,
 // 成功前业务树不挂载;失败进入 error 态由 _layout 渲染错误屏,用户点重试
 // 再跑一次。**没有超时兜底 / 缓存降级**——拉不到就停在这。
-// __DEV__ 直接放行(零网络,dev 端点行为与现状一致)。
+// __DEV__ 默认放行(零网络,端点初值来自仓内 config/endpoint.json,见 env.ts);
+// EXPO_PUBLIC_ENDPOINTS_CDN=1 时 dev 也走完整 CDN 闸门(测线上清单,与
+// desktop 的 --endpoints-cdn 同语义)。
 // 时序:本闸门必须先于 OTA 检查更新(_layout 只在 ready 后挂载 OTA 门)。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { runStartupEndpointResolve } from './clientEndpointStartup';
+import { resolveEnvFlag } from './env';
 
 export type StartupEndpointGateStatus = 'pending' | 'ready' | 'error';
 
@@ -19,7 +22,7 @@ export interface StartupEndpointGate {
 }
 
 export function useStartupEndpointGate(): StartupEndpointGate {
-  const enabled = !__DEV__;
+  const enabled = !__DEV__ || resolveEnvFlag(process.env.EXPO_PUBLIC_ENDPOINTS_CDN);
   const [status, setStatus] = useState<StartupEndpointGateStatus>(enabled ? 'pending' : 'ready');
   const [reason, setReason] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);

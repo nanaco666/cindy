@@ -11,8 +11,9 @@
  *   - 用户可操作面 = 开关 / Slack 账号绑定 / 工作目录清单。
  */
 
-/** 内置服务器地址(系统默认值; slack-hook.json 的 urlOverride 可覆写, 规则 20)。 */
-export { SLACK_HOOK_DEFAULT_URL } from './endpoints';
+// 内置服务器地址的系统默认值来自运行期端点清单(main 侧
+// getClientEndpoint('slackHookWsUrl'), 经 store deps.defaultUrl 注入);
+// 烘焙常量 SLACK_HOOK_DEFAULT_URL 已随 2026-07 端点清单重构退役。
 
 /**
  * 由 WS 服务器地址推导 Slack App 安装链接: wss→https / ws→http, 去尾斜杠后拼

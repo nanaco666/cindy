@@ -1,6 +1,11 @@
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  define: {
+    // env.ts 顶层引用 __DEV__(metro 全局);vitest node 环境按 prod 语义跑
+    // (端点初值只看显式 env,不 require 仓内 endpoint.json)。
+    __DEV__: false,
+  },
   plugins: [
     {
       // scripts/*.mjs 带 shebang(#!/usr/bin/env node)。vite-node 内联执行这类

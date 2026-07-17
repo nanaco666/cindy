@@ -9,7 +9,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { XD_GATEWAY_BASE_URL } from '../../../shared/endpoints';
+import { TEST_XD_GATEWAY_BASE_URL as XD_GATEWAY_BASE_URL } from '../../../test/vitest/clientEndpointsFixture';
 import type { ResponseObserverCtx } from '@lizi/anthropic-compat-proxy';
 
 import {

@@ -1,9 +1,9 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_API_BASE_URL: string;
   readonly VITE_CINDY_AUTH_REGION: 'cn' | 'global';
-  readonly VITE_CINDY_AUTH_BASE_URL: string;
+  /** 端点清单自举基址(唯一烘焙远程 URL);业务端点走 electronAPI.clientEndpoints。 */
+  readonly VITE_ENDPOINT_MANIFEST_BASE_URL: string;
 }
 
 interface ImportMeta {

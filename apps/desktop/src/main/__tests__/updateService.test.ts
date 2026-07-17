@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { CDN_EXTERNAL_BASE_URL } from '../../shared/endpoints';
+import { TEST_CDN_BASE_URL as CDN_EXTERNAL_BASE_URL } from '../../test/vitest/clientEndpointsFixture';
 
 const originalPlatform = process.platform;
 const TEST_ROOT = path.join(os.tmpdir(), 'xdt-maker-update-service-test');

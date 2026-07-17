@@ -16,11 +16,11 @@ export const RELEASE_ENV_EXEC_COMMANDS = Object.freeze({
   prod: 'apps/mobile/scripts/release-prod.mjs',
 });
 
+// 2026-07 端点清单重构后收缩:业务端点不再构建期烘焙(运行期由启动闸门从
+// `<manifest base>/endpoint.json` 回填),发版闸门只校验构建身份 + 清单自举基址。
 export const PUBLIC_ENV_KEYS = [
   'EXPO_PUBLIC_CINDY_AUTH_REGION',
-  'EXPO_PUBLIC_CINDY_AUTH_BASE_URL',
-  'EXPO_PUBLIC_XDT_API_BASE_URL',
-  'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL',
+  'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL',
   'EXPO_PUBLIC_TAPTAP_CLIENT_ID',
   'EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN',
 ];
