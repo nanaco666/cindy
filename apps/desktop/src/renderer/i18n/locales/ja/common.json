@@ -4660,7 +4660,8 @@
       },
       "script": {
         "protocolSummary": "stdout には xdt-maker-script/1 の完全な JSON オブジェクトを 1 行ずつ（JSONL）出力してください。type は call または complete のみ使用できます。通常のログは stderr に書き込み、最後に必ず complete フレームを出力してください。",
-        "protocolExample": "最小 Python サンプルを表示",
+        "protocolCapabilities": "許可済みの機能を呼び出す場合、スクリプトは host が stdin に送る start と call_result の JSONL フレームも 1 行ずつ読み、対応する呼び出し結果を待ってから処理を続行するか complete を出力する必要があります。",
+        "protocolExample": "機能を呼び出さない最小 Python サンプルを表示",
         "command": "スクリプトコマンド",
         "commandPlaceholder": "python scripts/auto.py",
         "timeout": "タイムアウト（秒、任意）",

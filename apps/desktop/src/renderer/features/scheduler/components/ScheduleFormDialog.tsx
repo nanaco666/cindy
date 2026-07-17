@@ -543,6 +543,7 @@ export function ScheduleFormDialog({
                   <Info className="mt-0.5 h-4 w-4 shrink-0 text-[var(--cmd-palette-item-meta)]" aria-hidden="true" />
                   <div className="min-w-0 text-xs leading-[1.5] text-[var(--cmd-palette-item-meta)] dark:text-[var(--settings-section-desc)]">
                     <p>{t('scheduler.editor.script.protocolSummary')}</p>
+                    <p className="mt-1">{t('scheduler.editor.script.protocolCapabilities')}</p>
                     <details className="mt-2">
                       <summary className="w-fit cursor-pointer select-none text-[var(--settings-btn-secondary-text)] hover:text-[var(--msg-assistant-text)]">
                         {t('scheduler.editor.script.protocolExample')}
