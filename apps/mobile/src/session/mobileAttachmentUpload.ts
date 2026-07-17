@@ -23,11 +23,12 @@ export interface MobileAttachmentPresignResult {
 
 export type MobileAttachmentUploadBody = BodyInit;
 
-/** 原生文件直传实现(可注入,测试用):返回 HTTP 状态码。 */
+/** 原生文件直传实现(可注入,测试用):返回 HTTP 状态码;signal 中止时应尽快取消传输。 */
 export type MobileAttachmentFileUploader = (
   putUrl: string,
   fileUri: string,
   headers: Record<string, string>,
+  opts?: { signal?: AbortSignal },
 ) => Promise<{ status: number; body?: string }>;
 
 interface UploadDeps {
@@ -143,7 +144,7 @@ async function readResponseTextSafe(response: Response): Promise<string | undefi
 }
 
 /**
- * 原生直传本地文件(expo-file-system uploadAsync)。
+ * 原生直传本地文件(expo-file-system createUploadTask)。
  * 不走 fetch(file://) + Response.blob():新架构运行时里 Response 会退化成 ArrayBuffer
  * 体,而 RN 的 Blob 不接受 ArrayBuffer 分片,直接抛
  * "Creating blobs from 'ArrayBuffer' and 'ArrayBufferView' are not supported"。
@@ -151,31 +152,58 @@ async function readResponseTextSafe(response: Response): Promise<string | undefi
  * nsurlsessiond 后台守护进程,该通道对交互式短上传有一族传输层玄学失败
  * (NSURLErrorDomain -1 / -997 / -999,线上实撞 Code=-1 "unknown error");
  * 用户停在输入框前台等结果,不需要后台会话语义,走进程内前台会话绕开。
+ * 用 createUploadTask 而非 uploadAsync:UploadTask 有 cancelAsync,signal 中止
+ * (超时 / 用户 X 掉)时能真正断掉传输,不再让僵死连接吊着调用方。
  * 动态 import 保证本模块在 vitest(node 环境)下可被导入——测试路径全部经 deps.uploadFile 注入。
  */
 async function uploadFileNative(
   putUrl: string,
   fileUri: string,
   headers: Record<string, string>,
+  opts: { signal?: AbortSignal } = {},
 ): Promise<{ status: number; body?: string }> {
   const FileSystem = await import('expo-file-system/legacy');
-  const result = await FileSystem.uploadAsync(putUrl, fileUri, {
+  if (opts.signal?.aborted) throw new Error(UPLOAD_ABORTED_MESSAGE);
+  const task = FileSystem.createUploadTask(putUrl, fileUri, {
     headers,
     httpMethod: 'PUT',
     sessionType: FileSystem.FileSystemSessionType.FOREGROUND,
     uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
   });
-  return { status: result.status, body: result.body };
+  const onAbort = () => {
+    void task.cancelAsync().catch(() => undefined);
+  };
+  opts.signal?.addEventListener('abort', onAbort);
+  try {
+    const result = await task.uploadAsync();
+    // 取消后 uploadAsync resolve undefined/null(而非 reject),归一化成异常让上层分诊。
+    if (!result) throw new Error(UPLOAD_ABORTED_MESSAGE);
+    return { status: result.status, body: result.body };
+  } finally {
+    opts.signal?.removeEventListener('abort', onAbort);
+  }
 }
 
 /** 传输层异常(拿不到 HTTP 响应)总尝试次数:失败自动重试 1 次。 */
 const UPLOAD_TRANSPORT_ATTEMPTS = 2;
+
+/**
+ * 原生文件直传的单次尝试超时,与 Blob 版 PUT_BLOB_TIMEOUT_MS 同口径:iOS 前台
+ * NSURLSession 只在「60s 完全无字节流动」时才自行超时,慢速蜂窝网上传大附件
+ * (上限 30MB)可以合法地涓涓细流挂很多分钟,期间发送等待没有任何出口。
+ * 超时不进传输层重试(两轮 120s 太久),直接报错让用户看到失败卡原地重试。
+ */
+const PUT_FILE_TIMEOUT_MS = 120_000;
+
+const UPLOAD_ABORTED_MESSAGE = '附件上传已取消。';
+const UPLOAD_TIMEOUT_MESSAGE = '附件上传超时,请检查网络后重试。';
 
 export async function putMobileAttachmentUploadFromFile(
   putUrl: string,
   fileUri: string,
   mimeType: string | undefined,
   deps: UploadDeps = {},
+  opts: { signal?: AbortSignal } = {},
 ): Promise<void> {
   const uploadFile = deps.uploadFile ?? uploadFileNative;
   const headers = buildMobileAttachmentUploadHeaders(mimeType);
@@ -183,13 +211,27 @@ export async function putMobileAttachmentUploadFromFile(
   // 拿到 HTTP 状态码的失败(403 签名/权限类)重试无意义,直接抛。
   let transportError: unknown;
   for (let attempt = 0; attempt < UPLOAD_TRANSPORT_ATTEMPTS; attempt += 1) {
+    if (opts.signal?.aborted) throw new Error(UPLOAD_ABORTED_MESSAGE);
+    // 每次尝试独立的超时窗;外部取消(用户 X 掉 / 页面退出)与超时共用一个
+    // 传给传输层的 signal,层内只管断传输,这里负责把两种中止分诊成不同结局。
+    const timeout = new AbortController();
+    const timer = setTimeout(() => timeout.abort(), PUT_FILE_TIMEOUT_MS);
+    const onOuterAbort = () => timeout.abort();
+    if (opts.signal) opts.signal.addEventListener('abort', onOuterAbort);
     let status: number;
     let body: string | undefined;
     try {
-      ({ status, body } = await uploadFile(putUrl, fileUri, headers));
+      ({ status, body } = await uploadFile(putUrl, fileUri, headers, { signal: timeout.signal }));
     } catch (err) {
+      // 外部取消:立刻收手,不重试(调用方自己发起的中止,静默语义由上层决定)。
+      if (opts.signal?.aborted) throw new Error(UPLOAD_ABORTED_MESSAGE);
+      // 超时:不进第二轮(再等 120s 只会让用户在失败卡出现前多干等一轮),直接报错。
+      if (timeout.signal.aborted) throw new Error(UPLOAD_TIMEOUT_MESSAGE);
       transportError = err;
       continue;
+    } finally {
+      clearTimeout(timer);
+      if (opts.signal) opts.signal.removeEventListener('abort', onOuterAbort);
     }
     if (status < 200 || status >= 300) {
       // 拿到 HTTP 状态码的失败重试无意义,直接抛;带上 OSS 错误 Code
@@ -247,14 +289,20 @@ export async function uploadMobileAttachment(
 export async function uploadMobileAttachmentFromFile(
   candidate: MobileAttachmentUploadCandidate,
   fileUri: string,
-  options: { token: string | null; id?: string; deps?: UploadDeps },
+  options: { token: string | null; id?: string; deps?: UploadDeps; signal?: AbortSignal },
 ): Promise<RemoteSerializedAttachment> {
   // 同 uploadMobileAttachment:presign 前先拦不支持的类型,避免 OSS 孤儿对象。
   if (!categorizeMobileAttachment(candidate.name)) {
     throw new Error('这个本机文件类型暂不支持作为附件发送。');
   }
   const presigned = await presignMobileAttachmentUpload(candidate, options);
-  await putMobileAttachmentUploadFromFile(presigned.putUrl, fileUri, candidate.mimeType, options.deps);
+  await putMobileAttachmentUploadFromFile(
+    presigned.putUrl,
+    fileUri,
+    candidate.mimeType,
+    options.deps,
+    { signal: options.signal },
+  );
   const attachment = buildMobileUploadedAttachment({
     id: options.id,
     ossKey: presigned.key,
