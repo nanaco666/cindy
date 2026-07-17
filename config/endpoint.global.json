@@ -5,6 +5,7 @@
   "authApiBaseUrl": "https://auth.cindy.app",
   "deviceLinkApiBaseUrl": "https://device.cindy.com.cn",
   "oauthBrokerApiBaseUrl": "https://oauth.cindy.com.cn",
+  "ossApiBaseUrl": "https://oss.cindy.com.cn",
   "heartbeatUrl": "https://heartbeat.cindy.com.cn",
   "slackHookWsUrl": "wss://slack-hook.cindy.com.cn",
   "websiteUrl": "https://cindy.com.cn",

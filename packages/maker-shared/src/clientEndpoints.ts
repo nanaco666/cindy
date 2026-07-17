@@ -55,6 +55,8 @@ export const CLIENT_ENDPOINT_KEYS = [
   'authApiBaseUrl',
   'deviceLinkApiBaseUrl',
   'oauthBrokerApiBaseUrl',
+  // oss-server(公开资产直传预签名,当前场景:头像上传)。
+  'ossApiBaseUrl',
   'heartbeatUrl',
   'slackHookWsUrl',
   'websiteUrl',
@@ -77,6 +79,7 @@ const FIELD_PROTOCOLS: Record<ClientEndpointKey, readonly string[]> = {
   authApiBaseUrl: ['https:'],
   deviceLinkApiBaseUrl: ['https:'],
   oauthBrokerApiBaseUrl: ['https:'],
+  ossApiBaseUrl: ['https:'],
   heartbeatUrl: ['https:'],
   slackHookWsUrl: ['wss:'],
   websiteUrl: ['https:'],

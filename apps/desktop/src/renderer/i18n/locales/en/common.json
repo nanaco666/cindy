@@ -507,13 +507,13 @@
         "open": "Edit name and avatar",
         "title": "Edit profile",
         "nameLabel": "Name",
-        "nameHint": "Leave empty to restore the default name",
+        "nameHint": "Leave empty to keep the current name",
         "changeAvatar": "Change avatar",
         "resetAvatar": "Restore default avatar",
         "save": "Save",
         "cancel": "Cancel",
-        "localOnlyHint": "Your custom name and avatar only apply on this device.",
-        "avatarInvalid": "Please choose a PNG / JPG / GIF / WebP image under 5MB",
+        "syncHint": "Your name and avatar are saved to your account and sync across all devices.",
+        "avatarInvalid": "Please choose a PNG / JPG / WebP image under 5MB",
         "saveFailed": "Failed to save, please try again"
       }
     },

@@ -45,6 +45,7 @@ const FULL_MANIFEST = JSON.stringify({
   authApiBaseUrl: 'https://auth.remote.example.com',
   deviceLinkApiBaseUrl: 'https://device.remote.example.com',
   oauthBrokerApiBaseUrl: 'https://oauth.remote.example.com',
+  ossApiBaseUrl: 'https://oss.remote.example.com',
   heartbeatUrl: 'https://heartbeat.remote.example.com',
   slackHookWsUrl: 'wss://hook.remote.example.com',
   websiteUrl: 'https://www.remote.example.com',

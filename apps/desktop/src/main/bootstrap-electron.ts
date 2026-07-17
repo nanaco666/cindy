@@ -110,12 +110,8 @@ import type { Maker } from '@lizi/maker-core';
 import { im, feishuIm, startImOrchestrators, startImConnection } from './im';
 import * as authManager from './authManager';
 import * as profileEdit from './profileEdit';
-import * as profileOverrideStore from './profileOverrideStore';
-import { ingestMedia as ingestCindyMedia } from './cindy-media/ingest';
-import {
-  removeRefs as removeMediaRefs,
-  removeRefsExceptHash as removeMediaRefsExceptHash,
-} from './cindy-media/ledger';
+import { uploadPublicAsset } from './ossPublicUpload';
+import { removeRefs as removeMediaRefs } from './cindy-media/ledger';
 import { installWebviewHardener } from './webview-security';
 import {
   installSelectionContextMenu,
@@ -2701,7 +2697,8 @@ const registerIpcHandlers = () => {
     return authManager.refresh();
   });
 
-  // ── Profile local override IPC(设置 → 用户卡片编辑;业务体在 profileEdit.ts) ──
+  // ── Profile 编辑 IPC(设置 → 用户卡片编辑;业务体在 profileEdit.ts,
+  //    资料直写 auth-server,头像经 oss-server 预签名直传) ──
 
   const profileEditLog = createLogger('profileEdit');
   const profileEditDeps: profileEdit.ProfileEditDeps = {
@@ -2715,12 +2712,16 @@ const registerIpcHandlers = () => {
       return result.canceled || !result.filePaths[0] ? null : result.filePaths[0];
     },
     readFile: (filePath) => fs.promises.readFile(filePath),
-    ingestMedia: ingestCindyMedia,
-    removeRefsExceptHash: removeMediaRefsExceptHash,
-    removeRefs: removeMediaRefs,
-    readOverride: profileOverrideStore.readOverride,
-    writeOverride: profileOverrideStore.writeOverride,
-    notifyChanged: () => authManager.notifyProfileOverrideChanged(),
+    uploadAvatar: ({ buffer, mimeType }) =>
+      uploadPublicAsset(
+        {
+          fetchImpl: (input, init) => net.fetch(input, init),
+          getBaseUrl: () => getClientEndpoint('ossApiBaseUrl'),
+          getToken: () => authManager.getAccessToken(),
+        },
+        { scene: 'avatar', contentType: mimeType, body: buffer },
+      ),
+    patchProfile: (patch) => authManager.updateServerProfile(patch),
     logWarn: (message, err) => profileEditLog.warn(message, err),
   };
 
@@ -4608,6 +4609,37 @@ app.on('ready', async () => {
       }
       attemptStartScheduler();
       attemptStartEmbeddingHost();
+      // 旧「资料本地覆写」方案退役(2026-07)的一次性清理:清当前账号名下的
+      // profile-avatar 媒体引用与 override 条目(文件条目即幂等标记,失败下次登录重试)。
+      void (async () => {
+        const overridePath = path.join(app.getPath('userData'), 'profile-override.json');
+        const legacyProfileLog = createLogger('profileEdit');
+        await profileEdit.cleanupLegacyProfileOverride(
+          {
+            readOverrideFile: () => {
+              try {
+                return fs.readFileSync(overridePath, 'utf-8');
+              } catch {
+                return null;
+              }
+            },
+            // tmp+rename 原子写:写一半崩溃不会把剩余账号的条目变成损坏 JSON
+            // (损坏文件会被清理逻辑当"无从定位"整体删除,其引用回到泄漏状态)。
+            writeOverrideFile: (content) => {
+              const tmp = `${overridePath}.tmp`;
+              fs.writeFileSync(tmp, content, 'utf-8');
+              fs.renameSync(tmp, overridePath);
+            },
+            deleteOverrideFile: () => fs.unlinkSync(overridePath),
+            removeRefs: removeMediaRefs,
+            logInfo: (message) => legacyProfileLog.info(message),
+            logWarn: (message, err) => legacyProfileLog.warn(message, err),
+          },
+          userId,
+        );
+      })().catch((err) => {
+        dbClientLog.warn('legacy profile override cleanup threw (non-fatal)', err);
+      });
       // 价格表作用域依赖当前 localDb 用户与 provider-secret owner;必须等用户 DB ready 后再预热。
       void prewarmModelPricing();
       // 自定义供应商配置在按 userId 切片的 localDb 里：DB ready / 换账号后重新加载并

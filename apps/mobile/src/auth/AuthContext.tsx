@@ -37,6 +37,11 @@ import {
 } from '@/auth/oauthCallback';
 import { createPkcePair, createState } from '@/auth/pkce';
 import {
+  mergeMembershipWithExisting,
+  mergeProductProfile,
+  type ProductMeUser,
+} from '@/auth/profileMerge';
+import {
   deleteSecureItem,
   getSecureItem,
   setSecureItem,
@@ -60,9 +65,6 @@ const PENDING_OAUTH_KEY = 'cindy.mobile.auth.pendingOAuth';
 const LEGACY_PENDING_OAUTH_KEY = 'xdt.mobile.pendingOAuth';
 const PENDING_OAUTH_MAX_AGE_MS = 10 * 60 * 1000;
 const AUTH_STARTUP_GATE_TIMEOUT_MS = 20 * 1000;
-const DEFAULT_MODEL = 'claude-sonnet-4-6';
-const DEFAULT_EFFORT = 'medium';
-
 export interface MobileUser {
   id: string;
   name: string;
@@ -79,15 +81,7 @@ export interface MobileUser {
 }
 
 interface ProductMeResponse {
-  user: {
-    id: string;
-    name: string;
-    avatar: string | null;
-    email: string | null;
-    defaultModel: string;
-    defaultEffort: string;
-    role?: 'user' | 'admin';
-  };
+  user: ProductMeUser;
 }
 
 export type MobileLoginAction =
@@ -226,7 +220,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
       }
       if (next && productResult.status === 'fulfilled') {
-        next = mergeProductProfile(next, productResult.value.user);
+        // 头像收敛必须用本轮新鲜 membership 的 avatarUrl(null=明确未设置),
+        // 不能拿合并态 next.avatar 判断(见 profileMerge.mergeProductProfile 注释)。
+        next = mergeProductProfile(
+          next,
+          productResult.value.user,
+          identityResult.status === 'fulfilled'
+            ? (identityResult.value.membership.avatarUrl ?? null)
+            : undefined,
+        );
       }
       if (next) applyUser(next);
     },
@@ -815,61 +817,8 @@ function authClientFor(deviceId: string): CindyAuthClient {
   });
 }
 
-function mapMembershipToMobileUser(
-  membership: AuthMembership,
-  passportId?: string,
-): MobileUser {
-  return {
-    id: membership.id,
-    name: membership.displayName || membership.email || 'Cindy',
-    avatar: null,
-    email: membership.email,
-    defaultModel: DEFAULT_MODEL,
-    defaultEffort: DEFAULT_EFFORT,
-    membershipKind: membership.kind,
-    membershipRole: membership.role,
-    orgId: membership.orgId,
-    orgName: membership.orgName,
-    passportId: passportId ?? membership.passportId ?? '',
-  };
-}
-
-function mergeMembershipWithExisting(
-  membership: AuthMembership,
-  existing: MobileUser | null,
-  passportId?: string,
-): MobileUser {
-  const mapped = mapMembershipToMobileUser(membership, passportId);
-  if (!existing || existing.id !== mapped.id) return mapped;
-  return {
-    ...mapped,
-    avatar: existing.avatar,
-    defaultModel: existing.defaultModel,
-    defaultEffort: existing.defaultEffort,
-    role: existing.role,
-    passportId: mapped.passportId || existing.passportId,
-  };
-}
-
-function mergeProductProfile(
-  identity: MobileUser,
-  product: ProductMeResponse['user'],
-): MobileUser {
-  return {
-    ...identity,
-    name: product.name || identity.name,
-    avatar: product.avatar,
-    email: product.email ?? identity.email,
-    defaultModel: product.defaultModel || identity.defaultModel,
-    defaultEffort: product.defaultEffort || identity.defaultEffort,
-    role:
-      product.role === 'admin'
-        ? 'admin'
-        : product.role === 'user'
-          ? 'user'
-          : undefined,
-  };
-}
+// mapMembershipToMobileUser / mergeMembershipWithExisting / mergeProductProfile
+// 已抽至 @/auth/profileMerge(纯函数,便于单测)。
 
 /** Unblocks initial rendering without aborting a rotating refresh-token request. */
 function awaitAuthStartupGate<T>(

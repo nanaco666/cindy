@@ -50,7 +50,6 @@ import {
   parseAuthLoopbackCallback,
 } from './authLoopbackCallback';
 
-import { applyProfileOverride, readOverride } from './profileOverrideStore';
 import { createLogger } from './logger';
 import { getResolvedMainLocale } from './i18n';
 import { getClientEndpoint } from './clientEndpointsService.js';
@@ -183,6 +182,13 @@ let refreshPromise: Promise<boolean> | null = null;
 const deviceId = process.env.XDT_DEVICE_ID_OVERRIDE?.trim() || machineIdSync();
 /** chat-data-localization V0.5: most recent migration snapshot from server. */
 let currentMigration: MigrationStatus | undefined;
+/**
+ * 最近一次 product /api/user/me 水合到的产品头像(飞书头像等)。
+ * membership.avatarUrl 为 null(用户未自定义 / 恢复默认)时的显示回落值;
+ * 单独留存是因为 currentUser.avatar 是合并后的展示值,恢复默认头像时
+ * 需要能回到产品默认,而不是清成首字母兜底。
+ */
+let productAvatarFallback: string | null = null;
 
 let loginFlowState: AuthFlowState | null = null;
 let providerConfig: ProviderConfig | null = null;
@@ -325,7 +331,9 @@ function mapMembershipToAuthUser(membership: AuthMembership, passportId?: string
   return {
     id: membership.id,
     name: membership.displayName || membership.email || 'Cindy',
-    avatar: null,
+    // auth-server 自助头像(PATCH /api/me/profile);null = 未设置,
+    // 后续 product /me 水合时回落产品资料头像(mergeProductProfile)。
+    avatar: membership.avatarUrl ?? null,
     email: membership.email,
     defaultModel: DEFAULT_MODEL,
     defaultEffort: DEFAULT_EFFORT,
@@ -344,7 +352,8 @@ function mergeMembershipWithExisting(membership: AuthMembership, existing: User 
   if (!existing || existing.id !== mapped.id) return mapped;
   return {
     ...mapped,
-    avatar: existing.avatar,
+    // membership 自助头像优先;未设置时保留既有值(product /me 水合来的产品头像)。
+    avatar: mapped.avatar ?? existing.avatar,
     defaultModel: existing.defaultModel,
     defaultEffort: existing.defaultEffort,
     isCanary: existing.isCanary,
@@ -357,10 +366,13 @@ function mergeMembershipWithExisting(membership: AuthMembership, existing: User 
 function mergeProductProfile(membership: AuthMembership, response: ProductMeResponse): User {
   const identity = mapMembershipToAuthUser(membership);
   const product = response.user;
+  // 2026-07 自助资料上线后,昵称/头像以 auth-server membership 为真源
+  // (displayName / avatarUrl),产品资料只作头像未设置时的默认值回落;
+  // 产品资料继续供给 defaultModel / isCanary / feishuId / role 等增强字段。
+  // productAvatarFallback 由各提交点显式维护(本函数保持纯函数)。
   return {
     ...identity,
-    name: product.name || identity.name,
-    avatar: product.avatar,
+    avatar: identity.avatar ?? product.avatar,
     email: product.email ?? identity.email,
     defaultModel: product.defaultModel || identity.defaultModel,
     defaultEffort: product.defaultEffort || identity.defaultEffort,
@@ -613,18 +625,13 @@ function broadcastToRenderers(channel: string, payload: unknown): void {
 /**
  * 当前登录态快照(所有状态出口共用)。
  *
- * `currentUser` 永远保持服务端真值;用户在本机自定义的名字 / 头像
- * (profileOverrideStore)只在这里出口处合并——login / refresh / /me 水合
- * 怎么覆写 currentUser 都不会把本地自定义冲掉,反之本地自定义也永远
- * 不会回写进服务端真值(规则 20:默认值与 override 分离)。
+ * `currentUser` 即服务端真值的合并展示态(auth-server membership 为主、
+ * product /me 增强字段与头像回落)。2026-07 自助资料上线后,名字/头像
+ * 修改直接写 auth-server(updateServerProfile),本地覆写层已退役。
  */
 function snapshotAuthState(): AuthState {
-  const user =
-    currentUser !== null
-      ? applyProfileOverride(currentUser, readOverride(currentUser.id))
-      : null;
   return {
-    user,
+    user: currentUser,
     isAuthenticated: accessToken !== null && currentUser !== null,
     migration: currentMigration,
     deviceId,
@@ -778,6 +785,7 @@ function clearAuth(opts: { notify?: boolean } = {}): void {
   accessToken = null;
   currentUser = null;
   currentMigration = undefined;
+  productAvatarFallback = null;
   resetLoginFlowState();
   persistedRefreshTokenNeedsIdentityCheck = false;
   lastAcceptedRefreshToken = null;
@@ -827,22 +835,75 @@ export function getAuthState(): AuthState {
 }
 
 /**
- * 服务端资料真值(profileEdit 判断「输入值 == 默认值 → 清 override 而非存快照」用)。
- * 未登录返回 null。
+ * 当前展示资料(profileEdit 弹窗预填用)。未登录返回 null。
  */
 export function getServerProfile(): { name: string; avatar: string | null } | null {
   if (!currentUser) return null;
   return { name: currentUser.name, avatar: currentUser.avatar };
 }
 
+/** PATCH /api/me/profile 的入参(至少提供一个字段;avatarUrl null = 清除头像)。 */
+export interface ServerProfilePatch {
+  displayName?: string;
+  avatarUrl?: string | null;
+}
+
+interface PatchProfileResponse {
+  membership?: AuthMembership;
+  error?: { code?: string; message?: string };
+}
+
+export type UpdateServerProfileResult =
+  | { ok: true; profile: { name: string; avatar: string | null } }
+  | { ok: false; status: number; code?: string };
+
 /**
- * 本地资料覆写变更后的重广播口(profileEdit 保存成功时调用):
- * 把合并了最新覆写的登录态推给所有 renderer 窗口与 main 内订阅者。
+ * 自助修改昵称/头像:PATCH auth-server /api/me/profile(2026-07 上线,替代
+ * 旧的本地覆写方案)。成功后用响应 membership 就地更新 currentUser 并广播
+ * 登录态;头像清除(avatarUrl:null)时回落最近一次产品资料头像。
+ * 网络/服务端失败返回 ok:false(status 0 = 网络层失败),不抛异常——
+ * IPC 错误语义由调用方 profileEdit 统一映射。
  */
-export function notifyProfileOverrideChanged(): void {
-  if (!currentUser) return;
-  notifyRenderer();
-  notifyAuthListeners();
+export async function updateServerProfile(
+  patch: ServerProfilePatch,
+): Promise<UpdateServerProfileResult> {
+  if (!accessToken || !currentUser) {
+    return { ok: false, status: 0, code: 'NOT_AUTHENTICATED' };
+  }
+  const epochAtStart = authStateEpoch;
+  const result = await apiFetch<PatchProfileResponse>('/api/me/profile', {
+    method: 'PATCH',
+    body: patch,
+    token: accessToken,
+  });
+  if (!result.ok) {
+    const code = result.data?.error?.code;
+    return { ok: false, status: result.status, ...(code !== undefined ? { code } : {}) };
+  }
+  const membership = result.data?.membership;
+  // 请求期间登出/换号则不回写全局态(服务端已改成功,下次登录自然拉到新值)。
+  if (
+    membership &&
+    authStateEpoch === epochAtStart &&
+    currentUser !== null &&
+    currentUser.id === membership.id
+  ) {
+    currentUser = {
+      ...currentUser,
+      name: membership.displayName || currentUser.name,
+      avatar: membership.avatarUrl ?? productAvatarFallback,
+    };
+    notifyRenderer();
+    notifyAuthListeners();
+    return { ok: true, profile: { name: currentUser.name, avatar: currentUser.avatar } };
+  }
+  return {
+    ok: true,
+    profile: {
+      name: membership?.displayName ?? '',
+      avatar: membership?.avatarUrl ?? null,
+    },
+  };
 }
 
 /** chat-data-localization V0.5: snapshot getter for IPC return paths. */
@@ -1002,6 +1063,7 @@ async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> 
     currentUser = meResult.ok
       ? mergeProductProfile(refreshData.membership, meResult.data)
       : mapMembershipToAuthUser(refreshData.membership);
+    productAvatarFallback = meResult.ok ? meResult.data.user.avatar : null;
     currentMigration = { status: 'none' };
     persistedRefreshTokenNeedsIdentityCheck = false;
     clearReplacementIntegrationReloadTimers();
@@ -1075,6 +1137,7 @@ async function hydrateCurrentProductProfile(
   }
   if (authStateEpoch !== expectedEpoch || currentUser?.id !== membership.id) return;
   currentUser = mergeProductProfile(membership, result.data);
+  productAvatarFallback = result.data.user.avatar;
   canaryFlagStore.sync(currentUser.isCanary === true);
   notifyRenderer();
 }
@@ -1105,6 +1168,8 @@ async function completeLogin(
   lastAcceptedRefreshToken = outcome.refreshToken;
   clearReloginFlag();
   currentUser = mapMembershipToAuthUser(outcome.membership);
+  // 上一账号的产品头像回落不带入本次登录(product /me 水合后重建)。
+  productAvatarFallback = null;
   currentMigration = { status: 'none' };
   canaryFlagStore.sync(false);
   getFeishuService().token.setJwt(outcome.accessToken);
@@ -1415,6 +1480,12 @@ export async function refresh(): Promise<boolean> {
 
         accessToken = data.accessToken;
         currentUser = nextUser;
+        if (meResult.ok) {
+          productAvatarFallback = meResult.data.user.avatar;
+        } else if (accountSwitched) {
+          // 换号且产品资料未拉到:旧账号的回落头像不能带给新账号。
+          productAvatarFallback = null;
+        }
         currentMigration = { status: 'none' };
         persistedRefreshTokenNeedsIdentityCheck = false;
         getProviderSecretStore().reconcileOwner(currentUser.id);

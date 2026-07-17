@@ -21,6 +21,7 @@ export const TEST_CLIENT_ENDPOINTS: ClientEndpointMap = {
   authApiBaseUrl: 'https://auth.test.invalid',
   deviceLinkApiBaseUrl: 'https://device.test.invalid',
   oauthBrokerApiBaseUrl: 'https://oauth.test.invalid',
+  ossApiBaseUrl: 'https://oss.test.invalid',
   heartbeatUrl: 'https://heartbeat.test.invalid',
   slackHookWsUrl: 'wss://slack-hook.test.invalid',
   websiteUrl: 'https://website.test.invalid',

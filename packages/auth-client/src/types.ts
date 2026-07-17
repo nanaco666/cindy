@@ -12,6 +12,9 @@ export const membershipSchema = z.object({
   kind: z.enum(["personal", "org"]),
   role: z.enum(["owner", "admin", "member"]),
   displayName: z.string(),
+  // 用户自助设置的头像(auth-server PATCH /api/me/profile);null = 未设置。
+  // optional 兼容尚未升级的旧 auth-server 响应(缺字段不整份拒绝)。
+  avatarUrl: z.string().nullable().optional(),
   email: z.string().nullable(),
   orgId: z.string().nullable(),
   orgName: z.string().nullable(),

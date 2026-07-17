@@ -1010,12 +1010,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   authLogout: (): Promise<void> => ipcRenderer.invoke('auth:logout'),
   authRefresh: (): Promise<boolean> => ipcRenderer.invoke('auth:refresh'),
 
-  // ── Profile local override(设置 → 用户卡片编辑名字 / 头像,仅本设备生效) ──
+  // ── Profile 编辑(设置 → 用户卡片编辑名字 / 头像;直写服务端,跨设备生效) ──
   profileGetState: (): Promise<{
-    serverName: string;
-    serverAvatar: string | null;
-    overrideName: string | null;
-    overrideAvatarUrl: string | null;
+    name: string;
+    avatarUrl: string | null;
   }> => ipcRenderer.invoke('profile:get-state'),
   profileChooseAvatar: (): Promise<{
     canceled: boolean;

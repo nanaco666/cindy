@@ -24,6 +24,7 @@ const FULL_MANIFEST_OBJECT = {
   authApiBaseUrl: 'https://auth-next.example.com',
   deviceLinkApiBaseUrl: 'https://relay-next.example.com',
   oauthBrokerApiBaseUrl: 'https://oauth-next.example.com',
+  ossApiBaseUrl: 'https://oss-next.example.com',
   heartbeatUrl: 'https://heartbeat-next.example.com',
   slackHookWsUrl: 'wss://hook-next.example.com',
   websiteUrl: 'https://www.next.example.com',

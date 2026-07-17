@@ -12,6 +12,7 @@ const VALID_MANIFEST = {
   authApiBaseUrl: 'https://auth.example.com',
   deviceLinkApiBaseUrl: 'https://device-link.example.com',
   oauthBrokerApiBaseUrl: 'https://oauth.example.com',
+  ossApiBaseUrl: 'https://oss.example.com',
   heartbeatUrl: 'https://heartbeat.example.com',
   slackHookWsUrl: 'wss://slack-hook.example.com',
   websiteUrl: 'https://www.example.com',
