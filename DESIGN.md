@@ -651,6 +651,7 @@ card/container
 - 状态四色:running `#FF6600` / awaiting `#00D9C5` / error `#ef4444` / done `#22c55e`。
 - `focus-ring` `#3b82f6`(蓝,不染红);diff 红绿;modal scrim/阴影;`overlay-lightbox`。
 - `destructive`/`search-match-bg` 语义色不纳入 HSL_FORMAT_IDS 覆盖。
+- **hljs 语法高亮色**(light=highlight.js/styles/github.css;dark=globals.css `.dark .hljs-*` mirror github-dark):hljs 主题色为 default 代码块底设计,CINDY 代码块底(surface-elevated #F8F8F8/#312F2F)接近 default(#ffffff/#2c2c2a),边缘不达标(light -keyword 4.31/-built_in 3.29/-name 4.36;dark -punctuation 2.47/-tag 2.99/-section 2.87)是 hljs 既有折损(用 design surface 而非 github 默认 #ffffff/#0d1117),非 CINDY 引入——default 同源也不达标。CINDY 不补 [data-theme] 整改(与 default 同源,补整改值需重新过用户关卡);落档见 cindyCodeBlockContrast.test.ts(≥2 基线 + text ≥4.5 守卫)。
 - model-budget 光谱条 / GhostTool shimmer:显式豁免(中性 shimmer,跨主题统一)。
 
 ### 8.5 U2 显式例外记录(二级信息色忠于 Figma 原值)
