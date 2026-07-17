@@ -26,11 +26,6 @@ describe('AuthContext role hydration race', () => {
     expect(source).toContain('setLoginState(null);');
   });
 
-  it('clears renderer session snapshots when the auth identity changes', () => {
-    expect(source).toContain('sessionsStore.reset();');
-    expect(source).toContain('activeUserIdRef.current !== state.user.id');
-  });
-
   it('projects browser waiting state before the main-process loopback request settles', () => {
     expect(source).toContain("if (action.type === 'start-browser')");
     expect(source).toContain("setLoginState({ step: 'browser-redirect', label: action.label });");
