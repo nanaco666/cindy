@@ -70,19 +70,6 @@ export interface NetworkSlotDeps {
    */
   getLoginEmail(): string | null;
   /**
-   * 飞书登录态令牌通道(source:'login-feishu-token';生产接主机
-   * FeishuTokenManager)。ensure = 现取当前有效 user access token(管理器
-   * 内部自管缓存 + 到期前刷新 + 单飞去重,这里每单现取,断连/重连下一单
-   * 即生效);forceRefresh = 401 兜底重刷(服务端提前作废 token 时用,与
-   * oauth 的 invalidate 同套路)。未连接飞书 / 刷新链路判死返回
-   * AUTH_EXPIRED。未注入时该来源凭证一律快速失败(接线缺失是主机 bug,
-   * 不静默跳过)。token 明文只进请求头,不进日志、不进错误消息、不回沙箱。
-   */
-  feishuToken?: {
-    ensure(): Promise<{ token: string } | { error: 'AUTH_EXPIRED' }>;
-    forceRefresh(): Promise<{ token: string } | { error: 'AUTH_EXPIRED' }>;
-  };
-  /**
    * 真实 HTTP 执行(生产注入 Electron net.fetch;单测注入假实现)。
    * 必须尊重 init.signal(超时经 AbortController 下发)与 redirect:'manual'
    * (重定向由本模块逐跳校验白名单,不许实现自动跟)。body 为 Uint8Array
@@ -681,7 +668,6 @@ export class GhostNetworkSlot {
     const inject0 = await this.injectSecrets(ghostId, net.secrets ?? [], connectionDecls, url.hostname, net.hosts, requestHeaders, authAccount);
     if (inject0.error) return { ok: false, message: inject0.error };
     let usedExchange = inject0.usedExchange;
-    let feishuInjected = inject0.feishuInjected;
     const oauthInjected = new Map(inject0.oauthInjected);
 
     // ── 在途并发闸(常量硬顶,防死循环刷单;不是配额)──────────────────
@@ -733,8 +719,8 @@ export class GhostNetworkSlot {
       }
 
       // ── 执行(重定向逐跳手动跟,每跳重验白名单 + 重算凭证注入)────────
-      // 外层 attempt 循环只为交换型 / oauth / 飞书登录态凭证的 401 兜底:令牌
-      // 可能被服务端提前作废,作废本地缓存重换/重刷一次再整链重试;第二次仍
+      // 外层 attempt 循环只为交换型 / oauth 凭证的 401 兜底:令牌可能被
+      // 服务端提前作废,作废本地缓存重换/重刷一次再整链重试;第二次仍
       // 401 就原样回给意识。
       let response: Response | null = null;
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -742,11 +728,6 @@ export class GhostNetworkSlot {
           this.invalidateExchangedTokens(ghostId, net.secrets ?? []);
           for (const [secretKey, accountId] of oauthInjected) {
             this.deps.oauthTokens?.invalidateAccessToken(ghostId, secretKey, accountId);
-          }
-          if (feishuInjected) {
-            // 服务端可能提前作废了飞书 token:强刷一次,随后 reInject 的
-            // ensure() 会拿到新鲜值;强刷失败则 reInject 会 fail-closed。
-            await this.deps.feishuToken?.forceRefresh();
           }
           const reInject = await this.injectSecrets(ghostId, net.secrets ?? [], connectionDecls, url.hostname, net.hosts, requestHeaders, authAccount);
           if (reInject.error) return { ok: false, message: reInject.error };
@@ -771,7 +752,6 @@ export class GhostNetworkSlot {
             const hopInject = await this.injectSecrets(ghostId, net.secrets ?? [], connectionDecls, currentUrl.hostname, net.hosts, hopHeaders, authAccount);
             if (hopInject.error) return { ok: false, message: hopInject.error };
             usedExchange ||= hopInject.usedExchange;
-            feishuInjected ||= hopInject.feishuInjected;
             for (const [k, v] of hopInject.oauthInjected) oauthInjected.set(k, v);
           }
           response = await this.deps.fetchImpl(currentUrl.toString(), {
@@ -809,7 +789,7 @@ export class GhostNetworkSlot {
           currentUrl = nextUrl;
         }
         if (!response) break;
-        if (response.status === 401 && (usedExchange || oauthInjected.size > 0 || feishuInjected) && attempt === 0) {
+        if (response.status === 401 && (usedExchange || oauthInjected.size > 0) && attempt === 0) {
           // 丢弃本次响应体(best-effort),换新令牌整链重试一次。
           try {
             await (response as { body?: ReadableStream<Uint8Array> | null }).body?.cancel();
@@ -995,8 +975,6 @@ export class GhostNetworkSlot {
     usedExchange: boolean;
     /** 本次注入过的 oauth 凭证(secretKey → 实际用的账号 id;401 作废用)。 */
     oauthInjected: Map<string, string>;
-    /** 本次是否注入过飞书登录态令牌(401 时 forceRefresh 重试用)。 */
-    feishuInjected: boolean;
   }> {
     // 声明的凭证头一律主机独占:先把意识自带(或上一跳残留)的任何大小写
     // 变体删干净,再按本 host 注入——不管这条凭证这一跳注不注入都要删,
@@ -1010,15 +988,13 @@ export class GhostNetworkSlot {
       deleteHeaderVariants(headers, decl.inject.header);
     }
     let usedExchange = false;
-    let feishuInjected = false;
     const oauthInjected = new Map<string, string>();
     for (const secret of secrets) {
       const scope = secret.inject.hosts ?? allHosts;
       if (!scope.some((pattern) => ghostNetworkHostMatches(pattern, hostname))) continue;
       const resolved = await this.resolveSecretValue(ghostId, secret, authAccount);
-      if ('error' in resolved) return { error: resolved.error, usedExchange, oauthInjected, feishuInjected };
+      if ('error' in resolved) return { error: resolved.error, usedExchange, oauthInjected };
       if (secret.exchange !== undefined) usedExchange = true;
-      if (secret.source === 'login-feishu-token') feishuInjected = true;
       if (resolved.oauthAccountId !== undefined) oauthInjected.set(secret.key, resolved.oauthAccountId);
       // 函数式替换同 performExchange:凭证/令牌含 $ 不得触发特殊序列解释。
       headers[secret.inject.header] = secret.inject.format.replace('{value}', () => resolved.value);
@@ -1036,14 +1012,13 @@ export class GhostNetworkSlot {
             error: `连接地址 ${hostname} 的凭证读取失败——请到 设置 → 插件 → 本意识详情页 重新添加该连接`,
             usedExchange,
             oauthInjected,
-            feishuInjected,
           };
         }
         deleteHeaderVariants(headers, tok.header);
         headers[tok.header] = tok.format.replace('{value}', () => tok.value);
       }
     }
-    return { error: null, usedExchange, oauthInjected, feishuInjected };
+    return { error: null, usedExchange, oauthInjected };
   }
 
   /**
@@ -1087,10 +1062,6 @@ export class GhostNetworkSlot {
     let raw: string;
     if (secret.source === 'login-email') {
       const resolved = this.resolveLoginEmail(secret);
-      if ('error' in resolved) return resolved;
-      raw = resolved.value;
-    } else if (secret.source === 'login-feishu-token') {
-      const resolved = await this.resolveFeishuToken(secret);
       if ('error' in resolved) return resolved;
       raw = resolved.value;
     } else {
@@ -1224,36 +1195,6 @@ export class GhostNetworkSlot {
       return { error: `凭证「${secret.label}」取自登录邮箱,但登录态里的邮箱形态不合法——请退出登录后重新登录再试` };
     }
     return { value: trimmed };
-  }
-
-  /**
-   * source:'login-feishu-token' 凭证的值解析:现取主机飞书登录态的 user
-   * access token,fail-closed——通道未接线 / 未连接飞书 / 刷新链路判死都拒
-   * (带重连指引),绝不注入一个坏值发出去。token 原文绝不进错误消息与
-   * 日志(与 login-email"邮箱不进沙箱"同一不变量)。
-   */
-  private async resolveFeishuToken(
-    secret: GhostSecretDecl,
-  ): Promise<{ value: string } | { error: string }> {
-    const channel = this.deps.feishuToken;
-    if (!channel) {
-      return { error: '飞书登录态凭证通道未就绪(主机未接线),请升级应用或反馈' };
-    }
-    const result = await channel.ensure();
-    if ('error' in result) {
-      return {
-        error:
-          `凭证「${secret.label}」取自飞书登录态,但当前未连接飞书或授权已失效——` +
-          '请退出登录后重新用飞书登录再试',
-      };
-    }
-    if (typeof result.token !== 'string' || result.token.length === 0) {
-      this.deps.log?.warn('ghost login-feishu-token secret rejected: empty token from channel', {
-        secretKey: secret.key,
-      });
-      return { error: `凭证「${secret.label}」取自飞书登录态,但令牌暂不可用——请稍后重试或重新登录飞书` };
-    }
-    return { value: result.token };
   }
 
   /** 作废某意识全部交换型凭证的令牌缓存(401 重试前调用)。 */

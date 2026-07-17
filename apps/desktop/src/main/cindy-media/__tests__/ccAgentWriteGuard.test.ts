@@ -13,9 +13,10 @@
  *   - imageCacheStore / videoCacheStore / modelCacheStore:冻结老 store,
  *     只读服务 xdt-image/video/model 历史地址 + 声明过的存量回落写入;
  *   - im/host.ts:IM 老目录 paths(非图片文件与回落副本)+ 注入说明;
- *   - mcp-integrations/feishu.ts:meta sidecar 索引根(3b 设计:小 json 非媒体字节);
  *     (confluence.ts / jira.ts 已随 lizi_jira / lizi_confluence 退役删除,
- *      2026-07-14 迁入 xd-atlassian 意识;历史附件只读路径留在 imageCacheStore)
+ *      2026-07-14 迁入 xd-atlassian 意识;mcp-integrations/feishu.ts 已随主机
+ *      飞书 token 链退役删除,2026-07-17 授权切 xd-feishu 意识 OAuth broker;
+ *      历史附件只读路径都留在 imageCacheStore)
  *   - session-share/sessionShareExport.ts / sessionShareImport.ts:读老地址打包 +
  *     非媒体散件/回落的老目录;
  *   - cindy-media/legacyDeadDirs.ts:死目录清退(第 5 步)——对老世界的唯一
@@ -33,7 +34,6 @@ const ALLOWED_FILES = new Set([
   'cindy-media/legacyDeadDirs.ts',
   'im/host.ts',
   'imageCacheStore.ts',
-  'mcp-integrations/feishu.ts',
   'modelCacheStore.ts',
   'session-share/sessionShareExport.ts',
   'session-share/sessionShareImport.ts',

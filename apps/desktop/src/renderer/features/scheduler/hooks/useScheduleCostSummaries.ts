@@ -9,8 +9,16 @@ const log = createLogger('ScheduleCostSummaries');
 export interface ScheduleCostSummary {
   scheduleId: string;
   totalCostUsd: number;
+  totalEstimatedValueUsd: number;
   /** 产生过自动化 turn cost 的去重 session 数；legacy 会话兜底同样计入。 */
   sessionCount: number;
+  sessions?: readonly ScheduleSessionCostSummary[];
+}
+
+export interface ScheduleSessionCostSummary {
+  sessionId: string;
+  totalCostUsd: number;
+  totalEstimatedValueUsd: number;
 }
 
 /** Automation 任务列表的 cost summary 状态；loaded=false 时 UI 不显示占位金额。 */
@@ -44,7 +52,8 @@ export function useScheduleCostSummaries(
 
     try {
       const visibleScheduleIds = new Set(scheduleIds);
-      const rows = (await window.electronAPI.maker.schedule.listCostSummaries()) as ScheduleCostSummary[];
+      const rows =
+        (await window.electronAPI.maker.schedule.listCostSummaries()) as ScheduleCostSummary[];
       if (refreshSeqRef.current !== seq) return;
 
       const next = new Map<string, ScheduleCostSummary>();

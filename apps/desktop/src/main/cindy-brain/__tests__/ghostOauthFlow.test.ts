@@ -430,18 +430,30 @@ describe('startGhostOauthFlow', () => {
     }
   });
 
-  it('tokenBroker:code 交给 broker,不直连 token 端点,且 PKCE 强制关闭', async () => {
+  it('tokenBroker:code 交给 broker,不直连 token 端点;PKCE 缺省开,verifier 透传 broker', async () => {
     const fetchImpl = vi.fn();
+    let challengeFromUrl: string | null = null;
     const broker: GhostOauthBrokerClient = {
-      exchange: vi.fn(async (slug: string, params: { code: string; redirectUri: string }) => {
-        expect(slug).toBe('jira');
-        expect(params.code).toBe('c-broker');
-        expect(params.redirectUri).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/callback$/);
-        return {
-          ok: true as const,
-          bundle: { accessToken: 'at-b', refreshToken: 'rt-b', expiresAt: Date.now() + 1000, grantedScope: null },
-        };
-      }),
+      exchange: vi.fn(
+        async (slug: string, params: { code: string; redirectUri: string; codeVerifier?: string }) => {
+          expect(slug).toBe('jira');
+          expect(params.code).toBe('c-broker');
+          expect(params.redirectUri).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/callback$/);
+          // PKCE:broker 收到的 verifier 必须与授权页 challenge 对得上(S256)。
+          expect(typeof params.codeVerifier).toBe('string');
+          const digest = createHash('sha256')
+            .update(params.codeVerifier as string)
+            .digest('base64')
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/, '');
+          expect(digest).toBe(challengeFromUrl);
+          return {
+            ok: true as const,
+            bundle: { accessToken: 'at-b', refreshToken: 'rt-b', expiresAt: Date.now() + 1000, grantedScope: null },
+          };
+        },
+      ),
       refresh: vi.fn(),
     };
     const result = await startGhostOauthFlow({
@@ -449,8 +461,8 @@ describe('startGhostOauthFlow', () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
       broker,
       openExternal: (url) => {
-        // pkce 缺省 true 也被 broker 模式强制关闭。
-        expect(new URL(url).searchParams.get('code_challenge')).toBeNull();
+        challengeFromUrl = new URL(url).searchParams.get('code_challenge');
+        expect(challengeFromUrl).toBeTruthy();
         browserRedirect(url, (au) => ({ code: 'c-broker', state: au.searchParams.get('state') ?? '' }));
       },
     });
@@ -458,6 +470,31 @@ describe('startGhostOauthFlow', () => {
     if (result.ok) expect(result.bundle.accessToken).toBe('at-b');
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(broker.exchange).toHaveBeenCalledTimes(1);
+  });
+
+  it('tokenBroker + pkce:false(jira/slack 形态):授权页无 challenge,broker 不收 verifier', async () => {
+    const broker: GhostOauthBrokerClient = {
+      exchange: vi.fn(
+        async (_slug: string, params: { code: string; redirectUri: string; codeVerifier?: string }) => {
+          expect(params.codeVerifier).toBeUndefined();
+          return {
+            ok: true as const,
+            bundle: { accessToken: 'at-np', refreshToken: null, expiresAt: null, grantedScope: null },
+          };
+        },
+      ),
+      refresh: vi.fn(),
+    };
+    const result = await startGhostOauthFlow({
+      config: { ...BASE_CONFIG, tokenBroker: 'jira', pkce: false },
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      broker,
+      openExternal: (url) => {
+        expect(new URL(url).searchParams.get('code_challenge')).toBeNull();
+        browserRedirect(url, (au) => ({ code: 'c-np', state: au.searchParams.get('state') ?? '' }));
+      },
+    });
+    expect(result).toMatchObject({ ok: true });
   });
 
   it('tokenBroker 声明但未接线 broker → INVALID_CONFIG,不拉浏览器', async () => {

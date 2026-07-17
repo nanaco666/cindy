@@ -10,5 +10,6 @@
   "websiteUrl": "https://cindy.com.cn",
   "xdGatewayBaseUrl": "https://llm-proxy.tapsvc.com",
   "modelAccessApiBaseUrl": "https://xdmaker-model-access.magiclizi.com",
-  "cdnBaseUrl": "https://hotfix.cindy.com.cn/cindy"
+  "cdnBaseUrl": "https://hotfix.cindy.com.cn/cindy",
+  "mobileUpdateBaseUrl": "https://mobile-update.cindy.com.cn"
 }

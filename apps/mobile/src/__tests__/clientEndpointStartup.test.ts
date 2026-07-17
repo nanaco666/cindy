@@ -31,6 +31,7 @@ const FULL_MANIFEST_OBJECT = {
   xdGatewayBaseUrl: 'https://gateway-next.example.com',
   modelAccessApiBaseUrl: 'https://model-access-next.example.com',
   cdnBaseUrl: 'https://cdn-next.example.com/app',
+  mobileUpdateBaseUrl: 'https://mobile-update-next.example.com',
 };
 const FULL_MANIFEST = JSON.stringify(FULL_MANIFEST_OBJECT);
 
@@ -49,6 +50,27 @@ describe('runStartupEndpointResolve(清单即唯一事实源)', () => {
     expect(env.AUTH_API_BASE_URL).toBe('https://auth-next.example.com'); // 单一字段无脑取
     expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay-next.example.com');
     expect(env.MOBILE_VOICE_LITELLM_BASE_URL).toBe('https://gateway-next.example.com');
+    // 非自建变体(IS_OTA_SELFHOST=false):mobileUpdateBaseUrl 不覆写,恒空串
+    expect(env.OTA_SERVER_BASE_URL).toBe('');
+  });
+
+  it('自建变体(IS_OTA_SELFHOST=1):mobileUpdateBaseUrl 覆写整包发现基址(可远程迁域名)', async () => {
+    process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST = '1';
+    process.env.EXPO_PUBLIC_XDT_OTA_URL = 'https://baked-ota.example.invalid';
+    try {
+      const { env, startup } = await freshModules();
+      expect(env.OTA_SERVER_BASE_URL).toBe('https://baked-ota.example.invalid');
+      const outcome = await startup.runStartupEndpointResolve({
+        fetchManifestText: async () => FULL_MANIFEST,
+      });
+      expect(outcome).toEqual({ ok: true });
+      // 清单值优先于烧包 env:已发自建包靠改线上清单即可迁域名
+      expect(env.OTA_SERVER_BASE_URL).toBe('https://mobile-update-next.example.com');
+    } finally {
+      delete process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST;
+      delete process.env.EXPO_PUBLIC_XDT_OTA_URL;
+      vi.resetModules();
+    }
   });
 
   it('拉取失败 → ok:false(fetch-failed),env 保持构建期值不动', async () => {

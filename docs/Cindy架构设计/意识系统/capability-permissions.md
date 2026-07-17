@@ -281,18 +281,17 @@ cindy 槽解决"用 Cindy 自己的能力";network 槽解决"意识自带服务"
   (与 exchange 同路)。互斥:oauth 与 exchange 不共存;login-email 不涉。
   确认框:「将引导你在 <授权域名> 完成 OAuth 授权(名称)」+ 主机说明 +
   scopes 原文逐行(`networkSecretOauth` / `networkSecretOauthDetail`);
-- **飞书登录态令牌(source:'login-feishu-token',2026-07-16 落地,lizi_feishu
-  意识化前置)**:login-email 同族的第三档派生凭证——值 = 主机飞书登录态的
-  user access token,注入时现取 `FeishuTokenManager.ensureToken()`(缓存 +
-  到期前 10min 自刷新 + 单飞去重都在管理器内,刷新链走 XDT server 的
-  refresh-feishu + 主机 JWT,与登录体系同源);上游 401 时 `forceRefresh`
-  作废重刷**整链重试一次**(与 exchange/oauth 同路,injectSecrets 按
-  `feishuInjected` 记账)。用户零配置零搬账(用飞书登录即用);未连接飞书 /
-  刷新链判死 fail-closed 报重登指引,**token 明文不进沙箱、不进错误消息、
-  不进日志**(与 login-email"邮箱不进沙箱"同一不变量)。校验同 login-email:
-  禁 url / exchange / input:'ghost',settingsHtml 豁免;不进 /secrets 收单键集。
-  确认框分档文案 `networkSecretFeishuToken(Detail)`。同日上传通道两个通用
-  增强:`upload.fields`(随行普通表单字段 ≤8 条,在文件段之前;值里字面量
+- **飞书登录态令牌(source:'login-feishu-token')已整档退役(2026-07-16
+  落地,2026-07-17 随飞书登录整体下线删除)**:该派生凭证原以主机
+  FeishuTokenManager 的登录态 user access token 现取注入(刷新链走 xdt-api
+  refresh-feishu)。飞书登录退役后,xd-feishu 改走上面的 **oauth +
+  tokenBroker:'feishu'** 通道(PKCE,code 换 token / 刷新经 oauth-broker-server
+  的 feishu provider,上游拒绝码 `FEISHU_OAUTH_FAILED`;broker 模式自此兼容
+  PKCE,verifier 经 broker exchange 透传服务端);schema、networkSlot 注入
+  通道、确认框分档文案 `networkSecretFeishuToken(Detail)`、FORGE_GUIDE 章节
+  均已删除,存量已装清单由内置播种器按指纹覆盖自愈。2026-07-16 同日上传
+  通道两个通用增强(仍现行):`upload.fields`(随行普通表单字段 ≤8 条,
+  在文件段之前;值里字面量
   `{bytes}` 由主机替换成全部上传文件总字节数——飞书 drive upload_all 的
   size 字段用)与 `uploadDir.fileField`(单文件精确字段名,与 fileFieldPrefix
   互斥、票据必须恰含 1 个文件、filename 只取文件名——飞书 im 文件上传这类

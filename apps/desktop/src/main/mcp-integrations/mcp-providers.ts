@@ -72,9 +72,9 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
       isComputerUseEnabled: () => pluginRegistry.isEnabled('computer'),
     }),
     // lizi_feishu 已于 2026-07-16 摘壳:飞书能力(44 精品 + 123 只读直通)迁入
-    // 内置意识 xd-feishu(登录态凭证 login-feishu-token,零迁移零配置)。
-    // 后端留任:getFeishuService() 的 token 刷新链(authManager 驱动)与工具
-    // registry(scheduler-host/script-capability-broker.ts 直调)不受影响。
+    // 内置意识 xd-feishu;2026-07-17 起授权切到意识 OAuth broker
+    // (tokenBroker:'feishu'),主机 token 刷新链(mcp-integrations/feishu.ts)
+    // 与 scheduler registry 直调一并退役(scheduler 飞书方法走 ghost pipe)。
     // mivo 已于 2026-07-13 退役:整体迁入内置意识 xd-mivo(见 xd-mivo/ghost.json)。
     // slack 官方 MCP 已于 2026-07-15 退役(迁入内置意识 cindy-slack,授权走
     // oauth-broker 的 slack provider;老账号由 slackAccountsMigration 无感搬入)。

@@ -16,13 +16,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Pencil,
-  Play,
-  Pause,
-  Trash2,
-  History,
-} from 'lucide-react';
+import { Pencil, Play, Pause, Trash2, History } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
@@ -33,6 +27,7 @@ import { useCCSessions } from '@/hooks/useCCSessions';
 import { clearSessionAttentionMany } from '@/lib/sessionAttentionStore';
 
 import { useRuns } from '../hooks/useRuns';
+import type { ScheduleCostSummary } from '../hooks/useScheduleCostSummaries';
 import { cronToConfig, summarizeConfig } from '../lib/cronCodexPreset';
 import { basenameOf, describeDestination, humanizeAgentKind } from '../lib/formatters';
 
@@ -44,6 +39,7 @@ interface Props {
   onTogglePause: (s: Schedule) => void | Promise<void>;
   onEdit: (s: Schedule) => void;
   onDelete: (s: Schedule) => void | Promise<void>;
+  costSummary?: ScheduleCostSummary;
   /**
    * 页面级 runNow busy 守卫（由 SchedulerPage 传入）。
    * true 表示同一 schedule 已在 TaskListCell 行按钮处触发了 runNow 且 IPC 未回执，
@@ -58,6 +54,7 @@ export function RunHistoryPane({
   onTogglePause,
   onEdit,
   onDelete,
+  costSummary,
   runNowBusy = false,
 }: Props) {
   const { t } = useTranslation();
@@ -86,20 +83,20 @@ export function RunHistoryPane({
     return m;
   }, [allSessions]);
   const sessionCostMap = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const sess of allSessions) {
-      m.set(sess.id, sess.totalCostUsd ?? 0);
+    const m = new Map<string, { totalCostUsd: number; totalEstimatedValueUsd: number }>();
+    for (const session of costSummary?.sessions ?? []) {
+      m.set(session.sessionId, session);
     }
     return m;
-  }, [allSessions]);
+  }, [costSummary]);
   const resolveRunAgent = useCallback(
     (run: ScheduleRun): AgentKind =>
       (run.sessionId && sessionAgentMap.get(run.sessionId)) || s.agentKind,
     [sessionAgentMap, s.agentKind],
   );
   const resolveRunCost = useCallback(
-    (run: ScheduleRun): number | undefined =>
-      run.sessionId ? sessionCostMap.get(run.sessionId) : undefined,
+    (run: ScheduleRun): { totalCostUsd?: number; totalEstimatedValueUsd?: number } =>
+      run.sessionId ? (sessionCostMap.get(run.sessionId) ?? {}) : {},
     [sessionCostMap],
   );
 
@@ -147,7 +144,9 @@ export function RunHistoryPane({
         await window.electronAPI.maker.schedule.deleteRun(run.id);
         toast.success(t('scheduler.toast.runDeleted'));
       } catch (e) {
-        toast.error(t('scheduler.toast.deleteFailed', { error: e instanceof Error ? e.message : String(e) }));
+        toast.error(
+          t('scheduler.toast.deleteFailed', { error: e instanceof Error ? e.message : String(e) }),
+        );
       }
     },
     [confirm, t],
@@ -167,7 +166,11 @@ export function RunHistoryPane({
           await window.electronAPI.maker.schedule.runNow(s.id);
           toast.success(t('scheduler.toast.restarted'));
         } catch (e) {
-          toast.error(t('scheduler.toast.restartFailed', { error: e instanceof Error ? e.message : String(e) }));
+          toast.error(
+            t('scheduler.toast.restartFailed', {
+              error: e instanceof Error ? e.message : String(e),
+            }),
+          );
         }
       });
     },
@@ -193,7 +196,9 @@ export function RunHistoryPane({
   // 用 summarizeConfig 复用创建对话框那套语义化摘要（"Daily at 09:00" / "Hourly" / "Weekly on Mon, Wed at 14:30" ...），
   // 跟 chip 文案 100% 对齐；不再用 cronToHuman 的 "At 09:00" 风格。
   // manual schedule 不参与 cron，cron 字段是占位 → header 显示 "Manual trigger"。
-  const cronText = s.manual ? t('scheduler.detail.manualTrigger') : summarizeConfig(cronToConfig(s.cronExpr));
+  const cronText = s.manual
+    ? t('scheduler.detail.manualTrigger')
+    : summarizeConfig(cronToConfig(s.cronExpr));
   const agentText = humanizeAgentKind(s.agentKind);
   const dest = describeDestination(s);
   // title 兜底显示完整路径，悬浮即可看到 — basename 视觉简洁，hover/title 看全量
@@ -263,7 +268,9 @@ export function RunHistoryPane({
           <PillButton
             onClick={() => void wrap(s.id, () => onTogglePause(s))}
             disabled={busy || isExpired}
-            icon={isPaused ? <Play size={12} strokeWidth={2} /> : <Pause size={12} strokeWidth={2} />}
+            icon={
+              isPaused ? <Play size={12} strokeWidth={2} /> : <Pause size={12} strokeWidth={2} />
+            }
             label={isPaused ? t('scheduler.button.enable') : t('scheduler.button.disable')}
           />
           {!isProjectSchedule && (
@@ -289,12 +296,20 @@ export function RunHistoryPane({
       <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
         {hasLoaded &&
           (isCurrent && error ? (
-            <p className="text-xs text-[var(--cmd-palette-item-meta)]">{t('scheduler.detail.runsLoadFailed', { error })}</p>
+            <p className="text-xs text-[var(--cmd-palette-item-meta)]">
+              {t('scheduler.detail.runsLoadFailed', { error })}
+            </p>
           ) : isCurrent && displayRuns.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <div className="flex flex-col items-center gap-2 py-12 text-center">
-                <History size={28} strokeWidth={1.5} className="text-[var(--settings-section-desc)]" />
-                <p className="text-sm text-[var(--cmd-palette-item-meta)]">{t('scheduler.detail.noRunsHeading')}</p>
+                <History
+                  size={28}
+                  strokeWidth={1.5}
+                  className="text-[var(--settings-section-desc)]"
+                />
+                <p className="text-sm text-[var(--cmd-palette-item-meta)]">
+                  {t('scheduler.detail.noRunsHeading')}
+                </p>
                 <p className="max-w-[260px] text-xs text-[var(--settings-section-desc)]">
                   {t('scheduler.detail.noRunsHint')}
                 </p>
@@ -310,7 +325,8 @@ export function RunHistoryPane({
                   <RunHistoryCard
                     run={r}
                     agentKind={resolveRunAgent(r)}
-                    sessionCostUsd={resolveRunCost(r)}
+                    sessionCostUsd={resolveRunCost(r).totalCostUsd}
+                    sessionEstimatedValueUsd={resolveRunCost(r).totalEstimatedValueUsd}
                     onDelete={handleDeleteRun}
                     onRestart={handleRestartRun}
                   />

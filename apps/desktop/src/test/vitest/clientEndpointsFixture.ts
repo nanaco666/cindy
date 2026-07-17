@@ -28,4 +28,5 @@ export const TEST_CLIENT_ENDPOINTS: ClientEndpointMap = {
   xdGatewayBaseUrl: TEST_XD_GATEWAY_BASE_URL,
   modelAccessApiBaseUrl: 'https://model-access.test.invalid',
   cdnBaseUrl: TEST_CDN_BASE_URL,
+  mobileUpdateBaseUrl: 'https://mobile-update.test.invalid',
 };

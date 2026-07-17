@@ -1827,6 +1827,7 @@
       "recording": "Press new shortcut…",
       "editAria": "Change shortcut for {{name}}",
       "errors": {
+        "saveFailed": "Failed to save shortcut settings",
         "notBindable": "This key combination cannot be used",
         "systemReserved": "Reserved by the operating system",
         "conflict": "Conflicts with \"{{name}}\"",
@@ -2006,8 +2007,6 @@
         "networkSecretGhostInputDetail": "Collected by this plugin's own settings UI — the plugin page sees the value at entry time. It is then handed to the host in one step for encrypted storage; once stored, the plugin can never read it back, and the host injects it only for the domains it declares.",
         "networkSecretIdentity": "Will use your login email as the credential \"{{name}}\"",
         "networkSecretIdentityDetail": "The value comes from your signed-in account's email, derived and injected by the host at request time; nothing to fill in. The plugin can read this email to show the current identity in its settings UI.",
-        "networkSecretFeishuToken": "Will call out using your Feishu login identity (credential \"{{name}}\")",
-        "networkSecretFeishuTokenDetail": "The value comes from your current Feishu login's access token, injected by the host at request time; nothing to fill in, and the token never enters the plugin code. If Feishu is not connected or the authorization has expired, requests fail with a re-login prompt.",
         "networkSecretOauth": "Will guide you through OAuth authorization at {{host}} ({{name}})",
         "networkSecretOauthDetail": "The authorization flow and all tokens are managed by the host and can never be read by the plugin code; you provide the client credentials on the plugin's settings page. The requested permission scopes are listed verbatim below — review them before approving.",
         "networkConnections": "Can connect to {{label}} addresses you add",
@@ -4611,6 +4610,7 @@
       "tagOnce": "Once",
       "tagManual": "Manual",
       "totalCost": "Cost {{cost}}",
+      "totalValue": "Value {{value}}",
       "menu": {
         "rename": "Rename",
         "resume": "Resume",
@@ -4645,6 +4645,7 @@
       "openSession": "Open session",
       "markReadTitle": "Click to mark as read",
       "sessionCost": "Session cost {{cost}}",
+      "sessionValue": "Session value {{value}}",
       "restart": "Restart",
       "moreAria": "More actions",
       "delete": "Delete",

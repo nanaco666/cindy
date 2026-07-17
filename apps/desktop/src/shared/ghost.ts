@@ -398,14 +398,12 @@ export const GHOST_OAUTH_BOUNCE_PATH_RE = /^\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)
  *   授权换来的 access token——用户在意识设置页填 client 凭证并点"连接账号",
  *   主机跑授权流程并保管全部令牌,出网时现取新鲜 token 注入(见
  *   GhostSecretOauthDecl;必须同时声明 oauth 详单)。
- * - 'login-feishu-token'(2026-07-16,lizi_feishu 意识化前置):值 = 主机
- *   飞书登录态的 user access token——主机注入时现取(FeishuTokenManager
- *   自刷新,token 明文不进沙箱、不进错误消息);未连接飞书 / 刷新链路判
- *   AUTH_EXPIRED 时 fail-closed 报错并引导重新登录飞书。适用于"能力面
- *   直接复用产品飞书登录身份"的第一方服务;与 login-email 同族:用户
- *   不填值,禁 url / exchange / oauth,settingsHtml 豁免。
+ *
+ * ('login-feishu-token' 已于 2026-07-17 随飞书登录整体下线退役——xd-feishu
+ * 改走 source:'oauth' + tokenBroker:'feishu';存量已装清单由内置意识播种器
+ * 按指纹覆盖自愈,未覆盖前该意识加载被拒属预期。)
  */
-export const GHOST_SECRET_SOURCES = ['user', 'login-email', 'oauth', 'login-feishu-token'] as const;
+export const GHOST_SECRET_SOURCES = ['user', 'login-email', 'oauth'] as const;
 export type GhostSecretSource = (typeof GHOST_SECRET_SOURCES)[number];
 
 /**
@@ -769,18 +767,6 @@ export function ghostPermissionItems(manifest: GhostManifest): GhostPermissionIt
         ...(secret.oauth.scopes && secret.oauth.scopes.length > 0
           ? { detail: secret.oauth.scopes.join('\n') }
           : {}),
-      });
-      continue;
-    }
-    if (secret.source === 'login-feishu-token') {
-      // 飞书登录态令牌:值 = 主机自持的飞书 user access token,用户不填、
-      // 不进保险库;确认框如实告知"以你的飞书身份出网"。
-      items.push({
-        key: `network:secret:${secret.key}`,
-        kind: 'network',
-        labelKey: 'networkSecretFeishuToken',
-        labelArgs: { name: secret.label },
-        detailKey: 'networkSecretFeishuTokenDetail',
       });
       continue;
     }
@@ -1347,7 +1333,6 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
           }
           if (s.source === 'login-email') source = 'login-email';
           if (s.source === 'oauth') source = 'oauth';
-          if (s.source === 'login-feishu-token') source = 'login-feishu-token';
         }
         // 输入面字段已退役(2026-07-13 宿主凭证渲染整体退役):user 凭证
         // 一律意识 settingsHtml 收单。遗留 `input: "ghost"` 接受并忽略
@@ -1358,9 +1343,9 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
             reason: 'network.secrets[].input 已退役:宿主收单不存在,用户填写的凭证一律由意识 settingsHtml 收单(删掉 input 字段即可;唯一可接受的遗留值是 "ghost")',
           };
         }
-        // login-email / login-feishu-token 同族:值取自主机登录态派生,用户
-        // 不填、没有输入面,禁 url / exchange,settingsHtml 豁免。
-        const loginDerived = source === 'login-email' || source === 'login-feishu-token';
+        // login-email:值取自主机登录态派生,用户不填、没有输入面,
+        // 禁 url / exchange,settingsHtml 豁免。
+        const loginDerived = source === 'login-email';
         if (s.input === 'ghost' && loginDerived) {
           return {
             ok: false,

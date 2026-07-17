@@ -21,15 +21,17 @@ describe('auth login-flow reset', () => {
     expect(source.slice(clearStart, clearEnd)).toContain('resetLoginFlowState();');
   });
 
-  it('does not let legacy integration cleanup overturn a successful auth-server login', () => {
+  it('keeps the login-epoch guard and does not resurrect the legacy feishu token chain', () => {
     const completeStart = source.indexOf('async function completeLogin(');
     const completeEnd = source.indexOf('\n}\n\nasync function acceptLoginOutcome', completeStart);
     const completeBody = source.slice(completeStart, completeEnd);
-    expect(completeBody).toContain(
-      "log.error('clear legacy Feishu integration before login failed (non-fatal)', error)",
-    );
     expect(completeBody).toContain('if (authStateEpoch !== loginEpoch)');
     expect(completeBody).toContain('notifyRenderer();');
+    // 防复活:主机飞书 token 链已随 refresh-feishu 退役(2026-07-17),
+    // authManager 不得再接 FeishuTokenManager(飞书授权归 xd-feishu 意识
+    // 的 OAuth broker 通道)。
+    expect(source).not.toContain('getFeishuService');
+    expect(source).not.toContain('setJwt(');
   });
 
   it('does not leave expired private tickets on a screen that can only reuse them', () => {

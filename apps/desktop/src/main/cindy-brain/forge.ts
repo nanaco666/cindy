@@ -200,7 +200,7 @@ my-ghost/
   "secrets": [{                                     // 可选 0–4 条:需要用户填的凭证(你只声明名字和注入位置,值用户填、主机保管)
     "key": "api_token",                             // 小写字母开头,小写/数字/下划线,1–32
     "label": "Example API Token",                   // 给用户看的名称(设置页/确认框)
-    "source": "user",                               // 可选:凭证值来源。"user"(缺省)=用户在你的 settingsHtml 里填(声明 user 凭证必须同时声明 settingsHtml,见 §4.7);"login-email"=主机登录邮箱自动派生(用户不填;声明它时不允许再写 url,见 §4.7);"oauth"=主机托管 OAuth 授权,值 = 授权换来的 access token(必须同时声明 oauth 详单,见 §4.7 与下方 oauth 字段);"login-feishu-token"=主机飞书登录态的 user access token(用户不填;禁 url / exchange,见 §4.7)
+    "source": "user",                               // 可选:凭证值来源。"user"(缺省)=用户在你的 settingsHtml 里填(声明 user 凭证必须同时声明 settingsHtml,见 §4.7);"login-email"=主机登录邮箱自动派生(用户不填;声明它时不允许再写 url,见 §4.7);"oauth"=主机托管 OAuth 授权,值 = 授权换来的 access token(必须同时声明 oauth 详单,见 §4.7 与下方 oauth 字段)
     "hint": "在控制台生成后粘贴",                     // 可选提示(建议写进你的 settingsHtml 提示文案)
     "url": "https://example.com/settings/keys",     // 可选:控制台地址(仅 https)。settingsHtml 里可用 <a href> 逐字引用它,点击经主机转系统浏览器打开(见 §4.8「外链」);也供确认框等宿主 UI 引用
     "inject": {                                     // 必填:这条凭证怎么进请求
@@ -735,17 +735,6 @@ BroadcastChannel、日志或任何自存路径(review 必查)。凭证只会注�
 照"请重新登录"画)——确认框已如实披露,除展示外别拿它做别的;对该 key 的
 PUT/DELETE 一律 405(派生身份不可配置)。
 
-**飞书登录态令牌(source:"login-feishu-token",可选)**:适用于"能力面直接复用
-产品飞书登录身份"的第一方服务(调用飞书开放平台 OpenAPI)。凭证声明
-\`"source": "login-feishu-token"\` 后,值不由用户填——主机在每次请求时现取飞书
-登录态的 user access token(主机自己负责缓存与到期刷新),按 \`inject.format\`
-(通常 \`"Bearer {value}"\`)注入请求头;token 明文不进沙箱、不进错误消息。上游
-401 时主机自动强刷一次并整链重试。用户未连接飞书 / 授权已失效时 cindy.fetch
-返回带重新登录指引的结构化错误,把 message 原样告诉用户即可。注意:声明了
-login-feishu-token 就不要再写 \`url\` 也不要配 \`exchange\`(校验都会拒);它没有
-任何输入动作,settingsHtml 可省略;想给用户"测试连接"体验就用 cindy.fetch 打
-一个便宜的只读接口试探。
-
 **key 换令牌二段式(exchange,可选)**:有些服务的 API key 不直接当请求凭证,要先
 POST 一个交换端点换临时令牌(令牌才进 Authorization)。在凭证上声明 \`exchange\`
 (字段见 §2),主机就照单代办整个流程:换取 → 按 ttlSeconds 缓存 → \`inject.format\`
@@ -806,8 +795,10 @@ identity.displayTemplate 时,\`/oauth\` 回查与连接结果里 account.label �
   声明。
 - \`tokenBroker\`:**仅第一方官方意识可用**(第三方声明直接拒装)——code/refresh
   交换改经 Cindy 服务端 broker 完成,client secret 由服务端持有、不随包分发,
-  且要求用户已登录 Cindy。声明它时与 clientSecret 互斥、PKCE 强制关闭、设置页
-  的 \`/oauth/<key>/client\` 自填通道返回 405(settingsHtml 不要再画 client 输入区)。
+  且要求用户已登录 Cindy。声明它时与 clientSecret 互斥;PKCE 缺省开(verifier
+  经 broker exchange 透传服务端),不吃 PKCE 的服务商显式 \`"pkce": false\`;
+  设置页的 \`/oauth/<key>/client\` 自填通道返回 405(settingsHtml 不要再画
+  client 输入区)。
 - \`brokerBounce\`:双地址弹跳回调(随 tokenBroker,同样仅第一方)。Slack 这类
   服务商后台只收 https redirect、不收 http loopback——声明后报给服务商的
   redirect_uri 是「broker 服务的 https 弹跳路由」(主机用 broker 基地址 + \`path\`
@@ -1166,8 +1157,8 @@ await cindy.fs({ op: 'write', root: 'data', path: 'a.txt', content: 'hi' });
 - network 详单格式错(hosts 缺失/裸 TLD/IP/带端口/通配不在最左、secret 缺 inject、
   inject.format 没有 {value} 占位、inject.header 用了 Host/Cookie 等协议关键头、
   inject.hosts 不是 hosts 声明条目的子集、有详单但 slots 没有 "network"、
-  secret.source 不是 "user"/"login-email"/"oauth"/"login-feishu-token"、
-  source:"login-email" / "login-feishu-token" 还声明了 url 或 exchange、
+  secret.source 不是 "user"/"login-email"/"oauth"、
+  source:"login-email" 还声明了 url 或 exchange、
   声明了 user 凭证但没声明 settingsHtml、遗留 input 字段值不是 "ghost")
 - exchange 声明格式错(url 非 https/域名不在 hosts 白名单、bodyFormat 不是恰含一个
   {value}、contentType 不在白名单、tokenPath 不是点分路径、ttlSeconds 越界)

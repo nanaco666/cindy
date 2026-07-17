@@ -186,6 +186,7 @@ export function applyResolvedClientEndpoints(resolved: {
   authApiBaseUrl?: string;
   deviceLinkApiBaseUrl?: string;
   xdGatewayBaseUrl?: string;
+  mobileUpdateBaseUrl?: string;
 }): void {
   if (resolved.apiBaseUrl) {
     API_BASE_URL = normalizeBaseUrl(resolved.apiBaseUrl);
@@ -207,11 +208,20 @@ export function applyResolvedClientEndpoints(resolved: {
       MOBILE_VOICE_LITELLM_BASE_URL,
     );
   }
+  // 仅自建变体吃清单覆写,保住「非自建 ⇒ OTA_SERVER_BASE_URL 恒空串」不变量
+  // (调用点虽都有 IS_OTA_SELFHOST 门控,这里再挡一层,变体身份始终由烧包决定)。
+  if (resolved.mobileUpdateBaseUrl && IS_OTA_SELFHOST) {
+    OTA_SERVER_BASE_URL = resolved.mobileUpdateBaseUrl.replace(/\/+$/, '');
+  }
 }
 
 // 自建分发(自托管 OTA)服务基址。仅自建变体的包会注入 EXPO_PUBLIC_XDT_OTA_URL,
 // 运行时用它拼 `${base}/latest` 做整包发现(runtimeVersion 不同则引导跳 NPKG)。
-export const OTA_SERVER_BASE_URL = (process.env.EXPO_PUBLIC_XDT_OTA_URL?.trim().replace(/\/+$/, '')) || '';
+// live binding:自建变体下启动闸门拉到端点清单后用 mobileUpdateBaseUrl 覆写
+// (清单值优先,已发自建包可远程迁域名);非自建变体不覆写,保持恒空串。
+// 烧包 env 作 dev / 闸门前初值。消费点(fetchLatestRelease 的调用时默认参数)
+// 读的是当前值,无模块顶层捕获。热更通道 updates.url 仍烧在原生层,不受清单影响。
+export let OTA_SERVER_BASE_URL = (process.env.EXPO_PUBLIC_XDT_OTA_URL?.trim().replace(/\/+$/, '')) || '';
 
 // 是否自建变体 —— 必须与 app.config.js 的构建门控读同一个 EXPO_PUBLIC_XDT_OTA_SELFHOST 标志,
 // 而非仅凭 EXPO_PUBLIC_XDT_OTA_URL 是否存在。否则某 EAS 包若恰好在 public env 里带了该 URL

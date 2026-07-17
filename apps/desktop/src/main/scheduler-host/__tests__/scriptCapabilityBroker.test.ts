@@ -4,24 +4,25 @@ import type { Schedule } from '@lizi/maker-scheduler';
 import { SchedulerScriptCapabilityBroker } from '../script-capability-broker';
 
 const sendToSessionMock = vi.hoisted(() => vi.fn());
-const feishuRegistryCallMock = vi.hoisted(() => vi.fn());
+// ghost pipe 统一入口:缺省回显请求(jira/feishu 用例断言请求形状),
+// 单个用例可 mockResolvedValueOnce 覆盖返回(断言 data 解包 / 错误映射)。
+const callGhostToolMock = vi.hoisted(() =>
+  vi.fn(
+    async (
+      request: unknown,
+    ): Promise<{ ok: boolean; result?: unknown; errorCode?: string; message?: string }> => ({
+      ok: true,
+      result: request,
+    }),
+  ),
+);
 
 vi.mock('../../cindy-brain/index.js', () => ({
-  getGhostPipeDispatcher: () => ({
-    callGhostTool: vi.fn(async (request) => ({ ok: true, result: request })),
-  }),
+  getGhostPipeDispatcher: () => ({ callGhostTool: callGhostToolMock }),
 }));
 
 vi.mock('../../maker-ipc/register.js', () => ({
   tryGetOrcaCollabService: () => ({ sendToSession: sendToSessionMock }),
-}));
-
-vi.mock('../../mcp-integrations/feishu.js', () => ({
-  getFeishuService: () => ({ toMcpDeps: () => ({}) }),
-}));
-
-vi.mock('lizi-mcps', () => ({
-  createFeishuMcpServerWithRegistry: () => ({ server: {}, registry: { call: feishuRegistryCallMock } }),
 }));
 
 function schedule(): Schedule {
@@ -57,7 +58,11 @@ function schedule(): Schedule {
 }
 
 describe('SchedulerScriptCapabilityBroker', () => {
-  beforeEach(() => sendToSessionMock.mockReset());
+  beforeEach(() => {
+    sendToSessionMock.mockReset();
+    callGhostToolMock.mockReset();
+    callGhostToolMock.mockImplementation(async (request: unknown) => ({ ok: true, result: request }));
+  });
 
   it('maps Jira reads to the current xd-atlassian argument contract', async () => {
     const result = await new SchedulerScriptCapabilityBroker().call(
@@ -97,32 +102,28 @@ describe('SchedulerScriptCapabilityBroker', () => {
   });
 
   it('lists recently-active feishu chats and forwards incremental start_time', async () => {
-    feishuRegistryCallMock.mockResolvedValue({
-      content: [{ type: 'text', text: JSON.stringify({ ok: true, items: [{ chat_id: 'oc_1' }] }) }],
-    });
     const broker = new SchedulerScriptCapabilityBroker();
     await broker.call(
       { method: 'feishu.recent_chats', params: { count: 15 } },
       new Set(['feishu.read']),
       { schedule: schedule() },
     );
-    expect(feishuRegistryCallMock).toHaveBeenCalledWith('im_list_chats', {
-      sort_type: 'ByActiveTimeDesc',
-      page_size: 15,
+    expect(callGhostToolMock).toHaveBeenCalledWith({
+      ghostId: 'xd-feishu',
+      tool: 'call_tool',
+      args: { name: 'im_list_chats', args: { sort_type: 'ByActiveTimeDesc', page_size: 15 } },
     });
 
-    feishuRegistryCallMock.mockClear();
-    feishuRegistryCallMock.mockResolvedValue({
-      content: [{ type: 'text', text: JSON.stringify({ ok: true, messages: [] }) }],
-    });
+    callGhostToolMock.mockClear();
     await broker.call(
       { method: 'feishu.recent_messages', params: { chat_id: 'oc_1', start_time: 1710000000 } },
       new Set(['feishu.read']),
       { schedule: schedule() },
     );
-    expect(feishuRegistryCallMock).toHaveBeenCalledWith('im_read_messages', {
-      container_id: 'oc_1',
-      start_time: '1710000000',
+    expect(callGhostToolMock).toHaveBeenCalledWith({
+      ghostId: 'xd-feishu',
+      tool: 'call_tool',
+      args: { name: 'im_read_messages', args: { container_id: 'oc_1', start_time: '1710000000' } },
     });
 
     await expect(
@@ -134,9 +135,12 @@ describe('SchedulerScriptCapabilityBroker', () => {
     ).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' });
   });
 
-  it('reads recent feishu messages through the in-process feishu tool registry', async () => {
-    feishuRegistryCallMock.mockResolvedValue({
-      content: [{ type: 'text', text: JSON.stringify({ ok: true, messages: [{ message_id: 'om_1' }] }) }],
+  it('reads recent feishu messages through the xd-feishu ghost pipe', async () => {
+    // 意识 call_tool 的交付是 { data } 包裹:broker 解开 data,脚本可见形状
+    // 与老 registry 直调保持一致。
+    callGhostToolMock.mockResolvedValueOnce({
+      ok: true,
+      result: { data: { ok: true, messages: [{ message_id: 'om_1' }] } },
     });
     const broker = new SchedulerScriptCapabilityBroker();
     const result = await broker.call(
@@ -144,15 +148,18 @@ describe('SchedulerScriptCapabilityBroker', () => {
       new Set(['feishu.read']),
       { schedule: schedule() },
     );
-    expect(feishuRegistryCallMock).toHaveBeenCalledWith('im_read_messages', {
-      container_id: 'oc_123',
-      page_size: 10,
+    expect(callGhostToolMock).toHaveBeenCalledWith({
+      ghostId: 'xd-feishu',
+      tool: 'call_tool',
+      args: { name: 'im_read_messages', args: { container_id: 'oc_123', page_size: 10 } },
     });
     expect(result).toMatchObject({ ok: true, messages: [{ message_id: 'om_1' }] });
 
-    feishuRegistryCallMock.mockResolvedValue({
-      isError: true,
-      content: [{ type: 'text', text: JSON.stringify({ ok: false, errorCode: 'AUTH_EXPIRED', data: { message: '登录态过期' } }) }],
+    // pipe 层真实错误码形态(GHOST_ASLEEP/GHOST_NOT_FOUND/INTERNAL 等)原样透传。
+    callGhostToolMock.mockResolvedValueOnce({
+      ok: false,
+      errorCode: 'GHOST_ASLEEP',
+      message: 'xd-feishu 沉睡中',
     });
     await expect(
       broker.call(
@@ -160,7 +167,7 @@ describe('SchedulerScriptCapabilityBroker', () => {
         new Set(['feishu.read']),
         { schedule: schedule() },
       ),
-    ).rejects.toMatchObject({ code: 'AUTH_EXPIRED' });
+    ).rejects.toMatchObject({ code: 'GHOST_ASLEEP' });
 
     await expect(
       broker.call(

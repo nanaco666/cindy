@@ -68,7 +68,9 @@ export interface GhostOauthClientConfig {
    * 可选:XDT server token broker 的 provider slug(如 'jira')。声明后
    * code 换 token 与 refresh 不直连 tokenUrl,改经注入的 broker 调用器
    * (client secret 在服务端,不随包分发)。仅第一方官方意识可用,门控在
-   * 运行时接线层。broker 模式下 PKCE 强制关闭(broker 端点不透传 verifier)。
+   * 运行时接线层。broker 模式兼容 PKCE(pkce 缺省开):verifier 经 broker
+   * exchange 透传到服务端,由 provider 决定是否消费(feishu 要、jira/slack
+   * 显式声明 pkce:false)。
    */
   tokenBroker?: string;
   /**
@@ -132,7 +134,10 @@ export type GhostOauthBrokerResult =
  * 并把响应映射成 bundle;本引擎不感知 HTTP 细节。
  */
 export interface GhostOauthBrokerClient {
-  exchange(slug: string, params: { code: string; redirectUri: string }): Promise<GhostOauthBrokerResult>;
+  exchange(
+    slug: string,
+    params: { code: string; redirectUri: string; codeVerifier?: string },
+  ): Promise<GhostOauthBrokerResult>;
   refresh(slug: string, params: { refreshToken: string }): Promise<GhostOauthBrokerResult>;
 }
 
@@ -453,8 +458,9 @@ async function runGhostOauthFlow(
   const timeoutMs = opts.timeoutMs ?? FLOW_TIMEOUT_DEFAULT_MS;
   const brandName = opts.brandName ?? 'Cindy';
 
-  // broker 模式强制关 PKCE:broker 端点不透传 verifier,带 challenge 授权必失败。
-  const usePkce = config.pkce !== false && !config.tokenBroker;
+  // PKCE 缺省开;broker 模式同样支持(verifier 经 broker exchange 透传服务端),
+  // 不吃 PKCE 的服务商(jira/slack)在声明里显式 pkce:false。
+  const usePkce = config.pkce !== false;
   const state = base64Url(crypto.randomBytes(32));
   const verifier = usePkce ? base64Url(crypto.randomBytes(32)) : null;
   const challenge = verifier ? base64Url(crypto.createHash('sha256').update(verifier).digest()) : null;
@@ -613,7 +619,11 @@ async function runGhostOauthFlow(
 
     // broker 模式:code 交换交给 XDT server(secret 在服务端),不直连 tokenUrl。
     if (config.tokenBroker && opts.broker) {
-      const brokered = await opts.broker.exchange(config.tokenBroker, { code: outcome.code, redirectUri });
+      const brokered = await opts.broker.exchange(config.tokenBroker, {
+        code: outcome.code,
+        redirectUri,
+        ...(verifier !== null ? { codeVerifier: verifier } : {}),
+      });
       if (!brokered.ok) {
         logger?.warn('ghost oauth broker 交换失败', { slug: config.tokenBroker, error: brokered.error });
         return { ok: false, error: brokered.error, detail: brokered.detail };
@@ -621,6 +631,11 @@ async function runGhostOauthFlow(
       logger?.info('ghost oauth 授权完成(broker)', {
         slug: config.tokenBroker,
         hasRefreshToken: brokered.bundle.refreshToken !== null,
+        // scope 名单非敏感(不含令牌字节)。飞书权限累积语义下,老用户(v1
+        // 登录时代授过全量)首连时这里回显的就是应用已开通用户权限全集——
+        // 用于校准 ghost.json 的 scopes 声明(声明不全会让新用户缺权限,
+        // 声明未开通的会 20027 整页拒绝,两头都靠这个回显对账)。
+        grantedScope: brokered.bundle.grantedScope,
       });
       return { ok: true, bundle: brokered.bundle };
     }

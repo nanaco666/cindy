@@ -51,6 +51,7 @@ const FULL_MANIFEST = JSON.stringify({
   websiteUrl: 'https://www.remote.example.com',
   xdGatewayBaseUrl: 'https://gateway.remote.example.com',
   cdnBaseUrl: 'https://cdn.remote.example.com/app',
+  mobileUpdateBaseUrl: 'https://mobile-update.remote.example.com',
 });
 
 /** localhost http 清单(local 模式 endpoint.local.json 形态)。 */

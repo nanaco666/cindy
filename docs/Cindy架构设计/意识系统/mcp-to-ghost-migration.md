@@ -3,7 +3,7 @@
 > 状态:盘点快照(2026-07-16 更新;工具计数基于 2026-07-12 main 代码实数)。
 > 用途:lizi_art 退役后,逐个评估剩余 MCP server 是否迁移成意识的工作清单。
 > 勾选规则:每处理完一个 server(迁移完成 / 明确不迁),把对应条目勾上并补一行结论。
-> 2026-07-16 大势:**第三梯队 6 家全部迁完**——lizi_feishu 于 2026-07-16 改判迁移(xd-feishu,登录态凭证 login-feishu-token,后端留任服务 scheduler broker 与登录链);可意识化的 MCP 至此清零。
+> 2026-07-16 大势:**第三梯队 6 家全部迁完**——lizi_feishu 于 2026-07-16 改判迁移(xd-feishu);可意识化的 MCP 至此清零。2026-07-17 追加:飞书授权也切到意识 OAuth broker(tokenBroker:'feishu'),"后端留任"终结,login-feishu-token 平台契约删除(见 lizi_feishu 条目)。
 
 ## 0. 总量口径
 
@@ -63,7 +63,8 @@
 07-12 的三个共同硬障碍((a) 主机 OAuth 登录态凭证;(b) 工具量大;(c) 本地文件读写)后被平台能力逐一拆解:(a) → 老账号一次性搬账 + OAuth 槽(直连 / tokenBroker);(b) → 两段式目录(list_tools/call_tool 元工具 + 意识内 OPS 表,改工具不发应用版本);(c) → fs 槽 + 过户票据。除 lizi_feishu 外全部改判迁移并摘壳:
 
 - [x] **lizi_feishu** — ≈171(48 精品 + ≈123 只读直通);飞书 OpenAPI + 用户 OAuth;上传/下载钳到 session workdir
-  - ~~结论(2026-07-12):不迁,留主机~~ → **结论改判(2026-07-16,Lizi 拍板"全部迁移"):已迁移为内置意识 xd-feishu 并摘壳(lizi_art 模式:壳下线、后端留任)**。要点:
+  - ~~结论(2026-07-12):不迁,留主机~~ → **结论改判(2026-07-16,Lizi 拍板"全部迁移"):已迁移为内置意识 xd-feishu 并摘壳(lizi_art 模式:壳下线、后端留任)**。
+  - **再改判(2026-07-17,Lizi 拍板"授权也归意识"):"后端留任"终结**——飞书登录整体下线后,xd-feishu 凭证从 `login-feishu-token` 切到 `source:'oauth'` + `tokenBroker:'feishu'`(PKCE,exchange/refresh 走 cindy-server oauth-broker-server 的 feishu provider,`FEISHU_OAUTH_FAILED` 上游拒绝码);主机 FeishuTokenManager 接线、authManager setJwt 挂钩、`refresh-feishu` 消费、`login-feishu-token` 平台契约(schema/networkSlot/FORGE_GUIDE)全部删除;scheduler 两个飞书方法改走 ghost pipe(对齐 callJira)。存量用户重新点一次「连接账号」(server 定案不做老 RT 回填);`packages/lizi-mcps/src/feishu/` 只剩死代码待整删(mcp/generated vendored 定义是 gen 脚本的源,整删时保留或搬家)。以下 07-16 要点中"凭证/后端留任"两条已被本段取代:
     - **凭证 = 新平台契约 `source:'login-feishu-token'`**(login-email 同族第三档派生凭证):主机注入时现取 FeishuTokenManager 的 user access token(自刷新 + 单飞去重都在管理器内),401 时 forceRefresh 整链重试一次;token 明文不进沙箱、不进错误消息;用户零配置零搬账(用飞书登录即用),意识设置页只有「测试连接」。"登录体系同源"的产品顾虑经论证不受影响——登录、IM 长连接(lizi-im)、feishu_bot 出站通道都在 desktop main,迁的只是 OpenAPI 协作套件。
     - **工具面全量搬迁**:44 个已注册精品工具(4 个老版已禁用项不迁)逐端点对齐移植进意识 OPS 表;≈123 只读直通面由 `scripts/gen-feishu-ghost-ops.mts` 从 vendored 定义静态烘焙(过滤策略与 genTools.ts 逐条一致:GET + 协作域 + user token + 排 task.v1),实烘 123 条,args 固定 path/params/data 三段;list_tools 保留 recommended/more 两组 + q 过滤 + 分页的老外形。
     - **本地文件语义全走过户票据**:上传本地文件 = ghost_call 顶层 dir 单文件过户(新增 `uploadDir.fileField` 单文件精确字段名,飞书 multipart 字段钉死 'file');上传聊天图 = attachments 指纹(新增 `upload.fields` 随行表单字段 + `{bytes}` 占位,supply drive upload_all 的 size);下载落盘 = save_dir 票据(as:'file');文档/消息图片 = as:'media' 进媒体总仓交回取件地址(**刻意差异**:不再回 base64 图片块);out_file 泄洪 = fs 槽 workdir 档(超 50KB 自动)。
