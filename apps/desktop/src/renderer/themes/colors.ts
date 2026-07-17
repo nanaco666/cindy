@@ -1670,3 +1670,56 @@ registerColor('skillhub-review-quarantine-fg', {
   light: '#a16207',
   dark: '#facc15',
 }, 'Skill Hub 人工复核中 badge 文字 (yellow warning, 语义豁免)');
+
+// CREATE AGENT composer controls — Figma 185:2724, E2-S 2026-07-17.
+// Light values intentionally point at existing CINDY neutral tokens; dark defaults
+// are the extracted Figma values. Route/components consume these private tokens
+// so the regular chat composer is unaffected.
+registerColor('create-agent-control-bg', {
+  light: 'var(--surface-chip)',
+  dark: '#393838',
+}, 'CREATE AGENT pill / icon button background');
+registerColor('create-agent-control-bg-hover', {
+  light: 'var(--surface-hover)',
+  dark: '#2E3237',
+}, 'CREATE AGENT neutral hover background');
+registerColor('create-agent-control-bg-pressed', {
+  light: 'var(--surface-hover-soft)',
+  dark: '#25282C',
+}, 'CREATE AGENT neutral pressed background');
+registerColor('create-agent-control-border', {
+  light: 'var(--border-default)',
+  dark: '#434343',
+}, 'CREATE AGENT pill / icon button border');
+registerColor('create-agent-control-text', {
+  light: 'var(--text-primary)',
+  dark: '#D4D4D4',
+}, 'CREATE AGENT pill text');
+registerColor('create-agent-control-icon', {
+  light: 'var(--text-primary)',
+  dark: '#D9D9D9',
+}, 'CREATE AGENT icon / chevron');
+registerColor('create-agent-segment-track-bg', {
+  light: 'var(--surface)',
+  dark: '#2A2828',
+}, 'CREATE AGENT Claude/Codex segmented track');
+registerColor('create-agent-segment-inactive-text', {
+  light: 'var(--text-secondary)',
+  dark: '#6F6F6F',
+}, 'CREATE AGENT segmented inactive text');
+registerColor('create-agent-send-bg', {
+  light: 'var(--text-primary)',
+  dark: '#EEEEEE',
+}, 'CREATE AGENT send button inverse neutral bg');
+registerColor('create-agent-send-icon', {
+  light: 'var(--text-primary-inv)',
+  dark: '#252222',
+}, 'CREATE AGENT send button inverse neutral icon');
+registerColor('create-agent-send-bg-hover', {
+  light: 'var(--text-primary-emphasis)',
+  dark: '#DADADA',
+}, 'CREATE AGENT send button neutral hover bg');
+registerColor('create-agent-focus-ring', {
+  light: '#417CDD',
+  dark: '#417CDD',
+}, 'CREATE AGENT control focus ring');

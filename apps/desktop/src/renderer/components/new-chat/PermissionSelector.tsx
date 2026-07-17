@@ -30,6 +30,8 @@ interface PermissionSelectorProps {
   disabled?: boolean;
   /** 窄容器(如 doc rail)下把 trigger 字号/图标各压一档,默认 false。 */
   dense?: boolean;
+  /** CREATE AGENT 首页按 Figma 185:2724 使用独立私有 token。 */
+  visualVariant?: 'default' | 'create-agent';
 }
 
 /**
@@ -68,6 +70,7 @@ export function PermissionSelector({
   deviceId,
   disabled = false,
   dense = false,
+  visualVariant = 'default',
 }: PermissionSelectorProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -95,6 +98,7 @@ export function PermissionSelector({
   };
   const triggerLabel = labelOf(current, effectiveMode);
   const triggerDescription = descriptionOf(current, effectiveMode);
+  const isCreateAgentVariant = visualVariant === 'create-agent';
 
   return (
     <Popover open={open && !disabled} onOpenChange={(next) => setOpen(disabled ? false : next)}>
@@ -108,29 +112,44 @@ export function PermissionSelector({
             type="button"
             disabled={disabled}
             className={cn(
-              'flex min-w-0 items-center gap-1 rounded-full',
-              'py-1 pl-0 pr-2',
-              'bg-transparent text-[var(--model-trigger-text)] transition-colors',
-              'hover:bg-[var(--model-trigger-hover)]',
-              triggerTone === 'auto' && 'text-[var(--perm-auto-selected-text)]',
-              triggerTone === 'bypassPermissions' &&
+              'flex min-w-0 items-center gap-1 rounded-full transition-colors',
+              isCreateAgentVariant
+                ? [
+                    'h-[30px] max-w-[90px] border border-[var(--create-agent-control-border)]',
+                    'bg-[var(--create-agent-control-bg)] py-0 pl-2.5 pr-2 text-[var(--create-agent-control-text)]',
+                    'hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)]',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
+                  ]
+                : [
+                    'py-1 pl-0 pr-2',
+                    'bg-transparent text-[var(--model-trigger-text)]',
+                    'hover:bg-[var(--model-trigger-hover)]',
+                  ],
+              !isCreateAgentVariant && triggerTone === 'auto' && 'text-[var(--perm-auto-selected-text)]',
+              !isCreateAgentVariant && triggerTone === 'bypassPermissions' &&
                 'text-[var(--perm-bypass-selected-text)]',
               disabled && 'pointer-events-none opacity-50',
             )}
             aria-label={t('newChat.permissionSelector.triggerAria', { label: triggerLabel })}
           >
-            <TriggerIcon size={dense ? 13 : 14} className="shrink-0 text-current" />
+            <TriggerIcon size={isCreateAgentVariant ? 11 : dense ? 13 : 14} className="shrink-0 text-current" />
             <span
               className={cn(
                 // min-w-0 让 span 能在 flex 容器里跌破内容宽度,truncate 才能在窄宽下出现 "完..."
                 'min-w-0 max-w-[160px] truncate font-normal text-current',
-                dense ? 'text-[12.5px]' : 'text-[13px]',
+                isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
               )}
             >
               {triggerLabel}
             </span>
             <div className="pt-[2px]">
-              <ChevronDown size={dense ? 13 : 14} className="shrink-0 text-current" />
+              <ChevronDown
+                size={isCreateAgentVariant ? 8 : dense ? 13 : 14}
+                className={cn(
+                  'shrink-0',
+                  isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : 'text-current',
+                )}
+              />
             </div>
           </button>
         </Tip>

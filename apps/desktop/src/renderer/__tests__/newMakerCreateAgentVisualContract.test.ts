@@ -7,6 +7,30 @@ const source = readFileSync(
   resolve(__dirname, '..', 'features', 'cc-agent', 'NewMakerDraftRoute.tsx'),
   'utf8',
 );
+const chatInputSource = readFileSync(
+  resolve(__dirname, '..', 'components', 'new-chat', 'ChatInput.tsx'),
+  'utf8',
+);
+const sendButtonSource = readFileSync(
+  resolve(__dirname, '..', 'components', 'new-chat', 'SendButton.tsx'),
+  'utf8',
+);
+const vendorSwitcherSource = readFileSync(
+  resolve(__dirname, '..', 'components', 'new-chat', 'VendorSegmentedSwitcher.tsx'),
+  'utf8',
+);
+const permissionSelectorSource = readFileSync(
+  resolve(__dirname, '..', 'components', 'new-chat', 'PermissionSelector.tsx'),
+  'utf8',
+);
+const modelSelectorSource = readFileSync(
+  resolve(__dirname, '..', 'components', 'new-chat', 'ModelSelector.tsx'),
+  'utf8',
+);
+const colorsSource = readFileSync(
+  resolve(__dirname, '..', 'themes', 'colors.ts'),
+  'utf8',
+);
 
 describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
   it('keeps the approved CREATE AGENT shell while preserving the functional composer', () => {
@@ -80,8 +104,6 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(source).toContain('Code2');
     expect(source).toContain('MessageSquareCode');
     expect(source).toContain('Hammer');
-    expect(source).toContain('[--send-btn-bg:#3C3F43]');
-    expect(source).toContain('dark:[--send-btn-bg:#EEEEEE]');
     expect(source).not.toContain('shadow-[');
     expect(source).not.toContain('boxShadow');
   });
@@ -89,5 +111,34 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
   it('keeps global sidebar chrome out of the route body', () => {
     expect(source).not.toContain('TODO-E4D');
     expect(source).not.toContain('cindy-avatar-account.png');
+  });
+
+  it('uses CREATE AGENT private tokens for composer controls', () => {
+    expect(source).toContain('border-[var(--create-agent-control-border)]');
+    expect(source).toContain('bg-[var(--create-agent-control-bg)]');
+    expect(source).toContain('text-[var(--create-agent-control-text)]');
+    expect(source).toContain('text-[var(--create-agent-control-icon)]');
+    expect(source).toContain('visualVariant="create-agent"');
+
+    expect(chatInputSource).toContain("visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}");
+    expect(chatInputSource).toContain('focus-within:border-[var(--create-agent-focus-ring)]');
+
+    expect(sendButtonSource).toContain('bg-[var(--create-agent-send-bg)]');
+    expect(sendButtonSource).toContain('text-[var(--create-agent-send-icon)]');
+    expect(sendButtonSource).toContain('hover:bg-[var(--create-agent-send-bg-hover)]');
+
+    expect(vendorSwitcherSource).toContain('bg-[var(--create-agent-segment-track-bg)]');
+    expect(vendorSwitcherSource).toContain('text-[var(--create-agent-segment-inactive-text)]');
+    expect(vendorSwitcherSource).toContain('border-[var(--create-agent-control-border)]');
+
+    expect(permissionSelectorSource).toContain('border-[var(--create-agent-control-border)]');
+    expect(modelSelectorSource).toContain('border-[var(--create-agent-control-border)]');
+
+    expect(colorsSource).toContain("registerColor('create-agent-send-bg'");
+    expect(colorsSource).toContain("dark: '#EEEEEE'");
+    expect(colorsSource).toContain("registerColor('create-agent-segment-inactive-text'");
+    expect(colorsSource).toContain("dark: '#6F6F6F'");
+    expect(colorsSource).toContain("registerColor('create-agent-control-border'");
+    expect(colorsSource).toContain("dark: '#434343'");
   });
 });

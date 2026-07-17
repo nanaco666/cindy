@@ -3924,7 +3924,9 @@ export function ChatInput({
             isCreateAgentVariant ? 'rounded-[6px]' : 'rounded-[12px]',
             'bg-[var(--chat-input-bg)]',
             'border-[var(--chat-input-border)]',
-            'focus-within:border-[var(--chat-input-border-focus)]',
+            isCreateAgentVariant
+              ? 'focus-within:border-[var(--create-agent-focus-ring)]'
+              : 'focus-within:border-[var(--chat-input-border-focus)]',
           ],
         )}
       >
@@ -3966,7 +3968,9 @@ export function ChatInput({
                   isCreateAgentVariant ? 'rounded-[6px]' : 'rounded-[12px]',
                   'bg-[var(--chat-input-bg)]',
                   'border-[var(--chat-input-border)]',
-                  'focus-within:border-[var(--chat-input-border-focus)]',
+                  isCreateAgentVariant
+                    ? 'focus-within:border-[var(--create-agent-focus-ring)]'
+                    : 'focus-within:border-[var(--chat-input-border-focus)]',
                 ],
           )}
         onDragEnter={(e) => {
@@ -4339,6 +4343,7 @@ export function ChatInput({
                 }
                 disabled={disabled}
                 dense={effectiveDenseToolbar}
+                visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
               />
             )}
             <PermissionSelector
@@ -4348,6 +4353,7 @@ export function ChatInput({
               deviceId={deviceLinkDeviceId}
               disabled={disabled}
               dense={effectiveDenseToolbar}
+              visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
             />
             {middleToolbarSlot}
           </div>
@@ -4390,6 +4396,7 @@ export function ChatInput({
               onNavigateToProviders={handleNavigateToProviders}
               switching={remoteSwitchInFlight}
               disabled={disabled}
+              visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
             />
             <VoiceInputButton
               state={voiceInput.state}
@@ -4402,6 +4409,7 @@ export function ChatInput({
               canReleaseToSend={canReleaseVoiceToSend}
               releaseToSendActive={voiceReleaseToSendActive}
               onReleaseToSendChange={setVoiceReleaseToSendActive}
+              visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
             />
             {/* Send / Stop 双槽语义:
                  - 主槽 (最右, 永远占位, sendButtonRef 钉在这里):
@@ -4426,6 +4434,7 @@ export function ChatInput({
                       disabled={false}
                       onClick={onStop ?? (() => {})}
                       isStreaming
+                      visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
                     />
                   )}
                   <span ref={sendButtonRef} className="inline-flex rounded-full">
@@ -4434,6 +4443,7 @@ export function ChatInput({
                         disabled={false}
                         onClick={onStop ?? (() => {})}
                         isStreaming
+                        visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
                       />
                     ) : (
                       <Tip
@@ -4460,6 +4470,7 @@ export function ChatInput({
                           <SendButton
                             disabled={sendButtonDisabled}
                             highlighted={voiceReleaseToSendActive}
+                            visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
                             ariaLabel={
                               showStopButton
                                 ? t('newChat.sendButton.queue')
@@ -4589,6 +4600,7 @@ function VoiceInputButton({
   canReleaseToSend,
   releaseToSendActive,
   onReleaseToSendChange,
+  visualVariant,
 }: {
   state: import('@lizi/voice-input-core').VoiceInputState;
   disabled: boolean;
@@ -4600,6 +4612,7 @@ function VoiceInputButton({
   canReleaseToSend: boolean;
   releaseToSendActive: boolean;
   onReleaseToSendChange: (active: boolean) => void;
+  visualVariant?: 'default' | 'create-agent';
 }) {
   const { t } = useTranslation();
   const [longPressActive, setLongPressActive] = useState(false);
@@ -4616,6 +4629,7 @@ function VoiceInputButton({
   const busy = state === 'submitting' || state === 'refining';
   const activeRecording = listening || longPressActive;
   const disabledOrBusy = disabled || (busy && !longPressActive);
+  const isCreateAgentVariant = visualVariant === 'create-agent';
   let label = t('newChat.chatInput.voiceInput.start');
   if (longPressActive) {
     label = t('newChat.chatInput.voiceInput.releaseToStop');
@@ -4725,9 +4739,19 @@ function VoiceInputButton({
       <button
         type="button"
         className={cn(
-          'flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
-          'bg-transparent text-[var(--model-trigger-text)]',
-          'transition-colors hover:bg-[var(--model-trigger-hover)]',
+          'flex shrink-0 items-center justify-center rounded-full transition-colors',
+          isCreateAgentVariant
+            ? [
+                'h-[30px] w-[30px] border border-[var(--create-agent-control-border)]',
+                'bg-[var(--create-agent-control-bg)] text-[var(--create-agent-control-icon)]',
+                'hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)]',
+                'focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
+              ]
+            : [
+                'h-7 w-7',
+                'bg-transparent text-[var(--model-trigger-text)]',
+                'hover:bg-[var(--model-trigger-hover)]',
+              ],
           'focus-visible:outline-none',
           disabledOrBusy && 'cursor-not-allowed opacity-40',
           activeRecording && 'text-[var(--settings-badge-error)]',
@@ -4776,11 +4800,11 @@ function VoiceInputButton({
         }}
       >
         {refining ? (
-          <Spinner size={15} />
+          <Spinner size={isCreateAgentVariant ? 11 : 15} />
         ) : activeRecording ? (
-          <Square size={14} />
+          <Square size={isCreateAgentVariant ? 11 : 14} />
         ) : (
-          <Mic size={15} />
+          <Mic size={isCreateAgentVariant ? 11 : 15} />
         )}
       </button>
     </Tip>

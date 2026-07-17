@@ -1624,12 +1624,12 @@ export function NewMakerDraftRoute() {
               data-testid="create-agent-mode-pill"
               disabled={!canToggleCreateAgentMode}
               onClick={() => patchCollab({ enabled: !effectiveCollab.enabled })}
-              className="absolute right-[30px] top-[290px] inline-flex h-[30px] w-20 items-center justify-center gap-1.5 rounded-full border border-[var(--border-default)] bg-[var(--chat-input-chip-bg)] text-[12px] font-medium leading-[14px] text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-chip)] disabled:cursor-not-allowed disabled:opacity-60"
+              className="absolute right-[30px] top-[290px] inline-flex h-[30px] w-20 items-center justify-center gap-1.5 rounded-full border border-[var(--create-agent-control-border)] bg-[var(--create-agent-control-bg)] text-[12px] font-medium leading-[14px] text-[var(--create-agent-control-text)] transition-colors hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
               aria-label={t('newChat.collaboration.modeLabel')}
             >
-              <MessageSquare size={12} strokeWidth={2} />
+              <MessageSquare size={12} strokeWidth={2} className="text-[var(--create-agent-control-icon)]" />
               <span>{effectiveCollab.enabled ? t('newChat.collaboration.pillLabel') : t('newChat.folderPicker.dialogue')}</span>
-              <ChevronDown size={12} strokeWidth={2} />
+              <ChevronDown size={12} strokeWidth={2} className="text-[var(--create-agent-control-icon)]" />
             </button>
             <div
               className="flex w-full flex-col items-start"
@@ -1690,7 +1690,7 @@ export function NewMakerDraftRoute() {
                     </span>
                   </div>
                 )}
-                <div className="w-full [--confirm-btn-primary-hover:#2F3236] [--send-btn-bg:#3C3F43] [--send-btn-icon:#FCFCFC] dark:[--confirm-btn-primary-hover:#DADADA] dark:[--send-btn-bg:#EEEEEE] dark:[--send-btn-icon:#252222]">
+                <div className="w-full">
                   <ChatInput
                 onSend={handleSend}
                 onBeforeVoiceInputStart={handleBeforeVoiceInputStart}
@@ -1727,6 +1727,7 @@ export function NewMakerDraftRoute() {
                     onChange={handleVendorChange}
                     width={150}
                     dense
+                    visualVariant="create-agent"
                     className="shrink-0"
                     disabled={wtCreating}
                   />

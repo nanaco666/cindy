@@ -13,6 +13,8 @@ interface SendButtonProps {
   highlighted?: boolean;
   /** Override for the accessible action name when Send visually means Queue. */
   ariaLabel?: string;
+  /** CREATE AGENT 首页按 Figma 185:2724 使用独立私有 token。 */
+  visualVariant?: 'default' | 'create-agent';
 }
 
 /**
@@ -22,20 +24,28 @@ interface SendButtonProps {
  * Stop (streaming): 28×28 圆角方形（8）, bg #e5e5e5/#3c3c3a, 10×10 圆角 1.5 反色方块
  */
 export const SendButton = forwardRef<HTMLButtonElement, SendButtonProps>(function SendButton(
-  { disabled, onClick, isStreaming = false, highlighted = false, ariaLabel },
+  { disabled, onClick, isStreaming = false, highlighted = false, ariaLabel, visualVariant = 'default' },
   ref,
 ) {
   const { t } = useTranslation();
+  const isCreateAgentVariant = visualVariant === 'create-agent';
   return (
     <button
       ref={ref}
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'flex h-7 w-7 shrink-0 items-center justify-center transition-colors',
+        'flex shrink-0 items-center justify-center transition-colors',
+        isCreateAgentVariant ? 'h-[30px] w-[30px]' : 'h-7 w-7',
         isStreaming
           ? 'rounded-[8px] bg-[var(--stop-btn-bg)] hover:opacity-85'
-          : 'rounded-full bg-[var(--send-btn-bg)] text-[var(--send-btn-icon)] hover:opacity-85',
+          : isCreateAgentVariant
+            ? [
+                'rounded-full bg-[var(--create-agent-send-bg)] text-[var(--create-agent-send-icon)]',
+                'hover:bg-[var(--create-agent-send-bg-hover)] active:bg-[var(--create-agent-send-bg-hover)]',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
+              ]
+            : 'rounded-full bg-[var(--send-btn-bg)] text-[var(--send-btn-icon)] hover:opacity-85',
         highlighted && !disabled && !isStreaming && 'opacity-85',
         disabled &&
           !isStreaming &&
@@ -49,7 +59,7 @@ export const SendButton = forwardRef<HTMLButtonElement, SendButtonProps>(functio
           aria-hidden
         />
       ) : (
-        <ArrowUp size={16} />
+        <ArrowUp size={isCreateAgentVariant ? 11 : 16} />
       )}
     </button>
   );
