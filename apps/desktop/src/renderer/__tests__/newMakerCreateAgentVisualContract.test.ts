@@ -10,6 +10,7 @@ const vendorSwitcherSource = readFileSync(resolve(__dirname, '..', 'components',
 const permissionSelectorSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'PermissionSelector.tsx'), 'utf8');
 const modelSelectorSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'ModelSelector.tsx'), 'utf8');
 const colorsSource = readFileSync(resolve(__dirname, '..', 'themes', 'colors.ts'), 'utf8');
+const globalsSource = readFileSync(resolve(__dirname, '..', 'styles', 'globals.css'), 'utf8');
 
 describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
   it('keeps the approved CREATE AGENT shell while preserving the functional composer', () => {
@@ -153,7 +154,7 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(permissionSelectorSource).toContain('min-w-[90px] max-w-none shrink-0');
     expect(permissionSelectorSource).toContain('whitespace-nowrap');
     expect(modelSelectorSource).toContain('border-[var(--create-agent-control-border)]');
-    expect(modelSelectorSource).toContain('min-w-[128px] max-w-full shrink');
+    expect(modelSelectorSource).toContain('w-[206px] min-w-[160px] max-w-[206px] shrink');
     expect(modelSelectorSource).toContain('max-w-[180px] truncate');
 
     expect(colorsSource).toContain("'create-agent-send-bg'");
@@ -181,9 +182,17 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(colorsSource).toContain("'create-agent-control-icon'");
     expect(colorsSource).toContain("light: '#3C3F43'");
 
-    expect(chatInputSource).toContain("isCreateAgentVariant ? 'flex-wrap gap-2' : 'min-w-0 gap-1'");
-    expect(chatInputSource).toContain("'flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2'");
+    expect(chatInputSource).toContain("isCreateAgentVariant ? 'min-w-0 gap-2 overflow-hidden' : 'min-w-0 gap-1'");
+    expect(chatInputSource).toContain("'flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2 overflow-hidden'");
+    expect(chatInputSource).not.toContain("isCreateAgentVariant ? 'flex-wrap gap-2' : 'min-w-0 gap-1'");
+    expect(chatInputSource).not.toContain("'flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2'");
     expect(chatInputSource).toContain("className={isCreateAgentVariant ? 'ml-[7px]' : undefined}");
+  });
+
+  it('uses the CINDY brand accent for editable carets', () => {
+    expect(globalsSource).toContain('caret-color: var(--accent-cta-bg);');
+    expect(globalsSource).toContain('.cm-editor .cm-cursor');
+    expect(globalsSource).toContain('border-left-color: var(--accent-cta-bg) !important;');
   });
 
   it('does not own global sidebar glass or selected-state tokens', () => {

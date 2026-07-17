@@ -1118,7 +1118,7 @@ export function ModelSelector({
                   'rounded-full',
                   isCreateAgentVariant
                     ? [
-                        'h-[30px] min-w-[128px] max-w-full shrink border border-[var(--create-agent-control-border)]',
+                        'h-[30px] w-[206px] min-w-[160px] max-w-[206px] shrink border border-[var(--create-agent-control-border)]',
                         'bg-[var(--create-agent-control-bg)] px-2 text-[var(--create-agent-control-text)]',
                         'hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)]',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',

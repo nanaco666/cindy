@@ -76,6 +76,13 @@
     user-select: text;
   }
 
+  input,
+  textarea,
+  [contenteditable='true'],
+  [role='textbox'] {
+    caret-color: var(--accent-cta-bg);
+  }
+
   /* F2: Global disable element drag — prevent image and element dragging */
   *:not(input):not(textarea):not([contenteditable='true']) {
     -webkit-user-drag: none;
@@ -227,7 +234,14 @@ html:lang(ko) {
   content: none;
 }
 .ProseMirror {
-  caret-color: var(--chat-input-text);
+  caret-color: var(--accent-cta-bg);
+}
+.cm-editor .cm-content {
+  caret-color: var(--accent-cta-bg) !important;
+}
+.cm-editor .cm-cursor,
+.cm-editor .cm-dropCursor {
+  border-left-color: var(--accent-cta-bg) !important;
 }
 .ProseMirror .voice-input-draft-replaced {
   display: none;
