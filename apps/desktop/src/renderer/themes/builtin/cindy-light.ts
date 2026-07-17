@@ -39,12 +39,12 @@ const overrides = {
   'text-tertiary-hsl': '222.0 4.6% 42.7%', // tertiary -> HSL
   'text-disabled': '#686B72', // 整改: 文档矩阵 AA; 禁用视觉用 opacity
   'text-disabled-tertiary': '#686B72', // 整改: disabled tertiary AA
-  'accent-cta-bg': '#DF0C27', // 裁决: 品牌红 CTA
-  'accent-cta-bg-pure': '#DF0C27', // 裁决: 品牌红 CTA
-  'accent-emphasis': '#DF0C27', // 裁决: 品牌红 CTA
-  'accent-soft': '#A61629', // 品牌深红 soft
-  'accent-hover': '#A61629', // 品牌深红 hover/pressed
-  'accent-pure-cta-fg': '#FFFFFF', // 红 CTA 专用白前景
+  'accent-cta-bg': '#3C3F43', // E1D 反相中性底(用户批准 2026-07-17,不用红)
+  'accent-cta-bg-pure': '#3C3F43', // E1D 反相中性底
+  'accent-emphasis': '#3C3F43', // E1D 反相中性底
+  'accent-soft': '#25282C', // E1D pressed 中性(soft→pressed)
+  'accent-hover': '#2E3237', // E1D hover 中性
+  'accent-pure-cta-fg': '#FCFCFC', // E1D 中性字(非白)
   accent: '0.0 0.0% 94.5%', // 裁决: shadcn 中性 hover
   'agent-actions-rail': '#DCDFE3', // 边框/rail
   'ask-checkbox-border': '#686B72', // AA checkbox border
@@ -54,8 +54,8 @@ const overrides = {
   'chat-input-text': '#3C3F43', // 正文
   'color-primary': '#3C3F43', // 正文
   'confirm-bg': '#F8F8F8', // 卡片
-  'confirm-btn-primary-bg': '#DF0C27', // 品牌红 CTA
-  'confirm-btn-primary-text': '#FFFFFF', // CTA 白字
+  'confirm-btn-primary-bg': '#3C3F43', // E1D C 类裁决 1:普通确认反相中性(danger 确认另设)
+  'confirm-btn-primary-text': '#FCFCFC', // E1D 反相中性字
   'confirm-btn-secondary-border': '#DCDFE3', // 边框
   'confirm-btn-secondary-hover': 'rgba(0, 0, 0, 0.06)', // 中性 alpha hover
   'confirm-btn-secondary-text': '#3C3F43', // 正文
@@ -73,8 +73,8 @@ const overrides = {
   muted: '0.0 0.0% 94.5%', // muted surface
   'muted-foreground': '222.0 4.6% 42.7%', // AA muted 前景
   'perm-auto-selected-text': '#1D4ED8', // auto approval 功能色
-  'perm-allow-btn-bg': '#DF0C27', // 允许 CTA 品牌红
-  'perm-allow-btn-text': '#FFFFFF', // 允许 CTA 白字
+  'perm-allow-btn-bg': '#3C3F43', // E1D C 类裁决 2:反相中性(警示由橙 chip 承担)
+  'perm-allow-btn-text': '#FCFCFC', // E1D 反相中性字
   'perm-allow-kbd-bg': '#F4F4F4', // kbd bg
   'perm-allow-kbd-border': '#DCDFE3', // 边框
   'perm-code-bg': '#F5F5F5', // code bg
@@ -85,7 +85,7 @@ const overrides = {
   'primary-foreground': '0.0 0.0% 100.0%', // 白前景
   'search-match-fg': '214.3 5.5% 24.9%', // search fg
   secondary: '0.0 0.0% 94.5%', // neutral secondary
-  'settings-btn-primary-text': '#FFFFFF', // 红 CTA 白字
+  'settings-btn-primary-text': '#FCFCFC', // E1D 中性字
   'settings-btn-secondary-hover-bg': '#F1F1F1', // secondary hover
   'text-placeholder': '#686B72', // 整改: placeholder AA; 透明度由组件控制
   'settings-integration-avatar-bg': '#F8F8F8', // avatar chip
@@ -103,11 +103,11 @@ const overrides = {
   'titlebar-icon': '222.0 4.6% 42.7%', // AA icon
   'tooltip-bg': '#3C3F43', // tooltip 深底
   'tooltip-text': '#FFFFFF', // tooltip 白字
-  'update-btn-border': '#DF0C27', // 更新 CTA 红边
-  'update-btn-text': '#DF0C27', // 更新 CTA 红字
+  'update-btn-border': '#3C3F43', // E1D 中性边(不再红边)
+  'update-btn-text': '#FCFCFC', // E1D 中性字(不再红字)
   'accent-foreground': '214.3 5.5% 24.9%', // 裁决: accent 成对中性前景
   'panel-bg': '#EDEDED', // 依赖 D1: 注册后直映背景
-  primary: '352.3 89.8% 46.1%', // 品牌红 primary
+  primary: '214.3 5.5% 24.9%', // E1D C 类裁决 3:反相中性 HSL
   ring: '217.2 91.2% 59.8%', // 固定蓝
   'settings-theme-auto-light': '#EDEDED', // Auto 预览 light 固定
   foreground: '214.3 5.5% 24.9%', // alias closure 直接值

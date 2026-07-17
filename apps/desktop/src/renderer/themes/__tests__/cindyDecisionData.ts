@@ -1,4 +1,5 @@
 // 自动从 2026-07-17-cindy-token-decision-table.md 提取(U8 批准冻结值)。
+// E1D 红色体系重构(用户批准 2026-07-17):B 类 11 项改反相中性,C 类按 8 项裁决。
 // D2T 八组断言 + 零残留脚本共享的决策基线;手改 cindy 主题值时此处不变 → 测试抓漂移。
 // 不要手编此文件;改值请先过用户关卡再更新决策表 + 重生成。
 
@@ -201,12 +202,12 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'text-tertiary-hsl': { light: '222.0 4.6% 42.7%', dark: '216.0 4.1% 75.9%' },
   'text-disabled': { light: '#686B72', dark: '#BFC1C4' },
   'text-disabled-tertiary': { light: '#686B72', dark: '#BFC1C4' },
-  'accent-cta-bg': { light: '#DF0C27', dark: '#DF0C27' },
-  'accent-cta-bg-pure': { light: '#DF0C27', dark: '#DF0C27' },
-  'accent-emphasis': { light: '#DF0C27', dark: '#DF0C27' },
-  'accent-soft': { light: '#A61629', dark: '#A61629' },
-  'accent-hover': { light: '#A61629', dark: '#A61629' },
-  'accent-pure-cta-fg': { light: '#FFFFFF', dark: '#FFFFFF' },
+  'accent-cta-bg': { light: '#3C3F43', dark: '#EEEEEE' }, // E1D
+  'accent-cta-bg-pure': { light: '#3C3F43', dark: '#EEEEEE' }, // E1D
+  'accent-emphasis': { light: '#3C3F43', dark: '#EEEEEE' }, // E1D
+  'accent-soft': { light: '#25282C', dark: '#D4D4D4' }, // E1D
+  'accent-hover': { light: '#2E3237', dark: '#E2E2E2' }, // E1D
+  'accent-pure-cta-fg': { light: '#FCFCFC', dark: '#252222' }, // E1D
   accent: { light: '0.0 0.0% 94.5%', dark: '0.0 2.2% 18.0%' },
   'agent-actions-rail': { light: '#DCDFE3', dark: '#434343' },
   'ask-checkbox-border': { light: '#686B72', dark: '#BFC1C4' },
@@ -216,8 +217,8 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'chat-input-text': { light: '#3C3F43', dark: '#D4D4D4' },
   'color-primary': { light: '#3C3F43', dark: '#D4D4D4' },
   'confirm-bg': { light: '#F8F8F8', dark: '#312F2F' },
-  'confirm-btn-primary-bg': { light: '#DF0C27', dark: '#DF0C27' },
-  'confirm-btn-primary-text': { light: '#FFFFFF', dark: '#FFFFFF' },
+  'confirm-btn-primary-bg': { light: '#3C3F43', dark: '#EEEEEE' }, // E1D
+  'confirm-btn-primary-text': { light: '#FCFCFC', dark: '#252222' }, // E1D
   'confirm-btn-secondary-border': { light: '#DCDFE3', dark: '#434343' },
   'confirm-btn-secondary-hover': { light: 'rgba(0, 0, 0, 0.06)', dark: 'rgba(255, 255, 255, 0.08)' },
   'confirm-btn-secondary-text': { light: '#3C3F43', dark: '#D4D4D4' },
@@ -235,8 +236,8 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   muted: { light: '0.0 0.0% 94.5%', dark: '0.0 2.2% 18.0%' },
   'muted-foreground': { light: '222.0 4.6% 42.7%', dark: '216.0 4.1% 75.9%' },
   'perm-auto-selected-text': { light: '#1D4ED8', dark: '#00D9C5' },
-  'perm-allow-btn-bg': { light: '#DF0C27', dark: '#DF0C27' },
-  'perm-allow-btn-text': { light: '#FFFFFF', dark: '#FFFFFF' },
+  'perm-allow-btn-bg': { light: '#3C3F43', dark: '#EEEEEE' }, // E1D
+  'perm-allow-btn-text': { light: '#FCFCFC', dark: '#252222' }, // E1D
   'perm-allow-kbd-bg': { light: '#F4F4F4', dark: '#2F2D2D' },
   'perm-allow-kbd-border': { light: '#DCDFE3', dark: '#434343' },
   'perm-code-bg': { light: '#F5F5F5', dark: '#2B2929' },
@@ -247,7 +248,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'primary-foreground': { light: '0.0 0.0% 100.0%', dark: '0.0 0.0% 100.0%' },
   'search-match-fg': { light: '214.3 5.5% 24.9%', dark: '0.0 0.0% 83.1%' },
   secondary: { light: '0.0 0.0% 94.5%', dark: '0.0 2.2% 18.0%' },
-  'settings-btn-primary-text': { light: '#FFFFFF', dark: '#FFFFFF' },
+  'settings-btn-primary-text': { light: '#FCFCFC', dark: '#252222' }, // E1D
   'settings-btn-secondary-hover-bg': { light: '#F1F1F1', dark: '#2F2D2D' },
   'text-placeholder': { light: '#686B72', dark: '#BFC1C4' },
   'settings-integration-avatar-bg': { light: '#F8F8F8', dark: '#2F2D2D' },
@@ -257,7 +258,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'settings-source-link': { light: '#1D4ED8', dark: '#93C5FD' },
   'settings-theme-auto-dark': { light: '#2A2828', dark: '#2A2828' },
   'sidebar-action-icon': { light: '222.0 4.6% 42.7%', dark: '216.0 4.1% 75.9%' },
-  'sidebar-item-active': { light: '352.3 89.8% 46.1%', dark: '352.3 89.8% 46.1%' },
+  'sidebar-item-active': { light: '352.3 89.8% 46.1%', dark: '352.1 76.6% 36.9%' }, // E1D
   'splash-bg': { light: '0.0 0.0% 92.9%', dark: '0.0 2.4% 16.1%' },
   'splash-text': { light: '222.0 4.6% 42.7%', dark: '216.0 4.1% 75.9%' },
   'splash-text-destructive': { light: '214.3 5.5% 24.9%', dark: '0.0 0.0% 100.0%' },
@@ -265,11 +266,11 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'titlebar-icon': { light: '222.0 4.6% 42.7%', dark: '216.0 4.1% 75.9%' },
   'tooltip-bg': { light: '#3C3F43', dark: '#2A2828' },
   'tooltip-text': { light: '#FFFFFF', dark: '#FFFFFF' },
-  'update-btn-border': { light: '#DF0C27', dark: '#DF0C27' },
-  'update-btn-text': { light: '#DF0C27', dark: '#DF0C27' },
+  'update-btn-border': { light: '#3C3F43', dark: '#EEEEEE' }, // E1D
+  'update-btn-text': { light: '#FCFCFC', dark: '#252222' }, // E1D
   'accent-foreground': { light: '214.3 5.5% 24.9%', dark: '0.0 0.0% 83.1%' },
   'panel-bg': { light: '#EDEDED', dark: '#2A2828' },
-  primary: { light: '352.3 89.8% 46.1%', dark: '352.3 89.8% 46.1%' },
+  primary: { light: '214.3 5.5% 24.9%', dark: '0.0 0.0% 93.3%' }, // E1D
   ring: { light: '217.2 91.2% 59.8%', dark: '217.2 91.2% 59.8%' },
   'settings-theme-auto-light': { light: '#EDEDED', dark: '#EDEDED' },
   foreground: { light: '214.3 5.5% 24.9%', dark: '0.0 0.0% 83.1%' },
@@ -293,6 +294,46 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'glass-pill-bg': { light: 'rgba(255, 255, 255, 0.05)', dark: 'rgba(217, 217, 217, 0.05)' }, // E3 D6 glass-pill
 };
 
+// E1D 红色体系重构(用户批准 2026-07-17):三份新 map 替代旧 BRAND_RED_*。
+// 常规主操作反相中性(light #3C3F43/#FCFCFC, dark #EEEEEE/#252222);
+// 红仅限 A 类(brand-login/error)+ C 类保留(migration-bar-fill/drop-overlay/sidebar-item-active)。
+export const NEUTRAL_PRIMARY_EXPECTED_BY_ID: Record<string, { light: string; dark: string }> = {
+  'accent-cta-bg': { light: '#3C3F43', dark: '#EEEEEE' },
+  'accent-cta-bg-pure': { light: '#3C3F43', dark: '#EEEEEE' },
+  'accent-emphasis': { light: '#3C3F43', dark: '#EEEEEE' },
+  'confirm-btn-primary-bg': { light: '#3C3F43', dark: '#EEEEEE' },
+  'perm-allow-btn-bg': { light: '#3C3F43', dark: '#EEEEEE' },
+  'update-btn-border': { light: '#3C3F43', dark: '#EEEEEE' },
+  primary: { light: '214.3 5.5% 24.9%', dark: '0.0 0.0% 93.3%' },
+};
+
+export const NEUTRAL_PRIMARY_FOREGROUND_BY_ID = [
+  'accent-pure-cta-fg',
+  'confirm-btn-primary-text',
+  'perm-allow-btn-text',
+  'settings-btn-primary-text',
+  'update-btn-text',
+] as const;
+
+export const RED_EXCEPTION_ALLOWED_IDS = [
+  // A 类:品牌资产/错误(保留红)
+  'brand-login-bg',
+  'brand-login-error-border',
+  'brand-login-error-text',
+  // C 类保留红(裁决:迁移填充/拖放 overlay/侧栏选中)
+  'migration-bar-fill',
+  'drop-overlay-bg',
+  'sidebar-item-active',
+  // hover/soft token(中性,但 token 名保留在 allowed 防误报)
+  'accent-soft',
+  'accent-hover',
+  'confirm-btn-primary-hover',
+  'settings-btn-primary-bg',
+  'settings-btn-primary-border',
+  'settings-btn-primary-hover-bg',
+] as const;
+
+// 旧 BRAND_RED_* map(保留供 D2T 迁移,迁完删):
 export const BRAND_RED_EXPECTED_BY_ID: Record<string, string> = {
   'accent-cta-bg': '#DF0C27',
   'accent-cta-bg-pure': '#DF0C27',
