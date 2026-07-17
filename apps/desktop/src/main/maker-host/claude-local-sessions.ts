@@ -22,6 +22,7 @@ import {
   cacheImportedBase64Image,
   importedUserContent,
   normalizeImageMime,
+  stripCompleteIdeOpenedFileBlocks,
   type ImportedImageRef,
 } from './imported-user-content.js';
 
@@ -777,7 +778,8 @@ function parseAssistantLine(
 
 function extractUserText(content: unknown): string {
   if (typeof content === 'string') {
-    return isSyntheticClaudeUserText(content) ? '' : content;
+    const text = stripCompleteIdeOpenedFileBlocks(content);
+    return isSyntheticClaudeUserText(text) ? '' : text;
   }
   if (!Array.isArray(content)) return '';
   const parts: string[] = [];
@@ -785,7 +787,7 @@ function extractUserText(content: unknown): string {
     if (!isRecord(block)) continue;
     if (block.type === 'tool_result') continue;
     if ((block.type === 'text' || block.type === 'input_text') && typeof block.text === 'string') {
-      parts.push(block.text);
+      parts.push(stripCompleteIdeOpenedFileBlocks(block.text));
     }
   }
   return parts.join('\n\n');

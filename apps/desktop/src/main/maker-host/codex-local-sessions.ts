@@ -26,6 +26,7 @@ import {
   cacheImportedBase64Image,
   importedUserContent,
   parseImageDataUrl,
+  stripCompleteIdeOpenedFileBlocks,
   type ImportedImageRef,
 } from './imported-user-content.js';
 
@@ -1640,7 +1641,8 @@ export function parseCodexRolloutMessageLine(
   if (payload.type !== 'message') return null;
   const role = payload.role === 'assistant' ? 'assistant' : payload.role === 'user' ? 'user' : null;
   if (!role) return null;
-  const text = extractContentText(payload.content).trim();
+  const rawText = extractContentText(payload.content);
+  const text = (role === 'user' ? stripCompleteIdeOpenedFileBlocks(rawText) : rawText).trim();
   if (!text) return null;
   return {
     lineNo,
@@ -1670,7 +1672,8 @@ async function parseCodexRolloutMessageLineForImport(
   const role = payload.role === 'assistant' ? 'assistant' : payload.role === 'user' ? 'user' : null;
   if (!role) return null;
 
-  const text = extractContentText(payload.content).trim();
+  const rawText = extractContentText(payload.content);
+  const text = (role === 'user' ? stripCompleteIdeOpenedFileBlocks(rawText) : rawText).trim();
   const images = role === 'user'
     ? await extractCodexUserImages(payload.content, sessionId, lineNo)
     : [];

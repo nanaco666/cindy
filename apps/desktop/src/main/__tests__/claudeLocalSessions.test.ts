@@ -163,6 +163,50 @@ describe('parseClaudeCodeMessageLine', () => {
     });
   });
 
+  it('removes complete IDE opened-file context blocks from imported user text', () => {
+    const ideContextA = '<ide_opened_file>The user opened /tmp/a.ts in the IDE.</ide_opened_file>';
+    const ideContextB = '<ide_opened_file>The user opened /tmp/b.ts in the IDE.</ide_opened_file>';
+    const rows = parseClaudeCodeMessageLine(line({
+      type: 'user',
+      uuid: 'user-ide-context',
+      message: {
+        role: 'user',
+        content: [
+          { type: 'text', text: `${ideContextA}\n${ideContextB}` },
+          { type: 'text', text: 'Please fix the parser' },
+          { type: 'text', text: ideContextA },
+        ],
+      },
+    }), 8, sdkSessionId, 'claude-sonnet-4-6');
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      role: 'user',
+      content: 'Please fix the parser',
+    });
+  });
+
+  it('skips IDE-only user messages but preserves malformed IDE tags', () => {
+    const ideOnly = parseClaudeCodeMessageLine(line({
+      type: 'user',
+      message: {
+        role: 'user',
+        content: '<ide_opened_file>The user opened /tmp/a.ts in the IDE.</ide_opened_file>',
+      },
+    }), 9, sdkSessionId, 'claude-sonnet-4-6');
+    const malformed = parseClaudeCodeMessageLine(line({
+      type: 'user',
+      message: {
+        role: 'user',
+        content: 'Keep this <ide_opened_file>unfinished context',
+      },
+    }), 10, sdkSessionId, 'claude-sonnet-4-6');
+
+    expect(ideOnly).toEqual([]);
+    expect(malformed).toHaveLength(1);
+    expect(malformed[0]?.content).toBe('Keep this <ide_opened_file>unfinished context');
+  });
+
   it('maps assistant text, tool use, and thinking blocks into XD roles', () => {
     const rows = parseClaudeCodeMessageLine(line({
       type: 'assistant',
@@ -289,6 +333,36 @@ describe('parseClaudeCodeMessageLine', () => {
         title: '继续写 V4 文档',
         archived: false,
       });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('uses the next real user input for full and scan titles after IDE-only context', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-ide-title-'));
+    const file = path.join(dir, `${sdkSessionId}.jsonl`);
+    const ideContext = '<ide_opened_file>The user opened /tmp/a.ts in the IDE.</ide_opened_file>';
+    fs.writeFileSync(file, [
+      line({
+        type: 'user',
+        uuid: 'user-ide-only',
+        cwd: '/tmp/project',
+        message: { role: 'user', content: ideContext },
+      }),
+      line({
+        type: 'user',
+        uuid: 'user-real-input',
+        cwd: '/tmp/project',
+        message: { role: 'user', content: `${ideContext}\nPlease fix the parser` },
+      }),
+    ].join('\n'));
+
+    try {
+      const summary = await readClaudeCodeSessionSummary(file);
+      const scanSummary = await readClaudeCodeSessionScanSummary(file);
+
+      expect(summary?.title).toBe('Please fix the parser');
+      expect(scanSummary?.title).toBe('Please fix the parser');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
