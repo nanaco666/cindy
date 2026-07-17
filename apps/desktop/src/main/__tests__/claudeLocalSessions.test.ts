@@ -810,6 +810,43 @@ describe('parseClaudeCodeMessageLine', () => {
     }
   });
 
+  it('inspects an IDE-only first overflow row before deciding whether to extend the scan', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-scan-ide-boundary-'));
+    const file = path.join(dir, `${sdkSessionId}.jsonl`);
+    const noiseRows = Array.from({ length: 400 }, (_, index) => line({
+      type: 'system',
+      subtype: 'noise',
+      cwd: '/tmp/project',
+      seq: index,
+    }));
+    fs.writeFileSync(file, [
+      ...noiseRows,
+      line({
+        type: 'user',
+        uuid: 'user-ide-at-boundary',
+        cwd: '/tmp/project',
+        message: {
+          role: 'user',
+          content: '<ide_opened_file>The user opened /tmp/a.ts in the IDE.</ide_opened_file>',
+        },
+      }),
+      line({
+        type: 'user',
+        uuid: 'user-real-after-boundary',
+        cwd: '/tmp/project',
+        message: { role: 'user', content: 'Please use the input after the boundary row' },
+      }),
+    ].join('\n'));
+
+    try {
+      const summary = await readClaudeCodeSessionScanSummary(file);
+
+      expect(summary?.title).toBe('Please use the input after the boundary row');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('scan summary is cached by (mtime, size) and re-parsed when the file changes', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-scan-cache-'));
     const file = path.join(dir, `${sdkSessionId}.jsonl`);

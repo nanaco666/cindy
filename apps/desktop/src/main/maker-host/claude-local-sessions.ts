@@ -401,8 +401,14 @@ async function readScanSummaryFromHead(file: string, mtimeMs: number): Promise<C
   try {
     for await (const line of rl) {
       lineCount += 1;
-      if (lineCount > SCAN_SUMMARY_MAX_LINES && !removedIdeContextWithoutTitle) break;
       const obj = parseJsonObject(line);
+      if (
+        lineCount > SCAN_SUMMARY_MAX_LINES &&
+        !removedIdeContextWithoutTitle &&
+        !isIdeOnlyUserRecord(obj)
+      ) {
+        break;
+      }
       if (!obj || obj.isSidechain === true) continue;
       const lineCwd = stringValue(obj.cwd);
       if (lineCwd) cwd = lineCwd;
@@ -809,6 +815,15 @@ function hasCompleteIdeOpenedFileBlock(content: unknown): boolean {
     typeof block.text === 'string' &&
     stripCompleteIdeOpenedFileBlocks(block.text) !== block.text
   ));
+}
+
+/** Whether a scan-limit boundary row is a removable IDE-only user record. */
+function isIdeOnlyUserRecord(obj: Record<string, unknown> | null): boolean {
+  if (!obj || obj.isSidechain === true || stringValue(obj.type) !== 'user' || !isRecord(obj.message)) {
+    return false;
+  }
+  const content = obj.message.content;
+  return !extractUserText(content).trim() && hasCompleteIdeOpenedFileBlock(content);
 }
 
 async function extractClaudeUserImages(
