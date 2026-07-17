@@ -54,10 +54,13 @@ export const SendButton = forwardRef<HTMLButtonElement, SendButtonProps>(functio
           : isCreateAgentVariant
             ? [
                 'rounded-full bg-[var(--create-agent-send-bg)] text-[var(--create-agent-send-icon)]',
-                'hover:bg-[var(--create-agent-send-bg-hover)] active:bg-[var(--create-agent-send-bg-pressed)]',
+                !disabled && 'hover:bg-[var(--create-agent-send-bg-hover)] active:bg-[var(--create-agent-send-bg-pressed)]',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
               ]
-            : 'rounded-full bg-[var(--send-btn-bg)] text-[var(--send-btn-icon)] hover:opacity-85',
+            : [
+                'rounded-full bg-[var(--send-btn-bg)] text-[var(--send-btn-icon)]',
+                !disabled && 'hover:bg-[var(--send-btn-hover-bg)] active:bg-[var(--send-btn-pressed-bg)]',
+              ],
         highlighted && !disabled && !isStreaming && 'opacity-85',
         disabled &&
           !isStreaming &&

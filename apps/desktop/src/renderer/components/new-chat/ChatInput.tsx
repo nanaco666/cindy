@@ -4757,7 +4757,7 @@ function VoiceInputButton({
                 'focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
               ]
             : [
-                'h-7 w-7',
+                'h-[30px] w-[30px]',
                 'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] border border-[var(--border-default)] text-[var(--composer-pill-icon,#3C3F43)] dark:text-[var(--composer-pill-icon,#D9D9D9)]' /* spec 2026-07-17, token by 一哥 */,
                 'hover:bg-[var(--model-trigger-hover)]',
               ],
