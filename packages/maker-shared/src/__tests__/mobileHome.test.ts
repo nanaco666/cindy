@@ -587,4 +587,68 @@ describe('mobileHome', () => {
       [['a-run-2', 'a-run-1']],
     ]);
   });
+
+  it('marks the no-device empty state as the remote-access onboarding kind', () => {
+    // 无可用设备是「首次使用 / 产品模式说明」级空态:客户端按 emptyKind=noDevice
+    // 渲染连接引导,文案讲清手机版当前是电脑端 Cindy 的远程入口。
+    const home = buildMobileHomePresentation({ devices: [], sessions: [] });
+
+    expect(home.emptyKind).toBe('noDevice');
+    expect(home.emptyNoDevice).toEqual({ reason: 'firstRun', devices: [] });
+    expect(home.emptyTitle).toBe('连接你电脑上的 Cindy');
+    expect(home.emptyCopy).toContain('远程访问');
+    expect(home.emptyCopy).toContain('运行在你的电脑上');
+  });
+
+  it('keeps plain empty-state kinds for filters once a device is available', () => {
+    const devices = [{ canOpen: true, deviceId: 'mac-a', name: 'Mac A' }];
+
+    expect(buildMobileHomePresentation({ devices, sessions: [] }).emptyKind).toBe('noSession');
+    expect(buildMobileHomePresentation({ devices, sessions: [] }).emptyNoDevice).toBeNull();
+    expect(buildMobileHomePresentation({ devices, sessions: [], searchQuery: 'x' }).emptyKind).toBe('search');
+    expect(buildMobileHomePresentation({ devices, sessions: [], statusFilter: 'waiting' }).emptyKind).toBe('waiting');
+    expect(buildMobileHomePresentation({ devices, sessions: [], statusFilter: 'automation' }).emptyKind).toBe('automation');
+    expect(buildMobileHomePresentation({ devices, sessions: [], statusFilter: 'archived' }).emptyKind).toBe('archived');
+  });
+
+  it('classifies unavailable-device empty states by the most actionable reason', () => {
+    const device = (deviceId: string, state: string, patch: Record<string, unknown> = {}) => ({
+      canOpen: false,
+      deviceId,
+      name: deviceId,
+      state,
+      ...patch,
+    });
+
+    // 全部离线 → offline 引导(打开电脑上的 Cindy)。
+    const offline = buildMobileHomePresentation({
+      devices: [device('mac-a', 'offline', { statusDetail: '3 小时前在线' })],
+      sessions: [],
+    });
+    expect(offline.emptyNoDevice).toEqual({
+      reason: 'offline',
+      devices: [{ deviceId: 'mac-a', name: 'mac-a', statusDetail: '3 小时前在线' }],
+    });
+    expect(offline.emptyTitle).toBe('打开电脑上的 Cindy');
+
+    // 在线但没开远程控制 → 精确到开关的一步引导,copy 指名设备。
+    const remoteDisabled = buildMobileHomePresentation({
+      devices: [device('mac-a', 'offline'), device('Mac Studio', 'remote_disabled')],
+      sessions: [],
+    });
+    expect(remoteDisabled.emptyNoDevice?.reason).toBe('remoteDisabled');
+    expect(remoteDisabled.emptyNoDevice?.devices.map((item) => item.name)).toEqual(['Mac Studio']);
+    expect(remoteDisabled.emptyTitle).toBe('在电脑上允许远程控制');
+    expect(remoteDisabled.emptyCopy).toContain('「Mac Studio」');
+
+    // 被撤销访问优先于其它一切(用户显式动作需正面回应)。
+    const revoked = buildMobileHomePresentation({
+      devices: [device('mac-a', 'remote_disabled'), device('MacBook', 'access_revoked')],
+      sessions: [],
+    });
+    expect(revoked.emptyNoDevice?.reason).toBe('accessRevoked');
+    expect(revoked.emptyNoDevice?.devices.map((item) => item.name)).toEqual(['MacBook']);
+    expect(revoked.emptyTitle).toBe('访问权限已被撤销');
+    expect(revoked.emptyCopy).toContain('「MacBook」');
+  });
 });
