@@ -34,14 +34,6 @@ const MANIFESTS = [
   { label: 'global', filePath: path.join(REPO_ROOT, 'config', 'endpoint.global.json') },
 ] as const;
 
-/**
- * 已从 CLIENT_ENDPOINT_KEYS 退役、但正本**必须暂时保值**的字段:正本是线上
- * CDN 清单的上传源,已发布老客户端的 parser 对这些字段仍是必填,删值 = 老
- * 版本全量启动阻断。等对应老版本消亡后,从正本与本白名单同批删除。
- *  - apiBaseUrl:老主 server(xdt-api),2026-07-18 四批收敛完成后代码侧退役。
- */
-const RETIRED_RESIDUE_KEYS = ['apiBaseUrl'] as const;
-
 describe.each(MANIFESTS)('config/endpoint*.json 守门($label)', ({ filePath }) => {
   const rawText = fs.readFileSync(filePath, 'utf8');
 
@@ -63,16 +55,7 @@ describe.each(MANIFESTS)('config/endpoint*.json 守门($label)', ({ filePath }) 
     const allowed = new Set<string>([
       ...CLIENT_ENDPOINT_KEYS,
       CLIENT_ENDPOINT_REVIEW_KEY,
-      ...RETIRED_RESIDUE_KEYS,
     ]);
     expect(keys.filter((key) => !allowed.has(key))).toEqual([]);
-  });
-
-  it('退役残留字段仍保值(老客户端必填;删值前先确认对应老版本已消亡)', () => {
-    const parsed = JSON.parse(rawText) as Record<string, unknown>;
-    for (const key of RETIRED_RESIDUE_KEYS) {
-      expect(typeof parsed[key], key).toBe('string');
-      expect(String(parsed[key]).length, key).toBeGreaterThan(0);
-    }
   });
 });

@@ -1,7 +1,6 @@
 {
   "_note": "global(海外)清单正本,人肉上传 https://hotfix.cindy.app/cindy/endpoint.json。除 authApiBaseUrl 外其余字段暂抄 cn 正本(海外独立部署地址待 Lizi 定值后更新);parser 忽略未知字段,本注释键不影响校验。",
   "schemaVersion": 1,
-  "apiBaseUrl": "https://xdt-api.magiclizi.com",
   "authApiBaseUrl": "https://auth.cindy.app",
   "deviceLinkApiBaseUrl": "https://device.cindy.com.cn",
   "oauthBrokerApiBaseUrl": "https://oauth.cindy.com.cn",

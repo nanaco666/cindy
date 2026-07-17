@@ -20,6 +20,7 @@ async function freshModules() {
 
 const FULL_MANIFEST_OBJECT = {
   schemaVersion: 1,
+  // apiBaseUrl 已退役出 parser:留在 fixture 里覆盖"未知字段向前兼容忽略"
   apiBaseUrl: 'https://api-next.example.com',
   authApiBaseUrl: 'https://auth-next.example.com',
   deviceLinkApiBaseUrl: 'https://relay-next.example.com',
@@ -46,7 +47,7 @@ describe('runStartupEndpointResolve(清单即唯一事实源)', () => {
     });
 
     expect(outcome).toEqual({ ok: true });
-    // apiBaseUrl 已退役:清单里的残留值(喂老客户端)不再回填,保持 env 初值
+    // apiBaseUrl 已退役:清单里出现该键按未知字段忽略,不回填 env,保持初值
     expect(env.API_BASE_URL).toBe('https://api.example.invalid');
     // 跨模块 live binding:本模块持有的 env 命名空间看到重赋值后的新值
     expect(env.AUTH_API_BASE_URL).toBe('https://auth-next.example.com'); // 单一字段无脑取

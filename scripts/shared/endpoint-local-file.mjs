@@ -5,8 +5,7 @@
  * 「连本地 server」的 local 模式改由本文件生成的 endpoint.local.json 承载——
  * auth / device-link / oss / model-access / github / skillhub 指向 localhost
  * 六件套(oss / model-access / github / skillhub 必须跟 auth 同侧:都用
- * AUTH_ISSUER 验签,本地 auth 签发的 token 过不了生产侧验签;apiBaseUrl 已随
- * 老主 server 退役,正本残留值原样透传给老 parser 用),
+ * AUTH_ISSUER 验签,本地 auth 签发的 token 过不了生产侧验签),
  * 其余字段(oauth broker / heartbeat / slack hook / website / 网关 / 更新链
  * CDN)照抄 cn 正本(本地不起这些服务,沿用远程值,消费方各自的
  * "连不上就跳过"分支继续生效)。

@@ -64,8 +64,8 @@ export const CLIENT_ENDPOINT_KEYS = [
   // apiBaseUrl(老主 server xdt-api)已于 2026-07-18 退役(不 bump,删必填字段
   // 对新客户端是纯放松):四块业务消费方分批迁至独立服务(chat-data 删除 /
   // SlackIM→slack-hook / GitHub 反馈→githubApiBaseUrl / Skillhub→
-  // skillhubApiBaseUrl)。⚠️ 线上 CDN 清单与仓内正本仍保留该字段喂存量老客户端
-  // (老 parser 必填),等老版本消亡后才能从清单删值。
+  // skillhubApiBaseUrl)。退役时清单体系尚无已发布的 packaged/mobile 消费者,
+  // 正本(=CDN 上传源)已同步删值,无兼容包袱(同 cdnInternalBaseUrl 先例)。
   // auth 不分 cn/global:国内/海外是两条 CDN 各发各的清单,清单本身已 region 化,
   // 客户端无脑取本字段即可。
   'authApiBaseUrl',

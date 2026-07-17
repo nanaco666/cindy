@@ -24,7 +24,6 @@ function makeRepoRoot(manifest) {
 
 const CN_MANIFEST = JSON.stringify({
   schemaVersion: 1,
-  apiBaseUrl: 'https://api.example.invalid',
   authApiBaseUrl: 'https://auth.example.invalid',
   deviceLinkApiBaseUrl: 'https://device.example.invalid',
   oauthBrokerApiBaseUrl: 'https://oauth.example.invalid',
@@ -43,8 +42,6 @@ test('localhost 七件套覆写,其余字段照抄 cn 正本,返回绝对路径'
   const target = generateEndpointLocalFile({ repoRoot });
   assert.equal(target, path.join(repoRoot, 'config', 'endpoint.local.json'));
   const local = JSON.parse(fs.readFileSync(target, 'utf8'));
-  // apiBaseUrl 已退役:不再 localhost 覆写,正本残留值原样透传(喂老 parser)
-  assert.equal(local.apiBaseUrl, 'https://api.example.invalid');
   assert.equal(local.authApiBaseUrl, 'http://localhost:3344');
   assert.equal(local.deviceLinkApiBaseUrl, 'http://localhost:3335');
   assert.equal(local.ossApiBaseUrl, 'http://localhost:3340');
