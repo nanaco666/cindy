@@ -20,6 +20,7 @@ import {
   type VoiceInputDictionaryEntry,
   type VoiceInputHistoryEntry,
   type VoiceInputSettings,
+  type VoiceInputSyncErrorResult,
 } from '../../shared/voiceInputData.js';
 
 const log = createLogger('voice-input:data-store');
@@ -279,7 +280,7 @@ export function registerVoiceInputDataStoreIpc(): void {
     try {
       event.returnValue = voiceInputDataStore.migrateLegacyRendererStorage(payload);
     } catch (error) {
-      throwVoiceInputDataStoreIpcError(error);
+      event.returnValue = voiceInputDataStoreIpcErrorResult(error);
     }
   });
 
@@ -315,7 +316,7 @@ export function registerVoiceInputDataStoreIpc(): void {
     try {
       event.returnValue = voiceInputDataStore.getHistoryForRefinement();
     } catch (error) {
-      throwVoiceInputDataStoreIpcError(error);
+      event.returnValue = voiceInputDataStoreIpcErrorResult(error);
     }
   });
 
@@ -323,26 +324,26 @@ export function registerVoiceInputDataStoreIpc(): void {
     try {
       event.returnValue = voiceInputDataStore.recordHistory(text);
     } catch (error) {
-      throwVoiceInputDataStoreIpcError(error);
+      event.returnValue = voiceInputDataStoreIpcErrorResult(error);
     }
   });
 
-  ipcMain.on('voice-input:history:update', (_event, payload: { id?: string; text?: string }) => {
+  ipcMain.on('voice-input:history:update', (event, payload: { id?: string; text?: string }) => {
     if (typeof payload?.id === 'string' && typeof payload.text === 'string') {
       try {
         voiceInputDataStore.updateHistoryEntry(payload.id, payload.text);
       } catch (error) {
-        throwVoiceInputDataStoreIpcError(error);
+        event.returnValue = voiceInputDataStoreIpcErrorResult(error);
       }
     }
   });
 
-  ipcMain.on('voice-input:history:delete', (_event, id: string) => {
+  ipcMain.on('voice-input:history:delete', (event, id: string) => {
     if (typeof id === 'string') {
       try {
         voiceInputDataStore.deleteHistoryEntry(id);
       } catch (error) {
-        throwVoiceInputDataStoreIpcError(error);
+        event.returnValue = voiceInputDataStoreIpcErrorResult(error);
       }
     }
   });
@@ -351,6 +352,13 @@ export function registerVoiceInputDataStoreIpc(): void {
 function throwVoiceInputDataStoreIpcError(error: unknown): never {
   if (error instanceof VoiceInputDataStoreWriteError) {
     throwIpcError('INTERNAL', error.message);
+  }
+  throw error;
+}
+
+function voiceInputDataStoreIpcErrorResult(error: unknown): VoiceInputSyncErrorResult {
+  if (error instanceof VoiceInputDataStoreWriteError) {
+    return { ok: false, code: 'INTERNAL', message: error.message };
   }
   throw error;
 }

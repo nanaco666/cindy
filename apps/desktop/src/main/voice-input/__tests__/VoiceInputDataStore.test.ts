@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const mocks = vi.hoisted(() => {
+  const onHandlers = new Map<string, (...args: unknown[]) => unknown>();
   const window = {
     isDestroyed: vi.fn(() => false),
     webContents: { send: vi.fn() },
@@ -11,6 +12,7 @@ const mocks = vi.hoisted(() => {
   return {
     dataDir: '',
     window,
+    onHandlers,
     appGetPath: vi.fn(() => mocks.dataDir),
   };
 });
@@ -18,14 +20,24 @@ const mocks = vi.hoisted(() => {
 vi.mock('electron', () => ({
   app: { getPath: mocks.appGetPath },
   BrowserWindow: { getAllWindows: vi.fn(() => [mocks.window]) },
-  ipcMain: { handle: vi.fn(), on: vi.fn() },
+  ipcMain: {
+    handle: vi.fn(),
+    on: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
+      mocks.onHandlers.set(channel, handler);
+    }),
+  },
 }));
 
 vi.mock('../../logger.js', () => ({
   createLogger: () => ({ warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn() }),
 }));
 
-import { VoiceInputDataStore } from '../VoiceInputDataStore.js';
+import {
+  registerVoiceInputDataStoreIpc,
+  voiceInputDataStore,
+  VoiceInputDataStore,
+} from '../VoiceInputDataStore.js';
+import { createVoiceInputHistoryEntry } from '../../../shared/voiceInputData.js';
 
 describe('VoiceInputDataStore persistence', () => {
   let dataDir: string;
@@ -83,5 +95,29 @@ describe('VoiceInputDataStore persistence', () => {
       fs.readFileSync(path.join(dataDir, 'voice-input-data.v1.json'), 'utf8'),
     ) as { settings: { language: string } };
     expect(persisted.settings.language).toBe('en');
+  });
+
+  it('returns a decodable INTERNAL result from sync history IPC on write failure', () => {
+    registerVoiceInputDataStoreIpc();
+    voiceInputDataStore.getSnapshot();
+    const longText = '历史记录'.repeat(80);
+    const internal = voiceInputDataStore as unknown as {
+      state: { history: Array<NonNullable<ReturnType<typeof createVoiceInputHistoryEntry>>> };
+    };
+    internal.state.history = Array.from({ length: 276 }, (_, index) =>
+      createVoiceInputHistoryEntry(`${index} ${longText}`),
+    ).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+    vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
+      throw new Error('rename denied');
+    });
+
+    const event: { returnValue?: unknown } = {};
+    mocks.onHandlers.get('voice-input:history:get-for-refinement')?.(event);
+
+    expect(event.returnValue).toEqual({
+      ok: false,
+      code: 'INTERNAL',
+      message: 'voice input data write failed: rename denied',
+    });
   });
 });

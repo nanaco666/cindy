@@ -7,6 +7,14 @@ import type {
 } from '@lizi/voice-input-core';
 
 import { SUPPORTED_LOCALES, type SupportedLocale } from './locale';
+import type { IpcErrorCode } from './ipc-errors';
+
+/** 同步 voice-input IPC 不能通过 Promise reject 传错时使用的可解码结果。 */
+export type VoiceInputSyncErrorResult = {
+  ok: false;
+  code: IpcErrorCode;
+  message: string;
+};
 
 export type VoiceInputLanguage = 'auto' | SupportedLocale;
 export type VoiceInputDictionaryEntrySource = 'manual' | 'automatic';

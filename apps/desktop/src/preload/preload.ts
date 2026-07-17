@@ -36,6 +36,8 @@ import type {
 } from '../shared/imDefaultSettings';
 import type { VoiceInputAsrMode, VoiceInputProviderKind } from '../shared/voiceInputAsrProfiles';
 import type { VoiceInputRefinerProviderKind, VoiceInputRefinerTransport } from '../shared/voiceInputRefinerProfiles';
+import { isIpcErrorCode, type IpcErrorCode } from '../shared/ipc-errors';
+import type { VoiceInputSyncErrorResult } from '../shared/voiceInputData';
 import type {
   ReviewBranchDiffData,
   ReviewCommitDiffData,
@@ -76,6 +78,16 @@ import type { DesktopLoginAction, DesktopLoginActionResult } from '../shared/aut
 // function; when the last subscriber leaves, the underlying binding is removed.
 
 type IpcCallback = (data: unknown) => void;
+
+function throwVoiceInputSyncError(result: unknown): void {
+  if (!result || typeof result !== 'object' || (result as { ok?: unknown }).ok !== false) return;
+  const candidate = result as Partial<VoiceInputSyncErrorResult>;
+  if (!isIpcErrorCode(candidate.code)) return;
+  const error = new Error(`[${candidate.code}] ${candidate.message ?? 'voice input data operation failed'}`);
+  (error as { code?: IpcErrorCode }).code = candidate.code;
+  throw error;
+}
+
 // ApplicationMenuCommand 从 ../shared/applicationMenuCommands 单点导入。
 type ApplicationMenuLocale = SupportedLocale;
 
@@ -838,22 +850,40 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('voice-input:cancel', params),
     onEvent: fanOutVoiceInputEvent,
     getDataSnapshot: (): unknown => ipcRenderer.sendSync('voice-input:data:get'),
-    migrateLegacyRendererData: (payload: { settingsRaw?: string | null; historyRaw?: string | null }): unknown =>
-      ipcRenderer.sendSync('voice-input:data:migrate-legacy', payload),
+    migrateLegacyRendererData: (payload: { settingsRaw?: string | null; historyRaw?: string | null }): unknown => {
+      const result = ipcRenderer.sendSync('voice-input:data:migrate-legacy', payload);
+      throwVoiceInputSyncError(result);
+      return result;
+    },
     updateSettings: (patch: unknown): Promise<unknown> =>
       ipcRenderer.invoke('voice-input:settings:update', patch),
     deleteDictionaryEntries: (entryIds: string[]): Promise<unknown> =>
       ipcRenderer.invoke('voice-input:dictionary:delete-entries', entryIds),
     recordDictionaryLearningActions: (actions: unknown[]): Promise<unknown> =>
       ipcRenderer.invoke('voice-input:dictionary-learning:record-actions', actions),
-    getHistory: (limit?: number): unknown => ipcRenderer.sendSync('voice-input:history:get', limit),
-    getHistoryForRefinement: (): unknown => ipcRenderer.sendSync('voice-input:history:get-for-refinement'),
-    recordHistory: (text: string): string | null =>
-      ipcRenderer.sendSync('voice-input:history:record', text) as string | null,
-    updateHistoryEntry: (id: string, text: string): void =>
-      ipcRenderer.send('voice-input:history:update', { id, text }),
-    deleteHistoryEntry: (id: string): void =>
-      ipcRenderer.send('voice-input:history:delete', id),
+    getHistory: (limit?: number): unknown => {
+      const result = ipcRenderer.sendSync('voice-input:history:get', limit);
+      throwVoiceInputSyncError(result);
+      return result;
+    },
+    getHistoryForRefinement: (): unknown => {
+      const result = ipcRenderer.sendSync('voice-input:history:get-for-refinement');
+      throwVoiceInputSyncError(result);
+      return result;
+    },
+    recordHistory: (text: string): string | null => {
+      const result = ipcRenderer.sendSync('voice-input:history:record', text);
+      throwVoiceInputSyncError(result);
+      return result as string | null;
+    },
+    updateHistoryEntry: (id: string, text: string): void => {
+      const result = ipcRenderer.sendSync('voice-input:history:update', { id, text });
+      throwVoiceInputSyncError(result);
+    },
+    deleteHistoryEntry: (id: string): void => {
+      const result = ipcRenderer.sendSync('voice-input:history:delete', id);
+      throwVoiceInputSyncError(result);
+    },
     onDataChanged: fanOutVoiceInputDataChanged,
     setGlobalShortcut: (shortcut: VoiceInputShortcutWire | null): Promise<VoiceInputGlobalResult> =>
       ipcRenderer.invoke('voice-input:global-shortcut:set', shortcut),
