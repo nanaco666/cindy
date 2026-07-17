@@ -1,13 +1,13 @@
 /**
- * 远程端点清单启动解析(clientEndpointStartup,清单即唯一事实源)+ env
- * live binding 回写的单测。
+ * 远程端点清单启动解析(clientEndpointStartup)+ env live binding 回写的单测。
  *
  * 关键覆盖:
  *  - 「跨模块 live binding 可见性」:applyResolvedClientEndpoints 对 `export let`
  *    重赋值后,另一个模块(本测试文件)经命名空间导入看到新值——这是 mobile
  *    不改 26 个消费文件的前提假设,用测试钉死;
- *  - 阻断语义:拉取失败 / 清单非法 / 缺字段 → 返回 ok:false 且 env 不被改动
- *    (没有缓存回退、没有逐字段烘焙回退),重试 = 调用方再跑一次。
+ *  - 兜底阶梯(2026-07-18 定案):CDN 严格解析失败后,先「包内正本为底 + CDN
+ *    合法字段覆盖」,再「整份包内正本」;两级都不可用才 ok:false 阻断。
+ *    测试一律经 deps.bundledManifestText 注入正本(vitest 无 metro require)。
  */
 import { describe, expect, it, vi } from 'vitest';
 
@@ -37,16 +37,26 @@ const FULL_MANIFEST_OBJECT = {
 };
 const FULL_MANIFEST = JSON.stringify(FULL_MANIFEST_OBJECT);
 
-describe('runStartupEndpointResolve(清单即唯一事实源)', () => {
-  it('拉取成功:回写 env live binding,跨模块可见', async () => {
+// 包内正本 stand-in:全字段合法、值域与 CDN 清单区分开,便于断言来源。
+const BUNDLED_MANIFEST_OBJECT = Object.fromEntries(
+  Object.entries(FULL_MANIFEST_OBJECT).map(([key, value]) => [
+    key,
+    typeof value === 'string' ? value.replace('-next', '-bundled').replace('.next', '.bundled') : value,
+  ]),
+);
+const BUNDLED_MANIFEST = JSON.stringify(BUNDLED_MANIFEST_OBJECT);
+
+describe('runStartupEndpointResolve(CDN 优先 + 包内正本兜底)', () => {
+  it('拉取成功:全量采用 CDN 清单,回写 env live binding,跨模块可见', async () => {
     const { env, startup } = await freshModules();
     expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay.example.invalid');
 
     const outcome = await startup.runStartupEndpointResolve({
       fetchManifestText: async () => FULL_MANIFEST,
+      bundledManifestText: BUNDLED_MANIFEST,
     });
 
-    expect(outcome).toEqual({ ok: true });
+    expect(outcome).toEqual({ ok: true, source: 'cdn' });
     // 跨模块 live binding:本模块持有的 env 命名空间看到重赋值后的新值
     expect(env.AUTH_API_BASE_URL).toBe('https://auth-next.example.com'); // 单一字段无脑取
     expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay-next.example.com');
@@ -74,24 +84,27 @@ describe('runStartupEndpointResolve(清单即唯一事实源)', () => {
       let outcome = await startup.runStartupEndpointResolve({
         fetchManifestText: async () =>
           JSON.stringify({ ...FULL_MANIFEST_OBJECT, review: '9.9.8' }),
+        bundledManifestText: BUNDLED_MANIFEST,
       });
-      expect(outcome).toEqual({ ok: true });
+      expect(outcome).toEqual({ ok: true, source: 'cdn' });
       expect(env.REVIEW_MODE).toBe(false);
 
       // 版本一致:进审核模式
       outcome = await startup.runStartupEndpointResolve({
         fetchManifestText: async () =>
           JSON.stringify({ ...FULL_MANIFEST_OBJECT, review: '9.9.9' }),
+        bundledManifestText: BUNDLED_MANIFEST,
       });
-      expect(outcome).toEqual({ ok: true });
+      expect(outcome).toEqual({ ok: true, source: 'cdn' });
       expect(env.REVIEW_MODE).toBe(true);
 
       // 审核结束清单清空字段:退出审核模式(重新拉清单即恢复)
       outcome = await startup.runStartupEndpointResolve({
         fetchManifestText: async () =>
           JSON.stringify({ ...FULL_MANIFEST_OBJECT, review: '' }),
+        bundledManifestText: BUNDLED_MANIFEST,
       });
-      expect(outcome).toEqual({ ok: true });
+      expect(outcome).toEqual({ ok: true, source: 'cdn' });
       expect(env.REVIEW_MODE).toBe(false);
     } finally {
       vi.doUnmock('expo-constants');
@@ -99,13 +112,157 @@ describe('runStartupEndpointResolve(清单即唯一事实源)', () => {
     }
   });
 
-  it('清单 review 非 string(布尔等)→ 整份拒绝(阻断),env 不动', async () => {
-    const { env, startup } = await freshModules();
+  it('清单缺字段 → 字段级兜底:CDN 值优先,缺的字段吃包内正本', async () => {
+    const { startup } = await freshModules();
+    const manifest: Record<string, unknown> = { ...FULL_MANIFEST_OBJECT };
+    delete manifest.heartbeatUrl;
+    const apply = vi.fn();
+    const outcome = await startup.runStartupEndpointResolve({
+      fetchManifestText: async () => JSON.stringify(manifest),
+      bundledManifestText: BUNDLED_MANIFEST,
+      apply,
+    });
+    expect(outcome).toEqual({
+      ok: true,
+      source: 'cdn+bundled',
+      fallbackFrom: 'missing-field:heartbeatUrl',
+    });
+    expect(apply).toHaveBeenCalledTimes(1);
+    const resolved = apply.mock.calls[0][0] as Record<string, unknown>;
+    expect(resolved.deviceLinkApiBaseUrl).toBe('https://relay-next.example.com'); // CDN 值优先
+    expect(resolved.heartbeatUrl).toBe('https://heartbeat-bundled.example.com'); // 缺字段吃包内
+  });
+
+  it('清单字段值非法(空串/非 string)→ 该字段按缺失处理吃包内值,其余 CDN 值保留', async () => {
+    const { startup } = await freshModules();
+    const apply = vi.fn();
+    const outcome = await startup.runStartupEndpointResolve({
+      fetchManifestText: async () =>
+        JSON.stringify({ ...FULL_MANIFEST_OBJECT, heartbeatUrl: '', websiteUrl: 42 }),
+      bundledManifestText: BUNDLED_MANIFEST,
+      apply,
+    });
+    expect(outcome).toMatchObject({ ok: true, source: 'cdn+bundled' });
+    const resolved = apply.mock.calls[0][0] as Record<string, unknown>;
+    expect(resolved.heartbeatUrl).toBe('https://heartbeat-bundled.example.com');
+    expect(resolved.websiteUrl).toBe('https://www.bundled.example.com');
+    expect(resolved.deviceLinkApiBaseUrl).toBe('https://relay-next.example.com');
+  });
+
+  it('review 只信 CDN:CDN review 非 string → 按未填处理,包内正本的 review 不泄漏', async () => {
+    const { startup } = await freshModules();
+    const apply = vi.fn();
     const outcome = await startup.runStartupEndpointResolve({
       fetchManifestText: async () => JSON.stringify({ ...FULL_MANIFEST_OBJECT, review: true }),
+      bundledManifestText: JSON.stringify({ ...BUNDLED_MANIFEST_OBJECT, review: '1.2.3' }),
+      apply,
     });
-    expect(outcome).toEqual({ ok: false, reason: 'invalid-field:review' });
+    expect(outcome).toEqual({
+      ok: true,
+      source: 'cdn+bundled',
+      fallbackFrom: 'invalid-field:review',
+    });
+    // 包内正本带送审版本号也不得随兜底生效(误开审核模式 = 用户失去更新通道)
+    expect((apply.mock.calls[0][0] as { reviewVersion: string | null }).reviewVersion).toBe(null);
+  });
+
+  it('字段级兜底下 CDN 的合法 review 值原样生效', async () => {
+    const { startup } = await freshModules();
+    const apply = vi.fn();
+    const manifest: Record<string, unknown> = { ...FULL_MANIFEST_OBJECT, review: '9.9.9' };
+    delete manifest.heartbeatUrl;
+    const outcome = await startup.runStartupEndpointResolve({
+      fetchManifestText: async () => JSON.stringify(manifest),
+      bundledManifestText: JSON.stringify({ ...BUNDLED_MANIFEST_OBJECT, review: '1.2.3' }),
+      apply,
+    });
+    expect(outcome).toMatchObject({ ok: true, source: 'cdn+bundled' });
+    expect((apply.mock.calls[0][0] as { reviewVersion: string | null }).reviewVersion).toBe('9.9.9');
+  });
+
+  it('CDN 的 review 空串是「显式关闭」,透传而不吃包内值', async () => {
+    const { startup } = await freshModules();
+    const apply = vi.fn();
+    const manifest: Record<string, unknown> = { ...FULL_MANIFEST_OBJECT, review: '' };
+    delete manifest.heartbeatUrl; // 制造字段级兜底路径
+    const outcome = await startup.runStartupEndpointResolve({
+      fetchManifestText: async () => JSON.stringify(manifest),
+      bundledManifestText: JSON.stringify({ ...BUNDLED_MANIFEST_OBJECT, review: '1.2.3' }),
+      apply,
+    });
+    expect(outcome).toMatchObject({ ok: true, source: 'cdn+bundled' });
+    expect((apply.mock.calls[0][0] as { reviewVersion: string | null }).reviewVersion).toBe(null);
+  });
+
+  it('拉取失败 → 整份兜底包内正本(不再阻断);正本 review 恒按未填处理', async () => {
+    const { env, startup } = await freshModules();
+    const apply = vi.fn();
+    const outcome = await startup.runStartupEndpointResolve({
+      fetchManifestText: async () => null,
+      bundledManifestText: JSON.stringify({ ...BUNDLED_MANIFEST_OBJECT, review: '1.2.3' }),
+      apply,
+    });
+    expect(outcome).toEqual({ ok: true, source: 'bundled', fallbackFrom: 'fetch-failed' });
+    expect((apply.mock.calls[0][0] as { reviewVersion: string | null }).reviewVersion).toBe(null);
+
+    // 不注入 apply 时同样回写 env(整份兜底端点生效)
+    const outcome2 = await startup.runStartupEndpointResolve({
+      fetchManifestText: async () => null,
+      bundledManifestText: BUNDLED_MANIFEST,
+    });
+    expect(outcome2).toEqual({ ok: true, source: 'bundled', fallbackFrom: 'fetch-failed' });
+    expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay-bundled.example.com');
     expect(env.REVIEW_MODE).toBe(false);
+  });
+
+  it('CDN 字段值为 string 但 URL 非法 → 合并过不了严格校验,跌到整份兜底', async () => {
+    const { startup } = await freshModules();
+    const apply = vi.fn();
+    const outcome = await startup.runStartupEndpointResolve({
+      fetchManifestText: async () =>
+        JSON.stringify({ ...FULL_MANIFEST_OBJECT, heartbeatUrl: 'not-a-url' }),
+      bundledManifestText: BUNDLED_MANIFEST,
+      apply,
+    });
+    expect(outcome).toEqual({
+      ok: true,
+      source: 'bundled',
+      fallbackFrom: 'invalid-field:heartbeatUrl',
+    });
+    // 整份兜底:CDN 其余合法值一并放弃,端点全部来自包内正本
+    expect((apply.mock.calls[0][0] as { deviceLinkApiBaseUrl: string }).deviceLinkApiBaseUrl).toBe(
+      'https://relay-bundled.example.com',
+    );
+  });
+
+  it('清单非 JSON → 整份兜底包内正本', async () => {
+    const { env, startup } = await freshModules();
+    const outcome = await startup.runStartupEndpointResolve({
+      fetchManifestText: async () => 'not-json{',
+      bundledManifestText: BUNDLED_MANIFEST,
+    });
+    expect(outcome).toEqual({ ok: true, source: 'bundled', fallbackFrom: 'invalid-json' });
+    expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay-bundled.example.com');
+  });
+
+  it('包内正本不可用时保持阻断语义:ok:false 且 env 不动', async () => {
+    const { env, startup } = await freshModules();
+    const manifest: Record<string, unknown> = { ...FULL_MANIFEST_OBJECT };
+    delete manifest.heartbeatUrl;
+    const apply = vi.fn();
+    for (const [text, reason] of [
+      [JSON.stringify(manifest), 'missing-field:heartbeatUrl'],
+      [null, 'fetch-failed'],
+      ['not-json{', 'invalid-json'],
+    ] as const) {
+      const outcome = await startup.runStartupEndpointResolve({
+        fetchManifestText: async () => text,
+        bundledManifestText: null,
+        apply,
+      });
+      expect(outcome).toEqual({ ok: false, reason });
+    }
+    expect(apply).not.toHaveBeenCalled();
     expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay.example.invalid');
   });
 
@@ -117,8 +274,9 @@ describe('runStartupEndpointResolve(清单即唯一事实源)', () => {
       expect(env.OTA_SERVER_BASE_URL).toBe('https://baked-ota.example.invalid');
       const outcome = await startup.runStartupEndpointResolve({
         fetchManifestText: async () => FULL_MANIFEST,
+        bundledManifestText: BUNDLED_MANIFEST,
       });
-      expect(outcome).toEqual({ ok: true });
+      expect(outcome).toEqual({ ok: true, source: 'cdn' });
       // 清单值优先于烧包 env:已发自建包靠改线上清单即可迁域名
       expect(env.OTA_SERVER_BASE_URL).toBe('https://mobile-update-next.example.com');
     } finally {
@@ -128,51 +286,72 @@ describe('runStartupEndpointResolve(清单即唯一事实源)', () => {
     }
   });
 
-  it('拉取失败 → ok:false(fetch-failed),env 保持构建期值不动', async () => {
-    const { env, startup } = await freshModules();
-    const outcome = await startup.runStartupEndpointResolve({
-      fetchManifestText: async () => null,
-    });
-    expect(outcome).toEqual({ ok: false, reason: 'fetch-failed' });
-    expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay.example.invalid');
-  });
-
-  it('清单缺字段 → ok:false(无烘焙回退),env 不动', async () => {
-    const { env, startup } = await freshModules();
-    const manifest: Record<string, unknown> = { ...FULL_MANIFEST_OBJECT };
-    delete manifest.heartbeatUrl;
-    const apply = vi.fn();
-    const outcome = await startup.runStartupEndpointResolve({
-      fetchManifestText: async () => JSON.stringify(manifest),
-      apply,
-    });
-    expect(outcome).toEqual({ ok: false, reason: 'missing-field:heartbeatUrl' });
-    expect(apply).not.toHaveBeenCalled();
-    expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay.example.invalid');
-  });
-
-  it('清单非法 → ok:false(坏清单不静默降级),env 不动', async () => {
-    const { env, startup } = await freshModules();
-    const outcome = await startup.runStartupEndpointResolve({
-      fetchManifestText: async () => 'not-json{',
-    });
-    expect(outcome).toEqual({ ok: false, reason: 'invalid-json' });
-    expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay.example.invalid');
-  });
-
-  it('fetch 抛错视同失败,永不 reject;重试 = 再调一次可成功', async () => {
+  it('fetch 抛错视同拉取失败 → 整份兜底;永不 reject', async () => {
     const { env, startup } = await freshModules();
     const fetchManifestText = vi
       .fn<(timeoutMs: number) => Promise<string | null>>()
       .mockRejectedValueOnce(new Error('boom'))
       .mockResolvedValueOnce(FULL_MANIFEST);
     await expect(
-      startup.runStartupEndpointResolve({ fetchManifestText }),
-    ).resolves.toEqual({ ok: false, reason: 'fetch-failed' });
+      startup.runStartupEndpointResolve({ fetchManifestText, bundledManifestText: BUNDLED_MANIFEST }),
+    ).resolves.toEqual({ ok: true, source: 'bundled', fallbackFrom: 'fetch-failed' });
+    // 下一次拉到完整清单:CDN 值覆盖兜底值
     await expect(
-      startup.runStartupEndpointResolve({ fetchManifestText }),
-    ).resolves.toEqual({ ok: true });
+      startup.runStartupEndpointResolve({ fetchManifestText, bundledManifestText: BUNDLED_MANIFEST }),
+    ).resolves.toEqual({ ok: true, source: 'cdn' });
     expect(env.AUTH_API_BASE_URL).toBe('https://auth-next.example.com');
+  });
+});
+
+describe('mergeManifestWithBundled(字段级兜底合并纯函数)', () => {
+  it('CDN 非对象/不可解析 → null(走整份兜底)', async () => {
+    const { startup } = await freshModules();
+    expect(startup.mergeManifestWithBundled(BUNDLED_MANIFEST, null)).toBe(null);
+    expect(startup.mergeManifestWithBundled(BUNDLED_MANIFEST, 'not-json{')).toBe(null);
+    expect(startup.mergeManifestWithBundled(BUNDLED_MANIFEST, '[1,2]')).toBe(null);
+  });
+
+  it('CDN schemaVersion 超出支持版本/非法 → 放弃合并(不兼容清单的字段不按旧语义收编)', async () => {
+    const { startup } = await freshModules();
+    for (const schemaVersion of [999, 0, 1.5, 'x']) {
+      expect(
+        startup.mergeManifestWithBundled(
+          BUNDLED_MANIFEST,
+          JSON.stringify({ schemaVersion, apiBaseUrl: 'https://api-next.example.com' }),
+        ),
+      ).toBe(null);
+    }
+  });
+
+  it('CDN schemaVersion 合法或缺失 → 正常合并,schemaVersion 恒取包内正本', async () => {
+    const { startup } = await freshModules();
+    for (const cdn of [
+      { schemaVersion: 1, apiBaseUrl: 'https://api-next.example.com' },
+      { apiBaseUrl: 'https://api-next.example.com' },
+    ]) {
+      const merged = startup.mergeManifestWithBundled(BUNDLED_MANIFEST, JSON.stringify(cdn));
+      expect(merged).not.toBe(null);
+      const parsed = JSON.parse(merged as string) as Record<string, unknown>;
+      expect(parsed.schemaVersion).toBe(1);
+      expect(parsed.apiBaseUrl).toBe('https://api-next.example.com');
+      expect(parsed.heartbeatUrl).toBe('https://heartbeat-bundled.example.com');
+    }
+  });
+
+  it('包内正本的 review 在合并时被剥离;CDN 的 review 才会出现在合并结果里', async () => {
+    const { startup } = await freshModules();
+    const bundledWithReview = JSON.stringify({ ...BUNDLED_MANIFEST_OBJECT, review: '1.2.3' });
+    const noCdnReview = JSON.parse(
+      startup.mergeManifestWithBundled(bundledWithReview, JSON.stringify({ schemaVersion: 1 })) as string,
+    ) as Record<string, unknown>;
+    expect('review' in noCdnReview).toBe(false);
+    const withCdnReview = JSON.parse(
+      startup.mergeManifestWithBundled(
+        bundledWithReview,
+        JSON.stringify({ schemaVersion: 1, review: '9.9.9' }),
+      ) as string,
+    ) as Record<string, unknown>;
+    expect(withCdnReview.review).toBe('9.9.9');
   });
 });
 

@@ -1,6 +1,7 @@
-// 启动端点清单闸门 hook(阻断式):冷启动时跑 runStartupEndpointResolve,
-// 成功前业务树不挂载;失败进入 error 态由 _layout 渲染错误屏,用户点重试
-// 再跑一次。**没有超时兜底 / 缓存降级**——拉不到就停在这。
+// 启动端点清单闸门 hook:冷启动时跑 runStartupEndpointResolve,成功前业务树
+// 不挂载。2026-07-18 起解析带包内正本兜底(CDN 缺字段按字段补、整份拉不到用
+// 整份正本,详见 clientEndpointStartup 头注),因此 error 态实际只在包内正本
+// 也不可用(构建损坏)时出现;届时由 _layout 渲染错误屏,用户点重试再跑一次。
 // __DEV__ 默认放行(零网络,端点初值来自仓内 config/endpoint.json,见 env.ts);
 // EXPO_PUBLIC_ENDPOINTS_CDN=1 时 dev 也走完整 CDN 闸门(测线上清单,与
 // desktop 的 --endpoints-cdn 同语义)。
