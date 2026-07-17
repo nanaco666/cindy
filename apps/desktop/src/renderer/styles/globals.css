@@ -628,6 +628,15 @@ body.resizing-pane [data-ghost-webview] {
 [data-theme="cindy-dark"] .hljs-section {
   color: #2573ec;
 }
+
+/* CINDY dark hljs -punctuation/-tag(D 裁决):github-dark "purposely ignored" 无显式色,
+   dark 继承 .dark .hljs text #c9d1d9(× #312F2F=8.62 ≥3 达标,无需提亮);
+   此处 [data-theme=cindy-dark] 显式覆盖 #c9d1d9 防御性(不依赖继承,满足 D 裁决"三项覆盖",
+   值同 text 不降对比度)。 */
+[data-theme="cindy-dark"] .hljs-punctuation,
+[data-theme="cindy-dark"] .hljs-tag {
+  color: #c9d1d9;
+}
 .dark .hljs-bullet {
   color: #f2cc60;
 }

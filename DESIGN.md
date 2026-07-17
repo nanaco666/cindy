@@ -654,7 +654,7 @@ card/container
 - **hljs 语法高亮色**(light=highlight.js/styles/github.css;dark=globals.css `.dark .hljs-*` mirror github-dark):hljs 主题色为 default 代码块底设计,CINDY 代码块底(surface-elevated #F8F8F8/#312F2F)接近 default(#ffffff/#2c2c2a),边缘不达标(light -keyword 4.31/-built_in 3.29/-name 4.36;dark -punctuation 2.47/-tag 2.99/-section 2.87)是 hljs 既有折损(用 design surface 而非 github 默认 #ffffff/#0d1117),非 CINDY 引入——default 同源也不达标。CINDY 不补 [data-theme] 整改(与 default 同源,补整改值需重新过用户关卡);落档见 cindyCodeBlockContrast.test.ts(≥2 基线 + text ≥4.5 守卫)。
 **双门槛口径(D 裁决 2026-07-17)**:hljs 语法高亮色属辅助性视觉编码,对齐 selection/边界 3:1 口径——语法色 ≥3:1、正文文本 ≥4.5:1。CINDY 代码块底(surface-elevated)接近 default,hljs 主题色为 github 默认底(#ffffff/#0d1117)设计,固有折损非 CINDY 引入(default 同源)。
 - light:语法色全 ≥3(4.31/3.29/4.36),<4.5 但 ≥3 门槛通过,**不整改**,逐项落豁免档(default 同源折损);
-- dark:`.hljs-section` #1f6feb × #312F2F = 2.87 <3,补 `[data-theme="cindy-dark"] .hljs-section` 提亮到 `#2573ec`(保持蓝 H212 S84%,L52%→53.5%,× #312F2F=3.00 ≥3);-punctuation/-tag dark 无单独选择器,继承 .dark .hljs text #c9d1d9(× #312F2F=8.62 ≥3,无需整改)。
+- dark:`.hljs-section` #1f6feb × #312F2F = 2.87 <3,补 `[data-theme="cindy-dark"] .hljs-section` 提亮 `#2573ec`(保持蓝 H212 S84% L52→53.5%,× #312F2F=3.00 ≥3);`.hljs-punctuation`/`.hljs-tag` github-dark "purposely ignored" 无显式色,dark 继承 .dark .hljs text `#c9d1d9`(× #312F2F=8.62 ≥3 达标),补 `[data-theme="cindy-dark"]` 显式覆盖 `#c9d1d9` 防御性(D 裁决三项覆盖,值同 text 不降对比度)。
 - model-budget 光谱条 / GhostTool shimmer:显式豁免(中性 shimmer,跨主题统一)。
 
 ### 8.5 U2 显式例外记录(二级信息色忠于 Figma 原值)
