@@ -3124,7 +3124,6 @@
     },
     "createAgent": {
       "quickStart": "Quick start",
-      "more": "More",
       "quickStarts": {
         "explore": "Explore and understand code",
         "build": "Build a feature, app, or tool",

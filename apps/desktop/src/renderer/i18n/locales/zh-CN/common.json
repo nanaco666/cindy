@@ -3124,7 +3124,6 @@
     },
     "createAgent": {
       "quickStart": "快速开始",
-      "more": "更多",
       "quickStarts": {
         "explore": "探索并理解代码",
         "build": "构建新功能、应用或工具",

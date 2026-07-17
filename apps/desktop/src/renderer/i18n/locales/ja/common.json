@@ -3124,7 +3124,6 @@
     },
     "createAgent": {
       "quickStart": "クイックスタート",
-      "more": "その他",
       "quickStarts": {
         "explore": "コードを探索して理解",
         "build": "新機能、アプリ、ツールを構築",

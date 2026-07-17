@@ -3124,7 +3124,6 @@
     },
     "createAgent": {
       "quickStart": "빠른 시작",
-      "more": "더 보기",
       "quickStarts": {
         "explore": "코드 탐색 및 이해",
         "build": "새 기능, 앱 또는 도구 만들기",

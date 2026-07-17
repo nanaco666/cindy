@@ -11,13 +11,25 @@ const source = readFileSync(
 describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
   it('keeps the approved CREATE AGENT shell while preserving the functional composer', () => {
     expect(source).toContain('data-testid="create-agent-shell"');
+    expect(source).toContain('data-testid="create-agent-main"');
+    expect(source).toContain('data-testid="create-agent-mode-pill"');
     expect(source).toContain('data-testid="create-agent-brand-lockup"');
     expect(source).toContain('data-testid="create-agent-quick-starts"');
     expect(source).toContain('createAgentQuickStarts.map');
     expect(source).toContain('<ChatInput');
-    expect(source).toContain('leftOfFolderPicker={');
-    expect(source).toContain('<WorktreeChipsRow');
     expect(source).toContain('<VendorSegmentedSwitcher');
+    expect(source).toContain('middleToolbarSlot={');
+    expect(source).not.toContain('<HomeUsageDashboard');
+    expect(source).not.toContain('newChat.createAgent.more');
+    expect(source).not.toContain('data-testid="create-agent-sidebar"');
+    expect(source).not.toContain('<aside');
+    expect(source).not.toContain('createAgentSidebarNav');
+    expect(source).not.toContain('createAgentSidebarProjects');
+    expect(source).not.toContain('<WorktreeChipsRow');
+    expect(source).not.toContain('h-2.5 w-2.5 rounded-full');
+    expect(source).not.toContain('surface-translucent-sidebar');
+    expect(source).not.toContain('agent-island-annie');
+    expect(source).toContain('cindy-avatar-lockup.png');
   });
 
   it('preserves New Maker behavior-critical props on ChatInput', () => {
@@ -56,7 +68,8 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
       'onNewGoal={(text) =>',
       'rememberedEffortByModel={isDeviceLinkDraft ? undefined : draft.effortByModel}',
       'onRememberedEffortChange={isDeviceLinkDraft ? undefined : handleRememberedEffortChange}',
-      'collaboration={',
+      'placeholder="Hi Cindy!"',
+      'middleToolbarSlot={',
     ]) {
       expect(chatInputBlock).toContain(invariant);
     }
@@ -73,8 +86,8 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(source).not.toContain('boxShadow');
   });
 
-  it('references the future translucent sidebar token with a TODO-E4D fallback', () => {
-    expect(source).toContain('--surface-translucent-sidebar');
-    expect(source).toContain('TODO-E4D');
+  it('keeps global sidebar chrome out of the route body', () => {
+    expect(source).not.toContain('TODO-E4D');
+    expect(source).not.toContain('cindy-avatar-account.png');
   });
 });
