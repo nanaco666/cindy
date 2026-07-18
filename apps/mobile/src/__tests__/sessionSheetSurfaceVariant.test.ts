@@ -41,4 +41,18 @@ describe('mobile session sheet styling variants', () => {
     expect(actionSheet).toContain('colors.destructive');
     expect(actionSheet).not.toContain('colors.statusError');
   });
+
+  it('keeps the session menu status chips left aligned inside the sheet body', () => {
+    const sessionMenu = readTextLf(resolve(process.cwd(), 'src/session/SessionMenuSheet.tsx'), 'utf8');
+    const headerBlockStart = sessionMenu.indexOf('headerBlock: {');
+    const headerBlockEnd = sessionMenu.indexOf('chipRow: {', headerBlockStart);
+    const headerBlockSource = sessionMenu.slice(headerBlockStart, headerBlockEnd);
+    const chipRowStart = sessionMenu.indexOf('chipRow: {');
+    const chipRowEnd = sessionMenu.indexOf('chip: {', chipRowStart);
+    const chipRowSource = sessionMenu.slice(chipRowStart, chipRowEnd);
+
+    expect(headerBlockSource).toContain("alignSelf: 'stretch'");
+    expect(chipRowSource).toContain("alignSelf: 'stretch'");
+    expect(chipRowSource).toContain("justifyContent: 'flex-start'");
+  });
 });

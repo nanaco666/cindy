@@ -24,7 +24,7 @@ export const MOBILE_COMPOSER_INPUT_SINGLE_LINE_HEIGHT = 28;
 export const MOBILE_COMPOSER_INPUT_MAX_VISIBLE_LINES = 12;
 export const MOBILE_COMPOSER_INPUT_MAX_HEIGHT = (MOBILE_COMPOSER_INPUT_LINE_HEIGHT * MOBILE_COMPOSER_INPUT_MAX_VISIBLE_LINES)
   + (MOBILE_COMPOSER_INPUT_VERTICAL_PADDING * 2);
-export const MOBILE_COMPOSER_CONTROL_SIZE = 28;
+export const MOBILE_COMPOSER_CONTROL_SIZE = 34;
 export const MOBILE_COMPOSER_TOOL_GAP = 6;
 const isExpoGo =
   Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
@@ -444,8 +444,8 @@ const makeMobileComposerInputRowStyles = (colors: ThemeColors) => ({
   // 简洁态工具排折叠为 0 高，外壳看起来就是单行 capsule。
   row: {
     alignItems: 'stretch',
-    backgroundColor: colors.surfaceElevated,
-    borderColor: colors.border,
+    backgroundColor: colors.chatCodeSurface,
+    borderColor: colors.sheetActionBorder,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'column',
@@ -463,7 +463,7 @@ const makeMobileComposerInputRowStyles = (colors: ThemeColors) => ({
   // 聚焦卡片形态：大圆角，paddingTop 给常驻的 grabber 留出呼吸空间
   // （grabber 横条距顶约 8pt、距输入内容约 14pt，参考 Cursor 移动端）。
   rowCard: {
-    borderRadius: 24, // 组件几何:composer 聚焦形态专用,非通用圆角档
+    borderRadius: radius.control,
     paddingBottom: 8,
     paddingTop: 26,
   },

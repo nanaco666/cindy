@@ -86,7 +86,7 @@ describe('mobile session composer desktop-first surface', () => {
     const voiceDraftTextStyleEnd = source.indexOf('voiceDraftListeningPrompt:', voiceDraftTextStyleStart);
     const voiceDraftTextStyle = source.slice(voiceDraftTextStyleStart, voiceDraftTextStyleEnd);
 
-    expect(source).toContain('ArrowUp');
+    expect(source).toContain('Send');
     expect(source).toContain('Camera');
     expect(source).toContain('Settings');
     // Context 面板「添加」分组的四个入口 icon(照片 / 截图 / 拍照 / 文件)。
@@ -98,9 +98,10 @@ describe('mobile session composer desktop-first surface', () => {
     expect(composerInputSource).toContain('toolbar={renderComposerToolbar()}');
     expect(source).toContain('const renderComposerToolbar = () => (');
     expect(attachmentButtonSource).toContain('<Plus');
-    expect(source).toContain('<Mic color={colors.textSecondary} size={iconSize.lg} strokeWidth={iconStroke.regular} />');
+    expect(source).toContain('<Mic color={colors.textSecondary} size={iconSize.sm} strokeWidth={iconStroke.regular} />');
     expect(composerInputSource).toContain('trailing={composerCardActive ? null : renderComposerTrailingActions()}');
-    expect(trailingActionsSource).toContain('<ArrowUp');
+    expect(trailingActionsSource).toContain('<Send');
+    expect(trailingActionsSource).toContain("fill={composerSendDisabled ? 'transparent' : colors.ctaText}");
     expect(source).toContain('const composerCardActive = (canUseComposer && composerFocused)');
     // 权限选择已合并进模型浮窗(ModelPickerSheet 二级视图);composer 底排只剩 [+][模型]。
     expect(source).not.toContain('testID="session.composerPermissionButton"');
@@ -150,7 +151,7 @@ describe('mobile session composer desktop-first surface', () => {
     expect(source).not.toContain("import { BlurView } from 'expo-blur';");
     expect(source).toContain("function TranslucentBackdrop()");
     expect(source).toContain("<TranslucentBackdrop />");
-    expect(source).toContain("backgroundColor: colors.surfaceTranslucentSidebar");
+    expect(source).toContain("backgroundColor: colors.chatHeaderSurface");
     expect(source).not.toContain("colors.glassTint");
     expect(source).not.toContain("colors.glassHighlight");
     expect(composerStyle).not.toContain('borderTopColor');
@@ -164,8 +165,8 @@ describe('mobile session composer desktop-first surface', () => {
     expect(composerInputRowStyle).toContain("flexDirection: 'column'");
     expect(sharedSource).toContain('mainRow: {');
     expect(sharedSource).toContain('cardLayout && toolbar != null');
-    expect(composerInputRowStyle).toContain('backgroundColor: colors.surfaceElevated');
-    expect(composerInputRowStyle).toContain('borderColor: colors.border');
+    expect(composerInputRowStyle).toContain('backgroundColor: colors.chatCodeSurface');
+    expect(composerInputRowStyle).toContain('borderColor: colors.sheetActionBorder');
     expect(composerInputRowStyle).toContain('borderRadius: radius.pill');
     expect(composerInputRowStyle).toContain('borderWidth: StyleSheet.hairlineWidth');
     expect(composerInputRowStyle).toContain('minHeight: 50');
@@ -393,8 +394,8 @@ describe('mobile session composer desktop-first surface', () => {
     expect(sendIndex).toBeGreaterThan(-1);
     expect(floatingVoiceIndex).toBeLessThan(sendIndex);
     expect(floatingVoiceStyleIndex).toBeLessThan(sendIndex);
-    expect(inlineButtonStyle).toContain('height: 28');
-    expect(inlineButtonStyle).toContain('width: 28');
+    expect(inlineButtonStyle).toContain('height: 34');
+    expect(inlineButtonStyle).toContain('width: 34');
     expect(inlineButtonStyle).not.toContain('height: 36');
     expect(inlineButtonStyle).not.toContain('width: 36');
     expect(inlineButtonStyle).not.toContain('height: 42');
@@ -404,8 +405,8 @@ describe('mobile session composer desktop-first surface', () => {
     expect(floatingButtonStyle).toContain('bottom: 11');
     expect(floatingButtonStyle).toContain('zIndex: 2');
     expect(sharedSource).toContain('right: spacing.md + MOBILE_COMPOSER_CONTROL_SIZE + MOBILE_COMPOSER_TOOL_GAP');
-    expect(sendButtonStyle).toContain('height: 28');
-    expect(sendButtonStyle).toContain('width: 28');
+    expect(sendButtonStyle).toContain('height: 34');
+    expect(sendButtonStyle).toContain('width: 34');
     expect(sendButtonStyle).not.toContain('height: 36');
     expect(sendButtonStyle).not.toContain('width: 36');
     expect(sendButtonStyle).not.toContain('height: 42');

@@ -54,10 +54,16 @@ describe('buildHomeSections', () => {
     expect(sections.find((s) => s.key === 'pinned')).toBeUndefined();
   });
 
-  it('第二分区的 key 随 groupByProject 在 mixed / grouped 间切换', () => {
-    const home = presentation({ chats: [listItem('c1', '2026-06-01T00:00:00Z')] });
+  it('分组模式按桌面层级拆分数据,但不渲染项目 / 对话汇总表头', () => {
+    const home = presentation({
+      chats: [listItem('c1', '2026-06-01T00:00:00Z')],
+      projects: [projectGroup('proj-a', '2026-06-02T00:00:00Z', [listItem('s1', '2026-06-02T00:00:00Z')])],
+    });
     expect(buildHomeSections(home, false, false).find((s) => s.title === null)?.key).toBe('mixed');
-    expect(buildHomeSections(home, true, false).find((s) => s.title === null)?.key).toBe('grouped');
+    expect(buildHomeSections(home, true, false).map((s) => [s.key, s.title])).toEqual([
+      ['projects', null],
+      ['dialogue', null],
+    ]);
   });
 });
 
@@ -79,12 +85,12 @@ describe('buildMixedHomeRows / buildGroupedHomeRows', () => {
     expect(rows.map((r) => (r.kind === 'session' ? r.source : 'project'))).toEqual(['project', 'project', 'chat']);
   });
 
-  it('分组:项目折成一个 project 行,chat 仍是 session 行', () => {
+  it('分组:固定桌面层级,项目文件夹始终在普通对话之前', () => {
     const rows = buildGroupedHomeRows(home);
     const kinds = rows.map((r) => r.kind);
     expect(kinds).toContain('project');
     expect(kinds).toContain('session');
-    // project(06-05)比 chat(06-01)新 → project 行在前
+    // 用户口头定稿:移动端跟 Mac 侧栏一致,分组模式不再按时间把普通对话插到项目上方。
     expect(rows[0].kind).toBe('project');
   });
 });

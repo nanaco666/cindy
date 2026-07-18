@@ -1,7 +1,6 @@
 import { isInFlightDeviceLinkError } from '@lizi/device-link';
 import {
   ArrowDown,
-  ArrowUp,
   Camera,
   Check,
   ChevronDown,
@@ -21,6 +20,7 @@ import {
   RefreshCw,
   Scan,
   Search,
+  Send,
   Settings,
   Square,
   Sparkles,
@@ -2917,7 +2917,7 @@ export default function SessionScreen() {
         // 与「停止任务」的中性色实心方块区分开。
         <Square color={colors.statusRecording} size={iconSize.sm} strokeWidth={iconStroke.regular} />
       ) : (
-        <Mic color={colors.textSecondary} size={iconSize.lg} strokeWidth={iconStroke.regular} />
+        <Mic color={colors.textSecondary} size={iconSize.sm} strokeWidth={iconStroke.regular} />
       )}
     </RouteActionButton>
   );
@@ -3408,7 +3408,7 @@ export default function SessionScreen() {
     >
       <Plus
         color={composerLayout.attachment.active ? colors.textPrimary : colors.textSecondary}
-        size={iconSize.lg}
+        size={iconSize.sm}
         strokeWidth={iconStroke.regular}
       />
     </RouteActionButton>
@@ -3458,7 +3458,7 @@ export default function SessionScreen() {
           {stopPending ? (
             <ActivityIndicator color={colors.textSecondary} size="small" />
           ) : (
-            <Square color={colors.textSecondary} size={iconSize.md} strokeWidth={iconStroke.regular} />
+            <Square color={colors.textSecondary} size={iconSize.sm} strokeWidth={iconStroke.regular} />
           )}
         </RouteActionButton>
       ) : null}
@@ -3510,8 +3510,9 @@ export default function SessionScreen() {
           {sending ? (
             <ActivityIndicator color={colors.textSecondary} size="small" />
           ) : (
-            <ArrowUp
+            <Send
               color={composerSendDisabled ? colors.textSecondary : colors.ctaText}
+              fill={composerSendDisabled ? 'transparent' : colors.ctaText}
               size={iconSize.lg}
               strokeWidth={iconStroke.medium}
             />
@@ -5450,7 +5451,7 @@ function SessionHeaderBar({
         style={styles.sessionHeaderBackButton}
         testID="session.backButton"
       >
-        <ChevronLeft color={colors.textPrimary} size={iconSize.xl} strokeWidth={iconStroke.regular} />
+        <ChevronLeft color={colors.textPrimary} size={iconSize.md} strokeWidth={iconStroke.medium} />
       </RouteActionButton>
 
       <View style={styles.sessionHeaderTextBlock}>
@@ -5521,7 +5522,7 @@ function SessionHeaderIconButton({
 }) {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
-  const color = active ? colors.ctaText : colors.textPrimary;
+  const color = colors.textPrimary;
   return (
     <RouteActionButton
       accessibilityHint={accessibilityHint}
@@ -5536,7 +5537,7 @@ function SessionHeaderIconButton({
       ]}
       testID={testID}
     >
-      <Icon color={color} size={iconSize.lg} strokeWidth={iconStroke.regular} />
+      <Icon color={color} size={iconSize.action} strokeWidth={iconStroke.regular} />
       {attention ? (
         <View style={styles.sessionHeaderIconDot} />
       ) : null}
@@ -6111,7 +6112,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   translucentBackdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: colors.surfaceTranslucentSidebar,
+    backgroundColor: colors.chatHeaderSurface,
   },
   // 排队消息编辑提示条(composer 上方):✎ + 「正在编辑第 N 条排队消息」 + × 放弃。
   queueEditBar: {
@@ -6142,8 +6143,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   sessionHeaderBar: {
     alignItems: 'center',
-    backgroundColor: colors.surfaceTranslucentSidebar,
-    borderBottomColor: colors.borderTranslucent,
+    backgroundColor: colors.chatHeaderSurface,
+    borderBottomColor: colors.chatHeaderDivider,
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: spacing.xs,
@@ -6153,10 +6154,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   sessionHeaderBackButton: {
     alignItems: 'center',
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.border,
     borderRadius: radius.pill,
-    height: 38,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 40,
     justifyContent: 'center',
-    width: 38,
+    width: 40,
   },
   sessionHeaderTextBlock: {
     flex: 1,
@@ -6190,13 +6194,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   sessionHeaderIconButton: {
     alignItems: 'center',
     borderRadius: radius.pill,
-    height: 34,
+    height: 38,
     justifyContent: 'center',
     position: 'relative',
-    width: 34,
+    width: 38,
   },
   sessionHeaderIconButtonActive: {
-    backgroundColor: colors.cta,
+    backgroundColor: colors.surfaceChip,
   },
   sessionHeaderIconPressed: {
     backgroundColor: colors.surfaceChip,
@@ -6435,13 +6439,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // (flexShrink + 文本 numberOfLines,剩余空间归 toolbarSpacer)。
   composerRuntimePill: {
     alignItems: 'center',
+    backgroundColor: colors.sheetActionSurface,
+    borderColor: colors.sheetActionBorder,
     borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     flexShrink: 1,
-    gap: 4,
-    minHeight: 28,
+    gap: spacing.xs,
+    minHeight: 34,
     minWidth: 0,
-    paddingHorizontal: spacing.xs,
+    paddingHorizontal: spacing.md,
   },
   composerRuntimePillText: {
     color: colors.textPrimary,
@@ -6481,18 +6488,24 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   composerInlineToolButton: {
     alignItems: 'center',
+    backgroundColor: colors.sheetActionSurface,
+    borderColor: colors.sheetActionBorder,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.pill,
     justifyContent: 'center',
-    height: 28,
-    width: 28,
+    height: 34,
+    width: 34,
   },
   composerFloatingVoiceButtonWithInlineStop: {
     right: spacing.md + (MOBILE_COMPOSER_CONTROL_SIZE * 2) + (MOBILE_COMPOSER_TOOL_GAP * 2),
   },
-  composerToolButtonActive: { backgroundColor: colors.surfaceChip },
+  composerToolButtonActive: {
+    backgroundColor: colors.surfaceChip,
+    borderColor: colors.borderStrong,
+  },
   composerToolButtonPrimary: {
-    backgroundColor: colors.cta,
-    borderColor: colors.cta,
+    backgroundColor: colors.surfaceChip,
+    borderColor: colors.borderStrong,
   },
   sessionComposerInput: {
     fontSize: typeScale.listBody,
@@ -6581,12 +6594,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.cta,
     borderColor: colors.cta,
     borderRadius: radius.pill,
-    height: 28,
-    width: 28,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 34,
+    width: 34,
     justifyContent: 'center',
   },
   sendButtonInactive: {
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: colors.surfaceChip,
     borderColor: colors.border,
   },
   sendButtonVoiceTarget: {

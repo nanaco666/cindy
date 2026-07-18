@@ -24,6 +24,10 @@ export interface ThemeColors {
   surfaceTranslucent: string;
   /** 侧栏/抽屉类面板毛玻璃底色(R1 audit 模式1,blur≈50 等效;BlurView tint 用) */
   surfaceTranslucentSidebar: string;
+  /** Chat 顶栏玻璃底色(M3:只给会话页顶部 chrome,不污染侧栏 / sheet) */
+  chatHeaderSurface: string;
+  /** Chat 顶栏底部分割线(M3:dark 为极弱白线) */
+  chatHeaderDivider: string;
   /** 浮层卡 sheet surface 底色(R1 audit 模式3,solid 玻璃感由 backdrop blur 承担,surface 不叠 blur 规避 Android 滚动热路径) */
   surfaceGlassPanel: string;
   /** List 行/任务行专用底色(不污染 chat code card / elevated surface) */
@@ -36,7 +40,7 @@ export interface ThemeColors {
   chatCodeSurface: string;
   /** Chat / task code card 专用描边 */
   chatCodeBorder: string;
-  /** Composer / input focus caret 蓝,并入 Mac focus 定稿 #417CDD */
+  /** Composer / input focus caret。用户口头定稿:跟 Mac caret-accent 品牌红 #DF0C27 */
   inputCaret: string;
   /** Bottom sheet root 玻璃面 */
   sheetSurface: string;
@@ -135,13 +139,15 @@ export const lightColors: ThemeColors = {
   surfaceElevated: '#F8F8F8',
   surfaceTranslucent: 'rgba(237, 237, 237, 0.78)',
   surfaceTranslucentSidebar: 'rgba(246, 246, 246, 0.90)',
+  chatHeaderSurface: 'rgba(246, 246, 246, 0.90)',
+  chatHeaderDivider: '#DCDFE3',
   surfaceGlassPanel: '#F8F8F8',
   surfaceListRow: '#F6F6F6',
   surfaceListExpanded: '#EAEAEA',
   activeGlyph: '#DF0C27',
   chatCodeSurface: '#F8F8F8',
   chatCodeBorder: '#DCDFE3',
-  inputCaret: '#417CDD',
+  inputCaret: '#DF0C27',
   sheetSurface: 'rgba(248, 248, 248, 0.95)',
   sheetActionSurface: '#F6F6F6',
   sheetActionBorder: '#DCDFE3',
@@ -193,13 +199,15 @@ export const darkColors: ThemeColors = {
   surfaceElevated: '#312F2F',
   surfaceTranslucent: 'rgba(42, 40, 40, 0.78)',
   surfaceTranslucentSidebar: 'rgba(18, 15, 15, 0.85)',
+  chatHeaderSurface: 'rgba(37, 35, 35, 0.80)',
+  chatHeaderDivider: 'rgba(255, 255, 255, 0.05)',
   surfaceGlassPanel: 'rgba(59, 59, 59, 0.95)',
   surfaceListRow: '#312F2F',
   surfaceListExpanded: '#2A2828',
   activeGlyph: '#A61629',
   chatCodeSurface: '#353333',
   chatCodeBorder: '#3C3C3C',
-  inputCaret: '#417CDD',
+  inputCaret: '#DF0C27',
   sheetSurface: 'rgba(59, 59, 59, 0.95)',
   sheetActionSurface: 'rgba(59, 59, 59, 0.5)',
   sheetActionBorder: '#505050',

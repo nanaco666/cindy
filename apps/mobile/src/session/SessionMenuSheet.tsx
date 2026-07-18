@@ -885,10 +885,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingBottom: spacing.lg,
   },
   headerBlock: {
+    alignSelf: 'stretch',
     gap: spacing.xs,
     paddingHorizontal: spacing.xs,
   },
   chipRow: {
+    alignSelf: 'stretch',
+    justifyContent: 'flex-start',
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.xs,

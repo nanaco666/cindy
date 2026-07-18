@@ -215,7 +215,7 @@ export default function HomeScreen() {
   const pendingSheetActionRef = useRef<(() => void) | null>(null);
   // 实测 header 高度(onLayout),用于下拉菜单定位;字体放大等导致 header 超过 HOME_HEADER_MIN_HEIGHT 时不再错位。
   const [headerHeight, setHeaderHeight] = useState<number | null>(null);
-  const [groupByProject, setGroupByProject] = useState(false);
+  const [groupByProject, setGroupByProject] = useState(true);
   // deviceId of the revoked-access device whose explanation tip is open (null = closed).
   const [revokedTipDeviceId, setRevokedTipDeviceId] = useState<string | null>(null);
   const [revokedTipRetryingId, setRevokedTipRetryingId] = useState<string | null>(null);
@@ -1121,6 +1121,7 @@ export default function HomeScreen() {
     // 自己的缩进线,相邻两个块之间也只保留一根(后块不画顶线)。
     const prevIsBlock = isBlockHomeRow(section.data[index - 1]);
     const nextIsBlock = isBlockHomeRow(section.data[index + 1]);
+    const inPinnedGroup = section.key === 'pinned' && !pinnedCollapsed;
     // 置顶区最后一行的下线由 pinnedFooter(或下方块的顶线)提供,自己不再画。
     const isLastPinnedRow = section.key === 'pinned' && index === section.data.length - 1 && sections.length > 1;
     if (item.kind === 'project') {
@@ -1141,9 +1142,12 @@ export default function HomeScreen() {
     }
     const row = (
       <HomeSessionRow
-        asBlock
+        asBlock={!inPinnedGroup}
         expandedAutomationGroups={expandedAutomationGroups}
-        hideDivider={nextIsBlock || isLastPinnedRow}
+        hideDivider={nextIsBlock || isLastPinnedRow || inPinnedGroup}
+        inOutlinedGroup={inPinnedGroup}
+        groupEnd={inPinnedGroup && index === section.data.length - 1}
+        indented={inPinnedGroup}
         item={item.item}
         onOpenAutomationGroup={openAutomationGroup}
         onOpenSession={openSession}
@@ -1177,6 +1181,7 @@ export default function HomeScreen() {
     openAutomationGroup,
     openProjectSessions,
     openSession,
+    pinnedCollapsed,
     sections,
     sessionSwipeControls,
     showSessionOptions,
@@ -1271,26 +1276,38 @@ export default function HomeScreen() {
           swipeRegistry.closeOpenRow();
         }}
         testID="devices.list"
-        renderSectionHeader={({ section }) => section.title ? (
-          <Pressable
-            accessibilityLabel={`置顶 ${home.pinned.length} 条对话`}
-            accessibilityRole="button"
-            accessibilityState={{ expanded: !pinnedCollapsed }}
-            onPress={togglePinned}
-            style={({ pressed }) => [styles.projectRow, styles.pinnedHeader, pressed && styles.pressed]}
-            testID="home.pinnedHeader"
-          >
-            {pinnedCollapsed ? (
-              <ChevronRight color={colors.textSecondary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
-            ) : (
-              <ChevronDown color={colors.textSecondary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
-            )}
-            <Pin color={colors.textSecondary} size={iconSize.md} strokeWidth={iconStroke.thin} />
-            <Text style={styles.projectTitle} numberOfLines={1}>{section.title}</Text>
-            <Text style={styles.projectCount} numberOfLines={1}>{home.pinned.length}</Text>
-          </Pressable>
-        ) : null}
-        renderSectionFooter={({ section }) => section.key === 'pinned' && sections.length > 1
+        renderSectionHeader={({ section }) => {
+          if (section.key !== 'pinned' || !section.title) return null;
+          return (
+            <Pressable
+              accessibilityLabel={`置顶 ${home.pinned.length} 条对话`}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: !pinnedCollapsed }}
+              onPress={togglePinned}
+              style={({ pressed }) => [
+                styles.projectRow,
+                styles.pinnedHeader,
+                !pinnedCollapsed && home.pinned.length > 0 && styles.pinnedHeaderExpanded,
+                pressed && styles.pressed,
+              ]}
+              testID="home.pinnedHeader"
+            >
+              <View style={styles.projectChevronSlot}>
+                {pinnedCollapsed ? (
+                  <ChevronRight color={colors.textSecondary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
+                ) : (
+                  <ChevronDown color={colors.textSecondary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
+                )}
+              </View>
+              <View style={styles.projectIconSlot}>
+                <Pin color={colors.textSecondary} size={iconSize.md} strokeWidth={iconStroke.thin} />
+              </View>
+              <Text style={styles.projectTitle} numberOfLines={1}>{section.title}</Text>
+              <Text style={styles.projectCount} numberOfLines={1}>{home.pinned.length}</Text>
+            </Pressable>
+          );
+        }}
+        renderSectionFooter={({ section }) => section.key === 'pinned' && sections.length > 1 && pinnedCollapsed
           // 置顶区底部一根全宽线,把置顶对话与下面的其他对话分开(仅当下方还有其他分区时才画;
           // 下方首行是块时不画 —— 块自己的全宽顶线就是这根分割线)。
           && !isBlockHomeRow(sections[1]?.data[0]) ? (
@@ -1844,16 +1861,20 @@ function ProjectRow({
         style={({ pressed }) => [styles.projectRow, pressed && styles.pressed]}
         testID="home.projectRow"
       >
-        {collapsed ? (
-          <ChevronRight color={colors.textSecondary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
-        ) : (
-          <ChevronDown color={colors.textSecondary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
-        )}
-        {collapsed ? (
-          <Folder color={colors.textSecondary} size={iconSize.md} strokeWidth={iconStroke.thin} />
-        ) : (
-          <FolderOpen color={colors.textSecondary} size={iconSize.md} strokeWidth={iconStroke.thin} />
-        )}
+        <View style={styles.projectChevronSlot}>
+          {collapsed ? (
+            <ChevronRight color={colors.textSecondary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
+          ) : (
+            <ChevronDown color={colors.textSecondary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
+          )}
+        </View>
+        <View style={styles.projectIconSlot}>
+          {collapsed ? (
+            <Folder color={colors.textSecondary} size={iconSize.md} strokeWidth={iconStroke.thin} />
+          ) : (
+            <FolderOpen color={colors.textSecondary} size={iconSize.md} strokeWidth={iconStroke.thin} />
+          )}
+        </View>
         <Text style={styles.projectTitle} numberOfLines={1}>{project.title}</Text>
         <Text style={styles.projectCount} numberOfLines={1}>{project.sessionCount}</Text>
       </Pressable>
@@ -1925,7 +1946,9 @@ export function HomeSessionRow({
   asBlock = false,
   deepIndented = false,
   expandedAutomationGroups,
+  groupEnd = false,
   hideDivider = false,
+  inOutlinedGroup = false,
   indented = false,
   item,
   onOpenAutomationGroup,
@@ -1948,11 +1971,15 @@ export function HomeSessionRow({
   deepIndented?: boolean;
   /** 已展开的自动化组 key 列表(页面级 state,列表虚拟化回收行组件也不丢展开态)。 */
   expandedAutomationGroups?: readonly string[];
+  /** 视觉 group 的最后一行:补底部圆角 / 外描边,不改变行语义。 */
+  groupEnd?: boolean;
   /**
    * 隐藏本行自己的缩进分割线。用于紧邻「块」(项目组 / 自动化组)上边界的行,以及块内最后
    * 一个元素 —— 块的全宽 border 已经画了线,行内缩进线再画会两根 hairline 叠成一根粗线。
    */
   hideDivider?: boolean;
+  /** 置顶组这类 SectionList 原生 section 的子行:需要自己续外描边,项目组子行由父容器描边。 */
+  inOutlinedGroup?: boolean;
   indented?: boolean;
   item: RemoteSessionListItem;
   /** 组展开后子运行超过限量时,点「查看全部 N 次运行」进入该任务的专属列表页(与项目组一致)。 */
@@ -2034,6 +2061,8 @@ export function HomeSessionRow({
         style={({ pressed }) => [
           styles.sessionListRow,
           cindyList && styles.sessionListRowCindy,
+          cindyList && inOutlinedGroup && styles.sessionListRowOutlinedGroup,
+          cindyList && inOutlinedGroup && groupEnd && styles.sessionListRowOutlinedGroupEnd,
           standaloneCindyCard && styles.sessionListRowCindyCard,
           indented && styles.sessionListRowIndented,
           cindyList && indented && styles.sessionListRowIndentedCindy,
@@ -2722,7 +2751,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     lineHeight: lineHeight.code,
   },
   projectGroup: {
-    backgroundColor: colors.surfaceListExpanded,
+    backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radius.container,
     borderWidth: StyleSheet.hairlineWidth,
@@ -2738,6 +2767,12 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     marginBottom: CINDY_LIST_ROW_GAP,
     overflow: 'hidden',
   },
+  pinnedHeaderExpanded: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderBottomWidth: 0,
+    marginBottom: 0,
+  },
   projectRow: {
     alignItems: 'center',
     backgroundColor: colors.surfaceListRow,
@@ -2747,8 +2782,20 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingLeft: 18,
     paddingRight: 18,
   },
+  projectChevronSlot: {
+    alignItems: 'center',
+    height: iconSize.xl,
+    justifyContent: 'center',
+    width: iconSize.xs,
+  },
+  projectIconSlot: {
+    alignItems: 'center',
+    height: iconSize.xl,
+    justifyContent: 'center',
+    width: iconSize.md,
+  },
   projectTitle: {
-    color: colors.textPrimary,
+    color: colors.textSecondary,
     flex: 1,
     fontSize: typeScale.listBody,
     fontWeight: fontWeight.semibold,
@@ -2762,7 +2809,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     lineHeight: lineHeight.micro,
   },
   projectChildren: {
-    backgroundColor: colors.surfaceListExpanded,
+    backgroundColor: colors.surface,
   },
   projectViewAllRow: {
     // 永远是项目块的最后一个元素:不画自己的下线,块底部的全宽线就是分割线
@@ -2808,7 +2855,24 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingLeft: spacing.md + spacing.lg,
   },
   sessionListRowIndentedCindy: {
+    backgroundColor: colors.surface,
     paddingLeft: 30,
+  },
+  sessionListRowOutlinedGroup: {
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: colors.border,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightColor: colors.border,
+    borderRightWidth: StyleSheet.hairlineWidth,
+  },
+  sessionListRowOutlinedGroupEnd: {
+    borderBottomColor: colors.border,
+    borderBottomLeftRadius: radius.container,
+    borderBottomRightRadius: radius.container,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginBottom: CINDY_LIST_ROW_GAP,
+    overflow: 'hidden',
   },
   sessionListRowDeepIndented: {
     // 自动化组子行:比 indented 再深一档(缩进全部收在行内,滑动包装全宽才能贴屏边),
@@ -2832,7 +2896,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderTopWidth: 0,
   },
   automationGroupBlockCindy: {
-    backgroundColor: colors.surfaceListExpanded,
+    backgroundColor: colors.surface,
     borderColor: colors.border,
     borderRadius: radius.container,
     borderWidth: StyleSheet.hairlineWidth,
@@ -2845,7 +2909,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.surface,
   },
   automationGroupChildrenCindy: {
-    backgroundColor: colors.surfaceListExpanded,
+    backgroundColor: colors.surface,
   },
   automationViewAllRow: {
     // 「查看全部 N 次运行」:与项目组「查看全部 N 条对话」同款行样式,
@@ -2874,7 +2938,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     width: 24,
   },
   sessionIconCellCindy: {
-    paddingTop: spacing.sm,
+    paddingTop: 14,
     width: iconSize.md,
   },
   sessionGroupChevronCell: {
@@ -2887,7 +2951,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     width: 22,
   },
   sessionGroupChevronCellCindy: {
-    paddingTop: spacing.sm,
+    paddingTop: 16,
     width: iconSize.xs,
   },
   sessionListContent: {
@@ -3004,6 +3068,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   sessionTrailingIconsCindy: {
     minHeight: lineHeight.micro,
     paddingTop: 0,
+    width: iconSize.md,
   },
   sessionTime: {
     color: colors.textTertiary,

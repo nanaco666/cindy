@@ -38,7 +38,7 @@ describe('mobile session header desktop-first surface', () => {
     // 空返回栈守卫收敛到共享 helper(见 backGuard.test.ts)
     expect(source).toContain('goBackGuarded(router);');
     expect(source).toContain('onBack={goBackToHome}');
-    expect(source).toContain('<Icon color={color} size={iconSize.lg} strokeWidth={iconStroke.regular} />');
+    expect(source).toContain('<Icon color={color} size={iconSize.action} strokeWidth={iconStroke.regular} />');
     expect(source).toContain('testID="session.controlsToggle"');
     expect(source).toContain('const insets = useSafeAreaInsets();');
     expect(source).toContain('<View style={styles.safeArea} testID="session.screen">');
@@ -50,14 +50,14 @@ describe('mobile session header desktop-first surface', () => {
     expect(source).toContain('<View style={[styles.sessionChromeContent, { paddingTop: insets.top }]}>');
     expect(source).toContain("sessionChrome: {\n    left: 0,\n    overflow: 'hidden',\n    position: 'absolute',");
     expect(source).toContain('sessionChromeContent: {');
-    expect(source).toContain("backgroundColor: colors.surfaceTranslucentSidebar");
+    expect(source).toContain("backgroundColor: colors.chatHeaderSurface");
     expect(source).not.toContain("colors.glassTint");
     expect(source).not.toContain("colors.glassHighlight");
-    expect(source).toContain("backgroundColor: colors.surfaceTranslucentSidebar");
-    expect(source).toContain("borderBottomColor: colors.borderTranslucent");
+    expect(source).toContain("backgroundColor: colors.chatHeaderSurface");
+    expect(source).toContain("borderBottomColor: colors.chatHeaderDivider");
     expect(source).toContain('minHeight: 50');
-    expect(source).toContain("sessionHeaderBackButton: {\n    alignItems: 'center',\n    borderRadius: radius.pill,\n    height: 38,");
-    expect(source).toContain("sessionHeaderIconButton: {\n    alignItems: 'center',\n    borderRadius: radius.pill,\n    height: 34,");
+    expect(source).toContain("sessionHeaderBackButton: {\n    alignItems: 'center',\n    backgroundColor: colors.surfaceElevated,\n    borderColor: colors.border,\n    borderRadius: radius.pill,\n    borderWidth: StyleSheet.hairlineWidth,\n    height: 40,");
+    expect(source).toContain("sessionHeaderIconButton: {\n    alignItems: 'center',\n    borderRadius: radius.pill,\n    height: 38,");
     expect(source).toContain('fontWeight: fontWeight.medium');
     expect(source).not.toContain('size={20} strokeWidth={2}');
     expect(source).not.toContain('minHeight: 54');

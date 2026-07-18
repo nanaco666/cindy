@@ -105,12 +105,17 @@ describe('theme tokens', () => {
     expect(darkColors.activeGlyph).toBe('#A61629');
     expect(lightColors.homeListFabBorder).toBe('transparent');
     expect(darkColors.homeListFabBorder).toBe('#FFFFFF');
+    expect(lightColors.chatHeaderSurface).toBe('rgba(246, 246, 246, 0.90)');
+    expect(darkColors.chatHeaderSurface).toBe('rgba(37, 35, 35, 0.80)');
+    expect(lightColors.chatHeaderDivider).toBe('#DCDFE3');
+    expect(darkColors.chatHeaderDivider).toBe('rgba(255, 255, 255, 0.05)');
     expect(lightColors.chatCodeSurface).toBe('#F8F8F8');
     expect(darkColors.chatCodeSurface).toBe('#353333');
     expect(lightColors.chatCodeBorder).toBe('#DCDFE3');
     expect(darkColors.chatCodeBorder).toBe('#3C3C3C');
-    expect(lightColors.inputCaret).toBe('#417CDD');
-    expect(darkColors.inputCaret).toBe('#417CDD');
+    // 用户口头定稿:移动端输入光标跟 Mac caret-accent,不用旧 M3 蓝。
+    expect(lightColors.inputCaret).toBe('#DF0C27');
+    expect(darkColors.inputCaret).toBe('#DF0C27');
     expect(lightColors.sheetSurface).toBe('rgba(248, 248, 248, 0.95)');
     expect(darkColors.sheetSurface).toBe('rgba(59, 59, 59, 0.95)');
     expect(lightColors.sheetActionSurface).toBe('#F6F6F6');
