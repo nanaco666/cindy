@@ -26,6 +26,17 @@ pnpm mobile:sim:rebuild
 
 脚本固定 Metro 8081、注入当前 git branch/commit 给新建会话页顶部的 `__DEV__` build label,避免多 worktree 连错 bundle。`mobile:sim:start` / `mobile:sim:rebuild` 会自动补齐 `apps/mobile/.env` 的功能变量(取自 `eas.json` production profile),无需手动复制 `.env.example`。具体排障见 [`simulator-debugging.md`](./simulator-debugging.md)。
 
+## Xcode 本地开发(region)
+
+需要在 Xcode 里选择真机 / 模拟器、调签名或看原生日志时,从仓库根运行同一条命令并显式选地区:
+
+```bash
+pnpm mobile:xcode --region=cn       # 国服:com.xd.cindycn / cindycn
+pnpm mobile:xcode --region=global   # 海外:com.xd.cindy / cindy
+```
+
+命令会把所选 region 与对应 endpoint 清单自举基址同步到 `apps/mobile/.env`,再执行 iOS clean prebuild、安装 Pods并打开 app 的 `.xcworkspace`。固定 clean prebuild 是为了防止从 cn / global 切换时复用旧 `ios/` 里的 bundleId / scheme。它只准备本地 Xcode 工程,不 archive、不上传 NPKG / OSS、不写发版记录。Xcode 打开后选择目标设备并点击 Run;如果旧 Metro 已在运行,需重启 Metro 才会读取刚切换的地区 env。
+
 ## 手机 Beta
 
 Beta 现在就是多开发者模型,不是未来目标:

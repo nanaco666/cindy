@@ -51,6 +51,7 @@
   },
   "scripts": {
     "h": "node scripts/help.mjs",
+    "mobile:xcode": "node apps/mobile/scripts/open-ios-xcode.mjs",
     "mobile:sim:rebuild": "node apps/mobile/scripts/sim-rebuild.mjs",
     "mobile:sim:start": "node apps/mobile/scripts/sim-start.mjs",
     "mobile:sim:whoami": "node apps/mobile/scripts/sim-whoami.mjs",
