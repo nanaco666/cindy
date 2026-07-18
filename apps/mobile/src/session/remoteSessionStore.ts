@@ -421,7 +421,17 @@ export const remoteSessionStore = {
   setLatestMessageWindow(sessionId: string, list: readonly RemoteMessage[]): void {
     const latestWindow = normalizeMessages(list);
     if (latestWindow.length === 0) {
-      this.setMessages(sessionId, []);
+      // 空窗口仍需保留本地系统卡(mobile-system-*):新会话首条消息发出后服务端
+      // 消息列表可能仍为空,下一次 setLatestMessageWindow 传空数组不能把刚追加的
+      // 本地卡擦掉。
+      const existing = messages.get(sessionId) ?? [];
+      const preserved = existing.filter((item) => messageKey(item).startsWith('mobile-system-'));
+      const next = preserved.length > 0 ? preserved : [];
+      if (!remoteMessageListsEqual(existing, next)) {
+        messages.set(sessionId, next);
+        bumpMessageVersion();
+        emit();
+      }
       return;
     }
 
