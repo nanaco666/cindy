@@ -17,6 +17,13 @@ type Href = Parameters<Router['push']>[0];
  *    不该再被来源页设下的窗口压住。
  *  - 本页从下一层返回、重新获得焦点时释放(首挂载 focus 跳过,原因见
  *    createRefocusReset)——兜住 transitionEnd 不触发的平台(web)。
+ *
+ * 焦点门(时间窗之外的确定性防线):发起页失焦后的 push 请求一律丢弃。
+ * 背景(2026-07-18 实锤):JS 长停摆(microtask 风暴)会把用户的补点分散到多个
+ * 恢复间隙里处理,彼此墙钟间隔可超过 SAME_TARGET_WINDOW_MS,且间隙里 transitionEnd
+ * 已提前放锁——时间窗对「跨停摆补点」整体失效,同一会话被连开 N 层。焦点是
+ * 确定性信号:第一次点击的导航 dispatch 即让本页失焦,其后处理到的补点必然
+ * isFocused()===false,丢弃即用户想要的结果(导航已经在路上)。
  */
 export function useGuardedPush(): (href: Href) => void {
   const router = useRouter();
@@ -36,7 +43,8 @@ export function useGuardedPush(): (href: Href) => void {
     onFocus();
   }, [onFocus]));
   return useCallback((href: Href) => {
+    if (navigation.isFocused() === false) return;
     if (!forwardNavigationLock.shouldAllow(navigationTargetKey(href))) return;
     router.push(href);
-  }, [router]);
+  }, [navigation, router]);
 }
