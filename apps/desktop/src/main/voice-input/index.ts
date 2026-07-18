@@ -52,6 +52,7 @@ import {
   orderVoiceInputRefinerChainForRuntime,
 } from './VoiceInputRefinerRouting.js';
 import {
+  getMicrophoneSettingsUrl,
   isExplicitMicrophonePermissionDenied,
   resolveMicrophonePermissionSnapshot,
   type VoiceInputMicrophonePermissionCache,
@@ -209,7 +210,6 @@ let cachedVoiceInputReadiness: VoiceInputReadiness | null = null;
 let readinessRefreshPromise: Promise<VoiceInputReadiness> | null = null;
 let lastModelSelectionSignature = '';
 let modelSelectionGeneration = 0;
-const MAC_MICROPHONE_SETTINGS_URL = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone';
 const MAX_REFINEMENT_SIDE_CONTEXT_CHARS = 1_200;
 const MAX_REFINEMENT_REPLY_TO_MESSAGE_CHARS = 500;
 const MAX_USER_REFINEMENT_INSTRUCTIONS_CHARS = 1_000;
@@ -981,14 +981,18 @@ async function resolveStartableAsrChain(): Promise<VoiceInputProviderKind[]> {
 }
 
 function readMicrophonePermissionSnapshot(): VoiceInputMicrophonePermissionCache {
-  if (process.platform !== 'darwin') {
+  if (process.platform !== 'darwin' && process.platform !== 'win32') {
     return { ok: true, status: 'granted' };
   }
   const status = systemPreferences.getMediaAccessStatus('microphone');
   if (rendererVerifiedMicrophonePermission && isExplicitMicrophonePermissionDenied(status)) {
     rendererVerifiedMicrophonePermission = false;
   }
-  return resolveMicrophonePermissionSnapshot(status, rendererVerifiedMicrophonePermission);
+  return resolveMicrophonePermissionSnapshot(
+    status,
+    rendererVerifiedMicrophonePermission,
+    process.platform,
+  );
 }
 
 function refreshMicrophonePermissionCache(): VoiceInputMicrophonePermissionCache {
@@ -1309,7 +1313,7 @@ export function registerVoiceInputIpc(): void {
   ipcMain.handle('voice-input:request-microphone-permission', async (): Promise<{ ok: true } | { ok: false; error: string }> => {
     const cached = refreshMicrophonePermissionCache();
     if (cached.ok) return { ok: true };
-    if (process.platform !== 'darwin') return { ok: true };
+    if (process.platform !== 'darwin') return { ok: false, error: cached.error };
     const granted = await systemPreferences.askForMediaAccess('microphone');
     const next = refreshMicrophonePermissionCache();
     if (granted && next.ok) return { ok: true };
@@ -1321,11 +1325,12 @@ export function registerVoiceInputIpc(): void {
   });
 
   ipcMain.handle('voice-input:open-microphone-settings', async (): Promise<VoiceInputActionResult> => {
-    if (process.platform !== 'darwin') {
-      return { ok: false, error: 'Microphone settings are only available on macOS.' };
+    const settingsUrl = getMicrophoneSettingsUrl(process.platform);
+    if (!settingsUrl) {
+      return { ok: false, error: 'Microphone settings are only available on macOS and Windows.' };
     }
     try {
-      await shell.openExternal(MAC_MICROPHONE_SETTINGS_URL);
+      await shell.openExternal(settingsUrl);
       return { ok: true };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
