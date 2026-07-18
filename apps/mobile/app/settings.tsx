@@ -633,6 +633,16 @@ export default function SettingsScreen() {
             testID="settings.logoutActions"
           />
         </View>
+
+        {/* App 备案信息:固定置于设置页最底部 */}
+        <SettingsGroup title="备案信息">
+          <InfoRow
+            key="app-filing-number"
+            label="App 备案号"
+            testID="settings.appFilingNumber"
+            value="沪ICP备11033765号-89A"
+          />
+        </SettingsGroup>
       </ScrollView>
     </SafeAreaView>
   );

@@ -163,4 +163,16 @@ describe('mobile settings overview', () => {
     expect(source).not.toContain('settings.renameSelfDevice.done');
     expect(source).not.toContain('clearManualName');
   });
+
+  it('shows the App filing number in the last settings card', () => {
+    const source = readTextLf(resolve(process.cwd(), 'app/settings.tsx'), 'utf8');
+    const accountActionsIndex = source.indexOf('testID="settings.accountActions"');
+    const filingCardIndex = source.indexOf('<SettingsGroup title="备案信息">');
+
+    expect(source).toContain('label="App 备案号"');
+    expect(source).toContain('testID="settings.appFilingNumber"');
+    expect(source).toContain('value="沪ICP备11033765号-89A"');
+    expect(accountActionsIndex).toBeGreaterThan(-1);
+    expect(filingCardIndex).toBeGreaterThan(accountActionsIndex);
+  });
 });
