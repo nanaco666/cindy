@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   isDarkMode: true,
+  phase: 'checking_env',
   skipSplash: vi.fn(),
   onTransitionEnd: vi.fn(),
   onTipsClick: vi.fn(),
@@ -16,7 +17,7 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('@/hooks/useSplash', () => ({
   useSplash: () => ({
-    phase: 'checking_env',
+    phase: mocks.phase,
     isDownloading: false,
     downloadProgress: 0,
     downloadInfo: {},
@@ -53,6 +54,8 @@ import { SplashScreen } from '../SplashScreen';
 describe('SplashScreen v2 layout', () => {
   beforeEach(() => {
     mocks.isDarkMode = true;
+    mocks.phase = 'checking_env';
+    document.documentElement.removeAttribute('data-splash-active');
     (window as unknown as { electronAPI: { platform: string } }).electronAPI = {
       platform: 'darwin',
     };
@@ -60,25 +63,38 @@ describe('SplashScreen v2 layout', () => {
 
   afterEach(() => {
     cleanup();
+    document.documentElement.removeAttribute('data-splash-active');
     vi.clearAllMocks();
   });
 
-  it('uses the dark translucent window wash without CSS backdrop-filter', () => {
+  it('uses the sidebar translucent surface token without CSS backdrop-filter', () => {
     const { container } = render(<SplashScreen />);
     const root = container.firstElementChild as HTMLElement;
 
-    expect(root.style.backgroundColor).toBe('rgba(18, 15, 15, 0.85)');
+    expect(root.getAttribute('style')).toContain('var(--surface-translucent-sidebar)');
     expect(root.getAttribute('style')).not.toContain('backdrop-filter');
     expect(root.className).not.toContain('backdrop');
   });
 
-  it('uses the light translucent window wash', () => {
-    mocks.isDarkMode = false;
+  it('marks the document as splash-active only before fade out', () => {
+    const view = render(<SplashScreen />);
 
-    const { container } = render(<SplashScreen />);
-    const root = container.firstElementChild as HTMLElement;
+    expect(document.documentElement.getAttribute('data-splash-active')).toBe('1');
 
-    expect(root.style.backgroundColor).toBe('rgba(255, 255, 255, 0.93)');
+    mocks.phase = 'fading_out';
+    view.rerender(<SplashScreen />);
+
+    expect(document.documentElement.hasAttribute('data-splash-active')).toBe(false);
+  });
+
+  it('removes the splash-active marker on unmount', () => {
+    const view = render(<SplashScreen />);
+
+    expect(document.documentElement.getAttribute('data-splash-active')).toBe('1');
+
+    view.unmount();
+
+    expect(document.documentElement.hasAttribute('data-splash-active')).toBe(false);
   });
 
   it('pins the brand assets to the v2 composition instead of stretching the illustration', () => {
