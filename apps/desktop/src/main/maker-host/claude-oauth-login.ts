@@ -15,6 +15,16 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import type { AddressInfo } from 'node:net';
 import { shell } from 'electron';
 
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
+
+import {
+  buildOAuthReturnAction,
+  getProviderOAuthResultCopy,
+  OAUTH_RESULT_HTML_LANG,
+  pickOAuthResultPageLang,
+  renderOAuthResultPage,
+  type OAuthResultPageLang,
+} from '../oauthResultPage.js';
 import { desktopMakerLogger } from './logger-adapter.js';
 import { writeClaudeAiOAuth } from './claude-credentials-store.js';
 import { backfillClaudeSubscriptionProfile } from './claude-oauth-refresh.js';
@@ -140,6 +150,7 @@ class CallbackListener {
   private port = 0;
   private expectedState = '';
   private pendingRes: ServerResponse | null = null;
+  private callbackLang: OAuthResultPageLang = 'en';
   private resolve: ((code: string) => void) | null = null;
   private reject: ((err: Error) => void) | null = null;
 
@@ -149,7 +160,9 @@ class CallbackListener {
 
   async start(): Promise<number> {
     return new Promise((resolve, reject) => {
-      this.server.once('error', (err) => reject(new Error(`OAuth callback server failed: ${err.message}`)));
+      this.server.once('error', (err) =>
+        reject(new Error(`OAuth callback server failed: ${err.message}`)),
+      );
       this.server.listen(0, 'localhost', () => {
         this.port = (this.server.address() as AddressInfo).port;
         resolve(this.port);
@@ -163,7 +176,9 @@ class CallbackListener {
     return new Promise<string>((resolve, reject) => {
       this.resolve = resolve;
       this.reject = reject;
-      this.server.on('request', (req: IncomingMessage, res: ServerResponse) => this.onRequest(req, res));
+      this.server.on('request', (req: IncomingMessage, res: ServerResponse) =>
+        this.onRequest(req, res),
+      );
     });
   }
 
@@ -174,17 +189,45 @@ class CallbackListener {
       res.end();
       return;
     }
+    const lang = pickOAuthResultPageLang(
+      typeof req.headers['accept-language'] === 'string'
+        ? req.headers['accept-language']
+        : undefined,
+    );
+    this.callbackLang = lang;
+    const copy = getProviderOAuthResultCopy(lang, 'Claude', BRAND_NAME);
+    const action = buildOAuthReturnAction(lang, 'claude-oauth', BRAND_NAME);
     const code = parsed.searchParams.get('code') ?? undefined;
     const state = parsed.searchParams.get('state') ?? undefined;
     if (!code) {
-      res.writeHead(400);
-      res.end('Authorization code not found');
+      res.writeHead(400, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(
+        renderOAuthResultPage({
+          htmlLang: OAUTH_RESULT_HTML_LANG[lang],
+          variant: 'error',
+          title: copy.errorTitle,
+          body: copy.missingCodeBody,
+          detail:
+            parsed.searchParams.get('error_description') ??
+            parsed.searchParams.get('error') ??
+            undefined,
+          action,
+        }),
+      );
       this.reject?.(new Error('No authorization code received'));
       return;
     }
     if (state !== this.expectedState) {
-      res.writeHead(400);
-      res.end('Invalid state parameter');
+      res.writeHead(400, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(
+        renderOAuthResultPage({
+          htmlLang: OAUTH_RESULT_HTML_LANG[lang],
+          variant: 'error',
+          title: copy.errorTitle,
+          body: copy.invalidStateBody,
+          action,
+        }),
+      );
       this.reject?.(new Error('Invalid state parameter'));
       return;
     }
@@ -200,18 +243,37 @@ class CallbackListener {
     this.pendingRes = null;
   }
 
+  fail(detail?: string): void {
+    if (!this.pendingRes) return;
+    try {
+      const copy = getProviderOAuthResultCopy(this.callbackLang, 'Claude', BRAND_NAME);
+      this.pendingRes.writeHead(500, { 'content-type': 'text/html; charset=utf-8' });
+      this.pendingRes.end(
+        renderOAuthResultPage({
+          htmlLang: OAUTH_RESULT_HTML_LANG[this.callbackLang],
+          variant: 'error',
+          title: copy.errorTitle,
+          body: copy.exchangeFailedBody,
+          detail,
+          action: buildOAuthReturnAction(this.callbackLang, 'claude-oauth', BRAND_NAME),
+        }),
+      );
+    } catch {
+      /* 回执通道已关闭,登录结果仍由调用链决定 */
+    }
+    this.pendingRes = null;
+  }
+
   close(): void {
     if (this.pendingRes) {
-      try {
-        this.pendingRes.writeHead(302, { Location: CLAUDEAI_SUCCESS_URL });
-        this.pendingRes.end();
-      } catch { /* no-op */ }
-      this.pendingRes = null;
+      this.fail();
     }
     try {
       this.server.removeAllListeners();
       this.server.close();
-    } catch { /* no-op */ }
+    } catch {
+      /* no-op */
+    }
   }
 }
 
@@ -254,7 +316,9 @@ export async function runClaudeOAuthLogin(opts?: {
     // 等回调,带 5min 超时 + 取消。
     const code = await new Promise<string>((resolve, reject) => {
       timer = setTimeout(() => reject(new Error('timeout')), LOGIN_TIMEOUT_MS);
-      abort.signal.addEventListener('abort', () => reject(new Error('login_cancelled')), { once: true });
+      abort.signal.addEventListener('abort', () => reject(new Error('login_cancelled')), {
+        once: true,
+      });
       listener.waitForCode(state).then(resolve, reject);
     });
 
@@ -264,6 +328,7 @@ export async function runClaudeOAuthLogin(opts?: {
 
     if (!scopes.includes(CLAUDE_AI_INFERENCE_SCOPE)) {
       // 没拿到 inference scope = 不是订阅账号(或只授权了 Console),订阅模式用不了。
+      listener.fail('not_a_subscription');
       return { ok: false, reason: 'not_a_subscription' };
     }
 
@@ -296,6 +361,7 @@ export async function runClaudeOAuthLogin(opts?: {
     return { ok: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    listener.fail(msg);
     log.warn('claude oauth login failed', { error: describeErrorChain(err) });
     return { ok: false, reason: abort.signal.aborted ? 'login_cancelled' : msg };
   } finally {

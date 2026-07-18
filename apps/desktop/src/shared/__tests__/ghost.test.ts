@@ -1253,6 +1253,8 @@ describe('ghost · network 详单校验(C4)', () => {
     // broker 模式 + 双地址弹跳:Slack 后台只收 https redirect,redirect_uri =
     // broker 基地址 + path(运行时拼),302 回本机 53683 的 callbackPath。
     expect(secret?.oauth?.tokenBroker).toBe('slack');
+    expect(secret?.oauth?.clientId).toBe('2372848536.11511864051187');
+    expect(secret?.oauth?.clientIdAlternatives).toEqual(['2372848536.11619977511874']);
     expect(secret?.oauth?.pkce).toBe(false);
     expect(secret?.oauth?.redirectPort).toBe(53683);
     expect(secret?.oauth?.brokerBounce).toEqual({
@@ -1272,6 +1274,10 @@ describe('ghost · network 详单校验(C4)', () => {
     // 写 scope 必须在清单里(设置页"只读连接"走 connect 的 scopes 子集参数)。
     expect(secret?.oauth?.scopes).toContain('chat:write');
     expect(secret?.oauth?.scopes).toContain('reactions:write');
+    const settingsSource = fs.readFileSync(path.join(path.dirname(p), 'settings.js'), 'utf-8');
+    expect(settingsSource).toContain("fetch('/app-context')");
+    expect(settingsSource).toContain('2372848536.11511864051187');
+    expect(settingsSource).toContain('2372848536.11619977511874');
     // 工具面 = Slack 官方托管 MCP 的两工具网关 + 账号自省。
     expect(r.manifest.tools?.map((t) => t.name)).toEqual([
       'slack_accounts',

@@ -66,7 +66,7 @@ git lfs pull
 pnpm restart:desktop:remote
 ```
 
-Login via Feishu OAuth in the Electron window.
+Complete Cindy account sign-in in the Electron window.
 
 ### Agent 二进制（claude / codex / ripgrep）命令模型
 
@@ -100,23 +100,23 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 | Command | Description |
 |---------|-------------|
-| `pnpm restart:desktop:remote` | **默认**；Agent 启动 / 重启桌面端连**远程 API**；补 `.env`、停所有 Cindy Electron dev 进程、在真 TTY 下启动 |
+| `pnpm restart:desktop:remote` | **默认**；Agent 启动 / 重启桌面端连**远程 API**；补 `.env`、停所有 Cindy Electron dev 进程、在真 TTY 下启动；支持 `--region=cn|global`（默认 `cn`） |
 | `pnpm restart:desktop:local` | **仅用户明确要求本地时**；连**本地 server**（`http://localhost:3333`）；同样停旧进程、真 TTY 启动;local 端点由 dev 脚本链自动生成的 `config/endpoint.local.json`(gitignored)承载;agent 只起客户端，本地 server 仍由用户自己起 |
 | `pnpm dev:desktop:remote` | ⚠️ human-only；**agent 禁止直接调**（无 TTY 兜底、不杀旧进程、不补 `.env`，agent 环境下必失败）——agent 走 `restart:desktop:remote` |
 | `pnpm dev:desktop` | ⚠️ human-only；连本地 server 的底层命令，**agent 禁止直接调**——agent 走 `restart:desktop:local` |
 | `pnpm dev:server` | ⚠️ human-only；到相邻 `cindy-server` checkout（或 `XDT_SERVER_REPO`）启动本地 server，**agent 禁止** |
 | `pnpm build` | 打包 Electron app |
 
-### 可选启动参数 `--passive` / `--isolated`（仅用户显式要求时加）
+### 可选启动参数 `--region` / `--passive` / `--isolated`（仅用户显式要求时加）
 
-两个 restart 命令都支持；human 直跑的 `pnpm dev:desktop` / `pnpm dev:desktop:remote` / `pnpm dev:desktop:inspect` 也支持同名参数（desktop dev 脚本以 `electron-forge start -- ` 收尾，pnpm 追加的参数会透传进主进程解析）。agent 仍然只走 restart 命令。另有 `--endpoints-cdn`(或 env `XDT_ENDPOINTS_CDN=1`):dev 不读仓内 `config/endpoint.json`,改走与 packaged 相同的线上 CDN 端点清单拉取链路(测线上清单;mobile 对应 `EXPO_PUBLIC_ENDPOINTS_CDN=1`),同样仅用户显式要求时加。
+两个 restart 命令都支持；human 直跑的 `pnpm dev:desktop` / `pnpm dev:desktop:remote` / `pnpm dev:desktop:inspect` 也支持同名参数（desktop dev 脚本以 `electron-forge start -- ` 收尾，pnpm 追加的参数会透传进主进程解析）。agent 仍然只走 restart 命令。remote restart 另支持 `--region=cn|global`（也接受 `--region global`）：默认 `cn`；`global` 会同时切换构建身份与仓内 `config/endpoint.global.json`。再加 `--endpoints-cdn`（或 env `XDT_ENDPOINTS_CDN=1`）时不读仓内清单，改按同一个 region 走与 packaged 相同的线上 CDN 端点清单拉取链路（测线上清单；mobile 对应 `EXPO_PUBLIC_ENDPOINTS_CDN=1`），同样仅用户显式要求时加。
 
 背景：dev 和 release（正式安装版）默认共用同一个 userData / SQLite 数据库；双开时定时任务靠 DB 级原子认领互斥，但**旧 release 包没有认领逻辑**，过渡期需要下面的参数配合。
 
 | 参数 | 作用 | 什么时候用 |
 |------|------|-----------|
 | `--passive` | 定时任务被动模式：本实例不自动触发 schedule（不 tick、不把对方 in-flight run 误标 interrupted），任务管理 UI / MCP / 手动"立即运行"照常；数据仍与 release 共享 | 用户说「被动模式 / 不要抢定时任务 / 让位给正式版 / 定时任务交给 release 跑」，或用户反馈「dev + release 双开导致定时任务重复执行」且希望继续共享数据时 |
-| `--isolated` | dev 使用独立 userData 目录（Windows `%APPDATA%\xdt-maker-dev`、macOS `~/Library/Application Support/xdt-maker-dev`）：数据库 / 登录态 / 会话 / 定时任务与 release 彻底隔离；首次需重新走飞书登录；**设备身份同步隔离**——自动派生独立 deviceId（`dev-<机器指纹>`），不会覆盖正式版的登录续期凭证、不触发同机互踢（服务端凭证按 user+device 一对一存）；已手动设 `XDT_USER_DATA_DIR` / `XDT_DEVICE_ID_OVERRIDE` 时尊重用户值不覆盖 | 用户说「独立数据库 / 隔离数据 / 沙箱启动 / 不要动我正式版的数据」时 |
+| `--isolated` | dev 使用独立 userData 目录（Windows `%APPDATA%\xdt-maker-dev`、macOS `~/Library/Application Support/xdt-maker-dev`）：数据库 / 登录态 / 会话 / 定时任务与 release 彻底隔离；首次需重新登录 Cindy 账号；**设备身份同步隔离**——自动派生独立 deviceId（`dev-<机器指纹>`），不会覆盖正式版的登录续期凭证、不触发同机互踢（服务端凭证按 user+device 一对一存）；已手动设 `XDT_USER_DATA_DIR` / `XDT_DEVICE_ID_OVERRIDE` 时尊重用户值不覆盖 | 用户说「独立数据库 / 隔离数据 / 沙箱启动 / 不要动我正式版的数据」时 |
 | `--isolated=<名字>` | **命名沙箱**：每个名字一条完全独立的沙箱（目录 `xdt-maker-dev-<名字>`、设备标识 `dev-<名字>-<指纹>`），与默认沙箱、其它命名沙箱、正式版全部互不干扰；名字限 `A-Za-z0-9_-`、≤32 字符（restart 脚本对非法名字直接报错退出） | 用户说「再开一个独立实例 / 第二个沙箱 / 多开几个环境 / 给这个分支单独开一个环境」时。⚠️ 同一 checkout 的 restart 命令启动前会杀掉本 checkout 全部 dev 进程——agent 无法用 restart 同时多开；用户要真正并行多实例时，告知其在自己终端里直跑 `pnpm dev:desktop:remote --isolated=<名字>`（human-only 命令，不杀旧进程）或用多个 checkout |
 
 - 两个参数都不带 = 原行为（共库 + 正常调度），**用户没提就不要主动加**。
@@ -129,7 +129,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 `restart:desktop:local` **只起客户端**——即便用户提到"服务器"，也不要因此去跑 `dev:server` / `dev:all` / 起 Postgres，本地 server 始终由用户自己起。Remote 跑不通时先排查 `.env` 和登录态，不要自动升级到本地。
 
-- **运行期端点来源(2026-07 端点清单重构)**:业务端点不再走 `.env` / 构建期烘焙——dev 默认读仓内 `config/endpoint.json`(cn 正本,与 CDN 上 `<hotfix base>/endpoint.json` 同格式);local 模式(`pnpm dev:desktop` 脚本链里的 `apps/desktop/scripts/dev-local-env.mjs`)自动生成并读 `config/endpoint.local.json`(gitignored,api/auth/device-link 指 localhost,每次启动整文件重写);packaged 与 `--endpoints-cdn` 从烘焙的 region 化 hotfix CDN 基址阻断式拉取。`apps/desktop/.env` 仍是 gitignored、per checkout/worktree 的,但只剩构建身份字段(`VITE_FEISHU_APP_ID` / `VITE_CINDY_AUTH_REGION`),restart 命令缺失时创建、只补空值;remote 模式由 `scripts/dev-remote-env.mjs` 注入身份字段、不看 `.env`。
+- **运行期端点来源(2026-07 端点清单重构)**:业务端点不再走 `.env` / 构建期烘焙——remote dev 默认 region `cn`，读仓内 `config/endpoint.json`；`--region=global` 时读 `config/endpoint.global.json`（两份均与各自 CDN 上 `<hotfix base>/endpoint.json` 同格式）。local 模式(`pnpm dev:desktop` 脚本链里的 `apps/desktop/scripts/dev-local-env.mjs`)自动生成并读 `config/endpoint.local.json`(gitignored,api/auth/device-link 指 localhost,每次启动整文件重写);packaged 与 `--endpoints-cdn` 从对应 region 清单的 `cdnBaseUrl` 烘焙自举基址并阻断式拉取。`apps/desktop/.env` 仍是 gitignored、per checkout/worktree 的,但构建身份只剩 `VITE_CINDY_AUTH_REGION`;飞书登录与 `VITE_FEISHU_APP_ID` 已退役。remote 模式由 `scripts/dev-remote-env.mjs` 注入 region 身份、不看 `.env`。
 - 本地 server 位于相邻的 `cindy-server` 仓（`pnpm dev:server` 会定位并启动它），其 `.env` 与启动要求以该仓文档为准。
 
 ### 启动 → 测试 → 结束
@@ -162,7 +162,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 - **命令通过 release 脚本调用 pinned `eas-cli`**；开发机通常已登录 EAS，先 `npx eas-cli whoami` 确认登录态。
 - **先用脚本判热更 vs 冷更**：`pnpm mobile:release:check -- --target production|staging|beta --dev <name>`。纯 JS / TS 且 runtime 匹配才可 OTA；动了原生层或 fingerprint 变化必须冷更。
 - **不要手拼写操作命令**：Beta 走 `pnpm mobile:release:beta -- --dev <name> --message "..."`；正式服走 `pnpm mobile:release:prod -- --message "..."`。脚本默认 dry-run，只有 `--execute` 才会调用 EAS 写操作。
-- **冷更版本号由脚本保证单调**：自建线冷更脚本读线上基线后,检测到 iOS `buildNumber` / Android `versionCode` 未大于基线时**自动自增写回版本文件**(`app.json` / `android-version.json`,`--execute` 才写盘;`--ipa` / `--apk` 复用现成包时跳过自动 bump、落回单调断言报错;发布完成后把 bump 改动 commit 回 main);Android 不上 Google Play,自签 APK 直传自有 OSS 分发(不经 NPKG;iOS 企业重签仍借 NPKG,重签后 ipa 也转传 OSS);飞书 Android 包名 + SHA 登记仍是外部 pending 动作，不能假装已完成。
+- **冷更版本号由脚本保证单调**：自建线冷更脚本读线上基线后,检测到 iOS `buildNumber` / Android `versionCode` 未大于基线时**自动自增写回版本文件**(`app.json` / `android-version.json`,`--execute` 才写盘;`--ipa` / `--apk` 复用现成包时跳过自动 bump、落回单调断言报错;发布完成后把 bump 改动 commit 回 main);Android 不上 Google Play,自签 APK 直传自有 OSS 分发(不经 NPKG;iOS 企业重签仍借 NPKG,重签后 ipa 也转传 OSS)。
 
 ## 设计实现规范
 

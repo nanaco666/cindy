@@ -33,7 +33,6 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { resolveEndpoint } from './shared/production-endpoints.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -97,6 +96,7 @@ Options:
 
 环境变量:
   ANTHROPIC_API_KEY  必填 — 与 desktop 同一个 LiteLLM bearer token
+  VITE_XDPROXY_BASE_URL 必填 — embedding gateway base URL
   XDT_USER_ID        可选 — 多账号时指定要查的 user
 `);
 }
@@ -193,15 +193,18 @@ function resolveVec0Path() {
 
 // ── xdproxy embed call (内联, 不走 EmbeddingClient 的 LRU) ──────────────────
 
-const XDPROXY_BASE_URL = resolveEndpoint('xdGatewayBaseUrl', 'VITE_XDPROXY_BASE_URL');
 const MODEL_ID = 'voyage/voyage-4';
 
 async function embedQuery(text) {
+  const baseUrl = process.env.VITE_XDPROXY_BASE_URL?.trim();
+  if (!baseUrl) {
+    fail('VITE_XDPROXY_BASE_URL 必须设置 (embedding dev CLI 不再读取生产端点私有配置)');
+  }
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     fail('ANTHROPIC_API_KEY 必须设置 (与 desktop 使用的同一个 LiteLLM bearer token)');
   }
-  const res = await fetch(`${XDPROXY_BASE_URL}/v1/embeddings`, {
+  const res = await fetch(`${baseUrl.replace(/\/+$/, '')}/v1/embeddings`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,

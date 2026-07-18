@@ -15,6 +15,7 @@ import { createGunzip } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { ensureBinary } from '../../../../scripts/ensure-agent-binaries.mjs';
+import { resolveReleaseCdnBaseUrl } from '../../../../scripts/shared/release-env.mjs';
 // OSS/CDN 原语(sha256 / gzip / ali-oss client / upload)已抽到仓库根 scripts/shared/oss.mjs,
 // 供 desktop 与 mobile 共用;这里 re-export 保持既有 import 面(CDN_BASE / createOSSClient 等)不变。
 import {
@@ -120,7 +121,10 @@ export function resolveAppleIdentity() {
 
 // ── .env 读取 ──────────────────────────────────────────────────────────────
 
-export function loadDotenv(envFilePath = path.join(DESKTOP_ROOT, '.env')) {
+export function loadDotenv(
+  envFilePath = path.join(DESKTOP_ROOT, '.env'),
+  { refreshReleaseConfig = true } = {},
+) {
   try {
     const envFile = fs.readFileSync(envFilePath, 'utf8');
     for (const line of envFile.split('\n')) {
@@ -128,7 +132,7 @@ export function loadDotenv(envFilePath = path.join(DESKTOP_ROOT, '.env')) {
       if (match && !process.env[match[1]]) process.env[match[1]] = match[2];
     }
   } catch { /* no .env file, that's fine */ }
-  refreshOssConfig();
+  if (refreshReleaseConfig) refreshOssConfig();
 }
 
 // ── 命令封装 ────────────────────────────────────────────────────────────────
@@ -172,7 +176,8 @@ function restorePackageJson() {
 // 唯独发布脚本此前漏了——2026-07-03 事故的直接诱因就是发版时读到陈旧基线,误判
 // "版本变了" 而对已存在的版本化路径做了字节不同的覆盖上传。
 export async function fetchExistingManifestIfAvailable(platformKey) {
-  const canaryUrl = `${CDN_BASE}/manifest-${platformKey}-canary.json?t=${Date.now()}`;
+  const cdnBase = resolveReleaseCdnBaseUrl();
+  const canaryUrl = `${cdnBase}/manifest-${platformKey}-canary.json?t=${Date.now()}`;
   const canaryRes = await fetch(canaryUrl);
   if (canaryRes.ok) {
     return await canaryRes.json();
@@ -180,7 +185,7 @@ export async function fetchExistingManifestIfAvailable(platformKey) {
   if (canaryRes.status !== 404) {
     throw new Error(`Failed to fetch canary manifest (${canaryRes.status}): ${canaryUrl}`);
   }
-  const stableUrl = `${CDN_BASE}/manifest-${platformKey}.json?t=${Date.now()}`;
+  const stableUrl = `${cdnBase}/manifest-${platformKey}.json?t=${Date.now()}`;
   const stableRes = await fetch(stableUrl);
   if (stableRes.ok) {
     return await stableRes.json();

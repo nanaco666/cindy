@@ -636,6 +636,7 @@ describe('tokenBroker 模式', () => {
     tokenUrl: 'https://auth.example.com/token',
     scopes: ['read:x'],
     clientId: 'builtin-cid',
+    clientIdAlternatives: ['global-cid'],
     pkce: false,
     tokenBroker: 'jira',
   };
@@ -680,6 +681,46 @@ describe('tokenBroker 模式', () => {
     expect(mgr.clientConfigured(GHOST, KEY, BROKER_DECL)).toBe(true);
     // brokered 但清单没内置 clientId → false(没有可用的授权身份)。
     expect(mgr.clientConfigured(GHOST, KEY, { ...BROKER_DECL, clientId: undefined })).toBe(false);
+  });
+
+  it('connect 可选清单内备用 clientId;未声明值防御性拒绝', async () => {
+    const openExternal = vi.fn((url: string) => {
+      expect(new URL(url).searchParams.get('client_id')).toBe('global-cid');
+      autoBrowser('c-global')(url);
+    });
+    const mgr = new GhostOauthAccountManager({
+      vault: memoryVault(),
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      openExternal,
+      broker: {
+        exchange: vi.fn(async () => ({
+          ok: true as const,
+          bundle: {
+            accessToken: 'at-global',
+            refreshToken: 'rt-global',
+            expiresAt: Date.now() + 60_000,
+            grantedScope: null,
+          },
+        })),
+        refresh: vi.fn(),
+      },
+    });
+    await expect(
+      mgr.connectAccount(GHOST, KEY, BROKER_DECL, { clientId: 'global-cid' }),
+    ).resolves.toMatchObject({ ok: true });
+    expect(openExternal).toHaveBeenCalledTimes(1);
+
+    const blockedOpenExternal = vi.fn();
+    const blocked = new GhostOauthAccountManager({
+      vault: memoryVault(),
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      openExternal: blockedOpenExternal,
+      broker: { exchange: vi.fn(), refresh: vi.fn() },
+    });
+    await expect(
+      blocked.connectAccount(GHOST, KEY, BROKER_DECL, { clientId: 'foreign-cid' }),
+    ).resolves.toMatchObject({ ok: false, error: 'INVALID_CONFIG' });
+    expect(blockedOpenExternal).not.toHaveBeenCalled();
   });
 
   it('刷新链路走 broker.refresh;invalidGrant 标 expired 并清 rt', async () => {

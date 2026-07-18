@@ -8,7 +8,7 @@
  *
  * 与独立 Codex CLI 授权链路的关系(硬约束:不得影响它):
  *   - 连接态以 codex auth adapter 为准(尊重登出与服务端失效标记),只**读** codex-home/auth.json
- *     的 access_token / account_id,不直接回落 ~/.codex(登出后系统 CLI 仍登录时不得继续用);
+ *     的 access_token / 可选 account_id,不直接回落 ~/.codex(登出后系统 CLI 仍登录时不得继续用);
  *   - token 刷新是**兜底**:仅当 access_token 已过期且没有其它进程刚刷新时才自己刷,
  *     且写回用**原地 writeFile**(保留 inode,codex adapter 建的 ~/.codex 硬链继续同步,
  *     不会被 rename 破坏),mutex 串行 + 刷新前重读文件(app-server 刚刷过就直接用,不重复刷)。
@@ -27,6 +27,11 @@ import { createResponsesHandler, type BridgeProviderConfig, type ResponsesBridge
 import { createMakerLogger } from './logger-adapter.js';
 import { getGrokAccessToken } from './grok-oauth-login.js';
 import { chatgptAccountIdFromIdToken, desktopCodexAuthAdapter } from './auth-adapters.js';
+import {
+  bearerAccessTokenFromHeaders,
+  createChatgptBridgeAuthInvalidator,
+} from './chatgpt-bridge-auth-invalidation.js';
+import { buildChatgptBridgeHeaders } from './chatgpt-bridge-headers.js';
 import { recordXaiRateLimitSnapshot } from '../usageBroadcaster.js';
 import { CHATGPT_MODEL_PREFIX, XAI_MODEL_PREFIX } from '../../shared/subscriptionModels.js';
 
@@ -190,7 +195,7 @@ async function refreshIfNeeded(authPath: string, current: CodexAuthFile): Promis
 // 结果在几十秒内必然不变;临期(isExpired)时绕过缓存走完整刷新路径。外部进程(codex CLI)改写
 // auth.json 最多延迟 AUTH_CACHE_TTL_MS 被看见,且只在旧 token 仍有效时发生,无正确性影响。
 const AUTH_CACHE_TTL_MS = 30_000;
-let _authCache: { accessToken: string; accountId: string; readAt: number } | null = null;
+let _authCache: { accessToken: string; accountId: string | null; readAt: number } | null = null;
 
 /**
  * 清除 ChatGPT bridge 凭证缓存。
@@ -202,8 +207,16 @@ export function clearChatgptBridgeCredentialCache(): void {
   _authCache = null;
 }
 
-/** 经 adapter 判连接态 → 读 codex-home/auth.json → 必要时刷新 → 返回 {accessToken, accountId}。 */
-async function getBridgeAuth(): Promise<{ accessToken: string; accountId: string }> {
+const invalidateChatgptBridgeAuth = createChatgptBridgeAuthInvalidator({
+  getCurrentAccessToken: () => desktopCodexAuthAdapter.getAccessToken(),
+  invalidate: async (reason) => {
+    clearChatgptBridgeCredentialCache();
+    await desktopCodexAuthAdapter.invalidate(reason);
+  },
+});
+
+/** 经 adapter 判连接态 → 读 codex-home/auth.json → 必要时刷新 → 返回 token 与可选 account id。 */
+async function getBridgeAuth(): Promise<{ accessToken: string; accountId: string | null }> {
   const now = Date.now();
   if (_authCache && now - _authCache.readAt < AUTH_CACHE_TTL_MS && !isExpired(_authCache.accessToken)) {
     return _authCache;
@@ -226,9 +239,9 @@ async function getBridgeAuth(): Promise<{ accessToken: string; accountId: string
   obj = await refreshIfNeeded(authPath, obj);
   const accessToken = obj.tokens?.access_token;
   const accountId = obj.tokens ? accountIdFrom(obj.tokens) : null;
-  if (!accessToken || !accountId) {
+  if (!accessToken) {
     _authCache = null;
-    throw new Error('codex auth.json 缺 access_token / account_id');
+    throw new Error('codex auth.json 缺 access_token');
   }
   _authCache = { accessToken, accountId, readAt: now };
   return _authCache;
@@ -246,14 +259,12 @@ function codexProviderConfig(): BridgeProviderConfig {
     // codex 后端不支持 max_output_tokens(会 400),保持默认 false。
     buildHeaders: async ({ sessionId }) => {
       const { accessToken, accountId } = await getBridgeAuth();
-      return {
-        authorization: `Bearer ${accessToken}`,
-        'chatgpt-account-id': accountId,
-        'openai-beta': 'responses=experimental',
-        originator: 'codex_cli_rs',
-        session_id: sessionId ?? '',
-        'user-agent': 'codex_cli_rs/0.0.0 (xdt-maker bridge)',
-      };
+      return buildChatgptBridgeHeaders({ accessToken, accountId, sessionId });
+    },
+    onUpstreamError: async ({ status, body, requestHeaders }) => {
+      const failedAccessToken = bearerAccessTokenFromHeaders(requestHeaders);
+      if (!failedAccessToken) return;
+      await invalidateChatgptBridgeAuth({ status, body, failedAccessToken });
     },
   };
 }

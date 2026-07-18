@@ -135,6 +135,50 @@ describe('createResponsesHandler', () => {
     expect(r.text).toContain('authentication_error');
   });
 
+  it('上游非 2xx → 先等待 provider 收口错误状态,再透传原始响应', async () => {
+    const callbackFinished = vi.fn();
+    const onUpstreamError = vi.fn(async () => {
+      await Promise.resolve();
+      callbackFinished();
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response('{"error":{"code":"token_invalidated"}}', { status: 401 }),
+      ),
+    );
+    const handler = createResponsesHandler({
+      providers: [providerConfig({ onUpstreamError })],
+    });
+
+    const result = await invoke(handler, { model: 'chatgpt/gpt-5.5', messages: [] });
+
+    expect(result.status).toBe(401);
+    expect(result.text).toContain('token_invalidated');
+    expect(callbackFinished).toHaveBeenCalledOnce();
+    expect(onUpstreamError).toHaveBeenCalledWith({
+      status: 401,
+      body: '{"error":{"code":"token_invalidated"}}',
+      requestHeaders: { authorization: 'Bearer t' },
+    });
+
+    const callbackFailure = createResponsesHandler({
+      providers: [
+        providerConfig({
+          onUpstreamError: async () => {
+            throw new Error('cleanup failed');
+          },
+        }),
+      ],
+    });
+    const preserved = await invoke(callbackFailure, {
+      model: 'chatgpt/gpt-5.5',
+      messages: [],
+    });
+    expect(preserved.status).toBe(401);
+    expect(preserved.text).toContain('token_invalidated');
+  });
+
   it('注册未实现的 wireProtocol → 装配即抛(fail-fast)', () => {
     expect(() => createResponsesHandler({
       providers: [providerConfig({ wireProtocol: 'openai-chat' as never })],

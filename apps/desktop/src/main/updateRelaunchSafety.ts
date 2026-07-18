@@ -3,21 +3,6 @@ export const MACOS_UPDATE_RELAUNCH_ARG = '--xdt-update-relaunch';
 
 export type UpdateSystemIdleState = 'active' | 'idle' | 'locked' | 'unknown';
 
-export type UpdateRelaunchScreenBlockReason = 'screen-locked' | 'screen-state-unknown';
-
-/**
- * Automatic update relaunches fail closed when the OS cannot safely present
- * the new app. Manual macOS relaunches can still rely on unlock recovery.
- */
-export function getUpdateRelaunchScreenBlockReason(
-  idleState: UpdateSystemIdleState,
-  blockWhenScreenLocked: boolean,
-): UpdateRelaunchScreenBlockReason | null {
-  if (idleState === 'locked' && blockWhenScreenLocked) return 'screen-locked';
-  if (idleState === 'unknown') return 'screen-state-unknown';
-  return null;
-}
-
 export function isMacOSUpdateRelaunch(argv: readonly string[]): boolean {
   return argv.includes(MACOS_UPDATE_RELAUNCH_ARG);
 }

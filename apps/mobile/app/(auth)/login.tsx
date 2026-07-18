@@ -249,7 +249,6 @@ export default function LoginScreen() {
             },
             testID: 'login.ssoEntryButton',
           }}
-          density="compact"
           style={styles.fullButton}
         />
       </>

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 
 import { osascriptLaunchDarwinTerminalArgs } from "../restart-desktop-remote.mjs";
@@ -22,4 +23,12 @@ test("macOS Terminal launch runs command before activating Terminal", () => {
 		doScriptIndex < activateIndex,
 		"do script must run before activate to avoid Terminal creating an empty default window",
 	);
+});
+
+test("desktop restart no longer depends on the retired Feishu build app id", () => {
+	const source = fs.readFileSync(
+		new URL("../restart-desktop-remote.mjs", import.meta.url),
+		"utf8",
+	);
+	assert.equal(source.includes("VITE_FEISHU_APP_ID"), false);
 });

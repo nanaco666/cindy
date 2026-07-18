@@ -3,28 +3,31 @@
  * dev-remote-env.mjs — dev:remote / dev:inspect 的构建身份注入包装。
  *
  * 2026-07 端点清单重构后,运行期业务端点全部来自启动时解析的端点清单
- * (dev 默认读仓内 config/endpoint.json,--endpoints-cdn 走线上 CDN),本包装
+ * (restart 按 --region 读仓内 config/endpoint*.json,--endpoints-cdn 走对应区域
+ * 线上 CDN),本包装
  * 不再注入任何端点 URL;剩余职责是「remote 模式不读 apps/desktop/.env」的
- * 构建身份注入:VITE_FEISHU_APP_ID / VITE_CINDY_AUTH_REGION(强制覆盖,
- * allowEnvOverride: false 语义保持——不吃 shell env / .env 的同名变量)。
+ * 构建身份注入只剩 VITE_CINDY_AUTH_REGION(强制覆盖,不吃 .env 同名变量)。
  *
  * 用法:node scripts/dev-remote-env.mjs <command> [args...]
  */
 import { spawn } from 'node:child_process';
 
-import { productionViteEnv } from '../../../scripts/shared/production-endpoints.mjs';
+import {
+  applyDesktopDevStartupConfig,
+  stripDesktopDevRegionArgs,
+} from '../../../scripts/shared/desktop-dev-region.mjs';
 
-const [command, ...args] = process.argv.slice(2);
+const [command, ...rawArgs] = process.argv.slice(2);
 if (!command) {
   console.error('usage: node scripts/dev-remote-env.mjs <command> [args...]');
   process.exit(2);
 }
 
-const productionEnv = productionViteEnv({ allowEnvOverride: false });
+const startupConfig = applyDesktopDevStartupConfig({ argv: rawArgs, mode: 'remote' });
+const args = stripDesktopDevRegionArgs(rawArgs);
 const env = {
   ...process.env,
-  VITE_FEISHU_APP_ID: productionEnv.VITE_FEISHU_APP_ID,
-  VITE_CINDY_AUTH_REGION: productionEnv.VITE_CINDY_AUTH_REGION,
+  VITE_CINDY_AUTH_REGION: startupConfig.region,
 };
 const isWindows = process.platform === 'win32';
 

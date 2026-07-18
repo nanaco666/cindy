@@ -32,6 +32,12 @@ import { BrowserWindow } from 'electron';
 
 import { isTerminalAgentErrorEvent } from '@lizi/maker-core';
 import type { AgentEvent, AgentKind, PermissionMode, UserContentBlock } from '@lizi/maker-core';
+import {
+  effectiveSourceIdForModel,
+  isModelVisible,
+  type ProviderView,
+  visibleModelUnion,
+} from '@lizi/model-providers';
 
 import { tapWindowBroadcast } from '../device-link/broadcast-tap.js';
 import { getMaker } from '../maker-host/index.js';
@@ -60,7 +66,8 @@ import { resolveSafe as resolveCindyMediaUrl } from '../cindy-media/blobStore.js
 import { ingestMedia } from '../cindy-media/ingest.js';
 import { worktreeStore, WorktreeManager } from '../worktree/index.js';
 import { readImDefaultSettings } from '../im/defaultSettingsStore.js';
-import { resolveDefaultProviderIdForModel } from '../im/defaultSessionSettings.js';
+import { getDesktopProviderService } from '../maker-host/createDesktopProviderService.js';
+import { getModelVisibilityOverride } from '../maker-host/model-visibility-mirror.js';
 import {
   createTurnActivity,
   pushToolStep,
@@ -85,9 +92,10 @@ import {
  * 新会话 agent/model/effort/permissionMode/providerId 合成: Slack 按目录偏好
  * (dispatch options)优先, 缺省落桌面端 IM 新会话默认值(草稿, 建 session 那
  * 一刻实时读; 权限无草稿概念, 缺省 bypassPermissions; 来源无 override 通道,
- * 恒取草稿默认)—— 与桌面端/IM 新开会话同一数据源, 取代旧版的硬编码兜底模型。
+ * 草稿默认仅作优先值, 最终收敛到已连接来源)—— 与桌面端/IM 新开会话同一
+ * 数据源, 取代旧版的硬编码兜底模型。
  */
-function resolveNewSessionConfig(
+async function resolveNewSessionConfig(
   overrides: {
     agentKind: string | null;
     model: string | null;
@@ -95,11 +103,28 @@ function resolveNewSessionConfig(
     permissionMode: string | null;
   },
   log: { warn(msg: string): void },
-): ResolvedHookSessionConfig {
-  return resolveHookSessionConfig(
+): Promise<ResolvedHookSessionConfig> {
+  let providers: ProviderView[] | null = null;
+  try {
+    providers = await getDesktopProviderService().listProviders();
+  } catch (err) {
+    log.warn(
+      `hook provider catalog unavailable; falling back to maker capabilities: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  const resolved = resolveHookSessionConfig(
     {
       readDefaults: () => readImDefaultSettings(),
-      getModels: (agentKind) => getMaker().getCapabilities(agentKind).availableModels,
+      getModels: (agentKind) =>
+        providers
+          ? visibleModelUnion(providers, agentKind, (providerId, model) =>
+              isModelVisible(
+                getModelVisibilityOverride(agentKind, providerId, model.id),
+                model.defaultEnabled,
+              ),
+            )
+          : getMaker().getCapabilities(agentKind).availableModels,
       getPermissionModes: (agentKind) =>
         getMaker()
           .getCapabilities(agentKind)
@@ -108,6 +133,13 @@ function resolveNewSessionConfig(
     },
     overrides,
   );
+
+  // 目录可用时始终把最终模型收敛到一个真实已连接、且确实提供它的来源。
+  // 目录读取失败才保留旧行为(草稿来源原样透传),避免临时目录故障阻断 hook。
+  const providerId = providers
+    ? effectiveSourceIdForModel(providers, resolved.providerId, resolved.model, resolved.agentKind)
+    : resolved.providerId;
+  return { ...resolved, providerId };
 }
 
 /** 后台 subagent 事件静默兜底(同 scheduler BG_TASK_IDLE_FALLBACK_MS 语义)。 */
@@ -288,7 +320,7 @@ export function createMakerHookSessionRunner(deps: {
 
       // 新建: 按「偏好 > 草稿默认」合成; 复用/接管: session meta 权威, 下方覆盖
       const resolved = req.isNew
-        ? resolveNewSessionConfig(
+        ? await resolveNewSessionConfig(
             {
               agentKind: req.agentKind,
               model: req.model,
@@ -339,23 +371,18 @@ export function createMakerHookSessionRunner(deps: {
       // resolved 路径必有 model; 复用路径 meta 缺失时兜底草稿默认
       const effectiveModel = model?.trim()
         ? model
-        : resolveNewSessionConfig(
-            { agentKind: effectiveAgentKind, model: null, effort: null, permissionMode: null },
-            log,
+        : (
+            await resolveNewSessionConfig(
+              { agentKind: effectiveAgentKind, model: null, effort: null, permissionMode: null },
+              log,
+            )
           ).model;
 
       // 来源(供应商)贯通(issue #854: hook 会话只继承模型 id 不继承来源):
-      //   - 新建: 草稿默认 providerId 过供应商目录校验(未连接 / 不供该模型 →
-      //     回落 null 走默认路由, 与 IM 新会话同语义);
+      //   - 新建: 上方 resolved 已用同一份实时供应商目录同时选定模型与具体来源;
       //   - 复用/接管: sessions.provider_id 权威(冷 resume 时内存 store 为空,
       //     不带上它 agent 首轮凭证形态会按默认 fallback 判断)。
-      const providerId = req.isNew
-        ? await resolveDefaultProviderIdForModel(
-            effectiveAgentKind,
-            effectiveModel,
-            resolved?.providerId ?? null,
-          )
-        : rowProviderId;
+      const providerId = req.isNew ? (resolved?.providerId ?? null) : rowProviderId;
 
       let session: Awaited<ReturnType<ReturnType<typeof getMaker>['createSession']>>;
       try {

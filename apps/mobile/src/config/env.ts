@@ -4,9 +4,24 @@ import { parseClientEndpointManifest } from '@lizi/maker-shared/client-endpoints
 
 export type CindyAuthRegion = 'cn' | 'global';
 
-const configuredBuildEnv = ((Constants.expoConfig?.extra as {
+export interface MobileGoogleConfig {
+  webClientId: string;
+  iosClientId: string;
+  iosUrlScheme: string;
+}
+
+const configuredExpoExtra = (Constants.expoConfig?.extra as {
   xdtProductionEnv?: Record<string, string>;
-} | null)?.xdtProductionEnv ?? {}) as Record<string, string>;
+  cindy?: {
+    regionConfigSource?: string;
+    google?: Partial<MobileGoogleConfig>;
+  };
+} | null) ?? {};
+const configuredBuildEnv = (configuredExpoExtra.xdtProductionEnv ?? {}) as Record<
+  string,
+  string
+>;
+const configuredRegionGoogle = configuredExpoExtra.cindy?.google;
 
 function configuredValue(key: string): string {
   return process.env[key]?.trim() || configuredBuildEnv[key]?.trim() || '';
@@ -17,19 +32,26 @@ export const AUTH_REGION: CindyAuthRegion =
 export const APP_SCHEME = AUTH_REGION === 'global' ? 'cindy' : 'cindycn';
 export const MOBILE_REDIRECT_URL = `${APP_SCHEME}://auth`;
 
-// __DEV__ 端点初值来源:metro 构建期把仓内 cn 正本 config/endpoint.json require
-// 进 dev bundle(__DEV__ 常量折叠 + DCE 后 prod bundle 不含该 JSON)。与 desktop
-// dev 读同一份文件同语义;正本非法直接抛错红屏(阻断语义:配置错要炸出来)。
+// __DEV__ 端点初值来源:metro 构建期按 AUTH_REGION 把仓内
+// config/endpoint.json 或 config/endpoint.global.json require 进 dev bundle
+// (__DEV__ 常量折叠 + DCE 后 prod bundle 不含该 JSON)。与 desktop dev 读同一份
+// region 正本同语义;正本非法直接抛错红屏(阻断语义:配置错要炸出来)。
 // 显式 EXPO_PUBLIC_* env 仍然优先——「手机连本地 server」的既有工作流不变。
 // prod(非 __DEV__)此处为空:生效端点由启动闸门拉取的 endpoint.json 回填
 // live binding,闸门放行前业务树不挂载,初值空串不会被真实消费。
 const DEV_MANIFEST_PARSED = (() => {
   if (!__DEV__) return null;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const raw: unknown = require('../../../../config/endpoint.json');
+  const manifestPath =
+    AUTH_REGION === 'global' ? 'config/endpoint.global.json' : 'config/endpoint.json';
+  const raw: unknown =
+    AUTH_REGION === 'global'
+      ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+        require('../../../../config/endpoint.global.json')
+      : // eslint-disable-next-line @typescript-eslint/no-require-imports
+        require('../../../../config/endpoint.json');
   const parsed = parseClientEndpointManifest(JSON.stringify(raw), { allowHttp: true });
   if (!parsed.ok) {
-    throw new Error(`config/endpoint.json invalid (${parsed.reason}) — dev 端点正本必须能过客户端 parser`);
+    throw new Error(`${manifestPath} invalid (${parsed.reason}) — dev 端点正本必须能过客户端 parser`);
   }
   return parsed;
 })();
@@ -119,12 +141,41 @@ export let AUTH_API_BASE_URL = normalizeBaseUrlWithDefault(
   DEV_MANIFEST.authApiBaseUrl ?? '',
 );
 
-export const GOOGLE_WEB_CLIENT_ID =
-  process.env.EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID?.trim() || '';
-export const GOOGLE_IOS_CLIENT_ID =
-  process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID?.trim() || '';
-export const GOOGLE_IOS_URL_SCHEME =
-  process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME?.trim() || '';
+/** 本地 / self-host 构建只认 region JSON 写入的 Expo extra;EAS 线使用 EXPO_PUBLIC_*。 */
+export function resolveMobileGoogleConfig(
+  regionConfigAuthoritative: boolean,
+  regionConfig: Partial<MobileGoogleConfig> | undefined,
+  env: Record<string, string | undefined> = process.env,
+): MobileGoogleConfig {
+  if (regionConfigAuthoritative) {
+    return {
+      webClientId: regionConfig?.webClientId?.trim() || '',
+      iosClientId: regionConfig?.iosClientId?.trim() || '',
+      iosUrlScheme: regionConfig?.iosUrlScheme?.trim() || '',
+    };
+  }
+  return {
+    webClientId: env.EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID?.trim() || '',
+    iosClientId: env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID?.trim() || '',
+    iosUrlScheme: env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME?.trim() || '',
+  };
+}
+
+const GOOGLE_CONFIG = resolveMobileGoogleConfig(
+  configuredExpoExtra.cindy?.regionConfigSource === 'self-host-regions',
+  configuredRegionGoogle,
+  {
+    EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID:
+      process.env.EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID,
+    EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID:
+      process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID,
+    EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME:
+      process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME,
+  },
+);
+export const GOOGLE_WEB_CLIENT_ID = GOOGLE_CONFIG.webClientId;
+export const GOOGLE_IOS_CLIENT_ID = GOOGLE_CONFIG.iosClientId;
+export const GOOGLE_IOS_URL_SCHEME = GOOGLE_CONFIG.iosUrlScheme;
 export const WECHAT_APP_ID =
   process.env.EXPO_PUBLIC_CINDY_WECHAT_APP_ID?.trim() || '';
 export const WECHAT_UNIVERSAL_LINK =
@@ -174,8 +225,8 @@ export const MOBILE_VOICE_LITELLM_BASE_URL = DEFAULT_MOBILE_VOICE_LITELLM_BASE_U
   : '';
 
 // 端点清单(endpoint.json)的自举拉取基址(启动闸门专用),按 region 构建期二选一
-// 烘焙(EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL ← production-endpoints.json 的
-// endpointManifestBaseUrlCn/Global)。**烘焙常量、不接受远程覆盖**——拉清单的
+// 烘焙(EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL ← region 对应 endpoint*.json 的
+// cdnBaseUrl)。**烘焙常量、不接受远程覆盖**——拉清单的
 // 地址若吃清单自己的字段,配错一次就把自己锁死(与 desktop 同则)。这是客户端
 // 唯一"有感"的烘焙远程 URL。
 export const ENDPOINT_MANIFEST_BASE_URL = configuredValue(

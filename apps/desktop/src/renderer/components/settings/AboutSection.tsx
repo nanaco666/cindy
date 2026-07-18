@@ -1,8 +1,8 @@
 /**
  * AboutSection — Settings → About tab content.
  *
- * 三行版本号:
- *   - 应用版本号: window.electronAPI.appDisplayVersion (主进程同步注入)
+ * 版本号:
+ *   - 应用版本号:仅国内版显示,值由 window.electronAPI.appDisplayVersion 同步注入
  *   - Claude Code 版本号: spawn 当前应用使用的 binary `--version`
  *   - Codex 版本号: 同上
  *
@@ -21,6 +21,7 @@ import { useExperimentalFlag } from '@/hooks/useExperimentalFeatures';
 import { useAutoUpdateSettings } from '@/hooks/useAutoUpdateSettings';
 import { DefaultOverrideControls } from './DefaultOverrideControls';
 import { StorageManagementCard } from './StorageManagementCard';
+import { CURRENT_CINDY_REGION } from '../../../shared/brandRegion';
 
 interface AgentVersionState {
   loading: boolean;
@@ -75,9 +76,6 @@ export function AboutSection() {
   const claudeCode = useAgentBinaryVersion('claude-code');
   const codex = useAgentBinaryVersion('codex');
 
-  const appVersion = window.electronAPI.appDisplayVersion;
-  const appVersionDetail = window.electronAPI.appDisplayVersionDetail;
-
   return (
     <div className="flex flex-col gap-3">
       <h2 className="text-16 font-medium leading-[1.2] text-[var(--settings-section-title)]">
@@ -96,8 +94,16 @@ export function AboutSection() {
           'border border-[var(--settings-theme-card-border)]',
         )}
       >
-        <InfoRow label={t('settings.about.appVersionLabel')} value={appVersion} title={appVersionDetail} />
-        <Divider />
+        {CURRENT_CINDY_REGION === 'cn' && (
+          <>
+            <InfoRow
+              label={t('settings.about.appVersionLabel')}
+              value={window.electronAPI.appDisplayVersion}
+              title={window.electronAPI.appDisplayVersionDetail}
+            />
+            <Divider />
+          </>
+        )}
         <AutoUpdateToggleRow />
         <Divider />
         <InfoRow

@@ -230,10 +230,6 @@ async function getAutoRelaunchBlockReasonForCurrentState(): Promise<AutoRelaunch
     hasBusyTasks: hasBusyTasksNow,
     idleTimeSeconds: readSystemIdleTimeSeconds(),
     idleState: readSystemIdleState(),
-    // Preserve the historical unattended behavior on Windows. The confirmed
-    // frontmost-activation failure is macOS-specific (loginwindow owns the
-    // screen there), so only macOS defers installation until unlock.
-    blockWhenScreenLocked: process.platform === 'darwin',
     nowMs,
     lastBusyAtMs,
     lastResumeAtMs,

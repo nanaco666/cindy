@@ -4,7 +4,7 @@ import type { Effort } from '@/lib/userPreferences.types';
 
 /** Renderer-safe projection of the authenticated auth-server membership. */
 // role 已随 /api/user/me、/api/me 退役；isCanary 改由 main 进程从专用
-// feature-flags 端点读取。两者都不再进入 renderer User。
+// feature-flags 端点读取，并作为 AuthState 独立字段投影，不进入 renderer User。
 export interface User {
   id: string;
   name: string;
@@ -22,6 +22,7 @@ export interface User {
 export interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
+  isCanary: boolean;
   deviceId: string;
 }
 
@@ -41,6 +42,7 @@ export function createAuthService(): AuthService {
     const normalized: AuthState = {
       user: rawState.user as User | null,
       isAuthenticated: rawState.isAuthenticated,
+      isCanary: rawState.isCanary === true,
       deviceId: rawState.deviceId,
     };
     listeners.forEach((listener) => listener(normalized));
@@ -52,6 +54,7 @@ export function createAuthService(): AuthService {
       return {
         user: raw.user as User | null,
         isAuthenticated: raw.isAuthenticated,
+        isCanary: raw.isCanary === true,
         deviceId: raw.deviceId,
       };
     },

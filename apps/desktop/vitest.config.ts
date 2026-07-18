@@ -1,15 +1,15 @@
 import { defineConfig } from 'vitest/config';
 import path from 'node:path';
-import { productionViteEnv } from '../../scripts/shared/production-endpoints.mjs';
+import { desktopClientBuildEnv } from '../../scripts/shared/client-endpoint-build-env.mjs';
 
-const productionEnv = productionViteEnv({ allowEnvOverride: false });
+const clientBuildEnv = desktopClientBuildEnv({ allowEnvOverride: false });
 
 export default defineConfig({
   define: {
     // 业务端点烘焙 define 已随端点清单重构退役;测试固定值统一走
     // src/test/vitest/clientEndpointsFixture.ts,不再从生产配置取"真值"。
     'import.meta.env.VITE_ENDPOINT_MANIFEST_BASE_URL': JSON.stringify(
-      productionEnv.VITE_ENDPOINT_MANIFEST_BASE_URL,
+      clientBuildEnv.VITE_ENDPOINT_MANIFEST_BASE_URL,
     ),
   },
   plugins: [

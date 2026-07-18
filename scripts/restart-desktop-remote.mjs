@@ -3,7 +3,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadProductionEndpoints } from './shared/production-endpoints.mjs';
+import { applyDesktopDevStartupConfig } from './shared/desktop-dev-region.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -23,24 +23,11 @@ const forceKillLabel = process.platform === 'win32' ? 'taskkill /F /T' : 'kill -
 export const BRAND_USER_DATA_DIR_NAME = 'Cindy';
 
 // 桌面端 .env 默认值。2026-07 端点清单重构后 .env 不再承载任何端点 URL
-// (运行期端点全部来自清单:dev 默认读仓内 config/endpoint.json,local 模式读
-// 生成的 config/endpoint.local.json,--endpoints-cdn 走线上 CDN),这里只剩
-// 构建身份字段:VITE_FEISHU_APP_ID / VITE_CINDY_AUTH_REGION 补空值、保留用户已填的值。
-function desktopEnvSpec(content) {
-  let productionConfig;
-  const configValue = (key) => {
-    productionConfig ??= loadProductionEndpoints();
-    return productionConfig[key];
-  };
-  const existingFeishuAppId = readEnvValue(content, 'VITE_FEISHU_APP_ID');
-  return [
-    { key: 'VITE_CINDY_AUTH_REGION', value: 'cn', force: false },
-    {
-      key: 'VITE_FEISHU_APP_ID',
-      value: existingFeishuAppId || configValue('feishuAppId'),
-      force: false,
-    },
-  ];
+// (运行期端点全部来自清单:remote restart 按 region 读 config/endpoint*.json,
+// local 模式读生成的 config/endpoint.local.json,--endpoints-cdn 走线上 CDN),这里只
+// 保留 region 身份。飞书登录构建变量已退役,不再创建或补写。
+function desktopEnvSpec() {
+  return [{ key: 'VITE_CINDY_AUTH_REGION', value: 'cn', force: false }];
 }
 const closeDarwinTerminalTtyScript = Object.freeze([
   'on closeMatchingTerminalTab(targetTty)',
@@ -443,21 +430,24 @@ function darwinEnvPrefix() {
   return `export PATH=${shellSingleQuote([...new Set(preferredPathParts)].join(path.delimiter))}:"$PATH":${shellSingleQuote([...new Set(fallbackPathParts)].join(path.delimiter))}; `;
 }
 
-function devEnvPrefix() {
+export function devEnvPrefix(env = process.env) {
   const envEntries = [
-    ['XDT_VOICE_INPUT_RECORD', process.env.XDT_VOICE_INPUT_RECORD],
-    ['XDT_USER_DATA_DIR', process.env.XDT_USER_DATA_DIR],
-    ['XDT_DEVICE_ID_OVERRIDE', process.env.XDT_DEVICE_ID_OVERRIDE],
-    ['XDT_SCHEDULER_PASSIVE', process.env.XDT_SCHEDULER_PASSIVE],
-    ['XDT_ISOLATED', process.env.XDT_ISOLATED],
-    ['XDT_ISOLATED_NAME', process.env.XDT_ISOLATED_NAME],
+    // --region 经 CINDY_AUTH_REGION 注入 dev-remote-env / Forge / Vite，同一个值
+    // 同时决定区域身份与 --endpoints-cdn 的自举 CDN 基址。
+    ['CINDY_AUTH_REGION', env.CINDY_AUTH_REGION],
+    ['XDT_VOICE_INPUT_RECORD', env.XDT_VOICE_INPUT_RECORD],
+    ['XDT_USER_DATA_DIR', env.XDT_USER_DATA_DIR],
+    ['XDT_DEVICE_ID_OVERRIDE', env.XDT_DEVICE_ID_OVERRIDE],
+    ['XDT_SCHEDULER_PASSIVE', env.XDT_SCHEDULER_PASSIVE],
+    ['XDT_ISOLATED', env.XDT_ISOLATED],
+    ['XDT_ISOLATED_NAME', env.XDT_ISOLATED_NAME],
     // 端点清单来源覆写:--endpoints-cdn(dev 走线上 CDN)/ local 模式的
     // endpoint.local.json 文件路径,均由主进程 clientEndpointsService 消费。
-    ['XDT_ENDPOINTS_CDN', process.env.XDT_ENDPOINTS_CDN],
-    ['XDT_ENDPOINT_MANIFEST_FILE', process.env.XDT_ENDPOINT_MANIFEST_FILE],
+    ['XDT_ENDPOINTS_CDN', env.XDT_ENDPOINTS_CDN],
+    ['XDT_ENDPOINT_MANIFEST_FILE', env.XDT_ENDPOINT_MANIFEST_FILE],
     // 启动即自动打开 DevTools(main 的 ready-to-show 里消费;见 bootstrap-electron)。
     // 给"快捷键/菜单打不开 DevTools"的环境兜底,QA 控制台验证依赖它。
-    ['OPEN_DEVTOOLS', process.env.OPEN_DEVTOOLS],
+    ['OPEN_DEVTOOLS', env.OPEN_DEVTOOLS],
   ].filter(([, value]) => value);
   if (envEntries.length === 0) return '';
 
@@ -541,6 +531,8 @@ async function main() {
   const killOnly = argv.includes('--kill-only');
   // --local 切换到本地模式(连 localhost:3333);缺省走 remote(连 xdt-api)。
   const mode = argv.includes('--local') ? 'local' : 'remote';
+  const startupConfig = applyDesktopDevStartupConfig({ argv, mode });
+  console.log(`==> Desktop region: ${startupConfig.region}`);
   // --passive: 定时任务被动模式 —— 本实例不参与自动触发(交给同机另一个实例,
   // 典型场景 dev + release 双开时 dev 让位)。实现方式是置 XDT_SCHEDULER_PASSIVE=1,
   // 经 devEnvPrefix 白名单透传进新开的系统终端 / 直接 spawn 的 dev 进程。
@@ -553,12 +545,13 @@ async function main() {
   // 经 devEnvPrefix 白名单透传,主进程 devCliFlags/clientEndpointsService 消费。
   // 注意 local 模式的 endpoint.local.json 生成不在本脚本——dev(local)脚本链里的
   // apps/desktop/scripts/dev-local-env.mjs 统一负责(human 直跑与 restart 同路径)。
-  if (argv.includes('--endpoints-cdn')) {
-    process.env.XDT_ENDPOINTS_CDN = '1';
-    console.log('==> Endpoints via CDN: dev will fetch the online endpoint manifest.');
+  if (startupConfig.endpointsCdn) {
+    console.log(`==> Endpoints via CDN: dev will fetch the ${startupConfig.region} online endpoint manifest.`);
+  } else if (mode === 'remote' && startupConfig.endpointManifestFile) {
+    console.log(`==> Endpoint manifest: ${startupConfig.endpointManifestFile}`);
   }
   // --isolated[=<名字>]: dev 使用独立的 userData 目录(数据库/登录态/会话全部与
-  // 正式版隔离,首次要重新走飞书登录)。不带名字 = 默认沙箱(Cindy-dev);
+  // 正式版隔离,首次要重新登录 Cindy 账号)。不带名字 = 默认沙箱(Cindy-dev);
   // 带名字 = 独立命名沙箱(Cindy-dev-<名字>),每个名字一条,可同时多开。
   // 实现:置 XDT_USER_DATA_DIR(主进程入口只在非 packaged 时应用,见
   // apps/desktop/src/main/index.ts),经 devEnvPrefix 白名单透传给 dev 进程。

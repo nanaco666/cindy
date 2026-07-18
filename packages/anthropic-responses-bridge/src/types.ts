@@ -143,6 +143,14 @@ export interface BridgeLogger {
  */
 export type BridgeWireProtocol = 'openai-responses';
 
+/** Provider 在上游返回非 2xx 后收到的请求级错误上下文。 */
+export interface BridgeUpstreamErrorInfo {
+  status: number;
+  body: string;
+  /** 本次实际发往上游的 provider headers；可能含凭证，只能用于内存态关联，禁止记录日志。 */
+  requestHeaders: Readonly<Record<string, string>>;
+}
+
 /**
  * 单个上游供应商的配置(= 订阅源 adapter 契约)。bridge 按 model 前缀匹配到某个 provider,
  * 用它的 upstream / headers / quirks 翻译转发。一个 bridge 实例可持有多个(codex 订阅 /
@@ -163,6 +171,12 @@ export interface BridgeProviderConfig {
    * 返回的 headers 与 server 的公共头(content-type / accept)合并。
    */
   buildHeaders: (ctx: { sessionId?: string }) => Promise<Record<string, string>>;
+  /**
+   * 上游返回非 2xx 后、错误响应写回调用方前触发。provider 可据此收口自己的认证状态；
+   * 回调异常只记日志，不覆盖原始上游错误。handler 会等待回调完成，保证错误到达 UI 时
+   * provider 的权威状态已经同步。
+   */
+  onUpstreamError?: (info: BridgeUpstreamErrorInfo) => void | Promise<void>;
   /**
    * 上游是否支持 `max_output_tokens`。默认 false —— codex 后端会 400;标准 OpenAI Responses / api.x.ai 支持。
    */
@@ -192,4 +206,3 @@ export interface UpstreamRateLimitInfo {
   limitTokens?: number;
   remainingTokens?: number;
 }
-

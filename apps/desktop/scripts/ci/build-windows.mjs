@@ -32,9 +32,9 @@ import {
   runSmokeTest,
   PACKAGED_APP_NAME,
 } from './lib.mjs';
-import { productionViteEnv } from '../../../../scripts/shared/production-endpoints.mjs';
+import { desktopClientBuildEnv } from '../../../../scripts/shared/client-endpoint-build-env.mjs';
 
-loadDotenv();
+loadDotenv(undefined, { refreshReleaseConfig: false });
 
 // ── 参数解析 ──────────────────────────────────────────────────────────────
 
@@ -116,7 +116,7 @@ async function main() {
     env: {
       ...process.env,
       NODE_ENV: 'production',
-      ...productionViteEnv(),
+      ...desktopClientBuildEnv(),
       APP_VERSION: version,
     },
   });

@@ -36,6 +36,7 @@
           "authorizeUrl": "https://slack.com/oauth/v2_user/authorize",
           "tokenUrl": "https://slack.com/api/oauth.v2.user.access",
           "clientId": "2372848536.11511864051187",
+          "clientIdAlternatives": ["2372848536.11619977511874"],
           "pkce": false,
           "scopeDelimiter": ",",
           "redirectPort": 53683,

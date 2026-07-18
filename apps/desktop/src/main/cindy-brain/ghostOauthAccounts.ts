@@ -292,14 +292,19 @@ export class GhostOauthAccountManager {
     ghostId: string,
     secretKey: string,
     decl: GhostOauthDecl,
+    clientIdOverride?: string,
   ): GhostOauthClientConfig | null {
     // broker 模式:服务端 secret 与内置 clientId 是绑定的一对,用户自填
     // client 无意义且必错(自填 id 配服务端 secret = invalid_client),
-    // 一律忽略自填、恒用内置 clientId。
+    // 一律忽略自填。缺省用内置 clientId;connect 可传已经过清单白名单
+    // 复验的备用 clientId,供同一意识按 region 选择不同 OAuth App。
     const customId = decl.tokenBroker ? null : this.deps.vault.read(ghostId, clientIdKey(secretKey));
     let clientId: string | null;
     let clientSecret: string | null | undefined;
-    if (customId) {
+    if (clientIdOverride !== undefined) {
+      clientId = clientIdOverride;
+      clientSecret = decl.clientSecret;
+    } else if (customId) {
       clientId = customId;
       clientSecret = this.deps.vault.read(ghostId, clientSecretKey(secretKey));
     } else {
@@ -395,9 +400,24 @@ export class GhostOauthAccountManager {
        * 意识永远不能借连接动作申请清单没声明过的授权面。
        */
       scopes?: readonly string[];
+      /**
+       * broker 模式本次授权使用的公开 clientId。只接受清单默认值或
+       * clientIdAlternatives 明确列出的值;用于意识按宿主 region 选 App。
+       */
+      clientId?: string;
     },
   ): Promise<GhostOauthConnectResult> {
-    const config = this.readClientConfig(ghostId, secretKey, decl);
+    if (opts?.clientId !== undefined) {
+      const allowedClientIds = [decl.clientId, ...(decl.clientIdAlternatives ?? [])];
+      if (!decl.tokenBroker || !allowedClientIds.includes(opts.clientId)) {
+        return {
+          ok: false,
+          error: 'INVALID_CONFIG',
+          detail: '本次授权选择的 clientId 未在清单中声明',
+        };
+      }
+    }
+    const config = this.readClientConfig(ghostId, secretKey, decl, opts?.clientId);
     if (!config) return { ok: false, error: 'NO_CLIENT_CONFIG' };
     if (decl.brokerBounce && !config.publicRedirectUri) {
       return {

@@ -73,9 +73,8 @@ interface TabBarProps {
   onCloseAll?: () => void;
   /** 「在新窗口中打开侧边栏」(开偏好 + 弹出子窗口);仅 showWindowControls=true
    *  (Win 端)时渲染在 maximize 左侧。Mac 端按钮走 MainLayout 浮层。
-   *  ⚠️ 收起按钮(onCloseSidebar)在主窗口内嵌形态已不再传入(B2b:折叠/展开
-   *  统一走聊天区角上的常驻 toggle,位置固定不跟面板跑);detached 子窗口等
-   *  其它宿主仍可传,按钮按经典样式渲染。 */
+   *  Windows 主窗口展开态同时传入 onCloseSidebar,折叠按钮归属本 TabBar;
+   *  折叠后再由聊天区角上的 chip 提供展开入口。 */
   onDetach?: () => void;
   /** 本条横带是否作为**窗口**拖拽区(B3):主窗口内嵌形态传 false —— 空白处是
    *  "拖面板"手势面(窗口拖拽区收不到鼠标事件,二者物理互斥;拖窗走左栏顶行);

@@ -10,7 +10,7 @@
 > 签名参数**零代码默认值**:keystore 路径 / alias / 两个口令全部由 `XDT_ANDROID_*` 环境变量提供,
 > `--execute` 缺任一项报错(本文 §7 的"路径/alias 有默认值"描述为历史设计);
 > scheme 仍为 `lizcn`。**换 keystore + 换包名 = 全新安装线**:旧 `com.xd.lizcn` / `com.xd.maker` 包
-> 无法覆盖安装,需重装;飞书后台需按新 package + 新 SHA256 重新登记(§16 待办随之更新对象)。
+> 无法覆盖安装,需重装；原生飞书 SSO 与相应 package/SHA 登记已退役。
 > 现状以 `RELEASING.md` 与脚本头注释为准。
 >
 > ⚠️ **分发链路变更(2026-07-06,已实现,本文其余章节的 NPKG 描述为历史设计)**:冷更 APK
@@ -51,13 +51,13 @@
 | 4 | 冷更用**自有 release keystore** 本地签 | mac 上 `gradlew assembleRelease` 用 `xdmaker-release.jks` 出 APK;**无重签环节**,自签即最终生产签名 |
 | 5 | `mobile-update-server` 部署在 Linux;OSS/CDN 复用桌面端机制 | 同 iOS;CDN 布局 `mobile-ota/android/*`(与 iOS `mobile-ota/ios/*` 平级隔离) |
 | 6 | **EAS 保留且仍可用**,新脚本不得影响既有 EAS 逻辑 | 靠 `EXPO_PUBLIC_XDT_OTA_SELFHOST` env gate 隔离,非自建 Expo config 逐字节不变 |
-| 7 | Android package 固定为 `com.xd.lizcn` | EAS/TestFlight 与自建线统一 app identity;连带飞书登记 Android 包名 + SHA256 的外部待办(§13) |
+| 7 | Android package 固定为 `com.xd.lizcn` | 历史身份决策；现行 region 身份见本文顶部更新与 `RELEASING.md` |
 | 8(Android 特有) | **versionCode 单调递增**,APK 覆盖安装的硬约束 | 值 committed 在仓库;`release-android-local.mjs` 检测到 ≤ 线上基线时自动 +1 写回(发布后 commit 回 main),语义对齐 iOS `buildNumber` |
 
 ## 3. 关键事实(实现前提)
 
 - 工程是 **managed workflow**(无 `android/` 目录),每次出包需 `expo prebuild -p android` 现生成原生工程。
-- 有 3 个本地原生模块需正确 autolink:`xdt-feishu-login` / `xdt-mobile-realtime-audio` / `xdt-tapdb`,外加从私有构建配置读取 App ID 的飞书 config plugin。
+- 有 2 个本地原生模块需正确 autolink:`xdt-mobile-realtime-audio` / `xdt-tapdb`；`xdt-feishu-login` 与其 config plugin 已删除。
 - Expo SDK ~56 / RN 0.85 / `expo-updates ~56`——完整支持 Expo Updates Protocol 自建服务器,客户端运行时 OTA 逻辑零改动。
 - **工具链**:mac 上需 **Android SDK**(`ANDROID_HOME` / `sdkmanager` / build-tools 含 `apksigner`)+ **JDK 17**。JDK 17 解析**复用 `scripts/java-runtime-env.mjs` 的 `resolveJavaRuntimeEnv()`**(已在 sim/e2e 脚本使用,自动探测 `/usr/libexec/java_home -v 17`、homebrew openjdk@17)。
 - **签名 keystore(已就绪)**:`xdmaker-release.jks`(alias `xdmaker-release`,storeType JKS,RSA 2048,证书 SHA256 `AD:73:7E:7E:13:1A:63:C6:B2:2B:43:D2:E6:76:9C:48:E5:C5:4C:65:25:32:85:A0:43:55:07:11:44:59:92:E4`,有效期至 2053)。文件在**仓库外** `/Users/cn-ios/Documents/xdt/XDMakerMobileCer/Android/`,**不进仓库**;口令同目录 `signing-info.txt`(明文,**严禁复制进仓库工作区**,红线 23)。脚本通过环境变量读取路径与口令(§7),自签即最终生产签名——**NPKG 不重签**,故无 iOS 的证书 Team 校验环节。
@@ -112,7 +112,7 @@ flowchart TD
 1. **`app.config.js` 自建分支补 `android.versionCode`**:默认 `android.package` 已是 `com.xd.lizcn`;自建分支注入 `android.versionCode = Number(process.env.XDT_ANDROID_VERSION_CODE)`(缺省不注入),并使用固定 OTA 占位 URL + `checkAutomatically=NEVER` + `disableAntiBrickingMeasures=true`。**非自建路径仍原样返回 app.json**(红线 1)。
 2. **JS 热更**:启动先拉 region 对应 `endpoint.json?t=<Date.now()>`,取 `mobileUpdateBaseUrl` 运行时覆盖 Expo Updates URL 为 `${base}/manifest`,再手动 check/fetch;真实更新域名不参与 build/fingerprint。
 3. **整包发现平台化**:`src/update/useBundleUpdatePrompt.ts` 当前硬编码 `fetchLatestRelease('ios')` → 改为 `fetchLatestRelease(Platform.OS === 'android' ? 'android' : 'ios')`(`import { Platform } from 'react-native'`)。`fetchLatestRelease` 已按 `?platform=` 参数化,`preferredInstallUrl` 已回退 `installUrl`——**只此一处 IO 平台化**,判定纯函数与弹窗逻辑不动。
-4. **Android package 统一为 `com.xd.lizcn`**;`scheme` 固定为 `lizcn`。EAS/TestFlight 默认优先走飞书 App 原生 SSO;自建线是否启用由发布 env 控制,启用时必须保留浏览器 OAuth 兜底以覆盖 §16 的 appId callback scheme 共装风险。
+4. **Android package / scheme 按 region 保持稳定**；登录统一走 Cindy auth-server，不再注入飞书 appId 或原生飞书 SSO。
 
 ## 6.5 地区分包(region,cn / global)
 
@@ -201,7 +201,7 @@ smash-dev/xdt-maker/mobile-ota/
 
 1. **EAS 指纹不变**:`app.config.js` 在无 `EXPO_PUBLIC_XDT_OTA_SELFHOST` 时逐字节原样返回;`android.versionCode` **只在自建分支注入** → EAS/beta Android OTA runtime 不受影响。**实现后必须验证**(§15)。
 2. **冷热同源(生命线)**:`release-android-local.mjs` 与 `release-android-ota.mjs` 必须用同一条 `fingerprint:generate --platform android` + 同一 self-host env;禁止一侧用 eas-cli 指纹、另一侧用本地指纹。
-3. **package / scheme 稳定**:EAS 与自建线都使用 `com.xd.lizcn` + `lizcn://auth`;EAS/TestFlight 默认优先走飞书 App 原生 SSO并保留浏览器 OAuth 兜底。自建线只通过 `EXPO_PUBLIC_XDT_OTA_SELFHOST=1` 切换 OTA URL 与本地签名链路,native SSO 是否启用由发布 env 显式决定。
+3. **package / scheme 稳定**:按 region 使用固定身份与 OAuth callback；自建线只通过 `EXPO_PUBLIC_XDT_OTA_SELFHOST=1` 切换 OTA URL 与本地签名链路，登录统一走 Cindy auth-server。
 4. **整包可覆盖安装**:同 `package`(`com.xd.lizcn`)+ **同一 keystore 签名**(签名不一致 Android 拒绝覆盖安装)+ `versionCode` 严格递增,三者缺一装不上。
 5. **OSS prefix 隔离**:Android OTA 只写 `xdt-maker/mobile-ota/android/`(及共享 `assets/`),不碰 iOS `mobile-ota/ios/` 与桌面端产物。
 6. **写操作默认 dry-run**:冷更上传 NPKG、热更上传 OSS 都必须显式 `--execute`。
@@ -234,8 +234,7 @@ smash-dev/xdt-maker/mobile-ota/
 ## 16. 外部登记待办(不阻塞写代码,阻塞真实发版)
 
 1. **NPKG APK 上传路径确认**:确认 NPKG 支持"上传 APK → 取下载/安装链接"(Android 不重签)。未确认前 `--skip-npkg` 兜底。
-2. **飞书后台登记 `com.xd.lizcn` Android**:EAS/TestFlight 已要求新 package 使用同一飞书 appId 走原生 SSO;发版前必须确认飞书开放平台登记覆盖 package + 签名 SHA256(§3 的 `AD:73:...:E4`)。
-3. **历史共装 URL scheme 冲突的处理口径(2026-07-08)**:浏览器 OAuth 回调已收敛:新包统一使用 `lizcn://auth`,server 通过 `lizcn.` state 前缀回跳新 scheme,无前缀历史包仍回 `xdmaker://auth`。原生飞书 SSO 仍会注册由私有 `feishuAppId` 派生的 callback scheme,旧包未卸载时可能抢回调;客户端必须对 native SSO 设置超时并回退浏览器 OAuth,真实内测建议先移除旧 `com.xdtmaker.mobile` 包。
+2. 原生飞书 SSO 与相应 Android package / 签名登记已退役，不再是发版前置条件。
 
 ## 17. 实现状态(2026-07-05,代码已落地,真实构建/上传待外部依赖)
 
@@ -258,10 +257,10 @@ smash-dev/xdt-maker/mobile-ota/
 
 ### 首次真实 Android 构建发现(2026-07-05,`:local --execute --skip-npkg`)
 
-在装好工具链(openjdk@17 + android-commandlinetools + `platforms;android-36` / `build-tools;36.0.0` + 两个 NDK 由 AGP 自动下)后实跑,**本发布流程本身全部跑通**:fingerprint(android)→ prebuild(`com.xd.maker` + versionCode 注入,历史改名前产物)→ **build.gradle 签名 patch 生效** → JDK17 探测 → gradle 配置/编译 770+ task。**但 APK 目前打不出来,卡在 §3 早已点名的「3 个本地原生模块」在 Android 上的首次编译**——与本发布脚本无关,属模块自身问题:
+在装好工具链(openjdk@17 + android-commandlinetools + `platforms;android-36` / `build-tools;36.0.0` + 两个 NDK 由 AGP 自动下)后实跑,**本发布流程本身全部跑通**:fingerprint(android)→ prebuild(`com.xd.maker` + versionCode 注入,历史改名前产物)→ **build.gradle 签名 patch 生效** → JDK17 探测 → gradle 配置/编译 770+ task。以下是当时的历史阻塞记录；其中 `xdt-feishu-login` 后续已整体删除，不再属于当前构建依赖:
 
 1. **`xdt-tapdb`(真实 Kotlin 编译错误,阻断)**:`modules/xdt-tapdb/android/.../XdtTapdbModule.kt:43/63` —— `TapTapSdkOptions(clientId, clientToken, region)` 第三参现在要 `Int`,而 `resolveRegion()` 返回 `TapTapRegion` 枚举(类型不匹配)。该模块 Android 源码对着的 TapDB SDK API 版本与解析到的不一致,需模块 owner 按当前 SDK 修正。
-2. **`xdt-feishu-login`(flatDir 传递解析)**:vendored `larksso-3.0.10.aar` 只在模块自身 `flatDir { dirs 'libs' }` 声明,`:app` 解析 release classpath 时传递解析不到(flatDir 无 POM、不跨工程传递)。iOS 走 CocoaPods 无此问题。修法:给 app 加一个 Expo config plugin,在 prebuild 时把该 libs flatDir 注入 root `allprojects.repositories`(app 本地、随 prebuild 持久,不改共享模块)。实测临时在生成的 `android/build.gradle` 手加该 flatDir 后 larksso 即解析通过。
+2. **历史:`xdt-feishu-login` flatDir 传递解析**:该模块与 vendored larksso 已删除；以下补丁只用于解释旧构建记录，不再执行。
 3. **Gradle Metaspace(内存配置)**:生成的 `android/gradle.properties` 默认 `-XX:MaxMetaspaceSize=512m`,大型多模块 + KSP 编译 OOM;需调大(如 1–2g)。可由 §2 的 config plugin 一并写入,或发布脚本 patch。
 
 结论:**打包链路成立**,真正出 APK 前需先解决上述 3 个模块/环境项。
@@ -270,13 +269,13 @@ smash-dev/xdt-maker/mobile-ota/
 
 三项全部收口后 `:local --execute --skip-npkg` **构建成功产出签名 APK**:
 
-1. **`xdt-feishu-login` larksso flatDir**:未用 config plugin(会进 Expo config `plugins`、改 `@expo/fingerprint`、殃及 EAS iOS 基线)。改为在**发布脚本 prebuild 后 patch 生成的 `android/build.gradle`**(把 libs flatDir 加进 `allprojects.repositories`),与签名 patch 同一阶段——只动生成的 `android/`,对 iOS / mac / win / EAS / 指纹**零影响**。纯函数 `patchRootBuildGradleFeishuFlatDir`(单测覆盖)。
+1. **历史:`xdt-feishu-login` larksso flatDir**:旧发布脚本曾在 prebuild 后 patch 生成工程；模块下线后该 patch 与相关单测已一并删除。
 2. **Metaspace**:同一 patch 阶段 bump `android/gradle.properties` 的 `org.gradle.jvmargs`(heap 4g / metaspace 2g),纯函数 `patchGradlePropertiesMemory`(单测覆盖)。
 3. **`xdt-tapdb` Kotlin 类型错误**:经 `javap` 核对 `tap-core:4.10.5` 实际 API —— `TapTapRegion` 是 `@IntDef` 注解(`CN`/`GLOBAL` 为 `Int` 常量)、`TapTapSdkOptions(...)` 第三参为 `int`。故把 `resolveRegion(): TapTapRegion` 改为 `: Int`(Android-only 源文件,原本就编译不过,无回退风险)。
 
 **产物校验**:`app-release.apk`(~140MB),`apksigner verify --print-certs` 证书 **SHA-256 = `ad73…5992e4`** == §3 的 `AD:73:…:E4`(自有 keystore 自签)、v2 签名 scheme verified;`aapt2 dump badging` = `package=com.xd.maker versionCode=1 versionName=1.0.0 compileSdk=36`。整条冷更构建段(fingerprint → prebuild → 三处 patch → gradle → 签名 APK)**在 mac 上实跑通过**。NPKG 上传段与 OTA 端到端仍待 §16 外部项。
 
-> 遗留:`expo run:android`(dev)与未来 EAS Android 不走发布脚本,仍会撞 larksso flatDir——若要它们也能构建,需 feishu 模块自身收口(模块 owner),与本发布流程解耦。
+> 该历史遗留已随 `xdt-feishu-login` 模块删除而解除。
 
 ## 相关文档
 

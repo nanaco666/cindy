@@ -18,6 +18,8 @@ const bounds = { minContentHeight: 28, maxContentHeight: 400 };
 
 describe('resolveComposerInputHeight', () => {
   it('keeps the legacy auto-grow behavior when no user height is set', () => {
+    // 回归:激活态 scrollEnabled 恒 true(不再依赖 onContentSizeChange 测量,
+    // RN 新架构下该回调漏报会让开关卡死在 false,超限后光标区域不可见)。
     expect(resolveComposerInputHeight({
       contentHeight: 120,
       userContentHeight: null,
@@ -26,8 +28,19 @@ describe('resolveComposerInputHeight', () => {
     })).toEqual({
       mode: 'auto',
       visibleContentHeight: 120,
-      scrollEnabled: false,
+      scrollEnabled: true,
     });
+  });
+
+  it('keeps inner scroll on even when the measured content height is stale at one line', () => {
+    // 复现原 bug 的场景:内容实际已超上限,但测量回调漏报、contentHeight 停在单行——
+    // 开关不得再依赖测量值。
+    expect(resolveComposerInputHeight({
+      contentHeight: 28,
+      userContentHeight: null,
+      autoMaxContentHeight: 270,
+      bounds,
+    }).scrollEnabled).toBe(true);
   });
 
   it('caps auto mode at the auto max and enables inner scroll beyond it', () => {
@@ -61,7 +74,7 @@ describe('resolveComposerInputHeight', () => {
     })).toEqual({
       mode: 'manual',
       visibleContentHeight: 200,
-      scrollEnabled: false,
+      scrollEnabled: true,
     });
   });
 

@@ -233,7 +233,14 @@ describe('getRunningSnapshot 后台 subagent 折算(真 store)', () => {
     } as CCAgentStreamEvent);
   };
 
-  it('主 turn 结束但 subagent 还在跑 → 快照保持 running;完成→桥接→wake turn→最终 Done 才转 stopped', () => {
+  /**
+   * running→stopped 的 transition 条目由 store 调度的 macrotask 显式清除
+   * (getter 纯化后读取不再消费,见 getRunningSnapshot 注释)——等一拍让清除落地。
+   */
+  const flushStopTransition = (): Promise<void> =>
+    new Promise((resolve) => setTimeout(resolve, 1));
+
+  it('主 turn 结束但 subagent 还在跑 → 快照保持 running;完成→桥接→wake turn→最终 Done 才转 stopped', async () => {
     const sid = `wake-${Math.random().toString(36).slice(2, 8)}`;
     try {
       // turn start + subagent 启动
@@ -253,17 +260,20 @@ describe('getRunningSnapshot 后台 subagent 折算(真 store)', () => {
       makerChatStore.__applyStatusUpdateForTest(sid, statusUpdate(sid, true));
       expect(makerChatStore.getRunningSnapshot().get(sid)?.isRunning).toBe(true);
 
-      // wake turn 结束,无 running 任务 → 一次 transition(isRunning:false)后条目消失
+      // wake turn 结束,无 running 任务 → transition(isRunning:false)投递一个
+      // 窗口(重复读取不消费),调度清除落地后条目消失
       makerChatStore.__applyStatusUpdateForTest(sid, statusUpdate(sid, false));
       const transition = makerChatStore.getRunningSnapshot().get(sid);
       expect(transition?.isRunning).toBe(false);
+      expect(makerChatStore.getRunningSnapshot().get(sid)?.isRunning).toBe(false);
+      await flushStopTransition();
       expect(makerChatStore.getRunningSnapshot().has(sid)).toBe(false);
     } finally {
       makerChatStore.purgeSession(sid);
     }
   });
 
-  it('local_bash 后台任务不折算:主 turn 结束即 stopped(dev server 不永转)', () => {
+  it('local_bash 后台任务不折算:主 turn 结束即 stopped(dev server 不永转)', async () => {
     const sid = `bash-${Math.random().toString(36).slice(2, 8)}`;
     try {
       makerChatStore.__applyStatusUpdateForTest(sid, statusUpdate(sid, true));
@@ -274,13 +284,14 @@ describe('getRunningSnapshot 后台 subagent 折算(真 store)', () => {
       makerChatStore.__applyStatusUpdateForTest(sid, statusUpdate(sid, false));
       const transition = makerChatStore.getRunningSnapshot().get(sid);
       expect(transition?.isRunning).toBe(false);
+      await flushStopTransition();
       expect(makerChatStore.getRunningSnapshot().has(sid)).toBe(false);
     } finally {
       makerChatStore.purgeSession(sid);
     }
   });
 
-  it('stopSession 把 wake 型 running 任务标 stopped、快照回落;非 wake 任务(bash)不动', () => {
+  it('stopSession 把 wake 型 running 任务标 stopped、快照回落;非 wake 任务(bash)不动', async () => {
     const sid = `stop-${Math.random().toString(36).slice(2, 8)}`;
     try {
       makerChatStore.__applyStatusUpdateForTest(sid, statusUpdate(sid, true));
@@ -292,6 +303,7 @@ describe('getRunningSnapshot 后台 subagent 折算(真 store)', () => {
       makerChatStore.stopSession(sid);
       const transition = makerChatStore.getRunningSnapshot().get(sid);
       expect(transition?.isRunning).toBe(false);
+      await flushStopTransition();
       expect(makerChatStore.getRunningSnapshot().has(sid)).toBe(false);
       // scope='wake':subagent 收口、后台 bash(interrupt 杀不掉的长驻进程)不动
       const tasks = makerChatStore.getSnapshot(sid).taskUpdates;
@@ -302,7 +314,7 @@ describe('getRunningSnapshot 后台 subagent 折算(真 store)', () => {
     }
   });
 
-  it('远程(device-link)会话豁免折算:主 turn 结束即 stopped,不受后台任务影响', () => {
+  it('远程(device-link)会话豁免折算:主 turn 结束即 stopped,不受后台任务影响', async () => {
     // review P1:远程 mirror 事件有设计内丢失窗口且 taskUpdates 不在 reconcile
     // 对账内,终态丢失会永久转圈——远程侧保持修复前行为换确定性。
     const sid = `remote-${Math.random().toString(36).slice(2, 8)}`;
@@ -313,13 +325,14 @@ describe('getRunningSnapshot 后台 subagent 折算(真 store)', () => {
       makerChatStore.__applyStatusUpdateForTest(sid, statusUpdate(sid, false));
       const transition = makerChatStore.getRunningSnapshot().get(sid);
       expect(transition?.isRunning).toBe(false);
+      await flushStopTransition();
       expect(makerChatStore.getRunningSnapshot().has(sid)).toBe(false);
     } finally {
       makerChatStore.purgeSession(sid);
     }
   });
 
-  it('codex 会话的 agent_task_update 不参与折算(provider gate)', () => {
+  it('codex 会话的 agent_task_update 不参与折算(provider gate)', async () => {
     const sid = `codex-${Math.random().toString(36).slice(2, 8)}`;
     try {
       makerChatStore.__applyStatusUpdateForTest(sid, statusUpdate(sid, true));
@@ -333,7 +346,37 @@ describe('getRunningSnapshot 后台 subagent 折算(真 store)', () => {
       makerChatStore.__applyStatusUpdateForTest(sid, statusUpdate(sid, false));
       const transition = makerChatStore.getRunningSnapshot().get(sid);
       expect(transition?.isRunning).toBe(false);
+      await flushStopTransition();
       expect(makerChatStore.getRunningSnapshot().has(sid)).toBe(false);
+    } finally {
+      makerChatStore.purgeSession(sid);
+    }
+  });
+
+  it('契约:两次 notify 之间连续读取返回同一引用,transition 不被读取消费', async () => {
+    const sid = `contract-${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      makerChatStore.__applyStatusUpdateForTest(sid, statusUpdate(sid, true));
+      const running1 = makerChatStore.getRunningSnapshot();
+      const running2 = makerChatStore.getRunningSnapshot();
+      expect(running2).toBe(running1); // 无 mutation → 同一引用
+
+      makerChatStore.__applyStatusUpdateForTest(sid, statusUpdate(sid, false));
+      const gen1 = makerChatStore.getRunningSnapshot();
+      const gen2 = makerChatStore.getRunningSnapshot();
+      const gen3 = makerChatStore.getRunningSnapshot();
+      // useSyncExternalStore 契约:transition 投递窗口内引用稳定、内容不变,
+      // 读取绝不消费(旧实现第二次读就删条目,触发 React getSnapshot 警告)。
+      expect(gen2).toBe(gen1);
+      expect(gen3).toBe(gen1);
+      expect(gen1.get(sid)?.isRunning).toBe(false);
+
+      // 显式清除(store 调度的 macrotask)落地后条目消失,之后继续引用稳定。
+      await flushStopTransition();
+      const cleared1 = makerChatStore.getRunningSnapshot();
+      const cleared2 = makerChatStore.getRunningSnapshot();
+      expect(cleared1.has(sid)).toBe(false);
+      expect(cleared2).toBe(cleared1);
     } finally {
       makerChatStore.purgeSession(sid);
     }

@@ -26,7 +26,7 @@ import {
   uploadVersionedGzImmutable,
   writePackageVersion,
   writeReleaseManifest, assertNotPublishingCindyToLegacyChannel } from './ci/lib.mjs';
-import { productionViteEnv } from '../../../scripts/shared/production-endpoints.mjs';
+import { desktopClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
 
 loadDotenv();
 // 渠道冻结硬闸:Cindy 布局产物禁止发布到老 /xdt-maker 前缀(见 lib.mjs)。
@@ -104,7 +104,7 @@ async function main() {
     env: {
       ...process.env,
       NODE_ENV: 'production',
-      ...productionViteEnv({ allowEnvOverride: false }),
+      ...desktopClientBuildEnv({ allowEnvOverride: false }),
       APP_VERSION: version,
     },
   });

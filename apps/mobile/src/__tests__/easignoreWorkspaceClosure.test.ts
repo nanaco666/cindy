@@ -52,6 +52,10 @@ describe('EAS .easignore covers apps/mobile workspace dependency closure', () =>
     expect(easignore).toMatch(/^!scripts\/ensure-agent-binaries\.mjs$/m);
     expect(easignore).toMatch(/^!scripts\/agent-binary-cdn-fallback\.mjs$/m);
     expect(easignore).toMatch(/^!scripts\/fix-node-pty-perms\.mjs$/m);
+    expect(easignore).toMatch(/^!scripts\/shared$/m);
+    expect(easignore).toMatch(
+      /^!scripts\/shared\/client-endpoint-build-env\.cjs$/m,
+    );
     expect(easignore).toMatch(/^!tools\/shared\/fetch-with-timeout\.mjs$/m);
     expect(easignore).toMatch(/^!cindy-protocol$/m);
     expect(easignore).toMatch(/^!cindy-protocol\/\*\*$/m);

@@ -56,4 +56,16 @@ describe('FORGE_GUIDE · oauth 凭证章节', () => {
       expect(FORGE_GUIDE).toContain(marker);
     }
   });
+
+  it('region request + clientIdAlternatives 讲清插件自选 App 与主机白名单', () => {
+    for (const marker of [
+      'cindy.request',
+      '/app-context',
+      'clientIdAlternatives',
+      "region:'cn'|'global'",
+      '主机会做清单白名单复验',
+    ]) {
+      expect(FORGE_GUIDE).toContain(marker);
+    }
+  });
 });

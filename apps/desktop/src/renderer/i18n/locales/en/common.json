@@ -867,15 +867,15 @@
     "connections": {
       "codex": {
         "logoutConfirm": {
-          "title": "Sign out of Codex?",
-          "description": "{{appName}} will stop using this ChatGPT subscription. Your Codex CLI sign-in stays unchanged; authorize here again to reconnect.",
-          "confirm": "Sign Out of Codex",
+          "title": "Disconnect ChatGPT Account?",
+          "description": "{{appName}} will stop using this ChatGPT subscription in Codex and Claude. Your system Codex CLI sign-in stays unchanged.",
+          "confirm": "Disconnect ChatGPT",
           "cancel": "Cancel"
         },
         "toast": {
-          "loggedOut": "Signed out of Codex",
-          "loginFailed": "Failed to sign in to Codex. Please retry",
-          "logoutFailed": "Failed to sign out of Codex. Please retry",
+          "loggedOut": "ChatGPT account disconnected",
+          "loginFailed": "Couldn’t connect ChatGPT. Try again",
+          "logoutFailed": "Couldn’t disconnect ChatGPT. Try again",
           "binaryMissing": "Codex component is unavailable, please restart the app"
         },
         "apiMode": {
@@ -974,8 +974,12 @@
       },
       "openai": {
         "title": "OpenAI",
-        "subtitle": "GPT models · ChatGPT subscription",
-        "modelLabel": "GPT models"
+        "subtitle": "Connect one ChatGPT account for both Codex and Claude",
+        "modelLabel": "GPT models",
+        "reconnectRequired": "Reconnect Needed",
+        "connect": "Connect ChatGPT",
+        "reconnect": "Reconnect ChatGPT",
+        "cancelConnect": "Cancel Connection"
       },
       "xai": {
         "title": "xAI",
@@ -1082,6 +1086,19 @@
           "testing": "Testing…",
           "ok": "Connected ({{ms}} ms)",
           "needFields": "Fill in the base URL and at least one model ID first"
+        },
+        "fetch": {
+          "button": "Fetch model list",
+          "fetching": "Fetching models…",
+          "needBaseUrl": "Fill in the base URL first",
+          "failed": "Failed to fetch the model list",
+          "pickerTitle": "Select models to add ({{runtime}})",
+          "pickerCount": "{{selected}} of {{total}} selected",
+          "searchPlaceholder": "Search models…",
+          "selectAll": "Select all",
+          "clearAll": "Clear",
+          "empty": "No matching models",
+          "confirm": "Add selected models ({{count}})"
         },
         "authMode": {
           "label": "Authentication",
@@ -2382,6 +2399,13 @@
     "unavailable": "Sign-in is temporarily unavailable",
     "retry": "Retry",
     "browserWaiting": "Complete verification in your browser",
+    "browserCallback": {
+      "successTitle": "Signed in",
+      "successBody": "You can close this page and return to {{appName}}.",
+      "errorTitle": "Sign-in not completed",
+      "errorBody": "Please return to {{appName}} and sign in again.",
+      "returnButton": "Return to {{appName}}"
+    },
     "globalRegion": "Global",
     "errors": {
       "fallback": "Sign-in failed. Please try again.",
@@ -3033,6 +3057,7 @@
     },
     "user": {
       "settingsLink": "Settings, current user: {{name}}",
+      "canaryBadge": "Canary user",
       "viewReleaseNotes": "View release notes",
       "reopenUpdateBanner": "Update ready — click to review"
     },
@@ -3489,11 +3514,11 @@
       "budgetModelHint": "If this keeps failing, try switching to the standard GPT model.",
       "codexAuthMissing": "Remote codex hasn't been signed in yet (401 Unauthorized). Click \"Sync auth\" to push your local ~/.codex/auth.json to the remote, then retry.",
       "codexAuthMissingLocal": "Codex credentials missing or expired (401 Unauthorized). Re-login in {{appName}} Settings → Codex (the app-server will auto-restart on login), or run `codex login` in your terminal and toggle the auth mode in Settings once to restart the app-server. Then start a new session.",
-      "codexSessionExpired": "Your Codex login has expired. Please sign in again and retry.",
+      "codexSessionExpired": "The OpenAI connection needs an update. Reconnect ChatGPT to continue; {{appName}} won’t sign your system Codex CLI out or ask you to reconnect other model sources.",
       "codexSessionExpiredDialog": {
-        "title": "Codex login expired",
-        "description": "Your current Codex login is no longer valid. Sign in again to continue using Codex sessions.",
-        "confirm": "Sign in again",
+        "title": "OpenAI Connection Needs an Update",
+        "description": "{{appName}} temporarily can’t use your ChatGPT account. Reconnecting restores OpenAI access for both Codex and Claude; {{appName}} won’t sign your system Codex CLI out or ask you to reconnect other model sources.",
+        "confirm": "Reconnect ChatGPT",
         "cancel": "Later"
       },
       "codexAuthSynced": "Auth synced. Click \"Retry\" to resend.",
@@ -3507,7 +3532,8 @@
       "forkStripEncrypted": "Fork and strip",
       "forkStripEncryptedRunning": "Forking...",
       "forkStripEncryptedTitle": "Fork and strip into a new session",
-      "codexSessionExpiredLogin": "Log in again",
+      "codexSessionExpiredLogin": "Reconnect ChatGPT",
+      "codexSessionReconnected": "ChatGPT is reconnected. Click “Retry” to continue.",
       "networkUnreachable": "Network error: the service is temporarily unreachable. Click \"Retry\" to try again.",
       "networkUnreachableNoRetry": "Network error: the service is temporarily unreachable.",
       "networkAutoRetrying": "Network error — retrying automatically…",
@@ -5695,7 +5721,7 @@
   "logic": {
     "toasts": {
       "googleConnected": "Google connected",
-      "codexConnected": "Codex connected",
+      "codexConnected": "ChatGPT account connected",
       "feishuBotConnected": "FeiShu bot connected",
       "feishuBotConflict": "This App is already in use — a colleague may be using the same App ID",
       "feishuBotConnectFailed": "Connection failed, check App ID / Secret",
@@ -5754,8 +5780,8 @@
       "voiceApiKeyAuthDescription": "The current voice input provider uses Cindy AI. Cindy AI is not connected yet, so voice input cannot start. Open Model Providers to connect it?",
       "voiceDirectApiKeyAuthTitle": "Voice input API key required",
       "voiceDirectApiKeyAuthDescription": "The current voice input provider requires a direct API key. Add it in API Keys to start voice input?",
-      "codexVoiceAuthTitle": "Codex connection required",
-      "codexVoiceAuthDescription": "Voice input now uses the Codex ChatGPT login for GPT realtime speech recognition. Codex is not connected or authorization expired. Go to Settings → Providers to connect?",
+      "codexVoiceAuthTitle": "ChatGPT Connection Required",
+      "codexVoiceAuthDescription": "Voice input uses a connected ChatGPT account for GPT realtime speech recognition. The account is not connected or needs an update. Open Model Providers to connect ChatGPT?",
       "codexBinaryMissingTitle": "Codex component not ready",
       "codexBinaryMissingDescription": "The Codex component is not ready yet, so this feature cannot be used. Try again later or check the Codex connection in Settings → Providers.",
       "goToSettings": "Open Settings",

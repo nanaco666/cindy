@@ -4,7 +4,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createLogger } from '../../logger.js';
-import { GHOST_SCHEME, ghostPartition, type InstalledGhost } from '../../../shared/ghost.js';
+import {
+  GHOST_SCHEME,
+  ghostPartition,
+  type GhostAppContextResult,
+  type InstalledGhost,
+} from '../../../shared/ghost.js';
 import { GHOST_BOOT_PATH, ghostBootHtml, ghostFileMime, resolveGhostFilePath } from './ghostFiles.js';
 import { handleGhostKvRequest, readBoundedBodyText } from './ghostKvEndpoint.js';
 import { resolveHashRef as resolveBlobHashRef } from '../../cindy-media/blobStore.js';
@@ -115,6 +120,16 @@ export function setGhostWakeHandler(
   handler: (ghostId: string) => Promise<{ state: string }>,
 ): void {
   ghostWakeHandler = handler;
+}
+
+/**
+ * 宿主公开上下文提供器(index.ts 注入)。电子脑走 cindy.request,设置页/面板
+ * 没有 preload 桥,走同源只读 `/app-context`;两路必须返回同一份构建身份。
+ */
+let ghostAppContextProvider: (() => GhostAppContextResult) | null = null;
+
+export function setGhostAppContextProvider(provider: () => GhostAppContextResult): void {
+  ghostAppContextProvider = provider;
 }
 
 /**
@@ -252,6 +267,19 @@ function registerGhostProtocol(partition: string, ghost: InstalledGhost): void {
         return new Response(JSON.stringify(wake), {
           status: 200,
           headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-cache' },
+        });
+      }
+      // /app-context:设置页/面板读取宿主公开构建上下文。只读、零用户数据,
+      // 与电子脑 cindy.request({kind:'app-context'}) 同返回契约。
+      if (url.pathname === '/app-context') {
+        if (request.method !== 'GET') return new Response(null, { status: 405 });
+        if (!ghostAppContextProvider) return new Response(null, { status: 503 });
+        return new Response(JSON.stringify(ghostAppContextProvider()), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'no-cache',
+          },
         });
       }
       // /kv:意识自定义参数存取(FORGE_GUIDE §4.8)。设置页/面板/电子脑

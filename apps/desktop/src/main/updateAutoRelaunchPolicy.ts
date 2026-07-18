@@ -1,8 +1,4 @@
-import {
-  getUpdateRelaunchScreenBlockReason,
-  type UpdateRelaunchScreenBlockReason,
-  type UpdateSystemIdleState,
-} from './updateRelaunchSafety';
+import type { UpdateSystemIdleState } from './updateRelaunchSafety';
 
 export const AUTO_UPDATE_IDLE_THRESHOLD_SECONDS = 10 * 60;
 export const AUTO_UPDATE_RESUME_COOLDOWN_MS = 60 * 1000;
@@ -17,7 +13,7 @@ export type AutoRelaunchBlockReason =
   | 'recent-busy'
   | 'recent-resume'
   | 'user-active'
-  | UpdateRelaunchScreenBlockReason;
+  | 'screen-state-unknown';
 
 export interface AutoRelaunchReadinessInput {
   enabled: boolean;
@@ -27,8 +23,6 @@ export interface AutoRelaunchReadinessInput {
   hasBusyTasks: boolean;
   idleTimeSeconds: number;
   idleState: UpdateSystemIdleState;
-  /** macOS cannot present an update-launched window while loginwindow owns the screen. */
-  blockWhenScreenLocked: boolean;
   nowMs: number;
   lastBusyAtMs: number | null;
   lastResumeAtMs: number | null;
@@ -58,11 +52,9 @@ export function getAutoRelaunchBlockReason(
   ) {
     return 'recent-resume';
   }
-  const screenBlockReason = getUpdateRelaunchScreenBlockReason(
-    input.idleState,
-    input.blockWhenScreenLocked,
-  );
-  if (screenBlockReason) return screenBlockReason;
+  // A locked session is a valid unattended state. Only an unreadable state
+  // fails closed; update-launched macOS windows recover presentation on unlock.
+  if (input.idleState === 'unknown') return 'screen-state-unknown';
   if (input.idleState === 'active') return 'user-active';
   if (input.idleTimeSeconds < idleThresholdSeconds) return 'user-active';
   return null;

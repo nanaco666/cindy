@@ -268,10 +268,51 @@ export function isTransientNetworkError(err: unknown): boolean {
   }
 }
 
+// dev 终端镜像的单行上限。终端只是人眼实时观察通道,超长行(典型:透传大 payload
+// 的 debug dump)全量镜像毫无阅读价值,却要在 main event loop 上做整行拷贝、且
+// Windows console 消费极慢会持续堆积内核缓冲;截断到 8KiB,完整内容永远在日志文件里。
+const DEV_TERMINAL_LINE_MAX_CHARS = 8 * 1024;
+
+// 背压:write() 返回 false = 内核 stdio 缓冲已满(典型:Windows console 慢消费 +
+// 日志风暴)。此时暂停镜像、只计数丢弃,等 'drain' 恢复时补一条汇总提示。
+// 只影响终端镜像,文件日志一行不丢。stdout/stderr 共用一个暂停位(同一个终端)。
+let devTerminalPaused = false;
+let devTerminalDroppedLines = 0;
+
+/** 导出仅供单测:镜像行截断规则(超限截断 + 提示后缀,保住行尾换行)。 */
+export function truncateDevTerminalLine(line: string): string {
+  if (line.length <= DEV_TERMINAL_LINE_MAX_CHARS) return line;
+  return (
+    line.slice(0, DEV_TERMINAL_LINE_MAX_CHARS) +
+    `... (terminal mirror truncated, ${line.length} chars; full line in log file)\n`
+  );
+}
+
 function writeDevTerminal(write: (chunk: string) => boolean, line: string): void {
   if (!devTerminalMirrorEnabled) return;
+  if (devTerminalPaused) {
+    devTerminalDroppedLines++;
+    return;
+  }
   try {
-    write(line);
+    const flushed = write(truncateDevTerminalLine(line));
+    if (!flushed) {
+      // 缓冲满:数据已排队不丢,但继续写只会无限堆积内存。暂停镜像等 drain。
+      // write 是启动期捕获的 bound 方法,stream 对象仍是 process.stdout/stderr
+      // 本体(console 劫持只换 write 方法),once('drain') 挂在流上是安全的。
+      const stream = write === origStderr ? process.stderr : process.stdout;
+      devTerminalPaused = true;
+      stream.once('drain', () => {
+        devTerminalPaused = false;
+        if (devTerminalDroppedLines > 0) {
+          const dropped = devTerminalDroppedLines;
+          devTerminalDroppedLines = 0;
+          try {
+            write(`[logger] terminal mirror dropped ${dropped} line(s) under backpressure (files kept full content)\n`);
+          } catch { /* 终端断开走下方同款降级,这里静默即可 */ }
+        }
+      });
+    }
   } catch (err) {
     if (isBrokenStdioError(err)) {
       // Dev terminals can disappear before Electron exits. File logging remains

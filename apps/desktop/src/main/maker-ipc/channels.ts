@@ -366,6 +366,13 @@ export const MAKER_INVOKE = {
    */
   PROVIDER_TEST_CONNECTION: 'maker:provider:test-connection',
   /**
+   * 供应商「获取模型列表」—— 用表单值（baseUrl / modelsUrl / key / headers 内存透传）GET
+   * 该供应商的列模型端点（见 maker-host/provider-model-fetch）。返回查询型结构化结果
+   * ProviderModelsFetchResult（{ok, models?, code?, status?}，规则 13 例外条款：renderer
+   * 需要 code 渲染分类文案）。带密钥材料，不进 device-link 白名单（口径同 test-connection）。
+   */
+  PROVIDER_MODELS_FETCH: 'maker:provider:models-fetch',
+  /**
    * 通用 OAuth 供应商（目录 auth.oauth 描述符驱动、非 bespoke 四家）的登录 / 登出 / 取消。
    * 入参 = providerId；login 走 generic-oauth Runner（PKCE 浏览器流），成功后拉动态模型
    * 发现（若描述符声明）并广播 PROVIDER_CHANGED。bespoke 供应商（anthropic/openai/xai）

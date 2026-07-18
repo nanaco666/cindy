@@ -25,7 +25,7 @@ import { setCurrentUserName } from '@/lib/makerChatStore';
 import { sessionsStore } from '@/lib/sessionsStore';
 
 /**
- * 登录态上下文：user / isAuthenticated / deviceId 全部来自 main 的
+ * 登录态上下文：user / isAuthenticated / isCanary / deviceId 全部来自 main 的
  * authManager 推送（auth:state-change）与 initialize() 返回值。
  *
  * 注意：本项目的 `AuthProvider` 在 `App.tsx` 中位于 `RouterProvider` **之外**，
@@ -35,6 +35,8 @@ import { sessionsStore } from '@/lib/sessionsStore';
 export interface AuthContextValue {
   user: User | null;
   isAuthenticated: boolean;
+  /** 当前账号是否加入 Canary 发布通道。 */
+  isCanary: boolean;
   isInitializing: boolean;
   /** SkillHub 跨设备识别：本机 deviceId（machineIdSync），登录前后都有值；初始化前为 null */
   deviceId: string | null;
@@ -50,6 +52,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isCanary, setIsCanary] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [loginState, setLoginState] = useState<AuthFlowState | null>(null);
@@ -83,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = service.onAuthStateChange((state: AuthState) => {
       authStateVersionRef.current += 1;
       setIsAuthenticated(state.isAuthenticated);
+      setIsCanary(state.isCanary);
       setDeviceId(state.deviceId);
       if (state.user) {
         setLoginState(null);
@@ -102,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // A pushed auth event is newer than this initialize response.
         if (authStateVersionRef.current !== initializeVersion) return;
         setIsAuthenticated(state.isAuthenticated);
+        setIsCanary(state.isCanary);
         setDeviceId(state.deviceId);
         if (state.user) {
           applyIncomingUser(state.user);
@@ -136,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearWorkersCache();
         setUser(null);
         setIsAuthenticated(false);
+        setIsCanary(false);
         setLoginState(null);
         handling = false;
       });
@@ -178,6 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       isAuthenticated,
+      isCanary,
       isInitializing,
       deviceId,
       loginState,
@@ -188,6 +195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       user,
       isAuthenticated,
+      isCanary,
       isInitializing,
       deviceId,
       loginState,

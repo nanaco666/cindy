@@ -684,6 +684,9 @@ export async function ensureCodexProxyReady(): Promise<void> {
           }),
         ),
         maxRequestBodyBytes: CODEX_PROXY_MAX_REQUEST_BODY_BYTES,
+        // 请求体 dump 默认关(dev trace 级别 + agent 高并发会刷爆 main event loop
+        // 与日志盘);诊断请求体时设 XDT_PROXY_DUMP_REQUEST_BODY=1 显式开启。
+        debugDumpRequestBody: process.env.XDT_PROXY_DUMP_REQUEST_BODY === '1',
         // Codex 走 OpenAI Responses API, 从不打 Anthropic Messages API, 不会出现空 thinking 块 400
         // → 挂 Responses 专属恢复规则, 不挂 thinking 规则。
         recoveryRules: [

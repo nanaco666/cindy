@@ -283,6 +283,9 @@ export async function ensureAnthropicCompatProxyReady(): Promise<void> {
         }),
       ],
       logger: log,
+      // 请求体 dump 默认关(dev trace 级别 + agent 高并发会刷爆 main event loop
+      // 与日志盘);诊断请求体时设 XDT_PROXY_DUMP_REQUEST_BODY=1 显式开启。
+      debugDumpRequestBody: process.env.XDT_PROXY_DUMP_REQUEST_BODY === '1',
     });
     log.debug('proxy ready', { url: _handle.url, upstream: claudeUpstreamEndpoint() });
   } catch (err) {

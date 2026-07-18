@@ -266,6 +266,7 @@ import { connectedProvidersForAgent } from '@lizi/model-providers';
 import { hydrateSessionProvider, getSessionProvider } from '../maker-host/session-provider-store.js';
 import { getActiveCatalog, setDiscoveredProviderModels } from '../maker-host/active-catalog.js';
 import { testProviderConnection } from '../maker-host/provider-diagnostics.js';
+import { fetchProviderModels } from '../maker-host/provider-model-fetch.js';
 import { setProviderUpstreamErrorBroadcaster } from '../maker-host/provider-upstream-error-observer.js';
 import {
   cancelGenericOAuthLogin,
@@ -2822,6 +2823,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     broadcastChanged: () => broadcastToAllWindows(MAKER_PUSH.PROVIDER_CHANGED, {}),
     listPresets: () => getActiveCatalog().presets ?? [],
     testConnection: (input) => testProviderConnection(input),
+    fetchModels: (spec) => fetchProviderModels(spec),
     // 通用 OAuth（目录 auth.oauth 描述符驱动）：login 成功后 best-effort 拉动态模型发现
     // (additions-only merge 进 active-catalog) 并广播 PROVIDER_CHANGED 让 UI 刷新连接态。
     oauthLogin: async (providerId) => {

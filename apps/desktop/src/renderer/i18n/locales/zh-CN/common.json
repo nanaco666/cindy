@@ -867,15 +867,15 @@
     "connections": {
       "codex": {
         "logoutConfirm": {
-          "title": "退出 Codex 登录？",
-          "description": "退出后，{{appName}} 将不再使用这份 ChatGPT 订阅；系统 Codex CLI 的登录不受影响，可随时重新授权连接。",
-          "confirm": "退出 Codex",
+          "title": "断开 ChatGPT 账号？",
+          "description": "断开后，{{appName}} 将无法在 Codex 和 Claude 中使用这份 ChatGPT 订阅。系统 Codex CLI 的登录不受影响。",
+          "confirm": "断开 ChatGPT",
           "cancel": "取消"
         },
         "toast": {
-          "loggedOut": "已退出 Codex 登录",
-          "loginFailed": "Codex 授权失败，请重试",
-          "logoutFailed": "退出 Codex 失败，请重试",
+          "loggedOut": "ChatGPT 账号已断开",
+          "loginFailed": "无法连接 ChatGPT，请重试",
+          "logoutFailed": "无法断开 ChatGPT，请重试",
           "binaryMissing": "Codex 组件不可用，请重启应用"
         },
         "apiMode": {
@@ -974,8 +974,12 @@
       },
       "openai": {
         "title": "OpenAI",
-        "subtitle": "GPT 模型 · ChatGPT 订阅",
-        "modelLabel": "GPT 模型"
+        "subtitle": "连接一个 ChatGPT 账号，同时用于 Codex 和 Claude",
+        "modelLabel": "GPT 模型",
+        "reconnectRequired": "需要重新连接",
+        "connect": "连接 ChatGPT",
+        "reconnect": "重新连接 ChatGPT",
+        "cancelConnect": "取消连接"
       },
       "xai": {
         "title": "xAI",
@@ -1082,6 +1086,19 @@
           "testing": "测试中…",
           "ok": "连接成功（{{ms}}ms）",
           "needFields": "请先填写基础 URL 和至少一个模型 ID"
+        },
+        "fetch": {
+          "button": "获取模型列表",
+          "fetching": "正在获取模型…",
+          "needBaseUrl": "请先填写基础 URL",
+          "failed": "获取模型列表失败",
+          "pickerTitle": "选择要添加的模型（{{runtime}}）",
+          "pickerCount": "已选 {{selected}} / 共 {{total}} 个",
+          "searchPlaceholder": "搜索模型…",
+          "selectAll": "全选",
+          "clearAll": "清空",
+          "empty": "没有匹配的模型",
+          "confirm": "填入所选模型（{{count}}）"
         },
         "authMode": {
           "label": "鉴权方式",
@@ -2382,6 +2399,13 @@
     "unavailable": "暂时无法登录",
     "retry": "重试",
     "browserWaiting": "请在浏览器中完成验证",
+    "browserCallback": {
+      "successTitle": "登录成功",
+      "successBody": "你可以关闭此页面，回到 {{appName}} 继续。",
+      "errorTitle": "登录未完成",
+      "errorBody": "请回到 {{appName}} 重新登录。",
+      "returnButton": "回到 {{appName}}"
+    },
     "globalRegion": "Global",
     "errors": {
       "fallback": "登录失败，请稍后重试",
@@ -3033,6 +3057,7 @@
     },
     "user": {
       "settingsLink": "设置, 当前用户: {{name}}",
+      "canaryBadge": "灰度用户",
       "viewReleaseNotes": "查看版本日志",
       "reopenUpdateBanner": "有更新待重启,点击查看"
     },
@@ -3489,11 +3514,11 @@
       "budgetModelHint": "如果反复失败，可以切换到普通版 GPT 再试试。",
       "codexAuthMissing": "远端 codex 还没同步登录态（401 Unauthorized）。点击右侧「同步登录态」把本地 ~/.codex/auth.json 推到远端，然后重试发送。",
       "codexAuthMissingLocal": "Codex 凭证缺失或失效（401 Unauthorized）。请在 {{appName}} Settings → Codex 重新登录（登录后会自动重启 Codex app-server），或在终端跑 `codex login` + 在 Settings 切换一次鉴权模式来重启 app-server，然后新建会话再发。",
-      "codexSessionExpired": "Codex 登录已过期，请重新登录后再试。",
+      "codexSessionExpired": "OpenAI 连接需要更新。重新连接 ChatGPT 后即可继续；{{appName}} 不会退出系统 Codex CLI，也不会要求你重新连接其他模型来源。",
       "codexSessionExpiredDialog": {
-        "title": "Codex 登录已过期",
-        "description": "当前 Codex 登录状态已经失效，需要重新授权后才能继续使用 Codex 会话。",
-        "confirm": "重新登录",
+        "title": "OpenAI 连接需要更新",
+        "description": "{{appName}} 暂时无法使用你的 ChatGPT 账号。重新连接会同时恢复 Codex 和 Claude 的 OpenAI 能力；{{appName}} 不会退出系统 Codex CLI，也不会要求你重新连接其他模型来源。",
+        "confirm": "重新连接 ChatGPT",
         "cancel": "稍后处理"
       },
       "codexAuthSynced": "登录态已同步，请点击「重试」重新发送。",
@@ -3507,7 +3532,8 @@
       "forkStripEncrypted": "Fork 并剥离",
       "forkStripEncryptedRunning": "Fork 中...",
       "forkStripEncryptedTitle": "Fork 并剥离出新会话(去掉加密推理内容)",
-      "codexSessionExpiredLogin": "重新登录",
+      "codexSessionExpiredLogin": "重新连接 ChatGPT",
+      "codexSessionReconnected": "ChatGPT 账号已重新连接。点击「重试」继续。",
       "networkUnreachable": "网络异常，服务暂时不可达，可点击「重试」。",
       "networkUnreachableNoRetry": "网络异常，服务暂时不可达。",
       "networkAutoRetrying": "网络异常，正在自动重试…",
@@ -5686,7 +5712,7 @@
   "logic": {
     "toasts": {
       "googleConnected": "Google 已连接",
-      "codexConnected": "Codex 已连接",
+      "codexConnected": "ChatGPT 账号已连接",
       "feishuBotConnected": "飞书机器人已连接",
       "feishuBotConflict": "该 App 已被占用，可能是同事在用同一个 App ID",
       "feishuBotConnectFailed": "连接失败，请检查 App ID / Secret",
@@ -5745,8 +5771,8 @@
       "voiceApiKeyAuthDescription": "语音输入当前使用 Cindy AI 语音识别服务。尚未连接 Cindy AI，无法开始语音输入。是否前往「模型供应商」连接？",
       "voiceDirectApiKeyAuthTitle": "需要配置语音输入 API Key",
       "voiceDirectApiKeyAuthDescription": "语音输入当前使用直连供应商，需要先配置对应 API Key。是否前往「API Keys」添加？",
-      "codexVoiceAuthTitle": "需要连接 Codex",
-      "codexVoiceAuthDescription": "语音输入现在使用 Codex 的 ChatGPT 登录来调用 GPT 实时语音识别。Codex 尚未连接或授权过期，无法开始语音输入。是否前往「模型供应商」完成连接？",
+      "codexVoiceAuthTitle": "需要连接 ChatGPT",
+      "codexVoiceAuthDescription": "语音输入需要使用已连接的 ChatGPT 账号调用 GPT 实时语音识别。当前账号尚未连接或需要更新，是否前往「模型供应商」连接 ChatGPT？",
       "codexBinaryMissingTitle": "Codex 组件未就绪",
       "codexBinaryMissingDescription": "Codex 组件尚未准备好，暂时无法使用这个功能。请稍后重试，或前往「模型供应商」检查 Codex 连接状态。",
       "goToSettings": "前往设置",

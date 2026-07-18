@@ -6,6 +6,7 @@ import {
   ensureMobileEnv,
   REQUIRED_MOBILE_ENV_KEYS,
 } from '../../scripts/ensure-mobile-env.mjs';
+import { mobileClientBuildEnv } from '../../../../scripts/shared/client-endpoint-build-env.mjs';
 
 const roots: string[] = [];
 
@@ -98,6 +99,49 @@ describe('mobile simulator env bootstrap', () => {
     expect(env.EXPO_PUBLIC_CINDY_AUTH_REGION).toBe('"global"');
     expect(env.EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL).toBe(
       '"https://hotfix.custom.example.invalid/app"',
+    );
+  });
+
+  it('accepts complete existing env when the inherited EAS profile omits the manifest base', () => {
+    const mobileDir = createMobileFixture({
+      production: { env: { EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn' } },
+    });
+    writeFileSync(
+      join(mobileDir, '.env'),
+      [
+        'EXPO_PUBLIC_CINDY_AUTH_REGION=global',
+        'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL=https://hotfix.global.example.invalid/app',
+        '',
+      ].join('\n'),
+    );
+
+    const result = ensureMobileEnv({ mobileDir });
+
+    expect(result.addedKeys).toEqual([]);
+    expect(readEnvMap(join(mobileDir, '.env'))).toMatchObject({
+      EXPO_PUBLIC_CINDY_AUTH_REGION: 'global',
+      EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://hotfix.global.example.invalid/app',
+    });
+  });
+
+  it('synchronizes both region keys when a local dev command selects a region', () => {
+    const mobileDir = createMobileFixture({
+      production: { env: { EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn' } },
+    });
+    writeFileSync(
+      join(mobileDir, '.env'),
+      [
+        'EXPO_PUBLIC_CINDY_AUTH_REGION=cn',
+        'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL=https://hotfix.cn.example.invalid/app',
+        '',
+      ].join('\n'),
+    );
+
+    const result = ensureMobileEnv({ mobileDir, authRegion: 'global' });
+
+    expect(result.addedKeys).toEqual(REQUIRED_MOBILE_ENV_KEYS);
+    expect(readEnvMap(join(mobileDir, '.env'))).toMatchObject(
+      mobileClientBuildEnv({ authRegion: 'global' }),
     );
   });
 });

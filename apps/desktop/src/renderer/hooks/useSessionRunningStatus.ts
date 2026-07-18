@@ -169,16 +169,16 @@ export function useSessionRunningStatus(
         // Session transitioned from running -> not running.
         const info = statusMap.get(sessionId);
         // side-task(mivo 等 skipTurnReset)的结束不是 turn 终态:done/error/角标/
-        // 通知全部跳过。entry 可能已被其它订阅者消费(info===undefined),用 store
-        // 兜底查询(与 hasError fallback 同款)。
+        // 通知全部跳过。transition entry 只存活一个投递窗口(store 调度清除),
+        // 本 effect 若晚于清除运行会拿到 info===undefined,用 store 兜底查询
+        // (与 hasError fallback 同款)。
         const isSideTaskStop = info?.sideTask ?? makerChatStore.wasLastStopSideTask(sessionId);
         if (isSideTaskStop) continue;
-        // The transition entry lives for exactly ONE snapshot generation, and
-        // the store has multiple subscribers racing to consume it — this
-        // effect may observe the generation where the entry is already gone
-        // (info === undefined). Falling back to `false` here was the root
-        // cause of failed turns being notified as "done"; always resolve
-        // errors against the authoritative store.
+        // The transition entry lives in the snapshot only until the store's
+        // scheduled clear fires — this effect may observe the generation where
+        // the entry is already gone (info === undefined). Falling back to
+        // `false` here was the root cause of failed turns being notified as
+        // "done"; always resolve errors against the authoritative store.
         const hasError = info?.hasError ?? makerChatStore.hasSessionTerminalError(sessionId);
         // observeNextSessionDoneSilenced 有副作用(消费一次静默 slot),必须在这里
         // 读一次,不能推迟到定时器里 —— 否则 debounce 期间 session 又起新 turn 时

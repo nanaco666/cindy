@@ -1,4 +1,35 @@
 import ExpoModulesCore
+
+#if targetEnvironment(simulator)
+/**
+ * WechatOpenSDK 2.0.5 没有 arm64-simulator 切片。Simulator 只保留稳定的不可用语义，
+ * 真机编译继续走下方真实 SDK，避免为本地调试牺牲生产微信登录。
+ */
+final class XdtWechatAuthCoordinator {
+  static let shared = XdtWechatAuthCoordinator()
+
+  func isInstalled() -> Bool {
+    return false
+  }
+
+  func request(options: [String: Any], promise: Promise) {
+    promise.reject(
+      "ERR_WECHAT_UNAVAILABLE_ON_SIMULATOR",
+      "WeChat login is unavailable in the iOS Simulator."
+    )
+  }
+
+  func handleOpen(_ url: URL) -> Bool {
+    return false
+  }
+
+  func handleUniversalLink(_ userActivity: NSUserActivity) -> Bool {
+    return false
+  }
+
+  func cancel() {}
+}
+#else
 import WechatOpenSDK
 
 /** Process-wide WeChat delegate shared by the Expo module and app-delegate subscriber. */
@@ -90,3 +121,4 @@ final class XdtWechatAuthCoordinator: NSObject, WXApiDelegate {
     promise?.reject(code, message)
   }
 }
+#endif

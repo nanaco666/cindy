@@ -40,12 +40,12 @@ try {
   }
 } catch { /* no .env file */ }
 
-import { resolveCdnBaseUrl } from '../../../scripts/shared/production-endpoints.mjs';
+import { resolveReleaseCdnBaseUrl } from '../../../scripts/shared/release-env.mjs';
 import { OSS_BUCKET, OSS_PREFIX, OSS_REGION, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
 
 refreshOssConfig();
 const PLATFORM_KEY = 'win32-x64';
-const CDN_BASE = resolveCdnBaseUrl();
+const CDN_BASE = resolveReleaseCdnBaseUrl();
 
 function getAKSK() {
   const accessKeyId = process.env.FP_DEV_OSS_ACCESS_KEY_ID;

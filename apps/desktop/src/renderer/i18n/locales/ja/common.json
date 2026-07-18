@@ -867,15 +867,15 @@
     "connections": {
       "codex": {
         "logoutConfirm": {
-          "title": "Codex からサインアウトしますか？",
-          "description": "{{appName}} はこの ChatGPT サブスクを使用しなくなります。システムの Codex CLI のログインには影響せず、ここで再認証すれば再接続できます。",
-          "confirm": "Codex からサインアウト",
+          "title": "ChatGPT アカウントを切断しますか？",
+          "description": "切断すると、{{appName}} の Codex と Claude でこの ChatGPT サブスクリプションを使用できなくなります。システムの Codex CLI のログインには影響しません。",
+          "confirm": "ChatGPT を切断",
           "cancel": "キャンセル"
         },
         "toast": {
-          "loggedOut": "Codex からサインアウトしました",
-          "loginFailed": "Codex の認証に失敗しました。再試行してください",
-          "logoutFailed": "Codex からのサインアウトに失敗しました。再試行してください",
+          "loggedOut": "ChatGPT アカウントを切断しました",
+          "loginFailed": "ChatGPT に接続できませんでした。再試行してください",
+          "logoutFailed": "ChatGPT を切断できませんでした。再試行してください",
           "binaryMissing": "Codex コンポーネントが利用できません。アプリを再起動してください"
         },
         "apiMode": {
@@ -974,8 +974,12 @@
       },
       "openai": {
         "title": "OpenAI",
-        "subtitle": "GPT モデル · ChatGPT サブスク",
-        "modelLabel": "GPT モデル"
+        "subtitle": "1 つの ChatGPT アカウントを Codex と Claude の両方で使用",
+        "modelLabel": "GPT モデル",
+        "reconnectRequired": "再接続が必要",
+        "connect": "ChatGPT に接続",
+        "reconnect": "ChatGPT に再接続",
+        "cancelConnect": "接続をキャンセル"
       },
       "xai": {
         "title": "xAI",
@@ -1082,6 +1086,19 @@
           "testing": "テスト中…",
           "ok": "接続に成功しました（{{ms}}ms）",
           "needFields": "先にベース URL と少なくとも 1 つのモデル ID を入力してください"
+        },
+        "fetch": {
+          "button": "モデル一覧を取得",
+          "fetching": "モデルを取得中…",
+          "needBaseUrl": "先にベース URL を入力してください",
+          "failed": "モデル一覧の取得に失敗しました",
+          "pickerTitle": "追加するモデルを選択（{{runtime}}）",
+          "pickerCount": "{{total}} 件中 {{selected}} 件を選択",
+          "searchPlaceholder": "モデルを検索…",
+          "selectAll": "すべて選択",
+          "clearAll": "クリア",
+          "empty": "一致するモデルがありません",
+          "confirm": "選択したモデルを追加（{{count}}）"
         },
         "authMode": {
           "label": "認証方式",
@@ -2382,6 +2399,13 @@
     "unavailable": "現在ログインできません",
     "retry": "再試行",
     "browserWaiting": "ブラウザで認証を完了してください",
+    "browserCallback": {
+      "successTitle": "ログイン完了",
+      "successBody": "このページを閉じて {{appName}} に戻れます。",
+      "errorTitle": "ログインを完了できませんでした",
+      "errorBody": "{{appName}} に戻ってもう一度ログインしてください。",
+      "returnButton": "{{appName}} に戻る"
+    },
     "globalRegion": "Global",
     "errors": {
       "fallback": "ログインに失敗しました。再試行してください。",
@@ -3033,6 +3057,7 @@
     },
     "user": {
       "settingsLink": "設定, 現在のユーザー: {{name}}",
+      "canaryBadge": "Canary ユーザー",
       "viewReleaseNotes": "リリースノートを表示",
       "reopenUpdateBanner": "更新の準備完了 — クリックして確認"
     },
@@ -3489,11 +3514,11 @@
       "budgetModelHint": "繰り返し失敗する場合は、通常版 GPT モデルに切り替えてお試しください。",
       "codexAuthMissing": "リモートの codex がまだサインインしていません（401 Unauthorized）。「認証情報を同期」をクリックしてローカルの ~/.codex/auth.json をリモートにプッシュし、再試行してください。",
       "codexAuthMissingLocal": "Codex 認証情報がないか期限切れです（401 Unauthorized）。{{appName}} Settings → Codex から再ログインする（ログイン時に app-server が自動再起動）か、ターミナルで `codex login` 実行後 Settings で認証モードを一度切り替えて app-server を再起動してから、新しい会話を開始してください。",
-      "codexSessionExpired": "Codex のログインが期限切れです。再度ログインしてからお試しください。",
+      "codexSessionExpired": "OpenAI 接続の更新が必要です。ChatGPT に再接続すると続行できます。{{appName}} がシステムの Codex CLI からサインアウトしたり、他のモデルソースへの再接続を求めたりすることはありません。",
       "codexSessionExpiredDialog": {
-        "title": "Codex のログインが期限切れです",
-        "description": "現在の Codex ログイン状態は無効です。Codex セッションを続けるには再度認証してください。",
-        "confirm": "再ログイン",
+        "title": "OpenAI 接続の更新が必要です",
+        "description": "{{appName}} は現在 ChatGPT アカウントを使用できません。再接続すると、Codex と Claude の OpenAI 機能が復旧します。{{appName}} がシステムの Codex CLI からサインアウトしたり、他のモデルソースへの再接続を求めたりすることはありません。",
+        "confirm": "ChatGPT に再接続",
         "cancel": "後で"
       },
       "codexAuthSynced": "認証情報が同期されました。「再試行」をクリックして再送信してください。",
@@ -3507,7 +3532,8 @@
       "forkStripEncrypted": "Fork して切り離す",
       "forkStripEncryptedRunning": "Fork 中...",
       "forkStripEncryptedTitle": "暗号化推論を除いた新しいセッションを Fork で作成",
-      "codexSessionExpiredLogin": "再ログイン",
+      "codexSessionExpiredLogin": "ChatGPT に再接続",
+      "codexSessionReconnected": "ChatGPT に再接続しました。「再試行」をクリックして続行してください。",
       "networkUnreachable": "ネットワークエラー:サービスに一時的に接続できません。「再試行」を押してください。",
       "networkUnreachableNoRetry": "ネットワークエラー:サービスに一時的に接続できません。",
       "networkAutoRetrying": "ネットワークエラー:自動的に再試行しています…",
@@ -5686,7 +5712,7 @@
   "logic": {
     "toasts": {
       "googleConnected": "Google に接続しました",
-      "codexConnected": "Codex に接続しました",
+      "codexConnected": "ChatGPT アカウントに接続しました",
       "feishuBotConnected": "Feishu ボットに接続しました",
       "feishuBotConflict": "この App は既に使用されています。同僚が同じ App ID を使用している可能性があります",
       "feishuBotConnectFailed": "接続に失敗しました。App ID / Secret を確認してください",
@@ -5745,8 +5771,8 @@
       "voiceApiKeyAuthDescription": "現在の音声入力プロバイダーは Cindy AI を使用します。Cindy AI が未接続のため音声入力を開始できません。モデルプロバイダーを開いて接続しますか？",
       "voiceDirectApiKeyAuthTitle": "音声入力の API Key が必要です",
       "voiceDirectApiKeyAuthDescription": "現在の音声入力プロバイダーには直接接続用の API Key が必要です。API Keys で追加しますか？",
-      "codexVoiceAuthTitle": "Codex への接続が必要です",
-      "codexVoiceAuthDescription": "音声入力は Codex の ChatGPT ログインを使って GPT リアルタイム音声認識を呼び出します。Codex が未接続または認証期限切れです。「設定 → プロバイダー」で接続しますか？",
+      "codexVoiceAuthTitle": "ChatGPT への接続が必要です",
+      "codexVoiceAuthDescription": "音声入力は、接続済みの ChatGPT アカウントで GPT リアルタイム音声認識を使用します。アカウントが未接続か、接続の更新が必要です。モデルプロバイダーを開いて ChatGPT に接続しますか？",
       "codexBinaryMissingTitle": "Codex コンポーネントの準備ができていません",
       "codexBinaryMissingDescription": "Codex コンポーネントの準備がまだできていないため、この機能は使用できません。しばらくしてから再試行するか、「設定 → プロバイダー」で Codex の接続状態を確認してください。",
       "goToSettings": "設定を開く",

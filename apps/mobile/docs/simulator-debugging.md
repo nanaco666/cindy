@@ -30,16 +30,20 @@ apply". Treat the following as a contract, not optional steps:
 ### Tools (use these instead of ad-hoc `lsof`/`PlistBuddy`/deep-link dances)
 
 ```bash
-pnpm mobile:sim:start      # start THIS worktree's dev-client Metro; injects git
+pnpm mobile:sim:start      # start THIS worktree's cn dev-client Metro; injects git
                            # branch/commit into the __DEV__ build label (EXPO_PUBLIC_*)
+pnpm mobile:sim:start -- --region=global # global JS region; rebuild global native app first
 pnpm mobile:sim:whoami     # doctor: booted install + which port = which worktree
-pnpm mobile:sim:rebuild    # rebuild + reinstall the native dev app (native changes only)
+pnpm mobile:sim:rebuild    # rebuild + reinstall the cn native dev app (native changes only)
 ```
 
-`mobile:sim:start` and `mobile:sim:rebuild` automatically ensure
-`apps/mobile/.env` has the required online-login values, sourced from the
-`production` env in `apps/mobile/eas.json`; you do not need to copy
-`.env.example` by hand.
+`mobile:sim:start` and `mobile:sim:rebuild` default to `cn`. They synchronize
+the selected build region and the matching `config/endpoint*.json` bootstrap
+base into `apps/mobile/.env`. Local Xcode / Simulator builds also read the selected
+block from the gitignored `apps/mobile/scripts/self-host-regions.json` for bundle
+identity, TapDB, and global Google client configuration; copy and fill
+`self-host-regions.json.example` first. You do not need to inject those public
+values or endpoint variables into `.env` by hand.
 
 The new-session build label reads branch/commit from `EXPO_PUBLIC_XDT_GIT_*` (set by
 `mobile:sim:start`) and the Metro host from `Constants.expoConfig.hostUri`. It is

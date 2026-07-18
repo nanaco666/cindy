@@ -73,6 +73,13 @@ describe('auth login-flow reset', () => {
     expect(source).toContain("getClientEndpoint('oauthBrokerApiBaseUrl')");
     expect(source).toContain("apiFetch('/api/user/feature-flags'");
 
+    const syncStart = source.indexOf('function scheduleCanaryFlagSync(');
+    const syncEnd = source.indexOf('\n}\n\n/**\n * 冷启动流程的进程内去重', syncStart);
+    expect(syncEnd).toBeGreaterThan(syncStart);
+    const syncBody = source.slice(syncStart, syncEnd);
+    expect(syncBody).toContain("if (outcome.kind === 'synced')");
+    expect(syncBody).toContain('notifyRenderer();');
+
     const clearIntegrationsStart = source.indexOf('async function clearPerAccountIntegrations(');
     const clearIntegrationsEnd = source.indexOf('\n}', clearIntegrationsStart);
     expect(source.slice(clearIntegrationsStart, clearIntegrationsEnd)).not.toContain(

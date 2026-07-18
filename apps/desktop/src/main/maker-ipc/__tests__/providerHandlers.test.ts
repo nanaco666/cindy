@@ -63,6 +63,7 @@ function makeDeps(over: Partial<ProviderHandlerDeps> = {}): ProviderHandlerDeps 
     broadcastChanged: vi.fn(() => {}),
     listPresets: () => [],
     testConnection: vi.fn(async () => ({ ok: true, latencyMs: 1 })),
+    fetchModels: vi.fn(async () => ({ ok: true, models: [{ id: 'm1', name: 'M1' }] })),
     oauthLogin: vi.fn(async () => ({ ok: true })),
     oauthLogout: vi.fn(async () => {}),
     oauthCancel: vi.fn(() => {}),
@@ -248,5 +249,49 @@ describe('provider:test-connection handler', () => {
     await expect(
       harness.invoke(MAKER_INVOKE.PROVIDER_TEST_CONNECTION, { kind: 'saved', providerId: 'ghost', agent: 'codex' }),
     ).rejects.toThrow(/INVALID_PARAMS/);
+  });
+});
+
+describe('provider:models-fetch handler', () => {
+  it('forwards parsed input and returns the structured result', async () => {
+    const harness = new IpcHarness();
+    const fetchModels = vi.fn(async () => ({
+      ok: true as const,
+      models: [{ id: 'kimi-k3', name: 'Kimi K3' }],
+    }));
+    registerProviderHandlers(harness, makeDeps({ fetchModels }));
+
+    const result = await harness.invoke(MAKER_INVOKE.PROVIDER_MODELS_FETCH, {
+      agent: 'claude-code',
+      baseUrl: 'https://x.example/anthropic',
+      modelsUrl: 'https://x.example/v1/models',
+      apiKey: 'k',
+    });
+    expect(result).toMatchObject({ ok: true, models: [{ id: 'kimi-k3', name: 'Kimi K3' }] });
+    expect(fetchModels).toHaveBeenCalledWith({
+      agent: 'claude-code',
+      baseUrl: 'https://x.example/anthropic',
+      modelsUrl: 'https://x.example/v1/models',
+      apiKey: 'k',
+      headers: undefined,
+    });
+  });
+
+  it('rejects malformed input with INVALID_PARAMS (bad agent / bad url / bad modelsUrl / bad headers)', async () => {
+    const harness = new IpcHarness();
+    const deps = makeDeps();
+    registerProviderHandlers(harness, deps);
+    const bad = [
+      null,
+      { agent: 'gemini', baseUrl: 'https://x.example' },
+      { agent: 'codex', baseUrl: 'ftp://x' },
+      { agent: 'codex', baseUrl: '' },
+      { agent: 'codex', baseUrl: 'https://x.example', modelsUrl: 'not-a-url' },
+      { agent: 'codex', baseUrl: 'https://x.example', headers: { a: 1 } },
+    ];
+    for (const input of bad) {
+      await expect(harness.invoke(MAKER_INVOKE.PROVIDER_MODELS_FETCH, input)).rejects.toThrow(/INVALID_PARAMS/);
+    }
+    expect(deps.fetchModels).not.toHaveBeenCalled();
   });
 });

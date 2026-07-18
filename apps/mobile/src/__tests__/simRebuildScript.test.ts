@@ -11,12 +11,13 @@ describe('sim-rebuild script invariants', () => {
   const source = readFileSync(resolve(process.cwd(), 'scripts/sim-rebuild.mjs'), 'utf8');
 
   it('runs pod install itself via the bounded runner, instead of letting prebuild own it', () => {
+    expect(source).toContain('const buildEnv = withLocalMobileRegionConfig(');
     // prebuild 不再隐式跑 pod install(它的失败重试会带 --repo-update 打 CDN 且无界)。
     expect(source).toContain("['exec', 'expo', 'prebuild', '-p', 'ios', '--no-install']");
     // pod 执行策略(本地 specs 优先 / --repo-update 重试 / 空转看门狗 / UTF-8 LANG)
     // 收敛在 sim-pod-install.mjs,行为由 simPodInstall.test.ts 用假 pod 二进制真实覆盖。
     expect(source).toContain("import { podInstallBounded } from './sim-pod-install.mjs';");
-    expect(source).toContain('await podInstallBounded({ iosDir })');
+    expect(source).toContain('await podInstallBounded({ iosDir, env: devProcessEnv })');
   });
 
   it('reuses built .app via the @expo/fingerprint cache with a force-build escape hatch', () => {
@@ -26,12 +27,20 @@ describe('sim-rebuild script invariants', () => {
     // production 口径(剥离 EXPO_PUBLIC_*),而 prebuild 继承当前环境,beta 变体
     // (EXPO_PUBLIC_APP_VARIANT)会改原生 name——不跟 env 走会互相污染缓存。
     expect(source).toContain('run: runFingerprintWithCurrentEnv');
-    expect(source).toContain('env: process.env');
+    expect(source).toContain('env: devProcessEnv');
     // --force-build 只跳过缓存"读",构建结果仍写回同一条目覆盖坏缓存;
     // 否则逃生舱跑完一次,坏条目还在,下次普通 rebuild 又命中它。
-    expect(source).toContain("process.argv.includes('--force-build')");
+    expect(source).toContain("passthrough.includes('--force-build')");
     expect(source).toContain('if (cacheDir && !forceBuild) {');
-    expect(source).toContain('if (cacheDir) storeAppCacheEntry(cacheDir, scheme, app);');
+    expect(source).toContain(
+      'if (cacheDir) storeAppCacheEntry(cacheDir, scheme, app, readAppBundleIdentifier(app));',
+    );
+    // global 产物的 bundle id 不同于 app.json 默认 cn 值，必须从实际 .app 读。
+    expect(source).toContain("'CFBundleIdentifier'");
+    expect(source).toContain('const bundleId = readAppBundleIdentifier(app);');
+    expect(source).toContain('readAppCacheEntry(cacheDir, simArch)');
+    expect(source).toContain('assertAppSupportsArchitecture(app, simArch)');
+    expect(source).toContain("capture('lipo', ['-archs'");
     // 缓存条目按 fingerprint + 架构定位,meta.json 是条目完整性标记。
     expect(source).toContain('sim-app-cache');
     expect(source).toContain('ios-${simArch}-${fingerprintHash}');

@@ -3,7 +3,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveCdnBaseUrl } from '../../../scripts/shared/production-endpoints.mjs';
+import { resolveReleaseCdnBaseUrl } from '../../../scripts/shared/release-env.mjs';
 
 export const MOBILE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const WORKTREE_ROOT = resolve(MOBILE_DIR, '../..');
@@ -25,7 +25,7 @@ export const PUBLIC_ENV_KEYS = [
   'EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN',
 ];
 
-// 自建线的 TapDB 公开配置来自 self-host-regions.json → Expo extra,不再要求
+// 自建线的 TapDB / Google 公开配置来自 self-host-regions.json → Expo extra,不再要求
 // EXPO_PUBLIC_* 注入。这里只校验自举启动所需的两个构建常量。
 export const SELF_HOST_PUBLIC_ENV_KEYS = [
   'EXPO_PUBLIC_CINDY_AUTH_REGION',
@@ -116,7 +116,7 @@ export function formatBakedEnvLines(env, { extraKeys = [] } = {}) {
 export async function resolveDesktopVersion(opts = {}) {
   const explicit = typeof opts.explicit === 'string' ? opts.explicit.trim() : '';
   if (explicit) return explicit;
-  const cdnBase = (opts.cdnBase ?? resolveCdnBaseUrl()).replace(/\/+$/, '');
+  const cdnBase = (opts.cdnBase ?? resolveReleaseCdnBaseUrl()).replace(/\/+$/, '');
   const platformKey = opts.platformKey ?? 'darwin-arm64';
   const timeoutMs = opts.timeoutMs ?? 8000;
   const url = `${cdnBase}/manifest-${platformKey}.json?t=${Date.now()}`;

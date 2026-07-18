@@ -219,6 +219,7 @@ my-ghost/
       "authorizeUrl": "https://accounts.example.com/authorize",  // 授权页(https;域名必须命中 hosts 白名单)
       "tokenUrl": "https://accounts.example.com/token",          // code/refresh 交换端点(https;域名必须命中 hosts)
       "clientId": "xxx.apps.example.com",           // 可选:内置 OAuth 客户端 ID(用户零配置开箱即用;用户在设置页自填的覆盖内置,清除自填即回落)
+      "clientIdAlternatives": ["xxx-global.apps.example.com"],  // 可选 ≤8 条:仅 tokenBroker 模式;意识按 app-context 选 App 时,connect 只接受默认值或这里声明的公开 ID
       "clientSecret": "xxx",                        // 可选(须与 clientId 成对):内置 client 的 secret;桌面应用的 client 凭证本非机密,纯 PKCE 服务商可省略
       "scopes": ["read.a", "write.b"],              // 可选 ≤32 条:申请的权限范围(确认框逐条展示给用户)
       "scopeDelimiter": ",",                        // 可选:authorize URL 的 scope 拼接分隔符;缺省空格(OAuth 标准),Slack 这类逗号分隔的服务商声明 ","(目前只认这一个值)
@@ -377,6 +378,28 @@ const r = await cindy.send({ type: 'cindy-request', kind: 'gen_image', prompt: '
 //     用户点的名字原样透传;白名单外会被拒。**不要**自己替用户选模型——
 //     具体型号是主机资产,写死在意识里必腐烂。
 \`\`\`
+
+## 4.1 宿主公开上下文(request,无需卡槽)
+
+电子脑需要按宿主构建身份选择公开配置时,走只读 request。当前只暴露
+\`region: 'cn' | 'global'\`,不含登录态、路径、设备信息或凭证:
+
+\`\`\`js
+const r = await cindy.request({ kind: 'app-context' });
+// → { ok:true, context:{ region:'cn'|'global' } }
+\`\`\`
+
+\`settingsHtml\` / panel 没有 preload 桥,读取同一份上下文走同源只读端点:
+
+\`\`\`js
+const r = await (await fetch('/app-context')).json();
+const region = r.context.region;
+\`\`\`
+
+region 只适合选择**已在 manifest 声明过**的公开配置。例如 broker OAuth
+可在 \`clientIdAlternatives\` 列出备用 ID,再由 settingsHtml 把选中的
+\`clientId\` 放进 \`/oauth/<key>/connect\` body;主机会做清单白名单复验。
+不要用 region 推断用户位置、语言或数据归属。
 
 ## 4.5 聊天卡片(card 槽,海报模式)
 
@@ -773,7 +796,11 @@ const list = await (await fetch('/oauth')).json();
 // client 凭证只写入库(和 /secrets 同纪律,存入后拿不回;clientSecret 可省略 = 纯 PKCE):
 await fetch('/oauth/acct/client', { method:'PUT', body: JSON.stringify({ clientId, clientSecret }) });  // 204 即入库
 // 「连接账号」按钮 → 主机拉浏览器跑授权(等待时间可能数分钟,给用户 loading 提示):
-const r = await (await fetch('/oauth/acct/connect', { method:'POST' })).json();
+const connectInit = { method:'POST' };
+// broker 模式可选:必须等于 oauth.clientId 或 clientIdAlternatives 中一项;
+// 典型用法是先读 /app-context,由意识按 region 选择公开 App ID。
+if (selectedClientId) connectInit.body = JSON.stringify({ clientId: selectedClientId });
+const r = await (await fetch('/oauth/acct/connect', connectInit)).json();
 // → { ok:true, account } 或 { ok:false, error: 'NO_CLIENT_CONFIG'|'TIMEOUT'|'CANCELLED'|'CALLBACK_INVALID'|'EXCHANGE_FAILED'|'NETWORK'|'ACCOUNT_LIMIT', detail? }
 // 授权成功时主机会自动弹「授权成功,已连接 xxx」的系统提示(带你的身份头,
 // 无需声明 notify 槽);设置页只管刷新自己的账号列表。
@@ -1173,6 +1200,7 @@ await cindy.fs({ op: 'write', root: 'data', path: 'a.txt', content: 'hi' });
   authorizeUrl/tokenUrl 非 https 或域名不在 hosts 白名单、scopes 条目含空白/重复、
   extraAuthorizeParams 覆写保留参数(client_id/redirect_uri/state/code_challenge 等)、
   redirectPort 不是 1024–65535 整数、tokenBroker 与 clientSecret 同时声明、
+  clientIdAlternatives 没与 clientId + tokenBroker 成套或包含重复/非法 ID、
   非官方前缀 id 声明了 tokenBroker(仅第一方可用)、brokerBounce 没和 tokenBroker +
   redirectPort 成套声明或路径不是 / 开头的站内绝对路径)
 - connections 声明格式错(超 2 条、key 撞 secrets 的 key 或声明内重复、label 缺失/超 64 字、

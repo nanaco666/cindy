@@ -313,8 +313,6 @@ interface AuthUser {
   email: string | null;
   defaultModel: string;
   defaultEffort: string;
-  role?: 'user' | 'admin';
-  isCanary?: boolean;
   membershipKind: 'personal' | 'org';
   membershipRole: 'owner' | 'admin' | 'member';
   orgId: string | null;
@@ -367,6 +365,8 @@ interface FeishuBotRegistrationStatusPayload {
 interface AuthStateChangePayload {
   user: AuthUser | null;
   isAuthenticated: boolean;
+  /** 当前账号是否加入 Canary 发布通道；由 main 的 feature-flags 同步结果驱动。 */
+  isCanary: boolean;
   /** SkillHub 跨设备识别：本机 deviceId（machineIdSync 结果），登录前后都有值 */
   deviceId: string;
 }
@@ -1364,6 +1364,7 @@ interface ElectronAPI {
   authInitialize: () => Promise<{
     user: AuthUser | null;
     isAuthenticated: boolean;
+    isCanary: boolean;
     /** SkillHub 跨设备识别：本机 deviceId，登录前后都有值 */
     deviceId: string;
   }>;
@@ -3207,6 +3208,20 @@ interface ElectronAPI {
       code?: import('../shared/providerErrors').ProviderErrorCode;
       status?: number;
       latencyMs: number;
+      detail?: string;
+    }>;
+    /** 供应商「获取模型列表」—— 表单值透传，结构化结果（code 走 providerError.* i18n）。 */
+    fetchProviderModels: (input: {
+      agent: 'claude-code' | 'codex';
+      baseUrl: string;
+      modelsUrl?: string | null;
+      apiKey?: string | null;
+      headers?: Record<string, string>;
+    }) => Promise<{
+      ok: boolean;
+      models?: { id: string; name: string }[];
+      code?: import('../shared/providerErrors').ProviderErrorCode;
+      status?: number;
       detail?: string;
     }>;
     /** 自定义供应商变更广播订阅（返回 off）。 */

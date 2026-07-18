@@ -2465,8 +2465,8 @@ export function CCAgentSessionView({
               - agentKind 传到 ErrorBanner 让 codex 401 / Missing bearer 不仅在远端
                 能 hide Retry (走 syncCodexAuth 引导), 本地 codex session 401 也能
                 hide Retry + 显本地 fix 文案 (避免 retry 撞同样的 auth retry-loop)。
-              - remoteHostId gate 仅 codex 远端会话才传 — Claude session 的 401
-                是 Anthropic 凭证, syncCodexAuth 改不了, 传过去会显误导按钮。 */}
+              - remoteHostId / deviceLinkDeviceId 始终标记真实执行端，避免控制端本机
+                认证恢复入口误处理远端错误；SSH 同步按钮仍由 agentKind='codex' 单独门控。 */}
           {/* 凭证切换等待(非错误):消息保留在队首,挡路的本地 Codex 任务结束后
               main 自动重发;取消 = 删除队首消息。与下方 ErrorBanner 互斥渲染——
               等待态由 main 权威维护,error 为空。 */}
@@ -2513,8 +2513,10 @@ export function CCAgentSessionView({
                 onSilentStopContinue={handleSilentStopContinue}
                 viewVisible={viewVisible}
                 agentKind={session?.agentKind}
-                remoteHostId={session?.agentKind === 'codex' ? (session?.remoteHostId ?? undefined) : undefined}
+                remoteHostId={session?.remoteHostId ?? undefined}
+                deviceLinkDeviceId={remoteDeviceId}
                 modelId={session?.model}
+                providerId={session?.providerId}
                 silentEncryptedRetryEnabled={silentEncryptedRetryEnabled}
                 onForkStripEncrypted={ownsWindowRoute ? handleForkStripEncrypted : undefined}
                 forkStripEncryptedRunning={forkStripEncryptedRunning}
@@ -2549,8 +2551,10 @@ export function CCAgentSessionView({
               onSilentStopContinue={handleSilentStopContinue}
               onCancel={handleDismissError}
               agentKind={session?.agentKind}
-              remoteHostId={session?.agentKind === 'codex' ? (session?.remoteHostId ?? undefined) : undefined}
+              remoteHostId={session?.remoteHostId ?? undefined}
+              deviceLinkDeviceId={remoteDeviceId}
               modelId={session?.model}
+              providerId={session?.providerId}
               silentEncryptedRetryEnabled={silentEncryptedRetryEnabled}
               onForkStripEncrypted={ownsWindowRoute ? handleForkStripEncrypted : undefined}
               forkStripEncryptedRunning={forkStripEncryptedRunning}
@@ -2897,15 +2901,15 @@ export function CCAgentSessionView({
       </div>
 
       {/* TopRightChipStack:聊天视图右上 chip 浮层。
-          chip 栈第一行 = 右栏开关(仅 Windows 全屏聊天视图;mac 开关在 ContentHeader
-          右端,见 ContentHeader.tsx,故 !isMac 守卫)。
+          chip 栈第一行 = 右栏展开入口(仅 Windows 且右栏折叠时;展开态的折叠按钮
+          归属右栏 TabBar;mac 开关在 ContentHeader 右端,故 !isMac 守卫)。
           MessageStream 内部的 PrevMessageJumpChip 通过 portal 挂入同一栈,自然落到下一行。
           "本次会话改动文件列表"已迁移到 RSB review tab,不再保留浮动按钮 + 滑入抽屉。 */}
       <TopRightChipStack>
-        {/* B2b:工具面板的开关是**常驻 toggle**(收起/展开都是它,不再"收起才冒 chip、
-            展开缩回 Tab 条"两套入口):按钮钉在聊天区靠缝的角上,位置固定不跟面板跑;
-            面板贴右时在右上(本栈第一行),贴左时镜像到左上(下方容器)。 */}
+        {/* Windows 折叠态的展开入口钉在聊天区靠缝的角上;面板贴右时在右上
+            (本栈第一行),贴左时镜像到左上(下方容器)。 */}
         {!isMac &&
+          rightSidebarCollapsed &&
           (ownsRoute || showRsbToggle) &&
           onToggleRightSidebar &&
           rightSidebarSide === 'right' && (
@@ -2918,8 +2922,9 @@ export function CCAgentSessionView({
       </TopRightChipStack>
       {/* mac 不渲染本 chip(2026-07-09 Lizi 口径):mac 的折叠 toggle 无论面板贴
           哪侧都**恒钉窗口右上角**(MainLayout 浮层,与左栏折叠按钮对称);
-          Windows 维持 B2b 常驻 toggle,面板贴左时镜像到聊天区左上角。 */}
+          Windows 仅折叠态显示,面板贴左时镜像到聊天区左上角。 */}
       {!isMac &&
+        rightSidebarCollapsed &&
         (ownsRoute || showRsbToggle) &&
         onToggleRightSidebar &&
         rightSidebarSide === 'left' && (

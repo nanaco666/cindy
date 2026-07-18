@@ -19,12 +19,26 @@
 模拟器调试已经代码化:
 
 ```bash
-pnpm mobile:sim:start
+pnpm mobile:sim:start                       # 国服(默认)
+pnpm mobile:sim:start -- --region=global   # 海外
 pnpm mobile:sim:whoami
-pnpm mobile:sim:rebuild
+pnpm mobile:sim:rebuild                     # 国服(默认)
+pnpm mobile:sim:rebuild -- --region=global # 海外
 ```
 
-脚本固定 Metro 8081、注入当前 git branch/commit 给新建会话页顶部的 `__DEV__` build label,避免多 worktree 连错 bundle。`mobile:sim:start` / `mobile:sim:rebuild` 会自动补齐 `apps/mobile/.env` 的功能变量(取自 `eas.json` production profile),无需手动复制 `.env.example`。具体排障见 [`simulator-debugging.md`](./simulator-debugging.md)。
+脚本固定 Metro 8081、注入当前 git branch/commit 给新建会话页顶部的 `__DEV__` build label,避免多 worktree 连错 bundle。`mobile:sim:start` / `mobile:sim:rebuild` 会按所选 region 把构建身份与对应 `config/endpoint*.json` 的 `cdnBaseUrl` 同步到 `apps/mobile/.env`,无需手动注入参数或复制 `.env.example`。具体排障见 [`simulator-debugging.md`](./simulator-debugging.md)。
+切到 global 时原生 bundle identity / scheme 也会变,先用同 region 的 `mobile:sim:rebuild` 重装开发包,再用 `mobile:sim:start -- --region=global` 启动 Metro。
+
+## Xcode 本地开发(region)
+
+需要在 Xcode 里选择真机 / 模拟器、调签名或看原生日志时,从仓库根运行同一条命令;不传 region 时默认国服:
+
+```bash
+pnpm mobile:xcode                   # 国服(默认):com.xd.cindycn / cindycn
+pnpm mobile:xcode --region=global   # 海外:com.xd.cindy / cindy
+```
+
+命令会把所选 region 与对应 endpoint 清单自举基址同步到 `apps/mobile/.env`,再执行 iOS clean prebuild、安装 Pods、打开 app 的 `.xcworkspace`,最后在当前终端持续运行 Metro 8081。固定 clean prebuild 是为了防止从 cn / global 切换时复用旧 `ios/` 里的 bundleId / scheme。它只准备本地 Xcode 开发工程,不 archive、不上传 NPKG / OSS、不写发版记录。Xcode 打开后保持命令所在终端运行,选择目标设备并点击 Run。切 region 时如果 8081 已有旧 Metro,命令会在改文件 / prebuild 前拒绝执行,避免 native 与 JS 使用不同地区。
 
 ## 手机 Beta
 
@@ -32,7 +46,7 @@ Beta 现在就是多开发者模型,不是未来目标:
 
 - build profile、channel、branch 同名:`beta-<dev>`。
 - 已 seed `beta-dash`;新增开发者用 `pnpm mobile:beta:add-dev -- <dev> --execute` 生成 profile,并创建/关联同名 EAS channel -> branch。
-- 同正式服 `bundleIdentifier` / `scheme` / 飞书 appId;当前为 `com.xd.lizcn` + `lizcn://auth`,EAS/TestFlight 默认优先走飞书 App 原生 SSO,超时或失败后退回浏览器 OAuth。
+- 同正式服 region 身份与 OAuth callback scheme；登录统一走 Cindy auth-server，原生飞书 SSO 已退役。
 - 同 bundleId 的代价:一台手机同一时间只能装一个 XDMaker mobile 变体;多个 beta 分支串行切,不能并存。
 - Beta 显示名为 `XDMaker Beta (<dev>)`;缺少 dev 时退回 `XDMaker Beta`。
 
@@ -93,7 +107,7 @@ pnpm mobile:release:android:npkg  -- upload <apk>  # 单独上传 APK 取下载�
 
 外部动作 pending,不要假装已完成:
 
-- EAS/TestFlight 默认启用 native Feishu SSO,失败或未安装飞书时回退浏览器 OAuth;自建线 Android 正式启用 native SSO 前仍需确认飞书后台登记 Android 包名 `com.xd.cindycn` 与新 keystore 签名 SHA256(`B0:A5:77:…:27:A9`,2026-07-16 换 Cindy.jks 后旧登记不适用);iOS 侧 `com.xd.cindycn` 的 NPKG 企业重签白名单与飞书登记同为新的外部待办。
+- iOS 侧 `com.xd.cindycn` 的 NPKG 企业重签白名单仍是外部待办；原生飞书 SSO 与相应包名/签名登记已退役。
 - ~~NPKG 的 Android APK 上传路径~~ 已不需要:冷更 APK 自 2026-07-06 起由 `release-android-local.mjs` 直传自有 OSS 取 CDN 直链,不经 NPKG(`release-android-npkg.sh` 仅供手动补传;只构建不上传用 `--skip-upload`)。
 
 ## PR 门禁(CI)
@@ -110,7 +124,7 @@ pnpm mobile:release:android:npkg  -- upload <apk>  # 单独上传 APK 取下载�
 ## 红线
 
 1. production fingerprint 必须与 `origin/main` 基线一致。beta profile 和 release scripts 不能改变 production OTA runtime。
-2. `bundleIdentifier` / Android package:EAS/TestFlight 线固定为 `com.xd.lizcn`,自建线固定为 `com.xd.cindycn`(2026-07-16 起两线身份分离);`scheme` 两线统一固定为 `lizcn`;EAS profiles 默认开启 native Feishu SSO 以满足飞书 App 跳转登录,并必须保留浏览器 OAuth 兜底。⚠️ 两线同机共装时 `lizcn://` scheme 重复注册,浏览器 OAuth 回调可能被另一条线的 app 抢走(iOS 对重复 scheme 的路由不确定),内测机建议只装一条线。
+2. `bundleIdentifier` / Android package 与 callback scheme 必须按 region 保持稳定；登录统一走 Cindy auth-server，禁止重新引入原生飞书 SSO 或飞书 appId 构建配置。
 3. `app.config.js` 在非 beta 环境必须原样返回 Expo config。
 4. 多人禁止共享单个 `beta` channel。
 5. 生产发版禁止绕过 release scripts。

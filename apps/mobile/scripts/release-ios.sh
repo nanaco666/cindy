@@ -194,7 +194,7 @@ for b in builds:
     print((b.get("artifacts",{}) or {}).get("applicationArchiveUrl","") or "")
     break')"
   [ -n "$url" ] || die "没找到 profile=$profile 的已完成 iOS 构建产物(先 \`eas build --platform ios --profile $profile\`;beta 用 --profile beta-<dev>)"
-  local tmp; tmp="$(mktemp -d)/xdmaker.ipa"
+  local tmp; tmp="$(mktemp -d)/Cindy.ipa"
   echo "  下载产物 → $tmp"
   curl -sfL -m 600 -o "$tmp" "$url" || die "下载 EAS 产物失败"
   cmd_upload "$tmp" "${pass[@]}"

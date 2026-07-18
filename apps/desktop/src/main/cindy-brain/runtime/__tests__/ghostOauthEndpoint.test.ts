@@ -305,16 +305,23 @@ describe('tokenBroker 门控', () => {
     authorizeUrl: 'https://auth.example.com/authorize',
     tokenUrl: 'https://auth.example.com/token',
     clientId: 'builtin-cid',
+    clientIdAlternatives: ['global-cid'],
     pkce: false,
     tokenBroker: 'jira',
   };
   const BROKERED_SECRETS = new Map<string, GhostOauthDecl>([['acct', BROKERED]]);
 
-  function callAs(ghostId: string, method: string, pathname: string, manager = fakeManager()) {
+  function callAs(
+    ghostId: string,
+    method: string,
+    pathname: string,
+    manager = fakeManager(),
+    body: Record<string, unknown> = {},
+  ) {
     return handleGhostOauthRequest({
       method,
       pathname,
-      readBodyText: async () => JSON.stringify({ clientId: 'x' }),
+      readBodyText: async () => JSON.stringify(body),
       oauthSecrets: BROKERED_SECRETS,
       manager,
       ghostId,
@@ -340,5 +347,31 @@ describe('tokenBroker 门控', () => {
     expect(blocked.status).toBe(200);
     expect(JSON.parse(blocked.body ?? '{}')).toMatchObject({ ok: false, error: 'BROKER_FORBIDDEN' });
     expect(blockedManager.connectAccount).not.toHaveBeenCalled();
+  });
+
+  it('connect:可选择清单声明的备用 clientId;未声明值在端点拒绝', async () => {
+    const manager = fakeManager();
+    const selected = await callAs(
+      'cindy-slack',
+      'POST',
+      '/oauth/acct/connect',
+      manager,
+      { clientId: 'global-cid' },
+    );
+    expect(selected.status).toBe(200);
+    expect(manager.connectAccount).toHaveBeenCalledWith('cindy-slack', 'acct', BROKERED, {
+      clientId: 'global-cid',
+    });
+
+    const rejectedManager = fakeManager();
+    const rejected = await callAs(
+      'cindy-slack',
+      'POST',
+      '/oauth/acct/connect',
+      rejectedManager,
+      { clientId: 'foreign-cid' },
+    );
+    expect(rejected.status).toBe(400);
+    expect(rejectedManager.connectAccount).not.toHaveBeenCalled();
   });
 });

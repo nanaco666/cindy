@@ -14,6 +14,10 @@ const managedEnvKeys = [
   'EXPO_PUBLIC_CINDY_AUTH_REGION',
   'EXPO_PUBLIC_XDT_OTA_SELFHOST',
   'EXPO_PUBLIC_XDT_OTA_URL',
+  'EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID',
+  'EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID',
+  'EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME',
+  'CINDY_USE_LOCAL_REGION_CONFIG',
   'CINDY_SELF_HOST_REGIONS_FILE',
 ];
 let previousEnv: Record<string, string | undefined>;
@@ -85,6 +89,11 @@ describe('mobile native app config', () => {
       global: {
         iosBundleId: 'com.xd.cindy',
         androidPackage: 'com.xd.cindy',
+        google: {
+          webClientId: 'web.apps.googleusercontent.com',
+          iosClientId: 'ios.apps.googleusercontent.com',
+          iosUrlScheme: 'com.googleusercontent.apps.ios',
+        },
         tapdb: { clientId: 'json-id', clientToken: 'json-token' },
       },
     }));
@@ -92,6 +101,9 @@ describe('mobile native app config', () => {
     process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST = '1';
     // 即使调用环境残留旧变量,自建原生 config 也不得再消费真实更新地址。
     process.env.EXPO_PUBLIC_XDT_OTA_URL = 'https://must-not-be-baked.example.com';
+    process.env.EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID = 'ambient-web';
+    process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID = 'ambient-ios';
+    process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME = 'ambient-scheme';
     const selfHosted = buildConfig({ config: appJson.expo });
     expect(selfHosted.updates).toMatchObject({
       url: 'https://selfhost.invalid/manifest',
@@ -107,12 +119,99 @@ describe('mobile native app config', () => {
       clientToken: 'json-token',
       region: 'cn',
     });
+    expect(selfHosted.extra.cindy).not.toHaveProperty('google');
+    expect(selfHosted.plugins).not.toContainEqual(
+      expect.arrayContaining(['@react-native-google-signin/google-signin']),
+    );
 
     process.env.EXPO_PUBLIC_CINDY_AUTH_REGION = 'global';
     const selfHostedGlobal = buildConfig({ config: appJson.expo });
     expect(selfHostedGlobal.ios.bundleIdentifier).toBe('com.xd.cindy');
     expect(selfHostedGlobal.android.package).toBe('com.xd.cindy');
     expect(selfHostedGlobal.extra.cindy.tapdb.region).toBe('global');
+    expect(selfHostedGlobal.extra.cindy.google).toEqual({
+      webClientId: 'web.apps.googleusercontent.com',
+      iosClientId: 'ios.apps.googleusercontent.com',
+      iosUrlScheme: 'com.googleusercontent.apps.ios',
+    });
+    expect(selfHostedGlobal.plugins).toContainEqual([
+      '@react-native-google-signin/google-signin',
+      { iosUrlScheme: 'com.googleusercontent.apps.ios' },
+    ]);
+  });
+
+  it('keeps the existing EAS Google environment path outside self-host builds', () => {
+    const appJson = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'app.json'), 'utf8'),
+    );
+    const buildConfig = require(resolve(process.cwd(), 'app.config.js'));
+    process.env.EXPO_PUBLIC_CINDY_AUTH_REGION = 'global';
+    process.env.EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID =
+      'eas-web.apps.googleusercontent.com';
+    process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID =
+      'eas-ios.apps.googleusercontent.com';
+    process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME =
+      'com.googleusercontent.apps.eas-ios';
+
+    const global = buildConfig({ config: appJson.expo });
+    expect(global.extra.cindy).toEqual({ authRegion: 'global' });
+    expect(global.plugins).toContainEqual([
+      '@react-native-google-signin/google-signin',
+      { iosUrlScheme: 'com.googleusercontent.apps.eas-ios' },
+    ]);
+  });
+
+  it('local Xcode / Simulator builds use the selected region JSON without enabling self-host OTA', () => {
+    const appJson = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'app.json'), 'utf8'),
+    );
+    const buildConfig = require(resolve(process.cwd(), 'app.config.js'));
+    const configDir = mkdtempSync(join(tmpdir(), 'cindy-local-regions-'));
+    temporaryDirs.push(configDir);
+    const regionsPath = join(configDir, 'regions.json');
+    writeFileSync(regionsPath, JSON.stringify({
+      cn: {
+        iosBundleId: 'com.local.cindycn',
+        androidPackage: 'com.local.cindycn',
+        tapdb: { clientId: 'cn-json-id', clientToken: 'cn-json-token' },
+      },
+      global: {
+        iosBundleId: 'com.local.cindy',
+        androidPackage: 'com.local.cindy',
+        google: {
+          webClientId: 'local-web.apps.googleusercontent.com',
+          iosClientId: 'local-ios.apps.googleusercontent.com',
+          iosUrlScheme: 'com.googleusercontent.apps.local-ios',
+        },
+        tapdb: { clientId: 'global-json-id', clientToken: 'global-json-token' },
+      },
+    }));
+    process.env.CINDY_SELF_HOST_REGIONS_FILE = regionsPath;
+    process.env.CINDY_USE_LOCAL_REGION_CONFIG = '1';
+    process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME =
+      'com.googleusercontent.apps.ambient';
+
+    const cn = buildConfig({ config: appJson.expo });
+    expect(cn.ios.bundleIdentifier).toBe('com.local.cindycn');
+    expect(cn.extra.cindy.regionConfigSource).toBe('self-host-regions');
+    expect(cn.extra.cindy.tapdb.clientId).toBe('cn-json-id');
+    expect(cn.extra.cindy).not.toHaveProperty('google');
+    expect(cn.updates).toEqual(appJson.expo.updates);
+    expect(cn.plugins).not.toContainEqual(
+      expect.arrayContaining(['@react-native-google-signin/google-signin']),
+    );
+
+    process.env.EXPO_PUBLIC_CINDY_AUTH_REGION = 'global';
+    const global = buildConfig({ config: appJson.expo });
+    expect(global.ios.bundleIdentifier).toBe('com.local.cindy');
+    expect(global.extra.cindy.google.webClientId).toBe(
+      'local-web.apps.googleusercontent.com',
+    );
+    expect(global.plugins).toContainEqual([
+      '@react-native-google-signin/google-signin',
+      { iosUrlScheme: 'com.googleusercontent.apps.local-ios' },
+    ]);
+    expect(global.updates).toEqual(appJson.expo.updates);
   });
 
   it('fails closed when a store build lacks its regional App Store numeric ID', () => {
@@ -240,6 +339,10 @@ describe('mobile native app config', () => {
       ),
       'utf8',
     );
+    const iosWechatPodfilePlugin = readFileSync(
+      resolve(process.cwd(), 'plugins/with-wechat-opensdk-modulemap.js'),
+      'utf8',
+    );
     const iosSubscriber = readFileSync(
       resolve(
         process.cwd(),
@@ -279,6 +382,39 @@ describe('mobile native app config', () => {
     expect(iosCoordinator).toContain(
       'WXApi.handleOpenUniversalLink(userActivity, delegate: self)',
     );
+    expect(iosCoordinator).toContain('#if targetEnvironment(simulator)');
+    expect(iosCoordinator).toContain('ERR_WECHAT_UNAVAILABLE_ON_SIMULATOR');
+    expect(iosWechatPodfilePlugin).toContain(
+      'xdt-wechat-login: arm64 simulator stub linkage',
+    );
+    expect(iosWechatPodfilePlugin).toContain(
+      "other_linker_flags[:libraries].delete?('WechatOpenSDK')",
+    );
+    expect(iosWechatPodfilePlugin).toContain(
+      "OTHER_LDFLAGS[sdk=iphoneos*]",
+    );
     expect(iosSubscriber).toContain('continue userActivity: NSUserActivity');
+  });
+
+  it('independently injects the WeChat simulator hook into an existing Podfile', () => {
+    const plugin = require(
+      resolve(process.cwd(), 'plugins/with-wechat-opensdk-modulemap.js'),
+    ) as {
+      injectPostInstallHooks(contents: string): string;
+    };
+    const oldPodfile = `
+post_install do |installer|
+  # xdt-wechat-login: WechatOpenSDK modulemap
+  # xdt-wechat-login: arm64 simulator stub linkage
+end
+`;
+
+    const upgradedPodfile = plugin.injectPostInstallHooks(oldPodfile);
+    expect(upgradedPodfile.match(/WechatOpenSDK modulemap/g)).toHaveLength(1);
+    expect(upgradedPodfile).toContain(
+      'xdt-wechat-login: arm64 simulator stub linkage v2',
+    );
+    expect(upgradedPodfile.match(/arm64 simulator stub linkage v2/g)).toHaveLength(1);
+    expect(plugin.injectPostInstallHooks(upgradedPodfile)).toBe(upgradedPodfile);
   });
 });

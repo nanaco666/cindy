@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_DEVICE_LINK_API_BASE_URL,
@@ -5,6 +7,7 @@ import {
   getMobileConfigIssues,
   resolveEnvFlag,
   resolveDeviceLinkApiBaseUrl,
+  resolveMobileGoogleConfig,
 } from '@/config/env';
 
 describe('mobile env', () => {
@@ -36,5 +39,45 @@ describe('mobile env', () => {
     expect(resolveEnvFlag('1')).toBe(true);
     expect(resolveEnvFlag(' true ')).toBe(true);
     expect(resolveEnvFlag('YES')).toBe(true);
+  });
+
+  it('本地 / self-host Google 只认 region JSON 写入的 Expo extra', () => {
+    const ambient = {
+      EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID: 'ambient-web',
+      EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID: 'ambient-ios',
+      EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME: 'ambient-scheme',
+    };
+    expect(
+      resolveMobileGoogleConfig(
+        true,
+        {
+          webClientId: 'json-web',
+          iosClientId: 'json-ios',
+          iosUrlScheme: 'json-scheme',
+        },
+        ambient,
+      ),
+    ).toEqual({
+      webClientId: 'json-web',
+      iosClientId: 'json-ios',
+      iosUrlScheme: 'json-scheme',
+    });
+    expect(resolveMobileGoogleConfig(true, undefined, ambient)).toEqual({
+      webClientId: '',
+      iosClientId: '',
+      iosUrlScheme: '',
+    });
+    expect(resolveMobileGoogleConfig(false, undefined, ambient)).toEqual({
+      webClientId: 'ambient-web',
+      iosClientId: 'ambient-ios',
+      iosUrlScheme: 'ambient-scheme',
+    });
+  });
+
+  it('selects the bundled dev endpoint manifest from AUTH_REGION', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/config/env.ts'), 'utf8');
+    expect(source).toContain("AUTH_REGION === 'global'");
+    expect(source).toContain("require('../../../../config/endpoint.global.json')");
+    expect(source).toContain("require('../../../../config/endpoint.json')");
   });
 });

@@ -2,7 +2,7 @@
  * brandRegion — 本构建的区域身份(cn/global)与区域派生 appId 的运行时单点。
  *
  * 区域在**构建期**经 VITE_CINDY_AUTH_REGION 烘焙(main 走 vite.main.config.ts
- * 的 define,renderer 走标准 Vite env;生产由 productionViteEnv 注入,dev /
+ * 的 define,renderer 走标准 Vite env;生产由 desktopClientBuildEnv 注入,dev /
  * 未注入一律默认 cn)。运行时不可切换——cn 与 global 是两个可并存的系统身份
  * (com.xd.cindycn / com.xd.cindy,与 mobile 同一套命名)。
  *

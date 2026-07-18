@@ -1142,3 +1142,69 @@ describe('anthropic-compat-proxy 客户端中断传播', () => {
     expect(infoLogs.filter((m) => m.includes('client disconnected'))).toHaveLength(0);
   });
 });
+
+describe('anthropic-compat-proxy 入站请求体 dump 开关(debugDumpRequestBody,默认关)', () => {
+  it('默认(不传开关)debug inbound 日志只有元数据,不含 body dump', async () => {
+    const upstream = await startFakeUpstream((_i, _b, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end('{}');
+    });
+    upstreamClose = upstream.close;
+
+    const debugs: Array<{ msg: string; ctx?: Record<string, unknown> }> = [];
+    proxy = await createAnthropicCompatProxy({
+      upstream: upstream.url,
+      transformRequest: [],
+      logger: { isDebugEnabled: () => true, debug: (msg, ctx) => debugs.push({ msg, ctx }) },
+    });
+
+    await post(proxy.url, { model: 'test-model', secretPayload: 'x'.repeat(2048) });
+    const inbound = debugs.find((d) => d.msg.includes('inbound request'));
+    expect(inbound).toBeDefined();
+    // 元数据照旧(reqId/method/url/bytes),定位问题不受影响。
+    expect(inbound?.ctx?.method).toBe('POST');
+    expect(typeof inbound?.ctx?.bytes).toBe('number');
+    // 但绝不 dump 请求体 —— dev trace 级别 + 高并发下这是 main event loop 风暴源。
+    expect(inbound?.ctx).not.toHaveProperty('body');
+  });
+
+  it('显式开启后 debug inbound 日志携带截断 dump(诊断模式)', async () => {
+    const upstream = await startFakeUpstream((_i, _b, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end('{}');
+    });
+    upstreamClose = upstream.close;
+
+    const debugs: Array<{ msg: string; ctx?: Record<string, unknown> }> = [];
+    proxy = await createAnthropicCompatProxy({
+      upstream: upstream.url,
+      transformRequest: [],
+      debugDumpRequestBody: true,
+      logger: { isDebugEnabled: () => true, debug: (msg, ctx) => debugs.push({ msg, ctx }) },
+    });
+
+    await post(proxy.url, { model: 'test-model', marker: 'dump-me' });
+    const inbound = debugs.find((d) => d.msg.includes('inbound request'));
+    expect(String(inbound?.ctx?.body)).toContain('dump-me');
+  });
+
+  it('localHandler 分支同样受开关约束(默认不 dump)', async () => {
+    const debugs: Array<{ msg: string; ctx?: Record<string, unknown> }> = [];
+    proxy = await createAnthropicCompatProxy({
+      upstream: () => '',
+      transformRequest: [],
+      routingTransform: () => ({
+        localHandler: async ({ res }) => {
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end('{}');
+        },
+      }),
+      logger: { isDebugEnabled: () => true, debug: (msg, ctx) => debugs.push({ msg, ctx }) },
+    });
+
+    await post(proxy.url, { model: 'local-model', secretPayload: 'y'.repeat(2048) });
+    const inbound = debugs.find((d) => d.msg.includes('inbound request'));
+    expect(inbound).toBeDefined();
+    expect(inbound?.ctx).not.toHaveProperty('body');
+  });
+});

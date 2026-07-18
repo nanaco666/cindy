@@ -2,6 +2,7 @@
 // 参数解析、版本解析(版本无关默认 / 显式 / bump)、产物目录与 build-info 组装。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
   VERSIONLESS_VERSION,
   parsePackageArgs,
@@ -13,6 +14,18 @@ import {
 } from '../../apps/desktop/scripts/ci/package-lib.mjs';
 
 const DEFAULTS = { platform: 'win32', arch: 'x64' };
+
+test('global package selects its region before agent binary CDN fallback', () => {
+  const source = fs.readFileSync(
+    new URL('../../apps/desktop/scripts/package-desktop.mjs', import.meta.url),
+    'utf8',
+  );
+  const regionIndex = source.indexOf('process.env.CINDY_AUTH_REGION = region;');
+  const ensureIndex = source.indexOf('await ensureBinary(kind, platformKey);');
+  assert.notEqual(regionIndex, -1);
+  assert.notEqual(ensureIndex, -1);
+  assert.ok(regionIndex < ensureIndex);
+});
 
 test('parsePackageArgs: 零参数默认 = 当前平台 + cn + dev + 版本无关', () => {
   const args = parsePackageArgs([], DEFAULTS);
