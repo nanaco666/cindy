@@ -8,6 +8,7 @@
 //     并自行生成 itms manifest plist(苹果 OTA 安装协议要求,必须 HTTPS)与安装页。
 
 const UNSAFE_SEGMENT = /[^A-Za-z0-9._-]/g;
+const PRODUCT_ARTIFACT_NAME = 'Cindy';
 
 /** 把 version / buildNumber 等外部值收敛成安全的文件名片段(OSS key / URL 友好)。 */
 export function sanitizeFileSegment(value, fallback = 'unknown') {
@@ -41,7 +42,7 @@ export function buildAndroidDistTarget({ ossPrefix, cdnBase, version, versionCod
   if (!ossPrefix || !cdnBase) throw new Error('buildAndroidDistTarget requires ossPrefix / cdnBase');
   if (versionCode == null || versionCode === '') throw new Error('buildAndroidDistTarget requires versionCode');
   const code = sanitizeFileSegment(versionCode);
-  const fileName = `xdmaker-${sanitizeFileSegment(version, 'v')}-${code}.apk`;
+  const fileName = `${PRODUCT_ARTIFACT_NAME}-${sanitizeFileSegment(version, 'v')}-${code}.apk`;
   const dir = `mobile-dist/android/${code}`;
   return { key: `${ossPrefix}/${dir}/${fileName}`, url: `${cdnBase}/${dir}/${fileName}`, fileName };
 }
@@ -83,7 +84,7 @@ export function buildIosDistTargets({ ossPrefix, cdnBase, version, buildNumber }
   if (buildNumber == null || buildNumber === '') throw new Error('buildIosDistTargets requires buildNumber');
   const build = sanitizeFileSegment(buildNumber);
   const dir = `mobile-dist/ios/${build}`;
-  const ipaFile = `xdmaker-${sanitizeFileSegment(version, 'v')}-${build}.ipa`;
+  const ipaFile = `${PRODUCT_ARTIFACT_NAME}-${sanitizeFileSegment(version, 'v')}-${build}.ipa`;
   const entry = (file) => ({ key: `${ossPrefix}/${dir}/${file}`, url: `${cdnBase}/${dir}/${file}` });
   return { ipa: entry(ipaFile), manifest: entry('manifest.plist'), page: entry('install.html') };
 }

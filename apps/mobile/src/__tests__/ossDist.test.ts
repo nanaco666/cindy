@@ -25,8 +25,8 @@ describe('sanitizeFileSegment', () => {
 describe('buildAndroidDistTarget', () => {
   it('按 versionCode 分目录拼 key 与 CDN 直链', () => {
     const t = buildAndroidDistTarget({ ossPrefix: 'xdt-maker', cdnBase: 'https://cdn.example.com/xdt-maker', version: '1.2.3', versionCode: 2026070101 });
-    expect(t.key).toBe('xdt-maker/mobile-dist/android/2026070101/xdmaker-1.2.3-2026070101.apk');
-    expect(t.url).toBe('https://cdn.example.com/xdt-maker/mobile-dist/android/2026070101/xdmaker-1.2.3-2026070101.apk');
+    expect(t.key).toBe('xdt-maker/mobile-dist/android/2026070101/Cindy-1.2.3-2026070101.apk');
+    expect(t.url).toBe('https://cdn.example.com/xdt-maker/mobile-dist/android/2026070101/Cindy-1.2.3-2026070101.apk');
   });
   it('缺 versionCode / cdnBase 抛错', () => {
     expect(() => buildAndroidDistTarget({ ossPrefix: 'p', cdnBase: 'https://c', version: '1', versionCode: '' })).toThrow();
@@ -37,7 +37,7 @@ describe('buildAndroidDistTarget', () => {
 describe('buildIosDistTargets', () => {
   it('按 buildNumber 分目录产出 ipa / manifest / page 三件套', () => {
     const t = buildIosDistTargets({ ossPrefix: 'xdt-maker', cdnBase: 'https://cdn.example.com/xdt-maker', version: '1.2.3', buildNumber: '2026070102' });
-    expect(t.ipa.key).toBe('xdt-maker/mobile-dist/ios/2026070102/xdmaker-1.2.3-2026070102.ipa');
+    expect(t.ipa.key).toBe('xdt-maker/mobile-dist/ios/2026070102/Cindy-1.2.3-2026070102.ipa');
     expect(t.manifest.url).toBe('https://cdn.example.com/xdt-maker/mobile-dist/ios/2026070102/manifest.plist');
     expect(t.page.url).toBe('https://cdn.example.com/xdt-maker/mobile-dist/ios/2026070102/install.html');
   });

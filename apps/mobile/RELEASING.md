@@ -31,7 +31,7 @@ pnpm mobile:release:prod -- --message "发布远控修复" --execute
 # iOS NPKG 运维脚本:上传 EAS iOS 产物等企业重签 / 补取链接 / 下载重签 ipa
 # (自建线冷更发版走 mobile:release:ios:local,它内部调 upload + download 后把 ipa 直传自有 OSS)
 pnpm mobile:release:ios:npkg -- from-eas
-pnpm mobile:release:ios:npkg -- upload /path/to/xdmaker.ipa --tag release
+pnpm mobile:release:ios:npkg -- upload /path/to/Cindy.ipa --tag release
 pnpm mobile:release:ios:npkg -- resolve <parent_package_id>
 pnpm mobile:release:ios:npkg -- download <package_id> /path/to/save.ipa
 

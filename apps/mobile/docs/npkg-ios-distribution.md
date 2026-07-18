@@ -40,7 +40,7 @@
 pnpm mobile:release:ios:npkg -- from-eas
 
 #    - 或手上已有 .ipa 文件:
-pnpm mobile:release:ios:npkg -- upload /path/to/xdmaker.ipa --tag release
+pnpm mobile:release:ios:npkg -- upload /path/to/Cindy.ipa --tag release
 #      经 pnpm 调用时 cwd 是仓库根,upload 传绝对路径更稳。
 
 # 2) 脚本会:上传 -> 轮询企业子包 -> 打印安装链接 + itms 链接 + 校验签名 Team
