@@ -1154,9 +1154,9 @@ export function MainLayout() {
                   // flex-1 自己撑满(2026-07-01 bug 修)。拖宽把手 = 引擎分割线。
                   width={rightSidebarWidth}
                   isMac={isMac}
-                  // B2b:不再传 onCloseSidebar —— Win TabBar 内的收起按钮撤掉,
-                  // 折叠/展开统一走聊天区靠缝角上的常驻 toggle(位置固定不跟面板跑);
-                  // mac 收起仍走窗口右上浮层(下方 isMac 块),不经此 prop。
+                  // Windows 展开态的折叠入口归属工具面板自身,放回 TabBar 右端;
+                  // 收起后聊天区角上才显示展开入口。mac 仍走窗口右上浮层。
+                  onCloseSidebar={isMac ? undefined : handleToggleRightSidebar}
                   onMaximize={handleMaximizeRightSidebar}
                   isMaximized={isRightSidebarMaximized}
                   sessionId={rightSidebarSessionId}
@@ -1197,7 +1197,7 @@ export function MainLayout() {
             sibling 会把窗口按钮挤左」的问题。no-drag（按钮可点），周围窗口拖拽区由
             ContentHeader / 左栏顶行提供。
             mac 不渲染本块（用系统红绿灯）。
-            （Windows 右栏开关走聊天视图的 chip 栈，不在这里。） */}
+            （Windows 折叠态的展开入口走聊天视图 chip,展开态的折叠入口在右栏 TabBar。） */}
         {!isMac && (
           <div
             className="absolute right-0 top-0 z-50 flex h-[46px] items-center"
