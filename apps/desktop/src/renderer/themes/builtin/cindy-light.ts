@@ -130,6 +130,7 @@ const overrides = {
   'sidebar-item-hover': '0.0 0.0% 94.5%', // alias closure: hover
   'sidebar-search-bg': '0.0 0.0% 92.9%', // alias closure: surface
   'sidebar-muted': '222.0 4.6% 42.7%', // alias closure: tertiary
+  'surface-translucent-sidebar': 'rgba(255, 255, 255, 0.85)', // 用户观感定稿(2026-07-18:纯白 85%)
 } as const;
 
 export const cindyLight: Theme = {

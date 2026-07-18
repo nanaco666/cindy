@@ -62,6 +62,10 @@ registerColor('panel-bg', {
   light: 'var(--surface)',
   dark: 'var(--surface)',
 }, '面板 / 侧边栏 / 工具面板头部背景(历史幽灵 token 补注册,alias 到 surface)');
+registerColor('surface-translucent-sidebar', {
+  light: 'rgba(255, 255, 255, 0.85)',
+  dark: 'rgba(31, 31, 30, 0.85)',
+}, '侧栏毛玻璃叠色层(仅 CINDY 覆盖 alpha 旋钮)');
 registerColor('md-table-bg', {
   light: 'rgba(236, 236, 234, 0.55)',
   dark: 'rgba(44, 44, 42, 0.55)',
