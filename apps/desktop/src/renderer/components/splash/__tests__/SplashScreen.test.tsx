@@ -89,7 +89,7 @@ describe('SplashScreen v2 layout', () => {
     const wordmark = screen.getByTestId('splash-wordmark');
     const script = screen.getByTestId('splash-script');
 
-    expect(brand.className).toContain('left-1/2 top-[26.5%]');
+    expect(brand.className).toContain('left-1/2 top-[19.3%]');
     expect(brand.className).toContain('h-[424.5px] w-[457px]');
     expect(brand.getAttribute('style')).toContain(
       'translateX(-50%) scale(min(1, calc(100vh / 700px)))',
@@ -98,10 +98,10 @@ describe('SplashScreen v2 layout', () => {
     expect(illustration.className).toContain('top-0 h-[457px] w-[457px]');
     expect(illustration.className).not.toMatch(/\bh-full\b|\bw-full\b|object-cover/);
 
-    expect(wordmark.className).toContain('top-[277.5px] h-[78px] w-[229.5px]');
+    expect(wordmark.className).toContain('top-[352.5px] h-[78px] w-[229.5px]');
     expect(wordmark.className).toContain('drop-shadow-[0_2px_6.5px_rgba(0,0,0,0.25)]');
 
-    expect(script.className).toContain('left-[352.25px] top-[335px]');
+    expect(script.className).toContain('left-[352.25px] top-[410px]');
     expect(script.className).toContain('h-[89.5px] w-[225.5px]');
   });
 
