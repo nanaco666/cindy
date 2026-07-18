@@ -512,11 +512,11 @@ describe('startGhostOauthFlow', () => {
 
   it('publicRedirectUri:authorize URL 与 broker exchange 都用公网弹跳地址,本地监听仍在 loopback', async () => {
     const fixedPort = await probeFreePort();
-    const PUBLIC_URI = 'https://broker.example.com/slack-mcp/bounce';
+    const PUBLIC_URI = 'https://broker.example.com/jira/bounce';
     let capturedRedirectParam: string | null = null;
     const broker: GhostOauthBrokerClient = {
       exchange: vi.fn(async (slug: string, params: { code: string; redirectUri: string }) => {
-        expect(slug).toBe('slack');
+        expect(slug).toBe('jira');
         expect(params.code).toBe('c-pub');
         // 双地址模型:code 交换带的 redirect_uri 必须与 authorize 时一致 = 公网弹跳地址。
         expect(params.redirectUri).toBe(PUBLIC_URI);
@@ -528,7 +528,7 @@ describe('startGhostOauthFlow', () => {
       refresh: vi.fn(),
     };
     const result = await startGhostOauthFlow({
-      config: { ...BASE_CONFIG, tokenBroker: 'slack', redirectPort: fixedPort, publicRedirectUri: PUBLIC_URI },
+      config: { ...BASE_CONFIG, tokenBroker: 'jira', redirectPort: fixedPort, publicRedirectUri: PUBLIC_URI },
       fetchImpl: vi.fn() as unknown as typeof fetch,
       broker,
       openExternal: (url) => {

@@ -1234,57 +1234,7 @@ describe('ghost · network 详单校验(C4)', () => {
     ]);
   });
 
-  it('内置意识 cindy-slack 的身份卡永远过校验(broker 弹跳回调 + 逗号 scope + MCP 网关 3 工具)', () => {
-    const p = path.join(
-      path.dirname(fileURLToPath(import.meta.url)),
-      '../../../resources/builtin-ghosts/cindy-slack/ghost.json',
-    );
-    const r = validateGhostManifest(JSON.parse(fs.readFileSync(p, 'utf-8')));
-    expect(r.ok, r.ok ? '' : r.reason).toBe(true);
-    if (!r.ok) return;
-    expect(r.manifest.id).toBe('cindy-slack');
-    // slack.com = 授权/tokenUrl/identity 的声明域;mcp.slack.com = MCP 数据面。
-    // Bearer 只注入 mcp.slack.com(授权域不吃意识发起的注入)。
-    expect(r.manifest.network?.hosts).toEqual(['slack.com', 'mcp.slack.com']);
-    const secret = r.manifest.network?.secrets?.[0];
-    expect(secret?.key).toBe('slack_account');
-    expect(secret?.source).toBe('oauth');
-    expect(secret?.inject.hosts).toEqual(['mcp.slack.com']);
-    // broker 模式 + 双地址弹跳:Slack 后台只收 https redirect,redirect_uri =
-    // broker 基地址 + path(运行时拼),302 回本机 53683 的 callbackPath。
-    expect(secret?.oauth?.tokenBroker).toBe('slack');
-    expect(secret?.oauth?.clientId).toBe('2372848536.11511864051187');
-    expect(secret?.oauth?.clientIdAlternatives).toEqual(['2372848536.11619977511874']);
-    expect(secret?.oauth?.pkce).toBe(false);
-    expect(secret?.oauth?.redirectPort).toBe(53683);
-    expect(secret?.oauth?.brokerBounce).toEqual({
-      path: '/slack-mcp/bounce',
-      callbackPath: '/slack-mcp/callback',
-    });
-    // Slack 的 scope 参数是逗号分隔(OAuth 标准的空格拼接 Slack 不认)。
-    expect(secret?.oauth?.scopeDelimiter).toBe(',');
-    // 同身份合并键 = auth.test 的 user_id(与 slackAccountsMigration 迁移
-    // 老账号时写入的 label 同源,重连才能命中合并而不是堆多行);展示名走
-    // displayTemplate 渲染("workspace · 用户名",user_id 只认不读)。
-    expect(secret?.oauth?.identity).toEqual({
-      url: 'https://slack.com/api/auth.test',
-      labelPath: 'user_id',
-      displayTemplate: '{team} · {user}',
-    });
-    // 写 scope 必须在清单里(设置页"只读连接"走 connect 的 scopes 子集参数)。
-    expect(secret?.oauth?.scopes).toContain('chat:write');
-    expect(secret?.oauth?.scopes).toContain('reactions:write');
-    const settingsSource = fs.readFileSync(path.join(path.dirname(p), 'settings.js'), 'utf-8');
-    expect(settingsSource).toContain("fetch('/app-context')");
-    expect(settingsSource).toContain('2372848536.11511864051187');
-    expect(settingsSource).toContain('2372848536.11619977511874');
-    // 工具面 = Slack 官方托管 MCP 的两工具网关 + 账号自省。
-    expect(r.manifest.tools?.map((t) => t.name)).toEqual([
-      'slack_accounts',
-      'slack_list_tools',
-      'slack_call_tool',
-    ]);
-  });
+  // cindy-slack 意识已于 2026-07-19 退役(Slack 能力并轨 hook 通道),其身份卡校验用例随包删除。
 });
 
 describe('ghost · network 多连接声明(connections)', () => {

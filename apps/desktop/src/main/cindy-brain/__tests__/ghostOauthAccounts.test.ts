@@ -762,9 +762,9 @@ describe('brokerBounce(双地址弹跳回调)', () => {
       scopes: ['read:x'],
       clientId: 'builtin-cid',
       pkce: false,
-      tokenBroker: 'slack',
+      tokenBroker: 'jira',
       redirectPort,
-      brokerBounce: { path: '/slack-mcp/bounce', callbackPath: '/slack-mcp/callback' },
+      brokerBounce: { path: '/jira/bounce', callbackPath: '/jira/callback' },
     };
   }
 
@@ -809,9 +809,9 @@ describe('brokerBounce(双地址弹跳回调)', () => {
     });
     await new Promise((r) => probe.close(r));
 
-    const PUBLIC_URI = 'https://broker.example.com/slack-mcp/bounce';
+    const PUBLIC_URI = 'https://broker.example.com/jira/bounce';
     const resolveBrokerPublicUrl = vi.fn((p: string) => {
-      expect(p).toBe('/slack-mcp/bounce');
+      expect(p).toBe('/jira/bounce');
       return PUBLIC_URI;
     });
     const exchange = vi.fn(async (_slug: string, params: { code: string; redirectUri: string }) => {
@@ -829,7 +829,7 @@ describe('brokerBounce(双地址弹跳回调)', () => {
         const u = new URL(url);
         expect(u.searchParams.get('redirect_uri')).toBe(PUBLIC_URI);
         // 模拟弹跳路由的 302:直接回打本机 loopback 的声明 callbackPath。
-        const cb = new URL(`http://127.0.0.1:${freePort}/slack-mcp/callback`);
+        const cb = new URL(`http://127.0.0.1:${freePort}/jira/callback`);
         cb.searchParams.set('code', 'c-bb');
         cb.searchParams.set('state', u.searchParams.get('state') ?? '');
         setImmediate(() => {

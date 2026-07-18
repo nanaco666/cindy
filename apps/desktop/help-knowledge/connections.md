@@ -1,7 +1,7 @@
 ---
 id: connections
 title: Connecting external accounts
-summary: External accounts (Slack, Google, Jira / Confluence, GitHub, GitLab) are connected on their ghost detail pages under Settings > Ghosts; Codex sign-in lives in Settings > Model Providers.
+summary: External accounts (Google, Jira / Confluence, GitHub, GitLab) are connected on their ghost detail pages under Settings > Ghosts; Slack is bound via the Slack toggle in Settings; Codex sign-in lives in Settings > Model Providers.
 tab: connections
 status: draft
 ---
@@ -9,7 +9,7 @@ External account connections have moved out of the old "Third-Party Platforms" s
 
 **Where to connect what:**
 
-- **Slack** — handled by the Cindy Slack ghost. Connect on Settings > Ghosts > Cindy Slack (read-write or read-only; existing Slack connections are migrated automatically).
+- **Slack** — bound via the Slack toggle in Settings (one browser authorization covers both the Slack channel bot and agent Slack tools). Bindings made before 2026-07 lack tool permission — toggle off and on once to re-authorize.
 - **Google** (Gmail / Calendar / Drive / Sheets) — handled by the Filo Google ghost (Settings > Ghosts > Filo Google).
 - **Jira / Confluence** — handled by the XD Atlassian ghost (Settings > Ghosts > XD Atlassian; existing connections are migrated automatically).
 - **GitHub** — handled by the Cindy GitHub ghost (Settings > Ghosts > Cindy GitHub; existing PAT connections are migrated automatically).
