@@ -19,7 +19,12 @@ import {
  * agentMeta.autoResume,桌面 silent-stop 守卫落库),历史上被手机渲染成一条
  * 用户没发过的「继续」气泡(2026-07 排查发现)。
  */
-export type MobileSystemCardType = SystemCardType | 'goal-complete' | 'goal-resumed' | 'auto-resume';
+export type MobileSystemCardType =
+  | SystemCardType
+  | 'goal-complete'
+  | 'goal-resumed'
+  | 'auto-resume'
+  | 'learn';
 export type MobileSystemCardPresentation = SystemCardPresentation;
 
 /** goal 达成记录文案(对齐桌面 GoalCompleteCard 的 goal.complete.record)。 */
@@ -64,8 +69,9 @@ export function buildMobileSystemCardData(
     session: RemoteSession | null;
   },
 ): Record<string, unknown> {
-  // goal / auto-resume 卡的数据由桌面落库的 agentMeta 派生,不走本地 slash 命令的数据组装。
-  if (type === 'goal-complete' || type === 'goal-resumed' || type === 'auto-resume') return {};
+  // goal / auto-resume 卡的数据由桌面落库的 agentMeta 派生,learn 卡的数据由
+  // 发送侧 buildLearnCardData 直接组装,都不走本地 slash 命令的数据组装。
+  if (type === 'goal-complete' || type === 'goal-resumed' || type === 'auto-resume' || type === 'learn') return {};
   return buildSystemCardData(type, {
     ...options,
     localCommands: MOBILE_LOCAL_SYSTEM_COMMANDS,
@@ -80,5 +86,29 @@ export function formatMobileSystemCard(
   if (type === 'goal-complete') return formatGoalCompleteCard(data);
   if (type === 'goal-resumed') return { title: '用量已恢复，继续目标', rows: [] };
   if (type === 'auto-resume') return { title: '连接中断，已自动继续', rows: [] };
+  if (type === 'learn') return formatLearnCard(data);
   return formatSystemCard(type, data);
+}
+
+/**
+ * /learn 启动反馈卡(移动端本地卡,数据来自 desktopSlashCommands.buildLearnCardData)。
+ * 蒸馏与评审全在被控端 learn-host:移动端暂无评审 UI,成功态明确引导回桌面端。
+ */
+function formatLearnCard(data: Record<string, unknown> | undefined): SystemCardPresentation {
+  const runId = typeof data?.runId === 'string' ? data.runId : '';
+  if (runId) {
+    return {
+      title: '技能学习已启动',
+      rows: [{ label: 'run', value: runId.slice(0, 8) }],
+      body: '蒸馏在桌面端后台进行,完成后请到桌面端查看并评审技能草案。',
+    };
+  }
+  const error = typeof data?.error === 'string' ? data.error : 'learn-failed';
+  return {
+    title: '技能学习未能启动',
+    rows: [],
+    body: error === 'learn-busy'
+      ? '已有一个学习任务在进行中,等它完成后再试。'
+      : `启动失败:${typeof data?.detail === 'string' && data.detail ? data.detail : '未知错误'}`,
+  };
 }

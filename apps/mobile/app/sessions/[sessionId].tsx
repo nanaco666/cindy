@@ -332,6 +332,12 @@ import {
   mergeMobileLocalSlashCommands,
   parseMobileLocalSystemCommand,
 } from '@/session/systemCard';
+import {
+  buildLearnCardData,
+  buildLearnStartRequest,
+  filterMobileDesktopCommands,
+  parseMobileDesktopCommand,
+} from '@/session/desktopSlashCommands';
 import type {
   InputProjection,
   QueuedRemoteMessage,
@@ -342,6 +348,7 @@ import type {
 import type {
   MobileAgentSkillListResult,
   MobileAtResourceItem,
+  MobileDesktopCommandListResult,
   MobileModelPricingMap,
   MobileSlashCommand,
   RemoteDirectoryEntry,
@@ -1671,7 +1678,7 @@ export default function SessionScreen() {
     setSlashPaletteError(null);
     void withTransientRemoteRetry(async () => {
       await openLink(deviceId);
-      const [builtins, skills] = await Promise.all([
+      const [builtins, skills, desktop] = await Promise.all([
         maker.listAgentCommands(agentKind),
         currentSession.workingDir
           ? maker.listAgentSkills(agentKind, {
@@ -1679,10 +1686,15 @@ export default function SessionScreen() {
               forceReload: false,
             })
           : Promise.resolve({ success: true, skills: [] } satisfies MobileAgentSkillListResult),
+        // desktop 命令是 additive 展示(分流判定不依赖此清单,见 desktopSlashCommands):
+        // 拉取失败(含老被控端无此通道)静默降级为不展示,不能拖垮 builtin/skill 两路。
+        maker.listDesktopCommands().catch(
+          () => ({ success: false } satisfies MobileDesktopCommandListResult),
+        ),
       ]);
-      return { builtins, skills };
+      return { builtins, skills, desktop };
     })
-      .then(({ builtins, skills }) => {
+      .then(({ builtins, skills, desktop }) => {
         if (slashLoadSeqRef.current !== seq) return;
         const builtinCommands = builtins.success && Array.isArray(builtins.commands)
           ? builtins.commands
@@ -1690,7 +1702,10 @@ export default function SessionScreen() {
         const skillCommands = skills.success && Array.isArray(skills.skills)
           ? skills.skills
           : [];
-        const merged = mergeSlashCommands(builtinCommands, skillCommands);
+        const desktopCommands = desktop.success && Array.isArray(desktop.commands)
+          ? filterMobileDesktopCommands(desktop.commands)
+          : [];
+        const merged = mergeSlashCommands(builtinCommands, skillCommands, desktopCommands);
         // 刷新失败(整体或部分)且缓存已画:保留缓存行、不置 error——
         // ComposerPaletteFrame 的 errorText 渲染在 children 之前,会把刚画的缓存
         // 整体盖住,可用面板被错误文案顶掉正是本 PR 要消除的体验(codex review R18)。
@@ -3143,9 +3158,30 @@ export default function SessionScreen() {
       }
       // 命令判定用 body(不含引用块):带引用时 /context 等本地命令仍生效,且不消费引用。
       const localSystemCommand = hasAttachments ? null : parseMobileLocalSystemCommand(body);
-      if (!sessionAtSend.workingDir && !localSystemCommand) {
+      // desktop 命令(/learn)按名字白名单分流,不依赖 palette 拉到的清单(代码确定性)。
+      const desktopCommand = hasAttachments ? null : parseMobileDesktopCommand(body);
+      if (!sessionAtSend.workingDir && !localSystemCommand && !desktopCommand) {
         setError('当前会话缺少工作目录，不能发送消息。');
         restoreDraftAfterFailure();
+        return;
+      }
+      if (desktopCommand?.name === 'learn') {
+        // /learn 是被控端宿主功能:直调 learn:start(execute-desktop-command 被
+        // allowlist 永久禁止),绝不进 agent 队列——原样 enqueue 的话 agent 只会当
+        // 普通文本忽略。蒸馏在被控端后台跑,这里以本地系统卡反馈启动结果。
+        let cardData: Record<string, unknown>;
+        try {
+          const { runId } = await maker.learnStart(
+            buildLearnStartRequest(desktopCommand.args, sessionId),
+          );
+          cardData = buildLearnCardData({ runId });
+        } catch (err) {
+          cardData = buildLearnCardData({ errorMessage: formatRemoteError(err) });
+        }
+        remoteSessionStore.appendLocalSystemCard(sessionId, 'learn', cardData);
+        voiceDictionaryLearningTrackerRef.current?.flush();
+        // 草稿已在乐观第一拍清空,这里只需跟到底部。
+        requestMessageListFollowLatest();
         return;
       }
       if (localSystemCommand) {
@@ -5089,7 +5125,13 @@ export default function SessionScreen() {
                   key={`${command.kind}:${command.name}`}
                   onPress={() => selectSlashCommand(command)}
                   primary={`/${command.name}`}
-                  secondary={command.kind === 'agent-skill' ? command.source : 'agent-cmd'}
+                  secondary={
+                    command.kind === 'agent-skill'
+                      ? command.source
+                      : command.kind === 'desktop'
+                        ? 'desktop'
+                        : 'agent-cmd'
+                  }
                   testID="session.slashCommandRow"
                 />
               ))}

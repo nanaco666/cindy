@@ -38,6 +38,28 @@ describe('shared composer palette model', () => {
     ]);
   });
 
+  it('merges desktop commands between skills and builtins (skill > desktop > builtin)', () => {
+    const commands = mergeSlashCommands([
+      { kind: 'agent-builtin', name: 'learn', description: 'builtin shadow' },
+      { kind: 'agent-builtin', name: 'compact', description: 'compact' },
+    ], [
+      { kind: 'agent-skill', name: 'learn', source: 'user', description: 'skill wins' },
+    ], [
+      { kind: 'desktop', name: 'learn', description: 'desktop learn' },
+      { kind: 'desktop', name: 'goal', description: 'desktop goal' },
+    ]);
+
+    expect(commands.map((command) => [command.kind, command.name])).toEqual([
+      ['agent-skill', 'learn'],
+      ['desktop', 'goal'],
+      ['agent-builtin', 'compact'],
+    ]);
+    // 第三参缺省 = 旧签名行为不变。
+    expect(mergeSlashCommands([
+      { kind: 'agent-builtin', name: 'compact', description: 'compact' },
+    ], []).map((command) => command.name)).toEqual(['compact']);
+  });
+
   it('inserts selected slash commands and at resources as desktop-compatible text', () => {
     const slashTrigger = detectComposerTrigger('/com');
     expect(insertSlashCommand('/com', slashTrigger, { name: 'compact' })).toBe('/compact ');
