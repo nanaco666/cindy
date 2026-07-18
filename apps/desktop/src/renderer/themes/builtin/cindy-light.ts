@@ -53,7 +53,7 @@ const overrides = {
   'chat-input-chip-border': '#DCDFE3', // 边框
   'chat-input-text': '#3C3F43', // 正文
   'color-primary': '#3C3F43', // 正文
-  'caret-accent': '#DF0C27', // 用户点名:所有输入光标使用 CINDY 品牌红
+  'caret-accent': '#417CDD', // 用户改稿 2026-07-18:光标撤红改回蓝(对齐 focus 蓝 #417CDD)
   'confirm-bg': '#F8F8F8', // 卡片
   'confirm-btn-primary-bg': '#3C3F43', // E1D C 类裁决 1:普通确认反相中性(danger 确认另设)
   'confirm-btn-primary-text': '#FCFCFC', // E1D 反相中性字

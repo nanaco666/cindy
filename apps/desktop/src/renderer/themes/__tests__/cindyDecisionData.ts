@@ -214,7 +214,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'text-tertiary-hsl': { light: '222.0 4.6% 42.7%', dark: '216.0 4.1% 75.9%' },
   'text-disabled': { light: '#686B72', dark: '#BFC1C4' },
   'text-disabled-tertiary': { light: '#686B72', dark: '#BFC1C4' },
-  'caret-accent': { light: '#DF0C27', dark: '#DF0C27' }, // 用户点名:输入光标品牌红
+  'caret-accent': { light: '#417CDD', dark: '#417CDD' }, // 用户改稿 2026-07-18:光标撤红改回蓝
   'accent-cta-bg': { light: '#3C3F43', dark: '#EEEEEE' }, // E1D
   'accent-cta-bg-pure': { light: '#3C3F43', dark: '#EEEEEE' }, // E1D
   'accent-emphasis': { light: '#3C3F43', dark: '#EEEEEE' }, // E1D
@@ -344,7 +344,6 @@ export const RED_EXCEPTION_ALLOWED_IDS = [
   'brand-login-bg',
   'brand-login-error-border',
   'brand-login-error-text',
-  'caret-accent',
   // C 类保留红(裁决:迁移填充/拖放 overlay/侧栏选中)
   'migration-bar-fill',
   'drop-overlay-bg',
