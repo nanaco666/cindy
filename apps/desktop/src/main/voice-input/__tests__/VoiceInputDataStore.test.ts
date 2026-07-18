@@ -97,6 +97,37 @@ describe('VoiceInputDataStore persistence', () => {
     expect(persisted.settings.language).toBe('en');
   });
 
+  it('always completes sync history update and delete IPC calls', () => {
+    registerVoiceInputDataStoreIpc();
+
+    const recordEvent: { returnValue?: unknown } = {};
+    mocks.onHandlers.get('voice-input:history:record')?.(recordEvent, '原始语音文本');
+    expect(recordEvent.returnValue).toEqual(expect.any(String));
+
+    const updateEvent: { returnValue?: unknown } = {};
+    mocks.onHandlers.get('voice-input:history:update')?.(updateEvent, {
+      id: recordEvent.returnValue,
+      text: '润色后文本',
+    });
+    expect(updateEvent.returnValue).toBe(true);
+    expect(voiceInputDataStore.getHistory()).toEqual([
+      expect.objectContaining({ id: recordEvent.returnValue, text: '润色后文本' }),
+    ]);
+
+    const deleteEvent: { returnValue?: unknown } = {};
+    mocks.onHandlers.get('voice-input:history:delete')?.(deleteEvent, recordEvent.returnValue);
+    expect(deleteEvent.returnValue).toBe(true);
+    expect(voiceInputDataStore.getHistory()).toEqual([]);
+
+    const invalidUpdateEvent: { returnValue?: unknown } = {};
+    mocks.onHandlers.get('voice-input:history:update')?.(invalidUpdateEvent, {});
+    expect(invalidUpdateEvent.returnValue).toBe(true);
+
+    const invalidDeleteEvent: { returnValue?: unknown } = {};
+    mocks.onHandlers.get('voice-input:history:delete')?.(invalidDeleteEvent, undefined);
+    expect(invalidDeleteEvent.returnValue).toBe(true);
+  });
+
   it('returns a decodable INTERNAL result from sync history IPC on write failure', () => {
     registerVoiceInputDataStoreIpc();
     voiceInputDataStore.getSnapshot();
