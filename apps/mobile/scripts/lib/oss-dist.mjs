@@ -47,6 +47,20 @@ export function buildAndroidDistTarget({ ossPrefix, cdnBase, version, versionCod
   return { key: `${ossPrefix}/${dir}/${fileName}`, url: `${cdnBase}/${dir}/${fileName}`, fileName };
 }
 
+/** Android 商店地址已配置时优先使用；留空则继续发布 OSS APK 直链。 */
+export function resolveAndroidInstallUrl({ storeUrl, apkUrl }) {
+  const fallback = String(apkUrl ?? '').trim();
+  if (!fallback) throw new Error('resolveAndroidInstallUrl requires apkUrl');
+  const store = String(storeUrl ?? '').trim();
+  if (!store) return fallback;
+  try {
+    new URL(store);
+  } catch {
+    throw new Error('resolveAndroidInstallUrl requires an absolute storeUrl');
+  }
+  return store;
+}
+
 /**
  * 解析 `aapt2 dump badging <apk>` 的 stdout,抽出内嵌 package / versionCode / versionName。
  * 纯函数(spawn/定位 aapt2 由调用方做),用于上传前校验 APK 与本次发版目标一致。

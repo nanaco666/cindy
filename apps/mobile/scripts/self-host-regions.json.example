@@ -1,10 +1,12 @@
 {
     "cn":
     {
-        "authRegion": "cn",
-        "iosBundleId": "com.xd.cindycn",
-        "androidPackage": "com.xd.cindycn",
-        "npkgExpectBundle": "com.xd.cindycn",
+        "authRegion": "",
+        "iosBundleId": "",
+        "iosAppStoreId": "",
+        "androidPackage": "",
+        "androidStoreUrl": "",
+        "npkgExpectBundle": "",
         "tapdb":
         {
             "clientId": "",
@@ -32,10 +34,12 @@
     },
     "global":
     {
-        "authRegion": "global",
-        "iosBundleId": "com.xd.cindy",
-        "androidPackage": "com.xd.cindy",
-        "npkgExpectBundle": "com.xd.cindy",
+        "authRegion": "",
+        "iosBundleId": "",
+        "iosAppStoreId": "",
+        "androidPackage": "",
+        "androidStoreUrl": "",
+        "npkgExpectBundle": "",
         "google":
         {
             "webClientId": "",

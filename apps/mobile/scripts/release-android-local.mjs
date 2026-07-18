@@ -6,14 +6,16 @@
 //       → expo prebuild(com.xd.cindycn,注入 versionCode)→ patch build.gradle 用自有 keystore 自签
 //       → gradlew assembleRelease → app-release.apk
 //       → 从 APK 回读内嵌 runtimeVersion(assets/fingerprint,落盘供 OTA 复用)
-//       → APK 直传 OSS(mobile-dist/android/<versionCode>/,installUrl = CDN 直链)
+//       → APK 直传 OSS(mobile-dist/android/<versionCode>/)
+//       → installUrl 优先取 region.androidStoreUrl；留空时回退 APK CDN 直链
 //       → 写整包版本记录 release.json 到 OSS(供 mobile-update-server /latest?platform=android)。
 //
 // runtimeVersion 取“真正烤进 APK 的 assets/fingerprint”为权威值(见 lib/embedded-runtime.mjs 头注):
 // 客户端运行时读该内嵌值与 release.json 比对,不一致就弹整包更新。绝不用 CLI 独立现算——现算会把
 // prebuild 各阶段内容不同的 android/ 目录也纳入指纹,与内嵌值错位 → 装了最新包仍反复弹整包更新。
 //
-// 分发不再经 NPKG:APK 自签即终版,无需任何重签/分发平台;客户端拿 installUrl 直下安装。
+// 分发不再经 NPKG:APK 自签即终版,无需任何重签/分发平台。商店地址尚未配置时客户端拿
+// installUrl 直下 APK；未来填入 androidStoreUrl 后会自动改为拉起对应应用商店。
 // (release-android-npkg.sh 保留,仅供手动往 NPKG 补传时使用。)
 //
 // 默认 dry-run(校验环境 + 打印计划,不构建、不上传);--execute 才跑完整链路
@@ -45,7 +47,7 @@ import {
   fetchBaselineBuildNumber,
   compareBuildNumbers,
 } from './lib/ios-local.mjs';
-import { buildAndroidDistTarget, parseApkBadging, assertApkMetadata } from './lib/oss-dist.mjs';
+import { buildAndroidDistTarget, resolveAndroidInstallUrl, parseApkBadging, assertApkMetadata } from './lib/oss-dist.mjs';
 import {
   readAndroidVersionCode,
   nextSequentialVersionCode,
@@ -281,6 +283,7 @@ async function main() {
   const pwPreview = (base) => (env[`${base}_${suffix}`]?.trim() || (suffix === 'CN' ? env[base]?.trim() : '')) ? 'set' : '未设';
   console.log(`sign: 自有 keystore 自签,path=${aSign.keystorePath || '(JSON 未填)'} alias=${aSign.keyAlias || '(JSON 未填)'} storePw(env ${suffix})=${pwPreview('XDT_ANDROID_KEYSTORE_PASSWORD')} keyPw(env ${suffix})=${pwPreview('XDT_ANDROID_KEY_PASSWORD')},终版,不经任何重签`);
   console.log(`oss: bucket=${region.oss?.bucket || '(未填)'} cdn=${region.oss?.cdnBaseUrl || '(未填)'}`);
+  console.log(`android store: ${region.androidStoreUrl?.trim() || '(未配置,回退 OSS APK)'}`);
   console.log(`steps: prebuild → patch build.gradle 签名 → gradlew assembleRelease → 从 APK 回读 runtimeVersion → APK 直传 OSS(${CDN_BASE}/mobile-dist/android/)→ 写 release.json`);
   // XDT_ANDROID_VERSION_CODE 非 EXPO_PUBLIC 前缀,但经 app.config.js 写进原生 versionCode,一并列出
   for (const line of formatBakedEnvLines(env, { extraKeys: ['XDT_ANDROID_VERSION_CODE'] })) console.log(line);
@@ -311,7 +314,8 @@ async function main() {
   // 若直传 OSS 并写进 release.json,会成为广播更新却装不上已装应用)。
   validateApkMetadata(apkPath, region.androidPackage, versionCode, { required: Boolean(args.apk) });
   const client = createOSSClient();
-  const installUrl = await uploadApkToOSS(client, apkPath, version, versionCode);
+  const apkInstallUrl = await uploadApkToOSS(client, apkPath, version, versionCode);
+  const installUrl = resolveAndroidInstallUrl({ storeUrl: region.androidStoreUrl, apkUrl: apkInstallUrl });
 
   if (!args.skipRecord) {
     const record = buildReleaseRecord({
@@ -325,7 +329,7 @@ async function main() {
   console.log('');
   console.log('==================== 冷更发布完成 ====================');
   console.log(`  runtimeVersion : ${runtimeVersion}`);
-  console.log(`  install        : ${installUrl}`);
+  console.log(`  install        : ${installUrl}${region.androidStoreUrl?.trim() ? ' (应用商店)' : ' (OSS APK fallback)'}`);
   console.log(`  下一步:纯 JS 改动用 \`${formatSelfHostReleaseCommand('android', 'ota', region, { execute: true })}\` 发热更(复用此 runtimeVersion)`);
   if (autoBumped) {
     console.log(`  ⚠ android-version.json versionCode 已自动 bump 为 ${versionCode},记得 commit + push 回 main(否则下次 git 闸门会拦)`);

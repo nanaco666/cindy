@@ -16,7 +16,9 @@ const VALID = {
   cn: {
     authRegion: 'cn',
     iosBundleId: 'com.xd.cindycn',
+    iosAppStoreId: '6788711632',
     androidPackage: 'com.xd.cindycn',
+    androidStoreUrl: '',
     npkgExpectBundle: 'com.xd.cindycn',
     tapdb: { clientId: 'tap-client', clientToken: 'tap-token' },
     oss: { cdnBaseUrl: 'https://cdn.cn/x', bucket: 'b-cn', prefix: 'p', ossRegion: 'oss-cn-shanghai' },
@@ -26,7 +28,9 @@ const VALID = {
   global: {
     authRegion: 'global',
     iosBundleId: 'com.xd.cindy',
+    iosAppStoreId: '6787894640',
     androidPackage: 'com.xd.cindy',
+    androidStoreUrl: '',
     npkgExpectBundle: 'com.xd.cindy',
     google: {
       webClientId: 'web.apps.googleusercontent.com',
@@ -73,6 +77,19 @@ describe('validateSelfHostRegions', () => {
     const bad = clone();
     bad.cn.iosBundleId = '';
     expect(() => validateSelfHostRegions(bad)).toThrow(/cn\.iosBundleId 必须是非空字符串/);
+  });
+  it('App Store ID 必须是纯数字', () => {
+    const bad = clone();
+    bad.global.iosAppStoreId = 'id6787894640';
+    expect(() => validateSelfHostRegions(bad)).toThrow(/global\.iosAppStoreId 必须是纯数字/);
+  });
+  it('Android 商店地址可留空；非空时必须是绝对 URL/deep link', () => {
+    const configured = clone();
+    configured.global.androidStoreUrl = 'market://details?id=com.xd.cindy';
+    expect(() => validateSelfHostRegions(configured)).not.toThrow();
+    const bad = clone();
+    bad.cn.androidStoreUrl = 'not-a-url';
+    expect(() => validateSelfHostRegions(bad)).toThrow(/cn\.androidStoreUrl 必须是绝对 URL/);
   });
   it('TapDB 公开配置缺失或为空 → 抛错', () => {
     const missing = clone();
