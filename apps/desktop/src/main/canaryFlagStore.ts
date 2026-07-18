@@ -13,9 +13,10 @@
  * safeStorage being unavailable (rare edge case on Linux without keyring).
  *
  * Lifecycle(2026-07 起):
- *   - 服务端 isCanary 字段已随产品 /api/user/me 退役——登录 / 刷新 / 冷启动
- *     恢复路径现在**恒 sync(false) 清标记**(存量 canary 用户回稳定通道);
- *     后续灰度由其它分发方式接管,届时由新机制负责 write()
+ *   - 登录 / 冷启动恢复 / 运行时换账号后从 oauth-broker 的
+ *     `/api/user/feature-flags` 读取 isCanary 并 sync 到本地;
+ *   - 接口失败或响应非法时保留旧值，避免瞬时故障把灰度用户静默降级;
+ *   - 登出时 clear，避免未登录或下一账号继承当前账号的发布通道;
  *   - Read by manifestService.fetchManifest() to switch URL between
  *     manifest-{platform}.json and manifest-{platform}-canary.json
  *
@@ -70,8 +71,7 @@ export function clear(): void {
 
 /**
  * Convenience: sync local flag to a desired value in one call.
- * 2026-07 起 authManager 在登录/刷新/冷启动恢复路径恒调 sync(false) 清标记;
- * true 分支留给未来的新灰度分发机制。
+ * authManager 仅在 feature-flags 请求成功且身份仍匹配时调用。
  */
 export function sync(isCanary: boolean): void {
   if (isCanary) write();

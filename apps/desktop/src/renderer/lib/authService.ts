@@ -3,8 +3,8 @@ import type { DesktopLoginAction, DesktopLoginActionResult } from '../../shared/
 import type { Effort } from '@/lib/userPreferences.types';
 
 /** Renderer-safe projection of the authenticated auth-server membership. */
-// 产品增强字段(role/isCanary)已随 /api/user/me、/api/me 退役(2026-07):
-// 身份即 auth-server membership,renderer 不再有二段式 role 水合。
+// role 已随 /api/user/me、/api/me 退役；isCanary 改由 main 进程从专用
+// feature-flags 端点读取。两者都不再进入 renderer User。
 export interface User {
   id: string;
   name: string;

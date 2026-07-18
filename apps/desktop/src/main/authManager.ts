@@ -45,6 +45,7 @@ import {
   type RefreshFetchResult,
 } from './authRefreshFailure';
 import { awaitWithStartupTimeout } from './authStartupGate';
+import { syncCanaryFlagAfterAuth } from './canaryFlagSync';
 import {
   createAuthBrowserAuthorizationSlot,
   parseAuthLoopbackCallback,
@@ -80,7 +81,8 @@ const DEFAULT_EFFORT = 'medium';
 
 // 2026-07 产品侧 me 路由退役:身份完全以 auth-server membership 为准,不再
 // 请求主 server `/api/user/me`。原产品增强字段的去向:
-//  - isCanary → 退役,canary 通道后续由其它分发方式管理(见 canaryFlagStore.sync 注释);
+//  - isCanary → 登录后从 oauth-broker `/api/user/feature-flags` 单独读取,
+//    仅落 main 进程本地标记,不进入 renderer User;
 //  - feishuOpenId → 退役,飞书登录已整体下线,身份锚(identityAnchor)只写 email;
 //  - role(产品级 admin)→ 退役,唯一消费是侧栏头像角标(纯装饰),一并移除。
 export interface User {
@@ -441,6 +443,51 @@ const COLD_START_AUTH_GATE_TIMEOUT_MS = 20_000;
 let authStateEpoch = 0;
 
 /**
+ * 登录态落地后异步同步灰度标记，不阻塞 renderer 进入主界面。
+ *
+ * expectedAuthEpoch + expectedUserId 防止慢响应在登出或换账号之后覆盖新身份；
+ * 请求失败/响应非法则保留旧值，遵守 feature-flags 服务端契约。
+ */
+function scheduleCanaryFlagSync(input: {
+  token: string;
+  expectedAuthEpoch: number;
+  expectedUserId: string;
+}): void {
+  void syncCanaryFlagAfterAuth(input, {
+    fetchFeatureFlags: (token) =>
+      apiFetch('/api/user/feature-flags', {
+        token,
+        baseUrl: getClientEndpoint('oauthBrokerApiBaseUrl'),
+      }),
+    readCurrentAuthIdentity: () => ({
+      authEpoch: authStateEpoch,
+      userId: currentUser?.id ?? null,
+    }),
+    persistFlag: canaryFlagStore.sync,
+  })
+    .then((outcome) => {
+      if (outcome.kind === 'synced') {
+        log.info('canary feature flag synced: isCanary=%s', outcome.isCanary);
+        return;
+      }
+      if (outcome.reason === 'stale-auth') {
+        log.debug('discarded stale canary feature-flags response');
+        return;
+      }
+      log.warn(
+        'canary feature flag sync preserved local value: reason=%s status=%s',
+        outcome.reason,
+        outcome.status ?? '<none>',
+      );
+    })
+    .catch((err) => {
+      // persistFlag currently absorbs filesystem errors, but keep this boundary
+      // non-fatal if that implementation changes later.
+      log.error('canary feature flag sync threw unexpectedly', err);
+    });
+}
+
+/**
  * 冷启动流程的进程内去重:主窗超时转后台之后,副窗 / 右侧栏窗口 mount 再调
  * initialize() 时复用同一个 in-flight promise(各自套各自的超时),避免两条流程
  * 并发轮换同一枚 refresh token 互相打成 INVALID_REFRESH_TOKEN。
@@ -601,8 +648,6 @@ function notifyAuthListeners(): void {
 // ── Auth state management ───────────────────────────────────────────────────
 
 async function clearPerAccountIntegrations(): Promise<void> {
-  // canary-release V0.1: 登出清理灰度标记，下次未登录直接走 stable manifest
-  canaryFlagStore.clear();
   // 登录账号级集成清单当前为空(2026-07-17 起):
   // - 飞书 token 链随 refresh-feishu 退役——xd-feishu 意识改走 OAuth broker,
   //   凭证是机器级意识保险库,登出不清(与 Atlassian / Slack / Google 同语义);
@@ -671,6 +716,8 @@ function clearAuth(opts: { notify?: boolean } = {}): void {
   }
   removeSafe(REFRESH_TOKEN_KEY);
   removeSafe(LEGACY_REFRESH_TOKEN_KEY);
+  // 未登录时固定使用 stable；同步中的旧请求会被 authStateEpoch 守卫丢弃。
+  canaryFlagStore.clear();
   // provider key(XD / Mivo)是绑定账号的本机密钥,**不在登出时清** —— 同账号重新登录 /
   // 会话过期重登需保留,避免每次都重填(本地 only 后服务器已无副本可拉回)。换账号导致的
   // 串号边界改由 login / 冷启动时 providerSecretStore.reconcileOwner 处理:owner 变了才清。
@@ -913,9 +960,11 @@ async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> 
     currentUser = mapMembershipToAuthUser(refreshData.membership);
     persistedRefreshTokenNeedsIdentityCheck = false;
     clearReplacementIntegrationReloadTimers();
-    // canary 分发已与登录态解耦(isCanary 字段退役):登录路径恒清本地标记,
-    // 存量 canary 用户回稳定通道;后续灰度由其它分发方式接管。
-    canaryFlagStore.sync(false);
+    scheduleCanaryFlagSync({
+      token: refreshData.accessToken,
+      expectedAuthEpoch: epochAtStart,
+      expectedUserId: currentUser.id,
+    });
     scheduleRefresh(refreshData.accessToken);
     // XD / Mivo key 均为本地 only,不再在冷启动从服务器同步到本地。
     // 账号边界对账:换账号则清掉上一个账号留在本机的 provider key,同账号保留(不必重填)。
@@ -929,7 +978,7 @@ async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> 
     return snapshotAuthState();
   } catch (err) {
     // 网络类失败都在 apiFetch 内部消化(返回 status 0),能走到这里的是 refresh 成功
-    // **之后**的本地状态同步代码(writeSafe / feishu token / canary sync 等)抛异常——
+    // **之后**的本地状态同步代码(writeSafe / provider owner reconcile 等)抛异常——
     // 此时新 refresh token 已轮换并落盘,删除它只会把有效凭据丢掉。保留 token、记录
     // 错误,本次以未登录返回,留待下次启动自愈。
     log.error('cold-start auth initialize threw after refresh — keeping persisted refresh token', err);
@@ -991,7 +1040,11 @@ async function completeLogin(
   lastAcceptedRefreshToken = outcome.refreshToken;
   clearReloginFlag();
   currentUser = mapMembershipToAuthUser(outcome.membership);
-  canaryFlagStore.sync(false);
+  scheduleCanaryFlagSync({
+    token: outcome.accessToken,
+    expectedAuthEpoch: loginEpoch,
+    expectedUserId: currentUser.id,
+  });
   scheduleRefresh(outcome.accessToken);
   getProviderSecretStore().reconcileOwner(outcome.membership.id);
   pendingLoginTicket = null;
@@ -1310,8 +1363,11 @@ export async function refresh(): Promise<boolean> {
           if (refreshWasSuperseded('after-integration-reload')) return false;
           scheduleReplacementIntegrationReloadRetries(currentUser.id);
         }
-        // canary 分发已与登录态解耦(isCanary 字段退役),恒清本地标记。
-        canaryFlagStore.sync(false);
+        scheduleCanaryFlagSync({
+          token: data.accessToken,
+          expectedAuthEpoch: refreshEpoch,
+          expectedUserId: currentUser.id,
+        });
         scheduleRefresh(data.accessToken);
         notifyRenderer();
         if (previousUserId !== currentUser.id) {

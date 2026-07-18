@@ -18,7 +18,9 @@ describe('auth login-flow reset', () => {
 
     const clearStart = source.indexOf('function clearAuth(');
     const clearEnd = source.indexOf('\n}\n\n// ── Public API', clearStart);
-    expect(source.slice(clearStart, clearEnd)).toContain('resetLoginFlowState();');
+    const clearBody = source.slice(clearStart, clearEnd);
+    expect(clearBody).toContain('resetLoginFlowState();');
+    expect(clearBody).toContain('canaryFlagStore.clear();');
   });
 
   it('keeps the login-epoch guard and does not resurrect the legacy feishu token chain', () => {
@@ -63,5 +65,18 @@ describe('auth login-flow reset', () => {
     expect(refreshBody).toContain("refreshWasSuperseded('after-account-switch-teardown')");
     expect(refreshBody).toContain("refreshWasSuperseded('after-integration-reload')");
     expect(refreshBody).toContain("refreshWasSuperseded('catch')");
+  });
+
+  it('synchronizes canary flags on every path that establishes a new auth identity', () => {
+    expect(source).not.toContain('canaryFlagStore.sync(false)');
+    expect(source.match(/scheduleCanaryFlagSync\(\{/g)).toHaveLength(3);
+    expect(source).toContain("getClientEndpoint('oauthBrokerApiBaseUrl')");
+    expect(source).toContain("apiFetch('/api/user/feature-flags'");
+
+    const clearIntegrationsStart = source.indexOf('async function clearPerAccountIntegrations(');
+    const clearIntegrationsEnd = source.indexOf('\n}', clearIntegrationsStart);
+    expect(source.slice(clearIntegrationsStart, clearIntegrationsEnd)).not.toContain(
+      'canaryFlagStore.clear()',
+    );
   });
 });
