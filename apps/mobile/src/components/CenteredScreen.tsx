@@ -4,7 +4,7 @@ import { Text } from '@/components/AppText';
 import { fontWeight, useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 import { spacing, typeScale } from '@/theme/tokens';
 
-const splashIllustration = require('../../assets/splash/cindy-splash-illustration-fade.png');
+const splashIllustration = require('../../assets/splash/cindy-splash-illustration-fade.webp');
 const splashWordmark = require('../../assets/splash/cindy-splash-wordmark-white.png');
 const splashScript = require('../../assets/splash/cindy-splash-script-white.png');
 

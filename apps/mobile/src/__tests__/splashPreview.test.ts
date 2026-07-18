@@ -17,9 +17,9 @@ describe('mobile splash preview route', () => {
   it('uses the Figma-cut splash illustration with the bottom fade baked into the asset', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/components/CenteredScreen.tsx'), 'utf8');
 
-    expect(source).toContain("require('../../assets/splash/cindy-splash-illustration-fade.png')");
+    expect(source).toContain("require('../../assets/splash/cindy-splash-illustration-fade.webp')");
     expect(source).not.toContain("require('../../assets/splash/cindy-splash-illustration.webp')");
-    expect(existsSync(resolve(process.cwd(), 'assets/splash/cindy-splash-illustration-fade.png'))).toBe(true);
+    expect(existsSync(resolve(process.cwd(), 'assets/splash/cindy-splash-illustration-fade.webp'))).toBe(true);
   });
 
   it('keeps the branded splash free of app loading spinner and status text', () => {
