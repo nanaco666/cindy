@@ -4306,16 +4306,16 @@ export function ChatInput({
             effectiveCompactToolbar
               ? isCreateAgentVariant
                 ? 'min-w-0 flex-nowrap justify-between gap-2 overflow-hidden'
-                : 'min-w-0 flex-nowrap gap-1 overflow-hidden'
+                : 'min-w-0 flex-nowrap justify-between gap-1 overflow-hidden'
               : 'justify-between',
           )}
         >
           <div
             className={cn(
-              effectiveCompactToolbar && !isCreateAgentVariant
-                ? 'contents'
-                : isCreateAgentVariant
+              effectiveCompactToolbar
+                ? isCreateAgentVariant
                   ? 'flex min-w-0 shrink items-center gap-2'
+                  : 'flex min-w-0 shrink items-center gap-1'
                 : 'flex items-center gap-2',
               // create-agent 按 Figma 使用 hug-content pills;默认会话页仍保留左侧优先压缩。
             )}
@@ -4364,10 +4364,10 @@ export function ChatInput({
           </div>
           <div
             className={cn(
-              effectiveCompactToolbar && !isCreateAgentVariant
-                ? 'contents'
-                : isCreateAgentVariant
+              effectiveCompactToolbar
+                ? isCreateAgentVariant
                   ? 'flex min-w-0 shrink items-center justify-end gap-2'
+                  : 'flex min-w-0 shrink items-center justify-end gap-1'
                 : 'flex items-center gap-2',
               // compact 模式下所有输入框工具行保持单行;权限 / 模型 pill 内部截断承压,
               // vendor tab、圆形操作按钮与协同图标按钮保持固定宽,避免控件重叠或掉到第二行。
