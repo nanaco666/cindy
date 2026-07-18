@@ -46,6 +46,8 @@ interface ErrorBannerProps {
   /** 当前 session 的远端 host id;非空 + agentKind='codex' 时显「同步登录态」按钮。
    *  本地 codex 401 仍 hide Retry, 但只能提示用户去自己 fix login (没有 sync 入口)。 */
   remoteHostId?: string;
+  /** device-link 被控端设备 id。非空表示 turn 不在本机执行，本机认证恢复入口必须禁用。 */
+  deviceLinkDeviceId?: string | null;
   /** 当前 session 的 model id。骨折版 GPT (budget, `codex/` 前缀) 报错时,在通用
    *  错误文案后追加一句「可切到普通版 GPT 试试」的引导 (骨折版走 gateway, 偶发
    *  限流/不可用时,普通版往往能正常出)。仅对没有专属引导的通用错误分支生效,
@@ -74,6 +76,7 @@ export function ErrorBanner({
   onSilentStopContinue,
   agentKind,
   remoteHostId,
+  deviceLinkDeviceId,
   modelId,
   providerId,
   silentEncryptedRetryEnabled = false,
@@ -90,21 +93,24 @@ export function ErrorBanner({
     // 不再叠一层重复确认弹窗。
     confirmBeforeLogin: false,
   });
+  // SSH 与 device-link 是两种互斥的远端来源，但都不能读取或修复控制端本机认证。
+  // 保留具体 id 而不是只传 boolean，SSH Codex 仍可使用既有的定向凭证同步入口。
+  const isAnyRemoteSession = Boolean(remoteHostId) || Boolean(deviceLinkDeviceId);
   // 本会话 codex app-server 的 spawn 鉴权注入(oauth-bearer = 走订阅 / env-key = 走网关 / provider-oauth = proxy 注入供应商 OAuth)。
   // 默认 'env-key'(保守):真值未回来前不会误命中 OAuth 引导分支而短暂 hide Retry。
   const { authInjection: codexAuthInjection } = useCodexRuntimeRoute({
-    enabled: agentKind === 'codex' && !remoteHostId,
+    enabled: agentKind === 'codex' && !isAnyRemoteSession,
   });
   const [syncing, setSyncing] = useState(false);
   // 已同步标志:点击同步成功后置 true, 让 displayError 切换成"已同步,请重试"提示,
   // 同时把 Retry 按钮显出来。
   const [syncedSinceError, setSyncedSinceError] = useState(false);
   // 防御性 reset: 当前流程下 Retry 会清 error → ErrorBanner unmount → 自然丢 state。
-  // 但若未来父组件改造保留 mount 仅切 error / 切 remoteHostId, 这条 useEffect
+  // 但若未来父组件改造保留 mount 仅切 error / 切远端来源, 这条 useEffect
   // 让 syncedSinceError 跟当前错误关联, 避免 stale 标志让新错误显示成"已同步"。
   useEffect(() => {
     setSyncedSinceError(false);
-  }, [error, remoteHostId]);
+  }, [error, isAnyRemoteSession, remoteHostId]);
 
   // 凭证切换忙:本会话要求的模型来源与共享 codex 进程当前钥匙形态不同,重启进程前
   // 必须等其它本地 Codex 任务全部结束。main 侧用 CREDENTIAL_SWITCH_BUSY: 前缀编码
@@ -118,7 +124,7 @@ export function ErrorBanner({
   // 仅本地 Codex 会话:远端会话 rollout 在远端机器, 本地 fork 剥离做不到, 不给入口。
   const showInvalidEncryptedContentRecovery =
     agentKind === 'codex' &&
-    !remoteHostId &&
+    !isAnyRemoteSession &&
     !silentEncryptedRetryEnabled &&
     isInvalidEncryptedContentError(error);
   // Codex 401 auth-missing detection 分三层:
@@ -148,7 +154,7 @@ export function ErrorBanner({
     agentKind === 'codex' && isCodexOpenAiSource && /\b401\b|Missing bearer/i.test(error);
   const isCodexRemoteAuthMissing = isCodexAuthMissing && !!remoteHostId;
   const isCodexLocalOAuthAuthMissing =
-    isCodexAuthMissing && !remoteHostId && codexAuthInjection === 'oauth-bearer';
+    isCodexAuthMissing && !isAnyRemoteSession && codexAuthInjection === 'oauth-bearer';
   // 明确的 OpenAI token/session invalidation 不可直接 Retry。Codex 路径不再要求当前
   // runtime route 仍是 oauth-bearer：invalidate 会先收割旧 host 并把 route 广播成
   // env-key，再把错误渲染到会话；继续依赖 route 会把真实失效原因漏成原始英文报错。
@@ -159,7 +165,7 @@ export function ErrorBanner({
     !!modelId &&
     modelId.startsWith('chatgpt/');
   const isOpenAiConnectionExpired =
-    !remoteHostId &&
+    !isAnyRemoteSession &&
     ((isCodexOpenAiSource && isCodexSessionExpiredError(error)) ||
       (isClaudeChatgptBridgeModel && isCodexSessionExpiredError(error)));
   // 以共享的 Codex OAuth 状态机为唯一真相源：设置页、横幅或其它入口完成重连时，

@@ -134,6 +134,7 @@ export function ErrorTailErrorBanner({
   viewVisible = true,
   agentKind,
   remoteHostId,
+  deviceLinkDeviceId,
   modelId,
   providerId,
   silentEncryptedRetryEnabled,
@@ -153,6 +154,7 @@ export function ErrorTailErrorBanner({
   viewVisible?: boolean;
   agentKind?: 'cc' | 'codex';
   remoteHostId?: string;
+  deviceLinkDeviceId?: string | null;
   modelId?: string;
   providerId?: string | null;
   silentEncryptedRetryEnabled?: boolean;
@@ -174,6 +176,7 @@ export function ErrorTailErrorBanner({
       onSilentStopContinue={onSilentStopContinue}
       agentKind={agentKind}
       remoteHostId={remoteHostId}
+      deviceLinkDeviceId={deviceLinkDeviceId}
       modelId={modelId}
       providerId={providerId}
       silentEncryptedRetryEnabled={silentEncryptedRetryEnabled}

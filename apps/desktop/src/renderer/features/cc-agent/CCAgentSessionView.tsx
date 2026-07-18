@@ -2465,8 +2465,8 @@ export function CCAgentSessionView({
               - agentKind 传到 ErrorBanner 让 codex 401 / Missing bearer 不仅在远端
                 能 hide Retry (走 syncCodexAuth 引导), 本地 codex session 401 也能
                 hide Retry + 显本地 fix 文案 (避免 retry 撞同样的 auth retry-loop)。
-              - remoteHostId gate 仅 codex 远端会话才传 — Claude session 的 401
-                是 Anthropic 凭证, syncCodexAuth 改不了, 传过去会显误导按钮。 */}
+              - remoteHostId / deviceLinkDeviceId 始终标记真实执行端，避免控制端本机
+                认证恢复入口误处理远端错误；SSH 同步按钮仍由 agentKind='codex' 单独门控。 */}
           {/* 凭证切换等待(非错误):消息保留在队首,挡路的本地 Codex 任务结束后
               main 自动重发;取消 = 删除队首消息。与下方 ErrorBanner 互斥渲染——
               等待态由 main 权威维护,error 为空。 */}
@@ -2513,7 +2513,8 @@ export function CCAgentSessionView({
                 onSilentStopContinue={handleSilentStopContinue}
                 viewVisible={viewVisible}
                 agentKind={session?.agentKind}
-                remoteHostId={session?.agentKind === 'codex' ? (session?.remoteHostId ?? undefined) : undefined}
+                remoteHostId={session?.remoteHostId ?? undefined}
+                deviceLinkDeviceId={remoteDeviceId}
                 modelId={session?.model}
                 providerId={session?.providerId}
                 silentEncryptedRetryEnabled={silentEncryptedRetryEnabled}
@@ -2550,7 +2551,8 @@ export function CCAgentSessionView({
               onSilentStopContinue={handleSilentStopContinue}
               onCancel={handleDismissError}
               agentKind={session?.agentKind}
-              remoteHostId={session?.agentKind === 'codex' ? (session?.remoteHostId ?? undefined) : undefined}
+              remoteHostId={session?.remoteHostId ?? undefined}
+              deviceLinkDeviceId={remoteDeviceId}
               modelId={session?.model}
               providerId={session?.providerId}
               silentEncryptedRetryEnabled={silentEncryptedRetryEnabled}

@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   onLoginProgress: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
+  runtimeRoute: vi.fn(() => ({ authInjection: 'env-key' as const })),
   stateChangedListeners: new Set<(payload: AuthStateChangedPayload) => void>(),
 }));
 
@@ -53,7 +54,7 @@ vi.mock('@/components/ui/confirm-dialog-provider', () => ({
 vi.mock('@/hooks/useCodexRuntimeRoute', () => ({
   // invalidate 会在横幅渲染前把已收割的 OAuth host 回落为 env-key；明确失效原因
   // 仍必须保留 ChatGPT 重连入口。
-  useCodexRuntimeRoute: () => ({ authInjection: 'env-key' }),
+  useCodexRuntimeRoute: mocks.runtimeRoute,
 }));
 
 vi.mock('@/lib/toast', () => ({
@@ -279,6 +280,46 @@ describe('ErrorBanner OpenAI connection recovery', () => {
     expect(screen.getByRole('button', { name: 'chat.errorBanner.retry' })).toBeTruthy();
     expect(mocks.getState).not.toHaveBeenCalled();
     expect(mocks.stateChangedListeners.size).toBe(0);
+  });
+
+  it.each([
+    {
+      label: 'device-link Codex',
+      agentKind: 'codex' as const,
+      error: 'token_invalidated',
+      modelId: 'gpt-5.4',
+      providerId: 'openai',
+      deviceLinkDeviceId: 'device-1',
+    },
+    {
+      label: 'device-link Claude ChatGPT bridge',
+      agentKind: 'cc' as const,
+      error: 'bridge auth unavailable for chatgpt/ (subscription login may have expired)',
+      modelId: 'chatgpt/gpt-5.4',
+      providerId: 'openai',
+      deviceLinkDeviceId: 'device-1',
+    },
+    {
+      label: 'SSH Claude ChatGPT bridge',
+      agentKind: 'cc' as const,
+      error: 'bridge auth unavailable for chatgpt/ (subscription login may have expired)',
+      modelId: 'chatgpt/gpt-5.4',
+      providerId: 'openai',
+      remoteHostId: 'ssh-1',
+    },
+  ])('does not reconnect the controller for a $label failure', (props) => {
+    render(<ErrorBanner {...props} retryText="retry this turn" onRetry={vi.fn()} />);
+
+    expect(screen.getByText(props.error)).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: 'chat.errorBanner.codexSessionExpiredLogin' }),
+    ).toBeNull();
+    expect(screen.getByRole('button', { name: 'chat.errorBanner.retry' })).toBeTruthy();
+    expect(mocks.getState).not.toHaveBeenCalled();
+    expect(mocks.stateChangedListeners.size).toBe(0);
+    if (props.agentKind === 'codex') {
+      expect(mocks.runtimeRoute).toHaveBeenLastCalledWith({ enabled: false });
+    }
   });
 
   it('restores retry after reconnect succeeds from the settings auth hook', async () => {
