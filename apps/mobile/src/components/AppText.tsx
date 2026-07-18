@@ -1,6 +1,7 @@
 import { Text as RNText, TextInput as RNTextInput } from 'react-native';
 import type { TextInputProps, TextProps } from 'react-native';
 import type { Ref } from 'react';
+import { useTheme } from '@/theme/ThemeProvider';
 
 /**
  * 全局字体缩放限幅包装 —— 应用内所有 `Text` / `TextInput` 的唯一来源。
@@ -21,5 +22,14 @@ export function Text(props: TextProps) {
 
 /** ref 直接透传给原生 TextInput(React 19 ref-as-prop),`focus()` 等命令式调用不受影响。 */
 export function TextInput({ ref, ...props }: TextInputProps & { ref?: Ref<RNTextInput> }) {
-  return <RNTextInput ref={ref} maxFontSizeMultiplier={MAX_FONT_SIZE_MULTIPLIER} {...props} />;
+  const { colors } = useTheme();
+  return (
+    <RNTextInput
+      ref={ref}
+      cursorColor={colors.inputCaret}
+      maxFontSizeMultiplier={MAX_FONT_SIZE_MULTIPLIER}
+      selectionColor={colors.inputCaret}
+      {...props}
+    />
+  );
 }
