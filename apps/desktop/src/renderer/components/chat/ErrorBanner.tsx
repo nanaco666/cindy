@@ -51,6 +51,9 @@ interface ErrorBannerProps {
    *  限流/不可用时,普通版往往能正常出)。仅对没有专属引导的通用错误分支生效,
    *  避免和 auth/stale/encrypted 等分支的具体指引打架。 */
   modelId?: string;
+  /** 当前会话显式选择的模型来源。OpenAI 重连只能处理 openai / 无显式来源的历史会话；
+   * 其它 provider 的 OAuth 错误必须留给对应来源处理。 */
+  providerId?: string | null;
   silentEncryptedRetryEnabled?: boolean;
   onForkStripEncrypted?: () => void | Promise<void>;
   forkStripEncryptedRunning?: boolean;
@@ -72,6 +75,7 @@ export function ErrorBanner({
   agentKind,
   remoteHostId,
   modelId,
+  providerId,
   silentEncryptedRetryEnabled = false,
   onForkStripEncrypted,
   forkStripEncryptedRunning = false,
@@ -126,14 +130,22 @@ export function ErrorBanner({
   //    gateway key, retry 即可恢复; 强行 hide Retry + 显 "codex login" 反而误导。
   // 父组件 (CCAgentSessionView) 必须只对 codex session 传 agentKind='codex' +
   // remoteHostId; Claude session 的 401 走默认 retry 流程不应被吞。
-  // xAI/SuperGrok 的真实 token 由 provider-oauth proxy 注入;即使当前 Codex host 是
-  // oauth-bearer 占位,401 也不能引导用户去修 Codex 登录态。
-  const isCodexProviderOAuthModel =
-    agentKind === 'codex' && !!modelId && modelId.startsWith('xai/');
+  // xAI / 自定义来源的真实凭证由 provider-oauth proxy 注入；显式 providerId 是权威来源，
+  // 不能因为错误文案碰巧含 token_revoked 就引导用户去修 ChatGPT 登录态。历史无来源
+  // 会话仍允许从非 provider-oauth runtime + 非 XD/xAI 前缀推断 OpenAI，守住旧数据兼容。
+  const normalizedProviderId = providerId?.trim() || null;
+  const hasExplicitOpenAiProvider = normalizedProviderId === 'openai';
+  const hasImplicitOpenAiProvider =
+    normalizedProviderId === null &&
+    codexAuthInjection !== 'provider-oauth' &&
+    !modelId?.startsWith('codex/') &&
+    !modelId?.startsWith('xai/');
+  const isCodexOpenAiSource =
+    agentKind === 'codex' && (hasExplicitOpenAiProvider || hasImplicitOpenAiProvider);
   // Pattern: 跟 translator.ts:180 一致, 收紧到 \b401\b | Missing bearer 避开
   // "Unauthorized file system access" 等非 HTTP-auth 误伤。
   const isCodexAuthMissing =
-    agentKind === 'codex' && !isCodexProviderOAuthModel && /\b401\b|Missing bearer/i.test(error);
+    agentKind === 'codex' && isCodexOpenAiSource && /\b401\b|Missing bearer/i.test(error);
   const isCodexRemoteAuthMissing = isCodexAuthMissing && !!remoteHostId;
   const isCodexLocalOAuthAuthMissing =
     isCodexAuthMissing && !remoteHostId && codexAuthInjection === 'oauth-bearer';
@@ -142,10 +154,13 @@ export function ErrorBanner({
   // env-key，再把错误渲染到会话；继续依赖 route 会把真实失效原因漏成原始英文报错。
   // Claude 的 chatgpt/* 模型复用同一份连接，bridge 鉴权不可用时也走同一恢复入口。
   const isClaudeChatgptBridgeModel =
-    agentKind === 'cc' && !!modelId && modelId.startsWith('chatgpt/');
+    agentKind === 'cc' &&
+    (hasExplicitOpenAiProvider || normalizedProviderId === null) &&
+    !!modelId &&
+    modelId.startsWith('chatgpt/');
   const isOpenAiConnectionExpired =
     !remoteHostId &&
-    ((agentKind === 'codex' && !isCodexProviderOAuthModel && isCodexSessionExpiredError(error)) ||
+    ((isCodexOpenAiSource && isCodexSessionExpiredError(error)) ||
       (isClaudeChatgptBridgeModel && isCodexSessionExpiredError(error)));
   // 以共享的 Codex OAuth 状态机为唯一真相源：设置页、横幅或其它入口完成重连时，
   // AUTH_STATE_CHANGED 都会让现存横幅同步恢复 Retry；后续失效 / 登出广播也会撤销恢复态。

@@ -123,6 +123,7 @@ describe('ErrorBanner OpenAI connection recovery', () => {
         onRetry={vi.fn()}
         agentKind="codex"
         modelId="gpt-5.4"
+        providerId="openai"
       />,
     );
 
@@ -150,6 +151,7 @@ describe('ErrorBanner OpenAI connection recovery', () => {
           onRetry={vi.fn()}
           agentKind="codex"
           modelId="gpt-5.4"
+          providerId="openai"
         />,
       );
     });
@@ -245,6 +247,7 @@ describe('ErrorBanner OpenAI connection recovery', () => {
         onRetry={vi.fn()}
         agentKind="codex"
         modelId="xai/grok-4"
+        providerId="xai"
       />,
     );
 
@@ -253,6 +256,29 @@ describe('ErrorBanner OpenAI connection recovery', () => {
       screen.queryByRole('button', { name: 'chat.errorBanner.codexSessionExpiredLogin' }),
     ).toBeNull();
     expect(screen.getByRole('button', { name: 'chat.errorBanner.retry' })).toBeTruthy();
+    expect(mocks.getState).not.toHaveBeenCalled();
+    expect(mocks.stateChangedListeners.size).toBe(0);
+  });
+
+  it('does not redirect an explicit custom provider OAuth failure to ChatGPT reconnect', () => {
+    render(
+      <ErrorBanner
+        error="token_revoked"
+        retryText="retry this turn"
+        onRetry={vi.fn()}
+        agentKind="codex"
+        modelId="custom-model"
+        providerId="custom-oauth"
+      />,
+    );
+
+    expect(screen.getByText('token_revoked')).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: 'chat.errorBanner.codexSessionExpiredLogin' }),
+    ).toBeNull();
+    expect(screen.getByRole('button', { name: 'chat.errorBanner.retry' })).toBeTruthy();
+    expect(mocks.getState).not.toHaveBeenCalled();
+    expect(mocks.stateChangedListeners.size).toBe(0);
   });
 
   it('restores retry after reconnect succeeds from the settings auth hook', async () => {

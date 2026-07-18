@@ -63,7 +63,7 @@ export function createChatgptBridgeAuthInvalidator(
     if (!reason) return false;
 
     const existing = inFlightByToken.get(failure.failedAccessToken);
-    if (existing) return existing;
+    if (existing) return await existing;
 
     const run = (async () => {
       const currentAccessToken = await dependencies.getCurrentAccessToken();

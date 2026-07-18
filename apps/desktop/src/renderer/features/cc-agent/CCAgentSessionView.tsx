@@ -2515,6 +2515,7 @@ export function CCAgentSessionView({
                 agentKind={session?.agentKind}
                 remoteHostId={session?.agentKind === 'codex' ? (session?.remoteHostId ?? undefined) : undefined}
                 modelId={session?.model}
+                providerId={session?.providerId}
                 silentEncryptedRetryEnabled={silentEncryptedRetryEnabled}
                 onForkStripEncrypted={ownsWindowRoute ? handleForkStripEncrypted : undefined}
                 forkStripEncryptedRunning={forkStripEncryptedRunning}
@@ -2551,6 +2552,7 @@ export function CCAgentSessionView({
               agentKind={session?.agentKind}
               remoteHostId={session?.agentKind === 'codex' ? (session?.remoteHostId ?? undefined) : undefined}
               modelId={session?.model}
+              providerId={session?.providerId}
               silentEncryptedRetryEnabled={silentEncryptedRetryEnabled}
               onForkStripEncrypted={ownsWindowRoute ? handleForkStripEncrypted : undefined}
               forkStripEncryptedRunning={forkStripEncryptedRunning}

@@ -135,6 +135,7 @@ export function ErrorTailErrorBanner({
   agentKind,
   remoteHostId,
   modelId,
+  providerId,
   silentEncryptedRetryEnabled,
   onForkStripEncrypted,
   forkStripEncryptedRunning,
@@ -153,6 +154,7 @@ export function ErrorTailErrorBanner({
   agentKind?: 'cc' | 'codex';
   remoteHostId?: string;
   modelId?: string;
+  providerId?: string | null;
   silentEncryptedRetryEnabled?: boolean;
   onForkStripEncrypted?: () => void | Promise<void>;
   forkStripEncryptedRunning?: boolean;
@@ -173,6 +175,7 @@ export function ErrorTailErrorBanner({
       agentKind={agentKind}
       remoteHostId={remoteHostId}
       modelId={modelId}
+      providerId={providerId}
       silentEncryptedRetryEnabled={silentEncryptedRetryEnabled}
       onForkStripEncrypted={onForkStripEncrypted}
       forkStripEncryptedRunning={forkStripEncryptedRunning}
