@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { usePathname, useRouter } from 'expo-router';
+import { useNavigation, usePathname, useRouter } from 'expo-router';
 
 import { goBackGuarded } from './backGuard';
 
@@ -32,6 +32,7 @@ export const BACK_VERIFY_DELAY_MS = 200;
  */
 export function useGuardedBack(fallback: Parameters<Router['replace']>[0] = '/'): () => void {
   const router = useRouter();
+  const navigation = useNavigation();
   const pathname = usePathname();
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
@@ -48,7 +49,11 @@ export function useGuardedBack(fallback: Parameters<Router['replace']>[0] = '/')
     if (verifyTimerRef.current) clearTimeout(verifyTimerRef.current);
     verifyTimerRef.current = setTimeout(() => {
       verifyTimerRef.current = null;
-      if (pathnameRef.current === before) router.replace(fallback);
+      // 双重条件才判定「back 被吞」:路由没变 且 本屏仍持有焦点。成功的 back 在
+      // dispatch 当刻即让本屏失焦(读已提交导航状态,不等转场动画)——低端机转场
+      // 再慢、pathname 更新再晚,失焦本身就排除误判(review P2 加固);被吞时导航
+      // 状态无变化、本屏保持焦点,兜底照常触发。
+      if (pathnameRef.current === before && navigation.isFocused()) router.replace(fallback);
     }, BACK_VERIFY_DELAY_MS);
-  }, [fallback, router]);
+  }, [fallback, navigation, router]);
 }
