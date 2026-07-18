@@ -5,6 +5,8 @@ export const commands = [
   ['dev:desktop',        '启动桌面端（本地 API）'],
   ['dev:desktop:remote', '启动桌面端（远程 API）'],
   ['dev:desktop:inspect','启动桌面端 + Chrome DevTools 内存分析'],
+  ['restart:desktop:remote', '重启桌面端远程模式（支持 --region=cn|global）'],
+  ['restart:desktop:local',  '重启桌面端本地模式（支持 --region=cn|global）'],
   ['build',              '打包桌面端（electron-forge make 裸调,human-only）'],
   ['package:desktop',          '桌面端打包（当前平台,默认版本无关 + cn + dev,不发布）'],
   ['package:win',              'Windows x64 打包（同上,只打包不发布）'],
@@ -44,6 +46,13 @@ export function printHelp(log = console.log) {
   for (const [name, desc] of commands) {
     log(`  pnpm ${name.padEnd(28)} ${desc}`);
   }
+  log('\n  桌面端区域 dev:');
+  log('    pnpm restart:desktop:remote --region=cn');
+  log('      国内版，读取 config/endpoint.json（默认）');
+  log('    pnpm restart:desktop:remote --region=global');
+  log('      海外版，读取 config/endpoint.global.json');
+  log('    pnpm restart:desktop:remote --region=global --endpoints-cdn');
+  log('      海外版，读取对应区域的线上 CDN 端点清单');
   log('\n  打包/发布拆分 (2026-07):');
   log('    package:* 只产出本地产物 + build-info.json,不碰 OSS/CDN');
   log('    可选参数: --region cn|global  --channel dev|release  --version x.y.z|major|minor|patch');
