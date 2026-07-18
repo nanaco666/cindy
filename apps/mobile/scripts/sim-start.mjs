@@ -24,14 +24,19 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mobileClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
 import { ensureMobileEnv, formatMobileEnvStatus } from './ensure-mobile-env.mjs';
-import { extractMobileDevRegionArgs } from './lib/mobile-dev-region.mjs';
+import {
+  extractMobileDevRegionArgs,
+  withLocalMobileRegionConfig,
+} from './lib/mobile-dev-region.mjs';
 import { cwdOfPid, gitBranchOfPid, isInside, listenerPid, portInUse } from './sim-metro.mjs';
 
 const mobileDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const worktreeRoot = resolve(mobileDir, '../..');
 const DEFAULT_PORT = 8081;
 const { region, passthrough } = extractMobileDevRegionArgs(process.argv.slice(2));
-const buildEnv = mobileClientBuildEnv({ authRegion: region });
+const buildEnv = withLocalMobileRegionConfig(
+  mobileClientBuildEnv({ authRegion: region }),
+);
 
 const envResult = ensureMobileEnv({ mobileDir, authRegion: region, endpointEnv: buildEnv });
 console.log(formatMobileEnvStatus(envResult, worktreeRoot));

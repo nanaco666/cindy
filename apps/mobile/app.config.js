@@ -3,10 +3,10 @@
 // - 默认 cn:com.xd.cindycn + cindycn://auth;显式 global:com.xd.cindy + cindy://auth。
 // - beta 只改显示名,不改变所选 region 的身份。
 // - production / TestFlight 必须由发布环境注入对应 App Store 数字 ID,缺失即中止。
+// - 本地 Xcode / Simulator 与自建分发变体共用 scripts/self-host-regions.json 的 app 身份、
+//   TapDB / Google 公开配置;EAS 云构建看不到 gitignored 文件,继续使用 EAS environment。
 // - 自建分发变体(`EXPO_PUBLIC_XDT_OTA_SELFHOST=1`,详见 docs/self-hosted-ios-build-and-ota.md):
-//     · 自建线 app 身份(iOS bundleId / Android package)按 region 从打包机本地的
-//       scripts/self-host-regions.json 取(cn=com.xd.cindycn / global=com.xd.cindy,与 EAS 线
-//       的 com.xd.lizcn 分离);iOS 与 Android 各自一个字段,可独立调整,互不影响。
+//     · iOS 与 Android app identity 各自一个字段,可独立调整,互不影响。
 //     · updates.url 只放稳定占位值;真实 mobile-update-server 地址由启动端点清单的
 //       mobileUpdateBaseUrl 运行时覆写,不参与 build/fingerprint;
 //     · 保留 region scheme,但使用自建 bundle identity。此变体有意改变指纹,
@@ -19,33 +19,28 @@ const {
   loadMobileClientBuildEnv,
 } = require('../../scripts/shared/client-endpoint-build-env.cjs');
 
-// 自建线 app 身份(iOS bundleId / Android package)按 region 从打包机本地的
-// scripts/self-host-regions.json 取(纯值、不入仓;由 release-{ios,android}-{local,ota,check}.mjs
-// 的 lib/self-host-region.mjs 校验完整性)。仅在自建分支惰性读取 —— EAS 不进该分支。
-// 真文件缺失时(CI / 单测 / 未配置机)回落到 .example:它只含公开的 bundle/package 身份
-// (oss/signing 留空),而本分支只读 bundle/package,足够;发布脚本仍要求真文件填全。
-function loadSelfHostRegionBundle(region) {
+// 本地 Xcode / Simulator 与 self-host release 共用同一份地区构建配置。EAS 云端看不到
+// gitignored 的真文件,因此不启用 CINDY_USE_LOCAL_REGION_CONFIG 时继续走 eas.json / EAS env。
+function loadRegionBuildConfig(region) {
   const dir = path.join(__dirname, 'scripts');
   const configured = process.env.CINDY_SELF_HOST_REGIONS_FILE?.trim();
   const real = configured
     ? path.resolve(dir, configured)
     : path.join(dir, 'self-host-regions.json');
   const example = path.join(dir, 'self-host-regions.json.example');
-  if (configured && !fs.existsSync(real)) {
-    throw new Error(`CINDY_SELF_HOST_REGIONS_FILE 指向的文件不存在: ${real}`);
+  if (!fs.existsSync(real)) {
+    throw new Error(
+      `缺少地区构建配置: ${real}。请复制 ${example} 为 self-host-regions.json 并填值`,
+    );
   }
-  const hasRealConfig = fs.existsSync(real);
-  const file = hasRealConfig ? real : example;
+  const file = real;
   const block = JSON.parse(fs.readFileSync(file, 'utf8'))[region];
   if (!block?.iosBundleId || !block?.androidPackage) {
     throw new Error(
-      `${path.basename(file)} 缺少 region "${region}" 的 iosBundleId/androidPackage(自建构建必需)`,
+      `${path.basename(file)} 缺少 region "${region}" 的 iosBundleId/androidPackage`,
     );
   }
-  if (
-    hasRealConfig &&
-    !(block.tapdb?.clientId?.trim() && block.tapdb?.clientToken?.trim())
-  ) {
+  if (!(block.tapdb?.clientId?.trim() && block.tapdb?.clientToken?.trim())) {
     throw new Error(
       `${path.basename(file)} 缺少 region "${region}" 的 tapdb.clientId/clientToken`,
     );
@@ -56,7 +51,7 @@ function loadSelfHostRegionBundle(region) {
   const google = block.google;
   const googleFields = ['webClientId', 'iosClientId', 'iosUrlScheme'];
   const hasGoogleConfig = googleFields.every((key) => google?.[key]?.trim());
-  if (hasRealConfig && region === 'global' && !hasGoogleConfig) {
+  if (region === 'global' && !hasGoogleConfig) {
     throw new Error(
       `${path.basename(file)} 缺少 global.google.webClientId/iosClientId/iosUrlScheme`,
     );
@@ -160,10 +155,23 @@ module.exports = (context = {}) => {
   for (const [key, value] of Object.entries(mobileBuildEnv)) {
     if (!process.env[key]?.trim()) process.env[key] = value;
   }
-  const regional = REGION_CONFIG[region];
   const selfHosted = process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST === '1';
-  const selfHostRegion = selfHosted ? loadSelfHostRegionBundle(region) : null;
-  const selfHostGoogle = selfHostRegion?.google;
+  const usesLocalRegionConfig =
+    process.env.CINDY_USE_LOCAL_REGION_CONFIG === '1';
+  const usesRegionConfig = selfHosted || usesLocalRegionConfig;
+  const regionBuildConfig = usesRegionConfig
+    ? loadRegionBuildConfig(region)
+    : null;
+  const builtInRegional = REGION_CONFIG[region];
+  const regional = regionBuildConfig
+    ? {
+        ...builtInRegional,
+        iosBundleIdentifier: regionBuildConfig.iosBundleId,
+        androidPackage: regionBuildConfig.androidPackage,
+      }
+    : builtInRegional;
+  const regionGoogle = regionBuildConfig?.google;
+  const regionTapdb = regionBuildConfig?.tapdb;
   resolveAppStoreId(region);
   let next = {
     ...baseConfig,
@@ -178,8 +186,8 @@ module.exports = (context = {}) => {
       package: regional.androidPackage,
     },
     plugins: withNativeAuthPlugins(baseConfig.plugins || [], {
-      googleIosUrlScheme: selfHosted
-        ? selfHostGoogle?.iosUrlScheme
+      googleIosUrlScheme: usesRegionConfig
+        ? regionGoogle?.iosUrlScheme
         : process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME?.trim(),
       wechatAppId: process.env.EXPO_PUBLIC_CINDY_WECHAT_APP_ID?.trim(),
       wechatUniversalLink:
@@ -189,6 +197,25 @@ module.exports = (context = {}) => {
       ...baseConfig.extra,
       cindy: {
         authRegion: region,
+        ...(usesRegionConfig
+          ? {
+              regionConfigSource: 'self-host-regions',
+              tapdb: {
+                clientId: regionTapdb.clientId.trim(),
+                clientToken: regionTapdb.clientToken.trim(),
+                region,
+              },
+              ...(regionGoogle
+                ? {
+                    google: {
+                      webClientId: regionGoogle.webClientId,
+                      iosClientId: regionGoogle.iosClientId,
+                      iosUrlScheme: regionGoogle.iosUrlScheme,
+                    },
+                  }
+                : {}),
+            }
+          : {}),
       },
       xdtProductionEnv: mobileBuildEnv,
     },
@@ -211,17 +238,10 @@ module.exports = (context = {}) => {
     // (避免把版本文件卷进 @expo/fingerprint 的配置源)。缺省(非 Android 出包路径)则不注入。
     const rawVersionCode = process.env.XDT_ANDROID_VERSION_CODE?.trim();
     const versionCode = rawVersionCode ? Number(rawVersionCode) : undefined;
-    // 自建 app 身份按 region 取(见 loadSelfHostRegionBundle 头注释)。
-    const tapdb = selfHostRegion.tapdb;
-    const hasTapdbConfig = Boolean(
-      tapdb?.clientId?.trim() && tapdb?.clientToken?.trim(),
-    );
     next = {
       ...next,
-      ios: { ...next.ios, bundleIdentifier: selfHostRegion.iosBundleId },
       android: {
         ...next.android,
-        package: selfHostRegion.androidPackage,
         ...(Number.isInteger(versionCode) && versionCode > 0 ? { versionCode } : {}),
       },
       updates: {
@@ -233,30 +253,6 @@ module.exports = (context = {}) => {
         // Expo 的运行时 URL override API 要求此开关。只在自建变体开启,EAS/TestFlight
         // 继续保留默认 anti-bricking 策略。此原生配置变化需要最后一次冷更。
         disableAntiBrickingMeasures: true,
-      },
-      extra: {
-        ...next.extra,
-        cindy: {
-          ...next.extra.cindy,
-          ...(hasTapdbConfig
-            ? {
-                tapdb: {
-                  clientId: tapdb.clientId.trim(),
-                  clientToken: tapdb.clientToken.trim(),
-                  region,
-                },
-              }
-            : {}),
-          ...(selfHostGoogle
-            ? {
-                google: {
-                  webClientId: selfHostGoogle.webClientId,
-                  iosClientId: selfHostGoogle.iosClientId,
-                  iosUrlScheme: selfHostGoogle.iosUrlScheme,
-                },
-              }
-            : {}),
-        },
       },
     };
   }

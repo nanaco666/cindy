@@ -17,6 +17,7 @@ const managedEnvKeys = [
   'EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID',
   'EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID',
   'EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME',
+  'CINDY_USE_LOCAL_REGION_CONFIG',
   'CINDY_SELF_HOST_REGIONS_FILE',
 ];
 let previousEnv: Record<string, string | undefined>;
@@ -158,6 +159,59 @@ describe('mobile native app config', () => {
       '@react-native-google-signin/google-signin',
       { iosUrlScheme: 'com.googleusercontent.apps.eas-ios' },
     ]);
+  });
+
+  it('local Xcode / Simulator builds use the selected region JSON without enabling self-host OTA', () => {
+    const appJson = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'app.json'), 'utf8'),
+    );
+    const buildConfig = require(resolve(process.cwd(), 'app.config.js'));
+    const configDir = mkdtempSync(join(tmpdir(), 'cindy-local-regions-'));
+    temporaryDirs.push(configDir);
+    const regionsPath = join(configDir, 'regions.json');
+    writeFileSync(regionsPath, JSON.stringify({
+      cn: {
+        iosBundleId: 'com.local.cindycn',
+        androidPackage: 'com.local.cindycn',
+        tapdb: { clientId: 'cn-json-id', clientToken: 'cn-json-token' },
+      },
+      global: {
+        iosBundleId: 'com.local.cindy',
+        androidPackage: 'com.local.cindy',
+        google: {
+          webClientId: 'local-web.apps.googleusercontent.com',
+          iosClientId: 'local-ios.apps.googleusercontent.com',
+          iosUrlScheme: 'com.googleusercontent.apps.local-ios',
+        },
+        tapdb: { clientId: 'global-json-id', clientToken: 'global-json-token' },
+      },
+    }));
+    process.env.CINDY_SELF_HOST_REGIONS_FILE = regionsPath;
+    process.env.CINDY_USE_LOCAL_REGION_CONFIG = '1';
+    process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME =
+      'com.googleusercontent.apps.ambient';
+
+    const cn = buildConfig({ config: appJson.expo });
+    expect(cn.ios.bundleIdentifier).toBe('com.local.cindycn');
+    expect(cn.extra.cindy.regionConfigSource).toBe('self-host-regions');
+    expect(cn.extra.cindy.tapdb.clientId).toBe('cn-json-id');
+    expect(cn.extra.cindy).not.toHaveProperty('google');
+    expect(cn.updates).toEqual(appJson.expo.updates);
+    expect(cn.plugins).not.toContainEqual(
+      expect.arrayContaining(['@react-native-google-signin/google-signin']),
+    );
+
+    process.env.EXPO_PUBLIC_CINDY_AUTH_REGION = 'global';
+    const global = buildConfig({ config: appJson.expo });
+    expect(global.ios.bundleIdentifier).toBe('com.local.cindy');
+    expect(global.extra.cindy.google.webClientId).toBe(
+      'local-web.apps.googleusercontent.com',
+    );
+    expect(global.plugins).toContainEqual([
+      '@react-native-google-signin/google-signin',
+      { iosUrlScheme: 'com.googleusercontent.apps.local-ios' },
+    ]);
+    expect(global.updates).toEqual(appJson.expo.updates);
   });
 
   it('fails closed when a store build lacks its regional App Store numeric ID', () => {

@@ -54,7 +54,10 @@ import { fileURLToPath } from 'node:url';
 import { mobileClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
 import { ensureMobileEnv, formatMobileEnvStatus } from './ensure-mobile-env.mjs';
 import { computeFingerprintReport, parseFingerprintCliOutput } from './ci-fingerprint.mjs';
-import { extractMobileDevRegionArgs } from './lib/mobile-dev-region.mjs';
+import {
+  extractMobileDevRegionArgs,
+  withLocalMobileRegionConfig,
+} from './lib/mobile-dev-region.mjs';
 import { podInstallBounded } from './sim-pod-install.mjs';
 import { cwdOfPid, gitBranchOfPid, isInside, listenerPid } from './sim-metro.mjs';
 
@@ -66,7 +69,9 @@ const { region, passthrough } = extractMobileDevRegionArgs(process.argv.slice(2)
 const clean = passthrough.includes('--clean');
 const forceBuild = passthrough.includes('--force-build');
 const buildOnly = passthrough.includes('--build-only');
-const buildEnv = mobileClientBuildEnv({ authRegion: region });
+const buildEnv = withLocalMobileRegionConfig(
+  mobileClientBuildEnv({ authRegion: region }),
+);
 const devProcessEnv = { ...process.env, ...buildEnv };
 
 // fingerprint 产物缓存位置与保留份数。跨 worktree 共享;条目按 LRU(目录 mtime)清理。

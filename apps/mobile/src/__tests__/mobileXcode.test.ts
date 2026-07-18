@@ -7,7 +7,10 @@ import {
   selectMobileXcodeWorkspace,
   updateMobileXcodeEnvContent,
 } from '../../scripts/lib/mobile-xcode.mjs';
-import { extractMobileDevRegionArgs } from '../../scripts/lib/mobile-dev-region.mjs';
+import {
+  extractMobileDevRegionArgs,
+  withLocalMobileRegionConfig,
+} from '../../scripts/lib/mobile-dev-region.mjs';
 
 describe('mobile:xcode 参数', () => {
   it('不传 region 时默认 cn', () => {
@@ -45,8 +48,16 @@ describe('mobile simulator region 参数', () => {
 
   it('把所选 region 直接注入 Metro 子进程，不被 shell 残留值覆盖', () => {
     const source = readFileSync(resolve(process.cwd(), 'scripts/sim-start.mjs'), 'utf8');
-    expect(source).toContain('const buildEnv = mobileClientBuildEnv({ authRegion: region });');
+    expect(source).toContain('const buildEnv = withLocalMobileRegionConfig(');
     expect(source).toContain('...process.env,\n    ...buildEnv,');
+  });
+
+  it('所有本地构建环境都启用 region JSON 配置源', () => {
+    expect(withLocalMobileRegionConfig({ EXPO_PUBLIC_CINDY_AUTH_REGION: 'global' }))
+      .toEqual({
+        EXPO_PUBLIC_CINDY_AUTH_REGION: 'global',
+        CINDY_USE_LOCAL_REGION_CONFIG: '1',
+      });
   });
 });
 
@@ -63,11 +74,13 @@ describe('mobile:xcode env 切换', () => {
     const next = updateMobileXcodeEnvContent(source, {
       EXPO_PUBLIC_CINDY_AUTH_REGION: 'global',
       EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://global.example',
+      CINDY_USE_LOCAL_REGION_CONFIG: '1',
     });
 
     expect(next.match(/EXPO_PUBLIC_CINDY_AUTH_REGION=/g)).toHaveLength(1);
     expect(next).toContain('EXPO_PUBLIC_CINDY_AUTH_REGION=global');
     expect(next).toContain('EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL=https://global.example');
+    expect(next).toContain('CINDY_USE_LOCAL_REGION_CONFIG=1');
     expect(next).toContain('EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID=keep-me');
   });
 });

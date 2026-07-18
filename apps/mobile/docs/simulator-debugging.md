@@ -39,8 +39,11 @@ pnpm mobile:sim:rebuild    # rebuild + reinstall the cn native dev app (native c
 
 `mobile:sim:start` and `mobile:sim:rebuild` default to `cn`. They synchronize
 the selected build region and the matching `config/endpoint*.json` bootstrap
-base into `apps/mobile/.env`; you do not need to inject endpoint variables or
-copy `.env.example` by hand.
+base into `apps/mobile/.env`. Local Xcode / Simulator builds also read the selected
+block from the gitignored `apps/mobile/scripts/self-host-regions.json` for bundle
+identity, TapDB, and global Google client configuration; copy and fill
+`self-host-regions.json.example` first. You do not need to inject those public
+values or endpoint variables into `.env` by hand.
 
 The new-session build label reads branch/commit from `EXPO_PUBLIC_XDT_GIT_*` (set by
 `mobile:sim:start`) and the Metro host from `Constants.expoConfig.hostUri`. It is

@@ -11,6 +11,7 @@ describe('sim-rebuild script invariants', () => {
   const source = readFileSync(resolve(process.cwd(), 'scripts/sim-rebuild.mjs'), 'utf8');
 
   it('runs pod install itself via the bounded runner, instead of letting prebuild own it', () => {
+    expect(source).toContain('const buildEnv = withLocalMobileRegionConfig(');
     // prebuild 不再隐式跑 pod install(它的失败重试会带 --repo-update 打 CDN 且无界)。
     expect(source).toContain("['exec', 'expo', 'prebuild', '-p', 'ios', '--no-install']");
     // pod 执行策略(本地 specs 优先 / --repo-update 重试 / 空转看门狗 / UTF-8 LANG)

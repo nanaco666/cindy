@@ -12,13 +12,16 @@ export interface MobileGoogleConfig {
 
 const configuredExpoExtra = (Constants.expoConfig?.extra as {
   xdtProductionEnv?: Record<string, string>;
-  cindy?: { google?: Partial<MobileGoogleConfig> };
+  cindy?: {
+    regionConfigSource?: string;
+    google?: Partial<MobileGoogleConfig>;
+  };
 } | null) ?? {};
 const configuredBuildEnv = (configuredExpoExtra.xdtProductionEnv ?? {}) as Record<
   string,
   string
 >;
-const configuredSelfHostGoogle = configuredExpoExtra.cindy?.google;
+const configuredRegionGoogle = configuredExpoExtra.cindy?.google;
 
 function configuredValue(key: string): string {
   return process.env[key]?.trim() || configuredBuildEnv[key]?.trim() || '';
@@ -138,17 +141,17 @@ export let AUTH_API_BASE_URL = normalizeBaseUrlWithDefault(
   DEV_MANIFEST.authApiBaseUrl ?? '',
 );
 
-/** Self-host 只认 region JSON 写入的 Expo extra;EAS 线继续使用 EXPO_PUBLIC_*。 */
+/** 本地 / self-host 构建只认 region JSON 写入的 Expo extra;EAS 线使用 EXPO_PUBLIC_*。 */
 export function resolveMobileGoogleConfig(
-  selfHosted: boolean,
-  selfHostConfig: Partial<MobileGoogleConfig> | undefined,
+  regionConfigAuthoritative: boolean,
+  regionConfig: Partial<MobileGoogleConfig> | undefined,
   env: Record<string, string | undefined> = process.env,
 ): MobileGoogleConfig {
-  if (selfHosted) {
+  if (regionConfigAuthoritative) {
     return {
-      webClientId: selfHostConfig?.webClientId?.trim() || '',
-      iosClientId: selfHostConfig?.iosClientId?.trim() || '',
-      iosUrlScheme: selfHostConfig?.iosUrlScheme?.trim() || '',
+      webClientId: regionConfig?.webClientId?.trim() || '',
+      iosClientId: regionConfig?.iosClientId?.trim() || '',
+      iosUrlScheme: regionConfig?.iosUrlScheme?.trim() || '',
     };
   }
   return {
@@ -159,8 +162,8 @@ export function resolveMobileGoogleConfig(
 }
 
 const GOOGLE_CONFIG = resolveMobileGoogleConfig(
-  resolveEnvFlag(process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST),
-  configuredSelfHostGoogle,
+  configuredExpoExtra.cindy?.regionConfigSource === 'self-host-regions',
+  configuredRegionGoogle,
   {
     EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID:
       process.env.EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID,

@@ -51,7 +51,7 @@ pnpm mobile:release:ios:ota       -- --region global --execute
 pnpm mobile:release:android:check -- --region cn
 ```
 
-- 所有**随地区变的非机密分包参数**(iOS bundleId / Android package / NPKG 期望包名 / TapDB 公开 clientId·clientToken / global Google 公开 Web·iOS client id 与 URL scheme / OSS 落点 bucket·CDN·prefix·ossRegion / 非机密签名描述符)集中在打包机本地的 `apps/mobile/scripts/self-host-regions.json`(纯值、已 gitignore;复制 `self-host-regions.json.example` 填值)。cn=`com.xd.cindycn`、global=`com.xd.cindy`;Google 配置只允许出现在 `global.google`,自建脚本不读取同名 `EXPO_PUBLIC_CINDY_GOOGLE_*` 环境变量。
+- 所有**随地区变的非机密分包参数**(iOS bundleId / Android package / NPKG 期望包名 / TapDB 公开 clientId·clientToken / global Google 公开 Web·iOS client id 与 URL scheme / OSS 落点 bucket·CDN·prefix·ossRegion / 非机密签名描述符)集中在打包机本地的 `apps/mobile/scripts/self-host-regions.json`(纯值、已 gitignore;复制 `self-host-regions.json.example` 填值)。仓库提供的全部本地构建入口(`mobile:xcode` / `mobile:sim:start` / `mobile:sim:rebuild`)与 self-host release 都按所选 region 读取它;cn=`com.xd.cindycn`、global=`com.xd.cindy`;Google 配置只允许出现在 `global.google`,本地/自建脚本不读取同名 `EXPO_PUBLIC_CINDY_GOOGLE_*` 环境变量。
 - **真机密仍走 env,按 region 后缀**:Android keystore 两个口令 `XDT_ANDROID_KEYSTORE_PASSWORD_{CN,GLOBAL}` / `XDT_ANDROID_KEY_PASSWORD_{CN,GLOBAL}`(cn 兼容无后缀旧名);OSS AK/SK 同账号继续用 `FP_DEV_OSS_ACCESS_KEY_ID/SECRET`,不同账号用 `XDT_OSS_ACCESS_KEY_ID_{CN,GLOBAL}` / `XDT_OSS_ACCESS_KEY_SECRET_{CN,GLOBAL}`。
 - OTA 更新域名**不进** region JSON:运行期由对应地区 `endpoint.json` 的 `mobileUpdateBaseUrl` 下发,不烘焙进包。
 - cn / global 是两个独立 OSS bucket,`release.json` 等落点互不覆盖。global 上架/重签需另在 NPKG 登记 `com.xd.cindy`(外部 pending)。

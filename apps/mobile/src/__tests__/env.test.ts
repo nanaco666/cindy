@@ -41,7 +41,7 @@ describe('mobile env', () => {
     expect(resolveEnvFlag('YES')).toBe(true);
   });
 
-  it('self-host Google 只认 region JSON 写入的 Expo extra', () => {
+  it('本地 / self-host Google 只认 region JSON 写入的 Expo extra', () => {
     const ambient = {
       EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID: 'ambient-web',
       EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID: 'ambient-ios',

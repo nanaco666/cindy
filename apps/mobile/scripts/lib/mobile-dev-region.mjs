@@ -1,5 +1,12 @@
 /** 本地 mobile 开发允许选择的地区；未显式指定时统一使用国服。 */
 export const MOBILE_DEV_REGIONS = Object.freeze(['cn', 'global']);
+export const LOCAL_MOBILE_REGION_CONFIG_ENV_KEY = 'CINDY_USE_LOCAL_REGION_CONFIG';
+
+/** 本地 Xcode / Simulator 构建统一从 self-host-regions.json 读取地区配置。 */
+export function withLocalMobileRegionConfig(env) {
+  return { ...env, [LOCAL_MOBILE_REGION_CONFIG_ENV_KEY]: '1' };
+}
+
 export const DEFAULT_MOBILE_DEV_REGION = 'cn';
 
 /**

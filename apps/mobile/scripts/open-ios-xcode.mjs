@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// 按所选 region(默认 cn)重新生成 iOS 原生工程、安装 Pods，然后打开 app 的 .xcworkspace。
+// 按所选 region(默认 cn)读取 self-host-regions.json,重新生成 iOS 原生工程、安装 Pods，
+// 然后打开 app 的 .xcworkspace。
 // 这是本地开发入口：不 archive、不上传 NPKG/OSS，也不写任何发版记录。
 
 import { execFileSync } from 'node:child_process';
@@ -9,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { mobileClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
 import { podInstallBounded } from './sim-pod-install.mjs';
 import { cwdOfPid, isInside, listenerPid, portInUse } from './sim-metro.mjs';
+import { withLocalMobileRegionConfig } from './lib/mobile-dev-region.mjs';
 import {
   mobileXcodeGeneratedDir,
   parseMobileXcodeArgs,
@@ -28,7 +30,7 @@ function printUsage() {
   pnpm mobile:xcode                   # 国服(默认)
   pnpm mobile:xcode --region=global   # 海外
 
-流程:切换 apps/mobile/.env 地区 → clean prebuild → 安装 Pods → 打开 Xcode → 启动 Metro
+流程:读取 self-host-regions.json → 切换 apps/mobile/.env 地区 → clean prebuild → 安装 Pods → 打开 Xcode → 启动 Metro
 说明:只准备本地 Xcode 工程，不会上传或发布。`);
 }
 
@@ -42,7 +44,9 @@ async function main() {
     throw new Error('mobile:xcode 只能在安装了 Xcode 的 macOS 上运行');
   }
 
-  const buildEnv = mobileClientBuildEnv({ authRegion: args.region });
+  const buildEnv = withLocalMobileRegionConfig(
+    mobileClientBuildEnv({ authRegion: args.region }),
+  );
   const env = { ...process.env, ...buildEnv };
   const previousEnv = existsSync(envPath) ? readFileSync(envPath, 'utf8') : '';
   const nextEnv = updateMobileXcodeEnvContent(previousEnv, buildEnv);
@@ -68,7 +72,7 @@ async function main() {
 
   console.log(`\n› 准备 Cindy iOS Xcode 工程(region=${args.region})`);
   console.log(`  bundle: ${args.region === 'global' ? 'com.xd.cindy' : 'com.xd.cindycn'}`);
-  console.log(`  已同步 apps/mobile/.env；后续 Metro 将沿用 ${args.region}。`);
+  console.log(`  已同步 apps/mobile/.env；原生构建与 Metro 将读取 self-host-regions.json 的 ${args.region}。`);
   console.log('› clean prebuild(重新生成 ios/，避免沿用另一地区的 bundle/scheme)…');
   execFileSync('pnpm', ['exec', 'expo', 'prebuild', '-p', 'ios', '--clean', '--no-install'], {
     cwd: mobileDir,
