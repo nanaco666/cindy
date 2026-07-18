@@ -184,17 +184,17 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(colorsSource).toContain("'create-agent-control-icon'");
     expect(colorsSource).toContain("light: '#3C3F43'");
 
-    expect(chatInputSource).toContain("'grid min-w-0 grid-cols-[minmax(0,max-content)_minmax(0,1fr)] gap-2 overflow-hidden'");
-    expect(chatInputSource).toContain("'grid min-w-0 grid-cols-[minmax(0,max-content)_minmax(0,1fr)] gap-1 overflow-hidden'");
-    expect(chatInputSource).toContain("'flex min-w-0 items-center gap-2 overflow-hidden'");
-    expect(chatInputSource).toContain("'flex min-w-0 items-center gap-1 overflow-hidden'");
-    expect(chatInputSource).toContain("'flex min-w-0 flex-nowrap items-center justify-end gap-2 overflow-hidden'");
-    expect(chatInputSource).toContain("'flex min-w-0 flex-nowrap items-center justify-end gap-1 overflow-hidden'");
+    expect(chatInputSource).toContain("'min-w-0 flex-nowrap gap-2 overflow-hidden'");
+    expect(chatInputSource).toContain("'min-w-0 flex-nowrap gap-1 overflow-hidden'");
+    expect(chatInputSource).toContain("'contents'");
+    expect(chatInputSource).not.toContain("grid-cols-[minmax(0,max-content)_minmax(0,1fr)]");
     expect(chatInputSource).not.toContain("isCreateAgentVariant ? 'flex-wrap gap-2' : 'min-w-0 gap-1'");
     expect(chatInputSource).not.toContain("'flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2'");
     expect(source).toContain('className="shrink-0"');
     expect(extraDirsButtonSource).toContain("'flex shrink-0 items-center rounded-full transition-colors'");
+    expect(permissionSelectorSource).toContain("'h-[30px] min-w-[52px] max-w-full shrink");
     expect(permissionSelectorSource).not.toContain("'h-[30px] min-w-[90px] max-w-none shrink-0");
+    expect(permissionSelectorSource).not.toContain("'h-[30px] min-w-[72px] max-w-full shrink border border-[var(--create-agent-control-border)]");
     expect(permissionSelectorSource).not.toContain("'h-[30px] min-w-max shrink-0 px-2.5");
     expect(sendButtonSource).toContain("'flex shrink-0 items-center justify-center transition-colors'");
     expect(modelSelectorSource).toContain("'h-[30px] min-w-[72px] max-w-full shrink overflow-hidden");

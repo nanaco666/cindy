@@ -115,7 +115,7 @@ export function PermissionSelector({
               'flex min-w-0 items-center gap-1 overflow-hidden rounded-full transition-colors',
               isCreateAgentVariant
                 ? [
-                    'h-[30px] min-w-[72px] max-w-full shrink border border-[var(--create-agent-control-border)]',
+                    'h-[30px] min-w-[52px] max-w-full shrink border border-[var(--create-agent-control-border)]',
                     'bg-[var(--create-agent-control-bg)] py-0 pl-2.5 pr-2 text-[var(--create-agent-control-text)]',
                     'hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)]',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
