@@ -870,6 +870,11 @@ export default function SessionScreen() {
   const sendButtonFrameRef = useRef<{ height: number; width: number; x: number; y: number } | null>(null);
   const slashLoadSeqRef = useRef(0);
   const atLoadSeqRef = useRef(0);
+  // 发送侧同名 skill 让行的仲裁清单:仅在新鲜拉取成功时更新(不含 desktop 命令,仅
+  // 供 parseMobileDesktopCommand 判断 agent-skill 重名);component-scoped——page
+  // 卸载/会话切换自然清零,比 module-level slashCache 粒度更细,避免跨会话携带卸载
+  // 技能的旧记录阻止 desktop 命令分流。
+  const lastKnownSkillsForDispatchRef = useRef<readonly MobileSlashCommand[]>([]);
   const capabilitiesLoadSeqRef = useRef(0);
   const extraDirBrowseSeqRef = useRef(0);
   const autoRetrySyncKeyRef = useRef<string | null>(null);
@@ -1717,9 +1722,10 @@ export default function SessionScreen() {
           setSlashCommands(merged);
           // desktop 命令(kind === 'desktop')不写入共享缓存:缓存被 new.tsx 等
           // 没有 desktop 命令分流逻辑的页面共读,写入会导致它们展示 /learn 但发送
-          // 时走普通文本透传给 agent(静默失效)。发送侧改从 slashCache 取 skill
-          // 清单作 fallback(见 L3164 处注释),不依赖 desktop 命令在缓存中的存在。
+          // 时走普通文本透传给 agent(静默失效)。
           writeSlashCommandCache(paletteCacheKey, merged.filter((c) => c.kind !== 'desktop'));
+          // 新鲜拉取成功:同步更新组件级仲裁清单(发送侧 fallback,见 L3173 注释)。
+          lastKnownSkillsForDispatchRef.current = merged;
           setSlashPaletteError(null);
         } else if (!cachedCommands) {
           setSlashCommands(merged);
@@ -3165,18 +3171,13 @@ export default function SessionScreen() {
       const localSystemCommand = hasAttachments ? null : parseMobileLocalSystemCommand(body);
       // desktop 命令(/learn)按名字白名单分流;同名 agent-skill 优先让行(对齐桌面
       // dispatch 语义),清单未加载时白名单兜底拦截。
-      // slashCommands 面板关闭时被 effect 清为[]:发送侧改从持久化缓存中读取
-      // (slashCache 仅在设备断联/登出时驱逐),保证已装同名 skill 的用户直接手输
-      // /learn 时仍能正确让行,不会跳过 skill 直调 learn:start。
+      // slashCommands 面板关闭时被 effect 清为[]:改用组件级 ref(见声明处注释)——
+      // 仅在本次 page mount 内、最近一次新鲜拉取成功后有值;技能在桌面卸载且用户
+      // 重开面板前 ref 可能仍含旧条目,但 component-scoped 保证了会话切换后自然清零,
+      // 比 module-level slashCache 的驱逐粒度更细,不会跨会话带入已卸载的技能记录。
       const dispatchSlashCommands = slashCommands.length > 0
         ? slashCommands
-        : readSlashCommandCache(
-            buildComposerPaletteCacheKey(
-              deviceId,
-              agentKindForSession(sessionAtSend),
-              sessionAtSend.workingDir ?? '',
-            ),
-          ) ?? [];
+        : lastKnownSkillsForDispatchRef.current;
       const desktopCommand = hasAttachments ? null : parseMobileDesktopCommand(body, dispatchSlashCommands);
       if (!sessionAtSend.workingDir && !localSystemCommand && !desktopCommand) {
         setError('当前会话缺少工作目录，不能发送消息。');
