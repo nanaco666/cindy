@@ -955,6 +955,126 @@ describe('prepareExternalCodexSessionForResume orphan rollout synthesis', () => 
     `).run(`${clientId}-id`, clientId, sessionId, role, content, createdAt);
   }
 
+  it('adopts a legacy branded Codex HOME and remains resumable after the old directory is removed', async () => {
+    const legacyUserData = path.join(path.dirname(targetUserData), 'xdt-maker');
+    const legacyHome = path.join(legacyUserData, 'codex-home');
+    const sourceRollout = path.join(
+      legacyHome,
+      'sessions',
+      '2026',
+      '07',
+      '14',
+      `rollout-2026-07-14-${threadId}.jsonl`,
+    );
+    const sourceContents = `${JSON.stringify({
+      type: 'session_meta',
+      payload: { id: threadId, cwd: '/tmp/project' },
+    })}\n${rolloutLine('m1', 'user', 'legacy history', '2026-07-14T00:00:01.000Z')}\n`;
+    const sourceDbPath = createStateDb(legacyHome);
+    fs.mkdirSync(path.dirname(sourceRollout), { recursive: true });
+    fs.writeFileSync(sourceRollout, sourceContents);
+    insertThread(sourceDbPath, threadId, sourceRollout, {
+      updatedAt: 2_000,
+      title: 'Legacy branded session',
+    });
+    const targetDbPath = createStateDb(desktopHome());
+
+    // CODEX_HOME 候选故意不存在,证明命中来自品牌身份表里的 legacy userData。
+    process.env.CODEX_HOME = path.join(rootDir, 'missing-external-home');
+    await prepareExternalCodexSessionForResume(threadId);
+
+    const targetRow = new Database(targetDbPath, { readonly: true });
+    const adopted = targetRow.prepare('SELECT rollout_path AS rolloutPath, title FROM threads WHERE id = ?')
+      .get(threadId) as { rolloutPath: string; title: string };
+    targetRow.close();
+    expect(adopted.title).toBe('Legacy branded session');
+    expect(adopted.rolloutPath.startsWith(path.join(desktopHome(), 'sessions'))).toBe(true);
+    expect(path.basename(adopted.rolloutPath)).toBe(path.basename(sourceRollout));
+    expect(fs.readFileSync(adopted.rolloutPath, 'utf-8')).toBe(sourceContents);
+
+    // 接管后不再依赖老目录;重复 prepare 走当前 HOME 热路径且不改写 rollout。
+    fs.rmSync(legacyUserData, { recursive: true, force: true });
+    await prepareExternalCodexSessionForResume(threadId);
+    expect(fs.readFileSync(adopted.rolloutPath, 'utf-8')).toBe(sourceContents);
+  });
+
+  it('repairs a pre-existing external rollout pointer without overwriting current thread metadata', async () => {
+    const legacyHome = path.join(path.dirname(targetUserData), 'xdt-maker', 'codex-home');
+    const sourceRollout = path.join(legacyHome, 'sessions', `rollout-2026-07-14-${threadId}.jsonl`);
+    const sourceDbPath = createStateDb(legacyHome);
+    fs.mkdirSync(path.dirname(sourceRollout), { recursive: true });
+    fs.writeFileSync(sourceRollout, 'LEGACY_ROLLOUT');
+    insertThread(sourceDbPath, threadId, sourceRollout, {
+      updatedAt: 2_000,
+      title: 'Older legacy title',
+    });
+    const targetDbPath = createStateDb(desktopHome());
+    insertThread(targetDbPath, threadId, sourceRollout, {
+      updatedAt: 3_000,
+      title: 'Current Cindy title',
+    });
+    process.env.CODEX_HOME = path.join(rootDir, 'missing-external-home');
+
+    await prepareExternalCodexSessionForResume(threadId);
+
+    const targetDb = new Database(targetDbPath, { readonly: true });
+    const targetRow = targetDb.prepare('SELECT rollout_path AS rolloutPath, title FROM threads WHERE id = ?')
+      .get(threadId) as { rolloutPath: string; title: string };
+    targetDb.close();
+    expect(targetRow.title).toBe('Current Cindy title');
+    expect(targetRow.rolloutPath.startsWith(path.join(desktopHome(), 'sessions'))).toBe(true);
+    expect(fs.readFileSync(targetRow.rolloutPath, 'utf-8')).toBe('LEGACY_ROLLOUT');
+  });
+
+  it('keeps an explicitly configured external CODEX_HOME linked instead of adopting it', async () => {
+    const sourceRollout = path.join(externalHome, 'sessions', `rollout-2026-07-14-${threadId}.jsonl`);
+    const sourceDbPath = createStateDb(externalHome);
+    fs.mkdirSync(path.dirname(sourceRollout), { recursive: true });
+    fs.writeFileSync(sourceRollout, 'LINKED_EXTERNAL_ROLLOUT');
+    insertThread(sourceDbPath, threadId, sourceRollout, { updatedAt: 2_000 });
+    const targetDbPath = createStateDb(desktopHome());
+
+    await prepareExternalCodexSessionForResume(threadId);
+
+    const targetDb = new Database(targetDbPath, { readonly: true });
+    const targetRow = targetDb.prepare('SELECT rollout_path AS rolloutPath FROM threads WHERE id = ?')
+      .get(threadId) as { rolloutPath: string };
+    targetDb.close();
+    expect(targetRow.rolloutPath).toBe(sourceRollout);
+    expect(fs.existsSync(path.join(desktopHome(), 'sessions', path.basename(sourceRollout)))).toBe(false);
+  });
+
+  it('synthesizes into the current HOME when legacy state survives but its rollout is missing', async () => {
+    const legacyHome = path.join(path.dirname(targetUserData), 'xdt-maker', 'codex-home');
+    const missingSourceRollout = path.join(
+      legacyHome,
+      'sessions',
+      '2026',
+      '07',
+      '14',
+      `rollout-2026-07-14-${threadId}.jsonl`,
+    );
+    const sourceDbPath = createStateDb(legacyHome);
+    insertThread(sourceDbPath, threadId, missingSourceRollout, { updatedAt: 2_000 });
+    const targetDbPath = createStateDb(desktopHome());
+    const sessionId = `local-legacy-${threadId}`;
+    insertLocalCodexSession(sessionId, threadId);
+    insertLocalMessage(sessionId, 'c1', 'user', JSON.stringify({ text: 'recover me' }), 1_000);
+    insertLocalMessage(sessionId, 'c2', 'assistant', 'recovered', 1_100);
+    process.env.CODEX_HOME = path.join(rootDir, 'missing-external-home');
+
+    await prepareExternalCodexSessionForResume(threadId);
+
+    const targetDb = new Database(targetDbPath, { readonly: true });
+    const targetRow = targetDb.prepare('SELECT rollout_path AS rolloutPath FROM threads WHERE id = ?')
+      .get(threadId) as { rolloutPath: string };
+    targetDb.close();
+    expect(targetRow.rolloutPath.startsWith(desktopHome())).toBe(true);
+    expect(fs.existsSync(targetRow.rolloutPath)).toBe(true);
+    expect(fs.existsSync(missingSourceRollout)).toBe(false);
+    expect(fs.readFileSync(targetRow.rolloutPath, 'utf-8')).toContain('recover me');
+  });
+
   it('synthesizes a rollout from localDb when the DB row exists but the file is missing', async () => {
     const dbPath = createStateDb(desktopHome());
     const missingRollout = path.join(desktopHome(), 'sessions', '2026', '06', '15', `rollout-2026-06-15-${threadId}.jsonl`);
