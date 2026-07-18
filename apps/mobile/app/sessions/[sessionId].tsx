@@ -3186,10 +3186,12 @@ export default function SessionScreen() {
           cardData = buildLearnCardData({ runId });
         } catch (err) {
           cardData = buildLearnCardData({ errorMessage: formatRemoteError(err) });
+          // 启动失败(LEARN_BUSY / CHANNEL_NOT_ALLOWED 等):恢复草稿供用户重试。
+          restoreDraftAfterFailure();
         }
         remoteSessionStore.appendLocalSystemCard(sessionId, 'learn', cardData);
         voiceDictionaryLearningTrackerRef.current?.flush();
-        // 草稿已在乐观第一拍清空,这里只需跟到底部。
+        // 成功时草稿已在乐观第一拍清空;失败时上方已恢复——两路都跟到底部。
         requestMessageListFollowLatest();
         return;
       }
