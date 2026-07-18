@@ -25,12 +25,24 @@ function monotonicNow(): number {
 export const JS_STALL_REPORT_THRESHOLD_MS = 2_000;
 
 /**
+ * 超过该时长的间隙判为「疑似挂起」而非 JS 停摆:整机睡眠 / 进程冻结也会冻结计时器,
+ * 实测(2026-07-18 夜间)Mac 睡眠的周期性维护唤醒会刷出成串 ~900-1080s 的假停摆,
+ * 污染取证。真实 microtask 风暴实测量级为秒级到 ~90s,取 120s 为分界。
+ */
+export const JS_STALL_SUSPEND_SUSPECT_MS = 120_000;
+
+/**
  * 纯判定:上个 tick 时刻 → 本 tick 时刻的间隙是否构成应上报的停摆。
  * 返回停摆时长(间隙中超出心跳周期的部分),不构成则返回 null。
  */
 export function evaluateJsStallTick(prevTickAt: number, now: number): number | null {
   const stalledMs = now - prevTickAt - JS_STALL_TICK_MS;
   return stalledMs >= JS_STALL_REPORT_THRESHOLD_MS ? stalledMs : null;
+}
+
+/** 纯判定:停摆时长归类——真 JS 停摆,还是疑似整机睡眠 / 进程挂起。 */
+export function classifyJsStallGap(stalledMs: number): 'stall' | 'suspend-suspect' {
+  return stalledMs >= JS_STALL_SUSPEND_SUSPECT_MS ? 'suspend-suspect' : 'stall';
 }
 
 /**
@@ -52,7 +64,10 @@ export function startJsStallWatchdog(
       : null;
     prevTickAt = now;
     if (stalledMs !== null) {
-      report(`[js-stall] JS thread stalled ~${(stalledMs / 1000).toFixed(1)}s (event-loop tick gap)`);
+      const seconds = (stalledMs / 1000).toFixed(1);
+      report(classifyJsStallGap(stalledMs) === 'suspend-suspect'
+        ? `[js-stall] suspicious ~${seconds}s gap (likely system/process suspend, not a JS stall)`
+        : `[js-stall] JS thread stalled ~${seconds}s (event-loop tick gap)`);
     }
   }, JS_STALL_TICK_MS);
   return () => {
