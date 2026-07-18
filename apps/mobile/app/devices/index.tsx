@@ -2478,8 +2478,7 @@ function pruneHomeDeviceConnectionStates(
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
-  // OTA 热更验证标记：首页背景临时改为状态红；沿用主题 token，避免新增裸色值。
-  safeArea: { flex: 1, backgroundColor: colors.statusError },
+  safeArea: { flex: 1, backgroundColor: colors.surface },
   pressed: { opacity: 0.72 },
   disabled: { opacity: 0.45 },
   homeHeader: {
@@ -2730,7 +2729,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     lineHeight: lineHeight.code,
   },
   projectGroup: {
-    backgroundColor: colors.statusError,
+    backgroundColor: colors.surface,
     // 全宽分割线挂在项目组的顶部与底部:把整个项目块与上方/下方的普通对话分开,
     // 而非分隔项目头与其下属会话(项目头 → 内容之间保持连续无线)。
     borderBottomColor: colors.border,
@@ -2746,7 +2745,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   projectRow: {
     alignItems: 'center',
-    backgroundColor: colors.statusError,
+    backgroundColor: colors.surface,
     flexDirection: 'row',
     gap: 8,
     minHeight: 56,
@@ -2769,7 +2768,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     lineHeight: lineHeight.subtitle,
   },
   projectChildren: {
-    backgroundColor: colors.statusError,
+    backgroundColor: colors.surface,
   },
   projectViewAllRow: {
     // 永远是项目块的最后一个元素:不画自己的下线,块底部的全宽线就是分割线
@@ -2790,7 +2789,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   sessionListRow: {
     alignItems: 'stretch',
-    backgroundColor: colors.statusError,
+    backgroundColor: colors.surface,
     flexDirection: 'row',
     gap: spacing.md,
     height: HOME_SESSION_ROW_HEIGHT,
@@ -2809,7 +2808,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   automationGroupBlock: {
     // 自动化组(组行 + 展开的子行)整体成块:上下各一根全宽分割线,与项目组(projectGroup)
     // 同款,把任务块和普通对话在视觉上区分开。
-    backgroundColor: colors.statusError,
+    backgroundColor: colors.surface,
     borderBottomColor: colors.border,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
@@ -2822,7 +2821,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   automationGroupChildren: {
     // 自动化组展开的子运行容器:不再用容器 padding 做缩进(会把子行的滑动包装挤离屏边),
     // 深一档的缩进由子行自身的 sessionListRowDeepIndented 承担,视觉层级不变。
-    backgroundColor: colors.statusError,
+    backgroundColor: colors.surface,
   },
   automationViewAllRow: {
     // 「查看全部 N 次运行」:与项目组「查看全部 N 条对话」同款行样式,
