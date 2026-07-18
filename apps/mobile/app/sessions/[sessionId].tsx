@@ -3465,13 +3465,24 @@ export default function SessionScreen() {
           disabled={composerLayout.stop.disabled}
           hitSlop={COMPOSER_CONTROL_HIT_SLOP}
           onPress={stopSession}
-          style={styles.composerInlineToolButton}
+          pressedStyle={styles.sendButtonPressed}
+          style={[
+            styles.sendButton,
+            composerLayout.stop.disabled && styles.sendButtonInactive,
+          ]}
           testID="session.stopButton"
         >
           {stopPending ? (
-            <ActivityIndicator color={colors.textSecondary} size="small" />
+            <ActivityIndicator color={composerLayout.stop.disabled ? colors.textSecondary : colors.ctaText} size="small" />
           ) : (
-            <Square color={colors.textSecondary} size={iconSize.sm} strokeWidth={iconStroke.regular} />
+            <Square
+              color={composerLayout.stop.disabled ? colors.textSecondary : colors.ctaText}
+              // 停止钮实心 Square:10px 填充块语义(非阶梯图标),零描边即语义本身
+              // (designTokenDiscipline ALLOWLIST 登记豁免)。
+              size={10}
+              strokeWidth={0}
+              fill={composerLayout.stop.disabled ? colors.textSecondary : colors.ctaText}
+            />
           )}
         </RouteActionButton>
       ) : null}
@@ -3485,21 +3496,20 @@ export default function SessionScreen() {
           pressedStyle={styles.sendButtonPressed}
           style={[
             styles.sendButton,
-            styles.sendButtonStop,
             composerLayout.stop.disabled && styles.sendButtonInactive,
           ]}
           testID="session.stopButton"
         >
           {stopPending ? (
-            <ActivityIndicator color={colors.textPrimary} size="small" />
+            <ActivityIndicator color={composerLayout.stop.disabled ? colors.textSecondary : colors.ctaText} size="small" />
           ) : (
             <Square
-              color={composerLayout.stop.disabled ? colors.textSecondary : colors.textPrimary}
+              color={composerLayout.stop.disabled ? colors.textSecondary : colors.ctaText}
               // 停止钮实心 Square:10px 填充块语义(非阶梯图标),零描边即语义本身
               // (designTokenDiscipline ALLOWLIST 登记豁免)。
               size={10}
               strokeWidth={0}
-              fill={composerLayout.stop.disabled ? colors.textSecondary : colors.textPrimary}
+              fill={composerLayout.stop.disabled ? colors.textSecondary : colors.ctaText}
             />
           )}
         </RouteActionButton>
@@ -6610,11 +6620,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   sendButtonVoiceTarget: {
     borderColor: colors.borderStrong,
-  },
-  sendButtonStop: {
-    backgroundColor: colors.surfaceChip,
-    borderColor: colors.surfaceChip,
-    borderRadius: radius.control,
   },
   sendButtonPressed: { opacity: 0.86 },
   sendButtonDisabled: { opacity: 0.45 },

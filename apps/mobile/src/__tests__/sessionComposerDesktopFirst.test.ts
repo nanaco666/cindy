@@ -476,10 +476,11 @@ describe('mobile session composer desktop-first surface', () => {
     expect(source).toContain('localVoiceInputHistory,');
     expect(source).toContain('recordHistory: (text) => recordMobileVoiceInputHistoryForHost(deviceId, text)');
     expect(source).toContain('updateHistoryEntry: (entryId, text) => updateMobileVoiceInputHistoryEntryForHost(deviceId, entryId, text)');
-    expect(source).toContain('styles.sendButtonStop');
-    expect(source).toContain('borderRadius: radius.control');
-    expect(source).toContain('backgroundColor: colors.surfaceChip');
-    expect(source).toContain('fill={composerLayout.stop.disabled ? colors.textSecondary : colors.textPrimary}');
+    expect(source).not.toContain('styles.sendButtonStop');
+    expect(source).not.toContain('sendButtonStop:');
+    expect(source).toContain('fill={composerLayout.stop.disabled ? colors.textSecondary : colors.ctaText}');
+    expect(source).toContain('color={composerLayout.stop.disabled ? colors.textSecondary : colors.ctaText}');
+    expect(source).toContain('pressedStyle={styles.sendButtonPressed}');
     expect(source).toContain('pressedStyle === undefined ? styles.routeButtonPressed : pressedStyle');
     expect(source).not.toContain('composerShowStatusRow');
     expect(source).not.toContain('composerStatusRow');
