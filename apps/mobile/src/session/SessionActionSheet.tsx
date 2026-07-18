@@ -34,7 +34,7 @@ import {
   type SessionSwipeAction,
 } from '@/session/swipeRowRegistry';
 import { iconSize, iconStroke, useTheme, useThemedStyles, type ThemeColors } from '@/theme';
-import { fontWeight, radius, spacing, typeScale } from '@/theme/tokens';
+import { fontWeight, lineHeight, radius, spacing, typeScale } from '@/theme/tokens';
 
 /** 卡片滑入距离(略大于卡片实高即可,滑入曲线吃掉误差)。 */
 const CARD_SLIDE_DISTANCE = 360;
@@ -128,7 +128,7 @@ export function SessionActionSheet({
           <View style={styles.actionCard}>
             {menu.map((item) => {
               const IconComponent = ACTION_ICONS[item.action];
-              const color = item.destructive ? colors.statusError : colors.textPrimary;
+              const color = item.destructive ? colors.destructive : colors.sheetActionText;
               return (
                 <Pressable
                   accessibilityLabel={item.label}
@@ -176,8 +176,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   actionCard: {
-    backgroundColor: colors.surfaceGlassPanel,
-    borderColor: colors.border,
+    backgroundColor: colors.sheetActionSurface,
+    borderColor: colors.sheetActionBorder,
     borderRadius: radius.container,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
@@ -190,26 +190,29 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   actionLabel: {
-    color: colors.textPrimary,
+    color: colors.sheetActionText,
     flexShrink: 1,
-    fontSize: typeScale.body,
+    fontSize: typeScale.listBody,
+    fontWeight: fontWeight.semibold,
+    lineHeight: lineHeight.listBody,
   },
   actionLabelDanger: {
-    color: colors.statusError,
+    color: colors.destructive,
   },
   cancelCard: {
     alignItems: 'center',
-    backgroundColor: colors.surfaceGlassPanel,
-    borderColor: colors.border,
+    backgroundColor: colors.sheetActionSurface,
+    borderColor: colors.sheetActionBorder,
     borderRadius: radius.container,
     borderWidth: StyleSheet.hairlineWidth,
     justifyContent: 'center',
     minHeight: 54,
   },
   cancelText: {
-    color: colors.textPrimary,
-    fontSize: typeScale.body,
-    fontWeight: fontWeight.medium,
+    color: colors.sheetActionText,
+    fontSize: typeScale.listBody,
+    fontWeight: fontWeight.semibold,
+    lineHeight: lineHeight.listBody,
   },
   pressed: {
     opacity: 0.72,

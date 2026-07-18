@@ -50,10 +50,10 @@ describe('mobile session header desktop-first surface', () => {
     expect(source).toContain('<View style={[styles.sessionChromeContent, { paddingTop: insets.top }]}>');
     expect(source).toContain("sessionChrome: {\n    left: 0,\n    overflow: 'hidden',\n    position: 'absolute',");
     expect(source).toContain('sessionChromeContent: {');
-    expect(source).toContain("backgroundColor: colors.surfaceTranslucent");
+    expect(source).toContain("backgroundColor: colors.surfaceTranslucentSidebar");
     expect(source).not.toContain("colors.glassTint");
     expect(source).not.toContain("colors.glassHighlight");
-    expect(source).toContain("backgroundColor: 'transparent'");
+    expect(source).toContain("backgroundColor: colors.surfaceTranslucentSidebar");
     expect(source).toContain("borderBottomColor: colors.borderTranslucent");
     expect(source).toContain('minHeight: 50');
     expect(source).toContain("sessionHeaderBackButton: {\n    alignItems: 'center',\n    borderRadius: radius.pill,\n    height: 38,");

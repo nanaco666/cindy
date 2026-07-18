@@ -124,6 +124,17 @@ describe('theme tokens', () => {
     expect(darkColors.destructive).toBe('#f43d3f');
   });
 
+  it('M4 app 内 splash 专用 token 契约:品牌红只服务 splash,不回流普通 CTA', () => {
+    expect(lightColors.brandSplashBackground).toBe('#DF0C27');
+    expect(darkColors.brandSplashBackground).toBe('#DF0C27');
+    expect(lightColors.brandSplashForeground).toBe('#FFFFFF');
+    expect(darkColors.brandSplashForeground).toBe('#FFFFFF');
+    expect(lightColors.brandSplashMuted).toBe('rgba(255, 255, 255, 0.82)');
+    expect(darkColors.brandSplashMuted).toBe('rgba(255, 255, 255, 0.82)');
+    expect(lightColors.cta).not.toBe(lightColors.brandSplashBackground);
+    expect(darkColors.cta).not.toBe(darkColors.brandSplashBackground);
+  });
+
   it('typeScale 严格单调递增', () => {
     const sizes = Object.values(typeScale);
     for (let i = 1; i < sizes.length; i += 1) {
