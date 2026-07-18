@@ -34,6 +34,7 @@ export const CINDY_REQUIRED_COLOR_IDS = [
   'text-tertiary-hsl',
   'text-disabled',
   'text-disabled-tertiary',
+  'caret-accent',
   'accent-cta-bg',
   'accent-cta-bg-pure',
   'accent-emphasis',
@@ -213,6 +214,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'text-tertiary-hsl': { light: '222.0 4.6% 42.7%', dark: '216.0 4.1% 75.9%' },
   'text-disabled': { light: '#686B72', dark: '#BFC1C4' },
   'text-disabled-tertiary': { light: '#686B72', dark: '#BFC1C4' },
+  'caret-accent': { light: '#DF0C27', dark: '#DF0C27' }, // 用户点名:输入光标品牌红
   'accent-cta-bg': { light: '#3C3F43', dark: '#EEEEEE' }, // E1D
   'accent-cta-bg-pure': { light: '#3C3F43', dark: '#EEEEEE' }, // E1D
   'accent-emphasis': { light: '#3C3F43', dark: '#EEEEEE' }, // E1D
@@ -342,6 +344,7 @@ export const RED_EXCEPTION_ALLOWED_IDS = [
   'brand-login-bg',
   'brand-login-error-border',
   'brand-login-error-text',
+  'caret-accent',
   // C 类保留红(裁决:迁移填充/拖放 overlay/侧栏选中)
   'migration-bar-fill',
   'drop-overlay-bg',
@@ -357,6 +360,7 @@ export const RED_EXCEPTION_ALLOWED_IDS = [
 
 // 旧 BRAND_RED_* map(保留供 D2T 迁移,迁完删):
 export const BRAND_RED_EXPECTED_BY_ID: Record<string, string> = {
+  'caret-accent': '#DF0C27',
   'accent-cta-bg': '#DF0C27',
   'accent-cta-bg-pure': '#DF0C27',
   'accent-emphasis': '#DF0C27',
@@ -370,6 +374,7 @@ export const BRAND_RED_EXPECTED_BY_ID: Record<string, string> = {
 };
 
 export const BRAND_RED_ALLOWED_IDS = [
+  'caret-accent',
   'accent-cta-bg',
   'accent-cta-bg-pure',
   'accent-emphasis',

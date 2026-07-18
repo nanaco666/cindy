@@ -80,7 +80,7 @@
   textarea,
   [contenteditable='true'],
   [role='textbox'] {
-    caret-color: var(--accent-cta-bg);
+    caret-color: var(--caret-accent);
   }
 
   /* F2: Global disable element drag — prevent image and element dragging */
@@ -234,14 +234,14 @@ html:lang(ko) {
   content: none;
 }
 .ProseMirror {
-  caret-color: var(--accent-cta-bg);
+  caret-color: var(--caret-accent);
 }
 .cm-editor .cm-content {
-  caret-color: var(--accent-cta-bg) !important;
+  caret-color: var(--caret-accent) !important;
 }
 .cm-editor .cm-cursor,
 .cm-editor .cm-dropCursor {
-  border-left-color: var(--accent-cta-bg) !important;
+  border-left-color: var(--caret-accent) !important;
 }
 .ProseMirror .voice-input-draft-replaced {
   display: none;
