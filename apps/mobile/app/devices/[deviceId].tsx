@@ -24,6 +24,7 @@ import {
   MainWindowMetric,
   MainWindowOptionButton,
   MainWindowRowButton,
+  RemoteListSyncingPlaceholder,
   ScreenHeader,
   SummaryStrip,
 } from '@/components/MobilePrimitives';
@@ -292,6 +293,8 @@ export default function DeviceDetailScreen() {
   );
   // 首同步完成前(lastSyncedAt === null)抑制"还没有对话"空状态,避免冷进(deep link)先闪空态
   // 再跳成真列表(规则 7:不闪空白/不跳变)。同步失败时 ConnectionBanner 已有错误 + 重试入口。
+  // 抑制期渲染 RemoteListSyncingPlaceholder(800ms 内空白,超时浮现「正在同步」),
+  // 慢链路 / 连接翻覆下首同步拖长时不再是无限期纯白。
   const suppressListEmptyState = shouldSuppressRemoteListEmptyState({
     itemCount: visibleSessionIds.length,
     hasSyncedThisOpen: lastSyncedAt !== null,
@@ -578,7 +581,9 @@ export default function DeviceDetailScreen() {
               testID={`deviceDetail.projectSessionRow.${item.session.id}`}
             />
           )}
-          ListEmptyComponent={suppressListEmptyState ? null : (
+          ListEmptyComponent={suppressListEmptyState ? (
+            <RemoteListSyncingPlaceholder testID="deviceDetail.projectSyncing" />
+          ) : (
             <MainWindowEmptyState
               centered
               copy="在这个项目里开始一个新对话。"
@@ -935,7 +940,9 @@ export default function DeviceDetailScreen() {
         renderSectionHeader={({ section }) => (
           <Text style={styles.sectionTitle}>{section.title}</Text>
         )}
-        ListEmptyComponent={suppressListEmptyState ? null : (
+        ListEmptyComponent={suppressListEmptyState ? (
+          <RemoteListSyncingPlaceholder testID="deviceDetail.syncing" />
+        ) : (
           <MainWindowEmptyState
             centered
             copy={emptyState.copy}
