@@ -11,6 +11,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { TextInput } from '@/components/AppText';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { TextInputWrapper, type PasteEventPayload } from 'expo-paste-input';
 import { Mic } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, type ReactNode } from 'react';
@@ -25,6 +26,8 @@ export const MOBILE_COMPOSER_INPUT_MAX_HEIGHT = (MOBILE_COMPOSER_INPUT_LINE_HEIG
   + (MOBILE_COMPOSER_INPUT_VERTICAL_PADDING * 2);
 export const MOBILE_COMPOSER_CONTROL_SIZE = 28;
 export const MOBILE_COMPOSER_TOOL_GAP = 6;
+const isExpoGo =
+  Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 /** 语音按钮 absolute 锚点距 composer 内容区右缘的距离(voiceButtonAnchor.right);
  * 消息列表的「跳到底部」浮标按同一常量推导麦克风所在列,保持两者圆心同列。 */
 export const MOBILE_COMPOSER_VOICE_ANCHOR_RIGHT = spacing.md;
@@ -242,7 +245,7 @@ export function MobileComposerInputRow({
             inputFrameHeight != null && { height: inputFrameHeight },
           ]}
         >
-          {onPasteImages ? (
+          {onPasteImages && !isExpoGo ? (
             <TextInputWrapper onPaste={handleNativePaste} style={styles.pasteWrapper}>
               {textInputElement}
             </TextInputWrapper>

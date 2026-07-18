@@ -18,6 +18,7 @@ import {
 } from '@lizi/device-link';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { deviceLinkWsUrl } from '@/config/env';
+import { MOBILE_VISUAL_MOCK_ENABLED } from '@/config/env';
 import { useAuth } from '@/auth/AuthContext';
 import {
   applyAccessRevokedFrame,
@@ -45,6 +46,7 @@ import { remoteScheduleEventStore } from '@/scheduler/remoteScheduleEvents';
 import { buildMobileDeviceName } from '@/device-link/mobileDeviceIdentity';
 import { updatePresenceAvailability } from '@/device-link/presenceRecovery';
 import type { InputProjection, PendingInteraction, RemoteMessage } from '@/session/types';
+import { createVisualMockDeviceLinkContext, seedVisualMockStore } from '@/debug/visualMock';
 
 export interface DeviceLinkContextValue {
   status: DeviceLinkStatus;
@@ -106,6 +108,10 @@ const BACKGROUND_SUSPEND_SUSPECT_MS = 10_000;
 const PRESENCE_OFFLINE_WIPE_GRACE_MS = 5_000;
 
 export function DeviceLinkProvider({ children }: { children: ReactNode }) {
+  if (MOBILE_VISUAL_MOCK_ENABLED) {
+    return <VisualMockDeviceLinkProvider>{children}</VisualMockDeviceLinkProvider>;
+  }
+
   const auth = useAuth();
   const clientRef = useRef<DeviceLinkClient | null>(null);
   const registryRef = useRef(new DeviceLinkTopicRegistry());
@@ -477,6 +483,14 @@ export function DeviceLinkProvider({ children }: { children: ReactNode }) {
     unsubscribe,
   ]);
 
+  return <DeviceLinkContext.Provider value={value}>{children}</DeviceLinkContext.Provider>;
+}
+
+function VisualMockDeviceLinkProvider({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    seedVisualMockStore();
+  }, []);
+  const value = useMemo(() => createVisualMockDeviceLinkContext(), []);
   return <DeviceLinkContext.Provider value={value}>{children}</DeviceLinkContext.Provider>;
 }
 

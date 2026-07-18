@@ -79,6 +79,10 @@ export const DEV_LOGIN_ENABLED = resolveEnvFlag(
   process.env.EXPO_PUBLIC_XDT_DEV_LOGIN_ENABLED,
 );
 
+export const MOBILE_VISUAL_MOCK_ENABLED = __DEV__ && resolveEnvFlag(
+  process.env.EXPO_PUBLIC_CINDY_MOBILE_VISUAL_MOCK,
+);
+
 export function getMobileConfigIssues(
   env: Record<string, string | undefined> = {
     EXPO_PUBLIC_CINDY_AUTH_BASE_URL:
