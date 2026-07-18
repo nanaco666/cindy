@@ -312,11 +312,21 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
     query: string;
   } | null>(null);
   // 最新 runtime 表单状态镜像：拉取响应到达时据此构建弹层行/预勾选，而不是用请求发出时的
-  // 闭包快照——在途期间被用户删除的行不得复活（弹层本身是全屏遮罩，打开后表单不可再编辑）。
+  // 闭包快照——在途期间被用户删除的行不得复活。镜像在每个 setRt updater 内**同步**更新
+  // （见 setRtSynced），不用被动 useEffect——effect 在 commit 后才跑，IPC 响应若落在
+  // 状态更新与 effect 之间会读到旧值。
   const rtRef = useRef(rt);
-  useEffect(() => {
-    rtRef.current = rt;
-  }, [rt]);
+  /** 唯一的 rt 写入口：状态更新的同时同步镜像进 rtRef（updater 幂等，StrictMode 双调无害）。 */
+  const setRtSynced = useCallback(
+    (fn: (prev: Record<AgentKind, RuntimeFields>) => Record<AgentKind, RuntimeFields>) => {
+      setRt((prev) => {
+        const next = fn(prev);
+        rtRef.current = next;
+        return next;
+      });
+    },
+    [],
+  );
 
   // 新建态拉取预设模板（本地 IPC 极快返回；失败静默 —— 没有预设也不影响手填，规则 7 不做 loading）。
   // 区域感知排序：zh-CN 用户国内端点预设靠前、其它语言国际端点靠前（只排序不过滤，
@@ -341,7 +351,7 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
   const applyPreset = useCallback((p: ProviderPreset) => {
     setAppliedPreset(p.id);
     setName(p.name);
-    setRt((prev) => {
+    setRtSynced((prev) => {
       const next = { ...prev };
       for (const a of AGENTS) {
         const rc = p.runtimes[a];
@@ -365,7 +375,7 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
     setTest({ 'claude-code': IDLE_TEST, codex: IDLE_TEST });
     const first = AGENTS.find((a) => p.runtimes[a]);
     if (first) setActiveTab(first);
-  }, []);
+  }, [setRtSynced]);
 
   // 编辑态：回填各已配置 runtime 的已存明文密钥（用户本机自己的 key）——
   // 让密钥框「能看」(eye 显形 / 可核对)，而非空白遮罩；据此点亮「已保存」徽标。
@@ -385,7 +395,7 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
       }
       if (cancelled) return;
       setHasKey(nextHas);
-      setRt((prev) => {
+      setRtSynced((prev) => {
         const next = { ...prev };
         for (const a of AGENTS) {
           if (fetched[a] != null) next[a] = { ...next[a], apiKey: fetched[a] as string };
@@ -398,9 +408,12 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
     };
   }, [editing, initial]);
 
-  const patch = useCallback((agent: AgentKind, fn: (f: RuntimeFields) => RuntimeFields) => {
-    setRt((prev) => ({ ...prev, [agent]: fn(prev[agent]) }));
-  }, []);
+  const patch = useCallback(
+    (agent: AgentKind, fn: (f: RuntimeFields) => RuntimeFields) => {
+      setRtSynced((prev) => ({ ...prev, [agent]: fn(prev[agent]) }));
+    },
+    [setRtSynced],
+  );
 
   const f = rt[activeTab];
 
@@ -504,6 +517,9 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
           }),
         ];
         setPicker({ agent, models: rows, selected: new Set(currentById.keys()), query: '' });
+        // 弹层锁定所属 runtime：把背景 Tab 同步切回请求的 runtime（标题也带 runtime 名），
+        // 请求期间切过 Tab 也不会在错误上下文里确认。
+        setActiveTab(agent);
       } else {
         toast.error(t(`providerError.${result.code ?? 'UNKNOWN'}`));
       }
@@ -1141,7 +1157,9 @@ function ModelPickerOverlay({
         <div className="flex items-center justify-between px-5 pb-1 pt-4">
           <div className="flex min-w-0 flex-col gap-0.5">
             <h3 className="text-15 font-semibold text-[var(--settings-section-title)]">
-              {t('settings.providers.custom.fetch.pickerTitle')}
+              {t('settings.providers.custom.fetch.pickerTitle', {
+                runtime: t(TAB_META[picker.agent].labelKey),
+              })}
             </h3>
             <span className="text-12 text-[var(--text-tertiary)]">
               {t('settings.providers.custom.fetch.pickerCount', {

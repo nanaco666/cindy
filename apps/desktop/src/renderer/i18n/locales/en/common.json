@@ -1088,7 +1088,7 @@
           "fetching": "Fetching models…",
           "needBaseUrl": "Fill in the base URL first",
           "failed": "Failed to fetch the model list",
-          "pickerTitle": "Select models to add",
+          "pickerTitle": "Select models to add ({{runtime}})",
           "pickerCount": "{{selected}} of {{total}} selected",
           "searchPlaceholder": "Search models…",
           "selectAll": "Select all",

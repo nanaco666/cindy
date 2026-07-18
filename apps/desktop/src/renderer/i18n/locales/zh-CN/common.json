@@ -1088,7 +1088,7 @@
           "fetching": "正在获取模型…",
           "needBaseUrl": "请先填写基础 URL",
           "failed": "获取模型列表失败",
-          "pickerTitle": "选择要添加的模型",
+          "pickerTitle": "选择要添加的模型（{{runtime}}）",
           "pickerCount": "已选 {{selected}} / 共 {{total}} 个",
           "searchPlaceholder": "搜索模型…",
           "selectAll": "全选",
