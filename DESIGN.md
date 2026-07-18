@@ -723,12 +723,14 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 
 三份新 map(`NEUTRAL_PRIMARY_EXPECTED_BY_ID`/`FOREGROUND` + `RED_EXCEPTION_ALLOWED_IDS`)替代旧 `BRAND_RED_*`。D2T ⑤/⑦/⑧ 改用新 map(中性 exact + 红例外白名单 + 中性对比度 + 可证伪)。
 
-### 15.11 caret-accent 品牌红光标(用户定稿 2026-07-18,跨端规则)
+### 15.11 caret-accent 光标(用户二次改稿 2026-07-18 定稿:蓝,跨端规则)
+
+> 决策史:07-18 日间"光标品牌红 #DF0C27"→ 07-18 晚**用户撤红,改回蓝 `#417CDD`**。以下为现行有效版本,历史文档中"caret 品牌红"表述一律作废。
 
 - 全部可编辑输入面的光标(caret)统一消费 `--caret-accent` token——globals.css 已全局接管(原生 `caret-color` + ProseMirror 伪光标),**组件内不许另设 caret-color**。
-- 取值:default 主题 = `var(--accent-cta-bg)`(中性反相,随主题走);**CINDY 两模式 override `#DF0C27`**(品牌红,已入 `RED_EXCEPTION_ALLOWED_IDS` 红例外白名单,`cindyDecisionData.ts` 断言锁值)。
-- **划界(易踩点)**:光标红 ≠ focus 红。focus ring / Auto Approval / 信息蓝仍是 `#417CDD`(§15.4 豁免,不染红)。E1D(§15.10)之后 `accent-cta-bg` 在 CINDY 下已是中性反相——不要凭旧记忆把"光标要红"实现成接红色 CTA token,光标唯一合法出口就是 `caret-accent`。
-- **跨端对齐**:移动端(`apps/mobile` `src/theme/tokens.ts` 的 `inputCaret`)同值 `#DF0C27` 双模式,RN 侧经 TextInput `cursorColor`/`selectionColor` 消费,`themeTokens.test.ts` 锁值。iOS/移动端任何文档若与此冲突(早期 M0/M3 文档曾写 caret 蓝 `#417CDD`),**以本条为准**——该旧值已于 2026-07-18 勘误作废。
+- 取值:default 主题 = `var(--accent-cta-bg)`(中性反相,随主题走);**CINDY 两模式 override `#417CDD`**(与 focus ring 同值的信息蓝;已从 `RED_EXCEPTION_ALLOWED_IDS` 红例外白名单移除,`cindyDecisionData.ts` 断言锁值)。
+- **易踩点**:①光标不再是红——红色白名单里没有光标,不要把 caret 接任何红 token;②虽然值与 `--focus-ring` 相同,**不要**把 caret 直接接 `--focus-ring`——语义不同,光标唯一合法出口仍是 `caret-accent`(便于日后独立调整)。
+- **跨端对齐**:移动端(`apps/mobile` `src/theme/tokens.ts` 的 `inputCaret`)同值 `#417CDD` 双模式,RN 侧经 TextInput `cursorColor`/`selectionColor` 消费,`themeTokens.test.ts` 锁值。
 
 ### 15.12 毛玻璃(vibrancy)体系(用户定稿 2026-07-18,macOS)
 
