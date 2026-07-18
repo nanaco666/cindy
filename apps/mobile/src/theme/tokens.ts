@@ -26,6 +26,28 @@ export interface ThemeColors {
   surfaceTranslucentSidebar: string;
   /** 浮层卡 sheet surface 底色(R1 audit 模式3,solid 玻璃感由 backdrop blur 承担,surface 不叠 blur 规避 Android 滚动热路径) */
   surfaceGlassPanel: string;
+  /** List 行/任务行专用底色(不污染 chat code card / elevated surface) */
+  surfaceListRow: string;
+  /** List 展开项目 block 专用底色 */
+  surfaceListExpanded: string;
+  /** List 行首品牌箭头 active 小图形色(非按钮红) */
+  activeGlyph: string;
+  /** Chat / task code card 专用底色 */
+  chatCodeSurface: string;
+  /** Chat / task code card 专用描边 */
+  chatCodeBorder: string;
+  /** Composer / input focus caret 蓝,并入 Mac focus 定稿 #417CDD */
+  inputCaret: string;
+  /** Bottom sheet root 玻璃面 */
+  sheetSurface: string;
+  /** Bottom sheet action group / row 面 */
+  sheetActionSurface: string;
+  /** Bottom sheet action group / row 描边 */
+  sheetActionBorder: string;
+  /** Bottom sheet action row 正文色 */
+  sheetActionText: string;
+  /** Bottom sheet / composer grabber 色 */
+  sheetGrabber: string;
   /** Chip / pill / 选中行填充 */
   surfaceChip: string;
   /** 1px 分隔线 / 边框(桌面 Board) */
@@ -106,6 +128,17 @@ export const lightColors: ThemeColors = {
   surfaceTranslucent: 'rgba(237, 237, 237, 0.78)',
   surfaceTranslucentSidebar: 'rgba(246, 246, 246, 0.90)',
   surfaceGlassPanel: '#F8F8F8',
+  surfaceListRow: '#F6F6F6',
+  surfaceListExpanded: '#EAEAEA',
+  activeGlyph: '#DF0C27',
+  chatCodeSurface: '#F8F8F8',
+  chatCodeBorder: '#DCDFE3',
+  inputCaret: '#417CDD',
+  sheetSurface: 'rgba(248, 248, 248, 0.95)',
+  sheetActionSurface: '#F6F6F6',
+  sheetActionBorder: '#DCDFE3',
+  sheetActionText: '#3C3F43',
+  sheetGrabber: '#DCDFE3',
   surfaceChip: '#F1F1F1',
   border: '#DCDFE3',
   borderTranslucent: 'rgba(220, 223, 227, 0.62)',
@@ -149,6 +182,17 @@ export const darkColors: ThemeColors = {
   surfaceTranslucent: 'rgba(42, 40, 40, 0.78)',
   surfaceTranslucentSidebar: 'rgba(18, 15, 15, 0.85)',
   surfaceGlassPanel: 'rgba(59, 59, 59, 0.95)',
+  surfaceListRow: '#312F2F',
+  surfaceListExpanded: '#2A2828',
+  activeGlyph: '#A61629',
+  chatCodeSurface: '#353333',
+  chatCodeBorder: '#3C3C3C',
+  inputCaret: '#417CDD',
+  sheetSurface: 'rgba(59, 59, 59, 0.95)',
+  sheetActionSurface: 'rgba(59, 59, 59, 0.5)',
+  sheetActionBorder: '#505050',
+  sheetActionText: '#C1C1C1',
+  sheetGrabber: '#6F6F6F',
   surfaceChip: '#2F2D2D',
   border: '#434343',
   borderTranslucent: 'rgba(67, 67, 67, 0.62)',

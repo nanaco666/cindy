@@ -95,6 +95,34 @@ describe('theme tokens', () => {
     expect(darkColors.surfaceGlassPanel).toBe('rgba(59, 59, 59, 0.95)');
   });
 
+  it('M1 mobile 专用 token 契约: list / chat / sheet / caret 双模式精确值', () => {
+    expect(lightColors.surfaceListRow).toBe('#F6F6F6');
+    expect(darkColors.surfaceListRow).toBe('#312F2F');
+    expect(lightColors.surfaceListExpanded).toBe('#EAEAEA');
+    expect(darkColors.surfaceListExpanded).toBe('#2A2828');
+    expect(lightColors.activeGlyph).toBe('#DF0C27');
+    expect(darkColors.activeGlyph).toBe('#A61629');
+    expect(lightColors.chatCodeSurface).toBe('#F8F8F8');
+    expect(darkColors.chatCodeSurface).toBe('#353333');
+    expect(lightColors.chatCodeBorder).toBe('#DCDFE3');
+    expect(darkColors.chatCodeBorder).toBe('#3C3C3C');
+    expect(lightColors.inputCaret).toBe('#417CDD');
+    expect(darkColors.inputCaret).toBe('#417CDD');
+    expect(lightColors.sheetSurface).toBe('rgba(248, 248, 248, 0.95)');
+    expect(darkColors.sheetSurface).toBe('rgba(59, 59, 59, 0.95)');
+    expect(lightColors.sheetActionSurface).toBe('#F6F6F6');
+    expect(darkColors.sheetActionSurface).toBe('rgba(59, 59, 59, 0.5)');
+    expect(lightColors.sheetActionBorder).toBe('#DCDFE3');
+    expect(darkColors.sheetActionBorder).toBe('#505050');
+    expect(lightColors.sheetActionText).toBe('#3C3F43');
+    expect(darkColors.sheetActionText).toBe('#C1C1C1');
+    expect(lightColors.sheetGrabber).toBe('#DCDFE3');
+    expect(darkColors.sheetGrabber).toBe('#6F6F6F');
+    // 破坏性红继续走 Mac red-audit-spec / token-decision-table 的 destructive 语义,不采用 Figma #DF0C27。
+    expect(lightColors.destructive).toBe('#f43d3f');
+    expect(darkColors.destructive).toBe('#f43d3f');
+  });
+
   it('typeScale 严格单调递增', () => {
     const sizes = Object.values(typeScale);
     for (let i = 1; i < sizes.length; i += 1) {
