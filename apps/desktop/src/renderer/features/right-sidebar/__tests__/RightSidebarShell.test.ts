@@ -397,13 +397,14 @@ describe('RightSidebarShell empty state', () => {
   });
 
   it('keeps the existing 36px TabBar host on Windows', async () => {
+    const onCloseSidebar = vi.fn();
     render(
       createElement(RightSidebarShell, {
         sessionId: 's1',
         workdir: '/tmp/repo',
         remoteHostId: null,
         isMac: false,
-        onCloseSidebar: vi.fn(),
+        onCloseSidebar,
         onMaximize: vi.fn(),
         onDetach: vi.fn(),
       }),
@@ -417,6 +418,11 @@ describe('RightSidebarShell empty state', () => {
     expect(tabbar.className).toContain('flex-none');
     // Win TabBar 维持 flush 变体(贴底 tab),strip 底对齐,零视觉改动。
     expect(screen.getByTestId('right-sidebar-tab-strip').className).toContain('items-end');
+    const collapseButton = screen.getByRole('button', {
+      name: 'rightSidebar.tabs.controls.closeAria',
+    });
+    collapseButton.click();
+    expect(onCloseSidebar).toHaveBeenCalledOnce();
   });
 
   it('keeps the legacy TabBar without window controls for the detached mac window (no unifiedTopbar)', async () => {

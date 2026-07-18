@@ -1634,10 +1634,12 @@ export function NewMakerDraftRoute() {
         {/* mac 上本页不渲染通用 ContentHeader 且顶部无交互元素,垫一条透明
           窗口拖拽条(windowDrag.tsx 约定) */}
         <InvisibleWindowDragStrip />
-        {/* B2b:常驻 toggle(收起/展开都是它),面板贴右在右上、贴左镜像左上,
-            与 CCAgentSessionView 同规则。mac 不渲染(2026-07-09 Lizi 口径):
+        {/* Windows 折叠态显示展开入口,面板贴右在右上、贴左镜像左上,
+            与 CCAgentSessionView 同规则。展开态的折叠按钮归属右栏 TabBar。
+            mac 不渲染(2026-07-09 Lizi 口径):
             折叠 toggle 无论面板贴哪侧都恒钉窗口右上角(MainLayout 浮层)。 */}
         {!IS_MAC_PLATFORM &&
+          rightSidebarCollapsed &&
           draftRightSidebar.available &&
           onToggleRightSidebar && (
           rightSidebarSide === 'right' ? (

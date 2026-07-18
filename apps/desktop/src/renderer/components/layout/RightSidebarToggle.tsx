@@ -3,9 +3,10 @@
  * ---------------------------------------------------------------------------
  * 单一一份裸图标按钮，两处复用，两平台同款样式、不同落点：
  *   - Mac：放在 ContentHeader 右端（mac 那侧没有窗口控制按钮，这个位置本就空着）。
- *   - Windows：全屏聊天视图的 chip 栈第一行 —— 落在哪个角由 `side` 决定
+ *   - Windows：右栏折叠后放在全屏聊天视图的 chip 栈第一行 —— 落在哪个角由 `side` 决定
  *     (B2b 去方位化:面板贴哪侧,展开入口就留守哪侧的 top-3 角,与 DiffPanelToggle /
- *     PrevMessageJumpChip 同层(content 层,z-20),随聊天视图天然出现/消失)。
+ *     PrevMessageJumpChip 同层(content 层,z-20),随聊天视图天然出现/消失);展开态的
+ *     折叠入口放在右栏自身 TabBar 内,不悬在聊天内容上。
  * resting 无底无边、仅 hover 底色（用户明确这个开关不要圆底；chip 栈里下方两个
  * chip 保留圆底，裸图标 + 圆底 chip 连成一列）。两种尺寸（size prop）：
  *   - 'chip'（默认，h-7 / 图标 15 / rounded-full）：与 chip 栈内其它 chip 对齐，
