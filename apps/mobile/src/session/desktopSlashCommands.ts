@@ -9,8 +9,8 @@
  * 移动端不能走桌面的 `maker:execute-desktop-command`(device-link allowlist 永久
  * 禁止,UI 副作用),必须像桌面远程会话一样按命令名直调具体业务通道(/learn →
  * `learn:start`)。因此这里维护一份「移动端可执行」白名单:palette 只展示白名单内
- * 的 desktop 命令,发送侧也只按白名单分流——列表加载失败/未加载不影响分流判定
- * (代码确定性优先,不依赖运行时拉到的清单)。
+ * 的 desktop 命令,发送侧按白名单分流——列表加载失败/未加载不影响白名单判定
+ * (代码确定性优先);已加载清单只用于「同名 agent-skill 优先让行」的重名仲裁。
  *
  * 纯函数、无 RN 依赖,node 可单测。
  */
@@ -41,14 +41,23 @@ export interface ParsedDesktopSlashCommand {
 
 /**
  * 发送侧分流判定:文本是否命中移动端可执行的 desktop 命令。
- * 只认「/名字 + 可选参数」形态;名字不在白名单 → null(照常走 enqueue,
- * 与 agent-skill 的 `/skill` 转发路径互不干扰——白名单里的名字桌面端注册表
- * 已保证与 skill 不重名,重名时 skill 优先的合并语义只影响 palette 展示)。
+ * 只认「/名字 + 可选参数」形态;名字不在白名单 → null(照常走 enqueue)。
+ * 重名让行:用户自装的同名 agent-skill 优先(与桌面 dispatch 语义一致——palette
+ * 合并展示的也是 skill),已加载清单里有同名 skill 时返回 null 让文本原样转发给
+ * agent;清单未加载 / 拉取失败时(空数组)按白名单拦截,保证 /learn 不静默失效。
  */
-export function parseMobileDesktopCommand(text: string): ParsedDesktopSlashCommand | null {
+export function parseMobileDesktopCommand(
+  text: string,
+  loadedCommands: readonly MobileSlashCommand[] = [],
+): ParsedDesktopSlashCommand | null {
   const match = /^\/([a-z][\w-]*)(?:\s+([\s\S]*))?$/.exec(text.trim());
   if (!match || !MOBILE_SUPPORTED_DESKTOP_COMMANDS.has(match[1])) return null;
-  return { name: match[1], args: (match[2] ?? '').trim() };
+  const name = match[1];
+  const shadowedBySkill = loadedCommands.some(
+    (command) => command.kind === 'agent-skill' && command.name.toLowerCase() === name,
+  );
+  if (shadowedBySkill) return null;
+  return { name, args: (match[2] ?? '').trim() };
 }
 
 /**

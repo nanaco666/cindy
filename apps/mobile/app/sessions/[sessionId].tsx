@@ -1686,8 +1686,9 @@ export default function SessionScreen() {
               forceReload: false,
             })
           : Promise.resolve({ success: true, skills: [] } satisfies MobileAgentSkillListResult),
-        // desktop 命令是 additive 展示(分流判定不依赖此清单,见 desktopSlashCommands):
-        // 拉取失败(含老被控端无此通道)静默降级为不展示,不能拖垮 builtin/skill 两路。
+        // desktop 命令是 additive 展示(白名单分流不依赖此清单,清单只参与同名 skill
+        // 让行仲裁,见 desktopSlashCommands):拉取失败(含老被控端无此通道)静默降级
+        // 为不展示,不能拖垮 builtin/skill 两路。
         maker.listDesktopCommands().catch(
           () => ({ success: false } satisfies MobileDesktopCommandListResult),
         ),
@@ -3158,8 +3159,9 @@ export default function SessionScreen() {
       }
       // 命令判定用 body(不含引用块):带引用时 /context 等本地命令仍生效,且不消费引用。
       const localSystemCommand = hasAttachments ? null : parseMobileLocalSystemCommand(body);
-      // desktop 命令(/learn)按名字白名单分流,不依赖 palette 拉到的清单(代码确定性)。
-      const desktopCommand = hasAttachments ? null : parseMobileDesktopCommand(body);
+      // desktop 命令(/learn)按名字白名单分流;同名 agent-skill 优先让行(对齐桌面
+      // dispatch 语义),清单未加载时白名单兜底拦截。
+      const desktopCommand = hasAttachments ? null : parseMobileDesktopCommand(body, slashCommands);
       if (!sessionAtSend.workingDir && !localSystemCommand && !desktopCommand) {
         setError('当前会话缺少工作目录，不能发送消息。');
         restoreDraftAfterFailure();

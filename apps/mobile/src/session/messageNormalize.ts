@@ -561,6 +561,7 @@ function normalizeSystemCardType(value: unknown): MobileSystemCardType | null {
     || value === 'status'
     || value === 'compact'
     || value === 'cmd'
+    || value === 'learn'
     ? value
     : null;
 }

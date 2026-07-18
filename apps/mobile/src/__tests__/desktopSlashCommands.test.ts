@@ -33,6 +33,19 @@ describe('parseMobileDesktopCommand', () => {
     expect(parseMobileDesktopCommand('  /learn  ')).toEqual({ name: 'learn', args: '' });
   });
 
+  it('已加载清单里有同名 agent-skill 时让行(对齐桌面 dispatch:skill 优先)', () => {
+    const loaded: MobileSlashCommand[] = [
+      { kind: 'agent-skill', name: 'learn', source: 'user', description: 'user skill' },
+    ];
+    expect(parseMobileDesktopCommand('/learn xxx', loaded)).toBeNull();
+    // 同名 desktop / builtin 不构成让行;清单为空(未加载/失败)时白名单兜底拦截。
+    expect(parseMobileDesktopCommand('/learn xxx', [
+      { kind: 'desktop', name: 'learn', description: 'desktop' },
+      { kind: 'agent-builtin', name: 'learn', description: 'builtin' },
+    ])).toEqual({ name: 'learn', args: 'xxx' });
+    expect(parseMobileDesktopCommand('/learn xxx', [])).toEqual({ name: 'learn', args: 'xxx' });
+  });
+
   it('白名单外的 desktop 命令与普通文本都不拦截', () => {
     expect(parseMobileDesktopCommand('/jump-session xxx')).toBeNull();
     expect(parseMobileDesktopCommand('/help')).toBeNull(); // mobile-local 卡片命令另有分流
