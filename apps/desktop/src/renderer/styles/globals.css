@@ -150,6 +150,11 @@
   html[data-voice-input-overlay='true'] #root {
     background: transparent;
   }
+
+  [data-theme="cindy-light"][data-splash-active] .bg-content-area,
+  [data-theme="cindy-dark"][data-splash-active] .bg-content-area {
+    background: transparent;
+  }
 }
 
 /* 按 <html lang> 切换 CJK 字体栈 —— 同一汉字在中/日/韩字体中字形不同

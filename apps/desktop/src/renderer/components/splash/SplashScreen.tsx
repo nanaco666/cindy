@@ -16,7 +16,7 @@ import splashScript from '@/assets/splash/script.png'; // 手写体 alpha(mask �
  * Splash v2 双模式启动画面。
  *
  * 状态机零删改(useSplash.ts 未动):14 phase 文案/进度/3 失败弹窗全保留,仅重排品牌块。
- * 背景半透由根容器铺色,不使用 CSS backdrop-filter;壁纸模糊交给原生 vibrancy。
+ * 背景半透跟随侧栏毛玻璃 token,不使用 CSS backdrop-filter;壁纸模糊交给原生 vibrancy。
  */
 export function SplashScreen() {
   const { t } = useTranslation();
@@ -51,6 +51,19 @@ export function SplashScreen() {
     prevResetRef.current = resetSignal;
   });
 
+  useEffect(() => {
+    const root = document.documentElement;
+    if (phase !== 'fading_out' && phase !== 'splash_done' && phase !== 'splash_skipped') {
+      root.setAttribute('data-splash-active', '1');
+    } else {
+      root.removeAttribute('data-splash-active');
+    }
+
+    return () => {
+      root.removeAttribute('data-splash-active');
+    };
+  }, [phase]);
+
   if (phase === 'splash_done' || phase === 'splash_skipped') return null;
 
   const isMac = window.electronAPI?.platform === 'darwin';
@@ -60,7 +73,6 @@ export function SplashScreen() {
   const mutedColor = isDark ? 'hsl(var(--splash-text-muted))' : 'hsl(var(--text-secondary))'; // light 用二级信息灰 #9A9DA3 系
   // 手写体 "Dream it Create it":按 v2 规格固定为 dark #FFFFFF / light #9499A2。
   const scriptFill = isDark ? '#ffffff' : '#9499a2';
-  const splashBackground = isDark ? 'rgba(18, 15, 15, 0.85)' : 'rgba(255, 255, 255, 0.93)';
 
   return (
     <div
@@ -70,7 +82,7 @@ export function SplashScreen() {
       )}
       style={
         {
-          backgroundColor: splashBackground,
+          background: 'var(--surface-translucent-sidebar)',
           transition: 'opacity var(--splash-fade-duration) var(--splash-fade-easing)',
           WebkitAppRegion: 'drag',
         } as React.CSSProperties
