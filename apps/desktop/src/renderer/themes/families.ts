@@ -7,6 +7,8 @@ import { materialOceanHC } from './builtin/material-ocean-hc';
 import { monokaiPro } from './builtin/monokai-pro';
 import { oneDarkPro } from './builtin/one-dark-pro';
 import { solarizedLight } from './builtin/solarized-light';
+import { cindyDark } from './builtin/cindy-dark';
+import { cindyLight } from './builtin/cindy-light';
 import { getLocalThemes } from './local-themes';
 import type { Theme, ThemeType } from './types';
 
@@ -38,6 +40,12 @@ const BUILTIN_FAMILIES: ThemeFamily[] = [
     name: 'Material Ocean High Contrast',
     light: null,
     dark: materialOceanHC,
+  },
+  {
+    id: 'cindy',
+    name: 'CINDY',
+    light: cindyLight,
+    dark: cindyDark,
   },
 ];
 

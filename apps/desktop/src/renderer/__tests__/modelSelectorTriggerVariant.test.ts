@@ -116,6 +116,7 @@ import {
   ModelSelector,
   ModelSelectorContent,
   modelEffortLabel,
+  resolveModelBrandKind,
 } from '@/components/new-chat/ModelSelector';
 
 describe('ModelSelector trigger variants', () => {
@@ -172,5 +173,24 @@ describe('ModelSelector trigger variants', () => {
         .getByRole('option', { name: /Opus 4\.8/ })
         .parentElement?.getAttribute('data-tooltip-class'),
     ).toBe('z-[10020]');
+  });
+
+  it('resolves the model mark from the model brand before the current runtime', () => {
+    expect(
+      resolveModelBrandKind({
+        modelId: 'gpt-5.5',
+        displayName: 'GPT-5.5 · 中',
+        agentKind: 'claude-code',
+        fallbackProviderId: 'anthropic',
+      }),
+    ).toBe('codex');
+    expect(
+      resolveModelBrandKind({
+        modelId: 'claude-opus-4-8',
+        displayName: 'Opus 4.8',
+        agentKind: 'codex',
+        fallbackProviderId: 'openai',
+      }),
+    ).toBe('claude');
   });
 });

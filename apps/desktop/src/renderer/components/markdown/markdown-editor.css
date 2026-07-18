@@ -914,3 +914,81 @@
 .mdxeditor-host [class*="frontmatterWrapper"][data-expanded='true'] {
   padding-bottom: 16px !important;
 }
+
+/* ── CINDY 主题覆盖(D2-4)──────────────────────────────────────────────
+ * MDXEditor 的 --blue-*/--slate-*/--base*/--accent* 色阶默认走 default greyscale,
+ * CINDY 切换时不会跟随。此处 [data-theme="cindy-*"] 把关键档重绑到 CINDY token
+ * (var 引用,light/dark 自动解析),让 markdown editor 跟随 CINDY 色板。
+ * 映射依据:文件顶部 Token map 注释(Surface/Card/Board/Text/Chip → --base*)+
+ * --blue-*/--slate-* 各档就近对应(solarized-light 也有类似 [data-theme] 先例)。
+ * 中间档(--blue-2/4/7/8/10/11/12)沿用就近 CINDY token,渐变关系保持。
+ */
+[data-theme="cindy-light"].mdxeditor-host,
+[data-theme="cindy-dark"].mdxeditor-host,
+[data-theme="cindy-light"] .mdxeditor-host,
+[data-theme="cindy-dark"] .mdxeditor-host {
+  /* Blue ramp → CINDY token */
+  --blue-1: var(--surface);
+  --blue-2: var(--surface-hover-soft);
+  --blue-3: var(--surface-elevated);
+  --blue-4: var(--surface-hover);
+  --blue-5: var(--surface-chip);
+  --blue-6: var(--border-default);
+  --blue-7: var(--border-default);
+  --blue-8: var(--text-tertiary);
+  --blue-9: var(--text-primary);
+  --blue-10: var(--text-primary-emphasis);
+  --blue-11: var(--text-primary);
+  --blue-12: var(--text-primary-emphasis);
+
+  /* Slate ramp → CINDY token */
+  --slate-1: var(--surface-elevated);
+  --slate-2: var(--surface);
+  --slate-3: var(--surface-elevated);
+  --slate-4: var(--surface-hover);
+  --slate-5: var(--surface-chip);
+  --slate-6: var(--border-default);
+  --slate-7: var(--border-default);
+  --slate-8: var(--text-tertiary);
+  --slate-9: var(--text-secondary);
+  --slate-10: var(--text-primary-body-strong);
+  --slate-11: var(--text-primary);
+  --slate-12: var(--text-primary-emphasis);
+
+  /* Base ramp → CINDY token(按 Token map 注释) */
+  --baseBase: var(--surface-elevated);
+  --baseBg: var(--surface-elevated);
+  --baseBgSubtle: var(--surface);
+  --baseBgHover: var(--surface-hover);
+  --baseBgActive: var(--surface-chip);
+  --baseBorder: var(--border-default);
+  --baseBorderHover: var(--text-tertiary);
+  --baseLine: var(--border-default);
+  --basePageBg: var(--surface);
+  --baseText: var(--text-primary);
+  --baseTextContrast: var(--text-primary-emphasis);
+  --baseSolid: var(--text-secondary);
+  --baseSolidHover: var(--text-primary);
+
+  /* Accent ramp → CINDY greyscale(DESIGN.md strict greyscale,no blue) */
+  --accentBase: var(--surface-elevated);
+  --accentBgSubtle: var(--surface);
+  --accentBg: var(--surface-elevated);
+  --accentBgHover: var(--surface-hover);
+  --accentBgActive: var(--surface-chip);
+  --accentLine: var(--border-default);
+  --accentBorder: var(--border-default);
+  --accentBorderHover: var(--text-tertiary);
+  --accentSolid: var(--text-primary);
+  --accentSolidHover: var(--text-primary-emphasis);
+  --accentText: var(--text-primary);
+  --accentTextContrast: var(--surface-elevated);
+}
+
+/* CINDY light 下 .mdxeditor-host body bg = CINDY surface(default #f8f8f6 → #EDEDED) */
+[data-theme="cindy-light"] .mdxeditor-host {
+  background: var(--surface);
+}
+[data-theme="cindy-dark"] .mdxeditor-host {
+  background: var(--surface);
+}

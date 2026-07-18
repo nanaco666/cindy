@@ -197,6 +197,36 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     };
   }, [theme]);
 
+  // 跨窗口主题同步:其他窗口切 theme/familyId 时(localStorage storage 事件,
+  // 本窗口 setItem 不触发 storage)刷新本窗口 state + 重应用主题,否则已打开的
+  // sidebar-window/副窗在主窗切 CINDY/亮暗时不跟随(B 实证 bug,计划 D2-3)。
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY) {
+        const next = e.newValue;
+        if (next === 'light' || next === 'dark' || next === 'system') {
+          setThemeState(next);
+          applyThemeClass(next);
+        }
+      } else if (e.key === FAMILY_KEY) {
+        const next = e.newValue;
+        if (next && tryGetFamily(next)) {
+          setFamilyIdState(next);
+          applyThemeClass(getStoredTheme());
+        }
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  // E4D 毛玻璃(R1 audit,用户裁决透壁纸 2026-07-17):family/theme 变化或 mount 时
+  // 通知 main 开关 macOS vibrancy(仅 CINDY family 启用,其他恢复不透明)。覆盖
+  // setFamily/storage 跨窗口同步/mount 三个场景(任一变化都重应用)。
+  useEffect(() => {
+    window.electronAPI?.theme?.applyVibrancy?.(familyId, resolveIsDark(theme));
+  }, [familyId, theme, systemPrefersDark]);
+
   const fallbackFromType = useMemo<ThemeType | null>(() => {
     const family = getFamily(familyId);
     const isDarkRequested =

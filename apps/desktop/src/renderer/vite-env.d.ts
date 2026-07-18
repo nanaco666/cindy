@@ -2396,6 +2396,8 @@ interface ElectronAPI {
   setAutoUpdateSettings: (settings: { autoRelaunchOnIdle: boolean }) => Promise<AutoUpdateSettingsPayload>;
   resetAutoUpdateSettings: () => Promise<AutoUpdateSettingsPayload>;
   setUpdateRelaunchTheme: (theme: 'light' | 'dark') => void;
+  // E4D 毛玻璃:family 切换/启动通知 main 开关 vibrancy(仅 CINDY 透壁纸)
+  theme: { applyVibrancy: (familyId: string, isDark: boolean) => void };
   /**
    * Manually trigger an update check. Returns the resolved state so the
    * renderer can show the appropriate toast:

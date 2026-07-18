@@ -7,3 +7,5 @@ export const SOLARIZED_LIGHT_ID = 'solarized-light';
 export const MONOKAI_PRO_ID = 'monokai-pro';
 export const MATERIAL_OCEAN_HC_ID = 'material-ocean-hc';
 export const GITHUB_DARK_ID = 'github-dark';
+export const CINDY_LIGHT_ID = 'cindy-light';
+export const CINDY_DARK_ID = 'cindy-dark';

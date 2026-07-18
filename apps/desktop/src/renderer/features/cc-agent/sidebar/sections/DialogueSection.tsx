@@ -148,7 +148,7 @@ export function DialogueSection({
             type="button"
             onClick={() => setCollapsed((value) => !value)}
             aria-expanded={!collapsed}
-            className="text-sm font-medium text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
+            className="text-sm font-medium text-[var(--sidebar-list-muted)] transition-colors hover:text-[var(--sidebar-nav-text)]"
           >
             {t('ccAgent.sidebar.dialogues')}
           </button>
@@ -162,8 +162,8 @@ export function DialogueSection({
                 className={cn(
                   'flex h-5 w-5 shrink-0 items-center justify-center rounded-md',
                   // 无灰底 hover(2026-07 用户定稿):纯色加深反馈,与段标题一致。
-                  'text-[var(--text-tertiary)]',
-                  'transition-colors hover:text-[var(--text-secondary)]',
+                  'text-[var(--sidebar-list-muted)]',
+                  'transition-colors hover:text-[var(--sidebar-nav-text)]',
                 )}
               >
                 <ToggleIcon size={13} strokeWidth={2} />
@@ -180,8 +180,8 @@ export function DialogueSection({
                   aria-label={t('ccAgent.sidebar.dialogueSettingsAria', { sortBy: sortByLabel })}
                   className={cn(
                     'flex h-7 w-7 items-center justify-center rounded-md',
-                    'text-[var(--text-tertiary)]',
-                    'transition-colors hover:text-[var(--text-secondary)]',
+                    'text-[var(--sidebar-list-muted)]',
+                    'transition-colors hover:text-[var(--sidebar-nav-text)]',
                   )}
                 >
                   <SlidersHorizontal size={14} strokeWidth={2} />
@@ -208,7 +208,10 @@ export function DialogueSection({
                     className="shrink-0 text-[var(--cmd-palette-item-meta)]"
                   />
                 </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent sideOffset={8} className={cn(MENU_SUB_CONTENT_CLASS, 'w-[180px]')}>
+                <DropdownMenuSubContent
+                  sideOffset={8}
+                  className={cn(MENU_SUB_CONTENT_CLASS, 'w-[180px]')}
+                >
                   {DIALOGUE_SORT_OPTIONS.map((option) => (
                     <DropdownMenuItem
                       key={option.value}

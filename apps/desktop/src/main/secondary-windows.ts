@@ -23,9 +23,13 @@ import { createLogger } from './logger.js';
 import { installNewMakerWindowShortcut } from './app-shortcuts/new-maker-window-shortcut.js';
 import { markAppContentWindow } from './windowFocusClassifier.js';
 import { readWindowBehaviorSettings } from './window-behavior-settings-store.js';
+import { resolveVibrancyConfig } from './vibrancyConfig.js';
 import { installSelectionContextMenu } from './selection-context-menu.js';
 
 const log = createLogger('secondary-windows');
+
+// E4D:副窗 vibrancy 同主窗(lead 裁决副窗同处理)。持有副窗 set 供 applyVibrancyToSecondaryWindows 遍历。
+const secondaryWindows = new Set<BrowserWindow>();
 
 // 副窗相对主窗右下错开的像素,让用户一眼看出弹出了新窗(而非严丝合缝盖住主窗)。
 const OFFSET_PX = 30;
@@ -118,6 +122,9 @@ export function openSessionInNewWindow(
   markAppContentWindow(win);
   installNewMakerWindowShortcut(win);
   installSelectionContextMenu(win);
+  // E4D:副窗加入 set,供 vibrancy 动态开关;关闭时移除。
+  secondaryWindows.add(win);
+  win.once('closed', () => { secondaryWindows.delete(win); });
 
   installExternalLinkGuards(win);
 
@@ -147,4 +154,18 @@ export function openSessionInNewWindow(
   }
 
   log.info('opened session in new window', { sessionId });
+}
+
+// E4D 毛玻璃(lead 裁决副窗同处理):遍历副窗 set,用同 resolveVibrancyConfig 映射
+// 开关 vibrancy(仅 CINDY 透壁纸)。副窗 renderer 首帧/切 family 时 IPC theme:apply-vibrancy
+// → main applyWindowVibrancy → 调主窗 + 本函数(副窗)。
+export function applyVibrancyToSecondaryWindows(familyId: string, isDark: boolean): void {
+  for (const win of secondaryWindows) {
+    if (win.isDestroyed()) continue;
+    const config = resolveVibrancyConfig(familyId, isDark, process.platform);
+    if (process.platform === 'darwin') {
+      win.setVibrancy(config.vibrancy as 'under-window' | null);
+    }
+    win.setBackgroundColor(config.backgroundColor);
+  }
 }

@@ -3135,6 +3135,24 @@
       "queueTooltip": "クリックでキューに追加。{{shortcut}} でタスクを中断せずに割り込み送信",
       "stop": "生成を停止"
     },
+    "createAgent": {
+      "quickStart": "クイックスタート",
+      "quickStarts": {
+        "explore": "コードを探索して理解",
+        "build": "新機能、アプリ、ツールを構築",
+        "review": "コードをレビューして修正を提案",
+        "fix": "問題や失敗を修正"
+      },
+      "sidebar": {
+        "new": "新規",
+        "automation": "自動化",
+        "skills": "スキル",
+        "search": "検索",
+        "local": "ローカル",
+        "projects": "プロジェクト",
+        "conversations": "会話"
+      }
+    },
     "addRemoteProject": {
       "title": "リモートプロジェクトを追加",
       "hint": "接続済みのリモートホストまたは被制御デバイスを選び、このプロジェクトのフォルダを選択します。",

@@ -31,7 +31,7 @@ import { useConversationSearchContext } from '@/features/cc-agent/sidebar/conver
 
 /** 列表行通用样式 —— 各行同款 pill 行。 */
 const ROW_CLASS =
-  'flex h-8 w-full items-center gap-2.5 rounded-full px-3 text-sm font-normal text-foreground transition-colors hover:bg-sidebar-item-hover';
+  'flex h-8 w-full items-center gap-2.5 rounded-full px-3 text-sm font-normal text-[var(--sidebar-nav-text)] transition-colors hover:bg-sidebar-item-hover';
 /** 命中当前视图(自动任务 / Skill / issue)时的高亮。 */
 const ROW_ACTIVE_CLASS = 'bg-[var(--chat-input-chip-bg)] font-medium';
 
@@ -61,7 +61,11 @@ export function SidebarTopNav(): React.ReactElement {
       {/* 1. 新建 —— 图标 15/1.8 + meta 灰:与项目行的文件夹图标同规格同色
           (2026-07 用户定稿,对齐 Codex;文字仍用 foreground)。 */}
       <button onClick={handleNew} className={ROW_CLASS} aria-label={t('ccAgent.layout.new')}>
-        <CirclePlus size={15} strokeWidth={1.8} className="shrink-0 text-[var(--cmd-palette-item-meta)]" />
+        <CirclePlus
+          size={15}
+          strokeWidth={1.8}
+          className="shrink-0 text-[var(--sidebar-nav-text)]"
+        />
         <span className="leading-none">{t('ccAgent.layout.new')}</span>
       </button>
 
@@ -73,7 +77,7 @@ export function SidebarTopNav(): React.ReactElement {
         aria-label={t('ccAgent.layout.automations')}
         aria-current={onScheduleMatch ? 'page' : undefined}
       >
-        <Clock size={15} strokeWidth={1.8} className="shrink-0 text-[var(--cmd-palette-item-meta)]" />
+        <Clock size={15} strokeWidth={1.8} className="shrink-0 text-[var(--sidebar-nav-text)]" />
         <span className="leading-none">{t('ccAgent.layout.automations')}</span>
       </button>
 
@@ -84,7 +88,7 @@ export function SidebarTopNav(): React.ReactElement {
         aria-label={t('sidebar.tabs.skillhub')}
         aria-current={activeKey === 'skillhub' ? 'page' : undefined}
       >
-        <Package size={15} strokeWidth={1.8} className="shrink-0 text-[var(--cmd-palette-item-meta)]" />
+        <Package size={15} strokeWidth={1.8} className="shrink-0 text-[var(--sidebar-nav-text)]" />
         <span className="leading-none">{t('sidebar.tabs.skillhub')}</span>
       </button>
 

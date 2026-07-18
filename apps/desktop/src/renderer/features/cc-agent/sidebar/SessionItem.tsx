@@ -632,7 +632,7 @@ export const SessionItem = memo(function SessionItem({
         // 用 ProjectAction 同款瞬时反馈,跟 Cursor / Codex sidebar 的体感一致。
         'text-sm font-medium text-left cursor-pointer',
         isActive
-          ? 'bg-sidebar-item-active text-foreground'
+          ? 'bg-sidebar-item-active text-sidebar-item-active-foreground border border-[var(--sidebar-item-active-border)]'
           : isSelected
             ? 'bg-[var(--chat-input-chip-bg)] text-foreground'
             : 'text-foreground hover:bg-sidebar-item-hover',
@@ -702,7 +702,14 @@ export const SessionItem = memo(function SessionItem({
           ) : null}
           <span className="min-w-0 truncate">
             {matchIndices && matchIndices.length > 0 && canHighlightDisplayTitle
-              ? highlightSegments(session.title, matchIndices)
+              ? highlightSegments(session.title, matchIndices, {
+                  highlightClassName: cn(
+                    'bg-transparent font-semibold',
+                    isActive
+                      ? 'text-[var(--sidebar-item-active-foreground)]'
+                      : 'text-[var(--msg-assistant-text)]',
+                  ),
+                })
               : displayTitle}
           </span>
           {remoteIconKind && (
@@ -711,7 +718,7 @@ export const SessionItem = memo(function SessionItem({
               size={12}
               strokeWidth={1.8}
               connectionStatus={remoteIconConnectionStatus}
-              className="text-sidebar-action-icon"
+              className={cn(isActive ? 'text-sidebar-item-active-foreground' : 'text-sidebar-action-icon')}
             />
           )}
         </span>
@@ -802,7 +809,7 @@ export const SessionItem = memo(function SessionItem({
                 title={formatSidebarTimeAbsolute(activityIso)}
                 className={cn(
                   'min-w-0 truncate text-right text-xs font-medium tabular-nums',
-                  'text-sidebar-action-icon',
+                  isActive ? 'text-sidebar-item-active-foreground' : 'text-sidebar-action-icon',
                 )}
               >
                 {formatSidebarTime(activityIso, t)}
@@ -833,7 +840,7 @@ export const SessionItem = memo(function SessionItem({
           )}
           {/* Action 按钮组（hover/menu open 时浮现，archivePending 期间整组让位给红色 pill）。
               尺寸/视觉与 Project Header 的 ProjectAction 同套（size-5 / icon 14 /
-              strokeWidth 2 / gap-0.5 / hover:bg-sidebar-item-active），唯一差异
+              strokeWidth 2 / gap-0.5 / hover:bg-sidebar-item-hover），唯一差异
               是 session 行的三个按钮**故意不挂 Tip 浮层** —— 图标语义已足够直观,
               tooltip 在密集 sidebar 列表里反而干扰视觉。
               组装顺序固定为 [Run(automation only), More, Archive | Undo]：
@@ -1089,7 +1096,7 @@ function SessionAction({
       className={cn(
         'shrink-0 size-5 flex items-center justify-center rounded-md',
         'text-sidebar-action-icon hover:text-foreground',
-        'hover:bg-sidebar-item-active focus:outline-none',
+        'hover:bg-sidebar-item-hover focus:outline-none',
       )}
     >
       {children}
