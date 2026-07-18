@@ -332,6 +332,12 @@ import {
   mergeMobileLocalSlashCommands,
   parseMobileLocalSystemCommand,
 } from '@/session/systemCard';
+import {
+  buildLearnCardData,
+  buildLearnStartRequest,
+  filterMobileDesktopCommands,
+  parseMobileDesktopCommand,
+} from '@/session/desktopSlashCommands';
 import type {
   InputProjection,
   QueuedRemoteMessage,
@@ -342,6 +348,7 @@ import type {
 import type {
   MobileAgentSkillListResult,
   MobileAtResourceItem,
+  MobileDesktopCommandListResult,
   MobileModelPricingMap,
   MobileSlashCommand,
   RemoteDirectoryEntry,
@@ -864,6 +871,11 @@ export default function SessionScreen() {
   const slashLoadSeqRef = useRef(0);
   const atLoadSeqRef = useRef(0);
   const capabilitiesLoadSeqRef = useRef(0);
+  // palette 点选的 agent-skill 名字(含 sessionId 绑定):保留到下次发送或再次打开
+  // palette;sessionId 绑定防止切换会话时旧点选污染新会话的 dispatch。
+  // 发送侧在 slashCommands=[] 时仍能区分「点选了 skill」与「直接手输」,确保
+  // 点选的 skill 不被白名单拦截误分流到 learn:start。
+  const pendingSkillSelectionRef = useRef<{ name: string; sid: string } | null>(null);
   const extraDirBrowseSeqRef = useRef(0);
   const autoRetrySyncKeyRef = useRef<string | null>(null);
   const loadedRouteFocusKeyRef = useRef<string | null>(null);
@@ -1647,6 +1659,23 @@ export default function SessionScreen() {
     };
   }, [restoreComposerDraft, routeDraft, sessionId]);
 
+  // 点选意图的有效性跟随草稿前缀与会话:一旦草稿不再以点选的 `/name` 开头
+  // (清空、整段替换、改名)或切换了会话,点选立即作废——覆盖「清稿/替换后手输
+  // /learn 被旧点选绑架」与「跨会话残留」两类误让行(review P1/P2)。
+  // 在 `/name` 后继续追加参数属于同一次点选的自然延续,保留。
+  useEffect(() => {
+    const pending = pendingSkillSelectionRef.current;
+    if (!pending) return;
+    if (pending.sid !== sessionId) {
+      pendingSkillSelectionRef.current = null;
+      return;
+    }
+    const head = /^\/([a-z][\w-]*)/i.exec(draft.trimStart());
+    if (!head || head[1].toLowerCase() !== pending.name.toLowerCase()) {
+      pendingSkillSelectionRef.current = null;
+    }
+  }, [draft, sessionId]);
+
   useEffect(() => {
     if (!canUseComposer || composerTrigger.kind !== 'slash' || !currentSession || !deviceId) {
       slashLoadSeqRef.current += 1;
@@ -1655,6 +1684,8 @@ export default function SessionScreen() {
       setSlashPaletteError(null);
       return;
     }
+    // palette 重新打开:之前的点选意图作废,以本次新选择为准。
+    pendingSkillSelectionRef.current = null;
     const seq = ++slashLoadSeqRef.current;
     const agentKind = agentKindForSession(currentSession);
     const paletteCacheKey = buildComposerPaletteCacheKey(deviceId, agentKind, currentSession.workingDir ?? '');
@@ -1671,7 +1702,7 @@ export default function SessionScreen() {
     setSlashPaletteError(null);
     void withTransientRemoteRetry(async () => {
       await openLink(deviceId);
-      const [builtins, skills] = await Promise.all([
+      const [builtins, skills, desktop] = await Promise.all([
         maker.listAgentCommands(agentKind),
         currentSession.workingDir
           ? maker.listAgentSkills(agentKind, {
@@ -1679,10 +1710,16 @@ export default function SessionScreen() {
               forceReload: false,
             })
           : Promise.resolve({ success: true, skills: [] } satisfies MobileAgentSkillListResult),
+        // desktop 命令是 additive 展示(白名单分流不依赖此清单,清单只参与同名 skill
+        // 让行仲裁,见 desktopSlashCommands):拉取失败(含老被控端无此通道)静默降级
+        // 为不展示,不能拖垮 builtin/skill 两路。
+        maker.listDesktopCommands().catch(
+          () => ({ success: false } satisfies MobileDesktopCommandListResult),
+        ),
       ]);
-      return { builtins, skills };
+      return { builtins, skills, desktop };
     })
-      .then(({ builtins, skills }) => {
+      .then(({ builtins, skills, desktop }) => {
         if (slashLoadSeqRef.current !== seq) return;
         const builtinCommands = builtins.success && Array.isArray(builtins.commands)
           ? builtins.commands
@@ -1690,7 +1727,10 @@ export default function SessionScreen() {
         const skillCommands = skills.success && Array.isArray(skills.skills)
           ? skills.skills
           : [];
-        const merged = mergeSlashCommands(builtinCommands, skillCommands);
+        const desktopCommands = desktop.success && Array.isArray(desktop.commands)
+          ? filterMobileDesktopCommands(desktop.commands)
+          : [];
+        const merged = mergeSlashCommands(builtinCommands, skillCommands, desktopCommands);
         // 刷新失败(整体或部分)且缓存已画:保留缓存行、不置 error——
         // ComposerPaletteFrame 的 errorText 渲染在 children 之前,会把刚画的缓存
         // 整体盖住,可用面板被错误文案顶掉正是本 PR 要消除的体验(codex review R18)。
@@ -1699,7 +1739,10 @@ export default function SessionScreen() {
             : null;
         if (!partialError) {
           setSlashCommands(merged);
-          writeSlashCommandCache(paletteCacheKey, merged);
+          // desktop 命令(kind === 'desktop')不写入共享缓存:缓存被 new.tsx 等
+          // 没有 desktop 命令分流逻辑的页面共读,写入会导致它们展示 /learn 但发送
+          // 时走普通文本透传给 agent(静默失效)。
+          writeSlashCommandCache(paletteCacheKey, merged.filter((c) => c.kind !== 'desktop'));
           setSlashPaletteError(null);
         } else if (!cachedCommands) {
           setSlashCommands(merged);
@@ -2582,8 +2625,13 @@ export default function SessionScreen() {
   }, [deviceId, hasOlderMessages, loadingEarlier, maker, messages, sessionId]);
 
   const selectSlashCommand = useCallback((command: MobileSlashCommand) => {
+    // 点选 agent-skill 时记录名字+会话 id:palette 关闭后 slashCommands 被清,发送侧
+    // 凭此 ref 识别「用户明确选中的 skill」;sid 绑定防止切换会话后旧点选残留。
+    pendingSkillSelectionRef.current = command.kind === 'agent-skill'
+      ? { name: command.name, sid: sessionId }
+      : null;
     setComposerDraft((current) => insertSlashCommand(current, detectComposerTrigger(current), command));
-  }, [setComposerDraft]);
+  }, [sessionId, setComposerDraft]);
 
   const selectAtResource = useCallback((item: MobileAtResourceItem) => {
     setComposerDraft((current) => insertAtResource(current, detectComposerTrigger(current), item));
@@ -3143,9 +3191,47 @@ export default function SessionScreen() {
       }
       // 命令判定用 body(不含引用块):带引用时 /context 等本地命令仍生效,且不消费引用。
       const localSystemCommand = hasAttachments ? null : parseMobileLocalSystemCommand(body);
-      if (!sessionAtSend.workingDir && !localSystemCommand) {
+      // desktop 命令(/learn)按名字白名单分流;同名 agent-skill 优先让行(对齐桌面
+      // dispatch 语义),清单未加载时白名单兜底拦截。
+      // slashCommands 在 palette 打开时含已加载清单(同名 skill 让行);palette
+      // 关闭时被清为[],退回白名单。例外:用户从 palette 点选了 agent-skill
+      // (pendingSkillSelectionRef 有值)时,即使 slashCommands 已清也应让行——
+      // 点选意图明确,不应被白名单覆盖。点选后再次打开 palette 或发送后 ref 清零。
+      const pendingSkill = pendingSkillSelectionRef.current;
+      pendingSkillSelectionRef.current = null;
+      const parsedDesktopCommand = hasAttachments ? null : parseMobileDesktopCommand(body, slashCommands);
+      // 若用户明确点选了同名 skill(且点选发生在当前会话),优先让行。
+      // sid 验证防止跨会话残留:切换会话后 ref 中的旧会话点选不应影响新会话 dispatch。
+      const desktopCommand =
+        parsedDesktopCommand
+        && pendingSkill?.sid === sessionId
+        && pendingSkill.name === parsedDesktopCommand.name
+          ? null
+          : parsedDesktopCommand;
+      if (!sessionAtSend.workingDir && !localSystemCommand && !desktopCommand) {
         setError('当前会话缺少工作目录，不能发送消息。');
         restoreDraftAfterFailure();
+        return;
+      }
+      if (desktopCommand?.name === 'learn') {
+        // /learn 是被控端宿主功能:直调 learn:start(execute-desktop-command 被
+        // allowlist 永久禁止),绝不进 agent 队列——原样 enqueue 的话 agent 只会当
+        // 普通文本忽略。蒸馏在被控端后台跑,这里以本地系统卡反馈启动结果。
+        let cardData: Record<string, unknown>;
+        try {
+          const { runId } = await maker.learnStart(
+            buildLearnStartRequest(desktopCommand.args, sessionId),
+          );
+          cardData = buildLearnCardData({ runId });
+        } catch (err) {
+          cardData = buildLearnCardData({ errorMessage: formatRemoteError(err) });
+          // 启动失败(LEARN_BUSY / CHANNEL_NOT_ALLOWED 等):恢复草稿供用户重试。
+          restoreDraftAfterFailure();
+        }
+        remoteSessionStore.appendLocalSystemCard(sessionId, 'learn', cardData);
+        voiceDictionaryLearningTrackerRef.current?.flush();
+        // 成功时草稿已在乐观第一拍清空;失败时上方已恢复——两路都跟到底部。
+        requestMessageListFollowLatest();
         return;
       }
       if (localSystemCommand) {
@@ -5089,7 +5175,13 @@ export default function SessionScreen() {
                   key={`${command.kind}:${command.name}`}
                   onPress={() => selectSlashCommand(command)}
                   primary={`/${command.name}`}
-                  secondary={command.kind === 'agent-skill' ? command.source : 'agent-cmd'}
+                  secondary={
+                    command.kind === 'agent-skill'
+                      ? command.source
+                      : command.kind === 'desktop'
+                        ? 'desktop'
+                        : 'agent-cmd'
+                  }
                   testID="session.slashCommandRow"
                 />
               ))}

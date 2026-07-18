@@ -421,7 +421,17 @@ export const remoteSessionStore = {
   setLatestMessageWindow(sessionId: string, list: readonly RemoteMessage[]): void {
     const latestWindow = normalizeMessages(list);
     if (latestWindow.length === 0) {
-      this.setMessages(sessionId, []);
+      // 空窗口仍需保留本地系统卡(mobile-system-*):新会话首条消息发出后服务端
+      // 消息列表可能仍为空,下一次 setLatestMessageWindow 传空数组不能把刚追加的
+      // 本地卡擦掉。
+      const existing = messages.get(sessionId) ?? [];
+      const preserved = existing.filter((item) => messageKey(item).startsWith('mobile-system-'));
+      const next = preserved.length > 0 ? preserved : [];
+      if (!remoteMessageListsEqual(existing, next)) {
+        messages.set(sessionId, next);
+        bumpMessageVersion();
+        emit();
+      }
       return;
     }
 
@@ -443,7 +453,10 @@ export const remoteSessionStore = {
       const createdAt = item.createdAt;
       const isNewerThanLatestPage = createdAt.localeCompare(latestNewestCreatedAt) >= 0;
       const isOlderLoadedPage = hasOverlap && createdAt.localeCompare(latestOldestCreatedAt) < 0;
-      if (isNewerThanLatestPage || isOlderLoadedPage) {
+      // 本地系统卡(/learn、/context 等)没有服务端对应行:不管时序落在窗口哪里都
+      // 不会出现在 latestKeys 里,若不单独保留会被 window 刷新时静默丢弃。
+      const isLocalSystemCard = messageKey(item).startsWith('mobile-system-');
+      if (isNewerThanLatestPage || isOlderLoadedPage || isLocalSystemCard) {
         byKey.set(messageKey(item), item);
       }
     }

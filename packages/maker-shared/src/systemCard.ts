@@ -213,6 +213,7 @@ function sourceLabel(source: string | null): string {
   if (source === 'mobile-local') return 'mobile local';
   if (source === 'agent-skill') return 'agent skill';
   if (source === 'agent-builtin') return 'agent command';
+  if (source === 'desktop') return 'desktop command';
   return source ?? '';
 }
 
