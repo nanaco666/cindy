@@ -28,7 +28,7 @@ const sourcePath = resolve(
 const source = readFileSync(sourcePath, 'utf8');
 const localePath = resolve(__dirname, '..', 'i18n', 'locales', 'zh-CN', 'common.json');
 const locale = JSON.parse(readFileSync(localePath, 'utf8')) as {
-  sidebar: { user: { settingsLink: string } };
+  sidebar: { user: { settingsLink: string; canaryBadge: string } };
 };
 
 // ── 改动 1: 外层 div 接管整栏 hover + Flame 反向抑制 ─────────────────────
@@ -65,6 +65,18 @@ describe('UserInfoSection — version label', () => {
   it('shows only the app version without the retired XD.Inc prefix', () => {
     expect(source).toContain('{appDisplayVersion}');
     expect(source).not.toContain('XD.Inc - {appDisplayVersion}');
+  });
+});
+
+describe('UserInfoSection — Canary avatar badge', () => {
+  it('shows only the shield decoration when isCanary is true', () => {
+    expect(source).toContain("import { Flame, Shield } from 'lucide-react';");
+    expect(source).toContain('const { user, isCanary } = useAuth();');
+    expect(source).toContain('{isCanary && (');
+    expect(source).toContain("aria-label={t('sidebar.user.canaryBadge')}");
+    expect(source).not.toContain("isCanary && 'ring-[1.5px] ring-foreground'");
+    expect(source).not.toContain("user.role === 'admin'");
+    expect(locale.sidebar.user.canaryBadge).toBe('灰度用户');
   });
 });
 

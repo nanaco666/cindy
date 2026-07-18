@@ -1049,7 +1049,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // ── Auth (delegated to main process authManager) ──
-  authInitialize: (): Promise<{ user: unknown; isAuthenticated: boolean }> =>
+  authInitialize: (): Promise<{
+    user: unknown;
+    isAuthenticated: boolean;
+    isCanary: boolean;
+    deviceId: string;
+  }> =>
     ipcRenderer.invoke('auth:initialize'),
   authGetLoginState: (): Promise<DesktopLoginActionResult> =>
     ipcRenderer.invoke('auth:get-login-state'),

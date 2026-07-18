@@ -77,10 +77,11 @@ function user(id: string) {
   };
 }
 
-function authState(id: string | null) {
+function authState(id: string | null, isCanary = false) {
   return {
     user: id ? user(id) : null,
     isAuthenticated: id !== null,
+    isCanary,
     deviceId: 'device',
   };
 }
@@ -134,5 +135,16 @@ describe('AuthContext session cache boundaries', () => {
     mocks.reset.mockClear();
     act(() => mocks.emitExpired());
     await waitFor(() => expect(mocks.reset).toHaveBeenCalledTimes(1));
+  });
+
+  it('updates Canary state without treating it as an account switch', async () => {
+    const view = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(view.result.current.user?.id).toBe('account-a'));
+
+    mocks.reset.mockClear();
+    act(() => mocks.emitAuth(authState('account-a', true)));
+
+    expect(view.result.current.isCanary).toBe(true);
+    expect(mocks.reset).not.toHaveBeenCalled();
   });
 });

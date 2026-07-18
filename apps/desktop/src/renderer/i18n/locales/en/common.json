@@ -3050,6 +3050,7 @@
     },
     "user": {
       "settingsLink": "Settings, current user: {{name}}",
+      "canaryBadge": "Canary user",
       "viewReleaseNotes": "View release notes",
       "reopenUpdateBanner": "Update ready — click to review"
     },

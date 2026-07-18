@@ -3050,6 +3050,7 @@
     },
     "user": {
       "settingsLink": "設定, 現在のユーザー: {{name}}",
+      "canaryBadge": "Canary ユーザー",
       "viewReleaseNotes": "リリースノートを表示",
       "reopenUpdateBanner": "更新の準備完了 — クリックして確認"
     },

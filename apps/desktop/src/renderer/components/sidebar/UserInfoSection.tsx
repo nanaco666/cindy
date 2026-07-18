@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Flame } from 'lucide-react';
+import { Flame, Shield } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,7 +14,7 @@ interface UserInfoSectionProps {
 }
 
 export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSectionProps) {
-  const { user } = useAuth();
+  const { user, isCanary } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [avatarError, setAvatarError] = useState(false);
@@ -60,8 +60,11 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
           isCollapsed && 'justify-center',
         )}
       >
-        {/* Avatar(admin 角标已随产品 role 退役,2026-07) */}
-        <div className="relative h-9 w-9 shrink-0">
+        {/* Avatar — Canary 用户只显示右下角盾牌角标，不改变头像本身的描边 */}
+        <div
+          className="relative h-9 w-9 shrink-0"
+          title={isCanary ? t('sidebar.user.canaryBadge') : undefined}
+        >
           {user.avatar && !avatarError ? (
             <img
               src={user.avatar}
@@ -74,12 +77,25 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
               className={cn(
                 'flex h-9 w-9 items-center justify-center rounded-full',
                 'bg-sidebar-item-hover text-base font-medium text-foreground',
-                // 无头像兜底加一圈细描边(与侧边栏分隔线同 token)
+                // 无头像兜底保留普通细描边，与 Canary 状态无关
                 'border border-sidebar-border',
               )}
             >
               {initial}
             </div>
+          )}
+          {isCanary && (
+            // ring-2 ring-sidebar 用 sidebar 背景色作为分隔环，避免角标和头像糊在一起
+            <span
+              aria-label={t('sidebar.user.canaryBadge')}
+              className={cn(
+                'absolute -bottom-0.5 -right-0.5',
+                'flex h-3 w-3 items-center justify-center rounded-full',
+                'bg-foreground text-background ring-2 ring-sidebar',
+              )}
+            >
+              <Shield size={8} strokeWidth={2.5} />
+            </span>
           )}
         </div>
 

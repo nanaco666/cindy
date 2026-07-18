@@ -83,7 +83,7 @@ const DEFAULT_EFFORT = 'medium';
 // 2026-07 产品侧 me 路由退役:身份完全以 auth-server membership 为准,不再
 // 请求主 server `/api/user/me`。原产品增强字段的去向:
 //  - isCanary → 登录后从 oauth-broker `/api/user/feature-flags` 单独读取,
-//    仅落 main 进程本地标记,不进入 renderer User;
+//    落 main 进程本地标记并通过 AuthState 独立投影给 renderer,不混入 User;
 //  - feishuOpenId → 退役,飞书登录已整体下线,身份锚(identityAnchor)只写 email;
 //  - role(产品级 admin)→ 退役,唯一消费是侧栏头像角标(纯装饰),一并移除。
 export interface User {
@@ -104,6 +104,8 @@ export interface User {
 export interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
+  /** 当前账号是否加入 Canary 发布通道；不属于身份资料。 */
+  isCanary: boolean;
   /** SkillHub 跨设备识别：本机 deviceId（machineIdSync 结果），登录前后都会有值 */
   deviceId: string;
 }
@@ -479,6 +481,9 @@ function scheduleCanaryFlagSync(input: {
     .then((outcome) => {
       if (outcome.kind === 'synced') {
         log.info('canary feature flag synced: isCanary=%s', outcome.isCanary);
+        // feature-flags 在登录态落地后异步返回；立即推送新快照，让 renderer
+        // 的 Canary 装饰不必等到下一次 refresh / 重启才更新。
+        notifyRenderer();
         return;
       }
       if (outcome.reason === 'stale-auth') {
@@ -608,6 +613,7 @@ function snapshotAuthState(): AuthState {
   return {
     user: currentUser,
     isAuthenticated: accessToken !== null && currentUser !== null,
+    isCanary: currentUser !== null && canaryFlagStore.read(),
     deviceId,
   };
 }
@@ -620,6 +626,7 @@ function notifyRendererAuthBoundaryPending(): void {
   const state: AuthState = {
     user: null,
     isAuthenticated: false,
+    isCanary: false,
     deviceId,
   };
   broadcastToRenderers('auth:state-change', state);
@@ -860,14 +867,14 @@ export async function initialize(): Promise<AuthState> {
     removeSafe(REFRESH_TOKEN_KEY);
     removeSafe(LEGACY_REFRESH_TOKEN_KEY);
     clearReloginFlag();
-    return { user: null, isAuthenticated: false, deviceId };
+    return { user: null, isAuthenticated: false, isCanary: false, deviceId };
   }
 
   // Old Feishu-auth refresh tokens are intentionally not portable to auth-server.
   removeSafe(LEGACY_REFRESH_TOKEN_KEY);
   const storedToken = readSafe(REFRESH_TOKEN_KEY);
   if (!storedToken) {
-    return { user: null, isAuthenticated: false, deviceId };
+    return { user: null, isAuthenticated: false, isCanary: false, deviceId };
   }
 
   // 进程内去重:主窗流程还挂着(黑洞网络)时,副窗 / 右侧栏窗口 mount 触发的
@@ -885,7 +892,7 @@ export async function initialize(): Promise<AuthState> {
       log.warn(
         `cold-start auth still pending after ${COLD_START_AUTH_GATE_TIMEOUT_MS}ms — unblocking startup as logged out, flow continues in background`,
       );
-      return { user: null, isAuthenticated: false, deviceId };
+      return { user: null, isAuthenticated: false, isCanary: false, deviceId };
     },
     onLateResult: (state) =>
       log.info(
@@ -937,7 +944,7 @@ async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> 
     // 迟到守卫①:refresh 期间用户手动登录 / 登出过 → 丢弃结果。成功也丢
     // (旧 token family 已被新登录取代);失败更不能把新登录的 token 删掉。
     if (epochChanged('after-refresh')) {
-      return { user: null, isAuthenticated: false, deviceId };
+      return { user: null, isAuthenticated: false, isCanary: false, deviceId };
     }
     if (!refreshResult.ok) {
       // 只在「确定性凭据失效」时清除 token。429 限流 / 5xx / 断网等瞬时失败保留 token,
@@ -959,7 +966,7 @@ async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> 
           `cold-start refresh still failing after ${attempts} attempt(s) — keeping refresh token, starting logged out`,
         );
       }
-      return { user: null, isAuthenticated: false, deviceId };
+      return { user: null, isAuthenticated: false, isCanary: false, deviceId };
     }
 
     const refreshData = refreshResult.data as RefreshResponse;
@@ -1002,7 +1009,7 @@ async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> 
         refreshTimer = null;
       }
     }
-    return { user: null, isAuthenticated: false, deviceId };
+    return { user: null, isAuthenticated: false, isCanary: false, deviceId };
   }
 }
 
