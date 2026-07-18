@@ -448,6 +448,18 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
   // 勾选弹层（后到的覆盖先开的、确认还会写进另一个 runtime），单飞直接消掉这类竞态。
   const anyFetching = fetchingModels['claude-code'] || fetchingModels.codex;
 
+  /** runtime 里参与拉取请求的字段的规范化签名（过期响应判据：签名变了 = 响应作废）。 */
+  const fetchRequestSignature = (f: RuntimeFields): string =>
+    JSON.stringify({
+      b: f.baseUrl.trim(),
+      m: f.modelsUrl.trim(),
+      k: f.apiKey.trim(),
+      h: f.headers
+        .map((h) => [h.name.trim(), h.value.trim()])
+        .filter(([n]) => n)
+        .sort((a, b) => (a[0]! < b[0]! ? -1 : a[0]! > b[0]! ? 1 : 0)),
+    });
+
   /** 获取模型列表：用当前 Tab 表单值 GET 列模型端点（key 仅内存透传），成功后开勾选弹层。 */
   const handleFetchModels = useCallback(async () => {
     const agent = activeTab;
@@ -463,6 +475,9 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
       const n = h.name.trim();
       if (n) headers[n] = h.value.trim();
     }
+    // 请求参数签名：响应回来时若该 runtime 的端点/凭证/请求头已被改动，响应按过期丢弃——
+    // 不能把旧端点的模型清单当成新端点的填进表单（成功和失败 toast 都不展示）。
+    const requestSig = fetchRequestSignature(rf);
     setFetchingModels((prev) => ({ ...prev, [agent]: true }));
     try {
       const result = await window.electronAPI.maker.fetchProviderModels({
@@ -472,6 +487,7 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
         apiKey: rf.apiKey.trim() || null,
         ...(Object.keys(headers).length > 0 ? { headers } : {}),
       });
+      if (fetchRequestSignature(rtRef.current[agent]) !== requestSig) return; // 过期响应，静默丢弃
       if (result.ok && result.models && result.models.length > 0) {
         // 用**响应到达时**的最新表单行构建弹层（rtRef），不是请求发出时的 rf 快照。
         const current = rtRef.current[agent].models
@@ -492,6 +508,7 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
         toast.error(t(`providerError.${result.code ?? 'UNKNOWN'}`));
       }
     } catch (e) {
+      if (fetchRequestSignature(rtRef.current[agent]) !== requestSig) return; // 过期失败同样静默
       const ipc = extractIpcError(e);
       toast.error(ipc?.message ?? t('settings.providers.custom.fetch.failed'));
     } finally {
