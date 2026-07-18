@@ -10,7 +10,7 @@
  * 编辑态密钥遮罩、留空 = 不改；id 不可改。颜色全走主题 token。
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, ChevronDown, Eye, EyeOff, Plug, Plus, RefreshCw, Sparkles, Trash2, X } from 'lucide-react';
 
@@ -311,6 +311,12 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
     selected: Set<string>;
     query: string;
   } | null>(null);
+  // 最新 runtime 表单状态镜像：拉取响应到达时据此构建弹层行/预勾选，而不是用请求发出时的
+  // 闭包快照——在途期间被用户删除的行不得复活（弹层本身是全屏遮罩，打开后表单不可再编辑）。
+  const rtRef = useRef(rt);
+  useEffect(() => {
+    rtRef.current = rt;
+  }, [rt]);
 
   // 新建态拉取预设模板（本地 IPC 极快返回；失败静默 —— 没有预设也不影响手填，规则 7 不做 loading）。
   // 区域感知排序：zh-CN 用户国内端点预设靠前、其它语言国际端点靠前（只排序不过滤，
@@ -462,7 +468,8 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
         ...(Object.keys(headers).length > 0 ? { headers } : {}),
       });
       if (result.ok && result.models && result.models.length > 0) {
-        const current = rf.models
+        // 用**响应到达时**的最新表单行构建弹层（rtRef），不是请求发出时的 rf 快照。
+        const current = rtRef.current[agent].models
           .map((m) => ({ id: m.id.trim(), name: m.name.trim() }))
           .filter((m) => m.id.length > 0);
         const currentById = new Map(current.map((m) => [m.id, m]));
