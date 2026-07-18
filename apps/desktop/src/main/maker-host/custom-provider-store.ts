@@ -76,6 +76,19 @@ function validateRuntime(agent: string, rt: unknown): ValidationResult {
       }
     }
   }
+  if (r.modelsUrl !== undefined) {
+    if (typeof r.modelsUrl !== 'string' || r.modelsUrl.trim().length === 0) {
+      return invalid(`runtime '${agent}' modelsUrl must be a non-empty string`);
+    }
+    try {
+      const u = new URL(r.modelsUrl);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+        return invalid(`runtime '${agent}' modelsUrl must be http(s)`);
+      }
+    } catch {
+      return invalid(`runtime '${agent}' modelsUrl is not a valid URL`);
+    }
+  }
   return { ok: true };
 }
 
@@ -164,6 +177,7 @@ function normalizeRuntime(rt: CustomProviderRuntimeConfig): CustomProviderRuntim
     rt.headers && Object.keys(rt.headers).length > 0 ? { ...rt.headers } : undefined;
   const out: CustomProviderRuntimeConfig = { baseUrl: rt.baseUrl.trim(), models };
   if (headers) out.headers = headers;
+  if (rt.modelsUrl && rt.modelsUrl.trim()) out.modelsUrl = rt.modelsUrl.trim();
   return out;
 }
 
@@ -262,6 +276,7 @@ function parseRuntimes(raw: string): Partial<Record<AgentKind, CustomProviderRun
     if (r.headers && typeof r.headers === 'object' && !Array.isArray(r.headers)) {
       entry.headers = r.headers as Record<string, string>;
     }
+    if (typeof r.modelsUrl === 'string' && r.modelsUrl.length > 0) entry.modelsUrl = r.modelsUrl;
     out[agent] = entry;
   }
   return out;

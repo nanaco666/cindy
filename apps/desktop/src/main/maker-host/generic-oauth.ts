@@ -504,6 +504,16 @@ export async function discoverGenericOAuthModels(
   } catch {
     return null;
   }
+  return parseModelsListResponse(json);
+}
+
+/**
+ * 解析 OpenAI / Anthropic「列模型」响应的三种形状（`{data:[{id}]}` / `{models:[{id}]}` /
+ * 字符串数组）为去重后的 `{id, name}[]`；无法识别返回 null。显示名优先取条目的
+ * `display_name`（Anthropic 形状）/ `name` 字段，缺省回退 id。
+ * 纯函数——OAuth 自动发现（本模块）与 API key 表单「获取模型列表」（provider-model-fetch）共用。
+ */
+export function parseModelsListResponse(json: unknown): { id: string; name: string }[] | null {
   const list = (() => {
     if (!json || typeof json !== 'object') return null;
     const o = json as { data?: unknown; models?: unknown };
@@ -523,7 +533,14 @@ export async function discoverGenericOAuthModels(
           : null;
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    out.push({ id, name: id });
+    const rec = item && typeof item === 'object' ? (item as { display_name?: unknown; name?: unknown }) : null;
+    const name =
+      rec && typeof rec.display_name === 'string' && rec.display_name.length > 0
+        ? rec.display_name
+        : rec && typeof rec.name === 'string' && rec.name.length > 0
+          ? rec.name
+          : id;
+    out.push({ id, name });
   }
   return out;
 }

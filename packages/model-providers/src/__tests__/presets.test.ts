@@ -68,6 +68,27 @@ describe('sanitizePresets', () => {
     expect(sanitizePresets(undefined)).toEqual([]);
     expect(sanitizePresets({})).toEqual([]);
   });
+
+  it('modelsUrl 合法保留；非法（空串 / 非字符串 / 非 http(s)）剥字段不淘汰整条', () => {
+    const rt = (modelsUrl: unknown) => ({
+      'claude-code': {
+        baseUrl: 'https://x.example/anthropic',
+        models: [{ id: 'a', name: 'A' }],
+        modelsUrl,
+      },
+    });
+    const out = sanitizePresets([
+      { id: 'with-url', name: 'X', runtimes: rt('https://x.example/v1/models') },
+      { id: 'bad-empty', name: 'X', runtimes: rt('') },
+      { id: 'bad-type', name: 'X', runtimes: rt(42) },
+      { id: 'bad-proto', name: 'X', runtimes: rt('ftp://x.example/models') },
+    ]);
+    expect(out.map((p) => p.id)).toEqual(['with-url', 'bad-empty', 'bad-type', 'bad-proto']);
+    expect(out[0]!.runtimes['claude-code']?.modelsUrl).toBe('https://x.example/v1/models');
+    for (const p of out.slice(1)) {
+      expect(p.runtimes['claude-code']?.modelsUrl).toBeUndefined();
+    }
+  });
 });
 
 describe('parseCatalog presets 容错', () => {

@@ -232,8 +232,39 @@ function isValidPreset(v: unknown): v is ProviderPreset {
       if (!r.headers || typeof r.headers !== 'object' || Array.isArray(r.headers)) return false;
       if (Object.values(r.headers as Record<string, unknown>).some((x) => typeof x !== 'string')) return false;
     }
+    // modelsUrl 不在此淘汰整条——非法值由 sanitizePresets 剥字段（同 regionHint 容错语义）。
   }
   return true;
+}
+
+/** 是否合法 http(s) URL（modelsUrl 归一化用）。 */
+function isHttpUrl(v: unknown): boolean {
+  if (typeof v !== 'string' || v.length === 0) return false;
+  try {
+    const u = new URL(v);
+    return u.protocol === 'https:' || u.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * runtime.modelsUrl 非法（非 http(s) URL）时剥掉该字段、保留预设本体——OSS 推错一个
+ * 不可见字段不该让整条预设消失，更不该让用户保存时撞 main 侧 URL 校验无法自助修复。
+ */
+function normalizePresetModelsUrls(p: ProviderPreset): ProviderPreset {
+  let changed = false;
+  const runtimes: ProviderPreset['runtimes'] = {};
+  for (const [agent, rt] of Object.entries(p.runtimes) as [AgentKind, ProviderPreset['runtimes'][AgentKind] & object][]) {
+    if (rt.modelsUrl !== undefined && !isHttpUrl(rt.modelsUrl)) {
+      const { modelsUrl: _drop, ...rest } = rt;
+      runtimes[agent] = rest;
+      changed = true;
+    } else {
+      runtimes[agent] = rt;
+    }
+  }
+  return changed ? { ...p, runtimes } : p;
 }
 
 /**
@@ -252,10 +283,10 @@ export function sanitizePresets(input: unknown): ProviderPreset[] {
     // regionHint 非法值不淘汰整条预设（它只是呈现提示），归一化为缺省（区域中立）。
     if (v.regionHint !== undefined && v.regionHint !== 'cn' && v.regionHint !== 'global') {
       const { regionHint: _drop, ...rest } = v as ProviderPreset & { regionHint: unknown };
-      out.push(rest as ProviderPreset);
+      out.push(normalizePresetModelsUrls(rest as ProviderPreset));
       continue;
     }
-    out.push(v);
+    out.push(normalizePresetModelsUrls(v));
   }
   return out;
 }

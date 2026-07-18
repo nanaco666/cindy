@@ -987,6 +987,8 @@ function providerViewToConfig(p: ProviderView): CustomProviderConfig {
       ...(routing?.headerOverride && Object.keys(routing.headerOverride).length > 0
         ? { headers: { ...routing.headerOverride } }
         : {}),
+      // 列模型端点随 routing 回带（buildUserProvider 写入），编辑保存不丢持久化字段。
+      ...(routing?.modelsUrl ? { modelsUrl: routing.modelsUrl } : {}),
     };
   }
   return {
