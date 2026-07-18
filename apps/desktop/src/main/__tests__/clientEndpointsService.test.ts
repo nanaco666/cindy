@@ -1,7 +1,7 @@
 /**
  * clientEndpointsService 单测(规则 14:依赖注入 + 内存 harness)。
  *
- * 校验语义(全字段必填/协议白名单/allowHttp)在 @lizi/maker-shared 侧已覆盖;
+ * 校验语义(缺省字段归一/协议白名单/allowHttp)在 @lizi/maker-shared 侧已覆盖;
  * 这里只测 desktop 宿主层:清单来源解析(resolveEndpointSource 表驱动)、
  * 阻断式重试循环(失败 → prompt → 重试/退出,无静默降级、无烘焙合并)、
  * file 模式的 allowHttp 放行、init 前 getter 抛错(启动时序守卫)、sendSync IPC 形状。
@@ -145,19 +145,23 @@ describe('resolveClientEndpointsBlocking(阻断循环,清单即唯一事实源)'
     expect(exitApp).not.toHaveBeenCalled();
   });
 
-  it('清单缺字段同样阻断(无烘焙回退),prompt 带 reason', async () => {
+  it.each([
+    ['字段缺失', undefined],
+    ['字段空串', ''],
+  ])('%s不阻断启动,解析结果归一为空串', async (_label, heartbeatUrl) => {
     const manifest = JSON.parse(FULL_MANIFEST) as Record<string, unknown>;
-    delete manifest.heartbeatUrl;
-    const promptRetry = vi.fn().mockReturnValue('exit');
+    if (heartbeatUrl === undefined) delete manifest.heartbeatUrl;
+    else manifest.heartbeatUrl = heartbeatUrl;
+    const promptRetry = vi.fn();
     const exitApp = vi.fn();
     const result = await resolveClientEndpointsBlocking({
       fetchManifestText: async () => JSON.stringify(manifest),
       promptRetry,
       exitApp,
     });
-    expect(result).toBeNull();
-    expect(promptRetry).toHaveBeenCalledWith('missing-field:heartbeatUrl');
-    expect(exitApp).toHaveBeenCalledTimes(1);
+    expect(result?.heartbeatUrl).toBe('');
+    expect(promptRetry).not.toHaveBeenCalled();
+    expect(exitApp).not.toHaveBeenCalled();
   });
 
   it('fetch 抛错视同失败进 prompt,选退出返回 null', async () => {

@@ -234,9 +234,9 @@ export const ENDPOINT_MANIFEST_BASE_URL = configuredValue(
 ).replace(/\/+$/, '');
 
 /**
- * 启动闸门拉到远程端点清单后回写运行期端点(仅覆盖清单中出现的字段;
- * 空值忽略,烘焙值兜底)。auth 字段不分 region——国内/海外两条 CDN 各发
- * 各的清单,无脑取。deviceLinkApiBaseUrl 是清单必填字段,恒被覆写。
+ * 启动闸门拉到远程端点清单后回写运行期端点。`undefined` 表示调用方未提供、
+ * 不修改;空串表示清单缺失/留空后的权威结果,必须清空旧值。auth 字段不分
+ * region——国内/海外两条 CDN 各发各的清单,无脑取。
  */
 export function applyResolvedClientEndpoints(resolved: {
   authApiBaseUrl?: string;
@@ -245,15 +245,15 @@ export function applyResolvedClientEndpoints(resolved: {
   /** 审核模式送审版本号(parser 产出,null = 清单未填;undefined = 不改动)。 */
   reviewVersion?: string | null;
 }): void {
-  if (resolved.authApiBaseUrl) {
-    AUTH_API_BASE_URL = normalizeBaseUrlWithDefault(resolved.authApiBaseUrl, AUTH_API_BASE_URL);
+  if (resolved.authApiBaseUrl !== undefined) {
+    AUTH_API_BASE_URL = normalizeBaseUrlWithDefault(resolved.authApiBaseUrl, '');
   }
-  if (resolved.deviceLinkApiBaseUrl) {
+  if (resolved.deviceLinkApiBaseUrl !== undefined) {
     DEVICE_LINK_API_BASE_URL = resolved.deviceLinkApiBaseUrl.replace(/\/$/, '');
   }
   // 仅自建变体吃清单覆写,保住「非自建 ⇒ OTA_SERVER_BASE_URL 恒空串」不变量
   // (调用点虽都有 IS_OTA_SELFHOST 门控,这里再挡一层,变体身份始终由烧包决定)。
-  if (resolved.mobileUpdateBaseUrl && IS_OTA_SELFHOST) {
+  if (resolved.mobileUpdateBaseUrl !== undefined && IS_OTA_SELFHOST) {
     OTA_SERVER_BASE_URL = resolved.mobileUpdateBaseUrl.replace(/\/+$/, '');
   }
   if (resolved.reviewVersion !== undefined) {
