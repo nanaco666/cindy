@@ -99,7 +99,11 @@ vi.mock('@/state/deviceLinkModelMirror', () => ({
   useDeviceLinkModelMirrorVersion: () => 0,
 }));
 
-import { ModelSelector, modelEffortLabel } from '@/components/new-chat/ModelSelector';
+import {
+  ModelSelector,
+  modelEffortLabel,
+  resolveModelBrandKind,
+} from '@/components/new-chat/ModelSelector';
 
 describe('ModelSelector trigger variants', () => {
   it('renders the field trigger as a settings input and localizes effort before provider labels', () => {
@@ -136,5 +140,24 @@ describe('ModelSelector trigger variants', () => {
     expect(
       modelEffortLabel(t, { effortDisplayNames: { xhigh: 'Extra High' } }, 'max', 'Max'),
     ).toBe('Max');
+  });
+
+  it('resolves the model mark from the model brand before the current runtime', () => {
+    expect(
+      resolveModelBrandKind({
+        modelId: 'gpt-5.5',
+        displayName: 'GPT-5.5 · 中',
+        agentKind: 'claude-code',
+        fallbackProviderId: 'anthropic',
+      }),
+    ).toBe('codex');
+    expect(
+      resolveModelBrandKind({
+        modelId: 'claude-opus-4-8',
+        displayName: 'Opus 4.8',
+        agentKind: 'codex',
+        fallbackProviderId: 'openai',
+      }),
+    ).toBe('claude');
   });
 });
