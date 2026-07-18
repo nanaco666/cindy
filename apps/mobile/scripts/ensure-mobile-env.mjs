@@ -53,6 +53,11 @@ export function ensureMobileEnv({
   };
 
   for (const key of REQUIRED_MOBILE_ENV_KEYS) {
+    // .env 已有用户真实值(非 example placeholder)时直接保留,不要求 defaults 提供该 key
+    // (eas.json 只带少数 key,其余 base URL 在私有端点配置里;.env 齐备时不会读私有配置)。
+    // 显式选择 region(authRegion)时例外:region 切换必须覆写既有值走 upsert 的
+    // replaceExisting 路径,否则 --region=global 静默不生效(既有用例钉住此语义)。
+    if (!authRegion && hasPreservedEnvValue(content, key, exampleValues[key])) continue;
     const value = defaults[key];
     if (!String(value ?? '').trim()) {
       if (hasPreservedEnvValue(content, key, exampleValues[key])) continue;
