@@ -165,6 +165,10 @@ export class Scheduler extends EventEmitter {
   private readonly generateId: () => string;
 
   private readonly activeSchedules = new Map<string, Schedule>();
+  // 同一 schedule 的用户态 CRUD 必须把“持久化写入 + activeSchedules 同步”视作一个
+  // 临界区。否则 update 恢复 expired 的 await 返回后，pause 可能先删缓存，旧 update
+  // 再把 active 快照加回来。不同 schedule 仍可并发，避免全局锁拖慢无关任务。
+  private readonly scheduleMutationTails = new Map<string, Promise<void>>();
   private tickHandle: ReturnType<typeof setInterval> | null = null;
   private started = false;
   // In-flight run 心跳定时器:inflight registry 非空时运行(fireOne / runNow /
@@ -875,6 +879,10 @@ export class Scheduler extends EventEmitter {
   }
 
   async update(id: string, patch: UpdateScheduleInput): Promise<Schedule> {
+    return this.serializeScheduleMutation(id, () => this.updateUnlocked(id, patch));
+  }
+
+  private async updateUnlocked(id: string, patch: UpdateScheduleInput): Promise<Schedule> {
     patch = this.normalizeManagedWorkingDir(patch);
     // patch 显式给了真实 workingDir 而未指明 workspaceKind 时,同步翻成 project
     // (与 create 的推断对称)—— 否则 dialogue 任务被改了目录后仍是 dialogue,
@@ -981,6 +989,13 @@ export class Scheduler extends EventEmitter {
   }
 
   async pause(id: string, opts?: { exemptRunId?: string }): Promise<Schedule> {
+    return this.serializeScheduleMutation(id, () => this.pauseUnlocked(id, opts));
+  }
+
+  private async pauseUnlocked(
+    id: string,
+    opts?: { exemptRunId?: string },
+  ): Promise<Schedule> {
     // 先中断这条 schedule 名下所有 in-flight run。pause 语义 = 立刻停 + 不再触发,
     // in-flight 跑完才算停就跟用户预期不符(且老行为还会更新 lastFinishedAt 把 schedule
     // 数据弄脏)。abort 触发后 fireOne 的 wasAborted 分支会自己把 run 标 'aborted'。
@@ -995,6 +1010,10 @@ export class Scheduler extends EventEmitter {
   }
 
   async resume(id: string): Promise<Schedule> {
+    return this.serializeScheduleMutation(id, () => this.resumeUnlocked(id));
+  }
+
+  private async resumeUnlocked(id: string): Promise<Schedule> {
     const existing = await this.storage.get(id);
     if (!existing) throw new Error(`Schedule not found: ${id}`);
     const now = this.clock.now();
@@ -1015,6 +1034,10 @@ export class Scheduler extends EventEmitter {
   }
 
   async delete(id: string, opts?: { exemptRunId?: string }): Promise<void> {
+    return this.serializeScheduleMutation(id, () => this.deleteUnlocked(id, opts));
+  }
+
+  private async deleteUnlocked(id: string, opts?: { exemptRunId?: string }): Promise<void> {
     // 先中断 in-flight,等它们 settle,再删 schedule 行。否则被删 schedule 名下的
     // in-flight run 会继续跑到底(原行为),用户点删除后看到的是"还在跑"。
     // abort + 等待逻辑见 abortInflightAndWait。
@@ -1030,6 +1053,27 @@ export class Scheduler extends EventEmitter {
     await this.storage.delete(id);
     this.activeSchedules.delete(id);
     this.emitEvent({ type: 'changed', scheduleId: id });
+  }
+
+  /** 按 schedule id 串行执行 CRUD，并在队尾完成后释放对应条目。 */
+  private async serializeScheduleMutation<T>(id: string, mutation: () => Promise<T>): Promise<T> {
+    const previous = this.scheduleMutationTails.get(id) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => gate);
+    this.scheduleMutationTails.set(id, tail);
+
+    await previous;
+    try {
+      return await mutation();
+    } finally {
+      release();
+      if (this.scheduleMutationTails.get(id) === tail) {
+        this.scheduleMutationTails.delete(id);
+      }
+    }
   }
 
   /**

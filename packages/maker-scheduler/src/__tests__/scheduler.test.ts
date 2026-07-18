@@ -829,6 +829,49 @@ describe('Scheduler', () => {
     await restarted.scheduler.stop();
   });
 
+  it('serializes pause behind an expired schedule revival so active cache stays paused', async () => {
+    const sch = await h.scheduler.create({ ...baseInput, recurring: false });
+    h.clock.setTo(Date.UTC(2026, 0, 1, 0, 1, 5));
+    await h.scheduler.tick();
+    expect((await h.storage.get(sch.id))?.status).toBe('expired');
+
+    const storageUpdate = h.storage.update.bind(h.storage);
+    let releaseRevival!: () => void;
+    const revivalGate = new Promise<void>((resolve) => {
+      releaseRevival = resolve;
+    });
+    let revivalPersisted!: () => void;
+    const revivalPersistedPromise = new Promise<void>((resolve) => {
+      revivalPersisted = resolve;
+    });
+    let pauseWriteCalls = 0;
+    vi.spyOn(h.storage, 'update').mockImplementation(async (id, patch) => {
+      const updated = await storageUpdate(id, patch);
+      if (patch.status === 'active') {
+        revivalPersisted();
+        await revivalGate;
+      } else if (patch.status === 'paused') {
+        pauseWriteCalls += 1;
+      }
+      return updated;
+    });
+
+    const revivePromise = h.scheduler.update(sch.id, { recurring: true });
+    await revivalPersistedPromise;
+    const pausePromise = h.scheduler.pause(sch.id);
+
+    // 让 pause 的 microtask 有机会推进；同一 schedule 的 mutation 临界区仍被 revival 占用，
+    // 因此 pause 不能越过它先写 DB / 删除缓存。
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(pauseWriteCalls).toBe(0);
+
+    releaseRevival();
+    await Promise.all([revivePromise, pausePromise]);
+    expect((await h.storage.get(sch.id))?.status).toBe('paused');
+    // @ts-expect-error 访问私有 map 仅用于验证 reviewer 指出的缓存竞态。
+    expect(h.scheduler.activeSchedules.has(sch.id)).toBe(false);
+  });
+
   it('update keeps an expired one-shot expired when it remains non-recurring', async () => {
     const sch = await h.scheduler.create({ ...baseInput, recurring: false });
     h.clock.setTo(Date.UTC(2026, 0, 1, 0, 1, 5));
