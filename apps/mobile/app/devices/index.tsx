@@ -1158,64 +1158,33 @@ export default function HomeScreen() {
   // renderItem 提取为稳定引用:打开「选项」sheet 等与列表数据无关的页面状态变更不再改变
   // renderItem 身份,SectionList 可见行不随之全量重渲染(review P2:每行 Swipeable 动画树
   // 较重)。行内滑动回调全部走「稳定引用 + session 入参」,不为每行现造闭包。
+  // 每行输出整体交给 per-item memo 的 HomeListRow(风暴修复第二刀,见其注释):这里只
+  // 计算邻接派生位(分割线唯一化 / 置顶尾行 / 折叠位)并以标量 props 传入,保证单行
+  // 数据变化只重建该行的包装树。
   const renderHomeRow = useCallback(({ item, index, section }: {
     item: HomeRow;
     index: number;
     section: HomeSection;
-  }) => {
-    // 分割线唯一化:块(项目组 / 自动化组)自带上下全宽线,紧邻块上边界的行不画
-    // 自己的缩进线,相邻两个块之间也只保留一根(后块不画顶线)。
-    const prevIsBlock = isBlockHomeRow(section.data[index - 1]);
-    const nextIsBlock = isBlockHomeRow(section.data[index + 1]);
-    // 置顶区最后一行的下线由 pinnedFooter(或下方块的顶线)提供,自己不再画。
-    const isLastPinnedRow = section.key === 'pinned' && index === section.data.length - 1 && sections.length > 1;
-    if (item.kind === 'project') {
-      return (
-        <ProjectRow
-          collapsed={collapsedProjectKeys.includes(item.project.key)}
-          expandedAutomationGroups={expandedAutomationGroups}
-          onOpenAutomationGroup={openAutomationGroup}
-          onOpenProject={() => openProjectSessions(item.project)}
-          onOpenSession={openSession}
-          onToggle={() => toggleProject(item.project.key)}
-          onToggleAutomationGroup={toggleAutomationGroup}
-          project={item.project}
-          suppressTopBorder={prevIsBlock}
-          swipe={sessionSwipeControls}
-        />
-      );
-    }
-    const row = (
-      <HomeSessionRow
-        asBlock
-        expandedAutomationGroups={expandedAutomationGroups}
-        hideDivider={nextIsBlock || isLastPinnedRow}
-        item={item.item}
-        onOpenAutomationGroup={openAutomationGroup}
-        onOpenSession={openSession}
-        onToggleAutomationGroup={toggleAutomationGroup}
-        suppressBlockTopBorder={prevIsBlock}
-        swipe={sessionSwipeControls}
-        testID={homeSessionRowTestId(item.source)}
-      />
-    );
-    // 普通会话行(含置顶区)在这里挂滑动操作;自动化组行不挂 —— 组行代表多次运行,
-    // 「置顶/归档这一组」语义含混,但其展开的子行经 swipe 透传同样可滑。
-    // 项目组子行 / 自动化子行的滑动在各自渲染路径内包裹;设备详情页不传 swipe,保持不可滑。
-    if (item.item.automationGroup) return row;
-    return (
-      <SwipeableSessionRow
-        onArchive={archiveSession}
-        onShowOptions={showSessionOptions}
-        onTogglePin={toggleSessionPinned}
-        registry={swipeRegistry}
-        session={item.item.session as RemoteSession}
-        testID={`${homeSessionRowTestId(item.source)}.swipe`}
-      >
-        {row}
-      </SwipeableSessionRow>
-    );
-  }, [
+  }) => (
+    <HomeListRow
+      expandedAutomationGroups={expandedAutomationGroups}
+      isLastPinnedRow={section.key === 'pinned' && index === section.data.length - 1 && sections.length > 1}
+      item={item}
+      nextIsBlock={isBlockHomeRow(section.data[index + 1])}
+      onArchive={archiveSession}
+      onOpenAutomationGroup={openAutomationGroup}
+      onOpenProjectSessions={openProjectSessions}
+      onOpenSession={openSession}
+      onShowOptions={showSessionOptions}
+      onToggleAutomationGroup={toggleAutomationGroup}
+      onToggleProject={toggleProject}
+      onTogglePin={toggleSessionPinned}
+      prevIsBlock={isBlockHomeRow(section.data[index - 1])}
+      projectCollapsed={item.kind === 'project' && collapsedProjectKeys.includes(item.project.key)}
+      registry={swipeRegistry}
+      swipe={sessionSwipeControls}
+    />
+  ), [
     archiveSession,
     collapsedProjectKeys,
     expandedAutomationGroups,
@@ -1993,6 +1962,102 @@ function ProjectRow({
         </View>
       )}
     </View>
+  );
+}
+
+/**
+ * 首页 renderItem 输出的 per-item memo 单元(2026-07-18 风暴修复第二刀)。
+ * 内核行(HomeSessionRow)memo 后,每次 sections 真实变化(流式期间预览更新等)仍会
+ * 整列表重渲染全部 cell 的 Swipeable / 手势包装树(trace:47 次壳层重渲染 × ~105 cell,
+ * 每次 ~500ms)。把整个 renderItem 输出按 item 级 memo,包装树只在自己 item 的数据
+ * 变化时重建。比较器与 HomeSessionRow 同款 dataPropsEqual:函数 props 跳过——闭包
+ * 审计:onArchive / onShowOptions / onTogglePin / onOpen* / onToggle* 均为 useCallback
+ * 且只闭合 router / store / 稳定 setState;registry(swipeRegistry)与 swipe 为
+ * useMemo 单例。给本组件新增函数 prop 时必须复审闭包稳定性。projectCollapsed /
+ * prevIsBlock 等邻接派生位由 renderItem 计算成标量传入,天然参与比较。
+ */
+const HomeListRow = memo(HomeListRowInner, dataPropsEqual);
+
+function HomeListRowInner({
+  expandedAutomationGroups,
+  isLastPinnedRow,
+  item,
+  nextIsBlock,
+  onArchive,
+  onOpenAutomationGroup,
+  onOpenProjectSessions,
+  onOpenSession,
+  onShowOptions,
+  onToggleAutomationGroup,
+  onToggleProject,
+  onTogglePin,
+  prevIsBlock,
+  projectCollapsed,
+  registry,
+  swipe,
+}: {
+  expandedAutomationGroups: readonly string[];
+  isLastPinnedRow: boolean;
+  item: HomeRow;
+  nextIsBlock: boolean;
+  onArchive(session: RemoteSession): void;
+  onOpenAutomationGroup(group: RemoteAutomationSessionGroup): void;
+  onOpenProjectSessions(project: MobileHomeProjectGroup): void;
+  onOpenSession(item: RemoteSessionListItem): void;
+  onShowOptions(session: RemoteSession): void;
+  onToggleAutomationGroup(key: string): void;
+  onToggleProject(key: string): void;
+  onTogglePin(session: RemoteSession): void;
+  prevIsBlock: boolean;
+  projectCollapsed: boolean;
+  registry: ReturnType<typeof createSwipeRowRegistry>;
+  swipe: SessionSwipeControls;
+}) {
+  if (item.kind === 'project') {
+    return (
+      <ProjectRow
+        collapsed={projectCollapsed}
+        expandedAutomationGroups={expandedAutomationGroups}
+        onOpenAutomationGroup={onOpenAutomationGroup}
+        onOpenProject={() => onOpenProjectSessions(item.project)}
+        onOpenSession={onOpenSession}
+        onToggle={() => onToggleProject(item.project.key)}
+        onToggleAutomationGroup={onToggleAutomationGroup}
+        project={item.project}
+        suppressTopBorder={prevIsBlock}
+        swipe={swipe}
+      />
+    );
+  }
+  const row = (
+    <HomeSessionRow
+      asBlock
+      expandedAutomationGroups={expandedAutomationGroups}
+      hideDivider={nextIsBlock || isLastPinnedRow}
+      item={item.item}
+      onOpenAutomationGroup={onOpenAutomationGroup}
+      onOpenSession={onOpenSession}
+      onToggleAutomationGroup={onToggleAutomationGroup}
+      suppressBlockTopBorder={prevIsBlock}
+      swipe={swipe}
+      testID={homeSessionRowTestId(item.source)}
+    />
+  );
+  // 普通会话行(含置顶区)在这里挂滑动操作;自动化组行不挂 —— 组行代表多次运行,
+  // 「置顶/归档这一组」语义含混,但其展开的子行经 swipe 透传同样可滑。
+  // 项目组子行 / 自动化子行的滑动在各自渲染路径内包裹;设备详情页不传 swipe,保持不可滑。
+  if (item.item.automationGroup) return row;
+  return (
+    <SwipeableSessionRow
+      onArchive={onArchive}
+      onShowOptions={onShowOptions}
+      onTogglePin={onTogglePin}
+      registry={registry}
+      session={item.item.session as RemoteSession}
+      testID={`${homeSessionRowTestId(item.source)}.swipe`}
+    >
+      {row}
+    </SwipeableSessionRow>
   );
 }
 
