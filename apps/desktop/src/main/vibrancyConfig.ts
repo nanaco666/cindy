@@ -16,8 +16,11 @@ export function resolveVibrancyConfig(
   const isCindy = familyId === 'cindy';
   const opaqueBg = isDark ? '#1f1f1e' : '#f8f8f6';
   if (platform === 'darwin') {
+    // 材质 A/B 旋钮(dev 调参用):XDT_VIBRANCY_MATERIAL=sidebar|hud|under-window|fullscreen-ui|
+    // popover|menu|none('none'=无材质纯透明,壁纸不模糊直透)。缺省 'sidebar'。定稿后回写默认值。
+    const material = process.env.XDT_VIBRANCY_MATERIAL || 'sidebar';
     return {
-      vibrancy: isCindy ? 'sidebar' : null,
+      vibrancy: isCindy && material !== 'none' ? material : null,
       backgroundColor: isCindy ? '#00000000' : opaqueBg,
     };
   }
