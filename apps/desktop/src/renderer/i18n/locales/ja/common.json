@@ -4795,9 +4795,8 @@
       "recent": "最近",
       "browseFolder": "別のフォルダを選択",
       "advanced": "詳細設定",
-      "branch": "ブランチ",
-      "loading": "読み込み中…",
       "worktree": "worktree",
+      "worktreeHint": "タスクの実行時にプロジェクトの現在のブランチから一時 worktree を作成し、継続セッションでは同じディレクトリを再利用します",
       "advancedAria": "詳細設定（worktree）",
       "useWorktreeAria": "worktree 分離を使用",
       "branchHints": {

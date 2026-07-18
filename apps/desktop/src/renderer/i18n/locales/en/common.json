@@ -4804,9 +4804,8 @@
       "recent": "Recent",
       "browseFolder": "Choose a different folder",
       "advanced": "Advanced",
-      "branch": "Branch",
-      "loading": "Loading…",
       "worktree": "worktree",
+      "worktreeHint": "Creates a temporary worktree from the project's current branch when triggered; persistent sessions reuse it",
       "advancedAria": "Advanced settings (worktree)",
       "useWorktreeAria": "Use worktree isolation",
       "branchHints": {
