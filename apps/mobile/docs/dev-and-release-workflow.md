@@ -21,12 +21,13 @@
 ```bash
 pnpm mobile:sim:start                       # 国服(默认)
 pnpm mobile:sim:start -- --region=global   # 海外
-pnpm mobile:sim:whoami
+pnpm mobile:sim:whoami                     # 检查国服安装包 + Metro/worktree
+pnpm mobile:sim:whoami -- --region=global  # 检查海外安装包 + Metro/worktree
 pnpm mobile:sim:rebuild                     # 国服(默认)
 pnpm mobile:sim:rebuild -- --region=global # 海外
 ```
 
-脚本固定 Metro 8081、注入当前 git branch/commit 给新建会话页顶部的 `__DEV__` build label,避免多 worktree 连错 bundle。`mobile:sim:start` / `mobile:sim:rebuild` 会按所选 region 把构建身份与对应 `config/endpoint*.json` 的 `cdnBaseUrl` 同步到 `apps/mobile/.env`,无需手动注入参数或复制 `.env.example`。具体排障见 [`simulator-debugging.md`](./simulator-debugging.md)。
+脚本固定 Metro 8081、注入当前 git branch/commit 给新建会话页顶部的 `__DEV__` build label,避免多 worktree 连错 bundle。`mobile:sim:start` / `mobile:sim:rebuild` 会按所选 region 把构建身份与对应 `config/endpoint*.json` 的 `cdnBaseUrl` 同步到 `apps/mobile/.env`,无需手动注入参数或复制 `.env.example`；`mobile:sim:whoami` 用同一份 region 配置解析实际 bundle id，不维护独立硬编码。具体排障见 [`simulator-debugging.md`](./simulator-debugging.md)。
 切到 global 时原生 bundle identity / scheme 也会变,先用同 region 的 `mobile:sim:rebuild` 重装开发包,再用 `mobile:sim:start -- --region=global` 启动 Metro。
 
 ## Xcode 本地开发(region)

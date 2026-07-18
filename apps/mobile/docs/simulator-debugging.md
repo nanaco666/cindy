@@ -34,6 +34,7 @@ pnpm mobile:sim:start      # start THIS worktree's cn dev-client Metro; injects 
                            # branch/commit into the __DEV__ build label (EXPO_PUBLIC_*)
 pnpm mobile:sim:start -- --region=global # global JS region; rebuild global native app first
 pnpm mobile:sim:whoami     # doctor: booted install + which port = which worktree
+pnpm mobile:sim:whoami -- --region=global # inspect the global native app + Metro ownership
 pnpm mobile:sim:rebuild    # rebuild + reinstall the cn native dev app (native changes only)
 ```
 
@@ -78,7 +79,8 @@ input — adding a script there would bump the mobile runtime version.
 Use these runtimes for different jobs:
 
 - Current source debugging: iOS development client, bundle id
-  `com.xd.lizcn`, attached to Metro.
+  resolved from the selected local region config (`com.xd.cindycn` for the
+  current cn config, `com.xd.cindy` for global), attached to Metro.
 - Distribution validation: TestFlight. It does not consume local Metro changes.
 - Expo Go: only for explicit Expo Go compatibility checks. It is not the normal
   regression target because this app depends on native config, secure storage,
@@ -93,7 +95,7 @@ Do not just say "the app".
 From the mobile worktree:
 
 ```bash
-cd /Users/dash/Code/Tools/xdt-maker-mobile-device-link
+cd <current-mobile-worktree>
 pnpm mobile:sim:start
 ```
 
@@ -108,8 +110,8 @@ If the app is already installed and only JavaScript changed, reload instead of
 reinstalling:
 
 ```bash
-xcrun simctl terminate booted com.xd.lizcn || true
-xcrun simctl launch booted com.xd.lizcn
+xcrun simctl terminate booted com.xd.cindycn || true
+xcrun simctl launch booted com.xd.cindycn
 ```
 
 Then press `r` in the Metro terminal, or open the Expo dev menu in the simulator
@@ -118,7 +120,7 @@ and choose Reload.
 Reinstall only when native state or native config changed:
 
 ```bash
-xcrun simctl uninstall booted com.xd.lizcn || true
+xcrun simctl uninstall booted com.xd.cindycn || true
 pnpm --filter mobile ios -- --device "iPhone 17 Pro"
 ```
 
@@ -150,13 +152,14 @@ Before asking someone to retest, confirm which native app is installed:
 
 ```bash
 xcrun simctl list devices booted
-APP_CONTAINER="$(xcrun simctl get_app_container booted com.xd.lizcn app)"
-/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_CONTAINER/Info.plist"
-/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_CONTAINER/Info.plist"
-/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_CONTAINER/Info.plist"
+pnpm mobile:sim:whoami                    # cn(default)
+pnpm mobile:sim:whoami -- --region=global # global
 ```
 
-Expected values come from `apps/mobile/app.json`:
+`mobile:sim:whoami` resolves the selected identity from `app.config.js` plus the
+gitignored `scripts/self-host-regions.json`, then prints the installed version
+and build number from that app's `Info.plist`. Expected version values come from
+`apps/mobile/app.json`:
 
 - `ios.bundleIdentifier`
 - `version`
@@ -181,7 +184,7 @@ logout path for normal testing, or uninstall the app for a clean login-state
 test:
 
 ```bash
-xcrun simctl uninstall booted com.xd.lizcn
+xcrun simctl uninstall booted com.xd.cindycn
 pnpm --filter mobile ios -- --device "iPhone 17 Pro"
 ```
 
@@ -189,7 +192,7 @@ If Feishu login opens Safari and lands on `Cannot GET /api/auth/callback`, do
 not assume the backend auth exchange failed yet. First check:
 
 - The app is the development client, not Expo Go or TestFlight.
-- The installed build contains the `lizcn` scheme.
+- The installed build contains the selected region scheme (`cindycn` or `cindy`).
 - Metro was restarted after env changes.
 - Metro logs show whether `WebBrowser.openAuthSessionAsync` returned success,
   cancel, or dismiss.
