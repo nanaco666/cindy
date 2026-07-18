@@ -4,7 +4,6 @@ import {
   MACOS_UPDATE_RELAUNCH_ARG,
   createUpdatePresentationRecoveryController,
   decideUpdatePresentationRecovery,
-  getUpdateRelaunchScreenBlockReason,
   hasUpdateRelaunchBusyActivity,
   isMacOSUpdateRelaunch,
   readUpdateRelaunchScheduleBusy,
@@ -70,15 +69,7 @@ function createRecoveryHarness(
   };
 }
 
-describe('update relaunch screen safety', () => {
-  it('blocks automatic relaunch while locked or when screen state is unknown', () => {
-    expect(getUpdateRelaunchScreenBlockReason('locked', true)).toBe('screen-locked');
-    expect(getUpdateRelaunchScreenBlockReason('locked', false)).toBeNull();
-    expect(getUpdateRelaunchScreenBlockReason('unknown', false)).toBe('screen-state-unknown');
-    expect(getUpdateRelaunchScreenBlockReason('active', true)).toBeNull();
-    expect(getUpdateRelaunchScreenBlockReason('idle', true)).toBeNull();
-  });
-
+describe('update relaunch marker', () => {
   it('recognizes only the exact update relaunch marker', () => {
     expect(isMacOSUpdateRelaunch([MACOS_UPDATE_RELAUNCH_ARG])).toBe(true);
     expect(isMacOSUpdateRelaunch([`${MACOS_UPDATE_RELAUNCH_ARG}=1`])).toBe(false);

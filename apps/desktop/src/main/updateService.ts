@@ -230,10 +230,6 @@ async function getAutoRelaunchBlockReasonForCurrentState(): Promise<AutoRelaunch
     hasBusyTasks: hasBusyTasksNow,
     idleTimeSeconds: readSystemIdleTimeSeconds(),
     idleState: readSystemIdleState(),
-    // A locked, logged-in session must still receive unattended updates. The
-    // macOS presentation recovery keeps the window hidden until unlock, while
-    // an unreadable screen state remains fail-closed in the policy.
-    blockWhenScreenLocked: false,
     nowMs,
     lastBusyAtMs,
     lastResumeAtMs,
