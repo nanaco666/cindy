@@ -6,15 +6,16 @@ import { useTheme } from '@/theme';
 import { BRAND_ARROW_PATH } from './vendorIconPaths';
 
 interface MobileVendorIconProps {
+  color?: string;
   running?: boolean;
   size?: number;
   vendor: 'cc' | 'codex' | string;
 }
 
-export function MobileVendorIcon({ running = false, size = 12, vendor }: MobileVendorIconProps) {
+export function MobileVendorIcon({ color: colorOverride, running = false, size = 12, vendor }: MobileVendorIconProps) {
   const { colors } = useTheme();
   const opacity = useRef(new Animated.Value(running ? 0.3 : 1)).current;
-  const color = running ? colors.statusAccent : colors.textTertiary;
+  const color = colorOverride ?? (running ? colors.statusAccent : colors.textTertiary);
 
   useEffect(() => {
     opacity.stopAnimation();

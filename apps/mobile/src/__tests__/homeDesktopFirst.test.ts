@@ -69,8 +69,8 @@ describe('mobile home desktop-first surface', () => {
     expect(source).toContain('fontWeight: fontWeight.medium');
     expect(source).toContain('testID="home.newChatButton"');
     expect(source).toContain("position: 'absolute'");
-    expect(source).toContain('bottom: spacing.lg');
-    expect(source).toContain('right: spacing.lg');
+    expect(source).toContain('bottom: CINDY_LIST_FAB_BOTTOM');
+    expect(source).toContain('right: CINDY_LIST_GUTTER');
   });
 
   it('uses TapTap blue for the online dot treatment', () => {
@@ -124,7 +124,8 @@ describe('mobile home desktop-first surface', () => {
     expect(homeSource).toContain('remoteSessionStore.isSessionRunning(item.session.id)');
     expect(homeSource).toContain('<RadioTower');
     expect(homeSource).toContain('width: 24');
-    expect(homeSource).toContain('size={isClaudeCodeAgentKind(item.session.agentKind) ? 19 : iconSize.lg}');
+    expect(homeSource).toContain('width: iconSize.md');
+    expect(homeSource).toContain('size={cindyList ? iconSize.sm : isClaudeCodeAgentKind(item.session.agentKind) ? 19 : iconSize.lg}');
     expect(homeSource).toContain("function isClaudeCodeAgentKind(agentKind: string): boolean");
     expect(homeSource).toContain("return agentKind !== 'codex';");
     expect(homeSource).not.toContain('sessionAttentionDot: {\n    backgroundColor: colors.statusAccent,\n    borderColor: colors.surface');
@@ -261,8 +262,12 @@ describe('mobile home desktop-first surface', () => {
     expect(sessionRowSource).toContain('styles.sessionTrailingIcons');
     expect(sessionRowSource).not.toContain('SessionBadge');
     expect(source).toContain('const HOME_SESSION_ROW_HEIGHT = 78;');
+    expect(source).toContain('const CINDY_LIST_ROW_HEIGHT = 60;');
+    expect(source).toContain('variant="cindyList"');
+    expect(source).toContain("type HomeSessionRowVariant = 'legacy' | 'cindyList';");
     expect(stylesSource).toContain('height: HOME_SESSION_ROW_HEIGHT');
-    expect(stylesSource).toContain('height: lineHeight.subtitle');
+    expect(stylesSource).toContain('height: CINDY_LIST_ROW_HEIGHT');
+    expect(stylesSource).toContain('height: lineHeight.micro');
   });
 
   it('keeps presence updates local and refreshes full home sync on every reconnect', () => {

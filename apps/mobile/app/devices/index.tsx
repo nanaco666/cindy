@@ -137,11 +137,17 @@ const DEVICE_LIST_TIMEOUT_MS = 12_000;
 // 项目组与自动化组展开后的子列表共用同一个预览限量(设备详情页也 import 复用,避免两处漂移)。
 export const PROJECT_PREVIEW_LIMIT = 5;
 const HOME_SESSION_ROW_HEIGHT = 78;
-const HOME_HEADER_MIN_HEIGHT = 88;
+const CINDY_LIST_GUTTER = 20;
+const CINDY_LIST_ROW_HEIGHT = 60;
+const CINDY_LIST_ROW_GAP = 10;
+const CINDY_LIST_FAB_SIZE = 55;
+const CINDY_LIST_FAB_BOTTOM = 45;
+const HOME_HEADER_MIN_HEIGHT = 48;
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 type RemoteListStatusFilter = Extract<RemoteSessionStatusFilter, 'active' | 'archived' | 'all'>;
 type HomeDeviceConnectionState = 'idle' | 'syncing' | 'failed';
+type HomeSessionRowVariant = 'legacy' | 'cindyList';
 type HydrateDeviceSessionsResult = {
   failure: string | null;
   offline: boolean;
@@ -1145,6 +1151,7 @@ export default function HomeScreen() {
         suppressBlockTopBorder={prevIsBlock}
         swipe={sessionSwipeControls}
         testID={homeSessionRowTestId(item.source)}
+        variant="cindyList"
       />
     );
     // 普通会话行(含置顶区)在这里挂滑动操作;自动化组行不挂 —— 组行代表多次运行,
@@ -1256,7 +1263,7 @@ export default function HomeScreen() {
         contentContainerStyle={[
           styles.listContent,
           {
-            paddingBottom: 96 + insets.bottom,
+            paddingBottom: 83 + insets.bottom,
           },
         ]}
         onScrollBeginDrag={() => {
@@ -1270,15 +1277,15 @@ export default function HomeScreen() {
             accessibilityRole="button"
             accessibilityState={{ expanded: !pinnedCollapsed }}
             onPress={togglePinned}
-            style={({ pressed }) => [styles.projectRow, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.projectRow, styles.pinnedHeader, pressed && styles.pressed]}
             testID="home.pinnedHeader"
           >
             {pinnedCollapsed ? (
-              <ChevronRight color={colors.textSecondary} size={iconSize.xl} strokeWidth={iconStroke.regular} />
+              <ChevronRight color={colors.textSecondary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
             ) : (
-              <ChevronDown color={colors.textSecondary} size={iconSize.xl} strokeWidth={iconStroke.regular} />
+              <ChevronDown color={colors.textSecondary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
             )}
-            <Pin color={colors.textSecondary} size={iconSize.action} strokeWidth={iconStroke.thin} />
+            <Pin color={colors.textSecondary} size={iconSize.md} strokeWidth={iconStroke.thin} />
             <Text style={styles.projectTitle} numberOfLines={1}>{section.title}</Text>
             <Text style={styles.projectCount} numberOfLines={1}>{home.pinned.length}</Text>
           </Pressable>
@@ -1326,13 +1333,13 @@ export default function HomeScreen() {
         onPress={() => openNewSession()}
         style={({ pressed }) => [
           styles.newChatButton,
-          { bottom: spacing.lg + insets.bottom },
+          { bottom: CINDY_LIST_FAB_BOTTOM + insets.bottom },
           pressed && styles.pressed,
           newSessionDisabled && styles.disabled,
         ]}
         testID="home.newChatButton"
       >
-        <SquarePen color={colors.ctaText} size={iconSize.xxl} strokeWidth={iconStroke.regular} />
+        <SquarePen color={colors.ctaText} size={iconSize.listGlyph} strokeWidth={iconStroke.regular} />
       </Pressable>
 
       <RevokedAccessTip
@@ -1838,14 +1845,14 @@ function ProjectRow({
         testID="home.projectRow"
       >
         {collapsed ? (
-          <ChevronRight color={colors.textSecondary} size={iconSize.xl} strokeWidth={iconStroke.regular} />
+          <ChevronRight color={colors.textSecondary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
         ) : (
-          <ChevronDown color={colors.textSecondary} size={iconSize.xl} strokeWidth={iconStroke.regular} />
+          <ChevronDown color={colors.textSecondary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
         )}
         {collapsed ? (
-          <Folder color={colors.textSecondary} size={iconSize.xl} strokeWidth={iconStroke.thin} />
+          <Folder color={colors.textSecondary} size={iconSize.md} strokeWidth={iconStroke.thin} />
         ) : (
-          <FolderOpen color={colors.textSecondary} size={iconSize.xl} strokeWidth={iconStroke.thin} />
+          <FolderOpen color={colors.activeGlyph} size={iconSize.md} strokeWidth={iconStroke.thin} />
         )}
         <Text style={styles.projectTitle} numberOfLines={1}>{project.title}</Text>
         <Text style={styles.projectCount} numberOfLines={1}>{project.sessionCount}</Text>
@@ -1866,6 +1873,7 @@ function ProjectRow({
                 onToggleAutomationGroup={onToggleAutomationGroup}
                 swipe={swipe}
                 testID="home.projectSessionRow"
+                variant="cindyList"
               />
             );
             // 与顶层同一条规则:普通会话子行挂滑动,自动化组行不挂(组行语义含混,
@@ -1926,6 +1934,7 @@ export function HomeSessionRow({
   suppressBlockTopBorder = false,
   swipe,
   testID,
+  variant = 'legacy',
 }: {
   /**
    * 自动化组行以「块」呈现:上下各一根全宽分割线,与项目组同款,把任务块和普通对话区分开。
@@ -1956,9 +1965,12 @@ export function HomeSessionRow({
   /** 提供时透传给展开的自动化组子行(子行挂与顶层同款滑动操作);组行自身不消费。 */
   swipe?: SessionSwipeControls;
   testID: string;
+  /** 纯样式变体:设备详情页默认 legacy,首页 List 显式使用 cindyList。 */
+  variant?: HomeSessionRowVariant;
 }) {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
+  const cindyList = variant === 'cindyList';
   const running = remoteSessionStore.isSessionRunning(item.session.id) || !!item.scheduleInfo?.running;
   // attention 合并 main 的 #368:liveActivity.attention 也点亮关注态(组行直开 primary 的判定沿用)。
   const attention = item.pendingInteractionCount > 0
@@ -1999,10 +2011,15 @@ export function HomeSessionRow({
     if (primary) onOpenSession(primary);
   };
   const groupRowOpensPrimary = !!group && attention && !groupExpanded;
+  const standaloneCindyCard = cindyList && !indented && !deepIndented && !blockMode;
   return (
     <View
       style={blockMode
-        ? [styles.automationGroupBlock, suppressBlockTopBorder && styles.automationGroupBlockNoTop]
+        ? [
+          styles.automationGroupBlock,
+          cindyList && styles.automationGroupBlockCindy,
+          suppressBlockTopBorder && !cindyList && styles.automationGroupBlockNoTop,
+        ]
         : undefined}
     >
       <Pressable
@@ -2016,8 +2033,12 @@ export function HomeSessionRow({
           : () => onOpenSession(item)}
         style={({ pressed }) => [
           styles.sessionListRow,
+          cindyList && styles.sessionListRowCindy,
+          standaloneCindyCard && styles.sessionListRowCindyCard,
           indented && styles.sessionListRowIndented,
+          cindyList && indented && styles.sessionListRowIndentedCindy,
           deepIndented && styles.sessionListRowDeepIndented,
+          cindyList && deepIndented && styles.sessionListRowDeepIndentedCindy,
           pressed && styles.pressed,
         ]}
         testID={group ? `${testID}.automationGroup` : testID}
@@ -2035,29 +2056,35 @@ export function HomeSessionRow({
               event.stopPropagation();
               onToggleAutomationGroup?.(group.key);
             }}
-            style={styles.sessionGroupChevronCell}
+            style={[styles.sessionGroupChevronCell, cindyList && styles.sessionGroupChevronCellCindy]}
             testID={`${testID}.automationGroupChevron`}
           >
             {groupExpanded ? (
-              <ChevronDown color={colors.textSecondary} size={iconSize.xl} strokeWidth={iconStroke.regular} />
+              <ChevronDown color={colors.textSecondary} size={cindyList ? iconSize.xs : iconSize.xl} strokeWidth={iconStroke.regular} />
             ) : (
-              <ChevronRight color={colors.textSecondary} size={iconSize.xl} strokeWidth={iconStroke.regular} />
+              <ChevronRight color={colors.textSecondary} size={cindyList ? iconSize.xs : iconSize.xl} strokeWidth={iconStroke.regular} />
             )}
           </Pressable>
         ) : null}
-        <View style={styles.sessionIconCell}>
+        <View style={[styles.sessionIconCell, cindyList && styles.sessionIconCellCindy]}>
           <SessionStatusMark
+            active={running || attention}
             item={item}
             running={running}
             showDraftIndicator={showDraftIndicator}
+            variant={variant}
           />
         </View>
         {/* 组行展开时不画自己的底线(组头 → 子行保持连续无线,块 / 非块模式观感一致);
             非块组行收起时保留底线,与下一行维持分隔。块模式恒不画(收起时块底线就在行下)。 */}
-        <View style={[styles.sessionListContent, (hideDivider || blockMode || (!!group && groupExpanded)) && styles.sessionListContentNoDivider]}>
-          <View style={styles.sessionTitleRow}>
+        <View style={[
+          styles.sessionListContent,
+          cindyList && styles.sessionListContentCindy,
+          (cindyList || hideDivider || blockMode || (!!group && groupExpanded)) && styles.sessionListContentNoDivider,
+        ]}>
+          <View style={[styles.sessionTitleRow, cindyList && styles.sessionTitleRowCindy]}>
             <Text
-              style={styles.sessionTitle}
+              style={[styles.sessionTitle, cindyList && styles.sessionTitleCindy]}
               ellipsizeMode="tail"
               numberOfLines={1}
               testID={`home.sessionRowTitle.${item.session.id}`}
@@ -2065,13 +2092,13 @@ export function HomeSessionRow({
               {item.title}
             </Text>
             {rightStatus === 'time' ? (
-              <Text style={styles.sessionTime} numberOfLines={1}>
+              <Text style={[styles.sessionTime, cindyList && styles.sessionTimeCindy]} numberOfLines={1}>
                 {formatRemoteSessionSidebarTime(item.lastActivityAt)}
               </Text>
             ) : (
               // 统一 18×18 定位槽(对齐桌面 size-4 槽的做法):点(10)与 spinner(15)
               // 尺寸不同,裸放会导致两者横/纵中心不一致,先居中到同一槽再谈对齐。
-              <View style={styles.sessionRightStatusCell}>
+              <View style={[styles.sessionRightStatusCell, cindyList && styles.sessionRightStatusCellCindy]}>
                 {rightStatus === 'running' ? (
                   // 与桌面右槽完全同款:lucide Loader2/LoaderCircle 圆弧 + 1s 匀速旋转
                   // (对齐 Tailwind animate-spin),中性色 —— running 的橙色语义由行首
@@ -2094,11 +2121,11 @@ export function HomeSessionRow({
               </View>
             )}
           </View>
-          <View style={styles.sessionPreviewRow}>
+          <View style={[styles.sessionPreviewRow, cindyList && styles.sessionPreviewRowCindy]}>
             <Text
               ellipsizeMode="tail"
               numberOfLines={1}
-              style={styles.sessionPreview}
+              style={[styles.sessionPreview, cindyList && styles.sessionPreviewCindy]}
               testID={`home.sessionRowPreview.${item.session.id}`}
             >
               {preview}
@@ -2106,9 +2133,9 @@ export function HomeSessionRow({
             {showSchedule || showPinned ? (
               // 组行与单次自动化会话行同款标记:Clock 放右下(时间下方的尾部图标位),
               // 行首保留正常的会话状态图标(primary 运行的 vendor / 运行态)。
-              <View style={styles.sessionTrailingIcons}>
-                {showSchedule ? <Clock color={colors.textTertiary} size={iconSize.lg} strokeWidth={iconStroke.thin} /> : null}
-                {showPinned ? <Pin color={colors.textTertiary} size={iconSize.lg} strokeWidth={iconStroke.thin} /> : null}
+              <View style={[styles.sessionTrailingIcons, cindyList && styles.sessionTrailingIconsCindy]}>
+                {showSchedule ? <Clock color={colors.textTertiary} size={cindyList ? iconSize.xs : iconSize.lg} strokeWidth={iconStroke.thin} /> : null}
+                {showPinned ? <Pin color={colors.textTertiary} size={cindyList ? iconSize.xs : iconSize.lg} strokeWidth={iconStroke.thin} /> : null}
               </View>
             ) : null}
           </View>
@@ -2122,6 +2149,7 @@ export function HomeSessionRow({
           onOpenSession={onOpenSession}
           swipe={swipe}
           testID={testID}
+          variant={variant}
         />
       ) : null}
     </View>
@@ -2141,6 +2169,7 @@ function AutomationGroupChildren({
   onOpenSession,
   swipe,
   testID,
+  variant = 'legacy',
 }: {
   group: RemoteAutomationSessionGroup;
   /** 组行处于块模式(上下全宽线):块内最后一个元素不画自己的缩进线,避免与块底线叠成粗线。 */
@@ -2150,6 +2179,7 @@ function AutomationGroupChildren({
   /** 提供时每条子运行挂与顶层普通会话行同款的左右滑操作。 */
   swipe?: SessionSwipeControls;
   testID: string;
+  variant?: HomeSessionRowVariant;
 }) {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
@@ -2160,7 +2190,7 @@ function AutomationGroupChildren({
   });
   const hasViewAllRow = hiddenCount > 0 && !!onOpenGroup;
   return (
-    <View style={styles.automationGroupChildren} testID={`${testID}.automationGroupChildren`}>
+    <View style={[styles.automationGroupChildren, variant === 'cindyList' && styles.automationGroupChildrenCindy]} testID={`${testID}.automationGroupChildren`}>
       {visibleItems.map((child, index) => {
         const row = (
           <HomeSessionRow
@@ -2169,6 +2199,7 @@ function AutomationGroupChildren({
             item={child}
             onOpenSession={onOpenSession}
             testID={`${testID}.automationChild`}
+            variant={variant}
           />
         );
         if (!swipe) return <Fragment key={child.session.id}>{row}</Fragment>;
@@ -2193,6 +2224,7 @@ function AutomationGroupChildren({
           onPress={() => onOpenGroup?.(group)}
           style={({ pressed }) => [
             styles.automationViewAllRow,
+            variant === 'cindyList' && styles.automationViewAllRowCindy,
             !inBlock && styles.automationViewAllRowDivider,
             pressed && styles.pressed,
           ]}
@@ -2201,7 +2233,7 @@ function AutomationGroupChildren({
           <Text style={styles.projectViewAllText} numberOfLines={1}>
             {`查看全部 ${group.sessionCount} 次运行`}
           </Text>
-          <ChevronRight color={colors.textTertiary} size={iconSize.action} strokeWidth={iconStroke.regular} />
+          <ChevronRight color={colors.textTertiary} size={variant === 'cindyList' ? iconSize.xs : iconSize.action} strokeWidth={iconStroke.regular} />
         </Pressable>
       ) : null}
     </View>
@@ -2225,36 +2257,45 @@ function automationGroupPreview(item: RemoteSessionListItem, sessionCount: numbe
 // 状态提醒点已移到行右侧(替代时间位,与桌面一致),行首图标只保留 vendor 标识 +
 // running 呼吸 + 草稿铅笔,不再叠角标点。
 function SessionStatusMark({
+  active = false,
   item,
   running,
   showDraftIndicator,
+  variant = 'legacy',
 }: {
+  active?: boolean;
   item: RemoteSessionListItem;
   running: boolean;
   showDraftIndicator: boolean;
+  variant?: HomeSessionRowVariant;
 }) {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
   const archived = item.session.status === 'archived';
   const orcaLead = item.session.orcaRole === 'lead';
   const attached = readBooleanField(item.session, 'attached') || readBooleanField(item.session, 'deviceLinkAttached');
+  const cindyList = variant === 'cindyList';
+  const glyphColor = cindyList
+    ? active ? colors.activeGlyph : colors.textSecondary
+    : running ? colors.statusAccent : colors.textTertiary;
   return (
-    <View style={styles.sessionStatusMark}>
+    <View style={[styles.sessionStatusMark, cindyList && styles.sessionStatusMarkCindy]}>
       {archived ? (
-        <Archive color={colors.textTertiary} size={iconSize.lg} strokeWidth={iconStroke.thin} />
+        <Archive color={cindyList ? colors.textSecondary : colors.textTertiary} size={cindyList ? iconSize.sm : iconSize.lg} strokeWidth={iconStroke.thin} />
       ) : orcaLead ? (
         <SessionStatusPulse running={running}>
-          <Puzzle color={running ? colors.statusAccent : colors.textTertiary} size={iconSize.action} strokeWidth={iconStroke.thin} />
+          <Puzzle color={glyphColor} size={cindyList ? iconSize.sm : iconSize.action} strokeWidth={iconStroke.thin} />
         </SessionStatusPulse>
       ) : attached ? (
         <SessionStatusPulse running={running}>
-          <RadioTower color={running ? colors.statusAccent : colors.textTertiary} size={iconSize.lg} strokeWidth={iconStroke.thin} />
+          <RadioTower color={glyphColor} size={cindyList ? iconSize.sm : iconSize.lg} strokeWidth={iconStroke.thin} />
         </SessionStatusPulse>
       ) : (
         <MobileVendorIcon
+          color={glyphColor}
           running={running}
           // Claude 星标 logo 视觉重量偏小,+1px 光学补偿对齐 Codex 标(刻意非阶梯值)。
-          size={isClaudeCodeAgentKind(item.session.agentKind) ? 19 : iconSize.lg}
+          size={cindyList ? iconSize.sm : isClaudeCodeAgentKind(item.session.agentKind) ? 19 : iconSize.lg}
           vendor={item.session.agentKind}
         />
       )}
@@ -2435,15 +2476,14 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     minHeight: HOME_HEADER_MIN_HEIGHT,
-    paddingBottom: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
+    marginBottom: spacing.md,
+    paddingHorizontal: CINDY_LIST_GUTTER,
   },
   headerDropdown: {
     alignItems: 'center',
     flex: 1,
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: 6,
     minHeight: 44,
     minWidth: 0,
     paddingRight: spacing.md,
@@ -2451,28 +2491,28 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   headerTitle: {
     color: colors.textPrimary,
     flexShrink: 1,
-    fontSize: typeScale.title,
-    fontWeight: fontWeight.medium,
-    lineHeight: lineHeight.title,
+    fontSize: typeScale.listTitle,
+    fontWeight: fontWeight.semibold,
+    lineHeight: lineHeight.listTitleCompact,
   },
   avatarButton: {
     alignItems: 'center',
     backgroundColor: colors.surfaceChip,
     borderRadius: radius.pill,
-    height: 52,
+    height: 45,
     justifyContent: 'center',
     overflow: 'hidden',
-    width: 52,
+    width: 45,
   },
   avatarImage: {
-    height: 52,
-    width: 52,
+    height: 45,
+    width: 45,
   },
   avatarText: {
     color: colors.textPrimary,
-    fontSize: typeScale.title,
+    fontSize: typeScale.subtitle,
     fontWeight: fontWeight.semibold,
-    lineHeight: lineHeight.bodyRelaxed,
+    lineHeight: lineHeight.body,
   },
   connectionRow: {
     alignItems: 'center',
@@ -2664,8 +2704,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: typeScale.body,
     fontWeight: fontWeight.semibold,
   },
-  listContent: { flexGrow: 1, paddingBottom: 96, paddingTop: 0 },
-  pinnedFooter: { backgroundColor: colors.border, height: StyleSheet.hairlineWidth },
+  listContent: {
+    flexGrow: 1,
+    paddingBottom: 83,
+    paddingHorizontal: CINDY_LIST_GUTTER,
+    paddingTop: 0,
+  },
+  pinnedFooter: { height: 0 },
   initialLoadingState: {
     alignItems: 'center',
     gap: spacing.sm,
@@ -2678,46 +2723,47 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     lineHeight: lineHeight.code,
   },
   projectGroup: {
-    backgroundColor: colors.surface,
-    // 全宽分割线挂在项目组的顶部与底部:把整个项目块与上方/下方的普通对话分开,
-    // 而非分隔项目头与其下属会话(项目头 → 内容之间保持连续无线)。
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderRadius: 0, // 显式方角覆盖,非漂移
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderWidth: 0,
+    backgroundColor: colors.surfaceListExpanded,
+    borderColor: colors.border,
+    borderRadius: radius.container,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: CINDY_LIST_ROW_GAP,
+    overflow: 'hidden',
   },
   projectGroupNoTop: {
-    // 前一行也是块时不画顶线,避免两根 hairline 叠成一根粗线。
-    borderTopWidth: 0,
+  },
+  pinnedHeader: {
+    borderColor: colors.border,
+    borderRadius: radius.container,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: CINDY_LIST_ROW_GAP,
+    overflow: 'hidden',
   },
   projectRow: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceListRow,
     flexDirection: 'row',
-    gap: 8,
-    minHeight: 56,
-    paddingLeft: spacing.md,
-    paddingRight: spacing.lg,
-    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+    height: CINDY_LIST_ROW_HEIGHT,
+    paddingLeft: 18,
+    paddingRight: 18,
   },
   projectTitle: {
     color: colors.textPrimary,
     flex: 1,
-    fontSize: typeScale.body,
-    fontWeight: fontWeight.medium,
-    lineHeight: lineHeight.listTitle,
+    fontSize: typeScale.listBody,
+    fontWeight: fontWeight.semibold,
+    lineHeight: lineHeight.listBody,
     minWidth: 0,
   },
   projectCount: {
-    color: colors.textTertiary,
-    fontSize: typeScale.footnote,
+    color: colors.textSecondary,
+    fontSize: typeScale.micro,
     fontWeight: fontWeight.regular,
-    lineHeight: lineHeight.subtitle,
+    lineHeight: lineHeight.micro,
   },
   projectChildren: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceListExpanded,
   },
   projectViewAllRow: {
     // 永远是项目块的最后一个元素:不画自己的下线,块底部的全宽线就是分割线
@@ -2725,16 +2771,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: spacing.sm,
-    minHeight: 54,
-    paddingLeft: 48,
-    paddingRight: spacing.lg,
+    height: CINDY_LIST_ROW_HEIGHT,
+    paddingLeft: 55,
+    paddingRight: 18,
   },
   projectViewAllText: {
     color: colors.textSecondary,
     flex: 1,
-    fontSize: typeScale.body,
+    fontSize: typeScale.listBody,
     fontWeight: fontWeight.medium,
-    lineHeight: lineHeight.body,
+    lineHeight: lineHeight.listBody,
   },
   sessionListRow: {
     alignItems: 'stretch',
@@ -2744,15 +2790,34 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     height: HOME_SESSION_ROW_HEIGHT,
     paddingLeft: spacing.md,
   },
+  sessionListRowCindy: {
+    backgroundColor: colors.surfaceListRow,
+    gap: spacing.sm,
+    height: CINDY_LIST_ROW_HEIGHT,
+    paddingLeft: 18,
+  },
+  sessionListRowCindyCard: {
+    borderColor: colors.border,
+    borderRadius: radius.container,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: CINDY_LIST_ROW_GAP,
+    overflow: 'hidden',
+  },
   sessionListRowIndented: {
     // 项目下属会话向右多缩进一档,让"隶属于该项目"在视觉上更明显
     // (连同行内分割线一起右移,形成嵌套层级感)。
     paddingLeft: spacing.md + spacing.lg,
   },
+  sessionListRowIndentedCindy: {
+    paddingLeft: 30,
+  },
   sessionListRowDeepIndented: {
     // 自动化组子行:比 indented 再深一档(缩进全部收在行内,滑动包装全宽才能贴屏边),
     // 保证子行始终比组行(无论组行在 chats 还是项目组内)更深一层。
     paddingLeft: spacing.md + spacing.lg * 2,
+  },
+  sessionListRowDeepIndentedCindy: {
+    paddingLeft: 46,
   },
   automationGroupBlock: {
     // 自动化组(组行 + 展开的子行)整体成块:上下各一根全宽分割线,与项目组(projectGroup)
@@ -2767,10 +2832,21 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     // 前一行也是块时不画顶线:前块的底线就是这根分割线,再画会叠成一根粗线。
     borderTopWidth: 0,
   },
+  automationGroupBlockCindy: {
+    backgroundColor: colors.surfaceListExpanded,
+    borderColor: colors.border,
+    borderRadius: radius.container,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: CINDY_LIST_ROW_GAP,
+    overflow: 'hidden',
+  },
   automationGroupChildren: {
     // 自动化组展开的子运行容器:不再用容器 padding 做缩进(会把子行的滑动包装挤离屏边),
     // 深一档的缩进由子行自身的 sessionListRowDeepIndented 承担,视觉层级不变。
     backgroundColor: colors.surface,
+  },
+  automationGroupChildrenCindy: {
+    backgroundColor: colors.surfaceListExpanded,
   },
   automationViewAllRow: {
     // 「查看全部 N 次运行」:与项目组「查看全部 N 条对话」同款行样式,
@@ -2781,6 +2857,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     minHeight: 54,
     paddingLeft: spacing.md + spacing.lg * 2 + 24 + spacing.md,
     paddingRight: spacing.lg,
+  },
+  automationViewAllRowCindy: {
+    height: CINDY_LIST_ROW_HEIGHT,
+    paddingLeft: 61,
+    paddingRight: 18,
   },
   automationViewAllRowDivider: {
     // 仅非块模式(项目组内部的自动化组)画自己的下线;块模式下块底线负责,不再叠一根。
@@ -2793,6 +2874,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingTop: 22,
     width: 24,
   },
+  sessionIconCellCindy: {
+    paddingTop: spacing.sm,
+    width: iconSize.md,
+  },
   sessionGroupChevronCell: {
     // 自动化组行行首的展开箭头列:与项目组行首 chevron 对齐(尺寸 22、次级色),
     // 垂直对齐标题行(与 sessionIconCell 同一基线)。
@@ -2802,6 +2887,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingTop: 23,
     width: 22,
   },
+  sessionGroupChevronCellCindy: {
+    paddingTop: spacing.sm,
+    width: iconSize.xs,
+  },
   sessionListContent: {
     borderBottomColor: colors.border,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -2810,6 +2899,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     minWidth: 0,
     paddingBottom: spacing.sm,
     paddingRight: spacing.lg,
+    paddingTop: spacing.sm,
+  },
+  sessionListContentCindy: {
+    paddingBottom: spacing.sm,
+    paddingRight: 18,
     paddingTop: spacing.sm,
   },
   sessionListContentNoDivider: {
@@ -2823,6 +2917,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     gap: spacing.sm,
     height: 30,
   },
+  sessionTitleRowCindy: {
+    height: lineHeight.listBody,
+  },
   sessionStatusMark: {
     alignItems: 'center',
     height: 24,
@@ -2830,6 +2927,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     overflow: 'visible',
     position: 'relative',
     width: 24,
+  },
+  sessionStatusMarkCindy: {
+    height: iconSize.md,
+    width: iconSize.md,
   },
   // 右侧状态槽(替代时间位):18×18 定位槽把点与 spinner 居中到同一锚点;
   // 点 10px(桌面 size-2=8px,手机屏幕密度高、观看距离远,放大一档保证可辨识,
@@ -2840,6 +2941,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     height: 18,
     justifyContent: 'center',
     width: 18,
+  },
+  sessionRightStatusCellCindy: {
+    height: iconSize.md,
+    width: iconSize.md,
   },
   sessionRightDot: {
     borderRadius: radius.pill, // 10x10 圆点:pill 钳制为半径 5,与原字面量视觉一致
@@ -2864,11 +2969,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     lineHeight: lineHeight.listTitle,
     minWidth: 0,
   },
+  sessionTitleCindy: {
+    fontSize: typeScale.listBody,
+    lineHeight: lineHeight.listBody,
+  },
   sessionPreviewRow: {
     alignItems: 'flex-start',
     flexDirection: 'row',
     gap: spacing.sm,
     height: lineHeight.subtitle,
+  },
+  sessionPreviewRowCindy: {
+    height: lineHeight.micro,
   },
   sessionPreview: {
     color: colors.textSecondary,
@@ -2878,6 +2990,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     lineHeight: lineHeight.subtitle,
     minWidth: 0,
   },
+  sessionPreviewCindy: {
+    fontSize: typeScale.micro,
+    lineHeight: lineHeight.micro,
+  },
   sessionTrailingIcons: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -2886,6 +3002,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     minHeight: lineHeight.subtitle,
     paddingTop: 3,
   },
+  sessionTrailingIconsCindy: {
+    minHeight: lineHeight.micro,
+    paddingTop: 0,
+  },
   sessionTime: {
     color: colors.textTertiary,
     flexShrink: 0,
@@ -2893,17 +3013,22 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: fontWeight.regular,
     lineHeight: lineHeight.body,
   },
+  sessionTimeCindy: {
+    color: colors.textSecondary,
+    fontSize: typeScale.micro,
+    lineHeight: lineHeight.micro,
+  },
   newChatButton: {
     alignItems: 'center',
     backgroundColor: colors.homeListFab,
     borderColor: colors.border,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
-    bottom: spacing.lg,
-    height: 64,
+    bottom: CINDY_LIST_FAB_BOTTOM,
+    height: CINDY_LIST_FAB_SIZE,
     justifyContent: 'center',
     position: 'absolute',
-    right: spacing.lg,
-    width: 64,
+    right: CINDY_LIST_GUTTER,
+    width: CINDY_LIST_FAB_SIZE,
   },
 });
