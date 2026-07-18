@@ -329,22 +329,26 @@ export function registerVoiceInputDataStoreIpc(): void {
   });
 
   ipcMain.on('voice-input:history:update', (event, payload: { id?: string; text?: string }) => {
-    if (typeof payload?.id === 'string' && typeof payload.text === 'string') {
-      try {
+    try {
+      if (typeof payload?.id === 'string' && typeof payload.text === 'string') {
         voiceInputDataStore.updateHistoryEntry(payload.id, payload.text);
-      } catch (error) {
-        event.returnValue = voiceInputDataStoreIpcErrorResult(error);
       }
+      // Every ipcRenderer.sendSync caller must receive a value. Leaving the
+      // success path unset blocks the renderer forever after refinement.
+      event.returnValue = true;
+    } catch (error) {
+      event.returnValue = voiceInputDataStoreIpcErrorResult(error);
     }
   });
 
   ipcMain.on('voice-input:history:delete', (event, id: string) => {
-    if (typeof id === 'string') {
-      try {
+    try {
+      if (typeof id === 'string') {
         voiceInputDataStore.deleteHistoryEntry(id);
-      } catch (error) {
-        event.returnValue = voiceInputDataStoreIpcErrorResult(error);
       }
+      event.returnValue = true;
+    } catch (error) {
+      event.returnValue = voiceInputDataStoreIpcErrorResult(error);
     }
   });
 }
