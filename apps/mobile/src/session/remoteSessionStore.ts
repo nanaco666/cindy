@@ -443,7 +443,10 @@ export const remoteSessionStore = {
       const createdAt = item.createdAt;
       const isNewerThanLatestPage = createdAt.localeCompare(latestNewestCreatedAt) >= 0;
       const isOlderLoadedPage = hasOverlap && createdAt.localeCompare(latestOldestCreatedAt) < 0;
-      if (isNewerThanLatestPage || isOlderLoadedPage) {
+      // 本地系统卡(/learn、/context 等)没有服务端对应行:不管时序落在窗口哪里都
+      // 不会出现在 latestKeys 里,若不单独保留会被 window 刷新时静默丢弃。
+      const isLocalSystemCard = messageKey(item).startsWith('mobile-system-');
+      if (isNewerThanLatestPage || isOlderLoadedPage || isLocalSystemCard) {
         byKey.set(messageKey(item), item);
       }
     }
