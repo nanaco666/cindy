@@ -112,16 +112,16 @@ export function PermissionSelector({
             type="button"
             disabled={disabled}
             className={cn(
-              'flex min-w-0 items-center gap-1 rounded-full transition-colors',
+              'flex min-w-0 items-center gap-1 overflow-hidden rounded-full transition-colors',
               isCreateAgentVariant
                 ? [
-                    'h-[30px] min-w-[90px] max-w-none shrink-0 border border-[var(--create-agent-control-border)]',
+                    'h-[30px] min-w-[72px] max-w-full shrink border border-[var(--create-agent-control-border)]',
                     'bg-[var(--create-agent-control-bg)] py-0 pl-2.5 pr-2 text-[var(--create-agent-control-text)]',
                     'hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)]',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
                   ]
                 : [
-                    'h-[30px] min-w-max shrink-0 px-2.5',
+                    'h-[30px] min-w-[72px] max-w-full shrink px-2.5',
                     'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] border border-[var(--border-default)] text-[var(--text-primary)]' /* spec 2026-07-17, token by 一哥; fallback 待注册后删 */,
                     'hover:bg-[var(--model-trigger-hover)]',
                   ],
@@ -139,9 +139,7 @@ export function PermissionSelector({
               className={cn(
                 // min-w-0 让 span 能在 flex 容器里跌破内容宽度,truncate 才能在窄宽下出现 "完..."
                 'min-w-0 font-normal text-current',
-                isCreateAgentVariant
-                  ? 'whitespace-nowrap'
-                  : 'whitespace-nowrap',
+                'truncate',
                 isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
               )}
             >

@@ -4303,15 +4303,15 @@ export function ChatInput({
             // "在元素上起选",从相邻可选区起拖再划入时按钮文字仍会被刷蓝
             // (同 sortable.css 侧栏行修过的 selection bleed),容器级禁选才挡得住。
             'mt-[2px] flex select-none items-center justify-between',
-            effectiveCompactToolbar && (isCreateAgentVariant ? 'min-w-0 gap-2 overflow-hidden' : 'min-w-0 gap-1'),
+            effectiveCompactToolbar && (isCreateAgentVariant ? 'min-w-0 gap-2 overflow-hidden' : 'min-w-0 gap-1 overflow-hidden'),
           )}
         >
           <div
             className={cn(
               effectiveCompactToolbar
                 ? isCreateAgentVariant
-                  ? 'flex shrink-0 items-center gap-2'
-                  : 'flex min-w-0 shrink items-center gap-1'
+                  ? 'flex min-w-0 shrink items-center gap-2 overflow-hidden'
+                  : 'flex min-w-0 shrink items-center gap-1 overflow-hidden'
                 : 'flex items-center gap-2',
               // create-agent 按 Figma 使用 hug-content pills;默认会话页仍保留左侧优先压缩。
             )}
@@ -4363,11 +4363,11 @@ export function ChatInput({
               effectiveCompactToolbar
                 ? isCreateAgentVariant
                   ? 'flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2 overflow-hidden'
-                  : 'flex items-center gap-1'
+                  : 'flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-1 overflow-hidden'
                 : 'flex items-center gap-2',
-              // compact 模式下默认会话右侧(fast/collab/model/voice/send)保持完整宽度;
-              // create-agent 保持单行,由模型 pill 内部截断承压,避免控件掉到第二行。
-              effectiveCompactToolbar && (isCreateAgentVariant ? 'justify-end' : 'shrink-0 justify-end'),
+              // compact 模式下所有输入框工具行保持单行;权限 / 模型 pill 内部截断承压,
+              // 圆形操作按钮与协同图标按钮保持固定宽,避免控件重叠或掉到第二行。
+              effectiveCompactToolbar && 'justify-end',
             )}
           >
             {middleToolbarSlot}
