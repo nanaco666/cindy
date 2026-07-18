@@ -199,7 +199,9 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(modelSelectorSource).not.toContain("'h-[30px] min-w-max shrink-0");
     expect(modelSelectorSource).not.toContain("'h-[30px] w-[206px] min-w-[160px] max-w-[206px]");
     expect(modelSelectorSource).toContain("? 'truncate'");
-    expect(modelSelectorSource).toContain("? 'shrink-0 whitespace-nowrap'");
+    expect(modelSelectorSource).toContain("? 'truncate'");
+    expect(modelSelectorSource).toContain('<ChevronDown');
+    expect(modelSelectorSource).toContain("'shrink-0'");
     expect(chatInputSource).toContain("className={isCreateAgentVariant ? 'ml-[7px]' : undefined}");
   });
 
