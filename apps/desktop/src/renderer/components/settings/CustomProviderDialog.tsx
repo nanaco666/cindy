@@ -444,10 +444,15 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
     }
   }, [activeTab, rt, t]);
 
+  // 拉取单飞：任一 runtime 在途时两个 Tab 的拉取按钮都禁用——两个并发请求会竞争同一个
+  // 勾选弹层（后到的覆盖先开的、确认还会写进另一个 runtime），单飞直接消掉这类竞态。
+  const anyFetching = fetchingModels['claude-code'] || fetchingModels.codex;
+
   /** 获取模型列表：用当前 Tab 表单值 GET 列模型端点（key 仅内存透传），成功后开勾选弹层。 */
   const handleFetchModels = useCallback(async () => {
     const agent = activeTab;
     const rf = rt[agent];
+    if (fetchingModels['claude-code'] || fetchingModels.codex) return; // 单飞（按钮已禁用，兜底）
     const baseUrl = rf.baseUrl.trim();
     if (!baseUrl) {
       toast.error(t('settings.providers.custom.fetch.needBaseUrl'));
@@ -492,7 +497,7 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
     } finally {
       setFetchingModels((prev) => ({ ...prev, [agent]: false }));
     }
-  }, [activeTab, rt, t]);
+  }, [activeTab, rt, fetchingModels, t]);
 
   /**
    * 勾选弹层确认：勾选集写回该 runtime 的模型行。基于**确认时的最新表单行**合并，
@@ -993,15 +998,16 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
                   ? t('settings.providers.custom.test.testing')
                   : t('settings.providers.custom.test.button')}
               </button>
-              {/* 获取模型列表：GET 该供应商的列模型端点，成功后开勾选弹层填进上方模型行。 */}
+              {/* 获取模型列表：GET 该供应商的列模型端点，成功后开勾选弹层填进上方模型行。
+                  disabled 用 anyFetching（单飞）：另一 Tab 在途时本 Tab 也不许发起。 */}
               <button
                 type="button"
                 onClick={() => void handleFetchModels()}
-                disabled={fetchingModels[activeTab]}
+                disabled={anyFetching}
                 className={cn(
                   'inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-12 font-medium transition-colors active:scale-[0.98]',
                   'border-[var(--settings-input-border)] text-[var(--settings-section-title)] hover:bg-[var(--surface-hover)]',
-                  fetchingModels[activeTab] && 'cursor-not-allowed opacity-60',
+                  anyFetching && 'cursor-not-allowed opacity-60',
                 )}
               >
                 {fetchingModels[activeTab] ? (
