@@ -255,17 +255,20 @@ export const radius = {
 
 /**
  * 收敛后的字号阶梯(对标桌面 hierarchy,保持克制)。
- * micro..headline 为工作号;largeTitle 是首页大标题(iOS large title 风格);hero 留给 login 品牌位。
+ * micro..headline 为工作号;listBody/listTitle 为 CINDY List 页专用档;
+ * largeTitle 是首页大标题(iOS large title 风格);hero 留给 login 品牌位。
  * 阶梯外字号一律禁止——需要新号先回本文件扩档,不许在组件里写字面量(有守护测试拦截)。
  */
 export const typeScale = {
   micro: 11,
   caption: 12,
   footnote: 13,
+  listBody: 14,
   code: 15,
   body: 16,
   bodyLarge: 17,
   subtitle: 18,
+  listTitle: 19,
   title: 20,
   headline: 24,
   largeTitle: 30,
@@ -276,18 +279,21 @@ export const typeScale = {
  * 与字号配对的行高。除标准配对外只有三个场景档:
  * - bodyLarge(17/24):对话消息流正文(对齐 iOS 对话类 app 的 17pt 惯例);
  * - bodyRelaxed(16/24):login 副标题等宽松正文;
- * - listTitle(18/28、20/28):首页列表标题类,行高撑触控行。
+ * - listBody/listTitleCompact(14/20、19/27):CINDY List 页 M2 施工图专用;
+ * - listTitle(18/28、20/28):既有首页列表标题类,行高撑触控行。
  * micro(16) 同时服务紧凑 caption 场景(diff 行、媒体 hint 等行高即盒高的地方)。
  */
 export const lineHeight = {
   micro: 16,
   caption: 18,
+  listBody: 20,
   code: 20,
   body: 22,
   bodyRelaxed: 24,
   bodyLarge: 24,
   title: 25,
   subtitle: 26,
+  listTitleCompact: 27,
   listTitle: 28,
   headline: 30,
   largeTitle: 36,
@@ -311,11 +317,13 @@ export const textStyles = {
   micro: { fontSize: typeScale.micro, lineHeight: lineHeight.micro },
   caption: { fontSize: typeScale.caption, lineHeight: lineHeight.caption },
   footnote: { fontSize: typeScale.footnote, lineHeight: lineHeight.caption },
+  listBody: { fontSize: typeScale.listBody, lineHeight: lineHeight.listBody },
   code: { fontSize: typeScale.code, lineHeight: lineHeight.code },
   body: { fontSize: typeScale.body, lineHeight: lineHeight.body },
   bodyRelaxed: { fontSize: typeScale.body, lineHeight: lineHeight.bodyRelaxed },
   bodyLarge: { fontSize: typeScale.bodyLarge, lineHeight: lineHeight.bodyLarge },
   subtitle: { fontSize: typeScale.subtitle, lineHeight: lineHeight.subtitle },
+  listTitle: { fontSize: typeScale.listTitle, lineHeight: lineHeight.listTitleCompact },
   title: { fontSize: typeScale.title, lineHeight: lineHeight.title },
   headline: { fontSize: typeScale.headline, lineHeight: lineHeight.headline },
   largeTitle: { fontSize: typeScale.largeTitle, lineHeight: lineHeight.largeTitle },
@@ -334,6 +342,7 @@ export const iconSize = {
   md: 16,
   lg: 18,
   action: 20,
+  listGlyph: 21,
   xl: 22,
   xxl: 26,
   display: 32,

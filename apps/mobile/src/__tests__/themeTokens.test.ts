@@ -6,6 +6,7 @@ import {
   lightColors,
   lineHeight,
   palettes,
+  textStyles,
   typeScale,
   type ThemeColors,
 } from '@/theme/tokens';
@@ -134,6 +135,16 @@ describe('theme tokens', () => {
     for (const value of [...Object.values(lineHeight), ...Object.values(iconSize)]) {
       expect(value).toBeGreaterThan(0);
     }
+  });
+
+  it('M1 List typography / icon 语义档补齐施工图缺口', () => {
+    expect(typeScale.listBody).toBe(14);
+    expect(lineHeight.listBody).toBe(20);
+    expect(textStyles.listBody).toEqual({ fontSize: 14, lineHeight: 20 });
+    expect(typeScale.listTitle).toBe(19);
+    expect(lineHeight.listTitleCompact).toBe(27);
+    expect(textStyles.listTitle).toEqual({ fontSize: 19, lineHeight: 27 });
+    expect(iconSize.listGlyph).toBe(21);
   });
 
   it('fontWeight 只暴露四档字符串(bold 仅限 login 品牌 hero)', () => {
