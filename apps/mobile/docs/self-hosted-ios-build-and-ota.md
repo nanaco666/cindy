@@ -122,6 +122,10 @@ if (process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST === '1') {
 3. **整包发现(新增)**:新增一个轻量 service(main/render 解耦,逻辑放可单测的纯函数),启动/进设置时拉 `/latest`,按第 5 节表格比对 `Updates.runtimeVersion`,触发"去更新"弹窗 → `Linking.openURL(itmsUrl)`。
 4. **bundleIdentifier 统一为 `com.xd.lizcn`**;`scheme` 固定为 `lizcn`。EAS/TestFlight 默认优先走飞书 App 原生 SSO;自建线是否启用由发布 env 控制,启用时必须保留浏览器 OAuth 兜底以覆盖 §13 的 appId callback scheme 共装风险。
 
+## 6.5 地区分包(region,cn / global)
+
+自建线四脚本(`release-ios-{local,ota,check}.mjs` + android 对应)**必须显式 `--region cn|global`**(无默认,缺失即报错;`lib/self-host-region.mjs` 解析)。随地区变的**非机密**分包参数集中在打包机本地 `scripts/self-host-regions.json`(纯值、gitignore;结构见 `self-host-regions.json.example`):`iosBundleId`(cn=`com.xd.cindycn` / global=`com.xd.cindy`)、`npkgExpectBundle`、`oss.{cdnBaseUrl,bucket,prefix,ossRegion}`、`iosSigning.{teamId,profileName,signIdentity,profilePath}`。脚本读该 region 的 `oss.*` 覆盖 `XDT_OSS_*` 后 `refreshOssConfig()`,切到该地区独立 bucket(两地不撞)。真机密仍走 env:OSS AK/SK 同账号用 `FP_DEV_OSS_ACCESS_KEY_ID/SECRET`、不同账号用 `XDT_OSS_ACCESS_KEY_{ID,SECRET}_{CN,GLOBAL}`(iOS 无 keystore 口令)。`app.config.js` 自建分支同样按 `EXPO_PUBLIC_CINDY_AUTH_REGION` 从该 JSON 取 bundleId(真文件缺失时回落 `.example`,只取公开 bundle 身份)。
+
 ## 7. 冷更:`apps/mobile/scripts/release-ios-local.mjs`
 
 复用 `release-lib.mjs` 的参数解析 / git 闸门 / dry-run 风格。步骤:

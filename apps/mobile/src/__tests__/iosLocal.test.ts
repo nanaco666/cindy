@@ -52,26 +52,26 @@ describe('compareBuildNumbers / assertBuildNumberMonotonic', () => {
   });
 });
 
-describe('resolveIosSigningEnv', () => {
-  const FULL = {
-    XDT_IOS_TEAM_ID: 'TEAM123456',
-    XDT_IOS_PROFILE_NAME: 'some_profile',
-    XDT_IOS_SIGN_IDENTITY: 'Apple Development',
+describe('resolveIosSigningEnv（从 region JSON 的 iosSigning 取值,非机密)', () => {
+  const REGION = {
+    authRegion: 'cn',
+    iosSigning: { teamId: 'TEAM123456', profileName: 'some_profile', signIdentity: 'Apple Development' },
   };
-  it('三项必填 env 齐全 → 透传;profilePath 可选缺省为空串', () => {
-    expect(resolveIosSigningEnv(FULL)).toEqual({
+  const withSigning = (patch) => ({ ...REGION, iosSigning: { ...REGION.iosSigning, ...patch } });
+  it('三项齐全 → 透传;profilePath 可选缺省为空串', () => {
+    expect(resolveIosSigningEnv(REGION)).toEqual({
       teamId: 'TEAM123456', profileName: 'some_profile', identity: 'Apple Development', profilePath: '',
     });
-    expect(resolveIosSigningEnv({ ...FULL, XDT_IOS_PROFILE_PATH: '/tmp/p.mobileprovision' }).profilePath)
+    expect(resolveIosSigningEnv(withSigning({ profilePath: '/tmp/p.mobileprovision' })).profilePath)
       .toBe('/tmp/p.mobileprovision');
   });
-  it('缺任一必填项 → 抛错并点名缺失的 env(零代码默认值,不回落)', () => {
-    expect(() => resolveIosSigningEnv({ ...FULL, XDT_IOS_TEAM_ID: '' })).toThrow(/XDT_IOS_TEAM_ID/);
-    expect(() => resolveIosSigningEnv({ ...FULL, XDT_IOS_PROFILE_NAME: ' ' })).toThrow(/XDT_IOS_PROFILE_NAME/);
-    expect(() => resolveIosSigningEnv({ ...FULL, XDT_IOS_SIGN_IDENTITY: undefined })).toThrow(/XDT_IOS_SIGN_IDENTITY/);
+  it('缺任一必填项 → 抛错并点名缺失字段(不回落)', () => {
+    expect(() => resolveIosSigningEnv(withSigning({ teamId: '' }))).toThrow(/teamId/);
+    expect(() => resolveIosSigningEnv(withSigning({ profileName: ' ' }))).toThrow(/profileName/);
+    expect(() => resolveIosSigningEnv(withSigning({ signIdentity: undefined }))).toThrow(/signIdentity/);
   });
   it('全缺 → 错误信息按序列出全部三项', () => {
-    expect(() => resolveIosSigningEnv({})).toThrow(/XDT_IOS_TEAM_ID, XDT_IOS_PROFILE_NAME, XDT_IOS_SIGN_IDENTITY/);
+    expect(() => resolveIosSigningEnv({ authRegion: 'cn', iosSigning: {} })).toThrow(/teamId, profileName, signIdentity/);
   });
 });
 

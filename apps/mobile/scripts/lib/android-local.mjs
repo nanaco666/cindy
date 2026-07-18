@@ -76,24 +76,37 @@ export function replaceVersionCodeInAndroidVersionJson(rawText, nextVersionCode)
 
 /**
  * 解析 keystore 签名环境(供 gradlew assembleRelease 消费,build.gradle 用 System.getenv 读)。
- * 路径 / alias / 两个口令**全部必须**由 env 提供(零代码默认值,缺任一项即抛错,fail-closed)。
+ * 按 region 分离:非机密的 keystorePath / keyAlias 从 self-host-regions.json 的 androidSigning 取值;
+ * 两个**口令是机密、不入仓**,从 env 按 region 后缀读 —— XDT_ANDROID_KEYSTORE_PASSWORD_<SUFFIX> /
+ * XDT_ANDROID_KEY_PASSWORD_<SUFFIX>(SUFFIX = authRegion 大写,如 CN / GLOBAL);cn 额外回落到
+ * 无后缀旧名(现有 cn 打包 env 不用改)。缺任一项即抛错(fail-closed)。
  * 返回的 env 只在构建子进程内传入,绝不落盘、绝不写进 build.gradle。
- * @param {NodeJS.ProcessEnv} baseEnv
+ * @param {{ authRegion?: string, androidSigning?: { keystorePath?: string, keyAlias?: string } }} regionConfig
+ * @param {NodeJS.ProcessEnv} [baseEnv]
  * @returns {{ XDT_ANDROID_KEYSTORE_PATH: string, XDT_ANDROID_KEYSTORE_PASSWORD: string, XDT_ANDROID_KEY_ALIAS: string, XDT_ANDROID_KEY_PASSWORD: string }}
  */
-export function resolveAndroidSigningEnv(baseEnv = process.env) {
-  const keystorePath = String(baseEnv.XDT_ANDROID_KEYSTORE_PATH ?? '').trim();
-  const keyAlias = String(baseEnv.XDT_ANDROID_KEY_ALIAS ?? '').trim();
-  const storePassword = String(baseEnv.XDT_ANDROID_KEYSTORE_PASSWORD ?? '').trim();
-  const keyPassword = String(baseEnv.XDT_ANDROID_KEY_PASSWORD ?? '').trim();
+export function resolveAndroidSigningEnv(regionConfig, baseEnv = process.env) {
+  const s = regionConfig?.androidSigning ?? {};
+  const region = regionConfig?.authRegion ?? '?';
+  const suffix = String(region).toUpperCase();
+  const keystorePath = String(s.keystorePath ?? '').trim();
+  const keyAlias = String(s.keyAlias ?? '').trim();
+  // 口令走 env(机密不入仓):region 后缀优先;cn 回落到无后缀旧名。
+  const pickSecret = (base) => {
+    const suffixed = String(baseEnv[`${base}_${suffix}`] ?? '').trim();
+    if (suffixed) return suffixed;
+    return suffix === 'CN' ? String(baseEnv[base] ?? '').trim() : '';
+  };
+  const storePassword = pickSecret('XDT_ANDROID_KEYSTORE_PASSWORD');
+  const keyPassword = pickSecret('XDT_ANDROID_KEY_PASSWORD');
   const missing = [];
-  if (!keystorePath) missing.push('XDT_ANDROID_KEYSTORE_PATH');
-  if (!storePassword) missing.push('XDT_ANDROID_KEYSTORE_PASSWORD');
-  if (!keyAlias) missing.push('XDT_ANDROID_KEY_ALIAS');
-  if (!keyPassword) missing.push('XDT_ANDROID_KEY_PASSWORD');
+  if (!keystorePath) missing.push(`${region}.androidSigning.keystorePath (JSON)`);
+  if (!keyAlias) missing.push(`${region}.androidSigning.keyAlias (JSON)`);
+  if (!storePassword) missing.push(`XDT_ANDROID_KEYSTORE_PASSWORD_${suffix} (env)`);
+  if (!keyPassword) missing.push(`XDT_ANDROID_KEY_PASSWORD_${suffix} (env)`);
   if (missing.length) {
     throw new Error(
-      `缺少 Android 签名环境变量:${missing.join(', ')}(签名配置零代码默认值,路径/alias/口令均须在启动时经 env 提供,凭证不入仓)`,
+      `Android 签名配置缺失(${region}):${missing.join(', ')}(路径/alias 走 region JSON,两个口令走 env、凭证不入仓)`,
     );
   }
   return {

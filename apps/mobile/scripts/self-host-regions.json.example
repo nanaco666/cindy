@@ -1,0 +1,54 @@
+{
+    "cn":
+    {
+        "authRegion": "cn",
+        "iosBundleId": "com.xd.cindycn",
+        "androidPackage": "com.xd.cindycn",
+        "npkgExpectBundle": "com.xd.cindycn",
+        "oss":
+        {
+            "cdnBaseUrl": "",
+            "bucket": "",
+            "prefix": "",
+            "ossRegion": ""
+        },
+        "iosSigning":
+        {
+            "teamId": "",
+            "profileName": "",
+            "signIdentity": "",
+            "profilePath": ""
+        },
+        "androidSigning":
+        {
+            "keyAlias": "",
+            "keystorePath": ""
+        }
+    },
+    "global":
+    {
+        "authRegion": "global",
+        "iosBundleId": "com.xd.cindy",
+        "androidPackage": "com.xd.cindy",
+        "npkgExpectBundle": "com.xd.cindy",
+        "oss":
+        {
+            "cdnBaseUrl": "",
+            "bucket": "",
+            "prefix": "",
+            "ossRegion": ""
+        },
+        "iosSigning":
+        {
+            "teamId": "",
+            "profileName": "",
+            "signIdentity": "",
+            "profilePath": ""
+        },
+        "androidSigning":
+        {
+            "keyAlias": "",
+            "keystorePath": ""
+        }
+    }
+}

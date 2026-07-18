@@ -133,26 +133,29 @@ export function replaceBuildNumberInAppJson(rawText, nextBuildNumber) {
 }
 
 /**
- * 解析 iOS 本地签名环境(供 xcodebuild archive/export 消费)。
- * teamId / profileName / identity **全部必须**由 env 提供(零代码默认值,缺任一项即抛错,
- * fail-closed,与 android-local.mjs 的 resolveAndroidSigningEnv 同一口径);profilePath 可选
+ * 解析 iOS 本地签名描述符(供 xcodebuild archive/export 消费)。
+ * iOS 签名不含任何机密(无口令),故 teamId / profileName / signIdentity / profilePath **全部从
+ * 按 region 的 self-host-regions.json 的 iosSigning 取值**(纯值、非机密、不入仓,详见 self-host-region.mjs)。
+ * teamId / profileName / signIdentity 缺任一即抛错(fail-closed);profilePath 可选
  * (空 = 假设描述文件已装入 ~/Library/MobileDevice/Provisioning Profiles)。
- * 签名套件本体(CindyMobileCer/iOS/,profile + p12)在打包机的仓库外目录,不入仓。
- * @param {NodeJS.ProcessEnv} baseEnv
+ * 签名套件本体(profile + p12)在打包机的仓库外目录,不入仓。
+ * @param {{ authRegion?: string, iosSigning?: { teamId?: string, profileName?: string, signIdentity?: string, profilePath?: string } }} regionConfig
  * @returns {{ teamId: string, profileName: string, identity: string, profilePath: string }}
  */
-export function resolveIosSigningEnv(baseEnv = process.env) {
-  const teamId = String(baseEnv.XDT_IOS_TEAM_ID ?? '').trim();
-  const profileName = String(baseEnv.XDT_IOS_PROFILE_NAME ?? '').trim();
-  const identity = String(baseEnv.XDT_IOS_SIGN_IDENTITY ?? '').trim();
-  const profilePath = String(baseEnv.XDT_IOS_PROFILE_PATH ?? '').trim();
+export function resolveIosSigningEnv(regionConfig) {
+  const s = regionConfig?.iosSigning ?? {};
+  const region = regionConfig?.authRegion ?? '?';
+  const teamId = String(s.teamId ?? '').trim();
+  const profileName = String(s.profileName ?? '').trim();
+  const identity = String(s.signIdentity ?? '').trim();
+  const profilePath = String(s.profilePath ?? '').trim();
   const missing = [];
-  if (!teamId) missing.push('XDT_IOS_TEAM_ID');
-  if (!profileName) missing.push('XDT_IOS_PROFILE_NAME');
-  if (!identity) missing.push('XDT_IOS_SIGN_IDENTITY');
+  if (!teamId) missing.push('teamId');
+  if (!profileName) missing.push('profileName');
+  if (!identity) missing.push('signIdentity');
   if (missing.length) {
     throw new Error(
-      `缺少 iOS 签名环境变量:${missing.join(', ')}(签名配置零代码默认值,team/profile/identity 均须在启动时经 env 提供;XDT_IOS_PROFILE_PATH 可选,缺省视为描述文件已装入系统)`,
+      `self-host-regions.json 的 ${region}.iosSigning 缺少非空字段:${missing.join(', ')}(iOS 签名描述符从 region JSON 取值,非机密;profilePath 可选,缺省视为描述文件已装入系统)`,
     );
   }
   return { teamId, profileName, identity, profilePath };

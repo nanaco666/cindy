@@ -114,6 +114,10 @@ flowchart TD
 3. **整包发现平台化**:`src/update/useBundleUpdatePrompt.ts` 当前硬编码 `fetchLatestRelease('ios')` → 改为 `fetchLatestRelease(Platform.OS === 'android' ? 'android' : 'ios')`(`import { Platform } from 'react-native'`)。`fetchLatestRelease` 已按 `?platform=` 参数化,`preferredInstallUrl` 已回退 `installUrl`——**只此一处 IO 平台化**,判定纯函数与弹窗逻辑不动。
 4. **Android package 统一为 `com.xd.lizcn`**;`scheme` 固定为 `lizcn`。EAS/TestFlight 默认优先走飞书 App 原生 SSO;自建线是否启用由发布 env 控制,启用时必须保留浏览器 OAuth 兜底以覆盖 §16 的 appId callback scheme 共装风险。
 
+## 6.5 地区分包(region,cn / global)
+
+自建线四脚本(`release-android-{local,ota,check}.mjs` + iOS 对应)**必须显式 `--region cn|global`**(无默认,缺失即报错;`lib/self-host-region.mjs` 解析)。随地区变的**非机密**分包参数集中在打包机本地 `scripts/self-host-regions.json`(纯值、gitignore;结构见 `self-host-regions.json.example`):`androidPackage`(cn=`com.xd.cindycn` / global=`com.xd.cindy`)、`oss.{cdnBaseUrl,bucket,prefix,ossRegion}`、`androidSigning.{keyAlias,keystorePath}`。脚本读该 region 的 `oss.*` 覆盖 `XDT_OSS_*` 后 `refreshOssConfig()`,切到该地区独立 bucket(两地不撞)。**真机密走 env、按 region 后缀**:keystore 两个口令 `XDT_ANDROID_KEYSTORE_PASSWORD_{CN,GLOBAL}` / `XDT_ANDROID_KEY_PASSWORD_{CN,GLOBAL}`(cn 兼容无后缀旧名);OSS AK/SK 同账号用 `FP_DEV_OSS_ACCESS_KEY_ID/SECRET`、不同账号用 `XDT_OSS_ACCESS_KEY_{ID,SECRET}_{CN,GLOBAL}`。`app.config.js` 自建分支同样按 `EXPO_PUBLIC_CINDY_AUTH_REGION` 从该 JSON 取 package(真文件缺失时回落 `.example`)。
+
 ## 7. 冷更:`apps/mobile/scripts/release-android-local.mjs`
 
 复用 `release-lib.mjs` 的参数解析 / git 闸门 / dry-run 风格。步骤:

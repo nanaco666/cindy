@@ -77,6 +77,14 @@ describe('mobile native app config', () => {
       disableAntiBrickingMeasures: true,
     });
     expect(JSON.stringify(selfHosted)).not.toContain('must-not-be-baked.example.com');
+    // 自建 app 身份按 region 从 self-host-regions.json(.example 回落)取,而非写死。
+    expect(selfHosted.ios.bundleIdentifier).toBe('com.xd.cindycn');
+    expect(selfHosted.android.package).toBe('com.xd.cindycn');
+
+    process.env.EXPO_PUBLIC_CINDY_AUTH_REGION = 'global';
+    const selfHostedGlobal = buildConfig({ config: appJson.expo });
+    expect(selfHostedGlobal.ios.bundleIdentifier).toBe('com.xd.cindy');
+    expect(selfHostedGlobal.android.package).toBe('com.xd.cindy');
   });
 
   it('fails closed when a store build lacks its regional App Store numeric ID', () => {

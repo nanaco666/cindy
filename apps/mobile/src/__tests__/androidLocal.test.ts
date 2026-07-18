@@ -41,30 +41,36 @@ describe('readAndroidVersionCode', () => {
   });
 });
 
-describe('resolveAndroidSigningEnv', () => {
-  const FULL = {
-    XDT_ANDROID_KEYSTORE_PATH: '/tmp/x.jks',
-    XDT_ANDROID_KEY_ALIAS: 'custom',
-    XDT_ANDROID_KEYSTORE_PASSWORD: 'a',
-    XDT_ANDROID_KEY_PASSWORD: 'b',
-  };
-  it('四项 env 齐全 → 原样透传(零代码默认值)', () => {
-    const env = resolveAndroidSigningEnv(FULL);
+describe('resolveAndroidSigningEnv（path/alias 来自 region JSON,两口令来自 env 后缀)', () => {
+  const CN = { authRegion: 'cn', androidSigning: { keystorePath: '/tmp/x.jks', keyAlias: 'custom' } };
+  const GLOBAL = { authRegion: 'global', androidSigning: { keystorePath: '/tmp/g.jks', keyAlias: 'g' } };
+  const CN_PW = { XDT_ANDROID_KEYSTORE_PASSWORD: 'a', XDT_ANDROID_KEY_PASSWORD: 'b' };
+
+  it('JSON 路径/alias + env 口令齐全 → 透传', () => {
+    const env = resolveAndroidSigningEnv(CN, CN_PW);
     expect(env.XDT_ANDROID_KEYSTORE_PATH).toBe('/tmp/x.jks');
     expect(env.XDT_ANDROID_KEY_ALIAS).toBe('custom');
     expect(env.XDT_ANDROID_KEYSTORE_PASSWORD).toBe('a');
     expect(env.XDT_ANDROID_KEY_PASSWORD).toBe('b');
   });
-  it('缺任一项 → 抛错并点名缺失的 env(不回落任何默认值)', () => {
-    expect(() => resolveAndroidSigningEnv({ ...FULL, XDT_ANDROID_KEYSTORE_PATH: '' })).toThrow(/XDT_ANDROID_KEYSTORE_PATH/);
-    expect(() => resolveAndroidSigningEnv({ ...FULL, XDT_ANDROID_KEY_ALIAS: ' ' })).toThrow(/XDT_ANDROID_KEY_ALIAS/);
-    expect(() => resolveAndroidSigningEnv({ ...FULL, XDT_ANDROID_KEYSTORE_PASSWORD: undefined })).toThrow(/XDT_ANDROID_KEYSTORE_PASSWORD/);
-    expect(() => resolveAndroidSigningEnv({ ...FULL, XDT_ANDROID_KEY_PASSWORD: undefined })).toThrow(/XDT_ANDROID_KEY_PASSWORD/);
+  it('cn 口令回落无后缀旧名;_CN 后缀优先', () => {
+    expect(resolveAndroidSigningEnv(CN, CN_PW).XDT_ANDROID_KEYSTORE_PASSWORD).toBe('a');
+    expect(
+      resolveAndroidSigningEnv(CN, { ...CN_PW, XDT_ANDROID_KEYSTORE_PASSWORD_CN: 'cnpw' }).XDT_ANDROID_KEYSTORE_PASSWORD,
+    ).toBe('cnpw');
   });
-  it('全缺 → 错误信息按序列出全部四项', () => {
-    expect(() => resolveAndroidSigningEnv({})).toThrow(
-      /XDT_ANDROID_KEYSTORE_PATH, XDT_ANDROID_KEYSTORE_PASSWORD, XDT_ANDROID_KEY_ALIAS, XDT_ANDROID_KEY_PASSWORD/,
-    );
+  it('global 口令必须带 _GLOBAL 后缀(无后缀不回落)', () => {
+    expect(() => resolveAndroidSigningEnv(GLOBAL, CN_PW)).toThrow(/XDT_ANDROID_KEYSTORE_PASSWORD_GLOBAL/);
+    const ok = resolveAndroidSigningEnv(GLOBAL, {
+      XDT_ANDROID_KEYSTORE_PASSWORD_GLOBAL: 'gpw',
+      XDT_ANDROID_KEY_PASSWORD_GLOBAL: 'gkey',
+    });
+    expect(ok.XDT_ANDROID_KEYSTORE_PASSWORD).toBe('gpw');
+    expect(ok.XDT_ANDROID_KEY_PASSWORD).toBe('gkey');
+  });
+  it('缺 JSON 字段 → 点名 keystorePath/keyAlias;缺 env 口令 → 点名 env 名', () => {
+    expect(() => resolveAndroidSigningEnv({ authRegion: 'cn', androidSigning: { keyAlias: 'x' } }, CN_PW)).toThrow(/keystorePath/);
+    expect(() => resolveAndroidSigningEnv(CN, { XDT_ANDROID_KEY_PASSWORD: 'b' })).toThrow(/XDT_ANDROID_KEYSTORE_PASSWORD_CN/);
   });
 });
 

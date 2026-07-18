@@ -23,15 +23,16 @@ import { buildAssetEntry, buildManifest, sha256Hex, assertOtaRuntimeMatchesBasel
 import { readAndroidVersionCode } from './lib/android-local.mjs';
 import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
 import { productionMobileEnv } from '../../../scripts/shared/production-endpoints.mjs';
+import { formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides, assertRegionOssComplete } from './lib/self-host-region.mjs';
 
-refreshOssConfig();
-
+// NOTE: 不在模块顶层 refreshOssConfig / 派生 OSS key —— OSS 落点桶由 --region 决定,以下 OTA_ROOT /
+// ASSET_DIR / RELEASE_RECORD_CDN 在 main() resolve region、覆盖 XDT_OSS_* 后 refreshOssConfig() 时赋值。
 const MOBILE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-const OTA_ROOT = `${OSS_PREFIX}/mobile-ota`;                     // OSS key 前缀
-const ASSET_DIR = `${OTA_ROOT}/assets`;                         // 内容寻址目录(与 iOS 共享)
-const RELEASE_RECORD_CDN = `${CDN_BASE}/mobile-ota/android/release.json`; // 冷更装机包记录(release-android-local 写)
-const cdnUrl = (sha) => `${CDN_BASE}/mobile-ota/assets/${sha}`;
+let OTA_ROOT;             // `${OSS_PREFIX}/mobile-ota`(OSS key 前缀)
+let ASSET_DIR;           // `${OTA_ROOT}/assets`(内容寻址目录,与 iOS 共享)
+let RELEASE_RECORD_CDN;  // `${CDN_BASE}/mobile-ota/android/release.json`(冷更装机包记录,release-android-local 写)
+const cdnUrl = (sha) => `${CDN_BASE}/mobile-ota/assets/${sha}`; // 读 live CDN_BASE(refresh 之后才调用)
 
 function log(msg) { console.error(msg); }
 
@@ -49,8 +50,14 @@ async function fetchColdBaselineRuntime() {
 }
 
 // runtime 基线闸门(--execute 用):判定逻辑在 lib/ota-manifest.mjs(纯函数,已单测)。
-function assertRuntimeMatchesColdBaseline({ runtimeVersion, baselineRuntime, skip }) {
-  const r = assertOtaRuntimeMatchesBaseline({ runtimeVersion, baselineRuntime, skip, recordUrl: RELEASE_RECORD_CDN });
+function assertRuntimeMatchesColdBaseline({ runtimeVersion, baselineRuntime, skip, region }) {
+  const r = assertOtaRuntimeMatchesBaseline({
+    runtimeVersion,
+    baselineRuntime,
+    skip,
+    recordUrl: RELEASE_RECORD_CDN,
+    coldBuildCommand: formatSelfHostReleaseCommand('android', 'local', region, { execute: true }),
+  });
   if (r.skipped) log('  warn: --skip-runtime-check,跳过 runtime 基线校验(仅在明确知情时用)');
   else log(`  ✓ runtime 基线校验通过(${runtimeVersion} == 冷更装机包 ${baselineRuntime})`);
 }
@@ -59,13 +66,14 @@ function assertRuntimeMatchesColdBaseline({ runtimeVersion, baselineRuntime, ski
 // ⚠️ 必须注入 XDT_ANDROID_VERSION_CODE(与 release-android-{check,local}.mjs 一致):app.config.js 自建分支
 // 会据此把 android.versionCode 打进 config,而它**进 @expo/fingerprint**。漏注入会算出与冷更/预判不同的
 // runtimeVersion,导致本能热更的改动被 runtime 基线闸门误判为原生已变而中止(冷热不同源)。
-function selfhostEnv(desktopVersion) {
+function selfhostEnv(region, desktopVersion) {
   const env = {
     ...process.env,
-    ...productionMobileEnv(),
+    ...productionMobileEnv({ authRegion: region.authRegion }),
     EXPO_PUBLIC_XDT_OTA_SELFHOST: '1',
     XDT_ANDROID_VERSION_CODE: String(readAndroidVersionCode(MOBILE_DIR)),
   };
+  // 防止打包机 shell / 旧 .env 残留变量重新混入构建;真实热更/整包地址运行期只认 endpoint.json。
   delete env.EXPO_PUBLIC_XDT_OTA_URL;
   // 二级版本号:仅 JS 层(app.config.js 不读它,不进 @expo/fingerprint,不改 runtimeVersion);空则不注入。
   if (desktopVersion) env.EXPO_PUBLIC_DESKTOP_VERSION = desktopVersion;
@@ -158,6 +166,14 @@ async function objectExists(client, key) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  // --region 必填(cn|global):选出本次热更身份 + OSS 落点桶(见 lib/self-host-region.mjs)。
+  const region = resolveSelfHostRegion(args);
+  Object.assign(process.env, regionEnvOverrides(region));
+  refreshOssConfig();
+  OTA_ROOT = `${OSS_PREFIX}/mobile-ota`;
+  ASSET_DIR = `${OTA_ROOT}/assets`;
+  RELEASE_RECORD_CDN = `${CDN_BASE}/mobile-ota/android/release.json`;
+
   const desktopVersion = await resolveDesktopVersion({
     explicit: typeof args.desktopVersion === 'string' ? args.desktopVersion : process.env.EXPO_PUBLIC_DESKTOP_VERSION,
     cdnBase: CDN_BASE,
@@ -165,7 +181,7 @@ async function main() {
   log(desktopVersion
     ? `→ 桌面包版本(二级版本号): ${desktopVersion}`
     : '→ 桌面包版本(二级版本号): 未解析到,设置页将不显示该行(可用 --desktop-version x.y.z 指定)');
-  const env = selfhostEnv(desktopVersion);
+  const env = selfhostEnv(region, desktopVersion);
   const distDir = args.dist ? resolve(String(args.dist)) : resolve(MOBILE_DIR, 'dist');
 
   // dry-run 用缓存/参数值快速预览;--execute 会重算当前工作树指纹作为权威发布值(见下)。
@@ -175,6 +191,8 @@ async function main() {
 
   // 发布闸门只在 --execute 生效,且早于 expo export —— 缺配置/mismatch 快速失败,不白跑一次导出。
   if (args.execute) {
+    // --execute 需要完整的 region OSS 落点(dry-run 可留空);缺则明确报错,不静默回落默认桶。
+    assertRegionOssComplete(region);
     assertPublicEnv(env, { variant: 'production' });
     if (!args.skipGitGate) assertProductionGitGate();
     else log('  warn: --skip-git-gate,跳过 main/clean/HEAD 校验(仅本地迭代用)');
@@ -182,11 +200,11 @@ async function main() {
       // ⚠️ 不信任可能过期的 release/android-runtime.json —— 重算当前工作树指纹,它才是本次 expo export
       // 的 JS 真正对应的原生面。要它等于 CDN 冷更基线;不等 = 原生层已变,必须先出冷更整包。
       const currentFingerprint = args.runtimeVersion ? String(args.runtimeVersion) : computeFingerprint(env);
-      assertRuntimeMatchesColdBaseline({ runtimeVersion: currentFingerprint, baselineRuntime, skip: false });
+      assertRuntimeMatchesColdBaseline({ runtimeVersion: currentFingerprint, baselineRuntime, skip: false, region });
       runtimeVersion = currentFingerprint;   // 用权威指纹发布(与基线一致时二者相等)
       runtimeMatchesBaseline = true;
     } else {
-      assertRuntimeMatchesColdBaseline({ runtimeVersion, baselineRuntime, skip: true });
+      assertRuntimeMatchesColdBaseline({ runtimeVersion, baselineRuntime, skip: true, region });
     }
   }
 

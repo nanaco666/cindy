@@ -56,23 +56,23 @@ import { clearBundlerCache } from './lib/bundler-cache.mjs';
 import { readEmbeddedRuntimeVersionFromIpa } from './lib/embedded-runtime.mjs';
 import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, OSS_BUCKET, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
 import { productionMobileEnv } from '../../../scripts/shared/production-endpoints.mjs';
+import { formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides, assertRegionOssComplete } from './lib/self-host-region.mjs';
 
-refreshOssConfig();
+// NOTE: 不在模块顶层 refreshOssConfig / 派生 OSS key —— OSS 落点桶由 --region 决定,必须在 main()
+// resolve region、Object.assign 覆盖 XDT_OSS_* 后再 refreshOssConfig(),否则会烤进默认(cn)桶。
 
 const MOBILE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-const SELFHOST_BUNDLE_ID = 'com.xd.cindycn';
-const RELEASE_RECORD_KEY = `${OSS_PREFIX}/mobile-ota/ios/release.json`;
-const RELEASE_RECORD_CDN = `${CDN_BASE}/mobile-ota/ios/release.json`;
 
 function log(msg) { console.error(msg); }
 
-function selfhostEnv(desktopVersion) {
+function selfhostEnv(region, desktopVersion) {
   const env = {
     ...process.env,
-    ...productionMobileEnv(),
+    ...productionMobileEnv({ authRegion: region.authRegion }),
     EXPO_PUBLIC_XDT_OTA_SELFHOST: '1',
   };
+  // 防止打包机 shell / 旧 .env 残留变量重新混入构建;真实地址只认 endpoint.json。
   delete env.EXPO_PUBLIC_XDT_OTA_URL;
   // 二级版本号:自建线包所配对的桌面产品线版本;仅有值时注入(空则设置页不显示该行)。
   if (desktopVersion) env.EXPO_PUBLIC_DESKTOP_VERSION = desktopVersion;
@@ -92,8 +92,8 @@ function writeRuntimeFile(runtimeVersion) {
 }
 
 // fail-closed 读取冷更基线 buildNumber(仅 404/无记录 → null,其它失败抛错);见 lib/ios-local.mjs。
-function fetchPreviousBuildNumber() {
-  return fetchBaselineBuildNumber(RELEASE_RECORD_CDN);
+function fetchPreviousBuildNumber(recordCdn) {
+  return fetchBaselineBuildNumber(recordCdn);
 }
 
 function findWorkspace() {
@@ -122,9 +122,9 @@ function run(cmd, args, opts = {}) {
   if (r.status !== 0) throw new Error(`命令失败(${r.status}): ${cmd} ${args.join(' ')}`);
 }
 
-function buildIpa(env) {
-  // 签名参数零默认值,构建时才强制解析(--ipa 复用现成包的路径不需要签名 env)。
-  const sign = resolveIosSigningEnv(process.env);
+function buildIpa(env, region) {
+  // 签名参数(非机密描述符)由 region JSON 提供,构建时才强制解析(--ipa 复用现成包不需要)。
+  const sign = resolveIosSigningEnv(region);
   run(NPX, ['--yes', 'expo', 'prebuild', '--platform', 'ios', '--clean'], { env });
   run(NPX, ['--yes', 'pod-install'], { env });
 
@@ -136,7 +136,7 @@ function buildIpa(env) {
   const archivePath = join(outDir, 'app.xcarchive');
   const exportDir = join(outDir, 'export');
   const plistPath = join(outDir, 'ExportOptions.plist');
-  writeFileSync(plistPath, buildExportOptionsPlist({ teamId: sign.teamId, bundleId: SELFHOST_BUNDLE_ID, profileName: sign.profileName }));
+  writeFileSync(plistPath, buildExportOptionsPlist({ teamId: sign.teamId, bundleId: region.iosBundleId, profileName: sign.profileName }));
 
   // xcodebuild 的 RN embed 阶段内部触发 expo export:embed 打 JS bundle,无法透传 --clear;
   // 构建前清 Metro/Babel 缓存,确保 EXPO_PUBLIC_ 变更(TAPTAP / API 等)被重新内联,不吃旧缓存。
@@ -156,14 +156,14 @@ function buildIpa(env) {
   return join(exportDir, ipa);
 }
 
-function uploadToNpkg(ipaPath, tag, env) {
-  log(`→ release-ios.sh upload(NPKG_EXPECT_BUNDLE=${SELFHOST_BUNDLE_ID},借 NPKG 企业重签)…`);
+function uploadToNpkg(ipaPath, tag, env, npkgExpectBundle) {
+  log(`→ release-ios.sh upload(NPKG_EXPECT_BUNDLE=${npkgExpectBundle},借 NPKG 企业重签)…`);
   const r = spawnSync('bash', [resolve(MOBILE_DIR, 'scripts/release-ios.sh'), 'upload', ipaPath, '--tag', tag], {
-    cwd: MOBILE_DIR, encoding: 'utf8', env: { ...env, NPKG_EXPECT_BUNDLE: SELFHOST_BUNDLE_ID },
+    cwd: MOBILE_DIR, encoding: 'utf8', env: { ...env, NPKG_EXPECT_BUNDLE: npkgExpectBundle },
   });
   process.stdout.write(r.stdout ?? '');
   process.stderr.write(r.stderr ?? '');
-  if (r.status !== 0) throw new Error(`NPKG 上传失败(白名单未配 ${SELFHOST_BUNDLE_ID}?见 docs §13)`);
+  if (r.status !== 0) throw new Error(`NPKG 上传失败(白名单未配 ${npkgExpectBundle}?见 docs §13)`);
   const links = parseNpkgInstallLinks(r.stdout);
   if (!links.childId) throw new Error('未能从 NPKG 输出解析企业子包 id(需要它下载重签 ipa 转传 OSS)');
   return links;
@@ -180,34 +180,42 @@ function downloadRepackedIpa(childId, env) {
 }
 
 // 重签 ipa + itms manifest plist + 安装页 直传自有 OSS,返回写进 release.json 的链接。
-async function uploadDistToOSS(client, repackedIpaPath, version, buildNumber) {
+async function uploadDistToOSS(client, repackedIpaPath, version, buildNumber, bundleId) {
   const targets = buildIosDistTargets({ ossPrefix: OSS_PREFIX, cdnBase: CDN_BASE, version, buildNumber });
   log(`→ 上传重签 ipa → oss://${OSS_BUCKET}/${targets.ipa.key}`);
   await uploadToOSS(client, targets.ipa.key, repackedIpaPath, { headers: { 'Content-Type': 'application/octet-stream' } });
 
   const tmpDir = mkdtempSync(join(tmpdir(), 'xdt-ios-dist-'));
   const manifestPath = join(tmpDir, 'manifest.plist');
-  writeFileSync(manifestPath, buildItmsManifestPlist({ ipaUrl: targets.ipa.url, bundleId: SELFHOST_BUNDLE_ID, buildNumber, title: 'XDMaker' }));
+  writeFileSync(manifestPath, buildItmsManifestPlist({ ipaUrl: targets.ipa.url, bundleId, buildNumber, title: 'Cindy' }));
   await uploadToOSS(client, targets.manifest.key, manifestPath, { headers: { 'Content-Type': 'text/xml' } });
 
   const itmsUrl = buildItmsUrl(targets.manifest.url);
   const pagePath = join(tmpDir, 'install.html');
-  writeFileSync(pagePath, buildInstallHtml({ itmsUrl, title: 'XDMaker', version, buildNumber }));
+  writeFileSync(pagePath, buildInstallHtml({ itmsUrl, title: 'Cindy', version, buildNumber }));
   await uploadToOSS(client, targets.page.key, pagePath, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 
   log(`  ✓ 安装页 ${targets.page.url}`);
   return { installUrl: targets.page.url, itmsUrl };
 }
 
-async function uploadReleaseRecord(client, record) {
+async function uploadReleaseRecord(client, record, recordKey, recordCdn) {
   const tmp = join(mkdtempSync(join(tmpdir(), 'xdt-rec-')), 'release.json');
   writeFileSync(tmp, JSON.stringify(record, null, 2));
-  await uploadToOSS(client, RELEASE_RECORD_KEY, tmp, { headers: { 'Content-Type': 'application/json' } });
-  log(`  ✓ 整包版本记录 → ${RELEASE_RECORD_CDN}`);
+  await uploadToOSS(client, recordKey, tmp, { headers: { 'Content-Type': 'application/json' } });
+  log(`  ✓ 整包版本记录 → ${recordCdn}`);
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  // --region 必填(cn|global):选出本次出包身份 + OSS 落点桶 + 签名描述符(见 lib/self-host-region.mjs)。
+  const region = resolveSelfHostRegion(args);
+  // 按 region 切 OSS 落点桶(bucket/cdn/prefix + 可选 AK/SK 后缀),之后 refreshOssConfig 才生效。
+  Object.assign(process.env, regionEnvOverrides(region));
+  refreshOssConfig();
+  const RELEASE_RECORD_KEY = `${OSS_PREFIX}/mobile-ota/ios/release.json`;
+  const RELEASE_RECORD_CDN = `${CDN_BASE}/mobile-ota/ios/release.json`;
+
   const desktopVersion = await resolveDesktopVersion({
     explicit: typeof args.desktopVersion === 'string' ? args.desktopVersion : process.env.EXPO_PUBLIC_DESKTOP_VERSION,
     cdnBase: CDN_BASE,
@@ -215,7 +223,7 @@ async function main() {
   log(desktopVersion
     ? `  桌面包版本(二级版本号): ${desktopVersion}`
     : '  桌面包版本(二级版本号): 未解析到,设置页将不显示该行(可用 --desktop-version x.y.z 指定)');
-  const env = selfhostEnv(desktopVersion);
+  const env = selfhostEnv(region, desktopVersion);
   const appJson = readAppJson();
   const version = appJson?.expo?.version ?? '';
   let buildNumber = appJson?.expo?.ios?.buildNumber ?? '';
@@ -224,10 +232,10 @@ async function main() {
   if (!args.skipGitGate) assertProductionGitGate();
   else log('  warn: --skip-git-gate,跳过 main/clean/HEAD 校验(仅本地迭代用)');
 
-  // 签名 env 预检必须在自动 bump 写盘之前:否则缺 env 时 app.json 的 buildNumber 已被写脏,
+  // 签名描述符预检必须在自动 bump 写盘之前:否则缺配置时 app.json 的 buildNumber 已被写脏,
   // 下一次执行会被 git gate 拒绝(与 Android 脚本同一口径,Greptile P1)。
   // buildIpa 内仍会再解析一次(取用值);--ipa 复用现成包不构建,豁免。
-  if (args.execute && !args.ipa) resolveIosSigningEnv(process.env);
+  if (args.execute && !args.ipa) resolveIosSigningEnv(region);
 
   // --skip-record 是"CDN 基线不可读/首发"的逃生开关:此时不写 release.json,buildNumber 单调
   // 门禁本就无意义,必须在读基线之前短路——否则 fetchBaselineBuildNumber 的 fail-closed 抛错会
@@ -237,7 +245,7 @@ async function main() {
   if (args.skipRecord) {
     log('  --skip-record:跳过冷更基线读取与 buildNumber 单调校验(不写 release.json)');
   } else {
-    previousBuildNumber = await fetchPreviousBuildNumber();
+    previousBuildNumber = await fetchPreviousBuildNumber(RELEASE_RECORD_CDN);
     // 检测到整包但版本文件没 bump(≤ 线上基线)→ 自动自增 app.json 的 ios.buildNumber:
     // dry-run 只预告不写盘;--execute 写盘发生在 fingerprint/prebuild 之前,保证烤进包、
     // 记录进 release.json 的是同一个新号。写盘后工作区会脏(git 闸门已过),完成后需 commit 回 main。
@@ -265,11 +273,13 @@ async function main() {
 
   // 计划打印
   console.log('');
-  console.log(`target: mobile 冷更(ios, ${SELFHOST_BUNDLE_ID})`);
+  console.log(`target: mobile 冷更(ios, region=${region.authRegion}, ${region.iosBundleId})`);
   console.log(`version / buildNumber: ${version} / ${buildNumber}${previousBuildNumber ? ` (上一条 ${previousBuildNumber})` : (args.skipRecord ? ' (--skip-record,跳过基线)' : ' (首发)')}`);
-  // 签名参数零代码默认值:此处只预览 env 现值,严格校验在 buildIpa 内(--ipa 复用现成包时不需要)。
-  const preview = (name) => process.env[name]?.trim() || `(${name} 未设,--execute 构建时必填)`;
-  console.log(`sign: team=${preview('XDT_IOS_TEAM_ID')} profile=${preview('XDT_IOS_PROFILE_NAME')} identity="${preview('XDT_IOS_SIGN_IDENTITY')}"(均由 XDT_IOS_* env 提供,无代码默认值)`);
+  // 签名描述符来自 region JSON(非机密);此处只预览取值,严格校验在 buildIpa 内(--ipa 复用现成包时不需要)。
+  const sPreview = (name, value) => value?.trim() || `(${region.authRegion}.iosSigning.${name} 未填,--execute 构建时必填)`;
+  const iosS = region.iosSigning ?? {};
+  console.log(`sign: team=${sPreview('teamId', iosS.teamId)} profile=${sPreview('profileName', iosS.profileName)} identity="${sPreview('signIdentity', iosS.signIdentity)}"(来自 self-host-regions.json 的 ${region.authRegion}.iosSigning)`);
+  console.log(`oss: bucket=${region.oss?.bucket || '(未填)'} cdn=${region.oss?.cdnBaseUrl || '(未填)'}`);
   console.log('steps: prebuild → pod-install → xcodebuild archive/export → 从 .ipa 回读 runtimeVersion → NPKG 企业重签 → 重签 ipa 直传 OSS(manifest.plist + install.html)→ 写 release.json');
   for (const line of formatBakedEnvLines(env)) console.log(line);
   if (!args.execute) {
@@ -279,11 +289,14 @@ async function main() {
 
   if (process.platform !== 'darwin') throw new Error('--execute 需在 macOS 上运行(xcodebuild)');
 
+  // --execute 需要完整的 region OSS 落点(dry-run 可留空);缺则明确报错,不静默回落默认桶。
+  assertRegionOssComplete(region);
+
   // 必需 public env 齐全,否则 prebuild/xcodebuild 会把空 auth-server 配置等烤进整包,
   // 装机后登录崩(与 release-prod/beta / OTA 脚本用同一 gate)。建议 eas env:exec production 包裹。
   assertPublicEnv(env, { variant: 'production' });
 
-  const ipaPath = args.ipa ? resolve(String(args.ipa)) : buildIpa(env);
+  const ipaPath = args.ipa ? resolve(String(args.ipa)) : buildIpa(env, region);
   log(`  ✓ ipa: ${ipaPath}`);
 
   // 权威 runtimeVersion = 真正烤进 .ipa 的 EXUpdates.bundle/fingerprint(iOS 运行时实际读取处)。
@@ -293,11 +306,11 @@ async function main() {
   log(`  ✓ runtimeVersion(读自 .ipa 内嵌 fingerprint): ${runtimeVersion}`);
 
   if (args.skipNpkg) { log('  --skip-npkg:跳过重签/上传与版本记录'); return; }
-  const npkg = uploadToNpkg(ipaPath, String(args.tag ?? 'release'), env);
+  const npkg = uploadToNpkg(ipaPath, String(args.tag ?? 'release'), env, region.npkgExpectBundle);
   const repackedIpa = downloadRepackedIpa(npkg.childId, env);
 
   const client = createOSSClient();
-  const links = await uploadDistToOSS(client, repackedIpa, version, buildNumber);
+  const links = await uploadDistToOSS(client, repackedIpa, version, buildNumber, region.iosBundleId);
 
   if (!args.skipRecord) {
     const record = buildReleaseRecord({
@@ -305,14 +318,14 @@ async function main() {
       installUrl: links.installUrl, itmsUrl: links.itmsUrl,
       releaseNotes: message || undefined,
     });
-    await uploadReleaseRecord(client, record);
+    await uploadReleaseRecord(client, record, RELEASE_RECORD_KEY, RELEASE_RECORD_CDN);
   }
 
   console.log('');
   console.log('==================== 冷更发布完成 ====================');
   console.log(`  runtimeVersion : ${runtimeVersion}`);
   console.log(`  install        : ${links.installUrl}(安装页,itms 走 OSS;NPKG 链接仅发版备查)`);
-  console.log('  下一步:纯 JS 改动用 `pnpm mobile:release:ios:ota -- --execute` 发热更(复用此 runtimeVersion)');
+  console.log(`  下一步:纯 JS 改动用 \`${formatSelfHostReleaseCommand('ios', 'ota', region, { execute: true })}\` 发热更(复用此 runtimeVersion)`);
   if (autoBumped) {
     console.log(`  ⚠ app.json ios.buildNumber 已自动 bump 为 ${buildNumber},记得 commit + push 回 main(否则下次 git 闸门会拦)`);
   }

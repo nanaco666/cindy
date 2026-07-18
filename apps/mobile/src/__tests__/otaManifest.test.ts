@@ -81,8 +81,11 @@ describe('assertOtaRuntimeMatchesBaseline', () => {
       .toThrow(/rtvNEW.*rtvOLD|rtvOLD.*rtvNEW/);
   });
   it('无冷更基线(null/undefined)→ 抛错,提示先出冷更整包', () => {
-    expect(() => assertOtaRuntimeMatchesBaseline({ runtimeVersion: 'rtv1', baselineRuntime: null }))
-      .toThrow(/冷更/);
+    expect(() => assertOtaRuntimeMatchesBaseline({
+      runtimeVersion: 'rtv1',
+      baselineRuntime: null,
+      coldBuildCommand: 'pnpm mobile:release:android:local -- --region global --execute',
+    })).toThrow(/mobile:release:android:local -- --region global --execute/);
     expect(() => assertOtaRuntimeMatchesBaseline({ runtimeVersion: 'rtv1', baselineRuntime: undefined }))
       .toThrow();
   });

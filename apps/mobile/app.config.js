@@ -4,23 +4,37 @@
 // - beta 只改显示名,不改变所选 region 的身份。
 // - production / TestFlight 必须由发布环境注入对应 App Store 数字 ID,缺失即中止。
 // - 自建分发变体(`EXPO_PUBLIC_XDT_OTA_SELFHOST=1`,详见 docs/self-hosted-ios-build-and-ota.md):
-//     · 自建线 app 身份(iOS `com.xd.cindycn` / Android `com.xd.cindycn`,2026-07-16 起,与 EAS 线
-//       的 com.xd.lizcn 分离);iOS 与 Android 是两条独立自建线,bundleId / package
-//       各自维护、不共用同一常量(否则改一端会静默改另一端);当前两端取值同为 com.xd.cindycn,
-//       仍分开两个常量,以便任一端未来单独调整时不影响另一端。
+//     · 自建线 app 身份(iOS bundleId / Android package)按 region 从打包机本地的
+//       scripts/self-host-regions.json 取(cn=com.xd.cindycn / global=com.xd.cindy,与 EAS 线
+//       的 com.xd.lizcn 分离);iOS 与 Android 各自一个字段,可独立调整,互不影响。
 //     · updates.url 只放稳定占位值;真实 mobile-update-server 地址由启动端点清单的
 //       mobileUpdateBaseUrl 运行时覆写,不参与 build/fingerprint;
 //     · 保留 region scheme,但使用自建 bundle identity。此变体有意改变指纹,
 //       但只在该 env 开启时生效,EAS 路径仍逐字节不变。
 // - 不注入任何按 commit 变化的内容(如 git hash),避免 fingerprint 每次提交漂移。
+const fs = require('node:fs');
+const path = require('node:path');
 const appJson = require('./app.json');
 const { loadProductionMobileEnv } = require('../../scripts/shared/production-mobile-env.cjs');
 
-// iOS 自建线 bundleId,须与 release-ios-local.mjs 的 SELFHOST_BUNDLE_ID 一致。
-const SELFHOST_IOS_BUNDLE_ID = 'com.xd.cindycn';
-// Android 自建线 package,须与 release-android-local.mjs 的 SELFHOST_PACKAGE /
-// release-android-npkg.sh 的 EXPECT_PACKAGE 一致。
-const SELFHOST_ANDROID_PACKAGE = 'com.xd.cindycn';
+// 自建线 app 身份(iOS bundleId / Android package)按 region 从打包机本地的
+// scripts/self-host-regions.json 取(纯值、不入仓;由 release-{ios,android}-{local,ota,check}.mjs
+// 的 lib/self-host-region.mjs 校验完整性)。仅在自建分支惰性读取 —— EAS 不进该分支。
+// 真文件缺失时(CI / 单测 / 未配置机)回落到 .example:它只含公开的 bundle/package 身份
+// (oss/signing 留空),而本分支只读 bundle/package,足够;发布脚本仍要求真文件填全。
+function loadSelfHostRegionBundle(region) {
+  const dir = path.join(__dirname, 'scripts');
+  const real = path.join(dir, 'self-host-regions.json');
+  const file = fs.existsSync(real) ? real : path.join(dir, 'self-host-regions.json.example');
+  const block = JSON.parse(fs.readFileSync(file, 'utf8'))[region];
+  if (!block?.iosBundleId || !block?.androidPackage) {
+    throw new Error(
+      `${path.basename(file)} 缺少 region "${region}" 的 iosBundleId/androidPackage(自建构建必需)`,
+    );
+  }
+  return block;
+}
+
 // expo-updates 原生配置要求一个合法 URL 才能启用模块。自建线关闭原生启动联网检查,
 // JS 启动闸门拉到 endpoint.json 后会在手动 check/fetch 前把它覆写成
 // `${mobileUpdateBaseUrl}/manifest`;因此本值永不承载真实服务地址,也不得随环境变化。
@@ -159,12 +173,14 @@ module.exports = (context = {}) => {
     // (避免把版本文件卷进 @expo/fingerprint 的配置源)。缺省(非 Android 出包路径)则不注入。
     const rawVersionCode = process.env.XDT_ANDROID_VERSION_CODE?.trim();
     const versionCode = rawVersionCode ? Number(rawVersionCode) : undefined;
+    // 自建 app 身份按 region 取(见 loadSelfHostRegionBundle 头注释)。
+    const selfHostRegion = loadSelfHostRegionBundle(region);
     next = {
       ...next,
-      ios: { ...next.ios, bundleIdentifier: SELFHOST_IOS_BUNDLE_ID },
+      ios: { ...next.ios, bundleIdentifier: selfHostRegion.iosBundleId },
       android: {
         ...next.android,
-        package: SELFHOST_ANDROID_PACKAGE,
+        package: selfHostRegion.androidPackage,
         ...(Number.isInteger(versionCode) && versionCode > 0 ? { versionCode } : {}),
       },
       updates: {
