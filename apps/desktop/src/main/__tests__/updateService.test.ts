@@ -311,7 +311,6 @@ describe('startup update relaunch safety', () => {
   });
 
   it.each([
-    ['locked', 'screen-locked'],
     ['unknown', 'screen-state-unknown'],
     ['active', 'user-active'],
   ] as const)(
@@ -335,13 +334,16 @@ describe('startup update relaunch safety', () => {
     await expect(runStartupUpdate({ busy: true })).resolves.toMatchObject({ action: 'none' });
   });
 
-  it('preserves locked-idle startup auto apply on Windows', async () => {
-    await expect(
-      runStartupUpdate({ idleState: 'locked', platform: 'win32' }),
-    ).resolves.toMatchObject({
-      action: 'relaunch',
-    });
-  });
+  it.each(['darwin', 'win32'] as const)(
+    'allows locked-idle startup auto apply on %s',
+    async (platform) => {
+      await expect(
+        runStartupUpdate({ idleState: 'locked', platform }),
+      ).resolves.toMatchObject({
+        action: 'relaunch',
+      });
+    },
+  );
 
   it('rechecks safety at the startup apply boundary while keeping manual apply separate', async () => {
     vi.useFakeTimers();
