@@ -1659,13 +1659,22 @@ export default function SessionScreen() {
     };
   }, [restoreComposerDraft, routeDraft, sessionId]);
 
-  // 草稿清空时作废未消费的 skill 点选意图:用户选了 skill 后主动清稿再手输
-  // /learn 不应被旧点选绑架(palette 会重新打开也会清,此处补覆盖清稿路径)。
+  // 点选意图的有效性跟随草稿前缀与会话:一旦草稿不再以点选的 `/name` 开头
+  // (清空、整段替换、改名)或切换了会话,点选立即作废——覆盖「清稿/替换后手输
+  // /learn 被旧点选绑架」与「跨会话残留」两类误让行(review P1/P2)。
+  // 在 `/name` 后继续追加参数属于同一次点选的自然延续,保留。
   useEffect(() => {
-    if (draft === '' && composerTrigger.kind !== 'slash') {
+    const pending = pendingSkillSelectionRef.current;
+    if (!pending) return;
+    if (pending.sid !== sessionId) {
+      pendingSkillSelectionRef.current = null;
+      return;
+    }
+    const head = /^\/([a-z][\w-]*)/i.exec(draft.trimStart());
+    if (!head || head[1].toLowerCase() !== pending.name.toLowerCase()) {
       pendingSkillSelectionRef.current = null;
     }
-  }, [draft, composerTrigger.kind]);
+  }, [draft, sessionId]);
 
   useEffect(() => {
     if (!canUseComposer || composerTrigger.kind !== 'slash' || !currentSession || !deviceId) {
@@ -2622,7 +2631,7 @@ export default function SessionScreen() {
       ? { name: command.name, sid: sessionId }
       : null;
     setComposerDraft((current) => insertSlashCommand(current, detectComposerTrigger(current), command));
-  }, [setComposerDraft]);
+  }, [sessionId, setComposerDraft]);
 
   const selectAtResource = useCallback((item: MobileAtResourceItem) => {
     setComposerDraft((current) => insertAtResource(current, detectComposerTrigger(current), item));
