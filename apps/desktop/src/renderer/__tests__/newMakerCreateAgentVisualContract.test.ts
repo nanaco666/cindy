@@ -218,7 +218,7 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(globalsSource).toContain('.cm-editor .cm-cursor');
     expect(globalsSource).toContain('border-left-color: var(--caret-accent) !important;');
     expect(colorsSource).toContain("'caret-accent'");
-    expect(colorsSource).toContain('CINDY overrides to brand red per user request 2026-07-18');
+    expect(colorsSource).toContain('CINDY overrides to focus blue #417CDD per user decision 2026-07-18');
   });
 
   it('keeps default composer send buttons aligned with the neutral inverse rule', () => {
