@@ -1257,7 +1257,7 @@ export function ModelSelector({
                 <>
                   <span
                     className={cn(
-                      'font-normal',
+                      'shrink-0 font-normal',
                       isCreateAgentVariant
                         ? 'text-[var(--create-agent-control-text)]'
                         : 'text-[var(--model-trigger-meta)]',
@@ -1278,7 +1278,7 @@ export function ModelSelector({
                         ? 'text-[var(--create-agent-control-text)]'
                         : 'text-[var(--model-trigger-text)]',
                       isCreateAgentVariant
-                        ? 'shrink-0 whitespace-nowrap'
+                        ? 'truncate'
                         : isFieldTrigger ? 'max-w-[120px] truncate' : 'shrink-0 whitespace-nowrap',
                       isCreateAgentVariant
                         ? 'text-[12px]'
