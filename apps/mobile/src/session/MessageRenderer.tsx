@@ -235,25 +235,16 @@ import { iconSize, iconStroke, monoFont, useTheme, useThemedStyles, type ThemeCo
 
 const MESSAGE_CONTROL_HIT_SLOP = { bottom: 10, left: 10, right: 10, top: 10 };
 // LegendList 变高 item 的初始估高(仅影响首帧布局定位,LegendList 挂载后按实测尺寸修正)。
+/**
+ * 冷开落底的 settle 窗口(ms):rAF 落底 + 初窗测量 + 贴底补滚在此窗口内基本结算,
+ * 期间列表以 opacity 0 遮罩(规则 7 防两段式落底的可见跳动),到期揭开。
+ * 取 300ms:初窗 ~15 个 render item 的测量在 2-4 帧内完成,补滚各一帧,慢设备留裕量;
+ * 更长会放大「进入会话到内容可见」的感知延迟,不取。
+ */
+const MOBILE_INITIAL_ANCHOR_SETTLE_MS = 300;
 const MOBILE_MESSAGE_ESTIMATED_ITEM_SIZE = 140;
 // LegendList 预渲距离(px,视口外每侧):约 1 屏,挂载集小 → 滚动 mount 帧压进一帧内(见 listperf 实测)。
 const MOBILE_MESSAGE_DRAW_DISTANCE = 800;
-// 贴底策略:on 四个触发键全开(见 @legendapp/list/react-native 的 MaintainScrollAtEndOnOptions:
-// dataChange / itemLayout / footerLayout / layout;等价于不传 on 的默认全开,这里显式列出以说明各自作用)。
-// - dataChange:流式每 token 替换 item 引用(见 mobile-message-list-streaming-rerender)属 data 变化,
-//   这是流式贴底的主触发路径;且 maintainVisibleContentPosition.data 会在每次 data 变化时上 MVCP 锚定锁,
-//   必须靠 onDataChange 的贴底分支把它顶回底部(否则回复往屏外长、视口钉在原地 → 流式不跟随)。
-// - itemLayout:已挂载 item 撑高(>5px)时补跟随。
-// - footerLayout:queue footer / typing 指示出现或变高时保持贴底。
-// - layout:视口自身尺寸变化(旋转 / 分屏 / 键盘弹收)时重新贴底,否则贴底用户的最新消息会落到视口外
-//   (review P2:缺 layout 触发时,视口变矮而无 data/row-size 变化,scroll offset 停在旧 end)。
-// animated:false → 冷开直接出现在底部,不「先在顶部再跳到底」。
-const MOBILE_MESSAGE_MAINTAIN_AT_END = {
-  animated: false,
-  on: { dataChange: true, footerLayout: true, itemLayout: true, layout: true },
-} as const;
-// 近底阈值(视口比例):用户滚离底超过这个比例就不再自动跟随,不会打断向上翻阅(对齐 filo)。
-const MOBILE_MESSAGE_MAINTAIN_END_THRESHOLD = 0.12;
 const FOLDABLE_HEADER_HIT_SLOP = { bottom: 10, left: 4, right: 4, top: 10 };
 // 「跳到底部」浮标直径:比 composer 里的语音按钮(28)大一档但不压过它,Telegram 同款层级感。
 const SCROLL_TO_BOTTOM_FAB_SIZE = 36;
@@ -434,8 +425,8 @@ export function MessageRenderer({
   // ── 拖动手势追踪(贴底跟随的意图解除用)──
   // 拖动期间(onScrollBeginDrag ~ onScrollEndDrag)相对起点累计上移超过死区
   // → 立即解除跟随(shouldUnpinMobileFollowOnDrag),不看近底距离阈值——
-  // 距离阈值(≥228px)在流式期间与 scrollToEnd / maintainScrollAtEnd 竞态,
-  // 慢速小幅上滑会被反复拽回(桌面版同源 bug 的手机版变体,见 messageScroll.ts)。
+  // 距离阈值(≥228px)在流式期间与程序化贴底滚动竞态,慢速小幅上滑会被反复拽回
+  // (桌面版同源 bug 的手机版变体,见 messageScroll.ts)。
   const isDraggingRef = useRef(false);
   const dragStartOffsetYRef = useRef<number | null>(null);
   // 用户是否主动拖动过(区分「冷开初始布局」与「用户上翻」):自动加载更早只在用户真拖过之后才允许,
@@ -462,6 +453,16 @@ export function MessageRenderer({
   // 断路到期后的 one-shot 贴底清账 timer:断路窗内错过的最终高度可能停在半空且
   // 之后再无 contentSize 事件,到期补一次(仍在贴底跟随时)把账清平(review P1)。
   const followEndPinRecoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 冷开落底是否已发起(每个 scrollResetKey 一次):替代 LegendList initialScrollAtEnd
+  // (弃用原因见下方 LegendList props 注释)。首批 items commit 后 rAF 命令式落底一次,
+  // 目标偏差由 handleContentSize 的贴底补滚随后续测量自然校正。
+  const initialAnchorDoneRef = useRef(false);
+  // 落底 rAF / 揭开 timer 的句柄(生命周期 = 每个 scrollResetKey 一轮,不挂 effect
+  // cleanup——原因见冷开落底 effect 的注释;清旧在落底 effect 自身开头,卸载时兜底清)。
+  const initialAnchorFrameRef = useRef<number | null>(null);
+  const initialRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // settle 遮罩:落底两段式期间列表保持 opacity 0,settle 窗口后揭开(规则 7 防跳动)。
+  const [listRevealed, setListRevealed] = useState(false);
   // 会话切换(scrollResetKey)的 ref 复位必须在渲染期同步完成,不能只靠下方的 reset effect:
   // effect 在 paint 后异步执行,而重挂的新列表(key={scrollResetKey})的首批 scroll /
   // onStartReached 回调、以及先于 reset effect 定义的 eligibility effect,都可能带着上个会话的
@@ -479,6 +480,10 @@ export function MessageRenderer({
     previousItemKeysRef.current = [];
     scrollMetricsRef.current = { contentHeight: 0, offsetY: 0, viewportHeight: 0 };
     followEndPinStateRef.current = createMobileFollowEndPinState();
+    initialAnchorDoneRef.current = false;
+    // settle 遮罩复位必须与列表重挂同帧(渲染期 setState,React 官方 prop-change 模式):
+    // 走 effect 会晚一帧,新列表以旧 revealed=true 裸挂一帧,未锚定内容闪现。
+    setListRevealed(false);
   }
   // DEV-only:把列表控制器 + 滚动 metrics 暴露给性能 harness(临时,profiling/回归测量用)。
   useEffect(() => {
@@ -491,10 +496,6 @@ export function MessageRenderer({
   const lastAppliedFocusKeyRef = useRef<string | null>(null);
   const [hasNewMessages, setHasNewMessages] = useState(false);
   const [isAwayFromBottom, setIsAwayFromBottom] = useState(false);
-  // load-earlier 期间关掉内置 maintainScrollAtEnd 的端部锚定(与 readingOlderRef 同源联动):短窗口 prepend
-  // 属 dataChange,内置 maintainer 会把列表拉回最新——只关自写的 handleContentSize 不够(review P2 L740)。
-  // 流式期间恒为 true,贴底行为完全不变;用户重新拖动 / 主动跳底 / 切会话时恢复 true。
-  const [endPinEnabled, setEndPinEnabled] = useState(true);
   const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
   const [payload, setPayload] = useState<MessagePayload | null>(null);
   // 关闭回调必须引用稳定:内联闭包每次渲染换新,会经 ImageLightbox 透传成
@@ -502,6 +503,18 @@ export function MessageRenderer({
   // 可能打断进行中的捏合/拖动手势(rule 7)。
   const closePayload = useCallback(() => setPayload(null), []);
   const listData = useMemo(() => [...items], [items]);
+  // 遮罩重武装(review P1):真冷开(无缓存)时列表以空挂载,落底 effect 的空分支已把
+  // 遮罩揭开;首批消息到达(0→N)且本会话尚未落底时,必须在**渲染期**重新武装遮罩——
+  // 等 effect 就晚一帧,长历史会先裸露顶部再跳底(规则 7)。渲染期 setState 同组件
+  // 官方 prop-change 模式,prev 判定保证只在转变那一次触发。
+  const prevListLengthRef = useRef(listData.length);
+  if (prevListLengthRef.current !== listData.length) {
+    if (prevListLengthRef.current === 0 && listData.length > 0
+      && !initialAnchorDoneRef.current && listRevealed) {
+      setListRevealed(false);
+    }
+    prevListLengthRef.current = listData.length;
+  }
   const itemKeys = useMemo(() => listData.map((item) => item.key), [listData]);
   const firstItemKey = itemKeys[0] ?? null;
   // 本地缩略兜底映射版本:collect 内部对 xdt-oss-attach:// 附件读全局 store 做 overlay,
@@ -617,7 +630,8 @@ export function MessageRenderer({
     if (nextIndex !== null) setFirstVisibleIndex(nextIndex);
   });
 
-  // LegendList 用内置 maintainScrollAtEnd/alignItemsAtEnd 贴底;跳底直接命令式 scrollToEnd。
+  // 贴底跟随由 handleContentSize 的手动补滚承担(nearBottomRef 是跟随意图的唯一真相);
+  // 跳底直接命令式 scrollToEnd。
   const scrollToBottom = useCallback(() => {
     nearBottomRef.current = true;
     readingOlderRef.current = false;
@@ -629,7 +643,6 @@ export function MessageRenderer({
       clearTimeout(followEndPinRecoveryTimerRef.current);
       followEndPinRecoveryTimerRef.current = null;
     }
-    setEndPinEnabled(true);
     setIsAwayFromBottom(false);
     setHasNewMessages(false);
     void listRef.current?.scrollToEnd({ animated: true });
@@ -651,7 +664,7 @@ export function MessageRenderer({
     });
   }, [previousUserTarget]);
 
-  // 「跳到最新」请求(会话外部触发):命令式滚到底,LegendList maintainScrollAtEnd 之后维持贴底。
+  // 「跳到最新」请求(会话外部触发):命令式滚到底,之后由 handleContentSize 补滚维持贴底。
   useEffect(() => {
     if (previousFollowLatestRequestKeyRef.current === followLatestRequestKey) return;
     previousFollowLatestRequestKeyRef.current = followLatestRequestKey;
@@ -664,7 +677,6 @@ export function MessageRenderer({
       clearTimeout(followEndPinRecoveryTimerRef.current);
       followEndPinRecoveryTimerRef.current = null;
     }
-    setEndPinEnabled(true);
     setHasNewMessages(false);
     setIsAwayFromBottom(false);
     void listRef.current?.scrollToEnd({ animated: true });
@@ -702,17 +714,15 @@ export function MessageRenderer({
     if (!eligible) return;
     lastAutoLoadEarlierKeyRef.current = firstItemKey;
     readingOlderRef.current = true;
-    setEndPinEnabled(false);
     onLoadEarlier();
   }, [firstItemKey, loadEarlierAction.disabled, loadEarlierAction.visible, onLoadEarlier]);
 
   // 近底/跟随态迁移 + 「跳到底部」浮标与新消息红点;metrics 也供 DEV harness 读取。
   // 「解除跟随」的主路径是拖动意图(shouldUnpinMobileFollowOnDrag):拖动中相对起点
-  // 上移超过死区立即解除,并同步关掉 LegendList 内置 maintainScrollAtEnd(endPinEnabled),
-  // 否则 0.12 × viewport 内的小幅上滑仍会被内置贴底拽回。
-  // 「恢复跟随」走 resolveMobileNearBottomOnScroll:距离 + 明确向下方向,恢复时把
-  // endPinEnabled 打开。读历史(readingOlderRef)期间禁止方向性恢复——load-earlier
-  // prepend 的 mVCP 补偿会产生程序化向下增量,短会话里会被误判成「用户滑回底部」。
+  // 上移超过死区立即解除(nearBottomRef 翻 false 即关掉 handleContentSize 的贴底补滚)。
+  // 「恢复跟随」走 resolveMobileNearBottomOnScroll:距离 + 明确向下方向。读历史
+  // (readingOlderRef)期间禁止方向性恢复——load-earlier prepend 的 mVCP 补偿会产生
+  // 程序化向下增量,短会话里会被误判成「用户滑回底部」。
   const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const metrics = {
       contentHeight: event.nativeEvent.contentSize.height,
@@ -730,7 +740,6 @@ export function MessageRenderer({
       })
     ) {
       nearBottomRef.current = false;
-      setEndPinEnabled(false);
       setIsAwayFromBottom(true);
     } else {
       const nearBottom = resolveMobileNearBottomOnScroll({
@@ -739,12 +748,7 @@ export function MessageRenderer({
         scrollDelta: readingOlderRef.current ? 0 : metrics.offsetY - previousOffsetY,
         bottomOverlayHeight,
       });
-      if (nearBottom !== nearBottomRef.current) {
-        nearBottomRef.current = nearBottom;
-        // 方向性恢复跟随 → 重新打开内置贴底(解除时在上面的分支关掉;
-        // scrollToBottom / followLatest / 切会话各自已显式恢复)。
-        if (nearBottom) setEndPinEnabled(true);
-      }
+      nearBottomRef.current = nearBottom;
       setIsAwayFromBottom(!nearBottom);
       if (nearBottom) setHasNewMessages(false);
     }
@@ -762,12 +766,9 @@ export function MessageRenderer({
     userScrollForOlderRef.current = true;
     // 新手势 = 允许重新尝试一次自动加载(上次失败 / 无进展的去重记录随手势作废)。
     lastAutoLoadEarlierKeyRef.current = null;
-    // 用户重新拖动 → 结束「读历史」态;内置贴底只在仍处于跟随态时恢复——
-    // 已意图解除的用户开始新一轮上滑时,无条件恢复会让 maintainScrollAtEnd
-    // 在死区被越过前的间隙里与手势打架;解除态下滑回底的恢复由 handleScroll
-    // 的方向判定负责(恢复时会重新打开 endPinEnabled)。
+    // 用户重新拖动 → 结束「读历史」态;解除态下滑回底的跟随恢复由 handleScroll
+    // 的方向判定负责(nearBottomRef 翻 true 即重新打开贴底补滚)。
     readingOlderRef.current = false;
-    if (nearBottomRef.current) setEndPinEnabled(true);
     // 翻完 refs 立即补一次电平评估:列表已顶死时(Android 无 bounce 尤甚)这次拖动不产生
     // offset 变化,不会有 onScroll / onStartReached,ref 写入也不驱动 effect——没有这一刀,
     // 「失败后停在顶部再拖一下重试」的信号会整体丢失(review P2)。
@@ -798,12 +799,11 @@ export function MessageRenderer({
     scrollMetricsRef.current = { ...scrollMetricsRef.current, viewportHeight };
   }, []);
 
-  // 记录 contentHeight 供近底判定 fallback + DEV harness 就绪判定;并为「大块一帧撑高」补贴底。
-  // 为何需要:LegendList 的 maintainScrollAtEnd 靠「撑高后距底 ≤ 阈值」判定是否跟随,而一帧内长出一大段
-  // (典型:流式结束时整条消息重排为完整 markdown)会让距底瞬间 > 阈值,被误判为「用户已上滑」而放弃跟随
-  // → 最新内容留在底部浮层下方。这里改用「撑高前是否贴底」这个意图信号补一刀(仿 filo onContentSizeChange
-  // → scrollToEnd):用户本就贴底(nearBottomRef,与「跳到底部」浮标同源)则无论这次长多少都跟到底;
+  // 记录 contentHeight 供近底判定 fallback + DEV harness 就绪判定;并承担**唯一的贴底跟随**:
+  // 内容长高(流式增长、大块一帧撑高、冷开测量结算)时,用户本就贴底(nearBottomRef,与
+  // 「跳到底部」浮标同源)则无论这次长多少都跟到底(仿 filo onContentSizeChange → scrollToEnd);
   // 上翻历史时 nearBottomRef=false,不打断。animated:false → 即时跟随、不排队动画。
+  // LegendList 内置 maintainScrollAtEnd 已弃用(见 LegendList props 注释),不存在双机制叠加。
   const handleContentSize = useCallback((_width: number, height: number) => {
     const { viewportHeight } = scrollMetricsRef.current;
     scrollMetricsRef.current = { ...scrollMetricsRef.current, contentHeight: height };
@@ -812,8 +812,7 @@ export function MessageRenderer({
     if (nearBottomRef.current && viewportHeight > 0 && height > viewportHeight) {
       // 补滚护栏:死区去噪 + 振荡断路,掐断「scrollToEnd → 重测 → onContentSizeChange」
       // 洪泛环(JS 忙死、冷开消息区空白;语义与参数见 messageScroll.ts 护栏段)。
-      // 单调增长(流式/冷开/回填)不限流——内置 maintainScrollAtEnd 对大块单帧撑高
-      // 不兜底,手动补滚必须保持原有的每次跟进;只有高度往返振荡才跳闸。
+      // 单调增长(流式/冷开/回填)不限流,每次跟进;只有高度往返振荡才跳闸。
       const decision = evaluateMobileFollowEndContentSizePin(followEndPinStateRef.current, {
         now: Date.now(),
         contentHeight: height,
@@ -843,34 +842,69 @@ export function MessageRenderer({
     }
   }, []);
 
+  // 冷开落底(替代 initialScrollAtEnd,弃用原因见 LegendList props 注释):首批 items
+  // commit 后 rAF 一次命令式落底。此刻测量未完备、目标可能偏短,但 nearBottomRef 冷开
+  // 为 true,后续每次 contentSize 增长都由 handleContentSize 的贴底补滚继续拉到底,
+  // 最终收敛在真实底部(与迁移 LegendList 前的手搓落底同机制)。落底→补滚是两段式的,
+  // 肉眼可见「跳两下」(规则 7)——沿用老方案的 settle 遮罩:列表先以 opacity 0 挂载,
+  // 落底发起后等一个 settle 窗口(初窗测量与补滚基本结算)再揭开,揭开后不再隐藏。
+  // ⚠️ rAF / reveal timer 挂 ref 而非 effect cleanup:本 effect 依赖 listData.length,
+  // settle 窗口内消息追加会触发 cleanup——若把 timer 交给 cleanup,它会被清掉且因
+  // initialAnchorDoneRef 已置位不再重设,列表永久停在 opacity 0(即新一种白屏)。
+  // 两者的真实生命周期是「每个 scrollResetKey 一轮」,清理归会话切换 effect 与卸载。
+  useEffect(() => {
+    if (initialAnchorDoneRef.current) return;
+    if (listData.length === 0) {
+      // 空会话没有落底问题,直接可见(空态/同步占位不该被遮罩藏住)。
+      setListRevealed(true);
+      return;
+    }
+    initialAnchorDoneRef.current = true;
+    // 上个会话可能遗留的在飞句柄在此接管清理。不能放会话切换 reset effect:它声明
+    // 在本 effect 之后,同一轮 commit 里会把这里刚排好的新句柄误清。
+    if (initialAnchorFrameRef.current !== null) cancelAnimationFrame(initialAnchorFrameRef.current);
+    if (initialRevealTimerRef.current) clearTimeout(initialRevealTimerRef.current);
+    initialAnchorFrameRef.current = requestAnimationFrame(() => {
+      initialAnchorFrameRef.current = null;
+      void listRef.current?.scrollToEnd({ animated: false });
+    });
+    initialRevealTimerRef.current = setTimeout(() => {
+      initialRevealTimerRef.current = null;
+      setListRevealed(true);
+    }, MOBILE_INITIAL_ANCHOR_SETTLE_MS);
+  }, [listData.length, scrollResetKey]);
+
   // 会话切换(scrollResetKey):重置浮标/近底等 UI 状态;LegendList 本体经 key={scrollResetKey}
-  // 重挂并由 alignItemsAtEnd + initialScrollAtEnd 重新锚到底部。滚动/自动加载相关的 ref 复位
-  // 已在渲染期同步块完成(见 prevScrollResetKeyRef,防切会话竞态误触发自动拉历史),此处不重复。
+  // 重挂并重新落底(上方冷开落底 effect;initialAnchorDoneRef 已在渲染期同步块复位)。
+  // 滚动/自动加载相关的 ref 复位已在渲染期同步块完成(见 prevScrollResetKeyRef,防切会话
+  // 竞态误触发自动拉历史),此处不重复。
   useEffect(() => {
     lastAppliedFocusKeyRef.current = null;
     // 上个会话遗留的断路清账 timer 作废(护栏状态本体已在渲染期同步块重建)。
+    // 冷开落底的 rAF / 揭开 timer 不在这清:清旧职责在落底 effect 自身(声明序原因见彼处)。
     if (followEndPinRecoveryTimerRef.current) {
       clearTimeout(followEndPinRecoveryTimerRef.current);
       followEndPinRecoveryTimerRef.current = null;
     }
-    setEndPinEnabled(true);
     setIsAwayFromBottom(false);
     setFirstVisibleIndex(0);
     setHasNewMessages(false);
   }, [scrollResetKey]);
-  // 卸载时清掉在飞的断路清账 timer(闭包引用 listRef,卸载后触发是无害 no-op,
-  // 但不留悬挂定时器)。
+  // 卸载时清掉在飞的定时器/rAF(闭包引用 listRef,卸载后触发是无害 no-op,
+  // 但不留悬挂句柄)。
   useEffect(() => () => {
     if (followEndPinRecoveryTimerRef.current) clearTimeout(followEndPinRecoveryTimerRef.current);
+    if (initialAnchorFrameRef.current !== null) cancelAnimationFrame(initialAnchorFrameRef.current);
+    if (initialRevealTimerRef.current) clearTimeout(initialRevealTimerRef.current);
   }, []);
 
   // 顶部 chrome(如连接横幅)出现/消失 → topPadding 变 → contentContainerStyle.paddingTop 变 →
   // 所有 item 随之上下移。LegendList 的 maintainVisibleContentPosition 只跟 data / item 尺寸变化、
-  // 不管容器 padding;用户上翻历史(非贴底)时 maintainScrollAtEnd 也不介入 → 可见消息会跳 padding
-  // 差值(迁移前由手搓 scrollToOffset 补偿,一并删了;此处按差值补回,review P1)。
-  // 跳过补偿的条件是「近底 *且* 端部维持仍生效」——此时交给 maintainScrollAtEnd,不重复补;
-  // 但读历史(readingOlderRef=true)期间 maintainScrollAtEnd 已被关掉(见 endPinEnabled),
-  // 即便被判近底(短会话)也必须在这里补,否则 topPadding 变化两边都不处理、可见消息仍跳(review P1 L683)。
+  // 不管容器 padding → 可见消息会跳 padding 差值(迁移前由手搓 scrollToOffset 补偿,一并删了;
+  // 此处按差值补回,review P1)。跳过补偿的条件是「近底且非读历史」——此时贴底补滚
+  // (handleContentSize)会随后续 contentSize 事件把列表重新拉到底,不重复补;读历史期间
+  // 补滚被 readingOlderRef 挡住,即便被判近底(短会话)也必须在这里补,否则 topPadding
+  // 变化两边都不处理、可见消息仍跳(review P1 L683)。
   useEffect(() => {
     const prev = prevTopPaddingRef.current;
     prevTopPaddingRef.current = topPadding;
@@ -895,11 +929,11 @@ export function MessageRenderer({
     void listRef.current?.scrollToIndex({ animated: true, index, viewPosition: 0.45 });
   }, [focusRunKey, focusedItemKey, listData]);
 
-  // 新消息红点:滚离底时来新消息(尾部 append)→ 提示。贴底时由 maintainScrollAtEnd 自动跟随、不提示。
-  // wasNearBottom 只看 nearBottomRef(跟随态唯一真相):以前 || 距离兜底会在
-  // 「意图解除后仍停在近底阈值带内」时把状态判回跟随——标志说在跟、滚动路径
-  // (handleContentSize / maintainScrollAtEnd)却已解除,红点被吞。ref 由
-  // handleScroll / 意图解除 / 跳转路径维护,冷开与切会话初始为 true,无需距离兜底。
+  // 新消息红点:滚离底时来新消息(尾部 append)→ 提示。贴底时由 handleContentSize 补滚
+  // 自动跟随、不提示。wasNearBottom 只看 nearBottomRef(跟随态唯一真相):以前 || 距离兜底
+  // 会在「意图解除后仍停在近底阈值带内」时把状态判回跟随——标志说在跟、补滚却已解除,
+  // 红点被吞。ref 由 handleScroll / 意图解除 / 跳转路径维护,冷开与切会话初始为 true,
+  // 无需距离兜底。
   useEffect(() => {
     const decision = evaluateMessageWindowUpdate({
       previousKeys: previousItemKeysRef.current,
@@ -916,8 +950,8 @@ export function MessageRenderer({
   }, [focusedItemKey, itemKeys]);
 
   const handleLoadEarlierPress = useCallback(() => {
+    // readingOlderRef 挡住 handleContentSize 的贴底补滚,prepend 撑高不再拽回底部。
     readingOlderRef.current = true;
-    setEndPinEnabled(false);
     onLoadEarlier?.();
   }, [onLoadEarlier]);
 
@@ -944,10 +978,14 @@ export function MessageRenderer({
         recycleItems={false}
         estimatedItemSize={MOBILE_MESSAGE_ESTIMATED_ITEM_SIZE}
         drawDistance={MOBILE_MESSAGE_DRAW_DISTANCE}
+        // 冷开落底不用 initialScrollAtEnd、贴底跟随不用 maintainScrollAtEnd:两者的内部
+        // 程序化滚动(冷开锚定 watchdog 的 fallback 补滚、贴底的 pending 自我续排)在特定
+        // 内容形态下会与布局结算互相触发,形成无限 onScroll 风暴把 JS 线程打满——表现为
+        // 冷开会话消息区空白、无 loading、返回键无响应,只能杀 App(2026-07 模拟器逐项
+        // 二分实锤,3.3.2 / 3.3.3 均复现)。落底改为下方 rAF 一次命令式 scrollToEnd,
+        // 后续贴底由 handleContentSize 的手动补滚(带振荡断路器)接管。
         alignItemsAtEnd
-        initialScrollAtEnd
-        maintainScrollAtEnd={endPinEnabled ? MOBILE_MESSAGE_MAINTAIN_AT_END : false}
-        maintainScrollAtEndThreshold={MOBILE_MESSAGE_MAINTAIN_END_THRESHOLD}
+        maintainScrollAtEnd={false}
         maintainVisibleContentPosition={{ data: true, size: true }}
         contentContainerStyle={[
           styles.messages,
@@ -981,7 +1019,7 @@ export function MessageRenderer({
         onStartReachedThreshold={2}
         scrollEventThrottle={16}
         ref={listRef}
-        style={styles.messageList}
+        style={[styles.messageList, !listRevealed && styles.messageListSettling]}
         testID={testID ?? 'message.list'}
         viewabilityConfig={viewabilityConfigRef.current}
         onViewableItemsChanged={handleViewableItemsChangedRef.current}
@@ -4492,8 +4530,9 @@ function messageClientId(item: MobileMessageItem): string {
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   messageFrame: { flex: 1, minHeight: 0 },
   messageList: { flex: 1 },
-  // 初次锚定前隐藏列表(不影响布局/测量,只视觉隐藏),锚定到底部后再显示,消除开会话跳位。
-  messageListHidden: { opacity: 0 },
+  // 冷开落底 settle 期的遮罩(不影响布局/测量,只视觉隐藏;防两段式落底跳动,
+  // 见 MOBILE_INITIAL_ANCHOR_SETTLE_MS)。
+  messageListSettling: { opacity: 0 },
   messages: {
     flexGrow: 1,
     // Anchor a short conversation to the bottom (just above the composer) like a normal chat,

@@ -70,7 +70,7 @@ import {
   useRemoteSessionStoreVersion,
 } from '@/session/remoteSessionStore';
 import { useRemoteScheduleEventSnapshot } from '@/scheduler/remoteScheduleEvents';
-import { loadSessionScheduleIndex } from '@/session/scheduleIndex';
+import { loadSessionScheduleIndex, loadSessionScheduleIndexThrottled } from '@/session/scheduleIndex';
 import { shouldSuppressRemoteListEmptyState } from '@/session/sessionEmptyState';
 import type { RemoteSession } from '@/session/types';
 import { useTheme, useThemedStyles, type ThemeColors } from '@/theme';
@@ -169,7 +169,9 @@ export default function DeviceDetailScreen() {
         ]);
       });
       remoteSessionStore.setDeviceSessions(deviceId, deviceName, Array.isArray(list) ? list : []);
-      void loadSessionScheduleIndex(maker)
+      // 节流缓存与首页共用同一 key(deviceId):两页交替浏览时不重复全量拉取(单飞 + TTL,
+      // 拥塞背景见 scheduleIndex 注释)。
+      void loadSessionScheduleIndexThrottled(deviceId, () => loadSessionScheduleIndex(maker))
         .then(setScheduleIndex)
         .catch(() => setScheduleIndex(new Map()));
       setLastSyncedAt(Date.now());
@@ -196,6 +198,20 @@ export default function DeviceDetailScreen() {
   useEffect(() => {
     if (scheduleEventSnapshot.sessionIndexVersion > 0) void loadSessions();
   }, [loadSessions, scheduleEventSnapshot.sessionIndexVersion]);
+
+  // read / all-read(清除未读的权威信号)force 刷新节流缓存——否则 30s TTL 内命中陈旧
+  // 结果,徽标清不掉(review P1)。依赖专用 unreadClearVersion 计数而非 lastProjection
+  // 引用:后者每个事件都换新,会让 fired / deferred 等无关事件也重跑本 effect(review P1)。
+  // 上方 loadSessions effect 随 sessionIndexVersion 同步触发,其内部 throttled 调用会
+  // 单飞复用本次 force 拉起的在途 promise,不产生第二次全量拉取。
+  useEffect(() => {
+    if (scheduleEventSnapshot.unreadClearVersion === 0) return;
+    void loadSessionScheduleIndexThrottled(deviceId, () => loadSessionScheduleIndex(maker), { force: true })
+      .then(setScheduleIndex)
+      .catch(() => {
+        // 失败保留旧徽标,与整页 load 的容错口径一致。
+      });
+  }, [deviceId, maker, scheduleEventSnapshot.unreadClearVersion]);
 
   const messagePreviewIndex = useMemo(
     () => buildSessionMessagePreviewIndex(

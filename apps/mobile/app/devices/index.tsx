@@ -113,6 +113,7 @@ import {
 } from '@/session/remoteSessionStore';
 import {
   loadDeviceSessionScheduleIndex,
+  loadSessionScheduleIndexThrottled,
   replaceSessionScheduleIndexEntries,
 } from '@/session/scheduleIndex';
 import { createScheduleIndexDeferRegistry } from '@/session/scheduleIndexDefer';
@@ -245,8 +246,20 @@ export default function HomeScreen() {
     });
   }, [reconcileDeviceViews]);
 
-  const refreshDeviceScheduleIndex = useCallback((deviceId: string, sessionIds: readonly string[]) => {
-    void loadDeviceSessionScheduleIndex(deviceId, invoke)
+  const refreshDeviceScheduleIndex = useCallback((
+    deviceId: string,
+    sessionIds: readonly string[],
+    options?: { force?: boolean },
+  ) => {
+    // 节流(单飞 + 30s TTL):focus / hydrate / schedule 推送三个触发源高频交叠,每次都全量
+    // 重放 1+N×listRuns 会拥塞 device-link 管道、拖慢会话打开的关键读(见 scheduleIndex 注释)。
+    // force = 已读类权威信号(read / all-read 推送),必须绕过 TTL 立即重拉——否则「看完
+    // 返回首页」这个最常见路径永远命中 30s 内的陈旧缓存,未读徽标清不掉(review P1)。
+    void loadSessionScheduleIndexThrottled(
+      deviceId,
+      () => loadDeviceSessionScheduleIndex(deviceId, invoke),
+      { force: options?.force },
+    )
       .then((nextIndex) => {
         setScheduleIndex((current) => replaceSessionScheduleIndexEntries(
           current,
@@ -501,7 +514,11 @@ export default function HomeScreen() {
         remoteSessionStore.requestReseed(deviceId);
         continue;
       }
-      refreshDeviceScheduleIndex(deviceId, sessionIds);
+      // read / all-read 是用户操作驱动的低频权威信号,force 穿透节流保证徽标即时清除;
+      // fired / running 等高频事件照常吃 TTL(全量 force 会把 listRuns 风暴请回来)。
+      refreshDeviceScheduleIndex(deviceId, sessionIds, {
+        force: projection.unreadImpact === 'may-clear-schedule' || projection.unreadImpact === 'clear-all',
+      });
     }
   }), [refreshDeviceScheduleIndex]);
 
