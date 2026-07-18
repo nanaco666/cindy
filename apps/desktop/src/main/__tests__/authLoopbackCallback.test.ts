@@ -4,6 +4,7 @@ import {
   createAuthBrowserAuthorizationSlot,
   parseAuthLoopbackCallback,
   raceAuthBrowserCancellation,
+  renderAuthLoopbackPage,
 } from '../authLoopbackCallback';
 
 describe('auth loopback callback', () => {
@@ -29,6 +30,46 @@ describe('auth loopback callback', () => {
     });
     expect(parseAuthLoopbackCallback('/health', 'expected')).toBeNull();
     expect(parseAuthLoopbackCallback(undefined, 'expected')).toBeNull();
+  });
+});
+
+describe('auth loopback callback page', () => {
+  it('renders the localized copy and lang attribute', () => {
+    const html = renderAuthLoopbackPage({
+      htmlLang: 'zh-CN',
+      variant: 'success',
+      title: '登录成功',
+      body: '你可以关闭此页面，回到 Cindy 继续。',
+    });
+    expect(html).toContain('<html lang="zh-CN">');
+    expect(html).toContain('<h1>登录成功</h1>');
+    expect(html).toContain('你可以关闭此页面，回到 Cindy 继续。');
+    expect(html).not.toContain('class="detail"');
+    expect(html).not.toContain('class="cta"');
+  });
+
+  it('renders the return-to-app CTA when an action is provided', () => {
+    const html = renderAuthLoopbackPage({
+      htmlLang: 'zh-CN',
+      variant: 'success',
+      title: '登录成功',
+      body: '你可以关闭此页面，回到 Cindy 继续。',
+      action: { href: 'cindy://focus/desktop-login', label: '回到 Cindy' },
+    });
+    expect(html).toContain('<a class="cta" href="cindy://focus/desktop-login">回到 Cindy</a>');
+  });
+
+  it('shows the raw error code on the error page and escapes injected markup', () => {
+    const html = renderAuthLoopbackPage({
+      htmlLang: 'en',
+      variant: 'error',
+      title: 'Sign-in not completed',
+      body: 'Please return to Cindy and sign in again.',
+      detail: '<script>alert(1)</script>',
+    });
+    expect(html).toContain('class="detail"');
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(html).not.toContain('<script>');
   });
 });
 
