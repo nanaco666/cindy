@@ -61,6 +61,13 @@ describe('UserInfoSection — outer wrapper takes over full-row hover', () => {
   });
 });
 
+describe('UserInfoSection — version label', () => {
+  it('shows only the app version without the retired XD.Inc prefix', () => {
+    expect(source).toContain('{appDisplayVersion}');
+    expect(source).not.toContain('XD.Inc - {appDisplayVersion}');
+  });
+});
+
 // ── 改动 2: 内部主按钮去掉冗余 hover / 圆角 ───────────────────────────
 
 describe('UserInfoSection — inner main button no longer owns hover background', () => {

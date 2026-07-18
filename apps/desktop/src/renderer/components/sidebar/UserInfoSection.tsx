@@ -83,7 +83,7 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
           )}
         </div>
 
-        {/* Name & plan — fade in/out with collapse。
+        {/* Name & version — fade in/out with collapse。
             折叠 rail（64px）下必须整个移出布局（hidden）——flex-1 占位会把
             头像挤出 64px 可视区（旧 w-0 折叠时代 opacity 即可，rail 时代不行）。 */}
         <div
@@ -98,7 +98,7 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
           </p>
           {/* 2px gap 对齐 cc-agent-view.pen 里 userNameContainer 的 gap: 2 */}
           <p className="mt-0.5 truncate text-xs leading-tight text-sidebar-muted" title={appDisplayVersionDetail}>
-            XD.Inc - {appDisplayVersion}
+            {appDisplayVersion}
           </p>
         </div>
       </button>
