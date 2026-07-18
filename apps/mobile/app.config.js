@@ -50,7 +50,38 @@ function loadSelfHostRegionBundle(region) {
       `${path.basename(file)} 缺少 region "${region}" 的 tapdb.clientId/clientToken`,
     );
   }
-  return block;
+  if (region === 'cn' && Object.hasOwn(block, 'google')) {
+    throw new Error(`${path.basename(file)} 的 cn 不得配置 google;Google 登录仅允许 global 线`);
+  }
+  const google = block.google;
+  const googleFields = ['webClientId', 'iosClientId', 'iosUrlScheme'];
+  const hasGoogleConfig = googleFields.every((key) => google?.[key]?.trim());
+  if (hasRealConfig && region === 'global' && !hasGoogleConfig) {
+    throw new Error(
+      `${path.basename(file)} 缺少 global.google.webClientId/iosClientId/iosUrlScheme`,
+    );
+  }
+  let normalizedGoogle;
+  if (hasGoogleConfig) {
+    const webClientId = google.webClientId.trim();
+    const iosClientId = google.iosClientId.trim();
+    const iosUrlScheme = google.iosUrlScheme.trim();
+    const clientIdSuffix = '.apps.googleusercontent.com';
+    if (!webClientId.endsWith(clientIdSuffix) || !iosClientId.endsWith(clientIdSuffix)) {
+      throw new Error(`${path.basename(file)} 的 global.google client id 格式无效`);
+    }
+    const expectedScheme = `com.googleusercontent.apps.${iosClientId.slice(0, -clientIdSuffix.length)}`;
+    if (iosUrlScheme !== expectedScheme) {
+      throw new Error(
+        `${path.basename(file)} 的 global.google.iosUrlScheme 必须由 iosClientId 反写为 ${expectedScheme}`,
+      );
+    }
+    normalizedGoogle = { webClientId, iosClientId, iosUrlScheme };
+  }
+  const normalizedBlock = { ...block };
+  delete normalizedBlock.google;
+  if (normalizedGoogle) normalizedBlock.google = normalizedGoogle;
+  return normalizedBlock;
 }
 
 // expo-updates 原生配置要求一个合法 URL 才能启用模块。自建线关闭原生启动联网检查,
@@ -130,6 +161,9 @@ module.exports = (context = {}) => {
     if (!process.env[key]?.trim()) process.env[key] = value;
   }
   const regional = REGION_CONFIG[region];
+  const selfHosted = process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST === '1';
+  const selfHostRegion = selfHosted ? loadSelfHostRegionBundle(region) : null;
+  const selfHostGoogle = selfHostRegion?.google;
   resolveAppStoreId(region);
   let next = {
     ...baseConfig,
@@ -144,8 +178,9 @@ module.exports = (context = {}) => {
       package: regional.androidPackage,
     },
     plugins: withNativeAuthPlugins(baseConfig.plugins || [], {
-      googleIosUrlScheme:
-        process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME?.trim(),
+      googleIosUrlScheme: selfHosted
+        ? selfHostGoogle?.iosUrlScheme
+        : process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME?.trim(),
       wechatAppId: process.env.EXPO_PUBLIC_CINDY_WECHAT_APP_ID?.trim(),
       wechatUniversalLink:
         process.env.EXPO_PUBLIC_CINDY_WECHAT_UNIVERSAL_LINK?.trim(),
@@ -168,7 +203,7 @@ module.exports = (context = {}) => {
   // 自建门控用 EXPO_PUBLIC_XDT_OTA_SELFHOST:同一个 EXPO_PUBLIC 标志既在此决定
   // bundleId / 原生 OTA 策略,又被 inline 进 JS 供运行时 IS_OTA_SELFHOST 判定,
   // 构建与运行时严格对齐。真实 OTA 地址不再作为构建 env 注入。
-  if (process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST === '1') {
+  if (selfHosted) {
     // Android 自建线:versionCode 只在此自建分支注入(经 release-android-*.mjs 传入的
     // XDT_ANDROID_VERSION_CODE),APK 覆盖安装 + NPKG md5 去重要求它单调递增。app.json 里
     // **不声明** android.versionCode → 非自建 resolved config 逐字节不变(红线 1,EAS 指纹不受影响)。
@@ -177,7 +212,6 @@ module.exports = (context = {}) => {
     const rawVersionCode = process.env.XDT_ANDROID_VERSION_CODE?.trim();
     const versionCode = rawVersionCode ? Number(rawVersionCode) : undefined;
     // 自建 app 身份按 region 取(见 loadSelfHostRegionBundle 头注释)。
-    const selfHostRegion = loadSelfHostRegionBundle(region);
     const tapdb = selfHostRegion.tapdb;
     const hasTapdbConfig = Boolean(
       tapdb?.clientId?.trim() && tapdb?.clientToken?.trim(),
@@ -210,6 +244,15 @@ module.exports = (context = {}) => {
                   clientId: tapdb.clientId.trim(),
                   clientToken: tapdb.clientToken.trim(),
                   region,
+                },
+              }
+            : {}),
+          ...(selfHostGoogle
+            ? {
+                google: {
+                  webClientId: selfHostGoogle.webClientId,
+                  iosClientId: selfHostGoogle.iosClientId,
+                  iosUrlScheme: selfHostGoogle.iosUrlScheme,
                 },
               }
             : {}),

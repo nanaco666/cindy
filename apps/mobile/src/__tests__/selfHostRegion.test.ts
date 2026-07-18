@@ -8,7 +8,7 @@ import {
   regionEnvOverrides,
   formatSelfHostReleaseCommand,
   assertRegionOssComplete,
-  stripSelfHostTapdbEnv,
+  stripSelfHostRegionEnv,
 } from '../../scripts/lib/self-host-region.mjs';
 
 // 一份结构完整的合法配置(oss/signing 叶子值都填,供 resolve/override/assert 用例复用)。
@@ -28,6 +28,11 @@ const VALID = {
     iosBundleId: 'com.xd.cindy',
     androidPackage: 'com.xd.cindy',
     npkgExpectBundle: 'com.xd.cindy',
+    google: {
+      webClientId: 'web.apps.googleusercontent.com',
+      iosClientId: 'ios.apps.googleusercontent.com',
+      iosUrlScheme: 'com.googleusercontent.apps.ios',
+    },
     tapdb: { clientId: 'tap-client', clientToken: 'tap-token' },
     oss: { cdnBaseUrl: 'https://cdn.app/x', bucket: 'b-g', prefix: 'p', ossRegion: 'oss-ap' },
     iosSigning: { teamId: 'T2', profileName: 'P2', signIdentity: 'I2', profilePath: '' },
@@ -50,6 +55,7 @@ describe('validateSelfHostRegions', () => {
     expect(r.global.androidPackage).toBe('com.xd.cindy');
     expect(Object.isFrozen(r)).toBe(true);
     expect(Object.isFrozen(r.cn.tapdb)).toBe(true);
+    expect(Object.isFrozen(r.global.google)).toBe(true);
     expect(Object.isFrozen(r.cn.oss)).toBe(true);
   });
   it('非对象 / 缺 region 块 → 抛错', () => {
@@ -76,6 +82,19 @@ describe('validateSelfHostRegions', () => {
     empty.global.tapdb.clientToken = '';
     expect(() => validateSelfHostRegions(empty)).toThrow(/global\.tapdb\.clientToken 必须是非空字符串/);
   });
+  it('Google 仅允许 global,且三个公开客户端字段必须完整匹配', () => {
+    const cnGoogle = clone();
+    cnGoogle.cn.google = { ...cnGoogle.global.google };
+    expect(() => validateSelfHostRegions(cnGoogle)).toThrow(/cn 不得配置 google/);
+
+    const missing = clone();
+    delete missing.global.google;
+    expect(() => validateSelfHostRegions(missing)).toThrow(/global\.google 必须是 object/);
+
+    const mismatchedScheme = clone();
+    mismatchedScheme.global.google.iosUrlScheme = 'com.googleusercontent.apps.wrong';
+    expect(() => validateSelfHostRegions(mismatchedScheme)).toThrow(/iosUrlScheme 必须由 iosClientId 反写/);
+  });
   it('oss 叶子值允许留空(dry-run 未配置态),但键必须存在', () => {
     const dryRun = clone();
     dryRun.cn.oss = { cdnBaseUrl: '', bucket: '', prefix: '', ossRegion: '' };
@@ -86,13 +105,16 @@ describe('validateSelfHostRegions', () => {
   });
 });
 
-describe('stripSelfHostTapdbEnv', () => {
-  it('清掉 ambient TapDB 注入键,保留其它构建环境', () => {
-    const env = stripSelfHostTapdbEnv({
+describe('stripSelfHostRegionEnv', () => {
+  it('清掉 ambient TapDB / Google 注入键,保留其它构建环境', () => {
+    const env = stripSelfHostRegionEnv({
       EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'ambient-id',
       EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'ambient-token',
       EXPO_PUBLIC_TAPDB_CHANNEL: 'ambient-channel',
       EXPO_PUBLIC_TAPDB_REGION: 'global',
+      EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID: 'ambient-web',
+      EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID: 'ambient-ios',
+      EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME: 'ambient-scheme',
       EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
     });
     expect(env).toEqual({ EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn' });

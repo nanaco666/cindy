@@ -14,6 +14,9 @@ const managedEnvKeys = [
   'EXPO_PUBLIC_CINDY_AUTH_REGION',
   'EXPO_PUBLIC_XDT_OTA_SELFHOST',
   'EXPO_PUBLIC_XDT_OTA_URL',
+  'EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID',
+  'EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID',
+  'EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME',
   'CINDY_SELF_HOST_REGIONS_FILE',
 ];
 let previousEnv: Record<string, string | undefined>;
@@ -85,6 +88,11 @@ describe('mobile native app config', () => {
       global: {
         iosBundleId: 'com.xd.cindy',
         androidPackage: 'com.xd.cindy',
+        google: {
+          webClientId: 'web.apps.googleusercontent.com',
+          iosClientId: 'ios.apps.googleusercontent.com',
+          iosUrlScheme: 'com.googleusercontent.apps.ios',
+        },
         tapdb: { clientId: 'json-id', clientToken: 'json-token' },
       },
     }));
@@ -92,6 +100,9 @@ describe('mobile native app config', () => {
     process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST = '1';
     // 即使调用环境残留旧变量,自建原生 config 也不得再消费真实更新地址。
     process.env.EXPO_PUBLIC_XDT_OTA_URL = 'https://must-not-be-baked.example.com';
+    process.env.EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID = 'ambient-web';
+    process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID = 'ambient-ios';
+    process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME = 'ambient-scheme';
     const selfHosted = buildConfig({ config: appJson.expo });
     expect(selfHosted.updates).toMatchObject({
       url: 'https://selfhost.invalid/manifest',
@@ -107,12 +118,46 @@ describe('mobile native app config', () => {
       clientToken: 'json-token',
       region: 'cn',
     });
+    expect(selfHosted.extra.cindy).not.toHaveProperty('google');
+    expect(selfHosted.plugins).not.toContainEqual(
+      expect.arrayContaining(['@react-native-google-signin/google-signin']),
+    );
 
     process.env.EXPO_PUBLIC_CINDY_AUTH_REGION = 'global';
     const selfHostedGlobal = buildConfig({ config: appJson.expo });
     expect(selfHostedGlobal.ios.bundleIdentifier).toBe('com.xd.cindy');
     expect(selfHostedGlobal.android.package).toBe('com.xd.cindy');
     expect(selfHostedGlobal.extra.cindy.tapdb.region).toBe('global');
+    expect(selfHostedGlobal.extra.cindy.google).toEqual({
+      webClientId: 'web.apps.googleusercontent.com',
+      iosClientId: 'ios.apps.googleusercontent.com',
+      iosUrlScheme: 'com.googleusercontent.apps.ios',
+    });
+    expect(selfHostedGlobal.plugins).toContainEqual([
+      '@react-native-google-signin/google-signin',
+      { iosUrlScheme: 'com.googleusercontent.apps.ios' },
+    ]);
+  });
+
+  it('keeps the existing EAS Google environment path outside self-host builds', () => {
+    const appJson = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'app.json'), 'utf8'),
+    );
+    const buildConfig = require(resolve(process.cwd(), 'app.config.js'));
+    process.env.EXPO_PUBLIC_CINDY_AUTH_REGION = 'global';
+    process.env.EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID =
+      'eas-web.apps.googleusercontent.com';
+    process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID =
+      'eas-ios.apps.googleusercontent.com';
+    process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME =
+      'com.googleusercontent.apps.eas-ios';
+
+    const global = buildConfig({ config: appJson.expo });
+    expect(global.extra.cindy).toEqual({ authRegion: 'global' });
+    expect(global.plugins).toContainEqual([
+      '@react-native-google-signin/google-signin',
+      { iosUrlScheme: 'com.googleusercontent.apps.eas-ios' },
+    ]);
   });
 
   it('fails closed when a store build lacks its regional App Store numeric ID', () => {

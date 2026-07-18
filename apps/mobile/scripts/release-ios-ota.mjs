@@ -18,7 +18,7 @@
 //     的 runtimeVersion,否则原生层已变、热更会推给跑着不同原生面的客户端,须先出冷更整包;
 //     --skip-runtime-check 跳过,显式 --runtime-version 作人工 override(仍过基线校验)。
 // OSS/CDN 配置统一由 scripts/shared/oss.mjs 在发布环境中解析。
-// region / endpoint manifest 自举基址由 mobileClientBuildEnv 提供;TapDB 公开配置来自
+// region / endpoint manifest 自举基址由 mobileClientBuildEnv 提供;TapDB / Google 公开配置来自
 // self-host-regions.json → Expo extra,不依赖 EXPO_PUBLIC_* 注入。
 // =============================================================================
 
@@ -31,7 +31,7 @@ import { parseArgs, assertProductionGitGate, assertPublicEnv, SELF_HOST_PUBLIC_E
 import { buildAssetEntry, buildManifest, sha256Hex, assertOtaRuntimeMatchesBaseline } from './lib/ota-manifest.mjs';
 import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
 import { mobileClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
-import { formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides, assertRegionOssComplete, stripSelfHostTapdbEnv } from './lib/self-host-region.mjs';
+import { formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides, assertRegionOssComplete, stripSelfHostRegionEnv } from './lib/self-host-region.mjs';
 
 // NOTE: 不在模块顶层 refreshOssConfig / 派生 OSS key —— OSS 落点桶由 --region 决定,以下 OTA_ROOT /
 // ASSET_DIR / RELEASE_RECORD_CDN 在 main() resolve region、覆盖 XDT_OSS_* 后 refreshOssConfig() 时赋值。
@@ -83,7 +83,7 @@ function selfhostEnv(region, desktopVersion) {
   delete env.EXPO_PUBLIC_XDT_OTA_URL;
   // 二级版本号:仅 JS 层(不进 @expo/fingerprint,不改 runtimeVersion,与冷更整包同源);空则不注入。
   if (desktopVersion) env.EXPO_PUBLIC_DESKTOP_VERSION = desktopVersion;
-  return stripSelfHostTapdbEnv(env);
+  return stripSelfHostRegionEnv(env);
 }
 
 // 现算当前工作树的 expo-updates 指纹(self-host env)—— 本次 export 的 JS 真正对应的原生面。
@@ -198,7 +198,7 @@ async function main() {
   if (args.execute) {
     // --execute 需要完整的 region OSS 落点(dry-run 可留空);缺则明确报错,不静默回落默认桶。
     assertRegionOssComplete(region);
-    // region / endpoint manifest 自举基址必须齐全;TapDB 公开配置已由所选 region JSON 校验。
+    // region / endpoint manifest 自举基址必须齐全;TapDB / Google 公开配置已由所选 region JSON 校验。
     assertPublicEnv(env, { variant: 'production', requiredKeys: SELF_HOST_PUBLIC_ENV_KEYS });
     if (!args.skipGitGate) assertProductionGitGate();
     else log('  warn: --skip-git-gate,跳过 main/clean/HEAD 校验(仅本地迭代用)');

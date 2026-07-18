@@ -25,7 +25,7 @@ export const PUBLIC_ENV_KEYS = [
   'EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN',
 ];
 
-// 自建线的 TapDB 公开配置来自 self-host-regions.json → Expo extra,不再要求
+// 自建线的 TapDB / Google 公开配置来自 self-host-regions.json → Expo extra,不再要求
 // EXPO_PUBLIC_* 注入。这里只校验自举启动所需的两个构建常量。
 export const SELF_HOST_PUBLIC_ENV_KEYS = [
   'EXPO_PUBLIC_CINDY_AUTH_REGION',

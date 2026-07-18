@@ -4,9 +4,21 @@ import { parseClientEndpointManifest } from '@lizi/maker-shared/client-endpoints
 
 export type CindyAuthRegion = 'cn' | 'global';
 
-const configuredBuildEnv = ((Constants.expoConfig?.extra as {
+export interface MobileGoogleConfig {
+  webClientId: string;
+  iosClientId: string;
+  iosUrlScheme: string;
+}
+
+const configuredExpoExtra = (Constants.expoConfig?.extra as {
   xdtProductionEnv?: Record<string, string>;
-} | null)?.xdtProductionEnv ?? {}) as Record<string, string>;
+  cindy?: { google?: Partial<MobileGoogleConfig> };
+} | null) ?? {};
+const configuredBuildEnv = (configuredExpoExtra.xdtProductionEnv ?? {}) as Record<
+  string,
+  string
+>;
+const configuredSelfHostGoogle = configuredExpoExtra.cindy?.google;
 
 function configuredValue(key: string): string {
   return process.env[key]?.trim() || configuredBuildEnv[key]?.trim() || '';
@@ -126,12 +138,41 @@ export let AUTH_API_BASE_URL = normalizeBaseUrlWithDefault(
   DEV_MANIFEST.authApiBaseUrl ?? '',
 );
 
-export const GOOGLE_WEB_CLIENT_ID =
-  process.env.EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID?.trim() || '';
-export const GOOGLE_IOS_CLIENT_ID =
-  process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID?.trim() || '';
-export const GOOGLE_IOS_URL_SCHEME =
-  process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME?.trim() || '';
+/** Self-host 只认 region JSON 写入的 Expo extra;EAS 线继续使用 EXPO_PUBLIC_*。 */
+export function resolveMobileGoogleConfig(
+  selfHosted: boolean,
+  selfHostConfig: Partial<MobileGoogleConfig> | undefined,
+  env: Record<string, string | undefined> = process.env,
+): MobileGoogleConfig {
+  if (selfHosted) {
+    return {
+      webClientId: selfHostConfig?.webClientId?.trim() || '',
+      iosClientId: selfHostConfig?.iosClientId?.trim() || '',
+      iosUrlScheme: selfHostConfig?.iosUrlScheme?.trim() || '',
+    };
+  }
+  return {
+    webClientId: env.EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID?.trim() || '',
+    iosClientId: env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID?.trim() || '',
+    iosUrlScheme: env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME?.trim() || '',
+  };
+}
+
+const GOOGLE_CONFIG = resolveMobileGoogleConfig(
+  resolveEnvFlag(process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST),
+  configuredSelfHostGoogle,
+  {
+    EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID:
+      process.env.EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID,
+    EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID:
+      process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID,
+    EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME:
+      process.env.EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME,
+  },
+);
+export const GOOGLE_WEB_CLIENT_ID = GOOGLE_CONFIG.webClientId;
+export const GOOGLE_IOS_CLIENT_ID = GOOGLE_CONFIG.iosClientId;
+export const GOOGLE_IOS_URL_SCHEME = GOOGLE_CONFIG.iosUrlScheme;
 export const WECHAT_APP_ID =
   process.env.EXPO_PUBLIC_CINDY_WECHAT_APP_ID?.trim() || '';
 export const WECHAT_UNIVERSAL_LINK =

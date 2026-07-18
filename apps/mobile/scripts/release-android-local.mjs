@@ -59,7 +59,7 @@ import { clearBundlerCache } from './lib/bundler-cache.mjs';
 import { readEmbeddedRuntimeVersionFromApk } from './lib/embedded-runtime.mjs';
 import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, OSS_BUCKET, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
 import { mobileClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
-import { formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides, assertRegionOssComplete, stripSelfHostTapdbEnv } from './lib/self-host-region.mjs';
+import { formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides, assertRegionOssComplete, stripSelfHostRegionEnv } from './lib/self-host-region.mjs';
 
 // NOTE: 不在模块顶层 refreshOssConfig / 派生 OSS key —— OSS 落点桶由 --region 决定,必须在 main()
 // resolve region、Object.assign 覆盖 XDT_OSS_* 后再 refreshOssConfig(),否则会烤进默认(cn)桶。
@@ -81,7 +81,7 @@ function selfhostEnv(region, versionCode, desktopVersion) {
   delete env.EXPO_PUBLIC_XDT_OTA_URL;
   // 二级版本号:自建线包所配对的桌面产品线版本;仅有值时注入(空则设置页不显示该行)。
   if (desktopVersion) env.EXPO_PUBLIC_DESKTOP_VERSION = desktopVersion;
-  return stripSelfHostTapdbEnv(env);
+  return stripSelfHostRegionEnv(env);
 }
 
 function readAppJson() {
@@ -292,7 +292,7 @@ async function main() {
   // --execute 需要完整的 region OSS 落点(dry-run 可留空);缺则明确报错,不静默回落默认桶。
   assertRegionOssComplete(region);
 
-  // region / endpoint manifest 自举基址必须齐全;TapDB 公开配置已由所选 region JSON 校验,
+  // region / endpoint manifest 自举基址必须齐全;TapDB / Google 公开配置已由所选 region JSON 校验,
   // 并经 Expo extra 烘焙,不走 EXPO_PUBLIC_* 注入。
   assertPublicEnv(env, { variant: 'production', requiredKeys: SELF_HOST_PUBLIC_ENV_KEYS });
 

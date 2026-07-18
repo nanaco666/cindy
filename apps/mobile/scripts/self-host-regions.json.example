@@ -36,6 +36,12 @@
         "iosBundleId": "com.xd.cindy",
         "androidPackage": "com.xd.cindy",
         "npkgExpectBundle": "com.xd.cindy",
+        "google":
+        {
+            "webClientId": "",
+            "iosClientId": "",
+            "iosUrlScheme": ""
+        },
         "tapdb":
         {
             "clientId": "",
