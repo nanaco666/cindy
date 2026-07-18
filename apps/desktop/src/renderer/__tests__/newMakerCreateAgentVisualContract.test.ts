@@ -210,6 +210,21 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(globalsSource).toContain('border-left-color: var(--accent-cta-bg) !important;');
   });
 
+  it('keeps default composer send buttons aligned with the neutral inverse rule', () => {
+    expect(sendButtonSource).toContain('bg-[var(--send-btn-bg)] text-[var(--send-btn-icon)]');
+    expect(sendButtonSource).toContain('hover:bg-[var(--send-btn-hover-bg)]');
+    expect(sendButtonSource).toContain('active:bg-[var(--send-btn-pressed-bg)]');
+    expect(sendButtonSource).toContain("'cursor-not-allowed bg-[var(--send-btn-bg)] text-[var(--send-btn-icon)] opacity-40'");
+    expect(sendButtonSource).not.toContain('bg-[var(--send-btn-disabled-bg)] text-[var(--send-btn-disabled-icon)]');
+
+    expect(colorsSource).toContain("'send-btn-bg'");
+    expect(colorsSource).toContain("light: '#3C3F43'");
+    expect(colorsSource).toContain("dark: '#EEEEEE'");
+    expect(colorsSource).toContain("'send-btn-icon'");
+    expect(colorsSource).toContain("light: '#FCFCFC'");
+    expect(colorsSource).toContain("dark: '#252222'");
+  });
+
   it('does not own global sidebar glass or selected-state tokens', () => {
     expect(colorsSource).not.toContain("'sidebar-glass-bg'");
     expect(colorsSource).not.toContain("'sidebar-glass-overlay-linear'");
