@@ -808,6 +808,47 @@ describe('Scheduler', () => {
     expect(after?.intervalMs).toBe(5 * 60_000);
   });
 
+  it('update revives an expired one-shot after it becomes recurring and survives restart', async () => {
+    const sch = await h.scheduler.create({ ...baseInput, recurring: false });
+    h.clock.setTo(Date.UTC(2026, 0, 1, 0, 1, 5));
+    await h.scheduler.tick();
+    expect((await h.storage.get(sch.id))?.status).toBe('expired');
+
+    h.clock.setTo(Date.UTC(2026, 0, 1, 0, 2, 10));
+    const revived = await h.scheduler.update(sch.id, { recurring: true });
+    expect(revived.status).toBe('active');
+    expect(revived.nextFireAt).toBe(Date.UTC(2026, 0, 1, 0, 3, 0));
+
+    // 模拟重启：新 Scheduler 必须能从 storage.listActive() 重新加载并按新排期触发。
+    const restarted = makeHarness({ storage: h.storage, clock: h.clock });
+    await restarted.scheduler.start();
+    h.clock.setTo(Date.UTC(2026, 0, 1, 0, 3, 0));
+    await restarted.scheduler.tick();
+    expect(restarted.runner.fire).toHaveBeenCalledTimes(1);
+    expect((await h.storage.get(sch.id))?.status).toBe('active');
+    await restarted.scheduler.stop();
+  });
+
+  it('update keeps an expired one-shot expired when it remains non-recurring', async () => {
+    const sch = await h.scheduler.create({ ...baseInput, recurring: false });
+    h.clock.setTo(Date.UTC(2026, 0, 1, 0, 1, 5));
+    await h.scheduler.tick();
+
+    const updated = await h.scheduler.update(sch.id, { name: 'still one-shot' });
+    expect(updated.status).toBe('expired');
+    expect(updated.nextFireAt).toBeUndefined();
+  });
+
+  it('update keeps an expired schedule out of auto scheduling when recurring but manual', async () => {
+    const sch = await h.scheduler.create({ ...baseInput, recurring: false });
+    h.clock.setTo(Date.UTC(2026, 0, 1, 0, 1, 5));
+    await h.scheduler.tick();
+
+    const updated = await h.scheduler.update(sch.id, { recurring: true, manual: true });
+    expect(updated.status).toBe('expired');
+    expect(updated.nextFireAt).toBeUndefined();
+  });
+
   // ── delete/pause abort in-flight runs ─────────────────────────────────────
   //
   // 这组用例覆盖"删除/暂停时彻底中断已在跑的 run"。

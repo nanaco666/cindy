@@ -899,15 +899,26 @@ export class Scheduler extends EventEmitter {
     }
     const existing = await this.storage.get(id);
     if (!existing) throw new Error(`Schedule not found: ${id}`);
+    const candidate: Schedule = { ...existing, ...updates };
     validateScheduleExecutionShape(
-      { ...existing, ...updates },
+      candidate,
       {
         checkAgentPrompt:
           Object.prototype.hasOwnProperty.call(patch, 'executionMode') ||
           Object.prototype.hasOwnProperty.call(patch, 'prompt'),
       },
     );
-    // manual / intervalMs / cronExpr / timezone 任一变化都要重算 nextFireAt：
+    // expired 是一次性任务已消费的终态。编辑后的配置若已经表达为“循环且非手动”，
+    // 继续保留 expired 会让持久化状态与排期语义冲突：即使算出了 nextFireAt，任务也
+    // 不会进入 activeSchedules，重启后 listActive() 同样加载不到。状态恢复集中在引擎
+    // 层处理，让 desktop、device-link 与其它调用方共享一致行为。
+    const shouldReactivateExpired =
+      existing.status === 'expired' && candidate.recurring && !candidate.manual;
+    if (shouldReactivateExpired) {
+      updates.status = 'active';
+    }
+    // manual / intervalMs / cronExpr / timezone 任一变化，或 expired 恢复 active 时，
+    // 都要重算 nextFireAt：
     //   - manual:true  → 强制清空 nextFireAt（不再自动 fire）
     //   - manual:false 且 触发字段变 → 按新表达式重算（intervalMs 优先于 cron）
     //   - manual:false 且 触发字段没动 → nextFireAt 保留（避免 update 副作用）
@@ -915,7 +926,8 @@ export class Scheduler extends EventEmitter {
       patch.cronExpr !== undefined ||
       patch.timezone !== undefined ||
       patch.manual !== undefined ||
-      patch.intervalMs !== undefined;
+      patch.intervalMs !== undefined ||
+      shouldReactivateExpired;
     let recomputeFromTo: { from: number | undefined; to: number | undefined } | null = null;
     if (needsRecompute) {
       // cron 变更但 patch 未显式带 intervalMs（典型：MCP 工具只 patch cronExpr，
@@ -934,7 +946,8 @@ export class Scheduler extends EventEmitter {
         patch.cronExpr !== undefined ||
         patch.timezone !== undefined ||
         patch.manual === false ||
-        patch.intervalMs !== undefined
+        patch.intervalMs !== undefined ||
+        shouldReactivateExpired
       ) {
         // intervalMs 模式：把"修改"视作冷启动，从 now 起新一轮 N 倒计时。
         // cron 模式：照旧从 now 找下一个壁钟槽位。
