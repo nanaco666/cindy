@@ -17,19 +17,26 @@ export const AUTH_REGION: CindyAuthRegion =
 export const APP_SCHEME = AUTH_REGION === 'global' ? 'cindy' : 'cindycn';
 export const MOBILE_REDIRECT_URL = `${APP_SCHEME}://auth`;
 
-// __DEV__ 端点初值来源:metro 构建期把仓内 cn 正本 config/endpoint.json require
-// 进 dev bundle(__DEV__ 常量折叠 + DCE 后 prod bundle 不含该 JSON)。与 desktop
-// dev 读同一份文件同语义;正本非法直接抛错红屏(阻断语义:配置错要炸出来)。
+// __DEV__ 端点初值来源:metro 构建期按 AUTH_REGION 把仓内
+// config/endpoint.json 或 config/endpoint.global.json require 进 dev bundle
+// (__DEV__ 常量折叠 + DCE 后 prod bundle 不含该 JSON)。与 desktop dev 读同一份
+// region 正本同语义;正本非法直接抛错红屏(阻断语义:配置错要炸出来)。
 // 显式 EXPO_PUBLIC_* env 仍然优先——「手机连本地 server」的既有工作流不变。
 // prod(非 __DEV__)此处为空:生效端点由启动闸门拉取的 endpoint.json 回填
 // live binding,闸门放行前业务树不挂载,初值空串不会被真实消费。
 const DEV_MANIFEST_PARSED = (() => {
   if (!__DEV__) return null;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const raw: unknown = require('../../../../config/endpoint.json');
+  const manifestPath =
+    AUTH_REGION === 'global' ? 'config/endpoint.global.json' : 'config/endpoint.json';
+  const raw: unknown =
+    AUTH_REGION === 'global'
+      ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+        require('../../../../config/endpoint.global.json')
+      : // eslint-disable-next-line @typescript-eslint/no-require-imports
+        require('../../../../config/endpoint.json');
   const parsed = parseClientEndpointManifest(JSON.stringify(raw), { allowHttp: true });
   if (!parsed.ok) {
-    throw new Error(`config/endpoint.json invalid (${parsed.reason}) — dev 端点正本必须能过客户端 parser`);
+    throw new Error(`${manifestPath} invalid (${parsed.reason}) — dev 端点正本必须能过客户端 parser`);
   }
   return parsed;
 })();

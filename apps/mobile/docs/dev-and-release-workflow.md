@@ -19,19 +19,22 @@
 模拟器调试已经代码化:
 
 ```bash
-pnpm mobile:sim:start
+pnpm mobile:sim:start                       # 国服(默认)
+pnpm mobile:sim:start -- --region=global   # 海外
 pnpm mobile:sim:whoami
-pnpm mobile:sim:rebuild
+pnpm mobile:sim:rebuild                     # 国服(默认)
+pnpm mobile:sim:rebuild -- --region=global # 海外
 ```
 
-脚本固定 Metro 8081、注入当前 git branch/commit 给新建会话页顶部的 `__DEV__` build label,避免多 worktree 连错 bundle。`mobile:sim:start` / `mobile:sim:rebuild` 会自动补齐 `apps/mobile/.env` 的功能变量(取自 `eas.json` production profile),无需手动复制 `.env.example`。具体排障见 [`simulator-debugging.md`](./simulator-debugging.md)。
+脚本固定 Metro 8081、注入当前 git branch/commit 给新建会话页顶部的 `__DEV__` build label,避免多 worktree 连错 bundle。`mobile:sim:start` / `mobile:sim:rebuild` 会按所选 region 把构建身份与对应 `config/endpoint*.json` 的 `cdnBaseUrl` 同步到 `apps/mobile/.env`,无需手动注入参数或复制 `.env.example`。具体排障见 [`simulator-debugging.md`](./simulator-debugging.md)。
+切到 global 时原生 bundle identity / scheme 也会变,先用同 region 的 `mobile:sim:rebuild` 重装开发包,再用 `mobile:sim:start -- --region=global` 启动 Metro。
 
 ## Xcode 本地开发(region)
 
-需要在 Xcode 里选择真机 / 模拟器、调签名或看原生日志时,从仓库根运行同一条命令并显式选地区:
+需要在 Xcode 里选择真机 / 模拟器、调签名或看原生日志时,从仓库根运行同一条命令;不传 region 时默认国服:
 
 ```bash
-pnpm mobile:xcode --region=cn       # 国服:com.xd.cindycn / cindycn
+pnpm mobile:xcode                   # 国服(默认):com.xd.cindycn / cindycn
 pnpm mobile:xcode --region=global   # 海外:com.xd.cindy / cindy
 ```
 

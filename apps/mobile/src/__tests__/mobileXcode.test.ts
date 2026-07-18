@@ -7,17 +7,46 @@ import {
   selectMobileXcodeWorkspace,
   updateMobileXcodeEnvContent,
 } from '../../scripts/lib/mobile-xcode.mjs';
+import { extractMobileDevRegionArgs } from '../../scripts/lib/mobile-dev-region.mjs';
 
 describe('mobile:xcode 参数', () => {
+  it('不传 region 时默认 cn', () => {
+    expect(parseMobileXcodeArgs([])).toEqual({ help: false, region: 'cn' });
+  });
+
   it('支持 --region value / --region=value 与 pnpm 的分隔符', () => {
     expect(parseMobileXcodeArgs(['--region', 'cn'])).toEqual({ help: false, region: 'cn' });
     expect(parseMobileXcodeArgs(['--', '--region=global'])).toEqual({ help: false, region: 'global' });
   });
 
-  it('region 必填且只允许 cn / global', () => {
-    expect(() => parseMobileXcodeArgs([])).toThrow(/必须显式指定/);
+  it('region 只允许 cn / global', () => {
     expect(() => parseMobileXcodeArgs(['--region', 'us'])).toThrow(/只能是 cn 或 global/);
-    expect(() => parseMobileXcodeArgs(['--region'])).toThrow(/必须显式指定/);
+    expect(() => parseMobileXcodeArgs(['--region'])).toThrow(/只能是 cn 或 global/);
+    expect(() => parseMobileXcodeArgs(['--region', ''])).toThrow(/只能是 cn 或 global/);
+  });
+});
+
+describe('mobile simulator region 参数', () => {
+  it('默认 cn，并仅移除 region 参数', () => {
+    expect(extractMobileDevRegionArgs(['--port', '8082'])).toEqual({
+      region: 'cn',
+      passthrough: ['--port', '8082'],
+    });
+    expect(extractMobileDevRegionArgs(['--', '--region=global', '--clean'])).toEqual({
+      region: 'global',
+      passthrough: ['--clean'],
+    });
+  });
+
+  it('拒绝非法或重复 region', () => {
+    expect(() => extractMobileDevRegionArgs(['--region=us'])).toThrow(/只能是 cn 或 global/);
+    expect(() => extractMobileDevRegionArgs(['--region=cn', '--region=global'])).toThrow(/只能传一次/);
+  });
+
+  it('把所选 region 直接注入 Metro 子进程，不被 shell 残留值覆盖', () => {
+    const source = readFileSync(resolve(process.cwd(), 'scripts/sim-start.mjs'), 'utf8');
+    expect(source).toContain('const buildEnv = mobileClientBuildEnv({ authRegion: region });');
+    expect(source).toContain('...process.env,\n    ...buildEnv,');
   });
 });
 
@@ -63,6 +92,6 @@ describe('mobile:xcode 完整开发链路', () => {
     const source = readFileSync(resolve(process.cwd(), 'scripts/open-ios-xcode.mjs'), 'utf8');
     expect(source).toContain("resolve(mobileDir, 'scripts/sim-start.mjs')");
     expect(source).toContain('await portInUse(metroPort)');
-    expect(source).toContain('execFileSync(process.execPath, [simStartPath]');
+    expect(source).toContain('execFileSync(process.execPath, [simStartPath, `--region=${args.region}`]');
   });
 });

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 按显式 region 重新生成 iOS 原生工程、安装 Pods，然后打开 app 的 .xcworkspace。
+// 按所选 region(默认 cn)重新生成 iOS 原生工程、安装 Pods，然后打开 app 的 .xcworkspace。
 // 这是本地开发入口：不 archive、不上传 NPKG/OSS，也不写任何发版记录。
 
 import { execFileSync } from 'node:child_process';
@@ -25,7 +25,7 @@ const metroPort = 8081;
 
 function printUsage() {
   console.log(`用法:
-  pnpm mobile:xcode --region=cn       # 国服
+  pnpm mobile:xcode                   # 国服(默认)
   pnpm mobile:xcode --region=global   # 海外
 
 流程:切换 apps/mobile/.env 地区 → clean prebuild → 安装 Pods → 打开 Xcode → 启动 Metro
@@ -85,7 +85,7 @@ async function main() {
   console.log(`\n✓ ${args.region === 'global' ? '海外版' : '国服版'} Xcode 工程已生成并打开。`);
   console.log(`  工程目录: ${mobileXcodeGeneratedDir(workspace)}`);
   console.log(`› 启动 Metro(${metroPort})；请保持当前终端开启，在 Xcode 选择设备后点击 Run。`);
-  execFileSync(process.execPath, [simStartPath], {
+  execFileSync(process.execPath, [simStartPath, `--region=${args.region}`], {
     cwd: worktreeRoot,
     env,
     stdio: 'inherit',

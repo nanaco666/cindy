@@ -34,7 +34,7 @@
 //   node scripts/sim-rebuild.mjs --force-build   # 跳过 fingerprint 产物缓存,强制完整重编
 //   node scripts/sim-rebuild.mjs --build-only    # 只构建 + 入产物缓存,不装/不启动模拟器
 //                                                #(预热缓存,或模拟器正被别的验证占用时)
-// 或仓库根:pnpm mobile:sim:rebuild [-- --clean] [-- --force-build] [-- --build-only]
+// 或仓库根:pnpm mobile:sim:rebuild [-- --region=global] [-- --clean] [-- --force-build] [-- --build-only]
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
@@ -51,8 +51,10 @@ import {
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { mobileClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
 import { ensureMobileEnv, formatMobileEnvStatus } from './ensure-mobile-env.mjs';
 import { computeFingerprintReport, parseFingerprintCliOutput } from './ci-fingerprint.mjs';
+import { extractMobileDevRegionArgs } from './lib/mobile-dev-region.mjs';
 import { podInstallBounded } from './sim-pod-install.mjs';
 import { cwdOfPid, gitBranchOfPid, isInside, listenerPid } from './sim-metro.mjs';
 
@@ -60,9 +62,12 @@ const mobileDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const worktreeRoot = resolve(mobileDir, '../..');
 const iosDir = join(mobileDir, 'ios');
 const buildDir = join(iosDir, 'build');
-const clean = process.argv.includes('--clean');
-const forceBuild = process.argv.includes('--force-build');
-const buildOnly = process.argv.includes('--build-only');
+const { region, passthrough } = extractMobileDevRegionArgs(process.argv.slice(2));
+const clean = passthrough.includes('--clean');
+const forceBuild = passthrough.includes('--force-build');
+const buildOnly = passthrough.includes('--build-only');
+const buildEnv = mobileClientBuildEnv({ authRegion: region });
+const devProcessEnv = { ...process.env, ...buildEnv };
 
 // fingerprint 产物缓存位置与保留份数。跨 worktree 共享;条目按 LRU(目录 mtime)清理。
 const appCacheRoot = join(homedir(), 'Library/Caches/xdt-maker/sim-app-cache');
@@ -73,18 +78,15 @@ const APP_CACHE_KEEP = 4;
 // (缓存无锁,这是面向单人多 worktree 场景的轻量保护,不追求分布式正确性)。
 const APP_CACHE_PRUNE_MIN_AGE_MS = 30 * 60_000;
 
-const envResult = ensureMobileEnv({ mobileDir });
+const envResult = ensureMobileEnv({ mobileDir, authRegion: region, endpointEnv: buildEnv });
 console.log(formatMobileEnvStatus(envResult, worktreeRoot));
+console.log(`==> Mobile dev region: ${region}`);
 const envChanged = envResult.created || envResult.addedKeys.length > 0;
 
 const run = (cmd, args, opts = {}) =>
-  execFileSync(cmd, args, { stdio: 'inherit', cwd: mobileDir, ...opts });
+  execFileSync(cmd, args, { stdio: 'inherit', cwd: mobileDir, env: devProcessEnv, ...opts });
 const capture = (cmd, args) =>
-  execFileSync(cmd, args, { cwd: mobileDir, encoding: 'utf8' }).trim();
-
-// bundleId 从 app.json 读,避免硬编码漂移。
-const bundleId = JSON.parse(readFileSync(join(mobileDir, 'app.json'), 'utf8'))
-  .expo.ios.bundleIdentifier;
+  execFileSync(cmd, args, { cwd: mobileDir, env: devProcessEnv, encoding: 'utf8' }).trim();
 
 // 必须有一台 booted 模拟器(--build-only 不装机,无此要求)。
 if (!buildOnly) {
@@ -135,7 +137,7 @@ if (!app) {
   run('pnpm', ['exec', 'expo', 'prebuild', '-p', 'ios', '--no-install']);
   console.log('› pod install(本地 specs 优先,输出空转看门狗兜底)…');
   try {
-    await podInstallBounded({ iosDir });
+    await podInstallBounded({ iosDir, env: devProcessEnv });
   } catch (error) {
     console.error(`✗ ${error.message}`);
     if (!error.podMissing) {
@@ -169,8 +171,12 @@ if (!app) {
     console.error(`✗ 没找到产物 ${app}`);
     process.exit(1);
   }
-  if (cacheDir) storeAppCacheEntry(cacheDir, scheme, app);
+  if (cacheDir) storeAppCacheEntry(cacheDir, scheme, app, readAppBundleIdentifier(app));
 }
+
+// bundle identity 必须从实际产物读:global 的 app.config.js 会把 bundle id
+// 切成 com.xd.cindy，不能再用默认 cn 的 app.json 值启动错 app。
+const bundleId = readAppBundleIdentifier(app);
 
 if (buildOnly) {
   console.log(`\n✓ --build-only 完成:产物在 ${app}${cacheDir ? '(已入 fingerprint 缓存)' : ''}。未安装到模拟器。`);
@@ -229,7 +235,7 @@ console.log(`\n✓ 完成。${bundleId} 已重装并启动。改 JS 直接靠 Me
 function runFingerprintWithCurrentEnv({ binPath, projectDir, platform }) {
   const result = spawnSync(process.execPath, [binPath, 'fingerprint:generate', '--platform', platform], {
     cwd: resolve(projectDir),
-    env: process.env,
+    env: devProcessEnv,
     encoding: 'utf8',
     // 输出含全部 sources(>1MB),必须调大 maxBuffer(与 ci-fingerprint 同款)。
     maxBuffer: 64 * 1024 * 1024,
@@ -257,14 +263,14 @@ function readAppCacheEntry(dir) {
  * 完整性的标记,readAppCacheEntry 缺 meta 即未命中,天然规避半份缓存),最后按
  * LRU 清理只留最近 APP_CACHE_KEEP 份。缓存写失败不影响本次构建结果。
  */
-function storeAppCacheEntry(dir, scheme, builtApp) {
+function storeAppCacheEntry(dir, scheme, builtApp, builtBundleId) {
   try {
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(dir, { recursive: true });
     cpSync(builtApp, join(dir, `${scheme}.app`), { recursive: true, verbatimSymlinks: true });
     writeFileSync(join(dir, 'meta.json'), `${JSON.stringify({
       scheme,
-      bundleId,
+      bundleId: builtBundleId,
       createdAt: new Date().toISOString(),
     }, null, 2)}\n`);
     pruneAppCache();
@@ -272,6 +278,18 @@ function storeAppCacheEntry(dir, scheme, builtApp) {
   } catch (error) {
     console.warn(`  产物缓存写入失败(${error.message}),忽略。`);
   }
+}
+
+/** 从已构建 .app 的 Info.plist 读取真实 bundle identity。 */
+function readAppBundleIdentifier(appPath) {
+  return capture('plutil', [
+    '-extract',
+    'CFBundleIdentifier',
+    'raw',
+    '-o',
+    '-',
+    join(appPath, 'Info.plist'),
+  ]);
 }
 
 /** 按目录 mtime 保留最近 APP_CACHE_KEEP 份;更旧的里只删超过最小年龄的(见常量注释)。 */

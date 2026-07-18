@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_DEVICE_LINK_API_BASE_URL,
@@ -36,5 +38,12 @@ describe('mobile env', () => {
     expect(resolveEnvFlag('1')).toBe(true);
     expect(resolveEnvFlag(' true ')).toBe(true);
     expect(resolveEnvFlag('YES')).toBe(true);
+  });
+
+  it('selects the bundled dev endpoint manifest from AUTH_REGION', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/config/env.ts'), 'utf8');
+    expect(source).toContain("AUTH_REGION === 'global'");
+    expect(source).toContain("require('../../../../config/endpoint.global.json')");
+    expect(source).toContain("require('../../../../config/endpoint.json')");
   });
 });

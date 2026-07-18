@@ -1,45 +1,17 @@
 import { dirname, join } from 'node:path';
+import { extractMobileDevRegionArgs, MOBILE_DEV_REGIONS } from './mobile-dev-region.mjs';
 
-export const MOBILE_XCODE_REGIONS = Object.freeze(['cn', 'global']);
+export const MOBILE_XCODE_REGIONS = MOBILE_DEV_REGIONS;
 
 /**
- * 解析 mobile:xcode 参数。region 必须显式给出，避免误把上一次生成的地区工程
- * 当成本次目标继续编译。
+ * 解析 mobile:xcode 参数。未显式指定 region 时与其它本地 mobile 入口一样默认 cn。
  */
 export function parseMobileXcodeArgs(argv) {
-  const args = argv.filter((arg) => arg !== '--');
-  let region;
-  let help = false;
-
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === '--help' || arg === '-h') {
-      help = true;
-      continue;
-    }
-    if (arg === '--region') {
-      if (region !== undefined) throw new Error('--region 只能传一次');
-      region = args[index + 1];
-      index += 1;
-      continue;
-    }
-    if (arg.startsWith('--region=')) {
-      if (region !== undefined) throw new Error('--region 只能传一次');
-      region = arg.slice('--region='.length);
-      continue;
-    }
-    throw new Error(`未知参数: ${arg}`);
-  }
-
-  if (help) return { help: true, region: undefined };
-  if (!region?.trim()) {
-    throw new Error('必须显式指定 --region cn|global');
-  }
-  const normalizedRegion = region.trim();
-  if (!MOBILE_XCODE_REGIONS.includes(normalizedRegion)) {
-    throw new Error(`--region 只能是 ${MOBILE_XCODE_REGIONS.join(' 或 ')},收到: ${normalizedRegion}`);
-  }
-  return { help: false, region: normalizedRegion };
+  const { region, passthrough } = extractMobileDevRegionArgs(argv);
+  const help = passthrough.some((arg) => arg === '--help' || arg === '-h');
+  const unknown = passthrough.filter((arg) => arg !== '--help' && arg !== '-h');
+  if (unknown.length) throw new Error(`未知参数: ${unknown[0]}`);
+  return { help, region };
 }
 
 /**

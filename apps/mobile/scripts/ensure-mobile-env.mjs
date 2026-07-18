@@ -19,6 +19,7 @@ export const REQUIRED_MOBILE_ENV_KEYS = [
  *   easJsonPath?: string,
  *   envExamplePath?: string,
  *   endpointEnv?: Record<string, string>,
+ *   authRegion?: 'cn' | 'global',
  * }} [options]
  */
 export function ensureMobileEnv({
@@ -27,6 +28,7 @@ export function ensureMobileEnv({
   easJsonPath = resolve(mobileDir, 'eas.json'),
   envExamplePath = resolve(mobileDir, '.env.example'),
   endpointEnv,
+  authRegion,
 } = {}) {
   const easDefaults = readProductionEnv(easJsonPath);
   const exampleValues = existsSync(envExamplePath) ? readEnvFile(envExamplePath) : {};
@@ -38,17 +40,25 @@ export function ensureMobileEnv({
       !hasPreservedEnvValue(content, key, exampleValues[key]) &&
       !String(easDefaults[key] ?? '').trim(),
   );
+  const existingRegion = readEnvValue(content, 'EXPO_PUBLIC_CINDY_AUTH_REGION');
   const defaults = {
     ...easDefaults,
-    ...(endpointEnv ?? (needsClientBuildDefaults ? mobileClientBuildEnv() : {})),
+    ...(endpointEnv ??
+      (authRegion || needsClientBuildDefaults
+        ? mobileClientBuildEnv({
+            authRegion:
+              authRegion || existingRegion || easDefaults.EXPO_PUBLIC_CINDY_AUTH_REGION,
+          })
+        : {})),
   };
 
   for (const key of REQUIRED_MOBILE_ENV_KEYS) {
     const value = defaults[key];
     if (!String(value ?? '').trim()) {
+      if (hasPreservedEnvValue(content, key, exampleValues[key])) continue;
       throw new Error(`Missing ${key} in mobile env defaults or region endpoint manifest`);
     }
-    const next = upsertEnvValue(content, key, value, exampleValues[key]);
+    const next = upsertEnvValue(content, key, value, exampleValues[key], Boolean(authRegion));
     if (next !== content) addedKeys.push(key);
     content = next;
   }
@@ -73,7 +83,7 @@ export function readProductionEnv(easJsonPath) {
   return resolveBuildProfile(easJson, 'production').env ?? {};
 }
 
-function upsertEnvValue(content, key, value, placeholderValue) {
+function upsertEnvValue(content, key, value, placeholderValue, replaceExisting = false) {
   const lines = content ? content.split(/\r?\n/) : [];
   const pattern = new RegExp(`^\\s*${escapeRegExp(key)}\\s*=`);
   let found = false;
@@ -82,11 +92,17 @@ function upsertEnvValue(content, key, value, placeholderValue) {
     if (!pattern.test(line)) return line;
     found = true;
     const current = normalizeEnvValue(line.slice(line.indexOf('=') + 1));
-    return current && current !== placeholderValue ? line : `${key}=${value}`;
+    return !replaceExisting && current && current !== placeholderValue ? line : `${key}=${value}`;
   });
 
   if (!found) next.push(`${key}=${value}`);
   return next.join('\n');
+}
+
+function readEnvValue(content, key) {
+  const pattern = new RegExp(`^\\s*${escapeRegExp(key)}\\s*=(.*)$`, 'm');
+  const match = content.match(pattern);
+  return match ? normalizeEnvValue(match[1]) : '';
 }
 
 function hasPreservedEnvValue(content, key, placeholderValue) {

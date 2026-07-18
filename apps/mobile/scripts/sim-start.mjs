@@ -15,20 +15,25 @@
 //     确实要换端口请 `--port <p>` 显式指定(你需自行把模拟器里的 app 指过去,如 dev menu)。
 //
 // 用法(仓库根):
-//   pnpm mobile:sim:start                 # 起在 8081(app 默认连这个)
+//   pnpm mobile:sim:start                 # cn，起在 8081(app 默认连这个)
+//   pnpm mobile:sim:start -- --region=global
 //   pnpm mobile:sim:start -- --port 8082   # 显式换端口(透传给 expo;需自行把 app 指过去)
 
 import { execFileSync, spawn } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { mobileClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
 import { ensureMobileEnv, formatMobileEnvStatus } from './ensure-mobile-env.mjs';
+import { extractMobileDevRegionArgs } from './lib/mobile-dev-region.mjs';
 import { cwdOfPid, gitBranchOfPid, isInside, listenerPid, portInUse } from './sim-metro.mjs';
 
 const mobileDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const worktreeRoot = resolve(mobileDir, '../..');
 const DEFAULT_PORT = 8081;
+const { region, passthrough } = extractMobileDevRegionArgs(process.argv.slice(2));
+const buildEnv = mobileClientBuildEnv({ authRegion: region });
 
-const envResult = ensureMobileEnv({ mobileDir });
+const envResult = ensureMobileEnv({ mobileDir, authRegion: region, endpointEnv: buildEnv });
 console.log(formatMobileEnvStatus(envResult, worktreeRoot));
 const envChanged = envResult.created || envResult.addedKeys.length > 0;
 
@@ -42,7 +47,6 @@ function git(args) {
 
 const branch = git(['branch', '--show-current']) || git(['rev-parse', '--short', 'HEAD']);
 const commit = git(['rev-parse', '--short', 'HEAD']);
-const passthrough = process.argv.slice(2);
 const hasExplicitPort = passthrough.some((a) => a === '--port' || a === '-p');
 
 // 未显式指定端口时,坚持 8081(app 默认连这个),并按归属决定起 / 提示 / 拒绝。
@@ -77,7 +81,7 @@ if (!hasExplicitPort) {
   args.push('--port', String(DEFAULT_PORT));
 }
 
-console.log(`› sim:start — branch=${branch || '(unknown)'} commit=${commit || '(unknown)'}`);
+console.log(`› sim:start — region=${region} branch=${branch || '(unknown)'} commit=${commit || '(unknown)'}`);
 const portArgIdx = args.indexOf('--port');
 if (portArgIdx >= 0) console.log(`  Metro 端口:${args[portArgIdx + 1]}(模拟器 build label 会显示 host:port,确认没连错分支)`);
 console.log('  注入 EXPO_PUBLIC_XDT_GIT_BRANCH / EXPO_PUBLIC_XDT_GIT_COMMIT 给 __DEV__ build label\n');
@@ -89,6 +93,7 @@ const child = spawn('pnpm', args, {
   stdio: 'inherit',
   env: {
     ...process.env,
+    ...buildEnv,
     EXPO_PUBLIC_XDT_GIT_BRANCH: branch,
     EXPO_PUBLIC_XDT_GIT_COMMIT: commit,
   },
