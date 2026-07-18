@@ -8,7 +8,7 @@
 // (keystore 两个口令、OSS AK/SK)仍走 env,凭证不入仓。
 // OTA 更新域名不属于构建/分包参数:由对应地区 endpoint.json 的 mobileUpdateBaseUrl 运行时下发。
 //
-// 设计对齐 scripts/shared/production-endpoints.mjs 的 loadProductionEndpoints:
+// 设计对齐 scripts/shared/client-endpoint-build-env.mjs 的 region 解析:
 //   - 缺文件 / 非法 JSON / 缺 region / 身份字段为空或 URL 非法 → 立即抛错,禁止回落默认值。
 //   - oss.* 与 *Signing.* 的叶子值在“加载”时允许为空(dry-run 只需身份字段),
 //     真正 --execute 用到时由签名 resolver / OSS 应用点各自强校验非空(与既有“签名零默认值、

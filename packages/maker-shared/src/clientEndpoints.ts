@@ -30,7 +30,7 @@
  *  - **全字段必填**:CLIENT_ENDPOINT_KEYS 每个字段都必须出现且合法,缺一个整份拒绝;
  *  - 未知字段忽略(向前兼容:新客户端加字段后,老清单先补字段再发新客户端;
  *    新清单多出的字段老客户端不认识但不报错);
- *  - 协议白名单(与 scripts/shared/production-endpoints.mjs 对齐)、禁 URL 凭据、
+ *  - 协议白名单、禁 URL 凭据、
  *    尾斜杠归一;
  *  - `allowHttp` 宽松模式(仅 dev 本地文件路径允许开启):https-only 字段追加
  *    接受 http:、wss 字段追加 ws:,让 endpoint.local.json 能填 localhost;

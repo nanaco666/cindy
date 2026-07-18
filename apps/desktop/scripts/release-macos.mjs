@@ -36,7 +36,8 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { ensureBinary } from '../../../scripts/ensure-agent-binaries.mjs';
-import { productionViteEnv, resolveCdnBaseUrl } from '../../../scripts/shared/production-endpoints.mjs';
+import { desktopClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
+import { resolveReleaseCdnBaseUrl } from '../../../scripts/shared/release-env.mjs';
 import {
   uploadVersionedGzImmutable,
   verifyMacContactsPermissions,
@@ -69,7 +70,7 @@ assertNotPublishingCindyToLegacyChannel(OSS_PREFIX);
 
 const PROJECT_ROOT = path.resolve(DESKTOP_ROOT, '../..');
 const RELEASE_DIR = path.join(DESKTOP_ROOT, 'release');
-const CDN_BASE = resolveCdnBaseUrl();
+const CDN_BASE = resolveReleaseCdnBaseUrl();
 
 // Apple signing config(身份默认值单点在 ci/lib.mjs 的 resolveAppleIdentity,此处
 // 在 .env 加载之后调用)。APPLE_APP_PASSWORD 是敏感凭据,绝对不允许 fallback 到源码
@@ -566,7 +567,7 @@ async function main() {
       env: {
         ...process.env,
         NODE_ENV: 'production',
-        ...productionViteEnv({ allowEnvOverride: false }),
+        ...desktopClientBuildEnv({ allowEnvOverride: false }),
         APP_VERSION: version, // forge.config.ts 读取此变量注入到 packagerConfig.appVersion
       },
     });

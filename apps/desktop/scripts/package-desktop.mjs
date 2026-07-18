@@ -38,7 +38,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ensureBinary } from '../../../scripts/ensure-agent-binaries.mjs';
-import { productionViteEnv } from '../../../scripts/shared/production-endpoints.mjs';
+import { desktopClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
 import {
   DESKTOP_ROOT,
   RELEASE_DIR,
@@ -136,8 +136,8 @@ function runForgeMake({ platform, arch, region, version, noSign }) {
   const forgeEnv = {
     ...process.env,
     NODE_ENV: 'production',
-    // 烘焙面 = 构建身份三件套(appId/region + 端点清单自举基址),按 region 二选一。
-    ...productionViteEnv({ allowEnvOverride: false, authRegion: region }),
+    // 烘焙面只含 region + 端点清单自举基址,按 region 二选一。
+    ...desktopClientBuildEnv({ allowEnvOverride: false, authRegion: region }),
     // forge.config.ts 的 NSIS appId / AUMID 优先读这个(与 VITE_ 同源,双保险)。
     CINDY_AUTH_REGION: region,
     // forge.config.ts 注入 packagerConfig.appVersion;版本无关时为占位 0.0.0。
@@ -315,7 +315,8 @@ async function finishLinux({ artifactDir, baseName }) {
 // ── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
-  loadDotenv();
+  // 打包本身不发布；只读通用构建 env，不要求 OSS 发布四件套。
+  loadDotenv(undefined, { refreshReleaseConfig: false });
   let args;
   try {
     args = parsePackageArgs(process.argv.slice(2));
@@ -325,6 +326,8 @@ async function main() {
   }
   const { platform, arch, region, channel, versionSpec, skipSmoke, allowUnsigned, noSign } = args;
   const platformKey = `${platform}-${arch}`;
+  // ensureBinary 的 CDN fallback 按此 region 选择清单基址；必须早于二进制准备。
+  process.env.CINDY_AUTH_REGION = region;
 
   if (platform !== process.platform) {
     console.error(`ERROR: 不支持交叉打包(当前 ${process.platform},目标 ${platform});请在目标平台机器上执行。`);

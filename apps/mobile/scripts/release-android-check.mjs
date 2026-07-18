@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs, decideReleaseMode, resolveDesktopVersion } from './release-lib.mjs';
 import { readAndroidVersionCode } from './lib/android-local.mjs';
 import { CDN_BASE, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
-import { productionMobileEnv } from '../../../scripts/shared/production-endpoints.mjs';
+import { mobileClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
 import { formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides, stripSelfHostTapdbEnv } from './lib/self-host-region.mjs';
 
 // NOTE: 不在模块顶层 refreshOssConfig / 派生 RELEASE_RECORD_CDN —— CDN 基址由 --region 决定,
@@ -31,7 +31,7 @@ let RELEASE_RECORD_CDN;   // `${CDN_BASE}/mobile-ota/android/release.json`
 function selfhostEnv(region, versionCode) {
   const env = {
     ...process.env,
-    ...productionMobileEnv({ authRegion: region.authRegion }),
+    ...mobileClientBuildEnv({ authRegion: region.authRegion }),
     EXPO_PUBLIC_XDT_OTA_SELFHOST: '1',
     XDT_ANDROID_VERSION_CODE: String(versionCode),
   };

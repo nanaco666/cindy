@@ -10,7 +10,8 @@
  *   OSS_ACCESS_KEY_ID     — 阿里云 AK
  *   OSS_ACCESS_KEY_SECRET — 阿里云 SK
  *   OSS_REGION            — 可选，默认 oss-cn-beijing
- *   XDT_CDN_BASE_URL      — 可选，CDN 地址
+ *   XDT_CDN_BASE_URL      — 必填，CDN 地址
+ *   XDT_OSS_BUCKET / XDT_OSS_PREFIX / XDT_OSS_REGION — 必填，发布目标
  *
  * 流程:
  *   1. 设置 production 环境变量
@@ -32,7 +33,8 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { ensureBinary } from '../../../scripts/ensure-agent-binaries.mjs';
-import { productionViteEnv, resolveCdnBaseUrl } from '../../../scripts/shared/production-endpoints.mjs';
+import { desktopClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
+import { resolveReleaseCdnBaseUrl } from '../../../scripts/shared/release-env.mjs';
 import { uploadVersionedGzImmutable, OSS_BUCKET, OSS_PREFIX, OSS_REGION, refreshOssConfig, PACKAGED_APP_NAME, assertNotPublishingCindyToLegacyChannel } from './ci/lib.mjs';
 
 const require = createRequire(import.meta.url);
@@ -55,7 +57,7 @@ assertNotPublishingCindyToLegacyChannel(OSS_PREFIX);
 const PROJECT_ROOT = path.resolve(DESKTOP_ROOT, '../..');
 const RELEASE_DIR = path.join(DESKTOP_ROOT, 'release');
 const PLATFORM_KEY = 'win32-x64';
-const CDN_BASE = resolveCdnBaseUrl();
+const CDN_BASE = resolveReleaseCdnBaseUrl();
 
 // ── Helpers ──
 
@@ -426,7 +428,7 @@ async function main() {
     env: {
       ...process.env,
       NODE_ENV: 'production',
-      ...productionViteEnv({ allowEnvOverride: false }),
+      ...desktopClientBuildEnv({ allowEnvOverride: false }),
       APP_VERSION: version, // forge.config.ts 读取此变量注入到 packagerConfig.appVersion
     },
   });

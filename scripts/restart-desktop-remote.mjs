@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applyDesktopDevStartupConfig } from './shared/desktop-dev-region.mjs';
-import { loadProductionEndpoints } from './shared/production-endpoints.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -25,23 +24,10 @@ export const BRAND_USER_DATA_DIR_NAME = 'Cindy';
 
 // 桌面端 .env 默认值。2026-07 端点清单重构后 .env 不再承载任何端点 URL
 // (运行期端点全部来自清单:remote restart 按 region 读 config/endpoint*.json,
-// local 模式读生成的 config/endpoint.local.json,--endpoints-cdn 走线上 CDN),这里只剩
-// 构建身份字段:VITE_FEISHU_APP_ID / VITE_CINDY_AUTH_REGION 补空值、保留用户已填的值。
-function desktopEnvSpec(content) {
-  let productionConfig;
-  const configValue = (key) => {
-    productionConfig ??= loadProductionEndpoints();
-    return productionConfig[key];
-  };
-  const existingFeishuAppId = readEnvValue(content, 'VITE_FEISHU_APP_ID');
-  return [
-    { key: 'VITE_CINDY_AUTH_REGION', value: 'cn', force: false },
-    {
-      key: 'VITE_FEISHU_APP_ID',
-      value: existingFeishuAppId || configValue('feishuAppId'),
-      force: false,
-    },
-  ];
+// local 模式读生成的 config/endpoint.local.json,--endpoints-cdn 走线上 CDN),这里只
+// 保留 region 身份。飞书登录构建变量已退役,不再创建或补写。
+function desktopEnvSpec() {
+  return [{ key: 'VITE_CINDY_AUTH_REGION', value: 'cn', force: false }];
 }
 const closeDarwinTerminalTtyScript = Object.freeze([
   'on closeMatchingTerminalTab(targetTty)',
@@ -565,7 +551,7 @@ async function main() {
     console.log(`==> Endpoint manifest: ${startupConfig.endpointManifestFile}`);
   }
   // --isolated[=<名字>]: dev 使用独立的 userData 目录(数据库/登录态/会话全部与
-  // 正式版隔离,首次要重新走飞书登录)。不带名字 = 默认沙箱(Cindy-dev);
+  // 正式版隔离,首次要重新登录 Cindy 账号)。不带名字 = 默认沙箱(Cindy-dev);
   // 带名字 = 独立命名沙箱(Cindy-dev-<名字>),每个名字一条,可同时多开。
   // 实现:置 XDT_USER_DATA_DIR(主进程入口只在非 packaged 时应用,见
   // apps/desktop/src/main/index.ts),经 devEnvPrefix 白名单透传给 dev 进程。

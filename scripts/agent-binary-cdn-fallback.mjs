@@ -25,11 +25,14 @@ import { createGunzip } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 
 import { fetchJsonWithTimeout, downloadToFileWithTimeout, createDownloadProgressLogger } from '../tools/shared/fetch-with-timeout.mjs';
-import { resolveCdnBaseUrl } from './shared/production-endpoints.mjs';
+import { loadEndpointManifestBaseUrl } from './shared/client-endpoint-build-env.mjs';
 
 /** 每次调用读 env，便于 home→office 切换与测试注入（语义对齐 manifestService.getBaseUrl）。 */
 function getCdnBase() {
-  return resolveCdnBaseUrl();
+  return (
+    process.env.XDT_CDN_BASE_URL?.trim().replace(/\/+$/, '') ||
+    loadEndpointManifestBaseUrl({ authRegion: process.env.CINDY_AUTH_REGION })
+  );
 }
 
 // kind → CDN 路径前缀 / 二进制基名 / manifest 顶层字段

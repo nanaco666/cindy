@@ -15,7 +15,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const appJson = require('./app.json');
-const { loadProductionMobileEnv } = require('../../scripts/shared/production-mobile-env.cjs');
+const {
+  loadMobileClientBuildEnv,
+} = require('../../scripts/shared/client-endpoint-build-env.cjs');
 
 // 自建线 app 身份(iOS bundleId / Android package)按 region 从打包机本地的
 // scripts/self-host-regions.json 取(纯值、不入仓;由 release-{ios,android}-{local,ota,check}.mjs
@@ -57,21 +59,7 @@ function loadSelfHostRegionBundle(region) {
 const SELFHOST_UPDATES_PLACEHOLDER_URL = 'https://selfhost.invalid/manifest';
 
 function resolveMobileBuildEnv() {
-  try {
-    return loadProductionMobileEnv();
-  } catch (error) {
-    // 与 production-mobile-env.cjs 输出键集一致(2026-07 端点清单重构后收缩:
-    // 业务端点运行期由启动闸门从 endpoint.json 回填,不再构建期烘焙)。
-    const keys = [
-      'EXPO_PUBLIC_CINDY_AUTH_REGION',
-      'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL',
-    ];
-    const fallback = Object.fromEntries(
-      keys.map((key) => [key, process.env[key]?.trim()]),
-    );
-    if (Object.values(fallback).every(Boolean)) return Object.freeze(fallback);
-    throw error;
-  }
+  return loadMobileClientBuildEnv();
 }
 
 const REGION_CONFIG = {

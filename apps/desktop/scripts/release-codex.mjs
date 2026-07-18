@@ -35,7 +35,7 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { ensureBinary } from '../../../scripts/ensure-agent-binaries.mjs';
-import { resolveCdnBaseUrl } from '../../../scripts/shared/production-endpoints.mjs';
+import { resolveReleaseCdnBaseUrl } from '../../../scripts/shared/release-env.mjs';
 import {
   loadDotenv,
   uploadVersionedGzImmutable,
@@ -55,7 +55,7 @@ const RELEASE_DIR = path.join(DESKTOP_ROOT, 'release');
 // 独立发布与完整 app 发版遵守同一配置时序：先加载 desktop .env，
 // loadDotenv 内部会刷新共享 OSS live bindings，再解析 CDN 地址。
 loadDotenv();
-const CDN_BASE = resolveCdnBaseUrl();
+const CDN_BASE = resolveReleaseCdnBaseUrl();
 
 const ALL_PLATFORMS = ['win32-x64', 'darwin-arm64', 'darwin-x64', 'linux-x64'];
 

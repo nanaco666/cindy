@@ -174,8 +174,8 @@ export const MOBILE_VOICE_LITELLM_BASE_URL = DEFAULT_MOBILE_VOICE_LITELLM_BASE_U
   : '';
 
 // 端点清单(endpoint.json)的自举拉取基址(启动闸门专用),按 region 构建期二选一
-// 烘焙(EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL ← production-endpoints.json 的
-// endpointManifestBaseUrlCn/Global)。**烘焙常量、不接受远程覆盖**——拉清单的
+// 烘焙(EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL ← region 对应 endpoint*.json 的
+// cdnBaseUrl)。**烘焙常量、不接受远程覆盖**——拉清单的
 // 地址若吃清单自己的字段,配错一次就把自己锁死(与 desktop 同则)。这是客户端
 // 唯一"有感"的烘焙远程 URL。
 export const ENDPOINT_MANIFEST_BASE_URL = configuredValue(

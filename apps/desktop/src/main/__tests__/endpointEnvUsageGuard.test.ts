@@ -9,7 +9,7 @@
  *  - src/main/clientEndpointsService.ts(烘焙 map 组装)
  *
  * 新端点消费一律走 getClientEndpoint()(main)或 electronAPI.clientEndpoints
- * (renderer),不要扩白名单。VITE_CINDY_AUTH_REGION / VITE_FEISHU_APP_ID 等
+ * (renderer),不要扩白名单。VITE_CINDY_AUTH_REGION 等
  * 非端点构建身份不在管控范围。
  */
 import fs from 'node:fs';

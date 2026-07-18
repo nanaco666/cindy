@@ -72,6 +72,27 @@ test("loadDotenv 刷新在 import 后才注入的 OSS/CDN 配置", () => {
   }
 });
 
+test("build-only loadDotenv 不要求 OSS 发布配置", () => {
+  const saved = Object.fromEntries(
+    CONFIG_ENV_KEYS.map((key) => [key, process.env[key]]),
+  );
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "xdt-build-env-"));
+  const envFile = path.join(tempDir, ".env");
+  try {
+    for (const key of CONFIG_ENV_KEYS) delete process.env[key];
+    fs.writeFileSync(envFile, "XDT_CDN_BASE_URL=https://runtime-only.example.invalid\n");
+    assert.doesNotThrow(() =>
+      loadDotenv(envFile, { refreshReleaseConfig: false }),
+    );
+  } finally {
+    for (const key of CONFIG_ENV_KEYS) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("独立 agent binary 发布脚本先加载 desktop .env 再读取 CDN / OSS 配置", () => {
   for (const scriptName of ["release-claude-code.mjs", "release-codex.mjs", "release-ripgrep.mjs"]) {
     const source = fs.readFileSync(
@@ -85,11 +106,11 @@ test("独立 agent binary 发布脚本先加载 desktop .env 再读取 CDN / OSS
       assert.notEqual(firstRuntimeConfigUse, -1, `${scriptName} 必须使用 OSS_PREFIX`);
       assert.ok(loadIndex < firstRuntimeConfigUse, `${scriptName} 必须在读取 OSS_PREFIX 前加载并刷新 desktop .env`);
     } else {
-      const resolveIndex = source.indexOf("const CDN_BASE = resolveCdnBaseUrl();");
+      const resolveIndex = source.indexOf("const CDN_BASE = resolveReleaseCdnBaseUrl();");
       assert.notEqual(resolveIndex, -1, `${scriptName} 必须解析 CDN_BASE`);
       assert.ok(
         loadIndex < resolveIndex,
-        `${scriptName} 必须在 resolveCdnBaseUrl() 前加载并刷新 desktop .env`,
+        `${scriptName} 必须在 resolveReleaseCdnBaseUrl() 前加载并刷新 desktop .env`,
       );
     }
   }

@@ -10,7 +10,6 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import WebSocket from 'ws';
-import { loadProductionEndpoints } from './shared/production-endpoints.mjs';
 
 const execFile = promisify(execFileCb);
 
@@ -21,7 +20,7 @@ const DEFAULT_PHRASE =
   'Voice input benchmark. Today we test realtime transcription latency for Cindy.';
 const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime?intent=transcription';
 const DEFAULT_MODEL = 'gpt-realtime-whisper';
-const DEFAULT_LITELLM_BASE_URL = loadProductionEndpoints().xdGatewayBaseUrl;
+const DEFAULT_LITELLM_BASE_URL = process.env.VITE_XDPROXY_BASE_URL?.trim() || '';
 const DEFAULT_ASR_PROVIDERS = [
   'litellm-qwen3-asr-flash-realtime',
   'litellm-gpt-realtime-whisper',
@@ -123,7 +122,7 @@ ASR options:
   --chunk-ms <n>                    Default: 40
   --tail-silence-ms <n>             Append silence before final/commit. Default: 0; Volcengine still sends its production 300ms final silence marker
   --timeout-ms <n>                  Default: 15000
-  --base-url <url>                  LiteLLM gateway. Default: ${DEFAULT_LITELLM_BASE_URL}
+  --base-url <url>                  LiteLLM gateway. Default: VITE_XDPROXY_BASE_URL
   --api-key <key>                   Optional. Otherwise env/App safeStorage is used
   --debug-events                    Print provider event/frame diagnostics to stderr
   --out <path>                      JSON report path
@@ -137,7 +136,7 @@ Refine options:
   --context <path>                  JSON context merged into every case
   --iterations <n>                  Default: 1
   --timeout-ms <n>                  Default: 15000
-  --base-url <url>                  LiteLLM gateway. Default: ${DEFAULT_LITELLM_BASE_URL}
+  --base-url <url>                  LiteLLM gateway. Default: VITE_XDPROXY_BASE_URL
   --api-key <key>                   Optional. Otherwise env/App safeStorage is used
   --out <path>                      JSON report path
   --json                            Print JSON only
@@ -2360,6 +2359,9 @@ async function main() {
   if (opts.help) {
     usage();
     return;
+  }
+  if ((opts.command === 'asr' || opts.command === 'refine') && !opts.baseUrl) {
+    throw new Error('缺少 LiteLLM gateway: 请传 --base-url 或设置 VITE_XDPROXY_BASE_URL');
   }
 
   let report;

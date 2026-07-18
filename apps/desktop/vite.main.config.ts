@@ -1,5 +1,5 @@
 import { defineConfig, loadEnv } from 'vite';
-import { productionViteEnv } from '../../scripts/shared/production-endpoints.mjs';
+import { desktopClientBuildEnv } from '../../scripts/shared/client-endpoint-build-env.mjs';
 
 
 export default defineConfig(({ mode }) => {
@@ -8,15 +8,17 @@ export default defineConfig(({ mode }) => {
   // production service endpoints from the shared config at bundle time. An
   // explicit .env/process override still wins, while API/Auth keep their
   // localhost defaults below.
-  const configuredProductionEnv = productionViteEnv({ allowEnvOverride: false });
-  const readViteEnv = (key: keyof typeof configuredProductionEnv): string =>
-    env[key] || process.env[key] || configuredProductionEnv[key];
+  const configuredClientEnv = desktopClientBuildEnv({ allowEnvOverride: false });
+  const readViteEnv = (key: keyof typeof configuredClientEnv): string =>
+    env[key] || process.env[key] || configuredClientEnv[key];
   // 非 VITE_* 的 main-only 变量（不暴露到 renderer/preload；编译期注入）
   const allEnv = loadEnv(mode, process.cwd(), '');
   const readMainEnv = (key: string): string => allEnv[key] || process.env[key] || '';
   return {
     define: {
-      'import.meta.env.VITE_CINDY_AUTH_REGION': JSON.stringify(env.VITE_CINDY_AUTH_REGION || 'cn'),
+      'import.meta.env.VITE_CINDY_AUTH_REGION': JSON.stringify(
+        readViteEnv('VITE_CINDY_AUTH_REGION'),
+      ),
       // 端点清单自举基址(唯一烘焙远程 URL;业务端点已全部改走运行期清单,
       // 旧的 VITE_API_BASE_URL 等端点 define 随之退役)。dev 构建也注入 cn 值,
       // `--endpoints-cdn` 才能零配置直连线上清单。

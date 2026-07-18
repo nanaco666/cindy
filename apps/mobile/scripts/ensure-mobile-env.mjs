@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { productionMobileEnv } from '../../../scripts/shared/production-endpoints.mjs';
+import { mobileClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
 
 export const MOBILE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // 2026-07 端点清单重构后收缩:dev 业务端点初值来自仓内 config/endpoint.json
@@ -33,20 +33,20 @@ export function ensureMobileEnv({
   let content = existsSync(envPath) ? readFileSync(envPath, 'utf8') : '';
   const created = !existsSync(envPath);
   const addedKeys = [];
-  const needsPrivateConfigDefaults = REQUIRED_MOBILE_ENV_KEYS.some(
+  const needsClientBuildDefaults = REQUIRED_MOBILE_ENV_KEYS.some(
     (key) =>
       !hasPreservedEnvValue(content, key, exampleValues[key]) &&
       !String(easDefaults[key] ?? '').trim(),
   );
   const defaults = {
     ...easDefaults,
-    ...(endpointEnv ?? (needsPrivateConfigDefaults ? productionMobileEnv() : {})),
+    ...(endpointEnv ?? (needsClientBuildDefaults ? mobileClientBuildEnv() : {})),
   };
 
   for (const key of REQUIRED_MOBILE_ENV_KEYS) {
     const value = defaults[key];
     if (!String(value ?? '').trim()) {
-      throw new Error(`Missing ${key} in mobile env defaults or production endpoint config`);
+      throw new Error(`Missing ${key} in mobile env defaults or region endpoint manifest`);
     }
     const next = upsertEnvValue(content, key, value, exampleValues[key]);
     if (next !== content) addedKeys.push(key);

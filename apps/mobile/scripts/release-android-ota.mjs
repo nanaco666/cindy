@@ -22,7 +22,7 @@ import { parseArgs, assertProductionGitGate, assertPublicEnv, SELF_HOST_PUBLIC_E
 import { buildAssetEntry, buildManifest, sha256Hex, assertOtaRuntimeMatchesBaseline } from './lib/ota-manifest.mjs';
 import { readAndroidVersionCode } from './lib/android-local.mjs';
 import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
-import { productionMobileEnv } from '../../../scripts/shared/production-endpoints.mjs';
+import { mobileClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
 import { formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides, assertRegionOssComplete, stripSelfHostTapdbEnv } from './lib/self-host-region.mjs';
 
 // NOTE: 不在模块顶层 refreshOssConfig / 派生 OSS key —— OSS 落点桶由 --region 决定,以下 OTA_ROOT /
@@ -69,7 +69,7 @@ function assertRuntimeMatchesColdBaseline({ runtimeVersion, baselineRuntime, ski
 function selfhostEnv(region, desktopVersion) {
   const env = {
     ...process.env,
-    ...productionMobileEnv({ authRegion: region.authRegion }),
+    ...mobileClientBuildEnv({ authRegion: region.authRegion }),
     EXPO_PUBLIC_XDT_OTA_SELFHOST: '1',
     XDT_ANDROID_VERSION_CODE: String(readAndroidVersionCode(MOBILE_DIR)),
   };

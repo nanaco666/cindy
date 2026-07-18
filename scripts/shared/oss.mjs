@@ -19,13 +19,9 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const OSS = require('ali-oss');
 
-import {
-  loadProductionEndpoints,
-  resolveProductionEndpointsPath,
-} from './production-endpoints.mjs';
-
-// CDN / OSS 目标。四项均可被环境变量显式覆盖；未覆盖时统一读取私有生产配置：
-// XDT_CDN_BASE_URL / XDT_OSS_BUCKET / XDT_OSS_PREFIX / XDT_OSS_REGION。
+// CDN / OSS 发布目标只接受显式环境变量：XDT_CDN_BASE_URL / XDT_OSS_BUCKET /
+// XDT_OSS_PREFIX / XDT_OSS_REGION。客户端运行期端点与发布落点是两类配置，不能再
+// 通过 production-endpoints.json 混装或互相兜底。
 //
 // 【存储类别】本文件及所有发布脚本只涉及 Public 类(匿名公开读:安装包/热更/
 // agent 二进制/公告/模型目录/手机 OTA 与分发),后续拆桶时这里整体指向 public 桶。
@@ -37,18 +33,16 @@ import {
 // 部分 desktop 发布入口会先静态 import 本模块、再从 apps/desktop/.env 补环境变量。
 // ESM 依赖会先于消费模块求值,所以配置不能永久冻结在首次 import 的时刻。
 export function resolveOssConfig() {
-  let privateConfig;
-  const resolveValue = (envName, configKey) => {
-    const override = process.env[envName]?.trim();
-    if (override) return override;
-    privateConfig ??= loadProductionEndpoints();
-    return privateConfig[configKey];
+  const required = (envName) => {
+    const value = process.env[envName]?.trim();
+    if (!value) throw new Error(`缺少 OSS 发布配置: 请设置 ${envName}`);
+    return value;
   };
   return {
-    cdnBase: resolveValue('XDT_CDN_BASE_URL', 'cdnBaseUrl'),
-    bucket: resolveValue('XDT_OSS_BUCKET', 'ossBucket'),
-    prefix: resolveValue('XDT_OSS_PREFIX', 'ossPrefix'),
-    region: resolveValue('XDT_OSS_REGION', 'ossRegion'),
+    cdnBase: required('XDT_CDN_BASE_URL').replace(/\/+$/, ''),
+    bucket: required('XDT_OSS_BUCKET'),
+    prefix: required('XDT_OSS_PREFIX'),
+    region: required('XDT_OSS_REGION'),
   };
 }
 
@@ -68,19 +62,15 @@ export function refreshOssConfig() {
   return config;
 }
 
-// 工具库本身会被普通测试和只读脚本 import。没有私有配置时允许完成 import，
-// 但任何真正需要 CDN 的入口仍必须调用 refreshOssConfig()/resolveOssConfig()，
-// 届时会按 production-endpoints 的 fail-closed 规则明确报错。
+// 工具库本身会被普通测试和只读脚本 import。配置不全时允许完成 import；真正的
+// 发布入口调用 refreshOssConfig()/resolveOssConfig() 时再 fail closed。
 const OSS_ENV_KEYS = [
   'XDT_CDN_BASE_URL',
   'XDT_OSS_BUCKET',
   'XDT_OSS_PREFIX',
   'XDT_OSS_REGION',
 ];
-if (
-  OSS_ENV_KEYS.every((key) => process.env[key]?.trim()) ||
-  fs.existsSync(resolveProductionEndpointsPath())
-) {
+if (OSS_ENV_KEYS.every((key) => process.env[key]?.trim())) {
   refreshOssConfig();
 }
 

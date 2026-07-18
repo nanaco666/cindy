@@ -18,7 +18,7 @@
 //     的 runtimeVersion,否则原生层已变、热更会推给跑着不同原生面的客户端,须先出冷更整包;
 //     --skip-runtime-check 跳过,显式 --runtime-version 作人工 override(仍过基线校验)。
 // OSS/CDN 配置统一由 scripts/shared/oss.mjs 在发布环境中解析。
-// region / endpoint manifest 自举基址由 productionMobileEnv 提供;TapDB 公开配置来自
+// region / endpoint manifest 自举基址由 mobileClientBuildEnv 提供;TapDB 公开配置来自
 // self-host-regions.json → Expo extra,不依赖 EXPO_PUBLIC_* 注入。
 // =============================================================================
 
@@ -30,7 +30,7 @@ import crypto from 'node:crypto';
 import { parseArgs, assertProductionGitGate, assertPublicEnv, SELF_HOST_PUBLIC_ENV_KEYS, resolveDesktopVersion } from './release-lib.mjs';
 import { buildAssetEntry, buildManifest, sha256Hex, assertOtaRuntimeMatchesBaseline } from './lib/ota-manifest.mjs';
 import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
-import { productionMobileEnv } from '../../../scripts/shared/production-endpoints.mjs';
+import { mobileClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
 import { formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides, assertRegionOssComplete, stripSelfHostTapdbEnv } from './lib/self-host-region.mjs';
 
 // NOTE: 不在模块顶层 refreshOssConfig / 派生 OSS key —— OSS 落点桶由 --region 决定,以下 OTA_ROOT /
@@ -76,7 +76,7 @@ function assertRuntimeMatchesColdBaseline({ runtimeVersion, baselineRuntime, ski
 function selfhostEnv(region, desktopVersion) {
   const env = {
     ...process.env,
-    ...productionMobileEnv({ authRegion: region.authRegion }),
+    ...mobileClientBuildEnv({ authRegion: region.authRegion }),
     EXPO_PUBLIC_XDT_OTA_SELFHOST: '1',
   };
   // 防止打包机 shell / 旧 .env 残留变量重新混入构建;真实热更/整包地址运行期只认 endpoint.json。

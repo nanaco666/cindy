@@ -20,6 +20,9 @@ scripts/*
 !scripts/ensure-agent-binaries.mjs
 !scripts/agent-binary-cdn-fallback.mjs
 !scripts/fix-node-pty-perms.mjs
+# app.config.js 在 EAS 云端求值时同步读取 region 端点清单的构建适配器。
+!scripts/shared
+!scripts/shared/client-endpoint-build-env.cjs
 THIRD-PARTY-NOTICES.txt
 .gitlab-ci*
 

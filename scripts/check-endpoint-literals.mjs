@@ -1,23 +1,14 @@
 #!/usr/bin/env node
 /**
- * 生产端点源码泄漏门禁。
+ * 客户端端点单一来源门禁。
  *
- * 真实地址集中存放在受 Git 管理的 production-endpoints.json。本脚本验证 example
- * 的字段形状、关键消费文件和 EAS 配置，并动态提取真实配置中的 hostname / App ID，
- * 确认这些值没有重新写回受控源码。
+ * 真实运行期地址只允许进入受 Git 管理的 config/endpoint*.json。本脚本验证关键
+ * 消费源码与 EAS profile 不重新烘焙业务端点；飞书登录相关构建变量继续列入退役
+ * 键，防止旧登录链复活。
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-
-import {
-  DEFAULT_PRODUCTION_ENDPOINTS_PATH,
-  PRODUCTION_APP_CONFIG_KEYS,
-  PRODUCTION_CONFIG_KEYS,
-  PRODUCTION_ENDPOINT_KEYS,
-  loadProductionEndpoints,
-  validateProductionEndpointsExample,
-} from './shared/production-endpoints.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const EAS_ENDPOINT_ENV_KEYS = Object.freeze([
@@ -85,15 +76,6 @@ function findAbsoluteOrigins(content) {
 function main() {
   const errors = [];
 
-  try {
-    const example = validateProductionEndpointsExample();
-    for (const key of PRODUCTION_CONFIG_KEYS) {
-      if (example[key] !== '') errors.push(`production-endpoints.json.example 的 ${key} 必须为空`);
-    }
-  } catch (error) {
-    errors.push(error instanceof Error ? error.message : String(error));
-  }
-
   for (const file of CONTROLLED_SOURCE_FILES) {
     const content = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8');
     for (const origin of findAbsoluteOrigins(content)) {
@@ -119,34 +101,6 @@ function main() {
     }
   } catch (error) {
     errors.push(error instanceof Error ? error.message : String(error));
-  }
-
-  if (fs.existsSync(DEFAULT_PRODUCTION_ENDPOINTS_PATH)) {
-    try {
-      const endpoints = loadProductionEndpoints();
-      const privateHosts = new Set(
-        PRODUCTION_ENDPOINT_KEYS.map(
-          (key) => new URL(endpoints[key]).hostname.toLowerCase(),
-        ),
-      );
-      const privateAppValues = new Set(
-        PRODUCTION_APP_CONFIG_KEYS.map((key) => endpoints[key].toLowerCase()),
-      );
-      for (const file of CONTROLLED_SOURCE_FILES) {
-        const content = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8').toLowerCase();
-        for (const hostname of privateHosts) {
-          if (content.includes(hostname)) errors.push(`${file} 泄漏私有端点 hostname: ${hostname}`);
-        }
-      }
-      for (const file of CONTROLLED_APP_CONFIG_FILES) {
-        const content = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8').toLowerCase();
-        for (const value of privateAppValues) {
-          if (content.includes(value)) errors.push(`${file} 泄漏私有应用配置值`);
-        }
-      }
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
-    }
   }
 
   if (errors.length) {

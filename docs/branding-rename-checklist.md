@@ -12,7 +12,7 @@
 |---|---|---|
 | `BRAND_NAME` | `Cindy`（2026-07-16 已翻转） | desktop renderer/main 全部展示层字符串；四语言 locale 的 `{{appName}}`（renderer 走 i18next `interpolation.defaultVariables`，main 走 `apps/desktop/src/main/i18n.ts` 的迷你 `t()` 注入）；`packages/lizi-mcps` 的 MCP 工具描述、错误文案、OAuth 授权成功页 |
 
-官网链接不再是品牌常量：原 `BRAND_WEBSITE_URL` 已删除，改为 `config/production-endpoints.json` 的 `websiteUrl`（消费点 `apps/desktop/src/shared/endpoints.ts` 的 `WEBSITE_URL`，由 `check-endpoint-literals` 门禁校验一致）。国内/海外（`cindy.com.cn` / `cindy.app`）不在代码里分支——未来由各分发渠道（bucket）自带的 `production-endpoints.json` 给出不同值。
+官网链接不再是品牌常量：原 `BRAND_WEBSITE_URL` 已删除，改为 region 对应 `config/endpoint*.json` 的 `websiteUrl`（消费点 `apps/desktop/src/shared/endpoints.ts` 的 `WEBSITE_URL`）。国内/海外（`cindy.com.cn` / `cindy.app`）由各自清单给出不同值。
 
 改完跑：仓库根 `pnpm test:unit` + `pnpm --filter desktop typecheck` + `pnpm check:brand-terminology`。
 
@@ -65,7 +65,7 @@
 ## 三、外部协调项（不在本仓库内，需人工对接；状态截至 2026-07-16）
 
 - [x] Slack App 名称：已改为 Cindy。
-- [x] 官网域名：`cindy.com.cn`（国内）/ `cindy.app`（海外）已持有并接入 `production-endpoints.json`；老域名 `xdmaker.magiclizi.com` 的重定向待处理。
+- [x] 官网域名：`cindy.com.cn`（国内）/ `cindy.app`（海外）已持有并接入 region 端点清单；老域名 `xdmaker.magiclizi.com` 的重定向待处理。
 - [ ] GitHub 仓库（issue 提交目标仓）：待 Lizi 最终确认，暂不动。
 - [ ] 下载 CDN：Cindy 渠道为独立 bucket（与旧渠道 URL 完全不同，不是同 bucket 换 path），随标识符层迁移一起落地。
 - ~~飞书开放平台改名~~：已不再使用飞书登录，此项作废。
@@ -87,7 +87,7 @@
 
 ## 五、执行顺序建议
 
-1. ✅（2026-07-16）改 `BRAND_NAME` 为 `Cindy` + 官网链接抽到 `production-endpoints.json` 的 `websiteUrl` → 跑测试，覆盖 80% 展示面。
+1. ✅（2026-07-16）改 `BRAND_NAME` 为 `Cindy` + 官网链接抽到端点清单的 `websiteUrl` → 跑测试，覆盖 80% 展示面。
 2. 过第二节手动清单（打包显示名 → mobile → md/skills → 静态页；server 文案在 `cindy-server` 仓）。
 3. ✅（2026-07-17 决策）**不做全仓 `XDMaker` 禁词**：清扫后的合法残留（冻结标识符 `PROG_ID`/`MANAGED_PROFILE`、代码注释、历史文档、测试夹具、飞书 bot 账号名引用）数量大且长期存在，逐条 file:line:col 豁免不可维护。守护收敛为：guard 的错拼禁词 + locale 硬编码检查（已覆盖 `XDMaker|XD Maker|xdt-maker`）+ review 口径。新增用户可见文案一律走 `BRAND_NAME` / `{{appName}}`。
 4. 外部协调项收口（老域名重定向 / GitHub 仓库确认）。

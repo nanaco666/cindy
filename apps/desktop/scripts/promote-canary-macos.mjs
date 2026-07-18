@@ -34,11 +34,11 @@ try {
   }
 } catch { /* no .env file */ }
 
-import { resolveCdnBaseUrl } from '../../../scripts/shared/production-endpoints.mjs';
+import { resolveReleaseCdnBaseUrl } from '../../../scripts/shared/release-env.mjs';
 import { OSS_BUCKET, OSS_PREFIX, OSS_REGION, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
 
 refreshOssConfig();
-const CDN_BASE = resolveCdnBaseUrl();
+const CDN_BASE = resolveReleaseCdnBaseUrl();
 
 const ALL_ARCHS = ['arm64', 'x64'];
 

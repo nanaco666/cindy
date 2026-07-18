@@ -1,4 +1,4 @@
-/** Mobile/EAS 的生产端点构建适配器。 */
+/** Mobile/EAS 的客户端清单自举构建适配器。 */
 import {
   existsSync,
   mkdirSync,
@@ -11,10 +11,10 @@ import {
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 
-import { productionMobileEnv } from '../../../scripts/shared/production-endpoints.mjs';
+import { mobileClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
 
 /**
- * 临时向所有 EAS build profile 注入生产端点，并返回幂等恢复函数。
+ * 临时向所有 EAS build profile 注入 region + 清单自举基址，并返回幂等恢复函数。
  * 真实 URL 只在构建工作区短暂出现，不进入 Git；恢复时逐字节写回原文件。
  */
 export function injectMobileEndpointsIntoEasFile(
@@ -34,8 +34,8 @@ export function injectMobileEndpointsIntoEasFile(
       options.endpointEnv
         ? null
         : {
-            cn: productionMobileEnv({ authRegion: 'cn' }),
-            global: productionMobileEnv({ authRegion: 'global' }),
+            cn: mobileClientBuildEnv({ authRegion: 'cn' }),
+            global: mobileClientBuildEnv({ authRegion: 'global' }),
           }
     );
     const fallbackEndpointEnv = options.endpointEnv ?? endpointEnvByRegion?.cn;

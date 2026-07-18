@@ -6,8 +6,8 @@
  * 解析的端点清单(main 走 getClientEndpoint(),renderer 走
  * electronAPI.clientEndpoints)——本文件不再提供任何业务端点烘焙常量。
  *
- * 仅存的烘焙注入是清单自举基址(构建脚本读 config/production-endpoints.json
- * 按 region 注入 VITE_ENDPOINT_MANIFEST_BASE_URL);本文件只提供类型化出口,
+ * 仅存的烘焙注入是清单自举基址(构建脚本读 region 对应的 config/endpoint*.json
+ * 的 cdnBaseUrl 注入 VITE_ENDPOINT_MANIFEST_BASE_URL);本文件只提供类型化出口,
  * 不保存任何生产地址。空值表示当前构建未配置,消费方(clientEndpointsService)
  * 会在启动时阻断暴露。
  */
