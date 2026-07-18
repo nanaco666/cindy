@@ -1,0 +1,54 @@
+// @ts-nocheck —— 被测对象是 .mjs 开发工具模块，vitest 跑其纯函数。
+import { describe, expect, it, vi } from 'vitest';
+import { resolveMobileSimulatorBundleId } from '../../scripts/lib/sim-whoami.mjs';
+
+describe('mobile:sim:whoami bundle identity', () => {
+  it.each([
+    ['cn', 'com.local.cindycn'],
+    ['global', 'com.local.cindy'],
+  ])('从 %s 的最终 Expo config 读取 bundle id', (region, bundleIdentifier) => {
+    const execFile = vi.fn(() => JSON.stringify({ ios: { bundleIdentifier } }));
+
+    expect(
+      resolveMobileSimulatorBundleId(region, {
+        execFile,
+        env: { KEEP_ME: 'yes' },
+        mobileDir: '/repo/apps/mobile',
+      }),
+    ).toBe(bundleIdentifier);
+
+    expect(execFile).toHaveBeenCalledWith(
+      'pnpm',
+      ['exec', 'expo', 'config', '--type', 'public', '--json'],
+      expect.objectContaining({
+        cwd: '/repo/apps/mobile',
+        env: expect.objectContaining({
+          KEEP_ME: 'yes',
+          CINDY_USE_LOCAL_REGION_CONFIG: '1',
+          EXPO_PUBLIC_CINDY_AUTH_REGION: region,
+        }),
+      }),
+    );
+  });
+
+  it('最终 Expo config 缺少 bundle id 时 fail closed', () => {
+    expect(() =>
+      resolveMobileSimulatorBundleId('cn', {
+        execFile: () => JSON.stringify({ ios: {} }),
+      }),
+    ).toThrow(/缺少 ios\.bundleIdentifier.*cn/);
+  });
+
+  it('保留 Expo config 的失败原因', () => {
+    const cause = Object.assign(new Error('command failed'), {
+      stderr: '缺少地区构建配置',
+    });
+    expect(() =>
+      resolveMobileSimulatorBundleId('global', {
+        execFile: () => {
+          throw cause;
+        },
+      }),
+    ).toThrow(/无法解析 global Simulator bundle id: 缺少地区构建配置/);
+  });
+});
