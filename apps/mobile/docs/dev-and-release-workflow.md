@@ -35,7 +35,7 @@ pnpm mobile:xcode --region=cn       # 国服:com.xd.cindycn / cindycn
 pnpm mobile:xcode --region=global   # 海外:com.xd.cindy / cindy
 ```
 
-命令会把所选 region 与对应 endpoint 清单自举基址同步到 `apps/mobile/.env`,再执行 iOS clean prebuild、安装 Pods并打开 app 的 `.xcworkspace`。固定 clean prebuild 是为了防止从 cn / global 切换时复用旧 `ios/` 里的 bundleId / scheme。它只准备本地 Xcode 工程,不 archive、不上传 NPKG / OSS、不写发版记录。Xcode 打开后选择目标设备并点击 Run;如果旧 Metro 已在运行,需重启 Metro 才会读取刚切换的地区 env。
+命令会把所选 region 与对应 endpoint 清单自举基址同步到 `apps/mobile/.env`,再执行 iOS clean prebuild、安装 Pods、打开 app 的 `.xcworkspace`,最后在当前终端持续运行 Metro 8081。固定 clean prebuild 是为了防止从 cn / global 切换时复用旧 `ios/` 里的 bundleId / scheme。它只准备本地 Xcode 开发工程,不 archive、不上传 NPKG / OSS、不写发版记录。Xcode 打开后保持命令所在终端运行,选择目标设备并点击 Run。切 region 时如果 8081 已有旧 Metro,命令会在改文件 / prebuild 前拒绝执行,避免 native 与 JS 使用不同地区。
 
 ## 手机 Beta
 

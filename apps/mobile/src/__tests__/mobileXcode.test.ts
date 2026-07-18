@@ -1,4 +1,6 @@
 // @ts-nocheck —— 被测对象是 .mjs 开发工具模块，vitest 跑其纯函数。
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   parseMobileXcodeArgs,
@@ -53,5 +55,14 @@ describe('mobile:xcode workspace 选择', () => {
   it('缺失或出现多个 app workspace 时 fail closed', () => {
     expect(() => selectMobileXcodeWorkspace('/ios', ['Podfile'])).toThrow(/未在 .* 找到/);
     expect(() => selectMobileXcodeWorkspace('/ios', ['A.xcworkspace', 'B.xcworkspace'])).toThrow(/找到多个/);
+  });
+});
+
+describe('mobile:xcode 完整开发链路', () => {
+  it('打开 Xcode 后复用 sim:start 启动带 worktree/port 防护的 Metro', () => {
+    const source = readFileSync(resolve(process.cwd(), 'scripts/open-ios-xcode.mjs'), 'utf8');
+    expect(source).toContain("resolve(mobileDir, 'scripts/sim-start.mjs')");
+    expect(source).toContain('await portInUse(metroPort)');
+    expect(source).toContain('execFileSync(process.execPath, [simStartPath]');
   });
 });

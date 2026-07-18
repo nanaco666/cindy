@@ -2,7 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const commands = [
-  ['mobile:xcode',       '按 --region=cn|global 生成 iOS 工程并打开 Xcode'],
+  ['mobile:xcode',       '按 --region=cn|global 生成 iOS 工程、打开 Xcode并启动 Metro'],
   ['dev:desktop',        '启动桌面端（本地 API）'],
   ['dev:desktop:remote', '启动桌面端（远程 API）'],
   ['dev:desktop:inspect','启动桌面端 + Chrome DevTools 内存分析'],

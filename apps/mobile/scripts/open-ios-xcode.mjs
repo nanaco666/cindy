@@ -8,6 +8,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mobileClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
 import { podInstallBounded } from './sim-pod-install.mjs';
+import { cwdOfPid, isInside, listenerPid, portInUse } from './sim-metro.mjs';
 import {
   mobileXcodeGeneratedDir,
   parseMobileXcodeArgs,
@@ -16,15 +17,18 @@ import {
 } from './lib/mobile-xcode.mjs';
 
 const mobileDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const worktreeRoot = resolve(mobileDir, '../..');
 const iosDir = resolve(mobileDir, 'ios');
 const envPath = resolve(mobileDir, '.env');
+const simStartPath = resolve(mobileDir, 'scripts/sim-start.mjs');
+const metroPort = 8081;
 
 function printUsage() {
   console.log(`用法:
   pnpm mobile:xcode --region=cn       # 国服
   pnpm mobile:xcode --region=global   # 海外
 
-流程:切换 apps/mobile/.env 地区 → clean prebuild → 安装 Pods → 打开 Xcode workspace
+流程:切换 apps/mobile/.env 地区 → clean prebuild → 安装 Pods → 打开 Xcode → 启动 Metro
 说明:只准备本地 Xcode 工程，不会上传或发布。`);
 }
 
@@ -42,6 +46,24 @@ async function main() {
   const env = { ...process.env, ...buildEnv };
   const previousEnv = existsSync(envPath) ? readFileSync(envPath, 'utf8') : '';
   const nextEnv = updateMobileXcodeEnvContent(previousEnv, buildEnv);
+  const envChanged = nextEnv !== previousEnv;
+
+  // 已运行的 Metro 会把 EXPO_PUBLIC_* 固化在它生成的 JS bundle 中。切 region 时不能
+  // 静默复用旧进程，否则 native 工程虽已切到 global/cn，JS 仍会走上一个地区。
+  if (await portInUse(metroPort)) {
+    const pid = listenerPid(metroPort);
+    const ownerCwd = pid ? cwdOfPid(pid) : null;
+    if (!ownerCwd || !isInside(worktreeRoot, ownerCwd)) {
+      throw new Error(
+        `${metroPort} 端口被其它 checkout/process 占用(${ownerCwd || '未知进程'})；请先停止它再重试`,
+      );
+    }
+    if (envChanged) {
+      throw new Error(
+        `检测到 region/env 将变化，但 ${metroPort} 上已有本 checkout 的 Metro；请先停止旧 Metro 再重试，避免 native 与 JS 地区错配`,
+      );
+    }
+  }
   if (nextEnv !== previousEnv) writeFileSync(envPath, nextEnv);
 
   console.log(`\n› 准备 Cindy iOS Xcode 工程(region=${args.region})`);
@@ -62,7 +84,12 @@ async function main() {
   execFileSync('open', ['-a', 'Xcode', workspace], { cwd: mobileDir, stdio: 'inherit' });
   console.log(`\n✓ ${args.region === 'global' ? '海外版' : '国服版'} Xcode 工程已生成并打开。`);
   console.log(`  工程目录: ${mobileXcodeGeneratedDir(workspace)}`);
-  console.log('  在 Xcode 选择真机或模拟器后点击 Run；如果 Metro 已在运行，请重启它以加载新地区 env。');
+  console.log(`› 启动 Metro(${metroPort})；请保持当前终端开启，在 Xcode 选择设备后点击 Run。`);
+  execFileSync(process.execPath, [simStartPath], {
+    cwd: worktreeRoot,
+    env,
+    stdio: 'inherit',
+  });
 }
 
 main().catch((error) => {
