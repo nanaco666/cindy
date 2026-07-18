@@ -12,22 +12,11 @@ import splashWordmarkDark from '@/assets/splash/wordmark.png'; // 白字标(深�
 import splashWordmarkLight from '@/assets/splash/wordmark-light.png'; // 深字标(浅底)
 import splashScript from '@/assets/splash/script.png'; // 手写体 alpha(mask 着色)
 
-const APP_VERSION = '0.0.150';
-
 /**
- * E6-B 双模式 splash(设计稿浅色版 230:1014 补齐,"固定深底"假设作废)。
+ * Splash v2 双模式启动画面。
  *
- * 背景与文案色跟随亮暗:
- *  - 背景底色走 frozen token `--splash-bg`(dark #2A2828 / light #EDEDED,opaque);
- *    设计要求 #120F0F@0.85 / #FFFFFF@0.93 透壁纸 + 背景模糊,但 splash 是 main 窗
- *    overlay(App.tsx:234,非独立 BrowserWindow),vibrancy 经 IPC 在主题加载后才应用,
- *    splash 时机早于 vibrancy + 闪白风险 → 按裁决回退 opaque 近似,透壁纸记 TODO。
- *  - 字标按模式换图(白/深);手写体用 mask 着色(dark #FFFFFF / light #9A9DA3 系);
- *    加载区/版本行文案 dark 沿用 frozen splash-text/muted,light 用 text-secondary(#9A9A3 系)。
- *  - 进度条恢复双套(dark 白 alpha / light 黑 alpha,沿用 E6 前既有值)。
- *
- * 状态机零删改(useSplash.ts 未动):14 phase 文案/进度/3 失败弹窗全保留,仅重排版到品牌块下方。
- * 零投影;不碰 theme 冻结区(splash-bg/text token 不动)。
+ * 状态机零删改(useSplash.ts 未动):14 phase 文案/进度/3 失败弹窗全保留,仅重排品牌块。
+ * 背景半透由根容器铺色,不使用 CSS backdrop-filter;壁纸模糊交给原生 vibrancy。
  */
 export function SplashScreen() {
   const { t } = useTranslation();
@@ -69,21 +58,19 @@ export function SplashScreen() {
   // 模式取值:frozen splash token(dark)↔ text-secondary(light #9A9DA3 系);手写体 mask 着色。
   const wordmark = isDark ? splashWordmarkDark : splashWordmarkLight;
   const mutedColor = isDark ? 'hsl(var(--splash-text-muted))' : 'hsl(var(--text-secondary))'; // light 用二级信息灰 #9A9DA3 系
-  const labelColor = isDark ? 'hsl(var(--splash-text))' : 'hsl(var(--text-secondary))';
-  // 手写体 "Dream it Create it":dark #FFFFFF / light #9A9DA3 系(均 token,无 hex)。
-  const scriptFill = isDark
-    ? 'hsl(var(--splash-text-destructive))' // dark = #FFFFFF
-    : 'hsl(var(--text-secondary))'; // light = #9A9DA3
+  // 手写体 "Dream it Create it":按 v2 规格固定为 dark #FFFFFF / light #9499A2。
+  const scriptFill = isDark ? '#ffffff' : '#9499a2';
+  const splashBackground = isDark ? 'rgba(18, 15, 15, 0.85)' : 'rgba(255, 255, 255, 0.93)';
 
   return (
     <div
       className={cn(
         'fixed inset-0 z-[9999] overflow-hidden',
-        'bg-[hsl(var(--splash-bg))]', // 跟随亮暗(dark #2A2828 / light #EDEDED,opaque 近似)
         phase === 'fading_out' ? 'opacity-0' : 'opacity-100',
       )}
       style={
         {
+          backgroundColor: splashBackground,
           transition: 'opacity var(--splash-fade-duration) var(--splash-fade-easing)',
           WebkitAppRegion: 'drag',
         } as React.CSSProperties
@@ -91,45 +78,49 @@ export function SplashScreen() {
       onTransitionEnd={onTransitionEnd}
       aria-hidden="true"
     >
-      {/* ── 品牌块:少女立绘(两模式共用,alpha 渐隐)+ CINDY 字标(白/深按模式)── 零投影 */}
-      <img
-        src={splashIllustration}
-        alt=""
-        draggable={false}
-        onError={skipSplash}
-        className="pointer-events-none absolute left-1/2 top-1/2 h-[105%] w-auto max-w-none -translate-x-1/2 -translate-y-1/2 object-contain"
-      />
-      {/* CINDY 字标:叠在立绘下沿(立绘下 1/3 区),水平居中;白字(深底)/深字(浅底)按模式。 */}
-      <img
-        src={wordmark}
-        alt=""
-        draggable={false}
-        className="pointer-events-none absolute left-1/2 top-[68%] h-[78px] w-auto -translate-x-1/2 -translate-y-1/2 object-contain"
-      />
-      {/* 手写体 "Dream it Create it":右下角,alpha mask 着色(dark 白 / light 灰)。 */}
+      {/* ── 品牌块:按设计稿固定自然尺寸排布,矮窗口整体等比缩放 ── */}
       <div
         aria-hidden
-        className="pointer-events-none absolute bottom-[8%] right-[10%] h-[40px] w-[140px]"
+        className="pointer-events-none absolute left-1/2 top-[26.5%] h-[424.5px] w-[457px]"
         style={{
-          backgroundColor: scriptFill,
-          WebkitMaskImage: `url(${splashScript})`,
-          WebkitMaskRepeat: 'no-repeat',
-          WebkitMaskPosition: 'center',
-          WebkitMaskSize: 'contain',
-          maskImage: `url(${splashScript})`,
-          maskRepeat: 'no-repeat',
-          maskPosition: 'center',
-          maskSize: 'contain',
+          transform: 'translateX(-50%) scale(min(1, calc(100vh / 700px)))',
+          transformOrigin: 'top center',
         }}
-      />
-      {/* 版本行:左下账户样式。 */}
-      <div className="pointer-events-none absolute bottom-[6%] left-[8%] flex flex-col gap-1">
-        <span className="text-[13px] font-medium" style={{ color: labelColor }}>
-          CINDY
-        </span>
-        <span className="text-[11px] font-normal" style={{ color: mutedColor }}>
-          XD.Inc · {APP_VERSION}
-        </span>
+        data-testid="splash-brand"
+      >
+        <img
+          src={splashIllustration}
+          alt=""
+          draggable={false}
+          onError={skipSplash}
+          className="pointer-events-none absolute left-1/2 top-0 h-[457px] w-[457px] max-w-none -translate-x-1/2 object-contain"
+          data-testid="splash-illustration"
+        />
+        {/* CINDY 字标:叠在立绘下三分之一,水平居中;白字(深底)/深字(浅底)按模式。 */}
+        <img
+          src={wordmark}
+          alt=""
+          draggable={false}
+          className="pointer-events-none absolute left-1/2 top-[277.5px] h-[78px] w-[229.5px] -translate-x-1/2 object-contain drop-shadow-[0_2px_6.5px_rgba(0,0,0,0.25)]"
+          data-testid="splash-wordmark"
+        />
+        {/* 手写体 "Dream it Create it":字标右缘 +9px,与字标底部略交叠。 */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute left-[352.25px] top-[335px] h-[89.5px] w-[225.5px]"
+          style={{
+            backgroundColor: scriptFill,
+            WebkitMaskImage: `url(${splashScript})`,
+            WebkitMaskRepeat: 'no-repeat',
+            WebkitMaskPosition: 'center',
+            WebkitMaskSize: 'contain',
+            maskImage: `url(${splashScript})`,
+            maskRepeat: 'no-repeat',
+            maskPosition: 'center',
+            maskSize: 'contain',
+          }}
+          data-testid="splash-script"
+        />
       </div>
 
       {/* Toolbar:z-10 to stay above absolute layers(关闭/最小化,仅 Windows 原生 chrome) */}
