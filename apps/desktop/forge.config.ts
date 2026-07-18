@@ -44,7 +44,7 @@ const CINDY_UTI_PREFIX = brandBundleIdPrefix(CINDY_REGION);
  * 同一区域切换(src/main/regionUserData.ts),两端从 brand-identity 同源派生。
  */
 const CINDY_EXE = brandExecutableName(CINDY_REGION);
-/** 更新器二进制文件名(cindy-updater.exe;源目录仍叫 xdt-updater/)。 */
+/** 更新器二进制文件名(cindy-updater.exe)。 */
 const UPDATER_EXE = `${BRAND_IDENTITY.updaterName}.exe`;
 
 // discord.js is externalized from the main Vite bundle because its circular
@@ -419,7 +419,7 @@ const isDev = process.env.NODE_ENV !== 'production' && !process.argv.includes('m
 const isWin = process.platform === 'win32';
 
 /**
- * Build xdt-updater (Rust + Tauri) and copy the release binary into
+ * Build cindy-updater (Rust + Tauri) and copy the release binary into
  * resources/. Runs once per `forge package` / `make` invocation, so
  * `pnpm build` / `pnpm release:win` always ship the latest updater.
  *
@@ -427,13 +427,13 @@ const isWin = process.platform === 'win32';
  * Hard-fails if cargo is missing or the build errors — we'd rather break
  * the release than ship a stale updater.
  */
-function buildXdtUpdater(): void {
+function buildCindyUpdater(): void {
   if (process.platform !== 'win32') return;
   console.log(`[forge:prePackage] Building ${UPDATER_EXE} (Rust + Tauri)...`);
 
-  const updaterRoot = path.join(__dirname, 'xdt-updater', 'src-tauri');
+  const updaterRoot = path.join(__dirname, 'cindy-updater', 'src-tauri');
   if (!fs.existsSync(updaterRoot)) {
-    throw new Error(`[forge] xdt-updater source missing at ${updaterRoot}`);
+    throw new Error(`[forge] cindy-updater source missing at ${updaterRoot}`);
   }
 
   // winget-installed Rust may not be on PATH in this shell session, fall
@@ -506,7 +506,7 @@ function findMtExe(): string {
 }
 
 function patchUpdaterManifest(exePath: string): void {
-  const manifestPath = path.join(__dirname, 'xdt-updater', 'src-tauri', 'xdt-updater.manifest');
+  const manifestPath = path.join(__dirname, 'cindy-updater', 'src-tauri', 'cindy-updater.manifest');
   if (!fs.existsSync(manifestPath)) {
     throw new Error(`[forge] manifest missing at ${manifestPath}`);
   }
@@ -1156,7 +1156,7 @@ const config: ForgeConfig = {
       const targetPlatform = requestedTargetPlatform();
       const targetArch = requestedTargetArch();
       if (targetPlatform === 'win32') {
-        buildXdtUpdater();
+        buildCindyUpdater();
       }
       stageRipgrep(targetPlatform, targetArch);
       stageAndroidPlatformTools(targetPlatform, targetArch);

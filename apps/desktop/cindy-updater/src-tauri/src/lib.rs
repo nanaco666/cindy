@@ -64,7 +64,7 @@ pub fn run() {
         env!("CARGO_PKG_VERSION"),
         args
     ));
-    // Best-effort sweep of >7-day-old xdt-update-* leftovers in %TEMP%.
+    // Best-effort sweep of >7-day-old current and legacy update leftovers in %TEMP%.
     // Catches backup dirs from prior failed rollbacks that we intentionally
     // kept around for manual recovery. Bounded so disk doesn't grow forever.
     installer::sweep_stale_temp_dirs();

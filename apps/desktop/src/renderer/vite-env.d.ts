@@ -2410,7 +2410,7 @@ interface ElectronAPI {
   }>;
   /** Tell main process to apply the update and relaunch the app.
    *  `theme` is the renderer's *resolved* light/dark (after collapsing 'system'),
-   *  forwarded to xdt-updater so its splash matches the app the user is seeing. */
+   *  forwarded to cindy-updater so its splash matches the app the user is seeing. */
   relaunchToUpdate: (theme: 'light' | 'dark') => void;
   /** Startup-only apply path; main performs a final unattended-safety check. */
   autoRelaunchToUpdate: (theme: 'light' | 'dark') => Promise<{

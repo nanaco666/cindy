@@ -217,7 +217,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 15. **任何功能的设计与实现都必须同时考虑 macOS / Windows 双平台兼容性，并在两端都做到最优性能**：
     - **路径与目录**：一律走 `path.join` / `path.resolve` / `path.sep`，禁止硬编码 `/` 或 `\\`；用户目录走 `app.getPath('userData' | 'home' | 'temp')`，不要拼 `~` 或 `%APPDATA%`。
-    - **子进程 / 原生二进制**（agent CLI、xdt-updater、ripgrep、better-sqlite3 等）按平台 + 架构分发与加载（`process.platform` + `process.arch`）；spawn 时注意 Windows 的 `.cmd` / `.exe` 后缀和 `shell: true` 行为差异；不要假设 POSIX 信号（`SIGTERM` / `SIGINT`）在 Windows 子进程上同样生效，需要兜底显式 kill；env 变量名大小写在 Windows 上不敏感、在 Mac 上敏感。
+    - **子进程 / 原生二进制**（agent CLI、cindy-updater、ripgrep、better-sqlite3 等）按平台 + 架构分发与加载（`process.platform` + `process.arch`）；spawn 时注意 Windows 的 `.cmd` / `.exe` 后缀和 `shell: true` 行为差异；不要假设 POSIX 信号（`SIGTERM` / `SIGINT`）在 Windows 子进程上同样生效，需要兜底显式 kill；env 变量名大小写在 Windows 上不敏感、在 Mac 上敏感。
     - **文件系统差异**：Windows 大小写不敏感、保留路径长度上限、文件锁与删除语义不同；涉及 rename / unlink / 监听文件变化 / SQLite 文件迁移的逻辑，必须在两端都验证。
     - **性能基线以两端中较弱的一端为准**，不能"Mac 上流畅就过"。I/O 密集（SQLite / FTS / 大文件）与渲染密集（长列表虚拟化、动画、滚动）的关键路径，要明确给出在 Windows 上的可接受指标（帧率、首屏、响应延迟），并优先选择跨平台原生最优方案（better-sqlite3、Electron 原生 API、CSS GPU 合成）而非纯 JS polyfill。
     - **快捷键 / 菜单 / 系统集成**（托盘、通知、窗口控制按钮、全屏行为、`cmd` vs `ctrl`）必须按平台规范分别实现，不要把 Mac 的交互直接照搬到 Windows。
@@ -256,7 +256,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 ### 高风险模块
 
-21. **xdt-updater 是非常重要的模块,任何修改都要和 owner 确认**：无论你做任何改动,都要先和 Lizi 确认后再动手。
+21. **cindy-updater 是非常重要的模块,任何修改都要和 owner 确认**：无论你做任何改动,都要先和 Lizi 确认后再动手。
 
 ### 文档与规范治理
 

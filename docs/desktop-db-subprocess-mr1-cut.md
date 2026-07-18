@@ -482,7 +482,7 @@ MR1 PR 合并前必须满足:
 - [ ] **drizzle proxy 实现复用 drizzle 内部 row mapping**(详见上方"影响 2");proxy 实现完后改写 `drizzle-split.spike.test.ts` 走 DbClient.drizzle 作回归基线
 - [ ] **vitest 跑法**:加 `apps/desktop/package.json` 的 `test:db` script 封装 ELECTRON_RUN_AS_NODE=1;README/CLAUDE.md dev 段加说明
 - [ ] 删 `apps/desktop/src/main/__spike__/` 目录 + `bootstrap-electron.ts` 里的 spike 触发分支(但 `drizzle-split.spike.test.ts` 保留作回归基线)
-- [ ] MR Description 符合 CLAUDE.md MR 规范(feature 模板,改动范围、自测确认、xdt-updater 声明等)
+- [ ] MR Description 符合 CLAUDE.md MR 规范(feature 模板,改动范围、自测确认、cindy-updater 声明等)
 - [ ] **typecheck + lint + 现有 test 全过**;`pnpm restart:desktop:remote` dev 启动正常
 
 ---

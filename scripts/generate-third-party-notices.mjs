@@ -33,7 +33,7 @@ const NOTICES_DIR = path.join(REPO_ROOT, "notices");
 const SBOM_DIR = path.join(NOTICES_DIR, "sbom");
 const CARGO_MANIFEST = path.join(
   DESKTOP_DIR,
-  "xdt-updater",
+  "cindy-updater",
   "src-tauri",
   "Cargo.toml",
 );
@@ -1156,7 +1156,7 @@ assertNativeDeclarations();
 assertTrackedBinariesRegistered();
 if (!fs.existsSync(path.join(path.dirname(CARGO_MANIFEST), "Cargo.lock"))) {
   throw new Error(
-    "xdt-updater Cargo.lock is required for deterministic license generation",
+    "cindy-updater Cargo.lock is required for deterministic license generation",
   );
 }
 

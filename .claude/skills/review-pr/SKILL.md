@@ -392,11 +392,11 @@ echo "checklist: $DONE/$TOTAL"
 - 没有 self-review 标题、或段内 `TOTAL=0` → 本节直接跳过,不判(与 `context.mjs` 的 `format.checklist` 同口径)。
 - `TOTAL>0` 时 `DONE/TOTAL` ≥ 80% 算合格;空 `- [ ]`(啥也没写)一律视作"糊弄"不算数。带 `N/A(<原因>)` 的 `[x]` 抽查是否给了原因即可,给了就算"有态度"。
 
-#### 1.2.4 xdt-updater / DB migration 红线(硬判定)
+#### 1.2.4 cindy-updater / DB migration 红线(硬判定)
 
-红线路径命中走 `context.json` 的 `format.redlinePaths` / `format.hitsUpdater`(脚本按 `pr-rules.json` 的 `redlinePaths` 判,路径清单只此一处)。脚本不可用时,对照 `AGENTS.md`「设计实现规范」的 xdt-updater 条(规则 21)与 DB migration 条(规则 17)自行识别红线路径,**不要在本 skill 里另存一份路径清单**。
+红线路径命中走 `context.json` 的 `format.redlinePaths` / `format.hitsUpdater`(脚本按 `pr-rules.json` 的 `redlinePaths` 判,路径清单只此一处)。脚本不可用时,对照 `AGENTS.md`「设计实现规范」的 cindy-updater 条(规则 21)与 DB migration 条(规则 17)自行识别红线路径,**不要在本 skill 里另存一份路径清单**。
 
-- 命中 `updater` 路径 → `$BODY` 必须有"已和 owner 确认"或语义等同字样(对应 agent 约束「xdt-updater」),缺失即 **不合规**、等级 `[阻断]`。
+- 命中 `updater` 路径 → `$BODY` 必须有"已和 owner 确认"或语义等同字样(对应 agent 约束「cindy-updater」),缺失即 **不合规**、等级 `[阻断]`。
 - 命中 migration 路径(`localDb/schema.ts` / `drizzle/`)→ 此处只标记,转到步骤 2 第 5 条按 agent 约束「DB migration」重点审(不在 1.2 拦)。
 
 #### 1.2.5 检测结果汇总与分支
@@ -626,7 +626,7 @@ gh pr view <PR_NUMBER> --repo <OWNER>/<REPO> --json commits \
 
 ⚠️ **审查视野硬约束:不要只看 diff 文件。** diff 只是改动的"出发点",你的职责是判断这些改动放回**整个仓库**后会不会波及 diff 之外的关联功能和代码。每碰到一处共享逻辑,都要主动顺着引用 / 数据流 / 契约走出去,把受影响的关联方都读一遍再下结论。**只盯着 diff 局部、不查关联方,等于没做这次审查**——这是第 4 条的核心,贯穿全程。
 
-**项目规范基准**:第 1 / 5 条要对照仓库根 `AGENTS.md` 与 `.github/PULL_REQUEST_TEMPLATE.md`——**直接 `Read` `AGENTS.md` 的「设计实现规范」节与 `.github/PULL_REQUEST_TEMPLATE.md`(按标题定位,不要用记忆里的旧条款 / 旧编号,规范条数会增改),逐条核对**。其中**红线条必查**(按小标题语义定位,不靠编号):xdt-updater 改动声明、跨平台双端兼容、优先用代码保证确定性、throwIpcError、主题 token、maker-core 指标(缓存率/性能/准确性)、系统提示词改动须 Lizi 确认、DB migration、凭证不入仓。
+**项目规范基准**:第 1 / 5 条要对照仓库根 `AGENTS.md` 与 `.github/PULL_REQUEST_TEMPLATE.md`——**直接 `Read` `AGENTS.md` 的「设计实现规范」节与 `.github/PULL_REQUEST_TEMPLATE.md`(按标题定位,不要用记忆里的旧条款 / 旧编号,规范条数会增改),逐条核对**。其中**红线条必查**(按小标题语义定位,不靠编号):cindy-updater 改动声明、跨平台双端兼容、优先用代码保证确定性、throwIpcError、主题 token、maker-core 指标(缓存率/性能/准确性)、系统提示词改动须 Lizi 确认、DB migration、凭证不入仓。
 
 0. 历史讨论的承接(最优先)
 0.5. 代码与描述一致性 + PR 目的单一性(对账 + 搭便车拆分判定)
@@ -754,7 +754,7 @@ gate 通过后,再根据"总体判断"分流:
      - 从 diff 里逐文件核对**这 N 件事是否真的实现**;同时反向问"diff 里还做了哪些 description 没提的事"。
    - **分桶(每件事先判对账状态,再判与主目的的关系)**:
      - **A. description 承诺但 diff 未实现**:**最严重的货不对板**,**直接判 `[阻断]`**,跳到步骤 3B。哪怕只有 1 件也要打回。
-     - **B. diff 实现但 description 未声明**:看影响面分级——涉及共享层 / 跨模块 / 配置 / 数据 schema / IPC 契约 / 主题 token / xdt-updater → **`[阻断]`**,要求作者补说明;仅是被改文件内部的小重构 / 命名调整 / 顺手清理 → **`[必改]`**,按 surgical changes 原则要求拆出去或补 description。
+     - **B. diff 实现但 description 未声明**:看影响面分级——涉及共享层 / 跨模块 / 配置 / 数据 schema / IPC 契约 / 主题 token / cindy-updater → **`[阻断]`**,要求作者补说明;仅是被改文件内部的小重构 / 命名调整 / 顺手清理 → **`[必改]`**,按 surgical changes 原则要求拆出去或补 description。
      - **C. 对得上且服务于主目的** → 合规,继续进入 1-9。**为实现主目的「必需的连带改动」也归 C、不算夹带**:被改函数签名传播到的调用点、配套的测试 / 类型 / i18n key、为支撑主功能而做的局部重构、主功能拆成的多层改动(只要每层都落在这一个目的的实现路径上,如 maker-core 结构化 → IPC → 持久化 → renderer 渲染)。
      - **D. 对得上、但与主目的无因果关系(搭便车改动)**:即「描述里坦白了、但本就不该和主目的塞进同一个 PR」的独立改动——典型:与主功能无关的另一个 bugfix、顺手做的另一块重构 / 优化、夹带的第二个功能、与本功能无关的静态检查清理。**即使 description 已声明(哪怕单列了「顺手 / 同时修复的既有问题」小节),仍判 `[必改]`**(违反"一个 PR 一个目的"——本 skill 执行细则),打回要求**拆成独立 PR**。
        - ⚠️ **声明不能豁免拆分**:0.5 的对账防的是"说一套做一套",**这道目的单一性判定防的是"做了不该一起做的事"**——把夹带改动写进描述,只让它**不进 B 桶**,**不等于满足目的单一性**,该进 D 桶。
@@ -784,10 +784,10 @@ gate 通过后,再根据"总体判断"分流:
        6. 这些测试**是否都已跑过**并通过。
    - **scope 守则(避免误伤)**:为实现本 PR 主目的而对他人共享代码做的**必需连带改动**(函数签名传播、调用点适配、0.5-C 那类围绕单一目的的局部改动)**不算**本条意义上的"重构他人功能"——命中门槛是"对他人既有功能做了**结构性重写**",不要拿这条拦正常连带改动。若 blame 显示原作者已离职 / 该段为无主 legacy、确实找不到对齐对象,降级为 `[必改]` 并在 finding 写明"原作者不可达,建议改与当前模块 owner / Lizi 对齐",交用户 / owner 定夺,**不要静默放行**。
 
-1. **是否符合项目规范**:**`Read` 仓库根 `AGENTS.md` 的「设计实现规范」节与 `.github/PULL_REQUEST_TEMPLATE.md`,以现行内容逐条核对**(不要用本 skill 或记忆里的旧编号——规范条数会增改)。尤其 render/main 解耦、统一 logger、跨平台、UI 不跳变、主题 token,以及红线条(xdt-updater / 跨平台 / 优先用代码保证确定性 / throwIpcError / 主题 token / maker-core 指标 / 系统提示词 / DB migration / 凭证不入仓)。maker package 改动看 package 自己的边界规则。
+1. **是否符合项目规范**:**`Read` 仓库根 `AGENTS.md` 的「设计实现规范」节与 `.github/PULL_REQUEST_TEMPLATE.md`,以现行内容逐条核对**(不要用本 skill 或记忆里的旧编号——规范条数会增改)。尤其 render/main 解耦、统一 logger、跨平台、UI 不跳变、主题 token,以及红线条(cindy-updater / 跨平台 / 优先用代码保证确定性 / throwIpcError / 主题 token / maker-core 指标 / 系统提示词 / DB migration / 凭证不入仓)。maker package 改动看 package 自己的边界规则。
 2. **真实可用性**:diff 里的逻辑是否真能跑通?有没有"看起来在做但实际是空壳"(空函数、被 mock 的返回、TODO 占位、被 if(false) 屏蔽的代码)?有没有调到不存在的方法/字段?
 3. **跨平台**:涉及路径、子进程、文件系统的改动,是否两端兼容(macOS/Windows)。
-4. **全局关联影响分析(必查,本条最重,不准只看 diff)**:核心问题——"这个 PR 名义上做 A,但它改的东西会不会让 diff 之外的 B、C、D 也跟着出问题?"。**diff 文件只是出发点,必须顺着引用 / 数据流 / 契约走出 diff,把整仓关联方和关联功能读一遍再下结论**。系统化排查:列出"高侵入面"改动(基类 / 抽象方法、公共工具、统一 logger / storage / IPC bridge、maker package 对外 API、preload channel、DB schema、全局样式 / 主题变量、`AGENTS.md` / `DESIGN.md` 约束文件)→ 反查调用方(TS 符号优先 LSP,非符号契约 grep,每个引用点 Read 真实代码)→ 功能级关联(共享状态 / 时序假设 / 同事件 / 兄弟实现 / 数据流上下游)→ 跨进程契约(IPC 两端同步)→ 跨模块共享状态(旧数据兼容 / migration)→ 构建运行时入口 → 配置 / 环境变量 → dev vs 打包差异 → xdt-updater 红线。输出"影响面清单",对每个关联方给"仍正确 / 需同步改 / 会破坏"明确结论。**只要存在"会破坏"或"需同步改但 diff 没动",直接进步骤 3B**。
+4. **全局关联影响分析(必查,本条最重,不准只看 diff)**:核心问题——"这个 PR 名义上做 A,但它改的东西会不会让 diff 之外的 B、C、D 也跟着出问题?"。**diff 文件只是出发点,必须顺着引用 / 数据流 / 契约走出 diff,把整仓关联方和关联功能读一遍再下结论**。系统化排查:列出"高侵入面"改动(基类 / 抽象方法、公共工具、统一 logger / storage / IPC bridge、maker package 对外 API、preload channel、DB schema、全局样式 / 主题变量、`AGENTS.md` / `DESIGN.md` 约束文件)→ 反查调用方(TS 符号优先 LSP,非符号契约 grep,每个引用点 Read 真实代码)→ 功能级关联(共享状态 / 时序假设 / 同事件 / 兄弟实现 / 数据流上下游)→ 跨进程契约(IPC 两端同步)→ 跨模块共享状态(旧数据兼容 / migration)→ 构建运行时入口 → 配置 / 环境变量 → dev vs 打包差异 → cindy-updater 红线。输出"影响面清单",对每个关联方给"仍正确 / 需同步改 / 会破坏"明确结论。**只要存在"会破坏"或"需同步改但 diff 没动",直接进步骤 3B**。
 5. **副作用 / 破坏性**:是否动了共享 state、IPC 契约、DB schema、对外 API、用户配置;有无破坏向后兼容。(与第 4 条互补:第 4 条问"谁会被波及",这条问"语义层面变没变")
    - **DB migration 红线(命中 schema 源文件或 migration 目录必查——`apps/desktop/src/main/localDb/schema.ts` / `apps/desktop/drizzle/**`,对照 agent 约束「DB migration」)**:desktop 用 Drizzle/SQLite,migration 必须由生成工具产出,手写 / 手改元数据会卡死整条迁移链;另有 migration 基线约束(`drizzle/migration-baseline.json` 固定旧仓迁入 SQL 的 SHA256,数据库变化只能追加新 migration)。
      - **Drizzle(desktop)**:新增 migration 必须三件套齐全——`.sql` + `meta/_journal.json` 条目 + `meta/<idx>_snapshot.json`,由 `pnpm db:generate` 一起产出;对**已生成**的 `.sql` 改动只允许同文件内补幂等 / 注释,不得改文件名 / 序号 / meta。红旗:新增 `.sql` 没动 journal / snapshot、只改 `schema.ts` 没生成 migration、手改 `_journal.json`、序号跳号 / 重号、改历史已合入 migration。任一命中判 `[阻断]`。
@@ -1137,7 +1137,7 @@ PR：<url>（分支 <headRefName>，base <baseRefName>）
 
    报告里每条 `[阻断]` / `[必改]` 意见 → 一条行级 comment;位置由 `path:line` 本身承载,body 含三件套:
    - **等级**:`[阻断]` / `[必改]`,放 body 开头方便扫读
-     - `[阻断]` — 不改不能合(线上崩、数据丢、跨平台跑不起来、破坏核心契约、安全/权限漏洞、xdt-updater / 系统提示词红线)
+     - `[阻断]` — 不改不能合(线上崩、数据丢、跨平台跑不起来、破坏核心契约、安全/权限漏洞、cindy-updater / 系统提示词红线)
      - `[必改]` — 不阻断流程但本次必须修(明显 bug、规范违反、影响面没处理干净、调用方没同步)
    - **影响**:产品/场景语言说"如果不改,什么时候会出什么后果"(例:"Windows 用户首次启动会闪退"),不要只甩技术名词
    - **建议改法**:具体可执行的方案,并加一句**"这只是参考,你也可以走自己的方案,只要解决上面那个影响就行"**——把决定权留给作者

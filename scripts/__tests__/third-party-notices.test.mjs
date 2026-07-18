@@ -92,7 +92,7 @@ test("desktop resources include both open-source and restricted disclosures", ()
   );
   assert.ok(
     fs.existsSync(
-      path.join(repoRoot, "apps/desktop/xdt-updater/src-tauri/Cargo.lock"),
+      path.join(repoRoot, "apps/desktop/cindy-updater/src-tauri/Cargo.lock"),
     ),
   );
 });

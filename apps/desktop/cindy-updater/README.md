@@ -1,7 +1,7 @@
 # cindy-updater
 
-> 源目录沿用历史名 `apps/desktop/xdt-updater/`;二进制与产物已随 2026-07 品牌
-> 翻转改名为 `cindy-updater.exe`(经 owner 确认,AGENTS.md 规则 21)。
+> 源码目录、二进制与产物均已统一为 `cindy-updater`（经 owner 确认，
+> AGENTS.md 规则 21）。
 
 Tauri-based Windows updater for `Cindy`. Replaces the inline `.cmd` script
 that the Electron main process previously generated in `executeUpdateWindows`
@@ -61,7 +61,7 @@ The Electron main process owns argument construction; see
 ## Build
 
 ```
-cd apps/desktop/xdt-updater
+cd apps/desktop/cindy-updater
 pnpm install              # pulls @tauri-apps/cli
 pnpm tauri build          # produces target/release/cindy-updater.exe
 ```

@@ -52,7 +52,7 @@
 | 模块 | 工作量 | 代码改动范围 | 交付内容 | 验收 |
 |---|---:|---|---|---|
 | 安装依赖与平台声明 | 0.5-1d | `package.json`、`pnpm-lock.yaml`、`apps/desktop/forge.config.ts` 的 `parcelWatcherPlatformPkg()` | `pnpm.supportedArchitectures.os` 增加 `linux`，并按首版目标明确 libc（优先 glibc）；修正 `@parcel/watcher` Linux 子包命名为 `@parcel/watcher-linux-x64-glibc`（必要时后续支持 `-musl`）。`sharp` 的 `@img/sharp-linux-x64` / `@img/sharp-libvips-linux-x64` 命名已匹配现有包 | Linux runner 上 `pnpm install` 成功；`bundleNativeDeps()` 能 resolve Linux watcher/sharp 子包；desktop typecheck 不因 optional deps 缺失失败 |
-| Linux Forge 打包 | 2-3d | `apps/desktop/package.json`、`apps/desktop/forge.config.ts`、可能新增 `@electron-forge/maker-*` 依赖 | 新增 `release:linux` / `build:linux`；首版当前采用 `MakerDeb` / `.deb`，如改 AppImage 需同步调整 release/CI；补 Linux icon、desktopName、mime/category metadata；按 target platform 处理 `extraResource`，避免把 Windows-only `resources/xdt-updater.exe` / `resources/xdt-helper.exe` 无条件打进 Linux 包；`buildXdtUpdater()` 也应按 target platform 跳过非 Windows 目标 | `npx electron-forge make --platform linux --arch x64` 产出可执行安装包；Linux 包内不包含不可用的 Windows helper/updater，或有明确 stub/guard |
+| Linux Forge 打包 | 2-3d | `apps/desktop/package.json`、`apps/desktop/forge.config.ts`、可能新增 `@electron-forge/maker-*` 依赖 | 新增 `release:linux` / `build:linux`；首版当前采用 `MakerDeb` / `.deb`，如改 AppImage 需同步调整 release/CI；补 Linux icon、desktopName、mime/category metadata；按 target platform 处理 `extraResource`，避免把 Windows-only `resources/cindy-updater.exe` / `resources/xdt-helper.exe` 无条件打进 Linux 包；`buildCindyUpdater()` 也应按 target platform 跳过非 Windows 目标 | `npx electron-forge make --platform linux --arch x64` 产出可执行安装包；Linux 包内不包含不可用的 Windows helper/updater，或有明确 stub/guard |
 | Linux release 脚本 | 2-3d | 新增 `apps/desktop/scripts/release-linux.mjs`；根 `package.json` release script；复用或抽取 `apps/desktop/scripts/ci/lib.mjs` / Win/Mac release 公共逻辑 | 对齐 Win/Mac release 护栏：版本注入、`db:validate`、remote bundle、forge make、drizzle 校验、smoke、release manifest。避免一次性重构三套 release 脚本，优先局部复用 | `pnpm release:linux` 能在 Linux x64 上跑完 dry run / canary 产物生成 |
 | sqlite-vec Linux 支持 | 1-2d | `apps/desktop/native/sqlite-vec/linux-x64/vec0.so`、`apps/desktop/forge.config.ts` 的 `copySqliteVecBinary`、`apps/desktop/src/main/localDb/sqliteVecLoader.ts` 的 `libFilename()`、`scripts/ensure-dev-runtime-assets.mjs`、`scripts/dev-embed-search.mjs`、相关测试 | 增加 Linux `.so` 命名规则和 LFS 资产；打包时复制到 `app.asar.unpacked`；dev 资产检查识别 Linux。注意 `ensure-dev-runtime-assets.mjs` 当前对非 macOS/Windows 直接返回空数组，改 Linux 时要同时纳入 Claude/Codex/sqlite-vec 三类 dev 资产 | Linux packaged smoke 里 sqlite-vec load 不报缺文件；语义搜索不可用时也要有明确日志 |
 | agent / ripgrep 运行资产 | 2-3d | `tools/claude/update.mjs`、`tools/codex/update.mjs`、`tools/ripgrep/update.mjs`、`scripts/ensure-dev-runtime-assets.mjs`、`apps/desktop/scripts/release-claude-code.mjs`、`apps/desktop/scripts/release-codex.mjs`、`apps/desktop/scripts/release-windows.mjs` / `release-macos.mjs` 中可抽公共逻辑、`apps/desktop/src/main/agent-binaries/**`、`apps/desktop/src/main/maker-host/runtime-configs.ts` | 增加 `linux-x64` 下载、promote、校验、打包查找；补 `apps/claude-code-bin/linux-x64`、`apps/codex-bin/linux-x64`、`apps/ripgrep-bin/linux-x64`；确认官方 Linux 资产命名与运行依赖后再锁定排期下界 | Linux 客户端能启动 Claude/Codex agent；项目内 grep/search 走 bundled ripgrep 成功 |
@@ -67,7 +67,7 @@
 1. **MR1: Linux platform scaffolding**
    - 改 `package.json` / `apps/desktop/package.json` / `forge.config.ts`。
    - 增加 Linux maker 和 `release:linux` 空壳流程。
-   - 按 target platform 处理 `extraResource`，避免 Linux 包携带 Windows-only `xdt-updater.exe` / `xdt-helper.exe`。
+   - 按 target platform 处理 `extraResource`，避免 Linux 包携带 Windows-only `cindy-updater.exe` / `xdt-helper.exe`。
    - 验收：Linux 能 forge package/make 到最小可执行包，包内资源不含错误平台的 helper/updater。
 
 2. **MR2: Linux runtime assets**
@@ -101,7 +101,7 @@
 
 | 模块 | 工作量 | 代码改动范围 | 交付内容 | 验收 |
 |---|---:|---|---|---|
-| 自动更新完整化 | 4-7d | `apps/desktop/src/main/updateService.ts`、`apps/desktop/xdt-updater/**`、`apps/desktop/forge.config.ts`、`apps/desktop/scripts/release-linux.mjs`、CI publish、manifest 生成与 promote 脚本、renderer update banner / toast | 明确 Linux 更新策略：AppImage 原地替换、下载新版安装包提示用户安装，或接入包管理仓库。若触碰 `xdt-updater`，必须先和 Lizi / owner 确认 | 从 Linux N 版升级到 N+1 版 E2E 通过；失败可恢复；日志能定位 |
+| 自动更新完整化 | 4-7d | `apps/desktop/src/main/updateService.ts`、`apps/desktop/cindy-updater/**`、`apps/desktop/forge.config.ts`、`apps/desktop/scripts/release-linux.mjs`、CI publish、manifest 生成与 promote 脚本、renderer update banner / toast | 明确 Linux 更新策略：AppImage 原地替换、下载新版安装包提示用户安装，或接入包管理仓库。若触碰 `cindy-updater`，必须先和 Lizi / owner 确认 | 从 Linux N 版升级到 N+1 版 E2E 通过；失败可恢复；日志能定位 |
 | Linux 语音输入完整化 | 5-10d | `apps/desktop/src/main/voice-input/global.ts`、`SystemAudioMuteGuard.ts`、`apps/desktop/native/voice-input/**` 或新增 Linux helper、renderer voice input overlay/settings、`packages/voice-input-core` 仅在确需抽象时修改、四语言 i18n | 支持 Linux 全局快捷键、录音、文本插入、焦点恢复、剪贴板恢复。Wayland/X11 可走不同实现；不可支持的 DE 必须在 readiness 中明确降级 | Ubuntu GNOME Wayland、Ubuntu X11 至少通过；KDE/Fedora 记录兼容性 |
 | Linux desktop integration | 3-5d | `apps/desktop/forge.config.ts`、`apps/desktop/src/main/deepLink.ts`、`apps/desktop/src/main/folderContextMenu.ts` 或新增 Linux 集成模块、renderer deep link 消费测试 | `.desktop` 文件、protocol handler、MIME/open-folder、图标、桌面分类、通知/托盘/badge 行为收敛 | 冷启动 deep link、已运行 deep link、文件夹打开、新建 session、通知点击行为通过 |
 | 多发行版与架构扩展 | 3-6d | `package.json` supportedArchitectures、Forge maker 配置、`tools/*/update.mjs`、`apps/*-bin/linux-arm64`、`sqlite-vec/linux-arm64`、CI matrix | 从 `linux-x64` 扩到 `linux-arm64` 或 deb/rpm/AppImage 多格式；补各平台资产 | 每个新增平台都有 packaged smoke；缺官方 agent binary 时有明确不支持策略 |
@@ -112,8 +112,8 @@
 ### 3.3 完整版建议 MR 切分
 
 1. **MR5: Linux updater design and implementation**
-   - 先出设计决策，再动 `updateService` / `xdt-updater` / release manifest。
-   - `xdt-updater` 是高风险模块，改动前必须拿 owner 确认。
+   - 先出设计决策，再动 `updateService` / `cindy-updater` / release manifest。
+   - `cindy-updater` 是高风险模块，改动前必须拿 owner 确认。
 
 2. **MR6: Linux voice input**
    - 先支持一个明确矩阵：GNOME Wayland + X11。
@@ -133,12 +133,12 @@
 |---|---|---|
 | 根脚本 / pnpm | `package.json`、`pnpm-lock.yaml` | 多架构 matrix、release promote script |
 | Desktop package scripts | `apps/desktop/package.json` | 多格式 Linux 发布脚本 |
-| Forge config | `apps/desktop/forge.config.ts`，含 `MakerDeb` / Linux maker、`extraResource` 平台 gating、target-aware `buildXdtUpdater()`、sqlite-vec `.so` copy | AppImage/deb/rpm metadata、protocol/open-folder metadata、updater resources |
+| Forge config | `apps/desktop/forge.config.ts`，含 `MakerDeb` / Linux maker、`extraResource` 平台 gating、target-aware `buildCindyUpdater()`、sqlite-vec `.so` copy | AppImage/deb/rpm metadata、protocol/open-folder metadata、updater resources |
 | Release scripts | `apps/desktop/scripts/release-linux.mjs`、`apps/desktop/scripts/ci/build-linux.mjs`、`publish-linux.mjs` | `promote-canary-linux.mjs`、公共 release helper 抽象 |
 | Native DB assets | `apps/desktop/native/sqlite-vec/linux-x64/vec0.so`、`sqliteVecLoader.ts`、`ensure-dev-runtime-assets.mjs` | `linux-arm64`、更多 migration replay fixture |
 | Agent binaries | `tools/claude/update.mjs`、`tools/codex/update.mjs`、`apps/claude-code-bin/linux-x64`、`apps/codex-bin/linux-x64`、`apps/desktop/src/main/agent-binaries/**` | 多架构、发布脚本抽象、缺失平台 fallback |
 | Search binary | `tools/ripgrep/update.mjs`、`apps/ripgrep-bin/linux-x64`、`runtime-configs.ts` | 多架构与校验矩阵 |
-| Update | 首版只做禁用/手动更新 guard：`updateService.ts`、renderer update UI、i18n、Linux manifest 不写 `app.hotfix`；同时在 Forge 资源层排除 Windows-only updater/helper | AppImage/package-manager 更新、`xdt-updater`、manifest/promote、rollback |
+| Update | 首版只做禁用/手动更新 guard：`updateService.ts`、renderer update UI、i18n、Linux manifest 不写 `app.hotfix`；同时在 Forge 资源层排除 Windows-only updater/helper | AppImage/package-manager 更新、`cindy-updater`、manifest/promote、rollback |
 | Voice input | 首版只做 Linux 降级 guard：`voice-input/global.ts`、settings/overlay UI、i18n | Linux helper、Wayland/X11 insertion、mute guard、readiness matrix |
 | Deep link / OS integration | `deepLink.ts`、Forge Linux metadata | `.desktop` / MIME / open-folder / notification click E2E |
 | Tests / QA | `smoke-packaged.mjs`、CI Linux runner、migration replay | Playwright/CDP smoke、多发行版 matrix、update E2E |
@@ -154,7 +154,7 @@
 4. **sqlite-vec Linux 分发**：`.so` 需要与 Electron/系统 glibc 环境兼容。必须在 Linux packaged smoke 中真实 load，而不是只检查文件存在。
 5. **自动更新安全性**：当前 Linux 更新代码仍保留直接替换 `APPIMAGE` 路径的旧雏形，缺少 release 产物链路、失败恢复和权限处理；在当前 `.deb` 首版方案下，这条路径应视为 dormant stub，而不是可发布能力。客户端按 `manifest-linux-x64(.json/-canary.json)` 分平台拉 manifest；一旦 Linux manifest 含 `app.hotfix` 就会激活未加固路径。首版发布 manifest 前必须显式禁止 Linux `app.hotfix`，完整版前必须做 E2E。
 6. **CI runner 环境**：Electron Linux 打包常见依赖需要在 runner 明确安装。当前 `.deb` 首版至少需要 `fakeroot`、`dpkg`、`desktop-file-utils`；如后续增加 AppImage/RPM，还要补 FUSE、`rpm` 等对应依赖。`forge.config.ts` 的 `rebuildNativeDepsInPackage()` 会用 `@electron/rebuild` 强制重编 `better-sqlite3`，Linux runner 还必须有 node-gyp/C++ 构建工具链（python3、make、gcc/g++ 等）。
-7. **Windows-only extraResource**：当前 `forge.config.ts` 无条件声明 `resources/xdt-helper.exe` / `resources/xdt-updater.exe`，且 `buildXdtUpdater()` 只在 Windows host 上构建。首版即使禁用 Linux 自动更新，也必须在打包层按 target platform 排除或替换这些资源，否则 Linux 包会携带错误平台二进制。
+7. **Windows-only extraResource**：当前 `forge.config.ts` 无条件声明 `resources/xdt-helper.exe` / `resources/cindy-updater.exe`，且 `buildCindyUpdater()` 只在 Windows host 上构建。首版即使禁用 Linux 自动更新，也必须在打包层按 target platform 排除或替换这些资源，否则 Linux 包会携带错误平台二进制。
 
 ---
 
@@ -224,14 +224,14 @@
    - 如改了更新逻辑，补客户端侧断言或手工验证：即使遇到误带 `app.hotfix` 的 Linux manifest，首版 guard 也不会进入可发布的自动更新主流程
 
 3. 包内容核对
-   - Linux 包内不应包含 `resources/xdt-updater.exe` / `resources/xdt-helper.exe`
+   - Linux 包内不应包含 `resources/cindy-updater.exe` / `resources/xdt-helper.exe`
    - Linux 包内应包含 ripgrep、sqlite-vec、Claude、Codex 所需运行资产
 
 ### 7.3 完整版追加自测
 
 1. 若进入自动更新开发
    - 必补 Linux update E2E：N -> N+1 升级、失败恢复、日志检查
-   - 如触碰 `apps/desktop/xdt-updater/**`，改动前后都要记录 owner 确认
+   - 如触碰 `apps/desktop/cindy-updater/**`，改动前后都要记录 owner 确认
 
 2. 若进入语音输入完整化
    - Wayland 与 X11 分开验证
