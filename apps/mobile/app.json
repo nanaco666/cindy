@@ -17,7 +17,7 @@
     "ios": {
       "bundleIdentifier": "com.xd.cindycn",
       "usesAppleSignIn": true,
-      "buildNumber": "2026071803",
+      "buildNumber": "2026071804",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "UISupportedInterfaceOrientations": [
