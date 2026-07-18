@@ -1807,4 +1807,4 @@ registerColor('sidebar-user-card-text', {
 registerColor('caret-accent', {
   light: 'var(--accent-cta-bg)',
   dark: 'var(--accent-cta-bg)',
-}, 'Editable caret accent; CINDY overrides to brand red per user request 2026-07-18');
+}, 'Editable caret accent; CINDY overrides to focus blue #417CDD per user decision 2026-07-18(撤红改蓝)');
