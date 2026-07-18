@@ -1,74 +1,8 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const commands = [
-  ['mobile:xcode',       '按 --region=cn|global 生成 iOS 工程、打开 Xcode并启动 Metro'],
-  ['mobile:sim:rebuild', '重建并安装 Mobile 模拟器开发包'],
-  ['mobile:sim:start',   '启动 Mobile Metro（支持 --region=cn|global）'],
-  ['mobile:sim:whoami',  '查看 8081-8086 上的 Metro 分支归属'],
-  ['mobile:release:check', '检查 EAS 正式服 / staging / Beta 应热更还是冷更'],
-  ['mobile:release:beta',  '发布指定开发者的手机 Beta（默认 dry-run）'],
-  ['mobile:release:prod',  '从 main 发布 EAS 正式服（默认 dry-run）'],
-  ['mobile:release:ios:check', '检查自建 iOS 应热更还是冷更（必须指定 region）'],
-  ['mobile:release:ios:local', '自建 iOS 完整冷更：打包、重签、上传并写 release.json'],
-  ['mobile:release:ios:ota',   '发布自建 iOS OTA（必须指定 region）'],
-  ['mobile:release:ios:npkg',  'iOS NPKG 上传 / 查询 / 下载运维入口'],
-  ['mobile:release:android:check', '检查自建 Android 应热更还是冷更（必须指定 region）'],
-  ['mobile:release:android:local', '自建 Android 完整冷更：打包、上传并写 release.json'],
-  ['mobile:release:android:ota',   '发布自建 Android OTA（必须指定 region）'],
-  ['mobile:release:android:npkg',  'Android APK 手动补传 NPKG 入口'],
-  ['mobile:beta:add-dev', '新增 per-dev Beta profile / channel / branch'],
-  ['dev:desktop',        '启动桌面端（本地 API）'],
-  ['dev:desktop:remote', '启动桌面端（远程 API）'],
-  ['dev:desktop:inspect','启动桌面端 + Chrome DevTools 内存分析'],
-  ['restart:desktop:remote', '重启桌面端远程模式（支持 --region=cn|global）'],
-  ['restart:desktop:local',  '重启桌面端本地模式（支持 --region=cn|global）'],
-  ['build',              '打包桌面端（electron-forge make 裸调,human-only）'],
-  ['package:desktop',          '桌面端打包（当前平台,默认版本无关 + cn + dev,不发布）'],
-  ['package:win',              'Windows x64 打包（同上,只打包不发布）'],
-  ['package:mac:arm64',        'macOS Apple Silicon 打包（只打包不发布）'],
-  ['package:mac:x64',          'macOS Intel 打包（只打包不发布）'],
-  ['package:linux',            'Linux x64 打包（只打包不发布）'],
-  ['release:mac',              'macOS 发布（arm64 + x64,默认进 canary 通道）'],
-  ['release:mac:arm64',        'macOS 发布（仅 Apple Silicon,canary 通道）'],
-  ['release:mac:x64',          'macOS 发布（仅 Intel,canary 通道）'],
-  ['release:win',              'Windows 发布（默认进 canary 通道）'],
-  ['release:linux',            'Linux x64 发布（默认进 canary 通道）'],
-  ['release:promote:win',      'Windows: canary → stable（dry-run，加 --yes 执行）'],
-  ['release:promote:mac',      'macOS: canary → stable，arm64 + x64（加 --yes 执行）'],
-  ['release:promote:mac:arm64','macOS arm64 单独 promote（加 --yes 执行）'],
-  ['release:promote:mac:x64',  'macOS x64 单独 promote（加 --yes 执行）'],
-  ['release:promote:linux',    'Linux: canary → stable（dry-run，加 --yes 执行）'],
-  ['release:claude-code',      'macOS Claude Code binary 发布（arm64 + x64）'],
-  ['release:claude-code:arm64','macOS Claude Code binary 发布（仅 Apple Silicon）'],
-  ['release:claude-code:x64',  'macOS Claude Code binary 发布（仅 Intel）'],
-  ['release:claude-code:win',  'Windows Claude Code binary 发布'],
-  ['release:codex',            'macOS Codex binary 发布（arm64 + x64）'],
-  ['release:codex:arm64',      'macOS Codex binary 发布（仅 Apple Silicon）'],
-  ['release:codex:x64',        'macOS Codex binary 发布（仅 Intel）'],
-  ['release:codex:win',        'Windows Codex binary 发布'],
-  ['release:ripgrep',          'macOS ripgrep binary 发布（arm64 + x64）'],
-  ['release:ripgrep:arm64',    'macOS ripgrep binary 发布（仅 Apple Silicon）'],
-  ['release:ripgrep:x64',      'macOS ripgrep binary 发布（仅 Intel）'],
-  ['release:ripgrep:win',      'Windows ripgrep binary 发布'],
-  ['update:claude',            '下载 @anthropic-ai/claude-code 各平台可执行文件'],
-  ['update:codex',             '下载 openai/codex GitHub Release 各平台可执行文件'],
-  ['update:ripgrep',           '下载 BurntSushi/ripgrep 各平台可执行文件'],
-  ['update:vendors',           '一键更新 claude + codex + ripgrep（顺序执行）'],
-  ['lint',               '全量 lint 检查'],
-  ['format',             '全量代码格式化'],
-  ['test:runner',        '项目级测试 runner 自测'],
-  ['test:unit',          '项目级 unit 测试契约检查'],
-  ['test:all',           '项目级全量测试契约检查（只运行 required tier）'],
-  ['test:db',            '运行 desktop DB 测试入口'],
-  ['test:guard',         '运行 desktop guard 源码结构契约测试'],
-];
-
 export function printHelp(log = console.log) {
-  log('\n  Cindy 客户端仓可用指令\n');
-  for (const [name, desc] of commands) {
-    log(`  pnpm ${name.padEnd(28)} ${desc}`);
-  }
+  log('\n  Cindy 客户端仓常用指令（按场景分组，可直接复制）');
 
   log('\n  桌面端启动（以下命令可直接复制）:');
   log('    # 推荐：先清理已有 Cindy dev 进程，再启动远程 API 模式');
@@ -112,6 +46,54 @@ export function printHelp(log = console.log) {
   log('    pnpm release:promote:win');
   log('    pnpm release:promote:win -- --yes');
   log('    pnpm release:promote:linux');
+  log('    pnpm release:promote:linux -- --yes');
+
+  log('\n  Agent 二进制安装 / 升级（Claude Code、Codex、ripgrep）:');
+  log('    # 按 latest.json 当前 pin 安装到本机，不修改 pin');
+  log('    pnpm install:agent-binaries');
+  log('      安装当前平台的全部三种二进制');
+  log('    pnpm install:claude');
+  log('    pnpm install:codex');
+  log('    pnpm install:ripgrep');
+  log('      只安装当前平台的指定二进制');
+  log('    # 升级到上游最新版：下载全平台二进制，并修改对应 latest.json pin');
+  log('    pnpm update:claude');
+  log('    pnpm update:codex');
+  log('    pnpm update:ripgrep');
+  log('    pnpm update:vendors');
+  log('      依次把三种二进制全部升级到上游最新版');
+  log('    # 固定到指定版本：下面是完整示例，会修改 latest.json pin');
+  log('    pnpm update:claude 2.1.199');
+  log('    pnpm update:codex 0.144.1');
+  log('    pnpm update:ripgrep 15.1.0');
+
+  log('\n  Agent 二进制单独发布（不重新打包 App）:');
+  log('    # 先 dry-run：检查全部四个平台，不上传');
+  log('    pnpm release:claude-code -- --dry-run');
+  log('    pnpm release:codex -- --dry-run');
+  log('    pnpm release:ripgrep -- --dry-run');
+  log('    # 正式发布：上传全部四个平台，并更新各平台 canary manifest');
+  log('    pnpm release:claude-code');
+  log('    pnpm release:codex');
+  log('    pnpm release:ripgrep');
+  log('    # 只发布单个平台');
+  log('    pnpm release:claude-code:arm64');
+  log('    pnpm release:claude-code:x64');
+  log('    pnpm release:claude-code:win');
+  log('    pnpm release:claude-code -- --platform linux-x64');
+  log('    pnpm release:codex:arm64');
+  log('    pnpm release:codex:x64');
+  log('    pnpm release:codex:win');
+  log('    pnpm release:codex -- --platform linux-x64');
+  log('    pnpm release:ripgrep:arm64');
+  log('    pnpm release:ripgrep:x64');
+  log('    pnpm release:ripgrep:win');
+  log('    pnpm release:ripgrep -- --platform linux-x64');
+  log('    # 发布目标：版本化 .gz + manifest-<platform>-canary.json');
+  log('      不是独立沙盒目录；canary 用户先看到，stable 用户暂时不受影响');
+  log('    # 没有“只 promote 某个二进制”的命令；以下会提升整份平台 manifest');
+  log('    pnpm release:promote:mac -- --yes');
+  log('    pnpm release:promote:win -- --yes');
   log('    pnpm release:promote:linux -- --yes');
 
   log('\n  Mobile 本地开发（以下命令可直接复制）:');
@@ -170,6 +152,14 @@ export function printHelp(log = console.log) {
   log('      海外版：依次对应检查、完整冷更打包发布、JS OTA');
   log('    pnpm mobile:release:android:npkg -- upload /absolute/path/Cindy.apk');
   log('      仅在需要时手动补传 APK 到 NPKG，不参与正常冷更链路');
+
+  log('\n  开发检查:');
+  log('    pnpm lint');
+  log('    pnpm test:runner');
+  log('    pnpm test:unit');
+  log('    pnpm test:all');
+  log('    pnpm test:db');
+  log('    pnpm test:guard');
   log();
 }
 

@@ -66,33 +66,30 @@ test("root db and guard delegate to the workspace runner", () => {
 	assert.equal(scripts["test:guard"], "node scripts/test-workspaces.mjs --tier guard");
 });
 
-test("help text describes guard as a runnable local contract tier", async () => {
-	const { commands } = await import("../help.mjs");
-	const guardCommand = commands.find(([name]) => name === "test:guard");
-	assert.deepEqual(guardCommand, [
-		"test:guard",
-		"运行 desktop guard 源码结构契约测试",
-	]);
-});
-
-test("help lists every root mobile workflow and prints copyable release commands", async () => {
-	const { commands, printHelp } = await import("../help.mjs");
-	const listed = new Set(commands.map(([name]) => name));
-	const mobileScripts = Object.keys(readRootScripts()).filter((name) =>
-		/^(mobile:xcode|mobile:sim:|mobile:release:|mobile:beta:)/.test(name),
-	);
-	assert.deepEqual(
-		mobileScripts.filter((name) => !listed.has(name)),
-		[],
-		"pnpm h must list every user-facing Mobile workflow",
-	);
-
+test("help groups copyable desktop, binary, and Mobile workflows", async () => {
+	const { printHelp } = await import("../help.mjs");
 	const lines = [];
 	printHelp((line = "") => lines.push(line));
 	const output = lines.join("\n");
+	const rootScripts = Object.keys(readRootScripts());
+	const documentedWorkflowScripts = rootScripts.filter((name) =>
+		/^(mobile:xcode|mobile:sim:|mobile:release:|mobile:beta:)/.test(name) ||
+		/^(install:(agent-binaries|claude|codex|ripgrep)|update:(vendors|claude|codex|ripgrep))$/.test(name) ||
+		/^release:(claude-code|codex|ripgrep)(:arm64|:x64|:win)?$/.test(name),
+	);
+	assert.deepEqual(
+		documentedWorkflowScripts.filter((name) => !output.includes(`pnpm ${name}`)),
+		[],
+		"pnpm h must include every user-facing Mobile and binary workflow",
+	);
+
 	for (const command of [
 		"pnpm dev:desktop:remote --region=global",
 		"pnpm package:desktop -- --region cn --channel release --version patch",
+		"pnpm install:agent-binaries",
+		"pnpm release:claude-code -- --dry-run",
+		"pnpm release:codex -- --platform linux-x64",
+		"pnpm release:ripgrep:win",
 		"pnpm mobile:release:prod -- --message \"发布本次改动\" --execute",
 		"pnpm mobile:release:ios:local -- --region cn --execute",
 		"pnpm mobile:release:ios:local -- --region global --execute",
@@ -101,6 +98,8 @@ test("help lists every root mobile workflow and prints copyable release commands
 	]) {
 		assert.match(output, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 	}
+	assert.match(output, /没有“只 promote 某个二进制”的命令/);
+	assert.match(output, /pnpm test:guard/);
 });
 
 test("orca workflow unit tier uses its own declared test runner", () => {
