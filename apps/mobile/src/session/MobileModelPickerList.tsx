@@ -3,7 +3,8 @@
  * 由 ModelPickerSheet 装配)。
  *
  * 展现内容对齐桌面 ModelSelector 的 renderModelItem:每行 = 来源官方 mark + 模型名 +
- * `85% off`(骨折版)+ 当前 effort 标签 + Fast 闪电(点亮时)+ 选中 Check + 行内「配置」入口。
+ * `订阅`(订阅制来源)+ `85% off`(骨折版)+ 当前 effort 标签 + Fast 闪电(点亮时)+
+ * 选中 Check + 行内「配置」入口。
  * 触屏适配:桌面 hover「Edit」→ 每行右侧常驻配置图标,点击经 `onOpenOptions` 通知浮窗
  * 打开二级「模型选项」SheetSurface(元信息 / 快速开关 / 推理强度,见 ModelOptionsSheetView),
  * 本组件不再承载行内展开。骨折版被控端无 gateway key → 整行置灰 + 行内提示。
@@ -189,6 +190,8 @@ export function MobileModelPickerList({
         {providerRows.map((row) => {
           const selected = row.model.id === activeModelId && row.provider.id === activeSourceId;
           const isBudget = row.model.id.startsWith('codex/');
+          // 对齐桌面 ModelSelector:订阅制来源(Claude.ai / ChatGPT 等)的模型带「订阅」徽标。
+          const isSubscription = row.provider.access?.kind === 'subscription';
           const rowDisabled = budgetRowDisabled(row.model.id, apiKeyStatus);
           const fastEditable =
             configEnabled &&
@@ -253,6 +256,11 @@ export function MobileModelPickerList({
               <View style={styles.optionMain}>
                 <View style={styles.optionTitleRow}>
                   <Text numberOfLines={1} style={styles.optionText}>{row.model.displayName}</Text>
+                  {isSubscription ? (
+                    <View style={styles.budgetBadge}>
+                      <Text style={styles.budgetBadgeText}>订阅</Text>
+                    </View>
+                  ) : null}
                   {isBudget ? (
                     <View style={styles.budgetBadge}>
                       <Text style={styles.budgetBadgeText}>85% off</Text>

@@ -73,6 +73,17 @@ describe('buildUserProvider (per-runtime)', () => {
     expect(p.routing.codex?.headerOverride).toEqual({ 'X-Org': 'acme' });
   });
 
+  it('carries modelsUrl into routing (edit-form round-trip), absent when unset', () => {
+    const p = buildUserProvider({
+      ...codexOnly,
+      runtimes: {
+        codex: { ...codexOnly.runtimes.codex!, modelsUrl: 'https://openrouter.ai/api/v1/models' },
+      },
+    });
+    expect(p.routing.codex?.modelsUrl).toBe('https://openrouter.ai/api/v1/models');
+    expect(buildUserProvider(codexOnly).routing.codex?.modelsUrl).toBeUndefined();
+  });
+
   it('does not infer subscription access from a generic OAuth login method', () => {
     const p = buildUserProvider({
       ...codexOnly,

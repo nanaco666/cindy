@@ -15,7 +15,6 @@ const BASE: AutoRelaunchReadinessInput = {
   hasBusyTasks: false,
   idleTimeSeconds: AUTO_UPDATE_IDLE_THRESHOLD_SECONDS,
   idleState: 'idle',
-  blockWhenScreenLocked: true,
   nowMs: 120_000,
   lastBusyAtMs: null,
   lastResumeAtMs: null,
@@ -52,12 +51,8 @@ describe('update auto relaunch policy', () => {
     expect(check({ idleState: 'active' })).toBe('user-active');
   });
 
-  it('blocks while the screen is locked even after the idle threshold', () => {
-    expect(check({ idleState: 'locked' })).toBe('screen-locked');
-  });
-
-  it('preserves locked-idle unattended relaunch on platforms without the macOS presentation issue', () => {
-    expect(check({ idleState: 'locked', blockWhenScreenLocked: false })).toBeNull();
+  it('allows locked-idle unattended relaunch after the idle threshold', () => {
+    expect(check({ idleState: 'locked' })).toBeNull();
   });
 
   it('fails closed when the system idle state cannot be read', () => {

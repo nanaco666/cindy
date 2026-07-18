@@ -66,9 +66,12 @@ function toRouting(
   baseUrl: string,
   headers: Record<string, string> | undefined,
   strategy: 'api-key-header' | 'oauth-token',
+  modelsUrl?: string,
 ): RoutingDescriptor {
   const r: RoutingDescriptor = { upstream: baseUrl, authStrategy: strategy };
   if (headers && Object.keys(headers).length > 0) r.headerOverride = { ...headers };
+  // 列模型端点回带（编辑表单从 routing 重建配置时不丢；路由器不消费本字段）。
+  if (modelsUrl) r.modelsUrl = modelsUrl;
   return r;
 }
 
@@ -87,7 +90,12 @@ export function buildUserProvider(config: CustomProviderConfig): Provider {
     const rt = config.runtimes[agent];
     if (!rt) continue;
     agents.push(agent);
-    routing[agent] = toRouting(rt.baseUrl, rt.headers, isOAuth ? 'oauth-token' : 'api-key-header');
+    routing[agent] = toRouting(
+      rt.baseUrl,
+      rt.headers,
+      isOAuth ? 'oauth-token' : 'api-key-header',
+      rt.modelsUrl,
+    );
     models[agent] = rt.models.map((m) => toCatalogModel(m, config.id, agent));
   }
   return {
