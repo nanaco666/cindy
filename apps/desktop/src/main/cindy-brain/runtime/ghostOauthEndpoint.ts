@@ -10,7 +10,9 @@
  * - PUT  /oauth/<key>/client             → body {"clientId":"...","clientSecret":"..."}
  *   写入用户自填的 OAuth 客户端凭证(clientSecret 可省略 = 纯 PKCE),204;
  * - DELETE /oauth/<key>/client           → 清除 client 凭证,204(幂等);
- * - POST /oauth/<key>/connect            → 主机跑完整授权流程(拉浏览器,最长
+ * - POST /oauth/<key>/connect            → 可选 body {scopes,clientId};scopes
+ *   只能是声明子集,clientId 仅 broker 模式且只能取默认/备用声明值。主机跑
+ *   完整授权流程(拉浏览器,最长
  *   数分钟),200 + {ok:true,account} 或 {ok:false,error}(结构化错误码,
  *   settingsHtml 据此提示;永不外泄令牌/凭证字节);
  * - DELETE /oauth/<key>/accounts/<id>    → 断开账号,204(幂等);
@@ -51,7 +53,7 @@ export interface GhostOauthEndpointManager {
     ghostId: string,
     secretKey: string,
     decl: GhostOauthDecl,
-    opts?: { scopes?: readonly string[] },
+    opts?: { scopes?: readonly string[]; clientId?: string },
   ): Promise<GhostOauthConnectResult>;
   disconnectAccount(ghostId: string, secretKey: string, accountId: string): void;
   setDefaultAccount(ghostId: string, secretKey: string, accountId: string): boolean;
@@ -167,10 +169,12 @@ export async function handleGhostOauthRequest(args: {
         body: JSON.stringify({ ok: false, error: 'BROKER_FORBIDDEN', detail: 'tokenBroker 仅第一方官方意识可用' }),
       };
     }
-    // 可选 body {"scopes":[...]}:本次授权申请清单 scopes 的非空子集
+    // 可选 body {"scopes":[...],"clientId":"..."}:scopes 是本次授权申请
+    // 清单的非空子集;clientId 仅 broker 模式可从默认/备用声明值中选择。
     // (设置页"只读连接"这类降面授权)。无 body / 空 body = 申请全量声明面;
     // 越界或形态不对 400(意识不能借连接动作扩权,manager 侧还有防御性重验)。
     let scopesOverride: string[] | undefined;
+    let clientIdOverride: string | undefined;
     try {
       const text = await readBodyText();
       if (text.trim().length > 0) {
@@ -187,18 +191,37 @@ export async function handleGhostOauthRequest(args: {
           }
           scopesOverride = collected;
         }
+        const rawClientId = (parsed as Record<string, unknown>).clientId;
+        if (rawClientId !== undefined) {
+          if (
+            typeof rawClientId !== 'string' ||
+            rawClientId.trim().length === 0 ||
+            rawClientId.length > 200 ||
+            /\s/.test(rawClientId)
+          ) {
+            return { status: 400 };
+          }
+          const normalized = rawClientId.trim();
+          const allowedClientIds = [decl.clientId, ...(decl.clientIdAlternatives ?? [])];
+          if (!decl.tokenBroker || !allowedClientIds.includes(normalized)) {
+            return { status: 400 };
+          }
+          clientIdOverride = normalized;
+        }
       }
     } catch (err) {
       if (err instanceof GhostKvError && err.code === 'TOO_LARGE') return { status: 413 };
       return { status: 400 };
     }
     try {
-      const result = await manager.connectAccount(
-        ghostId,
-        secretKey,
-        decl,
-        scopesOverride !== undefined ? { scopes: scopesOverride } : undefined,
-      );
+      const opts =
+        scopesOverride !== undefined || clientIdOverride !== undefined
+          ? {
+              ...(scopesOverride !== undefined ? { scopes: scopesOverride } : {}),
+              ...(clientIdOverride !== undefined ? { clientId: clientIdOverride } : {}),
+            }
+          : undefined;
+      const result = await manager.connectAccount(ghostId, secretKey, decl, opts);
       // 结构化透传(ok:false 也是 200——授权被拒/超时是业务态不是协议错;
       // detail 可能含服务端错误摘录,已由引擎保证不含凭证字节)。
       return { status: 200, body: JSON.stringify(result) };

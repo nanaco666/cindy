@@ -151,6 +151,9 @@ describe('FORGE_GUIDE', () => {
       // 卡内音频播放器(2026-07-14):data-ghost-audio 插槽 + 防重令牌。
       'data-ghost-audio',
       'xdt_audio_in_card',
+      'cindy.request',
+      'app-context',
+      'clientIdAlternatives',
       'cindy.fetch',
       'network 槽',
       '媒体上传',

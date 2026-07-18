@@ -282,6 +282,8 @@ export interface GhostSecretExchangeDecl {
 
 /** OAuth 凭证:scopes 条数上限(超出拒装;确认框逐条展示要可读)。 */
 export const GHOST_OAUTH_SCOPES_MAX = 32;
+/** OAuth broker 模式可声明的备用 clientId 上限(默认 clientId 不计入)。 */
+export const GHOST_OAUTH_CLIENT_ID_ALTERNATIVES_MAX = 8;
 /** OAuth 凭证:extraAuthorizeParams 条数上限。 */
 export const GHOST_OAUTH_EXTRA_PARAMS_MAX = 8;
 /**
@@ -321,6 +323,14 @@ export interface GhostSecretOauthDecl {
    * 授权仍需用户在浏览器里亲自同意,凭证本身访问不了任何数据。
    */
   clientId?: string;
+  /**
+   * 可选:broker 模式下允许意识在单次连接时选择的备用客户端 ID。
+   * 典型场景是同一官方意识按宿主 region 连接不同 OAuth App。值都是公开
+   * 标识,secret 仍由对应区域的 broker 持有;主机只接受本数组或 clientId
+   * 明确声明过的值,意识不能借 connect 请求切到任意第三方应用。
+   * 仅 tokenBroker 模式可用,默认 clientId 不要在这里重复声明。
+   */
+  clientIdAlternatives?: string[];
   /** 可选:内置 client 的 secret(与 clientId 成对;纯 PKCE 服务商可省略)。 */
   clientSecret?: string;
   /** 申请的 scope 列表(0–32 条,确认框逐条展示;缺省 = 不带 scope 参数)。 */
@@ -1501,6 +1511,43 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
               return { ok: false, reason: 'network.secrets[].oauth.clientId 必须是 1–200 字符、不含空白的字符串' };
             }
           }
+          let oaClientIdAlternatives: string[] | undefined;
+          if (oa.clientIdAlternatives !== undefined) {
+            if (oa.clientId === undefined) {
+              return { ok: false, reason: 'network.secrets[].oauth.clientIdAlternatives 必须与默认 clientId 一起声明' };
+            }
+            if (
+              !Array.isArray(oa.clientIdAlternatives) ||
+              oa.clientIdAlternatives.length === 0 ||
+              oa.clientIdAlternatives.length > GHOST_OAUTH_CLIENT_ID_ALTERNATIVES_MAX
+            ) {
+              return {
+                ok: false,
+                reason: `network.secrets[].oauth.clientIdAlternatives 必须是 1–${GHOST_OAUTH_CLIENT_ID_ALTERNATIVES_MAX} 条的数组`,
+              };
+            }
+            oaClientIdAlternatives = [];
+            for (const clientId of oa.clientIdAlternatives) {
+              if (
+                typeof clientId !== 'string' ||
+                clientId.trim().length === 0 ||
+                clientId.length > 200 ||
+                /\s/.test(clientId)
+              ) {
+                return {
+                  ok: false,
+                  reason: 'network.secrets[].oauth.clientIdAlternatives 含非法条目(须为 1–200 字符、不含空白的字符串)',
+                };
+              }
+              if (clientId === oa.clientId || oaClientIdAlternatives.includes(clientId)) {
+                return {
+                  ok: false,
+                  reason: `network.secrets[].oauth.clientIdAlternatives 含重复条目 ${JSON.stringify(clientId)}`,
+                };
+              }
+              oaClientIdAlternatives.push(clientId);
+            }
+          }
           if (oa.clientSecret !== undefined) {
             if (oa.clientId === undefined) {
               return { ok: false, reason: 'network.secrets[].oauth.clientSecret 必须与 clientId 成对声明' };
@@ -1579,6 +1626,12 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
             if (oa.clientSecret !== undefined) {
               return { ok: false, reason: 'network.secrets[].oauth.tokenBroker 与 clientSecret 互斥(broker 模式下 secret 由服务端持有,不随包分发)' };
             }
+          }
+          if (oaClientIdAlternatives !== undefined && oa.tokenBroker === undefined) {
+            return {
+              ok: false,
+              reason: 'network.secrets[].oauth.clientIdAlternatives 仅允许与 tokenBroker 一起声明',
+            };
           }
           // brokerBounce(可选):双地址弹跳回调,必须与 tokenBroker + redirectPort
           // 成套声明(302 目标端口/路径在 broker 服务端写死,三者是一套约定)。
@@ -1681,6 +1734,9 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
             authorizeUrl: authorizeParsed.url,
             tokenUrl: tokenParsed.url,
             ...(oa.clientId !== undefined ? { clientId: oa.clientId as string } : {}),
+            ...(oaClientIdAlternatives !== undefined
+              ? { clientIdAlternatives: oaClientIdAlternatives }
+              : {}),
             ...(oa.clientSecret !== undefined ? { clientSecret: oa.clientSecret as string } : {}),
             ...(oaScopes !== undefined ? { scopes: oaScopes } : {}),
             ...(oa.scopeDelimiter !== undefined ? { scopeDelimiter: oa.scopeDelimiter as ',' } : {}),
@@ -1964,6 +2020,8 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
  *
  * 上行(电子脑 → 主机,cindy.send(payload) = ipcRenderer.invoke):
  *   - tool-result:交卷。
+ *   - host-request:读取宿主公开上下文。目前只支持 app-context(region),
+ *     无需声明卡槽、无用户数据与凭证内容。
  *   - cindy-request(旧名 model-request 兼容):cindy 槽代办(意识请 Cindy 本体干活;invoke 的返回值即结果,
  *     无需另配对)。gen_image / edit_image;须声明 'cindy' 卡槽与能力详单。
  *   - fetch-request:network 槽代理 HTTP(invoke 返回值即响应,无需另配对)。
@@ -1985,6 +2043,26 @@ export interface GhostPipeToolCall {
 export type GhostPipeToolResult =
   | { type: 'tool-result'; callId: string; ok: true; result: unknown }
   | { type: 'tool-result'; callId: string; ok: false; message: string };
+
+/** 主机公开给意识的构建区域。与 desktop CURRENT_CINDY_REGION 同口径。 */
+export type GhostAppRegion = 'cn' | 'global';
+
+/**
+ * 上行:读取宿主公开上下文。`cindy.request({kind:'app-context'})` 是 preload
+ * 提供的语法糖,底层仍走同一根 ghost-pipe 与主机白名单。
+ */
+export interface GhostPipeHostRequest {
+  type: 'host-request';
+  kind: 'app-context';
+}
+
+/** host-request 与 settings 页面 `/app-context` 共用的只读返回形态。 */
+export interface GhostAppContextResult {
+  ok: true;
+  context: {
+    region: GhostAppRegion;
+  };
+}
 
 /**
  * 上行:聊天卡片供片(卡槽③,C3d' 海报模式)。意识为自己的一次 tool-call

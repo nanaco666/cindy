@@ -42,6 +42,7 @@ import {
   ensureGhostProtocolRegistered,
   ghostIdForLogicWebContents,
   sendToGhostLogic,
+  setGhostAppContextProvider,
   setGhostConnectionsHandler,
   setGhostKvStore,
   setGhostOauthHandler,
@@ -49,6 +50,7 @@ import {
   setGhostSecretsHandler,
   setGhostWakeHandler,
 } from './runtime/electronSandboxAdapter.js';
+import { CURRENT_CINDY_REGION } from '../../shared/brandRegion.js';
 import { createGhostKvStore } from './ghostKvStore.js';
 import { handleGhostSecretsRequest } from './runtime/ghostSecretsEndpoint.js';
 import { handleGhostOauthRequest } from './runtime/ghostOauthEndpoint.js';
@@ -166,6 +168,11 @@ import { eq } from 'drizzle-orm';
  */
 
 const log = createLogger('brain');
+
+/** 电子脑管子与 settingsHtml `/app-context` 共用,避免两条 region 口径漂移。 */
+function currentGhostAppContext() {
+  return { ok: true as const, context: { region: CURRENT_CINDY_REGION } };
+}
 
 let managerSingleton: GhostManager | null = null;
 let ipcRegistered = false;
@@ -1535,6 +1542,7 @@ export function registerGhostIpc(): void {
   const manager = getGhostManager();
   const runtime = getGhostRuntime();
   setGhostSandboxDevToolsDisabled(app.isPackaged);
+  setGhostAppContextProvider(currentGhostAppContext);
   // 面板唤醒电子脑(cindy-ghost://<id>/wake 供片分支):面板零桥,唤醒经它
   // 自己的协议通道进来。只对"已装且唤醒"的意识放行;熔断态不清账(重载 /
   // 重新唤醒才 resetFuse),spawn 幂等所以重复唤醒零成本。
@@ -1924,7 +1932,7 @@ export function registerGhostIpc(): void {
 
   // ── 管子(脑机接口)main 侧 handler(C3d 主循环通电;runtime-sandbox.md §5.5)──
   // 身份不信任 sender 自报,一律按 webContents id 反查绑定表验身。
-  // 上行白名单:tool-result(交卷,派发器配对验身)/ cindy-request(cindy 槽
+  // 上行白名单:tool-result(交卷,派发器配对验身)/ host-request(公开宿主上下文)/ cindy-request(cindy 槽
   // 代办,返回值即结果)/ card-update(卡槽③供片,cardService 校验链)/
   // notify(系统提示,notifySlot 资格审+限速)/ fs-request(fs 槽代写文件,
   // fsSlot 三档守门)。其它类型一律拒。
@@ -1942,6 +1950,13 @@ export function registerGhostIpc(): void {
       const outcome = getGhostPipeDispatcher().handleToolResult(id, payload);
       if (!outcome.accepted) log.warn('ghost tool-result rejected', { id, reason: outcome.reason });
       return { ok: true };
+    }
+    // host-request = 读取宿主公开上下文;不要求卡槽,只返回构建 region,
+    // 不含登录态/路径/设备信息。未知 kind 明确拒绝,避免接口悄悄扩面。
+    if (type === 'host-request') {
+      const kind = (payload as { kind?: unknown } | null)?.kind;
+      if (kind === 'app-context') return currentGhostAppContext();
+      throwIpcError('INVALID_PARAMS', '未知的宿主请求类型');
     }
     // cindy-request = 请 Cindy 本体代办;旧名 model-request 静默兼容(更名前的老包)。
     if (type === 'cindy-request' || type === 'model-request') {

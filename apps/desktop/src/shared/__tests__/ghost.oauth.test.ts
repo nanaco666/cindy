@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import {
+  GHOST_OAUTH_CLIENT_ID_ALTERNATIVES_MAX,
   GHOST_OAUTH_RESERVED_AUTHORIZE_PARAMS,
   GHOST_OAUTH_SCOPES_MAX,
   ghostPermissionItems,
@@ -315,6 +316,63 @@ describe('ghost · oauth 凭证声明校验', () => {
       validateGhostManifest(
         oauthManifest({ oauth: { ...base, clientSecret: 'sec', tokenBroker: 'jira' } }),
       ).ok,
+    ).toBe(false);
+  });
+
+  it('clientIdAlternatives:仅 broker + 默认 clientId 可用,合法值保留且重复/非法值拒绝', () => {
+    const base = {
+      authorizeUrl: 'https://accounts.example.com/authorize',
+      tokenUrl: 'https://accounts.example.com/token',
+      clientId: 'cn-client-id',
+      tokenBroker: 'slack',
+    };
+    const ok = validateGhostManifest(
+      oauthManifest({ oauth: { ...base, clientIdAlternatives: ['global-client-id'] } }),
+    );
+    expect(ok.ok, ok.ok ? '' : ok.reason).toBe(true);
+    if (ok.ok) {
+      expect(ok.manifest.network?.secrets?.[0]?.oauth?.clientIdAlternatives).toEqual([
+        'global-client-id',
+      ]);
+    }
+
+    for (const clientIdAlternatives of [
+      [],
+      ['cn-client-id'],
+      ['global-client-id', 'global-client-id'],
+      ['has space'],
+      ['x'.repeat(201)],
+      [42],
+      Array.from({ length: GHOST_OAUTH_CLIENT_ID_ALTERNATIVES_MAX + 1 }, (_, i) => `client-${i}`),
+    ]) {
+      expect(
+        validateGhostManifest(oauthManifest({ oauth: { ...base, clientIdAlternatives } })).ok,
+        JSON.stringify(clientIdAlternatives),
+      ).toBe(false);
+    }
+    expect(
+      validateGhostManifest(
+        oauthManifest({
+          oauth: {
+            ...base,
+            clientId: undefined,
+            clientIdAlternatives: ['global-client-id'],
+          },
+        }),
+      ).ok,
+      '缺默认 clientId 应拒',
+    ).toBe(false);
+    expect(
+      validateGhostManifest(
+        oauthManifest({
+          oauth: {
+            ...base,
+            tokenBroker: undefined,
+            clientIdAlternatives: ['global-client-id'],
+          },
+        }),
+      ).ok,
+      '非 broker 模式应拒',
     ).toBe(false);
   });
 

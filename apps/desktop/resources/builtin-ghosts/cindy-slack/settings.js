@@ -2,8 +2,10 @@
  * Cindy Slack 设置页脚本(CSP 禁内联,外挂加载)。
  * 数据面:主机 /oauth 通道(协议保留路径)——
  *   GET  /oauth                                → [{ key, clientConfigured, accounts }](零令牌字节)
+ *   GET  /app-context                          → { ok:true, context:{ region } }
  *   POST /oauth/slack_account/connect          → 主机拉浏览器跑授权(可能等数分钟);
- *     body {"scopes":[...]} = 本次申请的 scope 子集(只读连接不带写 scope)
+ *     body {"clientId":"...","scopes"?:[...]} = 按 region 选择清单白名单内
+ *     的 Slack App;scopes 是本次申请的可选子集(只读连接不带写 scope)
  *   DELETE /oauth/slack_account/accounts/<id>  → 断开账号
  *   POST /oauth/slack_account/default          → { accountId } 设默认
  * broker 模式没有自填 client 通道(/client 是 405),本页不画凭证输入。
@@ -12,6 +14,21 @@
   'use strict';
 
   var KEY = 'slack_account';
+  var CLIENT_ID_BY_REGION = {
+    cn: '2372848536.11511864051187',
+    global: '2372848536.11619977511874',
+  };
+
+  /** settings 页面零 preload 桥,经同源只读 request 端点取宿主构建 region。 */
+  async function getSlackClientId() {
+    var response = await fetch('/app-context');
+    if (!response.ok) throw new Error('app-context HTTP ' + response.status);
+    var result = await response.json();
+    var region = result && result.ok && result.context && result.context.region;
+    var clientId = CLIENT_ID_BY_REGION[region];
+    if (!clientId) throw new Error('unsupported region');
+    return clientId;
+  }
 
   /** 只读档的 scope 子集(与 ghost.json scopes 的前 16 条一致;读写 = 不传 body 用全量)。 */
   var READ_SCOPES = [
@@ -122,10 +139,12 @@
     // 按钮文案不动(改字会变宽,整块布局跳一帧);等待态只用 disabled + 状态行。
     rw.disabled = true;
     ro.disabled = true;
-    showStatus('已打开浏览器,请完成授权…', true);
+    showStatus('正在准备授权…', true);
     try {
-      var init = { method: 'POST' };
-      if (readOnly) init.body = JSON.stringify({ scopes: READ_SCOPES });
+      var body = { clientId: await getSlackClientId() };
+      if (readOnly) body.scopes = READ_SCOPES;
+      var init = { method: 'POST', body: JSON.stringify(body) };
+      showStatus('已打开浏览器,请完成授权…', true);
       var r = await fetch('/oauth/' + KEY + '/connect', init);
       if (r.status !== 200) {
         showStatus('连接失败(' + r.status + '),请重试');
