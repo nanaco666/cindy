@@ -37,6 +37,19 @@ git submodule update --init --recursive
 pnpm restart:desktop:remote
 ```
 
+区域化 desktop dev：
+
+```bash
+# 国内版（默认，读取 config/endpoint.json）
+pnpm restart:desktop:remote --region=cn
+
+# 海外版（读取 config/endpoint.global.json）
+pnpm restart:desktop:remote --region=global
+
+# 验证对应区域的线上 CDN 端点清单
+pnpm restart:desktop:remote --region=global --endpoints-cdn
+```
+
 连接开发者自己启动的本地服务端：
 
 ```bash
