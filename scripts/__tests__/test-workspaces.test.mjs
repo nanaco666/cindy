@@ -75,6 +75,34 @@ test("help text describes guard as a runnable local contract tier", async () => 
 	]);
 });
 
+test("help lists every root mobile workflow and prints copyable release commands", async () => {
+	const { commands, printHelp } = await import("../help.mjs");
+	const listed = new Set(commands.map(([name]) => name));
+	const mobileScripts = Object.keys(readRootScripts()).filter((name) =>
+		/^(mobile:xcode|mobile:sim:|mobile:release:|mobile:beta:)/.test(name),
+	);
+	assert.deepEqual(
+		mobileScripts.filter((name) => !listed.has(name)),
+		[],
+		"pnpm h must list every user-facing Mobile workflow",
+	);
+
+	const lines = [];
+	printHelp((line = "") => lines.push(line));
+	const output = lines.join("\n");
+	for (const command of [
+		"pnpm dev:desktop:remote --region=global",
+		"pnpm package:desktop -- --region cn --channel release --version patch",
+		"pnpm mobile:release:prod -- --message \"发布本次改动\" --execute",
+		"pnpm mobile:release:ios:local -- --region cn --execute",
+		"pnpm mobile:release:ios:local -- --region global --execute",
+		"pnpm mobile:release:android:local -- --region cn --execute",
+		"pnpm mobile:release:android:local -- --region global --execute",
+	]) {
+		assert.match(output, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+	}
+});
+
 test("orca workflow unit tier uses its own declared test runner", () => {
 	const orcaPackage = readWorkspacePackageJson("packages/orca-workflow");
 	const orcaWorkspace = manifest.workspaces.find(
