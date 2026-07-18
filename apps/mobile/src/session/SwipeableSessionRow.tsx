@@ -22,10 +22,11 @@
  */
 import { memo, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
-import Swipeable, {
+import {
+  ReanimatedSwipeable as Swipeable,
   SwipeDirection,
   type SwipeableMethods,
-} from 'react-native-gesture-handler/ReanimatedSwipeable';
+} from '@/platform/gestureHandler';
 import Animated, {
   interpolate,
   useAnimatedReaction,
@@ -125,7 +126,7 @@ function SwipeableSessionRowInner({
 
   // 全滑判定:松手瞬间(库在 release 时派发 WillOpen)读当前位移,超阈值即触发。
   // direction 语义:RIGHT = 右滑(露出左面板/置顶),LEFT = 左滑(露出右面板/归档)。
-  const handleWillOpen = useCallback((direction: SwipeDirection) => {
+  const handleWillOpen = useCallback((direction: (typeof SwipeDirection)[keyof typeof SwipeDirection]) => {
     const translation = translationRef.current;
     if (!translation) return;
     if (direction === SwipeDirection.RIGHT) {

@@ -1,4 +1,3 @@
-import { useObserve } from 'expo-observe';
 import { useFocusEffect } from 'expo-router';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
@@ -53,6 +52,7 @@ import { buildMainWindowLayout } from '@/components/mainWindowLayout';
 import { useScreenEdgePadding } from '@/components/screenEdgeInsets';
 import { isAccessRevokedError } from '@/device-link/accessRevoked';
 import { useDeviceLink } from '@/device-link/DeviceLinkContext';
+import { useObserve } from '@/observability/observe';
 import {
   createEmptyDeviceIdentityCache,
   loadDeviceIdentityCache,

@@ -14,7 +14,6 @@ import {
   Phone,
   UserRound,
 } from 'lucide-react-native';
-import { useObserve } from 'expo-observe';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { SocialProvider, VerificationKind } from '@cindy/auth-client';
 
@@ -24,6 +23,7 @@ import { isNativeSocialProviderSupported } from '@/auth/nativeSocial';
 import { Text, TextInput } from '@/components/AppText';
 import { MainWindowActionButton } from '@/components/MobilePrimitives';
 import { AUTH_REGION, getMobileConfigIssues } from '@/config/env';
+import { useObserve } from '@/observability/observe';
 import { useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 import {
   fontWeight,

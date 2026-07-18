@@ -1,4 +1,3 @@
-import { useObserve } from 'expo-observe';
 import { isInFlightDeviceLinkError } from '@lizi/device-link';
 import {
   ArrowDown,
@@ -70,6 +69,7 @@ import { isTransientRemoteError, withTransientRemoteRetry } from '@/device-link/
 import { useRemoteSyncTask } from '@/device-link/remoteSyncTask';
 import { useMobileMakerTransport } from '@/device-link/useMobileMakerTransport';
 import { startFocusedTopicSubscription } from '@/device-link/focusedTopicSubscription';
+import { useObserve } from '@/observability/observe';
 import { InteractionPanel, type MobilePlanViewerState } from '@/session/InteractionPanel';
 import { MessageRenderer } from '@/session/MessageRenderer';
 import { InlineQueueSection } from '@/session/InlineQueueSection';

@@ -26,7 +26,7 @@ import { Text } from '@/components/AppText';
 import { MessageSquarePlus, Pen, Share as ShareIcon, Undo2, X } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
 import { fontWeight, iconSize, iconStroke, radius, typeScale } from '@/theme';
-import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, GestureHandlerRootView } from '@/platform/gestureHandler';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
