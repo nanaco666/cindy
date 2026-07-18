@@ -4,7 +4,6 @@ import {
   Camera,
   Check,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   ChevronUp,
   Ellipsis,
@@ -56,10 +55,11 @@ import {
 } from 'react-native';
 import { Text, TextInput } from '@/components/AppText';
 import type { TextInput as NativeTextInput } from 'react-native';
+import { ScreenBackButton } from '@/components/MobilePrimitives';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/auth/AuthContext';
 import { goBackGuarded } from '@/utils/backGuard';
-import { DEVICE_LINK_API_BASE_URL } from '@/config/env';
+import { DEVICE_LINK_API_BASE_URL, MOBILE_VISUAL_MOCK_ENABLED } from '@/config/env';
 import { ConnectionBanner, useShowConnectionBanner } from '@/components/ConnectionBanner';
 import { useDeviceLink } from '@/device-link/DeviceLinkContext';
 import { useRevokedDevices } from '@/device-link/revokedDevicesStore';
@@ -74,6 +74,7 @@ import { InteractionPanel, type MobilePlanViewerState } from '@/session/Interact
 import { MessageRenderer } from '@/session/MessageRenderer';
 import { InlineQueueSection } from '@/session/InlineQueueSection';
 import { RewindPreviewPanel } from '@/session/RewindPreviewPanel';
+import { BlurBackdrop } from '@/session/BlurBackdrop';
 import { SheetModal } from '@/session/SheetModal';
 import { SheetGrabber } from '@/session/SheetSurface';
 import {
@@ -452,6 +453,9 @@ export default function SessionScreen() {
     draft?: string;
     focusClientId?: string;
     focusRequestKey?: string;
+    visualFocusComposer?: string;
+    visualOpenSearch?: string;
+    visualSearchQuery?: string;
   }>();
   const sessionId = readRouteParam(params.sessionId) ?? '';
   const deviceId = readRouteParam(params.deviceId) ?? remoteSessionStore.getSessionDeviceId(sessionId) ?? '';
@@ -465,6 +469,9 @@ export default function SessionScreen() {
   const routeDraft = readRouteParam(params.draft);
   const routeFocusClientId = readRouteParam(params.focusClientId);
   const routeFocusRequestKey = readRouteParam(params.focusRequestKey);
+  const visualFocusComposer = MOBILE_VISUAL_MOCK_ENABLED && readRouteParam(params.visualFocusComposer) === '1';
+  const visualOpenSearch = MOBILE_VISUAL_MOCK_ENABLED && readRouteParam(params.visualOpenSearch) === '1';
+  const visualSearchQuery = MOBILE_VISUAL_MOCK_ENABLED ? readRouteParam(params.visualSearchQuery) : null;
   const router = useRouter();
   const auth = useAuth();
   const windowDimensions = useWindowDimensions();
@@ -2466,6 +2473,12 @@ export default function SessionScreen() {
   useEffect(() => {
     setActiveSearchIndex((index) => normalizeMessageSearchIndex(searchHits.length, index));
   }, [searchHits.length]);
+
+  useEffect(() => {
+    if (!visualOpenSearch) return;
+    setSearchOpen(true);
+    if (visualSearchQuery !== null) setSearchQuery(visualSearchQuery);
+  }, [visualOpenSearch, visualSearchQuery]);
 
   const moveSearchHit = useCallback((direction: 'previous' | 'next') => {
     setActiveSearchIndex((index) => nextMessageSearchIndex(searchHits.length, index, direction));
@@ -5069,7 +5082,6 @@ export default function SessionScreen() {
           ]}
           testID="session.bottomLayer"
         >
-          <TranslucentBackdrop />
           <View
             pointerEvents="box-none"
             style={[
@@ -5309,6 +5321,7 @@ export default function SessionScreen() {
                     accessibilityLabel="输入远程消息"
                     accessibilityHint={composerLayout.input.disabledReason ?? undefined}
                     accessoryAbove={attachments.length > 0 || pendingUploads.length > 0 || pastePlaceholderCount > 0 ? renderComposerAttachmentTray() : null}
+                    autoFocus={visualFocusComposer}
                     cardActive={composerCardActive}
                     caretHidden={voiceIsListening}
                     compact={compactComposer && !composerCardActive}
@@ -5366,7 +5379,8 @@ type SessionHeaderIcon = typeof Folder;
 
 function TranslucentBackdrop() {
   const styles = useThemedStyles(makeStyles);
-  return <View pointerEvents="none" style={styles.translucentBackdrop} />;
+  const { colors } = useTheme();
+  return <BlurBackdrop intensity={40} overlayColor={colors.chatHeaderSurface} style={styles.translucentBackdrop} />;
 }
 
 function SessionHeaderBar({
@@ -5443,16 +5457,12 @@ function SessionHeaderBar({
 
   return (
     <View style={styles.sessionHeaderBar} testID="session.summary">
-      <RouteActionButton
-        accessibilityLabel="返回"
+      <ScreenBackButton
         hitSlop={4}
         onPress={onBack}
-        pressedStyle={styles.sessionHeaderIconPressed}
         style={styles.sessionHeaderBackButton}
         testID="session.backButton"
-      >
-        <ChevronLeft color={colors.textPrimary} size={iconSize.md} strokeWidth={iconStroke.medium} />
-      </RouteActionButton>
+      />
 
       <View style={styles.sessionHeaderTextBlock}>
         <View style={styles.sessionHeaderTitleRow}>
@@ -5633,6 +5643,7 @@ function SessionSearchSheet({
         style={[styles.adhocSheet, { maxHeight: sheetMaxHeight }]}
         testID="search.sheet"
       >
+        <BlurBackdrop intensity={32} overlayColor={colors.surfaceGlassPanel} />
         {/* 把手仅作视觉暗示(SheetSurface 同款 SheetGrabber);本 ad-hoc 面板不接拖动手势,点背板即可关。 */}
         <SheetGrabber style={styles.adhocSheetGrabber} />
         <View style={styles.adhocSheetHeader}>
@@ -5645,6 +5656,7 @@ function SessionSearchSheet({
             accessibilityLabel="搜索当前会话消息"
             autoCapitalize="none"
             autoCorrect={false}
+            autoFocus={MOBILE_VISUAL_MOCK_ENABLED && visible}
             onChangeText={onChangeQuery}
             placeholder="搜索当前会话消息"
             placeholderTextColor={colors.textTertiary}
@@ -6099,6 +6111,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     minHeight: 0,
   },
   sessionBottomLayer: {
+    backgroundColor: colors.surface,
     bottom: 0,
     left: 0,
     overflow: 'hidden',
@@ -6112,7 +6125,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   translucentBackdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: colors.chatHeaderSurface,
   },
   // 排队消息编辑提示条(composer 上方):✎ + 「正在编辑第 N 条排队消息」 + × 放弃。
   queueEditBar: {
@@ -6143,7 +6155,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   sessionHeaderBar: {
     alignItems: 'center',
-    backgroundColor: colors.chatHeaderSurface,
+    backgroundColor: 'transparent',
     borderBottomColor: colors.chatHeaderDivider,
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
@@ -6153,14 +6165,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   sessionHeaderBackButton: {
-    alignItems: 'center',
-    backgroundColor: colors.surfaceElevated,
-    borderColor: colors.border,
-    borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
+    flexShrink: 0,
   },
   sessionHeaderTextBlock: {
     flex: 1,
@@ -6220,7 +6225,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingTop: spacing.sm,
   },
   adhocSheet: {
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: 'transparent',
     borderTopColor: colors.border,
     borderTopLeftRadius: radius.container,
     borderTopRightRadius: radius.container,

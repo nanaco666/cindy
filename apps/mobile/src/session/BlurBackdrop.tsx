@@ -23,16 +23,18 @@ import { useTheme } from '@/theme';
 export interface BlurBackdropProps {
   /** iOS BlurView intensity(R1 模式1 ≈ 50;模式3 浮层可传更低)。默认 50。 */
   intensity?: number;
+  /** 玻璃上的半透明底色。默认沿用侧栏/背板 tint。 */
+  overlayColor?: string;
   children?: ReactNode;
   style?: StyleProp<ViewStyle>;
 }
 
-export function BlurBackdrop({ intensity = 50, children, style }: BlurBackdropProps) {
+export function BlurBackdrop({ intensity = 50, overlayColor, children, style }: BlurBackdropProps) {
   const { mode, colors } = useTheme();
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
       <BlurView intensity={intensity} tint={mode === 'dark' ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.surfaceTranslucentSidebar }]} />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: overlayColor ?? colors.surfaceTranslucentSidebar }]} />
       {children}
     </View>
   );

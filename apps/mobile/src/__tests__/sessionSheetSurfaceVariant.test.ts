@@ -17,7 +17,9 @@ describe('mobile session sheet styling variants', () => {
     expect(sheetSurface).toContain('variant?: SheetSurfaceVariant;');
     expect(sheetSurface).toContain("variant = 'default'");
     expect(sheetSurface).toContain("variant === 'tasksheet' && styles.sheetTasksheet");
-    expect(sheetSurface).toContain('backgroundColor: colors.sheetSurface');
+    expect(sheetSurface).toContain('<BlurBackdrop');
+    expect(sheetSurface).toContain('overlayColor={variant === \'tasksheet\' ? colors.sheetSurface : colors.surfaceGlassPanel}');
+    expect(sheetSurface).toContain("backgroundColor: 'transparent'");
     expect(sheetSurface).toContain('backgroundColor: colors.sheetGrabber');
 
     const primarySheetStart = sessionMenu.indexOf('testID="session.menuSheet"');
@@ -40,6 +42,7 @@ describe('mobile session sheet styling variants', () => {
     expect(actionSheet).toContain('colors.sheetActionBorder');
     expect(actionSheet).toContain('colors.destructive');
     expect(actionSheet).not.toContain('colors.statusError');
+    expect(actionSheet).toContain('<BlurBackdrop intensity={32} overlayColor={colors.sheetActionSurface} />');
   });
 
   it('keeps the session menu status chips left aligned inside the sheet body', () => {

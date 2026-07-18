@@ -126,6 +126,7 @@ export function SessionActionSheet({
           testID="home.sessionActions"
         >
           <View style={styles.actionCard}>
+            <BlurBackdrop intensity={32} overlayColor={colors.sheetActionSurface} />
             {menu.map((item) => {
               const IconComponent = ACTION_ICONS[item.action];
               const color = item.destructive ? colors.destructive : colors.sheetActionText;
@@ -153,6 +154,7 @@ export function SessionActionSheet({
             style={({ pressed }) => [styles.cancelCard, pressed && styles.pressed]}
             testID="home.sessionActions.cancel"
           >
+            <BlurBackdrop intensity={32} overlayColor={colors.sheetActionSurface} />
             <Text style={styles.cancelText}>取消</Text>
           </Pressable>
         </Animated.View>
@@ -176,7 +178,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   actionCard: {
-    backgroundColor: colors.sheetActionSurface,
+    backgroundColor: 'transparent',
     borderColor: colors.sheetActionBorder,
     borderRadius: radius.container,
     borderWidth: StyleSheet.hairlineWidth,
@@ -201,7 +203,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   cancelCard: {
     alignItems: 'center',
-    backgroundColor: colors.sheetActionSurface,
+    backgroundColor: 'transparent',
     borderColor: colors.sheetActionBorder,
     borderRadius: radius.container,
     borderWidth: StyleSheet.hairlineWidth,

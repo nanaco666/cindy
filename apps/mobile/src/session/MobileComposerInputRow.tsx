@@ -68,6 +68,7 @@ export interface MobileComposerInputRowProps {
   cardActive?: boolean;
   caretHidden?: boolean;
   compact?: boolean;
+  autoFocus?: TextInputProps['autoFocus'];
   cursorColor?: TextInputProps['cursorColor'];
   editable?: boolean;
   /**
@@ -145,6 +146,7 @@ export function MobileComposerInputRow({
   accessibilityHint,
   accessibilityLabel,
   accessoryAbove,
+  autoFocus,
   cardActive,
   caretHidden,
   compact,
@@ -202,6 +204,7 @@ export function MobileComposerInputRow({
       ref={inputRef as never}
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
+      autoFocus={autoFocus}
       caretHidden={caretHidden}
       cursorColor={cursorColor}
       editable={editable}

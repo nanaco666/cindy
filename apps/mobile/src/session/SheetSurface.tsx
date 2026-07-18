@@ -16,6 +16,7 @@ import type { ReactNode, RefObject } from 'react';
 import { ChevronLeft } from 'lucide-react-native';
 import { Animated, Pressable, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text } from '@/components/AppText';
+import { BlurBackdrop } from '@/session/BlurBackdrop';
 import type { ContextSheetSnap, ContextSheetSnapHeights } from '@/session/contextSheetModel';
 import { useContextSheetDrag } from '@/session/useContextSheetDrag';
 import { fontWeight, iconSize, iconStroke, radius, spacing, typeScale, useTheme, useThemedStyles, type ThemeColors } from '@/theme';
@@ -86,6 +87,10 @@ export function SheetSurface({
       ]}
       testID={testID}
     >
+      <BlurBackdrop
+        intensity={32}
+        overlayColor={variant === 'tasksheet' ? colors.sheetSurface : colors.surfaceGlassPanel}
+      />
       <View style={styles.dragZone} {...drag.panHandlers}>
         <SheetGrabber variant={variant} />
         <View style={styles.header}>
@@ -157,15 +162,13 @@ function makeSheetSurfaceStyles(colors: ThemeColors) {
     // 水平 padding 不加在 sheet 容器上,而是下放到 dragZone / pinnedTop / 滚动内容 / footer:
     // ScrollView 需要撑满面板宽,否则竖向滚动指示条会内缩 20px、悬在内容右缘。
     sheet: {
-      // surfaceGlassPanel(R1 模式3 浮层卡底色);玻璃感由 SheetModal backdrop 的 BlurBackdrop 承担,
-      // surface 不叠 blur 规避 Android 滚动热路径(lead 裁决)。
-      backgroundColor: colors.surfaceGlassPanel,
+      backgroundColor: 'transparent',
       borderTopLeftRadius: radius.container,
       borderTopRightRadius: radius.container,
       overflow: 'hidden' as const,
     },
     sheetTasksheet: {
-      backgroundColor: colors.sheetSurface,
+      backgroundColor: 'transparent',
     },
     dragZone: {
       paddingHorizontal: SHEET_HORIZONTAL_PADDING,
