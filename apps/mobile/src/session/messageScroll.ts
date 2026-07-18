@@ -133,6 +133,134 @@ export function resolveMobileNearBottomOnScroll(input: MobileNearBottomResolveIn
   return input.scrollDelta > MOBILE_FOLLOW_REPIN_DIRECTION_DEAD_ZONE;
 }
 
+// ── 贴底跟随的 contentSize 补滚护栏(振荡断路器)──
+// 背景(bug:冷开会话消息区空白 + 无 loading + 返回键无响应,杀 App 才恢复):
+// handleContentSize 的「贴底且内容长高 → 命令式 scrollToEnd」补偿,与 LegendList
+// 内置 alignItemsAtEnd / maintainScrollAtEnd / mVCP(size:true)叠在同一条布局流上。
+// 初始窗口里若存在测量高度不稳定的 item(异步媒体回填、字体回退重排、WebView 块
+// 高度结算等),每次重测都会触发 onContentSizeChange → scrollToEnd → 再次锚定/
+// 重测……命令式滚动不经 React state,「Maximum update depth」守卫不介入,回调
+// 洪泛把 JS 线程打满:首帧(header)已提交、消息区停在半布局态、SyncingMessages
+// 的延迟显形 timer 与一切 Pressable 全部失活。
+// 护栏语义(evaluateMobileFollowEndContentSizePin):
+//  - 高度死区:与上次已补滚高度差在死区内(浮点/舍入噪声、同值重复回调)→ 跳过;
+//  - 振荡断路:跳闸信号是「高度方向翻转」而**不是**补滚频率——合法路径(冷开分批
+//    渲染、流式逐行增长、媒体回填)的 contentHeight 单调递增,无论多快都不该被
+//    限流(内置 maintainScrollAtEnd 对「大块一帧撑高」恰恰不兜底:它的 0.12×视口
+//    距底闸在 rAF 里二次核验,单帧大增长直接被甩出阈值放弃跟随——这正是本手动
+//    补滚存在的理由,review P1);病理重测环的特征是 A/B 往返振荡,滚动窗口内
+//    方向翻转次数到达上限即打开断路器一段时间,期间不再手动 scrollToEnd;
+//  - 断路到期自动闭合;翻转计数在断路期间继续记账(不重新跳闸、不延长断路),
+//    上游若仍在振荡,断路一闭合就会立刻再次跳闸,净效果是把无界洪泛钳制成
+//    「每个断路周期最多一轮」的有界节奏;
+//  - 跳闸返回 suppressionStarted,调用方据此安排断路到期后的 one-shot 贴底清账
+//    (断路窗内错过的最终高度可能停在半空,且之后再无 contentSize 事件来纠正);
+//    首次跳闸另返回 trippedNow,供上层打一条诊断告警(每列表实例一次,防刷屏)。
+
+/**
+ * 补滚高度死区(px):与基准高度差 ≤ 此值视为噪声。与 MOBILE_ANCHOR_VERIFY_TOLERANCE
+ * 同源取 2px——小于任何真实的内容增长(一行文字 ≥ 20px),大于 Fabric 布局舍入抖动。
+ * 补滚判定基准是 lastPinnedHeight(不随被吞事件漂移,缓慢累积增长最终能逃逸死区);
+ * 方向观察基准是 lastObservedHeight(死区内的噪声不构成方向信号,不制造假翻转)。
+ */
+export const MOBILE_FOLLOW_END_PIN_HEIGHT_DEAD_ZONE = 2;
+/** 振荡统计的滚动窗口(ms)。 */
+export const MOBILE_FOLLOW_END_PIN_WINDOW_MS = 1000;
+/**
+ * 窗口内允许的方向翻转次数上限。合法场景的翻转极稀:流式单调增 = 0 次;用户折叠
+ * 长消息 / rewind 整窗替换 = 1~2 次;LegendList 冷开 estimated→measured 向下修正
+ * ≈ 1 次。病理振荡环是每帧一次翻转(~60/s),100ms 便可越线。取 6:两侧安全边际
+ * 都在 2 倍以上。
+ */
+export const MOBILE_FOLLOW_END_PIN_MAX_REVERSALS_PER_WINDOW = 6;
+/** 断路器打开时长(ms):给 LegendList 内置锚定一个不被外部滚动干扰的收敛窗口。 */
+export const MOBILE_FOLLOW_END_PIN_SUPPRESS_MS = 2000;
+
+/**
+ * 护栏状态:由 MessageRenderer 以 ref 持有,evaluate 原地更新(受控可变,滚动热路径
+ * 不为每次评估重建状态对象;reversalTimestamps 长度有界于窗口内事件数)。会话切换
+ * (scrollResetKey)与用户主动跳底(明确的重锚意图)时用工厂重建。
+ */
+export interface MobileFollowEndPinState {
+  /** 上次实际补滚时的 contentHeight;0 = 本实例尚未补滚过(首次必放行)。 */
+  lastPinnedHeight: number;
+  /** 上次越过死区的观察高度(方向翻转检测基准);0 = 尚无观察。 */
+  lastObservedHeight: number;
+  /** 上次观察到的高度变化方向;0 = 尚无方向。 */
+  lastDirection: 1 | -1 | 0;
+  /** 滚动窗口内的方向翻转时间戳(evaluate 内按窗口过滤)。 */
+  reversalTimestamps: number[];
+  /** 断路器打开截止时刻(epoch ms);0 = 闭合。 */
+  suppressedUntil: number;
+  /** 本实例是否跳闸过(诊断告警只报第一次)。 */
+  hasTripped: boolean;
+}
+
+export function createMobileFollowEndPinState(): MobileFollowEndPinState {
+  return {
+    lastPinnedHeight: 0,
+    lastObservedHeight: 0,
+    lastDirection: 0,
+    reversalTimestamps: [],
+    suppressedUntil: 0,
+    hasTripped: false,
+  };
+}
+
+export interface MobileFollowEndPinDecision {
+  /** 允许本次命令式 scrollToEnd。 */
+  shouldScroll: boolean;
+  /** 本次评估打开了断路器(调用方安排断路到期后的 one-shot 贴底清账)。 */
+  suppressionStarted: boolean;
+  /** 本次评估触发本实例首次跳闸(上层据此打一条诊断告警)。 */
+  trippedNow: boolean;
+}
+
+/**
+ * 「贴底补滚是否放行」判定。调用方已确认业务前置条件(贴底跟随中、内容超一屏、
+ * 非 load-earlier),这里只做护栏:方向翻转记账与跳闸 → 断路检查 → 死区去噪。
+ * 高度收缩(rewind / 删消息 / 用户折叠)本身不受限——收缩只是一次方向观察,
+ * 随后的补滚照常放行,只有窗口内反复往返才构成振荡。
+ */
+export function evaluateMobileFollowEndContentSizePin(
+  state: MobileFollowEndPinState,
+  input: { now: number; contentHeight: number },
+): MobileFollowEndPinDecision {
+  const { now, contentHeight } = input;
+  let suppressionStarted = false;
+  let trippedNow = false;
+  // 方向观察在断路检查之前:断路期间振荡照常记账,窗口不清零,断路一闭合、
+  // 上游仍在抖时首个翻转就能重新跳闸(而不是重新积累一整轮)。
+  const observedDelta = contentHeight - state.lastObservedHeight;
+  if (Math.abs(observedDelta) > MOBILE_FOLLOW_END_PIN_HEIGHT_DEAD_ZONE) {
+    const direction: 1 | -1 = observedDelta > 0 ? 1 : -1;
+    if (state.lastDirection !== 0 && direction !== state.lastDirection) {
+      const windowStart = now - MOBILE_FOLLOW_END_PIN_WINDOW_MS;
+      state.reversalTimestamps = state.reversalTimestamps.filter((at) => at > windowStart);
+      state.reversalTimestamps.push(now);
+      if (
+        state.reversalTimestamps.length >= MOBILE_FOLLOW_END_PIN_MAX_REVERSALS_PER_WINDOW
+        && state.suppressedUntil <= now
+      ) {
+        state.suppressedUntil = now + MOBILE_FOLLOW_END_PIN_SUPPRESS_MS;
+        suppressionStarted = true;
+        trippedNow = !state.hasTripped;
+        state.hasTripped = true;
+      }
+    }
+    state.lastDirection = direction;
+    state.lastObservedHeight = contentHeight;
+  }
+  if (state.suppressedUntil > now) {
+    return { shouldScroll: false, suppressionStarted, trippedNow };
+  }
+  if (Math.abs(contentHeight - state.lastPinnedHeight) <= MOBILE_FOLLOW_END_PIN_HEIGHT_DEAD_ZONE) {
+    return { shouldScroll: false, suppressionStarted: false, trippedNow: false };
+  }
+  state.lastPinnedHeight = contentHeight;
+  return { shouldScroll: true, suppressionStarted: false, trippedNow: false };
+}
+
 /**
  * 贴底锚定校验的判定容差:contentSize / offset 都是浮点布局值,亚像素误差不算落空。
  * 取 2px:小于任何真实遮挡(一行文字 ≥ 20px),大于 Fabric 布局的舍入抖动。

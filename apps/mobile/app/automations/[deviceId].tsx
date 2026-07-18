@@ -21,6 +21,7 @@ import {
   MainWindowMetric,
   MainWindowOptionButton,
   MainWindowRowButton,
+  RemoteListSyncingPlaceholder,
   ScreenHeader,
   SummaryStrip,
 } from '@/components/MobilePrimitives';
@@ -840,10 +841,13 @@ export default function AutomationsScreen() {
         {schedules.length === 0 ? (
           // 首同步完成前(lastSyncedAt === null)抑制"暂无自动化"空状态,避免冷进先闪空态再跳成真列表
           // (规则 7:不闪空白/不跳变)。同步失败时 ConnectionBanner 已有错误 + 重试入口,同样不谎报"暂无"。
+          // 抑制期渲染 RemoteListSyncingPlaceholder(800ms 内空白,超时浮现「正在同步」),慢链路下不再无限期纯白。
           shouldSuppressRemoteListEmptyState({
             itemCount: schedules.length,
             hasSyncedThisOpen: lastSyncedAt !== null,
-          }) ? null : (
+          }) ? (
+            <RemoteListSyncingPlaceholder testID="automations.syncing" />
+          ) : (
           <MainWindowEmptyState
             copy="可以直接从手机创建第一条自动化任务，或在桌面端创建后同步到这里。"
             style={{

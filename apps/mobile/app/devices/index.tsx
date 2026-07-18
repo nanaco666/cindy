@@ -1,6 +1,6 @@
 import { useObserve } from 'expo-observe';
 import { useFocusEffect } from 'expo-router';
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,6 +16,7 @@ import {
   View,
   useWindowDimensions,
   type StyleProp,
+  type TextStyle,
   type ViewStyle,
 } from 'react-native';
 import { Text, TextInput } from '@/components/AppText';
@@ -110,9 +111,14 @@ import {
   useRemoteMessageVersion,
   useRemoteSessions,
   useRemoteSessionStoreVersion,
+  useSessionRunning,
 } from '@/session/remoteSessionStore';
+import { dataPropsEqual, mapContentEqual } from '@/utils/valueEquality';
+import { useStableValue } from '@/utils/useStableValue';
+import { useMinuteNow } from '@/utils/useMinuteNow';
 import {
   loadDeviceSessionScheduleIndex,
+  loadSessionScheduleIndexThrottled,
   replaceSessionScheduleIndexEntries,
 } from '@/session/scheduleIndex';
 import { createScheduleIndexDeferRegistry } from '@/session/scheduleIndexDefer';
@@ -245,8 +251,20 @@ export default function HomeScreen() {
     });
   }, [reconcileDeviceViews]);
 
-  const refreshDeviceScheduleIndex = useCallback((deviceId: string, sessionIds: readonly string[]) => {
-    void loadDeviceSessionScheduleIndex(deviceId, invoke)
+  const refreshDeviceScheduleIndex = useCallback((
+    deviceId: string,
+    sessionIds: readonly string[],
+    options?: { force?: boolean },
+  ) => {
+    // 节流(单飞 + 30s TTL):focus / hydrate / schedule 推送三个触发源高频交叠,每次都全量
+    // 重放 1+N×listRuns 会拥塞 device-link 管道、拖慢会话打开的关键读(见 scheduleIndex 注释)。
+    // force = 已读类权威信号(read / all-read 推送),必须绕过 TTL 立即重拉——否则「看完
+    // 返回首页」这个最常见路径永远命中 30s 内的陈旧缓存,未读徽标清不掉(review P1)。
+    void loadSessionScheduleIndexThrottled(
+      deviceId,
+      () => loadDeviceSessionScheduleIndex(deviceId, invoke),
+      { force: options?.force },
+    )
       .then((nextIndex) => {
         setScheduleIndex((current) => replaceSessionScheduleIndexEntries(
           current,
@@ -501,7 +519,11 @@ export default function HomeScreen() {
         remoteSessionStore.requestReseed(deviceId);
         continue;
       }
-      refreshDeviceScheduleIndex(deviceId, sessionIds);
+      // read / all-read 是用户操作驱动的低频权威信号,force 穿透节流保证徽标即时清除;
+      // fired / running 等高频事件照常吃 TTL(全量 force 会把 listRuns 风暴请回来)。
+      refreshDeviceScheduleIndex(deviceId, sessionIds, {
+        force: projection.unreadImpact === 'may-clear-schedule' || projection.unreadImpact === 'clear-all',
+      });
     }
   }), [refreshDeviceScheduleIndex]);
 
@@ -705,19 +727,25 @@ export default function HomeScreen() {
       : null,
     [deviceModels, revokedTipDeviceId],
   );
-  const messagePreviewIndex = useMemo(
+  // 三个派生索引的依赖挂在全局 messageVersion / storeVersion 上,桌面端活跃期逐 emit
+  // 重建出内容相同的新 Map——若不做内容稳定化,home → sections → 全列表行整链每次
+  // emit 都重建(2026-07-18 重渲染风暴 trace 实锤)。useStableValue 在内容未变时保留
+  // 旧引用,下游 useMemo 依赖即可短路;内容真变(某会话预览/交互数/活动态变化)照常穿透。
+  const messagePreviewIndexRaw = useMemo(
     () => buildSessionMessagePreviewIndex(
       sessions.map((session) => session.id),
       (sessionId) => remoteSessionStore.getMessages(sessionId),
     ),
     [messageVersion, sessions],
   );
-  const pendingInteractionIndex = useMemo(() => new Map(
+  const messagePreviewIndex = useStableValue(messagePreviewIndexRaw, mapContentEqual);
+  const pendingInteractionIndexRaw = useMemo(() => new Map(
     sessions
       .map((session) => [session.id, remoteSessionStore.getPendingInteractions(session.id).length] as const)
       .filter(([, count]) => count > 0),
   ), [sessions, storeVersion]);
-  const liveActivityIndex = useMemo(() => {
+  const pendingInteractionIndex = useStableValue(pendingInteractionIndexRaw, mapContentEqual);
+  const liveActivityIndexRaw = useMemo(() => {
     const entries: Array<[string, RemoteSessionLiveActivity]> = [];
     for (const session of sessions) {
       const liveActivity = remoteSessionStore.getSessionLiveActivity(session.id);
@@ -725,6 +753,7 @@ export default function HomeScreen() {
     }
     return new Map(entries);
   }, [sessions, storeVersion]);
+  const liveActivityIndex = useStableValue(liveActivityIndexRaw, mapContentEqual);
   // 列表隐藏 Orca worker 子会话(本期不支持进 worker 聊天);Lead + 普通会话保留。仅 mobile 侧过滤。
   const homeSessions = useMemo(() => excludeOrcaWorkerSessions(sessions), [sessions]);
   const home = useMemo(
@@ -1129,64 +1158,33 @@ export default function HomeScreen() {
   // renderItem 提取为稳定引用:打开「选项」sheet 等与列表数据无关的页面状态变更不再改变
   // renderItem 身份,SectionList 可见行不随之全量重渲染(review P2:每行 Swipeable 动画树
   // 较重)。行内滑动回调全部走「稳定引用 + session 入参」,不为每行现造闭包。
+  // 每行输出整体交给 per-item memo 的 HomeListRow(风暴修复第二刀,见其注释):这里只
+  // 计算邻接派生位(分割线唯一化 / 置顶尾行 / 折叠位)并以标量 props 传入,保证单行
+  // 数据变化只重建该行的包装树。
   const renderHomeRow = useCallback(({ item, index, section }: {
     item: HomeRow;
     index: number;
     section: HomeSection;
-  }) => {
-    // 分割线唯一化:块(项目组 / 自动化组)自带上下全宽线,紧邻块上边界的行不画
-    // 自己的缩进线,相邻两个块之间也只保留一根(后块不画顶线)。
-    const prevIsBlock = isBlockHomeRow(section.data[index - 1]);
-    const nextIsBlock = isBlockHomeRow(section.data[index + 1]);
-    // 置顶区最后一行的下线由 pinnedFooter(或下方块的顶线)提供,自己不再画。
-    const isLastPinnedRow = section.key === 'pinned' && index === section.data.length - 1 && sections.length > 1;
-    if (item.kind === 'project') {
-      return (
-        <ProjectRow
-          collapsed={collapsedProjectKeys.includes(item.project.key)}
-          expandedAutomationGroups={expandedAutomationGroups}
-          onOpenAutomationGroup={openAutomationGroup}
-          onOpenProject={() => openProjectSessions(item.project)}
-          onOpenSession={openSession}
-          onToggle={() => toggleProject(item.project.key)}
-          onToggleAutomationGroup={toggleAutomationGroup}
-          project={item.project}
-          suppressTopBorder={prevIsBlock}
-          swipe={sessionSwipeControls}
-        />
-      );
-    }
-    const row = (
-      <HomeSessionRow
-        asBlock
-        expandedAutomationGroups={expandedAutomationGroups}
-        hideDivider={nextIsBlock || isLastPinnedRow}
-        item={item.item}
-        onOpenAutomationGroup={openAutomationGroup}
-        onOpenSession={openSession}
-        onToggleAutomationGroup={toggleAutomationGroup}
-        suppressBlockTopBorder={prevIsBlock}
-        swipe={sessionSwipeControls}
-        testID={homeSessionRowTestId(item.source)}
-      />
-    );
-    // 普通会话行(含置顶区)在这里挂滑动操作;自动化组行不挂 —— 组行代表多次运行,
-    // 「置顶/归档这一组」语义含混,但其展开的子行经 swipe 透传同样可滑。
-    // 项目组子行 / 自动化子行的滑动在各自渲染路径内包裹;设备详情页不传 swipe,保持不可滑。
-    if (item.item.automationGroup) return row;
-    return (
-      <SwipeableSessionRow
-        onArchive={archiveSession}
-        onShowOptions={showSessionOptions}
-        onTogglePin={toggleSessionPinned}
-        registry={swipeRegistry}
-        session={item.item.session as RemoteSession}
-        testID={`${homeSessionRowTestId(item.source)}.swipe`}
-      >
-        {row}
-      </SwipeableSessionRow>
-    );
-  }, [
+  }) => (
+    <HomeListRow
+      expandedAutomationGroups={expandedAutomationGroups}
+      isLastPinnedRow={section.key === 'pinned' && index === section.data.length - 1 && sections.length > 1}
+      item={item}
+      nextIsBlock={isBlockHomeRow(section.data[index + 1])}
+      onArchive={archiveSession}
+      onOpenAutomationGroup={openAutomationGroup}
+      onOpenProjectSessions={openProjectSessions}
+      onOpenSession={openSession}
+      onShowOptions={showSessionOptions}
+      onToggleAutomationGroup={toggleAutomationGroup}
+      onToggleProject={toggleProject}
+      onTogglePin={toggleSessionPinned}
+      prevIsBlock={isBlockHomeRow(section.data[index - 1])}
+      projectCollapsed={item.kind === 'project' && collapsedProjectKeys.includes(item.project.key)}
+      registry={swipeRegistry}
+      swipe={sessionSwipeControls}
+    />
+  ), [
     archiveSession,
     collapsedProjectKeys,
     expandedAutomationGroups,
@@ -1864,6 +1862,10 @@ function ProjectRow({
 }) {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
+  // 折叠豁免要命令式读会话运行态,而派生链稳定化后本组件不再逐 emit 重渲染(cell 经
+  // PureComponent bail)——以 storeVersion 订阅兜底感知运行态变化,与 AutomationGroup-
+  // Children 同款(否则折叠线以下转入 running 的会话不会被豁免展开,review P1)。
+  useRemoteSessionStoreVersion();
   // 与桌面侧栏项目组同一套折叠策略:前 N 条之外豁免最近 24h 活动 / 需关注 / 运行中的条目
   // (豁免语义见共享层 getRemoteSessionPreviewCollapse 注释)。
   // 自动化折叠后 sessions 是"行"(组行代表多条会话):按钮显隐看隐藏行数(hiddenCount),
@@ -1963,8 +1965,114 @@ function ProjectRow({
   );
 }
 
+/**
+ * 首页 renderItem 输出的 per-item memo 单元(2026-07-18 风暴修复第二刀)。
+ * 内核行(HomeSessionRow)memo 后,每次 sections 真实变化(流式期间预览更新等)仍会
+ * 整列表重渲染全部 cell 的 Swipeable / 手势包装树(trace:47 次壳层重渲染 × ~105 cell,
+ * 每次 ~500ms)。把整个 renderItem 输出按 item 级 memo,包装树只在自己 item 的数据
+ * 变化时重建。比较器与 HomeSessionRow 同款 dataPropsEqual:函数 props 跳过——闭包
+ * 审计:onArchive / onShowOptions / onTogglePin / onOpen* / onToggle* 均为 useCallback
+ * 且只闭合 router / store / 稳定 setState;registry(swipeRegistry)与 swipe 为
+ * useMemo 单例。给本组件新增函数 prop 时必须复审闭包稳定性。projectCollapsed /
+ * prevIsBlock 等邻接派生位由 renderItem 计算成标量传入,天然参与比较。
+ */
+const HomeListRow = memo(HomeListRowInner, dataPropsEqual);
+
+function HomeListRowInner({
+  expandedAutomationGroups,
+  isLastPinnedRow,
+  item,
+  nextIsBlock,
+  onArchive,
+  onOpenAutomationGroup,
+  onOpenProjectSessions,
+  onOpenSession,
+  onShowOptions,
+  onToggleAutomationGroup,
+  onToggleProject,
+  onTogglePin,
+  prevIsBlock,
+  projectCollapsed,
+  registry,
+  swipe,
+}: {
+  expandedAutomationGroups: readonly string[];
+  isLastPinnedRow: boolean;
+  item: HomeRow;
+  nextIsBlock: boolean;
+  onArchive(session: RemoteSession): void;
+  onOpenAutomationGroup(group: RemoteAutomationSessionGroup): void;
+  onOpenProjectSessions(project: MobileHomeProjectGroup): void;
+  onOpenSession(item: RemoteSessionListItem): void;
+  onShowOptions(session: RemoteSession): void;
+  onToggleAutomationGroup(key: string): void;
+  onToggleProject(key: string): void;
+  onTogglePin(session: RemoteSession): void;
+  prevIsBlock: boolean;
+  projectCollapsed: boolean;
+  registry: ReturnType<typeof createSwipeRowRegistry>;
+  swipe: SessionSwipeControls;
+}) {
+  if (item.kind === 'project') {
+    return (
+      <ProjectRow
+        collapsed={projectCollapsed}
+        expandedAutomationGroups={expandedAutomationGroups}
+        onOpenAutomationGroup={onOpenAutomationGroup}
+        onOpenProject={() => onOpenProjectSessions(item.project)}
+        onOpenSession={onOpenSession}
+        onToggle={() => onToggleProject(item.project.key)}
+        onToggleAutomationGroup={onToggleAutomationGroup}
+        project={item.project}
+        suppressTopBorder={prevIsBlock}
+        swipe={swipe}
+      />
+    );
+  }
+  const row = (
+    <HomeSessionRow
+      asBlock
+      expandedAutomationGroups={expandedAutomationGroups}
+      hideDivider={nextIsBlock || isLastPinnedRow}
+      item={item.item}
+      onOpenAutomationGroup={onOpenAutomationGroup}
+      onOpenSession={onOpenSession}
+      onToggleAutomationGroup={onToggleAutomationGroup}
+      suppressBlockTopBorder={prevIsBlock}
+      swipe={swipe}
+      testID={homeSessionRowTestId(item.source)}
+    />
+  );
+  // 普通会话行(含置顶区)在这里挂滑动操作;自动化组行不挂 —— 组行代表多次运行,
+  // 「置顶/归档这一组」语义含混,但其展开的子行经 swipe 透传同样可滑。
+  // 项目组子行 / 自动化子行的滑动在各自渲染路径内包裹;设备详情页不传 swipe,保持不可滑。
+  if (item.item.automationGroup) return row;
+  return (
+    <SwipeableSessionRow
+      onArchive={onArchive}
+      onShowOptions={onShowOptions}
+      onTogglePin={onTogglePin}
+      registry={registry}
+      session={item.item.session as RemoteSession}
+      testID={`${homeSessionRowTestId(item.source)}.swipe`}
+    >
+      {row}
+    </SwipeableSessionRow>
+  );
+}
+
 // 导出给项目作用域的设备详情页(app/devices/[deviceId].tsx)复用,保证两处会话行视觉一致。
-export function HomeSessionRow({
+// memo 化(2026-07-18 重渲染风暴):行是列表里最重的单元(Svg 状态标 + Swipeable +
+// 手势树,dev 实测单行 ~13ms),父层每次重渲染 105 个挂载行全量重画是风暴的主放大器。
+// 比较器 dataPropsEqual:数据 props(item / 布尔位 / expandedAutomationGroups)深比较,
+// **函数 props 跳过**——闭包审计:onOpenSession / onToggleAutomationGroup /
+// onOpenAutomationGroup 只闭合 router / 稳定 setState / 稳定 store 引用,新旧闭包可互换;
+// swipe(SessionSwipeControls)为父层 useMemo 单例,内部函数同理。给行新增函数 prop 时
+// 必须重新审计闭包稳定性,否则会拿着 stale 闭包运行。行内运行态经 useSessionRunning
+// 订阅(不再依赖父层重渲染带入),展开组子行的运行态订阅见 AutomationGroupChildren。
+export const HomeSessionRow = memo(HomeSessionRowInner, dataPropsEqual);
+
+function HomeSessionRowInner({
   asBlock = false,
   deepIndented = false,
   expandedAutomationGroups,
@@ -2010,7 +2118,9 @@ export function HomeSessionRow({
 }) {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
-  const running = remoteSessionStore.isSessionRunning(item.session.id) || !!item.scheduleInfo?.running;
+  // 运行态走订阅而非命令式读取:行已 memo 化,父层不再逐 emit 重渲染,命令式读取会 stale。
+  const sessionIsRunning = useSessionRunning(item.session.id);
+  const running = sessionIsRunning || !!item.scheduleInfo?.running;
   // attention 合并 main 的 #368:liveActivity.attention 也点亮关注态(组行直开 primary 的判定沿用)。
   const attention = item.pendingInteractionCount > 0
     || (item.scheduleInfo?.unreadCount ?? 0) > 0
@@ -2116,9 +2226,7 @@ export function HomeSessionRow({
               {item.title}
             </Text>
             {rightStatus === 'time' ? (
-              <Text style={styles.sessionTime} numberOfLines={1}>
-                {formatRemoteSessionSidebarTime(item.lastActivityAt)}
-              </Text>
+              <SessionRelativeTime lastActivityAt={item.lastActivityAt} style={styles.sessionTime} />
             ) : (
               // 统一 18×18 定位槽(对齐桌面 size-4 槽的做法):点(10)与 spinner(15)
               // 尺寸不同,裸放会导致两者横/纵中心不一致,先居中到同一槽再谈对齐。
@@ -2204,6 +2312,9 @@ function AutomationGroupChildren({
 }) {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
+  // 折叠豁免要命令式读子会话运行态,而父行(HomeSessionRow)已 memo 化、不再逐 emit
+  // 重渲染——这里以 storeVersion 订阅兜底感知运行态变化。仅组展开时挂载,量小成本可忽略。
+  useRemoteSessionStoreVersion();
   // 与项目组同一套折叠豁免(24h 活动 / 需关注 / 运行中),见共享层注释。
   const { visibleItems, hiddenCount } = getRemoteSessionPreviewCollapse(group.items, {
     limit: PROJECT_PREVIEW_LIMIT,
@@ -2321,6 +2432,21 @@ function SessionStatusMark({
 
 /** 行右侧 running spinner —— 与桌面 SessionItem 右槽同款:LoaderCircle(即桌面的
  *  lucide Loader2)圆弧图标,1s linear 无限旋转(Tailwind animate-spin 同参数)。 */
+/**
+ * 行右侧相对时间标签(「刚刚 / N 分钟前」)的独家保鲜叶子:行主体 memo 化后不再逐
+ * emit 重渲染,时间标签失去偶然保鲜会无限期冻结(review P1);而把分钟订阅挂在行
+ * 本体又等于每分钟重画全列表重型子树(review 复核 P1)。下沉到只渲染一个 Text 的
+ * 叶子组件独家订阅 useMinuteNow:每分钟只重渲染 ~百个纯 Text,行主体纹丝不动。
+ */
+function SessionRelativeTime({ lastActivityAt, style }: { lastActivityAt: string; style: StyleProp<TextStyle> }) {
+  useMinuteNow();
+  return (
+    <Text style={style} numberOfLines={1}>
+      {formatRemoteSessionSidebarTime(lastActivityAt)}
+    </Text>
+  );
+}
+
 function SessionRightSpinner({ testID }: { testID?: string }) {
   const { colors } = useTheme();
   const spin = useRef(new Animated.Value(0)).current;

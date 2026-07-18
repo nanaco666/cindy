@@ -242,7 +242,7 @@ export class DeviceLinkClient {
     if (!this.stopped) return;
     this.stopped = false;
     this.reconnectAttempt = 0;
-    void this.connect();
+    void this.connect('start');
   }
 
   /**
@@ -252,7 +252,7 @@ export class DeviceLinkClient {
    * 不改默认退避曲线(桌面端断线重连仍走 scheduleReconnect 的 1s→30s)。
    * 已 online 时为空操作,不打断健康连接;stopped 时等价于 start()。
    */
-  connectNow(): void {
+  connectNow(reason = 'connect-now'): void {
     if (this.status === 'online') return;
     this.stopped = false;
     this.reconnectAttempt = 0;
@@ -260,7 +260,7 @@ export class DeviceLinkClient {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    void this.connect();
+    void this.connect(reason);
   }
 
   /**
@@ -282,7 +282,7 @@ export class DeviceLinkClient {
     }
     // 仅在 park 在退避计时器上时 un-park(connectNow);若已有 connect 在途
     // (reconnectTimer 为 null),不重复打断,避免并发等待者互相 thrash。
-    if (this.reconnectTimer) this.connectNow();
+    if (this.reconnectTimer) this.connectNow('wait-until-online');
 
     const timeout = timeoutMs ?? this.timing.requestTimeoutMs;
     return new Promise<void>((resolve, reject) => {
@@ -501,22 +501,32 @@ export class DeviceLinkClient {
 
   // ─── 内部:连接管理 ─────────────────────────────────────────────────────────
 
-  private async connect(): Promise<void> {
+  private async connect(reason: string): Promise<void> {
     if (this.stopped) return;
     this.setStatus('connecting');
     const epoch = ++this.connEpoch;
     this.lastSocketErrorMessage = null;
+    this.log.debug(`connecting (reason=${reason})`);
 
     // 关掉可能残留的上一条 socket:getToken await 与 scheduleReconnect 竞态下 this.ws
     // 可能仍持半开旧连接,epoch 守卫只忽略其回调、不回收 socket。这里显式关闭防泄漏。
     const prev = this.ws;
     this.ws = null;
     if (prev) {
+      // 客户端主动重建丢弃在用 socket:旧 socket 的 close 事件被 epoch 守卫屏蔽,不经过
+      // handleDisconnect——若不在此 fail 掉 in-flight 请求,它们会一直挂到 requestTimeoutMs
+      // (默认 30s)才超时,用户侧表现为长时间空白干等。语义对齐心跳判死 / 正常断连:
+      // 立刻 fail(带 inFlight 标记),让上层快速重试。这条 INFO 同时是排障锚点:
+      // 此路径此前没有任何日志痕迹,连接翻覆时无法与「真实断连重连」区分。
+      this.log.info(
+        `discarding live socket for reconnect (reason=${reason}, pending=${this.pending.size})`,
+      );
       try {
         prev.close(1000, 'reconnecting');
       } catch {
         prev.terminate?.();
       }
+      this.failAllPending(new DeviceLinkError('NOT_CONNECTED', `connection restarted (${reason})`));
     }
 
     let token: string | null = null;
@@ -636,7 +646,7 @@ export class DeviceLinkClient {
     this.log.debug(`scheduling device-link reconnect in ${delay}ms (attempt=${this.reconnectAttempt})`);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      void this.connect();
+      void this.connect('backoff-reconnect');
     }, delay);
   }
 
@@ -727,10 +737,18 @@ export class DeviceLinkClient {
           clearTimeout(this.handshakeTimer);
           this.handshakeTimer = null;
         }
+        const wasOnline = this.status === 'online';
         this.setStatus('online');
         this.armReconnectStableReset();
         this.startHeartbeat();
-        this.log.info(`device-link online (protocol=v${ack.serverProtocolVersion})`);
+        // 重复 hello-ack(已在线还收到 ack)单独判别:这不是新连接,而是 relay 在同一条
+        // socket 上重发(relay 侧恢复 / 迁移)。若与真实重连共用同一条 online 日志,
+        // 连接翻覆排障时会误判为多次重连(手机端无落盘日志,现场只有这一条线索)。
+        if (wasOnline) {
+          this.log.info(`duplicate hello-ack while already online (protocol=v${ack.serverProtocolVersion})`);
+        } else {
+          this.log.info(`device-link online (protocol=v${ack.serverProtocolVersion})`);
+        }
         return;
       }
       case 'pong':

@@ -17,6 +17,8 @@ import { ConnectionBanner, useShowConnectionBanner } from '@/components/Connecti
 import { goBackGuarded } from '@/utils/backGuard';
 import { configureCollapseAnimation } from '@/utils/collapseAnimation';
 import { useGuardedPush } from '@/utils/useGuardedPush';
+import { mapContentEqual } from '@/utils/valueEquality';
+import { useStableValue } from '@/utils/useStableValue';
 import {
   MainWindowActionButton,
   MainWindowActionGroup,
@@ -24,6 +26,7 @@ import {
   MainWindowMetric,
   MainWindowOptionButton,
   MainWindowRowButton,
+  RemoteListSyncingPlaceholder,
   ScreenHeader,
   SummaryStrip,
 } from '@/components/MobilePrimitives';
@@ -70,7 +73,7 @@ import {
   useRemoteSessionStoreVersion,
 } from '@/session/remoteSessionStore';
 import { useRemoteScheduleEventSnapshot } from '@/scheduler/remoteScheduleEvents';
-import { loadSessionScheduleIndex } from '@/session/scheduleIndex';
+import { loadSessionScheduleIndex, loadSessionScheduleIndexThrottled } from '@/session/scheduleIndex';
 import { shouldSuppressRemoteListEmptyState } from '@/session/sessionEmptyState';
 import type { RemoteSession } from '@/session/types';
 import { useTheme, useThemedStyles, type ThemeColors } from '@/theme';
@@ -127,11 +130,16 @@ export default function DeviceDetailScreen() {
   const { connectionIssue, invoke, status, subscribe, unsubscribe } = useDeviceLink();
   const maker = useMobileMakerTransport(deviceId);
   const scheduleEventSnapshot = useRemoteScheduleEventSnapshot(deviceId);
-  const sessions = useRemoteSessions().filter((s) =>
+  const allSessions = useRemoteSessions();
+  // filter 必须 memo:裸 filter 每次渲染都产新数组,会让下游全部 [sessions, ...] 依赖的
+  // useMemo 逐 emit 失效,派生链(索引 → sections → 全列表行)整体重建(2026-07-18
+  // 重渲染风暴)。store 层已保证 allSessions 引用在内容未变时稳定,这里不能亲手打破。
+  const sessions = useMemo(() => allSessions.filter((s) =>
     // 用展示用 canonicalDeviceId(设备归并结果)匹配,与首页项目卡一致 —— 被认领的 stale 会话也能显示,
     // 数量与卡片相符。deviceLinkDeviceId 仍是物理路由 key(openSession / patch 用它),不参与此处判断。
     (s.canonicalDeviceId ?? s.deviceLinkDeviceId) === deviceId
-    && (!projectWorkingDir || sessionMatchesProjectDir(s.workingDir, projectWorkingDir)));
+    && (!projectWorkingDir || sessionMatchesProjectDir(s.workingDir, projectWorkingDir))),
+  [allSessions, deviceId, projectWorkingDir]);
   const messageVersion = useRemoteMessageVersion();
   const storeVersion = useRemoteSessionStoreVersion();
   const [statusFilter, setStatusFilter] = useState<RemoteSessionStatusFilter>('active');
@@ -169,7 +177,9 @@ export default function DeviceDetailScreen() {
         ]);
       });
       remoteSessionStore.setDeviceSessions(deviceId, deviceName, Array.isArray(list) ? list : []);
-      void loadSessionScheduleIndex(maker)
+      // 节流缓存与首页共用同一 key(deviceId):两页交替浏览时不重复全量拉取(单飞 + TTL,
+      // 拥塞背景见 scheduleIndex 注释)。
+      void loadSessionScheduleIndexThrottled(deviceId, () => loadSessionScheduleIndex(maker))
         .then(setScheduleIndex)
         .catch(() => setScheduleIndex(new Map()));
       setLastSyncedAt(Date.now());
@@ -197,18 +207,37 @@ export default function DeviceDetailScreen() {
     if (scheduleEventSnapshot.sessionIndexVersion > 0) void loadSessions();
   }, [loadSessions, scheduleEventSnapshot.sessionIndexVersion]);
 
-  const messagePreviewIndex = useMemo(
+  // read / all-read(清除未读的权威信号)force 刷新节流缓存——否则 30s TTL 内命中陈旧
+  // 结果,徽标清不掉(review P1)。依赖专用 unreadClearVersion 计数而非 lastProjection
+  // 引用:后者每个事件都换新,会让 fired / deferred 等无关事件也重跑本 effect(review P1)。
+  // 上方 loadSessions effect 随 sessionIndexVersion 同步触发,其内部 throttled 调用会
+  // 单飞复用本次 force 拉起的在途 promise,不产生第二次全量拉取。
+  useEffect(() => {
+    if (scheduleEventSnapshot.unreadClearVersion === 0) return;
+    void loadSessionScheduleIndexThrottled(deviceId, () => loadSessionScheduleIndex(maker), { force: true })
+      .then(setScheduleIndex)
+      .catch(() => {
+        // 失败保留旧徽标,与整页 load 的容错口径一致。
+      });
+  }, [deviceId, maker, scheduleEventSnapshot.unreadClearVersion]);
+
+  // 派生索引依赖全局 messageVersion / storeVersion,逐 emit 重建出内容相同的新 Map;
+  // useStableValue 在内容未变时保留旧引用,阻断 sections 派生链的无谓全量重建
+  // (与首页同款处理,风暴背景见 devices/index.tsx 对应注释)。
+  const messagePreviewIndexRaw = useMemo(
     () => buildSessionMessagePreviewIndex(
       sessions.map((session) => session.id),
       (sessionId) => remoteSessionStore.getMessages(sessionId),
     ),
     [messageVersion, sessions],
   );
-  const pendingInteractionIndex = useMemo(() => new Map(
+  const messagePreviewIndex = useStableValue(messagePreviewIndexRaw, mapContentEqual);
+  const pendingInteractionIndexRaw = useMemo(() => new Map(
     sessions
       .map((session) => [session.id, remoteSessionStore.getPendingInteractions(session.id).length] as const)
       .filter(([, count]) => count > 0),
   ), [sessions, storeVersion]);
+  const pendingInteractionIndex = useStableValue(pendingInteractionIndexRaw, mapContentEqual);
   const filterCounts = useMemo(
     () => summarizeRemoteSessionOverview(sessions, pendingInteractionIndex, scheduleIndex),
     [pendingInteractionIndex, scheduleIndex, sessions],
@@ -276,6 +305,8 @@ export default function DeviceDetailScreen() {
   );
   // 首同步完成前(lastSyncedAt === null)抑制"还没有对话"空状态,避免冷进(deep link)先闪空态
   // 再跳成真列表(规则 7:不闪空白/不跳变)。同步失败时 ConnectionBanner 已有错误 + 重试入口。
+  // 抑制期渲染 RemoteListSyncingPlaceholder(800ms 内空白,超时浮现「正在同步」),
+  // 慢链路 / 连接翻覆下首同步拖长时不再是无限期纯白。
   const suppressListEmptyState = shouldSuppressRemoteListEmptyState({
     itemCount: visibleSessionIds.length,
     hasSyncedThisOpen: lastSyncedAt !== null,
@@ -562,7 +593,9 @@ export default function DeviceDetailScreen() {
               testID={`deviceDetail.projectSessionRow.${item.session.id}`}
             />
           )}
-          ListEmptyComponent={suppressListEmptyState ? null : (
+          ListEmptyComponent={suppressListEmptyState ? (
+            <RemoteListSyncingPlaceholder testID="deviceDetail.projectSyncing" />
+          ) : (
             <MainWindowEmptyState
               centered
               copy="在这个项目里开始一个新对话。"
@@ -919,7 +952,9 @@ export default function DeviceDetailScreen() {
         renderSectionHeader={({ section }) => (
           <Text style={styles.sectionTitle}>{section.title}</Text>
         )}
-        ListEmptyComponent={suppressListEmptyState ? null : (
+        ListEmptyComponent={suppressListEmptyState ? (
+          <RemoteListSyncingPlaceholder testID="deviceDetail.syncing" />
+        ) : (
           <MainWindowEmptyState
             centered
             copy={emptyState.copy}

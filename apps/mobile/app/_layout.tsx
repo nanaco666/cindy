@@ -11,6 +11,7 @@ import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { CenteredScreen } from '@/components/CenteredScreen';
 import { StartupBlockedScreen } from '@/components/StartupBlockedScreen';
 import { registerDevCacheMenu } from '@/debug/devCacheMenu';
+import { startJsStallWatchdog } from '@/debug/jsStallWatchdog';
 import { initMobileTapdb } from '@/analytics/mobileTapdb';
 import { useBundleUpdatePrompt } from '@/update/useBundleUpdatePrompt';
 import { useResumeUpdateCheck } from '@/update/useResumeUpdateCheck';
@@ -89,6 +90,8 @@ function RootLayout() {
   useEffect(() => {
     registerDevCacheMenu();
   }, []);
+  // Dev-only:JS 停摆探测器,把 JS 线程忙死的时间边界钉进 Metro 日志流(内部 __DEV__ gate)。
+  useEffect(() => startJsStallWatchdog(), []);
   useEffect(() => {
     void initMobileTapdb();
   }, []);

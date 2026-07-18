@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronLeft } from 'lucide-react-native';
 import {
   ActivityIndicator,
@@ -536,6 +536,35 @@ export function MainWindowEmptyState({
   );
 }
 
+/**
+ * 远端列表首同步延迟 loading 出现阈值:正常 1-2s 内完成的首同步保持原"干净空白"
+ * 不闪指示;只有同步被慢链路 / 连接翻覆拖长时才浮现。
+ */
+const REMOTE_LIST_SYNCING_DELAY_MS = 800;
+
+/**
+ * 远端列表(设备会话列表 / 自动化列表)首同步窗口的占位:前 REMOTE_LIST_SYNCING_DELAY_MS
+ * 渲染空白(快同步不闪,与"首同步前不画错误空状态"的既有设计一致),超过阈值仍未
+ * 同步完成则显示「正在同步」指示——替代无限期纯白。背景:连接翻覆时首同步可能被拖到
+ * 10-30s,此前用户只能对着全白列表干等,无从判断是卡死还是在等数据。
+ */
+export function RemoteListSyncingPlaceholder({ testID }: { testID?: string }) {
+  const styles = useThemedStyles(makeStyles);
+  const { colors } = useTheme();
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(true), REMOTE_LIST_SYNCING_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  if (!visible) return null;
+  return (
+    <View style={styles.remoteSyncingPlaceholder} testID={testID}>
+      <ActivityIndicator color={colors.textTertiary} size="small" />
+      <Text style={styles.remoteSyncingText}>正在同步</Text>
+    </View>
+  );
+}
+
 export function MainWindowActionButton({
   action,
   density = 'default',
@@ -907,6 +936,15 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   mainEmptyTextCentered: {
     textAlign: 'center',
+  },
+  remoteSyncingPlaceholder: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.xxl,
+  },
+  remoteSyncingText: {
+    color: colors.textTertiary,
+    fontSize: typeScale.body,
   },
   mainActionGroup: {
     gap: spacing.sm,

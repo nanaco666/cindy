@@ -368,7 +368,7 @@ export function DeviceLinkProvider({ children }: { children: ReactNode }) {
         }
         // 回前台立刻重连:绕开断线后遗留的指数退避计时器(可能 park 到 30s),
         // 让"打开 App → 打开会话"路径快速恢复在线,而不是干等退避。
-        client.connectNow();
+        client.connectNow('appstate-active');
         // 快速切换(连接被宽限保住、始终 online)不会有 online 状态转换,这条显式
         // 补齐就是断档回填的唯一触发点;其余路径下它因 status 未 online 而空转。
         void rehydrateWithClient(client);

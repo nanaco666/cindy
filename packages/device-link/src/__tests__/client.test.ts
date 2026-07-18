@@ -58,10 +58,12 @@ interface Harness {
 function makeHarness(opts?: {
   token?: string | null;
   timing?: ConstructorParameters<typeof DeviceLinkClient>[0]['timing'];
+  logger?: ConstructorParameters<typeof DeviceLinkClient>[0]['logger'];
 }): Harness {
   const sockets: FakeWs[] = [];
   const client = new DeviceLinkClient({
     getWsUrl: () => 'ws://test/api/device-link/ws',
+    logger: opts?.logger,
     getToken: async () => (opts && 'token' in opts ? (opts.token ?? null) : 'jwt-token'),
     getHello: () => ({
       deviceName: 'Test Mac',
@@ -772,6 +774,81 @@ describe('DeviceLinkClient', () => {
       expect(h.client.getConnectionIssue()).toBeNull();
       expect(issues).toHaveLength(2);
       expect(issues[1]).toBeNull();
+    });
+  });
+
+  describe('客户端主动重建(connect 重入丢弃在用 socket)', () => {
+    const silent = () => {};
+
+    it('握手途中 connectNow:丢弃在用 socket、带 reason 打 INFO 排障锚点', async () => {
+      const info = vi.fn();
+      const h = makeHarness({ logger: { debug: silent, info, warn: silent, error: silent } });
+      h.client.start();
+      await tick();
+      const first = h.current();
+      first.emit('open'); // 已建连未 hello-ack:status 停在 connecting,connectNow 不被 online 守卫拦下
+      h.client.connectNow('appstate-active');
+      await tick();
+
+      expect(h.sockets.length).toBe(2);
+      expect(first.closed).toMatchObject({ code: 1000 }); // 旧 socket 被显式回收,不裸遗留
+      // 静默重建此前没有任何日志痕迹(旧 socket close 被 epoch 守卫屏蔽),这条 INFO
+      // 是排障时区分「客户端主动重建」与「真实断连重连」的唯一锚点。
+      expect(info).toHaveBeenCalledWith(
+        expect.stringContaining('discarding live socket for reconnect (reason=appstate-active, pending=0)'),
+      );
+      h.current().ack();
+      expect(h.client.getStatus()).toBe('online');
+      h.client.stop();
+    });
+
+    it('重建丢弃 socket 时立即 fail in-flight 请求(不等 requestTimeoutMs)', async () => {
+      const h = makeHarness({ timing: { requestTimeoutMs: 60_000 } });
+      h.client.start();
+      await tick();
+      h.current().ack();
+      const p = h.client.invoke('dev-b', { channel: 'maker:list-active', args: [] });
+
+      // 公开 API 下 online 期间不会重入 connect(connectNow 有 online 守卫),白盒直调
+      // 钉住防御性契约:任何丢弃在用 socket 的重建路径(文档描述的 getToken 竞态、未来
+      // host 主动 restart)都必须立刻以 NOT_CONNECTED + inFlight 标记 fail 掉 in-flight
+      // 请求,不许让它们挂满 requestTimeoutMs(连接翻覆场景下即 30s 空白干等)。
+      void (h.client as unknown as { connect(reason: string): Promise<void> }).connect('forced-test');
+      await expect(p).rejects.toMatchObject({ code: 'NOT_CONNECTED', inFlight: true });
+      h.client.stop();
+    });
+
+    it('重复 hello-ack(已在线)只打判别日志:不重连、不影响 in-flight 请求', async () => {
+      const info = vi.fn();
+      const h = makeHarness({ logger: { debug: silent, info, warn: silent, error: silent } });
+      h.client.start();
+      await tick();
+      const ws = h.current();
+      ws.ack();
+      const p = h.client.invoke('dev-b', { channel: 'maker:list-active', args: [] });
+      const sentInvoke = ws.sent.find((e) => e.kind === 'invoke')!;
+
+      // relay 在同一条 socket 上重发 hello-ack(relay 侧恢复/迁移):不是新连接
+      ws.push({
+        v: PROTOCOL_VERSION,
+        kind: 'hello-ack',
+        payload: { serverProtocolVersion: PROTOCOL_VERSION, deviceId: 'dev-self', userId: 'u1' },
+      });
+      expect(h.client.getStatus()).toBe('online');
+      expect(h.sockets.length).toBe(1); // 没有触发重连
+      expect(info).toHaveBeenCalledWith(
+        expect.stringContaining('duplicate hello-ack while already online'),
+      );
+
+      ws.push({
+        v: PROTOCOL_VERSION,
+        kind: 'invoke-result',
+        id: sentInvoke.id,
+        src: 'dev-b',
+        payload: { ok: true, result: [] },
+      });
+      await expect(p).resolves.toMatchObject({ ok: true });
+      h.client.stop();
     });
   });
 });

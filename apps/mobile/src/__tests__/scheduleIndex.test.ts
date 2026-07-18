@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { MobileMakerTransport } from '@/device-link/mobileMakerTransport';
 import {
   loadSessionScheduleIndex,
+  loadSessionScheduleIndexThrottled,
   replaceSessionScheduleIndexEntries,
+  resetScheduleIndexThrottleForTesting,
+  SCHEDULE_INDEX_THROTTLE_TTL_MS,
 } from '@/session/scheduleIndex';
 import type { RemoteSessionScheduleInfo } from '@/session/sessionList';
 
@@ -98,5 +101,78 @@ describe('scheduleIndex', () => {
 
     expect(merged).not.toBe(current);
     expect(merged.get('session-1')?.scheduleStatus).toBe('paused');
+  });
+});
+
+describe('loadSessionScheduleIndexThrottled (单飞 + TTL 节流)', () => {
+  it('TTL 内的重复触发复用同一在途/已完成 promise,不重复加载', async () => {
+    resetScheduleIndexThrottleForTesting();
+    const load = vi.fn(async () => new Map<string, RemoteSessionScheduleInfo>());
+    let clock = 1000;
+    const now = () => clock;
+    const first = loadSessionScheduleIndexThrottled('dev-1', load, { now });
+    clock += 5_000;
+    const second = loadSessionScheduleIndexThrottled('dev-1', load, { now });
+    expect(second).toBe(first);
+    expect(load).toHaveBeenCalledTimes(1);
+    await first;
+  });
+
+  it('TTL 过期后重新加载;不同 key 互不影响', async () => {
+    resetScheduleIndexThrottleForTesting();
+    const load = vi.fn(async () => new Map<string, RemoteSessionScheduleInfo>());
+    let clock = 1000;
+    const now = () => clock;
+    await loadSessionScheduleIndexThrottled('dev-1', load, { now });
+    clock += SCHEDULE_INDEX_THROTTLE_TTL_MS + 1;
+    await loadSessionScheduleIndexThrottled('dev-1', load, { now });
+    expect(load).toHaveBeenCalledTimes(2);
+    await loadSessionScheduleIndexThrottled('dev-2', load, { now });
+    expect(load).toHaveBeenCalledTimes(3);
+  });
+
+  it('force 绕过 TTL 立即重拉', async () => {
+    resetScheduleIndexThrottleForTesting();
+    const load = vi.fn(async () => new Map<string, RemoteSessionScheduleInfo>());
+    const now = () => 1000;
+    await loadSessionScheduleIndexThrottled('dev-1', load, { now });
+    await loadSessionScheduleIndexThrottled('dev-1', load, { now, force: true });
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it('失败不占坑:reject 后下一次触发正常重试', async () => {
+    resetScheduleIndexThrottleForTesting();
+    const load = vi.fn()
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce(new Map<string, RemoteSessionScheduleInfo>());
+    const now = () => 1000;
+    await expect(loadSessionScheduleIndexThrottled('dev-1', load, { now })).rejects.toThrow('boom');
+    // reject 清坑是微任务,先让它落地。
+    await Promise.resolve();
+    await expect(loadSessionScheduleIndexThrottled('dev-1', load, { now })).resolves.toBeInstanceOf(Map);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it('listRuns 串行执行(同一时刻最多一个在途,不挤占 device-link 管道)', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const maker = {
+      schedule: {
+        list: async () => [
+          { id: 'sched-1', name: 'a', status: 'active' },
+          { id: 'sched-2', name: 'b', status: 'active' },
+          { id: 'sched-3', name: 'c', status: 'active' },
+        ],
+        listRuns: async () => {
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          await Promise.resolve();
+          inFlight -= 1;
+          return [];
+        },
+      },
+    } as unknown as Pick<MobileMakerTransport, 'schedule'>;
+    await loadSessionScheduleIndex(maker);
+    expect(maxInFlight).toBe(1);
   });
 });
