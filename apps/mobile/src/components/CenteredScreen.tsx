@@ -2,9 +2,9 @@ import { ActivityIndicator, Image, StyleSheet, useWindowDimensions, View } from 
 import { StatusBar } from 'expo-status-bar';
 import { Text } from '@/components/AppText';
 import { fontWeight, useTheme, useThemedStyles, type ThemeColors } from '@/theme';
-import { lineHeight, spacing, typeScale } from '@/theme/tokens';
+import { spacing, typeScale } from '@/theme/tokens';
 
-const splashIllustration = require('../../assets/splash/cindy-splash-illustration.webp');
+const splashIllustration = require('../../assets/splash/cindy-splash-illustration-fade.png');
 const splashWordmark = require('../../assets/splash/cindy-splash-wordmark-white.png');
 const splashScript = require('../../assets/splash/cindy-splash-script-white.png');
 
@@ -91,10 +91,6 @@ export function CenteredScreen({
             },
           ]}
         />
-        <View style={[styles.splashLoadingArea, { bottom: Math.max(spacing.xxl, height * 0.12) }]}>
-          <ActivityIndicator color={colors.brandSplashForeground} size="small" />
-          {subtitle ? <Text style={styles.splashSubtitle}>{subtitle}</Text> : null}
-        </View>
       </View>
     );
   }
@@ -130,22 +126,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   splashScript: {
     position: 'absolute',
-  },
-  splashLoadingArea: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    gap: spacing.sm,
-    left: 0,
-    paddingHorizontal: spacing.xl,
-    position: 'absolute',
-    right: 0,
-  },
-  splashSubtitle: {
-    color: colors.brandSplashMuted,
-    fontSize: typeScale.caption,
-    fontWeight: fontWeight.medium,
-    lineHeight: lineHeight.caption,
-    textAlign: 'center',
   },
   title: {
     color: colors.textPrimary,
