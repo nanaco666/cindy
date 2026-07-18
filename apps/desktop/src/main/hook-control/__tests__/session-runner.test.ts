@@ -19,6 +19,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { CatalogModel, ProviderView } from '@lizi/model-providers';
 
 const h = vi.hoisted(() => {
   /** 跨模块调用顺序记录: 'touch:<id>' / 'created:<id>' */
@@ -41,10 +42,10 @@ const h = vi.hoisted(() => {
     }),
     setSessionProvider: vi.fn(),
     hydrateSessionProvider: vi.fn(),
-    /** 默认透传(视为来源可用); 校验回落用例里改写返回 null。 */
-    resolveDefaultProviderIdForModel: vi.fn(
-      async (_agentKind: string, _modelId: string, providerId: string | null) => providerId,
-    ),
+    listProviders: vi.fn(async (): Promise<unknown[]> => []),
+    getModelVisibilityOverride: vi.fn(() => undefined),
+    readImDefaultSettings: vi.fn(),
+    useActualDefaults: false,
     /** 每个 fake session 的事件监听回调(emit done 用)。 */
     eventCbs: new Map<string, (ev: { type: string; data: unknown }) => void>(),
     /** 每个 fake session 被装上的 interaction listener(交互测试驱动用)。 */
@@ -93,9 +94,6 @@ vi.mock('../../maker-host/session-provider-store.js', () => ({
   setSessionProvider: h.setSessionProvider,
   hydrateSessionProvider: h.hydrateSessionProvider,
 }));
-vi.mock('../../im/defaultSessionSettings.js', () => ({
-  resolveDefaultProviderIdForModel: h.resolveDefaultProviderIdForModel,
-}));
 vi.mock('../../imageCacheStore.js', () => ({
   resolveSafe: vi.fn(),
 }));
@@ -123,11 +121,24 @@ vi.mock('../../worktree/index.js', () => ({
   WorktreeManager: { removeWorktreeForSession: vi.fn(async () => undefined) },
 }));
 vi.mock('../../im/defaultSettingsStore.js', () => ({
-  readImDefaultSettings: vi.fn(),
+  readImDefaultSettings: h.readImDefaultSettings,
 }));
-vi.mock('../defaults.js', () => ({
-  resolveHookSessionConfig: () => ({ ...h.resolvedConfig }),
+vi.mock('../../maker-host/createDesktopProviderService.js', () => ({
+  getDesktopProviderService: () => ({ listProviders: h.listProviders }),
 }));
+vi.mock('../../maker-host/model-visibility-mirror.js', () => ({
+  getModelVisibilityOverride: h.getModelVisibilityOverride,
+}));
+vi.mock('../defaults.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../defaults.js')>();
+  return {
+    ...actual,
+    resolveHookSessionConfig: (
+      ...args: Parameters<typeof actual.resolveHookSessionConfig>
+    ): ReturnType<typeof actual.resolveHookSessionConfig> =>
+      h.useActualDefaults ? actual.resolveHookSessionConfig(...args) : { ...h.resolvedConfig },
+  };
+});
 
 /** fake maker: createSession 返回"send 即接受、随后立刻 done"的会话。 */
 function makeFakeSession(id: string) {
@@ -178,6 +189,33 @@ const log = { info: vi.fn(), warn: vi.fn() };
 /** 喂给 agent 的文本 = 用户原话 + 渠道说明(教模型用 xdt-file 回传文件)。 */
 const HELLO_WITH_NOTE = `hello\n\n${SLACK_HOOK_PROMPT_NOTE}`;
 
+function catalogModel(id: string, name = id): CatalogModel {
+  return {
+    id,
+    name,
+    contextWindow: 200_000,
+    efforts: ['low', 'high'],
+    defaultEffort: 'high',
+  };
+}
+
+function connectedProvider(
+  id: string,
+  models: CatalogModel[],
+  agentKind: 'claude-code' | 'codex' = 'claude-code',
+): ProviderView {
+  return {
+    id,
+    name: id,
+    source: 'builtin',
+    agents: [agentKind],
+    auth: { method: 'managed' },
+    routing: {},
+    models: { [agentKind]: models },
+    connected: true,
+  };
+}
+
 function baseReq(overrides: Partial<Parameters<ReturnType<typeof createMakerHookSessionRunner>['run']>[0]>) {
   return {
     sessionId: 'sess-new',
@@ -198,6 +236,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   h.calls.length = 0;
   h.eventCbs.clear();
+  h.listProviders.mockReset();
+  h.listProviders.mockResolvedValue([]);
+  h.getModelVisibilityOverride.mockReset();
+  h.getModelVisibilityOverride.mockReturnValue(undefined);
+  h.useActualDefaults = false;
   h.resolvedConfig.permissionMode = 'bypassPermissions';
   h.resolvedConfig.providerId = null;
 });
@@ -632,16 +675,11 @@ describe('permissionMode 落 createSession', () => {
 describe('providerId(来源/供应商)贯通 —— issue #854 回归', () => {
   it('新建: 草稿默认来源经校验后传 createSession + 注入运行时 store + 广播前落库', async () => {
     h.resolvedConfig.providerId = 'xd';
+    h.listProviders.mockResolvedValueOnce([connectedProvider('xd', [catalogModel('test-model')])]);
     const runner = createMakerHookSessionRunner({ log });
     const outcome = await runner.run(baseReq({}));
 
     expect(outcome.status).toBe('ok');
-    // 校验入参: 最终 agentKind + 最终 model + 草稿来源
-    expect(h.resolveDefaultProviderIdForModel).toHaveBeenCalledWith(
-      'claude-code',
-      'test-model',
-      'xd',
-    );
     expect(fakeMaker.createSession).toHaveBeenCalledWith(
       expect.objectContaining({ providerId: 'xd' }),
     );
@@ -653,20 +691,49 @@ describe('providerId(来源/供应商)贯通 —— issue #854 回归', () => {
     expect(providerDbIdx).toBeLessThan(createdIdx);
   });
 
-  it('新建: 来源校验回落 null(未连接/不供该模型)时不传参、不注入、不落库', async () => {
+  it('新建: 草稿来源失效时回落到实际提供该模型的已连接来源', async () => {
     h.resolvedConfig.providerId = 'gone-provider';
-    h.resolveDefaultProviderIdForModel.mockResolvedValueOnce(null);
+    h.listProviders.mockResolvedValueOnce([connectedProvider('xd', [catalogModel('test-model')])]);
     const runner = createMakerHookSessionRunner({ log });
     const outcome = await runner.run(baseReq({}));
 
     expect(outcome.status).toBe('ok');
-    const opts = fakeMaker.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>;
-    expect('providerId' in opts).toBe(false);
-    expect(h.setSessionProvider).not.toHaveBeenCalled();
-    expect(h.setSessionProviderIdInDb).not.toHaveBeenCalled();
+    expect(fakeMaker.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: 'xd' }),
+    );
+    expect(h.setSessionProvider).toHaveBeenCalledWith('sess-new', 'xd');
+    expect(h.setSessionProviderIdInDb).toHaveBeenCalledWith('sess-new', 'xd');
   });
 
-  it('新建: 默认来源未设置(null)时全程不进 provider 分支(no-break)', async () => {
+  it('新建: 默认仍是不可用 Opus 时,从唯一已连接 OpenAI 来源选可用模型并落具体 providerId', async () => {
+    h.useActualDefaults = true;
+    h.readImDefaultSettings.mockReturnValue({
+      agentKind: 'claude-code',
+      agents: {
+        'claude-code': { providerId: null, model: 'claude-opus-4-8', effort: 'high' },
+        codex: { providerId: null, model: 'gpt-5.6', effort: 'high' },
+      },
+    });
+    h.listProviders.mockResolvedValueOnce([
+      connectedProvider('openai', [catalogModel('chatgpt/gpt-5.6-sol', 'GPT-5.6')]),
+    ]);
+    const runner = createMakerHookSessionRunner({ log });
+    const outcome = await runner.run(baseReq({}));
+
+    expect(outcome.status).toBe('ok');
+    expect(fakeMaker.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentKind: 'claude-code',
+        model: 'chatgpt/gpt-5.6-sol',
+        providerId: 'openai',
+      }),
+    );
+    expect(h.setSessionProvider).toHaveBeenCalledWith('sess-new', 'openai');
+    expect(h.setSessionProviderIdInDb).toHaveBeenCalledWith('sess-new', 'openai');
+    expect(h.listProviders).toHaveBeenCalledTimes(1);
+  });
+
+  it('新建: 当前无任何已连接来源时保持无 providerId(no-break)', async () => {
     const runner = createMakerHookSessionRunner({ log });
     const outcome = await runner.run(baseReq({}));
 
@@ -700,8 +767,8 @@ describe('providerId(来源/供应商)贯通 —— issue #854 回归', () => {
     expect(h.setSessionProvider).not.toHaveBeenCalled();
     // 行里本来就有, 不重复写库
     expect(h.setSessionProviderIdInDb).not.toHaveBeenCalled();
-    // 复用路径不走草稿默认校验
-    expect(h.resolveDefaultProviderIdForModel).not.toHaveBeenCalled();
+    // 复用路径不读供应商目录
+    expect(h.listProviders).not.toHaveBeenCalled();
   });
 
   it('复用/接管: 旧会话 provider_id=NULL 时不传 providerId、hydrate(null)、不落库(no-break)', async () => {
@@ -727,8 +794,8 @@ describe('providerId(来源/供应商)贯通 —— issue #854 回归', () => {
     expect(h.setSessionProvider).not.toHaveBeenCalled();
     // 不落库(行本来就是 null, 无需补写)
     expect(h.setSessionProviderIdInDb).not.toHaveBeenCalled();
-    // 复用路径不走草稿默认校验
-    expect(h.resolveDefaultProviderIdForModel).not.toHaveBeenCalled();
+    // 复用路径不读供应商目录
+    expect(h.listProviders).not.toHaveBeenCalled();
   });
 });
 

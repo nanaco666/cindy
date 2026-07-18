@@ -5,12 +5,13 @@
  * (取值链的桌面端末段):
  *
  *   server 显式值(用户在 Slack 按工作目录设置的偏好) > 桌面端 IM 新会话
- *   默认值(草稿, 建 session 那一刻实时读) > capabilities 内的兜底
+ *   默认值(草稿, 建 session 那一刻实时读) > 当前可用模型清单的首项 >
+ *   草稿裸值(没有任何可用模型时的兼容兜底)
  *
- * 与 im/defaultSessionSettings 同一数据源(readImDefaultSettings +
- * getCapabilities), 语义是「Slack 里开的会话与桌面端新开会话行为一致」。
- * 显式值非法(模型不在能力清单 / effort 不被该模型支持)时静默回落并记日志
- * —— server 侧渲染按钮的清单本就来自本机 capabilities, 非法值只出现在
+ * 与 im/defaultSessionSettings 同一默认值数据源(readImDefaultSettings),
+ * 语义是「Slack 里开的会话与桌面端新开会话行为一致」。显式值非法(模型不在
+ * 可用清单 / effort 不被该模型支持)时静默回落并记日志 —— server 侧渲染按钮
+ * 的清单本就来自本机实时供应商目录, 非法值只出现在
  * "偏好过期"(模型下架 / agent 换代)的窗口里。
  *
  * permissionMode 例外: IM 草稿默认没有权限概念, 取值链是「显式且该 agent
@@ -23,7 +24,7 @@
 
 import type { Effort } from '@lizi/maker-core';
 
-/** 依赖注入面: IM 默认值 + 各 agent 能力清单。 */
+/** 依赖注入面: IM 默认值 + 各 agent 当前可用模型清单。 */
 export interface HookDefaultsDeps {
   readDefaults: () => {
     agentKind: 'claude-code' | 'codex';
@@ -49,9 +50,8 @@ export interface ResolvedHookSessionConfig {
   permissionMode: string;
   /**
    * 草稿默认的来源(供应商)id, 未设置为 null。这里只透传设置值不校验连接态 ——
-   * 供应商目录是异步接口, 本函数保持纯同步; 是否真实可用(已连接且提供最终
-   * 模型)由 session-runner 建会话前经 resolveDefaultProviderIdForModel 校验,
-   * 非法时回落 null(默认路由), 与 IM 新会话同一套语义。
+   * 供应商目录是异步接口, 本函数保持纯同步; session-runner 会在同一份实时
+   * 目录快照里把最终模型解析到具体已连接来源。
    */
   providerId: string | null;
 }
@@ -82,7 +82,7 @@ export function resolveHookSessionConfig(
   const models = deps.getModels(agentKind);
   const findModel = (id: string) => models.find((m) => m.id === id);
 
-  // 2. model: 显式且在能力清单 > 草稿默认(在清单) > 清单第一个 > 草稿默认裸值
+  // 2. model: 显式且在可用清单 > 草稿默认(在清单) > 清单第一个 > 草稿默认裸值
   let model: string;
   if (overrides.model !== null && findModel(overrides.model)) {
     model = overrides.model;
