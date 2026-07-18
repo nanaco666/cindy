@@ -1148,7 +1148,7 @@ export function ModelSelector({
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
                       ]
                     : [
-                        'h-[30px] min-w-max shrink-0',
+                        'h-[30px] min-w-[72px] max-w-full shrink overflow-hidden',
                         noSource
                           ? 'bg-[var(--surface-chip)] px-2.5 hover:bg-[var(--surface-hover)]'
                           : 'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] px-2.5 border border-[var(--border-default)] hover:bg-[var(--model-trigger-hover)]' /* spec 2026-07-17, token by 一哥 */,
@@ -1178,7 +1178,7 @@ export function ModelSelector({
                     : 'text-[var(--text-primary)]',
                   isCreateAgentVariant
                     ? 'truncate'
-                    : cn('truncate', isFieldTrigger ? 'max-w-[260px]' : 'max-w-[160px]'),
+                    : cn('truncate', isFieldTrigger ? 'max-w-[260px]' : ''),
                   isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
                 )}
               >
@@ -1201,7 +1201,7 @@ export function ModelSelector({
               <span
                 className={cn(
                   'min-w-0 font-normal text-[var(--text-primary)]',
-                  isCreateAgentVariant ? 'truncate' : isFieldTrigger ? 'max-w-[260px] truncate' : 'whitespace-nowrap',
+                  isCreateAgentVariant ? 'truncate' : isFieldTrigger ? 'max-w-[260px] truncate' : 'truncate',
                   isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
                 )}
               >
@@ -1242,7 +1242,7 @@ export function ModelSelector({
                   'min-w-0 font-normal',
                   isCreateAgentVariant
                     ? 'truncate'
-                    : isFieldTrigger ? 'max-w-[260px] truncate' : 'whitespace-nowrap',
+                    : isFieldTrigger ? 'max-w-[260px] truncate' : 'truncate',
                   !isBudget &&
                     (isCreateAgentVariant
                       ? 'text-[var(--create-agent-control-text)]'
@@ -1264,8 +1264,8 @@ export function ModelSelector({
                       isCreateAgentVariant
                         ? 'shrink-0 text-[12px]'
                         : dense
-                          ? 'text-[12.5px]'
-                          : 'text-[13px]',
+                          ? 'shrink-0 text-[12.5px]'
+                          : 'shrink-0 text-[13px]',
                     )}
                     aria-hidden="true"
                   >
@@ -1279,7 +1279,7 @@ export function ModelSelector({
                         : 'text-[var(--text-primary)]',
                       isCreateAgentVariant
                         ? 'shrink-0 whitespace-nowrap'
-                        : isFieldTrigger ? 'max-w-[120px] truncate' : 'whitespace-nowrap',
+                        : isFieldTrigger ? 'max-w-[120px] truncate' : 'shrink-0 whitespace-nowrap',
                       isCreateAgentVariant
                         ? 'text-[12px]'
                         : dense

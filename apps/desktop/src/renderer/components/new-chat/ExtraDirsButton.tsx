@@ -176,7 +176,7 @@ export function ExtraDirsButton({
             type="button"
             disabled={disabled}
             className={cn(
-              'flex items-center rounded-full transition-colors',
+              'flex shrink-0 items-center rounded-full transition-colors',
               isCreateAgentVariant
                 ? [
                     'h-[30px] w-[30px] justify-center border border-[var(--create-agent-control-border)]',

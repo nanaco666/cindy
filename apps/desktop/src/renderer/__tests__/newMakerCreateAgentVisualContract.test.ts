@@ -12,6 +12,7 @@ const modelSelectorSource = readFileSync(resolve(__dirname, '..', 'components', 
 const userInfoSectionSource = readFileSync(resolve(__dirname, '..', 'components', 'sidebar', 'UserInfoSection.tsx'), 'utf8');
 const sidebarTopNavSource = readFileSync(resolve(__dirname, '..', 'components', 'sidebar', 'SidebarTopNav.tsx'), 'utf8');
 const vendorIconSource = readFileSync(resolve(__dirname, '..', 'components', 'sidebar', 'VendorIcon.tsx'), 'utf8');
+const extraDirsButtonSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'ExtraDirsButton.tsx'), 'utf8');
 const colorsSource = readFileSync(resolve(__dirname, '..', 'themes', 'colors.ts'), 'utf8');
 const globalsSource = readFileSync(resolve(__dirname, '..', 'styles', 'globals.css'), 'utf8');
 
@@ -149,8 +150,8 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(vendorSwitcherSource).toContain('border-[var(--create-agent-control-border)]');
 
     expect(permissionSelectorSource).toContain('border-[var(--create-agent-control-border)]');
-    expect(permissionSelectorSource).toContain('min-w-[90px] max-w-none shrink-0');
-    expect(permissionSelectorSource).toContain('whitespace-nowrap');
+    expect(permissionSelectorSource).toContain('min-w-[72px] max-w-full shrink');
+    expect(permissionSelectorSource).toContain("'truncate'");
     expect(modelSelectorSource).toContain('border-[var(--create-agent-control-border)]');
     expect(modelSelectorSource).toContain('min-w-[72px] max-w-full shrink overflow-hidden');
     expect(modelSelectorSource).not.toContain('w-[206px] min-w-[160px] max-w-[206px] shrink');
@@ -181,14 +182,20 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(colorsSource).toContain("'create-agent-control-icon'");
     expect(colorsSource).toContain("light: '#3C3F43'");
 
-    expect(chatInputSource).toContain("isCreateAgentVariant ? 'min-w-0 gap-2 overflow-hidden' : 'min-w-0 gap-1'");
+    expect(chatInputSource).toContain("isCreateAgentVariant ? 'min-w-0 gap-2 overflow-hidden' : 'min-w-0 gap-1 overflow-hidden'");
+    expect(chatInputSource).toContain("'flex min-w-0 shrink items-center gap-2 overflow-hidden'");
+    expect(chatInputSource).toContain("'flex min-w-0 shrink items-center gap-1 overflow-hidden'");
     expect(chatInputSource).toContain("'flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2 overflow-hidden'");
+    expect(chatInputSource).toContain("'flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-1 overflow-hidden'");
     expect(chatInputSource).not.toContain("isCreateAgentVariant ? 'flex-wrap gap-2' : 'min-w-0 gap-1'");
     expect(chatInputSource).not.toContain("'flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2'");
     expect(source).toContain('className="shrink-0"');
-    expect(permissionSelectorSource).toContain("'h-[30px] min-w-[90px] max-w-none shrink-0");
+    expect(extraDirsButtonSource).toContain("'flex shrink-0 items-center rounded-full transition-colors'");
+    expect(permissionSelectorSource).not.toContain("'h-[30px] min-w-[90px] max-w-none shrink-0");
+    expect(permissionSelectorSource).not.toContain("'h-[30px] min-w-max shrink-0 px-2.5");
     expect(sendButtonSource).toContain("'flex shrink-0 items-center justify-center transition-colors'");
     expect(modelSelectorSource).toContain("'h-[30px] min-w-[72px] max-w-full shrink overflow-hidden");
+    expect(modelSelectorSource).not.toContain("'h-[30px] min-w-max shrink-0");
     expect(modelSelectorSource).not.toContain("'h-[30px] w-[206px] min-w-[160px] max-w-[206px]");
     expect(modelSelectorSource).toContain("? 'truncate'");
     expect(modelSelectorSource).toContain("? 'shrink-0 whitespace-nowrap'");
