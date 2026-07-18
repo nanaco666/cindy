@@ -613,6 +613,18 @@ export default function SettingsScreen() {
           </SettingsGroup>
         ) : null}
 
+        {/* App 备案信息:仅国内版显示,置于退出账号上方 */}
+        {AUTH_REGION === 'cn' ? (
+          <SettingsGroup title="备案信息">
+            <InfoRow
+              key="app-filing-number"
+              label="App 备案号"
+              testID="settings.appFilingNumber"
+              value="沪ICP备11033765号-89A"
+            />
+          </SettingsGroup>
+        ) : null}
+
         {/* 账号操作:低调置底 */}
         <View style={styles.dangerArea} testID="settings.accountActions">
           <Text style={styles.dangerHint}>
@@ -633,16 +645,6 @@ export default function SettingsScreen() {
             testID="settings.logoutActions"
           />
         </View>
-
-        {/* App 备案信息:固定置于设置页最底部 */}
-        <SettingsGroup title="备案信息">
-          <InfoRow
-            key="app-filing-number"
-            label="App 备案号"
-            testID="settings.appFilingNumber"
-            value="沪ICP备11033765号-89A"
-          />
-        </SettingsGroup>
       </ScrollView>
     </SafeAreaView>
   );

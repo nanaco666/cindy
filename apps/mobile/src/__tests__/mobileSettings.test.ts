@@ -164,15 +164,18 @@ describe('mobile settings overview', () => {
     expect(source).not.toContain('clearManualName');
   });
 
-  it('shows the App filing number in the last settings card', () => {
+  it('shows the App filing number only in cn above the account actions', () => {
     const source = readTextLf(resolve(process.cwd(), 'app/settings.tsx'), 'utf8');
-    const accountActionsIndex = source.indexOf('testID="settings.accountActions"');
+    const regionGuardIndex = source.indexOf("AUTH_REGION === 'cn' ? (");
     const filingCardIndex = source.indexOf('<SettingsGroup title="备案信息">');
+    const accountActionsIndex = source.indexOf('testID="settings.accountActions"');
 
     expect(source).toContain('label="App 备案号"');
     expect(source).toContain('testID="settings.appFilingNumber"');
     expect(source).toContain('value="沪ICP备11033765号-89A"');
+    expect(regionGuardIndex).toBeGreaterThan(-1);
+    expect(filingCardIndex).toBeGreaterThan(regionGuardIndex);
     expect(accountActionsIndex).toBeGreaterThan(-1);
-    expect(filingCardIndex).toBeGreaterThan(accountActionsIndex);
+    expect(filingCardIndex).toBeLessThan(accountActionsIndex);
   });
 });
