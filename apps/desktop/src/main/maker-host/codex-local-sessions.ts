@@ -190,7 +190,15 @@ export async function prepareExternalCodexSessionForResume(threadId: string): Pr
 
   // 尝试从外部 CODEX_HOME(~/.codex、Codex.app、历史品牌 userData 等)导入这个 thread。
   // rollout 必须接管进当前 Cindy HOME,不能让新 state 长期指向可能被用户清理的老目录。
-  const found = findExternalThreadById(threadId)
+  // target row 已指向旧品牌 rollout 时,这个指针比外部 HOME 的 updatedAt 更权威。
+  // 否则 ~/.codex / CODEX_HOME 中较新的同 id thread 会先胜出,linked 分支又因 target
+  // row 已存在而跳过复制,导致旧品牌指针永远没有被接管。
+  const legacyTargetThread = targetRollout
+    && isLegacyBrandedCodexLocation(targetHome, targetRollout)
+    ? findThreadByIdInHome(targetHome, threadId)
+    : null;
+  const found = legacyTargetThread
+    ?? findExternalThreadById(threadId)
     ?? (targetRollout ? findThreadByIdInHome(targetHome, threadId) : null);
   if (found) {
     const isBrandMigration = isLegacyBrandedCodexLocation(targetHome, found.sourceHome)

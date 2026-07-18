@@ -1026,6 +1026,43 @@ describe('prepareExternalCodexSessionForResume orphan rollout synthesis', () => 
     expect(fs.readFileSync(targetRow.rolloutPath, 'utf-8')).toBe('LEGACY_ROLLOUT');
   });
 
+  it('prioritizes the legacy rollout already referenced by target state over a newer linked external copy', async () => {
+    const legacyHome = path.join(path.dirname(targetUserData), 'xdt-maker', 'codex-home');
+    const legacyRollout = path.join(legacyHome, 'sessions', `rollout-2026-07-14-${threadId}.jsonl`);
+    fs.mkdirSync(path.dirname(legacyRollout), { recursive: true });
+    fs.writeFileSync(legacyRollout, 'LEGACY_ROLLOUT');
+    const legacyDbPath = createStateDb(legacyHome);
+    insertThread(legacyDbPath, threadId, legacyRollout, {
+      updatedAt: 2_000,
+      title: 'Legacy source title',
+    });
+
+    const linkedRollout = path.join(externalHome, 'sessions', `rollout-2026-07-15-${threadId}.jsonl`);
+    fs.mkdirSync(path.dirname(linkedRollout), { recursive: true });
+    fs.writeFileSync(linkedRollout, 'NEWER_LINKED_ROLLOUT');
+    const linkedDbPath = createStateDb(externalHome);
+    insertThread(linkedDbPath, threadId, linkedRollout, {
+      updatedAt: 4_000,
+      title: 'Newer linked title',
+    });
+
+    const targetDbPath = createStateDb(desktopHome());
+    insertThread(targetDbPath, threadId, legacyRollout, {
+      updatedAt: 3_000,
+      title: 'Current Cindy title',
+    });
+
+    await prepareExternalCodexSessionForResume(threadId);
+
+    const targetDb = new Database(targetDbPath, { readonly: true });
+    const targetRow = targetDb.prepare('SELECT rollout_path AS rolloutPath, title FROM threads WHERE id = ?')
+      .get(threadId) as { rolloutPath: string; title: string };
+    targetDb.close();
+    expect(targetRow.title).toBe('Current Cindy title');
+    expect(targetRow.rolloutPath.startsWith(path.join(desktopHome(), 'sessions'))).toBe(true);
+    expect(fs.readFileSync(targetRow.rolloutPath, 'utf-8')).toBe('LEGACY_ROLLOUT');
+  });
+
   it('keeps an explicitly configured external CODEX_HOME linked instead of adopting it', async () => {
     const sourceRollout = path.join(externalHome, 'sessions', `rollout-2026-07-14-${threadId}.jsonl`);
     const sourceDbPath = createStateDb(externalHome);
