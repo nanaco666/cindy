@@ -170,11 +170,6 @@ function fileEntry(role, filePath) {
   };
 }
 
-function signWindowsInstaller(exePath, token) {
-  const signScript = path.join(__dirname, 'sign.py');
-  execSync(`python "${signScript}" "${path.resolve(exePath)}" "${token}"`, { stdio: 'inherit' });
-}
-
 // ── 平台收尾:签名 + 产物归集,返回 files/signing 供 build-info ────────────────
 
 function findSetupExe(makeBaseDir) {
@@ -205,25 +200,27 @@ async function finishWindows({ artifactDir, baseName, appName, versionless, allo
   const installerPath = path.join(artifactDir, `${baseName}-Setup.exe`);
   fs.copyFileSync(setupExe, installerPath);
 
-  // 签名策略:有版本的包默认必须签(NPKG_TOKEN);版本无关包缺 token 时放行。
-  // 注意 forge postPackage 已用同一 token 签过内部 exe(Cindy/cindy-updater/
-  // xdt-helper),没 token 时那步也被静默跳过——所以这里的报错要提示两层影响。
+  // 签名已全部在 forge make 阶段完成,这里不再后置补签:
+  //   - 包内 exe(Cindy/cindy-updater/xdt-helper/loudness/node-pty/adb/rg)由
+  //     forge.config.ts 的 postPackage signPackagedExes 签;
+  //   - 安装器 Setup.exe + 卸载器 Uninstall <App>.exe 由 NSIS maker 的
+  //     win.sign(customSign)签(Issue #998)。
+  // 复制过来的 Setup.exe 已带签名,再走一遍 sign.py 只会与 make 阶段双签。
+  // 这里只保留「有版本必须能签」门禁 + 记录签名状态(依据 token 是否在手)。
   const npkgToken = noSign ? undefined : process.env.NPKG_TOKEN;
   let installerSigned = false;
   if (noSign) {
-    console.log('==> --no-sign: skipping installer and internal exe signing');
-  }
-  if (npkgToken) {
-    console.log('==> Signing installer via npkg...');
-    signWindowsInstaller(installerPath, npkgToken);
+    console.log('==> --no-sign: installer / uninstaller / internal exes are UNSIGNED');
+  } else if (npkgToken) {
+    // make 阶段用同一 token 已签全部 exe + installer + uninstaller。
     installerSigned = true;
   } else if (!versionless && !allowUnsigned) {
-    console.error('ERROR: 有版本的 Windows 打包要求 NPKG_TOKEN(安装包 + 内部 exe 签名)。');
-    console.error('       缺签名的包在严格策略 Windows 机器上热更/启动会被拦。');
+    console.error('ERROR: 有版本的 Windows 打包要求 NPKG_TOKEN(安装包 / 卸载器 / 内部 exe 均在 forge make 阶段签名)。');
+    console.error('       缺签名的包在严格策略 Windows 机器上热更/启动/卸载会被拦。');
     console.error('       确要产出未签名包时加 --allow-unsigned。');
     process.exit(1);
   } else {
-    console.log('==> NPKG_TOKEN not set — installer and internal exes are UNSIGNED');
+    console.log('==> NPKG_TOKEN not set — installer / uninstaller / internal exes are UNSIGNED');
   }
 
   const files = [fileEntry('installer', installerPath)];

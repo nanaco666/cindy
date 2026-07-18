@@ -542,14 +542,34 @@ function collectExeFilesRecursively(dir: string): string[] {
 }
 
 /**
+ * 用公司 npkg 签名服务签单个 exe（复用 publish-windows.mjs 给 Setup.exe 用的
+ * 同一份 sign.py）。postPackage 的包内 exe 循环 与 NSIS maker 的 customSign
+ * (installer + uninstaller) 共用这一处,签名逻辑单点、不 fork。
+ * 失败即抛（调用方 postPackage / customSign 会让整个 make 失败,避免发出漏签包）。
+ */
+function signOneExeWithNpkg(exePath: string, token: string): void {
+  const signScript = path.join(__dirname, 'scripts', 'sign.py');
+  if (!fs.existsSync(signScript)) {
+    throw new Error(`[forge:sign] sign.py missing at ${signScript}`);
+  }
+  console.log(`[forge:sign] signing ${path.basename(exePath)}...`);
+  const r = spawnSync('python', [signScript, exePath, token], { stdio: 'inherit' });
+  if (r.error) throw new Error(`[forge:sign] sign.py spawn failed: ${r.error.message}`);
+  if (r.status !== 0) throw new Error(`[forge:sign] sign.py exited ${r.status} for ${exePath}`);
+}
+
+/**
  * 把 packaged 目录内的所有 .exe 都用公司 npkg 签名服务签一遍。
  * 触发时机：electron-forge 的 postPackage（package 完、makers 跑前），所以
  * NSIS Setup.exe 拿到的、以及 publish 阶段从 packagedDir 打的热更 ZIP 拿到的，
  * 都是已签名版本——彻底解决 hot-update 后 spawn updater EACCES 的问题
  * (Win 严格策略机器拒绝从 %TEMP% 启动未签名 exe)。
  *
+ * NSIS 安装器自身(Setup.exe)与卸载器(Uninstall <App>.exe)不在这里签——它们由
+ * makers 阶段生成,由 getAppBuilderConfig 的 win.sign(customSign)统一签,同样走
+ * signOneExeWithNpkg。见 makers 定义处注释。
+ *
  * 没有 NPKG_TOKEN 时静默跳过，不影响本地 dev / 无密钥环境的 packaging。
- * Setup.exe 自身的签名仍在 publish-windows.mjs 里走 sign.py。
  */
 function signPackagedExes(buildPath: string): void {
   if (process.platform !== 'win32') return;
@@ -593,29 +613,20 @@ function signPackagedExes(buildPath: string): void {
     ...collectExeFilesRecursively(
       path.join(buildPath, 'resources', 'app.asar.unpacked', 'node_modules', 'node-pty'),
     ),
-    ...collectExeFilesRecursively(
-      path.join(buildPath, 'resources', 'tools', 'android-platform-tools'),
-    ),
+    // 递归整个 resources/tools（extraResource 注入的第三方 CLI）：覆盖
+    // android-platform-tools/adb.exe + ripgrep/rg.exe + 未来新增的 tool exe。
+    // 之前只递归了 android-platform-tools,漏了 ripgrep/rg.exe——rg 与 adb 同为
+    // 未签名第三方 exe,会被运行时 spawn(项目内 grep/search),未签同样被严格策略 /
+    // EDR 拦。扩到整个 tools/ 一次覆盖,新增工具免维护。
+    ...collectExeFilesRecursively(path.join(buildPath, 'resources', 'tools')),
   );
-
-  // 直接复用 publish-windows.mjs 给 Setup.exe 用的同一份 sign.py——
-  // 那条路径已经被验证 OK,不要 fork 出 Node 版本再踩同样的坑。
-  const signScript = path.join(__dirname, 'scripts', 'sign.py');
-  if (!fs.existsSync(signScript)) {
-    throw new Error(`[forge:postPackage] sign.py missing at ${signScript}`);
-  }
 
   for (const exe of exes) {
     if (!fs.existsSync(exe)) {
       console.warn(`[forge:postPackage] skip (missing): ${exe}`);
       continue;
     }
-    console.log(`[forge:postPackage] signing ${path.basename(exe)}...`);
-    const r = spawnSync('python', [signScript, exe, token], {
-      stdio: 'inherit',
-    });
-    if (r.error) throw new Error(`[forge:postPackage] sign.py spawn failed: ${r.error.message}`);
-    if (r.status !== 0) throw new Error(`[forge:postPackage] sign.py exited ${r.status} for ${exe}`);
+    signOneExeWithNpkg(exe, token);
   }
 }
 
@@ -970,6 +981,28 @@ if (isWin) {
   makers.unshift(
     new MakerNSIS({
       getAppBuilderConfig: async () => ({
+        // NSIS installer(Setup.exe)与 uninstaller(Uninstall <App>.exe)的签名。
+        // 这是签卸载器的唯一入口(Issue #998):uninstaller 由 NSIS 编译期两遍生成后
+        // 嵌入 installer,postPackage 阶段还不存在、也没有独立成品文件可事后补签,
+        // 只能让 electron-builder 在生成时对 installer + uninstaller 都回调 win.sign。
+        // 复用包内 exe 同一条 npkg 通道(signOneExeWithNpkg → sign.py),逻辑单点;
+        // 无 NPKG_TOKEN(dev / 版本无关 / --no-sign 已删 token)时跳过,与 postPackage 一致。
+        win: {
+          // 只用 sha256:不设时 electron-builder 默认 ['sha1','sha256'],会对 installer +
+          // uninstaller 各回调 customSign 两趟(sha1 一趟 + sha256 一趟)= 每个文件两次
+          // npkg 往返,sha1 那趟纯浪费(Windows 早已弃信 sha1 Authenticode)。收敛到单
+          // sha256:一趟往返、少一半瞬时失败面。customSign 忽略 hash 参数,npkg 用自身
+          // 证书签,与此列表无关——只影响回调次数。
+          signingHashAlgorithms: ['sha256'],
+          sign: async (cfg: { path: string }) => {
+            const t = process.env.NPKG_TOKEN;
+            if (!t) {
+              console.log(`[forge:nsis:sign] NPKG_TOKEN not set — skipping ${path.basename(cfg.path)}`);
+              return;
+            }
+            signOneExeWithNpkg(cfg.path, t);
+          },
+        },
         // appId 决定 NSIS 写到 Start Menu 快捷方式上的 System.AppUserModel.ID 属性。
         // Electron 主进程必须用 app.setAppUserModelId() 设同一个值，Windows 通知中枢
         // 才会接收 toast；否则原生 Notification 被静默丢弃。
