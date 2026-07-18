@@ -2399,6 +2399,13 @@
     "unavailable": "Sign-in is temporarily unavailable",
     "retry": "Retry",
     "browserWaiting": "Complete verification in your browser",
+    "browserCallback": {
+      "successTitle": "Signed in",
+      "successBody": "You can close this page and return to {{appName}}.",
+      "errorTitle": "Sign-in not completed",
+      "errorBody": "Please return to {{appName}} and sign in again.",
+      "returnButton": "Return to {{appName}}"
+    },
     "globalRegion": "Global",
     "errors": {
       "fallback": "Sign-in failed. Please try again.",

@@ -2399,6 +2399,13 @@
     "unavailable": "暂时无法登录",
     "retry": "重试",
     "browserWaiting": "请在浏览器中完成验证",
+    "browserCallback": {
+      "successTitle": "登录成功",
+      "successBody": "你可以关闭此页面，回到 {{appName}} 继续。",
+      "errorTitle": "登录未完成",
+      "errorBody": "请回到 {{appName}} 重新登录。",
+      "returnButton": "回到 {{appName}}"
+    },
     "globalRegion": "Global",
     "errors": {
       "fallback": "登录失败，请稍后重试",

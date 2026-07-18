@@ -50,10 +50,12 @@ import {
   createAuthBrowserAuthorizationSlot,
   parseAuthLoopbackCallback,
   raceAuthBrowserCancellation,
+  renderAuthLoopbackPage,
 } from './authLoopbackCallback';
 
 import { createLogger } from './logger';
-import { getResolvedMainLocale } from './i18n';
+import { buildFocusDeepLink } from './deepLink';
+import { getResolvedMainLocale, t } from './i18n';
 import { getClientEndpoint } from './clientEndpointsService.js';
 import {
   parseDesktopLoginAction,
@@ -341,9 +343,22 @@ async function openSystemBrowserAuthorization(
         res.writeHead(404).end();
         return;
       }
+      // 回调页语言跟随 app 当前 UI 语言(main 迷你 i18n 复用 renderer 四语文案,
+      // {{appName}} 由 t() 注入品牌名);成功 / 失败分别渲染,失败附原始错误码。
+      const isError = 'error' in result;
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(
-        '<!doctype html><meta charset="utf-8"><title>Cindy</title><p>You can return to Cindy.</p>',
+        renderAuthLoopbackPage({
+          htmlLang: getResolvedMainLocale(),
+          variant: isError ? 'error' : 'success',
+          title: t(isError ? 'login.browserCallback.errorTitle' : 'login.browserCallback.successTitle'),
+          body: t(isError ? 'login.browserCallback.errorBody' : 'login.browserCallback.successBody'),
+          detail: isError ? result.error : undefined,
+          action: {
+            href: buildFocusDeepLink('desktop-login'),
+            label: t('login.browserCallback.returnButton'),
+          },
+        }),
       );
       finish(result);
     });

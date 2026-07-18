@@ -2399,6 +2399,13 @@
     "unavailable": "現在ログインできません",
     "retry": "再試行",
     "browserWaiting": "ブラウザで認証を完了してください",
+    "browserCallback": {
+      "successTitle": "ログイン完了",
+      "successBody": "このページを閉じて {{appName}} に戻れます。",
+      "errorTitle": "ログインを完了できませんでした",
+      "errorBody": "{{appName}} に戻ってもう一度ログインしてください。",
+      "returnButton": "{{appName}} に戻る"
+    },
     "globalRegion": "Global",
     "errors": {
       "fallback": "ログインに失敗しました。再試行してください。",
