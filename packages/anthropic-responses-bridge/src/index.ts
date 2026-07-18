@@ -33,6 +33,7 @@ export type {
   AnthropicToolChoice,
   BridgeLogger,
   BridgeProviderConfig,
+  BridgeUpstreamErrorInfo,
   BridgeWireProtocol,
   ResponsesInputItem,
   ResponsesRequest,

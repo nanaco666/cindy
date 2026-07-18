@@ -27,6 +27,10 @@ import { createResponsesHandler, type BridgeProviderConfig, type ResponsesBridge
 import { createMakerLogger } from './logger-adapter.js';
 import { getGrokAccessToken } from './grok-oauth-login.js';
 import { chatgptAccountIdFromIdToken, desktopCodexAuthAdapter } from './auth-adapters.js';
+import {
+  bearerAccessTokenFromHeaders,
+  createChatgptBridgeAuthInvalidator,
+} from './chatgpt-bridge-auth-invalidation.js';
 import { buildChatgptBridgeHeaders } from './chatgpt-bridge-headers.js';
 import { recordXaiRateLimitSnapshot } from '../usageBroadcaster.js';
 import { CHATGPT_MODEL_PREFIX, XAI_MODEL_PREFIX } from '../../shared/subscriptionModels.js';
@@ -203,6 +207,14 @@ export function clearChatgptBridgeCredentialCache(): void {
   _authCache = null;
 }
 
+const invalidateChatgptBridgeAuth = createChatgptBridgeAuthInvalidator({
+  getCurrentAccessToken: () => desktopCodexAuthAdapter.getAccessToken(),
+  invalidate: async (reason) => {
+    clearChatgptBridgeCredentialCache();
+    await desktopCodexAuthAdapter.invalidate(reason);
+  },
+});
+
 /** 经 adapter 判连接态 → 读 codex-home/auth.json → 必要时刷新 → 返回 token 与可选 account id。 */
 async function getBridgeAuth(): Promise<{ accessToken: string; accountId: string | null }> {
   const now = Date.now();
@@ -248,6 +260,11 @@ function codexProviderConfig(): BridgeProviderConfig {
     buildHeaders: async ({ sessionId }) => {
       const { accessToken, accountId } = await getBridgeAuth();
       return buildChatgptBridgeHeaders({ accessToken, accountId, sessionId });
+    },
+    onUpstreamError: async ({ status, body, requestHeaders }) => {
+      const failedAccessToken = bearerAccessTokenFromHeaders(requestHeaders);
+      if (!failedAccessToken) return;
+      await invalidateChatgptBridgeAuth({ status, body, failedAccessToken });
     },
   };
 }
