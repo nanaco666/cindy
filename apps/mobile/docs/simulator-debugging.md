@@ -220,6 +220,36 @@ For device-link network symptoms, collect:
 - Server/device-link relay logs only when both mobile and desktop show relay
   symptoms.
 
+## Render Storm Forensics And Regression Measurement
+
+背景:2026-07 会话白屏/卡死排查确立的取证与回归测量体系(手机端无落盘日志,
+这套是唯一的量化通道)。触碰 `remoteSessionStore` 订阅链、首页/详情页列表派生
+(索引 useMemo、sections、行 memo)、或做相关重构时,改动前后各测一轮对比。
+
+三层信号,从粗到细:
+
+1. **`[js-stall]` 停摆探测器**(dev 常驻,`src/debug/jsStallWatchdog.ts`):JS 线程
+   停摆 ≥2s 即在 Metro 日志打带时长的 WARN(≥120s 判 suspend-suspect,是整机睡眠
+   假象)。日常开发的金丝雀——正常应为零或零星 2-3s(dev 调试开销);出现 ≥10s
+   或连发即回归。
+2. **渲染 trace 采集 + 组件归因**(按需):
+
+   ```bash
+   # App 连着 Metro 时录制;期间复现目标场景(典型:桌面端流式输出 + 手机首页/会话来回)
+   node apps/mobile/scripts/render-trace.mjs --seconds 120
+   node --max-old-space-size=8192 apps/mobile/scripts/render-trace-analyze.mjs /tmp/render-trace/trace.json
+   ```
+
+   判定基准(~2 分钟采样、桌面端流式场景实测):病态 = HomeSessionRow 数千次、
+   SectionList 全列表 pass 数十次 × 秒级;健康 = HomeSessionRow 两位数、壳层
+   pass 收敛到变化行。「Changed Props 供词」里的 *referentially unequal but
+   deeply equal* 就是引用不稳定处,优先修。
+3. **CI 不变量**(自动):`remoteSessionStore.test.ts` 的「引用调和」组(含
+   风暴不变量:消息/运行态高频 churn + 内容等价重算下 `getSessions()` 引用零漂移)、
+   `homeDesktopFirst.test.ts` 的保鲜契约断言(storeVersion 裸订阅 / 分钟心跳 /
+   SessionRelativeTime)。重构必须保持这些绿灯——它们钉住的是「无关更新不惊动
+   列表」与「memo 化后该刷新的仍会刷新」两个方向的语义。
+
 ## Keyboard, Rotation, And iPad
 
 Virtual keyboard:

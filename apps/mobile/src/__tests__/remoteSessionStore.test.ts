@@ -1079,4 +1079,40 @@ describe('引用调和(2026-07-18 首页重渲染风暴修复)', () => {
     remoteSessionStore.removeDevice('dev-2');
     expect(remoteSessionStore.getSessions().find((s) => s.id === 's1')).toBe(s1Before);
   });
+
+  it('风暴不变量:消息/运行态/活动高频 churn + 内容等价重算下,会话列表快照引用零漂移', () => {
+    // 桌面端流式输出 = appendMessage / status / activity 事件以每秒多条的频率灌入,
+    // 其间还夹杂设备表更新等触发 recomputeSessions 的内容等价重算(归一化分支每轮
+    // 都会重铸对象,必须被引用调和吸收)。这些都不改变会话列表内容,getSessions()
+    // 快照必须保持同一引用——它是 useRemoteSessions 消费屏(首页/设备详情)不被
+    // 无关 emit 惊动的结构保证,重构后回归验证的核心断言(2026-07-18 风暴修复;
+    // 每轮 setDeviceIdentity 在修复前的 store 上会真实打红本用例)。
+    remoteSessionStore.setDeviceSessions('dev-1', 'Mac', [session('s1'), session('s2')]);
+    const snapshot = remoteSessionStore.getSessions();
+    for (let i = 0; i < 50; i += 1) {
+      remoteSessionStore.appendMessage('s1', {
+        id: `m${i}`,
+        clientId: `m${i}`,
+        sessionId: 's1',
+        role: 'assistant',
+        content: `chunk ${i}`,
+        toolUseId: null,
+        agentMeta: null,
+        createdAt: `2026-01-01T00:00:${String(i).padStart(2, '0')}.000Z`,
+      });
+      remoteSessionStore.applyMakerEvent('s1', { type: 'status', data: { isRunning: true, tokenUsage: i + 1 } });
+      remoteSessionStore.applySessionActivity('dev-1', {
+        sessionId: 's1',
+        phase: 'running',
+        compactDetail: `step ${i}`,
+      });
+      // 每轮设备表变化(无关设备增补)强制走一次 recomputeSessions:会话内容等价,
+      // 归一化重铸的对象必须被调和吸收,快照引用不许漂移。
+      remoteSessionStore.setDeviceIdentity([
+        { deviceId: 'dev-1', name: 'Mac' },
+        { deviceId: `ghost-${i}`, name: `G${i}` },
+      ]);
+    }
+    expect(remoteSessionStore.getSessions()).toBe(snapshot);
+  });
 });
