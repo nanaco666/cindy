@@ -59,7 +59,7 @@ import { Text, TextInput } from '@/components/AppText';
 import type { TextInput as NativeTextInput } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/auth/AuthContext';
-import { goBackGuarded } from '@/utils/backGuard';
+import { useGuardedBack } from '@/utils/useGuardedBack';
 import { DEVICE_LINK_API_BASE_URL } from '@/config/env';
 import { ConnectionBanner, useShowConnectionBanner } from '@/components/ConnectionBanner';
 import { useDeviceLink } from '@/device-link/DeviceLinkContext';
@@ -4338,9 +4338,9 @@ export default function SessionScreen() {
     }
   }, [currentSession, extraDirBrowseOpen, loadExtraDirBrowsePath]);
 
-  const goBackToHome = useCallback(() => {
-    goBackGuarded(router);
-  }, [router]);
+  // 自愈返回:canGoBack 与真实栈不一致时(reload 恢复深路由 / 重复压栈残留),
+  // GO_BACK 会被静默吞掉,生产表现为"点返回永远没反应"——校验兜底见 useGuardedBack。
+  const goBackToHome = useGuardedBack();
 
   // chip「打开」:文件 → Quick Look 预览页(带行号),目录 → 文件浏览器定位。
   // 点击与长按菜单的「快速预览 / 打开文件浏览器」共用这一条。
