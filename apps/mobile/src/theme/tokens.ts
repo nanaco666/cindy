@@ -48,6 +48,12 @@ export interface ThemeColors {
   sheetActionText: string;
   /** Bottom sheet / composer grabber 色 */
   sheetGrabber: string;
+  /** App 内品牌 splash 背景红(仅限 splash,不进入普通 CTA 红名单) */
+  brandSplashBackground: string;
+  /** App 内品牌 splash 前景白(logo/script/loading) */
+  brandSplashForeground: string;
+  /** App 内品牌 splash 二级文案 */
+  brandSplashMuted: string;
   /** Chip / pill / 选中行填充 */
   surfaceChip: string;
   /** 1px 分隔线 / 边框(桌面 Board) */
@@ -139,6 +145,9 @@ export const lightColors: ThemeColors = {
   sheetActionBorder: '#DCDFE3',
   sheetActionText: '#3C3F43',
   sheetGrabber: '#DCDFE3',
+  brandSplashBackground: '#DF0C27',
+  brandSplashForeground: '#FFFFFF',
+  brandSplashMuted: 'rgba(255, 255, 255, 0.82)',
   surfaceChip: '#F1F1F1',
   border: '#DCDFE3',
   borderTranslucent: 'rgba(220, 223, 227, 0.62)',
@@ -193,6 +202,9 @@ export const darkColors: ThemeColors = {
   sheetActionBorder: '#505050',
   sheetActionText: '#C1C1C1',
   sheetGrabber: '#6F6F6F',
+  brandSplashBackground: '#DF0C27',
+  brandSplashForeground: '#FFFFFF',
+  brandSplashMuted: 'rgba(255, 255, 255, 0.82)',
   surfaceChip: '#2F2D2D',
   border: '#434343',
   borderTranslucent: 'rgba(67, 67, 67, 0.62)',

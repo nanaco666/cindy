@@ -73,7 +73,7 @@ function RootAfterEndpoints() {
   useResumeUpdateCheck();
   // 热更门未就绪(自建变体冷启动正在 check/fetch/reload)时先渲染 loading,避免闪旧 UI。
   if (!otaReady) {
-    return <CenteredScreen title="Cindy" subtitle="正在检查更新" />;
+    return <CenteredScreen title="Cindy" subtitle="正在检查更新" variant="splash" />;
   }
   return (
     <AuthProvider>
@@ -110,7 +110,7 @@ function RootLayout() {
       />
     );
   } else if (endpointGate.status === 'pending') {
-    body = <CenteredScreen title="Cindy" subtitle="正在启动" />;
+    body = <CenteredScreen title="Cindy" subtitle="正在启动" variant="splash" />;
   } else {
     body = <RootAfterEndpoints />;
   }
