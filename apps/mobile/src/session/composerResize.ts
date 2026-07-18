@@ -23,7 +23,17 @@ export interface ComposerInputHeightModel {
   mode: ComposerResizeMode;
   /** 输入区当前应呈现的内容高度。 */
   visibleContentHeight: number;
-  /** 内容超出可视高度时开启 TextInput 内部滚动。 */
+  /**
+   * TextInput 内部滚动开关。激活卡片态(collapsed !== true)下**恒为 true**:
+   * 早先按「contentHeight > 可视高度」动态开关,但 contentHeight 依赖原生
+   * onContentSizeChange 上报,RN 新架构下该回调有漏报历史(fb/react-native#52854
+   * 一类),漏一拍开关就停在 false——输入超过上限后既不跟随光标也无法手动滚动,
+   * 用户看不到自己正在输入的文本。原生 UITextView / EditText 在内容未超出时
+   * 本就滚不动、不抢手势,常开没有交互代价,还能让超限瞬间的光标跟随由原生层
+   * 直接兜底,不再经过「测量 → setState → 重渲染」链路。
+   * 简洁态(collapsed)维持测量判定:多行草稿钉在单行时才需要滚,误差只影响
+   * 收起态的次要浏览场景。
+   */
   scrollEnabled: boolean;
 }
 
@@ -70,7 +80,8 @@ export function resolveComposerInputHeight(
     return {
       mode,
       visibleContentHeight: clamp(input.contentHeight, bounds.minContentHeight, autoMax),
-      scrollEnabled: input.contentHeight > autoMax,
+      // 激活态常开,不依赖 contentHeight 测量(见 ComposerInputHeightModel.scrollEnabled 注释)。
+      scrollEnabled: true,
     };
   }
   const visibleContentHeight = clamp(
@@ -81,7 +92,8 @@ export function resolveComposerInputHeight(
   return {
     mode,
     visibleContentHeight,
-    scrollEnabled: input.contentHeight > visibleContentHeight,
+    // manual 定高同理常开:内容超过钉住高度时必须能滚,不能赌测量回调不漏拍。
+    scrollEnabled: true,
   };
 }
 
