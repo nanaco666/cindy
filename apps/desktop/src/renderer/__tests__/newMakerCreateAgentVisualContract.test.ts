@@ -142,6 +142,7 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(sendButtonSource).not.toContain('create-agent-send-border');
     expect(sendButtonSource).toContain('hover:bg-[var(--create-agent-send-bg-hover)]');
     expect(sendButtonSource).toContain('active:bg-[var(--create-agent-send-bg-pressed)]');
+    expect(sendButtonSource).toContain('bg-[var(--create-agent-send-icon)]');
     expect(sendButtonSource).toContain('function CreateAgentSendIcon');
     expect(sendButtonSource).toContain('fill="currentColor"');
     expect(sendButtonSource).toContain("'cursor-not-allowed bg-[var(--create-agent-send-bg)] text-[var(--create-agent-send-icon)] opacity-40'");
@@ -224,7 +225,12 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(sendButtonSource).toContain('bg-[var(--send-btn-bg)] text-[var(--send-btn-icon)]');
     expect(sendButtonSource).toContain('hover:bg-[var(--send-btn-hover-bg)]');
     expect(sendButtonSource).toContain('active:bg-[var(--send-btn-pressed-bg)]');
+    expect(sendButtonSource).toContain('bg-[var(--send-btn-icon)]');
     expect(sendButtonSource).toContain("'cursor-not-allowed bg-[var(--send-btn-bg)] text-[var(--send-btn-icon)] opacity-40'");
+    expect(sendButtonSource).not.toContain('stop-btn-bg');
+    expect(sendButtonSource).not.toContain('stop-btn-icon');
+    expect(sendButtonSource).not.toContain('hover:opacity-85');
+    expect(sendButtonSource).not.toContain('rounded-[8px]');
     expect(sendButtonSource).not.toContain('bg-[var(--send-btn-disabled-bg)] text-[var(--send-btn-disabled-icon)]');
 
     expect(colorsSource).toContain("'send-btn-bg'");
@@ -233,6 +239,8 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(colorsSource).toContain("'send-btn-icon'");
     expect(colorsSource).toContain("light: '#FCFCFC'");
     expect(colorsSource).toContain("dark: '#252222'");
+    expect(colorsSource).not.toContain("'stop-btn-bg'");
+    expect(colorsSource).not.toContain("'stop-btn-icon'");
   });
 
   it('does not own global sidebar glass or selected-state tokens', () => {

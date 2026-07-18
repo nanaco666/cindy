@@ -635,16 +635,6 @@ registerColor('send-btn-disabled-icon', {
   dark: 'var(--text-disabled-tertiary)',
 }, 'Silver');
 
-// Stop button — per cc-agent-view Streaming variant
-registerColor('stop-btn-bg', {
-  light: 'var(--surface-chip)',
-  dark: 'var(--surface-chip)',
-}, 'Light Gray');
-registerColor('stop-btn-icon', {
-  light: 'var(--text-primary-on-dark)',
-  dark: 'var(--text-primary-on-dark)',
-}, 'Near Black');
-
 // Permission prompt (F-PERM-2)
 registerColor('perm-code-bg', {
   light: '#f5f5f5',

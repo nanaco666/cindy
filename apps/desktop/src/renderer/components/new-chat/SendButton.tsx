@@ -33,7 +33,7 @@ function CreateAgentSendIcon() {
  * Send / Stop button — 对标 cc-agent-view.pen
  *
  * Send (idle): 28×28 圆形（9999）, bg #262626/#fff, arrow-up icon 白/黑
- * Stop (streaming): 28×28 圆角方形（8）, bg #e5e5e5/#3c3c3a, 10×10 圆角 1.5 反色方块
+ * Stop (streaming):复用 Send 壳样式,仅把内容换成 10×10 圆角 1.5 的停止方块
  */
 export const SendButton = forwardRef<HTMLButtonElement, SendButtonProps>(function SendButton(
   { disabled, onClick, isStreaming = false, highlighted = false, ariaLabel, visualVariant = 'default' },
@@ -50,7 +50,16 @@ export const SendButton = forwardRef<HTMLButtonElement, SendButtonProps>(functio
         'flex shrink-0 items-center justify-center transition-colors',
         isCreateAgentVariant ? 'h-[30px] w-[30px]' : 'h-7 w-7',
         isStreaming
-          ? 'rounded-[8px] bg-[var(--stop-btn-bg)] hover:opacity-85'
+          ? isCreateAgentVariant
+            ? [
+                'rounded-full bg-[var(--create-agent-send-bg)] text-[var(--create-agent-send-icon)]',
+                !disabled && 'hover:bg-[var(--create-agent-send-bg-hover)] active:bg-[var(--create-agent-send-bg-pressed)]',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
+              ]
+            : [
+                'rounded-full bg-[var(--send-btn-bg)] text-[var(--send-btn-icon)]',
+                !disabled && 'hover:bg-[var(--send-btn-hover-bg)] active:bg-[var(--send-btn-pressed-bg)]',
+              ]
           : isCreateAgentVariant
             ? [
                 'rounded-full bg-[var(--create-agent-send-bg)] text-[var(--create-agent-send-icon)]',
@@ -72,7 +81,12 @@ export const SendButton = forwardRef<HTMLButtonElement, SendButtonProps>(functio
     >
       {isStreaming ? (
         <span
-          className="block h-[10px] w-[10px] rounded-[1.5px] bg-[var(--stop-btn-icon)]"
+          className={cn(
+            'block h-[10px] w-[10px] rounded-[1.5px]',
+            isCreateAgentVariant
+              ? 'bg-[var(--create-agent-send-icon)]'
+              : 'bg-[var(--send-btn-icon)]',
+          )}
           aria-hidden
         />
       ) : (
