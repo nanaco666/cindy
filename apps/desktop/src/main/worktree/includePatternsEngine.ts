@@ -17,6 +17,7 @@
 
 import path from 'node:path';
 import fs from 'node:fs';
+import { MANAGED_WORKTREE_DIR_NAMES } from '../../shared/managedWorktreePaths';
 
 import { gitExec } from './gitExec';
 
@@ -117,11 +118,11 @@ function globToRegex(glob: string): RegExp {
 
 /**
  * 递归列出 baseRepo 下的所有文件相对路径(用 / 分隔)。
- * 跳过 .git/ + node_modules/ + .xdt-worktrees/ 子树, 防止扫超量。
+ * 跳过 .git/ + node_modules/ + Cindy 当前/历史托管 worktree 子树, 防止扫超量。
  */
 function listAllFiles(baseRepo: string): string[] {
   const out: string[] = [];
-  const SKIP_TOP = new Set(['.git', 'node_modules', '.xdt-worktrees']);
+  const SKIP_TOP = new Set(['.git', 'node_modules', ...MANAGED_WORKTREE_DIR_NAMES]);
   function walk(absDir: string, relDir: string): void {
     let entries: fs.Dirent[];
     try {

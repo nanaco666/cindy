@@ -61,7 +61,7 @@ const XDT_CLAUDE_PATH_MARKERS = [
   // 只认领本区域(+ 历史)userData 下的进程:同机双装时另一区域实例的
   // Claude 子进程属于对方,跨区域匹配会把人家活着的 agent 树误杀。
   ...buildClaudePathMarkers(allUserDataDirNames(CURRENT_CINDY_REGION)),
-  // Dev checkouts (and their .xdt-worktrees) launch the pinned binary from
+  // Dev checkouts (and their current/legacy managed worktrees) launch the pinned binary from
   // <repo>/apps/claude-code-bin/<platform-arch>/ — without these markers a
   // dev-spawned orphan is misclassified as an external install and spared,
   // so every abrupt dev restart leaks a live agent tree mutating the workdir.

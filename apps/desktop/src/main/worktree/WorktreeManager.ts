@@ -36,6 +36,10 @@ import {
 import { hasLiveSessionReference, loadLiveSessionPathKeys } from './liveSessionRefs';
 import * as store from './worktreeStore';
 import { createLogger } from '../logger';
+import {
+  getManagedWorktreeBasePath,
+  MANAGED_WORKTREE_DIR_NAME,
+} from '../../shared/managedWorktreePaths';
 
 const log = createLogger('WorktreeManager');
 
@@ -180,8 +184,9 @@ export async function detectCwd(cwd: string): Promise<DetectCwdResp> {
       out.isInsideWorktree = true;
     }
   } catch {
-    // 解析失败 → 兜底走旧的目录名启发式, 至少识别出 xdt 自己创建的 worktree
-    if (out.repoRoot && /[\\/]\.xdt-worktrees[\\/]/.test(out.repoRoot)) {
+    // 解析失败 → 兜底走托管目录名启发式, 至少识别出 Cindy 自己创建的 worktree
+    const normalizedRepoRoot = out.repoRoot?.replace(/\\/g, '/');
+    if (normalizedRepoRoot && getManagedWorktreeBasePath(normalizedRepoRoot) != null) {
       out.isInsideWorktree = true;
     }
   }
@@ -379,7 +384,7 @@ async function rollbackPartialCreate(snap: CreatedSnapshot): Promise<void> {
       }
     }
   }
-  // parentEnsured 不清理 — .xdt-worktrees 目录本身留着没坏处, 下次复用
+  // parentEnsured 不清理 — 托管 worktree 根目录本身留着没坏处, 下次复用
 }
 
 async function configureHooksPath(worktreePath: string, baseRepo: string): Promise<void> {
@@ -464,7 +469,7 @@ export async function copyClaudeSiviDirs(
  * 串行步骤 (任一失败 → classifyError → 返回 ok:false; 已建半成品需回滚):
  *   1. detectCwd 校验(isGitRepo / gitInstalled / !isInsideWorktree)
  *   2. listBranches 校验 sourceBranch 存在
- *   3. 计算 path = baseRepo/.xdt-worktrees/<name>; 已存在 → 重新 avoidCollision 拿一个
+ *   3. 计算 path = baseRepo/.cindy-worktrees/<name>; 已存在 → 重新 avoidCollision 拿一个
  *   4. mkdirp parent
  *   5. git worktree add -b xdt/<name> <path> <sourceBranch>
  *      失败时若 stderr 含 core.longpaths → 自动 git config --global core.longpaths true 重试一次
@@ -547,13 +552,13 @@ async function createWorktreeInner(
     if (taken.includes(name)) {
       name = avoidCollision(name, taken);
     }
-    let worktreePath = path.join(baseRepo, '.xdt-worktrees', name);
+    let worktreePath = path.join(baseRepo, MANAGED_WORKTREE_DIR_NAME, name);
     // 文件系统 collision(store 没记录但目录已存在): 多走一次 avoid
     let attempts = 0;
     while ((await pathExists(worktreePath)) && attempts < 100) {
       const all = [...taken, name];
       name = avoidCollision(name, all);
-      worktreePath = path.join(baseRepo, '.xdt-worktrees', name);
+      worktreePath = path.join(baseRepo, MANAGED_WORKTREE_DIR_NAME, name);
       attempts += 1;
     }
 

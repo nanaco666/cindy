@@ -144,7 +144,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 ## Dogfooding：在本仓库的 worktree 会话里工作（Agent 规则）
 
-如果你是 Cindy 内嵌的 agent，且 cwd 位于 `<baseRepo>/.xdt-worktrees/<name>` 下（会话级 git worktree），遵守以下契约（完整工作流与原理见 `docs/dogfooding-workflow.md`）：
+如果你是 Cindy 内嵌的 agent，且 cwd 位于 `<baseRepo>/.cindy-worktrees/<name>`（或品牌迁移前的 `.xdt-worktrees/<name>`）下（会话级 git worktree），遵守以下契约（完整工作流与原理见 `docs/dogfooding-workflow.md`）：
 
 1. **先等 checkout 完成，再确认依赖**：worktree 创建返回时后台的完整 checkout 可能仍在进行（staged copy 只含 `CLAUDE.md` / `.claude` 等少量文件，**不含 `package.json`**）。跑任何 `pnpm` 命令前先确认 `package.json` 存在且 `git status --short` 干净，未就绪就稍等再查。worktree 与 baseRepo 共享 `.git` 但**不共享 node_modules**，创建流程不会自动安装：checkout 完成后若 `node_modules` 缺失，先 `pnpm install`（首次可能数分钟，注意命令超时，必要时分步执行）。
 2. **你的编辑对运行中的 app 无效**：Vite HMR 只 watch 启动 dev 实例的那个 checkout，worktree 下的任何改动既不会热更也不会随重启生效。「改了没反应」不是 bug。验证一律在本 worktree 内跑 `pnpm --filter desktop typecheck` / 定向 `vitest run`；需要运行时验证时，commit + push 后告知用户，由用户启 verify 实例或重启（你无法重启宿主，见上文 refusal 规则）。

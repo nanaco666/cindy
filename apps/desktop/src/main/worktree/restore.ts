@@ -5,8 +5,9 @@
  * apply 回去，一键恢复到回收前的状态。
  *
  * 数据来源：sessions.worktree_path（回收时刻意不清，见 worktreeStore.del 注释）。
- * 路径必须能解析为 `<baseRepo>/.xdt-worktrees/<name>` 托管形态，其它一律按
- * no-worktree 处理——绝不对非托管路径做 git 写操作。
+ * 路径必须能解析为 `<baseRepo>/.cindy-worktrees/<name>` 或历史
+ * `<baseRepo>/.xdt-worktrees/<name>` 托管形态，其它一律按 no-worktree
+ * 处理——绝不对非托管路径做 git 写操作。
  */
 
 import path from 'node:path';
@@ -26,6 +27,7 @@ import * as store from './worktreeStore';
 import { getDbClient } from '../localDb/client/current';
 import { sessions } from '../localDb/schema';
 import { createLogger } from '../logger';
+import { isManagedWorktreeDirectoryName } from '../../shared/managedWorktreePaths';
 
 import type { WorktreeMeta } from './types';
 
@@ -57,12 +59,12 @@ interface ParsedManagedPath {
   branch: string;
 }
 
-/** 只认 `<baseRepo>/.xdt-worktrees/<name>` 形态；解析失败返回 null。 */
+/** 只认 Cindy 当前或历史托管 worktree 形态；解析失败返回 null。 */
 function parseManagedWorktreePath(worktreePath: string): ParsedManagedPath | null {
   try {
     const resolved = path.resolve(worktreePath);
     const parent = path.dirname(resolved);
-    if (path.basename(parent) !== '.xdt-worktrees') return null;
+    if (!isManagedWorktreeDirectoryName(path.basename(parent))) return null;
     const name = path.basename(resolved);
     if (!name) return null;
     return { baseRepo: path.dirname(parent), name, branch: `xdt/${name}` };

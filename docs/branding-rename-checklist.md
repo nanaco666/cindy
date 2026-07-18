@@ -82,7 +82,7 @@
 | `PROG_ID 'XDMaker.CindyGhost'`、HKCU `Directory\shell\xdt-maker` 注册表键名 | `brain/fileAssociation.ts`、`folderContextMenu.ts` | 文件关联 / 右键菜单重复注册或失效（菜单**显示文案**已走 `BRAND_NAME`，键名不用动） |
 | `WINDOWS_APP_USER_MODEL_ID 'com.magiclizi.xdt-maker'`、macOS `appId com.magiclizi.xdt-maker` | bootstrap-electron.ts、forge.config.ts | 通知归属 / 系统身份断裂（如需更换按平台迁移指引单独做） |
 | `clientInfo: { name: 'xdt-maker' }` | maker-core codex、lizi-mcps slack-official | 协议握手标识，非展示名 |
-| `~/.ssh` 默认密钥名 `xdt-maker`、`.xdmaker/` 项目目录、`xdt/` 分支前缀、`.xdt-worktrees/`、`XDT_*` 环境变量、deviceId 前缀 `dev-` | 多处 | 用户资产 / 协作约定，与品牌无关 |
+| `~/.ssh` 默认密钥名 `xdt-maker`、`.xdmaker/` 项目目录、`xdt/` 分支前缀、`XDT_*` 环境变量、deviceId 前缀 `dev-` | 多处 | 用户资产 / 协作约定，与品牌无关 |
 | 会话分享扩展名 `.cshare`（及旧 `.xdtshare` 兼容） | localDb/ipc/session-share.ts | 历史分享文件打不开 |
 
 ## 五、执行顺序建议

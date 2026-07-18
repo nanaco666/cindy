@@ -7,7 +7,7 @@ import type { CreateWorktreeReq, CreateWorktreeResp, DetectCwdResp, ListBranches
  *
  * 职责:从 dispatcher session 的 workingDir 解析出 base repo,然后为「即将创建的
  * 新 session」预建一个正规的 session worktree(与 UI 新会话勾选 worktree 产出的
- * 完全同类:.xdt-worktrees/<name> + xdt/<name> 分支、worktreeStore 绑定、关闭时
+ * 完全同类:.cindy-worktrees/<name> + xdt/<name> 分支、worktreeStore 绑定、关闭时
  * auto-stash 清理)。调用方拿到 worktree 路径后以其为 workingDir 创建 session。
  *
  * base repo 解析的三种情况(按序):

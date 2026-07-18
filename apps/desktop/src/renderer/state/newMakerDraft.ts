@@ -22,6 +22,7 @@ import type { MakerVendor } from '@/lib/ccAgent.types';
 import type { Effort, PermissionMode } from '@/lib/userPreferences.types';
 import { getDefaultModelForVendor } from '@/lib/modelDefinitions';
 import { normalizeWorkingDirForStorage } from '../../shared/workingDir';
+import { getManagedWorktreeBasePath } from '../../shared/managedWorktreePaths';
 
 const STORAGE_KEY = 'xdt:newMakerDraft:v1';
 const DEFAULT_CODEX_DRAFT_MODEL = 'gpt-5.4';
@@ -158,29 +159,20 @@ function makeDefault(): NewMakerDraft {
 
 /**
  * New Maker 的默认工作目录表示"项目入口",不是某次会话的隔离运行目录。
- * xdt 自己创建的 worktree 固定在 `<repo>/.xdt-worktrees/<name>` 下;如果历史
- * localStorage 或未来调用方误把它写进 draft,这里折回项目根目录,避免再次
- * 新建 Maker 时默认落到 worktree 里并触发"已在 worktree 中"。
+ * Cindy 自己创建的 worktree 固定在 `<repo>/.cindy-worktrees/<name>` 下；品牌
+ * 迁移前的 `<repo>/.xdt-worktrees/<name>` 也继续识别。如果历史 localStorage
+ * 或未来调用方误把它写进 draft,这里折回项目根目录,避免再次新建 Maker 时
+ * 默认落到 worktree 里并触发"已在 worktree 中"。
  *
- * 这里故意只处理 xdt 自己托管的 `.xdt-worktrees`:New Maker 草稿默认值不应
- * 折叠用户手选的 `.worktrees` / `.claude/worktrees`。侧边栏会话分组需要识别
- * 更多 worktree 形态,两边的职责不同,不要合并成同一套规则。
+ * 这里故意只处理 Cindy 自己托管的目录：New Maker 草稿默认值不应折叠用户
+ * 手选的 `.worktrees` / `.claude/worktrees`。侧边栏会话分组需要识别更多
+ * worktree 形态,两边的职责不同,不要合并成同一套规则。
  */
 function normalizeDraftWorkingDir(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const normalized = normalizeWorkingDirForStorage(raw);
   if (normalized == null) return null;
-  const worktreeMatch = normalized.match(/^(.*?)([\\/])\.xdt-worktrees[\\/][^\\/]+(?:[\\/].*)?$/);
-  if (!worktreeMatch) return normalized;
-  let baseRepo = worktreeMatch[1] ?? '';
-  const worktreeSeparator = worktreeMatch[2] ?? '';
-  if (/^[A-Za-z]:$/.test(baseRepo)) return `${baseRepo}${worktreeSeparator}`;
-  if (!baseRepo && worktreeSeparator === '/') return '/';
-  while (baseRepo.length > 1 && /[\\/]$/.test(baseRepo)) {
-    if (/^[A-Za-z]:[\\/]$/.test(baseRepo)) break;
-    baseRepo = baseRepo.slice(0, -1);
-  }
-  return baseRepo.length > 0 ? baseRepo : null;
+  return getManagedWorktreeBasePath(normalized) ?? normalized;
 }
 
 /** 严格校验 + 缺字段补齐——schema 损坏(老版本 / 手改 localStorage)时静默回退默认。 */

@@ -1,10 +1,10 @@
 /**
  * worktree-parallel-sessions: detectCwd 的 isInsideWorktree 检测单测。
  *
- * I-1 修复: 不再仅靠 ".xdt-worktrees" 目录名启发式; 改用
+ * I-1 修复: 不再仅靠托管目录名启发式; 改用
  *   git rev-parse --git-dir   vs   git rev-parse --git-common-dir
  * 不一致即 linked worktree。两种 worktree 都能识别:
- *   1) xdt 自己创建的 worktree (路径含 .xdt-worktrees)
+ *   1) Cindy 自己创建的 worktree (路径含 .cindy-worktrees；兼容历史目录)
  *   2) 外部工具 (CC Desktop / 手工 git worktree add) 创建的 worktree (路径不含)
  */
 
@@ -56,9 +56,9 @@ function setupGitMock(opts: {
 }
 
 describe('detectCwd → isInsideWorktree (I-1 fix)', () => {
-  it('returns isInsideWorktree=true for an xdt-created worktree (.xdt-worktrees path)', async () => {
+  it('returns isInsideWorktree=true for a Cindy-created worktree', async () => {
     const baseRepo = path.resolve('/tmp/repo');
-    const wtPath = path.join(baseRepo, '.xdt-worktrees', 'jolly-turing');
+    const wtPath = path.join(baseRepo, '.cindy-worktrees', 'jolly-turing');
     setupGitMock({
       toplevel: wtPath,
       // 在 linked worktree 里, --git-dir 指向主仓库 .git/worktrees/<name>
@@ -71,9 +71,27 @@ describe('detectCwd → isInsideWorktree (I-1 fix)', () => {
     expect(out.isInsideWorktree).toBe(true);
   });
 
-  it('returns isInsideWorktree=true for an externally-created worktree (path NOT under .xdt-worktrees)', async () => {
+  it('falls back to current managed directory detection when git metadata lookup fails', async () => {
+    const baseRepo = path.resolve('/tmp/repo');
+    const wtPath = path.join(baseRepo, '.cindy-worktrees', 'jolly-turing');
+    gitExecMock.mockImplementation(async (args: readonly string[]) => {
+      const a = args.join(' ');
+      if (a === '--version') return { stdout: 'git version 2.45.0\n', stderr: '' };
+      if (a === 'rev-parse --show-toplevel') return { stdout: `${wtPath}\n`, stderr: '' };
+      if (a === 'rev-parse --abbrev-ref HEAD') return { stdout: 'xdt/jolly-turing\n', stderr: '' };
+      if (a === 'rev-parse --git-dir' || a === 'rev-parse --git-common-dir') {
+        throw new Error('metadata unavailable');
+      }
+      throw new Error(`unexpected gitExec call: ${a}`);
+    });
+
+    const out = await detectCwd(wtPath);
+    expect(out.isInsideWorktree).toBe(true);
+  });
+
+  it('returns isInsideWorktree=true for an externally-created worktree (path outside managed roots)', async () => {
     // 模拟 CC Desktop 等外部工具用 `git worktree add ../feature-x` 创建的 worktree:
-    // 路径完全不含 .xdt-worktrees, 旧的目录名启发式漏检, 新逻辑必须正确识别。
+    // 路径完全不含 Cindy 托管目录名,旧的目录名启发式漏检,新逻辑必须正确识别。
     const mainRepo = path.resolve('/tmp/repo');
     const wtPath = path.resolve('/tmp/feature-x');
     setupGitMock({

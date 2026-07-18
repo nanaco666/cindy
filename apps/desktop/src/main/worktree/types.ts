@@ -13,7 +13,7 @@ export interface WorktreeMeta {
   sessionId: string;
   /** 用户输入或 nameGenerator 给的名字（用于显示 + 路径段 + 分支段）。 */
   name: string;
-  /** worktree 绝对路径，必然在 baseRepo/.xdt-worktrees/<name>/ 下。 */
+  /** worktree 绝对路径；新建位于 .cindy-worktrees，历史记录也可能位于 .xdt-worktrees。 */
   path: string;
   /** 创建 worktree 时所在的 git repo 根目录（cwd）。 */
   baseRepo: string;

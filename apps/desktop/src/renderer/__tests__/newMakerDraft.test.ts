@@ -126,9 +126,9 @@ describe('newMakerDraft store', () => {
     expect(m2.getDraft().workingDir).toBe('E:/projects/foo');
   });
 
-  it('patchDraft: xdt worktree 路径会折回项目根目录', async () => {
+  it('patchDraft: Cindy worktree 路径会折回项目根目录', async () => {
     const { getDraft, patchDraft } = await loadModule();
-    patchDraft({ workingDir: 'E:/projects/foo/.xdt-worktrees/auto-abc' });
+    patchDraft({ workingDir: 'E:/projects/foo/.cindy-worktrees/auto-abc' });
     expect(getDraft().workingDir).toBe('E:/projects/foo');
   });
 
@@ -136,17 +136,17 @@ describe('newMakerDraft store', () => {
     const { getDraft, patchDraft } = await loadModule();
     patchDraft({ workingDir: 'E:\\projects\\foo' });
     expect(getDraft().workingDir).toBe('E:/projects/foo');
-    patchDraft({ workingDir: 'E:\\projects\\foo\\.xdt-worktrees\\auto-abc\\src' });
+    patchDraft({ workingDir: 'E:\\projects\\foo\\.cindy-worktrees\\auto-abc\\src' });
     expect(getDraft().workingDir).toBe('E:/projects/foo');
   });
 
   it('patchDraft: Windows 盘符根目录下的 worktree 会折回盘符根目录', async () => {
     const { getDraft, patchDraft } = await loadModule();
-    patchDraft({ workingDir: 'E:\\.xdt-worktrees\\auto-abc\\src' });
+    patchDraft({ workingDir: 'E:\\.cindy-worktrees\\auto-abc\\src' });
     expect(getDraft().workingDir).toBe('E:/');
   });
 
-  it('localStorage 历史残留: xdt worktree 路径读取时迁移回项目根目录', async () => {
+  it('localStorage 历史残留:旧 xdt worktree 路径读取时迁移回项目根目录', async () => {
     memStorage.setItem(
       'xdt:newMakerDraft:v1',
       JSON.stringify({

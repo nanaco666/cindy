@@ -320,7 +320,7 @@ const EXTENDED_INVOKE_CHANNELS: readonly string[] = [
   // —— Worktree(为被控端项目预建独立 git worktree;git/fs 语义在被控端执行才正确——
   // 控制端本机 git 探测被控端路径必然误报"不是 git 仓库")——
   // 准入:detect-cwd / list-branches / suggest-name 是只读 git 探测,无写副作用;
-  // create 只在 baseRepo/.xdt-worktrees/<name> 下派生新目录(name 经被控端
+  // create 只在 baseRepo/.cindy-worktrees/<name> 下派生新目录(name 经被控端
   // validateWorktreeName 白名单校验,不接受任意路径),且 baseRepo 在被控端 dispatch
   // 层过 remote-workdir-guard 同款收敛(见 dispatch.ts PATH_GUARDED)。device-link
   // 已是同账号 + remoteControlEnabled 显式 opt-in,控制端本就能在项目目录跑 agent

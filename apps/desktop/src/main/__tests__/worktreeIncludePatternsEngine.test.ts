@@ -111,6 +111,8 @@ describe('listAllFiles', () => {
     fs.writeFileSync(path.join(tmpRoot, '.git', 'HEAD'), 'ref: refs/heads/main');
     fs.mkdirSync(path.join(tmpRoot, '.xdt-worktrees', 'leaf'), { recursive: true });
     fs.writeFileSync(path.join(tmpRoot, '.xdt-worktrees', 'leaf', 'x.txt'), 'x');
+    fs.mkdirSync(path.join(tmpRoot, '.cindy-worktrees', 'leaf'), { recursive: true });
+    fs.writeFileSync(path.join(tmpRoot, '.cindy-worktrees', 'leaf', 'x.txt'), 'x');
   });
 
   afterAll(() => {
@@ -124,11 +126,12 @@ describe('listAllFiles', () => {
     expect(all).toContain('src/index.ts');
   });
 
-  it('skips top-level node_modules / .git / .xdt-worktrees subtrees', () => {
+  it('skips top-level node_modules / .git / current and legacy worktree subtrees', () => {
     const all = listAllFiles(tmpRoot);
     expect(all.find((f) => f.startsWith('node_modules/'))).toBeUndefined();
     expect(all.find((f) => f.startsWith('.git/'))).toBeUndefined();
     expect(all.find((f) => f.startsWith('.xdt-worktrees/'))).toBeUndefined();
+    expect(all.find((f) => f.startsWith('.cindy-worktrees/'))).toBeUndefined();
   });
 });
 
@@ -140,7 +143,7 @@ describe('listChangedWorktreeIncludeFiles', () => {
   beforeAll(() => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'xdt-wt-include-dirty-'));
     baseRepo = path.join(tmpRoot, 'repo');
-    worktreePath = path.join(tmpRoot, 'repo', '.xdt-worktrees', 'leaf');
+    worktreePath = path.join(tmpRoot, 'repo', '.cindy-worktrees', 'leaf');
     fs.mkdirSync(worktreePath, { recursive: true });
     fs.writeFileSync(path.join(baseRepo, '.xdtworktreeinclude'), '.env\n');
     fs.writeFileSync(path.join(baseRepo, '.env'), 'A=1\n');

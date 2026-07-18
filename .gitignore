@@ -122,6 +122,8 @@ CLAUDE.local.md
 # ── Cindy/XDMaker 开发者本地工作区 ───────────────────────────
 # local 模式的端点清单(restart:desktop:local 从 config/endpoint.json 生成,api/auth/device-link 指 localhost)
 config/endpoint.local.json
+.cindy-worktrees/
+# 品牌迁移前已创建的 worktree 仍需保持 ignored。
 .xdt-worktrees/
 .xdtworktreeinclude
 /start-claude-clean.bat

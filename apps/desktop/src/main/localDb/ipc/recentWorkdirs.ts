@@ -17,6 +17,7 @@ import { desc, sql } from 'drizzle-orm';
 import { getDbClient } from '../client/current';
 import { recentWorkdirs } from '../schema';
 import { createLogger } from '../../logger';
+import { getManagedWorktreeBasePath } from '../../../shared/managedWorktreePaths';
 
 const log = createLogger('recentWorkdirs');
 
@@ -35,7 +36,8 @@ const MAX_RECENT_WORKDIRS = 10;
  *  - trim
  *  - 反斜杠 → 正斜杠 (Windows 的 E:\foo\bar 与 E:/foo/bar 当同一条)
  *  - 去除末尾 `/`,但保留单一根(`/` 或 `D:/`)
- *  - 拒绝 scheduler ephemeral worktree (`/.xdt-worktrees/` 段) —— 这些是
+ *  - 拒绝 scheduler ephemeral worktree（当前 `/.cindy-worktrees/` 与历史
+ *    `/.xdt-worktrees/` 段）—— 这些是
  *    runner 自己临时建的目录,不是用户选过的项目目录,不该出现在"最近"下拉里。
  *    防御性兜底:scheduler 走 DesktopSessionStorage.create() 直接 drizzle,
  *    不经过 sessions:create IPC,本来就不会触发 upsertRecentWorkdir;这里加
@@ -55,7 +57,7 @@ export function normalizeRecentWorkdirPath(
     if (/^[A-Za-z]:\/$/.test(s)) break; // 盘符根 `D:/`
     s = s.slice(0, -1);
   }
-  if (s.includes('/.xdt-worktrees/')) return null;
+  if (getManagedWorktreeBasePath(s) != null) return null;
   return s;
 }
 

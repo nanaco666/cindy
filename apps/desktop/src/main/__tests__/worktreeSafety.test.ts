@@ -14,19 +14,22 @@ import { isManagedWorktreePath } from '../worktree/safety';
 describe('isManagedWorktreePath', () => {
   let tmpRoot: string;
   let baseRepo: string;
-  let xdtRoot: string;
+  let managedRoot: string;
+  let legacyManagedRoot: string;
   let validPath: string;
   let symlinkPath: string;
 
   beforeAll(() => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'xdt-wt-safety-'));
     baseRepo = path.join(tmpRoot, 'repo');
-    xdtRoot = path.join(baseRepo, '.xdt-worktrees');
-    validPath = path.join(xdtRoot, 'jolly-turing');
+    managedRoot = path.join(baseRepo, '.cindy-worktrees');
+    legacyManagedRoot = path.join(baseRepo, '.xdt-worktrees');
+    validPath = path.join(managedRoot, 'jolly-turing');
     fs.mkdirSync(validPath, { recursive: true });
+    fs.mkdirSync(path.join(legacyManagedRoot, 'legacy-one'), { recursive: true });
 
-    // 在 xdt 下也建一个软链, 测试软链拒绝
-    symlinkPath = path.join(xdtRoot, 'evil-link');
+    // 在托管目录下也建一个软链, 测试软链拒绝
+    symlinkPath = path.join(managedRoot, 'evil-link');
     try {
       fs.symlinkSync(tmpRoot, symlinkPath, 'dir');
     } catch {
@@ -42,20 +45,25 @@ describe('isManagedWorktreePath', () => {
     expect(isManagedWorktreePath(validPath, baseRepo, [validPath])).toBe(true);
   });
 
-  it('rejects when path is OUTSIDE baseRepo/.xdt-worktrees', () => {
+  it('keeps accepting legacy .xdt-worktrees paths for safe cleanup', () => {
+    const legacyPath = path.join(legacyManagedRoot, 'legacy-one');
+    expect(isManagedWorktreePath(legacyPath, baseRepo, [legacyPath])).toBe(true);
+  });
+
+  it('rejects when path is outside the managed worktree roots', () => {
     const outside = path.join(tmpRoot, 'totally-elsewhere');
     fs.mkdirSync(outside, { recursive: true });
     expect(isManagedWorktreePath(outside, baseRepo, [outside])).toBe(false);
   });
 
   it('rejects when path uses ../ traversal to escape', () => {
-    const traversal = path.join(xdtRoot, 'jolly-turing', '..', '..', '..', 'tmp');
+    const traversal = path.join(managedRoot, 'jolly-turing', '..', '..', '..', 'tmp');
     expect(isManagedWorktreePath(traversal, baseRepo, [validPath])).toBe(false);
   });
 
   it('rejects when path is NOT in knownPathsInStore', () => {
     expect(isManagedWorktreePath(validPath, baseRepo, [])).toBe(false);
-    const otherPath = path.join(xdtRoot, 'someone-else');
+    const otherPath = path.join(managedRoot, 'someone-else');
     fs.mkdirSync(otherPath, { recursive: true });
     expect(isManagedWorktreePath(otherPath, baseRepo, [validPath])).toBe(false);
   });
@@ -71,13 +79,13 @@ describe('isManagedWorktreePath', () => {
       expect(isManagedWorktreePath(symlinkPath, baseRepo, [symlinkPath])).toBe(false);
     } else {
       // 软链没建出来, 至少验证 lstat 失败的路径被拒绝
-      const fakePath = path.join(xdtRoot, 'never-existed');
+      const fakePath = path.join(managedRoot, 'never-existed');
       expect(isManagedWorktreePath(fakePath, baseRepo, [fakePath])).toBe(false);
     }
   });
 
-  it('rejects sibling directory that shares prefix (xdt-worktrees-evil)', () => {
-    const sibling = path.join(baseRepo, '.xdt-worktrees-evil', 'foo');
+  it('rejects sibling directory that shares the managed prefix', () => {
+    const sibling = path.join(baseRepo, '.cindy-worktrees-evil', 'foo');
     fs.mkdirSync(sibling, { recursive: true });
     expect(isManagedWorktreePath(sibling, baseRepo, [sibling])).toBe(false);
   });
