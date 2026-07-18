@@ -37,6 +37,9 @@ describe('sim-rebuild script invariants', () => {
     // global 产物的 bundle id 不同于 app.json 默认 cn 值，必须从实际 .app 读。
     expect(source).toContain("'CFBundleIdentifier'");
     expect(source).toContain('const bundleId = readAppBundleIdentifier(app);');
+    expect(source).toContain('readAppCacheEntry(cacheDir, simArch)');
+    expect(source).toContain('assertAppSupportsArchitecture(app, simArch)');
+    expect(source).toContain("capture('lipo', ['-archs'");
     // 缓存条目按 fingerprint + 架构定位,meta.json 是条目完整性标记。
     expect(source).toContain('sim-app-cache');
     expect(source).toContain('ios-${simArch}-${fingerprintHash}');

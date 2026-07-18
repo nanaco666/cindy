@@ -118,7 +118,7 @@ const cacheDir = fingerprintHash ? join(appCacheRoot, `ios-${simArch}-${fingerpr
 
 let app = null;
 if (cacheDir && !forceBuild) {
-  const cached = readAppCacheEntry(cacheDir);
+  const cached = readAppCacheEntry(cacheDir, simArch);
   if (cached) {
     console.log(`✓ fingerprint 命中产物缓存(${fingerprintHash.slice(0, 12)}…),跳过 prebuild / pod / xcodebuild。`);
     console.log('  (改了原生层但怀疑缓存不对时,用 --force-build 强制重编。)');
@@ -173,6 +173,8 @@ if (!app) {
   }
   if (cacheDir) storeAppCacheEntry(cacheDir, scheme, app, readAppBundleIdentifier(app));
 }
+
+assertAppSupportsArchitecture(app, simArch);
 
 // bundle identity 必须从实际产物读:global 的 app.config.js 会把 bundle id
 // 切成 com.xd.cindy，不能再用默认 cn 的 app.json 值启动错 app。
@@ -247,12 +249,20 @@ function runFingerprintWithCurrentEnv({ binPath, projectDir, platform }) {
 }
 
 /** 读产物缓存条目;结构不完整(半份缓存)时视为未命中。 */
-function readAppCacheEntry(dir) {
+function readAppCacheEntry(dir, expectedArch) {
   try {
     const meta = JSON.parse(readFileSync(join(dir, 'meta.json'), 'utf8'));
     if (typeof meta.scheme !== 'string' || !meta.scheme) return null;
     const cachedApp = join(dir, `${meta.scheme}.app`);
-    return existsSync(cachedApp) ? cachedApp : null;
+    if (!existsSync(cachedApp)) return null;
+    const architectures = readAppArchitectures(cachedApp);
+    if (!architectures.includes(expectedArch)) {
+      console.warn(
+        `  缓存产物架构不匹配(实际=${architectures.join(',') || '未知'},当前 Simulator 需要=${expectedArch}),忽略并重新构建。`,
+      );
+      return null;
+    }
+    return cachedApp;
   } catch {
     return null;
   }
@@ -282,9 +292,31 @@ function storeAppCacheEntry(dir, scheme, builtApp, builtBundleId) {
 
 /** 从已构建 .app 的 Info.plist 读取真实 bundle identity。 */
 function readAppBundleIdentifier(appPath) {
+  return readAppInfoValue(appPath, 'CFBundleIdentifier');
+}
+
+/** 读取 .app 可执行文件实际包含的 Mach-O 架构。 */
+function readAppArchitectures(appPath) {
+  const executableName = readAppInfoValue(appPath, 'CFBundleExecutable');
+  return capture('lipo', ['-archs', join(appPath, executableName)])
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/** 产物架构不匹配时在安装前失败，避免把 IXUserPresentableErrorDomain 丢给用户。 */
+function assertAppSupportsArchitecture(appPath, expectedArch) {
+  const architectures = readAppArchitectures(appPath);
+  if (architectures.includes(expectedArch)) return;
+  throw new Error(
+    `Simulator 产物架构错误:实际=${architectures.join(',') || '未知'},期望=${expectedArch};请检查排除 arm64 的 native pod。`,
+  );
+}
+
+/** 从已构建 .app 的 Info.plist 读取单个原生配置值。 */
+function readAppInfoValue(appPath, key) {
   return capture('plutil', [
     '-extract',
-    'CFBundleIdentifier',
+    key,
     'raw',
     '-o',
     '-',

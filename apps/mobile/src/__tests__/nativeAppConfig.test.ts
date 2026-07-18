@@ -240,6 +240,10 @@ describe('mobile native app config', () => {
       ),
       'utf8',
     );
+    const iosWechatPodfilePlugin = readFileSync(
+      resolve(process.cwd(), 'plugins/with-wechat-opensdk-modulemap.js'),
+      'utf8',
+    );
     const iosSubscriber = readFileSync(
       resolve(
         process.cwd(),
@@ -279,6 +283,39 @@ describe('mobile native app config', () => {
     expect(iosCoordinator).toContain(
       'WXApi.handleOpenUniversalLink(userActivity, delegate: self)',
     );
+    expect(iosCoordinator).toContain('#if targetEnvironment(simulator)');
+    expect(iosCoordinator).toContain('ERR_WECHAT_UNAVAILABLE_ON_SIMULATOR');
+    expect(iosWechatPodfilePlugin).toContain(
+      'xdt-wechat-login: arm64 simulator stub linkage',
+    );
+    expect(iosWechatPodfilePlugin).toContain(
+      "other_linker_flags[:libraries].delete?('WechatOpenSDK')",
+    );
+    expect(iosWechatPodfilePlugin).toContain(
+      "OTHER_LDFLAGS[sdk=iphoneos*]",
+    );
     expect(iosSubscriber).toContain('continue userActivity: NSUserActivity');
+  });
+
+  it('independently injects the WeChat simulator hook into an existing Podfile', () => {
+    const plugin = require(
+      resolve(process.cwd(), 'plugins/with-wechat-opensdk-modulemap.js'),
+    ) as {
+      injectPostInstallHooks(contents: string): string;
+    };
+    const oldPodfile = `
+post_install do |installer|
+  # xdt-wechat-login: WechatOpenSDK modulemap
+  # xdt-wechat-login: arm64 simulator stub linkage
+end
+`;
+
+    const upgradedPodfile = plugin.injectPostInstallHooks(oldPodfile);
+    expect(upgradedPodfile.match(/WechatOpenSDK modulemap/g)).toHaveLength(1);
+    expect(upgradedPodfile).toContain(
+      'xdt-wechat-login: arm64 simulator stub linkage v2',
+    );
+    expect(upgradedPodfile.match(/arm64 simulator stub linkage v2/g)).toHaveLength(1);
+    expect(plugin.injectPostInstallHooks(upgradedPodfile)).toBe(upgradedPodfile);
   });
 });
