@@ -130,6 +130,7 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
 
     expect(chatInputSource).toContain("visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}");
     expect(chatInputSource).toContain('focus-within:border-[var(--create-agent-focus-ring)]');
+    expect(chatInputSource).toContain("'min-w-0 flex-nowrap justify-end gap-2 overflow-hidden'");
     const permissionSelectorIndex = chatInputSource.indexOf('<PermissionSelector');
     const middleToolbarSlotIndex = chatInputSource.indexOf('{middleToolbarSlot}');
     const modelSelectorIndex = chatInputSource.indexOf('<ModelSelector');
@@ -152,7 +153,7 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(vendorSwitcherSource).toContain('border-[var(--create-agent-control-border)]');
 
     expect(permissionSelectorSource).toContain('border-[var(--create-agent-control-border)]');
-    expect(permissionSelectorSource).toContain('min-w-[72px] max-w-full shrink');
+    expect(permissionSelectorSource).toContain('min-w-[52px] max-w-full shrink');
     expect(permissionSelectorSource).toContain("'truncate'");
     expect(modelSelectorSource).toContain('border-[var(--create-agent-control-border)]');
     expect(modelSelectorSource).toContain('min-w-[72px] max-w-full shrink overflow-hidden');
@@ -184,7 +185,7 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(colorsSource).toContain("'create-agent-control-icon'");
     expect(colorsSource).toContain("light: '#3C3F43'");
 
-    expect(chatInputSource).toContain("'min-w-0 flex-nowrap gap-2 overflow-hidden'");
+    expect(chatInputSource).toContain("'min-w-0 flex-nowrap justify-end gap-2 overflow-hidden'");
     expect(chatInputSource).toContain("'min-w-0 flex-nowrap gap-1 overflow-hidden'");
     expect(chatInputSource).toContain("'contents'");
     expect(chatInputSource).not.toContain("grid-cols-[minmax(0,max-content)_minmax(0,1fr)]");

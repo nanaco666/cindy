@@ -4305,7 +4305,7 @@ export function ChatInput({
             'mt-[2px] flex select-none items-center',
             effectiveCompactToolbar
               ? isCreateAgentVariant
-                ? 'min-w-0 flex-nowrap gap-2 overflow-hidden'
+                ? 'min-w-0 flex-nowrap justify-end gap-2 overflow-hidden'
                 : 'min-w-0 flex-nowrap gap-1 overflow-hidden'
               : 'justify-between',
           )}
