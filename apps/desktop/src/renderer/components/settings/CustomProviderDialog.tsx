@@ -487,12 +487,36 @@ export function CustomProviderDialog({ initial, existingIds, onSaved, onClose }:
     }
   }, [activeTab, rt, t]);
 
-  /** 勾选弹层确认：所选集合写回该 runtime 的模型行（替换语义——未勾选即移除）。 */
+  /**
+   * 勾选弹层确认：勾选集写回该 runtime 的模型行。基于**确认时的最新表单行**合并，
+   * 不用拉取时的快照整体替换——拉取在途/弹层打开期间用户对模型行的编辑不能被静默冲掉：
+   *   - 弹层见过且勾选的 id 保留（显示名若被用户后改过，跟随最新值）；
+   *   - 弹层见过但未勾选的 id 移除（明确的用户意图）；
+   *   - 弹层没见过的 id（之后新手填的行）原样保留。
+   */
   const applyPicker = useCallback(() => {
     if (!picker) return;
     const chosen = picker.models.filter((m) => picker.selected.has(m.id));
     if (chosen.length === 0) return;
-    patch(picker.agent, (x) => ({ ...x, models: chosen.map((m) => ({ ...m })) }));
+    const pickerIds = new Set(picker.models.map((m) => m.id));
+    patch(picker.agent, (x) => {
+      const latestById = new Map<string, ModelRow>();
+      for (const m of x.models) {
+        const id = m.id.trim();
+        if (id && !latestById.has(id)) latestById.set(id, m);
+      }
+      const merged: ModelRow[] = chosen.map((m) => {
+        const latest = latestById.get(m.id);
+        return { id: m.id, name: latest?.name.trim() ? latest.name.trim() : m.name };
+      });
+      for (const m of x.models) {
+        const id = m.id.trim();
+        if (id && !pickerIds.has(id) && !merged.some((r) => r.id === id)) {
+          merged.push({ id, name: m.name.trim() || id });
+        }
+      }
+      return { ...x, models: merged };
+    });
     setPicker(null);
   }, [picker, patch]);
 
