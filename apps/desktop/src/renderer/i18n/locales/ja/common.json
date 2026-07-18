@@ -503,6 +503,11 @@
     "userProfile": {
       "fallbackName": "ユーザー",
       "avatarAlt": "{{name}} のアバター",
+      "copyUserId": {
+        "action": "ユーザー ID をコピー",
+        "success": "ユーザー ID をコピーしました",
+        "failed": "ユーザー ID をコピーできませんでした"
+      },
       "edit": {
         "open": "名前とアバターを編集",
         "title": "プロフィールを編集",

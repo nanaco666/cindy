@@ -503,6 +503,11 @@
     "userProfile": {
       "fallbackName": "User",
       "avatarAlt": "{{name}} avatar",
+      "copyUserId": {
+        "action": "Copy user ID",
+        "success": "User ID copied",
+        "failed": "Failed to copy user ID"
+      },
       "edit": {
         "open": "Edit name and avatar",
         "title": "Edit profile",

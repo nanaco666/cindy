@@ -503,6 +503,11 @@
     "userProfile": {
       "fallbackName": "用户",
       "avatarAlt": "{{name}} 的头像",
+      "copyUserId": {
+        "action": "复制用户 ID",
+        "success": "用户 ID 已复制",
+        "failed": "复制用户 ID 失败"
+      },
       "edit": {
         "open": "编辑名字和头像",
         "title": "编辑个人资料",

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Pencil } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { toast } from '@/lib/toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { ProfileEditDialog } from './ProfileEditDialog';
 
@@ -24,6 +25,15 @@ export function UserProfileCard() {
   const displayName = user.name || t('settings.userProfile.fallbackName');
   const initial = displayName.charAt(0).toUpperCase();
   const avatarAlt = t('settings.userProfile.avatarAlt', { name: displayName });
+
+  const handleCopyUserId = async () => {
+    try {
+      await navigator.clipboard.writeText(user.id);
+      toast.success(t('settings.userProfile.copyUserId.success'));
+    } catch {
+      toast.error(t('settings.userProfile.copyUserId.failed'));
+    }
+  };
 
   return (
     <div
@@ -56,10 +66,24 @@ export function UserProfileCard() {
         </div>
       )}
 
-      {/* User name — 18px/500, line-height 1.2 */}
-      <p className="min-w-0 flex-1 truncate text-18 font-medium leading-[1.2] text-[var(--settings-profile-name)]">
-        {displayName}
-      </p>
+      {/* User name — 点击复制用户 ID;hover / cursor 明示可交互。 */}
+      <div className="min-w-0 flex-1">
+        <button
+          type="button"
+          onClick={() => void handleCopyUserId()}
+          aria-label={t('settings.userProfile.copyUserId.action')}
+          title={t('settings.userProfile.copyUserId.action')}
+          className={cn(
+            '-ml-2 flex min-w-0 max-w-full cursor-pointer items-center rounded-lg px-2 py-1 text-left',
+            'transition-colors hover:bg-[var(--settings-profile-avatar-bg)]',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-soft)]',
+          )}
+        >
+          <span className="min-w-0 truncate text-18 font-medium leading-[1.2] text-[var(--settings-profile-name)]">
+            {displayName}
+          </span>
+        </button>
+      </div>
 
       {/* 编辑名字 / 头像(直写服务端,弹窗见 ProfileEditDialog) */}
       <button
