@@ -48,11 +48,11 @@ export async function requestRendererMicrophonePermission(): Promise<VoiceInputP
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     stream.getTracks().forEach((track) => track.stop());
-    void window.electronAPI.voiceInput.setRendererMicrophonePermissionVerified(true);
+    await window.electronAPI.voiceInput.setRendererMicrophonePermissionVerified(true);
     const refreshed = await refreshMicrophonePermissionSnapshot();
     return refreshed.ok ? refreshed : { ok: true, status: 'granted' };
   } catch (error) {
-    void window.electronAPI.voiceInput.setRendererMicrophonePermissionVerified(false);
+    await window.electronAPI.voiceInput.setRendererMicrophonePermissionVerified(false);
     const mainResult = await window.electronAPI.voiceInput.requestMicrophonePermission();
     if (mainResult.ok) return mainResult;
 
@@ -89,12 +89,16 @@ export async function resolveVoiceInputStartGuards(
     ? cachedSystemPermissions.accessibility
     : ({ ok: true, status: 'not-required' } as const);
   const cachedReadiness = window.electronAPI.voiceInput.getReadinessCached();
-  const permissionSource = cachedPermission.ok ? 'cache' : 'async';
+  // Windows permission can be revoked while Cindy is running. Probe the
+  // renderer before every start so a stale positive main cache cannot let ASR
+  // connect before getUserMedia reports the denial.
+  const shouldVerifyPermission = window.electronAPI.platform === 'win32' || !cachedPermission.ok;
+  const permissionSource = shouldVerifyPermission ? 'async' : 'cache';
   const readinessSource = cachedReadiness?.ok ? 'cache' : 'async';
 
-  const permissionPromise: Promise<VoiceInputPermissionResult> = cachedPermission.ok
-    ? Promise.resolve(cachedPermission)
-    : requestRendererMicrophonePermission();
+  const permissionPromise: Promise<VoiceInputPermissionResult> = shouldVerifyPermission
+    ? requestRendererMicrophonePermission()
+    : Promise.resolve(cachedPermission);
   const readinessPromise: Promise<VoiceInputReadinessResult> = cachedReadiness?.ok
     ? Promise.resolve(cachedReadiness)
     : window.electronAPI.voiceInput.getReadiness();
