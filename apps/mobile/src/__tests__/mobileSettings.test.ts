@@ -178,4 +178,16 @@ describe('mobile settings overview', () => {
     expect(accountActionsIndex).toBeGreaterThan(-1);
     expect(filingCardIndex).toBeLessThan(accountActionsIndex);
   });
+
+  it('keeps one update action and shows both full-package and OTA versions', () => {
+    const source = readTextLf(resolve(process.cwd(), 'app/settings.tsx'), 'utf8');
+
+    expect(source.match(/testID: 'settings\.checkUpdateButton'/g)).toHaveLength(1);
+    expect(source).not.toContain('settings.checkBundleUpdateButton');
+    expect(source).not.toContain('testID="settings.bundleUpdate"');
+    expect(source).toContain('runManualUpdateCheck({');
+    expect(source).toContain('checkBundleUpdate: IS_OTA_SELFHOST ? checkBundleUpdate : undefined');
+    expect(source).toContain('整包版本 {appVersion}');
+    expect(source).toContain('testID="settings.otaVersion">热更版本 {otaVersion}');
+  });
 });

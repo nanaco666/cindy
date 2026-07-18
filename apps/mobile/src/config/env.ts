@@ -207,8 +207,8 @@ export function isReviewModeActive(
 
 // 手机版审核模式(清单可选字段 review = 送审版本号,缺失/空串 = 关闭):App 审核
 // 期间线上清单填送审构建的二进制版本号,仅版本命中的构建关闭全部 JS 显式更新检查
-// (启动 JS 热更门 / 整包检查 / resume 静默检查)、设置页隐藏「检查更新 / 检查整包
-// 更新」;存量其它版本用户不受影响。覆盖边界与运维义务(原生层后台检查管不到、
+// (启动 JS 热更门 / 整包检查 / resume 静默检查)、设置页隐藏统一「检查更新」入口;
+// 存量其它版本用户不受影响。覆盖边界与运维义务(原生层后台检查管不到、
 // 过审发布后须清空字段)见 maker-shared clientEndpoints 的 CLIENT_ENDPOINT_REVIEW_KEY
 // 注释。live binding:prod 由启动闸门回填,闸门 ready 前业务树不挂载,消费点
 // (更新 hooks / 设置页)读到的一定是清单值;dev 读仓内正本。仅 mobile 消费,

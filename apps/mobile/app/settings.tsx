@@ -38,7 +38,8 @@ import {
   hasMobileVoiceLiteLlmSettings,
   saveMobileVoiceLiteLlmSettings,
 } from '@/session/mobileVoiceLiteLlmSettings';
-import { buildMobileUpdateInfoRows } from '@/settings/updateInfo';
+import { buildMobileUpdateInfoRows, currentMobileOtaVersion } from '@/settings/updateInfo';
+import { runManualUpdateCheck } from '@/update/manualUpdateCheck';
 import { useBundleUpdatePrompt } from '@/update/useBundleUpdatePrompt';
 import { useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 import { fontWeight, iconSize, iconStroke, lineHeight, radius, spacing, typeScale } from '@/theme/tokens';
@@ -66,6 +67,7 @@ export default function SettingsScreen() {
   const [voiceSettingsMessage, setVoiceSettingsMessage] = useState<string | null>(null);
   const [updatePhase, setUpdatePhase] = useState<UpdatePhase>('idle');
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+  const updateCheckInFlightRef = useRef(false);
   const [selfDeviceName, setSelfDeviceName] = useState<string | null>(null);
   const [selfDeviceNameDraft, setSelfDeviceNameDraft] = useState('');
   const [selfDeviceNameEditing, setSelfDeviceNameEditing] = useState(false);
@@ -103,8 +105,10 @@ export default function SettingsScreen() {
   // 当前运行的 OTA bundle 信息(只读),折进「调试」分组,用于核验热更是否生效。
   const { currentlyRunning } = useUpdates();
   const updateInfoRows = useMemo(() => buildMobileUpdateInfoRows(currentlyRunning), [currentlyRunning]);
-  // 自建变体:整包更新(runtimeVersion 变化)的手动检查;非自建变体该行不渲染。手动检查时提示"已是最新"。
-  const bundleUpdate = useBundleUpdatePrompt({ auto: false, notifyWhenUpToDate: true });
+  const otaVersion = useMemo(() => currentMobileOtaVersion(currentlyRunning), [currentlyRunning]);
+  // 自建变体的统一入口先查整包;无整包时再由 checkForUpdate 继续查 JS OTA。
+  const { checkNow: checkBundleUpdate } = useBundleUpdatePrompt({ auto: false });
+  const updateCheckEnabled = IS_OTA_SELFHOST || updatesEnabled;
 
   const aboutSection = overview.sections.find((section) => section.id === 'about');
   const debugSection = overview.sections.find((section) => section.id === 'debug');
@@ -142,25 +146,40 @@ export default function SettingsScreen() {
 
   const checkForUpdate = useCallback(async () => {
     // 审核模式:入口按钮已隐藏,这里再挡一层(状态由代码保证,不依赖 UI 层记得隐藏)。
-    if (REVIEW_MODE || !updatesEnabled || updatePhase === 'checking' || updatePhase === 'downloading') return;
+    if (REVIEW_MODE || !updateCheckEnabled || updateCheckInFlightRef.current) return;
+    updateCheckInFlightRef.current = true;
     setUpdateMessage(null);
-    setUpdatePhase('checking');
     try {
-      const result = await Updates.checkForUpdateAsync();
-      if (!result.isAvailable) {
+      const outcome = await runManualUpdateCheck({
+        checkBundleUpdate: IS_OTA_SELFHOST ? checkBundleUpdate : undefined,
+        otaEnabled: updatesEnabled,
+        checkOtaUpdate: () => Updates.checkForUpdateAsync(),
+        fetchOtaUpdate: () => Updates.fetchUpdateAsync(),
+        reload: () => Updates.reloadAsync(),
+        onPhase: (phase) => setUpdatePhase(phase),
+      });
+      if (outcome.kind === 'bundle-update-available') {
+        setUpdatePhase('idle');
+        setUpdateMessage('发现整包更新');
+      } else if (outcome.kind === 'up-to-date') {
         setUpdatePhase('uptodate');
         setUpdateMessage('已是最新版本');
-        return;
+      } else if (outcome.kind === 'ota-unavailable') {
+        setUpdatePhase('uptodate');
+        setUpdateMessage('整包已是最新，当前版本不支持热更新');
+      } else if (outcome.kind === 'reloading') {
+        setUpdatePhase('downloading');
+        setUpdateMessage('更新已下载，正在重启');
+      } else if (outcome.kind === 'busy') {
+        setUpdatePhase('idle');
+      } else {
+        setUpdatePhase('error');
+        setUpdateMessage(outcome.message);
       }
-      setUpdatePhase('downloading');
-      await Updates.fetchUpdateAsync();
-      // 拉到新 bundle 后重载进入新版本(不需要用户手动杀进程)。
-      await Updates.reloadAsync();
-    } catch (err) {
-      setUpdatePhase('error');
-      setUpdateMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      updateCheckInFlightRef.current = false;
     }
-  }, [updatePhase, updatesEnabled]);
+  }, [checkBundleUpdate, updateCheckEnabled, updatesEnabled]);
 
   useEffect(() => {
     let cancelled = false;
@@ -442,13 +461,14 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* 版本:第一屏主角,支持热更检查(开发版下不可用) */}
+        {/* 版本:只保留统一检查入口,自建线严格先查整包、无整包再查热更。 */}
         <SettingsGroup title="版本">
           {[
             <View key="version" style={styles.versionRow} testID="settings.version">
               <View style={styles.versionTexts}>
                 <Text style={styles.rowLabel}>当前版本</Text>
-                <Text style={styles.versionValue} numberOfLines={1}>{appVersion}</Text>
+                <Text style={styles.versionValue} numberOfLines={1}>整包版本 {appVersion}</Text>
+                <Text style={styles.rowDetail} numberOfLines={1} testID="settings.otaVersion">热更版本 {otaVersion}</Text>
                 {/* 二级版本号:自建线打包所配对的桌面产品线版本(0.0.x);仅自建线且已注入时显示 */}
                 {IS_OTA_SELFHOST && DESKTOP_PACKAGE_VERSION ? (
                   <Text style={styles.rowDetail} numberOfLines={1} testID="settings.desktopVersion">桌面版 {DESKTOP_PACKAGE_VERSION}</Text>
@@ -465,7 +485,7 @@ export default function SettingsScreen() {
                   action={{
                     accessibilityLabel: updateBusy ? '正在检查更新' : '检查更新',
                     busy: updateBusy,
-                    disabled: !updatesEnabled,
+                    disabled: !updateCheckEnabled,
                     label: updateButtonLabel,
                     onPress: () => void checkForUpdate(),
                     testID: 'settings.checkUpdateButton',
@@ -476,26 +496,6 @@ export default function SettingsScreen() {
                 />
               ) : null}
             </View>,
-            ...(IS_OTA_SELFHOST && !REVIEW_MODE ? [
-              <View key="bundle-update" style={styles.versionRow} testID="settings.bundleUpdate">
-                <View style={styles.versionTexts}>
-                  <Text style={styles.rowLabel}>整包更新</Text>
-                  <Text style={styles.rowDetail} numberOfLines={1}>原生更新需重新下载安装整包</Text>
-                </View>
-                <MainWindowActionButton
-                  action={{
-                    accessibilityLabel: '检查整包更新',
-                    busy: bundleUpdate.state === 'checking',
-                    label: bundleUpdate.state === 'checking' ? '检查中' : '检查整包更新',
-                    onPress: () => void bundleUpdate.checkNow(),
-                    testID: 'settings.checkBundleUpdateButton',
-                    tone: 'primary',
-                  }}
-                  density="compact"
-                  style={styles.versionButton}
-                />
-              </View>,
-            ] : []),
           ]}
         </SettingsGroup>
 
