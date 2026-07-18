@@ -92,7 +92,9 @@ export function resolveComposerInputHeight(
   return {
     mode,
     visibleContentHeight,
-    // manual 定高同理常开:内容超过钉住高度时必须能滚,不能赌测量回调不漏拍。
+    // manual 定高同理常开:内容超过钉住高度时必须能滚,不能赌测量回调不漏拍;
+    // 高度 > 内容时 UITextView/EditText 不会主动滚动、不抢外层手势,无交互代价
+    // (同 ComposerInputHeightModel.scrollEnabled 注释说明)。
     scrollEnabled: true,
   };
 }
