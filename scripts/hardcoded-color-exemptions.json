@@ -118,5 +118,10 @@
   "glob": "apps/desktop/src/renderer/features/cc-agent/NewMakerDraftRoute.tsx",
   "reason": "create-agent 变体 focus/spec 残留 fallback(E2-S)",
   "owner": "E2"
+ },
+ {
+  "glob": "apps/desktop/src/renderer/components/splash/__tests__/SplashScreen.test.tsx",
+  "reason": "splash v2 断言值守护(expect rgba),非样式硬编码",
+  "owner": "SPLASH-V2"
  }
 ]
