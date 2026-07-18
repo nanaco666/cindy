@@ -17,7 +17,7 @@ describe('messageContentLayout', () => {
       fileChipMinHeight: 32,
       imagePreviewHeight: 89,
       imagePreviewWidth: 137,
-      markdownBodyGap: 8,
+      markdownBodyGap: 12,
       markdownListGap: 6,
       markdownListMarkerWidth: 20,
       markdownTableCellMinWidth: 96,

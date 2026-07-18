@@ -80,6 +80,34 @@ describe('mobile simulator env bootstrap', () => {
     expect(env).toMatchObject(productionEnv);
   });
 
+  it('keeps a fully populated .env valid when eas.json only carries a subset of keys', () => {
+    // 回归:真实仓库 eas.json production env 只有 REGION(清单基址在私有端点配置里)。
+    // .env 必填 key 都有真实值时不应再要求 defaults 齐备(曾出现「第二次运行必炸」)。
+    const mobileDir = createMobileFixture({
+      production: { env: { EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn' } },
+    });
+    writeEnvExample(mobileDir);
+    writeFileSync(
+      join(mobileDir, '.env'),
+      [
+        'EXPO_PUBLIC_CINDY_AUTH_REGION=global',
+        'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL=https://hotfix.user.example.com/app',
+        'EXPO_PUBLIC_CINDY_AUTH_BASE_URL=https://auth.user.example.com',
+        'EXPO_PUBLIC_XDT_API_BASE_URL=https://api.user.example.com',
+        'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL=https://relay.user.example.com',
+        'EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL=https://gateway.user.example.com',
+        '',
+      ].join('\n'),
+    );
+
+    const result = ensureMobileEnv({ mobileDir });
+    const env = readEnvMap(join(mobileDir, '.env'));
+
+    expect(result.addedKeys).toEqual([]);
+    expect(env.EXPO_PUBLIC_CINDY_AUTH_REGION).toBe('global');
+    expect(env.EXPO_PUBLIC_CINDY_AUTH_BASE_URL).toBe('https://auth.user.example.com');
+  });
+
   it('preserves real user values even when they are quoted', () => {
     const mobileDir = createMobileFixture({ production: { env: productionEnv } });
     writeEnvExample(mobileDir);
