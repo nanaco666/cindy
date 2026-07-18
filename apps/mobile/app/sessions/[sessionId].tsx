@@ -871,6 +871,10 @@ export default function SessionScreen() {
   const slashLoadSeqRef = useRef(0);
   const atLoadSeqRef = useRef(0);
   const capabilitiesLoadSeqRef = useRef(0);
+  // palette 点选的 agent-skill 名字:保留到下次发送或再次打开 palette。
+  // 发送侧在 slashCommands=[] 时仍能区分「点选了 skill」与「直接手输」,确保
+  // 点选的 skill 不被白名单拦截误分流到 learn:start。
+  const pendingSkillSelectionRef = useRef<string | null>(null);
   const extraDirBrowseSeqRef = useRef(0);
   const autoRetrySyncKeyRef = useRef<string | null>(null);
   const loadedRouteFocusKeyRef = useRef<string | null>(null);
@@ -1662,6 +1666,8 @@ export default function SessionScreen() {
       setSlashPaletteError(null);
       return;
     }
+    // palette 重新打开:之前的点选意图作废,以本次新选择为准。
+    pendingSkillSelectionRef.current = null;
     const seq = ++slashLoadSeqRef.current;
     const agentKind = agentKindForSession(currentSession);
     const paletteCacheKey = buildComposerPaletteCacheKey(deviceId, agentKind, currentSession.workingDir ?? '');
@@ -2601,6 +2607,9 @@ export default function SessionScreen() {
   }, [deviceId, hasOlderMessages, loadingEarlier, maker, messages, sessionId]);
 
   const selectSlashCommand = useCallback((command: MobileSlashCommand) => {
+    // 点选 agent-skill 时记录名字:palette 关闭后 slashCommands 被清,发送侧
+    // 凭此 ref 识别「用户明确选中的 skill」,避免白名单误分流到 learn:start。
+    pendingSkillSelectionRef.current = command.kind === 'agent-skill' ? command.name : null;
     setComposerDraft((current) => insertSlashCommand(current, detectComposerTrigger(current), command));
   }, [setComposerDraft]);
 
@@ -3164,11 +3173,19 @@ export default function SessionScreen() {
       const localSystemCommand = hasAttachments ? null : parseMobileLocalSystemCommand(body);
       // desktop 命令(/learn)按名字白名单分流;同名 agent-skill 优先让行(对齐桌面
       // dispatch 语义),清单未加载时白名单兜底拦截。
-      // slashCommands 在 palette 打开时含已加载清单(同名 agent-skill 让行);
-      // palette 关闭时 effect 将其清为[],此时退回白名单拦截(learn:start),
-      // 不使用任何历史缓存——历史清单无新鲜度保证,技能卸载后缓存仍会让行,
-      // 以确定性行为替代依赖过期数据的路由。
-      const desktopCommand = hasAttachments ? null : parseMobileDesktopCommand(body, slashCommands);
+      // slashCommands 在 palette 打开时含已加载清单(同名 skill 让行);palette
+      // 关闭时被清为[],退回白名单。例外:用户从 palette 点选了 agent-skill
+      // (pendingSkillSelectionRef 有值)时,即使 slashCommands 已清也应让行——
+      // 点选意图明确,不应被白名单覆盖。点选后再次打开 palette 或发送后 ref 清零。
+      const pendingSkillName = pendingSkillSelectionRef.current;
+      pendingSkillSelectionRef.current = null;
+      const parsedDesktopCommand = hasAttachments ? null : parseMobileDesktopCommand(body, slashCommands);
+      // 若用户明确点选了同名 skill,优先让行(parseMobileDesktopCommand 在
+      // slashCommands=[] 时无法感知点选意图,需由 ref 补偿)。
+      const desktopCommand =
+        parsedDesktopCommand && pendingSkillName === parsedDesktopCommand.name
+          ? null
+          : parsedDesktopCommand;
       if (!sessionAtSend.workingDir && !localSystemCommand && !desktopCommand) {
         setError('当前会话缺少工作目录，不能发送消息。');
         restoreDraftAfterFailure();
