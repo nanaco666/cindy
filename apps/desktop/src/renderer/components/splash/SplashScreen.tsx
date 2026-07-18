@@ -81,7 +81,7 @@ export function SplashScreen() {
       {/* ── 品牌块:按设计稿固定自然尺寸排布,矮窗口整体等比缩放 ── */}
       <div
         aria-hidden
-        className="pointer-events-none absolute left-1/2 top-[26.5%] h-[424.5px] w-[457px]"
+        className="pointer-events-none absolute left-1/2 top-[19.3%] h-[424.5px] w-[457px]"
         style={{
           transform: 'translateX(-50%) scale(min(1, calc(100vh / 700px)))',
           transformOrigin: 'top center',
@@ -101,13 +101,13 @@ export function SplashScreen() {
           src={wordmark}
           alt=""
           draggable={false}
-          className="pointer-events-none absolute left-1/2 top-[277.5px] h-[78px] w-[229.5px] -translate-x-1/2 object-contain drop-shadow-[0_2px_6.5px_rgba(0,0,0,0.25)]"
+          className="pointer-events-none absolute left-1/2 top-[352.5px] h-[78px] w-[229.5px] -translate-x-1/2 object-contain drop-shadow-[0_2px_6.5px_rgba(0,0,0,0.25)]"
           data-testid="splash-wordmark"
         />
         {/* 手写体 "Dream it Create it":字标右缘 +9px,与字标底部略交叠。 */}
         <div
           aria-hidden
-          className="pointer-events-none absolute left-[352.25px] top-[335px] h-[89.5px] w-[225.5px]"
+          className="pointer-events-none absolute left-[352.25px] top-[410px] h-[89.5px] w-[225.5px]"
           style={{
             backgroundColor: scriptFill,
             WebkitMaskImage: `url(${splashScript})`,
