@@ -56,7 +56,7 @@ describe('update auto relaunch policy', () => {
     expect(check({ idleState: 'locked' })).toBe('screen-locked');
   });
 
-  it('preserves locked-idle unattended relaunch on platforms without the macOS presentation issue', () => {
+  it('allows locked-idle unattended relaunch when the caller opts in', () => {
     expect(check({ idleState: 'locked', blockWhenScreenLocked: false })).toBeNull();
   });
 

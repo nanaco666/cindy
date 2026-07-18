@@ -230,10 +230,10 @@ async function getAutoRelaunchBlockReasonForCurrentState(): Promise<AutoRelaunch
     hasBusyTasks: hasBusyTasksNow,
     idleTimeSeconds: readSystemIdleTimeSeconds(),
     idleState: readSystemIdleState(),
-    // Preserve the historical unattended behavior on Windows. The confirmed
-    // frontmost-activation failure is macOS-specific (loginwindow owns the
-    // screen there), so only macOS defers installation until unlock.
-    blockWhenScreenLocked: process.platform === 'darwin',
+    // A locked, logged-in session must still receive unattended updates. The
+    // macOS presentation recovery keeps the window hidden until unlock, while
+    // an unreadable screen state remains fail-closed in the policy.
+    blockWhenScreenLocked: false,
     nowMs,
     lastBusyAtMs,
     lastResumeAtMs,
