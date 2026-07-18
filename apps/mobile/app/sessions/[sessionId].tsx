@@ -1715,7 +1715,11 @@ export default function SessionScreen() {
             : null;
         if (!partialError) {
           setSlashCommands(merged);
-          writeSlashCommandCache(paletteCacheKey, merged);
+          // desktop 命令(kind === 'desktop')不写入共享缓存:缓存被 new.tsx 等
+          // 没有 desktop 命令分流逻辑的页面共读,写入会导致它们展示 /learn 但发送
+          // 时走普通文本透传给 agent(静默失效)。发送侧改从 slashCache 取 skill
+          // 清单作 fallback(见 L3164 处注释),不依赖 desktop 命令在缓存中的存在。
+          writeSlashCommandCache(paletteCacheKey, merged.filter((c) => c.kind !== 'desktop'));
           setSlashPaletteError(null);
         } else if (!cachedCommands) {
           setSlashCommands(merged);
@@ -3161,7 +3165,19 @@ export default function SessionScreen() {
       const localSystemCommand = hasAttachments ? null : parseMobileLocalSystemCommand(body);
       // desktop 命令(/learn)按名字白名单分流;同名 agent-skill 优先让行(对齐桌面
       // dispatch 语义),清单未加载时白名单兜底拦截。
-      const desktopCommand = hasAttachments ? null : parseMobileDesktopCommand(body, slashCommands);
+      // slashCommands 面板关闭时被 effect 清为[]:发送侧改从持久化缓存中读取
+      // (slashCache 仅在设备断联/登出时驱逐),保证已装同名 skill 的用户直接手输
+      // /learn 时仍能正确让行,不会跳过 skill 直调 learn:start。
+      const dispatchSlashCommands = slashCommands.length > 0
+        ? slashCommands
+        : readSlashCommandCache(
+            buildComposerPaletteCacheKey(
+              deviceId,
+              agentKindForSession(sessionAtSend),
+              sessionAtSend.workingDir ?? '',
+            ),
+          ) ?? [];
+      const desktopCommand = hasAttachments ? null : parseMobileDesktopCommand(body, dispatchSlashCommands);
       if (!sessionAtSend.workingDir && !localSystemCommand && !desktopCommand) {
         setError('当前会话缺少工作目录，不能发送消息。');
         restoreDraftAfterFailure();
