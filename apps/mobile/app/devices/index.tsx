@@ -34,7 +34,7 @@ import {
   Puzzle,
   RefreshCw,
   RadioTower,
-  SquarePen,
+  Send,
   X,
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -1211,7 +1211,7 @@ export default function HomeScreen() {
           testID="devices.title"
         >
           <Text style={styles.headerTitle} numberOfLines={1}>{selectedDeviceLabel}</Text>
-          <ChevronDown color={colors.textSecondary} size={iconSize.md} strokeWidth={iconStroke.medium} />
+          <ChevronDown color={colors.textSecondary} size={iconSize.xs} strokeWidth={iconStroke.medium} />
         </Pressable>
         <Pressable
           accessibilityLabel="打开设置"
@@ -1339,7 +1339,7 @@ export default function HomeScreen() {
         ]}
         testID="home.newChatButton"
       >
-        <SquarePen color={colors.ctaText} size={iconSize.listGlyph} strokeWidth={iconStroke.regular} />
+        <Send color={colors.ctaText} size={iconSize.listGlyph} strokeWidth={iconStroke.regular} />
       </Pressable>
 
       <RevokedAccessTip
@@ -1852,7 +1852,7 @@ function ProjectRow({
         {collapsed ? (
           <Folder color={colors.textSecondary} size={iconSize.md} strokeWidth={iconStroke.thin} />
         ) : (
-          <FolderOpen color={colors.activeGlyph} size={iconSize.md} strokeWidth={iconStroke.thin} />
+          <FolderOpen color={colors.textSecondary} size={iconSize.md} strokeWidth={iconStroke.thin} />
         )}
         <Text style={styles.projectTitle} numberOfLines={1}>{project.title}</Text>
         <Text style={styles.projectCount} numberOfLines={1}>{project.sessionCount}</Text>
@@ -2075,12 +2075,11 @@ export function HomeSessionRow({
             variant={variant}
           />
         </View>
-        {/* 组行展开时不画自己的底线(组头 → 子行保持连续无线,块 / 非块模式观感一致);
-            非块组行收起时保留底线,与下一行维持分隔。块模式恒不画(收起时块底线就在行下)。 */}
+        {/* 独立卡片行不画内部线;展开块内部由 hideDivider 控制最后一行,非最后一行保留 hairline。 */}
         <View style={[
           styles.sessionListContent,
           cindyList && styles.sessionListContentCindy,
-          (cindyList || hideDivider || blockMode || (!!group && groupExpanded)) && styles.sessionListContentNoDivider,
+          (standaloneCindyCard || hideDivider || blockMode || (!!group && groupExpanded)) && styles.sessionListContentNoDivider,
         ]}>
           <View style={[styles.sessionTitleRow, cindyList && styles.sessionTitleRowCindy]}>
             <Text
@@ -2195,7 +2194,7 @@ function AutomationGroupChildren({
         const row = (
           <HomeSessionRow
             deepIndented
-            hideDivider={inBlock && !hasViewAllRow && index === visibleItems.length - 1}
+            hideDivider={variant === 'cindyList' ? !hasViewAllRow && index === visibleItems.length - 1 : inBlock && !hasViewAllRow && index === visibleItems.length - 1}
             item={child}
             onOpenSession={onOpenSession}
             testID={`${testID}.automationChild`}
@@ -3021,9 +3020,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   newChatButton: {
     alignItems: 'center',
     backgroundColor: colors.homeListFab,
-    borderColor: colors.border,
+    borderColor: colors.homeListFabBorder,
     borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: colors.homeListFabBorder === 'transparent' ? 0 : StyleSheet.hairlineWidth,
     bottom: CINDY_LIST_FAB_BOTTOM,
     height: CINDY_LIST_FAB_SIZE,
     justifyContent: 'center',

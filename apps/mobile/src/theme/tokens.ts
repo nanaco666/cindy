@@ -111,6 +111,8 @@ export interface ThemeColors {
   overlay: string;
   /** 素雅新建对话 FAB:dark 用柔白 #ECEDEF 而非纯白 cta,避免主入口在深底上过跳 */
   homeListFab: string;
+  /** List FAB 描边:light 无描边(transparent),dark 按 301:1073 帧白色 hairline */
+  homeListFabBorder: string;
   /** 会话行右滑「置顶/取消置顶」按钮底色(Heart Orange,与 statusAccent 同值但语义独立) */
   swipeActionPin: string;
   /** 会话行左滑「选项」按钮底色(iOS systemGray 感的中性灰) */
@@ -171,6 +173,7 @@ export const lightColors: ThemeColors = {
   // homeListFab:反相中性,不染品牌红(lead 裁决 2026-07-17:染红=扩张红名单,超 U8
   // 已批决策表范围;日后要红 FAB 须单独过用户关卡)。light 对齐 textPrimary 深灰 #3C3F43。
   homeListFab: '#3C3F43',
+  homeListFabBorder: 'transparent',
   swipeActionPin: '#EA6B17',
   swipeActionNeutral: '#8e8e93',
   swipeActionArchive: '#3b82f6',
@@ -227,6 +230,7 @@ export const darkColors: ThemeColors = {
   overlay: 'rgba(0, 0, 0, 0.45)',
   // homeListFab:反相中性(lead 裁决,见 lightColors 注释);dark 维持 #ECEDEF 柔白(非纯白 cta)。
   homeListFab: '#ECEDEF',
+  homeListFabBorder: '#FFFFFF',
   swipeActionPin: '#EA6B17',
   swipeActionNeutral: '#636366',
   swipeActionArchive: '#3b82f6',

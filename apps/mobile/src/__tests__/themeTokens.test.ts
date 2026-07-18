@@ -103,6 +103,8 @@ describe('theme tokens', () => {
     expect(darkColors.surfaceListExpanded).toBe('#2A2828');
     expect(lightColors.activeGlyph).toBe('#DF0C27');
     expect(darkColors.activeGlyph).toBe('#A61629');
+    expect(lightColors.homeListFabBorder).toBe('transparent');
+    expect(darkColors.homeListFabBorder).toBe('#FFFFFF');
     expect(lightColors.chatCodeSurface).toBe('#F8F8F8');
     expect(darkColors.chatCodeSurface).toBe('#353333');
     expect(lightColors.chatCodeBorder).toBe('#DCDFE3');
