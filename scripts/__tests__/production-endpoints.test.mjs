@@ -32,10 +32,9 @@ test('私有 JSON 是 Desktop/Mobile 构建注入的唯一输入', () => {
   process.env.CINDY_PRODUCTION_ENDPOINTS_FILE = filePath;
 
   assert.deepEqual({ ...loadProductionEndpoints() }, values);
-  // 2026-07 端点清单重构:mobile 构建注入收缩为身份 + 清单自举基址,
+  // 2026-07 端点清单重构:mobile 构建注入收缩为 region + 清单自举基址,
   // 业务端点运行期由启动闸门回填。
   assert.deepEqual(productionMobileEnv(), {
-    EXPO_PUBLIC_FEISHU_APP_ID: values.feishuAppId,
     EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
     EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: values.endpointManifestBaseUrlCn,
   });

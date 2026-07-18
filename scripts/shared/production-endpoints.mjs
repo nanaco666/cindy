@@ -209,7 +209,7 @@ export function productionViteEnv({ allowEnvOverride = true, authRegion } = {}) 
 
 /**
  * Mobile/EAS 构建所需的公开端点变量。
- * 2026-07 端点清单重构后收缩为构建身份 + 清单自举基址三件套——业务端点
+ * 2026-07 端点清单重构后收缩为 region + 清单自举基址——业务端点
  * (api / auth / device-link / 网关)不再构建期烘焙,运行期由启动闸门从
  * `<manifest base>/endpoint.json` 拉取回填(dev 读仓内 config/endpoint.json)。
  */
@@ -221,7 +221,6 @@ export function productionMobileEnv({ authRegion } = {}) {
     throw new Error(`Invalid Cindy auth region: ${region}; expected cn or global`);
   }
   return {
-    EXPO_PUBLIC_FEISHU_APP_ID: endpoints.feishuAppId,
     EXPO_PUBLIC_CINDY_AUTH_REGION: region,
     EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL:
       region === 'global'

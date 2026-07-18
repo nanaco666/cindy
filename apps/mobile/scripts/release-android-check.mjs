@@ -20,7 +20,7 @@ import { parseArgs, decideReleaseMode, resolveDesktopVersion } from './release-l
 import { readAndroidVersionCode } from './lib/android-local.mjs';
 import { CDN_BASE, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
 import { productionMobileEnv } from '../../../scripts/shared/production-endpoints.mjs';
-import { formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides } from './lib/self-host-region.mjs';
+import { formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides, stripSelfHostTapdbEnv } from './lib/self-host-region.mjs';
 
 // NOTE: 不在模块顶层 refreshOssConfig / 派生 RELEASE_RECORD_CDN —— CDN 基址由 --region 决定,
 // 在 main() resolve region、覆盖 XDT_OSS_* 后 refreshOssConfig() 时赋值。
@@ -37,7 +37,7 @@ function selfhostEnv(region, versionCode) {
   };
   // 真实更新地址来自 endpoint.json,不参与 build/fingerprint;清掉残留避免污染指纹。
   delete env.EXPO_PUBLIC_XDT_OTA_URL;
-  return env;
+  return stripSelfHostTapdbEnv(env);
 }
 
 function computeRuntimeVersion(env) {

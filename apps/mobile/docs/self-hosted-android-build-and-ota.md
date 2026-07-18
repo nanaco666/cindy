@@ -116,7 +116,7 @@ flowchart TD
 
 ## 6.5 地区分包(region,cn / global)
 
-自建线四脚本(`release-android-{local,ota,check}.mjs` + iOS 对应)**必须显式 `--region cn|global`**(无默认,缺失即报错;`lib/self-host-region.mjs` 解析)。随地区变的**非机密**分包参数集中在打包机本地 `scripts/self-host-regions.json`(纯值、gitignore;结构见 `self-host-regions.json.example`):`androidPackage`(cn=`com.xd.cindycn` / global=`com.xd.cindy`)、`oss.{cdnBaseUrl,bucket,prefix,ossRegion}`、`androidSigning.{keyAlias,keystorePath}`。脚本读该 region 的 `oss.*` 覆盖 `XDT_OSS_*` 后 `refreshOssConfig()`,切到该地区独立 bucket(两地不撞)。**真机密走 env、按 region 后缀**:keystore 两个口令 `XDT_ANDROID_KEYSTORE_PASSWORD_{CN,GLOBAL}` / `XDT_ANDROID_KEY_PASSWORD_{CN,GLOBAL}`(cn 兼容无后缀旧名);OSS AK/SK 同账号用 `FP_DEV_OSS_ACCESS_KEY_ID/SECRET`、不同账号用 `XDT_OSS_ACCESS_KEY_{ID,SECRET}_{CN,GLOBAL}`。`app.config.js` 自建分支同样按 `EXPO_PUBLIC_CINDY_AUTH_REGION` 从该 JSON 取 package(真文件缺失时回落 `.example`)。
+自建线四脚本(`release-android-{local,ota,check}.mjs` + iOS 对应)**必须显式 `--region cn|global`**(无默认,缺失即报错;`lib/self-host-region.mjs` 解析)。随地区变的**非机密**分包参数集中在打包机本地 `scripts/self-host-regions.json`(纯值、gitignore;结构见 `self-host-regions.json.example`):`androidPackage`(cn=`com.xd.cindycn` / global=`com.xd.cindy`)、`tapdb.{clientId,clientToken}`、`oss.{cdnBaseUrl,bucket,prefix,ossRegion}`、`androidSigning.{keyAlias,keystorePath}`。脚本读该 region 的 `oss.*` 覆盖 `XDT_OSS_*` 后 `refreshOssConfig()`,切到该地区独立 bucket(两地不撞);`app.config.js` 把 `tapdb` 公开配置写入 Expo extra,不再依赖同名 `EXPO_PUBLIC_*` 注入。**真机密走 env、按 region 后缀**:keystore 两个口令 `XDT_ANDROID_KEYSTORE_PASSWORD_{CN,GLOBAL}` / `XDT_ANDROID_KEY_PASSWORD_{CN,GLOBAL}`(cn 兼容无后缀旧名);OSS AK/SK 同账号用 `FP_DEV_OSS_ACCESS_KEY_ID/SECRET`、不同账号用 `XDT_OSS_ACCESS_KEY_{ID,SECRET}_{CN,GLOBAL}`。
 
 ## 7. 冷更:`apps/mobile/scripts/release-android-local.mjs`
 
@@ -134,7 +134,7 @@ flowchart TD
 6. **写整包版本记录**:`buildReleaseRecord({ version, buildNumber: versionCode, runtimeVersion, installUrl, releaseNotes, minVersion? })`(复用 `lib/ios-local.mjs`)→ 上传 `mobile-ota/android/release.json`,供 `/latest?platform=android` 读取。
 7. **闸门**:`assertProductionGitGate`(main + clean + `HEAD==origin/main`)、versionCode 单调、**默认 dry-run,`--execute` 才真跑**。逃生开关对齐 iOS:`--skip-git-gate` / `--skip-record` / `--skip-npkg` / `--apk <path>`(直传预构建 APK)。⚠️ `--apk` 逃生路径的元数据一致性硬化(读 APK 内 versionCode/runtimeVersion 与待写记录比对)沿用 iOS 文档 §13.4 的同类 pending 项。
 
-`--execute` 前置:`assertPublicEnv(env, { variant: 'production' })`(缺 `EXPO_PUBLIC_FEISHU_APP_ID` 等即中止,避免把空值烤进整包);需 macOS + Android SDK + JDK 17 + keystore env + NPKG 凭证(除非 `--skip-npkg`)。
+`--execute` 前置:校验 region / endpoint manifest 自举基址,并要求所选 region 的 `self-host-regions.json.tapdb` 完整;需 macOS + Android SDK + JDK 17 + keystore env + NPKG 凭证(除非 `--skip-npkg`)。
 
 ## 8. 热更:`apps/mobile/scripts/release-android-ota.mjs` + OSS/CDN 布局
 

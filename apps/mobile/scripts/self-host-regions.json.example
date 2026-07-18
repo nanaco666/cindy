@@ -5,6 +5,11 @@
         "iosBundleId": "com.xd.cindycn",
         "androidPackage": "com.xd.cindycn",
         "npkgExpectBundle": "com.xd.cindycn",
+        "tapdb":
+        {
+            "clientId": "",
+            "clientToken": ""
+        },
         "oss":
         {
             "cdnBaseUrl": "",
@@ -31,6 +36,11 @@
         "iosBundleId": "com.xd.cindy",
         "androidPackage": "com.xd.cindy",
         "npkgExpectBundle": "com.xd.cindy",
+        "tapdb":
+        {
+            "clientId": "",
+            "clientToken": ""
+        },
         "oss":
         {
             "cdnBaseUrl": "",

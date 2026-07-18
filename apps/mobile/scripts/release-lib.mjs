@@ -25,6 +25,13 @@ export const PUBLIC_ENV_KEYS = [
   'EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN',
 ];
 
+// 自建线的 TapDB 公开配置来自 self-host-regions.json → Expo extra,不再要求
+// EXPO_PUBLIC_* 注入。这里只校验自举启动所需的两个构建常量。
+export const SELF_HOST_PUBLIC_ENV_KEYS = [
+  'EXPO_PUBLIC_CINDY_AUTH_REGION',
+  'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL',
+];
+
 export const EXTERNAL_PUBLIC_ENV_KEYS = [
   'EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID',
   'EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID',
@@ -45,7 +52,6 @@ const BAKED_ENV_KEY_NOTES = {
   EXPO_PUBLIC_CINDY_AUTH_REGION: '构建区域 cn/global:决定登录线、appScheme 与端点清单基址',
   EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL:
     '端点清单自举基址:启动第一步拉 <此地址>/endpoint.json 回填业务端点(唯一不可远程覆盖的烘焙远程 URL)',
-  EXPO_PUBLIC_FEISHU_APP_ID: '飞书 OAuth 应用 ID(登录构建身份)',
   EXPO_PUBLIC_XDT_OTA_SELFHOST:
     '自建分发变体标志:=1;真实热更/整包地址均来自 endpoint.json 的 mobileUpdateBaseUrl',
   EXPO_PUBLIC_DESKTOP_VERSION: '配对的桌面产品线版本(二级版本号,设置页展示;空则该行不显示)',

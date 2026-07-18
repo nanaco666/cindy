@@ -5,10 +5,8 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const CONFIG_FILE_NAME = 'production-endpoints.json';
 // 2026-07 端点清单重构后收缩:业务端点不再构建期烘焙(运行期由启动闸门从
 // `<manifest base>/endpoint.json` 回填;dev 读仓内 config/endpoint.json)。
-// 与 ESM 侧 productionMobileEnv 输出键集保持一致。
-const MOBILE_ENV_FIELDS = Object.freeze({
-  EXPO_PUBLIC_FEISHU_APP_ID: 'feishuAppId',
-});
+// 与 ESM 侧 productionMobileEnv 输出键集保持一致。移动端已不再使用飞书登录,
+// 此处只保留 region + endpoint manifest 自举基址。
 
 function resolveConfigPath() {
   const configured = process.env.CINDY_PRODUCTION_ENDPOINTS_FILE?.trim();
@@ -37,29 +35,6 @@ function loadProductionMobileEnv() {
   }
 
   const env = {};
-  for (const [envKey, configKey] of Object.entries(MOBILE_ENV_FIELDS)) {
-    const value = parsed?.[configKey];
-    if (typeof value !== 'string' || !value.trim()) {
-      throw new Error(`Missing non-empty production endpoint field: ${configKey}`);
-    }
-    const normalized = value.trim();
-    if (configKey === 'feishuAppId') {
-      if (!/^cli_[a-z0-9]+$/i.test(normalized)) {
-        throw new Error(`Invalid Feishu app id in production endpoint config: ${configKey}`);
-      }
-    } else {
-      let url;
-      try {
-        url = new URL(normalized);
-      } catch {
-        throw new Error(`Invalid URL in production endpoint config: ${configKey}`);
-      }
-      if (url.protocol !== 'https:') {
-        throw new Error(`Production mobile endpoint must use HTTPS: ${configKey}`);
-      }
-    }
-    env[envKey] = normalized.replace(/\/+$/, '');
-  }
   const authRegion = process.env.EXPO_PUBLIC_CINDY_AUTH_REGION?.trim() || 'cn';
   if (authRegion !== 'cn' && authRegion !== 'global') {
     throw new Error(`Invalid Cindy auth region: ${authRegion}; expected cn or global`);

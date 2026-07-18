@@ -8,6 +8,7 @@ import {
   regionEnvOverrides,
   formatSelfHostReleaseCommand,
   assertRegionOssComplete,
+  stripSelfHostTapdbEnv,
 } from '../../scripts/lib/self-host-region.mjs';
 
 // 一份结构完整的合法配置(oss/signing 叶子值都填,供 resolve/override/assert 用例复用)。
@@ -17,6 +18,7 @@ const VALID = {
     iosBundleId: 'com.xd.cindycn',
     androidPackage: 'com.xd.cindycn',
     npkgExpectBundle: 'com.xd.cindycn',
+    tapdb: { clientId: 'tap-client', clientToken: 'tap-token' },
     oss: { cdnBaseUrl: 'https://cdn.cn/x', bucket: 'b-cn', prefix: 'p', ossRegion: 'oss-cn-shanghai' },
     iosSigning: { teamId: 'T', profileName: 'P', signIdentity: 'I', profilePath: '' },
     androidSigning: { keyAlias: 'a', keystorePath: '/k.jks' },
@@ -26,6 +28,7 @@ const VALID = {
     iosBundleId: 'com.xd.cindy',
     androidPackage: 'com.xd.cindy',
     npkgExpectBundle: 'com.xd.cindy',
+    tapdb: { clientId: 'tap-client', clientToken: 'tap-token' },
     oss: { cdnBaseUrl: 'https://cdn.app/x', bucket: 'b-g', prefix: 'p', ossRegion: 'oss-ap' },
     iosSigning: { teamId: 'T2', profileName: 'P2', signIdentity: 'I2', profilePath: '' },
     androidSigning: { keyAlias: 'ag', keystorePath: '/kg.jks' },
@@ -46,6 +49,7 @@ describe('validateSelfHostRegions', () => {
     expect(r.cn.iosBundleId).toBe('com.xd.cindycn');
     expect(r.global.androidPackage).toBe('com.xd.cindy');
     expect(Object.isFrozen(r)).toBe(true);
+    expect(Object.isFrozen(r.cn.tapdb)).toBe(true);
     expect(Object.isFrozen(r.cn.oss)).toBe(true);
   });
   it('非对象 / 缺 region 块 → 抛错', () => {
@@ -64,6 +68,14 @@ describe('validateSelfHostRegions', () => {
     bad.cn.iosBundleId = '';
     expect(() => validateSelfHostRegions(bad)).toThrow(/cn\.iosBundleId 必须是非空字符串/);
   });
+  it('TapDB 公开配置缺失或为空 → 抛错', () => {
+    const missing = clone();
+    delete missing.cn.tapdb;
+    expect(() => validateSelfHostRegions(missing)).toThrow(/cn\.tapdb 必须是 object/);
+    const empty = clone();
+    empty.global.tapdb.clientToken = '';
+    expect(() => validateSelfHostRegions(empty)).toThrow(/global\.tapdb\.clientToken 必须是非空字符串/);
+  });
   it('oss 叶子值允许留空(dry-run 未配置态),但键必须存在', () => {
     const dryRun = clone();
     dryRun.cn.oss = { cdnBaseUrl: '', bucket: '', prefix: '', ossRegion: '' };
@@ -71,6 +83,19 @@ describe('validateSelfHostRegions', () => {
     const missingKey = clone();
     missingKey.cn.oss = { cdnBaseUrl: '', bucket: '', prefix: '' }; // 缺 ossRegion
     expect(() => validateSelfHostRegions(missingKey)).toThrow(/cn\.oss\.ossRegion/);
+  });
+});
+
+describe('stripSelfHostTapdbEnv', () => {
+  it('清掉 ambient TapDB 注入键,保留其它构建环境', () => {
+    const env = stripSelfHostTapdbEnv({
+      EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'ambient-id',
+      EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'ambient-token',
+      EXPO_PUBLIC_TAPDB_CHANNEL: 'ambient-channel',
+      EXPO_PUBLIC_TAPDB_REGION: 'global',
+      EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+    });
+    expect(env).toEqual({ EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn' });
   });
 });
 

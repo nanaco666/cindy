@@ -20,12 +20,8 @@ describe('EAS endpoint injection', () => {
     writeFileSync(easPath, original);
 
     const endpointEnv = {
-      EXPO_PUBLIC_FEISHU_APP_ID: 'cli_testapp',
       EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
-      EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.invalid',
-      EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.invalid',
-      EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.invalid',
-      EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: 'https://gateway.example.invalid',
+      EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://hotfix.example.invalid/app',
     };
     const restore = injectMobileEndpointsIntoEasFile(easPath, { endpointEnv });
     const injected = JSON.parse(readFileSync(easPath, 'utf8'));
@@ -49,10 +45,7 @@ describe('EAS endpoint injection', () => {
       },
     }));
     const common = {
-      EXPO_PUBLIC_FEISHU_APP_ID: 'cli_testapp',
-      EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.invalid',
-      EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.invalid',
-      EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL: 'https://gateway.example.invalid',
+      EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://hotfix.example.invalid/app',
     };
     const endpointEnvByRegion = {
       cn: {
@@ -102,7 +95,7 @@ describe('EAS endpoint injection', () => {
     );
 
     const restore = injectMobileEndpointsIntoEasFile(easPath, {
-      endpointEnv: { EXPO_PUBLIC_FEISHU_APP_ID: 'cli_testapp' },
+      endpointEnv: { EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://hotfix.example.invalid/app' },
     });
     expect(readFileSync(easPath, 'utf8')).not.toBe(original);
     restore();

@@ -24,12 +24,28 @@ const { loadProductionMobileEnv } = require('../../scripts/shared/production-mob
 // (oss/signing 留空),而本分支只读 bundle/package,足够;发布脚本仍要求真文件填全。
 function loadSelfHostRegionBundle(region) {
   const dir = path.join(__dirname, 'scripts');
-  const real = path.join(dir, 'self-host-regions.json');
-  const file = fs.existsSync(real) ? real : path.join(dir, 'self-host-regions.json.example');
+  const configured = process.env.CINDY_SELF_HOST_REGIONS_FILE?.trim();
+  const real = configured
+    ? path.resolve(dir, configured)
+    : path.join(dir, 'self-host-regions.json');
+  const example = path.join(dir, 'self-host-regions.json.example');
+  if (configured && !fs.existsSync(real)) {
+    throw new Error(`CINDY_SELF_HOST_REGIONS_FILE 指向的文件不存在: ${real}`);
+  }
+  const hasRealConfig = fs.existsSync(real);
+  const file = hasRealConfig ? real : example;
   const block = JSON.parse(fs.readFileSync(file, 'utf8'))[region];
   if (!block?.iosBundleId || !block?.androidPackage) {
     throw new Error(
       `${path.basename(file)} 缺少 region "${region}" 的 iosBundleId/androidPackage(自建构建必需)`,
+    );
+  }
+  if (
+    hasRealConfig &&
+    !(block.tapdb?.clientId?.trim() && block.tapdb?.clientToken?.trim())
+  ) {
+    throw new Error(
+      `${path.basename(file)} 缺少 region "${region}" 的 tapdb.clientId/clientToken`,
     );
   }
   return block;
@@ -47,7 +63,6 @@ function resolveMobileBuildEnv() {
     // 与 production-mobile-env.cjs 输出键集一致(2026-07 端点清单重构后收缩:
     // 业务端点运行期由启动闸门从 endpoint.json 回填,不再构建期烘焙)。
     const keys = [
-      'EXPO_PUBLIC_FEISHU_APP_ID',
       'EXPO_PUBLIC_CINDY_AUTH_REGION',
       'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL',
     ];
@@ -175,6 +190,10 @@ module.exports = (context = {}) => {
     const versionCode = rawVersionCode ? Number(rawVersionCode) : undefined;
     // 自建 app 身份按 region 取(见 loadSelfHostRegionBundle 头注释)。
     const selfHostRegion = loadSelfHostRegionBundle(region);
+    const tapdb = selfHostRegion.tapdb;
+    const hasTapdbConfig = Boolean(
+      tapdb?.clientId?.trim() && tapdb?.clientToken?.trim(),
+    );
     next = {
       ...next,
       ios: { ...next.ios, bundleIdentifier: selfHostRegion.iosBundleId },
@@ -192,6 +211,21 @@ module.exports = (context = {}) => {
         // Expo 的运行时 URL override API 要求此开关。只在自建变体开启,EAS/TestFlight
         // 继续保留默认 anti-bricking 策略。此原生配置变化需要最后一次冷更。
         disableAntiBrickingMeasures: true,
+      },
+      extra: {
+        ...next.extra,
+        cindy: {
+          ...next.extra.cindy,
+          ...(hasTapdbConfig
+            ? {
+                tapdb: {
+                  clientId: tapdb.clientId.trim(),
+                  clientToken: tapdb.clientToken.trim(),
+                  region,
+                },
+              }
+            : {}),
+        },
       },
     };
   }

@@ -18,12 +18,12 @@ import { dirname, resolve, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
-import { parseArgs, assertProductionGitGate, assertPublicEnv, resolveDesktopVersion } from './release-lib.mjs';
+import { parseArgs, assertProductionGitGate, assertPublicEnv, SELF_HOST_PUBLIC_ENV_KEYS, resolveDesktopVersion } from './release-lib.mjs';
 import { buildAssetEntry, buildManifest, sha256Hex, assertOtaRuntimeMatchesBaseline } from './lib/ota-manifest.mjs';
 import { readAndroidVersionCode } from './lib/android-local.mjs';
 import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
 import { productionMobileEnv } from '../../../scripts/shared/production-endpoints.mjs';
-import { formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides, assertRegionOssComplete } from './lib/self-host-region.mjs';
+import { formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides, assertRegionOssComplete, stripSelfHostTapdbEnv } from './lib/self-host-region.mjs';
 
 // NOTE: 不在模块顶层 refreshOssConfig / 派生 OSS key —— OSS 落点桶由 --region 决定,以下 OTA_ROOT /
 // ASSET_DIR / RELEASE_RECORD_CDN 在 main() resolve region、覆盖 XDT_OSS_* 后 refreshOssConfig() 时赋值。
@@ -77,7 +77,7 @@ function selfhostEnv(region, desktopVersion) {
   delete env.EXPO_PUBLIC_XDT_OTA_URL;
   // 二级版本号:仅 JS 层(app.config.js 不读它,不进 @expo/fingerprint,不改 runtimeVersion);空则不注入。
   if (desktopVersion) env.EXPO_PUBLIC_DESKTOP_VERSION = desktopVersion;
-  return env;
+  return stripSelfHostTapdbEnv(env);
 }
 
 // 现算当前工作树的 expo-updates 指纹(self-host env)—— 本次 export 的 JS 真正对应的原生面。
@@ -193,7 +193,8 @@ async function main() {
   if (args.execute) {
     // --execute 需要完整的 region OSS 落点(dry-run 可留空);缺则明确报错,不静默回落默认桶。
     assertRegionOssComplete(region);
-    assertPublicEnv(env, { variant: 'production' });
+    // TapDB 公开配置已由所选 region JSON 校验;这里只校验自举构建常量。
+    assertPublicEnv(env, { variant: 'production', requiredKeys: SELF_HOST_PUBLIC_ENV_KEYS });
     if (!args.skipGitGate) assertProductionGitGate();
     else log('  warn: --skip-git-gate,跳过 main/clean/HEAD 校验(仅本地迭代用)');
     if (!args.skipRuntimeCheck) {

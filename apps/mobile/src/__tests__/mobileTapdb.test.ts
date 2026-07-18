@@ -44,6 +44,28 @@ describe('mobile TapDB analytics', () => {
     });
   });
 
+  it('prefers self-host JSON config from Expo extra over ambient build env', async () => {
+    vi.stubEnv('EXPO_PUBLIC_TAPTAP_CLIENT_ID', 'ambient-id');
+    vi.stubEnv('EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN', 'ambient-token');
+    vi.stubEnv('EXPO_PUBLIC_TAPDB_REGION', 'cn');
+    const tapdb = await importMobileTapdb({
+      cindy: {
+        tapdb: {
+          clientId: 'json-id',
+          clientToken: 'json-token',
+          region: 'global',
+        },
+      },
+    });
+
+    await expect(tapdb.initMobileTapdb()).resolves.toEqual({ ok: true });
+    expect(initializeTapdb).toHaveBeenCalledWith(expect.objectContaining({
+      clientId: 'json-id',
+      clientToken: 'json-token',
+      region: 'global',
+    }));
+  });
+
   it('uses AppStore and NPKG as default mobile channels', async () => {
     const tapdb = await importMobileTapdb();
 
@@ -65,7 +87,7 @@ describe('mobile TapDB analytics', () => {
   });
 });
 
-async function importMobileTapdb() {
+async function importMobileTapdb(extra: Record<string, unknown> = {}) {
   vi.doMock('xdt-tapdb', () => ({
     initializeTapdb,
     setTapdbUserId,
@@ -77,7 +99,7 @@ async function importMobileTapdb() {
   vi.doMock('expo-constants', () => ({
     default: {
       nativeAppVersion: '1.2.3',
-      expoConfig: { version: '1.0.0' },
+      expoConfig: { version: '1.0.0', extra },
     },
   }));
   return import('@/analytics/mobileTapdb');

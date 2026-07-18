@@ -1,5 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -13,8 +14,10 @@ const managedEnvKeys = [
   'EXPO_PUBLIC_CINDY_AUTH_REGION',
   'EXPO_PUBLIC_XDT_OTA_SELFHOST',
   'EXPO_PUBLIC_XDT_OTA_URL',
+  'CINDY_SELF_HOST_REGIONS_FILE',
 ];
 let previousEnv: Record<string, string | undefined>;
+const temporaryDirs: string[] = [];
 
 beforeEach(() => {
   previousEnv = Object.fromEntries(
@@ -28,6 +31,9 @@ afterEach(() => {
     const value = previousEnv[key];
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
+  }
+  for (const dir of temporaryDirs.splice(0)) {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 
@@ -67,6 +73,22 @@ describe('mobile native app config', () => {
     const regular = buildConfig({ config: appJson.expo });
     expect(regular.updates).toEqual(appJson.expo.updates);
 
+    const configDir = mkdtempSync(join(tmpdir(), 'cindy-selfhost-regions-'));
+    temporaryDirs.push(configDir);
+    const regionsPath = join(configDir, 'regions.json');
+    writeFileSync(regionsPath, JSON.stringify({
+      cn: {
+        iosBundleId: 'com.xd.cindycn',
+        androidPackage: 'com.xd.cindycn',
+        tapdb: { clientId: 'json-id', clientToken: 'json-token' },
+      },
+      global: {
+        iosBundleId: 'com.xd.cindy',
+        androidPackage: 'com.xd.cindy',
+        tapdb: { clientId: 'json-id', clientToken: 'json-token' },
+      },
+    }));
+    process.env.CINDY_SELF_HOST_REGIONS_FILE = regionsPath;
     process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST = '1';
     // 即使调用环境残留旧变量,自建原生 config 也不得再消费真实更新地址。
     process.env.EXPO_PUBLIC_XDT_OTA_URL = 'https://must-not-be-baked.example.com';
@@ -80,11 +102,17 @@ describe('mobile native app config', () => {
     // 自建 app 身份按 region 从 self-host-regions.json(.example 回落)取,而非写死。
     expect(selfHosted.ios.bundleIdentifier).toBe('com.xd.cindycn');
     expect(selfHosted.android.package).toBe('com.xd.cindycn');
+    expect(selfHosted.extra.cindy.tapdb).toEqual({
+      clientId: 'json-id',
+      clientToken: 'json-token',
+      region: 'cn',
+    });
 
     process.env.EXPO_PUBLIC_CINDY_AUTH_REGION = 'global';
     const selfHostedGlobal = buildConfig({ config: appJson.expo });
     expect(selfHostedGlobal.ios.bundleIdentifier).toBe('com.xd.cindy');
     expect(selfHostedGlobal.android.package).toBe('com.xd.cindy');
+    expect(selfHostedGlobal.extra.cindy.tapdb.region).toBe('global');
   });
 
   it('fails closed when a store build lacks its regional App Store numeric ID', () => {

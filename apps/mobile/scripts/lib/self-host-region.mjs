@@ -3,8 +3,9 @@
 //
 // 自建冷更/热更脚本(release-{ios,android}-{local,ota,check}.mjs)通过 `--region cn|global`
 // 选出本次出包的地区,所有随地区变化的**非机密**分包参数(bundleId / package /
-// OSS 落点 bucket / 非机密签名描述符)集中在打包机本地的 scripts/self-host-regions.json 里(纯值,
-// 不进 git;缺失时报错指向 .example)。真机密(keystore 两个口令、OSS AK/SK)仍走 env,凭证不入仓。
+// TapDB 公开 client 配置 / OSS 落点 bucket / 非机密签名描述符)集中在打包机本地的
+// scripts/self-host-regions.json 里(纯值,不进 git;缺失时报错指向 .example)。真机密
+// (keystore 两个口令、OSS AK/SK)仍走 env,凭证不入仓。
 // OTA 更新域名不属于构建/分包参数:由对应地区 endpoint.json 的 mobileUpdateBaseUrl 运行时下发。
 //
 // 设计对齐 scripts/shared/production-endpoints.mjs 的 loadProductionEndpoints:
@@ -33,6 +34,13 @@ const REQUIRED_IDENTITY_FIELDS = Object.freeze([
 ]);
 /** 必须存在(但叶子值允许 --execute 时才填)的子对象。 */
 const REQUIRED_OSS_KEYS = Object.freeze(['cdnBaseUrl', 'bucket', 'prefix', 'ossRegion']);
+const REQUIRED_TAPDB_KEYS = Object.freeze(['clientId', 'clientToken']);
+const SELF_HOST_TAPDB_ENV_KEYS = Object.freeze([
+  'EXPO_PUBLIC_TAPTAP_CLIENT_ID',
+  'EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN',
+  'EXPO_PUBLIC_TAPDB_CHANNEL',
+  'EXPO_PUBLIC_TAPDB_REGION',
+]);
 
 /** 解析真文件路径;显式 env 覆盖仅供测试 / 特殊打包机。 */
 export function resolveSelfHostRegionsPath(filePath = process.env.CINDY_SELF_HOST_REGIONS_FILE) {
@@ -67,7 +75,8 @@ export function loadSelfHostRegions(options = {}) {
 }
 
 /**
- * 校验 { cn, global } 结构。身份字段严格非空;oss/signing 叶子值允许空(用时再校验)。
+ * 校验 { cn, global } 结构。身份字段与 TapDB 公开 client 配置严格非空;
+ * oss/signing 叶子值允许空(用时再校验)。
  * @param {unknown} value
  * @param {{ source?: string }} [options]
  */
@@ -90,6 +99,15 @@ export function validateSelfHostRegions(value, options = {}) {
         throw new Error(`${source} 的 ${region}.${key} 必须是非空字符串`);
       }
     }
+    const tapdb = block.tapdb;
+    if (!tapdb || typeof tapdb !== 'object' || Array.isArray(tapdb)) {
+      throw new Error(`${source} 的 ${region}.tapdb 必须是 object`);
+    }
+    for (const key of REQUIRED_TAPDB_KEYS) {
+      if (typeof tapdb[key] !== 'string' || !tapdb[key].trim()) {
+        throw new Error(`${source} 的 ${region}.tapdb.${key} 必须是非空字符串`);
+      }
+    }
     // oss 子对象必须存在且含全部键(叶子值允许空,--execute 应用 OSS 时再强校验非空)。
     const oss = block.oss;
     if (!oss || typeof oss !== 'object' || Array.isArray(oss)) {
@@ -108,12 +126,23 @@ export function validateSelfHostRegions(value, options = {}) {
     }
     result[region] = Object.freeze({
       ...block,
+      tapdb: Object.freeze({ ...tapdb }),
       oss: Object.freeze({ ...oss }),
       iosSigning: Object.freeze({ ...block.iosSigning }),
       androidSigning: Object.freeze({ ...block.androidSigning }),
     });
   }
   return Object.freeze(result);
+}
+
+/**
+ * 自建线的 TapDB 配置来自 self-host-regions.json → Expo extra。主动清掉同名
+ * EXPO_PUBLIC_* 环境变量,避免打包机 shell/.env 残留值被 Metro 再次内联进 bundle。
+ * @param {Record<string, string | undefined>} env
+ */
+export function stripSelfHostTapdbEnv(env) {
+  for (const key of SELF_HOST_TAPDB_ENV_KEYS) delete env[key];
+  return env;
 }
 
 /**
