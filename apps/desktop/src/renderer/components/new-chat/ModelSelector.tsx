@@ -126,6 +126,7 @@ export function ProviderMark({
 
 function ModelBrandMark({
   modelId,
+  displayName,
   agentKind,
   fallbackProviderId,
   fallbackProviderName,
@@ -134,6 +135,7 @@ function ModelBrandMark({
   dense = false,
 }: {
   modelId: string;
+  displayName?: string;
   agentKind: AgentKind | null;
   fallbackProviderId?: string | null;
   fallbackProviderName?: string;
@@ -143,24 +145,16 @@ function ModelBrandMark({
 }) {
   const common = cn(withMargin && 'mr-1.5', 'shrink-0', colorClass);
   const markSize = dense ? 12.3 : 13;
-  const normalized = modelId.toLowerCase();
-  if (
-    agentKind === 'claude-code' ||
-    normalized.startsWith('claude-') ||
-    normalized.startsWith('opus') ||
-    normalized.startsWith('sonnet') ||
-    normalized.startsWith('haiku') ||
-    normalized.startsWith('fable')
-  ) {
+  const brandKind = resolveModelBrandKind({
+    modelId,
+    displayName,
+    agentKind,
+    fallbackProviderId,
+  });
+  if (brandKind === 'claude') {
     return <ClaudeMark size={markSize} className={common} />;
   }
-  if (
-    agentKind === 'codex' ||
-    normalized.startsWith('codex/') ||
-    normalized.startsWith('gpt-') ||
-    normalized.startsWith('chatgpt/') ||
-    normalized.startsWith('openai/')
-  ) {
+  if (brandKind === 'codex') {
     return <CodexMark size={markSize} className={common} />;
   }
   if (!fallbackProviderId) return null;
@@ -173,6 +167,36 @@ function ModelBrandMark({
       dense={dense}
     />
   );
+}
+
+export type ModelBrandKind = 'claude' | 'codex' | null;
+
+export function resolveModelBrandKind({
+  modelId,
+  displayName,
+  agentKind,
+  fallbackProviderId,
+}: {
+  modelId: string;
+  displayName?: string;
+  agentKind: AgentKind | null;
+  fallbackProviderId?: string | null;
+}): ModelBrandKind {
+  const brandText = `${modelId} ${displayName ?? ''}`.toLowerCase();
+  if (
+    /(^|[\s/])(?:codex|chatgpt|openai)(?:[\s/-]|$)/.test(brandText) ||
+    /(^|[\s/])gpt[-\s]/.test(brandText)
+  ) {
+    return 'codex';
+  }
+  if (/(^|[\s/])(?:claude|opus|sonnet|haiku|fable)(?:[\s/-]|$)/.test(brandText)) {
+    return 'claude';
+  }
+  if (fallbackProviderId === 'openai') return 'codex';
+  if (fallbackProviderId === 'anthropic') return 'claude';
+  if (agentKind === 'codex') return 'codex';
+  if (agentKind === 'claude-code') return 'claude';
+  return null;
 }
 
 // 上下文窗口 tokens → 紧凑展示("1M" / "272K" / "8192")。
@@ -1168,6 +1192,7 @@ export function ModelSelector({
             <>
               <ModelBrandMark
                 modelId={modelId}
+                displayName={currentModel?.displayName}
                 agentKind={currentAgentKind}
                 fallbackProviderId={currentProviderId}
                 fallbackProviderName={providers.find((p) => p.id === currentProviderId)?.name}
@@ -1203,6 +1228,7 @@ export function ModelSelector({
               {activeSourceId && (
                 <ModelBrandMark
                   modelId={modelId}
+                  displayName={currentModel?.displayName}
                   agentKind={currentAgentKind}
                   fallbackProviderId={activeSourceId}
                   fallbackProviderName={providers.find((p) => p.id === activeSourceId)?.name}
