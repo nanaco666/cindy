@@ -21,7 +21,7 @@ import { Check, SlidersHorizontal, Zap } from 'lucide-react-native';
 import type { MobileAgentCapabilities, MobileModelOption } from '@/session/agentCapabilities';
 import type { DeviceApiKeyStatus } from '@/device-link/deviceModelMetaCache';
 import type { AgentKind } from '@lizi/model-providers/types';
-import { MobileProviderMark } from '@/session/MobileProviderMark';
+import { MobileModelBrandMark } from '@/session/MobileProviderMark';
 import type { MobileModelMemoryAccessors } from '@/session/draftModelMemory';
 import { useDraftModelMemoryVersion } from '@/session/draftModelMemory';
 import { useSessionModelMirrorVersion } from '@/session/sessionModelMirror';
@@ -249,7 +249,13 @@ export function MobileModelPickerList({
               ]}
               testID={testID}
             >
-              <MobileProviderMark providerId={row.provider.id} name={row.provider.name} />
+              <MobileModelBrandMark
+                agentKind={agentKind ?? null}
+                displayName={row.model.displayName}
+                fallbackProviderId={row.provider.id}
+                fallbackProviderName={row.provider.name}
+                modelId={row.model.id}
+              />
               <View style={styles.optionMain}>
                 <View style={styles.optionTitleRow}>
                   <Text numberOfLines={1} style={styles.optionText}>{row.model.displayName}</Text>
@@ -336,6 +342,11 @@ export function MobileModelPickerList({
               ]}
               testID={testID}
             >
+              <MobileModelBrandMark
+                agentKind={agentKind ?? null}
+                displayName={option.label}
+                modelId={option.id}
+              />
               <View style={styles.optionMain}>
                 <View style={styles.optionTitleRow}>
                   <Text numberOfLines={1} style={styles.optionText}>{option.label}</Text>

@@ -3,7 +3,7 @@ import { Animated, Easing } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '@/theme';
 
-import { CLAUDE_PATH, CODEX_PATH } from './vendorIconPaths';
+import { BRAND_ARROW_PATH } from './vendorIconPaths';
 
 interface MobileVendorIconProps {
   running?: boolean;
@@ -45,14 +45,11 @@ export function MobileVendorIcon({ running = false, size = 12, vendor }: MobileV
     };
   }, [opacity, running]);
 
-  const isCodex = vendor === 'codex';
-  const mark = isCodex ? (
-    <Svg width={size} height={size} viewBox="0 0 24 24" accessibilityLabel="Codex">
-      <Path d={CODEX_PATH} fill={color} />
-    </Svg>
-  ) : (
-    <Svg width={size} height={size} viewBox="0 0 24 24" accessibilityLabel="Claude">
-      <Path d={CLAUDE_PATH} fill={color} />
+  // Mac D4-1:Claude/Codex 会话行首统一品牌箭头;vendor prop 保留给调用方兼容。
+  void vendor;
+  const mark = (
+    <Svg width={size} height={size} viewBox="0 0 24 24" accessibilityLabel="CINDY">
+      <Path d={BRAND_ARROW_PATH} fill={color} />
     </Svg>
   );
 

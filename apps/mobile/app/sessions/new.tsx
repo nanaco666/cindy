@@ -216,7 +216,7 @@ import {
   type ProviderModelRow,
 } from '@/session/providerModelSections';
 import { ModelPickerSheet } from '@/session/ModelPickerSheet';
-import { MobileProviderMark } from '@/session/MobileProviderMark';
+import { MobileModelBrandMark } from '@/session/MobileProviderMark';
 import { draftModelMemoryFor, hydrateDraftModelMemory } from '@/session/draftModelMemory';
 import { rowFastEditable } from '@/session/modelPickerRows';
 import { useTheme, useThemedStyles, type ThemeColors } from '@/theme';
@@ -1528,10 +1528,13 @@ export default function NewRemoteSessionScreen() {
         testID="newSession.modelIndicator"
       >
         {activeSourceProvider ? (
-          <MobileProviderMark
+          <MobileModelBrandMark
+            agentKind={draft.agentKind}
             color={colors.textPrimary}
-            name={activeSourceProvider.name}
-            providerId={activeSourceProvider.id}
+            displayName={runtimeOptions.currentModel?.label}
+            fallbackProviderId={activeSourceProvider.id}
+            fallbackProviderName={activeSourceProvider.name}
+            modelId={draft.model}
           />
         ) : null}
         <Text style={styles.modelPillText} numberOfLines={1}>{runtimeSummary.modelSummary}</Text>
