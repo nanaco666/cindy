@@ -535,6 +535,12 @@ export function LoginPage() {
       return (
         <>
           <Header title={t('login.browserWaiting')} subtitle={loginState.label} />
+          <Spinner
+            size={24}
+            className="mb-6 text-[var(--text-secondary)]"
+            role="status"
+            aria-label={t('login.working')}
+          />
           <button
             type="button"
             className={secondaryButtonClass}
