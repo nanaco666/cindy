@@ -268,13 +268,12 @@ export function PinnedSection({
           不改变段头文字样式或按钮位置。 */}
       <div className="group/sidebar-header flex h-6 items-center justify-between pr-3 pl-6">
         <div className="flex min-w-0 items-center gap-1">
-          {/* 段标题:淡灰 + 可点击收起/展开(与 项目/对话 段头同款,2026-07 用户定稿
-              取代上方注释里的深色规格)。 */}
+          {/* 段标题:与 项目/对话 段头同款,2026-07 用户定稿。 */}
           <button
             type="button"
             onClick={() => setCollapsed((value) => !value)}
             aria-expanded={!collapsed}
-            className="text-sm font-medium text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-secondary)]"
+            className="text-sm font-medium text-[var(--sidebar-list-muted)] transition-colors hover:text-[var(--sidebar-nav-text)]"
           >
             {t('ccAgent.sidebar.pinned')}
           </button>
@@ -288,8 +287,8 @@ export function PinnedSection({
                 className={cn(
                   'flex h-5 w-5 shrink-0 items-center justify-center rounded-md',
                   // 无灰底 hover(2026-07 用户定稿):纯色加深反馈,与段标题一致。
-                  'text-[var(--text-tertiary)]',
-                  'transition-colors hover:text-[var(--text-secondary)]',
+                  'text-[var(--sidebar-list-muted)]',
+                  'transition-colors hover:text-[var(--sidebar-nav-text)]',
                 )}
               >
                 <ToggleIcon size={13} strokeWidth={2} />
@@ -305,8 +304,8 @@ export function PinnedSection({
               aria-label={t('ccAgent.sidebar.viewStyle')}
               className={cn(
                 'flex h-5 w-5 shrink-0 items-center justify-center rounded-md',
-                'text-[var(--text-tertiary)]',
-                'transition-colors hover:text-[var(--text-secondary)]',
+                'text-[var(--sidebar-list-muted)]',
+                'transition-colors hover:text-[var(--sidebar-nav-text)]',
               )}
             >
               <LayoutGrid size={13} strokeWidth={2} />
