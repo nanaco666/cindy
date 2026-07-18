@@ -21,6 +21,7 @@ import { extractIpcError } from '@/utils/ipcError';
 import { buildCodexSyncWarning } from '@/utils/codexAuthSync';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { useCodexRuntimeRoute } from '@/hooks/useCodexRuntimeRoute';
+import { isChatGptConnectionConnected, useCodexAuth } from '@/hooks/useCodexAuth';
 import {
   isCodexSessionExpiredError,
   useCodexSessionExpiredPrompt,
@@ -80,12 +81,7 @@ export function ErrorBanner({
 }: ErrorBannerProps) {
   const { t } = useTranslation();
   const { confirm } = useConfirmDialog();
-  const [openAiConnectionRecoveredForError, setOpenAiConnectionRecoveredForError] = useState<
-    string | null
-  >(null);
-  const openAiConnectionRecoveredSinceError = openAiConnectionRecoveredForError === error;
   const promptCodexSessionExpired = useCodexSessionExpiredPrompt({
-    onAuthenticated: (recoveredError) => setOpenAiConnectionRecoveredForError(recoveredError),
     // 横幅已说明影响范围；用户点击“重新连接 ChatGPT”后直接进入浏览器连接流程，
     // 不再叠一层重复确认弹窗。
     confirmBeforeLogin: false,
@@ -151,6 +147,12 @@ export function ErrorBanner({
     !remoteHostId &&
     ((agentKind === 'codex' && !isCodexProviderOAuthModel && isCodexSessionExpiredError(error)) ||
       (isClaudeChatgptBridgeModel && isCodexSessionExpiredError(error)));
+  // 以共享的 Codex OAuth 状态机为唯一真相源：设置页、横幅或其它入口完成重连时，
+  // AUTH_STATE_CHANGED 都会让现存横幅同步恢复 Retry；后续失效 / 登出广播也会撤销恢复态。
+  // enabled 只控制副作用，hook 本身始终按固定顺序调用。
+  const { state: openAiAuthState } = useCodexAuth({ enabled: isOpenAiConnectionExpired });
+  const openAiConnectionRecoveredSinceError =
+    isOpenAiConnectionExpired && isChatGptConnectionConnected(openAiAuthState, false);
   const openAiReconnectRequired = isOpenAiConnectionExpired && !openAiConnectionRecoveredSinceError;
   // 网络类错误(502/连接失败/fetch failed 等):友好文案 + 原始错误折叠可查。
   const isNetworkishError = isNetworkishErrorMessage(error);

@@ -6,6 +6,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ErrorBanner } from '../ErrorBanner';
 import { useCodexAuth } from '@/hooks/useCodexAuth';
 
+type AuthStateChangedPayload = {
+  agentKind: 'claude-code' | 'codex';
+  authenticated: boolean;
+  identity?: string;
+  expiresAt?: number;
+  errorReason?: string;
+  authSource?: 'oauth' | 'api-key';
+};
+
 const mocks = vi.hoisted(() => ({
   confirm: vi.fn(),
   getState: vi.fn(),
@@ -16,7 +25,14 @@ const mocks = vi.hoisted(() => ({
   onLoginProgress: vi.fn(),
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
+  stateChangedListeners: new Set<(payload: AuthStateChangedPayload) => void>(),
 }));
+
+function emitCodexStateChanged(payload: Omit<AuthStateChangedPayload, 'agentKind'>): void {
+  for (const listener of mocks.stateChangedListeners) {
+    listener({ agentKind: 'codex', ...payload });
+  }
+}
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -47,15 +63,28 @@ vi.mock('@/lib/toast', () => ({
 describe('ErrorBanner OpenAI connection recovery', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.stateChangedListeners.clear();
     mocks.getState.mockResolvedValue({
-      authenticated: true,
-      identity: 'user@example.com',
-      authSource: 'oauth',
+      authenticated: false,
+      errorReason: 'refresh_token_reused',
     });
-    mocks.triggerLogin.mockResolvedValue({ authenticated: true, authSource: 'oauth' });
+    mocks.triggerLogin.mockImplementation(async () => {
+      const result = {
+        authenticated: true,
+        identity: 'user@example.com',
+        authSource: 'oauth' as const,
+      };
+      emitCodexStateChanged(result);
+      return result;
+    });
     mocks.cancelLogin.mockResolvedValue(undefined);
     mocks.logout.mockResolvedValue(undefined);
-    mocks.onStateChanged.mockReturnValue(() => undefined);
+    mocks.onStateChanged.mockImplementation(
+      (listener: (payload: AuthStateChangedPayload) => void) => {
+        mocks.stateChangedListeners.add(listener);
+        return () => mocks.stateChangedListeners.delete(listener);
+      },
+    );
     mocks.onLoginProgress.mockReturnValue(() => undefined);
     (
       window as unknown as {
@@ -112,15 +141,18 @@ describe('ErrorBanner OpenAI connection recovery', () => {
     expect(await screen.findByText('chat.errorBanner.codexSessionReconnected')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'chat.errorBanner.retry' })).toBeTruthy();
 
-    rerender(
-      <ErrorBanner
-        error="token_invalidated"
-        retryText="retry another turn"
-        onRetry={vi.fn()}
-        agentKind="codex"
-        modelId="gpt-5.4"
-      />,
-    );
+    act(() => {
+      emitCodexStateChanged({ authenticated: false, errorReason: 'token_invalidated' });
+      rerender(
+        <ErrorBanner
+          error="token_invalidated"
+          retryText="retry another turn"
+          onRetry={vi.fn()}
+          agentKind="codex"
+          modelId="gpt-5.4"
+        />,
+      );
+    });
     expect(screen.getByText('chat.errorBanner.codexSessionExpired')).toBeTruthy();
     expect(screen.queryByText('chat.errorBanner.codexSessionReconnected')).toBeNull();
     expect(screen.queryByRole('button', { name: 'chat.errorBanner.retry' })).toBeNull();
@@ -223,11 +255,36 @@ describe('ErrorBanner OpenAI connection recovery', () => {
     expect(screen.getByRole('button', { name: 'chat.errorBanner.retry' })).toBeTruthy();
   });
 
+  it('restores retry after reconnect succeeds from the settings auth hook', async () => {
+    const settingsAuth = renderHook(() => useCodexAuth());
+    render(
+      <ErrorBanner
+        error="refresh_token_reused"
+        retryText="retry this turn"
+        onRetry={vi.fn()}
+        agentKind="codex"
+        modelId="gpt-5.4"
+      />,
+    );
+
+    await waitFor(() => expect(settingsAuth.result.current.state.kind).toBe('reconnect-required'));
+    expect(screen.getByText('chat.errorBanner.codexSessionExpired')).toBeTruthy();
+    expect(mocks.triggerLogin).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await expect(settingsAuth.result.current.triggerLogin()).resolves.toBe('authenticated');
+    });
+
+    expect(await screen.findByText('chat.errorBanner.codexSessionReconnected')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'chat.errorBanner.retry' })).toBeTruthy();
+    expect(mocks.triggerLogin).toHaveBeenCalledOnce();
+  });
+
   it('joins an OAuth flow already started from the settings auth hook', async () => {
     const login = deferred<{ authenticated: boolean; authSource: 'oauth' }>();
     mocks.triggerLogin.mockImplementation(() => login.promise);
     const settingsAuth = renderHook(() => useCodexAuth());
-    await waitFor(() => expect(settingsAuth.result.current.state.kind).toBe('authenticated'));
+    await waitFor(() => expect(settingsAuth.result.current.state.kind).toBe('reconnect-required'));
 
     let settingsOutcome!: ReturnType<typeof settingsAuth.result.current.triggerLogin>;
     act(() => {
@@ -248,8 +305,9 @@ describe('ErrorBanner OpenAI connection recovery', () => {
     );
 
     await waitFor(() => expect(mocks.triggerLogin).toHaveBeenCalledOnce());
-    login.resolve({ authenticated: true, authSource: 'oauth' });
     await act(async () => {
+      emitCodexStateChanged({ authenticated: true, authSource: 'oauth' });
+      login.resolve({ authenticated: true, authSource: 'oauth' });
       await expect(settingsOutcome).resolves.toBe('authenticated');
     });
 
