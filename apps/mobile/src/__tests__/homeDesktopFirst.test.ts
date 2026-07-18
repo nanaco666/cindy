@@ -63,14 +63,21 @@ describe('mobile home desktop-first surface', () => {
     expect(source).toContain('backgroundColor: colors.surface');
     expect(source).toContain('borderBottomColor: colors.border');
     expect(source).toContain('colors.homeListFab');
+    expect(source).toContain('Send,');
+    expect(source).toContain('<Send\n            color={colors.ctaText}');
+    expect(source).toContain('fill={colors.ctaText}');
+    expect(source).toContain('size={iconSize.listGlyph}');
+    expect(source).toContain('strokeWidth={iconStroke.medium}');
+    expect(source).not.toContain('function HomeNewChatGlyph');
+    expect(source).not.toContain("import Svg, { Path } from 'react-native-svg';");
     expect(source).not.toContain(`colors.${removedListTokenPrefix}Background`);
     expect(source).not.toContain(`colors.${removedListTokenPrefix}Divider`);
     expect(source).not.toContain(`colors.${removedListTokenPrefix}Shadow`);
     expect(source).toContain('fontWeight: fontWeight.medium');
     expect(source).toContain('testID="home.newChatButton"');
     expect(source).toContain("position: 'absolute'");
-    expect(source).toContain('bottom: spacing.lg');
-    expect(source).toContain('right: spacing.lg');
+    expect(source).toContain('bottom: CINDY_LIST_FAB_BOTTOM');
+    expect(source).toContain('right: CINDY_LIST_GUTTER');
   });
 
   it('uses TapTap blue for the online dot treatment', () => {
@@ -79,7 +86,8 @@ describe('mobile home desktop-first surface', () => {
     const tokenSource = readFileSync(resolve(process.cwd(), 'src/theme/tokens.ts'), 'utf8');
     const removedListTokenPrefix = 'home' + 'List';
 
-    expect(tokenSource).toContain("statusReady: '#00D9C5'");
+    // E5M 状态色设计定稿(2026-07-17):teal 族 #00D9C5 → #19D2C1,statusReady 随 awaiting 同步。
+    expect(tokenSource).toContain("statusReady: '#19D2C1'");
     expect(tokenSource).toContain("homeListFab: '#ECEDEF'");
     expect(tokenSource).not.toContain(`${removedListTokenPrefix}Background`);
     expect(tokenSource).not.toContain(`${removedListTokenPrefix}Divider`);
@@ -95,7 +103,7 @@ describe('mobile home desktop-first surface', () => {
   it('mirrors the desktop sidebar vendor icon slot and running treatment', () => {
     const homeSource = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
     const vendorIconSource = readFileSync(resolve(process.cwd(), 'src/components/MobileVendorIcon.tsx'), 'utf8');
-    // 品牌 path 常量已抽到 vendorIconPaths.ts(供 MobileVendorIcon 与 MobileProviderMark 共用)。
+    // 品牌 path 常量已抽到 vendorIconPaths.ts(供 MobileVendorIcon 与 MobileModelBrandMark 共用)。
     const vendorPathsSource = readFileSync(resolve(process.cwd(), 'src/components/vendorIconPaths.ts'), 'utf8');
     const desktopVendorIconSource = readFileSync(
       resolve(process.cwd(), '../../apps/desktop/src/renderer/components/sidebar/VendorIcon.tsx'),
@@ -113,15 +121,18 @@ describe('mobile home desktop-first surface', () => {
     expect(vendorIconSource).toContain('width={size}');
     expect(vendorIconSource).toContain('height={size}');
     expect(vendorIconSource).toContain('viewBox="0 0 24 24"');
-    expect(vendorPathsSource).toContain("'M13.827 3.52h3.603");
-    expect(vendorIconSource).toContain("import { CLAUDE_PATH, CODEX_PATH } from './vendorIconPaths';");
+    expect(vendorPathsSource).toContain('BRAND_ARROW_PATH');
+    expect(vendorPathsSource).toContain('M19 10.7224V13.2775L7 22');
+    expect(vendorIconSource).toContain("import { BRAND_ARROW_PATH } from './vendorIconPaths';");
+    expect(vendorIconSource).toContain('void vendor;');
     expect(vendorIconSource).not.toContain('viewBox="136 137 282 158"');
     expect(vendorIconSource).not.toContain('transform="translate(');
     expect(vendorIconSource).toContain('Easing.inOut(Easing.ease)');
     expect(homeSource).toContain('remoteSessionStore.isSessionRunning(item.session.id)');
     expect(homeSource).toContain('<RadioTower');
     expect(homeSource).toContain('width: 24');
-    expect(homeSource).toContain('size={isClaudeCodeAgentKind(item.session.agentKind) ? 19 : iconSize.lg}');
+    expect(homeSource).toContain('width: iconSize.md');
+    expect(homeSource).toContain('size={cindyList ? iconSize.sm : isClaudeCodeAgentKind(item.session.agentKind) ? 19 : iconSize.lg}');
     expect(homeSource).toContain("function isClaudeCodeAgentKind(agentKind: string): boolean");
     expect(homeSource).toContain("return agentKind !== 'codex';");
     expect(homeSource).not.toContain('sessionAttentionDot: {\n    backgroundColor: colors.statusAccent,\n    borderColor: colors.surface');
@@ -258,8 +269,16 @@ describe('mobile home desktop-first surface', () => {
     expect(sessionRowSource).toContain('styles.sessionTrailingIcons');
     expect(sessionRowSource).not.toContain('SessionBadge');
     expect(source).toContain('const HOME_SESSION_ROW_HEIGHT = 78;');
+    expect(source).toContain('const CINDY_LIST_ROW_HEIGHT = 60;');
+    expect(source).toContain('variant="cindyList"');
+    expect(source).toContain("type HomeSessionRowVariant = 'legacy' | 'cindyList';");
     expect(stylesSource).toContain('height: HOME_SESSION_ROW_HEIGHT');
-    expect(stylesSource).toContain('height: lineHeight.subtitle');
+    expect(stylesSource).toContain('height: CINDY_LIST_ROW_HEIGHT');
+    expect(stylesSource).toContain('height: lineHeight.micro');
+    expect(stylesSource).toContain('projectChildren: {\n    backgroundColor: colors.surfaceListExpanded');
+    expect(stylesSource).toContain('sessionListRowIndentedCindy: {\n    backgroundColor: colors.surfaceListExpanded');
+    expect(stylesSource).toContain('sessionListRowDeepIndentedCindy: {\n    backgroundColor: colors.surfaceListExpanded');
+    expect(stylesSource).toContain('automationGroupChildrenCindy: {\n    backgroundColor: colors.surfaceListExpanded');
   });
 
   it('keeps presence updates local and refreshes full home sync on every reconnect', () => {

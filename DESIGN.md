@@ -617,8 +617,9 @@ card/container
 
 ## 15. CINDY 皮肤族(品牌化可选 family)
 
-> 本节为 CINDY 皮肤族的规范记录,**不改写 §1-7 默认皮肤规范**。值的唯一权威:
-> `2026-07-17-cindy-token-decision-table.md`(用户 U8 批准),零自由裁量。
+> 本节为 CINDY 皮肤族的规范记录,**不改写 §1-7 默认皮肤规范**。值的权威来源:
+> `skin-docs/10-specs/` 桌面端体系、`skin-docs/30-mobile/2026-07-18-m0-color-mapping.md`
+> 移动端勘误版,以及 2026-07-18 双端验收后的用户最终口头定稿。实现时零自由裁量。
 
 ### 15.1 色板(Figma 文本节点提取)
 
@@ -742,3 +743,58 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 - 材质经 `XDT_VIBRANCY_MATERIAL` 环境旋钮选择(缺省 sidebar;用户实测定稿 **hud**)。Windows 无 vibrancy 等价物,降级为不透明 `--surface`(backlog)。
 - 半透面上**不叠渐变覆盖层**——浅色红渐变层 2026-07-18 经用户确认设计稿无此元素,已整层砍除;splash 的渐变辉光层同样未实现(backlog 待用户表态)。
 - `surface-translucent-sidebar` 的 alpha 是主题冻结区**唯一开放的观感旋钮**,调整必须三处同步(`cindy-light.ts` / `cindy-dark.ts` / `cindyDecisionData.ts`)且 themes 套件跑绿。
+
+### 15.13 CINDY 双端换肤定稿规则(2026-07-18)
+
+本节是后续桌面端 / 手机端 UI 更新的执行规则。若本节与上方历史小节有冲突,以后续用户验收定稿为准;不要按早期红 CTA / 红 caret 口径回退。出处见 `skin-docs/10-specs/`、`skin-docs/30-mobile/2026-07-18-m0-color-mapping.md`、`skin-docs/30-mobile/2026-07-18-m3-chat-tasksheet-impl-plan.md`。
+
+#### 红色边界
+
+- 品牌红 `#DF0C27` 只用于品牌展示 / splash、破坏性操作、运行 / 思考状态强调、列表 active glyph。列表 active glyph 在 dark 使用 `#A61629`。
+- 普通 CTA、FAB、发送钮、确认类主操作一律使用中性反相:light 底 `#3C3F43` / 字 `#FCFCFC`,dark 底 `#EEEEEE` / 字 `#252222`。禁止把这些操作染成品牌红。
+- 红色白名单不包含输入光标、focus ring、普通按钮、普通选中态背景。新增红色消费必须先写明语义并进入对应 token / 测试白名单;不能在组件中硬编码。
+
+#### 光标与焦点
+
+- 所有输入光标 `cursorColor` / `selectionColor` 统一为蓝 `#417CDD`,等于 `permAutoAccent` / Mac `caret-accent`;light / dark 同值。
+- focus ring、Auto Approval、信息蓝同属 `#417CDD` 体系。Figma 旧蓝 `#426BF2` 不采用。
+- 禁止红色系光标。备注:2026-07-18 早前红 caret 口径已于同日晚被用户最终定稿覆盖。
+
+#### 双端颜色同构
+
+- 手机端颜色语义必须与桌面端 token 决策表同构:主背景、正文、二级信息、边框等基础层级按 CINDY desktop 语义直映,不要为移动端另造一套相同含义的颜色。
+- 移动端专用 token 只承载移动端特有层级或几何语境:
+
+| Mobile token | Light | Dark | 用途 |
+|---|---|---|---|
+| `surfaceListRow` | `#F6F6F6` | `#312F2F` | list 项目行 / 任务行 |
+| `surfaceListExpanded` | `#EAEAEA` | `#2A2828` | list 展开块 |
+| `activeGlyph` | `#DF0C27` | `#A61629` | list 行首 active glyph |
+| `chatCodeSurface` | `#F8F8F8` | `#353333` | chat / task code card |
+| `chatCodeBorder` | `#DCDFE3` | `#3C3C3C` | chat / task code card 边框 |
+| `inputCaret` | `#417CDD` | `#417CDD` | 所有输入光标 |
+| `sheetSurface` | `rgba(248,248,248,0.95)` | `rgba(59,59,59,0.95)` | bottom sheet root |
+| `sheetActionSurface` | `#F6F6F6` | `rgba(59,59,59,0.5)` | sheet action group / row |
+| `sheetActionBorder` | `#DCDFE3` | `#505050` | sheet action group / row 边框 |
+| `sheetActionText` | `#3C3F43` | `#C1C1C1` | sheet action row label |
+| `sheetGrabber` | `#DCDFE3` | `#6F6F6F` | sheet / composer grabber |
+
+#### 图标规范
+
+- 会话 / 品牌 glyph 统一使用 `BrandArrow`,Mac 与移动端同源资产;不要再各端各画一套箭头。
+- 模型选择按 model brand 出图。Mac 已替换过的品牌图标,移动端直接复用同源资产;其余使用现有图标库(lucide)中语义等价的图形。
+- 发送语义统一使用填充纸飞机 `Send`,颜色跟随中性反相 CTA token;不要用红色发送按钮或红色发送图标表达普通发送。
+
+#### 排版与布局要点
+
+- List 页采用卡片化密度:20pt gutter、60pt 行高、12pt 圆角、55pt FAB。不要回退到旧的松散列表或红色普通 CTA。
+- Chat 顶栏使用毛玻璃 / 半透明玻璃体系:优先复用 `BlurBackdrop` 与专用 chat header token;未接线 blur 的位置使用半透明实色 token + hairline,不要新增未经验证的 blur 接入点。
+- Sheet 系统一致使用 sheet token。共享 `SheetSurface` 等组件改新样式时默认走 variant 隔离,只让设计稿覆盖到的 tasksheet / `SessionActionSheet` / `SessionMenuSheet` 使用新样式;ContextSheet、ModelPicker、info sheet 等未覆盖页面不自动跟随。
+- 展开块内部使用 hairline 分隔:非末行有线,末行无线;边框颜色走对应 token,不要写死。
+
+#### 流程门禁
+
+- 新增 / 修改颜色必须走 token,桌面端走 ColorRegistry / CSS variable,移动端走 `ThemeColors` / `useTheme`;组件里禁止硬编码 hex / rgba。
+- `hardcoded-color-audit` 必须全绿才允许合入。若因资产固有色或平台语义确需例外,必须登记白名单并说明原因。
+- 设计稿与既有 token 冲突时,先在规格或 PR 说明中列出"待拍板"并请求裁决;不得自行定案或用相近色偷换。
+- 共享组件样式改动默认用 variant / prop 隔离影响面。设计稿没有覆盖的页面、状态、平台,默认保持现状。

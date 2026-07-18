@@ -22,10 +22,11 @@
  */
 import { memo, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
-import Swipeable, {
+import {
+  ReanimatedSwipeable as Swipeable,
   SwipeDirection,
   type SwipeableMethods,
-} from 'react-native-gesture-handler/ReanimatedSwipeable';
+} from '@/platform/gestureHandler';
 import Animated, {
   interpolate,
   useAnimatedReaction,
@@ -41,8 +42,8 @@ import type { RemoteSession } from '@/session/types';
 import { iconSize, iconStroke, useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 import { radius, spacing } from '@/theme/tokens';
 
-/** 圆形按钮直径(静置态是正圆,拖长后变胶囊;78 高的行内上下各留 11)。 */
-const BUTTON_SIZE = 56;
+/** 圆形按钮直径(静置态是正圆,拖长后变胶囊;适配 M2 60pt 卡片行)。 */
+const BUTTON_SIZE = 48;
 /** 按钮与行边缘 / 屏幕边缘 / 相邻按钮的间距(iOS 26 的悬浮圆钮留白比色块时代更宽)。 */
 const BUTTON_GAP = spacing.md;
 /** 左面板(置顶):gap + 圆 + gap;右面板(选项 + 归档):gap + 圆 + gap + 圆 + gap。 */
@@ -52,7 +53,7 @@ const RIGHT_PANEL_WIDTH = BUTTON_GAP * 3 + BUTTON_SIZE * 2;
 const FULL_SWIPE_RATIO = 0.55;
 /** 「归档」按钮越过全滑阈值时扩展盖满右侧面板的过渡时长。 */
 const ARM_ANIMATION_MS = 150;
-const ICON_SIZE = 23;
+const ICON_SIZE = iconSize.action;
 
 /**
  * 页面级滑动控制 bundle:registry + 三个动作回调打包成一个稳定引用(useMemo),
@@ -125,7 +126,7 @@ function SwipeableSessionRowInner({
 
   // 全滑判定:松手瞬间(库在 release 时派发 WillOpen)读当前位移,超阈值即触发。
   // direction 语义:RIGHT = 右滑(露出左面板/置顶),LEFT = 左滑(露出右面板/归档)。
-  const handleWillOpen = useCallback((direction: SwipeDirection) => {
+  const handleWillOpen = useCallback((direction: (typeof SwipeDirection)[keyof typeof SwipeDirection]) => {
     const translation = translationRef.current;
     if (!translation) return;
     if (direction === SwipeDirection.RIGHT) {

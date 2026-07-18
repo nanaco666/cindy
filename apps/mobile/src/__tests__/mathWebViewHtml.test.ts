@@ -63,7 +63,8 @@ describe('buildMathWebViewHtml — 主题色净化', () => {
     const evil = "red'; } </style><script>alert(1)</script>";
     const html = buildMathWebViewHtml('x', { background: evil, errorColor: evil });
     expect(html).not.toContain('alert(1)');
-    expect(html).toContain('background: #f8f8f6');
+    // fallback = lightColors.surface;随 CINDY 色板(U3+U8)同步为 #EDEDED。
+    expect(html).toContain('background: #EDEDED');
   });
 });
 
