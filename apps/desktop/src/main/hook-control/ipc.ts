@@ -53,6 +53,7 @@ import {
   type HookControlManager,
 } from './manager.js';
 import { createHookTransport } from './transport.js';
+import { registerSlackToolBridge, unregisterSlackToolBridge } from './slackToolBridge.js';
 import { createHookBindingStore } from './bindings.js';
 import { createHookDispatcher } from './dispatcher.js';
 import { createMakerHookSessionRunner } from './session-runner.js';
@@ -221,11 +222,18 @@ function ensureInstances(): { store: SlackHookStore; manager: HookControlManager
           };
         });
       },
-      // SIWS OIDC 授权链接: 用系统浏览器打开(远程控制时落被控机, 设置页另给复制链接)
+      // 绑定授权链接: 用系统浏览器打开(远程控制时落被控机, 设置页另给复制链接)
       openExternalUrl: (url) => {
         void shell.openExternal(url);
       },
       log,
+    });
+    // Slack 网关工具桥: lizi_slack provider 经叶子注册表取用(不直接 import
+    // 本模块, 避免 mcp-providers <-> ipc 的静态引用闭环)
+    const m = manager;
+    registerSlackToolBridge({
+      availability: () => m.getSlackToolAvailability(),
+      callTool: (tool, args) => m.callSlackTool(tool, args),
     });
   }
   return { store, manager };
@@ -335,6 +343,7 @@ export function registerHookControlIpc(): void {
 export function disposeHookControl(): void {
   disposeAuthListener?.();
   disposeAuthListener = null;
+  unregisterSlackToolBridge();
   manager?.dispose();
   manager = null;
 }

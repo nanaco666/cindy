@@ -16,6 +16,7 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  HOOK_FEATURE_SLACK_TOOLS,
   makeBindRevoke,
   makeBindStart,
   makeHello,
@@ -23,6 +24,7 @@ import {
   makePrefsSet,
   makeQueryResponse,
   makeTaskAck,
+  makeToolRequest,
   type HelloInput,
   type HookMessage,
 } from '@cindy/slack-hook-protocol';
@@ -62,6 +64,8 @@ export interface HookControlManagerDeps {
   notifyPrefs?: (view: HookPrefsView) => void;
   /** prefs 读写往返超时(默认 10s; 测试注短)。 */
   prefsTimeoutMs?: number;
+  /** Slack 网关工具往返超时(默认 60s —— 搜索/长查询比 prefs 慢得多; 测试注短)。 */
+  toolTimeoutMs?: number;
   /**
    * OIDC 授权等待上限(默认 3 分钟; 测试注短)。外部系统浏览器无法感知
    * 「用户直接关掉了授权页」, 只能本地超时兜底: 到点仍 pending 视为放弃,
@@ -114,6 +118,15 @@ export interface HookControlManager {
    */
   revokeAndDisconnect(): void;
   /**
+   * 调用 server 侧 Slack 网关工具(tool.request -> tool.response 往返)。
+   * 永不 reject —— 各类失败(未连接 / 未绑定 / server 太旧 / 超时 / server
+   * 侧错误)一律 resolve 为 { ok:false, error:{code,message} }, MCP 工具层
+   * 1:1 映射为结构化结果, 不需要 try/catch。
+   */
+  callSlackTool(tool: string, args?: Record<string, unknown>): Promise<HookSlackToolResult>;
+  /** Slack 工具可用性快照(lizi_slack provider 的 isEnabled / slack_status 数据源)。 */
+  getSlackToolAvailability(): HookSlackToolAvailability;
+  /**
    * 拉取绑定用户的全部目录偏好快照(prefs.get -> prefs.state 往返)。
    * 未连接 reject HookNotConnectedError; 超时(server 太旧, prefs 帧被丢)
    * reject HookPrefsTimeoutError。
@@ -122,6 +135,32 @@ export interface HookControlManager {
   /** 部分更新某目录偏好并返回写后的最新快照(语义同 getWorkspacePrefs)。 */
   setWorkspacePrefs(workspace: string, patch: HookPrefsPatch): Promise<HookPrefsView>;
   dispose(): void;
+}
+
+/** Slack 网关工具的结构化错误(server 码透传 + 本地码, 见 callSlackTool)。 */
+export interface HookSlackToolError {
+  /**
+   * 错误码。本地产生的四种: HOOK_NOT_CONNECTED(未连接)/ NOT_BOUND(未绑定,
+   * 本地短路)/ SERVER_TOO_OLD(welcome.features 无 slack-tools)/ TIMEOUT;
+   * 其余为 server 侧透传(NO_USER_TOKEN / TOKEN_EXPIRED / RATE_LIMITED 等)。
+   */
+  code: string;
+  message: string;
+}
+
+/** callSlackTool 的结构化结果(永不 throw)。 */
+export type HookSlackToolResult =
+  | { ok: true; result: unknown }
+  | { ok: false; error: HookSlackToolError };
+
+/** Slack 工具可用性快照。 */
+export interface HookSlackToolAvailability {
+  connected: boolean;
+  /** 绑定已 confirmed。 */
+  bound: boolean;
+  /** server 已宣告 slack-tools 能力(welcome.features)。 */
+  serverSupportsTools: boolean;
+  binding: HookBindingView | null;
 }
 
 /** 连接不在线时的 prefs 读写失败(IPC 层映射 HOOK_NOT_CONNECTED)。 */
@@ -142,6 +181,9 @@ export class HookPrefsTimeoutError extends Error {
 
 /** prefs 往返默认超时(对齐 server 侧 queryBroker 的 10s)。 */
 const DEFAULT_PREFS_TIMEOUT_MS = 10_000;
+
+/** Slack 网关工具往返默认超时(全量搜索等长查询远慢于 prefs, 取宽上限)。 */
+const DEFAULT_TOOL_TIMEOUT_MS = 60_000;
 
 /**
  * OIDC 授权等待默认上限: 已登录 Slack 的浏览器一键授权只要几秒, 3 分钟给足
@@ -183,6 +225,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     notifyStatus,
     notifyPrefs,
     prefsTimeoutMs,
+    toolTimeoutMs,
     bindPendingTimeoutMs,
     installWaitTimeoutMs,
     dispatcher,
@@ -226,6 +269,13 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     string,
     { resolve: (v: HookPrefsView) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }
   >();
+  /** 在途的 Slack 工具往返(requestId -> resolve; tool.response.replyTo 配对)。 */
+  const pendingTools = new Map<
+    string,
+    { resolve: (v: HookSlackToolResult) => void; timer: NodeJS.Timeout }
+  >();
+  /** welcome 宣告的 server 能力集(断线清空 —— 重连可能落到另一版本实例)。 */
+  let serverFeatures: string[] = [];
   let disposed = false;
 
   /** 断线/重建时在途 prefs 请求快速失败(不让 IPC invoke 挂满超时)。 */
@@ -235,6 +285,18 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       pending.reject(new HookNotConnectedError());
     }
     pendingPrefs.clear();
+  }
+
+  /** 断线/重建时在途工具请求快速失败(resolve 结构化错误, 语义与 prefs 对齐)。 */
+  function drainPendingTools(): void {
+    for (const [, pending] of pendingTools) {
+      clearTimeout(pending.timer);
+      pending.resolve({
+        ok: false,
+        error: { code: 'HOOK_NOT_CONNECTED', message: 'Slack 连接已断开, 请稍后重试' },
+      });
+    }
+    pendingTools.clear();
   }
 
   /** 发起一次 prefs 往返(get/set 共用): 连接就绪 -> 发帧 -> 等 replyTo 配对。 */
@@ -384,6 +446,24 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
 
   /** 业务帧处理(v2 帧 + 任务派发)。 */
   function handleBusinessMessage(msg: HookMessage, send: (m: HookMessage) => boolean): void {
+    if (msg.type === 'tool.response') {
+      // Slack 网关工具应答: replyTo 配对在途请求; 迟到帧(已超时清理)静默丢
+      const pending = pendingTools.get(msg.payload.replyTo);
+      if (pending === undefined) {
+        log.warn(`tool.response for unknown requestId=${msg.payload.replyTo}, dropped (late?)`);
+        return;
+      }
+      pendingTools.delete(msg.payload.replyTo);
+      clearTimeout(pending.timer);
+      if (msg.payload.ok) {
+        pending.resolve({ ok: true, result: msg.payload.result });
+      } else {
+        // parse 层已强制 ok=false 必带非空 error, 这里只是类型收窄兜底
+        const err = msg.payload.error ?? { code: 'INTERNAL', message: 'server returned no error detail' };
+        pending.resolve({ ok: false, error: { code: err.code, message: err.message } });
+      }
+      return;
+    }
     if (msg.type === 'prefs.state') {
       // 全量快照 latest-wins: 回执(replyTo 命中在途请求)与主动推送(/model
       // 卡写入后)都无条件广播 —— 多窗口/面板保持同步
@@ -562,12 +642,14 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     // 看门狗随连接停止一并撤(dispose / 关 toggle / sync 重建都不该留残余计时器)
     clearBindWatchdog();
     clearInstallWatchdog();
+    serverFeatures = [];
     if (transport === null) return;
     const t = transport;
     transport = null;
     status = null;
     lastError = null;
     drainPendingPrefs();
+    drainPendingTools();
     t.dispose();
   }
 
@@ -580,13 +662,22 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       getAuthToken,
       buildHello,
       onMessage: handleBusinessMessage,
+      onWelcome: (payload) => {
+        if (created === null || transport !== created) return;
+        // server 能力集以最新一次握手为准(重连可能落到另一版本实例)
+        serverFeatures = [...payload.features];
+      },
       onStatus: (s, err) => {
         // 构造期 / dispose / 重建后的尾随回调不再处理
         if (created === null || transport !== created) return;
         status = s;
         lastError = err;
-        // 掉线(含退避重连中): 在途 prefs 往返快速失败, 不让 IPC 挂满超时
-        if (s !== 'connected') drainPendingPrefs();
+        // 掉线(含退避重连中): 在途往返快速失败, 不让调用方挂满超时
+        if (s !== 'connected') {
+          drainPendingPrefs();
+          drainPendingTools();
+          serverFeatures = [];
+        }
         // 握手完成 → dispatcher 刷新发送函数并补发离线积压的 turn.end
         if (s === 'connected') {
           const t = created;
@@ -629,6 +720,48 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     bindRevoke() {
       if (transport === null || status !== 'connected') return false;
       return transport.send(makeBindRevoke());
+    },
+    callSlackTool(tool, args) {
+      const fail = (code: string, message: string): Promise<HookSlackToolResult> =>
+        Promise.resolve({ ok: false, error: { code, message } });
+      const t = transport;
+      if (t === null || status !== 'connected') {
+        return fail('HOOK_NOT_CONNECTED', 'Slack 连接不在线, 请检查 设置 → Slack 开关与网络');
+      }
+      if (binding?.state !== 'confirmed') {
+        return fail('NOT_BOUND', '本设备未绑定 Slack, 请先到 设置 → Slack 完成绑定');
+      }
+      // 老 server 不认识 tool.request(丢帧不应答): 按能力宣告短路, 不打空炮
+      if (!serverFeatures.includes(HOOK_FEATURE_SLACK_TOOLS)) {
+        return fail('SERVER_TOO_OLD', 'Slack 服务端版本过旧, 不支持 Slack 工具, 请联系管理员升级');
+      }
+      const requestId = randomUUID();
+      return new Promise<HookSlackToolResult>((resolve) => {
+        if (!t.send(makeToolRequest({ requestId, tool, ...(args !== undefined ? { args } : {}) }))) {
+          resolve({
+            ok: false,
+            error: { code: 'HOOK_NOT_CONNECTED', message: 'Slack 连接不在线, 请稍后重试' },
+          });
+          return;
+        }
+        const timer = setTimeout(() => {
+          pendingTools.delete(requestId);
+          resolve({
+            ok: false,
+            error: { code: 'TIMEOUT', message: 'Slack 工具请求超时(服务端无应答), 请稍后重试' },
+          });
+        }, toolTimeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS);
+        timer.unref?.();
+        pendingTools.set(requestId, { resolve, timer });
+      });
+    },
+    getSlackToolAvailability() {
+      return {
+        connected: status === 'connected',
+        bound: binding?.state === 'confirmed',
+        serverSupportsTools: serverFeatures.includes(HOOK_FEATURE_SLACK_TOOLS),
+        binding,
+      };
     },
     getWorkspacePrefs() {
       return sendPrefsRequest((requestId) => makePrefsGet({ requestId }));

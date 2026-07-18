@@ -55,7 +55,7 @@ const h = vi.hoisted(() => {
     resolvedConfig: {
       agentKind: 'claude-code' as const,
       model: 'test-model',
-      effort: undefined as string | undefined,
+      effort: undefined as import('@lizi/maker-core').Effort | undefined,
       permissionMode: 'bypassPermissions',
       providerId: null as string | null,
     },

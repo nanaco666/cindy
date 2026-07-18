@@ -25,6 +25,7 @@ import {
   serializeHookMessage,
   type HelloInput,
   type HookMessage,
+  type WelcomePayload,
 } from '@cindy/slack-hook-protocol';
 
 /** transport 对外状态(manager 映射为 HookConnectionStatus)。 */
@@ -42,6 +43,11 @@ export interface HookTransportOpts {
   buildHello: () => HelloInput;
   /** welcome / ping / pong 之外的消息透传(dispatch 等业务帧)。send 返回是否送出。 */
   onMessage: (msg: HookMessage, send: (m: HookMessage) => boolean) => void;
+  /**
+   * welcome 到达回调(onStatus('connected') 之前触发): 上层据 payload.features
+   * 记 server 能力(如 slack-tools), 发对应帧前先短路老 server。
+   */
+  onWelcome?: (payload: WelcomePayload) => void;
   onStatus: (status: HookTransportStatus, lastError: string | null) => void;
   log: { info(msg: string): void; warn(msg: string): void; debug?(msg: string): void };
 }
@@ -180,6 +186,8 @@ export function createHookTransport(opts: HookTransportOpts): HookTransport {
         attempt = 0;
         lastError = null;
         log.info(`handshake complete with ${msg.payload.serverName}`);
+        // 能力宣告先于 connected: 上层在状态回调里可能立刻发帧, 特性集必须已就位
+        opts.onWelcome?.(msg.payload);
         setStatus('connected');
         return;
       }
