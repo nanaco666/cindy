@@ -115,6 +115,12 @@ export interface RoutingDescriptor {
   /** 可选 quirk 适配钩子名（对齐 OpenCode custom loader，承接无法纯数据表达的特例）。 */
   adapter?: string;
   /**
+   * 自定义供应商的「列模型」端点回带（可选）。路由器**不消费**本字段——它只是把
+   * `CustomProviderRuntimeConfig.modelsUrl` 带进 Provider/ProviderView，让编辑表单
+   * （providerViewToConfig 从 routing 重建配置）不丢这个持久化字段。
+   */
+  modelsUrl?: string;
+  /**
    * 该路由能服务的 wire model id 命名空间前缀白名单（每项形如 `xai/`，必须以 `/` 结尾）。
    *
    * 声明后，per-session 路由只捕获命中前缀的请求；未命中的请求（典型：agent CLI 内部
