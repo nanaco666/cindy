@@ -1356,7 +1356,12 @@ export default function HomeScreen() {
         ]}
         testID="home.newChatButton"
       >
-        <Send color={colors.ctaText} size={iconSize.listGlyph} strokeWidth={iconStroke.regular} />
+        <Send
+          color={colors.ctaText}
+          fill={colors.ctaText}
+          size={iconSize.listGlyph}
+          strokeWidth={iconStroke.medium}
+        />
       </Pressable>
 
       <RevokedAccessTip
@@ -2809,7 +2814,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     lineHeight: lineHeight.micro,
   },
   projectChildren: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceListExpanded,
   },
   projectViewAllRow: {
     // 永远是项目块的最后一个元素:不画自己的下线,块底部的全宽线就是分割线
@@ -2855,7 +2860,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingLeft: spacing.md + spacing.lg,
   },
   sessionListRowIndentedCindy: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceListExpanded,
     paddingLeft: 30,
   },
   sessionListRowOutlinedGroup: {
@@ -2880,6 +2885,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingLeft: spacing.md + spacing.lg * 2,
   },
   sessionListRowDeepIndentedCindy: {
+    backgroundColor: colors.surfaceListExpanded,
     paddingLeft: 46,
   },
   automationGroupBlock: {
@@ -2909,7 +2915,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.surface,
   },
   automationGroupChildrenCindy: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceListExpanded,
   },
   automationViewAllRow: {
     // 「查看全部 N 次运行」:与项目组「查看全部 N 条对话」同款行样式,

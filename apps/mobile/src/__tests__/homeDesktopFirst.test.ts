@@ -63,6 +63,13 @@ describe('mobile home desktop-first surface', () => {
     expect(source).toContain('backgroundColor: colors.surface');
     expect(source).toContain('borderBottomColor: colors.border');
     expect(source).toContain('colors.homeListFab');
+    expect(source).toContain('Send,');
+    expect(source).toContain('<Send\n          color={colors.ctaText}');
+    expect(source).toContain('fill={colors.ctaText}');
+    expect(source).toContain('size={iconSize.listGlyph}');
+    expect(source).toContain('strokeWidth={iconStroke.medium}');
+    expect(source).not.toContain('function HomeNewChatGlyph');
+    expect(source).not.toContain("import Svg, { Path } from 'react-native-svg';");
     expect(source).not.toContain(`colors.${removedListTokenPrefix}Background`);
     expect(source).not.toContain(`colors.${removedListTokenPrefix}Divider`);
     expect(source).not.toContain(`colors.${removedListTokenPrefix}Shadow`);
@@ -268,6 +275,10 @@ describe('mobile home desktop-first surface', () => {
     expect(stylesSource).toContain('height: HOME_SESSION_ROW_HEIGHT');
     expect(stylesSource).toContain('height: CINDY_LIST_ROW_HEIGHT');
     expect(stylesSource).toContain('height: lineHeight.micro');
+    expect(stylesSource).toContain('projectChildren: {\n    backgroundColor: colors.surfaceListExpanded');
+    expect(stylesSource).toContain('sessionListRowIndentedCindy: {\n    backgroundColor: colors.surfaceListExpanded');
+    expect(stylesSource).toContain('sessionListRowDeepIndentedCindy: {\n    backgroundColor: colors.surfaceListExpanded');
+    expect(stylesSource).toContain('automationGroupChildrenCindy: {\n    backgroundColor: colors.surfaceListExpanded');
   });
 
   it('keeps presence updates local and refreshes full home sync on every reconnect', () => {
