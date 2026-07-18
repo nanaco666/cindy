@@ -725,7 +725,7 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 
 ### 15.11 caret-accent 光标(用户二次改稿 2026-07-18 定稿:蓝,跨端规则)
 
-> 决策史:07-18 日间"光标品牌红 #DF0C27"→ 07-18 晚**用户撤红,改回蓝 `#417CDD`**。以下为现行有效版本,历史文档中"caret 品牌红"表述一律作废。
+> 决策史:07-18 日间"光标品牌红 #DF0C27"→ 07-18 晚**红 caret 定稿已被用户覆盖为蓝 `#417CDD`,双端一致**。以下为现行有效版本,历史文档中"caret 品牌红"表述一律作废。
 
 - 全部可编辑输入面的光标(caret)统一消费 `--caret-accent` token——globals.css 已全局接管(原生 `caret-color` + ProseMirror 伪光标),**组件内不许另设 caret-color**。
 - 取值:default 主题 = `var(--accent-cta-bg)`(中性反相,随主题走);**CINDY 两模式 override `#417CDD`**(与 focus ring 同值的信息蓝;已从 `RED_EXCEPTION_ALLOWED_IDS` 红例外白名单移除,`cindyDecisionData.ts` 断言锁值)。

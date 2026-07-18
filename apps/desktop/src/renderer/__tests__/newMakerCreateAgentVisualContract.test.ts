@@ -228,7 +228,7 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(colorsSource).toContain('rgba(255, 255, 255, 0.05)');
   });
 
-  it('uses the CINDY brand accent for editable carets', () => {
+  it('uses the focus-blue caret accent for editable carets', () => {
     expect(globalsSource).toContain('caret-color: var(--caret-accent);');
     expect(globalsSource).toContain('.cm-editor .cm-cursor');
     expect(globalsSource).toContain('border-left-color: var(--caret-accent) !important;');

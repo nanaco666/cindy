@@ -359,7 +359,6 @@ export const RED_EXCEPTION_ALLOWED_IDS = [
 
 // 旧 BRAND_RED_* map(保留供 D2T 迁移,迁完删):
 export const BRAND_RED_EXPECTED_BY_ID: Record<string, string> = {
-  'caret-accent': '#DF0C27',
   'accent-cta-bg': '#DF0C27',
   'accent-cta-bg-pure': '#DF0C27',
   'accent-emphasis': '#DF0C27',
@@ -373,7 +372,6 @@ export const BRAND_RED_EXPECTED_BY_ID: Record<string, string> = {
 };
 
 export const BRAND_RED_ALLOWED_IDS = [
-  'caret-accent',
   'accent-cta-bg',
   'accent-cta-bg-pure',
   'accent-emphasis',

@@ -202,6 +202,22 @@ describe('CINDY · ⑤ E1D 红色体系重构(中性 exact map + 红例外白名
     }
   });
 
+  it('caret-accent 固定为 focus 蓝并退出所有红色白名单', () => {
+    expect(RED_EXCEPTION_ALLOWED_IDS).not.toContain('caret-accent');
+    expect(BRAND_RED_ALLOWED_IDS).not.toContain('caret-accent');
+    expect(Object.keys(BRAND_RED_EXPECTED_BY_ID)).not.toContain('caret-accent');
+
+    const focusBlue = toRgb('#417CDD');
+    const brandRed = toRgb('#DF0C27');
+    const darkRed = toRgb('#A61629');
+    for (const [name, theme] of THEMES) {
+      const actual = theme.colors['caret-accent'];
+      expect(rgbEqual(toRgb(actual), focusBlue, 1), `${name}.caret-accent 应为 #417CDD`).toBe(true);
+      expect(rgbEqual(toRgb(actual), brandRed, 2), `${name}.caret-accent 不得为品牌红`).toBe(false);
+      expect(rgbEqual(toRgb(actual), darkRed, 2), `${name}.caret-accent 不得为深红`).toBe(false);
+    }
+  });
+
   it('NEUTRAL_PRIMARY_FOREGROUND_BY_ID 前景必须中性字(light #FCFCFC/dark #252222,非全局白)', () => {
     for (const [name, theme] of THEMES) {
       const expFg = name === 'cindy-light' ? '#FCFCFC' : '#252222';
