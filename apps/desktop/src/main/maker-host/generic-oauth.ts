@@ -22,6 +22,14 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import type { AgentKind, OAuthProviderDescriptor } from '@lizi/model-providers';
 
+import {
+  buildOAuthReturnAction,
+  getProviderOAuthResultCopy,
+  OAUTH_RESULT_HTML_LANG,
+  pickOAuthResultPageLang,
+  renderOAuthResultPage,
+  type OAuthResultPageLang,
+} from '../oauthResultPage.js';
 import { desktopMakerLogger } from './logger-adapter.js';
 
 const log = desktopMakerLogger.child('generic-oauth');
@@ -70,7 +78,8 @@ function base64URLEncode(buffer: Buffer): string {
   return buffer.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 const genVerifier = (): string => base64URLEncode(randomBytes(32));
-const genChallenge = (v: string): string => base64URLEncode(createHash('sha256').update(v).digest());
+const genChallenge = (v: string): string =>
+  base64URLEncode(createHash('sha256').update(v).digest());
 const genState = (): string => base64URLEncode(randomBytes(16));
 
 // ── 凭证 blob ───────────────────────────────────────────────────────────────────
@@ -249,11 +258,12 @@ class CallbackListener {
   private server: Server;
   private expectedState = '';
   private pendingRes: ServerResponse | null = null;
+  private callbackLang: OAuthResultPageLang = 'en';
   private resolve: ((code: string) => void) | null = null;
   private reject: ((err: Error) => void) | null = null;
   port = 0;
 
-  constructor() {
+  constructor(private readonly providerName: string) {
     this.server = createServer();
   }
 
@@ -292,17 +302,45 @@ class CallbackListener {
       res.end();
       return;
     }
+    const lang = pickOAuthResultPageLang(
+      typeof req.headers['accept-language'] === 'string'
+        ? req.headers['accept-language']
+        : undefined,
+    );
+    this.callbackLang = lang;
+    const copy = getProviderOAuthResultCopy(lang, this.providerName, BRAND_NAME);
+    const action = buildOAuthReturnAction(lang, 'generic-oauth', BRAND_NAME);
     const code = parsed.searchParams.get('code') ?? undefined;
     const state = parsed.searchParams.get('state') ?? undefined;
     if (!code) {
-      res.writeHead(400);
-      res.end('Authorization code not found');
+      res.writeHead(400, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(
+        renderOAuthResultPage({
+          htmlLang: OAUTH_RESULT_HTML_LANG[lang],
+          variant: 'error',
+          title: copy.errorTitle,
+          body: copy.missingCodeBody,
+          detail:
+            parsed.searchParams.get('error_description') ??
+            parsed.searchParams.get('error') ??
+            undefined,
+          action,
+        }),
+      );
       this.reject?.(new Error('No authorization code received'));
       return;
     }
     if (state !== this.expectedState) {
-      res.writeHead(400);
-      res.end('Invalid state parameter');
+      res.writeHead(400, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(
+        renderOAuthResultPage({
+          htmlLang: OAUTH_RESULT_HTML_LANG[lang],
+          variant: 'error',
+          title: copy.errorTitle,
+          body: copy.invalidStateBody,
+          action,
+        }),
+      );
       this.reject?.(new Error('Invalid state parameter'));
       return;
     }
@@ -317,13 +355,39 @@ class CallbackListener {
     // 结果翻转成 { ok: false }(否则 UI 报失败但连接态又显示已连接,自相矛盾)。
     try {
       this.pendingRes.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      // 浏览器页面够不到 renderer i18n，双语兜底（同 grok）。
+      const copy = getProviderOAuthResultCopy(this.callbackLang, providerName, BRAND_NAME);
       this.pendingRes.end(
-        `<html><body style="font-family:sans-serif">${providerName} 登录成功，可以关闭此页面回到 ${BRAND_NAME}。<br/>`
-        + `${providerName} login successful — you can close this page and return to ${BRAND_NAME}.</body></html>`,
+        renderOAuthResultPage({
+          htmlLang: OAUTH_RESULT_HTML_LANG[this.callbackLang],
+          variant: 'success',
+          title: copy.successTitle,
+          body: copy.successBody,
+          action: buildOAuthReturnAction(this.callbackLang, 'generic-oauth', BRAND_NAME),
+        }),
       );
     } catch {
       /* 回执页写失败无害:登录结果以凭证落盘为准 */
+    }
+    this.pendingRes = null;
+  }
+
+  fail(detail?: string): void {
+    if (!this.pendingRes) return;
+    try {
+      const copy = getProviderOAuthResultCopy(this.callbackLang, this.providerName, BRAND_NAME);
+      this.pendingRes.writeHead(500, { 'content-type': 'text/html; charset=utf-8' });
+      this.pendingRes.end(
+        renderOAuthResultPage({
+          htmlLang: OAUTH_RESULT_HTML_LANG[this.callbackLang],
+          variant: 'error',
+          title: copy.errorTitle,
+          body: copy.exchangeFailedBody,
+          detail,
+          action: buildOAuthReturnAction(this.callbackLang, 'generic-oauth', BRAND_NAME),
+        }),
+      );
+    } catch {
+      /* 回执通道已关闭,登录结果仍由调用链决定 */
     }
     this.pendingRes = null;
   }
@@ -376,7 +440,7 @@ export async function runGenericOAuthLogin(
   const verifier = genVerifier();
   const challenge = genChallenge(verifier);
   const state = genState();
-  const listener = new CallbackListener();
+  const listener = new CallbackListener(provider.name);
   const abort = new AbortController();
   activeLogins.set(provider.id, { listener, abort });
 
@@ -400,12 +464,19 @@ export async function runGenericOAuthLogin(
 
     // 先注册 code 等待再开浏览器（已授权的浏览器可能在 openExternal 返回前就完成重定向，同 grok）。
     const codePromise = new Promise<string>((resolve, reject) => {
-      if (abort.signal.aborted) { reject(new Error('login_cancelled')); return; }
+      if (abort.signal.aborted) {
+        reject(new Error('login_cancelled'));
+        return;
+      }
       timer = setTimeout(() => reject(new Error('timeout')), LOGIN_TIMEOUT_MS);
-      abort.signal.addEventListener('abort', () => reject(new Error('login_cancelled')), { once: true });
+      abort.signal.addEventListener('abort', () => reject(new Error('login_cancelled')), {
+        once: true,
+      });
       listener.waitForCode(state).then(resolve, reject);
     });
-    codePromise.catch(() => { /* handled at await site */ });
+    codePromise.catch(() => {
+      /* handled at await site */
+    });
 
     log.info('opening browser for generic oauth', { providerId: provider.id, port: listener.port });
     await io.openExternal(authUrl.toString());
@@ -448,6 +519,7 @@ export async function runGenericOAuthLogin(
     return { ok: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    listener.fail(msg);
     log.warn('generic oauth login failed', { providerId: provider.id, error: msg });
     return { ok: false, reason: abort.signal.aborted ? 'login_cancelled' : msg };
   } finally {
@@ -533,7 +605,10 @@ export function parseModelsListResponse(json: unknown): { id: string; name: stri
           : null;
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    const rec = item && typeof item === 'object' ? (item as { display_name?: unknown; name?: unknown }) : null;
+    const rec =
+      item && typeof item === 'object'
+        ? (item as { display_name?: unknown; name?: unknown })
+        : null;
     const name =
       rec && typeof rec.display_name === 'string' && rec.display_name.length > 0
         ? rec.display_name

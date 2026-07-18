@@ -32,6 +32,13 @@ import * as http from 'node:http';
 import * as crypto from 'node:crypto';
 
 import { GHOST_OAUTH_RESERVED_AUTHORIZE_PARAMS } from '../../shared/ghost.js';
+import {
+  buildOAuthReturnAction,
+  OAUTH_RESULT_HTML_LANG,
+  pickOAuthResultPageLang,
+  renderOAuthResultPage,
+  type OAuthResultPageLang,
+} from '../oauthResultPage.js';
 
 /** 授权流程 / 刷新共用的声明参数(源自 ghost.json 的 oauth 声明 + 用户自填 client 凭证)。 */
 export interface GhostOauthClientConfig {
@@ -89,7 +96,9 @@ export interface GhostOauthClientConfig {
 }
 
 /** extraAuthorizeParams 不允许顶掉的协议保留参数(清单校验拒装,这里防御性重验)。 */
-const RESERVED_AUTHORIZE_PARAMS: ReadonlySet<string> = new Set(GHOST_OAUTH_RESERVED_AUTHORIZE_PARAMS);
+const RESERVED_AUTHORIZE_PARAMS: ReadonlySet<string> = new Set(
+  GHOST_OAUTH_RESERVED_AUTHORIZE_PARAMS,
+);
 
 /** 一次授权 / 刷新成功后的令牌包(交由 token manager 落库;本模块不持久化)。 */
 export interface GhostOauthTokenBundle {
@@ -193,35 +202,11 @@ function isSafeHttpsUrl(raw: string): boolean {
   }
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-/** 回调页语言(按拉起浏览器的 Accept-Language 就近命中; 缺省英文)。 */
-type OauthPageLang = 'zh' | 'en' | 'ja' | 'ko';
-
-function pickOauthPageLang(acceptLanguage: string | undefined): OauthPageLang {
-  if (typeof acceptLanguage !== 'string' || acceptLanguage.length === 0) return 'en';
-  for (const part of acceptLanguage.split(',')) {
-    const primary = part.trim().split(';')[0]?.trim().toLowerCase() ?? '';
-    if (primary.startsWith('zh')) return 'zh';
-    if (primary.startsWith('ja')) return 'ja';
-    if (primary.startsWith('ko')) return 'ko';
-    if (primary.startsWith('en')) return 'en';
-  }
-  return 'en';
-}
-
 /** 失败页文案键(免把中文散文当参数传, i18n 后统一走键)。 */
 type OauthErrorKind = 'provider-error' | 'invalid-callback' | 'internal';
 
 const OAUTH_PAGE_STRINGS: Record<
-  OauthPageLang,
+  OAuthResultPageLang,
   {
     successTitle: string;
     /** {brand} 占位替换品牌名。 */
@@ -246,8 +231,10 @@ const OAUTH_PAGE_STRINGS: Record<
     errorTitle: 'Authorization failed',
     errors: {
       'provider-error': 'The authorization server returned an error: {detail}',
-      'invalid-callback': 'The callback is incomplete or failed validation. Please return to {brand} and try again.',
-      internal: 'Something went wrong while handling the callback. Please return to {brand} and try again.',
+      'invalid-callback':
+        'The callback is incomplete or failed validation. Please return to {brand} and try again.',
+      internal:
+        'Something went wrong while handling the callback. Please return to {brand} and try again.',
     },
   },
   ja: {
@@ -256,7 +243,8 @@ const OAUTH_PAGE_STRINGS: Record<
     errorTitle: '認可に失敗しました',
     errors: {
       'provider-error': '認可サーバーがエラーを返しました：{detail}',
-      'invalid-callback': 'コールバックのパラメータが不完全か検証に失敗しました。{brand} に戻ってやり直してください。',
+      'invalid-callback':
+        'コールバックのパラメータが不完全か検証に失敗しました。{brand} に戻ってやり直してください。',
       internal: 'コールバック処理中にエラーが発生しました。{brand} に戻ってやり直してください。',
     },
   },
@@ -266,42 +254,44 @@ const OAUTH_PAGE_STRINGS: Record<
     errorTitle: '인증 실패',
     errors: {
       'provider-error': '인증 서버가 오류를 반환했습니다: {detail}',
-      'invalid-callback': '콜백 매개변수가 불완전하거나 검증에 실패했습니다. {brand}(으)로 돌아가 다시 시도하세요.',
+      'invalid-callback':
+        '콜백 매개변수가 불완전하거나 검증에 실패했습니다. {brand}(으)로 돌아가 다시 시도하세요.',
       internal: '콜백 처리 중 오류가 발생했습니다. {brand}(으)로 돌아가 다시 시도하세요.',
     },
   },
 };
 
-const OAUTH_HTML_LANG: Record<OauthPageLang, string> = { zh: 'zh-CN', en: 'en', ja: 'ja', ko: 'ko' };
-
-function oauthPageShell(lang: OauthPageLang, title: string, body: string, isError: boolean): string {
-  return `<!DOCTYPE html>
-<html lang="${OAUTH_HTML_LANG[lang]}"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
-<style>body{font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8f8f6;color:#000}
-.card{background:#fff;padding:32px 40px;border-radius:12px;border:1px solid #d7d7d4;text-align:center;max-width:360px}
-h1{font-size:18px;margin:0 0 8px;font-weight:500${isError ? ';color:#b53333' : ''}}p{color:#737373;margin:0;font-size:14px;line-height:1.5}</style></head>
-<body><div class="card"><h1>${escapeHtml(title)}</h1><p>${body}</p></div></body></html>`;
-}
-
-function successHtml(brandName: string, lang: OauthPageLang): string {
+function successHtml(brandName: string, lang: OAuthResultPageLang): string {
   const s = OAUTH_PAGE_STRINGS[lang];
   // 替换器必须用函数形式: 字符串形式会把替换值里的 $&/$' 等当特殊模式展开
-  // (escapeHtml 的输出天然含 &, 用户可控的 detail 能借此弄坏/伪造文案)
-  const body = escapeHtml(s.successBody).replace('{brand}', () => escapeHtml(brandName));
-  return oauthPageShell(lang, s.successTitle, body, false);
+  // (用户可控的 detail 能借此弄坏/伪造文案);统一 renderer 最后只转义一次。
+  const body = s.successBody.replace('{brand}', () => brandName);
+  return renderOAuthResultPage({
+    htmlLang: OAUTH_RESULT_HTML_LANG[lang],
+    variant: 'success',
+    title: s.successTitle,
+    body,
+    action: buildOAuthReturnAction(lang, 'ghost-oauth', brandName),
+  });
 }
 
 function errorHtml(
   kind: OauthErrorKind,
-  lang: OauthPageLang,
+  lang: OAuthResultPageLang,
   brandName: string,
   detail?: string,
 ): string {
   const s = OAUTH_PAGE_STRINGS[lang];
-  const body = escapeHtml(s.errors[kind])
-    .replace('{brand}', () => escapeHtml(brandName))
-    .replace('{detail}', () => escapeHtml(detail ?? ''));
-  return oauthPageShell(lang, s.errorTitle, body, true);
+  const body = s.errors[kind]
+    .replace('{brand}', () => brandName)
+    .replace('{detail}', () => detail ?? '');
+  return renderOAuthResultPage({
+    htmlLang: OAUTH_RESULT_HTML_LANG[lang],
+    variant: 'error',
+    title: s.errorTitle,
+    body,
+    action: buildOAuthReturnAction(lang, 'ghost-oauth', brandName),
+  });
 }
 
 /** 有界读取响应体文本(超限直接判失败,不截断硬解析半截 JSON)。 */
@@ -319,20 +309,28 @@ interface TokenEndpointResponse {
   error?: unknown;
 }
 
-function toBundle(parsed: TokenEndpointResponse, previousRefreshToken?: string): GhostOauthTokenBundle | null {
+function toBundle(
+  parsed: TokenEndpointResponse,
+  previousRefreshToken?: string,
+): GhostOauthTokenBundle | null {
   if (typeof parsed.access_token !== 'string' || parsed.access_token.length === 0) return null;
-  const expiresIn = typeof parsed.expires_in === 'number' && Number.isFinite(parsed.expires_in)
-    ? parsed.expires_in
-    : null;
+  const expiresIn =
+    typeof parsed.expires_in === 'number' && Number.isFinite(parsed.expires_in)
+      ? parsed.expires_in
+      : null;
   // refresh token 轮换兼容(Atlassian 等):响应带新 refresh token 用新的,
   // 没带则沿用旧的(Google 刷新时不重发 refresh token)。
-  const refreshToken = typeof parsed.refresh_token === 'string' && parsed.refresh_token.length > 0
-    ? parsed.refresh_token
-    : previousRefreshToken ?? null;
+  const refreshToken =
+    typeof parsed.refresh_token === 'string' && parsed.refresh_token.length > 0
+      ? parsed.refresh_token
+      : (previousRefreshToken ?? null);
   return {
     accessToken: parsed.access_token,
     refreshToken,
-    expiresAt: expiresIn !== null ? Date.now() + Math.max(0, expiresIn * 1000 - EXPIRY_SAFETY_MARGIN_MS) : null,
+    expiresAt:
+      expiresIn !== null
+        ? Date.now() + Math.max(0, expiresIn * 1000 - EXPIRY_SAFETY_MARGIN_MS)
+        : null,
     grantedScope: typeof parsed.scope === 'string' && parsed.scope.length > 0 ? parsed.scope : null,
   };
 }
@@ -387,21 +385,35 @@ export function cancelActiveGhostOauthFlow(): void {
  * loopback 起监听 → 拼授权 URL 拉浏览器 → 等回调验 state → code 换 token。
  * 永不 reject,一切失败折叠成结构化 result。
  */
-export async function startGhostOauthFlow(opts: StartGhostOauthFlowOptions): Promise<GhostOauthFlowResult> {
+export async function startGhostOauthFlow(
+  opts: StartGhostOauthFlowOptions,
+): Promise<GhostOauthFlowResult> {
   const { config } = opts;
 
   if (!config.clientId) return { ok: false, error: 'INVALID_CONFIG', detail: 'clientId 未配置' };
   if (!isSafeHttpsUrl(config.authorizeUrl)) {
-    return { ok: false, error: 'INVALID_CONFIG', detail: 'authorizeUrl 必须是 https 且不含内嵌凭证' };
+    return {
+      ok: false,
+      error: 'INVALID_CONFIG',
+      detail: 'authorizeUrl 必须是 https 且不含内嵌凭证',
+    };
   }
   if (!isSafeHttpsUrl(config.tokenUrl)) {
     return { ok: false, error: 'INVALID_CONFIG', detail: 'tokenUrl 必须是 https 且不含内嵌凭证' };
   }
   if (config.tokenBroker && !opts.broker) {
-    return { ok: false, error: 'INVALID_CONFIG', detail: 'tokenBroker 已声明但主机未接线 broker 通道' };
+    return {
+      ok: false,
+      error: 'INVALID_CONFIG',
+      detail: 'tokenBroker 已声明但主机未接线 broker 通道',
+    };
   }
   if (config.publicRedirectUri !== undefined && !isSafeHttpsUrl(config.publicRedirectUri)) {
-    return { ok: false, error: 'INVALID_CONFIG', detail: 'publicRedirectUri 必须是 https 且不含内嵌凭证' };
+    return {
+      ok: false,
+      error: 'INVALID_CONFIG',
+      detail: 'publicRedirectUri 必须是 https 且不含内嵌凭证',
+    };
   }
 
   // 本单取消信号在任何 await 之前**同步**注册:外部 cancel 与后来单的顶替,
@@ -463,7 +475,9 @@ async function runGhostOauthFlow(
   const usePkce = config.pkce !== false;
   const state = base64Url(crypto.randomBytes(32));
   const verifier = usePkce ? base64Url(crypto.randomBytes(32)) : null;
-  const challenge = verifier ? base64Url(crypto.createHash('sha256').update(verifier).digest()) : null;
+  const challenge = verifier
+    ? base64Url(crypto.createHash('sha256').update(verifier).digest())
+    : null;
 
   // loopback 监听:缺省 127.0.0.1 随机端口;声明 redirectPort 时钉死该端口
   // (Atlassian 等回调精确匹配的服务商)。钉死端口被外部进程占用时,注入了
@@ -510,7 +524,10 @@ async function runGhostOauthFlow(
     // 回收/重试窗口内被顶掉或取消的单按 CANCELLED 收场,不假报"端口被占用"
     // (新单可能马上就成功了,旧单的占用报错只会误导用户)。
     if (cancellation.isCancelled()) return { ok: false, error: 'CANCELLED' };
-    logger?.warn('ghost oauth loopback 监听失败', { port: config.redirectPort ?? 0, err: String(listenErr) });
+    logger?.warn('ghost oauth loopback 监听失败', {
+      port: config.redirectPort ?? 0,
+      err: String(listenErr),
+    });
     // 文案按"是否真的尝试过自动回收"区分:第三方意识拿不到回收器,不能
     // 谎称"无法自动释放"。
     const detail = config.redirectPort
@@ -546,17 +563,23 @@ async function runGhostOauthFlow(
   }
 
   // 回调等待(含超时与取消;三路竞速,谁先到听谁的)。
-  const callback = new Promise<{ kind: 'code'; code: string } | { kind: 'invalid'; detail: string }>((resolve) => {
+  const callback = new Promise<
+    { kind: 'code'; code: string } | { kind: 'invalid'; detail: string }
+  >((resolve) => {
     let settled = false;
-    const finish = (v: { kind: 'code'; code: string } | { kind: 'invalid'; detail: string }): void => {
+    const finish = (
+      v: { kind: 'code'; code: string } | { kind: 'invalid'; detail: string },
+    ): void => {
       if (settled) return;
       settled = true;
       resolve(v);
     };
     server.on('request', (req, res) => {
       // 页面语言按浏览器 Accept-Language 就近命中(zh/ja/ko, 缺省英文)
-      const lang = pickOauthPageLang(
-        typeof req.headers['accept-language'] === 'string' ? req.headers['accept-language'] : undefined,
+      const lang = pickOAuthResultPageLang(
+        typeof req.headers['accept-language'] === 'string'
+          ? req.headers['accept-language']
+          : undefined,
       );
       try {
         const url = new URL(req.url ?? '/', 'http://127.0.0.1');
@@ -615,7 +638,8 @@ async function runGhostOauthFlow(
 
     if (outcome === 'timeout') return { ok: false, error: 'TIMEOUT' };
     if (outcome === 'cancelled') return { ok: false, error: 'CANCELLED' };
-    if (outcome.kind === 'invalid') return { ok: false, error: 'CALLBACK_INVALID', detail: outcome.detail };
+    if (outcome.kind === 'invalid')
+      return { ok: false, error: 'CALLBACK_INVALID', detail: outcome.detail };
 
     // broker 模式:code 交换交给 XDT server(secret 在服务端),不直连 tokenUrl。
     if (config.tokenBroker && opts.broker) {
@@ -625,7 +649,10 @@ async function runGhostOauthFlow(
         ...(verifier !== null ? { codeVerifier: verifier } : {}),
       });
       if (!brokered.ok) {
-        logger?.warn('ghost oauth broker 交换失败', { slug: config.tokenBroker, error: brokered.error });
+        logger?.warn('ghost oauth broker 交换失败', {
+          slug: config.tokenBroker,
+          error: brokered.error,
+        });
         return { ok: false, error: brokered.error, detail: brokered.detail };
       }
       logger?.info('ghost oauth 授权完成(broker)', {
@@ -653,18 +680,27 @@ async function runGhostOauthFlow(
     try {
       res = await fetchImpl(config.tokenUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
         body: form.toString(),
       });
     } catch (err) {
-      logger?.warn('ghost oauth token 交换网络失败', { host: new URL(config.tokenUrl).hostname, err: String(err) });
+      logger?.warn('ghost oauth token 交换网络失败', {
+        host: new URL(config.tokenUrl).hostname,
+        err: String(err),
+      });
       return { ok: false, error: 'NETWORK', detail: String(err) };
     }
 
     const text = await readBoundedText(res);
     if (!res.ok) {
       const detail = summarizeTokenError(res.status, text);
-      logger?.warn('ghost oauth token 交换被拒', { host: new URL(config.tokenUrl).hostname, status: res.status });
+      logger?.warn('ghost oauth token 交换被拒', {
+        host: new URL(config.tokenUrl).hostname,
+        status: res.status,
+      });
       return { ok: false, error: 'EXCHANGE_FAILED', detail };
     }
     let parsed: TokenEndpointResponse;
@@ -674,7 +710,8 @@ async function runGhostOauthFlow(
       return { ok: false, error: 'EXCHANGE_FAILED', detail: 'token 端点响应不是合法 JSON' };
     }
     const bundle = toBundle(parsed);
-    if (!bundle) return { ok: false, error: 'EXCHANGE_FAILED', detail: 'token 端点响应缺少 access_token' };
+    if (!bundle)
+      return { ok: false, error: 'EXCHANGE_FAILED', detail: 'token 端点响应缺少 access_token' };
     logger?.info('ghost oauth 授权完成', {
       host: new URL(config.tokenUrl).hostname,
       hasRefreshToken: bundle.refreshToken !== null,
@@ -712,13 +749,20 @@ export interface RefreshGhostOauthTokenOptions {
  * 服务商如 Atlassian)一并回传,调用方必须覆盖落库,否则下一次刷新用旧
  * token 会 invalid_grant。
  */
-export async function refreshGhostOauthToken(opts: RefreshGhostOauthTokenOptions): Promise<GhostOauthRefreshResult> {
+export async function refreshGhostOauthToken(
+  opts: RefreshGhostOauthTokenOptions,
+): Promise<GhostOauthRefreshResult> {
   const { config, refreshToken, fetchImpl, logger } = opts;
 
   // broker 模式:refresh 同样经 XDT server;invalidGrant 原样透传给 markExpired 链路。
   if (config.tokenBroker) {
     if (!opts.broker) {
-      return { ok: false, error: 'EXCHANGE_FAILED', invalidGrant: false, detail: 'tokenBroker 已声明但主机未接线 broker 通道' };
+      return {
+        ok: false,
+        error: 'EXCHANGE_FAILED',
+        invalidGrant: false,
+        detail: 'tokenBroker 已声明但主机未接线 broker 通道',
+      };
     }
     const brokered = await opts.broker.refresh(config.tokenBroker, { refreshToken });
     if (!brokered.ok) {
@@ -730,9 +774,10 @@ export async function refreshGhostOauthToken(opts: RefreshGhostOauthTokenOptions
       return brokered;
     }
     // broker 未回新 refresh token 时沿用旧的(与直连 toBundle 的轮换语义对齐)。
-    const bundle = brokered.bundle.refreshToken !== null
-      ? brokered.bundle
-      : { ...brokered.bundle, refreshToken };
+    const bundle =
+      brokered.bundle.refreshToken !== null
+        ? brokered.bundle
+        : { ...brokered.bundle, refreshToken };
     return { ok: true, bundle };
   }
 
@@ -761,17 +806,32 @@ export async function refreshGhostOauthToken(opts: RefreshGhostOauthTokenOptions
       status: res.status,
       invalidGrant,
     });
-    return { ok: false, error: 'EXCHANGE_FAILED', invalidGrant, detail: summarizeTokenError(res.status, text) };
+    return {
+      ok: false,
+      error: 'EXCHANGE_FAILED',
+      invalidGrant,
+      detail: summarizeTokenError(res.status, text),
+    };
   }
   let parsed: TokenEndpointResponse;
   try {
     parsed = JSON.parse(text ?? '') as TokenEndpointResponse;
   } catch {
-    return { ok: false, error: 'EXCHANGE_FAILED', invalidGrant: false, detail: 'token 端点响应不是合法 JSON' };
+    return {
+      ok: false,
+      error: 'EXCHANGE_FAILED',
+      invalidGrant: false,
+      detail: 'token 端点响应不是合法 JSON',
+    };
   }
   const bundle = toBundle(parsed, refreshToken);
   if (!bundle) {
-    return { ok: false, error: 'EXCHANGE_FAILED', invalidGrant: false, detail: 'token 端点响应缺少 access_token' };
+    return {
+      ok: false,
+      error: 'EXCHANGE_FAILED',
+      invalidGrant: false,
+      detail: 'token 端点响应缺少 access_token',
+    };
   }
   return { ok: true, bundle };
 }
@@ -821,7 +881,9 @@ function extractIdentityValue(parsed: unknown, path: string): string | null {
     if (typeof cursor !== 'object' || cursor === null || Array.isArray(cursor)) return null;
     cursor = (cursor as Record<string, unknown>)[seg];
   }
-  return typeof cursor === 'string' && cursor.length > 0 && cursor.length <= IDENTITY_VALUE_MAX_CHARS
+  return typeof cursor === 'string' &&
+    cursor.length > 0 &&
+    cursor.length <= IDENTITY_VALUE_MAX_CHARS
     ? cursor
     : null;
 }
@@ -831,7 +893,9 @@ function extractIdentityValue(parsed: unknown, path: string): string | null {
  * displayTemplate(声明了才有)渲染人类可读展示名。纯展示/判定用途,任何
  * 失败不阻断授权(对应产物降级 null,设置页回落显示"账号 N")。
  */
-export async function fetchGhostOauthIdentity(opts: FetchGhostOauthIdentityOptions): Promise<GhostOauthIdentityInfo> {
+export async function fetchGhostOauthIdentity(
+  opts: FetchGhostOauthIdentityOptions,
+): Promise<GhostOauthIdentityInfo> {
   const none: GhostOauthIdentityInfo = { label: null, display: null, avatarUrl: null };
   if (!isSafeHttpsUrl(opts.url)) return none;
   let res: Response;
@@ -887,7 +951,9 @@ function extractIdentityUrlValue(parsed: unknown, path: string): string | null {
     if (typeof cursor !== 'object' || cursor === null || Array.isArray(cursor)) return null;
     cursor = (cursor as Record<string, unknown>)[seg];
   }
-  return typeof cursor === 'string' && cursor.length > 0 && cursor.length <= IDENTITY_URL_VALUE_MAX_CHARS
+  return typeof cursor === 'string' &&
+    cursor.length > 0 &&
+    cursor.length <= IDENTITY_URL_VALUE_MAX_CHARS
     ? cursor
     : null;
 }
