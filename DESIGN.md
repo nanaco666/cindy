@@ -620,7 +620,7 @@ card/container
 > 本节为 CINDY 皮肤族的规范记录,**不改写 §1-7 默认皮肤规范**。值的唯一权威:
 > `2026-07-17-cindy-token-decision-table.md`(用户 U8 批准),零自由裁量。
 
-### 8.1 色板(Figma 文本节点提取)
+### 15.1 色板(Figma 文本节点提取)
 
 | 语义 | Light | Dark |
 |---|---|---|
@@ -633,7 +633,7 @@ card/container
 | 正文 | `#3C3F43` | `#D4D4D4` |
 | 纯白 | `#FFFFFF` | `#FFFFFF` |
 
-### 8.2 三份红 exact map(品牌红边界)
+### 15.2 三份红 exact map(品牌红边界)
 
 - **BRAND_RED_EXPECTED_BY_ID**(必须等于品牌红/深红):`accent-cta-bg`/`accent-cta-bg-pure`/`accent-emphasis`/`confirm-btn-primary-bg`/`migration-bar-fill`/`perm-allow-btn-bg`/`update-btn-border`/`update-btn-text`(均 `#DF0C27`);`primary`/`sidebar-item-active`(HSL `352.3 89.8% 46.1%`,RGB 归一等价品牌红)。
 - **BRAND_RED_ALLOWED_IDS**(允许含红全集 = EXPECTED ∪ 派生):上述 + `accent-soft`/`accent-hover`/`drop-overlay-bg`/`confirm-btn-primary-hover`/`settings-btn-primary-bg`/`settings-btn-primary-border`/`settings-btn-primary-hover-bg`。
@@ -641,11 +641,11 @@ card/container
 
 单向禁止:`ALLOWED` 之外任何 token 出现 `#DF0C27`/`#A61629` = 测试红。
 
-### 8.3 插值表(sRGB 每通道 `round(A+(B-A)*t)`)
+### 15.3 插值表(sRGB 每通道 `round(A+(B-A)*t)`)
 
 详见决策表 §2。Light/Dark 各 20/40/65/75% 档已冻结精确值进单测(`#EFEFEF/#F1F1F1/#F4F4F4/#F5F5F5`、`#2B2929/#2D2B2B/#2F2D2D/#2F2D2D`)。
 
-### 8.4 豁免(不纳入 CINDY 覆盖,跨主题统一)
+### 15.4 豁免(不纳入 CINDY 覆盖,跨主题统一)
 
 - 语义色:`warning-accent` `#EA6B17`(定稿 2026-07-17,取代 `#FF6600`)/ `annotation-accent` `#FF3B30`(图片标注烧录笔迹色,语义豁免,不改)/ `status-bar-accent`(alias warning orange,自动跟随)。
 - 状态四色(设计定稿 2026-07-17,取代冻结红线;全局 light/dark 同值,9 主题无 override 自动跟随):running `#EA6B17` / awaiting `#19D2C1` / error(状态族)`#D91F37` / done `#2AAE5B`;warning 前景 `warning-fg` `#F3A115`(与 Toast amber `#F59E0B` 解耦,Toast 维持 B 组现状)。
@@ -657,7 +657,7 @@ card/container
 - dark:`.hljs-section` #1f6feb × #312F2F = 2.87 <3,补 `[data-theme="cindy-dark"] .hljs-section` 提亮 `#2573ec`(保持蓝 H212 S84% L52→53.5%,× #312F2F=3.00 ≥3);`.hljs-punctuation`/`.hljs-tag` github-dark "purposely ignored" 无显式色,dark 继承 .dark .hljs text `#c9d1d9`(× #312F2F=8.62 ≥3 达标),补 `[data-theme="cindy-dark"]` 显式覆盖 `#c9d1d9` 防御性(D 裁决三项覆盖,值同 text 不降对比度)。
 - model-budget 光谱条 / GhostTool shimmer:显式豁免(中性 shimmer,跨主题统一)。
 
-### 8.5 U2 显式例外记录(二级信息色忠于 Figma 原值)
+### 15.5 U2 显式例外记录(二级信息色忠于 Figma 原值)
 
 - token:`text-secondary` / `text-secondary-cross`(light `#9A9DA3` / dark `#6F6F6F`)。
 - 实测对比度(WCAG):× surface `2.32/2.92:1`、× elevated `2.56/2.65:1`、× chip `2.41/2.72:1`,均低于普通文本 AA `4.5:1`。
@@ -665,7 +665,7 @@ card/container
 - 约束:**不得擅自调深**(如 `#686B72` 已证伪且仅存档备查),改值须重新过用户关卡。
 - 反向冻结单测:`cindyThemes.test.ts` 第 ⑦ 组断言该值必须恰等 Figma 原值,注入 `#686B72` 必须变红。
 
-### 8.6 HSL 格式合约
+### 15.6 HSL 格式合约
 
 42 个 `HSL_FORMAT_IDS` 必须 HSL 三元组(`h s% l%`,`h∈[0,360)`、灰色 `hue=0`、1 位小数);其余 token 走 hex/rgba。round-trip HSL→RGB 通道误差 ≤1。HSL_FORMAT_IDS 之外不得误填 HSL 三元组。
 
@@ -722,3 +722,21 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 - **backlog(R2 §4.3 五点差异,lead 裁决 2026-07-17 本轮不做,入 backlog)**:Project_List 三态拆分(active-task-pill/project-card/flat-list-row 不共用 `sidebar-item-active`);项目 header/list card 选中应中性底(#312F2F/#F6F6F6 非 #DF0C27 大红);去 Project_List 选中组 `focus-ring-soft` 蓝 ring,改 card stroke #DCDFE3/#434343;小箭头 #A61629 强调(非整行红底)。详见 `2026-07-17-r2-ui-specs.md` §4.3。本轮收敛不扩战线,后续另开。
 
 三份新 map(`NEUTRAL_PRIMARY_EXPECTED_BY_ID`/`FOREGROUND` + `RED_EXCEPTION_ALLOWED_IDS`)替代旧 `BRAND_RED_*`。D2T ⑤/⑦/⑧ 改用新 map(中性 exact + 红例外白名单 + 中性对比度 + 可证伪)。
+
+### 15.11 caret-accent 品牌红光标(用户定稿 2026-07-18,跨端规则)
+
+- 全部可编辑输入面的光标(caret)统一消费 `--caret-accent` token——globals.css 已全局接管(原生 `caret-color` + ProseMirror 伪光标),**组件内不许另设 caret-color**。
+- 取值:default 主题 = `var(--accent-cta-bg)`(中性反相,随主题走);**CINDY 两模式 override `#DF0C27`**(品牌红,已入 `RED_EXCEPTION_ALLOWED_IDS` 红例外白名单,`cindyDecisionData.ts` 断言锁值)。
+- **划界(易踩点)**:光标红 ≠ focus 红。focus ring / Auto Approval / 信息蓝仍是 `#417CDD`(§15.4 豁免,不染红)。E1D(§15.10)之后 `accent-cta-bg` 在 CINDY 下已是中性反相——不要凭旧记忆把"光标要红"实现成接红色 CTA token,光标唯一合法出口就是 `caret-accent`。
+- **跨端对齐**:移动端(`apps/mobile` `src/theme/tokens.ts` 的 `inputCaret`)同值 `#DF0C27` 双模式,RN 侧经 TextInput `cursorColor`/`selectionColor` 消费,`themeTokens.test.ts` 锁值。iOS/移动端任何文档若与此冲突(早期 M0/M3 文档曾写 caret 蓝 `#417CDD`),**以本条为准**——该旧值已于 2026-07-18 勘误作废。
+
+### 15.12 毛玻璃(vibrancy)体系(用户定稿 2026-07-18,macOS)
+
+- **唯一半透面 token**:`surface-translucent-sidebar`——CINDY light `rgba(255, 255, 255, 0.85)` / dark `rgba(18, 15, 15, 0.75)`(default 主题下 = `var(--surface)` 不透明,非 CINDY 主题零影响)。左侧栏(`aside.bg-sidebar`)与 splash 根容器共用同一 token(用户裁决"一劳永逸");后续新增半透明表面**默认复用此 token**,不另造 rgba 值。
+- **透壁纸三重管线,缺一即死黑**(2026-07-18 实机 A/B 实证,详证据见换肤工程 sidebar-glass 补编终稿追记):
+  1. **窗口创建期**即设 `backgroundColor: '#00000000'` + vibrancy(`bootstrap-electron.ts` / `vibrancyConfig.ts`);运行时再 setBackgroundColor 改 alpha 不可靠。
+  2. CINDY 主题下**根容器让路**:globals.css 把 `.h-screen.bg-content-area`(及 splash 在场垫层)置 transparent,否则整窗不透明垫底挡死。
+  3. **禁止 CSS `backdrop-filter`**——它会把透明窗背衬渲染成黑箱;壁纸模糊完全由原生 vibrancy 材质负责,CSS 层只铺半透底色。
+- 材质经 `XDT_VIBRANCY_MATERIAL` 环境旋钮选择(缺省 sidebar;用户实测定稿 **hud**)。Windows 无 vibrancy 等价物,降级为不透明 `--surface`(backlog)。
+- 半透面上**不叠渐变覆盖层**——浅色红渐变层 2026-07-18 经用户确认设计稿无此元素,已整层砍除;splash 的渐变辉光层同样未实现(backlog 待用户表态)。
+- `surface-translucent-sidebar` 的 alpha 是主题冻结区**唯一开放的观感旋钮**,调整必须三处同步(`cindy-light.ts` / `cindy-dark.ts` / `cindyDecisionData.ts`)且 themes 套件跑绿。
