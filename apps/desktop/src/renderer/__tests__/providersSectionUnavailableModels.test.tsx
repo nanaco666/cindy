@@ -57,6 +57,7 @@ vi.mock('@/hooks/useProviders', () => ({
 }));
 
 vi.mock('@/hooks/useCodexAuth', () => ({
+  isChatGptConnectionConnected: () => false,
   useCodexAuth: () => ({
     state: { kind: 'unauthenticated' },
     triggerLogin: vi.fn(),

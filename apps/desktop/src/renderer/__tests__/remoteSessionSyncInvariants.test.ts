@@ -93,6 +93,14 @@ describe('CCAgentSessionView 接线不变式', () => {
       /<DropdownMenuItem[\s\S]*?disabled=\{remoteWritesBlocked\}[\s\S]*?onSelect=\{handleOpenInNewWindowSelect\}[\s\S]*?openInNewWindow/,
     );
   });
+  it('live / 历史错误横幅都携带 SSH 与 device-link 执行端归属', () => {
+    expect(sessionViewSrc).toMatch(
+      /<ErrorTailErrorBanner[\s\S]*?remoteHostId=\{session\?\.remoteHostId \?\? undefined\}[\s\S]*?deviceLinkDeviceId=\{remoteDeviceId\}/,
+    );
+    expect(sessionViewSrc).toMatch(
+      /<ErrorBanner[\s\S]*?remoteHostId=\{session\?\.remoteHostId \?\? undefined\}[\s\S]*?deviceLinkDeviceId=\{remoteDeviceId\}/,
+    );
+  });
   it('断线 device-link project 不能从项目标题 + 入口创建远程 draft', () => {
     expect(projectNodeSrc).toContain('const projectWritesBlocked = isDeviceLinkWriteBlocked(project)');
     expect(projectNodeSrc).toContain('disabled={projectWritesBlocked}');

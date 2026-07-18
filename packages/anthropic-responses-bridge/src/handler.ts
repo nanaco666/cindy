@@ -271,6 +271,22 @@ export function createResponsesHandler(opts: ResponsesHandlerOptions): Responses
     if (!upstream.ok || !upstream.body) {
       const text = upstream.body ? await upstream.text().catch(() => '') : '';
       log.warn?.('upstream non-2xx', { reqId, status: upstream.status, body: text.slice(0, 2000) });
+      if (!upstream.ok && provider.onUpstreamError) {
+        try {
+          await provider.onUpstreamError({
+            status: upstream.status,
+            body: text,
+            requestHeaders: providerHeaders,
+          });
+        } catch (err) {
+          // Provider 状态收口失败不能吞掉或改写真实上游错误；调用方仍需看到原始状态码/正文。
+          log.warn?.('onUpstreamError failed', {
+            reqId,
+            prefix: provider.prefix,
+            err: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
       writeJson(res, upstream.status, {
         type: 'error',
         error: { type: anthropicErrorType(upstream.status), message: text.slice(0, 2000) || `upstream ${upstream.status}` },

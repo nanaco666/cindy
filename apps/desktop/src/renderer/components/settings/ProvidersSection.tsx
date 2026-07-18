@@ -8,8 +8,8 @@
  *   - OpenAI:    useCodexAuth()(授权 / 登出,内部走 maker.auth.* codex 通道)。
  *   - XD 网关:  凭据由 model-access 自动下发(useModelAccessStatus 驱动状态;断开 = clearKey 清本机存量;无手填入口)。
  *
- * 连接态以 useProviders() 的 provider.connected 为准;任一鉴权动作后 refetch 刷新
- * (listProviders 每次现读连接态)。
+ * 连接态通常以 useProviders() 的 provider.connected 为准；OpenAI 行由 useCodexAuth
+ * 保留更具体的 reconnect-required 状态，provider 快照只在初始加载时兜底。
  *
  * 模型显示控制(展开态):每个「有模型」的来源行尾带 chevron,展开后是该来源支持的模型清单,
  * 每个模型一个开关 —— 控制它是否出现在对话的模型选择器里(见 modelVisibilityPrefs +
@@ -19,11 +19,11 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronDown, ChevronRight, ChevronUp, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, ChevronUp, Pencil, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { useProviders } from '@/hooks/useProviders';
-import { useCodexAuth } from '@/hooks/useCodexAuth';
+import { isChatGptConnectionConnected, useCodexAuth } from '@/hooks/useCodexAuth';
 import { useApiKey } from '@/hooks/useApiKey';
 import { useModelAccessStatus } from '@/hooks/useModelAccessStatus';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
@@ -96,6 +96,23 @@ function ConnectedPill() {
     >
       <Check size={12} strokeWidth={2.5} />
       {t('settings.providers.pill.connected')}
+    </span>
+  );
+}
+
+/** OpenAI OAuth 仍可恢复但需要用户重新连接；使用中性 chip，避免表现成全局故障。 */
+function ReconnectRequiredPill() {
+  const { t } = useTranslation();
+  return (
+    <span
+      className="flex h-[22px] shrink-0 select-none items-center gap-1 rounded-full px-2.5 text-11 font-medium"
+      style={{
+        backgroundColor: 'var(--settings-btn-secondary-bg)',
+        color: 'var(--settings-section-desc)',
+      }}
+    >
+      <RefreshCw size={11} />
+      {t('settings.providers.openai.reconnectRequired')}
     </span>
   );
 }
@@ -563,8 +580,11 @@ function OpenAiRow({ provider, onChanged }: { provider?: ProviderView; onChanged
   const { t } = useTranslation();
   const { confirm } = useConfirmDialog();
   const { state, triggerLogin, cancelLogin, logout } = useCodexAuth();
-  const connected = provider?.connected ?? false;
+  const reconnectRequired = state.kind === 'reconnect-required';
   const loggingIn = state.kind === 'login-pending';
+  // useCodexAuth 是这条连接的权威状态；provider 目录只在 hook 尚未完成首次读取时兜底。
+  // 这样失效或重连中都不会因为目录刷新较慢而短暂显示“已连接”。
+  const connected = isChatGptConnectionConnected(state, provider?.connected ?? false);
 
   const handleLogout = useCallback(async () => {
     const confirmed = await confirm({
@@ -598,9 +618,14 @@ function OpenAiRow({ provider, onChanged }: { provider?: ProviderView; onChanged
       <ConnectedPill />
       <PillButton label={t('settings.providers.button.disconnect')} onClick={() => void handleLogout()} />
     </div>
+  ) : reconnectRequired ? (
+    <div className="flex shrink-0 items-center gap-2.5">
+      <ReconnectRequiredPill />
+      <PillButton label={t('settings.providers.openai.reconnect')} onClick={() => void handleLogin()} />
+    </div>
   ) : (
     <PillButton
-      label={loggingIn ? t('settings.providers.button.cancel') : t('settings.providers.button.authorize')}
+      label={loggingIn ? t('settings.providers.openai.cancelConnect') : t('settings.providers.openai.connect')}
       onClick={() => {
         if (loggingIn) void cancelLogin();
         else void handleLogin();
@@ -612,9 +637,7 @@ function OpenAiRow({ provider, onChanged }: { provider?: ProviderView; onChanged
     <ProviderCell
       icon={<CodexMark size={18} />}
       title={t('settings.providers.openai.title')}
-      subtitle={providerSubtitleForDisplay(provider, t('settings.providers.openai.modelLabel'), {
-        fallback: t('settings.providers.openai.subtitle'),
-      })}
+      subtitle={t('settings.providers.openai.subtitle')}
       trailing={trailing}
       provider={provider}
     />

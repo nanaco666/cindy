@@ -134,7 +134,9 @@ export function ErrorTailErrorBanner({
   viewVisible = true,
   agentKind,
   remoteHostId,
+  deviceLinkDeviceId,
   modelId,
+  providerId,
   silentEncryptedRetryEnabled,
   onForkStripEncrypted,
   forkStripEncryptedRunning,
@@ -152,7 +154,9 @@ export function ErrorTailErrorBanner({
   viewVisible?: boolean;
   agentKind?: 'cc' | 'codex';
   remoteHostId?: string;
+  deviceLinkDeviceId?: string | null;
   modelId?: string;
+  providerId?: string | null;
   silentEncryptedRetryEnabled?: boolean;
   onForkStripEncrypted?: () => void | Promise<void>;
   forkStripEncryptedRunning?: boolean;
@@ -170,12 +174,11 @@ export function ErrorTailErrorBanner({
       onRetry={() => void onContinue()}
       onCancel={onDismiss}
       onSilentStopContinue={onSilentStopContinue}
-      // 历史行场景禁止 mount 即自动弹窗(codex session-expired 登录 modal):
-      // 纯浏览历史不应触发未经请求的模态框(review P2);按钮式恢复入口照常。
-      suppressAutoPrompts
       agentKind={agentKind}
       remoteHostId={remoteHostId}
+      deviceLinkDeviceId={deviceLinkDeviceId}
       modelId={modelId}
+      providerId={providerId}
       silentEncryptedRetryEnabled={silentEncryptedRetryEnabled}
       onForkStripEncrypted={onForkStripEncrypted}
       forkStripEncryptedRunning={forkStripEncryptedRunning}
