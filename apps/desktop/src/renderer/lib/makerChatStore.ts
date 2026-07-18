@@ -981,6 +981,10 @@ function _purgeSession(sessionId: string): void {
   // 避免其提交把旧窗口 merge 进 purge 后重建的空 slice。
   bumpMessagesEpoch(sessionId);
   sessions.delete(sessionId);
+  // 状态快照同步失效:该会话若有 running / pending / 待投递 transition 条目,
+  // 不能在缓存里残留(purge 不走 setState,需单独置位)。
+  _stopTransitions.delete(sessionId);
+  markStatusSnapshotDirty();
   listeners.delete(sessionId);
   lightSnapshotCache.delete(sessionId);
   titleUpdateCallbacks.delete(sessionId);
@@ -1176,6 +1180,9 @@ function setState(
   const next = updater(prev);
   if (next === prev) return;
   sessions.set(sessionId, next);
+  // running-status 快照缓存失效(getRunningSnapshot 纯 getter 契约:只有
+  // mutation 才允许让下一次读重算)。必须在 notify 之前置位。
+  markStatusSnapshotDirty();
   listeners.get(sessionId)?.forEach((cb) => {
     cb();
   });
@@ -3728,10 +3735,53 @@ export interface SessionStatusInfo {
  * F-SB-7: Returns a snapshot of all tracked sessions' status.
  * Only includes sessions that are either running or have an error.
  * The returned Map is referentially stable when nothing changed.
+ *
+ * 契约(2026-07 卡顿修复,useSyncExternalStore 要求):getRunningSnapshot 是
+ * **纯 getter**——两次 notify 之间无论被调用多少次,永远返回同一个引用。
+ * 实现:mutation 咽喉(setState / purge)只把 _statusSnapshotDirty 置位,
+ * getter 在 dirty 时才重算并缓存。旧实现在 getter 内部消费 running→stopped
+ * transition(第一次读到、第二次就删),连续调用返回不同 Map,触发 React
+ * "getSnapshot should be cached" 警告并在高频更新下放大重渲染。
+ *
+ * running→stopped 的一次性投递改为显式调度:重算时检测到边沿 → 条目进
+ * _stopTransitions(合并进快照,携带 hasError / sideTask / pending 标志)→
+ * 调度一个 macrotask 统一清除 + 再次 notify。所有订阅者在同一代快照里
+ * 都能看到 transition(不再被"谁先读谁消费"的 race 抢走);清除后条目消失,
+ * error-only 会话不会常驻累积(与旧设计的防累积目标一致)。消费方本就
+ * 兼容"条目已消失"(hasSessionTerminalError / wasLastStopSideTask 兜底)。
  */
-let _lastStatusSnapshot: ReadonlyMap<string, SessionStatusInfo> = new Map();
+let _statusSnapshot: ReadonlyMap<string, SessionStatusInfo> = new Map();
+let _statusSnapshotDirty = true;
+/** 待投递的 running→stopped 一次性条目(键 = sessionId)。 */
+const _stopTransitions = new Map<string, SessionStatusInfo>();
+let _stopTransitionClearScheduled = false;
 
-function getRunningSnapshot(): ReadonlyMap<string, SessionStatusInfo> {
+/** mutation 侧唯一入口:状态可能变了,下次读快照时重算。 */
+function markStatusSnapshotDirty(): void {
+  _statusSnapshotDirty = true;
+}
+
+/**
+ * transition 条目的显式清除:macrotask 里统一清空 + notify 全局订阅者。
+ * 用 setTimeout(0) 而非 microtask,给 React 一个完整任务周期把携带 transition
+ * 的那代快照渲染/派发出去;即使个别订阅者错过(自身 effect 晚于清除),
+ * 它们的边沿检测有 store 权威查询兜底(见 useSessionRunningStatus)。
+ */
+function scheduleStopTransitionClear(): void {
+  if (_stopTransitionClearScheduled) return;
+  _stopTransitionClearScheduled = true;
+  setTimeout(() => {
+    _stopTransitionClearScheduled = false;
+    if (_stopTransitions.size === 0) return;
+    _stopTransitions.clear();
+    _statusSnapshotDirty = true;
+    globalListeners.forEach((cb) => {
+      cb();
+    });
+  }, 0);
+}
+
+function computeRunningSnapshot(): Map<string, SessionStatusInfo> {
   const next = new Map<string, SessionStatusInfo>();
   for (const [id, state] of sessions) {
     const hasPendingAskUser = state.pendingAskUser !== null;
@@ -3749,25 +3799,57 @@ function getRunningSnapshot(): ReadonlyMap<string, SessionStatusInfo> {
     if (state.agentStatus.isRunning || bgTaskRunning) {
       // Currently running — always include.
       next.set(id, { isRunning: true, hasError: false, hasPendingAskUser, hasPendingPermission, hasPendingPlanReview });
-    } else if (_lastStatusSnapshot.has(id) && _lastStatusSnapshot.get(id)?.isRunning) {
-      // Just transitioned from running to stopped — include once so the
-      // subscriber can detect the transition and read hasError. On the next
-      // snapshot (after the subscriber has processed the change) this entry
-      // will be dropped, preventing error-only sessions from accumulating.
-      // side-task(skipTurnReset)结束不是 turn 终态: 整个 transition 标记为
-      // sideTask, 通知判定(done/error/dot)全部跳过(见 lastStopWasSideTask)。
-      next.set(id, { isRunning: false, hasError: !!state.error && !state.lastStopWasSideTask, sideTask: state.lastStopWasSideTask, hasPendingAskUser, hasPendingPermission, hasPendingPlanReview });
     } else if (hasPendingAskUser || hasPendingPermission || hasPendingPlanReview) {
       // Session has a pending prompt for the user — include so the Sidebar
       // can show the "needs attention" notification dot.
       next.set(id, { isRunning: false, hasError: false, hasPendingAskUser, hasPendingPermission, hasPendingPlanReview });
     }
   }
+
+  // running→stopped 边沿检测(对比上一代快照):生成一次性投递条目。
+  // side-task(skipTurnReset)结束不是 turn 终态:整个 transition 标记为
+  // sideTask,通知判定(done/error/dot)全部跳过(见 lastStopWasSideTask)。
+  for (const [id, prev] of _statusSnapshot) {
+    if (!prev.isRunning) continue;
+    if (next.get(id)?.isRunning) continue;
+    const state = sessions.get(id);
+    if (!state) continue; // 会话已 purge:无终态可投递
+    _stopTransitions.set(id, {
+      isRunning: false,
+      hasError: !!state.error && !state.lastStopWasSideTask,
+      sideTask: state.lastStopWasSideTask,
+      hasPendingAskUser: state.pendingAskUser !== null,
+      hasPendingPermission: state.pendingPermission !== null,
+      hasPendingPlanReview: state.pendingPlanReview !== null,
+    });
+  }
+
+  // 合并待投递条目(覆盖 pending 分支的同 id 条目,与旧 else-if 优先级一致);
+  // 期间又跑起来的会话 transition 作废(新 turn 已接续,不该报终态)。
+  for (const [id, info] of _stopTransitions) {
+    if (next.get(id)?.isRunning) {
+      _stopTransitions.delete(id);
+      continue;
+    }
+    if (!sessions.has(id)) {
+      _stopTransitions.delete(id); // 已 purge:条目随之作废
+      continue;
+    }
+    next.set(id, info);
+  }
+  if (_stopTransitions.size > 0) scheduleStopTransitionClear();
+  return next;
+}
+
+function getRunningSnapshot(): ReadonlyMap<string, SessionStatusInfo> {
+  if (!_statusSnapshotDirty) return _statusSnapshot;
+  _statusSnapshotDirty = false;
+  const next = computeRunningSnapshot();
   // Referential equality check — avoid re-renders when nothing changed
-  if (next.size === _lastStatusSnapshot.size) {
+  if (next.size === _statusSnapshot.size) {
     let same = true;
     for (const [id, info] of next) {
-      const prev = _lastStatusSnapshot.get(id);
+      const prev = _statusSnapshot.get(id);
       if (
         !prev ||
         prev.isRunning !== info.isRunning ||
@@ -3781,24 +3863,23 @@ function getRunningSnapshot(): ReadonlyMap<string, SessionStatusInfo> {
         break;
       }
     }
-    if (same) return _lastStatusSnapshot;
+    if (same) return _statusSnapshot;
   }
-  _lastStatusSnapshot = next;
-  return _lastStatusSnapshot;
+  _statusSnapshot = next;
+  return _statusSnapshot;
 }
 
 /**
  * F-SB-7: Authoritative terminal-error read for a session, independent of the
- * running-status snapshot generation. getRunningSnapshot() keeps a stopped
- * session's transition entry alive for exactly ONE snapshot generation — but
- * the store has multiple useSyncExternalStore subscribers (ExpandedView /
- * CollapsedView / SessionContentHeader), and whichever getSnapshot call runs
- * first consumes that generation. The subscriber holding the notification
- * callbacks can then observe the entry-already-dropped generation and must
- * not fall back to hasError=false — it queries here instead.
+ * running-status snapshot generation. Stop-transition entries now live in the
+ * snapshot for a full delivery window (until the scheduled clear fires) and
+ * reads no longer consume them — but a subscriber whose effect runs late
+ * (e.g. a debounced timer) can still observe the entry-already-cleared
+ * generation and must not fall back to hasError=false — it queries here
+ * instead.
  */
 /** 最近一次 running→stopped 是否来自 side-task(见 lastStopWasSideTask)。
- * useSessionRunningStatus 在 transition entry 被其它订阅者消费掉时以此兜底,
+ * useSessionRunningStatus 在 transition entry 已被调度清除后以此兜底,
  * 使 side-task 结束不触发 done/error 终态通知。 */
 function wasLastStopSideTask(sessionId: string): boolean {
   return !!sessions.get(sessionId)?.lastStopWasSideTask;

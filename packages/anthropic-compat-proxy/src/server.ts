@@ -905,6 +905,9 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
   const logger = opts.logger ?? {};
   const host = opts.host ?? '127.0.0.1';
   const maxBodyBytes = opts.maxRequestBodyBytes ?? DEFAULT_MAX_REQUEST_BODY_BYTES;
+  // 入站请求 body dump 默认关(仅显式诊断时开):高并发下 64KiB×每请求的日志
+  // 构造/落盘/终端镜像会占满宿主 main event loop,详见 ProxyOptions 注释。
+  const dumpRequestBody = opts.debugDumpRequestBody === true;
 
   /**
    * 路由优先级的唯一落点:显式 override 胜出时绝不读取默认上游;只有 decision
@@ -1084,7 +1087,7 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
           upstreamBase: 'local-handler',
           url,
           bytes: rawBody.length,
-          body: dumpBody(rawBody, DEBUG_REQUEST_DUMP_MAX_BYTES),
+          ...(dumpRequestBody ? { body: dumpBody(rawBody, DEBUG_REQUEST_DUMP_MAX_BYTES) } : {}),
         });
       }
       await runLocalHandler(
@@ -1108,7 +1111,7 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
         upstreamBase: formatUpstreamBase(route.target),
         url,
         bytes: rawBody.length,
-        body: dumpBody(rawBody, DEBUG_REQUEST_DUMP_MAX_BYTES),
+        ...(dumpRequestBody ? { body: dumpBody(rawBody, DEBUG_REQUEST_DUMP_MAX_BYTES) } : {}),
       });
     }
 

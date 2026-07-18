@@ -203,6 +203,17 @@ export interface ProxyOptions {
    * 注意: body 会整段缓冲进内存并 JSON.parse,该值同时就是单请求的内存 / 解析停顿预算。
    */
   maxRequestBodyBytes?: number;
+  /**
+   * 可选: debug 级别下是否 dump 入站请求 body(截断到 64KiB)。默认 false ——
+   * dev 的日志级别默认 trace,若默认 dump,agent 高并发场景(code-review 扇出 +
+   * 429 重试,2026-07-17 实测峰值 80 req/s)每请求几十 KiB 的 util.format /
+   * JSON.stringify / 终端镜像全压在 main event loop 上,单日 agent 日志可达
+   * 数百 MB,是整窗卡顿的确认放大器。需要诊断请求体时由宿主显式开启
+   * (desktop 侧: 环境变量 XDT_PROXY_DUMP_REQUEST_BODY=1)。关闭时 inbound
+   * 日志仍保留 reqId / method / upstream / url / bytes 元数据;错误响应 body
+   * dump(16KiB,debug-gated)不受本开关影响,照旧保留。
+   */
+  debugDumpRequestBody?: boolean;
 }
 
 /**
