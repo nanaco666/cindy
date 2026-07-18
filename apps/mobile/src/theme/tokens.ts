@@ -207,7 +207,7 @@ export const typeScale = {
 
 /**
  * 与字号配对的行高。除标准配对外只有三个场景档:
- * - bodyLarge(17/24):对话消息流正文(对齐 iOS 对话类 app 的 17pt 惯例);
+ * - bodyLarge(17/26):对话消息流正文(对齐 iOS 对话类 app 的 17pt 惯例,行高略松以改善长文可读性);
  * - bodyRelaxed(16/24):login 副标题等宽松正文;
  * - listTitle(18/28、20/28):首页列表标题类,行高撑触控行。
  * micro(16) 同时服务紧凑 caption 场景(diff 行、媒体 hint 等行高即盒高的地方)。
@@ -218,7 +218,7 @@ export const lineHeight = {
   code: 20,
   body: 22,
   bodyRelaxed: 24,
-  bodyLarge: 24,
+  bodyLarge: 26,
   title: 25,
   subtitle: 26,
   listTitle: 28,
@@ -227,7 +227,7 @@ export const lineHeight = {
   hero: 44,
 } as const;
 
-/** 字重:克制到 4 档。默认 medium;semibold 仅限大写微标签等少量强调;bold 仅限 login 品牌 hero 标题。 */
+/** 字重:克制到 4 档。默认 medium;semibold 仅限大写微标签等少量强调;bold 限 login 品牌 hero 标题与消息流 markdown 强调(对齐桌面 <strong> 的 700)。 */
 export const fontWeight = {
   regular: '400',
   medium: '500',

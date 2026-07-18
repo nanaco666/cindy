@@ -4559,7 +4559,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.surfaceChip,
     textDecorationLine: 'none',
   },
-  markdownStrong: { fontWeight: fontWeight.medium },
+  // 对齐桌面聊天 markdown:<strong> 走浏览器默认 700,与 400 正文拉开明显对比。
+  markdownStrong: { fontWeight: fontWeight.bold },
   markdownEmphasis: { fontStyle: 'italic' },
   // inline 公式:Unicode 近似文本以斜体呈现(数学正文的传统排版形态),
   // 与普通强调的区别只在语义,视觉上沿用 italic 已足够。
