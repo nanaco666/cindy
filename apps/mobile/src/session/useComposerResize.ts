@@ -61,7 +61,7 @@ export interface UseComposerResizeResult {
   mode: ComposerResizeMode;
   /** 输入区当前应呈现的内容高度（非拖动时的解析结果）。 */
   visibleContentHeight: number;
-  /** 内容超出可视高度时开启 TextInput 内部滚动。 */
+  /** TextInput 内部滚动开关(激活态恒 true,语义见 ComposerInputHeightModel.scrollEnabled)。 */
   scrollEnabled: boolean;
   /**
    * 传给 MobileComposerInputRow 的 inputFrameHeight：
