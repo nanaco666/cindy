@@ -49,6 +49,7 @@ import { syncCanaryFlagAfterAuth } from './canaryFlagSync';
 import {
   createAuthBrowserAuthorizationSlot,
   parseAuthLoopbackCallback,
+  raceAuthBrowserCancellation,
 } from './authLoopbackCallback';
 
 import { createLogger } from './logger';
@@ -316,16 +317,18 @@ export function setAccountSwitchTeardown(teardown: AccountSwitchTeardown | null)
 const BROWSER_AUTH_TIMEOUT_MS = 5 * 60_000;
 const browserAuthorizationSlot = createAuthBrowserAuthorizationSlot();
 
-async function openSystemBrowserAuthorization(input: {
-  kind: 'social' | 'sso';
-  providerOrConnectionId: string;
-  codeChallenge: string;
-  state: string;
-}): Promise<{ code: string } | { error: string }> {
+async function openSystemBrowserAuthorization(
+  input: {
+    kind: 'social' | 'sso';
+    providerOrConnectionId: string;
+    codeChallenge: string;
+    state: string;
+  },
+  signal: AbortSignal,
+): Promise<{ code: string } | { error: string }> {
   return new Promise((resolve) => {
     let settled = false;
     let timeout: ReturnType<typeof setTimeout> | null = null;
-    let deactivateCancellation: (() => void) | null = null;
     const server = createServer((req, res) => {
       if (settled || !req.url) {
         res.writeHead(404).end();
@@ -346,20 +349,28 @@ async function openSystemBrowserAuthorization(input: {
     const finish = (result: { code: string } | { error: string }) => {
       if (settled) return;
       settled = true;
-      deactivateCancellation?.();
-      deactivateCancellation = null;
+      signal.removeEventListener('abort', cancel);
       if (timeout !== null) clearTimeout(timeout);
-      server.close(() => resolve(result));
+      if (server.listening) {
+        // The browser may keep the callback connection alive briefly after
+        // rendering "return to Cindy". Closing belongs to cleanup; do not hold
+        // authorization-code exchange or cancellation behind its callback.
+        server.close();
+      }
+      resolve(result);
     };
 
-    deactivateCancellation = browserAuthorizationSlot.activate(() =>
-      finish({ error: 'USER_CANCELLED' }),
-    );
+    const cancel = () => finish({ error: 'USER_CANCELLED' });
+    signal.addEventListener('abort', cancel, { once: true });
 
     server.once('error', (error) => {
       log.warn('auth loopback listener failed', error);
       finish({ error: 'CALLBACK_LISTENER_FAILED' });
     });
+    if (signal.aborted) {
+      cancel();
+      return;
+    }
     server.listen(0, '127.0.0.1', () => {
       if (settled) {
         server.close();
@@ -1148,21 +1159,35 @@ async function runLoginAction(action: DesktopLoginAction): Promise<DesktopLoginA
         type: 'browser-started',
         label: action.label,
       });
-      const callback = await openSystemBrowserAuthorization({
-        kind: action.kind,
-        providerOrConnectionId: action.providerOrConnectionId,
-        codeChallenge,
-        state,
-      });
-      if ('error' in callback) {
-        throw new AuthApiError(callback.error, 0, 'Browser authorization did not complete');
+      const cancellation = new AbortController();
+      const deactivateCancellation = browserAuthorizationSlot.activate(() => cancellation.abort());
+      try {
+        const callback = await openSystemBrowserAuthorization(
+          {
+            kind: action.kind,
+            providerOrConnectionId: action.providerOrConnectionId,
+            codeChallenge,
+            state,
+          },
+          cancellation.signal,
+        );
+        if ('error' in callback) {
+          throw new AuthApiError(callback.error, 0, 'Browser authorization did not complete');
+        }
+        const exchange = await raceAuthBrowserCancellation(
+          client.exchangeAuthorizationCode(callback.code, codeVerifier),
+          cancellation.signal,
+        );
+        if (exchange.cancelled) {
+          throw new AuthApiError('USER_CANCELLED', 0, 'Browser authorization was cancelled');
+        }
+        return {
+          success: true,
+          state: await acceptLoginOutcome(exchange.value),
+        };
+      } finally {
+        deactivateCancellation();
       }
-      return {
-        success: true,
-        state: await acceptLoginOutcome(
-          await client.exchangeAuthorizationCode(callback.code, codeVerifier),
-        ),
-      };
     }
 
     if (action.type === 'select-account') {

@@ -7,6 +7,8 @@ export interface AuthBrowserAuthorizationSlot {
   cancelActive(): boolean;
 }
 
+export type AuthBrowserCancellationRace<T> = { cancelled: false; value: T } | { cancelled: true };
+
 /** Creates an identity-safe cancellation slot so an older attempt cannot clear a newer one. */
 export function createAuthBrowserAuthorizationSlot(): AuthBrowserAuthorizationSlot {
   let activeCancel: (() => void) | null = null;
@@ -25,6 +27,45 @@ export function createAuthBrowserAuthorizationSlot(): AuthBrowserAuthorizationSl
       return true;
     },
   };
+}
+
+/**
+ * Races post-callback work (notably the authorization-code exchange) against
+ * the same cancellation signal that owns the loopback listener. The wrapped
+ * operation may still settle later, but its result can no longer be accepted.
+ */
+export function raceAuthBrowserCancellation<T>(
+  operation: Promise<T>,
+  signal: AbortSignal,
+): Promise<AuthBrowserCancellationRace<T>> {
+  if (signal.aborted) return Promise.resolve({ cancelled: true });
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => signal.removeEventListener('abort', onAbort);
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve({ cancelled: true });
+    };
+
+    signal.addEventListener('abort', onAbort, { once: true });
+    operation.then(
+      (value) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(signal.aborted ? { cancelled: true } : { cancelled: false, value });
+      },
+      (error: unknown) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(error);
+      },
+    );
+  });
 }
 
 /**

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createAuthBrowserAuthorizationSlot,
   parseAuthLoopbackCallback,
+  raceAuthBrowserCancellation,
 } from '../authLoopbackCallback';
 
 describe('auth loopback callback', () => {
@@ -55,5 +56,23 @@ describe('auth browser authorization cancellation slot', () => {
     deactivateOlder();
     expect(slot.cancelActive()).toBe(true);
     expect(newerCancelled).toBe(true);
+  });
+
+  it('cancels post-callback work and ignores its late result', async () => {
+    const slot = createAuthBrowserAuthorizationSlot();
+    const controller = new AbortController();
+    slot.activate(() => controller.abort());
+    let completeExchange!: (value: string) => void;
+    const exchange = new Promise<string>((resolve) => {
+      completeExchange = resolve;
+    });
+
+    const raced = raceAuthBrowserCancellation(exchange, controller.signal);
+    expect(slot.cancelActive()).toBe(true);
+    await expect(raced).resolves.toEqual({ cancelled: true });
+
+    completeExchange('late-token');
+    await Promise.resolve();
+    expect(controller.signal.aborted).toBe(true);
   });
 });
