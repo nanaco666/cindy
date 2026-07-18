@@ -184,11 +184,12 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(colorsSource).toContain("'create-agent-control-icon'");
     expect(colorsSource).toContain("light: '#3C3F43'");
 
-    expect(chatInputSource).toContain("isCreateAgentVariant ? 'min-w-0 gap-2 overflow-hidden' : 'min-w-0 gap-1 overflow-hidden'");
-    expect(chatInputSource).toContain("'flex min-w-0 shrink items-center gap-2 overflow-hidden'");
-    expect(chatInputSource).toContain("'flex min-w-0 shrink items-center gap-1 overflow-hidden'");
-    expect(chatInputSource).toContain("'flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2 overflow-hidden'");
-    expect(chatInputSource).toContain("'flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-1 overflow-hidden'");
+    expect(chatInputSource).toContain("'grid min-w-0 grid-cols-[minmax(0,max-content)_minmax(0,1fr)] gap-2 overflow-hidden'");
+    expect(chatInputSource).toContain("'grid min-w-0 grid-cols-[minmax(0,max-content)_minmax(0,1fr)] gap-1 overflow-hidden'");
+    expect(chatInputSource).toContain("'flex min-w-0 items-center gap-2 overflow-hidden'");
+    expect(chatInputSource).toContain("'flex min-w-0 items-center gap-1 overflow-hidden'");
+    expect(chatInputSource).toContain("'flex min-w-0 flex-nowrap items-center justify-end gap-2 overflow-hidden'");
+    expect(chatInputSource).toContain("'flex min-w-0 flex-nowrap items-center justify-end gap-1 overflow-hidden'");
     expect(chatInputSource).not.toContain("isCreateAgentVariant ? 'flex-wrap gap-2' : 'min-w-0 gap-1'");
     expect(chatInputSource).not.toContain("'flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2'");
     expect(source).toContain('className="shrink-0"');
