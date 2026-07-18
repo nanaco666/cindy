@@ -33,6 +33,7 @@ export const CINDY_REQUIRED_COLOR_IDS = [
   'text-tertiary-hsl',
   'text-disabled',
   'text-disabled-tertiary',
+  'caret-accent',
   'accent-cta-bg',
   'accent-cta-bg-pure',
   'accent-emphasis',
@@ -202,6 +203,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'text-tertiary-hsl': { light: '222.0 4.6% 42.7%', dark: '216.0 4.1% 75.9%' },
   'text-disabled': { light: '#686B72', dark: '#BFC1C4' },
   'text-disabled-tertiary': { light: '#686B72', dark: '#BFC1C4' },
+  'caret-accent': { light: '#DF0C27', dark: '#DF0C27' },
   'accent-cta-bg': { light: '#DF0C27', dark: '#DF0C27' },
   'accent-cta-bg-pure': { light: '#DF0C27', dark: '#DF0C27' },
   'accent-emphasis': { light: '#DF0C27', dark: '#DF0C27' },
@@ -296,6 +298,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
 };
 
 export const BRAND_RED_EXPECTED_BY_ID: Record<string, string> = {
+  'caret-accent': '#DF0C27',
   'accent-cta-bg': '#DF0C27',
   'accent-cta-bg-pure': '#DF0C27',
   'accent-emphasis': '#DF0C27',
@@ -309,6 +312,7 @@ export const BRAND_RED_EXPECTED_BY_ID: Record<string, string> = {
 };
 
 export const BRAND_RED_ALLOWED_IDS = [
+  'caret-accent',
   'accent-cta-bg',
   'accent-cta-bg-pure',
   'accent-emphasis',

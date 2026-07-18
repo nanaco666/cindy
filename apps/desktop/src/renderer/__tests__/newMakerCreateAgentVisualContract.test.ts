@@ -190,9 +190,11 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
   });
 
   it('uses the CINDY brand accent for editable carets', () => {
-    expect(globalsSource).toContain('caret-color: var(--accent-cta-bg);');
+    expect(globalsSource).toContain('caret-color: var(--caret-accent);');
     expect(globalsSource).toContain('.cm-editor .cm-cursor');
-    expect(globalsSource).toContain('border-left-color: var(--accent-cta-bg) !important;');
+    expect(globalsSource).toContain('border-left-color: var(--caret-accent) !important;');
+    expect(colorsSource).toContain("'caret-accent'");
+    expect(colorsSource).toContain('CINDY overrides to brand red per user request 2026-07-18');
   });
 
   it('keeps default composer send buttons aligned with the neutral inverse rule', () => {

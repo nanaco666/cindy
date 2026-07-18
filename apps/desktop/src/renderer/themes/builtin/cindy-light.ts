@@ -53,6 +53,7 @@ const overrides = {
   'chat-input-chip-border': '#DCDFE3', // 边框
   'chat-input-text': '#3C3F43', // 正文
   'color-primary': '#3C3F43', // 正文
+  'caret-accent': '#DF0C27', // 用户点名:所有输入光标使用 CINDY 品牌红
   'confirm-bg': '#F8F8F8', // 卡片
   'confirm-btn-primary-bg': '#DF0C27', // 品牌红 CTA
   'confirm-btn-primary-text': '#FFFFFF', // CTA 白字

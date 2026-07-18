@@ -1810,3 +1810,7 @@ registerColor('sidebar-user-card-text', {
   light: '#3C3F43',
   dark: '#D4D4D4',
 }, 'CINDY sidebar user capsule text and icon');
+registerColor('caret-accent', {
+  light: 'var(--accent-cta-bg)',
+  dark: 'var(--accent-cta-bg)',
+}, 'Editable caret accent; CINDY overrides to brand red per user request 2026-07-18');
