@@ -42,6 +42,7 @@ type InitialSnapshotRevision = Pick<CodexAuthMachineState, 'authRevision' | 'eve
 type CodexAuthMachineEvent =
   | { type: 'initial-state'; result: CodexLoginResult; requestedAt: InitialSnapshotRevision }
   | { type: 'initial-state-failed'; requestedAt: InitialSnapshotRevision }
+  | { type: 'observer-disabled' }
   | { type: 'state-changed'; result: CodexLoginResult }
   | { type: 'login-pending' }
   | { type: 'login-progress-error'; message: string }
@@ -52,6 +53,15 @@ type CodexAuthMachineEvent =
   | { type: 'refreshed-state'; result: CodexLoginResult };
 
 const AGENT_KIND = 'codex' as const;
+
+function createInitialMachineState(): CodexAuthMachineState {
+  return {
+    ui: { kind: 'loading' },
+    reconnectReason: null,
+    authRevision: 0,
+    eventRevision: 0,
+  };
+}
 
 function toCodexUiState(raw: CodexLoginResult, preserveGenericError = false): CodexUiState {
   if (raw.authenticated) {
@@ -114,6 +124,19 @@ function reduceCodexAuthMachine(
   event: CodexAuthMachineEvent,
 ): CodexAuthMachineState {
   switch (event.type) {
+    case 'observer-disabled':
+      // A disabled observer intentionally misses auth broadcasts. Drop the previous
+      // activation's snapshot so re-enabling cannot expose stale recovery state while
+      // the new authoritative getState() request is still pending.
+      if (
+        machine.ui.kind === 'loading' &&
+        machine.reconnectReason === null &&
+        machine.authRevision === 0 &&
+        machine.eventRevision === 0
+      ) {
+        return machine;
+      }
+      return createInitialMachineState();
     case 'initial-state': {
       if (machine.authRevision !== event.requestedAt.authRevision) return machine;
       const snapshot = toCodexUiState(event.result);
@@ -201,12 +224,7 @@ export function isChatGptConnectionConnected(
 export function useCodexAuth(options?: { enabled?: boolean }) {
   const enabled = options?.enabled ?? true;
   const { t } = useTranslation();
-  const [machine, setMachine] = useState<CodexAuthMachineState>({
-    ui: { kind: 'loading' },
-    reconnectReason: null,
-    authRevision: 0,
-    eventRevision: 0,
-  });
+  const [machine, setMachine] = useState<CodexAuthMachineState>(createInitialMachineState);
   const machineRef = useRef(machine);
 
   const transition = useCallback((event: CodexAuthMachineEvent) => {
@@ -216,6 +234,10 @@ export function useCodexAuth(options?: { enabled?: boolean }) {
     machineRef.current = next;
     setMachine(next);
   }, []);
+
+  useEffect(() => {
+    if (!enabled) transition({ type: 'observer-disabled' });
+  }, [enabled, transition]);
 
   // 必须先订阅、再读取初始快照，避免两者之间出现漏事件窗口。
   useEffect(() => {

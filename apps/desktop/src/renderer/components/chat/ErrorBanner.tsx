@@ -149,7 +149,8 @@ export function ErrorBanner({
       (isClaudeChatgptBridgeModel && isCodexSessionExpiredError(error)));
   // 以共享的 Codex OAuth 状态机为唯一真相源：设置页、横幅或其它入口完成重连时，
   // AUTH_STATE_CHANGED 都会让现存横幅同步恢复 Retry；后续失效 / 登出广播也会撤销恢复态。
-  // enabled 只控制副作用，hook 本身始终按固定顺序调用。
+  // 非连接错误期间暂停订阅时 hook 会同时清掉旧快照；下次失效先保持“需重连”，直到
+  // 新 getState() 或广播确认已恢复，避免跨 error 复用过期的 authenticated 状态。
   const { state: openAiAuthState } = useCodexAuth({ enabled: isOpenAiConnectionExpired });
   const openAiConnectionRecoveredSinceError =
     isOpenAiConnectionExpired && isChatGptConnectionConnected(openAiAuthState, false);

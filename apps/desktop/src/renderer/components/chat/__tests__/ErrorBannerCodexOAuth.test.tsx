@@ -280,6 +280,66 @@ describe('ErrorBanner OpenAI connection recovery', () => {
     expect(mocks.triggerLogin).toHaveBeenCalledOnce();
   });
 
+  it('does not reuse recovered state after auth observation was disabled by another error', async () => {
+    const refreshedState = deferred<AuthStateChangedPayload>();
+    mocks.getState
+      .mockResolvedValueOnce({
+        authenticated: true,
+        identity: 'user@example.com',
+        authSource: 'oauth',
+      })
+      .mockImplementationOnce(() => refreshedState.promise);
+    const { rerender } = render(
+      <ErrorBanner
+        error="refresh_token_reused"
+        retryText="retry this turn"
+        onRetry={vi.fn()}
+        agentKind="codex"
+        modelId="gpt-5.4"
+      />,
+    );
+
+    expect(await screen.findByText('chat.errorBanner.codexSessionReconnected')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'chat.errorBanner.retry' })).toBeTruthy();
+
+    rerender(
+      <ErrorBanner
+        error="unrelated failure"
+        retryText="retry this turn"
+        onRetry={vi.fn()}
+        agentKind="codex"
+        modelId="gpt-5.4"
+      />,
+    );
+    expect(mocks.stateChangedListeners.size).toBe(0);
+    emitCodexStateChanged({ authenticated: false, errorReason: 'token_revoked' });
+
+    rerender(
+      <ErrorBanner
+        error="token_revoked"
+        retryText="retry another turn"
+        onRetry={vi.fn()}
+        agentKind="codex"
+        modelId="gpt-5.4"
+      />,
+    );
+
+    expect(screen.getByText('chat.errorBanner.codexSessionExpired')).toBeTruthy();
+    expect(screen.queryByText('chat.errorBanner.codexSessionReconnected')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'chat.errorBanner.retry' })).toBeNull();
+
+    await act(async () => {
+      refreshedState.resolve({
+        agentKind: 'codex',
+        authenticated: false,
+        errorReason: 'token_revoked',
+      });
+      await refreshedState.promise;
+    });
+    expect(screen.getByText('chat.errorBanner.codexSessionExpired')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'chat.errorBanner.retry' })).toBeNull();
+  });
+
   it('joins an OAuth flow already started from the settings auth hook', async () => {
     const login = deferred<{ authenticated: boolean; authSource: 'oauth' }>();
     mocks.triggerLogin.mockImplementation(() => login.promise);
