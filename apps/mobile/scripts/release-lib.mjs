@@ -46,9 +46,8 @@ const BAKED_ENV_KEY_NOTES = {
   EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL:
     '端点清单自举基址:启动第一步拉 <此地址>/endpoint.json 回填业务端点(唯一不可远程覆盖的烘焙远程 URL)',
   EXPO_PUBLIC_FEISHU_APP_ID: '飞书 OAuth 应用 ID(登录构建身份)',
-  EXPO_PUBLIC_XDT_OTA_SELFHOST: '自建分发变体标志:=1 开启自建 /latest 整包发现(与 EAS 线隔离)',
-  EXPO_PUBLIC_XDT_OTA_URL:
-    '自建 mobile-update-server 基址:整包发现可被清单 mobileUpdateBaseUrl 远程覆盖;热更通道 updates.url 同源烧原生、清单管不到',
+  EXPO_PUBLIC_XDT_OTA_SELFHOST:
+    '自建分发变体标志:=1;真实热更/整包地址均来自 endpoint.json 的 mobileUpdateBaseUrl',
   EXPO_PUBLIC_DESKTOP_VERSION: '配对的桌面产品线版本(二级版本号,设置页展示;空则该行不显示)',
   EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'TapDB 统计 client id(公开键,随包分发)',
   EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'TapDB 统计 client token(公开键,随包分发)',

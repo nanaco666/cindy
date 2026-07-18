@@ -60,15 +60,13 @@ function assertRuntimeMatchesColdBaseline({ runtimeVersion, baselineRuntime, ski
 // 会据此把 android.versionCode 打进 config,而它**进 @expo/fingerprint**。漏注入会算出与冷更/预判不同的
 // runtimeVersion,导致本能热更的改动被 runtime 基线闸门误判为原生已变而中止(冷热不同源)。
 function selfhostEnv(desktopVersion) {
-  const otaUrl = process.env.EXPO_PUBLIC_XDT_OTA_URL?.trim();
-  if (!otaUrl) throw new Error('release-android-ota 需要 EXPO_PUBLIC_XDT_OTA_URL(mobile-update-server 基址)');
   const env = {
     ...process.env,
     ...productionMobileEnv(),
     EXPO_PUBLIC_XDT_OTA_SELFHOST: '1',
-    EXPO_PUBLIC_XDT_OTA_URL: otaUrl,
     XDT_ANDROID_VERSION_CODE: String(readAndroidVersionCode(MOBILE_DIR)),
   };
+  delete env.EXPO_PUBLIC_XDT_OTA_URL;
   // 二级版本号:仅 JS 层(app.config.js 不读它,不进 @expo/fingerprint,不改 runtimeVersion);空则不注入。
   if (desktopVersion) env.EXPO_PUBLIC_DESKTOP_VERSION = desktopVersion;
   return env;

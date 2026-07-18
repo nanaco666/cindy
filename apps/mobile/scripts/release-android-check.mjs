@@ -9,7 +9,7 @@
 //   - 读不到基线   → BASELINE_UNKNOWN  (首发 / release.json 尚未上传)
 //
 // 只读:只算本地指纹 + GET 公开 CDN 上的 release.json,不写、不碰 EAS/NPKG/keystore。
-// 需要 EXPO_PUBLIC_XDT_OTA_URL(须与出包时一致,否则指纹不同源,判定失真)。versionCode 来自
+// 真实更新地址来自 endpoint.json,不参与 build/fingerprint。versionCode 来自
 // committed android-version.json,经 env 注入,保证与 local/ota 计算的指纹同源。
 // =============================================================================
 
@@ -28,15 +28,14 @@ const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 const RELEASE_RECORD_CDN = `${CDN_BASE}/mobile-ota/android/release.json`;
 
 function selfhostEnv(versionCode) {
-  const otaUrl = process.env.EXPO_PUBLIC_XDT_OTA_URL?.trim();
-  if (!otaUrl) throw new Error('release-android-check 需要 EXPO_PUBLIC_XDT_OTA_URL(须与出包时一致,才能算出同源指纹)');
-  return {
+  const env = {
     ...process.env,
     ...productionMobileEnv(),
     EXPO_PUBLIC_XDT_OTA_SELFHOST: '1',
-    EXPO_PUBLIC_XDT_OTA_URL: otaUrl,
     XDT_ANDROID_VERSION_CODE: String(versionCode),
   };
+  delete env.EXPO_PUBLIC_XDT_OTA_URL;
+  return env;
 }
 
 function computeRuntimeVersion(env) {

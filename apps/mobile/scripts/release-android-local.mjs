@@ -73,15 +73,13 @@ function log(msg) { console.error(msg); }
 
 // self-host 变体的构建环境:确保 prebuild/fingerprint 与安装包同源,并注入 versionCode。
 function selfhostEnv(versionCode, desktopVersion) {
-  const otaUrl = process.env.EXPO_PUBLIC_XDT_OTA_URL?.trim();
-  if (!otaUrl) throw new Error('release-android-local 需要 EXPO_PUBLIC_XDT_OTA_URL(mobile-update-server 基址,用于烧进包的 updates.url)');
   const env = {
     ...process.env,
     ...productionMobileEnv(),
     EXPO_PUBLIC_XDT_OTA_SELFHOST: '1',
-    EXPO_PUBLIC_XDT_OTA_URL: otaUrl,
     XDT_ANDROID_VERSION_CODE: String(versionCode),
   };
+  delete env.EXPO_PUBLIC_XDT_OTA_URL;
   // 二级版本号:自建线包所配对的桌面产品线版本;仅有值时注入(空则设置页不显示该行)。
   if (desktopVersion) env.EXPO_PUBLIC_DESKTOP_VERSION = desktopVersion;
   return env;

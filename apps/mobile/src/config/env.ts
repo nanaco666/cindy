@@ -210,17 +210,15 @@ export function applyResolvedClientEndpoints(resolved: {
   }
 }
 
-// 自建分发(自托管 OTA)服务基址。仅自建变体的包会注入 EXPO_PUBLIC_XDT_OTA_URL,
-// 运行时用它拼 `${base}/latest` 做整包发现(runtimeVersion 不同则引导跳 NPKG)。
-// live binding:自建变体下启动闸门拉到端点清单后用 mobileUpdateBaseUrl 覆写
-// (清单值优先,已发自建包可远程迁域名);非自建变体不覆写,保持恒空串。
-// 烧包 env 作 dev / 闸门前初值。消费点(fetchLatestRelease 的调用时默认参数)
-// 读的是当前值,无模块顶层捕获。热更通道 updates.url 仍烧在原生层,不受清单影响。
-export let OTA_SERVER_BASE_URL = (process.env.EXPO_PUBLIC_XDT_OTA_URL?.trim().replace(/\/+$/, '')) || '';
+// 自建分发服务基址,唯一来源是 endpoint.json 的 mobileUpdateBaseUrl:
+// - `${base}/manifest`:useStartupOtaGate 在手动 check/fetch 前运行时覆写 expo-updates URL;
+// - `${base}/latest`:整包发现(runtimeVersion 不同则引导安装新包)。
+// live binding:启动闸门成功前保持空串,业务树与 OTA 门均未挂载;自建变体由
+// applyResolvedClientEndpoints 回填,非自建变体恒空串。真实更新地址不再构建期注入。
+export let OTA_SERVER_BASE_URL = '';
 
-// 是否自建变体 —— 必须与 app.config.js 的构建门控读同一个 EXPO_PUBLIC_XDT_OTA_SELFHOST 标志,
-// 而非仅凭 EXPO_PUBLIC_XDT_OTA_URL 是否存在。否则某 EAS 包若恰好在 public env 里带了该 URL
-// (但没走自建构建),运行时却误开自建 /latest 检查、提示用户装自建包,破坏两条线的更新隔离。
+// 是否自建变体 —— 必须与 app.config.js 的构建门控读同一个 EXPO_PUBLIC_XDT_OTA_SELFHOST 标志。
+// 真实更新地址只来自 endpoint 清单,不能拿它反推包身份,否则会破坏 EAS / 自建两条线隔离。
 // EXPO_PUBLIC_ 前缀保证该标志会被 inline 进 JS bundle,
 // 与包的真实身份严格对齐。详见 docs/self-hosted-ios-build-and-ota.md。
 export const IS_OTA_SELFHOST = process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST === '1';

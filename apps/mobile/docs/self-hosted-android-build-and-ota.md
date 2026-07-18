@@ -109,8 +109,8 @@ flowchart TD
 
 ## 6. 客户端改动(env-gated,JS OTA 零改动 + 整包发现平台化)
 
-1. **`app.config.js` 自建分支补 `android.versionCode`**:默认 `android.package` 已是 `com.xd.lizcn`;自建分支仅注入 `android.versionCode = Number(process.env.XDT_ANDROID_VERSION_CODE)`(缺省不注入)并切换 OTA URL。**非自建路径仍原样返回 app.json**(红线 1)。不额外改 `scheme` / native Feishu SSO 设置。
-2. **JS 热更**:`expo-updates` 运行时逻辑完全不动,只是 url 指向自建服务(`app.config.js` 已在自建分支拼 `updates.url = ${base}/manifest`)。
+1. **`app.config.js` 自建分支补 `android.versionCode`**:默认 `android.package` 已是 `com.xd.lizcn`;自建分支注入 `android.versionCode = Number(process.env.XDT_ANDROID_VERSION_CODE)`(缺省不注入),并使用固定 OTA 占位 URL + `checkAutomatically=NEVER` + `disableAntiBrickingMeasures=true`。**非自建路径仍原样返回 app.json**(红线 1)。
+2. **JS 热更**:启动先拉 region 对应 `endpoint.json?t=<Date.now()>`,取 `mobileUpdateBaseUrl` 运行时覆盖 Expo Updates URL 为 `${base}/manifest`,再手动 check/fetch;真实更新域名不参与 build/fingerprint。
 3. **整包发现平台化**:`src/update/useBundleUpdatePrompt.ts` 当前硬编码 `fetchLatestRelease('ios')` → 改为 `fetchLatestRelease(Platform.OS === 'android' ? 'android' : 'ios')`(`import { Platform } from 'react-native'`)。`fetchLatestRelease` 已按 `?platform=` 参数化,`preferredInstallUrl` 已回退 `installUrl`——**只此一处 IO 平台化**,判定纯函数与弹窗逻辑不动。
 4. **Android package 统一为 `com.xd.lizcn`**;`scheme` 固定为 `lizcn`。EAS/TestFlight 默认优先走飞书 App 原生 SSO;自建线是否启用由发布 env 控制,启用时必须保留浏览器 OAuth 兜底以覆盖 §16 的 appId callback scheme 共装风险。
 
@@ -118,9 +118,9 @@ flowchart TD
 
 复用 `release-lib.mjs` 的参数解析 / git 闸门 / dry-run 风格。步骤:
 
-1. **算指纹**:`npx expo-updates fingerprint:generate --platform android`(self-host env:`EXPO_PUBLIC_XDT_OTA_SELFHOST=1` + `EXPO_PUBLIC_XDT_OTA_URL`;`fingerprint.config.cjs` 的 beta 剥离 hook 仍生效)→ 得 `runtimeVersion`,落盘 `release/android-runtime.json` 供热更脚本复用(镜像 iOS 的 `release/ios-runtime.json`)。
+1. **算指纹**:`npx expo-updates fingerprint:generate --platform android`(self-host 身份 env:`EXPO_PUBLIC_XDT_OTA_SELFHOST=1`;`fingerprint.config.cjs` 的 beta 剥离 hook 仍生效)→ 得 `runtimeVersion`,落盘 `release/android-runtime.json` 供热更脚本复用(镜像 iOS 的 `release/ios-runtime.json`)。
 2. **读并校验 versionCode**:读 committed `apps/mobile/android-version.json`(`{ "versionCode": N }`)——放仓库根而非 `release/`,因为 `apps/mobile/.gitignore` 忽略整个 `/release`(那里只放 per-build 产物如 `android-runtime.json`);经 `assertBuildNumberMonotonic`(复用 `lib/ios-local.mjs`)对 CDN 基线 `mobile-ota/android/release.json` 的上一条 `buildNumber`(即上次 versionCode)做单调校验;经 env `XDT_ANDROID_VERSION_CODE` 传给 prebuild(供 §6.1 注入)。
-3. **prebuild**:`expo prebuild -p android --clean`,注入自建变体 env(`EXPO_PUBLIC_XDT_OTA_SELFHOST=1` / `EXPO_PUBLIC_XDT_OTA_URL` / `XDT_ANDROID_VERSION_CODE` / 必要的 `EXPO_PUBLIC_*`)。
+3. **prebuild**:`expo prebuild -p android --clean`,注入自建变体 env(`EXPO_PUBLIC_XDT_OTA_SELFHOST=1` / `XDT_ANDROID_VERSION_CODE` / 必要的 `EXPO_PUBLIC_*`)。真实更新地址只来自 endpoint 清单。
 4. **注入签名 + 编译**:`android/` 是生成目录(gitignored、每次 prebuild 重建),脚本**幂等 patch** 生成的 `android/app/build.gradle`——把 `release` buildType 的 `signingConfig` 从默认的 `signingConfigs.debug` 改为指向 env 驱动的 release keystore(默认模板 release 用 debug 签名,**必须改**)。keystore 路径与口令经 `-P` gradle property 从环境变量传入 `gradlew assembleRelease`,**绝不落盘明文、绝不写进被 patch 的 build.gradle**(patch 只引用 property 名):
    - `XDT_ANDROID_KEYSTORE_PATH`(默认 `/Users/cn-ios/Documents/xdt/XDMakerMobileCer/Android/xdmaker-release.jks`)
    - `XDT_ANDROID_KEYSTORE_PASSWORD` / `XDT_ANDROID_KEY_ALIAS`(默认 `xdmaker-release`)/ `XDT_ANDROID_KEY_PASSWORD`

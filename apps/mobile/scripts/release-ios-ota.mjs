@@ -66,14 +66,12 @@ function assertRuntimeMatchesColdBaseline({ runtimeVersion, baselineRuntime, ski
 
 // self-host 变体的构建环境:确保 export/fingerprint 与安装包同源。
 function selfhostEnv(desktopVersion) {
-  const otaUrl = process.env.EXPO_PUBLIC_XDT_OTA_URL?.trim();
-  if (!otaUrl) throw new Error('release-ios-ota 需要 EXPO_PUBLIC_XDT_OTA_URL(mobile-update-server 基址)');
   const env = {
     ...process.env,
     ...productionMobileEnv(),
     EXPO_PUBLIC_XDT_OTA_SELFHOST: '1',
-    EXPO_PUBLIC_XDT_OTA_URL: otaUrl,
   };
+  delete env.EXPO_PUBLIC_XDT_OTA_URL;
   // 二级版本号:仅 JS 层(不进 @expo/fingerprint,不改 runtimeVersion,与冷更整包同源);空则不注入。
   if (desktopVersion) env.EXPO_PUBLIC_DESKTOP_VERSION = desktopVersion;
   return env;

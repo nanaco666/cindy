@@ -9,7 +9,7 @@
 //   - 读不到基线   → BASELINE_UNKNOWN  (首发 / release.json 尚未上传)
 //
 // 只读:只算本地指纹 + GET 公开 CDN 上的 release.json,不写任何东西、不碰 EAS。
-// 需要 EXPO_PUBLIC_XDT_OTA_URL(须与出包时一致,否则指纹不同源,判定失真)。
+// 真实更新地址来自 endpoint.json,不参与 build/fingerprint。
 // =============================================================================
 
 import { execFileSync } from 'node:child_process';
@@ -26,14 +26,13 @@ const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 const RELEASE_RECORD_CDN = `${CDN_BASE}/mobile-ota/ios/release.json`;
 
 function selfhostEnv() {
-  const otaUrl = process.env.EXPO_PUBLIC_XDT_OTA_URL?.trim();
-  if (!otaUrl) throw new Error('release-ios-check 需要 EXPO_PUBLIC_XDT_OTA_URL(须与出包时一致,才能算出同源指纹)');
-  return {
+  const env = {
     ...process.env,
     ...productionMobileEnv(),
     EXPO_PUBLIC_XDT_OTA_SELFHOST: '1',
-    EXPO_PUBLIC_XDT_OTA_URL: otaUrl,
   };
+  delete env.EXPO_PUBLIC_XDT_OTA_URL;
+  return env;
 }
 
 function computeRuntimeVersion(env) {

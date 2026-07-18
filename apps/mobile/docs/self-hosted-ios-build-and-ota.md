@@ -100,26 +100,25 @@ flowchart TD
 - 比对用 `Updates.runtimeVersion`(expo-updates 提供的当前运行 runtimeVersion),而非 `version`/`buildNumber` —— runtimeVersion 才是 JS OTA 能否落地的真实门闸。
 - 可选 `minRuntimeVersion` / `minVersion` 做**强制整包更新**(低于阈值阻断使用、只留"去更新")。
 
-## 6. 客户端改动(env-gated,JS OTA 零改动 + 新增整包发现)
+## 6. 客户端改动(env-gated 身份 + endpoint 驱动更新地址)
 
-1. `app.config.js` 增加**自建变体分支**(与现有 beta 分支同样的 gate 思路),仅当 `EXPO_PUBLIC_XDT_OTA_SELFHOST=1` 时把 `updates.url` 指向 `mobile-update-server`:
+1. `app.config.js` 的**自建变体分支**只由 `EXPO_PUBLIC_XDT_OTA_SELFHOST=1` 决定包身份与原生 OTA 策略。原生 `updates.url` 使用固定占位 URL、`checkAutomatically=NEVER`,不烘焙真实 mobile-update-server 地址:
 
 ```js
-// 自建分发变体沿用默认 app 身份(iOS com.xd.lizcn / Android com.xd.lizcn),只把 OTA 指向 mobile-update-server。
-// iOS 与 Android 是两条独立自建线,bundleId / package 各自维护(见 app.config.js 里两个独立常量),不共用。
-// 其它情况(EAS production / beta / 本地)必须原样返回 app.json。
 if (process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST === '1') {
-  const base = process.env.EXPO_PUBLIC_XDT_OTA_URL?.trim().replace(/\/+$/, '');
   return {
     ...config,
-    ios: { ...config.ios, bundleIdentifier: 'com.xd.lizcn' },
-    android: { ...config.android, package: 'com.xd.lizcn' },
-    updates: { ...config.updates, url: `${base}/manifest` },
+    updates: {
+      ...config.updates,
+      url: 'https://selfhost.invalid/manifest',
+      checkAutomatically: 'NEVER',
+      disableAntiBrickingMeasures: true,
+    },
   };
 }
 ```
 
-2. **JS 热更**:`expo-updates` 运行时逻辑(启动 `ON_LOAD` 检查、后台下载、下次启动生效、设置页 `reloadAsync`、回滚、`currentlyRunning` 展示)**完全不动**,只是 url 指向了自建服务。
+2. **JS 热更**:启动先从 region 对应 hotfix CDN 拉 `endpoint.json?t=<Date.now()>`;自建变体取 `mobileUpdateBaseUrl`,调用 `Updates.setUpdateURLAndRequestHeadersOverride({ updateUrl: base + '/manifest' })`,再手动 check/fetch/reload。Expo 的 URL override API 要求 `disableAntiBrickingMeasures=true`,因此首次接入必须冷更;以后迁移更新域名只改 endpoint 清单。
 3. **整包发现(新增)**:新增一个轻量 service(main/render 解耦,逻辑放可单测的纯函数),启动/进设置时拉 `/latest`,按第 5 节表格比对 `Updates.runtimeVersion`,触发"去更新"弹窗 → `Linking.openURL(itmsUrl)`。
 4. **bundleIdentifier 统一为 `com.xd.lizcn`**;`scheme` 固定为 `lizcn`。EAS/TestFlight 默认优先走飞书 App 原生 SSO;自建线是否启用由发布 env 控制,启用时必须保留浏览器 OAuth 兜底以覆盖 §13 的 appId callback scheme 共装风险。
 
@@ -128,7 +127,7 @@ if (process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST === '1') {
 复用 `release-lib.mjs` 的参数解析 / git 闸门 / dry-run 风格。步骤:
 
 1. **算指纹**:`npx expo-updates fingerprint:generate`(本地工具链;`fingerprint.config.cjs` 的 beta 剥离 hook 仍生效)→ 得到 `runtimeVersion`,落盘(如 `release/ios-runtime.json`)供热更脚本复用。
-2. **prebuild**:`expo prebuild -p ios --clean`,注入自建变体 env(`EXPO_PUBLIC_XDT_OTA_SELFHOST=1` / `EXPO_PUBLIC_XDT_OTA_URL` / 必要的 `EXPO_PUBLIC_*`);`pod install`。
+2. **prebuild**:`expo prebuild -p ios --clean`,注入自建变体身份 env(`EXPO_PUBLIC_XDT_OTA_SELFHOST=1` / 必要的 `EXPO_PUBLIC_*`);`pod install`。真实更新地址不参与 build/fingerprint。
 3. **编译**:`xcodebuild archive` + `-exportArchive`,`ExportOptions.plist` 用 `signingStyle=manual` + `teamID=NTC4BJ542G` + `provisioningProfiles: { "com.xd.lizcn": "lizcn_dev" }` + method `development`,证书取钥匙串 `Apple Development: Jiali LIU` → 产出 `.ipa`。profile 文件在仓库外 `/Users/cn-ios/Documents/xdt/XDMakerMobileCer/iOS/Dev/`,脚本用环境变量指向路径,不入库。
 4. **交付 NPKG**:调用 `release-ios.sh upload <ipa>`;默认校验 bundleId `com.xd.lizcn`,企业签 Team 校验 `UE5H8B62F9.*` 不变。
 5. **写整包版本记录**:把 `{ version, buildNumber, runtimeVersion, installUrl, itmsUrl, releaseNotes, minVersion? }` 上传到 OSS(`mobile-ota/ios/release.json`),供 `/latest` 读取。
@@ -190,7 +189,7 @@ smash-dev/xdt-maker/mobile-ota/
 | A5 channel | **首期单 `production` channel**,可后加 |
 | A6 整包发现 | **启动 + 设置页"检查更新"都加**;`minVersion` 字段预留但**默认不强制** |
 | A7 EAS profile | **首期不加**自建变体 profile,自建线纯本地驱动,`eas.json` 零改动 |
-| A8 mobile-update-server 域名 | **暂缺省**,`EXPO_PUBLIC_XDT_OTA_URL` 占位,后续配公网 HTTPS 域名再回填 |
+| A8 mobile-update-server 域名 | 由 region 对应 `endpoint.json.mobileUpdateBaseUrl` 运行时下发;不再使用构建 env |
 
 ## 12. 落地顺序(建议)
 
@@ -234,10 +233,10 @@ bundleId `com.xd.lizcn` 依赖以下仓库外动作 —— 第 1 项是自建冷
 > 注:上述 2026-07-02 实跑记录是 iOS 自建线**改名前**的产物(当时 bundleId=`com.xd.maker` / profile=`maker_dev`);现已改为 `com.xd.lizcn` / `lizcn_dev`(见 §3、§13),历史记录保留其真实产出值不改写。OTA 端到端(含包内 runtimeVersion 与 `/latest` 一致性)待 mobile-update-server 部署后验。
 
 实现中的细化(相对前文设计):
-- **OTA 服务地址 env `EXPO_PUBLIC_XDT_OTA_URL`**(mobile-update-server 基址)。build 时 `app.config.js` 拼 `updates.url = ${base}/manifest`;运行时 JS 用 `${base}/latest` 做整包发现。`EXPO_PUBLIC_XDT_OTA_SELFHOST=1` 作显式 build 门控。空值即"非自建变体",整包发现整体跳过。**2026-07 端点清单接入**:`/latest` 整包发现的基址运行期由端点清单 `mobileUpdateBaseUrl` 覆写(启动闸门回填 `OTA_SERVER_BASE_URL` live binding,清单值优先于烧包 env,已发自建包可远程迁域名);热更 `updates.url` 仍烧原生层不受清单影响,出包时两者仍应同源。
+- **OTA 服务地址只认 endpoint 清单**:`EXPO_PUBLIC_XDT_OTA_SELFHOST=1` 只标识自建包;启动闸门把 `endpoint.json.mobileUpdateBaseUrl` 回填为 live binding,同时用于 `${base}/manifest` JS 热更与 `${base}/latest` 整包发现。构建/指纹不再接受真实 OTA URL。端点清单自举 CDN 基址仍是不可自引用覆盖的唯一烘焙远程 URL。
 - **`ali-oss` 已 hoist 到仓库根**,`scripts/shared/oss.mjs` 直接 `require('ali-oss')`,`apps/mobile` **无需**新增依赖。
 - `release-ios.sh` 默认校验 `com.xd.lizcn`;`NPKG_EXPECT_BUNDLE` 仅用于历史包校验。
-- 真实运行需带 `EXPO_PUBLIC_XDT_OTA_URL` 及其它 `EXPO_PUBLIC_*`(建议 `eas env:exec production` 包裹);冷更 `--execute` 需 macOS+Xcode+已装 `lizcn_dev` 描述文件 + NPKG 白名单。
+- 真实运行需带其它构建身份 `EXPO_PUBLIC_*`(建议 `eas env:exec production` 包裹),但不再需要 OTA URL env;冷更 `--execute` 需 macOS+Xcode+已装 `lizcn_dev` 描述文件 + NPKG 白名单。
 
 ## 相关文档
 

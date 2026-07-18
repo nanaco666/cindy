@@ -266,22 +266,20 @@ describe('runStartupEndpointResolve(CDN 优先 + 包内正本兜底)', () => {
     expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay.example.invalid');
   });
 
-  it('自建变体(IS_OTA_SELFHOST=1):mobileUpdateBaseUrl 覆写整包发现基址(可远程迁域名)', async () => {
+  it('自建变体(IS_OTA_SELFHOST=1):mobileUpdateBaseUrl 是热更与整包发现的唯一基址', async () => {
     process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST = '1';
-    process.env.EXPO_PUBLIC_XDT_OTA_URL = 'https://baked-ota.example.invalid';
     try {
       const { env, startup } = await freshModules();
-      expect(env.OTA_SERVER_BASE_URL).toBe('https://baked-ota.example.invalid');
+      expect(env.OTA_SERVER_BASE_URL).toBe('');
       const outcome = await startup.runStartupEndpointResolve({
         fetchManifestText: async () => FULL_MANIFEST,
         bundledManifestText: BUNDLED_MANIFEST,
       });
       expect(outcome).toEqual({ ok: true, source: 'cdn' });
-      // 清单值优先于烧包 env:已发自建包靠改线上清单即可迁域名
+      // 真实地址只来自清单:已发自建包靠改线上清单即可迁域名
       expect(env.OTA_SERVER_BASE_URL).toBe('https://mobile-update-next.example.com');
     } finally {
       delete process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST;
-      delete process.env.EXPO_PUBLIC_XDT_OTA_URL;
       vi.resetModules();
     }
   });

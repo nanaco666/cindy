@@ -4,7 +4,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import * as Updates from 'expo-updates';
-import { IS_OTA_SELFHOST, REVIEW_MODE } from '@/config/env';
+import { IS_OTA_SELFHOST, OTA_SERVER_BASE_URL, REVIEW_MODE } from '@/config/env';
 import { runStartupOtaUpdate } from './startupOtaUpdate';
 
 export function useStartupOtaGate(): boolean {
@@ -24,6 +24,15 @@ export function useStartupOtaGate(): boolean {
     let cancelled = false;
     void runStartupOtaUpdate({
       enabled,
+      configureUpdateUrl: () => {
+        if (!OTA_SERVER_BASE_URL) {
+          throw new Error('endpoint manifest missing mobileUpdateBaseUrl');
+        }
+        Updates.setUpdateURLAndRequestHeadersOverride({
+          updateUrl: `${OTA_SERVER_BASE_URL}/manifest`,
+          requestHeaders: {},
+        });
+      },
       checkForUpdateAsync: () => Updates.checkForUpdateAsync(),
       fetchUpdateAsync: () => Updates.fetchUpdateAsync(),
       reloadAsync: () => Updates.reloadAsync(),

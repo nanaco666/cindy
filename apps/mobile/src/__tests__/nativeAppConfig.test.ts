@@ -11,6 +11,8 @@ const managedEnvKeys = [
   'EXPO_PUBLIC_APP_VARIANT',
   'EXPO_PUBLIC_BETA_DEV',
   'EXPO_PUBLIC_CINDY_AUTH_REGION',
+  'EXPO_PUBLIC_XDT_OTA_SELFHOST',
+  'EXPO_PUBLIC_XDT_OTA_URL',
 ];
 let previousEnv: Record<string, string | undefined>;
 
@@ -54,6 +56,27 @@ describe('mobile native app config', () => {
     expect(buildConfig({ config: appJson.expo }).name).toBe(
       'Cindy Beta (dash)',
     );
+  });
+
+  it('self-host builds use endpoint-driven OTA without baking the update server URL', () => {
+    const appJson = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'app.json'), 'utf8'),
+    );
+    const buildConfig = require(resolve(process.cwd(), 'app.config.js'));
+
+    const regular = buildConfig({ config: appJson.expo });
+    expect(regular.updates).toEqual(appJson.expo.updates);
+
+    process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST = '1';
+    // 即使调用环境残留旧变量,自建原生 config 也不得再消费真实更新地址。
+    process.env.EXPO_PUBLIC_XDT_OTA_URL = 'https://must-not-be-baked.example.com';
+    const selfHosted = buildConfig({ config: appJson.expo });
+    expect(selfHosted.updates).toMatchObject({
+      url: 'https://selfhost.invalid/manifest',
+      checkAutomatically: 'NEVER',
+      disableAntiBrickingMeasures: true,
+    });
+    expect(JSON.stringify(selfHosted)).not.toContain('must-not-be-baked.example.com');
   });
 
   it('fails closed when a store build lacks its regional App Store numeric ID', () => {

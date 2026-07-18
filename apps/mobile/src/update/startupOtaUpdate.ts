@@ -11,6 +11,8 @@ export type StartupOtaOutcome = 'skipped' | 'up-to-date' | 'reloading' | 'error'
 export interface StartupOtaDeps {
   /** 是否启用(自建变体 + 非 dev + expo-updates 可用);false 直接 skipped、不阻塞。 */
   enabled: boolean;
+  /** 把 endpoint 清单解析出的 /manifest URL 写入 expo-updates;必须先于 check。 */
+  configureUpdateUrl: () => void;
   checkForUpdateAsync: () => Promise<{ isAvailable: boolean }>;
   fetchUpdateAsync: () => Promise<{ isNew: boolean }>;
   /** 正常不返回(app 重启);测试里用 spy 断言被调用。 */
@@ -54,6 +56,7 @@ export async function runStartupOtaUpdate(
 ): Promise<StartupOtaOutcome> {
   if (!deps.enabled) return 'skipped';
   try {
+    deps.configureUpdateUrl();
     const check = await withTimeout(deps.checkForUpdateAsync(), checkTimeoutMs);
     if (!check.isAvailable) return 'up-to-date';
     const fetched = await withTimeout(deps.fetchUpdateAsync(), fetchTimeoutMs);
