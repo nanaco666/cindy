@@ -639,16 +639,6 @@ registerColor('send-btn-pressed-bg', {
   dark: 'var(--send-btn-bg)',
 }, 'Send button pressed bg(default 同 bg;CINDY override 反相中性 pressed #25282C/#D4D4D4,E1D 纳入值表)');
 
-// Stop button — per cc-agent-view Streaming variant
-registerColor('stop-btn-bg', {
-  light: 'var(--surface-chip)',
-  dark: 'var(--surface-chip)',
-}, 'Light Gray');
-registerColor('stop-btn-icon', {
-  light: 'var(--text-primary-on-dark)',
-  dark: 'var(--text-primary-on-dark)',
-}, 'Near Black');
-
 // Permission prompt (F-PERM-2)
 registerColor('perm-code-bg', {
   light: '#f5f5f5',
