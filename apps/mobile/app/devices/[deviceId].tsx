@@ -17,6 +17,8 @@ import { ConnectionBanner, useShowConnectionBanner } from '@/components/Connecti
 import { goBackGuarded } from '@/utils/backGuard';
 import { configureCollapseAnimation } from '@/utils/collapseAnimation';
 import { useGuardedPush } from '@/utils/useGuardedPush';
+import { mapContentEqual } from '@/utils/valueEquality';
+import { useStableValue } from '@/utils/useStableValue';
 import {
   MainWindowActionButton,
   MainWindowActionGroup,
@@ -128,11 +130,16 @@ export default function DeviceDetailScreen() {
   const { connectionIssue, invoke, status, subscribe, unsubscribe } = useDeviceLink();
   const maker = useMobileMakerTransport(deviceId);
   const scheduleEventSnapshot = useRemoteScheduleEventSnapshot(deviceId);
-  const sessions = useRemoteSessions().filter((s) =>
+  const allSessions = useRemoteSessions();
+  // filter 必须 memo:裸 filter 每次渲染都产新数组,会让下游全部 [sessions, ...] 依赖的
+  // useMemo 逐 emit 失效,派生链(索引 → sections → 全列表行)整体重建(2026-07-18
+  // 重渲染风暴)。store 层已保证 allSessions 引用在内容未变时稳定,这里不能亲手打破。
+  const sessions = useMemo(() => allSessions.filter((s) =>
     // 用展示用 canonicalDeviceId(设备归并结果)匹配,与首页项目卡一致 —— 被认领的 stale 会话也能显示,
     // 数量与卡片相符。deviceLinkDeviceId 仍是物理路由 key(openSession / patch 用它),不参与此处判断。
     (s.canonicalDeviceId ?? s.deviceLinkDeviceId) === deviceId
-    && (!projectWorkingDir || sessionMatchesProjectDir(s.workingDir, projectWorkingDir)));
+    && (!projectWorkingDir || sessionMatchesProjectDir(s.workingDir, projectWorkingDir))),
+  [allSessions, deviceId, projectWorkingDir]);
   const messageVersion = useRemoteMessageVersion();
   const storeVersion = useRemoteSessionStoreVersion();
   const [statusFilter, setStatusFilter] = useState<RemoteSessionStatusFilter>('active');
@@ -214,18 +221,23 @@ export default function DeviceDetailScreen() {
       });
   }, [deviceId, maker, scheduleEventSnapshot.unreadClearVersion]);
 
-  const messagePreviewIndex = useMemo(
+  // 派生索引依赖全局 messageVersion / storeVersion,逐 emit 重建出内容相同的新 Map;
+  // useStableValue 在内容未变时保留旧引用,阻断 sections 派生链的无谓全量重建
+  // (与首页同款处理,风暴背景见 devices/index.tsx 对应注释)。
+  const messagePreviewIndexRaw = useMemo(
     () => buildSessionMessagePreviewIndex(
       sessions.map((session) => session.id),
       (sessionId) => remoteSessionStore.getMessages(sessionId),
     ),
     [messageVersion, sessions],
   );
-  const pendingInteractionIndex = useMemo(() => new Map(
+  const messagePreviewIndex = useStableValue(messagePreviewIndexRaw, mapContentEqual);
+  const pendingInteractionIndexRaw = useMemo(() => new Map(
     sessions
       .map((session) => [session.id, remoteSessionStore.getPendingInteractions(session.id).length] as const)
       .filter(([, count]) => count > 0),
   ), [sessions, storeVersion]);
+  const pendingInteractionIndex = useStableValue(pendingInteractionIndexRaw, mapContentEqual);
   const filterCounts = useMemo(
     () => summarizeRemoteSessionOverview(sessions, pendingInteractionIndex, scheduleIndex),
     [pendingInteractionIndex, scheduleIndex, sessions],

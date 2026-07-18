@@ -1,6 +1,6 @@
 import { useObserve } from 'expo-observe';
 import { useFocusEffect } from 'expo-router';
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,6 +16,7 @@ import {
   View,
   useWindowDimensions,
   type StyleProp,
+  type TextStyle,
   type ViewStyle,
 } from 'react-native';
 import { Text, TextInput } from '@/components/AppText';
@@ -110,7 +111,11 @@ import {
   useRemoteMessageVersion,
   useRemoteSessions,
   useRemoteSessionStoreVersion,
+  useSessionRunning,
 } from '@/session/remoteSessionStore';
+import { dataPropsEqual, mapContentEqual } from '@/utils/valueEquality';
+import { useStableValue } from '@/utils/useStableValue';
+import { useMinuteNow } from '@/utils/useMinuteNow';
 import {
   loadDeviceSessionScheduleIndex,
   loadSessionScheduleIndexThrottled,
@@ -722,19 +727,25 @@ export default function HomeScreen() {
       : null,
     [deviceModels, revokedTipDeviceId],
   );
-  const messagePreviewIndex = useMemo(
+  // 三个派生索引的依赖挂在全局 messageVersion / storeVersion 上,桌面端活跃期逐 emit
+  // 重建出内容相同的新 Map——若不做内容稳定化,home → sections → 全列表行整链每次
+  // emit 都重建(2026-07-18 重渲染风暴 trace 实锤)。useStableValue 在内容未变时保留
+  // 旧引用,下游 useMemo 依赖即可短路;内容真变(某会话预览/交互数/活动态变化)照常穿透。
+  const messagePreviewIndexRaw = useMemo(
     () => buildSessionMessagePreviewIndex(
       sessions.map((session) => session.id),
       (sessionId) => remoteSessionStore.getMessages(sessionId),
     ),
     [messageVersion, sessions],
   );
-  const pendingInteractionIndex = useMemo(() => new Map(
+  const messagePreviewIndex = useStableValue(messagePreviewIndexRaw, mapContentEqual);
+  const pendingInteractionIndexRaw = useMemo(() => new Map(
     sessions
       .map((session) => [session.id, remoteSessionStore.getPendingInteractions(session.id).length] as const)
       .filter(([, count]) => count > 0),
   ), [sessions, storeVersion]);
-  const liveActivityIndex = useMemo(() => {
+  const pendingInteractionIndex = useStableValue(pendingInteractionIndexRaw, mapContentEqual);
+  const liveActivityIndexRaw = useMemo(() => {
     const entries: Array<[string, RemoteSessionLiveActivity]> = [];
     for (const session of sessions) {
       const liveActivity = remoteSessionStore.getSessionLiveActivity(session.id);
@@ -742,6 +753,7 @@ export default function HomeScreen() {
     }
     return new Map(entries);
   }, [sessions, storeVersion]);
+  const liveActivityIndex = useStableValue(liveActivityIndexRaw, mapContentEqual);
   // 列表隐藏 Orca worker 子会话(本期不支持进 worker 聊天);Lead + 普通会话保留。仅 mobile 侧过滤。
   const homeSessions = useMemo(() => excludeOrcaWorkerSessions(sessions), [sessions]);
   const home = useMemo(
@@ -1881,6 +1893,10 @@ function ProjectRow({
 }) {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
+  // 折叠豁免要命令式读会话运行态,而派生链稳定化后本组件不再逐 emit 重渲染(cell 经
+  // PureComponent bail)——以 storeVersion 订阅兜底感知运行态变化,与 AutomationGroup-
+  // Children 同款(否则折叠线以下转入 running 的会话不会被豁免展开,review P1)。
+  useRemoteSessionStoreVersion();
   // 与桌面侧栏项目组同一套折叠策略:前 N 条之外豁免最近 24h 活动 / 需关注 / 运行中的条目
   // (豁免语义见共享层 getRemoteSessionPreviewCollapse 注释)。
   // 自动化折叠后 sessions 是"行"(组行代表多条会话):按钮显隐看隐藏行数(hiddenCount),
@@ -1981,7 +1997,17 @@ function ProjectRow({
 }
 
 // 导出给项目作用域的设备详情页(app/devices/[deviceId].tsx)复用,保证两处会话行视觉一致。
-export function HomeSessionRow({
+// memo 化(2026-07-18 重渲染风暴):行是列表里最重的单元(Svg 状态标 + Swipeable +
+// 手势树,dev 实测单行 ~13ms),父层每次重渲染 105 个挂载行全量重画是风暴的主放大器。
+// 比较器 dataPropsEqual:数据 props(item / 布尔位 / expandedAutomationGroups)深比较,
+// **函数 props 跳过**——闭包审计:onOpenSession / onToggleAutomationGroup /
+// onOpenAutomationGroup 只闭合 router / 稳定 setState / 稳定 store 引用,新旧闭包可互换;
+// swipe(SessionSwipeControls)为父层 useMemo 单例,内部函数同理。给行新增函数 prop 时
+// 必须重新审计闭包稳定性,否则会拿着 stale 闭包运行。行内运行态经 useSessionRunning
+// 订阅(不再依赖父层重渲染带入),展开组子行的运行态订阅见 AutomationGroupChildren。
+export const HomeSessionRow = memo(HomeSessionRowInner, dataPropsEqual);
+
+function HomeSessionRowInner({
   asBlock = false,
   deepIndented = false,
   expandedAutomationGroups,
@@ -2027,7 +2053,9 @@ export function HomeSessionRow({
 }) {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
-  const running = remoteSessionStore.isSessionRunning(item.session.id) || !!item.scheduleInfo?.running;
+  // 运行态走订阅而非命令式读取:行已 memo 化,父层不再逐 emit 重渲染,命令式读取会 stale。
+  const sessionIsRunning = useSessionRunning(item.session.id);
+  const running = sessionIsRunning || !!item.scheduleInfo?.running;
   // attention 合并 main 的 #368:liveActivity.attention 也点亮关注态(组行直开 primary 的判定沿用)。
   const attention = item.pendingInteractionCount > 0
     || (item.scheduleInfo?.unreadCount ?? 0) > 0
@@ -2133,9 +2161,7 @@ export function HomeSessionRow({
               {item.title}
             </Text>
             {rightStatus === 'time' ? (
-              <Text style={styles.sessionTime} numberOfLines={1}>
-                {formatRemoteSessionSidebarTime(item.lastActivityAt)}
-              </Text>
+              <SessionRelativeTime lastActivityAt={item.lastActivityAt} style={styles.sessionTime} />
             ) : (
               // 统一 18×18 定位槽(对齐桌面 size-4 槽的做法):点(10)与 spinner(15)
               // 尺寸不同,裸放会导致两者横/纵中心不一致,先居中到同一槽再谈对齐。
@@ -2221,6 +2247,9 @@ function AutomationGroupChildren({
 }) {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
+  // 折叠豁免要命令式读子会话运行态,而父行(HomeSessionRow)已 memo 化、不再逐 emit
+  // 重渲染——这里以 storeVersion 订阅兜底感知运行态变化。仅组展开时挂载,量小成本可忽略。
+  useRemoteSessionStoreVersion();
   // 与项目组同一套折叠豁免(24h 活动 / 需关注 / 运行中),见共享层注释。
   const { visibleItems, hiddenCount } = getRemoteSessionPreviewCollapse(group.items, {
     limit: PROJECT_PREVIEW_LIMIT,
@@ -2338,6 +2367,21 @@ function SessionStatusMark({
 
 /** 行右侧 running spinner —— 与桌面 SessionItem 右槽同款:LoaderCircle(即桌面的
  *  lucide Loader2)圆弧图标,1s linear 无限旋转(Tailwind animate-spin 同参数)。 */
+/**
+ * 行右侧相对时间标签(「刚刚 / N 分钟前」)的独家保鲜叶子:行主体 memo 化后不再逐
+ * emit 重渲染,时间标签失去偶然保鲜会无限期冻结(review P1);而把分钟订阅挂在行
+ * 本体又等于每分钟重画全列表重型子树(review 复核 P1)。下沉到只渲染一个 Text 的
+ * 叶子组件独家订阅 useMinuteNow:每分钟只重渲染 ~百个纯 Text,行主体纹丝不动。
+ */
+function SessionRelativeTime({ lastActivityAt, style }: { lastActivityAt: string; style: StyleProp<TextStyle> }) {
+  useMinuteNow();
+  return (
+    <Text style={style} numberOfLines={1}>
+      {formatRemoteSessionSidebarTime(lastActivityAt)}
+    </Text>
+  );
+}
+
 function SessionRightSpinner({ testID }: { testID?: string }) {
   const { colors } = useTheme();
   const spin = useRef(new Animated.Value(0)).current;
