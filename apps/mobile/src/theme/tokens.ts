@@ -40,7 +40,7 @@ export interface ThemeColors {
   chatCodeSurface: string;
   /** Chat / task code card 专用描边 */
   chatCodeBorder: string;
-  /** Composer / input focus caret。用户口头定稿:跟 Mac caret-accent 品牌红 #DF0C27 */
+  /** Composer / input focus caret。二次改稿 2026-07-18 晚:撤红改蓝,对齐 Mac caret-accent */
   inputCaret: string;
   /** Bottom sheet root 玻璃面 */
   sheetSurface: string;
@@ -147,7 +147,7 @@ export const lightColors: ThemeColors = {
   activeGlyph: '#DF0C27',
   chatCodeSurface: '#F8F8F8',
   chatCodeBorder: '#DCDFE3',
-  inputCaret: '#DF0C27',
+  inputCaret: '#417CDD',
   sheetSurface: 'rgba(248, 248, 248, 0.95)',
   sheetActionSurface: '#F6F6F6',
   sheetActionBorder: '#DCDFE3',
@@ -207,7 +207,7 @@ export const darkColors: ThemeColors = {
   activeGlyph: '#A61629',
   chatCodeSurface: '#353333',
   chatCodeBorder: '#3C3C3C',
-  inputCaret: '#DF0C27',
+  inputCaret: '#417CDD',
   sheetSurface: 'rgba(59, 59, 59, 0.95)',
   sheetActionSurface: 'rgba(59, 59, 59, 0.5)',
   sheetActionBorder: '#505050',

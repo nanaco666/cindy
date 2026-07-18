@@ -113,9 +113,9 @@ describe('theme tokens', () => {
     expect(darkColors.chatCodeSurface).toBe('#353333');
     expect(lightColors.chatCodeBorder).toBe('#DCDFE3');
     expect(darkColors.chatCodeBorder).toBe('#3C3C3C');
-    // 用户口头定稿:移动端输入光标跟 Mac caret-accent,不用旧 M3 蓝。
-    expect(lightColors.inputCaret).toBe('#DF0C27');
-    expect(darkColors.inputCaret).toBe('#DF0C27');
+    // 二次改稿 2026-07-18 晚:撤红改蓝,对齐 Mac caret-accent。
+    expect(lightColors.inputCaret).toBe('#417CDD');
+    expect(darkColors.inputCaret).toBe('#417CDD');
     expect(lightColors.sheetSurface).toBe('rgba(248, 248, 248, 0.95)');
     expect(darkColors.sheetSurface).toBe('rgba(59, 59, 59, 0.95)');
     expect(lightColors.sheetActionSurface).toBe('#F6F6F6');
