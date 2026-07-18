@@ -140,7 +140,7 @@ describe('mobile session composer desktop-first surface', () => {
     expect(source).toContain('composerActivityMetaText');
     expect(source).toContain('composerActivityFrame');
     expect(source).toContain('marginTop: spacing.lg');
-    expect(source).toContain('height: 22');
+    expect(source).toContain('height: 25');
     expect(source).toContain('composerActivityStatusText');
     expect(composerStatusCallIndex).toBeGreaterThan(-1);
     expect(composerStatusCallIndex).toBeLessThan(composerViewStart);
@@ -150,7 +150,7 @@ describe('mobile session composer desktop-first surface', () => {
     expect(source).not.toContain("import { BlurView } from 'expo-blur';");
     expect(source).toContain("function TranslucentBackdrop()");
     expect(source).toContain("<TranslucentBackdrop />");
-    expect(source).toContain("backgroundColor: colors.surfaceTranslucent");
+    expect(source).toContain("backgroundColor: colors.surfaceTranslucentSidebar");
     expect(source).not.toContain("colors.glassTint");
     expect(source).not.toContain("colors.glassHighlight");
     expect(composerStyle).not.toContain('borderTopColor');
@@ -192,6 +192,8 @@ describe('mobile session composer desktop-first surface', () => {
     expect(source).not.toContain('renderComposerTextInput(false)');
     expect(source).not.toContain('const renderComposerTextInput = () => (');
     expect(composerInputSource).toContain('<MobileComposerInputRow');
+    expect(composerInputSource).toContain('cursorColor={colors.inputCaret}');
+    expect(composerInputSource).toContain('selectionColor={colors.inputCaret}');
     expect(sharedSource).toContain('multiline = true');
     expect(sharedSource).toContain('multiline={multiline}');
     expect(source).not.toContain('inputCompact: {');

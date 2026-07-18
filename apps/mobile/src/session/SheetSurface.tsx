@@ -44,8 +44,12 @@ export interface SheetSurfaceProps {
   onSnapChange: (snap: ContextSheetSnap) => void;
   /** 底部安全区 padding(调用方传 insets.bottom)。 */
   bottomInset: number;
+  /** 纯视觉变体；默认保留既有通用 sheet 外观，tasksheet 只给会话任务面板使用。 */
+  variant?: SheetSurfaceVariant;
   testID?: string;
 }
+
+export type SheetSurfaceVariant = 'default' | 'tasksheet';
 
 export function SheetSurface({
   title,
@@ -61,6 +65,7 @@ export function SheetSurface({
   snap,
   onSnapChange,
   bottomInset,
+  variant = 'default',
   testID,
 }: SheetSurfaceProps) {
   const styles = useThemedStyles(makeSheetSurfaceStyles);
@@ -74,11 +79,15 @@ export function SheetSurface({
 
   return (
     <Animated.View
-      style={[styles.sheet, { height: drag.animatedHeight, paddingBottom: bottomInset }]}
+      style={[
+        styles.sheet,
+        variant === 'tasksheet' && styles.sheetTasksheet,
+        { height: drag.animatedHeight, paddingBottom: bottomInset },
+      ]}
       testID={testID}
     >
       <View style={styles.dragZone} {...drag.panHandlers}>
-        <SheetGrabber />
+        <SheetGrabber variant={variant} />
         <View style={styles.header}>
           {onBack ? (
             <Pressable
@@ -126,11 +135,17 @@ export function SheetSurface({
  * `style` 供 ad-hoc 场景补容器差异(如 SheetSurface 里 paddingTop 由 dragZone 提供,
  * ad-hoc 面板需自带 paddingTop)。
  */
-export function SheetGrabber({ style }: { style?: StyleProp<ViewStyle> }) {
+export function SheetGrabber({
+  style,
+  variant = 'default',
+}: {
+  style?: StyleProp<ViewStyle>;
+  variant?: SheetSurfaceVariant;
+}) {
   const styles = useThemedStyles(makeSheetSurfaceStyles);
   return (
     <View style={[styles.grabberWrap, style]}>
-      <View style={styles.grabber} />
+      <View style={[styles.grabber, variant === 'tasksheet' && styles.grabberTasksheet]} />
     </View>
   );
 }
@@ -149,6 +164,9 @@ function makeSheetSurfaceStyles(colors: ThemeColors) {
       borderTopRightRadius: radius.container,
       overflow: 'hidden' as const,
     },
+    sheetTasksheet: {
+      backgroundColor: colors.sheetSurface,
+    },
     dragZone: {
       paddingHorizontal: SHEET_HORIZONTAL_PADDING,
       paddingTop: spacing.sm,
@@ -162,6 +180,10 @@ function makeSheetSurfaceStyles(colors: ThemeColors) {
       borderRadius: radius.pill,
       height: 5,
       width: 36,
+    },
+    grabberTasksheet: {
+      backgroundColor: colors.sheetGrabber,
+      width: 30,
     },
     header: {
       alignItems: 'center' as const,

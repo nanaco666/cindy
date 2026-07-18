@@ -68,6 +68,7 @@ export interface MobileComposerInputRowProps {
   cardActive?: boolean;
   caretHidden?: boolean;
   compact?: boolean;
+  cursorColor?: TextInputProps['cursorColor'];
   editable?: boolean;
   /**
    * 语音按钮 render。语音按钮是简洁态与卡片态都存在的常驻控件，
@@ -118,6 +119,7 @@ export interface MobileComposerInputRowProps {
   resizeHandle?: ReactNode;
   rowStyle?: StyleProp<ViewStyle>;
   scrollEnabled?: boolean;
+  selectionColor?: TextInputProps['selectionColor'];
   testID?: string;
   /**
    * 底部工具排内容（参考 Cursor 移动端聚焦态）。仅 cardActive 时挂载，
@@ -146,6 +148,7 @@ export function MobileComposerInputRow({
   cardActive,
   caretHidden,
   compact,
+  cursorColor,
   editable = true,
   floatingVoiceButton,
   floatingVoiceButtonStyle,
@@ -171,6 +174,7 @@ export function MobileComposerInputRow({
   resizeHandle,
   rowStyle,
   scrollEnabled,
+  selectionColor,
   testID,
   toolbar,
   trailing,
@@ -199,6 +203,7 @@ export function MobileComposerInputRow({
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
       caretHidden={caretHidden}
+      cursorColor={cursorColor}
       editable={editable}
       multiline={multiline}
       onBlur={onBlur}
@@ -209,6 +214,7 @@ export function MobileComposerInputRow({
       placeholder={placeholder}
       placeholderTextColor={placeholderTextColor}
       scrollEnabled={scrollEnabled}
+      selectionColor={selectionColor}
       style={[
         styles.input,
         { maxHeight },

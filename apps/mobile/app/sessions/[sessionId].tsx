@@ -5314,10 +5314,11 @@ export default function SessionScreen() {
                     editable={!composerLayout.input.disabled}
                     floatingVoiceButton={renderComposerVoiceButton}
                     floatingVoiceButtonStyle={composerFloatingVoiceButtonStyle}
+                    cursorColor={colors.inputCaret}
                     inputFrameHeight={composerResize.frameHeight}
                     inputOverlay={renderComposerInputOverlay()}
                     inputRef={composerInputRef}
-                    inputStyle={voiceIsListening && styles.inputVoiceHidden}
+                    inputStyle={[styles.sessionComposerInput, voiceIsListening && styles.inputVoiceHidden]}
                     inputTestID="session.composerInput"
                     leading={renderComposerCollapsedAttachmentBadge()}
                     maxHeight={composerResize.inputMaxHeight}
@@ -5341,6 +5342,7 @@ export default function SessionScreen() {
                     placeholderTextColor={colors.textTertiary}
                     resizeHandle={composerCardActive ? renderComposerResizeHandle() : null}
                     scrollEnabled={composerInputScrollEnabled}
+                    selectionColor={colors.inputCaret}
                     testID="session.composerInputRow"
                     toolbar={renderComposerToolbar()}
                     trailing={composerCardActive ? null : renderComposerTrailingActions()}
@@ -6109,7 +6111,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   translucentBackdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: colors.surfaceTranslucent,
+    backgroundColor: colors.surfaceTranslucentSidebar,
   },
   // 排队消息编辑提示条(composer 上方):✎ + 「正在编辑第 N 条排队消息」 + × 放弃。
   queueEditBar: {
@@ -6140,7 +6142,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   sessionHeaderBar: {
     alignItems: 'center',
-    backgroundColor: 'transparent',
+    backgroundColor: colors.surfaceTranslucentSidebar,
     borderBottomColor: colors.borderTranslucent,
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
@@ -6176,7 +6178,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   sessionHeaderNotice: {
     color: colors.textSecondary,
-    fontSize: typeScale.caption,
+    fontSize: typeScale.micro,
     lineHeight: lineHeight.micro,
     marginTop: 2,
   },
@@ -6401,7 +6403,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   composerActivityStatus: {
     alignItems: 'center',
     flexDirection: 'row',
-    height: 22,
+    height: 25,
     justifyContent: 'space-between',
     paddingHorizontal: spacing.xs,
   },
@@ -6442,10 +6444,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing.xs,
   },
   composerRuntimePillText: {
-    color: colors.textSecondary,
+    color: colors.textPrimary,
     flexShrink: 1,
     fontSize: typeScale.caption,
-    fontWeight: fontWeight.medium,
+    fontWeight: fontWeight.semibold,
     minWidth: 0,
   },
   composerRuntimePillTextRisky: {
@@ -6489,8 +6491,12 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   composerToolButtonActive: { backgroundColor: colors.surfaceChip },
   composerToolButtonPrimary: {
-    backgroundColor: colors.textPrimary,
-    borderColor: colors.textPrimary,
+    backgroundColor: colors.cta,
+    borderColor: colors.cta,
+  },
+  sessionComposerInput: {
+    fontSize: typeScale.listBody,
+    lineHeight: lineHeight.listBody,
   },
   voiceDraftOverlay: {
     ...StyleSheet.absoluteFill,
