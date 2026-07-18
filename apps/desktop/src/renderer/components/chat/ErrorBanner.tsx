@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { AlertCircle, GitFork, Play, RotateCcw, RefreshCw, X } from 'lucide-react';
+import { AlertCircle, Check, GitFork, Play, RotateCcw, RefreshCw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from '@/lib/toast';
 import { Spinner } from '@/components/ui/spinner';
@@ -53,12 +53,6 @@ interface ErrorBannerProps {
   silentEncryptedRetryEnabled?: boolean;
   onForkStripEncrypted?: () => void | Promise<void>;
   forkStripEncryptedRunning?: boolean;
-  /** 抑制 mount 即自动弹出的恢复交互(目前只有 codex session-expired 的登录
-   *  confirm modal)。历史尾部错误行复用本组件(ErrorTailErrorBanner)时必须
-   *  传 true(review P2):纯浏览一个曾以会话过期收尾的历史会话不应弹未经
-   *  请求的模态框。按钮式恢复入口(同步登录态 / fork 剥离)与 hideRetry 门控
-   *  不受影响。 */
-  suppressAutoPrompts?: boolean;
   /** 当前 error 是非终止的 recoverableError(turn 还在跑,agent/daemon 在自动
    *  重试,如 codex 网络 retry-loop 透出)。网络类分支据此区分文案:「正在自动
    *  重试…」vs「服务暂时不可达,可点击重试」。历史尾部行恒为 false。 */
@@ -80,16 +74,21 @@ export function ErrorBanner({
   silentEncryptedRetryEnabled = false,
   onForkStripEncrypted,
   forkStripEncryptedRunning = false,
-  suppressAutoPrompts = false,
   isRecoverable = false,
   style,
   className,
 }: ErrorBannerProps) {
   const { t } = useTranslation();
   const { confirm } = useConfirmDialog();
-  const [codexSessionRecoveredSinceError, setCodexSessionRecoveredSinceError] = useState(false);
+  const [openAiConnectionRecoveredForError, setOpenAiConnectionRecoveredForError] = useState<
+    string | null
+  >(null);
+  const openAiConnectionRecoveredSinceError = openAiConnectionRecoveredForError === error;
   const promptCodexSessionExpired = useCodexSessionExpiredPrompt({
-    onAuthenticated: () => setCodexSessionRecoveredSinceError(true),
+    onAuthenticated: (recoveredError) => setOpenAiConnectionRecoveredForError(recoveredError),
+    // 横幅已说明影响范围；用户点击“重新连接 ChatGPT”后直接进入浏览器连接流程，
+    // 不再叠一层重复确认弹窗。
+    confirmBeforeLogin: false,
   });
   // 本会话 codex app-server 的 spawn 鉴权注入(oauth-bearer = 走订阅 / env-key = 走网关 / provider-oauth = proxy 注入供应商 OAuth)。
   // 默认 'env-key'(保守):真值未回来前不会误命中 OAuth 引导分支而短暂 hide Retry。
@@ -105,7 +104,6 @@ export function ErrorBanner({
   // 让 syncedSinceError 跟当前错误关联, 避免 stale 标志让新错误显示成"已同步"。
   useEffect(() => {
     setSyncedSinceError(false);
-    setCodexSessionRecoveredSinceError(false);
   }, [error, remoteHostId]);
 
   // 凭证切换忙:本会话要求的模型来源与共享 codex 进程当前钥匙形态不同,重启进程前
@@ -143,15 +141,17 @@ export function ErrorBanner({
   const isCodexRemoteAuthMissing = isCodexAuthMissing && !!remoteHostId;
   const isCodexLocalOAuthAuthMissing =
     isCodexAuthMissing && !remoteHostId && codexAuthInjection === 'oauth-bearer';
-  // Codex OAuth token/session invalidation is not recoverable by Retry. Prompt once per
-  // concrete error and take the user through the same login flow used by Settings.
-  const isCodexLocalOAuthSessionExpired =
-    agentKind === 'codex' &&
-    !isCodexProviderOAuthModel &&
+  // 明确的 OpenAI token/session invalidation 不可直接 Retry。Codex 路径不再要求当前
+  // runtime route 仍是 oauth-bearer：invalidate 会先收割旧 host 并把 route 广播成
+  // env-key，再把错误渲染到会话；继续依赖 route 会把真实失效原因漏成原始英文报错。
+  // Claude 的 chatgpt/* 模型复用同一份连接，bridge 鉴权不可用时也走同一恢复入口。
+  const isClaudeChatgptBridgeModel =
+    agentKind === 'cc' && !!modelId && modelId.startsWith('chatgpt/');
+  const isOpenAiConnectionExpired =
     !remoteHostId &&
-    codexAuthInjection === 'oauth-bearer' &&
-    !codexSessionRecoveredSinceError &&
-    isCodexSessionExpiredError(error);
+    ((agentKind === 'codex' && !isCodexProviderOAuthModel && isCodexSessionExpiredError(error)) ||
+      (isClaudeChatgptBridgeModel && isCodexSessionExpiredError(error)));
+  const openAiReconnectRequired = isOpenAiConnectionExpired && !openAiConnectionRecoveredSinceError;
   // 网络类错误(502/连接失败/fetch failed 等):友好文案 + 原始错误折叠可查。
   const isNetworkishError = isNetworkishErrorMessage(error);
   // Retry 的显示条件与网络错误文案必须共用同一个判定。外部发起的 turn（例如
@@ -163,19 +163,13 @@ export function ErrorBanner({
     isCodexThreadStale ||
     showInvalidEncryptedContentRecovery ||
     (isCodexRemoteAuthMissing && !syncedSinceError) ||
-    isCodexLocalOAuthSessionExpired ||
+    openAiReconnectRequired ||
     isCodexLocalOAuthAuthMissing;
   const safeRetryText = !hideRetry && retryText ? retryText : null;
   const [showRawNetworkError, setShowRawNetworkError] = useState(false);
   useEffect(() => {
     setShowRawNetworkError(false);
   }, [error]);
-
-  useEffect(() => {
-    // suppressAutoPrompts:历史尾部行场景不自动弹登录 modal(review P2),
-    // session-expired 的文案与 hideRetry 门控照常生效。
-    if (isCodexLocalOAuthSessionExpired && !suppressAutoPrompts) promptCodexSessionExpired(error);
-  }, [error, isCodexLocalOAuthSessionExpired, promptCodexSessionExpired, suppressAutoPrompts]);
 
   // hasSpecialGuidance: 是否命中下面任一「有专属可操作指引」的特殊分支。用一个在
   // else 兜底里翻转的标志, 而不是另写一遍 5 个条件取反 —— 将来新增特殊分支只要照常
@@ -192,8 +186,10 @@ export function ErrorBanner({
     displayError = syncedSinceError
       ? t('chat.errorBanner.codexAuthSynced')
       : t('chat.errorBanner.codexAuthMissing');
-  } else if (isCodexLocalOAuthSessionExpired) {
-    displayError = t('chat.errorBanner.codexSessionExpired');
+  } else if (isOpenAiConnectionExpired) {
+    displayError = openAiConnectionRecoveredSinceError
+      ? t('chat.errorBanner.codexSessionReconnected')
+      : t('chat.errorBanner.codexSessionExpired');
   } else if (isCodexLocalOAuthAuthMissing) {
     displayError = t('chat.errorBanner.codexAuthMissingLocal');
   } else if (isNetworkishError) {
@@ -280,15 +276,36 @@ export function ErrorBanner({
   return (
     <div
       className={cn(
-        'mx-auto flex items-start gap-2 rounded-md px-3 py-2',
-        'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800',
+        'mx-auto flex items-start gap-2 border px-3 py-2',
+        isOpenAiConnectionExpired
+          ? 'rounded-xl bg-[var(--surface-elevated)] border-[var(--border-default)]'
+          : 'rounded-md bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800',
         className,
       )}
       style={style}
     >
-      <AlertCircle size={14} className="shrink-0 mt-[2px] text-red-500" />
+      {openAiConnectionRecoveredSinceError ? (
+        <Check size={14} className="mt-[2px] shrink-0 text-[var(--text-secondary)]" />
+      ) : (
+        <AlertCircle
+          size={14}
+          className={cn(
+            'mt-[2px] shrink-0',
+            isOpenAiConnectionExpired
+              ? 'text-[var(--settings-integration-warning)]'
+              : 'text-red-500',
+          )}
+        />
+      )}
       <div className="flex-1 min-w-0">
-        <span className="block text-xs text-red-600 dark:text-red-400 break-all">
+        <span
+          className={cn(
+            'block break-all text-xs',
+            isOpenAiConnectionExpired
+              ? 'text-[var(--text-secondary)]'
+              : 'text-red-600 dark:text-red-400',
+          )}
+        >
           {displayError}
         </span>
         {showBudgetHint && (
@@ -318,16 +335,15 @@ export function ErrorBanner({
           </>
         )}
       </div>
-      {isCodexLocalOAuthSessionExpired && suppressAutoPrompts && (
-        // suppressAutoPrompts 关掉了 session-expired 的自动登录弹窗,而该场景
-        // hideRetry 也藏了 Retry —— 必须补一个**按钮式**登录入口,否则历史尾部
-        // 行只剩关闭按钮、无任何恢复路径(review P2)。点击才弹同一个登录流程。
+      {openAiReconnectRequired && (
+        // OAuth 更新是低打扰的内联恢复入口：错误出现时不抢焦点，用户明确点击后
+        // 才打开浏览器连接。历史尾部与当前错误使用同一行为。
         <button
           type="button"
           onClick={() => promptCodexSessionExpired(error)}
           className={cn(
-            'shrink-0 flex items-center gap-1 text-xs font-medium',
-            'text-red-600 dark:text-red-400',
+            'shrink-0 flex select-none items-center gap-1 text-xs font-medium',
+            'text-[var(--text-primary)]',
             'hover:opacity-70 transition-opacity',
           )}
           title={t('chat.errorBanner.codexSessionExpiredLogin')}
@@ -374,7 +390,9 @@ export function ErrorBanner({
           onClick={() => onRetry(safeRetryText)}
           className={cn(
             'shrink-0 flex items-center gap-1 text-xs font-medium',
-            'text-red-600 dark:text-red-400',
+            isOpenAiConnectionExpired
+              ? 'text-[var(--text-primary)]'
+              : 'text-red-600 dark:text-red-400',
             'hover:opacity-70 transition-opacity',
           )}
           title={t('chat.errorBanner.retryTitle')}
