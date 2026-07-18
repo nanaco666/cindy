@@ -436,39 +436,6 @@ registerColor('login-error-text', {
   dark: 'var(--error-flat)',
 }, 'Functional error — not in design spec, kept for runtime error state');
 
-// chat-data-localization Migration Progress (Light) — see doc/design_docs/login.pen Migration frames
-registerColor('migration-bar-track', {
-  light: '#e5e5e5',
-  dark: '#1f1f1e',
-}, 'Light Gray — progress track bg');
-registerColor('migration-bar-track-border', {
-  light: 'var(--border-transparent-mixed)',
-  dark: 'var(--border-transparent-mixed)',
-}, 'light mode has no stroke');
-registerColor('migration-bar-fill', {
-  light: '#262626',
-  dark: '#e5e5e5',
-}, 'Near Black — running fill');
-registerColor('migration-bar-fill-retry', {
-  light: 'var(--text-tertiary)',
-  dark: 'var(--text-tertiary)',
-}, 'Silver — paused/retrying fill');
-registerColor('migration-bar-fill-failed', {
-  light: 'var(--text-disabled)',
-  dark: 'var(--text-disabled)',
-}, 'Border Light — failed dimmed fill');
-registerColor('migration-detail-text', {
-  light: 'var(--text-secondary)',
-  dark: 'var(--text-secondary)',
-}, 'Stone — caption');
-registerColor('migration-retry-text', {
-  light: 'var(--error-flat)',
-  dark: 'var(--error-flat)',
-}, 'Functional error — retry notice (single-purpose, mirrors --login-error-text)');
-registerColor('migration-overlay', {
-  light: 'rgba(0, 0, 0, 0.6)',
-  dark: 'rgba(0, 0, 0, 0.7)',
-}, 'AlertDialog overlay (matches design #00000099)');
 registerColor('lightbox-cta-bg', {
   light: 'var(--accent-cta-bg-pure)',
   dark: 'var(--accent-cta-bg-pure)',
@@ -476,7 +443,7 @@ registerColor('lightbox-cta-bg', {
 registerColor('lightbox-cta-fg', {
   light: 'var(--accent-pure-cta-fg)',
   dark: 'var(--accent-pure-cta-fg)',
-}, 'chat-data-localization Migration Progress (Light) — see doc/design_docs/login.pen Migration frames');
+}, 'Black Pill CTA foreground');
 registerColor('lightbox-cta-hover', {
   light: 'var(--accent-hover)',
   dark: 'var(--accent-hover)',

@@ -739,7 +739,7 @@ export function registerRemoteSshIpc(): void {
       if (!env) {
         throwIpcError(
           'SSH_AGENT_NOT_INSTALLED',
-          'XD Gateway is not connected in xdt-maker; connect it in Settings → Model Providers first',
+          'Cindy AI is not connected in Cindy; connect it in Settings → Model Providers first',
         );
       }
       envBlock = serializeEnvBlock(env);

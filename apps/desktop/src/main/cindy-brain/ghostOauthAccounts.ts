@@ -18,7 +18,8 @@
  * - `<key>-rt-<accountId>`:该账号的 refresh token(accountId 为 UUID)。
  *
  * 安全纪律与 networkSlot 一致:令牌与 client 凭证明文不进沙箱、不进日志、
- * 不进账号清单;对外(设置页/管子)只暴露 {id, label, status, isDefault}。
+ * 不进账号清单;对外(设置页/管子)只暴露 {id, label, status, isDefault,
+ * avatarDataUrl}(头像是主机下载转码的 data URL 小图,非机密)。
  *
  * 依赖注入(规则 14):保险库 / fetch / openExternal 全经 deps,单测用内存
  * 假体全覆盖,零 Electron。
@@ -27,6 +28,7 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  fetchGhostOauthAvatar,
   fetchGhostOauthIdentity,
   refreshGhostOauthToken,
   startGhostOauthFlow,
@@ -64,6 +66,12 @@ export interface GhostOauthAccountView {
   status: GhostOauthAccountStatus;
   isDefault: boolean;
   createdAt: number;
+  /**
+   * 头像 data URL(声明了 identity.avatarPath 且下载成功才有;主机下载转码,
+   * 沙箱 CSP 的 img-src data: 恰好放行)。只经 /oauth 回设置页,不进 LLM
+   * 上下文(networkSlot 只走 getFreshAccessToken)。
+   */
+  avatarDataUrl: string | null;
 }
 
 /** 保险库最小面(providerSecretStore 在接线处适配;测试喂内存假体)。 */
@@ -148,6 +156,10 @@ function accountsKey(secretKey: string): string {
 function refreshTokenKey(secretKey: string, accountId: string): string {
   return `${secretKey}-rt-${accountId}`;
 }
+/** 头像 data URL 的保险库键(派生键纪律见文件头;非机密但与账号同生命周期)。 */
+function avatarKey(secretKey: string, accountId: string): string {
+  return `${secretKey}-avatar-${accountId}`;
+}
 function clientIdKey(secretKey: string): string {
   return `${secretKey}-client-id`;
 }
@@ -186,13 +198,18 @@ function parseManifest(raw: string | null): AccountsManifest {
   }
 }
 
-function toView(row: AccountRow, defaultAccountId: string | null): GhostOauthAccountView {
+function toView(
+  row: AccountRow,
+  defaultAccountId: string | null,
+  avatarDataUrl: string | null,
+): GhostOauthAccountView {
   return {
     id: row.id,
     label: row.displayLabel ?? row.label,
     status: row.status,
     isDefault: row.id === defaultAccountId,
     createdAt: row.createdAt,
+    avatarDataUrl,
   };
 }
 
@@ -291,8 +308,9 @@ export class GhostOauthAccountManager {
     }
     if (!clientId) return null;
     // brokerBounce → 双地址模型:公网弹跳地址由接线处解析器现拼(broker 基
-    // 地址不进清单);解析不出(env 缺失)时不带 publicRedirectUri,由
-    // connectAccount 结构化拒绝(refresh 不需要 redirect_uri,照常可用)。
+    // 地址来自端点清单,生产恒非空)。null 仅剩一种来源:宿主未接线
+    // resolveBrokerPublicUrl(测试/精简宿主)——此时不带 publicRedirectUri,
+    // 由 connectAccount 结构化拒绝(refresh 不需要 redirect_uri,照常可用)。
     const publicRedirectUri = decl.brokerBounce
       ? (this.deps.resolveBrokerPublicUrl?.(decl.brokerBounce.path) ?? null)
       : null;
@@ -316,7 +334,15 @@ export class GhostOauthAccountManager {
 
   listAccounts(ghostId: string, secretKey: string): GhostOauthAccountView[] {
     const manifest = parseManifest(this.deps.vault.read(ghostId, accountsKey(secretKey)));
-    return manifest.accounts.map((a) => toView(a, manifest.defaultAccountId));
+    return manifest.accounts.map((a) =>
+      toView(a, manifest.defaultAccountId, this.readAvatar(ghostId, secretKey, a.id)),
+    );
+  }
+
+  /** 头像 data URL 读取(形状校验兜底:库里的坏值当无头像,不喂给 <img>)。 */
+  private readAvatar(ghostId: string, secretKey: string, accountId: string): string | null {
+    const raw = this.deps.vault.read(ghostId, avatarKey(secretKey, accountId));
+    return typeof raw === 'string' && raw.startsWith('data:image/') ? raw : null;
   }
 
   setDefaultAccount(ghostId: string, secretKey: string, accountId: string): boolean {
@@ -329,11 +355,12 @@ export class GhostOauthAccountManager {
     );
   }
 
-  /** 断开账号:清 refresh token、清缓存、从清单摘除(幂等)。 */
+  /** 断开账号:清 refresh token、清头像、清缓存、从清单摘除(幂等)。 */
   disconnectAccount(ghostId: string, secretKey: string, accountId: string): void {
     const manifest = parseManifest(this.deps.vault.read(ghostId, accountsKey(secretKey)));
     const remaining = manifest.accounts.filter((a) => a.id !== accountId);
     this.deps.vault.remove(ghostId, refreshTokenKey(secretKey, accountId));
+    this.deps.vault.remove(ghostId, avatarKey(secretKey, accountId));
     this.tokenCache.delete(this.cacheKey(ghostId, secretKey, accountId));
     this.deps.vault.store(
       ghostId,
@@ -376,7 +403,7 @@ export class GhostOauthAccountManager {
       return {
         ok: false,
         error: 'INVALID_CONFIG',
-        detail: '授权 broker 基地址未配置(VITE_OAUTH_BROKER_API_BASE_URL),无法拼出弹跳回调地址',
+        detail: '授权 broker 基地址未配置(端点清单 oauthBrokerApiBaseUrl),无法拼出弹跳回调地址',
       };
     }
     if (opts?.scopes !== undefined) {
@@ -403,9 +430,11 @@ export class GhostOauthAccountManager {
     if (!flow.ok) return { ok: false, error: flow.error, detail: flow.detail };
 
     // 身份标签:声明了 identity 才拉,失败降级 null(不阻断授权)。label 是
-    // 同身份合并的判定键;display 是展示名(declaration 有 displayTemplate 才有)。
+    // 同身份合并的判定键;display 是展示名(declaration 有 displayTemplate 才有);
+    // avatar 是头像 data URL(declaration 有 avatarPath 且下载成功才有)。
     let label: string | null = null;
     let display: string | null = null;
+    let avatar: string | null = null;
     if (decl.identity) {
       const identity = await fetchGhostOauthIdentity({
         url: decl.identity.url,
@@ -413,11 +442,19 @@ export class GhostOauthAccountManager {
         ...(decl.identity.displayTemplate !== undefined
           ? { displayTemplate: decl.identity.displayTemplate }
           : {}),
+        ...(decl.identity.avatarPath !== undefined ? { avatarPath: decl.identity.avatarPath } : {}),
         accessToken: flow.bundle.accessToken,
         fetchImpl: this.deps.fetchImpl,
       });
       label = identity.label;
       display = identity.display;
+      // 头像下载只对第一方官方意识放行(与 tokenBroker / 端口回收同口径):
+      // 头像地址是身份端点响应里的任意 https,不受 hosts 白名单约束——放开
+      // 等于给第三方意识一个"主机代发 GET + 小图字节回沙箱"的 SSRF 读原语。
+      // 下载本身不带任何凭证(CDN 域名不在注入白名单);失败降级无头像。
+      if (identity.avatarUrl !== null && isOfficialGhostId(ghostId)) {
+        avatar = await fetchGhostOauthAvatar({ url: identity.avatarUrl, fetchImpl: this.deps.fetchImpl });
+      }
     }
 
     // 清单在授权**之后**才读:授权流可长达数分钟,期间清单可能被并发写
@@ -448,13 +485,24 @@ export class GhostOauthAccountManager {
       if (manifestDirty) {
         this.deps.vault.store(ghostId, accountsKey(secretKey), JSON.stringify(manifest));
       }
+      // 重连顺带刷新头像(用户可能换过头像;写失败不影响连接结果)。
+      if (avatar !== null) {
+        this.deps.vault.store(ghostId, avatarKey(secretKey, existing.id), avatar);
+      }
       this.tokenCache.set(this.cacheKey(ghostId, secretKey, existing.id), {
         accessToken: flow.bundle.accessToken,
         expiresAt: flow.bundle.expiresAt,
       });
       this.deps.logger?.info('ghost oauth 账号已重连(同身份合并)', { ghostId, secretKey, accountId: existing.id });
       this.notifyConnected(ghostId, secretKey, existing.displayLabel ?? existing.label);
-      return { ok: true, account: toView(existing, manifest.defaultAccountId) };
+      return {
+        ok: true,
+        account: toView(
+          existing,
+          manifest.defaultAccountId,
+          avatar ?? this.readAvatar(ghostId, secretKey, existing.id),
+        ),
+      };
     }
 
     // 上限只拦"真新增":检查放在合并判定之后——满员时重连既有账号仍然要放行
@@ -487,6 +535,10 @@ export class GhostOauthAccountManager {
       this.deps.vault.remove(ghostId, refreshTokenKey(secretKey, account.id));
       return { ok: false, error: 'VAULT_WRITE_FAILED' };
     }
+    // 头像最后落(清单已是事实源;写失败只是没头像,不回滚账号)。
+    if (avatar !== null) {
+      this.deps.vault.store(ghostId, avatarKey(secretKey, account.id), avatar);
+    }
 
     this.tokenCache.set(this.cacheKey(ghostId, secretKey, account.id), {
       accessToken: flow.bundle.accessToken,
@@ -494,7 +546,7 @@ export class GhostOauthAccountManager {
     });
     this.deps.logger?.info('ghost oauth 账号已连接', { ghostId, secretKey, accountId: account.id });
     this.notifyConnected(ghostId, secretKey, account.displayLabel ?? account.label);
-    return { ok: true, account: toView(account, nextManifest.defaultAccountId) };
+    return { ok: true, account: toView(account, nextManifest.defaultAccountId, avatar) };
   }
 
   /** 授权成功通知(自兜异常:提示挂了不影响连接结果)。 */
@@ -599,18 +651,19 @@ export class GhostOauthAccountManager {
     });
     // 曾标 expired 的账号刷新成功即复活(用户在别处重授权后 rt 又有效的边角)。
     this.markConnected(ghostId, secretKey, accountId);
-    // 展示名回填(fire-and-forget,不拖累令牌热路径):displayTemplate 上线前
-    // 连的老账号没有展示名,借下一次令牌刷新顺路补上,用户无需重连。
-    void this.backfillDisplayLabel(ghostId, secretKey, decl, accountId, result.bundle.accessToken);
+    // 展示名/头像回填(fire-and-forget,不拖累令牌热路径):displayTemplate /
+    // avatarPath 上线前连的老账号缺这些,借下一次令牌刷新顺路补上,无需重连。
+    void this.backfillIdentityExtras(ghostId, secretKey, decl, accountId, result.bundle.accessToken);
     return { ok: true, accessToken: result.bundle.accessToken, accountId };
   }
 
   /**
-   * 老账号展示名一次性回填:声明了 displayTemplate 且该行还没有 displayLabel
-   * 时,用新鲜 access token 拉一次身份端点补上。best-effort——任何失败静默
-   * 放弃(下次刷新再试),绝不影响令牌获取结果。
+   * 老账号展示名/头像一次性回填:声明了 displayTemplate(且该行还没有
+   * displayLabel)或 avatarPath(且库里还没有头像)时,用新鲜 access token
+   * 拉一次身份端点补上。best-effort——任何失败静默放弃(下次刷新再试),
+   * 绝不影响令牌获取结果。
    */
-  private async backfillDisplayLabel(
+  private async backfillIdentityExtras(
     ghostId: string,
     secretKey: string,
     decl: GhostOauthDecl,
@@ -618,30 +671,50 @@ export class GhostOauthAccountManager {
     accessToken: string,
   ): Promise<void> {
     try {
-      const template = decl.identity?.displayTemplate;
-      if (decl.identity === undefined || template === undefined) return;
+      if (decl.identity === undefined) return;
+      const template = decl.identity.displayTemplate;
       const before = parseManifest(this.deps.vault.read(ghostId, accountsKey(secretKey)));
       const row = before.accounts.find((a) => a.id === accountId);
-      if (!row || row.displayLabel !== null) return;
+      if (!row) return;
+      const needDisplay = template !== undefined && row.displayLabel === null;
+      // 头像回填同样只对第一方官方意识放行(connectAccount 处的 SSRF 口径)。
+      const needAvatar =
+        decl.identity.avatarPath !== undefined &&
+        isOfficialGhostId(ghostId) &&
+        this.readAvatar(ghostId, secretKey, accountId) === null;
+      if (!needDisplay && !needAvatar) return;
       const identity = await fetchGhostOauthIdentity({
         url: decl.identity.url,
         labelPath: decl.identity.labelPath,
-        displayTemplate: template,
+        ...(template !== undefined ? { displayTemplate: template } : {}),
+        ...(decl.identity.avatarPath !== undefined ? { avatarPath: decl.identity.avatarPath } : {}),
         accessToken,
         fetchImpl: this.deps.fetchImpl,
       });
-      if (identity.display === null) return;
-      // 拉取期间清单可能被并发写(断开/设默认/新连接):用 patchAccount 做
-      // 定向字段写入——只改目标行的 displayLabel/label,不覆盖清单其它状态。
-      this.patchAccount(ghostId, secretKey, accountId, (fresh) => {
-        if (fresh.displayLabel !== null) return false;
-        fresh.displayLabel = identity.display;
-        if (fresh.label === null && identity.label !== null) fresh.label = identity.label;
-        return true;
-      });
-      this.deps.logger?.info('ghost oauth 账号展示名已回填', { ghostId, secretKey, accountId });
+      if (needDisplay && identity.display !== null) {
+        // 拉取期间清单可能被并发写(断开/设默认/新连接):用 patchAccount 做
+        // 定向字段写入——只改目标行的 displayLabel/label,不覆盖清单其它状态。
+        this.patchAccount(ghostId, secretKey, accountId, (fresh) => {
+          if (fresh.displayLabel !== null) return false;
+          fresh.displayLabel = identity.display;
+          if (fresh.label === null && identity.label !== null) fresh.label = identity.label;
+          return true;
+        });
+        this.deps.logger?.info('ghost oauth 账号展示名已回填', { ghostId, secretKey, accountId });
+      }
+      if (needAvatar && identity.avatarUrl !== null) {
+        const avatar = await fetchGhostOauthAvatar({ url: identity.avatarUrl, fetchImpl: this.deps.fetchImpl });
+        // 存前重验账号仍在清单(拉取期间可能被断开;断开后不再写孤儿头像键)。
+        if (avatar !== null) {
+          const fresh = parseManifest(this.deps.vault.read(ghostId, accountsKey(secretKey)));
+          if (fresh.accounts.some((a) => a.id === accountId)) {
+            this.deps.vault.store(ghostId, avatarKey(secretKey, accountId), avatar);
+            this.deps.logger?.info('ghost oauth 账号头像已回填', { ghostId, secretKey, accountId });
+          }
+        }
+      }
     } catch (err) {
-      this.deps.logger?.warn('ghost oauth 展示名回填失败(不影响令牌获取)', {
+      this.deps.logger?.warn('ghost oauth 展示名/头像回填失败(不影响令牌获取)', {
         ghostId,
         secretKey,
         accountId,

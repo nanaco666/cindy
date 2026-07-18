@@ -1,17 +1,28 @@
 import { defineConfig, loadEnv } from 'vite';
+import { productionViteEnv } from '../../scripts/shared/production-endpoints.mjs';
 
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');
+  // Local dev does not go through dev-remote-env.mjs, so provide the same
+  // production service endpoints from the shared config at bundle time. An
+  // explicit .env/process override still wins, while API/Auth keep their
+  // localhost defaults below.
+  const configuredProductionEnv = productionViteEnv({ allowEnvOverride: false });
+  const readViteEnv = (key: keyof typeof configuredProductionEnv): string =>
+    env[key] || process.env[key] || configuredProductionEnv[key];
   // 非 VITE_* 的 main-only 变量（不暴露到 renderer/preload；编译期注入）
   const allEnv = loadEnv(mode, process.cwd(), '');
   const readMainEnv = (key: string): string => allEnv[key] || process.env[key] || '';
   return {
     define: {
-      'import.meta.env.VITE_API_BASE_URL': JSON.stringify(
-        env.VITE_API_BASE_URL || 'http://localhost:3333',
+      'import.meta.env.VITE_CINDY_AUTH_REGION': JSON.stringify(env.VITE_CINDY_AUTH_REGION || 'cn'),
+      // 端点清单自举基址(唯一烘焙远程 URL;业务端点已全部改走运行期清单,
+      // 旧的 VITE_API_BASE_URL 等端点 define 随之退役)。dev 构建也注入 cn 值,
+      // `--endpoints-cdn` 才能零配置直连线上清单。
+      'import.meta.env.VITE_ENDPOINT_MANIFEST_BASE_URL': JSON.stringify(
+        readViteEnv('VITE_ENDPOINT_MANIFEST_BASE_URL'),
       ),
-      'import.meta.env.VITE_FEISHU_APP_ID': JSON.stringify(env.VITE_FEISHU_APP_ID || ''),
       // Triage bot token (dev only — production 留空，BotTokenStore 走 safeStorage)
       'process.env.TRIAGE_BOT_TOKEN': JSON.stringify(readMainEnv('TRIAGE_BOT_TOKEN')),
       // Filo Google OAuth desktop client（main-only，仓库不保存实际值）。
@@ -79,10 +90,10 @@ export default defineConfig(({ mode }) => {
         // better-sqlite3 is a native (.node) addon — must NOT be bundled, must
         // be require()'d at runtime from node_modules. Same for ws transitive
         // optional native deps.
-        // protobufjs uses eval-based dynamic require (`@protobufjs/inquire`)
-        // that rollup-commonjs can't statically resolve, so it leaks
-        // `require("protobufjs/minimal")` into the bundle as-is. Externalize
-        // it explicitly and ship the package via forge's NATIVE_RUNTIME_DEPS.
+        // The compiled lark sdk does `require("protobufjs/minimal")` in a way
+        // rollup-commonjs can't inline, so it leaks into the bundle as-is.
+        // Externalize it explicitly and ship the package via forge's
+        // NATIVE_RUNTIME_DEPS (protobufjs >=7.6 dropped `@protobufjs/inquire`).
         external: [
           'bufferutil',
           'utf-8-validate',

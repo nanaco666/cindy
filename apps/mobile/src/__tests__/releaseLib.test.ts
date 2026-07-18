@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_API_BASE_URL, DEFAULT_DEVICE_LINK_API_BASE_URL } from '@/config/env';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -24,6 +23,7 @@ import {
   buildUpdateCommand,
   buildWindowsCmdCommand,
   decideReleaseMode,
+  formatBakedEnvLines,
   decideTargetReleaseMode,
   easBuildPlatformForReleasePlatforms,
   EAS_CLI_SPEC,
@@ -57,7 +57,8 @@ const easJson = {
     base: {
       node: '22.19.0',
       env: {
-        EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
+        EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+        EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
         EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
         EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
         EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
@@ -97,7 +98,8 @@ describe('mobile release scripts core logic', () => {
       distribution: 'store',
       channel: 'beta-dash',
       env: {
-        EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
+        EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+        EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
         EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
         EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
         EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
@@ -112,6 +114,7 @@ describe('mobile release scripts core logic', () => {
     const target = resolveTarget({ easJson }, { kind: 'beta', dev: 'dash' });
     expect(target).toEqual({
       kind: 'beta',
+      region: 'cn',
       dev: 'dash',
       profile: 'beta-dash',
       channel: 'beta-dash',
@@ -121,7 +124,8 @@ describe('mobile release scripts core logic', () => {
       publicEnv: {
         EXPO_PUBLIC_APP_VARIANT: 'beta',
         EXPO_PUBLIC_BETA_DEV: 'dash',
-        EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
+        EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+        EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
         EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
         EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
         EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
@@ -132,6 +136,7 @@ describe('mobile release scripts core logic', () => {
 
   it('keeps production and staging target mapping explicit', () => {
     expect(resolveTarget({ easJson }, { kind: 'production' })).toMatchObject({
+      region: 'cn',
       profile: 'production',
       channel: 'production',
       branch: 'production',
@@ -146,37 +151,58 @@ describe('mobile release scripts core logic', () => {
   });
 
   it('requires OTA public env and beta variant env', () => {
-    expect(() => assertPublicEnv({
-      EXPO_PUBLIC_FEISHU_APP_ID: 'app',
-      EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
-      EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
-      EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
-      EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
-      EXPO_PUBLIC_APP_VARIANT: 'beta',
-      EXPO_PUBLIC_BETA_DEV: 'dash',
-    }, { variant: 'beta' })).not.toThrow();
-    expect(() => assertPublicEnv({
-      EXPO_PUBLIC_FEISHU_APP_ID: 'app',
-    }, { variant: 'beta' })).toThrow(/EXPO_PUBLIC_XDT_API_BASE_URL/);
-    expect(() => assertPublicEnv({
-      EXPO_PUBLIC_FEISHU_APP_ID: 'app',
-      EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
-      EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
-      EXPO_PUBLIC_APP_VARIANT: 'beta',
-    }, { variant: 'beta' })).toThrow(/EXPO_PUBLIC_BETA_DEV/);
-    expect(() => assertPublicEnv({
-      EXPO_PUBLIC_FEISHU_APP_ID: 'app',
-      EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
-      EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
-      EXPO_PUBLIC_APP_VARIANT: 'beta',
-    }, { variant: 'production' })).toThrow(/Production OTA environment/);
+    // 2026-07 端点清单重构:发版闸门必填集收缩为身份 + 清单自举基址 + TapTap。
+    expect(() =>
+      assertPublicEnv(
+        {
+          EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+          EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://hotfix.example.invalid/app',
+          EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
+          EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
+          EXPO_PUBLIC_APP_VARIANT: 'beta',
+          EXPO_PUBLIC_BETA_DEV: 'dash',
+        },
+        { variant: 'beta' },
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertPublicEnv(
+        {
+          EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+        },
+        { variant: 'beta' },
+      ),
+    ).toThrow(/EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL/);
+    expect(() =>
+      assertPublicEnv(
+        {
+          EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+          EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://hotfix.example.invalid/app',
+          EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
+          EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
+          EXPO_PUBLIC_APP_VARIANT: 'beta',
+        },
+        { variant: 'beta' },
+      ),
+    ).toThrow(/EXPO_PUBLIC_BETA_DEV/);
+    expect(() =>
+      assertPublicEnv(
+        {
+          EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+          EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://hotfix.example.invalid/app',
+          EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
+          EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'tap-client-token',
+          EXPO_PUBLIC_APP_VARIANT: 'beta',
+        },
+        { variant: 'production' },
+      ),
+    ).toThrow(/Production OTA environment/);
   });
 
   it('allows only TapDB public env to come from the external release environment', () => {
     const profileEnv = {
-      EXPO_PUBLIC_FEISHU_APP_ID: 'app',
-      EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
-      EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
+      EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+      EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://hotfix.example.invalid/app',
       EXPO_PUBLIC_APP_VARIANT: 'beta',
       EXPO_PUBLIC_BETA_DEV: 'dash',
     };
@@ -259,7 +285,8 @@ describe('mobile release scripts core logic', () => {
     expect(buildUpdateCommand(target, 'beta update', { platform: 'ios' })).toMatchObject({
       args: ['--yes', EAS_CLI_SPEC, 'update', '--branch', 'beta-dash', '--platform', 'ios', '--message', 'beta update', '--environment', 'preview', '--non-interactive'],
       env: {
-        EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
+        EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+        EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
         EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
         EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
         EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
@@ -268,9 +295,18 @@ describe('mobile release scripts core logic', () => {
         EXPO_PUBLIC_BETA_DEV: 'dash',
       },
     });
-    const prodCmd = buildUpdateCommand(resolveTarget({ easJson }, { kind: 'production' }), 'prod update', { platform: 'ios' });
-    expect(prodCmd.bin.endsWith('npx') || prodCmd.bin.endsWith('npx.cmd')).toBe(true);
-    expect(prodCmd.env).toMatchObject({ EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4' });
+    const prodCmd = buildUpdateCommand(
+      resolveTarget({ easJson }, { kind: 'production' }),
+      'prod update',
+      { platform: 'ios' },
+    );
+    expect(prodCmd.bin.endsWith('npx') || prodCmd.bin.endsWith('npx.cmd')).toBe(
+      true,
+    );
+    expect(prodCmd.env).toMatchObject({
+      EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+      EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
+    });
     expect(prodCmd.env).not.toHaveProperty('EXPO_PUBLIC_APP_VARIANT');
     expect(prodCmd.env).not.toHaveProperty('EXPO_PUBLIC_BETA_DEV');
     expect(prodCmd.args).toContain('--environment');
@@ -301,7 +337,8 @@ describe('mobile release scripts core logic', () => {
     expect(productionEnv).toMatchObject({
       KEEP_ME: 'yes',
       EXPO_NO_DOTENV: '1',
-      EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
+      EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+      EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
     });
     expect(productionEnv).not.toHaveProperty('EXPO_PUBLIC_APP_VARIANT');
     expect(productionEnv).not.toHaveProperty('EXPO_PUBLIC_BETA_DEV');
@@ -324,7 +361,8 @@ describe('mobile release scripts core logic', () => {
       EXPO_NO_DOTENV: '1',
       EXPO_PUBLIC_APP_VARIANT: 'beta',
       EXPO_PUBLIC_BETA_DEV: 'dash',
-      EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
+      EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+      EXPO_PUBLIC_CINDY_AUTH_BASE_URL: 'https://auth.example.com',
       EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.example.com',
       EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.example.com',
       EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'tap-client-id',
@@ -566,51 +604,74 @@ describe('mobile release scripts core logic', () => {
     expect(() => assertProductionPlatformAllowed(resolveTarget({ easJson }, { kind: 'staging' }), 'all')).not.toThrow();
   });
 
-  it('requires com.xd.lizcn production auto-submit to use the matching ASC app', () => {
-    const target = { kind: 'production', profile: 'production' };
-    const appJson = { expo: { ios: { bundleIdentifier: 'com.xd.lizcn' } } };
-    const legacySubmitConfig = { submit: { production: { ios: { ascAppId: '6782341575' } } } };
+  it('requires the regional App Store numeric ID in the release environment', () => {
+    const cnTarget = {
+      kind: 'production',
+      profile: 'production',
+      region: 'cn',
+    };
+    const globalTarget = {
+      kind: 'production',
+      profile: 'production-global',
+      region: 'global',
+    };
 
-    expect(() => assertProductionSubmitTarget({ target, appJson, easJson: legacySubmitConfig })).toThrow(/submit\.production\.ios\.ascAppId.*6785851372/);
-    expect(() => assertProductionSubmitTarget({
-      target: { kind: 'production', profile: 'testflight' },
-      appJson,
-      easJson: { submit: { testflight: { ios: { ascAppId: '6782341575' } } } },
-    })).toThrow(/submit\.testflight\.ios\.ascAppId.*6785851372/);
-    expect(() => assertProductionSubmitTarget({
-      target,
-      appJson,
-      easJson: { submit: { production: { ios: { ascAppId: 'com-xd-lizcn-asc-id' } } } },
-    })).toThrow(/submit\.production\.ios\.ascAppId.*6785851372/);
-    expect(() => assertProductionSubmitTarget({
-      target,
-      appJson,
-      easJson: { submit: { production: { ios: { ascAppId: '6785851372' } } } },
-    })).not.toThrow();
+    expect(() =>
+      assertProductionSubmitTarget({ target: cnTarget, env: {} }),
+    ).toThrow(/CINDY_CN_APP_STORE_ID/);
+    expect(() =>
+      assertProductionSubmitTarget({
+        target: cnTarget,
+        env: { CINDY_CN_APP_STORE_ID: 'not-numeric' },
+      }),
+    ).toThrow(/numeric CINDY_CN_APP_STORE_ID/);
+    expect(
+      assertProductionSubmitTarget({
+        target: cnTarget,
+        env: { CINDY_CN_APP_STORE_ID: '1234567890' },
+      }),
+    ).toBe('1234567890');
+    expect(() =>
+      assertProductionSubmitTarget({ target: globalTarget, env: {} }),
+    ).toThrow(/CINDY_GLOBAL_APP_STORE_ID/);
+    expect(
+      assertProductionSubmitTarget({
+        target: globalTarget,
+        env: { CINDY_GLOBAL_APP_STORE_ID: '9876543210' },
+      }),
+    ).toBe('9876543210');
   });
 
-  it('only enables production auto-submit when an iOS baseline proves buildNumber monotonicity', () => {
+  it('keeps App Store submission explicit for both regional apps', () => {
     const target = resolveTarget({ easJson }, { kind: 'production' });
-    expect(shouldAutoSubmitColdBuild({
-      target,
-      mode: 'COLD_BUILD_REQUIRED',
-      latest: { byPlatform: { ios: { appBuildVersion: '2026062608' } } },
-    })).toBe(true);
-    expect(shouldAutoSubmitColdBuild({
-      target,
-      mode: 'BASELINE_UNKNOWN',
-      latest: { byPlatform: {} },
-    })).toBe(false);
-    expect(shouldAutoSubmitColdBuild({
-      target,
-      mode: 'OTA_OK',
-      latest: { byPlatform: { ios: { appBuildVersion: '2026062608' } } },
-    })).toBe(false);
-    expect(shouldAutoSubmitColdBuild({
-      target: resolveTarget({ easJson }, { kind: 'staging' }),
-      mode: 'COLD_BUILD_REQUIRED',
-      latest: { byPlatform: { ios: { appBuildVersion: '2026062608' } } },
-    })).toBe(false);
+    expect(
+      shouldAutoSubmitColdBuild({
+        target,
+        mode: 'COLD_BUILD_REQUIRED',
+        latest: { byPlatform: { ios: { appBuildVersion: '2026062608' } } },
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoSubmitColdBuild({
+        target,
+        mode: 'BASELINE_UNKNOWN',
+        latest: { byPlatform: {} },
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoSubmitColdBuild({
+        target,
+        mode: 'OTA_OK',
+        latest: { byPlatform: { ios: { appBuildVersion: '2026062608' } } },
+      }),
+    ).toBe(false);
+    expect(
+      shouldAutoSubmitColdBuild({
+        target: resolveTarget({ easJson }, { kind: 'staging' }),
+        mode: 'COLD_BUILD_REQUIRED',
+        latest: { byPlatform: { ios: { appBuildVersion: '2026062608' } } },
+      }),
+    ).toBe(false);
   });
 
   it('adds beta developer profiles deterministically', () => {
@@ -622,6 +683,7 @@ describe('mobile release scripts core logic', () => {
       channel: 'beta-alice-zhang',
       branch: 'beta-alice-zhang',
       created: true,
+      region: 'cn',
       easJson: next,
     });
     expect(next.build['beta-alice-zhang']).toEqual({
@@ -701,62 +763,28 @@ describe('mobile release scripts core logic', () => {
   });
 
   it('normalizes eas.json for fingerprinting by stripping only beta profiles', () => {
-    const current = JSON.parse(readFileSync(resolve(process.cwd(), 'eas.json'), 'utf8'));
-    const normalized = stripBetaProfiles(current);
+    const current = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'eas.json'), 'utf8'),
+    );
+    const expected = JSON.parse(JSON.stringify(current));
+    for (const profile of Object.keys(expected.build)) {
+      if (profile === 'beta-base' || profile.startsWith('beta-'))
+        delete expected.build[profile];
+    }
+    const normalized = stripBetaProfiles(JSON.parse(JSON.stringify(current)));
 
-    expect(normalized).toEqual({
-      cli: { version: '>= 15.0.0', appVersionSource: 'local' },
-      build: {
-        testflight: {
-          distribution: 'store',
-          channel: 'production',
-          environment: 'production',
-          node: '22.19.0',
-          ios: { resourceClass: 'm-medium' },
-          env: {
-            EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
-            EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED: '1',
-            EXPO_PUBLIC_XDT_API_BASE_URL: DEFAULT_API_BASE_URL,
-            EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: DEFAULT_DEVICE_LINK_API_BASE_URL,
-            XDT_SKIP_AGENT_BIN_INSTALL: '1',
-          },
-        },
-        production: {
-          distribution: 'store',
-          channel: 'production',
-          environment: 'production',
-          node: '22.19.0',
-          ios: { resourceClass: 'm-medium' },
-          env: {
-            EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
-            EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED: '1',
-            EXPO_PUBLIC_XDT_API_BASE_URL: DEFAULT_API_BASE_URL,
-            EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: DEFAULT_DEVICE_LINK_API_BASE_URL,
-            XDT_SKIP_AGENT_BIN_INSTALL: '1',
-          },
-        },
-        adhoc: {
-          distribution: 'internal',
-          channel: 'staging',
-          environment: 'preview',
-          node: '22.19.0',
-          ios: { resourceClass: 'm-medium' },
-          env: {
-            EXPO_PUBLIC_FEISHU_APP_ID: 'cli_a94d4cf642381cd4',
-            EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED: '1',
-            EXPO_PUBLIC_XDT_API_BASE_URL: DEFAULT_API_BASE_URL,
-            EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: DEFAULT_DEVICE_LINK_API_BASE_URL,
-            XDT_SKIP_AGENT_BIN_INSTALL: '1',
-          },
-        },
-      },
-      submit: {
-        testflight: { ios: { ascAppId: '6785851372' } },
-        production: { ios: { ascAppId: '6785851372' } },
-      },
-    });
-    expect(JSON.stringify(normalized)).not.toContain('EXPO_PUBLIC_TAPTAP_CLIENT_ID');
-    expect(JSON.stringify(normalized)).not.toContain('EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN');
+    expect(normalized).toEqual(expected);
+    expect(
+      Object.keys(normalized.build).some((profile) =>
+        profile.startsWith('beta-'),
+      ),
+    ).toBe(false);
+    expect(JSON.stringify(normalized)).not.toContain(
+      'EXPO_PUBLIC_TAPTAP_CLIENT_ID',
+    );
+    expect(JSON.stringify(normalized)).not.toContain(
+      'EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN',
+    );
   });
 
   it('fingerprint eas.json transform includes the chunk delivered with EOF', () => {
@@ -815,5 +843,57 @@ describe('resolveDesktopVersion（自建线设置页二级版本号取值）', (
 
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
     await expect(resolveDesktopVersion({ cdnBase: 'https://cdn.example.com' })).resolves.toBe('');
+  });
+});
+
+describe('formatBakedEnvLines(自建冷更计划输出:实际烘焙注入清单)', () => {
+  const normalize = (lines: string[]) => lines.map((line) => line.replace(/ +/g, ' '));
+
+  it('只列 EXPO_PUBLIC_* 与 extraKeys,凭据类构建 env 不出现,空值标注', () => {
+    const lines = formatBakedEnvLines(
+      {
+        PATH: '/usr/bin',
+        FP_DEV_OSS_ACCESS_KEY_ID: 'secret',
+        XDT_IOS_TEAM_ID: 'TEAMID',
+        EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+        EXPO_PUBLIC_TAPTAP_CLIENT_ID: ' ',
+        XDT_ANDROID_VERSION_CODE: '42',
+      },
+      { extraKeys: ['XDT_ANDROID_VERSION_CODE', 'XDT_NOT_SET'] },
+    );
+    const body = normalize(lines).join('\n');
+    expect(body).toContain('EXPO_PUBLIC_CINDY_AUTH_REGION = cn');
+    expect(body).toContain('EXPO_PUBLIC_TAPTAP_CLIENT_ID = (空)'); // 空值要能被一眼发现
+    expect(body).toContain('XDT_ANDROID_VERSION_CODE = 42'); // extraKeys 存在才列
+    expect(body).not.toContain('XDT_NOT_SET'); // extraKeys 未设不列
+    expect(body).not.toContain('secret'); // 凭据类 env 不进包也不打印
+    expect(body).not.toContain('TEAMID');
+    expect(body).not.toContain('PATH');
+  });
+
+  it('每行带用途注释;未登记键打「未登记」提醒', () => {
+    const lines = normalize(
+      formatBakedEnvLines({
+        EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+        EXPO_PUBLIC_SOMETHING_NEW: 'x',
+      }),
+    );
+    const regionLine = lines.find((line) => line.includes('EXPO_PUBLIC_CINDY_AUTH_REGION'));
+    expect(regionLine).toContain('# 构建区域 cn/global');
+    const unknownLine = lines.find((line) => line.includes('EXPO_PUBLIC_SOMETHING_NEW'));
+    expect(unknownLine).toContain('未登记键');
+  });
+
+  it('键名排序稳定,首尾是标题与口径说明', () => {
+    const lines = normalize(
+      formatBakedEnvLines({
+        EXPO_PUBLIC_B: '2',
+        EXPO_PUBLIC_A: '1',
+      }),
+    );
+    expect(lines[0]).toContain('baked env');
+    expect(lines[1]).toContain('EXPO_PUBLIC_A = 1');
+    expect(lines[2]).toContain('EXPO_PUBLIC_B = 2');
+    expect(lines[lines.length - 1]).toContain('不进包');
   });
 });

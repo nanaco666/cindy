@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { CDN_EXTERNAL_BASE_URL } from '../../shared/endpoints';
+import { TEST_CDN_BASE_URL as CDN_EXTERNAL_BASE_URL } from '../../test/vitest/clientEndpointsFixture';
 
 const originalPlatform = process.platform;
 const TEST_ROOT = path.join(os.tmpdir(), 'xdt-maker-update-service-test');
@@ -25,17 +25,11 @@ const appGetPath = vi.fn((name: string) => {
   if (name === 'exe') return TEST_EXE;
   return TEST_ROOT;
 });
-
 const fetchManifest = vi.fn();
 const getBaseUrl = vi.fn(() => CDN_EXTERNAL_BASE_URL);
 const isDev = vi.fn(() => false);
 const download = vi.fn();
 const readAutoUpdateSettings = vi.fn(() => ({ autoRelaunchOnIdle: true }));
-const initMigrationRuntime = vi.fn();
-const handleMigrationBlock = vi.fn(async () => {});
-const isHotUpdateSuppressedNow = vi.fn(() => false);
-const isMigrationRelaunchReady = vi.fn(() => false);
-const executeMigrationRelaunch = vi.fn(async () => false);
 
 const logInfo = vi.fn();
 const logWarn = vi.fn();
@@ -74,14 +68,6 @@ vi.mock('../auto-update-settings-store', () => ({
   }),
   resetAutoUpdateSettings: () => ({ autoRelaunchOnIdle: false }),
   writeAutoRelaunchOnIdle: vi.fn(),
-}));
-
-vi.mock('../migration/electronRuntime', () => ({
-  initMigrationRuntime,
-  handleMigrationBlock,
-  isHotUpdateSuppressedNow,
-  isMigrationRelaunchReady,
-  executeMigrationRelaunch,
 }));
 
 vi.mock('../manifestService', () => ({
@@ -158,22 +144,12 @@ beforeEach(() => {
   download.mockReset();
   readAutoUpdateSettings.mockReset();
   readAutoUpdateSettings.mockReturnValue({ autoRelaunchOnIdle: true });
-  initMigrationRuntime.mockReset();
-  handleMigrationBlock.mockReset();
-  handleMigrationBlock.mockResolvedValue(undefined);
-  isHotUpdateSuppressedNow.mockReset();
-  isHotUpdateSuppressedNow.mockReturnValue(false);
-  isMigrationRelaunchReady.mockReset();
-  isMigrationRelaunchReady.mockReturnValue(false);
-  executeMigrationRelaunch.mockReset();
-  executeMigrationRelaunch.mockResolvedValue(false);
   logInfo.mockReset();
   logWarn.mockReset();
   logError.mockReset();
   logDebug.mockReset();
   fs.rmSync(TEST_ROOT, { recursive: true, force: true });
 });
-
 afterEach(() => {
   vi.clearAllTimers();
   vi.useRealTimers();
@@ -270,6 +246,61 @@ describe('checkForUpdate Linux first-release guard', () => {
   });
 });
 
+describe('checkForUpdate 版本无关(占位 0.0.0)打包豁免', () => {
+  it('占位版本 0.0.0 时直接 idle,不拉 manifest 不下载(即便传入含热更的 manifest)', async () => {
+    appGetVersion.mockReturnValue('0.0.0');
+    const { checkForUpdate, getUpdateStatus } = await freshUpdateService('darwin');
+
+    const result = await checkForUpdate(updateManifest('9.9.9'));
+
+    expect(result).toBe('idle');
+    expect(getUpdateStatus()).toBe('idle');
+    expect(fetchManifest).not.toHaveBeenCalled();
+    expect(download).not.toHaveBeenCalled();
+  });
+
+  it('update-check-startup 同样豁免:即便本地残留已下好的 patch 也不触发 relaunch', async () => {
+    // 版本无关包与正式版同 userData,updates/ 里可能残留正式版下好的 patch;
+    // startup 快路径(manifest 拉不到 → 本地 patch 直接 relaunch)必须一并短路。
+    appGetVersion.mockReturnValue('0.0.0');
+    fetchManifest.mockResolvedValue(null);
+    const updatesDir = path.join(TEST_USER_DATA, 'updates');
+    fs.mkdirSync(updatesDir, { recursive: true });
+    fs.writeFileSync(path.join(updatesDir, 'stale.zip'), 'zip');
+    fs.writeFileSync(
+      path.join(updatesDir, 'patch-info.json'),
+      JSON.stringify({ version: '9.9.9', fileName: 'stale.zip', sha256: 'abc' }),
+    );
+
+    const service = await freshUpdateService('win32');
+    service.initUpdateService();
+    try {
+      const handler = ipcHandlers.get('update-check-startup');
+      if (!handler) throw new Error('update-check-startup handler not registered');
+      const reply = (await handler()) as { hasUpdate: boolean; action: string };
+      expect(reply.hasUpdate).toBe(false);
+      expect(reply.action).toBe('none');
+      expect(service.getUpdateStatus()).toBe('idle');
+      expect(download).not.toHaveBeenCalled();
+    } finally {
+      service.stopUpdateService();
+      fs.rmSync(updatesDir, { recursive: true, force: true });
+    }
+  });
+
+  it('0.0.0-dev 形态同样豁免;真实版本不受影响', async () => {
+    appGetVersion.mockReturnValue('0.0.0-dev');
+    const service = await freshUpdateService('win32');
+    expect(await service.checkForUpdate(updateManifest('9.9.9'))).toBe('idle');
+    expect(download).not.toHaveBeenCalled();
+
+    expect(service.isVersionlessAppVersion('0.0.0')).toBe(true);
+    expect(service.isVersionlessAppVersion('0.0.0-dev')).toBe(true);
+    expect(service.isVersionlessAppVersion('0.0.1')).toBe(false);
+    expect(service.isVersionlessAppVersion('1.0.0')).toBe(false);
+  });
+});
+
 describe('startup update relaunch safety', () => {
   it('allows a staged startup update only when the unattended policy is satisfied', async () => {
     await expect(runStartupUpdate()).resolves.toMatchObject({
@@ -305,7 +336,9 @@ describe('startup update relaunch safety', () => {
   });
 
   it('preserves locked-idle startup auto apply on Windows', async () => {
-    await expect(runStartupUpdate({ idleState: 'locked', platform: 'win32' })).resolves.toMatchObject({
+    await expect(
+      runStartupUpdate({ idleState: 'locked', platform: 'win32' }),
+    ).resolves.toMatchObject({
       action: 'relaunch',
     });
   });
@@ -393,77 +426,79 @@ describe('startup update relaunch safety', () => {
   });
 });
 
-describe('brand migration update routing', () => {
-  const migrationManifest = {
-    app: {
-      version: '0.0.64',
-      migration: {
-        targetApp: 'cindy',
-        version: '1.0.0',
-        file: 'migration/cindy-setup.exe',
-        sha256: 'a'.repeat(64),
-        size: 123,
+describe('splash 启动下载 0% 显式广播', () => {
+  interface SentIpc {
+    channel: string;
+    payload: { progress?: number; received?: number; total?: number };
+  }
+
+  function makeProgressCollector() {
+    const sends: SentIpc[] = [];
+    const win = {
+      isDestroyed: () => false,
+      webContents: {
+        send: (channel: string, payload: SentIpc['payload']) => {
+          sends.push({ channel, payload });
+        },
       },
-    },
-    claudeCode: {
-      version: '1.0.0',
-      file: 'claude-code/1.0.0/darwin-arm64/claude.gz',
-      sha256: 'b'.repeat(64),
-      size: 456,
-    },
-  };
+    };
+    browserWindowGetAllWindows.mockReturnValue([win as never]);
+    const progressSends = () => sends.filter((s) => s.channel === 'app-update-progress');
+    return { sends, progressSends };
+  }
 
-  it('macOS App Translocation 下不 stage 品牌迁移', async () => {
-    appIsInApplicationsFolder.mockReturnValue(false);
+  function mockDownloadSuccess(onInvoke?: () => void) {
+    download.mockImplementation(async ({ targetPath }: { targetPath: string }) => {
+      onInvoke?.();
+      fs.mkdirSync(path.join(TEST_USER_DATA, 'updates'), { recursive: true });
+      fs.writeFileSync(targetPath, 'update');
+      return { path: targetPath, size: 123 };
+    });
+  }
+
+  beforeEach(() => {
+    // setStatus('ready') 会触发 evaluateAutoRelaunch;关掉无人值守开关,
+    // 避免测试进程里真的走到 executeRelaunch(spawn + process.exit)。
+    readAutoUpdateSettings.mockReturnValue({ autoRelaunchOnIdle: false });
+  });
+
+  it('启动(非 wasReady)路径:download() 之前恰好广播一次 progress:0', async () => {
+    const { progressSends } = makeProgressCollector();
+    // ProgressNormalizer 只在进度上升时 emit,首个 ≥1% 事件在大补丁/慢网下
+    // 可能要等数秒;没有这条显式 0%,splash 会停留在 'checking'、grace 定时器
+    // 也看不到 'updating' 而提前放行进 app —— 这里锁死"下载真正开始前恰好
+    // 已广播一次 0%"的契约。
+    let progressCountWhenDownloadStarted = -1;
+    mockDownloadSuccess(() => {
+      progressCountWhenDownloadStarted = progressSends().length;
+    });
+
     const { checkForUpdate } = await freshUpdateService('darwin');
+    expect(await checkForUpdate(updateManifest())).toBe('ready');
 
-    expect(await checkForUpdate(migrationManifest)).toBe('idle');
-    expect(handleMigrationBlock).not.toHaveBeenCalled();
+    expect(progressCountWhenDownloadStarted).toBe(1);
+    const payloads = progressSends().map((s) => s.payload);
+    expect(payloads[0]).toMatchObject({ progress: 0, received: 0, total: 123 });
+    expect(payloads[payloads.length - 1]).toMatchObject({ progress: 100 });
   });
 
-  it('macOS 已在 Applications 时正常 stage 品牌迁移', async () => {
-    const { checkForUpdate } = await freshUpdateService('darwin');
+  it('superseding(wasReady)路径:下载前不向 splash 通道广播 0%', async () => {
+    const { sends, progressSends } = makeProgressCollector();
+    mockDownloadSuccess();
 
-    expect(await checkForUpdate(migrationManifest)).toBe('idle');
-    expect(handleMigrationBlock).toHaveBeenCalledWith(migrationManifest.app.migration);
-  });
+    const service = await freshUpdateService('darwin');
+    expect(await service.checkForUpdate(updateManifest('0.0.65'))).toBe('ready');
 
-  it('macOS App Translocation 下拒绝执行品牌迁移 relaunch', async () => {
-    vi.useFakeTimers();
-    try {
-      appIsInApplicationsFolder.mockReturnValue(false);
-      isMigrationRelaunchReady.mockReturnValue(true);
-      const { getUpdateStatus, initUpdateService, stopUpdateService } =
-        await freshUpdateService('darwin');
-      initUpdateService();
-      const relaunchListener = ipcMainOn.mock.calls.find(([channel]) => channel === 'update-relaunch')?.[1] as
-        | ((event: unknown, theme: 'light' | 'dark') => void)
-        | undefined;
+    // 清空第一轮的广播,只观察 superseding 轮。
+    sends.length = 0;
+    let progressCountWhenDownloadStarted = -1;
+    mockDownloadSuccess(() => {
+      progressCountWhenDownloadStarted = progressSends().length;
+    });
 
-      relaunchListener?.({}, 'dark');
-      expect(getUpdateStatus()).toBe('error');
-      expect(executeMigrationRelaunch).not.toHaveBeenCalled();
-      stopUpdateService();
-    } finally {
-      vi.clearAllTimers();
-      vi.useRealTimers();
-    }
-  });
-
-  it('迁移执行 Promise reject 后恢复 relaunch 状态，后续点击可重试', async () => {
-    isDev.mockReturnValue(true);
-    isMigrationRelaunchReady.mockReturnValue(true);
-    executeMigrationRelaunch.mockRejectedValue(new Error('atomic rename failed'));
-    const { getUpdateStatus, initUpdateService } = await freshUpdateService('win32');
-    initUpdateService();
-    const relaunchListener = ipcMainOn.mock.calls.find(([channel]) => channel === 'update-relaunch')?.[1] as
-      | ((event: unknown, theme: 'light' | 'dark') => void)
-      | undefined;
-    expect(relaunchListener).toBeTypeOf('function');
-
-    relaunchListener?.({}, 'dark');
-    await vi.waitFor(() => expect(getUpdateStatus()).toBe('error'));
-    relaunchListener?.({}, 'dark');
-    await vi.waitFor(() => expect(executeMigrationRelaunch).toHaveBeenCalledTimes(2));
+    // banner 已 ready(a=0.0.65),后台轮询发现更高的 b=0.0.66 → superseding。
+    // 此时用户在主界面,启动 splash 早已结束;0% 广播只属于启动态。
+    expect(await service.checkForUpdate(updateManifest('0.0.66'))).toBe('ready');
+    expect(progressCountWhenDownloadStarted).toBe(0);
   });
 });

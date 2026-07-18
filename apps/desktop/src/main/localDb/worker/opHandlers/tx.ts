@@ -16,8 +16,6 @@ export function tx(db: Database.Database, args: unknown): unknown {
   const txArgs = payload.args;
 
   switch (name) {
-    case 'migration.writePage':
-      return migrationWritePage(db, txArgs);
     case 'codex.importMessages':
       return codexImportMessages(db, txArgs);
     case 'claude.importMessages':
@@ -194,65 +192,6 @@ function sessionsSetStatus(db: Database.Database, args: unknown): Array<{
     workspaceKind: string | null;
     status: 'active' | 'archived';
   }>;
-}
-
-function migrationWritePage(db: Database.Database, args: unknown): void {
-  const page = asRecord(args, 'migration.writePage args');
-  const sessions = expectArray(page.sessions, 'sessions');
-  const insertSession = db.prepare(
-    `INSERT OR IGNORE INTO sessions (
-      id, title, working_dir, model, effort, permission_mode, status,
-      sdk_session_id, total_token_usage, total_cost_usd, context_tokens,
-      context_window, fast_mode, cleared_at, pinned_at, created_at, updated_at
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-  );
-  const insertMessage = db.prepare(
-    `INSERT OR IGNORE INTO messages (
-      id, client_id, session_id, role, content, tool_use_id, created_at
-    ) VALUES (?,?,?,?,?,?,?)`,
-  );
-  const transaction = db.transaction(() => {
-    for (const rawSession of sessions) {
-      const s = asRecord(rawSession, 'session');
-      insertSession.run(
-        expectString(s.id, 'session.id'),
-        expectString(s.title, 'session.title'),
-        // 存储级归一(#537):云迁移种子行可能带服务端历史反斜杠拼写
-        normalizeWorkingDirForStorage(nullableString(s.workingDir)),
-        expectString(s.model, 'session.model'),
-        expectString(s.effort, 'session.effort'),
-        expectString(s.permissionMode, 'session.permissionMode'),
-        expectString(s.status, 'session.status'),
-        nullableString(s.sdkSessionId),
-        expectNumber(s.totalTokenUsage, 'session.totalTokenUsage'),
-        expectNumber(s.totalCostUsd, 'session.totalCostUsd'),
-        expectNumber(s.contextTokens, 'session.contextTokens'),
-        expectNumber(s.contextWindow, 'session.contextWindow'),
-        s.fastMode ? 1 : 0,
-        s.clearedAt ? new Date(expectString(s.clearedAt, 'session.clearedAt')).getTime() : null,
-        s.pinnedAt ? new Date(expectString(s.pinnedAt, 'session.pinnedAt')).getTime() : null,
-        new Date(expectString(s.createdAt, 'session.createdAt')).getTime(),
-        new Date(expectString(s.updatedAt, 'session.updatedAt')).getTime(),
-      );
-      for (const rawMessage of Array.isArray(s.messages) ? s.messages : []) {
-        const m = asRecord(rawMessage, 'message');
-        insertMessage.run(
-          expectString(m.id, 'message.id'),
-          expectString(m.clientId, 'message.clientId'),
-          expectString(m.sessionId, 'message.sessionId'),
-          expectString(m.role, 'message.role'),
-          typeof m.content === 'string' ? m.content : stringifyContent(m.content),
-          nullableString(m.toolUseId),
-          new Date(expectString(m.createdAt, 'message.createdAt')).getTime(),
-        );
-      }
-    }
-    if (page.nextAfter) writeMeta(db, 'cloud_migration_last_session_id', expectString(page.nextAfter, 'nextAfter'));
-    writeMeta(db, 'cloud_migration_has_more', page.hasMore ? '1' : '0');
-    const syncedNow = readMetaNumber(db, 'cloud_migration_synced') + sessions.length;
-    writeMeta(db, 'cloud_migration_synced', String(syncedNow));
-  });
-  transaction();
 }
 
 function codexImportMessages(db: Database.Database, args: unknown): { changed: number } {
@@ -875,20 +814,6 @@ function orcaUpsertWorker(db: Database.Database, args: unknown): void {
       now,
     );
   })();
-}
-
-function readMetaNumber(db: Database.Database, key: string): number {
-  const row = db.prepare(`SELECT value FROM migration_meta WHERE key = ?`).get(key) as
-    | { value: string }
-    | undefined;
-  return row ? Number(row.value) || 0 : 0;
-}
-
-function writeMeta(db: Database.Database, key: string, value: string): void {
-  db.prepare(
-    `INSERT INTO migration_meta (key, value) VALUES (?, ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-  ).run(key, value);
 }
 
 function readExistingImportedClientIds(

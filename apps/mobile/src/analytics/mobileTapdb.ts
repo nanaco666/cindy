@@ -13,11 +13,31 @@ export type MobileTapdbInitStatus =
 
 let initPromise: Promise<MobileTapdbInitStatus> | null = null;
 
+/** 自建线通过 Expo extra 烘焙的 TapDB 公开配置。 */
+interface SelfHostTapdbConfig {
+  clientId?: string;
+  clientToken?: string;
+  region?: string;
+  channel?: string;
+}
+
+function selfHostTapdbConfig(): SelfHostTapdbConfig {
+  const cindy = Constants.expoConfig?.extra?.cindy as
+    | { tapdb?: SelfHostTapdbConfig }
+    | undefined;
+  return cindy?.tapdb ?? {};
+}
+
 export function initMobileTapdb(): Promise<MobileTapdbInitStatus> {
   if (initPromise) return initPromise;
 
-  const clientId = process.env.EXPO_PUBLIC_TAPTAP_CLIENT_ID?.trim();
-  const clientToken = process.env.EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN?.trim();
+  const selfHostConfig = selfHostTapdbConfig();
+  const clientId =
+    selfHostConfig.clientId?.trim() ||
+    process.env.EXPO_PUBLIC_TAPTAP_CLIENT_ID?.trim();
+  const clientToken =
+    selfHostConfig.clientToken?.trim() ||
+    process.env.EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN?.trim();
   if (!clientId || !clientToken) {
     initPromise = Promise.resolve({ ok: false, reason: 'missing_config' });
     return initPromise;
@@ -26,8 +46,13 @@ export function initMobileTapdb(): Promise<MobileTapdbInitStatus> {
   initPromise = initializeTapdb({
     clientId,
     clientToken,
-    region: resolveTapdbRegion(process.env.EXPO_PUBLIC_TAPDB_REGION),
-    channel: resolveTapdbChannel(process.env.EXPO_PUBLIC_TAPDB_CHANNEL, Platform.OS),
+    region: resolveTapdbRegion(
+      selfHostConfig.region || process.env.EXPO_PUBLIC_TAPDB_REGION,
+    ),
+    channel: resolveTapdbChannel(
+      selfHostConfig.channel || process.env.EXPO_PUBLIC_TAPDB_CHANNEL,
+      Platform.OS,
+    ),
     properties: {
       xdt_surface: 'mobile',
       xdt_platform: Platform.OS,

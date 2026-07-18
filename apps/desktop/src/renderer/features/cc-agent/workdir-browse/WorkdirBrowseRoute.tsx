@@ -145,7 +145,7 @@ export function WorkdirBrowseRoute() {
     if (!browsableWorkdir) return [];
     // 历史 session 写入 DB 时 path 分隔符不统一(例: 同一目录有的存
     // `C:/Smash/CakeIsland`、有的存 `C:\Smash\CakeIsland`),且 worktree session
-    // 实际 cwd 是 `<repo>/.xdt-worktrees/<name>` 子目录。raw 字符串相等会把
+    // 实际 cwd 是 `<repo>/.cindy-worktrees/<name>`（或历史托管目录）子目录。raw 字符串相等会把
     // 同一项目下的 session 拆成多个 doc 视图; 用 normalizeWorkingDir 归一后比较,
     // 与 sidebar projects 分组对齐(同一 project 的 session 在 doc 模式都能列出来)。
     const normWorkdir = normalizeWorkingDir(browsableWorkdir);

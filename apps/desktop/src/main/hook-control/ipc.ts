@@ -33,6 +33,7 @@ import {
   ensureDialogueWorkspaceDir,
 } from '../localDb/dialogueWorkspace.js';
 import * as authManager from '../authManager.js';
+import { getClientEndpoint } from '../clientEndpointsService.js';
 import {
   HOOK_CONTROL_EVENT,
   HOOK_CONTROL_INVOKE,
@@ -91,6 +92,8 @@ function ensureInstances(): { store: SlackHookStore; manager: HookControlManager
     store = createSlackHookStore({
       filePath: path.join(app.getPath('userData'), 'slack-hook.json'),
       legacyFilePath: path.join(app.getPath('userData'), 'hook-connections.json'),
+      // 无覆写时跟随运行期端点清单(清单全权,烘焙兜底已随 2026-07 端点重构退役)
+      defaultUrl: () => getClientEndpoint('slackHookWsUrl'),
       // 旧多连接时代的 secret 加密文件按 id 清理(best-effort)
       cleanupLegacySecrets: (legacyIds) => {
         const dir = path.join(app.getPath('userData'), 'safe-storage');

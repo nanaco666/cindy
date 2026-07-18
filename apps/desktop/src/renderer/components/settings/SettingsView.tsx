@@ -380,7 +380,7 @@ export function SettingsView() {
                       onBack={() => handleSelectTab('ghosts')}
                     />
                   ) : (
-                    <GhostsSection onOpenGhost={handleSelectGhost} />
+                    <GhostsSection onOpenGhost={handleSelectGhost} workingDir={workingDir ?? undefined} />
                   )}
                 </section>
               </div>

@@ -32,6 +32,7 @@ export interface CindyGhostInfo {
 export type CindyGhostCallErrorCode =
   | 'GHOST_NOT_FOUND' // 未装入或已抽离
   | 'GHOST_ASLEEP' // 沉睡中(用户可在设置里唤醒)
+  | 'GHOST_DISABLED_IN_WORKDIR' // 用户在当前工作目录停用了该意识(不要重试)
   | 'TOOL_NOT_FOUND' // 该意识没有这个工具
   | 'GHOST_CRASHED' // 电子脑执行中崩溃
   | 'TIMEOUT' // 执行超时(host 掐掉)
@@ -40,7 +41,19 @@ export type CindyGhostCallErrorCode =
   | 'INTERNAL'; // 其它 host 侧错误
 
 export type CindyGhostCallResult =
-  | { ok: true; result: unknown }
+  | {
+      ok: true;
+      result: unknown;
+      /**
+       * 本次调用期间由主机实际入库(cindy-media)的媒体地址账本(可选,
+       * host 按 ghostId+callId 记账后随结果带回)。这是**主机侧事实**,
+       * 意识代码删不掉——ghost_call 层在意识自己没声明任何媒体字段时,
+       * 以 `xdt_media_produced` 注入返回体,兜底保证 IM/hook 出站至少
+       * 能拿到产物地址(2026-07-16 实踩:意识画卡后删媒体字段,IM 用户
+       * 收不到生成图)。
+       */
+      producedMedia?: string[];
+    }
   | { ok: false; errorCode: CindyGhostCallErrorCode; message: string };
 
 /** ghost_forge_pack 的结构化失败分类(host 侧产生,原样透传给 agent)。 */

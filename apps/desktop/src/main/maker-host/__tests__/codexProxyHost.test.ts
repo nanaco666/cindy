@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { XD_GATEWAY_BASE_URL } from '../../../shared/endpoints';
+import { TEST_XD_GATEWAY_BASE_URL as XD_GATEWAY_BASE_URL } from '../../../test/vitest/clientEndpointsFixture';
 
 type Registry = {
   set(threadId: string, text: string): void;
@@ -58,6 +58,21 @@ vi.mock('../../logger.js', () => ({
 vi.mock('../../usageBroadcaster.js', () => ({
   recordXaiRateLimitSnapshot: mockState.recordXaiRateLimitSnapshot,
 }));
+
+// SUT 链(codex-gateway-config → runtime-configs)运行期读端点清单;单测里没有
+// initClientEndpoints,mock 成 fixture 直读(与 XD_GATEWAY_BASE_URL 断言值同源)。
+vi.mock('../../clientEndpointsService.js', async () => {
+  const { TEST_CLIENT_ENDPOINTS } = await import('../../../test/vitest/clientEndpointsFixture');
+  return {
+    getClientEndpoint: (key: keyof typeof TEST_CLIENT_ENDPOINTS) => TEST_CLIENT_ENDPOINTS[key],
+  };
+});
+
+// 网关端点运行期来自 model-access 下发(effectiveXdGatewayBaseUrl),mock 成 fixture 值。
+vi.mock('../../model-access/effectiveEndpoint.js', async () => {
+  const { TEST_XD_GATEWAY_BASE_URL } = await import('../../../test/vitest/clientEndpointsFixture');
+  return { effectiveXdGatewayBaseUrl: () => TEST_XD_GATEWAY_BASE_URL };
+});
 
 vi.mock('@lizi/anthropic-compat-proxy', () => ({
   createAnthropicCompatProxy: mockState.createAnthropicCompatProxy,
@@ -339,7 +354,9 @@ describe('codex proxy host', () => {
     expect(host.getCodexProxyEndpoint()).toBe('http://127.0.0.1:43210');
     expect(mockState.createAnthropicCompatProxy).toHaveBeenCalledWith(
       expect.objectContaining({
-        upstream: `${XD_GATEWAY_BASE_URL}/v1`,
+        // upstream 是函数形态(每请求现取,model-access 下发可运行期换 endpoint);
+        // 断言其当前求值 = 网关 base + /v1
+        upstream: expect.any(Function),
         // [encrypted activeStrip, image generation activeStrip, instructions 注入, xAI Responses 兼容, provider model rewrite, stripNonAnthropicFields]
         transformRequest: [expect.any(Function), expect.any(Function), expect.any(Function), expect.any(Function), expect.any(Function), mockState.stripNonAnthropicFields],
         routingTransform: expect.any(Function),
@@ -349,6 +366,10 @@ describe('codex proxy host', () => {
         ]),
       }),
     );
+    const proxyOpts = mockState.createAnthropicCompatProxy.mock.calls[0][0] as {
+      upstream: () => string;
+    };
+    expect(proxyOpts.upstream()).toBe(`${XD_GATEWAY_BASE_URL}/v1`);
   });
 
   it('falls back to direct gateway /v1 endpoint when proxy is not ready', async () => {

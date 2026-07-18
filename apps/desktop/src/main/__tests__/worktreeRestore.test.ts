@@ -70,8 +70,8 @@ describe('worktree restore', () => {
   beforeEach(async () => {
     tmpRoot = fsSync.mkdtempSync(path.join(os.tmpdir(), 'xdt-wt-restore-'));
     baseRepo = path.join(tmpRoot, 'repo');
-    fsSync.mkdirSync(path.join(baseRepo, '.xdt-worktrees'), { recursive: true });
-    wtPath = path.join(baseRepo, '.xdt-worktrees', 'wt1');
+    fsSync.mkdirSync(path.join(baseRepo, '.cindy-worktrees'), { recursive: true });
+    wtPath = path.join(baseRepo, '.cindy-worktrees', 'wt1');
     dbWorktreePath = wtPath;
     gitExecMock.mockReset().mockResolvedValue({ stdout: '', stderr: '' });
     storeSetMock.mockReset().mockResolvedValue(undefined);
@@ -102,6 +102,18 @@ describe('worktree restore', () => {
     await expect(mod.getWorktreeRestoreStatus('s1')).resolves.toEqual({
       state: 'present',
       worktreePath: wtPath,
+      hasSnapshot: false,
+    });
+  });
+
+  it('legacy .xdt-worktrees directory still on disk → present', async () => {
+    const legacyPath = path.join(baseRepo, '.xdt-worktrees', 'wt1');
+    fsSync.mkdirSync(legacyPath, { recursive: true });
+    dbWorktreePath = legacyPath;
+
+    await expect(mod.getWorktreeRestoreStatus('s1')).resolves.toEqual({
+      state: 'present',
+      worktreePath: legacyPath,
       hasSnapshot: false,
     });
   });

@@ -15,7 +15,8 @@ import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 
-import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
+import { brandUserDataDirName } from '@lizi/maker-shared/brand-identity';
+import { CURRENT_CINDY_REGION } from '../../shared/brandRegion.js';
 
 import { getCurrentDbClientUserId, getDbClient } from '../localDb/client/current.js';
 import { createBetterSqliteDatabase } from '../localDb/betterSqliteFactory.js';
@@ -26,6 +27,7 @@ import {
   cacheImportedBase64Image,
   importedUserContent,
   parseImageDataUrl,
+  stripCompleteIdeOpenedFileBlocks,
   type ImportedImageRef,
 } from './imported-user-content.js';
 
@@ -880,7 +882,8 @@ function getDesktopCodexHome(): string {
     /* fallback for non-Electron test runners */
   }
 
-  const dirName = BRAND_IDENTITY.userDataDirName;
+  // 兜底路径按区域取目录名(global 构建的 userData 是 CindyGlobal,同机双装分库)。
+  const dirName = brandUserDataDirName(CURRENT_CINDY_REGION);
   if (process.platform === 'darwin') {
     return path.join(os.homedir(), 'Library', 'Application Support', dirName, 'codex-home');
   }
@@ -1640,7 +1643,8 @@ export function parseCodexRolloutMessageLine(
   if (payload.type !== 'message') return null;
   const role = payload.role === 'assistant' ? 'assistant' : payload.role === 'user' ? 'user' : null;
   if (!role) return null;
-  const text = extractContentText(payload.content).trim();
+  const rawText = extractContentText(payload.content);
+  const text = (role === 'user' ? stripCompleteIdeOpenedFileBlocks(rawText) : rawText).trim();
   if (!text) return null;
   return {
     lineNo,
@@ -1670,7 +1674,8 @@ async function parseCodexRolloutMessageLineForImport(
   const role = payload.role === 'assistant' ? 'assistant' : payload.role === 'user' ? 'user' : null;
   if (!role) return null;
 
-  const text = extractContentText(payload.content).trim();
+  const rawText = extractContentText(payload.content);
+  const text = (role === 'user' ? stripCompleteIdeOpenedFileBlocks(rawText) : rawText).trim();
   const images = role === 'user'
     ? await extractCodexUserImages(payload.content, sessionId, lineNo)
     : [];

@@ -101,16 +101,18 @@ describe('automation-generated sessions', () => {
   });
 
   it('keeps scheduler sessions in the desktop-visible source contract', () => {
-    // feishu 是合法 source 但不进 desktop sidebar；slack / discord 进入 sidebar。
+    // feishu / slack / discord 三个 IM 渠道均进 desktop sidebar
+    // (feishu 2026-07-16 起以「对话」分组回归, 见 sessionSource.ts 注释)。
     expect(DESKTOP_VISIBLE_SESSION_SOURCES).toEqual([
       'desktop',
+      'feishu',
       'slack',
       'discord',
       'scheduler',
       'learn',
       'shared',
     ]);
-    expect(DESKTOP_VISIBLE_SESSION_SOURCES).not.toContain('feishu');
+    expect(DESKTOP_VISIBLE_SESSION_SOURCES).toContain('feishu');
     expect(DESKTOP_VISIBLE_SESSION_SOURCES).toContain('discord');
 
     expect(normalizeSessionSource('desktop')).toBe('desktop');
@@ -190,9 +192,7 @@ describe('automation-generated sessions', () => {
     expect(groups[0].schedules.map((schedule) => schedule.scheduleName)).toEqual([
       'Dialogue check',
     ]);
-    expect(groups[0].schedules[0].sessions.map((session) => session.id)).toEqual([
-      'dialogue-run',
-    ]);
+    expect(groups[0].schedules[0].sessions.map((session) => session.id)).toEqual(['dialogue-run']);
 
     expect(groups[1]).toMatchObject({
       workingDir: '/Users/dash/repo',
@@ -243,9 +243,7 @@ describe('automation-generated sessions', () => {
       }),
     ]);
 
-    expect(grouped.dialogues.map((session) => session.id)).toEqual([
-      'dialogue-auto',
-    ]);
+    expect(grouped.dialogues.map((session) => session.id)).toEqual(['dialogue-auto']);
     expect(grouped.projects).toHaveLength(1);
     expect(grouped.projects[0]).toMatchObject({
       workingDir: '/Users/dash/repo',
@@ -277,17 +275,13 @@ describe('automation-generated sessions', () => {
       }),
     ]);
 
-    expect(grouped.unclassified.map((session) => session.id)).toEqual([
-      'manual-draft',
-    ]);
+    expect(grouped.unclassified.map((session) => session.id)).toEqual(['manual-draft']);
     expect(grouped.projects).toHaveLength(1);
     expect(grouped.projects[0]).toMatchObject({
       workingDir: '/Users/dash/repo',
       displayName: 'repo',
     });
-    expect(grouped.projects[0].sessions.map((session) => session.id)).toEqual([
-      'scheduler-bound',
-    ]);
+    expect(grouped.projects[0].sessions.map((session) => session.id)).toEqual(['scheduler-bound']);
   });
 
   it('keeps a single automation-generated session as an ordinary sidebar row', () => {
@@ -392,10 +386,7 @@ describe('automation-generated sessions', () => {
       },
     });
     if (entries[1].kind !== 'automation-group') throw new Error('expected automation group');
-    expect(entries[1].group.sessions.map((session) => session.id)).toEqual([
-      'jira-2',
-      'jira-1',
-    ]);
+    expect(entries[1].group.sessions.map((session) => session.id)).toEqual(['jira-2', 'jira-1']);
     expect(entries[2]).toEqual({ kind: 'session', session: sessions[3] });
   });
 
@@ -426,9 +417,24 @@ describe('automation-generated sessions', () => {
       id: 'schedule:sched-jira',
       title: 'Jira 自动修复',
       sessions: [
-        makeSession({ id: 'jira-old', title: 'BUG-old', source: 'scheduler', updatedAt: '2026-07-01T00:00:00.000Z' }),
-        makeSession({ id: 'jira-new', title: 'BUG-new', source: 'scheduler', updatedAt: '2026-07-08T00:00:00.000Z' }),
-        makeSession({ id: 'jira-mid', title: 'BUG-mid', source: 'scheduler', updatedAt: '2026-07-05T00:00:00.000Z' }),
+        makeSession({
+          id: 'jira-old',
+          title: 'BUG-old',
+          source: 'scheduler',
+          updatedAt: '2026-07-01T00:00:00.000Z',
+        }),
+        makeSession({
+          id: 'jira-new',
+          title: 'BUG-new',
+          source: 'scheduler',
+          updatedAt: '2026-07-08T00:00:00.000Z',
+        }),
+        makeSession({
+          id: 'jira-mid',
+          title: 'BUG-mid',
+          source: 'scheduler',
+          updatedAt: '2026-07-05T00:00:00.000Z',
+        }),
       ],
       attentionSessionIds: [],
     };
@@ -718,11 +724,15 @@ describe('automation-generated sessions', () => {
     expect(source).toContain('setCountdownNowMs(Date.now())');
     expect(source).toContain('window.setInterval');
     // 下次运行倒计时不再进 meta,而是作为整行 hover tooltip 的内容。
-    expect(source).toContain('formatSidebarFutureTime(group.nextFireAt, t, new Date(countdownNowMs))');
+    expect(source).toContain(
+      'formatSidebarFutureTime(group.nextFireAt, t, new Date(countdownNowMs))',
+    );
     // rowTooltip 现在同时展示「下次运行倒计时 + 累计运行次数」;countdownText 来自
     // shouldTickCountdown 分支,runCountText 走既有 runCount i18n。
     expect(source).toContain('const countdownText = shouldTickCountdown');
-    expect(source).toContain("t('ccAgent.sidebar.automationGroup.runCount', { count: group.sessions.length })");
+    expect(source).toContain(
+      "t('ccAgent.sidebar.automationGroup.runCount', { count: group.sessions.length })",
+    );
     expect(source).toContain('text={rowTooltip}');
     expect(source).toContain('side="right"');
     // 点击行空白 = 点击标题:共享 openPrimarySession,行 div 挂 onClick,内部 chevron /
@@ -733,7 +743,9 @@ describe('automation-generated sessions', () => {
     expect(source).toContain('onClick={openLatestSession}');
     expect(source).not.toMatch(/role=\{latestSession \? 'button'/);
     expect(source).toContain("group.scheduleStatus === 'active'");
-    expect(source).toContain("scheduleId && !menuOpen && 'group-hover:opacity-0 group-focus-within/slot:opacity-0'");
+    expect(source).toContain(
+      "scheduleId && !menuOpen && 'group-hover:opacity-0 group-focus-within/slot:opacity-0'",
+    );
     expect(source).toContain("menuOpen && 'opacity-0'");
     expect(source).toContain('disabled={!latestSession}');
     expect(source).toContain('<Clock');
@@ -758,14 +770,13 @@ describe('automation-generated sessions', () => {
     expect(source).toContain('setShowAll(false)');
     // 「显示全部 N 个」复用普通对话同款文案 key,溢出时才出现。
     expect(source).toContain('childView.isOverflowing');
-    expect(source).toContain("t('ccAgent.sidebar.showAllSessions', { count: childView.totalCount })");
+    expect(source).toContain(
+      "t('ccAgent.sidebar.showAllSessions', { count: childView.totalCount })",
+    );
   });
 
   it('refreshes the shared session store when a schedule binds a newly created session', () => {
-    const source = readTextLf(
-      new URL('../lib/sessionsStore.ts', import.meta.url),
-      'utf8',
-    );
+    const source = readTextLf(new URL('../lib/sessionsStore.ts', import.meta.url), 'utf8');
 
     expect(source).toContain('maker?.schedule');
     expect(source).toContain("event.type === 'session-bound'");
@@ -789,13 +800,9 @@ describe('automation-generated sessions', () => {
       .slice(fireStart, turnListenerStart)
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/^\s*\/\/.*$/gm, '');
-    const backfillMatches = [
-      ...fireSetupSource.matchAll(/\bawait\s+backfillSessionMeta\s*\(/g),
-    ];
+    const backfillMatches = [...fireSetupSource.matchAll(/\bawait\s+backfillSessionMeta\s*\(/g)];
     const sessionBoundMatches = [
-      ...fireSetupSource.matchAll(
-        /\bawait\s+ctx\.onSessionBound\?\.\(session\.id\)/g,
-      ),
+      ...fireSetupSource.matchAll(/\bawait\s+ctx\.onSessionBound\?\.\(session\.id\)/g),
     ];
 
     expect(backfillMatches).toHaveLength(1);
@@ -841,10 +848,7 @@ describe('automation-generated sessions', () => {
       new URL('../../main/scheduler-host/storage.ts', import.meta.url),
       'utf8',
     );
-    const preloadSource = readTextLf(
-      new URL('../../preload/preload.ts', import.meta.url),
-      'utf8',
-    );
+    const preloadSource = readTextLf(new URL('../../preload/preload.ts', import.meta.url), 'utf8');
 
     expect(scheduleIndexHookSource).toContain('loadScheduleSidebarIndexRuns()');
     expect(scheduleIndexHookSource).not.toContain('RUNS_PER_SCHEDULE_LIMIT');
@@ -899,14 +903,10 @@ describe('automation-generated sessions', () => {
       new URL('../features/scheduler/hooks/useScheduleCostSummaries.ts', import.meta.url),
       'utf8',
     );
-    const preloadSource = readTextLf(
-      new URL('../../preload/preload.ts', import.meta.url),
-      'utf8',
+    const preloadSource = readTextLf(new URL('../../preload/preload.ts', import.meta.url), 'utf8');
+    const zh = JSON.parse(
+      readTextLf(new URL('../i18n/locales/zh-CN/common.json', import.meta.url), 'utf8'),
     );
-    const zh = JSON.parse(readTextLf(
-      new URL('../i18n/locales/zh-CN/common.json', import.meta.url),
-      'utf8',
-    ));
 
     expect(formatUsd(0)).toBe('$0.00');
     expect(formatUsd(0.001)).toBe('<$0.01');
@@ -915,7 +915,7 @@ describe('automation-generated sessions', () => {
     expect(storageSource).toContain('messages.agentMeta');
     expect(storageSource).toContain('scheduleOriginIdFromAgentMeta');
     expect(storageSource).toContain("origin?.kind !== 'scheduler'");
-    expect(storageSource).toContain('billableTurnCostUsdFromAgentMeta');
+    expect(storageSource).toContain('turnCostFromAgentMeta');
     expect(storageSource).toContain('turnCostIsEstimate === true');
     expect(storageSource).toContain('SQLITE_IN_CHUNK_SIZE');
     expect(storageSource).toContain("when 'user' then 0 else 1 end");
@@ -926,7 +926,7 @@ describe('automation-generated sessions', () => {
     expect(storageSource).toContain('legacyScheduleNameFromSessionTitle(session.title)');
     expect(storageSource).toContain('listLegacyAliasesForSchedule');
     expect(storageSource).toContain('inArray(sessions.title, titles)');
-    expect(storageSource).toContain('legacyAliases.has(legacyScheduleKey({');
+    expect(storageSource).toContain('legacyAliases.has(');
     expect(storageSource).toContain('directScheduleId && directScheduleId !== schedule.id');
     expect(preloadSource).toContain('listCostSummaries');
     expect(hookSource).toContain('onUsageSessionSpendChanged');
@@ -937,13 +937,15 @@ describe('automation-generated sessions', () => {
     expect(taskListCellSource).toContain('scheduler.cell.totalCost');
     expect(taskListCellSource).toContain('formatUsd(totalCostUsd)');
     expect(runHistoryPaneSource).toContain('sessionCostMap');
-    expect(runHistoryPaneSource).toContain('sessionCostUsd={resolveRunCost(r)}');
+    expect(runHistoryPaneSource).toContain('sessionCostUsd={resolveRunCost(r).totalCostUsd}');
     expect(runHistoryCardSource).toContain('isLegacySessionRun');
     expect(runHistoryCardSource).toContain("!isLegacySessionRun && run.status !== 'running'");
     expect(runHistoryCardSource).toContain('scheduler.runs.sessionCost');
     expect(runHistoryCardSource).toContain('formatUsd(sessionCostUsd)');
     expect(zh.scheduler.cell.totalCost).toBe('开销 {{cost}}');
+    expect(zh.scheduler.cell.totalValue).toBe('价值 {{value}}');
     expect(zh.scheduler.runs.sessionCost).toBe('会话开销 {{cost}}');
+    expect(zh.scheduler.runs.sessionValue).toBe('会话价值 {{value}}');
   });
 
   it('routes automation group menu actions through the scheduler APIs', () => {
@@ -977,14 +979,18 @@ describe('automation-generated sessions', () => {
       'utf8',
     );
 
-    expect(deleteHookSource).toContain("export type ScheduleGeneratedSessionDisposition = 'keep' | 'archive' | 'delete'");
+    expect(deleteHookSource).toContain(
+      "export type ScheduleGeneratedSessionDisposition = 'keep' | 'archive' | 'delete'",
+    );
     expect(deleteHookSource).toContain('window.electronAPI.maker.schedule.listRuns(');
     expect(deleteHookSource).toContain('RUNS_PER_DELETE_PREVIEW_LIMIT');
     expect(deleteHookSource).toContain('target.knownSessionIds ?? []');
     expect(deleteHookSource).toContain('window.electronAPI.maker.projectAutomation.removeSchedule');
     expect(deleteHookSource).toContain('window.electronAPI.maker.schedule.delete(target.id)');
     expect(deleteHookSource).toContain("if (disposition === 'keep') return []");
-    expect(deleteHookSource).toContain("sessionService.update(sessionId, { status: 'archived', pinnedAt: null })");
+    expect(deleteHookSource).toContain(
+      "sessionService.update(sessionId, { status: 'archived', pinnedAt: null })",
+    );
     expect(deleteHookSource).toContain("sessionService.update(sessionId, { status: 'deleted' })");
     expect(deleteHookSource).toContain('window.electronAPI.cleanupSessionImages(sessionId)');
     expect(deleteHookSource).toContain('makerChatStore.closeSessionQuery(sessionId)');
@@ -1001,14 +1007,10 @@ describe('automation-generated sessions', () => {
 
     expect(hasSessionAttention('auto-run')).toBe(true);
     expect(hasSessionAttention('manual-run')).toBe(true);
-    expect([...getSessionAttentionSnapshot()].sort()).toEqual([
-      'auto-run',
-      'manual-run',
-    ]);
+    expect([...getSessionAttentionSnapshot()].sort()).toEqual(['auto-run', 'manual-run']);
 
     expect(clearSessionAttentionMany(['auto-run'])).toBe(1);
     expect(hasSessionAttention('auto-run')).toBe(false);
     expect(hasSessionAttention('manual-run')).toBe(true);
   });
-
 });

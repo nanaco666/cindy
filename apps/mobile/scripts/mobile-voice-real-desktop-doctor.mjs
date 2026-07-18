@@ -376,7 +376,7 @@ function normalizeBaseUrl(value) {
   return String(value || DEFAULT_API_BASE).replace(/\/+$/, '');
 }
 
-// deriveDeviceLinkApiBase 收敛至共享 lib(生产域名走 config/production-endpoints.json 权威源)
+// deriveDeviceLinkApiBase 收敛至共享 lib(仅本地 3333→3335 端口推导;生产域名分支已随 apiBaseUrl 退役删除)
 import { deriveDeviceLinkApiBase } from './lib/device-link-base.mjs';
 
 function parseNonNegativeInteger(value, fallback) {

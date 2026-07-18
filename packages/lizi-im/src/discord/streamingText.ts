@@ -79,12 +79,18 @@ class DiscordStreamingTextHandle implements StreamingTextHandle {
       }
     }
 
+    // 正文图与 tool_result 账本图按 absPath 去重——同一张图两个来源都到场时
+    // (ghost 读文档 xdt_media_inline 内联场景)只上传一份。
     const imageAbsPaths = [...this.extraImageAbsPaths];
+    const seenAbsPaths = new Set(imageAbsPaths);
     const { text, imageUrls } = this.deps.markdownToDiscord(finalText);
     for (const url of imageUrls) {
       if (!this.deps.resolveImageUrl) continue;
       try {
-        imageAbsPaths.push(this.deps.resolveImageUrl(url));
+        const absPath = this.deps.resolveImageUrl(url);
+        if (seenAbsPaths.has(absPath)) continue;
+        seenAbsPaths.add(absPath);
+        imageAbsPaths.push(absPath);
       } catch {
         /* best-effort */
       }

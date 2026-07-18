@@ -98,7 +98,7 @@ vi.mock('../pendingInteractions', () => ({
   lookupPending: vi.fn(() => null),
 }));
 
-import { ui as slackUi } from '../../slack/uiText';
+import { ui as slackUi } from './threadUiFixture';
 import { readSessionTitle } from '../controlProjects';
 import { createCardActionHandler } from '../cardActionHandler';
 import { resolvePending } from '../pendingInteractions';

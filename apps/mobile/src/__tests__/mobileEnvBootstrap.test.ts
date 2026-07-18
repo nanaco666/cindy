@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { DEFAULT_API_BASE_URL, DEFAULT_DEVICE_LINK_API_BASE_URL } from '@/config/env';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,10 +9,11 @@ import {
 
 const roots: string[] = [];
 
+// 2026-07 端点清单重构后,.env 必填键收缩为构建身份 + 清单自举基址;
+// 业务端点初值 dev 走仓内 config/endpoint.json,不再进 .env 必填集。
 const productionEnv = {
-  EXPO_PUBLIC_FEISHU_APP_ID: 'cli_prod_real',
-  EXPO_PUBLIC_XDT_API_BASE_URL: 'https://api.prod.example.com',
-  EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL: 'https://relay.prod.example.com',
+  EXPO_PUBLIC_CINDY_AUTH_REGION: 'cn',
+  EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL: 'https://hotfix.example.invalid/app',
 };
 
 afterEach(() => {
@@ -34,38 +34,43 @@ describe('mobile simulator env bootstrap', () => {
   });
 
   it('preserves existing user values and only fills missing or empty required keys', () => {
-    const mobileDir = createMobileFixture({ production: { env: productionEnv } });
-    writeFileSync(join(mobileDir, '.env'), [
-      '# local overrides',
-      'EXPO_PUBLIC_FEISHU_APP_ID=cli_custom',
-      'EXPO_PUBLIC_XDT_API_BASE_URL=',
-      'EXPO_PUBLIC_XDT_DEV_LOGIN_ENABLED=1',
-      '',
-    ].join('\n'));
+    const mobileDir = createMobileFixture({
+      production: { env: productionEnv },
+    });
+    writeFileSync(
+      join(mobileDir, '.env'),
+      [
+        '# local overrides',
+        'EXPO_PUBLIC_CINDY_AUTH_REGION=global',
+        'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL=',
+        'EXPO_PUBLIC_XDT_DEV_LOGIN_ENABLED=1',
+        '',
+      ].join('\n'),
+    );
 
     const result = ensureMobileEnv({ mobileDir });
     const env = readEnvMap(join(mobileDir, '.env'));
 
     expect(result.created).toBe(false);
-    expect(result.addedKeys).toEqual([
-      'EXPO_PUBLIC_XDT_API_BASE_URL',
-      'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL',
-    ]);
-    expect(env.EXPO_PUBLIC_FEISHU_APP_ID).toBe('cli_custom');
-    expect(env.EXPO_PUBLIC_XDT_API_BASE_URL).toBe(productionEnv.EXPO_PUBLIC_XDT_API_BASE_URL);
-    expect(env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL).toBe(productionEnv.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL);
+    expect(result.addedKeys).toEqual(['EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL']);
+    expect(env.EXPO_PUBLIC_CINDY_AUTH_REGION).toBe('global');
+    expect(env.EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL).toBe(
+      productionEnv.EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL,
+    );
     expect(env.EXPO_PUBLIC_XDT_DEV_LOGIN_ENABLED).toBe('1');
   });
 
   it('replaces copied example placeholders and quoted empty values', () => {
     const mobileDir = createMobileFixture({ production: { env: productionEnv } });
     writeEnvExample(mobileDir);
-    writeFileSync(join(mobileDir, '.env'), [
-      'EXPO_PUBLIC_FEISHU_APP_ID=cli_xxxxxxxxxxxxxxxx',
-      'EXPO_PUBLIC_XDT_API_BASE_URL=""',
-      "EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL=''",
-      '',
-    ].join('\n'));
+    writeFileSync(
+      join(mobileDir, '.env'),
+      [
+        'EXPO_PUBLIC_CINDY_AUTH_REGION=',
+        'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL=""',
+        '',
+      ].join('\n'),
+    );
 
     const result = ensureMobileEnv({ mobileDir });
     const env = readEnvMap(join(mobileDir, '.env'));
@@ -77,20 +82,23 @@ describe('mobile simulator env bootstrap', () => {
   it('preserves real user values even when they are quoted', () => {
     const mobileDir = createMobileFixture({ production: { env: productionEnv } });
     writeEnvExample(mobileDir);
-    writeFileSync(join(mobileDir, '.env'), [
-      'EXPO_PUBLIC_FEISHU_APP_ID="cli_real_custom"',
-      "EXPO_PUBLIC_XDT_API_BASE_URL='https://api.custom.example.com'",
-      'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL="https://relay.custom.example.com"',
-      '',
-    ].join('\n'));
+    writeFileSync(
+      join(mobileDir, '.env'),
+      [
+        'EXPO_PUBLIC_CINDY_AUTH_REGION="global"',
+        'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL="https://hotfix.custom.example.invalid/app"',
+        '',
+      ].join('\n'),
+    );
 
     const result = ensureMobileEnv({ mobileDir });
     const env = readEnvMap(join(mobileDir, '.env'));
 
     expect(result.addedKeys).toEqual([]);
-    expect(env.EXPO_PUBLIC_FEISHU_APP_ID).toBe('"cli_real_custom"');
-    expect(env.EXPO_PUBLIC_XDT_API_BASE_URL).toBe("'https://api.custom.example.com'");
-    expect(env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL).toBe('"https://relay.custom.example.com"');
+    expect(env.EXPO_PUBLIC_CINDY_AUTH_REGION).toBe('"global"');
+    expect(env.EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL).toBe(
+      '"https://hotfix.custom.example.invalid/app"',
+    );
   });
 });
 
@@ -112,10 +120,12 @@ function readEnvMap(envPath: string) {
 }
 
 function writeEnvExample(mobileDir: string) {
-  writeFileSync(join(mobileDir, '.env.example'), [
-    'EXPO_PUBLIC_FEISHU_APP_ID=cli_xxxxxxxxxxxxxxxx',
-    `EXPO_PUBLIC_XDT_API_BASE_URL=${DEFAULT_API_BASE_URL}`,
-    `EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL=${DEFAULT_DEVICE_LINK_API_BASE_URL}`,
-    '',
-  ].join('\n'));
+  writeFileSync(
+    join(mobileDir, '.env.example'),
+    [
+      'EXPO_PUBLIC_CINDY_AUTH_REGION=cn',
+      'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL=',
+      '',
+    ].join('\n'),
+  );
 }

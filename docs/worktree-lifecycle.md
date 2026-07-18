@@ -2,7 +2,7 @@
 
 ## 背景
 
-XDMaker 现在用 `baseRepo/.xdt-worktrees/<name>` 给会话和 scheduler 任务创建 Git worktree。这个设计的目标是让多个 agent 会话可以在同一个项目上并行工作，同时避免直接污染用户的原始 checkout。
+Cindy 现在用 `baseRepo/.cindy-worktrees/<name>` 给会话和 scheduler 任务创建 Git worktree，并继续识别品牌迁移前的 `.xdt-worktrees` 路径。这个设计的目标是让多个 agent 会话可以在同一个项目上并行工作，同时避免直接污染用户的原始 checkout。
 
 当前实现已经覆盖了创建、池化复用、脏目录保护和侧边栏徽标，但生命周期权威还不够清晰：`worktrees.json`、`sessions.working_dir`、`sessions.worktree_path` 都在描述 worktree 状态，清理逻辑容易把仍被 session 使用的 worktree 当成可回收资源。
 

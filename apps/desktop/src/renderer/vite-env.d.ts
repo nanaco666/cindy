@@ -1,15 +1,19 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_FEISHU_APP_ID: string;
-  readonly VITE_API_BASE_URL: string;
+  readonly VITE_CINDY_AUTH_REGION: 'cn' | 'global';
+  /** 端点清单自举基址(唯一烘焙远程 URL);业务端点走 electronAPI.clientEndpoints。 */
+  readonly VITE_ENDPOINT_MANIFEST_BASE_URL: string;
 }
 
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
 
+type ModelAccessStatusPayload = import('../shared/modelAccess').ModelAccessStatus;
 type RsbWindowCommand = import('../shared/rightSidebarWindow').RsbWindowCommand;
+type DesktopLoginAction = import('../shared/authIpc').DesktopLoginAction;
+type DesktopLoginActionResult = import('../shared/authIpc').DesktopLoginActionResult;
 
 /* ── Environment check ── */
 
@@ -309,6 +313,13 @@ interface AuthUser {
   email: string | null;
   defaultModel: string;
   defaultEffort: string;
+  role?: 'user' | 'admin';
+  isCanary?: boolean;
+  membershipKind: 'personal' | 'org';
+  membershipRole: 'owner' | 'admin' | 'member';
+  orgId: string | null;
+  orgName: string | null;
+  passportId: string;
 }
 
 /* ── Google integration ── */
@@ -316,14 +327,6 @@ interface AuthUser {
 type GoogleAuthStatus = 'not_connected' | 'connecting' | 'connected' | 'reconnect_required';
 
 type FeishuBotStatus = 'idle' | 'testing' | 'connected' | 'reconnecting' | 'conflict' | 'error';
-
-/** lizi-im SlackIM 的 transport 状态(IMStatus union 的 mirror)。 */
-type SlackBotTransportStatus =
-  | { kind: 'idle' }
-  | { kind: 'connecting' }
-  | { kind: 'connected'; appId: string }
-  | { kind: 'conflict'; appId: string }
-  | { kind: 'error'; reason: string };
 
 /** lizi-im DiscordIM 的 transport 状态(IMStatus union 的 mirror)。 */
 type DiscordBotTransportStatus =
@@ -360,18 +363,10 @@ interface FeishuBotRegistrationStatusPayload {
   error?: string;
 }
 
-/* ── chat-data-localization (V0.5: 2-state migration) ── */
-
-type MigrationStatusPayload =
-  | { status: 'none' }
-  | { status: 'pending'; totalSessions: number; totalMessages: number };
-
 /** Auth state pushed from main → renderer via 'auth:state-change'. */
 interface AuthStateChangePayload {
   user: AuthUser | null;
   isAuthenticated: boolean;
-  /** Latest migration snapshot from login/refresh response (V0.5 2-state). */
-  migration?: MigrationStatusPayload;
   /** SkillHub 跨设备识别：本机 deviceId（machineIdSync 结果），登录前后都有值 */
   deviceId: string;
 }
@@ -379,30 +374,6 @@ interface AuthStateChangePayload {
 interface AuthSessionExpiredPayload {
   message: string;
 }
-
-/** chat-data-localization F4: progress event payload (C8). */
-type MigrationProgressPayload =
-  | { phase: 'idle' }
-  | {
-      phase: 'running';
-      synced: number;
-      total: number;
-      etaSeconds: number | null;
-    }
-  | {
-      phase: 'retrying';
-      synced: number;
-      total: number;
-      attempt: number;
-      nextDelayMs: number;
-    }
-  | {
-      phase: 'failed';
-      synced: number;
-      total: number;
-      batchAttempts: number;
-    }
-  | { phase: 'done'; synced: number; total: number };
 
 /** chat-data-localization F1 V0.4: corruption-restored toast payload (C10). */
 interface CorruptionRestoredPayload {
@@ -882,6 +853,8 @@ interface ElectronAPI {
   platform: string;
   osRelease: string;
   appVersion: string;
+  /** 运行期端点清单(main 启动时远程 → 缓存 → 烘焙解析;重启生效)。 */
+  clientEndpoints: { websiteUrl: string };
   appDisplayVersion: string;
   appDisplayVersionDetail: string;
   preferredSystemLocale: ApplicationMenuLocale;
@@ -1006,6 +979,14 @@ interface ElectronAPI {
     uninstall: (id: string) => Promise<{ ok: true }>;
     /** 启用/停用(停用 = 面板休眠,布局位置保留)。 */
     setEnabled: (id: string, enabled: boolean) => Promise<{ ok: true }>;
+    /** 目录级禁用清单(设置 → 插件 项目范围视图;sendSync 切换同帧渲染)。 */
+    workdirPrefsSync: (workdir: string) => { disabled: string[] };
+    /** 写/清一条目录级例外(disabled=false 即清除,回到跟随全局)。 */
+    setWorkdirDisabled: (
+      workdir: string,
+      id: string,
+      disabled: boolean,
+    ) => Promise<{ disabled: string[] }>;
     /** 双击 .cindy 的待装路径,原子取走(取即清空;无则 null)。 */
     takePendingInstall: () => Promise<{ filePath: string | null }>;
     /**
@@ -1241,6 +1222,10 @@ interface ElectronAPI {
       historyRaw?: string | null;
     }) => VoiceInputDataSnapshot;
     updateSettings: (patch: Partial<VoiceInputSettingsData>) => Promise<VoiceInputSettingsData>;
+    updateShortcutSetting: (shortcut: VoiceInputShortcut | null) => Promise<
+      | { ok: true; settings: VoiceInputSettingsData }
+      | { ok: false; error: string; errorCode?: VoiceInputGlobalErrorCode }
+    >;
     deleteDictionaryEntries: (entryIds: string[]) => Promise<VoiceInputSettingsData>;
     recordDictionaryLearningActions: (actions: VoiceInputDictionaryLearningAction[]) => Promise<{
       settings: VoiceInputSettingsData;
@@ -1367,38 +1352,43 @@ interface ElectronAPI {
   safeStorageRemove: (key: string) => Promise<{ success: boolean; error?: string }>;
   /** CC 网络调试日志开关 (admin experimental). main 端 mutate process.env.XDT_CC_DEBUG_NET。 */
   ccSetDebugNet: (enabled: boolean) => Promise<{ ok: true }>;
+  /** 网关凭据自动下发(model-access,类型见 shared/modelAccess.ts)。 */
+  modelAccess: {
+    getStatus: () => Promise<ModelAccessStatusPayload>;
+    retry: () => Promise<ModelAccessStatusPayload>;
+    /** 轮换密钥;失败 reject(IPC 错误经 extractIpcError 解码)。 */
+    rotate: () => Promise<ModelAccessStatusPayload>;
+    onStatusChange: (callback: (status: ModelAccessStatusPayload) => void) => () => void;
+  };
   // ── Auth (delegated to main process authManager) ──
   authInitialize: () => Promise<{
     user: AuthUser | null;
     isAuthenticated: boolean;
-    /** chat-data-localization V0.5: present when refresh succeeded on cold start. */
-    migration?: MigrationStatusPayload;
     /** SkillHub 跨设备识别：本机 deviceId，登录前后都有值 */
     deviceId: string;
   }>;
-  authLogin: () => Promise<
-    | {
-        success: true;
-        user: AuthUser;
-        /** chat-data-localization V0.5: server's per-(userId, deviceId) snapshot. */
-        migration: MigrationStatusPayload;
-      }
-    | { success: false; code: string; statusCode: number; message: string }
-  >;
-  authDevLogin: () => Promise<
-    | {
-        success: true;
-        user: AuthUser;
-        /** chat-data-localization V0.5: server's per-(userId, deviceId) snapshot. */
-        migration: MigrationStatusPayload;
-      }
-    | { success: false; code: string; statusCode: number; message: string }
-  >;
+  authGetLoginState: () => Promise<DesktopLoginActionResult>;
+  authDispatchLoginAction: (action: DesktopLoginAction) => Promise<DesktopLoginActionResult>;
   authLogout: () => Promise<void>;
   authRefresh: () => Promise<boolean>;
   onAuthStateChange: (callback: (state: AuthStateChangePayload) => void) => () => void;
   onAuthSessionExpired: (callback: (state: AuthSessionExpiredPayload) => void) => () => void;
   onTapdbDailyActive: (callback: (payload: { date: string }) => void) => () => void;
+
+  // ── Profile 编辑(设置 → 用户卡片编辑名字 / 头像;直写服务端,跨设备生效) ──
+  profileGetState: () => Promise<{
+    name: string;
+    avatarUrl: string | null;
+  }>;
+  profileChooseAvatar: () => Promise<{
+    canceled: boolean;
+    filePath?: string;
+    previewDataUrl?: string;
+  }>;
+  profileUpdate: (params: {
+    name: string | null;
+    avatar: { type: 'keep' } | { type: 'set'; filePath: string } | { type: 'reset' };
+  }) => Promise<{ ok: true }>;
 
   // Slack 官方 MCP(slackOfficial)已于 2026-07-15 退役(能力迁入内置意识 cindy-slack);
   // github / gitlab bridge 已于 2026-07-14 退役(GitHub 能力迁入内置意识
@@ -1432,24 +1422,6 @@ interface ElectronAPI {
     onConflict: (callback: (payload: { appId: string }) => void) => () => void;
     onRegistrationStatus: (
       callback: (payload: FeishuBotRegistrationStatusPayload) => void,
-    ) => () => void;
-  };
-
-  // ── Slack Bot (Settings → Slack Bot tab) ──
-  slackBot: {
-    getStatus: () => Promise<{
-      status: SlackBotTransportStatus;
-      linked: boolean;
-      teamId: string | null;
-      slackUserId: string | null;
-      slackName: string | null;
-    }>;
-    onStatusChange: (
-      callback: (update: {
-        status: SlackBotTransportStatus;
-        linked: boolean;
-        slackName: string | null;
-      }) => void,
     ) => () => void;
   };
 
@@ -1572,18 +1544,6 @@ interface ElectronAPI {
     error?: 'manifest_failed' | 'download_failed';
   }>;
   onAppUpdateProgress: (callback: (payload: AppUpdateProgressPayload) => void) => () => void;
-  apiRequest: (params: {
-    path: string;
-    method?: string;
-    body?: unknown;
-  }) => Promise<{ ok: boolean; status: number; data: unknown }>;
-  imageUpload: {
-    putToOss: (params: {
-      putUrl: string;
-      contentType: string;
-      bytes: ArrayBuffer;
-    }) => Promise<{ ok: boolean; status: number; error?: string }>;
-  };
   fileBrowser: {
     listDir: (params: {
       /** 非空 = SSH remote 会话,操作经远端 file-service 执行(main 侧路由)。 */
@@ -1743,7 +1703,6 @@ interface ElectronAPI {
       ) => void,
     ) => () => void;
   };
-  testApiKeyConnection: (key: string) => Promise<{ success: boolean; error?: string }>;
   showOpenDirectoryDialog: () => Promise<{ canceled: boolean; path?: string }>;
   openExternal: (url: string) => Promise<{ success: boolean }>;
 
@@ -1813,7 +1772,7 @@ interface ElectronAPI {
   ) => () => void;
 
   /**
-   * xdt-maker:// 深度链接 + --open-folder 右键菜单订阅:main 端在 open-url /
+   * cindy://(+ 历史 xdt-maker://)深度链接 + --open-folder 右键菜单订阅:main 端在 open-url /
    * second-instance / 冷启动 argv 解析后通过此 channel 推 payload。
    * renderer 端 MainLayout 订阅 → navigate (session) / requestProjectFocus
    * (project) / patchDraft+navigate('/cc-agent/new') (new-session)。
@@ -2451,7 +2410,7 @@ interface ElectronAPI {
   }>;
   /** Tell main process to apply the update and relaunch the app.
    *  `theme` is the renderer's *resolved* light/dark (after collapsing 'system'),
-   *  forwarded to xdt-updater so its splash matches the app the user is seeing. */
+   *  forwarded to cindy-updater so its splash matches the app the user is seeing. */
   relaunchToUpdate: (theme: 'light' | 'dark') => void;
   /** Startup-only apply path; main performs a final unattended-safety check. */
   autoRelaunchToUpdate: (theme: 'light' | 'dark') => Promise<{
@@ -2798,6 +2757,18 @@ interface ElectronAPI {
     }) => void,
   ) => () => void;
 
+  // ── 首登轻量数据迁移(mToc) — 老 userData → Cindy 一次性复制迁移弹窗 ──
+  legacyMigration: {
+    /** 订阅弹窗阶段推送。payload: { phase } */
+    onState: (
+      cb: (data: { phase: 'confirm' | 'running' | 'done' | 'failed' }) => void,
+    ) => () => void;
+    /** 挂载时补拉当前阶段(main 先推送、renderer 后订阅时不丢态)。 */
+    getState: () => Promise<{ phase: 'confirm' | 'running' | 'done' | 'failed' | null }>;
+    /** confirm 态点「确定」放行迁移;failed 态点「继续」清态。 */
+    confirm: () => Promise<void>;
+  };
+
   // ── chat-data-localization (M-FE2) — local SQLite IPC bridge ──
   localDb: {
     /** Open / migrate the per-user db file. Failure → fatal dialog + ready:false. */
@@ -2833,6 +2804,14 @@ interface ElectronAPI {
         extraDirs?: string[];
       }) => Promise<import('@/lib/ccAgent.types').Session>;
       get: (id: string) => Promise<import('@/lib/ccAgent.types').Session>;
+      restoreIfArchived: (
+        id: string,
+        expected: {
+          workingDir: string | null;
+          workspaceKind: import('@/lib/ccAgent.types').WorkspaceKind;
+          remoteHostId: string | null;
+        },
+      ) => Promise<import('@/lib/ccAgent.types').Session | null>;
       update: (
         id: string,
         patch: {
@@ -3080,24 +3059,6 @@ interface ElectronAPI {
           sessionId: string;
           patch: Partial<import('@/lib/ccAgent.types').Session>;
         }) => void,
-      ) => () => void;
-    };
-    migration: {
-      getStatus: () => Promise<
-        'pending' | 'in_progress' | 'done' | 'skipped' | null
-      >;
-      setStatus: (s: 'done' | 'skipped') => Promise<void>;
-      start: (totals: {
-        totalSessions: number;
-        totalMessages: number;
-      }) => Promise<void>;
-      resume: () => Promise<void>;
-      abort: () => Promise<void>;
-      markDone: (
-        deviceName: string,
-      ) => Promise<{ ok: true; alreadyMigrated?: boolean }>;
-      onProgress: (
-        cb: (p: MigrationProgressPayload) => void,
       ) => () => void;
     };
     /** V0.4 (C10): one-shot toast trigger when ensureReady ran two-level fallback. */

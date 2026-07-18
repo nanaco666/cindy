@@ -44,7 +44,7 @@ import { BrowserWindow } from 'electron';
 
 import { createLogger } from '../logger';
 import { readClaudeApiKey } from '../maker-host/auth-adapters';
-import { CLAUDE_UPSTREAM_ENDPOINT } from '../maker-host/runtime-configs';
+import { claudeUpstreamEndpoint } from '../maker-host/runtime-configs';
 
 const log = createLogger('claudeAccountUsage');
 
@@ -176,7 +176,7 @@ async function fetchOnce(): Promise<ClaudeAccountUsageSnapshot | null> {
   const apiKey = readClaudeApiKey();
   // 直连真上游,不走本地 anthropic-compat-proxy —— 这条账号查询路径跟 Claude Code 子进程
   // 无关,proxy 只服务于子进程的 chat completion 请求。
-  const baseUrl = CLAUDE_UPSTREAM_ENDPOINT.trim();
+  const baseUrl = claudeUpstreamEndpoint().trim();
   if (!apiKey || !baseUrl) return null;
 
   const controller = new AbortController();

@@ -130,7 +130,13 @@ export function createImSessionRepo(
         const now = Date.now();
         await db
           .update(sessions)
-          .set({ status: 'active', userSendAt: now, updatedAt: now })
+          .set({
+            status: 'active',
+            userSendAt: now,
+            updatedAt: now,
+            // 渠道声明了归属分组时顺手校正(老行可能还是默认 'project')
+            ...(ns.workspaceKind ? { workspaceKind: ns.workspaceKind } : {}),
+          })
           .where(eq(sessions.id, id));
         log.info(`revived soft-deleted ${ns.source} session id=${row.id} (was ${row.status})`);
         // 软删行已从 sidebar 消失,patched 增量对不存在的行无效;
@@ -172,6 +178,7 @@ export function createImSessionRepo(
       await db.insert(sessions).values({
         id: row.id,
         title: ns.defaultTitle(userId),
+        ...(ns.workspaceKind ? { workspaceKind: ns.workspaceKind } : {}),
         workingDir: row.workingDir,
         model: row.model,
         effort: row.effort,
@@ -192,6 +199,7 @@ export function createImSessionRepo(
         set: {
           status: 'active',
           source: ns.source,
+          ...(ns.workspaceKind ? { workspaceKind: ns.workspaceKind } : {}),
           ...ns.extraInsertColumns(botContextId, userId),
           updatedAt: now,
           userSendAt: now,

@@ -14,7 +14,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { app, safeStorage, ipcMain, BrowserWindow, net } from 'electron';
 
-import { createIM, createDiscordIM, createFeishuIM, createSlackIM, type IMHost } from 'lizi-im';
+import { createIM, createDiscordIM, createFeishuIM, type IMHost } from 'lizi-im';
 
 import { createLogger } from '../logger';
 import { resolveSafe as resolveXdtImageUrl } from '../imageCacheStore';
@@ -26,7 +26,6 @@ import {
 } from '../cindy-media/integrationCache';
 import { pinBlob } from '../cindy-media/ledger';
 import { t } from '../i18n';
-import { createSlackRelayTransport } from './slack/transport';
 import { discordUiText } from './discord/uiText';
 
 const SAFE_STORAGE_DIR = (): string => path.join(app.getPath('userData'), 'safe-storage');
@@ -43,7 +42,6 @@ function resolveManagedImageAbsPath(url: string): string {
 const host: IMHost = {
   paths: {
     feishuMediaDir: path.join(app.getPath('userData'), 'cc-agent', 'feishu-media'),
-    slackMediaDir: path.join(app.getPath('userData'), 'cc-agent', 'slack-media'),
     discordMediaDir: path.join(app.getPath('userData'), 'cc-agent', 'discord-media'),
   },
   // cindy-media 媒体总仓回调(迁移第 3 步,规则 25):IM 入站图片按平台 token
@@ -150,15 +148,9 @@ const host: IMHost = {
 };
 
 export const feishuIm = createFeishuIM(host);
-// SlackIM 不直连 Slack — transport 是我们 server 的 SSE + 代理(见
-// slack/transport.ts);xdt-image:// 解析注入 imageCacheStore(流式 finalize
-// 上传文内图片用)。
-export const slackIm = createSlackIM(host, createSlackRelayTransport(), {
-  resolveImageUrl: resolveManagedImageAbsPath,
-});
 export const discordIm = createDiscordIM(host, {
   resolveImageUrl: resolveManagedImageAbsPath,
   expiredCardNotice: discordUiText.expiredCardNotice,
   ownerNoticeText: (phase) => t(`settings.discordBot.ownerNotice.${phase}`),
 });
-export const im = createIM([feishuIm, slackIm, discordIm]);
+export const im = createIM([feishuIm, discordIm]);

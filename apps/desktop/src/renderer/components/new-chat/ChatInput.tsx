@@ -43,7 +43,6 @@ import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/lib/toast';
 import { mapIpcErrorToI18nKey } from '@/utils/ipcError';
 import { Tip } from '@/components/ui/tooltip';
-import { useUserPreferences } from '@/contexts/UserPreferencesContext';
 import type { AttachedFile, MentionedResource, ImageAnnotationStroke } from '@/lib/fileTypes';
 import {
   formatQuotesForSend,
@@ -67,7 +66,6 @@ import {
 } from '@/lib/composerDraftStore';
 import { ModelSelector, type ModelMemoryAccessors } from './ModelSelector';
 import { isSelectedSourceDisconnected, resolveEffort, resolveProviderSwitchEffort } from './sourceSwitch';
-import { nativeDefaultSourceId } from '@lizi/model-providers';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { PermissionSelector } from './PermissionSelector';
 import { ExtraDirsButton } from './ExtraDirsButton';
@@ -82,6 +80,7 @@ import {
 } from './FolderPickerPopover';
 import { SlashCommandPalette } from './SlashCommandPalette';
 import { expandGhostCommand } from '@/cindy-brain/ghostCommand';
+import { filterGhostsForWorkdir } from '@/cindy-brain/ghostWorkdirFilter';
 import { useInstalledGhosts } from '@/cindy-brain/useInstalledGhosts';
 import {
   attachGhostMediaToSession,
@@ -128,7 +127,11 @@ import { useAgentCapabilities, type AgentKind } from '@/hooks/useAgentCapabiliti
 import { useConnectedSource } from '@/hooks/useConnectedSource';
 import { useProviders } from '@/hooks/useProviders';
 import { useDeviceProviders } from '@/hooks/useDeviceProviders';
-import { connectedProvidersForAgent, sourcesForModel } from '@lizi/model-providers';
+import {
+  connectedProvidersForAgent,
+  effectiveSourceIdForModel,
+  sourcesForModel,
+} from '@lizi/model-providers';
 import { deriveModelsFromProviders, resolveFastSupported } from '@/lib/providerModels';
 import {
   getProviderModelEffort,
@@ -137,6 +140,7 @@ import {
   setProviderModelFast,
 } from '@/state/providerModelMemory';
 import {
+  getDraft,
   patchVendorPrefsPreservingModelChoice,
   setEffortForModel,
   setFastModeForModel,
@@ -597,7 +601,7 @@ function hasFocusMovedToInteractiveElement(
  *   - dir chip   → `@{relPath}/`
  *   - agent chip → `@.claude/agents/{name}.md` (falls back to `@{name}` when
  *                  the host tells us the mapping is stale — see submit handler)
- *   - session chip → `[title](xdt-maker://session/…)` / bare deep link href
+ *   - session chip → `[title](cindy://session/…)` / bare deep link href
  *   - plain text → as-is
  * Paragraphs are joined with `\n`.
  */
@@ -944,7 +948,6 @@ export function ChatInput({
   }, [sessionId, t]);
   // F-QUEUE-1 — preserve prior semantics
   const showStopButton = isAgentBusy ?? isStreaming;
-  const { preferences, updatePreferences } = useUserPreferences();
   const { confirm: confirmDialog } = useConfirmDialog();
 
   // ── ESC / history ref bridges for Tiptap handleKeyDown ────────────
@@ -1132,8 +1135,12 @@ export function ChatInput({
   // 会一直 settle 不了、selector 置灰吃满 5s 兜底。乐观显示(chip 不回落默认)仍由 pendingRemoteSwitch 承接。
   const [remoteSwitchInFlight, setRemoteSwitchInFlight] = useState(false);
 
-  const activeModel = pendingRemoteSwitch?.model ?? initialModel ?? preferences.defaultModel;
-  const activeEffort = pendingRemoteSwitch?.effort ?? initialEffort ?? preferences.defaultEffort;
+  // initialModel/initialEffort 缺失的瞬态(会话快照未加载)兜底:读本地草稿 lastByVendor
+  // (localStorage,按 agent 分槽、sanitize 恒有种子值)。默认模型/档位偏好已全量本地化,
+  // 不再依赖服务端 UserPreferences(登录态失效/离线时模型与档位选择必须照常工作)。
+  const localVendorDefaults = getDraft().lastByVendor[vendorKey === 'codex' ? 'codex' : 'cc'];
+  const activeModel = pendingRemoteSwitch?.model ?? initialModel ?? localVendorDefaults.model;
+  const activeEffort = pendingRemoteSwitch?.effort ?? initialEffort ?? localVendorDefaults.effort;
   const activePermissionMode: PermissionMode = initialPermissionMode ?? 'acceptEdits';
 
   // per-session 来源(供应商)选择。session.providerId 尚未在 Session 类型回流前,
@@ -1215,13 +1222,14 @@ export function ChatInput({
   const remoteProviders = useDeviceProviders(deviceLinkDeviceId);
   const providers = deviceLinkDeviceId ? remoteProviders.providers : localProviders.providers;
 
-  // 空態(设计 Q7NYAD「ChatInput 空态 · 模型选择器」):当前 agent 一个已连接来源都没有 →
+  // 空態(设计 Q7NYAD「ChatInput 空态 · 模型选择器」):当前模型一个已连接来源都没有 →
   // 模型选择器 trigger 化成「连接来源」CTA、Send 禁用。「有没有来源」走统一判定 hook
   // useConnectedSource —— 与 ModelSelector trigger / send 门禁同一条规则,不再各算(避免漂移)。
   // providersLoading 期间不判,避免有缓存的老用户首帧闪 CTA / 禁用态(规则 7)。
-  // 注:这是 agent 维度;更细的「该模型无来源」由下方 dispatchSend 的 sourcesForModel 预检兜底
-  // (覆盖"有连接来源但不 offer 当前模型"的罕见 case)。
-  const { hasConnectedSource, loading: providersLoading } = useConnectedSource(currentModelAgentKind);
+  const { hasConnectedSource, loading: providersLoading } = useConnectedSource(
+    currentModelAgentKind,
+    activeModel,
+  );
   const noConnectedSource = !!currentModelAgentKind && !providersLoading && !hasConnectedSource;
 
   // 会话显式选中的来源已断开(如外部删除订阅 OAuth 凭证):trigger 显示「已断开」错误态 +
@@ -1236,20 +1244,19 @@ export function ChatInput({
     isSelectedSourceDisconnected({
       providers,
       agent: currentModelAgentKind,
+      modelId: activeModel,
       selectedProviderId,
       providersLoading,
     });
 
-  // 当前**生效来源 id**(= ModelSelector 高亮的 activeSourceId 同口径):显式选中且仍可连
-  // → 用它;否则落到该 agent 的原生默认来源(cc→xd / codex→openai|xd)。providerModelMemory
+  // 当前**生效来源 id**(= ModelSelector 高亮的 activeSourceId 同口径):显式选中且仍可连、
+  // 且提供当前模型 → 用它;否则只在“提供当前模型”的来源里取原生默认。providerModelMemory
   // 按 (agent, 来源) 分槽记 (model, effort),写入 / 恢复都以这个 id 为 key,保证对称。
   const effectiveSourceId = useMemo<string | null>(() => {
     const kind = currentModelAgentKind;
     if (!kind) return null;
-    const rail = connectedProvidersForAgent(providers, kind);
-    if (selectedProviderId && rail.some((p) => p.id === selectedProviderId)) return selectedProviderId;
-    return nativeDefaultSourceId(rail, kind);
-  }, [providers, currentModelAgentKind, selectedProviderId]);
+    return effectiveSourceIdForModel(providers, selectedProviderId, activeModel, kind);
+  }, [providers, currentModelAgentKind, selectedProviderId, activeModel]);
 
   // 发送(草稿态建会话)时携带的**显式来源**:仅当本地选择仍在已连接来源栏内才带上
   // (与 effectiveSourceId 的高亮口径一致,即"所见即所得");否则带 null。
@@ -1259,9 +1266,10 @@ export function ChatInput({
   const sendProviderId = useMemo<string | null>(() => {
     const kind = currentModelAgentKind;
     if (!kind || !selectedProviderId) return null;
-    const rail = connectedProvidersForAgent(providers, kind);
-    return rail.some((p) => p.id === selectedProviderId) ? selectedProviderId : null;
-  }, [providers, currentModelAgentKind, selectedProviderId]);
+    return effectiveSourceIdForModel(providers, selectedProviderId, activeModel, kind) === selectedProviderId
+      ? selectedProviderId
+      : null;
+  }, [providers, currentModelAgentKind, selectedProviderId, activeModel]);
 
   // 非选中模型行的 effort/fast 记忆按上下文路由(隔离草稿与各会话,见 ModelMemoryAccessors /
   // pickMemoryScope)。这是「草稿默认值被会话内修改污染」bug 的核心隔离点:
@@ -1805,10 +1813,16 @@ export function ChatInput({
 
   // 意识指令确认胶囊:清单推给 GhostCommandDecoration(装/卸/唤醒/沉睡即时
   // 反映;plugin 不自己查 listSync,同步 IPC 不进 keystroke 热路径)。
+  // 目录级禁用同判(ghostWorkdirFilter):被禁用的意识胶囊不亮——渲染层
+  // 绝不比发送层乐观;禁用变更会广播 ghosts:changed,清单引用变化时重滤。
   const installedGhosts = useInstalledGhosts();
+  const ghostsForCommand = useMemo(
+    () => filterGhostsForWorkdir(installedGhosts, workingDir),
+    [installedGhosts, workingDir],
+  );
   useEffect(() => {
-    setGhostCommandRoster(editor, installedGhosts);
-  }, [editor, installedGhosts]);
+    setGhostCommandRoster(editor, ghostsForCommand);
+  }, [editor, ghostsForCommand]);
 
   const handleVoiceInputPermissionRequired = useCallback(async () => {
     const confirmed = await confirmDialog({
@@ -2614,12 +2628,12 @@ export function ChatInput({
   }, [reloadSlashCommands]);
   // 意识指令源($ 触发):已唤醒且声明了 command 的意识,现查现报(同步
   // IPC 极小);构造成 UnifiedCommand 形状喂同一个面板(交互与 / 完全一致)。
+  // 目录级禁用同判:被禁用的意识不进 $ 菜单(与胶囊 / 发送期展开同源)。
   const isGhostSigil = trigger.kind === 'slash' && trigger.sigil === '$';
   const ghostCommandItems = useMemo(() => {
     if (!isGhostSigil) return [];
-    return window.electronAPI.ghosts
-      .listSync()
-      .ghosts.filter((g) => g.enabled && g.manifest.command !== undefined)
+    return filterGhostsForWorkdir(window.electronAPI.ghosts.listSync().ghosts, workingDir)
+      .filter((g) => g.enabled && g.manifest.command !== undefined)
       .map(
         (g) =>
           ({
@@ -2628,7 +2642,7 @@ export function ChatInput({
             description: `${g.manifest.name} · ${t('settings.ghosts.commandPaletteTag')}`,
           }) as UnifiedCommand,
       );
-  }, [isGhostSigil, t]);
+  }, [isGhostSigil, t, workingDir]);
   // 面板显示与键盘导航共用同一份命令源:$ 只列意识,/ 只列技能/命令。
   const paletteCommands = isGhostSigil ? ghostCommandItems : mergedCommands;
   const filteredCommands = useMemo(
@@ -3009,8 +3023,12 @@ export function ChatInput({
     const mentionsToSend = mentions.length > 0 ? mentions : undefined;
     // 意识 $指令展开(C3d 双触发):`$画图 ...` 开头且命中已唤醒意识时,
     // 追加"必须走 cindy 总机"的机器指令;未命中原样发送。
-    // listSync 是既有同步 IPC(首帧同款,极小),每次发送现查,装/卸即时反映。
-    const textToSend = expandGhostCommand(text, window.electronAPI.ghosts.listSync().ghosts);
+    // listSync 是既有同步 IPC(首帧同款,极小),每次发送现查,装/卸即时反映;
+    // 目录级禁用同判(与胶囊 / main 侧生效点同源),被禁用 = 原样发送。
+    const textToSend = expandGhostCommand(
+      text,
+      filterGhostsForWorkdir(window.electronAPI.ghosts.listSync().ghosts, workingDirRef.current),
+    );
     dispatchSendInFlightRef.current = true;
     setSendDispatchInFlight(true);
     let result: boolean | void;
@@ -3361,7 +3379,7 @@ export function ChatInput({
             // 新 model/effort)保证正确。Fast 恢复成功后再写穿被控端草稿默认;控制端本地默认仍不被污染。
             // New-K:await 而非 fire-and-forget —— relay 重连中 / 已被撤销 / effort 那半失败时,被控端
             // 运行时/DB 根本没变(或只变一半),不能照报成功、污染 controller 默认偏好。失败 → toast 提示
-            // 并 return,不跑下方 onModelDidChange/onEffortDidChange/updatePreferences 成功收尾。
+            // 并 return,不跑下方 onModelDidChange/onEffortDidChange 成功收尾。
             // Fast 恢复失败只代表 restoredFast 未落盘:不回滚已经成功的 model/effort 切换,也不向
             // 用户展示「远程切换失败」。草稿默认仍同步已落盘的 model/effort,Fast 保留当前真实值。
             // 乐观显示目标 (model, effort) + 置灰 selector,等被控端 echo 回流;失败回滚。
@@ -3436,21 +3454,14 @@ export function ChatInput({
           // state track that lagged the props track — see model-selector-xhigh-ui-stale.)
           onModelDidChange?.(newModelId);
           onEffortDidChange?.(newEffort);
-          // device-link(控制端纯镜像)不写控制端自身 server 默认偏好——远程会话 / 草稿的选择属被控端,
-          // 不应污染控制端本地新会话默认。仅本地上下文才落 defaultModel/defaultEffort。
-          if (!deviceLinkDeviceId) {
-            void updatePreferences({ defaultModel: newModelId, defaultEffort: newEffort }).catch((err) => {
-              log.warn('model preference update failed:', err);
-            });
-          }
           // 记进当前来源的槽:切回该来源时恢复这次选的 (model, effort)。
           rememberProviderChoice(newModelId, newEffort);
           return;
         }
 
-        if (!deviceLinkDeviceId) {
-          await updatePreferences({ defaultModel: newModelId, defaultEffort: newEffort });
-        }
+        // 草稿态:全本地生效。onModelDidChange/onEffortDidChange → 父级 patchVendorPrefs 落
+        // lastByVendor(localStorage,按 agent 分槽);per-(供应商,模型) 记忆走 rememberProviderChoice。
+        // 不再写服务端默认偏好——离线 / 登录态失效时草稿选择必须照常工作。
         onModelDidChange?.(newModelId);
         onEffortDidChange?.(newEffort);
         rememberProviderChoice(newModelId, newEffort);
@@ -3473,7 +3484,7 @@ export function ChatInput({
         );
       }
     },
-    [activeModel, activeEffort, sessionId, deviceLinkDeviceId, selectedProviderId, updatePreferences, onModelDidChange, onEffortDidChange, handleFastModeChange, persistFastModeChange, t, getRememberedEffort, setRememberedEffort, rememberProviderChoice, resolveModelEfforts, resolveFast, currentModelAgentKind, effectiveSourceId, modelMemory, modelFastSupported, syncSessionDraftModelPrefs, fastMode, confirmModelSwitchContextGuard],
+    [activeModel, activeEffort, sessionId, selectedProviderId, onModelDidChange, onEffortDidChange, handleFastModeChange, persistFastModeChange, t, getRememberedEffort, setRememberedEffort, rememberProviderChoice, resolveModelEfforts, resolveFast, currentModelAgentKind, effectiveSourceId, modelMemory, modelFastSupported, syncSessionDraftModelPrefs, fastMode, confirmModelSwitchContextGuard],
   );
 
   const handleEffortChange = useCallback(
@@ -3487,7 +3498,7 @@ export function ChatInput({
           if (getSessionDeviceId(sessionId)) {
             // 控制端纯镜像:**await** 运行时隧道 setEffort,被控端持久化后广播回流更新分片。
             // New-K:await 而非 fire-and-forget —— 失败时被控端没真改,不能照报成功、污染默认偏好;
-            // toast 提示并 return,不跑下方 onEffortDidChange/updatePreferences 成功收尾。
+            // toast 提示并 return,不跑下方 onEffortDidChange 成功收尾。
             // 乐观显示目标 effort + 置灰 selector(model/provider 不变),等被控端 echo 回流;失败回滚。
             setPendingRemoteSwitch({ model: activeModel, effort: newEffort, providerId: selectedProviderId });
             setRemoteSwitchInFlight(true);
@@ -3511,28 +3522,21 @@ export function ChatInput({
           }
           // SSoT: notify parent so it refreshes `session.effort` → props update.
           onEffortDidChange?.(newEffort);
-          // device-link 不写控制端自身 server 默认偏好(纯镜像,同 handleModelChange)。
-          if (!deviceLinkDeviceId) {
-            void updatePreferences({ defaultEffort: newEffort }).catch((err) => {
-              log.warn('effort preference update failed:', err);
-            });
-          }
           // 记进当前来源的槽:effort 与 model 同维度记忆。
           if (activeModel) rememberProviderChoice(activeModel, newEffort);
           return;
         }
 
-        if (!deviceLinkDeviceId) {
-          await updatePreferences({ defaultEffort: newEffort });
-        }
-        // SSoT: notify parent so it refreshes `session.effort` → props update.
+        // 草稿态:全本地生效(同 handleModelChange 草稿分支)。onEffortDidChange → 父级
+        // patchVendorPrefs 落 lastByVendor;per-(供应商,模型) 记忆走 rememberProviderChoice。
+        // 不再写服务端默认偏好——此前 await 服务端成功才刷 UI,token 失效时表现为"档位点不动"。
         onEffortDidChange?.(newEffort);
         if (activeModel) rememberProviderChoice(activeModel, newEffort);
       } catch (err) {
         log.warn('effort change failed:', err);
       }
     },
-    [activeModel, sessionId, deviceLinkDeviceId, selectedProviderId, updatePreferences, onEffortDidChange, setRememberedEffort, t, rememberProviderChoice, syncSessionDraftModelPrefs, fastMode],
+    [activeModel, sessionId, selectedProviderId, onEffortDidChange, setRememberedEffort, t, rememberProviderChoice, syncSessionDraftModelPrefs, fastMode],
   );
 
   // per-session 来源切换。镜像 model 持久化路径(handleModelChange 里的
@@ -3644,8 +3648,8 @@ export function ChatInput({
         if (kind && newProviderId && modelId) modelMemory?.setEffort(kind, newProviderId, modelId, eff);
       };
       // 应用「目标 model + effort」:会话态落盘 sessions.{model,effort,providerId} + 即时切运行时路由;
-      // 草稿态(无 sessionId)providerId 本就不持久化,只通知父级刷新 SSoT(草稿 vendor prefs)+ 全局默认。
-      // 两态都更新全局默认偏好(与 handleModelChange 同口径,源切换等效于一次 model/effort 变更)+ 记忆。
+      // 草稿态(无 sessionId)providerId 本就不持久化,只通知父级刷新 SSoT(草稿 vendor prefs)。
+      // 两态都写本地记忆(lastByVendor 经父级回调 + per-(供应商,模型) 的 remember),无服务端偏好写入。
       const applyModelAndEffort = async (modelId: string, eff: Effort) => {
         if (sessionId) {
           // 切来源+模型:fast 恢复目标 (供应商, 模型) 的记忆值(对齐 effort);不支持 → false。
@@ -3693,12 +3697,6 @@ export function ChatInput({
         }
         onModelDidChange?.(modelId);
         onEffortDidChange?.(eff);
-        // device-link(含远程草稿切来源)不写控制端自身 server 默认偏好(纯镜像,同 handleModelChange)。
-        if (!deviceLinkDeviceId) {
-          void updatePreferences({ defaultModel: modelId, defaultEffort: eff }).catch((err) => {
-            log.warn('model preference update failed:', err);
-          });
-        }
         remember(modelId, eff);
       };
       try {
@@ -3776,7 +3774,6 @@ export function ChatInput({
       handleFastModeChange,
       persistFastModeChange,
       onProviderDidChange,
-      updatePreferences,
       modelMemory,
       syncSessionDraftModelPrefs,
       fastMode,

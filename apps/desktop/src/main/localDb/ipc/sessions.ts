@@ -6,7 +6,7 @@
  */
 
 import { ipcMain, BrowserWindow } from 'electron';
-import { eq, ne, and, desc, count, inArray, isNotNull, sql } from 'drizzle-orm';
+import { eq, ne, and, desc, count, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 
 import { getDbClient } from '../client/current';
 import type { DbClient } from '../client/DbClient';
@@ -422,8 +422,9 @@ export function registerSessionIpc(): void {
           })
           .from(sessions)
           .leftJoin(messages, eq(messages.sessionId, sessions.id));
-      // 按 DESKTOP_VISIBLE_SESSION_SOURCES 白名单过滤 — 包含 slack 与本机自动化
-      // (scheduler/learn/shared);feishu 刻意排除,飞书会话只在飞书端操作。
+      // 按 DESKTOP_VISIBLE_SESSION_SOURCES 白名单过滤 — 包含 IM 渠道
+      // (feishu/slack/discord)与本机自动化(scheduler/learn/shared);
+      // feishu 会话以「对话」分组展示(workspaceKind='dialogue')。
       const sourceFilter = inArray(sessions.source, DESKTOP_VISIBLE_SESSION_SOURCES);
       const statusWhere = () =>
         statusFilter
@@ -571,6 +572,76 @@ export function registerSessionIpc(): void {
     if (!row) throwIpcError('NOT_FOUND', 'Session 不存在');
     return sessionToCamel(row);
   });
+
+  /**
+   * 批量恢复的 compare-and-set 写口：确认框期间会话可能被删除、由其他入口恢复，
+   * 或移动到别的项目。状态与项目身份必须在同一条 UPDATE 中校验，避免 renderer
+   * 先 get 再 update 的 TOCTOU 竞态覆盖较新的状态。
+   */
+  ipcMain.handle(
+    'local-db:sessions:restore-if-archived',
+    async (_e, id: unknown, expected: unknown) => {
+      const sid = requireString(id, 'id');
+      const identity = requireObject(expected, 'expected');
+      const expectedWorkingDir = identity.workingDir;
+      const expectedWorkspaceKind = identity.workspaceKind;
+      const expectedRemoteHostId = identity.remoteHostId;
+
+      if (expectedWorkingDir !== null && typeof expectedWorkingDir !== 'string') {
+        throwIpcError('INVALID_PARAMS', 'expected.workingDir must be a string or null');
+      }
+      if (expectedWorkspaceKind !== 'project' && expectedWorkspaceKind !== 'dialogue') {
+        throwIpcError('INVALID_PARAMS', 'expected.workspaceKind must be project or dialogue');
+      }
+      if (expectedRemoteHostId !== null && typeof expectedRemoteHostId !== 'string') {
+        throwIpcError('INVALID_PARAMS', 'expected.remoteHostId must be a string or null');
+      }
+
+      const db = getDbClient().drizzle;
+      // 显式 .run() 才能从生产 DbClient.drizzle proxy 拿到 changes；隐式 await
+      // 会丢弃写结果。CAS 是否命中必须以该原子 UPDATE 的 changes 判定。
+      const writeResult = await db
+        .update(sessions)
+        .set(sessionPatchToRow({ status: 'active' }))
+        .where(
+          and(
+            eq(sessions.id, sid),
+            eq(sessions.status, 'archived'),
+            expectedWorkingDir === null
+              ? isNull(sessions.workingDir)
+              : eq(sessions.workingDir, expectedWorkingDir),
+            eq(sessions.workspaceKind, expectedWorkspaceKind),
+            expectedRemoteHostId === null
+              ? isNull(sessions.remoteHostId)
+              : eq(sessions.remoteHostId, expectedRemoteHostId),
+          ),
+        )
+        .run();
+
+      if (writeResult.changes === 0) {
+        const [existing] = await db
+          .select({ id: sessions.id })
+          .from(sessions)
+          .where(eq(sessions.id, sid));
+        if (!existing) throwIpcError('NOT_FOUND', 'Session 不存在');
+        return null;
+      }
+
+      const row = await selectSessionWithCount(db, sid);
+      if (!row) throwIpcError('NOT_FOUND', 'Session 不存在');
+      const updated = sessionToCamel(row);
+      notifyAgentIslandSessionPatch(updated.id, {
+        status: updated.status,
+        title: updated.title,
+        workingDir: updated.workingDir,
+        workspaceKind: updated.workspaceKind,
+      });
+      broadcastSessionPatched(sid, { status: 'active' });
+      scheduleWorktreeRecycleForStatusChange(sid, 'active');
+      notifyGhostSessionStatusChange(sid, 'active', updated.workingDir);
+      return updated;
+    },
+  );
 
   ipcMain.handle('local-db:sessions:update', async (_e, id: unknown, patch: unknown) => {
     const sid = requireString(id, 'id');

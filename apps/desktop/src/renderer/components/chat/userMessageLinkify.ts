@@ -15,6 +15,7 @@ import {
   findMarkdownLabelStart,
   unescapeMarkdownLabelBrackets,
 } from '@/lib/deepLink';
+import { stripDeepLinkPathPrefix } from '../../../shared/deepLinkSchemes';
 
 /**
  * Combined linkify pattern: matches either
@@ -42,7 +43,7 @@ import {
 const URL_RE = /(https?:\/\/[^\s<>"\u0080-\uFFFF]+)/g;
 const IMG_PATH_RE =
   /([A-Za-z]:[\\/][^\s<>"']*?\.(?:png|jpe?g|gif|webp|svg|bmp|ico)|\/[^\s<>"']*?\.(?:png|jpe?g|gif|webp|svg|bmp|ico))/gi;
-// \u4F1A\u8BDD\u6DF1\u94FE xdt-maker://session/<id>[?message=<clientId>]:ASCII \u767D\u540D\u5355,CJK /
+// \u4F1A\u8BDD\u6DF1\u94FE cindy://session/<id>[?message=<clientId>](\u5386\u53F2 xdt-maker:// \u540C):ASCII \u767D\u540D\u5355,CJK /
 // \u7A7A\u767D / \u4E2D\u6587\u6807\u70B9\u5904\u5929\u7136\u6536\u5C3E;\u5C3E\u90E8\u7C98\u8FDE\u7684\u82F1\u6587\u53E5\u8BFB\u5728 findLinkifyMatches \u91CC\u5265\u6389\u3002
 // \u6B63\u5219\u6E90\u4E0E sessionLinkPaste(\u8F93\u5165\u6846\u7C98\u8D34\u8F6C chip)\u5171\u4EAB lib/deepLink.ts \u7684
 // SESSION_DEEP_LINK_RE_SOURCE,\u4E0E remarkSessionLinks(AI \u6D88\u606F)/ mobile
@@ -163,9 +164,12 @@ export function findLinkifyMatches(text: string): LinkifyMatch[] {
   }
   SESSION_URL_RE.lastIndex = 0;
   while ((m = SESSION_URL_RE.exec(text)) !== null) {
-    // 剥尾部粘连的英文句读("…?message=yyy." 的句号不属于链接)。
+    // Strip trailing English punctuation glued to the link, then reject
+    // empty-id matches by slicing at the *actually matched* scheme prefix —
+    // cindy:// and legacy xdt-maker:// differ in length, so a fixed-literal
+    // slice would cut at the wrong offset.
     const trimmed = m[0].replace(/[.,;:!?]+$/, '');
-    if (!trimmed.slice('xdt-maker://session/'.length)) continue;
+    if (!stripDeepLinkPathPrefix(trimmed, 'session/')) continue;
     matches.push({
       kind: 'session',
       index: m.index,

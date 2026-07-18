@@ -1,5 +1,3 @@
-import { API_BASE_URL } from '@/config/env';
-
 export class ApiError extends Error {
   constructor(
     public readonly code: string,
@@ -12,7 +10,8 @@ export class ApiError extends Error {
 }
 
 export interface ApiFetchOptions {
-  baseUrl?: string;
+  /** 目标服务 base URL(必传:老主 server 2026-07 退役后没有"默认业务 server")。 */
+  baseUrl: string;
   method?: string;
   token?: string | null;
   body?: unknown;
@@ -23,7 +22,7 @@ const DEFAULT_API_TIMEOUT_MS = 20_000;
 
 export async function apiFetchRaw<T>(
   path: string,
-  opts: ApiFetchOptions = {},
+  opts: ApiFetchOptions,
 ): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (opts.token) headers.Authorization = `Bearer ${opts.token}`;
@@ -33,7 +32,7 @@ export async function apiFetchRaw<T>(
   const timeoutMs = opts.timeoutMs ?? DEFAULT_API_TIMEOUT_MS;
   const controller = timeoutMs > 0 ? new AbortController() : null;
   try {
-    const fetchPromise = fetch((opts.baseUrl ?? API_BASE_URL) + path, {
+    const fetchPromise = fetch(opts.baseUrl + path, {
       method: opts.method ?? 'GET',
       headers,
       body: opts.body === undefined ? undefined : JSON.stringify(opts.body),

@@ -3,7 +3,6 @@ import type {
   BrowserMcpDeps,
   ComputerMcpDeps,
   FeishuBotMcpHostDeps,
-  FeishuMcpDeps,
   LiziMcpId,
   LiziMcpProvider,
   LiziMcpSessionContext,
@@ -13,8 +12,6 @@ import type {
   ContactsMcpDeps,
   LspMcpDeps,
 } from './types.js';
-import { createFeishuMcpServer } from './feishu/mcp/server.js';
-import { createSlackBotMcpServer, type SlackBotMcpDeps } from './lizi_slackBotMcpServer.js';
 import { createFeishuBotMcpServer } from './lizi_feishuBotMcpServer.js';
 import { createSchedulerMcpServer } from './lizi_schedulerMcpServer.js';
 import { createSshMcpServer } from './lizi_sshMcpServer.js';
@@ -38,9 +35,6 @@ export interface CreateLiziMcpProvidersOptions {
   browser?: BrowserMcpDeps;
   /** Local desktop computer-use tools backed by a host-managed external driver. */
   computer?: ComputerMcpDeps;
-  feishu?: FeishuMcpDeps;
-  /** slack bot 通道工具(send_file_to_user)— 仅 source='slack' session 注入。 */
-  slackBot?: Pick<SlackBotMcpDeps, 'sendFile' | 'logger'>;
   feishuBot?: FeishuBotMcpHostDeps;
   scheduler?: SchedulerMcpDeps;
   /**
@@ -91,15 +85,10 @@ function readFeishuChatId(ctx: LiziMcpSessionContext): string | null {
   return typeof raw === 'string' && raw.length > 0 ? raw : null;
 }
 
-function readSlackChatId(ctx: LiziMcpSessionContext): string | null {
-  const raw = ctx.vendorOptions?.slackChatId;
-  return typeof raw === 'string' && raw.length > 0 ? raw : null;
-}
-
-/** thread = session 模型: organic slack session 的 thread root ts(可缺省)。 */
-function readSlackThreadTs(ctx: LiziMcpSessionContext): string | null {
-  const raw = ctx.vendorOptions?.slackThreadTs;
-  return typeof raw === 'string' && raw.length > 0 ? raw : null;
+/** 会话来源(如 'slack-hook'),feishu bot 用它在构建期注入渠道路由提示。 */
+function readSessionSource(ctx: LiziMcpSessionContext): string | undefined {
+  const raw = ctx.vendorOptions?.source;
+  return typeof raw === 'string' && raw.length > 0 ? raw : undefined;
 }
 
 export function createLiziMcpProviders(
@@ -175,22 +164,12 @@ export function createLiziMcpProviders(
     });
   }
 
-  if (opts.feishu && selected(enabled, 'feishu')) {
-    providers.push({
-      name: 'lizi_feishu',
-      // ctx 注入:上传类工具的 file_path 读盘约束到当前 session workingDir
-      // (阻断 prompt 注入把 ~/.ssh/id_rsa 之类"上传"外泄)。Codex HTTP bridge
-      // 下 tool-call 阶段经 AsyncLocalStorage 恢复。
-      toClaudeSdkConfig: (ctx) => ({
-        type: 'sdk',
-        name: 'lizi_feishu',
-        instance: createFeishuMcpServer({
-          ...opts.feishu!,
-          getSessionContext: () => resolveLiziMcpSessionContext(ctx),
-        }),
-      }),
-    });
-  }
+  // lizi_feishu 已于 2026-07-16 摘壳:飞书全部能力(44 精品 + 123 只读直通)
+  // 迁入内置意识 xd-feishu。2026-07-17 起授权也切到意识 OAuth broker
+  // (source:'oauth' + tokenBroker:'feishu'),主机 token 刷新链与 scheduler
+  // registry 直调均已退役——feishu/ 目录只剩死代码待整删,唯一仍有用的是
+  // mcp/generated 的 vendored OpenAPI 定义(scripts/gen-feishu-ghost-ops.mts
+  // 烘焙意识直通面的源),整删时注意保留或搬家。
 
   // lizi_mivo 已于 2026-07-13 退役:mivo 全部 13 工具(图/视频/音乐/音效/3D
   // 生成、格式转换、按钮动作、下载)整体迁入内置意识 xd-mivo(network 槽
@@ -239,24 +218,9 @@ export function createLiziMcpProviders(
             readFeishuChatId(ctx) ?? opts.feishuBot!.getOwnerOpenId() ?? null,
           sendFile: opts.feishuBot!.sendFile,
           sendMessage: opts.feishuBot!.sendMessage,
-        }),
-      }),
-    });
-  }
-
-  // slack bot 通道工具 — 与 feishu 版平行, 仅 source='slack' session 注入。
-  // 不动 lizi_feishu_bot(其 tool 面对在跑的 feishu 会话是 prompt/cache 相邻物)。
-  if (opts.slackBot && selected(enabled, 'lizi_slack_bot')) {
-    providers.push({
-      name: 'lizi_slack_bot',
-      isEnabled: (ctx) => ctx.vendorOptions?.source === 'slack',
-      toClaudeSdkConfig: (ctx) => ({
-        type: 'sdk',
-        name: 'lizi_slack_bot',
-        instance: createSlackBotMcpServer({
-          getChatId: () => readSlackChatId(ctx),
-          getThreadTs: () => readSlackThreadTs(ctx),
-          sendFile: opts.slackBot!.sendFile,
+          // slack-hook 会话里按来源在构建期注入渠道路由提示,
+          // 把「发给我」的默认通道钉死在会话自身渠道(规则 9)。
+          sessionSource: readSessionSource(ctx),
         }),
       }),
     });

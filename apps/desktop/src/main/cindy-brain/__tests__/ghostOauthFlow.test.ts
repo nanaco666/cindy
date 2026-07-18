@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   cancelActiveGhostOauthFlow,
+  fetchGhostOauthAvatar,
   fetchGhostOauthIdentity,
   refreshGhostOauthToken,
   startGhostOauthFlow,
@@ -430,18 +431,30 @@ describe('startGhostOauthFlow', () => {
     }
   });
 
-  it('tokenBroker:code 交给 broker,不直连 token 端点,且 PKCE 强制关闭', async () => {
+  it('tokenBroker:code 交给 broker,不直连 token 端点;PKCE 缺省开,verifier 透传 broker', async () => {
     const fetchImpl = vi.fn();
+    let challengeFromUrl: string | null = null;
     const broker: GhostOauthBrokerClient = {
-      exchange: vi.fn(async (slug: string, params: { code: string; redirectUri: string }) => {
-        expect(slug).toBe('jira');
-        expect(params.code).toBe('c-broker');
-        expect(params.redirectUri).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/callback$/);
-        return {
-          ok: true as const,
-          bundle: { accessToken: 'at-b', refreshToken: 'rt-b', expiresAt: Date.now() + 1000, grantedScope: null },
-        };
-      }),
+      exchange: vi.fn(
+        async (slug: string, params: { code: string; redirectUri: string; codeVerifier?: string }) => {
+          expect(slug).toBe('jira');
+          expect(params.code).toBe('c-broker');
+          expect(params.redirectUri).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/callback$/);
+          // PKCE:broker 收到的 verifier 必须与授权页 challenge 对得上(S256)。
+          expect(typeof params.codeVerifier).toBe('string');
+          const digest = createHash('sha256')
+            .update(params.codeVerifier as string)
+            .digest('base64')
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/, '');
+          expect(digest).toBe(challengeFromUrl);
+          return {
+            ok: true as const,
+            bundle: { accessToken: 'at-b', refreshToken: 'rt-b', expiresAt: Date.now() + 1000, grantedScope: null },
+          };
+        },
+      ),
       refresh: vi.fn(),
     };
     const result = await startGhostOauthFlow({
@@ -449,8 +462,8 @@ describe('startGhostOauthFlow', () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
       broker,
       openExternal: (url) => {
-        // pkce 缺省 true 也被 broker 模式强制关闭。
-        expect(new URL(url).searchParams.get('code_challenge')).toBeNull();
+        challengeFromUrl = new URL(url).searchParams.get('code_challenge');
+        expect(challengeFromUrl).toBeTruthy();
         browserRedirect(url, (au) => ({ code: 'c-broker', state: au.searchParams.get('state') ?? '' }));
       },
     });
@@ -458,6 +471,31 @@ describe('startGhostOauthFlow', () => {
     if (result.ok) expect(result.bundle.accessToken).toBe('at-b');
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(broker.exchange).toHaveBeenCalledTimes(1);
+  });
+
+  it('tokenBroker + pkce:false(jira/slack 形态):授权页无 challenge,broker 不收 verifier', async () => {
+    const broker: GhostOauthBrokerClient = {
+      exchange: vi.fn(
+        async (_slug: string, params: { code: string; redirectUri: string; codeVerifier?: string }) => {
+          expect(params.codeVerifier).toBeUndefined();
+          return {
+            ok: true as const,
+            bundle: { accessToken: 'at-np', refreshToken: null, expiresAt: null, grantedScope: null },
+          };
+        },
+      ),
+      refresh: vi.fn(),
+    };
+    const result = await startGhostOauthFlow({
+      config: { ...BASE_CONFIG, tokenBroker: 'jira', pkce: false },
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      broker,
+      openExternal: (url) => {
+        expect(new URL(url).searchParams.get('code_challenge')).toBeNull();
+        browserRedirect(url, (au) => ({ code: 'c-np', state: au.searchParams.get('state') ?? '' }));
+      },
+    });
+    expect(result).toMatchObject({ ok: true });
   });
 
   it('tokenBroker 声明但未接线 broker → INVALID_CONFIG,不拉浏览器', async () => {
@@ -691,7 +729,7 @@ describe('fetchGhostOauthIdentity', () => {
         return jsonResponse({ user: { email: 'a@b.com' } });
       }) as unknown as typeof fetch,
     });
-    expect(identity).toEqual({ label: 'a@b.com', display: null });
+    expect(identity).toEqual({ label: 'a@b.com', display: null, avatarUrl: null });
   });
 
   it('displayTemplate 渲染展示名(多占位符,同一份响应取值)', async () => {
@@ -704,7 +742,7 @@ describe('fetchGhostOauthIdentity', () => {
         jsonResponse({ ok: true, team: 'xindong', user: 'lizi', user_id: 'U9ZC94EDR' }),
       ) as unknown as typeof fetch,
     });
-    expect(identity).toEqual({ label: 'U9ZC94EDR', display: 'xindong · lizi' });
+    expect(identity).toEqual({ label: 'U9ZC94EDR', display: 'xindong · lizi', avatarUrl: null });
   });
 
   it('模板任一占位符取不到值 → display 降级 null,label 不受影响', async () => {
@@ -715,11 +753,11 @@ describe('fetchGhostOauthIdentity', () => {
       accessToken: 'at-1',
       fetchImpl: vi.fn(async () => jsonResponse({ ok: true, user_id: 'U9ZC94EDR', team: 42 })) as unknown as typeof fetch,
     });
-    expect(identity).toEqual({ label: 'U9ZC94EDR', display: null });
+    expect(identity).toEqual({ label: 'U9ZC94EDR', display: null, avatarUrl: null });
   });
 
   it('路径不存在 / 非字符串 / 非 https / 请求失败 → 双 null(纯展示,不阻断)', async () => {
-    const none = { label: null, display: null };
+    const none = { label: null, display: null, avatarUrl: null };
     const okFetch = vi.fn(async () => jsonResponse({ user: { email: 42 } })) as unknown as typeof fetch;
     await expect(
       fetchGhostOauthIdentity({ url: 'https://x.com/me', labelPath: 'user.email', accessToken: 'a', fetchImpl: okFetch }),
@@ -737,5 +775,67 @@ describe('fetchGhostOauthIdentity', () => {
         }) as unknown as typeof fetch,
       }),
     ).resolves.toEqual(none);
+  });
+
+  it('avatarPath 取头像 https 地址;非 https / 非字符串降级 null(label 不受影响)', async () => {
+    const mk = (avatar: unknown) =>
+      fetchGhostOauthIdentity({
+        url: 'https://open.feishu.cn/open-apis/authen/v1/user_info',
+        labelPath: 'data.union_id',
+        avatarPath: 'data.avatar_thumb',
+        accessToken: 'at-1',
+        fetchImpl: vi.fn(async () =>
+          jsonResponse({ data: { union_id: 'on_x', avatar_thumb: avatar } }),
+        ) as unknown as typeof fetch,
+      });
+    await expect(mk('https://cdn.example.com/a.png')).resolves.toEqual({
+      label: 'on_x',
+      display: null,
+      avatarUrl: 'https://cdn.example.com/a.png',
+    });
+    await expect(mk('http://cdn.example.com/a.png')).resolves.toMatchObject({ avatarUrl: null });
+    await expect(mk(42)).resolves.toMatchObject({ label: 'on_x', avatarUrl: null });
+  });
+});
+
+describe('fetchGhostOauthAvatar', () => {
+  const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+  const imageResponse = (mime: string, bytes: Buffer = pngBytes): Response =>
+    new Response(new Uint8Array(bytes), { status: 200, headers: { 'Content-Type': mime } });
+
+  it('图片响应转 data URL,且请求不带 Authorization(头像域名无凭证)', async () => {
+    const fetchImpl = vi.fn(async (_i: unknown, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get('Authorization')).toBeNull();
+      return imageResponse('image/png');
+    });
+    await expect(
+      fetchGhostOauthAvatar({ url: 'https://cdn.example.com/a.png', fetchImpl: fetchImpl as unknown as typeof fetch }),
+    ).resolves.toBe(`data:image/png;base64,${pngBytes.toString('base64')}`);
+  });
+
+  it('非 https / 非图片 mime / 超限 / 请求失败 → null(best-effort 不阻断)', async () => {
+    await expect(
+      fetchGhostOauthAvatar({ url: 'http://cdn.example.com/a.png', fetchImpl: vi.fn() as unknown as typeof fetch }),
+    ).resolves.toBeNull();
+    await expect(
+      fetchGhostOauthAvatar({
+        url: 'https://cdn.example.com/a.html',
+        fetchImpl: vi.fn(async () => imageResponse('text/html')) as unknown as typeof fetch,
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      fetchGhostOauthAvatar({
+        url: 'https://cdn.example.com/big.png',
+        fetchImpl: vi.fn(async () => imageResponse('image/png', Buffer.alloc(256 * 1024 + 1))) as unknown as typeof fetch,
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      fetchGhostOauthAvatar({
+        url: 'https://cdn.example.com/a.png',
+        fetchImpl: vi.fn(async () => {
+          throw new Error('boom');
+        }) as unknown as typeof fetch,
+      }),
+    ).resolves.toBeNull();
   });
 });

@@ -169,12 +169,8 @@ change.
 `mobile:sim:start` / `mobile:sim:rebuild` create or repair the required
 functional values automatically from `eas.json`, without enabling dev-only flags.
 
-Required online-login values:
-
-```bash
-EXPO_PUBLIC_FEISHU_APP_ID=...
-EXPO_PUBLIC_XDT_API_BASE_URL=https://xdt-api.magiclizi.com
-```
+Online login no longer requires a Feishu App ID. Business endpoints come from
+the repo's `config/endpoint.json` manifest in dev; no API base env is needed.
 
 If the simulator starts already logged in, app data is still present. Use the app
 logout path for normal testing, or uninstall the app for a clean login-state
@@ -247,10 +243,6 @@ regression targets.
 
 `Project is incompatible with this version of Expo Go`
 : Wrong runtime. Use the development client for current source testing.
-
-Missing `EXPO_PUBLIC_FEISHU_APP_ID`
-: Metro did not see the env value. Run `pnpm mobile:sim:start` to repair
-`apps/mobile/.env`, then restart Metro and reload the app.
 
 `The action 'GO_BACK' was not handled`
 : The screen called stack back without a previous route. Top-level and modal-like

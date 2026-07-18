@@ -31,6 +31,13 @@ vi.mock('node:fs', async () => {
   };
 });
 
+// runtime-configs 经 effectiveXdGatewayBaseUrl 读 model-access 下发的 endpoint;
+// 本测试不断言端点,mock 成 fixture 值只为隔离 credentialsStore 的文件 IO。
+vi.mock('../../model-access/effectiveEndpoint.js', async () => {
+  const { TEST_XD_GATEWAY_BASE_URL } = await import('../../../test/vitest/clientEndpointsFixture');
+  return { effectiveXdGatewayBaseUrl: () => TEST_XD_GATEWAY_BASE_URL };
+});
+
 describe('runtime-configs', () => {
   beforeEach(() => {
     vi.resetModules();

@@ -75,14 +75,14 @@ export function buildManifest({ id, createdAt, runtimeVersion, launchAsset, asse
 /**
  * runtime 基线闸门(纯判定,便于单测)。要发布的 OTA runtimeVersion 必须等于在装冷更整包
  * 记录的 runtimeVersion;不一致 / 缺基线时抛错强制走冷更。skip=true 直接放行。
- * @param {{ runtimeVersion: string, baselineRuntime: string | null | undefined, skip?: boolean, recordUrl?: string }} input
+ * @param {{ runtimeVersion: string, baselineRuntime: string | null | undefined, skip?: boolean, recordUrl?: string, coldBuildCommand?: string }} input
  * @returns {{ skipped: true } | { ok: true }}
  */
-export function assertOtaRuntimeMatchesBaseline({ runtimeVersion, baselineRuntime, skip = false, recordUrl = '' }) {
+export function assertOtaRuntimeMatchesBaseline({ runtimeVersion, baselineRuntime, skip = false, recordUrl = '', coldBuildCommand = 'pnpm mobile:release:ios:local -- --region <cn|global> --execute' }) {
   if (skip) return { skipped: true };
   if (baselineRuntime == null) {
     throw new Error(
-      `未找到冷更装机包基线(${recordUrl}):请先 \`pnpm mobile:release:ios:local -- --execute\` 出一次冷更整包再发热更(确认无误可加 --skip-runtime-check)`,
+      `未找到冷更装机包基线(${recordUrl}):请先 \`${coldBuildCommand}\` 出一次冷更整包再发热更(确认无误可加 --skip-runtime-check)`,
     );
   }
   if (baselineRuntime !== runtimeVersion) {

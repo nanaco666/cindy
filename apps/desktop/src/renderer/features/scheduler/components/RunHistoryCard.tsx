@@ -28,12 +28,7 @@ import {
 
 import { AgentMark } from './AgentMark';
 import { AttentionDot } from '@/components/sidebar/AttentionDot';
-import {
-  formatDuration,
-  formatRunTimestamp,
-  formatStartedAgo,
-  formatUsd,
-} from '../lib/formatters';
+import { formatDuration, formatRunTimestamp, formatStartedAgo, formatUsd } from '../lib/formatters';
 import { isUnreadScheduleRun } from '../lib/runUnread';
 import { markScheduleRunReadAndSync } from '../lib/scheduleRunReadSync';
 
@@ -70,6 +65,7 @@ interface Props {
   run: ScheduleRun;
   agentKind: AgentKind;
   sessionCostUsd?: number;
+  sessionEstimatedValueUsd?: number;
   /** 删除单条历史 run 的回调；省略则不渲染删除按钮（向后兼容）。 */
   onDelete?: (run: ScheduleRun) => void | Promise<void>;
   /**
@@ -79,7 +75,14 @@ interface Props {
   onRestart?: (run: ScheduleRun) => void | Promise<void>;
 }
 
-export function RunHistoryCard({ run, agentKind, sessionCostUsd, onDelete, onRestart }: Props) {
+export function RunHistoryCard({
+  run,
+  agentKind,
+  sessionCostUsd,
+  sessionEstimatedValueUsd = 0,
+  onDelete,
+  onRestart,
+}: Props) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const isLegacySessionRun = run.id.startsWith(LEGACY_SESSION_RUN_ID_PREFIX);
@@ -91,9 +94,19 @@ export function RunHistoryCard({ run, agentKind, sessionCostUsd, onDelete, onRes
     run.status === 'running'
       ? formatStartedAgo(run.firedAt)
       : t('scheduler.runs.took', { duration: formatDuration(run.firedAt, run.finishedAt) });
-  const costText = sessionCostUsd == null
-    ? null
-    : t('scheduler.runs.sessionCost', { cost: formatUsd(sessionCostUsd) });
+  const costText =
+    sessionCostUsd == null
+      ? null
+      : [
+          sessionCostUsd > 0
+            ? t('scheduler.runs.sessionCost', { cost: formatUsd(sessionCostUsd) })
+            : null,
+          sessionEstimatedValueUsd > 0
+            ? t('scheduler.runs.sessionValue', { value: formatUsd(sessionEstimatedValueUsd) })
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') || t('scheduler.runs.sessionCost', { cost: formatUsd(0) });
 
   // 终态且未读 → 在 agent 图标右上角点一个状态点(全端统一色表:失败结局红 / 成功绿)。
   // running 不算未读（结果还没出来，没什么"漏看"）。
@@ -138,9 +151,7 @@ export function RunHistoryCard({ run, agentKind, sessionCostUsd, onDelete, onRes
   // 通常是配置/代码问题，重跑会立刻再失败，让用户去 schedule header 的 Run now
   // 显式触发更安全。
   const canRestart =
-    !!onRestart &&
-    !run.sessionId &&
-    (run.status === 'interrupted' || run.status === 'aborted');
+    !!onRestart && !run.sessionId && (run.status === 'interrupted' || run.status === 'aborted');
 
   return (
     <article
@@ -218,9 +229,7 @@ export function RunHistoryCard({ run, agentKind, sessionCostUsd, onDelete, onRes
         {(costText || (onDelete && !isLegacySessionRun && run.status !== 'running')) && (
           <div className="flex shrink-0 items-center gap-1.5">
             {costText && (
-              <span className="text-12 text-[var(--settings-section-desc)]">
-                {costText}
-              </span>
+              <span className="text-12 text-[var(--settings-section-desc)]">{costText}</span>
             )}
             {onDelete && !isLegacySessionRun && run.status !== 'running' && (
               // hover 才显示 ⋯ 按钮（对齐 SessionItem 模式），点击展开菜单 → Delete →
@@ -290,7 +299,6 @@ export function RunHistoryCard({ run, agentKind, sessionCostUsd, onDelete, onRes
           {run.resultText}
         </p>
       )}
-
     </article>
   );
 }

@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Flame, Shield } from 'lucide-react';
+import { Flame } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -29,10 +29,16 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
   const hasPendingUpdate = status === 'ready' || status === 'superseding';
   const isFlameReopen = hasPendingUpdate && dismissed;
 
+  // 头像地址变化(设置页改头像 / 服务端资料更新)时重置加载失败标记,
+  // 让新地址有机会渲染,而不是永远停在首字母兜底。
+  const avatarUrl = user?.avatar ?? null;
+  useEffect(() => {
+    setAvatarError(false);
+  }, [avatarUrl]);
+
   if (!user) return null;
 
   const initial = user.name.charAt(0).toUpperCase();
-  const isAdmin = user.role === 'admin';
   const appDisplayVersion = window.electronAPI.appDisplayVersion;
   const appDisplayVersionDetail = window.electronAPI.appDisplayVersionDetail;
 
@@ -54,19 +60,13 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
           isCollapsed && 'justify-center',
         )}
       >
-        {/* Avatar — admin 用户加 1.5px 反色描边 + 右下角盾牌角标 */}
-        <div
-          className="relative h-9 w-9 shrink-0"
-          title={isAdmin ? t('sidebar.user.adminBadge') : undefined}
-        >
+        {/* Avatar(admin 角标已随产品 role 退役,2026-07) */}
+        <div className="relative h-9 w-9 shrink-0">
           {user.avatar && !avatarError ? (
             <img
               src={user.avatar}
               alt={user.name}
-              className={cn(
-                'h-9 w-9 rounded-full object-cover',
-                isAdmin && 'ring-[1.5px] ring-foreground',
-              )}
+              className="h-9 w-9 rounded-full object-cover"
               onError={() => setAvatarError(true)}
             />
           ) : (
@@ -74,24 +74,12 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
               className={cn(
                 'flex h-9 w-9 items-center justify-center rounded-full',
                 'bg-sidebar-item-hover text-base font-medium text-foreground',
-                isAdmin && 'ring-[1.5px] ring-foreground',
+                // 无头像兜底加一圈细描边(与侧边栏分隔线同 token)
+                'border border-sidebar-border',
               )}
             >
               {initial}
             </div>
-          )}
-          {isAdmin && (
-            // ring-2 ring-sidebar 用 sidebar 背景色作为分隔环，避免角标和头像糊在一起
-            <span
-              aria-label={t('sidebar.user.adminBadge')}
-              className={cn(
-                'absolute -bottom-0.5 -right-0.5',
-                'flex h-3 w-3 items-center justify-center rounded-full',
-                'bg-foreground text-background ring-2 ring-sidebar',
-              )}
-            >
-              <Shield size={8} strokeWidth={2.5} />
-            </span>
           )}
         </div>
 

@@ -27,7 +27,6 @@ import {
   type EmbeddingModelMeta,
 } from './types.js';
 
-const DEFAULT_BASE_URL = 'https://llm-proxy.tapsvc.com';
 const DEFAULT_CACHE_SIZE = 1000;
 // 重试间隔 (ms): 1s / 5s / 15s. 共最多 4 次尝试 (initial + 3 retries)。
 const RETRY_DELAYS_MS = [1_000, 5_000, 15_000];
@@ -44,14 +43,23 @@ interface OpenAiErrorResponse {
 }
 
 export class EmbeddingClient {
-  private readonly baseUrl: string;
+  private readonly resolveBaseUrl: () => string;
   private readonly getApiKey: () => string | undefined | null;
   private readonly fetchImpl: typeof fetch;
   private readonly cache: LruCache<string, number[]>;
   private readonly log: EmbeddingLogger;
 
   constructor(opts: EmbeddingClientOptions) {
-    this.baseUrl = (opts.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
+    // baseUrl 支持函数形态:宿主的网关 endpoint 可能在运行期变化(如登录后由
+    // 服务端下发),每次请求现取,避免构造期快照钉死旧地址。
+    const normalize = (raw: string): string => {
+      let baseUrl = raw;
+      while (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+      return baseUrl;
+    };
+    const rawBaseUrl = opts.baseUrl;
+    this.resolveBaseUrl =
+      typeof rawBaseUrl === 'function' ? () => normalize(rawBaseUrl()) : () => normalize(rawBaseUrl);
     this.getApiKey = opts.getApiKey;
     this.fetchImpl = opts.fetchImpl ?? globalThis.fetch;
     this.cache = new LruCache<string, number[]>(opts.cacheSize ?? DEFAULT_CACHE_SIZE);
@@ -200,7 +208,7 @@ export class EmbeddingClient {
     model: string,
     inputs: string[],
   ): Promise<OpenAiEmbeddingsResponse> {
-    const url = `${this.baseUrl}/v1/embeddings`;
+    const url = `${this.resolveBaseUrl()}/v1/embeddings`;
     let res: Response;
     try {
       res = await this.fetchImpl(url, {

@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "xd-atlassian",
   "name": "XD Atlassian",
-  "description": "内置的 Atlassian 服务意识:连上公司 Atlassian 账号即可读写 Jira 与 Confluence(issue / JQL 搜索 / 工作流,页面 / 评论 / 附件)。开箱即用——点「连接账号」完成授权即可;授权由 XDMaker 服务端托管,应用密钥不随包分发。",
+  "description": "内置的 Atlassian 服务意识:连上公司 Atlassian 账号即可读写 Jira 与 Confluence(issue / JQL 搜索 / 工作流,页面 / 评论 / 附件)。开箱即用——点「连接账号」完成授权即可;授权由 Cindy 服务端托管,应用密钥不随包分发。",
   "whenToUse": "需要查/建/改 Jira issue,JQL 搜索,查项目或用户,流转工作流,下载 Jira 附件,或搜索/阅读/创建/更新 Confluence 页面、读写评论、下载 Confluence 附件时找我(需先在意识设置页连接 Atlassian 账号)。",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": "Cindy",
   "entry": "main.js",
   "settingsHtml": "settings.html",
@@ -25,7 +25,7 @@
         "key": "atlassian_account",
         "label": "Atlassian 账号",
         "source": "oauth",
-        "hint": "到设置页点「连接账号」即可;授权与令牌全程由主机与 XDMaker 服务端托管",
+        "hint": "到设置页点「连接账号」即可;授权与令牌全程由主机与 Cindy 服务端托管",
         "inject": {
           "header": "Authorization",
           "format": "Bearer {value}",
@@ -116,7 +116,7 @@
           "body_text": { "type": "string", "description": "add_comment:纯文本评论正文" },
           "body_adf": { "type": "object", "description": "add_comment:进阶,ADF 格式评论正文(与 body_text 二选一)" },
           "transition_id": { "type": "string", "description": "transition:流转 id(list_transitions 可查)" },
-          "out_file": { "type": "string", "description": "可选:把完整结果 JSON 写进会话工作目录的该相对路径(如 tmp/jql-result.json),只返回文件路径——结果大、要交给脚本处理时用。结果超 50KB 时即使不传也会自动落盘返回路径" }
+          "out_file": { "type": "string", "description": "可选:把完整结果 JSON 写进会话工作目录的该相对路径(如 tmp/jql-result.json),只返回文件路径——结果大、要交给脚本处理时用" }
         },
         "required": ["action"]
       }
@@ -206,7 +206,7 @@
           "cursor": { "type": "string", "description": "分页 cursor" },
           "account": { "type": "string", "description": "账号 id;省略 = 默认账号" },
           "cloud_id": { "type": "string", "description": "站点 cloud_id;省略 = 默认站点" },
-          "out_file": { "type": "string", "description": "可选:把完整结果 JSON 写进会话工作目录的该相对路径,只返回文件路径——长页面正文、要交给脚本处理时用。结果超 50KB 时即使不传也会自动落盘返回路径" }
+          "out_file": { "type": "string", "description": "可选:把完整结果 JSON 写进会话工作目录的该相对路径,只返回文件路径——长页面正文、要交给脚本处理时用" }
         },
         "required": ["action"]
       }

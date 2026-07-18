@@ -15,6 +15,7 @@
  */
 
 import type { InteractiveCardSpec } from '../types.js';
+import { XDT_IMAGE_REGEX } from '../xdtRefs.js';
 
 /**
  * 去掉 markdown inline code 的反引号，保留 fenced code block（```）不动。
@@ -117,15 +118,17 @@ export function buildMarkdownCardV2(text: string): unknown {
 
 /**
  * Build a feishu v2 card with mixed markdown text and inline `img` elements
- * for `xdt-image://...` references resolved to feishu image_keys. Falls back
+ * for managed-image references resolved to feishu image_keys. Falls back
  * to italicised "_[图片加载失败:alt]_" placeholder text when imageMap is
  * missing the URL (upload failed).
  *
- * Used by streamingText during finalize after all xdt-image URLs have been
- * uploaded in parallel.
+ * 图片引用识别用 xdtRefs 的共享双协议正则(老 xdt-image + 媒体总仓
+ * cindy-media)——此前这里是只认 xdt-image 的本地副本,cindy-media 引用
+ * 匹配不上:上传拿到了 image_key 却拼不进卡片,正文残留字面量 markdown。
+ *
+ * Used by streamingText during finalize after all managed image URLs have
+ * been uploaded in parallel.
  */
-const XDT_IMAGE_REGEX = /!\[([^\]]*)\]\((xdt-image:\/\/[^)]+)\)/g;
-
 export function buildMixedMarkdownCardV2(
   text: string,
   imageMap: Map<string, string>,

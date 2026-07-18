@@ -26,14 +26,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Flame, Check, X } from 'lucide-react';
-import { BRAND_WEBSITE_URL } from '@lizi/maker-shared/branding';
-
 import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 import { useUpdateStatus } from '@/hooks/useUpdateStatus';
 import { useUpdateBannerDismiss } from '@/hooks/useUpdateBannerDismiss';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Tip } from '@/components/ui/tooltip';
+
+// 运行期端点清单(dev/packaged 都在启动阻断后有真值,烘焙兜底已退役)
+const websiteUrl = () => window.electronAPI.clientEndpoints.websiteUrl;
 
 interface UpdateBannerProps {
   isCollapsed: boolean;
@@ -141,12 +142,12 @@ export function UpdateBanner({ isCollapsed }: UpdateBannerProps) {
 
   const handleManualDownload = () => {
     setShowTranslocatedDialog(false);
-    window.open(BRAND_WEBSITE_URL, '_blank');
+    window.open(websiteUrl(), '_blank');
   };
 
   const handleSpawnFailedDownload = () => {
     setShowSpawnFailedDialog(false);
-    window.open(BRAND_WEBSITE_URL, '_blank');
+    window.open(websiteUrl(), '_blank');
   };
 
   const versionSuffix = version ? ` (v${version})` : '';

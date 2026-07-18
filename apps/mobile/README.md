@@ -1,6 +1,6 @@
-# XDMaker Mobile
+# Cindy Mobile
 
-Mobile controller for XDMaker device link. The app logs in with the same Feishu account as desktop, discovers controllable desktop devices, mirrors active sessions, sends messages, and resolves pending remote interactions.
+Mobile controller for Cindy device link. The app logs in with the same Cindy account as desktop, discovers controllable desktop devices, mirrors active sessions, sends messages, and resolves pending remote interactions.
 
 ## Planning
 
@@ -21,9 +21,8 @@ Expo Go or TestFlight as proof that local source changes are running.
 
 Required Expo public env:
 
-- `EXPO_PUBLIC_FEISHU_APP_ID`: Feishu OAuth app id used by the XDMaker backend.
-- `EXPO_PUBLIC_XDT_API_BASE_URL`: XDMaker API base URL. Defaults to `https://xdt-api.magiclizi.com` when omitted.
-- TapDB mobile analytics env: `EXPO_PUBLIC_TAPTAP_CLIENT_ID` and `EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN`. Optional `EXPO_PUBLIC_TAPDB_CHANNEL` overrides the default `AppStore` / `NPKG` channel; optional `EXPO_PUBLIC_TAPDB_REGION` defaults to `cn`.
+- `EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL`: endpoint manifest bootstrap base (per-region hotfix CDN). Runtime business endpoints (auth / device-link / gateway) are resolved from `<base>/endpoint.json` at startup; in dev they default to the repo's `config/endpoint.json` and can still be overridden with explicit `EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL` / `EXPO_PUBLIC_CINDY_AUTH_BASE_URL`. Set `EXPO_PUBLIC_ENDPOINTS_CDN=1` to make dev fetch the online manifest like production.
+- EAS/TestFlight reads TapDB analytics from `EXPO_PUBLIC_TAPTAP_CLIENT_ID` and `EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN`. Self-hosted builds read the same public values from the selected region's `scripts/self-host-regions.json` `tapdb` block instead. Optional EAS `EXPO_PUBLIC_TAPDB_CHANNEL` overrides the default `AppStore` / `NPKG` channel; optional `EXPO_PUBLIC_TAPDB_REGION` defaults to `cn`.
 
 Release env:
 
@@ -31,13 +30,9 @@ Release env:
 - Configure `EXPO_PUBLIC_TAPTAP_CLIENT_ID` and `EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN` in EAS project environments for both `production` and `preview`, so cloud builds can bundle TapDB. Configure optional `EXPO_PUBLIC_TAPDB_CHANNEL` / `EXPO_PUBLIC_TAPDB_REGION` there too when they need to differ from defaults.
 - Run releases through the fixed root `pnpm mobile:release:*` scripts. They automatically wrap the underlying release command with the matching EAS environment and only allow the TapDB public env keys through.
 
-The mobile redirect URI is `lizcn://auth`. Feishu should redirect to the backend callback first:
-
-```text
-https://<api-host>/api/auth/callback
-```
-
-The backend callback then forwards `code`, `state`, or OAuth `error` back into the app.
+The mobile redirect URI is region-specific: `cindycn://auth` for CN and
+`cindy://auth` for Global. Cindy Auth and native social login callbacks must
+return to the scheme selected by the build region.
 
 ## Automated Checks
 

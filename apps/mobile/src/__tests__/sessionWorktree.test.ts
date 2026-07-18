@@ -3,8 +3,8 @@ import { sessionWorktreeInfo, sessionWorktreeLabel } from '@/session/sessionWork
 
 describe('session worktree display', () => {
   it('extracts a stable worktree label from macOS and Windows paths', () => {
-    expect(sessionWorktreeInfo({ worktreePath: '/repo/app/.xdt-worktrees/feat-mobile' })).toEqual({
-      path: '/repo/app/.xdt-worktrees/feat-mobile',
+    expect(sessionWorktreeInfo({ worktreePath: '/repo/app/.cindy-worktrees/feat-mobile' })).toEqual({
+      path: '/repo/app/.cindy-worktrees/feat-mobile',
       name: 'feat-mobile',
     });
     expect(sessionWorktreeLabel({ worktreePath: 'D:\\repo\\.xdt-worktrees\\feat-win\\' })).toBe('Worktree feat-win');

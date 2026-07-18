@@ -26,7 +26,12 @@ async function main() {
   const config = loadMobileConfig();
   requireExplicitDev(args, 'mobile:release:beta');
   assertEasLoggedIn({ mobileDir: config.mobileDir });
-  const target = resolveTarget(config, { kind: 'beta', dev: args.dev, environment: args.environment });
+  const target = resolveTarget(config, {
+    kind: 'beta',
+    dev: args.dev,
+    environment: args.environment,
+    region: args.region,
+  });
   assertTargetProfile(config, target);
 
   assertPublicEnv(resolveCommandPublicEnv(target.publicEnv), { variant: 'beta' });

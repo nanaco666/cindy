@@ -1032,13 +1032,16 @@ export function buildRenderItems(
           // 控制端无卡、card-update 被静默拒、老历史)保留基座渲染,音频永不
           // 消失。URL 在净化器输出里是 escapeAttr 原样(cindy-media 地址无需
           // 转义字符),字面量包含判定成立。
-          if (media.some((m) => m.audioInCard)) {
+          if (media.some((m) => m.audioInCard || m.imageInCard)) {
             const anchorEntry = anchor ? ghostCards?.byCallId.get(anchor) : undefined;
             const cardHtml =
               sameGhostTarget && anchorEntry?.status === 'ready' ? anchorEntry.html : '';
             media = media.filter(
               (m) =>
-                !(m.kind === 'audio' && m.audioInCard && cardHtml.includes(`data-ghost-audio="${m.url}"`)),
+                !(m.kind === 'audio' && m.audioInCard && cardHtml.includes(`data-ghost-audio="${m.url}"`)) &&
+                // 图片入卡令牌同款验证:锚到的同意识卡 html 真含该图片地址
+                // (卡内 <img src> 就是 cindy-media 地址原文)才压基座。
+                !(m.kind === 'image' && m.imageInCard && cardHtml.includes(m.url)),
             );
             if (media.length === 0) return;
           }

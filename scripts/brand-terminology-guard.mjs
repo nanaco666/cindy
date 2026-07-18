@@ -5,11 +5,11 @@ import process from 'node:process';
 const FORBIDDEN_TERMS = [
   {
     term: 'XDT' + 'Maker',
-    replacement: 'XDMaker',
+    replacement: 'Cindy',
   },
   {
     term: 'XDT' + ' Maker',
-    replacement: 'XDMaker',
+    replacement: 'Cindy',
   },
 ];
 
@@ -33,13 +33,13 @@ const ALLOWED_LEGACY_OCCURRENCES = new Set([
 const LOCALE_FILE_RE = /^apps\/desktop\/src\/renderer\/i18n\/locales\/[^/]+\/common\.json$/;
 const LOCALE_BRAND_RE = /XDMaker|XD Maker|xdt-maker/;
 /**
- * key 级豁免:值是标识符而非品牌展示名(ssh 默认密钥名 / Chrome 受管 profile 标签)。
- * 按完整 key 路径精确匹配——不能只按末段 key 名,否则任意嵌套下同名 key 都会被静默放过。
+ * key 级豁免:当前为空。历史豁免均已随 2026-07 品牌翻转清退:
+ *  - openForLoginHint(Chrome 受管 profile 显示名)→ profile 已翻 Cindy,文案同步;
+ *  - settings.remote.keys.nameHint(ssh 默认密钥名)→ 默认名已翻 cindy,文案同步。
+ * 若未来需要新豁免,按完整 key 路径精确匹配——不能只按末段 key 名,否则任意
+ * 嵌套下同名 key 都会被静默放过。
  */
-const LOCALE_EXEMPT_KEY_PATHS = new Set([
-  'settings.remote.keys.nameHint',
-  'settings.computerUse.browser.openForLoginHint',
-]);
+const LOCALE_EXEMPT_KEY_PATHS = new Set([]);
 /** 值级豁免:文档路径引用。 */
 const LOCALE_EXEMPT_VALUE_SUBSTRINGS = ['xdt-maker-architecture.md'];
 
@@ -138,8 +138,8 @@ if (localeViolations.length > 0) {
     console.error(`  ${hit.file} → key "${hit.key}"`);
   }
   console.error('\nlocale 文案里的品牌名必须写 {{appName}}(由 i18next defaultVariables 注入 BRAND_NAME)。');
-  console.error('标识符例外(settings.remote.keys.nameHint / settings.computerUse.browser.openForLoginHint / 架构文档路径)见 docs/branding-rename-checklist.md。');
+  console.error('标识符例外(架构文档路径)见 docs/branding-rename-checklist.md。');
   process.exit(1);
 }
 
-console.log('✅ [brand-terminology-guard] PASS — product spelling uses XDMaker, locales use {{appName}}');
+console.log('✅ [brand-terminology-guard] PASS — no forbidden brand spellings, locales use {{appName}}');

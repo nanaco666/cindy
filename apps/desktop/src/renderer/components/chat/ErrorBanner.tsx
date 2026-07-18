@@ -154,6 +154,18 @@ export function ErrorBanner({
     isCodexSessionExpiredError(error);
   // 网络类错误(502/连接失败/fetch failed 等):友好文案 + 原始错误折叠可查。
   const isNetworkishError = isNetworkishErrorMessage(error);
+  // Retry 的显示条件与网络错误文案必须共用同一个判定。外部发起的 turn（例如
+  // scheduler / goal）失败时没有安全的 recovery target，errorRetryText 会是 null；
+  // 此时不能一边隐藏按钮，一边仍提示用户“点击重试”。
+  const isSilentStopExhausted = errorReason === 'silent-stop-exhausted';
+  const hideRetry =
+    isSilentStopExhausted ||
+    isCodexThreadStale ||
+    showInvalidEncryptedContentRecovery ||
+    (isCodexRemoteAuthMissing && !syncedSinceError) ||
+    isCodexLocalOAuthSessionExpired ||
+    isCodexLocalOAuthAuthMissing;
+  const safeRetryText = !hideRetry && retryText ? retryText : null;
   const [showRawNetworkError, setShowRawNetworkError] = useState(false);
   useEffect(() => {
     setShowRawNetworkError(false);
@@ -191,7 +203,11 @@ export function ErrorBanner({
     // 放在所有专属指引分支之后:401 等更具体的分支优先。
     displayError = isRecoverable
       ? t('chat.errorBanner.networkAutoRetrying')
-      : t('chat.errorBanner.networkUnreachable');
+      : t(
+          safeRetryText
+            ? 'chat.errorBanner.networkUnreachable'
+            : 'chat.errorBanner.networkUnreachableNoRetry',
+        );
   } else {
     displayError = error;
     hasSpecialGuidance = false;
@@ -261,16 +277,6 @@ export function ErrorBanner({
   // Retry hide 条件: stale thread / 远端 auth 缺失未同步 / 本地 OAuth auth 缺失
   // (本地没 sync 入口, 用户去 codex login 再来; retry 立刻撞同样 401 没意义)。
   // **API mode 不在 hide 列表里** — gateway key 自动 refresh, retry 大概率成功。
-  const isSilentStopExhausted = errorReason === 'silent-stop-exhausted';
-  const hideRetry =
-    isSilentStopExhausted ||
-    isCodexThreadStale ||
-    showInvalidEncryptedContentRecovery ||
-    (isCodexRemoteAuthMissing && !syncedSinceError) ||
-    isCodexLocalOAuthSessionExpired ||
-    isCodexLocalOAuthAuthMissing;
-  const safeRetryText = !hideRetry && retryText ? retryText : null;
-
   return (
     <div
       className={cn(

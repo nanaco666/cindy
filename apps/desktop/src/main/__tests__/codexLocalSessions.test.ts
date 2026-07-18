@@ -32,6 +32,7 @@ vi.mock('../logger.js', () => ({
 import {
   importExternalCodexSessions,
   importExternalCodexMessagesForSession,
+  parseCodexRolloutMessageLine,
   scanExternalCodexSessions,
   prepareExternalCodexSessionForResume,
 } from '../maker-host/codex-local-sessions';
@@ -256,6 +257,30 @@ afterEach(() => {
 });
 
 describe('Codex local session import', () => {
+  it('defensively removes complete IDE context from Codex user messages', () => {
+    const ideContext = '<ide_opened_file>The user opened /tmp/a.ts in the IDE.</ide_opened_file>';
+    const cleaned = parseCodexRolloutMessageLine(
+      rolloutLine('m1', 'user', `${ideContext}\nPlease fix the parser`, '2026-05-13T00:00:01.000Z'),
+      1,
+    );
+    const ideOnly = parseCodexRolloutMessageLine(
+      rolloutLine('m2', 'user', ideContext, '2026-05-13T00:00:02.000Z'),
+      2,
+    );
+    const malformed = parseCodexRolloutMessageLine(
+      rolloutLine('m3', 'user', 'Keep <ide_opened_file>unfinished context', '2026-05-13T00:00:03.000Z'),
+      3,
+    );
+
+    expect(cleaned).toMatchObject({
+      role: 'user',
+      text: 'Please fix the parser',
+      content: 'Please fix the parser',
+    });
+    expect(ideOnly).toBeNull();
+    expect(malformed).toMatchObject({ text: 'Keep <ide_opened_file>unfinished context' });
+  });
+
   it('applies the import cap after filtering subagent threads', async () => {
     const dbPath = createStateDb(externalHome);
     const rolloutPath = path.join(externalHome, 'sessions', `rollout-2026-05-13-${threadId}.jsonl`);

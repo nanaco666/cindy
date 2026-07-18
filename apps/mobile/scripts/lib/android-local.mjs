@@ -6,10 +6,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-/** 自建 Android 线默认 release keystore(仓库外,不入仓;可用 env 覆盖)。 */
-export const DEFAULT_KEYSTORE_PATH = '/Users/cn-ios/Documents/xdt/XDMakerMobileCer/Android/xdmaker-release.jks';
-/** 默认 keyAlias(见 XDMakerMobileCer/Android/signing-info.txt)。口令**绝不**写进代码,只从 env 读。 */
-export const DEFAULT_KEY_ALIAS = 'xdmaker-release';
+// 签名配置零代码默认值:keystore 路径 / alias / 两个口令全部由 XDT_ANDROID_* 环境变量提供,
+// 缺任一项即抛错(fail-closed)。签名套件本体(CindyMobileCer/Android/,含 signing-info.txt)
+// 在打包机的仓库外目录,口令**绝不**写进代码,只从 env 读。
 
 /**
  * 读 committed android-version.json 的 versionCode(单调递增整数,语义对齐 iOS buildNumber)。
@@ -77,22 +76,37 @@ export function replaceVersionCodeInAndroidVersionJson(rawText, nextVersionCode)
 
 /**
  * 解析 keystore 签名环境(供 gradlew assembleRelease 消费,build.gradle 用 System.getenv 读)。
- * 路径/alias 有默认值;两个口令**必须**由 env 提供(缺失即抛错,不落任何默认口令)。
+ * 按 region 分离:非机密的 keystorePath / keyAlias 从 self-host-regions.json 的 androidSigning 取值;
+ * 两个**口令是机密、不入仓**,从 env 按 region 后缀读 —— XDT_ANDROID_KEYSTORE_PASSWORD_<SUFFIX> /
+ * XDT_ANDROID_KEY_PASSWORD_<SUFFIX>(SUFFIX = authRegion 大写,如 CN / GLOBAL);cn 额外回落到
+ * 无后缀旧名(现有 cn 打包 env 不用改)。缺任一项即抛错(fail-closed)。
  * 返回的 env 只在构建子进程内传入,绝不落盘、绝不写进 build.gradle。
- * @param {NodeJS.ProcessEnv} baseEnv
+ * @param {{ authRegion?: string, androidSigning?: { keystorePath?: string, keyAlias?: string } }} regionConfig
+ * @param {NodeJS.ProcessEnv} [baseEnv]
  * @returns {{ XDT_ANDROID_KEYSTORE_PATH: string, XDT_ANDROID_KEYSTORE_PASSWORD: string, XDT_ANDROID_KEY_ALIAS: string, XDT_ANDROID_KEY_PASSWORD: string }}
  */
-export function resolveAndroidSigningEnv(baseEnv = process.env) {
-  const keystorePath = String(baseEnv.XDT_ANDROID_KEYSTORE_PATH ?? '').trim() || DEFAULT_KEYSTORE_PATH;
-  const keyAlias = String(baseEnv.XDT_ANDROID_KEY_ALIAS ?? '').trim() || DEFAULT_KEY_ALIAS;
-  const storePassword = String(baseEnv.XDT_ANDROID_KEYSTORE_PASSWORD ?? '').trim();
-  const keyPassword = String(baseEnv.XDT_ANDROID_KEY_PASSWORD ?? '').trim();
+export function resolveAndroidSigningEnv(regionConfig, baseEnv = process.env) {
+  const s = regionConfig?.androidSigning ?? {};
+  const region = regionConfig?.authRegion ?? '?';
+  const suffix = String(region).toUpperCase();
+  const keystorePath = String(s.keystorePath ?? '').trim();
+  const keyAlias = String(s.keyAlias ?? '').trim();
+  // 口令走 env(机密不入仓):region 后缀优先;cn 回落到无后缀旧名。
+  const pickSecret = (base) => {
+    const suffixed = String(baseEnv[`${base}_${suffix}`] ?? '').trim();
+    if (suffixed) return suffixed;
+    return suffix === 'CN' ? String(baseEnv[base] ?? '').trim() : '';
+  };
+  const storePassword = pickSecret('XDT_ANDROID_KEYSTORE_PASSWORD');
+  const keyPassword = pickSecret('XDT_ANDROID_KEY_PASSWORD');
   const missing = [];
-  if (!storePassword) missing.push('XDT_ANDROID_KEYSTORE_PASSWORD');
-  if (!keyPassword) missing.push('XDT_ANDROID_KEY_PASSWORD');
+  if (!keystorePath) missing.push(`${region}.androidSigning.keystorePath (JSON)`);
+  if (!keyAlias) missing.push(`${region}.androidSigning.keyAlias (JSON)`);
+  if (!storePassword) missing.push(`XDT_ANDROID_KEYSTORE_PASSWORD_${suffix} (env)`);
+  if (!keyPassword) missing.push(`XDT_ANDROID_KEY_PASSWORD_${suffix} (env)`);
   if (missing.length) {
     throw new Error(
-      `缺少 keystore 口令环境变量:${missing.join(', ')}(口令不入仓,须在启动时提供;keystore 路径默认 ${DEFAULT_KEYSTORE_PATH},可用 XDT_ANDROID_KEYSTORE_PATH 覆盖)`,
+      `Android 签名配置缺失(${region}):${missing.join(', ')}(路径/alias 走 region JSON,两个口令走 env、凭证不入仓)`,
     );
   }
   return {
@@ -142,28 +156,6 @@ export function patchBuildGradleSigning(source) {
   }
   patched = patched.replace(flip, '$1release');
   return patched;
-}
-
-// xdt-feishu-login vendored 的 larksso AAR 目录(相对生成的 android/ 根工程)。用单引号 JS 串,
-// 保持 groovy 的 ${rootProject.projectDir} 字面量(不被 JS 模板插值)。
-export const FEISHU_LIBS_DIR_EXPR = '${rootProject.projectDir}/../modules/xdt-feishu-login/android/libs';
-
-/**
- * 幂等 patch 生成的 android/build.gradle:把 xdt-feishu-login 的 libs flatDir 加进 allprojects.repositories,
- * 让 :app 能传递解析 vendored 的 larksso AAR(flatDir 无 POM、不跨工程传递,故 :app 侧必须显式声明)。
- * 只动生成的 android/(prebuild 之后),对 @expo/fingerprint / iOS / EAS 零影响。找不到锚点抛错。
- * @param {string} source android/build.gradle 原文
- * @returns {string}
- */
-export function patchRootBuildGradleFeishuFlatDir(source) {
-  if (typeof source !== 'string' || !source) throw new Error('patchRootBuildGradleFeishuFlatDir: 空 build.gradle');
-  if (source.includes('xdt-feishu-login/android/libs')) return source; // 幂等:已 patch
-  // 只认 allprojects 里的 repositories(避免误伤 buildscript.repositories)。
-  const anchor = /allprojects\s*\{\s*repositories\s*\{/;
-  if (!anchor.test(source)) {
-    throw new Error('patchRootBuildGradleFeishuFlatDir: 未找到 allprojects { repositories { 块(Expo prebuild 模板结构变化?)');
-  }
-  return source.replace(anchor, (m) => `${m}\n    flatDir { dirs "${FEISHU_LIBS_DIR_EXPR}" }`);
 }
 
 /**

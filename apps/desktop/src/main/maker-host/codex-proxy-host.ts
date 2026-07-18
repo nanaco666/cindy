@@ -34,7 +34,7 @@ import {
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { buildCodexGatewayBaseUrl, CODEX_GATEWAY_BASE_URL, CODEX_OAUTH_UPSTREAM } from './codex-gateway-config.js';
+import { buildCodexGatewayBaseUrl, CODEX_OAUTH_UPSTREAM } from './codex-gateway-config.js';
 import { getActiveCatalog } from './active-catalog.js';
 import {
   gatewayDefaultRouteDecision,
@@ -666,7 +666,8 @@ export async function ensureCodexProxyReady(): Promise<void> {
     try {
       const handle = await createAnthropicCompatProxy({
         // 默认上游 = gateway(含 /v1); 「普通模型 + oauth」由 routingTransform override 到 ChatGPT。
-        upstream: CODEX_GATEWAY_BASE_URL,
+        // 函数形态:model-access 下发切换网关 endpoint 后,常驻 proxy 每请求现取(按值 memoize)。
+        upstream: () => buildCodexGatewayBaseUrl(),
         transformRequest: createTransformRequestChain(),
         routingTransform: createModelRoutingTransform(),
         // 组合两个只读观察器:service-tier 抽取 + 自定义供应商上游错误分类广播
@@ -705,7 +706,7 @@ export async function ensureCodexProxyReady(): Promise<void> {
         return;
       }
       _handle = handle;
-      log.info('codex proxy ready', { url: _handle.url, upstream: CODEX_GATEWAY_BASE_URL });
+      log.info('codex proxy ready', { url: _handle.url, upstream: buildCodexGatewayBaseUrl() });
     } catch (err) {
       _handle = null;
       log.error('codex proxy failed to start, falling back to direct upstream', {
@@ -723,7 +724,7 @@ export async function ensureCodexProxyReady(): Promise<void> {
  * 给 Codex app-server 用的 provider base_url —— 永远是 loopback proxy 的 root。
  *
  * codex 向 `${base_url}/responses` 发请求 → proxy 收 `/responses`。proxy 默认上游
- * CODEX_GATEWAY_BASE_URL(含 /v1)→ 拼成 `/v1/responses` 转 gateway;routingTransform override 到
+ * buildCodexGatewayBaseUrl()(含 /v1)→ 拼成 `/v1/responses` 转 gateway;routingTransform override 到
  * CODEX_OAUTH_UPSTREAM(含 /backend-api/codex)→ 拼成 `/backend-api/codex/responses` 转 ChatGPT。
  * proxy 没起来 → fallback 到 gateway base_url(codex 直连 gateway, 失去 ChatGPT 透传, 但不裸奔)。
  */
@@ -781,7 +782,7 @@ export function unregister(sessionId: string): void {
 
 /**
  * proxy handle 是否就绪(`_handle` 非空)。spawn 决策点用它**直接**判定 active,
- * 不要靠 `endpoint !== CODEX_GATEWAY_BASE_URL` 这类字符串比较——upstream / 常量
+ * 不要靠 `endpoint !== buildCodexGatewayBaseUrl()` 这类字符串比较——upstream / 常量
  * 任何一处加尾斜杠或改写都会让比较失真 → proxy 起不来却误判 active=true →
  * maker-core drop dev → 全员裸奔。这条路影响所有 API 用户,必须用显式就绪状态。
  */

@@ -366,18 +366,15 @@ export const sessionPrRefs = sqliteTable(
 );
 
 /**
- * 本地"控制面"键值表——存放 schema_version、cloud_migration_status 等。
+ * 本地"控制面"键值表——存放 schema_version 等。
  * Key/value 都是字符串；调用方按需解析。
  *
  * 已知 keys：
  *   - schema_version                       (string，"0" / "1" / ...)
- *   - cloud_migration_status               ('pending' | 'in_progress' | 'done' | 'skipped')
- *   - cloud_migration_last_session_id      (string，cursor)
- *   - cloud_migration_total_sessions       (string，整数)
- *   - cloud_migration_total_messages       (string，整数)
- *   - cloud_migration_synced               (string，整数)
- *   - cloud_migration_has_more             ('1' | '0')
  *   - codex_history_has_product_prompt_initialized_v1 ('done')
+ *
+ * 历史 keys（只读遗留，不再写入）：cloud_migration_*——chat-data 云端迁移已随
+ * 主 server 退役（2026-07），存量库里可能残留这组键，无消费方。
  */
 export const migrationMeta = sqliteTable('migration_meta', {
   key: text('key').primaryKey(),

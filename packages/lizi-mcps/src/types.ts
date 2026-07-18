@@ -438,13 +438,14 @@ export type SessionSearchFn = (
   options?: SessionSearchOptions,
 ) => Promise<SessionSearchHit[]>;
 
+// 'feishu' 已于 2026-07-16 摘壳(能力迁内置意识 xd-feishu;后端留任给
+// scheduler capability broker,见 providers.ts 注释),不再是可注册 MCP id。
+// 'lizi_slack_bot' 已于 2026-07-17 随老 SlackIM relay 渠道退役(apiBaseUrl 清理)。
 export type LiziMcpId =
   | 'android'
   | 'browser'
   | 'computer'
-  | 'feishu'
   | 'lizi_feishu_bot'
-  | 'lizi_slack_bot'
   | 'lizi_scheduler'
   | 'lizi_ssh'
   | 'lizi_memory'

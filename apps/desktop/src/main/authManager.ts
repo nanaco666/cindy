@@ -3,7 +3,7 @@
  * ---------------------------------------------------------------------------
  * All authentication logic lives here in the main process:
  *
- * - OAuth login flow (PKCE, BrowserWindow, token exchange)
+ * - auth-server login flow (verification codes, PKCE browser redirects, account selection)
  * - Token storage (safeStorage for refresh token, in-memory for access token)
  * - Automatic access token refresh scheduling
  * - Logout (API + state cleanup)
@@ -13,12 +13,27 @@
  * exposed by this module and receives state updates via 'auth:state-change'.
  */
 
-import { BrowserWindow, net, safeStorage, app } from 'electron';
+import { BrowserWindow, net, safeStorage, app, shell } from 'electron';
 import crypto from 'node:crypto';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import fs from 'node:fs';
 import { machineIdSync } from 'node-machine-id';
-import { getFeishuService } from './mcp-integrations/feishu.js';
+import {
+  AuthApiError,
+  CindyAuthClient,
+  reduceAuthFlow,
+  ssoOrgDiscoveryToMethods,
+  type AuthFlowState,
+  type AuthMembership,
+  type AuthRegion,
+  type AuthTokenPair,
+  type LoginMethod,
+  type LoginOutcome,
+  type ProviderConfig,
+  type SocialProvider,
+} from '@cindy/auth-client';
 import { closeDb as closeLocalDb } from './localDb';
 import { readReloginFlag, clearReloginFlag } from './updateService';
 import * as canaryFlagStore from './canaryFlagStore';
@@ -30,20 +45,46 @@ import {
   type RefreshFetchResult,
 } from './authRefreshFailure';
 import { awaitWithStartupTimeout } from './authStartupGate';
+import { syncCanaryFlagAfterAuth } from './canaryFlagSync';
+import {
+  createAuthBrowserAuthorizationSlot,
+  parseAuthLoopbackCallback,
+} from './authLoopbackCallback';
 
 import { createLogger } from './logger';
-import { API_BASE_URL_DEV_FALLBACK } from '../shared/endpoints';
+import { getResolvedMainLocale } from './i18n';
+import { getClientEndpoint } from './clientEndpointsService.js';
+import {
+  parseDesktopLoginAction,
+  type DesktopLoginAction,
+  type DesktopLoginActionResult,
+} from '../shared/authIpc';
 
 const log = createLogger('authManager');
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
-const SERVER_URL = import.meta.env.VITE_API_BASE_URL || API_BASE_URL_DEV_FALLBACK;
-const FEISHU_APP_ID = import.meta.env.VITE_FEISHU_APP_ID;
-const REDIRECT_URI = SERVER_URL + '/api/auth/callback';
+const AUTH_REGION: AuthRegion =
+  import.meta.env.VITE_CINDY_AUTH_REGION === 'global' ? 'global' : 'cn';
+// 端点惰性读取(勿固化成模块级常量):远程清单在 app.ready 内解析,
+// 顶层求值会把值钉死在烘焙值上。clientEndpointsService 的烘焙值已含 dev fallback。
+// auth 清单字段不分 region——国内/海外两条 CDN 各发各的清单,无脑取即可。
+function authServerUrl(): string {
+  return getClientEndpoint('authApiBaseUrl');
+}
+const REFRESH_TOKEN_KEY = 'cindy_auth_refresh_token';
+const LEGACY_REFRESH_TOKEN_KEY = 'refresh_token';
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
+const DEFAULT_EFFORT = 'medium';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
+// 2026-07 产品侧 me 路由退役:身份完全以 auth-server membership 为准,不再
+// 请求主 server `/api/user/me`。原产品增强字段的去向:
+//  - isCanary → 登录后从 oauth-broker `/api/user/feature-flags` 单独读取,
+//    仅落 main 进程本地标记,不进入 renderer User;
+//  - feishuOpenId → 退役,飞书登录已整体下线,身份锚(identityAnchor)只写 email;
+//  - role(产品级 admin)→ 退役,唯一消费是侧栏头像角标(纯装饰),一并移除。
 export interface User {
   id: string;
   name: string;
@@ -51,80 +92,22 @@ export interface User {
   email: string | null;
   defaultModel: string;
   defaultEffort: string;
-  /** canary-release V0.1: server-side gray-release flag; mirrored to canaryFlagStore. */
-  isCanary?: boolean;
-  /**
-   * 当前登录用户的飞书 open_id（来自 xdt 服务端的 feishu app, cli_a94d4cf642381cd4)。
-   * 从 server `/me` 的 `feishuId` 字段映射来——server DB `user.feishuId` 存的是
-   * feishu open_id（auth.ts L91）。
-   *
-   * 注意：**不**用于 lizi-im 的 bot 白名单——bot 用的是用户自己的 feishu app，
-   * open_id 跨 app 不通用，所以白名单走 TOFU（feishu/ownerGuard.ts）。这个字段
-   * 仅供未来跨服务身份关联（如 SkillHub 部门同步）使用。
-   *
-   * **可能 null**：仅当 server 端 user.feishuId 列为空时（理论上不会，因为登录
-   * 流程必经飞书 OAuth）。登录响应和 /me 都已下发 feishuId（auth.ts L147 / user.ts L23）。
-   */
-  feishuOpenId?: string | null;
-  /**
-   * 服务器侧用户角色。'user' 默认；'admin' 有额外权限。
-   * 登录与 initialize() 时从 server 拉一次后缓存到进程生命周期内。
-   * 不实时同步 —— promote/demote 后用户重启 app 才生效（按设计）。
-   */
-  role?: 'user' | 'admin';
+  /** auth-server membership context. */
+  membershipKind: 'personal' | 'org';
+  membershipRole: 'owner' | 'admin' | 'member';
+  orgId: string | null;
+  orgName: string | null;
+  passportId: string;
 }
-
-/**
- * chat-data-localization V0.5: 2-state migration snapshot.
- * V0.4 之前的 'migrated_elsewhere' 已删除——按 (userId, deviceId) 切片隔离后该状态自洽不再需要。
- */
-export type MigrationStatus =
-  | { status: 'none' }
-  | { status: 'pending'; totalSessions: number; totalMessages: number };
 
 export interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
-  /** chat-data-localization V0.5: latest migration snapshot from login/refresh response. */
-  migration?: MigrationStatus;
   /** SkillHub 跨设备识别：本机 deviceId（machineIdSync 结果），登录前后都会有值 */
   deviceId: string;
 }
 
-interface LoginResponse {
-  accessToken: string;
-  refreshToken: string;
-  /** Server's wire shape — uses `feishuId` (DB column name); we map to `feishuOpenId` below. */
-  user: {
-    id: string;
-    name: string;
-    avatar: string | null;
-    email: string | null;
-    defaultModel: string;
-    defaultEffort: string;
-    isCanary: boolean;
-    feishuId: string;
-    /** automation-admin-gate: server 端 UserRole 枚举值 */
-    role: 'user' | 'admin';
-  };
-  feishuAccessToken: string;
-  feishuRefreshToken: string;
-  feishuExpiresIn: number;
-  grantedScopes: string[];
-  /** chat-data-localization V0.5: server-side per-(userId, deviceId) snapshot; absent → treat as 'none'. */
-  migration?: MigrationStatus;
-}
-
-interface RefreshResponse {
-  accessToken: string;
-  refreshToken: string;
-  preferences: {
-    defaultModel: string;
-    defaultEffort: string;
-  };
-  /** chat-data-localization V0.5: same shape as login response migration field. */
-  migration?: MigrationStatus;
-}
+type RefreshResponse = AuthTokenPair;
 
 interface AuthErrorResponse {
   error?: {
@@ -142,28 +125,6 @@ type AccountSwitchTeardown = (context: {
 
 let accountSwitchTeardown: AccountSwitchTeardown | null = null;
 
-interface MeResponse {
-  user: {
-    id: string;
-    name: string;
-    avatar: string | null;
-    email: string | null;
-    createdAt: string;
-    updatedAt: string;
-    defaultModel: string;
-    defaultEffort: string;
-    /** Server-side column storing the feishu open_id (see auth.ts L91). */
-    feishuId?: string | null;
-    /** Per-request, fetched on-demand by skillhub publish flow. */
-    firstLevelDepartmentIds?: string[];
-    firstLevelDepartmentNames?: string[];
-    /** canary-release V0.1: gray-release flag */
-    isCanary?: boolean;
-    /** automation-admin-gate: 缺省视为 'user'（兼容老 server） */
-    role?: 'user' | 'admin';
-  };
-}
-
 // ── Module-level state ──────────────────────────────────────────────────────
 
 let accessToken: string | null = null;
@@ -175,28 +136,26 @@ let refreshPromise: Promise<boolean> | null = null;
  *
  * dev-only 覆盖:设了 `XDT_DEVICE_ID_OVERRIDE` 则用它——用于在同一台机器上跑多个
  * desktop 实例模拟「多设备」(device-link 跨设备远程控制本地联调)。deviceId 只是
- * 同账号下区分设备的标识、非鉴权凭证(鉴权走飞书 OAuth + server 签 JWT),覆盖无安全风险。
+ * 同账号下区分设备的标识、非鉴权凭证(鉴权走 auth-server 签发的 JWT),覆盖无安全风险。
  */
 const deviceId = process.env.XDT_DEVICE_ID_OVERRIDE?.trim() || machineIdSync();
-/** chat-data-localization V0.5: most recent migration snapshot from server. */
-let currentMigration: MigrationStatus | undefined;
 
-/** Normalize an unknown-shape `migration` field from server response. */
-function normalizeMigration(raw: unknown): MigrationStatus {
-  if (!raw || typeof raw !== 'object') return { status: 'none' };
-  const m = raw as { status?: unknown; totalSessions?: unknown; totalMessages?: unknown };
-  if (m.status === 'pending') {
-    const totalSessions =
-      typeof m.totalSessions === 'number' && Number.isFinite(m.totalSessions)
-        ? Math.max(0, Math.floor(m.totalSessions))
-        : 0;
-    const totalMessages =
-      typeof m.totalMessages === 'number' && Number.isFinite(m.totalMessages)
-        ? Math.max(0, Math.floor(m.totalMessages))
-        : 0;
-    return { status: 'pending', totalSessions, totalMessages };
-  }
-  return { status: 'none' };
+let loginFlowState: AuthFlowState | null = null;
+let providerConfig: ProviderConfig | null = null;
+let discoveredMethods: LoginMethod[] = [];
+let pendingLoginTicket: string | null = null;
+let pendingBindTicket: string | null = null;
+let loginActionPromise: Promise<DesktopLoginActionResult> | null = null;
+
+function createAuthClient(): CindyAuthClient {
+  return new CindyAuthClient({
+    baseUrl: authServerUrl(),
+    region: AUTH_REGION,
+    deviceId,
+    clientType: 'desktop',
+    locale: getResolvedMainLocale(),
+    fetch: async (input, init) => net.fetch(input, init as RequestInit),
+  });
 }
 
 // ── safeStorage helpers ─────────────────────────────────────────────────────
@@ -262,9 +221,15 @@ const API_FETCH_TIMEOUT_MS = 15_000;
 
 async function apiFetch<T>(
   apiPath: string,
-  options?: { method?: string; body?: unknown; token?: string | null; timeoutMs?: number },
+  options?: {
+    method?: string;
+    body?: unknown;
+    token?: string | null;
+    timeoutMs?: number;
+    baseUrl?: string;
+  },
 ): Promise<{ ok: boolean; status: number; data: T }> {
-  const url = SERVER_URL + apiPath;
+  const url = (options?.baseUrl ?? authServerUrl()) + apiPath;
   const method = options?.method ?? 'GET';
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (options?.token) {
@@ -305,17 +270,34 @@ function getRefreshErrorCode(result: { data: unknown }): string | undefined {
   return (result.data as AuthErrorResponse | null)?.error?.code;
 }
 
-function mapMeUserToAuthUser(user: MeResponse['user']): User {
+function mapMembershipToAuthUser(membership: AuthMembership, passportId?: string): User {
   return {
-    id: user.id,
-    name: user.name,
-    avatar: user.avatar,
-    email: user.email,
-    defaultModel: user.defaultModel,
-    defaultEffort: user.defaultEffort,
-    isCanary: user.isCanary === true,
-    feishuOpenId: user.feishuId ?? null,
-    role: user.role === 'admin' ? 'admin' : 'user',
+    id: membership.id,
+    name: membership.displayName || membership.email || 'Cindy',
+    // auth-server 自助头像(PATCH /api/me/profile);null = 未设置(UI 首字母兜底)。
+    // 产品资料头像回落已随 /api/user/me 退役(2026-07)。
+    avatar: membership.avatarUrl ?? null,
+    email: membership.email,
+    defaultModel: DEFAULT_MODEL,
+    defaultEffort: DEFAULT_EFFORT,
+    membershipKind: membership.kind,
+    membershipRole: membership.role,
+    orgId: membership.orgId,
+    orgName: membership.orgName,
+    passportId: passportId ?? membership.passportId ?? '',
+  };
+}
+
+function mergeMembershipWithExisting(membership: AuthMembership, existing: User | null): User {
+  const mapped = mapMembershipToAuthUser(membership);
+  if (!existing || existing.id !== mapped.id) return mapped;
+  return {
+    ...mapped,
+    // membership 自助头像优先;未设置时保留既有展示值。
+    avatar: mapped.avatar ?? existing.avatar,
+    defaultModel: existing.defaultModel,
+    defaultEffort: existing.defaultEffort,
+    passportId: mapped.passportId || existing.passportId,
   };
 }
 
@@ -329,91 +311,69 @@ export function setAccountSwitchTeardown(teardown: AccountSwitchTeardown | null)
 // 从不同步到服务器,因此登录 / 冷启动不再从服务器拉 key 写本地。新设备 / 新登录
 // 需用户在本机重新填入 key。renderer 侧 useApiKey / useMivoApiKey 同为本地 only。
 
-// ── OAuth BrowserWindow ─────────────────────────────────────────────────────
+// ── System-browser OAuth / SSO (RFC 8252 loopback callback) ────────────────
 
-function openOAuthWindow(
-  parentWindow: BrowserWindow | null,
-  authUrl: string,
-  expectedState: string,
-): Promise<{ code: string } | { error: string }> {
+const BROWSER_AUTH_TIMEOUT_MS = 5 * 60_000;
+const browserAuthorizationSlot = createAuthBrowserAuthorizationSlot();
+
+async function openSystemBrowserAuthorization(input: {
+  kind: 'social' | 'sso';
+  providerOrConnectionId: string;
+  codeChallenge: string;
+  state: string;
+}): Promise<{ code: string } | { error: string }> {
   return new Promise((resolve) => {
-    const authWindow = new BrowserWindow({
-      width: 600,
-      height: 740,
-      parent: parentWindow ?? undefined,
-      // Keep OAuth non-modal so the main window, app menu, and quit shortcuts
-      // remain usable while the vendor login page is open.
-      modal: false,
-      closable: true,
-      minimizable: true,
-      webPreferences: { nodeIntegration: false, contextIsolation: true, spellcheck: false },
-    });
-    authWindow.setMenu(null);
-
-    let resolved = false;
-
-    const handleRedirect = (url: string) => {
-      if (resolved) return;
-      if (!url.startsWith(REDIRECT_URI)) return;
-      resolved = true;
-      const parsed = new URL(url);
-      const state = parsed.searchParams.get('state');
-      if (state !== expectedState) {
-        resolve({ error: 'STATE_MISMATCH' });
-        authWindow.close();
+    let settled = false;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    let deactivateCancellation: (() => void) | null = null;
+    const server = createServer((req, res) => {
+      if (settled || !req.url) {
+        res.writeHead(404).end();
         return;
       }
-      const code = parsed.searchParams.get('code');
-      resolve(code ? { code } : { error: 'USER_CANCELLED' });
-      authWindow.close();
-    };
-
-    installOAuthWindowInputFallbacks(authWindow);
-    authWindow.webContents.on('will-redirect', (_e, url) => handleRedirect(url));
-    authWindow.webContents.on('will-navigate', (_e, url) => handleRedirect(url));
-    authWindow.on('closed', () => {
-      if (!resolved) {
-        resolved = true;
-        resolve({ error: 'USER_CANCELLED' });
+      const result = parseAuthLoopbackCallback(req.url, input.state);
+      if (!result) {
+        res.writeHead(404).end();
+        return;
       }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(
+        '<!doctype html><meta charset="utf-8"><title>Cindy</title><p>You can return to Cindy.</p>',
+      );
+      finish(result);
     });
 
-    authWindow.loadURL(authUrl);
-  });
-}
+    const finish = (result: { code: string } | { error: string }) => {
+      if (settled) return;
+      settled = true;
+      deactivateCancellation?.();
+      deactivateCancellation = null;
+      if (timeout !== null) clearTimeout(timeout);
+      server.close(() => resolve(result));
+    };
 
-function installOAuthWindowInputFallbacks(authWindow: BrowserWindow): void {
-  const goBack = () => {
-    if (authWindow.webContents.canGoBack()) {
-      authWindow.webContents.goBack();
-    }
-  };
+    deactivateCancellation = browserAuthorizationSlot.activate(() =>
+      finish({ error: 'USER_CANCELLED' }),
+    );
 
-  authWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.type !== 'keyDown') return;
-
-    if (input.key === 'Escape') {
-      event.preventDefault();
-      authWindow.close();
-      return;
-    }
-
-    const key = input.key.toLowerCase();
-    const wantsBack =
-      input.key === 'BrowserBack' ||
-      (input.alt && key === 'arrowleft') ||
-      (process.platform === 'darwin' && input.meta && key === '[');
-
-    if (wantsBack) {
-      event.preventDefault();
-      goBack();
-    }
-  });
-
-  authWindow.on('app-command', (event, command) => {
-    if (command !== 'browser-backward') return;
-    event.preventDefault();
-    goBack();
+    server.once('error', (error) => {
+      log.warn('auth loopback listener failed', error);
+      finish({ error: 'CALLBACK_LISTENER_FAILED' });
+    });
+    server.listen(0, '127.0.0.1', () => {
+      if (settled) {
+        server.close();
+        return;
+      }
+      const address = server.address() as AddressInfo;
+      const redirectUri = `http://127.0.0.1:${address.port}/auth/callback`;
+      const authUrl = createAuthClient().buildAuthorizeUrl({ ...input, redirectUri });
+      timeout = setTimeout(() => finish({ error: 'USER_CANCELLED' }), BROWSER_AUTH_TIMEOUT_MS);
+      void shell.openExternal(authUrl).catch((error) => {
+        log.warn('open auth URL in system browser failed', error);
+        finish({ error: 'BROWSER_OPEN_FAILED' });
+      });
+    });
   });
 }
 
@@ -475,12 +435,57 @@ let replacementIntegrationReloadTimers: ReturnType<typeof setTimeout>[] = [];
 const COLD_START_AUTH_GATE_TIMEOUT_MS = 20_000;
 
 /**
- * auth 状态代际计数:login / devLogin / clearAuth(logout、会话过期、账号切换)
+ * auth 状态代际计数:login / clearAuth(logout、会话过期、账号切换)
  * 每次改写全局登录态时 +1。冷启动流程在开跑时快照代际,超时转后台后的每个状态
  * 写入点都先核对代际——用户在流程挂起期间手动登录 / 登出过,则迟到结果整体丢弃,
  * 绝不覆盖更新的登录态或删除新写入的 refresh token。
  */
 let authStateEpoch = 0;
+
+/**
+ * 登录态落地后异步同步灰度标记，不阻塞 renderer 进入主界面。
+ *
+ * expectedAuthEpoch + expectedUserId 防止慢响应在登出或换账号之后覆盖新身份；
+ * 请求失败/响应非法则保留旧值，遵守 feature-flags 服务端契约。
+ */
+function scheduleCanaryFlagSync(input: {
+  token: string;
+  expectedAuthEpoch: number;
+  expectedUserId: string;
+}): void {
+  void syncCanaryFlagAfterAuth(input, {
+    fetchFeatureFlags: (token) =>
+      apiFetch('/api/user/feature-flags', {
+        token,
+        baseUrl: getClientEndpoint('oauthBrokerApiBaseUrl'),
+      }),
+    readCurrentAuthIdentity: () => ({
+      authEpoch: authStateEpoch,
+      userId: currentUser?.id ?? null,
+    }),
+    persistFlag: canaryFlagStore.sync,
+  })
+    .then((outcome) => {
+      if (outcome.kind === 'synced') {
+        log.info('canary feature flag synced: isCanary=%s', outcome.isCanary);
+        return;
+      }
+      if (outcome.reason === 'stale-auth') {
+        log.debug('discarded stale canary feature-flags response');
+        return;
+      }
+      log.warn(
+        'canary feature flag sync preserved local value: reason=%s status=%s',
+        outcome.reason,
+        outcome.status ?? '<none>',
+      );
+    })
+    .catch((err) => {
+      // persistFlag currently absorbs filesystem errors, but keep this boundary
+      // non-fatal if that implementation changes later.
+      log.error('canary feature flag sync threw unexpectedly', err);
+    });
+}
 
 /**
  * 冷启动流程的进程内去重:主窗超时转后台之后,副窗 / 右侧栏窗口 mount 再调
@@ -521,7 +526,7 @@ async function runAuthRefreshWithReplacementRetry(
 }> {
   const run = await runRefreshWithReplacementRetry(initialRefreshToken, {
     doRefresh: requestAuthRefresh,
-    readLatestStoredToken: () => readSafe('refresh_token'),
+    readLatestStoredToken: () => readSafe(REFRESH_TOKEN_KEY),
     transientRetry: opts.withTransientRetry
       ? {
           rateLimitDelayMs: opts.rateLimitDelayMs,
@@ -581,14 +586,23 @@ function broadcastToRenderers(channel: string, payload: unknown): void {
   }
 }
 
-function notifyRenderer(): void {
-  const state: AuthState = {
+/**
+ * 当前登录态快照(所有状态出口共用)。
+ *
+ * `currentUser` 即服务端真值的合并展示态(auth-server membership 为主、
+ * product /me 增强字段与头像回落)。2026-07 自助资料上线后,名字/头像
+ * 修改直接写 auth-server(updateServerProfile),本地覆写层已退役。
+ */
+function snapshotAuthState(): AuthState {
+  return {
     user: currentUser,
     isAuthenticated: accessToken !== null && currentUser !== null,
-    migration: currentMigration,
     deviceId,
   };
-  broadcastToRenderers('auth:state-change', state);
+}
+
+function notifyRenderer(): void {
+  broadcastToRenderers('auth:state-change', snapshotAuthState());
 }
 
 function notifyRendererAuthBoundaryPending(): void {
@@ -621,12 +635,7 @@ export function onAuthStateChange(listener: AuthListener): () => void {
 }
 
 function notifyAuthListeners(): void {
-  const state: AuthState = {
-    user: currentUser,
-    isAuthenticated: accessToken !== null && currentUser !== null,
-    migration: currentMigration,
-    deviceId,
-  };
+  const state = snapshotAuthState();
   for (const l of authStateListeners) {
     try {
       l(state);
@@ -639,32 +648,13 @@ function notifyAuthListeners(): void {
 // ── Auth state management ───────────────────────────────────────────────────
 
 async function clearPerAccountIntegrations(): Promise<void> {
-  // canary-release V0.1: 登出清理灰度标记，下次未登录直接走 stable manifest
-  canaryFlagStore.clear();
-  const errors: unknown[] = [];
-  const clearOne = async (name: string, clear: () => Promise<void>): Promise<void> => {
-    try {
-      await clear();
-    } catch (err) {
-      log.error(`clear ${name} integration failed`, err);
-      errors.push(err);
-    }
-  };
-
-  await clearOne('feishu', () => getFeishuService().token.clearFeishuTokens());
-  // Jira/Confluence 的 per-account 清理已随 lizi_jira 退役(2026-07-14):
-  // Atlassian 账号迁入 xd-atlassian 意识保险库,是机器级而非登录账号级凭证,
-  // 与 Google 意识同语义,登出不清。
-  // Slack 官方 MCP 的 per-account 清理已随 slack-official 退役(2026-07-15):
-  // Slack 账号迁入 cindy-slack 意识保险库,是机器级而非登录账号级凭证,与
-  // Atlassian / Google 意识同语义,登出不清。
-
-  if (errors.length > 0) {
-    throw new AggregateError(
-      errors,
-      `failed to clear ${errors.length} per-account integration(s)`,
-    );
-  }
+  // 登录账号级集成清单当前为空(2026-07-17 起):
+  // - 飞书 token 链随 refresh-feishu 退役——xd-feishu 意识改走 OAuth broker,
+  //   凭证是机器级意识保险库,登出不清(与 Atlassian / Slack / Google 同语义);
+  // - Jira/Confluence 清理已随 lizi_jira 退役(2026-07-14);
+  // - Slack 官方 MCP 清理已随 slack-official 退役(2026-07-15)。
+  // 骨架保留:未来出现真正跟登录账号绑定的集成时在此登记,refresh() 的
+  // 账号切换 teardown 守卫链依赖本函数的调用位。
 }
 
 function clearPerAccountIntegrationsInBackground(): void {
@@ -673,40 +663,26 @@ function clearPerAccountIntegrationsInBackground(): void {
   });
 }
 
-async function reloadPerAccountIntegrationsFromDisk(feishuJwt: string | null): Promise<void> {
-  const errors: unknown[] = [];
-  const reloadOne = async (name: string, reload: () => Promise<void>): Promise<void> => {
-    try {
-      await reload();
-    } catch (err) {
-      log.error(`reload ${name} integration from disk failed`, err);
-      errors.push(err);
-    }
-  };
+/** Clear renderer-safe login progress and all main-only login tickets. */
+function resetLoginFlowState(): void {
+  loginFlowState = null;
+  providerConfig = null;
+  discoveredMethods = [];
+  pendingLoginTicket = null;
+  pendingBindTicket = null;
+}
 
-  await reloadOne('feishu', async () => {
-    const feishuAuth = getFeishuService().token;
-    feishuAuth.dispose();
-    await feishuAuth.init();
-    if (feishuJwt) {
-      feishuAuth.setJwt(feishuJwt);
-    }
-  });
-
-  if (errors.length > 0) {
-    throw new AggregateError(
-      errors,
-      `failed to reload ${errors.length} per-account integration(s) from disk`,
-    );
-  }
+async function reloadPerAccountIntegrationsFromDisk(_accessToken: string | null): Promise<void> {
+  // 登录账号级集成清单当前为空(见 clearPerAccountIntegrations 顶注)。
+  // 骨架与重试调度保留:替换式刷新的账号切换路径依赖本函数的调用位与
+  // 'after-integration-reload' 守卫点。
 }
 
 function scheduleReplacementIntegrationReloadRetries(userId: string): void {
   clearReplacementIntegrationReloadTimers();
   const timers: ReturnType<typeof setTimeout>[] = [];
   for (const delayMs of REPLACEMENT_INTEGRATION_RELOAD_RETRY_DELAYS_MS) {
-    let timer: ReturnType<typeof setTimeout>;
-    timer = setTimeout(() => {
+    const timer = setTimeout(() => {
       replacementIntegrationReloadTimers = replacementIntegrationReloadTimers.filter(
         (candidate) => candidate !== timer,
       );
@@ -730,7 +706,7 @@ function clearAuth(opts: { notify?: boolean } = {}): void {
   authStateEpoch += 1; // 迟到的冷启动流程从此作废(见 authStateEpoch 注释)
   accessToken = null;
   currentUser = null;
-  currentMigration = undefined;
+  resetLoginFlowState();
   persistedRefreshTokenNeedsIdentityCheck = false;
   lastAcceptedRefreshToken = null;
   clearReplacementIntegrationReloadTimers();
@@ -738,7 +714,10 @@ function clearAuth(opts: { notify?: boolean } = {}): void {
     clearTimeout(refreshTimer);
     refreshTimer = null;
   }
-  removeSafe('refresh_token');
+  removeSafe(REFRESH_TOKEN_KEY);
+  removeSafe(LEGACY_REFRESH_TOKEN_KEY);
+  // 未登录时固定使用 stable；同步中的旧请求会被 authStateEpoch 守卫丢弃。
+  canaryFlagStore.clear();
   // provider key(XD / Mivo)是绑定账号的本机密钥,**不在登出时清** —— 同账号重新登录 /
   // 会话过期重登需保留,避免每次都重填(本地 only 后服务器已无副本可拉回)。换账号导致的
   // 串号边界改由 login / 冷启动时 providerSecretStore.reconcileOwner 处理:owner 变了才清。
@@ -761,30 +740,86 @@ export function getCurrentUserId(): string | null {
   return currentUser?.id ?? null;
 }
 
-/**
- * 返回当前登录用户的 role。未登录或缺字段视为 'user'。
- */
-export function getCurrentUserRole(): 'user' | 'admin' {
-  return currentUser?.role === 'admin' ? 'admin' : 'user';
-}
-
 /** SkillHub 跨设备识别：本机 deviceId（machineIdSync 结果），登录前后都可用 */
 export function getDeviceId(): string {
   return deviceId;
 }
 
 export function getAuthState(): AuthState {
-  return {
-    user: currentUser,
-    isAuthenticated: accessToken !== null && currentUser !== null,
-    migration: currentMigration,
-    deviceId,
-  };
+  return snapshotAuthState();
 }
 
-/** chat-data-localization V0.5: snapshot getter for IPC return paths. */
-export function getMigrationSnapshot(): MigrationStatus | undefined {
-  return currentMigration;
+/**
+ * 当前展示资料(profileEdit 弹窗预填用)。未登录返回 null。
+ */
+export function getServerProfile(): { name: string; avatar: string | null } | null {
+  if (!currentUser) return null;
+  return { name: currentUser.name, avatar: currentUser.avatar };
+}
+
+/** PATCH /api/me/profile 的入参(至少提供一个字段;avatarUrl null = 清除头像)。 */
+export interface ServerProfilePatch {
+  displayName?: string;
+  avatarUrl?: string | null;
+}
+
+interface PatchProfileResponse {
+  membership?: AuthMembership;
+  error?: { code?: string; message?: string };
+}
+
+export type UpdateServerProfileResult =
+  | { ok: true; profile: { name: string; avatar: string | null } }
+  | { ok: false; status: number; code?: string };
+
+/**
+ * 自助修改昵称/头像:PATCH auth-server /api/me/profile(2026-07 上线,替代
+ * 旧的本地覆写方案)。成功后用响应 membership 就地更新 currentUser 并广播
+ * 登录态;头像清除(avatarUrl:null)后 UI 回落首字母兜底(产品资料头像
+ * 回落已随 /api/user/me 退役)。
+ * 网络/服务端失败返回 ok:false(status 0 = 网络层失败),不抛异常——
+ * IPC 错误语义由调用方 profileEdit 统一映射。
+ */
+export async function updateServerProfile(
+  patch: ServerProfilePatch,
+): Promise<UpdateServerProfileResult> {
+  if (!accessToken || !currentUser) {
+    return { ok: false, status: 0, code: 'NOT_AUTHENTICATED' };
+  }
+  const epochAtStart = authStateEpoch;
+  const result = await apiFetch<PatchProfileResponse>('/api/me/profile', {
+    method: 'PATCH',
+    body: patch,
+    token: accessToken,
+  });
+  if (!result.ok) {
+    const code = result.data?.error?.code;
+    return { ok: false, status: result.status, ...(code !== undefined ? { code } : {}) };
+  }
+  const membership = result.data?.membership;
+  // 请求期间登出/换号则不回写全局态(服务端已改成功,下次登录自然拉到新值)。
+  if (
+    membership &&
+    authStateEpoch === epochAtStart &&
+    currentUser !== null &&
+    currentUser.id === membership.id
+  ) {
+    currentUser = {
+      ...currentUser,
+      name: membership.displayName || currentUser.name,
+      avatar: membership.avatarUrl ?? null,
+    };
+    notifyRenderer();
+    notifyAuthListeners();
+    return { ok: true, profile: { name: currentUser.name, avatar: currentUser.avatar } };
+  }
+  return {
+    ok: true,
+    profile: {
+      name: membership?.displayName ?? '',
+      avatar: membership?.avatarUrl ?? null,
+    },
+  };
 }
 
 export async function initialize(): Promise<AuthState> {
@@ -796,12 +831,7 @@ export async function initialize(): Promise<AuthState> {
   // 冷启动时 accessToken/currentUser 必为空,不影响下方完整初始化流程
   // (relogin marker 消费、持久化 refresh_token 校验)。
   if (accessToken && currentUser) {
-    return {
-      user: currentUser,
-      isAuthenticated: true,
-      migration: currentMigration,
-      deviceId,
-    };
+    return snapshotAuthState();
   }
 
   // release-relogin-on-update: if the auto-updater dropped a relogin marker
@@ -816,13 +846,15 @@ export async function initialize(): Promise<AuthState> {
       reloginFlag.version,
     );
     lastAcceptedRefreshToken = null;
-    removeSafe('refresh_token');
-    void getFeishuService().token.clearFeishuTokens();
+    removeSafe(REFRESH_TOKEN_KEY);
+    removeSafe(LEGACY_REFRESH_TOKEN_KEY);
     clearReloginFlag();
     return { user: null, isAuthenticated: false, deviceId };
   }
 
-  const storedToken = readSafe('refresh_token');
+  // Old Feishu-auth refresh tokens are intentionally not portable to auth-server.
+  removeSafe(LEGACY_REFRESH_TOKEN_KEY);
+  const storedToken = readSafe(REFRESH_TOKEN_KEY);
   if (!storedToken) {
     return { user: null, isAuthenticated: false, deviceId };
   }
@@ -906,7 +938,7 @@ async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> 
           'cold-start refresh: definitive credential failure — clearing persisted refresh token',
         );
         lastAcceptedRefreshToken = null;
-        removeSafe('refresh_token');
+        removeSafe(REFRESH_TOKEN_KEY);
       } else if (action.kind === 'replacement-retry') {
         log.warn(
           `cold-start refresh failed for a stale token after ${attempts} attempt(s) — keeping latest refresh token, starting logged out`,
@@ -920,214 +952,318 @@ async function runColdStartRefreshFlow(storedToken: string): Promise<AuthState> 
     }
 
     const refreshData = refreshResult.data as RefreshResponse;
-    accessToken = refreshData.accessToken;
-    writeSafe('refresh_token', refreshData.refreshToken);
+    writeSafe(REFRESH_TOKEN_KEY, refreshData.refreshToken);
     lastAcceptedRefreshToken = refreshData.refreshToken;
-    currentMigration = normalizeMigration(refreshData.migration);
 
-    // Sync JWT to feishu token manager
-    getFeishuService().token.setJwt(accessToken);
-
-    const meResult = await apiFetch<MeResponse>('/api/user/me', {
-      token: accessToken,
-    });
-    // 迟到守卫②:/me 期间用户手动登录 / 登出过 → 不再触碰任何全局状态
-    // (accessToken / currentUser / feishu JWT 均已是新登录的值)。
-    if (epochChanged('after-me')) {
-      return { user: null, isAuthenticated: false, deviceId };
-    }
-    if (!meResult.ok) {
-      // refresh 刚成功(token 已轮换并写回),此处 /me 失败几乎都是瞬时(429/5xx/断网)
-      // 或 access-token 侧问题,不能据此删除刚轮换的有效 refresh token —— 保留它,本次以
-      // 未登录返回,留待下次启动 / refresh 恢复。
-      log.warn(
-        `cold-start /me failed status=${meResult.status} — keeping rotated refresh token, starting logged out`,
-      );
-      accessToken = null;
-      currentMigration = undefined;
-      return { user: null, isAuthenticated: false, deviceId };
-    }
-
-    currentUser = mapMeUserToAuthUser(meResult.data.user);
+    accessToken = refreshData.accessToken;
+    // 2026-07 起身份完全以 auth membership 为准(产品 /api/user/me 已退役)。
+    currentUser = mapMembershipToAuthUser(refreshData.membership);
     persistedRefreshTokenNeedsIdentityCheck = false;
     clearReplacementIntegrationReloadTimers();
-    // canary-release V0.1: 用 server 返回的状态覆盖本地标记（true 写、false 清）
-    canaryFlagStore.sync(currentUser.isCanary === true);
-    scheduleRefresh(accessToken);
+    scheduleCanaryFlagSync({
+      token: refreshData.accessToken,
+      expectedAuthEpoch: epochAtStart,
+      expectedUserId: currentUser.id,
+    });
+    scheduleRefresh(refreshData.accessToken);
     // XD / Mivo key 均为本地 only,不再在冷启动从服务器同步到本地。
     // 账号边界对账:换账号则清掉上一个账号留在本机的 provider key,同账号保留(不必重填)。
-    getProviderSecretStore().reconcileOwner(meResult.data.user.id);
+    getProviderSecretStore().reconcileOwner(refreshData.membership.id);
     // 自动登录(冷启动)也广播到 renderer,和 login() / refresh() / clearAuth() 一致。
     // AuthContext 是从 service.initialize() 的 IPC return value 拿初始 state 的,这条
     // 广播对它是"幂等的重复事件";但 renderer 侧晚到的订阅者(如 tapdb 上报)只能从
     // 广播拿到冷启动状态——不广播就永远收不到 auto-login 事件。
     notifyRenderer();
     notifyAuthListeners();
-    return {
-      user: currentUser,
-      isAuthenticated: true,
-      migration: currentMigration,
-      deviceId,
-    };
+    return snapshotAuthState();
   } catch (err) {
     // 网络类失败都在 apiFetch 内部消化(返回 status 0),能走到这里的是 refresh 成功
-    // **之后**的本地状态同步代码(writeSafe / feishu token / canary sync 等)抛异常——
+    // **之后**的本地状态同步代码(writeSafe / provider owner reconcile 等)抛异常——
     // 此时新 refresh token 已轮换并落盘,删除它只会把有效凭据丢掉。保留 token、记录
     // 错误,本次以未登录返回,留待下次启动自愈。
     log.error('cold-start auth initialize threw after refresh — keeping persisted refresh token', err);
     // 迟到守卫③:异常清理同样不能覆盖用户手动登录后的状态。
     if (!epochChanged('catch')) {
       accessToken = null;
-      currentMigration = undefined;
+      currentUser = null;
+      if (refreshTimer !== null) {
+        clearTimeout(refreshTimer);
+        refreshTimer = null;
+      }
     }
     return { user: null, isAuthenticated: false, deviceId };
   }
 }
 
-export async function login(
-  parentWindow: BrowserWindow | null,
-): Promise<
-  | { success: true; user: User; migration: MigrationStatus }
-  | { success: false; code: string; statusCode: number; message: string }
-> {
-  const { codeVerifier, codeChallenge } = generatePKCE();
-  const state = crypto.randomUUID();
-
-  const params = new URLSearchParams({
-    client_id: FEISHU_APP_ID,
-    redirect_uri: REDIRECT_URI,
-    response_type: 'code',
-    state,
-    code_challenge: codeChallenge,
-    code_challenge_method: 'S256',
-    scope: 'offline_access docx:document bitable:app wiki:wiki drive:drive im:message im:message.send_as_user im:message:readonly im:chat:readonly im:resource search:message calendar:calendar contact:contact.base:readonly contact:user.email:readonly contact:user.department:readonly contact:user.department_path:readonly contact:department.base:readonly contact:user:search minutes:minutes:readonly minutes:minutes.artifacts:read minutes:minutes.search:read vc:meeting.meetingevent:read vc:meeting.meetingid:read vc:record:readonly vc:reserve:readonly task:task:read task:tasklist:read task:section:read task:custom_field:read task:comment:read task:attachment:read',
+async function loadLoginProviders(): Promise<AuthFlowState> {
+  providerConfig = await createAuthClient().getProviders();
+  discoveredMethods = [];
+  pendingLoginTicket = null;
+  pendingBindTicket = null;
+  loginFlowState = reduceAuthFlow(loginFlowState, {
+    type: 'providers-loaded',
+    providers: providerConfig,
   });
-  const authUrl = `https://accounts.feishu.cn/open-apis/authen/v1/authorize?${params.toString()}`;
-
-  const oauthResult = await openOAuthWindow(parentWindow, authUrl, state);
-  if ('error' in oauthResult) {
-    const code = oauthResult.error;
-    const message =
-      code === 'STATE_MISMATCH' ? '安全验证失败，请重试' : '用户取消了登录';
-    return { success: false, code, statusCode: 0, message };
-  }
-
-  const loginResult = await apiFetch<LoginResponse>('/api/auth/login', {
-    method: 'POST',
-    // desktop 是真相端:直接调飞书数据 API,显式声明 desktop 走严格 scope / refresh_token 校验。
-    body: { code: oauthResult.code, codeVerifier, deviceId, clientType: 'desktop' },
-  });
-
-  if (!loginResult.ok) {
-    const errData = loginResult.data as unknown as {
-      error?: { code?: string; message?: string };
-    } | null;
-    return {
-      success: false,
-      code: errData?.error?.code ?? 'UNKNOWN',
-      statusCode: loginResult.status,
-      message: errData?.error?.message ?? '登录失败，请重试',
-    };
-  }
-
-  authStateEpoch += 1; // 迟到的冷启动流程从此作废(见 authStateEpoch 注释)
-  accessToken = loginResult.data.accessToken;
-  persistedRefreshTokenNeedsIdentityCheck = false;
-  clearReplacementIntegrationReloadTimers();
-  writeSafe('refresh_token', loginResult.data.refreshToken);
-  lastAcceptedRefreshToken = loginResult.data.refreshToken;
-  // release-relogin-on-update: defensive cleanup — if a marker somehow
-  // survived past initialize() (e.g. login was triggered before initialize
-  // had a chance to consume it), make sure it doesn't fire on next launch.
-  clearReloginFlag();
-  currentUser = {
-    id: loginResult.data.user.id,
-    name: loginResult.data.user.name,
-    avatar: loginResult.data.user.avatar,
-    email: loginResult.data.user.email,
-    defaultModel: loginResult.data.user.defaultModel,
-    defaultEffort: loginResult.data.user.defaultEffort,
-    isCanary: loginResult.data.user.isCanary === true,
-    feishuOpenId: loginResult.data.user.feishuId ?? null,
-    role: loginResult.data.user.role === 'admin' ? 'admin' : 'user',
-  };
-  // canary-release V0.1: 用 server 返回的状态覆盖本地标记
-  canaryFlagStore.sync(currentUser.isCanary === true);
-  currentMigration = normalizeMigration(loginResult.data.migration);
-
-  // Store Feishu tokens in main process
-  void getFeishuService().token.storeFeishuToken({
-    accessToken: loginResult.data.feishuAccessToken,
-    refreshToken: loginResult.data.feishuRefreshToken,
-    expiresIn: loginResult.data.feishuExpiresIn,
-  });
-
-  // Sync JWT to feishu token manager
-  getFeishuService().token.setJwt(accessToken);
-
-  scheduleRefresh(accessToken);
-  // XD / Mivo key 均为本地 only,不再在登录时从服务器同步到本地。
-  // 账号边界对账:换账号则清掉上一个账号留在本机的 provider key,同账号保留(不必重填)。
-  getProviderSecretStore().reconcileOwner(loginResult.data.user.id);
-  notifyRenderer();
-  notifyAuthListeners();
-  return { success: true, user: currentUser, migration: currentMigration };
+  return loginFlowState;
 }
 
-export async function devLogin(): Promise<
-  | { success: true; user: User; migration: MigrationStatus }
-  | { success: false; code: string; statusCode: number; message: string }
-> {
-  const loginResult = await apiFetch<LoginResponse>('/api/auth/dev-login', {
-    method: 'POST',
-    body: { deviceId },
-  });
+export async function getLoginState(): Promise<DesktopLoginActionResult> {
+  try {
+    return { success: true, state: loginFlowState ?? (await loadLoginProviders()) };
+  } catch (error) {
+    const code = error instanceof AuthApiError ? error.code : 'AUTH_SERVICE_UNAVAILABLE';
+    log.warn(`load login providers failed code=${code}`);
+    loginFlowState = { step: 'error', code, recoverTo: 'identifier' };
+    return { success: false, code, state: loginFlowState };
+  }
+}
 
-  if (!loginResult.ok) {
-    const errData = loginResult.data as unknown as {
-      error?: { code?: string; message?: string };
-    } | null;
-    return {
-      success: false,
-      code: errData?.error?.code ?? 'UNKNOWN',
-      statusCode: loginResult.status,
-      message: errData?.error?.message ?? '本地模拟登录失败',
-    };
+async function completeLogin(
+  outcome: Extract<LoginOutcome, { status: 'ok' }>,
+): Promise<AuthFlowState> {
+  const loginEpoch = ++authStateEpoch;
+  // legacy 飞书集成清理已随主机 token 链退役(2026-07-17):这里不再有登录前
+  // 的异步清理窗口,epoch 守卫保留给未来在提交前重新引入 await 的改动兜底。
+  if (authStateEpoch !== loginEpoch) {
+    throw new AuthApiError(
+      'AUTH_FLOW_SUPERSEDED',
+      409,
+      'Login was superseded by a newer auth action',
+    );
   }
 
-  authStateEpoch += 1; // 迟到的冷启动流程从此作废(见 authStateEpoch 注释)
-  accessToken = loginResult.data.accessToken;
+  accessToken = outcome.accessToken;
   persistedRefreshTokenNeedsIdentityCheck = false;
   clearReplacementIntegrationReloadTimers();
-  writeSafe('refresh_token', loginResult.data.refreshToken);
-  lastAcceptedRefreshToken = loginResult.data.refreshToken;
+  writeSafe(REFRESH_TOKEN_KEY, outcome.refreshToken);
+  removeSafe(LEGACY_REFRESH_TOKEN_KEY);
+  lastAcceptedRefreshToken = outcome.refreshToken;
   clearReloginFlag();
-  currentUser = {
-    id: loginResult.data.user.id,
-    name: loginResult.data.user.name,
-    avatar: loginResult.data.user.avatar,
-    email: loginResult.data.user.email,
-    defaultModel: loginResult.data.user.defaultModel,
-    defaultEffort: loginResult.data.user.defaultEffort,
-    isCanary: loginResult.data.user.isCanary === true,
-    feishuOpenId: loginResult.data.user.feishuId ?? null,
-    role: loginResult.data.user.role === 'admin' ? 'admin' : 'user',
-  };
-  canaryFlagStore.sync(currentUser.isCanary === true);
-  currentMigration = normalizeMigration(loginResult.data.migration);
-  getFeishuService().token.setJwt(accessToken);
-
-  scheduleRefresh(accessToken);
+  currentUser = mapMembershipToAuthUser(outcome.membership);
+  scheduleCanaryFlagSync({
+    token: outcome.accessToken,
+    expectedAuthEpoch: loginEpoch,
+    expectedUserId: currentUser.id,
+  });
+  scheduleRefresh(outcome.accessToken);
+  getProviderSecretStore().reconcileOwner(outcome.membership.id);
+  pendingLoginTicket = null;
+  pendingBindTicket = null;
+  loginFlowState = reduceAuthFlow(loginFlowState, { type: 'outcome', outcome });
   notifyRenderer();
   notifyAuthListeners();
-  return { success: true, user: currentUser, migration: currentMigration };
+  return loginFlowState;
+}
+
+async function acceptLoginOutcome(outcome: LoginOutcome): Promise<AuthFlowState> {
+  if (outcome.status === 'ok') return completeLogin(outcome);
+  if (outcome.status === 'select_account') {
+    pendingLoginTicket = outcome.loginTicket;
+    pendingBindTicket = null;
+  } else {
+    pendingBindTicket = outcome.bindTicket;
+    pendingLoginTicket = null;
+  }
+  loginFlowState = reduceAuthFlow(loginFlowState, { type: 'outcome', outcome });
+  return loginFlowState;
+}
+
+async function runLoginAction(action: DesktopLoginAction): Promise<DesktopLoginActionResult> {
+  const client = createAuthClient();
+  const stateBeforeAction = loginFlowState?.step === 'error' ? null : loginFlowState;
+  try {
+    // Cancellation is intercepted by dispatchLoginAction so it can settle the
+    // already-running browser action instead of starting a second action.
+    if (action.type === 'cancel-browser') {
+      throw new AuthApiError('INVALID_AUTH_ACTION', 400, 'Unexpected browser cancellation');
+    }
+    if (action.type === 'reset') {
+      return { success: true, state: await loadLoginProviders() };
+    }
+    if (!providerConfig) await loadLoginProviders();
+
+    if (action.type === 'discover') {
+      const email = action.email.trim().toLowerCase();
+      discoveredMethods = await client.discover(email);
+      loginFlowState = reduceAuthFlow(loginFlowState, {
+        type: 'discovery-loaded',
+        email,
+        methods: discoveredMethods,
+      });
+      return { success: true, state: loginFlowState };
+    }
+
+    // 企业 SSO 入口（按企业 ID/组织 slug）：结果映射进 method-choice，
+    // 使 start-browser 的 connectionId 白名单校验与连接选择 UI 直接复用。
+    if (action.type === 'discover-sso-org') {
+      const discovery = await client.discoverSsoOrg(action.org.trim().toLowerCase());
+      discoveredMethods = ssoOrgDiscoveryToMethods(discovery);
+      loginFlowState = reduceAuthFlow(loginFlowState, {
+        type: 'discovery-loaded',
+        email: '',
+        methods: discoveredMethods,
+      });
+      return { success: true, state: loginFlowState };
+    }
+
+    if (action.type === 'request-code') {
+      if (action.kind === 'phone' && !providerConfig?.phone) {
+        throw new AuthApiError('PHONE_LOGIN_DISABLED', 400, 'Phone login is disabled');
+      }
+      await client.requestCode(action.kind, action.identifier);
+      loginFlowState = reduceAuthFlow(loginFlowState, {
+        type: 'code-requested',
+        kind: action.kind,
+        identifier: action.identifier,
+      });
+      return { success: true, state: loginFlowState };
+    }
+
+    if (action.type === 'verify-code') {
+      return {
+        success: true,
+        state: await acceptLoginOutcome(
+          await client.verifyCode(action.kind, action.identifier, action.code),
+        ),
+      };
+    }
+
+    if (action.type === 'start-browser') {
+      if (action.kind === 'social') {
+        const provider = action.providerOrConnectionId as SocialProvider;
+        if (!providerConfig?.social.includes(provider)) {
+          throw new AuthApiError('SOCIAL_PROVIDER_DISABLED', 400, 'Provider is disabled');
+        }
+      } else if (
+        !discoveredMethods.some(
+          (method) =>
+            method.type === 'sso' && method.connectionId === action.providerOrConnectionId,
+        )
+      ) {
+        throw new AuthApiError('CONNECTION_NOT_FOUND', 404, 'SSO connection is unavailable');
+      }
+      const { codeVerifier, codeChallenge } = generatePKCE();
+      const state = crypto.randomUUID();
+      loginFlowState = reduceAuthFlow(loginFlowState, {
+        type: 'browser-started',
+        label: action.label,
+      });
+      const callback = await openSystemBrowserAuthorization({
+        kind: action.kind,
+        providerOrConnectionId: action.providerOrConnectionId,
+        codeChallenge,
+        state,
+      });
+      if ('error' in callback) {
+        throw new AuthApiError(callback.error, 0, 'Browser authorization did not complete');
+      }
+      return {
+        success: true,
+        state: await acceptLoginOutcome(
+          await client.exchangeAuthorizationCode(callback.code, codeVerifier),
+        ),
+      };
+    }
+
+    if (action.type === 'select-account') {
+      if (!pendingLoginTicket)
+        throw new AuthApiError('INVALID_LOGIN_TICKET', 401, 'Missing login ticket');
+      return {
+        success: true,
+        state: await acceptLoginOutcome(
+          await client.selectAccount(pendingLoginTicket, action.accountId),
+        ),
+      };
+    }
+
+    if (action.type === 'request-binding-code') {
+      if (!pendingBindTicket || loginFlowState?.step !== 'binding') {
+        throw new AuthApiError('INVALID_BIND_TICKET', 401, 'Missing binding ticket');
+      }
+      await client.requestBindingCode(pendingBindTicket, loginFlowState.bindType, action.contact);
+      loginFlowState = reduceAuthFlow(loginFlowState, {
+        type: 'binding-code-requested',
+        bindType: loginFlowState.bindType,
+        contact: action.contact,
+      });
+      return { success: true, state: loginFlowState };
+    }
+
+    if (!pendingBindTicket || loginFlowState?.step !== 'binding') {
+      throw new AuthApiError('INVALID_BIND_TICKET', 401, 'Missing binding ticket');
+    }
+    return {
+      success: true,
+      state: await acceptLoginOutcome(
+        await client.verifyBinding(
+          pendingBindTicket,
+          loginFlowState.bindType,
+          action.contact,
+          action.code,
+        ),
+      ),
+    };
+  } catch (error) {
+    const code = error instanceof AuthApiError ? error.code : 'AUTH_REQUEST_FAILED';
+    const status = error instanceof AuthApiError ? error.statusCode : 0;
+    log.warn(`login action failed action=${action.type} status=${status} code=${code}`);
+    const flowCannotRetry = [
+      'INVALID_LOGIN_TICKET',
+      'INVALID_BIND_TICKET',
+      'INVALID_AUTH_CODE',
+    ].includes(code);
+    if (flowCannotRetry) {
+      pendingLoginTicket = null;
+      pendingBindTicket = null;
+    }
+    // Keep the last usable screen so validation/network failures can be retried
+    // without discarding the entered identifier or requesting another code.
+    loginFlowState = flowCannotRetry
+      ? { step: 'error', code, recoverTo: 'identifier' }
+      : (stateBeforeAction ?? { step: 'error', code, recoverTo: 'identifier' });
+    return { success: false, code, state: loginFlowState };
+  }
+}
+
+export async function dispatchLoginAction(action: unknown): Promise<DesktopLoginActionResult> {
+  const parsedAction = parseDesktopLoginAction(action);
+  if (!parsedAction) {
+    return { success: false, code: 'INVALID_AUTH_ACTION', state: loginFlowState };
+  }
+  if (parsedAction.type === 'cancel-browser') {
+    const pendingAction = loginActionPromise;
+    const cancelled = browserAuthorizationSlot.cancelActive();
+    if (!cancelled && !pendingAction) {
+      return { success: false, code: 'NO_BROWSER_AUTH_IN_PROGRESS', state: loginFlowState };
+    }
+    const settled = pendingAction ? await pendingAction : null;
+    const state = settled?.state ?? loginFlowState ?? (await loadLoginProviders());
+    return { success: true, state };
+  }
+  if (loginActionPromise) {
+    return { success: false, code: 'LOGIN_BUSY', state: loginFlowState };
+  }
+  loginActionPromise = runLoginAction(parsedAction);
+  try {
+    return await loginActionPromise;
+  } finally {
+    loginActionPromise = null;
+  }
 }
 
 export async function refresh(): Promise<boolean> {
   if (refreshPromise !== null) return refreshPromise;
 
   refreshPromise = (async () => {
-    const storedToken = readSafe('refresh_token');
+    const refreshEpoch = authStateEpoch;
+    const refreshWasSuperseded = (point: string): boolean => {
+      if (authStateEpoch === refreshEpoch) return false;
+      log.warn(
+        `runtime refresh superseded by logout or a newer login (${point}) — discarding late result`,
+      );
+      return true;
+    };
+    const storedToken = readSafe(REFRESH_TOKEN_KEY);
     if (!storedToken) {
       log.debug('runtime refresh skipped: no persisted refresh token');
       return false;
@@ -1148,6 +1284,7 @@ export async function refresh(): Promise<boolean> {
           phase: 'runtime',
           withTransientRetry: false,
         });
+      if (refreshWasSuperseded('after-refresh')) return false;
       if (!result.ok) {
         const action: RefreshFailureAction = failureAction ?? { kind: 'transient-failure' };
         const code = getRefreshErrorCode(result);
@@ -1183,21 +1320,11 @@ export async function refresh(): Promise<boolean> {
         // instance. Verify / reconcile the account before accepting its access token,
         // otherwise renderer state could still show account A while API calls use B.
         persistedRefreshTokenNeedsIdentityCheck = true;
-        writeSafe('refresh_token', data.refreshToken);
+        writeSafe(REFRESH_TOKEN_KEY, data.refreshToken);
         lastAcceptedRefreshToken = data.refreshToken;
-        const meResult = await apiFetch<MeResponse>('/api/user/me', {
-          token: data.accessToken,
-        });
-        if (!meResult.ok) {
-          log.warn(
-            `runtime replacement refresh /me failed status=${meResult.status} — keeping rotated refresh token but not accepting replacement access token`,
-          );
-          scheduleRefreshRetryAfterTransientFailure();
-          return false;
-        }
 
         const previousUserId = currentUser?.id ?? null;
-        const nextUser = mapMeUserToAuthUser(meResult.data.user);
+        const nextUser = mergeMembershipWithExisting(data.membership, currentUser);
         const accountSwitched = previousUserId !== null && previousUserId !== nextUser.id;
         if (accountSwitched) {
           log.warn(
@@ -1219,11 +1346,11 @@ export async function refresh(): Promise<boolean> {
             scheduleRefreshRetryAfterTransientFailure();
             return false;
           }
+          if (refreshWasSuperseded('after-account-switch-teardown')) return false;
         }
 
         accessToken = data.accessToken;
         currentUser = nextUser;
-        currentMigration = normalizeMigration(data.migration);
         persistedRefreshTokenNeedsIdentityCheck = false;
         getProviderSecretStore().reconcileOwner(currentUser.id);
         if (accountSwitched) {
@@ -1233,11 +1360,15 @@ export async function refresh(): Promise<boolean> {
           } catch (err) {
             log.error('reload per-account integrations after replacement account switch failed', err);
           }
+          if (refreshWasSuperseded('after-integration-reload')) return false;
           scheduleReplacementIntegrationReloadRetries(currentUser.id);
         }
-        canaryFlagStore.sync(currentUser.isCanary === true);
-        getFeishuService().token.setJwt(accessToken);
-        scheduleRefresh(accessToken);
+        scheduleCanaryFlagSync({
+          token: data.accessToken,
+          expectedAuthEpoch: refreshEpoch,
+          expectedUserId: currentUser.id,
+        });
+        scheduleRefresh(data.accessToken);
         notifyRenderer();
         if (previousUserId !== currentUser.id) {
           notifyAuthListeners();
@@ -1246,16 +1377,15 @@ export async function refresh(): Promise<boolean> {
       }
 
       accessToken = data.accessToken;
+      currentUser = mergeMembershipWithExisting(data.membership, currentUser);
       persistedRefreshTokenNeedsIdentityCheck = false;
-      writeSafe('refresh_token', data.refreshToken);
+      writeSafe(REFRESH_TOKEN_KEY, data.refreshToken);
       lastAcceptedRefreshToken = data.refreshToken;
-      currentMigration = normalizeMigration(data.migration);
-      getFeishuService().token.setJwt(accessToken);
-      scheduleRefresh(accessToken);
-      // Push updated migration snapshot down to renderer via auth:state-change
+      scheduleRefresh(data.accessToken);
       notifyRenderer();
       return true;
     } catch (err) {
+      if (refreshWasSuperseded('catch')) return false;
       // apiFetch 消化了网络错误(status 0 走上面 !ok 分支),这里是本地状态同步异常;
       // 与瞬时失败同等对待:记录并重排,避免刷新链就此断掉。
       log.error('runtime refresh threw — retrying later', err);
@@ -1313,6 +1443,7 @@ export function handleResume(): void {
 }
 
 export function dispose(): void {
+  browserAuthorizationSlot.cancelActive();
   if (refreshTimer !== null) {
     clearTimeout(refreshTimer);
     refreshTimer = null;

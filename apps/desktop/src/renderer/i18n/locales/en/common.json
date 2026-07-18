@@ -168,7 +168,7 @@
         "unlockSubmit": "Unlock",
         "generateTitle": "Generate a new SSH key",
         "nameLabel": "Name (optional)",
-        "nameHint": "Saved as ~/.ssh/<name>. Defaults to \"xdt-maker\", suffixes with -1, -2... on collision.",
+        "nameHint": "Saved as ~/.ssh/<name>. Defaults to \"cindy\", suffixes with -1, -2... on collision.",
         "encryptLabel": "Encrypt with a passphrase (recommended)",
         "encryptHint": "Passphrase is typed once now, then ssh-add caches the decrypted key in your system's ssh-agent. macOS also persists the passphrase in Keychain so it survives reboots.",
         "passLabel": "Passphrase",
@@ -502,7 +502,25 @@
     },
     "userProfile": {
       "fallbackName": "User",
-      "avatarAlt": "{{name}} avatar"
+      "avatarAlt": "{{name}} avatar",
+      "copyUserId": {
+        "action": "Copy user ID",
+        "success": "User ID copied",
+        "failed": "Failed to copy user ID"
+      },
+      "edit": {
+        "open": "Edit name and avatar",
+        "title": "Edit profile",
+        "nameLabel": "Name",
+        "nameHint": "Leave empty to keep the current name",
+        "changeAvatar": "Change avatar",
+        "resetAvatar": "Restore default avatar",
+        "save": "Save",
+        "cancel": "Cancel",
+        "syncHint": "Your name and avatar are saved to your account and sync across all devices.",
+        "avatarInvalid": "Please choose a PNG / JPG / WebP image under 5MB",
+        "saveFailed": "Failed to save, please try again"
+      }
     },
     "help": {
       "title": "Help",
@@ -605,18 +623,13 @@
       }
     },
     "apiKey": {
-      "title": "Tool Key",
-      "inputAria": "API Key",
       "showKey": "Show key",
-      "hideKey": "Hide key",
-      "openConsole": "Open Console ↗",
-      "save": "Save",
-      "saved": "Saved",
-      "saving": "Saving..."
+      "hideKey": "Hide key"
     },
     "voiceInput": {
       "title": "Voice input",
       "description": "Set language, microphone, shortcut, refinement, and muting during voice input.",
+      "saveFailed": "Could not save voice input settings: {{message}}",
       "sections": {
         "basics": "Basics",
         "refinement": "Refinement",
@@ -653,7 +666,8 @@
         "toast": {
           "needsModifier": "Use a key combo, a standalone F1-F24 key, or Left/Right Command, Option, Control, Fn.",
           "fnUnavailable": "Use a key combo, a standalone F1-F24 key, or Left/Right Command, Option, Control, Fn.",
-          "systemReserved": "This shortcut conflicts with a system or common editing shortcut"
+          "systemReserved": "This shortcut conflicts with a system or common editing shortcut",
+          "registrationFailed": "Could not register this shortcut: {{error}}"
         }
       },
       "permissions": {
@@ -865,12 +879,12 @@
           "binaryMissing": "Codex component is unavailable, please restart the app"
         },
         "apiMode": {
-          "label": "API mode (via AI Gateway)",
-          "description": "When on, Codex uses the XD Gateway key from Model Providers instead of your subscription.",
-          "noKey": "No XD Gateway key configured — connect XD Gateway in Model Providers",
+          "label": "API mode (via Cindy AI)",
+          "description": "When on, Codex uses the Cindy AI key from Model Providers instead of your subscription.",
+          "noKey": "No Cindy AI key configured — connect Cindy AI in Model Providers",
           "noKeyDialog": {
             "title": "API Key not configured",
-            "description": "API mode reuses the XD Gateway key, which is not set yet. Connect XD Gateway in Model Providers to enable API mode."
+            "description": "API mode reuses the Cindy AI key, which is not set yet. Connect Cindy AI in Model Providers to enable API mode."
           },
           "badge": {
             "api": "● API",
@@ -878,7 +892,7 @@
           },
           "expandAria": "Expand / collapse Codex API mode settings",
           "toggleAria": "Toggle Codex API mode",
-          "sharedKeyWarning": "Shares one key with XD Gateway — deleting/changing it also affects Claude",
+          "sharedKeyWarning": "Shares one key with Cindy AI — deleting/changing it also affects Claude",
           "toast": {
             "toggleFailed": "Failed to switch API mode, please retry"
           }
@@ -913,7 +927,7 @@
         },
         "logoutConfirm": {
           "title": "Disconnect Claude.ai subscription?",
-          "description": "Disconnecting clears this machine's Claude Code login credential (your local `claude` CLI is signed out too); if you're currently in subscription mode it falls back to the AI Gateway. You'll need to authorize again to restore it.",
+          "description": "Disconnecting clears this machine's Claude Code login credential (your local `claude` CLI is signed out too); if you're currently in subscription mode it falls back to Cindy AI. You'll need to authorize again to restore it.",
           "confirm": "Disconnect",
           "cancel": "Cancel"
         },
@@ -926,13 +940,13 @@
           "needAuth": "Authorize and sign in to Claude.ai first"
         },
         "apiMode": {
-          "label": "API mode (via AI Gateway)",
-          "description": "When on, Claude uses the XD AI Gateway shared key (default); when off, native Anthropic models (Claude) connect directly to api.anthropic.com using your subscription, while other models still go through the Gateway.",
+          "label": "API mode (via Cindy AI)",
+          "description": "When on, Claude uses the Cindy AI shared key (default); when off, native Anthropic models (Claude) connect directly to api.anthropic.com using your subscription, while other models still use Cindy AI.",
           "toggleAria": "Toggle Claude API mode",
-          "sharedKeyWarning": "Shares one key with XD Gateway — with API mode off, non-Claude models still use the Gateway and need it",
+          "sharedKeyWarning": "Shares one key with Cindy AI — with API mode off, non-Claude models still need Cindy AI",
           "noKeyDialog": {
             "title": "No API Key configured",
-            "description": "With API mode off (subscription), non-Claude models (gpt / deepseek, etc.) still reuse the XD Gateway key, which is not configured yet. Connect XD Gateway in Model Providers to continue."
+            "description": "With API mode off (subscription), non-Claude models (gpt / deepseek, etc.) still reuse the Cindy AI key, which is not configured yet. Connect Cindy AI in Model Providers to continue."
           },
           "toast": {
             "toggleFailed": "Failed to switch API mode, please retry"
@@ -970,21 +984,32 @@
         "billingLabel": "SuperGrok subscription (direct)"
       },
       "xd": {
-        "title": "XD Gateway",
+        "title": "Cindy AI",
         "subtitle": "All models · Claude Code / Codex · billed per token",
         "modelLabel": "All models",
         "billingLabel": "billed per token",
-        "manageKey": "Change key ↗",
         "disconnectConfirm": {
-          "title": "Disconnect XD Gateway?",
-          "description": "Disconnecting clears the gateway key saved locally. You will need to reconnect to keep using gateway models."
+          "title": "Disconnect Cindy AI?",
+          "description": "Disconnecting clears the Cindy AI key saved locally. You will need to reconnect to keep using models provided by Cindy AI."
         },
-        "keyDialog": {
-          "title": "Configure XD Gateway key",
-          "description": "Enter your XD Gateway API Key to enable all pay-per-token models. The key is stored encrypted on this device and synced across your signed-in devices.",
-          "placeholder": "sk-...",
-          "close": "Close"
-        }
+        "sync": {
+          "syncing": "Fetching credentials…",
+          "retry": "Retry",
+          "refresh": "Refresh credentials",
+          "rotate": "Rotate key",
+          "rotating": "Rotating…",
+          "unsupported": "Not enabled for your organization",
+          "autoProvision": "Provisioned automatically after sign-in",
+          "disabled": "Model access service not enabled",
+          "modelsFetchFailed": "Couldn’t fetch the model list. Check your network and try again."
+        },
+        "rotateConfirm": {
+          "title": "Rotate Cindy AI Key?",
+          "description": "This revokes the current key and issues a new one. The old key stops working immediately: in-flight sessions, remote sessions, and mobile voice using it will need to restart.",
+          "confirm": "Rotate"
+        },
+        "rotateSuccess": "Key rotated",
+        "rotateFailed": "Rotation failed, please try again later"
       },
       "addCustom": {
         "title": "Add a custom provider",
@@ -1124,7 +1149,7 @@
     "gitSafety": {
       "title": "Git Safety",
       "autoSnapshotTitle": "Git safety snapshots",
-      "description": "Create automatic XDT savepoint commits after agent edits. Codex rewind is shown only when this is enabled.",
+      "description": "Create automatic savepoint commits after agent edits. Codex rewind is shown only when this is enabled.",
       "toggleAria": "Toggle Git safety snapshots",
       "saveFailed": "Failed to save Git safety setting"
     },
@@ -1410,7 +1435,7 @@
           "openForLoginFailed": "Failed to open the browser"
         },
         "openForLogin": "Open agent browser",
-        "openForLoginHint": "This is a dedicated browser for agents: it runs on your installed Chrome but with a separate profile (shown as “XDMaker”), so it never touches your everyday Chrome's tabs, bookmarks, or logins. Agents open pages, read, click, and take screenshots here on your behalf. For sites that need a login, click “Open agent browser” above and sign in once — your session is kept, so the agent can keep acting as you afterward."
+        "openForLoginHint": "This is a dedicated browser for agents: it runs on your installed Chrome but with a separate profile (shown as “Cindy”), so it never touches your everyday Chrome's tabs, bookmarks, or logins. Agents open pages, read, click, and take screenshots here on your behalf. For sites that need a login, click “Open agent browser” above and sign in once — your session is kept, so the agent can keep acting as you afterward."
       },
       "browserBackend": {
         "title": "Automation browser target",
@@ -1601,12 +1626,12 @@
           "description": "Cross-agent long-term memory for persistent context across sessions"
         },
         "xdt_helper": {
-          "name": "XDT Helper",
+          "name": "Cindy Helper",
           "description": "Host capability disclosure — tells agents what tools and models are available"
         },
         "collab": {
           "name": "Collab Mode",
-          "description": "Multi-worker collaboration (Orca Team) — start_team / create_worker and other team orchestration tools"
+          "description": "Turning it off only affects newly created sessions and does not stop active workers; supports multi-worker team orchestration"
         },
         "lsp": {
           "name": "LSP",
@@ -1664,7 +1689,7 @@
           "workspaces": "Working directory mapping (alias → local absolute path)",
           "workspacesBoundCount_one": "{{count}} local working directory bound",
           "workspacesBoundCount_other": "{{count}} local working directories bound",
-          "aliasPlaceholder": "Alias, e.g. xdmaker",
+          "aliasPlaceholder": "Alias, e.g. my-server",
           "addWorkspace": "Add working directory",
           "removeWorkspace": "Remove this working directory",
           "changeDir": "Click to change directory (alias and preferences kept)"
@@ -1823,6 +1848,7 @@
       "recording": "Press new shortcut…",
       "editAria": "Change shortcut for {{name}}",
       "errors": {
+        "saveFailed": "Failed to save shortcut settings",
         "notBindable": "This key combination cannot be used",
         "systemReserved": "Reserved by the operating system",
         "conflict": "Conflicts with \"{{name}}\"",
@@ -1926,6 +1952,18 @@
       "empty": "No plugins installed yet",
       "emptyHint": "Click \"Install Plugin…\" above and pick a .cindy file",
       "disabledTag": "Disabled",
+      "projectDisabledTag": "Off in this project",
+      "projectSwitchLockedTip": "This plugin is disabled globally; enable it in the Global view first",
+      "projectBanner": {
+        "title": "Configuring project \"{{name}}\"",
+        "desc": "Switches here only affect this project — turned-off plugins won't appear in its new sessions",
+        "backToGlobal": "Back to global"
+      },
+      "scopePicker": {
+        "global": "Global (default)",
+        "ariaLabel": "Choose where plugins take effect",
+        "browse": "Choose another folder…"
+      },
       "enableAria": "Enable {{name}}",
       "uninstall": "Uninstall",
       "uninstallConfirm": {
@@ -1939,7 +1977,9 @@
         "uninstalled": "Uninstalled \"{{name}}\"",
         "installedAsleep": "Installed \"{{name}}\" (disabled — enable it here anytime)",
         "updated": "\"{{name}}\" updated to v{{version}}",
-        "restored": "Restored \"{{name}}\""
+        "restored": "Restored \"{{name}}\"",
+        "projectDisabled": "Turned off \"{{name}}\" for this project (applies to new sessions)",
+        "projectEnabled": "\"{{name}}\" now follows the global setting in this project"
       },
       "panelError": {
         "crashed": "This plugin crashed",
@@ -1948,8 +1988,8 @@
         "close": "Close plugin"
       },
       "installConfirm": {
-        "title": "Install Ghost “{{name}}”?",
-        "confirm": "Install Ghost",
+        "title": "Install plugin “{{name}}”?",
+        "confirm": "Install plugin",
         "cancel": "Cancel",
         "meta": "Version {{version}}. Installs locally and can be uninstalled anytime.",
         "metaWithAuthor": "By {{author}} · Version {{version}}. Installs locally and can be uninstalled anytime.",
@@ -2302,45 +2342,99 @@
     "versionMismatch": "Version mismatch with the other device; some features may be limited"
   },
   "login": {
-    "signingIn": "Signing in...",
-    "feishuLogin": "Sign in with Feishu",
-    "devLogin": "Local dev sign in",
-    "helpText": "Sign in securely with your Feishu enterprise account"
-  },
-  "migration": {
-    "title": "Downloading your chat history",
-    "subtitle": "First-time localization takes a moment, please keep the window open",
-    "detail": {
-      "idle": "Preparing…",
-      "paused": "{{synced}} / {{total}} sessions · paused",
-      "running": "{{synced}} / {{total}} sessions",
-      "runningWithEta": "{{synced}} / {{total}} sessions · ~{{eta}}",
-      "done": "{{synced}} / {{total}} sessions"
+    "title": "Welcome to Cindy",
+    "subtitle": "Choose a secure way to sign in",
+    "phone": "Phone",
+    "email": "Email",
+    "phonePlaceholder": "Enter your phone number",
+    "emailPlaceholder": "Enter your email",
+    "working": "Please wait...",
+    "continue": "Continue",
+    "or": "or",
+    "socialButton": "Continue with {{provider}}",
+    "social": {
+      "apple": "Apple",
+      "google": "Google",
+      "wechat": "WeChat"
     },
-    "retryNotice": "Network unstable, retry attempt {{attempt}}…",
-    "eta": {
-      "seconds": "{{seconds}}s",
-      "minutes": "{{m}}m",
-      "minutesSeconds": "{{m}}m {{s}}s"
+    "back": "Back",
+    "cancel": "Cancel",
+    "chooseMethod": "Choose how to sign in",
+    "emailCode": "Sign in with an email code",
+    "orgDetected": "{{email}} belongs to \"{{org}}\"",
+    "enterpriseLogin": "Sign in with your work identity",
+    "enterpriseVia": "Single sign-on via {{name}}",
+    "personalLogin": "Sign in with a personal account",
+    "personalDesc": "Send a verification code to your email",
+    "ssoRequired": "This organization requires SSO sign-in",
+    "ssoEntry": "Sign in with enterprise SSO",
+    "ssoOrgTitle": "Enterprise SSO",
+    "ssoOrgSubtitle": "Enter your company ID to continue with single sign-on",
+    "ssoOrgPlaceholder": "Enter your company ID",
+    "ssoOrgHint": "Don't know your company ID? Ask your admin",
+    "ssoOrgDetected": "Choose a single sign-on connection for \"{{org}}\"",
+    "enterCode": "Enter verification code",
+    "codeSentTo": "We sent a code to {{identifier}}",
+    "codePlaceholder": "6-digit code",
+    "verifying": "Verifying...",
+    "signIn": "Sign in",
+    "resendCode": "Resend code",
+    "chooseAccount": "Choose an identity",
+    "chooseAccountSubtitle": "Select the personal or organization identity to use",
+    "personalAccount": "Personal identity",
+    "binding": {
+      "phoneTitle": "Verify a phone number",
+      "phoneSubtitle": "A verified phone number is required to finish signing in",
+      "emailTitle": "Verify an email",
+      "emailSubtitle": "A verified real email is required to finish signing in"
     },
-    "failedDialog": {
-      "title": "Migration failed",
-      "description": "Localization could not complete after several attempts. Check your network and retry, or skip migration and enter the app — already-downloaded data is preserved locally.",
-      "skip": "Skip now",
-      "retry": "Retry later"
-    },
-    "skipConfirm": {
-      "title": "Confirm skip migration?",
-      "description": "After confirming, the client cannot auto-recover. You'll need to contact support. Continue?",
-      "back": "Back",
-      "confirm": "Confirm skip"
+    "sendCode": "Send code",
+    "completeSignIn": "Complete sign-in",
+    "preparing": "Connecting to sign-in",
+    "preparingSubtitle": "Loading the methods available for this region",
+    "unavailable": "Sign-in is temporarily unavailable",
+    "retry": "Retry",
+    "browserWaiting": "Complete verification in your browser",
+    "globalRegion": "Global",
+    "errors": {
+      "fallback": "Sign-in failed. Please try again.",
+      "AUTH_SERVICE_UNAVAILABLE": "The sign-in service is temporarily unavailable.",
+      "AUTH_REQUEST_FAILED": "The sign-in request failed. Please try again.",
+      "NETWORK_ERROR": "Could not connect. Check your network and try again.",
+      "REQUEST_TIMEOUT": "The request timed out. Please try again.",
+      "INVALID_PARAMS": "Check the value you entered.",
+      "INVALID_CODE": "The verification code is incorrect or expired.",
+      "CODE_ATTEMPTS_EXCEEDED": "Too many incorrect attempts. Request a new code.",
+      "RATE_LIMITED": "Too many attempts. Please wait and try again.",
+      "SSO_LOGIN_REQUIRED": "This organization requires SSO sign-in.",
+      "ORG_SSO_NOT_FOUND": "Company not found, or it has no SSO connection enabled",
+      "SOCIAL_TOKEN_INVALID": "The provider authorization expired. Please try again.",
+      "SOCIAL_PROVIDER_DISABLED": "This sign-in method is not currently available.",
+      "USER_CANCELLED": "Sign-in was cancelled.",
+      "STATE_MISMATCH": "Security verification failed. Please try again.",
+      "INVALID_AUTH_CODE": "Authorization expired. Start sign-in again.",
+      "INVALID_LOGIN_TICKET": "The sign-in session expired. Start again.",
+      "INVALID_BIND_TICKET": "The verification session expired. Start again.",
+      "REGION_MISMATCH": "The sign-in service region does not match this app."
     }
   },
+  "legacyMigration": {
+    "title": "Migrate data from the previous version",
+    "description": "Data from a previous version was found on this device. Your chat history and media files will be migrated to the new data location. If the old app is still running, please quit it completely first, and keep {{appName}} open during the migration. Note: authorized third-party keys and credentials cannot be migrated — after the migration you will need to re-authorize or re-enter them in Settings.",
+    "confirm": "OK",
+    "migrating": "Migrating data, please wait…",
+    "failedTitle": "Migration incomplete",
+    "failedDescription": "The data migration could not be completed this time. You can keep using {{appName}} — it will retry automatically the next time you sign in.",
+    "continue": "Continue"
+  },
   "splash": {
-    "relaunch": {
-      "title": "Town updated",
-      "description": "After clicking, the app will restart automatically — please wait. (If it stays unresponsive, double-click the app icon to launch manually.)",
-      "confirm": "Re-enter"
+    "tips": {
+      "checkingUpdate": "Checking for updates...",
+      "updating": "Updating Cindy...",
+      "updateDone": "Update complete, restarting shortly...",
+      "checkingEnv": "Checking runtime environment...",
+      "waking": "Waking Cindy...",
+      "envFailed": "Environment setup failed — click to retry"
     },
     "manifestFailed": {
       "title": "Network connection failed",
@@ -2550,7 +2644,7 @@
         "browserSub": "Browser",
         "openTerminal": "Open terminal",
         "terminalSub": "Terminal",
-        "addMoreHint": "Or click the + button at the top for more panel types"
+        "addMoreHint": "Use the + button at the top to choose more panel types"
       },
       "placeholderHint": "{{kind}} — content coming in a later phase"
     },
@@ -2952,7 +3046,6 @@
     },
     "user": {
       "settingsLink": "Settings, current user: {{name}}",
-      "adminBadge": "Admin",
       "viewReleaseNotes": "View release notes",
       "reopenUpdateBanner": "Update ready — click to review"
     },
@@ -3429,6 +3522,7 @@
       "forkStripEncryptedTitle": "Fork and strip into a new session",
       "codexSessionExpiredLogin": "Log in again",
       "networkUnreachable": "Network error: the service is temporarily unreachable. Click \"Retry\" to try again.",
+      "networkUnreachableNoRetry": "Network error: the service is temporarily unreachable.",
       "networkAutoRetrying": "Network error — retrying automatically…",
       "networkShowRaw": "Show raw error",
       "networkHideRaw": "Hide raw error",
@@ -3755,6 +3849,7 @@
       "REMOTE_DAEMON_CLOSED": "Remote connection interrupted (the daemon may be upgrading or restarting). The turn has ended — please resend.",
       "REMOTE_LOCAL_ATTACHMENT_UNSUPPORTED": "Local file/image attachments aren't accessible in remote sessions. Paste the content directly instead.",
       "REMOTE_COMPAT_MODE_UNSUPPORTED": "Remote Claude Code sessions can't route through the local compat proxy (internal error).",
+      "REMOTE_GATEWAY_ENDPOINT_UNAVAILABLE": "Cindy AI credentials are not ready yet (issued automatically after sign-in). Please retry shortly; if this persists, check the Cindy AI status in Settings → Model Providers.",
       "DEVICE_LINK_CONTROL_DISABLED": "Control for this device is off; the message was not sent.",
       "DEVICE_LINK_MEDIA_TRANSFER_FAILED": "Attachment transfer failed; the message was not sent. Please try again."
     },
@@ -3886,8 +3981,8 @@
       "markedAsRead_other": "Marked {{count}} runs as read",
       "markAllReadFailed": "Failed to mark all read: {{error}}",
       "apiKeyDialog": {
-        "title": "XD Gateway required",
-        "description": "Connect XD Gateway in Model Providers before sending messages — tap below to open settings",
+        "title": "Cindy AI required",
+        "description": "Connect Cindy AI in Model Providers before sending messages — tap below to open settings",
         "confirm": "Open Settings",
         "cancel": "Cancel"
       },
@@ -4110,6 +4205,16 @@
         "allRunning": "All sessions in this Project are running, please stop them before archiving",
         "empty": "No sessions to archive in this Project"
       },
+      "unarchiveAll": {
+        "title": "Restore all archived sessions",
+        "confirm": "Restore all",
+        "cancel": "Cancel",
+        "description": "Restore {{count}} archived sessions in this Project? They'll leave the Archived list and return to Active.",
+        "unarchived_one": "Restored {{count}} session",
+        "unarchived_other": "Restored {{count}} sessions",
+        "partialFailure": "Restored {{ok}}, {{fail}} failed, please retry",
+        "empty": "No archived sessions to restore in this Project"
+      },
       "bulkSelection": {
         "selected": "{{count}} selected",
         "archive": "Archive selected sessions",
@@ -4169,7 +4274,8 @@
       "projectAction": {
         "rename": "Rename project",
         "showFiles": "Show Files",
-        "archivedAll": "Archived All",
+        "archivedAll": "Archive all",
+        "unarchiveAll": "Restore all",
         "openInExplorer": "Open in file manager",
         "newInDirectory": "New session in this directory",
         "copyDeepLink": "Copy deep link",
@@ -4301,7 +4407,7 @@
         "revealFolder": "Show in folder"
       },
       "fileBody": {
-        "selectFile": "Select a file from the left to preview",
+        "selectFile": "Select a file to preview",
         "readFailed": "Read file failed: {{message}}",
         "truncatedNotice": "File is large, only the first 2 MB are shown — open in system to view the full content",
         "editLabel": "Edit",
@@ -4516,6 +4622,7 @@
       "tagOnce": "Once",
       "tagManual": "Manual",
       "totalCost": "Cost {{cost}}",
+      "totalValue": "Value {{value}}",
       "menu": {
         "rename": "Rename",
         "resume": "Resume",
@@ -4550,6 +4657,7 @@
       "openSession": "Open session",
       "markReadTitle": "Click to mark as read",
       "sessionCost": "Session cost {{cost}}",
+      "sessionValue": "Session value {{value}}",
       "restart": "Restart",
       "moreAria": "More actions",
       "delete": "Delete",
@@ -4579,6 +4687,9 @@
         "script": "Script only"
       },
       "script": {
+        "protocolSummary": "stdout must emit one complete xdt-maker-script/1 JSON object per line (JSONL); type must be call or complete. Write regular logs to stderr, and always finish with a complete frame.",
+        "protocolCapabilities": "When using granted capabilities, the script must also read the host's start and call_result JSONL frames from stdin, then wait for each call result before continuing or emitting complete.",
+        "protocolExample": "View minimal Python example without capabilities",
         "command": "Script command",
         "commandPlaceholder": "python scripts/auto.py",
         "timeout": "Timeout (seconds, optional)",
@@ -4601,8 +4712,8 @@
           "feishu_read": "List recently-active chats; fetch recent messages from a chat (group or DM)"
         },
         "capabilityWarn": {
-          "ghostMissing": "Requires the \"{{name}}\" ghost, which is not installed — this capability will fail at run time",
-          "ghostAsleep": "Requires the \"{{name}}\" ghost, which is asleep — this capability will fail at run time"
+          "ghostMissing": "Requires the \"{{name}}\" plugin, which is not installed — this capability will fail at run time",
+          "ghostAsleep": "Requires the \"{{name}}\" plugin, which is disabled — this capability will fail at run time"
         }
       },
       "fields": {
@@ -5039,10 +5150,10 @@
     "confirm": {
       "title": "“{{name}}” requests access to your files",
       "count": "{{count}} files",
-      "descriptionAttachments": "The files below are outside this session's working directory. If you allow, they will be handed to this ghost (it only receives content fingerprints, never paths).",
-      "descriptionDir": "The directory/file below is outside this session's working directory. If you allow, its files will be handed to this ghost for upload (it only receives a one-time ticket, never paths).",
-      "descriptionSaveDir": "The directory below is outside this session's working directory. If you allow, this ghost can save downloaded files into it (existing files are never overwritten).",
-      "descriptionFsWrite": "This ghost requests to write the files below into the current session's working directory. If you allow, further writes to the same directory in this session won't ask again.",
+      "descriptionAttachments": "The files below are outside this session's working directory. If you allow, they will be handed to this plugin (it only receives content fingerprints, never paths).",
+      "descriptionDir": "The directory/file below is outside this session's working directory. If you allow, its files will be handed to this plugin for upload (it only receives a one-time ticket, never paths).",
+      "descriptionSaveDir": "The directory below is outside this session's working directory. If you allow, this plugin can save downloaded files into it (existing files are never overwritten).",
+      "descriptionFsWrite": "This plugin requests to write the files below into the current session's working directory. If you allow, further writes to the same directory in this session won't ask again.",
       "dirMeta": "{{count}} files · {{size}}",
       "directory": "Directory",
       "allowDirs": "Also allow their folders (media files in the same folders won't ask again this session)",
@@ -5606,16 +5717,11 @@
       "feishuBotClearFailed": "Clear failed: {{message}}",
       "feishuBotCreatedConnected": "FeiShu bot created and connected",
       "feishuBotCreatedCheck": "FeiShu bot created, please check connection status",
-      "slackOauthStartFailed": "Failed to start Slack authorization, please try again",
-      "slackUnlinked": "Slack unlinked",
-      "slackUnlinkFailed": "Unlink failed, please try again",
       "discordBotConnected": "Discord bot configuration saved",
       "discordBotConnectFailed": "Discord bot connection failed; check the token and permissions",
       "discordBotSaveFailed": "Save failed: {{message}}",
       "discordBotDisconnected": "Discord bot unbound",
       "discordBotDisconnectFailed": "Unbind failed: {{message}}",
-      "apiKeySaved": "API Key saved",
-      "apiKeyConnectionTestSuccess": "Connection test succeeded",
       "attachmentLocalOnly": "Local files only: {{name}}",
       "attachmentReadError": "{{name}}: {{reason}}",
       "attachmentReadFailed": "Read failed: {{name}} - {{error}}",
@@ -5634,22 +5740,16 @@
       "openFileFailed": "Cannot open file in system",
       "emptyResponse": "The model returned an empty response — please retry. (Nothing was produced this turn; this often happens when the model gateway short-circuits under large context or high load.)",
       "turnFailed": "The task failed (the model returned no error detail) — please retry.",
-      "requestFailed": "Request failed",
       "sendFailed": "Send failed: {{message}}",
       "steerNoActiveTurn": "No task is currently running, so this message cannot be steered",
       "steerRequiresRestart": "Steer needs a desktop restart before it can take effect; this message was not cleared",
       "steerFailed": "Steer failed: {{message}}",
       "qrExpired": "QR code expired, please start again",
       "registrationFailed": "Creation failed, please retry later",
-      "apiKeySafeStorageFailed": "Storage failed, please check the system secure storage feature",
-      "apiKeyTestFailed": "Connection test failed",
-      "apiKeyTestFailedNotSaved": "Connection test failed; Key not saved",
-      "apiKeyNetworkFailed": "Network connection failed, please check your network",
       "silentStopExhausted": "The model returned empty responses repeatedly; auto-resume is paused. Click \"Continue\" to resume the task.",
       "permissionTightenInterruptFailed": "Failed to stop the running task while tightening permissions; it may keep running without approval prompts until it finishes. Stop it manually if needed."
     },
     "validation": {
-      "apiKeyFormat": "Key format invalid; should start with sk-",
       "feishuFieldsRequired": "App ID and App Secret are both required",
       "feishuAppIdFormat": "App ID format should be cli_xxxxxxxxxxxxxxxx",
       "discordFieldsRequired": "Bot Token and Discord user ID are both required",
@@ -5663,8 +5763,8 @@
       "sessionExpiredTitle": "Login expired",
       "sessionExpiredDescription": "Your login has expired, please log in again.",
       "sessionExpiredConfirm": "Log in again",
-      "voiceApiKeyAuthTitle": "XD Gateway required",
-      "voiceApiKeyAuthDescription": "The current voice input provider uses AI Gateway. XD Gateway is not connected yet, so voice input cannot start. Open Model Providers to connect it?",
+      "voiceApiKeyAuthTitle": "Cindy AI required",
+      "voiceApiKeyAuthDescription": "The current voice input provider uses Cindy AI. Cindy AI is not connected yet, so voice input cannot start. Open Model Providers to connect it?",
       "voiceDirectApiKeyAuthTitle": "Voice input API key required",
       "voiceDirectApiKeyAuthDescription": "The current voice input provider requires a direct API key. Add it in API Keys to start voice input?",
       "codexVoiceAuthTitle": "Codex connection required",

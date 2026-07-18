@@ -18,11 +18,12 @@
  * (GhostManager / builtinGhostProvisioner),本组件零业务逻辑。
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Package, Plus, RotateCcw } from 'lucide-react';
+import { Check, ChevronDown, Folder, FolderOpen, Globe, Package, Plus, RotateCcw } from 'lucide-react';
 
 import { toast } from '@/lib/toast';
+import { basename, cn } from '@/lib/utils';
 import { extractIpcError } from '@/utils/ipcError';
 import type { InstalledGhost } from '../../../shared/ghost';
 import { ghostInstallErrorKey } from '@/cindy-brain/installErrorKey';
@@ -30,15 +31,36 @@ import { confirmAndInstallGhost } from '@/cindy-brain/installFlow';
 import { useInstalledGhosts } from '@/cindy-brain/useInstalledGhosts';
 import { Switch } from '@/components/ui/switch';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
+import { recentWorkdirsStore, type RecentWorkdirEntry } from '@/lib/recentWorkdirsStore';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface GhostsSectionProps {
   /** 点击列表行 → 进入该意识的独立设置页(C2c-2;SettingsView 负责路由)。 */
   onOpenGhost: (id: string) => void;
+  /** 当前 active session 的工作目录(SettingsView 的 lastWorkingDir)——
+   *  范围切换器把它并进候选清单并置顶(用户"我刚才在的项目")。 */
+  workingDir?: string;
 }
 
 type BuiltinStatus = ReturnType<typeof window.electronAPI.ghosts.builtinStatusSync>;
 
-export function GhostsSection({ onOpenGhost }: GhostsSectionProps) {
+function useRecentWorkdirs(): RecentWorkdirEntry[] {
+  // 同 BuiltinToolsSection:snapshot 经 useSyncExternalStore 订阅,ensure()
+  // 首读懒加载;失败静默(空下拉是可接受的退化)。
+  const snapshot = useSyncExternalStore(recentWorkdirsStore.subscribe, recentWorkdirsStore.get);
+  useEffect(() => {
+    void recentWorkdirsStore.ensure().catch(() => {});
+  }, []);
+  return snapshot ?? [];
+}
+
+export function GhostsSection({ onOpenGhost, workingDir }: GhostsSectionProps) {
   const { t } = useTranslation();
   const { confirm, confirmWithCheckbox } = useConfirmDialog();
   const ghosts = useInstalledGhosts();
@@ -49,9 +71,41 @@ export function GhostsSection({ onOpenGhost }: GhostsSectionProps) {
   );
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
+  // ── 生效范围(目录级禁用,ghostWorkdirPrefs)────────────────────────
+  // null = 全局视图(现状不变,开关管全局生效态);选中项目后开关变为
+  // "该项目下是否生效"——关闭写目录级例外,打开清除例外回到跟随全局。
+  // 禁用清单走 sendSync 与卡片同帧渲染(规则 7 无跳变),体量极小。
+  const [scopeDir, setScopeDir] = useState<string | null>(null);
+  const scopeDirRef = useRef<string | null>(scopeDir);
+  scopeDirRef.current = scopeDir;
+  const recentWorkdirs = useRecentWorkdirs();
+  const readProjectDisabled = (dir: string | null): Set<string> => {
+    if (!dir) return new Set();
+    try {
+      return new Set(window.electronAPI.ghosts.workdirPrefsSync(dir).disabled);
+    } catch {
+      return new Set();
+    }
+  };
+  const [projectDisabled, setProjectDisabled] = useState<Set<string>>(() => readProjectDisabled(null));
+  const handlePickScope = useCallback((dir: string | null) => {
+    setScopeDir(dir);
+    // 同一次 render 周期内同步取清单,切换范围不闪基态帧(规则 7)。
+    setProjectDisabled(dir ? new Set(window.electronAPI.ghosts.workdirPrefsSync(dir).disabled) : new Set());
+  }, []);
+
   useEffect(() => {
     return window.electronAPI.ghosts.onChanged(() => {
       setBuiltinStatus(window.electronAPI.ghosts.builtinStatusSync());
+      // 目录级例外变更(本窗或其它窗口写入)同轮重拉,多窗口同步。
+      const dir = scopeDirRef.current;
+      if (dir) {
+        try {
+          setProjectDisabled(new Set(window.electronAPI.ghosts.workdirPrefsSync(dir).disabled));
+        } catch {
+          /* 保持现值 */
+        }
+      }
     });
   }, []);
 
@@ -76,6 +130,23 @@ export function GhostsSection({ onOpenGhost }: GhostsSectionProps) {
 
   const handleToggle = useCallback(
     async (ghost: InstalledGhost, enabled: boolean) => {
+      // 项目视图:开关写目录级例外(关 = 停用,开 = 清例外回到跟随全局),
+      // 不碰全局生效态;全局视图维持原语义。
+      const dir = scopeDirRef.current;
+      if (dir) {
+        try {
+          const res = await window.electronAPI.ghosts.setWorkdirDisabled(dir, ghost.manifest.id, !enabled);
+          setProjectDisabled(new Set(res.disabled));
+          toast.success(
+            enabled
+              ? t('settings.ghosts.toast.projectEnabled', { name: ghost.manifest.name })
+              : t('settings.ghosts.toast.projectDisabled', { name: ghost.manifest.name }),
+          );
+        } catch {
+          toast.error(t('settings.ghosts.errors.generic'));
+        }
+        return;
+      }
       try {
         await window.electronAPI.ghosts.setEnabled(ghost.manifest.id, enabled);
       } catch {
@@ -131,6 +202,12 @@ export function GhostsSection({ onOpenGhost }: GhostsSectionProps) {
   const renderGhostCard = (ghost: InstalledGhost, origin: 'builtin' | 'enterprise' | 'external') => {
     const { manifest } = ghost;
     const isSeeded = origin !== 'external';
+    // 项目视图的开关语义:该项目下的生效结果(全局生效 且 无目录级例外)。
+    // 全局未生效的插件在项目视图只读——项目层不提供"强开",先去全局开。
+    const isProjectScope = scopeDir !== null;
+    const projectOff = isProjectScope && projectDisabled.has(manifest.id);
+    const effectiveEnabled = isProjectScope ? ghost.enabled && !projectOff : ghost.enabled;
+    const switchLocked = isProjectScope && !ghost.enabled;
     return (
       <div
         key={manifest.id}
@@ -153,18 +230,18 @@ export function GhostsSection({ onOpenGhost }: GhostsSectionProps) {
                 src={ghost.iconDataUrl}
                 alt=""
                 draggable={false}
-                className={`h-full w-full object-cover ${ghost.enabled ? '' : 'opacity-50'}`}
+                className={`h-full w-full object-cover ${effectiveEnabled ? '' : 'opacity-50'}`}
               />
             ) : (
               <Package
                 size={18}
-                className={ghost.enabled ? 'text-[var(--text-secondary)]' : 'text-[var(--text-tertiary)]'}
+                className={effectiveEnabled ? 'text-[var(--text-secondary)]' : 'text-[var(--text-tertiary)]'}
               />
             )}
           </div>
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <p
-              className={`truncate text-14 font-medium ${ghost.enabled ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}
+              className={`truncate text-14 font-medium ${effectiveEnabled ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'}`}
             >
               {manifest.name}
             </p>
@@ -173,16 +250,26 @@ export function GhostsSection({ onOpenGhost }: GhostsSectionProps) {
                 {t(origin === 'enterprise' ? 'settings.ghosts.enterpriseTag' : 'settings.ghosts.builtinTag')}
               </span>
             ) : null}
-            {/* 停用标签仅停用时渲染:卡片高度由 grid 行拉齐,无跳变问题。 */}
+            {/* 停用标签仅停用时渲染:卡片高度由 grid 行拉齐,无跳变问题。
+                项目视图里全局未生效沿用「未生效」,目录级例外标「本项目未生效」。 */}
             {!ghost.enabled ? (
               <span className="shrink-0 rounded-md border border-[var(--border-default)] px-1.5 py-0.5 text-11 text-[var(--text-tertiary)]">
                 {t('settings.ghosts.disabledTag')}
               </span>
+            ) : projectOff ? (
+              <span className="shrink-0 rounded-md border border-[var(--border-default)] px-1.5 py-0.5 text-11 text-[var(--text-tertiary)]">
+                {t('settings.ghosts.projectDisabledTag')}
+              </span>
             ) : null}
           </div>
-          <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="shrink-0"
+            onClick={(e) => e.stopPropagation()}
+            title={switchLocked ? t('settings.ghosts.projectSwitchLockedTip') : undefined}
+          >
             <Switch
-              checked={ghost.enabled}
+              checked={effectiveEnabled}
+              disabled={switchLocked}
               onCheckedChange={(next) => void handleToggle(ghost, next)}
               aria-label={t('settings.ghosts.enableAria', { name: manifest.name })}
             />
@@ -260,7 +347,7 @@ export function GhostsSection({ onOpenGhost }: GhostsSectionProps) {
 
   return (
     <div className="flex flex-col gap-[14px]">
-      {/* 标题行:左标题+描述,右「装入意识…」主按钮 */}
+      {/* 标题行:左标题+描述,右「范围切换器 + 装入意识…」 */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h2 className="text-16 font-medium leading-[1.2] text-[var(--settings-section-title)]">
@@ -270,15 +357,48 @@ export function GhostsSection({ onOpenGhost }: GhostsSectionProps) {
             {t('settings.ghosts.description')}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleInstall}
-          className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-[var(--accent-cta-bg)] px-4 text-13 font-medium text-[var(--accent-pure-cta-fg)] transition-opacity hover:opacity-90"
-        >
-          <Plus size={15} />
-          {t('settings.ghosts.install')}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <ScopePicker
+            scopeDir={scopeDir}
+            activeSessionWorkingDir={workingDir}
+            recentWorkdirs={recentWorkdirs}
+            onPick={handlePickScope}
+          />
+          <button
+            type="button"
+            onClick={handleInstall}
+            className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-[var(--accent-cta-bg)] px-4 text-13 font-medium text-[var(--accent-pure-cta-fg)] transition-opacity hover:opacity-90"
+          >
+            <Plus size={15} />
+            {t('settings.ghosts.install')}
+          </button>
+        </div>
       </div>
+
+      {/* 项目模式横幅:范围切到项目后必须"一眼可见"当前不在全局——
+          灰字提示没人注意(实测),独立横幅 + 返回按钮把模式状态钉在列表上方。 */}
+      {scopeDir ? (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border-default)] bg-[var(--surface-chip)] px-4 py-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Folder size={16} className="shrink-0 text-[var(--text-secondary)]" />
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <p className="truncate text-13 font-medium text-[var(--text-primary)]">
+                {t('settings.ghosts.projectBanner.title', { name: basename(scopeDir) })}
+              </p>
+              <p className="truncate text-12 text-[var(--text-tertiary)]">
+                {scopeDir} · {t('settings.ghosts.projectBanner.desc')}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => handlePickScope(null)}
+            className="shrink-0 rounded-full border border-[var(--border-default)] px-3 py-1 text-12 text-[var(--text-secondary)] transition-colors hover:bg-sidebar-item-hover"
+          >
+            {t('settings.ghosts.projectBanner.backToGlobal')}
+          </button>
+        </div>
+      ) : null}
 
       {isEmpty ? (
         // 空状态:不留白页(规则 7),给一句引导。
@@ -325,5 +445,119 @@ export function GhostsSection({ onOpenGhost }: GhostsSectionProps) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * 生效范围切换器 —— 「全局(默认)」 + 最近项目清单(交互同
+ * BuiltinToolsSection 的 ProjectPicker,首项多一条全局入口)。
+ * 选中项目后,下方卡片的开关变为"该项目下是否生效"(目录级例外)。
+ */
+function ScopePicker({
+  scopeDir,
+  activeSessionWorkingDir,
+  recentWorkdirs,
+  onPick,
+}: {
+  scopeDir: string | null;
+  /** 当前 active session 的目录——并入候选并置顶(不依赖 recent 缓存时序)。 */
+  activeSessionWorkingDir: string | undefined;
+  recentWorkdirs: RecentWorkdirEntry[];
+  onPick: (dir: string | null) => void;
+}) {
+  const { t } = useTranslation();
+
+  const candidates = useMemo<string[]>(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const push = (p: string | undefined | null) => {
+      if (!p || seen.has(p)) return;
+      seen.add(p);
+      out.push(p);
+    };
+    push(scopeDir);
+    push(activeSessionWorkingDir);
+    for (const r of recentWorkdirs) push(r.path);
+    return out;
+  }, [scopeDir, activeSessionWorkingDir, recentWorkdirs]);
+
+  const triggerLabel = scopeDir ? basename(scopeDir) : t('settings.ghosts.scopePicker.global');
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        {/* 尺寸与右侧「安装插件…」主按钮完全同款(h-8 / px-4 / text-13),
+            只是配色用输入底色区分主次。 */}
+        <button
+          type="button"
+          aria-label={t('settings.ghosts.scopePicker.ariaLabel')}
+          title={scopeDir ?? undefined}
+          className={cn(
+            'flex h-8 max-w-[220px] shrink-0 items-center gap-1.5 rounded-full px-4',
+            'bg-[var(--settings-input-bg)] text-13 font-medium text-[var(--settings-section-title)]',
+            'hover:bg-[var(--surface-chip)]',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
+            'transition-colors',
+          )}
+        >
+          {scopeDir ? <Folder size={14} className="shrink-0" /> : <Globe size={14} className="shrink-0" />}
+          <span className="truncate">{triggerLabel}</span>
+          <ChevronDown size={13} className="shrink-0 opacity-60" />
+        </button>
+      </DropdownMenuTrigger>
+      {/* 结构:「全局」钉顶 + 最近项目滚动区(封顶高度)+「选择其它目录…」
+          钉底——清单再长,首尾两个入口永远可见、可一步点到。 */}
+      <DropdownMenuContent align="end" className="w-max min-w-0 max-w-[calc(100vw-32px)]">
+        <DropdownMenuItem
+          onClick={() => onPick(null)}
+          className="grid w-full cursor-pointer grid-cols-[14px_max-content] items-center gap-x-2.5 pr-4"
+        >
+          <Check size={14} className={cn('shrink-0', scopeDir === null ? 'opacity-100' : 'opacity-0')} />
+          <div className="flex items-center gap-1.5">
+            <Globe size={13} className="shrink-0 text-[var(--settings-section-desc)]" />
+            <span className="whitespace-nowrap text-13 font-medium">
+              {t('settings.ghosts.scopePicker.global')}
+            </span>
+          </div>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <div className="max-h-[min(320px,45vh)] overflow-y-auto">
+          {candidates.map((dir) => {
+            const isCurrent = dir === scopeDir;
+            return (
+              <DropdownMenuItem
+                key={dir}
+                onClick={() => onPick(dir)}
+                className="grid w-full cursor-pointer grid-cols-[14px_max-content] items-center gap-x-2.5 pr-4"
+              >
+                <Check size={14} className={cn('shrink-0', isCurrent ? 'opacity-100' : 'opacity-0')} />
+                <div className="flex flex-col gap-0.5">
+                  <span className="whitespace-nowrap text-13 font-medium">{basename(dir)}</span>
+                  <span className="whitespace-nowrap text-11 text-[var(--settings-section-desc)]">{dir}</span>
+                </div>
+              </DropdownMenuItem>
+            );
+          })}
+        </div>
+        <DropdownMenuSeparator />
+        {/* 浏览任意目录:还没开过会话的目录也能提前配置(系统目录选择框)。 */}
+        <DropdownMenuItem
+          onClick={() => {
+            void window.electronAPI.showOpenDirectoryDialog().then((r) => {
+              if (!r.canceled && r.path) onPick(r.path);
+            });
+          }}
+          className="grid w-full cursor-pointer grid-cols-[14px_max-content] items-center gap-x-2.5 pr-4"
+        >
+          <span aria-hidden className="w-[14px]" />
+          <div className="flex items-center gap-1.5">
+            <FolderOpen size={13} className="shrink-0 text-[var(--settings-section-desc)]" />
+            <span className="whitespace-nowrap text-13 font-medium">
+              {t('settings.ghosts.scopePicker.browse')}
+            </span>
+          </div>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   buildMobileSessionDeepLink,
   buildMobileSessionMessageDeepLink,
-  buildSessionCopyTargets,
   extractSessionLinkIds,
   parseSessionDeepLinkUrl,
   shortSessionId,
@@ -11,42 +10,16 @@ import {
 describe('session links', () => {
   it('matches the desktop xdt-maker session deep link format', () => {
     expect(buildMobileSessionDeepLink('session/with space')).toBe(
-      'xdt-maker://session/session%2Fwith%20space',
+      'cindy://session/session%2Fwith%20space',
     );
   });
 
-  it('builds stable copy targets for session diagnostics', () => {
-    expect(buildSessionCopyTargets({
-      id: 's1',
-      sdkSessionId: 'sdk-1',
-    })).toEqual([
-      {
-        key: 'deepLink',
-        label: '深度链接',
-        testID: 'session.copy.deepLink',
-        value: 'xdt-maker://session/s1',
-      },
-      {
-        key: 'xdtId',
-        label: 'XDT ID',
-        testID: 'session.copy.xdtId',
-        value: 's1',
-      },
-      {
-        key: 'sdkId',
-        label: 'Agent ID',
-        testID: 'session.copy.sdkId',
-        value: 'sdk-1',
-      },
-    ]);
-
-    expect(buildSessionCopyTargets({
-      id: 's1',
-      sdkSessionId: null,
-    })[2]).toMatchObject({ key: 'sdkId', value: null });
-  });
-
   it('parses session deep links with optional message anchor', () => {
+    // 双 scheme:cindy 主 + xdt-maker 兼容存量消息,两种都必须解析。
+    expect(parseSessionDeepLinkUrl('cindy://session/abc-123')).toEqual({
+      sessionId: 'abc-123',
+      messageClientId: null,
+    });
     expect(parseSessionDeepLinkUrl('xdt-maker://session/abc-123')).toEqual({
       sessionId: 'abc-123',
       messageClientId: null,

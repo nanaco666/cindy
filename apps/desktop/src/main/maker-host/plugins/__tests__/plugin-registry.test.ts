@@ -57,9 +57,7 @@ function realBuiltinProviderNames(): KnownProviderName[] {
     android: {} as never,
     browser: {} as never,
     computer: {} as never,
-    feishu: {} as never,
     feishuBot: {} as never,
-    slackBot: {} as never,
     scheduler: {} as never,
     ssh: {} as never,
     memory: {} as never,
@@ -87,7 +85,7 @@ describe('PluginRegistry — two-tier priority', () => {
   // ── 第 3 层：内置默认值 ────────────────────────────────────────────────
 
   it('returns true by default (tier 3)', () => {
-    expect(registry.isEnabled('feishu')).toBe(true);
+    expect(registry.isEnabled('feishu_bot')).toBe(true);
     expect(registry.isEnabled('ssh')).toBe(true);
   });
 
@@ -120,7 +118,7 @@ describe('PluginRegistry — two-tier priority', () => {
     registry = createRegistry(workingDir);
 
     expect(registry.isEnabled('ssh', workingDir)).toBe(false);
-    expect(registry.isEnabled('feishu', workingDir)).toBe(true); // 未设置
+    expect(registry.isEnabled('feishu_bot', workingDir)).toBe(true); // 未设置
   });
 
   it('project override: explicit true', () => {

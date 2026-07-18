@@ -11,15 +11,15 @@ const readTextLf = (...args: Parameters<typeof readFileSync>): string =>
 describe('mobile settings overview', () => {
   it('keeps the device-link hello name and settings device name on one source', () => {
     expect(buildMobileDeviceName({ constantsDeviceName: ' Dash iPhone ', platform: 'ios' })).toBe('Dash iPhone');
-    expect(buildMobileDeviceName({ constantsDeviceName: '   ', platform: 'android' })).toBe('XDMaker android');
+    expect(buildMobileDeviceName({ constantsDeviceName: '   ', platform: 'android' })).toBe('Cindy android');
   });
 
   it('projects an account header plus about and debug sections for the settings screen', () => {
     const overview = buildMobileSettingsOverview({
-      apiBaseUrl: 'http://127.0.0.1:3333',
+      authBaseUrl: 'https://auth-cn.example.com',
+      authRegion: 'cn',
       deviceId: 'mobile-device-1',
       deviceName: 'Dash iPhone',
-      feishuConfigured: true,
       lastSyncedAt: new Date(2026, 0, 1, 3, 4, 5).getTime(),
       platform: 'ios',
       relayStatus: 'online',
@@ -64,20 +64,14 @@ describe('mobile settings overview', () => {
       label: '设备 ID',
       value: 'mobile-device-1',
     });
-    expect(overview.sections.find((section) => section.id === 'debug')?.rows).toContainEqual({
-      copyValue: 'http://127.0.0.1:3333',
-      id: 'debug.apiBaseUrl',
-      label: 'API Base',
-      value: 'http://127.0.0.1:3333',
-    });
   });
 
   it('omits the redundant email line when display name equals the email', () => {
     const overview = buildMobileSettingsOverview({
-      apiBaseUrl: 'http://localhost:3333',
+      authBaseUrl: 'https://auth-global.example.com',
+      authRegion: 'global',
       deviceId: null,
       deviceName: 'Local Phone',
-      feishuConfigured: false,
       platform: 'android',
       relayStatus: 'stopped',
       userEmail: 'dash@example.com',
@@ -88,12 +82,12 @@ describe('mobile settings overview', () => {
     expect(overview.header.email).toBeUndefined();
   });
 
-  it('keeps missing auth and Feishu config explicit instead of hiding the rows', () => {
+  it('keeps auth-server region and endpoint explicit in debug rows', () => {
     const overview = buildMobileSettingsOverview({
-      apiBaseUrl: 'http://localhost:3333',
+      authBaseUrl: 'https://auth-global.example.com',
+      authRegion: 'global',
       deviceId: null,
       deviceName: 'Local Phone',
-      feishuConfigured: false,
       platform: 'android',
       relayStatus: 'stopped',
     });
@@ -102,10 +96,21 @@ describe('mobile settings overview', () => {
     const debugRows = overview.sections.find((section) => section.id === 'debug')?.rows;
 
     expect(overview.header.name).toBe('未登录');
-    expect(aboutRows?.find((row) => row.id === 'about.platform')?.value).toBe('Android');
-    expect(debugRows?.find((row) => row.id === 'debug.userId')?.value).toBe('未同步');
-    expect(debugRows?.find((row) => row.id === 'debug.deviceId')?.value).toBe('初始化中');
-    expect(debugRows?.find((row) => row.id === 'debug.feishu')?.value).toBe('缺少 App ID');
+    expect(aboutRows?.find((row) => row.id === 'about.platform')?.value).toBe(
+      'Android',
+    );
+    expect(debugRows?.find((row) => row.id === 'debug.userId')?.value).toBe(
+      '未同步',
+    );
+    expect(debugRows?.find((row) => row.id === 'debug.deviceId')?.value).toBe(
+      '初始化中',
+    );
+    expect(
+      debugRows?.find((row) => row.id === 'debug.authBaseUrl')?.value,
+    ).toBe('https://auth-global.example.com');
+    expect(debugRows?.find((row) => row.id === 'debug.authRegion')?.value).toBe(
+      'Global',
+    );
   });
 
   it('maps relay status to stable mobile indicator tones', () => {
@@ -157,5 +162,17 @@ describe('mobile settings overview', () => {
     expect(source).not.toContain('settings.renameSelfDevice.save');
     expect(source).not.toContain('settings.renameSelfDevice.done');
     expect(source).not.toContain('clearManualName');
+  });
+
+  it('shows the App filing number in the last settings card', () => {
+    const source = readTextLf(resolve(process.cwd(), 'app/settings.tsx'), 'utf8');
+    const accountActionsIndex = source.indexOf('testID="settings.accountActions"');
+    const filingCardIndex = source.indexOf('<SettingsGroup title="备案信息">');
+
+    expect(source).toContain('label="App 备案号"');
+    expect(source).toContain('testID="settings.appFilingNumber"');
+    expect(source).toContain('value="沪ICP备11033765号-89A"');
+    expect(accountActionsIndex).toBeGreaterThan(-1);
+    expect(filingCardIndex).toBeGreaterThan(accountActionsIndex);
   });
 });

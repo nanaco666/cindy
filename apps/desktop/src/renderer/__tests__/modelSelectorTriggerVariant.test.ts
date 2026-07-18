@@ -21,6 +21,19 @@ vi.mock('@/components/ui/popover', () => ({
   PopoverContent: () => null,
 }));
 
+vi.mock('@/components/ui/tooltip', async () => {
+  const React = await import('react');
+  return {
+    Tip: ({
+      children,
+      contentClassName,
+    }: {
+      children: React.ReactElement;
+      contentClassName?: string;
+    }) => React.createElement('div', { 'data-tooltip-class': contentClassName }, children),
+  };
+});
+
 vi.mock('@/lib/scrollbarAutoHide', () => ({
   flashScrollbar: vi.fn(),
 }));
@@ -99,7 +112,11 @@ vi.mock('@/state/deviceLinkModelMirror', () => ({
   useDeviceLinkModelMirrorVersion: () => 0,
 }));
 
-import { ModelSelector, modelEffortLabel } from '@/components/new-chat/ModelSelector';
+import {
+  ModelSelector,
+  ModelSelectorContent,
+  modelEffortLabel,
+} from '@/components/new-chat/ModelSelector';
 
 describe('ModelSelector trigger variants', () => {
   it('renders the field trigger as a settings input and localizes effort before provider labels', () => {
@@ -136,5 +153,24 @@ describe('ModelSelector trigger variants', () => {
     expect(
       modelEffortLabel(t, { effortDisplayNames: { xhigh: 'Extra High' } }, 'max', 'Max'),
     ).toBe('Max');
+  });
+
+  it('forwards an overlay-specific z-index to model tooltips', () => {
+    render(
+      React.createElement(ModelSelectorContent, {
+        modelId: 'claude-opus-4-8',
+        effort: 'high',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+        tooltipContentClassName: 'z-[10020]',
+      }),
+    );
+
+    expect(
+      screen
+        .getByRole('option', { name: /Opus 4\.8/ })
+        .parentElement?.getAttribute('data-tooltip-class'),
+    ).toBe('z-[10020]');
   });
 });

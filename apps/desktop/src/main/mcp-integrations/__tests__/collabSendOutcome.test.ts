@@ -69,11 +69,6 @@ vi.mock('../cindyProxyMedia.js', () => ({
   getCindyProxyMediaService: () => ({ mcp: {} }),
 }));
 
-vi.mock('../feishu.js', () => ({
-  getFeishuService: () => ({ mcp: {} }),
-}));
-
-
 vi.mock('../../maker-host/session-search.js', () => ({
   searchSessionsFn: vi.fn(),
 }));

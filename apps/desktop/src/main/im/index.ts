@@ -18,7 +18,7 @@
  *   │ App boot                        │ im.registerIpc + startImOrch         │
  *   │                                 │   (orchestrators only — NO connect)  │
  *   │ User login + localDb ready      │ app:ready-for-bot IPC →              │
- *   │   (MigrationGate, renderer)     │   startImConnection() → im.init()    │
+ *   │   (LocalDbGate, renderer)       │   startImConnection() → im.init()    │
  *   │                                 │   (auto-connect if creds)            │
  *   │ App quit (before-quit)          │ im.dispose (in bootstrap)            │
  *   │ Save credentials (renderer)     │ feishuBot:save IPC → wsClient.start  │
@@ -48,10 +48,12 @@
  */
 
 import { ipcMain, BrowserWindow, type IpcMainEvent } from 'electron';
+import { and, eq, like, ne, sql } from 'drizzle-orm';
 
-import { im, feishuIm, slackIm, discordIm } from './host';
+import { getDbClient } from '../localDb/client/current';
+import { sessions } from '../localDb/schema';
+import { im, feishuIm, discordIm } from './host';
 import { wireFeishuOrchestrator, type FeishuOrchestratorConfig } from './feishu';
-import { wireSlackOrchestrator } from './slack';
 import { wireDiscordOrchestrator } from './discord';
 import { getImOrchestrator } from './shared/orchestrator';
 import type { ImOrchestratorConfig } from './shared/types';
@@ -62,7 +64,7 @@ import { getUpdateStatus } from '../updateService';
 
 import { createLogger } from '../logger';
 
-export { im, feishuIm, slackIm, discordIm } from './host';
+export { im, feishuIm, discordIm } from './host';
 
 const log = createLogger('main:im');
 
@@ -115,16 +117,7 @@ const FEISHU_CONFIG: FeishuOrchestratorConfig = {
   effortOverrides: IM_DEFAULT_EFFORT_OVERRIDES,
 };
 
-// Slack 渠道的产品默认与 feishu 完全一致 — 两个渠道是同一产品能力的两个入口,
-// 默认体验不该有差异。需要分渠道调参时在这里各自改。
-const SLACK_CONFIG: ImOrchestratorConfig = {
-  agentKind: IM_DEFAULT_SETTINGS.agentKind,
-  defaultModel: IM_DEFAULT_SETTINGS.agents[IM_DEFAULT_SETTINGS.agentKind].model,
-  defaultPermissionMode: 'auto',
-  effortOverrides: IM_DEFAULT_EFFORT_OVERRIDES,
-};
-
-// Discord P1 DM 渠道与 Slack/Feishu 共享同一套产品默认值。
+// Discord P1 DM 渠道与 Feishu 共享同一套产品默认值。
 const DISCORD_CONFIG: ImOrchestratorConfig = {
   agentKind: IM_DEFAULT_SETTINGS.agentKind,
   defaultModel: IM_DEFAULT_SETTINGS.agents[IM_DEFAULT_SETTINGS.agentKind].model,
@@ -143,7 +136,6 @@ export function startImOrchestrators(): void {
   });
 
   wireFeishuOrchestrator(feishuIm, FEISHU_CONFIG);
-  wireSlackOrchestrator(slackIm, SLACK_CONFIG);
   wireDiscordOrchestrator(discordIm, DISCORD_CONFIG);
 
   // bindingStore.preload() 故意不在这里跑 —— 它要 DbClient, 而 localDb 在
@@ -290,6 +282,32 @@ export function startImConnection(): void {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       log.error(`bindingStore.preload failed (non-fatal): ${msg}`);
+    }
+    // 存量 feishu 会话行补 workspaceKind='dialogue' —— 2026-07 起 feishu 会话
+    // 进侧边栏「对话」分组(sessionSource.ts 白名单 + feishu adapter 声明),
+    // 此前落库的行还是默认 'project', 不补会以 im-working-dir/{botAppId}
+    // 聚成一个假项目组。幂等一次性 UPDATE; 不 bump updatedAt(避免重排列表)。
+    try {
+      await getDbClient()
+        .drizzle.update(sessions)
+        .set({ workspaceKind: 'dialogue' })
+        .where(and(eq(sessions.source, 'feishu'), ne(sessions.workspaceKind, 'dialogue')));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn(`feishu sessions workspaceKind backfill failed (non-fatal): ${msg}`);
+    }
+    // 存量 feishu 会话的旧默认标题 `飞书 · {后6位}` 迁到新风格 `[飞书·DM] {后6位}`
+    // (与 hook Slack 的 [Slack·DM] 同款)。只动旧默认前缀命中的行, 用户自定义
+    // 标题不受影响; 改名后不再命中 LIKE, 天然幂等。'飞书 · ' 共 5 个字符,
+    // substr 从第 6 个字符起保留后缀。
+    try {
+      await getDbClient()
+        .drizzle.update(sessions)
+        .set({ title: sql`'[飞书·DM] ' || substr(${sessions.title}, 6)` })
+        .where(and(eq(sessions.source, 'feishu'), like(sessions.title, '飞书 · %')));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.warn(`feishu sessions title backfill failed (non-fatal): ${msg}`);
     }
     try {
       await im.init();

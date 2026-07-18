@@ -82,36 +82,6 @@ export async function persistUserMessage(args: {
   }
 }
 
-/**
- * Persist a feishu (or future IM) assistant message to the local messages table.
- *
- * MVP shape: content = string (跟 desktop renderer 的 isFinal assistant 写库
- * 一致, 见 makerChatStore.ts 行 521-523)。
- *
- * agentMeta MVP 阶段固定 null — feishu fanout listener 拿不到 SDK 的
- * uuid/sdkSessionId/usage 等元信息 (那些通过 'session_id' / 'done' event 单独
- * 携带, 不是 per-message)。如果以后要补, 调用方可以传进来。
- */
-export async function persistAssistantMessage(args: {
-  sessionId: string;
-  text: string;
-}): Promise<{ clientId: string } | null> {
-  const { sessionId, text } = args;
-  if (!text) return null; // 空文本不入库, 避免污染消息流
-  const clientId = createId();
-  try {
-    await createMessage(sessionId, {
-      clientId,
-      role: 'assistant',
-      content: text,
-      agentMeta: null,
-    });
-    return { clientId };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    log.warn(
-      `persistAssistantMessage failed (non-fatal) sessionId=...${sessionId.slice(-8)}: ${msg}`,
-    );
-    return null;
-  }
-}
+// 注: assistant 消息不在本模块落库 — IM 会话统一经 wireSessionToIpcExternal
+// 接入 desktop 事件管线, assistant / tool_use / tool_result / thinking 由
+// messagePersistBroadcaster 单点落库(原 persistAssistantMessage 已随之移除)。

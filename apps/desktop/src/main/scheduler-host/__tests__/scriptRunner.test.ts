@@ -457,6 +457,58 @@ describe('ScriptScheduleRunner', () => {
     expect(killProcessTreeMock).toHaveBeenCalled();
   });
 
+  it('explains that plain stdout must be JSONL protocol frames and logs belong on stderr', async () => {
+    const child = childProcess();
+    spawnMock.mockReturnValue(child);
+    const runner = new ScriptScheduleRunner({ broker: { call: vi.fn() }, logger: {} });
+    const resultPromise = runner.fire(schedule(), {
+      runId: 'run-1',
+      firedAt: 1,
+      signal: new AbortController().signal,
+    });
+
+    child.stdout.write('ordinary debug output\n');
+    child.emit('close', 0);
+
+    await expect(resultPromise).rejects.toThrow('script stdout must contain JSONL protocol frames only');
+    await expect(resultPromise).rejects.toThrow('logs belong on stderr');
+    expect(killProcessTreeMock).toHaveBeenCalled();
+  });
+
+  it('rejects protocol JSON with an unknown or missing frame type', async () => {
+    const child = childProcess();
+    spawnMock.mockReturnValue(child);
+    const runner = new ScriptScheduleRunner({ broker: { call: vi.fn() }, logger: {} });
+    const resultPromise = runner.fire(schedule(), {
+      runId: 'run-1',
+      firedAt: 1,
+      signal: new AbortController().signal,
+    });
+
+    child.stdout.write(`${JSON.stringify({ protocol: 'xdt-maker-script/1', type: 'progress' })}\n`);
+    child.emit('close', 0);
+
+    await expect(resultPromise).rejects.toThrow(
+      'invalid or missing type; expected "call" or "complete"',
+    );
+    expect(killProcessTreeMock).toHaveBeenCalled();
+  });
+
+  it('explains that a successful exit still requires a complete protocol frame', async () => {
+    const child = childProcess();
+    spawnMock.mockReturnValue(child);
+    const runner = new ScriptScheduleRunner({ broker: { call: vi.fn() }, logger: {} });
+    const resultPromise = runner.fire(schedule(), {
+      runId: 'run-1',
+      firedAt: 1,
+      signal: new AbortController().signal,
+    });
+
+    child.emit('close', 0);
+
+    await expect(resultPromise).rejects.toThrow('script exited without a complete frame');
+  });
+
   it('kills immediately when the abort signal is already aborted before fire() attaches its listener (codex review #966)', async () => {
     const child = childProcess();
     spawnMock.mockReturnValue(child);

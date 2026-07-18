@@ -1,0 +1,91 @@
+{
+  "_comment": "PR 提交规范的机器判定数据,单一真相源,scripts/review-pr/context.mjs 直接 import 做格式判定。titleTypes 是 Title type 前缀白名单;featureSections / bugfixSections 需与 .github/PULL_REQUEST_TEMPLATE.md 的必填段落保持一致——本仓模板是统一三节制(这次改了什么 / 怎么验证的 / 风险),feature 与 bugfix 共用同一组段落;sync 脚本(agent-use/scripts/sync-agent-instructions.mjs)会双向校验,改一边忘改另一边会报错退出。lightTypes / redlinePaths / serverPaths / ciSensitivePaths / productWhitelist / uiPaths 只在本文件(PR 模板无对应,无需同步)。serverPaths 在本仓恒为空数组——服务端已拆至独立的 cindy-server 仓库,本仓不含 apps/server,「Server 发布通知 gate」因此永不触发(如未来本仓重新出现 server 面路径再补)。productWhitelist 是「产品/UI 变更门」的人肉把关白名单(GitHub login,匹配时大小写不敏感);uiPaths 是 UI 面路径前缀,命中即触发产品/UI 语义定性;archGate 是「技术架构变更门」配置(whitelist=技术把关白名单;corePaths=架构敏感路径前缀,命中文件的 diff 行数合计 ≥coreDiffLines 触发;refactorDiffLines=refactor 类型的触发阈值;anyTypeDiffLines=任意类型的超大 diff 触发阈值——三个触发器任一命中且未豁免即进语义定性,详见 SKILL「技术架构变更门」);slackSyncBots 是往讨论 issue 同步 Slack 消息的机器人账号(GitHub login,大小写不敏感、比对时去掉 [bot] 后缀)——只有这些账号发的 issue 评论才允许按正文「发送者:<名字>」归属真实发言人(context.mjs 拿名字先查 slackSenderAliases 别名、再去 orgMappingRepos 名录反查 GitHub 账号,最后对白名单;信任锚是 bot 账号本身,防止普通用户伪造发送者行冒充白名单);slackSenderAliases 是 Slack 显示名→GitHub login 的别名映射(大小写不敏感),兜「Slack 显示名与名录中文名对不上」的情况(如 Dash=黄一孟=dashhuang);feishuNotify 是产品门/架构门的飞书通知配置(groupName=产品门群通知的飞书群名;archRecipientName=架构门通知收件人——架构门不发群,改为飞书私聊此人,详见 SKILL「技术架构变更门」的「飞书通知」节;orgMappingRepos=git 邮箱→飞书身份的名录仓库,供 resolve-author-feishu.mjs 查 README)。staleAuthorReminder 是「停滞飞书催办」阈值(idleHours=作者停滞多久算卡住,repeatHours=同一 PR 两次提醒的最小间隔,remind-stale-author.mjs 消费)。selfFixAuthors 是「自动跟进修复」名单(GitHub login,大小写不敏感):这些作者的 PR 卡在作者侧问题(格式不合规 / 审查不通过 / 冲突 / CI 失败 / 未 resolve thread)时,不走打回 / 催办(其中 owner 本人的 PR 对自动化账号是 own-pr,GitHub 也不允许对自己的 PR 提 REQUEST_CHANGES),而是开 / 复用一个跟进会话自动修复直到可合并,详见 SKILL「自动跟进修复(fix-handoff)」。详见 SKILL「产品 / UI 变更门」与「停滞飞书催办」。",
+  "titleTypes": [
+    "feat",
+    "fix",
+    "refactor",
+    "perf",
+    "chore",
+    "docs",
+    "test",
+    "revert",
+    "build",
+    "ci"
+  ],
+  "lightTypes": [
+    "chore",
+    "docs",
+    "test",
+    "build",
+    "ci",
+    "revert"
+  ],
+  "featureSections": [
+    "这次改了什么",
+    "怎么验证的",
+    "风险"
+  ],
+  "bugfixSections": [
+    "这次改了什么",
+    "怎么验证的",
+    "风险"
+  ],
+  "redlinePaths": [
+    "updater",
+    "localDb/schema\\.ts",
+    "drizzle/"
+  ],
+  "serverPaths": [],
+  "ciSensitivePaths": [
+    "\\.github/workflows/",
+    "\\.github/actions/"
+  ],
+  "productWhitelist": [
+    "dashhuang",
+    "xdanger",
+    "magiclizi",
+    "zqchris"
+  ],
+  "uiPaths": [
+    "apps/desktop/src/renderer/",
+    "apps/mobile/",
+    "DESIGN.md"
+  ],
+  "archGate": {
+    "whitelist": [
+      "magiclizi",
+      "xdanger"
+    ],
+    "corePaths": [
+      "packages/",
+      "cindy-protocol/",
+      "apps/desktop/src/main/",
+      "apps/desktop/src/preload/",
+      "apps/desktop/src/shared/"
+    ],
+    "coreDiffLines": 150,
+    "refactorDiffLines": 400,
+    "anyTypeDiffLines": 800
+  },
+  "slackSyncBots": [
+    "dash-s-cindy"
+  ],
+  "slackSenderAliases": {
+    "Dash": "dashhuang"
+  },
+  "feishuNotify": {
+    "groupName": "Cindy",
+    "archRecipientName": "刘佳黎",
+    "orgMappingRepos": [
+      "taptap/org",
+      "xindong/org"
+    ]
+  },
+  "staleAuthorReminder": {
+    "idleHours": 24,
+    "repeatHours": 24
+  },
+  "selfFixAuthors": [
+    "magiclizi"
+  ]
+}

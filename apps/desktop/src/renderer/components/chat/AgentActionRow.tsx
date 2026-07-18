@@ -166,6 +166,10 @@ export interface ToolMediaItem {
    *  确认其 html 真含对应 data-ghost-audio 插槽才压基座渲染;验证不过
    *  (远程控制端无卡 / card-update 被拒 / 老渲染层)照常渲染基座播放器。 */
   audioInCard?: boolean;
+  /** Image-only: 结果带 xdt_images_in_card 令牌(意识声明图片已画进自己的
+   *  卡)。语义同 audioInCard:待验证声明,MessageStream 确认锚卡 html 真含
+   *  对应图片地址才压基座渲染;验证不过照常渲染,图片永不消失。 */
+  imageInCard?: boolean;
 }
 
 function parseModelFiles(raw: unknown): ToolMediaModelFile[] {
@@ -304,6 +308,7 @@ export function extractToolResultMedia(toolResult: string): ToolMediaItem[] {
       xdt_audio_urls?: unknown;
       xdt_audio_tracks?: unknown;
       xdt_audio_in_card?: unknown;
+      xdt_images_in_card?: unknown;
       _xdt_render_image?: unknown;
       _xdt_model_files?: unknown;
       _xdt_audio_tracks?: unknown;
@@ -319,6 +324,10 @@ export function extractToolResultMedia(toolResult: string): ToolMediaItem[] {
       return m;
     };
     const items: ToolMediaItem[] = [];
+    // 图片入卡令牌(xdt_images_in_card):与音频令牌同款「待验证声明」——
+    // 提取层只打标不裁决,压不压基座由 MessageStream 验证锚卡真含对应图片
+    // 后决定(验证不过照常渲染,图片永不消失)。手机端提取器不认该令牌。
+    const imagesInCard = parsed.xdt_images_in_card === true;
     if (
       typeof parsed.xdt_image_url === 'string' &&
       isToolImageUrl(parsed.xdt_image_url)
@@ -328,6 +337,7 @@ export function extractToolResultMedia(toolResult: string): ToolMediaItem[] {
         kind: 'image',
         url: parsed.xdt_image_url,
         ...(modelFile ? { modelFile } : {}),
+        ...(imagesInCard ? { imageInCard: true } : {}),
       });
     }
     if (Array.isArray(parsed.xdt_image_urls)) {
@@ -338,6 +348,7 @@ export function extractToolResultMedia(toolResult: string): ToolMediaItem[] {
             kind: 'image',
             url: u,
             ...(modelFile ? { modelFile } : {}),
+            ...(imagesInCard ? { imageInCard: true } : {}),
           });
         }
       }

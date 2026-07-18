@@ -182,6 +182,99 @@ describe('cindy_ghosts · ghost_call(派活透传)', () => {
     expect(String(payload.hint)).toContain('markdown');
   });
 
+  it('图片入卡令牌提升:xdt_images_in_card === true 才上提(与音频令牌同款)', async () => {
+    const withToken = parsePayload(await handleGhostCall(
+      fakeDeps({
+        callGhostTool: async () => ({
+          ok: true,
+          result: { xdt_image_urls: ['cindy-media://blobs/abc.png'], xdt_images_in_card: true },
+        }),
+      }),
+      { ghost_id: 'art', tool: 'gen_image', args: {} },
+    ));
+    expect(withToken.xdt_images_in_card).toBe(true);
+
+    const nonBool = parsePayload(await handleGhostCall(
+      fakeDeps({
+        callGhostTool: async () => ({
+          ok: true,
+          result: { xdt_image_urls: ['cindy-media://blobs/abc.png'], xdt_images_in_card: 'yes' },
+        }),
+      }),
+      { ghost_id: 'art', tool: 'gen_image', args: {} },
+    ));
+    expect(nonBool.xdt_images_in_card).toBeUndefined();
+  });
+
+  it('兜底账本注入:意识未声明媒体字段时 producedMedia → xdt_media_produced', async () => {
+    const payload = parsePayload(await handleGhostCall(
+      fakeDeps({
+        callGhostTool: async () => ({
+          ok: true,
+          result: { note: '画完了但没声明字段' },
+          producedMedia: ['cindy-media://blobs/def.png'],
+        }),
+      }),
+      { ghost_id: 'art', tool: 'gen_image', args: {} },
+    ));
+    expect(payload.xdt_media_produced).toEqual(['cindy-media://blobs/def.png']);
+    // producedMedia 是主机侧信道,不泄漏原始字段名给模型侧 payload
+    expect(payload.producedMedia).toBeUndefined();
+  });
+
+  it('内联意图令牌:xdt_media_inline + 账本媒体 → hint 改为鼓励 markdown 内联', async () => {
+    const payload = parsePayload(await handleGhostCall(
+      fakeDeps({
+        callGhostTool: async () => ({
+          ok: true,
+          result: { xdt_image_url: 'cindy-media://blobs/def.png', xdt_media_inline: true },
+          producedMedia: ['cindy-media://blobs/def.png'],
+        }),
+      }),
+      { ghost_id: 'xd-feishu', tool: 'call_tool', args: {} },
+    ));
+    // 账本注入照旧(IM/hook 出站靠它),但禁令换成内联指引。
+    expect(payload.xdt_media_produced).toEqual(['cindy-media://blobs/def.png']);
+    expect(String(payload.hint)).toContain('markdown');
+    expect(String(payload.hint)).toContain('![](');
+    expect(String(payload.hint)).not.toContain('不要在回复文本里用 markdown');
+    // 无账本媒体时令牌不触发任何 hint(读了文档但没下图的常态)。
+    const noMedia = parsePayload(await handleGhostCall(
+      fakeDeps({
+        callGhostTool: async () => ({ ok: true, result: { data: { text: '正文' }, xdt_media_inline: true } }),
+      }),
+      { ghost_id: 'xd-feishu', tool: 'call_tool', args: {} },
+    ));
+    expect(noMedia.hint).toBeUndefined();
+    // 声明了复数媒体字段时令牌无效,仍走卡片语义禁令。
+    const declared = parsePayload(await handleGhostCall(
+      fakeDeps({
+        callGhostTool: async () => ({
+          ok: true,
+          result: { xdt_image_urls: ['cindy-media://blobs/abc.png'], xdt_media_inline: true },
+          producedMedia: ['cindy-media://blobs/abc.png'],
+        }),
+      }),
+      { ghost_id: 'art', tool: 'gen_image', args: {} },
+    ));
+    expect(String(declared.hint)).toContain('不要在回复文本里用 markdown');
+  });
+
+  it('兜底账本不注入:意识声明了媒体字段时以声明为准', async () => {
+    const payload = parsePayload(await handleGhostCall(
+      fakeDeps({
+        callGhostTool: async () => ({
+          ok: true,
+          result: { xdt_image_urls: ['cindy-media://blobs/abc.png'] },
+          producedMedia: ['cindy-media://blobs/def.png', 'cindy-media://blobs/abc.png'],
+        }),
+      }),
+      { ghost_id: 'art', tool: 'gen_image', args: {} },
+    ));
+    expect(payload.xdt_media_produced).toBeUndefined();
+    expect(payload.xdt_image_urls).toEqual(['cindy-media://blobs/abc.png']);
+  });
+
   it('无媒体的返回体不附防重复渲染提示', async () => {
     const result = await handleGhostCall(
       fakeDeps({ callGhostTool: async () => ({ ok: true, result: { done: true } }) }),

@@ -521,7 +521,7 @@ export const SessionItem = memo(function SessionItem({
     void window.electronAPI.maker.openSessionInNewWindow(session.id);
   }, [remoteWritesBlocked, session.id, t]);
 
-  // 复制 xdt-maker://session/<id> 深度链接到剪贴板。三个变体(标准/Pinned/Archived/Draft)
+  // 复制 cindy://session/<id> 深度链接到剪贴板。三个变体(标准/Pinned/Archived/Draft)
   // 共用此 handler — sessionId 始终存在(draft 也是 DB-backed 的 Session row)。
   const handleCopyDeepLinkSelect = useCallback(async () => {
     const link = buildSessionDeepLink(session.id);
@@ -534,7 +534,7 @@ export const SessionItem = memo(function SessionItem({
     }
   }, [session.id, t]);
 
-  // 单项「复制对话链接」:直接复制 xdt-maker://session/<id> 深链(可粘贴到聊天里
+  // 单项「复制对话链接」:直接复制 cindy://session/<id> 深链(可粘贴到聊天里
   // 渲染成会话 chip)。原「复制会话 ID」二级菜单(深度链接 / 仅 ID / Agent)已按
   // 产品决策收敛为这一项;不自带分隔线,分组由各使用点决定,避免菜单被切得过碎。
   const copySessionIdSubmenu = (

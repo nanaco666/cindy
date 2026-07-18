@@ -7,13 +7,15 @@
  * 条目, 不删文件。
  *
  * 三条校验:
- *   1. 路径在 baseRepo/.xdt-worktrees/ 下(绝对路径前缀比对, 抗 ../ 越权)
+ *   1. 路径在 baseRepo/.cindy-worktrees/ 或历史 .xdt-worktrees/ 下
+ *      (绝对路径前缀比对, 抗 ../ 越权)
  *   2. 路径在 worktreeStore 已记录的 known paths 列表里(双向校验, 抗 store 与文件系统不一致)
  *   3. 路径不能是 symbolic link(软链可能指向 baseRepo 之外, fs.rm 会跟着删源)
  */
 
 import path from 'node:path';
 import fs from 'node:fs';
+import { MANAGED_WORKTREE_DIR_NAMES } from '../../shared/managedWorktreePaths';
 
 /**
  * 用户手动保留哨兵（P1，对齐 Claude Desktop 的 `.worktree-keep` 语义）：
@@ -58,10 +60,13 @@ export function isManagedWorktreePath(
     return false;
   }
 
-  // 1. 必须在 baseRepo/.xdt-worktrees/ 下
+  // 1. 必须在 Cindy 当前或历史托管 worktree 根目录下
   // 用 path.sep 后缀防止 ".../my-repo-evil" 误匹配 ".../my-repo"
-  const expectedParent = path.join(normalizedBase, '.xdt-worktrees') + path.sep;
-  if (!normalized.startsWith(expectedParent)) return false;
+  const isUnderManagedParent = MANAGED_WORKTREE_DIR_NAMES.some((directoryName) => {
+    const expectedParent = path.join(normalizedBase, directoryName) + path.sep;
+    return normalized.startsWith(expectedParent);
+  });
+  if (!isUnderManagedParent) return false;
 
   // 2. 必须在 store 已记录的 path 列表中(将 known paths 也做一次 resolve 兜底大小写/分隔符差异)
   const knownNormalized = knownPathsInStore.map((p) => {

@@ -3,8 +3,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FEISHU_APP_ID } from './shared/feishu.mjs';
-import { productionEndpoints } from './shared/production-endpoints.mjs';
+import { loadProductionEndpoints } from './shared/production-endpoints.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -12,22 +11,35 @@ const gracefulTimeoutMs = 3000;
 const forceTimeoutMs = 5000;
 const pollIntervalMs = 150;
 const forceKillLabel = process.platform === 'win32' ? 'taskkill /F /T' : 'kill -9';
-// FEISHU_APP_ID(飞书公共 client id,非密钥)统一从 scripts/shared/feishu.mjs 引入,见该文件说明。
-const REMOTE_API_BASE_URL = productionEndpoints.apiBaseUrl;
-const LOCAL_API_BASE_URL = 'http://localhost:3333';
 
-// 桌面端 .env 默认值,按启动模式区分 VITE_API_BASE_URL:
-// - remote(默认):dev:desktop:remote 用 cross-env 在运行时强制注入 xdt-api,桌面端不看 .env,
-//   所以 .env 里的 VITE_API_BASE_URL 只是占位,沿用旧策略「文件已存在则不覆盖」即可。
-// - local:dev:desktop 无运行时注入,桌面端直接读 .env,因此必须 force 把 .env 的
-//   VITE_API_BASE_URL 写成本地地址,否则会沿用上一次 remote 留下的远程地址连错服务器。
-// VITE_FEISHU_APP_ID 两种模式都只补空值、保留用户已填的值。
-function desktopEnvSpec(mode) {
+/**
+ * 产品 userData 目录基名(--isolated 沙箱目录 `<BRAND_USER_DATA_DIR_NAME>-dev[-<名字>]`
+ * 的派生基座)。⚠️ 值必须与 packages/maker-shared/src/brandIdentity.ts 的
+ * BRAND_IDENTITY.userDataDirName 一致——.mjs 无法 import TS 单点,只能镜像字面量;
+ * 一致性由 scripts/__tests__/brand-identity-sync.test.mjs 断言兜底。
+ * 主进程侧(devCliFlags.ts)以 app.getPath('userData') 为基座派生同名目录,两边
+ * 必须落在同一路径,否则 restart 脚本创建的沙箱目录与实际生效目录分家。
+ */
+export const BRAND_USER_DATA_DIR_NAME = 'Cindy';
+
+// 桌面端 .env 默认值。2026-07 端点清单重构后 .env 不再承载任何端点 URL
+// (运行期端点全部来自清单:dev 默认读仓内 config/endpoint.json,local 模式读
+// 生成的 config/endpoint.local.json,--endpoints-cdn 走线上 CDN),这里只剩
+// 构建身份字段:VITE_FEISHU_APP_ID / VITE_CINDY_AUTH_REGION 补空值、保留用户已填的值。
+function desktopEnvSpec(content) {
+  let productionConfig;
+  const configValue = (key) => {
+    productionConfig ??= loadProductionEndpoints();
+    return productionConfig[key];
+  };
+  const existingFeishuAppId = readEnvValue(content, 'VITE_FEISHU_APP_ID');
   return [
-    { key: 'VITE_FEISHU_APP_ID', value: FEISHU_APP_ID, force: false },
-    mode === 'local'
-      ? { key: 'VITE_API_BASE_URL', value: LOCAL_API_BASE_URL, force: true }
-      : { key: 'VITE_API_BASE_URL', value: REMOTE_API_BASE_URL, force: false },
+    { key: 'VITE_CINDY_AUTH_REGION', value: 'cn', force: false },
+    {
+      key: 'VITE_FEISHU_APP_ID',
+      value: existingFeishuAppId || configValue('feishuAppId'),
+      force: false,
+    },
   ];
 }
 const closeDarwinTerminalTtyScript = Object.freeze([
@@ -121,7 +133,7 @@ function run(command, args, options = {}) {
   });
 }
 
-function ensureDesktopEnv(mode) {
+function ensureDesktopEnv() {
   const envPath = path.join(rootDir, 'apps', 'desktop', '.env');
   const examplePath = path.join(rootDir, 'apps', 'desktop', '.env.example');
   let content = '';
@@ -136,7 +148,7 @@ function ensureDesktopEnv(mode) {
       : '';
   }
 
-  for (const { key, value, force } of desktopEnvSpec(mode)) {
+  for (const { key, value, force } of desktopEnvSpec(content)) {
     content = upsertEnvValue(content, key, value, { overwrite: created || force });
   }
 
@@ -148,6 +160,11 @@ function ensureDesktopEnv(mode) {
   } else {
     console.log(`==> Checked desktop env: ${path.relative(rootDir, envPath)}`);
   }
+}
+
+function readEnvValue(content, key) {
+  const pattern = new RegExp(`^\\s*${escapeRegExp(key)}\\s*=\\s*(.*?)\\s*$`, 'm');
+  return content.match(pattern)?.[1]?.trim() ?? '';
 }
 
 function upsertEnvValue(content, key, value, options = {}) {
@@ -212,8 +229,8 @@ function listPosixProcesses() {
     .filter(Boolean);
 }
 
-// 沿 ppid 链向上找祖先里有没有 xdt-maker desktop dev 进程。
-// 用途：拦住"agent 跑在 xdt-maker desktop dev 进程内还调 restart"这种自杀场景——
+// 沿 ppid 链向上找祖先里有没有 Cindy desktop dev 进程。
+// 用途：拦住"agent 跑在 Cindy desktop dev 进程内还调 restart"这种自杀场景——
 // 一旦 taskkill /T 走到祖先 dev 进程，整棵树（包括正在跑的本脚本）都会被收掉，
 // 新 cmd 要么没机会起、要么撞上未释放的端口/文件锁，结果是看不懂的 ELIFECYCLE。
 // 检测到就直接 exit 1 + 清晰提示，让 agent 把控制权交回给开发者。
@@ -363,14 +380,14 @@ function closeDarwinTerminalTtys(ttys) {
 }
 
 /**
- * --isolated 的默认独立 userData 目录:与正式版的 `xdt-maker` 平级、名字带 -dev 后缀,
+ * --isolated 的默认独立 userData 目录:与正式版的 `Cindy` 平级、名字带 -dev 后缀,
  * 稳定不随 checkout 变(多个 worktree 共享同一个 dev 沙箱,想再细分用命名沙箱
  * `--isolated=<名字>` 或自己设 XDT_USER_DATA_DIR 覆盖)。命名沙箱目录再追加
  * `-<名字>` 后缀,每个名字一条完全独立的沙箱。只在 dev 生效——主进程入口只在
  * 非 packaged 时应用该覆写。
  */
 function defaultIsolatedUserDataDir(isolationName) {
-  const dirName = `xdt-maker-dev${isolationName ? `-${isolationName}` : ''}`;
+  const dirName = `${BRAND_USER_DATA_DIR_NAME}-dev${isolationName ? `-${isolationName}` : ''}`;
   if (process.platform === 'win32') {
     const appData = process.env.APPDATA || path.join(process.env.USERPROFILE || '', 'AppData', 'Roaming');
     return path.join(appData, dirName);
@@ -434,6 +451,10 @@ function devEnvPrefix() {
     ['XDT_SCHEDULER_PASSIVE', process.env.XDT_SCHEDULER_PASSIVE],
     ['XDT_ISOLATED', process.env.XDT_ISOLATED],
     ['XDT_ISOLATED_NAME', process.env.XDT_ISOLATED_NAME],
+    // 端点清单来源覆写:--endpoints-cdn(dev 走线上 CDN)/ local 模式的
+    // endpoint.local.json 文件路径,均由主进程 clientEndpointsService 消费。
+    ['XDT_ENDPOINTS_CDN', process.env.XDT_ENDPOINTS_CDN],
+    ['XDT_ENDPOINT_MANIFEST_FILE', process.env.XDT_ENDPOINT_MANIFEST_FILE],
     // 启动即自动打开 DevTools(main 的 ready-to-show 里消费;见 bootstrap-electron)。
     // 给"快捷键/菜单打不开 DevTools"的环境兜底,QA 控制台验证依赖它。
     ['OPEN_DEVTOOLS', process.env.OPEN_DEVTOOLS],
@@ -527,9 +548,18 @@ async function main() {
     process.env.XDT_SCHEDULER_PASSIVE = '1';
     console.log('==> Scheduler passive mode: this instance will not auto-fire schedules.');
   }
+  // --endpoints-cdn: dev 不读仓内 config/endpoint.json,改走与 packaged 相同的
+  // 线上 CDN 端点清单拉取链路(测线上清单)。实现方式是置 XDT_ENDPOINTS_CDN=1,
+  // 经 devEnvPrefix 白名单透传,主进程 devCliFlags/clientEndpointsService 消费。
+  // 注意 local 模式的 endpoint.local.json 生成不在本脚本——dev(local)脚本链里的
+  // apps/desktop/scripts/dev-local-env.mjs 统一负责(human 直跑与 restart 同路径)。
+  if (argv.includes('--endpoints-cdn')) {
+    process.env.XDT_ENDPOINTS_CDN = '1';
+    console.log('==> Endpoints via CDN: dev will fetch the online endpoint manifest.');
+  }
   // --isolated[=<名字>]: dev 使用独立的 userData 目录(数据库/登录态/会话全部与
-  // 正式版隔离,首次要重新走飞书登录)。不带名字 = 默认沙箱(xdt-maker-dev);
-  // 带名字 = 独立命名沙箱(xdt-maker-dev-<名字>),每个名字一条,可同时多开。
+  // 正式版隔离,首次要重新走飞书登录)。不带名字 = 默认沙箱(Cindy-dev);
+  // 带名字 = 独立命名沙箱(Cindy-dev-<名字>),每个名字一条,可同时多开。
   // 实现:置 XDT_USER_DATA_DIR(主进程入口只在非 packaged 时应用,见
   // apps/desktop/src/main/index.ts),经 devEnvPrefix 白名单透传给 dev 进程。
   // 已手动设了 XDT_USER_DATA_DIR 时尊重用户的值,不覆盖。
@@ -558,11 +588,11 @@ async function main() {
     fs.mkdirSync(process.env.XDT_USER_DATA_DIR, { recursive: true });
     console.log(`==> Isolated dev user data${isolationName ? ` (sandbox "${isolationName}")` : ''}: ${process.env.XDT_USER_DATA_DIR}`);
   }
-  if (!killOnly) ensureDesktopEnv(mode);
+  if (!killOnly) ensureDesktopEnv();
 
   const devAncestor = findDevAncestor();
   if (devAncestor) {
-    console.error('==> Detected this script is running inside an xdt-maker desktop dev process tree:');
+    console.error('==> Detected this script is running inside an Cindy desktop dev process tree:');
     console.error(`    ancestor pid ${devAncestor.pid}: ${devAncestor.command.slice(0, 180)}`);
     console.error('==> Refusing to restart from within. Killing the ancestor would terminate this');
     console.error('    script mid-flight and leave ports / file locks held by the dying process,');
@@ -577,9 +607,9 @@ async function main() {
   const darwinTerminalTtys = darwinTerminalTtysForProcesses(targets);
 
   if (targets.length === 0) {
-    console.log('==> No existing xdt-maker desktop dev processes found.');
+    console.log('==> No existing Cindy desktop dev processes found.');
   } else {
-    console.log(`==> Stopping ${targets.length} existing xdt-maker desktop dev process(es)...`);
+    console.log(`==> Stopping ${targets.length} existing Cindy desktop dev process(es)...`);
     for (const target of targets) {
       console.log(`    kill ${target.pid}: ${target.command.slice(0, 180)}`);
       killProcess(target.pid);
@@ -587,7 +617,7 @@ async function main() {
 
     const remainingAfterTerm = await waitForDesktopDevProcessesToExit(gracefulTimeoutMs);
     if (remainingAfterTerm.length > 0) {
-      console.log(`==> Force stopping ${remainingAfterTerm.length} stubborn xdt-maker desktop dev process(es)...`);
+      console.log(`==> Force stopping ${remainingAfterTerm.length} stubborn Cindy desktop dev process(es)...`);
       for (const target of remainingAfterTerm) {
         console.log(`    ${forceKillLabel} ${target.pid}: ${target.command.slice(0, 180)}`);
         forceKillProcess(target.pid);
@@ -596,7 +626,7 @@ async function main() {
 
     const remainingAfterForce = await waitForDesktopDevProcessesToExit(forceTimeoutMs);
     if (remainingAfterForce.length > 0) {
-      console.error(`==> Failed to stop ${remainingAfterForce.length} xdt-maker desktop dev process(es); aborting restart.`);
+      console.error(`==> Failed to stop ${remainingAfterForce.length} Cindy desktop dev process(es); aborting restart.`);
       for (const target of remainingAfterForce) {
         console.error(`    still running ${target.pid}: ${target.command.slice(0, 180)}`);
       }

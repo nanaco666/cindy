@@ -15,7 +15,7 @@ import {
 import { formatRemoteError } from '@lizi/maker-shared/device-link-contract';
 
 export const MOBILE_MAX_VOICE_AUDIO_BYTES = 64 * 1024 * 1024;
-export const MOBILE_VOICE_MIC_PERMISSION_ERROR = '麦克风权限未开启，请在系统设置里允许 XDMaker 使用麦克风。';
+export const MOBILE_VOICE_MIC_PERMISSION_ERROR = '麦克风权限未开启，请在系统设置里允许 Cindy 使用麦克风。';
 export const MOBILE_VOICE_REALTIME_AUDIO_UNAVAILABLE_ERROR = '当前安装包不支持实时语音输入，请安装包含原生录音模块的测试版。';
 export const MOBILE_VOICE_CREDENTIAL_SYNC_UNSUPPORTED_ERROR =
   '当前被控电脑端版本还不支持手机实时语音输入，请更新或重启桌面端后再试。';

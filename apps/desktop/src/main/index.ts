@@ -1,9 +1,26 @@
 // Entry: Electron startup → bootstrap-electron.ts (dynamic import).
 import fixPath from 'fix-path';
 import { app } from 'electron';
+import path from 'node:path';
 import { setDefaultAutoSelectFamilyAttemptTimeout } from 'node:net';
 import { exit, stderr } from 'node:process';
+import { CURRENT_CINDY_REGION } from '../shared/brandRegion.js';
+import { resolveRegionUserDataDirName } from './regionUserData.js';
 import { createLogger, initLogger } from './logger.js';
+
+// 同机双装(cn/global):global 构建把 userData 切到区域目录(CindyGlobal),
+// 与 cn 版(productName 默认 'Cindy')彻底分库;数据库 / 登录态 / 单实例锁 /
+// sessionData 随 userData 目录天然隔离。必须在 initLogger()(packaged 日志
+// 目录)、crashReporter、单实例锁与一切 userData 读取之前执行。cn 构建与
+// dev 返回 null,零行为变化(dev 隔离语义由下方 devCliFlags 的 --isolated 承载)。
+const regionUserDataDirName = resolveRegionUserDataDirName({
+  isPackaged: app.isPackaged,
+  region: CURRENT_CINDY_REGION,
+  argv: process.argv,
+});
+if (regionUserDataDirName) {
+  app.setPath('userData', path.join(app.getPath('appData'), regionUserDataDirName));
+}
 
 // Node happy-eyeballs(autoSelectFamily)默认每个地址只给 250ms 完成 TCP 握手,
 // VPN/高 RTT 链路上直连海外端点(platform.claude.com 换 token、订阅模式模型流量等)
@@ -36,7 +53,7 @@ import { installInvokeCapture } from './device-link/invoke-registry.js';
 
 const stripped = stripSensitiveAnthropicEnv();
 if (stripped.length > 0) {
-  stderr.write(`[xdt-maker] stripped user-level Anthropic env: ${stripped.join(', ')}\n`);
+  stderr.write(`[cindy] stripped user-level Anthropic env: ${stripped.join(', ')}\n`);
 }
 
 installInvokeCapture();
@@ -62,23 +79,29 @@ const devFlags = resolveDevCliFlags({
   envIsolated: process.env.XDT_ISOLATED,
   envIsolationName: process.env.XDT_ISOLATED_NAME,
   envDeviceIdOverride: process.env.XDT_DEVICE_ID_OVERRIDE,
+  envEndpointsCdn: process.env.XDT_ENDPOINTS_CDN,
 });
 if (devFlags.schedulerPassive) {
   // 统一收敛到 env:scheduler-host 只认 XDT_SCHEDULER_PASSIVE,不重复解析 argv。
   process.env.XDT_SCHEDULER_PASSIVE = '1';
-  stderr.write('[xdt-maker] dev scheduler passive mode (--passive)\n');
+  stderr.write('[cindy] dev scheduler passive mode (--passive)\n');
+}
+if (devFlags.endpointsCdn) {
+  // 统一收敛到 env:clientEndpointsService 只认 XDT_ENDPOINTS_CDN,不重复解析 argv。
+  process.env.XDT_ENDPOINTS_CDN = '1';
+  stderr.write('[cindy] dev endpoints via CDN (--endpoints-cdn)\n');
 }
 if (devFlags.userDataDirOverride) {
   // 同步回 env,让读 env 的下游(日志、诊断)与实际生效目录一致。
   process.env.XDT_USER_DATA_DIR = devFlags.userDataDirOverride;
   app.setPath('userData', devFlags.userDataDirOverride);
-  stderr.write(`[xdt-maker] dev userData override → ${devFlags.userDataDirOverride}\n`);
+  stderr.write(`[cindy] dev userData override → ${devFlags.userDataDirOverride}\n`);
 }
 if (devFlags.invalidIsolationName !== null) {
   // 名字不合法(字符集 / 长度)→ 已按默认沙箱处理(回落到不隔离会混进正式版
   // 数据,更危险),这里只大声警告,让用户发现自己起错了名字。
   stderr.write(
-    `[xdt-maker] WARN: invalid --isolated name "${devFlags.invalidIsolationName}"` +
+    `[cindy] WARN: invalid --isolated name "${devFlags.invalidIsolationName}"` +
       ' (allowed: A-Za-z0-9_-, max 32 chars); falling back to the DEFAULT sandbox\n',
   );
 }
@@ -100,7 +123,7 @@ if (devFlags.needsIsolatedDeviceId) {
     isolatedDeviceId = `isolated-dev${devFlags.isolationName ? `-${devFlags.isolationName}` : ''}`;
   }
   process.env.XDT_DEVICE_ID_OVERRIDE = isolatedDeviceId;
-  stderr.write(`[xdt-maker] dev isolated deviceId → ${isolatedDeviceId}\n`);
+  stderr.write(`[cindy] dev isolated deviceId → ${isolatedDeviceId}\n`);
 }
 
 async function dispatch(): Promise<void> {
@@ -109,6 +132,6 @@ async function dispatch(): Promise<void> {
 }
 
 dispatch().catch((err) => {
-  stderr.write(`[xdt-maker] fatal: ${(err as Error).stack ?? err}\n`);
+  stderr.write(`[cindy] fatal: ${(err as Error).stack ?? err}\n`);
   exit(1);
 });

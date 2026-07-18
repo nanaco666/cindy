@@ -1,18 +1,18 @@
 ---
 id: integrations
-title: What XDMaker integrates with
+title: What Cindy integrates with
 summary: Supported external services — FeiShu, Slack, Google, Jira / Confluence, GitHub, GitLab (via ghosts) — and what's not supported.
 tab: connections
 status: draft
 ---
-At a glance, XDMaker integrates with:
+At a glance, Cindy integrates with:
 
 - **FeiShu (Lark)** — sign-in (OAuth) and DM-style bot notifications. See the FeiShu bot topic.
 - **Slack** — search / read / act on Slack via the Cindy Slack ghost (Settings > Ghosts > Cindy Slack), plus the Slack channel bot for receiving tasks (see IM bot settings).
 - **Google** — Gmail / Calendar / Drive / Sheets, via the Filo Google ghost (Settings > Ghosts > Filo Google).
 - **Jira / Confluence** — via the XD Atlassian ghost (Settings > Ghosts > XD Atlassian; one OAuth covers both).
 - **GitHub / GitLab** — via the Cindy GitHub and Cindy GitLab ghosts (Settings > Ghosts).
-- **The coding agents** — Claude Code and Codex can reach Gateway-backed models through **XD Gateway** in Settings > Model Providers.
+- **The coding agents** — Claude Code and Codex can reach pay-per-token models through **Cindy AI** in Settings > Model Providers.
 - **Mivo** (optional) — image / video / music / 3D generation via the built-in XD Mivo ghost; add your Mivo key on its ghost detail page under Settings > Ghosts.
 
 **Not supported:**

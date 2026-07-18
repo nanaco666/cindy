@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "XDMaker",
+    "name": "Cindy",
     "slug": "xdt-maker-mobile",
-    "scheme": "lizcn",
-    "version": "1.0.0",
+    "scheme": "cindycn",
+    "version": "0.1.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -15,8 +15,9 @@
       "enabled": true
     },
     "ios": {
-      "bundleIdentifier": "com.xd.lizcn",
-      "buildNumber": "2026071401",
+      "bundleIdentifier": "com.xd.cindycn",
+      "usesAppleSignIn": true,
+      "buildNumber": "2026071803",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "UISupportedInterfaceOrientations": [
@@ -30,20 +31,15 @@
           "UIInterfaceOrientationPortraitUpsideDown",
           "UIInterfaceOrientationLandscapeLeft",
           "UIInterfaceOrientationLandscapeRight"
-        ],
-        "LSApplicationQueriesSchemes": [
-          "feishu",
-          "lark"
         ]
       },
       "supportsTablet": true
     },
     "android": {
-      "package": "com.xd.lizcn",
+      "package": "com.xd.cindycn",
       "adaptiveIcon": {
-        "backgroundColor": "#F8F8F6",
+        "backgroundColor": "#F70121",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
@@ -56,7 +52,10 @@
     },
     "plugins": [
       "./plugins/with-third-party-notices",
+      "./plugins/with-google-signin-modular-headers",
+      "./plugins/with-wechat-opensdk-modulemap",
       "expo-router",
+      "expo-apple-authentication",
       "expo-secure-store",
       "expo-web-browser",
       [
@@ -73,8 +72,14 @@
               {
                 "fontFamily": "JetBrains Mono",
                 "fontDefinitions": [
-                  { "path": "./assets/fonts/JetBrainsMono-Regular.ttf", "weight": 400 },
-                  { "path": "./assets/fonts/JetBrainsMono-Medium.ttf", "weight": 500 }
+                  {
+                    "path": "./assets/fonts/JetBrainsMono-Regular.ttf",
+                    "weight": 400
+                  },
+                  {
+                    "path": "./assets/fonts/JetBrainsMono-Medium.ttf",
+                    "weight": 500
+                  }
                 ]
               }
             ]
@@ -84,31 +89,24 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "XDMaker needs microphone access for voice input in remote sessions.",
+          "microphonePermission": "Cindy needs microphone access for voice input in remote sessions.",
           "recordAudioAndroid": true
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "XDMaker needs photo library access to attach images to remote sessions.",
-          "cameraPermission": "XDMaker needs camera access to attach photos to remote sessions.",
+          "photosPermission": "Cindy needs photo library access to attach images to remote sessions.",
+          "cameraPermission": "Cindy needs camera access to attach photos to remote sessions.",
           "microphonePermission": false
         }
       ],
       [
         "expo-media-library",
         {
-          "photosPermission": "XDMaker needs photo library access to show recent photos and screenshots for quick attaching.",
+          "photosPermission": "Cindy needs photo library access to show recent photos and screenshots for quick attaching.",
           "savePhotosPermission": false,
           "isAccessMediaLocationEnabled": false
-        }
-      ],
-      [
-        "xdt-feishu-login/plugin",
-        {
-          "appId": "cli_a94d4cf642381cd4",
-          "registerCallbackScheme": true
         }
       ]
     ],

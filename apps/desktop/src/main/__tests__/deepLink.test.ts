@@ -30,10 +30,12 @@ import {
   parseDeepLink,
   buildFocusDeepLink,
   buildProjectDeepLink,
+  buildSessionDeepLink,
   buildSessionMessageDeepLink,
   findDeepLinkInArgv,
   findOpenFolderInArgv,
   findOpenShareFileInArgv,
+  DEEP_LINK_PROTOCOL,
   OPEN_FOLDER_FLAG,
   OPEN_SHARE_FILE_FLAG,
 } from '../deepLink';
@@ -126,6 +128,39 @@ describe('parseDeepLink', () => {
   });
 });
 
+// 双 scheme 收敛(2026-07 品牌翻转):解析 cindy 主 + 历史 xdt-maker 都认,
+// 生成一律主 scheme cindy://。上面的 xdt-maker:// 用例即历史 scheme 回归。
+describe('dual scheme (cindy primary + legacy xdt-maker)', () => {
+  it('parses primary-scheme cindy:// links for every payload type', () => {
+    expect(parseDeepLink('cindy://session/abc-123')).toEqual({
+      type: 'session',
+      id: 'abc-123',
+    });
+    expect(parseDeepLink('cindy://session/abc-123?message=client-9')).toEqual({
+      type: 'session',
+      id: 'abc-123',
+      messageClientId: 'client-9',
+    });
+    expect(parseDeepLink(`cindy://project/${encodeURIComponent('C:\\Some Path\\proj')}`)).toEqual({
+      type: 'project',
+      workingDir: 'C:\\Some Path\\proj',
+    });
+    expect(parseDeepLink('cindy://focus/google-auth')).toEqual({ type: 'focus' });
+    expect(parseDeepLink('cindy://unknown/x')).toBeNull();
+    expect(parseDeepLink('cindy://session/')).toBeNull();
+  });
+
+  it('generates all builders with the primary cindy:// scheme', () => {
+    expect(DEEP_LINK_PROTOCOL).toBe('cindy');
+    expect(buildSessionDeepLink('abc-123')).toBe('cindy://session/abc-123');
+    expect(buildSessionMessageDeepLink('abc-123', 'm1')).toBe(
+      'cindy://session/abc-123?message=m1',
+    );
+    expect(buildProjectDeepLink('/tmp/x')).toBe('cindy://project/%2Ftmp%2Fx');
+    expect(buildFocusDeepLink('google-auth')).toBe('cindy://focus/google-auth');
+  });
+});
+
 describe('findDeepLinkInArgv', () => {
   it('returns the last xdt-maker URL in argv', () => {
     expect(
@@ -135,6 +170,13 @@ describe('findDeepLinkInArgv', () => {
 
   it('returns null when no xdt-maker URL present', () => {
     expect(findDeepLinkInArgv(['electron.exe', '--flag'])).toBeNull();
+  });
+
+  it('accepts both cindy and legacy xdt-maker schemes in argv', () => {
+    expect(findDeepLinkInArgv(['electron.exe', 'cindy://session/a'])).toBe('cindy://session/a');
+    expect(findDeepLinkInArgv(['electron.exe', 'xdt-maker://session/a'])).toBe(
+      'xdt-maker://session/a',
+    );
   });
 });
 

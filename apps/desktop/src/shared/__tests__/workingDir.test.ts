@@ -19,4 +19,9 @@ describe('workingDir normalization', () => {
       '/Users/me/a\\b',
     );
   });
+
+  it('groups current and legacy managed worktrees under their base repo', () => {
+    expect(normalizeWorkingDirForGrouping('/repo/.cindy-worktrees/new-one/src')).toBe('/repo');
+    expect(normalizeWorkingDirForGrouping('/repo/.xdt-worktrees/old-one/src')).toBe('/repo');
+  });
 });

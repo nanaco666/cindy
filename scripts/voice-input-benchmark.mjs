@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import WebSocket from 'ws';
-import { productionEndpoints } from './shared/production-endpoints.mjs';
+import { loadProductionEndpoints } from './shared/production-endpoints.mjs';
 
 const execFile = promisify(execFileCb);
 
@@ -18,10 +18,10 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const DEFAULT_FIXTURE = path.join(os.tmpdir(), 'xdt-voice-input-benchmark', 'fixture.wav');
 const DEFAULT_REPORT_OUT = path.join(os.tmpdir(), 'xdt-voice-input-benchmark', 'last-report.json');
 const DEFAULT_PHRASE =
-  'Voice input benchmark. Today we test realtime transcription latency for XDMaker.';
+  'Voice input benchmark. Today we test realtime transcription latency for Cindy.';
 const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime?intent=transcription';
 const DEFAULT_MODEL = 'gpt-realtime-whisper';
-const DEFAULT_LITELLM_BASE_URL = productionEndpoints.xdGatewayBaseUrl;
+const DEFAULT_LITELLM_BASE_URL = loadProductionEndpoints().xdGatewayBaseUrl;
 const DEFAULT_ASR_PROVIDERS = [
   'litellm-qwen3-asr-flash-realtime',
   'litellm-gpt-realtime-whisper',
@@ -620,7 +620,9 @@ async function readXdProxyApiKeyFromAppStorage() {
 const fs = require('node:fs');
 const path = require('node:path');
 const { app, safeStorage } = require('electron');
-app.setName('xdt-maker');
+// userData 子目录随 productName(2026-07 身份翻转后 'Cindy'),要读 desktop dev
+// 同一份 safe-storage 就必须对齐这个名字。
+app.setName('Cindy');
 app.whenReady().then(() => {
   try {
     const file = path.join(app.getPath('userData'), 'safe-storage', 'api_key.enc');
@@ -944,7 +946,7 @@ async function runVolcengineSaucAsrIteration(spec, audio, opts, apiKey, iteratio
   });
 
   ws.send(encodeVolcengineBenchmarkFullClientRequest({
-    user: { uid: 'xdt-maker-benchmark' },
+    user: { uid: 'cindy-benchmark' },
     audio: {
       format: 'pcm',
       codec: 'raw',

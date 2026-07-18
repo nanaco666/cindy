@@ -32,6 +32,7 @@ import {
 } from './builtinGhostProvisioner.js';
 import { getAccessToken, getAuthState, onAuthStateChange } from '../authManager.js';
 import { serverApiFetch } from '../serverApiClient.js';
+import { getClientEndpoint } from '../clientEndpointsService.js';
 import { createGhostOauthBrokerClient } from './ghostOauthBroker.js';
 import { resolveGhostRepoRoot } from './repoRoot.js';
 import { takePendingCindyInstall } from './openFileInstall.js';
@@ -132,11 +133,16 @@ import {
   writeGhostCindyOverride,
   type CindyCapabilityKey,
 } from './cindyPrefsStore.js';
+import {
+  listDisabledGhostIdsForWorkdir,
+  setGhostDisabledForWorkdir,
+} from './ghostWorkdirPrefs.js';
 import { getCindyProxyMediaService } from '../mcp-integrations/cindyProxyMedia.js';
 import type { XdproxyImageModel } from '../cindy-proxy-media/types.js';
 import * as blobStore from '../cindy-media/blobStore.js';
 import * as ledger from '../cindy-media/ledger.js';
 import { ingestMedia, supportedMime } from '../cindy-media/ingest.js';
+import { recordGhostCallMedia } from './ghostMediaLedger.js';
 // ⚠️ 下面三个依赖必须保持模块顶层静态 import,禁止改回函数内 await import():
 // 运行时 import() 会被 Rollup 编译成跨 chunk 的 require(尤其 drizzle-orm 会拆独立
 // chunk),而 bootstrap chunk 因 conf(electron-store 依赖)的模块副作用
@@ -197,7 +203,6 @@ function currentProvisionIdentity(): ProvisionIdentity | null {
   return {
     userId: state.user.id,
     email: state.user.email,
-    role: state.user.role ?? 'user',
   };
 }
 
@@ -226,6 +231,7 @@ function scheduleBuiltinReconcile(reason: string): void {
  */
 const RENAMED_BUILTIN_GHOSTS: ReadonlyArray<readonly [string, string]> = [
   ['cindy-mivo', 'xd-mivo'], // 2026-07-13 更名 XD Mivo
+  ['cindy-feishu', 'xd-feishu'], // 2026-07-16 更名 XD Feishu(企业档)
 ];
 
 /**
@@ -1159,7 +1165,7 @@ export function getGhostCindySlot(): GhostCindySlot {
           return null;
         }
       },
-      saveGhostMedia: async ({ ghostId, buffer, mimeType, label }) => {
+      saveGhostMedia: async ({ ghostId, buffer, mimeType, label, callId }) => {
         const written = await blobStore.writeBlob({ buffer, mimeType });
         await ledger.recordBlob({
           hash: written.hash,
@@ -1179,6 +1185,7 @@ export function getGhostCindySlot(): GhostCindySlot {
           originId: ghostId,
           ...(label ? { label } : {}),
         });
+        recordGhostCallMedia(ghostId, callId, written.url);
         return { url: written.url, hash: written.hash, ext: written.ext };
       },
       log,
@@ -1206,32 +1213,28 @@ function getGhostOauthAccountManager(): GhostOauthAccountManager {
       // 与 networkSlot 同选型:Node 侧全局 fetch(undici),不吃系统代理。
       fetchImpl: (url, init) => fetch(url, init as RequestInit),
       openExternal: (url) => shell.openExternal(url),
-      // tokenBroker 声明的意识(仅第一方,门控在装入闸与连接闸)经 XDT 授权
-      // broker 换/刷 token:serverApiFetch 自带登录 JWT 注入与 TOKEN_EXPIRED
-      // 自动刷新。地址优先独立 oauth-broker-server(编译期注入),未注入时
-      // 回退主 server 的老路由(/api/integrations/jira/oauth/* 仍保留)——
-      // 与 device-link 的"不回退"不同:broker 老端点还活着,回退让独立服务
-      // 的部署节奏与客户端发版完全解耦。
+      // tokenBroker 声明的意识(仅第一方,门控在装入闸与连接闸)经独立
+      // oauth-broker 服务换/刷 token:serverApiFetch 自带登录 JWT 注入与
+      // TOKEN_EXPIRED 自动刷新。基地址来自运行期端点清单(全字段必填,
+      // 启动阻断保证非空)——恒指 broker,**不再回退主 server 老路由**
+      // (2026-07 apiBaseUrl 清理:旧"编译期注入可能为空 → 回退"的分支随
+      // 清单机制成为死代码;配错清单时明确 404 暴露,不静默落主 server)。
       broker: createGhostOauthBrokerClient({
         apiPost: (path, body) =>
           serverApiFetch(path, {
             method: 'POST',
             body,
-            ...(import.meta.env.VITE_OAUTH_BROKER_API_BASE_URL
-              ? { baseUrl: import.meta.env.VITE_OAUTH_BROKER_API_BASE_URL }
-              : {}),
+            baseUrl: getClientEndpoint('oauthBrokerApiBaseUrl'),
           }),
         hasLoginToken: () => getAccessToken() !== null,
         logger: log,
       }),
-      // brokerBounce 声明的公网弹跳地址:broker 基地址(编译期注入)+ 声明
-      // 路径现拼;基地址未配置回 null → connect 结构化拒绝(INVALID_CONFIG)。
-      // 不回退主 server——弹跳路由只存在于独立 oauth-broker(slack provider
-      // 同款约束:绝不跨服务回退,见 mcp-integrations 迁移前的同名纪律)。
+      // brokerBounce 声明的公网弹跳地址:broker 基地址(端点清单,恒非空)
+      // + 声明路径现拼。不回退主 server——弹跳路由只存在于独立 oauth-broker
+      // (slack provider 同款约束:绝不跨服务回退)。
       resolveBrokerPublicUrl: (path) => {
-        const base = import.meta.env.VITE_OAUTH_BROKER_API_BASE_URL;
-        if (!base) return null;
-        return `${String(base).replace(/\/+$/, '')}${path}`;
+        const base = getClientEndpoint('oauthBrokerApiBaseUrl');
+        return `${base.replace(/\/+$/, '')}${path}`;
       },
       logger: log,
       // 钉死回调端口(如 xd-atlassian 的 53682)被外部进程占用时自动查杀
@@ -1299,7 +1302,7 @@ export function getGhostNetworkSlot(): GhostNetworkSlot {
       // 意识,与 cindy 槽产物同一记账口径),走统一入库助手 ingestMedia
       // (规则 25)。mime 白名单同一来源(blobStore),槽内归一化后再判。
       isSupportedMediaMime: (mime) => supportedMime(mime),
-      saveGhostMedia: async ({ ghostId, buffer, mimeType, label }) => {
+      saveGhostMedia: async ({ ghostId, buffer, mimeType, label, callId }) => {
         const r = await ingestMedia({
           buffer,
           mimeType,
@@ -1312,6 +1315,7 @@ export function getGhostNetworkSlot(): GhostNetworkSlot {
             ...(label ? { label } : {}),
           }],
         });
+        recordGhostCallMedia(ghostId, callId, r.url);
         return { url: r.url, hash: r.hash, ext: r.ext };
       },
       // 上传通道:归属(ghostCanRead)→ 元数据(账本)→ 读盘,三段式与
@@ -2082,6 +2086,32 @@ export function registerGhostIpc(): void {
       video: byKind(getCatalogVideoConfig()),
     };
   });
+  // ── 目录级禁用(ghostWorkdirPrefs;设置 → 插件 的项目范围视图)──
+  // 读走 sendSync:切换范围时禁用清单要与卡片同帧渲染(规则 7 无跳变),
+  // 文件读取极小且带 mtime 缓存。写走 invoke;写后广播 ghosts:changed
+  // (renderer 复用同一订阅热更,多窗口同步)。
+  ipcMain.on('ghosts:workdir-prefs', (event, workdir: unknown) => {
+    event.returnValue = {
+      disabled: typeof workdir === 'string' ? listDisabledGhostIdsForWorkdir(workdir) : [],
+    };
+  });
+  ipcMain.handle('ghosts:workdir-prefs:set', (_event, workdir: unknown, ghostId: unknown, disabled: unknown) => {
+    if (typeof workdir !== 'string' || workdir.trim().length === 0) {
+      throwIpcError('INVALID_PARAMS', 'workdir must be a non-empty string');
+    }
+    if (typeof ghostId !== 'string' || ghostId.trim().length === 0) {
+      throwIpcError('INVALID_PARAMS', 'ghostId must be a non-empty string');
+    }
+    if (typeof disabled !== 'boolean') {
+      throwIpcError('INVALID_PARAMS', 'disabled must be a boolean');
+    }
+    const next = setGhostDisabledForWorkdir(workdir, ghostId, disabled);
+    // 生效面变了(新会话花名册 / $ 菜单),借 ghosts:changed 通知所有窗口
+    // 重拉——载荷仍是完整已装清单,消费方按需再 sendSync 取目录级清单。
+    broadcastGhostsChanged(manager.list());
+    return { disabled: next };
+  });
+
   ipcMain.handle('ghosts:cindy-prefs:set', (_event, ghostId: unknown, capability: unknown, model: unknown) => {
     if (typeof ghostId !== 'string' || ghostId.trim().length === 0) {
       throwIpcError('INVALID_PARAMS', 'ghostId must be a non-empty string');

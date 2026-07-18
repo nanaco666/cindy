@@ -18,7 +18,6 @@
  *      the bot once before agent can push notifications).
  */
 
-import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { jsonObjectArg } from './json-object-arg.js';
@@ -40,6 +39,38 @@ const D = {
   send_file_to_user: descSendFileToUser.trim(),
   send_message_to_user: descSendMessageToUser.trim(),
 } as const;
+
+type FeishuBotToolDescriptions = { [K in keyof typeof D]: string };
+
+/**
+ * Slack hook 会话里追加到全部工具描述末尾的渠道路由提示(规则 9:通道路由的
+ * 确定性用代码保证,不交给模型自由判断)。hook 渠道的文件回传靠最终回复文本里
+ * 的 xdt-file 引用(hook outbound 收集器),提示与 hook-control/outbound.ts 的
+ * SLACK_HOOK_PROMPT_NOTE 语义对齐。导出仅供测试锁定文案。
+ * (organic SlackIM 渠道及其 lizi_slack_bot 已于 2026-07-17 随老 relay 退役。)
+ */
+export const SLACK_HOOK_SESSION_CHANNEL_NOTE =
+  '\n\n⚠️ 当前是 Slack 会话:文字回复直接输出即可(会自动回贴到当前 Slack thread,无需工具);把文件发给用户是在最终回复文本里写 `[文件名](xdt-file:///绝对路径)`(文件须位于当前工作目录内),图片直接引用其地址 `![说明](cindy-media://… 或 xdt-image://…)`,系统自动作为 Slack 附件发回,不要用本工具;仅当用户明确说「发飞书 / 飞书通知我」时才走飞书通道。';
+
+const NOTE_BY_SOURCE: Record<string, string> = {
+  'slack-hook': SLACK_HOOK_SESSION_CHANNEL_NOTE,
+};
+
+/** 按会话来源产出工具描述——无对应 note 的来源原样返回 D,保证字节级不变。 */
+function buildDescriptions(sessionSource: string | undefined): FeishuBotToolDescriptions {
+  // Object.hasOwn 挡原型链键('__proto__' 等),source 虽来自可信 host,防御性收紧
+  const note =
+    sessionSource !== undefined && Object.hasOwn(NOTE_BY_SOURCE, sessionSource)
+      ? NOTE_BY_SOURCE[sessionSource]
+      : undefined;
+  if (note === undefined) return D;
+  return {
+    list_tools: D.list_tools + note,
+    call_tool: D.call_tool + note,
+    send_file_to_user: D.send_file_to_user + note,
+    send_message_to_user: D.send_message_to_user + note,
+  };
+}
 
 /**
  * Character upper bound for message text. Enforced via schema `.max()` so the
@@ -69,6 +100,14 @@ export type FeishuBotMcpDeps = Omit<FeishuBotMcpHostDeps, 'getOwnerOpenId'> & {
    * NO_CHAT_CONTEXT with guidance.
    */
   getChatId: () => string | null | undefined;
+  /**
+   * 会话来源(ctx.vendorOptions.source,session 构建期确定)。'slack-hook' 时给
+   * 本 server 全部工具描述追加渠道路由提示——Slack 会话里若通道选择交给模型
+   * 自由判断会随机路由错通道(2026-07-16 实踩:Slack 会话里「把文件发给我」被
+   * 路由到飞书);用构建期注入把默认通道钉死在会话自身渠道上。描述在 session
+   * 构建期一次确定、会话内字节稳定,不影响 prompt cache。
+   */
+  sessionSource?: string;
 };
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -91,11 +130,12 @@ function isImageExt(absPath: string): boolean {
 function registerSendFileToUser(
   registry: FeishuBotToolRegistry,
   deps: FeishuBotMcpDeps,
+  d: FeishuBotToolDescriptions,
 ): void {
   registry.register({
     name: 'send_file_to_user',
     category: 'bot',
-    description: D.send_file_to_user,
+    description: d.send_file_to_user,
     inputShape: {
       absPath: z
         .string()
@@ -116,7 +156,7 @@ function registerSendFileToUser(
             ok: false,
             errorCode: 'NO_CHAT_CONTEXT',
             error:
-              `既没有当前飞书 session 的 chatId,bot 也没有绑定过 owner(用户从未私聊过 bot)。请让用户先在飞书里私聊 ${BRAND_NAME} bot 一次完成绑定,再重试。`,
+              `既没有当前飞书 session 的 chatId,bot 也没有绑定过 owner(用户从未私聊过 bot)。请让用户先在飞书里私聊自己配置的那个机器人一次完成绑定,再重试。`,
           },
           true,
         );
@@ -165,11 +205,12 @@ function registerSendFileToUser(
 function registerSendMessageToUser(
   registry: FeishuBotToolRegistry,
   deps: FeishuBotMcpDeps,
+  d: FeishuBotToolDescriptions,
 ): void {
   registry.register({
     name: 'send_message_to_user',
     category: 'bot',
-    description: D.send_message_to_user,
+    description: d.send_message_to_user,
     inputShape: {
       text: z
         .string()
@@ -187,7 +228,7 @@ function registerSendMessageToUser(
             ok: false,
             errorCode: 'NO_CHAT_CONTEXT',
             error:
-              `既没有当前飞书 session 的 chatId,bot 也没有绑定过 owner(用户从未私聊过 bot)。请让用户先在飞书里私聊 ${BRAND_NAME} bot 一次完成绑定,再重试。`,
+              `既没有当前飞书 session 的 chatId,bot 也没有绑定过 owner(用户从未私聊过 bot)。请让用户先在飞书里私聊自己配置的那个机器人一次完成绑定,再重试。`,
           },
           true,
         );
@@ -240,10 +281,11 @@ const CATEGORY_ENUM = ['bot'] as const;
 function registerListToolsEntry(
   server: McpServer,
   registry: FeishuBotToolRegistry,
+  d: FeishuBotToolDescriptions,
 ): void {
   server.tool(
     'list_tools',
-    D.list_tools,
+    d.list_tools,
     {
       category: z
         .enum(CATEGORY_ENUM)
@@ -306,10 +348,11 @@ function registerListToolsEntry(
 function registerCallToolEntry(
   server: McpServer,
   registry: FeishuBotToolRegistry,
+  d: FeishuBotToolDescriptions,
 ): void {
   server.tool(
     'call_tool',
-    D.call_tool,
+    d.call_tool,
     {
       name: z
         .string()
@@ -328,12 +371,13 @@ export function createFeishuBotMcpServer(deps: FeishuBotMcpDeps): McpServer {
     version: '1.0.0',
   });
 
+  const d = buildDescriptions(deps.sessionSource);
   const registry = new FeishuBotToolRegistry();
-  registerSendFileToUser(registry, deps);
-  registerSendMessageToUser(registry, deps);
+  registerSendFileToUser(registry, deps, d);
+  registerSendMessageToUser(registry, deps, d);
 
-  registerListToolsEntry(server, registry);
-  registerCallToolEntry(server, registry);
+  registerListToolsEntry(server, registry, d);
+  registerCallToolEntry(server, registry, d);
 
   return server;
 }

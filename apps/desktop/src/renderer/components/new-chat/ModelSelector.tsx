@@ -24,9 +24,9 @@ import { useProviderModelMemoryVersion } from '@/state/providerModelMemory';
 import { useDeviceLinkModelMirrorVersion } from '@/state/deviceLinkModelMirror';
 import {
   connectedProvidersForAgent,
+  effectiveSourceIdForModel,
   getModel,
   modelSupportsFastMode,
-  nativeDefaultSourceId,
   providerOffersModel,
   type ProviderView,
 } from '@lizi/model-providers';
@@ -222,6 +222,8 @@ interface ModelSelectorContentProps {
   excludeSubscriptionDirect?: boolean;
   /** 选中后是否自动关闭。Popover 场景传入,内嵌场景不传。 */
   onDismiss?: () => void;
+  /** 模型行 Tooltip 的额外样式。供嵌套在高层级 overlay 中的调用方覆盖默认 z-index。 */
+  tooltipContentClassName?: string;
   currentProviderId?: string | null;
   onProviderChange?: (
     providerId: string | null,
@@ -254,6 +256,7 @@ export function ModelSelectorContent({
   deviceId,
   excludeSubscriptionDirect,
   onDismiss,
+  tooltipContentClassName,
   currentProviderId,
   onProviderChange,
   onNavigateToProviders,
@@ -355,15 +358,15 @@ export function ModelSelectorContent({
         : [],
     [sourcesEnabled, providers, currentAgentKind],
   );
-  const nativeDefaultId = useMemo(
-    () => nativeDefaultSourceId(connected, currentAgentKind),
-    [connected, currentAgentKind],
+  // 生效来源必须按当前模型收窄。只按 agent 从 connected 里兜底，会在 XD key 缺失但
+  // OpenAI 已连接时拼出「OpenAI 图标 + Opus」这种不存在的路由。
+  const activeSourceId = useMemo(
+    () =>
+      currentAgentKind
+        ? effectiveSourceIdForModel(providers, currentProviderId, modelId, currentAgentKind)
+        : null,
+    [providers, currentProviderId, modelId, currentAgentKind],
   );
-  // 显式选中(且仍在已连接列表)→ 它;否则原生默认来源(= 未显式选时路由实际命中那家)。
-  const activeSourceId =
-    currentProviderId && connected.some((p) => p.id === currentProviderId)
-      ? currentProviderId
-      : nativeDefaultId;
 
   // 行级 Fast 可编辑性 = agent 能力 × 该(供应商, 模型)条目的 supportsFastMode。
   // Fast 能力是 per-(provider, agent) 的(见 CatalogModel)：按该行供应商现查它自己的模型条目,
@@ -590,6 +593,7 @@ export function ModelSelectorContent({
         key={`${providerId ?? ''}::${model.id}`}
         text={tipText}
         side="left"
+        contentClassName={tooltipContentClassName}
       >
         <div
           role="option"
@@ -958,15 +962,17 @@ export function ModelSelector({
     modelEffortLabel(t, currentModel, e, effortMeta.get(e));
 
   // 「有没有可选来源」走统一判定 hook(与 ChatInput Send 门禁同一条规则)。
-  const { hasConnectedSource, loading: providersLoading } = useConnectedSource(currentAgentKind);
-  // trigger 左侧的来源 icon —— 取当前生效来源(显式选中且仍可连 → 用它;否则原生默认)。
-  const activeSourceId = useMemo<string | null>(() => {
-    if (!currentAgentKind) return null;
-    const rail = connectedProvidersForAgent(providers, currentAgentKind);
-    if (currentProviderId && rail.some((p) => p.id === currentProviderId)) return currentProviderId;
-    return nativeDefaultSourceId(rail, currentAgentKind);
-  }, [providers, currentAgentKind, currentProviderId]);
-  // 空態:当前 agent 一个已连接来源都没有 → trigger 改「连接来源」CTA。
+  const { hasConnectedSource, loading: providersLoading } = useConnectedSource(currentAgentKind, modelId);
+  // trigger 左侧来源 icon 必须是当前模型真正可路由的来源，不能拿“支持该 agent 但不提供
+  // 此模型”的供应商作兜底。
+  const activeSourceId = useMemo<string | null>(
+    () =>
+      currentAgentKind
+        ? effectiveSourceIdForModel(providers, currentProviderId, modelId, currentAgentKind)
+        : null,
+    [providers, currentAgentKind, currentProviderId, modelId],
+  );
+  // 空態:当前模型一个已连接来源都没有 → trigger 改「连接来源」CTA。
   // device-link 远程会话不走此 CTA(控制端无法替被控端连来源;hasConnectedSource 是本机口径)。
   const noSource =
     !!onProviderChange &&

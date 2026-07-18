@@ -141,7 +141,7 @@ export function classifyMarkdownHref(href: string | undefined): LocalHrefKind {
   // scroll handler, so surface as 'external' and let it fall through there.
   if (href.startsWith('#')) return 'external';
   // Any URL scheme other than file:// is a non-local target — http(s), and our
-  // internal deep links (xdt-maker://session/<uuid>, xdt-audio://...). file://
+  // internal deep links (cindy://session/<uuid>, xdt-audio://...). file://
   // is the one scheme that maps to a local path and is unwrapped below. This
   // mirrors the URL_SCHEME_RE rejection in looksLikeFilePath so the two
   // predicates stay symmetric: without it a session deep link (contains `/`,

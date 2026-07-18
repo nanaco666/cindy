@@ -49,7 +49,59 @@ export const DESKTOP_ROOT = path.resolve(SCRIPTS_DIR, '..');
 export const PROJECT_ROOT = path.resolve(DESKTOP_ROOT, '../..');
 export const RELEASE_DIR = path.join(DESKTOP_ROOT, 'release');
 
+/**
+ * electron-forge 打包产物基名(2026-07-17 品牌翻转 xdt-maker → Cindy):
+ *   - packaged 目录  out/<PACKAGED_APP_NAME>-<platform>-<arch>/
+ *   - Windows exe    <packaged>/<PACKAGED_APP_NAME>.exe
+ *   - macOS .app     <packaged>/<PACKAGED_APP_NAME>.app(Mach-O 同名)
+ *   - Linux 二进制   <packaged>/<PACKAGED_APP_NAME>
+ * ⚠️ 值必须与 packages/maker-shared/src/brandIdentity.ts 的
+ * BRAND_IDENTITY.executableName(= apps/desktop/package.json productName)一致
+ * ——.mjs 无法 import TS 单点,只能镜像字面量;一致性由
+ * scripts/__tests__/brand-identity-sync.test.mjs 断言兜底。
+ * ⚠️ 只描述「本地构建产物路径」。OSS/CDN 渠道前缀与发布产物文件名
+ * (xdt-maker-<version>-Setup.exe / .dmg / .zip 等)仍留在老值:新渠道 bucket
+ * 未就绪,发布目标另议,不随本次翻转。
+ */
+export const PACKAGED_APP_NAME = 'Cindy';
+
+/**
+ * 按区域取打包产物基名(2026-07-18 同机双装:cn 'Cindy' / global 'CindyGlobal',
+ * exe / .app / 安装目录 / 快捷方式全部跟随)。镜像
+ * brandIdentity.ts 的 executableNameByRegion,一致性同样由
+ * scripts/__tests__/brand-identity-sync.test.mjs 断言兜底。
+ * PACKAGED_APP_NAME 保留为 cn 基线值,供未传 region 的 legacy 脚本使用。
+ */
+export const PACKAGED_APP_NAME_BY_REGION = Object.freeze({
+  cn: 'Cindy',
+  global: 'CindyGlobal',
+});
+
+export function packagedAppName(region = 'cn') {
+  const name = PACKAGED_APP_NAME_BY_REGION[region];
+  if (!name) throw new Error(`unknown region: ${region}`);
+  return name;
+}
+
 // CDN_BASE / OSS_BUCKET / OSS_PREFIX / OSS_REGION 由 scripts/shared/oss.mjs 提供并在顶部 re-export。
+
+/**
+ * 渠道冻结硬闸(2026-07-17 身份翻转):老 /xdt-maker 渠道已冻结,存量 0.0.x
+ * 用户的更新器按 --exe-name xdt-maker.exe 工作——把 Cindy 布局(Cindy.exe)
+ * 的产物/manifest 发上老前缀,会让所有存量安装的自动更新当场断裂。
+ * 在任何 desktop 发布/上传动作前调用;新渠道 bucket 就绪并把 OSS 前缀切走
+ * 之前,发布一律拒绝。确需覆盖(如演练)显式设 XDT_ALLOW_LEGACY_CHANNEL_RELEASE=1。
+ */
+export function assertNotPublishingCindyToLegacyChannel(ossPrefix) {
+  if (process.env.XDT_ALLOW_LEGACY_CHANNEL_RELEASE === '1') return;
+  if (PACKAGED_APP_NAME === 'Cindy' && ossPrefix === 'xdt-maker') {
+    throw new Error(
+      '[channel-freeze] 拒绝把 Cindy 身份的产物发布到已冻结的 /xdt-maker 渠道:'
+      + '存量用户更新器会因 exe 布局变化(Cindy.exe)当场断裂。'
+      + '等新渠道 OSS 前缀就绪后再发布;演练可设 XDT_ALLOW_LEGACY_CHANNEL_RELEASE=1 覆盖。',
+    );
+  }
+}
 
 // ── Apple 公证/签名身份(macOS release / publish 共用;单点定义)────────────
 // 均为公开身份信息(非密钥;APPLE_APP_PASSWORD 才是密钥,只从 env 读、无默认)。
@@ -484,13 +536,119 @@ export function adhocSignMacApp(appPath, helperEntitlementsPath, mainEntitlement
   verifyMacContactsPermissions(appPath);
 }
 
+// ── macOS 正式签名 / 公证 / DMG(单点实现;publish-macos 与 package-desktop 共用)──
+// 原实现在 ci/publish-macos.mjs 与 release-macos.mjs 各有一份;此处为参数化版本,
+// Apple 身份由调用方传入(resolveAppleIdentity() + env APPLE_APP_PASSWORD)。
+
+/**
+ * Developer ID 由内向外逐层签名(Electron app 不能依赖 --deep)。
+ * @param {{ signIdentity: string }} identity
+ */
+export function signMacAppWithIdentity(appPath, helperEntitlementsPath, mainEntitlementsPath, identity) {
+  console.log('    Removing provenance attributes...');
+  exec(`/usr/bin/xattr -dr com.apple.provenance "${appPath}" 2>/dev/null || true`);
+
+  const signBase = `/usr/bin/codesign --force --timestamp --options runtime --sign "${identity.signIdentity}"`;
+  const frameworksDir = path.join(appPath, 'Contents', 'Frameworks');
+
+  // 0. app.asar.unpacked/ 里的原生模块(better_sqlite3.node 等)是独立文件,
+  //    不单签的话 Gatekeeper 拒绝加载,app 直接打不开。
+  const asarUnpackedDir = path.join(appPath, 'Contents', 'Resources', 'app.asar.unpacked');
+  if (fs.existsSync(asarUnpackedDir)) {
+    console.log('    Signing native modules in app.asar.unpacked/...');
+    exec(`find "${asarUnpackedDir}" -type f | while IFS= read -r f; do if file "$f" | grep -qE "Mach-O"; then ${signBase} "$f"; fi; done`);
+  }
+
+  // 0b. Contents/Resources/tools/ 下的 CLI 工具(extraResource 拷入,公证要求显式签)。
+  const resourceToolsDir = path.join(appPath, 'Contents', 'Resources', 'tools');
+  if (fs.existsSync(resourceToolsDir)) {
+    console.log('    Signing bundled CLI tools in Contents/Resources/tools/...');
+    exec(`find "${resourceToolsDir}" -type f | while IFS= read -r f; do if file "$f" | grep -qE "Mach-O"; then ${signBase} "$f"; fi; done`);
+  }
+
+  // 1. 全部 Mach-O(库、chrome_crashpad_handler、ShipIt 等)
+  console.log('    Signing all Mach-O binaries...');
+  exec(`find "${frameworksDir}" -type f | while IFS= read -r f; do if file "$f" | grep -qE "Mach-O"; then ${signBase} "$f"; fi; done`);
+
+  // 2. Helper apps(V8 JIT entitlements)
+  console.log('    Signing helper apps...');
+  exec(`find "${frameworksDir}" -name "*.app" -exec ${signBase} --entitlements "${helperEntitlementsPath}" {} \\;`);
+
+  // 3. Framework bundles
+  console.log('    Signing frameworks...');
+  exec(`find "${frameworksDir}" -maxdepth 1 -name "*.framework" -exec ${signBase} {} \\;`);
+
+  // 4. 主 app bundle
+  console.log('    Signing main app...');
+  exec(`${signBase} --entitlements "${mainEntitlementsPath}" "${appPath}"`);
+
+  console.log('    Verifying signature...');
+  exec(`/usr/bin/codesign --verify --deep --strict "${appPath}"`);
+  verifyMacContactsPermissions(appPath);
+}
+
+/**
+ * Apple notarytool 公证 + staple。
+ * @param {{ appleId: string, teamId: string, applePassword: string }} identity
+ */
+export function notarizeMacApp(appPath, identity) {
+  const zipPath = appPath + '.zip';
+
+  console.log('    Compressing for notarization...');
+  exec(`/usr/bin/ditto -c -k --keepParent "${appPath}" "${zipPath}"`);
+
+  console.log('    Submitting to Apple notarization service (this may take a few minutes)...');
+  // 不走 exec():它会把完整命令(含 app-specific password)回显进终端/CI 日志。
+  // 这里打码后手动回显,再直接 execSync。
+  const submitCmd =
+    `/usr/bin/xcrun notarytool submit "${zipPath}" ` +
+    `--apple-id "${identity.appleId}" --password "${identity.applePassword}" ` +
+    `--team-id "${identity.teamId}" --wait`;
+  console.log(`    $ ${submitCmd.replace(identity.applePassword, '***')}`);
+  execSync(submitCmd, { stdio: 'inherit', timeout: 1800000 }); // 30 min
+
+  fs.unlinkSync(zipPath);
+
+  console.log('    Stapling notarization ticket...');
+  exec(`/usr/bin/xcrun stapler staple "${appPath}"`);
+}
+
+/**
+ * 生成含 /Applications 快捷方式的 UDZO DMG 并签名。
+ * @param {{ signIdentity: string }} identity
+ */
+export function createMacDMG(appPath, dmgPath, volumeName, identity) {
+  const stagingDir = dmgPath + '.staging';
+
+  if (fs.existsSync(stagingDir)) fs.rmSync(stagingDir, { recursive: true });
+  fs.mkdirSync(stagingDir, { recursive: true });
+
+  exec(`cp -R "${appPath}" "${stagingDir}/"`);
+  fs.symlinkSync('/Applications', path.join(stagingDir, 'Applications'));
+
+  if (fs.existsSync(dmgPath)) fs.unlinkSync(dmgPath);
+  console.log('    Creating DMG...');
+  exec(`/usr/bin/hdiutil create "${dmgPath}" -volname "${volumeName}" -srcfolder "${stagingDir}" -ov -format UDZO`);
+
+  console.log('    Signing DMG...');
+  exec(`/usr/bin/codesign --force --timestamp --sign "${identity.signIdentity}" "${dmgPath}"`);
+
+  fs.rmSync(stagingDir, { recursive: true });
+}
+
 // ── Smoke test (启动 packaged app) ──────────────────────────────────────────
 
-export function runSmokeTest(platform, arch) {
+export function runSmokeTest(platform, arch, region = 'cn') {
   console.log('==> Running packaged smoke test...');
   const result = spawnSync(
     'node',
-    ['scripts/smoke-packaged.mjs', `--platform=${platform}`, `--arch=${arch}`],
+    [
+      'scripts/smoke-packaged.mjs',
+      `--platform=${platform}`,
+      `--arch=${arch}`,
+      // 产物基名按区域派生(global 的 out 目录 / exe / .app 是 CindyGlobal)。
+      `--app-name=${packagedAppName(region)}`,
+    ],
     { stdio: 'inherit', cwd: DESKTOP_ROOT, shell: false },
   );
   if (result.status !== 0) {

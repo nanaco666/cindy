@@ -7,7 +7,7 @@
  *   - create 成功 / close 完成后由调用方主动 refresh()
  *   - V1 不订阅 main 推送（main 不广播）
  *
- * 与项目内 AuthContext / EnvCheckContext / UserPreferencesContext 同
+ * 与项目内 AuthContext / EnvCheckContext 同
  * Provider+hooks 范式，不引入新状态库。
  */
 

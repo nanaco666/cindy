@@ -23,6 +23,8 @@
  * 零 Electron。
  */
 
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
+
 import {
   EXPIRY_SAFETY_MARGIN_MS,
   type GhostOauthBrokerClient,
@@ -36,7 +38,7 @@ import {
  * 直接结构化拒绝(不打无谓的 server 请求)。新增 provider 时同步扩这里
  * 与 server 端路由。
  */
-export const SUPPORTED_TOKEN_BROKERS: ReadonlySet<string> = new Set(['jira', 'slack']);
+export const SUPPORTED_TOKEN_BROKERS: ReadonlySet<string> = new Set(['feishu', 'jira', 'slack']);
 
 /**
  * server 401 里明确表示"上游服务商拒绝了这份授权"的错误码白名单——只有命中
@@ -44,7 +46,11 @@ export const SUPPORTED_TOKEN_BROKERS: ReadonlySet<string> = new Set(['jira', 'sl
  * 把它的上游拒绝码加进来;不认识的 401 一律按登录层故障处理(fail-safe:
  * 宁可多一次重试,绝不误删用户凭证)。
  */
-const UPSTREAM_REJECTION_CODES: ReadonlySet<string> = new Set(['JIRA_OAUTH_FAILED', 'SLACK_MCP_OAUTH_FAILED']);
+const UPSTREAM_REJECTION_CODES: ReadonlySet<string> = new Set([
+  'FEISHU_OAUTH_FAILED',
+  'JIRA_OAUTH_FAILED',
+  'SLACK_MCP_OAUTH_FAILED',
+]);
 
 /** broker 端点的响应形态(apps/server routes/jiraOAuth.ts 的返回契约)。 */
 interface BrokerTokenResponse {
@@ -109,7 +115,7 @@ export function createGhostOauthBrokerClient(deps: GhostOauthBrokerDeps): GhostO
         ok: false,
         error: 'EXCHANGE_FAILED',
         invalidGrant: false,
-        detail: '需要先登录 XDMaker(broker 授权经服务端完成)',
+        detail: `需要先登录 ${BRAND_NAME}(broker 授权经服务端完成)`,
       };
     }
     let raw: unknown;
@@ -145,7 +151,14 @@ export function createGhostOauthBrokerClient(deps: GhostOauthBrokerDeps): GhostO
   };
 
   return {
-    exchange: (slug, { code, redirectUri }) => call(slug, 'exchange', { code, redirectUri }),
+    // codeVerifier:PKCE 流(feishu)由 broker 端点透传上游;不吃 PKCE 的
+    // provider(jira/slack)声明 pkce:false,不会带到这里。
+    exchange: (slug, { code, redirectUri, codeVerifier }) =>
+      call(slug, 'exchange', {
+        code,
+        redirectUri,
+        ...(codeVerifier !== undefined ? { codeVerifier } : {}),
+      }),
     refresh: (slug, { refreshToken }) => call(slug, 'refresh', { refreshToken }),
   };
 }

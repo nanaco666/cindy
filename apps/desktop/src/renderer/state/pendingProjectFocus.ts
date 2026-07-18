@@ -1,7 +1,7 @@
 /**
  * pendingProjectFocus —— "请求聚焦某个 project" 的一次性信号
  *
- * 场景：xdt-maker://project/<workingDir> 深度链接到达时，MainLayout 调
+ * 场景：cindy://project/<workingDir>(历史 xdt-maker:// 同)深度链接到达时，MainLayout 调
  * `requestProjectFocus(workingDir)`；CCAgentSidebarUpper 通过
  * useSyncExternalStore 订阅到信号后展开该 project + 滚到 viewport，处理完
  * 调 `consumePendingProjectFocus()` 把 flag 清零。

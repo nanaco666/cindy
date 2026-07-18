@@ -10,12 +10,20 @@
  * fails parse silently and falls back to source view. When syntax becomes
  * valid the next attempt swaps to SVG. No flash, no toast spam.
  *
+ * Auto-repair: when the raw source fails parse, we retry once with the
+ * deterministic fixes from `repairMermaidSource` (maker-shared) — common LLM
+ * slips like unquoted labels / unicode arrows / `subgraph Id[` missing space.
+ * Copy & view-source keep showing the ORIGINAL source; only the rendered SVG
+ * comes from the repaired variant. Streaming-partial sources fail both parses
+ * and fall through to the same source-view path as before.
+ *
  * Theme: re-renders when <html class="dark"> toggles, via MutationObserver.
  */
 
 import { memo, useEffect, useId, useRef, useState } from 'react';
 import { Check, Code2, Copy, Expand, Eye } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { repairMermaidSource } from '@lizi/maker-shared/mermaid-autofix';
 
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
@@ -113,6 +121,23 @@ export const MarkdownMermaidBlock = memo(function MarkdownMermaidBlock({
           setSvg(rendered);
           setError(null);
         } catch (err) {
+          // Deterministic auto-repair retry: only ever runs on sources that
+          // already failed parse, so a valid diagram is never rewritten. The
+          // repair itself is cheap string work; the extra parse only happens
+          // when the repair actually changed something.
+          const repaired = repairMermaidSource(trimmed);
+          if (repaired !== trimmed) {
+            try {
+              await mermaid.parse(repaired);
+              const { svg: rendered } = await mermaid.render(renderId, repaired);
+              if (cancelled) return;
+              setSvg(rendered);
+              setError(null);
+              return;
+            } catch {
+              // Repair didn't help — fall through to the original error path.
+            }
+          }
           if (cancelled) return;
           // Streaming case: source not yet complete. Don't toast; just hold
           // the previous SVG (if any) and let the next attempt try again.

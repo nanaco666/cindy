@@ -164,8 +164,13 @@ export interface ProxyLogger {
  * createAnthropicCompatProxy 入参。
  */
 export interface ProxyOptions {
-  /** 真正的 Anthropic-compatible 上游 (例: https://llm-proxy.tapsvc.com) */
-  upstream: string;
+  /**
+   * 真正的 Anthropic-compatible 上游 (例: https://llm-proxy.tapsvc.com)。
+   * 函数形态 = 每个请求现取(宿主网关 endpoint 运行期可变,如登录后由服务端下发)。
+   * null / undefined / 空串 = 默认上游当前不可用;显式 upstreamOverride / localHandler
+   * 仍可正常工作,只有确实回落默认上游的请求会收到 503。
+   */
+  upstream: string | null | undefined | (() => string | null | undefined);
   /**
    * 请求 transform 链。不传时 = [stripNonAnthropicFields](默认行为)。
    * 传空数组 [] = 显式禁用所有 transform,纯透传。

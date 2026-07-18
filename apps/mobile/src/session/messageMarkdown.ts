@@ -1,5 +1,6 @@
 import { normalizeMathDelimiters } from '@lizi/maker-shared/math-markdown';
 import { classifyChatPathLinkTarget } from '@/session/chatPathCandidate';
+import { DEEP_LINK_SCHEME_GROUP } from '@/session/sessionLinks';
 
 export type MobileMarkdownInline =
   | { type: 'text'; text: string }
@@ -548,14 +549,18 @@ function findNextInlineToken(
     // 靠 image 的起点(`!`)更靠前在排序里胜出,这里的顺序只是可读性上的强调。
     matchMarkdownImage(input, from, startsInsideHtmlComment),
     matchHtmlImage(input, from, startsInsideHtmlComment),
-    // 链接语法:http(s) 之外放行 XDMaker 深链 xdt-maker://session|project/
-    // (session 渲染成会话 chip;project 在 renderInline 里显示 label 纯文本,
-    // 不落 Linking.openURL——桌面端粘贴 chip 化后会按 [标题](深链) 发送,
-    // 不 tokenize 会把整段渲染成原始 markdown 源码,review P1)。
+    // 链接语法:http(s) 之外放行 Cindy 深链(双 scheme:cindy 主 + xdt-maker
+    // 兼容存量消息)session|project/(session 渲染成会话 chip;project 在
+    // renderInline 里显示 label 纯文本,不落 Linking.openURL——桌面端粘贴
+    // chip 化后会按 [标题](深链) 发送,不 tokenize 会把整段渲染成原始
+    // markdown 源码,review P1)。
     matchRegex(
       input,
       from,
-      /\[([^\]]+)\]\(((?:https?:\/\/|xdt-maker:\/\/(?:session|project)\/)[^)\s]+)\)/g,
+      new RegExp(
+        `\\[([^\\]]+)\\]\\(((?:https?://|(?:${DEEP_LINK_SCHEME_GROUP})://(?:session|project)/)[^)\\s]+)\\)`,
+        'g',
+      ),
       (match) => ({
         type: 'link' as const,
         text: match[1],
@@ -604,7 +609,10 @@ function findNextInlineToken(
       const raw = matchRegex(
         input,
         from,
-        /(?:https?:\/\/[^\s<>()]+[^\s<>().,;:!?]|xdt-maker:\/\/session\/[A-Za-z0-9%~_-]+(?:\?[A-Za-z0-9%&=~._-]*[A-Za-z0-9%~_-])?|xdt-maker:\/\/project\/[A-Za-z0-9%~._!*-]+(?![A-Za-z0-9%~._!*('-]))/g,
+        new RegExp(
+          `(?:https?://[^\\s<>()]+[^\\s<>().,;:!?]|(?:${DEEP_LINK_SCHEME_GROUP})://session/[A-Za-z0-9%~_-]+(?:\\?[A-Za-z0-9%&=~._-]*[A-Za-z0-9%~_-])?|(?:${DEEP_LINK_SCHEME_GROUP})://project/[A-Za-z0-9%~._!*-]+(?![A-Za-z0-9%~._!*('-]))`,
+          'g',
+        ),
         (match) => ({
           type: 'link' as const,
           text: trimUrlPunctuation(match[0]),

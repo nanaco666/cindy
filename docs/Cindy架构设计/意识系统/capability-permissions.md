@@ -281,6 +281,21 @@ cindy 槽解决"用 Cindy 自己的能力";network 槽解决"意识自带服务"
   (与 exchange 同路)。互斥:oauth 与 exchange 不共存;login-email 不涉。
   确认框:「将引导你在 <授权域名> 完成 OAuth 授权(名称)」+ 主机说明 +
   scopes 原文逐行(`networkSecretOauth` / `networkSecretOauthDetail`);
+- **飞书登录态令牌(source:'login-feishu-token')已整档退役(2026-07-16
+  落地,2026-07-17 随飞书登录整体下线删除)**:该派生凭证原以主机
+  FeishuTokenManager 的登录态 user access token 现取注入(刷新链走 xdt-api
+  refresh-feishu)。飞书登录退役后,xd-feishu 改走上面的 **oauth +
+  tokenBroker:'feishu'** 通道(PKCE,code 换 token / 刷新经 oauth-broker-server
+  的 feishu provider,上游拒绝码 `FEISHU_OAUTH_FAILED`;broker 模式自此兼容
+  PKCE,verifier 经 broker exchange 透传服务端);schema、networkSlot 注入
+  通道、确认框分档文案 `networkSecretFeishuToken(Detail)`、FORGE_GUIDE 章节
+  均已删除,存量已装清单由内置播种器按指纹覆盖自愈。2026-07-16 同日上传
+  通道两个通用增强(仍现行):`upload.fields`(随行普通表单字段 ≤8 条,
+  在文件段之前;值里字面量
+  `{bytes}` 由主机替换成全部上传文件总字节数——飞书 drive upload_all 的
+  size 字段用)与 `uploadDir.fileField`(单文件精确字段名,与 fileFieldPrefix
+  互斥、票据必须恰含 1 个文件、filename 只取文件名——飞书 im 文件上传这类
+  "字段名钉死 file"的服务用);
 - **下行落盘(as:'file' + save 票据,2026-07-13 落地,uploadDir 的镜像)**:
   任意类型文件(邮件附件 / 云盘文档)下载进用户本地——主 agent 经 ghost_call
   顶层 `save_dir` 过户 workdir 内的**已存在目录**(realpath 钳制同 dir 过户),

@@ -4,22 +4,18 @@ import { test } from 'node:test';
 
 import { resolveEasBuildProfileEnv } from '../check-endpoint-literals.mjs';
 
-test('逐个解析实际 EAS build profile 的端点 env（含 extends）', () => {
-  const endpoints = JSON.parse(
-    fs.readFileSync(new URL('../../config/production-endpoints.json', import.meta.url), 'utf8'),
-  );
+test('提交的 EAS build profiles 不包含生产端点 env（含 extends）', () => {
   const eas = JSON.parse(
     fs.readFileSync(new URL('../../apps/mobile/eas.json', import.meta.url), 'utf8'),
   );
 
   for (const profileName of Object.keys(eas.build)) {
     const env = resolveEasBuildProfileEnv(eas.build, profileName);
-    assert.equal(env.EXPO_PUBLIC_XDT_API_BASE_URL, endpoints.apiBaseUrl, profileName);
-    assert.equal(
-      env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL,
-      endpoints.deviceLinkApiBaseUrl,
-      profileName,
-    );
+    assert.equal(env.EXPO_PUBLIC_FEISHU_APP_ID, undefined, profileName);
+    assert.equal(env.EXPO_PUBLIC_XDT_API_BASE_URL, undefined, profileName);
+    assert.equal(env.EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL, undefined, profileName);
+    assert.equal(env.EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL, undefined, profileName);
+    assert.equal(env.EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL, undefined, profileName);
   }
   assert.equal(resolveEasBuildProfileEnv(eas.build, 'beta-dash').EXPO_PUBLIC_BETA_DEV, 'dash');
 });

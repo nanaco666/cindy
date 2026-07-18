@@ -52,7 +52,7 @@ describe('providerDisplayTitle / formatPriceLine / buildRowMetaLine', () => {
   it('内置供应商用桌面 zh-CN 标题,自定义回退 name', () => {
     expect(providerDisplayTitle({ id: 'anthropic', name: 'x' })).toBe('Anthropic');
     expect(providerDisplayTitle({ id: 'openai', name: 'x' })).toBe('OpenAI');
-    expect(providerDisplayTitle({ id: 'xd', name: 'x' })).toBe('XD 网关');
+    expect(providerDisplayTitle({ id: 'xd', name: 'x' })).toBe('Cindy AI');
     expect(providerDisplayTitle({ id: 'my-proxy', name: '我的代理' })).toBe('我的代理');
   });
 
@@ -72,7 +72,7 @@ describe('providerDisplayTitle / formatPriceLine / buildRowMetaLine', () => {
       model: { id: 'gpt-5.5', contextWindow: 272_000, supportsFastMode: true },
       pricing: { 'gpt-5.5': { inputUsdPerMtok: 3, outputUsdPerMtok: 15 } },
     });
-    expect(full).toBe('XD 网关 · 272K 上下文 · 输入 $3 · 输出 $15 / 百万 token · 快速');
+    expect(full).toBe('Cindy AI · 272K 上下文 · 输入 $3 · 输出 $15 / 百万 token · 快速');
 
     const minimal = buildRowMetaLine({
       provider: null,

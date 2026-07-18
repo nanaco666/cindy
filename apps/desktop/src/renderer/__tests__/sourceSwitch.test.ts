@@ -467,15 +467,23 @@ describe('buildProviderSections —— 单栏按供应商分段', () => {
 });
 
 describe('isSelectedSourceDisconnected — 会话显式来源断连判定', () => {
-  /** 最小 ProviderView —— connectedProvidersForAgent 只读 connected + agents。 */
+  const MODEL_ID = 'claude-opus-4-8';
+  /** 最小 ProviderView —— 来源必须同时 connected、匹配 agent 且提供当前模型。 */
   const view = (id: string, connected: boolean, agents: AgentKind[] = [AGENT]): ProviderView =>
-    ({ id, name: id, connected, agents, models: {} }) as unknown as ProviderView;
+    ({
+      id,
+      name: id,
+      connected,
+      agents,
+      models: { [AGENT]: [{ id: MODEL_ID }] },
+    }) as unknown as ProviderView;
 
   it('选中来源仍在已连接栏内 → false', () => {
     expect(
       isSelectedSourceDisconnected({
         providers: [view('xd', true), view('anthropic', true)],
         agent: AGENT,
+        modelId: MODEL_ID,
         selectedProviderId: 'anthropic',
         providersLoading: false,
       }),
@@ -487,6 +495,7 @@ describe('isSelectedSourceDisconnected — 会话显式来源断连判定', () =
       isSelectedSourceDisconnected({
         providers: [view('xd', true), view('anthropic', false)],
         agent: AGENT,
+        modelId: MODEL_ID,
         selectedProviderId: 'anthropic',
         providersLoading: false,
       }),
@@ -498,6 +507,7 @@ describe('isSelectedSourceDisconnected — 会话显式来源断连判定', () =
       isSelectedSourceDisconnected({
         providers: [view('xd', true)],
         agent: AGENT,
+        modelId: MODEL_ID,
         selectedProviderId: 'my-custom',
         providersLoading: false,
       }),
@@ -509,6 +519,23 @@ describe('isSelectedSourceDisconnected — 会话显式来源断连判定', () =
       isSelectedSourceDisconnected({
         providers: [view('openai', true, ['codex'])],
         agent: AGENT,
+        modelId: MODEL_ID,
+        selectedProviderId: 'openai',
+        providersLoading: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('来源已连接且服务当前 agent，但不提供当前模型 → true', () => {
+    const provider = {
+      ...view('openai', true),
+      models: { [AGENT]: [{ id: 'chatgpt/gpt-5.5' }] },
+    } as unknown as ProviderView;
+    expect(
+      isSelectedSourceDisconnected({
+        providers: [provider],
+        agent: AGENT,
+        modelId: MODEL_ID,
         selectedProviderId: 'openai',
         providersLoading: false,
       }),
@@ -520,6 +547,7 @@ describe('isSelectedSourceDisconnected — 会话显式来源断连判定', () =
       isSelectedSourceDisconnected({
         providers: [],
         agent: AGENT,
+        modelId: MODEL_ID,
         selectedProviderId: 'anthropic',
         providersLoading: true,
       }),
@@ -531,6 +559,7 @@ describe('isSelectedSourceDisconnected — 会话显式来源断连判定', () =
       isSelectedSourceDisconnected({
         providers: [view('xd', true)],
         agent: AGENT,
+        modelId: MODEL_ID,
         selectedProviderId: null,
         providersLoading: false,
       }),
@@ -539,6 +568,7 @@ describe('isSelectedSourceDisconnected — 会话显式来源断连判定', () =
       isSelectedSourceDisconnected({
         providers: [view('xd', true)],
         agent: null,
+        modelId: MODEL_ID,
         selectedProviderId: 'xd',
         providersLoading: false,
       }),

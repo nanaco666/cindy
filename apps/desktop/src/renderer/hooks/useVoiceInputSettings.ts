@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { DictationDictionaryLearningAction } from '@lizi/voice-input-core';
 
 import { createLogger } from '@/lib/logger';
+import { toast } from '@/lib/toast';
+import { extractIpcError } from '@/utils/ipcError';
 import {
   DEFAULT_VOICE_INPUT_REFINEMENT_INSTRUCTIONS,
   MAX_VOICE_INPUT_DICTIONARY_CSV_BYTES,
@@ -131,14 +134,21 @@ export function subscribeVoiceInputSettings(
   });
 }
 
-export async function syncVoiceInputGlobalShortcut(shortcut: VoiceInputShortcut | null): Promise<void> {
+export type VoiceInputShortcutUpdateResult =
+  | { ok: true; settings: VoiceInputSettings }
+  | { ok: false; error: string; errorCode?: string };
+
+export async function syncVoiceInputGlobalShortcut(shortcut: VoiceInputShortcut | null): Promise<{ ok: boolean; error?: string }> {
   try {
     const result = await window.electronAPI.voiceInput.setGlobalShortcut(shortcut);
     if (!result.ok) {
       log.warn('global voice input shortcut sync failed:', result.error);
     }
+    return result;
   } catch (error) {
-    log.warn('global voice input shortcut sync failed:', error instanceof Error ? error.message : String(error));
+    const message = error instanceof Error ? error.message : String(error);
+    log.warn('global voice input shortcut sync failed:', message);
+    return { ok: false, error: message };
   }
 }
 
@@ -155,8 +165,9 @@ export function useVoiceInputSettings(): {
   setDictionaryEntries: (entries: VoiceInputDictionaryEntry[]) => void;
   deleteDictionaryEntry: (entryId: string) => void;
   recordDictionaryLearningActions: (actions: DictationDictionaryLearningAction[]) => void;
-  setShortcut: (shortcut: VoiceInputShortcut | null) => void;
+  setShortcut: (shortcut: VoiceInputShortcut | null) => Promise<VoiceInputShortcutUpdateResult>;
 } {
+  const { t } = useTranslation();
   const [settings, setSettings] = useState<VoiceInputSettings>(getVoiceInputSettings);
 
   const updateSettings = useCallback((patch: Partial<VoiceInputSettings>) => {
@@ -171,8 +182,9 @@ export function useVoiceInputSettings(): {
       })
       .catch((error) => {
         log.warn('voice input settings update failed:', error instanceof Error ? error.message : String(error));
+        toast.error(formatVoiceInputPersistenceError(t, error));
       });
-  }, []);
+  }, [t]);
 
   const setLanguage = useCallback(
     (language: VoiceInputLanguage) => updateSettings({ language }),
@@ -225,16 +237,27 @@ export function useVoiceInputSettings(): {
       .then(setSettings)
       .catch((error) => {
         log.warn('voice input dictionary delete failed:', error instanceof Error ? error.message : String(error));
+        toast.error(formatVoiceInputPersistenceError(t, error));
       });
-  }, []);
+  }, [t]);
 
   const recordDictionaryLearningActions = useCallback((actions: DictationDictionaryLearningAction[]) => {
     void recordVoiceInputDictionaryLearningActions(actions);
   }, []);
 
   const setShortcut = useCallback(
-    (shortcut: VoiceInputShortcut | null) => updateSettings({ shortcut }),
-    [updateSettings],
+    async (shortcut: VoiceInputShortcut | null): Promise<VoiceInputShortcutUpdateResult> => {
+      try {
+        const result = await window.electronAPI.voiceInput.updateShortcutSetting(shortcut);
+        if (!result.ok) log.warn('voice input shortcut setting update failed:', result.error);
+        return result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log.warn('voice input shortcut setting update failed:', message);
+        return { ok: false, error: message };
+      }
+    },
+    [],
   );
 
   useEffect(() => {
@@ -258,6 +281,15 @@ export function useVoiceInputSettings(): {
     recordDictionaryLearningActions,
     setShortcut,
   };
+}
+
+function formatVoiceInputPersistenceError(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  error: unknown,
+): string {
+  const message =
+    extractIpcError(error)?.message ?? (error instanceof Error ? error.message : String(error));
+  return t('settings.voiceInput.saveFailed', { message });
 }
 
 function areVoiceInputShortcutsEqual(

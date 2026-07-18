@@ -51,7 +51,7 @@ import {
   createClaudeFastModeRequestTransform,
   createClaudeFastModeResponseObserver,
 } from './claude-fast-mode-log.js';
-import { CLAUDE_UPSTREAM_ENDPOINT } from './runtime-configs.js';
+import { claudeUpstreamEndpoint } from './runtime-configs.js';
 import { readSilentEncryptedRetrySettings } from './silent-encrypted-retry-store.js';
 import {
   createClaudeSessionActivityResponseObserver,
@@ -227,7 +227,9 @@ export async function ensureAnthropicCompatProxyReady(): Promise<void> {
 
   try {
     _handle = await createAnthropicCompatProxy({
-      upstream: CLAUDE_UPSTREAM_ENDPOINT,
+      // 函数形态:model-access 凭据同步可能在 proxy 启动(splash)后才把 endpoint
+      // 换成下发值;每请求现取才能保证与当前 key 同租户(proxy 内部按值 memoize)。
+      upstream: () => claudeUpstreamEndpoint(),
       // 'oauth' 模式按 model 分流(claude-* → api.anthropic.com 走订阅;其余 → gateway 换 key)。
       // 'gateway' 模式恒返 null,字节级行为与扩展前一致。
       routingTransform: createModelRoutingTransform(),
@@ -282,12 +284,12 @@ export async function ensureAnthropicCompatProxyReady(): Promise<void> {
       ],
       logger: log,
     });
-    log.debug('proxy ready', { url: _handle.url, upstream: CLAUDE_UPSTREAM_ENDPOINT });
+    log.debug('proxy ready', { url: _handle.url, upstream: claudeUpstreamEndpoint() });
   } catch (err) {
     _handle = null;
     log.error('proxy failed to start, falling back to direct upstream', {
       err: err instanceof Error ? err.message : String(err),
-      fallbackEndpoint: CLAUDE_UPSTREAM_ENDPOINT,
+      fallbackEndpoint: claudeUpstreamEndpoint(),
     });
   }
 }
@@ -309,7 +311,7 @@ export function isAnthropicCompatProxyHandleReady(): boolean {
  * routingTransform 里, 绕过 proxy 等于绕过路由器(多供应商选择会被静默丢弃)。所以:
  *
  *   proxy ready → 返回 loopback URL(请求经 proxy 做路由 + 字段适配)
- *   proxy 没起  → fail-open 回落真上游 (CLAUDE_UPSTREAM_ENDPOINT) + 日志。
+ *   proxy 没起  → fail-open 回落真上游 (claudeUpstreamEndpoint()) + 日志。
  *                 oauth-spawn 下本不该到这(getState 已 gate proxy readiness, 见
  *                 auth-adapters), 记 ERROR; gateway-spawn 记 warn。
  *
@@ -325,14 +327,14 @@ export function getClaudeEndpoint(): string {
   // proxy 没起来 —— fail-open 回落真上游。
   if (_isOAuthSpawn()) {
     log.error('oauth-spawn but proxy not ready; falling back to direct upstream (getState 应已拦截)', {
-      fallbackEndpoint: CLAUDE_UPSTREAM_ENDPOINT,
+      fallbackEndpoint: claudeUpstreamEndpoint(),
     });
   } else {
     log.warn('proxy not ready, falling back to direct upstream', {
-      fallbackEndpoint: CLAUDE_UPSTREAM_ENDPOINT,
+      fallbackEndpoint: claudeUpstreamEndpoint(),
     });
   }
-  return CLAUDE_UPSTREAM_ENDPOINT;
+  return claudeUpstreamEndpoint();
 }
 
 /**

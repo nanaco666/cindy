@@ -170,9 +170,13 @@ vi.mock('../../maker-host/index.js', () => ({
   getMaker: () => fakeMaker,
 }));
 
-import { createMakerHookSessionRunner } from '../session-runner.js';
+import { createMakerHookSessionRunner, extractToolResultImageUrls } from '../session-runner.js';
+import { SLACK_HOOK_PROMPT_NOTE } from '../outbound.js';
 
 const log = { info: vi.fn(), warn: vi.fn() };
+
+/** 喂给 agent 的文本 = 用户原话 + 渠道说明(教模型用 xdt-file 回传文件)。 */
+const HELLO_WITH_NOTE = `hello\n\n${SLACK_HOOK_PROMPT_NOTE}`;
 
 function baseReq(overrides: Partial<Parameters<ReturnType<typeof createMakerHookSessionRunner>['run']>[0]>) {
   return {
@@ -183,7 +187,7 @@ function baseReq(overrides: Partial<Parameters<ReturnType<typeof createMakerHook
     model: null,
     effort: null,
     permissionMode: null,
-    title: '[Hook·slack] dm:U1:g0',
+    title: '[Slack·DM] dm:U1:g0',
     prompt: 'hello',
     origin: { connectionId: 'slack', connectionName: 'XDMaker Slack', externalKey: 'slack:dm:U1:g0' },
     ...overrides,
@@ -274,9 +278,41 @@ describe('hook session-runner 的 userSendAt 时序(未分类误判回归)', () 
     );
     expect(outcome.status).toBe('ok');
     const session = await fakeMaker.createSession.mock.results[0].value;
-    // 图被降级丢弃:send 内容回落纯文本
-    expect(session.send.mock.calls[0][0]).toMatchObject({ content: 'hello' });
+    // 图被降级丢弃:send 内容回落纯文本(仍带渠道说明后缀)
+    expect(session.send.mock.calls[0][0]).toMatchObject({ content: HELLO_WITH_NOTE });
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('hook image ingest failed'));
+  });
+
+  it('渠道说明与渠道标记:喂 agent 带 xdt-file 说明,落库保持原话,createSession 带 slack-hook 标', async () => {
+    const runner = createMakerHookSessionRunner({ log });
+    const outcome = await runner.run(baseReq({}));
+    expect(outcome.status).toBe('ok');
+
+    // createSession 带渠道标记(lizi_feishu_bot 据此注入路由提示;
+    // 刻意不是 'slack' —— 那是已退役 organic SlackIM 渠道的历史标记)
+    expect(fakeMaker.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ vendorOptions: { source: 'slack-hook' } }),
+    );
+
+    // 喂 agent:用户原话 + 渠道说明(教模型 xdt-file 回传契约)
+    const session = await fakeMaker.createSession.mock.results[0].value;
+    expect(session.send.mock.calls[0][0]).toMatchObject({ content: HELLO_WITH_NOTE });
+
+    // 落库的用户消息保持 Slack 原话,不带说明(渲染层展示口径)
+    const createCalls = h.createMessage.mock.calls as unknown as Array<[string, { content: unknown }]>;
+    expect(createCalls[0][1].content).toBe('hello');
+  });
+
+  it('复用/接管(isNew=false):createSession 不带 vendorOptions,不给可能的桌面会话打 Slack 标', async () => {
+    const runner = createMakerHookSessionRunner({ log });
+    const outcome = await runner.run(baseReq({ sessionId: 'sess-old', isNew: false }));
+    expect(outcome.status).toBe('ok');
+
+    const createArgs = fakeMaker.createSession.mock.calls[0][0] as Record<string, unknown>;
+    expect('vendorOptions' in createArgs).toBe(false);
+    // 渠道说明仍逐 turn 生效(不依赖 vendorOptions)
+    const session = await fakeMaker.createSession.mock.results[0].value;
+    expect(session.send.mock.calls[0][0]).toMatchObject({ content: HELLO_WITH_NOTE });
   });
 
   it('isNew: touchUserSendInDb 失败不阻断建会话与广播(onAccepted 兜底)', async () => {
@@ -693,5 +729,25 @@ describe('providerId(来源/供应商)贯通 —— issue #854 回归', () => {
     expect(h.setSessionProviderIdInDb).not.toHaveBeenCalled();
     // 复用路径不走草稿默认校验
     expect(h.resolveDefaultProviderIdForModel).not.toHaveBeenCalled();
+  });
+});
+
+describe('extractToolResultImageUrls 的兜底账本回落(xdt_media_produced)', () => {
+  const IMG = `cindy-media://blobs/${'d'.repeat(64)}.png`;
+  const MP3 = `cindy-media://blobs/${'e'.repeat(64)}.mp3`;
+
+  it('意识未声明媒体字段时,从 xdt_media_produced 接走图片(过滤非图)', () => {
+    const text = JSON.stringify({ ok: true, xdt_media_produced: [IMG, MP3] });
+    expect(extractToolResultImageUrls(text)).toEqual([IMG]);
+  });
+
+  it('声明字段与账本并存时合并去重', () => {
+    const text = JSON.stringify({ ok: true, xdt_image_urls: [IMG], xdt_media_produced: [IMG] });
+    expect(extractToolResultImageUrls(text)).toEqual([IMG]);
+  });
+
+  it('_xdt_render_image:false 哨兵优先,全部不外发', () => {
+    const text = JSON.stringify({ ok: true, xdt_media_produced: [IMG], _xdt_render_image: false });
+    expect(extractToolResultImageUrls(text)).toEqual([]);
   });
 });

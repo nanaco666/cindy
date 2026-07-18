@@ -16,13 +16,15 @@ import type { CindyGhostsMcpDeps } from '../types.js';
 const D_GHOST_LIST = [
   '列出用户当前装入且唤醒的意识(Ghost)及各自提供的工具。',
   '意识是用户自装的第三方能力包(.cindy),清单是实时的:用户随时可能装入/抽离/唤醒/沉睡,',
-  '每次需要用意识工具前都应重新调用本工具获取最新清单,不要依赖会话早前的记忆。',
+  '每次需要用意识工具前都应重新调用本工具获取最新清单,不要依赖会话早前的记忆',
+  '(例外:用户消息的[意识指令]已附带目标意识的工具清单时,可直接 ghost_call 免查)。',
   '返回条目含 id、name、command(用户显式点名用的 /指令)与 tools(名称/说明/参数)。',
   '调用具体工具用 ghost_call({ghost_id, tool, args})。清单为空 = 用户没有可用的意识工具。',
 ].join('\n');
 
 const D_GHOST_CALL = [
-  '调用某段意识(Ghost)提供的工具。ghost_id 与 tool 来自 ghost_list 的返回;',
+  '调用某段意识(Ghost)提供的工具。ghost_id 与 tool 来自 ghost_list 的返回,',
+  '或用户消息[意识指令]附带的工具清单;',
   'args 按该工具声明的参数 schema 传 JSON 对象。',
   '执行发生在该意识的独立沙箱中(无文件/网络访问,用 AI 走主机统一通道)。',
   '用户的图片/媒体文件要交给意识处理时,把其地址放进顶层 attachments',
@@ -39,6 +41,7 @@ const D_GHOST_CALL = [
   '**必须**先发一次 grant_only:true + attachments 列出整批文件(≤32 张,tool 随便填会被忽略)',
   '——用户只需在一张卡上批一次;跳过预授权会让用户被迫一张张点允许。',
   '结构化错误:GHOST_NOT_FOUND(已抽离)/ GHOST_ASLEEP(沉睡,可提示用户到设置里唤醒)/',
+  'GHOST_DISABLED_IN_WORKDIR(用户在当前工作目录停用了该意识——不要重试,改用其它方式完成)/',
   'TOOL_NOT_FOUND / GHOST_CRASHED / TIMEOUT / ATTACHMENT_INVALID(附件过户失败,查 message)/',
   'DIR_INVALID(目录过户失败,查 message)/ INTERNAL。遇到 NOT_FOUND 类错误先重新 ghost_list。',
 ].join('\n');
@@ -176,6 +179,14 @@ const ANCHOR_CARD_ID_HOIST_KEY = 'xdt_anchor_card_id';
  *  (data-ghost-audio 插槽),桌面基座不再重复渲染音频卡;手机端忽略。 */
 const AUDIO_IN_CARD_HOIST_KEY = 'xdt_audio_in_card';
 
+/** 图片入卡令牌(布尔 true 才上提):意识已把图片画进自己的卡片。语义与
+ *  音频令牌一致——**只去重呈现,不掐数据通道**:`xdt_image_urls` 仍必须
+ *  照常下发(IM/hook 出站靠它把图送到 Slack/飞书),桌面渲染层验证锚卡
+ *  真含对应图片后才跳过基座渲染;手机端无卡片体系,忽略令牌照常渲染。
+ *  背景:2026-07-16 实踩——意识画卡后删掉 xdt_image_urls,导致 IM 用户
+ *  永远收不到生成图,只能追问一次让模型手动补发。 */
+const IMAGES_IN_CARD_HOIST_KEY = 'xdt_images_in_card';
+
 function hoistMediaFields(result: unknown): Record<string, unknown> {
   if (!result || typeof result !== 'object' || Array.isArray(result)) return {};
   const out: Record<string, unknown> = {};
@@ -189,11 +200,12 @@ function hoistMediaFields(result: unknown): Record<string, unknown> {
     (result as Record<string, unknown>)[AUDIO_TRACKS_HOIST_KEY],
   );
   if (audioTracks) out[AUDIO_TRACKS_HOIST_KEY] = audioTracks;
-  // 音频入卡令牌(布尔;意识把播放器画进了自己的卡片——data-ghost-audio
-  // 插槽——时置 true):桌面渲染层据此跳过基座音频卡,防同一音频两个播放器;
-  // 手机端无卡片体系,忽略该令牌、继续按 xdt_audio_tracks 渲染基座播放器。
-  if ((result as Record<string, unknown>)[AUDIO_IN_CARD_HOIST_KEY] === true) {
-    out[AUDIO_IN_CARD_HOIST_KEY] = true;
+  // 入卡令牌(布尔;意识把媒体画进了自己的卡片时置 true):桌面渲染层据此
+  // 跳过基座渲染防双份;手机端无卡片体系,忽略令牌照常渲染基座。
+  for (const key of [AUDIO_IN_CARD_HOIST_KEY, IMAGES_IN_CARD_HOIST_KEY]) {
+    if ((result as Record<string, unknown>)[key] === true) {
+      out[key] = true;
+    }
   }
   for (const key of [CARD_ID_HOIST_KEY, ANCHOR_CARD_ID_HOIST_KEY]) {
     const value = (result as Record<string, unknown>)[key];
@@ -242,16 +254,49 @@ export async function handleGhostCall(
       return textResult(result, true);
     }
     const hoisted = hoistMediaFields(result.result);
-    // 带媒体的返回体随附防重复渲染提示(代码级统一注入,不靠意识作者自觉):
-    // 模型手里有 cindy-media:// 地址就会想用 markdown 再嵌一遍,而聊天正文
-    // markdown 加载不了该协议 → 裂图。卡片由渲染层按顶层媒体字段自动画。
+    // 兜底账本(规则 9,主机侧事实):意识没声明任何媒体字段、但本次调用
+    // 期间确有媒体入库时,把主机记账的地址以 xdt_media_produced 注入——
+    // IM/hook 出站消费它,保证"意识画卡后删字段"也不影响媒体送达 IM 用户。
+    // 声明了媒体字段(含 xdt_audio_tracks)时以声明为准,账本不注入
+    // (声明是意图表达,能覆盖 render:false 抑制等语义)。
+    const { producedMedia, ...resultForModel } = result;
+    const declaredMedia = ['xdt_image_urls', 'xdt_video_urls', 'xdt_audio_tracks'].some(
+      (k) => k in hoisted,
+    );
+    const producedFallback =
+      !declaredMedia && Array.isArray(producedMedia) && producedMedia.length > 0
+        ? { xdt_media_produced: producedMedia }
+        : {};
+    // 内联意图令牌(意识声明,读取类意识用):xdt_media_inline: true = 这些媒体
+    // 是"文档/消息里读出来的素材",桌面呈现应由模型在最终回复里 markdown 内联
+    // (聊天正文渲染器支持 cindy-media:// / xdt-image://),主机不画卡也不注
+    // "别嵌 markdown"禁令;IM/hook 出站仍照常消费 xdt_media_produced 自动送图
+    // (IM 出站对正文 markdown 托管图与账本图按 absPath 去重)。仅在未声明
+    // 复数媒体字段(即走兜底账本分支)时有意义——声明了媒体字段仍走卡片语义。
+    const inlineIntent =
+      !declaredMedia &&
+      !!result.result &&
+      typeof result.result === 'object' &&
+      (result.result as Record<string, unknown>).xdt_media_inline === true;
+    // 带媒体的返回体随附呈现口径提示(代码级统一注入,不靠意识作者自觉):
+    // - 卡片语义(声明了媒体字段):渲染层自动画卡,模型再嵌 markdown 会双份;
+    // - 内联语义(xdt_media_inline):桌面不画卡、不自动显示,模型必须 markdown
+    //   内联否则桌面用户什么都看不到。
     const mediaHint =
       Object.keys(hoisted).length > 0
         ? {
             hint: '媒体已由聊天气泡自动渲染成卡片,不要在回复文本里用 markdown(![](…))重复嵌入这些地址;后续改图引用返回的 hash 指纹即可。xdt_card_id / xdt_anchor_card_id 是渲染层的配对令牌,忽略即可,不要复述。',
           }
-        : {};
-    return textResult({ ...result, ...hoisted, ...mediaHint });
+        : Object.keys(producedFallback).length > 0
+          ? inlineIntent
+            ? {
+                hint: '这些媒体已入库但桌面聊天不会自动显示——请在最终回复的 markdown 里用 ![](地址) 把图按内容对应位置嵌入展示(原样使用返回里的 xdt_image_url / cindy-media:// 地址,不要自己拼);IM/远程场景由主机按 xdt_media_produced 自动送达,无需复述该字段。不要口播下载过程。',
+              }
+            : {
+                hint: 'xdt_media_produced 是主机记账的送达通道:这些媒体已自动送达用户(桌面/IM),不要在回复文本里用 markdown 嵌入这些地址,也不要复述它们。',
+              }
+          : {};
+    return textResult({ ...resultForModel, ...hoisted, ...producedFallback, ...mediaHint });
   } catch (err) {
     return textResult(
       { ok: false, errorCode: 'INTERNAL', message: err instanceof Error ? err.message : String(err) },

@@ -1,19 +1,39 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Pencil } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { toast } from '@/lib/toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { ProfileEditDialog } from './ProfileEditDialog';
 
 export function UserProfileCard() {
   const { user } = useAuth();
   const [avatarError, setAvatarError] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const { t } = useTranslation();
+
+  // 换头像(服务端资料更新)后给新地址重试的机会,
+  // 不让一次历史加载失败永远钉死在首字母兜底上。
+  const avatarUrl = user?.avatar ?? null;
+  useEffect(() => {
+    setAvatarError(false);
+  }, [avatarUrl]);
 
   if (!user) return null;
 
   const displayName = user.name || t('settings.userProfile.fallbackName');
   const initial = displayName.charAt(0).toUpperCase();
   const avatarAlt = t('settings.userProfile.avatarAlt', { name: displayName });
+
+  const handleCopyUserId = async () => {
+    try {
+      await navigator.clipboard.writeText(user.id);
+      toast.success(t('settings.userProfile.copyUserId.success'));
+    } catch {
+      toast.error(t('settings.userProfile.copyUserId.failed'));
+    }
+  };
 
   return (
     <div
@@ -36,6 +56,8 @@ export function UserProfileCard() {
           className={cn(
             'flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full',
             'bg-[var(--settings-profile-avatar-bg)]',
+            // 无头像的首字母兜底加一圈细描边,与卡片边框同 token,避免圆盘悬空
+            'border border-[var(--settings-profile-card-border)]',
             'text-18 font-medium text-[var(--settings-profile-avatar-text)]',
           )}
           aria-label={avatarAlt}
@@ -44,10 +66,42 @@ export function UserProfileCard() {
         </div>
       )}
 
-      {/* User name — 18px/500, line-height 1.2 */}
-      <p className="text-18 font-medium leading-[1.2] text-[var(--settings-profile-name)]">
-        {displayName}
-      </p>
+      {/* User name — 点击复制用户 ID;hover / cursor 明示可交互。 */}
+      <div className="min-w-0 flex-1">
+        <button
+          type="button"
+          onClick={() => void handleCopyUserId()}
+          aria-label={t('settings.userProfile.copyUserId.action')}
+          title={t('settings.userProfile.copyUserId.action')}
+          className={cn(
+            '-ml-2 flex min-w-0 max-w-full cursor-pointer items-center rounded-lg px-2 py-1 text-left',
+            'transition-colors hover:bg-[var(--settings-profile-avatar-bg)]',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-soft)]',
+          )}
+        >
+          <span className="min-w-0 truncate text-18 font-medium leading-[1.2] text-[var(--settings-profile-name)]">
+            {displayName}
+          </span>
+        </button>
+      </div>
+
+      {/* 编辑名字 / 头像(直写服务端,弹窗见 ProfileEditDialog) */}
+      <button
+        type="button"
+        onClick={() => setEditOpen(true)}
+        aria-label={t('settings.userProfile.edit.open')}
+        title={t('settings.userProfile.edit.open')}
+        className={cn(
+          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
+          'text-[var(--text-tertiary)] transition-colors',
+          'hover:bg-[var(--settings-profile-avatar-bg)] hover:text-[var(--text-primary)]',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-soft)]',
+        )}
+      >
+        <Pencil size={15} />
+      </button>
+
+      <ProfileEditDialog open={editOpen} onOpenChange={setEditOpen} />
     </div>
   );
 }

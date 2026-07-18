@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BRAND_WEBSITE_URL } from '@lizi/maker-shared/branding';
-
+import { useTranslation } from 'react-i18next';
 import { useEnvCheck } from '@/contexts/EnvCheckContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUpdateStatus } from '@/hooks/useUpdateStatus';
+
+// 运行期端点清单(dev/packaged 都在启动阻断后有真值,烘焙兜底已退役)
+const websiteUrl = () => window.electronAPI.clientEndpoints.websiteUrl;
 
 /* ── Types ── */
 
@@ -36,6 +38,7 @@ const FADE_FALLBACK_MS = 500;
 const AUTO_RELAUNCH_DELAY_MS = 1_500;
 
 export function useSplash() {
+  const { t } = useTranslation();
   const { status: envStatus, downloadProgress, downloadInfo, updateVersion, step, totalSteps, resetSignal, checkEnvironment } = useEnvCheck();
   const { isInitializing: authInitializing } = useAuth();
   const { errorCode: updateErrorCode } = useUpdateStatus();
@@ -109,11 +112,11 @@ export function useSplash() {
   const tips: TipsInfo = useMemo<TipsInfo>(() => {
     switch (phase) {
       case 'splash_checking_update':
-        return { tipsText: '检查更新中...', tipsClickable: false, tipsDestructive: false };
+        return { tipsText: t('splash.tips.checkingUpdate'), tipsClickable: false, tipsDestructive: false };
       case 'splash_updating':
-        return { tipsText: '小镇更新中...', tipsClickable: false, tipsDestructive: false };
+        return { tipsText: t('splash.tips.updating'), tipsClickable: false, tipsDestructive: false };
       case 'splash_update_done':
-        return { tipsText: '更新完成，等待自动重启...', tipsClickable: false, tipsDestructive: false };
+        return { tipsText: t('splash.tips.updateDone'), tipsClickable: false, tipsDestructive: false };
       case 'splash_manifest_failed':
         return { tipsText: null, tipsClickable: false, tipsDestructive: false }; // Dialog takes over
       case 'splash_download_failed':
@@ -121,21 +124,21 @@ export function useSplash() {
       case 'splash_spawn_failed':
         return { tipsText: null, tipsClickable: false, tipsDestructive: false }; // Dialog takes over
       case 'splash_checking':
-        return { tipsText: '运行环境检测中...', tipsClickable: false, tipsDestructive: false };
+        return { tipsText: t('splash.tips.checkingEnv'), tipsClickable: false, tipsDestructive: false };
       case 'splash_downloading': {
         // D 场景（两个 vendor 都需要下载）显示 (x/2) 进度标签；B/C 场景维持单文案。
         const suffix = step && totalSteps ? `(${step}/${totalSteps})` : '';
-        return { tipsText: `正在召唤村民...${suffix}`, tipsClickable: false, tipsDestructive: false };
+        return { tipsText: `${t('splash.tips.waking')}${suffix}`, tipsClickable: false, tipsDestructive: false };
       }
       case 'splash_passed':
       case 'fading_out':
-        return { tipsText: '正在进入小镇中...', tipsClickable: false, tipsDestructive: false };
+        return { tipsText: t('splash.tips.waking'), tipsClickable: false, tipsDestructive: false };
       case 'splash_failed':
-        return { tipsText: '环境初始化失败，点击重试', tipsClickable: true, tipsDestructive: true };
+        return { tipsText: t('splash.tips.envFailed'), tipsClickable: true, tipsDestructive: true };
       default:
         return { tipsText: null, tipsClickable: false, tipsDestructive: false };
     }
-  }, [phase, step, totalSteps]);
+  }, [phase, step, totalSteps, t]);
 
   // ── Dialogs ──
   // splash_update_done 不再用弹窗;改为先展示 "更新完成，等待自动重启..." tip,
@@ -187,7 +190,7 @@ export function useSplash() {
   }, [phase, checkEnvironment]);
 
   const onSpawnFailedDownload = useCallback(() => {
-    window.open(BRAND_WEBSITE_URL, '_blank');
+    window.open(websiteUrl(), '_blank');
   }, []);
 
   // ── Show progress bar during download phases ──

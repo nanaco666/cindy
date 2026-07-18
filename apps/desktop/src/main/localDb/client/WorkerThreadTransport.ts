@@ -268,8 +268,6 @@ function dispatchTx(readyDb, payload) {
   const request = asRecord(payload, 'tx args');
   const name = expectString(request.name, 'name');
   switch (name) {
-    case 'migration.writePage':
-      return migrationWritePage(readyDb, request.args);
     case 'codex.importMessages':
       return codexImportMessages(readyDb, request.args);
     case 'claude.importMessages':
@@ -557,57 +555,6 @@ function orcaUpsertWorker(readyDb, args) {
       now,
       now,
     );
-  })();
-}
-
-function migrationWritePage(readyDb, args) {
-  const page = asRecord(args, 'migration.writePage args');
-  const sessions = expectArray(page.sessions, 'sessions');
-  const insertSession = readyDb.prepare(
-    'INSERT OR IGNORE INTO sessions (id, title, working_dir, model, effort, permission_mode, status, sdk_session_id, total_token_usage, total_cost_usd, context_tokens, context_window, fast_mode, cleared_at, pinned_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-  );
-  const insertMessage = readyDb.prepare(
-    'INSERT OR IGNORE INTO messages (id, client_id, session_id, role, content, tool_use_id, created_at) VALUES (?,?,?,?,?,?,?)',
-  );
-  readyDb.transaction(() => {
-    for (const rawSession of sessions) {
-      const s = asRecord(rawSession, 'session');
-      insertSession.run(
-        expectString(s.id, 'session.id'),
-        expectString(s.title, 'session.title'),
-        // 存储级归一(#537):云迁移种子行可能带服务端历史反斜杠拼写
-        normalizeWorkingDirForStorage(nullableString(s.workingDir)),
-        expectString(s.model, 'session.model'),
-        expectString(s.effort, 'session.effort'),
-        expectString(s.permissionMode, 'session.permissionMode'),
-        expectString(s.status, 'session.status'),
-        nullableString(s.sdkSessionId),
-        expectNumber(s.totalTokenUsage, 'session.totalTokenUsage'),
-        expectNumber(s.totalCostUsd, 'session.totalCostUsd'),
-        expectNumber(s.contextTokens, 'session.contextTokens'),
-        expectNumber(s.contextWindow, 'session.contextWindow'),
-        s.fastMode ? 1 : 0,
-        s.clearedAt ? new Date(expectString(s.clearedAt, 'session.clearedAt')).getTime() : null,
-        s.pinnedAt ? new Date(expectString(s.pinnedAt, 'session.pinnedAt')).getTime() : null,
-        new Date(expectString(s.createdAt, 'session.createdAt')).getTime(),
-        new Date(expectString(s.updatedAt, 'session.updatedAt')).getTime(),
-      );
-      for (const rawMessage of Array.isArray(s.messages) ? s.messages : []) {
-        const m = asRecord(rawMessage, 'message');
-        insertMessage.run(
-          expectString(m.id, 'message.id'),
-          expectString(m.clientId, 'message.clientId'),
-          expectString(m.sessionId, 'message.sessionId'),
-          expectString(m.role, 'message.role'),
-          typeof m.content === 'string' ? m.content : stringifyContent(m.content),
-          nullableString(m.toolUseId),
-          new Date(expectString(m.createdAt, 'message.createdAt')).getTime(),
-        );
-      }
-    }
-    if (page.nextAfter) writeMeta(readyDb, 'cloud_migration_last_session_id', expectString(page.nextAfter, 'nextAfter'));
-    writeMeta(readyDb, 'cloud_migration_has_more', page.hasMore ? '1' : '0');
-    writeMeta(readyDb, 'cloud_migration_synced', String(readMetaNumber(readyDb, 'cloud_migration_synced') + sessions.length));
   })();
 }
 
@@ -962,15 +909,6 @@ function embeddingEnqueue(readyDb, args) {
   return { inserted, skipped: items.length - inserted };
 }
 
-function readMetaNumber(readyDb, key) {
-  const row = readyDb.prepare('SELECT value FROM migration_meta WHERE key = ?').get(key);
-  return row ? Number(row.value) || 0 : 0;
-}
-
-function writeMeta(readyDb, key, value) {
-  readyDb.prepare('INSERT INTO migration_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value);
-}
-
 function readExistingImportedClientIds(readyDb, sessionId, importClientIdPrefix) {
   const rows = readyDb.prepare('SELECT client_id AS clientId FROM messages WHERE session_id = ? AND client_id LIKE ?').all(sessionId, importClientIdPrefix + '%');
   return new Set(rows.map((row) => row.clientId));
@@ -1245,7 +1183,7 @@ export type RpcTimeoutVerdict =
  * 背景(2026-07-15 实锤):睡前发出的 RPC,其 30s setTimeout 会在系统睡眠期间
  * 继续计时(Apple Silicon 连续时钟)或在 dark wake 时集中触发,唤醒瞬间成批
  * "超时"——但 worker 从头到尾没得到过 30s 清醒的处理机会。这批假超时曾把
- * MigrationGate 打进 fatal 造成白屏。语义修正:预算指「30s 清醒时间」,
+ * LocalDbGate 打进 fatal 造成白屏。语义修正:预算指「30s 清醒时间」,
  * 挂钟耗时远超预算说明中途睡过,重置预算重等;只有真实清醒窗口耗满才拒绝。
  */
 export function evaluateRpcTimeout(

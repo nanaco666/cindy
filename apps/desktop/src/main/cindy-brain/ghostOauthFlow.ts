@@ -68,7 +68,9 @@ export interface GhostOauthClientConfig {
    * 可选:XDT server token broker 的 provider slug(如 'jira')。声明后
    * code 换 token 与 refresh 不直连 tokenUrl,改经注入的 broker 调用器
    * (client secret 在服务端,不随包分发)。仅第一方官方意识可用,门控在
-   * 运行时接线层。broker 模式下 PKCE 强制关闭(broker 端点不透传 verifier)。
+   * 运行时接线层。broker 模式兼容 PKCE(pkce 缺省开):verifier 经 broker
+   * exchange 透传到服务端,由 provider 决定是否消费(feishu 要、jira/slack
+   * 显式声明 pkce:false)。
    */
   tokenBroker?: string;
   /**
@@ -132,7 +134,10 @@ export type GhostOauthBrokerResult =
  * 并把响应映射成 bundle;本引擎不感知 HTTP 细节。
  */
 export interface GhostOauthBrokerClient {
-  exchange(slug: string, params: { code: string; redirectUri: string }): Promise<GhostOauthBrokerResult>;
+  exchange(
+    slug: string,
+    params: { code: string; redirectUri: string; codeVerifier?: string },
+  ): Promise<GhostOauthBrokerResult>;
   refresh(slug: string, params: { refreshToken: string }): Promise<GhostOauthBrokerResult>;
 }
 
@@ -453,8 +458,9 @@ async function runGhostOauthFlow(
   const timeoutMs = opts.timeoutMs ?? FLOW_TIMEOUT_DEFAULT_MS;
   const brandName = opts.brandName ?? 'Cindy';
 
-  // broker 模式强制关 PKCE:broker 端点不透传 verifier,带 challenge 授权必失败。
-  const usePkce = config.pkce !== false && !config.tokenBroker;
+  // PKCE 缺省开;broker 模式同样支持(verifier 经 broker exchange 透传服务端),
+  // 不吃 PKCE 的服务商(jira/slack)在声明里显式 pkce:false。
+  const usePkce = config.pkce !== false;
   const state = base64Url(crypto.randomBytes(32));
   const verifier = usePkce ? base64Url(crypto.randomBytes(32)) : null;
   const challenge = verifier ? base64Url(crypto.createHash('sha256').update(verifier).digest()) : null;
@@ -613,7 +619,11 @@ async function runGhostOauthFlow(
 
     // broker 模式:code 交换交给 XDT server(secret 在服务端),不直连 tokenUrl。
     if (config.tokenBroker && opts.broker) {
-      const brokered = await opts.broker.exchange(config.tokenBroker, { code: outcome.code, redirectUri });
+      const brokered = await opts.broker.exchange(config.tokenBroker, {
+        code: outcome.code,
+        redirectUri,
+        ...(verifier !== null ? { codeVerifier: verifier } : {}),
+      });
       if (!brokered.ok) {
         logger?.warn('ghost oauth broker 交换失败', { slug: config.tokenBroker, error: brokered.error });
         return { ok: false, error: brokered.error, detail: brokered.detail };
@@ -621,6 +631,11 @@ async function runGhostOauthFlow(
       logger?.info('ghost oauth 授权完成(broker)', {
         slug: config.tokenBroker,
         hasRefreshToken: brokered.bundle.refreshToken !== null,
+        // scope 名单非敏感(不含令牌字节)。飞书权限累积语义下,老用户(v1
+        // 登录时代授过全量)首连时这里回显的就是应用已开通用户权限全集——
+        // 用于校准 ghost.json 的 scopes 声明(声明不全会让新用户缺权限,
+        // 声明未开通的会 20027 整页拒绝,两头都靠这个回显对账)。
+        grantedScope: brokered.bundle.grantedScope,
       });
       return { ok: true, bundle: brokered.bundle };
     }
@@ -775,14 +790,24 @@ export interface FetchGhostOauthIdentityOptions {
    * 与 labelPath 取同一份响应;任一占位符取不到字符串值时整体降级 null。
    */
   displayTemplate?: string;
+  /**
+   * 可选:头像 URL 的点分路径(如飞书 user_info 的 "data.avatar_thumb")。
+   * 取到的值必须是 https 地址,否则降级 null;这里只取地址不下载——下载在
+   * fetchGhostOauthAvatar(调用方按需跑,失败不阻断)。
+   */
+  avatarPath?: string;
   accessToken: string;
   fetchImpl: typeof fetch;
 }
 
-/** 身份端点一次拉取的两个产物:label = 稳定身份键(合并判定),display = 人类可读展示名。 */
+/**
+ * 身份端点一次拉取的产物:label = 稳定身份键(合并判定),display = 人类可读
+ * 展示名,avatarUrl = 头像地址(声明了 avatarPath 且值是合法 https 才有)。
+ */
 export interface GhostOauthIdentityInfo {
   label: string | null;
   display: string | null;
+  avatarUrl: string | null;
 }
 
 const IDENTITY_VALUE_MAX_CHARS = 200;
@@ -807,7 +832,7 @@ function extractIdentityValue(parsed: unknown, path: string): string | null {
  * 失败不阻断授权(对应产物降级 null,设置页回落显示"账号 N")。
  */
 export async function fetchGhostOauthIdentity(opts: FetchGhostOauthIdentityOptions): Promise<GhostOauthIdentityInfo> {
-  const none: GhostOauthIdentityInfo = { label: null, display: null };
+  const none: GhostOauthIdentityInfo = { label: null, display: null, avatarUrl: null };
   if (!isSafeHttpsUrl(opts.url)) return none;
   let res: Response;
   try {
@@ -843,5 +868,64 @@ export async function fetchGhostOauthIdentity(opts: FetchGhostOauthIdentityOptio
     });
     if (broken || display.length === 0 || display.length > IDENTITY_VALUE_MAX_CHARS) display = null;
   }
-  return { label, display };
+
+  // 头像地址:URL 常带长签名参数,用独立的长度上限;非 https 一律弃(降级
+  // 无头像,不能让身份端点把 file:// / http:// 地址塞进主机下载器)。
+  let avatarUrl: string | null = null;
+  if (opts.avatarPath) {
+    const raw = extractIdentityUrlValue(parsed, opts.avatarPath);
+    if (raw !== null && isSafeHttpsUrl(raw)) avatarUrl = raw;
+  }
+  return { label, display, avatarUrl };
+}
+
+/** 头像 URL 专用取值(与 extractIdentityValue 同路径规则,上限放宽到 URL 级)。 */
+const IDENTITY_URL_VALUE_MAX_CHARS = 2048;
+function extractIdentityUrlValue(parsed: unknown, path: string): string | null {
+  let cursor: unknown = parsed;
+  for (const seg of path.split('.')) {
+    if (typeof cursor !== 'object' || cursor === null || Array.isArray(cursor)) return null;
+    cursor = (cursor as Record<string, unknown>)[seg];
+  }
+  return typeof cursor === 'string' && cursor.length > 0 && cursor.length <= IDENTITY_URL_VALUE_MAX_CHARS
+    ? cursor
+    : null;
+}
+
+/* ------------------------------------------------------------------------ */
+/* 声明式头像下载(设置页账号卡的头像 data URL)                               */
+/* ------------------------------------------------------------------------ */
+
+/** 头像原始字节硬顶(缩略图级;超限整单弃,不截断出坏图)。 */
+const AVATAR_MAX_BYTES = 256 * 1024;
+/** 头像可接受的图片 mime(data URL 直出给沙箱 <img>,只认常见位图)。 */
+const AVATAR_ALLOWED_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+
+/**
+ * 下载账号头像并转 data URL。地址来自身份响应(服务商自报的 CDN),**绝不
+ * 带 Authorization**——头像域名不在凭证注入白名单里,带令牌出去就是泄露。
+ * 任何失败(非 https / 非图片 / 超限 / 网络)一律 null,纯 best-effort。
+ */
+export async function fetchGhostOauthAvatar(opts: {
+  url: string;
+  fetchImpl: typeof fetch;
+}): Promise<string | null> {
+  if (!isSafeHttpsUrl(opts.url)) return null;
+  let res: Response;
+  try {
+    res = await opts.fetchImpl(opts.url, { method: 'GET', headers: { Accept: 'image/*' } });
+  } catch {
+    return null;
+  }
+  if (!res.ok) return null;
+  const mime = (res.headers.get('content-type') ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
+  if (!AVATAR_ALLOWED_MIMES.has(mime)) return null;
+  let bytes: Buffer;
+  try {
+    bytes = Buffer.from(await res.arrayBuffer());
+  } catch {
+    return null;
+  }
+  if (bytes.byteLength === 0 || bytes.byteLength > AVATAR_MAX_BYTES) return null;
+  return `data:${mime};base64,${bytes.toString('base64')}`;
 }

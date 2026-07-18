@@ -13,7 +13,7 @@ import { app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { XD_GATEWAY_BASE_URL } from '../../shared/endpoints.js';
+import { effectiveXdGatewayBaseUrl } from '../model-access/effectiveEndpoint.js';
 import claudeSystemPrompt from './claude-system-prompt.md?raw';
 import codexSystemPrompt from './codex-system-prompt.md?raw';
 import hostSystemPrompt from './host-system-prompt.md?raw';
@@ -99,7 +99,12 @@ const staticClaudeBehaviorFlags = {
  * 非 Claude 模型(gpt-5.4 / kimi 等)的请求里 strip 掉,绕开上游 Azure backend
  * "Unknown parameter" 400 错误。
  */
-export const CLAUDE_UPSTREAM_ENDPOINT = XD_GATEWAY_BASE_URL;
+// 惰性函数而非模块级常量:model-access 凭据同步在登录后才写入 endpoint,顶层求值会钉死空值。
+// 只认 server 随凭据成对下发的租户 endpoint,同步成功前返回空串(网关不可用)——
+// 保证 key 与 endpoint 永远同租户(见 model-access/effectiveEndpoint.ts)。
+export function claudeUpstreamEndpoint(): string {
+  return effectiveXdGatewayBaseUrl();
+}
 
 /**
  * Claude 运行时配置工厂 ——
@@ -136,10 +141,15 @@ export function buildDesktopClaudeRuntimeConfig(endpointFn: () => string): Agent
     get makerMemoryEnabled() {
       return readMakerMemoryEnabled();
     },
-    // 远端 cc-mgr 会话恒用真上游网关 —— 本地 endpoint 是 loopback proxy(远端够不到)。
-    // 静态值即可:远端从来不走 per-model OAuth↔gateway 拆分(那只在本地 proxy 里有意义)。
-    remoteEndpoint: CLAUDE_UPSTREAM_ENDPOINT,
   };
+  // 远端 cc-mgr 会话恒用真上游网关 —— 本地 endpoint 是 loopback proxy(远端够不到)。
+  // 用 getter 而非构建期快照:model-access 凭据同步可能在 maker 构建后才把
+  // endpoint 换成下发值,远端 spawn 期读 getter 才能拿到与 key 配套的上游。
+  Object.defineProperty(config, 'remoteEndpoint', {
+    get: () => claudeUpstreamEndpoint(),
+    enumerable: true,
+    configurable: false,
+  });
   Object.defineProperty(config, 'endpoint', {
     get: endpointFn,
     enumerable: true,

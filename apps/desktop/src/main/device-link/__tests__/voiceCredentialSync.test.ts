@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { XD_GATEWAY_BASE_URL } from '../../../shared/endpoints';
+import { TEST_XD_GATEWAY_BASE_URL as XD_GATEWAY_BASE_URL } from '../../../test/vitest/clientEndpointsFixture';
 
 const apiKey = vi.hoisted(() => ({ value: 'sk-xd-proxy-secret' as string | null }));
 const selection = vi.hoisted(() => ({
@@ -18,9 +18,11 @@ vi.mock('../../maker-host/auth-adapters.js', () => ({
 }));
 
 vi.mock('../../maker-host/runtime-configs.js', async () => {
-  // 动态 import 避开 vi.mock 工厂提升导致的 TDZ;值即 XD 网关单点常量
-  const { XD_GATEWAY_BASE_URL: gateway } = await import('../../../shared/endpoints');
-  return { CLAUDE_UPSTREAM_ENDPOINT: gateway };
+  // 动态 import 避开 vi.mock 工厂提升导致的 TDZ;值即测试 fixture 的网关地址
+  const { TEST_XD_GATEWAY_BASE_URL: gateway } = await import(
+    '../../../test/vitest/clientEndpointsFixture'
+  );
+  return { claudeUpstreamEndpoint: () => gateway };
 });
 
 vi.mock('../../voice-input/VoiceInputModelSelection.js', () => ({
@@ -319,11 +321,11 @@ describe('voiceCredentialSync', () => {
     ]);
   });
 
-  it('throws when the desktop has no XD Gateway key to sync', async () => {
+  it('throws when the desktop has no Cindy AI key to sync', async () => {
     apiKey.value = null;
     const { syncMobileVoiceCredential } = await import('../voiceCredentialSync');
 
-    expect(() => syncMobileVoiceCredential()).toThrow('XD Gateway API key is not configured');
+    expect(() => syncMobileVoiceCredential()).toThrow('Cindy AI key is not configured');
   });
 
   it('redacts proxyApiKey for logs without mutating the result', async () => {

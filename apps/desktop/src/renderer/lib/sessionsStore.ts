@@ -50,10 +50,12 @@ const DEFAULT_LIMIT = 1000;
 
 const cache = new Map<ListStatusFilter, Session[]>();
 const inflight = new Map<ListStatusFilter, Promise<Session[]>>();
-const subs = new Set<() => void>();
+type StoreChange = 'updated' | 'reset';
 
-function notify(): void {
-  subs.forEach((fn) => fn());
+const subs = new Set<(change: StoreChange) => void>();
+
+function notify(change: StoreChange = 'updated'): void {
+  subs.forEach((fn) => fn(change));
 }
 
 /**
@@ -75,7 +77,7 @@ async function fetchFilter(filter: ListStatusFilter): Promise<Session[]> {
 }
 
 export const sessionsStore = {
-  subscribe(fn: () => void): () => void {
+  subscribe(fn: (change: StoreChange) => void): () => void {
     subs.add(fn);
     return () => {
       subs.delete(fn);
@@ -95,17 +97,24 @@ export const sessionsStore = {
     if (cache.has(filter)) return;
     let promise = inflight.get(filter);
     if (!promise) {
-      promise = fetchFilter(filter)
+      const request = fetchFilter(filter)
         .then((data) => {
-          cache.set(filter, data);
-          inflight.delete(filter);
-          notify();
+          // reset / forceRefresh 会把旧 request 从 inflight 移除。只有仍被
+          // 当前桶认领的 request 才能提交，避免旧账号请求回填新账号缓存。
+          if (inflight.get(filter) === request) {
+            cache.set(filter, data);
+            inflight.delete(filter);
+            notify();
+          }
           return data;
         })
         .catch((e) => {
-          inflight.delete(filter);
+          if (inflight.get(filter) === request) {
+            inflight.delete(filter);
+          }
           throw e;
         });
+      promise = request;
       inflight.set(filter, promise);
     }
     await promise;
@@ -205,7 +214,7 @@ export const sessionsStore = {
   reset(): void {
     cache.clear();
     inflight.clear();
-    notify();
+    notify('reset');
   },
 };
 

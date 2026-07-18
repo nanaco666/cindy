@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 
 const {
   existsSyncMock,
@@ -874,7 +875,7 @@ describe('computer mcp integration', () => {
 
   it('requires a host session before dispatching computer-use tool calls', async () => {
     await expect(callComputerDriverTool('list_windows', {})).rejects.toThrow(
-      'Computer Use tool calls require an active XDMaker session',
+      `Computer Use tool calls require an active ${BRAND_NAME} session`,
     );
 
     expect(mcpConnectMock).not.toHaveBeenCalled();

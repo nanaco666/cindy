@@ -10,7 +10,7 @@ import { useEffect } from 'react';
 import { AppState, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
-import { IS_OTA_SELFHOST } from '@/config/env';
+import { IS_OTA_SELFHOST, REVIEW_MODE } from '@/config/env';
 import { fetchLatestRelease } from './fetchLatestRelease';
 import { createResumeUpdateChecker } from './resumeUpdateCheck';
 import { promptBundleUpdate } from './useBundleUpdatePrompt';
@@ -18,6 +18,7 @@ import { promptBundleUpdate } from './useBundleUpdatePrompt';
 export function useResumeUpdateCheck(): void {
   useEffect(() => {
     if (!IS_OTA_SELFHOST) return; // 非自建变体无静默更新通道,连 AppState 都不订阅
+    if (REVIEW_MODE) return; // 审核模式:关闭本 hook 的 resume 静默检查,不订阅 AppState
 
     const checker = createResumeUpdateChecker({
       otaEnabled: IS_OTA_SELFHOST && !__DEV__ && Updates.isEnabled,

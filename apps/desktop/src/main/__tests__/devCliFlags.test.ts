@@ -10,6 +10,7 @@ const base = {
   envIsolated: undefined as string | undefined,
   envIsolationName: undefined as string | undefined,
   envDeviceIdOverride: undefined as string | undefined,
+  envEndpointsCdn: undefined as string | undefined,
 };
 
 describe('resolveDevCliFlags', () => {
@@ -20,6 +21,7 @@ describe('resolveDevCliFlags', () => {
       needsIsolatedDeviceId: false,
       isolationName: null,
       invalidIsolationName: null,
+      endpointsCdn: false,
     });
   });
 
@@ -162,7 +164,24 @@ describe('resolveDevCliFlags', () => {
       needsIsolatedDeviceId: false,
       isolationName: null,
       invalidIsolationName: null,
+      endpointsCdn: false,
     });
+  });
+
+  it('--endpoints-cdn / XDT_ENDPOINTS_CDN=1 双通道(与 --passive 同款);开关非 "1" 视为关', () => {
+    expect(resolveDevCliFlags({ ...base, argv: [...base.argv, '--endpoints-cdn'] }).endpointsCdn).toBe(true);
+    expect(resolveDevCliFlags({ ...base, envEndpointsCdn: '1' }).endpointsCdn).toBe(true);
+    for (const v of ['0', 'false', 'true', 'yes']) {
+      expect(resolveDevCliFlags({ ...base, envEndpointsCdn: v }).endpointsCdn).toBe(false);
+    }
+    // packaged 恒 false(packaged 本来就走 CDN,该标志无意义)
+    const packaged = resolveDevCliFlags({
+      ...base,
+      isPackaged: true,
+      argv: [...base.argv, '--endpoints-cdn'],
+      envEndpointsCdn: '1',
+    });
+    expect(packaged.endpointsCdn).toBe(false);
   });
 
   it('--passive 与命名沙箱可组合', () => {

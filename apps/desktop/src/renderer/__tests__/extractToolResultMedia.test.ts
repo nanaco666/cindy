@@ -242,6 +242,25 @@ describe('extractToolResultMedia', () => {
     expect(plain[0].audioInCard).toBeUndefined();
   });
 
+  it('xdt_images_in_card 令牌只打标不裁决(与音频令牌同款「待验证声明」)', () => {
+    const img = `cindy-media://blobs/${'c'.repeat(64)}.png`;
+    const items = extractToolResultMedia(JSON.stringify({
+      xdt_image_urls: [img],
+      xdt_images_in_card: true,
+    }));
+    expect(items).toHaveLength(1);
+    expect(items[0].kind).toBe('image');
+    expect(items[0].imageInCard).toBe(true);
+    // 无令牌 / 非布尔 true 时不打标。
+    const plain = extractToolResultMedia(JSON.stringify({ xdt_image_urls: [img] }));
+    expect(plain[0].imageInCard).toBeUndefined();
+    const bogus = extractToolResultMedia(JSON.stringify({
+      xdt_image_urls: [img],
+      xdt_images_in_card: 'yes',
+    }));
+    expect(bogus[0].imageInCard).toBeUndefined();
+  });
+
   it('rejects audio tracks with disallowed schemes; xdt_audio_urls fallback accepts both worlds', () => {
     const bad = JSON.stringify({
       xdt_audio_tracks: [{ kind: 'music', xdt_audio_url: 'https://evil.example/a.mp3' }],

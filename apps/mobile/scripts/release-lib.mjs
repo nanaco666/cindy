@@ -16,25 +16,92 @@ export const RELEASE_ENV_EXEC_COMMANDS = Object.freeze({
   prod: 'apps/mobile/scripts/release-prod.mjs',
 });
 
+// 2026-07 端点清单重构后收缩:业务端点不再构建期烘焙(运行期由启动闸门从
+// `<manifest base>/endpoint.json` 回填),发版闸门只校验构建身份 + 清单自举基址。
 export const PUBLIC_ENV_KEYS = [
-  'EXPO_PUBLIC_FEISHU_APP_ID',
-  'EXPO_PUBLIC_XDT_API_BASE_URL',
-  'EXPO_PUBLIC_XDT_DEVICE_LINK_API_BASE_URL',
+  'EXPO_PUBLIC_CINDY_AUTH_REGION',
+  'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL',
   'EXPO_PUBLIC_TAPTAP_CLIENT_ID',
   'EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN',
 ];
 
+// 自建线的 TapDB 公开配置来自 self-host-regions.json → Expo extra,不再要求
+// EXPO_PUBLIC_* 注入。这里只校验自举启动所需的两个构建常量。
+export const SELF_HOST_PUBLIC_ENV_KEYS = [
+  'EXPO_PUBLIC_CINDY_AUTH_REGION',
+  'EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL',
+];
+
 export const EXTERNAL_PUBLIC_ENV_KEYS = [
+  'EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID',
+  'EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID',
+  'EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME',
+  'EXPO_PUBLIC_CINDY_WECHAT_APP_ID',
+  'EXPO_PUBLIC_CINDY_WECHAT_UNIVERSAL_LINK',
   'EXPO_PUBLIC_TAPTAP_CLIENT_ID',
   'EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN',
   'EXPO_PUBLIC_TAPDB_CHANNEL',
   'EXPO_PUBLIC_TAPDB_REGION',
 ];
 
+/**
+ * 已知烘焙键的用途注释(打印在每行值后面,发版者不用翻代码就知道每个键干嘛的)。
+ * 新增烘焙键时同步补一条;不在表里的键会打印「未登记」提示,提醒确认它该不该进包。
+ */
+const BAKED_ENV_KEY_NOTES = {
+  EXPO_PUBLIC_CINDY_AUTH_REGION: '构建区域 cn/global:决定登录线、appScheme 与端点清单基址',
+  EXPO_PUBLIC_ENDPOINT_MANIFEST_BASE_URL:
+    '端点清单自举基址:启动第一步拉 <此地址>/endpoint.json 回填业务端点(唯一不可远程覆盖的烘焙远程 URL)',
+  EXPO_PUBLIC_XDT_OTA_SELFHOST:
+    '自建分发变体标志:=1;真实热更/整包地址均来自 endpoint.json 的 mobileUpdateBaseUrl',
+  EXPO_PUBLIC_DESKTOP_VERSION: '配对的桌面产品线版本(二级版本号,设置页展示;空则该行不显示)',
+  EXPO_PUBLIC_TAPTAP_CLIENT_ID: 'TapDB 统计 client id(公开键,随包分发)',
+  EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN: 'TapDB 统计 client token(公开键,随包分发)',
+  EXPO_PUBLIC_TAPDB_CHANNEL: 'TapDB 上报渠道标识',
+  EXPO_PUBLIC_TAPDB_REGION: 'TapDB 上报区域',
+  EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID: 'Google 登录 Web client id',
+  EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID: 'Google 登录 iOS client id',
+  EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME: 'Google 登录 iOS 回跳 URL scheme',
+  EXPO_PUBLIC_CINDY_WECHAT_APP_ID: '微信登录 AppID',
+  EXPO_PUBLIC_CINDY_WECHAT_UNIVERSAL_LINK: '微信登录 Universal Link',
+  EXPO_PUBLIC_APP_VARIANT: '构建变体(beta = per-dev Beta 线;不设 = production)',
+  EXPO_PUBLIC_BETA_DEV: 'Beta 线开发者名(per-dev 轨道标识)',
+  XDT_ANDROID_VERSION_CODE: 'Android 原生 versionCode(app.config.js 写入,冷更单调号)',
+};
+
+/**
+ * 把「实际会内联进 JS bundle 的注入内容」整理成可打印行(自建冷更脚本的
+ * dry-run / execute 计划输出共用)。口径:
+ *  - metro 只内联 `EXPO_PUBLIC_*` 前缀的 env,构建 env 里全部该前缀键都列出
+ *    (值本身随包公开分发,打印无泄密面);值为空串标注 `(空)` 便于发现漏配;
+ *  - 每行尾部带 BAKED_ENV_KEY_NOTES 的用途注释;未登记键打「未登记」提醒;
+ *  - `extraKeys` 列非 EXPO_PUBLIC 但同样影响包体的构建键(如 android 的
+ *    XDT_ANDROID_VERSION_CODE 经 app.config.js 写进原生 versionCode);
+ *  - 签名口令 / OSS AK 等其余 env 只驱动构建过程、不进包,不在此列。
+ * @param {Record<string, string | undefined>} env 最终传给 prebuild/构建的 env
+ * @param {{ extraKeys?: string[] }} [options]
+ * @returns {string[]} 打印行(含节标题与说明,直接逐行 console.log)
+ */
+export function formatBakedEnvLines(env, { extraKeys = [] } = {}) {
+  const keys = [
+    ...Object.keys(env).filter((key) => key.startsWith('EXPO_PUBLIC_')),
+    ...extraKeys.filter((key) => env[key] !== undefined),
+  ].sort();
+  const width = Math.max(0, ...keys.map((key) => key.length));
+  const lines = ['baked env(将内联进 JS bundle 的全部注入内容,EXPO_PUBLIC_* 前缀):'];
+  for (const key of keys) {
+    const value = String(env[key] ?? '').trim();
+    const note = BAKED_ENV_KEY_NOTES[key] ?? '⚠ 未登记键:确认它该不该进包,并补 BAKED_ENV_KEY_NOTES';
+    lines.push(`  ${key.padEnd(width)} = ${value || '(空)'}  # ${note}`);
+  }
+  lines.push(
+    '  (运行期业务端点来自 CDN endpoint.json + 包内正本兜底,不在烘焙列;签名/OSS 凭据只驱动构建、不进包)',
+  );
+  return lines;
+}
+
 // 桌面产品线 CDN manifest 基址 —— 与桌面发版脚本(apps/desktop/scripts/release-macos.mjs
 // 的 CDN_BASE)读同一 Source of Truth。桌面版本(app.version)是唯一真实来源。
-export const DESKTOP_CDN_BASE = resolveCdnBaseUrl();
-
 /**
  * 解析本次自建线打包要显示的「桌面包版本」(二级版本号,注入 EXPO_PUBLIC_DESKTOP_VERSION)。
  * 取值优先级:
@@ -49,7 +116,7 @@ export const DESKTOP_CDN_BASE = resolveCdnBaseUrl();
 export async function resolveDesktopVersion(opts = {}) {
   const explicit = typeof opts.explicit === 'string' ? opts.explicit.trim() : '';
   if (explicit) return explicit;
-  const cdnBase = (opts.cdnBase ?? DESKTOP_CDN_BASE).replace(/\/+$/, '');
+  const cdnBase = (opts.cdnBase ?? resolveCdnBaseUrl()).replace(/\/+$/, '');
   const platformKey = opts.platformKey ?? 'darwin-arm64';
   const timeoutMs = opts.timeoutMs ?? 8000;
   const url = `${cdnBase}/manifest-${platformKey}.json?t=${Date.now()}`;
@@ -128,12 +195,19 @@ export function resolveBuildProfile(easJson, profileName, seen = new Set()) {
 
 export function resolveTarget(config, options = {}) {
   const kind = options.kind ?? options.target ?? 'production';
+  const region = resolveAuthRegion(options.region);
   if (kind === 'beta') {
-    const dev = slugifyDevName(options.dev ?? process.env.XDT_MOBILE_BETA_DEV ?? gitValue(['config', 'user.name']) ?? 'dash');
-    const profile = `beta-${dev}`;
+    const dev = slugifyDevName(
+      options.dev ??
+        process.env.XDT_MOBILE_BETA_DEV ??
+        gitValue(['config', 'user.name']) ??
+        'dash',
+    );
+    const profile = region === 'global' ? `beta-global-${dev}` : `beta-${dev}`;
     const resolved = resolveBuildProfile(config.easJson, profile);
     return {
       kind: 'beta',
+      region,
       dev,
       profile,
       channel: resolved.channel ?? profile,
@@ -144,10 +218,12 @@ export function resolveTarget(config, options = {}) {
     };
   }
   if (kind === 'staging') {
-    const profile = options.profile ?? 'adhoc';
+    const profile =
+      options.profile ?? (region === 'global' ? 'adhoc-global' : 'adhoc');
     const resolved = resolveBuildProfile(config.easJson, profile);
     return {
       kind: 'staging',
+      region,
       profile,
       channel: resolved.channel ?? 'staging',
       branch: options.branch ?? resolved.channel ?? 'staging',
@@ -157,10 +233,13 @@ export function resolveTarget(config, options = {}) {
     };
   }
   if (kind === 'production') {
-    const profile = options.profile ?? 'production';
+    const profile =
+      options.profile ??
+      (region === 'global' ? 'production-global' : 'production');
     const resolved = resolveBuildProfile(config.easJson, profile);
     return {
       kind: 'production',
+      region,
       profile,
       channel: resolved.channel ?? 'production',
       branch: options.branch ?? resolved.channel ?? 'production',
@@ -185,7 +264,19 @@ export function assertTargetProfile(config, target) {
       throw new Error(`Profile ${target.profile} must set EXPO_PUBLIC_BETA_DEV=${target.dev}`);
     }
   }
+  if (profile.env?.EXPO_PUBLIC_CINDY_AUTH_REGION !== target.region) {
+    throw new Error(
+      `Profile ${target.profile} must set EXPO_PUBLIC_CINDY_AUTH_REGION=${target.region}`,
+    );
+  }
   return profile;
+}
+
+export function resolveAuthRegion(value = 'cn') {
+  const region = String(value ?? 'cn').trim() || 'cn';
+  if (region !== 'cn' && region !== 'global')
+    throw new Error('--region must be cn or global');
+  return region;
 }
 
 export function slugifyDevName(value) {
@@ -548,22 +639,37 @@ export function assertProductionPlatformAllowed(target, platform) {
   }
 }
 
-export function assertProductionSubmitTarget({ target, appJson, easJson } = {}) {
+/**
+ * @param {{ target?: { kind: string; region?: string }; env?: Record<string, string | undefined> }} [options]
+ */
+export function assertProductionSubmitTarget({
+  target,
+  env = process.env,
+} = {}) {
   if (target?.kind !== 'production') return true;
-  const bundleId = appJson?.expo?.ios?.bundleIdentifier;
-  const ascAppId = easJson?.submit?.[target.profile]?.ios?.ascAppId;
-  if (bundleId === 'com.xd.lizcn' && ascAppId !== '6785851372') {
-    throw new Error(`Production bundleIdentifier is com.xd.lizcn but eas.json submit.${target.profile}.ios.ascAppId is ${ascAppId ?? 'missing'}; expected App Store Connect app id 6785851372. Configure the com.xd.lizcn ASC app id before TestFlight auto-submit.`);
+  const region = resolveAuthRegion(target.region);
+  const key =
+    region === 'global' ? 'CINDY_GLOBAL_APP_STORE_ID' : 'CINDY_CN_APP_STORE_ID';
+  const appStoreId = String(env[key] ?? '').trim();
+  if (!/^\d+$/.test(appStoreId)) {
+    throw new Error(
+      `Production ${region} build requires numeric ${key} in the release environment`,
+    );
   }
-  return true;
+  return appStoreId;
 }
 
 /**
  * @param {{ target: { kind: string }; mode: string; latest?: { byPlatform?: Record<string, { appBuildVersion?: string | null }> } | null }} options
  */
 export function shouldAutoSubmitColdBuild({ target, mode, latest } = {}) {
-  if (target.kind !== 'production' || mode === 'OTA_OK') return false;
-  return Boolean(latest?.byPlatform?.ios?.appBuildVersion);
+  // CN and Global have separate ASC apps whose numeric IDs live in the release environment.
+  // eas.json cannot safely interpolate those IDs into submit profiles, so builds stay fail-closed
+  // and submission is an explicit App Store Connect step.
+  void target;
+  void mode;
+  void latest;
+  return false;
 }
 
 /**
@@ -766,26 +872,55 @@ export function assertProductionGitGate({
   return true;
 }
 
-export function addBetaDeveloperProfile(easJson, devName, { allowExisting = false } = {}) {
+export function addBetaDeveloperProfile(
+  easJson,
+  devName,
+  { allowExisting = false, region: regionValue = 'cn' } = {},
+) {
   const dev = slugifyDevName(devName);
-  const profile = `beta-${dev}`;
-  if (!easJson.build?.['beta-base']) throw new Error('Missing beta-base profile');
+  const region = resolveAuthRegion(regionValue);
+  const baseProfile = region === 'global' ? 'beta-global-base' : 'beta-base';
+  const profile = region === 'global' ? `beta-global-${dev}` : `beta-${dev}`;
+  if (!easJson.build?.[baseProfile])
+    throw new Error(`Missing ${baseProfile} profile`);
   if (easJson.build[profile]) {
     if (!allowExisting) throw new Error(`Profile already exists: ${profile}`);
     const existing = easJson.build[profile];
-    if (existing.extends !== 'beta-base' || existing.channel !== profile || existing.env?.EXPO_PUBLIC_BETA_DEV !== dev) {
-      throw new Error(`Existing profile ${profile} does not match expected beta developer shape`);
+    if (
+      existing.extends !== baseProfile ||
+      existing.channel !== profile ||
+      existing.env?.EXPO_PUBLIC_BETA_DEV !== dev
+    ) {
+      throw new Error(
+        `Existing profile ${profile} does not match expected beta developer shape`,
+      );
     }
-    return { easJson, profile, channel: profile, branch: profile, dev, created: false };
+    return {
+      easJson,
+      profile,
+      channel: profile,
+      branch: profile,
+      dev,
+      region,
+      created: false,
+    };
   }
   easJson.build[profile] = {
-    extends: 'beta-base',
+    extends: baseProfile,
     channel: profile,
     env: {
       EXPO_PUBLIC_BETA_DEV: dev,
     },
   };
-  return { easJson, profile, channel: profile, branch: profile, dev, created: true };
+  return {
+    easJson,
+    profile,
+    channel: profile,
+    branch: profile,
+    dev,
+    region,
+    created: true,
+  };
 }
 
 function compareVersionParts(a, b) {

@@ -3,7 +3,7 @@
 // release-android-local.mjs —— 自建线 Android 冷更(本机出签名 APK → 直传自有 OSS → 内部分发)
 //
 // 流程:git 闸门 → 读基线并按需自动 bump versionCode(≤ 基线时自增,写回 android-version.json)
-//       → expo prebuild(com.xd.lizcn,注入 versionCode)→ patch build.gradle 用自有 keystore 自签
+//       → expo prebuild(com.xd.cindycn,注入 versionCode)→ patch build.gradle 用自有 keystore 自签
 //       → gradlew assembleRelease → app-release.apk
 //       → 从 APK 回读内嵌 runtimeVersion(assets/fingerprint,落盘供 OTA 复用)
 //       → APK 直传 OSS(mobile-dist/android/<versionCode>/,installUrl = CDN 直链)
@@ -19,9 +19,11 @@
 // 默认 dry-run(校验环境 + 打印计划,不构建、不上传);--execute 才跑完整链路
 // (需 macOS + Android SDK + JDK 17 + keystore 口令 env + OSS AK/SK env,除非 --skip-upload)。
 //
-// 签名(见 docs/self-hosted-android-build-and-ota.md §7):自有 release keystore
-// xdmaker-release.jks(alias xdmaker-release)自签即终版。keystore 路径/口令
-// 经环境变量供给(XDT_ANDROID_KEYSTORE_PATH / _PASSWORD / _KEY_ALIAS / _KEY_PASSWORD),不入仓。
+// 签名(见 docs/self-hosted-android-build-and-ota.md §7):自有 release keystore 自签即终版。
+// 签名参数**零代码默认值**,路径 / alias / 两个口令全部由环境变量提供(--execute 构建时缺任一项
+// 抛错;--apk 复用现成包时豁免):XDT_ANDROID_KEYSTORE_PATH / XDT_ANDROID_KEY_ALIAS /
+// XDT_ANDROID_KEYSTORE_PASSWORD / XDT_ANDROID_KEY_PASSWORD。
+// 签名套件本体(CindyMobileCer/Android/)在打包机的仓库外目录,不入仓。
 // =============================================================================
 
 import { spawnSync } from 'node:child_process';
@@ -33,6 +35,8 @@ import {
   parseArgs,
   assertProductionGitGate,
   assertPublicEnv,
+  SELF_HOST_PUBLIC_ENV_KEYS,
+  formatBakedEnvLines,
   resolveDesktopVersion,
 } from './release-lib.mjs';
 import {
@@ -48,37 +52,36 @@ import {
   replaceVersionCodeInAndroidVersionJson,
   resolveAndroidSigningEnv,
   patchBuildGradleSigning,
-  patchRootBuildGradleFeishuFlatDir,
   patchGradlePropertiesMemory,
 } from './lib/android-local.mjs';
 import { resolveJavaRuntimeEnv, javaRuntimeDetail } from './java-runtime-env.mjs';
 import { clearBundlerCache } from './lib/bundler-cache.mjs';
 import { readEmbeddedRuntimeVersionFromApk } from './lib/embedded-runtime.mjs';
-import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, OSS_BUCKET } from '../../../scripts/shared/oss.mjs';
+import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, OSS_BUCKET, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
+import { productionMobileEnv } from '../../../scripts/shared/production-endpoints.mjs';
+import { formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides, assertRegionOssComplete, stripSelfHostTapdbEnv } from './lib/self-host-region.mjs';
+
+// NOTE: 不在模块顶层 refreshOssConfig / 派生 OSS key —— OSS 落点桶由 --region 决定,必须在 main()
+// resolve region、Object.assign 覆盖 XDT_OSS_* 后再 refreshOssConfig(),否则会烤进默认(cn)桶。
 
 const MOBILE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-// 必须与 app.config.js 自建分支的 SELFHOST_ANDROID_PACKAGE 一致(改身份时两处一起改),
-// 否则出的 APK 包名与 validateApkMetadata 期望不符、校验会被拒。
-const SELFHOST_PACKAGE = 'com.xd.lizcn';
-const RELEASE_RECORD_KEY = `${OSS_PREFIX}/mobile-ota/android/release.json`;
-const RELEASE_RECORD_CDN = `${CDN_BASE}/mobile-ota/android/release.json`;
 
 function log(msg) { console.error(msg); }
 
 // self-host 变体的构建环境:确保 prebuild/fingerprint 与安装包同源,并注入 versionCode。
-function selfhostEnv(versionCode, desktopVersion) {
-  const otaUrl = process.env.EXPO_PUBLIC_XDT_OTA_URL?.trim();
-  if (!otaUrl) throw new Error('release-android-local 需要 EXPO_PUBLIC_XDT_OTA_URL(mobile-update-server 基址,用于烧进包的 updates.url)');
+function selfhostEnv(region, versionCode, desktopVersion) {
   const env = {
     ...process.env,
+    ...productionMobileEnv({ authRegion: region.authRegion }),
     EXPO_PUBLIC_XDT_OTA_SELFHOST: '1',
-    EXPO_PUBLIC_XDT_OTA_URL: otaUrl,
     XDT_ANDROID_VERSION_CODE: String(versionCode),
   };
+  // 防止打包机 shell / 旧 .env 残留变量重新混入构建;真实地址只认 endpoint.json。
+  delete env.EXPO_PUBLIC_XDT_OTA_URL;
   // 二级版本号:自建线包所配对的桌面产品线版本;仅有值时注入(空则设置页不显示该行)。
   if (desktopVersion) env.EXPO_PUBLIC_DESKTOP_VERSION = desktopVersion;
-  return env;
+  return stripSelfHostTapdbEnv(env);
 }
 
 function readAppJson() {
@@ -94,8 +97,8 @@ function writeRuntimeFile(runtimeVersion) {
 }
 
 // fail-closed 读取冷更基线 versionCode(仅 404/无记录 → null,其它失败抛错);见 lib/ios-local.mjs。
-function fetchPreviousVersionCode() {
-  return fetchBaselineBuildNumber(RELEASE_RECORD_CDN);
+function fetchPreviousVersionCode(recordCdn) {
+  return fetchBaselineBuildNumber(recordCdn);
 }
 
 function run(cmd, args, opts = {}) {
@@ -113,31 +116,29 @@ function patchGradleSigning() {
   log('  ✓ 已 patch android/app/build.gradle:release 用自有 keystore 自签(口令走 env,不落盘)');
 }
 
-// patch 生成的 android/build.gradle(larksso flatDir)+ gradle.properties(bump heap/metaspace)。
-// 均只动生成的 android/(prebuild 之后),对 @expo/fingerprint / iOS / mac / win / EAS 零影响。
-function patchGradleRootAndProps() {
-  const rootGradle = resolve(MOBILE_DIR, 'android/build.gradle');
-  if (!existsSync(rootGradle)) throw new Error(`prebuild 后未找到 ${rootGradle}`);
-  writeFileSync(rootGradle, patchRootBuildGradleFeishuFlatDir(readFileSync(rootGradle, 'utf8')));
-
+// 调大生成工程的 Gradle heap / metaspace。只动 prebuild 产物,不影响 fingerprint。
+function patchGradleProps() {
   const props = resolve(MOBILE_DIR, 'android/gradle.properties');
   if (!existsSync(props)) throw new Error(`prebuild 后未找到 ${props}`);
   writeFileSync(props, patchGradlePropertiesMemory(readFileSync(props, 'utf8')));
-  log('  ✓ 已 patch android/build.gradle(larksso flatDir 传递解析)+ gradle.properties(bump heap/metaspace)');
+  log('  ✓ 已 patch android/gradle.properties(bump heap/metaspace)');
 }
 
-function buildApk(env) {
-  // prebuild 生成原生工程(注入 SELFHOST env → package=com.xd.lizcn + versionCode)。
+function buildApk(env, region) {
+  // 签名配置:路径/alias 来自 region JSON,口令来自 env;prebuild 前先强制解析(fail-fast,
+  // 缺配置不白跑数分钟 prebuild;--apk 复用现成包的路径不进本函数,天然豁免)。
+  const signEnv = resolveAndroidSigningEnv(region, env);
+
+  // prebuild 生成原生工程(注入 SELFHOST env → package=com.xd.cindycn + versionCode)。
   run(NPX, ['--yes', 'expo', 'prebuild', '--platform', 'android', '--clean'], { env });
   patchGradleSigning();
-  patchGradleRootAndProps();
+  patchGradleProps();
 
   // gradle 内部触发 expo export:embed 打 JS bundle,无法透传 --clear;打包前清 Metro/Babel 缓存,
   // 确保 EXPO_PUBLIC_ 变更(TAPTAP / API 等)被重新内联,不吃旧缓存(如 placeholder)。
   clearBundlerCache({ mobileDir: MOBILE_DIR, log });
 
-  // gradlew assembleRelease:需 JDK 17 + keystore 口令 env。
-  const signEnv = resolveAndroidSigningEnv(env);
+  // gradlew assembleRelease:需 JDK 17 + keystore 签名 env。
   const javaEnv = resolveJavaRuntimeEnv({ ...env, ...signEnv });
   log(`  → gradle 用 ${javaRuntimeDetail(javaEnv)}`);
   const androidDir = resolve(MOBILE_DIR, 'android');
@@ -196,15 +197,23 @@ function validateApkMetadata(apkPath, expectPackage, expectVersionCode, { requir
   log(`  ✓ APK manifest 校验通过(package=${expectPackage}, versionCode=${expectVersionCode})`);
 }
 
-async function uploadReleaseRecord(client, record) {
+async function uploadReleaseRecord(client, record, recordKey, recordCdn) {
   const tmp = join(tmpdir(), `xdt-android-rec-${process.pid}.json`);
   writeFileSync(tmp, JSON.stringify(record, null, 2));
-  await uploadToOSS(client, RELEASE_RECORD_KEY, tmp, { headers: { 'Content-Type': 'application/json' } });
-  log(`  ✓ 整包版本记录 → ${RELEASE_RECORD_CDN}`);
+  await uploadToOSS(client, recordKey, tmp, { headers: { 'Content-Type': 'application/json' } });
+  log(`  ✓ 整包版本记录 → ${recordCdn}`);
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  // --region 必填(cn|global):选出本次出包身份 + OSS 落点桶 + 签名配置(见 lib/self-host-region.mjs)。
+  const region = resolveSelfHostRegion(args);
+  // 按 region 切 OSS 落点桶(bucket/cdn/prefix + 可选 AK/SK 后缀),之后 refreshOssConfig 才生效。
+  Object.assign(process.env, regionEnvOverrides(region));
+  refreshOssConfig();
+  const RELEASE_RECORD_KEY = `${OSS_PREFIX}/mobile-ota/android/release.json`;
+  const RELEASE_RECORD_CDN = `${CDN_BASE}/mobile-ota/android/release.json`;
+
   const appJson = readAppJson();
   const version = appJson?.expo?.version ?? '';
   let versionCode = readAndroidVersionCode(MOBILE_DIR);
@@ -220,6 +229,11 @@ async function main() {
   if (!args.skipGitGate) assertProductionGitGate();
   else log('  warn: --skip-git-gate,跳过 main/clean/HEAD 校验(仅本地迭代用)');
 
+  // 签名配置预检必须在自动 bump 写盘之前:否则缺配置时 android-version.json 已被写脏,
+  // 下一次执行会被 git gate 拒绝,得人工收拾未发布的版本号(Greptile P1)。
+  // buildApk 内仍会再解析一次(取用值);--apk 复用现成包不构建,豁免。
+  if (args.execute && !args.apk) resolveAndroidSigningEnv(region, process.env);
+
   // --skip-record 是"CDN 基线不可读/首发"的逃生开关:此时不写 release.json,versionCode 单调
   // 门禁本就无意义,必须在读基线之前短路(与 iOS 脚本对称,Greptile P1)。
   let previousVersionCode = null;
@@ -227,7 +241,7 @@ async function main() {
   if (args.skipRecord) {
     log('  --skip-record:跳过冷更基线读取与 versionCode 单调校验(不写 release.json)');
   } else {
-    previousVersionCode = await fetchPreviousVersionCode();
+    previousVersionCode = await fetchPreviousVersionCode(RELEASE_RECORD_CDN);
     // 检测到整包但版本文件没 bump(≤ 线上基线)→ 自动自增 android-version.json 的 versionCode:
     // dry-run 只预告不写盘;--execute 写盘发生在 env 构建之前(versionCode 经
     // XDT_ANDROID_VERSION_CODE 注入 fingerprint/prebuild,必须用新号,否则烤进包的
@@ -255,24 +269,34 @@ async function main() {
   }
 
   // env 必须在自动 bump 之后构建:selfhostEnv 把 versionCode 注入 XDT_ANDROID_VERSION_CODE。
-  const env = selfhostEnv(versionCode, desktopVersion);
+  const env = selfhostEnv(region, versionCode, desktopVersion);
 
   // 计划打印
   console.log('');
-  console.log(`target: mobile 冷更(android, ${SELFHOST_PACKAGE})`);
+  console.log(`target: mobile 冷更(android, region=${region.authRegion}, ${region.androidPackage})`);
   console.log(`version / versionCode: ${version} / ${versionCode}${previousVersionCode ? ` (上一条 ${previousVersionCode})` : (args.skipRecord ? ' (--skip-record,跳过基线)' : ' (首发)')}`);
-  console.log('sign: 自有 keystore 自签(xdmaker-release),终版,不经任何重签');
+  // 签名现值预览:path/alias 来自 region JSON,两个口令来自 env(只报 set/未设,绝不打印值)。严格校验在 buildApk 内。
+  const suffix = String(region.authRegion).toUpperCase();
+  const aSign = region.androidSigning ?? {};
+  const pwPreview = (base) => (env[`${base}_${suffix}`]?.trim() || (suffix === 'CN' ? env[base]?.trim() : '')) ? 'set' : '未设';
+  console.log(`sign: 自有 keystore 自签,path=${aSign.keystorePath || '(JSON 未填)'} alias=${aSign.keyAlias || '(JSON 未填)'} storePw(env ${suffix})=${pwPreview('XDT_ANDROID_KEYSTORE_PASSWORD')} keyPw(env ${suffix})=${pwPreview('XDT_ANDROID_KEY_PASSWORD')},终版,不经任何重签`);
+  console.log(`oss: bucket=${region.oss?.bucket || '(未填)'} cdn=${region.oss?.cdnBaseUrl || '(未填)'}`);
   console.log(`steps: prebuild → patch build.gradle 签名 → gradlew assembleRelease → 从 APK 回读 runtimeVersion → APK 直传 OSS(${CDN_BASE}/mobile-dist/android/)→ 写 release.json`);
+  // XDT_ANDROID_VERSION_CODE 非 EXPO_PUBLIC 前缀,但经 app.config.js 写进原生 versionCode,一并列出
+  for (const line of formatBakedEnvLines(env, { extraKeys: ['XDT_ANDROID_VERSION_CODE'] })) console.log(line);
   if (!args.execute) {
     console.log('dry-run: 传 --execute 才真正构建 + 上传(需 Android SDK + JDK 17 + keystore 口令 env + OSS AK/SK env)');
     return;
   }
 
-  // 必需 public env 齐全,否则 prebuild/gradle 会把空 EXPO_PUBLIC_FEISHU_APP_ID 等烤进整包,
-  // 装机后登录崩(与 release-prod/beta / OTA 脚本用同一 gate)。建议 eas env:exec production 包裹。
-  assertPublicEnv(env, { variant: 'production' });
+  // --execute 需要完整的 region OSS 落点(dry-run 可留空);缺则明确报错,不静默回落默认桶。
+  assertRegionOssComplete(region);
 
-  const apkPath = args.apk ? resolve(String(args.apk)) : buildApk(env);
+  // region / endpoint manifest 自举基址必须齐全;TapDB 公开配置已由所选 region JSON 校验,
+  // 并经 Expo extra 烘焙,不走 EXPO_PUBLIC_* 注入。
+  assertPublicEnv(env, { variant: 'production', requiredKeys: SELF_HOST_PUBLIC_ENV_KEYS });
+
+  const apkPath = args.apk ? resolve(String(args.apk)) : buildApk(env, region);
   log(`  ✓ apk: ${apkPath}`);
 
   // 权威 runtimeVersion = 真正烤进 APK 的 assets/fingerprint(客户端运行时就读它比对是否需要整包更新)。
@@ -285,7 +309,7 @@ async function main() {
   if (args.skipUpload || args.skipNpkg) { log('  --skip-upload:跳过上传与版本记录'); return; }
   // 上传前校验 APK 内嵌 manifest 与目标一致(尤其 --apk 传外部预构包:stale / 包名错的包
   // 若直传 OSS 并写进 release.json,会成为广播更新却装不上已装应用)。
-  validateApkMetadata(apkPath, SELFHOST_PACKAGE, versionCode, { required: Boolean(args.apk) });
+  validateApkMetadata(apkPath, region.androidPackage, versionCode, { required: Boolean(args.apk) });
   const client = createOSSClient();
   const installUrl = await uploadApkToOSS(client, apkPath, version, versionCode);
 
@@ -295,14 +319,14 @@ async function main() {
       installUrl,
       releaseNotes: message || undefined,
     });
-    await uploadReleaseRecord(client, record);
+    await uploadReleaseRecord(client, record, RELEASE_RECORD_KEY, RELEASE_RECORD_CDN);
   }
 
   console.log('');
   console.log('==================== 冷更发布完成 ====================');
   console.log(`  runtimeVersion : ${runtimeVersion}`);
   console.log(`  install        : ${installUrl}`);
-  console.log('  下一步:纯 JS 改动用 `pnpm mobile:release:android:ota -- --execute` 发热更(复用此 runtimeVersion)');
+  console.log(`  下一步:纯 JS 改动用 \`${formatSelfHostReleaseCommand('android', 'ota', region, { execute: true })}\` 发热更(复用此 runtimeVersion)`);
   if (autoBumped) {
     console.log(`  ⚠ android-version.json versionCode 已自动 bump 为 ${versionCode},记得 commit + push 回 main(否则下次 git 闸门会拦)`);
   }

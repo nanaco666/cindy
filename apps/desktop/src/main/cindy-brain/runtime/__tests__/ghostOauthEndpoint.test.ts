@@ -28,11 +28,25 @@ function fakeManager(overrides: Partial<GhostOauthEndpointManager> = {}): GhostO
     setClientConfig: vi.fn(() => true),
     clearClientConfig: vi.fn(),
     listAccounts: vi.fn(() => [
-      { id: 'acc-1', label: 'a@b.com', status: 'connected' as const, isDefault: true, createdAt: 1 },
+      {
+        id: 'acc-1',
+        label: 'a@b.com',
+        status: 'connected' as const,
+        isDefault: true,
+        createdAt: 1,
+        avatarDataUrl: null,
+      },
     ]),
     connectAccount: vi.fn(async () => ({
       ok: true as const,
-      account: { id: 'acc-2', label: 'c@d.com', status: 'connected' as const, isDefault: false, createdAt: 2 },
+      account: {
+        id: 'acc-2',
+        label: 'c@d.com',
+        status: 'connected' as const,
+        isDefault: false,
+        createdAt: 2,
+        avatarDataUrl: null,
+      },
     })),
     disconnectAccount: vi.fn(),
     setDefaultAccount: vi.fn(() => true),

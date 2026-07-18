@@ -1,6 +1,6 @@
 # 「仅运行脚本」自动化 · 接入模板
 
-XDMaker 自动化任务支持 **script 执行模式**:触发时不起 agent、零 token,宿主直接
+Cindy 自动化任务支持 **script 执行模式**:触发时不起 agent、零 token,宿主直接
 spawn 你的脚本;脚本通过 stdin/stdout 的 JSONL 协议(`xdt-maker-script/1`)回调
 宿主的受限能力(Jira / 飞书 / 会话派发),能力按任务级白名单授予、默认全拒。
 
@@ -18,7 +18,7 @@ spawn 你的脚本;脚本通过 stdin/stdout 的 JSONL 协议(`xdt-maker-script/
 ## 快速开始
 
 1. 把三个文件拷到你的项目里,改 `demo.py` 写业务;
-2. XDMaker 里「创建自动化」→ 执行方式切「**仅运行脚本**」→ 脚本命令填
+2. Cindy 里「创建自动化」→ 执行方式切「**仅运行脚本**」→ 脚本命令填
    `python demo.py` → 选项目目录(= 脚本 cwd)→ 勾选需要的能力 → 定时或手动;
    也可以直接对 agent 说一句「建个自动化,每 5 分钟跑 python demo.py,给它读取
    飞书的权限」;
@@ -32,7 +32,7 @@ spawn 你的脚本;脚本通过 stdin/stdout 的 JSONL 协议(`xdt-maker-script/
 | `jira.read` | `jira_issue_get(key, fields?)` / `jira_issues_search_jql(jql, fields, max_results, next_page_token?)` | 读 Jira(走已连接的 Atlassian 账号;**需要 XD Atlassian 意识装入且唤醒**) |
 | `jira.comment` | `jira_issue_add_comment(key, body_text)` | 写 Jira 评论(同上) |
 | `feishu.read` | `feishu_recent_chats(count≤50)` / `feishu_recent_messages(chat_id, count≤50, start_time?)` | 按活跃倒序列最近会话;拉指定会话最近消息(新→旧,含 sender_name,`start_time` 做增量游标)。走应用内飞书登录态,token 不下发脚本 |
-| `sessions.dispatch` | `sessions_dispatch(message, title?, target_session_id?)` | 创建或唤醒 XDMaker 会话并投递消息;新会话配置继承任务本身(agent/model/目录),脚本无法伪造 |
+| `sessions.dispatch` | `sessions_dispatch(message, title?, target_session_id?)` | 创建或唤醒 Cindy 会话并投递消息;新会话配置继承任务本身(agent/model/目录),脚本无法伪造 |
 
 ## 必须遵守的约定
 

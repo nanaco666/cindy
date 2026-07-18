@@ -2,7 +2,7 @@
 
 > 状态：设计 / 实施计划。
 >
-> 本文按项目 PR 提交规范里的 Feature PR 结构组织：动机 / 背景、用户场景、改动范围、设计 spec、测试路径、自测确认、Breaking Change、关联任务、xdt-updater 声明和 Self-review Checklist。当前只记录方案与涉及代码范围，不代表功能已经实现。
+> 本文按项目 PR 提交规范里的 Feature PR 结构组织：动机 / 背景、用户场景、改动范围、设计 spec、测试路径、自测确认、Breaking Change、关联任务、cindy-updater 声明和 Self-review Checklist。当前只记录方案与涉及代码范围，不代表功能已经实现。
 
 ## PR 标题建议
 
@@ -635,9 +635,9 @@ pnpm check:i18n
 
 若后续进入实现，建议先建一个 Jira / GitHub issue 绑定 Phase 0 spike，再按 Phase 1 / Phase 2 拆任务。
 
-## xdt-updater 改动声明
+## cindy-updater 改动声明
 
-不涉及 `xdt-updater`。
+不涉及 `cindy-updater`。
 
 ## 风险
 

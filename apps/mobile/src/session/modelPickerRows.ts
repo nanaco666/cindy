@@ -46,7 +46,7 @@ export function formatContextWindow(tokens: number): string {
 const PROVIDER_TITLE: Record<string, string> = {
   anthropic: 'Anthropic',
   openai: 'OpenAI',
-  xd: 'XD 网关',
+  xd: 'Cindy AI',
 };
 
 export function providerDisplayTitle(p: Pick<ProviderView, 'id' | 'name'>): string {

@@ -20,7 +20,7 @@ import {
 } from '@lizi/voice-input-core';
 import { createLogger } from '../logger.js';
 import { desktopCodexAuthAdapter, readClaudeApiKey } from '../maker-host/auth-adapters.js';
-import { CLAUDE_UPSTREAM_ENDPOINT } from '../maker-host/runtime-configs.js';
+import { claudeUpstreamEndpoint } from '../maker-host/runtime-configs.js';
 import { throwIpcError } from '../utils/ipcValidate.js';
 import {
   CodexResponsesTextModelClient,
@@ -668,7 +668,7 @@ function readLiteLlmProxyConfig(): { proxyApiKey: string | null; proxyBaseUrl: s
     // passthrough routes. Do not reuse getClaudeEndpoint(): when Claude compat
     // mode is enabled it returns a local HTTP-only anthropic-compat proxy,
     // which cannot handle realtime ASR WebSockets.
-    proxyBaseUrl: CLAUDE_UPSTREAM_ENDPOINT.trim(),
+    proxyBaseUrl: claudeUpstreamEndpoint().trim(),
   };
 }
 

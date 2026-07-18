@@ -16,7 +16,8 @@
  *   - 三条标题调用都**不注入任何 system / 身份提示词**(实测 anthropic 裸调即 200),不触及系统提示词。
  *
  * 路由素材(upstream / authStrategy)取自当前生效目录 `getActiveCatalog()`(OSS 真源 / bundled 兜底)
- * —— 与统一路由器(provider-route)同源。
+ * —— 与统一路由器(provider-route)同源。例外:xd 网关的 upstream 不取 catalog,
+ * 运行期用 model-access server 下发的 endpoint(effectiveXdGatewayBaseUrl,与 key 同租户)。
  *
  * Provider 解析优先级(WYSIWYG,与模型选择器高亮同口径):
  *   1. DB sessions.provider_id(显式选中,race-free)。
@@ -43,6 +44,7 @@ import { createLogger } from '../logger.js';
 import { getActiveCatalog } from './active-catalog.js';
 import { readClaudeApiKey, readCodexOneShotCreds } from './auth-adapters.js';
 import { getValidClaudeAiOAuth } from './claude-oauth-refresh.js';
+import { effectiveXdGatewayBaseUrl } from '../model-access/effectiveEndpoint.js';
 
 const log = createLogger('maker-host:title-one-shot');
 
@@ -64,7 +66,7 @@ export interface TitleTarget {
   /** 该模型在目录里的最低 effort 档;null = 该模型不支持 effort(如 Haiku)。 */
   effort: Effort | null;
   wire: TitleWire;
-  /** 上游 base(取自 catalog routing.upstream)。 */
+  /** 上游 base(anthropic/openai 取自 catalog routing.upstream;xd 取 server 下发 endpoint)。 */
   upstream: string;
 }
 
@@ -140,10 +142,12 @@ export function buildTitleTarget(providerId: string): TitleTarget | null {
     }
     case 'xd': {
       // titleModel 为 gpt-5.4-mini(OpenAI 系)→ 走网关 litellm 的 chat-completions。
-      // 用 codex 路由的 upstream(`…/v1`);为防配置缺失回落 claude-code 路由。
-      const routing = provider.routing['codex'] ?? provider.routing['claude-code'];
-      return routing
-        ? { providerId, model, effort, wire: 'gateway-chat', upstream: routing.upstream }
+      // 上游不取 catalog routing.upstream:XD 网关入口一律用 model-access server
+      // 随凭据下发的 endpoint(与 key 同租户,见 effectiveEndpoint.ts);凭据未
+      // 就绪(空串)时返回 null,回落启发式起名。
+      const base = effectiveXdGatewayBaseUrl().trim();
+      return base
+        ? { providerId, model, effort, wire: 'gateway-chat', upstream: `${trimTrailingSlash(base)}/v1` }
         : null;
     }
     default:

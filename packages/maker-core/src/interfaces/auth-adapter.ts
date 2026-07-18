@@ -15,7 +15,8 @@ export interface AuthAdapterOptions {
    * 本次 agent 子进程期望使用的凭证形态。
    *
    * undefined 表示调用方没有显式来源,adapter 维持既有 fallback 策略。
-   * provider-oauth 表示目标供应商 OAuth 由 host/proxy 注入,子进程自身凭证只作占位。
+   * provider-oauth 是历史命名:表示目标供应商凭证(API key 或 OAuth)
+   * 由 host/proxy 注入,子进程自身凭证只作占位。
    */
   credentialMode?: AgentCredentialMode;
 }

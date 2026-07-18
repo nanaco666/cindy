@@ -43,6 +43,15 @@ import {
   ThreadPickerInline,
 } from './ScheduleChips';
 
+/** 可直接运行的最小协议示例，帮助用户理解 stdout 的 JSONL 约束。 */
+const SCRIPT_PROTOCOL_PYTHON_EXAMPLE = `import json
+
+print(json.dumps({
+    "protocol": "xdt-maker-script/1",
+    "type": "complete",
+    "resultText": "done"
+}))`;
+
 /**
  * 前置检查相关 IPC 失败的 toast:先走 extractIpcError 剥掉 `[CODE]` 编码前缀
  * (规则 13:renderer 消费 IPC 错误统一解码,不给用户看协议内码),非 IPC 错误原样展示。
@@ -529,7 +538,22 @@ export function ScheduleFormDialog({
             )}
 
             {isScriptMode && (
-              <div className="flex flex-col gap-3 rounded-2xl border border-[var(--settings-input-border)] bg-[var(--settings-input-bg)] p-4">
+              <div className="flex flex-col gap-3 rounded-xl border border-[var(--settings-input-border)] bg-[var(--settings-input-bg)] p-4">
+                <div className="flex gap-2 rounded-xl border border-[var(--settings-input-border)] bg-[var(--cmd-palette-bg)] p-3">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-[var(--cmd-palette-item-meta)]" aria-hidden="true" />
+                  <div className="min-w-0 text-xs leading-[1.5] text-[var(--cmd-palette-item-meta)] dark:text-[var(--settings-section-desc)]">
+                    <p>{t('scheduler.editor.script.protocolSummary')}</p>
+                    <p className="mt-1">{t('scheduler.editor.script.protocolCapabilities')}</p>
+                    <details className="mt-2">
+                      <summary className="w-fit cursor-pointer select-none text-[var(--settings-btn-secondary-text)] hover:text-[var(--msg-assistant-text)]">
+                        {t('scheduler.editor.script.protocolExample')}
+                      </summary>
+                      <pre className="mt-2 overflow-x-auto rounded-xl border border-[var(--settings-input-border)] bg-[var(--settings-input-bg)] p-3 font-mono text-[11px] leading-[1.5] text-[var(--settings-input-text)]">
+                        <code>{SCRIPT_PROTOCOL_PYTHON_EXAMPLE}</code>
+                      </pre>
+                    </details>
+                  </div>
+                </div>
                 <label className="text-xs text-[var(--cmd-palette-item-meta)] dark:text-[var(--settings-section-desc)]">
                   {t('scheduler.editor.script.command')}
                 </label>

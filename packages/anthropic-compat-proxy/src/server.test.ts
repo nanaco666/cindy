@@ -319,6 +319,54 @@ async function postWithAuth(url: string, body: unknown, authorization: string): 
 }
 
 describe('anthropic-compat-proxy routingTransform', () => {
+  it('routes an explicit upstream override without resolving an unavailable default upstream', async () => {
+    const custom = await startFakeUpstream((_i, _b, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ from: 'custom' }));
+    });
+    upstreamClose = custom.close;
+
+    proxy = await createAnthropicCompatProxy({
+      upstream: () => '',
+      transformRequest: [],
+      routingTransform: () => ({ upstreamOverride: custom.url }),
+    });
+
+    const result = await post(proxy.url, { model: 'custom-model' });
+    expect(result).toEqual({ status: 200, text: JSON.stringify({ from: 'custom' }) });
+    expect(custom.bodies).toHaveLength(1);
+  });
+
+  it('runs a local handler without resolving an unavailable default upstream', async () => {
+    proxy = await createAnthropicCompatProxy({
+      upstream: () => '',
+      transformRequest: [],
+      routingTransform: () => ({
+        localHandler: async ({ res }) => {
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ from: 'local-handler' }));
+        },
+      }),
+    });
+
+    const result = await post(proxy.url, { model: 'subscription-direct-model' });
+    expect(result).toEqual({ status: 200, text: JSON.stringify({ from: 'local-handler' }) });
+  });
+
+  it('returns a controlled 503 only when the request actually needs an unavailable default upstream', async () => {
+    proxy = await createAnthropicCompatProxy({
+      upstream: () => '',
+      transformRequest: [],
+      routingTransform: () => ({ headerOverride: { authorization: 'Bearer gateway-key' } }),
+    });
+
+    const result = await post(proxy.url, { model: 'gateway-model' });
+    expect(result.status).toBe(503);
+    expect(JSON.parse(result.text)).toEqual({
+      error: { type: 'proxy_error', message: 'default upstream unavailable' },
+    });
+  });
+
   it('awaits async routingTransform decisions before forwarding', async () => {
     const gateway = await startFakeUpstream((_i, _b, res) => {
       res.writeHead(200, { 'content-type': 'application/json' });

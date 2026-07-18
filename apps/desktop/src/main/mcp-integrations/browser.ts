@@ -6,6 +6,8 @@
 // CONFIG_DIR const (see browser-runtime-env.ts). No import-order autofix is
 // configured, so this position is stable.
 import './browser-runtime-env.js';
+import fs from 'node:fs';
+import nodePath from 'node:path';
 import { ipcMain } from 'electron';
 import {
   createBrowserControlRuntime,
@@ -52,15 +54,24 @@ const logger = createLogger('mcp/lizi_browser');
 /**
  * Managed profile identity. The profile key doubles as (a) the Chrome profile
  * display name rendered in the launched browser's top-right profile button and (b)
- * the user-data-dir folder name — so it's branded "XDMaker" to make the automation
+ * the user-data-dir folder name — so it's branded "Cindy" to make the automation
  * browser obviously distinct from the user's everyday Chrome at a glance. The runtime
- * seeds the name + color into the profile's Local State / Preferences before launch.
+ * seeds the name + color into the profile's Local State / Preferences before launch
+ * (decoration re-checks the desired name every launch, so a profile dir carried over
+ * with an old display name self-heals to "Cindy" on first run).
  * (Same Chrome binary as the user's, so the dock/taskbar icon is unchanged.)
  *
- * ⚠️ 磁盘标识符:品牌改名时【不要】跟随 @lizi/maker-shared/branding 的 BRAND_NAME
- * 变化——改了会指向新的空 profile 目录,丢失既有登录态/Cookie。
+ * ⚠️ 磁盘标识符:这是 2026-07 品牌翻转时钉死的目录名,之后【不要】再跟随
+ * @lizi/maker-shared/branding 的 BRAND_NAME 变化——改了会指向新的空 profile
+ * 目录,丢失既有登录态/Cookie。老 profile 的接续路径:
+ *  - 老 userData(xdt-maker)里的 `browser-runtime/browser/XDMaker` 由 mToc 首登
+ *    迁移(legacyUserDataMigration.ts)复制为新 userData 的 `browser/Cindy`;
+ *  - 新 userData 里若已有旧名目录(翻转前的 dev 实例),下方 module-eval 的
+ *    就地改名自愈处理。两处的 'XDMaker'/'Cindy' 字面量与本常量保持一致。
  */
-const MANAGED_PROFILE = 'XDMaker';
+const MANAGED_PROFILE = 'Cindy';
+/** 翻转前(≤2026-07-17)创建的受管 profile 目录名,仅用于就地改名自愈。 */
+const LEGACY_MANAGED_PROFILE = 'XDMaker';
 /**
  * Fixed brand tint for the managed profile. This intentionally stays on the vivid
  * teal variant instead of the Default Light auto-approval text color. NOTE:
@@ -121,6 +132,29 @@ function buildManagedConfig(): BrowserRuntimeConfig {
     },
   };
 }
+
+/**
+ * 就地改名自愈:同一 userData 下存在翻转前的 `browser/XDMaker` 而无 `browser/Cindy`
+ * 时,整目录 rename(同卷原子、瞬时)——覆盖「身份翻转后、本次改名前」跑过 agent
+ * 浏览器的 dev 实例。mToc 迁移直接落到新名,不依赖这里。必须在 runtime 首次
+ * launch(创建 profile 目录)之前执行;rename 失败(如旧 Chrome 进程持锁)只 warn,
+ * 后果是该实例从空 profile 重新开始,不阻塞。
+ */
+function healLegacyManagedProfileDir(): void {
+  const runtimeDir = process.env.XDT_BROWSER_RUNTIME_DIR;
+  if (!runtimeDir) return; // 非 Electron 上下文(单测):runtime 走自身默认目录,不动
+  try {
+    const legacy = nodePath.join(runtimeDir, 'browser', LEGACY_MANAGED_PROFILE);
+    const current = nodePath.join(runtimeDir, 'browser', MANAGED_PROFILE);
+    if (fs.existsSync(legacy) && !fs.existsSync(current)) {
+      fs.renameSync(legacy, current);
+      logger.info(`managed profile dir renamed in place: ${LEGACY_MANAGED_PROFILE} -> ${MANAGED_PROFILE}`);
+    }
+  } catch (err) {
+    logger.warn(`managed profile dir rename failed (fresh profile will be used): ${String(err)}`);
+  }
+}
+healLegacyManagedProfileDir();
 
 // Single shared runtime for the desktop process. Boots with the managed profile
 // (electron-free, safe at module-eval); logs route into the unified logger.

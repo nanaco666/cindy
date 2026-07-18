@@ -320,7 +320,7 @@ function HostForm({ mode, initial, busy, onSubmit, onCancel }: HostFormProps) {
   return (
     <div
       className="flex flex-col gap-3 px-5 py-4"
-      style={{ borderTop: '1px solid var(--settings-theme-card-border)' }}
+      style={isEdit ? { borderTop: '1px solid var(--settings-theme-card-border)' } : undefined}
     >
       <p
         className="text-13 font-medium"
@@ -898,6 +898,14 @@ export function RemoteSection({ showTitle = true }: { showTitle?: boolean } = {}
         className={cn('flex flex-col rounded-xl', 'bg-[var(--settings-theme-card-bg)]')}
         style={{ border: '1px solid var(--settings-theme-card-border)' }}
       >
+        {adding && (
+          <HostForm
+            mode="add"
+            busy={addBusy}
+            onSubmit={handleAdd}
+            onCancel={() => setAdding(false)}
+          />
+        )}
         {hosts.length === 0 && !adding && (
           <div className="px-5 py-6 text-center">
             <p className="text-13" style={{ color: 'var(--settings-integration-subtitle)' }}>
@@ -916,7 +924,9 @@ export function RemoteSection({ showTitle = true }: { showTitle?: boolean } = {}
           return (
             <div
               key={snap.config.id}
-              style={idx > 0 ? { borderTop: '1px solid var(--settings-theme-card-border)' } : undefined}
+              style={idx > 0 || adding
+                ? { borderTop: '1px solid var(--settings-theme-card-border)' }
+                : undefined}
             >
               <HostRow
                 snap={snap}
@@ -952,14 +962,6 @@ export function RemoteSection({ showTitle = true }: { showTitle?: boolean } = {}
             </div>
           );
         })}
-        {adding && (
-          <HostForm
-            mode="add"
-            busy={addBusy}
-            onSubmit={handleAdd}
-            onCancel={() => setAdding(false)}
-          />
-        )}
       </div>
 
       <SshKeySetupDialog

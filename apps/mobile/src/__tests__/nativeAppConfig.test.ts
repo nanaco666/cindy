@@ -1,128 +1,284 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve, sep } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
+const managedEnvKeys = [
+  'CINDY_CN_APP_STORE_ID',
+  'CINDY_GLOBAL_APP_STORE_ID',
+  'EAS_BUILD_PROFILE',
+  'EXPO_PUBLIC_APP_VARIANT',
+  'EXPO_PUBLIC_BETA_DEV',
+  'EXPO_PUBLIC_CINDY_AUTH_REGION',
+  'EXPO_PUBLIC_XDT_OTA_SELFHOST',
+  'EXPO_PUBLIC_XDT_OTA_URL',
+  'CINDY_SELF_HOST_REGIONS_FILE',
+];
+let previousEnv: Record<string, string | undefined>;
+const temporaryDirs: string[] = [];
+
+beforeEach(() => {
+  previousEnv = Object.fromEntries(
+    managedEnvKeys.map((key) => [key, process.env[key]]),
+  );
+  for (const key of managedEnvKeys) delete process.env[key];
+});
+
+afterEach(() => {
+  for (const key of managedEnvKeys) {
+    const value = previousEnv[key];
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  for (const dir of temporaryDirs.splice(0)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 describe('mobile native app config', () => {
-  it('keeps production dynamic config identical to app.json and only renames beta', () => {
-    const appJson = JSON.parse(readFileSync(resolve(process.cwd(), 'app.json'), 'utf8'));
+  it('defaults to the CN app identity and requires an explicit Global build', () => {
+    const appJson = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'app.json'), 'utf8'),
+    );
     const buildConfig = require(resolve(process.cwd(), 'app.config.js'));
-    const previousVariant = process.env.EXPO_PUBLIC_APP_VARIANT;
-    const previousBetaDev = process.env.EXPO_PUBLIC_BETA_DEV;
 
-    try {
-      delete process.env.EXPO_PUBLIC_APP_VARIANT;
-      delete process.env.EXPO_PUBLIC_BETA_DEV;
-      expect(buildConfig()).toEqual(appJson.expo);
-      expect(buildConfig({})).toEqual(appJson.expo);
-      expect(buildConfig({ config: appJson.expo })).toEqual(appJson.expo);
+    const cn = buildConfig({ config: appJson.expo });
+    expect(cn.scheme).toBe('cindycn');
+    expect(cn.ios.bundleIdentifier).toBe('com.xd.cindycn');
+    expect(cn.android.package).toBe('com.xd.cindycn');
+    expect(cn.extra.cindy.authRegion).toBe('cn');
 
-      process.env.EXPO_PUBLIC_APP_VARIANT = 'beta';
-      process.env.EXPO_PUBLIC_BETA_DEV = 'dash';
-      expect(buildConfig({}).name).toBe('XDMaker Beta (dash)');
-    } finally {
-      if (previousVariant === undefined) delete process.env.EXPO_PUBLIC_APP_VARIANT;
-      else process.env.EXPO_PUBLIC_APP_VARIANT = previousVariant;
-      if (previousBetaDev === undefined) delete process.env.EXPO_PUBLIC_BETA_DEV;
-      else process.env.EXPO_PUBLIC_BETA_DEV = previousBetaDev;
-    }
+    process.env.EXPO_PUBLIC_CINDY_AUTH_REGION = 'global';
+    const global = buildConfig({ config: appJson.expo });
+    expect(global.scheme).toBe('cindy');
+    expect(global.ios.bundleIdentifier).toBe('com.xd.cindy');
+    expect(global.android.package).toBe('com.xd.cindy');
+    expect(global.extra.cindy.authRegion).toBe('global');
+
+    process.env.EXPO_PUBLIC_APP_VARIANT = 'beta';
+    process.env.EXPO_PUBLIC_BETA_DEV = 'dash';
+    expect(buildConfig({ config: appJson.expo }).name).toBe(
+      'Cindy Beta (dash)',
+    );
   });
 
-  it('supports iPad and phone landscape from the native shell', () => {
-    const appJson = JSON.parse(readFileSync(resolve(process.cwd(), 'app.json'), 'utf8'));
-    const phoneOrientations = appJson.expo.ios.infoPlist.UISupportedInterfaceOrientations;
-    const tabletOrientations = appJson.expo.ios.infoPlist['UISupportedInterfaceOrientations~ipad'];
+  it('self-host builds use endpoint-driven OTA without baking the update server URL', () => {
+    const appJson = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'app.json'), 'utf8'),
+    );
+    const buildConfig = require(resolve(process.cwd(), 'app.config.js'));
+
+    const regular = buildConfig({ config: appJson.expo });
+    expect(regular.updates).toEqual(appJson.expo.updates);
+
+    const configDir = mkdtempSync(join(tmpdir(), 'cindy-selfhost-regions-'));
+    temporaryDirs.push(configDir);
+    const regionsPath = join(configDir, 'regions.json');
+    writeFileSync(regionsPath, JSON.stringify({
+      cn: {
+        iosBundleId: 'com.xd.cindycn',
+        androidPackage: 'com.xd.cindycn',
+        tapdb: { clientId: 'json-id', clientToken: 'json-token' },
+      },
+      global: {
+        iosBundleId: 'com.xd.cindy',
+        androidPackage: 'com.xd.cindy',
+        tapdb: { clientId: 'json-id', clientToken: 'json-token' },
+      },
+    }));
+    process.env.CINDY_SELF_HOST_REGIONS_FILE = regionsPath;
+    process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST = '1';
+    // 即使调用环境残留旧变量,自建原生 config 也不得再消费真实更新地址。
+    process.env.EXPO_PUBLIC_XDT_OTA_URL = 'https://must-not-be-baked.example.com';
+    const selfHosted = buildConfig({ config: appJson.expo });
+    expect(selfHosted.updates).toMatchObject({
+      url: 'https://selfhost.invalid/manifest',
+      checkAutomatically: 'NEVER',
+      disableAntiBrickingMeasures: true,
+    });
+    expect(JSON.stringify(selfHosted)).not.toContain('must-not-be-baked.example.com');
+    // 自建 app 身份按 region 从 self-host-regions.json(.example 回落)取,而非写死。
+    expect(selfHosted.ios.bundleIdentifier).toBe('com.xd.cindycn');
+    expect(selfHosted.android.package).toBe('com.xd.cindycn');
+    expect(selfHosted.extra.cindy.tapdb).toEqual({
+      clientId: 'json-id',
+      clientToken: 'json-token',
+      region: 'cn',
+    });
+
+    process.env.EXPO_PUBLIC_CINDY_AUTH_REGION = 'global';
+    const selfHostedGlobal = buildConfig({ config: appJson.expo });
+    expect(selfHostedGlobal.ios.bundleIdentifier).toBe('com.xd.cindy');
+    expect(selfHostedGlobal.android.package).toBe('com.xd.cindy');
+    expect(selfHostedGlobal.extra.cindy.tapdb.region).toBe('global');
+  });
+
+  it('fails closed when a store build lacks its regional App Store numeric ID', () => {
+    const appJson = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'app.json'), 'utf8'),
+    );
+    const buildConfig = require(resolve(process.cwd(), 'app.config.js'));
+
+    process.env.EAS_BUILD_PROFILE = 'production';
+    expect(() => buildConfig({ config: appJson.expo })).toThrow(
+      'CINDY_CN_APP_STORE_ID',
+    );
+    process.env.CINDY_CN_APP_STORE_ID = '1234567890';
+    expect(buildConfig({ config: appJson.expo }).extra.cindy).toEqual({
+      authRegion: 'cn',
+    });
+
+    process.env.EAS_BUILD_PROFILE = 'production-global';
+    process.env.EXPO_PUBLIC_CINDY_AUTH_REGION = 'global';
+    delete process.env.CINDY_CN_APP_STORE_ID;
+    expect(() => buildConfig({ config: appJson.expo })).toThrow(
+      'CINDY_GLOBAL_APP_STORE_ID',
+    );
+    process.env.CINDY_GLOBAL_APP_STORE_ID = '9876543210';
+    expect(buildConfig({ config: appJson.expo }).extra.cindy).toEqual({
+      authRegion: 'global',
+    });
+  });
+
+  it('supports iPad and phone landscape and versions native builds from app.json', () => {
+    const appJson = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'app.json'), 'utf8'),
+    );
+    const eas = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'eas.json'), 'utf8'),
+    );
+    const phoneOrientations =
+      appJson.expo.ios.infoPlist.UISupportedInterfaceOrientations;
+    const tabletOrientations =
+      appJson.expo.ios.infoPlist['UISupportedInterfaceOrientations~ipad'];
 
     expect(appJson.expo.orientation).toBe('default');
     expect(appJson.expo.ios.supportsTablet).toBe(true);
     expect(phoneOrientations).toContain('UIInterfaceOrientationLandscapeLeft');
     expect(phoneOrientations).toContain('UIInterfaceOrientationLandscapeRight');
     expect(tabletOrientations).toContain('UIInterfaceOrientationLandscapeLeft');
-    expect(tabletOrientations).toContain('UIInterfaceOrientationLandscapeRight');
-  });
-
-  it('declares Feishu app schemes and versions native builds from app.json', () => {
-    const appJson = JSON.parse(readFileSync(resolve(process.cwd(), 'app.json'), 'utf8'));
-    const eas = JSON.parse(readFileSync(resolve(process.cwd(), 'eas.json'), 'utf8'));
-    const schemes = appJson.expo.ios.infoPlist.LSApplicationQueriesSchemes;
-    const buildNumber = appJson.expo.ios.buildNumber;
-
-    // Source of truth: app.json declares the Feishu/Lark query schemes and the build number.
-    expect(appJson.expo.scheme).toBe('lizcn');
-    expect(schemes).toContain('feishu');
-    expect(schemes).toContain('lark');
-    expect(buildNumber).toMatch(/^\d{10}$/);
+    expect(tabletOrientations).toContain(
+      'UIInterfaceOrientationLandscapeRight',
+    );
+    expect(appJson.expo.ios.buildNumber).toMatch(/^\d{10}$/);
     expect(appJson.expo.android.versionCode).toBeUndefined();
-    // appVersionSource=local makes EAS inject app.json's buildNumber into the native project's
-    // CFBundleVersion + CURRENT_PROJECT_VERSION at build time. We assert that invariant here
-    // rather than the gitignored, EAS-only-synced generated ios/ (plain `expo prebuild` leaves
-    // CURRENT_PROJECT_VERSION=1, so asserting it against a local prebuild is unsound).
     expect(eas.cli.appVersionSource).toBe('local');
-    expect(eas.build['beta-dash'].channel).toBe('beta-dash');
-    expect(eas.build['beta-dash'].extends).toBe('beta-base');
-    for (const profile of ['testflight', 'production', 'adhoc', 'beta-base']) {
-      expect(eas.build[profile].env.EXPO_PUBLIC_XDT_NATIVE_FEISHU_LOGIN_ENABLED).toBe('1');
-    }
-    expect(appJson.expo.plugins).not.toContain('expo-status-bar');
-    expect(appJson.expo.plugins).toContainEqual([
-      'xdt-feishu-login/plugin',
-      { appId: 'cli_a94d4cf642381cd4', registerCallbackScheme: true },
-    ]);
-
-    // The generated ios/ is gitignored and only present after a prebuild; when it exists it must
-    // carry the Feishu schemes that prebuild copies from app.json.
-    const infoPlistPath = resolve(process.cwd(), 'ios/XDMaker/Info.plist');
-    if (existsSync(infoPlistPath)) {
-      const infoPlist = readFileSync(infoPlistPath, 'utf8');
-      expect(infoPlist).toContain('<key>LSApplicationQueriesSchemes</key>');
-      expect(infoPlist).toContain('<string>feishu</string>');
-      expect(infoPlist).toContain('<string>lark</string>');
-    }
+    expect(eas.build.production.extends).toBe('store-cn-base');
+    expect(eas.build['production-global'].extends).toBe('store-global-base');
   });
 
   it('keeps Metro React resolution on the mobile app dependency', () => {
-    const metroConfig = readFileSync(resolve(process.cwd(), 'metro.config.js'), 'utf8');
-
+    const metroConfig = readFileSync(
+      resolve(process.cwd(), 'metro.config.js'),
+      'utf8',
+    );
     expect(metroConfig).toContain("react: path.join(appNodeModules, 'react')");
     expect(metroConfig).not.toContain("react: path.join(workspaceNodeModules, 'react')");
+    expect(metroConfig).toContain("'auth-client'");
+    expect(metroConfig).toContain("'@cindy/device-link-protocol'");
   });
 
-  it('wires the native Feishu Login SDK module and config plugin', () => {
-    const pluginSource = readFileSync(resolve(process.cwd(), 'modules/xdt-feishu-login/plugin/index.js'), 'utf8');
-    const iosPodspec = readFileSync(resolve(process.cwd(), 'modules/xdt-feishu-login/ios/XdtFeishuLogin.podspec'), 'utf8');
-    const moduleConfig = readFileSync(resolve(process.cwd(), 'modules/xdt-feishu-login/expo-module.config.json'), 'utf8');
-    const iosSubscriber = readFileSync(
-      resolve(process.cwd(), 'modules/xdt-feishu-login/ios/XdtFeishuLoginAppDelegateSubscriber.swift'),
-      'utf8',
-    );
-    const androidModule = readFileSync(
-      resolve(process.cwd(), 'modules/xdt-feishu-login/android/src/main/java/com/xdtmaker/feishulogin/XdtFeishuLoginModule.kt'),
-      'utf8',
-    );
-    const androidAarPath = resolve(process.cwd(), 'modules/xdt-feishu-login/android/libs/larksso-3.0.10.aar');
+  it('Metro nodeModulesPaths 覆盖 workspace TS 源码包各自的 node_modules(pnpm hoisted 布局下 workspace: 链接不提升到根,只在消费方包自己的 node_modules)', () => {
+    // 2026-07-16 iOS 冷更实踩:disableHierarchicalLookup 后漏列这些目录,
+    // packages/device-link 引用的 @cindy/device-link-protocol(cindy-protocol submodule)
+    // 在 expo export:embed 打 bundle 时 Unable to resolve → ARCHIVE FAILED。
+    // 期望路径从 metro.config.js 自身位置推导(它内部用 __dirname 计算),不依赖测试进程 cwd。
+    const metroConfigPath = require.resolve('../../metro.config.js');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const metroConfig = require(metroConfigPath);
+    const appDir = dirname(metroConfigPath);
+    const paths: string[] = metroConfig.resolver.nodeModulesPaths;
+    // path.join 产物在 Windows 上是反斜杠,比较前统一归一为 POSIX 分隔符(规则 15)。
+    const posix = (p: string) => p.split(sep).join('/');
+    for (const packageName of ['auth-client', 'device-link', 'maker-shared', 'model-providers']) {
+      expect(paths.some((p) => posix(p).endsWith(`packages/${packageName}/node_modules`))).toBe(true);
+    }
+    // 追加在 app / workspace 根之后:常规依赖命中顺序不变(精确断言前两位,防止顺序被换)。
+    expect(paths[0]).toBe(join(appDir, 'node_modules'));
+    expect(paths[1]).toBe(join(resolve(appDir, '../..'), 'node_modules'));
+  });
 
-    // LarkSSOSDK 1.2.0 resolves from the CocoaPods trunk CDN; the volcengine-specs source must
-    // NOT be injected (same pod+version on both sources triggers a fatal duplicate-spec conflict
-    // in EAS clean builds). Guard both: trunk present, volcengine absent.
-    expect(pluginSource).toContain("source 'https://cdn.cocoapods.org/'");
-    expect(pluginSource).not.toContain("source 'https://github.com/volcengine/volcengine-specs.git'");
-    expect(pluginSource).toContain('CFBundleURLTypes');
-    expect(pluginSource).toContain('registerCallbackScheme');
-    expect(pluginSource).toContain("const DEFAULT_APP_ID = 'cli_a94d4cf642381cd4'");
-    expect(pluginSource).toContain("replace(/_/g, '')");
-    expect(pluginSource).toContain("'android:scheme': 'lark'");
-    expect(pluginSource).toContain("'android:host': 'ssoclient'");
-    expect(pluginSource).toContain("'android:launchMode': 'singleTop'");
-    expect(pluginSource).toContain("'android:exported': 'true'");
-    expect(iosPodspec).toContain("s.dependency 'LarkSSOSDK', '1.2.0'");
-    expect(moduleConfig).toContain('XdtFeishuLoginAppDelegateSubscriber');
-    expect(iosSubscriber).toContain('LarkSSO.handleURL(url)');
-    expect(androidModule).toContain('com.ss.android.larksso.LarkSSO');
-    expect(androidModule).toContain('setChallengeMode(false)');
-    expect(androidModule).toContain('OnNewIntent');
-    expect(androidModule).toContain('OnActivityResult');
-    expect(existsSync(androidAarPath)).toBe(true);
+  it('wires first-party Apple, public Google, and the minimal official WeChat bridge', () => {
+    const appJson = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'app.json'), 'utf8'),
+    );
+    const packageJson = JSON.parse(
+      readFileSync(resolve(process.cwd(), 'package.json'), 'utf8'),
+    );
+    const configSource = readFileSync(
+      resolve(process.cwd(), 'app.config.js'),
+      'utf8',
+    );
+    const pluginSource = readFileSync(
+      resolve(process.cwd(), 'modules/xdt-wechat-login/plugin/index.js'),
+      'utf8',
+    );
+    const iosPodspec = readFileSync(
+      resolve(
+        process.cwd(),
+        'modules/xdt-wechat-login/ios/XdtWechatLogin.podspec',
+      ),
+      'utf8',
+    );
+    const androidGradle = readFileSync(
+      resolve(process.cwd(), 'modules/xdt-wechat-login/android/build.gradle'),
+      'utf8',
+    );
+    const moduleConfig = readFileSync(
+      resolve(
+        process.cwd(),
+        'modules/xdt-wechat-login/expo-module.config.json',
+      ),
+      'utf8',
+    );
+    const iosCoordinator = readFileSync(
+      resolve(
+        process.cwd(),
+        'modules/xdt-wechat-login/ios/XdtWechatAuthCoordinator.swift',
+      ),
+      'utf8',
+    );
+    const iosSubscriber = readFileSync(
+      resolve(
+        process.cwd(),
+        'modules/xdt-wechat-login/ios/XdtWechatLoginAppDelegateSubscriber.swift',
+      ),
+      'utf8',
+    );
+
+    expect(appJson.expo.ios.usesAppleSignIn).toBe(true);
+    expect(appJson.expo.plugins).toContain('expo-apple-authentication');
+    expect(packageJson.dependencies['expo-apple-authentication']).toBeTruthy();
+    expect(
+      packageJson.dependencies['@react-native-google-signin/google-signin'],
+    ).toBe('16.1.2');
+    expect(packageJson.dependencies['xdt-wechat-login']).toBe(
+      'file:./modules/xdt-wechat-login',
+    );
+    expect(
+      existsSync(
+        resolve(
+          process.cwd(),
+          'modules/xdt-feishu-login/expo-module.config.json',
+        ),
+      ),
+    ).toBe(false);
+    expect(configSource).toContain(
+      "'@react-native-google-signin/google-signin'",
+    );
+    expect(configSource).toContain("'xdt-wechat-login/plugin'");
+    expect(pluginSource).toContain("'weixinULAPI'");
+    expect(pluginSource).toContain("'.wxapi.WXEntryActivity'");
+    expect(pluginSource).toContain('withWechatEntryActivity(config, appId)');
+    expect(pluginSource).toContain('createWXAPI(this, ${kotlinAppId}, false)');
+    expect(iosPodspec).toContain("s.dependency 'WechatOpenSDK', '2.0.5'");
+    expect(androidGradle).toContain('wechat-sdk-android:6.8.38');
+    expect(moduleConfig).toContain('XdtWechatLoginAppDelegateSubscriber');
+    expect(iosCoordinator).toContain(
+      'WXApi.handleOpenUniversalLink(userActivity, delegate: self)',
+    );
+    expect(iosSubscriber).toContain('continue userActivity: NSUserActivity');
   });
 });

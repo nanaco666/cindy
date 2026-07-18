@@ -161,21 +161,22 @@ export class AppShortcutStore {
   }
 
   private replaceOverrides(next: AppShortcutOverrides): void {
+    // Commit the candidate only after the atomic file replacement succeeds.
+    this.save(next);
     this.overrides = next;
-    this.save();
     const snapshot = { ...next };
     this.options.onChanged?.(snapshot);
     this.changeListeners.forEach((listener) => listener(snapshot));
   }
 
-  private save(): void {
+  private save(overrides: AppShortcutOverrides): void {
     const filePath = this.options.getFilePath();
+    const tmp = `${filePath}.tmp`;
     try {
       fs.mkdirSync(path.dirname(filePath), { recursive: true });
-      const tmp = `${filePath}.tmp`;
       fs.writeFileSync(
         tmp,
-        JSON.stringify({ version: 1, overrides: this.overrides ?? {} }, null, 2),
+        JSON.stringify({ version: 1, overrides }, null, 2),
         'utf-8',
       );
       fs.renameSync(tmp, filePath);
@@ -183,6 +184,12 @@ export class AppShortcutStore {
       log.warn('app shortcut overrides write failed', {
         error: error instanceof Error ? error.message : String(error),
       });
+      try {
+        fs.unlinkSync(tmp);
+      } catch {
+        // Best effort cleanup; preserve the original write error.
+      }
+      throw error;
     }
   }
 }

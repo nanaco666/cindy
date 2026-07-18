@@ -1,8 +1,6 @@
 // @ts-nocheck —— 被测对象是 .mjs 发布工具模块,vitest 跑其纯函数。
 import { describe, expect, it } from 'vitest';
-import { productionEndpoints } from '../../../../scripts/shared/production-endpoints.mjs';
-
-const NPKG_INSTALL_URL = `${productionEndpoints.npkgBaseUrl}/install/4567`;
+const NPKG_INSTALL_URL = 'https://npkg.example.invalid/install/4567';
 import {
   parseNpkgInstallLinks,
   compareBuildNumbers,
@@ -12,6 +10,7 @@ import {
   fetchBaselineBuildNumber,
   nextDateBuildNumber,
   replaceBuildNumberInAppJson,
+  resolveIosSigningEnv,
 } from '../../scripts/lib/ios-local.mjs';
 
 const resp = (status, { json, ok } = {}) => ({
@@ -53,14 +52,37 @@ describe('compareBuildNumbers / assertBuildNumberMonotonic', () => {
   });
 });
 
+describe('resolveIosSigningEnv（从 region JSON 的 iosSigning 取值,非机密)', () => {
+  const REGION = {
+    authRegion: 'cn',
+    iosSigning: { teamId: 'TEAM123456', profileName: 'some_profile', signIdentity: 'Apple Development' },
+  };
+  const withSigning = (patch) => ({ ...REGION, iosSigning: { ...REGION.iosSigning, ...patch } });
+  it('三项齐全 → 透传;profilePath 可选缺省为空串', () => {
+    expect(resolveIosSigningEnv(REGION)).toEqual({
+      teamId: 'TEAM123456', profileName: 'some_profile', identity: 'Apple Development', profilePath: '',
+    });
+    expect(resolveIosSigningEnv(withSigning({ profilePath: '/tmp/p.mobileprovision' })).profilePath)
+      .toBe('/tmp/p.mobileprovision');
+  });
+  it('缺任一必填项 → 抛错并点名缺失字段(不回落)', () => {
+    expect(() => resolveIosSigningEnv(withSigning({ teamId: '' }))).toThrow(/teamId/);
+    expect(() => resolveIosSigningEnv(withSigning({ profileName: ' ' }))).toThrow(/profileName/);
+    expect(() => resolveIosSigningEnv(withSigning({ signIdentity: undefined }))).toThrow(/signIdentity/);
+  });
+  it('全缺 → 错误信息按序列出全部三项', () => {
+    expect(() => resolveIosSigningEnv({ authRegion: 'cn', iosSigning: {} })).toThrow(/teamId, profileName, signIdentity/);
+  });
+});
+
 describe('buildExportOptionsPlist', () => {
   it('含 development / manual / team / profile 映射', () => {
-    const plist = buildExportOptionsPlist({ teamId: 'NTC4BJ542G', bundleId: 'com.xd.lizcn', profileName: 'lizcn_dev' });
+    const plist = buildExportOptionsPlist({ teamId: 'NTC4BJ542G', bundleId: 'com.xd.cindycn', profileName: 'cindycn_dev' });
     expect(plist).toContain('<string>development</string>');
     expect(plist).toContain('<string>manual</string>');
     expect(plist).toContain('<string>NTC4BJ542G</string>');
-    expect(plist).toContain('<key>com.xd.lizcn</key>');
-    expect(plist).toContain('<string>lizcn_dev</string>');
+    expect(plist).toContain('<key>com.xd.cindycn</key>');
+    expect(plist).toContain('<string>cindycn_dev</string>');
   });
   it('缺参抛错', () => {
     expect(() => buildExportOptionsPlist({ teamId: 'x', bundleId: 'y' })).toThrow();

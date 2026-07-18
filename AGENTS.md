@@ -9,11 +9,11 @@
 
 - **本仓没有 `apps/server` / `apps/heartbeat-server`**。下文规则 17 的 server（Prisma）段与规则 19（docker compose 白名单）仅在 `cindy-server` 仓工作时适用，保留在此作为同一套工程口径的参照。
 - **本地 server 由相邻的 `cindy-server` checkout 提供**：`pnpm dev:server` 会定位 `../cindy-server`（或 `XDT_SERVER_REPO` 指定的路径）并执行其 `dev:server`；server 侧 `.env` 配置以该仓文档为准。原单仓的 `pnpm dev:all` 在本仓不存在。
-- **工作流**：默认直接在当前分支工作，不主动开分支；先保留用户已有改动，禁止用破坏性 Git 命令覆盖工作区；功能完成后跑与风险匹配的验证、提交前对整体 diff review 一次；验证和 review 通过后创建本地 commit，把结果与 commit 信息交给用户确认，**只有用户明确确认后才能 push**（「提 PR」节的测试与对抗性 review 门禁仍然适用，push 本身必须经用户确认）。
+- **工作流**：尊重宿主和开发者选择的 Git 隔离方式。cwd 已是会话级 / 任务级 worktree 时直接复用，禁止再嵌套创建；cwd 不是任务 worktree 时按用户级 Git workflow 决定是否另建；未配置该 workflow 时先向用户确认，不要直接修改 checkout。不要把新任务混进已有脏 checkout，也不要用破坏性 Git 命令覆盖用户改动。功能完成后跑与风险匹配的验证、提交前对整体 diff review 一次；验证和 review 通过后创建本地 commit，把结果与 commit 信息交给用户确认，**只有用户明确确认后才能 push**（「提 PR」节的测试与对抗性 review 门禁仍然适用，push 本身必须经用户确认）。
 - **SQLite migration 迁移基线**：从旧仓迁入的 SQL 由 `drizzle/migration-baseline.json` 固定 SHA256；数据库变化只能追加新 migration，并运行 `pnpm --filter desktop db:validate` 与 migration replay。本地数据库查询必须使用异步 API；不要对异步 DB client 使用同步 `.all()`。
 - **main 进程禁止运行时动态 `import()`**；依赖使用顶层静态 import。
 - **协议 submodule**：`cindy-protocol` 是协议权威来源。desktop 使用 `@cindy/slack-hook-protocol`，客户端 device-link 包复用 `@cindy/device-link-protocol` 的 relay 层定义；客户端重连、IPC allowlist 与隧道 payload 留在 `packages/device-link`。**升级 submodule 指针前必须确认 `cindy-server` 同步升级**，避免两端 wire protocol 漂移。
-- **dev 数据沿用 `xdt-maker` userData** 以读取历史数据；用户未明确要求隔离时，不加 `--isolated`、不设置 `XDT_USER_DATA_DIR`（参数语义见下文启动参数表）。
+- **dev 数据目录为 `Cindy` userData**（2026-07-17 身份翻转起由 `productName: Cindy` 派生；从空开始，不再沿用老 `xdt-maker` 目录的历史数据）；用户未明确要求隔离时，不加 `--isolated`、不设置 `XDT_USER_DATA_DIR`（参数语义见下文启动参数表）。
 
 ## 外部关联
 
@@ -101,7 +101,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 | Command | Description |
 |---------|-------------|
 | `pnpm restart:desktop:remote` | **默认**；Agent 启动 / 重启桌面端连**远程 API**；补 `.env`、停所有 Cindy Electron dev 进程、在真 TTY 下启动 |
-| `pnpm restart:desktop:local` | **仅用户明确要求本地时**；连**本地 server**（`http://localhost:3333`）；同样停旧进程、真 TTY 启动，并**强制**把 `.env` 的 `VITE_API_BASE_URL` 写成本地地址；agent 只起客户端，本地 server 仍由用户自己起 |
+| `pnpm restart:desktop:local` | **仅用户明确要求本地时**；连**本地 server**（`http://localhost:3333`）；同样停旧进程、真 TTY 启动;local 端点由 dev 脚本链自动生成的 `config/endpoint.local.json`(gitignored)承载;agent 只起客户端，本地 server 仍由用户自己起 |
 | `pnpm dev:desktop:remote` | ⚠️ human-only；**agent 禁止直接调**（无 TTY 兜底、不杀旧进程、不补 `.env`，agent 环境下必失败）——agent 走 `restart:desktop:remote` |
 | `pnpm dev:desktop` | ⚠️ human-only；连本地 server 的底层命令，**agent 禁止直接调**——agent 走 `restart:desktop:local` |
 | `pnpm dev:server` | ⚠️ human-only；到相邻 `cindy-server` checkout（或 `XDT_SERVER_REPO`）启动本地 server，**agent 禁止** |
@@ -109,7 +109,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 ### 可选启动参数 `--passive` / `--isolated`（仅用户显式要求时加）
 
-两个 restart 命令都支持；human 直跑的 `pnpm dev:desktop` / `pnpm dev:desktop:remote` / `pnpm dev:desktop:inspect` 也支持同名参数（desktop dev 脚本以 `electron-forge start -- ` 收尾，pnpm 追加的参数会透传进主进程解析）。agent 仍然只走 restart 命令。
+两个 restart 命令都支持；human 直跑的 `pnpm dev:desktop` / `pnpm dev:desktop:remote` / `pnpm dev:desktop:inspect` 也支持同名参数（desktop dev 脚本以 `electron-forge start -- ` 收尾，pnpm 追加的参数会透传进主进程解析）。agent 仍然只走 restart 命令。另有 `--endpoints-cdn`(或 env `XDT_ENDPOINTS_CDN=1`):dev 不读仓内 `config/endpoint.json`,改走与 packaged 相同的线上 CDN 端点清单拉取链路(测线上清单;mobile 对应 `EXPO_PUBLIC_ENDPOINTS_CDN=1`),同样仅用户显式要求时加。
 
 背景：dev 和 release（正式安装版）默认共用同一个 userData / SQLite 数据库；双开时定时任务靠 DB 级原子认领互斥，但**旧 release 包没有认领逻辑**，过渡期需要下面的参数配合。
 
@@ -129,7 +129,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 `restart:desktop:local` **只起客户端**——即便用户提到"服务器"，也不要因此去跑 `dev:server` / `dev:all` / 起 Postgres，本地 server 始终由用户自己起。Remote 跑不通时先排查 `.env` 和登录态，不要自动升级到本地。
 
-- `apps/desktop/.env` 是 gitignored、per checkout/worktree 的。两个 restart 命令缺失时都会创建并填 `VITE_FEISHU_APP_ID` / `VITE_API_BASE_URL`、文件已存在时只补空值，**唯一区别**：`restart:desktop:local` 会**强制覆盖** `VITE_API_BASE_URL` 为 `http://localhost:3333`（因为 local 模式桌面端直接读 `.env`；而 remote 模式由 `scripts/dev-remote-env.mjs` 包装在运行时强制注入生产端点(值来自 `config/production-endpoints.json` 权威源)、根本不看 `.env`——所以只有 local 必须保证 `.env` 是本地地址）。
+- **运行期端点来源(2026-07 端点清单重构)**:业务端点不再走 `.env` / 构建期烘焙——dev 默认读仓内 `config/endpoint.json`(cn 正本,与 CDN 上 `<hotfix base>/endpoint.json` 同格式);local 模式(`pnpm dev:desktop` 脚本链里的 `apps/desktop/scripts/dev-local-env.mjs`)自动生成并读 `config/endpoint.local.json`(gitignored,api/auth/device-link 指 localhost,每次启动整文件重写);packaged 与 `--endpoints-cdn` 从烘焙的 region 化 hotfix CDN 基址阻断式拉取。`apps/desktop/.env` 仍是 gitignored、per checkout/worktree 的,但只剩构建身份字段(`VITE_FEISHU_APP_ID` / `VITE_CINDY_AUTH_REGION`),restart 命令缺失时创建、只补空值;remote 模式由 `scripts/dev-remote-env.mjs` 注入身份字段、不看 `.env`。
 - 本地 server 位于相邻的 `cindy-server` 仓（`pnpm dev:server` 会定位并启动它），其 `.env` 与启动要求以该仓文档为准。
 
 ### 启动 → 测试 → 结束
@@ -144,7 +144,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 ## Dogfooding：在本仓库的 worktree 会话里工作（Agent 规则）
 
-如果你是 Cindy 内嵌的 agent，且 cwd 位于 `<baseRepo>/.xdt-worktrees/<name>` 下（会话级 git worktree），遵守以下契约（完整工作流与原理见 `docs/dogfooding-workflow.md`）：
+如果你是 Cindy 内嵌的 agent，且 cwd 位于 `<baseRepo>/.cindy-worktrees/<name>`（或品牌迁移前的 `.xdt-worktrees/<name>`）下（会话级 git worktree），遵守以下契约（完整工作流与原理见 `docs/dogfooding-workflow.md`）：
 
 1. **先等 checkout 完成，再确认依赖**：worktree 创建返回时后台的完整 checkout 可能仍在进行（staged copy 只含 `CLAUDE.md` / `.claude` 等少量文件，**不含 `package.json`**）。跑任何 `pnpm` 命令前先确认 `package.json` 存在且 `git status --short` 干净，未就绪就稍等再查。worktree 与 baseRepo 共享 `.git` 但**不共享 node_modules**，创建流程不会自动安装：checkout 完成后若 `node_modules` 缺失，先 `pnpm install`（首次可能数分钟，注意命令超时，必要时分步执行）。
 2. **你的编辑对运行中的 app 无效**：Vite HMR 只 watch 启动 dev 实例的那个 checkout，worktree 下的任何改动既不会热更也不会随重启生效。「改了没反应」不是 bug。验证一律在本 worktree 内跑 `pnpm --filter desktop typecheck` / 定向 `vitest run`；需要运行时验证时，commit + push 后告知用户，由用户启 verify 实例或重启（你无法重启宿主，见上文 refusal 规则）。
@@ -217,7 +217,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 15. **任何功能的设计与实现都必须同时考虑 macOS / Windows 双平台兼容性，并在两端都做到最优性能**：
     - **路径与目录**：一律走 `path.join` / `path.resolve` / `path.sep`，禁止硬编码 `/` 或 `\\`；用户目录走 `app.getPath('userData' | 'home' | 'temp')`，不要拼 `~` 或 `%APPDATA%`。
-    - **子进程 / 原生二进制**（agent CLI、xdt-updater、ripgrep、better-sqlite3 等）按平台 + 架构分发与加载（`process.platform` + `process.arch`）；spawn 时注意 Windows 的 `.cmd` / `.exe` 后缀和 `shell: true` 行为差异；不要假设 POSIX 信号（`SIGTERM` / `SIGINT`）在 Windows 子进程上同样生效，需要兜底显式 kill；env 变量名大小写在 Windows 上不敏感、在 Mac 上敏感。
+    - **子进程 / 原生二进制**（agent CLI、cindy-updater、ripgrep、better-sqlite3 等）按平台 + 架构分发与加载（`process.platform` + `process.arch`）；spawn 时注意 Windows 的 `.cmd` / `.exe` 后缀和 `shell: true` 行为差异；不要假设 POSIX 信号（`SIGTERM` / `SIGINT`）在 Windows 子进程上同样生效，需要兜底显式 kill；env 变量名大小写在 Windows 上不敏感、在 Mac 上敏感。
     - **文件系统差异**：Windows 大小写不敏感、保留路径长度上限、文件锁与删除语义不同；涉及 rename / unlink / 监听文件变化 / SQLite 文件迁移的逻辑，必须在两端都验证。
     - **性能基线以两端中较弱的一端为准**，不能"Mac 上流畅就过"。I/O 密集（SQLite / FTS / 大文件）与渲染密集（长列表虚拟化、动画、滚动）的关键路径，要明确给出在 Windows 上的可接受指标（帧率、首屏、响应延迟），并优先选择跨平台原生最优方案（better-sqlite3、Electron 原生 API、CSS GPU 合成）而非纯 JS polyfill。
     - **快捷键 / 菜单 / 系统集成**（托盘、通知、窗口控制按钮、全屏行为、`cmd` vs `ctrl`）必须按平台规范分别实现，不要把 Mac 的交互直接照搬到 Windows。
@@ -256,7 +256,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 ### 高风险模块
 
-21. **xdt-updater 是非常重要的模块,任何修改都要和 owner 确认**：无论你做任何改动,都要先和 Lizi 确认后再动手。
+21. **cindy-updater 是非常重要的模块,任何修改都要和 owner 确认**：无论你做任何改动,都要先和 Lizi 确认后再动手。
 
 ### 文档与规范治理
 

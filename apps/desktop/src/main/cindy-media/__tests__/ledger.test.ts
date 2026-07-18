@@ -95,6 +95,39 @@ describe('addRef / removeRefs(引用增删)', () => {
   });
 });
 
+describe('removeRefsExceptHash(替换型引用清理:个人头像换图)', () => {
+  it('只删同引用方名下、指纹不等于 keepHash 的行;别的引用方不受牵连', async () => {
+    await seedBlob(HASH_A);
+    await seedBlob(HASH_B);
+    // user-1 换头像:旧图 HASH_A、新图 HASH_B 均已挂 profile-avatar 引用
+    await ledger.addRef({ hash: HASH_A, refKind: 'profile-avatar', refId: 'user-1', originKind: 'user' }, db);
+    await ledger.addRef({ hash: HASH_B, refKind: 'profile-avatar', refId: 'user-1', originKind: 'user' }, db);
+    // 同指纹的其它业务引用与别的用户头像都必须幸存
+    await ledger.addRef({ hash: HASH_A, refKind: 'ghost-gallery', refId: 'art' }, db);
+    await ledger.addRef({ hash: HASH_A, refKind: 'profile-avatar', refId: 'user-2', originKind: 'user' }, db);
+
+    await expect(
+      ledger.removeRefsExceptHash({ refKind: 'profile-avatar', refId: 'user-1', keepHash: HASH_B }, db),
+    ).resolves.toBe(1);
+
+    const left = db.select().from(schema.mediaRefs).all();
+    expect(left).toHaveLength(3);
+    const mine = left.filter((r) => r.refKind === 'profile-avatar' && r.refId === 'user-1');
+    expect(mine).toHaveLength(1);
+    expect(mine[0].hash).toBe(HASH_B);
+  });
+
+  it('同指纹重复保存(去重命中)时不删 keepHash 的任何行', async () => {
+    await seedBlob(HASH_A);
+    await ledger.addRef({ hash: HASH_A, refKind: 'profile-avatar', refId: 'user-1', originKind: 'user' }, db);
+    await ledger.addRef({ hash: HASH_A, refKind: 'profile-avatar', refId: 'user-1', originKind: 'user' }, db);
+    await expect(
+      ledger.removeRefsExceptHash({ refKind: 'profile-avatar', refId: 'user-1', keepHash: HASH_A }, db),
+    ).resolves.toBe(0);
+    expect(db.select().from(schema.mediaRefs).all()).toHaveLength(2);
+  });
+});
+
 describe('removeSessionRefs(会话删除钩子)', () => {
   it('删附件/导入/本会话出生的消息引用;画廊与引渡引用不陪葬;别的会话不受牵连', async () => {
     await seedBlob(HASH_A);

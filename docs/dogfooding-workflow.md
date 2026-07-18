@@ -15,7 +15,7 @@ XDMaker 本身就是 coding agent 宿主，用它开发它自己（dogfooding）
 | `baseRepo/apps/desktop/src/renderer/**` | **HMR 即时热更** |
 | `baseRepo/packages/<零依赖包>/src/**` | 热更（这些包被排除出 optimizeDeps，`vite.renderer.config.ts:179-219`） |
 | `baseRepo` 的 main / preload / `packages/maker-core` | **人工 restart 前无任何效果**（maker-core 以 TS 源码形式打进 main 构建；forge 的 vite 插件不会自动重启 Electron） |
-| **`baseRepo/.xdt-worktrees/<wt>/**` 下的任何文件** | **完全无效果**——绝对路径不同，不在 dev server 的 module graph 里 |
+| **`baseRepo/.cindy-worktrees/<wt>/**` 下的任何文件** | **完全无效果**——绝对路径不同，不在 dev server 的 module graph 里 |
 
 所以 **worktree 会话是"产出分支"的地方，不是"观察 app 变化"的地方**。验证 worktree 改动只有三条路：
 (a) worktree 内跑 typecheck / vitest；(b) 从该 worktree 启一个 verify 实例（见下）；(c) merge 回 baseRepo 走正常两环。
@@ -24,19 +24,19 @@ XDMaker 本身就是 coding agent 宿主，用它开发它自己（dogfooding）
 
 支撑事实：dev 下跳过 single-instance lock（`bootstrap-electron.ts:1096`，以 `app.isPackaged` 为门）；`XDT_USER_DATA_DIR` 仅 dev 生效，用于隔离 userData / SQLite（`apps/desktop/src/main/index.ts:40-42`）；打包版与默认配置的 dev 实例共享 `~/Library/Application Support/xdt-maker`，同跑会抢 SQLite / electron-store 锁；`xdt-maker://` deep link 后注册者赢（`deepLink.ts`）；Vite 端口不固定（5173 起按启动顺序递增）。
 
-1. **实例 A——日常主力**。由**人**在自己的终端从 baseRepo 启动（`pnpm restart:desktop:remote`，默认模式）。**承载所有会话**：baseRepo 直改会话 + 全部 N 个 worktree 会话（WorktreeManager 在 `baseRepo/.xdt-worktrees/` 下创建，都归这个实例管）。与打包版 app 二选一常驻；必须同跑时给实例 A 设 `XDT_USER_DATA_DIR`。
+1. **实例 A——日常主力**。由**人**在自己的终端从 baseRepo 启动（`pnpm restart:desktop:remote`，默认模式）。**承载所有会话**：baseRepo 直改会话 + 全部 N 个 worktree 会话（WorktreeManager 在 `baseRepo/.cindy-worktrees/` 下创建，都归这个实例管；历史 `.xdt-worktrees/` 继续兼容）。与打包版 app 二选一常驻；必须同跑时给实例 A 设 `XDT_USER_DATA_DIR`。
 2. **实例 B..N——per-worktree verify 实例（短命）**。需要真机验证某个 worktree 的 main / renderer 改动时，由**人**从该 worktree 启动：
 
    ```bash
    # macOS（bash / zsh）
-   cd /path/to/baseRepo/.xdt-worktrees/<wt>
+   cd /path/to/baseRepo/.cindy-worktrees/<wt>
    XDT_USER_DATA_DIR="$HOME/.xdt-dev-userdata/<wt>" pnpm restart:desktop:remote
    ```
 
    ```powershell
    # Windows（PowerShell）——POSIX 行内 env 赋值在 PowerShell / cmd 下不生效，
    # 会静默丢失 XDT_USER_DATA_DIR、退回默认 userData，正好撞上本节要防的 SQLite 冲突
-   cd C:\path\to\baseRepo\.xdt-worktrees\<wt>
+   cd C:\path\to\baseRepo\.cindy-worktrees\<wt>
    $env:XDT_USER_DATA_DIR = "$env:USERPROFILE\.xdt-dev-userdata\<wt>"; pnpm restart:desktop:remote
    ```
 
@@ -45,7 +45,7 @@ XDMaker 本身就是 coding agent 宿主，用它开发它自己（dogfooding）
 
 **kill 范围的不对称性（重要，已核对 `scripts/restart-desktop-remote.mjs:96-112`）**：进程匹配按「命令行是否含本 checkout 的 rootDir（后随 `/` 或引号边界）」判定。worktree 路径是 baseRepo 路径的子路径，因此：
 
-- 从 **baseRepo** 跑 restart → 会杀掉 baseRepo 实例 **以及所有从 `.xdt-worktrees/` 下启动的 verify 实例**；
+- 从 **baseRepo** 跑 restart → 会杀掉 baseRepo 实例 **以及所有从 `.cindy-worktrees/` 下启动的 verify 实例**；
 - 从**某个 worktree** 跑 restart → 只杀该 worktree 自己的实例，不动实例 A；
 - 其它位置的 sibling checkout 互不影响（宁可漏杀不误杀，脚本内注释已说明）。
 
@@ -78,7 +78,7 @@ baseRepo 直改 renderer 的会话是在热更**承载它自己的那个 app**�
 
 **首条消息模板**（补偿当前已知缺口，建议每个 worktree 会话都带上）：
 
-> 你的 cwd 是 `.xdt-worktrees/` 下的 git worktree。注意：
+> 你的 cwd 是 `.cindy-worktrees/` 下的 git worktree。注意：
 > 1. 先确认 checkout 已完成（`package.json` 存在、`git status --short` 干净——创建返回后完整 checkout 仍在后台跑，staged copy 不含 `package.json`），然后 node_modules 缺失就先跑 `pnpm install`（首次可能数分钟，注意命令超时，必要时分步跑）；
 > 2. 宿主 app 的日志在 `<baseRepo>/apps/desktop/logs/`，不在你的 cwd 下；
 > 3. 你的任何编辑都不会出现在运行中的 app 里（HMR 只 watch 启动 checkout），不要以为"改了没生效"是 bug；验证用本 worktree 内 `pnpm --filter desktop typecheck` / 定向 `vitest run`；

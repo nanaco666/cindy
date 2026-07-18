@@ -1,0 +1,14 @@
+{
+  "feishuAppId": "",
+  "authApiBaseUrlCn": "",
+  "authApiBaseUrlGlobal": "",
+  "deviceLinkApiBaseUrl": "",
+  "xdGatewayBaseUrl": "",
+  "cdnBaseUrl": "",
+  "npkgBaseUrl": "",
+  "endpointManifestBaseUrlCn": "",
+  "endpointManifestBaseUrlGlobal": "",
+  "ossBucket": "",
+  "ossPrefix": "",
+  "ossRegion": ""
+}

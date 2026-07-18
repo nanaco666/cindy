@@ -1,4 +1,4 @@
-import * as WebBrowser from "expo-web-browser";
+import * as WebBrowser from 'expo-web-browser';
 import {
   createContext,
   useCallback,
@@ -8,44 +8,62 @@ import {
   useRef,
   useState,
   type ReactNode,
-} from "react";
-import { AppState, Linking } from "react-native";
-import { apiFetchRaw, ApiError, type ApiFetchOptions } from "@/api/client";
+} from 'react';
+import { AppState, Linking } from 'react-native';
 import {
-  API_BASE_URL,
-  FEISHU_APP_ID,
-  MOBILE_OAUTH_STATE_PREFIX,
+  AuthApiError,
+  CindyAuthClient,
+  reduceAuthFlow,
+  ssoOrgDiscoveryToMethods,
+  type AuthFlowState,
+  type AuthMembership,
+  type LoginOutcome,
+  type SocialProvider,
+  type VerificationKind,
+} from '@cindy/auth-client';
+
+import { apiFetchRaw, ApiError, type ApiFetchOptions } from '@/api/client';
+import {
+  AUTH_API_BASE_URL,
+  AUTH_REGION,
   MOBILE_REDIRECT_URL,
-  NATIVE_FEISHU_LOGIN_ENABLED,
-  OAUTH_SCOPE,
-} from "@/config/env";
-import { ensureDeviceId } from "@/auth/deviceId";
-import { parseOAuthCallbackUrl } from "@/auth/oauthCallback";
-import { createPkcePair, createState } from "@/auth/pkce";
-import { isAccessTokenExpiring } from "@/auth/jwt";
-import { isFeishuAppInstalled, requestFeishuAuthCode } from "@/auth/feishuNativeLogin";
+} from '@/config/env';
+import { ensureDeviceId } from '@/auth/deviceId';
+import { isAccessTokenExpiring } from '@/auth/jwt';
+import { getAuthLocale } from '@/auth/loginMessages';
+import { acquireNativeSocialCredential } from '@/auth/nativeSocial';
+import {
+  matchesOAuthCallbackUrl,
+  parseOAuthCallbackUrl,
+} from '@/auth/oauthCallback';
+import { createPkcePair, createState } from '@/auth/pkce';
+import { mergeMembershipWithExisting } from '@/auth/profileMerge';
 import {
   deleteSecureItem,
   getSecureItem,
   setSecureItem,
-} from "@/auth/secureStorage";
-import { clearAllMobileVoiceCredentials } from "@/session/mobileVoiceCredentialStore";
-import { clearAllMobileVoiceInputHistories } from "@/session/mobileVoiceHistoryStore";
-import { clearCachedHomeListSnapshot } from "@/session/mobileHomeListCache";
-import { resetComposerPaletteCache } from "@/session/composerPaletteCache";
-import { resetAgentCapabilitiesCache } from "@/session/agentCapabilitiesCache";
-import { clearCachedSessionMessages } from "@/session/mobileSessionMessageCache";
-import { clearMobileVoiceLiteLlmSettings } from "@/session/mobileVoiceLiteLlmSettings";
-import { clearTapdbUser, setTapdbUser } from "@/analytics/mobileTapdb";
+} from '@/auth/secureStorage';
+import { clearTapdbUser, setTapdbUser } from '@/analytics/mobileTapdb';
+import { resetAgentCapabilitiesCache } from '@/session/agentCapabilitiesCache';
+import { resetComposerPaletteCache } from '@/session/composerPaletteCache';
+import { clearCachedHomeListSnapshot } from '@/session/mobileHomeListCache';
+import { clearCachedSessionMessages } from '@/session/mobileSessionMessageCache';
+import { clearAllMobileVoiceCredentials } from '@/session/mobileVoiceCredentialStore';
+import { clearAllMobileVoiceInputHistories } from '@/session/mobileVoiceHistoryStore';
+import { clearMobileVoiceLiteLlmSettings } from '@/session/mobileVoiceLiteLlmSettings';
 
 WebBrowser.maybeCompleteAuthSession();
 
-const REFRESH_TOKEN_KEY = "xdt.mobile.refreshToken";
-const USER_PROFILE_KEY = "xdt.mobile.userProfile";
-const PENDING_OAUTH_KEY = "xdt.mobile.pendingOAuth";
+const REFRESH_TOKEN_KEY = 'cindy.mobile.auth.refreshToken';
+const LEGACY_REFRESH_TOKEN_KEY = 'xdt.mobile.refreshToken';
+const USER_PROFILE_KEY = 'cindy.mobile.auth.userProfile';
+const LEGACY_USER_PROFILE_KEY = 'xdt.mobile.userProfile';
+const PENDING_OAUTH_KEY = 'cindy.mobile.auth.pendingOAuth';
+const LEGACY_PENDING_OAUTH_KEY = 'xdt.mobile.pendingOAuth';
 const PENDING_OAUTH_MAX_AGE_MS = 10 * 60 * 1000;
-const NATIVE_FEISHU_LOGIN_FOREGROUND_TIMEOUT_MS = 8 * 1000;
-
+const AUTH_STARTUP_GATE_TIMEOUT_MS = 20 * 1000;
+// 2026-07 产品 /api/user/me 退役:身份完全以 auth-server membership 为准,
+// 原产品增强字段(role/isCanary/feishuId)一并下线(与 desktop 同步)。
 export interface MobileUser {
   id: string;
   name: string;
@@ -53,95 +71,36 @@ export interface MobileUser {
   email: string | null;
   defaultModel: string;
   defaultEffort: string;
-  role?: "user" | "admin";
+  membershipKind: 'personal' | 'org';
+  membershipRole: 'owner' | 'admin' | 'member';
+  orgId: string | null;
+  orgName: string | null;
+  passportId: string;
 }
 
-interface LoginResponse {
-  accessToken: string;
-  refreshToken: string;
-  user: MobileUser;
-}
-
-interface RefreshResponse {
-  accessToken: string;
-  refreshToken: string;
-}
-
-interface MeResponse {
-  user: MobileUser;
-}
+export type MobileLoginAction =
+  | { type: 'reset' }
+  | { type: 'discover'; email: string }
+  | { type: 'discover-sso-org'; org: string }
+  | { type: 'request-code'; kind: VerificationKind; identifier: string }
+  | {
+      type: 'verify-code';
+      kind: VerificationKind;
+      identifier: string;
+      code: string;
+    }
+  | { type: 'start-sso'; connectionId: string; label: string }
+  | { type: 'native-social'; provider: SocialProvider }
+  | { type: 'select-account'; accountId: string }
+  | { type: 'request-binding-code'; contact: string }
+  | { type: 'verify-binding'; contact: string; code: string };
 
 interface PendingOAuth {
   codeVerifier: string;
   deviceId: string;
   state: string;
   createdAt: number;
-}
-
-function createNativeFeishuLoginTimeout(): { promise: Promise<never>; cleanup: () => void } {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  let activeStartedAt: number | null = AppState.currentState === "active" ? Date.now() : null;
-  let foregroundElapsedMs = 0;
-  let cleanup = () => undefined;
-  const promise = new Promise<never>((_, reject) => {
-    const clearTimer = () => {
-      if (timeoutId) clearTimeout(timeoutId);
-      timeoutId = null;
-    };
-    const rejectTimeout = () => {
-      cleanup();
-      reject(new Error("native-feishu-login-timeout"));
-    };
-    const armTimer = () => {
-      clearTimer();
-      if (activeStartedAt == null) return;
-      const remaining = NATIVE_FEISHU_LOGIN_FOREGROUND_TIMEOUT_MS - foregroundElapsedMs;
-      if (remaining <= 0) {
-        rejectTimeout();
-        return;
-      }
-      timeoutId = setTimeout(rejectTimeout, remaining);
-    };
-    const pauseTimer = () => {
-      if (activeStartedAt != null) {
-        foregroundElapsedMs += Date.now() - activeStartedAt;
-        activeStartedAt = null;
-      }
-      clearTimer();
-    };
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
-        activeStartedAt = Date.now();
-        armTimer();
-      } else {
-        pauseTimer();
-      }
-    });
-    cleanup = () => {
-      clearTimer();
-      subscription.remove();
-    };
-    armTimer();
-  });
-  return { promise, cleanup };
-}
-
-async function requestFeishuAuthCodeWithTimeout(appId: string): Promise<string> {
-  const timeout = createNativeFeishuLoginTimeout();
-  try {
-    const result = await Promise.race([
-      requestFeishuAuthCode({ appId }),
-      timeout.promise,
-    ]);
-    return result.code;
-  } finally {
-    timeout.cleanup();
-  }
-}
-
-export interface OAuthLoginRequest {
-  authUrl: string;
-  redirectUri: string;
+  label: string;
 }
 
 export interface AuthContextValue {
@@ -150,34 +109,72 @@ export interface AuthContextValue {
   isAuthenticated: boolean;
   user: MobileUser | null;
   deviceId: string | null;
-  prepareOAuthLogin(): Promise<OAuthLoginRequest>;
-  loginWithFeishu(): Promise<void>;
+  loginState: AuthFlowState | null;
   authError: string | null;
   clearAuthError(): void;
-  devLogin(): Promise<void>;
+  dispatchLoginAction(action: MobileLoginAction): Promise<boolean>;
   completeOAuthCallback(callbackUrl: string): Promise<void>;
   logout(): Promise<void>;
   getAccessToken(): Promise<string | null>;
-  apiFetch<T>(path: string, opts?: Omit<ApiFetchOptions, "token">): Promise<T>;
+  apiFetch<T>(path: string, opts: Omit<ApiFetchOptions, 'token'>): Promise<T>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/** Owns auth-server credentials and login tickets for the mobile process. */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [initialized, setInitialized] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [deviceId, setDeviceId] = useState<string | null>(null);
+  const deviceIdRef = useRef<string | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const accessTokenRef = useRef<string | null>(null);
   const [user, setUser] = useState<MobileUser | null>(null);
+  const userRef = useRef<MobileUser | null>(null);
+  const [loginState, setLoginState] = useState<AuthFlowState | null>(null);
+  const loginStateRef = useRef<AuthFlowState | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-  // Dedupe concurrent refreshes: the server rotates (deletes) the refresh token on use, so two
-  // callers racing with the same token would have only the first succeed and the rest fail with
-  // an invalid token. Concurrent callers share this single in-flight promise instead.
+  const pendingLoginTicketRef = useRef<string | null>(null);
+  const pendingBindTicketRef = useRef<string | null>(null);
+  const loginActionInFlightRef = useRef<Promise<boolean> | null>(null);
+  const browserCompletionRef = useRef<Promise<void> | null>(null);
+  // auth-server rotates refresh tokens, so every caller must share one request.
   const refreshInFlightRef = useRef<Promise<string | null> | null>(null);
-  // Bumped on logout so an in-flight refresh that resolves afterwards discards its result instead
-  // of writing a fresh token back and resurrecting the just-logged-out session.
+  // Logout bumps this generation so a late refresh cannot resurrect the session.
   const authGenerationRef = useRef(0);
+  // SecureStore operations are asynchronous. Serialize mutations so logout always
+  // wins over a refresh/login write that was already inside the native storage call.
+  const refreshTokenMutationRef = useRef<Promise<void>>(Promise.resolve());
+  const userProfileMutationRef = useRef<Promise<void>>(Promise.resolve());
+
+  const serializeRefreshTokenMutation = useCallback(
+    <T,>(operation: () => Promise<T>): Promise<T> => {
+      const run = refreshTokenMutationRef.current.then(operation, operation);
+      refreshTokenMutationRef.current = run.then(
+        () => undefined,
+        () => undefined,
+      );
+      return run;
+    },
+    [],
+  );
+
+  const serializeUserProfileMutation = useCallback(
+    <T,>(operation: () => Promise<T>): Promise<T> => {
+      const run = userProfileMutationRef.current.then(operation, operation);
+      userProfileMutationRef.current = run.then(
+        () => undefined,
+        () => undefined,
+      );
+      return run;
+    },
+    [],
+  );
+
+  const updateLoginState = useCallback((next: AuthFlowState | null) => {
+    loginStateRef.current = next;
+    setLoginState(next);
+  }, []);
 
   const setToken = useCallback((token: string | null) => {
     accessTokenRef.current = token;
@@ -185,64 +182,162 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // 用户资料的唯一写入口:同步 state + 持久化快照。快照让弱网冷启动能先以
-  // 缓存资料恢复"已登录"视图(isAuthenticated 以 user 为准),token 由后台刷新
-  // 补齐;没有快照时,冷启动的任何一次网络失败都会把有效会话误判成未登录。
-  const applyUser = useCallback((next: MobileUser | null) => {
-    setUser(next);
-    void writeCachedUserProfile(next);
-  }, []);
+  // 缓存资料恢复“已登录”视图,token 由后台刷新补齐。
+  const applyUser = useCallback(
+    (next: MobileUser | null) => {
+      userRef.current = next;
+      setUser(next);
+      void serializeUserProfileMutation(() => writeCachedUserProfile(next));
+    },
+    [serializeUserProfileMutation],
+  );
 
   const clearAuthError = useCallback(() => setAuthError(null), []);
+
+  const loadMe = useCallback(
+    async (
+      token: string,
+      did: string,
+      expectedGeneration = authGenerationRef.current,
+    ): Promise<void> => {
+      // 2026-07 起只拉 auth-server 身份(产品 /api/user/me 已退役)。
+      const identityResult = await authClientFor(did)
+        .getMe(token)
+        .then(
+          (value) => ({ status: 'fulfilled' as const, value }),
+          () => ({ status: 'rejected' as const }),
+        );
+      if (authGenerationRef.current !== expectedGeneration) return;
+
+      if (identityResult.status === 'fulfilled') {
+        const next = mergeMembershipWithExisting(
+          identityResult.value.membership,
+          userRef.current,
+          identityResult.value.passportId,
+        );
+        applyUser(next);
+      }
+    },
+    [applyUser],
+  );
+
+  const acceptOutcome = useCallback(
+    async (outcome: LoginOutcome, did: string): Promise<void> => {
+      await deleteSecureItem(PENDING_OAUTH_KEY).catch(() => undefined);
+
+      if (outcome.status === 'select_account') {
+        pendingLoginTicketRef.current = outcome.loginTicket;
+        pendingBindTicketRef.current = null;
+        updateLoginState(
+          reduceAuthFlow(loginStateRef.current, { type: 'outcome', outcome }),
+        );
+        return;
+      }
+      if (outcome.status === 'binding_required') {
+        pendingBindTicketRef.current = outcome.bindTicket;
+        pendingLoginTicketRef.current = null;
+        updateLoginState(
+          reduceAuthFlow(loginStateRef.current, { type: 'outcome', outcome }),
+        );
+        return;
+      }
+
+      const generation = ++authGenerationRef.current;
+      refreshInFlightRef.current = null;
+      const persisted = await serializeRefreshTokenMutation(async () => {
+        if (authGenerationRef.current !== generation) return false;
+        await setSecureItem(REFRESH_TOKEN_KEY, outcome.refreshToken);
+        return authGenerationRef.current === generation;
+      });
+      if (!persisted) throw authCodeError('AUTH_FLOW_SUPERSEDED');
+      if (authGenerationRef.current !== generation)
+        throw authCodeError('AUTH_FLOW_SUPERSEDED');
+
+      pendingLoginTicketRef.current = null;
+      pendingBindTicketRef.current = null;
+      setToken(outcome.accessToken);
+      applyUser(
+        mergeMembershipWithExisting(outcome.membership, userRef.current),
+      );
+      updateLoginState(
+        reduceAuthFlow(loginStateRef.current, { type: 'outcome', outcome }),
+      );
+      // Identity is already durable. Product preferences/profile hydration is best effort
+      // and must not turn a successful login into an error on a transient downstream outage.
+      void loadMe(outcome.accessToken, did, generation).catch(() => undefined);
+    },
+    [
+      applyUser,
+      loadMe,
+      serializeRefreshTokenMutation,
+      setToken,
+      updateLoginState,
+    ],
+  );
 
   const refresh = useCallback(
     (knownDeviceId?: string): Promise<string | null> => {
       if (refreshInFlightRef.current) return refreshInFlightRef.current;
-      // Snapshot the auth generation: if a logout happens while this refresh is in flight, the
-      // bumped generation tells us to discard the rotated token rather than resurrect the session.
       const generation = authGenerationRef.current;
       let run: Promise<string | null>;
       const clearIfCurrent = () => {
         if (refreshInFlightRef.current === run) refreshInFlightRef.current = null;
       };
-      run = (async (): Promise<string | null> => {
-        const did = knownDeviceId ?? deviceId ?? (await ensureDeviceId());
-        const refreshToken = await getSecureItem(REFRESH_TOKEN_KEY).catch(
-          () => null,
+      run = (async () => {
+        const did =
+          knownDeviceId ?? deviceIdRef.current ?? (await ensureDeviceId());
+        deviceIdRef.current = did;
+        const refreshToken = await serializeRefreshTokenMutation(() =>
+          getSecureItem(REFRESH_TOKEN_KEY).catch(() => null),
         );
         if (!refreshToken) return null;
         try {
-          const result = await apiFetchRaw<RefreshResponse>("/api/auth/refresh", {
-            method: "POST",
-            body: { refreshToken, deviceId: did },
-          });
-          if (authGenerationRef.current !== generation) return null; // logged out mid-refresh
-          await setSecureItem(REFRESH_TOKEN_KEY, result.refreshToken);
-          setToken(result.accessToken);
-          return result.accessToken;
-        } catch (err) {
+          const pair = await authClientFor(did).refresh(refreshToken);
           if (authGenerationRef.current !== generation) return null;
-          // Refresh token rejected (rotated away / expired) → drop to logged-out so the UI
-          // re-prompts, instead of leaving isAuthenticated stuck true with every call failing.
-          if (err instanceof ApiError && err.status === 401) {
-            await deleteSecureItem(REFRESH_TOKEN_KEY).catch(() => undefined);
+          const persisted = await serializeRefreshTokenMutation(async () => {
+            if (authGenerationRef.current !== generation) return false;
+            await setSecureItem(REFRESH_TOKEN_KEY, pair.refreshToken);
+            return authGenerationRef.current === generation;
+          });
+          if (!persisted) return null;
+          if (authGenerationRef.current !== generation) return null;
+          setToken(pair.accessToken);
+          applyUser(
+            mergeMembershipWithExisting(pair.membership, userRef.current),
+          );
+          void loadMe(pair.accessToken, did, generation).catch(() => undefined);
+          return pair.accessToken;
+        } catch (error) {
+          if (authGenerationRef.current !== generation) return null;
+          if (isRejectedRefresh(error)) {
+            const cleared = await serializeRefreshTokenMutation(async () => {
+              if (authGenerationRef.current !== generation) return false;
+              await deleteSecureItem(REFRESH_TOKEN_KEY).catch(() => undefined);
+              return authGenerationRef.current === generation;
+            });
+            if (!cleared) return null;
             setToken(null);
             applyUser(null);
+            updateLoginState(null);
+            pendingLoginTicketRef.current = null;
+            pendingBindTicketRef.current = null;
             return null;
           }
-          throw err; // transient (network / 5xx): keep the session so callers can retry
+          throw error;
         }
       })();
       refreshInFlightRef.current = run;
       run.then(clearIfCurrent, clearIfCurrent);
       return run;
     },
-    [applyUser, deviceId, setToken],
+    [
+      applyUser,
+      loadMe,
+      serializeRefreshTokenMutation,
+      setToken,
+      updateLoginState,
+    ],
   );
-
-  const loadMe = useCallback(async (token: string) => {
-    const me = await apiFetchRaw<MeResponse>("/api/user/me", { token });
-    applyUser(me.user);
-  }, [applyUser]);
 
   useEffect(() => {
     let cancelled = false;
@@ -251,23 +346,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const did = await ensureDeviceId();
         if (cancelled) return;
+        deviceIdRef.current = did;
         setDeviceId(did);
-        // 弱网冷启动:先用本地会话痕迹(refresh token + 用户资料快照)恢复
-        // "已登录"视图,再走网络刷新 token。refresh 的瞬时失败(网络断开 / 5xx /
-        // 超时)绝不能把持有效凭证的用户踢回登录页——只有 401(凭证真失效)才
-        // 降级为未登录,那条路径在 refresh 内部已清 token + user。
+        // Old Feishu refresh tokens are not valid in auth-server. Purge them explicitly
+        // instead of sending them to the new endpoint or restoring an unrelated profile.
+        await Promise.all([
+          deleteSecureItem(LEGACY_REFRESH_TOKEN_KEY).catch(() => undefined),
+          deleteSecureItem(LEGACY_PENDING_OAUTH_KEY).catch(() => undefined),
+          deleteSecureItem(LEGACY_USER_PROFILE_KEY).catch(() => undefined),
+        ]);
         const [storedRefreshToken, cachedUser] = await Promise.all([
           getSecureItem(REFRESH_TOKEN_KEY).catch(() => null),
           readCachedUserProfile(),
         ]);
-        if (cancelled) return;
-        if (storedRefreshToken && cachedUser) setUser(cachedUser);
+        // 弱网冷启动:先用本地会话痕迹恢复已登录视图,再走网络刷新。
+        if (storedRefreshToken && cachedUser) {
+          userRef.current = cachedUser;
+          setUser(cachedUser);
+        }
+        if (!storedRefreshToken)
+          await deleteSecureItem(USER_PROFILE_KEY).catch(() => undefined);
         try {
-          const token = await refresh(did);
-          if (token) await loadMe(token).catch(() => undefined);
+          await awaitAuthStartupGate(
+            refresh(did),
+            AUTH_STARTUP_GATE_TIMEOUT_MS,
+          );
         } catch {
-          // transient:保留降级会话(user 已从快照恢复),由下方自愈 effect
-          // 按退避 + 回前台时机自动补刷 token。
+          // transient:保留降级会话,由下方自愈 effect 自动补刷 token。
         }
       } finally {
         if (!cancelled) {
@@ -280,11 +385,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [loadMe, refresh]);
+  }, [refresh]);
 
-  // 降级会话自愈:已用快照恢复登录视图(user 非空)但 accessToken 还没拿到时,
-  // 以退避节奏 + 回前台时机自动重试 refresh。成功(setToken)或凭证真失效
-  // (401 清 user)都会让本 effect 的条件失效并自动停止。
+  // 降级会话自愈:有缓存用户但尚未取得 access token 时,以退避节奏和回前台时机重试。
   useEffect(() => {
     if (!initialized || !user || accessToken) return;
     let cancelled = false;
@@ -302,16 +405,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const token = await refresh();
         if (cancelled) return;
-        if (token) {
-          await loadMe(token).catch(() => undefined);
-          return;
-        }
-        // refresh 无异常返回 null 但不是 401(401 会清 user 让本 effect 停止):
-        // 典型是 secure store 读取瞬时失败。凭证若确已不在,降级会话没有恢复
-        // 可能,按登出收敛;凭证还在(读取抖动)则继续退避重试——两种情况都
-        // 不能静默停止,否则降级态永远卡死(review P1)。注意读取异常不能与
-        // 「读到空值」折叠:异常时无从判定凭证是否存在,只能继续退避,绝不能
-        // 据此登出(二次 review P1)。
+        if (token) return;
         let storedRefreshToken: string | null;
         try {
           storedRefreshToken = await getSecureItem(REFRESH_TOKEN_KEY);
@@ -329,203 +423,344 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         scheduleNext();
       }
     };
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") void tryRefresh();
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void tryRefresh();
     });
     void tryRefresh();
     return () => {
       cancelled = true;
-      sub.remove();
+      subscription.remove();
       if (timer) clearTimeout(timer);
     };
-  }, [accessToken, applyUser, initialized, loadMe, refresh, user]);
+  }, [accessToken, applyUser, initialized, refresh, user]);
 
   useEffect(() => {
     if (!initialized) return;
-    if (user?.id) {
-      void setTapdbUser(user.id);
-    } else {
-      void clearTapdbUser();
-    }
+    if (user?.id) void setTapdbUser(user.id);
+    else void clearTapdbUser();
   }, [initialized, user?.id]);
 
-  const prepareOAuthLogin =
-    useCallback(async (): Promise<OAuthLoginRequest> => {
-      if (!FEISHU_APP_ID) throw new Error("缺少 EXPO_PUBLIC_FEISHU_APP_ID");
-      setAuthError(null);
-      const did = deviceId ?? (await ensureDeviceId());
-      setDeviceId(did);
-      const { codeVerifier, codeChallenge } = await createPkcePair();
-      const state = `${MOBILE_OAUTH_STATE_PREFIX}${createState()}`;
-      await setSecureItem(
-        PENDING_OAUTH_KEY,
-        JSON.stringify({
-          codeVerifier,
-          deviceId: did,
-          state,
-          createdAt: Date.now(),
-        } satisfies PendingOAuth),
-      );
-      const redirectUri = `${API_BASE_URL}/api/auth/callback`;
-      const params = new URLSearchParams({
-        client_id: FEISHU_APP_ID,
-        redirect_uri: redirectUri,
-        response_type: "code",
-        state,
-        code_challenge: codeChallenge,
-        code_challenge_method: "S256",
-        scope: OAUTH_SCOPE,
-      });
-      return {
-        authUrl: `https://accounts.feishu.cn/open-apis/authen/v1/authorize?${params.toString()}`,
-        redirectUri,
-      };
-    }, [deviceId]);
-
   const completeOAuthCallback = useCallback(
-    async (callbackUrl: string) => {
-      setIsBusy(true);
-      try {
-        const pending = await readPendingOAuth();
-        await finishOAuthLogin(callbackUrl, pending, setToken, applyUser);
-        setDeviceId(pending.deviceId);
-      } finally {
-        setIsBusy(false);
-      }
-    },
-    [applyUser, setToken],
-  );
-
-  const loginWithFeishu = useCallback(async () => {
-    if (!FEISHU_APP_ID) throw new Error("缺少 EXPO_PUBLIC_FEISHU_APP_ID");
-    setAuthError(null);
-    setIsBusy(true);
-    try {
-      const did = deviceId ?? (await ensureDeviceId());
-      setDeviceId(did);
-      // Only the native SDK detection / launch is allowed to fall back to the browser.
-      // The server token exchange must NOT live inside this catch: once we already have a
-      // code from Feishu, a login failure (expired/rejected code, network, server 5xx) has
-      // to surface to the caller — otherwise it gets swallowed and the user is silently
-      // re-prompted with a second (browser) login.
-      let nativeCode: string | null = null;
-      try {
-        if (NATIVE_FEISHU_LOGIN_ENABLED && await isFeishuAppInstalled()) {
-          nativeCode = await requestFeishuAuthCodeWithTimeout(FEISHU_APP_ID);
+    (callbackUrl: string): Promise<void> => {
+      if (browserCompletionRef.current) return browserCompletionRef.current;
+      const run = (async () => {
+        setIsBusy(true);
+        try {
+          if (!matchesOAuthCallbackUrl(callbackUrl, MOBILE_REDIRECT_URL)) {
+            throw authCodeError('INVALID_AUTH_CODE');
+          }
+          const pending = await readPendingOAuth();
+          const callback = parseOAuthCallbackUrl(callbackUrl);
+          if (callback.state !== pending.state)
+            throw authCodeError('STATE_MISMATCH');
+          const outcome = await authClientFor(
+            pending.deviceId,
+          ).exchangeAuthorizationCode(callback.code, pending.codeVerifier);
+          deviceIdRef.current = pending.deviceId;
+          setDeviceId(pending.deviceId);
+          await acceptOutcome(outcome, pending.deviceId);
+          setAuthError(null);
+        } catch (error) {
+          const code = authErrorCode(error);
+          if (code === 'INVALID_AUTH_CODE') {
+            await deleteSecureItem(PENDING_OAUTH_KEY).catch(() => undefined);
+            updateLoginState(null);
+          }
+          setAuthError(code);
+          throw error;
+        } finally {
+          setIsBusy(false);
         }
-      } catch {
-        // Feishu not installed / native SDK launch failed or never returned (for example
-        // a migration-period callback collision with an old installed app) → browser fallback.
-        nativeCode = null;
-      }
-
-      if (nativeCode) {
-        await finishOAuthLoginWithCode(nativeCode, did, setToken, applyUser);
-        return;
-      }
-
-      const request = await prepareOAuthLogin();
-      const result = await WebBrowser.openAuthSessionAsync(request.authUrl, MOBILE_REDIRECT_URL);
-      if (result.type === "success") {
-        await completeOAuthCallback(result.url);
-      } else if (result.type === "cancel") {
-        throw new Error("已取消飞书登录");
-      } else {
-        throw new Error("飞书登录未完成");
-      }
-    } finally {
-      setIsBusy(false);
-    }
-  }, [applyUser, completeOAuthCallback, deviceId, prepareOAuthLogin, setToken]);
-
-  // Complete OAuth when the app is re-opened via the lizcn://auth deep link. This is the
-  // return path for the browser OAuth flow: the server bounces Feishu's https callback
-  // to lizcn://auth?code=..., iOS re-opens the app, and we finish the PKCE exchange using
-  // the pending state saved before the browser opened (survives an app restart). Double
-  // completion is guarded by completeOAuthCallback clearing the pending key on success.
-  useEffect(() => {
-    const handleDeepLink = (url: string | null) => {
-      if (!url || !url.startsWith(MOBILE_REDIRECT_URL)) return;
-      // Surface failures (expired/mismatched state, OAuth error, network) — unlike the in-WebView
-      // path there's no visible flow here, so a swallowed error would just strand the user on the
-      // login screen with no feedback. The login screen renders auth.authError.
-      void completeOAuthCallback(url).catch((err) => {
-        setAuthError(err instanceof Error ? err.message : String(err));
-      });
-    };
-    const sub = Linking.addEventListener("url", ({ url }) => handleDeepLink(url));
-    void Linking.getInitialURL().then(handleDeepLink).catch(() => undefined);
-    return () => sub.remove();
-  }, [completeOAuthCallback]);
-
-  const devLogin = useCallback(async () => {
-    const did = deviceId ?? (await ensureDeviceId());
-    setDeviceId(did);
-    setIsBusy(true);
-    try {
-      const loginResult = await apiFetchRaw<LoginResponse>(
-        "/api/auth/dev-login",
-        {
-          method: "POST",
-          body: { deviceId: did },
+      })();
+      browserCompletionRef.current = run;
+      run.then(
+        () => {
+          if (browserCompletionRef.current === run)
+            browserCompletionRef.current = null;
+        },
+        () => {
+          if (browserCompletionRef.current === run)
+            browserCompletionRef.current = null;
         },
       );
-      await setSecureItem(REFRESH_TOKEN_KEY, loginResult.refreshToken);
-      await deleteSecureItem(PENDING_OAUTH_KEY).catch(() => undefined);
-      setToken(loginResult.accessToken);
-      applyUser(loginResult.user);
-    } finally {
-      setIsBusy(false);
-    }
-  }, [applyUser, deviceId, setToken]);
+      return run;
+    },
+    [acceptOutcome, updateLoginState],
+  );
+
+  // SSO returns through cindycn://auth or cindy://auth. The pending PKCE verifier
+  // lives in SecureStore so a browser-triggered app restart can still finish safely.
+  useEffect(() => {
+    const handleDeepLink = (url: string | null) => {
+      if (!url || !matchesOAuthCallbackUrl(url, MOBILE_REDIRECT_URL)) return;
+      void completeOAuthCallback(url).catch(() => undefined);
+    };
+    const subscription = Linking.addEventListener('url', ({ url }) =>
+      handleDeepLink(url),
+    );
+    void Linking.getInitialURL()
+      .then(handleDeepLink)
+      .catch(() => undefined);
+    return () => subscription.remove();
+  }, [completeOAuthCallback]);
+
+  const dispatchLoginAction = useCallback(
+    (action: MobileLoginAction): Promise<boolean> => {
+      if (loginActionInFlightRef.current) return loginActionInFlightRef.current;
+      let run: Promise<boolean>;
+      const clearIfCurrent = () => {
+        if (loginActionInFlightRef.current === run)
+          loginActionInFlightRef.current = null;
+      };
+      run = (async () => {
+        setIsBusy(true);
+        setAuthError(null);
+        try {
+          const did = deviceIdRef.current ?? (await ensureDeviceId());
+          deviceIdRef.current = did;
+          setDeviceId(did);
+          const client = authClientFor(did);
+
+          if (action.type === 'reset') {
+            pendingLoginTicketRef.current = null;
+            pendingBindTicketRef.current = null;
+            await deleteSecureItem(PENDING_OAUTH_KEY).catch(() => undefined);
+            const providers = await client.getProviders();
+            updateLoginState(
+              reduceAuthFlow(loginStateRef.current, {
+                type: 'providers-loaded',
+                providers,
+              }),
+            );
+            return true;
+          }
+          if (action.type === 'discover') {
+            const email = action.email.trim().toLowerCase();
+            const methods = await client.discover(email);
+            updateLoginState(
+              reduceAuthFlow(loginStateRef.current, {
+                type: 'discovery-loaded',
+                email,
+                methods,
+              }),
+            );
+            return true;
+          }
+          // 企业 SSO 入口（按企业 ID/组织 slug）：结果映射进 method-choice，
+          // 复用连接选择 UI 与 start-sso 流程。
+          if (action.type === 'discover-sso-org') {
+            const discovery = await client.discoverSsoOrg(
+              action.org.trim().toLowerCase(),
+            );
+            updateLoginState(
+              reduceAuthFlow(loginStateRef.current, {
+                type: 'discovery-loaded',
+                email: '',
+                methods: ssoOrgDiscoveryToMethods(discovery),
+              }),
+            );
+            return true;
+          }
+          if (action.type === 'request-code') {
+            const identifier = action.identifier.trim();
+            await client.requestCode(action.kind, identifier);
+            updateLoginState(
+              reduceAuthFlow(loginStateRef.current, {
+                type: 'code-requested',
+                kind: action.kind,
+                identifier,
+              }),
+            );
+            return true;
+          }
+          if (action.type === 'verify-code') {
+            await acceptOutcome(
+              await client.verifyCode(
+                action.kind,
+                action.identifier.trim(),
+                action.code,
+              ),
+              did,
+            );
+            return true;
+          }
+          if (action.type === 'native-social') {
+            const credential = await acquireNativeSocialCredential(
+              action.provider,
+            );
+            await acceptOutcome(
+              await client.exchangeNativeSocial(action.provider, credential),
+              did,
+            );
+            return true;
+          }
+          if (action.type === 'start-sso') {
+            const previousState = loginStateRef.current;
+            const { codeVerifier, codeChallenge } = await createPkcePair();
+            const state = createState();
+            await setSecureItem(
+              PENDING_OAUTH_KEY,
+              JSON.stringify({
+                codeVerifier,
+                deviceId: did,
+                state,
+                createdAt: Date.now(),
+                label: action.label,
+              } satisfies PendingOAuth),
+            );
+            updateLoginState(
+              reduceAuthFlow(previousState, {
+                type: 'browser-started',
+                label: action.label,
+              }),
+            );
+            const authUrl = client.buildAuthorizeUrl({
+              kind: 'sso',
+              providerOrConnectionId: action.connectionId,
+              redirectUri: MOBILE_REDIRECT_URL,
+              codeChallenge,
+              state,
+            });
+            const result = await WebBrowser.openAuthSessionAsync(
+              authUrl,
+              MOBILE_REDIRECT_URL,
+            );
+            if (result.type === 'success') {
+              await completeOAuthCallback(result.url);
+              return true;
+            }
+            await deleteSecureItem(PENDING_OAUTH_KEY).catch(() => undefined);
+            updateLoginState(previousState);
+            throw authCodeError('USER_CANCELLED');
+          }
+          if (action.type === 'select-account') {
+            const ticket = pendingLoginTicketRef.current;
+            if (!ticket) throw authCodeError('INVALID_LOGIN_TICKET');
+            await acceptOutcome(
+              await client.selectAccount(ticket, action.accountId),
+              did,
+            );
+            return true;
+          }
+
+          const bindTicket = pendingBindTicketRef.current;
+          const state = loginStateRef.current;
+          if (!bindTicket || state?.step !== 'binding')
+            throw authCodeError('INVALID_BIND_TICKET');
+          if (action.type === 'request-binding-code') {
+            const contact = action.contact.trim();
+            await client.requestBindingCode(
+              bindTicket,
+              state.bindType,
+              contact,
+            );
+            updateLoginState(
+              reduceAuthFlow(state, {
+                type: 'binding-code-requested',
+                bindType: state.bindType,
+                contact,
+              }),
+            );
+            return true;
+          }
+          await acceptOutcome(
+            await client.verifyBinding(
+              bindTicket,
+              state.bindType,
+              action.contact.trim(),
+              action.code,
+            ),
+            did,
+          );
+          return true;
+        } catch (error) {
+          const code = authErrorCode(error);
+          if (
+            code === 'INVALID_LOGIN_TICKET' ||
+            code === 'INVALID_BIND_TICKET'
+          ) {
+            pendingLoginTicketRef.current = null;
+            pendingBindTicketRef.current = null;
+            updateLoginState(null);
+          }
+          setAuthError(code);
+          return false;
+        } finally {
+          setIsBusy(false);
+        }
+      })();
+      loginActionInFlightRef.current = run;
+      run.then(clearIfCurrent, clearIfCurrent);
+      return run;
+    },
+    [acceptOutcome, completeOAuthCallback, updateLoginState],
+  );
 
   const logout = useCallback(async () => {
-    // Invalidate any in-flight refresh so it can't write a rotated token back after we log out.
     authGenerationRef.current += 1;
     refreshInFlightRef.current = null;
     const token = accessTokenRef.current;
-    const did = deviceId;
+    const did = deviceIdRef.current;
     setToken(null);
     applyUser(null);
+    updateLoginState(null);
+    pendingLoginTicketRef.current = null;
+    pendingBindTicketRef.current = null;
     await clearAllMobileVoiceCredentials().catch(() => undefined);
     await clearMobileVoiceLiteLlmSettings().catch(() => undefined);
     await clearAllMobileVoiceInputHistories().catch(() => undefined);
     await clearCachedSessionMessages().catch(() => undefined);
-    // 首页设备+会话快照与消息缓存一样属于账号数据,登出必须清掉,避免下个账号冷启动画出上个账号的列表。
+    // 首页设备+会话快照与消息缓存一样属于账号数据,登出必须清掉。
     await clearCachedHomeListSnapshot().catch(() => undefined);
-    // 内存缓存同步清:@ 资源(含文件路径)/ slash / 能力表按账号隔离,防止换号短暂串数据。
     resetComposerPaletteCache();
     resetAgentCapabilitiesCache();
-    await deleteSecureItem(REFRESH_TOKEN_KEY).catch(() => undefined);
-    if (token && did) {
-      await apiFetchRaw("/api/auth/logout", {
-        method: "POST",
-        token,
-        body: { deviceId: did },
-      }).catch(() => undefined);
-    }
-  }, [deviceId, setToken]);
+    await serializeRefreshTokenMutation(() =>
+      deleteSecureItem(REFRESH_TOKEN_KEY).catch(() => undefined),
+    );
+    await Promise.all([
+      serializeUserProfileMutation(() =>
+        deleteSecureItem(USER_PROFILE_KEY).catch(() => undefined),
+      ),
+      deleteSecureItem(LEGACY_REFRESH_TOKEN_KEY).catch(() => undefined),
+      deleteSecureItem(PENDING_OAUTH_KEY).catch(() => undefined),
+      deleteSecureItem(LEGACY_PENDING_OAUTH_KEY).catch(() => undefined),
+      deleteSecureItem(LEGACY_USER_PROFILE_KEY).catch(() => undefined),
+    ]);
+    if (token && did)
+      await authClientFor(did)
+        .logout(token)
+        .catch(() => undefined);
+  }, [
+    applyUser,
+    serializeRefreshTokenMutation,
+    serializeUserProfileMutation,
+    setToken,
+    updateLoginState,
+  ]);
 
   const getAccessToken = useCallback(async () => {
-    // Refresh proactively when the cached token is expired/near-expiry. Callers like the
-    // device-link WS upgrade have no 401-retry, so handing them a stale JWT gets rejected.
     const cached = accessTokenRef.current;
     if (cached && !isAccessTokenExpiring(cached)) return cached;
     return refresh();
   }, [refresh]);
 
+  // 带 Bearer + 401 自动 refresh 的业务请求封装;目标服务由调用方经
+  // opts.baseUrl 显式指定(老主 server xdt-api 已退役,没有默认业务 server)。
   const apiFetch = useCallback(
-    async <T,>(path: string, opts: Omit<ApiFetchOptions, "token"> = {}) => {
+    async <T,>(
+      path: string,
+      opts: Omit<ApiFetchOptions, 'token'>,
+    ): Promise<T> => {
       const token = await getAccessToken();
-      if (!token) throw new Error("未登录");
+      if (!token) throw new Error('UNAUTHENTICATED');
       try {
         return await apiFetchRaw<T>(path, { ...opts, token });
-      } catch (err) {
-        if (err instanceof ApiError && err.status === 401) {
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
           const fresh = await refresh();
           if (fresh) return apiFetchRaw<T>(path, { ...opts, token: fresh });
         }
-        throw err;
+        throw error;
       }
     },
     [getAccessToken, refresh],
@@ -535,36 +770,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       initialized,
       isBusy,
-      // 以 user 为准而非 accessToken:弱网冷启动下 token 可能尚未刷到
-      // (降级会话,由自愈 effect 补),但会话仍然有效,不能闪回登录页。
-      // 凭证真失效(refresh 401)与登出都会把 user 清空,语义仍然收敛。
+      // 以 user 为准:弱网冷启动 token 可能尚未刷到,但会话仍可降级恢复。
       isAuthenticated: user !== null,
       user,
       deviceId,
-      prepareOAuthLogin,
-      loginWithFeishu,
+      loginState,
       authError,
       clearAuthError,
-      devLogin,
+      dispatchLoginAction,
       completeOAuthCallback,
       logout,
       getAccessToken,
       apiFetch,
     }),
     [
-      accessToken,
       apiFetch,
       authError,
       clearAuthError,
       completeOAuthCallback,
-      devLogin,
       deviceId,
+      dispatchLoginAction,
       getAccessToken,
       initialized,
       isBusy,
-      loginWithFeishu,
+      loginState,
       logout,
-      prepareOAuthLogin,
       user,
     ],
   );
@@ -573,9 +803,84 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
-  return ctx;
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used inside AuthProvider');
+  return context;
+}
+
+function authClientFor(deviceId: string): CindyAuthClient {
+  return new CindyAuthClient({
+    baseUrl: AUTH_API_BASE_URL,
+    region: AUTH_REGION,
+    deviceId,
+    clientType: 'mobile',
+    locale: getAuthLocale(),
+    fetch: async (input, init) => fetch(input, init),
+  });
+}
+
+// mapMembershipToMobileUser / mergeMembershipWithExisting
+// 已抽至 @/auth/profileMerge(纯函数,便于单测)。
+
+/** Unblocks initial rendering without aborting a rotating refresh-token request. */
+function awaitAuthStartupGate<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+): Promise<T | null> {
+  return new Promise((resolve, reject) => {
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      resolve(null);
+    }, timeoutMs);
+    operation.then(
+      (value) => {
+        if (timedOut) return;
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        if (timedOut) return;
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+function isRejectedRefresh(error: unknown): boolean {
+  return (
+    error instanceof AuthApiError &&
+    (error.statusCode === 401 ||
+      error.code.includes('REFRESH_TOKEN') ||
+      error.code === 'MEMBERSHIP_DISABLED')
+  );
+}
+
+function authErrorCode(error: unknown): string {
+  if (error instanceof AuthApiError) return error.code;
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string') {
+      if (
+        [
+          'ERR_REQUEST_CANCELED',
+          'ERR_WECHAT_CANCELLED',
+          'SIGN_IN_CANCELLED',
+        ].includes(code)
+      ) {
+        return 'USER_CANCELLED';
+      }
+      return code;
+    }
+  }
+  if (error instanceof Error && /^[A-Z][A-Z0-9_]+$/.test(error.message))
+    return error.message;
+  return 'AUTH_REQUEST_FAILED';
+}
+
+function authCodeError(code: string): Error & { code: string } {
+  return Object.assign(new Error(code), { code });
 }
 
 async function readCachedUserProfile(): Promise<MobileUser | null> {
@@ -583,7 +888,12 @@ async function readCachedUserProfile(): Promise<MobileUser | null> {
     const raw = await getSecureItem(USER_PROFILE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<MobileUser>;
-    if (typeof parsed.id !== "string" || typeof parsed.name !== "string") return null;
+    if (
+      typeof parsed.id !== 'string' ||
+      typeof parsed.name !== 'string' ||
+      (parsed.membershipKind !== 'personal' && parsed.membershipKind !== 'org')
+    )
+      return null;
     return parsed as MobileUser;
   } catch {
     return null;
@@ -595,78 +905,30 @@ async function writeCachedUserProfile(user: MobileUser | null): Promise<void> {
     if (user) await setSecureItem(USER_PROFILE_KEY, JSON.stringify(user));
     else await deleteSecureItem(USER_PROFILE_KEY);
   } catch {
-    // 快照是尽力而为的加速缓存,写失败不影响登录流程本身
+    // Snapshot persistence is best effort and never blocks the auth flow.
   }
 }
 
 async function readPendingOAuth(): Promise<PendingOAuth> {
   const raw = await getSecureItem(PENDING_OAUTH_KEY);
-  if (!raw) throw new Error("没有待完成的飞书登录，请先点一次飞书登录");
-
-  const parsed = JSON.parse(raw) as Partial<PendingOAuth>;
-  if (
-    typeof parsed.codeVerifier !== "string" ||
-    typeof parsed.deviceId !== "string" ||
-    typeof parsed.state !== "string" ||
-    typeof parsed.createdAt !== "number"
-  ) {
-    throw new Error("待完成的登录状态无效，请重新发起飞书登录");
+  if (!raw) throw authCodeError('INVALID_AUTH_CODE');
+  let parsed: Partial<PendingOAuth>;
+  try {
+    parsed = JSON.parse(raw) as Partial<PendingOAuth>;
+  } catch {
+    throw authCodeError('INVALID_AUTH_CODE');
   }
+  if (
+    typeof parsed.codeVerifier !== 'string' ||
+    typeof parsed.deviceId !== 'string' ||
+    typeof parsed.state !== 'string' ||
+    typeof parsed.createdAt !== 'number' ||
+    typeof parsed.label !== 'string'
+  )
+    throw authCodeError('INVALID_AUTH_CODE');
   if (Date.now() - parsed.createdAt > PENDING_OAUTH_MAX_AGE_MS) {
     await deleteSecureItem(PENDING_OAUTH_KEY).catch(() => undefined);
-    throw new Error("飞书登录已过期，请重新发起登录");
+    throw authCodeError('INVALID_AUTH_CODE');
   }
   return parsed as PendingOAuth;
-}
-
-async function finishOAuthLogin(
-  callbackUrl: string,
-  pending: Pick<PendingOAuth, "codeVerifier" | "deviceId" | "state">,
-  setToken: (token: string | null) => void,
-  setUser: (user: MobileUser | null) => void,
-): Promise<void> {
-  const callback = parseOAuthCallbackUrl(callbackUrl);
-  if (callback.state !== pending.state) throw new Error("登录状态校验失败");
-
-  const loginResult = await apiFetchRaw<LoginResponse>("/api/auth/login", {
-    method: "POST",
-    body: {
-      code: callback.code,
-      codeVerifier: pending.codeVerifier,
-      deviceId: pending.deviceId,
-      // 手机是远程控制端:只需身份,不直接调飞书数据 API,故声明 mobile 让服务端放宽
-      // scope / refresh_token 校验。浏览器兜底与原生 SDK 两条路径都声明,保持一致。
-      clientType: "mobile",
-    },
-  });
-  await persistLoginResult(loginResult, setToken, setUser);
-}
-
-async function finishOAuthLoginWithCode(
-  code: string,
-  deviceId: string,
-  setToken: (token: string | null) => void,
-  setUser: (user: MobileUser | null) => void,
-): Promise<void> {
-  const loginResult = await apiFetchRaw<LoginResponse>("/api/auth/login", {
-    method: "POST",
-    body: {
-      code,
-      deviceId,
-      // 原生 LarkSSO 登录:无 codeVerifier;声明 mobile 让服务端放宽 scope / refresh_token 校验。
-      clientType: "mobile",
-    },
-  });
-  await persistLoginResult(loginResult, setToken, setUser);
-}
-
-async function persistLoginResult(
-  loginResult: LoginResponse,
-  setToken: (token: string | null) => void,
-  setUser: (user: MobileUser | null) => void,
-): Promise<void> {
-  await setSecureItem(REFRESH_TOKEN_KEY, loginResult.refreshToken);
-  await deleteSecureItem(PENDING_OAUTH_KEY).catch(() => undefined);
-  setToken(loginResult.accessToken);
-  setUser(loginResult.user);
 }

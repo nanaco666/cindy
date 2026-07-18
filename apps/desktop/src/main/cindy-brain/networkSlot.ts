@@ -121,6 +121,9 @@ export interface NetworkSlotDeps {
     buffer: Uint8Array;
     mimeType: string;
     label?: string;
+    /** 署名调用的 tool-call callId(记入 ghostMediaLedger 供收口带回);
+     *  未署名('unattributed')不传、不记账。 */
+    callId?: string;
   }): Promise<{ url: string; hash: string; ext: string }>;
   /** 归一化后的 mime 是否可入总仓(生产为 cindy-media 的 supportedMime)。 */
   isSupportedMediaMime(mime: string): boolean;
@@ -440,12 +443,12 @@ export class GhostNetworkSlot {
     }
     // ── 上传通道(媒体模式的镜像):意识只报指纹,主机验归属读字节代组
     // multipart。字节不进沙箱。
-    let upload: { hashes: string[]; field: string } | undefined;
+    let upload: { hashes: string[]; field: string; fields: Record<string, string> } | undefined;
     if (p.upload !== undefined) {
       if (typeof p.upload !== 'object' || p.upload === null || Array.isArray(p.upload)) {
-        return { ok: false, message: 'upload 必须是对象({ hashes, field? })' };
+        return { ok: false, message: 'upload 必须是对象({ hashes, field?, fields? })' };
       }
-      const u = p.upload as { hashes?: unknown; field?: unknown };
+      const u = p.upload as { hashes?: unknown; field?: unknown; fields?: unknown };
       if (!Array.isArray(u.hashes) || u.hashes.length === 0 || u.hashes.length > GHOST_FETCH_UPLOAD_MAX_FILES) {
         return { ok: false, message: `upload.hashes 必须是 1–${GHOST_FETCH_UPLOAD_MAX_FILES} 条的数组` };
       }
@@ -466,22 +469,54 @@ export class GhostNetworkSlot {
         }
         field = u.field;
       }
+      // 随行普通表单字段(与 uploadDir.fields 同规格;值里的 "{bytes}" 由
+      // buildUploadBody 替换成总字节数——飞书 upload_all 的 size 字段用)。
+      const uploadFields: Record<string, string> = {};
+      if (u.fields !== undefined) {
+        if (typeof u.fields !== 'object' || u.fields === null || Array.isArray(u.fields)) {
+          return { ok: false, message: 'upload.fields 必须是对象(字段名 → 字符串值)' };
+        }
+        const entries = Object.entries(u.fields as Record<string, unknown>);
+        if (entries.length > GHOST_FETCH_DIR_UPLOAD_MAX_FIELDS) {
+          return { ok: false, message: `upload.fields 过多(上限 ${GHOST_FETCH_DIR_UPLOAD_MAX_FIELDS} 条)` };
+        }
+        for (const [name, value] of entries) {
+          if (!GHOST_FETCH_UPLOAD_FIELD_RE.test(name)) {
+            return { ok: false, message: `upload.fields 含非法字段名 ${JSON.stringify(name)}` };
+          }
+          if (
+            typeof value !== 'string' ||
+            value.length > GHOST_FETCH_DIR_UPLOAD_FIELD_VALUE_MAX_CHARS ||
+            /[\r\n]/.test(value)
+          ) {
+            return { ok: false, message: `upload.fields 字段 ${JSON.stringify(name)} 的值不合法` };
+          }
+          uploadFields[name] = value;
+        }
+      }
       if (method !== 'POST') return { ok: false, message: 'upload 仅在 POST 时允许' };
       if (body !== undefined) return { ok: false, message: 'upload 与 body 互斥(multipart 体由主机代组)' };
       if (asMode === 'media') {
         // 上传响应(入库回执 JSON)按文本回;禁掉组合免与取件闸互相占坑。
         return { ok: false, message: "upload 与 as:'media' 不可同时使用(上传响应按文本形态返回)" };
       }
-      upload = { hashes, field };
+      upload = { hashes, field, fields: uploadFields };
     }
     // ── 目录上传通道(uploadDir):意识只报过户票据,主机凭票读盘代组
     // multipart(文件字段 file-N,filename=相对路径)。路径与字节都不进沙箱。
-    let uploadDir: { token: string; fields: Record<string, string>; fileFieldPrefix: string } | undefined;
+    let uploadDir:
+      | { token: string; fields: Record<string, string>; fileFieldPrefix: string; fileField?: string }
+      | undefined;
     if (p.uploadDir !== undefined) {
       if (typeof p.uploadDir !== 'object' || p.uploadDir === null || Array.isArray(p.uploadDir)) {
-        return { ok: false, message: 'uploadDir 必须是对象({ token, fields?, fileFieldPrefix? })' };
+        return { ok: false, message: 'uploadDir 必须是对象({ token, fields?, fileFieldPrefix?, fileField? })' };
       }
-      const d = p.uploadDir as { token?: unknown; fields?: unknown; fileFieldPrefix?: unknown };
+      const d = p.uploadDir as {
+        token?: unknown;
+        fields?: unknown;
+        fileFieldPrefix?: unknown;
+        fileField?: unknown;
+      };
       if (typeof d.token !== 'string' || !GHOST_DIR_DEPOSIT_TOKEN_RE.test(d.token)) {
         return { ok: false, message: 'uploadDir.token 不合法(需 ghost_call 目录过户注入的 args.dir_deposit.token)' };
       }
@@ -515,13 +550,25 @@ export class GhostNetworkSlot {
         }
         fileFieldPrefix = d.fileFieldPrefix;
       }
+      // 单文件精确字段名(飞书 im 文件上传这类"字段名钉死 file"的服务):
+      // 与前缀形态互斥,消费时票据必须恰含 1 个文件(buildDirUploadBody 钳)。
+      let fileField: string | undefined;
+      if (d.fileField !== undefined) {
+        if (typeof d.fileField !== 'string' || !GHOST_FETCH_UPLOAD_FIELD_RE.test(d.fileField)) {
+          return { ok: false, message: 'uploadDir.fileField 必须是 1–64 位字母/数字/_/- 的字段名' };
+        }
+        if (d.fileFieldPrefix !== undefined) {
+          return { ok: false, message: 'uploadDir.fileField 与 fileFieldPrefix 互斥(单文件精确字段名 vs 多文件前缀)' };
+        }
+        fileField = d.fileField;
+      }
       if (method !== 'POST') return { ok: false, message: 'uploadDir 仅在 POST 时允许' };
       if (body !== undefined) return { ok: false, message: 'uploadDir 与 body 互斥(multipart 体由主机代组)' };
       if (upload !== undefined) return { ok: false, message: 'uploadDir 与 upload 互斥(一单一种上传形态)' };
       if (asMode === 'media') {
         return { ok: false, message: "uploadDir 与 as:'media' 不可同时使用(上传响应按文本形态返回)" };
       }
-      uploadDir = { token: d.token, fields, fileFieldPrefix };
+      uploadDir = { token: d.token, fields, fileFieldPrefix, ...(fileField ? { fileField } : {}) };
     }
     let label: string | undefined;
     if (p.label !== undefined) {
@@ -672,9 +719,9 @@ export class GhostNetworkSlot {
       }
 
       // ── 执行(重定向逐跳手动跟,每跳重验白名单 + 重算凭证注入)────────
-      // 外层 attempt 循环只为交换型 / oauth 凭证的 401 兜底:令牌可能被服务端
-      // 提前作废,作废本地缓存重换/重刷一次再整链重试;第二次仍 401 就原样
-      // 回给意识。
+      // 外层 attempt 循环只为交换型 / oauth 凭证的 401 兜底:令牌可能被
+      // 服务端提前作废,作废本地缓存重换/重刷一次再整链重试;第二次仍
+      // 401 就原样回给意识。
       let response: Response | null = null;
       for (let attempt = 0; attempt < 2; attempt++) {
         if (attempt > 0) {
@@ -845,6 +892,9 @@ export class GhostNetworkSlot {
               buffer: mediaBytes,
               mimeType: mime,
               ...(label !== undefined ? { label } : {}),
+              // 署名调用记账(ghostMediaLedger):产物随 ghost_call 收口带回,
+              // IM/hook 出站兜底送达;未署名不记(避免并发误配)。
+              ...(callId !== 'unattributed' ? { callId } : {}),
             });
             this.deps.log?.info('ghost fetch-request done (media)', {
               ghostId, callId, method, host: url.hostname, status: response.status,
@@ -1163,12 +1213,13 @@ export class GhostNetworkSlot {
    */
   private async buildUploadBody(
     ghostId: string,
-    upload: { hashes: string[]; field: string },
+    upload: { hashes: string[]; field: string; fields?: Record<string, string> },
   ): Promise<{ body: Uint8Array; boundary: string } | { error: string }> {
     const boundary = `----cindy-ghost-${randomUUID()}`;
     const encoder = new TextEncoder();
     const chunks: Uint8Array[] = [];
     let total = 0;
+    const fileParts: Uint8Array[] = [];
     for (const hash of upload.hashes) {
       const media = await this.deps.readGhostMedia(ghostId, hash);
       if (!media) {
@@ -1181,7 +1232,7 @@ export class GhostNetworkSlot {
       if (total > GHOST_FETCH_UPLOAD_MAX_TOTAL_BYTES) {
         return { error: `上传总量超上限(${GHOST_FETCH_UPLOAD_MAX_TOTAL_BYTES} 字节)` };
       }
-      chunks.push(
+      fileParts.push(
         encoder.encode(
           `--${boundary}\r\n` +
           `Content-Disposition: form-data; name="${upload.field}"; filename="${hash.slice(0, 16)}${media.ext}"\r\n` +
@@ -1191,6 +1242,19 @@ export class GhostNetworkSlot {
         encoder.encode('\r\n'),
       );
     }
+    // 普通字段在文件段之前;值里的 "{bytes}" 替换成全部文件的总字节数
+    // (飞书 upload_all 这类要求 size 字段的服务;字段值已在解析层消毒)。
+    for (const [name, value] of Object.entries(upload.fields ?? {})) {
+      const resolved = value.replace('{bytes}', () => String(total));
+      chunks.push(
+        encoder.encode(
+          `--${boundary}\r\n` +
+          `Content-Disposition: form-data; name="${name}"\r\n\r\n` +
+          `${resolved}\r\n`,
+        ),
+      );
+    }
+    chunks.push(...fileParts);
     chunks.push(encoder.encode(`--${boundary}--\r\n`));
     const body = new Uint8Array(chunks.reduce((n, c) => n + c.byteLength, 0));
     let offset = 0;
@@ -1210,21 +1274,35 @@ export class GhostNetworkSlot {
    */
   private async buildDirUploadBody(
     ghostId: string,
-    uploadDir: { token: string; fields: Record<string, string>; fileFieldPrefix: string },
+    uploadDir: {
+      token: string;
+      fields: Record<string, string>;
+      fileFieldPrefix: string;
+      fileField?: string;
+    },
   ): Promise<{ body: Uint8Array; boundary: string } | { error: string }> {
     const deposit = this.deps.takeDirDeposit(ghostId, uploadDir.token);
     if (!deposit) {
       return { error: '目录过户票据无效(不存在 / 已使用 / 已过期)——请让主 agent 重新经 ghost_call 的 dir 参数过户目录' };
     }
+    // 单文件精确字段名形态:票据必须恰含 1 个文件(过户的是单文件或单文件
+    // 目录),否则整单拒——多文件没有"钉死字段名"的正当语义。
+    if (uploadDir.fileField !== undefined && deposit.files.length !== 1) {
+      return { error: `uploadDir.fileField 要求票据恰含 1 个文件(实际 ${deposit.files.length} 个)——请让主 agent 用 ghost_call 的 dir 参数过户单个文件` };
+    }
     const boundary = `----cindy-ghost-${randomUUID()}`;
     const encoder = new TextEncoder();
     const chunks: Uint8Array[] = [];
+    // 普通字段在文件段之前;值里的 "{bytes}" 替换成全部文件的总字节数
+    // (票据元数据的 size 之和;与 upload 通道同一约定)。
+    const declaredTotal = deposit.files.reduce((n, f) => n + f.size, 0);
     for (const [name, value] of Object.entries(uploadDir.fields)) {
+      const resolved = value.replace('{bytes}', () => String(declaredTotal));
       chunks.push(
         encoder.encode(
           `--${boundary}\r\n` +
           `Content-Disposition: form-data; name="${name}"\r\n\r\n` +
-          `${value}\r\n`,
+          `${resolved}\r\n`,
         ),
       );
     }
@@ -1253,12 +1331,17 @@ export class GhostNetworkSlot {
         return { error: `目录总体积超过限额(${GHOST_FETCH_DIR_UPLOAD_MAX_TOTAL_BYTES} 字节)` };
       }
       // filename 的引号与换行按 RFC 2046 语境消毒(relPath 来自文件系统,
-      // 极端文件名不许破坏 multipart 结构)。
-      const safeName = file.relPath.replace(/"/g, '%22').replace(/[\r\n]/g, '');
+      // 极端文件名不许破坏 multipart 结构)。单文件精确字段名形态下
+      // filename 只取文件名(不含目录段——目标服务按普通文件收,不还原结构)。
+      const rawName = uploadDir.fileField !== undefined
+        ? (file.relPath.split('/').pop() ?? file.relPath)
+        : file.relPath;
+      const safeName = rawName.replace(/"/g, '%22').replace(/[\r\n]/g, '');
+      const partField = uploadDir.fileField ?? `${uploadDir.fileFieldPrefix}${i}`;
       chunks.push(
         encoder.encode(
           `--${boundary}\r\n` +
-          `Content-Disposition: form-data; name="${uploadDir.fileFieldPrefix}${i}"; filename="${safeName}"\r\n` +
+          `Content-Disposition: form-data; name="${partField}"; filename="${safeName}"\r\n` +
           `Content-Type: application/octet-stream\r\n\r\n`,
         ),
         bytes,

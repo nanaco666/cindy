@@ -168,7 +168,7 @@
         "unlockSubmit": "解锁",
         "generateTitle": "生成新的 SSH 密钥",
         "nameLabel": "名字(可选)",
-        "nameHint": "保存为 ~/.ssh/<名字>。默认 \"xdt-maker\",有重名时自动加 -1 / -2 ...",
+        "nameHint": "保存为 ~/.ssh/<名字>。默认 \"cindy\",有重名时自动加 -1 / -2 ...",
         "encryptLabel": "用 passphrase 加密(推荐)",
         "encryptHint": "passphrase 现在输入一次,然后 ssh-add 会把解密后的密钥缓存在系统 ssh-agent 里。macOS 还会把 passphrase 存到 Keychain,重启后自动恢复。",
         "passLabel": "Passphrase",
@@ -502,7 +502,25 @@
     },
     "userProfile": {
       "fallbackName": "用户",
-      "avatarAlt": "{{name}} 的头像"
+      "avatarAlt": "{{name}} 的头像",
+      "copyUserId": {
+        "action": "复制用户 ID",
+        "success": "用户 ID 已复制",
+        "failed": "复制用户 ID 失败"
+      },
+      "edit": {
+        "open": "编辑名字和头像",
+        "title": "编辑个人资料",
+        "nameLabel": "名字",
+        "nameHint": "留空则保持当前名字",
+        "changeAvatar": "更换头像",
+        "resetAvatar": "恢复默认头像",
+        "save": "保存",
+        "cancel": "取消",
+        "syncHint": "名字和头像保存在你的账号中,所有设备同步生效。",
+        "avatarInvalid": "请选择 5MB 以内的 PNG / JPG / WebP 图片",
+        "saveFailed": "保存失败,请重试"
+      }
     },
     "help": {
       "title": "帮助",
@@ -605,18 +623,13 @@
       }
     },
     "apiKey": {
-      "title": "工具密钥",
-      "inputAria": "API Key",
       "showKey": "显示密钥",
-      "hideKey": "隐藏密钥",
-      "openConsole": "打开控制台 ↗",
-      "save": "保存",
-      "saved": "已保存",
-      "saving": "保存中..."
+      "hideKey": "隐藏密钥"
     },
     "voiceInput": {
       "title": "语音输入",
       "description": "设置识别语言、麦克风、快捷键、语音润色和语音输入时静音。",
+      "saveFailed": "语音输入设置保存失败：{{message}}",
       "sections": {
         "basics": "基础",
         "refinement": "润色",
@@ -653,7 +666,8 @@
         "toast": {
           "needsModifier": "请使用组合键、F1-F24 单键，或左/右 Command、Option、Control、Fn。",
           "fnUnavailable": "请使用组合键、F1-F24 单键，或左/右 Command、Option、Control、Fn。",
-          "systemReserved": "这个快捷键会和系统或常用编辑快捷键冲突"
+          "systemReserved": "这个快捷键会和系统或常用编辑快捷键冲突",
+          "registrationFailed": "无法注册此快捷键：{{error}}"
         }
       },
       "permissions": {
@@ -865,12 +879,12 @@
           "binaryMissing": "Codex 组件不可用，请重启应用"
         },
         "apiMode": {
-          "label": "API 模式（走 AI Gateway）",
-          "description": "开启后 Codex 不走订阅，复用「模型供应商」里的 XD 网关 Key。",
-          "noKey": "未配置 XD 网关 Key，请在「模型供应商」里连接 XD 网关",
+          "label": "API 模式（走 Cindy AI）",
+          "description": "开启后 Codex 不走订阅，复用「模型供应商」里的 Cindy AI Key。",
+          "noKey": "未配置 Cindy AI Key，请在「模型供应商」里连接 Cindy AI",
           "noKeyDialog": {
             "title": "尚未配置 API Key",
-            "description": "API 模式需要复用 XD 网关 Key，当前还没有配置。前往「模型供应商」连接 XD 网关后即可开启。"
+            "description": "API 模式需要复用 Cindy AI Key，当前还没有配置。前往「模型供应商」连接 Cindy AI 后即可开启。"
           },
           "badge": {
             "api": "● API",
@@ -878,7 +892,7 @@
           },
           "expandAria": "展开 / 收起 Codex API 模式设置",
           "toggleAria": "切换 Codex API 模式",
-          "sharedKeyWarning": "和 XD 网关共用一把 Key，删除/修改会同时影响 Claude",
+          "sharedKeyWarning": "和 Cindy AI 共用一把 Key，删除/修改会同时影响 Claude",
           "toast": {
             "toggleFailed": "切换 API 模式失败，请重试"
           }
@@ -913,7 +927,7 @@
         },
         "logoutConfirm": {
           "title": "断开 Claude.ai 订阅？",
-          "description": "断开会清除本机 Claude Code 的登录凭证（本地 `claude` 命令行也会一起登出）；若当前在订阅模式会自动切回 AI Gateway。需要重新授权才能恢复。",
+          "description": "断开会清除本机 Claude Code 的登录凭证（本地 `claude` 命令行也会一起登出）；若当前在订阅模式会自动切回 Cindy AI。需要重新授权才能恢复。",
           "confirm": "断开",
           "cancel": "取消"
         },
@@ -926,13 +940,13 @@
           "needAuth": "请先授权登录 Claude.ai"
         },
         "apiMode": {
-          "label": "API 模式（走 AI Gateway）",
-          "description": "开启后 Claude 走 XD AI Gateway 共享 Key（默认）；关闭后 Anthropic 原生模型（Claude）直连 api.anthropic.com 走你的订阅，其余模型仍走 Gateway。",
+          "label": "API 模式（走 Cindy AI）",
+          "description": "开启后 Claude 走 Cindy AI 共享 Key（默认）；关闭后 Anthropic 原生模型（Claude）直连 api.anthropic.com 走你的订阅，其余模型仍走 Cindy AI。",
           "toggleAria": "切换 Claude API 模式",
-          "sharedKeyWarning": "和 XD 网关共用一把 Key，关闭 API 模式后非 Claude 模型仍走 Gateway 需要它",
+          "sharedKeyWarning": "和 Cindy AI 共用一把 Key，关闭 API 模式后非 Claude 模型仍需 Cindy AI",
           "noKeyDialog": {
             "title": "尚未配置 API Key",
-            "description": "关闭 API 模式（走订阅）后，非 Claude 模型（gpt / deepseek 等）仍需复用 XD 网关 Key，当前还没有配置。前往「模型供应商」连接 XD 网关后即可。"
+            "description": "关闭 API 模式（走订阅）后，非 Claude 模型（gpt / deepseek 等）仍需复用 Cindy AI Key，当前还没有配置。前往「模型供应商」连接 Cindy AI 后即可。"
           },
           "toast": {
             "toggleFailed": "切换 API 模式失败，请重试"
@@ -970,21 +984,32 @@
         "billingLabel": "SuperGrok 订阅直连"
       },
       "xd": {
-        "title": "XD 网关",
+        "title": "Cindy AI",
         "subtitle": "全部模型 · Claude Code / Codex 通用 · 按 token 计费",
         "modelLabel": "全部模型",
         "billingLabel": "按 token 计费",
-        "manageKey": "更换 key ↗",
         "disconnectConfirm": {
-          "title": "断开 XD 网关?",
-          "description": "断开后将清除本地保存的网关 key,需要重新连接才能继续使用网关模型。"
+          "title": "断开 Cindy AI?",
+          "description": "断开后将清除本地保存的 Cindy AI Key,需要重新连接才能继续使用 Cindy AI 提供的模型。"
         },
-        "keyDialog": {
-          "title": "配置 XD 网关 Key",
-          "description": "填入 XD 网关 API Key 以启用按 token 计费的全部模型。Key 加密存储在本地,并在登录设备间自动同步。",
-          "placeholder": "sk-...",
-          "close": "关闭"
-        }
+        "sync": {
+          "syncing": "获取凭据中…",
+          "retry": "重试",
+          "refresh": "重新获取凭据",
+          "rotate": "轮换密钥",
+          "rotating": "轮换中…",
+          "unsupported": "当前企业未开通",
+          "autoProvision": "登录后自动获取",
+          "disabled": "模型访问服务未启用",
+          "modelsFetchFailed": "拉取模型列表失败,请检查网络后重试"
+        },
+        "rotateConfirm": {
+          "title": "轮换 Cindy AI 密钥?",
+          "description": "将撤销当前密钥并签发新密钥。旧密钥立即失效:使用旧密钥的进行中会话、远程会话与手机语音需要重新发起。",
+          "confirm": "轮换"
+        },
+        "rotateSuccess": "密钥已轮换",
+        "rotateFailed": "轮换失败,请稍后重试"
       },
       "addCustom": {
         "title": "添加自定义供应商",
@@ -1124,7 +1149,7 @@
     "gitSafety": {
       "title": "Git 安全",
       "autoSnapshotTitle": "Git 安全保存点",
-      "description": "Agent 修改后自动创建 XDT 保存点 commit。只有开启后才显示 Codex rewind 入口。",
+      "description": "Agent 修改后自动创建保存点 commit。只有开启后才显示 Codex rewind 入口。",
       "toggleAria": "切换 Git 安全保存点",
       "saveFailed": "保存 Git 安全设置失败"
     },
@@ -1410,7 +1435,7 @@
           "openForLoginFailed": "打开浏览器失败"
         },
         "openForLogin": "打开 Agent 专用浏览器",
-        "openForLoginHint": "这是 agent 专用的独立浏览器：基于你本机的 Chrome，但用一份独立配置（右上角显示为 XDMaker），不会动你日常 Chrome 的标签页、书签和登录态。agent 会在这里替你打开网页、阅读内容、点击和截图。需要登录的网站，点上面「打开 Agent 专用浏览器」手动登录一次即可——登录态会长期保留，之后 agent 就能以你的身份继续操作。"
+        "openForLoginHint": "这是 agent 专用的独立浏览器：基于你本机的 Chrome，但用一份独立配置（右上角显示为 Cindy），不会动你日常 Chrome 的标签页、书签和登录态。agent 会在这里替你打开网页、阅读内容、点击和截图。需要登录的网站，点上面「打开 Agent 专用浏览器」手动登录一次即可——登录态会长期保留，之后 agent 就能以你的身份继续操作。"
       },
       "browserBackend": {
         "title": "浏览器自动化目标",
@@ -1601,12 +1626,12 @@
           "description": "跨 agent 的长期记忆，让上下文在会话之间持续"
         },
         "xdt_helper": {
-          "name": "XDT Helper",
+          "name": "Cindy Helper",
           "description": "宿主能力自省 —— 告诉 agent 当前可用的工具与模型"
         },
         "collab": {
           "name": "协同模式",
-          "description": "多 worker 协同 (Orca Team) — start_team / create_worker 等团队编排工具"
+          "description": "关闭后仅影响后续新建的会话，不会中止当前 Worker；用于多 Worker 团队编排"
         },
         "lsp": {
           "name": "LSP",
@@ -1664,7 +1689,7 @@
           "workspaces": "工作目录映射(别名 → 本地绝对路径)",
           "workspacesBoundCount_one": "已绑定 {{count}} 个本地工作目录",
           "workspacesBoundCount_other": "已绑定 {{count}} 个本地工作目录",
-          "aliasPlaceholder": "别名, 如 xdmaker",
+          "aliasPlaceholder": "别名, 如 my-server",
           "addWorkspace": "添加工作目录",
           "removeWorkspace": "删除此工作目录",
           "changeDir": "点击更换目录(别名与偏好保留)"
@@ -1823,6 +1848,7 @@
       "recording": "按下新快捷键…",
       "editAria": "修改 {{name}} 的快捷键",
       "errors": {
+        "saveFailed": "保存快捷键设置失败",
         "notBindable": "该组合键不可用",
         "systemReserved": "该组合键被系统保留",
         "conflict": "与「{{name}}」冲突",
@@ -1926,6 +1952,18 @@
       "empty": "还没有安装任何插件",
       "emptyHint": "点击右上角「安装插件…」选择一个 .cindy 文件",
       "disabledTag": "未生效",
+      "projectDisabledTag": "本项目未生效",
+      "projectSwitchLockedTip": "该插件已在全局停用;请先切回「全局」视图开启",
+      "projectBanner": {
+        "title": "正在配置项目「{{name}}」",
+        "desc": "开关只影响此项目:关闭的插件不会出现在该项目的新会话里",
+        "backToGlobal": "返回全局"
+      },
+      "scopePicker": {
+        "global": "全局(默认)",
+        "ariaLabel": "选择插件生效范围",
+        "browse": "选择其它目录…"
+      },
       "enableAria": "使 {{name}} 生效",
       "uninstall": "卸载",
       "uninstallConfirm": {
@@ -1939,7 +1977,9 @@
         "uninstalled": "已卸载「{{name}}」",
         "installedAsleep": "已安装「{{name}}」(未生效,可在此开启)",
         "updated": "「{{name}}」已更新到 v{{version}}",
-        "restored": "已恢复「{{name}}」"
+        "restored": "已恢复「{{name}}」",
+        "projectDisabled": "已在此项目停用「{{name}}」(新会话生效)",
+        "projectEnabled": "「{{name}}」在此项目恢复跟随全局"
       },
       "panelError": {
         "crashed": "这个插件崩溃了",
@@ -1948,8 +1988,8 @@
         "close": "关闭插件"
       },
       "installConfirm": {
-        "title": "安装意识「{{name}}」？",
-        "confirm": "安装意识",
+        "title": "安装插件「{{name}}」？",
+        "confirm": "安装插件",
         "cancel": "取消",
         "meta": "版本 {{version}}。将安装到本机,可随时卸载。",
         "metaWithAuthor": "作者 {{author}} · 版本 {{version}}。将安装到本机,可随时卸载。",
@@ -2302,45 +2342,99 @@
     "versionMismatch": "对方版本不一致,部分功能可能受限"
   },
   "login": {
-    "signingIn": "登录中...",
-    "feishuLogin": "飞书账号登录",
-    "devLogin": "本地模拟登录",
-    "helpText": "使用飞书企业账号安全登录"
-  },
-  "migration": {
-    "title": "正在为你下载历史聊天数据",
-    "subtitle": "首次本地化需要一些时间，请保持窗口打开",
-    "detail": {
-      "idle": "准备开始...",
-      "paused": "{{synced}} / {{total}} 个会话 · 已暂停",
-      "running": "{{synced}} / {{total}} 个会话",
-      "runningWithEta": "{{synced}} / {{total}} 个会话 · 约 {{eta}}",
-      "done": "{{synced}} / {{total}} 个会话"
+    "title": "欢迎使用 Cindy",
+    "subtitle": "选择一种方式安全登录",
+    "phone": "手机号",
+    "email": "邮箱",
+    "phonePlaceholder": "请输入手机号",
+    "emailPlaceholder": "请输入邮箱",
+    "working": "请稍候...",
+    "continue": "继续",
+    "or": "或",
+    "socialButton": "使用 {{provider}} 登录",
+    "social": {
+      "apple": "Apple",
+      "google": "Google",
+      "wechat": "微信"
     },
-    "retryNotice": "网络不稳定，第 {{attempt}} 次重试中...",
-    "eta": {
-      "seconds": "{{seconds}} 秒",
-      "minutes": "{{m}} 分",
-      "minutesSeconds": "{{m}} 分 {{s}} 秒"
+    "back": "返回",
+    "cancel": "取消",
+    "chooseMethod": "选择登录方式",
+    "emailCode": "使用邮箱验证码登录",
+    "orgDetected": "{{email}} 属于企业「{{org}}」",
+    "enterpriseLogin": "以企业身份登录",
+    "enterpriseVia": "通过 {{name}} 单点登录",
+    "personalLogin": "以个人身份登录",
+    "personalDesc": "向邮箱发送验证码",
+    "ssoRequired": "该企业要求通过 SSO 登录",
+    "ssoEntry": "使用企业 SSO 登录",
+    "ssoOrgTitle": "企业 SSO 登录",
+    "ssoOrgSubtitle": "输入企业 ID，跳转到你所在企业的单点登录",
+    "ssoOrgPlaceholder": "请输入企业 ID",
+    "ssoOrgHint": "不知道企业 ID？请联系企业管理员",
+    "ssoOrgDetected": "选择企业「{{org}}」的单点登录方式",
+    "enterCode": "输入验证码",
+    "codeSentTo": "验证码已发送至 {{identifier}}",
+    "codePlaceholder": "6 位验证码",
+    "verifying": "正在验证...",
+    "signIn": "登录",
+    "resendCode": "重新发送验证码",
+    "chooseAccount": "选择身份",
+    "chooseAccountSubtitle": "选择本次要使用的个人或企业身份",
+    "personalAccount": "个人身份",
+    "binding": {
+      "phoneTitle": "绑定手机号",
+      "phoneSubtitle": "登录完成前，需要验证一个手机号",
+      "emailTitle": "绑定邮箱",
+      "emailSubtitle": "登录完成前，需要验证一个真实邮箱"
     },
-    "failedDialog": {
-      "title": "迁移失败",
-      "description": "已多次尝试仍未能完成本地化。请检查网络后重试，或选择跳过迁移直接进入应用——已下载的数据会保留在本地。",
-      "skip": "现在跳过",
-      "retry": "稍后再试"
-    },
-    "skipConfirm": {
-      "title": "确认跳过迁移？",
-      "description": "确认后无法在客户端自动恢复，仅可联系支持。继续？",
-      "back": "返回",
-      "confirm": "确认跳过"
+    "sendCode": "发送验证码",
+    "completeSignIn": "完成登录",
+    "preparing": "正在连接登录服务",
+    "preparingSubtitle": "将为你加载当前区域可用的登录方式",
+    "unavailable": "暂时无法登录",
+    "retry": "重试",
+    "browserWaiting": "请在浏览器中完成验证",
+    "globalRegion": "Global",
+    "errors": {
+      "fallback": "登录失败，请稍后重试",
+      "AUTH_SERVICE_UNAVAILABLE": "登录服务暂不可用",
+      "AUTH_REQUEST_FAILED": "登录请求失败，请重试",
+      "NETWORK_ERROR": "网络连接失败，请检查网络",
+      "REQUEST_TIMEOUT": "请求超时，请重试",
+      "INVALID_PARAMS": "输入格式不正确",
+      "INVALID_CODE": "验证码错误或已过期",
+      "CODE_ATTEMPTS_EXCEEDED": "验证码错误次数过多，请重新获取",
+      "RATE_LIMITED": "操作过于频繁，请稍后再试",
+      "SSO_LOGIN_REQUIRED": "该邮箱所属企业要求通过 SSO 登录",
+      "ORG_SSO_NOT_FOUND": "未找到该企业，或该企业未启用 SSO 登录",
+      "SOCIAL_TOKEN_INVALID": "第三方授权已失效，请重试",
+      "SOCIAL_PROVIDER_DISABLED": "该登录方式当前不可用",
+      "USER_CANCELLED": "已取消登录",
+      "STATE_MISMATCH": "安全校验失败，请重试",
+      "INVALID_AUTH_CODE": "授权已过期，请重新登录",
+      "INVALID_LOGIN_TICKET": "登录会话已过期，请重新登录",
+      "INVALID_BIND_TICKET": "绑定会话已过期，请重新登录",
+      "REGION_MISMATCH": "登录服务区域与当前客户端不匹配"
     }
   },
+  "legacyMigration": {
+    "title": "迁移旧版本数据",
+    "description": "检测到本机存有旧版本的数据。历史会话和媒体文件将迁移到新的数据位置。若旧版应用正在运行，请先完全退出它；迁移期间请保持 {{appName}} 打开。注意：已授权的第三方密钥与凭证无法随数据迁移，迁移完成后需要在设置中重新授权或重新填写。",
+    "confirm": "确定",
+    "migrating": "正在迁移数据，请稍候…",
+    "failedTitle": "迁移未完成",
+    "failedDescription": "本次数据迁移未能完成。你可以继续使用 {{appName}}，下次登录时会自动重试。",
+    "continue": "继续"
+  },
   "splash": {
-    "relaunch": {
-      "title": "小镇已更新",
-      "description": "点击按钮后，应用会自动重启，请耐心等待（如果长时间没反应，请双击应用图标手动启动）",
-      "confirm": "重新进入"
+    "tips": {
+      "checkingUpdate": "检查更新中...",
+      "updating": "Cindy 更新中...",
+      "updateDone": "更新完成，等待自动重启...",
+      "checkingEnv": "运行环境检测中...",
+      "waking": "唤醒 Cindy 中...",
+      "envFailed": "环境初始化失败，点击重试"
     },
     "manifestFailed": {
       "title": "网络连接失败",
@@ -2550,7 +2644,7 @@
         "browserSub": "Browser",
         "openTerminal": "打开终端",
         "terminalSub": "Terminal",
-        "addMoreHint": "或点击顶部 + 按钮选择更多面板类型"
+        "addMoreHint": "可通过顶部 + 按钮选择更多面板类型"
       },
       "placeholderHint": "{{kind}} — 内容将在后续阶段加入"
     },
@@ -2952,7 +3046,6 @@
     },
     "user": {
       "settingsLink": "设置, 当前用户: {{name}}",
-      "adminBadge": "管理员",
       "viewReleaseNotes": "查看版本日志",
       "reopenUpdateBanner": "有更新待重启,点击查看"
     },
@@ -3429,6 +3522,7 @@
       "forkStripEncryptedTitle": "Fork 并剥离出新会话(去掉加密推理内容)",
       "codexSessionExpiredLogin": "重新登录",
       "networkUnreachable": "网络异常，服务暂时不可达，可点击「重试」。",
+      "networkUnreachableNoRetry": "网络异常，服务暂时不可达。",
       "networkAutoRetrying": "网络异常，正在自动重试…",
       "networkShowRaw": "查看原始错误",
       "networkHideRaw": "收起原始错误",
@@ -3755,6 +3849,7 @@
       "REMOTE_DAEMON_CLOSED": "远端连接已中断（daemon 可能正在升级或重启）。本轮已结束 — 请重新发送。",
       "REMOTE_LOCAL_ATTACHMENT_UNSUPPORTED": "远端会话无法访问本地文件/图片附件。请直接粘贴内容。",
       "REMOTE_COMPAT_MODE_UNSUPPORTED": "远端 Claude Code 会话无法通过本地兼容代理路由(内部错误,请反馈)。",
+      "REMOTE_GATEWAY_ENDPOINT_UNAVAILABLE": "Cindy AI 凭据尚未就绪(登录后由服务端自动下发)。请稍候重试;若持续出现,请到 设置 → 模型供应商 检查 Cindy AI 连接状态。",
       "DEVICE_LINK_CONTROL_DISABLED": "已关闭对该设备的控制,消息未发送。",
       "DEVICE_LINK_MEDIA_TRANSFER_FAILED": "附件传输失败,消息未发送。请重试。"
     },
@@ -3877,8 +3972,8 @@
       "markedAsRead_other": "已标记 {{count}} 条运行为已读",
       "markAllReadFailed": "全部标记已读失败：{{error}}",
       "apiKeyDialog": {
-        "title": "需要连接 XD 网关",
-        "description": "发送消息前需要先在「模型供应商」连接 XD 网关，点击下方前往设置",
+        "title": "需要连接 Cindy AI",
+        "description": "发送消息前需要先在「模型供应商」连接 Cindy AI，点击下方前往设置",
         "confirm": "前往设置",
         "cancel": "取消"
       },
@@ -4101,6 +4196,16 @@
         "allRunning": "该 Project 下所有会话都在执行中，请先停止后再归档",
         "empty": "该 Project 下没有可归档的会话"
       },
+      "unarchiveAll": {
+        "title": "取消归档全部会话",
+        "confirm": "全部取消归档",
+        "cancel": "取消",
+        "description": "将恢复该 Project 下 {{count}} 个已归档会话。恢复后将从“已归档”列表移除，并回到“活跃”列表。",
+        "unarchived_one": "已恢复 {{count}} 个会话",
+        "unarchived_other": "已恢复 {{count}} 个会话",
+        "partialFailure": "已恢复 {{ok}} 个，{{fail}} 个失败，请重试",
+        "empty": "该 Project 下没有可取消归档的会话"
+      },
       "bulkSelection": {
         "selected": "已选 {{count}} 个",
         "archive": "归档所选会话",
@@ -4161,6 +4266,7 @@
         "rename": "重命名项目",
         "showFiles": "查看文件",
         "archivedAll": "全部归档",
+        "unarchiveAll": "全部取消归档",
         "openInExplorer": "在文件管理器中打开",
         "newInDirectory": "在此目录新建会话",
         "copyDeepLink": "复制深度链接",
@@ -4292,7 +4398,7 @@
         "revealFolder": "显示所在文件夹"
       },
       "fileBody": {
-        "selectFile": "从左侧选择一个文件预览",
+        "selectFile": "选择一个文件进行预览",
         "readFailed": "读取文件失败：{{message}}",
         "truncatedNotice": "文件较大，已截断显示前 2 MB —— 在系统中打开查看完整内容",
         "editLabel": "编辑",
@@ -4507,6 +4613,7 @@
       "tagOnce": "一次",
       "tagManual": "手动",
       "totalCost": "开销 {{cost}}",
+      "totalValue": "价值 {{value}}",
       "menu": {
         "rename": "重命名",
         "resume": "恢复",
@@ -4541,6 +4648,7 @@
       "openSession": "打开会话",
       "markReadTitle": "点击标记为已读",
       "sessionCost": "会话开销 {{cost}}",
+      "sessionValue": "会话价值 {{value}}",
       "restart": "重新运行",
       "moreAria": "更多操作",
       "delete": "删除",
@@ -4570,6 +4678,9 @@
         "script": "仅运行脚本"
       },
       "script": {
+        "protocolSummary": "stdout 必须逐行输出 xdt-maker-script/1 的完整 JSON 对象（JSONL）；type 只能是 call 或 complete。普通日志请写入 stderr，并且脚本必须最终输出一个 complete 帧。",
+        "protocolCapabilities": "如需调用已授权能力，脚本还必须逐行读取 stdin 中 host 发送的 start 和 call_result JSONL 帧，并等待对应调用结果后再继续或输出 complete。",
+        "protocolExample": "查看不调用能力的最小 Python 示例",
         "command": "脚本命令",
         "commandPlaceholder": "python scripts/auto.py",
         "timeout": "超时（秒，可选）",
@@ -4592,8 +4703,8 @@
           "feishu_read": "列最近活跃会话;拉取指定会话(群/单聊)的最近消息"
         },
         "capabilityWarn": {
-          "ghostMissing": "依赖「{{name}}」意识,当前未装入——任务运行时该能力会失败",
-          "ghostAsleep": "依赖「{{name}}」意识,当前处于沉睡——任务运行时该能力会失败"
+          "ghostMissing": "依赖「{{name}}」插件,当前未装入——任务运行时该能力会失败",
+          "ghostAsleep": "依赖「{{name}}」插件,当前未生效——任务运行时该能力会失败"
         }
       },
       "fields": {
@@ -5030,10 +5141,10 @@
     "confirm": {
       "title": "「{{name}}」请求使用你的文件",
       "count": "{{count}} 个文件",
-      "descriptionAttachments": "以下文件在当前会话的工作目录之外。允许后,这些文件会交给该意识处理(它只拿到内容指纹,拿不到路径)。",
-      "descriptionDir": "以下目录/文件在当前会话的工作目录之外。允许后,其中的文件会交给该意识上传(它只拿到一次性票据,拿不到路径)。",
-      "descriptionSaveDir": "以下目录在当前会话的工作目录之外。允许后,该意识可以把下载的文件存入其中(不会覆盖已有文件)。",
-      "descriptionFsWrite": "该意识请求在当前会话的工作目录写入以下文件。允许后,本会话内它写同一目录不再询问。",
+      "descriptionAttachments": "以下文件在当前会话的工作目录之外。允许后,这些文件会交给该插件处理(它只拿到内容指纹,拿不到路径)。",
+      "descriptionDir": "以下目录/文件在当前会话的工作目录之外。允许后,其中的文件会交给该插件上传(它只拿到一次性票据,拿不到路径)。",
+      "descriptionSaveDir": "以下目录在当前会话的工作目录之外。允许后,该插件可以把下载的文件存入其中(不会覆盖已有文件)。",
+      "descriptionFsWrite": "该插件请求在当前会话的工作目录写入以下文件。允许后,本会话内它写同一目录不再询问。",
       "dirMeta": "{{count}} 个文件 · {{size}}",
       "directory": "目录",
       "allowDirs": "同时允许这些文件所在目录(本会话内同目录媒体文件不再询问)",
@@ -5597,16 +5708,11 @@
       "feishuBotClearFailed": "清除失败：{{message}}",
       "feishuBotCreatedConnected": "飞书机器人已创建并连接",
       "feishuBotCreatedCheck": "飞书机器人已创建，请检查连接状态",
-      "slackOauthStartFailed": "发起 Slack 授权失败，请稍后重试",
-      "slackUnlinked": "已解除 Slack 绑定",
-      "slackUnlinkFailed": "解除绑定失败，请稍后重试",
       "discordBotConnected": "Discord 机器人配置已保存",
       "discordBotConnectFailed": "Discord 机器人连接失败，请检查 Token 和权限",
       "discordBotSaveFailed": "保存失败：{{message}}",
       "discordBotDisconnected": "已解绑 Discord 机器人",
       "discordBotDisconnectFailed": "解绑失败：{{message}}",
-      "apiKeySaved": "API Key 已保存",
-      "apiKeyConnectionTestSuccess": "连接测试成功",
       "attachmentLocalOnly": "仅支持本地文件：{{name}}",
       "attachmentReadError": "{{name}}：{{reason}}",
       "attachmentReadFailed": "读取失败：{{name}} - {{error}}",
@@ -5625,22 +5731,16 @@
       "openFileFailed": "无法在系统中打开文件",
       "emptyResponse": "模型返回了空响应,请重试。(本轮未产出任何内容,常见于模型网关在大上下文 / 高负载下返回空流)",
       "turnFailed": "任务执行失败（模型未返回错误详情），请重试。",
-      "requestFailed": "请求失败",
       "sendFailed": "发送失败：{{message}}",
       "steerNoActiveTurn": "当前没有正在执行的任务，无法插话",
       "steerRequiresRestart": "插话功能需要重启桌面端后生效；这条消息未被清空",
       "steerFailed": "插话失败：{{message}}",
       "qrExpired": "二维码已过期，请重新开始",
       "registrationFailed": "创建失败，请稍后重试",
-      "apiKeySafeStorageFailed": "存储失败，请检查系统安全存储功能",
-      "apiKeyTestFailed": "测试连接失败",
-      "apiKeyTestFailedNotSaved": "测试连接失败，Key 未保存",
-      "apiKeyNetworkFailed": "网络连接失败，请检查网络",
       "silentStopExhausted": "模型连续多次返回空响应，自动续跑已暂停。点击「继续」恢复任务。",
       "permissionTightenInterruptFailed": "收紧权限时未能停止正在运行的任务，它可能会继续免确认执行直到结束；如有需要请手动停止。"
     },
     "validation": {
-      "apiKeyFormat": "Key 格式错误，应以 sk- 开头",
       "feishuFieldsRequired": "App ID 和 App Secret 都需要填写",
       "feishuAppIdFormat": "App ID 格式应为 cli_xxxxxxxxxxxxxxxx",
       "discordFieldsRequired": "Bot Token 和 Discord 用户 ID 都需要填写",
@@ -5654,8 +5754,8 @@
       "sessionExpiredTitle": "登录已过期",
       "sessionExpiredDescription": "登录状态已过期，请重新登录。",
       "sessionExpiredConfirm": "重新登录",
-      "voiceApiKeyAuthTitle": "需要配置 XD 网关",
-      "voiceApiKeyAuthDescription": "语音输入当前使用 AI Gateway 语音识别服务。尚未连接 XD 网关，无法开始语音输入。是否前往「模型供应商」连接？",
+      "voiceApiKeyAuthTitle": "需要配置 Cindy AI",
+      "voiceApiKeyAuthDescription": "语音输入当前使用 Cindy AI 语音识别服务。尚未连接 Cindy AI，无法开始语音输入。是否前往「模型供应商」连接？",
       "voiceDirectApiKeyAuthTitle": "需要配置语音输入 API Key",
       "voiceDirectApiKeyAuthDescription": "语音输入当前使用直连供应商，需要先配置对应 API Key。是否前往「API Keys」添加？",
       "codexVoiceAuthTitle": "需要连接 Codex",

@@ -48,6 +48,7 @@ export type {
   QueryApplyFlagSettingsParams,
   QueryGetContextUsageParams,
   QueryInterruptParams,
+  QueryStopTaskParams,
   QueryCloseParams,
   SessionAttachParams,
   SessionAttachResult,

@@ -23,6 +23,13 @@ vi.mock('undici', () => ({
   fetch: vi.fn(),
 }));
 
+// SUT 链(maker-host/runtime-configs → effectiveXdGatewayBaseUrl)运行期读
+// model-access 下发的 endpoint;mock 成 fixture 值。
+vi.mock('../../model-access/effectiveEndpoint.js', async () => {
+  const { TEST_XD_GATEWAY_BASE_URL } = await import('../../../test/vitest/clientEndpointsFixture');
+  return { effectiveXdGatewayBaseUrl: () => TEST_XD_GATEWAY_BASE_URL };
+});
+
 import type { Maker } from '@lizi/maker-core';
 import { fetch as undiciFetch } from 'undici';
 

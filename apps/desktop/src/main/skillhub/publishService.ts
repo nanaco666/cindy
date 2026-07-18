@@ -13,7 +13,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { net } from 'electron';
-import { serverApiFetch, ServerApiError } from '../serverApiClient';
+import { ServerApiError } from '../serverApiClient';
+import { skillhubApiFetch } from './hubApi';
 import { computeFolderHash } from './folderHash';
 import { writeSnapshot } from './snapshot';
 import { pack } from './zipPacker';
@@ -285,7 +286,7 @@ export class SkillPublishService {
           }
 
           try {
-            const initResp = await serverApiFetch<InitResponse>('/api/skills-hub/skills/publish/init', {
+            const initResp = await skillhubApiFetch<InitResponse>('/api/skills-hub/skills/publish/init', {
               method: 'POST',
               body: { slug: params.name, ...(params.version && { version: params.version }) },
             });
@@ -449,7 +450,7 @@ export class SkillPublishService {
               `firstPublish=${params.isFirstPublish}`,
           );
 
-          await serverApiFetch('/api/skills-hub/skills/publish/commit', {
+          await skillhubApiFetch('/api/skills-hub/skills/publish/commit', {
             method: 'POST',
             body: commitBody,
           });
@@ -574,7 +575,7 @@ export class SkillPublishService {
   }
 
   private async getScanStatus(slug: string, version: string): Promise<ScanStatusResponse> {
-    return serverApiFetch<ScanStatusResponse>(
+    return skillhubApiFetch<ScanStatusResponse>(
       `/api/skills-hub/skills/${encodeURIComponent(slug)}/scan?version=${encodeURIComponent(version)}`,
       { cache: 'no-store', headers: { 'Cache-Control': 'no-store', Pragma: 'no-cache' } },
     );

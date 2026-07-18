@@ -11,9 +11,41 @@ import { AutoUnpackNativesPlugin } from '@electron-forge/plugin-auto-unpack-nati
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import type { ForgeArch, ForgeConfig, ForgePlatform } from '@electron-forge/shared-types';
+import {
+  BRAND_IDENTITY,
+  allDeepLinkSchemes,
+  brandAppId,
+  brandBundleIdPrefix,
+  brandExecutableName,
+  resolveCindyRegion,
+} from '@lizi/maker-shared/brand-identity';
 import { stagePackagedThirdPartyNotices } from './forge-third-party-notices';
 
 const _require = createRequire(__filename);
+
+// ── 构建期身份(2026-07-17 Cindy 渠道分叉) ─────────────────────────────────────
+// 区域默认 cn;打海外包时由发布脚本注入 CINDY_AUTH_REGION=global。appId 随区域
+// 派生(com.xd.cindycn / com.xd.cindy),必须与运行时 shared/brandRegion
+// (经 vite.main.config 的 VITE_CINDY_AUTH_REGION define 烘焙)同源——AUMID
+// 三位一体:NSIS appId = 运行时 setAppUserModelId = 快捷方式 AUMID。
+const CINDY_REGION = resolveCindyRegion(
+  process.env.CINDY_AUTH_REGION?.trim() || process.env.VITE_CINDY_AUTH_REGION,
+);
+// 把归一化后的区域回写给 vite 构建(plugin-vite 与 forge 同进程,loadEnv 读
+// process.env):防止「只设 CINDY_AUTH_REGION 直跑 forge」时 NSIS appId 用
+// global 而 main 烘焙的 CURRENT_APP_ID 落回 cn——AUMID 漂移 = toast 静默丢失。
+process.env.VITE_CINDY_AUTH_REGION = CINDY_REGION;
+const CINDY_APP_ID = brandAppId(CINDY_REGION);
+const CINDY_UTI_PREFIX = brandBundleIdPrefix(CINDY_REGION);
+/**
+ * 可执行文件基名,按区域派生(cn 'Cindy' / global 'CindyGlobal'):同机双装时
+ * exe / mac .app 包名 / NSIS 安装目录与快捷方式若同名,第二个安装会覆盖第一个,
+ * 更新器按 exe 名杀进程也会误伤另一区域。运行时 userData 目录由 main 入口按
+ * 同一区域切换(src/main/regionUserData.ts),两端从 brand-identity 同源派生。
+ */
+const CINDY_EXE = brandExecutableName(CINDY_REGION);
+/** 更新器二进制文件名(cindy-updater.exe)。 */
+const UPDATER_EXE = `${BRAND_IDENTITY.updaterName}.exe`;
 
 // discord.js is externalized from the main Vite bundle because its circular
 // CommonJS graph crashes when Rollup reorders it. Its dependency tree contains
@@ -32,11 +64,12 @@ const DISCORD_RUNTIME_DEPS = [
 // rebuild 完成后 AutoUnpackNativesPlugin 才能在 asar 阶段识别 .node 并 unpack 到
 // app.asar.unpacked/ 下。
 // `@larksuiteoapi/node-sdk` itself is bundled inline by Vite, but its compiled
-// lib does `require("protobufjs/minimal")`, and protobufjs uses eval-based
-// dynamic require (`@protobufjs/inquire`) that rollup-commonjs can't trace.
-// So `require("protobufjs/minimal")` survives into the runtime bundle and
-// must be resolvable from the packaged app's node_modules. Ship the full
-// protobufjs runtime closure (10 `@protobufjs/*` helpers + `long`).
+// lib does `require("protobufjs/minimal")` which rollup-commonjs can't inline,
+// so it survives into the runtime bundle and must be resolvable from the
+// packaged app's node_modules. Ship the full protobufjs runtime closure
+// (9 `@protobufjs/*` helpers + `long`). protobufjs >=7.6 dropped
+// `@protobufjs/inquire` (the eval-based dynamic require was removed in its
+// 2026 security fixes) — don't re-add it, resolvePackageDir would throw.
 const NATIVE_RUNTIME_DEPS = [
   'better-sqlite3',
   'bindings',
@@ -48,7 +81,6 @@ const NATIVE_RUNTIME_DEPS = [
   '@protobufjs/eventemitter',
   '@protobufjs/fetch',
   '@protobufjs/float',
-  '@protobufjs/inquire',
   '@protobufjs/path',
   '@protobufjs/pool',
   '@protobufjs/utf8',
@@ -387,7 +419,7 @@ const isDev = process.env.NODE_ENV !== 'production' && !process.argv.includes('m
 const isWin = process.platform === 'win32';
 
 /**
- * Build xdt-updater (Rust + Tauri) and copy the release binary into
+ * Build cindy-updater (Rust + Tauri) and copy the release binary into
  * resources/. Runs once per `forge package` / `make` invocation, so
  * `pnpm build` / `pnpm release:win` always ship the latest updater.
  *
@@ -395,13 +427,13 @@ const isWin = process.platform === 'win32';
  * Hard-fails if cargo is missing or the build errors — we'd rather break
  * the release than ship a stale updater.
  */
-function buildXdtUpdater(): void {
+function buildCindyUpdater(): void {
   if (process.platform !== 'win32') return;
-  console.log('[forge:prePackage] Building xdt-updater.exe (Rust + Tauri)...');
+  console.log(`[forge:prePackage] Building ${UPDATER_EXE} (Rust + Tauri)...`);
 
-  const updaterRoot = path.join(__dirname, 'xdt-updater', 'src-tauri');
+  const updaterRoot = path.join(__dirname, 'cindy-updater', 'src-tauri');
   if (!fs.existsSync(updaterRoot)) {
-    throw new Error(`[forge] xdt-updater source missing at ${updaterRoot}`);
+    throw new Error(`[forge] cindy-updater source missing at ${updaterRoot}`);
   }
 
   // winget-installed Rust may not be on PATH in this shell session, fall
@@ -424,8 +456,8 @@ function buildXdtUpdater(): void {
     throw new Error(`[forge] cargo build --release failed with exit code ${r.status}`);
   }
 
-  const builtExe = path.join(updaterRoot, 'target', 'release', 'xdt-updater.exe');
-  const destExe = path.join(__dirname, 'resources', 'xdt-updater.exe');
+  const builtExe = path.join(updaterRoot, 'target', 'release', UPDATER_EXE);
+  const destExe = path.join(__dirname, 'resources', UPDATER_EXE);
   if (!fs.existsSync(builtExe)) {
     throw new Error(`[forge] cargo build succeeded but ${builtExe} is missing`);
   }
@@ -440,7 +472,7 @@ function buildXdtUpdater(): void {
 
   fs.copyFileSync(builtExe, destExe);
   const sizeMb = (fs.statSync(destExe).size / (1024 * 1024)).toFixed(2);
-  console.log(`[forge:prePackage] xdt-updater.exe → ${destExe} (${sizeMb} MB, ${Date.now() - t0}ms)`);
+  console.log(`[forge:prePackage] ${UPDATER_EXE} → ${destExe} (${sizeMb} MB, ${Date.now() - t0}ms)`);
 }
 
 /**
@@ -474,7 +506,7 @@ function findMtExe(): string {
 }
 
 function patchUpdaterManifest(exePath: string): void {
-  const manifestPath = path.join(__dirname, 'xdt-updater', 'src-tauri', 'xdt-updater.manifest');
+  const manifestPath = path.join(__dirname, 'cindy-updater', 'src-tauri', 'cindy-updater.manifest');
   if (!fs.existsSync(manifestPath)) {
     throw new Error(`[forge] manifest missing at ${manifestPath}`);
   }
@@ -488,7 +520,7 @@ function patchUpdaterManifest(exePath: string): void {
   ], { stdio: 'inherit' });
   if (r.error) throw new Error(`[forge] mt.exe spawn failed: ${r.error.message}`);
   if (r.status !== 0) throw new Error(`[forge] mt.exe exited ${r.status} when patching manifest`);
-  console.log(`[forge:prePackage] manifest patched into xdt-updater.exe (PCA bypass)`);
+  console.log(`[forge:prePackage] manifest patched into ${UPDATER_EXE} (PCA bypass)`);
 }
 
 /**
@@ -510,14 +542,34 @@ function collectExeFilesRecursively(dir: string): string[] {
 }
 
 /**
+ * 用公司 npkg 签名服务签单个 exe（复用 publish-windows.mjs 给 Setup.exe 用的
+ * 同一份 sign.py）。postPackage 的包内 exe 循环 与 NSIS maker 的 customSign
+ * (installer + uninstaller) 共用这一处,签名逻辑单点、不 fork。
+ * 失败即抛（调用方 postPackage / customSign 会让整个 make 失败,避免发出漏签包）。
+ */
+function signOneExeWithNpkg(exePath: string, token: string): void {
+  const signScript = path.join(__dirname, 'scripts', 'sign.py');
+  if (!fs.existsSync(signScript)) {
+    throw new Error(`[forge:sign] sign.py missing at ${signScript}`);
+  }
+  console.log(`[forge:sign] signing ${path.basename(exePath)}...`);
+  const r = spawnSync('python', [signScript, exePath, token], { stdio: 'inherit' });
+  if (r.error) throw new Error(`[forge:sign] sign.py spawn failed: ${r.error.message}`);
+  if (r.status !== 0) throw new Error(`[forge:sign] sign.py exited ${r.status} for ${exePath}`);
+}
+
+/**
  * 把 packaged 目录内的所有 .exe 都用公司 npkg 签名服务签一遍。
  * 触发时机：electron-forge 的 postPackage（package 完、makers 跑前），所以
  * NSIS Setup.exe 拿到的、以及 publish 阶段从 packagedDir 打的热更 ZIP 拿到的，
  * 都是已签名版本——彻底解决 hot-update 后 spawn updater EACCES 的问题
  * (Win 严格策略机器拒绝从 %TEMP% 启动未签名 exe)。
  *
+ * NSIS 安装器自身(Setup.exe)与卸载器(Uninstall <App>.exe)不在这里签——它们由
+ * makers 阶段生成,由 getAppBuilderConfig 的 win.sign(customSign)统一签,同样走
+ * signOneExeWithNpkg。见 makers 定义处注释。
+ *
  * 没有 NPKG_TOKEN 时静默跳过，不影响本地 dev / 无密钥环境的 packaging。
- * Setup.exe 自身的签名仍在 publish-windows.mjs 里走 sign.py。
  */
 function signPackagedExes(buildPath: string): void {
   if (process.platform !== 'win32') return;
@@ -536,8 +588,8 @@ function signPackagedExes(buildPath: string): void {
   // loudness 自带的 .exe 也在这里签:不签的话企业 EDR / Smart App Control 可能
   // 把它当未知未签名第三方进程拦下,影响"录音时静音"功能。
   const exes = [
-    path.join(buildPath, 'xdt-maker.exe'),
-    path.join(buildPath, 'resources', 'xdt-updater.exe'),
+    path.join(buildPath, `${CINDY_EXE}.exe`),
+    path.join(buildPath, 'resources', UPDATER_EXE),
     path.join(buildPath, 'resources', 'xdt-helper.exe'),
     path.join(
       buildPath,
@@ -561,29 +613,61 @@ function signPackagedExes(buildPath: string): void {
     ...collectExeFilesRecursively(
       path.join(buildPath, 'resources', 'app.asar.unpacked', 'node_modules', 'node-pty'),
     ),
-    ...collectExeFilesRecursively(
-      path.join(buildPath, 'resources', 'tools', 'android-platform-tools'),
-    ),
+    // 递归整个 resources/tools（extraResource 注入的第三方 CLI）：覆盖
+    // android-platform-tools/adb.exe + ripgrep/rg.exe + 未来新增的 tool exe。
+    // 之前只递归了 android-platform-tools,漏了 ripgrep/rg.exe——rg 与 adb 同为
+    // 未签名第三方 exe,会被运行时 spawn(项目内 grep/search),未签同样被严格策略 /
+    // EDR 拦。扩到整个 tools/ 一次覆盖,新增工具免维护。
+    ...collectExeFilesRecursively(path.join(buildPath, 'resources', 'tools')),
   );
-
-  // 直接复用 publish-windows.mjs 给 Setup.exe 用的同一份 sign.py——
-  // 那条路径已经被验证 OK,不要 fork 出 Node 版本再踩同样的坑。
-  const signScript = path.join(__dirname, 'scripts', 'sign.py');
-  if (!fs.existsSync(signScript)) {
-    throw new Error(`[forge:postPackage] sign.py missing at ${signScript}`);
-  }
 
   for (const exe of exes) {
     if (!fs.existsSync(exe)) {
       console.warn(`[forge:postPackage] skip (missing): ${exe}`);
       continue;
     }
-    console.log(`[forge:postPackage] signing ${path.basename(exe)}...`);
-    const r = spawnSync('python', [signScript, exe, token], {
-      stdio: 'inherit',
-    });
-    if (r.error) throw new Error(`[forge:postPackage] sign.py spawn failed: ${r.error.message}`);
-    if (r.status !== 0) throw new Error(`[forge:postPackage] sign.py exited ${r.status} for ${exe}`);
+    signOneExeWithNpkg(exe, token);
+  }
+}
+
+/**
+ * macOS 打包显示名(与 win32metadata 同构):packaged 后把
+ * .app 的 Info.plist 里 CFBundleName / CFBundleDisplayName 改成 Cindy——
+ * Dock 名、菜单栏粗体标题、Cmd+Tab、系统通知读的都是这两个字段。
+ *
+ * 为什么在 postPackage 改而不是 packagerConfig:electron-packager 在
+ * updatePlistFiles 里先合并 extendInfo、后用 appName/executableName 覆写
+ * CFBundleName / CFBundleDisplayName,extendInfo 改不动这两个键;而给
+ * packagerConfig.name 设 'Cindy' 会连 .app 目录名一起改,踩标识符红线。
+ *
+ * 历史沿革:本步骤诞生于身份翻转前(当时 .app/CFBundleExecutable/bundle id/
+ * userData 均为 xdt-maker 系,这里是唯一的显示名来源)。2026-07-17 身份翻转后
+ * cn 构建的 packager 本身就会把 CFBundleName/CFBundleDisplayName 写成 Cindy,
+ * 对 cn 是冗余兜底;2026-07-18 双装支持后 global 构建的 packager name 是
+ * 'CindyGlobal'(.app 目录名 / 标识符层),本步骤把 Dock 名、菜单栏粗体标题、
+ * Cmd+Tab、系统通知的**显示层**统一拉回 Cindy(BRAND_NAME 两区共用)——对
+ * global 不再冗余,是显示名的唯一来源。正式签名/公证在 release-macos.mjs 里
+ * 发生在 postPackage 之后,本改动会被签名一起封印,不存在破坏签名问题。
+ */
+function applyMacPackagedDisplayName(buildPath: string, platform: string): void {
+  if (platform !== 'darwin') return;
+  const apps = fs.readdirSync(buildPath).filter((n) => n.endsWith('.app'));
+  for (const appDir of apps) {
+    const plistPath = path.join(buildPath, appDir, 'Contents', 'Info.plist');
+    if (!fs.existsSync(plistPath)) {
+      throw new Error(`[forge:postPackage] Info.plist missing at ${plistPath}`);
+    }
+    for (const key of ['CFBundleName', 'CFBundleDisplayName']) {
+      // packager 必写这两个键,Set 即可;Add 兜底防未来 packager 行为变化。
+      const set = spawnSync('/usr/libexec/PlistBuddy', ['-c', `Set :${key} Cindy`, plistPath]);
+      if (set.status !== 0) {
+        const add = spawnSync('/usr/libexec/PlistBuddy', ['-c', `Add :${key} string Cindy`, plistPath]);
+        if (add.status !== 0) {
+          throw new Error(`[forge:postPackage] PlistBuddy failed to set ${key} in ${plistPath}`);
+        }
+      }
+    }
+    console.log(`[forge:postPackage] mac display name → Cindy (${appDir}/Contents/Info.plist)`);
   }
 }
 
@@ -665,7 +749,7 @@ function extraResourcesForTarget(targetPlatform: string): string[] {
   ];
 
   if (targetPlatform === 'win32') {
-    base.unshift('resources/xdt-helper.exe', 'resources/xdt-updater.exe');
+    base.unshift('resources/xdt-helper.exe', `resources/${UPDATER_EXE}`);
   }
 
   return base;
@@ -881,11 +965,13 @@ const makers: ForgeConfig['makers'] = [
     options: {
       categories: ['Development'],
       icon: path.join(__dirname, 'resources', 'icon.png'),
-      mimeType: ['x-scheme-handler/xdt-maker'],
+      // 双 scheme:cindy 主 + xdt-maker 兼容(老分享链接不死)。
+      mimeType: allDeepLinkSchemes().map((s) => `x-scheme-handler/${s}`),
       maintainer: 'Lizi <jiali@magiclizi.com>',
-      name: 'xdt-maker',
-      bin: 'xdt-maker',
-      productName: 'XDMaker',
+      // deb 包名规范要求小写;跟随区域 exe 名(cn cindy / global cindyglobal)。
+      name: CINDY_EXE.toLowerCase(),
+      bin: CINDY_EXE,
+      productName: CINDY_EXE,
     },
   }, ['linux']),
 ];
@@ -895,11 +981,37 @@ if (isWin) {
   makers.unshift(
     new MakerNSIS({
       getAppBuilderConfig: async () => ({
+        // NSIS installer(Setup.exe)与 uninstaller(Uninstall <App>.exe)的签名。
+        // 这是签卸载器的唯一入口(Issue #998):uninstaller 由 NSIS 编译期两遍生成后
+        // 嵌入 installer,postPackage 阶段还不存在、也没有独立成品文件可事后补签,
+        // 只能让 electron-builder 在生成时对 installer + uninstaller 都回调 win.sign。
+        // 复用包内 exe 同一条 npkg 通道(signOneExeWithNpkg → sign.py),逻辑单点;
+        // 无 NPKG_TOKEN(dev / 版本无关 / --no-sign 已删 token)时跳过,与 postPackage 一致。
+        win: {
+          // 只用 sha256:不设时 electron-builder 默认 ['sha1','sha256'],会对 installer +
+          // uninstaller 各回调 customSign 两趟(sha1 一趟 + sha256 一趟)= 每个文件两次
+          // npkg 往返,sha1 那趟纯浪费(Windows 早已弃信 sha1 Authenticode)。收敛到单
+          // sha256:一趟往返、少一半瞬时失败面。customSign 忽略 hash 参数,npkg 用自身
+          // 证书签,与此列表无关——只影响回调次数。
+          signingHashAlgorithms: ['sha256'],
+          sign: async (cfg: { path: string }) => {
+            const t = process.env.NPKG_TOKEN;
+            if (!t) {
+              console.log(`[forge:nsis:sign] NPKG_TOKEN not set — skipping ${path.basename(cfg.path)}`);
+              return;
+            }
+            signOneExeWithNpkg(cfg.path, t);
+          },
+        },
         // appId 决定 NSIS 写到 Start Menu 快捷方式上的 System.AppUserModel.ID 属性。
         // Electron 主进程必须用 app.setAppUserModelId() 设同一个值，Windows 通知中枢
         // 才会接收 toast；否则原生 Notification 被静默丢弃。
-        // 详见 src/main/notificationService.ts 顶部注释 + src/main/index.ts AUMID 块。
-        appId: 'com.magiclizi.xdt-maker',
+        // 值按构建区域派生(shared/brandRegion 运行时同源),见文件头身份块。
+        appId: CINDY_APP_ID,
+        // 安装目录名跟随区域(默认装到 …\Programs\<productName>):cn 'Cindy' /
+        // global 'CindyGlobal'。不设的话 app-builder 回落 package.json 的
+        // productName('Cindy'),两个区域会装进同一目录互相覆盖(双装红线)。
+        productName: CINDY_EXE,
         nsis: {
           oneClick: false,
           allowToChangeInstallationDirectory: true,
@@ -907,10 +1019,11 @@ if (isWin) {
           uninstallerIcon: 'resources/icon.ico',
           createDesktopShortcut: 'always',
           createStartMenuShortcut: true,
-          // 只覆盖快捷方式显示名，不动 productName/appId/exe/userData，
-          // 保证 updater 和老用户数据兼容。
-          // 老 xdt-maker.lnk 由 installer.nsh customInit 提前删除。
-          shortcutName: 'XDMaker',
+          // 快捷方式显示名,跟随区域 exe 名(cn 'Cindy' / global 'CindyGlobal',
+          // 同名 .lnk 双装互抢)。installer.nsh 只清理/重建自家 .lnk——同机可能
+          // 并存老 XDMaker 安装,它的 xdt-maker.lnk / XDMaker.lnk 属于老 app,
+          // 绝不能删(共存红线,见 installer.nsh customInit 注释)。
+          shortcutName: CINDY_EXE,
           runAfterFinish: true,
           include: 'resources/installer.nsh',
         },
@@ -939,7 +1052,24 @@ const config: ForgeConfig = {
     // 到 asar 外才能被 spawn / 动态加载。AutoUnpackNativesPlugin 只 unpack .node,
     // 所以这里显式覆盖 loudness / node-pty 整个目录。
     asar: { unpack: '**/{@img/{sharp-libvips-*,sharp-win32-*},loudness,native/sqlite-vec,node-pty}/**' },
-    executableName: 'xdt-maker',
+    // 打包名(out 目录 / mac .app 包名)按区域派生:不设的话 packager 回落
+    // package.json productName('Cindy'),global 的 .app 会与 cn 撞名(双装
+    // 时拖进 /Applications 直接覆盖)。mac 的 Dock/菜单栏**显示名**由
+    // postPackage 的 applyMacPackagedDisplayName 统一拉回 Cindy(显示层共用
+    // BRAND_NAME,标识符层分区域)。
+    name: CINDY_EXE,
+    executableName: CINDY_EXE,
+    // mac bundle id(与 Windows AUMID 同值,按区域派生;cn/global 是两个可并存
+    // 的系统身份,与 mobile 的 com.xd.cindycn / com.xd.cindy 同一套)。
+    appBundleId: CINDY_APP_ID,
+    // exe 资源元数据(任务管理器进程名、文件右键属性的显示层)。只影响展示,
+    // 与 exe 文件名 / AUMID / userData 等标识符解耦;显示层两区共用 Cindy
+    // (与 mac 显示名口径一致)。
+    win32metadata: {
+      CompanyName: 'XD',
+      ProductName: 'Cindy',
+      FileDescription: 'Cindy',
+    },
     icon: 'resources/icon',
     // 自定义 URL scheme: xdt-maker://session/<id> | xdt-maker://project/<encoded-workingDir>
     // macOS: electron-packager 把这里的项写进 Info.plist 的 CFBundleURLTypes,
@@ -947,7 +1077,8 @@ const config: ForgeConfig = {
     // Windows: 不读这个字段(走 app.setAsDefaultProtocolClient 写注册表), 见
     //          main/deepLink.ts registerDeepLinkProtocol()。
     protocols: [
-      { name: 'XDMaker Deep Link', schemes: ['xdt-maker'] },
+      // 双 scheme 注册:cindy:// 主 + xdt-maker:// 永久兼容(存量分享链接不死)。
+      { name: 'Cindy Deep Link', schemes: [...allDeepLinkSchemes()] },
     ],
     // macOS 文件夹右键 "打开方式 → XDMaker" 入口:
     //   声明 app 能接受 public.folder, Finder 自动把 XDMaker 出现在 "打开方式" 列表。
@@ -963,9 +1094,9 @@ const config: ForgeConfig = {
       // 智能通讯录导入: 经 osascript 向"通讯录"发 Apple Events(只读拉取)。
       // 缺这条声明 macOS 会不弹授权窗直接拒绝(-1743), 用户只看到静默失败。
       NSAppleEventsUsageDescription:
-        'XDMaker uses Apple Events to read Contacts you import and to add or update Contacts you explicitly export.',
+        'Cindy uses Apple Events to read Contacts you import and to add or update Contacts you explicitly export.',
       NSContactsUsageDescription:
-        'XDMaker accesses Contacts only when you import them or explicitly export additions or updates.',
+        'Cindy accesses Contacts only when you import them or explicitly export additions or updates.',
       CFBundleDocumentTypes: [
         {
           CFBundleTypeName: 'Folder',
@@ -983,7 +1114,7 @@ const config: ForgeConfig = {
           CFBundleTypeName: 'Cindy Cartridge',
           CFBundleTypeRole: 'Viewer',
           LSHandlerRank: 'Owner',
-          LSItemContentTypes: ['com.magiclizi.xdt-maker.cindy'],
+          LSItemContentTypes: [`${CINDY_UTI_PREFIX}.cindy`],
           CFBundleTypeExtensions: ['cindy'],
         },
       ],
@@ -994,7 +1125,7 @@ const config: ForgeConfig = {
       // 打开行为;导入入口仍是拖入窗口 / 设置页按钮。
       UTExportedTypeDeclarations: [
         {
-          UTTypeIdentifier: 'com.magiclizi.xdt-maker.cindy',
+          UTTypeIdentifier: `${CINDY_UTI_PREFIX}.cindy`,
           UTTypeDescription: 'Cindy Cartridge',
           UTTypeConformsTo: ['public.data'],
           UTTypeTagSpecification: {
@@ -1003,8 +1134,8 @@ const config: ForgeConfig = {
           },
         },
         {
-          UTTypeIdentifier: 'com.magiclizi.xdt-maker.cshare',
-          UTTypeDescription: 'XDMaker Session Share',
+          UTTypeIdentifier: `${CINDY_UTI_PREFIX}.cshare`,
+          UTTypeDescription: 'Cindy Session Share',
           UTTypeConformsTo: ['public.data'],
           UTTypeTagSpecification: {
             'public.filename-extension': ['cshare'],
@@ -1052,13 +1183,13 @@ const config: ForgeConfig = {
   },
   rebuildConfig: {},
   hooks: {
-    // Builds xdt-updater.exe before electron-packager copies resources/ into
+    // Builds cindy-updater.exe before electron-packager copies resources/ into
     // the package — guarantees the shipped updater matches HEAD.
     prePackage: async (_forgeConfig, platform, arch) => {
       const targetPlatform = requestedTargetPlatform();
       const targetArch = requestedTargetArch();
       if (targetPlatform === 'win32') {
-        buildXdtUpdater();
+        buildCindyUpdater();
       }
       stageRipgrep(targetPlatform, targetArch);
       stageAndroidPlatformTools(targetPlatform, targetArch);
@@ -1074,6 +1205,7 @@ const config: ForgeConfig = {
         const noticeName = stagePackagedThirdPartyNotices(buildPath, opts.platform);
         console.log(`[forge:postPackage] staged ${noticeName} + restricted component disclosure`);
         signPackagedExes(buildPath);
+        applyMacPackagedDisplayName(buildPath, opts.platform);
       }
     },
   },

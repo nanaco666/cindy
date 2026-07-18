@@ -1,0 +1,57 @@
+name: agent-sync
+
+# 校验 review-pr 产物与 agent-use/docs/ 单源同步:
+# 改了 agent-use/docs/ 却忘跑 pnpm sync:agent-instructions、或手改了生成的 SKILL.md,
+# 都会让重新 sync 后 git diff 非空 → CI 红。sync 脚本内部还会跑 pr-rules.json ↔ PR 模板一致性校验(漂移即 exit 1)。
+
+on:
+  pull_request:
+    paths:
+      - 'agent-use/docs/**'
+      - 'agent-use/scripts/sync-agent-instructions.mjs'
+      - '.claude/skills/review-pr/SKILL.md'
+      - '.agents/skills/review-pr/SKILL.md'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
+      - '.github/workflows/agent-sync.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'agent-use/docs/**'
+      - 'agent-use/scripts/sync-agent-instructions.mjs'
+      - '.claude/skills/review-pr/SKILL.md'
+      - '.agents/skills/review-pr/SKILL.md'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
+      - '.github/workflows/agent-sync.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: check:agent-sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Verify review-pr artifacts are in sync
+        run: |
+          pnpm sync:agent-instructions
+          if ! git diff --exit-code; then
+            echo "::error::review-pr 产物与 agent-use/docs/ 不同步。请本地跑 'pnpm sync:agent-instructions' 并提交生成的两份 SKILL.md(勿手改产物)。"
+            exit 1
+          fi

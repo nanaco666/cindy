@@ -28,7 +28,7 @@
  */
 
 import { readClaudeApiKey } from '../maker-host/auth-adapters.js';
-import { CLAUDE_UPSTREAM_ENDPOINT } from '../maker-host/runtime-configs.js';
+import { claudeUpstreamEndpoint } from '../maker-host/runtime-configs.js';
 
 /**
  * Return env vars to inject when running `claude --print` on a remote.
@@ -52,11 +52,18 @@ import { CLAUDE_UPSTREAM_ENDPOINT } from '../maker-host/runtime-configs.js';
 export function getRemoteClaudeEnv(): Record<string, string> | null {
   const apiKey = readClaudeApiKey();
   if (!apiKey) return null;
+  // Endpoint pairs with the key (model-access issued; empty = gateway not
+  // ready / legacy manual key). An empty ANTHROPIC_BASE_URL would make the
+  // remote CLI fall back to api.anthropic.com and send the gateway key there
+  // — misleading 401. Treat it the same as "no key": caller surfaces the
+  // "connect XD Gateway in xdt-maker first" error.
+  const baseUrl = claudeUpstreamEndpoint().trim();
+  if (!baseUrl) return null;
   return {
     // Auth — same key as local.
     ANTHROPIC_API_KEY: apiKey,
     // Always the upstream (company internal gateway), never local loopback.
-    ANTHROPIC_BASE_URL: CLAUDE_UPSTREAM_ENDPOINT,
+    ANTHROPIC_BASE_URL: baseUrl,
     // Behaviour flags — must match local so remote talks to the same proxy
     // the same way. Especially ENABLE_TOOL_SEARCH: without it CC sends full
     // tool defs on every request to non-first-party hosts (big bandwidth hit).

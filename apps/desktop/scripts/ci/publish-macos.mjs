@@ -15,7 +15,7 @@
 //   APPLE_SIGN_IDENTITY            — 默认 Developer ID Application: Jiali Liu (WJ6LYABL8Z)
 //
 // 前置条件:
-//   build-macos.mjs 已执行成功，out/xdt-maker-darwin-<arch>/xdt-maker.app 存在
+//   build-macos.mjs 已执行成功，out/<PACKAGED_APP_NAME>-darwin-<arch>/<PACKAGED_APP_NAME>.app 存在
 // =============================================================================
 
 import fs from 'node:fs';
@@ -35,11 +35,15 @@ import {
   uploadToOSS,
   uploadVersionedGzImmutable,
   writeMacEntitlements,
-  verifyMacContactsPermissions,
   resolveAppleIdentity,
-} from './lib.mjs';
+  signMacAppWithIdentity,
+  notarizeMacApp,
+  createMacDMG,
+  PACKAGED_APP_NAME, assertNotPublishingCindyToLegacyChannel } from './lib.mjs';
 
 loadDotenv();
+// 渠道冻结硬闸:Cindy 布局产物禁止发布到老 /xdt-maker 前缀(见 lib.mjs)。
+assertNotPublishingCindyToLegacyChannel(OSS_PREFIX);
 
 // ── 参数解析 ──────────────────────────────────────────────────────────────
 
@@ -75,94 +79,26 @@ if (!APPLE_APP_PASSWORD) {
 }
 
 // ── Signing & Notarization ────────────────────────────────────────────────
+// 实现已收进 lib.mjs(signMacAppWithIdentity / notarizeMacApp / createMacDMG,
+// 与 package-desktop.mjs 共用);这里只保留绑定本脚本 Apple 身份的薄封装。
+
+const APPLE_IDENTITY = {
+  appleId: APPLE_ID,
+  teamId: APPLE_TEAM_ID,
+  signIdentity: SIGN_IDENTITY,
+  applePassword: APPLE_APP_PASSWORD,
+};
 
 function signApp(appPath, helperEntitlementsPath, mainEntitlementsPath) {
-  console.log('    Removing provenance attributes...');
-  exec(`/usr/bin/xattr -dr com.apple.provenance "${appPath}" 2>/dev/null || true`);
-
-  // Electron apps must be signed from inside out — `--deep` doesn't
-  // reliably timestamp nested Helper apps and frameworks.
-  const signBase = `/usr/bin/codesign --force --timestamp --options runtime --sign "${SIGN_IDENTITY}"`;
-  const frameworksDir = path.join(appPath, 'Contents', 'Frameworks');
-
-  // 0. Native modules in app.asar.unpacked/ (e.g. better_sqlite3.node)
-  //    AutoUnpackNativesPlugin 把 *.node 解包到 app.asar.unpacked/ 后是独立文件，
-  //    不在这里单签的话 Gatekeeper 会拒绝加载，app 直接打不开。
-  const asarUnpackedDir = path.join(appPath, 'Contents', 'Resources', 'app.asar.unpacked');
-  if (fs.existsSync(asarUnpackedDir)) {
-    console.log('    Signing native modules in app.asar.unpacked/...');
-    exec(`find "${asarUnpackedDir}" -type f | while IFS= read -r f; do if file "$f" | grep -qE "Mach-O"; then ${signBase} "$f"; fi; done`);
-  }
-
-  // 0b. Bundled CLI tools under Contents/Resources/tools/ (ripgrep, voice
-  // input text insertion helper). They are copied as extraResource, outside the
-  // app binary and outside app.asar.unpacked, so notarization needs them signed
-  // explicitly.
-  const resourceToolsDir = path.join(appPath, 'Contents', 'Resources', 'tools');
-  if (fs.existsSync(resourceToolsDir)) {
-    console.log('    Signing bundled CLI tools in Contents/Resources/tools/...');
-    exec(`find "${resourceToolsDir}" -type f | while IFS= read -r f; do if file "$f" | grep -qE "Mach-O"; then ${signBase} "$f"; fi; done`);
-  }
-
-  // 1. ALL Mach-O binaries (libraries, executables like chrome_crashpad_handler, ShipIt, etc.)
-  console.log('    Signing all Mach-O binaries...');
-  exec(`find "${frameworksDir}" -type f | while IFS= read -r f; do if file "$f" | grep -qE "Mach-O"; then ${signBase} "$f"; fi; done`);
-
-  // 2. Helper apps (need entitlements for V8 JIT)
-  console.log('    Signing helper apps...');
-  exec(`find "${frameworksDir}" -name "*.app" -exec ${signBase} --entitlements "${helperEntitlementsPath}" {} \\;`);
-
-  // 3. Framework bundles
-  console.log('    Signing frameworks...');
-  exec(`find "${frameworksDir}" -maxdepth 1 -name "*.framework" -exec ${signBase} {} \\;`);
-
-  // 4. Main app bundle
-  console.log('    Signing main app...');
-  exec(`${signBase} --entitlements "${mainEntitlementsPath}" "${appPath}"`);
-
-  // Verify entire bundle
-  console.log('    Verifying signature...');
-  exec(`/usr/bin/codesign --verify --deep --strict "${appPath}"`);
-  verifyMacContactsPermissions(appPath);
+  signMacAppWithIdentity(appPath, helperEntitlementsPath, mainEntitlementsPath, APPLE_IDENTITY);
 }
 
 function notarizeApp(appPath) {
-  const zipPath = appPath + '.zip';
-
-  console.log('    Compressing for notarization...');
-  exec(`/usr/bin/ditto -c -k --keepParent "${appPath}" "${zipPath}"`);
-
-  console.log('    Submitting to Apple notarization service (this may take a few minutes)...');
-  exec(
-    `/usr/bin/xcrun notarytool submit "${zipPath}" ` +
-    `--apple-id "${APPLE_ID}" --password "${APPLE_APP_PASSWORD}" ` +
-    `--team-id "${APPLE_TEAM_ID}" --wait`,
-    { timeout: 1800000 }, // 30 min
-  );
-
-  fs.unlinkSync(zipPath);
-
-  console.log('    Stapling notarization ticket...');
-  exec(`/usr/bin/xcrun stapler staple "${appPath}"`);
+  notarizeMacApp(appPath, APPLE_IDENTITY);
 }
 
 function createDMG(appPath, dmgPath, volumeName) {
-  const stagingDir = dmgPath + '.staging';
-
-  if (fs.existsSync(stagingDir)) fs.rmSync(stagingDir, { recursive: true });
-  fs.mkdirSync(stagingDir, { recursive: true });
-
-  exec(`cp -R "${appPath}" "${stagingDir}/"`);
-  fs.symlinkSync('/Applications', path.join(stagingDir, 'Applications'));
-
-  if (fs.existsSync(dmgPath)) fs.unlinkSync(dmgPath);
-  console.log('    Creating DMG...');
-  exec(`/usr/bin/hdiutil create "${dmgPath}" -volname "${volumeName}" -srcfolder "${stagingDir}" -ov -format UDZO`);
-
-  console.log('    Signing DMG...');
-  exec(`/usr/bin/codesign --force --timestamp --sign "${SIGN_IDENTITY}" "${dmgPath}"`);
-
-  fs.rmSync(stagingDir, { recursive: true });
+  createMacDMG(appPath, dmgPath, volumeName, APPLE_IDENTITY);
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────
@@ -176,8 +112,8 @@ async function main() {
   console.log('='.repeat(60));
 
   // 0. 前置：确保 build 阶段产物存在
-  const packagedDir = path.join(DESKTOP_ROOT, 'out', `xdt-maker-darwin-${arch}`);
-  const appPath = path.join(packagedDir, 'xdt-maker.app');
+  const packagedDir = path.join(DESKTOP_ROOT, 'out', `${PACKAGED_APP_NAME}-darwin-${arch}`);
+  const appPath = path.join(packagedDir, `${PACKAGED_APP_NAME}.app`);
   if (!fs.existsSync(appPath)) {
     console.error(`ERROR: ${appPath} not found.`);
     console.error(`       Run: node scripts/ci/build-macos.mjs --arch ${arch} --version ${version}`);

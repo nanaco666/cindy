@@ -8,9 +8,8 @@
 // xcodebuild 枚举不出具体模拟器,会报
 //   `xcodebuild: error: Unable to find a destination matching ... { id:<udid> }`。
 // 这里改用 `generic/platform=iOS Simulator` 通用目标编译(不需要枚举具体设备),
-// 再用 `simctl` 把产物装到当前 booted 的模拟器。
-// `EXCLUDED_ARCHS='' ARCHS=arm64` 用来覆盖 LarkSSO pod 给模拟器排除 arm64 的设置,
-// 产出原生 arm64 包(否则装不上 / 走 Rosetta)。
+// 再用 `simctl` 把产物装到当前 booted 的模拟器。架构交给 Pods/Xcode 决定，
+// 避免覆盖原生 SDK 自己声明的 simulator exclusions。
 //
 // 两个提速机制(2026-07 加,背景:每任务一个新 worktree 的工作流让"从零冷构建"
 // 成为高频成本,一次约 12 分钟;外加一次 pod CDN 挂死 20 分钟的事故):
@@ -96,10 +95,7 @@ if (!buildOnly) {
   }
 }
 
-// 按宿主机架构选模拟器 arch:Apple Silicon → arm64,Intel → x86_64。
-// 硬编码 arm64 会让 Intel Mac 产出装不上其 x86_64 模拟器的包(repo 仍支持 darwin-x64)。
-// EXCLUDED_ARCHS='' 清空是为绕开 LarkSSO pod 对模拟器 arm64 的排除(只在 Apple Silicon 上有意义,
-// Intel 上清空无副作用)。
+// 宿主机架构只参与缓存隔离；真实构建架构由 Xcode 与各 Pod 的支持矩阵决定。
 const simArch = process.arch === 'arm64' ? 'arm64' : 'x86_64';
 
 // —— fingerprint 产物缓存查询 ——
@@ -157,7 +153,7 @@ if (!app) {
   }
   const scheme = workspace.replace(/\.xcworkspace$/, '');
 
-  console.log(`› 编译 ${scheme}(${simArch} 模拟器,generic destination)…`);
+  console.log(`› 编译 ${scheme}(generic iOS Simulator destination)…`);
   run('xcodebuild', [
     '-workspace', join(iosDir, workspace),
     '-scheme', scheme,
@@ -165,8 +161,6 @@ if (!app) {
     '-destination', 'generic/platform=iOS Simulator',
     '-derivedDataPath', buildDir,
     '-quiet',
-    'EXCLUDED_ARCHS=',
-    `ARCHS=${simArch}`,
     'build',
   ]);
 

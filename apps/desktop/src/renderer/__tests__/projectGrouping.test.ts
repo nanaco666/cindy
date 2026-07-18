@@ -91,6 +91,7 @@ describe('normalizeWorkingDir', () => {
     expect(normalizeWorkingDir('\\\\?\\D:\\AI\\tl_web_agent\\.worktrees\\cx-20260526-104440')).toBe(
       'D:/AI/tl_web_agent',
     );
+    expect(normalizeWorkingDir('/repo/.cindy-worktrees/auto-kypf0e/server')).toBe('/repo');
     expect(normalizeWorkingDir('/repo/.xdt-worktrees/auto-kypf0e/server')).toBe('/repo');
     expect(normalizeWorkingDir('/repo/.claude/worktrees/agent-a123/server')).toBe('/repo');
   });

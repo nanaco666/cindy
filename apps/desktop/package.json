@@ -1,8 +1,8 @@
 {
   "name": "desktop",
-  "productName": "xdt-maker",
-  "version": "0.0.64",
-  "description": "xdt-maker desktop client (真实版本号在 release 时由脚本通过 APP_VERSION 注入,见 forge.config.ts)",
+  "productName": "Cindy",
+  "version": "1.0.0",
+  "description": "Cindy desktop client (真实版本号在 release 时由脚本通过 APP_VERSION 注入,见 forge.config.ts)",
   "main": ".vite/build/index.js",
   "private": true,
   "scripts": {
@@ -13,10 +13,11 @@
     "predev:inspect": "pnpm build:remote-bundles",
     "prepackage": "pnpm build:remote-bundles",
     "prebuild": "pnpm build:remote-bundles",
-    "dev": "pnpm dev:winsetup && electron-forge start --",
+    "dev": "pnpm dev:winsetup && node scripts/dev-local-env.mjs electron-forge start --",
     "dev:remote": "pnpm dev:winsetup && node scripts/dev-remote-env.mjs electron-forge start --",
     "dev:inspect": "pnpm dev:winsetup && cross-env OPEN_DEVTOOLS=1 node scripts/dev-remote-env.mjs electron-forge start --inspect-electron --",
     "package": "electron-forge package",
+    "package:app": "node scripts/package-desktop.mjs",
     "build": "electron-forge make",
     "db:check": "drizzle-kit check",
     "db:generate": "drizzle-kit generate",
@@ -63,6 +64,7 @@
   },
   "license": "UNLICENSED",
   "dependencies": {
+    "@cindy/auth-client": "workspace:*",
     "@codemirror/commands": "^6.10.3",
     "@codemirror/lang-cpp": "^6.0.3",
     "@codemirror/lang-css": "^6.3.1",
@@ -136,7 +138,7 @@
     "cindy-tools": "workspace:*",
     "clsx": "^2.1.1",
     "diff": "^8.0.4",
-    "drizzle-orm": "^0.36.4",
+    "drizzle-orm": "^0.45.2",
     "electron-squirrel-startup": "^1.0.1",
     "electron-store": "^7.0.3",
     "electron-window-state": "^5.0.3",
@@ -199,7 +201,7 @@
     "ali-oss": "^6.21.0",
     "autoprefixer": "^10.4.20",
     "cross-env": "^7.0.3",
-    "drizzle-kit": "^0.28.1",
+    "drizzle-kit": "^0.31.10",
     "electron": "41.2.0",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^9.1.0",
@@ -211,7 +213,7 @@
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.0.0",
     "unified": "11.0.5",
-    "vite": "^5.4.21",
+    "vite": "^6.4.3",
     "vitest": "^3.2.4"
   }
 }

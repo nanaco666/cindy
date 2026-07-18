@@ -10,9 +10,15 @@ import type { StoredMobileVoiceCredential } from '@/session/mobileVoiceCredentia
 const STORAGE_KEY = 'xdt.mobileVoiceLiteLlmSettings.v1';
 const STORAGE_VERSION = 1;
 
-export const MOBILE_VOICE_LITELLM_DEFAULT_PROXY_BASE_URL = MOBILE_VOICE_LITELLM_BASE_URL;
+// 默认 proxy base 仅剩 env 覆写(本地 e2e / dev);清单默认值已随 xdGatewayBaseUrl
+// 退役(2026-07-17),生产为空串——正常链路的地址来自桌面端凭据同步的 proxyBaseUrl。
+export function mobileVoiceLiteLlmDefaultProxyBaseUrl(): string {
+  return MOBILE_VOICE_LITELLM_BASE_URL;
+}
 export const MOBILE_VOICE_LITELLM_KEY_MISSING_ERROR =
   '请先在设置里填写 LiteLLM Key，再使用语音输入。';
+export const MOBILE_VOICE_LITELLM_BASE_URL_MISSING_ERROR =
+  '缺少语音网关地址：请先连接桌面端同步语音配置，或在构建时配置 EXPO_PUBLIC_XDT_MOBILE_VOICE_LITELLM_BASE_URL。';
 
 export interface MobileVoiceLiteLlmSettings {
   proxyApiKey: string;
@@ -36,6 +42,9 @@ export async function saveMobileVoiceLiteLlmSettings(input: {
   const proxyApiKey = input.proxyApiKey.trim();
   if (!proxyApiKey) throw new Error('LiteLLM Key 不能为空。');
   const proxyBaseUrl = normalizeProxyBaseUrl(input.proxyBaseUrl);
+  // 清单不再提供网关默认地址:显式传入非法且无 env 默认时明确报错,
+  // 不落一份 proxyBaseUrl 为空的配置(后续连接只会以更晦涩的方式失败)。
+  if (!proxyBaseUrl) throw new Error(MOBILE_VOICE_LITELLM_BASE_URL_MISSING_ERROR);
   const settings: MobileVoiceLiteLlmSettings = {
     proxyApiKey,
     proxyBaseUrl,
@@ -118,7 +127,7 @@ function parseStoredSettings(raw: string | null): MobileVoiceLiteLlmSettings | n
 }
 
 function normalizeProxyBaseUrl(value: unknown): string {
-  const raw = readNonEmptyString(value) ?? MOBILE_VOICE_LITELLM_DEFAULT_PROXY_BASE_URL;
+  const raw = readNonEmptyString(value) ?? mobileVoiceLiteLlmDefaultProxyBaseUrl();
   const withoutTrailingSlash = raw.replace(/\/+$/, '');
   try {
     const url = new URL(withoutTrailingSlash);
@@ -127,7 +136,7 @@ function normalizeProxyBaseUrl(value: unknown): string {
     }
     return url.toString().replace(/\/+$/, '');
   } catch {
-    return MOBILE_VOICE_LITELLM_DEFAULT_PROXY_BASE_URL;
+    return mobileVoiceLiteLlmDefaultProxyBaseUrl();
   }
 }
 

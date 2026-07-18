@@ -195,21 +195,24 @@ async function listenOnFetchSafeLoopbackPort(
 }
 
 /**
- * 把 routingTransform 返回的 `RoutingDecision` 翻译成 forward 用的三件套(上游 override /
- * header override / header delete)。decision 为 null 时返回空对象(走默认上游 + 透传 headers)。
- * 抽出来给 POST 与无 body(GET 等)两条路径共用,避免重复 parseUpstream / 字段映射逻辑。
+ * 把路由解析失败收敛为单请求的结构化错误,不能让 async HTTP handler 的 rejected
+ * Promise 漂成 process-level unhandledRejection。错误详情只进日志,响应不回显 URL。
  */
-function decisionToOverrides(decision: RoutingDecision | null): {
-  overrideTarget?: UpstreamTarget;
-  headerOverride?: Record<string, string>;
-  headerDelete?: readonly string[];
-} {
-  if (!decision) return {};
-  return {
-    overrideTarget: decision.upstreamOverride ? parseUpstream(decision.upstreamOverride) : undefined,
-    headerOverride: decision.headerOverride,
-    headerDelete: decision.headerDelete,
-  };
+function respondRoutingFailure(
+  res: ServerResponse,
+  logger: ProxyLogger,
+  reqId: number,
+  status: 502 | 503,
+  message: string,
+  err: unknown,
+): void {
+  logger.warn?.(message, { reqId, err: String(err) });
+  if (!res.headersSent) {
+    res.writeHead(status, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: { type: 'proxy_error', message } }));
+    return;
+  }
+  res.destroy(err instanceof Error ? err : new Error(String(err)));
 }
 
 function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
@@ -880,11 +883,66 @@ function forward(
  * 启动代理。返回 ProxyHandle —— url 给 host 用作 ANTHROPIC_BASE_URL。
  */
 export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<ProxyHandle> {
-  const target = parseUpstream(opts.upstream);
+  // 默认上游支持函数形态:宿主的网关 endpoint 运行期可变(如登录后由服务端下发),
+  // 只在路由没有给出 upstreamOverride / localHandler 时现取。有效值按原文 memoize,
+  // endpoint 未变化时零重复 parse;显式供应商路由完全不碰默认上游(热路径,规则 10)。
+  const resolveTarget = ((): (() => UpstreamTarget) => {
+    const raw = opts.upstream;
+    const readRaw = typeof raw === 'function' ? raw : () => raw;
+    let cachedRaw: string | null = null;
+    let cachedTarget: UpstreamTarget | null = null;
+    return () => {
+      const current = readRaw()?.trim() ?? '';
+      if (!current) throw new Error('default upstream is not configured');
+      if (cachedTarget === null || current !== cachedRaw) {
+        cachedTarget = parseUpstream(current);
+        cachedRaw = current;
+      }
+      return cachedTarget;
+    };
+  })();
   const transforms = opts.transformRequest ?? [stripNonAnthropicFields];
   const logger = opts.logger ?? {};
   const host = opts.host ?? '127.0.0.1';
   const maxBodyBytes = opts.maxRequestBodyBytes ?? DEFAULT_MAX_REQUEST_BODY_BYTES;
+
+  /**
+   * 路由优先级的唯一落点:显式 override 胜出时绝不读取默认上游;只有 decision
+   * 没选目标(含仅换 header 的 gateway-key 路由)时才解析默认 endpoint。
+   */
+  const resolveForwardRoute = (
+    decision: RoutingDecision | null,
+    res: ServerResponse,
+    reqId: number,
+  ): {
+    target: UpstreamTarget;
+    overrideTarget?: UpstreamTarget;
+    headerOverride?: Record<string, string>;
+    headerDelete?: readonly string[];
+  } | null => {
+    let overrideTarget: UpstreamTarget | undefined;
+    try {
+      overrideTarget = decision?.upstreamOverride
+        ? parseUpstream(decision.upstreamOverride)
+        : undefined;
+    } catch (err) {
+      respondRoutingFailure(res, logger, reqId, 502, 'selected upstream invalid', err);
+      return null;
+    }
+    let target = overrideTarget;
+    try {
+      target ??= resolveTarget();
+    } catch (err) {
+      respondRoutingFailure(res, logger, reqId, 503, 'default upstream unavailable', err);
+      return null;
+    }
+    return {
+      target,
+      overrideTarget,
+      headerOverride: decision?.headerOverride,
+      headerDelete: decision?.headerDelete,
+    };
+  };
 
   // in-flight 请求计数 —— dispose 时等清零或 2s 超时
   let inflight = 0;
@@ -932,18 +990,19 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
         );
         return;
       }
-      const { overrideTarget, headerOverride, headerDelete } = decisionToOverrides(decision);
+      const route = resolveForwardRoute(decision, res, reqId);
+      if (!route) return;
       if (logger.isDebugEnabled?.()) {
         logger.debug?.('▶ inbound request from client', {
           reqId,
           method,
-          upstreamBase: formatUpstreamBase(overrideTarget ?? target),
+          upstreamBase: formatUpstreamBase(route.target),
           url,
           bytes: 0,
         });
       }
       forward(
-        target,
+        route.target,
         method,
         url,
         headers,
@@ -953,9 +1012,9 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
         opts.recoveryRules ?? [],
         reqId,
         true,
-        overrideTarget,
-        headerOverride,
-        headerDelete,
+        route.overrideTarget,
+        route.headerOverride,
+        route.headerDelete,
         opts.responseObserver,
       );
       return;
@@ -1036,7 +1095,8 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
       );
       return;
     }
-    const { overrideTarget, headerOverride, headerDelete } = decisionToOverrides(decision);
+    const route = resolveForwardRoute(decision, res, reqId);
+    if (!route) return;
 
     const debugOn = logger.isDebugEnabled?.() ?? false;
     if (debugOn) {
@@ -1045,7 +1105,7 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
         method,
         // 本请求**最终**发往的 upstream(per-request override 后), 不是静态默认上游 ——
         // = api.anthropic.com 即走订阅直连; = llm-proxy.tapsvc.com 即走网关。
-        upstreamBase: formatUpstreamBase(overrideTarget ?? target),
+        upstreamBase: formatUpstreamBase(route.target),
         url,
         bytes: rawBody.length,
         body: dumpBody(rawBody, DEBUG_REQUEST_DUMP_MAX_BYTES),
@@ -1066,7 +1126,7 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
     }
 
     forward(
-      target,
+      route.target,
       method,
       url,
       headers,
@@ -1076,9 +1136,9 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
       opts.recoveryRules ?? [],
       reqId,
       true,
-      overrideTarget,
-      headerOverride,
-      headerDelete,
+      route.overrideTarget,
+      route.headerOverride,
+      route.headerDelete,
       opts.responseObserver,
     );
   });

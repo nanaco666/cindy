@@ -24,13 +24,30 @@ import { promises as fsp } from 'node:fs';
 
 import type { TaskAttachment } from '@cindy/slack-hook-protocol';
 
-const XDT_IMAGE_REGEX = /!\[([^\]]*)\]\((xdt-image:\/\/[^)]+)\)/g;
+// 双协议:老 xdt-image + 新 cindy-media(媒体总仓),与 lizi-im/xdtRefs.ts 对齐
+const XDT_IMAGE_REGEX = /!\[([^\]]*)\]\(((?:xdt-image|cindy-media):\/\/[^)]+)\)/g;
 const XDT_FILE_REGEX = /\[([^\]]*)\]\((xdt-file:\/\/[^)]+)\)/g;
 
 const MAX_OUT_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_OUT_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_OUT_ATTACHMENTS = 8;
 const MAX_OUT_TOTAL_BYTES = 30 * 1024 * 1024;
+
+/**
+ * hook 派发 turn 时附在用户消息末尾的渠道说明(session-runner 消费)。
+ * 本收集器的出站契约只认最终回复文本里的 xdt-file / xdt-image 引用,但
+ * 没有任何提示教模型这个约定 —— 实踩(2026-07-16)里模型两次把「把文件
+ * 发给我」路由到 lizi_feishu_bot(hook 会话里唯一可见的推送工具)并失败。
+ * 固定文本、逐 turn 追加,保证行为确定(规则 9);修改措辞时同步
+ * collectOutboundAttachments 的实际语义,别让说明和收集器漂移。
+ */
+export const SLACK_HOOK_PROMPT_NOTE =
+  '[渠道说明] 本会话来自 Slack。要把文件发给用户:在最终回复文本里写 ' +
+  '`[文件名](xdt-file:///绝对路径)`;图片直接引用其地址 ' +
+  '`![说明](cindy-media://… 或 xdt-image://…)`,无需复制文件。' +
+  '系统会在回复结束后自动把它们作为 Slack 附件发回,无需调用任何工具;' +
+  'xdt-file 文件必须位于当前工作目录内(目录外的引用会被静默丢弃)。' +
+  '不要用 lizi_feishu_bot 发送,除非用户明确要求发到飞书。';
 
 /** 扩展名 -> 图片 MIME(agent 产图只有这几种; 其它按二进制流)。 */
 const IMAGE_MIME_BY_EXT: Record<string, string> = {
@@ -41,13 +58,19 @@ const IMAGE_MIME_BY_EXT: Record<string, string> = {
   '.webp': 'image/webp',
 };
 
-function xdtFileUrlToAbsPath(url: string): string {
+export function xdtFileUrlToAbsPath(url: string): string {
   const raw = url.replace(/^xdt-file:\/\//, '');
+  let decoded: string;
   try {
-    return decodeURIComponent(raw);
+    decoded = decodeURIComponent(raw);
   } catch {
-    return raw;
+    decoded = raw;
   }
+  // 约定写法 xdt-file:///<绝对路径>:Unix 下剥掉协议后的首个 `/` 就是根;
+  // Windows 盘符路径剥完协议剩 `/C:\...`(或 /C:/...),多余的前导 `/` 会让
+  // allowedFileRoots 比对必失败 → 附件静默丢失(2026-07-16 实踩,规则 15),
+  // 这里剥掉。与 lizi-im/xdtRefs.ts 同步修改。
+  return decoded.replace(/^\/+([A-Za-z]:[\\/])/, '$1');
 }
 
 export function guessMime(absPath: string): string {
@@ -84,9 +107,15 @@ export interface OutboundResult {
   skipped: number;
 }
 
-/** 文本里是否存在任何 xdt 出站引用(快速前置判断, 避免无谓的收集开销)。 */
+/** 文本里是否存在任何托管媒体出站引用(快速前置判断, 避免无谓的收集开销)。 */
 export function hasOutboundRefs(text: string): boolean {
-  return text.includes('xdt-image://') || text.includes('xdt-file://');
+  // 双协议:老 xdt-image + 媒体总仓 cindy-media(XDT_IMAGE_REGEX 同口径)——
+  // 漏了 cindy-media 会让只含总仓图的回帖跳过附件收集,图静默丢失。
+  return (
+    text.includes('xdt-image://') ||
+    text.includes('cindy-media://') ||
+    text.includes('xdt-file://')
+  );
 }
 
 /**

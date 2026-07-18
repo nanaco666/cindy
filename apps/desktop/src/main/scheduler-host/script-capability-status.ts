@@ -17,6 +17,8 @@ import { SCRIPT_CAPABILITIES, type ScriptCapability } from '@lizi/maker-schedule
 const CAPABILITY_GHOST_DEPS: Partial<Record<ScriptCapability, string>> = {
   'jira.read': 'xd-atlassian',
   'jira.comment': 'xd-atlassian',
+  // 2026-07-17:主机飞书 token 链退役,feishu.* 改走 xd-feishu 意识 ghost pipe。
+  'feishu.read': 'xd-feishu',
 };
 
 export type ScriptCapabilityRuntimeState = 'ok' | 'ghost-missing' | 'ghost-asleep';

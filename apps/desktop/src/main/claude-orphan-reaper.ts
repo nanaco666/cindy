@@ -28,6 +28,7 @@
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { allUserDataDirNames } from '@lizi/maker-shared/brand-identity';
+import { CURRENT_CINDY_REGION } from '../shared/brandRegion.js';
 import { createLogger } from './logger';
 
 const log = createLogger('claude-orphan-reaper');
@@ -41,7 +42,7 @@ const log = createLogger('claude-orphan-reaper');
  * the packaged Claude binary ever moves out of `userData/claude-code/`.
  *
  * Markers cover every current + historical userData dir name (brand-identity
- * `legacyUserDataDirNames`): during a brand-rename migration window, orphans
+ * `legacyUserDataDirNames`): while retaining compatibility with legacy profiles, orphans
  * spawned by the pre-rename install still carry the old dir name in their
  * command line and must keep being recognized.
  */
@@ -57,8 +58,10 @@ export function buildClaudePathMarkers(dirNames: readonly string[]): string[] {
 }
 
 const XDT_CLAUDE_PATH_MARKERS = [
-  ...buildClaudePathMarkers(allUserDataDirNames()),
-  // Dev checkouts (and their .xdt-worktrees) launch the pinned binary from
+  // 只认领本区域(+ 历史)userData 下的进程:同机双装时另一区域实例的
+  // Claude 子进程属于对方,跨区域匹配会把人家活着的 agent 树误杀。
+  ...buildClaudePathMarkers(allUserDataDirNames(CURRENT_CINDY_REGION)),
+  // Dev checkouts (and their current/legacy managed worktrees) launch the pinned binary from
   // <repo>/apps/claude-code-bin/<platform-arch>/ — without these markers a
   // dev-spawned orphan is misclassified as an external install and spared,
   // so every abrupt dev restart leaks a live agent tree mutating the workdir.

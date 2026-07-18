@@ -168,7 +168,7 @@
         "unlockSubmit": "アンロック",
         "generateTitle": "新しい SSH 鍵を生成",
         "nameLabel": "名前(省略可)",
-        "nameHint": "~/.ssh/<name> に保存。デフォルトは \"xdt-maker\"、衝突時は -1 / -2 ... を付与。",
+        "nameHint": "~/.ssh/<name> に保存。デフォルトは \"cindy\"、衝突時は -1 / -2 ... を付与。",
         "encryptLabel": "passphrase で暗号化する(推奨)",
         "encryptHint": "passphrase は今一度だけ入力し、ssh-add が復号した鍵をシステム ssh-agent にキャッシュします。macOS では Keychain にも保存されるため再起動後も自動復帰します。",
         "passLabel": "Passphrase",
@@ -502,7 +502,25 @@
     },
     "userProfile": {
       "fallbackName": "ユーザー",
-      "avatarAlt": "{{name}} のアバター"
+      "avatarAlt": "{{name}} のアバター",
+      "copyUserId": {
+        "action": "ユーザー ID をコピー",
+        "success": "ユーザー ID をコピーしました",
+        "failed": "ユーザー ID をコピーできませんでした"
+      },
+      "edit": {
+        "open": "名前とアバターを編集",
+        "title": "プロフィールを編集",
+        "nameLabel": "名前",
+        "nameHint": "空欄にすると現在の名前を維持します",
+        "changeAvatar": "アバターを変更",
+        "resetAvatar": "デフォルトのアバターに戻す",
+        "save": "保存",
+        "cancel": "キャンセル",
+        "syncHint": "名前とアバターはアカウントに保存され、すべてのデバイスに同期されます。",
+        "avatarInvalid": "5MB 以下の PNG / JPG / WebP 画像を選択してください",
+        "saveFailed": "保存に失敗しました。もう一度お試しください"
+      }
     },
     "help": {
       "title": "ヘルプ",
@@ -605,18 +623,13 @@
       }
     },
     "apiKey": {
-      "title": "ツールキー",
-      "inputAria": "API キー",
       "showKey": "キーを表示",
-      "hideKey": "キーを非表示",
-      "openConsole": "コンソールを開く ↗",
-      "save": "保存",
-      "saved": "保存済み",
-      "saving": "保存中..."
+      "hideKey": "キーを非表示"
     },
     "voiceInput": {
       "title": "音声入力",
       "description": "認識言語、マイク、ショートカット、音声の整え方、音声入力中のミュートを設定します。",
+      "saveFailed": "音声入力設定の保存に失敗しました：{{message}}",
       "sections": {
         "basics": "基本",
         "refinement": "整え方",
@@ -653,7 +666,8 @@
         "toast": {
           "needsModifier": "組み合わせキー、F1-F24 単独、または左右の Command / Option / Control / Fn を使ってください。",
           "fnUnavailable": "組み合わせキー、F1-F24 単独、または左右の Command / Option / Control / Fn を使ってください。",
-          "systemReserved": "このショートカットはシステムまたは一般的な編集ショートカットと競合します"
+          "systemReserved": "このショートカットはシステムまたは一般的な編集ショートカットと競合します",
+          "registrationFailed": "ショートカットを登録できませんでした: {{error}}"
         }
       },
       "permissions": {
@@ -865,12 +879,12 @@
           "binaryMissing": "Codex コンポーネントが利用できません。アプリを再起動してください"
         },
         "apiMode": {
-          "label": "API モード (AI Gateway 経由)",
-          "description": "オンにすると Codex はサブスクではなく、モデルプロバイダーの XD Gateway Key を使用します。",
-          "noKey": "XD Gateway Key が未設定です。モデルプロバイダーで XD Gateway を接続してください",
+          "label": "API モード (Cindy AI 経由)",
+          "description": "オンにすると Codex はサブスクではなく、モデルプロバイダーの Cindy AI Key を使用します。",
+          "noKey": "Cindy AI Key が未設定です。モデルプロバイダーで Cindy AI を接続してください",
           "noKeyDialog": {
             "title": "API Key が未設定です",
-            "description": "API モードは XD Gateway Key を再利用しますが、まだ設定されていません。モデルプロバイダーで XD Gateway を接続すると有効化できます。"
+            "description": "API モードは Cindy AI Key を再利用しますが、まだ設定されていません。モデルプロバイダーで Cindy AI を接続すると有効化できます。"
           },
           "badge": {
             "api": "● API",
@@ -878,7 +892,7 @@
           },
           "expandAria": "Codex API モード設定を展開 / 折りたたむ",
           "toggleAria": "Codex API モードを切り替え",
-          "sharedKeyWarning": "XD Gateway と Key を共有 — 削除/変更すると Claude にも影響します",
+          "sharedKeyWarning": "Cindy AI と Key を共有 — 削除/変更すると Claude にも影響します",
           "toast": {
             "toggleFailed": "API モードの切り替えに失敗しました。再試行してください"
           }
@@ -913,7 +927,7 @@
         },
         "logoutConfirm": {
           "title": "Claude.ai サブスクリプションを切断しますか？",
-          "description": "切断するとこの端末の Claude Code のログイン資格情報が削除されます（ローカルの `claude` CLI もログアウトされます）。サブスクリプションモード中の場合は AI Gateway に自動的に戻ります。復元するには再度認証が必要です。",
+          "description": "切断するとこの端末の Claude Code のログイン資格情報が削除されます（ローカルの `claude` CLI もログアウトされます）。サブスクリプションモード中の場合は Cindy AI に自動的に戻ります。復元するには再度認証が必要です。",
           "confirm": "切断",
           "cancel": "キャンセル"
         },
@@ -926,13 +940,13 @@
           "needAuth": "先に Claude.ai にログイン認証してください"
         },
         "apiMode": {
-          "label": "API モード（AI Gateway 経由）",
-          "description": "オンにすると Claude は XD AI Gateway の共有 Key を使用します（デフォルト）。オフにすると Anthropic ネイティブモデル（Claude）はあなたのサブスクリプションで api.anthropic.com に直接接続し、それ以外のモデルは引き続き Gateway を経由します。",
+          "label": "API モード（Cindy AI 経由）",
+          "description": "オンにすると Claude は Cindy AI の共有 Key を使用します（デフォルト）。オフにすると Anthropic ネイティブモデル（Claude）はあなたのサブスクリプションで api.anthropic.com に直接接続し、それ以外のモデルは引き続き Cindy AI を使用します。",
           "toggleAria": "Claude API モードを切り替え",
-          "sharedKeyWarning": "XD Gateway と Key を共有 — API モードをオフにしても Claude 以外のモデルは Gateway を使うため必要です",
+          "sharedKeyWarning": "Cindy AI と Key を共有 — API モードをオフにしても Claude 以外のモデルには Cindy AI が必要です",
           "noKeyDialog": {
             "title": "API Key が未設定です",
-            "description": "API モードをオフ（サブスクリプション）にしても、Claude 以外のモデル（gpt / deepseek など）には XD Gateway Key を再利用しますが、まだ設定されていません。モデルプロバイダーで XD Gateway を接続してください。"
+            "description": "API モードをオフ（サブスクリプション）にしても、Claude 以外のモデル（gpt / deepseek など）には Cindy AI Key を再利用しますが、まだ設定されていません。モデルプロバイダーで Cindy AI を接続してください。"
           },
           "toast": {
             "toggleFailed": "API モードの切り替えに失敗しました。再試行してください"
@@ -970,21 +984,32 @@
         "billingLabel": "SuperGrok サブスク直結"
       },
       "xd": {
-        "title": "XD ゲートウェイ",
+        "title": "Cindy AI",
         "subtitle": "すべてのモデル · Claude Code / Codex 共通 · トークン課金",
         "modelLabel": "すべてのモデル",
         "billingLabel": "トークン課金",
-        "manageKey": "キーを変更 ↗",
         "disconnectConfirm": {
-          "title": "XD ゲートウェイを切断しますか?",
-          "description": "切断するとローカルに保存されたゲートウェイキーが削除されます。ゲートウェイのモデルを引き続き使うには再接続が必要です。"
+          "title": "Cindy AI を切断しますか?",
+          "description": "切断するとローカルに保存された Cindy AI Key が削除されます。Cindy AI のモデルを引き続き使うには再接続が必要です。"
         },
-        "keyDialog": {
-          "title": "XD ゲートウェイのキーを設定",
-          "description": "XD ゲートウェイ API キーを入力すると、トークン課金のすべてのモデルが利用できます。キーは本端末で暗号化して保存され、サインイン中の端末間で自動的に同期されます。",
-          "placeholder": "sk-...",
-          "close": "閉じる"
-        }
+        "sync": {
+          "syncing": "認証情報を取得中…",
+          "retry": "再試行",
+          "refresh": "認証情報を再取得",
+          "rotate": "キーをローテーション",
+          "rotating": "ローテーション中…",
+          "unsupported": "所属組織では利用できません",
+          "autoProvision": "サインイン後に自動取得",
+          "disabled": "モデルアクセスサービスは未提供です",
+          "modelsFetchFailed": "モデル一覧を取得できませんでした。ネットワークを確認して、もう一度お試しください。"
+        },
+        "rotateConfirm": {
+          "title": "Cindy AI Key をローテーションしますか?",
+          "description": "現在のキーを失効させ、新しいキーを発行します。旧キーは即時無効になります:旧キーを使用中のセッション、リモートセッション、モバイル音声はやり直しが必要です。",
+          "confirm": "ローテーション"
+        },
+        "rotateSuccess": "キーをローテーションしました",
+        "rotateFailed": "ローテーションに失敗しました。後でもう一度お試しください"
       },
       "addCustom": {
         "title": "カスタムプロバイダーを追加",
@@ -1124,7 +1149,7 @@
     "gitSafety": {
       "title": "Git セーフティ",
       "autoSnapshotTitle": "Git セーフティ保存点",
-      "description": "Agent の編集後に XDT 保存点 commit を自動作成します。有効な場合のみ Codex rewind を表示します。",
+      "description": "Agent の編集後に保存点 commit を自動作成します。有効な場合のみ Codex rewind を表示します。",
       "toggleAria": "Git セーフティ保存点を切り替え",
       "saveFailed": "Git セーフティ設定の保存に失敗しました"
     },
@@ -1410,7 +1435,7 @@
           "openForLoginFailed": "ブラウザを開けませんでした"
         },
         "openForLogin": "Agent 専用ブラウザを開く",
-        "openForLoginHint": "これはエージェント専用の独立したブラウザです。お使いの Chrome を利用しますが、プロファイルは完全に独立しており（右上に「XDMaker」と表示）、普段の Chrome のタブ・ブックマーク・ログイン状態には一切影響しません。エージェントはこのブラウザであなたの代わりにページを開き、読み、クリックし、スクリーンショットを撮ります。ログインが必要なサイトは、上の「Agent 専用ブラウザを開く」から一度ログインすれば、ログイン状態が保持され、以降はエージェントがあなたとして操作を続けられます。"
+        "openForLoginHint": "これはエージェント専用の独立したブラウザです。お使いの Chrome を利用しますが、プロファイルは完全に独立しており（右上に「Cindy」と表示）、普段の Chrome のタブ・ブックマーク・ログイン状態には一切影響しません。エージェントはこのブラウザであなたの代わりにページを開き、読み、クリックし、スクリーンショットを撮ります。ログインが必要なサイトは、上の「Agent 専用ブラウザを開く」から一度ログインすれば、ログイン状態が保持され、以降はエージェントがあなたとして操作を続けられます。"
       },
       "browserBackend": {
         "title": "自動操作のブラウザ対象",
@@ -1601,12 +1626,12 @@
           "description": "セッションをまたいでコンテキストを保持する agent 横断の長期メモリ"
         },
         "xdt_helper": {
-          "name": "XDT Helper",
+          "name": "Cindy Helper",
           "description": "ホスト機能の開示 — 利用可能なツールとモデルを agent に伝える"
         },
         "collab": {
           "name": "コラボモード",
-          "description": "マルチ Worker 協調 (Orca Team) — start_team / create_worker 等チーム編成ツール"
+          "description": "オフにしても今後作成するセッションにのみ反映され、現在の Worker は停止しません。マルチ Worker のチーム編成に使用します"
         },
         "lsp": {
           "name": "LSP",
@@ -1664,7 +1689,7 @@
           "workspaces": "作業ディレクトリのマッピング(エイリアス → ローカル絶対パス)",
           "workspacesBoundCount_one": "ローカル作業ディレクトリを {{count}} 個バインド済み",
           "workspacesBoundCount_other": "ローカル作業ディレクトリを {{count}} 個バインド済み",
-          "aliasPlaceholder": "エイリアス(例: xdmaker)",
+          "aliasPlaceholder": "エイリアス(例: my-server)",
           "addWorkspace": "作業ディレクトリを追加",
           "removeWorkspace": "この作業ディレクトリを削除",
           "changeDir": "クリックしてディレクトリを変更(別名と設定は保持)"
@@ -1823,6 +1848,7 @@
       "recording": "新しいショートカットを入力…",
       "editAria": "{{name}} のショートカットを変更",
       "errors": {
+        "saveFailed": "ショートカット設定の保存に失敗しました",
         "notBindable": "このキーの組み合わせは使用できません",
         "systemReserved": "OS によって予約されています",
         "conflict": "「{{name}}」と競合しています",
@@ -1926,6 +1952,18 @@
       "empty": "まだプラグインがインストールされていません",
       "emptyHint": "右上の「プラグインをインストール…」から .cindy ファイルを選択してください",
       "disabledTag": "無効",
+      "projectDisabledTag": "このプロジェクトでは無効",
+      "projectSwitchLockedTip": "このプラグインはグローバルで無効です。先に「グローバル」ビューで有効にしてください",
+      "projectBanner": {
+        "title": "プロジェクト「{{name}}」を設定中",
+        "desc": "ここのスイッチはこのプロジェクトのみに適用されます。オフにしたプラグインは新しいセッションに現れません",
+        "backToGlobal": "グローバルに戻る"
+      },
+      "scopePicker": {
+        "global": "グローバル(デフォルト)",
+        "ariaLabel": "プラグインの適用範囲を選択",
+        "browse": "別のフォルダを選択…"
+      },
       "enableAria": "{{name}} を有効化",
       "uninstall": "アンインストール",
       "uninstallConfirm": {
@@ -1939,7 +1977,9 @@
         "uninstalled": "「{{name}}」をアンインストールしました",
         "installedAsleep": "「{{name}}」をインストールしました(無効状態。ここでいつでも有効化できます)",
         "updated": "「{{name}}」を v{{version}} に更新しました",
-        "restored": "「{{name}}」を復元しました"
+        "restored": "「{{name}}」を復元しました",
+        "projectDisabled": "「{{name}}」をこのプロジェクトで無効にしました(新しいセッションから適用)",
+        "projectEnabled": "「{{name}}」はこのプロジェクトでグローバル設定に従います"
       },
       "panelError": {
         "crashed": "このプラグインはクラッシュしました",
@@ -1948,8 +1988,8 @@
         "close": "プラグインを閉じる"
       },
       "installConfirm": {
-        "title": "意識「{{name}}」をインストールしますか？",
-        "confirm": "意識をインストール",
+        "title": "プラグイン「{{name}}」をインストールしますか？",
+        "confirm": "プラグインをインストール",
         "cancel": "キャンセル",
         "meta": "バージョン {{version}}。ローカルにインストールされ、いつでもアンインストールできます。",
         "metaWithAuthor": "作者 {{author}} · バージョン {{version}}。ローカルにインストールされ、いつでもアンインストールできます。",
@@ -2302,45 +2342,99 @@
     "versionMismatch": "相手のバージョンが異なります。一部機能が制限される場合があります"
   },
   "login": {
-    "signingIn": "ログイン中...",
-    "feishuLogin": "Feishu アカウントでログイン",
-    "devLogin": "ローカル開発ログイン",
-    "helpText": "Feishu の企業アカウントで安全にログイン"
-  },
-  "migration": {
-    "title": "チャット履歴をダウンロード中",
-    "subtitle": "初回のローカル化には時間がかかります。ウィンドウを開いたままにしてください",
-    "detail": {
-      "idle": "準備中…",
-      "paused": "{{synced}} / {{total}} セッション · 一時停止",
-      "running": "{{synced}} / {{total}} セッション",
-      "runningWithEta": "{{synced}} / {{total}} セッション · 約 {{eta}}",
-      "done": "{{synced}} / {{total}} セッション"
+    "title": "Cindy へようこそ",
+    "subtitle": "安全なログイン方法を選択してください",
+    "phone": "電話番号",
+    "email": "メール",
+    "phonePlaceholder": "電話番号を入力",
+    "emailPlaceholder": "メールアドレスを入力",
+    "working": "お待ちください...",
+    "continue": "続行",
+    "or": "または",
+    "socialButton": "{{provider}} で続行",
+    "social": {
+      "apple": "Apple",
+      "google": "Google",
+      "wechat": "WeChat"
     },
-    "retryNotice": "ネットワークが不安定です。{{attempt}} 回目の再試行中…",
-    "eta": {
-      "seconds": "{{seconds}} 秒",
-      "minutes": "{{m}} 分",
-      "minutesSeconds": "{{m}} 分 {{s}} 秒"
+    "back": "戻る",
+    "cancel": "キャンセル",
+    "chooseMethod": "ログイン方法を選択",
+    "emailCode": "メール認証コードでログイン",
+    "orgDetected": "{{email}} は企業「{{org}}」に所属しています",
+    "enterpriseLogin": "企業アカウントでログイン",
+    "enterpriseVia": "{{name}} でシングルサインオン",
+    "personalLogin": "個人アカウントでログイン",
+    "personalDesc": "メールアドレスに認証コードを送信",
+    "ssoRequired": "この組織は SSO ログインが必要です",
+    "ssoEntry": "企業 SSO でサインイン",
+    "ssoOrgTitle": "企業 SSO サインイン",
+    "ssoOrgSubtitle": "企業 ID を入力すると、所属企業のシングルサインオンに進みます",
+    "ssoOrgPlaceholder": "企業 ID を入力してください",
+    "ssoOrgHint": "企業 ID が不明な場合は、企業の管理者にお問い合わせください",
+    "ssoOrgDetected": "「{{org}}」のシングルサインオン方法を選択してください",
+    "enterCode": "認証コードを入力",
+    "codeSentTo": "{{identifier}} にコードを送信しました",
+    "codePlaceholder": "6 桁のコード",
+    "verifying": "確認中...",
+    "signIn": "ログイン",
+    "resendCode": "コードを再送信",
+    "chooseAccount": "ID を選択",
+    "chooseAccountSubtitle": "使用する個人または組織 ID を選択",
+    "personalAccount": "個人 ID",
+    "binding": {
+      "phoneTitle": "電話番号を確認",
+      "phoneSubtitle": "ログインを完了するには電話番号の確認が必要です",
+      "emailTitle": "メールを確認",
+      "emailSubtitle": "ログインを完了するにはメールの確認が必要です"
     },
-    "failedDialog": {
-      "title": "移行に失敗しました",
-      "description": "何度試行してもローカル化を完了できませんでした。ネットワークを確認してから再試行するか、移行をスキップしてアプリに入ることができます — ダウンロード済みのデータはローカルに保持されます。",
-      "skip": "今すぐスキップ",
-      "retry": "後で再試行"
-    },
-    "skipConfirm": {
-      "title": "移行をスキップしますか？",
-      "description": "確認後はクライアントから自動回復できなくなり、サポートに連絡する必要があります。続行しますか？",
-      "back": "戻る",
-      "confirm": "スキップを確認"
+    "sendCode": "コードを送信",
+    "completeSignIn": "ログインを完了",
+    "preparing": "ログインに接続中",
+    "preparingSubtitle": "この地域で利用可能な方法を読み込んでいます",
+    "unavailable": "現在ログインできません",
+    "retry": "再試行",
+    "browserWaiting": "ブラウザで認証を完了してください",
+    "globalRegion": "Global",
+    "errors": {
+      "fallback": "ログインに失敗しました。再試行してください。",
+      "AUTH_SERVICE_UNAVAILABLE": "ログインサービスは一時的に利用できません。",
+      "AUTH_REQUEST_FAILED": "ログインリクエストに失敗しました。",
+      "NETWORK_ERROR": "ネットワーク接続を確認してください。",
+      "REQUEST_TIMEOUT": "リクエストがタイムアウトしました。",
+      "INVALID_PARAMS": "入力内容を確認してください。",
+      "INVALID_CODE": "認証コードが間違っているか期限切れです。",
+      "CODE_ATTEMPTS_EXCEEDED": "試行回数を超えました。新しいコードを取得してください。",
+      "RATE_LIMITED": "試行が多すぎます。少し待ってから再試行してください。",
+      "SSO_LOGIN_REQUIRED": "この組織は SSO ログインが必要です。",
+      "ORG_SSO_NOT_FOUND": "該当する企業が見つからないか、SSO サインインが有効になっていません",
+      "SOCIAL_TOKEN_INVALID": "プロバイダー認証の期限が切れました。",
+      "SOCIAL_PROVIDER_DISABLED": "このログイン方法は現在利用できません。",
+      "USER_CANCELLED": "ログインをキャンセルしました。",
+      "STATE_MISMATCH": "セキュリティ検証に失敗しました。",
+      "INVALID_AUTH_CODE": "認証の期限が切れました。",
+      "INVALID_LOGIN_TICKET": "ログインセッションの期限が切れました。",
+      "INVALID_BIND_TICKET": "確認セッションの期限が切れました。",
+      "REGION_MISMATCH": "ログインサービスの地域がこのアプリと一致しません。"
     }
   },
+  "legacyMigration": {
+    "title": "旧バージョンのデータを移行",
+    "description": "このデバイスに旧バージョンのデータが見つかりました。チャット履歴とメディアファイルを新しいデータ保存先に移行します。旧バージョンのアプリが起動中の場合は、先に完全に終了してください。移行中は {{appName}} を閉じないでください。ご注意:認証済みのサードパーティのキーや資格情報は移行できません。移行完了後、設定で再認証または再入力が必要です。",
+    "confirm": "OK",
+    "migrating": "データを移行しています。しばらくお待ちください…",
+    "failedTitle": "移行が完了しませんでした",
+    "failedDescription": "今回はデータ移行を完了できませんでした。{{appName}} はそのまま利用できます。次回のログイン時に自動的に再試行されます。",
+    "continue": "続行"
+  },
   "splash": {
-    "relaunch": {
-      "title": "アプリが更新されました",
-      "description": "クリックするとアプリが自動的に再起動します。しばらくお待ちください（長時間反応がない場合は、アプリアイコンをダブルクリックして手動で起動してください）。",
-      "confirm": "再入場"
+    "tips": {
+      "checkingUpdate": "更新を確認中...",
+      "updating": "Cindyを更新中...",
+      "updateDone": "更新完了、まもなく自動的に再起動します...",
+      "checkingEnv": "実行環境を確認中...",
+      "waking": "Cindyを起こしています...",
+      "envFailed": "環境の初期化に失敗しました。クリックして再試行してください"
     },
     "manifestFailed": {
       "title": "ネットワーク接続失敗",
@@ -2550,7 +2644,7 @@
         "browserSub": "Browser",
         "openTerminal": "ターミナルを開く",
         "terminalSub": "Terminal",
-        "addMoreHint": "上部の + ボタンからほかのパネルタイプも追加できます"
+        "addMoreHint": "上部の + ボタンからほかのパネルタイプを選択できます"
       },
       "placeholderHint": "{{kind}} — コンテンツは後続フェーズで追加されます"
     },
@@ -2952,7 +3046,6 @@
     },
     "user": {
       "settingsLink": "設定, 現在のユーザー: {{name}}",
-      "adminBadge": "管理者",
       "viewReleaseNotes": "リリースノートを表示",
       "reopenUpdateBanner": "更新の準備完了 — クリックして確認"
     },
@@ -3429,6 +3522,7 @@
       "forkStripEncryptedTitle": "暗号化推論を除いた新しいセッションを Fork で作成",
       "codexSessionExpiredLogin": "再ログイン",
       "networkUnreachable": "ネットワークエラー:サービスに一時的に接続できません。「再試行」を押してください。",
+      "networkUnreachableNoRetry": "ネットワークエラー:サービスに一時的に接続できません。",
       "networkAutoRetrying": "ネットワークエラー:自動的に再試行しています…",
       "networkShowRaw": "元のエラーを表示",
       "networkHideRaw": "元のエラーを隠す",
@@ -3755,6 +3849,7 @@
       "REMOTE_DAEMON_CLOSED": "リモート接続が中断されました（daemon がアップグレードまたは再起動中の可能性があります）。ターンが終了しました — 再送信してください。",
       "REMOTE_LOCAL_ATTACHMENT_UNSUPPORTED": "リモートセッションではローカルのファイル/画像の添付にアクセスできません。内容を直接貼り付けてください。",
       "REMOTE_COMPAT_MODE_UNSUPPORTED": "リモート Claude Code セッションはローカル互換プロキシ経由でルーティングできません(内部エラー)。",
+      "REMOTE_GATEWAY_ENDPOINT_UNAVAILABLE": "Cindy AI の資格情報がまだ準備できていません(サインイン後に自動発行されます)。しばらくしてから再試行してください。続く場合は 設定 → モデルプロバイダー で Cindy AI の接続状態を確認してください。",
       "DEVICE_LINK_CONTROL_DISABLED": "このデバイスの操作はオフです。メッセージは送信されていません。",
       "DEVICE_LINK_MEDIA_TRANSFER_FAILED": "添付ファイルの転送に失敗しました。メッセージは送信されていません。もう一度お試しください。"
     },
@@ -3877,8 +3972,8 @@
       "markedAsRead_other": "{{count}} 件の実行を既読にしました",
       "markAllReadFailed": "すべて既読の処理に失敗：{{error}}",
       "apiKeyDialog": {
-        "title": "XD Gateway の接続が必要です",
-        "description": "メッセージを送信する前に、モデルプロバイダーで XD Gateway に接続してください。下のボタンで設定画面を開きます",
+        "title": "Cindy AI の接続が必要です",
+        "description": "メッセージを送信する前に、モデルプロバイダーで Cindy AI に接続してください。下のボタンで設定画面を開きます",
         "confirm": "設定を開く",
         "cancel": "キャンセル"
       },
@@ -4101,6 +4196,16 @@
         "allRunning": "この Project のすべてのセッションが実行中です。停止してからアーカイブしてください",
         "empty": "この Project にはアーカイブできるセッションがありません"
       },
+      "unarchiveAll": {
+        "title": "すべてのセッションのアーカイブを解除",
+        "confirm": "すべてアーカイブ解除",
+        "cancel": "キャンセル",
+        "description": "この Project のアーカイブ済みセッション {{count}} 件を復元します。復元後は「アーカイブ済み」リストから消え、「アクティブ」リストに戻ります。",
+        "unarchived_one": "{{count}} 件のセッションを復元しました",
+        "unarchived_other": "{{count}} 件のセッションを復元しました",
+        "partialFailure": "{{ok}} 件を復元、{{fail}} 件が失敗しました。再試行してください",
+        "empty": "この Project にはアーカイブを解除できるセッションがありません"
+      },
       "bulkSelection": {
         "selected": "{{count}} 件選択中",
         "archive": "選択したセッションをアーカイブ",
@@ -4166,6 +4271,7 @@
         "syncCodexFailed": "Codex 同期に失敗しました:{{error}}",
         "showFiles": "ファイルを表示",
         "archivedAll": "すべてアーカイブ",
+        "unarchiveAll": "すべてアーカイブ解除",
         "openInExplorer": "ファイルマネージャーで開く",
         "newInDirectory": "このディレクトリで新規セッション",
         "copyDeepLink": "ディープリンクをコピー",
@@ -4292,7 +4398,7 @@
         "revealFolder": "フォルダで表示"
       },
       "fileBody": {
-        "selectFile": "左からファイルを選択してプレビュー",
+        "selectFile": "ファイルを選択してプレビュー",
         "readFailed": "ファイルの読み取りに失敗：{{message}}",
         "truncatedNotice": "ファイルが大きすぎるため、先頭 2 MB のみ表示しています。完全な内容はシステムで開いてください",
         "editLabel": "編集",
@@ -4507,6 +4613,7 @@
       "tagOnce": "1回",
       "tagManual": "手動",
       "totalCost": "コスト {{cost}}",
+      "totalValue": "価値 {{value}}",
       "menu": {
         "rename": "名前を変更",
         "resume": "再開",
@@ -4541,6 +4648,7 @@
       "openSession": "セッションを開く",
       "markReadTitle": "クリックして既読にする",
       "sessionCost": "セッションコスト {{cost}}",
+      "sessionValue": "セッション価値 {{value}}",
       "restart": "再実行",
       "moreAria": "その他の操作",
       "delete": "削除",
@@ -4570,6 +4678,9 @@
         "script": "スクリプトのみ"
       },
       "script": {
+        "protocolSummary": "stdout には xdt-maker-script/1 の完全な JSON オブジェクトを 1 行ずつ（JSONL）出力してください。type は call または complete のみ使用できます。通常のログは stderr に書き込み、最後に必ず complete フレームを出力してください。",
+        "protocolCapabilities": "許可済みの機能を呼び出す場合、スクリプトは host が stdin に送る start と call_result の JSONL フレームも 1 行ずつ読み、対応する呼び出し結果を待ってから処理を続行するか complete を出力する必要があります。",
+        "protocolExample": "機能を呼び出さない最小 Python サンプルを表示",
         "command": "スクリプトコマンド",
         "commandPlaceholder": "python scripts/auto.py",
         "timeout": "タイムアウト（秒、任意）",
@@ -4592,8 +4703,8 @@
           "feishu_read": "最近アクティブなチャットの一覧取得;指定チャット(グループ/DM)の最新メッセージ取得"
         },
         "capabilityWarn": {
-          "ghostMissing": "「{{name}}」意識が必要ですが未インストールです——実行時にこの機能は失敗します",
-          "ghostAsleep": "「{{name}}」意識が必要ですが休眠中です——実行時にこの機能は失敗します"
+          "ghostMissing": "「{{name}}」プラグインが必要ですが未インストールです——実行時にこの機能は失敗します",
+          "ghostAsleep": "「{{name}}」プラグインが必要ですが無効です——実行時にこの機能は失敗します"
         }
       },
       "fields": {
@@ -5030,10 +5141,10 @@
     "confirm": {
       "title": "「{{name}}」がファイルへのアクセスを要求しています",
       "count": "{{count}} 個のファイル",
-      "descriptionAttachments": "以下のファイルは現在のセッションの作業ディレクトリの外にあります。許可すると、このゴーストに渡されます(渡されるのはコンテンツのフィンガープリントのみで、パスは渡されません)。",
-      "descriptionDir": "以下のディレクトリ/ファイルは現在のセッションの作業ディレクトリの外にあります。許可すると、その中のファイルがアップロード用にこのゴーストへ渡されます(渡されるのはワンタイムチケットのみで、パスは渡されません)。",
-      "descriptionSaveDir": "以下のディレクトリは現在のセッションの作業ディレクトリの外にあります。許可すると、このゴーストがダウンロードしたファイルをここに保存できます(既存ファイルは上書きされません)。",
-      "descriptionFsWrite": "このゴーストは現在のセッションの作業ディレクトリに以下のファイルを書き込もうとしています。許可すると、このセッション中は同じディレクトリへの書き込みは再確認されません。",
+      "descriptionAttachments": "以下のファイルは現在のセッションの作業ディレクトリの外にあります。許可すると、このプラグインに渡されます(渡されるのはコンテンツのフィンガープリントのみで、パスは渡されません)。",
+      "descriptionDir": "以下のディレクトリ/ファイルは現在のセッションの作業ディレクトリの外にあります。許可すると、その中のファイルがアップロード用にこのプラグインへ渡されます(渡されるのはワンタイムチケットのみで、パスは渡されません)。",
+      "descriptionSaveDir": "以下のディレクトリは現在のセッションの作業ディレクトリの外にあります。許可すると、このプラグインがダウンロードしたファイルをここに保存できます(既存ファイルは上書きされません)。",
+      "descriptionFsWrite": "このプラグインは現在のセッションの作業ディレクトリに以下のファイルを書き込もうとしています。許可すると、このセッション中は同じディレクトリへの書き込みは再確認されません。",
       "dirMeta": "{{count}} 個のファイル · {{size}}",
       "directory": "ディレクトリ",
       "allowDirs": "これらのファイルのフォルダーも許可(このセッション中、同じフォルダーのメディアファイルは再確認しません)",
@@ -5597,16 +5708,11 @@
       "feishuBotClearFailed": "削除に失敗しました：{{message}}",
       "feishuBotCreatedConnected": "Feishu ボットを作成し接続しました",
       "feishuBotCreatedCheck": "Feishu ボットを作成しました。接続状態をご確認ください",
-      "slackOauthStartFailed": "Slack 認可の開始に失敗しました。後でもう一度お試しください",
-      "slackUnlinked": "Slack 連携を解除しました",
-      "slackUnlinkFailed": "連携解除に失敗しました。後でもう一度お試しください",
       "discordBotConnected": "Discord ボット設定を保存しました",
       "discordBotConnectFailed": "Discord ボットの接続に失敗しました。Token と権限を確認してください",
       "discordBotSaveFailed": "保存に失敗しました：{{message}}",
       "discordBotDisconnected": "Discord ボットの連携を解除しました",
       "discordBotDisconnectFailed": "連携解除に失敗しました：{{message}}",
-      "apiKeySaved": "API Key を保存しました",
-      "apiKeyConnectionTestSuccess": "接続テストに成功しました",
       "attachmentLocalOnly": "ローカルファイルのみ対応：{{name}}",
       "attachmentReadError": "{{name}}：{{reason}}",
       "attachmentReadFailed": "読み込みに失敗：{{name}} - {{error}}",
@@ -5625,22 +5731,16 @@
       "openFileFailed": "システムでファイルを開けません",
       "emptyResponse": "モデルが空の応答を返しました。再試行してください。(今回は何も生成されませんでした。大きなコンテキストや高負荷時にモデルゲートウェイが空のストリームを返すことがあります)",
       "turnFailed": "タスクの実行に失敗しました（モデルからエラーの詳細が返されませんでした）。再試行してください。",
-      "requestFailed": "リクエストに失敗しました",
       "sendFailed": "送信に失敗：{{message}}",
       "steerNoActiveTurn": "実行中のタスクがないため、割り込み送信できません",
       "steerRequiresRestart": "割り込み送信を有効にするにはデスクトップ端末の再起動が必要です。このメッセージは消去されていません",
       "steerFailed": "割り込み送信に失敗：{{message}}",
       "qrExpired": "QR コードが期限切れです。最初からやり直してください",
       "registrationFailed": "作成に失敗しました。後でもう一度お試しください",
-      "apiKeySafeStorageFailed": "保存に失敗しました。システムのセキュアストレージを確認してください",
-      "apiKeyTestFailed": "接続テストに失敗しました",
-      "apiKeyTestFailedNotSaved": "接続テストに失敗しました。Key は保存されていません",
-      "apiKeyNetworkFailed": "ネットワーク接続に失敗しました。ネットワークを確認してください",
       "silentStopExhausted": "モデルが空の応答を繰り返し返したため、自動再開を一時停止しました。「続行」をクリックしてタスクを再開してください。",
       "permissionTightenInterruptFailed": "権限を厳格化する際に実行中のタスクを停止できませんでした。タスクは終了まで確認なしで実行され続ける可能性があります。必要に応じて手動で停止してください。"
     },
     "validation": {
-      "apiKeyFormat": "Key の形式が不正です。sk- で始める必要があります",
       "feishuFieldsRequired": "App ID と App Secret の両方を入力してください",
       "feishuAppIdFormat": "App ID の形式は cli_xxxxxxxxxxxxxxxx である必要があります",
       "discordFieldsRequired": "Bot Token と Discord ユーザー ID の両方を入力してください",
@@ -5654,8 +5754,8 @@
       "sessionExpiredTitle": "ログインの有効期限が切れました",
       "sessionExpiredDescription": "ログインの有効期限が切れました。再度ログインしてください。",
       "sessionExpiredConfirm": "再ログイン",
-      "voiceApiKeyAuthTitle": "XD Gateway の設定が必要です",
-      "voiceApiKeyAuthDescription": "現在の音声入力プロバイダーは AI Gateway を使用します。XD Gateway が未接続のため音声入力を開始できません。モデルプロバイダーを開いて接続しますか？",
+      "voiceApiKeyAuthTitle": "Cindy AI の設定が必要です",
+      "voiceApiKeyAuthDescription": "現在の音声入力プロバイダーは Cindy AI を使用します。Cindy AI が未接続のため音声入力を開始できません。モデルプロバイダーを開いて接続しますか？",
       "voiceDirectApiKeyAuthTitle": "音声入力の API Key が必要です",
       "voiceDirectApiKeyAuthDescription": "現在の音声入力プロバイダーには直接接続用の API Key が必要です。API Keys で追加しますか？",
       "codexVoiceAuthTitle": "Codex への接続が必要です",

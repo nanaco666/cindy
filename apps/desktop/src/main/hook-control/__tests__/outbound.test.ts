@@ -7,7 +7,7 @@ import path from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { collectOutboundAttachments, hasOutboundRefs, guessMime } from '../outbound';
+import { collectOutboundAttachments, hasOutboundRefs, guessMime, xdtFileUrlToAbsPath } from '../outbound';
 
 const log = { warn: vi.fn() };
 
@@ -23,7 +23,9 @@ function deps(
   } = {},
 ) {
   return {
-    resolveImageUrl: (url: string) => ({ absPath: url.replace('xdt-image://', '/cache/') }),
+    resolveImageUrl: (url: string) => ({
+      absPath: url.replace('xdt-image://', '/cache/').replace('cindy-media://', '/blobs/'),
+    }),
     allowedFileRoots: opts.allowedFileRoots,
     realpath: vi.fn(async (absPath: string) => opts.realpaths?.[path.resolve(absPath)] ?? path.resolve(absPath)),
     readFile: vi.fn(async (absPath: string) => {
@@ -49,6 +51,18 @@ describe('collectOutboundAttachments', () => {
     expect(r.text).toContain('🖼️ _效果图(已作为附件发送)_');
     expect(r.text).not.toContain('xdt-image://');
     expect(r.text).not.toContain('xdt-file://');
+    expect(r.skipped).toBe(0);
+  });
+
+  it('cindy-media 图片引用同样收集(媒体总仓双协议;只认 xdt-image 会让 hook Slack 拿不到生成图)', async () => {
+    const hash = 'b'.repeat(64);
+    const text = `画好了 ![猫](cindy-media://blobs/${hash}.png)`;
+    const r = await collectOutboundAttachments(text, [], deps({
+      [`/blobs/blobs/${hash}.png`]: Buffer.from('png-bytes'),
+    }));
+    expect(r.attachments.map((a) => a.name)).toEqual([`${hash}.png`]);
+    expect(r.attachments[0].mimeType).toBe('image/png');
+    expect(r.text).not.toContain('cindy-media://');
     expect(r.skipped).toBe(0);
   });
 
@@ -146,6 +160,17 @@ describe('collectOutboundAttachments', () => {
 });
 
 describe('辅助函数', () => {
+  it('xdtFileUrlToAbsPath: Windows 盘符路径剥掉多余前导斜杠(2026-07-16 实踩:附件被判目录外静默丢弃)', () => {
+    expect(xdtFileUrlToAbsPath('xdt-file:///C:\\Users\\x\\wd\\hello.txt')).toBe('C:\\Users\\x\\wd\\hello.txt');
+    expect(xdtFileUrlToAbsPath('xdt-file:///C:/Users/x/wd/hello.txt')).toBe('C:/Users/x/wd/hello.txt');
+    // Unix 绝对路径不受影响(前导 / 就是根)
+    expect(xdtFileUrlToAbsPath('xdt-file:///home/u/f.txt')).toBe('/home/u/f.txt');
+    // URL 编码照常解
+    expect(xdtFileUrlToAbsPath('xdt-file:///C:/Users/x/%E6%8A%A5%E5%91%8A.md')).toBe('C:/Users/x/报告.md');
+    // decode 失败(孤立 %)回落 raw 后仍剥盘符前导斜杠
+    expect(xdtFileUrlToAbsPath('xdt-file:///C:\\dir\\a 50%.txt')).toBe('C:\\dir\\a 50%.txt');
+  });
+
   it('hasOutboundRefs / guessMime', () => {
     expect(hasOutboundRefs('纯文本')).toBe(false);
     expect(hasOutboundRefs('![a](xdt-image://x)')).toBe(true);

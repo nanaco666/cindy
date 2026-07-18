@@ -25,6 +25,10 @@ vi.mock('../../logger', () => ({
   }),
 }));
 
+vi.mock('../../clientEndpointsService', () => ({
+  getClientEndpoint: vi.fn(() => 'https://skillhub.test.invalid'),
+}));
+
 vi.mock('../../serverApiClient', async () => {
   class ServerApiError extends Error {
     constructor(
@@ -237,6 +241,7 @@ describe('SkillPublishService', () => {
     expect(serverApiFetch).toHaveBeenCalledWith('/api/skills-hub/skills/publish/init', {
       method: 'POST',
       body: { slug: 'lark-task', version: '1.1.0' },
+      baseUrl: 'https://skillhub.test.invalid',
     });
   });
 
@@ -301,6 +306,7 @@ describe('SkillPublishService', () => {
     expect(result.success).toBe(true);
     expect(serverApiFetch).toHaveBeenCalledWith('/api/skills-hub/skills/publish/commit', {
       method: 'POST',
+      baseUrl: 'https://skillhub.test.invalid',
       body: expect.objectContaining({
         displayName: 'Lark Task',
         summary: 'Publish summary',
@@ -373,6 +379,7 @@ describe('SkillPublishService', () => {
     expect(result.success).toBe(true);
     expect(serverApiFetch).toHaveBeenCalledWith('/api/skills-hub/skills/publish/commit', {
       method: 'POST',
+      baseUrl: 'https://skillhub.test.invalid',
       body: expect.objectContaining({
         categoryMode: 'auto',
         categories: [],
@@ -442,6 +449,7 @@ describe('SkillPublishService', () => {
     expect(result.success).toBe(true);
     expect(serverApiFetch).toHaveBeenCalledWith('/api/skills-hub/skills/publish/commit', {
       method: 'POST',
+      baseUrl: 'https://skillhub.test.invalid',
       body: expect.objectContaining({
         visibility: 'public',
         visibleSlugs: [],

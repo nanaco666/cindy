@@ -43,6 +43,7 @@ export {
   providersForAgent,
   connectedProvidersForAgent,
   nativeDefaultSourceId,
+  effectiveSourceIdForModel,
   providerOffersModel,
   getModel,
   sourcesForModel,

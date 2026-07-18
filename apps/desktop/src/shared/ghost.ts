@@ -350,8 +350,15 @@ export interface GhostSecretOauthDecl {
    * 只管展示(设置页 / 账号工具看到的名字),任一占位符取不到值时整体降级
    * 为空(回落显示 labelPath 标签)。不声明 = 展示名就用 labelPath 的值
    * (邮箱这类本身可读的服务商不需要它)。
+   *
+   * avatarPath(可选,2026-07-17 xd-feishu 设置页前置):头像 URL 在身份
+   * 响应里的点分路径(如飞书 user_info 的 "data.avatar_thumb")。主机连接
+   * 时按该路径取 https 地址、**不带任何凭证**地下载小图(mime / 体积硬顶),
+   * 转 data URL 存主机保险库,经 /oauth 只读回给意识自绘设置页展示——图片
+   * 字节不出主机、沙箱 CSP(img-src data:)恰好放行。取不到 / 下载失败一律
+   * 降级无头像,不阻断授权。
    */
-  identity?: { url: string; labelPath: string; displayTemplate?: string };
+  identity?: { url: string; labelPath: string; displayTemplate?: string; avatarPath?: string };
   /**
    * 可选:loopback 回调固定端口(1024–65535)。Atlassian 这类服务商要求回调
    * URI 与应用注册值精确匹配(含端口),声明后主机授权引擎钉死
@@ -398,6 +405,10 @@ export const GHOST_OAUTH_BOUNCE_PATH_RE = /^\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)
  *   授权换来的 access token——用户在意识设置页填 client 凭证并点"连接账号",
  *   主机跑授权流程并保管全部令牌,出网时现取新鲜 token 注入(见
  *   GhostSecretOauthDecl;必须同时声明 oauth 详单)。
+ *
+ * ('login-feishu-token' 已于 2026-07-17 随飞书登录整体下线退役——xd-feishu
+ * 改走 source:'oauth' + tokenBroker:'feishu';存量已装清单由内置意识播种器
+ * 按指纹覆盖自愈,未覆盖前该意识加载被拒属预期。)
  */
 export const GHOST_SECRET_SOURCES = ['user', 'login-email', 'oauth'] as const;
 export type GhostSecretSource = (typeof GHOST_SECRET_SOURCES)[number];
@@ -1339,30 +1350,33 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
             reason: 'network.secrets[].input 已退役:宿主收单不存在,用户填写的凭证一律由意识 settingsHtml 收单(删掉 input 字段即可;唯一可接受的遗留值是 "ghost")',
           };
         }
-        if (s.input === 'ghost' && source === 'login-email') {
+        // login-email:值取自主机登录态派生,用户不填、没有输入面,
+        // 禁 url / exchange,settingsHtml 豁免。
+        const loginDerived = source === 'login-email';
+        if (s.input === 'ghost' && loginDerived) {
           return {
             ok: false,
-            reason: 'source: login-email 的凭证不允许标注 input: ghost(派生凭证没有输入,谈不上谁收单)',
+            reason: `source: ${source} 的凭证不允许标注 input: ghost(派生凭证没有输入,谈不上谁收单)`,
           };
         }
-        if (source !== 'login-email' && raw.settingsHtml === undefined) {
+        if (!loginDerived && raw.settingsHtml === undefined) {
           return {
             ok: false,
             reason: 'network.secrets 声明了用户填写的凭证时必须同时声明 settingsHtml(凭证由意识设置界面收单,没有界面就没人收单;宿主渲染输入行已退役)',
           };
         }
-        if (source === 'login-email' && s.url !== undefined) {
+        if (loginDerived && s.url !== undefined) {
           return {
             ok: false,
-            reason: 'network.secrets[].source 为 login-email 时不允许声明 url(值取自登录邮箱,没有"前往控制台"可去)',
+            reason: `network.secrets[].source 为 ${source} 时不允许声明 url(值取自主机登录态,没有"前往控制台"可去)`,
           };
         }
-        if (source === 'login-email' && s.exchange !== undefined) {
-          // 组合会把登录邮箱作为原始凭证 POST 给交换端点,而确认框文案只
+        if (loginDerived && s.exchange !== undefined) {
+          // 组合会把登录态凭证作为原始值 POST 给交换端点,而确认框文案只
           // 承诺"派生注入请求头"——语义盖不住,结构上禁掉(有真实场景再议)。
           return {
             ok: false,
-            reason: 'network.secrets[].source 为 login-email 时不允许声明 exchange(登录邮箱不外送交换端点)',
+            reason: `network.secrets[].source 为 ${source} 时不允许声明 exchange(登录态凭证不外送交换端点)`,
           };
         }
         if (
@@ -1588,7 +1602,9 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
             }
             oaBounce = { path: bb.path as string, callbackPath: bb.callbackPath as string };
           }
-          let oaIdentity: { url: string; labelPath: string; displayTemplate?: string } | undefined;
+          let oaIdentity:
+            | { url: string; labelPath: string; displayTemplate?: string; avatarPath?: string }
+            | undefined;
           if (oa.identity !== undefined) {
             if (!isPlainObject(oa.identity)) {
               return { ok: false, reason: 'network.secrets[].oauth.identity 必须是对象' };
@@ -1639,10 +1655,26 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
               }
               idnTemplate = idn.displayTemplate;
             }
+            // avatarPath(可选):头像 URL 的点分路径,形状同 labelPath。
+            let idnAvatarPath: string | undefined;
+            if (idn.avatarPath !== undefined) {
+              if (
+                typeof idn.avatarPath !== 'string' ||
+                idn.avatarPath.length > 128 ||
+                !GHOST_SECRET_EXCHANGE_TOKEN_PATH_RE.test(idn.avatarPath)
+              ) {
+                return {
+                  ok: false,
+                  reason: 'network.secrets[].oauth.identity.avatarPath 必须是 ≤128 字符的点分路径(段名限字母/数字/_/-,如 "data.avatar_thumb")',
+                };
+              }
+              idnAvatarPath = idn.avatarPath;
+            }
             oaIdentity = {
               url: idnUrl.url,
               labelPath: idn.labelPath,
               ...(idnTemplate !== undefined ? { displayTemplate: idnTemplate } : {}),
+              ...(idnAvatarPath !== undefined ? { avatarPath: idnAvatarPath } : {}),
             };
           }
           oauth = {
@@ -2524,17 +2556,29 @@ export interface GhostPipeFetchRequest {
    * 上传通道(仅 POST;与 body 互斥):把本意识名下的总仓媒体以
    * multipart/form-data 上传给目标——只报指纹,主机验归属、读字节、代组
    * 请求体,Content-Type(boundary)由主机独占。hashes 1–4 条(64 位
-   * 十六进制指纹);field 为每个文件的表单字段名,缺省 'file'。
+   * 十六进制指纹);field 为每个文件的表单字段名,缺省 'file';fields 为
+   * 随行普通表单字段(在文件段之前;值里的字面量 "{bytes}" 由主机替换成
+   * 全部上传文件的总字节数——飞书 upload_all 这类要求 size 字段的服务用,
+   * 2026-07-16 lizi_feishu 意识化前置)。
    */
-  upload?: { hashes: string[]; field?: string };
+  upload?: { hashes: string[]; field?: string; fields?: Record<string, string> };
   /**
    * 目录上传通道(仅 POST;与 body / upload 互斥):把主机过户票据指向的
    * 本地目录整体以 multipart/form-data 上传——token 来自 ghost_call 顶层
    * dir 参数过户后注入的 args.dir_deposit.token(一次性、限本意识、限时);
-   * fields 为随行普通表单字段(如 name / preset);fileFieldPrefix 为文件
-   * 字段名前缀(缺省 'file-',第 N 个文件字段名 `file-N`,filename=相对路径)。
+   * fields 为随行普通表单字段(如 name / preset;值里的字面量 "{bytes}"
+   * 由主机替换成全部上传文件的总字节数);fileFieldPrefix 为文件字段名前缀
+   * (缺省 'file-',第 N 个文件字段名 `file-N`,filename=相对路径);
+   * fileField 为单文件精确字段名(与 fileFieldPrefix 互斥,票据必须恰含
+   * 1 个文件,filename=文件名不含目录——飞书 im 文件上传这类"字段名钉死
+   * file"的服务用,2026-07-16)。
    */
-  uploadDir?: { token: string; fields?: Record<string, string>; fileFieldPrefix?: string };
+  uploadDir?: {
+    token: string;
+    fields?: Record<string, string>;
+    fileFieldPrefix?: string;
+    fileField?: string;
+  };
   /** 超时毫秒(clamp 到 [MIN, MAX];媒体模式与上传用 MEDIA_* 档;缺省各自 DEFAULT)。 */
   timeoutMs?: number;
   /**
@@ -2602,6 +2646,7 @@ export type GhostPipeFetchResult =
 export type GhostToolCallErrorCode =
   | 'GHOST_NOT_FOUND'
   | 'GHOST_ASLEEP'
+  | 'GHOST_DISABLED_IN_WORKDIR'
   | 'TOOL_NOT_FOUND'
   | 'GHOST_CRASHED'
   | 'TIMEOUT'
@@ -2615,13 +2660,19 @@ export type GhostToolCallResult =
   | { ok: false; errorCode: GhostToolCallErrorCode; message: string };
 
 /**
- * ghost_call 的工具全名(mcp__<server>__<tool>)。2026-07-12 server 由
- * 'cindy_ghosts' 更名 'cindy'(调用名更短);旧名保留用于匹配改名前
- * 持久化的历史消息(召唤行/已召唤卡对老会话不失效)。
+ * ghost_call 的工具全名。两套 agent 的 MCP toolName 形态不同:
+ * Claude Code 是 `mcp__<server>__<tool>`,Codex translator 组装成
+ * `mcp:<server>:<tool>`(见 maker-core codex/translator.ts handleMcpToolCall),
+ * 两种都要认——漏了 Codex 形态时,Codex 会话的意识召唤行/意识卡全部退化成
+ * 通用 MCP 行「cindy · ghost call」。2026-07-12 server 由 'cindy_ghosts'
+ * 更名 'cindy'(调用名更短);旧名保留用于匹配改名前持久化的历史消息
+ * (召唤行/已召唤卡对老会话不失效)。
  */
 export const GHOST_CALL_TOOL_NAMES: readonly string[] = [
   'mcp__cindy__ghost_call',
   'mcp__cindy_ghosts__ghost_call',
+  'mcp:cindy:ghost_call',
+  'mcp:cindy_ghosts:ghost_call',
 ];
 
 /** toolName 是否是 ghost_call(兼容新旧 server 名)。 */

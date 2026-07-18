@@ -2,7 +2,7 @@
  * heartbeatService.ts — Desktop main 进程的心跳 host 适配层。
  *
  * 职责:
- *  - 从 import.meta.env 读 endpoint (VITE_HEARTBEAT_URL,默认指向生产域名)
+ *  - 从运行期端点清单读 endpoint(getClientEndpoint('heartbeatUrl'))
  *  - 把 @lizi/heartbeat-client 接入 authManager:
  *      · 已登录 → uid = currentUser.id
  *      · 未登录 → uid = deviceId (machineIdSync,App 一打开就有)
@@ -20,12 +20,10 @@ import { createHeartbeatClient, type HeartbeatHandle } from '@lizi/heartbeat-cli
 import * as authManager from './authManager';
 import { createLogger } from './logger';
 import { onQuit } from './lifecycle';
-import { HEARTBEAT_DEFAULT_ENDPOINT } from '../shared/endpoints';
+import { getClientEndpoint } from './clientEndpointsService';
 
 const log = createLogger('heartbeat');
 
-// 默认走生产域名;dev / staging 想覆盖就改 apps/desktop/.env
-const DEFAULT_ENDPOINT = HEARTBEAT_DEFAULT_ENDPOINT;
 const DEFAULT_INTERVAL_MS = 60_000;
 const TAPDB_DAILY_ACTIVE_CHANNEL = 'tapdb:daily-active';
 
@@ -38,8 +36,8 @@ export function initHeartbeatService(): void {
     return;
   }
 
-  // import.meta.env 在 Electron main 的 Vite bundle 里可用
-  const endpoint = (import.meta.env.VITE_HEARTBEAT_URL as string | undefined) || DEFAULT_ENDPOINT;
+  // 运行期端点清单(initClientEndpoints 在 app.ready 内早于本服务,清单全权无兜底)
+  const endpoint = getClientEndpoint('heartbeatUrl');
 
   handle = createHeartbeatClient({
     endpoint,

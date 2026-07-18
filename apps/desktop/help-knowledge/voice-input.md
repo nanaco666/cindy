@@ -10,7 +10,7 @@ Voice input lets you dictate instead of typing. Hold a shortcut, talk, release �
 **Activation:**
 
 - Default shortcut: **Alt+Space** on macOS, **Ctrl+Shift+Space** on Windows / Linux. Customizable in Settings > Voice Input.
-- The shortcut is **global** — it works even when XDMaker isn't the focused app, so you can dictate into the composer from anywhere.
+- The shortcut is **global** — it works even when Cindy isn't the focused app, so you can dictate into the composer from anywhere.
 - It's **push-and-hold**: press to start listening, release to stop and submit.
 
 **Settings:**

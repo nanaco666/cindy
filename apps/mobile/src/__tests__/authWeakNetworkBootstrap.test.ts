@@ -13,9 +13,17 @@ describe('auth weak-network bootstrap', () => {
 
   it('bootstrap 先用本地会话痕迹(refresh token + 用户快照)恢复登录视图', () => {
     // 快照恢复必须双条件:refresh token 还在 + 有缓存资料;二者缺一不得凭空造登录态。
-    expect(authSource).toContain('if (storedRefreshToken && cachedUser) setUser(cachedUser);');
+    expect(authSource).toContain('if (storedRefreshToken && cachedUser) {');
+    expect(authSource).toContain('userRef.current = cachedUser;');
+    expect(authSource).toContain('setUser(cachedUser);');
     // bootstrap 里的 refresh 失败必须是"保留降级会话",不许再出现坍缩式 .catch(() => null)。
     expect(authSource).not.toContain('await refresh(did).catch(() => null)');
+    expect(authSource).toMatch(
+      /await awaitAuthStartupGate\(\s*refresh\(did\),\s*AUTH_STARTUP_GATE_TIMEOUT_MS,?\s*\)/,
+    );
+    expect(authSource).toContain(
+      'without aborting a rotating refresh-token request',
+    );
   });
 
   it('isAuthenticated 以 user 为准,token 未刷到时不闪回登录页', () => {
@@ -51,6 +59,19 @@ describe('auth weak-network bootstrap', () => {
     // 否则下次冷启动会用快照复活已失效的会话。
     const occurrences = authSource.split('applyUser(null)').length - 1;
     expect(occurrences).toBeGreaterThanOrEqual(2);
-    expect(authSource).toContain('const USER_PROFILE_KEY = "xdt.mobile.userProfile";');
+    expect(authSource).toContain(
+      "const USER_PROFILE_KEY = 'cindy.mobile.auth.userProfile';",
+    );
+    expect(authSource).toContain("error.code === 'MEMBERSHIP_DISABLED'");
+    expect(authSource).toContain('updateLoginState(null);');
+  });
+
+  it('初始化会清理所有旧飞书登录痕迹,不复活旧账号资料', () => {
+    const bootstrapStart = authSource.indexOf('useEffect(() => {');
+    const bootstrapEnd = authSource.indexOf('// 降级会话自愈', bootstrapStart);
+    const bootstrap = authSource.slice(bootstrapStart, bootstrapEnd);
+    expect(bootstrap).toContain('deleteSecureItem(LEGACY_REFRESH_TOKEN_KEY)');
+    expect(bootstrap).toContain('deleteSecureItem(LEGACY_PENDING_OAUTH_KEY)');
+    expect(bootstrap).toContain('deleteSecureItem(LEGACY_USER_PROFILE_KEY)');
   });
 });

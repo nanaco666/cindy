@@ -1,22 +1,19 @@
 /**
- * chat-data-localization：main 进程统一的服务端 API 客户端。
+ * main 进程统一的服务端 API 客户端。
  *
  * - 复用 `authManager.getAccessToken()` 自动注入 Bearer Authorization
  * - 401 + `TOKEN_EXPIRED` 自动 refresh 一次再重试
- * - 通用 `serverApiFetch<T>(path, opts)` 给迁移协调器与未来 main 内部调用复用
- *
- * renderer 仍走 `electronAPI.apiRequest`（main 的 `api:request` handler 内部转调本模块）。
+ * - `baseUrl` **必传**:老主 server(apiBaseUrl)2026-07-18 退役后没有"默认
+ *   业务 server"了,每个调用方显式指向自己的独立服务(device-link relay /
+ *   model-access / oauth-broker / github-server / skillhub-server ...)。
  */
 
 import { net } from 'electron';
 import * as authManager from './authManager';
 
 import { createLogger } from './logger';
-import { API_BASE_URL_DEV_FALLBACK } from '../shared/endpoints';
 
 const log = createLogger('serverApiClient');
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || API_BASE_URL_DEV_FALLBACK;
 
 export class ServerApiError extends Error {
   constructor(
@@ -38,8 +35,8 @@ export interface ApiFetchOptions {
   token?: string | null;
   /** 跳过 401 自动 refresh（避免无限循环；refresh 自身调用时禁用）。 */
   skipAutoRefresh?: boolean;
-  /** 覆盖 base URL(device-link relay 独立部署后指向 relay 域名)。不传走默认 API_BASE_URL。 */
-  baseUrl?: string;
+  /** 目标服务 base URL(必传;来自 clientEndpoints 的对应字段或注入方)。 */
+  baseUrl: string;
 }
 
 interface RawResponse<T> {
@@ -49,7 +46,7 @@ interface RawResponse<T> {
 }
 
 async function rawFetch<T>(apiPath: string, opts: ApiFetchOptions): Promise<RawResponse<T>> {
-  const url = (opts.baseUrl ?? API_BASE_URL) + apiPath;
+  const url = opts.baseUrl + apiPath;
   const method = opts.method ?? 'GET';
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -85,7 +82,7 @@ async function rawFetch<T>(apiPath: string, opts: ApiFetchOptions): Promise<RawR
  */
 export async function serverApiFetch<T>(
   apiPath: string,
-  opts: ApiFetchOptions = {},
+  opts: ApiFetchOptions,
 ): Promise<T> {
   let result = await rawFetch<T>(apiPath, opts);
 

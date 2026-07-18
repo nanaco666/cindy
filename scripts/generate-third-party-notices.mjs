@@ -33,7 +33,7 @@ const NOTICES_DIR = path.join(REPO_ROOT, "notices");
 const SBOM_DIR = path.join(NOTICES_DIR, "sbom");
 const CARGO_MANIFEST = path.join(
   DESKTOP_DIR,
-  "xdt-updater",
+  "cindy-updater",
   "src-tauri",
   "Cargo.toml",
 );
@@ -586,6 +586,33 @@ function buildDesktopCommonEntries(apacheText, sharpPackageName) {
     /* vendored 目录被移除时自动跳过 */
   }
 
+  // drawio viewer — vendored 进仓库的 .drawio 文件预览脚本(renderer 资源随包分发)
+  try {
+    const drawioDir = path.join(DESKTOP_DIR, "src", "renderer", "vendor", "drawio");
+    const drawioLicense = normalizeNoticeText(
+      fs.readFileSync(path.join(drawioDir, "LICENSE"), "utf8"),
+    );
+    const drawioVersion =
+      /VERSION:"([\d.]+)"/.exec(
+        fs.readFileSync(path.join(drawioDir, "viewer-static.min.js"), "utf8"),
+      )?.[1] || "vendored";
+    entries.push(
+      bundledComponent({
+        name: "drawio viewer (vendored)",
+        version: drawioVersion,
+        license: "Apache-2.0",
+        url: "https://github.com/jgraph/drawio",
+        licenseText:
+          drawioLicense +
+          "\n\nOnly the viewer JavaScript (viewer-static.min.js) is redistributed. " +
+          "Upstream icon sets / stencils / templates carry an additional no-Atlassian-use " +
+          "restriction; none of those assets are redistributed by this product.",
+      }),
+    );
+  } catch {
+    /* vendored 目录被移除时自动跳过 */
+  }
+
   // sqlite-vec — 四个平台均以原生动态库随桌面安装包分发。
   entries.push(
     bundledComponent({
@@ -693,13 +720,6 @@ function buildMobileEntries(apacheText, platform) {
   ];
   if (platform === "ios") {
     entries.push(
-      bundledComponent({
-        name: "LarkSSOSDK",
-        version: "1.2.0",
-        license: "MIT",
-        url: "https://open.feishu.cn",
-        licenseText: MIT_TEXT("Copyright (c) Lark Technologies Pte. Ltd."),
-      }),
       bundledComponent({
         name: "TapTapSDK/Core",
         version: "4.10.5",
@@ -868,7 +888,7 @@ function mergeComponents(...groups) {
 
 function buildRestrictedOutput(
   components,
-  productName = "xdt-maker project distributions",
+  productName = "Cindy project distributions",
 ) {
   const lines = [
     "=".repeat(78),
@@ -985,8 +1005,8 @@ function buildSpdxDocument(artifact, components) {
     spdxVersion: "SPDX-2.3",
     dataLicense: "CC0-1.0",
     SPDXID: "SPDXRef-DOCUMENT",
-    name: `xdt-maker-${artifact}`,
-    documentNamespace: `https://xdmaker.com/spdx/${artifact}/${digest}`,
+    name: `cindy-${artifact}`,
+    documentNamespace: `https://cindy.app/spdx/${artifact}/${digest}`,
     creationInfo: {
       created: stableCreationTime(),
       creators: ["Tool: scripts/generate-third-party-notices.mjs"],
@@ -1050,13 +1070,23 @@ function auditArtifact(label, closure, manualEntries) {
 }
 
 function assertNativeDeclarations() {
-  const iosFeishu = fs.readFileSync(
+  const iosWechat = fs.readFileSync(
     path.join(
       MOBILE_DIR,
       "modules",
-      "xdt-feishu-login",
+      "xdt-wechat-login",
       "ios",
-      "XdtFeishuLogin.podspec",
+      "XdtWechatLogin.podspec",
+    ),
+    "utf8",
+  );
+  const androidWechat = fs.readFileSync(
+    path.join(
+      MOBILE_DIR,
+      "modules",
+      "xdt-wechat-login",
+      "android",
+      "build.gradle",
     ),
     "utf8",
   );
@@ -1068,28 +1098,14 @@ function assertNativeDeclarations() {
     path.join(MOBILE_DIR, "modules", "xdt-tapdb", "android", "build.gradle"),
     "utf8",
   );
-  if (!/LarkSSOSDK', '1\.2\.0'/.test(iosFeishu))
-    throw new Error("LarkSSOSDK version changed; update notice policy");
+  if (!/WechatOpenSDK', '2\.0\.5'/.test(iosWechat))
+    throw new Error("WechatOpenSDK iOS version changed; update notice policy");
+  if (!/com\.tencent\.mm\.opensdk:wechat-sdk-android:6\.8\.38/.test(androidWechat))
+    throw new Error("WeChat OpenSDK Android version changed; update notice policy");
   if (!/TapTapSDK\/Core', '4\.10\.5'/.test(iosTap))
     throw new Error("TapTapSDK iOS version changed; update notice policy");
   if (!/com\.taptap\.sdk:tap-core:4\.10\.5/.test(androidTap))
     throw new Error("TapTapSDK Android version changed; update notice policy");
-  if (
-    !fs.existsSync(
-      path.join(
-        MOBILE_DIR,
-        "modules",
-        "xdt-feishu-login",
-        "android",
-        "libs",
-        "larksso-3.0.10.aar",
-      ),
-    )
-  ) {
-    throw new Error(
-      "Lark SSO Android AAR changed; update restricted-component disclosure",
-    );
-  }
 }
 
 function assertTrackedBinariesRegistered() {
@@ -1110,9 +1126,8 @@ function assertTrackedBinariesRegistered() {
     "apps/android-platform-tools-bin/",
     "apps/desktop/native/sqlite-vec/",
     "apps/desktop/resources/xdt-helper.exe",
-    "apps/desktop/resources/xdt-updater.exe",
+    "apps/desktop/resources/cindy-updater.exe",
     "apps/mobile/assets/fonts/JetBrainsMono-",
-    "apps/mobile/modules/xdt-feishu-login/android/libs/larksso-3.0.10.aar",
   ];
   const files = execFileSync("git", ["ls-files", "-z"], {
     cwd: REPO_ROOT,
@@ -1141,7 +1156,7 @@ assertNativeDeclarations();
 assertTrackedBinariesRegistered();
 if (!fs.existsSync(path.join(path.dirname(CARGO_MANIFEST), "Cargo.lock"))) {
   throw new Error(
-    "xdt-updater Cargo.lock is required for deterministic license generation",
+    "cindy-updater Cargo.lock is required for deterministic license generation",
   );
 }
 
@@ -1177,7 +1192,7 @@ const artifactDefinitions = {
       ...buildDesktopCommonEntries(apacheText, "@img/sharp-win32-x64"),
       ...buildWindowsEntries(),
     ],
-    productName: "xdt-maker desktop application — Windows x64",
+    productName: "Cindy desktop application — Windows x64",
     description: ["Windows x64 桌面安装包的第三方开源组件声明。"],
     notes: [
       "包含 Rust/Tauri updater 运行时 crate 闭包和随包 Android Platform-Tools。",
@@ -1189,7 +1204,7 @@ const artifactDefinitions = {
       apacheText,
       "@img/sharp-libvips-darwin-arm64",
     ),
-    productName: "xdt-maker desktop application — macOS x64/arm64",
+    productName: "Cindy desktop application — macOS x64/arm64",
     description: [
       "macOS Intel 与 Apple Silicon 桌面安装包的第三方开源组件声明。",
     ],
@@ -1203,14 +1218,14 @@ const artifactDefinitions = {
       apacheText,
       "@img/sharp-libvips-linux-x64",
     ),
-    productName: "xdt-maker desktop application — Linux x64 glibc",
+    productName: "Cindy desktop application — Linux x64 glibc",
     description: ["Linux x64 glibc 桌面安装包的第三方开源组件声明。"],
     notes: ["不包含运行时按需下载的 Android Platform-Tools。"],
   },
   "mobile-ios": {
     closure: mobileNpm,
     manual: buildMobileEntries(apacheText, "ios"),
-    productName: "xdt-maker mobile application — iOS",
+    productName: "Cindy mobile application — iOS",
     description: ["iOS JS 生产依赖及仓库显式声明的原生 SDK/字体组件。"],
     notes: [
       "Expo managed 工程的完整 Pod 闭包在构建时生成;本文件不声称替代具体构建产物的 Podfile.lock 审计。",
@@ -1219,7 +1234,7 @@ const artifactDefinitions = {
   "mobile-android": {
     closure: mobileNpm,
     manual: buildMobileEntries(apacheText, "android"),
-    productName: "xdt-maker mobile application — Android",
+    productName: "Cindy mobile application — Android",
     description: ["Android JS 生产依赖及仓库显式声明的原生 SDK/字体组件。"],
     notes: [
       "Expo managed 工程的完整 Gradle 闭包在构建时生成;本文件不声称替代具体 APK/AAB 的依赖报告。",
@@ -1253,12 +1268,22 @@ const restrictedManualEntries = [
   },
   {
     ecosystem: "bundled",
-    name: "Lark SSO Android SDK AAR",
-    version: "3.0.10",
+    name: "WeChat OpenSDK for iOS",
+    version: "2.0.5",
     license: "NOASSERTION",
     category: "restricted-review-required",
-    url: "https://open.feishu.cn",
-    note: "AAR 内未携带 LICENSE/NOTICE,发布前需由 SDK owner 提供可分发许可依据。",
+    url: "https://developers.weixin.qq.com/doc/oplatform/Mobile_App/Access_Guide/iOS.html",
+    note: "上游 CocoaPod 声明为 Copyright 且未提供标准开源许可证；发布前需确认微信开放平台 SDK 分发条款。",
+    artifacts: ["mobile-ios"],
+  },
+  {
+    ecosystem: "bundled",
+    name: "WeChat OpenSDK for Android",
+    version: "6.8.38",
+    license: "NOASSERTION",
+    category: "restricted-review-required",
+    url: "https://developers.weixin.qq.com/doc/oplatform/Mobile_App/Access_Guide/Android.html",
+    note: "上游 Maven SDK 未提供标准开源许可证；发布前需确认微信开放平台 SDK 分发条款。",
     artifacts: ["mobile-android"],
   },
 ];
@@ -1331,7 +1356,7 @@ outputs.push(
     buildOutput({
       packages: projectClosure.packages,
       manualEntries: projectManual,
-      productName: "xdt-maker project aggregate",
+      productName: "Cindy project aggregate",
       description: ["全工程各已定义分发产物的第三方开源组件聚合声明。"],
       coverageNotes: ["各产物精确范围见 notices/*.txt;受限组件见独立清单。"],
     }),
@@ -1341,7 +1366,7 @@ outputs.push(
     buildOutput({
       packages: desktopCombined.packages,
       manualEntries: desktopManual,
-      productName: "xdt-maker desktop application — all supported platforms",
+      productName: "Cindy desktop application — all supported platforms",
       description: ["Windows、macOS 与 Linux 桌面产物的保守合并声明。"],
       coverageNotes: [
         "发布包可按 notices/desktop-<platform>.txt 使用平台精确版本。",
@@ -1356,7 +1381,7 @@ outputs.push(
     path.join(DESKTOP_DIR, "resources", "THIRD-PARTY-RESTRICTED.txt"),
     buildRestrictedOutput(
       desktopRestricted,
-      "xdt-maker desktop application — all supported platforms",
+      "Cindy desktop application — all supported platforms",
     ),
   ],
 );

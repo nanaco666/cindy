@@ -104,8 +104,9 @@ export async function listLocalSshKeys(): Promise<LocalSshKey[]> {
  * Generate a new ed25519 key pair at `~/.ssh/<name>`. If `passphrase`
  * is non-empty the private key file is encrypted with it; otherwise the
  * key is stored unencrypted (user can `ssh-keygen -p -f <path>` later
- * to retrofit a passphrase). `name` defaults to `xdt-maker` — bumps with
- * `-1`, `-2`, ... on collision so we never overwrite.
+ * to retrofit a passphrase). `name` defaults to `cindy` — bumps with
+ * `-1`, `-2`, ... on collision so we never overwrite. (2026-07-17 品牌翻转:
+ * 只影响之后新生成的密钥文件名;用户已有密钥按显式路径保存,不受影响。)
  *
  * The passphrase is passed to ssh-keygen via the `-N` arg, which means
  * it briefly appears in our argv and ssh-keygen's argv. ssh-keygen
@@ -123,8 +124,8 @@ export async function generateNewKey(opts: {
   comment?: string;
   passphrase?: string;
 }): Promise<GenerateNewKeyResult> {
-  const baseName = sanitizeFilename(opts.name ?? 'xdt-maker');
-  const comment = opts.comment ?? `xdt-maker@${os.hostname()}`;
+  const baseName = sanitizeFilename(opts.name ?? 'cindy');
+  const comment = opts.comment ?? `cindy@${os.hostname()}`;
   const passphrase = opts.passphrase ?? '';
   const dir = SSH_DIR_DEFAULT;
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
@@ -521,7 +522,7 @@ function sanitizeFilename(s: string): string {
   // Strip anything that could escape ~/.ssh/ or break shell quoting.
   // Conservative whitelist: alnum + dash + underscore. Replace others with `-`.
   const cleaned = s.replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
-  return cleaned || 'xdt-maker';
+  return cleaned || 'cindy';
 }
 
 function shellQuote(s: string): string {

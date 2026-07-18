@@ -1,6 +1,6 @@
 # @lizi/heartbeat-client
 
-XDMaker 客户端在线心跳模块。
+Cindy 客户端在线心跳模块。
 
 - 零运行时依赖,仅用全局 `fetch` + `AbortSignal.timeout`
 - Electron-agnostic (浏览器 / Node / Electron 主进程都能跑)

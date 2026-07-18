@@ -1,7 +1,17 @@
 import { defineConfig } from 'vitest/config';
 import path from 'node:path';
+import { productionViteEnv } from '../../scripts/shared/production-endpoints.mjs';
+
+const productionEnv = productionViteEnv({ allowEnvOverride: false });
 
 export default defineConfig({
+  define: {
+    // 业务端点烘焙 define 已随端点清单重构退役;测试固定值统一走
+    // src/test/vitest/clientEndpointsFixture.ts,不再从生产配置取"真值"。
+    'import.meta.env.VITE_ENDPOINT_MANIFEST_BASE_URL': JSON.stringify(
+      productionEnv.VITE_ENDPOINT_MANIFEST_BASE_URL,
+    ),
+  },
   plugins: [
     {
       // 仓库根 scripts/*.mjs 带 shebang(#!/usr/bin/env node)。vite-node 内联

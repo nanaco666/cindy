@@ -40,12 +40,29 @@ pnpm mobile:beta:add-dev -- alice
 pnpm mobile:beta:add-dev -- alice --execute
 ```
 
+## 自建线地区分包(region,cn / global)
+
+自建线四个脚本 `mobile:release:{ios,android}:{local,ota,check}` **必须显式带 `--region cn|global`**(无默认值,缺失即报错):
+
+```bash
+pnpm mobile:release:ios:local     -- --region global --execute
+pnpm mobile:release:android:local -- --region cn     --execute
+pnpm mobile:release:ios:ota       -- --region global --execute
+pnpm mobile:release:android:check -- --region cn
+```
+
+- 所有**随地区变的非机密分包参数**(iOS bundleId / Android package / NPKG 期望包名 / TapDB 公开 clientId·clientToken / OSS 落点 bucket·CDN·prefix·ossRegion / 非机密签名描述符)集中在打包机本地的 `apps/mobile/scripts/self-host-regions.json`(纯值、已 gitignore;复制 `self-host-regions.json.example` 填值)。cn=`com.xd.cindycn`、global=`com.xd.cindy`。
+- **真机密仍走 env,按 region 后缀**:Android keystore 两个口令 `XDT_ANDROID_KEYSTORE_PASSWORD_{CN,GLOBAL}` / `XDT_ANDROID_KEY_PASSWORD_{CN,GLOBAL}`(cn 兼容无后缀旧名);OSS AK/SK 同账号继续用 `FP_DEV_OSS_ACCESS_KEY_ID/SECRET`,不同账号用 `XDT_OSS_ACCESS_KEY_ID_{CN,GLOBAL}` / `XDT_OSS_ACCESS_KEY_SECRET_{CN,GLOBAL}`。
+- OTA 更新域名**不进** region JSON:运行期由对应地区 `endpoint.json` 的 `mobileUpdateBaseUrl` 下发,不烘焙进包。
+- cn / global 是两个独立 OSS bucket,`release.json` 等落点互不覆盖。global 上架/重签需另在 NPKG 登记 `com.xd.cindy`(外部 pending)。
+
 ## 脚本契约
 
 - `mobile:release:check` 只读:计算当前 fingerprint,读取 EAS 最新 finished build runtime,输出 `OTA_OK` / `COLD_BUILD_REQUIRED` / `BASELINE_UNKNOWN`。
 - `mobile:release:beta` 固定 `beta-<dev>` profile/channel/branch,从 resolved build profile 注入 OTA 需要的 `EXPO_PUBLIC_*` / `EXPO_PUBLIC_APP_VARIANT=beta` / `EXPO_PUBLIC_BETA_DEV`。
 - `mobile:release:prod` 拦截非 `main`、脏 worktree、`HEAD != origin/main`;默认同时处理 `production` 和 `staging`;冷更前校验 iOS `buildNumber` 单调,并在 Android `versionCode` 存在时校验它单调;无法读取线上 build/runtime 基线时默认硬失败。
-- TapTap/TapDB 客户端凭证不写进 `eas.json`;在 EAS project environment 的 `production` / `preview` 配好 `EXPO_PUBLIC_TAPTAP_CLIENT_ID` 与 `EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN`。需要覆盖默认渠道或区域时,可同处配置 `EXPO_PUBLIC_TAPDB_CHANNEL` / `EXPO_PUBLIC_TAPDB_REGION`。固定的 root `mobile:release:*` 脚本会自动按 target 选择 EAS environment 并注入变量,同时剥离任意 ambient `EXPO_PUBLIC_*`,只对白名单里的 TapDB public env 放行。
+- EAS/TestFlight 的 TapTap/TapDB 客户端公开配置不写进 `eas.json`;在 EAS project environment 的 `production` / `preview` 配好 `EXPO_PUBLIC_TAPTAP_CLIENT_ID` 与 `EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN`。需要覆盖默认渠道或区域时,可同处配置 `EXPO_PUBLIC_TAPDB_CHANNEL` / `EXPO_PUBLIC_TAPDB_REGION`。自建线不依赖这些 env,只读所选 region 的 `self-host-regions.json.tapdb`;发版脚本会主动清掉打包机残留的同名 TapDB env。
+- Google 原生登录(global 线)的客户端标识同样不写进 `eas.json`;在 EAS project environment 的 `production` / `preview` 配好 `EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID`、`EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID`、`EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME`(三个值来自 GCP 项目 `cindy-ddd51` 的 Google Cloud Console Web / iOS OAuth client;URL scheme 即 iOS client id 反写 `com.googleusercontent.apps.<id>`,EAS prebuild 时由 `@react-native-google-signin` config plugin 注入 Info.plist;Android 无需独立变量,但 GCP 项目里必须建 Android OAuth client 并登记发布签名 SHA)。⚠️ 这三个变量缺失**不会**让发版失败——客户端 `isNativeSocialProviderSupported` 会静默隐藏 Google 登录按钮(Android 只看 WEB_CLIENT_ID,iOS 三个都要),发 global 线前先确认 EAS environment 已配齐;服务端侧还需 auth-server 把 iOS client id 配进 `GOOGLE_IOS_CLIENT_ID`(原生 idToken 的合法 aud,见 `cindy-server` 仓 `docs/auth-server/`)。
 - `mobile:release:ios:npkg` 走 [`docs/npkg-ios-distribution.md`](./docs/npkg-ios-distribution.md):取 EAS iOS `.ipa` 或上传本地 `.ipa`,等待 NPKG 企业重签并输出安装链接;`download` 子命令可把重签子包 `.ipa` 拉回本地。
 - **冷更安装包分发走自有 OSS,不再让用户从 NPKG 下载**:`mobile:release:ios:local` 在 NPKG 重签完成后把重签 `.ipa` 下载回来,连同自生成的 `manifest.plist`(itms 安装清单)与 `install.html`(安装页)直传 OSS 的 `mobile-dist/ios/<buildNumber>/`;`release.json` 的 `itmsUrl` / `installUrl` 均指向 OSS/CDN。`mobile:release:android:local` 则完全不经 NPKG,自签 APK 直传 OSS 的 `mobile-dist/android/<versionCode>/`。OSS 目标(bucket / CDN 域名)与热更一致,由 `scripts/shared/oss.mjs` + `XDT_CDN_BASE_URL` 决定;需要 `FP_DEV_OSS_ACCESS_KEY_ID` / `FP_DEV_OSS_ACCESS_KEY_SECRET`。
 - `--allow-unknown-baseline` 只用于明确的首次发版语义;production Android/all 冷构建在 Android 正式服启用前会被拒绝。
@@ -56,7 +73,7 @@ pnpm mobile:beta:add-dev -- alice --execute
 
 - 是否发版、何时发版、发给谁。
 - 明知可 OTA 时是否仍要冷更。
-- 是否再次改 `scheme` / 飞书 appId / native Feishu SSO；当前固定为 `com.xd.lizcn` + `lizcn://auth`，EAS/TestFlight 默认开启 native Feishu SSO，超时或失败时回退浏览器 OAuth。
+- 是否再次改 `scheme` / 飞书 appId / native Feishu SSO；当前 EAS/TestFlight 线为 `com.xd.lizcn`,自建线为 `com.xd.cindycn`(2026-07-16 起两线身份分离,可同机共装,但两线 scheme 仍统一为 `lizcn://auth`——共装时 scheme 重复注册,浏览器 OAuth 回调可能被另一条线的 app 抢走,内测机建议只装一条线),EAS/TestFlight 默认开启 native Feishu SSO,超时或失败时回退浏览器 OAuth。
 - App Store / TestFlight 审核材料、隐私权限自查、外部签名分发。
 - iOS NPKG 内部分发的目标范围和安装链接发送对象。
-- Android 内部分发(不上 Google Play):自建线本机出**自签 APK**(keystore `xdmaker-release`,不走 iOS 企业重签),**直传自有 OSS 取 CDN 下载直链**(不经 NPKG;`release-android-npkg.sh` 仅供手动补传);命令 `pnpm mobile:release:android:{check,local,ota,npkg}`,设计见 [`docs/self-hosted-android-build-and-ota.md`](./docs/self-hosted-android-build-and-ota.md)。外部事项仍 pending:飞书 Android 包名 `com.xd.lizcn` 与签名 SHA256 登记(只构建不上传可用 `--skip-upload` 兜底)。
+- Android 内部分发(不上 Google Play):自建线本机出**自签 APK**(keystore `Cindy.jks` / alias `Cindy`,路径/alias/口令全部走 `XDT_ANDROID_*` 环境变量、无代码默认值,不走 iOS 企业重签),**直传自有 OSS 取 CDN 下载直链**(不经 NPKG;`release-android-npkg.sh` 仅供手动补传);命令 `pnpm mobile:release:android:{check,local,ota,npkg}`,设计见 [`docs/self-hosted-android-build-and-ota.md`](./docs/self-hosted-android-build-and-ota.md)。外部事项仍 pending:飞书 Android 包名 `com.xd.cindycn` 与签名 SHA256 登记(只构建不上传可用 `--skip-upload` 兜底)。

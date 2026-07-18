@@ -6,7 +6,7 @@
  * 一行 disabled 占位)。本页**不发明新的连接 IPC**,复用既有鉴权流:
  *   - Anthropic: maker.claudeOAuth*(授权 / 登出 / 状态)。
  *   - OpenAI:    useCodexAuth()(授权 / 登出,内部走 maker.auth.* codex 通道)。
- *   - XD 网关:  useApiKey()(断开 = clearKey;连接 / 更换 key = 就地弹窗录入)。
+ *   - XD 网关:  凭据由 model-access 自动下发(useModelAccessStatus 驱动状态;断开 = clearKey 清本机存量;无手填入口)。
  *
  * 连接态以 useProviders() 的 provider.connected 为准;任一鉴权动作后 refetch 刷新
  * (listProviders 每次现读连接态)。
@@ -17,7 +17,7 @@
  * 模型清单 / 开关 / 计数各自独立(同名模型如 gpt-5.5 在 cc=1M / codex=272k 也分开记)。
  */
 
-import { Fragment, useCallback, useMemo, useState, type ComponentType, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, ChevronDown, ChevronRight, ChevronUp, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 
@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils';
 import { useProviders } from '@/hooks/useProviders';
 import { useCodexAuth } from '@/hooks/useCodexAuth';
 import { useApiKey } from '@/hooks/useApiKey';
+import { useModelAccessStatus } from '@/hooks/useModelAccessStatus';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { toast } from '@/lib/toast';
 import { deleteCustomProvider } from '@/lib/customProviders';
@@ -43,7 +44,6 @@ import {
   useModelVisibilityVersion,
 } from '@/state/modelVisibilityPrefs';
 
-import { XdGatewayKeyDialog } from './XdGatewayKeyDialog';
 
 import type { AgentKind, CatalogModel, CustomProviderConfig, ProviderView } from '@lizi/model-providers';
 
@@ -367,6 +367,7 @@ function ProviderCell({
   provider,
   detail,
   badge,
+  onUnavailableExpand,
 }: {
   icon: ReactNode;
   title: string;
@@ -376,11 +377,15 @@ function ProviderCell({
   detail?: ReactNode;
   /** 标题旁的额外徽标（自定义供应商的「自定义」tag）。 */
   badge?: ReactNode;
+  /** 来源行需要保留展开入口、但实时模型清单不可用时的点击反馈。 */
+  onUnavailableExpand?: () => void;
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
-  const expandable = !!provider && providerHasModels(provider);
-  const counts = expandable && provider ? combinedCount(provider) : null;
+  const hasModels = !!provider && providerHasModels(provider);
+  const expandable = hasModels || !!onUnavailableExpand;
+  const effectiveExpanded = hasModels && expanded;
+  const counts = hasModels && provider ? combinedCount(provider) : null;
   const subscriptionProduct =
     provider?.access?.kind === 'subscription' ? provider.access.product : null;
 
@@ -430,16 +435,22 @@ function ProviderCell({
           {expandable && (
             <button
               type="button"
-              onClick={() => setExpanded((v) => !v)}
-              aria-expanded={expanded}
+              onClick={() => {
+                if (!hasModels) {
+                  onUnavailableExpand?.();
+                  return;
+                }
+                setExpanded((v) => !v);
+              }}
+              aria-expanded={effectiveExpanded}
               aria-label={t(
-                expanded
+                effectiveExpanded
                   ? 'settings.providers.models.collapseAria'
                   : 'settings.providers.models.expandAria',
               )}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-[var(--surface-hover)]"
             >
-              {expanded ? (
+              {effectiveExpanded ? (
                 <ChevronUp size={18} style={{ color: 'var(--text-tertiary)' }} />
               ) : (
                 <ChevronDown size={18} style={{ color: 'var(--text-tertiary)' }} />
@@ -451,7 +462,7 @@ function ProviderCell({
         {detail}
       </div>
 
-      {expandable && expanded && provider && <ModelListPanel provider={provider} />}
+      {effectiveExpanded && provider && <ModelListPanel provider={provider} />}
     </div>
   );
 }
@@ -795,9 +806,22 @@ function XdGatewayRow({ provider, onChanged }: { provider?: ProviderView; onChan
   const { t } = useTranslation();
   const { confirm } = useConfirmDialog();
   const { key, hasSavedKey, clearKey } = useApiKey();
+  const syncStatus = useModelAccessStatus();
   const connected = provider?.connected ?? false;
-  // 连接 / 更换 key 就地弹窗录入(不再跳 API 密钥页 —— 那边后续不承载 XD 配置)。
-  const [keyDialogOpen, setKeyDialogOpen] = useState(false);
+  const [rotating, setRotating] = useState(false);
+
+  // 凭据一律由服务端自动下发(个人 / 已接入企业),**无手填入口**(2026-07-17 定案):
+  // 连接态由登录同步驱动;失败只提供重试;「断开」仅用于清理本机存量 key。
+  const serverManaged = syncStatus.state === 'ok' && syncStatus.source === 'server';
+
+  // 同步状态翻 ok(main 侧已写入新 key)→ 刷新供应商列表,让 provider.connected
+  // 立即反映自动下发结果(useProviders 不订阅 key 变化,需要显式 refetch)。
+  const prevSyncStateRef = useRef(syncStatus.state);
+  useEffect(() => {
+    if (prevSyncStateRef.current === syncStatus.state) return;
+    prevSyncStateRef.current = syncStatus.state;
+    if (syncStatus.state === 'ok') onChanged();
+  }, [syncStatus.state, onChanged]);
 
   const handleDisconnect = useCallback(async () => {
     const confirmed = await confirm({
@@ -811,67 +835,138 @@ function XdGatewayRow({ provider, onChanged }: { provider?: ProviderView; onChan
     if (ok) onChanged();
   }, [clearKey, confirm, onChanged, t]);
 
-  const trailing = connected ? (
-    <div className="flex shrink-0 items-center gap-2.5">
-      <ConnectedPill />
-      <PillButton label={t('settings.providers.button.disconnect')} onClick={() => void handleDisconnect()} />
-    </div>
-  ) : (
-    <PillButton label={t('settings.providers.button.connect')} onClick={() => setKeyDialogOpen(true)} />
-  );
+  const handleRetry = useCallback(() => {
+    void window.electronAPI.modelAccess
+      .retry()
+      .then(() => onChanged())
+      .catch(() => undefined);
+  }, [onChanged]);
+
+  const handleUnavailableExpand = useCallback(() => {
+    toast.error(t('settings.providers.xd.sync.modelsFetchFailed'));
+  }, [t]);
+
+  // 轮换密钥(泄露自救):旧 key 立即失效,进行中的会话 / 远端会话 / 手机语音
+  // 会用旧 key 收到 401,新会话自动用新 key —— 确认文案明示这一影响。
+  const handleRotate = useCallback(async () => {
+    const confirmed = await confirm({
+      title: t('settings.providers.xd.rotateConfirm.title'),
+      description: t('settings.providers.xd.rotateConfirm.description'),
+      confirmText: t('settings.providers.xd.rotateConfirm.confirm'),
+      cancelText: t('settings.connections.codex.logoutConfirm.cancel'),
+    });
+    if (!confirmed) return;
+    setRotating(true);
+    try {
+      await window.electronAPI.modelAccess.rotate();
+      toast.success(t('settings.providers.xd.rotateSuccess'));
+      onChanged();
+    } catch {
+      toast.error(t('settings.providers.xd.rotateFailed'));
+    } finally {
+      setRotating(false);
+    }
+  }, [confirm, onChanged, t]);
+
+  const trailing = (() => {
+    switch (syncStatus.state) {
+      case 'unsupported':
+        // 企业未开通:不提供任何入口(含手填),置灰说明。
+        return (
+          <span className="shrink-0 text-12" style={{ color: 'var(--text-tertiary)' }}>
+            {t('settings.providers.xd.sync.unsupported')}
+          </span>
+        );
+      case 'syncing':
+        return (
+          <PillButton label={t('settings.providers.xd.sync.syncing')} onClick={() => undefined} disabled />
+        );
+      case 'ok':
+        if (serverManaged) {
+          return (
+            <div className="flex shrink-0 items-center gap-2.5">
+              <ConnectedPill />
+              <PillButton
+                label={rotating ? t('settings.providers.xd.sync.rotating') : t('settings.providers.xd.sync.rotate')}
+                onClick={() => void handleRotate()}
+                disabled={rotating}
+              />
+            </div>
+          );
+        }
+        break;
+      case 'failed':
+        // 自动获取失败:只提供重试;本地既有 key 不受影响(仍显示已连接)。
+        return (
+          <div className="flex shrink-0 items-center gap-2.5">
+            {connected && <ConnectedPill />}
+            <PillButton label={t('settings.providers.xd.sync.retry')} onClick={handleRetry} />
+          </div>
+        );
+      default:
+        break;
+    }
+    // idle(未登录/未同步)/ disabled(服务端灰度未启用):
+    // 有存量 key → 已连接 + 断开(清本机);无 key → 置灰说明,等登录自动下发。
+    return connected ? (
+      <div className="flex shrink-0 items-center gap-2.5">
+        <ConnectedPill />
+        <PillButton label={t('settings.providers.button.disconnect')} onClick={() => void handleDisconnect()} />
+      </div>
+    ) : (
+      <span className="shrink-0 text-12" style={{ color: 'var(--text-tertiary)' }}>
+        {syncStatus.state === 'disabled'
+          ? t('settings.providers.xd.sync.disabled')
+          : t('settings.providers.xd.sync.autoProvision')}
+      </span>
+    );
+  })();
 
   // 已连接时:masked key chip 已存本地才有真实末 4 位,否则通用遮罩。
   const maskedKey = useMemo(() => maskKey(hasSavedKey ? key : ''), [hasSavedKey, key]);
 
-  // 连接后的缩进行(masked key + 更换 key)——对齐到文字块(avatar 36 + gap 12 = 48px)。
-  const detail = connected ? (
-    <div className="flex items-center gap-2.5 pl-12">
-      <span
-        className="flex shrink-0 items-center rounded-md px-2 py-1 text-12"
-        style={{
-          backgroundColor: 'var(--surface-chip)',
-          border: '1px solid var(--settings-integration-avatar-border)',
-          color: 'var(--settings-section-desc)',
-        }}
-      >
-        {maskedKey}
-      </span>
-      <div className="flex-1" />
-      <button
-        type="button"
-        onClick={() => setKeyDialogOpen(true)}
-        className="shrink-0 text-12 transition-colors"
-        style={{ color: 'var(--settings-integration-subtitle)' }}
-      >
-        {t('settings.providers.xd.manageKey')}
-      </button>
-    </div>
-  ) : undefined;
+  // 连接后的缩进行(masked key + 次操作)——对齐到文字块(avatar 36 + gap 12 = 48px)。
+  // server 托管态的次操作是「重新获取凭据」;存量本机 key 无次操作(只读展示)。
+  const detail =
+    connected && syncStatus.state !== 'unsupported' ? (
+      <div className="flex items-center gap-2.5 pl-12">
+        <span
+          className="flex shrink-0 items-center rounded-md px-2 py-1 text-12"
+          style={{
+            backgroundColor: 'var(--surface-chip)',
+            border: '1px solid var(--settings-integration-avatar-border)',
+            color: 'var(--settings-section-desc)',
+          }}
+        >
+          {maskedKey}
+        </span>
+        <div className="flex-1" />
+        {serverManaged && (
+          <button
+            type="button"
+            onClick={handleRetry}
+            className="shrink-0 text-12 transition-colors"
+            style={{ color: 'var(--settings-integration-subtitle)' }}
+          >
+            {t('settings.providers.xd.sync.refresh')}
+          </button>
+        )}
+      </div>
+    ) : undefined;
 
   return (
-    <>
-      <ProviderCell
-        icon={<XDIncMark size={18} />}
-        title={t('settings.providers.xd.title')}
-        subtitle={providerSubtitleForDisplay(provider, t('settings.providers.xd.modelLabel'), {
-          suffix: t('settings.providers.xd.billingLabel'),
-          fallback: t('settings.providers.xd.subtitle'),
-        })}
-        trailing={trailing}
-        provider={provider}
-        detail={detail}
-      />
-
-      {keyDialogOpen && (
-        <XdGatewayKeyDialog
-          onClose={() => setKeyDialogOpen(false)}
-          onSaved={() => {
-            setKeyDialogOpen(false);
-            onChanged();
-          }}
-        />
-      )}
-    </>
+    <ProviderCell
+      icon={<XDIncMark size={18} />}
+      title={t('settings.providers.xd.title')}
+      subtitle={providerSubtitleForDisplay(provider, t('settings.providers.xd.modelLabel'), {
+        suffix: t('settings.providers.xd.billingLabel'),
+        fallback: t('settings.providers.xd.subtitle'),
+      })}
+      trailing={trailing}
+      provider={provider}
+      detail={detail}
+      onUnavailableExpand={handleUnavailableExpand}
+    />
   );
 }
 
@@ -1111,10 +1206,18 @@ export function ProvidersSection() {
     const p = byId.get(id);
     if (p && providerHasModels(p)) providerRows.push({ key: id, node: render(p) });
   };
+  // Cindy AI 行固定置顶,即使实时模型清单为空也保留:用户仍需要看到凭据状态 / 重试入口,
+  // 点击展开则由 XdGatewayRow 给出明确的「模型列表拉取失败」提示。
+  const xdProvider = byId.get('xd');
+  if (xdProvider) {
+    providerRows.push({
+      key: 'xd',
+      node: <XdGatewayRow provider={xdProvider} onChanged={refetch} />,
+    });
+  }
   pushBuiltin('anthropic', (p) => <AnthropicRow provider={p} onChanged={refetch} />);
   pushBuiltin('openai', (p) => <OpenAiRow provider={p} onChanged={refetch} />);
   pushBuiltin('xai', (p) => <XaiRow provider={p} onChanged={refetch} />);
-  pushBuiltin('xd', (p) => <XdGatewayRow provider={p} onChanged={refetch} />);
   // 通用 OAuth 供应商(目录 auth.oauth 描述符驱动、非上面 bespoke 四家):目录推数据即出现。
   // OAuth 形态**不要求已有模型**:模型在授权成功后动态发现,零模型时行必须保留,
   // 否则用户没有「授权」按钮可点,发现永远无法发生(鸡生蛋死锁)。自定义 OAuth 行同理。

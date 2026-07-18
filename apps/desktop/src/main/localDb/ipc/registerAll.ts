@@ -12,7 +12,6 @@ import { ipcMain } from 'electron';
 import { ensureReady } from '../index';
 import { registerSessionIpc } from './sessions';
 import { registerMessageIpc } from './messages';
-import { registerMigrationIpc } from './migration';
 import { registerOrcaWorkflowIpc } from './orcaTeams';
 import { registerSessionImportIpc } from './session-import';
 import { registerSessionShareIpc } from './session-share';
@@ -102,7 +101,6 @@ export function registerLocalDbIpc(opts: RegisterLocalDbIpcOpts = {}): void {
 
   registerSessionIpc();
   registerMessageIpc();
-  registerMigrationIpc();
   registerSessionImportIpc();
   registerSessionShareIpc();
   registerOrcaWorkflowIpc();

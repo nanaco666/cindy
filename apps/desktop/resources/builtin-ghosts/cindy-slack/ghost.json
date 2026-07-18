@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "id": "cindy-slack",
   "name": "Cindy Slack",
-  "description": "内置的 Slack 服务意识:连上 Slack 账号即可搜索与阅读消息、频道、文件、用户,读写级别授权后还能发消息与加 reaction。工具面直连 Slack 官方托管 MCP,清单随官方更新自动生效。开箱即用——点「连接账号」完成授权即可;授权由 XDMaker 服务端托管,应用密钥不随包分发。",
+  "description": "内置的 Slack 服务意识:连上 Slack 账号即可搜索与阅读消息、频道、文件、用户,读写级别授权后还能发消息与加 reaction。工具面直连 Slack 官方托管 MCP,清单随官方更新自动生效。开箱即用——点「连接账号」完成授权即可;授权由 Cindy 服务端托管,应用密钥不随包分发。",
   "whenToUse": "需要搜索 Slack 消息/频道/文件/用户,阅读频道或私聊历史,或(读写授权后)发 Slack 消息、加 reaction 时找我(需先在意识设置页连接 Slack 账号)。先用 slack_list_tools 看当前授权下可用的工具清单。",
   "version": "1.0.0",
   "author": "Cindy",
@@ -24,7 +24,7 @@
         "key": "slack_account",
         "label": "Slack 账号",
         "source": "oauth",
-        "hint": "到设置页点「连接账号」即可;授权与令牌全程由主机与 XDMaker 服务端托管",
+        "hint": "到设置页点「连接账号」即可;授权与令牌全程由主机与 Cindy 服务端托管",
         "inject": {
           "header": "Authorization",
           "format": "Bearer {value}",

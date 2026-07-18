@@ -2,9 +2,9 @@
   "schemaVersion": 2,
   "id": "xd-mivo",
   "name": "XD Mivo",
-  "description": "XDMaker 内置的 mivo 意识:用你自己的 mivo key 在 aigc.xindong.com 生成图片(Nano/GPT/MJ/Niji)、视频(Seedance/Kling)、音乐(Suno)、音效(ElevenLabs)、3D 模型(Tripo/Seed3D,可转 FBX/OBJ),以及抠图、超分、MJ 按钮动作。key 在 设置 → 意识 → 本意识详情页 填写,加密存本机、只注入 aigc.xindong.com 的请求。",
+  "description": "Cindy 内置的 mivo 意识:用你自己的 mivo key 在 aigc.xindong.com 生成图片(Nano/GPT/MJ/Niji)、视频(Seedance/Kling)、音乐(Suno)、音效(ElevenLabs)、3D 模型(Tripo/Seed3D,可转 FBX/OBJ),以及抠图、超分、MJ 按钮动作。key 在 设置 → 意识 → 本意识详情页 填写,加密存本机、只注入 aigc.xindong.com 的请求。",
   "whenToUse": "用户明确要用 mivo / MJ / Midjourney / niji 画图,用 Seedance / 豆包视频 / 即梦视频 / 可灵 / kling 生成视频,做音乐 / 写歌(Suno)、做音效,3D 建模(Tripo / Seed3D / 即梦3D)、给 3D 模型绑动作、把 3D 模型转成 FBX / OBJ 格式,以及抠图 / 去背景、超分 / 放大图片、触发 MJ 图片按钮(U/V/Reroll)时找我(需先在意识设置页配置 mivo_ 开头的 key)。日常画图默认走 Cindy Art,只有上述显式触发词才用我。",
-  "version": "1.5.10",
+  "version": "1.6.0",
   "author": "Cindy",
   "entry": "main.js",
   "settingsHtml": "settings.html",
@@ -121,7 +121,7 @@
     },
     {
       "name": "submit_gen_video",
-      "description": "提交视频生成任务到 mivo 平台,返回 jobId(需紧接着调 poll_result({ jobId, mode: \"gpt_wait\" }))。视频普遍需要 1-5 分钟,必须用 gpt_wait 模式,可能要多轮才拿到 completed,中途 processing 立刻继续轮询,不要询问用户。三种模型(modelVersion 切换):Seedance_2_0_Fast(默认;触发词 seedance/豆包视频/即梦视频/ARK;支持 1-9 张参考图)、Seedance_1_0_Pro(即 Seedance 3.0 Pro 极速版;触发词 seedance 3.0/pro/极速版;图生视频必须按顺序提供首帧、尾帧共 2 张)与 kling-v3-omni(触发词 kling/可灵;支持 1-7 张参考图、std/pro 双档 mode、多镜头切镜 multi_shot、AI 配音 sound 默认带声)。三种模型都允许不传图做文生视频。默认走 Seedance Fast,除非用户明确说用 3.0/pro/极速版(→ Seedance_1_0_Pro)或 kling/可灵。通用参数:prompt 必填(用户原话透传,不要扩写、不要堆「高清/4K/电影感」质量词);images 可选;videoRatio 默认 16:9;duration 5 或 10 秒。Seedance 专属:resolution(480P 默认 / 720P 用户说高清)、audio;Kling 专属:mode(std 默认 / pro 高品质)、multi_shot、sound(on 默认 / off 静音)——跨引擎误传会报 INVALID_ARGS。完成后视频经 xdt_video_urls 自动渲染,不要再用 markdown 嵌一遍(会出现两个播放器);基于结果简短点评即可,不要复述 prompt 原文。",
+      "description": "提交视频生成任务到 mivo 平台,返回 jobId(需紧接着调 poll_result({ jobId, mode: \"gpt_wait\" }))。视频普遍需要 1-5 分钟,必须用 gpt_wait 模式,可能要多轮才拿到 completed,中途 processing 立刻继续轮询,不要询问用户。四种模型(modelVersion 切换):Seedance_2_0_Fast(默认;触发词 seedance/豆包视频/即梦视频/ARK;支持 1-9 张参考图)、Seedance_2_0(标准模式;触发词 标准/标准模式/standard;质量更高、更慢,参考图与参数同 Fast)、Seedance_1_0_Pro(即 Seedance 3.0 Pro 极速版;触发词 seedance 3.0/pro/极速版;图生视频必须按顺序提供首帧、尾帧共 2 张)与 kling-v3-omni(触发词 kling/可灵;支持 1-7 张参考图、std/pro 双档 mode、多镜头切镜 multi_shot、AI 配音 sound 默认带声)。四种模型都允许不传图做文生视频。默认走 Seedance Fast,除非用户明确说用 标准/标准模式(→ Seedance_2_0)、3.0/pro/极速版(→ Seedance_1_0_Pro)或 kling/可灵。通用参数:prompt 必填(用户原话透传,不要扩写、不要堆「高清/4K/电影感」质量词);images 可选;videoRatio 默认 16:9;duration 5 或 10 秒。Seedance 专属:resolution(480P 默认 / 720P 用户说高清)、audio;Kling 专属:mode(std 默认 / pro 高品质)、multi_shot、sound(on 默认 / off 静音)——跨引擎误传会报 INVALID_ARGS。完成后视频经 xdt_video_urls 自动渲染,不要再用 markdown 嵌一遍(会出现两个播放器);基于结果简短点评即可,不要复述 prompt 原文。",
       "parameters": {
         "type": "object",
         "properties": {
@@ -132,7 +132,7 @@
             "maxItems": 9,
             "description": "图生视频参考图,按用户给出的顺序透传。Seedance 2.0 支持 1-9 张;Seedance 3.0 图生视频必须恰好 2 张(第 1 张首帧、第 2 张尾帧);Kling v3 支持 1-7 张。可以是 mivo://image/{fileId} / aigc URL / 24 位 fileId;用户随消息发来的图片附件会自动追加;不支持本地绝对路径"
           },
-          "modelVersion": { "type": "string", "description": "引擎版本,默认 Seedance_2_0_Fast(别名 seedance/ark/豆包/即梦视频);可选 Seedance_1_0_Pro(即 Seedance 3.0 Pro 极速版,别名 seedance3/seedance30pro/pro/极速版,画质更高)、kling-v3-omni(别名 kling/可灵/klingv3)" },
+          "modelVersion": { "type": "string", "description": "引擎版本,默认 Seedance_2_0_Fast(别名 seedance/ark/豆包/即梦视频);可选 Seedance_2_0(标准模式,别名 标准/标准模式/standard,质量更高更慢)、Seedance_1_0_Pro(即 Seedance 3.0 Pro 极速版,别名 seedance3/seedance30pro/pro/极速版,画质更高)、kling-v3-omni(别名 kling/可灵/klingv3)" },
           "videoRatio": { "type": "string", "enum": ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"], "description": "画幅比例,默认 16:9;9:16 竖屏/抖音" },
           "duration": { "type": "number", "enum": [5, 10], "description": "时长秒数,5 或 10,默认 5。用户说「长一点/10 秒」→ 10" },
           "resolution": { "type": "string", "enum": ["480P", "720P"], "description": "仅 Seedance:2.0 默认 480P;3.0 Pro 默认 720P" },

@@ -353,6 +353,15 @@ function isInvalidCompactPreservedSegmentForkError(err: unknown): boolean {
   return msg.includes('invalid compact preservedSegment reference');
 }
 
+/**
+ * 会持续调模型的后台任务类型(SDK task_started.task_type),用户 Stop 时需要
+ * 连带 stopTask 的白名单 —— 与 renderer makerChatStore 的 WAKE_AGENT_TASK_TYPES
+ * 折算口径保持一致。刻意排除:local_bash(不调模型,dev server 等长驻进程不能
+ * 被 Stop 误杀)、remote_agent(云端生命周期不受本进程控制)、未知类型(宁可
+ * 少停不误停,启发式后台活动检测兜底)。
+ */
+const WAKE_BACKGROUND_TASK_TYPES: ReadonlySet<string> = new Set(['local_agent', 'local_workflow']);
+
 // ── 能力声明 ──────────────────────────────────────────────────────────────────
 
 // 模型清单 SSoT 已迁至目录 packages/model-providers/catalog/providers.json。
@@ -627,7 +636,7 @@ export class ClaudeCodeAgent extends BaseAgent {
     // process.env 里其他字段(已被 boot strip 兜底) / `~/.claude/.credentials.json`
     // (用户单独装过 Claude Code 时存在),用上别人的 OAuth 通道 → 既泄漏隔离,也
     // 让用户莫名其妙"用上了不属于本 app 的 key"。
-    // renderer 接到 AgentNotAuthenticatedError 引导用户去 settings 完成 API key 设置。
+    // renderer 接到 AgentNotAuthenticatedError 后据 reason 引导用户补齐当前来源的鉴权。
     const credentialMode = opts.remoteHostId
       ? 'gateway-key'
       : resolveAgentCredentialMode({
@@ -1410,6 +1419,19 @@ export class ClaudeCodeAgent extends BaseAgent {
           remoteHostId: opts.remoteHostId,
           sessionId: opts.sessionId,
         });
+        // 远端真上游由 host 经 runtimeConfig.remoteEndpoint 提供(model-access 下发的
+        // 网关 endpoint)。host 定义了该字段但值为空 = 网关凭据尚未就绪 / 已失效——
+        // 此时 env-builder 会回落到本地 endpoint,下面的 loopback guard 虽也能拦,
+        // 但错误归因是「内部错误」,按它排查会走进死胡同。这里先按真实原因拒绝。
+        // (`!== undefined` 区分未注入该字段的旧 host:保持其原有回落行为。)
+        if (
+          this.deps.runtimeConfig.remoteEndpoint !== undefined &&
+          !this.deps.runtimeConfig.remoteEndpoint.trim()
+        ) {
+          throw new Error(
+            '[REMOTE_GATEWAY_ENDPOINT_UNAVAILABLE] Remote Claude Code sessions need the XD gateway endpoint issued after sign-in; gateway credentials are not ready on this desktop yet.',
+          );
+        }
         // Defense-in-depth: a remote machine can't reach the host's local loopback
         // compat-proxy. The host guarantees remote env uses the real upstream gateway
         // via runtimeConfig.remoteEndpoint (see desktop runtime-configs.ts +
@@ -1811,6 +1833,7 @@ export class ClaudeCodeAgent extends BaseAgent {
       queuedBridgeTurns = 0;
       activeBridgeRewindResumeAt = undefined;
       pendingToolIds.clear();
+      runningBackgroundTasks.clear();
       closed = true;
       try { dismissAllPending('session_closed', 'deny'); } catch (e) {
         log.warn(`${logLabel}: dismissAllPending threw`, { error: String(e) });
@@ -1859,6 +1882,68 @@ export class ClaudeCodeAgent extends BaseAgent {
     // 需要一个 per-query 标记,否则迟到的 stream_end/abort 会被误判为当前新 q 的崩溃。
     const rewindTransitionQueries = new WeakSet<Query>();
 
+    // ── 后台任务追踪(用户 Stop 的确定性全停,2026-07-16 Lizi 拍板)──────────
+    // 产品语义:用户点 Stop = 本会话所有模型调用停止,不允许残留。q.interrupt()
+    // 只中断当前 turn;跨 turn 存活的后台 wake 任务(subagent / workflow)会继续
+    // 调模型烧用量(2026-07-13 事故形态),abort 时必须逐个 q.stopTask()。
+    // 数据源:translator 产出的 agent_task_update(running 进表 / 终态出表)。
+    // taskType 只保证在 task_started 携带,后续 task_updated 补丁可能缺失 ——
+    // 一旦见过 wake 型就锁存,补丁不会把 wake 降级。
+    // 只停 wake 型(local_agent / local_workflow,与 renderer 折算口径一致):
+    // local_bash 不调模型(dev server 等长驻进程不能被 Stop 误杀);remote_agent
+    // 生命周期不在本进程。q.close() 会连 CLI 子进程一起杀(任务随之死亡),
+    // 换代 / teardown / close 时清表。
+    const runningBackgroundTasks = new Map<string, { wake: boolean }>();
+    function noteBackgroundTaskEvent(e: AgentEvent): void {
+      if (e.type !== 'agent_task_update') return;
+      const data = e.data as
+        | { taskId?: unknown; status?: unknown; taskType?: unknown }
+        | null
+        | undefined;
+      const taskId = typeof data?.taskId === 'string' ? data.taskId : undefined;
+      if (!taskId) return;
+      const status = data?.status;
+      if (status === 'running') {
+        const wake =
+          runningBackgroundTasks.get(taskId)?.wake === true ||
+          (typeof data?.taskType === 'string' && WAKE_BACKGROUND_TASK_TYPES.has(data.taskType));
+        runningBackgroundTasks.set(taskId, { wake });
+      } else if (status === 'completed' || status === 'failed' || status === 'stopped') {
+        runningBackgroundTasks.delete(taskId);
+      }
+    }
+    // fire-and-forget 逐个 stopTask:单个失败(任务恰好已自然结束 / 远端 daemon
+    // 版本差)只 warn,绝不阻塞随后的 q.interrupt()。SDK 对每个被停任务会回吐
+    // status:'stopped' 的 task_notification → 现有事件链把任务出表并让 UI 确定性收口。
+    function stopRunningWakeBackgroundTasks(reason: string): void {
+      if (runningBackgroundTasks.size === 0) return;
+      const wakeIds: string[] = [];
+      for (const [taskId, info] of runningBackgroundTasks) {
+        if (info.wake) wakeIds.push(taskId);
+      }
+      if (wakeIds.length === 0) return;
+      // 远端老 daemon / 老 SDK 没有 stopTask:退化为原行为(interrupt-only),
+      // proxy 活动检测 + 「全部停止」兜底仍在。
+      if (typeof q.stopTask !== 'function') {
+        log.warn('stopTask unavailable on current query; background wake tasks left running', {
+          reason,
+          wakeIds,
+        });
+        return;
+      }
+      log.info('stopping running background wake tasks', { reason, wakeIds });
+      for (const taskId of wakeIds) {
+        void q.stopTask(taskId).catch((e: unknown) => {
+          // 两类预期失败:任务恰好已自然结束;远端老 daemon 不认识 query/stopTask
+          // (RemoteQuery 恒有本地方法,老 daemon 差异只会在这里以 RPC 错误暴露)。
+          log.warn('stopTask failed (task already finished, or remote daemon predates query/stopTask)', {
+            taskId,
+            error: String(e),
+          });
+        });
+      }
+    }
+
     // ── Middle-turn 事件过滤 (Codex review 3534925347 / 3535259132 / 3535293200) ──
     // rewind rebuild 尾部注入的 /compact 是 SDK 独立 turn, 但从产品层看它是"用户 turn
     // 的一部分" (预压缩) — 该 turn 的 done / status(isRunning=false) 不能让 register.ts
@@ -1885,6 +1970,8 @@ export class ClaudeCodeAgent extends BaseAgent {
     //  bridge 期间的 compact 失败静默恢复(warn 日志保留供排查)是最安全的语义。
     const forwardEventSink: AsyncQueue<AgentEvent> = {
       push(e: AgentEvent) {
+        // 后台任务表旁路观察(O(1) type check,task 事件低频,不碰热路径逻辑)。
+        noteBackgroundTaskEvent(e);
         if (queuedBridgeTurns > 0) {
           if (e.type === 'done') {
             rememberBridgeSuppressedDoneData(e.data);
@@ -1932,6 +2019,9 @@ export class ClaudeCodeAgent extends BaseAgent {
       // q 换代: 上一代 q 的 pending interrupted result 不可能从新 q drain 出来,
       // 残留的 interruptRequested 会错误抑制新 q 首个真实 is_error 终态 —— 兜底清。
       turnState.interruptRequested = false;
+      // q 换代 = 旧 CLI 子进程已死,其后台任务全部随之终止 —— 清表防 stale 条目
+      // 让下次 abort 对不存在的任务空发 stopTask。
+      runningBackgroundTasks.clear();
       void (async () => {
         try {
           for await (const rawMsg of currentQ) {
@@ -2772,6 +2862,9 @@ export class ClaudeCodeAgent extends BaseAgent {
           } catch (e) {
             log.warn('abort during bridge turn: q.close threw', { error: String(e) });
           }
+          // close 本地会连 CLI 子进程一起杀(远端为 daemon 侧 interrupt + 输入流收口,
+          // SDK 退出前有极窄残留窗口,由下次 q 换代清表兜底),后台任务随之终止,清表即可。
+          runningBackgroundTasks.clear();
           turnInFlight = false;
           turnState.interruptRequested = false;
           emitTurnBoundary('bridge_aborted', takeBridgeSuppressedDoneData());
@@ -2787,6 +2880,10 @@ export class ClaudeCodeAgent extends BaseAgent {
           turnState.interruptRequested = true;
           turnState.interruptGeneration = turnState.generation;
         }
+        // 用户 Stop 的产品语义 = 本会话所有模型调用停止:先发 stopTask 再 interrupt
+        // (同一控制通道按序处理),封掉「interrupt 后任务恰好完成 → task_notification
+        // 自动续跑新 turn」的竞态窗口。fire-and-forget,不阻塞 interrupt。
+        stopRunningWakeBackgroundTasks('user_stop');
         try {
           await q.interrupt();
         } catch (e) {
@@ -2804,6 +2901,8 @@ export class ClaudeCodeAgent extends BaseAgent {
           dismissAllPending('session_closed', 'deny');
           inputQueue.end();
           abortController.abort();
+          // close 会终结 CLI 子进程(本地)/ 远端 session,后台任务随之死亡。
+          runningBackgroundTasks.clear();
         } catch (e) {
           log.warn('close threw', { error: String(e) });
         }

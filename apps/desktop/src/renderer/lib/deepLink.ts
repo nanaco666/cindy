@@ -1,14 +1,23 @@
 /**
- * deepLink (renderer) — xdt-maker:// URL 拼装 helper
+ * deepLink (renderer) — cindy:// (+ 历史 xdt-maker://) URL 拼装 helper
  *
+ * scheme 单点在 shared/deepLinkSchemes.ts(事实源 @lizi/maker-shared 的
+ * brand-identity):**生成一律主 scheme cindy://,解析主 + 历史 scheme 都认**
+ * (存量消息里复制的 xdt-maker:// 老链接不能死)。
  * 解析在 main 端做（src/main/deepLink.ts），renderer 只需要"复制深度链接"
  * 时把 sessionId / workingDir 拼成可粘贴的字符串。两端实现是 pure function、
  * 等价镜像，没必要走 IPC 跨进程拉。
  */
 
-const URL_PREFIX = 'xdt-maker://';
+import {
+  DEEP_LINK_URL_PREFIX,
+  DEEP_LINK_SCHEME_RE_GROUP,
+  stripDeepLinkPathPrefix,
+} from '../../shared/deepLinkSchemes';
+
+/** 生成侧前缀(cindy://)。解析侧不要 startsWith 它——用 stripDeepLinkPathPrefix。 */
+const URL_PREFIX = DEEP_LINK_URL_PREFIX;
 const SESSION_PREFIX = `${URL_PREFIX}session/`;
-const PROJECT_PREFIX = `${URL_PREFIX}project/`;
 
 export function buildSessionDeepLink(sessionId: string): string {
   return `${SESSION_PREFIX}${encodeURIComponent(sessionId)}`;
@@ -45,10 +54,11 @@ export function buildProjectDeepLink(workingDir: string): string {
  * (每次新建实例,避免共享 lastIndex 状态)。
  */
 export const SESSION_DEEP_LINK_RE_SOURCE =
-  'xdt-maker:\\/\\/session\\/[A-Za-z0-9%~_-]+(?:\\?[A-Za-z0-9%&=~._-]*)?';
+  `${DEEP_LINK_SCHEME_RE_GROUP}:\\/\\/session\\/[A-Za-z0-9%~_-]+(?:\\?[A-Za-z0-9%&=~._-]*)?`;
 
 /**
- * 项目深链 `xdt-maker://project/<urlencoded-workingDir>` 的匹配正则源。
+ * 项目深链 `<scheme>://project/<urlencoded-workingDir>` 的匹配正则源
+ * (cindy / xdt-maker 双 scheme)。
  * workingDir 经 strictEncodeURIComponent(空格、`/`、CJK、`!'()*` 全部转
  * %XX),白名单排除裸 `()` `'`(不吞 markdown `[..](..)` 定界符与英文引号)
  * ——本端生成的深链经严格编码永不含这些裸字符;外部手拼的含裸括号链接
@@ -66,7 +76,7 @@ export const SESSION_DEEP_LINK_RE_SOURCE =
  * 误伤主流形态;目录名含未配对 `)` 的残余风险接受。
  */
 export const PROJECT_DEEP_LINK_RE_SOURCE =
-  "xdt-maker:\\/\\/project\\/[A-Za-z0-9%~._!*-]+(?![A-Za-z0-9%~._!*('-])";
+  `${DEEP_LINK_SCHEME_RE_GROUP}:\\/\\/project\\/[A-Za-z0-9%~._!*-]+(?![A-Za-z0-9%~._!*('-])`;
 
 /** `text[idx]` 前是否有奇数个连续反斜杠(markdown 转义语义,`\\]` 是字面反斜杠+配对括号)。 */
 function isMarkdownEscaped(text: string, idx: number): boolean {
@@ -115,15 +125,16 @@ export interface SessionDeepLinkTarget {
 }
 
 /**
- * 解析 `xdt-maker://session/<id>[?message=<clientId>]`。
+ * 解析 `<scheme>://session/<id>[?message=<clientId>]`(cindy / xdt-maker
+ * 双 scheme 都认,按实际命中的前缀长度切片)。
  * 非本形态 / sessionId 为空或解码失败 → null。
  *
  * 手解而不用 `new URL()`:WHATWG URL 对 non-special scheme 的 host/pathname
  * 切分行为跨引擎不稳(与 main/deepLink.ts 同一结论),split 最稳。
  */
 export function parseSessionDeepLinkHref(href: string): SessionDeepLinkTarget | null {
-  if (typeof href !== 'string' || !href.startsWith(SESSION_PREFIX)) return null;
-  const rest = href.slice(SESSION_PREFIX.length);
+  const rest = stripDeepLinkPathPrefix(href, 'session/');
+  if (rest === null) return null;
   const hashIdx = rest.indexOf('#');
   const noHash = hashIdx >= 0 ? rest.slice(0, hashIdx) : rest;
   const queryIdx = noHash.indexOf('?');
@@ -157,13 +168,14 @@ export function parseSessionDeepLinkHref(href: string): SessionDeepLinkTarget | 
 }
 
 /**
- * 解析 `xdt-maker://project/<urlencoded-workingDir>` → workingDir(被控端
- * native 绝对路径)。非本形态 / 为空 / 解码失败 → null。与 main/deepLink.ts
- * 的 project 分支等价镜像(同样剥 hash / query / 尾斜杠后整体 decode)。
+ * 解析 `<scheme>://project/<urlencoded-workingDir>` → workingDir(被控端
+ * native 绝对路径;cindy / xdt-maker 双 scheme 都认)。非本形态 / 为空 /
+ * 解码失败 → null。与 main/deepLink.ts 的 project 分支等价镜像(同样剥
+ * hash / query / 尾斜杠后整体 decode)。
  */
 export function parseProjectDeepLinkHref(href: string): { workingDir: string } | null {
-  if (typeof href !== 'string' || !href.startsWith(PROJECT_PREFIX)) return null;
-  const rest = href.slice(PROJECT_PREFIX.length);
+  const rest = stripDeepLinkPathPrefix(href, 'project/');
+  if (rest === null) return null;
   const hashIdx = rest.indexOf('#');
   const noHash = hashIdx >= 0 ? rest.slice(0, hashIdx) : rest;
   const queryIdx = noHash.indexOf('?');

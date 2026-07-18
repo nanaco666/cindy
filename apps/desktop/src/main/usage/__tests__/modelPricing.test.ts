@@ -31,7 +31,7 @@ vi.mock('../../localDb/client/current', () => ({
   getCurrentDbClientUserId: mocks.getCurrentDbClientUserId,
 }));
 vi.mock('../../maker-host/runtime-configs', () => ({
-  CLAUDE_UPSTREAM_ENDPOINT: 'https://example.invalid',
+  claudeUpstreamEndpoint: () => 'https://example.invalid',
 }));
 
 import {

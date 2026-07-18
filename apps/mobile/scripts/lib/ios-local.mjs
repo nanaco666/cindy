@@ -132,6 +132,35 @@ export function replaceBuildNumberInAppJson(rawText, nextBuildNumber) {
   return String(rawText).replace(/("buildNumber"\s*:\s*")[^"]*(")/, `$1${nextBuildNumber}$2`);
 }
 
+/**
+ * 解析 iOS 本地签名描述符(供 xcodebuild archive/export 消费)。
+ * iOS 签名不含任何机密(无口令),故 teamId / profileName / signIdentity / profilePath **全部从
+ * 按 region 的 self-host-regions.json 的 iosSigning 取值**(纯值、非机密、不入仓,详见 self-host-region.mjs)。
+ * teamId / profileName / signIdentity 缺任一即抛错(fail-closed);profilePath 可选
+ * (空 = 假设描述文件已装入 ~/Library/MobileDevice/Provisioning Profiles)。
+ * 签名套件本体(profile + p12)在打包机的仓库外目录,不入仓。
+ * @param {{ authRegion?: string, iosSigning?: { teamId?: string, profileName?: string, signIdentity?: string, profilePath?: string } }} regionConfig
+ * @returns {{ teamId: string, profileName: string, identity: string, profilePath: string }}
+ */
+export function resolveIosSigningEnv(regionConfig) {
+  const s = regionConfig?.iosSigning ?? {};
+  const region = regionConfig?.authRegion ?? '?';
+  const teamId = String(s.teamId ?? '').trim();
+  const profileName = String(s.profileName ?? '').trim();
+  const identity = String(s.signIdentity ?? '').trim();
+  const profilePath = String(s.profilePath ?? '').trim();
+  const missing = [];
+  if (!teamId) missing.push('teamId');
+  if (!profileName) missing.push('profileName');
+  if (!identity) missing.push('signIdentity');
+  if (missing.length) {
+    throw new Error(
+      `self-host-regions.json 的 ${region}.iosSigning 缺少非空字段:${missing.join(', ')}(iOS 签名描述符从 region JSON 取值,非机密;profilePath 可选,缺省视为描述文件已装入系统)`,
+    );
+  }
+  return { teamId, profileName, identity, profilePath };
+}
+
 /** 生成 xcodebuild -exportArchive 用的 ExportOptions.plist(development 方法 + 手动签名)。 */
 export function buildExportOptionsPlist({ teamId, bundleId, profileName, method = 'development' }) {
   if (!teamId || !bundleId || !profileName) {

@@ -60,6 +60,9 @@ export class ThemeService {
     const root = document.documentElement;
     root.dataset.theme = theme.id;
     root.classList.toggle('dark', theme.type === 'dark');
+    // Keep Chromium's native form controls (including number-input spinners)
+    // on the same color scheme as the active application theme.
+    root.style.colorScheme = theme.type;
 
     this.currentTheme = theme;
     this.didChangeTheme.fire(theme);

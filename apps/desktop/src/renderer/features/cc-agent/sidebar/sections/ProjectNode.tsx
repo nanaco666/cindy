@@ -51,14 +51,18 @@ import type {
 import { getProjectSessionCollapseLimit } from '../../lib/sidebarCollapseConfig';
 import type { FolderPickerOption } from '@/components/new-chat/FolderPickerPopover';
 import type { SessionMoveTarget } from '../sessionMoveTarget';
+import type { FilterStatus } from '../../hooks/useSidebarFilter';
 import { MENU_CONTENT_CLASS, MENU_ITEM_CLASS, MENU_SEPARATOR_CLASS } from '../menuStyles';
 import { RemoteProjectIcon } from '../RemoteProjectIcon';
 import { isDeviceLinkWriteBlocked } from '../../lib/remoteSessionWriteGuard';
+import { projectBulkArchiveActionForStatus } from '../../lib/projectBulkArchiveAction';
 
 const log = createLogger('ProjectNode');
 
 export interface ProjectNodeProps {
   project: ProjectNodeData;
+  /** 当前会话状态筛选，决定项目菜单是批量归档还是批量恢复。 */
+  statusFilter: FilterStatus;
   isCollapsed: boolean;
   /** 父级 Projects 段整体收起时,也要让项目内「显示全部」在动画后复位。 */
   parentSectionCollapsed: boolean;
@@ -98,6 +102,7 @@ export interface ProjectNodeProps {
 
 export function ProjectNode({
   project,
+  statusFilter,
   isCollapsed,
   parentSectionCollapsed,
   activeSessionId,
@@ -132,6 +137,7 @@ export function ProjectNode({
   // 但徽标用设备 icon 而非 SSH 的 Globe,tooltip 显示设备名。
   const isDeviceLink = project.deviceLinkDeviceId != null;
   const projectWritesBlocked = isDeviceLinkWriteBlocked(project);
+  const bulkArchiveAction = projectBulkArchiveActionForStatus(statusFilter);
   // 项目图标两态(2026-07 用户定稿,参考 MivoCanvas):收起 Folder / 展开 FolderOpen,
   // 常驻在标题左侧;展开/收起指示箭头移到标题右侧、hover 才渐显(见下方 Chevron)。
   const FolderIcon = isCollapsed ? Folder : FolderOpen;
@@ -172,7 +178,7 @@ export function ProjectNode({
     }
   }, [isEditingName]);
 
-  // 复制 xdt-maker://project/<urlencoded-workingDir> 到剪贴板。
+  // 复制 cindy://project/<urlencoded-workingDir> 到剪贴板。
   // workingDir 是 POSIX 全路径,会被 encodeURIComponent 编码进 URL,跨机粘贴
   // 时若对方没这个 workingDir 会在 sidebar 那侧 toast "project not found"。
   const handleCopyDeepLink = useCallback(async () => {
@@ -468,7 +474,11 @@ export function ProjectNode({
             }}
             className={MENU_ITEM_CLASS}
           >
-            {t('ccAgent.sidebar.projectAction.archivedAll')}
+            {t(
+              bulkArchiveAction === 'unarchive'
+                ? 'ccAgent.sidebar.projectAction.unarchiveAll'
+                : 'ccAgent.sidebar.projectAction.archivedAll',
+            )}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

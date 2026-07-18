@@ -75,7 +75,11 @@ import {
   composeInteractionCard,
   registerHookInteraction,
 } from './interactions.js';
-import { collectOutboundAttachments, hasOutboundRefs } from './outbound.js';
+import {
+  collectOutboundAttachments,
+  hasOutboundRefs,
+  SLACK_HOOK_PROMPT_NOTE,
+} from './outbound.js';
 
 /**
  * 新会话 agent/model/effort/permissionMode/providerId 合成: Slack 按目录偏好
@@ -139,11 +143,28 @@ const TURN_HARD_TIMEOUT_MS = 60 * 60_000;
  * sentinel: read_by_url 读文档注图但不希望刷屏的场景必须尊重, 否则"总结这篇
  * 文档"会往 Slack 刷一堆插图)。视频本期不外发, 直接忽略。
  */
-function extractToolResultImageUrls(toolResultText: string): string[] {
-  if (!toolResultText.includes('xdt_image_url')) return [];
+/** 双协议:老 xdt-image(历史/未迁移工具)+ 新 cindy-media(媒体总仓,mivo /
+ *  art 等生成图迁移后均为此形态)。与 IM turnRunner 同判据——只认老协议会让
+ *  hook Slack 拿不到任何生成图(2026-07-16 实踩)。 */
+function isRenderableImageUrl(u: string): boolean {
+  return u.startsWith('xdt-image://') || u.startsWith('cindy-media://');
+}
+
+/** 兜底账本条目是否图片(hook 本期只外发图片):cindy-media 地址按扩展名判。 */
+const PRODUCED_IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp)$/i;
+
+/** 导出仅供单测(纯函数,不碰 electron)。 */
+export function extractToolResultImageUrls(toolResultText: string): string[] {
+  if (
+    !toolResultText.includes('xdt_image_url') &&
+    !toolResultText.includes('xdt_media_produced')
+  ) {
+    return [];
+  }
   let parsed: {
     xdt_image_url?: unknown;
     xdt_image_urls?: unknown;
+    xdt_media_produced?: unknown;
     _xdt_render_image?: unknown;
   };
   try {
@@ -153,15 +174,29 @@ function extractToolResultImageUrls(toolResultText: string): string[] {
   }
   if (parsed._xdt_render_image === false) return [];
   const urls: string[] = [];
-  if (typeof parsed.xdt_image_url === 'string' && parsed.xdt_image_url.startsWith('xdt-image://')) {
+  if (typeof parsed.xdt_image_url === 'string' && isRenderableImageUrl(parsed.xdt_image_url)) {
     urls.push(parsed.xdt_image_url);
   }
   if (Array.isArray(parsed.xdt_image_urls)) {
     for (const u of parsed.xdt_image_urls) {
-      if (typeof u === 'string' && u.startsWith('xdt-image://')) urls.push(u);
+      if (typeof u === 'string' && isRenderableImageUrl(u)) urls.push(u);
+    }
+  }
+  // 兜底账本(xdt_media_produced,ghost_call 层在意识未声明媒体字段时注入,
+  // 主机记账、意识删不掉):可能混有视频/音频/3D,这里只接走图片。
+  if (Array.isArray(parsed.xdt_media_produced)) {
+    for (const u of parsed.xdt_media_produced) {
+      if (typeof u === 'string' && isRenderableImageUrl(u) && PRODUCED_IMAGE_EXT_RE.test(u)) {
+        urls.push(u);
+      }
     }
   }
   return Array.from(new Set(urls));
+}
+
+/** 按协议解出图片 absPath(与 IM turnRunner 同语义)。 */
+function resolveRenderableImageUrl(url: string): { absPath: string } {
+  return url.startsWith('cindy-media://') ? resolveCindyMediaUrl(url) : resolveXdtImage(url);
 }
 
 /**
@@ -338,6 +373,16 @@ export function createMakerHookSessionRunner(deps: {
             ? { workspaceKind: req.workspaceKind }
             : {}),
           title: req.isNew ? (req.title ?? undefined) : undefined,
+          // 渠道标记(仅 hook 亲生新会话): lizi_feishu_bot 据此在构建期给
+          // 工具描述注入渠道路由提示。两个刻意限定:
+          //   - 不用 'slack'(那是已退役的 organic SlackIM relay 渠道的历史
+          //     标记,留给存量会话的侧边栏显示,新会话不再产生);
+          //   - 复用/接管路径(isNew=false,可能是桌面端创建的会话)不传,
+          //     否则冷 resume 时会把桌面会话打上 Slack 渠道描述并存续整个
+          //     进程生命周期(对齐 im/turnRunner「attached 不传 vendorOptions」
+          //     的裁决)。hook turn 本身的渠道说明由逐 turn 的
+          //     SLACK_HOOK_PROMPT_NOTE 全覆盖,不依赖这里。
+          ...(req.isNew ? { vendorOptions: { source: 'slack-hook' } } : {}),
           resumeSessionId,
         });
       } catch (err) {
@@ -521,11 +566,11 @@ export function createMakerHookSessionRunner(deps: {
             if (data && typeof data.fullText === 'string') {
               for (const url of extractToolResultImageUrls(data.fullText)) {
                 try {
-                  const { absPath } = resolveXdtImage(url);
+                  const { absPath } = resolveRenderableImageUrl(url);
                   extraImageAbsPaths.push(absPath);
                 } catch (err) {
                   log.warn(
-                    `hook resolve tool_result xdt-image failed: ${err instanceof Error ? err.message : String(err)}`,
+                    `hook resolve tool_result image failed: ${err instanceof Error ? err.message : String(err)}`,
                   );
                 }
               }
@@ -619,10 +664,15 @@ export function createMakerHookSessionRunner(deps: {
           log.warn(`hook image ingest failed: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
+      // 渠道说明只进喂给 agent 的内容,不进落库的 userMessageContent ——
+      // 渲染层展示的用户消息保持 Slack 原话。逐 turn 追加固定文本,教模型
+      // 用 xdt-file 引用回传文件而非误用 lizi_feishu_bot(规则 9,实踩背景
+      // 见 outbound.ts 的常量注释)。
+      const promptWithNote = `${req.prompt}\n\n${SLACK_HOOK_PROMPT_NOTE}`;
       const sendContent =
         imageBlocks.length > 0
-          ? [{ type: 'text' as const, text: req.prompt }, ...imageBlocks]
-          : req.prompt;
+          ? [{ type: 'text' as const, text: promptWithNote }, ...imageBlocks]
+          : promptWithNote;
       // 落库形态: 有图用 {text, images(xdt-image URL), files} 对象(createMessage
       // safeStringify 存 JSON, 读回 parseUserContent 提取 images); 无图纯文本 string。
       const userMessageContent =
@@ -704,7 +754,7 @@ export function createMakerHookSessionRunner(deps: {
       if (hasOutboundRefs(assistantText) || extraImageAbsPaths.length > 0) {
         try {
           const collected = await collectOutboundAttachments(assistantText, extraImageAbsPaths, {
-            resolveImageUrl: resolveXdtImage,
+            resolveImageUrl: resolveRenderableImageUrl,
             allowedFileRoots: [workingDir],
             log,
           });

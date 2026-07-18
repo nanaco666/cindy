@@ -109,6 +109,9 @@ import matter from 'gray-matter';
 import type { Maker } from '@lizi/maker-core';
 import { im, feishuIm, startImOrchestrators, startImConnection } from './im';
 import * as authManager from './authManager';
+import * as profileEdit from './profileEdit';
+import { uploadPublicAsset } from './ossPublicUpload';
+import { removeRefs as removeMediaRefs } from './cindy-media/ledger';
 import { installWebviewHardener } from './webview-security';
 import {
   installSelectionContextMenu,
@@ -120,7 +123,6 @@ import {
   registerRsbBrowserBridgeIpc,
   registerTabOpResultHandler,
 } from './rsb-browser-bridge';
-import { getFeishuService } from './mcp-integrations/feishu.js';
 import { disposeAndroidAdb } from './mcp-integrations/android.js';
 import { shutdownCodexEnvironment } from './mcp-integrations/codexEnvironment.js';
 import { fetchRemoteMediaImageBytes } from './device-link/remoteMediaProtocol';
@@ -159,6 +161,10 @@ import { cindyGhostSchemePrivilege } from './cindy-brain/runtime/electronSandbox
 import { fetchReleaseNotes, fetchReleaseNotesIndex } from './releaseNotesService';
 import { resolveWorkspacePathCached, resolveWorkspacePathBatchCached } from './pathResolver';
 import { registerLocalDbIpc } from './localDb/ipc/registerAll';
+import {
+  registerLegacyMigrationIpc,
+  runLegacyUserDataMigrationForUser,
+} from './legacyUserDataMigration';
 import { registerFsBrowseIpc } from './fsBrowse/ipc';
 import {
   ensureReady as localDbEnsureReady,
@@ -331,7 +337,6 @@ import { registerMakerUsageIpc, syncClaudeSubscriptionUsageForAuthChange } from 
 import { prewarmModelPricing } from './usage/modelPricing.js';
 import { registerMakerBinaryVersionIpc } from './maker-ipc/binary-version.js';
 import { registerCrossAgentConvertIpc } from './cross-agent-convert/ipc.js';
-import { registerImageUploadIpc } from './imageUploadIpc.js';
 import { registerFileBrowserIpc } from './file-browser/index.js';
 import { disposeRemoteFileBrowser } from './file-browser/remote-deps.js';
 import { registerFileBrowserDeviceOp } from './file-browser/device-op.js';
@@ -355,6 +360,8 @@ import {
   takePendingDeepLink,
 } from './deepLink.js';
 import { registerFolderContextMenu } from './folderContextMenu.js';
+import { healWindowsShortcuts } from './windowsShortcutSelfHeal.js';
+import { CURRENT_APP_ID } from '../shared/brandRegion.js';
 import {
   readWindowBehaviorSettings,
   writeSwallowActivationClick,
@@ -376,7 +383,17 @@ import {
   type ImDefaultSettingsPatch,
 } from '../shared/imDefaultSettings.js';
 import { isBrowserOpenablePath } from '../shared/browserOpenableExts.js';
-import { XD_GATEWAY_BASE_URL, API_BASE_URL_DEV_FALLBACK } from '../shared/endpoints.js';
+import {
+  getClientEndpoint,
+  initClientEndpoints,
+  registerClientEndpointsIpc,
+} from './clientEndpointsService.js';
+import {
+  initModelAccess,
+  noteManualXdKeySaved,
+  noteManualXdKeyRemoved,
+} from './model-access/index.js';
+import { effectiveXdGatewayBaseUrl } from './model-access/effectiveEndpoint.js';
 import type { ApplicationMenuCommand } from '../shared/applicationMenuCommands.js';
 import {
   comboToElectronAccelerator,
@@ -389,6 +406,7 @@ import {
   registerAppShortcutIpc,
   subscribeAppShortcutRecording,
 } from './app-shortcuts/index.js';
+import { installNewMakerWindowShortcut } from './app-shortcuts/new-maker-window-shortcut.js';
 import { registerLayoutIpc } from './layout/index.js';
 import { registerGhostIpc } from './cindy-brain/index.js';
 import { findCindyFileInArgv } from './cindy-brain/argv.js';
@@ -396,7 +414,6 @@ import { handleIncomingCindyFile } from './cindy-brain/openFileInstall.js';
 import { registerCindyFileAssociation } from './cindy-brain/fileAssociation.js';
 import { setMainLocale, t } from './i18n.js';
 import { throwIpcError } from './utils/ipcValidate.js';
-import * as brandMigrationRuntime from './migration/electronRuntime.js';
 // Scheduler (Phase 3) — 启动单例需要 maker / localDb / mainWindow 都 ready，但
 // splash check-environment / user login (触发 ensureReady) 谁先到不固定。
 // 通过 attemptStartScheduler 在两个就绪事件源各调一次幂等 startScheduler，最后到的
@@ -467,8 +484,6 @@ async function attemptStartScheduler(): Promise<void> {
       getDb: () => getDbClient().drizzle,
       getMainWindow: () => mainWindowRef,
       feishuIm,
-      // lazy: notifyFeishu 触发时才读 (登录状态可能晚于 scheduler 启动)
-      getCurrentUserFeishuOpenId: () => authManager.getAuthState().user?.feishuOpenId ?? null,
       logger: createSchedulerLogger('scheduler-host'),
       ...automationGitBaselineHooks,
     });
@@ -564,7 +579,8 @@ function attemptStartEmbeddingHost(): void {
       },
       // xdproxy /v1/embeddings 走 Bearer ANTHROPIC_API_KEY (与 art / claude 同源)
       getApiKey: () => readClaudeApiKey(),
-      xdproxyBaseUrl: import.meta.env.VITE_XDPROXY_BASE_URL || undefined,
+      // 函数形态:model-access 下发切换 endpoint 后,常驻的 embedding host 无需重启。
+      xdproxyBaseUrl: () => effectiveXdGatewayBaseUrl(),
       log: createSchedulerLogger('embeddingHost'),
     });
     // chat-history-embedder consumer 注册 + setEnabled(true) 触发 cutoff 落盘。
@@ -598,12 +614,9 @@ function attemptStartEmbeddingHost(): void {
 // 走 packaged 分支,但 logStream 还是 null —— 所有日志都会被静默吞掉。
 // dev: 直接 console;packaged: 写 userData/logs/main.log。
 import { initLogger, writeFromRenderer, setLogLevel, getLogLevel, keepRecentSync, keepRecentSessionCcDebugSync, createLogger, writeCcDebugLine, type LogLevel } from './logger.js';
-import { buildApiUrl } from './apiUrl.js';
 initLogger();
 const dbClientLog = createLogger('DbClient');
-const apiRequestLog = createLogger('api-request');
 const authBoundaryLog = createLogger('auth-boundary');
-const brandMigrationBootstrapLog = createLogger('brand-migration-bootstrap');
 // 主窗 renderer 加载失败可观测性 + dev 启动看门狗(见 renderer-boot-guard.ts 顶部注释)。
 const rendererGuardLog = createLogger('renderer-guard');
 const updatePresentationLog = createLogger('update-presentation');
@@ -903,6 +916,8 @@ type ApplicationMenuLocale = SupportedLocale;
 
 interface ApplicationMenuLabels {
   about: string;
+  hide: string;
+  quit: string;
   settings: string;
   checkForUpdates: string;
   fileMenu: string;
@@ -919,6 +934,8 @@ interface ApplicationMenuLabels {
 const APPLICATION_MENU_LABELS: Record<ApplicationMenuLocale, ApplicationMenuLabels> = {
   'zh-CN': {
     about: '关于 {{appName}}',
+    hide: '隐藏 {{appName}}',
+    quit: '退出 {{appName}}',
     settings: '设置...',
     checkForUpdates: '检查更新...',
     fileMenu: '文件',
@@ -933,6 +950,8 @@ const APPLICATION_MENU_LABELS: Record<ApplicationMenuLocale, ApplicationMenuLabe
   },
   en: {
     about: 'About {{appName}}',
+    hide: 'Hide {{appName}}',
+    quit: 'Quit {{appName}}',
     settings: 'Settings...',
     checkForUpdates: 'Check for Updates...',
     fileMenu: 'File',
@@ -947,6 +966,8 @@ const APPLICATION_MENU_LABELS: Record<ApplicationMenuLocale, ApplicationMenuLabe
   },
   ja: {
     about: '{{appName}} について',
+    hide: '{{appName}}を隠す',
+    quit: '{{appName}}を終了',
     settings: '設定...',
     checkForUpdates: 'アップデートを確認...',
     fileMenu: 'ファイル',
@@ -961,6 +982,8 @@ const APPLICATION_MENU_LABELS: Record<ApplicationMenuLocale, ApplicationMenuLabe
   },
   ko: {
     about: '{{appName}} 정보',
+    hide: '{{appName}} 가리기',
+    quit: '{{appName}} 종료',
     settings: '설정...',
     checkForUpdates: '업데이트 확인...',
     fileMenu: '파일',
@@ -1079,12 +1102,17 @@ function installApplicationMenu(
         ],
       };
 
+  // 应用名相关文案一律走 BRAND_NAME(展示名),不用 app.getName():后者返回
+  // package.json productName(过渡期仍是 xdt-maker,机器身份不许跟随改名,
+  // 见 maker-shared/branding.ts 顶注)。hide/quit role 的默认标签也吃 app.name,
+  // 所以显式给 label。macOS 菜单栏第一项的粗体标题不吃这里的 label(系统取自
+  // 可执行 bundle 的 Info.plist CFBundleName),dev 下恒为 "Electron",无法运行时修改。
   const template: Electron.MenuItemConstructorOptions[] = [
     {
-      label: app.getName(),
+      label: BRAND_NAME,
       submenu: [
         {
-          label: labels.about.replace('{{appName}}', app.getName()),
+          label: labels.about.replace('{{appName}}', BRAND_NAME),
           click: () => dispatchApplicationMenuCommand(mainWindow, 'open-about'),
         },
         { type: 'separator' },
@@ -1109,11 +1137,19 @@ function installApplicationMenu(
         // ⌘Q/⌘H/⌘M 会先触发原生 role, 用户看不到"系统保留"校验提示就把
         // 应用退出/隐藏了。(close 已改为永不注册 accelerator, 不在此列,
         // 见下方 Window 菜单注释。)
-        { role: 'hide', registerAccelerator: registerMenuAccelerators },
+        {
+          role: 'hide',
+          label: labels.hide.replace('{{appName}}', BRAND_NAME),
+          registerAccelerator: registerMenuAccelerators,
+        },
         { role: 'hideOthers', registerAccelerator: registerMenuAccelerators },
         { role: 'unhide' },
         { type: 'separator' },
-        { role: 'quit', registerAccelerator: registerMenuAccelerators },
+        {
+          role: 'quit',
+          label: labels.quit.replace('{{appName}}', BRAND_NAME),
+          registerAccelerator: registerMenuAccelerators,
+        },
       ],
     },
     {
@@ -1236,6 +1272,11 @@ function isPathAllowed(filePath: string): boolean {
 // BrowserWindow，[0] 拿到它再 .focus() 等于啥也没干，用户视觉上以为
 // "双击启动不了"。
 let mainWindowRef: BrowserWindow | null = null;
+// 端点清单阻断门:ready 流程走到正常 createWindow() 前置 true。在此之前
+// second-instance / activate 一律不许建窗——阻断循环(错误框重试)期间用户
+// 双击图标 / 点 Dock 若能建窗,preload 的模块级 sendSync 会因 handler 未注册
+// 而白屏,且窗口会带着烘焙端点绕过"拉不到清单不放行"的语义。
+let startupWindowCreationAllowed = false;
 let appFocusSyncTimer: ReturnType<typeof setTimeout> | null = null;
 let mainWindowBackgroundThrottlingAllowed = true;
 const isUpdateRelaunchCandidate =
@@ -1426,7 +1467,7 @@ function adjustPageZoomLevel(mainWindow: BrowserWindow, delta: number): number {
   return applyPageZoomLevel(mainWindow, getPageZoomLevel(mainWindow) + delta);
 }
 
-// ── Custom URL scheme (xdt-maker://...) ──────────────────────────────────
+// ── Custom URL scheme (cindy://... + 历史 xdt-maker://...) ───────────────
 // 必须在 app.whenReady() 之前注册:
 //   - registerDeepLinkProtocol() 调 setAsDefaultProtocolClient (Windows/Linux
 //     写注册表 / .desktop entry; macOS 走 Info.plist, 此调用是兜底)
@@ -1472,7 +1513,7 @@ if (app.isPackaged) {
     app.quit();
   } else {
     app.on('second-instance', (_event, argv) => {
-      // Windows: 用户点 xdt-maker:// 链接 / 右键 "通过 XDMaker 打开" 时,
+      // Windows: 用户点 cindy://(或历史 xdt-maker://)链接 / 右键 "通过 Cindy 打开" 时,
       // OS 会再起一个本 app 实例; 单例锁把它 redirect 成 second-instance 事件,
       // URL 或 --open-folder 参数都在 argv 里。macOS 不走这个路径(走 open-url),
       // Linux 由 .desktop 决定。
@@ -1499,7 +1540,11 @@ if (app.isPackaged) {
           }
         }
       }
-      if (!focusMainWindow()) {
+      // 端点清单阻断期间(startupWindowCreationAllowed=false)禁止建窗:
+      // 否则 preload 的模块级 sendSync 找不到 handler 直接白屏,且窗口会带着
+      // 烘焙端点绕过"拉不到清单不放行"的阻断语义。deep-link 分发不受影响
+      // (deepLink 只向已有窗口投递/排队,不建窗)。
+      if (startupWindowCreationAllowed && !focusMainWindow()) {
         createWindow();
       }
     });
@@ -1534,15 +1579,19 @@ if (process.platform !== 'darwin') {
   }
 }
 
-// 启动时尝试自注册 Windows 右键菜单 "通过 XDMaker 打开"。fire-and-forget,
+// 启动时尝试自注册 Windows 右键菜单(显示文案走 BRAND_NAME)。fire-and-forget,
 // 完全不阻塞启动流程;失败仅 warn log。详见 folderContextMenu.ts 模块头注释。
 //
-// 放在 single-instance 锁之后:第二实例 (gotTheLock=false) 走 app.quit(),
-// 不必触发注册流程。
+// 位置在 single-instance 锁之后,但 app.quit() 不中止顶层同步代码,第二实例
+// (gotTheLock=false)仍会执行到这里——三个自愈都是幂等 + 全吞错,重复执行无害,
+// 不为此加门控。
 if (app.isPackaged) {
   void registerFolderContextMenu();
   // Windows .cindy 文件关联自注册(双击装入意识,C2c)。同款 best-effort 口径。
   registerCindyFileAssociation();
+  // 品牌改名快捷方式自愈(XDMaker.lnk → Cindy.lnk;差量更新不重跑安装器,
+  // 存量用户靠这里换名)。同款 best-effort 口径,详见模块头注释。
+  void healWindowsShortcuts();
 }
 
 const createWindow = () => {
@@ -1651,22 +1700,9 @@ const createWindow = () => {
     currentApplicationMenuLocale ?? getPreferredApplicationLocale(),
   );
 
-  // Windows / Linux: 没有 Mac 应用菜单, accelerator 不会被系统分发。
-  // 用 before-input-event 在主进程侧拦截 New Maker 快捷键, 与 Mac 的菜单项
-  // 走同一条 'new-maker' 命令通道, 双端体验一致。
-  // Mac 不挂这个监听 — 菜单 accelerator 已经覆盖, 避免重复触发。
-  // 组合键在 handler 内实时读 store, 用户改绑后无需重挂监听即时生效。
-  if (process.platform !== 'darwin') {
-    mainWindow.webContents.on('before-input-event', (event, input) => {
-      if (input.type !== 'keyDown') return;
-      // 设置页录制快捷键期间让路, 与 renderer 的录制态互斥保持一致。
-      if (isAppShortcutRecordingActive()) return;
-      const combos = getAppShortcutStore().getEffectiveCombos('new-maker');
-      if (!combos.some((c) => matchesElectronInput(input, c))) return;
-      event.preventDefault();
-      dispatchApplicationMenuCommand(mainWindow, 'new-maker');
-    });
-  }
+  // Windows / Linux 没有 Mac 应用菜单 accelerator。主窗口和会话副窗口都走
+  // 同一个窗口级安装器，命令发回实际接收按键的窗口；Mac 安装器会直接 no-op。
+  installNewMakerWindowShortcut(mainWindow);
 
   // Wire resize / move / maximize / fullscreen listeners that persist the
   // state to disk on `close`. Must run before any user resize event fires.
@@ -2540,7 +2576,12 @@ const registerIpcHandlers = () => {
           mutated = true;
           const restartResult = await finalizeApiKeyChangeMaybeRestartCodex(key);
           finalized = restartResult.ok;
-          if (restartResult.ok) return true;
+          if (restartResult.ok) {
+            // 手填 XD key 保存成功:来源标记翻 manual(endpoint 回落编译期常量,
+            // 与 model-access 自动下发的 endpoint 解耦,见 credentialsStore 注释)。
+            if (key === 'api_key') noteManualXdKeySaved();
+            return true;
+          }
           if (hadPrevious && previousContent !== null) fs.writeFileSync(filepath, previousContent, 'utf-8');
           else if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
           return false;
@@ -2615,6 +2656,8 @@ const registerIpcHandlers = () => {
           }
           return { success: false, error: 'codex_restart_failed' };
         }
+        // 手填 XD key 被删除(断开):清来源标记,endpoint 回落编译期常量。
+        if (key === 'api_key') noteManualXdKeyRemoved();
         return { success: true };
       } catch (err: unknown) {
         console.error('[safe-storage-remove]', err);
@@ -2633,12 +2676,10 @@ const registerIpcHandlers = () => {
     return authManager.initialize();
   });
 
-  ipcMain.handle('auth:login', async () => {
-    return authManager.login(getWindow());
-  });
+  ipcMain.handle('auth:get-login-state', async () => authManager.getLoginState());
 
-  ipcMain.handle('auth:dev-login', async () => {
-    return authManager.devLogin();
+  ipcMain.handle('auth:dispatch-login-action', async (_event, action: unknown) => {
+    return authManager.dispatchLoginAction(action);
   });
 
   ipcMain.handle('auth:logout', async () => {
@@ -2649,6 +2690,42 @@ const registerIpcHandlers = () => {
   ipcMain.handle('auth:refresh', async () => {
     return authManager.refresh();
   });
+
+  // ── Profile 编辑 IPC(设置 → 用户卡片编辑;业务体在 profileEdit.ts,
+  //    资料直写 auth-server,头像经 oss-server 预签名直传) ──
+
+  const profileEditLog = createLogger('profileEdit');
+  const profileEditDeps: profileEdit.ProfileEditDeps = {
+    getCurrentUserId: () => authManager.getCurrentUserId(),
+    getServerProfile: () => authManager.getServerProfile(),
+    showAvatarOpenDialog: async () => {
+      const result = await dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [{ name: 'Images', extensions: profileEdit.AVATAR_FILE_EXTENSIONS }],
+      });
+      return result.canceled || !result.filePaths[0] ? null : result.filePaths[0];
+    },
+    readFile: (filePath) => fs.promises.readFile(filePath),
+    uploadAvatar: ({ buffer, mimeType }) =>
+      uploadPublicAsset(
+        {
+          fetchImpl: (input, init) => net.fetch(input, init),
+          getBaseUrl: () => getClientEndpoint('ossApiBaseUrl'),
+          getToken: () => authManager.getAccessToken(),
+        },
+        { scene: 'avatar', contentType: mimeType, body: buffer },
+      ),
+    patchProfile: (patch) => authManager.updateServerProfile(patch),
+    logWarn: (message, err) => profileEditLog.warn(message, err),
+  };
+
+  ipcMain.handle('profile:get-state', async () => profileEdit.getProfileEditState(profileEditDeps));
+
+  ipcMain.handle('profile:choose-avatar', async () => profileEdit.chooseAvatarFile(profileEditDeps));
+
+  ipcMain.handle('profile:update', async (_event, params: unknown) =>
+    profileEdit.updateProfile(profileEditDeps, params),
+  );
 
   // Google OAuth 集成已于 2026-07-13 随 lizi_google 退役——Google 能力整体
   // 迁入内置意识 filo-google(设置入口在 意识 → Filo Google)。
@@ -2721,7 +2798,6 @@ const registerIpcHandlers = () => {
       registerMakerUsageIpc();
       registerMakerBinaryVersionIpc();
       registerCrossAgentConvertIpc();
-      registerImageUploadIpc();
       // Workdir File Browser (vscode-style lazy file tree + content viewer for
       // a session's working directory). Pure local fs IO, no Maker dependency,
       // but lives in this block to keep splash-gating simple.
@@ -2833,7 +2909,7 @@ const registerIpcHandlers = () => {
 
   // Environment check IPC handler — 顺序检查 claude → codex 两个 vendor binary。
   // 提前 peekNeedsDownload 决定 (x/2) 标签：两个都需要下载时给 step/totalSteps，
-  // 否则不带标签（splash 显示单一 "正在召唤村民..." 文案）。
+  // 否则不带标签（splash 显示单一 "唤醒 Cindy 中..." 文案）。
   ipcMain.handle('check-environment', async () => {
     // splash 首个 invoke = renderer 存活的强信号(与 renderer:log 双保险)。
     rendererBootGuard?.markAlive();
@@ -3284,92 +3360,13 @@ const registerIpcHandlers = () => {
     },
   );
 
-  // API Key test connection IPC handler
-  ipcMain.handle(
-    'api-key:test-connection',
-    async (_event: Electron.IpcMainInvokeEvent, key: string): Promise<{ success: boolean; error?: string }> => {
-      try {
-        const response = await net.fetch(`${XD_GATEWAY_BASE_URL}/v1/models`, {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${key}` },
-        });
-        if (response.ok) {
-          return { success: true };
-        }
-        if (response.status === 401) {
-          return { success: false, error: 'Key 无效，请检查' };
-        }
-        return { success: false, error: `服务异常 (HTTP ${response.status})` };
-      } catch {
-        return { success: false, error: '网络连接失败，请检查网络' };
-      }
-    },
-  );
+  // (api-key:test-connection 已随手填录入链路移除,2026-07-17:XD 网关 key 一律由
+  //  model-access 自动下发,连通性由同步状态机负责。)
 
-  // ── Generic API request proxy (renderer → main → server) ──
-  // All backend HTTP calls go through this handler so the renderer never
-  // uses fetch() directly. Token is auto-attached from authManager.
-  // On 401 TOKEN_EXPIRED, auto-refreshes and retries once.
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || API_BASE_URL_DEV_FALLBACK;
-
-  async function doApiFetch(
-    apiPath: string,
-    method: string,
-    body: unknown | undefined,
-  ): Promise<{ ok: boolean; status: number; data: unknown }> {
-    // Never let a renderer-supplied path escape the API origin — the request
-    // carries the user's bearer token, so an off-origin target would leak it.
-    let url: string;
-    try {
-      url = buildApiUrl(API_BASE_URL, apiPath);
-    } catch (err) {
-      apiRequestLog.warn('rejected api:request with unsafe path', {
-        path: apiPath,
-        error: (err as Error).message,
-      });
-      return { ok: false, status: 0, data: null };
-    }
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    const token = authManager.getAccessToken();
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-    try {
-      const response = await net.fetch(url, {
-        method,
-        headers,
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-      });
-      const data = await response.json();
-      return { ok: response.ok, status: response.status, data };
-    } catch {
-      return { ok: false, status: 0, data: null };
-    }
-  }
-
-  ipcMain.handle(
-    'api:request',
-    async (
-      _event: Electron.IpcMainInvokeEvent,
-      params: { path: string; method?: string; body?: unknown },
-    ): Promise<{ ok: boolean; status: number; data: unknown }> => {
-      const method = params.method ?? 'GET';
-      const result = await doApiFetch(params.path, method, params.body);
-
-      // Auto-refresh on TOKEN_EXPIRED and retry once
-      if (result.status === 401) {
-        const errData = result.data as { error?: { code?: string } } | null;
-        if (errData?.error?.code === 'TOKEN_EXPIRED') {
-          const refreshed = await authManager.refresh();
-          if (refreshed) {
-            return doApiFetch(params.path, method, params.body);
-          }
-        }
-      }
-
-      return result;
-    },
-  );
+  // ── Generic API request proxy: 已移除(2026-07 apiBaseUrl 清理)──
+  // 曾经的 `api:request`(renderer → main → 主 server)通用代理随最后一个
+  // 调用者(meService GET /api/me,产品 role 已退役)一起拆除。renderer 从此
+  // 对业务 server 零请求;main 内部调用走 serverApiClient.serverApiFetch。
 
   // ── API Key refresh from server: 已移除 ──
   // XD 网关 key / Mivo key 均为本地 only(safeStorage),没有服务器副本,
@@ -4241,7 +4238,10 @@ async function runSmokeTest(userId: string): Promise<void> {
   }
 }
 
-const WINDOWS_APP_USER_MODEL_ID = 'com.magiclizi.xdt-maker';
+// AUMID 三位一体:必须与 NSIS appId(forge.config 按构建区域从 brandAppId() 取)
+// 与快捷方式 AUMID 逐字符一致。值经 shared/brandRegion 按构建期区域烘焙
+// (cn=com.xd.cindycn / global=com.xd.cindy,dev 默认 cn)。
+const WINDOWS_APP_USER_MODEL_ID = CURRENT_APP_ID;
 
 /**
  * 清理 Start Menu 里指向 dev `node_modules\electron\dist\electron.exe` 的残留 .lnk。
@@ -4325,42 +4325,38 @@ app.on('ready', async () => {
     return;
   }
 
-  // 品牌迁移(docs/cindy-rebrand/migration-state-machine.md)——两个分支平时
-  // 均惰性(无 marker / 无迁移 argv 时零副作用),必须在建窗口前执行:
-  //  1. 新 app 身份:--migrated-from 首启健康检查失败 → 退出拉回老 app;
-  //  2. 老 app 身份:marker=confirmed 跳板拉起新 app 成功 → 静默退出。
-  try {
-    if ((await brandMigrationRuntime.maybeRunCindyFirstRun()) === 'quit') {
-      app.exit(1);
-      return;
-    }
-  } catch (err) {
-    // Cindy 首启异常意味着自拷/健康检查未完成，绝不能 fail-open 后创建主窗口并使用
-    // 未验证的新 profile。退出后保留老数据，等待老 app / 下次迁移重入。
-    brandMigrationBootstrapLog.error('Cindy first-run handling threw', { error: String(err) });
-    app.exit(1);
-    return;
+  // 客户端端点清单:启动第一步、先于一切更新检查,**阻断式**解析(packaged 走
+  // 烘焙 hotfix CDN 基址;dev 默认读仓内 config/endpoint.json,--endpoints-cdn
+  // 时同 packaged;失败 → 系统错误框重试/退出,无缓存与烘焙兜底)。
+  // 必须早于一切端点消费方初始化、且在 createWindow() 前注册 sendSync IPC
+  // (preload 模块级同步读取依赖它)。用户在错误框选"退出"时 app.exit 已调用,
+  // 这里直接 return 不再继续启动。
+  if (!(await initClientEndpoints())) {
+    return; // 用户在错误框选择退出,app.exit 已调用
   }
-  try {
-    if ((await brandMigrationRuntime.runTransitionStartupElectron()) === 'quit') {
-      app.exit(0);
-      return;
-    }
-  } catch (err) {
-    // 旧 app 跳板编排异常不挡正常启动；用户仍可继续使用逃生舱。
-    brandMigrationBootstrapLog.error('legacy startup handling threw', { error: String(err) });
-  }
+  registerClientEndpointsIpc();
 
-  // 身份锚埋点(账号系统切换前置,identityAnchor.ts 顶注):登录成功 / 恢复
-  // 登录态时把 { userId, email, feishuOpenId } 持久化到 userData,供切换后优先按
-  // email、零命中时按 feishuOpenId 认领老库;登出不清。auth 由 renderer 经 auth:initialize 触发,此处
-  // (建窗口前)装订阅必然先于首次 auth 状态就绪。
-  authManager.onAuthStateChange((state) => {
-    if (!state.isAuthenticated || state.user == null) return;
-    brandMigrationRuntime.recordIdentityAnchor(state.user);
-  });
+  // 网关凭据自动下发:订阅登录态(登录后向 model-access-server 拉 endpoint +
+  // 用户专属 key)+ 注册 model-access:* IPC。须在 initClientEndpoints 之后
+  // (依赖 modelAccessApiBaseUrl 端点)、renderer auth:initialize 之前装订阅。
+  initModelAccess();
 
   initializeUpdatePresentationRecovery();
+
+  // mac dev 下 Dock 显示的是 Electron 默认图标——macOS 忽略 BrowserWindow.icon,
+  // Dock 图标取自可执行 bundle 的 icns,而 dev 跑的是 node_modules 里的官方
+  // Electron 二进制。这里 dev-only 手动设成 Cindy 图标;packaged 版由
+  // resources/icon.icns 自然生效,不需要也不该动。
+  // 必须用 icon-dock.png(generate-mac-icns.mjs 产出,已套 Apple 圆角网格):
+  // setIcon 原样显示不加遮罩,满幅方图 icon.png 会显示成无圆角方块。
+  if (!app.isPackaged && process.platform === 'darwin') {
+    try {
+      app.dock?.setIcon(path.join(__dirname, '../../resources/icon-dock.png'));
+    } catch (err) {
+      // 仅影响 dev Dock 观感,失败不挡启动
+      createLogger('dock-icon').warn('setIcon failed', { error: String(err) });
+    }
+  }
 
   await ensureMainAppPresence('app-ready');
 
@@ -4430,7 +4426,6 @@ app.on('ready', async () => {
   const cspDevServerUrl = MAIN_WINDOW_VITE_DEV_SERVER_URL || null;
   installContentSecurityPolicy(session.defaultSession, {
     isDev: Boolean(cspDevServerUrl),
-    apiOrigin: parseOrigin(import.meta.env.VITE_API_BASE_URL),
     devServerOrigin: parseOrigin(cspDevServerUrl),
   });
 
@@ -4443,11 +4438,16 @@ app.on('ready', async () => {
   // onReady 回调 → scheduler-host 启动重试入口 (Phase 3)：splash 跑早于 user login
   // 的话第一次 startScheduler 会因为 localDb 未 ready 而失败；这里在 ensureReady
   // 完成后再触发一次幂等的 startScheduler，谁后到谁负责真正启动。
+  // 首登轻量数据迁移(mToc)的确认弹窗 IPC —— 必须先于 registerLocalDbIpc 注册,
+  // 保证 beforeEnsureReady 推送 confirm 态时 renderer 已能 invoke 确认通道。
+  registerLegacyMigrationIpc();
   registerLocalDbIpc({
     beforeEnsureReady: async (userId) => {
       const user = authManager.getAuthState().user;
       if (user == null || user.id !== userId) return;
-      await brandMigrationRuntime.claimLegacyLocalDbBeforeEnsureReady(user);
+      // 首登轻量迁移(老 xdt-maker userData → Cindy):内部自带 marker 防重入与
+      // 全量兜底,绝不 throw,失败不阻塞登录(ensureReady 照常建新库)。
+      await runLegacyUserDataMigrationForUser(user.id);
     },
     onReady: async (userId) => {
       // 必须先 await ensureLifecycleDbClient(内部 await createDbClient → worker
@@ -4489,6 +4489,37 @@ app.on('ready', async () => {
       }
       attemptStartScheduler();
       attemptStartEmbeddingHost();
+      // 旧「资料本地覆写」方案退役(2026-07)的一次性清理:清当前账号名下的
+      // profile-avatar 媒体引用与 override 条目(文件条目即幂等标记,失败下次登录重试)。
+      void (async () => {
+        const overridePath = path.join(app.getPath('userData'), 'profile-override.json');
+        const legacyProfileLog = createLogger('profileEdit');
+        await profileEdit.cleanupLegacyProfileOverride(
+          {
+            readOverrideFile: () => {
+              try {
+                return fs.readFileSync(overridePath, 'utf-8');
+              } catch {
+                return null;
+              }
+            },
+            // tmp+rename 原子写:写一半崩溃不会把剩余账号的条目变成损坏 JSON
+            // (损坏文件会被清理逻辑当"无从定位"整体删除,其引用回到泄漏状态)。
+            writeOverrideFile: (content) => {
+              const tmp = `${overridePath}.tmp`;
+              fs.writeFileSync(tmp, content, 'utf-8');
+              fs.renameSync(tmp, overridePath);
+            },
+            deleteOverrideFile: () => fs.unlinkSync(overridePath),
+            removeRefs: removeMediaRefs,
+            logInfo: (message) => legacyProfileLog.info(message),
+            logWarn: (message, err) => legacyProfileLog.warn(message, err),
+          },
+          userId,
+        );
+      })().catch((err) => {
+        dbClientLog.warn('legacy profile override cleanup threw (non-fatal)', err);
+      });
       // 价格表作用域依赖当前 localDb 用户与 provider-secret owner;必须等用户 DB ready 后再预热。
       void prewarmModelPricing();
       // 自定义供应商配置在按 userId 切片的 localDb 里：DB ready / 换账号后重新加载并
@@ -4566,9 +4597,19 @@ app.on('ready', async () => {
   registerGlobalVoiceInputIpc();
   // 老 'usage:get-today-spend' 已退役 —— renderer 走 maker:usage:today('claude-code') 拉。
   // readTodaySpend 仍在 main/usageBroadcaster.ts 内部被 readAgentTodayUsage 用。
-  // feishu service: token init reads disk RT (lazy-creates singleton; the
-  // onJwtRefreshNeeded callback is wired at construction in mcp-integrations/feishu.ts)
-  await getFeishuService().token.init();
+  // 主机飞书 token 链已退役(2026-07-17):飞书授权改由 xd-feishu 意识经
+  // OAuth broker 自持。老登录链留在磁盘的飞书 refresh token 一次性清掉
+  // (凭证卫生:该 RT 已无任何消费方,不留死凭证)。幂等,失败仅告警。
+  try {
+    fs.unlinkSync(path.join(app.getPath('userData'), 'safe-storage', 'feishu_refresh_token.enc'));
+    createLogger('feishu-legacy-cleanup').info('legacy feishu refresh token removed (host feishu token chain retired)');
+  } catch (err) {
+    // ENOENT = 从未有过或已清,静默;其它错误(Windows EPERM/EBUSY 等)告警,
+    // 下次启动重试(best-effort,不阻断)。
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      createLogger('feishu-legacy-cleanup').warn('legacy feishu refresh token removal failed:', err);
+    }
+  }
   // IM channels (lizi-im): 完全独立 workspace 包，跟随 app 生命周期。
   // 注册 IPC handlers 必须在 init 之前——init 失败时 emit 的状态事件依赖 IPC bridge 转发。
   // IPC handlers 必须无条件注册:用户在 Settings 页保存凭证时, renderer 走这些
@@ -4579,7 +4620,7 @@ app.on('ready', async () => {
   // handler。bot 的 WS 长连接此处不启动 —— 由 renderer 在用户登录 + localDb 就绪
   // 后通过 'app:ready-for-bot' IPC 触发(见下方 handler)。
   startImOrchestrators();
-  // Renderer → main 的 "应用真正就绪" 信号。MigrationGate 在 localDb.ensureReady
+  // Renderer → main 的 "应用真正就绪" 信号。LocalDbGate 在 localDb.ensureReady
   // 成功之后调一次。在此之前 bot 不上线 —— 否则会出现"bot 已上线但 localDb 未
   // ready, 用户回消息直接 500"的 race(2026-05-07 王韬反馈)。
   // 多次调用是幂等的(startImConnection 内部 connectionStarted 守卫),
@@ -4590,6 +4631,8 @@ app.on('ready', async () => {
   });
   // 强制引用避免 tree-shaking 干掉 feishuIm（imHost 已通过 im 间接持有，但 main/im 也直接用它）
   void feishuIm;
+  // 端点清单已就绪、IPC 已注册,此后 second-instance / activate 允许按需建窗。
+  startupWindowCreationAllowed = true;
   createWindow();
   initUpdateService();
   // 在线人数心跳:App 启动即上报,内部走 deviceId / userId 兜底,登录前后都活
@@ -4607,12 +4650,7 @@ app.on('ready', async () => {
 
   // ── System resume: refresh tokens after sleep/hibernate ──
   powerMonitor.on('resume', () => {
-    // JWT first — feishu refresh depends on a valid JWT
     authManager.handleResume();
-    // Give JWT refresh a moment to complete, then refresh feishu token.
-    // doRefresh() internally also has a fallback (401 → JWT callback → retry),
-    // so even if timing is imperfect it will still recover.
-    setTimeout(() => getFeishuService().token.handleResume(), 2000);
   });
 
   // Memory diagnostics — dev only, log per-process memory every 30s
@@ -4642,7 +4680,7 @@ app.on('ready', async () => {
 // Sync 阶段: 同步触发, 不等结果。只放真正同步的清理 (释放本地句柄 / 取消定时器)。
 //   - reap-claude-children: 必须在 shutdown-maker 之前同步完成；SDK abort 掐掉
 //     claude.exe 后 Windows 上子进程会被 reparent 到 System, PPID 链断了就无法安全识别。
-//   - authManager / feishu token / google auth: 同步释放定时器+回调引用。
+//   - authManager / google auth: 同步释放定时器+回调引用。
 //     注意 token.dispose() 只清内存状态, 不删盘上的 refresh token (那是 logout 干的)。
 // interrupted-turn-resume:退出编排一启动就冻结「turn 在飞」标记的写入 —— 否则
 // 下方 shutdown-maker 关 session 触发的 markSessionTurnEnded 会把"退出时还在飞
@@ -4651,7 +4689,6 @@ app.on('ready', async () => {
 onQuit('session-active-turn-freeze', () => { freezeSessionActiveTurnMarkers(); }, 'sync');
 onQuit('reap-claude-children', () => { reapClaudeOrphansSync(); }, 'sync');
 onQuit('auth-manager', () => authManager.dispose(), 'sync');
-onQuit('feishu-token', () => getFeishuService().token.dispose(), 'sync');
 onQuit('app-badge-clear', () => clearAllSessionAttention(), 'sync');
 // 自带 adb 的常驻 server 守护进程随退出收掉(fire-and-forget detached spawn,
 // 不阻塞)。不收会一直锁安装目录里的 adb.exe,弄挂增量更新(os error 32)。
@@ -4724,7 +4761,8 @@ app.on('activate', () => {
   if (isGlobalVoiceInputOverlayVisible()) return;
   // focusMainWindow() 在 hide-on-close 模式下天然把藏起来的窗口 show 回来,
   // renderer 不重载;返回 false 表示主窗口真没了(异常或首次启动),才 createWindow。
-  if (!focusMainWindow()) {
+  // 端点清单阻断期间禁止建窗(同 second-instance,防绕过阻断门 + preload 白屏)。
+  if (startupWindowCreationAllowed && !focusMainWindow()) {
     createWindow();
   }
 });

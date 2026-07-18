@@ -66,13 +66,6 @@ const CUSTOM_MEDIA_SCHEMES = [
 export interface CspContext {
   /** True when the renderer is served by the Vite dev server (needs eval + ws). */
   isDev: boolean;
-  /**
-   * Origin of `VITE_API_BASE_URL` (e.g. `https://xdt-api.magiclizi.com` in prod,
-   * `http://localhost:3333` in local mode). Added to connect-src so a direct
-   * renderer→API request keeps working even in the tightened prod policy.
-   * `null` when the URL cannot be parsed.
-   */
-  apiOrigin: string | null;
   /** Vite dev-server origin (dev only); added to connect-src. `null` in prod. */
   devServerOrigin: string | null;
 }
@@ -100,7 +93,7 @@ export function parseOrigin(url: string | null | undefined): string | null {
  * vendored drawio) plus `object-src 'none'` and `frame-src 'none'`.
  */
 export function buildContentSecurityPolicy(ctx: CspContext): string {
-  const { isDev, apiOrigin, devServerOrigin } = ctx;
+  const { isDev, devServerOrigin } = ctx;
 
   // script-src is the crown jewel. The XSS→preload escalation path is an
   // attacker getting THEIR script to run — via an injected inline <script>
@@ -130,10 +123,12 @@ export function buildContentSecurityPolicy(ctx: CspContext): string {
   // and <model-viewer> fetch()-ing models over the xdt-model: / cindy-media:
   // schemes (mivo 老缓存与媒体总仓 GLB 各走各的协议). https: covers the first
   // two; the privileged schemes are listed explicitly (a privileged scheme
-  // is its own origin and does not match https:/'self'). Allowing the API origin
-  // + https:/wss: is also a non-breaking hedge for any future direct fetch —
-  // safe because a tight script-src stops an attacker from running code to abuse
-  // egress in the first place.
+  // is its own origin and does not match https:/'self'). Allowing https:/wss:
+  // is also a non-breaking hedge for any future direct fetch — safe because a
+  // tight script-src stops an attacker from running code to abuse egress in
+  // the first place. (The explicit apiBaseUrl origin entry was removed in the
+  // 2026-07 apiBaseUrl cleanup: the https:(prod)/http:(dev) wildcards already
+  // covered it, so the entry never changed the effective policy.)
   //
   // blob:: three.js GLTFLoader decodes GLB-embedded textures by wrapping the
   // bufferView bytes in URL.createObjectURL(blob) and loading it through
@@ -143,7 +138,6 @@ export function buildContentSecurityPolicy(ctx: CspContext): string {
   // as an untextured white model. blob: URLs can only reference objects the
   // renderer itself created, so this grants no new network egress.
   const connectSrc = ["'self'", 'blob:', 'xdt-model:', 'cindy-media:'];
-  if (apiOrigin) connectSrc.push(apiOrigin);
   if (isDev) {
     // Dev is not the attack surface (remote-debugging-port is already open in
     // dev); be permissive so HMR / dev tooling never breaks.

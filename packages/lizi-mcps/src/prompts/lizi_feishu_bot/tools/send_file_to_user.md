@@ -18,7 +18,7 @@
 - 单文件硬上限 30MB(飞书侧限制),超出返回 `FILE_TOO_LARGE`,改 `errorCode` 让你知道是规格问题不是网络问题。
 
 错误码:
-- `NO_CHAT_CONTEXT` —— 既不在飞书 session,bot 又没有绑定过 owner(用户从未私聊过 bot)。告诉用户先在飞书里私聊 xdt-maker bot 一次完成绑定,再重试。不要自己重试。
+- `NO_CHAT_CONTEXT` —— 既不在飞书 session,bot 又没有绑定过 owner(用户从未私聊过 bot)。告诉用户先在飞书里私聊自己配置的那个机器人一次完成绑定,再重试。不要自己重试。
 - `FILE_NOT_FOUND` —— absPath 不存在,检查路径
 - `FILE_EMPTY` —— 0 字节文件,飞书拒收
 - `FILE_TOO_LARGE` —— 超过 30MB

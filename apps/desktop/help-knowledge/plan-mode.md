@@ -19,6 +19,6 @@ For larger tasks the agent may first propose a **plan**, shown as a card in the 
 
 **Notes:**
 
-- This is XDMaker's own flow (renderer ↔ main IPC `resolveInteraction`), not the same as the Claude Code SDK's `ExitPlanMode` tool — different mechanics under the hood.
+- This is Cindy's own flow (renderer ↔ main IPC `resolveInteraction`), not the same as the Claude Code SDK's `ExitPlanMode` tool — different mechanics under the hood.
 - An approved plan card stays in your chat history with an "approved" state; you can scroll back to it.
 - If you close the window while a plan card is open, the agent is still paused waiting for your decision — reopen the session to resolve it.

@@ -1,7 +1,7 @@
 import { Observe, ObserveRoot } from 'expo-observe';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, type ReactElement } from 'react';
 import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -9,11 +9,13 @@ import { AuthProvider, useAuth } from '@/auth/AuthContext';
 import { DeviceLinkProvider } from '@/device-link/DeviceLinkContext';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { CenteredScreen } from '@/components/CenteredScreen';
+import { StartupBlockedScreen } from '@/components/StartupBlockedScreen';
 import { registerDevCacheMenu } from '@/debug/devCacheMenu';
 import { initMobileTapdb } from '@/analytics/mobileTapdb';
 import { useBundleUpdatePrompt } from '@/update/useBundleUpdatePrompt';
 import { useResumeUpdateCheck } from '@/update/useResumeUpdateCheck';
 import { useStartupOtaGate } from '@/update/useStartupOtaGate';
+import { useStartupEndpointGate } from '@/config/useStartupEndpointGate';
 
 // EAS Observe:启用 expo-router 集成,采集 per-route 导航指标(cold_ttr / warm_ttr / tti)。
 // 必须在挂载前的模块作用域调用;否则 useObserve().markInteractive 会退化为全局兜底、不记 per-route。
@@ -55,14 +57,11 @@ function NavigationGate() {
   );
 }
 
-function RootLayout() {
-  // Dev-only:注册开发者菜单的"清缓存 + reload"项(内部 __DEV__ gate,生产为 no-op)。
-  useEffect(() => {
-    registerDevCacheMenu();
-  }, []);
-  useEffect(() => {
-    void initMobileTapdb();
-  }, []);
+/**
+ * 端点闸门之后的应用主体:OTA 检查更新与业务树都在这里——保证「拉端点清单」
+ * 严格先于「检查更新」(本组件只在端点闸门 ready 后才挂载)。
+ */
+function RootAfterEndpoints() {
   // 自建变体:启动即生效的 JS 热更门(冷启动 check→fetch→reload,本次启动就跑上最新 JS)。
   // 内部 gate 自建 + 非 dev + updates 可用,其余直接 ready=true 不阻塞。见 useStartupOtaGate。
   const otaReady = useStartupOtaGate();
@@ -73,30 +72,52 @@ function RootLayout() {
   // 内部节流 + IS_OTA_SELFHOST gate,非自建为 no-op。见 useResumeUpdateCheck。
   useResumeUpdateCheck();
   // 热更门未就绪(自建变体冷启动正在 check/fetch/reload)时先渲染 loading,避免闪旧 UI。
-  // 所有 hook 已在上方调用,此处条件返回不违反 hooks 规则。
-  // GestureHandlerRootView 必须在根部常驻(RNGH 官方要求;缺失时 Android 手势整体不响应)。
-  // 两个 return 分支都包同一层,避免热更 loading 分支切换时 root 重挂。
   if (!otaReady) {
-    return (
-      <GestureHandlerRootView style={styles.gestureRoot}>
-        <SafeAreaProvider>
-          <ThemeProvider>
-            <CenteredScreen title="XDMaker" subtitle="正在检查更新" />
-          </ThemeProvider>
-        </SafeAreaProvider>
-      </GestureHandlerRootView>
+    return <CenteredScreen title="Cindy" subtitle="正在检查更新" />;
+  }
+  return (
+    <AuthProvider>
+      <DeviceLinkProvider>
+        <NavigationGate />
+      </DeviceLinkProvider>
+    </AuthProvider>
+  );
+}
+
+function RootLayout() {
+  // Dev-only:注册开发者菜单的"清缓存 + reload"项(内部 __DEV__ gate,生产为 no-op)。
+  useEffect(() => {
+    registerDevCacheMenu();
+  }, []);
+  useEffect(() => {
+    void initMobileTapdb();
+  }, []);
+  // 远程端点清单闸门(阻断式):冷启动第一步、先于 OTA 检查更新拉取 OSS 清单,
+  // 回写 env live binding。拉不到 / 清单非法 → 错误屏等用户重试,无缓存与超时兜底;
+  // __DEV__ 直接放行。ready 前 RootAfterEndpoints(含 OTA 门与业务树)不挂载。
+  const endpointGate = useStartupEndpointGate();
+  // 所有 hook 已在上方调用,下面条件返回不违反 hooks 规则。
+  // GestureHandlerRootView 必须在根部常驻(RNGH 官方要求;缺失时 Android 手势整体不响应)。
+  // 各分支都包同一层,避免闸门状态切换时 root 重挂。
+  let body: ReactElement;
+  if (endpointGate.status === 'error') {
+    body = (
+      <StartupBlockedScreen
+        title="无法获取服务器配置"
+        subtitle={`请检查网络连接后重试(${endpointGate.reason ?? 'unknown'})`}
+        retryLabel="重试"
+        onRetry={endpointGate.retry}
+      />
     );
+  } else if (endpointGate.status === 'pending') {
+    body = <CenteredScreen title="Cindy" subtitle="正在启动" />;
+  } else {
+    body = <RootAfterEndpoints />;
   }
   return (
     <GestureHandlerRootView style={styles.gestureRoot}>
       <SafeAreaProvider>
-        <ThemeProvider>
-          <AuthProvider>
-            <DeviceLinkProvider>
-              <NavigationGate />
-            </DeviceLinkProvider>
-          </AuthProvider>
-        </ThemeProvider>
+        <ThemeProvider>{body}</ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

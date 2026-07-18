@@ -18,20 +18,20 @@ import { EmbeddingClient, type EmbeddingClientOptions } from '@lizi/embedding-cl
 import type { createLogger } from '../logger';
 import type { DbClient } from '../localDb/client/DbClient';
 import { EmbeddingService } from './EmbeddingService';
-import { XD_GATEWAY_BASE_URL } from '../../shared/endpoints';
 
 export type { EmbeddingProvider, EmbeddingJobForProvider } from './providers';
 export type { EmbeddingService } from './EmbeddingService';
 export type { VecTableSpec } from './VecTableRegistry';
 
-const DEFAULT_XDPROXY_BASE_URL = XD_GATEWAY_BASE_URL;
-
 export interface StartEmbeddingHostDeps {
   getDbClient: () => DbClient;
   isVecAvailable: () => boolean;
   getApiKey: () => string | null | undefined;
-  /** 可选: 覆盖 xdproxy base url (默认 https://llm-proxy.tapsvc.com)。 */
-  xdproxyBaseUrl?: string;
+  /**
+   * xdproxy base URL(生产接线注入 effectiveXdGatewayBaseUrl,见 bootstrap-electron);
+   * 函数形态 = 每次请求现取(model-access 下发的 endpoint 运行期可变)。
+   */
+  xdproxyBaseUrl: string | (() => string);
   log: ReturnType<typeof createLogger>;
   /** 可选: 注入 fetch (测试用) */
   fetchImpl?: typeof fetch;
@@ -46,7 +46,7 @@ export function startEmbeddingHost(deps: StartEmbeddingHostDeps): EmbeddingServi
     return _service;
   }
   const clientOpts: EmbeddingClientOptions = {
-    baseUrl: deps.xdproxyBaseUrl ?? DEFAULT_XDPROXY_BASE_URL,
+    baseUrl: deps.xdproxyBaseUrl,
     getApiKey: deps.getApiKey,
     fetchImpl: deps.fetchImpl,
     logger: {

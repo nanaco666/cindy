@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 /**
- * dev-remote-env.mjs — dev:remote / dev:inspect 的生产端点注入包装。
+ * dev-remote-env.mjs — dev:remote / dev:inspect 的构建身份注入包装。
  *
- * 历史上 VITE_API_BASE_URL / VITE_DEVICE_LINK_API_BASE_URL / VITE_OAUTH_BROKER_API_BASE_URL
- * 三个值以 cross-env 字面量写死在 package.json 脚本里,是端点收敛后仅存的散写点;
- * 现在改为从 config/production-endpoints.json 权威源读取,统一替换域名只改那份 JSON。
- *
- * 语义与原 cross-env 字面量完全一致:强制覆盖(allowEnvOverride: false,不吃
- * shell env / .env 的同名变量)——remote 模式从来不看 apps/desktop/.env。
+ * 2026-07 端点清单重构后,运行期业务端点全部来自启动时解析的端点清单
+ * (dev 默认读仓内 config/endpoint.json,--endpoints-cdn 走线上 CDN),本包装
+ * 不再注入任何端点 URL;剩余职责是「remote 模式不读 apps/desktop/.env」的
+ * 构建身份注入:VITE_FEISHU_APP_ID / VITE_CINDY_AUTH_REGION(强制覆盖,
+ * allowEnvOverride: false 语义保持——不吃 shell env / .env 的同名变量)。
  *
  * 用法:node scripts/dev-remote-env.mjs <command> [args...]
  */
@@ -21,7 +20,12 @@ if (!command) {
   process.exit(2);
 }
 
-const env = { ...process.env, ...productionViteEnv({ allowEnvOverride: false }) };
+const productionEnv = productionViteEnv({ allowEnvOverride: false });
+const env = {
+  ...process.env,
+  VITE_FEISHU_APP_ID: productionEnv.VITE_FEISHU_APP_ID,
+  VITE_CINDY_AUTH_REGION: productionEnv.VITE_CINDY_AUTH_REGION,
+};
 const isWindows = process.platform === 'win32';
 
 // Windows 下 electron-forge 等 .cmd shim 需要经 shell 解析;shell 模式下 Node 不转义

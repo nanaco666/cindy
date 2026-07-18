@@ -111,8 +111,9 @@ export interface GroupSessionsOptions {
  * - null/undefined/空字符串 → null
  * - 反斜杠 → 正斜杠
  * - 去除末尾 `/`，但保留单一根（`/` 或 `D:/`）
- * - **worktree 归一**：`<repo>/.xdt-worktrees/<name>` / `<repo>/.worktrees/<name>`
- *   / `<repo>/.claude/worktrees/<name>` → `<repo>`
+ * - **worktree 归一**：`<repo>/.cindy-worktrees/<name>`（兼容历史
+ *   `.xdt-worktrees`）/ `<repo>/.worktrees/<name>` /
+ *   `<repo>/.claude/worktrees/<name>` → `<repo>`
  *   （schedule / issue-triage / imported Codex session 的实际 cwd 可能是 worktree
  *    子目录，sidebar 分组应当归到 baseRepo，否则每个 worktree 一个独立 group。
  *    本函数仅用于 displayName / 分组键，IO 路径仍读 session.workingDir 原值。）

@@ -13,6 +13,7 @@ import type { ProviderModelChoice } from '@/state/providerModelMemory';
 import {
   connectedProvidersForAgent,
   providerOffersModel,
+  sourcesForModel,
   type AgentKind,
   type ProviderView,
 } from '@lizi/model-providers';
@@ -164,20 +165,21 @@ export { resolveEffort, resolveProviderSwitchEffort } from '@lizi/model-provider
  * 界面显示 XD 网关、发送却按 DB 里的 anthropic 报 no_oauth)。此函数给显示与发送门禁
  * 提供同一份「选中来源是否还连着」的判定。
  *
- * 只判「selectedProviderId 不在该 agent 的已连接来源栏内」;providersLoading 期间恒 false
+ * 只判「selectedProviderId 不在该 `(agent, model)` 的已连接来源内」;providersLoading 期间恒 false
  * (providers 首帧未就绪,避免闪断开态)。sessionId(排除草稿)/ deviceLinkDeviceId
  * (排除远程会话,其连接态在被控端)的 scoping 由调用方叠加。
  */
 export function isSelectedSourceDisconnected(args: {
   providers: ProviderView[];
   agent: AgentKind | null;
+  modelId: string;
   selectedProviderId: string | null | undefined;
   providersLoading: boolean;
 }): boolean {
-  const { providers, agent, selectedProviderId, providersLoading } = args;
+  const { providers, agent, modelId, selectedProviderId, providersLoading } = args;
   if (providersLoading || !agent || !selectedProviderId) return false;
-  const rail = connectedProvidersForAgent(providers, agent);
-  return !rail.some((p) => p.id === selectedProviderId);
+  const sources = sourcesForModel(providers, modelId, agent);
+  return !sources.some((p) => p.id === selectedProviderId);
 }
 
 // 「按供应商分段」的列表派生 + 类型已下沉到共享包 `@lizi/model-providers`(让 main 侧 IM /model

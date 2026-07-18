@@ -2,10 +2,10 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "xdt-maker-mobile-android",
-  "documentNamespace": "https://xdmaker.com/spdx/mobile-android/602b034ed8dfdc0b2f48a5a987e9cbe230043c730132e20b9bc476cc4bb77a65",
+  "name": "cindy-mobile-android",
+  "documentNamespace": "https://cindy.app/spdx/mobile-android/e403d7c31d7dd6c65d25bd3e3d9598c357e0cf72fbcfab167b0db29949a9776e",
   "creationInfo": {
-    "created": "1970-01-01T00:00:00Z",
+    "created": "2026-07-17T05:10:01Z",
     "creators": [
       "Tool: scripts/generate-third-party-notices.mjs"
     ]
@@ -2378,6 +2378,23 @@
       ]
     },
     {
+      "name": "@react-native-google-signin/google-signin",
+      "SPDXID": "SPDXRef-Package-ff864636e5cd1bfd",
+      "versionInfo": "16.1.2",
+      "downloadLocation": "https://github.com/react-native-google-signin/google-signin",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40react-native-google-signin/google-signin@16.1.2"
+        }
+      ]
+    },
+    {
       "name": "@react-native-masked-view/masked-view",
       "SPDXID": "SPDXRef-Package-d319f2205aa9e192",
       "versionInfo": "0.3.2",
@@ -4690,6 +4707,23 @@
       ]
     },
     {
+      "name": "expo-apple-authentication",
+      "SPDXID": "SPDXRef-Package-49bdb2df683d4c2b",
+      "versionInfo": "56.0.4",
+      "downloadLocation": "https://github.com/expo/expo",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/expo-apple-authentication@56.0.4"
+        }
+      ]
+    },
+    {
       "name": "expo-application",
       "SPDXID": "SPDXRef-Package-c0652dfd8ad23fd0",
       "versionInfo": "56.0.3",
@@ -5026,6 +5060,23 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/expo-linking@56.0.15"
+        }
+      ]
+    },
+    {
+      "name": "expo-localization",
+      "SPDXID": "SPDXRef-Package-415b21fcb52049d8",
+      "versionInfo": "56.0.6",
+      "downloadLocation": "https://github.com/expo/expo",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/expo-localization@56.0.6"
         }
       ]
     },
@@ -8532,6 +8583,23 @@
       ]
     },
     {
+      "name": "rtl-detect",
+      "SPDXID": "SPDXRef-Package-588aed9701d84db4",
+      "versionInfo": "1.1.2",
+      "downloadLocation": "https://github.com/shadiabuhilal/rtl-detect",
+      "filesAnalyzed": false,
+      "licenseConcluded": "BSD-3-Clause",
+      "licenseDeclared": "BSD-3-Clause",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/rtl-detect@1.1.2"
+        }
+      ]
+    },
+    {
       "name": "safe-buffer",
       "SPDXID": "SPDXRef-Package-1708d3e03e05ca06",
       "versionInfo": "5.2.1",
@@ -10131,8 +10199,8 @@
     },
     {
       "name": "zod",
-      "SPDXID": "SPDXRef-Package-3eb99723ac833b71",
-      "versionInfo": "3.25.76",
+      "SPDXID": "SPDXRef-Package-db999faf406e0717",
+      "versionInfo": "4.3.6",
       "downloadLocation": "https://github.com/colinhacks/zod",
       "filesAnalyzed": false,
       "licenseConcluded": "MIT",
@@ -10142,7 +10210,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/zod@3.25.76"
+          "referenceLocator": "pkg:npm/zod@4.3.6"
         }
       ]
     }
@@ -10851,6 +10919,11 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-ff864636e5cd1bfd"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-d319f2205aa9e192"
     },
     {
@@ -11531,6 +11604,11 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-49bdb2df683d4c2b"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-c0652dfd8ad23fd0"
     },
     {
@@ -11627,6 +11705,11 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-489f92d8a30a359c"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-415b21fcb52049d8"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -12661,6 +12744,11 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-588aed9701d84db4"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-1708d3e03e05ca06"
     },
     {
@@ -13131,7 +13219,7 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-3eb99723ac833b71"
+      "relatedSpdxElement": "SPDXRef-Package-db999faf406e0717"
     }
   ]
 }

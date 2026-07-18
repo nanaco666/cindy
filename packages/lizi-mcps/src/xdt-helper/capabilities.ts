@@ -191,7 +191,7 @@ export const CAPABILITIES: readonly CapabilityEntry[] = [
     title: '自动更新',
     oneLiner: '后台检测新版本,断点续传 + 完整性校验 + 增量更新,不打断会话。',
     detail: [
-      '内置 xdt-updater 模块:启动和定时轮询检测版本,下载支持断点续传、SHA / MD5 校验、自动重试。',
+      '内置 cindy-updater 模块:启动和定时轮询检测版本,下载支持断点续传、SHA / MD5 校验、自动重试。',
       '增量包传输节省带宽。',
       '更新过程不中断当前会话,启动时若发现版本不一致会提示用户。',
     ].join(' '),

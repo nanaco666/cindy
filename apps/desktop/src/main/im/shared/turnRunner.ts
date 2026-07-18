@@ -66,15 +66,15 @@ import type {
   StreamingTextHandle,
 } from 'lizi-im';
 
-import {
-  persistUserMessage,
-  persistAssistantMessage,
-} from '../messagePersistence';
+import { persistUserMessage } from '../messagePersistence';
 import { bindingStore } from '../binding';
 import {
   wireSessionToIpcExternal,
   installDesktopInteractionListener,
   takePendingInteractionsForSession,
+  noteSilentStopUserSend,
+  noteSilentStopSessionReset,
+  onSilentStopSettled,
 } from '../../maker-ipc/register';
 import {
   registerPending,
@@ -144,6 +144,12 @@ interface TurnState {
    * 在 turn 结束后才返回，也能撤掉这个 emoji。
    */
   ackReactionIdPromise: Promise<string | null> | null;
+  /**
+   * silent-stop done 后挂起等守卫决策的 settle 订阅退订函数(见
+   * handleSilentStopDone)。非 null = 本 turn 正在等 settle / 已被自动续跑接管;
+   * 真 done / error 收口与 cleanup 路径负责退订,防陈旧回调二次收口。
+   */
+  silentStopSettleUnsub: (() => void) | null;
 }
 
 /**
@@ -478,6 +484,7 @@ export function createTurnRunner(
       onTurnComplete: args.onTurnComplete ?? null,
       userMessageId: userMessageId ?? null,
       ackReactionIdPromise,
+      silentStopSettleUnsub: null,
     };
 
     let state: SessionState;
@@ -512,10 +519,18 @@ export function createTurnRunner(
         scopeKey: target.scopeKey,
         workingDir: row.workingDir,
       });
-    } else if (target.created && text.trim().length > 0) {
-      // threadScoped 新 thread 会话: 同样用首条消息生成正式标题(渠道前缀),
+    } else if (
+      text.trim().length > 0 &&
+      (adapter.threadScoped
+        ? target.created
+        : adapter.sessions.generatedTitlePrefix !== undefined && row.sdkSessionId == null)
+    ) {
+      // threadScoped 新 thread 会话: 用首条消息生成正式标题(渠道前缀),
       // 完成后把 thread 名片卡升级为「{正式标题}」。
-      void maybeGenerateThreadSessionTitle(row.id, text, threadHeaderCardId);
+      // 非 threadScoped 渠道(feishu/discord, 一 (bot,user) 一行长期复用):
+      // 每条"新对话"的首条消息重新起名 —— sdkSessionId == null 即新上下文
+      // (首次建行 / /new 重置后), 标题跟随当前话题而不是永远停在第一次。
+      void maybeGenerateImSessionTitle(row.id, text, threadHeaderCardId);
     }
 
     const item: QueuedSend = {
@@ -588,6 +603,11 @@ export function createTurnRunner(
         // B' 阶段: 把渠道用户消息也写本地 messages 表 — 跟 desktop renderer
         // 写自己 user message 等价 (renderer 走 IPC, 我们 main 端直接调函数)。
         onAccepted: async () => {
+          // 真实用户消息 → 给 silent-stop 守卫充值自动续跑额度(renderer 发送
+          // 走 createMakerSendTransaction 内部已充值;scheduler / hook 与本
+          // 路径直接 session.send,必须额外调这里,否则守卫额度恒 0,首次
+          // silent-stop 就落"已耗尽"误导横幅且永不自动续跑)。
+          noteSilentStopUserSend(rowId);
           await persistUserMessage({
             sessionId: rowId,
             text: item.text,
@@ -811,13 +831,17 @@ export function createTurnRunner(
       resumeSessionId: row.sdkSessionId ?? undefined,
     });
 
-    // 接管模式: 把 desktop 端的 IPC fan-out (broadcastToAllWindows + 默认
-    // interaction listener) 装到这个 session 上, 这样 desktop renderer 也能
-    // 实时看到 agent 输出。wireSessionToIpcExternal 内部用 wiredSessionIds 守重,
-    // 重复调安全。
-    if (attached) {
-      wireSessionToIpcExternal(makerSession);
-    }
+    // 把 desktop 端的 IPC fan-out (broadcastToAllWindows + messagePersistBroadcaster
+    // 的 assistant / tool_use / tool_result / thinking 落库 + 默认 interaction
+    // listener) 装到这个 session 上 —— **接管与渠道默认 session 都要 wire**。
+    // 不 wire 的话渠道默认 session 在 desktop 里只有 user + 最终回复两头、过程
+    // 全空,实时也看不到(scheduler / hook-control 两条 headless 链路同款老坑,
+    // 先例见 scheduler-host/runner.ts 与 hook-control/session-runner.ts)。
+    // assistant 文本自此由 messagePersistBroadcaster 单点落库,本模块不再自写
+    // (见 handleTurnDoneAsync)。wireSessionToIpcExternal 内部用 wiredSessionIds
+    // 守重,重复调安全。下方 setInteractionListener 会把 wire 装上的 desktop
+    // interaction listener 覆盖回渠道卡片版,顺序不能颠倒。
+    wireSessionToIpcExternal(makerSession);
 
     const state: SessionState = {
       makerSession,
@@ -838,10 +862,10 @@ export function createTurnRunner(
       makerSession.onEvent(handleEventFor(row.id, userId)),
     );
 
-    // setInteractionListener 是 single-listener: 这一调会覆盖 desktop 版 (如果
-    // attached 路径里 wireSessionToIpcExternal 装了的话) — 接管期间 permission /
-    // ask / plan 都走渠道卡片审批, 这正是设计。detach 时 executeDetach
-    // 会调 installDesktopInteractionListener 还原。
+    // setInteractionListener 是 single-listener: 这一调会覆盖上方
+    // wireSessionToIpcExternal 装上的 desktop 版 — 渠道会话(含接管期间)的
+    // permission / ask / plan 都走渠道卡片审批, 这正是设计。detach 时
+    // executeDetach 会调 installDesktopInteractionListener 还原。
     makerSession.setInteractionListener(
       handleInteractionFor(row.id, userId, target.scopeKey),
     );
@@ -1042,31 +1066,32 @@ export function createTurnRunner(
   }
 
   /**
-   * threadScoped 新 thread 会话的标题生成 — 用首条消息 oneshot 起名(渠道
-   * 前缀, 如 'Slack · '), 落库后把 thread 名片卡升级为正式标题。
-   * 失败 swallow — 名片保持初始文案, 不阻塞主流程。
+   * 渠道默认(非接管)会话的标题生成 — 用首条消息 oneshot 起名(渠道前缀,
+   * 如 'Slack · ' / '[飞书·DM] ')。
+   *   - threadScoped(slack): 新 thread 会话触发, 落库后把 thread 名片卡升级
+   *     为正式标题;
+   *   - 非 threadScoped(feishu/discord): 新上下文(建行 / /new 后)的首条
+   *     消息触发, 只改库不发卡(这类渠道没有 thread 名片)。
+   * 失败 swallow — 标题保持原样, 不阻塞主流程。
    */
-  async function maybeGenerateThreadSessionTitle(
+  async function maybeGenerateImSessionTitle(
     sessionId: string,
     text: string,
     headerCardId: string | null,
   ): Promise<void> {
     const threadUiPack = adapter.ui.thread;
-    if (!adapter.threadScoped || !threadUiPack) return;
+    const prefix = adapter.sessions.generatedTitlePrefix;
+    if (prefix === undefined && !(adapter.threadScoped && threadUiPack)) return;
     try {
-      const title = await generateAndPersistFbotTitle(
-        sessionId,
-        text,
-        adapter.sessions.generatedTitlePrefix,
-      );
-      if (!title || !headerCardId) return;
+      const title = await generateAndPersistFbotTitle(sessionId, text, prefix);
+      if (!title || !headerCardId || !threadUiPack) return;
       await im.updateInteractiveCard(headerCardId, {
         ...threadUiPack.sessionHeaderTitled(title),
         buttons: [],
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      log.warn(`maybeGenerateThreadSessionTitle failed (non-fatal): ${msg}`);
+      log.warn(`maybeGenerateImSessionTitle failed (non-fatal): ${msg}`);
     }
   }
 
@@ -1155,6 +1180,12 @@ export function createTurnRunner(
         case 'tool_result_full':
           return handleToolResultFullEvent(turn, event);
         case 'done':
+          // silent-stop done(上游用空内容静默收尾): 不当普通 done 收口 —
+          // 守卫可能自动续跑,续跑轮事件要继续流进本 turn 的卡片,
+          // 见 handleSilentStopDone。
+          if ((event.data as { silentStop?: boolean } | null)?.silentStop === true) {
+            return handleSilentStopDone(state, userId);
+          }
           return handleTurnDoneAsync(state, userId);
         case 'error':
           return handleTurnErrorAsync(state, userId, event.data);
@@ -1183,7 +1214,8 @@ export function createTurnRunner(
     if (!toolResultText || typeof toolResultText !== 'string') return [];
     if (
       !toolResultText.includes('xdt_image_url') &&
-      !toolResultText.includes('xdt_video_url')
+      !toolResultText.includes('xdt_video_url') &&
+      !toolResultText.includes('xdt_media_produced')
     ) {
       return [];
     }
@@ -1192,6 +1224,7 @@ export function createTurnRunner(
       xdt_image_urls?: unknown;
       xdt_video_url?: unknown;
       xdt_video_urls?: unknown;
+      xdt_media_produced?: unknown;
       _xdt_render_image?: unknown;
     };
     try {
@@ -1211,6 +1244,19 @@ export function createTurnRunner(
     if (Array.isArray(parsed.xdt_image_urls)) {
       for (const u of parsed.xdt_image_urls) {
         if (typeof u === 'string' && isManagedImageUrl(u)) urls.push(u);
+      }
+    }
+    // 兜底账本(xdt_media_produced,ghost_call 层在意识未声明媒体字段时注入,
+    // 主机记账、意识删不掉):可能混有视频/音频/3D,IM 本期只接走图片。
+    if (Array.isArray(parsed.xdt_media_produced)) {
+      for (const u of parsed.xdt_media_produced) {
+        if (
+          typeof u === 'string' &&
+          isManagedImageUrl(u) &&
+          /\.(png|jpe?g|gif|webp)$/i.test(u)
+        ) {
+          urls.push(u);
+        }
       }
     }
     // 视频:本期不推 IM,只 warn 一下让回查容易。
@@ -1637,23 +1683,53 @@ export function createTurnRunner(
     return turn.streamingHandlePromise;
   }
 
+  /**
+   * silent-stop done: translator 判定上游用空内容 assistant 消息把"干到一半"的
+   * turn 静默收尾(done.data.silentStop=true)。wire 进 desktop 管线后,
+   * register.ts 的 silent-stop 守卫会在 ~1.5s 内做决策:
+   *   - resume: 以用户身份补发「继续」开新 SDK turn。本渠道**不 shift 队列**,
+   *     续跑轮的 text / tool_use 继续路由到 queue[0] 的同一张卡片接着流式,
+   *     最终的真 done 走 handleTurnDoneAsync 正常收口 —— 否则续跑输出会变成
+   *     stray,IM 用户永远看不到后半段;
+   *   - skip / exhausted / send-failed: 不续跑,经 onSilentStopSettled 通知,
+   *     此时才把这轮按 done 收口(与 hook-control/session-runner.ts 的
+   *     settle 语义对齐)。
+   * 重复的 silentStop done(守卫 pendingResume 去重后仍会 settle)不重复订阅。
+   */
+  function handleSilentStopDone(state: SessionState, userId: string): void {
+    const turn = state.queue[0];
+    if (!turn) return;
+    if (turn.silentStopSettleUnsub) return;
+    const unsub = onSilentStopSettled(state.makerSession.id, () => {
+      turn.silentStopSettleUnsub = null;
+      unsub();
+      // 防御: 收口路径都会先退订,回调能跑理应意味着 turn 仍是 queue[0];
+      // 若未来有人加了新的出队路径破坏该不变量,这里宁可不动也不错收别人的 turn。
+      if (state.queue[0] !== turn) return;
+      void handleTurnDoneAsync(state, userId);
+    });
+    turn.silentStopSettleUnsub = unsub;
+  }
+
+  /** 真 done / error 收口前清掉挂着的 silent-stop settle 订阅(幂等)。 */
+  function clearSilentStopSettleWait(turn: TurnState): void {
+    if (turn.silentStopSettleUnsub) {
+      turn.silentStopSettleUnsub();
+      turn.silentStopSettleUnsub = null;
+    }
+  }
+
   async function handleTurnDoneAsync(state: SessionState, userId: string): Promise<void> {
     const turn = state.queue.shift();
     if (!turn) return;
+    clearSilentStopSettleWait(turn);
     turn.done = true;
     clearActivityTicker(turn);
     completeTurnCallback(turn);
-    // B' 阶段: 把 agent 完整回复写本地 messages 表 — turn.buffer 是这一轮所有
-    // text events 累加后的最终文本。空 buffer (无文本输出) 不写, 避免污染消息流。
-    // 在 streamingHandle.finalize 之前调用, 这样即便 finalize 失败也已落库。
-    // attached=true 时 desktop 路径 (wireSessionToIpcExternal → makerChatStore)
-    // 已经负责写库, 这里不重复写, 否则消息流会出现两条相同记录。
-    if (turn.buffer.length > 0 && !state.attached) {
-      void persistAssistantMessage({
-        sessionId: state.makerSession.id,
-        text: turn.buffer,
-      });
-    }
+    // assistant 回复落库不在这里做 — 所有 IM session(接管与渠道默认)都已
+    // wireSessionToIpcExternal,由 messagePersistBroadcaster 单点落库(含
+    // tool_use / tool_result / thinking 过程消息,desktop 重开历史能完整回放)。
+    // 这里再写一份会产生重复记录。
     if (turn.streamingHandle) {
       try {
         const finalView = composeStreamingView(turn) || '_(空回复)_';
@@ -1691,6 +1767,7 @@ export function createTurnRunner(
         ? String((errData as { message: unknown }).message)
         : String(errData);
     log.error(`turn error: ${msg}`);
+    if (turn) clearSilentStopSettleWait(turn);
     if (turn) clearActivityTicker(turn);
     if (turn) completeTurnCallback(turn);
     if (turn?.streamingHandle) {
@@ -1889,10 +1966,12 @@ export function createTurnRunner(
     }
   }
 
-  /** detach / dispose 路径: 清掉 in-flight turn 的过程区 ticker, 防定时器泄漏。 */
+  /** detach / dispose 路径: 清掉 in-flight turn 的过程区 ticker 与 silent-stop
+   *  settle 订阅, 防定时器 / 陈旧回调泄漏。 */
   function clearQueuedTurnTimers(state: SessionState): void {
     for (const turn of state.queue) {
       clearActivityTicker(turn);
+      clearSilentStopSettleWait(turn);
     }
     if (state.scheduledTranspond) clearTranspondTicker(state.scheduledTranspond);
   }
@@ -1959,6 +2038,11 @@ export function createTurnRunner(
     // 先清排队再 abort — abort 触发的 done/error 会走 maybeDispatchNextQueued,
     // 队列不清空的话下一条排队消息会在中止后立刻自动派发。
     clearPendingSends(state);
+    // 重置 silent-stop 守卫(与 desktop ABORT_SESSION handler 同源): turn 若正
+    // 挂在 silentStop 的 1.5s 决策窗里, abort 对早已收尾的 SDK turn 是 no-op、
+    // 不产生任何事件,不重置的话守卫照样自动续跑,用户喊停后 agent 原地复活。
+    // 重置后守卫判 superseded → settle('skip') → 挂起 turn 经现有订阅按 done 收口。
+    noteSilentStopSessionReset(state.makerSession.id);
     await state.makerSession.abort();
     log.info(
       `!stop aborted turn for session=...${state.makerSession.id.slice(-8)} droppedQueued=${droppedQueued}`,

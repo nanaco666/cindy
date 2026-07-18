@@ -7,8 +7,9 @@
  *     —— 属配置而非业务数据, 不进 localDb, 免去 migration 链; 原子写防半截文件。
  *   - **没有密钥**: 鉴权走登录 JWT(manager 注入 token 源), 本模块不再有
  *     safeStorage 依赖。
- *   - 服务器地址是系统默认值(SLACK_HOOK_DEFAULT_URL); urlOverride 是无 UI 的
- *     隐藏覆写位(规则 20: 未自定义的用户随版本吃到新默认值, 覆写过的保留)。
+ *   - 服务器地址的系统默认值由 deps.defaultUrl 注入(生产 = 运行期端点清单的
+ *     slackHookWsUrl); urlOverride 是无 UI 的隐藏覆写位(规则 20: 未自定义的
+ *     用户随版本吃到新默认值, 覆写过的保留)。
  *   - 一次性迁移: 旧多连接文件 hook-connections.json 存在且新文件不存在时,
  *     取最早创建的启用条目的 enabled + workspaces 落进新文件, 旧文件与旧
  *     secret 加密文件 best-effort 清除(该功能无存量真实用户, 迁移从简)。
@@ -21,7 +22,6 @@ import path from 'node:path';
 import {
   HOOK_CHAT_WORKSPACE_ALIAS,
   HOOK_WORKSPACE_ALIAS_RE,
-  SLACK_HOOK_DEFAULT_URL,
 } from '../../shared/hookControlIpc.js';
 
 /** 持久化的单配置(不含任何凭证)。 */
@@ -39,6 +39,8 @@ export interface SlackHookStoreDeps {
   legacyFilePath?: string;
   /** 旧 secret 加密文件清理钩子(best-effort; 生产传 safe-storage 目录清理)。 */
   cleanupLegacySecrets?: (legacyIds: string[]) => void;
+  /** 无覆写时的默认服务器地址(生产注入运行期端点清单读取, 必填——烘焙常量已退役)。 */
+  defaultUrl: () => string;
   log: { info(msg: string): void; warn(msg: string): void };
 }
 
@@ -187,7 +189,7 @@ export function createSlackHookStore(deps: SlackHookStoreDeps): SlackHookStore {
   return {
     get: () => read(),
     effectiveUrl() {
-      return read().urlOverride ?? SLACK_HOOK_DEFAULT_URL;
+      return read().urlOverride ?? deps.defaultUrl();
     },
     setEnabled(enabled) {
       const next = { ...read(), enabled };

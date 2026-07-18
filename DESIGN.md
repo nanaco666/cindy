@@ -365,7 +365,7 @@ The grayscale rule is near-absolute. The following are the **only** sanctioned n
 
 ### 架构
 
-xdt-maker 桌面端用 **VSCode 风格的 ColorRegistry + Theme override** 模型管理颜色。所有颜色都通过 CSS variable 以 token 形式被组件消费,**永远不允许在组件里硬编码 hex / rgba**(违反规则会让该组件在非默认主题下无法切色)。
+Cindy 桌面端用 **VSCode 风格的 ColorRegistry + Theme override** 模型管理颜色。所有颜色都通过 CSS variable 以 token 形式被组件消费,**永远不允许在组件里硬编码 hex / rgba**(违反规则会让该组件在非默认主题下无法切色)。
 
 源码:`apps/desktop/src/renderer/themes/`
 - `color-registry.ts` — `ColorRegistry` 单例和 `registerColor(id, defaults, description)` API
@@ -493,7 +493,7 @@ CSS variable 名一律 kebab-case。点号风格(如 VSCode 的 `sidebar.itemAct
 
 > **状态:草案**,2026-06 引入(参考 Vercel Geist `design.md` 的 Voice & Content 一节)。本节规定**界面文案怎么写**,与 CLAUDE.md 规则 #18(i18n 体系)配套——#18 管"文案必须 4 语言对齐、走 token",本节管"每条文案本身的语气/措辞"。本节不新增任何 UI 字符串,只约束写法。
 
-XDMaker 的产品气质和视觉一致:**克制、直接、不自夸**。文案是工具的一部分,不是营销。
+Cindy 的产品气质和视觉一致:**克制、直接、不自夸**。文案是工具的一部分,不是营销。
 
 ### 11.1 语言无关原则(zh-CN / en / ja / ko 全部适用)
 

@@ -1,11 +1,12 @@
-import { ServerApiError, serverApiFetch, type ApiFetchOptions } from '../serverApiClient';
+import { ServerApiError, type ApiFetchOptions } from '../serverApiClient';
+import { skillhubApiFetch } from './hubApi';
 import { mapHubSkillInfoToDesktopInfo, type HubSkillInfoForDesktop } from './infoMapping';
 import { buildSkillhubSyncResponse, type SkillhubBatchDetailResponse } from './syncMapping';
 
 const SKILLHUB_SYNC_BATCH_SIZE = 100;
 const HUB_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,127}$/;
 
-export type SkillhubMarketFetcher = <T>(apiPath: string, opts?: ApiFetchOptions) => Promise<T>;
+export type SkillhubMarketFetcher = <T>(apiPath: string, opts?: Omit<ApiFetchOptions, 'baseUrl'>) => Promise<T>;
 
 interface SkillhubInstalledSkillForHub {
   slug: string;
@@ -54,7 +55,7 @@ export class SkillhubMarketService {
   private readonly fetch: SkillhubMarketFetcher;
 
   constructor(options: SkillhubMarketServiceOptions = {}) {
-    this.fetch = options.fetch ?? serverApiFetch;
+    this.fetch = options.fetch ?? skillhubApiFetch;
   }
 
   async sync(params: { slugs?: string[] } | undefined) {

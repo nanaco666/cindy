@@ -33,7 +33,7 @@ import { createMessageHandler, isStopCommand } from '../messageHandler';
 import type { ImSlashHandlers } from '../slashCommands';
 import type { ImTurnRunner } from '../turnRunner';
 import type { ImChannelAdapter } from '../types';
-import { ui as slackUi } from '../../slack/uiText';
+import { ui as slackUi } from './threadUiFixture';
 
 function makeEvent(overrides: Partial<IMMessageEvent> = {}): IMMessageEvent {
   return {

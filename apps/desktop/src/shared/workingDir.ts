@@ -1,3 +1,5 @@
+import { getManagedWorktreeBasePath } from './managedWorktreePaths';
+
 /**
  * workingDir helpers shared by main, preload, and renderer.
  *
@@ -41,8 +43,10 @@ export function normalizeWorkingDirForGrouping(raw: string | null | undefined): 
   const out = normalizeWorkingDirForStorage(raw);
   if (out == null) return null;
 
+  const managedWorktreeBase = getManagedWorktreeBasePath(out);
+  if (managedWorktreeBase != null) return managedWorktreeBase;
+
   return out
-    .replace(/\/\.xdt-worktrees\/[^/]+(?:\/.*)?$/, '')
     .replace(/\/\.worktrees\/[^/]+(?:\/.*)?$/, '')
     .replace(/\/\.claude\/worktrees\/[^/]+(?:\/.*)?$/, '');
 }

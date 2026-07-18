@@ -2,6 +2,17 @@
 
 > 状态:设计稿(待评审 / 未实现)。负责人:dash。最后更新 2026-07-05。
 >
+> ⚠️ **自建线身份切换(2026-07-16,已实现,本文其余章节的 `com.xd.lizcn` / `xdmaker-release` 描述为历史值)**:
+> 自建线 package 改为 **`com.xd.cindycn`**(与 EAS 线的 `com.xd.lizcn` 分离),签名 keystore 换为
+> **`Cindy.jks`**(alias `Cindy`,PKCS12,storePassword 与 keyPassword 相同,证书 SHA256
+> `B0:A5:77:DC:05:DF:60:75:96:47:A6:E5:97:42:B2:C4:A7:82:8A:1F:4C:04:01:B6:A9:BB:B3:EE:42:F0:27:A9`,
+> 有效期至 2053),打包机路径 `/Users/cn-ios/Documents/cindy/CindyMobileCer/Android/`(不进仓库);
+> 签名参数**零代码默认值**:keystore 路径 / alias / 两个口令全部由 `XDT_ANDROID_*` 环境变量提供,
+> `--execute` 缺任一项报错(本文 §7 的"路径/alias 有默认值"描述为历史设计);
+> scheme 仍为 `lizcn`。**换 keystore + 换包名 = 全新安装线**:旧 `com.xd.lizcn` / `com.xd.maker` 包
+> 无法覆盖安装,需重装;飞书后台需按新 package + 新 SHA256 重新登记(§16 待办随之更新对象)。
+> 现状以 `RELEASING.md` 与脚本头注释为准。
+>
 > ⚠️ **分发链路变更(2026-07-06,已实现,本文其余章节的 NPKG 描述为历史设计)**:冷更 APK
 > 不再经 NPKG 取下载链接,由 `release-android-local.mjs` **直传自有 OSS**
 > (`mobile-dist/android/<versionCode>/`,installUrl = CDN 直链;helper 见
@@ -46,7 +57,7 @@
 ## 3. 关键事实(实现前提)
 
 - 工程是 **managed workflow**(无 `android/` 目录),每次出包需 `expo prebuild -p android` 现生成原生工程。
-- 有 3 个本地原生模块需正确 autolink:`xdt-feishu-login` / `xdt-mobile-realtime-audio` / `xdt-tapdb`,外加飞书 config plugin(`appId=cli_a94d4cf642381cd4`)。
+- 有 3 个本地原生模块需正确 autolink:`xdt-feishu-login` / `xdt-mobile-realtime-audio` / `xdt-tapdb`,外加从私有构建配置读取 App ID 的飞书 config plugin。
 - Expo SDK ~56 / RN 0.85 / `expo-updates ~56`——完整支持 Expo Updates Protocol 自建服务器,客户端运行时 OTA 逻辑零改动。
 - **工具链**:mac 上需 **Android SDK**(`ANDROID_HOME` / `sdkmanager` / build-tools 含 `apksigner`)+ **JDK 17**。JDK 17 解析**复用 `scripts/java-runtime-env.mjs` 的 `resolveJavaRuntimeEnv()`**(已在 sim/e2e 脚本使用,自动探测 `/usr/libexec/java_home -v 17`、homebrew openjdk@17)。
 - **签名 keystore(已就绪)**:`xdmaker-release.jks`(alias `xdmaker-release`,storeType JKS,RSA 2048,证书 SHA256 `AD:73:7E:7E:13:1A:63:C6:B2:2B:43:D2:E6:76:9C:48:E5:C5:4C:65:25:32:85:A0:43:55:07:11:44:59:92:E4`,有效期至 2053)。文件在**仓库外** `/Users/cn-ios/Documents/xdt/XDMakerMobileCer/Android/`,**不进仓库**;口令同目录 `signing-info.txt`(明文,**严禁复制进仓库工作区**,红线 23)。脚本通过环境变量读取路径与口令(§7),自签即最终生产签名——**NPKG 不重签**,故无 iOS 的证书 Team 校验环节。
@@ -98,18 +109,22 @@ flowchart TD
 
 ## 6. 客户端改动(env-gated,JS OTA 零改动 + 整包发现平台化)
 
-1. **`app.config.js` 自建分支补 `android.versionCode`**:默认 `android.package` 已是 `com.xd.lizcn`;自建分支仅注入 `android.versionCode = Number(process.env.XDT_ANDROID_VERSION_CODE)`(缺省不注入)并切换 OTA URL。**非自建路径仍原样返回 app.json**(红线 1)。不额外改 `scheme` / native Feishu SSO 设置。
-2. **JS 热更**:`expo-updates` 运行时逻辑完全不动,只是 url 指向自建服务(`app.config.js` 已在自建分支拼 `updates.url = ${base}/manifest`)。
+1. **`app.config.js` 自建分支补 `android.versionCode`**:默认 `android.package` 已是 `com.xd.lizcn`;自建分支注入 `android.versionCode = Number(process.env.XDT_ANDROID_VERSION_CODE)`(缺省不注入),并使用固定 OTA 占位 URL + `checkAutomatically=NEVER` + `disableAntiBrickingMeasures=true`。**非自建路径仍原样返回 app.json**(红线 1)。
+2. **JS 热更**:启动先拉 region 对应 `endpoint.json?t=<Date.now()>`,取 `mobileUpdateBaseUrl` 运行时覆盖 Expo Updates URL 为 `${base}/manifest`,再手动 check/fetch;真实更新域名不参与 build/fingerprint。
 3. **整包发现平台化**:`src/update/useBundleUpdatePrompt.ts` 当前硬编码 `fetchLatestRelease('ios')` → 改为 `fetchLatestRelease(Platform.OS === 'android' ? 'android' : 'ios')`(`import { Platform } from 'react-native'`)。`fetchLatestRelease` 已按 `?platform=` 参数化,`preferredInstallUrl` 已回退 `installUrl`——**只此一处 IO 平台化**,判定纯函数与弹窗逻辑不动。
 4. **Android package 统一为 `com.xd.lizcn`**;`scheme` 固定为 `lizcn`。EAS/TestFlight 默认优先走飞书 App 原生 SSO;自建线是否启用由发布 env 控制,启用时必须保留浏览器 OAuth 兜底以覆盖 §16 的 appId callback scheme 共装风险。
+
+## 6.5 地区分包(region,cn / global)
+
+自建线四脚本(`release-android-{local,ota,check}.mjs` + iOS 对应)**必须显式 `--region cn|global`**(无默认,缺失即报错;`lib/self-host-region.mjs` 解析)。随地区变的**非机密**分包参数集中在打包机本地 `scripts/self-host-regions.json`(纯值、gitignore;结构见 `self-host-regions.json.example`):`androidPackage`(cn=`com.xd.cindycn` / global=`com.xd.cindy`)、`tapdb.{clientId,clientToken}`、`oss.{cdnBaseUrl,bucket,prefix,ossRegion}`、`androidSigning.{keyAlias,keystorePath}`。脚本读该 region 的 `oss.*` 覆盖 `XDT_OSS_*` 后 `refreshOssConfig()`,切到该地区独立 bucket(两地不撞);`app.config.js` 把 `tapdb` 公开配置写入 Expo extra,不再依赖同名 `EXPO_PUBLIC_*` 注入。**真机密走 env、按 region 后缀**:keystore 两个口令 `XDT_ANDROID_KEYSTORE_PASSWORD_{CN,GLOBAL}` / `XDT_ANDROID_KEY_PASSWORD_{CN,GLOBAL}`(cn 兼容无后缀旧名);OSS AK/SK 同账号用 `FP_DEV_OSS_ACCESS_KEY_ID/SECRET`、不同账号用 `XDT_OSS_ACCESS_KEY_{ID,SECRET}_{CN,GLOBAL}`。
 
 ## 7. 冷更:`apps/mobile/scripts/release-android-local.mjs`
 
 复用 `release-lib.mjs` 的参数解析 / git 闸门 / dry-run 风格。步骤:
 
-1. **算指纹**:`npx expo-updates fingerprint:generate --platform android`(self-host env:`EXPO_PUBLIC_XDT_OTA_SELFHOST=1` + `EXPO_PUBLIC_XDT_OTA_URL`;`fingerprint.config.cjs` 的 beta 剥离 hook 仍生效)→ 得 `runtimeVersion`,落盘 `release/android-runtime.json` 供热更脚本复用(镜像 iOS 的 `release/ios-runtime.json`)。
+1. **算指纹**:`npx expo-updates fingerprint:generate --platform android`(self-host 身份 env:`EXPO_PUBLIC_XDT_OTA_SELFHOST=1`;`fingerprint.config.cjs` 的 beta 剥离 hook 仍生效)→ 得 `runtimeVersion`,落盘 `release/android-runtime.json` 供热更脚本复用(镜像 iOS 的 `release/ios-runtime.json`)。
 2. **读并校验 versionCode**:读 committed `apps/mobile/android-version.json`(`{ "versionCode": N }`)——放仓库根而非 `release/`,因为 `apps/mobile/.gitignore` 忽略整个 `/release`(那里只放 per-build 产物如 `android-runtime.json`);经 `assertBuildNumberMonotonic`(复用 `lib/ios-local.mjs`)对 CDN 基线 `mobile-ota/android/release.json` 的上一条 `buildNumber`(即上次 versionCode)做单调校验;经 env `XDT_ANDROID_VERSION_CODE` 传给 prebuild(供 §6.1 注入)。
-3. **prebuild**:`expo prebuild -p android --clean`,注入自建变体 env(`EXPO_PUBLIC_XDT_OTA_SELFHOST=1` / `EXPO_PUBLIC_XDT_OTA_URL` / `XDT_ANDROID_VERSION_CODE` / 必要的 `EXPO_PUBLIC_*`)。
+3. **prebuild**:`expo prebuild -p android --clean`,注入自建变体 env(`EXPO_PUBLIC_XDT_OTA_SELFHOST=1` / `XDT_ANDROID_VERSION_CODE` / 必要的 `EXPO_PUBLIC_*`)。真实更新地址只来自 endpoint 清单。
 4. **注入签名 + 编译**:`android/` 是生成目录(gitignored、每次 prebuild 重建),脚本**幂等 patch** 生成的 `android/app/build.gradle`——把 `release` buildType 的 `signingConfig` 从默认的 `signingConfigs.debug` 改为指向 env 驱动的 release keystore(默认模板 release 用 debug 签名,**必须改**)。keystore 路径与口令经 `-P` gradle property 从环境变量传入 `gradlew assembleRelease`,**绝不落盘明文、绝不写进被 patch 的 build.gradle**(patch 只引用 property 名):
    - `XDT_ANDROID_KEYSTORE_PATH`(默认 `/Users/cn-ios/Documents/xdt/XDMakerMobileCer/Android/xdmaker-release.jks`)
    - `XDT_ANDROID_KEYSTORE_PASSWORD` / `XDT_ANDROID_KEY_ALIAS`(默认 `xdmaker-release`)/ `XDT_ANDROID_KEY_PASSWORD`
@@ -119,7 +134,7 @@ flowchart TD
 6. **写整包版本记录**:`buildReleaseRecord({ version, buildNumber: versionCode, runtimeVersion, installUrl, releaseNotes, minVersion? })`(复用 `lib/ios-local.mjs`)→ 上传 `mobile-ota/android/release.json`,供 `/latest?platform=android` 读取。
 7. **闸门**:`assertProductionGitGate`(main + clean + `HEAD==origin/main`)、versionCode 单调、**默认 dry-run,`--execute` 才真跑**。逃生开关对齐 iOS:`--skip-git-gate` / `--skip-record` / `--skip-npkg` / `--apk <path>`(直传预构建 APK)。⚠️ `--apk` 逃生路径的元数据一致性硬化(读 APK 内 versionCode/runtimeVersion 与待写记录比对)沿用 iOS 文档 §13.4 的同类 pending 项。
 
-`--execute` 前置:`assertPublicEnv(env, { variant: 'production' })`(缺 `EXPO_PUBLIC_FEISHU_APP_ID` 等即中止,避免把空值烤进整包);需 macOS + Android SDK + JDK 17 + keystore env + NPKG 凭证(除非 `--skip-npkg`)。
+`--execute` 前置:校验 region / endpoint manifest 自举基址,并要求所选 region 的 `self-host-regions.json.tapdb` 完整;需 macOS + Android SDK + JDK 17 + keystore env + NPKG 凭证(除非 `--skip-npkg`)。
 
 ## 8. 热更:`apps/mobile/scripts/release-android-ota.mjs` + OSS/CDN 布局
 
@@ -220,7 +235,7 @@ smash-dev/xdt-maker/mobile-ota/
 
 1. **NPKG APK 上传路径确认**:确认 NPKG 支持"上传 APK → 取下载/安装链接"(Android 不重签)。未确认前 `--skip-npkg` 兜底。
 2. **飞书后台登记 `com.xd.lizcn` Android**:EAS/TestFlight 已要求新 package 使用同一飞书 appId 走原生 SSO;发版前必须确认飞书开放平台登记覆盖 package + 签名 SHA256(§3 的 `AD:73:...:E4`)。
-3. **历史共装 URL scheme 冲突的处理口径(2026-07-08)**:浏览器 OAuth 回调已收敛:新包统一使用 `lizcn://auth`,server 通过 `lizcn.` state 前缀回跳新 scheme,无前缀历史包仍回 `xdmaker://auth`。原生飞书 SSO 仍会注册 `cli_a94d4cf642381cd4` 派生 callback scheme,旧包未卸载时可能抢回调;客户端必须对 native SSO 设置超时并回退浏览器 OAuth,真实内测建议先移除旧 `com.xdtmaker.mobile` 包。
+3. **历史共装 URL scheme 冲突的处理口径(2026-07-08)**:浏览器 OAuth 回调已收敛:新包统一使用 `lizcn://auth`,server 通过 `lizcn.` state 前缀回跳新 scheme,无前缀历史包仍回 `xdmaker://auth`。原生飞书 SSO 仍会注册由私有 `feishuAppId` 派生的 callback scheme,旧包未卸载时可能抢回调;客户端必须对 native SSO 设置超时并回退浏览器 OAuth,真实内测建议先移除旧 `com.xdtmaker.mobile` 包。
 
 ## 17. 实现状态(2026-07-05,代码已落地,真实构建/上传待外部依赖)
 

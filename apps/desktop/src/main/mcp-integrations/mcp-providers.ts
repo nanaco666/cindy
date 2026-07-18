@@ -10,11 +10,10 @@ import type { OrcaMcpDeps } from 'lizi-mcps';
 import { createCindyGhostsMcpServer } from 'cindy-tools';
 import type { MakerMemoryManager } from '@lizi/maker-core';
 import { getCindyGhostsMcpDeps } from './ghost.js';
-import { getFeishuService } from './feishu.js';
 import { getAndroidMcpDeps } from './android.js';
 import { getBrowserMcpDeps } from './browser.js';
 import { getComputerMcpDeps } from './computer.js';
-import { feishuIm, slackIm } from '../im';
+import { feishuIm } from '../im';
 import { createLogger } from '../logger.js';
 import { getScheduler } from '../scheduler-host/index.js';
 import { searchSessionsFn } from '../maker-host/session-search.js';
@@ -72,7 +71,10 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
     computer: getComputerMcpDeps({
       isComputerUseEnabled: () => pluginRegistry.isEnabled('computer'),
     }),
-    feishu: getFeishuService().mcp,
+    // lizi_feishu 已于 2026-07-16 摘壳:飞书能力(44 精品 + 123 只读直通)迁入
+    // 内置意识 xd-feishu;2026-07-17 起授权切到意识 OAuth broker
+    // (tokenBroker:'feishu'),主机 token 刷新链(mcp-integrations/feishu.ts)
+    // 与 scheduler registry 直调一并退役(scheduler 飞书方法走 ghost pipe)。
     // mivo 已于 2026-07-13 退役:整体迁入内置意识 xd-mivo(见 xd-mivo/ghost.json)。
     // slack 官方 MCP 已于 2026-07-15 退役(迁入内置意识 cindy-slack,授权走
     // oauth-broker 的 slack provider;老账号由 slackAccountsMigration 无感搬入)。
@@ -125,11 +127,6 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
         }
       },
       logger: createLogger('mcp/lizi_feishu_bot'),
-    },
-    slackBot: {
-      sendFile: (chatId: string, absPath: string, displayName?: string, threadTs?: string) =>
-        slackIm.sendFile(chatId, absPath, displayName, { threadTs }),
-      logger: createLogger('mcp/lizi_slack_bot'),
     },
     scheduler: {
       getScheduler: () => getScheduler(),

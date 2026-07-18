@@ -25,7 +25,7 @@ import {
   ScreenHeader,
   StatusDot,
 } from '@/components/MobilePrimitives';
-import { API_BASE_URL, DESKTOP_PACKAGE_VERSION, DEVICE_LINK_API_BASE_URL, FEISHU_APP_ID, IS_OTA_SELFHOST } from '@/config/env';
+import { AUTH_API_BASE_URL, AUTH_REGION, DESKTOP_PACKAGE_VERSION, DEVICE_LINK_API_BASE_URL, IS_OTA_SELFHOST, REVIEW_MODE } from '@/config/env';
 import { useDeviceLink } from '@/device-link/DeviceLinkContext';
 import { buildMobileDeviceName } from '@/device-link/mobileDeviceIdentity';
 import { formatRemoteError } from '@/device-link/remoteStatus';
@@ -85,10 +85,10 @@ export default function SettingsScreen() {
   const deviceName = selfDeviceName ?? systemDeviceName;
   const overview = useMemo(
     () => buildMobileSettingsOverview({
-      apiBaseUrl: API_BASE_URL,
+      authBaseUrl: AUTH_API_BASE_URL,
+      authRegion: AUTH_REGION,
       deviceId: auth.deviceId,
       deviceName,
-      feishuConfigured: FEISHU_APP_ID.trim().length > 0,
       platform: Platform.OS,
       relayStatus: status,
       userEmail: auth.user?.email,
@@ -141,7 +141,8 @@ export default function SettingsScreen() {
   }, []);
 
   const checkForUpdate = useCallback(async () => {
-    if (!updatesEnabled || updatePhase === 'checking' || updatePhase === 'downloading') return;
+    // 审核模式:入口按钮已隐藏,这里再挡一层(状态由代码保证,不依赖 UI 层记得隐藏)。
+    if (REVIEW_MODE || !updatesEnabled || updatePhase === 'checking' || updatePhase === 'downloading') return;
     setUpdateMessage(null);
     setUpdatePhase('checking');
     try {
@@ -454,25 +455,28 @@ export default function SettingsScreen() {
                 ) : null}
                 {updateMessage ? (
                   <Text style={styles.rowDetail} numberOfLines={2} testID="settings.updateMessage">{updateMessage}</Text>
-                ) : !updatesEnabled ? (
+                ) : !REVIEW_MODE && !updatesEnabled ? (
                   <Text style={styles.rowDetail} numberOfLines={1}>开发版，热更不可用</Text>
                 ) : null}
               </View>
-              <MainWindowActionButton
-                action={{
-                  accessibilityLabel: updateBusy ? '正在检查更新' : '检查更新',
-                  busy: updateBusy,
-                  disabled: !updatesEnabled,
-                  label: updateButtonLabel,
-                  onPress: () => void checkForUpdate(),
-                  testID: 'settings.checkUpdateButton',
-                  tone: 'primary',
-                }}
-                density="compact"
-                style={styles.versionButton}
-              />
+              {/* 审核模式(清单 review 命中当前二进制版本):隐藏检查更新入口,版本号照常展示 */}
+              {!REVIEW_MODE ? (
+                <MainWindowActionButton
+                  action={{
+                    accessibilityLabel: updateBusy ? '正在检查更新' : '检查更新',
+                    busy: updateBusy,
+                    disabled: !updatesEnabled,
+                    label: updateButtonLabel,
+                    onPress: () => void checkForUpdate(),
+                    testID: 'settings.checkUpdateButton',
+                    tone: 'primary',
+                  }}
+                  density="compact"
+                  style={styles.versionButton}
+                />
+              ) : null}
             </View>,
-            ...(IS_OTA_SELFHOST ? [
+            ...(IS_OTA_SELFHOST && !REVIEW_MODE ? [
               <View key="bundle-update" style={styles.versionRow} testID="settings.bundleUpdate">
                 <View style={styles.versionTexts}>
                   <Text style={styles.rowLabel}>整包更新</Text>
@@ -629,6 +633,16 @@ export default function SettingsScreen() {
             testID="settings.logoutActions"
           />
         </View>
+
+        {/* App 备案信息:固定置于设置页最底部 */}
+        <SettingsGroup title="备案信息">
+          <InfoRow
+            key="app-filing-number"
+            label="App 备案号"
+            testID="settings.appFilingNumber"
+            value="沪ICP备11033765号-89A"
+          />
+        </SettingsGroup>
       </ScrollView>
     </SafeAreaView>
   );

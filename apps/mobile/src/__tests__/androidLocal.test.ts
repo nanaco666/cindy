@@ -9,10 +9,7 @@ import {
   replaceVersionCodeInAndroidVersionJson,
   resolveAndroidSigningEnv,
   patchBuildGradleSigning,
-  patchRootBuildGradleFeishuFlatDir,
   patchGradlePropertiesMemory,
-  DEFAULT_KEYSTORE_PATH,
-  DEFAULT_KEY_ALIAS,
 } from '../../scripts/lib/android-local.mjs';
 
 function withMobileDir(json: unknown, fn: (dir: string) => void) {
@@ -44,31 +41,36 @@ describe('readAndroidVersionCode', () => {
   });
 });
 
-describe('resolveAndroidSigningEnv', () => {
-  it('两个口令齐全 → 应用默认路径/alias', () => {
-    const env = resolveAndroidSigningEnv({
-      XDT_ANDROID_KEYSTORE_PASSWORD: 's3cret',
-      XDT_ANDROID_KEY_PASSWORD: 'k3y',
-    });
-    expect(env.XDT_ANDROID_KEYSTORE_PATH).toBe(DEFAULT_KEYSTORE_PATH);
-    expect(env.XDT_ANDROID_KEY_ALIAS).toBe(DEFAULT_KEY_ALIAS);
-    expect(env.XDT_ANDROID_KEYSTORE_PASSWORD).toBe('s3cret');
-    expect(env.XDT_ANDROID_KEY_PASSWORD).toBe('k3y');
-  });
-  it('env 覆盖路径/alias', () => {
-    const env = resolveAndroidSigningEnv({
-      XDT_ANDROID_KEYSTORE_PATH: '/tmp/x.jks',
-      XDT_ANDROID_KEY_ALIAS: 'custom',
-      XDT_ANDROID_KEYSTORE_PASSWORD: 'a',
-      XDT_ANDROID_KEY_PASSWORD: 'b',
-    });
+describe('resolveAndroidSigningEnv（path/alias 来自 region JSON,两口令来自 env 后缀)', () => {
+  const CN = { authRegion: 'cn', androidSigning: { keystorePath: '/tmp/x.jks', keyAlias: 'custom' } };
+  const GLOBAL = { authRegion: 'global', androidSigning: { keystorePath: '/tmp/g.jks', keyAlias: 'g' } };
+  const CN_PW = { XDT_ANDROID_KEYSTORE_PASSWORD: 'a', XDT_ANDROID_KEY_PASSWORD: 'b' };
+
+  it('JSON 路径/alias + env 口令齐全 → 透传', () => {
+    const env = resolveAndroidSigningEnv(CN, CN_PW);
     expect(env.XDT_ANDROID_KEYSTORE_PATH).toBe('/tmp/x.jks');
     expect(env.XDT_ANDROID_KEY_ALIAS).toBe('custom');
+    expect(env.XDT_ANDROID_KEYSTORE_PASSWORD).toBe('a');
+    expect(env.XDT_ANDROID_KEY_PASSWORD).toBe('b');
   });
-  it('缺口令 → 抛错且不落任何默认口令', () => {
-    expect(() => resolveAndroidSigningEnv({ XDT_ANDROID_KEY_PASSWORD: 'b' })).toThrow(/XDT_ANDROID_KEYSTORE_PASSWORD/);
-    expect(() => resolveAndroidSigningEnv({ XDT_ANDROID_KEYSTORE_PASSWORD: 'a' })).toThrow(/XDT_ANDROID_KEY_PASSWORD/);
-    expect(() => resolveAndroidSigningEnv({})).toThrow(/XDT_ANDROID_KEYSTORE_PASSWORD, XDT_ANDROID_KEY_PASSWORD/);
+  it('cn 口令回落无后缀旧名;_CN 后缀优先', () => {
+    expect(resolveAndroidSigningEnv(CN, CN_PW).XDT_ANDROID_KEYSTORE_PASSWORD).toBe('a');
+    expect(
+      resolveAndroidSigningEnv(CN, { ...CN_PW, XDT_ANDROID_KEYSTORE_PASSWORD_CN: 'cnpw' }).XDT_ANDROID_KEYSTORE_PASSWORD,
+    ).toBe('cnpw');
+  });
+  it('global 口令必须带 _GLOBAL 后缀(无后缀不回落)', () => {
+    expect(() => resolveAndroidSigningEnv(GLOBAL, CN_PW)).toThrow(/XDT_ANDROID_KEYSTORE_PASSWORD_GLOBAL/);
+    const ok = resolveAndroidSigningEnv(GLOBAL, {
+      XDT_ANDROID_KEYSTORE_PASSWORD_GLOBAL: 'gpw',
+      XDT_ANDROID_KEY_PASSWORD_GLOBAL: 'gkey',
+    });
+    expect(ok.XDT_ANDROID_KEYSTORE_PASSWORD).toBe('gpw');
+    expect(ok.XDT_ANDROID_KEY_PASSWORD).toBe('gkey');
+  });
+  it('缺 JSON 字段 → 点名 keystorePath/keyAlias;缺 env 口令 → 点名 env 名', () => {
+    expect(() => resolveAndroidSigningEnv({ authRegion: 'cn', androidSigning: { keyAlias: 'x' } }, CN_PW)).toThrow(/keystorePath/);
+    expect(() => resolveAndroidSigningEnv(CN, { XDT_ANDROID_KEY_PASSWORD: 'b' })).toThrow(/XDT_ANDROID_KEYSTORE_PASSWORD_CN/);
   });
 });
 
@@ -119,39 +121,6 @@ describe('patchBuildGradleSigning', () => {
   it('找不到锚点 → 抛错(不静默出 debug 签名包)', () => {
     expect(() => patchBuildGradleSigning('android {\n  buildTypes { release { minifyEnabled true } }\n}')).toThrow(/signingConfigs/);
     expect(() => patchBuildGradleSigning('')).toThrow();
-  });
-});
-
-// Expo prebuild 生成的 android/build.gradle 根工程代表片段(buildscript + allprojects 两个 repositories)。
-const TEMPLATE_ROOT_GRADLE = `buildscript {
-  repositories {
-    google()
-    mavenCentral()
-  }
-}
-allprojects {
-  repositories {
-    google()
-    mavenCentral()
-    maven { url 'https://www.jitpack.io' }
-  }
-}
-`;
-
-describe('patchRootBuildGradleFeishuFlatDir', () => {
-  it('把 larksso flatDir 加进 allprojects.repositories(不动 buildscript)', () => {
-    const out = patchRootBuildGradleFeishuFlatDir(TEMPLATE_ROOT_GRADLE);
-    expect(out).toContain('flatDir { dirs "${rootProject.projectDir}/../modules/xdt-feishu-login/android/libs" }');
-    // buildscript.repositories 不应被注入(flatDir 只在 allprojects 出现一次)
-    expect(out.match(/flatDir/g)?.length).toBe(1);
-    expect(out.indexOf('flatDir')).toBeGreaterThan(out.indexOf('allprojects'));
-  });
-  it('幂等:再跑原样返回', () => {
-    const once = patchRootBuildGradleFeishuFlatDir(TEMPLATE_ROOT_GRADLE);
-    expect(patchRootBuildGradleFeishuFlatDir(once)).toBe(once);
-  });
-  it('找不到 allprojects.repositories → 抛错', () => {
-    expect(() => patchRootBuildGradleFeishuFlatDir('buildscript { repositories { google() } }')).toThrow(/allprojects/);
   });
 });
 

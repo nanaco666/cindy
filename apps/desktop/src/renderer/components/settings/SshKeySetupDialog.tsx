@@ -538,7 +538,7 @@ function GenerateForm({ generating, onSubmit, onCancel }: GenerateFormProps) {
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="xdt-maker"
+          placeholder="cindy"
           disabled={generating}
           className="h-8 rounded-md border bg-transparent px-2 text-12 outline-none"
           style={{

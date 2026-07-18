@@ -2,10 +2,10 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "xdt-maker-desktop-linux",
-  "documentNamespace": "https://xdmaker.com/spdx/desktop-linux/74631a074dd8452ade00ae591fdb0dac48e9e389233f585be59cae8c7bbe2816",
+  "name": "cindy-desktop-linux",
+  "documentNamespace": "https://cindy.app/spdx/desktop-linux/a5f125c4533602ff8bbd8de4ddb7a10322336dda5a6ccbc8a99ffb3defee137b",
   "creationInfo": {
-    "created": "1970-01-01T00:00:00Z",
+    "created": "2026-07-17T05:10:01Z",
     "creators": [
       "Tool: scripts/generate-third-party-notices.mjs"
     ]
@@ -19,6 +19,16 @@
       "filesAnalyzed": false,
       "licenseConcluded": "LicenseRef-Sharp-Third-Party-Licenses",
       "licenseDeclared": "LicenseRef-Sharp-Third-Party-Licenses",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "name": "drawio viewer (vendored)",
+      "SPDXID": "SPDXRef-Package-ef29a7e5a6f64477",
+      "versionInfo": "30.0.4",
+      "downloadLocation": "https://github.com/jgraph/drawio",
+      "filesAnalyzed": false,
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
       "copyrightText": "NOASSERTION"
     },
     {
@@ -6716,8 +6726,8 @@
     },
     {
       "name": "drizzle-orm",
-      "SPDXID": "SPDXRef-Package-ff2415e6057a6c54",
-      "versionInfo": "0.36.4",
+      "SPDXID": "SPDXRef-Package-bc6d5248a7fbabed",
+      "versionInfo": "0.45.2",
       "downloadLocation": "https://github.com/drizzle-team/drizzle-orm",
       "filesAnalyzed": false,
       "licenseConcluded": "Apache-2.0",
@@ -6727,7 +6737,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/drizzle-orm@0.36.4"
+          "referenceLocator": "pkg:npm/drizzle-orm@0.45.2"
         }
       ]
     },
@@ -9193,23 +9203,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/js-yaml@3.15.0"
-        }
-      ]
-    },
-    {
-      "name": "js-yaml",
-      "SPDXID": "SPDXRef-Package-8f45382471476cce",
-      "versionInfo": "4.1.1",
-      "downloadLocation": "https://github.com/nodeca/js-yaml",
-      "filesAnalyzed": false,
-      "licenseConcluded": "MIT",
-      "licenseDeclared": "MIT",
-      "copyrightText": "NOASSERTION",
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/js-yaml@4.1.1"
         }
       ]
     },
@@ -14978,8 +14971,8 @@
     },
     {
       "name": "zod",
-      "SPDXID": "SPDXRef-Package-ba9ad081296230d2",
-      "versionInfo": "4.4.3",
+      "SPDXID": "SPDXRef-Package-db999faf406e0717",
+      "versionInfo": "4.3.6",
       "downloadLocation": "https://github.com/colinhacks/zod",
       "filesAnalyzed": false,
       "licenseConcluded": "MIT",
@@ -14989,7 +14982,7 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/zod@4.4.3"
+          "referenceLocator": "pkg:npm/zod@4.3.6"
         }
       ]
     },
@@ -15033,6 +15026,11 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-643f8990f2c4980c"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-ef29a7e5a6f64477"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -17022,7 +17020,7 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-ff2415e6057a6c54"
+      "relatedSpdxElement": "SPDXRef-Package-bc6d5248a7fbabed"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -17748,11 +17746,6 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-98f88ff4e5a3d486"
-    },
-    {
-      "spdxElementId": "SPDXRef-DOCUMENT",
-      "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-8f45382471476cce"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
@@ -19452,7 +19445,7 @@
     {
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
-      "relatedSpdxElement": "SPDXRef-Package-ba9ad081296230d2"
+      "relatedSpdxElement": "SPDXRef-Package-db999faf406e0717"
     },
     {
       "spdxElementId": "SPDXRef-DOCUMENT",

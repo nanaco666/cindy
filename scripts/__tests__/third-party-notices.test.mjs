@@ -41,9 +41,9 @@ test("generated artifact notices are platform-scoped and disclose restricted com
   assert.match(linux, /@img\/sharp-linux-x64@/);
   assert.match(windowsRestricted, /@codesandbox\/nodebox@0\.1\.8/);
   assert.match(windowsRestricted, /Sustainable Use License/);
-  assert.match(iosRestricted, /No restricted or proprietary components/);
-  assert.doesNotMatch(iosRestricted, /Lark SSO Android SDK AAR@3\.0\.10/);
-  assert.match(androidRestricted, /Lark SSO Android SDK AAR@3\.0\.10/);
+  assert.match(iosRestricted, /WeChat OpenSDK for iOS@2\.0\.5/);
+  assert.doesNotMatch(iosRestricted, /WeChat OpenSDK for Android@6\.8\.38/);
+  assert.match(androidRestricted, /WeChat OpenSDK for Android@6\.8\.38/);
   assert.doesNotMatch(androidRestricted, /Claude Code CLI@/);
   assert.doesNotMatch(windows, /@codesandbox\/nodebox@0\.1\.8 —/);
 });
@@ -85,14 +85,14 @@ test("desktop resources include both open-source and restricted disclosures", ()
     "apps/desktop/resources/THIRD-PARTY-RESTRICTED.txt",
   );
   assert.match(desktopRestricted, /Claude Code CLI@/);
-  assert.doesNotMatch(desktopRestricted, /Lark SSO Android SDK AAR@/);
+  assert.doesNotMatch(desktopRestricted, /WeChat OpenSDK/);
   assert.match(
     read("apps/desktop/resources/THIRD-PARTY-NOTICES.txt"),
     /sqlite-vec/,
   );
   assert.ok(
     fs.existsSync(
-      path.join(repoRoot, "apps/desktop/xdt-updater/src-tauri/Cargo.lock"),
+      path.join(repoRoot, "apps/desktop/cindy-updater/src-tauri/Cargo.lock"),
     ),
   );
 });

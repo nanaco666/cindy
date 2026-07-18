@@ -16,7 +16,7 @@ External account connections have moved out of the old "Third-Party Platforms" s
 - **GitLab** — handled by the Cindy GitLab ghost (Settings > Ghosts > Cindy GitLab; existing PAT connections are migrated automatically).
 - **Codex** — sign in under Settings > Model Providers (separate from the Codex CLI binary the app ships with).
 - **FeiShu** (sign-in + bot) — see the FeiShu bot topic; it lives in its own settings section.
-- **XD Gateway** — Settings > Model Providers. Mivo and web-search keys are configured on the matching ghost detail pages (XD Mivo / Cindy Web Search).
+- **Cindy AI** — Settings > Model Providers. Mivo and web-search keys are configured on the matching ghost detail pages (XD Mivo / Cindy Web Search).
 
 **Managing connections:**
 

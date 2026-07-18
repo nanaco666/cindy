@@ -87,8 +87,6 @@ const singletonOverrides = {
   'file-chip-bg': BORDER_BG,
   'file-remove-bg': TEXT_DISABLED,
   'info-700': TEAL_SOFT,
-  'migration-bar-fill': TEAL_PRIMARY,
-  'migration-bar-track': SURFACE_BG,
   'model-trigger-hover': HOVER_BG,
   'msg-link': TEAL_SOFT,
   'msg-scrollbar-hover': TEXT_DISABLED,

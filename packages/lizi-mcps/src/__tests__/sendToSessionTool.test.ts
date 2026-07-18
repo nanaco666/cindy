@@ -119,7 +119,7 @@ describe('send_to_session tool', () => {
         wakeKind: 'created',
         targetTitle: 'PR #638',
         targetLastUserSendAt: null,
-        worktreePath: '/repo/.xdt-worktrees/auto-abc123',
+        worktreePath: '/repo/.cindy-worktrees/auto-abc123',
       },
     });
     const res = await registry.call('send_to_session', {
@@ -133,7 +133,7 @@ describe('send_to_session tool', () => {
     expect(parse(res)).toMatchObject({
       ok: true,
       wake_kind: 'created',
-      worktree_path: '/repo/.xdt-worktrees/auto-abc123',
+      worktree_path: '/repo/.cindy-worktrees/auto-abc123',
     });
   });
 

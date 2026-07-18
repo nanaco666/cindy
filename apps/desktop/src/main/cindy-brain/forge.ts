@@ -138,7 +138,7 @@ export async function packGhostDir(dir: string): Promise<ForgePackResult> {
  */
 export const FORGE_GUIDE = `# 意识(Ghost)编写手册
 
-意识是 XDMaker(Cindy)的第三方能力包,文件形态是 \`.cindy\`(zip 包)。装入后可给
+意识是 Cindy 的第三方能力包,文件形态是 \`.cindy\`(zip 包)。装入后可给
 主机叠加:AI 可调用的工具、常驻界面面板、模型代办能力。本手册教你(agent)替用户
 写一个意识。**流程:读完本手册 → 在工作目录写源码文件 → ghost_forge_pack 打包 →
 用户在弹窗上确认装入。**
@@ -224,9 +224,9 @@ my-ghost/
       "scopeDelimiter": ",",                        // 可选:authorize URL 的 scope 拼接分隔符;缺省空格(OAuth 标准),Slack 这类逗号分隔的服务商声明 ","(目前只认这一个值)
       "pkce": true,                                 // 可选:PKCE(S256)开关,缺省 true
       "extraAuthorizeParams": { "access_type": "offline", "prompt": "consent" },  // 可选 ≤8 条:服务商特有授权参数(协议保留参数禁写)
-      "identity": { "url": "https://api.example.com/userinfo", "labelPath": "email", "displayTemplate": "{team} · {user}" },  // 可选:授权后拉一次身份端点给账号打标签(设置页"已连接为 xxx";url 域名须命中 hosts)。labelPath 应指向**唯一且稳定**字段(如邮箱 / user_id)——它是重复授权时的同身份合并判定键,选 name 这类可重名可改名字段会误合并。displayTemplate 可选:人类可读展示名模板,\`{点分路径}\` 占位符从同一份身份响应取值(至少一个占位符,≤200 字符),任一占位符取不到值整体降级为空、回落显示 labelPath 的值——labelPath 的稳定字段不可读(如 Slack 的 user_id)时声明它,设置页与账号工具展示的就是渲染后的名字(邮箱这类本身可读的服务商不需要)
+      "identity": { "url": "https://api.example.com/userinfo", "labelPath": "email", "displayTemplate": "{team} · {user}", "avatarPath": "data.avatar_thumb" },  // 可选:授权后拉一次身份端点给账号打标签(设置页"已连接为 xxx";url 域名须命中 hosts)。labelPath 应指向**唯一且稳定**字段(如邮箱 / user_id)——它是重复授权时的同身份合并判定键,选 name 这类可重名可改名字段会误合并。displayTemplate 可选:人类可读展示名模板,\`{点分路径}\` 占位符从同一份身份响应取值(至少一个占位符,≤200 字符),任一占位符取不到值整体降级为空、回落显示 labelPath 的值——labelPath 的稳定字段不可读(如 Slack 的 user_id)时声明它,设置页与账号工具展示的就是渲染后的名字(邮箱这类本身可读的服务商不需要)。avatarPath 可选:头像 URL 在身份响应里的点分路径(如飞书的 "data.avatar_thumb")——主机取 https 地址后**不带凭证**下载小图(仅 png/jpeg/webp/gif、≤256KB)转 data URL 存库,\`/oauth\` 回查里以 account.avatarDataUrl 给你的 settingsHtml 展示(<img> 直接用)。**下载仅对第一方官方意识生效**(头像地址不受 hosts 白名单约束,第三方声明合法但恒降级 null)——所以页面必须能没头像也好看(如回落姓名首字圆片)
       "redirectPort": 53682,                        // 可选:loopback 回调固定端口(1024–65535)。服务商要求回调 URI 与注册值精确匹配(如 Atlassian)时声明,回调恒为 http://127.0.0.1:<端口>/callback;缺省 = 随机端口(Google 等允许任意 loopback 端口的服务商不用声明)
-      "tokenBroker": "jira",                        // 可选:仅第一方官方意识可用(第三方声明拒装)。声明后 code/refresh 交换经 XDMaker 服务端 broker 完成(client secret 在服务端,不随包分发),与 clientSecret 互斥;设置页不再支持自填 client
+      "tokenBroker": "jira",                        // 可选:仅第一方官方意识可用(第三方声明拒装)。声明后 code/refresh 交换经 Cindy 服务端 broker 完成(client secret 在服务端,不随包分发),与 clientSecret 互斥;设置页不再支持自填 client
       "brokerBounce": { "path": "/slack-mcp/bounce", "callbackPath": "/slack-mcp/callback" }  // 可选:双地址弹跳回调(服务商后台只收 https redirect 时用,如 Slack)。必须与 tokenBroker、redirectPort 同时声明;报给服务商的 redirect_uri = broker 服务基地址 + path(主机运行时拼,清单不落域名),浏览器授权后由弹跳路由 302 回 http://127.0.0.1:<redirectPort><callbackPath>
     }
   }],
@@ -335,6 +335,21 @@ cindy.send({ type: 'tool-result', callId: msg.callId, ok: true, result: {
   // 3D 产物(GLB 已入媒体库)可另带
   // _xdt_model_files: [{ provider: 'cindy', url: 'cindy-media://….glb', format: 'GLB' }]
   // ——与 xdt_image_urls 按位配对,用户点对应预览图直接进应用内 3D 查看器。
+  //
+  // ⚠️ 媒体字段是**数据通道**,不只是桌面渲染指令:IM/远程会话(Slack/飞书)的
+  // 出站与手机端都靠这些字段把你的产物送到用户手里。**任何情况下都不要删掉/
+  // 省略它们**——包括你把图画进了自己的卡片时(那会让 IM 用户永远收不到图)。
+  // 画卡去重用令牌:图入卡带 xdt_images_in_card: true(音频对应
+  // xdt_audio_in_card),桌面验证锚卡真含对应媒体后才跳过基座渲染,IM/手机
+  // 不受影响。另:主机会对"署名调用"(cindy-request / fetch 带 callId)期间
+  // 入库的媒体独立记账,你没声明媒体字段时以 xdt_media_produced 兜底注入
+  // ——但那是安全网,别依赖它,正路是老实声明字段。
+  // 内联意图令牌(读取类意识用):结果顶层带 xdt_media_inline: true = 这些
+  // 媒体是"从文档/消息里读出来的素材",桌面呈现应由主 agent 在最终回复里
+  // markdown 内联(![](cindy-media://…)),主机不画卡、也不注"别嵌 markdown"
+  // 禁令;IM/远程出站仍按账本自动送图。仅在你**没有**声明 xdt_image_urls 等
+  // 复数媒体字段时有意义——声明了媒体字段一律走卡片语义,别两个都带。
+  // 生成类意识(画图/做视频)不要用它:生成产物走卡片语义体验才对。
   note: "干完了"
 }});
 // 失败交卷:{ type: 'tool-result', callId, ok: false, message: '原因' }
@@ -449,7 +464,11 @@ cindy.onHostMessage(async function (msg) {
   调用参数),你画不了也冒充不了——它是"这块内容由某意识渲染"的信任签名;chip
   以下整块画布归你,主机不再叠边框/底色/内边距;
 - 供卡的调用,聊天不再渲染 \`xdt_image_urls\` 的通用图卡(被你的卡替换);其它
-  工具/其它调用不受影响。
+  工具/其它调用不受影响。**但 \`xdt_image_urls\` 本身仍必须照发**(数据通道,
+  IM/远程会话出站与手机端靠它),图画进卡时结果带 \`xdt_images_in_card: true\`
+  即可(与 \`xdt_audio_in_card\` 同款令牌,桌面据此去重,删字段=IM 丢图);
+  **跨调用画卡**(如轮询流画回首轮卡位)还需同时回锚 \`xdt_anchor_card_id\`
+  = 持卡调用的 callId,桌面凭锚取卡验证含图后才压基座,锚不上会双渲染。
 
 **交互卡的 card-action 处理**(声明了 card 槽即可收;点击触发你的动作、会花配额):
 
@@ -748,7 +767,8 @@ settingsHtml 里自填**(用户用自己注册的 OAuth 应用,配额风控归�
 \`\`\`js
 // 状态回查(哪些 oauth 凭证槽、client 配没配、连了哪些账号;零令牌字节):
 const list = await (await fetch('/oauth')).json();
-// → [{ key:'acct', clientConfigured:true, clientCustom:false, accounts:[{ id, label, status:'connected'|'expired', isDefault, createdAt }] }]
+// → [{ key:'acct', clientConfigured:true, clientCustom:false, accounts:[{ id, label, status:'connected'|'expired', isDefault, createdAt, avatarDataUrl }] }]
+// avatarDataUrl = 头像 data URL(声明了 identity.avatarPath 且主机下载成功才有,否则 null;<img src> 直接用)
 // clientConfigured = 自填或内置任一在场;clientCustom = 用户自填过(UI 显示"内置应用身份/已自定义")
 // client 凭证只写入库(和 /secrets 同纪律,存入后拿不回;clientSecret 可省略 = 纯 PKCE):
 await fetch('/oauth/acct/client', { method:'PUT', body: JSON.stringify({ clientId, clientSecret }) });  // 204 即入库
@@ -781,9 +801,11 @@ identity.displayTemplate 时,\`/oauth\` 回查与连接结果里 account.label �
   ——请选一个不易撞车的端口)。Google 这类允许任意 loopback 端口的服务商不用
   声明。
 - \`tokenBroker\`:**仅第一方官方意识可用**(第三方声明直接拒装)——code/refresh
-  交换改经 XDMaker 服务端 broker 完成,client secret 由服务端持有、不随包分发,
-  且要求用户已登录 XDMaker。声明它时与 clientSecret 互斥、PKCE 强制关闭、设置页
-  的 \`/oauth/<key>/client\` 自填通道返回 405(settingsHtml 不要再画 client 输入区)。
+  交换改经 Cindy 服务端 broker 完成,client secret 由服务端持有、不随包分发,
+  且要求用户已登录 Cindy。声明它时与 clientSecret 互斥;PKCE 缺省开(verifier
+  经 broker exchange 透传服务端),不吃 PKCE 的服务商显式 \`"pkce": false\`;
+  设置页的 \`/oauth/<key>/client\` 自填通道返回 405(settingsHtml 不要再画
+  client 输入区)。
 - \`brokerBounce\`:双地址弹跳回调(随 tokenBroker,同样仅第一方)。Slack 这类
   服务商后台只收 https redirect、不收 http loopback——声明后报给服务商的
   redirect_uri 是「broker 服务的 https 弹跳路由」(主机用 broker 基地址 + \`path\`
@@ -804,6 +826,9 @@ const r = await cindy.fetch({
   url: 'https://api.example.com/v1/file/',
   method: 'POST',                                   // upload 仅 POST;与 body 互斥;与 as:'media' 互斥
   upload: { hashes: ['<64位指纹>'], field: 'file' }, // 1–4 条;field 缺省 'file'
+  // 可选 fields ≤8 条:随行普通表单字段,在文件段之前;值里的字面量 "{bytes}"
+  // 由主机替换成全部上传文件的总字节数(要求 size 字段的服务用):
+  // upload: { hashes: [...], field: 'file', fields: { parent_type: 'docx_image', size: '{bytes}' } }
   callId: msg.callId,
 });
 // 响应按文本形态返回(服务端的入库回执 JSON 你自己解析)。
@@ -828,8 +853,10 @@ const r = await cindy.fetch({
   method: 'POST',                                   // uploadDir 仅 POST;与 body / upload / as:'media' 互斥
   uploadDir: {
     token: args.dir_deposit.token,                  // 一次性票据:用一次即废,失败重试要主 agent 重新过户
-    fields: { name: 'my-site' },                    // 可选 ≤8 条:随行普通表单字段
+    fields: { name: 'my-site' },                    // 可选 ≤8 条:随行普通表单字段(值里的 "{bytes}" 由主机替换成文件总字节数)
     fileFieldPrefix: 'file-',                       // 可选:文件字段名前缀(第 N 个文件字段名 file-N,filename=相对路径)
+    // fileField: 'file',                           // 可选(与 fileFieldPrefix 互斥):单文件精确字段名——票据必须恰含
+    //                                              // 1 个文件,filename 只取文件名;"字段名钉死 file"的服务(飞书传文件)用
   },
   callId: msg.callId,
 });
@@ -1137,7 +1164,8 @@ await cindy.fs({ op: 'write', root: 'data', path: 'a.txt', content: 'hi' });
 - network 详单格式错(hosts 缺失/裸 TLD/IP/带端口/通配不在最左、secret 缺 inject、
   inject.format 没有 {value} 占位、inject.header 用了 Host/Cookie 等协议关键头、
   inject.hosts 不是 hosts 声明条目的子集、有详单但 slots 没有 "network"、
-  secret.source 不是 "user"/"login-email"/"oauth"、source:"login-email" 还声明了 url、
+  secret.source 不是 "user"/"login-email"/"oauth"、
+  source:"login-email" 还声明了 url 或 exchange、
   声明了 user 凭证但没声明 settingsHtml、遗留 input 字段值不是 "ghost")
 - exchange 声明格式错(url 非 https/域名不在 hosts 白名单、bodyFormat 不是恰含一个
   {value}、contentType 不在白名单、tokenPath 不是点分路径、ttlSeconds 越界)

@@ -19,6 +19,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import type { AgentKind, OAuthProviderDescriptor } from '@lizi/model-providers';
 
 import { desktopMakerLogger } from './logger-adapter.js';
@@ -318,8 +319,8 @@ class CallbackListener {
       this.pendingRes.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       // 浏览器页面够不到 renderer i18n，双语兜底（同 grok）。
       this.pendingRes.end(
-        `<html><body style="font-family:sans-serif">${providerName} 登录成功，可以关闭此页面回到 XDMaker。<br/>`
-        + `${providerName} login successful — you can close this page and return to XDMaker.</body></html>`,
+        `<html><body style="font-family:sans-serif">${providerName} 登录成功，可以关闭此页面回到 ${BRAND_NAME}。<br/>`
+        + `${providerName} login successful — you can close this page and return to ${BRAND_NAME}.</body></html>`,
       );
     } catch {
       /* 回执页写失败无害:登录结果以凭证落盘为准 */
