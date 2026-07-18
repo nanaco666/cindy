@@ -19,6 +19,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Effort } from '@lizi/maker-core/types/common';
 
 const h = vi.hoisted(() => {
   /** 跨模块调用顺序记录: 'touch:<id>' / 'created:<id>' */
@@ -54,7 +55,7 @@ const h = vi.hoisted(() => {
     resolvedConfig: {
       agentKind: 'claude-code' as const,
       model: 'test-model',
-      effort: undefined as string | undefined,
+      effort: undefined as Effort | undefined,
       permissionMode: 'bypassPermissions',
       providerId: null as string | null,
     },

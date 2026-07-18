@@ -871,10 +871,11 @@ export default function SessionScreen() {
   const slashLoadSeqRef = useRef(0);
   const atLoadSeqRef = useRef(0);
   const capabilitiesLoadSeqRef = useRef(0);
-  // palette 点选的 agent-skill 名字:保留到下次发送或再次打开 palette。
+  // palette 点选的 agent-skill 名字(含 sessionId 绑定):保留到下次发送或再次打开
+  // palette;sessionId 绑定防止切换会话时旧点选污染新会话的 dispatch。
   // 发送侧在 slashCommands=[] 时仍能区分「点选了 skill」与「直接手输」,确保
   // 点选的 skill 不被白名单拦截误分流到 learn:start。
-  const pendingSkillSelectionRef = useRef<string | null>(null);
+  const pendingSkillSelectionRef = useRef<{ name: string; sid: string } | null>(null);
   const extraDirBrowseSeqRef = useRef(0);
   const autoRetrySyncKeyRef = useRef<string | null>(null);
   const loadedRouteFocusKeyRef = useRef<string | null>(null);
@@ -1657,6 +1658,14 @@ export default function SessionScreen() {
       void flushComposerDraftWrites(sessionId);
     };
   }, [restoreComposerDraft, routeDraft, sessionId]);
+
+  // 草稿清空时作废未消费的 skill 点选意图:用户选了 skill 后主动清稿再手输
+  // /learn 不应被旧点选绑架(palette 会重新打开也会清,此处补覆盖清稿路径)。
+  useEffect(() => {
+    if (draft === '' && composerTrigger.kind !== 'slash') {
+      pendingSkillSelectionRef.current = null;
+    }
+  }, [draft, composerTrigger.kind]);
 
   useEffect(() => {
     if (!canUseComposer || composerTrigger.kind !== 'slash' || !currentSession || !deviceId) {
@@ -2607,9 +2616,11 @@ export default function SessionScreen() {
   }, [deviceId, hasOlderMessages, loadingEarlier, maker, messages, sessionId]);
 
   const selectSlashCommand = useCallback((command: MobileSlashCommand) => {
-    // 点选 agent-skill 时记录名字:palette 关闭后 slashCommands 被清,发送侧
-    // 凭此 ref 识别「用户明确选中的 skill」,避免白名单误分流到 learn:start。
-    pendingSkillSelectionRef.current = command.kind === 'agent-skill' ? command.name : null;
+    // 点选 agent-skill 时记录名字+会话 id:palette 关闭后 slashCommands 被清,发送侧
+    // 凭此 ref 识别「用户明确选中的 skill」;sid 绑定防止切换会话后旧点选残留。
+    pendingSkillSelectionRef.current = command.kind === 'agent-skill'
+      ? { name: command.name, sid: sessionId }
+      : null;
     setComposerDraft((current) => insertSlashCommand(current, detectComposerTrigger(current), command));
   }, [setComposerDraft]);
 
@@ -3177,13 +3188,15 @@ export default function SessionScreen() {
       // 关闭时被清为[],退回白名单。例外:用户从 palette 点选了 agent-skill
       // (pendingSkillSelectionRef 有值)时,即使 slashCommands 已清也应让行——
       // 点选意图明确,不应被白名单覆盖。点选后再次打开 palette 或发送后 ref 清零。
-      const pendingSkillName = pendingSkillSelectionRef.current;
+      const pendingSkill = pendingSkillSelectionRef.current;
       pendingSkillSelectionRef.current = null;
       const parsedDesktopCommand = hasAttachments ? null : parseMobileDesktopCommand(body, slashCommands);
-      // 若用户明确点选了同名 skill,优先让行(parseMobileDesktopCommand 在
-      // slashCommands=[] 时无法感知点选意图,需由 ref 补偿)。
+      // 若用户明确点选了同名 skill(且点选发生在当前会话),优先让行。
+      // sid 验证防止跨会话残留:切换会话后 ref 中的旧会话点选不应影响新会话 dispatch。
       const desktopCommand =
-        parsedDesktopCommand && pendingSkillName === parsedDesktopCommand.name
+        parsedDesktopCommand
+        && pendingSkill?.sid === sessionId
+        && pendingSkill.name === parsedDesktopCommand.name
           ? null
           : parsedDesktopCommand;
       if (!sessionAtSend.workingDir && !localSystemCommand && !desktopCommand) {
