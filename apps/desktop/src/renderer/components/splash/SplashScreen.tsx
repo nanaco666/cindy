@@ -90,13 +90,13 @@ export function SplashScreen() {
       onTransitionEnd={onTransitionEnd}
       aria-hidden="true"
     >
-      {/* ── 品牌块:按设计稿固定自然尺寸排布,矮窗口整体等比缩放 ── */}
+      {/* ── 品牌块:按完整图组高度上下居中,矮窗口整体等比缩放 ── */}
       <div
         aria-hidden
-        className="pointer-events-none absolute left-1/2 top-[19.3%] h-[424.5px] w-[457px]"
+        className="pointer-events-none absolute left-1/2 top-1/2 h-[499.5px] w-[457px]"
         style={{
-          transform: 'translateX(-50%) scale(min(1, calc(100vh / 700px)))',
-          transformOrigin: 'top center',
+          transform: 'translate(-50%, -50%) scale(min(1, calc(100vh / 700px)))',
+          transformOrigin: 'center',
         }}
         data-testid="splash-brand"
       >
