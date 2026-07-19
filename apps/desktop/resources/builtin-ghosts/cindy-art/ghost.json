@@ -6,6 +6,7 @@
   "whenToUse": "需要生成图片、画画、插画、配图、头像、海报,基于已生成的图改图、加元素、换风格、P 图,或想生成短视频、让一张图动起来时找我。",
   "version": "1.9.1",
   "author": "Cindy",
+  "icon": "assets/icon.png",
   "entry": "main.js",
   "slots": [
     "cindy",

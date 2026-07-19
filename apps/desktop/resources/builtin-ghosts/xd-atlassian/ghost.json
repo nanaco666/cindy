@@ -6,6 +6,7 @@
   "whenToUse": "需要查/建/改 Jira issue,JQL 搜索,查项目或用户,流转工作流,下载 Jira 附件,或搜索/阅读/创建/更新 Confluence 页面、读写评论、下载 Confluence 附件时找我(需先在意识设置页连接 Atlassian 账号)。",
   "version": "1.1.1",
   "author": "Cindy",
+  "icon": "assets/icon.png",
   "entry": "main.js",
   "settingsHtml": "settings.html",
   "slots": [

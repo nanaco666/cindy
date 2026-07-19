@@ -1962,7 +1962,32 @@
     },
     "ghosts": {
       "title": "插件",
-      "description": "以「插件」为 Cindy 叠加能力与界面,安装即用、卸载即走;每个插件都有自己的设置页。",
+      "description": "扩展 Cindy 能力的工具与集成。",
+      "page": {
+        "search": "搜索插件",
+        "clearSearch": "清除插件搜索",
+        "addPlugin": "添加插件",
+        "addPluginAria": "插件添加选项",
+        "createWithCindy": "使用 Cindy 创建",
+        "createPrompt": "帮我创建一个新的 Cindy 插件。先询问它应该做什么，以及需要哪些工具或连接。",
+        "installedTitle": "已安装的插件",
+        "installedExpand": "展开另外 {{count}} 个已安装插件",
+        "installedCollapse": "收起其他已安装插件",
+        "allTitle": "全部插件",
+        "filterAll": "全部",
+        "filtersAria": "按来源筛选插件",
+        "emptyFiltered": "没有找到匹配的插件",
+        "useAction": "使用",
+        "useAria": "使用 {{name}}",
+        "installAction": "安装",
+        "installAria": "安装 {{name}}",
+        "restoreAria": "恢复 {{name}}",
+        "origin": {
+          "builtin": "内置",
+          "enterprise": "团队共享",
+          "external": "外部/本地"
+        }
+      },
       "provisioning": {
         "updating": "正在更新内置插件…"
       },
@@ -2085,8 +2110,14 @@
         "infoTitle": "详细信息",
         "infoId": "标识",
         "infoAuthor": "作者",
+        "byAuthor": "作者 {{author}}",
         "infoPanel": "面板",
         "infoLocation": "安装位置",
+        "expandInfoValue": "展开完整{{label}}",
+        "collapseInfoValue": "收起{{label}}",
+        "copyLocation": "复制安装位置",
+        "locationCopied": "安装位置已复制",
+        "locationCopyFailed": "复制安装位置失败，请手动复制",
         "openLocation": "打开安装位置",
         "panelDocked": "已停靠 · 最小宽 {{min}}px",
         "panelNotDocked": "未停靠(布局中暂无位置记录)",
@@ -2108,10 +2139,26 @@
           },
           "defaultOption": "{{model}}(默认)"
         },
-        "toolsTitle": "注册工具",
+        "toolsTitle": "Tools",
         "permissionsTitle": "权限",
         "infoDescription": "描述",
-        "customSlotAsleep": "插件未生效,生效后这里将显示它的设置界面。"
+        "customSlotAsleep": "插件未生效,生效后这里将显示它的设置界面。",
+        "descriptionExpand": "展开",
+        "descriptionCollapse": "收起",
+        "useAction": "使用",
+        "useDisabled": "请先开启 Plugin",
+        "moreActions": "更多 Plugin 操作",
+        "updateFromFile": "从 .cindy 文件更新…",
+        "settingsTitle": "{{name}} 设置",
+        "settingsUnavailableUntilRestore": "恢复插件后可继续使用这项配置。",
+        "configurationTitle": "配置",
+        "openTool": "查看 Tool {{name}} 的详情",
+        "noToolDescription": "该 Tool 暂无描述。",
+        "viewAllTools": "查看更多",
+        "collapseTools": "收起 Tool",
+        "viewAllPermissions": "查看更多",
+        "permissionsDialogDescription": "该 Plugin 申请的全部 {{count}} 项权限",
+        "closeDialog": "关闭弹窗"
       },
       "contents": {
         "panel": "面板",
@@ -3074,6 +3121,7 @@
     "tabs": {
       "projects": "项目",
       "skillhub": "技能",
+      "plugins": "插件",
       "issues": "议题"
     },
     "user": {
@@ -5206,6 +5254,11 @@
   },
   "skillhub": {
     "home": {
+      "title": "技能",
+      "description": "管理本地技能，或从 Skill Hub 发现并安装更多技能。",
+      "search": "搜索技能",
+      "clearSearch": "清除技能搜索",
+      "noSearchResults": "没有找到匹配的技能",
       "browseTitle": "浏览 Skill Hub",
       "browseDesc": "发现并安装更多技能",
       "recommended": "推荐安装",
@@ -5894,8 +5947,11 @@
   },
   "extraDirs": {
     "menuAria": "操作菜单",
-    "tooltipEmpty": "新建目标 / 添加引用目录",
+    "tooltipEmpty": "更多操作",
     "tooltipCount": "{{count}} 个附加引用目录",
+    "pluginsTitle": "已安装的插件",
+    "pluginDisabled": "未生效",
+    "pluginNoCommand": "不可直接使用",
     "sectionTitle": "引用目录(只读)",
     "empty": "还没有引用目录",
     "add": "添加目录…",

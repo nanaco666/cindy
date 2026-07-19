@@ -48,6 +48,26 @@ export function findGhostByCommand(
   );
 }
 
+/**
+ * 只按 manifest command 识别已安装意识，不把 enabled 当成匹配条件。
+ *
+ * 仅用于编辑器内替换旧 `$command` 的结构识别；真正发送仍必须走
+ * findGhostByCommand，所以停用 Plugin 不会因此被误调用。
+ */
+export function findGhostByCommandIncludingDisabled(
+  ghosts: InstalledGhost[],
+  word: string,
+): InstalledGhost | null {
+  const fold = word.toLowerCase();
+  return (
+    ghosts.find(
+      (ghost) =>
+        ghost.manifest.command !== undefined &&
+        ghost.manifest.command.toLowerCase() === fold,
+    ) ?? null
+  );
+}
+
 // ---------------------------------------------------------------------------
 // 指令文本模板(生成端与渲染端解析必须严格同源):expandGhostCommand 用下面
 // 的模板函数生成追加文本;splitGhostDirective 把同一模板经 escapeRegExp 反推

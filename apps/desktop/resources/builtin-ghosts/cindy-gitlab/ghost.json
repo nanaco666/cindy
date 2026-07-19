@@ -6,6 +6,7 @@
   "whenToUse": "只管 GitLab 实例(gitlab.com/公司/自建),github.com 的链接不归我、找 Cindy GitHub。需要查/建/改 GitLab issue 或 MR,提交/回复/发布 code review,合并或 rebase MR,查仓库/分支/commit/文件内容,查 CI pipeline 与 job 日志,管理 release / tag / 分支,搜索全实例内容,或下载仓库归档时找我(需先在意识设置页添加 GitLab 实例与 token)。",
   "version": "1.1.1",
   "author": "Cindy",
+  "icon": "assets/icon.png",
   "entry": "main.js",
   "settingsHtml": "settings.html",
   "slots": [

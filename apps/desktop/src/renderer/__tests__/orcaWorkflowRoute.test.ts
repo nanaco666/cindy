@@ -180,7 +180,9 @@ describe('OrcaWorkflowRoute source invariants', () => {
 
   it('keeps missing worker panes as placeholders instead of editable inputs', () => {
     expect(splitViewSource).toContain("workerEmptyLabel ?? t('orca.split.waitingForWorker')");
-    expect(chatInputSource).toContain('autofocus: !disableAutofocus && !disabled');
+    expect(chatInputSource).toContain(
+      "autofocus: !disableAutofocus && !disabled ? 'end' : false",
+    );
     expect(chatInputSource).toContain('editor?.setEditable(!disabled)');
   });
 

@@ -12,10 +12,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Bot, ChevronRight, Download, Package, SquareTerminal, Store, type LucideIcon } from 'lucide-react';
+import {
+  Bot,
+  ChevronRight,
+  Download,
+  Package,
+  SquareTerminal,
+  Store,
+  type LucideIcon,
+} from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import { InvisibleWindowDragStrip } from '@/components/layout/windowDrag';
+import {
+  PluginManagementLayout,
+  PluginManagementPage,
+} from '@/features/plugin/PluginManagementLayout';
 import { refresh as refreshSkillhub, useSkillhub } from './hooks/useSkillhub';
 import { useMarketList, type MarketSkill } from './hooks/useMarketList';
 import { basename } from './lib/pathDerivations';
@@ -33,20 +44,49 @@ const KIND_ICON: Record<string, LucideIcon> = {
 /** 推荐区展示条数(market trending 前 N)。 */
 const RECOMMENDED_LIMIT = 8;
 
+function includesSkillQuery(values: ReadonlyArray<string | undefined>, query: string): boolean {
+  if (!query) return true;
+  return values.some((value) => value?.toLocaleLowerCase().includes(query));
+}
+
 export function SkillhubHomeView() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { skills, projects, bootstrapped, syncResults } = useSkillhub();
+  const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim().toLocaleLowerCase();
 
   // 推荐 = market trending 前 N(默认排序是 updated_at,挂载时切到 trending)。
   const { items: marketItems, loading: marketLoading, setSortBy } = useMarketList('available');
   useEffect(() => {
     setSortBy('trending');
   }, [setSortBy]);
-  const recommended = useMemo(() => marketItems.slice(0, RECOMMENDED_LIMIT), [marketItems]);
+  const recommended = useMemo(
+    () =>
+      marketItems
+        .filter((skill) =>
+          includesSkillQuery(
+            [skill.displayName, skill.name, skill.description, skill.authorName],
+            normalizedQuery,
+          ),
+        )
+        .slice(0, RECOMMENDED_LIMIT),
+    [marketItems, normalizedQuery],
+  );
 
   // 本地技能:global 一组 + 每个 project 一组(displayName 取自 store.projects,兜底 basename)。
-  const globalSkills = useMemo(() => skills.filter((s) => s.scope === 'global'), [skills]);
+  const globalSkills = useMemo(
+    () =>
+      skills.filter(
+        (skill) =>
+          skill.scope === 'global' &&
+          includesSkillQuery(
+            [skill.name, skill.description, skill.kind, skill.engine],
+            normalizedQuery,
+          ),
+      ),
+    [normalizedQuery, skills],
+  );
   const projectGroups = useMemo(() => {
     const byRoot = new Map<string, SkillhubSkill[]>();
     for (const s of skills) {
@@ -56,12 +96,28 @@ export function SkillhubHomeView() {
       else byRoot.set(s.projectRoot, [s]);
     }
     const nameByRoot = new Map(projects.map((p) => [p.projectRoot, p.displayName]));
-    return [...byRoot.entries()].map(([root, list]) => ({
-      root,
-      label: nameByRoot.get(root) ?? basename(root),
-      skills: list,
-    }));
-  }, [skills, projects]);
+    return [...byRoot.entries()]
+      .map(([root, list]) => {
+        const label = nameByRoot.get(root) ?? basename(root);
+        return {
+          root,
+          label,
+          skills: list.filter((skill) =>
+            includesSkillQuery(
+              [skill.name, skill.description, skill.kind, skill.engine, label],
+              normalizedQuery,
+            ),
+          ),
+        };
+      })
+      .filter((group) => group.skills.length > 0);
+  }, [normalizedQuery, skills, projects]);
+  const visibleLocalCount = useMemo(
+    () =>
+      globalSkills.length + projectGroups.reduce((count, group) => count + group.skills.length, 0),
+    [globalSkills.length, projectGroups],
+  );
+  const hasSearchResults = recommended.length > 0 || visibleLocalCount > 0;
 
   // 推荐技能的预览浮层 + 安装选择器(复用 Market 那套):点推荐卡 = 下一步直接
   // 进入该技能的预览;关闭 = 回退到首页。
@@ -90,146 +146,212 @@ export function SkillhubHomeView() {
   };
 
   return (
-    <div className="relative h-full w-full overflow-y-auto">
-      {/* 本页不渲染通用 ContentHeader,垫一条透明窗口拖拽条(mac) */}
-      <InvisibleWindowDragStrip />
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-8 py-8">
-        <h1 className="text-2xl font-semibold text-[var(--msg-assistant-text)]">SkillHub</h1>
-
-        {/* ① Skill Hub 入口 → 完整 Market 浏览页 */}
-        <button
-          type="button"
-          onClick={openMarket}
-          className={cn(
-            'group flex items-center gap-4 rounded-xl border border-[var(--cmd-palette-border)]',
-            'bg-[var(--cmd-palette-bg)] px-5 py-4 text-left transition-colors hover:bg-sidebar-item-hover',
-          )}
-        >
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[var(--chat-input-chip-bg)]">
-            <Store size={20} className="text-[var(--msg-assistant-text)]" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold text-[var(--msg-assistant-text)]">
-              {t('skillhub.home.browseTitle')}
-            </span>
-            <span className="block text-xs text-[var(--cmd-palette-item-meta)]">
-              {t('skillhub.home.browseDesc')}
-            </span>
-          </span>
-          <ChevronRight size={18} className="shrink-0 text-[var(--cmd-palette-item-meta)]" />
-        </button>
-
-        {/* ② 推荐安装 */}
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold text-[var(--msg-assistant-text)]">
-            {t('skillhub.home.recommended')}
-          </h2>
-          {marketLoading && recommended.length === 0 ? (
-            // 占位骨架:与真实卡片同栅格、同行数、同高度,内容到位后原地替换不跳动。
-            <div className="grid grid-cols-2 gap-3" aria-hidden>
-              {Array.from({ length: RECOMMENDED_LIMIT }).map((_, i) => (
-                <div
-                  key={i}
-                  className="flex h-[100px] flex-col gap-2 rounded-xl border border-[var(--cmd-palette-border)] bg-[var(--cmd-palette-bg)] p-3"
-                >
-                  <div className="h-3.5 w-2/3 animate-pulse rounded bg-[var(--cmd-palette-item-hover)] opacity-60" />
-                  <div className="h-3 w-full animate-pulse rounded bg-[var(--cmd-palette-item-hover)] opacity-40" />
-                  <div className="h-3 w-4/5 animate-pulse rounded bg-[var(--cmd-palette-item-hover)] opacity-40" />
-                  <div className="mt-auto h-3 w-1/3 animate-pulse rounded bg-[var(--cmd-palette-item-hover)] opacity-40" />
-                </div>
-              ))}
+    <PluginManagementLayout
+      activeTab="skills"
+      query={query}
+      onQueryChange={setQuery}
+      searchPlaceholder={t('skillhub.home.search')}
+      clearSearchLabel={t('skillhub.home.clearSearch')}
+    >
+      <main className="relative h-full w-full overflow-y-auto bg-[var(--surface)]">
+        <PluginManagementPage className="gap-10">
+          <header className="plugin-motion-page-header flex items-start justify-between gap-4">
+            <div className="min-w-0 pt-1">
+              <h1 className="text-28 font-medium leading-tight text-[var(--text-primary)]">
+                {t('skillhub.home.title')}
+              </h1>
+              <p className="mt-2 max-w-2xl text-14 leading-6 text-[var(--text-secondary)]">
+                {t('skillhub.home.description')}
+              </p>
             </div>
-          ) : recommended.length === 0 ? (
-            <p className="text-sm text-[var(--cmd-palette-item-meta)]">{t('skillhub.home.recommendedEmpty')}</p>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              {recommended.map((s) => (
-                <button
-                  key={s.name}
-                  type="button"
-                  onClick={() => openRecommended(s)}
-                  className={cn(
-                    'flex min-h-[100px] flex-col gap-1.5 rounded-xl border border-[var(--cmd-palette-border)]',
-                    'bg-[var(--cmd-palette-bg)] p-3 text-left transition-colors hover:bg-sidebar-item-hover',
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--msg-assistant-text)]">
-                      {s.displayName || s.name}
-                    </span>
-                    {s.installedLocally && (
-                      <span className="shrink-0 rounded-full bg-[var(--chat-input-chip-bg)] px-1.5 py-0.5 text-10 text-[var(--cmd-palette-item-meta)]">
-                        {t('skillhub.home.installed')}
-                      </span>
-                    )}
-                  </div>
-                  {s.description && (
-                    <p className="line-clamp-2 text-xs text-[var(--cmd-palette-item-meta)]">{s.description}</p>
-                  )}
-                  <div className="flex items-center gap-2 text-11 text-[var(--cmd-palette-item-meta)]">
-                    <span className="min-w-0 truncate">{s.authorName}</span>
-                    <span className="inline-flex shrink-0 items-center gap-0.5">
-                      <Download size={11} />
-                      {s.downloads}
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
+          </header>
 
-        {/* ③ 本地技能 */}
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold text-[var(--msg-assistant-text)]">
-            {t('skillhub.home.local')}
-          </h2>
-          {skills.length === 0 ? (
-            <p className="text-sm text-[var(--cmd-palette-item-meta)]">
-              {bootstrapped ? t('skillhub.home.localEmpty') : t('skillhub.welcome.scanning')}
-            </p>
-          ) : (
-            <div className="flex flex-col gap-4">
-              {globalSkills.length > 0 && (
-                <LocalGroup label={t('skillhub.home.globalScope')} skills={globalSkills} syncResults={syncResults} onOpen={openLocal} />
+          {/* ① Skill Hub 入口 → 完整 Market 浏览页 */}
+          {!normalizedQuery ? (
+            <button
+              type="button"
+              onClick={openMarket}
+              className={cn(
+                'plugin-motion-page-section',
+                'group flex items-center gap-4 rounded-[12px] border-[0.5px] border-[var(--border-default)]',
+                'bg-[var(--surface-elevated)] px-5 py-4 text-left shadow-[var(--plugin-card-shadow)]',
+                'transition-[background-color,border-color,transform] duration-150 ease-out',
+                'hover:-translate-y-0.5 hover:border-[var(--text-tertiary)]',
+                'active:translate-y-0 active:scale-[0.992]',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
               )}
-              {projectGroups.map((g) => (
-                <LocalGroup key={g.root} label={g.label} skills={g.skills} syncResults={syncResults} onOpen={openLocal} />
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
+            >
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-[22%] border-[0.5px] border-[var(--border-default)] bg-[var(--surface-elevated)] shadow-[var(--plugin-card-shadow)]">
+                <Store size={20} className="text-[var(--msg-assistant-text)]" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-[var(--msg-assistant-text)]">
+                  {t('skillhub.home.browseTitle')}
+                </span>
+                <span className="block text-xs text-[var(--cmd-palette-item-meta)]">
+                  {t('skillhub.home.browseDesc')}
+                </span>
+              </span>
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border-default)] text-[var(--text-secondary)] transition-[background-color,color,transform] group-hover:translate-x-0.5 group-hover:bg-[var(--surface-chip)] group-hover:text-[var(--text-primary)] group-active:translate-x-0 group-active:scale-95">
+                <ChevronRight size={16} strokeWidth={1.8} />
+              </span>
+            </button>
+          ) : null}
 
-      {/* 推荐技能预览浮层(下一步)+ 安装选择器 —— 复用 Market 同款。
+          {/* ② 推荐安装 */}
+          {!normalizedQuery || recommended.length > 0 || marketLoading ? (
+            <section className="plugin-motion-page-section min-w-0">
+              <SkillSectionHeading
+                title={t('skillhub.home.recommended')}
+                count={recommended.length}
+              />
+              {marketLoading && recommended.length === 0 ? (
+                // 占位骨架:与真实卡片同栅格、同行数、同高度,内容到位后原地替换不跳动。
+                <div
+                  className="grid grid-cols-[repeat(auto-fill,minmax(360px,1fr))] gap-3"
+                  aria-hidden
+                >
+                  {Array.from({ length: RECOMMENDED_LIMIT }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="flex h-[100px] flex-col gap-2 rounded-[12px] border-[0.5px] border-[var(--border-default)] bg-[var(--surface-elevated)] p-3 shadow-[var(--plugin-card-shadow)]"
+                    >
+                      <div className="h-3.5 w-2/3 animate-pulse rounded bg-[var(--cmd-palette-item-hover)] opacity-60" />
+                      <div className="h-3 w-full animate-pulse rounded bg-[var(--cmd-palette-item-hover)] opacity-40" />
+                      <div className="h-3 w-4/5 animate-pulse rounded bg-[var(--cmd-palette-item-hover)] opacity-40" />
+                      <div className="mt-auto h-3 w-1/3 animate-pulse rounded bg-[var(--cmd-palette-item-hover)] opacity-40" />
+                    </div>
+                  ))}
+                </div>
+              ) : recommended.length === 0 ? (
+                <div className="rounded-[12px] border-[0.5px] border-[var(--border-default)] px-4 py-5 text-13 leading-5 text-[var(--text-secondary)]">
+                  {t('skillhub.home.recommendedEmpty')}
+                </div>
+              ) : (
+                <div className="plugin-motion-stagger grid grid-cols-[repeat(auto-fill,minmax(360px,1fr))] gap-3">
+                  {recommended.map((s) => (
+                    <button
+                      key={s.name}
+                      type="button"
+                      onClick={() => openRecommended(s)}
+                      className={cn(
+                        'group flex min-h-[100px] flex-col gap-1.5 rounded-[12px] border-[0.5px] border-[var(--border-default)]',
+                        'bg-[var(--surface-elevated)] p-3 text-left shadow-[var(--plugin-card-shadow)]',
+                        'transition-[background-color,border-color,transform] duration-150 ease-out',
+                        'hover:-translate-y-0.5 hover:border-[var(--text-tertiary)]',
+                        'active:translate-y-0 active:scale-[0.992]',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-[var(--msg-assistant-text)]">
+                          {s.displayName || s.name}
+                        </span>
+                        {s.installedLocally && (
+                          <span className="shrink-0 rounded-full bg-[var(--chat-input-chip-bg)] px-1.5 py-0.5 text-10 text-[var(--cmd-palette-item-meta)]">
+                            {t('skillhub.home.installed')}
+                          </span>
+                        )}
+                      </div>
+                      {s.description && (
+                        <p className="line-clamp-2 text-xs text-[var(--cmd-palette-item-meta)]">
+                          {s.description}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-2 text-11 text-[var(--cmd-palette-item-meta)]">
+                        <span className="min-w-0 truncate">{s.authorName}</span>
+                        <span className="inline-flex shrink-0 items-center gap-0.5">
+                          <Download size={11} />
+                          {s.downloads}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          ) : null}
+
+          {/* ③ 本地技能 */}
+          {!normalizedQuery || visibleLocalCount > 0 ? (
+            <section className="plugin-motion-page-section min-w-0">
+              <SkillSectionHeading title={t('skillhub.home.local')} count={visibleLocalCount} />
+              {visibleLocalCount === 0 ? (
+                <div className="rounded-[12px] border-[0.5px] border-[var(--border-default)] px-4 py-5 text-13 leading-5 text-[var(--text-secondary)]">
+                  {bootstrapped ? t('skillhub.home.localEmpty') : t('skillhub.welcome.scanning')}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-6">
+                  {globalSkills.length > 0 && (
+                    <LocalGroup
+                      label={t('skillhub.home.globalScope')}
+                      skills={globalSkills}
+                      syncResults={syncResults}
+                      onOpen={openLocal}
+                    />
+                  )}
+                  {projectGroups.map((g) => (
+                    <LocalGroup
+                      key={g.root}
+                      label={g.label}
+                      skills={g.skills}
+                      syncResults={syncResults}
+                      onOpen={openLocal}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          ) : null}
+
+          {normalizedQuery && !marketLoading && !hasSearchResults ? (
+            <div className="plugin-motion-page-section rounded-[12px] border-[0.5px] border-[var(--border-default)] px-4 py-8 text-center text-13 leading-5 text-[var(--text-secondary)]">
+              {t('skillhub.home.noSearchResults')}
+            </div>
+          ) : null}
+        </PluginManagementPage>
+
+        {/* 推荐技能预览浮层(下一步)+ 安装选择器 —— 复用 Market 同款。
           点推荐卡 = 打开预览;关闭 = 回退到首页。 */}
-      <SkillhubMarketPreviewPanel
-        open={previewSkill !== null}
-        skill={previewSkill}
-        onClose={() => setPreviewSkill(null)}
-        primaryAction={
-          previewSkill
-            ? marketCardPrimaryAction({
-                isMine: previewSkill.isMine,
-                listVisibility: 'available',
-                cardState: previewSkill.cardState,
-              })
-            : 'none'
-        }
-        onClone={handleClone}
-      />
-      <InstallTargetPicker
-        open={pickerOpen}
-        skill={pickerSkill}
-        onClose={() => setPickerOpen(false)}
-        onInstallComplete={() => {
-          void refreshSkillhub();
-          setPickerOpen(false);
-          // 安装后关掉预览浮层:否则它仍持有 stale previewSkill、CTA 继续显示「安装/克隆」,
-          // 可被重复点安装(PR #246 review)。
-          setPreviewSkill(null);
-        }}
-      />
+        <SkillhubMarketPreviewPanel
+          open={previewSkill !== null}
+          skill={previewSkill}
+          onClose={() => setPreviewSkill(null)}
+          primaryAction={
+            previewSkill
+              ? marketCardPrimaryAction({
+                  isMine: previewSkill.isMine,
+                  listVisibility: 'available',
+                  cardState: previewSkill.cardState,
+                })
+              : 'none'
+          }
+          onClone={handleClone}
+        />
+        <InstallTargetPicker
+          open={pickerOpen}
+          skill={pickerSkill}
+          onClose={() => setPickerOpen(false)}
+          onInstallComplete={() => {
+            void refreshSkillhub();
+            setPickerOpen(false);
+            // 安装后关掉预览浮层:否则它仍持有 stale previewSkill、CTA 继续显示「安装/克隆」,
+            // 可被重复点安装(PR #246 review)。
+            setPreviewSkill(null);
+          }}
+        />
+      </main>
+    </PluginManagementLayout>
+  );
+}
+
+function SkillSectionHeading({ title, count }: { title: string; count: number }) {
+  return (
+    <div className="mb-5 flex items-end justify-between gap-4">
+      <div className="flex min-w-0 items-baseline gap-2">
+        <h2 className="text-20 font-medium leading-tight text-[var(--text-primary)]">{title}</h2>
+        <span className="text-13 text-[var(--text-tertiary)]">{count}</span>
+      </div>
     </div>
   );
 }
@@ -248,42 +370,62 @@ function LocalGroup({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="flex flex-col gap-1">
-      <span className="px-1 text-xs font-medium text-[var(--cmd-palette-item-meta)]">{label}</span>
-      {skills.map((s) => {
-        const Icon = KIND_ICON[s.kind] ?? Package;
-        // 来源:'skillhub' = 从市场安装的副本(填充徽标);'local' = 自己开发/发布、
-        // 没走 SkillHub 安装的本地副本(弱化文字,不与 SkillHub 抢视觉)。
-        // origin 缺失的历史 registry 靠 server isMine 兜底判定(见 deriveSkillSource)。
-        const sync = syncResults.get(s.name);
-        const isMine = sync?.exists === true ? sync.isMine : null;
-        const source = deriveSkillSource(s.registryEntry?.origin, s.registryEntry !== null, isMine);
-        return (
-          <button
-            key={s.id}
-            type="button"
-            onClick={() => onOpen(s)}
-            className="group flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm transition-colors hover:bg-sidebar-item-hover"
-          >
-            <Icon size={16} strokeWidth={1.75} className="shrink-0 text-[var(--cmd-palette-item-meta)]" />
-            <span className="min-w-0 flex-1 truncate text-[var(--msg-assistant-text)]">{s.name}</span>
-            {s.description && (
-              <span className="hidden min-w-0 max-w-[55%] truncate text-xs text-[var(--cmd-palette-item-meta)] sm:block">
-                {s.description}
+    <div className="flex flex-col gap-3">
+      <span className="px-1 text-13 font-medium text-[var(--text-secondary)]">{label}</span>
+      <div className="plugin-motion-stagger grid grid-cols-1 gap-3 md:grid-cols-2">
+        {skills.map((s) => {
+          const Icon = KIND_ICON[s.kind] ?? Package;
+          // 来源:'skillhub' = 从市场安装的副本(填充徽标);'local' = 自己开发/发布、
+          // 没走 SkillHub 安装的本地副本(弱化文字,不与 SkillHub 抢视觉)。
+          // origin 缺失的历史 registry 靠 server isMine 兜底判定(见 deriveSkillSource)。
+          const sync = syncResults.get(s.name);
+          const isMine = sync?.exists === true ? sync.isMine : null;
+          const source = deriveSkillSource(
+            s.registryEntry?.origin,
+            s.registryEntry !== null,
+            isMine,
+          );
+          return (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => onOpen(s)}
+              className={cn(
+                'group flex w-full items-start gap-3 rounded-[12px] border-[0.5px] border-[var(--border-default)] px-3 py-2.5 text-left',
+                'bg-[var(--surface-elevated)] shadow-[var(--plugin-card-shadow)]',
+                'transition-[background-color,border-color,transform] duration-150 ease-out',
+                'hover:-translate-y-0.5 hover:border-[var(--text-tertiary)]',
+                'active:translate-y-0 active:scale-[0.992]',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
+              )}
+            >
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-[22%] border-[0.5px] border-[var(--border-default)] bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-[var(--plugin-card-shadow)]">
+                <Icon size={17} strokeWidth={1.75} />
               </span>
-            )}
-            {source === 'skillhub' ? (
-              <span className="shrink-0 rounded-full bg-[var(--chat-input-chip-bg)] px-1.5 py-0.5 text-10 text-[var(--cmd-palette-item-meta)]">
-                {t('skillhub.home.sourceSkillhub')}
+              <span className="flex min-w-0 flex-1 flex-col gap-1 pt-0.5">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-13 font-medium text-[var(--text-primary)]">
+                    {s.name}
+                  </span>
+                  <span className="shrink-0 text-10 text-[var(--text-tertiary)]">
+                    {source === 'skillhub'
+                      ? t('skillhub.home.sourceSkillhub')
+                      : t('skillhub.home.sourceLocal')}
+                  </span>
+                </span>
+                {s.description && (
+                  <span className="line-clamp-1 text-12 leading-4 text-[var(--text-secondary)]">
+                    {s.description}
+                  </span>
+                )}
               </span>
-            ) : (
-              <span className="shrink-0 text-10 text-[var(--text-tertiary)]">
-                {t('skillhub.home.sourceLocal')}
+              <span className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg border border-transparent text-[var(--text-secondary)] transition-[background-color,color,transform] group-hover:translate-x-0.5 group-hover:bg-[var(--surface-chip)] group-hover:text-[var(--text-primary)] group-active:translate-x-0 group-active:scale-95">
+                <ChevronRight size={15} strokeWidth={1.8} />
               </span>
-            )}
-          </button>
-        );
-      })}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

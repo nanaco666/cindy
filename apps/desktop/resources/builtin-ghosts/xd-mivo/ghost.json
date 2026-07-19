@@ -6,6 +6,7 @@
   "whenToUse": "用户明确要用 mivo / MJ / Midjourney / niji 画图,用 Seedance / 豆包视频 / 即梦视频 / 可灵 / kling 生成视频,做音乐 / 写歌(Suno)、做音效,3D 建模(Tripo / Seed3D / 即梦3D)、给 3D 模型绑动作、把 3D 模型转成 FBX / OBJ 格式,以及抠图 / 去背景、超分 / 放大图片、触发 MJ 图片按钮(U/V/Reroll)时找我(需先在意识设置页配置 mivo_ 开头的 key)。日常画图默认走 Cindy Art,只有上述显式触发词才用我。",
   "version": "1.6.0",
   "author": "Cindy",
+  "icon": "assets/icon.png",
   "entry": "main.js",
   "settingsHtml": "settings.html",
   "slots": ["tool", "network", "card"],

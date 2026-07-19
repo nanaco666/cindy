@@ -6,6 +6,7 @@
   "whenToUse": "需要把本地目录部署成 workers.xd.team 内部站点,或查看 / 管理已部署站点(列站点、查详情、删站点、拿 worker IP 白名单模板)时找我。部署时把构建产物目录的绝对路径放在 ghost_call 顶层 dir 参数交付。",
   "version": "1.2.1",
   "author": "Cindy",
+  "icon": "assets/icon.png",
   "entry": "main.js",
   "settingsHtml": "settings.html",
   "slots": ["tool", "network"],

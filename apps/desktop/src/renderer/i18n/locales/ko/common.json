@@ -1962,7 +1962,32 @@
     },
     "ghosts": {
       "title": "플러그인",
-      "description": "플러그인으로 Cindy에 기능과 화면을 추가합니다. 설치하면 바로 사용하고, 제거하면 사라집니다. 각 플러그인은 자체 설정 페이지를 가집니다.",
+      "description": "Cindy의 기능을 확장하는 도구와 연동입니다.",
+      "page": {
+        "search": "플러그인 검색",
+        "clearSearch": "플러그인 검색 지우기",
+        "addPlugin": "플러그인 추가",
+        "addPluginAria": "플러그인 추가 옵션",
+        "createWithCindy": "Cindy로 만들기",
+        "createPrompt": "새 Cindy 플러그인을 만들어 주세요. 먼저 무엇을 해야 하는지와 필요한 도구 또는 연결을 물어봐 주세요.",
+        "installedTitle": "설치된 플러그인",
+        "installedExpand": "설치된 플러그인 {{count}}개 더 보기",
+        "installedCollapse": "추가 설치 플러그인 숨기기",
+        "allTitle": "모든 플러그인",
+        "filterAll": "전체",
+        "filtersAria": "출처별 플러그인 필터",
+        "emptyFiltered": "일치하는 플러그인이 없습니다",
+        "useAction": "사용",
+        "useAria": "{{name}} 사용",
+        "installAction": "설치",
+        "installAria": "{{name}} 설치",
+        "restoreAria": "{{name}} 복원",
+        "origin": {
+          "builtin": "기본 제공",
+          "enterprise": "팀 공유",
+          "external": "외부 / 로컬"
+        }
+      },
       "provisioning": {
         "updating": "내장 플러그인 업데이트 중…"
       },
@@ -2085,8 +2110,14 @@
         "infoTitle": "상세 정보",
         "infoId": "식별자",
         "infoAuthor": "제작자",
+        "byAuthor": "제작자 {{author}}",
         "infoPanel": "패널",
         "infoLocation": "설치 위치",
+        "expandInfoValue": "{{label}} 전체 보기",
+        "collapseInfoValue": "{{label}} 접기",
+        "copyLocation": "설치 위치 복사",
+        "locationCopied": "설치 위치를 복사했습니다",
+        "locationCopyFailed": "설치 위치를 복사하지 못했습니다. 수동으로 복사하세요",
         "openLocation": "설치 위치 열기",
         "panelDocked": "도킹됨 · 최소 너비 {{min}}px",
         "panelNotDocked": "도킹되지 않음(레이아웃에 위치 기록 없음)",
@@ -2108,10 +2139,26 @@
           },
           "defaultOption": "{{model}} (기본값)"
         },
-        "toolsTitle": "등록된 도구",
+        "toolsTitle": "Tools",
         "permissionsTitle": "권한",
         "infoDescription": "설명",
-        "customSlotAsleep": "이 플러그인은 비활성 상태입니다. 활성화하면 여기에 설정 화면이 표시됩니다."
+        "customSlotAsleep": "이 플러그인은 비활성 상태입니다. 활성화하면 여기에 설정 화면이 표시됩니다.",
+        "descriptionExpand": "더 보기",
+        "descriptionCollapse": "접기",
+        "useAction": "Plugin 사용",
+        "useDisabled": "사용하기 전에 Plugin을 활성화하세요",
+        "moreActions": "Plugin 추가 작업",
+        "updateFromFile": ".cindy 파일에서 업데이트…",
+        "settingsTitle": "{{name}} 설정",
+        "settingsUnavailableUntilRestore": "이 설정을 다시 사용하려면 플러그인을 복원하세요.",
+        "configurationTitle": "설정",
+        "openTool": "Tool {{name}} 세부 정보 보기",
+        "noToolDescription": "이 Tool에는 설명이 없습니다.",
+        "viewAllTools": "더 보기",
+        "collapseTools": "Tool 접기",
+        "viewAllPermissions": "더 보기",
+        "permissionsDialogDescription": "이 Plugin이 요청하는 전체 {{count}}개 권한",
+        "closeDialog": "대화 상자 닫기"
       },
       "contents": {
         "panel": "패널",
@@ -3074,6 +3121,7 @@
     "tabs": {
       "projects": "프로젝트",
       "skillhub": "스킬 허브",
+      "plugins": "플러그인",
       "issues": "이슈"
     },
     "user": {
@@ -5206,6 +5254,11 @@
   },
   "skillhub": {
     "home": {
+      "title": "스킬",
+      "description": "로컬 스킬을 관리하거나 Skill Hub에서 새로운 스킬을 찾아 설치하세요.",
+      "search": "스킬 검색",
+      "clearSearch": "스킬 검색 지우기",
+      "noSearchResults": "일치하는 스킬을 찾을 수 없습니다",
       "browseTitle": "Skill Hub 둘러보기",
       "browseDesc": "더 많은 스킬을 찾아 설치하세요",
       "recommended": "추천",
@@ -5894,8 +5947,11 @@
   },
   "extraDirs": {
     "menuAria": "작업 메뉴",
-    "tooltipEmpty": "새 목표 / 참조 디렉터리 추가",
+    "tooltipEmpty": "더 많은 작업",
     "tooltipCount": "참조 디렉터리 {{count}}개",
+    "pluginsTitle": "설치된 플러그인",
+    "pluginDisabled": "비활성화됨",
+    "pluginNoCommand": "여기에서 사용할 수 없음",
     "sectionTitle": "참조 디렉터리(읽기 전용)",
     "empty": "아직 참조 디렉터리가 없습니다",
     "add": "디렉터리 추가…",

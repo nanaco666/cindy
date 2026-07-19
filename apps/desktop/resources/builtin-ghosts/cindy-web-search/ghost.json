@@ -6,6 +6,7 @@
   "whenToUse": "需要搜索公网信息、查资料、找网页、看最新动态时找我(需先在意识设置页配置 Brave 或 Tavily key)。",
   "version": "1.1.4",
   "author": "Cindy",
+  "icon": "assets/icon.png",
   "entry": "main.js",
   "settingsHtml": "settings.html",
   "slots": ["tool", "network"],

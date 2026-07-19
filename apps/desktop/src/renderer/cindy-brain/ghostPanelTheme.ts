@@ -105,6 +105,14 @@ export function buildGhostSettingsThemeCss(): string {
   ].join('\n');
 }
 
+/** Plugin detail embeds settings.html on the shared Plugin card surface. */
+export function buildGhostPluginSettingsThemeCss(): string {
+  return [
+    buildGhostThemeVarsBlock(),
+    `body { margin: 0; background: color-mix(in srgb, var(--surface-elevated) 82%, var(--surface)); color: var(--text-primary); font-family: ${GHOST_FONT_STACK}; font-size: 13px; }`,
+  ].join('\n');
+}
+
 /**
  * 订阅主机主题变化(root 上 class / style / data-theme 任一变动)。
  * 返回取消订阅函数。

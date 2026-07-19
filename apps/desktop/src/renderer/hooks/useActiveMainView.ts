@@ -1,7 +1,7 @@
 /**
  * useActiveMainView
  * ---------------------------------------------------------------------------
- * 推导主区域当前激活的 View（Chat / Issues / SkillHub），并返回 navigateToView 切换函数。
+ * 推导主区域当前激活的 View（Chat / Issues / Plugins），并返回 navigateToView 切换函数。
  *
  * 激活态由 URL 派生：pathname === prefix || pathname.startsWith(prefix + '/')。
  * 当 pathname 不匹配任何 view prefix 时（如 /settings），保留最近一次匹配过的 key —
@@ -11,23 +11,24 @@
  * 不必要的子树重挂载。
  *
  * 见 .sivi/docs/tech_specs/horizontal-tabbar-frontend.md M2。
+ * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
 import { useCallback, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-export type MainViewKey = 'cc-agent' | 'issues' | 'skillhub';
+export type MainViewKey = 'cc-agent' | 'issues' | 'plugins';
 
 interface ViewDef {
   key: MainViewKey;
   to: string;
-  prefix: string;
+  prefixes: readonly string[];
 }
 
 const VIEWS: ViewDef[] = [
-  { key: 'cc-agent', to: '/cc-agent', prefix: '/cc-agent' },
-  { key: 'issues', to: '/issues', prefix: '/issues' },
-  { key: 'skillhub', to: '/skillhub', prefix: '/skillhub' },
+  { key: 'cc-agent', to: '/cc-agent', prefixes: ['/cc-agent'] },
+  { key: 'issues', to: '/issues', prefixes: ['/issues'] },
+  { key: 'plugins', to: '/plugins', prefixes: ['/plugins', '/skillhub'] },
 ];
 
 const DEFAULT_KEY: MainViewKey = 'cc-agent';
@@ -37,10 +38,10 @@ export function useActiveMainView() {
   const navigate = useNavigate();
 
   const matchedKey: MainViewKey | null =
-    VIEWS.find(
-      (v) =>
-        location.pathname === v.prefix ||
-        location.pathname.startsWith(v.prefix + '/'),
+    VIEWS.find((view) =>
+      view.prefixes.some(
+        (prefix) => location.pathname === prefix || location.pathname.startsWith(prefix + '/'),
+      ),
     )?.key ?? null;
 
   // Sticky last-matched key — when path leaves a view (e.g. /settings),
@@ -63,8 +64,9 @@ export function useActiveMainView() {
       const view = VIEWS.find((v) => v.key === key);
       if (!view) return;
       if (
-        location.pathname === view.to ||
-        location.pathname.startsWith(view.prefix + '/')
+        view.prefixes.some(
+          (prefix) => location.pathname === prefix || location.pathname.startsWith(prefix + '/'),
+        )
       ) {
         return; // 同视图不重复 navigate，与旧 FeatureRail 行为一致
       }

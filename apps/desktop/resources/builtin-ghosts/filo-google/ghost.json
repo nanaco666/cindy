@@ -6,6 +6,7 @@
   "whenToUse": "需要查邮件、发邮件、写草稿(Gmail),查/建/改日程(Google 日历),搜索云端文件(Google Drive),读写表格(Google Sheets),或查看已连接的 Google 账号时找我(需先在意识设置页连接 Google 账号)。",
   "version": "1.2.2",
   "author": "Cindy",
+  "icon": "assets/icon.png",
   "entry": "main.js",
   "settingsHtml": "settings.html",
   "slots": [
