@@ -32,9 +32,9 @@ pnpm mobile:sim:rebuild -- --region=global # 海外
 
 ### PR 与聚合验证顺序
 
-仓库改动正常先在任务 worktree 完成。默认交付顺序为：定向验证与本地 commit → 按开发者 / 宿主 workflow 完成发布授权 → push 任务分支并创建 / 更新 PR → 刷新 verify / personal client checkout → 在该验证 checkout 启 Metro。不要仅为了让运行中的 base checkout 立即 HMR 就自行修改或 push `main`；有权决定的开发者明确选择 local merge-back 或直推 `main` 时，分别按 `docs/dogfooding-workflow.md` 与根 `AGENTS.md` 的例外门禁执行。
+仓库改动正常先在任务 worktree 完成。默认交付顺序为：定向验证与本地 commit → 按开发者 / 宿主 workflow 完成发布授权 → push 任务分支并创建 / 更新 PR → 刷新 verify / personal client checkout → 在该验证 checkout 启 Metro。刷新后、启动 Metro 前，聚合验证记录必须同时列出作为基线的 `main` commit、待验证 PR commit 与聚合后的 `HEAD`，证明验证 checkout 确实由最新 `main` + 待验证 PR 组成。不要仅为了让运行中的 base checkout 立即 HMR 就自行修改或 push `main`；有权决定的开发者明确选择 local merge-back 或直推 `main` 时，分别按 `docs/dogfooding-workflow.md` 与根 `AGENTS.md` 的例外门禁执行。
 
-聚合验证时，可信源码证据仍是同一组三件套：
+聚合验证时，除上述三个 commit SHA 外，运行实例还必须具备同一组三件套证据：
 
 1. `pnpm mobile:sim:whoami` 显示 8081 属于当前验证 checkout。
 2. App 的 `__DEV__` build label 显示该 checkout 的 branch 与 Metro host:port。
