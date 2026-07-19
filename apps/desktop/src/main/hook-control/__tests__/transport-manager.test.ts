@@ -611,6 +611,52 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     await expect.poll(() => opened, { timeout: 3000 }).toEqual([freshUrl]);
   });
 
+  it('armAutoBind: bind.update 处理中连接恰好掉线(send 失败)→ 意图保留待重连重试, 不弹回开关', async () => {
+    // 场景: 用户刚开 toggle, server 回放 bind.update(none) 的同一时刻连接掉了,
+    // bind.start 发不出去。旧行为会消费掉 autoBindIntent, 重连回放 none 时走
+    // autoDisable 把开关静默弹回(用户视角: 点了开关没弹浏览器又自己关了);
+    // 现在意图保留, 重连回放后自动重试发起授权。用 fake transport 精确控制
+    // send 失败时机(真 ws 无法确定性模拟"处理帧时掉线")。
+    const store = memoryStore({ url: 'wss://fake.example' });
+    const sent: HookMessage[] = [];
+    let sendOk = false;
+    const transportOpts: Parameters<typeof createHookTransport>[0][] = [];
+    const manager = makeManager(store, {
+      createTransport: (opts) => {
+        transportOpts.push(opts);
+        return {
+          send: (m) => {
+            if (!sendOk) return false;
+            sent.push(m);
+            return true;
+          },
+          dispose: () => {},
+        };
+      },
+      openExternalUrl: () => {},
+    });
+    cleanups.push(() => manager.dispose());
+
+    manager.armAutoBind(); // 打开 toggle
+    manager.sync();
+    const opts = transportOpts[0];
+    opts.onStatus('connected', null);
+    const none = makeBindUpdate({ state: 'none', slackUserId: null, slackUserName: null, message: null });
+    if (none.type !== 'bind.update') throw new Error('unreachable');
+
+    // 第一帧 none: send 失败(掉线瞬间)→ 不 auto-disable, 意图保留
+    opts.onMessage(none, (m) => (sendOk ? (sent.push(m), true) : false));
+    expect(store.get().enabled).toBe(true);
+    expect(sent.some((f) => f.type === 'bind.start')).toBe(false);
+
+    // 重连回放 none: send 恢复 → 自动重试发起绑定, 开关仍开
+    sendOk = true;
+    opts.onMessage(none, (m) => (sent.push(m), true));
+    expect(sent.some((f) => f.type === 'bind.start')).toBe(true);
+    expect(store.get().enabled).toBe(true);
+    expect(manager.snapshot().binding?.state).toBe('pending');
+  });
+
   it('授权看门狗: 超时仍 pending(用户关掉浏览器)→ 本地判 expired, toggle 弹回', async () => {
     const { wss, url } = await startServer();
     const store = memoryStore({ url });

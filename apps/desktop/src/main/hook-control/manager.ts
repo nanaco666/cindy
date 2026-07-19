@@ -556,13 +556,21 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       // 不重发, 用户会卡在「授权中」;initiateBind 让 server 作废旧尝试签新链接。
       // 一次性: 判定后即清, 后续回放不再触发。
       if (autoBindIntent) {
-        autoBindIntent = false;
         if (msg.payload.state === 'none' || msg.payload.state === 'pending') {
-          initiateBind();
-          // initiateBind 会把 binding 乐观置 pending 并 notifyStatus, 这里直接返回
-          // 避免下方用刚被覆盖前的旧状态再 notify 一次(状态闪回)
+          if (initiateBind()) {
+            autoBindIntent = false;
+            // initiateBind 会把 binding 乐观置 pending 并 notifyStatus, 这里直接返回
+            // 避免下方用刚被覆盖前的旧状态再 notify 一次(状态闪回)
+            return;
+          }
+          // 发不出 bind.start = 连接恰在本帧处理中掉线: 保留意图等重连回放
+          // bind.update 时重试, 且不落入下方 autoDisable(none 会把用户刚打开
+          // 的开关静默弹回, 表现为"点了开关没弹浏览器又自己关了")
+          log.info('bind.start send failed mid-frame, keeping auto-bind intent for reconnect replay');
+          notifyStatus(toView());
           return;
         }
+        autoBindIntent = false;
       }
       // 自动下线的终止态(开关语义 = 连接 + 绑定齐备才允许保持打开):
       //   revoked  被其它设备顶掉(实时推送, 保留原因供设置页展示被踢);

@@ -157,6 +157,14 @@ export function HookConnectionsSection() {
     hook.enabled &&
     hook.binding?.state === 'failed' &&
     hook.binding?.reason === HOOK_BIND_REASON_NOT_INSTALLED;
+  /**
+   * 确认框是异步的, 弹着期间状态可能已翻页(典型: 用户已在浏览器里装完 App,
+   * server 推回 confirmed): 确认/取消回调只能对"仍在等安装"的现状生效 ——
+   * 陈旧弹窗上点「取消」不得误杀刚建立的绑定, 点「安装」也不再重复开安装页。
+   * 用 ref 存最新值, 避免回调闭包捕获弹窗时刻的旧快照。
+   */
+  const awaitingInstallRef = useRef(false);
+  awaitingInstallRef.current = awaitingInstall;
   // 安装链接: 优先 server 按 workspace 定制的(带 team 参数, 安装页预选到刚
   // 授权的工作区), 老 server 不下发时回退通用 /slack/install
   const installUrl =
@@ -175,6 +183,9 @@ export function HookConnectionsSection() {
         confirmText: t('settings.remoteControl.hook.notInstalled.confirmInstall'),
         cancelText: t('settings.remoteControl.hook.notInstalled.confirmCancel'),
       });
+      // 弹窗期间状态已翻页(装完自动 confirmed / 超时弹回)则本次选择作废:
+      // 取消不关刚绑好的开关, 确认不重复开安装页
+      if (!awaitingInstallRef.current) return;
       if (ok) {
         if (installUrl) void window.electronAPI.openExternal(installUrl);
       } else {
