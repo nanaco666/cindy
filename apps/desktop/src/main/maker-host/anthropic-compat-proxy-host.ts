@@ -51,6 +51,7 @@ import {
   createClaudeFastModeRequestTransform,
   createClaudeFastModeResponseObserver,
 } from './claude-fast-mode-log.js';
+import { createClaudeSubagentUsageResponseObserver } from './claude-subagent-usage-bridge.js';
 import { claudeUpstreamEndpoint } from './runtime-configs.js';
 import { readSilentEncryptedRetrySettings } from './silent-encrypted-retry-store.js';
 import {
@@ -240,6 +241,7 @@ export async function ensureAnthropicCompatProxyReady(): Promise<void> {
       //   - 自定义供应商上游错误分类广播(status≥400 且会话路由到 user 供应商时才 tee,
       //     成功路径零开销;30s 节流,见 provider-upstream-error-observer)。
       responseObserver: composeResponseObservers(
+        createClaudeSubagentUsageResponseObserver(),
         createClaudeFastModeResponseObserver(log),
         createClaudeRateLimitHeadersObserver(),
         // 后台活动检测:响应流按节流刷新活动时刻(覆盖长 SSE 跨过 turn 结束点仍在吐字的场景)。

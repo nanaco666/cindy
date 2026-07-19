@@ -100,11 +100,6 @@ export interface RuntimeState {
   /** task_id 到启动它的 Agent tool_use.id 的别名映射。 */
   subagentParentToolUseIdByTaskId: Map<string, string>;
   /**
-   * Claude Code 对外部子模型可能把 task notification 的 token 统计写成 0。
-   * 这里按 parent_tool_use_id 隔离真实 SSE usage，避免并发 child 串线。
-   */
-  subagentUsageByParentToolUseId: Map<string, SubagentUsageAggregate>;
-  /**
    * 上一次 SDK assistant 消息提取出来的 agentMeta (uuid / sdkSessionId / model / ...).
    * 主 agent 的 stream_event 累积时用它补齐 transcript 锚点；subagent stream
    * 则必须按 parent_tool_use_id 隔离，不能共享这份会话级状态。
@@ -125,7 +120,6 @@ export function newRuntimeState(): RuntimeState {
     streamModelByParentToolUseId: new Map(),
     resolvedSubagentModelByParentToolUseId: new Map(),
     subagentParentToolUseIdByTaskId: new Map(),
-    subagentUsageByParentToolUseId: new Map(),
     lastAssistantMeta: null,
     lastResultUsageAggregate: null,
   };
@@ -154,32 +148,6 @@ type ResultUsageAggregate = {
   cacheReadTokens?: number;
   cacheCreateTokens?: number;
 };
-
-type SubagentUsageAggregate = {
-  /** 最近一次 child API call 的 input + cache tokens。 */
-  latestInputTokens: number;
-  /** child 各次 API call 的 output tokens 累计。 */
-  cumulativeOutputTokens: number;
-};
-
-function recordSubagentStreamUsage(
-  rt: RuntimeState,
-  parentToolUseId: string | undefined,
-  usage: Record<string, number> | undefined,
-  includeOutput: boolean,
-): void {
-  if (!parentToolUseId || !usage) return;
-  const aggregate = rt.subagentUsageByParentToolUseId.get(parentToolUseId) ?? {
-    latestInputTokens: 0,
-    cumulativeOutputTokens: 0,
-  };
-  const latestInputTokens = (usage.input_tokens ?? 0)
-    + (usage.cache_read_input_tokens ?? 0)
-    + (usage.cache_creation_input_tokens ?? 0);
-  if (latestInputTokens > 0) aggregate.latestInputTokens = latestInputTokens;
-  if (includeOutput) aggregate.cumulativeOutputTokens += usage.output_tokens ?? 0;
-  rt.subagentUsageByParentToolUseId.set(parentToolUseId, aggregate);
-}
 
 function resultUsageToTurnDelta(
   previous: ResultUsageAggregate | null,
@@ -339,13 +307,20 @@ function readToolResultFullText(blockRaw: unknown): { toolUseId: string; fullTex
  * Claude Code 会把最终解析后的模型放在 tool_use_result.resolvedModel；这比
  * 流式子消息的时序推断可靠，适合直接补到 AgentTaskUpdate 给任务卡展示。
  */
-function extractAsyncSubagentModelUpdate(
+interface AsyncSubagentLaunch {
+  taskId: string;
+  parentToolUseId: string;
+  prompt?: string;
+  model?: string;
+}
+
+function extractAsyncSubagentLaunch(
   msg: {
     message?: { content?: unknown };
     tool_use_result?: unknown;
     toolUseResult?: unknown;
   },
-): AgentTaskUpdateEventData | null {
+): AsyncSubagentLaunch | null {
   const rawResult = msg.tool_use_result ?? msg.toolUseResult;
   if (!rawResult || typeof rawResult !== 'object' || Array.isArray(rawResult)) return null;
   const result = rawResult as Record<string, unknown>;
@@ -358,8 +333,6 @@ function extractAsyncSubagentModelUpdate(
     : typeof result.resolved_model === 'string'
       ? result.resolved_model
       : undefined;
-  if (!model) return null;
-
   const content = msg.message?.content;
   let toolResult: { toolUseId: string; fullText: string } | null = null;
   if (Array.isArray(content)) {
@@ -374,12 +347,14 @@ function extractAsyncSubagentModelUpdate(
   const taskId = typeof rawAgentId === 'string' && rawAgentId
     ? rawAgentId
     : toolResult.toolUseId;
+  const prompt = typeof result.prompt === 'string' && result.prompt
+    ? result.prompt
+    : undefined;
   return {
-    provider: 'claude-code',
     taskId,
     parentToolUseId: toolResult.toolUseId,
-    status: 'running',
     model,
+    prompt,
   };
 }
 
@@ -470,6 +445,13 @@ interface TranslateContext {
    * watchdog 整 turn 失效。
    */
   onToolResultDone?: (toolUseId: string, output: string) => void;
+  onSubagentTaskLaunched?: (task: {
+    taskId: string;
+    parentToolUseId: string;
+    prompt: string;
+    model?: string;
+  }) => void;
+  getSubagentTaskUsage?: (taskId: string) => AgentTaskUsage | undefined;
   /**
    * Maker Memory flush 观察器 — 翻译 status / message_delta event 时, push 完
    * eventQueue 后调一下 (传当前 contextTokens / contextWindow 让 controller 算 ratio)。
@@ -540,20 +522,29 @@ export function translateSdkMessage(
           source: 'claude-code',
         });
       }
-      const subagentModelUpdate = extractAsyncSubagentModelUpdate(msg);
-      if (subagentModelUpdate) {
-        const { taskId, parentToolUseId, model } = subagentModelUpdate;
-        if (parentToolUseId) {
-          ctx.rt.subagentParentToolUseIdByTaskId.set(taskId, parentToolUseId);
-          if (model) {
-            ctx.rt.resolvedSubagentModelByParentToolUseId.set(parentToolUseId, model);
-          }
+      const subagentLaunch = extractAsyncSubagentLaunch(msg);
+      if (subagentLaunch) {
+        const { taskId, parentToolUseId, model, prompt } = subagentLaunch;
+        ctx.rt.subagentParentToolUseIdByTaskId.set(taskId, parentToolUseId);
+        if (model) {
+          ctx.rt.resolvedSubagentModelByParentToolUseId.set(parentToolUseId, model);
         }
-        queue.push({
-          type: 'agent_task_update',
-          data: subagentModelUpdate,
-          source: 'claude-code',
-        });
+        if (prompt) {
+          ctx.onSubagentTaskLaunched?.({ taskId, parentToolUseId, prompt, model });
+        }
+        if (model) {
+          queue.push({
+            type: 'agent_task_update',
+            data: {
+              provider: 'claude-code',
+              taskId,
+              parentToolUseId,
+              status: 'running',
+              model,
+            },
+            source: 'claude-code',
+          });
+        }
       }
       // 单独遍历: 不能复用 extractToolResultFullText, 见 onToolResultDone JSDoc。
       const completedToolUseIds = new Set(fullPairs.map((pair) => pair.toolUseId));
@@ -742,7 +733,7 @@ function handleSystem(
     msg.subtype === 'task_progress' ||
     msg.subtype === 'task_notification'
   ) {
-    const update = toClaudeTaskUpdate(msg, ctx.rt);
+    const update = toClaudeTaskUpdate(msg, ctx.rt, ctx.getSubagentTaskUsage);
     if (update) {
       queue.push({
         type: 'agent_task_update',
@@ -792,7 +783,7 @@ function toClaudeTaskUpdate(msg: {
   summary?: string;
   usage?: Record<string, number | undefined>;
   last_tool_name?: string;
-}, rt: RuntimeState): AgentTaskUpdateEventData | null {
+}, rt: RuntimeState, getSubagentTaskUsage?: (taskId: string) => AgentTaskUsage | undefined): AgentTaskUpdateEventData | null {
   if (!msg.task_id) return null;
   const parentToolUseId = msg.tool_use_id
     ?? rt.subagentParentToolUseIdByTaskId.get(msg.task_id);
@@ -804,15 +795,12 @@ function toClaudeTaskUpdate(msg: {
     status = msg.status === 'failed' || msg.status === 'stopped' ? msg.status : 'completed';
   }
   const sdkUsage = toClaudeTaskUsage(msg.usage);
-  const streamUsage = parentToolUseId
-    ? rt.subagentUsageByParentToolUseId.get(parentToolUseId)
+  const hostUsage = msg.subtype === 'task_notification'
+    ? getSubagentTaskUsage?.(msg.task_id)
     : undefined;
-  const streamTotalTokens = streamUsage
-    ? streamUsage.latestInputTokens + streamUsage.cumulativeOutputTokens
-    : 0;
-  // SDK 有非零统计时继续信任 SDK；只有明确为 0 / 缺失时才用真实 child SSE 修正。
-  const usage = streamTotalTokens > 0 && (sdkUsage?.totalTokens ?? 0) === 0
-    ? { ...sdkUsage, totalTokens: streamTotalTokens }
+  // SDK 有非零统计时继续信任 SDK；只有明确为 0 / 缺失时才用 host 观测值修正。
+  const usage = hostUsage && (sdkUsage?.totalTokens ?? 0) === 0
+    ? { ...sdkUsage, totalTokens: hostUsage.totalTokens }
     : sdkUsage;
   const model = parentToolUseId
     ? rt.resolvedSubagentModelByParentToolUseId.get(parentToolUseId)
@@ -1107,7 +1095,6 @@ function handleStreamEvent(
   if (event.type === 'message_delta') {
     const usage = event.usage;
     if (usage) {
-      recordSubagentStreamUsage(ctx.rt, parentToolUseId, usage, true);
       const dIn = usage.input_tokens ?? 0;
       const dOut = usage.output_tokens ?? 0;
       const dCacheRead = usage.cache_read_input_tokens ?? 0;
@@ -1158,7 +1145,6 @@ function handleStreamEvent(
     // 第三方 proxy(如 litellm)或官方端点通常在 message_start 给出 input_tokens
     const usage = event.message?.usage as Record<string, number> | undefined;
     if (usage) {
-      recordSubagentStreamUsage(ctx.rt, parentToolUseId, usage, false);
       const dIn = usage.input_tokens ?? 0;
       const dCacheRead = usage.cache_read_input_tokens ?? 0;
       const dCacheCreate = usage.cache_creation_input_tokens ?? 0;

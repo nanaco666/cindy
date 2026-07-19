@@ -2050,6 +2050,9 @@ export class ClaudeCodeAgent extends BaseAgent {
     //         本 loop 退出, 但 eventQueue 不能关 —— 新 buildQuery 后还要继续 push 事件。
     //
     // 每条 SDK message 都通知 watchdog (受 pendingToolIds 守卫不起 timer 那段见上方注释)。
+    const registerClaudeSubagentTask = this.deps.registerClaudeSubagentTask;
+    const getClaudeSubagentTaskUsage = this.deps.getClaudeSubagentTaskUsage;
+
     function startForwardLoop(currentQ: Query): void {
       // q 换代: 上一代 q 的 pending interrupted result 不可能从新 q drain 出来,
       // 残留的 interruptRequested 会错误抑制新 q 首个真实 is_error 终态 —— 兜底清。
@@ -2119,6 +2122,13 @@ export class ClaudeCodeAgent extends BaseAgent {
                   sdkSessionId = sid;
                   eventQueue.push({ type: 'session_id', data: sid, source: 'claude-code' });
                 }
+              },
+              onSubagentTaskLaunched: (task) => {
+                registerClaudeSubagentTask?.(task);
+              },
+              getSubagentTaskUsage: (taskId) => {
+                const usage = getClaudeSubagentTaskUsage?.(taskId);
+                return usage ? { totalTokens: usage.totalTokens } : undefined;
               },
               onTurnEnd: () => {
                 // 兜底: 防 watchdog interrupt / SDK 异常路径留下未配对的 tool_use_id。

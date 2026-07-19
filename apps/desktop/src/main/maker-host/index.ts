@@ -67,6 +67,7 @@ import {
   desktopCodexRuntimeConfig,
 } from './runtime-configs.js';
 import { getClaudeEndpoint, setClaudeProxyGatewayKeyReader, setClaudeProxyOAuthSpawnChecker } from './anthropic-compat-proxy-host.js';
+import { claudeSubagentUsageBridge } from './claude-subagent-usage-bridge.js';
 import { hasClaudeAiOAuth } from './claude-credentials-store.js';
 import {
   clearCodexProxyAuthInjection,
@@ -318,6 +319,8 @@ export function getMaker(): Maker {
           },
         ],
       },
+      registerClaudeSubagentTask: (task) => claudeSubagentUsageBridge.registerTask(task),
+      getClaudeSubagentTaskUsage: (taskId) => claudeSubagentUsageBridge.getTaskUsage(taskId),
       // Phase 4.3: 远端 cc 路由 — 当 session 标了 remoteHostId, ClaudeCodeAgent
       // 调这个 factory 拿一个连远端 cc-mgr daemon 的 Query (替代本地 sdkQuery
       // 起 cc 子进程)。详见 packages/maker-core/src/agents/base-agent.ts 的

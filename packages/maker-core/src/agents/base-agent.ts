@@ -102,6 +102,17 @@ export interface CodexLocalCredentialModeSwitchContext {
   activeSubscriptions: number;
 }
 
+export interface ClaudeSubagentTaskRegistration {
+  taskId: string;
+  parentToolUseId: string;
+  prompt: string;
+  model?: string;
+}
+
+export interface ClaudeSubagentTaskUsage {
+  totalTokens: number;
+}
+
 export interface AgentDeps {
   auth: AuthAdapter;
   runtimeConfig: AgentRuntimeConfig;
@@ -289,6 +300,10 @@ export interface AgentDeps {
    * Codex 不消费此字段。
    */
   claudeHooks?: Partial<Record<HookEvent, HookCallbackMatcher[]>>;
+
+  /** Host bridge for repairing Claude Code subagent usage when provider usage is zero. */
+  registerClaudeSubagentTask?: (task: ClaudeSubagentTaskRegistration) => void;
+  getClaudeSubagentTaskUsage?: (taskId: string) => ClaudeSubagentTaskUsage | undefined;
 
   /**
    * Claude Code 专用:为远端机器构造一个 SDK `Query` (实际是 cc-mgr daemon 端

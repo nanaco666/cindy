@@ -25,7 +25,15 @@ function createTurnState(): TurnState {
   };
 }
 
-function createCtx() {
+function createCtx(overrides: {
+  onSubagentTaskLaunched?: (task: {
+    taskId: string;
+    parentToolUseId: string;
+    prompt: string;
+    model?: string;
+  }) => void;
+  getSubagentTaskUsage?: (taskId: string) => { totalTokens?: number } | undefined;
+} = {}) {
   return {
     rt: newRuntimeState(),
     turn: createTurnState(),
@@ -37,6 +45,7 @@ function createCtx() {
     getSdkSessionId: () => undefined,
     getLogTitle: () => undefined,
     tracker: new UsageTracker(),
+    ...overrides,
   };
 }
 
@@ -148,9 +157,18 @@ describe('Claude Code translator subagent model attribution', () => {
     });
   });
 
-  it('repairs zero task tokens from isolated child streams and preserves zero tool uses', async () => {
+  it('repairs zero task tokens from host usage and preserves zero tool uses', async () => {
     const queue = createAsyncQueue<AgentEvent>();
-    const ctx = createCtx();
+    const usageByTaskId = new Map([
+      ['agent-a', 185],
+      ['agent-b', 230],
+    ]);
+    const ctx = createCtx({
+      getSubagentTaskUsage: (taskId) => {
+        const totalTokens = usageByTaskId.get(taskId);
+        return totalTokens === undefined ? undefined : { totalTokens };
+      },
+    });
 
     const stream = (
       parentToolUseId: string,
@@ -189,19 +207,6 @@ describe('Claude Code translator subagent model attribution', () => {
       type: 'message_delta',
       usage: { input_tokens: 0, output_tokens: 30 },
     });
-    // A 发起第二次 API call：input 取最新一轮，output 跨轮累计。
-    stream('toolu_agent_a', {
-      type: 'message_start',
-      message: {
-        model: 'codex/gpt-5.6-terra',
-        usage: { input_tokens: 150, cache_read_input_tokens: 20 },
-      },
-    });
-    stream('toolu_agent_a', {
-      type: 'message_delta',
-      usage: { input_tokens: 0, output_tokens: 5 },
-    });
-
     for (const [taskId, parentToolUseId] of [
       ['agent-a', 'toolu_agent_a'],
       ['agent-b', 'toolu_agent_b'],
