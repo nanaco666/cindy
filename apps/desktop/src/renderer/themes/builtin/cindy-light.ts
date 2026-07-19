@@ -61,7 +61,6 @@ const overrides = {
   'confirm-btn-secondary-hover': 'rgba(0, 0, 0, 0.06)', // 中性 alpha hover
   'confirm-btn-secondary-text': '#3C3F43', // 正文
   'confirm-title': '#3C3F43', // 正文
-  'drop-overlay-bg': 'rgba(223, 12, 39, 0.10)', // 品牌红 10% alpha
   'file-chip-bg': '#D8D9DB', // neutral chip thumb
   'file-remove-bg': '#686B72', // AA remove affordance
   'info-700': '#1D4ED8', // 信息/链接蓝
