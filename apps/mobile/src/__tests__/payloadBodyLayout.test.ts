@@ -22,7 +22,6 @@ describe('payloadBodyLayout', () => {
       mediaFrameMinHeight: 260,
       mediaPlayerMinHeight: 220,
       mediaPlaceholderMinHeight: 220,
-      mermaidHeight: 320,
       textScrollMaxHeight: 184,
     });
   });
