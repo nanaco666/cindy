@@ -2,10 +2,14 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+function readSource(relativePath: string): string {
+  return readFileSync(resolve(process.cwd(), relativePath), 'utf8').replace(/\r\n/g, '\n');
+}
+
 describe('mobile home desktop-first surface', () => {
   it('uses the desktop-sidebar Home as the authenticated root instead of a device picker route', () => {
-    const indexSource = readFileSync(resolve(process.cwd(), 'app/index.tsx'), 'utf8');
-    const layoutSource = readFileSync(resolve(process.cwd(), 'app/_layout.tsx'), 'utf8');
+    const indexSource = readSource('app/index.tsx');
+    const layoutSource = readSource('app/_layout.tsx');
 
     expect(indexSource).toContain("import HomeScreen from './devices';");
     expect(indexSource).toContain('return <HomeScreen />;');
@@ -15,7 +19,7 @@ describe('mobile home desktop-first surface', () => {
   });
 
   it('keeps the home list leaner than device detail surfaces', () => {
-    const source = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
+    const source = readSource('app/devices/index.tsx');
     const removedListTokenPrefix = 'home' + 'List';
 
     expect(source).toContain('export default function HomeScreen()');
@@ -81,9 +85,9 @@ describe('mobile home desktop-first surface', () => {
   });
 
   it('uses TapTap blue for the online dot treatment', () => {
-    const homeSource = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
-    const primitivesSource = readFileSync(resolve(process.cwd(), 'src/components/MobilePrimitives.tsx'), 'utf8');
-    const tokenSource = readFileSync(resolve(process.cwd(), 'src/theme/tokens.ts'), 'utf8');
+    const homeSource = readSource('app/devices/index.tsx');
+    const primitivesSource = readSource('src/components/MobilePrimitives.tsx');
+    const tokenSource = readSource('src/theme/tokens.ts');
     const removedListTokenPrefix = 'home' + 'List';
 
     // E5M 状态色设计定稿(2026-07-17):teal 族 #00D9C5 → #19D2C1,statusReady 随 awaiting 同步。
@@ -101,13 +105,12 @@ describe('mobile home desktop-first surface', () => {
   });
 
   it('mirrors the desktop sidebar vendor icon slot and running treatment', () => {
-    const homeSource = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
-    const vendorIconSource = readFileSync(resolve(process.cwd(), 'src/components/MobileVendorIcon.tsx'), 'utf8');
+    const homeSource = readSource('app/devices/index.tsx');
+    const vendorIconSource = readSource('src/components/MobileVendorIcon.tsx');
     // 品牌 path 常量已抽到 vendorIconPaths.ts(供 MobileVendorIcon 与 MobileModelBrandMark 共用)。
-    const vendorPathsSource = readFileSync(resolve(process.cwd(), 'src/components/vendorIconPaths.ts'), 'utf8');
-    const desktopVendorIconSource = readFileSync(
-      resolve(process.cwd(), '../../apps/desktop/src/renderer/components/sidebar/VendorIcon.tsx'),
-      'utf8',
+    const vendorPathsSource = readSource('src/components/vendorIconPaths.ts');
+    const desktopVendorIconSource = readSource(
+      '../../apps/desktop/src/renderer/components/sidebar/VendorIcon.tsx',
     );
 
     expect(desktopVendorIconSource).toContain('VendorIcon — sidebar session 行的 vendor + running 状态指示器');
@@ -145,8 +148,8 @@ describe('mobile home desktop-first surface', () => {
   });
 
   it('uses desktop-style attention dots for unread automation on the home list without extra row text', () => {
-    const source = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
-    const scheduleIndexSource = readFileSync(resolve(process.cwd(), 'src/session/scheduleIndex.ts'), 'utf8');
+    const source = readSource('app/devices/index.tsx');
+    const scheduleIndexSource = readSource('src/session/scheduleIndex.ts');
 
     expect(source).toContain('const [scheduleIndex, setScheduleIndex]');
     expect(source).toContain('const [deviceIdentityCacheReady, setDeviceIdentityCacheReady]');
@@ -184,10 +187,10 @@ describe('mobile home desktop-first surface', () => {
   });
 
   it('gives device chips stable per-device e2e anchors for multi-device local smoke', () => {
-    const source = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
-    const maestroSource = readFileSync(resolve(process.cwd(), 'scripts/maestro-e2e.mjs'), 'utf8');
-    const localSmokeSource = readFileSync(resolve(process.cwd(), 'scripts/local-device-link-smoke.mjs'), 'utf8');
-    const deviceDetailFlow = readFileSync(resolve(process.cwd(), 'e2e/maestro/session_list_controls.yaml'), 'utf8');
+    const source = readSource('app/devices/index.tsx');
+    const maestroSource = readSource('scripts/maestro-e2e.mjs');
+    const localSmokeSource = readSource('scripts/local-device-link-smoke.mjs');
+    const deviceDetailFlow = readSource('e2e/maestro/session_list_controls.yaml');
 
     expect(source).toContain('`home.deviceChip.${sanitizeDeviceChipTestId(item.deviceId)}`');
     expect(source).toContain('function sanitizeDeviceChipTestId');
@@ -199,7 +202,7 @@ describe('mobile home desktop-first surface', () => {
   });
 
   it('lets mobile rename account devices through the authoritative device-link API', () => {
-    const source = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
+    const source = readSource('app/devices/index.tsx');
 
     expect(source).toContain('const [renameTarget, setRenameTarget]');
     expect(source).toContain('function RenameDeviceModal');
@@ -215,7 +218,7 @@ describe('mobile home desktop-first surface', () => {
   });
 
   it('scopes multi-device connection feedback to the affected device chip', () => {
-    const source = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
+    const source = readSource('app/devices/index.tsx');
 
     expect(source).toContain("type HomeDeviceConnectionState = 'idle' | 'syncing' | 'failed';");
     expect(source).toContain('const [deviceConnectionStates, setDeviceConnectionStates]');
@@ -233,10 +236,9 @@ describe('mobile home desktop-first surface', () => {
   });
 
   it('keeps project and session rows at desktop sidebar information density', () => {
-    const source = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
-    const desktopProjectNode = readFileSync(
-      resolve(process.cwd(), '../../apps/desktop/src/renderer/features/cc-agent/sidebar/sections/ProjectNode.tsx'),
-      'utf8',
+    const source = readSource('app/devices/index.tsx');
+    const desktopProjectNode = readSource(
+      '../../apps/desktop/src/renderer/features/cc-agent/sidebar/sections/ProjectNode.tsx',
     );
     const projectRowStart = source.indexOf('function ProjectRow');
     const projectRowEnd = source.indexOf('function HomeSessionRow', projectRowStart);
@@ -289,7 +291,7 @@ describe('mobile home desktop-first surface', () => {
   });
 
   it('keeps presence updates local and refreshes full home sync on every reconnect', () => {
-    const source = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
+    const source = readSource('app/devices/index.tsx');
 
     expect(source).toContain('void loadHome({ visible: false });');
     // 重连(connectionEpoch 变化)必须无条件全量刷新:presence 只在变化时广播、无全量重放,
@@ -314,7 +316,7 @@ describe('mobile home desktop-first surface', () => {
   });
 
   it('does not show the no-device empty state before startup sync settles', () => {
-    const source = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
+    const source = readSource('app/devices/index.tsx');
 
     expect(source).toContain('const initialHomeSettled = deviceIdentityCacheReady && lastSyncedAt !== null;');
     expect(source).toContain('const initialHomeLoading = !initialHomeSettled && !connectionError;');
@@ -330,7 +332,7 @@ describe('mobile home desktop-first surface', () => {
   });
 
   it('renders the remote-access onboarding guide for the no-device empty state', () => {
-    const source = readFileSync(resolve(process.cwd(), 'app/devices/index.tsx'), 'utf8');
+    const source = readSource('app/devices/index.tsx');
 
     // 无可控制电脑时不再是一句话空态,而是产品模式引导(按 reason 分场景 + 云端 Cindy 预告);
     // 启动同步失败(initialHomeError)仍走同步失败空态,不冒充引导。
@@ -343,7 +345,7 @@ describe('mobile home desktop-first surface', () => {
     expect(source).toContain('{showRemoteGuide ? (');
     expect(source).toContain('{showRemoteGuide ? null : (');
 
-    const guideSource = readFileSync(resolve(process.cwd(), 'src/components/RemoteAccessGuide.tsx'), 'utf8');
+    const guideSource = readSource('src/components/RemoteAccessGuide.tsx');
     // 步骤三的开关名必须与桌面端设置页 devices.allowControl 文案一致,避免用户按指引找不到开关。
     expect(guideSource).toContain('在电脑上安装并打开 Cindy');
     expect(guideSource).toContain('用与手机相同的账号登录');
