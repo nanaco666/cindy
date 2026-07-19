@@ -53,6 +53,8 @@ import { readClaudeApiKey, desktopCodexAuthAdapter } from './auth-adapters.js';
 import { readCustomProviderKey } from '../secrets/providerSecretStore.js';
 import { hasClaudeAiOAuth } from './claude-credentials-store.js';
 import { getGrokAccessToken, hasGrokOAuthLogin } from './grok-oauth-login.js';
+import { getAuthState } from '../authManager.js';
+import { filterProviderCatalogForAccount } from './provider-access-policy.js';
 
 const log = createLogger('provider-service');
 
@@ -262,11 +264,23 @@ export async function refreshCustomProvidersIntoCatalog(): Promise<void> {
 
 let singleton: ProviderService | null = null;
 
+/**
+ * User-selectable desktop catalog. Packaged personal memberships do not receive
+ * the Cindy AI provider or any models whose only source is Cindy AI; dev and org
+ * memberships keep the full active catalog.
+ */
+export function getDesktopSelectableCatalog(): Catalog {
+  return filterProviderCatalogForAccount(getActiveCatalog(), {
+    isPackaged: app.isPackaged,
+    membershipKind: getAuthState().user?.membershipKind,
+  });
+}
+
 /** 进程内单例：注入 active-catalog（同步读）+ 实时连接状态读取器。 */
 export function getDesktopProviderService(): ProviderService {
   if (singleton) return singleton;
   singleton = createProviderService({
-    getCatalog: getActiveCatalog,
+    getCatalog: getDesktopSelectableCatalog,
     connection: {
       xd: () => readClaudeApiKey() != null,
       anthropic: () => hasClaudeAiOAuth(),

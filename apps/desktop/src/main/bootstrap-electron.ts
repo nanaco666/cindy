@@ -240,6 +240,7 @@ import {
   readCodexRuntimeRoute,
   broadcastClaudeAuthStateChanged,
   broadcastXaiAuthStateChanged,
+  refreshProviderAccessAfterAuthChange,
   restartCodexAfterAuthModeChange,
   waitForInitialCustomMcpRefresh,
 } from './maker-host/index.js';
@@ -1954,6 +1955,7 @@ const createWindow = () => {
 };
 
 let disposeSkillhubAutoSyncAuthListener: (() => void) | null = null;
+let disposeProviderAccessAuthListener: (() => void) | null = null;
 
 const registerIpcHandlers = () => {
   // Find the primary app window, skipping transient utility BrowserWindows like
@@ -3438,6 +3440,9 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     if (!state.isAuthenticated) return;
     void skillhubAutoSyncService.runOnceAfterLogin();
   });
+  disposeProviderAccessAuthListener = authManager.onAuthStateChange(() => {
+    refreshProviderAccessAfterAuthChange();
+  });
 
   // ── Dialog: 目录选择器（v0.6 新增，与旧 show-open-directory-dialog 并存） ──
   ipcMain.handle(
@@ -4815,6 +4820,10 @@ onQuit('android-adb-kill-server', () => disposeAndroidAdb(), 'sync');
 onQuit('skillhub-auto-sync-listener', () => {
   disposeSkillhubAutoSyncAuthListener?.();
   disposeSkillhubAutoSyncAuthListener = null;
+}, 'sync');
+onQuit('provider-access-auth-listener', () => {
+  disposeProviderAccessAuthListener?.();
+  disposeProviderAccessAuthListener = null;
 }, 'sync');
 
 // Async 阶段: 并发跑, 6s 超时兜底。
