@@ -16,7 +16,8 @@
  * 改它们必然伴随发版(SDK 集成 / 翻译桥 / 网关协议都是代码),所以写死在这里,
  * 不再经 OSS 下发。OSS `cfg/providers.json`(v2)只承载 xai 清单 + presets 模板,
  * 外加服务端消费的 `cindyModelMeta` 段(model-access-server 的网关模型元数据
- * 远程覆盖表,经 MODEL_METADATA_URL 指向同一文件热加载;客户端不读该字段)。
+ * 远程覆盖表,经 MODEL_METADATA_URL 指向同一文件热加载;客户端仅 dev 模式
+ * 用它本地覆盖 XD 模型元数据以便自测,packaged 不读)。
  *
  * ⚠️ 顺序契约:BUILTIN_PROVIDERS 的数组序(anthropic → openai → xai → xd)决定
  * 选择器分段顺序与 deriveAvailableModels 的 first-wins 去重优先级,不要改动。
@@ -129,4 +130,6 @@ export const BUNDLED_CATALOG: Catalog = {
   version: catalogFile.version,
   providers: BUILTIN_PROVIDERS,
   ...(catalogFile.presets && catalogFile.presets.length > 0 ? { presets: catalogFile.presets } : {}),
+  // cindyModelMeta 随目录透传(dev 本地覆盖用;packaged 客户端不消费,见 types.ts)。
+  ...(catalogFile.cindyModelMeta !== undefined ? { cindyModelMeta: catalogFile.cindyModelMeta } : {}),
 };

@@ -93,7 +93,14 @@ export function mergeWithBundled(primary: Catalog): Catalog {
   }
   // presets 同理兜底：远端带了用远端的，远端没带回落 bundled 的（预设是纯 UI 模板数据）。
   const presets = primary.presets ?? BUNDLED_CATALOG.presets;
-  return { version: primary.version, providers: merged, ...(presets && presets.length > 0 ? { presets } : {}) };
+  // cindyModelMeta 同 presets 兜底语义透传(dev 本地覆盖用,packaged 客户端不消费)。
+  const cindyModelMeta = primary.cindyModelMeta ?? BUNDLED_CATALOG.cindyModelMeta;
+  return {
+    version: primary.version,
+    providers: merged,
+    ...(presets && presets.length > 0 ? { presets } : {}),
+    ...(cindyModelMeta !== undefined ? { cindyModelMeta } : {}),
+  };
 }
 
 function log(io: CatalogIO, level: 'info' | 'warn' | 'error', msg: string, meta?: Record<string, unknown>): void {
