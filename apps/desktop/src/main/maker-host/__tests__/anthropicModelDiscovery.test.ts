@@ -38,7 +38,9 @@ import {
   mapAnthropicHttpModels,
   noteAnthropicSdkSupportedModels,
   loadAnthropicModelsFromDiskCache,
+  clearAnthropicDiscoveredModels,
   resetAnthropicDiscoveryForTest,
+  waitForAnthropicDiscoveryIdleForTest,
 } from '../model-discovery/anthropic.js';
 import { getActiveCatalog, setAnthropicDiscoveredModels } from '../active-catalog.js';
 
@@ -210,10 +212,10 @@ describe('noteAnthropicSdkSupportedModels(登录态门控 + 合并纪律)', () =
   });
 
   afterEach(async () => {
+    await clearAnthropicDiscoveredModels();
+    await waitForAnthropicDiscoveryIdleForTest();
     resetAnthropicDiscoveryForTest();
     setAnthropicDiscoveredModels([]);
-    // applyModels 的 persist 是 fire-and-forget:等一拍再删,避免清理与在途写盘竞态。
-    await new Promise((r) => setTimeout(r, 20));
     await fsp.rm(TEST_USER_DATA, { recursive: true, force: true });
   });
 
@@ -230,6 +232,53 @@ describe('noteAnthropicSdkSupportedModels(登录态门控 + 合并纪律)', () =
       { value: 'claude-opus-4-8', displayName: 'Opus 4.8', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high'] },
     ]);
     expect(anthropicIds()).toEqual(['claude-opus-4-8']);
+  });
+
+  it('直接换号边界先清旧账号清单与缓存,新账号发现失败也不继承(review P1 回归)', async () => {
+    noteAnthropicSdkSupportedModels([
+      { value: 'claude-opus-4-8', displayName: 'Account A Opus' },
+    ]);
+    await waitForAnthropicDiscoveryIdleForTest();
+    const cache = path.join(TEST_USER_DATA, 'model-discovery', 'anthropic-models.json');
+    await expect(fsp.access(cache)).resolves.toBeUndefined();
+
+    // 模拟 OAuth 成功后凭证已被 B 覆盖、但 B 的 HTTP / SDK 尚未返回任何清单。
+    await clearAnthropicDiscoveredModels();
+
+    expect(anthropicIds()).toEqual([]);
+    await expect(fsp.access(cache)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('登出删除排在旧 SDK 在途持久化之后,缓存不会死灰复燃(review P1 回归)', async () => {
+    const originalWriteFile = fsp.writeFile.bind(fsp);
+    let releaseWrite!: () => void;
+    let signalWriteStarted!: () => void;
+    const writeGate = new Promise<void>((resolve) => { releaseWrite = resolve; });
+    const writeStarted = new Promise<void>((resolve) => { signalWriteStarted = resolve; });
+    const writeSpy = vi.spyOn(fsp, 'writeFile').mockImplementationOnce(async (...args) => {
+      signalWriteStarted();
+      await writeGate;
+      return originalWriteFile(...args);
+    });
+
+    try {
+      noteAnthropicSdkSupportedModels([
+        { value: 'claude-opus-4-8', displayName: 'Account A Opus' },
+      ]);
+      await writeStarted;
+      authState.loggedIn = false;
+      const clearPromise = clearAnthropicDiscoveredModels();
+      releaseWrite();
+      await clearPromise;
+      await waitForAnthropicDiscoveryIdleForTest();
+
+      const cache = path.join(TEST_USER_DATA, 'model-discovery', 'anthropic-models.json');
+      expect(anthropicIds()).toEqual([]);
+      await expect(fsp.access(cache)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      releaseWrite();
+      writeSpy.mockRestore();
+    }
   });
 
   it('无能力信息的捕获不打回已精化条目的档位 / fast(合并纪律)', () => {

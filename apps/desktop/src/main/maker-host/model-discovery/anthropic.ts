@@ -17,14 +17,15 @@
  *     已发现条目的能力字段(防止「不带能力字段的粗清单」把「已精化的档位」打回默认);
  *   - HTTP 明说的 max_input_tokens 单独记账(explicitWindows,随缓存持久化),SDK
  *     通道覆盖时不许把精确窗口打回 1M/200k 猜测值;
- *   - 失败不清列表(上一次成功结果 + 磁盘缓存是「陈旧的真数据」,可溯源),
- *     只有**登出**才清空并删缓存。
+ *   - 同一授权世代内失败不清列表(上一次成功结果 + 磁盘缓存是「陈旧的真数据」,
+ *     可溯源);登出 / 直接换号都会先清空并删缓存,旧账号结果不得跨世代继承。
  *
  * 登录态门控(2026-07-19 对抗性 review P1):两条通道的 apply 都必须以「当前确有
  * Claude.ai OAuth」为前提——SDK 捕获来自本地 CLI 注册表,不需要 Anthropic 凭证也能
  * 应答,不设门会让未登录 / 已登出用户长出 anthropic 清单并重建刚删掉的缓存;HTTP
- * 在途请求跨越登出完成时同理。世代计数(authGeneration)在登出时自增,作废一切
- * 在途写回,并让换号后的新拉取不被旧 single-flight 吞掉。
+ * 在途请求跨越授权边界完成时同理。世代计数(authGeneration)在登出 / 换号时自增,
+ * 作废一切在途写回,并让新账号拉取不被旧 single-flight 吞掉。磁盘缓存写删经同一
+ * 串行队列 + 原子 rename,保证登出删缓存不会被较早的 SDK 持久化反向覆盖。
  *
  * contextWindow 规则(Anthropic 无任何动态通道下发窗口,2026-07-19 与 Lizi 定案):
  *   HTTP 响应带 max_input_tokens 用之;否则默认 1M,仅 id 含 "haiku" 例外 200k。
@@ -56,14 +57,29 @@ const MAX_MODEL_PAGES = 5;
 let lastApplied: CatalogModel[] = [];
 /** HTTP 明说过 max_input_tokens 的模型窗口(id → tokens);SDK 覆盖时优先于启发式规则。 */
 const explicitWindows = new Map<string, number>();
-/** 登出时自增:在途 HTTP 拉取完成时若世代已变,结果作废不写回。 */
+/** 授权边界(登出 / 换号)自增:在途发现若世代已变,结果作废不写回。 */
 let authGeneration = 0;
 let httpRefreshInflight: Promise<void> | null = null;
 /** 在途拉取所属的世代;世代已变时新调用不复用旧 promise(换号补拉不被吞)。 */
 let httpRefreshInflightGen = -1;
+/** 缓存写入 / 删除严格串行,保证授权边界后的删除一定排在旧世代写入之后。 */
+let cacheMutationQueue: Promise<void> = Promise.resolve();
+let cacheTempSequence = 0;
 
 function cacheFilePath(): string {
   return path.join(app.getPath('userData'), 'model-discovery', 'anthropic-models.json');
+}
+
+/** 缓存 IO 串行化;单次失败记日志并吞掉,后续授权边界删除仍必须继续执行。 */
+function enqueueCacheMutation(task: () => Promise<void>): Promise<void> {
+  cacheMutationQueue = cacheMutationQueue.then(task).catch((err) => {
+    log.warn('anthropic models cache mutation failed', { error: String(err) });
+  });
+  return cacheMutationQueue;
+}
+
+function generationCanApply(generation: number, models: CatalogModel[]): boolean {
+  return generation === authGeneration && (models.length === 0 || hasClaudeAiOAuth());
 }
 
 /** 剥掉 dated wire id 的日期后缀(claude-opus-4-8-20260401 → claude-opus-4-8)。 */
@@ -231,30 +247,40 @@ export function mapAnthropicHttpModels(raw: unknown): HttpMappedModel[] {
  * 内容与现值一致时整体跳过(SDK 捕获每会话触发,清单通常一字不变——不做比较会
  * 每开一个会话就白跑一次落盘 + 全窗口广播 + capabilities 重 derive,review P2)。
  */
-async function applyModels(models: CatalogModel[], persist: boolean): Promise<void> {
+async function applyModels(
+  models: CatalogModel[],
+  persist: boolean,
+  generation = authGeneration,
+): Promise<void> {
+  if (!generationCanApply(generation, models)) return;
   if (JSON.stringify(models) === JSON.stringify(lastApplied)) return;
   lastApplied = models;
   setAnthropicDiscoveredModels(models);
   if (persist) {
-    try {
+    const payload = JSON.stringify(
+      {
+        fetchedAt: new Date().toISOString(),
+        models,
+        explicitWindows: Object.fromEntries(explicitWindows),
+      },
+      null,
+      2,
+    );
+    await enqueueCacheMutation(async () => {
+      if (!generationCanApply(generation, models)) return;
       const file = cacheFilePath();
-      await fsp.mkdir(path.dirname(file), { recursive: true });
-      await fsp.writeFile(
-        file,
-        JSON.stringify(
-          {
-            fetchedAt: new Date().toISOString(),
-            models,
-            explicitWindows: Object.fromEntries(explicitWindows),
-          },
-          null,
-          2,
-        ),
-        'utf-8',
-      );
-    } catch (err) {
-      log.warn('persist anthropic models cache failed', { error: String(err) });
-    }
+      const temp = `${file}.${process.pid}.${cacheTempSequence += 1}.tmp`;
+      try {
+        await fsp.mkdir(path.dirname(file), { recursive: true });
+        if (!generationCanApply(generation, models)) return;
+        await fsp.writeFile(temp, payload, 'utf-8');
+        // 写临时文件期间可能发生登出 / 换号:禁止旧世代 rename 成正式缓存。
+        if (!generationCanApply(generation, models)) return;
+        await fsp.rename(temp, file);
+      } finally {
+        await fsp.rm(temp, { force: true }).catch(() => undefined);
+      }
+    });
   }
 }
 
@@ -264,8 +290,10 @@ async function applyModels(models: CatalogModel[], persist: boolean): Promise<vo
  */
 export async function loadAnthropicModelsFromDiskCache(): Promise<void> {
   if (!hasClaudeAiOAuth()) return;
+  const generation = authGeneration;
   try {
     const raw: unknown = JSON.parse(await fsp.readFile(cacheFilePath(), 'utf-8'));
+    if (generation !== authGeneration || !hasClaudeAiOAuth()) return;
     const models = (raw as { models?: unknown } | null)?.models;
     if (!Array.isArray(models) || models.length === 0) return;
     // 恢复「窗口来自 HTTP 明说」的记账,否则重启后首个 SDK 捕获会把精确窗口打回猜测值。
@@ -286,7 +314,7 @@ export async function loadAnthropicModelsFromDiskCache(): Promise<void> {
         Array.isArray((m as CatalogModel).efforts),
     );
     if (valid.length === 0) return;
-    await applyModels(valid, false);
+    await applyModels(valid, false, generation);
     log.info(`anthropic models loaded from disk cache: ${valid.length}`);
   } catch {
     /* 缓存缺失 / 损坏:等动态通道,不影响启动 */
@@ -301,6 +329,7 @@ export async function loadAnthropicModelsFromDiskCache(): Promise<void> {
  */
 export function noteAnthropicSdkSupportedModels(raw: unknown): void {
   if (!hasClaudeAiOAuth()) return;
+  const generation = authGeneration;
   const mapped = mapAnthropicSdkModels(raw);
   if (mapped.length === 0) return;
   const prevById = new Map(lastApplied.map((m) => [m.id, m]));
@@ -317,7 +346,9 @@ export function noteAnthropicSdkSupportedModels(raw: unknown): void {
     };
   });
   log.info(`anthropic models captured from SDK init: ${models.length}`);
-  void applyModels(models, true);
+  void applyModels(models, true, generation).catch((err) => {
+    log.warn('apply anthropic SDK models failed', { error: String(err) });
+  });
 }
 
 /**
@@ -332,6 +363,7 @@ export function refreshAnthropicModelsFromHttp(): Promise<void> {
   const flight = (async () => {
     const oauth = await getValidClaudeAiOAuth();
     if (!oauth?.accessToken) return;
+    if (gen !== authGeneration || !hasClaudeAiOAuth()) return;
     const provider = getActiveCatalog().providers.find((p) => p.id === 'anthropic');
     const upstream = provider?.routing['claude-code']?.upstream ?? 'https://api.anthropic.com';
     const entries: unknown[] = [];
@@ -385,7 +417,7 @@ export function refreshAnthropicModelsFromHttp(): Promise<void> {
       };
     });
     log.info(`anthropic models refreshed via HTTP: ${models.length}`);
-    await applyModels(models, true);
+    await applyModels(models, true, gen);
   })().finally(() => {
     // 只清自己的登记:世代变化后可能已有新 flight 顶替,不能误清。
     if (httpRefreshInflight === flight) httpRefreshInflight = null;
@@ -396,30 +428,30 @@ export function refreshAnthropicModelsFromHttp(): Promise<void> {
 }
 
 /**
- * 登录成功收口(换号可以不经过登出,直接覆盖凭证):作废在途拉取,让紧随其后的
- * refresh 用新凭证起新一轮,而不是被旧账号的 single-flight 吞掉。
+ * 授权边界收口(登出 / 直接换号共用):清空清单 + 删磁盘缓存 + 作废在途发现。
+ * 删除与持久化走同一队列,所以函数 resolve 后旧世代缓存不可能重新出现。
  */
-export function invalidateAnthropicDiscoveryInflight(): void {
-  authGeneration += 1;
+export async function clearAnthropicDiscoveredModels(): Promise<void> {
+  const generation = authGeneration + 1;
+  authGeneration = generation;
+  explicitWindows.clear();
+  await applyModels([], false, generation);
+  await enqueueCacheMutation(async () => {
+    await fsp.rm(cacheFilePath(), { force: true });
+  });
 }
 
-/** 登出收口:清空清单 + 删磁盘缓存 + 作废在途拉取(旧账号的清单不能跨登录残留)。 */
-export async function clearAnthropicDiscoveredModels(): Promise<void> {
-  authGeneration += 1;
-  explicitWindows.clear();
-  await applyModels([], false);
-  try {
-    await fsp.rm(cacheFilePath(), { force: true });
-  } catch {
-    /* 删缓存失败无害:下次登录会整体覆盖 */
-  }
+/** 仅测试:等待所有缓存写删完成,不在生产路径调用。 */
+export function waitForAnthropicDiscoveryIdleForTest(): Promise<void> {
+  return cacheMutationQueue;
 }
 
 /** 仅测试:重置模块态。 */
 export function resetAnthropicDiscoveryForTest(): void {
   lastApplied = [];
   explicitWindows.clear();
-  authGeneration = 0;
+  // 不回拨世代:即便测试误留异步任务,旧任务也不会重新获得生效资格。
+  authGeneration += 1;
   httpRefreshInflight = null;
   httpRefreshInflightGen = -1;
 }

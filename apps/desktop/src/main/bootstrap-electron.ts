@@ -252,7 +252,6 @@ import {
   noteAnthropicSdkSupportedModels,
   refreshAnthropicModelsFromHttp,
   clearAnthropicDiscoveredModels,
-  invalidateAnthropicDiscoveryInflight,
 } from './maker-host/model-discovery/anthropic.js';
 import { refreshCustomMcpProviders } from './mcp-integrations/custom-mcp-registry.js';
 import { clearXaiRateLimitSnapshot } from './usageBroadcaster.js';
@@ -2251,13 +2250,14 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     if (result.ok) {
       // oauth 模式 per-model 路由依赖本地 proxy,确保 ready,再广播鉴权态让 Connections 行刷新。
       await ensureAnthropicCompatProxyReady();
+      // 登录可直接覆盖旧账号凭证,不一定先走登出。先跨授权世代清掉旧清单 / 缓存并
+      // 等待旧 SDK 持久化收尾,新账号 HTTP 失败时也绝不继承 A 账号清单。
+      await clearAnthropicDiscoveredModels();
       await broadcastClaudeAuthStateChanged();
       // 订阅余量同步: 换号时清旧账号快照 + 拉新账号余量(内部指纹校验), chip 随 push 更新。
       syncClaudeSubscriptionUsageForAuthChange();
       // 模型清单动态发现:登录成功即后台拉 /v1/models(完成后经 active-catalog 广播刷新,
       // 设置页无需等下次会话就能看到清单;失败保留现值,SDK 通道随后仍会精化)。
-      // 先作废在途拉取:换号可以不经登出直接覆盖凭证,旧账号的 single-flight 不能吞掉本次补拉。
-      invalidateAnthropicDiscoveryInflight();
       void refreshAnthropicModelsFromHttp();
       return { ok: true, authorized: true };
     }
@@ -2279,8 +2279,8 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     await broadcastClaudeAuthStateChanged();
     // 订阅余量同步: 凭证已清, read() 会清快照并广播 null, chip 立即回占位态。
     syncClaudeSubscriptionUsageForAuthChange();
-    // 模型清单动态发现:登出即清空清单 + 删磁盘缓存(旧账号清单不得跨登录残留)。
-    void clearAnthropicDiscoveredModels();
+    // 模型清单动态发现:登出完成前清空清单 + 删磁盘缓存,并等待旧 SDK 写盘收尾。
+    await clearAnthropicDiscoveredModels();
     return { authorized: hasClaudeAiOAuth() };
   });
   ipcMain.handle(MAKER_IPC_INVOKE.CLAUDE_OAUTH_CANCEL, async () => {
