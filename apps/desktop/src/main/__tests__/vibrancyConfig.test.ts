@@ -23,6 +23,13 @@ describe('E4D resolveVibrancyConfig(familyId→vibrancy/backgroundColor 映射)'
     delete process.env.XDT_BACKDROP_MATERIAL;
   });
 
+  it('darwin × CINDY × 未设旋钮:缺省材质 = hud(用户定稿回写 2026-07-19)', () => {
+    expect(resolveVibrancyConfig('cindy', false, 'darwin')).toEqual({
+      vibrancy: 'hud',
+      backgroundColor: '#00000000',
+    });
+  });
+
   it('darwin × CINDY × vibrancy 材质旋钮:保持原 macOS 映射', () => {
     for (const material of MATERIAL_VALUES) {
       process.env.XDT_VIBRANCY_MATERIAL = material;

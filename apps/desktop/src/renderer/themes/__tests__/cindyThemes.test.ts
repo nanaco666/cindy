@@ -283,8 +283,8 @@ describe('CINDY · ⑥ family(cindy 存在 / DEFAULT 不变 / 9 主题快照)', 
     expect(fam?.dark?.id).toBe('cindy-dark');
   });
 
-  it('DEFAULT_FAMILY_ID 仍是 default(不动默认)', () => {
-    expect(DEFAULT_FAMILY_ID).toBe('default');
+  it('DEFAULT_FAMILY_ID = cindy(用户拍板 2026-07-19 出厂默认 CINDY 族)', () => {
+    expect(DEFAULT_FAMILY_ID).toBe('cindy');
   });
 
   it('既有 9 主题 keys 快照不变(不增减 builtin 主题)', () => {
