@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ⚠️ dev-only 工具:把真实 xdt-maker/Cindy SQLite 的会话导出成移动端视觉预览快照。
-// 导出物含真实聊天标题 / 工作目录 / 消息正文 / agentMeta,属敏感数据,安全约束(应 review #104 收口):
+// 导出物含真实聊天标题 / 工作目录 / 消息正文 / agentMeta,属敏感数据,安全约束(应 PR-104 review 收口):
 //   1. 不再默认 auto 扫旧 xdt-maker 目录:必须显式 `--db <path>` 或 `--confirm-sensitive` 才导出真实库;
 //   2. 明文 DB 副本与快照落私有目录(0700)+ 文件 0600,并在进程退出时清理(--keep 可保留);
 //   3. serve 模式强制随机 token(路径带 ?token= 或 header),Origin 白名单默认只放 Expo dev 本地源,
