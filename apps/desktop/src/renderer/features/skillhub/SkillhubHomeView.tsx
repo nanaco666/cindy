@@ -90,10 +90,10 @@ export function SkillhubHomeView() {
   };
 
   return (
-    <div className="relative h-full w-full overflow-y-auto">
+    <div className="relative h-full w-full overflow-y-auto px-8 [scrollbar-gutter:stable_both-edges]">
       {/* 本页不渲染通用 ContentHeader,垫一条透明窗口拖拽条(mac) */}
       <InvisibleWindowDragStrip />
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-8 py-8">
+      <div className="mx-auto flex w-full max-w-[800px] flex-col gap-8 py-8">
         <h1 className="text-2xl font-semibold text-[var(--msg-assistant-text)]">SkillHub</h1>
 
         {/* ① Skill Hub 入口 → 完整 Market 浏览页 */}

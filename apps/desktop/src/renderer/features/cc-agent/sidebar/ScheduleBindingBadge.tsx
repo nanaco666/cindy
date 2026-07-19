@@ -30,6 +30,8 @@ export interface ScheduleBindingBadgeProps {
   /** Timer 图标尺寸,sidebar 10 / header 13。 */
   size?: number;
   className?: string;
+  /** 宿主行处于红胶囊选中态 → Timer 反白(用户规则 2026-07-19:选中态前景与文字同色)。 */
+  activeForeground?: boolean;
 }
 
 /** 单条 schedule 的触发频率文案(与 RunHistoryPane 同源逻辑)。 */
@@ -46,6 +48,7 @@ export function ScheduleBindingBadge({
   schedules,
   size = 10,
   className,
+  activeForeground = false,
 }: ScheduleBindingBadgeProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -76,7 +79,9 @@ export function ScheduleBindingBadge({
             size={size}
             strokeWidth={1.75}
             className={cn(
-              'text-[var(--cmd-palette-item-meta)] hover:text-foreground transition-colors',
+              activeForeground
+                ? 'text-[var(--sidebar-item-active-foreground)]'
+                : 'text-[var(--cmd-palette-item-meta)] hover:text-foreground transition-colors',
               allPaused && 'opacity-60',
             )}
             aria-hidden

@@ -43,7 +43,7 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
   it('centers the CREATE AGENT content group without reintroducing route chrome', () => {
     expect(source).toContain('items-center justify-start');
     expect(source).toContain('pt-[clamp(96px,25.5vh,268px)]');
-    expect(source).toContain('relative flex w-full max-w-[637px] flex-col items-start');
+    expect(source).toContain('relative flex w-full max-w-[800px] flex-col items-start');
     expect(source).toContain('absolute right-0 top-[22px]');
   });
 

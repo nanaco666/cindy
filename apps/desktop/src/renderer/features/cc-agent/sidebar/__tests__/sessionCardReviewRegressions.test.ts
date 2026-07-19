@@ -91,7 +91,7 @@ describe('SessionCard review regressions', () => {
 
   it('keeps selected running-session icons and spinner on the active foreground color', () => {
     expect(sessionStatusIconSource).toContain(
-      "className={isActive ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}",
+      "colorClassName={isActive ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}" /* colorClassName 覆盖口(VendorIcon,running 红类确定性让位) */,
     );
     expect(sessionStatusIconSource).toMatch(
       /isActive\s*\? 'text-\[var\(--sidebar-item-active-foreground\)\]'\s*:\s*isRunning/,
@@ -113,7 +113,7 @@ describe('SessionCard review regressions', () => {
 
   it('keeps selected automation group icons, spinner, and actions in the active color system', () => {
     expect(automationGroupSource).toContain(
-      "className={hasActiveHidden ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}",
+      "colorClassName={hasActiveHidden ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}",
     );
     expect(automationGroupSource).toMatch(
       /hasActiveHidden\s*\? 'text-\[var\(--sidebar-item-active-foreground\)\]'\s*:\s*isRunning/,

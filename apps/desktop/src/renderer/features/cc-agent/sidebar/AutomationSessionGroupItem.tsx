@@ -334,7 +334,7 @@ export function AutomationSessionGroupItem({
               vendor={latestSession?.agentKind === 'codex' ? 'codex' : 'cc'}
               size={12}
               running={isRunning}
-              className={hasActiveHidden ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}
+              colorClassName={hasActiveHidden ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}
             />
             {/* Clock 点击跳自动化页对应条目。宿主已是 title <button>,不能嵌套
                 button,用 span role="button" + stopPropagation 拦下行点击。 */}
@@ -440,7 +440,7 @@ export function AutomationSessionGroupItem({
                   >
                     <span
                       className="size-2 rounded-full"
-                      style={{ backgroundColor: 'var(--card-status-error)' }}
+                      style={{ backgroundColor: hasActiveHidden ? 'var(--sidebar-item-active-foreground)' : 'var(--card-status-error)' }}
                       aria-hidden
                     />
                   </span>
@@ -453,7 +453,7 @@ export function AutomationSessionGroupItem({
                   >
                     <span
                       className="size-2 rounded-full"
-                      style={{ backgroundColor: 'var(--card-status-awaiting)' }}
+                      style={{ backgroundColor: hasActiveHidden ? 'var(--sidebar-item-active-foreground)' : 'var(--card-status-awaiting)' }}
                       aria-hidden
                     />
                   </span>
@@ -478,7 +478,7 @@ export function AutomationSessionGroupItem({
                   >
                     <span
                       className="size-2 rounded-full"
-                      style={{ backgroundColor: 'var(--card-status-done)' }}
+                      style={{ backgroundColor: hasActiveHidden ? 'var(--sidebar-item-active-foreground)' : 'var(--card-status-done)' }}
                       aria-hidden
                     />
                   </span>

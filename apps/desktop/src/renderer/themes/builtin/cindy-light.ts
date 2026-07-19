@@ -61,7 +61,6 @@ const overrides = {
   'confirm-btn-secondary-hover': 'rgba(0, 0, 0, 0.06)', // 中性 alpha hover
   'confirm-btn-secondary-text': '#3C3F43', // 正文
   'confirm-title': '#3C3F43', // 正文
-  'drop-overlay-bg': 'rgba(223, 12, 39, 0.10)', // 品牌红 10% alpha
   'file-chip-bg': '#D8D9DB', // neutral chip thumb
   'file-remove-bg': '#686B72', // AA remove affordance
   'info-700': '#1D4ED8', // 信息/链接蓝
@@ -74,8 +73,8 @@ const overrides = {
   'perm-auto-selected-text': '#417CDD', // auto approval 功能色(E5D 定稿 2026-07-17,light/dark 同值)
   'perm-allow-btn-bg': '#3C3F43', // E1D C 类裁决 2:反相中性(警示由橙 chip 承担)
   'perm-allow-btn-text': '#FCFCFC', // E1D 反相中性字
-  'perm-allow-kbd-bg': '#F4F4F4', // kbd bg
-  'perm-allow-kbd-border': '#DCDFE3', // 边框
+  'perm-allow-kbd-bg': 'rgba(255, 255, 255, 0.16)', // kbd bg:随反相深钮的浅翻译层(修复 2026-07-19:原页面级浅灰在深钮上字底同亮)
+  'perm-allow-kbd-border': 'rgba(255, 255, 255, 0.30)', // 边框:同上
   'perm-code-bg': '#F5F5F5', // code bg
   'perm-item-selected-bg': '#F1F1F1', // selected bg
   'plan-outline-active-bg': '#F1F1F1', // active bg

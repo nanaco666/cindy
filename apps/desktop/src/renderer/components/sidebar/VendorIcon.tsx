@@ -21,16 +21,18 @@ interface VendorIconProps {
   /** true → 切 Thinking Orange + 呼吸动画,复用 .session-status-breathing */
   running?: boolean;
   className?: string;
+  /** 覆盖默认取色(如红胶囊选中态传反白前景 —— 用户规则 2026-07-19:选中态上
+   *  所有前景元素与文字同色);running 呼吸动画不受影响。 */
+  colorClassName?: string;
 }
 
-export function VendorIcon({ vendor, size = 12, running = false, className }: VendorIconProps) {
+export function VendorIcon({ vendor, size = 12, running = false, className, colorClassName }: VendorIconProps) {
   // D4-1:vendor 保留兼容(统一品牌箭头,Claude/Codex 不再视觉区分);未来恢复 glyph 可在此分支。
   void vendor;
   const wrapperClassName = cn(
     'inline-flex shrink-0',
-    running
-      ? 'text-sidebar-item-active session-status-breathing'
-      : 'text-[hsl(var(--sidebar-muted))]',
+    running && 'session-status-breathing',
+    colorClassName ?? (running ? 'text-sidebar-item-active' : 'text-[hsl(var(--sidebar-muted))]'),
     className,
   );
 
