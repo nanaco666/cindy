@@ -100,6 +100,16 @@ describe('active-catalog discovered augment', () => {
     expect(openaiIds('claude-code')).toEqual([]);
   });
 
+  it('bridge tab 默认隐藏策略:chatgpt/gpt-5.4(-mini)默认收起,其余继承 codex 侧可见性', () => {
+    setActiveCatalog(BUNDLED_CATALOG);
+    setDiscoveredCodexModels([fake('gpt-5.5', 20), fake('gpt-5.4', 21), fake('gpt-5.4-mini', 22)]);
+    const openai = getActiveCatalog().providers.find((p) => p.id === 'openai');
+    const cc = openai?.models['claude-code'] ?? [];
+    expect(cc.find((m) => m.id === 'chatgpt/gpt-5.4')?.defaultEnabled).toBe(false);
+    expect(cc.find((m) => m.id === 'chatgpt/gpt-5.4-mini')?.defaultEnabled).toBe(false);
+    expect(cc.find((m) => m.id === 'chatgpt/gpt-5.5')?.defaultEnabled).toBe(true);
+  });
+
   it('空 discovered + bundled 零静态 → openai 两个 tab 都为空(不用假数据冒充)', () => {
     setActiveCatalog(BUNDLED_CATALOG);
     setDiscoveredCodexModels([]);

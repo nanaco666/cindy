@@ -133,9 +133,20 @@ function augmentModels(
   return { ...p, models: { ...p.models, [agent]: models } };
 }
 
+/**
+ * bridge tab 默认收起的原始 slug(旧产品目录 chatgpt/* 条目 defaultEnabled:false 的
+ * 延续):cc tab 上 ChatGPT 订阅直连只默认露出旗舰,legacy 模型收起——与 codex tab
+ * 的可见性策略(见 codex-model-discovery DEFAULT_HIDDEN_SLUGS)按 tab 各自维护。
+ */
+const BRIDGE_DEFAULT_HIDDEN_SLUGS: ReadonlySet<string> = new Set(['gpt-5.4', 'gpt-5.4-mini']);
+
 /** Codex 规范模型 → Claude bridge 路由模型；显示元数据保持一致，只改路由 id。 */
 function toChatgptBridgeModel(model: CatalogModel): CatalogModel {
-  return { ...model, id: `${CHATGPT_MODEL_PREFIX}${model.id}` };
+  return {
+    ...model,
+    id: `${CHATGPT_MODEL_PREFIX}${model.id}`,
+    ...(BRIDGE_DEFAULT_HIDDEN_SLUGS.has(model.id) ? { defaultEnabled: false } : {}),
+  };
 }
 
 /**

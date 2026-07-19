@@ -256,6 +256,7 @@ import {
   noteAnthropicSdkSupportedModels,
   refreshAnthropicModelsFromHttp,
   clearAnthropicDiscoveredModels,
+  invalidateAnthropicDiscoveryInflight,
 } from './maker-host/model-discovery/anthropic.js';
 import { refreshCustomMcpProviders } from './mcp-integrations/custom-mcp-registry.js';
 import { clearXaiRateLimitSnapshot } from './usageBroadcaster.js';
@@ -2269,6 +2270,8 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       syncClaudeSubscriptionUsageForAuthChange();
       // 模型清单动态发现:登录成功即后台拉 /v1/models(完成后经 onApplied 广播刷新,
       // 设置页无需等下次会话就能看到清单;失败保留现值,SDK 通道随后仍会精化)。
+      // 先作废在途拉取:换号可以不经登出直接覆盖凭证,旧账号的 single-flight 不能吞掉本次补拉。
+      invalidateAnthropicDiscoveryInflight();
       void refreshAnthropicModelsFromHttp();
       return { ok: true, authorized: true };
     }

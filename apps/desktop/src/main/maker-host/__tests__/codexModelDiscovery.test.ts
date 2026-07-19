@@ -73,6 +73,15 @@ describe('mapCodexModelsToCatalog', () => {
     expect(out.find((m) => m.id === 'gpt-5.4')?.sortOrder).toBe(21);
   });
 
+  it('legacy 默认隐藏策略:gpt-5.4-mini defaultEnabled:false(旧目录可见性不因清单动态化漂移)', () => {
+    const out = mapCodexModelsToCatalog({
+      models: [
+        { slug: 'gpt-5.4-mini', display_name: 'GPT-5.4-Mini', visibility: 'list', supported_in_api: true, context_window: 272000, priority: 23, supported_reasoning_levels: [{ effort: 'high' }] },
+      ],
+    });
+    expect(out[0].defaultEnabled).toBe(false);
+  });
+
   it('坏输入(非对象 / 无 models / 空)→ 空数组,不抛', () => {
     expect(mapCodexModelsToCatalog(null)).toEqual([]);
     expect(mapCodexModelsToCatalog({})).toEqual([]);

@@ -400,7 +400,11 @@ function notifySupportedModels(q: Query): void {
   if (typeof fn !== 'function') return;
   void fn.call(q).then(
     (models) => {
-      if (Array.isArray(models)) supportedModelsListener?.(models);
+      try {
+        if (Array.isArray(models)) supportedModelsListener?.(models);
+      } catch {
+        /* listener 异常不得外溢成 unhandled rejection */
+      }
     },
     () => {
       /* 捕获失败静默:发现是附加能力,不影响会话 */
