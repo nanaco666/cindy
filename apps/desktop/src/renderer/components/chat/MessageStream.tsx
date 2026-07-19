@@ -274,7 +274,8 @@ type ForkOriginRenderItem = {
 };
 
 /** work_group 子项的窄类型 — groupWorkRuns 的 isWorkChild 类型守卫保证
- *  children 只会是 tool_segment / agent_task / thinking / 中间 assistant 正文。 */
+ *  新分组路径的 children 只会是 tool_segment / agent_task / thinking。
+ *  MessageRenderItem 仍保留在 union 中,用于兼容老的已构造 render item。 */
 export type WorkChildItem = ToolSegmentRenderItem | AgentTaskRenderItem | MessageRenderItem;
 
 export type RenderItem =
@@ -322,7 +323,7 @@ export type RenderItem =
   | {
       /** work-group: 一段工作过程。运行中默认展示最近 5 条真实活动,结束后
        *  折叠成一行「已工作 Xs ›」摘要(WorkGroupBlock)。children 复用现有
-       *  tool/thinking 折叠,并可包含最终正文前的中间 assistant 正文。
+       *  tool/thinking 折叠;assistant 文字始终留在主消息流。
        *  tool_media 不参与合并,产物继续留在折叠块外可见。
        *  key 派生自首个真实活动的 clientId(`work-${clientId}`),与子项 key 同源
        *  稳定。durationMs 是 run 首个真实活动 createdAt → 终结正文消息 createdAt
@@ -1157,18 +1158,13 @@ export function buildRenderItems(
 // Work-group pass(buildRenderItems 之后的第二层后处理)
 // ---------------------------------------------------------------------------
 
-/** work_group 可合并的子项:tool_segment / agent_task / thinking / 中间 assistant。 */
+/** work_group 可合并的子项:tool_segment / agent_task / thinking。
+ *  assistant 文字始终留在主消息流,不再作为 work_group child。 */
 function isWorkChild(it: RenderItem): it is WorkChildItem {
   return (
     it.type === 'tool_segment'
     || it.type === 'agent_task'
-    || (
-      it.type === 'message'
-      && (
-        it.message.role === 'thinking'
-        || (it.message.role === 'assistant' && !it.message.systemCardType)
-      )
-    )
+    || (it.type === 'message' && it.message.role === 'thinking')
   );
 }
 
@@ -1183,8 +1179,8 @@ function isRunningAgentTask(it: RenderItem): boolean {
   return status === 'running';
 }
 
-/** preview 中计为一条真实活动的 render item。assistant 进度文字可进完整历史,
- *  但不占最近 5 条活动窗口。 */
+/** preview 中计为一条真实活动的 render item。assistant 进度文字
+ *  始终留在主消息流,不占最近 5 条活动窗口。 */
 function isWorkActivityItem(it: RenderItem): it is WorkChildItem {
   return (
     !isRunningAgentTask(it)
@@ -1206,11 +1202,6 @@ function isAssistantAnswerCandidate(it: RenderItem): it is MessageRenderItem {
   );
 }
 
-/** thinking 消息 render item。 */
-function isThinkingItem(it: RenderItem): it is MessageRenderItem {
-  return it.type === 'message' && it.message.role === 'thinking';
-}
-
 /** 子项的稳定 clientId(group key 派生用)。 */
 function workChildClientId(it: WorkChildItem): string {
   if (it.type === 'tool_segment') return it.toolCalls[0].clientId;
@@ -1223,9 +1214,8 @@ function workChildClientId(it: WorkChildItem): string {
   return it.message.clientId;
 }
 
-/** group 的身份锚在首个真实活动(tool / thinking / agent task),不锚中间正文。
- *  这样运行中仅含尾部工具段、结束后再吸收前置 assistant 正文时,key 仍不变,
- *  用户手动展开态可从 live 状态无缝延续到 completed 状态。 */
+/** group 的身份锚在首个真实活动(tool / thinking / agent task)。
+ *  完成后的合并组沿用第一段的锚点,保持该段的手动展开态。 */
 function workGroupClientId(run: WorkChildItem[]): string {
   const firstActivity = run.find((it) => (
     it.type !== 'message' || it.message.role === 'thinking'
@@ -1388,35 +1378,29 @@ function groupLegacyWorkRuns(items: RenderItem[]): RenderItem[] {
 }
 
 /** Active turn 专用分组:
- *  - 工具 / thinking 之间的 assistant 进度文字也归入同一组,避免一次 turn 被
- *    切成多组;最后一个真实活动之后的回复正文仍留在主消息流。
- *  - 含最后一个真实活动的组标成 streaming,直到 session 真正结束才收起
- *    latest-five preview。这样 final answer 开始吐字时不会提前消失。
+ *  - assistant 文字始终作为普通 message 留在主消息流;
+ *  - 文字是动作组的分段边界:新文字一出现,前一段立即变为已完成;
+ *  - 最后一段之后还没有 assistant 文字时,该段才标成 streaming,
+ *    默认显示 latest-five preview。
  */
 function groupActiveWorkRuns(items: RenderItem[]): RenderItem[] {
-  let lastActivityIdx = -1;
+  let lastAssistantTextIdx = -1;
   for (let i = 0; i < items.length; i++) {
-    if (isWorkActivityItem(items[i])) lastActivityIdx = i;
+    if (isAssistantAnswerCandidate(items[i])) lastAssistantTextIdx = i;
   }
-  if (lastActivityIdx < 0) return items;
 
   const out: RenderItem[] = [];
   let run: WorkChildItem[] = [];
   let runLastIdx = -1;
   const flushRun = (nextItem: RenderItem | undefined) => {
     if (run.length === 0) return;
-    out.push(createWorkGroup(run, nextItem, runLastIdx === lastActivityIdx));
+    out.push(createWorkGroup(run, nextItem, runLastIdx > lastAssistantTextIdx));
     run = [];
   };
 
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
-    const isIntermediateAssistant =
-      i < lastActivityIdx
-      && it.type === 'message'
-      && it.message.role === 'assistant'
-      && !it.message.systemCardType;
-    if (isWorkActivityItem(it) || isIntermediateAssistant) {
+    if (isWorkActivityItem(it)) {
       run.push(it);
       runLastIdx = i;
     } else {
@@ -1429,14 +1413,12 @@ function groupActiveWorkRuns(items: RenderItem[]): RenderItem[] {
 }
 
 /**
- * 已结束的 turn:把工作过程折成「已工作 Xs」,但保留这些"可见锚点"留在主消息流:
- *   1. 最终普通 assistant 正文(最后一条);
- *   2. 最后一段 thinking **之后**的所有 assistant 正文 —— 即"答复阶段"的文字。
- *      thinking 本身仍折进「已工作」,但它之后写给用户的正文不该被一并折掉,否则
- *      引用上文的结尾句(如「等你确认第 1 点」)会变成看不到上文的无头句。
- * 最后一段 thinking 之前 / 之内的 thinking / 工具 / 中间正文照折。
- * 没有最终正文(被中断 / 停在工具)时返回 handled:false,交回 groupLegacyWorkRuns
- * 兜底折叠(维持原行为)。tool_media 等非 work child 一律留可见。
+ * 已结束的 turn:把所有 tool / thinking / 已结束 agent task 动作片段
+ * 合并成一个「已工作 Xs」组,assistant 文字全部保留在主消息流。
+ * 合并组放在最终 assistant 正文之前,key 仍沿用本 turn 的第一个真实动作,
+ * 使 React 移动原节点而不重挂。没有最终正文(被中断 / 停在工具)时返回
+ * handled:false,交回 groupLegacyWorkRuns 按连续动作折叠。tool_media /
+ * agent_plan /运行中子 Agent 等非可归档动作一律保持可见。
  */
 function groupAnsweredTurnItems(
   turnItems: RenderItem[],
@@ -1450,38 +1432,25 @@ function groupAnsweredTurnItems(
   }
   if (lastAnswerIdx < 0) return { items: turnItems, handled: false };
 
-  let lastThinkingIdx = -1;
-  for (let i = turnItems.length - 1; i >= 0; i--) {
-    if (isThinkingItem(turnItems[i])) {
-      lastThinkingIdx = i;
-      break;
-    }
-  }
+  const workChildren = turnItems.filter(
+    (item): item is WorkChildItem => isWorkChild(item) && !isRunningAgentTask(item),
+  );
+  if (workChildren.length === 0) return { items: turnItems, handled: true };
+  const hasWorkAfterLastAnswer = turnItems.some(
+    (item, index) =>
+      index > lastAnswerIdx && isWorkChild(item) && !isRunningAgentTask(item),
+  );
+  if (hasWorkAfterLastAnswer) return { items: turnItems, handled: false };
 
+  const group = createWorkGroup(workChildren, turnItems[lastAnswerIdx]);
   const out: RenderItem[] = [];
-  let run: WorkChildItem[] = [];
-  const flushRun = (nextItem: RenderItem | undefined) => {
-    if (run.length === 0) return;
-    out.push(createWorkGroup(run, nextItem));
-    run = [];
-  };
 
   for (let i = 0; i < turnItems.length; i++) {
     const it = turnItems[i];
-    // 可见:最终正文,或"最后一段 thinking 之后"的任意 assistant 正文,
-    // 或仍在运行的子 Agent 卡片(未完成不折进「已工作 Xs」)。
-    const isVisibleAnchor =
-      i === lastAnswerIdx
-      || (lastThinkingIdx >= 0 && i > lastThinkingIdx && isAssistantAnswerCandidate(it))
-      || isRunningAgentTask(it);
-    if (!isVisibleAnchor && isWorkChild(it)) {
-      run.push(it);
-    } else {
-      flushRun(it);
-      out.push(it);
-    }
+    if (i === lastAnswerIdx) out.push(group);
+    if (isWorkChild(it) && !isRunningAgentTask(it)) continue;
+    out.push(it);
   }
-  flushRun(undefined);
 
   return { items: out, handled: true };
 }
@@ -1620,18 +1589,18 @@ function renderWorkGroupChild(
 /**
  * 把每个 user turn 内最终 assistant 正文前的工作过程聚成 work_group item。
  *
- * 新规则:同一 turn 内如果已经有最终普通 assistant 文本,它之前的 thinking /
- * tool_segment / 中间 assistant 文本折叠为「已工作 Xs」,把最终文本留在
- * 主消息流;并额外把"最后一段 thinking 之后"的 assistant 正文也留可见(答复阶段
- * 的文字,避免引用上文的结尾句因上文被折而变无头句)。tool_media 不参与折叠。
+ * 新规则:assistant 文字在运行中始终持续可见,不进最近 5 条动作窗口;
+ * 每次文字出现都结束前一个 live 动作片段,后续动作重新开一组。
+ * turn 结束后,所有动作片段合并成一个「已工作 Xs」,assistant 文字仍全部
+ * 留在主消息流。tool_media 不参与折叠。
  *
  * 兼容旧规则:如果 turn 里还没有最终文本(例如正在流式执行),继续按连续的
  * tool_segment + thinking run 分组;正在进行中的尾部 run 也立即成为 work_group,
  * 默认仅展示最近 5 条活动,不再把所有卡片平铺到消息流。
  *
- * key 稳定性:group key = `work-${首个真实活动 clientId}` — 运行中与完成后
- * 都使用同一个 group key;DB prepend 向前合并等场景由 recoverLostAnchorIdx
- * 的 work_group 分支兜底找回锚点。
+ * key 稳定性:分段与完成合并组都使用各自首个真实活动 clientId;
+ * 因此第一段从 live 到 completed 的 key 不变。DB prepend 向前合并等场景由
+ * recoverLostAnchorIdx 的 work_group 分支兜底找回锚点。
  *
  * export 仅供单测使用。
  */
@@ -3010,7 +2979,7 @@ export function MessageStream({
 
               if (item.type === 'work_group') {
                 // 折叠的工作过程组 — children 是 WorkChildItem(tool_segment /
-                // agent_task / thinking message / 中间正文),类型系统保证;映射成 WorkGroupBlock 的窄
+                // agent_task / thinking message),类型系统保证;映射成 WorkGroupBlock 的窄
                 // 类型,保持组件与 RenderItem 解耦。
                 const childItems: WorkGroupChild[] = item.children.map((c) =>
                   c.type === 'tool_segment'
