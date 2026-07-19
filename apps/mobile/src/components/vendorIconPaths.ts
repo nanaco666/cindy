@@ -4,7 +4,7 @@
  * BrandArrow 来自 Mac 桌面 D4-1 定稿(806b173);Claude / Codex path 原样来自
  * MobileVendorIcon(与桌面 ClaudeMark / CodexMark 同源);XD 三段 path 与 viewBox 原样来自
  * 桌面 XDIncMark.tsx。集中放这里让 MobileVendorIcon(行首品牌箭头)与
- * MobileProviderMark / MobileModelBrandMark(模型来源/品牌徽标)共用同一份资产,不各自复制。
+ * MobileProviderMark(模型来源徽标)共用同一份资产,不各自复制。
  */
 
 /** CINDY BrandArrow(viewBox 0 0 24 24),Mac 桌面 806b173 同源。 */

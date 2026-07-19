@@ -71,8 +71,10 @@ vi.mock('@/hooks/useModelPricing', () => ({
   useModelPricing: () => ({}),
 }));
 
+// 可变 providers mock:默认空(多数用例不关心来源解析),单个用例可临时注入再还原。
+const providersRef = vi.hoisted(() => ({ providers: [] as unknown[] }));
 vi.mock('@/hooks/useProviders', () => ({
-  useProviders: () => ({ providers: [] }),
+  useProviders: () => ({ providers: providersRef.providers }),
 }));
 
 vi.mock('@/hooks/useDeviceProviders', () => ({
@@ -116,7 +118,6 @@ import {
   ModelSelector,
   ModelSelectorContent,
   modelEffortLabel,
-  resolveModelBrandKind,
 } from '@/components/new-chat/ModelSelector';
 
 describe('ModelSelector trigger variants', () => {
@@ -212,22 +213,46 @@ describe('ModelSelector trigger variants', () => {
     ).toBe('z-[10020]');
   });
 
-  it('resolves the model mark from the model brand before the current runtime', () => {
-    expect(
-      resolveModelBrandKind({
-        modelId: 'gpt-5.5',
-        displayName: 'GPT-5.5 · 中',
-        agentKind: 'claude-code',
-        fallbackProviderId: 'anthropic',
-      }),
-    ).toBe('codex');
-    expect(
-      resolveModelBrandKind({
-        modelId: 'claude-opus-4-8',
-        displayName: 'Opus 4.8',
-        agentKind: 'codex',
-        fallbackProviderId: 'openai',
-      }),
-    ).toBe('claude');
+  it('renders the routed source mark on the trigger instead of guessing a model brand', () => {
+    // claude-* 模型经自定义网关路由时,trigger 必须显示该来源的 monogram,
+    // 不能按 model id 猜成 Claude 厂牌图标(否则订阅直连与网关来源同貌,用户无法自查)。
+    providersRef.providers = [
+      {
+        id: 'zeta-gw',
+        name: 'Zeta',
+        connected: true,
+        agents: ['claude-code'],
+        routing: { 'claude-code': {} },
+        models: {
+          'claude-code': [
+            {
+              id: 'claude-opus-4-8',
+              name: 'Opus 4.8',
+              contextWindow: 200000,
+              efforts: ['high'],
+              defaultEffort: 'high',
+            },
+          ],
+        },
+      },
+    ];
+    try {
+      render(
+        React.createElement(ModelSelector, {
+          modelId: 'claude-opus-4-8',
+          effort: 'high',
+          onModelChange: vi.fn(),
+          onEffortChange: vi.fn(),
+          vendorKey: 'cc',
+        }),
+      );
+
+      const trigger = screen.getByRole('button', { name: /Current: Opus 4\.8/ });
+      // ProviderMark 自定义供应商分支渲染 name 首字母 monogram。
+      expect(trigger.textContent).toContain('Z');
+      expect(trigger.textContent).toContain('Opus 4.8');
+    } finally {
+      providersRef.providers = [];
+    }
   });
 });

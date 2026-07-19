@@ -1,8 +1,9 @@
 /**
  * CINDY mobile icon slot map for M1/M2 UI alignment.
  *
- * This is pure metadata: M1 wires BrandArrow + model brand marks, while page-level
- * replacement for folder/FAB/action-sheet slots stays in the M2 layout pass.
+ * This is pure metadata: M1 wires BrandArrow (model brand marks were reverted to
+ * provider source marks), while page-level replacement for folder/FAB/action-sheet
+ * slots stays in the M2 layout pass.
  */
 export type CindyMobileIconSlot =
   | 'sessionLeadingGlyph'
@@ -35,10 +36,12 @@ export const cindyMobileIconSpecs: readonly CindyMobileIconSpec[] = [
     figmaNode: '301:854 / 301:881 / 301:1077 / 301:1096',
   },
   {
+    // 2026-07-20 回退厂牌徽标接线:模型徽标必须反映真实路由来源(MobileProviderMark),
+    // 按 model id 猜厂牌会让订阅直连与 Cindy AI 网关同貌,用户无法自查计费来源。
     slot: 'modelBrandMark',
     currentAsset: 'provider mark',
-    targetAsset: 'MobileModelBrandMark',
-    status: 'wired',
+    targetAsset: 'provider mark(品牌徽标方案已回退,保留 slot 记录)',
+    status: 'mapped',
     colorToken: 'textSecondary / textPrimary',
   },
   {

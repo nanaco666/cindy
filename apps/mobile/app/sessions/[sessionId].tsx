@@ -100,7 +100,7 @@ import { useDeviceApiKeyStatus, useDeviceModelPricing } from '@/device-link/useD
 import type { DeviceApiKeyStatus } from '@/device-link/deviceModelMetaCache';
 import type { MobileModelMemoryAccessors } from '@/session/draftModelMemory';
 import { ModelPickerSheet } from '@/session/ModelPickerSheet';
-import { MobileModelBrandMark } from '@/session/MobileProviderMark';
+import { MobileProviderMark } from '@/session/MobileProviderMark';
 import { clearSessionMirror, makeSessionMirrorAccessors } from '@/session/sessionModelMirror';
 import { rowFastEditable } from '@/session/modelPickerRows';
 import {
@@ -1495,12 +1495,9 @@ export default function SessionScreen() {
           fastOn={composerPillFastOn}
           label={composerRuntimeSummary.modelSummary}
           leading={composerActiveSourceProvider ? (
-            <MobileModelBrandMark
-              agentKind={sessionAgentKind}
-              displayName={runtimeOptions?.currentModel?.label}
-              fallbackProviderId={composerActiveSourceProvider.id}
-              fallbackProviderName={composerActiveSourceProvider.name}
-              modelId={currentSession?.model ?? ''}
+            <MobileProviderMark
+              name={composerActiveSourceProvider.name}
+              providerId={composerActiveSourceProvider.id}
             />
           ) : null}
           onPress={toggleComposerModelPicker}

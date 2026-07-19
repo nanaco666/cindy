@@ -107,7 +107,7 @@ describe('mobile home desktop-first surface', () => {
   it('mirrors the desktop sidebar vendor icon slot and running treatment', () => {
     const homeSource = readSource('app/devices/index.tsx');
     const vendorIconSource = readSource('src/components/MobileVendorIcon.tsx');
-    // 品牌 path 常量已抽到 vendorIconPaths.ts(供 MobileVendorIcon 与 MobileModelBrandMark 共用)。
+    // 品牌 path 常量已抽到 vendorIconPaths.ts(供 MobileVendorIcon 与 MobileProviderMark 共用)。
     const vendorPathsSource = readSource('src/components/vendorIconPaths.ts');
     const desktopVendorIconSource = readSource(
       '../../apps/desktop/src/renderer/components/sidebar/VendorIcon.tsx',

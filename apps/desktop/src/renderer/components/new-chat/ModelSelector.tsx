@@ -124,81 +124,6 @@ export function ProviderMark({
   }
 }
 
-function ModelBrandMark({
-  modelId,
-  displayName,
-  agentKind,
-  fallbackProviderId,
-  fallbackProviderName,
-  colorClass = 'text-[var(--model-trigger-text)]',
-  withMargin = true,
-  dense = false,
-}: {
-  modelId: string;
-  displayName?: string;
-  agentKind: AgentKind | null;
-  fallbackProviderId?: string | null;
-  fallbackProviderName?: string;
-  colorClass?: string;
-  withMargin?: boolean;
-  dense?: boolean;
-}) {
-  const common = cn(withMargin && 'mr-1.5', 'shrink-0', colorClass);
-  const markSize = dense ? 12.3 : 13;
-  const brandKind = resolveModelBrandKind({
-    modelId,
-    displayName,
-    agentKind,
-    fallbackProviderId,
-  });
-  if (brandKind === 'claude') {
-    return <ClaudeMark size={markSize} className={common} />;
-  }
-  if (brandKind === 'codex') {
-    return <CodexMark size={markSize} className={common} />;
-  }
-  if (!fallbackProviderId) return null;
-  return (
-    <ProviderMark
-      providerId={fallbackProviderId}
-      name={fallbackProviderName}
-      colorClass={colorClass}
-      withMargin={withMargin}
-      dense={dense}
-    />
-  );
-}
-
-export type ModelBrandKind = 'claude' | 'codex' | null;
-
-export function resolveModelBrandKind({
-  modelId,
-  displayName,
-  agentKind,
-  fallbackProviderId,
-}: {
-  modelId: string;
-  displayName?: string;
-  agentKind: AgentKind | null;
-  fallbackProviderId?: string | null;
-}): ModelBrandKind {
-  const brandText = `${modelId} ${displayName ?? ''}`.toLowerCase();
-  if (
-    /(^|[\s/])(?:codex|chatgpt|openai)(?:[\s/-]|$)/.test(brandText) ||
-    /(^|[\s/])gpt[-\s]/.test(brandText)
-  ) {
-    return 'codex';
-  }
-  if (/(^|[\s/])(?:claude|opus|sonnet|haiku|fable)(?:[\s/-]|$)/.test(brandText)) {
-    return 'claude';
-  }
-  if (fallbackProviderId === 'openai') return 'codex';
-  if (fallbackProviderId === 'anthropic') return 'claude';
-  if (agentKind === 'codex') return 'codex';
-  if (agentKind === 'claude-code') return 'claude';
-  return null;
-}
-
 // 上下文窗口 tokens → 紧凑展示("1M" / "272K" / "8192")。
 function formatContextWindow(tokens: number): string {
   if (tokens >= 1_000_000) {
@@ -1220,12 +1145,9 @@ export function ModelSelector({
             // ——回落图标会让用户以为在用默认来源,而发送实际按 DB 里的断开来源走(no_oauth 事故)。
             // 错误态用语义豁免 error token(规则 16);trigger 保持可点击,下拉换源即恢复。
             <>
-              <ModelBrandMark
-                modelId={modelId}
-                displayName={currentModel?.displayName}
-                agentKind={currentAgentKind}
-                fallbackProviderId={currentProviderId}
-                fallbackProviderName={providers.find((p) => p.id === currentProviderId)?.name}
+              <ProviderMark
+                providerId={currentProviderId}
+                name={providers.find((p) => p.id === currentProviderId)?.name}
                 colorClass="text-[var(--error-fg)]"
               />
               <span
@@ -1259,13 +1181,12 @@ export function ModelSelector({
             </>
           ) : (
             <>
+              {/* 来源图标必须反映当前模型真正路由的来源(activeSourceId),不能按 model id 猜厂牌
+                  —— 否则订阅直连与 Cindy AI 网关在 trigger 上同貌,用户无法自查计费来源。 */}
               {activeSourceId && (
-                <ModelBrandMark
-                  modelId={modelId}
-                  displayName={currentModel?.displayName}
-                  agentKind={currentAgentKind}
-                  fallbackProviderId={activeSourceId}
-                  fallbackProviderName={providers.find((p) => p.id === activeSourceId)?.name}
+                <ProviderMark
+                  providerId={activeSourceId}
+                  name={providers.find((p) => p.id === activeSourceId)?.name}
                   colorClass={
                     isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : undefined
                   }

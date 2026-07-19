@@ -20,7 +20,6 @@ import {
 } from '@/components/vendorIconPaths';
 import { useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 import { fontWeight as fontWeightToken, radius, typeScale } from '@/theme/tokens';
-import type { AgentKind } from '@lizi/model-providers/types';
 
 import { providerMonogram } from './providerModelSections';
 
@@ -108,91 +107,4 @@ export function MobileProviderMark({ providerId, name, color }: MobileProviderMa
         </View>
       );
   }
-}
-
-export type MobileModelBrandKind = 'claude' | 'codex' | null;
-
-export function resolveMobileModelBrandKind({
-  modelId,
-  displayName,
-  agentKind,
-  fallbackProviderId,
-}: {
-  modelId: string;
-  displayName?: string;
-  agentKind: AgentKind | null;
-  fallbackProviderId?: string | null;
-}): MobileModelBrandKind {
-  const brandText = `${modelId} ${displayName ?? ''}`.toLowerCase();
-  if (
-    /(^|[\s/])(?:codex|chatgpt|openai)(?:[\s/-]|$)/.test(brandText) ||
-    /(^|[\s/])gpt[-\s]/.test(brandText)
-  ) {
-    return 'codex';
-  }
-  if (/(^|[\s/])(?:claude|opus|sonnet|haiku|fable)(?:[\s/-]|$)/.test(brandText)) {
-    return 'claude';
-  }
-  if (fallbackProviderId === 'openai') return 'codex';
-  if (fallbackProviderId === 'anthropic') return 'claude';
-  if (agentKind === 'codex') return 'codex';
-  if (agentKind === 'claude-code') return 'claude';
-  return null;
-}
-
-export interface MobileModelBrandMarkProps {
-  modelId: string;
-  displayName?: string;
-  agentKind: AgentKind | null;
-  fallbackProviderId?: string | null;
-  fallbackProviderName?: string;
-  color?: string;
-}
-
-/** 模型品牌徽标:按 model id/displayName 优先解析 Claude/Codex,否则回落来源徽标。 */
-export function MobileModelBrandMark({
-  modelId,
-  displayName,
-  agentKind,
-  fallbackProviderId,
-  fallbackProviderName,
-  color,
-}: MobileModelBrandMarkProps) {
-  const styles = useThemedStyles(makeStyles);
-  const { colors } = useTheme();
-  const fill = color ?? colors.textSecondary;
-  const glyph = 13;
-  const brandKind = resolveMobileModelBrandKind({
-    modelId,
-    displayName,
-    agentKind,
-    fallbackProviderId,
-  });
-
-  if (brandKind === 'claude') {
-    return (
-      <View accessible={false} style={styles.markBox}>
-        <Svg width={glyph} height={glyph} viewBox="0 0 24 24">
-          <Path d={CLAUDE_PATH} fill={fill} />
-        </Svg>
-      </View>
-    );
-  }
-  if (brandKind === 'codex') {
-    return (
-      <View accessible={false} style={styles.markBox}>
-        <Svg width={glyph} height={glyph} viewBox="0 0 24 24">
-          <Path d={CODEX_PATH} fill={fill} />
-        </Svg>
-      </View>
-    );
-  }
-  if (!fallbackProviderId) return null;
-  return (
-    <MobileProviderMark
-      color={color}
-      name={fallbackProviderName ?? fallbackProviderId}
-      providerId={fallbackProviderId}
-    />
-  );
 }
