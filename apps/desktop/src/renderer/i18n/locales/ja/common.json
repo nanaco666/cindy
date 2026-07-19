@@ -1746,7 +1746,8 @@
           "removeConfirm": "解除",
           "cancelPending": "キャンセル",
           "dismiss": "閉じる",
-          "addWorkspace": "Slack ワークスペースを追加"
+          "addWorkspace": "Slack ワークスペースを追加",
+          "alreadyBound": "認可されたのはすでに連携済みの {{team}} です。別のワークスペースを追加するには、Slack の認可ページ右上でワークスペースを切り替えてから許可してください。"
         }
       },
       "summary": {

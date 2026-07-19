@@ -1746,7 +1746,8 @@
           "removeConfirm": "Unlink",
           "cancelPending": "Cancel",
           "dismiss": "Dismiss",
-          "addWorkspace": "Add Slack workspace"
+          "addWorkspace": "Add Slack workspace",
+          "alreadyBound": "You authorized {{team}}, which is already linked. To add another workspace, switch workspaces in the top-right corner of the Slack authorization page before allowing."
         }
       },
       "summary": {
