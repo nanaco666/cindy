@@ -2724,7 +2724,11 @@
       "styleTweaks": "スタイル調整",
       "styleReset": "リセット",
       "styleTextLabel": "テキスト",
-      "moreToolsComingSoon": "その他のツール(開発中)",
+      "moreTools": "その他",
+      "openInSystemBrowser": "システムブラウザで開く",
+      "copyLink": "リンクをコピー",
+      "linkCopied": "リンクをクリップボードにコピーしました",
+      "copyLinkFailed": "リンクのコピーに失敗しました",
       "crash": {
         "crashedTitle": "ページがクラッシュしました",
         "crashedDesc": "ページプロセスが予期せず終了しました。再読み込みしてください。",

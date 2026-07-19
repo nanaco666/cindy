@@ -37,6 +37,8 @@ import {
   ArrowRight,
   Camera,
   Ellipsis,
+  ExternalLink,
+  Link as LinkIcon,
   Lock,
   MessageSquarePlus,
   RotateCw,
@@ -45,6 +47,12 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 
 import { parseOmnibox } from './lib/parseOmnibox';
@@ -71,6 +79,10 @@ export interface BrowserChromeProps {
    * 评论写进去无处可发(且会误弹成功 toast)——故子窗口传 false 隐藏该按钮。
    */
   commentSupported?: boolean;
+  /** 「更多」菜单项:用系统默认浏览器打开当前页(main 端 shell.openExternal)。 */
+  onOpenInSystemBrowser: () => void;
+  /** 「更多」菜单项:复制当前页链接到剪贴板(反馈 toast 由 TabBody 做)。 */
+  onCopyLink: () => void;
 }
 
 /** Imperative ref —— 父组件(BrowserTabBody)用 keydown 监听 Cmd/Ctrl+L,调
@@ -95,6 +107,8 @@ export const BrowserChrome = forwardRef<BrowserChromeHandle, BrowserChromeProps>
       commentActive,
       onToggleComment,
       commentSupported = true,
+      onOpenInSystemBrowser,
+      onCopyLink,
     },
     ref,
   ) {
@@ -182,6 +196,10 @@ export const BrowserChrome = forwardRef<BrowserChromeHandle, BrowserChromeProps>
   // 是否 https:左侧 lock icon 决定。about:blank 等非 web 协议显示 unlock 占位。
   const isSecure = url.startsWith('https://');
 
+  // 「更多」菜单里"系统浏览器打开 / 复制链接"两项:仅当存在有效页面 URL(非空、非
+  // about:blank)时可用,新标签空白态置灰。判据与 displayValue 一致。
+  const hasValidLink = Boolean(url) && url !== 'about:blank';
+
   return (
     <div className="flex h-10 shrink-0 items-center gap-1 border-b border-[var(--border-default)] bg-content-area px-2">
       {/* 左:导航按钮 */}
@@ -251,8 +269,7 @@ export const BrowserChrome = forwardRef<BrowserChromeHandle, BrowserChromeProps>
       {/* 右侧工具区(设计稿 right-side.pen「Browser 工具栏增强」):
           camera = 截图(capturePage → 剪贴板,已实现);
           message-square-plus = 页面评论(评论模式点选元素 → 评论进 composer,
-          已实现,active 态高亮);ellipsis = 更多菜单 —— 后续分期实现,
-          当前 disabled 展示。 */}
+          已实现,active 态高亮);ellipsis = 更多菜单(系统浏览器打开 / 复制链接)。 */}
       <ChromeIconButton
         icon={Camera}
         onClick={onCaptureScreenshot}
@@ -267,12 +284,34 @@ export const BrowserChrome = forwardRef<BrowserChromeHandle, BrowserChromeProps>
           tooltip={t('rightSidebar.browser.comment')}
         />
       )}
-      <ChromeIconButton
-        icon={Ellipsis}
-        disabled
-        onClick={() => undefined}
-        tooltip={t('rightSidebar.browser.moreToolsComingSoon')}
-      />
+      {/* 更多菜单:trigger 复用 chrome 图标按钮视觉(默认态 + 菜单打开时 active 高亮,
+          走 data-[state=open])。菜单项在无有效链接(新标签空白态)时置灰。 */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            title={t('rightSidebar.browser.moreTools')}
+            aria-label={t('rightSidebar.browser.moreTools')}
+            className={cn(
+              'flex size-6 shrink-0 items-center justify-center rounded-md transition-colors',
+              'text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-foreground',
+              'data-[state=open]:bg-sidebar-item-active data-[state=open]:text-foreground',
+            )}
+          >
+            <Ellipsis size={14} strokeWidth={2} />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-[9rem]">
+          <DropdownMenuItem disabled={!hasValidLink} onSelect={onOpenInSystemBrowser}>
+            <ExternalLink size={14} strokeWidth={2} className="mr-2 shrink-0" />
+            {t('rightSidebar.browser.openInSystemBrowser')}
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!hasValidLink} onSelect={onCopyLink}>
+            <LinkIcon size={14} strokeWidth={2} className="mr-2 shrink-0" />
+            {t('rightSidebar.browser.copyLink')}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 });

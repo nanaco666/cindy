@@ -343,6 +343,36 @@ export function BrowserTabBody({ state, ctx, active }: BrowserTabBodyProps) {
     }
   }, [browser, state.url]);
 
+  // 「更多」菜单 —— 用系统默认浏览器打开当前页。取 pageUrlRef 最新值(与页面评论共用)。
+  // 菜单项在无有效链接时已 disabled,这里再兜一层空 / about:blank 保护。
+  // openExternal 在被控端(远程控制场景)本机打开,语义正确(见规则 26)。
+  const handleOpenInSystemBrowser = useCallback(() => {
+    const url = pageUrlRef.current;
+    if (!url || url === 'about:blank') return;
+    void window.electronAPI
+      .openExternal(url)
+      .then((res) => {
+        if (!res?.success) {
+          toast.error(t('chat.markdownRenderer.openInBrowserFailed'));
+        }
+      })
+      .catch(() => {
+        toast.error(t('chat.markdownRenderer.openInBrowserFailed'));
+      });
+  }, [t]);
+
+  // 「更多」菜单 —— 复制当前页链接到剪贴板(renderer clipboard,项目惯例)。
+  const handleCopyLink = useCallback(async () => {
+    const url = pageUrlRef.current;
+    if (!url || url === 'about:blank') return;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success(t('rightSidebar.browser.linkCopied'));
+    } catch {
+      toast.error(t('rightSidebar.browser.copyLinkFailed'));
+    }
+  }, [t]);
+
   return (
     <div ref={rootRef} className="flex h-full w-full flex-col bg-content-area">
       <BrowserChrome
@@ -360,6 +390,8 @@ export function BrowserTabBody({ state, ctx, active }: BrowserTabBodyProps) {
         commentActive={comment.mode !== 'off'}
         onToggleComment={comment.toggle}
         commentSupported={commentSupported}
+        onOpenInSystemBrowser={handleOpenInSystemBrowser}
+        onCopyLink={handleCopyLink}
       />
       {/* webview slot:flex-1 占满剩余空间。pool 的 wrapper 用 100% width/height
           填满,所以这里不需要再设尺寸。

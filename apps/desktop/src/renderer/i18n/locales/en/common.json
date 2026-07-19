@@ -2724,7 +2724,11 @@
       "styleTweaks": "Style tweaks",
       "styleReset": "Reset",
       "styleTextLabel": "Text",
-      "moreToolsComingSoon": "More tools (coming soon)",
+      "moreTools": "More",
+      "openInSystemBrowser": "Open in system browser",
+      "copyLink": "Copy link",
+      "linkCopied": "Link copied to clipboard",
+      "copyLinkFailed": "Failed to copy link",
       "crash": {
         "crashedTitle": "Page crashed",
         "crashedDesc": "The page process terminated unexpectedly. Please reload.",
