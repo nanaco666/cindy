@@ -2,10 +2,25 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildSkillhubPublishParams,
+  deptMirrorTeamSlug,
+  matchesDeptMirrorTeamSlug,
   validateRequiredCategory,
   validateVisibilityScope,
   type PublishFormValues,
 } from '../publishForm';
+
+describe('deptMirrorTeamSlug', () => {
+  it('uses the Feishu open department id as the materialized team slug', () => {
+    expect(deptMirrorTeamSlug('od-platform')).toBe('od-platform');
+  });
+
+  it('recognizes a pre-migration mirror slug only while reading old ownership', () => {
+    expect(matchesDeptMirrorTeamSlug('od-platform', 'dept-od-platform', 'dept')).toBe(true);
+    expect(matchesDeptMirrorTeamSlug('od-platform', 'dept-od-platform', 'xdt-maker')).toBe(true);
+    expect(matchesDeptMirrorTeamSlug('od-platform', 'dept-od-platform', null)).toBe(false);
+    expect(matchesDeptMirrorTeamSlug('od-platform', 'platform')).toBe(false);
+  });
+});
 
 const baseForm: PublishFormValues = {
   name: 'sivi-boss-fighting',
