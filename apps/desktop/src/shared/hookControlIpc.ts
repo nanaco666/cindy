@@ -113,6 +113,13 @@ export const HOOK_BIND_REASON_NOT_INSTALLED = 'not-installed';
 export const HOOK_BIND_REASON_SUPERSEDED = 'superseded';
 
 /**
+ * (multi-team)本地合成的终止态 reason: 「添加 workspace」授权落在已绑定的
+ * 活跃 team 上(用户没在 Slack 授权页右上角切换 workspace)。仅 desktop 本地
+ * 使用, 不过网线; renderer 据此显示切换指引而非通用失败文案。
+ */
+export const HOOK_BIND_REASON_ALREADY_BOUND = 'already-bound';
+
+/**
  * (multi-team)单个已确认的 Slack workspace 绑定行(bind.state 快照 +
  * confirmed/revoked 事件维护; displaced 行来自本地缓存 diff 或 superseded 事件)。
  */

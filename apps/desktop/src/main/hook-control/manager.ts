@@ -33,6 +33,7 @@ import {
 
 import {
   HOOK_BIND_REASON_NOT_INSTALLED,
+  HOOK_BIND_REASON_ALREADY_BOUND,
   HOOK_BIND_REASON_SUPERSEDED,
   HOOK_CHAT_WORKSPACE_ALIAS,
 } from '../../shared/hookControlIpc.js';
@@ -719,6 +720,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     const state = payload.state;
     if (state === 'confirmed') {
       // 添加/重绑成功: 行级 upsert + 在途授权收口(看门狗/意图/弹窗置位全清)
+      const pendingBefore = pendingBind;
       clearBindWatchdog();
       clearInstallWatchdog();
       clearAutoBindDefer();
@@ -735,6 +737,26 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
           displaced: false,
         };
         const idx = multiBindings.findIndex((b) => b.teamId === teamId);
+        // 「添加 workspace」流落在已绑定的活跃 team 上: Slack 授权页右上角的
+        // workspace 下拉默认停在当前登录的 workspace, 用户没切换就点了允许 ——
+        // 结果只是刷新原绑定, 列表不变。若不提示, 用户看到的是"点了添加却毫无
+        // 反应"(实测踩坑)。以本地终止态 already-bound 呈现指引; 指定 team 的
+        // 重绑(pendingBefore.teamId === teamId)与 displaced 行的复活不提示。
+        if (
+          idx >= 0 &&
+          !multiBindings[idx].displaced &&
+          pendingBefore !== null &&
+          pendingBefore.teamId !== teamId
+        ) {
+          pendingBind = {
+            state: 'failed',
+            message: null,
+            authorizeUrl: null,
+            reason: HOOK_BIND_REASON_ALREADY_BOUND,
+            installUrl: null,
+            teamId,
+          };
+        }
         if (idx >= 0) multiBindings[idx] = row;
         else multiBindings.push(row);
         persistBindingsCache();
