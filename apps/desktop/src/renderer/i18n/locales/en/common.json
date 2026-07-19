@@ -1969,7 +1969,7 @@
         "addPlugin": "Add plugin",
         "addPluginAria": "Plugin add options",
         "createWithCindy": "Create with Cindy",
-        "createPrompt": "Help me create a new Cindy plugin. Start by asking what it should do and which tools or connections it needs.",
+        "createPrompt": "I want to create a Cindy plugin. First call ghost_forge_guide to read the full specification; do not start implementing yet. Begin by asking questions, focusing on one key decision at a time, and work with me to define the problem, target users, interaction flow, required tools and connections, permission boundaries, and acceptance criteria. After I confirm the design, implement and validate it according to the specification, then call ghost_forge_pack to package and install the plugin.",
         "installedTitle": "Installed Plugins",
         "installedExpand": "Show {{count}} more installed plugins",
         "installedCollapse": "Hide additional installed plugins",

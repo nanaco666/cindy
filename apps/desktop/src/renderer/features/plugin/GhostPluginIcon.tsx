@@ -77,9 +77,7 @@ export function GhostPluginIcon({
         'inline-flex shrink-0 items-center justify-center overflow-hidden border-[0.5px] border-[var(--border-default)]',
         iconDataUrl
           ? 'bg-[var(--plugin-icon-surface)] shadow-[var(--plugin-icon-shadow)]'
-          : fallbackKind === 'diagram'
-            ? 'bg-[var(--plugin-diagram-fallback-surface)] text-[var(--plugin-diagram-fallback-fg)] shadow-none'
-            : 'bg-[var(--surface-chip)] text-[var(--text-secondary)] shadow-none',
+          : 'bg-[var(--surface-elevated)] text-[var(--text-secondary)] shadow-none',
         CONTAINER_CLASSES[size],
       )}
     >

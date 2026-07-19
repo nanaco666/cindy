@@ -127,7 +127,7 @@ describe('GhostPluginCard', () => {
     ).toBe('settings.ghosts.page.installAction');
   });
 
-  it('renders the Mermaid fallback symbol on the shared theme-aware surface', () => {
+  it('renders the Mermaid fallback symbol on the theme elevated surface', () => {
     const { container } = render(
       <GhostPluginCard
         item={{
@@ -143,8 +143,6 @@ describe('GhostPluginCard', () => {
 
     const fallbackIcon = container.querySelector('.lucide-workflow');
     expect(fallbackIcon).toBeTruthy();
-    expect(fallbackIcon?.parentElement?.className).toContain(
-      'var(--plugin-diagram-fallback-surface)',
-    );
+    expect(fallbackIcon?.parentElement?.className).toContain('var(--surface-elevated)');
   });
 });

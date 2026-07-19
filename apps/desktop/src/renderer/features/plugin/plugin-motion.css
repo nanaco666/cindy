@@ -8,12 +8,6 @@
   --plugin-card-shadow: var(--shadow-soft-panel);
   --plugin-icon-surface: color-mix(in srgb, var(--surface-elevated) 78%, transparent);
   --plugin-icon-shadow: 0 1px 2px color-mix(in srgb, var(--text-primary) 12%, transparent);
-  --plugin-diagram-fallback-surface: color-mix(
-    in srgb,
-    var(--surface-elevated) 88%,
-    var(--text-primary) 12%
-  );
-  --plugin-diagram-fallback-fg: var(--text-secondary);
 }
 
 /* GitHub's package icon is a monochrome mark; invert only the mark in dark themes. */
