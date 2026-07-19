@@ -1,24 +1,49 @@
 #!/usr/bin/env node
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+// ⚠️ dev-only 工具:把真实 xdt-maker/Cindy SQLite 的会话导出成移动端视觉预览快照。
+// 导出物含真实聊天标题 / 工作目录 / 消息正文 / agentMeta,属敏感数据,安全约束(应 review #104 收口):
+//   1. 不再默认 auto 扫旧 xdt-maker 目录:必须显式 `--db <path>` 或 `--confirm-sensitive` 才导出真实库;
+//   2. 明文 DB 副本与快照落私有目录(0700)+ 文件 0600,并在进程退出时清理(--keep 可保留);
+//   3. serve 模式强制随机 token(路径带 ?token= 或 header),Origin 白名单默认只放 Expo dev 本地源,
+//      不再 `Access-Control-Allow-Origin: *`;缺 token / Origin 不符一律 403。
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 
-const DEFAULT_APP_SUPPORT = join(homedir(), 'Library', 'Application Support', 'xdt-maker');
-const DEFAULT_OUT_DIR = '/tmp/cindy-mobile-realdata';
+// 新装身份是 Cindy;旧 xdt-maker 目录仅在用户显式 --db 指过去时才碰,不再默认扫描。
+const DEFAULT_APP_SUPPORT = join(homedir(), 'Library', 'Application Support', 'Cindy');
+const DEFAULT_OUT_DIR = join(tmpdir(), 'cindy-mobile-realdata');
 const DEFAULT_LIMIT = 100;
 const DEFAULT_MESSAGE_LIMIT = 80;
 const DEFAULT_PORT = 3344;
+// serve 模式默认只接受来自 Expo dev server / 本地回环的跨源请求。
+const DEFAULT_ALLOWED_ORIGINS = [
+  'http://localhost:8081',
+  'http://127.0.0.1:8081',
+  'http://localhost:19006',
+];
 
 const options = parseArgs(process.argv.slice(2));
 const repoRoot = resolve(options.repo ?? join(import.meta.dirname, '..'));
 const requireFromRepo = createRequire(join(repoRoot, 'package.json'));
 const Database = requireFromRepo('better-sqlite3');
 
-const sourceDb = resolveDbPath(options.db ?? 'auto');
+const sourceDb = resolveDbPath(options.db, Boolean(options.confirmSensitive));
+// 私有输出目录:0700,只有当前用户可进。
 const outDir = resolve(options.outDir ?? DEFAULT_OUT_DIR);
 mkdirSync(outDir, { recursive: true });
+chmodSafe(outDir, 0o700);
 
 const dbCopy = join(outDir, 'xdt-maker-realdata.db');
 copySqliteBundle(sourceDb, dbCopy);
@@ -32,31 +57,106 @@ const snapshot = buildSnapshot(dbCopy, {
   messageLimit: positiveInt(options.messageLimit, DEFAULT_MESSAGE_LIMIT),
 });
 writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2), 'utf8');
+chmodSafe(snapshotPath, 0o600);
+
+// 非 serve 模式:一次性导出,用完即清明文副本(除非 --keep)。
+// serve 模式:进程存活期间保留,SIGINT/SIGTERM 时清理。
+const cleanupPaths = options.keep ? [] : [dbCopy, `${dbCopy}-wal`, `${dbCopy}-shm`, snapshotPath];
+function cleanup() {
+  for (const p of cleanupPaths) {
+    try {
+      rmSync(p, { force: true });
+    } catch {}
+  }
+}
 
 console.log(`snapshot: ${snapshotPath}`);
-console.log(`db copy: ${dbCopy}`);
+console.log(`db copy: ${dbCopy}${options.keep ? '' : ' (进程退出时清理)'}`);
 console.log(`sessions: ${snapshot.sessions.length}`);
 console.log(`messages: ${Object.values(snapshot.messagesBySession).reduce((sum, list) => sum + list.length, 0)}`);
 console.log(`selected session: ${snapshot.selectedSessionId}`);
 
 if (options.serve) {
   const port = positiveInt(options.port, DEFAULT_PORT);
-  createServer((req, res) => {
-    const url = new URL(req.url ?? '/', `http://${req.headers.host ?? `127.0.0.1:${port}`}`);
+  // 随机 token:每次启动新生成,client 必须带 ?token= 或 x-realdata-token header。
+  const token = options.token ?? randomBytes(24).toString('base64url');
+  const allowedOrigins = new Set(
+    options.allowOrigin ? options.allowOrigin.split(',').map((s) => s.trim()) : DEFAULT_ALLOWED_ORIGINS,
+  );
+  const payload = JSON.stringify(snapshot, null, 2);
+
+  const server = createServer((req, res) => {
+    const origin = req.headers.origin;
+    // Origin 白名单:带 Origin 头(浏览器跨源)时必须在白名单内;非浏览器(无 Origin)放行到 token 校验。
+    const originAllowed = !origin || allowedOrigins.has(origin);
+    if (origin && originAllowed) res.setHeader('access-control-allow-origin', origin);
+    res.setHeader('vary', 'origin');
+
+    if (req.method === 'OPTIONS') {
+      res.setHeader('access-control-allow-headers', 'x-realdata-token');
+      res.writeHead(originAllowed ? 204 : 403);
+      res.end();
+      return;
+    }
+    if (!originAllowed) {
+      res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('forbidden origin');
+      return;
+    }
+
+    const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
     if (url.pathname !== '/' && url.pathname !== '/visualMockRealData.local.json') {
       res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
       res.end('not found');
       return;
     }
+    // token 校验(定长比较防时序侧信道):query ?token= 或 header x-realdata-token。
+    const provided = url.searchParams.get('token') ?? headerToken(req);
+    if (!tokenMatches(provided, token)) {
+      res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('missing or invalid token');
+      return;
+    }
     res.writeHead(200, {
-      'access-control-allow-origin': '*',
       'cache-control': 'no-store',
       'content-type': 'application/json; charset=utf-8',
     });
-    res.end(JSON.stringify(snapshot, null, 2));
-  }).listen(port, '127.0.0.1', () => {
-    console.log(`serving: http://127.0.0.1:${port}/visualMockRealData.local.json`);
+    res.end(payload);
   });
+  server.listen(port, '127.0.0.1', () => {
+    const tokenizedUrl = `http://127.0.0.1:${port}/visualMockRealData.local.json?token=${token}`;
+    console.log(`serving (token-gated): ${tokenizedUrl}`);
+    console.log(`  EXPO_PUBLIC_CINDY_MOBILE_REALDATA_URL=${tokenizedUrl}`);
+    console.log(`  allowed origins: ${[...allowedOrigins].join(', ')}`);
+  });
+  for (const sig of ['SIGINT', 'SIGTERM']) {
+    process.on(sig, () => {
+      server.close();
+      cleanup();
+      process.exit(0);
+    });
+  }
+} else {
+  // 一次性导出:如需长期保留供 serve,加 --keep;否则清理明文副本。
+  cleanup();
+}
+
+function headerToken(req) {
+  const raw = req.headers['x-realdata-token'];
+  return Array.isArray(raw) ? raw[0] : raw ?? null;
+}
+
+function tokenMatches(provided, expected) {
+  if (typeof provided !== 'string' || provided.length === 0) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+function chmodSafe(path, mode) {
+  try {
+    chmodSync(path, mode);
+  } catch {}
 }
 
 function buildSnapshot(dbPath, opts) {
@@ -211,11 +311,23 @@ function messageRow(row) {
   };
 }
 
-function resolveDbPath(input) {
-  if (input && input !== 'auto') return resolve(input);
+// DB 来源解析:显式 --db 直接用;auto 扫描属"从真实库导出敏感数据",必须显式 --confirm-sensitive
+// 才允许,避免脚本被无意运行就把整库聊天导出来。
+function resolveDbPath(input, confirmSensitive) {
+  if (input && input !== 'auto') {
+    const explicit = resolve(input);
+    if (!existsSync(explicit)) throw new Error(`--db 指定的文件不存在: ${explicit}`);
+    return explicit;
+  }
+  if (!confirmSensitive) {
+    throw new Error(
+      '拒绝自动扫描真实库:auto 模式会导出真实聊天数据。请显式 `--db <path>` 指定库,' +
+        '或加 `--confirm-sensitive` 明确确认要从默认目录导出敏感数据。',
+    );
+  }
   const entries = [];
   for (const name of safeReaddir(DEFAULT_APP_SUPPORT)) {
-    if (!/^xdt-maker-.+\.db$/.test(name)) continue;
+    if (!/^(xdt-maker|cindy)-.+\.db$/i.test(name)) continue;
     const full = join(DEFAULT_APP_SUPPORT, name);
     try {
       const stat = statSync(full);
@@ -223,15 +335,19 @@ function resolveDbPath(input) {
     } catch {}
   }
   entries.sort((a, b) => b.mtimeMs - a.mtimeMs || b.size - a.size);
-  if (!entries[0]) throw new Error(`no xdt-maker-*.db found in ${DEFAULT_APP_SUPPORT}`);
+  if (!entries[0]) throw new Error(`no cindy/xdt-maker *.db found in ${DEFAULT_APP_SUPPORT}`);
   return entries[0].full;
 }
 
 function copySqliteBundle(source, target) {
   mkdirSync(dirname(target), { recursive: true });
   copyFileSync(source, target);
+  chmodSafe(target, 0o600); // 明文副本仅当前用户可读写
   for (const suffix of ['-wal', '-shm']) {
-    if (existsSync(`${source}${suffix}`)) copyFileSync(`${source}${suffix}`, `${target}${suffix}`);
+    if (existsSync(`${source}${suffix}`)) {
+      copyFileSync(`${source}${suffix}`, `${target}${suffix}`);
+      chmodSafe(`${target}${suffix}`, 0o600);
+    }
   }
 }
 
@@ -249,8 +365,27 @@ function parseArgs(args) {
     else if (arg === '--device-name') parsed.deviceName = args[++i];
     else if (arg === '--serve') parsed.serve = true;
     else if (arg === '--port') parsed.port = args[++i];
+    else if (arg === '--confirm-sensitive') parsed.confirmSensitive = true;
+    else if (arg === '--keep') parsed.keep = true;
+    else if (arg === '--token') parsed.token = args[++i];
+    else if (arg === '--allow-origin') parsed.allowOrigin = args[++i];
     else if (arg === '--help' || arg === '-h') {
-      console.log('Usage: node scripts/export-realdata-visual-snapshot.mjs [--db auto|path] [--serve] [--port 3344]');
+      console.log(
+        [
+          'Usage: node scripts/export-realdata-visual-snapshot.mjs [options]',
+          '',
+          'dev-only 工具:导出真实会话为移动端视觉预览快照(含敏感聊天数据)。',
+          '',
+          '  --db <path>           指定 SQLite 库路径(推荐);省略需配 --confirm-sensitive',
+          '  --confirm-sensitive   确认从默认 Cindy 目录自动扫描真实库并导出',
+          '  --serve               启动 token 门禁的本地 HTTP(仅回环 + Origin 白名单)',
+          '  --port <n>            serve 端口(默认 3344)',
+          '  --token <str>         固定 serve token(默认每次随机生成)',
+          '  --allow-origin <csv>  覆盖 serve 允许的 Origin 白名单(逗号分隔)',
+          '  --keep                保留明文 DB 副本与快照(默认用完清理)',
+          '  --limit / --message-limit / --out / --out-dir / --device-id / --device-name',
+        ].join('\n'),
+      );
       process.exit(0);
     } else {
       throw new Error(`unknown arg: ${arg}`);

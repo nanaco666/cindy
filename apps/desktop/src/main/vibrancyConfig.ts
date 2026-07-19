@@ -4,6 +4,10 @@
  * 不透明。Windows 11 CINDY family 启用 Electron backgroundMaterial;Windows 10/Linux
  * 回退不透明。
  */
+import { createLogger } from './logger.js';
+
+const log = createLogger('vibrancyConfig');
+
 export type WindowsBackdropMaterial = 'acrylic' | 'mica' | 'tabbed' | 'none';
 
 export interface VibrancyConfig {
@@ -53,7 +57,7 @@ function resolveBackdropMaterial(): WindowsBackdropMaterial {
   if (VALID_BACKDROP_MATERIALS.has(raw as WindowsBackdropMaterial)) {
     return raw as WindowsBackdropMaterial;
   }
-  console.warn(`[main] Invalid XDT_BACKDROP_MATERIAL '${raw}', falling back to acrylic.`);
+  log.warn(`Invalid XDT_BACKDROP_MATERIAL '${raw}', falling back to acrylic.`);
   return 'acrylic';
 }
 

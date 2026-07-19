@@ -1,4 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// vibrancyConfig 走 main 统一 logger(规则 12:禁止裸 console),测试对 logger.warn 断言。
+// vi.hoisted 让 warnSpy 在 vi.mock 提升后仍可用(否则模块工厂里引用会命中 TDZ)。
+const { warnSpy } = vi.hoisted(() => ({ warnSpy: vi.fn() }));
+vi.mock('../logger.js', () => ({
+  createLogger: () => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: warnSpy,
+    error: vi.fn(),
+  }),
+}));
+
 import { resolveVibrancyConfig } from '../vibrancyConfig';
 
 const MATERIAL_VALUES = [
@@ -90,7 +103,7 @@ describe('E4D resolveVibrancyConfig(familyId→vibrancy/backgroundColor 映射)'
   });
 
   it('win32 × Win11 × CINDY:非法材质 warn 后回落 acrylic', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    warnSpy.mockClear();
     process.env.XDT_BACKDROP_MATERIAL = 'glass';
     expect(
       resolveVibrancyConfig('cindy', true, 'win32', {
@@ -101,8 +114,9 @@ describe('E4D resolveVibrancyConfig(familyId→vibrancy/backgroundColor 映射)'
       backgroundColor: '#00000000',
       backgroundMaterial: 'acrylic',
     });
-    expect(warn).toHaveBeenCalledWith(
-      "[main] Invalid XDT_BACKDROP_MATERIAL 'glass', falling back to acrylic.",
+    // 走统一 logger.warn,不再是裸 console.warn;文案不再带 [main] 前缀(scope 由 logger 注入)
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Invalid XDT_BACKDROP_MATERIAL 'glass', falling back to acrylic.",
     );
   });
 

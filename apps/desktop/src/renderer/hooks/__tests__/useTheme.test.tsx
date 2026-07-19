@@ -26,6 +26,16 @@ function wrapper({ children }: { children: ReactNode }) {
   return createElement(ThemeProvider, null, children);
 }
 
+// 构造 storage 事件:用普通 Event + 显式 key/newValue,避免依赖 jsdom 对
+// StorageEvent 构造函数第二参数(init)的重载支持(CodeQL: superfluous trailing arguments)。
+// useTheme 的 storage 监听只读 event.key / event.newValue,语义完全等价。
+function dispatchStorage(key: string, newValue: string | null) {
+  const event = new Event('storage');
+  Object.defineProperty(event, 'key', { value: key });
+  Object.defineProperty(event, 'newValue', { value: newValue });
+  window.dispatchEvent(event);
+}
+
 describe('useTheme 跨窗口主题同步(D2-3)', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -36,7 +46,7 @@ describe('useTheme 跨窗口主题同步(D2-3)', () => {
     const { result } = renderHook(() => useTheme(), { wrapper });
     expect(result.current.theme).toBe('system');
     act(() => {
-      window.dispatchEvent(new StorageEvent('storage', { key: 'theme', newValue: 'dark' }));
+      dispatchStorage('theme', 'dark');
     });
     expect(result.current.theme).toBe('dark');
     expect(themeService.applyTheme).toHaveBeenCalled();
@@ -46,9 +56,7 @@ describe('useTheme 跨窗口主题同步(D2-3)', () => {
     const { result } = renderHook(() => useTheme(), { wrapper });
     expect(result.current.familyId).toBe('default');
     act(() => {
-      window.dispatchEvent(
-        new StorageEvent('storage', { key: 'theme.familyId', newValue: 'cindy' }),
-      );
+      dispatchStorage('theme.familyId', 'cindy');
     });
     expect(result.current.familyId).toBe('cindy');
   });
@@ -57,7 +65,7 @@ describe('useTheme 跨窗口主题同步(D2-3)', () => {
     const { result } = renderHook(() => useTheme(), { wrapper });
     const before = result.current.theme;
     act(() => {
-      window.dispatchEvent(new StorageEvent('storage', { key: 'theme', newValue: 'garbage' }));
+      dispatchStorage('theme', 'garbage');
     });
     expect(result.current.theme).toBe(before);
   });
@@ -66,12 +74,7 @@ describe('useTheme 跨窗口主题同步(D2-3)', () => {
     const { result } = renderHook(() => useTheme(), { wrapper });
     const before = result.current.familyId;
     act(() => {
-      window.dispatchEvent(
-        new StorageEvent('storage', {
-          key: 'theme.familyId',
-          newValue: 'no-such-family',
-        }),
-      );
+      dispatchStorage('theme.familyId', 'no-such-family');
     });
     expect(result.current.familyId).toBe(before);
   });
@@ -83,7 +86,7 @@ describe('useTheme 跨窗口主题同步(D2-3)', () => {
     const beforeTheme = result.current.theme;
     const beforeFamily = result.current.familyId;
     act(() => {
-      window.dispatchEvent(new StorageEvent('storage', { key: 'unrelated.key', newValue: 'x' }));
+      dispatchStorage('unrelated.key', 'x');
     });
     expect(result.current.theme).toBe(beforeTheme);
     expect(result.current.familyId).toBe(beforeFamily);

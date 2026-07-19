@@ -23,7 +23,7 @@ import { createLogger } from './logger.js';
 import { installNewMakerWindowShortcut } from './app-shortcuts/new-maker-window-shortcut.js';
 import { markAppContentWindow } from './windowFocusClassifier.js';
 import { readWindowBehaviorSettings } from './window-behavior-settings-store.js';
-import { resolveVibrancyConfig } from './vibrancyConfig.js';
+import { resolveVibrancyConfig, type WindowsBackdropMaterial } from './vibrancyConfig.js';
 import { installSelectionContextMenu } from './selection-context-menu.js';
 
 const log = createLogger('secondary-windows');
@@ -165,6 +165,14 @@ export function applyVibrancyToSecondaryWindows(familyId: string, isDark: boolea
     const config = resolveVibrancyConfig(familyId, isDark, process.platform);
     if (process.platform === 'darwin') {
       win.setVibrancy(config.vibrancy as 'under-window' | null);
+    }
+    // Windows 11:副窗口与主窗口一致地应用 acrylic/mica 材质;切回非 CINDY family 时
+    // config.backgroundMaterial 为 'none',显式复位,避免会话副窗口残留上一次的毛玻璃材质。
+    if (process.platform === 'win32' && config.backgroundMaterial) {
+      const withMaterial = win as typeof win & {
+        setBackgroundMaterial?: (material: WindowsBackdropMaterial) => void;
+      };
+      withMaterial.setBackgroundMaterial?.(config.backgroundMaterial);
     }
     win.setBackgroundColor(config.backgroundColor);
   }

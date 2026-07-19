@@ -148,5 +148,10 @@
   "glob": "apps/mobile/src/session/BlurBackdrop.tsx",
   "reason": "mobile blur component comments document approved translucent token source values; runtime styles consume tokens",
   "owner": "M1-mobile-align"
+ },
+ {
+  "glob": "apps/mobile/src/__tests__/typographyTokenDiscipline.test.ts",
+  "reason": "caret 防红回流守护测试:红色字面量是禁止匹配的正则模式与豁免蓝值,非组件硬编码",
+  "owner": "M1-mobile-align"
  }
 ]
