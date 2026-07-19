@@ -313,6 +313,8 @@ const fanOutLayoutChanged = createIpcFanOut('layout:changed');
 // 意识仓库变化广播 (install/uninstall 后 main 推全量已装清单,多窗口热更新;
 // 见 main/cindy-brain/index.ts)。
 const fanOutGhostsChanged = createIpcFanOut('ghosts:changed');
+// Plugin 顶部已安装快捷行的最近使用顺序，多窗口同步。
+const fanOutGhostRecentUsageChanged = createIpcFanOut('ghosts:recent-usage-changed');
 // 双击 .cindy 转交信号(main 缓存路径,renderer 收信号后来取,统一走应用内确认流程)。
 const fanOutGhostInstallRequested = createIpcFanOut('ghosts:install-requested');
 // 意识运行时状态广播(crashed/fused → 面板原地错误接管态)。
@@ -704,6 +706,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 面板同帧注册进布局引擎(规则 7 无跳变);目录扫描极小,同步读不卡启动。
   ghosts: {
     listSync: (): { ghosts: unknown[] } => ipcRenderer.sendSync('ghosts:list'),
+    recentUsageSync: (): { ids: string[] } => {
+      try {
+        const result = ipcRenderer.sendSync('ghosts:recent-usage') as { ids?: unknown } | null;
+        return {
+          ids: Array.isArray(result?.ids)
+            ? result.ids.filter((id): id is string => typeof id === 'string')
+            : [],
+        };
+      } catch {
+        // MRU 是非关键展示数据；main 不可用 /旧版无 channel 时首屏按空历史渲染。
+        return { ids: [] };
+      }
+    },
+    markUsed: (id: string): Promise<{ ids: string[] }> =>
+      ipcRenderer.invoke('ghosts:mark-used', id),
     install: (lizFilePath: string, opts?: { enable?: boolean }): Promise<{ ghost: unknown }> =>
       ipcRenderer.invoke('ghosts:install', lizFilePath, opts),
     update: (lizFilePath: string): Promise<{ ghost: unknown }> =>
@@ -736,6 +753,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     takePendingInstall: (): Promise<{ filePath: string | null }> =>
       ipcRenderer.invoke('ghosts:take-pending-install'),
     onChanged: fanOutGhostsChanged,
+    onRecentUsageChanged: fanOutGhostRecentUsageChanged,
     onInstallRequested: fanOutGhostInstallRequested,
     onRuntimeChanged: fanOutGhostRuntimeChanged,
     onPreviewMedia: fanOutGhostPreviewMedia,

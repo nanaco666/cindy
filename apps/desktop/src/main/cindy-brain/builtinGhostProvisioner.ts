@@ -381,6 +381,8 @@ export interface RestorableBuiltinGhost {
   name: string;
   description?: string;
   version: string;
+  /** 随包 seed 的完整已校验身份卡;卸载不抹掉插件的声明事实。 */
+  manifest: GhostManifest;
   /** 种子档位(设置页按它归组:builtin → 内置组,enterprise → 企业组)。 */
   tier: GhostSeedTier;
   iconDataUrl?: string;
@@ -419,6 +421,7 @@ export function listRestorableBuiltinGhosts(deps: {
       name: manifest.name,
       ...(manifest.description !== undefined ? { description: manifest.description } : {}),
       version: manifest.version,
+      manifest,
       tier: config.get(id)?.tier ?? 'builtin',
       ...(iconDataUrl !== null ? { iconDataUrl } : {}),
     });

@@ -453,8 +453,16 @@ export class GhostManager {
     }
   }
 
-  /** 卸下一个意识(删除其目录;布局树里的位置记录由布局引擎保留)。 */
-  async uninstall(id: string): Promise<{ ok: true } | { rejection: UninstallRejection }> {
+  /**
+   * 卸下一个意识(删除其目录;布局树里的位置记录由布局引擎保留)。
+   *
+   * Host 需要在内置意识卸载后先写 tombstone，再向 renderer 发布一份
+   * 已安装 + 可恢复相互一致的快照。notify=false 只延后广播，不改变卸载语义。
+   */
+  async uninstall(
+    id: string,
+    options: { notify?: boolean } = {},
+  ): Promise<{ ok: true } | { rejection: UninstallRejection }> {
     if (!isValidGhostId(id)) {
       return { rejection: { code: 'invalid-id', reason: '非法意识 id' } };
     }
@@ -473,7 +481,7 @@ export class GhostManager {
       return { rejection: { code: 'io', reason: err instanceof Error ? err.message : String(err) } };
     }
     this.options.log?.info('ghost uninstalled', { id });
-    this.options.onChanged?.(this.list());
+    if (options.notify !== false) this.options.onChanged?.(this.list());
     return { ok: true };
   }
 }
