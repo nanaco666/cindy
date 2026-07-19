@@ -55,6 +55,7 @@ const SESSION_RUNNING_RETRY_DELAY_MS = 250;
  */
 const CREDENTIAL_SWITCH_RETRY_DELAY_MS = 10_000;
 const TERMINAL_DONE_FALLBACK_DELAY_MS = 250;
+const REWIND_BOUNDARY_POLL_INTERVAL_MS = 100;
 
 export interface AgentInputSendOpts {
   messageUuid?: string;
@@ -616,6 +617,39 @@ export class AgentInputCoordinator {
     return this.getState(sessionId).queuePaused;
   }
 
+  /**
+   * Rewind owns the whole active input boundary, including vendor turns and
+   * unresolved interactions that can still resume the current turn.
+   */
+  hasActiveTurnForRewind(sessionId: string): boolean {
+    return this.isDispatchBoundaryBusy(sessionId, this.getState(sessionId));
+  }
+
+  /** Wait until Stop has closed every input path that can mutate the old history. */
+  async waitForRewindBoundaryIdle(
+    sessionId: string,
+    timeoutMs: number,
+  ): Promise<boolean> {
+    const deadline = Date.now() + Math.max(0, timeoutMs);
+    while (this.hasActiveTurnForRewind(sessionId)) {
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) return false;
+      await new Promise<void>((resolve) =>
+        setTimeout(resolve, Math.min(REWIND_BOUNDARY_POLL_INTERVAL_MS, remainingMs)),
+      );
+    }
+    return true;
+  }
+
+  /** Preserve queued input but keep it paused while rewind changes history. */
+  pausePendingQueueForRewind(sessionId: string): AgentInputProjection {
+    const state = this.getState(sessionId);
+    state.queuePaused = state.pendingQueue.length > 0 || state.pendingCompacts.length > 0;
+    state.queuePausedByRestore = false;
+    this.emit(sessionId);
+    return this.getProjection(sessionId);
+  }
+
   /** 近期已受理 clientId 窗口容量:覆盖控制端秒级重发窗口即可,防无界增长。 */
   private static readonly RECENT_ENQUEUED_CLIENT_IDS_LIMIT = 32;
 
@@ -821,15 +855,19 @@ export class AgentInputCoordinator {
 
   async steer(sessionId: string, item: AgentInputQueuedMessage, opts?: { removeFromQueue?: boolean; touchUserSend?: boolean }): Promise<boolean> {
     const state = this.getState(sessionId);
-    if (state.steeringQueueClientIds.length > 0 || state.queueAbortPending) {
-      // 同会话同一时刻只允许一个 steer 事务。这里返回 false 对 renderer 是
-      // "无反应", 必须留痕 —— 若 marker 长期残留 (steer 事务挂死), 这条日志
-      // 是唯一的现场证据。
-      log.warn('steer rejected: another steer transaction in flight', {
+    if (
+      state.steeringQueueClientIds.length > 0 ||
+      state.queueAbortPending ||
+      state.queueInteractionLocks.length > 0
+    ) {
+      // 同会话同一时刻只允许一个 steer 事务；输入锁 / Stop 边界也必须挡住
+      // steer，否则 rewind 等待收尾时仍可能把新内容注入即将废弃的旧 turn。
+      log.warn('steer rejected: session input boundary is locked', {
         sessionId,
         clientId: item.clientId,
         inFlightClientIds: [...state.steeringQueueClientIds],
         queueAbortPending: state.queueAbortPending,
+        interactionLockIds: [...state.queueInteractionLocks],
       });
       return false;
     }

@@ -118,8 +118,8 @@ interface UserMessageProps {
    *  fork IPC takes (sessionId, clientId) to locate the fork point. When
    *  omitted, the Fork button is not rendered. */
   messageClientId?: string;
-  /** Whether this session currently has an in-flight SDK turn. Rewind still
-   *  needs an idle live query, while fork is allowed from stable history. */
+  /** Whether this session currently has an in-flight SDK turn. Rewind uses it
+   *  to select stop-then-rewind confirmation; fork is allowed from stable history. */
   sessionRunning?: boolean;
   /** Host-side delivery marker. Same-turn steer user rows are unstable while running. */
   delivery?: 'turn' | 'steer';
@@ -676,12 +676,8 @@ export function UserMessage({
 
   const handleRewind = useCallback(() => {
     if (!sessionId || !messageClientId) return;
-    if (sessionRunning) {
-      toast.error(t('chat.userMessage.rewindBusy'));
-      return;
-    }
     setRewindOpen(true);
-  }, [sessionId, messageClientId, sessionRunning, t]);
+  }, [sessionId, messageClientId]);
 
   const handleRewindCommitted = useCallback(
     (session: Session) => {
@@ -1217,6 +1213,7 @@ export function UserMessage({
           onOpenChange={setRewindOpen}
           sessionId={sessionId}
           clientId={messageClientId}
+          sessionRunning={sessionRunning === true}
           onCommitted={handleRewindCommitted}
         />
       )}

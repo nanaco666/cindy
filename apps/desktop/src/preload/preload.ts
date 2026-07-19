@@ -4057,7 +4057,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     rewindCommit: (
       sessionId: string,
       clientId: string,
-      opts?: { requireLatestUser?: boolean },
+      opts?: { requireLatestUser?: boolean; stopIfRunning?: boolean },
     ): Promise<unknown> =>
       ipcRenderer.invoke('maker:rewind:commit', sessionId, clientId, opts),
     fork: (sourceSessionId: string, messageClientId: string): Promise<unknown> =>

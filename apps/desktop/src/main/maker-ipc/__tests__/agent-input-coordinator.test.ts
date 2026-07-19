@@ -2952,6 +2952,86 @@ describe('AgentInputCoordinator interaction-resolved wake', () => {
 });
 
 describe('AgentInputCoordinator stop and drain boundaries', () => {
+  it('reports vendor running and pending interactions as active rewind boundaries', () => {
+    const h = createHarness();
+    const sid = 'rewind-active-boundary';
+
+    expect(h.coordinator.hasActiveTurnForRewind(sid)).toBe(false);
+    h.setRunning(true);
+    expect(h.coordinator.hasActiveTurnForRewind(sid)).toBe(true);
+    h.setRunning(false);
+    h.setPendingInteraction(true);
+    expect(h.coordinator.hasActiveTurnForRewind(sid)).toBe(true);
+  });
+
+  it('waits for the complete rewind boundary instead of only the vendor running flag', async () => {
+    vi.useFakeTimers();
+    try {
+      const h = createHarness();
+      const sid = 'rewind-pending-interaction';
+      h.setPendingInteraction(true);
+
+      const waiting = h.coordinator.waitForRewindBoundaryIdle(sid, 1_000);
+      let settled = false;
+      void waiting.then(() => {
+        settled = true;
+      });
+      await flush();
+      expect(settled).toBe(false);
+
+      h.setPendingInteraction(false);
+      await vi.advanceTimersByTimeAsync(100);
+
+      await expect(waiting).resolves.toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('times out when the authoritative rewind boundary never settles', async () => {
+    vi.useFakeTimers();
+    try {
+      const h = createHarness();
+      const sid = 'rewind-stop-timeout';
+      h.setRunning(true);
+
+      const waiting = h.coordinator.waitForRewindBoundaryIdle(sid, 250);
+      await vi.advanceTimersByTimeAsync(250);
+
+      await expect(waiting).resolves.toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects steer while rewind owns the session input boundary', async () => {
+    const h = createHarness();
+    const sid = 'rewind-blocks-steer';
+    h.setRunning(true);
+    h.coordinator.setInteractionLock(sid, 'session-rewind', true);
+
+    await expect(h.coordinator.steer(sid, makeItem('steer-1', 'new input'))).resolves.toBe(false);
+
+    expect(h.steerToAgent).not.toHaveBeenCalled();
+  });
+
+  it('retains and pauses queued messages for rewind without dispatching or aborting', async () => {
+    const h = createHarness();
+    const sid = 'rewind-pause-queue';
+    const first = makeItem('q-1', 'first');
+
+    h.setRunning(true);
+    h.coordinator.enqueue(sid, first);
+    await flush();
+
+    const projection = h.coordinator.pausePendingQueueForRewind(sid);
+
+    expect(projection.queuePaused).toBe(true);
+    expect(projection.pendingQueue.map((item) => item.clientId)).toEqual(['q-1']);
+    expect(h.sendToAgent).not.toHaveBeenCalled();
+    expect(h.abortSession).not.toHaveBeenCalled();
+  });
+
   it('keeps the queue paused after Stop and drains after Continue plus Claude abort boundary', async () => {
     const h = createHarness();
     const sid = 'stop-claude';

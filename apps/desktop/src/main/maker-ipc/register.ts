@@ -1228,9 +1228,60 @@ const pendingFailedTurnAssistantPersistId = new Map<string, string>();
  */
 const sendToSessionLocks = new Map<string, Promise<unknown>>();
 let agentInputCoordinatorHolder: AgentInputCoordinator | null = null;
+const rewindInputSessions = new Set<string>();
+const SESSION_REWIND_INPUT_LOCK_ID = 'session-rewind';
+const SESSION_REWIND_STOP_TIMEOUT_MS = 15_000;
 let pendingCredentialSwitchHolder: PendingCredentialSwitchService | null = null;
 let gitSnapshotCoordinator: GitSnapshotCoordinator | null = null;
 const sessionTurnActivityTracker = new SessionTurnActivityTracker();
+
+/**
+ * Own the session input boundary while rewind stops an active turn and changes
+ * history. Queued messages survive the operation but stay paused afterwards.
+ */
+export async function withSessionInputStoppedForRewind<T>(
+  sessionId: string,
+  action: () => Promise<T>,
+): Promise<T> {
+  const coordinator = agentInputCoordinatorHolder;
+  if (!coordinator) {
+    throwIpcError('INTERNAL', 'Agent input coordinator is not initialized');
+  }
+  if (rewindInputSessions.has(sessionId)) {
+    throwIpcError('SESSION_RUNNING', 'A rewind is already in progress for this session');
+  }
+
+  rewindInputSessions.add(sessionId);
+  try {
+    await coordinator.ensureQueueRestored(sessionId).catch(() => undefined);
+    if (!coordinator.isQueueRestored(sessionId)) {
+      throwIpcError('INTERNAL', 'Failed to restore queued input before rewind');
+    }
+
+    coordinator.setInteractionLock(sessionId, SESSION_REWIND_INPUT_LOCK_ID, true);
+    if (coordinator.hasActiveTurnForRewind(sessionId)) {
+      // Pause /goal before abort so the terminal event cannot auto-resume it.
+      await goalStopObserver?.(sessionId);
+      coordinator.stop(sessionId, { keepQueue: true, pauseQueue: true });
+    } else {
+      coordinator.pausePendingQueueForRewind(sessionId);
+    }
+
+    const stopped = await coordinator.waitForRewindBoundaryIdle(
+      sessionId,
+      SESSION_REWIND_STOP_TIMEOUT_MS,
+    );
+    if (!stopped) {
+      throwIpcError('SESSION_RUNNING', 'Timed out waiting for the session to stop before rewind');
+    }
+
+    return await action();
+  } finally {
+    coordinator.pausePendingQueueForRewind(sessionId);
+    coordinator.setInteractionLock(sessionId, SESSION_REWIND_INPUT_LOCK_ID, false);
+    rewindInputSessions.delete(sessionId);
+  }
+}
 
 /**
  * 媒体回收器活引用取证入口(media-store.md §4 暂存区 (2)):内存排队/在途
