@@ -39,6 +39,14 @@ export const HOOK_CONTROL_INVOKE = {
   PREFS_GET: 'maker:hook-control:prefs-get',
   /** 部分更新某目录偏好(经 WS prefs.set; null = 清空回默认)。 */
   PREFS_SET: 'maker:hook-control:prefs-set',
+  /** (multi-team)添加新 Slack workspace 绑定(bind.start 空 teamId, 授权页自选)。 */
+  ADD_BINDING: 'maker:hook-control:add-binding',
+  /** (multi-team)给指定 team 重新授权(bind.start 带 teamId, pin 授权页)。 */
+  REBIND_TEAM: 'maker:hook-control:rebind-team',
+  /** (multi-team)解绑指定 team(bind.revoke{teamId}; displaced 行 = 仅清本地缓存)。 */
+  REVOKE_TEAM: 'maker:hook-control:revoke-team',
+  /** (multi-team)取消在途的添加/重绑授权(bind.revoke{pendingOnly} + 本地清 pending)。 */
+  CANCEL_PENDING_BIND: 'maker:hook-control:cancel-pending-bind',
 } as const;
 
 export const HOOK_CONTROL_EVENT = {
@@ -101,6 +109,44 @@ export interface HookBindingView {
 /** binding.reason 已知值(与 hook-protocol 的 BIND_FAIL_REASON_NOT_INSTALLED 对齐)。 */
 export const HOOK_BIND_REASON_NOT_INSTALLED = 'not-installed';
 
+/** binding.reason 已知值(multi-team): 该 team 被同用户在另一台设备顶掉。 */
+export const HOOK_BIND_REASON_SUPERSEDED = 'superseded';
+
+/**
+ * (multi-team)单个已确认的 Slack workspace 绑定行(bind.state 快照 +
+ * confirmed/revoked 事件维护; displaced 行来自本地缓存 diff 或 superseded 事件)。
+ */
+export interface HookTeamBindingView {
+  teamId: string;
+  /** workspace 显示名; 安装档案缺名时 null(回退显示 teamId)。 */
+  teamName: string | null;
+  slackUserId: string;
+  slackUserName: string | null;
+  /**
+   * true = 该 team 的绑定已被同用户在另一台设备顶替(reason=superseded 实时
+   * 推送, 或冷启动快照 diff 出「本地有、服务端没有」): 行保留并标注
+   * 「已在另一台设备绑定」, 用户可重新绑定(rebind)或删除(仅清本地缓存)。
+   */
+  displaced: boolean;
+}
+
+/**
+ * (multi-team)在途授权状态 —— 原单绑定状态机中「非 confirmed」的部分拆出来
+ * 单独承载: 添加/重绑 workspace 的授权流(pending)与其终止态(denied/expired/
+ * failed)。confirmed/revoked 只落到 bindings 列表, 不出现在这里。
+ */
+export interface HookPendingBindView {
+  state: 'pending' | 'denied' | 'expired' | 'failed';
+  message: string | null;
+  /** 仅 pending 时非空(SIWS OIDC 授权链接, 复制链接兜底用)。 */
+  authorizeUrl: string | null;
+  /** 结构化失败原因(如 not-installed), 语义同 HookBindingView.reason。 */
+  reason: string | null;
+  installUrl: string | null;
+  /** 重绑指定 team 时的目标 team; 添加新 workspace 时 null。 */
+  teamId: string | null;
+}
+
 /**
  * 连接运行时状态:
  *  - disabled:   开关关闭, 不建连
@@ -119,8 +165,21 @@ export interface SlackHookView {
   workspaces: Record<string, string>;
   status: HookConnectionStatus;
   lastError: string | null;
-  /** Slack 账号绑定状态; 未连接过 / server 未推送时为 null(按未绑定显示)。 */
+  /**
+   * Slack 账号绑定状态(legacy 单绑定视图); 未连接过 / server 未推送时为
+   * null(按未绑定显示)。multi-team 模式下由 bindings/pendingBind 映射而来
+   * (在途授权优先, 否则首个未 displaced 绑定), 供老消费点继续读取。
+   */
   binding: HookBindingView | null;
+  /**
+   * (multi-team)已确认绑定列表(含 displaced 行)。老 server / 未连接时来自
+   * 本地缓存(冷启动「已关闭 · N 个绑定已保留」的数据源)。
+   */
+  bindings: HookTeamBindingView[];
+  /** (multi-team)在途授权状态; 无在途流程时 null。 */
+  pendingBind: HookPendingBindView | null;
+  /** server 是否宣告 multi-team 能力(welcome.features; renderer 据此显示「添加」入口)。 */
+  serverMultiTeam: boolean;
 }
 
 /** 工作区别名的合法格式(与 hook server 侧约定一致)。 */
@@ -147,6 +206,11 @@ export interface HookWorkspacePrefs {
   effort: string | null;
   agentKind: string | null;
   permissionMode: string | null;
+  /**
+   * (multi-team)偏好归属的 Slack workspace(prefs.state 条目透传)。老 server /
+   * 单绑定语境下缺省 —— renderer 按 teamId 过滤显示时对缺省值宽松匹配。
+   */
+  teamId?: string | null;
 }
 
 /** 偏好快照(prefs.state 的 renderer 侧形态)。bound=false 时 prefs 恒空。 */

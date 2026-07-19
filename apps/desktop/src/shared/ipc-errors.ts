@@ -65,6 +65,9 @@ export type IpcErrorCode =
   // hook-control: 目录偏好读写往返超时 —— server 大概率是不认识 prefs.* 帧的
   // 旧版本(丢帧不应答), 也可能是卡死; renderer 据此显示"服务器版本过旧"
   | 'HOOK_PREFS_TIMEOUT'
+  // hook-control: server 未宣告 multi-team 能力(多 workspace 绑定操作不可用;
+  // renderer 本就按 serverMultiTeam 隐藏入口, 本码是防御性兜底)
+  | 'HOOK_MULTI_TEAM_UNSUPPORTED'
   // 本机文件系统浏览(项目选择器；device-link 经隧道在被控端执行)
   | 'FS_BROWSE_FAILED'
   // device-link(跨设备远程控制)
@@ -162,6 +165,7 @@ const IPC_ERROR_CODES: ReadonlySet<IpcErrorCode> = new Set<IpcErrorCode>([
   'REMOTE_FS_UNAVAILABLE',
   'HOOK_NOT_CONNECTED',
   'HOOK_PREFS_TIMEOUT',
+  'HOOK_MULTI_TEAM_UNSUPPORTED',
   'FS_BROWSE_FAILED',
   'DEVICE_LINK_UNAVAILABLE',
   'DEVICE_LINK_NOT_CONNECTED',

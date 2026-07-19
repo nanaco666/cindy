@@ -59,6 +59,8 @@ const CODE_HINTS: Record<string, string> = {
   RATE_LIMITED: 'Slack 侧限流, 等待片刻再重试',
   BUSY: '并发请求过多, 排队稍后重试',
   TIMEOUT: '请求超时, 可稍后重试; 大范围搜索可缩小查询范围',
+  AMBIGUOUS_TEAM:
+    '本设备绑定了多个 Slack workspace, 必须用 team_id 指明以哪个 workspace 身份执行 —— 先调 slack_status 查看 bindings 列表再重试',
 };
 
 function errorResult(code: string, message: string): SlackToolResult {
@@ -137,17 +139,23 @@ async function deliver(
 export function createSlackMcpGatewayServer(deps: SlackHookMcpDeps): McpServer {
   const server = new McpServer({ name: 'lizi_slack', version: '1.0.0' });
 
+  /** team_id 入参的统一描述(multi-team 语境下 3 个工具共用口径)。 */
+  const TEAM_ID_DESC =
+    '可选: 以哪个 Slack workspace 的绑定身份执行(bindings 列表见 slack_status)。设备绑定了多个 workspace 时必须传, 否则 server 拒绝猜测(AMBIGUOUS_TEAM); 只绑一个时可省略';
+
   server.tool('slack_status', descStatus.trim(), {}, async () => {
     const bridge = requireBridge(deps);
     if ('err' in bridge) return bridge.err;
     const local = bridge.availability();
-    // 本地不通时直接给本地视角(server 侧 status 反正问不到)
+    // 本地不通时直接给本地视角(server 侧 status 反正问不到); multi-team 的
+    // 绑定清单本地就有, 一并带上供 agent 决定 team_id
     if (!local.connected || !local.bound || !local.serverSupportsTools) {
       return jsonResult({
         ok: true,
         connected: local.connected,
         bound: local.bound,
         serverSupportsTools: local.serverSupportsTools,
+        ...(local.multiTeam === true ? { multiTeam: true, bindings: local.bindings ?? [] } : {}),
         hint: !local.bound
           ? '未绑定 Slack: 请让用户到 设置 → Slack 打开开关完成绑定'
           : !local.connected
@@ -155,6 +163,7 @@ export function createSlackMcpGatewayServer(deps: SlackHookMcpDeps): McpServer {
             : '服务端暂不支持 Slack 工具(版本过旧)',
       });
     }
+    // 不带 teamId 的 status: 多绑定时 server 返回 { multiTeam, bindings } 总览
     const r = await bridge.callTool('status');
     if (!r.ok) return errorResult(r.error.code, r.error.message);
     return jsonResult({ ok: true, connected: true, ...(r.result as object) });
@@ -164,15 +173,16 @@ export function createSlackMcpGatewayServer(deps: SlackHookMcpDeps): McpServer {
     'slack_list_tools',
     descListTools.trim(),
     {
+      team_id: z.string().optional().describe(TEAM_ID_DESC),
       out_file: z
         .string()
         .optional()
         .describe('可选: 把完整清单 JSON 写进会话工作目录的该相对路径, 只返回文件路径'),
     },
-    async ({ out_file }) => {
+    async ({ team_id, out_file }) => {
       const bridge = requireBridge(deps);
       if ('err' in bridge) return bridge.err;
-      const r = await bridge.callTool('listTools');
+      const r = await bridge.callTool('listTools', undefined, team_id ?? null);
       if (!r.ok) return errorResult(r.error.code, r.error.message);
       return deliver(r.result, out_file, deps.workingDir);
     },
@@ -184,6 +194,7 @@ export function createSlackMcpGatewayServer(deps: SlackHookMcpDeps): McpServer {
     {
       name: z.string().min(1).describe('工具名(slack_list_tools 可查)'),
       arguments: jsonObjectArg('工具参数(按该工具的 inputSchema 传 JSON 对象; 无参可省略)').optional(),
+      team_id: z.string().optional().describe(TEAM_ID_DESC),
       out_file: z
         .string()
         .optional()
@@ -191,13 +202,17 @@ export function createSlackMcpGatewayServer(deps: SlackHookMcpDeps): McpServer {
           '可选: 把完整结果 JSON 写进会话工作目录的该相对路径(如 tmp/slack-result.json), 只返回文件路径 —— 结果大、要交给脚本处理时用。结果超 50KB 时即使不传也会自动落盘返回路径',
         ),
     },
-    async ({ name, arguments: toolArgs, out_file }) => {
+    async ({ name, arguments: toolArgs, team_id, out_file }) => {
       const bridge = requireBridge(deps);
       if ('err' in bridge) return bridge.err;
-      const r = await bridge.callTool('callTool', {
-        name,
-        ...(toolArgs !== undefined ? { arguments: toolArgs } : {}),
-      });
+      const r = await bridge.callTool(
+        'callTool',
+        {
+          name,
+          ...(toolArgs !== undefined ? { arguments: toolArgs } : {}),
+        },
+        team_id ?? null,
+      );
       if (!r.ok) return errorResult(r.error.code, r.error.message);
       return deliver(r.result, out_file, deps.workingDir);
     },

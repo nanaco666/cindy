@@ -215,11 +215,14 @@ const TITLE_SNIPPET_MAX = 24;
  * (如纯图片派发)时回退渠道内标识 bareKey。
  * 渠道内标识约定 `dm:` 前缀 = 私聊(见 slack-hook-server externalKeyFor),
  * 私聊会话前缀额外标 `·DM`(`[Slack·DM]`), 与频道驱动的会话在列表里一眼区分。
+ * teamName: (multi-team)来源 workspace 显示名, 非空时加前缀「{teamName} · 」
+ * —— 多绑定设备上区分「哪个 workspace 派来的」(老 server / 单绑定不下发)。
  */
 export function buildHookSessionTitle(
   providerName: string,
   prompt: string,
   bareKey: string,
+  teamName?: string | null,
 ): string {
   const flat = prompt.replace(/\s+/g, ' ').trim();
   const snippet =
@@ -230,7 +233,8 @@ export function buildHookSessionTitle(
         : flat;
   const dmTag = bareKey.startsWith('dm:') ? '·DM' : '';
   const displayProvider = providerName.charAt(0).toUpperCase() + providerName.slice(1);
-  return `[${displayProvider}${dmTag}] ${snippet}`;
+  const teamPrefix = teamName && teamName.trim().length > 0 ? `${teamName.trim()} · ` : '';
+  return `${teamPrefix}[${displayProvider}${dmTag}] ${snippet}`;
 }
 
 /** 待执行任务(定位已完成, 排队即执行参数就绪)。 */
@@ -574,7 +578,7 @@ export function createHookDispatcher(deps: HookDispatcherDeps): HookDispatcher {
         effort,
         permissionMode,
         ...(isChat ? { workspaceKind: 'dialogue' as const } : {}),
-        title: buildHookSessionTitle(providerName, payload.prompt, bareKey),
+        title: buildHookSessionTitle(providerName, payload.prompt, bareKey, payload.source?.teamName),
         prompt: payload.prompt,
         attachments: payload.attachments,
         origin,

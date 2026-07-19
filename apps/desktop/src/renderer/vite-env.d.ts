@@ -2672,12 +2672,22 @@ interface ElectronAPI {
     ) => Promise<{ hook: import('../shared/hookControlIpc').SlackHookView }>;
     bindStart: () => Promise<{ ok: true }>;
     bindRevoke: () => Promise<{ ok: true }>;
+    // (multi-team)多 workspace 绑定动作
+    addBinding: () => Promise<{ hook: import('../shared/hookControlIpc').SlackHookView }>;
+    rebindTeam: (
+      teamId: string,
+    ) => Promise<{ hook: import('../shared/hookControlIpc').SlackHookView }>;
+    revokeTeam: (
+      teamId: string,
+    ) => Promise<{ hook: import('../shared/hookControlIpc').SlackHookView }>;
+    cancelPendingBind: () => Promise<{ hook: import('../shared/hookControlIpc').SlackHookView }>;
     getWorkspacePrefs: () => Promise<{
       prefs: import('../shared/hookControlIpc').HookPrefsView;
     }>;
     setWorkspacePrefs: (
       workspace: string,
       patch: import('../shared/hookControlIpc').HookPrefsPatch,
+      teamId?: string | null,
     ) => Promise<{ prefs: import('../shared/hookControlIpc').HookPrefsView }>;
     onPrefsChanged: (
       cb: (view: import('../shared/hookControlIpc').HookPrefsView) => void,

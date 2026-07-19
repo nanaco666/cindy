@@ -16,6 +16,7 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  HOOK_FEATURE_MULTI_TEAM,
   HOOK_FEATURE_SLACK_TOOLS,
   makeBindRevoke,
   makeBindStart,
@@ -25,19 +26,23 @@ import {
   makeQueryResponse,
   makeTaskAck,
   makeToolRequest,
+  type BindUpdatePayload,
   type HelloInput,
   type HookMessage,
 } from '@cindy/slack-hook-protocol';
 
 import {
   HOOK_BIND_REASON_NOT_INSTALLED,
+  HOOK_BIND_REASON_SUPERSEDED,
   HOOK_CHAT_WORKSPACE_ALIAS,
 } from '../../shared/hookControlIpc.js';
 import type {
   HookBindingView,
   HookConnectionStatus,
+  HookPendingBindView,
   HookPrefsPatch,
   HookPrefsView,
+  HookTeamBindingView,
   SlackHookView,
 } from '../../shared/hookControlIpc.js';
 import type { SlackHookStore } from './store.js';
@@ -121,6 +126,24 @@ export interface HookControlManager {
   /** 解除 Slack 账号绑定(bind.revoke); 当前无 UI 入口, 保留供未来显式解绑。 */
   bindRevoke(): boolean;
   /**
+   * (multi-team)添加新 Slack workspace 绑定: 发 bind.start(空 teamId, 用户在
+   * 授权页自选)。已有真在途授权(pending)时忽略(返回 true); 终止态(denied/
+   * expired/failed)允许直接重试覆盖。false = 未连接或 server 不支持 multi-team。
+   */
+  addBinding(): boolean;
+  /** (multi-team)给指定 team 重新授权(bind.start 带 teamId, pin 授权页)。 */
+  rebindTeam(teamId: string): boolean;
+  /**
+   * (multi-team)解绑指定 team。displaced 行 = 仅清本地缓存(服务端本就没有该
+   * 绑定, 离线也能删); 活跃行 = 发 bind.revoke{teamId} 并乐观移除(需在线)。
+   */
+  revokeTeam(teamId: string): boolean;
+  /**
+   * (multi-team)取消在途授权: 本地清 pendingBind, 在线时发 bind.revoke
+   * {pendingOnly:true} 作废 server 侧登记(pending 授权 / 等安装)。幂等。
+   */
+  cancelPendingBind(): boolean;
+  /**
    * 关闭开关: **解除绑定并断开** —— 在线则先发 bind.revoke(server 清绑定与
    * 一切在途登记), 本地绑定态归零, 再断开。再打开需重新走浏览器授权。
    * 离线时发不出 revoke(尽力而为), 服务端绑定保留, 重开会按 confirmed 秒恢复。
@@ -132,7 +155,11 @@ export interface HookControlManager {
    * 侧错误)一律 resolve 为 { ok:false, error:{code,message} }, MCP 工具层
    * 1:1 映射为结构化结果, 不需要 try/catch。
    */
-  callSlackTool(tool: string, args?: Record<string, unknown>): Promise<HookSlackToolResult>;
+  callSlackTool(
+    tool: string,
+    args?: Record<string, unknown>,
+    teamId?: string | null,
+  ): Promise<HookSlackToolResult>;
   /** Slack 工具可用性快照(lizi_slack provider 的 isEnabled / slack_status 数据源)。 */
   getSlackToolAvailability(): HookSlackToolAvailability;
   /**
@@ -141,8 +168,15 @@ export interface HookControlManager {
    * reject HookPrefsTimeoutError。
    */
   getWorkspacePrefs(): Promise<HookPrefsView>;
-  /** 部分更新某目录偏好并返回写后的最新快照(语义同 getWorkspacePrefs)。 */
-  setWorkspacePrefs(workspace: string, patch: HookPrefsPatch): Promise<HookPrefsView>;
+  /**
+   * 部分更新某目录偏好并返回写后的最新快照(语义同 getWorkspacePrefs)。
+   * teamId: (multi-team)写入目标 team; 仅 server 宣告 multi-team 时进帧。
+   */
+  setWorkspacePrefs(
+    workspace: string,
+    patch: HookPrefsPatch,
+    teamId?: string | null,
+  ): Promise<HookPrefsView>;
   dispose(): void;
 }
 
@@ -165,11 +199,15 @@ export type HookSlackToolResult =
 /** Slack 工具可用性快照。 */
 export interface HookSlackToolAvailability {
   connected: boolean;
-  /** 绑定已 confirmed。 */
+  /** 绑定已 confirmed(multi-team 下 = 至少一条未 displaced 的绑定)。 */
   bound: boolean;
   /** server 已宣告 slack-tools 能力(welcome.features)。 */
   serverSupportsTools: boolean;
   binding: HookBindingView | null;
+  /** server 已宣告 multi-team 能力(true 时非 status 工具必须带 teamId)。 */
+  multiTeam: boolean;
+  /** (multi-team)可用绑定清单(不含 displaced 行), 供 slack_status / 工具描述消费。 */
+  bindings: Array<{ teamId: string; teamName: string | null }>;
 }
 
 /** 连接不在线时的 prefs 读写失败(IPC 层映射 HOOK_NOT_CONNECTED)。 */
@@ -207,6 +245,13 @@ const DEFAULT_BIND_PENDING_TIMEOUT_MS = 180_000;
  * 到点没等到即视为放弃, toggle 弹回。需小于 server 侧登记 TTL(15 分钟)。
  */
 const DEFAULT_INSTALL_WAIT_TIMEOUT_MS = 600_000;
+
+/**
+ * (multi-team)自动首绑的延迟窗口: 空 bind.state 后等这么久没有任何
+ * bind.update(pending 回放)到达才发起首绑。server 的 hello 同步帧背靠背
+ * 下发, 同一 TCP flush 内到达远快于本窗口; 取值只需盖住网络抖动。
+ */
+const AUTO_BIND_DEFER_MS = 300;
 
 /** transport 状态 -> 渲染层状态。 */
 function toViewStatus(s: HookTransportStatus | null, enabled: boolean): HookConnectionStatus {
@@ -248,8 +293,29 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
   let transport: HookTransport | null = null;
   let status: HookTransportStatus | null = null;
   let lastError: string | null = null;
-  /** server 推送的最新绑定状态(bind.update); 未推送过为 null。 */
+  /**
+   * server 推送的最新绑定状态(bind.update); 未推送过为 null。
+   * 仅老 server(单绑定)路径维护 —— multi-team 模式下对外的 legacy binding
+   * 视图由 bindings/pendingBind 在 toView 里映射, 本变量不参与。
+   */
   let binding: HookBindingView | null = null;
+  /**
+   * (multi-team)绑定列表(活跃 + displaced 行)。权威来源是 bind.state 快照与
+   * confirmed/revoked(带 teamId)事件; 冷启动从 store.bindingsCache 预热,
+   * 让「已关闭 · N 个绑定已保留」与重开秒恢复在断线状态下也成立。
+   */
+  let multiBindings: HookTeamBindingView[] = store
+    .get()
+    .bindingsCache.map((e) => ({ ...e, displaced: false }));
+  /** (multi-team)在途授权状态(添加/重绑 workspace 的 pending 与其终止态)。 */
+  let pendingBind: HookPendingBindView | null = null;
+  /**
+   * (multi-team)自动首绑的延迟触发器: 空 bind.state + autoBindIntent 时不能
+   * 立即发 bind.start —— server 的 hello 同步可能紧跟一帧 pending 回放(旧
+   * 授权仍在途), 先到的回放会走「pending + 意图 → 重新发起」的既有路径签新
+   * 链接; 只有短窗内没有任何 bind.update 到达才由本计时器发起首绑。
+   */
+  let autoBindDefer: NodeJS.Timeout | null = null;
   /**
    * 用户点「连接 Slack」发起 OIDC 后的一次性置位: 下一帧 bind.update(pending,
    * authorizeUrl)到达时打开系统浏览器一次即清 —— 重连时的 pending 状态回放
@@ -293,10 +359,31 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
   let slackToolProviderEnabled = false;
   let disposed = false;
 
+  /** server 是否宣告 multi-team 能力(最近一次成功 welcome 快照)。 */
+  function serverMultiTeam(): boolean {
+    return serverFeatures.includes(HOOK_FEATURE_MULTI_TEAM);
+  }
+
+  /** multi-team 视图是否生效: server 宣告能力, 或本地缓存里有多绑定行(冷启动/
+   *  断线期间 serverFeatures 尚空, 但上一次会话已是多绑定世界)。 */
+  function multiTeamKnown(): boolean {
+    return serverMultiTeam() || multiBindings.length > 0;
+  }
+
+  /** (multi-team)当前可用(未 displaced)的绑定行。 */
+  function activeBindings(): HookTeamBindingView[] {
+    return multiBindings.filter((b) => !b.displaced);
+  }
+
   /** 只在 provider 构建期 gate 真翻转时通知 host 失效 Codex MCP 缓存。 */
   function notifySlackToolProviderEnabledIfChanged(): void {
-    const next =
-      binding?.state === 'confirmed' && serverFeatures.includes(HOOK_FEATURE_SLACK_TOOLS);
+    // multi-team: 至少一条可用绑定 + 总开关打开(关开关不再 revoke, 绑定保留
+    // 在本地/服务端, 必须用 enabled 把工具面关掉); 老 server: 关开关会把
+    // binding 置 none, confirmed 判据自足, enabled 条件恒真不改变行为。
+    const bound = multiTeamKnown()
+      ? activeBindings().length > 0 && store.get().enabled
+      : binding?.state === 'confirmed';
+    const next = bound && serverFeatures.includes(HOOK_FEATURE_SLACK_TOOLS);
     if (next === slackToolProviderEnabled) return;
     slackToolProviderEnabled = next;
     onSlackToolProviderEnabledChanged?.(next);
@@ -345,6 +432,50 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     });
   }
 
+  /**
+   * multi-team 模式下映射给老消费点的 legacy 单绑定视图: 在途授权优先
+   * (pending/denied/expired/failed 原样透传), 否则首个可用绑定映射成
+   * confirmed, 都没有则 none —— 让只认 binding 字段的读取方拿到语义上
+   * 最接近的单值快照。
+   */
+  function legacyBindingView(): HookBindingView | null {
+    if (pendingBind !== null) {
+      return {
+        state: pendingBind.state,
+        slackUserId: null,
+        slackUserName: null,
+        message: pendingBind.message,
+        authorizeUrl: pendingBind.authorizeUrl,
+        reason: pendingBind.reason,
+        installUrl: pendingBind.installUrl,
+        teamName: null,
+      };
+    }
+    const first = activeBindings()[0];
+    if (first !== undefined) {
+      return {
+        state: 'confirmed',
+        slackUserId: first.slackUserId,
+        slackUserName: first.slackUserName,
+        message: null,
+        authorizeUrl: null,
+        reason: null,
+        installUrl: null,
+        teamName: first.teamName,
+      };
+    }
+    return {
+      state: 'none',
+      slackUserId: null,
+      slackUserName: null,
+      message: null,
+      authorizeUrl: null,
+      reason: null,
+      installUrl: null,
+      teamName: null,
+    };
+  }
+
   function toView(): SlackHookView {
     const config = store.get();
     return {
@@ -353,8 +484,28 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       workspaces: { ...config.workspaces },
       status: toViewStatus(status, config.enabled),
       lastError: config.enabled ? lastError : null,
-      binding,
+      binding: multiTeamKnown() ? legacyBindingView() : binding,
+      bindings: multiBindings.map((b) => ({ ...b })),
+      pendingBind: pendingBind !== null ? { ...pendingBind } : null,
+      serverMultiTeam: serverMultiTeam(),
     };
+  }
+
+  /** (multi-team)把当前绑定列表(含 displaced 行的 team 信息)写回本地缓存。 */
+  function persistBindingsCache(): void {
+    try {
+      store.setBindingsCache(
+        multiBindings.map((b) => ({
+          teamId: b.teamId,
+          teamName: b.teamName,
+          slackUserId: b.slackUserId,
+          slackUserName: b.slackUserName,
+        })),
+      );
+    } catch (err) {
+      // 缓存是体验增强(冷启动显示/diff), 写失败不影响运行时状态
+      log.warn(`persist bindings cache failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   /**
@@ -399,6 +550,29 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     installWatchdog = setTimeout(() => {
       installWatchdog = null;
       if (!store.get().enabled) return;
+      if (multiTeamKnown()) {
+        // multi-team: "等安装"挂在 pendingBind 上。已有可用绑定时只作废这次
+        // 添加尝试(连接与其它绑定不受影响); 首绑(0 可用绑定)保持老语义弹回。
+        if (pendingBind?.state !== 'failed' || pendingBind.reason !== HOOK_BIND_REASON_NOT_INSTALLED) {
+          return;
+        }
+        autoBindIntent = false;
+        openAuthorizeOnNextPending = false;
+        if (activeBindings().length > 0) {
+          if (transport !== null && status === 'connected') {
+            transport.send(makeBindRevoke({ pendingOnly: true }));
+          }
+          pendingBind = null;
+          notifyStatus(toView());
+          log.info('multi-team add-binding install wait timed out, pending cleared');
+        } else {
+          store.setEnabled(false);
+          stop();
+          notifyStatus(toView());
+          log.info('slack hook auto-disabled: app install not completed in time (multi-team)');
+        }
+        return;
+      }
       if (binding?.state !== 'failed' || binding.reason !== HOOK_BIND_REASON_NOT_INSTALLED) return;
       autoBindIntent = false;
       openAuthorizeOnNextPending = false;
@@ -418,7 +592,31 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     clearBindWatchdog();
     bindWatchdog = setTimeout(() => {
       bindWatchdog = null;
-      if (binding?.state !== 'pending' || !store.get().enabled) return;
+      if (!store.get().enabled) return;
+      if (multiTeamKnown()) {
+        if (pendingBind?.state !== 'pending') return;
+        autoBindIntent = false;
+        openAuthorizeOnNextPending = false;
+        if (activeBindings().length > 0) {
+          // 已有可用绑定: 只作废这次"添加/重绑"授权(server 侧登记顺手作废),
+          // 总开关与既有绑定不受影响
+          if (transport !== null && status === 'connected') {
+            transport.send(makeBindRevoke({ pendingOnly: true }));
+          }
+          pendingBind = null;
+          notifyStatus(toView());
+          log.info('multi-team add-binding authorize timed out, pending cleared');
+        } else {
+          // 首绑超时: 与单绑定同语义 —— 本地判 expired, toggle 弹回
+          pendingBind = { ...pendingBind, state: 'expired', authorizeUrl: null };
+          store.setEnabled(false);
+          stop();
+          notifyStatus(toView());
+          log.info('slack hook auto-disabled: first authorize timed out (multi-team)');
+        }
+        return;
+      }
+      if (binding?.state !== 'pending') return;
       autoBindIntent = false;
       openAuthorizeOnNextPending = false;
       binding = {
@@ -448,10 +646,50 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     if (transport === null || status !== 'connected') return false;
     if (!transport.send(makeBindStart({}))) return false;
     openAuthorizeOnNextPending = true;
-    markBindingPending();
+    if (multiTeamKnown()) {
+      // multi-team: 在途授权落 pendingBind(乐观置位, 语义同 markBindingPending)
+      pendingBind = {
+        state: 'pending',
+        message: null,
+        authorizeUrl: null,
+        reason: null,
+        installUrl: null,
+        teamId: null,
+      };
+    } else {
+      markBindingPending();
+    }
     armBindWatchdog();
     notifyStatus(toView());
     return true;
+  }
+
+  /**
+   * (multi-team)发起添加/重绑授权: bind.start 带可选 teamId(重绑时 pin
+   * 授权页), 乐观置 pendingBind 并臂授权看门狗。false = 发不出(未连接)。
+   */
+  function initiateMultiBind(teamId: string | null): boolean {
+    if (transport === null || status !== 'connected') return false;
+    if (!transport.send(makeBindStart(teamId !== null ? { teamId } : {}))) return false;
+    openAuthorizeOnNextPending = true;
+    pendingBind = {
+      state: 'pending',
+      message: null,
+      authorizeUrl: null,
+      reason: null,
+      installUrl: null,
+      teamId,
+    };
+    armBindWatchdog();
+    notifyStatus(toView());
+    return true;
+  }
+
+  function clearAutoBindDefer(): void {
+    if (autoBindDefer !== null) {
+      clearTimeout(autoBindDefer);
+      autoBindDefer = null;
+    }
   }
 
   function buildHello(): HelloInput {
@@ -465,11 +703,186 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
         ...new Set([HOOK_CHAT_WORKSPACE_ALIAS, ...Object.keys(store.get().workspaces)]),
       ],
       agents,
+      // 能力声明: 会消费 bind.state 快照与按 team 定位的帧(multi-team)。
+      // 老 server 校验器只查已知字段, 本字段安全透传。
+      features: [HOOK_FEATURE_MULTI_TEAM],
     };
+  }
+
+  /**
+   * (multi-team)bind.update 处理: 事件帧只做行级更新与在途授权状态维护,
+   * 列表权威以 bind.state 快照为准(server 在任何绑定变化后都会补推快照)。
+   * 与老路径的关键差异: confirmed/revoked 按 teamId 定位行; none 只清在途
+   * 授权不清列表; 终止态只在「首绑(0 可用绑定)」时才弹回 toggle。
+   */
+  function handleMultiBindUpdate(payload: BindUpdatePayload): void {
+    const state = payload.state;
+    if (state === 'confirmed') {
+      // 添加/重绑成功: 行级 upsert + 在途授权收口(看门狗/意图/弹窗置位全清)
+      clearBindWatchdog();
+      clearInstallWatchdog();
+      clearAutoBindDefer();
+      autoBindIntent = false;
+      openAuthorizeOnNextPending = false;
+      pendingBind = null;
+      const teamId = payload.teamId ?? null;
+      if (teamId !== null && payload.slackUserId !== null) {
+        const row: HookTeamBindingView = {
+          teamId,
+          teamName: payload.teamName ?? null,
+          slackUserId: payload.slackUserId,
+          slackUserName: payload.slackUserName,
+          displaced: false,
+        };
+        const idx = multiBindings.findIndex((b) => b.teamId === teamId);
+        if (idx >= 0) multiBindings[idx] = row;
+        else multiBindings.push(row);
+        persistBindingsCache();
+      }
+      // teamId 缺失属异常(multi server 恒下发): 不猜行, 等随后的 bind.state 对齐
+      notifySlackToolProviderEnabledIfChanged();
+      notifyStatus(toView());
+      return;
+    }
+    if (state === 'revoked') {
+      const teamId = payload.teamId ?? null;
+      if (teamId !== null) {
+        const idx = multiBindings.findIndex((b) => b.teamId === teamId);
+        if (idx >= 0) {
+          if ((payload.reason ?? null) === HOOK_BIND_REASON_SUPERSEDED) {
+            // 被另一台设备顶掉: 行保留标注 displaced, 用户可重新绑定或删除
+            multiBindings[idx] = { ...multiBindings[idx], displaced: true };
+          } else {
+            multiBindings.splice(idx, 1);
+          }
+          persistBindingsCache();
+        }
+      } else {
+        // 无 teamId 的全量解除(异常/服务端清理): 清列表, 等 bind.state 对齐
+        multiBindings = [];
+        persistBindingsCache();
+      }
+      notifySlackToolProviderEnabledIfChanged();
+      notifyStatus(toView());
+      return;
+    }
+    if (state === 'none') {
+      // 只影响在途授权(server 侧已无进行中流程); 列表只信 bind.state/confirmed/revoked
+      clearBindWatchdog();
+      clearInstallWatchdog();
+      pendingBind = null;
+      if (autoBindIntent) {
+        clearAutoBindDefer();
+        if (initiateMultiBind(null)) {
+          autoBindIntent = false;
+          return;
+        }
+        log.info('multi-team bind.start send failed mid-frame, keeping auto-bind intent');
+      }
+      notifyStatus(toView());
+      return;
+    }
+    // pending / denied / expired / failed → 在途授权状态
+    const authorizeUrl = payload.authorizeUrl ?? null;
+    pendingBind = {
+      state,
+      message: payload.message,
+      authorizeUrl,
+      reason: payload.reason ?? null,
+      installUrl: payload.installUrl ?? null,
+      // 授权流早期 server 不带 teamId(用户尚未选 workspace), 保留本地发起时
+      // 记下的目标 team(重绑场景)供 UI 定位
+      teamId: payload.teamId ?? pendingBind?.teamId ?? null,
+    };
+    // 授权/安装看门狗跟随真实状态(语义同老路径, 见各 arm 函数注释)
+    if (state !== 'pending') clearBindWatchdog();
+    else if (bindWatchdog === null) armBindWatchdog();
+    const awaitingInstall =
+      state === 'failed' && (payload.reason ?? null) === HOOK_BIND_REASON_NOT_INSTALLED;
+    if (awaitingInstall && store.get().enabled) {
+      if (installWatchdog === null) armInstallWatchdog();
+    } else {
+      clearInstallWatchdog();
+    }
+    // 刚开 toggle 撞上 server 回放的旧 pending: 重新发起换新链接(老路径同语义;
+    // 同时取消 bind.state 分支排下的延迟首绑, 避免双发)
+    if (state === 'pending' && autoBindIntent) {
+      clearAutoBindDefer();
+      if (initiateMultiBind(null)) {
+        autoBindIntent = false;
+        return;
+      }
+      log.info('multi-team bind.start send failed mid-frame, keeping auto-bind intent');
+      notifyStatus(toView());
+      return;
+    }
+    // 用户刚发起添加/重绑 → 首帧 pending 带授权链接时打开系统浏览器一次
+    if (state === 'pending' && authorizeUrl !== null && openAuthorizeOnNextPending) {
+      openAuthorizeOnNextPending = false;
+      try {
+        openExternalUrl?.(authorizeUrl);
+      } catch (err) {
+        log.warn(`openExternal(authorizeUrl) failed: ${String(err)}`);
+      }
+    }
+    // 终止态: 首绑(0 可用绑定)保持老语义弹回 toggle; 已有绑定时只把终止态留
+    // 在 pendingBind 供 UI 展示原因, 连接与既有绑定不受影响
+    const terminal =
+      state === 'denied' || state === 'expired' || (state === 'failed' && !awaitingInstall);
+    if (terminal) {
+      autoBindIntent = false;
+      clearAutoBindDefer();
+      if (activeBindings().length === 0 && store.get().enabled) {
+        store.setEnabled(false);
+        stop();
+        log.info(`slack hook auto-disabled on first-bind ${state} (multi-team)`);
+      }
+    }
+    notifyStatus(toView());
   }
 
   /** 业务帧处理(v2 帧 + 任务派发)。 */
   function handleBusinessMessage(msg: HookMessage, send: (m: HookMessage) => boolean): void {
+    if (msg.type === 'bind.state') {
+      // (multi-team)绑定全量快照(权威列表): 整体替换活跃行; 本地已知(缓存/
+      // 上一轮)但快照缺失的 team 保留为 displaced 行 —— 覆盖「绑定在本机
+      // 离线期间被另一台设备顶掉」的冷启动场景(实时被顶走 revoked 事件)。
+      const snap = msg.payload.bindings;
+      const snapIds = new Set(snap.map((e) => e.teamId));
+      const next: HookTeamBindingView[] = snap.map((e) => ({
+        teamId: e.teamId,
+        teamName: e.teamName,
+        slackUserId: e.slackUserId,
+        slackUserName: e.slackUserName,
+        displaced: false,
+      }));
+      for (const row of multiBindings) {
+        if (!snapIds.has(row.teamId)) next.push({ ...row, displaced: true });
+      }
+      multiBindings = next;
+      persistBindingsCache();
+      notifySlackToolProviderEnabledIfChanged();
+      // 开关即绑定(首次 0 绑定): 快照为空且用户刚开 toggle → 延迟一小窗发起
+      // 首绑。不立即发的原因: server 的 hello 同步可能紧跟一帧 pending 回放,
+      // 先让它走「pending + 意图 → 重新发起」路径签新链接; 短窗内没有任何
+      // bind.update 才由计时器发空 bind.start(见 autoBindDefer 声明注释)。
+      if (autoBindIntent) {
+        if (activeBindings().length > 0) {
+          autoBindIntent = false; // 已有绑定, 秒恢复, 无需发起授权
+        } else if (autoBindDefer === null) {
+          autoBindDefer = setTimeout(() => {
+            autoBindDefer = null;
+            if (!autoBindIntent || !store.get().enabled) return;
+            if (pendingBind !== null) return; // 回放先到, 已交给 pending 路径
+            if (initiateMultiBind(null)) autoBindIntent = false;
+          }, AUTO_BIND_DEFER_MS);
+          autoBindDefer.unref?.();
+        }
+      }
+      notifyStatus(toView());
+      log.info(`bind.state: ${snap.length} bindings`);
+      return;
+    }
     if (msg.type === 'tool.response') {
       // Slack 网关工具应答: replyTo 配对在途请求; 迟到帧(已超时清理)静默丢
       const pending = pendingTools.get(msg.payload.replyTo);
@@ -507,6 +920,12 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       return;
     }
     if (msg.type === 'bind.update') {
+      if (serverMultiTeam()) {
+        // multi-team 双方能力齐备: 事件帧按 team 行级处理, 老状态机不参与
+        handleMultiBindUpdate(msg.payload);
+        log.info(`bind.update(multi): ${msg.payload.state}`);
+        return;
+      }
       const authorizeUrl = msg.payload.authorizeUrl ?? null;
       binding = {
         state: msg.payload.state,
@@ -675,6 +1094,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     // 看门狗随连接停止一并撤(dispose / 关 toggle / sync 重建都不该留残余计时器)
     clearBindWatchdog();
     clearInstallWatchdog();
+    clearAutoBindDefer();
     if (transport === null) return;
     const t = transport;
     transport = null;
@@ -698,6 +1118,14 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
         if (created === null || transport !== created) return;
         // server 能力集以最新一次握手为准(重连可能落到另一版本实例)
         serverFeatures = [...payload.features];
+        // 落回老 server(无 multi-team): 多绑定列表与缓存作废 —— 老 server 是
+        // 单绑定权威(它会经 bind.update 推现状), 残留的多绑定行会让 toView
+        // 误走 multi 映射、渲染层误开列表 UI
+        if (!serverMultiTeam() && multiBindings.length > 0) {
+          multiBindings = [];
+          pendingBind = null;
+          persistBindingsCache();
+        }
         notifySlackToolProviderEnabledIfChanged();
       },
       onStatus: (s, err) => {
@@ -730,6 +1158,9 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       // 统一策略: 停旧建新 —— url/别名/登录态变更全部经重建生效, 不做增量 diff
       stop();
       if (store.get().enabled && !disposed) start();
+      // multi-team 的 gate 含 enabled 因子(关开关不再清绑定), setEnabled 后的
+      // sync 是它唯一的重算点; 老路径下本调用是幂等 no-op
+      notifySlackToolProviderEnabledIfChanged();
       notifyStatus(toView());
     },
     snapshot: () => toView(),
@@ -741,26 +1172,78 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       return initiateBind();
     },
     armAutoBind() {
-      // 开关即绑定: 置一次性意图, 连上后收到 bind.update(none/pending) 自动发起绑定
+      // 开关即绑定: 置一次性意图, 连上后收到 bind.update(none/pending) 或
+      // (multi-team)空 bind.state 自动发起绑定
       autoBindIntent = true;
       // 重开开关 = 新一轮流程: 清掉上一轮残留的终止态绑定快照(failed/expired
       // 等), 否则 renderer 会拿陈旧的 not-installed 误弹"安装确认框"、用户对
       // 过时弹窗点取消还会误杀刚建立的新绑定。server 连上后按 hello 推回真实
       // 现状; confirmed 保留(离线关开关的边缘场景, 重开即显已绑定)。
       if (binding !== null && binding.state !== 'confirmed') binding = null;
+      // multi-team 的在途授权快照同理清掉(真在途的话 server 会回放 pending)
+      pendingBind = null;
     },
     bindRevoke() {
       if (transport === null || status !== 'connected') return false;
       return transport.send(makeBindRevoke());
     },
-    callSlackTool(tool, args) {
+    addBinding() {
+      // 需 server multi-team 能力(老 server 对多绑定语义一无所知)
+      if (!serverMultiTeam()) return false;
+      // 真在途授权(pending)时忽略(幂等, 不打断进行中的流程); 终止态
+      // (denied/expired/failed)允许直接重试覆盖
+      if (pendingBind?.state === 'pending') return true;
+      return initiateMultiBind(null);
+    },
+    rebindTeam(teamId) {
+      if (!serverMultiTeam()) return false;
+      return initiateMultiBind(teamId);
+    },
+    revokeTeam(teamId) {
+      const idx = multiBindings.findIndex((b) => b.teamId === teamId);
+      if (idx < 0) return true; // 行已不在(重复点击/竞态), 幂等成功
+      if (multiBindings[idx].displaced) {
+        // displaced 行: 服务端本就没有该绑定, 删除 = 仅清本地缓存(离线可用)
+        multiBindings.splice(idx, 1);
+        persistBindingsCache();
+        notifyStatus(toView());
+        return true;
+      }
+      if (!serverMultiTeam() || transport === null || status !== 'connected') return false;
+      if (!transport.send(makeBindRevoke({ teamId }))) return false;
+      // 乐观移除: server 处理后还会补推 bind.state 快照对齐
+      multiBindings.splice(idx, 1);
+      persistBindingsCache();
+      notifySlackToolProviderEnabledIfChanged();
+      notifyStatus(toView());
+      return true;
+    },
+    cancelPendingBind() {
+      // 本地收口无条件执行(离线也能取消显示); server 侧登记在线时顺手作废
+      clearBindWatchdog();
+      clearInstallWatchdog();
+      clearAutoBindDefer();
+      autoBindIntent = false;
+      openAuthorizeOnNextPending = false;
+      const hadPending = pendingBind !== null;
+      pendingBind = null;
+      if (serverMultiTeam() && transport !== null && status === 'connected' && hadPending) {
+        transport.send(makeBindRevoke({ pendingOnly: true }));
+      }
+      notifyStatus(toView());
+      return true;
+    },
+    callSlackTool(tool, args, teamId) {
       const fail = (code: string, message: string): Promise<HookSlackToolResult> =>
         Promise.resolve({ ok: false, error: { code, message } });
       const t = transport;
       if (t === null || status !== 'connected') {
         return fail('HOOK_NOT_CONNECTED', 'Slack 连接不在线, 请检查 设置 → Slack 开关与网络');
       }
-      if (binding?.state !== 'confirmed') {
+      const bound = multiTeamKnown()
+        ? activeBindings().length > 0
+        : binding?.state === 'confirmed';
+      if (!bound) {
         return fail('NOT_BOUND', '本设备未绑定 Slack, 请先到 设置 → Slack 完成绑定');
       }
       // 老 server 不认识 tool.request(丢帧不应答): 按能力宣告短路, 不打空炮
@@ -768,8 +1251,14 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
         return fail('SERVER_TOO_OLD', 'Slack 服务端版本过旧, 不支持 Slack 工具, 请联系管理员升级');
       }
       const requestId = randomUUID();
+      // teamId 仅在 server 宣告 multi-team 后进帧(老 server 语境下无意义)
+      const withTeam = teamId != null && serverMultiTeam() ? { teamId } : {};
       return new Promise<HookSlackToolResult>((resolve) => {
-        if (!t.send(makeToolRequest({ requestId, tool, ...(args !== undefined ? { args } : {}) }))) {
+        if (
+          !t.send(
+            makeToolRequest({ requestId, tool, ...(args !== undefined ? { args } : {}), ...withTeam }),
+          )
+        ) {
           resolve({
             ok: false,
             error: { code: 'HOOK_NOT_CONNECTED', message: 'Slack 连接不在线, 请稍后重试' },
@@ -788,17 +1277,25 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       });
     },
     getSlackToolAvailability() {
+      const multi = multiTeamKnown();
       return {
         connected: status === 'connected',
-        bound: binding?.state === 'confirmed',
+        // multi-team 关开关不清绑定, bound 必须叠 enabled 因子 —— 否则 Slack
+        // 已关的设备上 lizi_slack 工具面仍会挂进新会话(老路径关开关会把
+        // binding 归零, confirmed 判据自足)
+        bound: multi
+          ? store.get().enabled && activeBindings().length > 0
+          : binding?.state === 'confirmed',
         serverSupportsTools: serverFeatures.includes(HOOK_FEATURE_SLACK_TOOLS),
-        binding,
+        binding: multi ? legacyBindingView() : binding,
+        multiTeam: serverMultiTeam(),
+        bindings: activeBindings().map((b) => ({ teamId: b.teamId, teamName: b.teamName })),
       };
     },
     getWorkspacePrefs() {
       return sendPrefsRequest((requestId) => makePrefsGet({ requestId }));
     },
-    setWorkspacePrefs(workspace, patch) {
+    setWorkspacePrefs(workspace, patch, teamId) {
       return sendPrefsRequest((requestId) =>
         makePrefsSet({
           requestId,
@@ -808,10 +1305,28 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
           ...(patch.effort !== undefined ? { effort: patch.effort } : {}),
           ...(patch.agentKind !== undefined ? { agentKind: patch.agentKind } : {}),
           ...(patch.permissionMode !== undefined ? { permissionMode: patch.permissionMode } : {}),
+          // (multi-team)偏好归属 team: 仅 server 宣告能力时进帧(老 server 不查
+          // 本字段, 但语义上单绑定无归属概念, 不发保持帧面与老版本逐字节一致)
+          ...(teamId != null && serverMultiTeam() ? { teamId } : {}),
         }),
       );
     },
     revokeAndDisconnect() {
+      if (serverMultiTeam()) {
+        // (multi-team)关 toggle = 只断开, **不再发全量 bind.revoke** —— 绑定
+        // 保留在服务端与本地缓存, 重开开关秒恢复(解绑改走显式 revokeTeam)。
+        // 在途的添加/重绑授权顺手作废(pendingOnly, 不触碰已确认绑定)。
+        if (transport !== null && status === 'connected' && pendingBind !== null) {
+          transport.send(makeBindRevoke({ pendingOnly: true }));
+        }
+        autoBindIntent = false;
+        openAuthorizeOnNextPending = false;
+        pendingBind = null;
+        stop();
+        // gate 的 enabled 因子在 ipc 层 setEnabled(false) + sync() 后重算
+        notifySlackToolProviderEnabledIfChanged();
+        return;
+      }
       // 关 toggle = 解除绑定并断开: 在线则先发 bind.revoke(server 清绑定 +
       // pendingLink + 等安装登记, 取消"安装确认框"也走这里), 本地绑定态直接
       // 归零(stop 后收不到 server 回的 none 帧, 不能靠推送), 清在途意图与
@@ -824,6 +1339,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
       }
       autoBindIntent = false;
       openAuthorizeOnNextPending = false;
+      pendingBind = null;
       binding = {
         state: 'none',
         slackUserId: null,

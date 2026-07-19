@@ -1711,7 +1711,8 @@
         },
         "toast": {
           "saveFailed": "Failed to save",
-          "toggleFailed": "Failed to toggle"
+          "toggleFailed": "Failed to toggle",
+          "actionFailed": "Operation failed"
         },
         "loginRequired": "Sign in to your {{appName}} account first; the connection resumes automatically after login.",
         "authorizing": "Authorizing…",
@@ -1727,6 +1728,25 @@
           "confirmInstall": "Install",
           "confirmCancel": "Cancel",
           "waitingHint": "Waiting for the installation to finish… Binding completes automatically once installed, no re-authorization needed."
+        },
+        "multi": {
+          "title": "Slack workspaces",
+          "statusWorkspaces_one": "{{count}} workspace",
+          "statusWorkspaces_other": "{{count}} workspaces",
+          "statusPendingSuffix_one": " ({{count}} pending)",
+          "statusPendingSuffix_other": " ({{count}} pending)",
+          "statusOffKept_one": "Off · {{count}} workspace binding kept",
+          "statusOffKept_other": "Off · {{count}} workspace bindings kept",
+          "displaced": "Bound on another device",
+          "rebind": "Rebind",
+          "removeAria": "Unlink this workspace",
+          "removeConfirmTitle": "Unlink {{team}}",
+          "removeConfirmDescription": "After unlinking, the Slack workspace \"{{team}}\" can no longer dispatch tasks to this device. You can authorize and bind it again anytime.",
+          "removeDisplacedConfirmDescription": "This binding has been taken over by another device. Removing it only deletes this row from the local list.",
+          "removeConfirm": "Unlink",
+          "cancelPending": "Cancel",
+          "dismiss": "Dismiss",
+          "addWorkspace": "Add Slack workspace"
         }
       },
       "summary": {
@@ -1759,7 +1779,8 @@
         "retry": "Retry",
         "toast": {
           "saveFailed": "Failed to save directory preferences"
-        }
+        },
+        "teamChipAria": "Choose which Slack workspace these preferences belong to"
       }
     },
     "devices": {

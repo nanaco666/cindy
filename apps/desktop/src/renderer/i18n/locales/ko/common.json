@@ -1711,7 +1711,8 @@
         },
         "toast": {
           "saveFailed": "저장 실패",
-          "toggleFailed": "전환 실패"
+          "toggleFailed": "전환 실패",
+          "actionFailed": "작업에 실패했습니다"
         },
         "loginRequired": "먼저 {{appName}} 계정에 로그인하세요. 로그인 후 연결이 자동으로 복구됩니다.",
         "authorizing": "인증 중…",
@@ -1727,6 +1728,25 @@
           "confirmInstall": "설치",
           "confirmCancel": "취소",
           "waitingHint": "설치 완료를 기다리는 중… 설치되면 바인딩이 자동으로 완료되며 재인증은 필요 없습니다."
+        },
+        "multi": {
+          "title": "Slack 워크스페이스",
+          "statusWorkspaces_one": "워크스페이스 {{count}}개",
+          "statusWorkspaces_other": "워크스페이스 {{count}}개",
+          "statusPendingSuffix_one": "({{count}}개 처리 대기)",
+          "statusPendingSuffix_other": "({{count}}개 처리 대기)",
+          "statusOffKept_one": "꺼짐 · 워크스페이스 바인딩 {{count}}개 유지됨",
+          "statusOffKept_other": "꺼짐 · 워크스페이스 바인딩 {{count}}개 유지됨",
+          "displaced": "다른 기기에서 바인딩됨",
+          "rebind": "다시 바인딩",
+          "removeAria": "이 워크스페이스 바인딩 해제",
+          "removeConfirmTitle": "{{team}} 바인딩 해제",
+          "removeConfirmDescription": "해제하면 Slack 워크스페이스 \"{{team}}\"에서 이 기기로 더 이상 작업을 보낼 수 없습니다. 필요하면 언제든 다시 인증하여 바인딩할 수 있습니다.",
+          "removeDisplacedConfirmDescription": "이 바인딩은 다른 기기가 가져갔습니다. 삭제해도 로컬 목록에서 이 행만 제거됩니다.",
+          "removeConfirm": "해제",
+          "cancelPending": "취소",
+          "dismiss": "닫기",
+          "addWorkspace": "Slack 워크스페이스 추가"
         }
       },
       "summary": {
@@ -1759,7 +1779,8 @@
         "retry": "다시 시도",
         "toast": {
           "saveFailed": "디렉터리 설정을 저장하지 못했습니다"
-        }
+        },
+        "teamChipAria": "환경설정이 속한 Slack 워크스페이스 선택"
       }
     },
     "devices": {

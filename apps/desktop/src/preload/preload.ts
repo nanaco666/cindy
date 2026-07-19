@@ -2771,14 +2771,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('maker:hook-control:bind-start', {}),
     bindRevoke: (): Promise<{ ok: true }> =>
       ipcRenderer.invoke('maker:hook-control:bind-revoke'),
-    // 目录偏好远程读写(数据正本在 slack-hook-server, 与 Slack /model 卡同一份)
+    // (multi-team)多 workspace 绑定动作: 添加 / 重绑指定 team / 解绑指定 team /
+    // 取消在途授权 —— server 宣告 multi-team 能力后才可用(renderer 按快照隐藏入口)
+    addBinding: (): Promise<{ hook: unknown }> =>
+      ipcRenderer.invoke('maker:hook-control:add-binding'),
+    rebindTeam: (teamId: string): Promise<{ hook: unknown }> =>
+      ipcRenderer.invoke('maker:hook-control:rebind-team', { teamId }),
+    revokeTeam: (teamId: string): Promise<{ hook: unknown }> =>
+      ipcRenderer.invoke('maker:hook-control:revoke-team', { teamId }),
+    cancelPendingBind: (): Promise<{ hook: unknown }> =>
+      ipcRenderer.invoke('maker:hook-control:cancel-pending-bind'),
+    // 目录偏好远程读写(数据正本在 slack-hook-server, 与 Slack /model 卡同一份;
+    // teamId 为 multi-team 下的归属 team, 单绑定缺省)
     getWorkspacePrefs: (): Promise<{ prefs: unknown }> =>
       ipcRenderer.invoke('maker:hook-control:prefs-get'),
     setWorkspacePrefs: (
       workspace: string,
       patch: Record<string, string | null>,
+      teamId?: string | null,
     ): Promise<{ prefs: unknown }> =>
-      ipcRenderer.invoke('maker:hook-control:prefs-set', { workspace, patch }),
+      ipcRenderer.invoke('maker:hook-control:prefs-set', {
+        workspace,
+        patch,
+        ...(teamId !== undefined ? { teamId } : {}),
+      }),
     onPrefsChanged: fanOutHookControlPrefs,
     onStatusChanged: fanOutHookControlStatus,
   },

@@ -1711,7 +1711,8 @@
         },
         "toast": {
           "saveFailed": "保存失败",
-          "toggleFailed": "切换失败"
+          "toggleFailed": "切换失败",
+          "actionFailed": "操作失败"
         },
         "loginRequired": "需要先登录 {{appName}} 账号, 连接会在登录后自动恢复。",
         "authorizing": "授权中…",
@@ -1727,6 +1728,25 @@
           "confirmInstall": "安装",
           "confirmCancel": "取消",
           "waitingHint": "等待安装完成…装好后会自动完成绑定, 无需再次授权。"
+        },
+        "multi": {
+          "title": "Slack workspaces",
+          "statusWorkspaces_one": "{{count}} 个 workspace",
+          "statusWorkspaces_other": "{{count}} 个 workspace",
+          "statusPendingSuffix_one": "({{count}} 个待处理)",
+          "statusPendingSuffix_other": "({{count}} 个待处理)",
+          "statusOffKept_one": "已关闭 · {{count}} 个 workspace 绑定已保留",
+          "statusOffKept_other": "已关闭 · {{count}} 个 workspace 绑定已保留",
+          "displaced": "已在另一台设备绑定",
+          "rebind": "重新绑定",
+          "removeAria": "解绑此 workspace",
+          "removeConfirmTitle": "解绑 {{team}}",
+          "removeConfirmDescription": "解绑后 Slack workspace「{{team}}」将无法再向这台设备派发任务;需要时可随时重新授权绑定。",
+          "removeDisplacedConfirmDescription": "该绑定已被另一台设备顶替, 删除只是把这一行从本机列表移除。",
+          "removeConfirm": "解绑",
+          "cancelPending": "取消",
+          "dismiss": "知道了",
+          "addWorkspace": "添加 Slack workspace"
         }
       },
       "summary": {
@@ -1759,7 +1779,8 @@
         "retry": "重试",
         "toast": {
           "saveFailed": "保存目录偏好失败"
-        }
+        },
+        "teamChipAria": "选择偏好所属的 Slack workspace"
       }
     },
     "devices": {

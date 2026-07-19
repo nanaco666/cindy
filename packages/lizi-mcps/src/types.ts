@@ -215,10 +215,23 @@ export type SlackToolBridgeResult =
 /**
  * hook-control 的 Slack 工具桥(结构性 duck type —— 本包不 import desktop
  * 模块, host 侧实现为 hook-control/slackToolBridge 注册表里的桥对象)。
+ * multiTeam / bindings: (multi-team)多 workspace 绑定信息 —— 多绑定时非
+ * status 工具必须带 teamId, server 拒绝猜测(AMBIGUOUS_TEAM)。旧 host 实现
+ * 可能缺这两个字段, 消费方按 undefined 宽松处理。
  */
 export interface SlackToolBridgeLike {
-  availability(): { connected: boolean; bound: boolean; serverSupportsTools: boolean };
-  callTool(tool: string, args?: Record<string, unknown>): Promise<SlackToolBridgeResult>;
+  availability(): {
+    connected: boolean;
+    bound: boolean;
+    serverSupportsTools: boolean;
+    multiTeam?: boolean;
+    bindings?: Array<{ teamId: string; teamName: string | null }>;
+  };
+  callTool(
+    tool: string,
+    args?: Record<string, unknown>,
+    teamId?: string | null,
+  ): Promise<SlackToolBridgeResult>;
 }
 
 /**

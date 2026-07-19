@@ -292,7 +292,8 @@ function ensureInstances(): { store: SlackHookStore; manager: HookControlManager
     const m = manager;
     registerSlackToolBridge({
       availability: () => m.getSlackToolAvailability(),
-      callTool: (tool, args) => m.callSlackTool(tool, args),
+      // teamId: (multi-team)以哪个 workspace 身份执行(lizi_slack 工具入参透传)
+      callTool: (tool, args, teamId) => m.callSlackTool(tool, args, teamId),
     });
   }
   return { store, manager };
@@ -360,6 +361,49 @@ export function registerHookControlIpc(): void {
     return { ok: true as const };
   });
 
+  // ── (multi-team)多 workspace 绑定动作 ──────────────────────────────────
+  // 全部要求 server 已宣告 multi-team(renderer 按 serverMultiTeam 隐藏入口,
+  // 这里是防御性兜底); 动作失败按「能力缺失 / 不在线」双码区分(规则 13)。
+
+  /** 能力检查 + 动作执行的公共体: false 一律翻译为结构化 IPC 错误。 */
+  const runMultiTeamAction = (action: (mgr: HookControlManager) => boolean): { hook: SlackHookView } => {
+    const mgr = ensureInstances().manager;
+    if (!mgr.snapshot().serverMultiTeam) {
+      throwIpcError('HOOK_MULTI_TEAM_UNSUPPORTED', 'hook server does not support multi-team binding');
+    }
+    if (!action(mgr)) {
+      throwIpcError('HOOK_NOT_CONNECTED', 'slack hook is not connected');
+    }
+    return { hook: mgr.snapshot() };
+  };
+
+  ipcMain.handle(HOOK_CONTROL_INVOKE.ADD_BINDING, () => runMultiTeamAction((mgr) => mgr.addBinding()));
+
+  ipcMain.handle(HOOK_CONTROL_INVOKE.REBIND_TEAM, (_e, payload) => {
+    const p = requireObject(payload);
+    const teamId = requireString(p.teamId, 'teamId');
+    return runMultiTeamAction((mgr) => mgr.rebindTeam(teamId));
+  });
+
+  ipcMain.handle(HOOK_CONTROL_INVOKE.REVOKE_TEAM, (_e, payload) => {
+    const p = requireObject(payload);
+    const teamId = requireString(p.teamId, 'teamId');
+    // displaced 行的删除是纯本地操作, 离线也要能删 —— 不做 multi-team 能力
+    // 前置检查(manager 内部区分 displaced/活跃行)
+    const mgr = ensureInstances().manager;
+    if (!mgr.revokeTeam(teamId)) {
+      throwIpcError('HOOK_NOT_CONNECTED', 'slack hook is not connected');
+    }
+    return { hook: mgr.snapshot() };
+  });
+
+  ipcMain.handle(HOOK_CONTROL_INVOKE.CANCEL_PENDING_BIND, () => {
+    // 取消在途授权本地收口无条件成功(离线也能清), 不需要能力/在线检查
+    const mgr = ensureInstances().manager;
+    mgr.cancelPendingBind();
+    return { hook: mgr.snapshot() };
+  });
+
   // 目录偏好远程读写: 数据正本在 slack-hook-server 的 user_prefs(与 Slack
   // /model 卡同一份), 这里只是经 WS 往返的 adapter; 校验在协议层 + server。
   ipcMain.handle(HOOK_CONTROL_INVOKE.PREFS_GET, async () => {
@@ -383,8 +427,12 @@ export function registerHookControlIpc(): void {
       }
       patch[field] = v as string | null;
     }
+    // (multi-team)偏好归属 team: 可选; 缺省/null = 单绑定语境(server 侧按
+    // 设备唯一绑定落值)
+    const teamId =
+      p.teamId === undefined || p.teamId === null ? null : requireString(p.teamId, 'teamId');
     try {
-      return { prefs: await m.setWorkspacePrefs(workspace, patch) };
+      return { prefs: await m.setWorkspacePrefs(workspace, patch, teamId) };
     } catch (err) {
       throwHookPrefsError(err);
     }

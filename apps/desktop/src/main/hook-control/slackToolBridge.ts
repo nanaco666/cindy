@@ -19,7 +19,12 @@ import type { HookSlackToolAvailability, HookSlackToolResult } from './manager.j
 /** lizi_slack provider 消费的桥接面(与 manager 的工具 API 同形)。 */
 export interface SlackToolBridge {
   availability(): HookSlackToolAvailability;
-  callTool(tool: string, args?: Record<string, unknown>): Promise<HookSlackToolResult>;
+  /** teamId: (multi-team)以哪个 workspace 身份执行; 缺省 = 设备唯一绑定。 */
+  callTool(
+    tool: string,
+    args?: Record<string, unknown>,
+    teamId?: string | null,
+  ): Promise<HookSlackToolResult>;
 }
 
 export type { HookBindingView, HookSlackToolAvailability, HookSlackToolResult };
