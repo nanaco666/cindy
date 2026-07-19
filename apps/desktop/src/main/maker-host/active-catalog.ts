@@ -68,6 +68,8 @@ export interface XdGatewayModelInfo {
   supportsFastMode?: boolean;
   /** 默认可见性;缺省按 true。 */
   defaultEnabled?: boolean;
+  /** 展示图标 id(AI Gateway 设定;缺省 / 未知值渲染层回落来源供应商标)。 */
+  icon?: string;
   /** per-tab 能力覆盖。 */
   perAgent?: Partial<Record<AgentKind, XdGatewayAgentOverride>>;
 }
@@ -296,6 +298,7 @@ function computeMerged(): Catalog {
           ...(gm.description !== undefined ? { description: gm.description } : {}),
           ...(gm.sortOrder !== undefined ? { sortOrder: gm.sortOrder } : {}),
           ...(defaultEnabled !== undefined ? { defaultEnabled } : {}),
+          ...(gm.icon !== undefined ? { icon: gm.icon } : {}),
         };
         models[agent]!.push(merged);
       }

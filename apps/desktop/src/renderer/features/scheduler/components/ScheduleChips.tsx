@@ -13,8 +13,8 @@ import {
 import { useDetectCwd } from '@/hooks/useWorktreeQueries';
 import { useAgentCapabilities, type ModelDescriptor } from '@/hooks/useAgentCapabilities';
 import { useProviders } from '@/hooks/useProviders';
-import { ModelSelectorContent, ProviderMark } from '@/components/new-chat/ModelSelector';
-import { connectedProvidersForAgent, nativeDefaultSourceId } from '@lizi/model-providers';
+import { ModelIconMark, ModelSelectorContent } from '@/components/new-chat/ModelSelector';
+import { connectedProvidersForAgent, getModel, nativeDefaultSourceId } from '@lizi/model-providers';
 import * as sessionService from '@/lib/sessionService';
 import type { Session } from '@/lib/ccAgent.types';
 import { cn } from '@/lib/utils';
@@ -1020,7 +1020,10 @@ export function ModelEffortChip({
         <ChipButton
           icon={
             !isFollowingSession && activeSourceId ? (
-              <ProviderMark
+              // 图标统一规则(与聊天 trigger 同口径):模型条目 icon(AI Gateway / 目录设定)
+              // 优先,缺省回落来源供应商标。
+              <ModelIconMark
+                icon={activeProvider ? getModel(activeProvider, effectiveId, agentKind)?.icon : undefined}
                 providerId={activeSourceId}
                 name={activeProvider?.name}
                 colorClass=""

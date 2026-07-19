@@ -255,4 +255,47 @@ describe('ModelSelector trigger variants', () => {
       providersRef.providers = [];
     }
   });
+
+  it('honors the gateway-configured model icon over the source mark fallback', () => {
+    // 统一规则:模型条目带 icon(AI Gateway / 目录设定)→ 渲染厂牌 mark(此处 Claude svg),
+    // 不再显示来源 monogram;缺省才回落来源标(上一个用例)。
+    providersRef.providers = [
+      {
+        id: 'zeta-gw',
+        name: 'Zeta',
+        connected: true,
+        agents: ['claude-code'],
+        routing: { 'claude-code': {} },
+        models: {
+          'claude-code': [
+            {
+              id: 'claude-opus-4-8',
+              name: 'Opus 4.8',
+              contextWindow: 200000,
+              efforts: ['high'],
+              defaultEffort: 'high',
+              icon: 'claude',
+            },
+          ],
+        },
+      },
+    ];
+    try {
+      render(
+        React.createElement(ModelSelector, {
+          modelId: 'claude-opus-4-8',
+          effort: 'high',
+          onModelChange: vi.fn(),
+          onEffortChange: vi.fn(),
+          vendorKey: 'cc',
+        }),
+      );
+
+      const trigger = screen.getByRole('button', { name: /Current: Opus 4\.8/ });
+      expect(trigger.textContent).not.toContain('Z');
+      expect(trigger.textContent).toContain('Opus 4.8');
+    } finally {
+      providersRef.providers = [];
+    }
+  });
 });

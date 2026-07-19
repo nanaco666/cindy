@@ -59,7 +59,7 @@ import type {
 } from '@/device-link/mobileMakerTransport';
 import { describeAgentAuthError, formatRemoteError } from '@/device-link/remoteStatus';
 import { agentAuthGateHint, agentAuthGateVerdict } from '@/session/agentAuthGate';
-import { connectedProvidersForAgent } from '@lizi/model-providers/registry';
+import { connectedProvidersForAgent, getModel } from '@lizi/model-providers/registry';
 import { withTransientRemoteRetry } from '@/device-link/remoteRetry';
 import { useMobileMakerTransport } from '@/device-link/useMobileMakerTransport';
 import { evictDeviceProviders, useDeviceProviders } from '@/device-link/useDeviceProviders';
@@ -220,7 +220,7 @@ import {
   type ProviderModelRow,
 } from '@/session/providerModelSections';
 import { ModelPickerSheet } from '@/session/ModelPickerSheet';
-import { MobileProviderMark } from '@/session/MobileProviderMark';
+import { MobileModelIconMark } from '@/session/MobileProviderMark';
 import { draftModelMemoryFor, hydrateDraftModelMemory } from '@/session/draftModelMemory';
 import { rowFastEditable } from '@/session/modelPickerRows';
 import { useTheme, useThemedStyles, type ThemeColors } from '@/theme';
@@ -1577,8 +1577,10 @@ export default function NewRemoteSessionScreen() {
         testID="newSession.modelIndicator"
       >
         {activeSourceProvider ? (
-          <MobileProviderMark
+          // 图标统一规则(桌面同源):模型条目 icon(AI Gateway 设定)优先,缺省回落来源标。
+          <MobileModelIconMark
             color={colors.textSecondary}
+            icon={getModel(activeSourceProvider, draft.model, draft.agentKind)?.icon}
             name={activeSourceProvider.name}
             providerId={activeSourceProvider.id}
           />

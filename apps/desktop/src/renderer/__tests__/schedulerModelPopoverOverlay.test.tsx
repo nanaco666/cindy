@@ -32,7 +32,7 @@ vi.mock('@/components/new-chat/ModelSelector', () => ({
   ModelSelectorContent: ({ tooltipContentClassName }: { tooltipContentClassName?: string }) => (
     <div data-testid="model-selector-content" data-tooltip-class={tooltipContentClassName} />
   ),
-  ProviderMark: () => null,
+  ModelIconMark: () => null,
 }));
 
 vi.mock('@/hooks/useAgentCapabilities', () => ({

@@ -35,11 +35,41 @@ export interface SectionModel {
   effortDisplayNames?: Record<string, string>;
   supportsFastMode?: boolean;
   contextWindow: number;
+  /** 展示图标 id(AI Gateway / 目录设定,见 CatalogModel.icon);缺省回落来源供应商标。 */
+  icon?: string;
 }
 
 export interface ProviderSection {
   provider: ProviderView;
   models: SectionModel[];
+}
+
+/** 客户端有资产可渲染的模型图标种类(桌面 ClaudeMark / CodexMark / XDIncMark,手机同源 path)。 */
+export type ModelIconKind = 'claude' | 'codex' | 'cindy';
+
+/**
+ * 解析目录 / 网关下发的模型图标 id —— **跨端唯一口径**(桌面 + 手机同一套规则,
+ * 「显示什么图标以 AI Gateway 设定为准」)。已知取值(大小写不敏感,含常用别名):
+ *   claude / anthropic → 'claude';codex / openai / gpt → 'codex';cindy / xd → 'cindy'。
+ * 缺省 / 未知值返回 null:渲染层回落该行来源供应商标(ProviderMark),
+ * 网关先于客户端登记新图标时优雅降级、不会渲染错图。
+ */
+export function resolveModelIconKind(icon: string | undefined): ModelIconKind | null {
+  if (!icon) return null;
+  switch (icon.trim().toLowerCase()) {
+    case 'claude':
+    case 'anthropic':
+      return 'claude';
+    case 'codex':
+    case 'openai':
+    case 'gpt':
+      return 'codex';
+    case 'cindy':
+    case 'xd':
+      return 'cindy';
+    default:
+      return null;
+  }
 }
 
 /**
@@ -109,6 +139,7 @@ export function buildProviderSections(args: {
       };
       if (m.effortDisplayNames !== undefined) sm.effortDisplayNames = m.effortDisplayNames;
       if (m.supportsFastMode !== undefined) sm.supportsFastMode = m.supportsFastMode;
+      if (m.icon !== undefined) sm.icon = m.icon;
       models.push(sm);
     }
     if (models.length > 0) sections.push({ provider, models });

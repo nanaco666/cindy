@@ -100,7 +100,8 @@ import { useDeviceApiKeyStatus, useDeviceModelPricing } from '@/device-link/useD
 import type { DeviceApiKeyStatus } from '@/device-link/deviceModelMetaCache';
 import type { MobileModelMemoryAccessors } from '@/session/draftModelMemory';
 import { ModelPickerSheet } from '@/session/ModelPickerSheet';
-import { MobileProviderMark } from '@/session/MobileProviderMark';
+import { MobileModelIconMark } from '@/session/MobileProviderMark';
+import { getModel } from '@lizi/model-providers/registry';
 import { clearSessionMirror, makeSessionMirrorAccessors } from '@/session/sessionModelMirror';
 import { rowFastEditable } from '@/session/modelPickerRows';
 import {
@@ -1495,7 +1496,11 @@ export default function SessionScreen() {
           fastOn={composerPillFastOn}
           label={composerRuntimeSummary.modelSummary}
           leading={composerActiveSourceProvider ? (
-            <MobileProviderMark
+            // 图标统一规则(桌面同源):模型条目 icon(AI Gateway 设定)优先,缺省回落来源标。
+            <MobileModelIconMark
+              icon={currentSession
+                ? getModel(composerActiveSourceProvider, currentSession.model, sessionAgentKind)?.icon
+                : undefined}
               name={composerActiveSourceProvider.name}
               providerId={composerActiveSourceProvider.id}
             />

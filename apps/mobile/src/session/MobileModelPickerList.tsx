@@ -22,7 +22,7 @@ import { Check, SlidersHorizontal, Zap } from 'lucide-react-native';
 import type { MobileAgentCapabilities, MobileModelOption } from '@/session/agentCapabilities';
 import type { DeviceApiKeyStatus } from '@/device-link/deviceModelMetaCache';
 import type { AgentKind } from '@lizi/model-providers/types';
-import { MobileProviderMark } from '@/session/MobileProviderMark';
+import { MobileModelIconMark } from '@/session/MobileProviderMark';
 import type { MobileModelMemoryAccessors } from '@/session/draftModelMemory';
 import { useDraftModelMemoryVersion } from '@/session/draftModelMemory';
 import { useSessionModelMirrorVersion } from '@/session/sessionModelMirror';
@@ -252,7 +252,11 @@ export function MobileModelPickerList({
               ]}
               testID={testID}
             >
-              <MobileProviderMark name={row.provider.name} providerId={row.provider.id} />
+              <MobileModelIconMark
+                icon={row.model.icon}
+                name={row.provider.name}
+                providerId={row.provider.id}
+              />
               <View style={styles.optionMain}>
                 <View style={styles.optionTitleRow}>
                   <Text numberOfLines={1} style={styles.optionText}>{row.model.displayName}</Text>

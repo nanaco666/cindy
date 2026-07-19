@@ -37,6 +37,7 @@ import {
   getModel,
   modelSupportsFastMode,
   providerOffersModel,
+  resolveModelIconKind,
   type ProviderView,
 } from '@lizi/model-providers';
 import { buildProviderSections } from './sourceSwitch';
@@ -124,6 +125,52 @@ export function ProviderMark({
   }
 }
 
+/**
+ * 模型行 / trigger 的图标 —— 统一规则(桌面与手机同源,见 resolveModelIconKind):
+ * 模型条目带 `icon`(**AI Gateway / 目录设定**)就渲染对应厂牌 mark;缺省或未知值
+ * 回落该行来源供应商标(ProviderMark)。禁止在客户端按 model id 猜厂牌。
+ */
+export function ModelIconMark({
+  icon,
+  providerId,
+  name,
+  colorClass = 'text-[var(--model-trigger-text)]',
+  withMargin = true,
+  dense = false,
+}: {
+  /** 模型条目的展示图标 id(CatalogModel.icon);undefined = 未设定。 */
+  icon?: string;
+  /** 回落用的来源供应商 id / 展示名(与 ProviderMark 同语义)。 */
+  providerId: string;
+  name?: string;
+  colorClass?: string;
+  withMargin?: boolean;
+  dense?: boolean;
+}) {
+  const kind = resolveModelIconKind(icon);
+  if (kind) {
+    const common = cn(withMargin && 'mr-1.5', 'shrink-0', colorClass);
+    const markSize = dense ? 12.3 : 13;
+    if (kind === 'claude') return <ClaudeMark size={markSize} className={common} />;
+    if (kind === 'codex') return <CodexMark size={markSize} className={common} />;
+    return (
+      <XDIncMark
+        size={markSize}
+        className={cn(dense ? 'h-[8.4px] w-[14.2px]' : 'h-[9px] w-[15px]', common)}
+      />
+    );
+  }
+  return (
+    <ProviderMark
+      providerId={providerId}
+      name={name}
+      colorClass={colorClass}
+      withMargin={withMargin}
+      dense={dense}
+    />
+  );
+}
+
 // 上下文窗口 tokens → 紧凑展示("1M" / "272K" / "8192")。
 function formatContextWindow(tokens: number): string {
   if (tokens >= 1_000_000) {
@@ -145,6 +192,8 @@ interface RowModel {
   defaultEffort: Effort | null;
   effortDisplayNames?: Partial<Record<string, string>>;
   supportsFastMode?: boolean;
+  /** 展示图标 id(AI Gateway / 目录设定,SectionModel.icon);flat 列表的 ModelDescriptor 无此字段。 */
+  icon?: string;
 }
 
 type Translate = (key: string, options?: { defaultValue?: string }) => string;
@@ -671,7 +720,8 @@ export function ModelSelectorContent({
           {/* 外层 gap-2.5 = icon→名字间距(略宽,与行左内边距更协调);内层 gap-1.5 = 名字→徽标/effort。 */}
           <span className="flex min-w-0 items-center gap-2.5">
             {provider && (
-              <ProviderMark
+              <ModelIconMark
+                icon={model.icon}
                 providerId={provider.id}
                 name={provider.name}
                 colorClass="text-[var(--text-secondary)]"
@@ -1052,6 +1102,20 @@ export function ModelSelector({
   const triggerActiveProvider = activeSourceId
     ? providers.find((p) => p.id === activeSourceId)
     : undefined;
+  // trigger 图标的统一规则:当前 (来源, 模型) 条目的 icon(AI Gateway / 目录设定)优先,
+  // 缺省回落来源供应商标 —— 与列表行、手机版同一套口径(ModelIconMark)。
+  const triggerModelIcon =
+    triggerActiveProvider && currentAgentKind
+      ? getModel(triggerActiveProvider, modelId, currentAgentKind)?.icon
+      : undefined;
+  // 断开态同一规则,只是来源取「真实断开来源」(currentProviderId)。
+  const disconnectedProvider = currentProviderId
+    ? providers.find((p) => p.id === currentProviderId)
+    : undefined;
+  const disconnectedModelIcon =
+    disconnectedProvider && currentAgentKind
+      ? getModel(disconnectedProvider, modelId, currentAgentKind)?.icon
+      : undefined;
   const triggerFastSupported =
     triggerActiveProvider && currentAgentKind
       ? modelSupportsFastMode(triggerActiveProvider, modelId, currentAgentKind)
@@ -1145,9 +1209,10 @@ export function ModelSelector({
             // ——回落图标会让用户以为在用默认来源,而发送实际按 DB 里的断开来源走(no_oauth 事故)。
             // 错误态用语义豁免 error token(规则 16);trigger 保持可点击,下拉换源即恢复。
             <>
-              <ProviderMark
+              <ModelIconMark
+                icon={disconnectedModelIcon}
                 providerId={currentProviderId}
-                name={providers.find((p) => p.id === currentProviderId)?.name}
+                name={disconnectedProvider?.name}
                 colorClass="text-[var(--error-fg)]"
               />
               <span
@@ -1181,10 +1246,11 @@ export function ModelSelector({
             </>
           ) : (
             <>
-              {/* 来源图标必须反映当前模型真正路由的来源(activeSourceId),不能按 model id 猜厂牌
-                  —— 否则订阅直连与 Cindy AI 网关在 trigger 上同貌,用户无法自查计费来源。 */}
+              {/* 图标统一规则:模型条目 icon(AI Gateway / 目录设定)优先,缺省回落
+                  当前真正路由的来源标(activeSourceId)——客户端不按 model id 猜厂牌。 */}
               {activeSourceId && (
-                <ProviderMark
+                <ModelIconMark
+                  icon={triggerModelIcon}
                   providerId={activeSourceId}
                   name={providers.find((p) => p.id === activeSourceId)?.name}
                   colorClass={

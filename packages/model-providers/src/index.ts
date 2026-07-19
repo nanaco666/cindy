@@ -53,7 +53,7 @@ export {
 } from './registry.js';
 export type { ConnectionState, ProviderView, ResolvedRoute } from './registry.js';
 
-export { isModelVisible, buildProviderSections, visibleModelUnion } from './sections.js';
-export type { SectionModel, ProviderSection } from './sections.js';
+export { isModelVisible, buildProviderSections, visibleModelUnion, resolveModelIconKind } from './sections.js';
+export type { SectionModel, ProviderSection, ModelIconKind } from './sections.js';
 
 export { resolveEffort, resolveProviderSwitchEffort } from './effortResolution.js';
