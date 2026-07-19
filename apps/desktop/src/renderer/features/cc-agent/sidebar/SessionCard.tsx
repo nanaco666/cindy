@@ -413,13 +413,19 @@ export function SessionCard({
   // list 变体沿用标题前缀。图标尺寸随所在行统一(card 底部与时间/其它图标同大)。
   const renderAutomationMeta = (iconSize: number) =>
     showScheduleBindingBadge ? (
-      <ScheduleBindingBadge schedules={boundSchedules} size={iconSize} />
+      <ScheduleBindingBadge
+        schedules={boundSchedules}
+        size={iconSize}
+        activeForeground={isActive}
+      />
     ) : showAutomationClock ? (
       <button
         type="button"
         className={cn(
           'inline-flex shrink-0 items-center justify-center',
-          'text-[var(--cmd-palette-item-meta)] hover:text-foreground transition-colors',
+          isActive
+            ? 'text-[var(--sidebar-item-active-foreground)]'
+            : 'text-[var(--cmd-palette-item-meta)] hover:text-foreground transition-colors',
           'cursor-pointer focus:outline-none',
         )}
         aria-label={t('ccAgent.sidebar.scheduleBinding.viewTask')}

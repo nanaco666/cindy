@@ -8,6 +8,7 @@ const sessionCardSource = readFileSync(resolve(sidebarDir, 'SessionCard.tsx'), '
 const sessionItemSource = readFileSync(resolve(sidebarDir, 'SessionItem.tsx'), 'utf8');
 const sessionStatusIconSource = readFileSync(resolve(sidebarDir, 'SessionStatusIcon.tsx'), 'utf8');
 const automationGroupSource = readFileSync(resolve(sidebarDir, 'AutomationSessionGroupItem.tsx'), 'utf8');
+const scheduleBindingBadgeSource = readFileSync(resolve(sidebarDir, 'ScheduleBindingBadge.tsx'), 'utf8');
 const globalsSource = readFileSync(resolve(__dirname, '..', '..', '..', '..', 'styles', 'globals.css'), 'utf8');
 
 describe('SessionCard review regressions', () => {
@@ -44,7 +45,7 @@ describe('SessionCard review regressions', () => {
     // Timer(schedule 绑定)优先于自动化 Clock 的判定收敛在 renderAutomationMeta,
     // list 标题前缀(10px)与 card 底部 meta 行(11px)共用同一份优先级逻辑。
     expect(sessionCardSource).toMatch(
-      /const renderAutomationMeta = \(iconSize: number\) =>[\s\S]*?showScheduleBindingBadge \? \([\s\S]*?<ScheduleBindingBadge schedules=\{boundSchedules\} size=\{iconSize\} \/>[\s\S]*?\) : showAutomationClock \? \([\s\S]*?<Clock size=\{iconSize\}/,
+      /const renderAutomationMeta = \(iconSize: number\) =>[\s\S]*?showScheduleBindingBadge \? \([\s\S]*?<ScheduleBindingBadge[\s\S]*?schedules=\{boundSchedules\}[\s\S]*?size=\{iconSize\}[\s\S]*?activeForeground=\{isActive\}[\s\S]*?\) : showAutomationClock \? \([\s\S]*?<Clock size=\{iconSize\}/,
     );
     expect(sessionCardSource).toContain('{renderAutomationMeta(10)}');
     expect(sessionCardSource).toContain('{renderAutomationMeta(11)}');
@@ -108,6 +109,23 @@ describe('SessionCard review regressions', () => {
     );
     expect(sessionItemSource).toContain(
       "'text-sidebar-action-icon hover:bg-sidebar-item-hover hover:text-foreground'",
+    );
+  });
+
+  it('PR-123 greptile: card 路径的绑定徽章与 Clock 进反白体系', () => {
+    // P1:renderAutomationMeta 卡片/列表两路都要把选中态透传给 ScheduleBindingBadge,
+    // 否则红胶囊上 Timer 仍是 meta 灰;Clock 分支同族对齐 SessionItem 写法。
+    expect(sessionCardSource).toContain('activeForeground={isActive}');
+    expect(sessionCardSource).toMatch(
+      /showAutomationClock \? \([\s\S]*?isActive[\s\S]*?\? 'text-\[var\(--sidebar-item-active-foreground\)\]'[\s\S]*?: 'text-\[var\(--cmd-palette-item-meta\)\] hover:text-foreground transition-colors'/,
+    );
+  });
+
+  it('PR-123 greptile: 暂停角标随反白态切换红胶囊配色', () => {
+    // P2:allPaused mini-badge 在 activeForeground 下改用选中态三 token,
+    // 不再把页面级 chip 灰底灰字嵌进红胶囊。
+    expect(scheduleBindingBadgeSource).toMatch(
+      /allPaused && \([\s\S]*?activeForeground[\s\S]*?\? 'border border-\[var\(--sidebar-item-active-border\)\] bg-sidebar-item-active text-\[var\(--sidebar-item-active-foreground\)\]'[\s\S]*?: 'border border-\[var\(--cmd-palette-border\)\] bg-\[var\(--chat-input-chip-bg\)\] text-\[var\(--cmd-palette-item-meta\)\]'/,
     );
   });
 

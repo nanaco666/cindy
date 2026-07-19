@@ -91,8 +91,11 @@ export function ScheduleBindingBadge({
               aria-hidden
               className={cn(
                 'absolute -bottom-1 -right-1 flex size-2.5 items-center justify-center rounded-full',
-                'border border-[var(--cmd-palette-border)]',
-                'bg-[var(--chat-input-chip-bg)] text-[var(--cmd-palette-item-meta)]',
+                // 反白态下角标随红胶囊取色(底=胶囊底遮住 Timer,前景反白),
+                // 否则沿用页面级 chip 配色。
+                activeForeground
+                  ? 'border border-[var(--sidebar-item-active-border)] bg-sidebar-item-active text-[var(--sidebar-item-active-foreground)]'
+                  : 'border border-[var(--cmd-palette-border)] bg-[var(--chat-input-chip-bg)] text-[var(--cmd-palette-item-meta)]',
               )}
             >
               <Pause size={6} strokeWidth={3} />
