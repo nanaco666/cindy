@@ -10,6 +10,7 @@ import type { SettingsTab } from '@/lib/tabLabels';
 import { UserProfileCard } from './UserProfileCard';
 import { VoiceInputSection } from './VoiceInputSection';
 import { AppearanceSection } from './AppearanceSection';
+import { SubagentModelSection } from './SubagentModelSection';
 import { ProvidersSection } from './ProvidersSection';
 import { McpServersSection } from './McpServersSection';
 import { RemoteControlSection } from './RemoteControlSection';
@@ -342,6 +343,9 @@ export function SettingsView() {
                 </section>
                 <section className="pb-[18px]" aria-label={t('settings.sections.memory')}>
                   <MemorySection />
+                </section>
+                <section className="pb-[18px]" aria-label={t('settings.sections.subagentModels')}>
+                  <SubagentModelSection />
                 </section>
                 <section className="pb-[18px]" aria-label={t('settings.contacts.title')}>
                   <ContactsSection />

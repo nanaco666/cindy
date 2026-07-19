@@ -93,6 +93,7 @@
       "personalization": "个性化",
       "chipMetrics": "用量指示器",
       "memory": "记忆",
+      "subagentModels": "子代理模型",
       "compaction": "上下文压缩",
       "terminalShell": "默认终端 shell",
       "linkOpen": "链接打开方式",
@@ -1326,6 +1327,14 @@
           "cancel": "取消"
         }
       }
+    },
+    "subagentModels": {
+      "title": "子代理模型",
+      "description": "为 Claude 和 Codex 的子代理分别指定默认模型。",
+      "unspecified": "不指定（跟随原逻辑）",
+      "codexUnavailable": "当前 Codex 版本暂不支持安全覆盖",
+      "hint": "留空时不会注入任何覆盖。Claude 的修改从新建会话开始生效；Codex 完整上下文派生暂不支持模型覆盖。",
+      "saveFailed": "保存子代理模型失败"
     },
     "compaction": {
       "title": "上下文压缩",

@@ -93,6 +93,7 @@
       "personalization": "Personalization",
       "chipMetrics": "Usage indicator",
       "memory": "Memory",
+      "subagentModels": "Subagent models",
       "compaction": "Context compaction",
       "terminalShell": "Default terminal shell",
       "linkOpen": "Link open behavior",
@@ -1326,6 +1327,14 @@
           "cancel": "Cancel"
         }
       }
+    },
+    "subagentModels": {
+      "title": "Subagent models",
+      "description": "Choose separate default models for Claude and Codex subagents.",
+      "unspecified": "Not specified (use default behavior)",
+      "codexUnavailable": "Safe overrides are unavailable in this Codex version",
+      "hint": "No override is injected when left unspecified. Claude changes apply to new sessions; Codex full-context forks do not currently support model overrides.",
+      "saveFailed": "Failed to save subagent model"
     },
     "compaction": {
       "title": "Context compaction",

@@ -93,6 +93,7 @@
       "personalization": "パーソナライズ",
       "chipMetrics": "使用量インジケーター",
       "memory": "メモリ",
+      "subagentModels": "サブエージェントモデル",
       "compaction": "コンテキスト圧縮",
       "terminalShell": "デフォルトターミナルシェル",
       "linkOpen": "リンクの開き方",
@@ -1326,6 +1327,14 @@
           "cancel": "キャンセル"
         }
       }
+    },
+    "subagentModels": {
+      "title": "サブエージェントモデル",
+      "description": "Claude と Codex のサブエージェントに個別のデフォルトモデルを指定します。",
+      "unspecified": "指定しない（既定の動作を使用）",
+      "codexUnavailable": "現在の Codex バージョンでは安全な上書きに未対応です",
+      "hint": "未指定の場合は上書きを注入しません。Claude の変更は新規セッションから有効です。Codex の完全コンテキスト fork は現在モデル上書きに対応していません。",
+      "saveFailed": "サブエージェントモデルの保存に失敗しました"
     },
     "compaction": {
       "title": "コンテキスト圧縮",

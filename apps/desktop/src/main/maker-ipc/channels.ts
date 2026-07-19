@@ -222,6 +222,10 @@ export const MAKER_INVOKE = {
   IM_DEFAULT_SETTINGS_GET: 'maker:im-default-settings:get',
   IM_DEFAULT_SETTINGS_SET: 'maker:im-default-settings:set',
   IM_DEFAULT_SETTINGS_RESET: 'maker:im-default-settings:reset',
+  /** Claude / Codex 子代理模型覆盖；null 表示沿用 agent 原生逻辑。 */
+  SUBAGENT_MODEL_SETTINGS_GET: 'maker:subagent-model-settings:get',
+  SUBAGENT_MODEL_SETTINGS_SET: 'maker:subagent-model-settings:set',
+  SUBAGENT_MODEL_SETTINGS_RESET: 'maker:subagent-model-settings:reset',
   SILENT_ENCRYPTED_RETRY_GET: 'maker:silent-encrypted-retry:get',
   SILENT_ENCRYPTED_RETRY_SET: 'maker:silent-encrypted-retry:set',
   SILENT_ENCRYPTED_RETRY_RESET: 'maker:silent-encrypted-retry:reset',

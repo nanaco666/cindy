@@ -197,6 +197,8 @@ type LocalThemeWriteRequest = import('../shared/local-themes').LocalThemeWriteRe
 type LocalThemeWriteResult = import('../shared/local-themes').LocalThemeWriteResult;
 type ImDefaultSettingsPatch = import('../shared/imDefaultSettings').ImDefaultSettingsPatch;
 type ImDefaultSettingsState = import('../shared/imDefaultSettings').ImDefaultSettingsState;
+type SubagentModelSettingsPatch = import('../shared/subagentModelSettings').SubagentModelSettingsPatch;
+type SubagentModelSettingsState = import('../shared/subagentModelSettings').SubagentModelSettingsState;
 
 interface VoiceInputShortcut {
   trigger?: 'keyboard' | 'modifier';
@@ -3672,6 +3674,11 @@ interface ElectronAPI {
     imDefaultSettingsGet: () => Promise<ImDefaultSettingsState>;
     imDefaultSettingsSet: (patch: ImDefaultSettingsPatch) => Promise<ImDefaultSettingsState>;
     imDefaultSettingsReset: () => Promise<ImDefaultSettingsState>;
+
+    /** 子代理模型覆盖。null 表示不注入覆盖，仅对新建 agent 会话生效。 */
+    subagentModelSettingsGet: () => Promise<SubagentModelSettingsState>;
+    subagentModelSettingsSet: (patch: SubagentModelSettingsPatch) => Promise<SubagentModelSettingsState>;
+    subagentModelSettingsReset: () => Promise<SubagentModelSettingsState>;
 
     /** Silent invalid_encrypted_content recovery setting. */
     silentEncryptedRetryGet: () => Promise<{ enabled: boolean; isCustomized?: boolean; defaultEnabled?: boolean }>;
