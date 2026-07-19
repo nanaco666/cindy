@@ -42,15 +42,15 @@ describe('useTheme 跨窗口主题同步(D2-3)', () => {
     expect(themeService.applyTheme).toHaveBeenCalled();
   });
 
-  it('其他窗口切 familyId=cindy → 本窗口 familyId 跟随', () => {
+  it('其他窗口切 familyId=default → 本窗口 familyId 跟随(出厂默认已为 cindy,2026-07-19)', () => {
     const { result } = renderHook(() => useTheme(), { wrapper });
-    expect(result.current.familyId).toBe('default');
+    expect(result.current.familyId).toBe('cindy');
     act(() => {
       window.dispatchEvent(
-        new StorageEvent('storage', { key: 'theme.familyId', newValue: 'cindy' }),
+        new StorageEvent('storage', { key: 'theme.familyId', newValue: 'default' }),
       );
     });
-    expect(result.current.familyId).toBe('cindy');
+    expect(result.current.familyId).toBe('default');
   });
 
   it('非法 theme 值不触发 state 变更', () => {

@@ -24,7 +24,7 @@ export interface ThemeFamily {
   dark: Theme | null;
 }
 
-export const DEFAULT_FAMILY_ID = 'default';
+export const DEFAULT_FAMILY_ID = 'cindy'; // 用户拍板 2026-07-19:CINDY 为出厂默认族(未自定义用户随版本切换,已自定义保留)
 
 // 顺序就是设置 dropdown 的显示顺序: 默认家族在前, 之后按 light→dark 双
 // 变体优先, 再列 dark-only 家族。
