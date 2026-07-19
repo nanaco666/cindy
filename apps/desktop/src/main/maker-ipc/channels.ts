@@ -75,9 +75,9 @@ export const MAKER_INVOKE = {
    */
   LIST_SESSION_BACKGROUND_ACTIVITY: 'maker:session-background-activity:list',
   /**
-   * 一键停止指定会话的全部后台任务:关闭该会话的常驻 CC 子进程(maker.closeSession,
-   * 进程内后台子 agent 随之终止),会话本身可续 —— 下次发消息按 resume 自动重建。
-   * 有 turn 正在跑时拒绝(那是 Stop 按钮的职责),抛 [SESSION_RUNNING]。
+   * 一键停止指定会话的全部任务:关闭该会话的常驻 agent 进程(maker.closeSession)，
+   * 当前 turn 与进程内后台子 agent 一并终止。会话本身可续 —— 下次发消息按 resume 自动重建。
+   * 这是 renderer/main 运行态不一致时仍须可用的最终止损入口，不受 isTurnRunning 限制。
    */
   STOP_SESSION_BACKGROUND_TASKS: 'maker:session-background-tasks:stop',
   /**
