@@ -519,7 +519,7 @@ export const MAKER_SEND = {
   SYNC_NEW_MAKER_DRAFT: 'maker:sync-new-maker-draft',
   /**
    * 被控端 renderer → 自身 main:把 providerModelMemory 的全量快照(snapshotForSeed():
-   * `${agent}:${providerId}` → {effortByModel, fastByModel})镜像给 main 缓存。device-link 草稿
+   * `${agent}:*` 为模型级全局预设,来源槽为旧 v2 兼容副本)镜像给 main 缓存。device-link 草稿
    * 列表行的真实读源是 providerModelMemory(非选中行 = modelMemory.getEffort/getFast),旧的
    * newMakerDraft.effortByModel 已不再写非选中 → 必须把这一层也镜像出去,控制端才能完整镜像被控端
    * 草稿模型列表(req1)。main 把它并入 getRemoteNewMakerDefaults().providerModelMemory 返回 +

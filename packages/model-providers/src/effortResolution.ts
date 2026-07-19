@@ -18,7 +18,7 @@ type Effort = string;
  * 优先级(高 → 低),每一档都要求候选值仍在 `efforts` 列表里(不同模型 effort 档不同,旧值可能非法):
  *   0. 模型无 effort 档(efforts 为空)→ 'low'(占位,UI 不显示 effort segmented)。
  *   1. preferred:切来源时由 resolveSourceSwitch 带回的落点 hint(目标来源 lastModel 的 effort)。
- *   2. providerEffort:(agent, provider, model) 维度精确记忆 —— 「这个来源下这个模型上次用的档」。
+ *   2. providerEffort:调用方提供的模型预设(桌面端现为 (agent, model) 全局预设;参数名为兼容保留)。
  *   3. rememberedEffort:per-model 记忆(provider 无关,跨来源兜底;手机端无此存储,恒不传)。
  *   4. activeEffort:当前 effort 仍被目标模型支持 → 沿用(切模型时少打扰用户)。
  *   5. 模型默认 defaultEffort(仍需 ∈ efforts;非法/缺失时落 efforts 首档)。
@@ -48,16 +48,14 @@ export function resolveEffort(args: {
 }
 
 /**
- * 「同模型只切来源」时落档 —— 严格 per-(供应商, 模型)。与 resolveEffort 的**关键区别**:
- * **没有 activeEffort 沿用档、也不读 provider-agnostic 记忆**。这两条正是同一 modelId 在两个来源
- * 之间串档的入口(实测 bug:改了 A 来源 Opus 的 effort,选 B 来源的同名 Opus 也跟着变成 A 的档)。
- * 切来源换的是「同一模型的另一个后端」,每个 (供应商, 模型) 必须各记各的:有自己的记忆就恢复,
- * 没有就回落模型默认,绝不继承当前来源的当前档。
+ * 「同模型只切来源」时落档。与 resolveEffort 的关键区别是没有 activeEffort 沿用档:
+ * 有显式模型预设就按目标来源支持范围恢复;没有预设则回落模型默认,避免把当前会话 live 值
+ * 意外写成全局默认。
  *
  * 优先级(高 → 低,每档都要求仍在 efforts 内):
  *   1. preferred:来源切换 hint(resolveSourceSwitch 带回的目标来源记忆档);当前 picker 行点击
  *      不传,保留以兼容未来带 hint 的调用方。
- *   2. providerEffort:(agent, 新来源, 模型) 精确记忆 —— 「这个来源下这个模型上次用的档」。
+ *   2. providerEffort:调用方提供的模型预设(桌面端跨来源共享,再由 efforts 校验是否合法)。
  *   3. 模型默认 defaultEffort。
  *   4. efforts 首档。
  *   5. fallbackEffort:efforts 为空等极端兜底(通常 = 当前 activeEffort,该模型无 effort 档、UI 不显示)。

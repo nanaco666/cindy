@@ -612,6 +612,7 @@ export function CCAgentSessionView({
             providerId,
             modelId: model,
             active: false,
+            ...(patch.markModelChoice !== undefined ? { markModelChoice: patch.markModelChoice } : {}),
             ...(patch.effort !== undefined ? { effort: patch.effort } : {}),
             ...(patch.fast !== undefined ? { fast: patch.fast } : {}),
           },

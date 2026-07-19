@@ -1,29 +1,33 @@
 /**
- * providerModelMemory —— 按「(agent, 来源/provider, model) → effort」记忆,外加每个来源
+ * providerModelMemory —— 按「(agent, model) → effort / fast」记全局模型预设,外加每个来源
  * 「上次选中的模型」,localStorage 持久化,跨会话 / 跨重启在本机生效。
  *
  * 背景:
- *   用户在不同来源(provider)下、对不同模型偏好不同的 effort —— 例如在 Anthropic 给 opus 用
- *   high、在 XD 网关给同一个 opus 用 medium;同一来源里 opus 用 high、haiku 用 low。此前 renderer
- *   的模型记忆都没有「按 (来源, 模型) 分别记 effort」这一维度:
+ *   用户把思考深度 / Fast 理解成「这个模型的默认设置」,而不是「这个来源下这个模型的设置」。
+ *   因此在首页调整 Opus 后,其它对话里的 Opus 非选中行也必须立即看到同一预设,即便两个页面
+ *   分别把 Opus 路由到 Anthropic / XD。当前正在使用 Opus 的会话仍由 live DB/runtime 值保护,
+ *   只有切走再切回时才采用最新全局预设。
+ *
+ *   此前 renderer 有三层模型记忆:
  *     1) per-vendor 草稿默认(newMakerDraft.lastByVendor,历史上还有服务端全局单槽,已移除);
  *     2) per-session(sessions 表 model/effort/providerId 各一份);
- *     3) per-model effort(effortByModel,只按 modelId 记,跨来源会串)。
- *   本 store 补「(agent, provider, model) → effort」这一维度,并保留「该来源上次用过哪个模型」
- *   (lastModel)用于切来源时落到正确的模型。
+ *     3) per-model effort(effortByModel,只按 modelId 记)。
+ *   本 store 现在明确把模型预设放在 `${agent}:*` 全局槽,同时保留来源槽的 lastModel,用于切来源
+ *   时落到正确的模型。来源槽里的 effort/fast 仅作为 v2 旧数据 / 旧客户端兼容副本,读取时全局槽优先。
  *
  * 谁读谁写:
- *   - 写:ChatInput —— 用户在某来源下选定 (model, effort) 后,把 effort 记进
- *         (agent, provider, model) 槽,并更新该来源的 lastModel(setProviderModelChoice)。
+ *   - 写:ChatInput —— 用户真正选定 (model, effort) 后更新全局模型预设 + 该来源 lastModel
+ *         (setProviderModelChoice);只编辑非选中模型时仅更新预设、不改 lastModel
+ *         (setProviderModelEffort)。
  *   - 读:
  *       · ModelSelector 的 resolveSourceSwitch —— 切来源时取该来源 lastModel + 其 effort
  *         (getProviderModelChoice)作为落点 hint;
- *       · ChatInput 的 effort 解析 —— 选回某 (provider, model) 时精确恢复其 effort
+ *       · ChatInput 的 effort 解析 —— 选回某 model 时恢复全局预设,再按目标来源 capability 校验
  *         (getProviderModelEffort)。
  *
- * key 设计:`${agentKind}:${providerId}` → ProviderMemory。
+ * key 设计:`${agentKind}:${providerId}` → ProviderMemory,`${agentKind}:*` → 全局模型预设。
  *   xd 来源同时服务 cc / codex 两个 agent,若只按 providerId 分槽,cc 会话与 codex 会话会
- *   互相覆盖对方在 xd 下的选择。按 (agent, provider) 分槽彻底规避;每个槽内再按 modelId 分 effort。
+ *   互相覆盖对方在 xd 下的选择。agent 维度始终保留;只有同 agent 的同 model 才跨来源共享预设。
  *
  * 持久化频率极低(仅用户点 dropdown 触发),同步写 localStorage,不做 batch / debounce
  * —— 与 newMakerDraft 的取舍一致(避免热更新 relaunch 强退丢最近一次改动)。
@@ -40,12 +44,13 @@ import type { Effort } from '@/lib/userPreferences.types';
 const STORAGE_KEY = 'xdt:providerModelMemory:v2';
 /** 历史单槽版本 key —— 冷启动迁移源(只读,不再写)。 */
 const LEGACY_STORAGE_KEY_V1 = 'xdt:providerModelMemory:v1';
+/** v2 schema 内的保留来源 id:同一 agent 下跨真实 provider 共享的模型级预设槽。 */
+export const MODEL_PRESET_SLOT_ID = '*';
 
 /**
- * 单个来源槽:记该来源「上次选中的模型」+「每个模型各自的 effort / fast」。
+ * 单个来源槽:真实来源槽记「上次选中的模型」+ 兼容副本;`*` 槽记权威模型级 effort / fast。
  * lastModel 可为空(只记过 effort/fast 没法确定 lastModel 的脏数据);
- * effortByModel / fastByModel 至少一边非空才保留。fast 与 effort 同维度(per agent/provider/model),
- * 让「选回某来源下的某模型」能恢复它上次的 fast(对齐 effort 的恢复行为)。
+ * effortByModel / fastByModel 至少一边非空才保留。
  */
 interface ProviderMemory {
   lastModel: string;
@@ -61,6 +66,10 @@ export interface ProviderModelChoice {
 
 function keyOf(agent: AgentKind, providerId: string): string {
   return `${agent}:${providerId}`;
+}
+
+function presetKeyOf(agent: AgentKind): string {
+  return keyOf(agent, MODEL_PRESET_SLOT_ID);
 }
 
 /**
@@ -178,13 +187,14 @@ export function getProviderModelChoice(
   if (!providerId) return undefined;
   const rec = load()[keyOf(agent, providerId)];
   if (!rec || !rec.lastModel) return undefined;
-  const effort = rec.effortByModel[rec.lastModel];
+  const map = load();
+  const effort = map[presetKeyOf(agent)]?.effortByModel[rec.lastModel] ?? rec.effortByModel[rec.lastModel];
   return effort ? { model: rec.lastModel, effort } : undefined;
 }
 
 /**
- * 读某 (agent, 来源, 模型) 精确记下的 effort;无记录返回 undefined。
- * 用于选回某来源下的某模型时恢复它上次的 effort(ChatInput effort 解析),不受同来源其它模型干扰。
+ * 读某 (agent, 模型) 的全局 effort;providerId 只用于兼容读取旧 v2 来源槽。
+ * 新全局值优先,所以同模型跨来源 / 跨对话共享;旧数据尚未产生全局值时仍能按原来源恢复。
  */
 export function getProviderModelEffort(
   agent: AgentKind,
@@ -192,12 +202,58 @@ export function getProviderModelEffort(
   model: string,
 ): Effort | undefined {
   if (!providerId || !model) return undefined;
-  return load()[keyOf(agent, providerId)]?.effortByModel[model];
+  const map = load();
+  return map[presetKeyOf(agent)]?.effortByModel[model] ?? map[keyOf(agent, providerId)]?.effortByModel[model];
+}
+
+function setModelEffort(
+  agent: AgentKind,
+  providerId: string,
+  model: string,
+  effort: Effort,
+  updateLastModel: boolean,
+): void {
+  if (!providerId || providerId === MODEL_PRESET_SLOT_ID || !model || !effort) return;
+  const map = load();
+  const providerKey = keyOf(agent, providerId);
+  const presetKey = presetKeyOf(agent);
+  const provider = map[providerKey];
+  const preset = map[presetKey];
+  const lastModel = updateLastModel ? model : (provider?.lastModel ?? '');
+  if (
+    provider?.lastModel === lastModel &&
+    provider.effortByModel[model] === effort &&
+    preset?.effortByModel[model] === effort
+  ) return;
+
+  persist({
+    ...map,
+    [providerKey]: {
+      lastModel,
+      effortByModel: { ...(provider?.effortByModel ?? {}), [model]: effort },
+      fastByModel: provider?.fastByModel ?? {},
+    },
+    [presetKey]: {
+      lastModel: '',
+      effortByModel: { ...(preset?.effortByModel ?? {}), [model]: effort },
+      fastByModel: preset?.fastByModel ?? {},
+    },
+  });
+}
+
+/** 只更新模型级全局 effort,不把「编辑非选中模型」误记为该来源上次选中的模型。 */
+export function setProviderModelEffort(
+  agent: AgentKind,
+  providerId: string,
+  model: string,
+  effort: Effort,
+): void {
+  setModelEffort(agent, providerId, model, effort, false);
 }
 
 /**
- * 写某 (agent, 来源) 下用户选定的 (model, effort):更新该来源 lastModel,并记下该模型的 effort
- * (不覆盖同来源其它模型的 effort)。同值短路,避免无意义落盘。
+ * 写用户真正选定的 (model, effort):更新该来源 lastModel + 模型级全局 effort。
+ * 同时保留来源兼容副本,供旧 v2 客户端 / 旧 device-link 快照继续工作。
  */
 export function setProviderModelChoice(
   agent: AgentKind,
@@ -205,19 +261,11 @@ export function setProviderModelChoice(
   model: string,
   effort: Effort,
 ): void {
-  if (!providerId || !model || !effort) return;
-  const map = load();
-  const k = keyOf(agent, providerId);
-  const prev = map[k];
-  if (prev && prev.lastModel === model && prev.effortByModel[model] === effort) return;
-  const effortByModel = { ...(prev?.effortByModel ?? {}), [model]: effort };
-  // 保留同槽已记的 fastByModel(effort 写入不应清掉 fast 记忆)。
-  persist({ ...map, [k]: { lastModel: model, effortByModel, fastByModel: prev?.fastByModel ?? {} } });
+  setModelEffort(agent, providerId, model, effort, true);
 }
 
 /**
- * 读某 (agent, 来源, 模型) 精确记下的 fast(无记录返回 undefined)。与 getProviderModelEffort 同维度,
- * 用于选回某来源下的某模型时恢复它上次的 fast。
+ * 读某 (agent, 模型) 的全局 fast;providerId 只用于兼容读取旧 v2 来源槽。
  */
 export function getProviderModelFast(
   agent: AgentKind,
@@ -225,11 +273,12 @@ export function getProviderModelFast(
   model: string,
 ): boolean | undefined {
   if (!providerId || !model) return undefined;
-  return load()[keyOf(agent, providerId)]?.fastByModel?.[model];
+  const map = load();
+  return map[presetKeyOf(agent)]?.fastByModel?.[model] ?? map[keyOf(agent, providerId)]?.fastByModel?.[model];
 }
 
 /**
- * 写某 (agent, 来源, 模型) 的 fast(不覆盖同来源其它模型的 fast / effort / lastModel)。同值短路。
+ * 写某 (agent, 模型) 的全局 fast,同时保留来源兼容副本;不动 effort / lastModel。同值短路。
  */
 export function setProviderModelFast(
   agent: AgentKind,
@@ -237,15 +286,25 @@ export function setProviderModelFast(
   model: string,
   enabled: boolean,
 ): void {
-  if (!providerId || !model) return;
+  if (!providerId || providerId === MODEL_PRESET_SLOT_ID || !model) return;
   const map = load();
-  const k = keyOf(agent, providerId);
-  const prev = map[k];
-  if (prev && prev.fastByModel?.[model] === enabled) return;
-  const fastByModel = { ...(prev?.fastByModel ?? {}), [model]: enabled };
+  const providerKey = keyOf(agent, providerId);
+  const presetKey = presetKeyOf(agent);
+  const provider = map[providerKey];
+  const preset = map[presetKey];
+  if (provider?.fastByModel?.[model] === enabled && preset?.fastByModel?.[model] === enabled) return;
   persist({
     ...map,
-    [k]: { lastModel: prev?.lastModel ?? '', effortByModel: prev?.effortByModel ?? {}, fastByModel },
+    [providerKey]: {
+      lastModel: provider?.lastModel ?? '',
+      effortByModel: provider?.effortByModel ?? {},
+      fastByModel: { ...(provider?.fastByModel ?? {}), [model]: enabled },
+    },
+    [presetKey]: {
+      lastModel: '',
+      effortByModel: preset?.effortByModel ?? {},
+      fastByModel: { ...(preset?.fastByModel ?? {}), [model]: enabled },
+    },
   });
 }
 

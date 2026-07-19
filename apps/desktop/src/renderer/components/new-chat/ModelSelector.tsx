@@ -46,6 +46,8 @@ export { categorize, CATEGORY_LABEL_KEY, type ModelCategory } from './sourceSwit
 export interface ModelMemoryAccessors {
   getEffort: (agent: AgentKind, providerId: string, modelId: string) => Effort | undefined;
   setEffort: (agent: AgentKind, providerId: string, modelId: string, effort: Effort) => void;
+  /** 真正选中 / 使用模型时同时更新该来源 lastModel;只编辑非选中行不调用。 */
+  setChoice?: (agent: AgentKind, providerId: string, modelId: string, effort: Effort) => void;
   getFast: (agent: AgentKind, providerId: string, modelId: string) => boolean | undefined;
   setFast: (agent: AgentKind, providerId: string, modelId: string, enabled: boolean) => void;
 }
@@ -456,10 +458,8 @@ export function ModelSelectorContent({
   const isSelectedRow = (providerId: string | null, id: string): boolean =>
     id === modelId && (providerId === null || providerId === activeSourceId);
 
-  // 行内 Fast 闪电:**严格 per-(供应商, 模型)**。选中行 → live fastMode;其余行 → 该 (供应商,模型)
-  // 的全局预设(本机=providerModelMemory / 远程=被控端镜像),缺省 false。不读 provider-agnostic
-  // 的 per-model 记忆 —— 否则同一 model id 跨供应商会串(写了 openai 那份,xd 行 fallback 到共享
-  // per-model 也亮 = 之前两个 5.5 一起变的根因)。
+  // 行内 Fast 闪电:选中行 → live fastMode;其余行 → (agent,model) 全局预设(本机 =
+  // providerModelMemory / 远程 = 被控端镜像),并由 fastEditable 按当前来源 capability 过滤。
   const fastOnOf = (providerId: string | null, m: RowModel): boolean => {
     if (!fastEditable(providerId, m)) return false;
     if (isSelectedRow(providerId, m.id)) return fastMode;
@@ -467,9 +467,8 @@ export function ModelSelectorContent({
     return modelMemory?.getFast(currentAgentKind, providerId, m.id) ?? false;
   };
 
-  // 某 (供应商, 模型) 行当前要展示的 effort(选中 → live;否则注入记忆 → 模型默认)。无 effort 档返回 null。
-  // 严格只读 per-(供应商, 模型) 记忆,不再回退到 provider-agnostic 的 newMakerDraft.effortByModel
-  // (那份会让会话/草稿、跨供应商互相串,与 fast 的严格口径对齐)。
+  // 某 (供应商, 模型) 行当前要展示的 effort(选中 → live;否则全局模型预设 → 模型默认)。
+  // 预设若不被该来源支持,在这里按行 capabilities 回落;无 effort 档返回 null。
   const rowEffortOf = (providerId: string | null, m: RowModel): Effort | null => {
     if (!m.efforts || m.efforts.length === 0) return null;
     if (isSelectedRow(providerId, m.id)) {
@@ -529,8 +528,8 @@ export function ModelSelectorContent({
     editing.modelId === modelId &&
     (editing.providerId === null || editing.providerId === activeSourceId);
   const editingProviderId = editing?.providerId ?? null;
-  // 当前行可编辑配置的边界:选中行写实时状态;非选中供应商行必须有精确的 scoped memory。
-  // flat 非选中行没有 provider 作用域,只展示模型信息,避免出现点击后无效果的配置项。
+  // 当前行可编辑配置的边界:选中行写实时状态;非选中供应商行写模型级全局预设。
+  // flat 非选中行没有来源 capability / 写穿上下文,只展示模型信息,避免出现点击后无效果的配置项。
   const canConfigure =
     !!editingModel &&
     (editingIsActive || (!!modelMemory && !!currentAgentKind && !!editingProviderId));
@@ -567,7 +566,7 @@ export function ModelSelectorContent({
       // ChatInput 同步草稿默认;这里不能预写 modelMemory,否则 device-link 远程失败会污染被控端草稿。
       void onFastModeChange?.(enabled);
     } else {
-      // 非选中行:只写 per-(供应商, 模型) 注入记忆(不写 provider-agnostic 的 per-model,避免跨供应商串)。
+      // 非选中行:只写该设备的模型级全局预设;来源参数用于 capability / device-link 写穿路由。
       if (currentAgentKind && editing.providerId) {
         modelMemory?.setFast(currentAgentKind, editing.providerId, editingModel.id, enabled);
       }

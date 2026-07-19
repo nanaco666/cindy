@@ -32,9 +32,9 @@ export interface RemoteDraftDefaults {
   effortByModel?: Record<string, string>;
   fastModeByModel?: Record<string, boolean>;
   /**
-   * 被控端 providerModelMemory 全量快照(`${agent}:${providerId}` → {effortByModel, fastByModel})。
-   * device-link 草稿列表行(非选中模型)的真实权威读源:控制端据此 1:1 镜像被控端每个供应商每个模型的
-   * effort/fast(req1)。旧版被控端不回 → undefined → 控制端非选中行回落 capabilities 默认。
+   * 被控端 providerModelMemory 全量快照;`${agent}:*` 是模型级全局预设,
+   * `${agent}:${providerId}` 是旧 v2 兼容副本。device-link 草稿列表行据此镜像被控端预设;
+   * 旧版被控端不回 → undefined → 控制端非选中行回落 capabilities 默认。
    */
   providerModelMemory?: Record<
     string,

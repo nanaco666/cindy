@@ -481,9 +481,9 @@ export function NewMakerDraftRoute() {
 
   // 草稿当前**生效来源 id**(= ModelSelector 高亮 / ChatInput effectiveSourceId 同口径):显式选中且
   // 仍可连、并提供当前模型 → 它;否则只在当前模型的可用来源中取原生默认。fast/effort 的
-  // per-(供应商,模型) 记忆按它做 key —— 多供应商
-  // 同名模型(如 Anthropic 与 XD 网关都有 Opus)各记各的,切来源 / 选回不串。仅本地草稿用;device-link
-  // 走 dlSel 镜像、不读本机记忆(下方 resolveDraftFast 只在本地分支调用)。
+  // 模型级全局预设不靠它隔离,但仍用它校验来源 capability、保留旧 v2 兼容副本并路由
+  // device-link 写穿。仅本地草稿用;device-link 走 dlSel 镜像、不读本机记忆
+  // (下方 resolveDraftFast 只在本地分支调用)。
   const effectiveSourceId = useMemo<string | null>(() => {
     return effectiveSourceIdForModel(
       providers,
@@ -627,6 +627,7 @@ export function NewMakerDraftRoute() {
             providerId,
             modelId: model,
             active: false,
+            ...(patch.markModelChoice !== undefined ? { markModelChoice: patch.markModelChoice } : {}),
             ...(patch.effort !== undefined ? { effort: patch.effort } : {}),
             ...(patch.fast !== undefined ? { fast: patch.fast } : {}),
           },
@@ -643,8 +644,8 @@ export function NewMakerDraftRoute() {
   //
   // ⚠️ 与 deviceLinkDraftMemory(active=false)是**互补**而非重复,勿当"双写"清理掉其一:
   //   - 本路径(active=true,providerId 可能为空)→ 被控端 patchVendorPrefs 更 trigger 激活档(provider 无关)。
-  //   - mirror 路径(active=false,providerId=ChatInput 解析出的真实来源)→ 被控端 setProviderModelChoice
-  //     才真正落 providerModelMemory[来源][模型](切走再回的还原源)。
+  //   - mirror 路径(active=false,providerId=ChatInput 解析出的真实来源)→ 非选中编辑只改模型预设;
+  //     真正选择模型时额外带 markModelChoice=true 更新该来源 lastModel。
   // 选中模型编辑时两路都会触发(effort 经 ChatInput.rememberProviderChoice + onEffortDidChange;
   // fast 经 ModelSelector.handleEditFast + onFastModeChange),各司其职,缺一会丢 trigger 或 provider 记忆。
   const pushActiveDraftPref = useCallback(
