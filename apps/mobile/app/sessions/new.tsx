@@ -451,6 +451,9 @@ export default function NewRemoteSessionScreen() {
   // 自动默认运行配置(跟随最近会话 / 列表最上面)的守卫:用户一旦手动选过模型,就不再自动覆盖;
   // 记录已自动应用过的设备,切设备时(未手动选过)按新设备重算。
   const userTouchedRuntimeRef = useRef(false);
+  // 只保护当前页面刚从 provider 目录显式选中的模型，避免旧 capabilities 在途结果误回退；
+  // 持久草稿不会写入该 ref，因此已下架模型仍走 mobile 的首项降级。
+  const explicitProviderModelSelectionRef = useRef<string | null>(null);
   const autoDefaultDeviceRef = useRef<string | null>(null);
   const runtimeOptions = useMemo(
     () => buildSessionRuntimeOptions(draft, capabilities),
@@ -830,6 +833,7 @@ export default function NewRemoteSessionScreen() {
       cancelVoiceForDeviceSwitch();
     }
     userTouchedDeviceRef.current = true;
+    explicitProviderModelSelectionRef.current = null;
     setSelectedDeviceId(option.deviceId);
     setSelectedDeviceName(option.name || option.deviceId);
     void saveNewSessionPreferences({
@@ -889,7 +893,9 @@ export default function NewRemoteSessionScreen() {
     if (cachedCapabilities) {
       setCapabilities(cachedCapabilities);
       setDraft((current) => current.agentKind === agentKind
-        ? reconcileRuntimeDraftWithCapabilities(current, cachedCapabilities)
+        ? reconcileRuntimeDraftWithCapabilities(current, cachedCapabilities, {
+          preserveUnknownModel: explicitProviderModelSelectionRef.current === current.model,
+        })
         : current);
     } else {
       setCapabilitiesLoading(true);
@@ -912,7 +918,9 @@ export default function NewRemoteSessionScreen() {
         setCapabilitiesError(normalized ? null : '远程能力返回格式不支持');
         if (normalized) {
           setDraft((current) => current.agentKind === agentKind
-            ? reconcileRuntimeDraftWithCapabilities(current, normalized)
+            ? reconcileRuntimeDraftWithCapabilities(current, normalized, {
+              preserveUnknownModel: explicitProviderModelSelectionRef.current === current.model,
+            })
             : current);
         }
       })
@@ -1176,6 +1184,7 @@ export default function NewRemoteSessionScreen() {
         hasFastModeCap: capabilities?.hasFastMode === true,
         memory: draftMemory,
       });
+      explicitProviderModelSelectionRef.current = next.model;
       // 选定即记忆该 (来源, 模型) 的 effort(对齐桌面「选定后写记忆」),下次选回可恢复。
       if (next.effort) draftMemory.setEffort(current.agentKind, next.providerId, next.model, next.effort);
       return {
@@ -1192,6 +1201,7 @@ export default function NewRemoteSessionScreen() {
   // 扁平回退(被控端 0 供应商):只落 model、清来源(默认路由),effort 跟随 capabilities reconcile。
   const selectFlatModel = useCallback((option: MobileModelOption) => {
     userTouchedRuntimeRef.current = true; // 用户手动选了模型 → 不再自动覆盖运行配置
+    explicitProviderModelSelectionRef.current = null;
     setDraft((current) =>
       reconcileRuntimeDraftWithCapabilities({ ...current, model: option.id, providerId: null }, capabilities));
     setModelSheetOpen(false);
@@ -1648,6 +1658,7 @@ export default function NewRemoteSessionScreen() {
     setAgentPickerOpen(false);
     if (draft.agentKind === nextKind) return;
     userTouchedRuntimeRef.current = true;
+    explicitProviderModelSelectionRef.current = null;
     void saveNewSessionPreferences({ agentKind: nextKind });
     // 取目标 agent 自己的模型列表(providers 已加载时同步可得),用于"列表最上面"兜底 + effort reconcile。
     const rows = flattenProviderSections(
