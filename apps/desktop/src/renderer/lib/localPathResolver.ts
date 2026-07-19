@@ -557,3 +557,46 @@ export function toFileUrl(absPath: string): string {
 export function toLocalFileUrl(absPath: string): string {
   return `xdt-file://local/?path=${encodeURIComponent(absPath)}`;
 }
+
+/**
+ * Normalize the src handed to a react-markdown image renderer.
+ *
+ * react-markdown percent-encodes local path segments before invoking the
+ * custom `img` component (`Application Support` becomes
+ * `Application%20Support`). Decode that renderer-owned URL representation
+ * exactly once before routing it through xdt-file; otherwise
+ * `toLocalFileUrl()` encodes the percent again (`%20` -> `%2520`) and the
+ * protocol looks for a literal `Application%20Support` directory.
+ *
+ * Already-routable URLs stay byte-for-byte unchanged. This matters for
+ * xdt-file query strings and remote URLs, whose existing escapes belong to
+ * their own protocol rather than to a local filesystem path.
+ */
+export function normalizeMarkdownImageSrc(
+  src: string | undefined,
+  workingDir: string,
+  allowPrivilegedLinks: boolean,
+): string | undefined {
+  if (!src) return src;
+  if (!allowPrivilegedLinks) {
+    return /^https?:\/\//i.test(src) ? src : undefined;
+  }
+  if (
+    src.startsWith('data:') ||
+    src.startsWith('http://') ||
+    src.startsWith('https://') ||
+    src.startsWith('xdt-image://') ||
+    src.startsWith('cindy-media://') ||
+    src.startsWith('xdt-file://') ||
+    src.startsWith('xdt-remote-media://')
+  ) {
+    return src;
+  }
+
+  const decoded = safeDecodeURIComponent(src);
+  let localPath = decoded.startsWith('file://') ? decoded.slice(7) : decoded;
+  // file:///C:/x.png -> /C:/x.png after stripping the scheme. Drop the
+  // URL-only leading slash before handing the native Windows path onward.
+  if (/^\/[A-Za-z]:[\\/]/.test(localPath)) localPath = localPath.slice(1);
+  return toLocalFileUrl(resolveLocalPath(localPath, workingDir));
+}

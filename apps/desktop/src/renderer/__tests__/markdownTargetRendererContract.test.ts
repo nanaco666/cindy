@@ -7,6 +7,11 @@ const markdownRenderer = readFileSync(
   'utf8',
 );
 
+const localPathResolver = readFileSync(
+  resolve(__dirname, '..', 'lib', 'localPathResolver.ts'),
+  'utf8',
+);
+
 const textLightbox = readFileSync(
   resolve(__dirname, '..', 'components', 'chat', 'TextLightbox.tsx'),
   'utf8',
@@ -67,8 +72,9 @@ describe('Markdown target rendering contract', () => {
   });
 
   it('passes already-rewritten remote media image URLs through normalization', () => {
-    const normalizeBlock = markdownRenderer.match(
-      /function normalizeImgSrc[\s\S]*?function stripPrivilegedMarkdownTarget/,
+    expect(markdownRenderer).toContain('normalizeMarkdownImageSrc(');
+    const normalizeBlock = localPathResolver.match(
+      /export function normalizeMarkdownImageSrc[\s\S]*?return toLocalFileUrl/,
     );
     expect(normalizeBlock).not.toBeNull();
     expect(normalizeBlock![0]).toContain("src.startsWith('xdt-remote-media://')");

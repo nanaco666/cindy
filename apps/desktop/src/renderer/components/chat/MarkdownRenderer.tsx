@@ -34,6 +34,7 @@ import { cn, basename } from '@/lib/utils';
 import {
   looksLikeFilePath,
   MODEL_EXT_RE,
+  normalizeMarkdownImageSrc,
   resolveLocalPath,
   resolveLocalPathSmartCached,
   peekResolveLocalPathSmart,
@@ -631,52 +632,6 @@ function makeSourceLineWrappers(): Partial<Components> {
     blockquote: wrapWithSourceLine('blockquote', baseComponents.blockquote),
     hr: wrapWithSourceLine('hr', baseComponents.hr),
   };
-}
-
-/**
- * Normalize a markdown image src into a value the renderer can actually load.
- *
- * Pass-through (already a valid URL the browser/renderer accepts):
- *   - data:                — inline base64
- *   - http(s)://           — remote
- *   - xdt-image://         — session image cache (imageProtocol.ts)
- *   - xdt-file://          — already routed through our local-file scheme
- *   - xdt-remote-media://  — device-link remote media proxy
- *
- * Convert (a raw local path that <img> can't load directly):
- *   - file://...           — strip and re-route via xdt-file://
- *   - C:\... / C:/...      — Windows absolute
- *   - /abs/...             — POSIX absolute
- *   - relative/foo.png     — joined with workingDir, then xdt-file://
- *
- * Returns undefined when src is undefined/empty so the caller can render
- * the missing-image placeholder.
- */
-function normalizeImgSrc(
-  src: string | undefined,
-  workingDir: string,
-  allowPrivilegedLinks: boolean,
-): string | undefined {
-  if (!src) return src;
-  if (!allowPrivilegedLinks) {
-    return /^https?:\/\//i.test(src) ? src : undefined;
-  }
-  if (
-    src.startsWith('data:') ||
-    src.startsWith('http://') ||
-    src.startsWith('https://') ||
-    src.startsWith('xdt-image://') ||
-    src.startsWith('cindy-media://') ||
-    src.startsWith('xdt-file://') ||
-    src.startsWith('xdt-remote-media://')
-  ) {
-    return src;
-  }
-  // file:// → strip prefix, then go through xdt-file:// like any other
-  // local path so Chromium's cross-scheme block doesn't silently 404 us.
-  const stripped = src.startsWith('file://') ? src.slice(7) : src;
-  const abs = resolveLocalPath(stripped, workingDir);
-  return toLocalFileUrl(abs);
 }
 
 function stripPrivilegedMarkdownTarget(target: MarkdownTarget): MarkdownTarget {
@@ -1525,7 +1480,11 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
       // → 默认 false → 整段是 falsy 短路, components 对象与之前完全一致。
       ...(emitSourceLines ? makeSourceLineWrappers() : {}),
       img: ({ src, alt, ...props }) => {
-        const normalized = normalizeImgSrc(src, workingDir, allowPrivilegedLinks);
+        const normalized = normalizeMarkdownImageSrc(
+          src,
+          workingDir,
+          allowPrivilegedLinks,
+        );
         return (
           <LightboxImage
             src={normalized ? rewriteToRemoteMediaOrigin(normalized, remoteMediaOrigin) : normalized}
