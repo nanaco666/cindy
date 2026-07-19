@@ -117,9 +117,9 @@ describe('agent capabilities shared model', () => {
       permissionMode: 'bypassPermissions',
       fastMode: true,
     }, capabilities)).toMatchObject({
-      model: 'claude-sonnet-4-6',
-      effort: 'medium',
-      permissionMode: 'ask',
+      model: 'missing-model',
+      effort: 'ultra',
+      permissionMode: 'bypassPermissions',
       fastMode: true,
     });
 

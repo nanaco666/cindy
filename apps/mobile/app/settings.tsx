@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { Children, Fragment, isValidElement, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Image,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -50,6 +51,9 @@ type SelfDeviceNameQueuedWrite =
   | { kind: 'rename'; name: string; options: SelfDeviceNameSaveOptions }
   | { kind: 'reset' };
 const SETTINGS_DEVICE_TIMEOUT_MS = 12_000;
+const PRIVACY_POLICY_URL = AUTH_REGION === 'cn'
+  ? 'https://cindy.com.cn/privacy/'
+  : 'https://cindy.app/privacy/';
 
 export default function SettingsScreen() {
   const styles = useThemedStyles(makeStyles);
@@ -142,6 +146,10 @@ export default function SettingsScreen() {
     if (!row.copyValue) return;
     await Clipboard.setStringAsync(row.copyValue);
     setCopiedRowId(row.id);
+  }, []);
+
+  const openPrivacyPolicy = useCallback(() => {
+    void Linking.openURL(PRIVACY_POLICY_URL).catch(() => undefined);
   }, []);
 
   const checkForUpdate = useCallback(async () => {
@@ -574,7 +582,8 @@ export default function SettingsScreen() {
           <SettingsGroup title={aboutSection.title}>
             {aboutSection.rows.map((row) => (
               row.id === 'about.deviceName' ? (
-                <EditableInfoRow
+                <ActionInfoRow
+                  accessibilityLabel={`修改${row.label}`}
                   detail={selfDeviceNameMessage ?? row.detail}
                   key={row.id}
                   label={row.label}
@@ -613,17 +622,26 @@ export default function SettingsScreen() {
           </SettingsGroup>
         ) : null}
 
-        {/* App 备案信息:仅国内版显示,置于退出账号上方 */}
-        {AUTH_REGION === 'cn' ? (
-          <SettingsGroup title="备案信息">
+        {/* 法律信息:隐私政策始终显示;App 备案号仅国内版显示。 */}
+        <SettingsGroup title="备案信息">
+          <ActionInfoRow
+            accessibilityLabel="打开隐私政策"
+            accessibilityRole="link"
+            key="privacy-policy"
+            label="隐私政策"
+            onPress={openPrivacyPolicy}
+            testID="settings.privacyPolicy"
+            value="查看"
+          />
+          {AUTH_REGION === 'cn' ? (
             <InfoRow
               key="app-filing-number"
               label="App 备案号"
               testID="settings.appFilingNumber"
               value="沪ICP备11033765号-89A"
             />
-          </SettingsGroup>
-        ) : null}
+          ) : null}
+        </SettingsGroup>
 
         {/* 账号操作:低调置底 */}
         <View style={styles.dangerArea} testID="settings.accountActions">
@@ -731,14 +749,18 @@ function InfoRow({
   );
 }
 
-/** 可点击信息行:用于轻量编辑单个设置项。 */
-function EditableInfoRow({
+/** 可点击信息行:用于轻量编辑或打开外部信息。 */
+function ActionInfoRow({
+  accessibilityLabel,
+  accessibilityRole = 'button',
   detail,
   label,
   onPress,
   testID,
   value,
 }: {
+  accessibilityLabel: string;
+  accessibilityRole?: 'button' | 'link';
   detail?: string;
   label: string;
   onPress(): void;
@@ -749,8 +771,8 @@ function EditableInfoRow({
   const { colors } = useTheme();
   return (
     <Pressable
-      accessibilityLabel={`修改${label}`}
-      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole={accessibilityRole}
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
       testID={testID}

@@ -16,7 +16,10 @@ import {
   CodexAgent,
   configureDefaultImageResizer,
 } from '@lizi/maker-core';
-import { getActiveCatalog } from './active-catalog.js';
+import {
+  setActiveCatalogChangedListener,
+  setDiscoveredCodexModels,
+} from './active-catalog.js';
 import {
   createOrcaWorkerBridgeMcpProvider,
   type OrcaBridgeMcpDeps,
@@ -34,6 +37,7 @@ import {
 } from '../maker-ipc/orcaManualInterrupt.js';
 import { dispatchInterAgentMessage, isSessionInTurn, wireSessionToIpc } from '../maker-ipc/register.js';
 import { MAKER_PUSH } from '../maker-ipc/channels.js';
+import { tapWindowBroadcast } from '../device-link/broadcast-tap.js';
 import { WorktreePool } from '../worktree/index.js';
 import { getReadyBinaryPath, getCachedBinaryStatus } from '../agent-binaries/index.js';
 import {
@@ -55,7 +59,11 @@ import { getRemoteClaudeBinaryPath } from '../remote-ssh/cc-manager-install.js';
 import { createReadImageHook } from './claude-hooks/read-image-hook.js';
 import { deriveAvailableModels, refreshCatalogDerivedModels } from './catalog-to-descriptors.js';
 import { clearChatgptBridgeCredentialCache } from './anthropic-responses-bridge-host.js';
-import { refreshDiscoveredCodexModels } from './createDesktopProviderService.js';
+import {
+  getDesktopSelectableCatalog,
+  refreshDiscoveredCodexModels,
+} from './createDesktopProviderService.js';
+import { clearAnthropicDiscoveredModels } from './model-discovery/anthropic.js';
 import {
   buildDesktopClaudeRuntimeConfig,
   desktopCodexRuntimeConfig,
@@ -98,6 +106,7 @@ import { prepareLocalCodexCredentialModeSwitch } from './codex-credential-switch
 import { createDesktopOrcaTeamStoreAdapter } from './orcaTeamStoreAdapter.js';
 import { broadcastOrcaWorkerChanged } from './orcaWorkerBroadcast.js';
 import { getDesktopMcpToolApprovalPolicy } from './mcp-tool-approval-policy.js';
+import { mapCodexAppServerModelsToCatalog } from './codex-model-discovery.js';
 export { withRehydrateCloseSuppressed };
 
 type RemoteCcQuery = Awaited<
@@ -105,6 +114,47 @@ type RemoteCcQuery = Awaited<
 >;
 
 let _maker: Maker | null = null;
+
+/** Refresh selectable model capabilities, then notify every local/remote renderer. */
+function refreshSelectableModelsAndBroadcast(payload: Record<string, unknown>): void {
+  if (_maker) refreshCatalogDerivedModels(_maker, getDesktopSelectableCatalog());
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed()) continue;
+    try {
+      win.webContents.send(MAKER_PUSH.PROVIDER_CHANGED, payload);
+    } catch {
+      // Window teardown may race the broadcast; other windows still receive it.
+    }
+  }
+  tapWindowBroadcast(MAKER_PUSH.PROVIDER_CHANGED, payload);
+}
+
+/**
+ * active catalog 的唯一 desktop 收口：先原地刷新两种 agent 的 capabilities，
+ * 再广播同一 revision。这样 provider 列表先变而 backend 仍校验旧模型的窗口不会出现。
+ */
+setActiveCatalogChangedListener((revision) => {
+  try {
+    refreshSelectableModelsAndBroadcast({ revision });
+  } catch (error) {
+    desktopMakerLogger.warn('active catalog capabilities refresh failed', {
+      revision,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return;
+  }
+});
+
+/** Re-project provider/model availability after the Cindy membership changes. */
+export function refreshProviderAccessAfterAuthChange(): void {
+  try {
+    refreshSelectableModelsAndBroadcast({});
+  } catch (error) {
+    desktopMakerLogger.warn('provider access refresh after auth change failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 /**
  * codexAgent 的模块级引用 —— 仅供 restartCodexAfterAuthModeChange() 在 API 模式切换 /
  * api_key 变更时 dispose 重建 app-server。getMaker() 构造后回填,resetMaker() 清空。
@@ -261,11 +311,11 @@ export function getMaker(): Maker {
       mcpProviders: claudeMcpProviders,
       makerMemory: makerMemoryManager,
       // 模型清单 SSoT = 目录（providers.json，OSS 运行时真源 / bundled 兜底）。maker-core 的
-      // CLAUDE_MODELS 已删、availableModels 起始为空；host 从 getActiveCatalog() 派生 cc 列表注入
+      // CLAUDE_MODELS 已删、availableModels 起始为空；host 从账号可选目录派生 cc 列表注入
       // （含 claude 订阅模型 + XD 网关路由的 gpt / 国产 / gemini 等）。active catalog 已在 splash 期
       // ensureActiveCatalogLoaded 加载完成（早于本构造点）。详见 catalog-to-descriptors.ts。
       capabilityAdditions: {
-        availableModels: deriveAvailableModels(getActiveCatalog(), 'claude-code'),
+        availableModels: deriveAvailableModels(getDesktopSelectableCatalog(), 'claude-code'),
       },
       // SDK PreToolUse / PostToolUse 等 in-process hook 注入点。host 自己定义 hook
       // 实现 (./claude-hooks/*.ts), maker-core 不感知具体逻辑。
@@ -341,11 +391,14 @@ export function getMaker(): Maker {
       mcpProviders: codexMcpProviders,
       makerMemory: makerMemoryManager,
       // 模型清单 SSoT = 目录（providers.json，OSS 运行时真源 / bundled 兜底）。maker-core 的
-      // CODEX_MODELS 已删、availableModels 起始为空；host 从 getActiveCatalog() 派生 codex 列表注入
+      // CODEX_MODELS 已删、availableModels 起始为空；host 从账号可选目录派生 codex 列表注入
       // （gpt 原生 + codex/ 骨折网关路由）。「骨折GPT」codex/ 仍是「XD 网关来源」,渲染层按
       // 「XD 网关已连接」gate 可见性（ModelSelector onlyConnected / CreateWorkerPopover / ScheduleChips）。
       capabilityAdditions: {
-        availableModels: deriveAvailableModels(getActiveCatalog(), 'codex'),
+        availableModels: deriveAvailableModels(getDesktopSelectableCatalog(), 'codex'),
+      },
+      onCodexLocalModelsListed: (models) => {
+        setDiscoveredCodexModels(mapCodexAppServerModelsToCatalog(models));
       },
       prepareCodexLocalCredentialModeSwitch: async (ctx) => {
         const maker = _maker;
@@ -499,6 +552,9 @@ export function getMaker(): Maker {
     // 不重启则隐式会话继续复用旧钥匙形态,新登录不生效(codex review 2026-07-03 P2)。
     // 下次 getHost 会按新 fallback(oauth-bearer)重建并重设 proxy 注入。
     desktopCodexAuthAdapter.setOnLoginSuccess(async () => {
+      // 必须在新 app-server 首次 model/list / Responses 请求之前清：bridge 的旧账号
+      // accessToken/accountId 有 30s 内存缓存，晚清会让新 host 短暂带旧账号凭证请求。
+      clearChatgptBridgeCredentialCache();
       await codexAgent.forceDisposeLocalHostForAuthChange('Codex desktop auth login');
       await broadcastCodexRuntimeRoute();
     });
@@ -512,7 +568,6 @@ export function getMaker(): Maker {
       try {
         clearChatgptBridgeCredentialCache();
         await refreshDiscoveredCodexModels(false);
-        if (_maker) refreshCatalogDerivedModels(_maker, getActiveCatalog());
       } catch (e) {
         // 目录刷新是失效广播的附加收口，不能因其异常让 renderer 错过“请重新登录”。
         desktopMakerLogger.warn('Codex invalidation catalog cleanup failed', {
@@ -532,6 +587,8 @@ export function getMaker(): Maker {
     // Claude 同款:订阅 refresh token 被服务端作废(invalid_grant)时,adapter.invalidate()
     // 清态后经这里广播,UI 立刻进「请重新登录」而不是连环 401 的假连接状态。
     desktopClaudeAuthAdapter.setOnInvalidatedBroadcast((reason) => {
+      // 凭证已失效 = anthropic 动态清单失去可用性证明,与登出同款收口(清单+磁盘缓存)。
+      void clearAnthropicDiscoveredModels().catch(() => { /* 清理失败不阻断失效广播 */ });
       const payload = {
         agentKind: 'claude-code' as const,
         authenticated: false,
@@ -706,7 +763,6 @@ export async function finalizeCodexAfterAuthModeChange(): Promise<void> {
   // 重读 codex models_cache 刷新规范化模型快照 —— active-catalog 会同时投影 Codex 与
   // Claude bridge;放在 auth 广播前,renderer refetch 即见最新。
   await refreshDiscoveredCodexModels();
-  if (_maker) refreshCatalogDerivedModels(_maker, getActiveCatalog());
   await broadcastCodexAuthStateChanged();
 }
 

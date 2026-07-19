@@ -1,4 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, protocol, safeStorage, screen, session, shell } from 'electron';
+import { resolveVibrancyConfig } from './vibrancyConfig';
+import { applyVibrancyToSecondaryWindows } from './secondary-windows';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -7,6 +9,8 @@ import { execFile, execFileSync, spawn } from 'node:child_process';
 import { machineIdSync } from 'node-machine-id';
 import windowStateKeeper from 'electron-window-state';
 import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { shouldRequestSingleInstanceLock } from './devCliFlags.js';
+import { acquirePassiveDevLock } from './passiveDevLock.js';
 
 const PROCESS_STARTED_AT_MS = Date.now();
 
@@ -236,6 +240,7 @@ import {
   readCodexRuntimeRoute,
   broadcastClaudeAuthStateChanged,
   broadcastXaiAuthStateChanged,
+  refreshProviderAccessAfterAuthChange,
   restartCodexAfterAuthModeChange,
   waitForInitialCustomMcpRefresh,
 } from './maker-host/index.js';
@@ -243,6 +248,12 @@ import {
   ensureActiveCatalogLoaded,
   refreshCustomProvidersIntoCatalog,
 } from './maker-host/createDesktopProviderService.js';
+import { setClaudeSupportedModelsListener } from '@lizi/maker-core';
+import {
+  noteAnthropicSdkSupportedModels,
+  refreshAnthropicModelsFromHttp,
+  clearAnthropicDiscoveredModels,
+} from './maker-host/model-discovery/anthropic.js';
 import { refreshCustomMcpProviders } from './mcp-integrations/custom-mcp-registry.js';
 import { clearXaiRateLimitSnapshot } from './usageBroadcaster.js';
 import {
@@ -304,6 +315,11 @@ import {
   resetCompactionPct,
   writeCompactionPct,
 } from './maker-host/compaction-settings-store.js';
+import {
+  readSubagentModelSettingsState,
+  resetSubagentModelSettings,
+  writeSubagentModelSettingsPatch,
+} from './maker-host/subagent-model-settings-store.js';
 import {
   readLspModeSettings,
   writeLspModeEnabled,
@@ -382,6 +398,11 @@ import {
   type ImDefaultAgentSettings,
   type ImDefaultSettingsPatch,
 } from '../shared/imDefaultSettings.js';
+import {
+  isValidSubagentModelIdInput,
+  normalizeSubagentModelId,
+  type SubagentModelSettingsPatch,
+} from '../shared/subagentModelSettings.js';
 import { isBrowserOpenablePath } from '../shared/browserOpenableExts.js';
 import {
   getClientEndpoint,
@@ -617,6 +638,7 @@ import { initLogger, writeFromRenderer, setLogLevel, getLogLevel, keepRecentSync
 initLogger();
 const dbClientLog = createLogger('DbClient');
 const authBoundaryLog = createLogger('auth-boundary');
+const passiveDevLockLog = createLogger('passive-dev-lock');
 // 主窗 renderer 加载失败可观测性 + dev 启动看门狗(见 renderer-boot-guard.ts 顶部注释)。
 const rendererGuardLog = createLogger('renderer-guard');
 const updatePresentationLog = createLogger('update-presentation');
@@ -1505,9 +1527,24 @@ app.on('open-file', (event, filePath) => {
 });
 
 // ── Single instance lock ─────────────────────────────────────────────────
-// Prevent multiple instances in packaged builds. Skip in dev so that
-// multiple `pnpm dev:desktop*` sessions can run side-by-side.
-if (app.isPackaged) {
+// 正常 dev 与 packaged 一律启用。这是把 OS 因深链(cindy://focus 授权返回 /
+// cindy://session 等)/ 右键 "通过 Cindy 打开" 而拉起的第二个进程 redirect 成
+// "聚焦已运行窗口" 的唯一机制——两个独立 Electron 进程之间没有别的通道能交接焦点。
+//
+// 唯一例外是 dev `--passive`:它的公开契约就是和正式版共享 Cindy userData 双开、
+// 同时让出自动 schedule。正式版已持有同一作用域的锁，passive dev 若也请求会直接
+// quit，契约形同失效；所以只有这个明确模式跳过 Electron 内置锁。此模式没有
+// second-instance redirect，deep link 落到哪个实例由当前 OS 协议注册归属决定。
+// 但 passive 实例之间仍需互斥(同一 userData 的 SQLite 不能并发打开两个写者),
+// 通过 userData 下的 `.passive-dev.lock` 原子文件锁实现。
+//
+// 锁按 userData 目录作用域:默认 dev / packaged 共用 `Cindy` userData → 单实例;
+// `--isolated=<名字>` 沙箱各有独立 userData → 各自独立锁,仍可并行共存。真要多开走
+// `--isolated`(见 AGENTS.md),不再依赖 "dev 无锁" 各开窗口。
+if (shouldRequestSingleInstanceLock({
+  isPackaged: app.isPackaged,
+  schedulerPassive: process.env.XDT_SCHEDULER_PASSIVE === '1',
+})) {
   const gotTheLock = app.requestSingleInstanceLock();
   if (!gotTheLock) {
     app.quit();
@@ -1546,6 +1583,37 @@ if (app.isPackaged) {
       // (deepLink 只向已有窗口投递/排队,不建窗)。
       if (startupWindowCreationAllowed && !focusMainWindow()) {
         createWindow();
+      }
+    });
+  }
+} else {
+  // passive dev 跳过 Electron 的 single-instance lock(避免与正式版冲突),但仍需
+  // 阻止同一 userData 下的第二个 passive 实例并发启动——否则两者同时打开 SQLite
+  // 会产生 busy / migration 竞态。锁用 wx/O_EXCL 原子创建，记录 PID + owner token；
+  // 异常退出可回收 stale 锁，release 也不会误删已经易主的新锁。
+  const userDataDir = app.getPath('userData');
+  const passiveLockPath = path.join(userDataDir, '.passive-dev.lock');
+  const result = acquirePassiveDevLock({
+    lockPath: passiveLockPath,
+    pid: process.pid,
+    startedAtMs: PROCESS_STARTED_AT_MS,
+    onCompromised: (reason) => {
+      passiveDevLockLog.error('passive dev lock compromised; quitting', { reason });
+      app.quit();
+    },
+  });
+  if (!result.acquired) {
+    if (result.reason === 'occupied') {
+      passiveDevLockLog.warn('another passive dev instance owns this userData; quitting', result);
+    } else {
+      passiveDevLockLog.error('passive dev lock acquisition failed; quitting', result);
+    }
+    app.quit();
+  } else {
+    app.on('will-quit', () => {
+      const released = result.lock.release();
+      if (!released.released && released.reason !== 'missing') {
+        passiveDevLockLog.warn('passive dev lock release skipped', released);
       }
     });
   }
@@ -1610,7 +1678,9 @@ const createWindow = () => {
 
   // Use nativeTheme to pick initial background color matching OS preference,
   // avoiding white flash on startup for dark mode users.
-  const bgColor = nativeTheme.shouldUseDarkColors ? '#1f1f1e' : '#f8f8f6';
+  // mac:创建期即透明底+sidebar 材质(Electron setBackgroundColor 运行时改 alpha 不可靠,是 vibrancy 不透壁纸的根因;非 CINDY 皮肤 body 不透明会自然盖住,视觉无影响)
+  const bgColor = process.platform === 'darwin' ? '#00000000' : (nativeTheme.shouldUseDarkColors ? '#1f1f1e' : '#f8f8f6');
+  const winBackdropConfig = resolveVibrancyConfig('cindy', nativeTheme.shouldUseDarkColors, process.platform);
 
   // Window state persistence (F-WST-1): remembers position / size / maximized
   // / fullscreen across launches. Falls back to the defaults below on first
@@ -1638,6 +1708,11 @@ const createWindow = () => {
     autoHideMenuBar: true,
     show: false,
     backgroundColor: bgColor,
+    ...(process.platform === 'win32' && winBackdropConfig.backgroundMaterial ? {
+      backgroundMaterial: winBackdropConfig.backgroundMaterial,
+      backgroundColor: winBackdropConfig.backgroundColor,
+    } : {}),
+    ...(process.platform === 'darwin' ? { vibrancy: 'sidebar' as const } : {}),
     acceptFirstMouse: !swallowActivationClick,
     ...platformOptions,
     webPreferences: {
@@ -1880,6 +1955,7 @@ const createWindow = () => {
 };
 
 let disposeSkillhubAutoSyncAuthListener: (() => void) | null = null;
+let disposeProviderAccessAuthListener: (() => void) | null = null;
 
 const registerIpcHandlers = () => {
   // Find the primary app window, skipping transient utility BrowserWindows like
@@ -1933,6 +2009,28 @@ const registerIpcHandlers = () => {
     openSessionInNewWindow(sessionId, mainWindowRef);
   });
 
+// E4D 毛玻璃(R1 audit,用户裁决透壁纸 2026-07-17):仅 CINDY family 启用毛玻璃透壁纸;
+// 其他 family 恢复不透明。macOS 走 setVibrancy + 透明底;Windows 11 走 setBackgroundMaterial
+// (acrylic/mica,见 resolveVibrancyConfig),Windows 10/Linux 回退不透明 surface。
+// family 切换时经 IPC theme:apply-vibrancy 运行时动态调用,同步主窗口与全部副窗口。
+function applyWindowVibrancy(familyId: string, isDark: boolean): void {
+  const win = mainWindowRef;
+  if (!win || win.isDestroyed()) return;
+  const config = resolveVibrancyConfig(familyId, isDark, process.platform);
+  if (process.platform === 'darwin') {
+    win.setVibrancy(config.vibrancy as 'under-window' | null);
+  }
+  if (process.platform === 'win32' && config.backgroundMaterial) {
+    win.setBackgroundMaterial(config.backgroundMaterial);
+  }
+  win.setBackgroundColor(config.backgroundColor);
+  applyVibrancyToSecondaryWindows(familyId, isDark);
+}
+
+ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark: boolean }) => {
+  applyWindowVibrancy(payload.familyId, payload.isDark);
+});
+
   ipcMain.on('get-app-version', (event) => {
     event.returnValue = app.getVersion();
   });
@@ -1983,6 +2081,17 @@ const registerIpcHandlers = () => {
   ipcMain.handle(MAKER_IPC_INVOKE.IM_DEFAULT_SETTINGS_RESET, async () => {
     resetImDefaultSettings();
     return imDefaultSettingsWire();
+  });
+  ipcMain.handle(MAKER_IPC_INVOKE.SUBAGENT_MODEL_SETTINGS_GET, async () => {
+    return subagentModelSettingsWire();
+  });
+  ipcMain.handle(MAKER_IPC_INVOKE.SUBAGENT_MODEL_SETTINGS_SET, async (_e, patch: unknown) => {
+    writeSubagentModelSettingsPatch(parseSubagentModelSettingsPatch(patch));
+    return subagentModelSettingsWire();
+  });
+  ipcMain.handle(MAKER_IPC_INVOKE.SUBAGENT_MODEL_SETTINGS_RESET, async () => {
+    resetSubagentModelSettings();
+    return subagentModelSettingsWire();
   });
 
   // Claude Code 自动上下文压缩阈值 IPC —— store 跟 Maker 单例无关, 提前注册。
@@ -2150,6 +2259,10 @@ const registerIpcHandlers = () => {
 
   // ── Claude.ai 订阅 OAuth 登录(浏览器流程,凭证落系统 ~/.claude) ────────────────
   // 与鉴权模式开关正交:管理订阅凭证本身(像 Codex 的 OAuth 登录独立于 API 模式)。
+  // Anthropic 模型清单动态发现接线(2026-07-19 统一重构):
+  //   - active-catalog 统一收口 capabilities 刷新 + revision 广播;
+  //   - SDK supportedModels 捕获(maker-core 会话 init 后上报)是能力字段权威。
+  setClaudeSupportedModelsListener(noteAnthropicSdkSupportedModels);
   ipcMain.handle(MAKER_IPC_INVOKE.CLAUDE_OAUTH_STATUS, async () => {
     return { authorized: hasClaudeAiOAuth() };
   });
@@ -2158,11 +2271,17 @@ const registerIpcHandlers = () => {
     // 数据,不抛 throwIpcError(符合规则 13 查询型例外:renderer 需要 reason 做不同 UI)。
     const result = await runClaudeOAuthLogin();
     if (result.ok) {
+      // 登录可直接覆盖旧账号凭证,不一定先走登出。先跨授权世代清掉旧清单 / 缓存并
+      // 等待旧 SDK 持久化收尾;即使后续 proxy 初始化失败也绝不保留 A 账号清单。
+      await clearAnthropicDiscoveredModels();
       // oauth 模式 per-model 路由依赖本地 proxy,确保 ready,再广播鉴权态让 Connections 行刷新。
       await ensureAnthropicCompatProxyReady();
       await broadcastClaudeAuthStateChanged();
       // 订阅余量同步: 换号时清旧账号快照 + 拉新账号余量(内部指纹校验), chip 随 push 更新。
       syncClaudeSubscriptionUsageForAuthChange();
+      // 模型清单动态发现:登录成功即后台拉 /v1/models(完成后经 active-catalog 广播刷新,
+      // 设置页无需等下次会话就能看到清单;失败保留现值,SDK 通道随后仍会精化)。
+      void refreshAnthropicModelsFromHttp();
       return { ok: true, authorized: true };
     }
     return { ok: false, reason: result.reason ?? 'unknown', authorized: hasClaudeAiOAuth() };
@@ -2183,6 +2302,8 @@ const registerIpcHandlers = () => {
     await broadcastClaudeAuthStateChanged();
     // 订阅余量同步: 凭证已清, read() 会清快照并广播 null, chip 立即回占位态。
     syncClaudeSubscriptionUsageForAuthChange();
+    // 模型清单动态发现:登出完成前清空清单 + 删磁盘缓存,并等待旧 SDK 写盘收尾。
+    await clearAnthropicDiscoveredModels();
     return { authorized: hasClaudeAiOAuth() };
   });
   ipcMain.handle(MAKER_IPC_INVOKE.CLAUDE_OAUTH_CANCEL, async () => {
@@ -3318,6 +3439,9 @@ const registerIpcHandlers = () => {
   disposeSkillhubAutoSyncAuthListener = authManager.onAuthStateChange((state) => {
     if (!state.isAuthenticated) return;
     void skillhubAutoSyncService.runOnceAfterLogin();
+  });
+  disposeProviderAccessAuthListener = authManager.onAuthStateChange(() => {
+    refreshProviderAccessAfterAuthChange();
   });
 
   // ── Dialog: 目录选择器（v0.6 新增，与旧 show-open-directory-dialog 并存） ──
@@ -4697,6 +4821,10 @@ onQuit('skillhub-auto-sync-listener', () => {
   disposeSkillhubAutoSyncAuthListener?.();
   disposeSkillhubAutoSyncAuthListener = null;
 }, 'sync');
+onQuit('provider-access-auth-listener', () => {
+  disposeProviderAccessAuthListener?.();
+  disposeProviderAccessAuthListener = null;
+}, 'sync');
 
 // Async 阶段: 并发跑, 6s 超时兜底。
 //   - shutdown-maker:       Layer 1 关 sessions → Layer 2 dispose agents (Codex
@@ -4785,6 +4913,33 @@ function imDefaultSettingsWire() {
     customizedKeys: state.customizedKeys,
     defaults: state.defaults,
   };
+}
+
+function subagentModelSettingsWire() {
+  const state = readSubagentModelSettingsState();
+  return {
+    ...state.value,
+    isCustomized: state.isCustomized,
+    customizedKeys: state.customizedKeys,
+    defaults: state.defaults,
+  };
+}
+
+function parseSubagentModelSettingsPatch(raw: unknown): SubagentModelSettingsPatch {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throwIpcError('INVALID_PARAMS', 'subagent model settings patch required (object)');
+  }
+  const input = raw as Record<string, unknown>;
+  const patch: SubagentModelSettingsPatch = {};
+  for (const key of ['claudeCode', 'codex'] as const) {
+    if (!(key in input)) continue;
+    const value = input[key];
+    if (!isValidSubagentModelIdInput(value)) {
+      throwIpcError('INVALID_PARAMS', `subagent model ${key} must be a valid string or null`);
+    }
+    patch[key] = normalizeSubagentModelId(value);
+  }
+  return patch;
 }
 
 function parseImDefaultSettingsPatch(raw: unknown): ImDefaultSettingsPatch {

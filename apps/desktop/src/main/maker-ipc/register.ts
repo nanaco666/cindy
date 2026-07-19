@@ -255,6 +255,7 @@ import { registerMakerSessionCreateHandler } from './sessionCreateHandler.js';
 import { type MakerSessionCreateOpts, withCreateSessionStderr } from './sessionRequest.js';
 import { persistAndHydrateSessionProvider } from './sessionProviderBootstrap.js';
 import { registerMakerSessionSendHandler } from './sessionSendHandler.js';
+import { registerStopSessionBackgroundTasksHandler } from './stopSessionBackgroundTasksHandler.js';
 import { registerProviderHandlers } from './providerHandlers.js';
 import { registerMcpHandlers } from './mcpHandlers.js';
 import { refreshCustomMcpProviders } from '../mcp-integrations/custom-mcp-registry.js';
@@ -2643,20 +2644,12 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     return { sessionIds: listActiveClaudeBackgroundActivitySessions() };
   });
 
-  // 一键停止后台任务:关闭该会话的常驻 CC 子进程(进程内后台子 agent 随之终止),
-  // 会话可续(下次发消息 resume 重建)。turn 在跑时拒绝 —— 那是 Stop 按钮的职责,
-  // 且 closeSession 会连正在跑的 turn 一起杀掉,语义不符。
-  ipcMain.handle(MAKER_INVOKE.STOP_SESSION_BACKGROUND_TASKS, async (_e, sessionId: unknown) => {
-    if (typeof sessionId !== 'string') throwIpcError('INVALID_PARAMS', 'sessionId required');
-    const live = maker.getSession(sessionId);
-    if (live?.isTurnRunning()) {
-      throwIpcError('SESSION_RUNNING', 'Cannot stop background tasks while a turn is running');
-    }
-    await maker.closeSession(sessionId);
-    // closed 事件的统一清理也会清账;这里显式清一次保证 renderer 立即收到熄灭广播,
-    // 不依赖 closed 事件时序。幂等。
-    clearClaudeSessionBackgroundActivity(sessionId);
-    return { ok: true as const };
+  // “全部停止”是会话级最终止损入口：即使 turn 正在运行，也关闭其 agent 进程与全部子代理。
+  registerStopSessionBackgroundTasksHandler(createElectronIpcHandlerRegistry(), {
+    closeSession: (sessionId) => maker.closeSession(sessionId),
+    clearBackgroundActivity: clearClaudeSessionBackgroundActivity,
+    noteSessionReset: (sessionId) => silentStopAutoResumeGuard.noteSessionReset(sessionId),
+    notifyGoalStop: (sessionId) => goalStopObserver?.(sessionId),
   });
 
   // workflow 逐 agent 进度树(只读)。从活跃会话拿 workDir + sdkSessionId → 推导 Claude Code

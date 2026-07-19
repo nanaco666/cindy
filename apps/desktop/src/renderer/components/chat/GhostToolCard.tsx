@@ -118,7 +118,8 @@ function buildCardSrcDoc(sanitizedHtml: string, themeVars: string): string {
     themeVars ? `<style>${themeVars}</style>` : '',
     // reduced-motion 门控是宿主强制(规则 7),不靠意识作者自觉:系统开了
     // 减弱动效时,动画版卡片的意识自绘动画一律停播(srcdoc 内 media query
-    // 正常继承系统偏好)。
+    // 正常继承系统偏好)。背景仍由意识正文自己决定:透明画布是现行卡片
+    // 作者契约,宿主不能强铺 surface 改变其它 Ghost 的视觉。
     '<style>html,body{margin:0;padding:0;overflow:hidden;font-family:system-ui,-apple-system,sans-serif}img{max-width:100%;-webkit-user-drag:none;-webkit-user-select:none;user-select:none}@media (prefers-reduced-motion:reduce){*{animation:none!important}}</style>',
     '</head><body>',
     sanitizedHtml,
@@ -536,6 +537,11 @@ function GhostCardCanvas({
           className="block w-full border-0"
           style={{
             height: measuredHeight ?? height,
+            // iframe 是 replaced element,UA frame chrome 不能指望子文档 reset
+            // 覆盖;宿主侧显式清空,避免在圆角裁切处露出白边。
+            border: 'none',
+            outline: 'none',
+            boxShadow: 'none',
             // 首帧/历史回放收敛瞬时贴合;只有活卡换海报(已有过权威实测)才缓动。
             transition: settledOnceRef.current ? 'height 200ms ease' : 'none',
           }}

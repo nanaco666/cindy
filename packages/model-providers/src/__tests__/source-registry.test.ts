@@ -1,5 +1,9 @@
 /**
  * source（目录加载/兜底/合并）与 registry（可见性/来源/路由解析）的纯逻辑测试。
+ *
+ * 2026-07-19 统一重构后:bundled 的 anthropic/openai/xd 是动态清单供应商(零静态模型),
+ * registry / resolveRoute 的行为测试统一在「运行时注入后的目录」fixture 上进行
+ * (与生产一致:active-catalog 把 SDK 发现 / codex 注册表 / 网关下发注入后再 buildRegistry)。
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -22,7 +26,7 @@ import {
   effectiveSourceIdForModel,
   resolveRoute,
 } from '../registry.js';
-import type { Catalog } from '../types.js';
+import type { Catalog, CatalogModel } from '../types.js';
 
 const MINIMAL: Catalog = {
   version: 'test',
@@ -42,6 +46,32 @@ const MINIMAL: Catalog = {
     },
   ],
 };
+
+function model(id: string, extra: Partial<CatalogModel> = {}): CatalogModel {
+  return { id, name: id, contextWindow: 200_000, efforts: [], defaultEffort: null, ...extra };
+}
+
+/** 模拟生产形态:动态清单注入后的目录(active-catalog 合并结果的等价物)。 */
+function runtimeCatalog(): Catalog {
+  const clone = JSON.parse(JSON.stringify(BUNDLED_CATALOG)) as Catalog;
+  for (const p of clone.providers) {
+    if (p.id === 'anthropic') {
+      p.models['claude-code'] = [model('claude-opus-4-8', { name: 'Opus 4.8', contextWindow: 1_000_000 })];
+    }
+    if (p.id === 'openai') {
+      p.models.codex = [model('gpt-5.5', { name: 'GPT-5.5' })];
+      p.models['claude-code'] = [model('chatgpt/gpt-5.5', { name: 'GPT-5.5' })];
+    }
+    if (p.id === 'xd') {
+      p.models['claude-code'] = [
+        model('claude-opus-4-8', { name: 'Opus 4.8', contextWindow: 1_000_000 }),
+        model('gpt-5.5', { name: 'GPT-5.5' }),
+      ];
+      p.models.codex = [model('gpt-5.5', { name: 'GPT-5.5' })];
+    }
+  }
+  return clone;
+}
 
 describe('resolveCatalogUrl', () => {
   it('prefers explicit url', () => {
@@ -66,6 +96,26 @@ describe('mergeWithBundled', () => {
     expect(ids).toContain('xd');
     // primary's anthropic wins (only 1 cc model in MINIMAL)
     expect(merged.providers.find((p) => p.id === 'anthropic')!.models['claude-code']!.length).toBe(1);
+  });
+
+  it('orders result by bundled provider order (v2 远端只带 xai 时不得窜位)', () => {
+    const v2Remote: Catalog = {
+      version: '2',
+      providers: [JSON.parse(JSON.stringify(BUNDLED_CATALOG.providers.find((p) => p.id === 'xai')))],
+    };
+    const merged = mergeWithBundled(v2Remote);
+    expect(merged.providers.map((p) => p.id)).toEqual(['anthropic', 'openai', 'xai', 'xd']);
+    // 远端独有的新供应商追加在 bundled 之后。
+    const withExtra: Catalog = {
+      version: '2',
+      providers: [
+        ...v2Remote.providers,
+        { ...MINIMAL.providers[0], id: 'newvendor', name: 'NewVendor' },
+      ],
+    };
+    expect(mergeWithBundled(withExtra).providers.map((p) => p.id)).toEqual([
+      'anthropic', 'openai', 'xai', 'xd', 'newvendor',
+    ]);
   });
 
   it('backfills access for an old primary catalog without mutating it', () => {
@@ -112,8 +162,10 @@ describe('mergeWithBundled', () => {
       })),
     };
 
-    expect(mergeWithBundled(apiKeyPrimary).providers[0].access).toBeUndefined();
-    expect(mergeWithBundled(alternateOAuthPrimary).providers[0].access).toBeUndefined();
+    const apiKeyMerged = mergeWithBundled(apiKeyPrimary).providers.find((p) => p.id === 'anthropic');
+    const altMerged = mergeWithBundled(alternateOAuthPrimary).providers.find((p) => p.id === 'anthropic');
+    expect(apiKeyMerged?.access).toBeUndefined();
+    expect(altMerged?.access).toBeUndefined();
   });
 });
 
@@ -132,7 +184,7 @@ describe('loadCatalog', () => {
     const cat = await loadCatalog({ url: 'https://x/y.json' }, io);
     expect(io.fetchText).toHaveBeenCalledWith('https://x/y.json');
     expect(cat.version).toBe('test');
-    // 远端目录裁剪到只有 anthropic，bundled 补回 openai/xd（mergeWithBundled）。
+    // 远端目录裁剪到只有 anthropic，bundled 补回 openai/xai/xd（mergeWithBundled）。
     expect(cat.providers.map((p) => p.id).sort()).toEqual(['anthropic', 'openai', 'xai', 'xd']);
   });
 
@@ -155,11 +207,10 @@ describe('loadCatalog', () => {
   });
 });
 
-describe('registry visibility & sources', () => {
-  const views = buildRegistry(BUNDLED_CATALOG, { xd: true, anthropic: false, openai: false });
+describe('registry visibility & sources(运行时注入 fixture)', () => {
+  const views = buildRegistry(runtimeCatalog(), { xd: true, anthropic: false, openai: false });
 
   it('providersForAgent ignores connection', () => {
-    // openai 现在也声明 claude-code(ChatGPT 订阅直连 gpt-5.5 等,经 responses-bridge)。
     expect(providersForAgent(views, 'claude-code').map((p) => p.id).sort()).toEqual(['anthropic', 'openai', 'xai', 'xd']);
     expect(providersForAgent(views, 'codex').map((p) => p.id).sort()).toEqual(['openai', 'xai', 'xd']);
   });
@@ -173,34 +224,30 @@ describe('registry visibility & sources', () => {
     const xd = views.find((p) => p.id === 'xd')!;
     expect(providerOffersModel(xd, 'gpt-5.5', 'codex')).toBe(true);
     expect(providerOffersModel(xd, 'no-such', 'codex')).toBe(false);
-    // claude-opus 只在 cc 列表;按 codex 查不到,按 claude-code 查得到。
     expect(providerOffersModel(xd, 'claude-opus-4-8', 'codex')).toBe(false);
     expect(getModel(xd, 'claude-opus-4-8', 'claude-code')?.name).toBe('Opus 4.8');
   });
 
   it('sourcesForModel: only connected providers by default', () => {
-    // only xd connected → claude-opus on cc has just [xd]
     expect(sourcesForModel(views, 'claude-opus-4-8', 'claude-code').map((p) => p.id)).toEqual(['xd']);
-    // include unconnected → anthropic also offers it
     expect(sourcesForModel(views, 'claude-opus-4-8', 'claude-code', { onlyConnected: false }).map((p) => p.id).sort())
       .toEqual(['anthropic', 'xd']);
   });
 
   it('sourcesForModel: same model two sources when both connected', () => {
-    const all = buildRegistry(BUNDLED_CATALOG, { xd: true, anthropic: true, openai: true, xai: true });
+    const all = buildRegistry(runtimeCatalog(), { xd: true, anthropic: true, openai: true, xai: true });
     expect(sourcesForModel(all, 'gpt-5.5', 'codex').map((p) => p.id).sort()).toEqual(['openai', 'xd']);
     expect(sourcesForModel(all, 'gpt-5.5', 'claude-code').map((p) => p.id)).toEqual(['xd']);
     expect(sourcesForModel(all, 'xai/grok-4.3', 'codex').map((p) => p.id)).toEqual(['xai']);
   });
 
   it('effectiveSourceIdForModel 只在真正提供当前模型的已连接来源里选默认', () => {
-    const openaiOnly = buildRegistry(BUNDLED_CATALOG, {
+    const openaiOnly = buildRegistry(runtimeCatalog(), {
       xd: false,
       anthropic: false,
       openai: true,
       xai: false,
     });
-    // OpenAI 虽支持 claude-code agent，但不提供 Opus；不能拼成 OpenAI + Opus。
     expect(
       effectiveSourceIdForModel(openaiOnly, null, 'claude-opus-4-8', 'claude-code'),
     ).toBeNull();
@@ -210,7 +257,7 @@ describe('registry visibility & sources', () => {
   });
 
   it('effectiveSourceIdForModel 保留有效显式来源，失效时回落到同模型默认来源', () => {
-    const all = buildRegistry(BUNDLED_CATALOG, {
+    const all = buildRegistry(runtimeCatalog(), {
       xd: true,
       anthropic: true,
       openai: true,
@@ -225,9 +272,9 @@ describe('registry visibility & sources', () => {
   });
 });
 
-describe('resolveRoute', () => {
-  const views = buildRegistry(BUNDLED_CATALOG, { xd: true, anthropic: true, openai: true, xai: true });
-  // xd 网关地址以内置 catalog(providers.json,端点单点)为准;门禁校验其与权威源一致
+describe('resolveRoute(运行时注入 fixture)', () => {
+  const views = buildRegistry(runtimeCatalog(), { xd: true, anthropic: true, openai: true, xai: true });
+  // xd 网关地址以内置身份卡(builtin.ts,端点单点)为准;门禁校验其与权威源一致
   const xdRouting = BUNDLED_CATALOG.providers.find((prov) => prov.id === 'xd')?.routing;
 
   it('anthropic claude (claude-code) → direct upstream, oauth-passthrough', () => {
@@ -237,7 +284,6 @@ describe('resolveRoute', () => {
   });
 
   it('xd claude (claude-code) → gateway, gateway-key, 不删 anthropic-beta(fast 经网关透传)', () => {
-    // commit 6024f25cb 起:XD cc 网关不再 headerDelete anthropic-beta，Fast 可经网关透传。
     const r = resolveRoute(views, 'xd', 'claude-opus-4-8', 'claude-code');
     expect(r?.routing.upstream).toBe(xdRouting?.['claude-code']?.upstream);
     expect(r?.routing.authStrategy).toBe('gateway-key');
@@ -259,9 +305,16 @@ describe('resolveRoute', () => {
   });
 
   it('rejects unsupported (provider, model, agent) combos', () => {
-    expect(resolveRoute(views, 'anthropic', 'gpt-5.5', 'claude-code')).toBeNull(); // anthropic offers no gpt
-    expect(resolveRoute(views, 'anthropic', 'claude-opus-4-8', 'codex')).toBeNull(); // anthropic has no codex agent
+    expect(resolveRoute(views, 'anthropic', 'gpt-5.5', 'claude-code')).toBeNull();
+    expect(resolveRoute(views, 'anthropic', 'claude-opus-4-8', 'codex')).toBeNull();
     expect(resolveRoute(views, 'openai', 'claude-opus-4-8', 'codex')).toBeNull();
     expect(resolveRoute(views, 'nope', 'claude-opus-4-8', 'claude-code')).toBeNull();
+  });
+
+  it('动态供应商未注入清单时不解析路由(无可用性证明不路由)', () => {
+    const bare = buildRegistry(BUNDLED_CATALOG, { xd: true, anthropic: true, openai: true, xai: true });
+    expect(resolveRoute(bare, 'anthropic', 'claude-opus-4-8', 'claude-code')).toBeNull();
+    expect(resolveRoute(bare, 'xd', 'gpt-5.5', 'codex')).toBeNull();
+    expect(resolveRoute(bare, 'xai', 'xai/grok-4.3', 'codex')?.routing.upstream).toBe('https://api.x.ai/v1');
   });
 });

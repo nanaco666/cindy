@@ -24,8 +24,6 @@ export interface MessageContentLayout {
   mediaGap: number;
   mediaPlaceholderMinHeight: number;
   mediaPreviewWidth: number;
-  mermaidCardGap: number;
-  mermaidCardPadding: number;
   toolResultMaxLines: number;
 }
 
@@ -65,8 +63,6 @@ export function buildMessageContentLayout(input: MessageContentLayoutInput): Mes
     mediaGap: compact ? 6 : 8,
     mediaPlaceholderMinHeight: compact ? 84 : 90,
     mediaPreviewWidth,
-    mermaidCardGap: compact ? 6 : 8,
-    mermaidCardPadding: compact ? 10 : 12,
     toolResultMaxLines: compact ? 6 : 8,
   };
 }

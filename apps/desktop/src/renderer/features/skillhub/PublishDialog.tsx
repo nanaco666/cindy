@@ -33,6 +33,7 @@ import { refresh as refreshSkillhub } from './hooks/useSkillhub';
 import { getPublishErrorCopy, type PublishActionType } from './lib/publishErrorMap';
 import { shouldHandlePublishProgressEvent } from './lib/publishProgressFilter';
 import { buildPublishFailureEvent, shouldDispatchPublishResultFallback } from './lib/publishFailureFallback';
+import { selectableUserTeams } from './lib/userTeams';
 import {
   buildSkillhubPublishParams,
   validateRequiredCategory,
@@ -559,8 +560,7 @@ export function PublishDialog({
     if (!open || !effectiveFirstPublish) return;
     void window.electronAPI.skillhub.listUserTeams().then((res) => {
       if (res.success) {
-        const teams = res.teams
-          .filter((t) => !t.isPersonal && t.source !== 'dept')
+        const teams = selectableUserTeams(res.teams)
           .map((t) => ({ slug: t.slug, name: t.name, type: t.type ?? 'team' }));
         setUserTeams(teams);
       }

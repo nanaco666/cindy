@@ -22,7 +22,8 @@ import { toast } from '@/lib/toast';
 import { AudiencePicker, PublisherPicker } from './TeamScopePicker';
 import { VisibilityCard } from '../PublishDialog';
 import { marketActionErrorMessage } from '../lib/marketErrors';
-import { deptMirrorTeamSlug } from '../lib/publishForm';
+import { matchesDeptMirrorTeamSlug } from '../lib/publishForm';
+import { selectableUserTeams } from '../lib/userTeams';
 import type { TeamOption } from '../lib/marketDetailViewModel';
 
 export type VisibilityTier = 'public' | 'team' | 'private';
@@ -98,16 +99,19 @@ export function VisibilityEditorDialog({
       const names = depts.success ? depts.names : [];
       setDeptIds(ids);
       setDeptNames(names);
-      const allTeams = teamsRes.success
-        ? teamsRes.teams.filter((team) => !team.isPersonal)
+      const regularTeams = teamsRes.success
+        ? selectableUserTeams(teamsRes.teams)
         : [];
       // 团队选项:普通团队;部门统一走 od- id(归属保存走 PATCH deptId)
-      setTeams(allTeams
-        .filter((team) => team.source !== 'dept')
+      setTeams(regularTeams
         .map((team) => ({ slug: team.slug, name: team.name, source: team.source })));
       // 当前归属是部门镜像团队时,映射回 od- id,让「部门」组里正确高亮
       if (currentOwnerIsTeam && currentOwnerSlug) {
-        const ownerOd = ids.find((id) => deptMirrorTeamSlug(id) === currentOwnerSlug);
+        const ownerTeamSource = teamsRes.success
+          ? teamsRes.teams.find((team) => team.slug === currentOwnerSlug)?.source
+          : undefined;
+        const ownerOd = ids.find((id) =>
+          matchesDeptMirrorTeamSlug(id, currentOwnerSlug, ownerTeamSource));
         if (ownerOd) setOwnerTeamSlug(ownerOd);
       }
       // 回显;不在我可选范围内的历史值原样保留,保存时不静默丢弃

@@ -9,6 +9,7 @@ import {
   View,
   type AccessibilityRole,
   type AccessibilityState,
+  type PressableProps,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -372,13 +373,17 @@ export function ScreenHeader({
   );
 }
 
-function ScreenBackButton({
-  compact,
+export function ScreenBackButton({
+  compact = false,
+  hitSlop,
   onPress,
+  style,
   testID,
 }: {
-  compact: boolean;
+  compact?: boolean;
+  hitSlop?: PressableProps['hitSlop'];
   onPress?: () => void;
+  style?: StyleProp<ViewStyle>;
   testID: string;
 }) {
   const styles = useThemedStyles(makeStyles);
@@ -390,16 +395,18 @@ function ScreenBackButton({
       accessibilityRole="button"
       accessibilityState={{ disabled: interactionDisabled }}
       disabled={interactionDisabled}
+      hitSlop={hitSlop}
       onPress={interactionDisabled ? undefined : onPress}
       style={({ pressed }) => [
         styles.backButton,
         compact && styles.backButtonCompact,
         pressed && styles.pressed,
         interactionDisabled && styles.disabled,
+        style,
       ]}
       testID={testID}
     >
-      <ChevronLeft color={colors.textPrimary} size={iconSize.xl} strokeWidth={iconStroke.regular} />
+      <ChevronLeft color={colors.textPrimary} size={iconSize.md} strokeWidth={iconStroke.medium} />
     </Pressable>
   );
 }
@@ -693,15 +700,17 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   backButton: {
     alignItems: 'center',
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.border,
     borderRadius: radius.pill,
-    height: 44,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 40,
     justifyContent: 'center',
-    marginLeft: -spacing.sm,
-    width: 44,
+    width: 40,
   },
   backButtonCompact: {
-    height: 36,
-    width: 36,
+    height: 40,
+    width: 40,
   },
   headerText: {
     flex: 1,

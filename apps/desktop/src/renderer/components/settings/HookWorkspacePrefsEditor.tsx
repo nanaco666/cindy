@@ -84,7 +84,7 @@ function toPrefsCaps(caps: AgentCapabilities | null): PrefsAgentCaps | null {
 }
 
 export interface HookWorkspacePrefsState {
-  /** 按别名查该目录偏好(无行返回全 null 缺省)。 */
+  /** 按别名查该目录偏好(无行返回全 null 缺省; multi-team 下按选中 team 过滤)。 */
   prefsFor: (alias: string) => HookWorkspacePrefs;
   /** 是否可编辑(已连接 + 已绑定 + 快照可用)。 */
   editable: boolean;
@@ -97,6 +97,13 @@ export interface HookWorkspacePrefsState {
   /** 桌面新会话默认设置(解析「当前生效默认值」的数据源; 未就绪为 null)。 */
   imDefaults: ImDefaultsLike | null;
   applyPatch: (workspace: string, patch: HookPrefsPatch) => void;
+  /** (multi-team)可用绑定清单(未 displaced); 单绑定/老 server 时 ≤1 条。 */
+  teams: Array<{ teamId: string; teamName: string | null }>;
+  /** 当前偏好归属 team(teams 非空时必有值; 选中项失效自动回落首个)。 */
+  selectedTeamId: string | null;
+  selectTeam: (teamId: string) => void;
+  /** 是否显示 team 切换 chip(server multi-team 且 ≥2 个可用绑定)。 */
+  showTeamChip: boolean;
 }
 
 /**
@@ -150,17 +157,44 @@ export function useHookWorkspacePrefs(hook: SlackHookView | null): HookWorkspace
     lastStatusRef.current = status;
   }, [status, fetchPrefs]);
 
-  const prefsByWorkspace = useMemo(() => {
-    const map = new Map<string, HookWorkspacePrefs>();
-    for (const entry of prefsView?.prefs ?? []) map.set(entry.workspace, entry);
-    return map;
-  }, [prefsView]);
+  // (multi-team)偏好归属 team: 可选清单 = 未 displaced 的绑定; 选中项失效
+  // (解绑/被顶)时自动回落首个, 不留悬空选择
+  const multiTeam = hook?.serverMultiTeam === true;
+  const teams = useMemo(
+    () =>
+      (hook?.bindings ?? [])
+        .filter((b) => !b.displaced)
+        .map((b) => ({ teamId: b.teamId, teamName: b.teamName })),
+    [hook],
+  );
+  const [selectedTeamRaw, setSelectedTeamRaw] = useState<string | null>(null);
+  const selectedTeamId = teams.some((tm) => tm.teamId === selectedTeamRaw)
+    ? selectedTeamRaw
+    : (teams[0]?.teamId ?? null);
+
+  const prefsFor = useCallback(
+    (alias: string): HookWorkspacePrefs => {
+      const entries = prefsView?.prefs ?? [];
+      if (multiTeam && selectedTeamId !== null) {
+        // 精确 team 匹配优先; 老 server 存量行(无 teamId)宽松兜底
+        return (
+          entries.find((e) => e.workspace === alias && (e.teamId ?? null) === selectedTeamId) ??
+          entries.find((e) => e.workspace === alias && (e.teamId ?? null) === null) ??
+          emptyPrefs(alias)
+        );
+      }
+      return entries.find((e) => e.workspace === alias) ?? emptyPrefs(alias);
+    },
+    [prefsView, multiTeam, selectedTeamId],
+  );
 
   const applyPatch = useCallback(
     (workspace: string, patch: HookPrefsPatch) => {
       setPendingWs(workspace);
       void window.electronAPI.hookControl
-        .setWorkspacePrefs(workspace, patch)
+        // multi-team 下写偏好必须带归属 team(server 拒绝猜测); 单绑定/老
+        // server 缺省, 帧面与既有行为一致
+        .setWorkspacePrefs(workspace, patch, multiTeam ? selectedTeamId : undefined)
         .then((res) => {
           setPrefsView(res.prefs);
           setLoadError(null);
@@ -173,7 +207,7 @@ export function useHookWorkspacePrefs(hook: SlackHookView | null): HookWorkspace
         })
         .finally(() => setPendingWs(null));
     },
-    [fetchPrefs, t],
+    [fetchPrefs, t, multiTeam, selectedTeamId],
   );
 
   const connected = hook?.enabled === true && hook.status === 'connected';
@@ -187,13 +221,17 @@ export function useHookWorkspacePrefs(hook: SlackHookView | null): HookWorkspace
         : null;
 
   return {
-    prefsFor: (alias) => prefsByWorkspace.get(alias) ?? emptyPrefs(alias),
+    prefsFor,
     editable: connected && bound && loadError === null,
     pendingWs,
     hint,
     retry: loadError === 'unavailable' ? () => void fetchPrefs() : null,
     imDefaults,
     applyPatch,
+    teams,
+    selectedTeamId,
+    selectTeam: setSelectedTeamRaw,
+    showTeamChip: multiTeam && teams.length > 1,
   };
 }
 

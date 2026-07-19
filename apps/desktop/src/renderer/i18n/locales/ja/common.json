@@ -93,6 +93,7 @@
       "personalization": "パーソナライズ",
       "chipMetrics": "使用量インジケーター",
       "memory": "メモリ",
+      "subagentModels": "サブエージェントモデル",
       "compaction": "コンテキスト圧縮",
       "terminalShell": "デフォルトターミナルシェル",
       "linkOpen": "リンクの開き方",
@@ -1327,6 +1328,14 @@
         }
       }
     },
+    "subagentModels": {
+      "title": "サブエージェントモデル",
+      "description": "Claude と Codex のサブエージェントに個別のデフォルトモデルを指定します。",
+      "unspecified": "指定しない（既定の動作を使用）",
+      "codexUnavailable": "現在の Codex バージョンでは安全な上書きに未対応です",
+      "hint": "未指定の場合は上書きを注入しません。Claude の変更は新規セッションから有効です。Codex の完全コンテキスト fork は現在モデル上書きに対応していません。",
+      "saveFailed": "サブエージェントモデルの保存に失敗しました"
+    },
     "compaction": {
       "title": "コンテキスト圧縮",
       "description": "Claude Code がいつ自動的にコンテキストを圧縮するかを制御します。",
@@ -1711,7 +1720,8 @@
         },
         "toast": {
           "saveFailed": "保存に失敗しました",
-          "toggleFailed": "切り替えに失敗しました"
+          "toggleFailed": "切り替えに失敗しました",
+          "actionFailed": "操作に失敗しました"
         },
         "loginRequired": "先に {{appName}} アカウントにログインしてください。ログイン後、接続は自動的に復旧します。",
         "authorizing": "認可中…",
@@ -1727,6 +1737,26 @@
           "confirmInstall": "インストール",
           "confirmCancel": "キャンセル",
           "waitingHint": "インストールの完了を待っています…完了するとバインドは自動的に行われ、再認証は不要です。"
+        },
+        "multi": {
+          "title": "Slack ワークスペース",
+          "statusWorkspaces_one": "{{count}} 個のワークスペース",
+          "statusWorkspaces_other": "{{count}} 個のワークスペース",
+          "statusPendingSuffix_one": "({{count}} 件対応待ち)",
+          "statusPendingSuffix_other": "({{count}} 件対応待ち)",
+          "statusOffKept_one": "オフ · {{count}} 個のワークスペース連携を保持中",
+          "statusOffKept_other": "オフ · {{count}} 個のワークスペース連携を保持中",
+          "displaced": "別のデバイスで連携済み",
+          "rebind": "再連携",
+          "removeAria": "このワークスペースの連携を解除",
+          "removeConfirmTitle": "{{team}} の連携を解除",
+          "removeConfirmDescription": "解除すると、Slack ワークスペース「{{team}}」からこのデバイスへタスクを送れなくなります。必要になったら、いつでも再認証して連携し直せます。",
+          "removeDisplacedConfirmDescription": "この連携は別のデバイスに引き継がれています。削除しても、ローカルの一覧からこの行が消えるだけです。",
+          "removeConfirm": "解除",
+          "cancelPending": "キャンセル",
+          "dismiss": "閉じる",
+          "addWorkspace": "Slack ワークスペースを追加",
+          "alreadyBound": "認可されたのはすでに連携済みの {{team}} です。別のワークスペースを追加するには、Slack の認可ページ右上でワークスペースを切り替えてから許可してください。"
         }
       },
       "summary": {
@@ -1759,7 +1789,8 @@
         "retry": "再試行",
         "toast": {
           "saveFailed": "ディレクトリ設定の保存に失敗しました"
-        }
+        },
+        "teamChipAria": "設定の対象となる Slack ワークスペースを選択"
       }
     },
     "devices": {
@@ -3135,6 +3166,24 @@
       "queueTooltip": "クリックでキューに追加。{{shortcut}} でタスクを中断せずに割り込み送信",
       "stop": "生成を停止"
     },
+    "createAgent": {
+      "quickStart": "クイックスタート",
+      "quickStarts": {
+        "explore": "コードを探索して理解",
+        "build": "新機能、アプリ、ツールを構築",
+        "review": "コードをレビューして修正を提案",
+        "fix": "問題や失敗を修正"
+      },
+      "sidebar": {
+        "new": "新規",
+        "automation": "自動化",
+        "skills": "スキル",
+        "search": "検索",
+        "local": "ローカル",
+        "projects": "プロジェクト",
+        "conversations": "会話"
+      }
+    },
     "addRemoteProject": {
       "title": "リモートプロジェクトを追加",
       "hint": "接続済みのリモートホストまたは被制御デバイスを選び、このプロジェクトのフォルダを選択します。",
@@ -3398,7 +3447,10 @@
     },
     "pastedText": {
       "chipLabel": "貼り付けたテキスト({{lines}} 行)",
-      "previewTitle": "貼り付けたテキスト"
+      "previewTitle": "貼り付けたテキスト",
+      "editTitle": "貼り付けたテキストを編集",
+      "cancelEdit": "編集をキャンセル",
+      "saveEdit": "テキストを保存"
     }
   },
   "voiceInputOverlay": {
@@ -4786,6 +4838,7 @@
         "timezoneRequired": "タイムゾーンは必須です",
         "selectThread": "対象スレッドを選択してください",
         "selectProject": "プロジェクトディレクトリを選択してください",
+        "modelUnavailable": "モデル {{model}} は利用できません。別のモデルを選択してください",
         "reasoningInvalid": "Reasoning は {{values}} のいずれかである必要があります",
         "preRunHookCommandRequired": "事前チェックスクリプトのコマンドを入力してください"
       }

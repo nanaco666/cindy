@@ -44,9 +44,14 @@ function makeStore(cleanup?: (ids: string[]) => void) {
 }
 
 describe('默认态与持久化', () => {
-  it('无文件: 关闭 + 空目录清单 + 内置默认地址', () => {
+  it('无文件: 关闭 + 空目录清单 + 内置默认地址 + 空绑定缓存', () => {
     const store = makeStore();
-    expect(store.get()).toEqual({ enabled: false, urlOverride: null, workspaces: {} });
+    expect(store.get()).toEqual({
+      enabled: false,
+      urlOverride: null,
+      workspaces: {},
+      bindingsCache: [],
+    });
     expect(store.effectiveUrl()).toBe(TEST_DEFAULT_URL);
   });
 
@@ -120,6 +125,55 @@ describe('旧多连接文件迁移', () => {
 
   it('旧文件损坏: 迁移跳过, 回默认态', () => {
     fs.writeFileSync(legacyPath(), 'not-json');
-    expect(makeStore().get()).toEqual({ enabled: false, urlOverride: null, workspaces: {} });
+    expect(makeStore().get()).toEqual({
+      enabled: false,
+      urlOverride: null,
+      workspaces: {},
+      bindingsCache: [],
+    });
+  });
+});
+
+describe('(multi-team)bindingsCache 持久化', () => {
+  const T1 = { teamId: 'T1', teamName: 'xindong', slackUserId: 'U1', slackUserName: 'lizi' };
+  const T2 = { teamId: 'T2', teamName: null, slackUserId: 'U2', slackUserName: null };
+
+  it('setBindingsCache 落盘, 重建实例仍在; 覆写为空即清空', () => {
+    makeStore().setBindingsCache([T1, T2]);
+    expect(makeStore().get().bindingsCache).toEqual([T1, T2]);
+    makeStore().setBindingsCache([]);
+    expect(makeStore().get().bindingsCache).toEqual([]);
+  });
+
+  it('读回时坏条目静默丢弃(缺 teamId/slackUserId、非对象), teamName 非字符串归 null', () => {
+    fs.writeFileSync(
+      filePath(),
+      JSON.stringify({
+        enabled: false,
+        urlOverride: null,
+        workspaces: {},
+        bindingsCache: [
+          T1,
+          { teamId: '', slackUserId: 'U9' }, // teamId 空串 → 丢
+          { teamId: 'T3' }, // 缺 slackUserId → 丢
+          'not-an-object', // 非对象 → 丢
+          { teamId: 'T4', teamName: 42, slackUserId: 'U4', slackUserName: 7 }, // 非字符串名 → null
+        ],
+      }),
+    );
+    expect(makeStore().get().bindingsCache).toEqual([
+      T1,
+      { teamId: 'T4', teamName: null, slackUserId: 'U4', slackUserName: null },
+    ]);
+  });
+
+  it('bindingsCache 字段非数组: 回空数组不炸', () => {
+    fs.writeFileSync(
+      filePath(),
+      JSON.stringify({ enabled: true, urlOverride: null, workspaces: {}, bindingsCache: 'junk' }),
+    );
+    const state = makeStore().get();
+    expect(state.enabled).toBe(true);
+    expect(state.bindingsCache).toEqual([]);
   });
 });

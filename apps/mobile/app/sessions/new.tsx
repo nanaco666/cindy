@@ -1,6 +1,7 @@
 import { stripTrailingPathSeparators } from '@lizi/maker-shared/path-text';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Constants from 'expo-constants';
+import { MOBILE_VISUAL_MOCK_ENABLED } from '@/config/env';
 import { formatMobileBuildLabel, normalizeBuildInfo } from '@/config/buildInfo';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type SetStateAction } from 'react';
 import {
@@ -22,11 +23,9 @@ import {
 import { Text } from '@/components/AppText';
 import type { TextInput as NativeTextInput } from 'react-native';
 import {
-  ArrowUp,
   Camera,
   Check,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
   Folder,
@@ -38,6 +37,7 @@ import {
   Mic,
   Plus,
   Scan,
+  Send,
   Settings,
   Square,
   Target,
@@ -49,6 +49,7 @@ import {
   setAudioModeAsync,
 } from 'expo-audio';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ScreenBackButton } from '@/components/MobilePrimitives';
 import { useDeviceLink } from '@/device-link/DeviceLinkContext';
 import type {
   MobileAgentSkillListResult,
@@ -90,8 +91,11 @@ import {
 } from '@/session/composerPaletteCache';
 import {
   buildAgentCapabilitiesCacheKey,
+  commitAgentCapabilities,
+  getAgentCapabilitiesGeneration,
   getCachedAgentCapabilities,
-  setCachedAgentCapabilities,
+  isAgentCapabilitiesGenerationCurrent,
+  subscribeAgentCapabilities,
 } from '@/session/agentCapabilitiesCache';
 import {
   ContextSheet,
@@ -216,7 +220,7 @@ import {
   type ProviderModelRow,
 } from '@/session/providerModelSections';
 import { ModelPickerSheet } from '@/session/ModelPickerSheet';
-import { MobileProviderMark } from '@/session/MobileProviderMark';
+import { MobileModelBrandMark } from '@/session/MobileProviderMark';
 import { draftModelMemoryFor, hydrateDraftModelMemory } from '@/session/draftModelMemory';
 import { rowFastEditable } from '@/session/modelPickerRows';
 import { useTheme, useThemedStyles, type ThemeColors } from '@/theme';
@@ -254,10 +258,14 @@ export default function NewRemoteSessionScreen() {
     deviceOptions?: string;
     workingDir?: string;
     deviceExplicit?: string;
+    visualFocusComposer?: string;
+    visualDraft?: string;
   }>();
   const routeDeviceId = String(params.deviceId ?? '');
   const routeDeviceName = String(params.deviceName ?? routeDeviceId);
   const initialWorkingDir = readRouteString(params.workingDir);
+  const visualFocusComposer = MOBILE_VISUAL_MOCK_ENABLED && readRouteString(params.visualFocusComposer) === '1';
+  const visualInitialDraft = MOBILE_VISUAL_MOCK_ENABLED ? readRouteString(params.visualDraft) : null;
   const router = useRouter();
   const auth = useAuth();
   const { openLink, subscribe } = useDeviceLink();
@@ -303,6 +311,7 @@ export default function NewRemoteSessionScreen() {
   );
   const [draft, setDraft] = useState<NewSessionDraft>({
     ...DEFAULT_NEW_SESSION_DRAFT,
+    firstMessage: visualInitialDraft ?? DEFAULT_NEW_SESSION_DRAFT.firstMessage,
     // 默认进入「对话」(无项目),对齐桌面;只有从项目入口带了 workingDir 才默认项目模式。
     workspaceKind: initialWorkingDir ? 'project' : 'dialogue',
     workingDir: initialWorkingDir ?? '',
@@ -445,6 +454,9 @@ export default function NewRemoteSessionScreen() {
   // 自动默认运行配置(跟随最近会话 / 列表最上面)的守卫:用户一旦手动选过模型,就不再自动覆盖;
   // 记录已自动应用过的设备,切设备时(未手动选过)按新设备重算。
   const userTouchedRuntimeRef = useRef(false);
+  // 只保护当前页面刚从 provider 目录显式选中的模型，避免旧 capabilities 在途结果误回退；
+  // 持久草稿不会写入该 ref，因此已下架模型仍走 mobile 的首项降级。
+  const explicitProviderModelSelectionRef = useRef<string | null>(null);
   const autoDefaultDeviceRef = useRef<string | null>(null);
   const runtimeOptions = useMemo(
     () => buildSessionRuntimeOptions(draft, capabilities),
@@ -824,6 +836,7 @@ export default function NewRemoteSessionScreen() {
       cancelVoiceForDeviceSwitch();
     }
     userTouchedDeviceRef.current = true;
+    explicitProviderModelSelectionRef.current = null;
     setSelectedDeviceId(option.deviceId);
     setSelectedDeviceName(option.name || option.deviceId);
     void saveNewSessionPreferences({
@@ -876,14 +889,31 @@ export default function NewRemoteSessionScreen() {
       return;
     }
     const seq = ++capabilitiesSeqRef.current;
+    let cancelled = false;
     const agentKind = draft.agentKind;
     // 能力表按 (设备, agent) 基本不变:缓存命中先画(选择器立即可用),后台静默刷新。
     const capabilitiesCacheKey = buildAgentCapabilitiesCacheKey(selectedDeviceId, agentKind);
+    const generation = getAgentCapabilitiesGeneration(selectedDeviceId);
+    const applyCapabilities = (next: MobileAgentCapabilities): void => {
+      if (cancelled) return;
+      setCapabilities(next);
+      setCapabilitiesLoading(false);
+      setCapabilitiesError(null);
+      setDraft((current) => current.agentKind === agentKind
+        ? reconcileRuntimeDraftWithCapabilities(current, next, {
+          preserveUnknownModel: explicitProviderModelSelectionRef.current === current.model,
+        })
+        : current);
+    };
+    const unsubscribe = subscribeAgentCapabilities(selectedDeviceId, agentKind, applyCapabilities);
     const cachedCapabilities = getCachedAgentCapabilities(capabilitiesCacheKey);
     if (cachedCapabilities) {
       setCapabilities(cachedCapabilities);
+      setCapabilitiesLoading(false);
       setDraft((current) => current.agentKind === agentKind
-        ? reconcileRuntimeDraftWithCapabilities(current, cachedCapabilities)
+        ? reconcileRuntimeDraftWithCapabilities(current, cachedCapabilities, {
+          preserveUnknownModel: explicitProviderModelSelectionRef.current === current.model,
+        })
         : current);
     } else {
       setCapabilitiesLoading(true);
@@ -896,7 +926,12 @@ export default function NewRemoteSessionScreen() {
       .then((result) => {
         if (capabilitiesSeqRef.current !== seq) return;
         const normalized = normalizeMobileAgentCapabilities(result);
-        if (normalized) setCachedAgentCapabilities(capabilitiesCacheKey, normalized);
+        if (normalized) {
+          // state/draft 只经当前代际 commit 的订阅通知更新，旧请求无法覆盖 revision 新快照。
+          commitAgentCapabilities(selectedDeviceId, agentKind, generation, normalized);
+          return;
+        }
+        if (!isAgentCapabilitiesGenerationCurrent(selectedDeviceId, generation)) return;
         if (!normalized && cachedCapabilities) {
           // 缓存已画时保留旧能力表,只报错。
           setCapabilitiesError('远程能力返回格式不支持');
@@ -904,14 +939,10 @@ export default function NewRemoteSessionScreen() {
         }
         setCapabilities(normalized);
         setCapabilitiesError(normalized ? null : '远程能力返回格式不支持');
-        if (normalized) {
-          setDraft((current) => current.agentKind === agentKind
-            ? reconcileRuntimeDraftWithCapabilities(current, normalized)
-            : current);
-        }
       })
       .catch((err) => {
         if (capabilitiesSeqRef.current !== seq) return;
+        if (!isAgentCapabilitiesGenerationCurrent(selectedDeviceId, generation)) return;
         if (cachedCapabilities) {
           setCapabilitiesError(formatRemoteError(err));
           return;
@@ -920,8 +951,15 @@ export default function NewRemoteSessionScreen() {
         setCapabilitiesError(formatRemoteError(err));
       })
       .finally(() => {
-        if (capabilitiesSeqRef.current === seq) setCapabilitiesLoading(false);
+        if (
+          capabilitiesSeqRef.current === seq
+          && isAgentCapabilitiesGenerationCurrent(selectedDeviceId, generation)
+        ) setCapabilitiesLoading(false);
       });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [selectedDeviceId, draft.agentKind, maker, openLink]);
 
   useEffect(() => {
@@ -1170,6 +1208,7 @@ export default function NewRemoteSessionScreen() {
         hasFastModeCap: capabilities?.hasFastMode === true,
         memory: draftMemory,
       });
+      explicitProviderModelSelectionRef.current = next.model;
       // 选定即记忆该 (来源, 模型) 的 effort(对齐桌面「选定后写记忆」),下次选回可恢复。
       if (next.effort) draftMemory.setEffort(current.agentKind, next.providerId, next.model, next.effort);
       return {
@@ -1186,6 +1225,7 @@ export default function NewRemoteSessionScreen() {
   // 扁平回退(被控端 0 供应商):只落 model、清来源(默认路由),effort 跟随 capabilities reconcile。
   const selectFlatModel = useCallback((option: MobileModelOption) => {
     userTouchedRuntimeRef.current = true; // 用户手动选了模型 → 不再自动覆盖运行配置
+    explicitProviderModelSelectionRef.current = null;
     setDraft((current) =>
       reconcileRuntimeDraftWithCapabilities({ ...current, model: option.id, providerId: null }, capabilities));
     setModelSheetOpen(false);
@@ -1473,10 +1513,18 @@ export default function NewRemoteSessionScreen() {
         setContextSheetView('main');
         setContextSheetOpen(true);
       }}
-      style={({ pressed }) => [styles.composerIconButton, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.composerIconButton,
+        contextSheetOpen && styles.composerIconButtonActive,
+        pressed && styles.pressed,
+      ]}
       testID="newSession.attachmentToggleButton"
     >
-      <Plus color={colors.textPrimary} size={iconSize.lg} strokeWidth={iconStroke.regular} />
+      <Plus
+        color={contextSheetOpen ? colors.textPrimary : colors.textSecondary}
+        size={iconSize.sm}
+        strokeWidth={iconStroke.regular}
+      />
     </Pressable>
   );
   const renderCreateButton = () => (
@@ -1498,8 +1546,9 @@ export default function NewRemoteSessionScreen() {
       {creating ? (
         <ActivityIndicator color={colors.textSecondary} size="small" />
       ) : (
-        <ArrowUp
-          color={canCreate ? colors.ctaText : colors.textTertiary}
+        <Send
+          color={canCreate ? colors.ctaText : colors.textSecondary}
+          fill={canCreate ? colors.ctaText : 'transparent'}
           size={iconSize.lg}
           strokeWidth={iconStroke.medium}
         />
@@ -1528,10 +1577,13 @@ export default function NewRemoteSessionScreen() {
         testID="newSession.modelIndicator"
       >
         {activeSourceProvider ? (
-          <MobileProviderMark
-            color={colors.textPrimary}
-            name={activeSourceProvider.name}
-            providerId={activeSourceProvider.id}
+          <MobileModelBrandMark
+            agentKind={draft.agentKind}
+            color={colors.textSecondary}
+            displayName={runtimeOptions.currentModel?.label}
+            fallbackProviderId={activeSourceProvider.id}
+            fallbackProviderName={activeSourceProvider.name}
+            modelId={draft.model}
           />
         ) : null}
         <Text style={styles.modelPillText} numberOfLines={1}>{runtimeSummary.modelSummary}</Text>
@@ -1619,7 +1671,7 @@ export default function NewRemoteSessionScreen() {
         // 与「停止任务」的中性色实心方块区分开。
         <Square color={colors.statusRecording} size={iconSize.sm} strokeWidth={iconStroke.regular} />
       ) : (
-        <Mic color={colors.textPrimary} size={iconSize.lg} strokeWidth={iconStroke.regular} />
+        <Mic color={colors.textSecondary} size={iconSize.sm} strokeWidth={iconStroke.regular} />
       )}
     </Pressable>
   );
@@ -1630,6 +1682,7 @@ export default function NewRemoteSessionScreen() {
     setAgentPickerOpen(false);
     if (draft.agentKind === nextKind) return;
     userTouchedRuntimeRef.current = true;
+    explicitProviderModelSelectionRef.current = null;
     void saveNewSessionPreferences({ agentKind: nextKind });
     // 取目标 agent 自己的模型列表(providers 已加载时同步可得),用于"列表最上面"兜底 + effort reconcile。
     const rows = flattenProviderSections(
@@ -2134,16 +2187,12 @@ export default function NewRemoteSessionScreen() {
       >
         <View style={styles.screen}>
           <View style={styles.topBar}>
-            <Pressable
-              accessibilityLabel="返回"
-              accessibilityRole="button"
+            <ScreenBackButton
               hitSlop={12}
               onPress={handleBack}
-              style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
+              style={styles.backButton}
               testID="newSession.backButton"
-            >
-              <ChevronLeft color={colors.textPrimary} size={iconSize.xl} strokeWidth={iconStroke.regular} />
-            </Pressable>
+            />
             {buildLabel ? (
               <Text numberOfLines={1} style={styles.buildLabel}>{buildLabel}</Text>
             ) : null}
@@ -2502,13 +2551,15 @@ export default function NewRemoteSessionScreen() {
                 <MobileComposerInputRow
                   accessibilityLabel="输入首条消息"
                   accessoryAbove={attachments.length > 0 || pendingUploads.length > 0 || pastePlaceholderCount > 0 ? renderComposerAttachmentTray() : null}
+                  autoFocus={visualFocusComposer}
                   cardActive={composerCardActive}
                   caretHidden={voiceIsListening}
+                  cursorColor={colors.inputCaret}
                   inputRef={firstMessageInputRef}
                   leading={renderComposerCollapsedAttachmentBadge()}
                   inputFrameHeight={composerResize.frameHeight}
                   inputOverlay={renderComposerInputOverlay()}
-                  inputStyle={voiceIsListening && styles.inputVoiceHidden}
+                  inputStyle={[styles.sessionComposerInput, voiceIsListening && styles.inputVoiceHidden]}
                   inputTestID="newSession.firstMessageInput"
                   maxHeight={composerResize.inputMaxHeight}
                   multilineShape={!composerCardActive && composerInputIsMultiline}
@@ -2530,6 +2581,7 @@ export default function NewRemoteSessionScreen() {
                   placeholderTextColor={colors.textTertiary}
                   resizeHandle={composerCardActive ? renderComposerResizeHandle() : null}
                   scrollEnabled={composerInputScrollEnabled}
+                  selectionColor={colors.inputCaret}
                   testID="newSession.actions"
                   toolbar={renderComposerToolbar()}
                   trailing={composerCardActive || !composerShowCreateButton ? null : renderCreateButton()}
@@ -2864,12 +2916,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   backButton: {
-    alignItems: 'center',
-    height: 44,
-    justifyContent: 'center',
-    // 与全局 ScreenBackButton 对齐:裸 chevron,无底无边;左移抵掉视觉留白让图标贴回版心。
-    marginLeft: -spacing.sm,
-    width: 44,
+    flexShrink: 0,
   },
   bottomCluster: {
     flex: 1,
@@ -3175,13 +3222,17 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   composerIconButton: {
     alignItems: 'center',
+    backgroundColor: colors.sheetActionSurface,
+    borderColor: colors.sheetActionBorder,
     borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
     height: MOBILE_COMPOSER_CONTROL_SIZE,
     justifyContent: 'center',
     width: MOBILE_COMPOSER_CONTROL_SIZE,
   },
   composerIconButtonActive: {
     backgroundColor: colors.surfaceChip,
+    borderColor: colors.borderStrong,
   },
   voiceStatusRow: {
     alignItems: 'center',
@@ -3240,19 +3291,29 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // 只在行宽不足时才收缩截断(flexShrink + 文本 numberOfLines)。
   modelPill: {
     alignItems: 'center',
+    backgroundColor: colors.sheetActionSurface,
+    borderColor: colors.sheetActionBorder,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     flexShrink: 1,
-    gap: 6,
+    gap: spacing.xs,
     justifyContent: 'flex-start',
+    minHeight: MOBILE_COMPOSER_CONTROL_SIZE,
     minWidth: 0,
+    paddingHorizontal: spacing.md,
   },
   modelPillText: {
-    color: colors.textSecondary,
+    color: colors.textPrimary,
     flexShrink: 1,
-    fontSize: typeScale.body,
-    fontWeight: fontWeight.medium,
-    lineHeight: lineHeight.body,
+    fontSize: typeScale.caption,
+    fontWeight: fontWeight.semibold,
+    lineHeight: lineHeight.caption,
     minWidth: 0,
+  },
+  sessionComposerInput: {
+    fontSize: typeScale.listBody,
+    lineHeight: lineHeight.listBody,
   },
   inputVoiceHidden: {
     color: 'transparent',
@@ -3260,13 +3321,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   sendButton: {
     alignItems: 'center',
     backgroundColor: colors.cta,
+    borderColor: colors.cta,
     borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
     height: MOBILE_COMPOSER_CONTROL_SIZE,
     justifyContent: 'center',
     width: MOBILE_COMPOSER_CONTROL_SIZE,
   },
-  sendButtonDisabled: { backgroundColor: colors.surfaceChip },
-  sendButtonPressed: { opacity: 0.72 },
+  sendButtonDisabled: {
+    backgroundColor: colors.surfaceChip,
+    borderColor: colors.border,
+  },
+  sendButtonPressed: { opacity: 0.86 },
   pressed: { opacity: 0.65 },
   disabled: { opacity: 0.44 },
 });

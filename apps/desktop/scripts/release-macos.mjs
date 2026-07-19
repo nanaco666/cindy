@@ -3,8 +3,11 @@
 /**
  * release-macos.mjs — macOS 平台客户端发布脚本（arm64 + x64）
  *
- * 用法: node scripts/release-macos.mjs [version]
- *   version 可选：major | minor | patch | x.y.z（默认 patch）
+ * 用法: node scripts/release-macos.mjs [version] [--region cn|global] [--arch arm64|x64]
+ *   version 可选：major | minor | patch | x.y.z（默认 patch;该渠道首次发布必须传显式 x.y.z）
+ *   --region 可选：cn(默认,国内渠道) | global(海外渠道)。区域决定应用身份
+ *   (Cindy / CindyGlobal)、烘焙端点(config/endpoint*.json)与发布目标
+ *   (XDT_* vs XDT_GLOBAL_* 的 OSS/CDN),见 docs/desktop-release-cn-global.md。
  *
  * 环境变量（可写入 apps/desktop/.env，已 gitignored）:
  *   FP_DEV_OSS_ACCESS_KEY_ID     — 必填，阿里云 AK
@@ -47,7 +50,11 @@ import {
   OSS_PREFIX,
   OSS_REGION,
   refreshOssConfig,
-  PACKAGED_APP_NAME, assertNotPublishingCindyToLegacyChannel } from './ci/lib.mjs';
+  resolveOssCredentials,
+  packagedAppName,
+  releaseArtifactBasename,
+  assertNotPublishingCindyToLegacyChannel } from './ci/lib.mjs';
+import { applyReleaseRegionConfigToEnv } from './ci/release-regions.mjs';
 
 const require = createRequire(import.meta.url);
 const OSS = require('ali-oss');
@@ -64,13 +71,35 @@ try {
   }
 } catch { /* no .env file, that's fine */ }
 
-refreshOssConfig();
+// 发布区域:cn(国内,默认)/ global(海外)。区域决定应用身份、烘焙端点与
+// 发布目标渠道,必须在 refreshOssConfig 之前解析。
+const REGION = (() => {
+  const idx = process.argv.indexOf('--region');
+  const value = idx !== -1 && process.argv[idx + 1] ? process.argv[idx + 1] : 'cn';
+  if (!['cn', 'global'].includes(value)) {
+    console.error(`ERROR: --region must be cn or global (got "${value}")`);
+    process.exit(1);
+  }
+  return value;
+})();
+// forge.config.ts(appId / exe 基名)与 ensureBinary 的 CDN fallback 都读这个变量。
+process.env.CINDY_AUTH_REGION = REGION;
+
+// 发布目标优先从发版机本地 scripts/release-regions.json 取(env 显式值优先,
+// 见 ci/release-regions.mjs;真机密 AK/SK 等仍走 env / .env)。
+applyReleaseRegionConfigToEnv(REGION);
+
+refreshOssConfig(REGION);
 // 渠道冻结硬闸:Cindy 布局产物禁止发布到老 /xdt-maker 前缀(见 lib.mjs)。
 assertNotPublishingCindyToLegacyChannel(OSS_PREFIX);
 
 const PROJECT_ROOT = path.resolve(DESKTOP_ROOT, '../..');
 const RELEASE_DIR = path.join(DESKTOP_ROOT, 'release');
-const CDN_BASE = resolveReleaseCdnBaseUrl();
+const CDN_BASE = resolveReleaseCdnBaseUrl(REGION);
+// 产物基名按区域派生:out 目录 / .app 用应用身份名(Cindy / CindyGlobal),
+// 安装包 / 热更 zip 文件名用发布渠道基名(cn 'cindy' / global 'cindy-global')。
+const APP_NAME = packagedAppName(REGION);
+const ARTIFACT_BASENAME = releaseArtifactBasename(REGION);
 
 // Apple signing config(身份默认值单点在 ci/lib.mjs 的 resolveAppleIdentity,此处
 // 在 .env 加载之后调用)。APPLE_APP_PASSWORD 是敏感凭据,绝对不允许 fallback 到源码
@@ -178,10 +207,13 @@ async function fetchExistingManifest(platformKey) {
   console.warn(`    canary manifest missing — falling back to stable manifest for version baseline`);
   const stableUrl = `${CDN_BASE}/manifest-${platformKey}.json?t=${Date.now()}`;
   const stableRes = await fetchWithRetry(stableUrl);
-  if (!stableRes.ok) {
+  if (stableRes.ok) return await stableRes.json();
+  if (stableRes.status !== 404) {
     throw new Error(`Failed to fetch manifest (${stableRes.status}): ${stableUrl}`);
   }
-  return await stableRes.json();
+  // canary 与 stable 都不存在:全新渠道(如 global 首发)。返回 null,由调用方
+  // 要求显式 x.y.z 版本号后从空 manifest 起步。
+  return null;
 }
 
 function getLocalClaudeCodeVersion(platformKey) {
@@ -221,18 +253,8 @@ async function gzipFile(srcPath, destPath) {
   await pipeline(src, gzip, dest);
 }
 
-function getAKSK() {
-  const accessKeyId = process.env.FP_DEV_OSS_ACCESS_KEY_ID;
-  const accessKeySecret = process.env.FP_DEV_OSS_ACCESS_KEY_SECRET;
-  if (!accessKeyId || !accessKeySecret) {
-    console.error('ERROR: FP_DEV_OSS_ACCESS_KEY_ID and FP_DEV_OSS_ACCESS_KEY_SECRET must be set');
-    process.exit(1);
-  }
-  return { accessKeyId, accessKeySecret };
-}
-
 function createOSSClient() {
-  const { accessKeyId, accessKeySecret } = getAKSK();
+  const { accessKeyId, accessKeySecret } = resolveOssCredentials(REGION);
   return new OSS({
     region: OSS_REGION,
     accessKeyId,
@@ -464,6 +486,8 @@ async function main() {
       i >= 2 &&
       process.argv[i - 1] !== '--arch' &&
       _ !== '--arch' &&
+      process.argv[i - 1] !== '--region' &&
+      _ !== '--region' &&
       _ !== '--require-relogin',
   )[0];
   const requireRelogin =
@@ -481,17 +505,27 @@ async function main() {
     }
   }
 
+  console.log(`==> Release region: ${REGION} (app: ${APP_NAME}, CDN: ${CDN_BASE})`);
+
   // Use darwin-arm64 manifest as version reference
   const refManifest = await fetchExistingManifest('darwin-arm64');
-  const cdnVersion = refManifest.app.version;
+  const isExplicitVersion = /^\d+\.\d+\.\d+$/.test(argVersion ?? '');
+  if (!refManifest && !isExplicitVersion) {
+    // 全新渠道没有版本基线,bump 关键字无从计算 —— 首发必须显式指定版本号。
+    console.error(`ERROR: no canary/stable manifest found on this channel (${CDN_BASE}).`);
+    console.error('       First release on a fresh channel requires an explicit x.y.z version, e.g.');
+    console.error(`       node scripts/release-macos.mjs 1.0.0 --region ${REGION}`);
+    process.exit(1);
+  }
+  const cdnVersion = refManifest?.app?.version;
   const hasCdnVersion = cdnVersion && cdnVersion !== '0.0.0';
 
-  if (!hasCdnVersion) {
+  if (refManifest && !hasCdnVersion) {
     console.error(`ERROR: CDN manifest has no valid version (got "${cdnVersion}"). Aborting release.`);
     console.error(`       URL: ${CDN_BASE}/manifest-darwin-arm64-canary.json (or stable fallback)`);
     process.exit(1);
   }
-  console.log(`==> CDN current version: ${cdnVersion}`);
+  console.log(`==> CDN current version: ${cdnVersion ?? '(none — fresh channel)'}`);
 
   let version;
   if (argVersion === 'major') {
@@ -567,14 +601,15 @@ async function main() {
       env: {
         ...process.env,
         NODE_ENV: 'production',
-        ...desktopClientBuildEnv({ allowEnvOverride: false }),
+        ...desktopClientBuildEnv({ allowEnvOverride: false, authRegion: REGION }),
+        CINDY_AUTH_REGION: REGION,
         APP_VERSION: version, // forge.config.ts 读取此变量注入到 packagerConfig.appVersion
       },
     });
 
     // 3. Find .app
-    const packagedDir = path.join(DESKTOP_ROOT, 'out', `${PACKAGED_APP_NAME}-darwin-${arch}`);
-    const appPath = path.join(packagedDir, `${PACKAGED_APP_NAME}.app`);
+    const packagedDir = path.join(DESKTOP_ROOT, 'out', `${APP_NAME}-darwin-${arch}`);
+    const appPath = path.join(packagedDir, `${APP_NAME}.app`);
     if (!fs.existsSync(appPath)) {
       console.error(`ERROR: ${appPath} not found`);
       process.exit(1);
@@ -590,7 +625,7 @@ async function main() {
     console.log('==> Running packaged smoke test...');
     const smokeResult = spawnSync(
       'node',
-      ['scripts/smoke-packaged.mjs', `--platform=darwin`, `--arch=${arch}`],
+      ['scripts/smoke-packaged.mjs', `--platform=darwin`, `--arch=${arch}`, `--app-name=${APP_NAME}`],
       {
         stdio: 'inherit',
         cwd: DESKTOP_ROOT,
@@ -610,10 +645,11 @@ async function main() {
     await notarizeApp(appPath);
 
     // 5. Create DMG (contains signed + notarized .app)
-    const dmgName = `xdt-maker-${version}-${arch}.dmg`;
+    const dmgName = `${ARTIFACT_BASENAME}-${version}-${arch}.dmg`;
     const dmgPath = path.join(RELEASE_DIR, dmgName);
     console.log('==> Creating DMG...');
-    createDMG(appPath, dmgPath, `xdt-maker ${version}`);
+    // DMG 卷名 = 应用身份名(cn 'Cindy x.y.z' / global 'CindyGlobal x.y.z')。
+    createDMG(appPath, dmgPath, `${APP_NAME} ${version}`);
 
     const dmgHash = sha256(dmgPath);
     const dmgSize = fs.statSync(dmgPath).size;
@@ -621,7 +657,7 @@ async function main() {
     console.log(`    DMG Size:   ${(dmgSize / 1024 / 1024).toFixed(1)} MB`);
 
     // 6. Hotfix ZIP (from packaged dir, for auto-update)
-    const hotfixZipName = `xdt-maker-${version}-${arch}.zip`;
+    const hotfixZipName = `${ARTIFACT_BASENAME}-${version}-${arch}.zip`;
     const hotfixZipPath = path.join(RELEASE_DIR, hotfixZipName);
     console.log('==> Creating hotfix ZIP...');
     if (fs.existsSync(hotfixZipPath)) fs.unlinkSync(hotfixZipPath);
@@ -632,8 +668,8 @@ async function main() {
     console.log(`    ZIP SHA256: ${zipHash}`);
     console.log(`    ZIP Size:   ${(zipSize / 1024 / 1024).toFixed(1)} MB`);
 
-    // 7. Update manifest
-    const manifest = await fetchExistingManifest(platformKey);
+    // 7. Update manifest(全新渠道首次发布时从空骨架起步)
+    const manifest = (await fetchExistingManifest(platformKey)) ?? { app: {} };
     manifest.app.version = version;
     manifest.app.hotfix = {
       file: `hotfix/${platformKey}/${hotfixZipName}`,
@@ -811,15 +847,16 @@ async function main() {
   // Done
   console.log('');
   console.log('=== Release complete ===');
-  console.log(`App: ${version}`);
+  console.log(`App:    ${version}`);
+  console.log(`Region: ${REGION}`);
   for (const arch of ARCHS) {
     const platformKey = `darwin-${arch}`;
     console.log(`\n[${platformKey}]`);
-    console.log(`  DMG:      ${CDN_BASE}/app/${platformKey}/xdt-maker-${version}-${arch}.dmg`);
-    console.log(`  Hotfix:   ${CDN_BASE}/hotfix/${platformKey}/xdt-maker-${version}-${arch}.zip`);
+    console.log(`  DMG:      ${CDN_BASE}/app/${platformKey}/${ARTIFACT_BASENAME}-${version}-${arch}.dmg`);
+    console.log(`  Hotfix:   ${CDN_BASE}/hotfix/${platformKey}/${ARTIFACT_BASENAME}-${version}-${arch}.zip`);
     console.log(`  Manifest: ${CDN_BASE}/manifest-${platformKey}-canary.json (canary channel)`);
   }
-  console.log(`\n  → 发布到 stable: pnpm release:promote:mac`);
+  console.log(`\n  → 发布到 stable: pnpm release:promote:mac${REGION === 'global' ? ':global' : ''}`);
 }
 
 main().catch((err) => {

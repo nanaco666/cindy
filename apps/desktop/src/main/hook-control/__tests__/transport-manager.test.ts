@@ -11,11 +11,15 @@ import { WebSocketServer, type WebSocket as ServerSocket } from 'ws';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  HOOK_FEATURE_MULTI_TEAM,
+  HOOK_FEATURE_SLACK_TOOLS,
+  makeBindState,
   makeBindUpdate,
   makePing,
   makePrefsState,
   makeQueryRequest,
   makeTaskDispatch,
+  makeToolResponse,
   makeWelcome,
   parseHookMessage,
   serializeHookMessage,
@@ -39,9 +43,14 @@ function memoryStore(initial: Partial<SlackHookConfigState> & { url: string }): 
     enabled: initial.enabled ?? true,
     urlOverride: initial.url,
     workspaces: initial.workspaces ?? {},
+    bindingsCache: initial.bindingsCache ?? [],
   };
   return {
-    get: () => ({ ...state, workspaces: { ...state.workspaces } }),
+    get: () => ({
+      ...state,
+      workspaces: { ...state.workspaces },
+      bindingsCache: state.bindingsCache.map((e) => ({ ...e })),
+    }),
     effectiveUrl: () => state.urlOverride ?? 'wss://unused.example',
     setEnabled(enabled) {
       state = { ...state, enabled };
@@ -49,6 +58,10 @@ function memoryStore(initial: Partial<SlackHookConfigState> & { url: string }): 
     },
     setWorkspaces(workspaces) {
       state = { ...state, workspaces };
+      return state;
+    },
+    setBindingsCache(entries) {
+      state = { ...state, bindingsCache: entries.map((e) => ({ ...e })) };
       return state;
     },
   };
@@ -490,6 +503,76 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     expect(manager.snapshot().binding?.teamName).toBe('xindong');
   });
 
+  it('lizi_slack provider gate 跟随绑定与 server capability，断线抖动不重复刷新', async () => {
+    const { wss, url } = await startServer();
+    const store = memoryStore({ url });
+    const changes: boolean[] = [];
+    const manager = makeManager(store, {
+      onSlackToolProviderEnabledChanged: (enabled) => changes.push(enabled),
+    });
+    cleanups.push(() => manager.dispose());
+
+    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
+    manager.sync();
+    const [sock] = await connPromise;
+    const server = collectFrames(sock);
+    await server.waitFor('hello');
+    sock.send(serializeHookMessage(makeWelcome({ serverName: 'mock', features: [] })));
+    await expect.poll(() => manager.snapshot().status, { timeout: 3000 }).toBe('connected');
+    expect(changes).toEqual([]);
+
+    const confirmed = makeBindUpdate({
+      state: 'confirmed',
+      slackUserId: 'U1',
+      slackUserName: 'lizi',
+      message: null,
+    });
+    sock.send(serializeHookMessage(confirmed));
+    await expect.poll(() => manager.snapshot().binding?.state, { timeout: 3000 }).toBe('confirmed');
+    expect(manager.getSlackToolAvailability()).toMatchObject({
+      bound: true,
+      serverSupportsTools: false,
+    });
+    expect(changes).toEqual([]);
+
+    // 同一绑定下，server 能力升级会打开 provider；重复 welcome 不重复刷新。
+    sock.send(
+      serializeHookMessage(
+        makeWelcome({ serverName: 'mock-new', features: [HOOK_FEATURE_SLACK_TOOLS] }),
+      ),
+    );
+    await expect.poll(() => changes, { timeout: 3000 }).toEqual([true]);
+    sock.send(
+      serializeHookMessage(
+        makeWelcome({ serverName: 'mock-new', features: [HOOK_FEATURE_SLACK_TOOLS] }),
+      ),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(changes).toEqual([true]);
+
+    // 重连到旧 server 时按新 welcome 关闭；再次升级可重新打开。
+    sock.send(serializeHookMessage(makeWelcome({ serverName: 'mock-old', features: [] })));
+    await expect.poll(() => changes, { timeout: 3000 }).toEqual([true, false]);
+    sock.send(
+      serializeHookMessage(
+        makeWelcome({ serverName: 'mock-new', features: [HOOK_FEATURE_SLACK_TOOLS] }),
+      ),
+    );
+    await expect.poll(() => changes, { timeout: 3000 }).toEqual([true, false, true]);
+
+    // confirmed 回放与短暂连接抖动都不改变最近一次成功能力快照。
+    sock.send(serializeHookMessage(confirmed));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(changes).toEqual([true, false, true]);
+    sock.close();
+    await expect.poll(() => manager.snapshot().status, { timeout: 3000 }).not.toBe('connected');
+    expect(manager.getSlackToolAvailability().serverSupportsTools).toBe(true);
+    expect(changes).toEqual([true, false, true]);
+
+    manager.revokeAndDisconnect();
+    expect(changes).toEqual([true, false, true, false]);
+  });
+
   it('armAutoBind: 重开 toggle 撞上 server 回放的旧 pending → 重新发起并弹新链接', async () => {
     // 场景: 本地看门狗超时(3 分钟)早于 server 侧 pending TTL(10 分钟), toggle
     // 弹回后重开, server 按 hello 回放旧 pending —— 必须重发 bind.start 换新链接
@@ -537,6 +620,52 @@ describe('hook-control transport + manager(真实 ws server)', () => {
       ),
     );
     await expect.poll(() => opened, { timeout: 3000 }).toEqual([freshUrl]);
+  });
+
+  it('armAutoBind: bind.update 处理中连接恰好掉线(send 失败)→ 意图保留待重连重试, 不弹回开关', async () => {
+    // 场景: 用户刚开 toggle, server 回放 bind.update(none) 的同一时刻连接掉了,
+    // bind.start 发不出去。旧行为会消费掉 autoBindIntent, 重连回放 none 时走
+    // autoDisable 把开关静默弹回(用户视角: 点了开关没弹浏览器又自己关了);
+    // 现在意图保留, 重连回放后自动重试发起授权。用 fake transport 精确控制
+    // send 失败时机(真 ws 无法确定性模拟"处理帧时掉线")。
+    const store = memoryStore({ url: 'wss://fake.example' });
+    const sent: HookMessage[] = [];
+    let sendOk = false;
+    const transportOpts: Parameters<typeof createHookTransport>[0][] = [];
+    const manager = makeManager(store, {
+      createTransport: (opts) => {
+        transportOpts.push(opts);
+        return {
+          send: (m) => {
+            if (!sendOk) return false;
+            sent.push(m);
+            return true;
+          },
+          dispose: () => {},
+        };
+      },
+      openExternalUrl: () => {},
+    });
+    cleanups.push(() => manager.dispose());
+
+    manager.armAutoBind(); // 打开 toggle
+    manager.sync();
+    const opts = transportOpts[0];
+    opts.onStatus('connected', null);
+    const none = makeBindUpdate({ state: 'none', slackUserId: null, slackUserName: null, message: null });
+    if (none.type !== 'bind.update') throw new Error('unreachable');
+
+    // 第一帧 none: send 失败(掉线瞬间)→ 不 auto-disable, 意图保留
+    opts.onMessage(none, (m) => (sendOk ? (sent.push(m), true) : false));
+    expect(store.get().enabled).toBe(true);
+    expect(sent.some((f) => f.type === 'bind.start')).toBe(false);
+
+    // 重连回放 none: send 恢复 → 自动重试发起绑定, 开关仍开
+    sendOk = true;
+    opts.onMessage(none, (m) => (sent.push(m), true));
+    expect(sent.some((f) => f.type === 'bind.start')).toBe(true);
+    expect(store.get().enabled).toBe(true);
+    expect(manager.snapshot().binding?.state).toBe('pending');
   });
 
   it('授权看门狗: 超时仍 pending(用户关掉浏览器)→ 本地判 expired, toggle 弹回', async () => {
@@ -840,5 +969,616 @@ describe('内置 chat 伪目录的清单注入', () => {
     expect([...(resp.payload.workspaces ?? [])].sort()).toEqual(['blog', 'chat', 'xdmaker']);
     // 去重: 即便(历史遗留)存量配置里有 chat 键, 也只出现一次
     expect(resp.payload.workspaces?.filter((w) => w === 'chat')).toHaveLength(1);
+  });
+});
+
+describe('Slack 网关工具代理(tool.request/tool.response)', () => {
+  /** 建连 -> welcome(带/不带 slack-tools)-> 绑定 confirmed 的通用起手。 */
+  async function connectWithTools(opts: {
+    features?: string[];
+    confirmed?: boolean;
+    toolTimeoutMs?: number;
+  }) {
+    const { wss, url } = await startServer();
+    const store = memoryStore({ url, workspaces: WORKSPACES });
+    const manager = makeManager(store, {
+      ...(opts.toolTimeoutMs !== undefined ? { toolTimeoutMs: opts.toolTimeoutMs } : {}),
+    });
+    cleanups.push(() => manager.dispose());
+
+    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
+    manager.sync();
+    const [sock] = await connPromise;
+    const server = collectFrames(sock);
+    sock.send(
+      serializeHookMessage(
+        makeWelcome({ serverName: 'mock', features: opts.features ?? [HOOK_FEATURE_SLACK_TOOLS] }),
+      ),
+    );
+    await expect.poll(() => manager.snapshot().status, { timeout: 3000 }).toBe('connected');
+    if (opts.confirmed !== false) {
+      sock.send(
+        serializeHookMessage(
+          makeBindUpdate({
+            state: 'confirmed',
+            slackUserId: 'U1',
+            slackUserName: 'tester',
+            message: null,
+          }),
+        ),
+      );
+      await expect
+        .poll(() => manager.snapshot().binding?.state, { timeout: 3000 })
+        .toBe('confirmed');
+    }
+    return { manager, sock, server };
+  }
+
+  it('成功往返: tool.request 携带 tool/args, replyTo 配对 resolve 结果', async () => {
+    const { manager, sock, server } = await connectWithTools({});
+    const pending = manager.callSlackTool('callTool', { name: 'search', arguments: { q: 'x' } });
+    const req = await server.waitFor('tool.request');
+    if (req.type !== 'tool.request') throw new Error('unreachable');
+    expect(req.payload.tool).toBe('callTool');
+    expect(req.payload.args).toEqual({ name: 'search', arguments: { q: 'x' } });
+    sock.send(
+      serializeHookMessage(
+        makeToolResponse({ replyTo: req.payload.requestId, ok: true, result: { hit: 1 } }),
+      ),
+    );
+    expect(await pending).toEqual({ ok: true, result: { hit: 1 } });
+    // 可用性快照三真
+    expect(manager.getSlackToolAvailability()).toMatchObject({
+      connected: true,
+      bound: true,
+      serverSupportsTools: true,
+    });
+  });
+
+  it('server 侧结构化错误透传(code/message 原样)', async () => {
+    const { manager, sock, server } = await connectWithTools({});
+    const pending = manager.callSlackTool('listTools');
+    const req = await server.waitFor('tool.request');
+    if (req.type !== 'tool.request') throw new Error('unreachable');
+    sock.send(
+      serializeHookMessage(
+        makeToolResponse({
+          replyTo: req.payload.requestId,
+          ok: false,
+          error: { code: 'NO_USER_TOKEN', message: '需重新授权' },
+        }),
+      ),
+    );
+    const r = await pending;
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toEqual({ code: 'NO_USER_TOKEN', message: '需重新授权' });
+  });
+
+  it('SERVER_TOO_OLD: welcome 未宣告 slack-tools 时短路, 不发帧', async () => {
+    const { manager, server } = await connectWithTools({ features: [] });
+    const r = await manager.callSlackTool('status');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe('SERVER_TOO_OLD');
+    expect(server.frames.some((f) => f.type === 'tool.request')).toBe(false);
+  });
+
+  it('NOT_BOUND: 未绑定时短路, 不发帧', async () => {
+    const { manager, server } = await connectWithTools({ confirmed: false });
+    const r = await manager.callSlackTool('status');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe('NOT_BOUND');
+    expect(server.frames.some((f) => f.type === 'tool.request')).toBe(false);
+  });
+
+  it('HOOK_NOT_CONNECTED: 未连接时短路', async () => {
+    const store = memoryStore({ url: 'ws://127.0.0.1:1', enabled: false });
+    const manager = makeManager(store);
+    cleanups.push(() => manager.dispose());
+    const r = await manager.callSlackTool('status');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe('HOOK_NOT_CONNECTED');
+  });
+
+  it('TIMEOUT: server 不应答时按注入超时收口; 迟到应答静默丢弃', async () => {
+    const { manager, sock, server } = await connectWithTools({ toolTimeoutMs: 60 });
+    const pending = manager.callSlackTool('listTools');
+    const req = await server.waitFor('tool.request');
+    if (req.type !== 'tool.request') throw new Error('unreachable');
+    const r = await pending;
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe('TIMEOUT');
+    // 迟到帧: 不抛不炸(replyTo 已无配对)
+    sock.send(
+      serializeHookMessage(makeToolResponse({ replyTo: req.payload.requestId, ok: true, result: 1 })),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+
+  it('断线 drain: 在途请求 resolve HOOK_NOT_CONNECTED; 能力保留到下一次 welcome 覆盖', async () => {
+    const { manager, sock, server } = await connectWithTools({});
+    const pending = manager.callSlackTool('listTools');
+    await server.waitFor('tool.request');
+    sock.close();
+    const r = await pending;
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe('HOOK_NOT_CONNECTED');
+    // 瞬时断线只让调用期 fail-closed，不触发 Codex 工具清单抖动；下一次 welcome
+    // 会整组覆盖能力快照。
+    expect(manager.getSlackToolAvailability()).toMatchObject({
+      connected: false,
+      serverSupportsTools: true,
+    });
+  });
+});
+
+describe('多 workspace 绑定(multi-team)', () => {
+  const T1 = { teamId: 'T1', teamName: 'xindong', slackUserId: 'U1', slackUserName: 'lizi' };
+  const T2 = { teamId: 'T2', teamName: 'sideproj', slackUserId: 'U2', slackUserName: 'lizi2' };
+
+  /** 建连到 connected 的 multi-team 起手(welcome 宣告 multi-team [+ 可选 slack-tools])。 */
+  async function connectMulti(opts?: {
+    managerOverrides?: Partial<HookControlManagerDeps>;
+    features?: string[];
+  }) {
+    const { wss, url } = await startServer();
+    const store = memoryStore({ url });
+    const manager = makeManager(store, opts?.managerOverrides ?? {});
+    cleanups.push(() => manager.dispose());
+    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
+    manager.sync();
+    const [sock] = await connPromise;
+    const server = collectFrames(sock);
+    await server.waitFor('hello');
+    sock.send(
+      serializeHookMessage(
+        makeWelcome({
+          serverName: 'mock-multi',
+          features: opts?.features ?? [HOOK_FEATURE_MULTI_TEAM],
+        }),
+      ),
+    );
+    await expect.poll(() => manager.snapshot().status, { timeout: 3000 }).toBe('connected');
+    return { manager, store, sock, server, wss, url };
+  }
+
+  it('hello 声明 multi-team 能力; bind.state 快照整体对齐 + 写本地缓存 + legacy binding 映射', async () => {
+    const { manager, store, sock, server } = await connectMulti();
+    const hello = server.frames.find((f) => f.type === 'hello');
+    if (hello?.type !== 'hello') throw new Error('unreachable');
+    expect(hello.payload.features).toContain(HOOK_FEATURE_MULTI_TEAM);
+
+    sock.send(serializeHookMessage(makeBindState({ bindings: [T1, T2] })));
+    await expect.poll(() => manager.snapshot().bindings.length, { timeout: 3000 }).toBe(2);
+    const snap = manager.snapshot();
+    expect(snap.serverMultiTeam).toBe(true);
+    expect(snap.bindings).toEqual([
+      { ...T1, displaced: false },
+      { ...T2, displaced: false },
+    ]);
+    // legacy binding 字段映射为首个可用绑定(老消费点兼容)
+    expect(snap.binding).toMatchObject({
+      state: 'confirmed',
+      slackUserId: 'U1',
+      teamName: 'xindong',
+    });
+    // 本地缓存随快照落盘
+    expect(store.get().bindingsCache).toEqual([T1, T2]);
+  });
+
+  it('addBinding: 发空 bind.start, pending 落 pendingBind 并弹浏览器; confirmed(teamId) upsert 行 + 清 pendingBind', async () => {
+    const opened: string[] = [];
+    const { manager, sock, server } = await connectMulti({
+      managerOverrides: { openExternalUrl: (u) => opened.push(u) },
+    });
+    sock.send(serializeHookMessage(makeBindState({ bindings: [T1] })));
+    await expect.poll(() => manager.snapshot().bindings.length, { timeout: 3000 }).toBe(1);
+
+    expect(manager.addBinding()).toBe(true);
+    const bind = await server.waitFor('bind.start');
+    if (bind.type !== 'bind.start') throw new Error('unreachable');
+    expect(bind.payload.teamId).toBeUndefined(); // 添加新 workspace: 授权页自选
+    expect(manager.snapshot().pendingBind?.state).toBe('pending');
+
+    const authorizeUrl = 'https://slack.example.com/authorize?state=add';
+    sock.send(
+      serializeHookMessage(
+        makeBindUpdate({ state: 'pending', slackUserId: null, slackUserName: null, message: null, authorizeUrl }),
+      ),
+    );
+    await expect
+      .poll(() => manager.snapshot().pendingBind?.authorizeUrl, { timeout: 3000 })
+      .toBe(authorizeUrl);
+    expect(opened).toEqual([authorizeUrl]);
+    // 已有真在途授权时重复 addBinding 幂等忽略(不重发帧)
+    expect(manager.addBinding()).toBe(true);
+    expect(server.frames.filter((f) => f.type === 'bind.start')).toHaveLength(1);
+
+    sock.send(
+      serializeHookMessage(
+        makeBindUpdate({
+          state: 'confirmed',
+          slackUserId: 'U2',
+          slackUserName: 'lizi2',
+          message: null,
+          teamId: 'T2',
+          teamName: 'sideproj',
+        }),
+      ),
+    );
+    await expect.poll(() => manager.snapshot().bindings.length, { timeout: 3000 }).toBe(2);
+    expect(manager.snapshot().pendingBind).toBeNull();
+    expect(manager.snapshot().bindings[1]).toEqual({ ...T2, displaced: false });
+  });
+
+  it('rebindTeam: bind.start 带 teamId(pin 授权页)', async () => {
+    const { manager, sock, server } = await connectMulti();
+    sock.send(serializeHookMessage(makeBindState({ bindings: [T1] })));
+    await expect.poll(() => manager.snapshot().bindings.length, { timeout: 3000 }).toBe(1);
+    expect(manager.rebindTeam('T1')).toBe(true);
+    const bind = await server.waitFor('bind.start');
+    if (bind.type !== 'bind.start') throw new Error('unreachable');
+    expect(bind.payload.teamId).toBe('T1');
+    expect(manager.snapshot().pendingBind).toMatchObject({ state: 'pending', teamId: 'T1' });
+  });
+
+  it('revoked(teamId, reason=superseded): 行保留标注 displaced, 不弹开关不掉线', async () => {
+    const { manager, store, sock } = await connectMulti();
+    sock.send(serializeHookMessage(makeBindState({ bindings: [T1, T2] })));
+    await expect.poll(() => manager.snapshot().bindings.length, { timeout: 3000 }).toBe(2);
+
+    sock.send(
+      serializeHookMessage(
+        makeBindUpdate({
+          state: 'revoked',
+          slackUserId: null,
+          slackUserName: null,
+          message: '已在另一台设备绑定',
+          teamId: 'T1',
+          reason: 'superseded',
+        }),
+      ),
+    );
+    await expect
+      .poll(() => manager.snapshot().bindings.find((b) => b.teamId === 'T1')?.displaced, {
+        timeout: 3000,
+      })
+      .toBe(true);
+    // 另一行不受影响; 总开关不弹回, 连接保持
+    expect(manager.snapshot().bindings.find((b) => b.teamId === 'T2')?.displaced).toBe(false);
+    expect(store.get().enabled).toBe(true);
+    expect(manager.snapshot().status).toBe('connected');
+  });
+
+  it('revoked(teamId, 无 reason): 行直接移除', async () => {
+    const { manager, sock } = await connectMulti();
+    sock.send(serializeHookMessage(makeBindState({ bindings: [T1, T2] })));
+    await expect.poll(() => manager.snapshot().bindings.length, { timeout: 3000 }).toBe(2);
+    sock.send(
+      serializeHookMessage(
+        makeBindUpdate({ state: 'revoked', slackUserId: null, slackUserName: null, message: null, teamId: 'T1' }),
+      ),
+    );
+    await expect.poll(() => manager.snapshot().bindings.length, { timeout: 3000 }).toBe(1);
+    expect(manager.snapshot().bindings[0].teamId).toBe('T2');
+  });
+
+  it('revokeTeam: 发 bind.revoke{teamId} 并乐观移除; displaced 行删除 = 仅清本地', async () => {
+    const { manager, store, sock, server } = await connectMulti();
+    sock.send(serializeHookMessage(makeBindState({ bindings: [T1, T2] })));
+    await expect.poll(() => manager.snapshot().bindings.length, { timeout: 3000 }).toBe(2);
+
+    expect(manager.revokeTeam('T1')).toBe(true);
+    const revoke = await server.waitFor('bind.revoke');
+    if (revoke.type !== 'bind.revoke') throw new Error('unreachable');
+    expect(revoke.payload.teamId).toBe('T1');
+    expect(manager.snapshot().bindings.map((b) => b.teamId)).toEqual(['T2']);
+    expect(store.get().bindingsCache.map((b) => b.teamId)).toEqual(['T2']);
+
+    // displaced 行删除: 不发帧, 只清本地缓存
+    sock.send(
+      serializeHookMessage(
+        makeBindUpdate({
+          state: 'revoked',
+          slackUserId: null,
+          slackUserName: null,
+          message: null,
+          teamId: 'T2',
+          reason: 'superseded',
+        }),
+      ),
+    );
+    await expect
+      .poll(() => manager.snapshot().bindings.find((b) => b.teamId === 'T2')?.displaced, {
+        timeout: 3000,
+      })
+      .toBe(true);
+    const framesBefore = server.frames.filter((f) => f.type === 'bind.revoke').length;
+    expect(manager.revokeTeam('T2')).toBe(true);
+    expect(manager.snapshot().bindings).toEqual([]);
+    expect(store.get().bindingsCache).toEqual([]);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(server.frames.filter((f) => f.type === 'bind.revoke')).toHaveLength(framesBefore);
+  });
+
+  it('cancelPendingBind: 本地清 pendingBind + 发 bind.revoke{pendingOnly}', async () => {
+    const { manager, sock, server } = await connectMulti({
+      managerOverrides: { openExternalUrl: () => {} },
+    });
+    sock.send(serializeHookMessage(makeBindState({ bindings: [T1] })));
+    await expect.poll(() => manager.snapshot().bindings.length, { timeout: 3000 }).toBe(1);
+    manager.addBinding();
+    await server.waitFor('bind.start');
+    expect(manager.snapshot().pendingBind?.state).toBe('pending');
+
+    expect(manager.cancelPendingBind()).toBe(true);
+    expect(manager.snapshot().pendingBind).toBeNull();
+    const revoke = await server.waitFor('bind.revoke');
+    if (revoke.type !== 'bind.revoke') throw new Error('unreachable');
+    expect(revoke.payload.pendingOnly).toBe(true);
+    expect(revoke.payload.teamId ?? null).toBeNull();
+  });
+
+  it('关开关(multi-team): 不发全量 bind.revoke, 绑定保留, 重开秒恢复', async () => {
+    const { manager, store, sock, server } = await connectMulti();
+    sock.send(serializeHookMessage(makeBindState({ bindings: [T1, T2] })));
+    await expect.poll(() => manager.snapshot().bindings.length, { timeout: 3000 }).toBe(2);
+
+    // ipc SET_ENABLED(false) 的编排: revokeAndDisconnect -> setEnabled -> sync
+    manager.revokeAndDisconnect();
+    store.setEnabled(false);
+    manager.sync();
+    await expect.poll(() => manager.snapshot().status, { timeout: 3000 }).toBe('disabled');
+    // 没有任何 bind.revoke 帧(无在途授权时连 pendingOnly 也不发)
+    expect(server.frames.some((f) => f.type === 'bind.revoke')).toBe(false);
+    // 绑定与缓存保留 —— 「已关闭 · N 个绑定已保留」的数据源
+    expect(manager.snapshot().bindings).toHaveLength(2);
+    expect(store.get().bindingsCache).toHaveLength(2);
+  });
+
+  it('本地缓存 diff: 服务端快照缺失的 team 生成 displaced 行(离线期间被顶)', async () => {
+    const { wss, url } = await startServer();
+    const store = memoryStore({ url, bindingsCache: [T1, T2] });
+    const manager = makeManager(store);
+    cleanups.push(() => manager.dispose());
+    // 冷启动(未连接)即可从缓存显示绑定行
+    expect(manager.snapshot().bindings).toHaveLength(2);
+
+    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
+    manager.sync();
+    const [sock] = await connPromise;
+    const server = collectFrames(sock);
+    await server.waitFor('hello');
+    sock.send(
+      serializeHookMessage(makeWelcome({ serverName: 'mock', features: [HOOK_FEATURE_MULTI_TEAM] })),
+    );
+    await expect.poll(() => manager.snapshot().status, { timeout: 3000 }).toBe('connected');
+
+    // 服务端只剩 T2(T1 在离线期间被另一台设备顶掉)
+    sock.send(serializeHookMessage(makeBindState({ bindings: [T2] })));
+    await expect
+      .poll(() => manager.snapshot().bindings.find((b) => b.teamId === 'T1')?.displaced, {
+        timeout: 3000,
+      })
+      .toBe(true);
+    expect(manager.snapshot().bindings.find((b) => b.teamId === 'T2')?.displaced).toBe(false);
+    // displaced 行的 team 信息留在缓存(重启后仍能显示与重绑)
+    expect(store.get().bindingsCache.map((b) => b.teamId).sort()).toEqual(['T1', 'T2']);
+  });
+
+  it('老 server 回落: welcome 无 multi-team 时清掉缓存行, 多绑定动作全部拒绝', async () => {
+    const { wss, url } = await startServer();
+    const store = memoryStore({ url, bindingsCache: [T1] });
+    const manager = makeManager(store);
+    cleanups.push(() => manager.dispose());
+    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
+    manager.sync();
+    const [sock] = await connPromise;
+    const server = collectFrames(sock);
+    await server.waitFor('hello');
+    sock.send(serializeHookMessage(makeWelcome({ serverName: 'mock-old', features: [] })));
+    await expect.poll(() => manager.snapshot().status, { timeout: 3000 }).toBe('connected');
+
+    // 老 server 是单绑定权威: 缓存行清空, UI 回落单绑定样式
+    expect(manager.snapshot().serverMultiTeam).toBe(false);
+    expect(manager.snapshot().bindings).toEqual([]);
+    expect(store.get().bindingsCache).toEqual([]);
+    // 多绑定动作 no-op(不发帧)
+    expect(manager.addBinding()).toBe(false);
+    expect(manager.rebindTeam('T1')).toBe(false);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(server.frames.some((f) => f.type === 'bind.start')).toBe(false);
+  });
+
+  it('armAutoBind + 空 bind.state: 延迟窗后自动发起首绑(server 无 pending 回放)', async () => {
+    const opened: string[] = [];
+    const { manager, sock, server } = await connectMulti({
+      managerOverrides: { openExternalUrl: (u) => opened.push(u) },
+    });
+    manager.armAutoBind();
+    sock.send(serializeHookMessage(makeBindState({ bindings: [] })));
+    // 延迟窗(300ms)后发起
+    const bind = await server.waitFor('bind.start');
+    expect(bind.type).toBe('bind.start');
+    const authorizeUrl = 'https://slack.example.com/authorize?state=first';
+    sock.send(
+      serializeHookMessage(
+        makeBindUpdate({ state: 'pending', slackUserId: null, slackUserName: null, message: null, authorizeUrl }),
+      ),
+    );
+    await expect.poll(() => opened, { timeout: 3000 }).toEqual([authorizeUrl]);
+  });
+
+  it('armAutoBind + 空 bind.state 后紧跟 pending 回放: 重新发起换新链接, 不用旧链接弹浏览器', async () => {
+    const opened: string[] = [];
+    const { manager, sock, server } = await connectMulti({
+      managerOverrides: { openExternalUrl: (u) => opened.push(u) },
+    });
+    manager.armAutoBind();
+    sock.send(serializeHookMessage(makeBindState({ bindings: [] })));
+    // server 回放旧的进行中授权(旧链接) —— 在延迟窗内先到
+    sock.send(
+      serializeHookMessage(
+        makeBindUpdate({
+          state: 'pending',
+          slackUserId: null,
+          slackUserName: null,
+          message: null,
+          authorizeUrl: 'https://slack.example.com/authorize?state=stale',
+        }),
+      ),
+    );
+    await server.waitFor('bind.start');
+    expect(opened).toEqual([]); // 旧链接不弹
+    const freshUrl = 'https://slack.example.com/authorize?state=fresh';
+    sock.send(
+      serializeHookMessage(
+        makeBindUpdate({ state: 'pending', slackUserId: null, slackUserName: null, message: null, authorizeUrl: freshUrl }),
+      ),
+    );
+    await expect.poll(() => opened, { timeout: 3000 }).toEqual([freshUrl]);
+    // 延迟窗过去后也不会再多发一次 bind.start(意图已消费)
+    await new Promise((r) => setTimeout(r, 400));
+    expect(server.frames.filter((f) => f.type === 'bind.start')).toHaveLength(1);
+  });
+
+  it('首绑终止态(denied): 开关弹回后快照保留 pendingBind 终止态(设置页兜底行数据源)', async () => {
+    const { manager, store, sock, server } = await connectMulti();
+    manager.armAutoBind();
+    sock.send(serializeHookMessage(makeBindState({ bindings: [] })));
+    await server.waitFor('bind.start');
+    sock.send(
+      serializeHookMessage(
+        makeBindUpdate({
+          state: 'pending',
+          slackUserId: null,
+          slackUserName: null,
+          message: null,
+          authorizeUrl: 'https://slack.example.com/authorize?state=x',
+        }),
+      ),
+    );
+    await expect.poll(() => manager.snapshot().pendingBind?.state, { timeout: 3000 }).toBe('pending');
+    // 用户在授权页点取消 → server 推 denied → 首绑(0 绑定)自动关开关,
+    // 但终止态必须留在快照里 —— 渲染层靠它显示失败原因与重试提示,
+    // 否则用户只看到开关静默弹回(review P1)
+    sock.send(
+      serializeHookMessage(
+        makeBindUpdate({ state: 'denied', slackUserId: null, slackUserName: null, message: null }),
+      ),
+    );
+    await expect.poll(() => store.get().enabled, { timeout: 3000 }).toBe(false);
+    const snap = manager.snapshot();
+    expect(snap.pendingBind?.state).toBe('denied');
+    expect(snap.bindings).toEqual([]);
+  });
+
+  it('添加流授权落在已绑定 team: 合成 already-bound 终止态提示; 指定 team 重绑不提示', async () => {
+    const { manager, sock, server } = await connectMulti();
+    sock.send(serializeHookMessage(makeBindState({ bindings: [T1] })));
+    await expect.poll(() => manager.snapshot().bindings.length, { timeout: 3000 }).toBe(1);
+
+    // 「添加 workspace」流: 用户在授权页没切 workspace, confirmed 回的还是 T1
+    expect(manager.addBinding()).toBe(true);
+    await server.waitFor('bind.start');
+    sock.send(
+      serializeHookMessage(
+        makeBindUpdate({
+          state: 'confirmed',
+          slackUserId: 'U1',
+          slackUserName: 'lizi',
+          message: null,
+          teamId: 'T1',
+          teamName: 'xindong',
+        }),
+      ),
+    );
+    await expect
+      .poll(() => manager.snapshot().pendingBind?.reason, { timeout: 3000 })
+      .toBe('already-bound');
+    const snap = manager.snapshot();
+    expect(snap.pendingBind?.state).toBe('failed');
+    expect(snap.pendingBind?.teamId).toBe('T1');
+    expect(snap.bindings).toHaveLength(1);
+
+    // 指定 team 的重绑(刷新授权)回到同 team 是预期动作, 不合成提示
+    expect(manager.cancelPendingBind()).toBe(true);
+    expect(manager.rebindTeam('T1')).toBe(true);
+    await expect
+      .poll(() => server.frames.filter((f) => f.type === 'bind.start').length, { timeout: 3000 })
+      .toBe(2);
+    sock.send(
+      serializeHookMessage(
+        makeBindUpdate({
+          state: 'confirmed',
+          slackUserId: 'U1',
+          slackUserName: 'lizi',
+          message: null,
+          teamId: 'T1',
+          teamName: 'xindong',
+        }),
+      ),
+    );
+    await expect.poll(() => manager.snapshot().pendingBind, { timeout: 3000 }).toBeNull();
+    expect(manager.snapshot().bindings).toHaveLength(1);
+  });
+
+  it('tool.request 携带 teamId; bound 判据 = 存在可用绑定(无需 legacy confirmed)', async () => {
+    const { manager, sock, server } = await connectMulti({
+      features: [HOOK_FEATURE_MULTI_TEAM, HOOK_FEATURE_SLACK_TOOLS],
+    });
+    sock.send(serializeHookMessage(makeBindState({ bindings: [T1, T2] })));
+    await expect.poll(() => manager.snapshot().bindings.length, { timeout: 3000 }).toBe(2);
+    expect(manager.getSlackToolAvailability()).toMatchObject({
+      bound: true,
+      multiTeam: true,
+      bindings: [
+        { teamId: 'T1', teamName: 'xindong' },
+        { teamId: 'T2', teamName: 'sideproj' },
+      ],
+    });
+
+    const pending = manager.callSlackTool('callTool', { name: 'search' }, 'T2');
+    const req = await server.waitFor('tool.request');
+    if (req.type !== 'tool.request') throw new Error('unreachable');
+    expect(req.payload.teamId).toBe('T2');
+    sock.send(
+      serializeHookMessage(makeToolResponse({ replyTo: req.payload.requestId, ok: true, result: 1 })),
+    );
+    expect(await pending).toEqual({ ok: true, result: 1 });
+
+    // 不带 teamId 的调用(如 status 总览)不注入字段
+    const pending2 = manager.callSlackTool('status');
+    const req2 = await new Promise<HookMessage>((resolve) => {
+      const check = (): void => {
+        const hits = server.frames.filter((f) => f.type === 'tool.request');
+        if (hits.length >= 2) resolve(hits[1]);
+        else setTimeout(check, 10);
+      };
+      check();
+    });
+    if (req2.type !== 'tool.request') throw new Error('unreachable');
+    expect('teamId' in req2.payload).toBe(false);
+    sock.send(
+      serializeHookMessage(makeToolResponse({ replyTo: req2.payload.requestId, ok: true, result: 2 })),
+    );
+    expect(await pending2).toEqual({ ok: true, result: 2 });
+  });
+
+  it('prefs.set 携带 teamId(multi-team 下偏好归属)', async () => {
+    const { manager, sock, server } = await connectMulti();
+    sock.send(serializeHookMessage(makeBindState({ bindings: [T1] })));
+    await expect.poll(() => manager.snapshot().bindings.length, { timeout: 3000 }).toBe(1);
+
+    const promise = manager.setWorkspacePrefs('xdmaker', { effort: 'low' }, 'T1');
+    const set = await server.waitFor('prefs.set');
+    if (set.type !== 'prefs.set') throw new Error('unreachable');
+    expect(set.payload.teamId).toBe('T1');
+    expect(set.payload.effort).toBe('low');
+    sock.send(
+      serializeHookMessage(
+        makePrefsState({ replyTo: set.payload.requestId, bound: true, prefs: [] }),
+      ),
+    );
+    await expect(promise).resolves.toEqual({ bound: true, prefs: [] });
   });
 });

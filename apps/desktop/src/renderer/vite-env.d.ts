@@ -197,6 +197,8 @@ type LocalThemeWriteRequest = import('../shared/local-themes').LocalThemeWriteRe
 type LocalThemeWriteResult = import('../shared/local-themes').LocalThemeWriteResult;
 type ImDefaultSettingsPatch = import('../shared/imDefaultSettings').ImDefaultSettingsPatch;
 type ImDefaultSettingsState = import('../shared/imDefaultSettings').ImDefaultSettingsState;
+type SubagentModelSettingsPatch = import('../shared/subagentModelSettings').SubagentModelSettingsPatch;
+type SubagentModelSettingsState = import('../shared/subagentModelSettings').SubagentModelSettingsState;
 
 interface VoiceInputShortcut {
   trigger?: 'keyboard' | 'modifier';
@@ -2396,6 +2398,8 @@ interface ElectronAPI {
   setAutoUpdateSettings: (settings: { autoRelaunchOnIdle: boolean }) => Promise<AutoUpdateSettingsPayload>;
   resetAutoUpdateSettings: () => Promise<AutoUpdateSettingsPayload>;
   setUpdateRelaunchTheme: (theme: 'light' | 'dark') => void;
+  // E4D 毛玻璃:family 切换/启动通知 main 开关 vibrancy(仅 CINDY 透壁纸)
+  theme: { applyVibrancy: (familyId: string, isDark: boolean) => void };
   /**
    * Manually trigger an update check. Returns the resolved state so the
    * renderer can show the appropriate toast:
@@ -2670,12 +2674,22 @@ interface ElectronAPI {
     ) => Promise<{ hook: import('../shared/hookControlIpc').SlackHookView }>;
     bindStart: () => Promise<{ ok: true }>;
     bindRevoke: () => Promise<{ ok: true }>;
+    // (multi-team)多 workspace 绑定动作
+    addBinding: () => Promise<{ hook: import('../shared/hookControlIpc').SlackHookView }>;
+    rebindTeam: (
+      teamId: string,
+    ) => Promise<{ hook: import('../shared/hookControlIpc').SlackHookView }>;
+    revokeTeam: (
+      teamId: string,
+    ) => Promise<{ hook: import('../shared/hookControlIpc').SlackHookView }>;
+    cancelPendingBind: () => Promise<{ hook: import('../shared/hookControlIpc').SlackHookView }>;
     getWorkspacePrefs: () => Promise<{
       prefs: import('../shared/hookControlIpc').HookPrefsView;
     }>;
     setWorkspacePrefs: (
       workspace: string,
       patch: import('../shared/hookControlIpc').HookPrefsPatch,
+      teamId?: string | null,
     ) => Promise<{ prefs: import('../shared/hookControlIpc').HookPrefsView }>;
     onPrefsChanged: (
       cb: (view: import('../shared/hookControlIpc').HookPrefsView) => void,
@@ -3660,6 +3674,11 @@ interface ElectronAPI {
     imDefaultSettingsGet: () => Promise<ImDefaultSettingsState>;
     imDefaultSettingsSet: (patch: ImDefaultSettingsPatch) => Promise<ImDefaultSettingsState>;
     imDefaultSettingsReset: () => Promise<ImDefaultSettingsState>;
+
+    /** 子代理模型覆盖。null 表示不注入覆盖，仅对新建 agent 会话生效。 */
+    subagentModelSettingsGet: () => Promise<SubagentModelSettingsState>;
+    subagentModelSettingsSet: (patch: SubagentModelSettingsPatch) => Promise<SubagentModelSettingsState>;
+    subagentModelSettingsReset: () => Promise<SubagentModelSettingsState>;
 
     /** Silent invalid_encrypted_content recovery setting. */
     silentEncryptedRetryGet: () => Promise<{ enabled: boolean; isCustomized?: boolean; defaultEnabled?: boolean }>;

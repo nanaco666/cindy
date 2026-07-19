@@ -24,6 +24,19 @@ import {
   HOOK_WORKSPACE_ALIAS_RE,
 } from '../../shared/hookControlIpc.js';
 
+/**
+ * (multi-team)本地绑定缓存条目 —— bind.state 快照的持久化影子(含 displaced
+ * 行的 team 信息)。用途: 冷启动在断线/关开关状态下也能显示「N 个绑定已保留」,
+ * 且连上后与服务端快照 diff 出「本地有、服务端没有」的 displaced 行
+ * (绑定在本机离线期间被另一台设备顶掉的场景)。不含任何凭证。
+ */
+export interface HookBindingCacheEntry {
+  teamId: string;
+  teamName: string | null;
+  slackUserId: string;
+  slackUserName: string | null;
+}
+
 /** 持久化的单配置(不含任何凭证)。 */
 export interface SlackHookConfigState {
   enabled: boolean;
@@ -31,6 +44,8 @@ export interface SlackHookConfigState {
   urlOverride: string | null;
   /** 别名 -> 本地绝对路径。 */
   workspaces: Record<string, string>;
+  /** (multi-team)本地绑定缓存; 老 server / 从未多绑定时恒空数组。 */
+  bindingsCache: HookBindingCacheEntry[];
 }
 
 export interface SlackHookStoreDeps {
@@ -98,6 +113,8 @@ export interface SlackHookStore {
   effectiveUrl(): string;
   setEnabled(enabled: boolean): SlackHookConfigState;
   setWorkspaces(workspaces: Record<string, string>): SlackHookConfigState;
+  /** (multi-team)覆写本地绑定缓存(bind.state / 绑定行变化后由 manager 调用)。 */
+  setBindingsCache(entries: HookBindingCacheEntry[]): SlackHookConfigState;
 }
 
 export function createSlackHookStore(deps: SlackHookStoreDeps): SlackHookStore {
@@ -130,6 +147,7 @@ export function createSlackHookStore(deps: SlackHookStoreDeps): SlackHookStore {
         enabled: source?.enabled === true,
         urlOverride: null, // 旧 url 是自部署地址, 不迁移 —— 新形态用内置中心服务器
         workspaces,
+        bindingsCache: [], // 旧多连接时代没有绑定缓存概念
       };
       // 清理旧文件与旧 secret(best-effort, 失败只记日志)
       const legacyIds = rows.map((r) => (typeof r.id === 'string' ? r.id : '')).filter(Boolean);
@@ -151,6 +169,32 @@ export function createSlackHookStore(deps: SlackHookStoreDeps): SlackHookStore {
     }
   }
 
+  const EMPTY_STATE: SlackHookConfigState = {
+    enabled: false,
+    urlOverride: null,
+    workspaces: {},
+    bindingsCache: [],
+  };
+
+  /** 绑定缓存条目形状校验(坏条目静默丢弃 —— 缓存是可再生数据, 不值得报错)。 */
+  function parseBindingsCache(raw: unknown): HookBindingCacheEntry[] {
+    if (!Array.isArray(raw)) return [];
+    const entries: HookBindingCacheEntry[] = [];
+    for (const item of raw) {
+      if (!item || typeof item !== 'object') continue;
+      const row = item as Record<string, unknown>;
+      if (typeof row.teamId !== 'string' || row.teamId.length === 0) continue;
+      if (typeof row.slackUserId !== 'string' || row.slackUserId.length === 0) continue;
+      entries.push({
+        teamId: row.teamId,
+        teamName: typeof row.teamName === 'string' ? row.teamName : null,
+        slackUserId: row.slackUserId,
+        slackUserName: typeof row.slackUserName === 'string' ? row.slackUserName : null,
+      });
+    }
+    return entries;
+  }
+
   function read(): SlackHookConfigState {
     try {
       if (!fs.existsSync(filePath)) {
@@ -159,11 +203,11 @@ export function createSlackHookStore(deps: SlackHookStoreDeps): SlackHookStore {
           write(migrated);
           return migrated;
         }
-        return { enabled: false, urlOverride: null, workspaces: {} };
+        return { ...EMPTY_STATE };
       }
       const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as unknown;
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-        return { enabled: false, urlOverride: null, workspaces: {} };
+        return { ...EMPTY_STATE };
       }
       const row = raw as Record<string, unknown>;
       const workspaces: Record<string, string> = {};
@@ -179,10 +223,11 @@ export function createSlackHookStore(deps: SlackHookStoreDeps): SlackHookStore {
             ? row.urlOverride
             : null,
         workspaces,
+        bindingsCache: parseBindingsCache(row.bindingsCache),
       };
     } catch (err) {
       log.warn(`read slack-hook config failed: ${err instanceof Error ? err.message : String(err)}`);
-      return { enabled: false, urlOverride: null, workspaces: {} };
+      return { ...EMPTY_STATE };
     }
   }
 
@@ -198,6 +243,12 @@ export function createSlackHookStore(deps: SlackHookStoreDeps): SlackHookStore {
     },
     setWorkspaces(workspaces) {
       const next = { ...read(), workspaces: validateWorkspaces(workspaces) };
+      write(next);
+      return next;
+    },
+    setBindingsCache(entries) {
+      // 缓存条目由 manager 从协议帧生成(形状可信), 这里只做浅拷贝防外部改动
+      const next = { ...read(), bindingsCache: entries.map((e) => ({ ...e })) };
       write(next);
       return next;
     },

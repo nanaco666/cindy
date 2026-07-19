@@ -21,7 +21,8 @@ import { isModelVisible, visibleModelUnion } from '@lizi/model-providers';
 import { BRAND_NAME } from '@lizi/maker-shared/branding';
 
 import { createLogger } from '../logger.js';
-import { getMaker } from '../maker-host/index.js';
+import { getMaker, restartCodexAfterAuthModeChange } from '../maker-host/index.js';
+import { shutdownCodexEnvironment } from '../mcp-integrations/codexEnvironment.js';
 import { getDesktopProviderService } from '../maker-host/createDesktopProviderService.js';
 import { getModelVisibilityOverride } from '../maker-host/model-visibility-mirror.js';
 import { WorktreeManager } from '../worktree/index.js';
@@ -53,6 +54,7 @@ import {
   type HookControlManager,
 } from './manager.js';
 import { createHookTransport } from './transport.js';
+import { registerSlackToolBridge, unregisterSlackToolBridge } from './slackToolBridge.js';
 import { createHookBindingStore } from './bindings.js';
 import { createHookDispatcher } from './dispatcher.js';
 import { createMakerHookSessionRunner } from './session-runner.js';
@@ -63,6 +65,63 @@ const log = createLogger('hook-control');
 let store: SlackHookStore | null = null;
 let manager: HookControlManager | null = null;
 let disposeAuthListener: (() => void) | null = null;
+let codexMcpRefreshPending = false;
+let codexMcpRefreshRunning = false;
+let codexMcpRefreshRetryTimer: NodeJS.Timeout | null = null;
+let latestSlackToolProviderEnabled = false;
+
+const CODEX_MCP_REFRESH_RETRY_MS = 2_000;
+
+/**
+ * Slack 绑定态会改变 lizi_slack 是否出现在 Codex 的冻结 MCP 清单里。
+ *
+ * 先软关 Codex app-server(含 busy turn 的 fail-closed 检查)，成功后再关 HTTP
+ * bridge / 清 spawn cache；反过来会让仍在运行的 session 指向已停 bridge。
+ * busy 时保留 pending 并低频重试，避免「绑定发生在 Codex turn 中」后必须重启
+ * 整个 App 才能看到工具。多次快速翻转合并到同一条串行 drain，不并发 dispose。
+ */
+function requestCodexMcpRefreshForSlackAvailability(enabled: boolean): void {
+  latestSlackToolProviderEnabled = enabled;
+  codexMcpRefreshPending = true;
+  if (codexMcpRefreshRetryTimer !== null) {
+    clearTimeout(codexMcpRefreshRetryTimer);
+    codexMcpRefreshRetryTimer = null;
+  }
+  void drainCodexMcpRefreshForSlackAvailability();
+}
+
+async function drainCodexMcpRefreshForSlackAvailability(): Promise<void> {
+  if (codexMcpRefreshRunning) return;
+  codexMcpRefreshRunning = true;
+  try {
+    while (codexMcpRefreshPending) {
+      codexMcpRefreshPending = false;
+      try {
+        await restartCodexAfterAuthModeChange();
+        await shutdownCodexEnvironment();
+        log.info('Codex MCP environment refreshed after Slack provider availability changed', {
+          enabled: latestSlackToolProviderEnabled,
+        });
+      } catch (err) {
+        codexMcpRefreshPending = true;
+        log.warn('Codex MCP refresh deferred after Slack provider availability changed', {
+          enabled: latestSlackToolProviderEnabled,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        break;
+      }
+    }
+  } finally {
+    codexMcpRefreshRunning = false;
+  }
+  if (codexMcpRefreshPending && codexMcpRefreshRetryTimer === null) {
+    codexMcpRefreshRetryTimer = setTimeout(() => {
+      codexMcpRefreshRetryTimer = null;
+      void drainCodexMcpRefreshForSlackAvailability();
+    }, CODEX_MCP_REFRESH_RETRY_MS);
+    codexMcpRefreshRetryTimer.unref?.();
+  }
+}
 
 function broadcastStatus(view: SlackHookView): void {
   for (const w of BrowserWindow.getAllWindows()) {
@@ -190,6 +249,7 @@ function ensureInstances(): { store: SlackHookStore; manager: HookControlManager
       }),
       agents: ['claude-code', 'codex'],
       notifyStatus: broadcastStatus,
+      onSlackToolProviderEnabledChanged: requestCodexMcpRefreshForSlackAvailability,
       notifyPrefs: broadcastPrefs,
       dispatcher,
       // /model /effort 实时问答的数据源: 与会话内模型选择器**同一套规则**——
@@ -221,11 +281,19 @@ function ensureInstances(): { store: SlackHookStore; manager: HookControlManager
           };
         });
       },
-      // SIWS OIDC 授权链接: 用系统浏览器打开(远程控制时落被控机, 设置页另给复制链接)
+      // 绑定授权链接: 用系统浏览器打开(远程控制时落被控机, 设置页另给复制链接)
       openExternalUrl: (url) => {
         void shell.openExternal(url);
       },
       log,
+    });
+    // Slack 网关工具桥: lizi_slack provider 经叶子注册表取用(不直接 import
+    // 本模块, 避免 mcp-providers <-> ipc 的静态引用闭环)
+    const m = manager;
+    registerSlackToolBridge({
+      availability: () => m.getSlackToolAvailability(),
+      // teamId: (multi-team)以哪个 workspace 身份执行(lizi_slack 工具入参透传)
+      callTool: (tool, args, teamId) => m.callSlackTool(tool, args, teamId),
     });
   }
   return { store, manager };
@@ -293,6 +361,49 @@ export function registerHookControlIpc(): void {
     return { ok: true as const };
   });
 
+  // ── (multi-team)多 workspace 绑定动作 ──────────────────────────────────
+  // 全部要求 server 已宣告 multi-team(renderer 按 serverMultiTeam 隐藏入口,
+  // 这里是防御性兜底); 动作失败按「能力缺失 / 不在线」双码区分(规则 13)。
+
+  /** 能力检查 + 动作执行的公共体: false 一律翻译为结构化 IPC 错误。 */
+  const runMultiTeamAction = (action: (mgr: HookControlManager) => boolean): { hook: SlackHookView } => {
+    const mgr = ensureInstances().manager;
+    if (!mgr.snapshot().serverMultiTeam) {
+      throwIpcError('HOOK_MULTI_TEAM_UNSUPPORTED', 'hook server does not support multi-team binding');
+    }
+    if (!action(mgr)) {
+      throwIpcError('HOOK_NOT_CONNECTED', 'slack hook is not connected');
+    }
+    return { hook: mgr.snapshot() };
+  };
+
+  ipcMain.handle(HOOK_CONTROL_INVOKE.ADD_BINDING, () => runMultiTeamAction((mgr) => mgr.addBinding()));
+
+  ipcMain.handle(HOOK_CONTROL_INVOKE.REBIND_TEAM, (_e, payload) => {
+    const p = requireObject(payload);
+    const teamId = requireString(p.teamId, 'teamId');
+    return runMultiTeamAction((mgr) => mgr.rebindTeam(teamId));
+  });
+
+  ipcMain.handle(HOOK_CONTROL_INVOKE.REVOKE_TEAM, (_e, payload) => {
+    const p = requireObject(payload);
+    const teamId = requireString(p.teamId, 'teamId');
+    // displaced 行的删除是纯本地操作, 离线也要能删 —— 不做 multi-team 能力
+    // 前置检查(manager 内部区分 displaced/活跃行)
+    const mgr = ensureInstances().manager;
+    if (!mgr.revokeTeam(teamId)) {
+      throwIpcError('HOOK_NOT_CONNECTED', 'slack hook is not connected');
+    }
+    return { hook: mgr.snapshot() };
+  });
+
+  ipcMain.handle(HOOK_CONTROL_INVOKE.CANCEL_PENDING_BIND, () => {
+    // 取消在途授权本地收口无条件成功(离线也能清), 不需要能力/在线检查
+    const mgr = ensureInstances().manager;
+    mgr.cancelPendingBind();
+    return { hook: mgr.snapshot() };
+  });
+
   // 目录偏好远程读写: 数据正本在 slack-hook-server 的 user_prefs(与 Slack
   // /model 卡同一份), 这里只是经 WS 往返的 adapter; 校验在协议层 + server。
   ipcMain.handle(HOOK_CONTROL_INVOKE.PREFS_GET, async () => {
@@ -316,8 +427,12 @@ export function registerHookControlIpc(): void {
       }
       patch[field] = v as string | null;
     }
+    // (multi-team)偏好归属 team: 可选; 缺省/null = 单绑定语境(server 侧按
+    // 设备唯一绑定落值)
+    const teamId =
+      p.teamId === undefined || p.teamId === null ? null : requireString(p.teamId, 'teamId');
     try {
-      return { prefs: await m.setWorkspacePrefs(workspace, patch) };
+      return { prefs: await m.setWorkspacePrefs(workspace, patch, teamId) };
     } catch (err) {
       throwHookPrefsError(err);
     }
@@ -333,8 +448,14 @@ export function registerHookControlIpc(): void {
 
 /** App 退出清理(onQuit 钩子)。 */
 export function disposeHookControl(): void {
+  codexMcpRefreshPending = false;
+  if (codexMcpRefreshRetryTimer !== null) {
+    clearTimeout(codexMcpRefreshRetryTimer);
+    codexMcpRefreshRetryTimer = null;
+  }
   disposeAuthListener?.();
   disposeAuthListener = null;
+  unregisterSlackToolBridge();
   manager?.dispose();
   manager = null;
 }

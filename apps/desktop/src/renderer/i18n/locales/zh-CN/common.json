@@ -93,6 +93,7 @@
       "personalization": "个性化",
       "chipMetrics": "用量指示器",
       "memory": "记忆",
+      "subagentModels": "子代理模型",
       "compaction": "上下文压缩",
       "terminalShell": "默认终端 shell",
       "linkOpen": "链接打开方式",
@@ -1327,6 +1328,14 @@
         }
       }
     },
+    "subagentModels": {
+      "title": "子代理模型",
+      "description": "为 Claude 和 Codex 的子代理分别指定默认模型。",
+      "unspecified": "不指定（跟随原逻辑）",
+      "codexUnavailable": "当前 Codex 版本暂不支持安全覆盖",
+      "hint": "留空时不会注入任何覆盖。Claude 的修改从新建会话开始生效；Codex 完整上下文派生暂不支持模型覆盖。",
+      "saveFailed": "保存子代理模型失败"
+    },
     "compaction": {
       "title": "上下文压缩",
       "description": "控制 Claude Code 何时自动压缩上下文。",
@@ -1711,7 +1720,8 @@
         },
         "toast": {
           "saveFailed": "保存失败",
-          "toggleFailed": "切换失败"
+          "toggleFailed": "切换失败",
+          "actionFailed": "操作失败"
         },
         "loginRequired": "需要先登录 {{appName}} 账号, 连接会在登录后自动恢复。",
         "authorizing": "授权中…",
@@ -1727,6 +1737,26 @@
           "confirmInstall": "安装",
           "confirmCancel": "取消",
           "waitingHint": "等待安装完成…装好后会自动完成绑定, 无需再次授权。"
+        },
+        "multi": {
+          "title": "Slack workspaces",
+          "statusWorkspaces_one": "{{count}} 个 workspace",
+          "statusWorkspaces_other": "{{count}} 个 workspace",
+          "statusPendingSuffix_one": "({{count}} 个待处理)",
+          "statusPendingSuffix_other": "({{count}} 个待处理)",
+          "statusOffKept_one": "已关闭 · {{count}} 个 workspace 绑定已保留",
+          "statusOffKept_other": "已关闭 · {{count}} 个 workspace 绑定已保留",
+          "displaced": "已在另一台设备绑定",
+          "rebind": "重新绑定",
+          "removeAria": "解绑此 workspace",
+          "removeConfirmTitle": "解绑 {{team}}",
+          "removeConfirmDescription": "解绑后 Slack workspace「{{team}}」将无法再向这台设备派发任务;需要时可随时重新授权绑定。",
+          "removeDisplacedConfirmDescription": "该绑定已被另一台设备顶替, 删除只是把这一行从本机列表移除。",
+          "removeConfirm": "解绑",
+          "cancelPending": "取消",
+          "dismiss": "知道了",
+          "addWorkspace": "添加 Slack workspace",
+          "alreadyBound": "授权的是已绑定的 {{team}}。要添加其它 workspace, 请在 Slack 授权页右上角先切换到目标 workspace 再点允许。"
         }
       },
       "summary": {
@@ -1759,7 +1789,8 @@
         "retry": "重试",
         "toast": {
           "saveFailed": "保存目录偏好失败"
-        }
+        },
+        "teamChipAria": "选择偏好所属的 Slack workspace"
       }
     },
     "devices": {
@@ -3135,6 +3166,24 @@
       "queueTooltip": "点击排队发送；按 {{shortcut}} 插话，不打断当前任务",
       "stop": "停止生成"
     },
+    "createAgent": {
+      "quickStart": "快速开始",
+      "quickStarts": {
+        "explore": "探索并理解代码",
+        "build": "构建新功能、应用或工具",
+        "review": "审查代码并提出修改建议",
+        "fix": "修复问题和失败"
+      },
+      "sidebar": {
+        "new": "新建",
+        "automation": "自动化",
+        "skills": "技能",
+        "search": "搜索",
+        "local": "本机",
+        "projects": "项目",
+        "conversations": "对话"
+      }
+    },
     "addRemoteProject": {
       "title": "添加远程项目",
       "hint": "选择一台已连接的远程主机或被控设备,并选择此项目的文件夹。",
@@ -3398,7 +3447,10 @@
     },
     "pastedText": {
       "chipLabel": "粘贴的文本({{lines}} 行)",
-      "previewTitle": "粘贴的文本"
+      "previewTitle": "粘贴的文本",
+      "editTitle": "编辑粘贴的文本",
+      "cancelEdit": "取消编辑",
+      "saveEdit": "保存文本"
     }
   },
   "voiceInputOverlay": {
@@ -4786,6 +4838,7 @@
         "timezoneRequired": "请填写时区",
         "selectThread": "请选择目标会话",
         "selectProject": "请选择项目目录",
+        "modelUnavailable": "模型 {{model}} 已不可用，请重新选择",
         "reasoningInvalid": "Reasoning 必须是 {{values}} 之一",
         "preRunHookCommandRequired": "请填写前置检查脚本命令"
       }

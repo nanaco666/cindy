@@ -18,6 +18,25 @@ interface FileDragPayload {
   };
 }
 
+/**
+ * 执行一次由 plugin state 触发的外部文件打开请求。调用方用 isCancelled 绑定
+ * 当前 effect 生命周期；旧请求被新 nonce 替代后既不能再改预览，也不能清掉新请求。
+ */
+export async function runExternalFileOpenRequest({
+  absPath,
+  open,
+  isCancelled,
+  clearRequest,
+}: {
+  absPath: string;
+  open: (path: string, isCancelled: () => boolean) => Promise<void>;
+  isCancelled: () => boolean;
+  clearRequest: () => void;
+}): Promise<void> {
+  await open(absPath, isCancelled);
+  if (!isCancelled()) clearRequest();
+}
+
 export function hasFileDragPayload(dataTransfer: FileDragPayload): boolean {
   for (let i = 0; i < dataTransfer.types.length; i++) {
     if (dataTransfer.types[i] === 'Files') return true;

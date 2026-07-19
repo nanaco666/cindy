@@ -496,6 +496,25 @@ export class AppServerHost {
     await this.shutdown(reason);
   }
 
+  /**
+   * 强制收割前把终态 transport error 广播给仍在订阅的 session。
+   *
+   * retire()/shutdown() 会静默清空 subscribers —— 常规路径(凭证切换/app 退出)由
+   * 上层先 Session.close 收尾,这是对的;但 auth 失效等强制路径会带着 in-flight turn
+   * 直接收割 host,不先叫醒订阅者的话,session 的 isTurnRunning 永远不翻 false,上层
+   * 的输入队列 / Stop 的 queueAbortPending 锁 / 凭证切换 busy 判定全部永久卡死
+   * (2026-07-19 实排:auth app_session_terminated 触发 retire 后会话假 busy 数小时)。
+   * 只广播、不清订阅 —— 紧随其后的 retire() 负责清理。
+   */
+  notifySubscribersOfForcedRetire(reason: string): void {
+    if (this.subscribers.size === 0) return;
+    this.logger.warn('forced retire with live subscribers — broadcasting terminal transport error', {
+      subscribers: this.subscribers.size,
+      reason,
+    });
+    this.broadcastTransportErrorToSubscribers(`app-server force-retired: ${reason}`);
+  }
+
   // ── 订阅 / 路由 ───────────────────────────────────────────────────────────
 
   /**
@@ -658,7 +677,12 @@ export class AppServerHost {
    */
   private handleTransportError(err: Error): void {
     this.logger.error('transport error, notifying subscribers + shutting down', { message: err.message });
-    // ErrorNotification 的 shape 不能完全合成 (没真实 turnId), 用最小可信字段。
+    this.broadcastTransportErrorToSubscribers(`app-server transport error: ${err.message}`);
+    void this.shutdown(`transport error: ${err.message}`);
+  }
+
+  /** ErrorNotification 的 shape 不能完全合成 (没真实 turnId), 用最小可信字段。 */
+  private broadcastTransportErrorToSubscribers(message: string): void {
     for (const [threadId, handlers] of this.subscribers) {
       try {
         handlers.error?.({
@@ -666,13 +690,12 @@ export class AppServerHost {
           turnId: '',
           willRetry: false,
           scope: 'transport',
-          error: { message: `app-server transport error: ${err.message}` },
+          error: { message },
         });
       } catch (e) {
         this.logger.warn('error broadcast handler threw', { threadId, message: (e as Error).message });
       }
     }
-    void this.shutdown(`transport error: ${err.message}`);
   }
 
   // ── 诊断辅助 (测试 / 日志) ────────────────────────────────────────────────

@@ -14,9 +14,7 @@ import { BrowserWindow } from 'electron';
 import { createLogger } from '../logger.js';
 
 import { readClaudeApiKey } from '../maker-host/auth-adapters.js';
-import { getActiveCatalog } from '../maker-host/active-catalog.js';
 import { clearChatgptBridgeCredentialCache } from '../maker-host/anthropic-responses-bridge-host.js';
-import { refreshCatalogDerivedModels } from '../maker-host/catalog-to-descriptors.js';
 import { refreshDiscoveredCodexModels } from '../maker-host/createDesktopProviderService.js';
 import { registerMakerAuthHandlers } from './authHandlers.js';
 import { createElectronIpcHandlerRegistry } from './electronIpcRegistry.js';
@@ -45,10 +43,18 @@ export function registerMakerAuthIpc(maker: Maker): void {
     // codex 登录/登出完成 → 清 bridge 凭证缓存 + 重读 models_cache 刷新 chatgpt/ 发现清单;
     // handler 在 AUTH_STATE_CHANGED 广播前 await,renderer refetch 即见最新目录(设置页
     // triggerLogin 路径不经 finalizeCodexAfterAuthModeChange,必须在这里同样收口)。
-    async (authenticated) => {
+    async (authenticated, liveModelsApplied, isCurrent) => {
+      if (!isCurrent()) return;
       clearChatgptBridgeCredentialCache();
-      await refreshDiscoveredCodexModels(authenticated);
-      refreshCatalogDerivedModels(maker, getActiveCatalog());
+      // live `model/list` 成功时 active-catalog 已由 CodexAgent callback 原子更新，不能再用
+      // 尚未落盘的 models_cache.json 覆盖成空。失败/登出才走磁盘边界收口；cache miss
+      // 会明确清空旧账号模型，避免串号。
+      if (!authenticated || !liveModelsApplied) {
+        if (authenticated) {
+          log.warn('Codex live model refresh was not applied; falling back to models_cache');
+        }
+        await refreshDiscoveredCodexModels(authenticated, isCurrent);
+      }
     },
   );
 

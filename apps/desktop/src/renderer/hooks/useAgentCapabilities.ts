@@ -112,6 +112,8 @@ const inflight = new Map<CacheKey, Promise<AgentCapabilities>>();
 let localGen = 0;
 /** 已挂载 hook 的本地能力订阅者；刷新完成后一次性切到新快照，避免中途空白帧。 */
 const localListeners = new Set<(agent: AgentKind, caps: AgentCapabilities) => void>();
+/** 已挂载的远程能力订阅者；key 同缓存，provider revision 后可原子换入新快照。 */
+const remoteListeners = new Map<CacheKey, Set<(caps: AgentCapabilities) => void>>();
 /**
  * 每被控设备的能力「代际」。`evictDeviceCapabilities` 时自增——在途的 fetchCapabilities 完成
  * 回调据此判断「本次请求是否已被驱逐」:被驱逐则**丢弃结果**,既不回写 cache、也不动 inflight
@@ -120,6 +122,30 @@ const localListeners = new Set<(agent: AgentKind, caps: AgentCapabilities) => vo
  * 本机用 localGen 处理目录热刷新；远端继续按 deviceGen 隔离。
  */
 const deviceGen = new Map<string, number>();
+
+function notifyRemoteCapabilities(
+  deviceId: string,
+  agentKind: AgentKind,
+  caps: AgentCapabilities,
+): void {
+  for (const listener of remoteListeners.get(cacheKey(agentKind, deviceId)) ?? []) listener(caps);
+}
+
+/** 订阅某被控端某 agent 的能力快照；只通知当前代际成功提交的完整结果。 */
+export function subscribeDeviceCapabilities(
+  deviceId: string,
+  agentKind: AgentKind,
+  listener: (caps: AgentCapabilities) => void,
+): () => void {
+  const key = cacheKey(agentKind, deviceId);
+  const bucket = remoteListeners.get(key) ?? new Set<(caps: AgentCapabilities) => void>();
+  bucket.add(listener);
+  remoteListeners.set(key, bucket);
+  return () => {
+    bucket.delete(listener);
+    if (bucket.size === 0) remoteListeners.delete(key);
+  };
+}
 
 async function fetchCapabilities(agentKind: AgentKind, deviceId?: string): Promise<AgentCapabilities> {
   const key = cacheKey(agentKind, deviceId);
@@ -151,6 +177,7 @@ async function fetchCapabilities(agentKind: AgentKind, deviceId?: string): Promi
       if (isCurrent()) {
         cache.set(key, caps);
         inflight.delete(key);
+        if (deviceId) notifyRemoteCapabilities(deviceId, agentKind, caps);
       } else if (!deviceId) {
         // 本地热刷新可能已原子换入更新快照；旧请求的调用方也应拿当前 cache，不能在
         // listener 更新之后又把 hook state 覆盖回旧对象。刷新仍在途时保留旧对象，完成后再通知。
@@ -183,12 +210,16 @@ export function useAgentCapabilities(
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!agentKind || deviceId) return undefined;
-    const onRefresh = (refreshedAgent: AgentKind, caps: AgentCapabilities): void => {
-      if (refreshedAgent !== agentKind) return;
+    if (!agentKind) return undefined;
+    const applySnapshot = (caps: AgentCapabilities): void => {
       setCapabilities(caps);
       setLoading(false);
       setError(null);
+    };
+    if (deviceId) return subscribeDeviceCapabilities(deviceId, agentKind, applySnapshot);
+    const onRefresh = (refreshedAgent: AgentKind, caps: AgentCapabilities): void => {
+      if (refreshedAgent !== agentKind) return;
+      applySnapshot(caps);
     };
     localListeners.add(onRefresh);
     return () => {
@@ -212,13 +243,17 @@ export function useAgentCapabilities(
     setCapabilities(null);
     setLoading(true);
     setError(null);
+    const remoteGeneration = deviceId ? deviceGen.get(deviceId) ?? 0 : null;
     fetchCapabilities(agentKind, deviceId)
       .then((caps) => {
-        if (cancelled) return;
+        // 远程成功结果只经「当前代际 cache commit → listener」更新，避免 revision 前的
+        // 旧 Promise 晚到后直接把已刷新的 hook state 覆盖回旧快照。
+        if (cancelled || deviceId) return;
         setCapabilities(caps);
       })
       .catch((e: unknown) => {
         if (cancelled) return;
+        if (deviceId && (deviceGen.get(deviceId) ?? 0) !== remoteGeneration) return;
         setError(e instanceof Error ? e.message : String(e));
       })
       .finally(() => {
@@ -263,34 +298,60 @@ export function evictDeviceCapabilities(deviceId: string): void {
   deviceGen.set(deviceId, (deviceGen.get(deviceId) ?? 0) + 1);
 }
 
+export type LocalCapabilitiesSnapshot = ReadonlyArray<
+  readonly [AgentKind, AgentCapabilities]
+>;
+
+/** 开始一轮本地 capabilities 刷新，并作废所有更早的本地请求。 */
+export function beginLocalCapabilitiesRefresh(): number {
+  localGen += 1;
+  for (const agent of ['claude-code', 'codex'] as const) {
+    inflight.delete(cacheKey(agent));
+  }
+  return localGen;
+}
+
+/** 读取两种 agent 的完整能力快照；失败向上抛，不触碰现有缓存。 */
+export async function loadLocalCapabilitiesSnapshot(): Promise<LocalCapabilitiesSnapshot> {
+  const api = getMakerApi();
+  if (!api) throw new Error('maker IPC not available');
+  return Promise.all(
+    (['claude-code', 'codex'] as const).map(async (agent) => [
+      agent,
+      await api.getCapabilities(agent),
+    ] as const),
+  );
+}
+
+export function isLocalCapabilitiesRefreshCurrent(generation: number): boolean {
+  return localGen === generation;
+}
+
+/** 仅提交当前代际的完整能力快照，并在提交后统一通知 mounted hooks。 */
+export function commitLocalCapabilitiesSnapshot(
+  generation: number,
+  entries: LocalCapabilitiesSnapshot,
+): boolean {
+  if (!isLocalCapabilitiesRefreshCurrent(generation)) return false;
+  for (const [agent, caps] of entries) cache.set(cacheKey(agent), caps);
+  for (const [agent, caps] of entries) {
+    for (const listener of localListeners) listener(agent, caps);
+  }
+  return true;
+}
+
 /**
  * Codex auth/discovery 广播后的本地热刷新。旧 cache 在两个 IPC 都成功前继续可读；完成后同时
  * 替换 cache 并通知 mounted hooks，避免 provider:list 已更新而 scheduler/selector 仍用旧能力。
  */
 export async function refreshLocalCapabilities(): Promise<void> {
-  const api = getMakerApi();
-  if (!api) {
-    log.warn('refreshLocalCapabilities skipped: maker IPC not available');
-    return;
-  }
-  const generation = ++localGen;
-  for (const agent of ['claude-code', 'codex'] as const) {
-    inflight.delete(cacheKey(agent));
-  }
+  const generation = beginLocalCapabilitiesRefresh();
   try {
-    const entries = await Promise.all(
-      (['claude-code', 'codex'] as const).map(async (agent) => [
-        agent,
-        await api.getCapabilities(agent),
-      ] as const),
-    );
-    if (localGen !== generation) return;
-    for (const [agent, caps] of entries) cache.set(cacheKey(agent), caps);
-    for (const [agent, caps] of entries) {
-      for (const listener of localListeners) listener(agent, caps);
-    }
+    commitLocalCapabilitiesSnapshot(generation, await loadLocalCapabilitiesSnapshot());
   } catch (err) {
-    if (localGen === generation) log.warn('refreshLocalCapabilities failed:', err);
+    if (isLocalCapabilitiesRefreshCurrent(generation)) {
+      log.warn('refreshLocalCapabilities failed:', err);
+    }
   }
 }
 

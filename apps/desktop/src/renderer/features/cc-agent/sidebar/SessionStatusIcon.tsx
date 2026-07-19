@@ -89,16 +89,23 @@ export function SessionStatusIcon({
   return (
     <span className="relative shrink-0 inline-flex items-center justify-center size-3" aria-hidden>
       {isArchived ? (
-        <Archive size={size ?? 12} strokeWidth={1.5} className="text-[var(--cmd-palette-item-meta)]" />
+        <Archive
+          size={size ?? 12}
+          strokeWidth={1.5}
+          className={isActive ? 'text-[var(--sidebar-item-active-foreground)]' : 'text-[var(--cmd-palette-item-meta)]'}
+        />
       ) : isOrcaLead ? (
         <Puzzle
           size={size ?? 13}
           strokeWidth={1.75}
           className={cn(
             'shrink-0',
-            isRunning
-              ? 'text-[var(--status-bar-accent)] session-status-breathing'
-              : 'text-[var(--cmd-palette-item-meta)]',
+            isActive
+              ? 'text-[var(--sidebar-item-active-foreground)]'
+              : isRunning
+                ? 'text-[var(--status-bar-accent)]'
+                : 'text-[var(--cmd-palette-item-meta)]',
+            isRunning && 'session-status-breathing',
           )}
         />
       ) : isAttached ? (
@@ -107,13 +114,21 @@ export function SessionStatusIcon({
           strokeWidth={1.75}
           className={cn(
             'shrink-0',
-            isRunning
-              ? 'text-[var(--status-bar-accent)] session-status-breathing'
-              : 'text-[var(--cmd-palette-item-meta)]',
+            isActive
+              ? 'text-[var(--sidebar-item-active-foreground)]'
+              : isRunning
+                ? 'text-[var(--status-bar-accent)]'
+                : 'text-[var(--cmd-palette-item-meta)]',
+            isRunning && 'session-status-breathing',
           )}
         />
       ) : (
-        <VendorIcon vendor={vendor} size={size ?? (vendor === 'cc' ? 13 : 12)} running={isRunning} />
+        <VendorIcon
+          vendor={vendor}
+          size={size ?? (vendor === 'cc' ? 13 : 12)}
+          running={isRunning}
+          className={isActive ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}
+        />
       )}
       {showAttentionDot && hasAttentionNotification && (
         <AttentionDot size={6} tone={attentionTone} className="absolute -top-0.5 -right-0.5" />

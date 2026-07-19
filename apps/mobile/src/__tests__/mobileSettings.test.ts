@@ -164,19 +164,28 @@ describe('mobile settings overview', () => {
     expect(source).not.toContain('clearManualName');
   });
 
-  it('shows the App filing number only in cn above the account actions', () => {
+  it('always shows the regional privacy policy above the cn-only App filing number', () => {
     const source = readTextLf(resolve(process.cwd(), 'app/settings.tsx'), 'utf8');
-    const regionGuardIndex = source.indexOf("AUTH_REGION === 'cn' ? (");
     const filingCardIndex = source.indexOf('<SettingsGroup title="备案信息">');
+    const privacyRowIndex = source.indexOf('testID="settings.privacyPolicy"');
+    const regionGuardIndex = source.indexOf("{AUTH_REGION === 'cn' ? (", privacyRowIndex);
+    const filingNumberIndex = source.indexOf('testID="settings.appFilingNumber"');
     const accountActionsIndex = source.indexOf('testID="settings.accountActions"');
 
+    expect(source).toContain("const PRIVACY_POLICY_URL = AUTH_REGION === 'cn'");
+    expect(source).toContain("'https://cindy.com.cn/privacy/'");
+    expect(source).toContain("'https://cindy.app/privacy/'");
+    expect(source).toContain('Linking.openURL(PRIVACY_POLICY_URL)');
+    expect(source).toContain('accessibilityLabel="打开隐私政策"');
+    expect(source).toContain('accessibilityRole="link"');
+    expect(source).toContain('label="隐私政策"');
     expect(source).toContain('label="App 备案号"');
-    expect(source).toContain('testID="settings.appFilingNumber"');
     expect(source).toContain('value="沪ICP备11033765号-89A"');
-    expect(regionGuardIndex).toBeGreaterThan(-1);
-    expect(filingCardIndex).toBeGreaterThan(regionGuardIndex);
-    expect(accountActionsIndex).toBeGreaterThan(-1);
-    expect(filingCardIndex).toBeLessThan(accountActionsIndex);
+    expect(filingCardIndex).toBeGreaterThan(-1);
+    expect(privacyRowIndex).toBeGreaterThan(filingCardIndex);
+    expect(regionGuardIndex).toBeGreaterThan(privacyRowIndex);
+    expect(filingNumberIndex).toBeGreaterThan(regionGuardIndex);
+    expect(accountActionsIndex).toBeGreaterThan(filingNumberIndex);
   });
 
   it('keeps one update action and shows both full-package and OTA versions', () => {

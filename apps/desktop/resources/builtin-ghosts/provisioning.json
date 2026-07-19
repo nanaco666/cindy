@@ -31,9 +31,6 @@
     "cindy-gitlab": {
       "audience": "all"
     },
-    "cindy-slack": {
-      "audience": "all"
-    },
     "xd-feishu": {
       "audience": "all",
       "tier": "enterprise"

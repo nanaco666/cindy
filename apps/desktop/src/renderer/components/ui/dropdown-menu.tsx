@@ -35,18 +35,29 @@ const DropdownMenuSubTrigger = React.forwardRef<
 ));
 DropdownMenuSubTrigger.displayName = DropdownMenuPrimitive.SubTrigger.displayName;
 
+// SubContent 必须走 Portal 挂到 body,不能作为父 Content 的 DOM 后代原地渲染。
+// Radix 默认不给 SubContent 套 Portal,但我们的菜单 surface(MENU_CONTENT_CLASS,
+// 含 bg-[var(--cmd-palette-bg)])在 CINDY 毛玻璃主题下会拿到 `backdrop-filter: blur`
+// (globals.css 的 E4D 毛玻璃规则)。`backdrop-filter` 非 none 会让父 Content 成为
+// fixed 定位后代的 containing block,于是子菜单的 Popper wrapper(position:fixed)不再
+// 逃逸到外层 popper wrapper,而是被父 Content 的 `overflow-hidden` 裁掉 —— 表现为
+// 「点了移动到项目/子菜单没反应」。Portal 到 body(无 filter、无 overflow 裁剪)可根治,
+// 与 DropdownMenuContent 自身已 Portal 的做法一致。删除此 Portal 会让子菜单在毛玻璃
+// 主题下重新消失。
 const DropdownMenuSubContent = React.forwardRef<
   React.ComponentRef<typeof DropdownMenuPrimitive.SubContent>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>
 >(({ className, ...props }, ref) => (
-  <DropdownMenuPrimitive.SubContent
-    ref={ref}
-    className={cn(
-      'z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
-      className,
-    )}
-    {...props}
-  />
+  <DropdownMenuPrimitive.Portal>
+    <DropdownMenuPrimitive.SubContent
+      ref={ref}
+      className={cn(
+        'z-50 min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-lg data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2',
+        className,
+      )}
+      {...props}
+    />
+  </DropdownMenuPrimitive.Portal>
 ));
 DropdownMenuSubContent.displayName = DropdownMenuPrimitive.SubContent.displayName;
 

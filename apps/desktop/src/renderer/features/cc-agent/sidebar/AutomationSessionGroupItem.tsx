@@ -147,6 +147,9 @@ export function AutomationSessionGroupItem({
     hasAttentionNotification: latestHasNotification,
   });
   const showRightStatus = groupRightStatusKind !== 'time';
+  const actionButtonToneClassName = hasActiveHidden
+    ? 'text-sidebar-item-active-foreground hover:text-sidebar-item-active-foreground hover:bg-[color-mix(in_srgb,var(--sidebar-item-active-foreground)_14%,transparent)]'
+    : 'text-sidebar-action-icon hover:bg-sidebar-item-hover hover:text-foreground';
 
   const freezeCurrentLayout = (sessionId: string): void => {
     setFrozen({
@@ -307,9 +310,10 @@ export function AutomationSessionGroupItem({
             // (2026-07 侧栏视觉统一)。
             'group relative flex h-8 w-full items-center gap-1.5 rounded-full',
             indented ? 'pl-[22px] pr-2' : 'pl-3 pr-2',
-            'text-left text-sm font-medium text-foreground',
-            'hover:bg-sidebar-item-hover',
-            hasActiveHidden && 'bg-sidebar-item-active',
+            'text-left text-sm font-medium',
+            hasActiveHidden
+              ? 'bg-sidebar-item-active text-[var(--sidebar-item-active-foreground)]'
+              : 'text-foreground hover:bg-sidebar-item-hover',
             latestSession && 'cursor-pointer',
           )}
         >
@@ -330,6 +334,7 @@ export function AutomationSessionGroupItem({
               vendor={latestSession?.agentKind === 'codex' ? 'codex' : 'cc'}
               size={12}
               running={isRunning}
+              className={hasActiveHidden ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}
             />
             {/* Clock 点击跳自动化页对应条目。宿主已是 title <button>,不能嵌套
                 button,用 span role="button" + stopPropagation 拦下行点击。 */}
@@ -358,16 +363,19 @@ export function AutomationSessionGroupItem({
                   size={10}
                   strokeWidth={0}
                   fill="currentColor"
-                  className="text-[var(--cmd-palette-item-meta)] hover:text-foreground transition-colors"
+                  className={hasActiveHidden ? 'text-[var(--sidebar-item-active-foreground)]' : 'text-[var(--cmd-palette-item-meta)] hover:text-foreground transition-colors'}
                 />
               ) : (
                 <Clock
                   size={10}
                   strokeWidth={1.75}
                   className={cn(
-                    isRunning
-                      ? 'text-[var(--status-bar-accent)] session-status-breathing'
-                      : 'text-[var(--cmd-palette-item-meta)] hover:text-foreground transition-colors',
+                    hasActiveHidden
+                      ? 'text-[var(--sidebar-item-active-foreground)]'
+                      : isRunning
+                        ? 'text-[var(--status-bar-accent)]'
+                        : 'text-[var(--cmd-palette-item-meta)] hover:text-foreground transition-colors',
+                    isRunning && 'session-status-breathing',
                   )}
                 />
               )}
@@ -392,9 +400,18 @@ export function AutomationSessionGroupItem({
               count: group.sessions.length,
               attention: attentionCount,
             })}
-            className="flex size-5 shrink-0 items-center justify-center rounded-md hover:bg-sidebar-item-hover"
+            className={cn(
+              'flex size-5 shrink-0 items-center justify-center rounded-md',
+              hasActiveHidden
+                ? 'hover:bg-[color-mix(in_srgb,var(--sidebar-item-active-foreground)_14%,transparent)]'
+                : 'hover:bg-sidebar-item-hover',
+            )}
           >
-            <ToggleIcon size={12} strokeWidth={2} className="text-[var(--cmd-palette-item-meta)]" />
+            <ToggleIcon
+              size={12}
+              strokeWidth={2}
+              className={hasActiveHidden ? 'text-[var(--sidebar-item-active-foreground)]' : 'text-[var(--cmd-palette-item-meta)]'}
+            />
           </button>
           {/* focus 隐藏条件用命名 group(/slot) 收窄到本槽位:行内 toggle/title
               button 点击后焦点常驻行内,整行 group-focus-within 会让选中态
@@ -407,7 +424,8 @@ export function AutomationSessionGroupItem({
                 fade 出让位给 [Run][More] 按钮组。 */}
             <div
               className={cn(
-                'flex items-center gap-1 text-xs font-medium text-sidebar-action-icon',
+                'flex items-center gap-1 text-xs font-medium',
+                hasActiveHidden ? 'text-[var(--sidebar-item-active-foreground)]' : 'text-sidebar-action-icon',
                 scheduleId && !menuOpen && 'group-hover:opacity-0 group-focus-within/slot:opacity-0',
                 menuOpen && 'opacity-0',
               )}
@@ -444,7 +462,10 @@ export function AutomationSessionGroupItem({
                     role="img"
                     size={12}
                     strokeWidth={2}
-                    className="size-4 text-sidebar-action-icon"
+                    className={cn(
+                      'size-4',
+                      hasActiveHidden ? 'text-sidebar-item-active-foreground' : 'text-sidebar-action-icon',
+                    )}
                     aria-label={t('ccAgent.sidebar.status.running', 'Running')}
                     title={t('ccAgent.sidebar.status.running', 'Running')}
                   />
@@ -492,8 +513,8 @@ export function AutomationSessionGroupItem({
                     aria-label={t('ccAgent.sidebar.automationGroup.menu.runNow')}
                     className={cn(
                       'flex size-5 shrink-0 items-center justify-center rounded-md',
-                      'text-sidebar-action-icon transition-colors',
-                      'hover:bg-sidebar-item-hover hover:text-foreground',
+                      'transition-colors',
+                      actionButtonToneClassName,
                     )}
                   >
                     <Play size={14} strokeWidth={2} />
@@ -511,8 +532,8 @@ export function AutomationSessionGroupItem({
                       aria-label={t('ccAgent.sidebar.automationGroup.menu.more')}
                       className={cn(
                         'flex size-5 shrink-0 items-center justify-center rounded-md',
-                        'text-sidebar-action-icon transition-colors',
-                        'hover:bg-sidebar-item-hover hover:text-foreground',
+                        'transition-colors',
+                        actionButtonToneClassName,
                       )}
                     >
                       <EllipsisVertical size={14} strokeWidth={2} />

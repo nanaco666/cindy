@@ -14,6 +14,7 @@ import { getAndroidMcpDeps } from './android.js';
 import { getBrowserMcpDeps } from './browser.js';
 import { getComputerMcpDeps } from './computer.js';
 import { feishuIm } from '../im';
+import { getSlackToolBridge } from '../hook-control/slackToolBridge.js';
 import { createLogger } from '../logger.js';
 import { getScheduler } from '../scheduler-host/index.js';
 import { searchSessionsFn } from '../maker-host/session-search.js';
@@ -127,6 +128,13 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
         }
       },
       logger: createLogger('mcp/lizi_feishu_bot'),
+    },
+    // lizi_slack(2026-07-19): Slack 网关工具。桥经 hook-control 的零依赖
+    // 注册表取用(静态 import ipc.ts 会与 maker-host 闭环, 见 slackToolBridge
+    // 模块头); 未注册 = null, provider isEnabled fail-closed。
+    slackHook: {
+      getBridge: () => getSlackToolBridge(),
+      logger: createLogger('mcp/lizi_slack'),
     },
     scheduler: {
       getScheduler: () => getScheduler(),

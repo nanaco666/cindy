@@ -10,6 +10,7 @@
  *   node scripts/promote-canary-macos.mjs --yes            # 提升 darwin-arm64 + darwin-x64
  *   node scripts/promote-canary-macos.mjs --arch arm64     # 仅 dry-run arm64
  *   node scripts/promote-canary-macos.mjs --arch x64 --yes # 仅提升 x64
+ *   node scripts/promote-canary-macos.mjs --region global --yes  # 海外渠道(默认 cn)
  *
  * 流程: 与 windows 版相同，每个 arch 独立处理。
  */
@@ -35,10 +36,26 @@ try {
 } catch { /* no .env file */ }
 
 import { resolveReleaseCdnBaseUrl } from '../../../scripts/shared/release-env.mjs';
-import { OSS_BUCKET, OSS_PREFIX, OSS_REGION, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
+import { OSS_BUCKET, OSS_PREFIX, OSS_REGION, refreshOssConfig, resolveOssCredentials } from '../../../scripts/shared/oss.mjs';
+import { applyReleaseRegionConfigToEnv } from './ci/release-regions.mjs';
 
-refreshOssConfig();
-const CDN_BASE = resolveReleaseCdnBaseUrl();
+// 发布区域:cn(国内,默认)/ global(海外),与 release-macos.mjs 同一套渠道配置。
+const REGION = (() => {
+  const idx = process.argv.indexOf('--region');
+  const value = idx !== -1 && process.argv[idx + 1] ? process.argv[idx + 1] : 'cn';
+  if (!['cn', 'global'].includes(value)) {
+    console.error(`ERROR: --region must be cn or global (got "${value}")`);
+    process.exit(1);
+  }
+  return value;
+})();
+
+// 发布目标优先从发版机本地 scripts/release-regions.json 取(env 显式值优先,
+// 见 ci/release-regions.mjs;真机密 AK/SK 等仍走 env / .env)。
+applyReleaseRegionConfigToEnv(REGION);
+
+refreshOssConfig(REGION);
+const CDN_BASE = resolveReleaseCdnBaseUrl(REGION);
 
 const ALL_ARCHS = ['arm64', 'x64'];
 
@@ -58,18 +75,8 @@ function parseArgs() {
   return { yes, archs };
 }
 
-function getAKSK() {
-  const accessKeyId = process.env.FP_DEV_OSS_ACCESS_KEY_ID;
-  const accessKeySecret = process.env.FP_DEV_OSS_ACCESS_KEY_SECRET;
-  if (!accessKeyId || !accessKeySecret) {
-    console.error('ERROR: FP_DEV_OSS_ACCESS_KEY_ID and FP_DEV_OSS_ACCESS_KEY_SECRET must be set');
-    process.exit(1);
-  }
-  return { accessKeyId, accessKeySecret };
-}
-
 function createOSSClient() {
-  const { accessKeyId, accessKeySecret } = getAKSK();
+  const { accessKeyId, accessKeySecret } = resolveOssCredentials(REGION);
   return new OSS({
     region: OSS_REGION,
     accessKeyId,
@@ -172,7 +179,8 @@ async function promoteOne(client, arch, yes) {
 
 async function main() {
   const { yes, archs } = parseArgs();
-  console.log(`=== Promote canary → stable (macOS, ${archs.join(' + ')}) ===`);
+  console.log(`=== Promote canary → stable (macOS, ${archs.join(' + ')}, region: ${REGION}) ===`);
+  console.log(`    CDN: ${CDN_BASE}`);
 
   // 仅在真要执行时才创建 OSS client（dry-run 不需要 AK/SK）
   const client = yes ? createOSSClient() : null;

@@ -52,6 +52,16 @@ registerColor('surface-on-card', {
   light: '#ffffff',
   dark: '#1f1f1e',
 }, 'CTA/checked icon 的深色前景');
+// 历史幽灵 token 补注册:--panel-bg 被 9 处宿主组件裸引用(PanelChrome / TabBar
+// / RightSidebarShell / ReviewTabBody / ghostPanels / RightSidebar / SidebarWindowLayout,
+// 均 bg-[var(--panel-bg)] 无 fallback)但 colors.ts 从未注册,:root 读不到值 → 面板/
+// 侧边栏头部背景失效。语义 = 面板背景 = surface(与 ghostPanelTheme.ts 沙箱 body
+// fallback var(--panel-bg, var(--surface)) 兜底一致),故 alias 到 --surface,
+// 注册后宿主消费点显式取到 surface 值。
+registerColor('panel-bg', {
+  light: 'var(--surface)',
+  dark: 'var(--surface)',
+}, '面板 / 侧边栏 / 工具面板头部背景(历史幽灵 token 补注册,alias 到 surface)');
 registerColor('md-table-bg', {
   light: 'rgba(236, 236, 234, 0.55)',
   dark: 'rgba(44, 44, 42, 0.55)',
@@ -72,6 +82,13 @@ registerColor('border-transparent-mixed', {
   light: 'transparent',
   dark: '#3c3c3a',
 }, 'Light transparent / dark board border');
+// 历史幽灵 token 补注册:--board 被 RewindPreviewDialog 4 处 border-[var(--board)]
+// 裸引用(无 fallback)但从未注册,边框读不到值。名字泛但消费点全是边框,语义 =
+// 边框,alias 到 --border-default。
+registerColor('board', {
+  light: 'var(--border-default)',
+  dark: 'var(--border-default)',
+}, '通用边框(历史幽灵 token --board 补注册,alias 到 border-default)');
 registerColor('text-primary', {
   light: '#262626',
   dark: '#d4d4d4',
@@ -169,9 +186,9 @@ registerColor('error-flat', {
   dark: '#ef4444',
 }, '扁平 danger 前景');
 registerColor('warning-accent', {
-  light: '#FF6600',
-  dark: '#FF6600',
-}, 'Thinking orange / warning accent');
+  light: '#EA6B17',
+  dark: '#EA6B17',
+}, 'Thinking orange / warning accent — running 状态色,设计定稿 2026-07-17(取代 #FF6600 冻结红线);全局同值,9 主题无 override 自动跟随');
 registerColor('shadow-soft-panel', {
   light: '0 4px 12px rgb(0 0 0 / 0.08)',
   dark: '0 4px 12px rgb(0 0 0 / 0.3)',
@@ -351,6 +368,14 @@ registerColor('sidebar-item-active', {
   light: '0 0% 90%',
   dark: '60 2% 17%',
 }, 'Light Gray #e5e5e5 — selected pill');
+registerColor('sidebar-item-active-foreground', {
+  light: 'var(--foreground)',
+  dark: 'var(--foreground)',
+}, 'Selected pill 文字/图标前景(default=foreground 正文;CINDY override 反白 #FCFCFC/#D4D4D4,E1D 侧栏层级)');
+registerColor('sidebar-item-active-border', {
+  light: 'var(--sidebar-item-active)',
+  dark: 'var(--sidebar-item-active)',
+}, 'Selected pill 1px 描边(default=invisible 同 pill bg;CINDY override light 深红 #A00A1D/dark 浅红 #C24152,补编 §3,别装反)');
 registerColor('sidebar-search-bg', {
   light: 'var(--surface-hsl)',
   dark: 'var(--surface-hsl)',
@@ -462,6 +487,10 @@ registerColor('chat-input-border-focus', {
   light: 'var(--text-tertiary)',
   dark: 'var(--text-tertiary)',
 }, 'Silver — focus hint, still grayscale');
+registerColor('chat-input-placeholder-subtle', {
+  light: 'color-mix(in srgb, var(--chat-input-placeholder) 40%, transparent)',
+  dark: 'color-mix(in srgb, var(--chat-input-placeholder) 40%, transparent)',
+}, 'Chat input placeholder at 40% opacity');
 registerColor('chat-input-text', {
   light: '#000000',
   dark: '#d4d4d4',
@@ -568,16 +597,14 @@ registerColor('send-btn-disabled-icon', {
   light: 'var(--text-disabled-tertiary)',
   dark: 'var(--text-disabled-tertiary)',
 }, 'Silver');
-
-// Stop button — per cc-agent-view Streaming variant
-registerColor('stop-btn-bg', {
-  light: 'var(--surface-chip)',
-  dark: 'var(--surface-chip)',
-}, 'Light Gray');
-registerColor('stop-btn-icon', {
-  light: 'var(--text-primary-on-dark)',
-  dark: 'var(--text-primary-on-dark)',
-}, 'Near Black');
+registerColor('send-btn-hover-bg', {
+  light: 'var(--send-btn-bg)',
+  dark: 'var(--send-btn-bg)',
+}, 'Send button hover bg(default 同 bg,默认皮肤维持 opacity-85 hover;CINDY override 反相中性 hover #2E3237/#E2E2E2,E1D 纳入值表)');
+registerColor('send-btn-pressed-bg', {
+  light: 'var(--send-btn-bg)',
+  dark: 'var(--send-btn-bg)',
+}, 'Send button pressed bg(default 同 bg;CINDY override 反相中性 pressed #25282C/#D4D4D4,E1D 纳入值表)');
 
 // Permission prompt (F-PERM-2)
 registerColor('perm-code-bg', {
@@ -671,9 +698,9 @@ registerColor('perm-item-selected-bg', {
 
 // Narrow scoped text hints: only selected risky permission modes use color.
 registerColor('perm-auto-selected-text', {
-  light: '#000050',
-  dark: '#00D9C5',
-}, 'Auto Approval accent');
+  light: '#417CDD',
+  dark: '#417CDD',
+}, 'Auto Approval accent(设计定稿 2026-07-17 #417CDD,light/dark 同值;原 light #000050/dark #00D9C5)');
 registerColor('perm-bypass-selected-text', {
   light: 'var(--warning-accent)',
   dark: 'var(--warning-accent)',
@@ -895,6 +922,35 @@ registerColor('status-bar-accent', {
   light: 'var(--warning-accent)',
   dark: 'var(--warning-accent)',
 }, 'Thinking Orange — DESIGN.md');
+// 状态徽章前景(§7 必炸点):橙底(status-bar-accent #FF6600)深字。
+// 此前橙徽章借用 accent-pure-cta-fg(白字)→ #FFFFFF×#FF6600=2.94:1 不达标;
+// 拆独立 token 走深字(=text-primary/text-primary-inv),× status-bar-accent ≥4.5:1。
+registerColor('status-badge-fg', {
+  light: 'var(--accent-pure-cta-fg)',
+  dark: 'var(--accent-pure-cta-fg)',
+}, '状态徽章前景(§7 必炸点;default 镜像 accent-pure-cta-fg 保证既有 9 主题零变化,CINDY override #1F1F1F)');
+// E4D 毛玻璃(R1 audit,用户裁决透壁纸 2026-07-17):半透明底色,仅 CINDY override 生效;
+// default 不透明等价色(其他 family 行为零变化)。blur 在 CSS backdrop-filter(50px/6px)。
+registerColor('surface-translucent-sidebar', {
+  light: 'var(--surface)',
+  dark: 'var(--surface)',
+}, 'E4D 侧栏半透明底(default 等价 surface;CINDY override rgba #F6F6F6@90%/#120F0F@85% R1 模式1)');
+registerColor('surface-translucent-main', {
+  light: 'var(--surface-elevated)',
+  dark: 'var(--surface-elevated)',
+}, 'E4D 主面板半透明底(default surface-elevated;CINDY override rgba #FFFFFF@93%/#120F0F@85% R1 模式2)');
+registerColor('surface-translucent-overlay', {
+  light: 'var(--surface-elevated)',
+  dark: 'var(--surface-elevated)',
+}, 'E4D 浮层半透明底(default surface-elevated;CINDY override rgba #F6F6F6@90%/#252323@80% R1 模式3)');
+registerColor('composer-pill-bg', {
+  light: '#FCFCFC',
+  dark: '#393838',
+}, 'E2 composer pill/圆钮底(输入条 pill/圆钮,比卡面浅一档刻意对比;lead Figma 实测 spec §2-3;取代错稿 glass-pill-bg)');
+registerColor('composer-pill-icon', {
+  light: '#3C3F43',
+  dark: '#D9D9D9',
+}, 'E2 composer pill 图标(light=text-primary #3C3F43;dark #D9D9D9;spec §2-3)');
 registerColor('status-bar-meta', {
   light: 'var(--text-secondary)',
   dark: 'var(--text-secondary)',
@@ -1191,16 +1247,16 @@ registerColor('settings-integration-warning', {
 // small enough that saturation issues don't arise; legibility comes from
 // the dot's high-contrast position against surface, not from luminance.
 registerColor('remote-status-ready', {
-  light: '#22c55e',
-  dark: '#22c55e',
+  light: '#2AAE5B',
+  dark: '#2AAE5B',
 }, 'Status — connected / ready (green)');
 registerColor('remote-status-progress', {
   light: '#f59e0b',
   dark: '#f59e0b',
 }, 'Status — connecting/authenticating/reconnecting (amber-500, 偏黄不容易在小圆点上被误读为红)');
 registerColor('remote-status-failed', {
-  light: '#ef4444',
-  dark: '#ef4444',
+  light: '#D91F37',
+  dark: '#D91F37',
 }, 'Status — connect failed (red)');
 
 // 会话状态点(AttentionDot / 列表行右槽 / 灵动岛)三态语义色 —— 同 remote-status 走
@@ -1208,17 +1264,17 @@ registerColor('remote-status-failed', {
 // 全端统一色表(与灵动岛 native 对齐):running=Thinking Orange(status-bar-accent)、
 // awaiting=TapTap 蓝、error=红、完成未读=绿。
 registerColor('card-status-awaiting', {
-  light: '#00D9C5',
-  dark: '#00D9C5',
-}, '状态点 — 待用户回复/选择 (TapTap 蓝 #00D9C5,与灵动岛 needs-interaction 同值;light/dark 同色,2026-07 Dash 真机确认浅底可辨)');
+  light: '#19D2C1',
+  dark: '#19D2C1',
+}, '状态点 — 待用户回复/选择 (设计定稿 2026-07-17 #19D2C1,取代 #00D9C5 冻结红线;light/dark 同值)');
 registerColor('card-status-error', {
-  light: '#ef4444',
-  dark: '#ef4444',
-}, '状态点 — 任务出错 (red,与灵动岛 error 同值)');
+  light: '#D91F37',
+  dark: '#D91F37',
+}, '状态点 — 任务出错 (设计定稿 2026-07-17 #D91F37,取代 #ef4444;状态族 error,非 error-flat 正文文案)');
 registerColor('card-status-done', {
-  light: '#22c55e',
-  dark: '#22c55e',
-}, '状态点 — 完成未读 (green;普通/定时任务完成统一,橙专职 running)');
+  light: '#2AAE5B',
+  dark: '#2AAE5B',
+}, '状态点 — 完成未读 (设计定稿 2026-07-17 #2AAE5B,取代 #22c55e;普通/定时任务完成统一,橙专职 running)');
 registerColor('remote-status-disconnected', {
   light: 'var(--text-tertiary)',
   dark: 'var(--text-tertiary)',
@@ -1422,9 +1478,9 @@ registerColor('plan-edit-body', {
 
 // Action card
 registerColor('plan-action-approve-text', {
-  light: 'var(--text-primary-inv)',
-  dark: 'var(--text-primary-inv)',
-}, 'Near Black');
+  light: 'var(--text-primary-emphasis)',
+  dark: 'var(--text-primary-emphasis)',
+}, 'Plan 操作卡强调主文字');
 registerColor('plan-action-approve-enter', {
   light: 'var(--text-secondary-cross)',
   dark: 'var(--text-secondary-cross)',
@@ -1442,9 +1498,9 @@ registerColor('plan-action-fb-placeholder', {
   dark: 'var(--text-placeholder)',
 }, 'Placeholder — 收口至 --text-placeholder slot');
 registerColor('plan-action-fb-text', {
-  light: 'var(--text-primary-inv)',
-  dark: 'var(--text-primary-inv)',
-}, 'Near Black');
+  light: 'var(--text-primary-emphasis)',
+  dark: 'var(--text-primary-emphasis)',
+}, 'Plan 反馈输入强调主文字');
 registerColor('plan-action-row-hover-bg', {
   light: 'var(--surface-hover-soft)',
   dark: 'var(--surface-hover-soft)',
@@ -1508,13 +1564,13 @@ registerColor('color-error-700', {
 
 /* === P3.1: focus / shadow / overlay / error / warning 语义槽 === */
 registerColor('focus-ring', {
-  light: '#3b82f6',
-  dark: '#3b82f6',
-}, 'Opaque a11y focus border (Tailwind blue-500)');
+  light: '#417CDD',
+  dark: '#417CDD',
+}, 'Opaque a11y focus border(设计定稿 2026-07-17 #417CDD,取代 blue-500 #3b82f6)');
 registerColor('focus-ring-soft', {
-  light: 'rgba(59, 130, 246, 0.5)',
-  dark: 'rgba(59, 130, 246, 0.5)',
-}, '50% alpha focus ring — 替代 ring-[#xxx]/50 写法');
+  light: 'rgba(65, 124, 221, 0.5)',
+  dark: 'rgba(65, 124, 221, 0.5)',
+}, '50% alpha focus ring(随 focus-ring #417CDD,定稿 2026-07-17)— 替代 ring-[#xxx]/50 写法');
 registerColor('shadow-menu', {
   light: '0 4px 16px rgba(0, 0, 0, 0.15)',
   dark: '0 4px 16px rgba(0, 0, 0, 0.5)',
@@ -1566,13 +1622,13 @@ registerColor('error-fg-strong', {
   dark: '#fca5a5',
 }, '错误卡片强调文字');
 registerColor('warning-bg-soft', {
-  light: 'rgba(255, 102, 0, 0.12)',
-  dark: 'rgba(255, 102, 0, 0.18)',
-}, 'Warning alpha surface (FeishuConflictDialog 类警告 badge)');
+  light: 'rgba(234, 107, 23, 0.12)',
+  dark: 'rgba(234, 107, 23, 0.18)',
+}, 'Warning alpha surface (FeishuConflictDialog 类警告 badge;alpha 随 warning-accent #EA6B17 同步重算 2026-07-17)');
 registerColor('warning-fg', {
-  light: '#F59E0B',
-  dark: '#F59E0B',
-}, 'Toast warning amber 同款,用于需要 warning 语义的强调文字/图标(跨主题统一,语义豁免)');
+  light: '#F3A115',
+  dark: '#F3A115',
+}, '警示强调文字/图标(设计定稿 2026-07-17 #F3A115;与 Toast amber #F59E0B 解耦——Toast 维持 B 组现状,本 token 走定稿前景)');
 // cc-mgr 远端升级 banner (UpgradeBanner.tsx) — amber warning 语义,跨主题统一、语义豁免
 // (规则 15:warning/amber 在豁免范围,不被非默认主题 override,但仍走 token)。
 registerColor('upgrade-banner-bg', {
@@ -1613,3 +1669,131 @@ registerColor('skillhub-review-quarantine-fg', {
   light: '#a16207',
   dark: '#facc15',
 }, 'Skill Hub 人工复核中 badge 文字 (yellow warning, 语义豁免)');
+
+// CREATE AGENT composer controls — Figma 185:1495 / 185:2724, E2-S 2026-07-17.
+// These private tokens are exact light/dark values for the new-page solid
+// composer controls. Do not reuse for the session-view glass composer pills.
+registerColor('create-agent-control-bg', {
+  light: '#FCFCFC',
+  dark: '#393838',
+}, 'CREATE AGENT pill / icon button background');
+registerColor('create-agent-control-bg-hover', {
+  light: 'var(--surface-hover)',
+  dark: '#444242',
+}, 'CREATE AGENT neutral hover background');
+registerColor('create-agent-control-bg-pressed', {
+  light: 'var(--surface-hover-soft)',
+  dark: '#504F4F',
+}, 'CREATE AGENT neutral pressed background');
+registerColor('create-agent-control-border', {
+  light: '#DCDFE3',
+  dark: '#434343',
+}, 'CREATE AGENT pill / icon button border');
+registerColor('create-agent-control-text', {
+  light: '#3C3F43',
+  dark: '#D4D4D4',
+}, 'CREATE AGENT pill text');
+registerColor('create-agent-control-icon', {
+  light: '#3C3F43',
+  dark: '#D9D9D9',
+}, 'CREATE AGENT icon / chevron');
+registerColor('create-agent-segment-track-bg', {
+  light: '#EDEDED',
+  dark: '#2A2828',
+}, 'CREATE AGENT Claude/Codex segmented track');
+registerColor('create-agent-segment-inactive-text', {
+  light: '#9A9DA3',
+  dark: '#6F6F6F',
+}, 'CREATE AGENT segmented inactive text');
+registerColor('create-agent-send-bg', {
+  light: '#3C3F43',
+  dark: '#EEEEEE',
+}, 'CREATE AGENT send button inverse neutral bg');
+registerColor('create-agent-send-icon', {
+  light: '#FCFCFC',
+  dark: '#252222',
+}, 'CREATE AGENT send button inverse neutral icon');
+registerColor('create-agent-send-bg-hover', {
+  light: '#2E3237',
+  dark: '#E2E2E2',
+}, 'CREATE AGENT send button neutral hover bg');
+registerColor('create-agent-send-bg-pressed', {
+  light: '#25282C',
+  dark: '#D4D4D4',
+}, 'CREATE AGENT send button neutral pressed bg');
+registerColor('create-agent-send-disabled-bg', {
+  light: '#EDEDED',
+  dark: '#444242',
+}, 'CREATE AGENT send button disabled bg');
+registerColor('create-agent-send-disabled-icon', {
+  light: '#9A9DA3',
+  dark: '#585555',
+}, 'CREATE AGENT send button disabled icon');
+registerColor('create-agent-focus-ring', {
+  light: 'var(--text-tertiary)',
+  dark: 'var(--text-tertiary)',
+}, 'CREATE AGENT neutral focus border');
+registerColor('create-agent-quick-card-bg', {
+  light: '#F8F8F8',
+  dark: '#312F2F',
+}, 'CREATE AGENT quick-start card background');
+registerColor('create-agent-quick-card-border', {
+  light: '#DCDFE3',
+  dark: '#434343',
+}, 'CREATE AGENT quick-start card border');
+registerColor('create-agent-quick-card-text', {
+  light: '#3C3F43',
+  dark: '#D4D4D4',
+}, 'CREATE AGENT quick-start card text');
+registerColor('create-agent-quick-card-icon-bg', {
+  light: '#EDEDED',
+  dark: '#2A2828',
+}, 'CREATE AGENT quick-start icon circle background');
+registerColor('create-agent-quick-card-icon', {
+  light: '#3C3F43',
+  dark: '#D4D4D4',
+}, 'CREATE AGENT quick-start icon');
+registerColor('create-agent-quick-card-bg-hover', {
+  light: '#FCFCFC',
+  dark: '#3B3A3A',
+}, 'CREATE AGENT quick-start card neutral hover background');
+registerColor('create-agent-avatar-ring', {
+  light: 'rgba(255, 255, 255, 0.08)',
+  dark: 'rgba(255, 255, 255, 0.08)',
+}, 'CREATE AGENT lockup avatar outer ring');
+registerColor('create-agent-avatar-glass-bg', {
+  light: 'rgba(0, 0, 0, 0.004)',
+  dark: 'rgba(0, 0, 0, 0.004)',
+}, 'CREATE AGENT lockup avatar GLASS fill');
+registerColor('create-agent-avatar-inner-ring-start', {
+  light: 'rgba(255, 255, 255, 0.29)',
+  dark: 'rgba(255, 255, 255, 0.29)',
+}, 'CREATE AGENT lockup avatar inner gradient ring start');
+registerColor('create-agent-avatar-inner-ring-end', {
+  light: 'rgba(255, 255, 255, 0.24)',
+  dark: 'rgba(255, 255, 255, 0.24)',
+}, 'CREATE AGENT lockup avatar inner gradient ring end');
+registerColor('sidebar-nav-text', {
+  light: '#3C3F43',
+  dark: '#D4D4D4',
+}, 'CINDY sidebar top nav icon / text');
+registerColor('sidebar-list-muted', {
+  light: '#9A9DA3',
+  dark: '#6F6F6F',
+}, 'CINDY sidebar section and project list muted text');
+registerColor('sidebar-user-card-bg', {
+  light: 'rgba(255, 255, 255, 0.20)',
+  dark: 'rgba(255, 255, 255, 0.05)',
+}, 'CINDY sidebar user capsule background');
+registerColor('sidebar-user-card-border', {
+  light: 'rgba(60, 63, 67, 0.10)',
+  dark: 'rgba(255, 255, 255, 0.13)',
+}, 'CINDY sidebar user capsule border');
+registerColor('sidebar-user-card-text', {
+  light: '#3C3F43',
+  dark: '#D4D4D4',
+}, 'CINDY sidebar user capsule text and icon');
+registerColor('caret-accent', {
+  light: 'var(--accent-cta-bg)',
+  dark: 'var(--accent-cta-bg)',
+}, 'Editable caret accent; CINDY overrides to focus blue #417CDD per user decision 2026-07-18(撤红改蓝)');

@@ -93,6 +93,7 @@
       "personalization": "개인화",
       "chipMetrics": "사용량 표시기",
       "memory": "메모리",
+      "subagentModels": "하위 에이전트 모델",
       "compaction": "컨텍스트 압축",
       "terminalShell": "기본 터미널 셸",
       "linkOpen": "링크 열기 방식",
@@ -1327,6 +1328,14 @@
         }
       }
     },
+    "subagentModels": {
+      "title": "하위 에이전트 모델",
+      "description": "Claude와 Codex 하위 에이전트의 기본 모델을 각각 지정합니다.",
+      "unspecified": "지정 안 함(기본 동작 사용)",
+      "codexUnavailable": "현재 Codex 버전에서는 안전한 재정의를 지원하지 않습니다",
+      "hint": "지정하지 않으면 재정의를 주입하지 않습니다. Claude 변경 사항은 새 세션부터 적용되며, Codex 전체 컨텍스트 fork는 현재 모델 재정의를 지원하지 않습니다.",
+      "saveFailed": "하위 에이전트 모델 저장 실패"
+    },
     "compaction": {
       "title": "컨텍스트 압축",
       "description": "Claude Code가 언제 컨텍스트를 자동 압축할지 제어합니다.",
@@ -1711,7 +1720,8 @@
         },
         "toast": {
           "saveFailed": "저장 실패",
-          "toggleFailed": "전환 실패"
+          "toggleFailed": "전환 실패",
+          "actionFailed": "작업에 실패했습니다"
         },
         "loginRequired": "먼저 {{appName}} 계정에 로그인하세요. 로그인 후 연결이 자동으로 복구됩니다.",
         "authorizing": "인증 중…",
@@ -1727,6 +1737,26 @@
           "confirmInstall": "설치",
           "confirmCancel": "취소",
           "waitingHint": "설치 완료를 기다리는 중… 설치되면 바인딩이 자동으로 완료되며 재인증은 필요 없습니다."
+        },
+        "multi": {
+          "title": "Slack 워크스페이스",
+          "statusWorkspaces_one": "워크스페이스 {{count}}개",
+          "statusWorkspaces_other": "워크스페이스 {{count}}개",
+          "statusPendingSuffix_one": "({{count}}개 처리 대기)",
+          "statusPendingSuffix_other": "({{count}}개 처리 대기)",
+          "statusOffKept_one": "꺼짐 · 워크스페이스 바인딩 {{count}}개 유지됨",
+          "statusOffKept_other": "꺼짐 · 워크스페이스 바인딩 {{count}}개 유지됨",
+          "displaced": "다른 기기에서 바인딩됨",
+          "rebind": "다시 바인딩",
+          "removeAria": "이 워크스페이스 바인딩 해제",
+          "removeConfirmTitle": "{{team}} 바인딩 해제",
+          "removeConfirmDescription": "해제하면 Slack 워크스페이스 \"{{team}}\"에서 이 기기로 더 이상 작업을 보낼 수 없습니다. 필요하면 언제든 다시 인증하여 바인딩할 수 있습니다.",
+          "removeDisplacedConfirmDescription": "이 바인딩은 다른 기기가 가져갔습니다. 삭제해도 로컬 목록에서 이 행만 제거됩니다.",
+          "removeConfirm": "해제",
+          "cancelPending": "취소",
+          "dismiss": "닫기",
+          "addWorkspace": "Slack 워크스페이스 추가",
+          "alreadyBound": "이미 연동된 {{team}}이(가) 인증되었습니다. 다른 워크스페이스를 추가하려면 Slack 인증 페이지 오른쪽 위에서 워크스페이스를 전환한 후 허용하세요."
         }
       },
       "summary": {
@@ -1759,7 +1789,8 @@
         "retry": "다시 시도",
         "toast": {
           "saveFailed": "디렉터리 설정을 저장하지 못했습니다"
-        }
+        },
+        "teamChipAria": "환경설정이 속한 Slack 워크스페이스 선택"
       }
     },
     "devices": {
@@ -3135,6 +3166,24 @@
       "queueTooltip": "클릭하면 대기열에 추가됩니다. {{shortcut}} 를 누르면 작업을 중단하지 않고 끼어듭니다",
       "stop": "생성 중지"
     },
+    "createAgent": {
+      "quickStart": "빠른 시작",
+      "quickStarts": {
+        "explore": "코드 탐색 및 이해",
+        "build": "새 기능, 앱 또는 도구 만들기",
+        "review": "코드 검토 및 수정 제안",
+        "fix": "문제와 실패 수정"
+      },
+      "sidebar": {
+        "new": "새로 만들기",
+        "automation": "자동화",
+        "skills": "스킬",
+        "search": "검색",
+        "local": "로컬",
+        "projects": "프로젝트",
+        "conversations": "대화"
+      }
+    },
     "addRemoteProject": {
       "title": "원격 프로젝트 추가",
       "hint": "연결된 원격 호스트 또는 제어 가능한 기기를 선택하고 이 프로젝트의 폴더를 선택하세요.",
@@ -3398,7 +3447,10 @@
     },
     "pastedText": {
       "chipLabel": "붙여넣은 텍스트({{lines}}줄)",
-      "previewTitle": "붙여넣은 텍스트"
+      "previewTitle": "붙여넣은 텍스트",
+      "editTitle": "붙여넣은 텍스트 편집",
+      "cancelEdit": "편집 취소",
+      "saveEdit": "텍스트 저장"
     }
   },
   "voiceInputOverlay": {
@@ -4786,6 +4838,7 @@
         "timezoneRequired": "시간대는 필수입니다",
         "selectThread": "대상 스레드를 선택하세요",
         "selectProject": "프로젝트 디렉토리를 선택하세요",
+        "modelUnavailable": "모델 {{model}}을 더 이상 사용할 수 없습니다. 다른 모델을 선택하세요.",
         "reasoningInvalid": "Reasoning은 {{values}} 중 하나여야 합니다",
         "preRunHookCommandRequired": "사전 검사 스크립트 명령을 입력하세요"
       }

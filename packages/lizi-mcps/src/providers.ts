@@ -7,12 +7,14 @@ import type {
   LiziMcpProvider,
   LiziMcpSessionContext,
   SchedulerMcpDeps,
+  SlackHookMcpDeps,
   SshMcpDeps,
   MemoryMcpDeps,
   ContactsMcpDeps,
   LspMcpDeps,
 } from './types.js';
 import { createFeishuBotMcpServer } from './lizi_feishuBotMcpServer.js';
+import { createSlackMcpGatewayServer } from './lizi_slackMcpServer.js';
 import { createSchedulerMcpServer } from './lizi_schedulerMcpServer.js';
 import { createSshMcpServer } from './lizi_sshMcpServer.js';
 import { createLiziMemoryMcpServer } from './lizi_memoryMcpServer.js';
@@ -36,6 +38,14 @@ export interface CreateLiziMcpProvidersOptions {
   /** Local desktop computer-use tools backed by a host-managed external driver. */
   computer?: ComputerMcpDeps;
   feishuBot?: FeishuBotMcpHostDeps;
+  /**
+   * lizi_slack: Slack 网关工具(经 hook 通道由 slack-hook-server 以托管
+   * user token 调 Slack 官方 MCP, 接替退役的 cindy-slack 意识)。
+   * workingDir 由 provider 从 ctx 绑定; isEnabled = 桥可用、绑定 confirmed 且
+   * 最近一次 welcome 宣告 slack-tools 能力(所有会话可见, 不按 source 门控)。
+   * 对应可关插件 id 'slack'。
+   */
+  slackHook?: Omit<SlackHookMcpDeps, 'workingDir'>;
   scheduler?: SchedulerMcpDeps;
   /**
    * lizi_ssh: 在已配置 SSH 主机上直接执行命令（复用 desktop ConnectionPool 的
@@ -221,6 +231,32 @@ export function createLiziMcpProviders(
           // slack-hook 会话里按来源在构建期注入渠道路由提示,
           // 把「发给我」的默认通道钉死在会话自身渠道(规则 9)。
           sessionSource: readSessionSource(ctx),
+        }),
+      }),
+    });
+  }
+
+  if (opts.slackHook && selected(enabled, 'lizi_slack')) {
+    providers.push({
+      name: 'lizi_slack',
+      // 会话构建期门控: 桥已注册、绑定 confirmed、最近一次成功 welcome 宣告
+      // slack-tools 才挂工具面。瞬时断线不撤 provider(避免重建 Codex),调用期由
+      // connected fail-closed 复查兜底;重连到不同 server 后 manager 会按新 welcome
+      // 刷新此 gate。server 侧还有 NOT_BOUND 的最终防线。
+      isEnabled: () => {
+        const bridge = opts.slackHook!.getBridge();
+        if (bridge === null) return false;
+        const a = bridge.availability();
+        return a.bound && a.serverSupportsTools;
+      },
+      toClaudeSdkConfig: (ctx) => ({
+        type: 'sdk',
+        name: 'lizi_slack',
+        instance: createSlackMcpGatewayServer({
+          getBridge: opts.slackHook!.getBridge,
+          // 大结果落盘的钳制根: 绑定当前会话工作目录(空 = 只截断不落盘)
+          ...(ctx.workingDir ? { workingDir: ctx.workingDir } : {}),
+          ...(opts.slackHook!.logger !== undefined ? { logger: opts.slackHook!.logger } : {}),
         }),
       }),
     });

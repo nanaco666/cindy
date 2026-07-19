@@ -92,11 +92,22 @@ export function isDeptSlug(slug: string): boolean {
 
 /** 部门镜像团队 slug(与 Hub team.service 的 deptTeamSlug 同算法) */
 export function deptMirrorTeamSlug(deptId: string): string {
+  return deptId;
+}
+
+/** 兼容迁移前的回显 slug;新请求始终使用 deptMirrorTeamSlug 的结果。 */
+export function matchesDeptMirrorTeamSlug(
+  deptId: string,
+  teamSlug: string,
+  teamSource?: string | null,
+): boolean {
+  if (deptMirrorTeamSlug(deptId) === teamSlug) return true;
+  if (teamSource !== 'dept' && teamSource !== 'xdt-maker') return false;
   const sanitized = deptId
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
-  return `dept-${sanitized}`;
+  return `dept-${sanitized}` === teamSlug;
 }
 
 export function buildSkillhubPublishParams({

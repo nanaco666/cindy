@@ -540,8 +540,8 @@ function WorkerTabsList({
                     'inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border py-0 pl-2 pr-6 text-[11px] leading-none transition-colors',
                     selected
                       ? isError
-                        ? 'border-[var(--error-fg)] bg-[var(--accent-cta-bg)] text-[var(--surface-on-card)]'
-                        : 'border-[var(--accent-cta-bg)] bg-[var(--accent-cta-bg)] text-[var(--surface-on-card)]'
+                        ? 'border-[var(--error-fg)] bg-[var(--accent-cta-bg)] text-[var(--accent-pure-cta-fg)]'
+                        : 'border-[var(--accent-cta-bg)] bg-[var(--accent-cta-bg)] text-[var(--accent-pure-cta-fg)]'
                       : isError
                         ? 'border-[var(--error-border)] bg-[var(--error-bg)] text-[var(--error-fg-strong)] hover:bg-[var(--error-bg)]'
                         : 'border-[var(--border-default)] bg-[var(--surface-chip)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]',

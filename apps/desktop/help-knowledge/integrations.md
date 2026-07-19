@@ -8,7 +8,7 @@ status: draft
 At a glance, Cindy integrates with:
 
 - **FeiShu (Lark)** — sign-in (OAuth) and DM-style bot notifications. See the FeiShu bot topic.
-- **Slack** — search / read / act on Slack via the Cindy Slack ghost (Settings > Ghosts > Cindy Slack), plus the Slack channel bot for receiving tasks (see IM bot settings).
+- **Slack** — one Slack binding (Settings > Slack toggle) powers both directions: the Slack channel bot for receiving tasks, and agent Slack tools (search / read history / post as the bound user via Slack's hosted MCP) available in every session.
 - **Google** — Gmail / Calendar / Drive / Sheets, via the Filo Google ghost (Settings > Ghosts > Filo Google).
 - **Jira / Confluence** — via the XD Atlassian ghost (Settings > Ghosts > XD Atlassian; one OAuth covers both).
 - **GitHub / GitLab** — via the Cindy GitHub and Cindy GitLab ghosts (Settings > Ghosts).

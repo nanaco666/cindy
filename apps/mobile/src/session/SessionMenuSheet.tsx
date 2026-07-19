@@ -726,6 +726,7 @@ export function SessionMenuSheet({
         snap={primarySnap}
         testID="session.menuSheet"
         title={header.title}
+        variant="tasksheet"
       >
         {menuContent}
       </SheetSurface>
@@ -792,7 +793,7 @@ function MenuActionRow({
 }) {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
-  const color = danger ? colors.destructive : colors.textPrimary;
+  const color = danger ? colors.destructive : colors.sheetActionText;
   return (
     <Pressable
       accessibilityLabel={label}
@@ -884,10 +885,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingBottom: spacing.lg,
   },
   headerBlock: {
+    alignSelf: 'stretch',
     gap: spacing.xs,
     paddingHorizontal: spacing.xs,
   },
   chipRow: {
+    alignSelf: 'stretch',
+    justifyContent: 'flex-start',
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.xs,
@@ -929,8 +933,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     minWidth: 0,
   },
   actionGroup: {
-    backgroundColor: colors.surfaceElevated,
-    borderColor: colors.border,
+    backgroundColor: colors.sheetActionSurface,
+    borderColor: colors.sheetActionBorder,
     borderRadius: radius.container,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
@@ -939,14 +943,15 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: spacing.md,
-    minHeight: 48,
-    paddingHorizontal: spacing.md,
+    minHeight: 45,
+    paddingHorizontal: spacing.lg,
   },
   actionLabel: {
-    color: colors.textPrimary,
+    color: colors.sheetActionText,
     flexShrink: 1,
-    fontSize: typeScale.body,
-    fontWeight: fontWeight.medium,
+    fontSize: typeScale.listBody,
+    fontWeight: fontWeight.semibold,
+    lineHeight: lineHeight.listBody,
   },
   actionLabelDanger: {
     color: colors.destructive,

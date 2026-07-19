@@ -1192,7 +1192,7 @@ export function ProvidersSection() {
     null | { mode: 'create' } | { mode: 'edit'; config: CustomProviderConfig }
   >(null);
 
-  // 订阅 maker.auth 变更由 useProviders 内部处理;api-key 类断开后手动 refetch。
+  // maker.auth/catalog 广播由 App 的联合快照刷新处理；api-key 类断开后手动 refetch 连接态。
   const byId = useMemo(() => {
     const map = new Map<string, ProviderView>();
     providers.forEach((p) => map.set(p.id, p));
@@ -1215,7 +1215,7 @@ export function ProvidersSection() {
       });
       if (!ok) return;
       try {
-        // 删配置 + 清密钥;main 广播 PROVIDER_CHANGED → useProviders 自动 refetch。
+        // 删配置 + 清密钥；main 广播 PROVIDER_CHANGED → App 联合刷新目录与 capabilities。
         await deleteCustomProvider(p.id);
         toast.success(t('settings.providers.custom.toast.deleted'));
       } catch {
@@ -1225,11 +1225,14 @@ export function ProvidersSection() {
     [confirm, t],
   );
 
-  // 只保留有模型的供应商行——没有可选模型的供应商不应占据列表空间。
+  // 内置四家(bespoke)行无条件保留——它们是应用内置的连接入口,清单统一重构后模型
+  // 全靠连接后动态发现,零模型时行也必须在,否则未登录用户没有「授权」按钮可点,
+  // 发现永远无法发生(鸡生蛋死锁)。零模型时 ProviderCell 自身不画计数与展开箭头。
+  // 「有模型才占行」的过滤只适用于自定义 API-key 供应商(见下方 customProviders 循环)。
   const providerRows: Array<{ key: string; node: ReactNode }> = [];
   const pushBuiltin = (id: string, render: (p: ProviderView) => ReactNode) => {
     const p = byId.get(id);
-    if (p && providerHasModels(p)) providerRows.push({ key: id, node: render(p) });
+    if (p) providerRows.push({ key: id, node: render(p) });
   };
   // Cindy AI 行固定置顶,即使实时模型清单为空也保留:用户仍需要看到凭据状态 / 重试入口,
   // 点击展开则由 XdGatewayRow 给出明确的「模型列表拉取失败」提示。

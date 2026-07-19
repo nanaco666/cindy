@@ -66,12 +66,12 @@ export function CollaborationModeToggle({
   const [open, setOpen] = useState(false);
   const [draftWorker, setDraftWorker] = useState<CollabWorkerKind>(worker);
 
-  // iconOnly 时 pill 退化成方形纯图标按钮(无 border / 无 bg, 只剩 hover 反馈),
-  // 视觉权重降到与同行其它 trigger (PermissionSelector / ExtraDirsButton) 一致。
+  // iconOnly 时 pill 退化成 30px 圆形图标按钮,与同行其它 trigger
+  // (PermissionSelector / ExtraDirsButton / VoiceInputButton) 同尺寸同底同描边。
   const pillSizeCn = iconOnly
-    ? cn('h-6 w-6 justify-center px-0', dense && 'h-[22px] w-[22px]')
-    : cn('h-6 px-2.5', dense ? 'text-[11.5px]' : 'text-[12px]');
-  const iconSize = iconOnly ? (dense ? 13 : 14) : 11;
+    ? 'h-[30px] w-[30px] justify-center px-0'
+    : cn('h-[30px] px-2.5', dense ? 'text-[11.5px]' : 'text-[12px]');
+  const iconSize = iconOnly ? 14 : 11;
 
   const handleOpenChange = (next: boolean) => {
     if (next) setDraftWorker(worker);
@@ -97,9 +97,9 @@ export function CollaborationModeToggle({
           aria-pressed
           className={cn(
             'flex shrink-0 items-center gap-1.5 rounded-full font-medium transition-colors',
-            'bg-transparent text-[var(--status-bar-accent)]',
-            !iconOnly && 'border border-[var(--status-bar-accent)]',
-            'hover:bg-[var(--status-bar-accent)]/15',
+            'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] text-[var(--text-primary)]' /* spec 2026-07-17, 去橙中性, token by 一哥 */,
+            'border border-[var(--border-default)]',
+            'hover:bg-[var(--model-trigger-hover)]',
             pillSizeCn,
             disabled && 'cursor-not-allowed opacity-50',
           )}
@@ -127,9 +127,9 @@ export function CollaborationModeToggle({
           aria-pressed={false}
           className={cn(
             'flex shrink-0 items-center gap-1.5 rounded-full font-medium transition-colors',
-            'bg-transparent text-[var(--cmd-palette-item-meta)]',
-            !iconOnly && 'border border-[var(--cmd-palette-border)]',
-            'hover:bg-[var(--cmd-palette-item-hover)]',
+            'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] text-[var(--text-primary)]' /* spec 2026-07-17, token by 一哥 */,
+            'border border-[var(--border-default)]',
+            'hover:bg-[var(--model-trigger-hover)]',
             pillSizeCn,
             disabled && 'cursor-not-allowed opacity-50',
           )}
@@ -156,9 +156,9 @@ export function CollaborationModeToggle({
             aria-pressed={false}
             className={cn(
               'flex shrink-0 items-center gap-1.5 rounded-full font-medium transition-colors',
-              'bg-transparent text-[var(--cmd-palette-item-meta)]',
-              !iconOnly && 'border border-[var(--cmd-palette-border)]',
-              'hover:bg-[var(--cmd-palette-item-hover)]',
+              'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] text-[var(--text-primary)]' /* spec 2026-07-17, token by 一哥 */,
+              'border border-[var(--border-default)]',
+              'hover:bg-[var(--model-trigger-hover)]',
               pillSizeCn,
               disabled && 'cursor-not-allowed opacity-50',
             )}

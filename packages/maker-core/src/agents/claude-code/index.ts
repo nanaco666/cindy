@@ -377,6 +377,41 @@ const CLAUDE_EFFORTS: EffortDescriptor[] = [
 ];
 
 // 注: plan 不再作为权限档暴露 —— 计划模式已独立成 Capabilities.planMode 一级开关
+/**
+ * Anthropic 模型清单动态发现的 host 捕获回调(2026-07-19 模型列表统一重构)。
+ * host(apps/desktop maker-host/model-discovery/anthropic)注入监听器,agent 在
+ * 每次会话首个 Query 建立后 fire-and-forget 调 SDK `supportedModels()` 上报。
+ * 纯附加能力:不阻塞 send / 不进事件热路径 / 不改 prompt 组装(缓存前缀零影响);
+ * 失败静默(发现通道有 HTTP + 磁盘缓存互补,见 host 侧)。
+ */
+let supportedModelsListener: ((models: unknown[]) => void) | null = null;
+
+/** host 注入 SDK supportedModels 捕获回调;传 null 解除。 */
+export function setClaudeSupportedModelsListener(
+  listener: ((models: unknown[]) => void) | null,
+): void {
+  supportedModelsListener = listener;
+}
+
+/** fire-and-forget 捕获(远端 RemoteQuery 无 supportedModels 方法时静默跳过)。 */
+function notifySupportedModels(q: Query): void {
+  if (!supportedModelsListener) return;
+  const fn = (q as { supportedModels?: () => Promise<unknown[]> }).supportedModels;
+  if (typeof fn !== 'function') return;
+  void fn.call(q).then(
+    (models) => {
+      try {
+        if (Array.isArray(models)) supportedModelsListener?.(models);
+      } catch {
+        /* listener 异常不得外溢成 unhandled rejection */
+      }
+    },
+    () => {
+      /* 捕获失败静默:发现是附加能力,不影响会话 */
+    },
+  );
+}
+
 // (与目标模式同级的 UI 入口), agent 内部仍用 SDK permissionMode='plan' 实现。
 const CLAUDE_PERMISSION_MODES: PermissionModeDescriptor[] = [
   { id: 'ask',               displayName: 'Ask permissions',     description: 'Always ask before making changes' },
@@ -2363,6 +2398,8 @@ export class ClaudeCodeAgent extends BaseAgent {
     // ── 首次起 q + 启动 forward loop ─────────────────────────────────────────
     q = await buildQuery();
     startForwardLoop(q);
+    // Anthropic 清单动态发现:init 后 fire-and-forget 捕获 supportedModels(见文件顶注)。
+    notifySupportedModels(q);
 
     // ── AgentSessionHandle 包装 ─────────────────────────────────────────────
     // Rewind rebuild 已创建新 q、但本次 send 尚未登记 turnInFlight / bridge state 的短窗口。

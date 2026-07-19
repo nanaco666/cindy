@@ -27,8 +27,10 @@ import { installSystemNetworkErrorToastListener } from '@/lib/systemNetworkError
 import { installSilentInstallToastListener } from '@/lib/silentInstallToast';
 import { installProviderUpstreamErrorToastListener } from '@/lib/providerUpstreamErrorToast';
 import { installCcMgrUpgradeListener } from '@/state/ccMgrUpgradeStore';
-import { preloadAllCapabilities, refreshLocalCapabilities } from '@/hooks/useAgentCapabilities';
-import { preloadProviders } from '@/hooks/useProviders';
+import {
+  preloadLocalCatalogSnapshot,
+  refreshLocalCatalogSnapshot,
+} from '@/lib/localCatalogSnapshot';
 import {
   useResyncAgentIslandSettingsAfterLogin,
 } from '@/hooks/useAgentIslandSettings';
@@ -58,15 +60,18 @@ function MakerBootstrap() {
 
   useEffect(() => {
     makerChatStore.syncActiveTurnsFromMain();
-    void preloadAllCapabilities();
-    // 预热供应商快照 —— 让模型下拉首次打开即终态布局(双栏/单栏不再跳变,见 useProviders)。
-    void preloadProviders();
-    // main 在 Codex auth/discovery 收口后先原地更新 Maker capabilities，再发 auth push；
-    // renderer 收到后重拉两个 agent，保持 scheduler / selector / context metadata 同步。
-    const off = window.electronAPI.maker.auth.onStateChanged((payload) => {
-      if (payload.agentKind === 'codex') void refreshLocalCapabilities();
-    });
-    return off;
+    void preloadLocalCatalogSnapshot();
+    // main 先提交 active catalog + capabilities 再广播；renderer 收到任一目录/鉴权变化后
+    // 联合重拉 providers 与两份 capabilities，整组成功且代际最新时才切换。
+    const refresh = () => {
+      void refreshLocalCatalogSnapshot();
+    };
+    const offAuth = window.electronAPI.maker.auth.onStateChanged(refresh);
+    const offProviders = window.electronAPI.maker.onProvidersChanged(refresh);
+    return () => {
+      offAuth?.();
+      offProviders?.();
+    };
   }, []);
   return null;
 }

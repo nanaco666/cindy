@@ -501,7 +501,7 @@ function SkillUsagePanel({
               disabled={diagnoseDisabled || diagnoseLoading}
               className={cn(
                 'inline-flex h-8 w-full items-center justify-center gap-2 rounded-full px-2 text-xs font-medium',
-                'bg-[var(--accent-cta-bg)] text-[var(--surface-on-card)]',
+                'bg-[var(--accent-cta-bg)] text-[var(--accent-pure-cta-fg)]',
                 'hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60',
               )}
             >
@@ -1310,7 +1310,7 @@ export function SkillhubDetailView() {
   const initialRawRef = useRef<string>('');
   const { confirm } = useConfirmDialog();
 
-  // 当前用户的部门信息：仅在打开 PublishDialog 时按需拉一次（避免每次进 detail 都触发 /api/user/me）
+  // 当前用户的部门信息：仅在打开 PublishDialog 时按需拉一次
   // 已发布的 skill 也可走 infoResult.currentUserDeptIds 兜底
   const [myDepts, setMyDepts] = useState<{ ids: string[]; names: string[] }>({ ids: [], names: [] });
   const currentUserDeptIds = myDepts.ids.length > 0 ? myDepts.ids : (infoResult?.currentUserDeptIds ?? []);

@@ -28,6 +28,7 @@ describe('buildClaudeEnv', () => {
   const originalForceColor = process.env.FORCE_COLOR;
   const originalTerm = process.env.TERM;
   const originalPsOutputRendering = process.env.PSStyle__OutputRendering;
+  const originalSubagentModel = process.env.CLAUDE_CODE_SUBAGENT_MODEL;
 
   afterEach(() => {
     if (originalDisableCron === undefined) {
@@ -44,6 +45,7 @@ describe('buildClaudeEnv', () => {
     restore('FORCE_COLOR', originalForceColor);
     restore('TERM', originalTerm);
     restore('PSStyle__OutputRendering', originalPsOutputRendering);
+    restore('CLAUDE_CODE_SUBAGENT_MODEL', originalSubagentModel);
   });
 
   it('disables Claude Code native cron for host-managed sessions', async () => {
@@ -65,6 +67,24 @@ describe('buildClaudeEnv', () => {
 
     expect(getAuthEnv).toHaveBeenCalledWith({ credentialMode: 'gateway-key' });
     expect(env.ANTHROPIC_API_KEY).toBe('key');
+  });
+
+  it('injects the configured Claude subagent model', async () => {
+    delete process.env.CLAUDE_CODE_SUBAGENT_MODEL;
+
+    const env = await buildClaudeEnv(createAuthAdapter(), {
+      subagentModel: 'claude-haiku-4-5-20251001',
+    });
+
+    expect(env.CLAUDE_CODE_SUBAGENT_MODEL).toBe('claude-haiku-4-5-20251001');
+  });
+
+  it('does not inject a subagent model when the host setting is blank', async () => {
+    delete process.env.CLAUDE_CODE_SUBAGENT_MODEL;
+
+    const env = await buildClaudeEnv(createAuthAdapter(), { subagentModel: '   ' });
+
+    expect(env.CLAUDE_CODE_SUBAGENT_MODEL).toBeUndefined();
   });
 
   it('keeps native cron disabled even when inherited env or runtime flags try to enable it', async () => {

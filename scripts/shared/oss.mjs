@@ -32,17 +32,46 @@ const OSS = require('ali-oss');
 //
 // 部分 desktop 发布入口会先静态 import 本模块、再从 apps/desktop/.env 补环境变量。
 // ESM 依赖会先于消费模块求值,所以配置不能永久冻结在首次 import 的时刻。
-export function resolveOssConfig() {
+// 发布区域(国内 cn / 海外 global)各自一套独立发布目标:cn 沿用既有 XDT_* 变量名,
+// global 用 XDT_GLOBAL_*。两套渠道(bucket / prefix / CDN 域名)不互相兜底,
+// 少配一项就 fail closed,防止海外产物误发进国内渠道(反之亦然)。
+export const RELEASE_REGIONS = Object.freeze(['cn', 'global']);
+
+export function resolveReleaseRegion(region) {
+  const normalized = region?.trim() || 'cn';
+  if (!RELEASE_REGIONS.includes(normalized)) {
+    throw new Error(`Invalid release region: ${normalized}; expected cn or global`);
+  }
+  return normalized;
+}
+
+const OSS_ENV_NAMES_BY_REGION = Object.freeze({
+  cn: {
+    cdnBase: 'XDT_CDN_BASE_URL',
+    bucket: 'XDT_OSS_BUCKET',
+    prefix: 'XDT_OSS_PREFIX',
+    region: 'XDT_OSS_REGION',
+  },
+  global: {
+    cdnBase: 'XDT_GLOBAL_CDN_BASE_URL',
+    bucket: 'XDT_GLOBAL_OSS_BUCKET',
+    prefix: 'XDT_GLOBAL_OSS_PREFIX',
+    region: 'XDT_GLOBAL_OSS_REGION',
+  },
+});
+
+export function resolveOssConfig(releaseRegion = 'cn') {
+  const names = OSS_ENV_NAMES_BY_REGION[resolveReleaseRegion(releaseRegion)];
   const required = (envName) => {
     const value = process.env[envName]?.trim();
     if (!value) throw new Error(`缺少 OSS 发布配置: 请设置 ${envName}`);
     return value;
   };
   return {
-    cdnBase: required('XDT_CDN_BASE_URL').replace(/\/+$/, ''),
-    bucket: required('XDT_OSS_BUCKET'),
-    prefix: required('XDT_OSS_PREFIX'),
-    region: required('XDT_OSS_REGION'),
+    cdnBase: required(names.cdnBase).replace(/\/+$/, ''),
+    bucket: required(names.bucket),
+    prefix: required(names.prefix),
+    region: required(names.region),
   };
 }
 
@@ -53,8 +82,14 @@ export let OSS_BUCKET;
 export let OSS_PREFIX;
 export let OSS_REGION;
 
-export function refreshOssConfig() {
-  const config = resolveOssConfig();
+// 记住最近一次 refresh 用的区域:createOSSClient() 在调用时重新解析配置,
+// 必须跟 live binding 指向同一渠道,不能悄悄回落到 cn。
+let ACTIVE_RELEASE_REGION = 'cn';
+
+export function refreshOssConfig(releaseRegion = 'cn') {
+  const region = resolveReleaseRegion(releaseRegion);
+  const config = resolveOssConfig(region);
+  ACTIVE_RELEASE_REGION = region;
   CDN_BASE = config.cdnBase;
   OSS_BUCKET = config.bucket;
   OSS_PREFIX = config.prefix;
@@ -93,19 +128,29 @@ export async function gzipFile(srcPath, destPath) {
 // ── 阿里云 OSS ─────────────────────────────────────────────────────────────
 
 // 凭证从环境变量读取,不进仓库。缺失时直接终止(release 脚本上下文,快速失败)。
-function getAKSK() {
-  const accessKeyId = process.env.FP_DEV_OSS_ACCESS_KEY_ID;
-  const accessKeySecret = process.env.FP_DEV_OSS_ACCESS_KEY_SECRET;
+// cn 沿用既有 FP_DEV_OSS_ACCESS_KEY_*;global 渠道 bucket 挂在不同阿里云账号时
+// 可单独设 XDT_GLOBAL_OSS_ACCESS_KEY_*,不设则回落 FP_DEV_*(同账号跨区域场景)。
+export function resolveOssCredentials(releaseRegion = 'cn') {
+  const region = resolveReleaseRegion(releaseRegion);
+  const accessKeyId =
+    (region === 'global' && process.env.XDT_GLOBAL_OSS_ACCESS_KEY_ID?.trim()) ||
+    process.env.FP_DEV_OSS_ACCESS_KEY_ID;
+  const accessKeySecret =
+    (region === 'global' && process.env.XDT_GLOBAL_OSS_ACCESS_KEY_SECRET?.trim()) ||
+    process.env.FP_DEV_OSS_ACCESS_KEY_SECRET;
   if (!accessKeyId || !accessKeySecret) {
     console.error('ERROR: FP_DEV_OSS_ACCESS_KEY_ID and FP_DEV_OSS_ACCESS_KEY_SECRET must be set');
+    if (region === 'global') {
+      console.error('       (global 渠道也可改设 XDT_GLOBAL_OSS_ACCESS_KEY_ID / XDT_GLOBAL_OSS_ACCESS_KEY_SECRET)');
+    }
     process.exit(1);
   }
   return { accessKeyId, accessKeySecret };
 }
 
-export function createOSSClient() {
-  const { accessKeyId, accessKeySecret } = getAKSK();
-  const { region, bucket } = resolveOssConfig();
+export function createOSSClient(releaseRegion = ACTIVE_RELEASE_REGION) {
+  const { accessKeyId, accessKeySecret } = resolveOssCredentials(releaseRegion);
+  const { region, bucket } = resolveOssConfig(releaseRegion);
   return new OSS({
     region,
     accessKeyId,

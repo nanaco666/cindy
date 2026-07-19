@@ -7,6 +7,8 @@ import { materialOceanHC } from './builtin/material-ocean-hc';
 import { monokaiPro } from './builtin/monokai-pro';
 import { oneDarkPro } from './builtin/one-dark-pro';
 import { solarizedLight } from './builtin/solarized-light';
+import { cindyDark } from './builtin/cindy-dark';
+import { cindyLight } from './builtin/cindy-light';
 import { getLocalThemes } from './local-themes';
 import type { Theme, ThemeType } from './types';
 
@@ -22,12 +24,18 @@ export interface ThemeFamily {
   dark: Theme | null;
 }
 
-export const DEFAULT_FAMILY_ID = 'default';
+export const DEFAULT_FAMILY_ID = 'cindy';
 
-// 顺序就是设置 dropdown 的显示顺序: 默认家族在前, 之后按 light→dark 双
-// 变体优先, 再列 dark-only 家族。
+// 顺序就是设置 dropdown 的显示顺序:Cindy 作为新用户默认主题置顶,
+// 之后按 light→dark 双变体优先, 再列 dark-only 家族。
 const BUILTIN_FAMILIES: ThemeFamily[] = [
-  { id: 'default', name: 'Default', light: defaultLight, dark: defaultDark },
+  {
+    id: 'cindy',
+    name: 'Cindy',
+    light: cindyLight,
+    dark: cindyDark,
+  },
+  { id: 'default', name: 'Classic', light: defaultLight, dark: defaultDark },
   { id: 'atom-one', name: 'Atom One', light: atomOneLight, dark: oneDarkPro },
   { id: 'solarized-light', name: 'Solarized Light', light: solarizedLight, dark: null },
   { id: 'eclipse', name: 'Eclipse', light: null, dark: eclipse },

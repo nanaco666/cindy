@@ -89,13 +89,13 @@ describe('homeViewPreferenceStore', () => {
     }));
 
     await expect(readHomeViewPreferences()).resolves.toEqual({
-      groupByProject: false,
+      groupByProject: true,
       selectedDevice: { deviceId: 'devB', name: 'devB' },
     });
 
     store.set(__testing.storageKey, 'not-json');
     await expect(readHomeViewPreferences()).resolves.toEqual({
-      groupByProject: false,
+      groupByProject: true,
       selectedDevice: null,
     });
   });

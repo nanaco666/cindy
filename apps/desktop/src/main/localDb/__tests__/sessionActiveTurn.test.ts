@@ -1,7 +1,7 @@
 /**
  * interrupted-turn-resume(简化版)单测。
  * 覆盖:started/ended 时间戳写入与保序、quit freeze、「疑似中断」pending 判定
- * (ended / cleared 边界、deleted / IM 来源排除)、ended 落库后的注入回调通知
+ * (ended / cleared 边界、deleted / 不可见来源排除)、ended 落库后的注入回调通知
  * (广播假阳性修复:生效值读回 / 异常不断链 / ack resolve 前发出),以及 retry
  * 续跑判定 hasAssistantProgressAfterMessage 的正负路径。
  */
@@ -342,10 +342,19 @@ describe('sessionActiveTurn', () => {
     await seedSession(client, 's-cleared', { startedAt: now - 5000, clearedAt: now - 1000 });
     // 不命中:deleted 会话。
     await seedSession(client, 's-deleted', { status: 'deleted', startedAt: now - 1000 });
-    // 不命中:IM(feishu)来源,桌面 sidebar 不渲染红点。
+    // 命中:IM(feishu)来源已进入桌面 sidebar 白名单,应正常渲染红点。
     await seedSession(client, 's-feishu', { startedAt: now - 1000, source: 'feishu' });
+    // 不命中:不在当前白名单里的旧来源,红点无处展示也无法清除。
+    await seedSession(client, 's-hidden-source', {
+      startedAt: now - 1000,
+      source: 'legacy-hidden',
+    });
 
-    expect((await listInterruptedPendingSessionIds()).sort()).toEqual(['s-pending', 's-pending-2']);
+    expect((await listInterruptedPendingSessionIds()).sort()).toEqual([
+      's-feishu',
+      's-pending',
+      's-pending-2',
+    ]);
   });
 
   it('hasAssistantProgressAfterMessage detects agent output after the user row', async () => {

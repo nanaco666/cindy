@@ -9,7 +9,7 @@
  *    `useTheme().colors` 或 `useThemedStyles(makeStyles)` 消费,**永远写 token 不写 hex**。
  *  - spacing / radius / typeScale / lineHeight / fontWeight / iconSize:主题无关的不变量阶梯。
  *
- * 色值对齐桌面 `DESIGN.md` 的 Ollama Light / Dark,保证跨端一致。
+ * 色值对齐 CINDY 色板(决策表 PRE-2 / U3+U8 批准),与桌面 D2 落地同源。
  */
 
 export type ThemeMode = 'light' | 'dark';
@@ -20,8 +20,44 @@ export interface ThemeColors {
   surface: string;
   /** 抬一层的 Card / 弹窗 / 输入框 */
   surfaceElevated: string;
-  /** Surface 半透明(吸顶栏等) */
+  /** Surface 半透明(吸顶栏等,solid 非模糊——chrome/composer 热路径专用,守护测试禁 BlurView) */
   surfaceTranslucent: string;
+  /** 侧栏/抽屉类面板毛玻璃底色(R1 audit 模式1,blur≈50 等效;BlurView tint 用) */
+  surfaceTranslucentSidebar: string;
+  /** Chat 顶栏玻璃底色(M3:只给会话页顶部 chrome,不污染侧栏 / sheet) */
+  chatHeaderSurface: string;
+  /** Chat 顶栏底部分割线(M3:dark 为极弱白线) */
+  chatHeaderDivider: string;
+  /** 浮层卡 sheet surface 底色(R1 audit 模式3,solid 玻璃感由 backdrop blur 承担,surface 不叠 blur 规避 Android 滚动热路径) */
+  surfaceGlassPanel: string;
+  /** List 行/任务行专用底色(不污染 chat code card / elevated surface) */
+  surfaceListRow: string;
+  /** List 展开项目 block 专用底色 */
+  surfaceListExpanded: string;
+  /** List 行首品牌箭头 active 小图形色(非按钮红) */
+  activeGlyph: string;
+  /** Chat / task code card 专用底色 */
+  chatCodeSurface: string;
+  /** Chat / task code card 专用描边 */
+  chatCodeBorder: string;
+  /** Composer / input focus caret。二次改稿 2026-07-18 晚:撤红改蓝,对齐 Mac caret-accent */
+  inputCaret: string;
+  /** Bottom sheet root 玻璃面 */
+  sheetSurface: string;
+  /** Bottom sheet action group / row 面 */
+  sheetActionSurface: string;
+  /** Bottom sheet action group / row 描边 */
+  sheetActionBorder: string;
+  /** Bottom sheet action row 正文色 */
+  sheetActionText: string;
+  /** Bottom sheet / composer grabber 色 */
+  sheetGrabber: string;
+  /** App 内品牌 splash 背景红(仅限 splash,不进入普通 CTA 红名单) */
+  brandSplashBackground: string;
+  /** App 内品牌 splash 前景白(logo/script/loading) */
+  brandSplashForeground: string;
+  /** App 内品牌 splash 二级文案 */
+  brandSplashMuted: string;
   /** Chip / pill / 选中行填充 */
   surfaceChip: string;
   /** 1px 分隔线 / 边框(桌面 Board) */
@@ -36,14 +72,14 @@ export interface ThemeColors {
   textSecondary: string;
   /** 三级文字 / placeholder / metadata */
   textTertiary: string;
-  /** CTA / 主操作填充(dark 下反相为白) */
+  /** CTA / 主操作填充 —— 中性反相(常规按钮非红;红只留警告/报错。用户红色新规 2026-07-17,取代 U3+U8 全态红契约) */
   cta: string;
   /** CTA 上的文字 */
   ctaText: string;
   /** 就绪 / 在线状态点(品牌 teal,语义不变) */
   statusReady: string;
   /**
-   * 录音中状态指示红(#ef4444,与 statusError 同值、对齐桌面;区分「停止录音」与中性色的
+   * 录音中状态指示红(#D91F37,与 statusError 同值、对齐桌面;区分「停止录音」与中性色的
    * 「停止任务」)。红色系分工:状态指示(点/波形)用 statusError / statusRecording;
    * 破坏性按钮文字用 destructive;错误说明文案用 errorText(黑白系)。
    */
@@ -53,14 +89,14 @@ export interface ThemeColors {
   /** 会话状态点 — 等待用户回复/选择(TapTap 蓝,对齐桌面 --card-status-awaiting 与灵动岛 needs-interaction) */
   statusAwaiting: string;
   /**
-   * 会话状态点 — 任务出错(状态指示红 #ef4444,对齐桌面 --card-status-error;红专职表示出错)。
+   * 会话状态点 — 任务出错(状态指示红 #D91F37,对齐桌面 --card-status-error;红专职表示出错)。
    * 仅用于状态指示(状态点/徽标),不用于按钮文字(那是 destructive)也不用于成段错误文案
    * (那是 errorText,黑白系)。
    */
   statusError: string;
   /** 会话状态点 — 完成未读(绿,对齐桌面 --card-status-done;橙专职 running) */
   statusDone: string;
-  /** 自动审批权限模式强调色(TapTap 星蓝 light / teal dark,对齐桌面 --perm-auto-selected-text) */
+  /** 自动审批权限模式强调色(Auto Approval 蓝 #417CDD,L=D 同值,设计定稿 2026-07-17;取代 M2 的 #1D4ED8/#19D2C1 拆值) */
   permAutoAccent: string;
   /**
    * 错误说明文案的黑白系前景 —— **刻意跟随 textPrimary,不是红色**(黑白反色设计里成段
@@ -70,7 +106,7 @@ export interface ThemeColors {
   errorText: string;
   /**
    * 破坏性操作按钮(退出登录/删除等)的**文字红**(#f43d3f),跨主题一致。只上按钮/菜单项
-   * 文字;状态指示红是另一档 #ef4444(statusError / statusRecording),不要混用。
+   * 文字;状态指示红是另一档 #D91F37(statusError / statusRecording),不要混用。
    */
   destructive: string;
   /** 错误边框(跟随 borderStrong) */
@@ -79,6 +115,8 @@ export interface ThemeColors {
   overlay: string;
   /** 素雅新建对话 FAB:dark 用柔白 #ECEDEF 而非纯白 cta,避免主入口在深底上过跳 */
   homeListFab: string;
+  /** List FAB 描边:light 无描边(transparent),dark 按 301:1073 帧白色 hairline */
+  homeListFabBorder: string;
   /** 会话行右滑「置顶/取消置顶」按钮底色(Heart Orange,与 statusAccent 同值但语义独立) */
   swipeActionPin: string;
   /** 会话行左滑「选项」按钮底色(iOS systemGray 感的中性灰) */
@@ -89,66 +127,119 @@ export interface ThemeColors {
   swipeActionText: string;
 }
 
-/** Default Light —— 对齐桌面 Ollama Light。 */
+/**
+ * Default Light —— CINDY 色板(决策表 PRE-2 / U3+U8 批准)。
+ * 直映:背景/卡片/边框/正文/二级信息;CTA 中性反相(常规按钮非红,红只留警告/报错)。插值档按决策表 §2(sRGB 每通道 round)。
+ * 二级信息色 #9A9DA3 为 U2 裁决忠于 Figma 原值,实测 2.32-2.56:1 低于 AA,进显式例外。
+ * borderStrong/errorBorder 取表内 AA 中性强调灰 #686B72(与 text-tertiary/ask-checkbox-border/
+ * file-remove-bg 同源,非表内直落 id;lead 2026-07-17 确认采纳,errorBorder 跟随)。
+ */
 export const lightColors: ThemeColors = {
-  surface: '#f8f8f6',
-  surfaceElevated: '#ffffff',
-  surfaceTranslucent: 'rgba(248, 248, 246, 0.78)',
-  surfaceChip: '#e5e5e5',
-  border: '#d7d7d4',
-  borderTranslucent: 'rgba(215, 215, 212, 0.62)',
-  borderStrong: '#a3a3a3',
-  textPrimary: '#262626',
-  textSecondary: '#525252',
-  textTertiary: '#737373',
-  cta: '#1f1f1f',
-  ctaText: '#fbfbfa',
-  statusReady: '#00D9C5',
-  statusRecording: '#ef4444',
-  statusAccent: '#ff6600',
-  statusAwaiting: '#00D9C5',
-  statusError: '#ef4444',
-  statusDone: '#22c55e',
-  permAutoAccent: '#000050',
-  errorText: '#262626',
+  surface: '#EDEDED',
+  surfaceElevated: '#F8F8F8',
+  surfaceTranslucent: 'rgba(237, 237, 237, 0.78)',
+  surfaceTranslucentSidebar: 'rgba(246, 246, 246, 0.90)',
+  chatHeaderSurface: 'rgba(246, 246, 246, 0.90)',
+  chatHeaderDivider: '#DCDFE3',
+  surfaceGlassPanel: '#F8F8F8',
+  surfaceListRow: '#F6F6F6',
+  surfaceListExpanded: '#EAEAEA',
+  activeGlyph: '#DF0C27',
+  chatCodeSurface: '#F8F8F8',
+  chatCodeBorder: '#DCDFE3',
+  inputCaret: '#417CDD',
+  sheetSurface: 'rgba(248, 248, 248, 0.95)',
+  sheetActionSurface: '#F6F6F6',
+  sheetActionBorder: '#DCDFE3',
+  sheetActionText: '#3C3F43',
+  sheetGrabber: '#DCDFE3',
+  brandSplashBackground: '#DF0C27',
+  brandSplashForeground: '#FFFFFF',
+  brandSplashMuted: 'rgba(255, 255, 255, 0.82)',
+  surfaceChip: '#F1F1F1',
+  border: '#DCDFE3',
+  borderTranslucent: 'rgba(220, 223, 227, 0.62)',
+  borderStrong: '#686B72',
+  textPrimary: '#3C3F43',
+  textSecondary: '#9A9DA3',
+  textTertiary: '#686B72',
+  cta: '#3C3F43',
+  ctaText: '#FCFCFC',
+  statusReady: '#19D2C1',
+  statusRecording: '#D91F37',
+  statusAccent: '#EA6B17',
+  statusAwaiting: '#19D2C1',
+  statusError: '#D91F37',
+  statusDone: '#2AAE5B',
+  permAutoAccent: '#417CDD',
+  errorText: '#3C3F43',
   destructive: '#f43d3f',
-  errorBorder: '#a3a3a3',
+  errorBorder: '#686B72',
   overlay: 'rgba(38, 38, 38, 0.24)',
-  homeListFab: '#262626',
-  swipeActionPin: '#ff6600',
+  // homeListFab:反相中性,不染品牌红(lead 裁决 2026-07-17:染红=扩张红名单,超 U8
+  // 已批决策表范围;日后要红 FAB 须单独过用户关卡)。light 对齐 textPrimary 深灰 #3C3F43。
+  homeListFab: '#3C3F43',
+  homeListFabBorder: 'transparent',
+  swipeActionPin: '#EA6B17',
   swipeActionNeutral: '#8e8e93',
   swipeActionArchive: '#3b82f6',
   swipeActionText: '#fbfbfa',
 };
 
-/** Default Dark —— 对齐桌面 Ollama Dark。 */
+/**
+ * Default Dark —— CINDY 色板(决策表 PRE-2 / U3+U8 批准)。
+ * CTA 回归中性反相:light 深底 #3C3F43 + 浅字 #FCFCFC / dark 浅底 #EEEEEE + 深字 #252222
+ * (对比度 10.32/13.60 过 AA)——用户红色新规 2026-07-17:常规按钮非红,红只留警告/报错,
+ * 取代 U3+U8 时期的全态红契约;themeTokens.test.ts 契约第二次改写(见 E1M)。
+ * borderStrong/errorBorder 取表内 AA 中性强调灰 #BFC1C4(与 text-tertiary/ask-checkbox-border
+ * 同源,非表内直落 id;lead 2026-07-17 确认采纳,errorBorder 跟随)。
+ */
 export const darkColors: ThemeColors = {
-  surface: '#1f1f1e',
-  surfaceElevated: '#2c2c2a',
-  surfaceTranslucent: 'rgba(31, 31, 30, 0.78)',
-  surfaceChip: '#3c3c3a',
-  border: '#3c3c3a',
-  borderTranslucent: 'rgba(60, 60, 58, 0.62)',
-  borderStrong: '#525252',
-  textPrimary: '#d4d4d4',
-  textSecondary: '#a3a3a3',
-  textTertiary: '#737373',
-  // CTA 在 dark 反相为白 pill + 深色文字(同桌面 inverted CTA)。
-  cta: '#ffffff',
-  ctaText: '#1f1f1e',
-  statusReady: '#00D9C5',
-  statusRecording: '#ef4444',
-  statusAccent: '#ff6600',
-  statusAwaiting: '#00D9C5',
-  statusError: '#ef4444',
-  statusDone: '#22c55e',
-  permAutoAccent: '#00D9C5',
-  errorText: '#d4d4d4',
+  surface: '#2A2828',
+  surfaceElevated: '#312F2F',
+  surfaceTranslucent: 'rgba(42, 40, 40, 0.78)',
+  surfaceTranslucentSidebar: 'rgba(18, 15, 15, 0.85)',
+  chatHeaderSurface: 'rgba(37, 35, 35, 0.80)',
+  chatHeaderDivider: 'rgba(255, 255, 255, 0.05)',
+  surfaceGlassPanel: 'rgba(59, 59, 59, 0.95)',
+  surfaceListRow: '#312F2F',
+  surfaceListExpanded: '#2A2828',
+  activeGlyph: '#A61629',
+  chatCodeSurface: '#353333',
+  chatCodeBorder: '#3C3C3C',
+  inputCaret: '#417CDD',
+  sheetSurface: 'rgba(59, 59, 59, 0.95)',
+  sheetActionSurface: 'rgba(59, 59, 59, 0.5)',
+  sheetActionBorder: '#505050',
+  sheetActionText: '#C1C1C1',
+  sheetGrabber: '#6F6F6F',
+  brandSplashBackground: '#DF0C27',
+  brandSplashForeground: '#FFFFFF',
+  brandSplashMuted: 'rgba(255, 255, 255, 0.82)',
+  surfaceChip: '#2F2D2D',
+  border: '#434343',
+  borderTranslucent: 'rgba(67, 67, 67, 0.62)',
+  borderStrong: '#BFC1C4',
+  textPrimary: '#D4D4D4',
+  textSecondary: '#6F6F6F',
+  textTertiary: '#BFC1C4',
+  cta: '#EEEEEE',
+  ctaText: '#252222',
+  statusReady: '#19D2C1',
+  statusRecording: '#D91F37',
+  statusAccent: '#EA6B17',
+  statusAwaiting: '#19D2C1',
+  statusError: '#D91F37',
+  statusDone: '#2AAE5B',
+  permAutoAccent: '#417CDD',
+  errorText: '#D4D4D4',
   destructive: '#f43d3f',
-  errorBorder: '#525252',
+  errorBorder: '#BFC1C4',
   overlay: 'rgba(0, 0, 0, 0.45)',
+  // homeListFab:反相中性(lead 裁决,见 lightColors 注释);dark 维持 #ECEDEF 柔白(非纯白 cta)。
   homeListFab: '#ECEDEF',
-  swipeActionPin: '#ff6600',
+  homeListFabBorder: '#FFFFFF',
+  swipeActionPin: '#EA6B17',
   swipeActionNeutral: '#636366',
   swipeActionArchive: '#3b82f6',
   swipeActionText: '#fbfbfa',
@@ -188,17 +279,20 @@ export const radius = {
 
 /**
  * 收敛后的字号阶梯(对标桌面 hierarchy,保持克制)。
- * micro..headline 为工作号;largeTitle 是首页大标题(iOS large title 风格);hero 留给 login 品牌位。
+ * micro..headline 为工作号;listBody/listTitle 为 CINDY List 页专用档;
+ * largeTitle 是首页大标题(iOS large title 风格);hero 留给 login 品牌位。
  * 阶梯外字号一律禁止——需要新号先回本文件扩档,不许在组件里写字面量(有守护测试拦截)。
  */
 export const typeScale = {
   micro: 11,
   caption: 12,
   footnote: 13,
+  listBody: 14,
   code: 15,
   body: 16,
   bodyLarge: 17,
   subtitle: 18,
+  listTitle: 19,
   title: 20,
   headline: 24,
   largeTitle: 30,
@@ -209,18 +303,21 @@ export const typeScale = {
  * 与字号配对的行高。除标准配对外只有三个场景档:
  * - bodyLarge(17/26):对话消息流正文(对齐 iOS 对话类 app 的 17pt 惯例,行高略松以改善长文可读性);
  * - bodyRelaxed(16/24):login 副标题等宽松正文;
- * - listTitle(18/28、20/28):首页列表标题类,行高撑触控行。
+ * - listBody/listTitleCompact(14/20、19/27):CINDY List 页 M2 施工图专用;
+ * - listTitle(18/28、20/28):既有首页列表标题类,行高撑触控行。
  * micro(16) 同时服务紧凑 caption 场景(diff 行、媒体 hint 等行高即盒高的地方)。
  */
 export const lineHeight = {
   micro: 16,
   caption: 18,
+  listBody: 20,
   code: 20,
   body: 22,
   bodyRelaxed: 24,
   bodyLarge: 26,
   title: 25,
   subtitle: 26,
+  listTitleCompact: 27,
   listTitle: 28,
   headline: 30,
   largeTitle: 36,
@@ -244,11 +341,13 @@ export const textStyles = {
   micro: { fontSize: typeScale.micro, lineHeight: lineHeight.micro },
   caption: { fontSize: typeScale.caption, lineHeight: lineHeight.caption },
   footnote: { fontSize: typeScale.footnote, lineHeight: lineHeight.caption },
+  listBody: { fontSize: typeScale.listBody, lineHeight: lineHeight.listBody },
   code: { fontSize: typeScale.code, lineHeight: lineHeight.code },
   body: { fontSize: typeScale.body, lineHeight: lineHeight.body },
   bodyRelaxed: { fontSize: typeScale.body, lineHeight: lineHeight.bodyRelaxed },
   bodyLarge: { fontSize: typeScale.bodyLarge, lineHeight: lineHeight.bodyLarge },
   subtitle: { fontSize: typeScale.subtitle, lineHeight: lineHeight.subtitle },
+  listTitle: { fontSize: typeScale.listTitle, lineHeight: lineHeight.listTitleCompact },
   title: { fontSize: typeScale.title, lineHeight: lineHeight.title },
   headline: { fontSize: typeScale.headline, lineHeight: lineHeight.headline },
   largeTitle: { fontSize: typeScale.largeTitle, lineHeight: lineHeight.largeTitle },
@@ -267,6 +366,7 @@ export const iconSize = {
   md: 16,
   lg: 18,
   action: 20,
+  listGlyph: 21,
   xl: 22,
   xxl: 26,
   display: 32,

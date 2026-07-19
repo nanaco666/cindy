@@ -22,9 +22,9 @@ Cindy 本身就是 coding agent 宿主，用它开发它自己（dogfooding）�
 
 ## 实例拓扑（推荐稳态）
 
-支撑事实：dev 下跳过 single-instance lock（`bootstrap-electron.ts:1096`，以 `app.isPackaged` 为门）；`XDT_USER_DATA_DIR` 仅 dev 生效，用于隔离 userData / SQLite（`apps/desktop/src/main/index.ts:40-42`）；打包版与默认配置的 dev 实例共享 `~/Library/Application Support/Cindy`，同跑会抢 SQLite / electron-store 锁；主 `cindy://` deep link（以及永久兼容的历史 `xdt-maker://`）由后注册者接管（`deepLink.ts`）；Vite 端口不固定（5173 起按启动顺序递增）。
+支撑事实：正常 dev 与打包版在共享 userData 时共用 single-instance lock；只有显式 `--passive` 的 dev 跳过锁，以便和正式版共享数据双开并让出自动 schedule。`--isolated[=<名字>]` 会切独立 userData，因此仍能各自持锁并并行；`XDT_USER_DATA_DIR` 仅 dev 生效，也可用于显式隔离 userData / SQLite。passive 双开不提供 `second-instance` 转发，主 `cindy://` deep link（以及永久兼容的历史 `xdt-maker://`）落到哪个实例由当前 OS 协议注册归属决定；Vite 端口不固定（5173 起按启动顺序递增）。
 
-1. **实例 A——日常主力**。由**人**在自己的终端从 baseRepo 启动（`pnpm restart:desktop:remote`，默认模式）。**承载所有会话**：baseRepo 里的只读 / 运维会话 + 全部 N 个任务 worktree 会话（WorktreeManager 在 `baseRepo/.cindy-worktrees/` 下创建，都归这个实例管；历史 `.xdt-worktrees/` 继续兼容）。代码和文档修改都在任务 worktree 完成。与打包版 app 二选一常驻；必须同跑时给实例 A 设 `XDT_USER_DATA_DIR`。
+1. **实例 A——日常主力**。由**人**在自己的终端从 baseRepo 启动（`pnpm restart:desktop:remote`，默认模式）。**承载所有会话**：baseRepo 里的只读 / 运维会话 + 全部 N 个任务 worktree 会话（WorktreeManager 在 `baseRepo/.cindy-worktrees/` 下创建，都归这个实例管；历史 `.xdt-worktrees/` 继续兼容）。代码和文档修改都在任务 worktree 完成。与打包版 app 二选一常驻；必须共享数据同跑时加 `--passive`，需要完全隔离时用 `--isolated` / `XDT_USER_DATA_DIR`。
 2. **实例 B..N——per-worktree verify 实例（短命）**。需要真机验证某个 worktree 的 main / renderer 改动时，由**人**从该 worktree 启动：
 
    ```bash
@@ -143,7 +143,7 @@ gh pr create --base <source-branch> ...
 | worktree 会话里 skill / 配置陈旧 | `.claude` / `.sivi` 在创建时一次性 copy；之后 baseRepo 的 skill 改动对既有会话不可见 | 改完后重建任务 worktree 会话；发布前重新读取当前 AGENTS / Git workflow，不沿用旧快照 |
 | 「在 worktree 里改了没反应」 | HMR 根在启动 checkout（`vite.renderer.config.ts:222`） | 见心智模型节；verify 实例或 PR 发布后刷新 personal client |
 | 给 maker-core 等加 export 后白屏 | stale optimizeDeps prebundle（`vite.renderer.config.ts:157-177`） | 受影响实例完整重启 |
-| 两个实例互相搞坏 DB | 共享默认 userData；dev 跳过 single-instance lock | 第二个起的每个实例都设 `XDT_USER_DATA_DIR`；打包版与默认配置 dev 实例不同跑 |
+| 两个实例争用运行职责 | 正常共享 userData 的实例会被 single-instance lock 拦住；`--passive` 明确允许共享数据双开并让出自动 schedule | 要共享数据联调就给 dev 加 `--passive`；要数据库 / 登录态完全隔离就用 `--isolated[=<名字>]` 或显式 `XDT_USER_DATA_DIR` |
 | 从 baseRepo restart 误杀 verify 实例 | worktree 路径是 baseRepo 路径子路径，kill 匹配按 rootDir 前缀 | 重启实例 A 前先记住 verify 实例会陪葬，需要就重新启 |
 | deep link 落错实例 | `cindy://`（历史 `xdt-maker://` 同）后注册者赢（`deepLink.ts`） | 接受现状；知道哪个实例最后注册即可 |
 | agent 读错日志 | dev 日志在**启动 checkout** 的 `apps/desktop/logs/`（`logger.ts:311-316`） | 首条消息模板第 2 条 |

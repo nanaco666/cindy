@@ -113,6 +113,10 @@ const { MockCodexTransport, createdTransports } = vi.hoisted(() => {
         });
         return;
       }
+      if (req.method === 'model/list') {
+        this.emitLine({ id: req.id, result: { data: [], nextCursor: null } });
+        return;
+      }
       if (req.method === 'config/read') {
         this.emitLine({
           id: req.id,
@@ -393,6 +397,68 @@ describe('CodexAgent.listCustomizations', () => {
         workingDir: undefined,
       },
     ]);
+  });
+});
+
+describe('CodexAgent.refreshLocalModels', () => {
+  it('reads every model/list page and publishes one complete snapshot', async () => {
+    const onCodexLocalModelsListed = vi.fn().mockResolvedValue(undefined);
+    const agent = new CodexAgent(createDeps({}, { onCodexLocalModelsListed }));
+    const pages = new Map<string | null, unknown>([
+      [null, {
+        data: [{ id: 'gpt-5.6', model: 'gpt-5.6', displayName: 'GPT-5.6' }],
+        nextCursor: 'page-2',
+      }],
+      ['page-2', {
+        data: [{ id: 'gpt-5.5', model: 'gpt-5.5', displayName: 'GPT-5.5' }],
+        nextCursor: null,
+      }],
+    ]);
+    const host = installFakeHost(agent, (method, params) => {
+      if (method !== Method.ModelList) return undefined;
+      const cursor = (params as { cursor?: string | null }).cursor ?? null;
+      return pages.get(cursor);
+    });
+    (agent as unknown as { hosts: Map<string, unknown> }).hosts.set('local', host);
+
+    await expect(agent.refreshLocalModels()).resolves.toBe(true);
+    expect(host.request.mock.calls.filter(([method]) => method === Method.ModelList)).toEqual([
+      [Method.ModelList, { cursor: null, limit: 100, includeHidden: false }],
+      [Method.ModelList, { cursor: 'page-2', limit: 100, includeHidden: false }],
+    ]);
+    expect(onCodexLocalModelsListed).toHaveBeenCalledOnce();
+    expect(onCodexLocalModelsListed.mock.calls[0][0].map((model: { id: string }) => model.id))
+      .toEqual(['gpt-5.6', 'gpt-5.5']);
+  });
+
+  it('rejects a repeated cursor without publishing a partial snapshot', async () => {
+    const onCodexLocalModelsListed = vi.fn();
+    const agent = new CodexAgent(createDeps({}, { onCodexLocalModelsListed }));
+    let page = 0;
+    const host = installFakeHost(agent, (method) => {
+      if (method !== Method.ModelList) return undefined;
+      page += 1;
+      return { data: [], nextCursor: 'same-cursor' };
+    });
+    (agent as unknown as { hosts: Map<string, unknown> }).hosts.set('local', host);
+
+    await expect(agent.refreshLocalModels()).rejects.toThrow('repeated cursor: same-cursor');
+    expect(page).toBe(2);
+    expect(onCodexLocalModelsListed).not.toHaveBeenCalled();
+  });
+
+  it('drops a late model/list result after the originating host is retired', async () => {
+    const onCodexLocalModelsListed = vi.fn();
+    const agent = new CodexAgent(createDeps({}, { onCodexLocalModelsListed }));
+    const host = installFakeHost(agent, (method) => {
+      if (method !== Method.ModelList) return undefined;
+      (agent as unknown as { hosts: Map<string, unknown> }).hosts.delete('local');
+      return { data: [{ id: 'old', model: 'old' }], nextCursor: null };
+    });
+    (agent as unknown as { hosts: Map<string, unknown> }).hosts.set('local', host);
+
+    await expect(agent.refreshLocalModels()).resolves.toBe(false);
+    expect(onCodexLocalModelsListed).not.toHaveBeenCalled();
   });
 });
 
@@ -1325,6 +1391,49 @@ describe('CodexAgent MCP thread context hooks', () => {
     await remoteHandle.send({ type: 'user', content: 'still remote' });
     await localHandle.close();
     await remoteHandle.close();
+    await agent.dispose();
+  });
+
+  it('collapses in-flight turn state with a terminal transport error when the local host is force-retired', async () => {
+    // 回归 2026-07-19:auth 失效触发 retiring host with active sessions 时,原实现
+    // 静默清 subscribers 再杀进程,session 收不到任何终态事件 → isTurnRunning 永久
+    // true,上层输入排队 / Stop 锁 / 凭证切换 busy 重试全部卡死。
+    const agent = new CodexAgent(createDeps());
+
+    const handle = await agent.startSession({
+      sessionId: 'session-forced-retire-in-flight-turn',
+      model: 'gpt-5.4',
+      workingDir: '/repo-local',
+    });
+    const iterator = handle.events()[Symbol.asyncIterator]();
+    const transport = createdTransports[0];
+
+    transport.emitMockLine({
+      method: 'turn/started',
+      params: { threadId: 'thread-1', turn: { id: 'turn-forced-retire' } },
+    });
+    await waitForExpectation(() => {
+      expect(handle.isTurnRunning?.()).toBe(true);
+    });
+
+    await agent.forceDisposeLocalHostForAuthChange('test forced retire');
+
+    expect(handle.isTurnRunning?.()).toBe(false);
+    expect(transport.closed).toBe(true);
+    await expect(nextEvent(iterator)).resolves.toMatchObject({
+      type: 'error',
+      data: expect.objectContaining({
+        isTerminal: true,
+        willRetry: false,
+        message: expect.stringContaining('app-server force-retired'),
+      }),
+    });
+    await expect(nextEvent(iterator)).resolves.toMatchObject({
+      type: 'status',
+      data: expect.objectContaining({ status: 'Done', isRunning: false }),
+    });
+
+    await handle.close();
     await agent.dispose();
   });
 

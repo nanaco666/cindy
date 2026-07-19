@@ -11,8 +11,17 @@ describe('mermaidWebView', () => {
 
     expect(html).toContain(MOBILE_MERMAID_SCRIPT_URL);
     expect(html).toContain("securityLevel: 'strict'");
-    expect(html).toContain('flowchart: { useMaxWidth: false }');
+    // htmlLabels:false 是导出 PNG 的前提(foreignObject 在 WebKit canvas 里丢文字)
+    expect(html).toContain('flowchart: { useMaxWidth: false, htmlLabels: false }');
     expect(html).toContain('graph TD\\nA --\\u003e B');
+  });
+
+  it('导出协议:SVG 光栅化函数就位(viewBox 固有尺寸 + canvas 上限收敛 + 实底)', () => {
+    const html = buildMermaidWebViewHtml('graph TD\nA --> B');
+    expect(html).toContain('window.__cindyMermaidExportPng = function');
+    expect(html).toContain("post({ type: 'mermaid-export', id: id, ok: true");
+    expect(html).toContain('4096 / Math.max(w, h)');
+    expect(html).toContain("canvas.toDataURL('image/png')");
   });
 
   it('escapes source before injecting it into the script tag', () => {
@@ -52,5 +61,27 @@ describe('mermaidWebView', () => {
     const html = buildMermaidWebViewHtml('graph TD\nA["<b>x</b>"] --> B');
     expect(html).toContain('A[&quot;'.replace('&quot;', '"')); // 引号不转义,尖括号必须转义
     expect(html).toContain('&lt;b&gt;x&lt;/b&gt;');
+  });
+
+  it('deferSource:首屏留空背景不闪源码,CDN 耗尽 / 空源码显式降级到源码', () => {
+    const html = buildMermaidWebViewHtml('graph TD\nA --> B', { deferSource: true });
+    // 首屏无源码 pre(干净背景等 SVG 浮现,观感同图片加载)
+    expect(html).toContain('<div id="root" class="source"></div>');
+    // 「静默停留首屏」的两条路径必须显式 showSource,否则永远空白
+    expect(html).toContain('{ showSource(); return; }');
+    // 默认(内联)模式不受影响:源码仍是首屏
+    const inlineHtml = buildMermaidWebViewHtml('graph TD\nA --> B');
+    expect(inlineHtml).toContain('<div id="root" class="source"><pre>graph TD');
+    expect(inlineHtml).not.toContain('{ showSource(); return; }');
+  });
+
+  it('zoomable:详情视口放开双指缩放,内联锁定', () => {
+    expect(buildMermaidWebViewHtml('graph TD\nA --> B', { zoomable: true }))
+      .toContain('maximum-scale=5');
+    expect(buildMermaidWebViewHtml('graph TD\nA --> B')).toContain('maximum-scale=1');
+  });
+
+  it('gantt 钉固定宽画布:布局与打开时的屏幕朝向解耦(竖屏打开不再挤叠日期轴)', () => {
+    expect(buildMermaidWebViewHtml('gantt\ntitle x')).toContain('useWidth: 760');
   });
 });

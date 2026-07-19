@@ -5,6 +5,9 @@ import { describe, expect, it } from 'vitest';
 
 const sidebarDir = resolve(__dirname, '..');
 const sessionCardSource = readFileSync(resolve(sidebarDir, 'SessionCard.tsx'), 'utf8');
+const sessionItemSource = readFileSync(resolve(sidebarDir, 'SessionItem.tsx'), 'utf8');
+const sessionStatusIconSource = readFileSync(resolve(sidebarDir, 'SessionStatusIcon.tsx'), 'utf8');
+const automationGroupSource = readFileSync(resolve(sidebarDir, 'AutomationSessionGroupItem.tsx'), 'utf8');
 const globalsSource = readFileSync(resolve(__dirname, '..', '..', '..', '..', 'styles', 'globals.css'), 'utf8');
 
 describe('SessionCard review regressions', () => {
@@ -57,7 +60,7 @@ describe('SessionCard review regressions', () => {
     // 时间固定在底部 meta 行右端(ml-auto),不再依赖 overlay/block 双态测量。
     expect(sessionCardSource).not.toContain('cardTimeLayout');
     expect(sessionCardSource).toContain('{cardTimeText}');
-    expect(sessionCardSource).toContain('className="ml-auto shrink-0"');
+    expect(sessionCardSource).toContain('ml-auto shrink-0'); // E1D 侧栏层级:time 色 conditional via cn,ml-auto shrink-0 保留
   });
 
   it('keeps running card previews stable instead of streaming compact activity text', () => {
@@ -69,5 +72,61 @@ describe('SessionCard review regressions', () => {
   it('lets single-line card content keep its natural compact height', () => {
     expect(sessionCardSource).toContain("'rounded-xl bg-[var(--surface-elevated)] border'");
     expect(sessionCardSource).not.toContain("'h-full rounded-xl bg-[var(--surface-elevated)] border'");
+  });
+
+  it('E1D 任务C: SessionCard active 反白链收全(title/time/RemoteProjectIcon 全切 sidebar-item-active-foreground)', () => {
+    // 阿梅 SIDEBAR-R 打回:SessionCard 漏网(title 700 + RemoteProjectIcon 556/735/753/941)未切反白,现收全
+    const re = /isActive \? 'text-sidebar-item-active-foreground'/g;
+    const count = (sessionCardSource.match(re) || []).length;
+    expect(count, 'isActive conditional active-foreground ≥7(title×2+time+RemoteProjectIcon×4)').toBeGreaterThanOrEqual(7);
+    expect(sessionCardSource).toContain("isActive ? 'text-sidebar-item-active-foreground' : isMuted ? 'text-[var(--text-disabled)]' : 'text-[var(--text-tertiary)]'");
+  });
+
+  it('keeps selected sidebar text bound to the active foreground token', () => {
+    expect(globalsSource).toContain('.text-sidebar-item-active-foreground');
+    expect(globalsSource).toContain('color: var(--sidebar-item-active-foreground);');
+    expect(sessionItemSource).toContain('text-[var(--sidebar-item-active-foreground)]');
+    expect(sessionCardSource).toContain('text-[var(--sidebar-item-active-foreground)]');
+  });
+
+  it('keeps selected running-session icons and spinner on the active foreground color', () => {
+    expect(sessionStatusIconSource).toContain(
+      "className={isActive ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}",
+    );
+    expect(sessionStatusIconSource).toMatch(
+      /isActive\s*\? 'text-\[var\(--sidebar-item-active-foreground\)\]'\s*:\s*isRunning/,
+    );
+    expect(sessionItemSource).toContain(
+      "isActive ? 'text-sidebar-item-active-foreground' : 'text-sidebar-action-icon'",
+    );
+  });
+
+  it('keeps selected sidebar hover actions inside the active color system', () => {
+    expect(sessionItemSource).toContain('isActive={isActive}');
+    expect(sessionItemSource).toContain(
+      "'text-sidebar-item-active-foreground hover:text-sidebar-item-active-foreground hover:bg-[color-mix(in_srgb,var(--sidebar-item-active-foreground)_14%,transparent)]'",
+    );
+    expect(sessionItemSource).toContain(
+      "'text-sidebar-action-icon hover:bg-sidebar-item-hover hover:text-foreground'",
+    );
+  });
+
+  it('keeps selected automation group icons, spinner, and actions in the active color system', () => {
+    expect(automationGroupSource).toContain(
+      "className={hasActiveHidden ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}",
+    );
+    expect(automationGroupSource).toMatch(
+      /hasActiveHidden\s*\? 'text-\[var\(--sidebar-item-active-foreground\)\]'\s*:\s*isRunning/,
+    );
+    expect(automationGroupSource).toContain(
+      "hasActiveHidden ? 'text-sidebar-item-active-foreground' : 'text-sidebar-action-icon'",
+    );
+    expect(automationGroupSource).toContain('actionButtonToneClassName');
+    expect(automationGroupSource).toContain(
+      "? 'text-sidebar-item-active-foreground hover:text-sidebar-item-active-foreground hover:bg-[color-mix(in_srgb,var(--sidebar-item-active-foreground)_14%,transparent)]'",
+    );
+    expect(automationGroupSource).toContain(
+      ": 'text-foreground hover:bg-sidebar-item-hover'",
+    );
   });
 });

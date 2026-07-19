@@ -229,6 +229,7 @@ import {
   ModelSelector,
   ModelSelectorContent,
   modelEffortLabel,
+  resolveModelBrandKind,
 } from '@/components/new-chat/ModelSelector';
 
 describe('ModelSelector trigger variants', () => {
@@ -263,9 +264,49 @@ describe('ModelSelector trigger variants', () => {
     expect(
       modelEffortLabel(t, { effortDisplayNames: { xhigh: 'Extra High' } }, 'xhigh', 'X-High'),
     ).toBe('超高');
-    expect(
-      modelEffortLabel(t, { effortDisplayNames: { xhigh: 'Extra High' } }, 'max', 'Max'),
-    ).toBe('Max');
+    expect(modelEffortLabel(t, { effortDisplayNames: { xhigh: 'Extra High' } }, 'max', 'Max')).toBe(
+      'Max',
+    );
+  });
+
+  it('renders an active fallback option without model effort metadata', () => {
+    render(
+      React.createElement(ModelSelector, {
+        modelId: '',
+        effort: 'high',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+        triggerVariant: 'field',
+        fallbackOption: {
+          active: true,
+          label: '不指定（跟随原逻辑）',
+          onSelect: vi.fn(),
+        },
+      }),
+    );
+
+    const trigger = screen.getByRole('button', { name: /不指定（跟随原逻辑）/ });
+    expect(trigger.textContent).toContain('不指定（跟随原逻辑）');
+    expect(trigger.textContent).not.toContain('high');
+  });
+
+  it('can hide model effort and Fast editing controls for model-id-only settings', () => {
+    render(
+      React.createElement(ModelSelectorContent, {
+        modelId: 'claude-opus-4-8',
+        effort: 'high',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+        configurationEnabled: false,
+      }),
+    );
+
+    fireEvent.pointerEnter(screen.getByRole('option', { name: /Opus 4\.8/ }));
+    const information = screen.getByRole('group', { name: /Opus 4\.8/ });
+    expect(within(information).getByText('Most capable for ambitious work')).toBeTruthy();
+    expect(within(information).queryByRole('option')).toBeNull();
   });
 
   it('forwards an overlay-specific z-index to the model information panel', () => {
@@ -313,9 +354,9 @@ describe('ModelSelector trigger variants', () => {
     expect(
       description.compareDocumentPosition(firstChoice) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(
-      firstChoice.compareDocumentPosition(price) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(firstChoice.compareDocumentPosition(price) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
     expect(row.getAttribute('data-model-options-active')).toBe('true');
 
     fireEvent.pointerLeave(row);
@@ -414,7 +455,11 @@ describe('ModelSelector trigger variants', () => {
       }),
     );
     fireEvent.pointerEnter(screen.getByRole('option', { name: /Opus 4\.8/ }));
-    fireEvent.click(within(screen.getByRole('group', { name: /Opus 4\.8/ })).getByRole('option', { name: 'high' }));
+    fireEvent.click(
+      within(screen.getByRole('group', { name: /Opus 4\.8/ })).getByRole('option', {
+        name: 'high',
+      }),
+    );
     expect(efforts.get('anthropic:claude-opus-4-8')).toBe('high');
     conversationA.unmount();
 
@@ -454,7 +499,30 @@ describe('ModelSelector trigger variants', () => {
     );
     fireEvent.pointerEnter(screen.getByRole('option', { name: /Opus 4\.8/ }));
     const activeOptions = screen.getByRole('group', { name: /Opus 4\.8/ });
-    expect(within(activeOptions).getByRole('option', { name: 'medium' }).getAttribute('aria-selected')).toBe('true');
-    expect(within(activeOptions).getByRole('option', { name: 'high' }).getAttribute('aria-selected')).toBe('false');
+    expect(
+      within(activeOptions).getByRole('option', { name: 'medium' }).getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(
+      within(activeOptions).getByRole('option', { name: 'high' }).getAttribute('aria-selected'),
+    ).toBe('false');
+  });
+
+  it('resolves the model mark from the model brand before the current runtime', () => {
+    expect(
+      resolveModelBrandKind({
+        modelId: 'gpt-5.5',
+        displayName: 'GPT-5.5 · 中',
+        agentKind: 'claude-code',
+        fallbackProviderId: 'anthropic',
+      }),
+    ).toBe('codex');
+    expect(
+      resolveModelBrandKind({
+        modelId: 'claude-opus-4-8',
+        displayName: 'Opus 4.8',
+        agentKind: 'codex',
+        fallbackProviderId: 'openai',
+      }),
+    ).toBe('claude');
   });
 });

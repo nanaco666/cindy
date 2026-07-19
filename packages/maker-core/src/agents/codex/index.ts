@@ -98,6 +98,7 @@ import {
   Method,
   type AskForApproval,
   type ApprovalDecision,
+  type CodexModelListResponse,
   type CommandExecutionRequestApprovalParams,
   type CommandExecutionRequestApprovalResponse,
   type DynamicToolCallParams,
@@ -1434,6 +1435,45 @@ export class CodexAgent extends BaseAgent {
     if (inflight) return { key, host: await inflight.promise };
     const host = await this.getHost();
     return { key, host };
+  }
+
+  /**
+   * 向本地 app-server 实时读取完整模型清单并交给宿主。
+   *
+   * 不能只读 `models_cache.json`：OAuth 登录前会按账号边界删掉旧 cache，而登录 CLI
+   * 成功时未必已经触发模型注册表刷新。`model/list` 是官方 app-server 的权威读取面，
+   * 同时也是 cache ready barrier；分页全部读完后才一次性交给宿主，避免 UI 看到半份目录。
+   */
+  override async refreshLocalModels(): Promise<boolean> {
+    const { key, host } = await this.getUtilityHost();
+    const init = await host.ensureStarted();
+    if (init.codexHome) this.codexHome = init.codexHome;
+
+    const models: CodexModelListResponse['data'] = [];
+    const seenCursors = new Set<string>();
+    let cursor: string | null = null;
+    do {
+      const page: CodexModelListResponse = await host.request<CodexModelListResponse>(Method.ModelList, {
+        cursor,
+        limit: 100,
+        includeHidden: false,
+      });
+      models.push(...(Array.isArray(page.data) ? page.data : []));
+      const next: string | null = typeof page.nextCursor === 'string' && page.nextCursor.length > 0
+        ? page.nextCursor
+        : null;
+      if (next && seenCursors.has(next)) {
+        throw new Error(`Codex app-server model/list repeated cursor: ${next}`);
+      }
+      if (next) seenCursors.add(next);
+      cursor = next;
+    } while (cursor !== null);
+
+    // Auth 切换 / logout 可能在分页请求期间 retire 旧 host。旧账号的迟到响应绝不能
+    // 覆盖新账号目录；只有仍登记为当前 local host 的结果才允许交给宿主。
+    if (this.hosts.get(key) !== host || !this.deps.onCodexLocalModelsListed) return false;
+    await this.deps.onCodexLocalModelsListed(models);
+    return true;
   }
 
   private async createHost(
@@ -4421,6 +4461,11 @@ export class CodexAgent extends BaseAgent {
         key,
         activeUseCount,
       });
+      // 强杀 host 不走 Session.close —— 先把终态 transport error 广播给订阅者,
+      // 让每个 session 自己收口 turn 状态 (isTurnInFlight→false + 补发 isRunning:false)。
+      // 不广播的话上层 busy 判定永久 stale:输入排队不派发、Stop 的 abort 锁解不开、
+      // 凭证切换 busy 重试风暴 (2026-07-19 auth app_session_terminated 实排)。
+      host?.notifySubscribersOfForcedRetire(reason);
     }
 
     this.hosts.delete(key);

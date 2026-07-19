@@ -10,6 +10,7 @@ import type { SettingsTab } from '@/lib/tabLabels';
 import { UserProfileCard } from './UserProfileCard';
 import { VoiceInputSection } from './VoiceInputSection';
 import { AppearanceSection } from './AppearanceSection';
+import { SubagentModelSection } from './SubagentModelSection';
 import { ProvidersSection } from './ProvidersSection';
 import { McpServersSection } from './McpServersSection';
 import { RemoteControlSection } from './RemoteControlSection';
@@ -237,9 +238,9 @@ export function SettingsView() {
                   aria-controls={`settings-panel-${tabId}`}
                   onClick={() => handleSelectTab(tabId)}
                   className={cn(
-                    'flex h-9 items-center rounded-lg px-3 text-sm transition-colors',
+                    'flex h-9 items-center rounded-full px-3 text-sm transition-colors',
                     selected
-                      ? 'bg-[var(--settings-menu-bg-selected)] font-medium text-[var(--settings-menu-text-selected)] border border-[var(--settings-menu-border-selected)]'
+                      ? 'border border-[var(--sidebar-item-active-border)] bg-sidebar-item-active font-medium text-[var(--sidebar-item-active-foreground)]'
                       : 'border border-transparent text-[var(--settings-menu-text)] hover:bg-[var(--settings-menu-bg-hover)]',
                   )}
                 >
@@ -342,6 +343,9 @@ export function SettingsView() {
                 </section>
                 <section className="pb-[18px]" aria-label={t('settings.sections.memory')}>
                   <MemorySection />
+                </section>
+                <section className="pb-[18px]" aria-label={t('settings.sections.subagentModels')}>
+                  <SubagentModelSection />
                 </section>
                 <section className="pb-[18px]" aria-label={t('settings.contacts.title')}>
                   <ContactsSection />

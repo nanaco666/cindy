@@ -132,10 +132,10 @@ export function CreateWorkerPopover({
     if (agent === 'codex' && providersLoading) return;
     const models = activeModels;
     if (models.length === 0) return;
-    const selected = models.find((m) => m.id === model) ?? models[0];
-    if (selected.id !== model) {
-      setModel(selected.id);
-    }
+    const selected = models.find((m) => m.id === model);
+    // 显式模型可能刚由 provider catalog 发现，而 capabilities 快照仍在联合刷新。
+    // 不得把它静默替换成 models[0]；只有真正找到 descriptor 后才校准 effort。
+    if (!selected) return;
     if (selected.efforts.length > 0 && !selected.efforts.includes(effort)) {
       setEffort(selected.defaultEffort ?? selected.efforts[selected.efforts.length - 1]);
     }

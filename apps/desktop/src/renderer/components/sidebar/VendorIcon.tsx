@@ -1,54 +1,42 @@
 /**
  * VendorIcon — sidebar session 行的 vendor + running 状态指示器
  * ---------------------------------------------------------------------------
- * Claude (cc) -> Anthropic AA wordmark（ClaudeMark）
- * Codex       -> OpenAI six-petal mark
+ * D4-1(用户拍板):Claude(AA 字标)/Codex(六瓣)统一替换为品牌箭头(BrandArrow),
+ *   常规任务/会话行首视觉统一,vendor 不再区分;vendor prop 保留兼容(未来恢复
+ *   glyph 可在此分支)。Claude/Codex 视觉不再区分——若日后要区分再单独加辅助标识。
  *
- * 状态：
+ * 状态(不变):
  *   - idle (默认)   : Stone 灰 #737373 / dark #a3a3a3
- *   - running=true  : Thinking Orange #FF6600（== --status-bar-accent）+ session-breathing 呼吸
+ *   - running=true  : 品牌红系(== --sidebar-item-active,E1D 侧栏强调态;与 E5D 状态点新橙解耦——状态点归橙,行首强调箭头归红)+ session-breathing 呼吸
  *
- * 设计参考：doc/design_docs/cc-agent-view.pen 节点 ugsrn (方案 C)。
+ * 设计参考:doc/design_docs/cc-agent-view.pen 节点 ugsrn (方案 C)。
  */
 
 import { cn } from '@/lib/utils';
-import { ClaudeMark } from '@/components/icons/ClaudeMark';
+import { BrandArrow } from '@/components/icons/BrandArrow';
 
 interface VendorIconProps {
   vendor: 'cc' | 'codex';
   size?: number;
-  /** true → 切 Thinking Orange + 呼吸动画，复用 .session-status-breathing */
+  /** true → 切 Thinking Orange + 呼吸动画,复用 .session-status-breathing */
   running?: boolean;
   className?: string;
 }
 
-const CODEX_PATH =
-  'M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.142-.08 4.778-2.758a.795.795 0 0 0 .393-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.495 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.787a4.49 4.49 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.674zm2.01-3.026l-.142-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.607 1.5-2.602-1.5z';
-
 export function VendorIcon({ vendor, size = 12, running = false, className }: VendorIconProps) {
+  // D4-1:vendor 保留兼容(统一品牌箭头,Claude/Codex 不再视觉区分);未来恢复 glyph 可在此分支。
+  void vendor;
   const wrapperClassName = cn(
     'inline-flex shrink-0',
     running
-      ? 'text-[var(--status-bar-accent)] session-status-breathing'
+      ? 'text-sidebar-item-active session-status-breathing'
       : 'text-[hsl(var(--sidebar-muted))]',
     className,
   );
 
   return (
     <span className={wrapperClassName}>
-      {vendor === 'cc' ? (
-        <ClaudeMark size={size} />
-      ) : (
-        <svg
-          width={size}
-          height={size}
-          viewBox="0 0 24 24"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-label="Codex"
-        >
-          <path d={CODEX_PATH} fill="currentColor" />
-        </svg>
-      )}
+      <BrandArrow size={size} />
     </span>
   );
 }

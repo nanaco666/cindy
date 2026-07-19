@@ -38,6 +38,10 @@ import type {
   ImDefaultSettingsPatch,
   ImDefaultSettingsState,
 } from '../shared/imDefaultSettings';
+import type {
+  SubagentModelSettingsPatch,
+  SubagentModelSettingsState,
+} from '../shared/subagentModelSettings';
 import type { VoiceInputAsrMode, VoiceInputProviderKind } from '../shared/voiceInputAsrProfiles';
 import type { VoiceInputRefinerProviderKind, VoiceInputRefinerTransport } from '../shared/voiceInputRefinerProfiles';
 import { isIpcErrorCode, type IpcErrorCode } from '../shared/ipc-errors';
@@ -1292,6 +1296,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }> => ipcRenderer.invoke('update-auto-settings-reset'),
   setUpdateRelaunchTheme: (theme: 'light' | 'dark'): void => {
     ipcRenderer.send('update-set-relaunch-theme', theme);
+  },
+
+  // E4D 毛玻璃:family 切换/启动时通知 main 开关 macOS vibrancy(仅 CINDY 透壁纸)
+  theme: {
+    applyVibrancy: (familyId: string, isDark: boolean): void => {
+      ipcRenderer.send('theme:apply-vibrancy', { familyId, isDark });
+    },
   },
   onAppUpdateProgress: fanOutAppUpdateProgress,
 
@@ -2764,14 +2775,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('maker:hook-control:bind-start', {}),
     bindRevoke: (): Promise<{ ok: true }> =>
       ipcRenderer.invoke('maker:hook-control:bind-revoke'),
-    // 目录偏好远程读写(数据正本在 slack-hook-server, 与 Slack /model 卡同一份)
+    // (multi-team)多 workspace 绑定动作: 添加 / 重绑指定 team / 解绑指定 team /
+    // 取消在途授权 —— server 宣告 multi-team 能力后才可用(renderer 按快照隐藏入口)
+    addBinding: (): Promise<{ hook: unknown }> =>
+      ipcRenderer.invoke('maker:hook-control:add-binding'),
+    rebindTeam: (teamId: string): Promise<{ hook: unknown }> =>
+      ipcRenderer.invoke('maker:hook-control:rebind-team', { teamId }),
+    revokeTeam: (teamId: string): Promise<{ hook: unknown }> =>
+      ipcRenderer.invoke('maker:hook-control:revoke-team', { teamId }),
+    cancelPendingBind: (): Promise<{ hook: unknown }> =>
+      ipcRenderer.invoke('maker:hook-control:cancel-pending-bind'),
+    // 目录偏好远程读写(数据正本在 slack-hook-server, 与 Slack /model 卡同一份;
+    // teamId 为 multi-team 下的归属 team, 单绑定缺省)
     getWorkspacePrefs: (): Promise<{ prefs: unknown }> =>
       ipcRenderer.invoke('maker:hook-control:prefs-get'),
     setWorkspacePrefs: (
       workspace: string,
       patch: Record<string, string | null>,
+      teamId?: string | null,
     ): Promise<{ prefs: unknown }> =>
-      ipcRenderer.invoke('maker:hook-control:prefs-set', { workspace, patch }),
+      ipcRenderer.invoke('maker:hook-control:prefs-set', {
+        workspace,
+        patch,
+        ...(teamId !== undefined ? { teamId } : {}),
+      }),
     onPrefsChanged: fanOutHookControlPrefs,
     onStatusChanged: fanOutHookControlStatus,
   },
@@ -3261,7 +3288,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /** 后台活动活跃会话全量列表(全局 store 挂载时的初始快照,增量走 push 订阅)。 */
     listSessionBackgroundActivity: (): Promise<{ sessionIds: string[] }> =>
       ipcRenderer.invoke('maker:session-background-activity:list'),
-    /** 一键停止会话后台任务(关闭常驻 CC 子进程,会话可续);turn 在跑时抛 [SESSION_RUNNING]。 */
+    /** 一键停止会话全部任务(含当前 turn 与后台子 agent；关闭运行句柄后会话仍可续)。 */
     stopSessionBackgroundTasks: (sessionId: string): Promise<{ ok: true }> =>
       ipcRenderer.invoke('maker:session-background-tasks:stop', sessionId),
     /** 会话后台活动翻转订阅(payload = { sessionId, active },返回 off)。 */
@@ -3689,6 +3716,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('maker:im-default-settings:set', patch),
     imDefaultSettingsReset: (): Promise<ImDefaultSettingsState> =>
       ipcRenderer.invoke('maker:im-default-settings:reset'),
+
+    /** 子代理模型覆盖。null 表示不注入覆盖，仅对新建 agent 会话生效。 */
+    subagentModelSettingsGet: (): Promise<SubagentModelSettingsState> =>
+      ipcRenderer.invoke('maker:subagent-model-settings:get'),
+    subagentModelSettingsSet: (
+      patch: SubagentModelSettingsPatch,
+    ): Promise<SubagentModelSettingsState> =>
+      ipcRenderer.invoke('maker:subagent-model-settings:set', patch),
+    subagentModelSettingsReset: (): Promise<SubagentModelSettingsState> =>
+      ipcRenderer.invoke('maker:subagent-model-settings:reset'),
 
     silentEncryptedRetryGet: (): Promise<{ enabled: boolean; isCustomized?: boolean; defaultEnabled?: boolean }> =>
       ipcRenderer.invoke('maker:silent-encrypted-retry:get'),

@@ -70,21 +70,37 @@ function legacyAccessFor(primary: Provider, bundled: Provider): Provider['access
  * 把远端 / 本地目录与内置 bundled 合并：以输入目录为主，bundled 补它缺失的
  * provider（按 id），并给旧目录中同 id provider 补缺失的 access 元数据。primary
  * 明确提供的 access 永远优先，不被 bundled 覆盖。
+ *
+ * **顺序契约**：结果按 bundled 数组序稳定排列（anthropic → openai → xai → xd），
+ * bundled 之外的远端新增供应商按远端原序追加在后。v2 远端目录只承载 xai 段，
+ * 不排序的话 xai 会窜到首位，选择器分段顺序漂移。
  */
 export function mergeWithBundled(primary: Catalog): Catalog {
   const byId = new Map(primary.providers.map((p) => [p.id, p]));
   const bundledById = new Map(BUNDLED_CATALOG.providers.map((p) => [p.id, p]));
-  const merged = primary.providers.map((p) => {
+  const withAccess = primary.providers.map((p) => {
     const bundled = bundledById.get(p.id);
     const bundledAccess = bundled ? legacyAccessFor(p, bundled) : undefined;
     return p.access === undefined && bundledAccess !== undefined ? { ...p, access: bundledAccess } : p;
   });
-  for (const p of BUNDLED_CATALOG.providers) {
-    if (!byId.has(p.id)) merged.push(p);
+  const primaryById = new Map(withAccess.map((p) => [p.id, p]));
+  // bundled 序在前(同 id 取 primary 内容),远端独有的追加在后(保持远端原序)。
+  const merged: Provider[] = BUNDLED_CATALOG.providers.map(
+    (bundled) => primaryById.get(bundled.id) ?? bundled,
+  );
+  for (const p of withAccess) {
+    if (!bundledById.has(p.id)) merged.push(p);
   }
   // presets 同理兜底：远端带了用远端的，远端没带回落 bundled 的（预设是纯 UI 模板数据）。
   const presets = primary.presets ?? BUNDLED_CATALOG.presets;
-  return { version: primary.version, providers: merged, ...(presets && presets.length > 0 ? { presets } : {}) };
+  // cindyModelMeta 同 presets 兜底语义透传(dev 本地覆盖用,packaged 客户端不消费)。
+  const cindyModelMeta = primary.cindyModelMeta ?? BUNDLED_CATALOG.cindyModelMeta;
+  return {
+    version: primary.version,
+    providers: merged,
+    ...(presets && presets.length > 0 ? { presets } : {}),
+    ...(cindyModelMeta !== undefined ? { cindyModelMeta } : {}),
+  };
 }
 
 function log(io: CatalogIO, level: 'info' | 'warn' | 'error', msg: string, meta?: Record<string, unknown>): void {

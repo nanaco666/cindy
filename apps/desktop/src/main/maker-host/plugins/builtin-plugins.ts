@@ -33,6 +33,7 @@ const BUILTIN_META: BuiltinPluginMeta[] = [
   { id: 'browser',     name: 'Browser',      description: 'Browser automation — isolated browsing, snapshots, screenshots, and page actions' },
   { id: 'computer',    name: 'Computer Use', description: 'Local desktop automation — apps, windows, UI inspection, clicks, and typing via an installed driver' },
   { id: 'feishu_bot',   name: 'Feishu Bot',   description: 'Send files and notifications to Feishu users via bot messages' },
+  { id: 'slack',        name: 'Slack',        description: 'Slack tools via the bound Slack connection — search, read history, and post through Slack\'s hosted MCP as the bound user' },
   { id: 'scheduler',    name: 'Scheduler',    description: 'Task scheduling — cron-based recurring jobs and one-shot reminders' },
   { id: 'ssh',          name: 'SSH Remote',   description: 'Run commands on configured SSH hosts via the built-in connection pool (aliases, ssh-agent/keys) — nothing installed remotely' },
   { id: 'memory',       name: 'Maker Memory', description: 'Cross-agent long-term memory for persistent context across sessions' },
@@ -48,8 +49,9 @@ const BUILTIN_META: BuiltinPluginMeta[] = [
   // (老 PAT 由 githubAccountsMigration 无感搬账),不再是 MCP 插件。
   // gitlab 已于 2026-07-14 退役:GitLab 能力整体迁入内置意识 cindy-gitlab
   // (老 PAT + 实例地址由 gitlabAccountsMigration 无感搬账),不再是 MCP 插件。
-  // slack 已于 2026-07-15 退役:Slack 官方 MCP 能力整体迁入内置意识 cindy-slack
-  // (老账号由 slackAccountsMigration 无感搬账),不再是 MCP 插件。
+  // slack 插件 2026-07-19 回归(lizi_slack): Slack 能力并轨 hook 通道 ——
+  // slack-hook-server 以 bind v2 托管的 user token 调 Slack 官方 MCP,
+  // 桌面侧经 tool.request 帧透传; cindy-slack 意识同日退役。
   // feishu 已于 2026-07-16 摘壳:飞书 OpenAPI 能力(44 精品 + 123 只读直通)
   // 迁入内置意识 xd-feishu,不再是 MCP 插件;2026-07-17 起授权也切到意识
   // OAuth broker(tokenBroker:'feishu'),主机 token 刷新链与 scheduler
@@ -69,6 +71,7 @@ export type KnownProviderName =
   | 'lizi_browser'
   | 'lizi_computer'
   | 'lizi_feishu_bot'
+  | 'lizi_slack'
   | 'lizi_scheduler'
   | 'lizi_ssh'
   | 'lizi_memory'
@@ -96,6 +99,7 @@ export const PROVIDER_NAME_TO_PLUGIN_ID: Record<KnownProviderName, PluginId> = {
   lizi_browser: 'browser',
   lizi_computer: 'computer',
   lizi_feishu_bot: 'feishu_bot',
+  lizi_slack: 'slack',
   lizi_scheduler: 'scheduler',
   lizi_ssh: 'ssh',
   lizi_memory: 'memory',
@@ -145,6 +149,7 @@ const PLUGIN_ID_TO_MCP_ID: Record<PluginId, LiziMcpId | undefined> = {
   browser: 'browser',
   computer: 'computer',
   feishu_bot: 'lizi_feishu_bot',
+  slack: 'lizi_slack',
   scheduler: 'lizi_scheduler',
   ssh: 'lizi_ssh',
   memory: 'lizi_memory',

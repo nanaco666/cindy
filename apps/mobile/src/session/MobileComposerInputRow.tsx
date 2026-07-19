@@ -11,6 +11,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { TextInput } from '@/components/AppText';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { TextInputWrapper, type PasteEventPayload } from 'expo-paste-input';
 import { Mic } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, type ReactNode } from 'react';
@@ -23,8 +24,10 @@ export const MOBILE_COMPOSER_INPUT_SINGLE_LINE_HEIGHT = 28;
 export const MOBILE_COMPOSER_INPUT_MAX_VISIBLE_LINES = 12;
 export const MOBILE_COMPOSER_INPUT_MAX_HEIGHT = (MOBILE_COMPOSER_INPUT_LINE_HEIGHT * MOBILE_COMPOSER_INPUT_MAX_VISIBLE_LINES)
   + (MOBILE_COMPOSER_INPUT_VERTICAL_PADDING * 2);
-export const MOBILE_COMPOSER_CONTROL_SIZE = 28;
+export const MOBILE_COMPOSER_CONTROL_SIZE = 34;
 export const MOBILE_COMPOSER_TOOL_GAP = 6;
+const isExpoGo =
+  Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 /** 语音按钮 absolute 锚点距 composer 内容区右缘的距离(voiceButtonAnchor.right);
  * 消息列表的「跳到底部」浮标按同一常量推导麦克风所在列,保持两者圆心同列。 */
 export const MOBILE_COMPOSER_VOICE_ANCHOR_RIGHT = spacing.md;
@@ -65,6 +68,8 @@ export interface MobileComposerInputRowProps {
   cardActive?: boolean;
   caretHidden?: boolean;
   compact?: boolean;
+  autoFocus?: TextInputProps['autoFocus'];
+  cursorColor?: TextInputProps['cursorColor'];
   editable?: boolean;
   /**
    * 语音按钮 render。语音按钮是简洁态与卡片态都存在的常驻控件，
@@ -115,6 +120,7 @@ export interface MobileComposerInputRowProps {
   resizeHandle?: ReactNode;
   rowStyle?: StyleProp<ViewStyle>;
   scrollEnabled?: boolean;
+  selectionColor?: TextInputProps['selectionColor'];
   testID?: string;
   /**
    * 底部工具排内容（参考 Cursor 移动端聚焦态）。仅 cardActive 时挂载，
@@ -140,9 +146,11 @@ export function MobileComposerInputRow({
   accessibilityHint,
   accessibilityLabel,
   accessoryAbove,
+  autoFocus,
   cardActive,
   caretHidden,
   compact,
+  cursorColor,
   editable = true,
   floatingVoiceButton,
   floatingVoiceButtonStyle,
@@ -168,6 +176,7 @@ export function MobileComposerInputRow({
   resizeHandle,
   rowStyle,
   scrollEnabled,
+  selectionColor,
   testID,
   toolbar,
   trailing,
@@ -195,7 +204,9 @@ export function MobileComposerInputRow({
       ref={inputRef as never}
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
+      autoFocus={autoFocus}
       caretHidden={caretHidden}
+      cursorColor={cursorColor}
       editable={editable}
       multiline={multiline}
       onBlur={onBlur}
@@ -206,6 +217,7 @@ export function MobileComposerInputRow({
       placeholder={placeholder}
       placeholderTextColor={placeholderTextColor}
       scrollEnabled={scrollEnabled}
+      selectionColor={selectionColor}
       style={[
         styles.input,
         { maxHeight },
@@ -242,7 +254,7 @@ export function MobileComposerInputRow({
             inputFrameHeight != null && { height: inputFrameHeight },
           ]}
         >
-          {onPasteImages ? (
+          {onPasteImages && !isExpoGo ? (
             <TextInputWrapper onPaste={handleNativePaste} style={styles.pasteWrapper}>
               {textInputElement}
             </TextInputWrapper>
@@ -435,8 +447,8 @@ const makeMobileComposerInputRowStyles = (colors: ThemeColors) => ({
   // 简洁态工具排折叠为 0 高，外壳看起来就是单行 capsule。
   row: {
     alignItems: 'stretch',
-    backgroundColor: colors.surfaceElevated,
-    borderColor: colors.border,
+    backgroundColor: colors.chatCodeSurface,
+    borderColor: colors.sheetActionBorder,
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'column',
@@ -454,7 +466,7 @@ const makeMobileComposerInputRowStyles = (colors: ThemeColors) => ({
   // 聚焦卡片形态：大圆角，paddingTop 给常驻的 grabber 留出呼吸空间
   // （grabber 横条距顶约 8pt、距输入内容约 14pt，参考 Cursor 移动端）。
   rowCard: {
-    borderRadius: 24, // 组件几何:composer 聚焦形态专用,非通用圆角档
+    borderRadius: radius.control,
     paddingBottom: 8,
     paddingTop: 26,
   },

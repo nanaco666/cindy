@@ -15,6 +15,7 @@ import type { ProviderView } from '@lizi/model-providers/registry';
 import {
   fetchDeviceProviders,
   getCachedDeviceProviders,
+  subscribeDeviceProviders,
   type DeviceProvidersPayload,
 } from './deviceProvidersCache';
 import { useMobileMakerTransport } from './useMobileMakerTransport';
@@ -49,6 +50,13 @@ export function useDeviceProviders(deviceId?: string): UseDeviceProvidersResult 
       setLoading(false);
       return;
     }
+    let cancelled = false;
+    const unsubscribe = subscribeDeviceProviders(deviceId, (next) => {
+      if (cancelled) return;
+      setPayload(next);
+      setError(null);
+      setLoading(false);
+    });
     const cached = getCachedDeviceProviders(deviceId);
     if (cached) {
       setPayload(cached);
@@ -57,17 +65,13 @@ export function useDeviceProviders(deviceId?: string): UseDeviceProvidersResult 
       // (loading=true) when we switch to a cached device, its cancelled `finally` won't clear it,
       // so the cache-hit return must, or the UI stays stuck "loading" over fully-populated data.
       setLoading(false);
-      return;
+      return unsubscribe;
     }
-    let cancelled = false;
     // cache miss:先清空,避免 fetch 解析前(失败则永远)残留上一设备的供应商。
     setPayload(EMPTY_PAYLOAD);
     setLoading(true);
     setError(null);
     fetchDeviceProviders(deviceId, () => maker.listProviders())
-      .then((p) => {
-        if (!cancelled) setPayload(p);
-      })
       .catch((e: unknown) => {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : String(e));
@@ -77,6 +81,7 @@ export function useDeviceProviders(deviceId?: string): UseDeviceProvidersResult 
       });
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [deviceId, maker]);
 

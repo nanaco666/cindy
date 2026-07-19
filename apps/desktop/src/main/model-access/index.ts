@@ -10,11 +10,10 @@ import {
   prepareCodexForAuthModeChange,
   finalizeCodexAfterAuthModeChange,
   cancelCodexAuthModeChange,
-  getMakerIfReady,
 } from '../maker-host/index.js';
 import { getActiveCatalog, setXdGatewayModels } from '../maker-host/active-catalog.js';
-import { refreshCatalogDerivedModels } from '../maker-host/catalog-to-descriptors.js';
-import { MAKER_PUSH } from '../maker-ipc/channels.js';
+import { isDev } from '../manifestService.js';
+import { overlayCindyModelMeta } from './devMetaOverlay.js';
 import { throwIpcError } from '../utils/ipcValidate.js';
 import {
   MODEL_ACCESS_STATUS_CHANNEL,
@@ -125,17 +124,15 @@ let authGeneration = 0;
 let lastAuthUserId: string | null = null;
 
 function applyGatewayModels(models: ModelAccessGatewayModel[]): void {
-  setXdGatewayModels(models);
-  // 已创建的 maker 会话持有 capabilities 引用,原地刷新;maker 未构建时目录
-  // 惰性重算即可(下次 getActiveCatalog 自然生效)。
-  const maker = getMakerIfReady();
-  if (maker) refreshCatalogDerivedModels(maker, getActiveCatalog());
-  // 让供应商页 / 模型选择器 refetch(与自定义供应商 CRUD 同一条刷新通道)。
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send(MAKER_PUSH.PROVIDER_CHANGED, {});
-    }
-  }
+  // dev:本地目录文件(catalog/providers.json)的 cindyModelMeta 段覆盖服务端下发的
+  // 元数据,改本地 json + 重启即可自测,无需发 OSS / 等服务端热加载;只覆盖同 id,
+  // 清单成员资格仍以网关为准。packaged 不走此分支(语义见 devMetaOverlay.ts)。
+  const effective =
+    isDev() && models.length > 0
+      ? overlayCindyModelMeta(models, getActiveCatalog().cindyModelMeta, log)
+      : models;
+  // active-catalog 统一收口会原地刷新 Maker capabilities，再广播同一 revision。
+  setXdGatewayModels(effective);
 }
 
 async function runModelsSync(myGen: number): Promise<void> {
@@ -145,10 +142,9 @@ async function runModelsSync(myGen: number): Promise<void> {
       baseUrl: getClientEndpoint('modelAccessApiBaseUrl'),
     });
   } catch (err) {
-    log.warn('xd gateway models fetch failed (clearing current list)', {
+    log.warn('xd gateway models fetch failed (keeping last valid list)', {
       error: err instanceof Error ? err.message : String(err),
     });
-    if (myGen === authGeneration) applyGatewayModels([]);
     return;
   }
   if (myGen !== authGeneration) return; // 响应归属旧账号,丢弃

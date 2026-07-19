@@ -32,9 +32,10 @@ describe('isLongPasteText / countPasteLines', () => {
     expect(isLongPasteText('x'.repeat(LONG_PASTE_CHAR_THRESHOLD))).toBe(true);
   });
 
-  it('counts lines for the chip label', () => {
+  it('counts lines for the chip label, including CRLF and a trailing empty line', () => {
     expect(countPasteLines('a')).toBe(1);
     expect(countPasteLines('a\nb\nc')).toBe(3);
+    expect(countPasteLines('a\r\nb\r\n')).toBe(3);
   });
 
   it('detects own chip markup in clipboard HTML (review P2: chip 回环不走管线)', () => {

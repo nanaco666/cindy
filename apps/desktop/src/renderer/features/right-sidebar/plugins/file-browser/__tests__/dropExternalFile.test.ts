@@ -4,6 +4,7 @@ import {
   countFileDragItems,
   hasFileDragPayload,
   isDroppedFilePreviewSupported,
+  runExternalFileOpenRequest,
   splitExternalFilePath,
 } from '../dropExternalFile';
 
@@ -63,5 +64,40 @@ describe('file-browser external drop helpers', () => {
     ).toBe(2);
     expect(countFileDragItems({ items: { length: 1, 0: { kind: 'string' } }, files: { length: 2 } })).toBe(2);
     expect(countFileDragItems({ files: { length: 1 } })).toBe(1);
+  });
+
+  it('prevents an older cancelled request from overwriting or clearing the newer request', async () => {
+    let releaseOld: (() => void) | undefined;
+    const oldConfirmation = new Promise<void>((resolve) => {
+      releaseOld = resolve;
+    });
+    let oldCancelled = false;
+    const applied: string[] = [];
+    const cleared: string[] = [];
+
+    const oldRequest = runExternalFileOpenRequest({
+      absPath: 'C:\\tmp\\a.md',
+      open: async (path, isCancelled) => {
+        await oldConfirmation;
+        if (!isCancelled()) applied.push(path);
+      },
+      isCancelled: () => oldCancelled,
+      clearRequest: () => cleared.push('a'),
+    });
+
+    oldCancelled = true;
+    await runExternalFileOpenRequest({
+      absPath: 'C:\\tmp\\b.md',
+      open: async (path, isCancelled) => {
+        if (!isCancelled()) applied.push(path);
+      },
+      isCancelled: () => false,
+      clearRequest: () => cleared.push('b'),
+    });
+    releaseOld?.();
+    await oldRequest;
+
+    expect(applied).toEqual(['C:\\tmp\\b.md']);
+    expect(cleared).toEqual(['b']);
   });
 });

@@ -16,6 +16,7 @@ import type { ReactNode, RefObject } from 'react';
 import { ChevronLeft } from 'lucide-react-native';
 import { Animated, Pressable, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text } from '@/components/AppText';
+import { BlurBackdrop } from '@/session/BlurBackdrop';
 import type { ContextSheetSnap, ContextSheetSnapHeights } from '@/session/contextSheetModel';
 import { useContextSheetDrag } from '@/session/useContextSheetDrag';
 import { fontWeight, iconSize, iconStroke, radius, spacing, typeScale, useTheme, useThemedStyles, type ThemeColors } from '@/theme';
@@ -44,8 +45,12 @@ export interface SheetSurfaceProps {
   onSnapChange: (snap: ContextSheetSnap) => void;
   /** 底部安全区 padding(调用方传 insets.bottom)。 */
   bottomInset: number;
+  /** 纯视觉变体；默认保留既有通用 sheet 外观，tasksheet 只给会话任务面板使用。 */
+  variant?: SheetSurfaceVariant;
   testID?: string;
 }
+
+export type SheetSurfaceVariant = 'default' | 'tasksheet';
 
 export function SheetSurface({
   title,
@@ -61,6 +66,7 @@ export function SheetSurface({
   snap,
   onSnapChange,
   bottomInset,
+  variant = 'default',
   testID,
 }: SheetSurfaceProps) {
   const styles = useThemedStyles(makeSheetSurfaceStyles);
@@ -74,11 +80,19 @@ export function SheetSurface({
 
   return (
     <Animated.View
-      style={[styles.sheet, { height: drag.animatedHeight, paddingBottom: bottomInset }]}
+      style={[
+        styles.sheet,
+        variant === 'tasksheet' && styles.sheetTasksheet,
+        { height: drag.animatedHeight, paddingBottom: bottomInset },
+      ]}
       testID={testID}
     >
+      <BlurBackdrop
+        intensity={32}
+        overlayColor={variant === 'tasksheet' ? colors.sheetSurface : colors.surfaceGlassPanel}
+      />
       <View style={styles.dragZone} {...drag.panHandlers}>
-        <SheetGrabber />
+        <SheetGrabber variant={variant} />
         <View style={styles.header}>
           {onBack ? (
             <Pressable
@@ -126,11 +140,17 @@ export function SheetSurface({
  * `style` 供 ad-hoc 场景补容器差异(如 SheetSurface 里 paddingTop 由 dragZone 提供,
  * ad-hoc 面板需自带 paddingTop)。
  */
-export function SheetGrabber({ style }: { style?: StyleProp<ViewStyle> }) {
+export function SheetGrabber({
+  style,
+  variant = 'default',
+}: {
+  style?: StyleProp<ViewStyle>;
+  variant?: SheetSurfaceVariant;
+}) {
   const styles = useThemedStyles(makeSheetSurfaceStyles);
   return (
     <View style={[styles.grabberWrap, style]}>
-      <View style={styles.grabber} />
+      <View style={[styles.grabber, variant === 'tasksheet' && styles.grabberTasksheet]} />
     </View>
   );
 }
@@ -142,10 +162,13 @@ function makeSheetSurfaceStyles(colors: ThemeColors) {
     // 水平 padding 不加在 sheet 容器上,而是下放到 dragZone / pinnedTop / 滚动内容 / footer:
     // ScrollView 需要撑满面板宽,否则竖向滚动指示条会内缩 20px、悬在内容右缘。
     sheet: {
-      backgroundColor: colors.surfaceElevated,
+      backgroundColor: 'transparent',
       borderTopLeftRadius: radius.container,
       borderTopRightRadius: radius.container,
       overflow: 'hidden' as const,
+    },
+    sheetTasksheet: {
+      backgroundColor: 'transparent',
     },
     dragZone: {
       paddingHorizontal: SHEET_HORIZONTAL_PADDING,
@@ -160,6 +183,10 @@ function makeSheetSurfaceStyles(colors: ThemeColors) {
       borderRadius: radius.pill,
       height: 5,
       width: 36,
+    },
+    grabberTasksheet: {
+      backgroundColor: colors.sheetGrabber,
+      width: 30,
     },
     header: {
       alignItems: 'center' as const,

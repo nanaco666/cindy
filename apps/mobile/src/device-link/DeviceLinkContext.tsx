@@ -18,13 +18,25 @@ import {
 } from '@lizi/device-link';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { deviceLinkWsUrl } from '@/config/env';
+import { MOBILE_VISUAL_MOCK_ENABLED } from '@/config/env';
 import { useAuth } from '@/auth/AuthContext';
 import {
   applyAccessRevokedFrame,
   withAccessRevokedHandling,
 } from '@/device-link/accessRevoked';
-import { clearAllDeviceProviders, evictDeviceProviders } from '@/device-link/deviceProvidersCache';
-import { evictAgentCapabilitiesForDevice, resetAgentCapabilitiesCache } from '@/session/agentCapabilitiesCache';
+import {
+  clearAllDeviceProviders,
+  evictDeviceProviders,
+  fetchDeviceProviders,
+  type DeviceProvidersPayload,
+} from '@/device-link/deviceProvidersCache';
+import {
+  commitAgentCapabilities,
+  evictAgentCapabilitiesForDevice,
+  getAgentCapabilitiesGeneration,
+  resetAgentCapabilitiesCache,
+} from '@/session/agentCapabilitiesCache';
+import { normalizeMobileAgentCapabilities } from '@/session/agentCapabilities';
 import { evictComposerPaletteCacheForDevice, resetComposerPaletteCache } from '@/session/composerPaletteCache';
 import { clearAllDeviceModelMeta, evictDeviceModelMeta } from '@/device-link/deviceModelMetaCache';
 import { dispatchFileBrowserWatchEvent } from '@/device-link/fileBrowserWatch';
@@ -45,6 +57,7 @@ import { remoteScheduleEventStore } from '@/scheduler/remoteScheduleEvents';
 import { buildMobileDeviceName } from '@/device-link/mobileDeviceIdentity';
 import { updatePresenceAvailability } from '@/device-link/presenceRecovery';
 import type { InputProjection, PendingInteraction, RemoteMessage } from '@/session/types';
+import { createVisualMockDeviceLinkContext, seedVisualMockStore } from '@/debug/visualMock';
 
 export interface DeviceLinkContextValue {
   status: DeviceLinkStatus;
@@ -106,6 +119,10 @@ const BACKGROUND_SUSPEND_SUSPECT_MS = 10_000;
 const PRESENCE_OFFLINE_WIPE_GRACE_MS = 5_000;
 
 export function DeviceLinkProvider({ children }: { children: ReactNode }) {
+  if (MOBILE_VISUAL_MOCK_ENABLED) {
+    return <VisualMockDeviceLinkProvider>{children}</VisualMockDeviceLinkProvider>;
+  }
+
   const auth = useAuth();
   const clientRef = useRef<DeviceLinkClient | null>(null);
   const registryRef = useRef(new DeviceLinkTopicRegistry());
@@ -340,6 +357,21 @@ export function DeviceLinkProvider({ children }: { children: ReactNode }) {
     });
     const offFrame = client.onFrame((env) => routeFrame(env, {
       onAccessRevoked: (deviceId) => remoteSubscribedTopicsRef.current.delete(deviceId),
+      onProviderChanged: (deviceId) => {
+        // provider 目录与 capabilities.availableModels 是同一份 active catalog 的两种视图。
+        // 同时驱逐并后台重拉；页面保留旧画面，当前代完整快照提交后由订阅一次性更新。
+        evictDeviceProviders(deviceId);
+        evictAgentCapabilitiesForDevice(deviceId);
+        void fetchDeviceProviders(deviceId, () =>
+          sendInvokeWithAccessHandling<DeviceProvidersPayload>(
+            client,
+            deviceId,
+            'maker:provider:list',
+            [],
+          )
+        ).catch(() => { /* 下次进入选择器或重连补齐时继续重试。 */ });
+        void refreshDeviceCapabilities(client, deviceId);
+      },
     }));
     client.start();
 
@@ -480,13 +512,28 @@ export function DeviceLinkProvider({ children }: { children: ReactNode }) {
   return <DeviceLinkContext.Provider value={value}>{children}</DeviceLinkContext.Provider>;
 }
 
-function routeFrame(env: Envelope, handlers: { onAccessRevoked?: (deviceId: string) => void } = {}): void {
+function VisualMockDeviceLinkProvider({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    seedVisualMockStore();
+  }, []);
+  const value = useMemo(() => createVisualMockDeviceLinkContext(), []);
+  return <DeviceLinkContext.Provider value={value}>{children}</DeviceLinkContext.Provider>;
+}
+
+function routeFrame(env: Envelope, handlers: {
+  onAccessRevoked?: (deviceId: string) => void;
+  onProviderChanged?: (deviceId: string) => void;
+} = {}): void {
   if (applyAccessRevokedFrame(env)) {
     if (env.src) handlers.onAccessRevoked?.(env.src);
     return;
   }
   if (env.kind !== 'push' || !env.src) return;
   const push = env.payload as PushPayload;
+  if (push.channel === 'maker:provider:changed') {
+    handlers.onProviderChanged?.(env.src);
+    return;
+  }
   if (push.channel === 'maker:schedule:event') {
     remoteScheduleEventStore.apply(env.src, push.payload);
   }
@@ -496,6 +543,28 @@ function routeFrame(env: Envelope, handlers: { onAccessRevoked?: (deviceId: stri
     return;
   }
   remoteSessionStore.applyRemotePush(env.src, push.channel, push.payload);
+}
+
+/** provider revision 后并行重拉两种 agent 的能力；旧代或异常结果都不触碰当前页面。 */
+async function refreshDeviceCapabilities(
+  client: DeviceLinkClient,
+  deviceId: string,
+): Promise<void> {
+  const generation = getAgentCapabilitiesGeneration(deviceId);
+  await Promise.allSettled(
+    (['claude-code', 'codex'] as const).map(async (agentKind) => {
+      const raw = await sendInvokeWithAccessHandling<unknown>(
+        client,
+        deviceId,
+        'maker:get-capabilities',
+        [agentKind],
+      );
+      const normalized = normalizeMobileAgentCapabilities(raw);
+      if (normalized) {
+        commitAgentCapabilities(deviceId, agentKind, generation, normalized);
+      }
+    }),
+  );
 }
 
 async function rebuildSessionSnapshot(

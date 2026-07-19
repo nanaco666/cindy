@@ -352,20 +352,20 @@ describe('tokenBroker 门控', () => {
   it('connect:可选择清单声明的备用 clientId;未声明值在端点拒绝', async () => {
     const manager = fakeManager();
     const selected = await callAs(
-      'cindy-slack',
+      'xd-atlassian',
       'POST',
       '/oauth/acct/connect',
       manager,
       { clientId: 'global-cid' },
     );
     expect(selected.status).toBe(200);
-    expect(manager.connectAccount).toHaveBeenCalledWith('cindy-slack', 'acct', BROKERED, {
+    expect(manager.connectAccount).toHaveBeenCalledWith('xd-atlassian', 'acct', BROKERED, {
       clientId: 'global-cid',
     });
 
     const rejectedManager = fakeManager();
     const rejected = await callAs(
-      'cindy-slack',
+      'xd-atlassian',
       'POST',
       '/oauth/acct/connect',
       rejectedManager,

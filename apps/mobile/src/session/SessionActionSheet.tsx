@@ -28,12 +28,13 @@ import {
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/AppText';
+import { BlurBackdrop } from '@/session/BlurBackdrop';
 import {
   buildSessionActionMenu,
   type SessionSwipeAction,
 } from '@/session/swipeRowRegistry';
 import { iconSize, iconStroke, useTheme, useThemedStyles, type ThemeColors } from '@/theme';
-import { fontWeight, radius, spacing, typeScale } from '@/theme/tokens';
+import { fontWeight, lineHeight, radius, spacing, typeScale } from '@/theme/tokens';
 
 /** 卡片滑入距离(略大于卡片实高即可,滑入曲线吃掉误差)。 */
 const CARD_SLIDE_DISTANCE = 360;
@@ -109,6 +110,7 @@ export function SessionActionSheet({
     <Modal animationType="none" onRequestClose={onClose} transparent visible={mounted}>
       <View style={styles.overlay}>
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: progress }]}>
+          <BlurBackdrop />
           <Pressable
             accessibilityLabel="关闭会话操作菜单"
             onPress={onClose}
@@ -124,9 +126,10 @@ export function SessionActionSheet({
           testID="home.sessionActions"
         >
           <View style={styles.actionCard}>
+            <BlurBackdrop intensity={32} overlayColor={colors.sheetActionSurface} />
             {menu.map((item) => {
               const IconComponent = ACTION_ICONS[item.action];
-              const color = item.destructive ? colors.statusError : colors.textPrimary;
+              const color = item.destructive ? colors.destructive : colors.sheetActionText;
               return (
                 <Pressable
                   accessibilityLabel={item.label}
@@ -151,6 +154,7 @@ export function SessionActionSheet({
             style={({ pressed }) => [styles.cancelCard, pressed && styles.pressed]}
             testID="home.sessionActions.cancel"
           >
+            <BlurBackdrop intensity={32} overlayColor={colors.sheetActionSurface} />
             <Text style={styles.cancelText}>取消</Text>
           </Pressable>
         </Animated.View>
@@ -165,7 +169,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'flex-end',
   },
   backdrop: {
-    backgroundColor: colors.overlay,
+    // 背板玻璃色由 BlurBackdrop 承担(absoluteFill 在本 Pressable 之下);Pressable 透明,
+    // 仅占触摸区接收点按关闭。
     flex: 1,
   },
   cardArea: {
@@ -173,8 +178,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   actionCard: {
-    backgroundColor: colors.surfaceElevated,
-    borderColor: colors.border,
+    backgroundColor: 'transparent',
+    borderColor: colors.sheetActionBorder,
     borderRadius: radius.container,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
@@ -187,26 +192,29 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   actionLabel: {
-    color: colors.textPrimary,
+    color: colors.sheetActionText,
     flexShrink: 1,
-    fontSize: typeScale.body,
+    fontSize: typeScale.listBody,
+    fontWeight: fontWeight.semibold,
+    lineHeight: lineHeight.listBody,
   },
   actionLabelDanger: {
-    color: colors.statusError,
+    color: colors.destructive,
   },
   cancelCard: {
     alignItems: 'center',
-    backgroundColor: colors.surfaceElevated,
-    borderColor: colors.border,
+    backgroundColor: 'transparent',
+    borderColor: colors.sheetActionBorder,
     borderRadius: radius.container,
     borderWidth: StyleSheet.hairlineWidth,
     justifyContent: 'center',
     minHeight: 54,
   },
   cancelText: {
-    color: colors.textPrimary,
-    fontSize: typeScale.body,
-    fontWeight: fontWeight.medium,
+    color: colors.sheetActionText,
+    fontSize: typeScale.listBody,
+    fontWeight: fontWeight.semibold,
+    lineHeight: lineHeight.listBody,
   },
   pressed: {
     opacity: 0.72,

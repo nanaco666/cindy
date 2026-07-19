@@ -39,6 +39,17 @@ export interface AgentRuntimeConfig {
   behaviorFlags?: Record<string, string>;
 
   /**
+   * Host-managed default model for native subagents.
+   *
+   * - undefined / blank: do not override the agent's native selection logic
+   * - non-blank: the agent implementation injects the vendor-supported deterministic override
+   *
+   * Claude maps this to `CLAUDE_CODE_SUBAGENT_MODEL`. Codex does not consume it yet because
+   * its full-history fork path rejects model overrides in the currently bundled binary.
+   */
+  subagentModel?: string;
+
+  /**
    * Claude Code 自动上下文压缩阈值百分比。
    *
    * - undefined: host 不接管自动压缩 (保持 agent 默认行为)

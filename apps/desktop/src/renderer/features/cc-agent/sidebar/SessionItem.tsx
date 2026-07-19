@@ -632,7 +632,7 @@ export const SessionItem = memo(function SessionItem({
         // 用 ProjectAction 同款瞬时反馈,跟 Cursor / Codex sidebar 的体感一致。
         'text-sm font-medium text-left cursor-pointer',
         isActive
-          ? 'bg-sidebar-item-active text-foreground'
+          ? 'bg-sidebar-item-active text-sidebar-item-active-foreground border border-[var(--sidebar-item-active-border)]'
           : isSelected
             ? 'bg-[var(--chat-input-chip-bg)] text-foreground'
             : 'text-foreground hover:bg-sidebar-item-hover',
@@ -702,7 +702,14 @@ export const SessionItem = memo(function SessionItem({
           ) : null}
           <span className="min-w-0 truncate">
             {matchIndices && matchIndices.length > 0 && canHighlightDisplayTitle
-              ? highlightSegments(session.title, matchIndices)
+              ? highlightSegments(session.title, matchIndices, {
+                  highlightClassName: cn(
+                    'bg-transparent font-semibold',
+                    isActive
+                      ? 'text-[var(--sidebar-item-active-foreground)]'
+                      : 'text-[var(--msg-assistant-text)]',
+                  ),
+                })
               : displayTitle}
           </span>
           {remoteIconKind && (
@@ -711,7 +718,7 @@ export const SessionItem = memo(function SessionItem({
               size={12}
               strokeWidth={1.8}
               connectionStatus={remoteIconConnectionStatus}
-              className="text-sidebar-action-icon"
+              className={cn(isActive ? 'text-sidebar-item-active-foreground' : 'text-sidebar-action-icon')}
             />
           )}
         </span>
@@ -778,7 +785,10 @@ export const SessionItem = memo(function SessionItem({
                   role="img"
                   size={12}
                   strokeWidth={2}
-                  className="size-4 text-sidebar-action-icon"
+                  className={cn(
+                    'size-4',
+                    isActive ? 'text-sidebar-item-active-foreground' : 'text-sidebar-action-icon',
+                  )}
                   aria-label={t('ccAgent.sidebar.status.running', 'Running')}
                   title={t('ccAgent.sidebar.status.running', 'Running')}
                 />
@@ -802,7 +812,7 @@ export const SessionItem = memo(function SessionItem({
                 title={formatSidebarTimeAbsolute(activityIso)}
                 className={cn(
                   'min-w-0 truncate text-right text-xs font-medium tabular-nums',
-                  'text-sidebar-action-icon',
+                  isActive ? 'text-sidebar-item-active-foreground' : 'text-sidebar-action-icon',
                 )}
               >
                 {formatSidebarTime(activityIso, t)}
@@ -833,7 +843,8 @@ export const SessionItem = memo(function SessionItem({
           )}
           {/* Action 按钮组（hover/menu open 时浮现，archivePending 期间整组让位给红色 pill）。
               尺寸/视觉与 Project Header 的 ProjectAction 同套（size-5 / icon 14 /
-              strokeWidth 2 / gap-0.5 / hover:bg-sidebar-item-active），唯一差异
+              strokeWidth 2 / gap-0.5）；普通行 hover 走 sidebar-item-hover，选中行
+              则用 active foreground 的半透明叠色保持红色胶囊内的反色体系。唯一差异
               是 session 行的三个按钮**故意不挂 Tip 浮层** —— 图标语义已足够直观,
               tooltip 在密集 sidebar 列表里反而干扰视觉。
               组装顺序固定为 [Run(automation only), More, Archive | Undo]：
@@ -865,6 +876,7 @@ export const SessionItem = memo(function SessionItem({
                 <SessionAction
                   label={t('ccAgent.sidebar.automationGroup.menu.runNow')}
                   onClick={() => void handleAutomationRunClick()}
+                  isActive={isActive}
                 >
                   <Play size={14} strokeWidth={2} />
                 </SessionAction>
@@ -875,6 +887,7 @@ export const SessionItem = memo(function SessionItem({
                   const rect = e.currentTarget.getBoundingClientRect();
                   setMenuPos({ x: rect.left, y: rect.bottom + 2 });
                 }}
+                isActive={isActive}
               >
                 <EllipsisVertical size={14} strokeWidth={2} />
               </SessionAction>
@@ -882,6 +895,7 @@ export const SessionItem = memo(function SessionItem({
                 <SessionAction
                   label={t('ccAgent.sidebar.sessionMenu.unarchive')}
                   onClick={() => handleUnarchiveSelect()}
+                  isActive={isActive}
                 >
                   <Undo size={14} strokeWidth={2} />
                 </SessionAction>
@@ -889,6 +903,7 @@ export const SessionItem = memo(function SessionItem({
                 <SessionAction
                   label={t('ccAgent.sidebar.sessionMenu.archived')}
                   onClick={() => setArchivePending(true)}
+                  isActive={isActive}
                 >
                   <Archive size={14} strokeWidth={2} />
                 </SessionAction>
@@ -1063,15 +1078,18 @@ export const SessionItem = memo(function SessionItem({
 
 /** SessionItem 右侧 hover action 图标按钮 —— 尺寸/视觉与 Project Header 的
  *  ProjectAction 基本一致(size-5 / icon 14×14 / strokeWidth 2 / 圆角 md /
- *  hover 用 sidebar-item-active 背景 + 文字色升到 foreground),区别是这里
+ *  普通行 hover 用 sidebar-item-hover + foreground；选中行保持 active foreground,
+ *  hover 只叠一层同色半透明高光),区别是这里
  *  **不挂 Tip 浮层**,图标语义已经够直观,sidebar 密集列表里少干扰为先。 */
 function SessionAction({
   label,
   onClick,
+  isActive,
   children,
 }: {
   label: string;
   onClick: (e: ReactMouseEvent<HTMLButtonElement>) => void;
+  isActive: boolean;
   children: ReactNode;
 }) {
   // 这里**故意不挂 Tip 浮层** —— 三个按钮(More/Archive/Undo)的图标语义都足够
@@ -1088,8 +1106,10 @@ function SessionAction({
       onDoubleClick={(e) => e.stopPropagation()}
       className={cn(
         'shrink-0 size-5 flex items-center justify-center rounded-md',
-        'text-sidebar-action-icon hover:text-foreground',
-        'hover:bg-sidebar-item-active focus:outline-none',
+        'focus:outline-none',
+        isActive
+          ? 'text-sidebar-item-active-foreground hover:text-sidebar-item-active-foreground hover:bg-[color-mix(in_srgb,var(--sidebar-item-active-foreground)_14%,transparent)]'
+          : 'text-sidebar-action-icon hover:bg-sidebar-item-hover hover:text-foreground',
       )}
     >
       {children}

@@ -199,6 +199,53 @@ export interface FeishuBotMcpHostDeps {
   logger?: LiziMcpLogger;
 }
 
+// ── lizi_slack(Slack 网关工具, 2026-07 并轨 hook 通道) ──────────────────────
+
+/** Slack 网关工具的结构化错误(hook-control manager 定义的同构形状)。 */
+export interface SlackToolBridgeError {
+  code: string;
+  message: string;
+}
+
+/** callTool 的结构化结果(桥永不 throw)。 */
+export type SlackToolBridgeResult =
+  | { ok: true; result: unknown }
+  | { ok: false; error: SlackToolBridgeError };
+
+/**
+ * hook-control 的 Slack 工具桥(结构性 duck type —— 本包不 import desktop
+ * 模块, host 侧实现为 hook-control/slackToolBridge 注册表里的桥对象)。
+ * multiTeam / bindings: (multi-team)多 workspace 绑定信息 —— 多绑定时非
+ * status 工具必须带 teamId, server 拒绝猜测(AMBIGUOUS_TEAM)。旧 host 实现
+ * 可能缺这两个字段, 消费方按 undefined 宽松处理。
+ */
+export interface SlackToolBridgeLike {
+  availability(): {
+    connected: boolean;
+    bound: boolean;
+    serverSupportsTools: boolean;
+    multiTeam?: boolean;
+    bindings?: Array<{ teamId: string; teamName: string | null }>;
+  };
+  callTool(
+    tool: string,
+    args?: Record<string, unknown>,
+    teamId?: string | null,
+  ): Promise<SlackToolBridgeResult>;
+}
+
+/**
+ * lizi_slack 的 host 依赖: getBridge 每次现取(hook-control 未初始化 / 已
+ * dispose 时为 null, 工具 fail-closed); workingDir 由 provider 从 ctx 绑定
+ * (大结果落盘的钳制根)。
+ */
+export interface SlackHookMcpDeps {
+  getBridge(): SlackToolBridgeLike | null;
+  /** 当前会话工作目录(out_file 泄洪根; 空 = 不落盘只截断)。 */
+  workingDir?: string;
+  logger?: LiziMcpLogger;
+}
+
 /**
  * Host injects a `getScheduler()` accessor — the lizi_scheduler MCP server
  * never holds a long-lived Scheduler reference because the host may
@@ -441,11 +488,15 @@ export type SessionSearchFn = (
 // 'feishu' 已于 2026-07-16 摘壳(能力迁内置意识 xd-feishu;后端留任给
 // scheduler capability broker,见 providers.ts 注释),不再是可注册 MCP id。
 // 'lizi_slack_bot' 已于 2026-07-17 随老 SlackIM relay 渠道退役(apiBaseUrl 清理)。
+// 'lizi_slack'(与老 lizi_slack_bot 无关)2026-07-19 上线: Slack 网关工具,
+// 经 hook 通道由 slack-hook-server 以托管 user token 调 Slack 官方 MCP,
+// 接替退役的 cindy-slack 意识。
 export type LiziMcpId =
   | 'android'
   | 'browser'
   | 'computer'
   | 'lizi_feishu_bot'
+  | 'lizi_slack'
   | 'lizi_scheduler'
   | 'lizi_ssh'
   | 'lizi_memory'
