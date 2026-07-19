@@ -30,6 +30,18 @@ pnpm mobile:sim:rebuild -- --region=global # 海外
 脚本固定 Metro 8081、注入当前 git branch/commit 给新建会话页顶部的 `__DEV__` build label,避免多 worktree 连错 bundle。`mobile:sim:start` / `mobile:sim:rebuild` 会按所选 region 把构建身份与对应 `config/endpoint*.json` 的 `cdnBaseUrl` 同步到 `apps/mobile/.env`,无需手动注入参数或复制 `.env.example`；`mobile:sim:whoami` 用同一份 region 配置解析实际 bundle id，不维护独立硬编码。具体排障见 [`simulator-debugging.md`](./simulator-debugging.md)。
 切到 global 时原生 bundle identity / scheme 也会变,先用同 region 的 `mobile:sim:rebuild` 重装开发包,再用 `mobile:sim:start -- --region=global` 启动 Metro。
 
+### PR 与聚合验证顺序
+
+仓库改动正常先在任务 worktree 完成。默认交付顺序为：定向验证与本地 commit → 按开发者 / 宿主 workflow 完成发布授权 → push 任务分支并创建 / 更新 PR → 刷新 verify / personal client checkout → 在该验证 checkout 启 Metro。刷新后、启动 Metro 前，聚合验证记录必须同时列出作为基线的 `main` commit、待验证 PR commit 与聚合后的 `HEAD`，证明验证 checkout 确实由最新 `main` + 待验证 PR 组成。不要仅为了让运行中的 base checkout 立即 HMR 就自行修改或 push `main`；有权决定的开发者明确选择 local merge-back 或直推 `main` 时，分别按 `docs/dogfooding-workflow.md` 与根 `AGENTS.md` 的例外门禁执行。
+
+聚合验证时，除上述三个 commit SHA 外，运行实例还必须具备同一组三件套证据：
+
+1. `pnpm mobile:sim:whoami` 显示 8081 属于当前验证 checkout。
+2. App 的 `__DEV__` build label 显示该 checkout 的 branch 与 Metro host:port。
+3. Metro 在本次修改后打印新的 `iOS Bundled ...`。
+
+personal client 的具体目录和刷新 helper 属于开发者本机规则，不在仓库文档写死；团队共享契约只有“验证 checkout 必须由最新 `main` + 待验证 PR 组成”。
+
 ## Xcode 本地开发(region)
 
 需要在 Xcode 里选择真机 / 模拟器、调签名或看原生日志时,从仓库根运行同一条命令;不传 region 时默认国服:
@@ -48,8 +60,8 @@ Beta 现在就是多开发者模型,不是未来目标:
 - build profile、channel、branch 同名:`beta-<dev>`。
 - 已 seed `beta-dash`;新增开发者用 `pnpm mobile:beta:add-dev -- <dev> --execute` 生成 profile,并创建/关联同名 EAS channel -> branch。
 - 同正式服 region 身份与 OAuth callback scheme；登录统一走 Cindy auth-server，原生飞书 SSO 已退役。
-- 同 bundleId 的代价:一台手机同一时间只能装一个 XDMaker mobile 变体;多个 beta 分支串行切,不能并存。
-- Beta 显示名为 `XDMaker Beta (<dev>)`;缺少 dev 时退回 `XDMaker Beta`。
+- 同 bundleId 的代价:一台手机同一时间只能装一个 Cindy mobile 变体;多个 beta 分支串行切,不能并存。
+- Beta 显示名为 `Cindy Beta (<dev>)`;缺少 dev 时退回 `Cindy Beta`。
 
 ### Beta 命令
 
