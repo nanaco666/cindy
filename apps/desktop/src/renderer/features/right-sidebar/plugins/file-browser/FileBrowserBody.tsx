@@ -409,6 +409,18 @@ function FileBrowserBodyWithWorkdir({
     [confirmSwitchAway, ctx, isRemote, revealFileInTree, state.selectedFilePath, t, workdir],
   );
 
+  // 聊天文件 chip 的“在侧边栏文件浏览器中打开”可把 workdir 外本地文件写成
+  // 一次性请求。这里直接复用上面的原生拖入处理，确保格式限制、dirty guard、
+  // 只读预览和“仓内路径仍定位文件树”的行为只有一份实现。
+  const externalFilePath = state.externalFilePath ?? null;
+  const externalFileNonce = state.externalFileNonce ?? 0;
+  useEffect(() => {
+    if (!externalFilePath) return;
+    ctx.patchState({ externalFilePath: null });
+    void handleDroppedExternalFile(externalFilePath);
+    // ctx / handler 引用变化不应重放已经开始消费的一次性请求。
+  }, [externalFilePath, externalFileNonce]);
+
   const handleDrop = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
       if (!hasFileDragPayload(event.dataTransfer)) return;

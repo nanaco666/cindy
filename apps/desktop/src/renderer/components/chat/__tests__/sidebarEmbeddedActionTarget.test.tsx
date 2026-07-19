@@ -28,6 +28,7 @@ vi.mock('@/features/right-sidebar/lib/openInSidebarBrowser', () => ({
 
 vi.mock('@/features/right-sidebar/lib/openInSidebarFileBrowser', () => ({
   openDirInSidebarFileBrowser: vi.fn(async () => undefined),
+  openExternalFileInSidebarFileBrowser: vi.fn(async () => undefined),
   openFileInSidebarFileBrowser: vi.fn(async () => undefined),
 }));
 
@@ -42,7 +43,10 @@ vi.mock('@/lib/toast', () => ({
 
 import { SessionNavigationModeProvider } from '@/features/cc-agent/embeddedSessionNavigation';
 import { openUrlInSidebarBrowser } from '@/features/right-sidebar/lib/openInSidebarBrowser';
-import { openFileInSidebarFileBrowser } from '@/features/right-sidebar/lib/openInSidebarFileBrowser';
+import {
+  openExternalFileInSidebarFileBrowser,
+  openFileInSidebarFileBrowser,
+} from '@/features/right-sidebar/lib/openInSidebarFileBrowser';
 import { LOCAL_FILE_ORIGIN } from '@/lib/sessionFileOrigin';
 import { ChatSessionFileProvider } from '../ChatSessionFileContext';
 import { useFileChipContextMenu } from '../useFileChipContextMenu';
@@ -57,6 +61,20 @@ function ActionProbe() {
     <>
       <button type="button" onClick={() => menu.openAt(10, 20)}>
         open-menu
+      </button>
+      {menu.menu}
+    </>
+  );
+}
+
+function ExternalFileActionProbe() {
+  const menu = useFileChipContextMenu({
+    getAbsPath: () => 'C:\\tmp\\outside.md',
+  });
+  return (
+    <>
+      <button type="button" onClick={() => menu.openAt(10, 20)}>
+        open-external-menu
       </button>
       {menu.menu}
     </>
@@ -125,5 +143,20 @@ describe('sidebar-embedded action target', () => {
     await waitFor(() =>
       expect(openUrlInSidebarBrowser).toHaveBeenCalledWith('lead-a', 'https://example.com/'),
     );
+  });
+
+  it('opens a local file outside the workdir through the external-file preview path', async () => {
+    render(wrapper(<ExternalFileActionProbe />));
+
+    fireEvent.click(screen.getByText('open-external-menu'));
+    fireEvent.click(screen.getByText('chat.markdownRenderer.openInSidebarFileBrowser'));
+
+    await waitFor(() =>
+      expect(openExternalFileInSidebarFileBrowser).toHaveBeenCalledWith(
+        'lead-a',
+        'C:\\tmp\\outside.md',
+      ),
+    );
+    expect(openFileInSidebarFileBrowser).not.toHaveBeenCalled();
   });
 });
