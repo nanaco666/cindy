@@ -20,6 +20,9 @@ vi.mock('@/lib/toast', () => ({
 vi.mock('@/components/chat/DiffView', () => ({
   DiffView: () => <div data-testid="diff-view" />,
 }));
+vi.mock('@/components/chat/MarkdownDiffBlock', () => ({
+  MarkdownDiffBlock: ({ raw }: { raw: string }) => <div data-testid="raw-diff-view">{raw}</div>,
+}));
 
 afterEach(() => {
   act(() => vi.runOnlyPendingTimers());
@@ -130,5 +133,75 @@ describe('ToolPayloadLightbox editable text mode', () => {
     );
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Save Text' })).toBeNull();
+  });
+});
+
+describe('ToolPayloadLightbox shared file diff mode', () => {
+  it('renders Claude old/new and Codex unified diffs in one multi-file view', () => {
+    vi.useFakeTimers();
+    render(
+      <Tooltip.Provider>
+        <ToolPayloadLightbox
+          payload={{
+            kind: 'diff',
+            files: [
+              {
+                key: 'claude',
+                filePath: '/repo/src/claude.ts',
+                diffs: [{ key: 'edit:0', oldString: 'old', newString: 'new' }],
+              },
+              {
+                key: 'codex',
+                filePath: '/repo/src/codex.ts',
+                diffs: [{ key: 'file-change:0', rawDiff: '-before\n+after' }],
+              },
+            ],
+          }}
+          onClose={() => undefined}
+        />
+      </Tooltip.Provider>,
+    );
+
+    expect(screen.getByText('claude.ts')).toBeTruthy();
+    expect(screen.getByText('codex.ts')).toBeTruthy();
+    expect(screen.getByTestId('diff-view')).toBeTruthy();
+    expect(screen.getByTestId('raw-diff-view').textContent).toBe('-before\n+after');
+    expect(screen.queryByLabelText('chat.lightbox.openInExplorer')).toBeNull();
+  });
+
+  it('copies every file path and both diff formats without exposing raw tool JSON', () => {
+    vi.useFakeTimers();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    render(
+      <Tooltip.Provider>
+        <ToolPayloadLightbox
+          payload={{
+            kind: 'diff',
+            files: [
+              {
+                key: 'claude',
+                filePath: '/repo/a.ts',
+                diffs: [{ key: 'edit:0', oldString: 'old', newString: 'new' }],
+              },
+              {
+                key: 'codex',
+                filePath: '/repo/b.ts',
+                diffs: [{ key: 'file-change:0', rawDiff: '-before\n+after' }],
+              },
+            ],
+          }}
+          onClose={() => undefined}
+        />
+      </Tooltip.Provider>,
+    );
+
+    fireEvent.click(screen.getByLabelText('chat.lightbox.copyContent'));
+    expect(writeText).toHaveBeenCalledWith(
+      '--- /repo/a.ts ---\n--- old\nold\n+++ new\nnew\n\n--- /repo/b.ts ---\n-before\n+after',
+    );
   });
 });

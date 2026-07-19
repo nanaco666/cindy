@@ -11,9 +11,9 @@
  *       state machine.
  *   F10 MessageStream wraps render items in `gap-3.5` (= 14 px), exactly
  *       half of the v1 `gap-7` (28 px).
- *   F11 AgentActionRow renders Edit/Write/MultiEdit/Read file paths as a
- *       real **chip** (chat-input-chip-* tokens) and routes activation to
- *       a Lightbox — not an inline 2nd-level expand.
+ *   F11 AgentActionRow renders Claude and Codex single-file actions as a real
+ *       **chip** (chat-input-chip-* tokens) and routes edits to one shared
+ *       Lightbox — not an inline 2nd-level expand.
  *   F12 Other tools (Bash/Grep/...) toggle inline input/output details,
  *       not the payload Lightbox.
  */
@@ -113,10 +113,12 @@ describe('F11 — file chip + diff lightbox', () => {
     expect(rowSrc).not.toMatch(/RowJsonBody/);
   });
 
-  it('Edit / Write / MultiEdit route to ToolPayloadLightbox in diff mode', () => {
+  it('Claude Edit / Write / MultiEdit and Codex file_change share diff mode', () => {
     expect(rowSrc).toMatch(/buildDiffPayload/);
     expect(rowSrc).toMatch(/kind:\s*'diff'/);
+    expect(rowSrc).toMatch(/rawDiff:\s*change\.diff/);
     expect(rowSrc).toMatch(/ToolPayloadLightbox/);
+    expect(rowSrc).not.toMatch(/FileChangeDetails/);
   });
 
   it('Read tool routes to TextLightbox', () => {
@@ -157,6 +159,7 @@ describe('F12 — non-file tools → inline details', () => {
     expect(toolPayloadSrc).toMatch(/kind:\s*'diff'/);
     expect(toolPayloadSrc).toMatch(/kind:\s*'json'/);
     expect(toolPayloadSrc).toMatch(/<DiffView/);
+    expect(toolPayloadSrc).toMatch(/<MarkdownDiffBlock/);
     expect(toolPayloadSrc).toMatch(/e\.key\s*===\s*'Escape'/);
     expect(toolPayloadSrc).toMatch(/onClick=\{handleClose\}/);
   });
@@ -169,7 +172,7 @@ describe('F12 — non-file tools → inline details', () => {
     expect(buildDiffPayloadBlock).toContain("key: 'write:0'");
     expect(buildDiffPayloadBlock).toMatch(/edits\.map\(\(e, index\) =>/);
     expect(buildDiffPayloadBlock).toMatch(/key:\s*`edit:\$\{index\}`/);
-    expect(toolPayloadSrc).toContain('key={d.key}');
+    expect(toolPayloadSrc).toContain('key={diff.key}');
   });
 });
 
