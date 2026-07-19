@@ -323,13 +323,13 @@ function listDesktopDevProcesses() {
   return processes.filter((proc) => isRepositoryDesktopDevProcess(proc, checkoutPaths));
 }
 
-async function waitForDesktopDevProcessesToExit(timeoutMs) {
+async function waitForDesktopDevProcessesToExit(timeoutMs, filter = () => true) {
   const deadline = Date.now() + timeoutMs;
-  let remaining = listDesktopDevProcesses();
+  let remaining = listDesktopDevProcesses().filter(filter);
 
   while (remaining.length > 0 && Date.now() < deadline) {
     await sleep(pollIntervalMs);
-    remaining = listDesktopDevProcesses();
+    remaining = listDesktopDevProcesses().filter(filter);
   }
 
   return remaining;
@@ -547,6 +547,22 @@ export function readDesktopStartupStatus(statusPath) {
   }
 }
 
+export function formatDesktopStartupFailure(status) {
+  const code = typeof status?.code === 'string' ? status.code : 'DEV_PROCESS_EXITED';
+  const message = typeof status?.message === 'string'
+    ? status.message
+    : 'Desktop dev exited before the main window became ready.';
+  const detail = status?.detail && typeof status.detail === 'object'
+    ? Object.entries(status.detail)
+      .map(([key, value]) => `${key}=${String(value)}`)
+      .join(', ')
+    : '';
+  const processExit = status?.exitCode !== undefined || status?.signal
+    ? ` exit=${status.exitCode ?? 'unknown'}${status.signal ? ` signal=${status.signal}` : ''}`
+    : '';
+  return `[${code}] ${message}${detail ? ` (${detail})` : ''}${processExit}`;
+}
+
 function writeDesktopStartupStatus(statusPath, status) {
   const tempPath = `${statusPath}.${process.pid}.tmp`;
   try {
@@ -570,7 +586,7 @@ export async function waitForDesktopStartup(statusPath, timeoutMs = startupReady
     if (status?.state === 'failed') {
       fs.rmSync(statusPath, { force: true });
       throw new Error(
-        `Desktop dev exited before the main window became ready (exit ${status.exitCode ?? 'unknown'}). Check the dev terminal and apps/desktop/logs/.`,
+        `${formatDesktopStartupFailure(status)} Check the dev terminal, run \`pnpm desktop:whoami\`, and inspect apps/desktop/logs/.`,
       );
     }
     await sleep(pollIntervalMs);
@@ -588,12 +604,31 @@ async function main() {
   const killOnly = argv.includes('--kill-only');
   const waitReady = argv.includes('--wait-ready');
   const preserveRunning = argv.includes('--preserve-running');
+  const replaceRunningArg = argv.find((arg) => arg.startsWith('--replace-running-root='));
+  const replaceRunningRoot = replaceRunningArg
+    ? path.resolve(replaceRunningArg.slice('--replace-running-root='.length))
+    : null;
   // --local 切换到本地模式(连 localhost:3333);缺省走 remote(连 xdt-api)。
   const mode = argv.includes('--local') ? 'local' : 'remote';
   const startupConfig = applyDesktopDevStartupConfig({ argv, mode });
   const isolatedArg = argv.find((a) => a === '--isolated' || a.startsWith('--isolated='));
   if (preserveRunning && killOnly) {
     throw new Error('--preserve-running cannot be combined with the internal --kill-only stage');
+  }
+  if (replaceRunningRoot && !preserveRunning) {
+    throw new Error('--replace-running-root requires --preserve-running');
+  }
+  if (replaceRunningArg && !replaceRunningArg.slice('--replace-running-root='.length)) {
+    throw new Error('--replace-running-root requires an absolute registered worktree path');
+  }
+  if (replaceRunningRoot) {
+    const registeredRoots = repositoryWorktreePaths().map((entry) => path.resolve(entry));
+    if (!registeredRoots.includes(replaceRunningRoot)) {
+      throw new Error(`--replace-running-root is not a registered repository worktree: ${replaceRunningRoot}`);
+    }
+    if (replaceRunningRoot === rootDir) {
+      throw new Error('--replace-running-root cannot target the worktree that is starting the replacement');
+    }
   }
   if (preserveRunning && mode === 'local') {
     throw new Error(
@@ -672,18 +707,66 @@ async function main() {
     process.exit(1);
   }
   if (devAncestor && preserveRunning) {
+    if (replaceRunningRoot && commandContainsPath(devAncestor.command, replaceRunningRoot)) {
+      throw new Error(
+        `Refusing to replace ${replaceRunningRoot}: the current command is hosted by that dev process tree`,
+      );
+    }
     console.log(
       `==> Current session is hosted by Cindy desktop dev pid ${devAncestor.pid}; preserving that process tree.`,
     );
   }
 
-  const targets = listDesktopDevProcesses();
+  const allTargets = listDesktopDevProcesses();
+  const targets = replaceRunningRoot
+    ? allTargets.filter((proc) => commandContainsPath(proc.command, replaceRunningRoot))
+    : allTargets;
   const darwinTerminalTtys = darwinTerminalTtysForProcesses(targets);
 
-  if (preserveRunning) {
+  if (preserveRunning && !replaceRunningRoot) {
     console.log(
       `==> Preserving ${targets.length} existing Cindy desktop dev process(es); the preview will start alongside them in passive mode.`,
     );
+  } else if (replaceRunningRoot) {
+    console.log(
+      `==> Preserving ${allTargets.length - targets.length} other Cindy desktop dev process(es); replacing only ${replaceRunningRoot}.`,
+    );
+    if (targets.length === 0) {
+      console.log('==> No running desktop dev processes were found for the requested replacement root.');
+    } else {
+      console.log(`==> Stopping ${targets.length} desktop dev process(es) from the requested replacement root...`);
+      for (const target of targets) {
+        console.log(`    kill ${target.pid}: ${target.command.slice(0, 180)}`);
+        killProcess(target.pid);
+      }
+
+      const matchesReplacementRoot = (proc) => commandContainsPath(proc.command, replaceRunningRoot);
+      const remainingForRoot = await waitForDesktopDevProcessesToExit(
+        gracefulTimeoutMs,
+        matchesReplacementRoot,
+      );
+      if (remainingForRoot.length > 0) {
+        console.log(`==> Force stopping ${remainingForRoot.length} stubborn process(es) from the replacement root...`);
+        for (const target of remainingForRoot) {
+          console.log(`    ${forceKillLabel} ${target.pid}: ${target.command.slice(0, 180)}`);
+          forceKillProcess(target.pid);
+        }
+      }
+
+      const remainingAfterForce = await waitForDesktopDevProcessesToExit(
+        forceTimeoutMs,
+        matchesReplacementRoot,
+      );
+      if (remainingAfterForce.length > 0) {
+        console.error(`==> Failed to stop ${remainingAfterForce.length} process(es) from ${replaceRunningRoot}; aborting restart.`);
+        for (const target of remainingAfterForce) {
+          console.error(`    still running ${target.pid}: ${target.command.slice(0, 180)}`);
+        }
+        process.exit(1);
+      }
+
+      closeDarwinTerminalTtys(darwinTerminalTtys);
+    }
   } else if (targets.length === 0) {
     console.log('==> No existing Cindy desktop dev processes found.');
   } else {

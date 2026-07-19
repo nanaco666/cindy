@@ -84,6 +84,7 @@
     "dev:desktop:remote": "node scripts/ensure-deps.mjs && node scripts/ensure-dev-runtime-assets.mjs && pnpm --filter desktop dev:remote",
     "restart:desktop:remote": "node scripts/desktop-restart-runner.mjs --wait-ready",
     "restart:desktop:local": "node scripts/desktop-restart-runner.mjs --local --wait-ready",
+    "desktop:whoami": "node scripts/desktop-whoami.mjs",
     "dev:desktop:inspect": "node scripts/ensure-deps.mjs && node scripts/ensure-dev-runtime-assets.mjs && pnpm --filter desktop dev:inspect",
     "dev:server": "node scripts/run-external-server.mjs",
     "benchmark:voice-input": "node scripts/voice-input-benchmark.mjs",

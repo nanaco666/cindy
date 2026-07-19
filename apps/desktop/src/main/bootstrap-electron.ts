@@ -11,7 +11,7 @@ import windowStateKeeper from 'electron-window-state';
 import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import { shouldRequestSingleInstanceLock } from './devCliFlags.js';
 import { acquirePassiveDevLock } from './passiveDevLock.js';
-import { markDesktopDevReady } from './devStartupStatus';
+import { markDesktopDevReady, markDesktopDevStartupFailed } from './devStartupStatus';
 
 const PROCESS_STARTED_AT_MS = Date.now();
 
@@ -1548,6 +1548,11 @@ if (shouldRequestSingleInstanceLock({
 })) {
   const gotTheLock = app.requestSingleInstanceLock();
   if (!gotTheLock) {
+    markDesktopDevStartupFailed(
+      'SINGLE_INSTANCE_OWNED',
+      'Another Cindy instance already owns this userData single-instance lock.',
+      { userDataDir: app.getPath('userData') },
+    );
     app.quit();
   } else {
     app.on('second-instance', (_event, argv) => {
@@ -1600,14 +1605,29 @@ if (shouldRequestSingleInstanceLock({
     startedAtMs: PROCESS_STARTED_AT_MS,
     onCompromised: (reason) => {
       passiveDevLockLog.error('passive dev lock compromised; quitting', { reason });
+      markDesktopDevStartupFailed(
+        'PASSIVE_LOCK_COMPROMISED',
+        'The passive dev lock changed while this instance was running.',
+        { reason, userDataDir },
+      );
       app.quit();
     },
   });
   if (!result.acquired) {
     if (result.reason === 'occupied') {
       passiveDevLockLog.warn('another passive dev instance owns this userData; quitting', result);
+      markDesktopDevStartupFailed(
+        'PASSIVE_USER_DATA_OCCUPIED',
+        'Another passive desktop dev instance already owns this shared userData slot.',
+        { userDataDir, ...(result.ownerPid ? { ownerPid: result.ownerPid } : {}) },
+      );
     } else {
       passiveDevLockLog.error('passive dev lock acquisition failed; quitting', result);
+      markDesktopDevStartupFailed(
+        'PASSIVE_LOCK_ERROR',
+        'The passive desktop dev lock could not be acquired safely.',
+        { userDataDir, error: result.error },
+      );
     }
     app.quit();
   } else {

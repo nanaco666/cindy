@@ -41,7 +41,7 @@ child.once('exit', (code, signal) => {
   if (statusPath) {
     if (existing?.state === 'ready' || existing?.state === 'abandoned' || !existing) {
       fs.rmSync(statusPath, { force: true });
-    } else {
+    } else if (existing.state !== 'failed') {
       writeFailedStatus({ exitCode: code, signal });
     }
   }
@@ -65,7 +65,14 @@ function writeFailedStatus(detail) {
   const statusPath = process.env.XDT_DESKTOP_DEV_STARTUP_STATUS_FILE;
   const state = statusPath ? readStatus(statusPath)?.state : null;
   if (!statusPath || state === 'ready' || state === 'abandoned') return;
-  writeStatus(statusPath, { state: 'failed', ...detail, pid: process.pid, at: Date.now() });
+  writeStatus(statusPath, {
+    state: 'failed',
+    code: 'DEV_PROCESS_EXITED',
+    message: 'The desktop dev process exited before the main window became ready.',
+    ...detail,
+    pid: process.pid,
+    at: Date.now(),
+  });
 }
 
 function writeStatus(statusPath, status) {
