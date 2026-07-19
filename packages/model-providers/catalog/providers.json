@@ -1,169 +1,174 @@
 {
-  "version": "1",
+  "version": "2",
   "providers": [
-    {
-      "id": "anthropic",
-      "name": "Anthropic",
-      "source": "builtin",
-      "agents": ["claude-code"],
-      "auth": { "method": "oauth" },
-      "access": { "kind": "subscription", "product": "Claude.ai" },
-      "titleModel": "claude-haiku-4-5",
-      "routing": {
-        "claude-code": {
-          "upstream": "https://api.anthropic.com",
-          "authStrategy": "oauth-passthrough"
-        }
-      },
-      "models": {
-        "claude-code": [
-          { "id": "claude-opus-4-8", "name": "Opus 4.8", "group": "anthropic", "sortOrder": 1, "description": "Most capable, supports xhigh effort", "contextWindow": 1000000, "efforts": ["low", "medium", "high", "xhigh", "max"], "defaultEffort": "high", "supportsFastMode": true, "status": "active" },
-          { "id": "claude-opus-4-7", "name": "Opus 4.7", "group": "anthropic", "sortOrder": 2, "description": "Most capable, supports xhigh effort", "contextWindow": 1000000, "efforts": ["low", "medium", "high", "xhigh", "max"], "defaultEffort": "high", "supportsFastMode": true, "status": "active" },
-          { "id": "claude-opus-4-6", "name": "Opus 4.6", "group": "anthropic", "sortOrder": 3, "description": "Most capable for ambitious work", "contextWindow": 1000000, "efforts": ["low", "medium", "high", "max"], "defaultEffort": "high", "supportsFastMode": true, "status": "active" },
-          { "id": "claude-sonnet-5", "name": "Sonnet 5", "group": "anthropic", "sortOrder": 4, "description": "Latest Sonnet — fast and highly capable", "contextWindow": 1000000, "efforts": ["low", "medium", "high"], "defaultEffort": "high", "status": "active" },
-          { "id": "claude-sonnet-4-6", "name": "Sonnet 4.6", "group": "anthropic", "sortOrder": 5, "description": "Most efficient for everyday tasks", "contextWindow": 1000000, "efforts": ["low", "medium", "high"], "defaultEffort": "high", "status": "active" },
-          { "id": "claude-haiku-4-5", "name": "Haiku 4.5", "group": "anthropic", "sortOrder": 6, "description": "Fastest for quick answers", "contextWindow": 200000, "efforts": [], "defaultEffort": null, "status": "active", "defaultEnabled": false },
-          { "id": "claude-fable-5", "name": "Fable 5", "group": "anthropic", "sortOrder": 0, "description": "Most capable, supports xhigh effort", "contextWindow": 1000000, "efforts": ["low", "medium", "high", "xhigh", "max"], "defaultEffort": "high", "status": "active" }
-        ]
-      }
-    },
-    {
-      "id": "openai",
-      "name": "OpenAI",
-      "source": "builtin",
-      "agents": ["codex", "claude-code"],
-      "auth": { "method": "oauth" },
-      "access": { "kind": "subscription", "product": "ChatGPT" },
-      "titleModel": "gpt-5.4-mini",
-      "routing": {
-        "codex": {
-          "upstream": "https://chatgpt.com/backend-api/codex",
-          "authStrategy": "oauth-passthrough"
-        },
-        "claude-code": {
-          "upstream": "https://chatgpt.com/backend-api/codex",
-          "authStrategy": "oauth-passthrough",
-          "modelPrefixes": ["chatgpt/"]
-        }
-      },
-      "models": {
-        "claude-code": [
-          { "id": "chatgpt/gpt-5.5", "name": "GPT-5.5", "group": "gpt", "sortOrder": 20, "description": "ChatGPT 订阅额度直连 gpt-5.5(本地 Anthropic↔Responses 翻译,不走公司网关)", "contextWindow": 272000, "efforts": ["low", "medium", "high", "xhigh"], "effortDisplayNames": { "xhigh": "Extra High" }, "defaultEffort": "high", "supportsFastMode": true, "status": "active" },
-          { "id": "chatgpt/gpt-5.4", "name": "GPT-5.4", "group": "gpt", "sortOrder": 21, "description": "ChatGPT 订阅额度直连 gpt-5.4", "contextWindow": 272000, "efforts": ["low", "medium", "high", "xhigh"], "effortDisplayNames": { "xhigh": "Extra High" }, "defaultEffort": "high", "supportsFastMode": true, "status": "active", "defaultEnabled": false },
-          { "id": "chatgpt/gpt-5.4-mini", "name": "GPT-5.4-Mini", "group": "gpt", "sortOrder": 22, "description": "ChatGPT 订阅额度的轻量 codex 变体,适合子任务 / 快速编辑", "contextWindow": 272000, "efforts": ["low", "medium", "high", "xhigh"], "effortDisplayNames": { "xhigh": "Extra High" }, "defaultEffort": "high", "status": "active", "defaultEnabled": false }
-        ],
-        "codex": [
-          { "id": "gpt-5.6-sol", "name": "GPT-5.6-Sol", "group": "gpt", "sortOrder": 17, "description": "Latest frontier agentic coding model", "contextWindow": 372000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "supportsFastMode": true, "status": "active" },
-          { "id": "gpt-5.6-terra", "name": "GPT-5.6-Terra", "group": "gpt", "sortOrder": 18, "description": "Balanced agentic coding model for everyday work", "contextWindow": 372000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "supportsFastMode": true, "status": "active" },
-          { "id": "gpt-5.6-luna", "name": "GPT-5.6-Luna", "group": "gpt", "sortOrder": 19, "description": "Fast and affordable agentic coding model", "contextWindow": 372000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "supportsFastMode": true, "status": "active" },
-          { "id": "gpt-5.5", "name": "GPT-5.5", "group": "gpt", "sortOrder": 20, "description": "OpenAI Codex (GPT-5.5) for coding tasks", "contextWindow": 272000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "supportsFastMode": true, "status": "active" },
-          { "id": "gpt-5.4", "name": "GPT-5.4", "group": "gpt", "sortOrder": 21, "description": "OpenAI Codex (GPT-5.4) for coding tasks", "contextWindow": 1000000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "supportsFastMode": true, "status": "active" },
-          { "id": "gpt-5.4-mini", "name": "GPT-5.4-Mini", "group": "gpt", "sortOrder": 22, "description": "Faster, lighter Codex variant — speed-optimized for quick edits", "contextWindow": 272000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "status": "active", "defaultEnabled": false }
-        ]
-      }
-    },
     {
       "id": "xai",
       "name": "xAI",
       "source": "builtin",
-      "agents": ["claude-code", "codex"],
-      "auth": { "method": "oauth" },
-      "access": { "kind": "subscription", "product": "SuperGrok" },
-      "routing": {
-        "claude-code": { "upstream": "https://api.x.ai/v1", "authStrategy": "oauth-passthrough", "modelPrefixes": ["xai/"] },
-        "codex": {
-          "upstream": "https://api.x.ai/v1",
-          "authStrategy": "provider-oauth-header",
-          "modelIdRewrite": { "stripPrefix": "xai/" },
-          "headerDelete": ["chatgpt-account-id", "openai-beta", "originator", "session_id"],
-          "modelPrefixes": ["xai/"]
-        }
-      },
-      "models": {
-        "claude-code": [
-          { "id": "xai/grok-4.5", "name": "Grok 4.5", "group": "grok", "sortOrder": 49, "description": "xAI Grok 4.5 新旗舰,编码/agent 任务最强,500k 上下文(SuperGrok 订阅直连)", "contextWindow": 500000, "efforts": ["low", "medium", "high"], "defaultEffort": "high", "status": "active" },
-          { "id": "xai/grok-4.3", "name": "Grok 4.3", "group": "grok", "sortOrder": 50, "description": "xAI Grok 4.3 通用旗舰,1M 上下文(SuperGrok 订阅直连)", "contextWindow": 1000000, "efforts": ["low", "medium", "high", "xhigh"], "effortDisplayNames": { "xhigh": "Extra High" }, "defaultEffort": "high", "status": "active" },
-          { "id": "xai/grok-4.20", "name": "Grok 4.20 Reasoning", "group": "grok", "sortOrder": 51, "description": "xAI Grok 4.20 推理版(SuperGrok 订阅直连)", "contextWindow": 1000000, "efforts": ["low", "medium", "high", "xhigh"], "effortDisplayNames": { "xhigh": "Extra High" }, "defaultEffort": "high", "status": "active", "defaultEnabled": false },
-          { "id": "xai/grok-code-fast", "name": "Grok Code Fast", "group": "grok", "sortOrder": 52, "description": "xAI 编码模型 grok-code-fast,不支持思维深度调节(SuperGrok 订阅直连)", "contextWindow": 256000, "efforts": [], "defaultEffort": null, "status": "active", "defaultEnabled": false }
-        ],
-        "codex": [
-          { "id": "xai/grok-4.5", "name": "Grok 4.5", "group": "grok", "sortOrder": 49, "description": "xAI Grok 4.5 新旗舰,编码/agent 任务最强,500k 上下文(SuperGrok 订阅直连)", "contextWindow": 500000, "efforts": ["low", "medium", "high"], "defaultEffort": "high", "status": "active" },
-          { "id": "xai/grok-4.3", "name": "Grok 4.3", "group": "grok", "sortOrder": 50, "description": "xAI Grok 4.3 通用旗舰,1M 上下文(SuperGrok 订阅直连)", "contextWindow": 1000000, "efforts": ["low", "medium", "high"], "defaultEffort": "high", "status": "active" },
-          { "id": "xai/grok-4.20", "name": "Grok 4.20 Reasoning", "group": "grok", "sortOrder": 51, "description": "xAI Grok 4.20 推理版(SuperGrok 订阅直连)", "contextWindow": 1000000, "efforts": ["low", "medium", "high"], "defaultEffort": "high", "status": "active", "defaultEnabled": false },
-          { "id": "xai/grok-code-fast", "name": "Grok Code Fast", "group": "grok", "sortOrder": 52, "description": "xAI 编码模型 grok-code-fast,不支持思维深度调节(SuperGrok 订阅直连)", "contextWindow": 256000, "efforts": [], "defaultEffort": null, "status": "active", "defaultEnabled": false }
-        ]
-      }
-    },
-    {
-      "id": "xd",
-      "name": "XD Gateway",
-      "source": "builtin",
-      "agents": ["claude-code", "codex"],
-      "auth": { "method": "managed" },
-      "access": { "kind": "managed" },
-      "titleModel": "gpt-5.4-mini",
-      "imageModels": [
-        { "id": "gpt-image-2", "name": "GPT Image 2" },
-        { "id": "gemini-3-pro-image-preview", "name": "Gemini 3 Pro Image" },
-        { "id": "gemini-3.1-flash-image-preview", "name": "Gemini 3.1 Flash Image" }
+      "agents": [
+        "claude-code",
+        "codex"
       ],
-      "imageDefaults": {
-        "standard": "gpt-image-2",
-        "draft": "gemini-3.1-flash-image-preview"
+      "auth": {
+        "method": "oauth"
       },
-      "videoModels": [
-        { "id": "seedance-fast", "name": "Seedance 快速" },
-        { "id": "seedance-pro", "name": "Seedance Pro" },
-        { "id": "happyhorse", "name": "HappyHorse 1.0" }
-      ],
-      "videoDefaults": {
-        "standard": "seedance-fast",
-        "best": "seedance-pro"
+      "access": {
+        "kind": "subscription",
+        "product": "SuperGrok"
       },
       "routing": {
         "claude-code": {
-          "upstream": "https://llm-proxy.tapsvc.com",
-          "authStrategy": "gateway-key"
+          "upstream": "https://api.x.ai/v1",
+          "authStrategy": "oauth-passthrough",
+          "modelPrefixes": [
+            "xai/"
+          ]
         },
         "codex": {
-          "upstream": "https://llm-proxy.tapsvc.com/v1",
-          "authStrategy": "gateway-key"
+          "upstream": "https://api.x.ai/v1",
+          "authStrategy": "provider-oauth-header",
+          "modelIdRewrite": {
+            "stripPrefix": "xai/"
+          },
+          "headerDelete": [
+            "chatgpt-account-id",
+            "openai-beta",
+            "originator",
+            "session_id"
+          ],
+          "modelPrefixes": [
+            "xai/"
+          ]
         }
       },
       "models": {
         "claude-code": [
-          { "id": "claude-opus-4-8", "name": "Opus 4.8", "group": "anthropic", "sortOrder": 1, "description": "Most capable, supports xhigh effort", "contextWindow": 1000000, "efforts": ["low", "medium", "high", "xhigh", "max"], "defaultEffort": "high", "supportsFastMode": false, "status": "active" },
-          { "id": "claude-opus-4-7", "name": "Opus 4.7", "group": "anthropic", "sortOrder": 2, "description": "Most capable, supports xhigh effort", "contextWindow": 1000000, "efforts": ["low", "medium", "high", "xhigh", "max"], "defaultEffort": "high", "supportsFastMode": false, "status": "active" },
-          { "id": "claude-opus-4-6", "name": "Opus 4.6", "group": "anthropic", "sortOrder": 3, "description": "Most capable for ambitious work", "contextWindow": 1000000, "efforts": ["low", "medium", "high", "max"], "defaultEffort": "high", "supportsFastMode": false, "status": "active" },
-          { "id": "claude-sonnet-5", "name": "Sonnet 5", "group": "anthropic", "sortOrder": 4, "description": "Latest Sonnet — fast and highly capable", "contextWindow": 1000000, "efforts": ["low", "medium", "high"], "defaultEffort": "high", "status": "active" },
-          { "id": "claude-sonnet-4-6", "name": "Sonnet 4.6", "group": "anthropic", "sortOrder": 5, "description": "Most efficient for everyday tasks", "contextWindow": 1000000, "efforts": ["low", "medium", "high"], "defaultEffort": "high", "status": "active" },
-          { "id": "claude-haiku-4-5", "name": "Haiku 4.5", "group": "anthropic", "sortOrder": 6, "description": "Fastest for quick answers", "contextWindow": 200000, "efforts": [], "defaultEffort": null, "status": "active", "defaultEnabled": false },
-          { "id": "claude-fable-5", "name": "Fable 5", "group": "anthropic", "sortOrder": 0, "description": "Most capable, supports xhigh effort", "contextWindow": 1000000, "efforts": ["low", "medium", "high", "xhigh", "max"], "defaultEffort": "high", "status": "active" },
-          { "id": "qwen/qwen3.7-max", "name": "Qwen 3.7 Max", "group": "china", "sortOrder": 40, "description": "Qwen 3.7 Max agentic coding model; thinking is provider-managed", "contextWindow": 992000, "efforts": [], "defaultEffort": null, "status": "active" },
-          { "id": "gpt-5.5", "name": "GPT-5.5", "group": "gpt", "sortOrder": 20, "description": "OpenAI Codex (GPT-5.5) for coding tasks", "contextWindow": 1000000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "status": "active" },
-          { "id": "gpt-5.4", "name": "GPT-5.4", "group": "gpt", "sortOrder": 21, "description": "OpenAI Codex (GPT-5.4) for coding tasks", "contextWindow": 1000000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "status": "active" },
-          { "id": "gpt-5.4-mini", "name": "GPT-5.4-Mini", "group": "gpt", "sortOrder": 22, "description": "Faster, lighter Codex variant — speed-optimized for quick edits", "contextWindow": 272000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "status": "active", "defaultEnabled": false },
-          { "id": "codex/gpt-5.6-sol", "name": "GPT-5.6-Sol", "group": "gpt-budget", "sortOrder": 8, "description": "GPT-5.6-Sol (骨折价 codex 路由) for coding tasks", "contextWindow": 372000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "status": "active" },
-          { "id": "codex/gpt-5.6-terra", "name": "GPT-5.6-Terra", "group": "gpt-budget", "sortOrder": 9, "description": "GPT-5.6-Terra (骨折价 codex 路由) for coding tasks", "contextWindow": 372000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "status": "active" },
-          { "id": "codex/gpt-5.5", "name": "GPT-5.5", "group": "gpt-budget", "sortOrder": 10, "description": "GPT-5.5 (骨折价 codex 路由) for coding tasks", "contextWindow": 272000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "status": "active" },
-          { "id": "codex/gpt-5.4", "name": "GPT-5.4", "group": "gpt-budget", "sortOrder": 11, "description": "GPT-5.4 (骨折价 codex 路由) for coding tasks", "contextWindow": 272000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "status": "active" },
-          { "id": "moonshotai/kimi-k2.6", "name": "Kimi K2.6", "group": "china", "sortOrder": 41, "description": "Moonshot Kimi K2.6 agentic coding model; thinking is provider-managed", "contextWindow": 262144, "efforts": [], "defaultEffort": null, "status": "active" },
-          { "id": "z-ai/glm-5.1", "name": "GLM-5.1", "group": "china", "sortOrder": 42, "description": "Zhipu GLM-5.1 agentic coding model; thinking is provider-managed", "contextWindow": 202752, "efforts": [], "defaultEffort": null, "status": "active", "defaultEnabled": false },
-          { "id": "z-ai/glm-5.2", "name": "GLM-5.2", "group": "china", "sortOrder": 43, "description": "Zhipu GLM-5.2 agentic coding model; 1M context", "contextWindow": 1000000, "efforts": ["high", "max"], "defaultEffort": "high", "status": "active" },
-          { "id": "deepseek/deepseek-v4-pro", "name": "DeepSeek V4 Pro", "group": "china", "sortOrder": 44, "description": "DeepSeek V4 Pro reasoning model; only high/max effective (low/medium→high, xhigh→max)", "contextWindow": 1048576, "efforts": ["high", "max"], "defaultEffort": "high", "status": "active" },
-          { "id": "deepseek/deepseek-v4-flash", "name": "DeepSeek V4 Flash", "group": "china", "sortOrder": 45, "description": "DeepSeek V4 Flash efficiency-optimized MoE; only high/max effective", "contextWindow": 1048576, "efforts": ["high", "max"], "defaultEffort": "high", "status": "active" },
-          { "id": "gemini-3.5-flash", "name": "Gemini 3.5 Flash", "group": "google", "sortOrder": 30, "description": "Google Gemini 3.5 Flash — upgraded Flash with stronger reasoning", "contextWindow": 1000000, "efforts": ["low", "medium", "high"], "defaultEffort": "high", "status": "active" },
-          { "id": "gemini-3.1-pro-preview", "name": "Gemini 3.1 Pro", "group": "google", "sortOrder": 31, "description": "Google Gemini 3.1 Pro Preview — deepest reasoning, multimodal", "contextWindow": 1000000, "efforts": ["low", "medium", "high"], "defaultEffort": "high", "status": "active", "defaultEnabled": false },
-          { "id": "gemini-3-flash-preview", "name": "Gemini 3 Flash", "group": "google", "sortOrder": 32, "description": "Google Gemini 3 Flash Preview — fast multimodal reasoning", "contextWindow": 1000000, "efforts": ["low", "medium", "high"], "defaultEffort": "high", "status": "active", "defaultEnabled": false }
+          {
+            "id": "xai/grok-4.5",
+            "name": "Grok 4.5",
+            "group": "grok",
+            "sortOrder": 49,
+            "description": "xAI Grok 4.5 新旗舰,编码/agent 任务最强,500k 上下文(SuperGrok 订阅直连)",
+            "contextWindow": 500000,
+            "efforts": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "defaultEffort": "high",
+            "status": "active"
+          },
+          {
+            "id": "xai/grok-4.3",
+            "name": "Grok 4.3",
+            "group": "grok",
+            "sortOrder": 50,
+            "description": "xAI Grok 4.3 通用旗舰,1M 上下文(SuperGrok 订阅直连)",
+            "contextWindow": 1000000,
+            "efforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ],
+            "effortDisplayNames": {
+              "xhigh": "Extra High"
+            },
+            "defaultEffort": "high",
+            "status": "active"
+          },
+          {
+            "id": "xai/grok-4.20",
+            "name": "Grok 4.20 Reasoning",
+            "group": "grok",
+            "sortOrder": 51,
+            "description": "xAI Grok 4.20 推理版(SuperGrok 订阅直连)",
+            "contextWindow": 1000000,
+            "efforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ],
+            "effortDisplayNames": {
+              "xhigh": "Extra High"
+            },
+            "defaultEffort": "high",
+            "status": "active",
+            "defaultEnabled": false
+          },
+          {
+            "id": "xai/grok-code-fast",
+            "name": "Grok Code Fast",
+            "group": "grok",
+            "sortOrder": 52,
+            "description": "xAI 编码模型 grok-code-fast,不支持思维深度调节(SuperGrok 订阅直连)",
+            "contextWindow": 256000,
+            "efforts": [],
+            "defaultEffort": null,
+            "status": "active",
+            "defaultEnabled": false
+          }
         ],
         "codex": [
-          { "id": "gpt-5.5", "name": "GPT-5.5", "group": "gpt", "sortOrder": 20, "description": "OpenAI Codex (GPT-5.5) for coding tasks", "contextWindow": 272000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "supportsFastMode": true, "status": "active" },
-          { "id": "gpt-5.4", "name": "GPT-5.4", "group": "gpt", "sortOrder": 21, "description": "OpenAI Codex (GPT-5.4) for coding tasks", "contextWindow": 1000000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "supportsFastMode": true, "status": "active" },
-          { "id": "gpt-5.4-mini", "name": "GPT-5.4-Mini", "group": "gpt", "sortOrder": 22, "description": "Faster, lighter Codex variant — speed-optimized for quick edits", "contextWindow": 272000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "supportsFastMode": true, "status": "active", "defaultEnabled": false },
-          { "id": "codex/gpt-5.6-sol", "name": "GPT-5.6-Sol", "group": "gpt-budget", "sortOrder": 8, "description": "GPT-5.6-Sol (骨折价 codex 路由) for coding tasks", "contextWindow": 372000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "supportsFastMode": true, "status": "active" },
-          { "id": "codex/gpt-5.6-terra", "name": "GPT-5.6-Terra", "group": "gpt-budget", "sortOrder": 9, "description": "GPT-5.6-Terra (骨折价 codex 路由) for coding tasks", "contextWindow": 372000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "supportsFastMode": true, "status": "active" },
-          { "id": "codex/gpt-5.5", "name": "GPT-5.5", "group": "gpt-budget", "sortOrder": 10, "description": "GPT-5.5 (骨折价 codex 路由) for coding tasks", "contextWindow": 272000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "supportsFastMode": true, "status": "active" },
-          { "id": "codex/gpt-5.4", "name": "GPT-5.4", "group": "gpt-budget", "sortOrder": 11, "description": "GPT-5.4 (骨折价 codex 路由) for coding tasks", "contextWindow": 272000, "efforts": ["low", "medium", "high", "xhigh"], "defaultEffort": "high", "supportsFastMode": true, "status": "active" }
+          {
+            "id": "xai/grok-4.5",
+            "name": "Grok 4.5",
+            "group": "grok",
+            "sortOrder": 49,
+            "description": "xAI Grok 4.5 新旗舰,编码/agent 任务最强,500k 上下文(SuperGrok 订阅直连)",
+            "contextWindow": 500000,
+            "efforts": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "defaultEffort": "high",
+            "status": "active"
+          },
+          {
+            "id": "xai/grok-4.3",
+            "name": "Grok 4.3",
+            "group": "grok",
+            "sortOrder": 50,
+            "description": "xAI Grok 4.3 通用旗舰,1M 上下文(SuperGrok 订阅直连)",
+            "contextWindow": 1000000,
+            "efforts": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "defaultEffort": "high",
+            "status": "active"
+          },
+          {
+            "id": "xai/grok-4.20",
+            "name": "Grok 4.20 Reasoning",
+            "group": "grok",
+            "sortOrder": 51,
+            "description": "xAI Grok 4.20 推理版(SuperGrok 订阅直连)",
+            "contextWindow": 1000000,
+            "efforts": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "defaultEffort": "high",
+            "status": "active",
+            "defaultEnabled": false
+          },
+          {
+            "id": "xai/grok-code-fast",
+            "name": "Grok Code Fast",
+            "group": "grok",
+            "sortOrder": 52,
+            "description": "xAI 编码模型 grok-code-fast,不支持思维深度调节(SuperGrok 订阅直连)",
+            "contextWindow": 256000,
+            "efforts": [],
+            "defaultEffort": null,
+            "status": "active",
+            "defaultEnabled": false
+          }
         ]
       }
     }
@@ -178,16 +183,31 @@
         "claude-code": {
           "baseUrl": "https://openrouter.ai/api",
           "models": [
-            { "id": "z-ai/glm-5.2", "name": "GLM-5.2 (OpenRouter)" },
-            { "id": "moonshotai/kimi-k2.6", "name": "Kimi K2.6 (OpenRouter)" },
-            { "id": "deepseek/deepseek-v4-pro", "name": "DeepSeek V4 Pro (OpenRouter)" }
+            {
+              "id": "z-ai/glm-5.2",
+              "name": "GLM-5.2 (OpenRouter)"
+            },
+            {
+              "id": "moonshotai/kimi-k2.6",
+              "name": "Kimi K2.6 (OpenRouter)"
+            },
+            {
+              "id": "deepseek/deepseek-v4-pro",
+              "name": "DeepSeek V4 Pro (OpenRouter)"
+            }
           ]
         },
         "codex": {
           "baseUrl": "https://openrouter.ai/api/v1",
           "models": [
-            { "id": "z-ai/glm-5.2", "name": "GLM-5.2 (OpenRouter)" },
-            { "id": "moonshotai/kimi-k2.6", "name": "Kimi K2.6 (OpenRouter)" }
+            {
+              "id": "z-ai/glm-5.2",
+              "name": "GLM-5.2 (OpenRouter)"
+            },
+            {
+              "id": "moonshotai/kimi-k2.6",
+              "name": "Kimi K2.6 (OpenRouter)"
+            }
           ]
         }
       }
@@ -200,8 +220,14 @@
         "claude-code": {
           "baseUrl": "https://api.deepseek.com/anthropic",
           "models": [
-            { "id": "deepseek-v4-flash", "name": "DeepSeek V4 Flash" },
-            { "id": "deepseek-v4-pro", "name": "DeepSeek V4 Pro" }
+            {
+              "id": "deepseek-v4-flash",
+              "name": "DeepSeek V4 Flash"
+            },
+            {
+              "id": "deepseek-v4-pro",
+              "name": "DeepSeek V4 Pro"
+            }
           ],
           "modelsUrl": "https://api.deepseek.com/models"
         }
@@ -216,8 +242,14 @@
         "claude-code": {
           "baseUrl": "https://open.bigmodel.cn/api/anthropic",
           "models": [
-            { "id": "glm-5.2", "name": "GLM-5.2" },
-            { "id": "glm-5.1", "name": "GLM-5.1" }
+            {
+              "id": "glm-5.2",
+              "name": "GLM-5.2"
+            },
+            {
+              "id": "glm-5.1",
+              "name": "GLM-5.1"
+            }
           ]
         }
       }
@@ -231,8 +263,14 @@
         "claude-code": {
           "baseUrl": "https://api.z.ai/api/anthropic",
           "models": [
-            { "id": "glm-5.2", "name": "GLM-5.2" },
-            { "id": "glm-5.1", "name": "GLM-5.1" }
+            {
+              "id": "glm-5.2",
+              "name": "GLM-5.2"
+            },
+            {
+              "id": "glm-5.1",
+              "name": "GLM-5.1"
+            }
           ]
         }
       }
@@ -246,9 +284,18 @@
         "claude-code": {
           "baseUrl": "https://api.moonshot.cn/anthropic",
           "models": [
-            { "id": "kimi-k3", "name": "Kimi K3" },
-            { "id": "kimi-k2.7-code", "name": "Kimi K2.7 Code" },
-            { "id": "kimi-k2.6", "name": "Kimi K2.6" }
+            {
+              "id": "kimi-k3",
+              "name": "Kimi K3"
+            },
+            {
+              "id": "kimi-k2.7-code",
+              "name": "Kimi K2.7 Code"
+            },
+            {
+              "id": "kimi-k2.6",
+              "name": "Kimi K2.6"
+            }
           ],
           "modelsUrl": "https://api.moonshot.cn/v1/models"
         }
@@ -263,9 +310,18 @@
         "claude-code": {
           "baseUrl": "https://api.moonshot.ai/anthropic",
           "models": [
-            { "id": "kimi-k3", "name": "Kimi K3" },
-            { "id": "kimi-k2.7-code", "name": "Kimi K2.7 Code" },
-            { "id": "kimi-k2.6", "name": "Kimi K2.6" }
+            {
+              "id": "kimi-k3",
+              "name": "Kimi K3"
+            },
+            {
+              "id": "kimi-k2.7-code",
+              "name": "Kimi K2.7 Code"
+            },
+            {
+              "id": "kimi-k2.6",
+              "name": "Kimi K2.6"
+            }
           ],
           "modelsUrl": "https://api.moonshot.ai/v1/models"
         }
@@ -279,8 +335,14 @@
         "claude-code": {
           "baseUrl": "https://api.kimi.com/coding",
           "models": [
-            { "id": "kimi-for-coding", "name": "Kimi for Coding" },
-            { "id": "kimi-for-coding-highspeed", "name": "Kimi for Coding 高速版" }
+            {
+              "id": "kimi-for-coding",
+              "name": "Kimi for Coding"
+            },
+            {
+              "id": "kimi-for-coding-highspeed",
+              "name": "Kimi for Coding 高速版"
+            }
           ]
         }
       }
@@ -294,8 +356,14 @@
         "claude-code": {
           "baseUrl": "https://api.minimaxi.com/anthropic",
           "models": [
-            { "id": "MiniMax-M3", "name": "MiniMax M3" },
-            { "id": "MiniMax-M2.5", "name": "MiniMax M2.5" }
+            {
+              "id": "MiniMax-M3",
+              "name": "MiniMax M3"
+            },
+            {
+              "id": "MiniMax-M2.5",
+              "name": "MiniMax M2.5"
+            }
           ]
         }
       }
@@ -309,8 +377,14 @@
         "claude-code": {
           "baseUrl": "https://api.minimax.io/anthropic",
           "models": [
-            { "id": "MiniMax-M3", "name": "MiniMax M3" },
-            { "id": "MiniMax-M2.5", "name": "MiniMax M2.5" }
+            {
+              "id": "MiniMax-M3",
+              "name": "MiniMax M3"
+            },
+            {
+              "id": "MiniMax-M2.5",
+              "name": "MiniMax M2.5"
+            }
           ]
         }
       }
@@ -324,9 +398,18 @@
         "claude-code": {
           "baseUrl": "https://coding.dashscope.aliyuncs.com/apps/anthropic",
           "models": [
-            { "id": "qwen3.7-plus", "name": "Qwen3.7 Plus" },
-            { "id": "qwen3-coder-next", "name": "Qwen3 Coder Next" },
-            { "id": "qwen3-coder-plus", "name": "Qwen3 Coder Plus" }
+            {
+              "id": "qwen3.7-plus",
+              "name": "Qwen3.7 Plus"
+            },
+            {
+              "id": "qwen3-coder-next",
+              "name": "Qwen3 Coder Next"
+            },
+            {
+              "id": "qwen3-coder-plus",
+              "name": "Qwen3 Coder Plus"
+            }
           ]
         }
       }

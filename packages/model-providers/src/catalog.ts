@@ -1,22 +1,18 @@
 /**
- * 内置目录（bundled snapshot）+ 运行时校验。
+ * 目录运行时校验(parseCatalog)+ presets 清洗排序。
  *
- * `catalog/providers.json` 是单一目录文件，三处使用：① 打包进 App 作离线兜底
- * （此处 import）② 上传 OSS `cfg/providers.json` 作线上最新版 ③ dev 直接读仓库该
- * 文件。本目录是 per-agent 模型清单的**唯一来源(SSoT)**：host 从中派生 maker-core 的
- * `capabilities.availableModels`（见 apps/desktop maker-host/catalog-to-descriptors）。
- * no-break 由 desktop 的 catalogDerivedModels.test.ts 守（派生结果 == 迁移前快照）。
+ * 2026-07-19 起 bundled 目录由 `builtin.ts` 组装:内置供应商身份卡是 TS 常量,
+ * `catalog/providers.json`(v2)只承载 xai 静态清单 + presets 模板——它仍是
+ * ① OSS `cfg/providers.json` 的发布物 ② dev 直读的仓库文件。anthropic/openai/xd
+ * 的模型清单运行时动态注入(见 apps/desktop maker-host active-catalog),不再进目录文件。
  */
-
-import bundledJson from '../catalog/providers.json' with { type: 'json' };
 
 import type { Catalog, Provider, CatalogModel, AgentKind, Effort, ProviderPreset } from './types.js';
 
+export { BUNDLED_CATALOG, BUILTIN_PROVIDERS } from './builtin.js';
+
 const AGENT_KINDS: readonly AgentKind[] = ['claude-code', 'codex'];
 const EFFORTS: readonly Effort[] = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
-
-/** 打包进 App 的内置目录（离线兜底 / 远端拉取失败时使用）。 */
-export const BUNDLED_CATALOG: Catalog = bundledJson as unknown as Catalog;
 
 function isAgentKind(v: unknown): v is AgentKind {
   return typeof v === 'string' && (AGENT_KINDS as readonly string[]).includes(v);
@@ -123,10 +119,15 @@ function validateProvider(p: Provider): void {
   }
   // 约束：若声明了 titleModel（标题 oneShot 用的最经济模型），它必须存在于本供应商任一
   // agent 的模型清单里 —— 防把不存在 / 拼错的 id 配进去导致运行时静默起不出标题。
+  // 豁免:动态清单供应商(全部 models 数组为空,清单运行时注入——2026-07-19 统一重构后
+  // 的 anthropic/openai/xd)无静态清单可校验,titleModel 指向的是运行时会出现的 id。
   if (p.titleModel !== undefined) {
     assert(typeof p.titleModel === 'string' && p.titleModel.length > 0, `provider '${p.id}' titleModel must be a non-empty string`);
-    const known = p.agents.some((agent) => (p.models[agent] ?? []).some((m) => m.id === p.titleModel));
-    assert(known, `provider '${p.id}' titleModel '${p.titleModel}' not found in any agent's models`);
+    const hasStaticModels = p.agents.some((agent) => (p.models[agent] ?? []).length > 0);
+    if (hasStaticModels) {
+      const known = p.agents.some((agent) => (p.models[agent] ?? []).some((m) => m.id === p.titleModel));
+      assert(known, `provider '${p.id}' titleModel '${p.titleModel}' not found in any agent's models`);
+    }
   }
   // 媒体模型清单与默认选型(图像/视频同一套规则,C3c-5 起两类目):
   // 清单 id/name 非空、id 不重复,不参与 agent/routing 约束(媒体模型不经

@@ -56,6 +56,7 @@ import { createReadImageHook } from './claude-hooks/read-image-hook.js';
 import { deriveAvailableModels, refreshCatalogDerivedModels } from './catalog-to-descriptors.js';
 import { clearChatgptBridgeCredentialCache } from './anthropic-responses-bridge-host.js';
 import { refreshDiscoveredCodexModels } from './createDesktopProviderService.js';
+import { clearAnthropicDiscoveredModels } from './model-discovery/anthropic.js';
 import {
   buildDesktopClaudeRuntimeConfig,
   desktopCodexRuntimeConfig,
@@ -532,6 +533,8 @@ export function getMaker(): Maker {
     // Claude 同款:订阅 refresh token 被服务端作废(invalid_grant)时,adapter.invalidate()
     // 清态后经这里广播,UI 立刻进「请重新登录」而不是连环 401 的假连接状态。
     desktopClaudeAuthAdapter.setOnInvalidatedBroadcast((reason) => {
+      // 凭证已失效 = anthropic 动态清单失去可用性证明,与登出同款收口(清单+磁盘缓存)。
+      void clearAnthropicDiscoveredModels().catch(() => { /* 清理失败不阻断失效广播 */ });
       const payload = {
         agentKind: 'claude-code' as const,
         authenticated: false,
