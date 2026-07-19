@@ -61,11 +61,12 @@ export interface HookControlManagerDeps {
   /** 状态变化推送(IPC 层广播到所有窗口)。 */
   notifyStatus: (view: SlackHookView) => void;
   /**
-   * lizi_slack provider 的构建期可用性(bound)翻转通知。
+   * lizi_slack provider 的构建期可用性(bound + server capability)翻转通知。
    *
    * Claude 每个 session 启动时都会重新评估 provider；Codex 会把 MCP server
    * 清单冻结在共享 app-server / bridge 中，host 用这个出口失效其缓存。只在
-   * false <-> true 真变化时触发，连接抖动但绑定仍 confirmed 不会反复重建。
+   * false <-> true 真变化时触发。server capability 保留最近一次成功 welcome 的
+   * 快照，因此连接抖动不会反复重建；重连到不同版本 server 时会准确刷新。
    */
   onSlackToolProviderEnabledChanged?: (enabled: boolean) => void;
   /** 目录偏好快照推送(prefs.state 到达时广播; 含请求回执与 /model 卡主动推)。 */
@@ -283,7 +284,10 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     string,
     { resolve: (v: HookSlackToolResult) => void; timer: NodeJS.Timeout }
   >();
-  /** welcome 宣告的 server 能力集(断线清空 —— 重连可能落到另一版本实例)。 */
+  /**
+   * 最近一次成功 welcome 宣告的 server 能力集。瞬时断线不清空，避免 Codex MCP
+   * 清单随网络抖动反复重建；重连后的新 welcome 会整组覆盖并触发 gate 复算。
+   */
   let serverFeatures: string[] = [];
   /** lizi_slack provider 的构建期 gate 当前值；初始未绑定 = false。 */
   let slackToolProviderEnabled = false;
@@ -291,7 +295,8 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
 
   /** 只在 provider 构建期 gate 真翻转时通知 host 失效 Codex MCP 缓存。 */
   function notifySlackToolProviderEnabledIfChanged(): void {
-    const next = binding?.state === 'confirmed';
+    const next =
+      binding?.state === 'confirmed' && serverFeatures.includes(HOOK_FEATURE_SLACK_TOOLS);
     if (next === slackToolProviderEnabled) return;
     slackToolProviderEnabled = next;
     onSlackToolProviderEnabledChanged?.(next);
@@ -662,7 +667,6 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     // 看门狗随连接停止一并撤(dispose / 关 toggle / sync 重建都不该留残余计时器)
     clearBindWatchdog();
     clearInstallWatchdog();
-    serverFeatures = [];
     if (transport === null) return;
     const t = transport;
     transport = null;
@@ -686,6 +690,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
         if (created === null || transport !== created) return;
         // server 能力集以最新一次握手为准(重连可能落到另一版本实例)
         serverFeatures = [...payload.features];
+        notifySlackToolProviderEnabledIfChanged();
       },
       onStatus: (s, err) => {
         // 构造期 / dispose / 重建后的尾随回调不再处理
@@ -696,7 +701,6 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
         if (s !== 'connected') {
           drainPendingPrefs();
           drainPendingTools();
-          serverFeatures = [];
         }
         // 握手完成 → dispatcher 刷新发送函数并补发离线积压的 turn.end
         if (s === 'connected') {

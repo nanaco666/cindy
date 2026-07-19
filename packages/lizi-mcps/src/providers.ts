@@ -41,8 +41,9 @@ export interface CreateLiziMcpProvidersOptions {
   /**
    * lizi_slack: Slack 网关工具(经 hook 通道由 slack-hook-server 以托管
    * user token 调 Slack 官方 MCP, 接替退役的 cindy-slack 意识)。
-   * workingDir 由 provider 从 ctx 绑定; isEnabled = 桥可用且绑定 confirmed
-   * (所有会话可见, 不按 source 门控)。对应可关插件 id 'slack'。
+   * workingDir 由 provider 从 ctx 绑定; isEnabled = 桥可用、绑定 confirmed 且
+   * 最近一次 welcome 宣告 slack-tools 能力(所有会话可见, 不按 source 门控)。
+   * 对应可关插件 id 'slack'。
    */
   slackHook?: Omit<SlackHookMcpDeps, 'workingDir'>;
   scheduler?: SchedulerMcpDeps;
@@ -238,9 +239,10 @@ export function createLiziMcpProviders(
   if (opts.slackHook && selected(enabled, 'lizi_slack')) {
     providers.push({
       name: 'lizi_slack',
-      // 会话构建期门控: 桥已注册且绑定 confirmed 才挂工具面。绑定态会话中途
-      // 变化(解绑/断线)由工具调用期的 fail-closed 复查兜底(server 侧还有
-      // NOT_BOUND 的最终防线); Codex 共享 bridge 场景同理。
+      // 会话构建期门控: 桥已注册、绑定 confirmed、最近一次成功 welcome 宣告
+      // slack-tools 才挂工具面。瞬时断线不撤 provider(避免重建 Codex),调用期由
+      // connected fail-closed 复查兜底;重连到不同 server 后 manager 会按新 welcome
+      // 刷新此 gate。server 侧还有 NOT_BOUND 的最终防线。
       isEnabled: () => {
         const bridge = opts.slackHook!.getBridge();
         if (bridge === null) return false;

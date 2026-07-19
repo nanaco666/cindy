@@ -492,7 +492,7 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     expect(manager.snapshot().binding?.teamName).toBe('xindong');
   });
 
-  it('lizi_slack provider gate 只在绑定可用性真翻转时通知 Codex 刷新', async () => {
+  it('lizi_slack provider gate 跟随绑定与 server capability，断线抖动不重复刷新', async () => {
     const { wss, url } = await startServer();
     const store = memoryStore({ url });
     const changes: boolean[] = [];
@@ -517,15 +517,49 @@ describe('hook-control transport + manager(真实 ws server)', () => {
       message: null,
     });
     sock.send(serializeHookMessage(confirmed));
-    await expect.poll(() => changes, { timeout: 3000 }).toEqual([true]);
+    await expect.poll(() => manager.snapshot().binding?.state, { timeout: 3000 }).toBe('confirmed');
+    expect(manager.getSlackToolAvailability()).toMatchObject({
+      bound: true,
+      serverSupportsTools: false,
+    });
+    expect(changes).toEqual([]);
 
-    // confirmed 回放与连接抖动都不改变 provider 构建期 gate，不应重复重启 Codex。
-    sock.send(serializeHookMessage(confirmed));
+    // 同一绑定下，server 能力升级会打开 provider；重复 welcome 不重复刷新。
+    sock.send(
+      serializeHookMessage(
+        makeWelcome({ serverName: 'mock-new', features: [HOOK_FEATURE_SLACK_TOOLS] }),
+      ),
+    );
+    await expect.poll(() => changes, { timeout: 3000 }).toEqual([true]);
+    sock.send(
+      serializeHookMessage(
+        makeWelcome({ serverName: 'mock-new', features: [HOOK_FEATURE_SLACK_TOOLS] }),
+      ),
+    );
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(changes).toEqual([true]);
 
+    // 重连到旧 server 时按新 welcome 关闭；再次升级可重新打开。
+    sock.send(serializeHookMessage(makeWelcome({ serverName: 'mock-old', features: [] })));
+    await expect.poll(() => changes, { timeout: 3000 }).toEqual([true, false]);
+    sock.send(
+      serializeHookMessage(
+        makeWelcome({ serverName: 'mock-new', features: [HOOK_FEATURE_SLACK_TOOLS] }),
+      ),
+    );
+    await expect.poll(() => changes, { timeout: 3000 }).toEqual([true, false, true]);
+
+    // confirmed 回放与短暂连接抖动都不改变最近一次成功能力快照。
+    sock.send(serializeHookMessage(confirmed));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(changes).toEqual([true, false, true]);
+    sock.close();
+    await expect.poll(() => manager.snapshot().status, { timeout: 3000 }).not.toBe('connected');
+    expect(manager.getSlackToolAvailability().serverSupportsTools).toBe(true);
+    expect(changes).toEqual([true, false, true]);
+
     manager.revokeAndDisconnect();
-    expect(changes).toEqual([true, false]);
+    expect(changes).toEqual([true, false, true, false]);
   });
 
   it('armAutoBind: 重开 toggle 撞上 server 回放的旧 pending → 重新发起并弹新链接', async () => {
@@ -1003,7 +1037,7 @@ describe('Slack 网关工具代理(tool.request/tool.response)', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
   });
 
-  it('断线 drain: 在途请求 resolve HOOK_NOT_CONNECTED; 重连后能力集重置', async () => {
+  it('断线 drain: 在途请求 resolve HOOK_NOT_CONNECTED; 能力保留到下一次 welcome 覆盖', async () => {
     const { manager, sock, server } = await connectWithTools({});
     const pending = manager.callSlackTool('listTools');
     await server.waitFor('tool.request');
@@ -1011,7 +1045,11 @@ describe('Slack 网关工具代理(tool.request/tool.response)', () => {
     const r = await pending;
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe('HOOK_NOT_CONNECTED');
-    // 断线后能力集清空(重连可能落到旧版本实例)
-    expect(manager.getSlackToolAvailability().serverSupportsTools).toBe(false);
+    // 瞬时断线只让调用期 fail-closed，不触发 Codex 工具清单抖动；下一次 welcome
+    // 会整组覆盖能力快照。
+    expect(manager.getSlackToolAvailability()).toMatchObject({
+      connected: false,
+      serverSupportsTools: true,
+    });
   });
 });
