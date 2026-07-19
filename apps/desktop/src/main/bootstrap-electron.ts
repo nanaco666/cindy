@@ -2248,11 +2248,11 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     // 数据,不抛 throwIpcError(符合规则 13 查询型例外:renderer 需要 reason 做不同 UI)。
     const result = await runClaudeOAuthLogin();
     if (result.ok) {
+      // 登录可直接覆盖旧账号凭证,不一定先走登出。先跨授权世代清掉旧清单 / 缓存并
+      // 等待旧 SDK 持久化收尾;即使后续 proxy 初始化失败也绝不保留 A 账号清单。
+      await clearAnthropicDiscoveredModels();
       // oauth 模式 per-model 路由依赖本地 proxy,确保 ready,再广播鉴权态让 Connections 行刷新。
       await ensureAnthropicCompatProxyReady();
-      // 登录可直接覆盖旧账号凭证,不一定先走登出。先跨授权世代清掉旧清单 / 缓存并
-      // 等待旧 SDK 持久化收尾,新账号 HTTP 失败时也绝不继承 A 账号清单。
-      await clearAnthropicDiscoveredModels();
       await broadcastClaudeAuthStateChanged();
       // 订阅余量同步: 换号时清旧账号快照 + 拉新账号余量(内部指纹校验), chip 随 push 更新。
       syncClaudeSubscriptionUsageForAuthChange();
