@@ -71,7 +71,7 @@ describe('SplashScreen v2 layout', () => {
     const { container } = render(<SplashScreen />);
     const root = container.firstElementChild as HTMLElement;
 
-    expect(root.getAttribute('style')).toContain('var(--surface-translucent-sidebar)');
+    expect(root.getAttribute('style')).toContain('var(--surface)');
     expect(root.getAttribute('style')).not.toContain('backdrop-filter');
     expect(root.className).not.toContain('backdrop');
   });

@@ -82,7 +82,9 @@ export function SplashScreen() {
       )}
       style={
         {
-          background: 'var(--surface-translucent-sidebar)',
+          // 2026-07-19 用户拍板:splash 期间必须完全盖住底下已挂载的主界面——
+          // 换不透明 --surface(全主题皆不透明);半透明侧栏材质会把 app UI 透出来。
+          background: 'var(--surface)',
           transition: 'opacity var(--splash-fade-duration) var(--splash-fade-easing)',
           WebkitAppRegion: 'drag',
         } as React.CSSProperties
