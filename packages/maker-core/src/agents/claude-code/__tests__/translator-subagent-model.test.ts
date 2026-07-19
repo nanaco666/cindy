@@ -147,4 +147,150 @@ describe('Claude Code translator subagent model attribution', () => {
       model: 'codex/gpt-5.6-sol',
     });
   });
+
+  it('repairs zero task tokens from isolated child streams and preserves zero tool uses', async () => {
+    const queue = createAsyncQueue<AgentEvent>();
+    const ctx = createCtx();
+
+    const stream = (
+      parentToolUseId: string,
+      event: Record<string, unknown>,
+    ) => translateSdkMessage(
+      {
+        type: 'stream_event',
+        session_id: 'sdk-session',
+        parent_tool_use_id: parentToolUseId,
+        event,
+      },
+      queue,
+      ctx,
+    );
+
+    stream('toolu_agent_a', {
+      type: 'message_start',
+      message: {
+        model: 'codex/gpt-5.6-terra',
+        usage: {
+          input_tokens: 100,
+          cache_read_input_tokens: 20,
+          cache_creation_input_tokens: 5,
+        },
+      },
+    });
+    stream('toolu_agent_b', {
+      type: 'message_start',
+      message: { model: 'codex/gpt-5.6-sol', usage: { input_tokens: 200 } },
+    });
+    stream('toolu_agent_a', {
+      type: 'message_delta',
+      usage: { input_tokens: 0, output_tokens: 10 },
+    });
+    stream('toolu_agent_b', {
+      type: 'message_delta',
+      usage: { input_tokens: 0, output_tokens: 30 },
+    });
+    // A 发起第二次 API call：input 取最新一轮，output 跨轮累计。
+    stream('toolu_agent_a', {
+      type: 'message_start',
+      message: {
+        model: 'codex/gpt-5.6-terra',
+        usage: { input_tokens: 150, cache_read_input_tokens: 20 },
+      },
+    });
+    stream('toolu_agent_a', {
+      type: 'message_delta',
+      usage: { input_tokens: 0, output_tokens: 5 },
+    });
+
+    for (const [taskId, parentToolUseId] of [
+      ['agent-a', 'toolu_agent_a'],
+      ['agent-b', 'toolu_agent_b'],
+    ] as const) {
+      translateSdkMessage(
+        {
+          type: 'system',
+          subtype: 'task_notification',
+          task_id: taskId,
+          tool_use_id: parentToolUseId,
+          status: 'completed',
+          usage: { total_tokens: 0, tool_uses: 0, duration_ms: 1000 },
+        },
+        queue,
+        ctx,
+      );
+    }
+
+    const taskUpdates = (await collect(queue)).filter(
+      (event) => event.type === 'agent_task_update',
+    );
+    expect(taskUpdates.map((event) => event.data)).toEqual([
+      expect.objectContaining({
+        taskId: 'agent-a',
+        parentToolUseId: 'toolu_agent_a',
+        model: 'codex/gpt-5.6-terra',
+        usage: { totalTokens: 185, toolUses: 0, durationMs: 1000 },
+      }),
+      expect.objectContaining({
+        taskId: 'agent-b',
+        parentToolUseId: 'toolu_agent_b',
+        model: 'codex/gpt-5.6-sol',
+        usage: { totalTokens: 230, toolUses: 0, durationMs: 1000 },
+      }),
+    ]);
+  });
+
+  it('keeps resolvedModel authoritative over the child stream model', async () => {
+    const queue = createAsyncQueue<AgentEvent>();
+    const ctx = createCtx();
+
+    translateSdkMessage(
+      {
+        type: 'user',
+        message: {
+          content: [{ type: 'tool_result', tool_use_id: 'toolu_agent_a', content: 'launched' }],
+        },
+        toolUseResult: {
+          isAsync: true,
+          agentId: 'agent-a',
+          resolvedModel: 'codex/gpt-5.6-terra',
+        },
+      },
+      queue,
+      ctx,
+    );
+    translateSdkMessage(
+      {
+        type: 'stream_event',
+        parent_tool_use_id: 'toolu_agent_a',
+        event: {
+          type: 'message_start',
+          message: { model: 'gpt-5.6-terra', usage: { input_tokens: 100 } },
+        },
+      },
+      queue,
+      ctx,
+    );
+    // notification 缺 tool_use_id 时也应通过 task id 别名找回 parent/model。
+    translateSdkMessage(
+      {
+        type: 'system',
+        subtype: 'task_notification',
+        task_id: 'agent-a',
+        status: 'completed',
+        usage: { total_tokens: 42 },
+      },
+      queue,
+      ctx,
+    );
+
+    const taskUpdates = (await collect(queue)).filter(
+      (event) => event.type === 'agent_task_update',
+    );
+    expect(taskUpdates.at(-1)?.data).toMatchObject({
+      taskId: 'agent-a',
+      parentToolUseId: 'toolu_agent_a',
+      model: 'codex/gpt-5.6-terra',
+      usage: { totalTokens: 42 },
+    });
+  });
 });
