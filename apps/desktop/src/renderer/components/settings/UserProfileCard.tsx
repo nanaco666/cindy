@@ -43,28 +43,42 @@ export function UserProfileCard() {
         'border border-[var(--settings-profile-card-border)]',
       )}
     >
-      {/* Avatar — 52×52 pill */}
-      {user.avatar && !avatarError ? (
-        <img
-          src={user.avatar}
-          alt={avatarAlt}
-          className="h-[52px] w-[52px] shrink-0 rounded-full object-cover"
-          onError={() => setAvatarError(true)}
-        />
-      ) : (
-        <div
-          className={cn(
-            'flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full',
-            'bg-[var(--settings-profile-avatar-bg)]',
-            // 无头像的首字母兜底加一圈细描边,与卡片边框同 token,避免圆盘悬空
-            'border border-[var(--settings-profile-card-border)]',
-            'text-18 font-medium text-[var(--settings-profile-avatar-text)]',
-          )}
-          aria-label={avatarAlt}
-        >
-          {initial}
-        </div>
-      )}
+      {/* Avatar — 52×52 pill;点击与右侧铅笔一样打开编辑弹窗 */}
+      <button
+        type="button"
+        onClick={() => setEditOpen(true)}
+        aria-label={t('settings.userProfile.edit.open')}
+        title={t('settings.userProfile.edit.open')}
+        className={cn(
+          'group relative h-[52px] w-[52px] shrink-0 cursor-pointer rounded-full',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-soft)]',
+        )}
+      >
+        {user.avatar && !avatarError ? (
+          <img
+            src={user.avatar}
+            alt={avatarAlt}
+            className={cn(
+              'h-[52px] w-[52px] rounded-full object-cover',
+              'transition-opacity group-hover:opacity-80',
+            )}
+            onError={() => setAvatarError(true)}
+          />
+        ) : (
+          <div
+            className={cn(
+              'flex h-[52px] w-[52px] items-center justify-center rounded-full',
+              'bg-[var(--settings-profile-avatar-bg)]',
+              // 无头像的首字母兜底加一圈细描边,与卡片边框同 token,避免圆盘悬空
+              'border border-[var(--settings-profile-card-border)]',
+              'text-18 font-medium text-[var(--settings-profile-avatar-text)]',
+              'transition-colors group-hover:bg-[var(--settings-profile-card-border)]',
+            )}
+          >
+            {initial}
+          </div>
+        )}
+      </button>
 
       {/* User name — 点击复制用户 ID;hover / cursor 明示可交互。 */}
       <div className="min-w-0 flex-1">

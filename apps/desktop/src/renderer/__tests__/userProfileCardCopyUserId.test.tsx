@@ -29,7 +29,8 @@ vi.mock('@/lib/toast', () => ({
 }));
 
 vi.mock('@/components/settings/ProfileEditDialog', () => ({
-  ProfileEditDialog: () => null,
+  ProfileEditDialog: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="profile-edit-dialog" /> : null,
 }));
 
 import { UserProfileCard } from '@/components/settings/UserProfileCard';
@@ -61,6 +62,23 @@ describe('UserProfileCard copy user ID', () => {
 
     await waitFor(() => expect(mocks.writeText).toHaveBeenCalledWith('user-123'));
     expect(mocks.toastSuccess).toHaveBeenCalledWith('settings.userProfile.copyUserId.success');
+  });
+
+  it('opens the profile edit dialog when the avatar is clicked', () => {
+    render(<UserProfileCard />);
+
+    expect(screen.queryByTestId('profile-edit-dialog')).toBeNull();
+
+    // 头像与铅笔共用 edit.open 标签;取第一个(头像)点击。
+    const [avatarButton] = screen.getAllByRole('button', {
+      name: 'settings.userProfile.edit.open',
+    });
+    expect(avatarButton.className).toContain('cursor-pointer');
+
+    fireEvent.click(avatarButton);
+
+    expect(screen.getByTestId('profile-edit-dialog')).toBeTruthy();
+    expect(mocks.writeText).not.toHaveBeenCalled();
   });
 
   it('shows an error toast when clipboard access fails', async () => {
