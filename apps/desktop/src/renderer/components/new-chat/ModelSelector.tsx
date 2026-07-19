@@ -598,7 +598,20 @@ export function ModelSelectorContent({
         aria-label={`${editingModel.displayName} ${t('newChat.modelSelector.options')}`}
         className="flex flex-col gap-0.5"
       >
-        {/* 操作区优先贴近 hover 行；说明收到底部，避免信息高度把可点击项推离鼠标。 */}
+        {/* 名字 / 简介先帮助确认模型；面板整体居中后，操作区仍贴近当前 hover 行。 */}
+        <div className="flex flex-col gap-1 px-2 py-1.5">
+          <span className="min-w-0 text-14 font-medium text-[var(--model-item-text)]">
+            {editingModel.displayName}
+          </span>
+          {editingModel.description && (
+            <span className="line-clamp-2 text-12 font-normal leading-[1.4] text-[var(--text-secondary)]">
+              {editingModel.description}
+            </span>
+          )}
+        </div>
+        {(editShowFast || editHasEfforts) && (
+          <div className="mx-1 my-1 h-px bg-[var(--model-dropdown-border)]" />
+        )}
         {editShowFast && (
           <div className="px-0.5">
             {/* 遵循设计稿:单色反色(轨/文字 --text-primary,钮 --surface-on-card),不用品牌橙。 */}
@@ -655,15 +668,7 @@ export function ModelSelectorContent({
         {(editShowFast || editHasEfforts) && (
           <div className="mx-1 my-1 h-px bg-[var(--model-dropdown-border)]" />
         )}
-        <div className="flex flex-col gap-1 px-2 py-1.5">
-          <span className="min-w-0 text-14 font-medium text-[var(--model-item-text)]">
-            {editingModel.displayName}
-          </span>
-          {editingModel.description && (
-            <span className="line-clamp-2 text-12 font-normal leading-[1.4] text-[var(--text-secondary)]">
-              {editingModel.description}
-            </span>
-          )}
+        <div className="px-2 py-1.5">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-11 font-normal leading-[1.4] text-[var(--text-tertiary)]">
             {editingProvider && (
               <span>
