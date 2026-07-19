@@ -10,7 +10,8 @@
  *     AgentActionsBlock / ThinkingCard 同款视觉(icon 14 + Inter 14 in
  *     `--msg-tool-card-chevron` + trailing chevron)。
  *   - 点开组后,thinking 直接显示为与 live preview 同款的单行内容;
- *     空 thinking 不显示,redacted thinking 保留不可见提示。
+ *     超过一行时可再点开查看完整段落。空 thinking 不显示,
+ *     redacted thinking 保留不可见提示。
  *   - 工具段仍用 AgentActionsBlock 的折叠头行,用户可再展开某个工具详情。
  *   - 展开状态走 useExpandedBlockMemory(`work:<groupKey>`),app 运行期内记住;
  *     工具子卡的独立展开态与组互不影响。
@@ -18,7 +19,16 @@
  * 时长缺失(老历史数据没有 createdAt)时退化为「工作过程」文案,不显示时间。
  */
 
-import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { Check, ChevronDown, ChevronRight, Layers, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { describeToolUse } from '@lizi/maker-shared';
@@ -181,10 +191,80 @@ function ThinkingActivityRow({
   );
 }
 
-/** 已展开工作组里的 thinking:有内容时直接显示单行,redacted 保留原提示。 */
+/** 有内容的 thinking 行:默认单行,实际溢出或原文换行时可展开完整内容。 */
+function ExpandableThinkingContentRow({
+  message,
+  activity,
+}: {
+  message: ChatMessage;
+  activity: Extract<LiveWorkActivity, { kind: 'thinking' }>;
+}) {
+  const rawContent = message.content.trim();
+  const hasExplicitLineBreak = /[\r\n]/.test(rawContent);
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [canExpand, setCanExpand] = useState(hasExplicitLineBreak);
+  const { expanded, setExpanded } = useExpandedBlockMemory(`thinking:${message.clientId}`);
+
+  useLayoutEffect(() => {
+    if (expanded) return;
+    const textElement = textRef.current;
+    if (!textElement) return;
+
+    const updateOverflow = () => {
+      setCanExpand(
+        hasExplicitLineBreak || textElement.scrollWidth > textElement.clientWidth + 1,
+      );
+    };
+    updateOverflow();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(updateOverflow);
+    observer.observe(textElement);
+    return () => observer.disconnect();
+  }, [activity.content, expanded, hasExplicitLineBreak]);
+
+  const onToggle = useCallback(() => {
+    if (canExpand) setExpanded((value) => !value);
+  }, [canExpand, setExpanded]);
+
+  return (
+    <button
+      type="button"
+      data-live-work-activity="thinking"
+      data-work-thinking-expandable={canExpand ? 'true' : 'false'}
+      onClick={onToggle}
+      disabled={!canExpand}
+      aria-expanded={canExpand ? expanded : undefined}
+      className={cn(
+        'flex w-full min-w-0 items-start gap-[6px] px-2 py-[3px] text-left',
+        canExpand && 'cursor-pointer hover:opacity-80 transition-opacity',
+      )}
+    >
+      <span className="inline-flex h-[18px] w-4 shrink-0 items-center justify-center text-[var(--msg-tool-card-chevron)]">
+        <Sparkles size={13} />
+      </span>
+      <span
+        ref={textRef}
+        className={cn(
+          'min-w-0 flex-1 text-[14px] italic text-[var(--thinking-body-text)]',
+          expanded ? 'whitespace-pre-wrap break-words' : 'truncate',
+        )}
+        title={expanded ? undefined : activity.content}
+      >
+        {expanded ? rawContent : activity.content}
+      </span>
+      {canExpand && (
+        <span className="inline-flex h-[18px] shrink-0 items-center text-[var(--msg-tool-card-chevron)]">
+          {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+        </span>
+      )}
+    </button>
+  );
+}
+
+/** 已展开工作组里的 thinking:有内容时显示可展开行,redacted 保留原提示。 */
 function ExpandedThinkingRow({ message }: { message: ChatMessage }) {
   const activity = thinkingActivityForMessage(message);
-  if (activity) return <ThinkingActivityRow activity={activity} />;
+  if (activity) return <ExpandableThinkingContentRow message={message} activity={activity} />;
   if (!message.thinkingRedacted) return null;
   return (
     <ThinkingCard
@@ -223,7 +303,8 @@ export function WorkGroupBlock({
     [childItems, isStreaming],
   );
 
-  // 点开组后 thinking 直接展示单行内容;工具仍保留子卡详情的第二级展开。
+  // 点开组后 thinking 直接展示单行内容,长内容可再展开;
+  // 工具仍保留子卡详情的第二级展开。
   const onToggle = useCallback(() => {
     setExpanded((v) => !v);
   }, [setExpanded]);

@@ -40,7 +40,10 @@ import {
 import { __test_internals as expandMemory } from '@/hooks/useExpandedBlockMemory';
 import type { ChatMessage } from '@/lib/makerChatStore';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 beforeEach(() => expandMemory.reset());
 
 const mkTool = (id: string, command = id): ChatMessage => ({
@@ -170,6 +173,50 @@ describe('WorkGroupBlock — running latest-five preview', () => {
     fireEvent.click(screen.getByRole('button'));
     expect(document.querySelectorAll('[data-live-work-activity="thinking"]')).toHaveLength(0);
     expect(screen.getByTestId('expanded-thinking')).toBeTruthy();
+  });
+
+  it('expands multiline thinking in place and preserves the original line breaks', () => {
+    render(
+      createElement(WorkGroupBlock, {
+        blockId: 'work:t1',
+        childItems: [thinking(mkThinking('long', 'first line\nsecond line'))],
+      }),
+    );
+
+    fireEvent.click(screen.getByRole('button'));
+    const thinkingButton = document.querySelector<HTMLButtonElement>(
+      '[data-work-thinking-expandable="true"]',
+    );
+    expect(thinkingButton).toBeTruthy();
+    expect(thinkingButton?.getAttribute('aria-expanded')).toBe('false');
+    expect(thinkingButton?.textContent).toContain('first line second line');
+
+    fireEvent.click(thinkingButton!);
+    expect(thinkingButton?.getAttribute('aria-expanded')).toBe('true');
+    expect(thinkingButton?.textContent).toContain('first line\nsecond line');
+
+    fireEvent.click(thinkingButton!);
+    expect(thinkingButton?.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('offers expansion when a single-line thinking row is visually truncated', () => {
+    vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(240);
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(120);
+    render(
+      createElement(WorkGroupBlock, {
+        blockId: 'work:t1',
+        childItems: [thinking(mkThinking('long', 'a long reasoning sentence without line breaks'))],
+      }),
+    );
+
+    fireEvent.click(screen.getByRole('button'));
+    const thinkingButton = document.querySelector<HTMLButtonElement>(
+      '[data-work-thinking-expandable="true"]',
+    );
+    expect(thinkingButton).toBeTruthy();
+    fireEvent.click(thinkingButton!);
+    expect(thinkingButton?.getAttribute('aria-expanded')).toBe('true');
+    expect(thinkingButton?.querySelector('.whitespace-pre-wrap')).toBeTruthy();
   });
 
   it('marks result/settled tools done and only unresolved tools running', () => {
