@@ -17,7 +17,6 @@ import {
   configureDefaultImageResizer,
 } from '@lizi/maker-core';
 import {
-  getActiveCatalog,
   setActiveCatalogChangedListener,
   setDiscoveredCodexModels,
 } from './active-catalog.js';
@@ -60,7 +59,10 @@ import { getRemoteClaudeBinaryPath } from '../remote-ssh/cc-manager-install.js';
 import { createReadImageHook } from './claude-hooks/read-image-hook.js';
 import { deriveAvailableModels, refreshCatalogDerivedModels } from './catalog-to-descriptors.js';
 import { clearChatgptBridgeCredentialCache } from './anthropic-responses-bridge-host.js';
-import { refreshDiscoveredCodexModels } from './createDesktopProviderService.js';
+import {
+  getDesktopSelectableCatalog,
+  refreshDiscoveredCodexModels,
+} from './createDesktopProviderService.js';
 import { clearAnthropicDiscoveredModels } from './model-discovery/anthropic.js';
 import {
   buildDesktopClaudeRuntimeConfig,
@@ -113,13 +115,27 @@ type RemoteCcQuery = Awaited<
 
 let _maker: Maker | null = null;
 
+/** Refresh selectable model capabilities, then notify every local/remote renderer. */
+function refreshSelectableModelsAndBroadcast(payload: Record<string, unknown>): void {
+  if (_maker) refreshCatalogDerivedModels(_maker, getDesktopSelectableCatalog());
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed()) continue;
+    try {
+      win.webContents.send(MAKER_PUSH.PROVIDER_CHANGED, payload);
+    } catch {
+      // Window teardown may race the broadcast; other windows still receive it.
+    }
+  }
+  tapWindowBroadcast(MAKER_PUSH.PROVIDER_CHANGED, payload);
+}
+
 /**
  * active catalog 的唯一 desktop 收口：先原地刷新两种 agent 的 capabilities，
  * 再广播同一 revision。这样 provider 列表先变而 backend 仍校验旧模型的窗口不会出现。
  */
 setActiveCatalogChangedListener((revision) => {
   try {
-    if (_maker) refreshCatalogDerivedModels(_maker, getActiveCatalog());
+    refreshSelectableModelsAndBroadcast({ revision });
   } catch (error) {
     desktopMakerLogger.warn('active catalog capabilities refresh failed', {
       revision,
@@ -127,16 +143,18 @@ setActiveCatalogChangedListener((revision) => {
     });
     return;
   }
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (win.isDestroyed()) continue;
-    try {
-      win.webContents.send(MAKER_PUSH.PROVIDER_CHANGED, { revision });
-    } catch {
-      // Window teardown may race the broadcast; other windows still receive this revision.
-    }
-  }
-  tapWindowBroadcast(MAKER_PUSH.PROVIDER_CHANGED, { revision });
 });
+
+/** Re-project provider/model availability after the Cindy membership changes. */
+export function refreshProviderAccessAfterAuthChange(): void {
+  try {
+    refreshSelectableModelsAndBroadcast({});
+  } catch (error) {
+    desktopMakerLogger.warn('provider access refresh after auth change failed', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 /**
  * codexAgent 的模块级引用 —— 仅供 restartCodexAfterAuthModeChange() 在 API 模式切换 /
  * api_key 变更时 dispose 重建 app-server。getMaker() 构造后回填,resetMaker() 清空。
@@ -293,11 +311,11 @@ export function getMaker(): Maker {
       mcpProviders: claudeMcpProviders,
       makerMemory: makerMemoryManager,
       // 模型清单 SSoT = 目录（providers.json，OSS 运行时真源 / bundled 兜底）。maker-core 的
-      // CLAUDE_MODELS 已删、availableModels 起始为空；host 从 getActiveCatalog() 派生 cc 列表注入
+      // CLAUDE_MODELS 已删、availableModels 起始为空；host 从账号可选目录派生 cc 列表注入
       // （含 claude 订阅模型 + XD 网关路由的 gpt / 国产 / gemini 等）。active catalog 已在 splash 期
       // ensureActiveCatalogLoaded 加载完成（早于本构造点）。详见 catalog-to-descriptors.ts。
       capabilityAdditions: {
-        availableModels: deriveAvailableModels(getActiveCatalog(), 'claude-code'),
+        availableModels: deriveAvailableModels(getDesktopSelectableCatalog(), 'claude-code'),
       },
       // SDK PreToolUse / PostToolUse 等 in-process hook 注入点。host 自己定义 hook
       // 实现 (./claude-hooks/*.ts), maker-core 不感知具体逻辑。
@@ -373,11 +391,11 @@ export function getMaker(): Maker {
       mcpProviders: codexMcpProviders,
       makerMemory: makerMemoryManager,
       // 模型清单 SSoT = 目录（providers.json，OSS 运行时真源 / bundled 兜底）。maker-core 的
-      // CODEX_MODELS 已删、availableModels 起始为空；host 从 getActiveCatalog() 派生 codex 列表注入
+      // CODEX_MODELS 已删、availableModels 起始为空；host 从账号可选目录派生 codex 列表注入
       // （gpt 原生 + codex/ 骨折网关路由）。「骨折GPT」codex/ 仍是「XD 网关来源」,渲染层按
       // 「XD 网关已连接」gate 可见性（ModelSelector onlyConnected / CreateWorkerPopover / ScheduleChips）。
       capabilityAdditions: {
-        availableModels: deriveAvailableModels(getActiveCatalog(), 'codex'),
+        availableModels: deriveAvailableModels(getDesktopSelectableCatalog(), 'codex'),
       },
       onCodexLocalModelsListed: (models) => {
         setDiscoveredCodexModels(mapCodexAppServerModelsToCatalog(models));
