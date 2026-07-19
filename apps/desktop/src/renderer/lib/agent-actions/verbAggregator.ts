@@ -57,6 +57,7 @@ export interface AgentActionSummary {
 const TOOL_TO_VERB: Record<string, Verb> = {
   Edit: 'edited',
   MultiEdit: 'edited',
+  file_change: 'edited',
   Write: 'created',
   Bash: 'ran',
   exec: 'ran',

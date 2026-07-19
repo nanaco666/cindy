@@ -98,6 +98,18 @@ export type ToolUseDescriptor =
       fileName: string;
     }
   | {
+      kind: 'fileChange';
+      toolName: string;
+      changes: Array<{
+        action: 'add' | 'delete' | 'update' | 'move' | 'unknown';
+        path: string;
+        fileName: string;
+        movePath?: string;
+        moveFileName?: string;
+        diff: string;
+      }>;
+    }
+  | {
       kind: 'search';
       toolName: string;
       mode: 'grep' | 'glob';
@@ -232,6 +244,8 @@ export function describeToolUse(toolName: string, input: unknown): ToolUseDescri
         commandIntentFromActions(inp?.commandActions, command) ?? commandIntentFromCommand(command);
       return { kind: 'command', toolName, command, ...withCwd(inp), ...(intent ? { intent } : {}) };
     }
+    case 'file_change':
+      return fileChangeDescriptor(toolName, inp);
     case 'Read':
       return fileDescriptor(toolName, 'read', inp);
     case 'Edit':
@@ -300,6 +314,56 @@ function fileDescriptor(
     filePath,
     fileName: basenameRemotePath(filePath) || filePath,
   };
+}
+
+/**
+ * Codex file_change 一次可以携带多个文件；这里只把协议形态收敛成稳定的
+ * 展示模型。任一 change 缺关键字段时整次降级 generic，避免 UI 只展示半套
+ * 变更而让用户误以为剩余文件没有被修改。
+ */
+function fileChangeDescriptor(
+  toolName: string,
+  inp: Record<string, unknown> | null,
+): ToolUseDescriptor {
+  if (!Array.isArray(inp?.changes) || inp.changes.length === 0) {
+    return genericDescriptor(toolName, inp);
+  }
+
+  const changes: Extract<ToolUseDescriptor, { kind: 'fileChange' }>['changes'] = [];
+  for (const rawChange of inp.changes) {
+    const change = readRecord(rawChange);
+    const kind = readRecord(change?.kind);
+    const path = readNonEmptyString(change?.path);
+    const kindType = readNonEmptyString(kind?.type);
+    if (!change || !kind || !path || !kindType || typeof change.diff !== 'string') {
+      return genericDescriptor(toolName, inp);
+    }
+
+    const movePath = readNonEmptyString(kind.move_path)
+      ?? readNonEmptyString(kind.movePath)
+      ?? readNonEmptyString(change.move_path)
+      ?? readNonEmptyString(change.movePath);
+    const action = movePath
+      ? 'move'
+      : kindType === 'add' || kindType === 'delete' || kindType === 'update'
+        ? kindType
+        : 'unknown';
+
+    changes.push({
+      action,
+      path,
+      fileName: basenameRemotePath(path) || path,
+      ...(movePath
+        ? {
+            movePath,
+            moveFileName: basenameRemotePath(movePath) || movePath,
+          }
+        : {}),
+      diff: change.diff,
+    });
+  }
+
+  return { kind: 'fileChange', toolName, changes };
 }
 
 function genericDescriptor(toolName: string, inp: Record<string, unknown> | null): ToolUseDescriptor {

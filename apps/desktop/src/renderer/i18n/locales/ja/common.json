@@ -3734,6 +3734,12 @@
     },
     "agentActionRow": {
       "noContent": "表示できる内容はありません",
+      "fileChange": {
+        "deleted": "削除",
+        "renamed": "名前変更",
+        "files": "{{count}} ファイル",
+        "rawData": "元データを表示"
+      },
       "verb": {
         "edited": "編集",
         "created": "作成",

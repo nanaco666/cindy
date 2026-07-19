@@ -178,6 +178,79 @@ describe('describeToolUse — file tools', () => {
   });
 });
 
+describe('describeToolUse — Codex file_change', () => {
+  it('normalizes add/update/delete and rename changes', () => {
+    expect(describeToolUse('file_change', {
+      changes: [
+        { path: '/repo/src/new.ts', kind: { type: 'add' }, diff: '+++ b/src/new.ts\n+hello' },
+        { path: '/repo/src/app.ts', kind: { type: 'update' }, diff: '-old\n+new' },
+        { path: '/repo/src/old.ts', kind: { type: 'delete' }, diff: '-gone' },
+        {
+          path: '/repo/src/before.ts',
+          kind: { type: 'update', move_path: '/repo/src/after.ts' },
+          diff: '',
+        },
+      ],
+    })).toEqual({
+      kind: 'fileChange',
+      toolName: 'file_change',
+      changes: [
+        {
+          action: 'add',
+          path: '/repo/src/new.ts',
+          fileName: 'new.ts',
+          diff: '+++ b/src/new.ts\n+hello',
+        },
+        {
+          action: 'update',
+          path: '/repo/src/app.ts',
+          fileName: 'app.ts',
+          diff: '-old\n+new',
+        },
+        {
+          action: 'delete',
+          path: '/repo/src/old.ts',
+          fileName: 'old.ts',
+          diff: '-gone',
+        },
+        {
+          action: 'move',
+          path: '/repo/src/before.ts',
+          fileName: 'before.ts',
+          movePath: '/repo/src/after.ts',
+          moveFileName: 'after.ts',
+          diff: '',
+        },
+      ],
+    });
+  });
+
+  it('accepts camelCase/top-level move fields and preserves unknown actions', () => {
+    expect(describeToolUse('file_change', {
+      changes: [
+        { path: 'C:\\repo\\a.ts', kind: { type: 'update', movePath: 'C:\\repo\\b.ts' }, diff: '' },
+        { path: '/repo/custom.bin', kind: { type: 'chmod' }, diff: '' },
+      ],
+    })).toMatchObject({
+      kind: 'fileChange',
+      changes: [
+        { action: 'move', fileName: 'a.ts', moveFileName: 'b.ts' },
+        { action: 'unknown', fileName: 'custom.bin' },
+      ],
+    });
+  });
+
+  it('degrades the whole call to generic when changes are empty or malformed', () => {
+    expect(describeToolUse('file_change', { changes: [] })).toEqual({
+      kind: 'generic',
+      toolName: 'file_change',
+    });
+    expect(describeToolUse('file_change', {
+      changes: [{ path: '/repo/a.ts', kind: { type: 'update' } }],
+    })).toEqual({ kind: 'generic', toolName: 'file_change' });
+  });
+});
+
 describe('describeToolUse — search / web / todo / task tools', () => {
   it('maps Grep and Glob to search descriptors', () => {
     expect(describeToolUse('Grep', { pattern: 'foo', path: 'src', glob: '*.ts' })).toEqual({

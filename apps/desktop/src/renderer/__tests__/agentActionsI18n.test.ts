@@ -40,6 +40,7 @@ function readLocale(locale: (typeof locales)[number]) {
   ) as {
     chat?: {
       agentActionRow?: {
+        fileChange?: Record<string, unknown>;
         verb?: Record<string, unknown>;
         status?: Record<string, unknown>;
       };
@@ -59,6 +60,9 @@ describe('agent actions i18n', () => {
       }
       expect(row?.status?.running, `${locale} status.running`).toEqual(expect.any(String));
       expect(row?.status?.done, `${locale} status.done`).toEqual(expect.any(String));
+      for (const key of ['deleted', 'renamed', 'files', 'rawData']) {
+        expect(row?.fileChange?.[key], `${locale} fileChange.${key}`).toEqual(expect.any(String));
+      }
     }
   });
 

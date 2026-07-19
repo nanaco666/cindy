@@ -168,6 +168,15 @@ describe('messagePresentation', () => {
     );
   });
 
+  it('counts Codex file_change as an edited file action', () => {
+    const group: MessageRenderToolGroupItem<TestMessage> = {
+      type: 'tool_group',
+      key: 'tools-file-change',
+      tools: [message('file-change-summary', { label: 'file_change' })],
+    };
+    expect(summarizeToolGroupPresentation(group).title).toBe('编辑 1 个文件');
+  });
+
   it('renders humanized tool row labels from tool_use descriptors (issue #450 mobile)', () => {
     // Bash 带模型 description:独立成句,命令原文降为次要细节。
     expect(summarizeToolRowPresentation(message('bash-desc', {
@@ -269,6 +278,45 @@ describe('messagePresentation', () => {
       label: '读取 app.ts',
       detail: '/repo/src/app.ts',
     });
+
+    const fileChangeSource = {
+      clientId: 'file-change-1',
+      content: {
+        toolName: 'file_change',
+        input: {
+          changes: [{
+            path: '/repo/src/old.ts',
+            kind: { type: 'update', move_path: '/repo/src/new.ts' },
+            diff: '',
+          }],
+        },
+      },
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
+    expect(summarizeToolRowPresentation(message('file-change-1', {
+      label: 'file_change',
+      source: fileChangeSource,
+    }))).toMatchObject({
+      label: '重命名 old.ts → new.ts',
+      detail: '/repo/src/old.ts → /repo/src/new.ts',
+    });
+
+    expect(summarizeToolRowPresentation(message('file-change-many', {
+      label: 'file_change',
+      source: {
+        ...fileChangeSource,
+        clientId: 'file-change-many',
+        content: {
+          toolName: 'file_change',
+          input: {
+            changes: [
+              { path: '/repo/a.ts', kind: { type: 'update' }, diff: '-a\n+b' },
+              { path: '/repo/b.ts', kind: { type: 'add' }, diff: '+b' },
+            ],
+          },
+        },
+      },
+    }))).toMatchObject({ label: '更新 2 个文件' });
   });
 
   it('marks unsettled tool rows running only while the session is streaming', () => {

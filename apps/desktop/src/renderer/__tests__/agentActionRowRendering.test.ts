@@ -149,6 +149,62 @@ describe('AgentActionRow — 行主文案', () => {
     expect(screen.getByText('chat.agentActionRow.verb.used')).toBeTruthy();
   });
 
+  it('file_change:主行显示文件数与总 diff，展开后逐文件查看 diff', () => {
+    render(
+      createElement(AgentActionRow, {
+        message: mkTool('t1', 'file_change', {
+          changes: [
+            {
+              path: '/repo/src/app.ts',
+              kind: { type: 'update' },
+              diff: '--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new',
+            },
+            {
+              path: '/repo/src/new.ts',
+              kind: { type: 'add' },
+              diff: '+++ b/src/new.ts\n+one\n+two',
+            },
+          ],
+        }),
+        toolResult: 'update /repo/src/app.ts\nadd /repo/src/new.ts',
+      }),
+    );
+
+    expect(screen.getByText('chat.agentActionRow.verb.updated')).toBeTruthy();
+    expect(screen.getByText('chat.agentActionRow.fileChange.files:2')).toBeTruthy();
+    expect(screen.getByText('+3')).toBeTruthy();
+    expect(screen.getByText('-1')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button'));
+    expect(screen.getByText('app.ts')).toBeTruthy();
+    expect(screen.getByText('new.ts')).toBeTruthy();
+    expect(screen.getByText('chat.agentActionRow.fileChange.rawData')).toBeTruthy();
+    expect(screen.queryByText('update /repo/src/app.ts\nadd /repo/src/new.ts')).toBeNull();
+
+    const appRow = screen.getByText('app.ts').closest('button');
+    expect(appRow).toBeTruthy();
+    fireEvent.click(appRow!);
+    expect(document.querySelector('[data-agent-file-change-diff="true"]')).toBeTruthy();
+    expect(screen.getByText('old')).toBeTruthy();
+    expect(screen.getByText('new')).toBeTruthy();
+  });
+
+  it('file_change:单文件重命名直接显示源文件和目标文件', () => {
+    render(
+      createElement(AgentActionRow, {
+        message: mkTool('t1', 'file_change', {
+          changes: [{
+            path: '/repo/src/old.ts',
+            kind: { type: 'update', move_path: '/repo/src/new.ts' },
+            diff: '',
+          }],
+        }),
+      }),
+    );
+    expect(screen.getByText('chat.agentActionRow.fileChange.renamed')).toBeTruthy();
+    expect(screen.getByText('old.ts → new.ts')).toBeTruthy();
+  });
+
   it('状态图标:running / done 经 aria-label 可达,缺省为 done', () => {
     const { rerender } = render(
       createElement(AgentActionRow, {

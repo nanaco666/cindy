@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 
 import {
   computeDiffStats,
+  computeUnifiedDiffStats,
   statsForToolCall,
 } from '@/lib/agent-actions/diffStats';
 
@@ -30,6 +31,25 @@ describe('computeDiffStats', () => {
 
   it('strips trailing newlines so they do not count as a phantom line', () => {
     expect(computeDiffStats('', 'one line\n')).toEqual({ add: 1, del: 0 });
+  });
+});
+
+describe('computeUnifiedDiffStats', () => {
+  it('counts changed rows while excluding file and hunk headers', () => {
+    expect(computeUnifiedDiffStats([
+      '--- a/src/app.ts',
+      '+++ b/src/app.ts',
+      '@@ -1,2 +1,3 @@',
+      ' context',
+      '-old',
+      '+new',
+      '+extra',
+    ].join('\n'))).toEqual({ add: 2, del: 1 });
+  });
+
+  it('returns null when the unified diff has no changed rows', () => {
+    expect(computeUnifiedDiffStats('')).toBeNull();
+    expect(computeUnifiedDiffStats('@@ -1 +1 @@\n context')).toBeNull();
   });
 });
 
@@ -82,5 +102,20 @@ describe('statsForToolCall', () => {
 
   it('MultiEdit: empty edits[] returns +0 -0 (not null)', () => {
     expect(statsForToolCall('MultiEdit', { edits: [] })).toEqual({ add: 0, del: 0 });
+  });
+
+  it('file_change: sums unified diffs across all changed files', () => {
+    expect(statsForToolCall('file_change', {
+      changes: [
+        { diff: '--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old\n+new' },
+        { diff: '+++ b/b.ts\n+one\n+two' },
+        { diff: '' },
+      ],
+    })).toEqual({ add: 3, del: 1 });
+  });
+
+  it('file_change: returns null when no valid unified diff is available', () => {
+    expect(statsForToolCall('file_change', { changes: [{ diff: '' }] })).toBeNull();
+    expect(statsForToolCall('file_change', { changes: [{ nope: true }] })).toBeNull();
   });
 });

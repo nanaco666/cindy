@@ -45,13 +45,14 @@ import { Check, ChevronDown, ChevronRight, File as FileIcon } from 'lucide-react
 import { useTranslation } from 'react-i18next';
 import {
   describeToolUse,
+  type ToolUseDescriptor,
 } from '@lizi/maker-shared';
 
 import { cn, basename } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 import type { ChatMessage } from '@/lib/makerChatStore';
 import { verbForTool, verbLabelKeyForIntent, verbLabelKeyForRow } from '@/lib/agent-actions/verbAggregator';
-import { statsForToolCall } from '@/lib/agent-actions/diffStats';
+import { computeUnifiedDiffStats, statsForToolCall } from '@/lib/agent-actions/diffStats';
 import { extractDisplayParam } from '@/lib/agent-actions/actionPresentation';
 import { SUPPORTED_IMAGE_EXTS, extractExt } from '@/lib/fileTypes';
 import { toLocalFileUrl } from '@/lib/localPathResolver';
@@ -63,6 +64,7 @@ import { rewriteToRemoteMediaOrigin } from '../../../shared/remoteMediaUrl';
 import { useInstalledGhosts } from '@/cindy-brain/useInstalledGhosts';
 import { useChatSessionFile } from './ChatSessionFileContext';
 import { ImageLightbox } from './ImageLightbox';
+import { MarkdownDiffBlock } from './MarkdownDiffBlock';
 import { TextLightbox } from './TextLightbox';
 import { ToolPayloadLightbox, type ToolPayloadMode } from './ToolPayloadLightbox';
 import { useFileChipContextMenu } from './useFileChipContextMenu';
@@ -545,6 +547,170 @@ type LightboxState =
   | { kind: 'image'; src: string }
   | { kind: 'payload'; payload: ToolPayloadMode };
 
+type FileChangeDescriptor = Extract<ToolUseDescriptor, { kind: 'fileChange' }>;
+type FileChange = FileChangeDescriptor['changes'][number];
+
+function fileChangeVerbKey(descriptor: FileChangeDescriptor): string {
+  if (descriptor.changes.length !== 1) return 'chat.agentActionRow.verb.updated';
+  switch (descriptor.changes[0].action) {
+    case 'add':
+      return 'chat.agentActionRow.verb.created';
+    case 'delete':
+      return 'chat.agentActionRow.fileChange.deleted';
+    case 'move':
+      return 'chat.agentActionRow.fileChange.renamed';
+    case 'update':
+      return 'chat.agentActionRow.verb.edited';
+    default:
+      return 'chat.agentActionRow.verb.updated';
+  }
+}
+
+function pathRelativeToWorkingDir(filePath: string, workingDir: string): string {
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  const normalizedRoot = workingDir.replace(/\\/g, '/').replace(/\/+$/, '');
+  if (!normalizedRoot) return normalizedPath;
+  const isWindowsPath = /^[A-Za-z]:\//.test(normalizedPath) && /^[A-Za-z]:\//.test(normalizedRoot);
+  const comparedPath = isWindowsPath ? normalizedPath.toLowerCase() : normalizedPath;
+  const comparedRoot = isWindowsPath ? normalizedRoot.toLowerCase() : normalizedRoot;
+  if (comparedPath === comparedRoot) return basename(normalizedPath);
+  if (comparedPath.startsWith(`${comparedRoot}/`)) {
+    return normalizedPath.slice(normalizedRoot.length + 1);
+  }
+  return normalizedPath;
+}
+
+function fileChangePathDetail(change: FileChange, workingDir: string): string {
+  const source = pathRelativeToWorkingDir(change.path, workingDir);
+  if (change.action === 'move' && change.movePath) {
+    return `${source} → ${pathRelativeToWorkingDir(change.movePath, workingDir)}`;
+  }
+  return source;
+}
+
+/** Codex file_change 的第二层：文件清单；每个有 diff 的文件还能独立展开。 */
+function FileChangeDetails({
+  descriptor,
+  workingDir,
+  onShowRawData,
+}: {
+  descriptor: FileChangeDescriptor;
+  workingDir: string;
+  onShowRawData: (anchor: HTMLElement) => void;
+}) {
+  const { t } = useTranslation();
+  const [expandedDiffs, setExpandedDiffs] = useState<Set<number>>(() => new Set());
+
+  const toggleDiff = (index: number) => {
+    setExpandedDiffs((current) => {
+      const next = new Set(current);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  };
+
+  const actionLabel = (change: FileChange): string => {
+    switch (change.action) {
+      case 'add':
+        return t('chat.agentActionRow.verb.created');
+      case 'delete':
+        return t('chat.agentActionRow.fileChange.deleted');
+      case 'move':
+        return t('chat.agentActionRow.fileChange.renamed');
+      case 'update':
+        return t('chat.agentActionRow.verb.edited');
+      default:
+        return t('chat.agentActionRow.verb.updated');
+    }
+  };
+
+  return (
+    <div
+      data-agent-file-change-details="true"
+      className={cn(
+        'mx-2 mt-1 mb-1 overflow-hidden rounded-[6px]',
+        'bg-[var(--msg-user-bg)] border border-[var(--msg-user-border)]',
+      )}
+    >
+      {descriptor.changes.map((change, index) => {
+        const stats = computeUnifiedDiffStats(change.diff);
+        const hasDiff = change.diff.trim().length > 0;
+        const isExpanded = hasDiff && expandedDiffs.has(index);
+        const target = change.action === 'move' && change.moveFileName
+          ? `${change.fileName} → ${change.moveFileName}`
+          : change.fileName;
+        const pathDetail = fileChangePathDetail(change, workingDir);
+
+        return (
+          <div key={`${change.path}:${change.movePath ?? ''}:${index}`}>
+            <button
+              type="button"
+              disabled={!hasDiff}
+              aria-expanded={hasDiff ? isExpanded : undefined}
+              onClick={() => toggleDiff(index)}
+              className={cn(
+                'group flex w-full items-center gap-2 px-[10px] py-[6px] text-left outline-none',
+                hasDiff && 'cursor-pointer hover:bg-[var(--msg-code-inline-bg)]',
+                hasDiff && 'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--info-700)]/40',
+              )}
+            >
+              <span className="w-[52px] shrink-0 text-[12px] text-[var(--msg-tool-card-chevron)]">
+                {actionLabel(change)}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[14px] font-medium text-[var(--foreground)]">
+                  {target}
+                </span>
+                {pathDetail !== target && (
+                  <span
+                    title={pathDetail}
+                    className="block truncate font-mono text-[12px] leading-[16px] text-[var(--msg-tool-card-chevron)]"
+                  >
+                    {pathDetail}
+                  </span>
+                )}
+              </span>
+              {stats && (
+                <span className="flex shrink-0 gap-1 font-mono text-[12px] font-medium">
+                  <span className="text-[var(--diff-add-fg)]">+{stats.add}</span>
+                  <span className="text-[var(--diff-del-fg)]">-{stats.del}</span>
+                </span>
+              )}
+              {hasDiff && (
+                <span
+                  aria-hidden="true"
+                  className="flex h-[18px] w-[18px] shrink-0 items-center justify-center text-[var(--msg-tool-card-chevron)]"
+                >
+                  {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                </span>
+              )}
+            </button>
+            {isExpanded && (
+              <div data-agent-file-change-diff="true" className="px-[10px] pb-1">
+                <MarkdownDiffBlock raw={change.diff} />
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <div className="border-t border-[var(--msg-user-border)] px-[10px] py-[5px]">
+        <button
+          type="button"
+          onClick={(event) => onShowRawData(event.currentTarget)}
+          className={cn(
+            'rounded-[4px] px-1 py-0.5 text-[12px] text-[var(--msg-tool-card-chevron)]',
+            'hover:bg-[var(--msg-code-inline-bg)] hover:text-[var(--foreground)]',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--info-700)]/40',
+          )}
+        >
+          {t('chat.agentActionRow.fileChange.rawData')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** True when the file extension is one ImageLightbox can render via xdt-file://. */
 function isImagePath(filePath: string): boolean {
   const ext = extractExt(filePath).toLowerCase();
@@ -578,6 +744,7 @@ export function AgentActionRow({
   }, [toolName, inp, installedGhosts]);
 
   const descriptor = useMemo(() => describeToolUse(toolName, inp), [toolName, inp]);
+  const isFileChange = descriptor.kind === 'fileChange';
   // command 类带模型 description 时,description 自含动词语义("查看工作区
   // 状态"),再渲染英文动词 label 会变成"Ran 查看工作区状态"的中英混排 —
   // 隐藏动词,让 description 独立成句(Claude App 同款形态)。
@@ -596,7 +763,9 @@ export function AgentActionRow({
       ? verbLabelKeyForIntent(intentAction)
       : isRawCommandFallback
         ? 'chat.agentActionRow.verb.ranCommand'
-        : verbLabelKeyForRow(verbForTool(toolName)),
+        : isFileChange
+          ? fileChangeVerbKey(descriptor)
+          : verbLabelKeyForRow(verbForTool(toolName)),
   );
   // 意识行动词固定"召唤意识"(与其它工具的 Ran/Read 语系并列)。
   const rowVerbLabel = ghostInfo ? t('chat.ghostCall.verb') : verbLabel;
@@ -604,6 +773,9 @@ export function AgentActionRow({
     () => extractDisplayParam(descriptor, { hideRawCommandFallback: showRawCommand }),
     [descriptor, showRawCommand],
   );
+  const fileChangeCountText = isFileChange && descriptor.changes.length > 1
+    ? t('chat.agentActionRow.fileChange.files', { count: descriptor.changes.length })
+    : null;
   const rawCommand =
     showRawCommand && descriptor.kind === 'command' && descriptor.command
       ? descriptor.command
@@ -671,9 +843,22 @@ export function AgentActionRow({
 
   // 就地展开时要展示的 input 文本(已按 tool 名做了人类可读的格式化)。
   const inlineInputText = useMemo(
-    () => (isInlineExpand ? formatInlineInput(toolName, inp) : ''),
-    [isInlineExpand, toolName, inp],
+    () => (isInlineExpand && !isFileChange ? formatInlineInput(toolName, inp) : ''),
+    [isFileChange, isInlineExpand, toolName, inp],
   );
+
+  const showFileChangeRawData = (anchor: HTMLElement) => {
+    triggerRef.current = anchor;
+    setLightbox({
+      kind: 'payload',
+      payload: {
+        kind: 'json',
+        title: t('chat.agentActionRow.fileChange.rawData'),
+        toolInput: inp,
+        ...(toolResult ? { toolResult } : {}),
+      },
+    });
+  };
 
   // v12: 文件 chip 右键菜单 (复制 / 复制文件路径 / 打开文件所在目录)。
   // filePath 直接来自 tool_input.file_path,已是绝对路径,无需 resolveLocalPathSmart。
@@ -697,6 +882,13 @@ export function AgentActionRow({
       return (
         <span className="truncate text-[14px] font-medium text-[var(--msg-tool-card-chevron)]">
           「{ghostInfo.name}」· {ghostInfo.tool}
+        </span>
+      );
+    }
+    if (fileChangeCountText) {
+      return (
+        <span className="min-w-0 truncate text-[14px] font-medium text-[var(--msg-tool-card-chevron)]">
+          {fileChangeCountText}
         </span>
       );
     }
@@ -762,10 +954,10 @@ export function AgentActionRow({
         aria-label={
           ghostInfo
             ? `${rowVerbLabel} ${ghostInfo.name} ${ghostInfo.tool}`
-            : displayParam
+            : displayParam || fileChangeCountText
               ? hideVerb
-                ? displayParam.text
-                : `${rowVerbLabel} ${displayParam.text}`
+                ? displayParam?.text ?? fileChangeCountText ?? ''
+                : `${rowVerbLabel} ${displayParam?.text ?? fileChangeCountText ?? ''}`
               : rowVerbLabel
         }
         className={cn(
@@ -842,7 +1034,15 @@ export function AgentActionRow({
           v11 (2026-04-20):背景色 + 边框对齐"用户输入气泡"
           (`--msg-user-bg` + `--msg-user-border`),与 hover 嵌入式 inline-code
           灰区分开,把就地展开视觉上提升为一个独立"卡片"。 */}
-      {isInlineExpand && expanded && (
+      {isFileChange && expanded && (
+        <FileChangeDetails
+          descriptor={descriptor}
+          workingDir={fileCtx.workingDir}
+          onShowRawData={showFileChangeRawData}
+        />
+      )}
+
+      {isInlineExpand && !isFileChange && expanded && (
         <div
           // 行按钮本身是 select-none,这里必须显式 select-text,让用户能复制
           // grep pattern、bash command 这种关键文本。

@@ -49,6 +49,17 @@ export function extractDisplayParam(
     }
     case 'file':
       return { text: descriptor.fileName, fullTitle: descriptor.filePath };
+    case 'fileChange': {
+      const change = descriptor.changes.length === 1 ? descriptor.changes[0] : null;
+      if (!change) return null;
+      if (change.action === 'move' && change.moveFileName && change.movePath) {
+        return {
+          text: `${change.fileName} → ${change.moveFileName}`,
+          fullTitle: `${change.path} → ${change.movePath}`,
+        };
+      }
+      return { text: change.fileName, fullTitle: change.path };
+    }
     case 'search':
       return { text: descriptor.pattern };
     case 'web':

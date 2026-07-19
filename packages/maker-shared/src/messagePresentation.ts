@@ -137,6 +137,7 @@ interface ToolSummaryVerbEntry {
 const TOOL_SUMMARY_VERB_BY_LABEL: Record<string, ToolSummaryVerb> = {
   Edit: 'edited',
   MultiEdit: 'edited',
+  file_change: 'edited',
   Write: 'created',
   Bash: 'ran',
   exec: 'ran',
@@ -177,6 +178,9 @@ const TOOL_ROW_VERB_ZH = {
   read: '读取',
   edit: '编辑',
   create: '创建',
+  delete: '删除',
+  rename: '重命名',
+  update: '更新',
   run: '运行',
   runCommand: '运行命令',
   search: '搜索',
@@ -401,6 +405,31 @@ function formatToolRowText(descriptor: ToolUseDescriptor): { label: string; deta
       return {
         label: joinVerb(verb, descriptor.fileName),
         ...(descriptor.filePath !== descriptor.fileName ? { detail: descriptor.filePath } : {}),
+      };
+    }
+    case 'fileChange': {
+      if (descriptor.changes.length > 1) {
+        return { label: `${TOOL_ROW_VERB_ZH.update} ${descriptor.changes.length} 个文件` };
+      }
+      const change = descriptor.changes[0];
+      const verb = change.action === 'add'
+        ? TOOL_ROW_VERB_ZH.create
+        : change.action === 'delete'
+          ? TOOL_ROW_VERB_ZH.delete
+          : change.action === 'move'
+            ? TOOL_ROW_VERB_ZH.rename
+            : change.action === 'update'
+              ? TOOL_ROW_VERB_ZH.edit
+              : TOOL_ROW_VERB_ZH.update;
+      const target = change.action === 'move' && change.moveFileName
+        ? `${change.fileName} → ${change.moveFileName}`
+        : change.fileName;
+      const detail = change.action === 'move' && change.movePath
+        ? `${change.path} → ${change.movePath}`
+        : change.path;
+      return {
+        label: joinVerb(verb, target),
+        ...(detail !== target ? { detail } : {}),
       };
     }
     case 'search':

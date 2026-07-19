@@ -3734,6 +3734,12 @@
     },
     "agentActionRow": {
       "noContent": "Nothing to display",
+      "fileChange": {
+        "deleted": "Deleted",
+        "renamed": "Renamed",
+        "files": "{{count}} files",
+        "rawData": "View raw data"
+      },
       "verb": {
         "edited": "Edited",
         "created": "Created",
