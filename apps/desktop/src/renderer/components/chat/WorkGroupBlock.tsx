@@ -36,6 +36,7 @@ import { Spinner } from '@/components/ui/spinner';
 
 import { AgentActionRow } from './AgentActionRow';
 import { ThinkingCard, formatDuration } from './ThinkingCard';
+import { ThinkingText } from './ThinkingText';
 
 /** work_group 子项的窄类型 — 与 MessageStream 的 RenderItem 解耦,由调用方映射。 */
 export type WorkGroupChild =
@@ -169,7 +170,7 @@ function ThinkingActivityRow({
         className="min-w-0 truncate text-[14px] italic text-[var(--thinking-body-text)]"
         title={activity.content}
       >
-        {activity.content}
+        <ThinkingText content={activity.content} />
       </span>
     </div>
   );
@@ -240,7 +241,7 @@ function ExpandedThinkingRow({ message }: { message: ChatMessage }) {
         )}
         title={expanded ? undefined : activity.content}
       >
-        {expanded ? rawContent : activity.content}
+        <ThinkingText content={expanded ? rawContent : activity.content} />
       </span>
       {canExpand && (
         <span className="inline-flex h-[18px] shrink-0 items-center text-[var(--msg-tool-card-chevron)]">

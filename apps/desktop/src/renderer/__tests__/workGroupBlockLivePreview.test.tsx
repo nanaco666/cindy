@@ -152,16 +152,17 @@ describe('WorkGroupBlock — running latest-five preview', () => {
       createElement(WorkGroupBlock, {
         blockId: 'work:t1',
         isStreaming: true,
-        childItems: [thinking(mkThinking('th1', 'inspecting'))],
+        childItems: [thinking(mkThinking('th1', '**inspecting**'))],
       }),
     );
     expect(screen.getAllByText('inspecting')).toHaveLength(1);
+    expect(screen.queryByText('**inspecting**')).toBeNull();
 
     rerender(
       createElement(WorkGroupBlock, {
         blockId: 'work:t1',
         isStreaming: true,
-        childItems: [thinking(mkThinking('th1', 'inspecting the renderer'))],
+        childItems: [thinking(mkThinking('th1', '**inspecting the renderer**'))],
       }),
     );
     expect(screen.queryByText('inspecting')).toBeNull();
