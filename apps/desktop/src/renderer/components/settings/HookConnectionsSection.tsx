@@ -490,6 +490,51 @@ export function HookConnectionsSection() {
           </div>
         ) : null}
 
+        {/* (multi-team)首绑失败兜底: 首次授权终止(denied/expired/failed/装 App
+            超时)时 manager 会 setEnabled(false) 弹回开关, 下方列表区块随
+            enabled 一起消失 —— 终止态原因与未安装引导必须在这里独立于 enabled
+            渲染, 否则用户只看到开关静默弹回、没有任何原因与重试提示。已有
+            绑定时列表区块可见, 终止态行由列表内的对应行承载, 这里不重复。 */}
+        {multiUi && !hook.enabled && isNotInstalled ? (
+          <div className="mt-3 flex flex-col gap-1.5 border-t border-[var(--border-default)] pt-3">
+            <div className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 text-11 leading-relaxed text-[var(--error-fg)]">
+                {t('settings.remoteControl.hook.notInstalled.title')}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (installUrl) void window.electronAPI.openExternal(installUrl);
+                }}
+                className={pillBtn}
+              >
+                {t('settings.remoteControl.hook.installApp')}
+              </button>
+              <button type="button" onClick={() => void handleCopyInstallLink()} className={pillBtn}>
+                {t('settings.remoteControl.hook.binding.copyLink')}
+              </button>
+            </div>
+            <span className="text-11 leading-relaxed text-[var(--text-tertiary)]">
+              {t('settings.remoteControl.hook.notInstalled.hint')}
+            </span>
+          </div>
+        ) : null}
+        {multiUi &&
+        !hook.enabled &&
+        !isNotInstalled &&
+        hook.pendingBind !== null &&
+        hook.pendingBind.state !== 'pending' ? (
+          <div className="mt-3 flex flex-col gap-1 border-t border-[var(--border-default)] pt-3">
+            <span className="text-11 leading-relaxed text-[var(--error-fg)]">
+              {hook.pendingBind.message ??
+                t(`settings.remoteControl.hook.binding.state.${hook.pendingBind.state}`)}
+            </span>
+            <span className="text-11 leading-relaxed text-[var(--text-tertiary)]">
+              {t('settings.remoteControl.hook.binding.retryHint')}
+            </span>
+          </div>
+        ) : null}
+
         {hook.enabled ? (
           <>
             {/* (multi-team)Slack workspaces 区块: 每个绑定一行(team + 用户 +

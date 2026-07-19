@@ -1441,6 +1441,37 @@ describe('多 workspace 绑定(multi-team)', () => {
     expect(server.frames.filter((f) => f.type === 'bind.start')).toHaveLength(1);
   });
 
+  it('首绑终止态(denied): 开关弹回后快照保留 pendingBind 终止态(设置页兜底行数据源)', async () => {
+    const { manager, store, sock, server } = await connectMulti();
+    manager.armAutoBind();
+    sock.send(serializeHookMessage(makeBindState({ bindings: [] })));
+    await server.waitFor('bind.start');
+    sock.send(
+      serializeHookMessage(
+        makeBindUpdate({
+          state: 'pending',
+          slackUserId: null,
+          slackUserName: null,
+          message: null,
+          authorizeUrl: 'https://slack.example.com/authorize?state=x',
+        }),
+      ),
+    );
+    await expect.poll(() => manager.snapshot().pendingBind?.state, { timeout: 3000 }).toBe('pending');
+    // 用户在授权页点取消 → server 推 denied → 首绑(0 绑定)自动关开关,
+    // 但终止态必须留在快照里 —— 渲染层靠它显示失败原因与重试提示,
+    // 否则用户只看到开关静默弹回(review P1)
+    sock.send(
+      serializeHookMessage(
+        makeBindUpdate({ state: 'denied', slackUserId: null, slackUserName: null, message: null }),
+      ),
+    );
+    await expect.poll(() => store.get().enabled, { timeout: 3000 }).toBe(false);
+    const snap = manager.snapshot();
+    expect(snap.pendingBind?.state).toBe('denied');
+    expect(snap.bindings).toEqual([]);
+  });
+
   it('tool.request 携带 teamId; bound 判据 = 存在可用绑定(无需 legacy confirmed)', async () => {
     const { manager, sock, server } = await connectMulti({
       features: [HOOK_FEATURE_MULTI_TEAM, HOOK_FEATURE_SLACK_TOOLS],

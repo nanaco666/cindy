@@ -1120,11 +1120,14 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
         serverFeatures = [...payload.features];
         // 落回老 server(无 multi-team): 多绑定列表与缓存作废 —— 老 server 是
         // 单绑定权威(它会经 bind.update 推现状), 残留的多绑定行会让 toView
-        // 误走 multi 映射、渲染层误开列表 UI
-        if (!serverMultiTeam() && multiBindings.length > 0) {
-          multiBindings = [];
+        // 误走 multi 映射、渲染层误开列表 UI。pendingBind 无条件清: 滚动发布
+        // multi→old 横跳时 0 绑定设备的在途态也不该滞留(老 server 随后会推现状)
+        if (!serverMultiTeam()) {
           pendingBind = null;
-          persistBindingsCache();
+          if (multiBindings.length > 0) {
+            multiBindings = [];
+            persistBindingsCache();
+          }
         }
         notifySlackToolProviderEnabledIfChanged();
       },
