@@ -24,6 +24,8 @@ import {
   OSS_PREFIX,
   OSS_REGION,
   resolveOssConfig,
+  resolveOssCredentials,
+  resolveReleaseRegion,
   refreshOssConfig,
   sha256,
   gzipFile,
@@ -37,6 +39,8 @@ export {
   OSS_PREFIX,
   OSS_REGION,
   resolveOssConfig,
+  resolveOssCredentials,
+  resolveReleaseRegion,
   refreshOssConfig,
   sha256,
   gzipFile,
@@ -80,6 +84,23 @@ export const PACKAGED_APP_NAME_BY_REGION = Object.freeze({
 
 export function packagedAppName(region = 'cn') {
   const name = PACKAGED_APP_NAME_BY_REGION[region];
+  if (!name) throw new Error(`unknown region: ${region}`);
+  return name;
+}
+
+/**
+ * 发布产物文件名基名(安装包 / 热更 zip / OSS key 里的文件名,用户下载可见)。
+ * 老 'xdt-maker-*' 命名只属于已冻结的 /xdt-maker 渠道;新渠道(2026-07-19 实查
+ * 现网 manifest 全 404,从零起步)统一用 cindy 命名,与 package-desktop.mjs 的
+ * 本地产物命名对齐。
+ */
+export const RELEASE_ARTIFACT_BASENAME_BY_REGION = Object.freeze({
+  cn: 'cindy',
+  global: 'cindy-global',
+});
+
+export function releaseArtifactBasename(region = 'cn') {
+  const name = RELEASE_ARTIFACT_BASENAME_BY_REGION[region];
   if (!name) throw new Error(`unknown region: ${region}`);
   return name;
 }

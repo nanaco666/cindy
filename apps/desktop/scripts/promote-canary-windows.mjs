@@ -8,6 +8,7 @@
  * 用法:
  *   node scripts/promote-canary-windows.mjs           # dry-run，仅打印将要提升的版本
  *   node scripts/promote-canary-windows.mjs --yes     # 真正执行覆盖
+ *   node scripts/promote-canary-windows.mjs --region global --yes  # 海外渠道(默认 cn)
  *
  * 流程:
  *   1. 从 CDN 拉 manifest-win32-x64-canary.json
@@ -41,24 +42,30 @@ try {
 } catch { /* no .env file */ }
 
 import { resolveReleaseCdnBaseUrl } from '../../../scripts/shared/release-env.mjs';
-import { OSS_BUCKET, OSS_PREFIX, OSS_REGION, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
+import { OSS_BUCKET, OSS_PREFIX, OSS_REGION, refreshOssConfig, resolveOssCredentials } from '../../../scripts/shared/oss.mjs';
+import { applyReleaseRegionConfigToEnv } from './ci/release-regions.mjs';
 
-refreshOssConfig();
-const PLATFORM_KEY = 'win32-x64';
-const CDN_BASE = resolveReleaseCdnBaseUrl();
-
-function getAKSK() {
-  const accessKeyId = process.env.FP_DEV_OSS_ACCESS_KEY_ID;
-  const accessKeySecret = process.env.FP_DEV_OSS_ACCESS_KEY_SECRET;
-  if (!accessKeyId || !accessKeySecret) {
-    console.error('ERROR: FP_DEV_OSS_ACCESS_KEY_ID and FP_DEV_OSS_ACCESS_KEY_SECRET must be set');
+// 发布区域:cn(国内,默认)/ global(海外),与 release-windows.mjs 同一套渠道配置。
+const REGION = (() => {
+  const idx = process.argv.indexOf('--region');
+  const value = idx !== -1 && process.argv[idx + 1] ? process.argv[idx + 1] : 'cn';
+  if (!['cn', 'global'].includes(value)) {
+    console.error(`ERROR: --region must be cn or global (got "${value}")`);
     process.exit(1);
   }
-  return { accessKeyId, accessKeySecret };
-}
+  return value;
+})();
+
+// 发布目标优先从发版机本地 scripts/release-regions.json 取(env 显式值优先,
+// 见 ci/release-regions.mjs;真机密 AK/SK 等仍走 env / .env)。
+applyReleaseRegionConfigToEnv(REGION);
+
+refreshOssConfig(REGION);
+const PLATFORM_KEY = 'win32-x64';
+const CDN_BASE = resolveReleaseCdnBaseUrl(REGION);
 
 function createOSSClient() {
-  const { accessKeyId, accessKeySecret } = getAKSK();
+  const { accessKeyId, accessKeySecret } = resolveOssCredentials(REGION);
   return new OSS({
     region: OSS_REGION,
     accessKeyId,
@@ -131,7 +138,8 @@ async function main() {
   const args = process.argv.slice(2);
   const yes = args.includes('--yes');
 
-  console.log('=== Promote canary → stable (Windows) ===\n');
+  console.log(`=== Promote canary → stable (Windows, region: ${REGION}) ===`);
+  console.log(`    CDN: ${CDN_BASE}\n`);
 
   const { text, json: canaryManifest } = await fetchCanaryManifest();
   const { text: stableText, json: stableManifest } = await fetchStableManifest();

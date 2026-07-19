@@ -1,0 +1,22 @@
+{
+    "cn":
+    {
+        "oss":
+        {
+            "cdnBaseUrl": "",
+            "bucket": "",
+            "prefix": "",
+            "ossRegion": ""
+        }
+    },
+    "global":
+    {
+        "oss":
+        {
+            "cdnBaseUrl": "",
+            "bucket": "",
+            "prefix": "",
+            "ossRegion": ""
+        }
+    }
+}

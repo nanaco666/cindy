@@ -13,6 +13,7 @@
 | [builtin-tools-system.md](./builtin-tools-system.md) | 设计 spike | 参考 | `apps/desktop` builtin MCP 开关、`packages/lizi-mcps` providers、Settings connections UI | — |
 | [codex-system-prompt-persistence.md](./codex-system-prompt-persistence.md) | 设计 spike | 参考 | `packages/maker-core` Codex developerInstructions、`apps/desktop/src/main/maker-host/codex-proxy-host.ts`、`packages/anthropic-compat-proxy` | — |
 | [configuration-design-principles.md](./configuration-design-principles.md) | 契约/规范 | authoritative | 全项目用户可配置项、Settings UI、高级设置、隐藏配置、默认值与用户 override 模型 | Lizi |
+| [desktop-release-cn-global.md](./desktop-release-cn-global.md) | 操作手册/规范 | 参考 | Desktop cn/global 双渠道发布指令矩阵、`apps/desktop/scripts/release-*` `promote-canary-*`、`scripts/shared/oss.mjs` 区域化发布目标 | — |
 | [desktop-db-subprocess-callsites.md](./desktop-db-subprocess-callsites.md) | 历史/记录 | 参考 | Desktop localDb 调用点审计、`apps/desktop/src/main/localDb/**`、main 进程 DB callsites | — |
 | [desktop-db-subprocess-mr0-spike.md](./desktop-db-subprocess-mr0-spike.md) | 设计 spike | 参考 | Desktop DB worker thread spike、`apps/desktop/src/main/localDb/client/**`、`apps/desktop/src/main/localDb/worker/**` | — |
 | [desktop-db-subprocess-mr1-cut.md](./desktop-db-subprocess-mr1-cut.md) | 设计 spike | 参考 | Desktop DB worker thread MR1 切片、DbClient/transport skeleton | — |

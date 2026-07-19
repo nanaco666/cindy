@@ -3,8 +3,11 @@
 /**
  * release-windows.mjs — Windows 平台客户端发布脚本
  *
- * 用法: node scripts/release-windows.mjs [version]
- *   version 可选，不传则用 package.json 里的当前版本
+ * 用法: node scripts/release-windows.mjs [version] [--region cn|global]
+ *   version 可选：major | minor | patch | x.y.z(默认 patch;该渠道首次发布必须传显式 x.y.z)
+ *   --region 可选：cn(默认,国内渠道) | global(海外渠道)。区域决定应用身份
+ *   (Cindy / CindyGlobal)、烘焙端点(config/endpoint*.json)与发布目标
+ *   (XDT_* vs XDT_GLOBAL_* 的 OSS/CDN),见 docs/desktop-release-cn-global.md。
  *
  * 环境变量:
  *   OSS_ACCESS_KEY_ID     — 阿里云 AK
@@ -35,7 +38,18 @@ import { createRequire } from 'node:module';
 import { ensureBinary } from '../../../scripts/ensure-agent-binaries.mjs';
 import { desktopClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
 import { resolveReleaseCdnBaseUrl } from '../../../scripts/shared/release-env.mjs';
-import { uploadVersionedGzImmutable, OSS_BUCKET, OSS_PREFIX, OSS_REGION, refreshOssConfig, PACKAGED_APP_NAME, assertNotPublishingCindyToLegacyChannel } from './ci/lib.mjs';
+import {
+  uploadVersionedGzImmutable,
+  OSS_BUCKET,
+  OSS_PREFIX,
+  OSS_REGION,
+  refreshOssConfig,
+  resolveOssCredentials,
+  packagedAppName,
+  releaseArtifactBasename,
+  assertNotPublishingCindyToLegacyChannel,
+} from './ci/lib.mjs';
+import { applyReleaseRegionConfigToEnv } from './ci/release-regions.mjs';
 
 const require = createRequire(import.meta.url);
 const OSS = require('ali-oss');
@@ -51,13 +65,35 @@ try {
     if (match && !process.env[match[1]]) process.env[match[1]] = match[2];
   }
 } catch { /* no .env file, that's fine */ }
-refreshOssConfig();
+// 发布区域:cn(国内,默认)/ global(海外)。区域决定应用身份、烘焙端点与
+// 发布目标渠道,必须在 refreshOssConfig 之前解析。
+const REGION = (() => {
+  const idx = process.argv.indexOf('--region');
+  const value = idx !== -1 && process.argv[idx + 1] ? process.argv[idx + 1] : 'cn';
+  if (!['cn', 'global'].includes(value)) {
+    console.error(`ERROR: --region must be cn or global (got "${value}")`);
+    process.exit(1);
+  }
+  return value;
+})();
+// forge.config.ts(appId / exe 基名)与 ensureBinary 的 CDN fallback 都读这个变量。
+process.env.CINDY_AUTH_REGION = REGION;
+
+// 发布目标优先从发版机本地 scripts/release-regions.json 取(env 显式值优先,
+// 见 ci/release-regions.mjs;真机密 AK/SK 等仍走 env / .env)。
+applyReleaseRegionConfigToEnv(REGION);
+
+refreshOssConfig(REGION);
 // 渠道冻结硬闸:Cindy 布局产物禁止发布到老 /xdt-maker 前缀(见 lib.mjs)。
 assertNotPublishingCindyToLegacyChannel(OSS_PREFIX);
 const PROJECT_ROOT = path.resolve(DESKTOP_ROOT, '../..');
 const RELEASE_DIR = path.join(DESKTOP_ROOT, 'release');
 const PLATFORM_KEY = 'win32-x64';
-const CDN_BASE = resolveReleaseCdnBaseUrl();
+const CDN_BASE = resolveReleaseCdnBaseUrl(REGION);
+// 产物基名按区域派生:out 目录 / exe 用应用身份名(Cindy / CindyGlobal),
+// 安装包 / 热更 zip 文件名用发布渠道基名(cn 'cindy' / global 'cindy-global')。
+const APP_NAME = packagedAppName(REGION);
+const ARTIFACT_BASENAME = releaseArtifactBasename(REGION);
 
 // ── Helpers ──
 
@@ -129,10 +165,13 @@ async function fetchExistingManifest() {
   console.warn(`    canary manifest missing — falling back to stable manifest for version baseline`);
   const stableUrl = `${CDN_BASE}/manifest-${PLATFORM_KEY}.json?t=${Date.now()}`;
   const stableRes = await fetchWithRetry(stableUrl);
-  if (!stableRes.ok) {
+  if (stableRes.ok) return await stableRes.json();
+  if (stableRes.status !== 404) {
     throw new Error(`Failed to fetch manifest (${stableRes.status}): ${stableUrl}`);
   }
-  return await stableRes.json();
+  // canary 与 stable 都不存在:全新渠道(如 global 首发)。返回 null,由调用方
+  // 要求显式 x.y.z 版本号后从空 manifest 起步。
+  return null;
 }
 
 function getLocalClaudeCodeVersion() {
@@ -169,18 +208,8 @@ async function gzipFile(srcPath, destPath) {
   await pipeline(src, gzip, dest);
 }
 
-function getAKSK() {
-  const accessKeyId = process.env.FP_DEV_OSS_ACCESS_KEY_ID;
-  const accessKeySecret = process.env.FP_DEV_OSS_ACCESS_KEY_SECRET;
-  if (!accessKeyId || !accessKeySecret) {
-    console.error('ERROR: FP_DEV_OSS_ACCESS_KEY_ID and FP_DEV_OSS_ACCESS_KEY_SECRET must be set');
-    process.exit(1);
-  }
-  return { accessKeyId, accessKeySecret };
-}
-
 function createOSSClient() {
-  const { accessKeyId, accessKeySecret } = getAKSK();
+  const { accessKeyId, accessKeySecret } = resolveOssCredentials(REGION);
   return new OSS({
     region: OSS_REGION,
     accessKeyId,
@@ -336,7 +365,11 @@ async function main() {
   // release-relogin-on-update: 把 --require-relogin 从 argv 里拣出来,
   // 剩下的位置参数才是 version 标识(major/minor/patch/x.y.z)。
   // 也支持 REQUIRE_RELOGIN=1 环境变量,方便 CI 不需要改命令模板。
-  const positionalArgs = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+  // 位置参数 = 去掉 --flags 及带值 flag(--region <val>)的值之后剩下的 token。
+  const flagsWithValue = new Set(['--region']);
+  const positionalArgs = process.argv
+    .slice(2)
+    .filter((a, i, arr) => !a.startsWith('--') && !flagsWithValue.has(arr[i - 1]));
   const requireRelogin =
     process.argv.includes('--require-relogin') ||
     process.env.REQUIRE_RELOGIN === '1' ||
@@ -351,17 +384,28 @@ async function main() {
     await ensureBinary(kind, PLATFORM_KEY);
   }
 
+  console.log(`==> Release region: ${REGION} (app: ${APP_NAME}, CDN: ${CDN_BASE})`);
+
   // 1. Version — 从 CDN 拉取当前版本，自动 bump
-  const existingManifest = await fetchExistingManifest();
+  const fetchedManifest = await fetchExistingManifest();
+  const isExplicitVersion = /^\d+\.\d+\.\d+$/.test(argVersion ?? '');
+  if (!fetchedManifest && !isExplicitVersion) {
+    // 全新渠道没有版本基线,bump 关键字无从计算 —— 首发必须显式指定版本号。
+    console.error(`ERROR: no canary/stable manifest found on this channel (${CDN_BASE}).`);
+    console.error('       First release on a fresh channel requires an explicit x.y.z version, e.g.');
+    console.error(`       node scripts/release-windows.mjs 1.0.0 --region ${REGION}`);
+    process.exit(1);
+  }
+  const existingManifest = fetchedManifest ?? { app: {} };
   const cdnVersion = existingManifest.app.version;
   const hasCdnVersion = cdnVersion && cdnVersion !== '0.0.0';
 
-  if (!hasCdnVersion) {
+  if (fetchedManifest && !hasCdnVersion) {
     console.error(`ERROR: CDN manifest has no valid version (got "${cdnVersion}"). Aborting release.`);
     console.error(`       URL: ${CDN_BASE}/manifest-${PLATFORM_KEY}-canary.json (or stable fallback)`);
     process.exit(1);
   }
-  console.log(`==> CDN current version: ${cdnVersion}`);
+  console.log(`==> CDN current version: ${cdnVersion ?? '(none — fresh channel)'}`);
 
   let version;
   if (argVersion === 'major') {
@@ -404,7 +448,7 @@ async function main() {
     try {
       fs.rmSync(outDir, { recursive: true, force: true });
     } catch (err) {
-      console.error(`ERROR: Cannot remove ${outDir} — is ${PACKAGED_APP_NAME}.exe still running or is antivirus scanning it?`);
+      console.error(`ERROR: Cannot remove ${outDir} — is ${APP_NAME}.exe still running or is antivirus scanning it?`);
       console.error(err.message);
       process.exit(1);
     }
@@ -428,7 +472,8 @@ async function main() {
     env: {
       ...process.env,
       NODE_ENV: 'production',
-      ...desktopClientBuildEnv({ allowEnvOverride: false }),
+      ...desktopClientBuildEnv({ allowEnvOverride: false, authRegion: REGION }),
+      CINDY_AUTH_REGION: REGION,
       APP_VERSION: version, // forge.config.ts 读取此变量注入到 packagerConfig.appVersion
     },
   });
@@ -459,14 +504,14 @@ async function main() {
   // NSIS installer wraps the packaged dir verbatim, so verifying out/<PACKAGED_APP_NAME>-win32-x64/
   // is the accurate way to check drizzle files landed. Verifying inside the .exe
   // would require unpacking NSIS, and the installer just copies this dir.
-  const packagedForVerify = path.join(DESKTOP_ROOT, 'out', `${PACKAGED_APP_NAME}-win32-x64`);
+  const packagedForVerify = path.join(DESKTOP_ROOT, 'out', `${APP_NAME}-win32-x64`);
   verifyPackagedDrizzle(packagedForVerify);
 
   // 3.6 Post-build smoke test: launch packaged exe with --smoke-test
   console.log('==> Running packaged smoke test...');
   const smokeResult = spawnSync(
     'node',
-    ['scripts/smoke-packaged.mjs', '--platform=win32', '--arch=x64'],
+    ['scripts/smoke-packaged.mjs', '--platform=win32', '--arch=x64', `--app-name=${APP_NAME}`],
     {
       stdio: 'inherit',
       cwd: DESKTOP_ROOT,
@@ -480,7 +525,7 @@ async function main() {
 
   // 4. Prepare release directory
   fs.mkdirSync(RELEASE_DIR, { recursive: true });
-  const releaseExeName = `xdt-maker-${version}-Setup.exe`;
+  const releaseExeName = `${ARTIFACT_BASENAME}-${version}-Setup.exe`;
   const releaseExePath = path.join(RELEASE_DIR, releaseExeName);
   fs.copyFileSync(exePath, releaseExePath);
 
@@ -501,8 +546,8 @@ async function main() {
   console.log(`    Size:   ${(size / 1024 / 1024).toFixed(1)} MB`);
 
   // 5. Create hotfix ZIP from packaged app (for auto-update, no installer overhead)
-  const packagedDir = path.join(DESKTOP_ROOT, 'out', `${PACKAGED_APP_NAME}-win32-x64`);
-  const hotfixZipName = `xdt-maker-${version}.zip`;
+  const packagedDir = path.join(DESKTOP_ROOT, 'out', `${APP_NAME}-win32-x64`);
+  const hotfixZipName = `${ARTIFACT_BASENAME}-${version}.zip`;
   const hotfixZipPath = path.join(RELEASE_DIR, hotfixZipName);
   console.log('==> Creating hotfix ZIP from packaged app...');
   if (fs.existsSync(hotfixZipPath)) fs.unlinkSync(hotfixZipPath);
@@ -709,6 +754,7 @@ async function main() {
   console.log('');
   console.log('=== Release complete ===');
   console.log(`App:         ${version}`);
+  console.log(`Region:      ${REGION}`);
   console.log(`Platform:    ${PLATFORM_KEY}`);
   console.log(`Installer:   ${CDN_BASE}/app/${PLATFORM_KEY}/${releaseExeName}`);
   console.log(`Hotfix ZIP:  ${CDN_BASE}/hotfix/${PLATFORM_KEY}/${hotfixZipName}`);
@@ -719,7 +765,7 @@ async function main() {
     console.log(`Codex:       ${localCodexVersion} (updated)`);
   }
   console.log(`Manifest:    ${CDN_BASE}/manifest-${PLATFORM_KEY}-canary.json (canary channel)`);
-  console.log(`             → 发布到 stable: pnpm release:promote:win`);
+  console.log(`             → 发布到 stable: pnpm release:promote:win${REGION === 'global' ? ':global' : ''}`);
 }
 
 main().catch((err) => {
