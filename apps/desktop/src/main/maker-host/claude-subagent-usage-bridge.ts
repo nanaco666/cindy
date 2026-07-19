@@ -197,14 +197,15 @@ export function createClaudeSubagentUsageResponseObserver(
 ): ResponseObserver {
   return (ctx) => {
     if (ctx.method !== 'POST' || !isMessagesPath(ctx.url)) return null;
-    const taskId = bridge.takeReservedTask(ctx.reqId);
-    if (!taskId) return null;
     if (ctx.status < 200 || ctx.status >= 300) return null;
 
     const contentType = (ctx.responseHeaders['content-type'] ?? '').toLowerCase();
     const isSse = contentType.includes('text/event-stream');
     const isJson = contentType.includes('application/json');
     if (!isSse && !isJson) return null;
+    // 可恢复的中间失败可能复用 reqId；只在最终可计量响应开始时消费预留。
+    const taskId = bridge.takeReservedTask(ctx.reqId);
+    if (!taskId) return null;
 
     let done = false;
     let totalBytes = 0;

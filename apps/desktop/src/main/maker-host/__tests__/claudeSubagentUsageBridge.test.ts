@@ -138,6 +138,43 @@ describe('ClaudeSubagentUsageBridge', () => {
     expect(bridge.getTaskUsage('agent-a')).toBeUndefined();
   });
 
+  it('keeps the request reservation through a recoverable non-2xx response', () => {
+    const bridge = new ClaudeSubagentUsageBridge();
+    bridge.registerTask({
+      taskId: 'agent-a',
+      parentToolUseId: 'toolu-a',
+      prompt: 'Solve calculator problem A',
+      model: 'codex/gpt-5.6-terra',
+    });
+    reserveRequest(bridge, 1, 'codex/gpt-5.6-terra', 'Solve calculator problem A');
+
+    const observer = createClaudeSubagentUsageResponseObserver(bridge);
+    const context = {
+      reqId: 1,
+      method: 'POST',
+      url: '/v1/messages',
+      upstreamBase: 'https://example.com',
+      requestHeaders: {},
+      requestBody: requestBody('codex/gpt-5.6-terra', 'Solve calculator problem A'),
+    } as const;
+    expect(observer({
+      ...context,
+      status: 400,
+      responseHeaders: { 'content-type': 'application/json' },
+    })).toBeNull();
+
+    const sink = observer({
+      ...context,
+      status: 200,
+      responseHeaders: { 'content-type': 'text/event-stream' },
+    });
+    expect(sink).toBeTruthy();
+    sink?.onData?.(sse(100, 10));
+    sink?.onEnd?.();
+
+    expect(bridge.getTaskUsage('agent-a')).toEqual({ totalTokens: 110 });
+  });
+
   it('prefers the longest matching prompt when prompts overlap', () => {
     const bridge = new ClaudeSubagentUsageBridge();
     bridge.registerTask({
