@@ -45,11 +45,13 @@ vi.mock('@/components/ui/popover', async () => {
     PopoverContent: ({
       children,
       className,
+      align,
       onPointerEnter,
       onPointerLeave,
     }: {
       children: React.ReactNode;
       className?: string;
+      align?: 'start' | 'center' | 'end';
       onPointerEnter?: React.PointerEventHandler<HTMLDivElement>;
       onPointerLeave?: React.PointerEventHandler<HTMLDivElement>;
     }) => {
@@ -60,6 +62,7 @@ vi.mock('@/components/ui/popover', async () => {
             {
               className,
               'data-testid': 'model-options-popover',
+              'data-align': align,
               onPointerEnter,
               onPointerLeave,
             },
@@ -301,6 +304,7 @@ describe('ModelSelector trigger variants', () => {
 
     fireEvent.pointerEnter(row);
     const options = screen.getByRole('group', { name: /Opus 4\.8/ });
+    expect(screen.getByTestId('model-options-popover').getAttribute('data-align')).toBe('center');
     expect(options).toBeTruthy();
     expect(within(options).getByText('Most capable for ambitious work')).toBeTruthy();
     expect(within(options).getByText('Source: Anthropic')).toBeTruthy();

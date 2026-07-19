@@ -807,7 +807,7 @@ export function ModelSelectorContent({
         {isEditingThis && configPanel && (
           <PopoverContent
             side="left"
-            align="start"
+            align="center"
             sideOffset={4}
             collisionPadding={8}
             onOpenAutoFocus={(event) => event.preventDefault()}
