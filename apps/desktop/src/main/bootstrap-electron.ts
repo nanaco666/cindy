@@ -1512,8 +1512,10 @@ app.on('open-file', (event, filePath) => {
 //
 // 唯一例外是 dev `--passive`:它的公开契约就是和正式版共享 Cindy userData 双开、
 // 同时让出自动 schedule。正式版已持有同一作用域的锁，passive dev 若也请求会直接
-// quit，契约形同失效；所以只有这个明确模式跳过锁。此模式没有 second-instance
-// redirect，deep link 落到哪个实例由当前 OS 协议注册归属决定。
+// quit，契约形同失效；所以只有这个明确模式跳过 Electron 内置锁。此模式没有
+// second-instance redirect，deep link 落到哪个实例由当前 OS 协议注册归属决定。
+// 但 passive 实例之间仍需互斥(同一 userData 的 SQLite 不能并发打开两个写者),
+// 通过 userData 下的 `.passive-dev.lock` 文件锁(记录 PID)实现。
 //
 // 锁按 userData 目录作用域:默认 dev / packaged 共用 `Cindy` userData → 单实例;
 // `--isolated=<名字>` 沙箱各有独立 userData → 各自独立锁,仍可并行共存。真要多开走
@@ -1561,6 +1563,33 @@ if (shouldRequestSingleInstanceLock({
       if (startupWindowCreationAllowed && !focusMainWindow()) {
         createWindow();
       }
+    });
+  }
+} else {
+  // passive dev 跳过 Electron 的 single-instance lock(避免与正式版冲突),但仍需
+  // 阻止同一 userData 下的第二个 passive 实例并发启动——否则两者同时打开 SQLite
+  // 会产生 busy / migration 竞态。采用文件锁(lockfile PID):启动时检查 userData
+  // 下的 `.passive-dev.lock`,若已存在且 PID 仍存活则退出。
+  const userDataDir = app.getPath('userData');
+  const passiveLockPath = path.join(userDataDir, '.passive-dev.lock');
+  let shouldQuit = false;
+  try {
+    const existing = fs.readFileSync(passiveLockPath, 'utf-8').trim();
+    const pid = Number(existing);
+    if (pid > 0) {
+      try { process.kill(pid, 0); shouldQuit = true; } catch { /* PID 不存活,可以接管 */ }
+    }
+  } catch { /* 锁文件不存在或不可读,正常启动 */ }
+  if (shouldQuit) {
+    app.quit();
+  } else {
+    fs.mkdirSync(userDataDir, { recursive: true });
+    fs.writeFileSync(passiveLockPath, String(process.pid), 'utf-8');
+    app.on('will-quit', () => {
+      try {
+        const content = fs.readFileSync(passiveLockPath, 'utf-8').trim();
+        if (content === String(process.pid)) fs.unlinkSync(passiveLockPath);
+      } catch { /* 已被其他进程清理或目录不存在 */ }
     });
   }
 }

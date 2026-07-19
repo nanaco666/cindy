@@ -243,7 +243,9 @@ export function createLiziMcpProviders(
       // NOT_BOUND 的最终防线); Codex 共享 bridge 场景同理。
       isEnabled: () => {
         const bridge = opts.slackHook!.getBridge();
-        return bridge !== null && bridge.availability().bound;
+        if (bridge === null) return false;
+        const a = bridge.availability();
+        return a.bound && a.serverSupportsTools;
       },
       toClaudeSdkConfig: (ctx) => ({
         type: 'sdk',
