@@ -21,7 +21,8 @@ import { isModelVisible, visibleModelUnion } from '@lizi/model-providers';
 import { BRAND_NAME } from '@lizi/maker-shared/branding';
 
 import { createLogger } from '../logger.js';
-import { getMaker } from '../maker-host/index.js';
+import { getMaker, restartCodexAfterAuthModeChange } from '../maker-host/index.js';
+import { shutdownCodexEnvironment } from '../mcp-integrations/codexEnvironment.js';
 import { getDesktopProviderService } from '../maker-host/createDesktopProviderService.js';
 import { getModelVisibilityOverride } from '../maker-host/model-visibility-mirror.js';
 import { WorktreeManager } from '../worktree/index.js';
@@ -64,6 +65,63 @@ const log = createLogger('hook-control');
 let store: SlackHookStore | null = null;
 let manager: HookControlManager | null = null;
 let disposeAuthListener: (() => void) | null = null;
+let codexMcpRefreshPending = false;
+let codexMcpRefreshRunning = false;
+let codexMcpRefreshRetryTimer: NodeJS.Timeout | null = null;
+let latestSlackToolProviderEnabled = false;
+
+const CODEX_MCP_REFRESH_RETRY_MS = 2_000;
+
+/**
+ * Slack 绑定态会改变 lizi_slack 是否出现在 Codex 的冻结 MCP 清单里。
+ *
+ * 先软关 Codex app-server(含 busy turn 的 fail-closed 检查)，成功后再关 HTTP
+ * bridge / 清 spawn cache；反过来会让仍在运行的 session 指向已停 bridge。
+ * busy 时保留 pending 并低频重试，避免「绑定发生在 Codex turn 中」后必须重启
+ * 整个 App 才能看到工具。多次快速翻转合并到同一条串行 drain，不并发 dispose。
+ */
+function requestCodexMcpRefreshForSlackAvailability(enabled: boolean): void {
+  latestSlackToolProviderEnabled = enabled;
+  codexMcpRefreshPending = true;
+  if (codexMcpRefreshRetryTimer !== null) {
+    clearTimeout(codexMcpRefreshRetryTimer);
+    codexMcpRefreshRetryTimer = null;
+  }
+  void drainCodexMcpRefreshForSlackAvailability();
+}
+
+async function drainCodexMcpRefreshForSlackAvailability(): Promise<void> {
+  if (codexMcpRefreshRunning) return;
+  codexMcpRefreshRunning = true;
+  try {
+    while (codexMcpRefreshPending) {
+      codexMcpRefreshPending = false;
+      try {
+        await restartCodexAfterAuthModeChange();
+        await shutdownCodexEnvironment();
+        log.info('Codex MCP environment refreshed after Slack provider availability changed', {
+          enabled: latestSlackToolProviderEnabled,
+        });
+      } catch (err) {
+        codexMcpRefreshPending = true;
+        log.warn('Codex MCP refresh deferred after Slack provider availability changed', {
+          enabled: latestSlackToolProviderEnabled,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        break;
+      }
+    }
+  } finally {
+    codexMcpRefreshRunning = false;
+  }
+  if (codexMcpRefreshPending && codexMcpRefreshRetryTimer === null) {
+    codexMcpRefreshRetryTimer = setTimeout(() => {
+      codexMcpRefreshRetryTimer = null;
+      void drainCodexMcpRefreshForSlackAvailability();
+    }, CODEX_MCP_REFRESH_RETRY_MS);
+    codexMcpRefreshRetryTimer.unref?.();
+  }
+}
 
 function broadcastStatus(view: SlackHookView): void {
   for (const w of BrowserWindow.getAllWindows()) {
@@ -191,6 +249,7 @@ function ensureInstances(): { store: SlackHookStore; manager: HookControlManager
       }),
       agents: ['claude-code', 'codex'],
       notifyStatus: broadcastStatus,
+      onSlackToolProviderEnabledChanged: requestCodexMcpRefreshForSlackAvailability,
       notifyPrefs: broadcastPrefs,
       dispatcher,
       // /model /effort 实时问答的数据源: 与会话内模型选择器**同一套规则**——
@@ -341,6 +400,11 @@ export function registerHookControlIpc(): void {
 
 /** App 退出清理(onQuit 钩子)。 */
 export function disposeHookControl(): void {
+  codexMcpRefreshPending = false;
+  if (codexMcpRefreshRetryTimer !== null) {
+    clearTimeout(codexMcpRefreshRetryTimer);
+    codexMcpRefreshRetryTimer = null;
+  }
   disposeAuthListener?.();
   disposeAuthListener = null;
   unregisterSlackToolBridge();

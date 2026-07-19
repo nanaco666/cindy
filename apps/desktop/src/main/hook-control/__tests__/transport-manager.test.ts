@@ -492,6 +492,42 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     expect(manager.snapshot().binding?.teamName).toBe('xindong');
   });
 
+  it('lizi_slack provider gate 只在绑定可用性真翻转时通知 Codex 刷新', async () => {
+    const { wss, url } = await startServer();
+    const store = memoryStore({ url });
+    const changes: boolean[] = [];
+    const manager = makeManager(store, {
+      onSlackToolProviderEnabledChanged: (enabled) => changes.push(enabled),
+    });
+    cleanups.push(() => manager.dispose());
+
+    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
+    manager.sync();
+    const [sock] = await connPromise;
+    const server = collectFrames(sock);
+    await server.waitFor('hello');
+    sock.send(serializeHookMessage(makeWelcome({ serverName: 'mock', features: [] })));
+    await expect.poll(() => manager.snapshot().status, { timeout: 3000 }).toBe('connected');
+    expect(changes).toEqual([]);
+
+    const confirmed = makeBindUpdate({
+      state: 'confirmed',
+      slackUserId: 'U1',
+      slackUserName: 'lizi',
+      message: null,
+    });
+    sock.send(serializeHookMessage(confirmed));
+    await expect.poll(() => changes, { timeout: 3000 }).toEqual([true]);
+
+    // confirmed 回放与连接抖动都不改变 provider 构建期 gate，不应重复重启 Codex。
+    sock.send(serializeHookMessage(confirmed));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(changes).toEqual([true]);
+
+    manager.revokeAndDisconnect();
+    expect(changes).toEqual([true, false]);
+  });
+
   it('armAutoBind: 重开 toggle 撞上 server 回放的旧 pending → 重新发起并弹新链接', async () => {
     // 场景: 本地看门狗超时(3 分钟)早于 server 侧 pending TTL(10 分钟), toggle
     // 弹回后重开, server 按 hello 回放旧 pending —— 必须重发 bind.start 换新链接

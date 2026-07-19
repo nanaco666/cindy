@@ -60,6 +60,14 @@ export interface HookControlManagerDeps {
   agents: string[];
   /** 状态变化推送(IPC 层广播到所有窗口)。 */
   notifyStatus: (view: SlackHookView) => void;
+  /**
+   * lizi_slack provider 的构建期可用性(bound)翻转通知。
+   *
+   * Claude 每个 session 启动时都会重新评估 provider；Codex 会把 MCP server
+   * 清单冻结在共享 app-server / bridge 中，host 用这个出口失效其缓存。只在
+   * false <-> true 真变化时触发，连接抖动但绑定仍 confirmed 不会反复重建。
+   */
+  onSlackToolProviderEnabledChanged?: (enabled: boolean) => void;
   /** 目录偏好快照推送(prefs.state 到达时广播; 含请求回执与 /model 卡主动推)。 */
   notifyPrefs?: (view: HookPrefsView) => void;
   /** prefs 读写往返超时(默认 10s; 测试注短)。 */
@@ -223,6 +231,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     deviceInfo,
     agents,
     notifyStatus,
+    onSlackToolProviderEnabledChanged,
     notifyPrefs,
     prefsTimeoutMs,
     toolTimeoutMs,
@@ -276,7 +285,17 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
   >();
   /** welcome 宣告的 server 能力集(断线清空 —— 重连可能落到另一版本实例)。 */
   let serverFeatures: string[] = [];
+  /** lizi_slack provider 的构建期 gate 当前值；初始未绑定 = false。 */
+  let slackToolProviderEnabled = false;
   let disposed = false;
+
+  /** 只在 provider 构建期 gate 真翻转时通知 host 失效 Codex MCP 缓存。 */
+  function notifySlackToolProviderEnabledIfChanged(): void {
+    const next = binding?.state === 'confirmed';
+    if (next === slackToolProviderEnabled) return;
+    slackToolProviderEnabled = next;
+    onSlackToolProviderEnabledChanged?.(next);
+  }
 
   /** 断线/重建时在途 prefs 请求快速失败(不让 IPC invoke 挂满超时)。 */
   function drainPendingPrefs(): void {
@@ -494,6 +513,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
         installUrl: msg.payload.installUrl ?? null,
         teamName: msg.payload.teamName ?? null,
       };
+      notifySlackToolProviderEnabledIfChanged();
       // 授权看门狗跟随真实状态: 离开 pending 即撤; 重连回放 pending(server 侧
       // 授权仍在途)且本地没在计时的补一只 —— 断线重连不会让"等授权"变成无限等。
       if (msg.payload.state !== 'pending') {
@@ -802,6 +822,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
         installUrl: null,
         teamName: null,
       };
+      notifySlackToolProviderEnabledIfChanged();
       stop();
     },
     dispose() {
