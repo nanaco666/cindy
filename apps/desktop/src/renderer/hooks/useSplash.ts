@@ -209,6 +209,10 @@ export function useSplash() {
   // 自动触发 relaunch。用 ref 保证同一会话只触发一次;若期间 spawn 失败,Effect 2b
   // 会把 phase 切到 splash_spawn_failed,这里依然只是已经发过一次 IPC,由 spawn 失败
   // dialog 接管。
+  // 重启时机同时守两条契约(2026-07-19 review 收口):挂载累计 ≥ MIN_DISPLAY_MS
+  // (3s 地板对所有启动路径生效,热更路径不许提前销毁 renderer) 且 更新完成提示
+  // 至少展示 AUTO_RELAUNCH_DELAY_MS——取两者剩余量的较大者作为延时。
+  const mountedAtRef = useRef(Date.now());
   const autoRelaunchFiredRef = useRef(false);
   useEffect(() => {
     if (phase !== 'splash_update_done') {
@@ -217,6 +221,8 @@ export function useSplash() {
     }
     if (autoRelaunchFiredRef.current) return;
 
+    const minDisplayRemaining = Math.max(0, MIN_DISPLAY_MS - (Date.now() - mountedAtRef.current));
+    const relaunchDelay = Math.max(AUTO_RELAUNCH_DELAY_MS, minDisplayRemaining);
     const timer = setTimeout(() => {
       autoRelaunchFiredRef.current = true;
       const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
@@ -234,7 +240,7 @@ export function useSplash() {
           // checks is the safest recovery from an IPC/handler failure.
           void checkEnvironment();
         });
-    }, AUTO_RELAUNCH_DELAY_MS);
+    }, relaunchDelay);
 
     return () => clearTimeout(timer);
   }, [phase, checkEnvironment]);

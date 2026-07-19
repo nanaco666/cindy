@@ -67,7 +67,7 @@ describe('SplashScreen v2 layout', () => {
     vi.clearAllMocks();
   });
 
-  it('uses the sidebar translucent surface token without CSS backdrop-filter', () => {
+  it('uses the opaque surface token without CSS backdrop-filter', () => {
     const { container } = render(<SplashScreen />);
     const root = container.firstElementChild as HTMLElement;
 
