@@ -21,7 +21,6 @@ export interface PayloadBodyLayout {
   mediaFrameMinHeight: number;
   mediaPlayerMinHeight: number;
   mediaPlaceholderMinHeight: number;
-  mermaidHeight: number;
   textScrollMaxHeight: number;
 }
 
@@ -50,6 +49,7 @@ export function buildPayloadBodyLayout(input: PayloadBodyLayoutInput): PayloadBo
     screenWidth,
   });
   const mediaDetailScrollMaxHeight = compact ? 168 : large ? 260 : 192;
+  // mermaid 不再消费本布局的源码区高度(详情走沉浸式全屏查看器,无源码区)。
   const textScrollMaxHeight = input.kind === 'media'
     ? mediaDetailScrollMaxHeight
     : compact
@@ -73,7 +73,6 @@ export function buildPayloadBodyLayout(input: PayloadBodyLayoutInput): PayloadBo
     mediaFrameMinHeight: compact ? 260 : large ? 360 : 300,
     mediaPlayerMinHeight: compact ? 220 : large ? 320 : 260,
     mediaPlaceholderMinHeight: compact ? 220 : large ? 320 : 260,
-    mermaidHeight: compact ? 320 : large ? 420 : 360,
     textScrollMaxHeight,
   };
 }

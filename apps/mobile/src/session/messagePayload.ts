@@ -80,7 +80,10 @@ export function buildDiffPayload(diff: NormalizedToolDiff): MessagePayload {
   return buildSharedDiffPayload(diff);
 }
 
-export function buildMediaPayload(media: NormalizedToolMedia, label: string): MessagePayload {
+export function buildMediaPayload(
+  media: NormalizedToolMedia,
+  label: string,
+): Extract<MessagePayload, { kind: 'media' }> {
   return buildSharedMediaPayload(media, label);
 }
 

@@ -23,13 +23,19 @@ export const MOBILE_MERMAID_SCRIPT_URL = MOBILE_MERMAID_SCRIPT_URLS[0];
 /** 单个 CDN 源的就绪超时;超时即切下一源,全部失败停留在源码展示(与 KaTeX 同口径)。 */
 const MERMAID_CDN_TIMEOUT_MS = 6000;
 
-/** mermaid WebView 主题色(可选,缺省走 light;调用方从 useTheme().colors 注入)。 */
+/** mermaid WebView 主题色与展示选项(可选,缺省走 light;调用方从 useTheme().colors 注入)。 */
 export interface MermaidWebViewColors {
   surfaceChip?: string;
   textPrimary?: string;
   textSecondary?: string;
   textTertiary?: string;
   dark?: boolean;
+  /** true 时首屏不绘制源码(保持干净背景,SVG 就绪后直接浮现,观感同图片加载);
+      源码仅在 CDN 全部失败或渲染失败时作为降级出现。详情查看器用;内联预览
+      保持源码首屏(列表里不能出现无内容白条)。 */
+  deferSource?: boolean;
+  /** true 时页面允许双指缩放(详情查看);缺省锁定(内联预览,避免列表滚动误触)。 */
+  zoomable?: boolean;
 }
 
 export function buildMermaidWebViewHtml(source: string, theme: MermaidWebViewColors = {}): string {
@@ -38,7 +44,17 @@ export function buildMermaidWebViewHtml(source: string, theme: MermaidWebViewCol
   const textSecondary = theme.textSecondary ?? lightColors.textSecondary;
   const textTertiary = theme.textTertiary ?? lightColors.textTertiary;
   const mermaidTheme = theme.dark ? 'dark' : 'default';
+  // 详情查看允许双指放大(上限 5x);内联预览锁定缩放,避免和消息列表滚动手势打架。
+  const viewportContent = theme.zoomable
+    ? 'width=device-width, initial-scale=1, maximum-scale=5'
+    : 'width=device-width, initial-scale=1, maximum-scale=1';
   const trimmed = source.trim();
+  const deferSource = !!theme.deferSource;
+  // deferSource:首屏留空(干净背景),源码只作降级;否则源码即首屏(弱网零白条)。
+  const firstFrameHtml = deferSource ? '' : `<pre>${escapeHtmlText(trimmed) || '空 Mermaid 图表。'}</pre>`;
+  // deferSource 模式下,CDN 全部耗尽 / 空源码这两条「静默停留首屏」的路径必须
+  // 显式降级到源码,否则页面永远空白。
+  const exhaustFallback = deferSource ? 'showSource();' : '';
   const serializedSource = serializeForScript(trimmed);
   // RN 侧预计算确定性修复版(mermaidAutofix):原文 parse 失败时 WebView 内用它
   // 重试一次。无可修项时注入空串,WebView 侧跳过重试直接走源码降级。
@@ -49,7 +65,7 @@ export function buildMermaidWebViewHtml(source: string, theme: MermaidWebViewCol
 <html>
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <meta name="viewport" content="${viewportContent}" />
   <style>
     html, body {
       margin: 0;
@@ -67,9 +83,12 @@ export function buildMermaidWebViewHtml(source: string, theme: MermaidWebViewCol
       align-items: center;
       justify-content: center;
     }
+    /* contain 模式:SVG 盒子撑满可视区,内容靠 preserveAspectRatio(默认 meet)
+       等比缩放居中——小图放大、大图缩小,任何容器长宽比(竖屏/横屏/内联窄条)
+       都不变形、不留大片空白、无内滚动。 */
     #root > svg {
-      max-width: 100%;
-      height: auto !important;
+      width: 100%;
+      height: calc(100vh - 24px) !important;
     }
     #root.source {
       display: block;
@@ -93,8 +112,9 @@ export function buildMermaidWebViewHtml(source: string, theme: MermaidWebViewCol
   </style>
 </head>
 <body>
-  <!-- 首屏立即绘制图表源码(零外链阻塞),mermaid 就绪后原位升级为 SVG。 -->
-  <div id="root" class="source"><pre>${escapeHtmlText(trimmed) || '空 Mermaid 图表。'}</pre></div>
+  <!-- 首屏零外链阻塞:默认立即绘制图表源码;deferSource 模式留空背景。
+       mermaid 就绪后原位升级为 SVG。 -->
+  <div id="root" class="source">${firstFrameHtml}</div>
   <script>
     const source = ${serializedSource};
     const repairedSource = ${serializedRepaired};
@@ -122,12 +142,17 @@ export function buildMermaidWebViewHtml(source: string, theme: MermaidWebViewCol
         securityLevel: 'strict',
         theme: '${mermaidTheme}',
         fontFamily: 'inherit',
-        flowchart: { useMaxWidth: false },
+        // htmlLabels:false 强制 SVG text 标签:foreignObject(HTML label)在 WebKit
+        // 的 canvas 光栅化里会丢文字,导出 PNG 必须纯 SVG 文本。
+        flowchart: { useMaxWidth: false, htmlLabels: false },
         sequence: { useMaxWidth: false },
         class: { useMaxWidth: false },
         state: { useMaxWidth: false },
         er: { useMaxWidth: false },
-        gantt: { useMaxWidth: false },
+        // gantt 不钉 useWidth 时按「渲染那一刻的窗口宽度」排版:竖屏打开即窄画布,
+        // 日期轴挤叠,且 SVG 长宽比随渲染定死、旋转只缩放不重排。钉宽画布(横屏/
+        // 桌面同级)让任何朝向打开都得到宽松布局,显示端 contain 等比缩放适配。
+        gantt: { useMaxWidth: false, useWidth: 760 },
         journey: { useMaxWidth: false },
         pie: { useMaxWidth: false }
       });
@@ -153,13 +178,52 @@ export function buildMermaidWebViewHtml(source: string, theme: MermaidWebViewCol
       }
     }
 
+    // 导出:把当前已渲染 SVG 光栅化为 PNG(base64)经 postMessage 回传 RN。
+    // 尺寸取 viewBox 固有值(与显示缩放无关),按请求倍率放大并对 canvas 上限
+    // (4096)收敛;实底填充查看器底色(透明 PNG 拷贝到浅/深底后难辨认)。
+    window.__cindyMermaidExportPng = function (id, scale) {
+      function post(payload) {
+        if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+      }
+      try {
+        var svg = root.querySelector('svg');
+        if (!svg) { post({ type: 'mermaid-export', id: id, ok: false, error: 'not-rendered' }); return; }
+        var vb = svg.viewBox && svg.viewBox.baseVal;
+        var rect = svg.getBoundingClientRect();
+        var w = (vb && vb.width) || rect.width || 800;
+        var h = (vb && vb.height) || rect.height || 600;
+        var effScale = Math.min(scale || 2, 4096 / Math.max(w, h));
+        var xml = new XMLSerializer().serializeToString(svg);
+        var img = new Image();
+        img.onload = function () {
+          try {
+            var canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(w * effScale));
+            canvas.height = Math.max(1, Math.round(h * effScale));
+            var ctx = canvas.getContext('2d');
+            ctx.fillStyle = '${surfaceChip}';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            var dataUrl = canvas.toDataURL('image/png');
+            post({ type: 'mermaid-export', id: id, ok: true, base64: dataUrl.slice('data:image/png;base64,'.length) });
+          } catch (e) {
+            post({ type: 'mermaid-export', id: id, ok: false, error: String((e && e.message) || e) });
+          }
+        };
+        img.onerror = function () { post({ type: 'mermaid-export', id: id, ok: false, error: 'svg-decode-failed' }); };
+        img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+      } catch (e) {
+        post({ type: 'mermaid-export', id: id, ok: false, error: String((e && e.message) || e) });
+      }
+    };
+
     // mermaid JS 动态注入:单源超时 ${MERMAID_CDN_TIMEOUT_MS}ms 即切下一 CDN;
     // 全部失败停留在首屏源码(不改 DOM,不需要额外降级动作)。
     (function () {
       var cdns = ${cdnsJson};
-      if (!source.trim()) return;
+      if (!source.trim()) { ${exhaustFallback} return; }
       function attempt(i) {
-        if (i >= cdns.length) return;
+        if (i >= cdns.length) { ${exhaustFallback} return; }
         var done = false;
         var timer = setTimeout(fail, ${MERMAID_CDN_TIMEOUT_MS});
         function fail() {
