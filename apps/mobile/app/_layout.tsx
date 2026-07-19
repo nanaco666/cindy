@@ -1,12 +1,11 @@
-import { Observe, ObserveRoot } from 'expo-observe';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, type ReactElement } from 'react';
 import { StyleSheet } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/auth/AuthContext';
 import { DeviceLinkProvider } from '@/device-link/DeviceLinkContext';
+import { GestureHandlerRootView } from '@/platform/gestureHandler';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { CenteredScreen } from '@/components/CenteredScreen';
 import { StartupBlockedScreen } from '@/components/StartupBlockedScreen';
@@ -17,6 +16,7 @@ import { useBundleUpdatePrompt } from '@/update/useBundleUpdatePrompt';
 import { useResumeUpdateCheck } from '@/update/useResumeUpdateCheck';
 import { useStartupOtaGate } from '@/update/useStartupOtaGate';
 import { useStartupEndpointGate } from '@/config/useStartupEndpointGate';
+import { Observe, ObserveRoot } from '@/observability/observe';
 
 // EAS Observe:启用 expo-router 集成,采集 per-route 导航指标(cold_ttr / warm_ttr / tti)。
 // 必须在挂载前的模块作用域调用;否则 useObserve().markInteractive 会退化为全局兜底、不记 per-route。
@@ -74,7 +74,7 @@ function RootAfterEndpoints() {
   useResumeUpdateCheck();
   // 热更门未就绪(自建变体冷启动正在 check/fetch/reload)时先渲染 loading,避免闪旧 UI。
   if (!otaReady) {
-    return <CenteredScreen title="Cindy" subtitle="正在检查更新" />;
+    return <CenteredScreen title="Cindy" variant="splash" />;
   }
   return (
     <AuthProvider>
@@ -113,7 +113,7 @@ function RootLayout() {
       />
     );
   } else if (endpointGate.status === 'pending') {
-    body = <CenteredScreen title="Cindy" subtitle="正在启动" />;
+    body = <CenteredScreen title="Cindy" variant="splash" />;
   } else {
     body = <RootAfterEndpoints />;
   }

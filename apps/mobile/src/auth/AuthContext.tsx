@@ -26,6 +26,7 @@ import { apiFetchRaw, ApiError, type ApiFetchOptions } from '@/api/client';
 import {
   AUTH_API_BASE_URL,
   AUTH_REGION,
+  MOBILE_VISUAL_MOCK_ENABLED,
   MOBILE_REDIRECT_URL,
 } from '@/config/env';
 import { ensureDeviceId } from '@/auth/deviceId';
@@ -51,6 +52,7 @@ import { clearCachedSessionMessages } from '@/session/mobileSessionMessageCache'
 import { clearAllMobileVoiceCredentials } from '@/session/mobileVoiceCredentialStore';
 import { clearAllMobileVoiceInputHistories } from '@/session/mobileVoiceHistoryStore';
 import { clearMobileVoiceLiteLlmSettings } from '@/session/mobileVoiceLiteLlmSettings';
+import { visualMockApiFetch, visualMockUser } from '@/debug/visualMock';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -123,6 +125,25 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 /** Owns auth-server credentials and login tickets for the mobile process. */
 export function AuthProvider({ children }: { children: ReactNode }) {
+  if (MOBILE_VISUAL_MOCK_ENABLED) {
+    const value: AuthContextValue = {
+      initialized: true,
+      isBusy: false,
+      isAuthenticated: true,
+      user: visualMockUser,
+      deviceId: 'visual-mock-phone',
+      loginState: null,
+      authError: null,
+      clearAuthError: () => undefined,
+      dispatchLoginAction: async () => true,
+      completeOAuthCallback: async () => undefined,
+      logout: async () => undefined,
+      getAccessToken: async () => 'visual-mock-token',
+      apiFetch: visualMockApiFetch,
+    };
+    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  }
+
   const [initialized, setInitialized] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [deviceId, setDeviceId] = useState<string | null>(null);

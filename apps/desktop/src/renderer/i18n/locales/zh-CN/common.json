@@ -3135,6 +3135,24 @@
       "queueTooltip": "点击排队发送；按 {{shortcut}} 插话，不打断当前任务",
       "stop": "停止生成"
     },
+    "createAgent": {
+      "quickStart": "快速开始",
+      "quickStarts": {
+        "explore": "探索并理解代码",
+        "build": "构建新功能、应用或工具",
+        "review": "审查代码并提出修改建议",
+        "fix": "修复问题和失败"
+      },
+      "sidebar": {
+        "new": "新建",
+        "automation": "自动化",
+        "skills": "技能",
+        "search": "搜索",
+        "local": "本机",
+        "projects": "项目",
+        "conversations": "对话"
+      }
+    },
     "addRemoteProject": {
       "title": "添加远程项目",
       "hint": "选择一台已连接的远程主机或被控设备,并选择此项目的文件夹。",

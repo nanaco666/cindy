@@ -81,6 +81,31 @@ describe('typography token discipline', () => {
     expect(violations).toEqual([]);
   });
 
+  it('defaults all AppText TextInput carets and selections to the Cindy input caret token', () => {
+    const source = readFileSync(join(ROOT, 'src/components/AppText.tsx'), 'utf8');
+
+    expect(source).toContain("import { useTheme } from '@/theme/ThemeProvider';");
+    expect(source).toContain('const { colors } = useTheme();');
+    expect(source).toContain('cursorColor={colors.inputCaret}');
+    expect(source).toContain('selectionColor={colors.inputCaret}');
+  });
+
+  it('forbids red literal cursor / selection colors in mobile inputs', () => {
+    const redCaretLiteral = /(?:cursorColor|selectionColor)=\{?['"](?:#DF0C27|#A61629|#D91F37|#f43d3f)['"]\}?/i;
+    const violations: string[] = [];
+
+    for (const rel of files) {
+      const src = readFileSync(join(ROOT, rel), 'utf8');
+      src.split('\n').forEach((line, i) => {
+        if (redCaretLiteral.test(line)) {
+          violations.push(`${rel}:${i + 1} red cursor / selection literal -> use colors.inputCaret (#417CDD)`);
+        }
+      });
+    }
+
+    expect(violations).toEqual([]);
+  });
+
   it('keeps textStyles presets composed from the typeScale / lineHeight ladders', () => {
     const sizes = new Set<number>(Object.values(typeScale));
     const heights = new Set<number>(Object.values(lineHeight));

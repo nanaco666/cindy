@@ -6,7 +6,7 @@ import HomeScreen from './devices';
 export default function IndexScreen() {
   const auth = useAuth();
   if (!auth.initialized) {
-    return <CenteredScreen title="Cindy" subtitle="正在恢复登录状态" />;
+    return <CenteredScreen title="Cindy" variant="splash" />;
   }
   if (!auth.isAuthenticated) return <Redirect href="/login" />;
   return <HomeScreen />;

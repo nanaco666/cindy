@@ -15,7 +15,6 @@ import {
   ArrowDownWideNarrow,
   Check,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   Copy,
   Database,
@@ -47,6 +46,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, TextInput } from '@/components/AppText';
+import { ScreenBackButton } from '@/components/MobilePrimitives';
 import { ConnectionBanner, useShowConnectionBanner } from '@/components/ConnectionBanner';
 import { goBackGuarded } from '@/utils/backGuard';
 import { useAuth } from '@/auth/AuthContext';
@@ -702,15 +702,11 @@ export default function RemoteFileBrowserScreen() {
         />
       ) : (
         <View style={styles.navRow} testID="files.navRow">
-          <Pressable
-            accessibilityLabel="返回"
+          <ScreenBackButton
             hitSlop={8}
             onPress={() => goBackGuarded(router)}
-            style={styles.circleBtn}
             testID="files.backButton"
-          >
-            <ChevronLeft color={colors.textPrimary} size={iconSize.xl} strokeWidth={iconStroke.regular} />
-          </Pressable>
+          />
           <Pressable
             accessibilityLabel="路径与视图菜单"
             onPress={() => setTitleMenuOpen(true)}
@@ -1431,12 +1427,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-  },
-  circleBtn: {
-    alignItems: 'center',
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
   },
   navActionBtn: {
     // 与会话头 SessionHeaderIconButton 同规格(34×34 pill),hitSlop 补足 44 热区。

@@ -8,6 +8,7 @@ import {
   type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
+  type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
@@ -472,6 +473,8 @@ interface ChatInputProps {
    * 默认 false (保持主会话视图的舒适字号)。
    */
   denseToolbar?: boolean;
+  visualVariant?: 'default' | 'create-agent';
+  middleToolbarSlot?: ReactNode;
   /**
    * Slot rendered INSIDE the input card, above the textarea, sharing the same
    * rounded border / focus-within highlight. Used by Orca mode for the
@@ -901,6 +904,8 @@ export function ChatInput({
   onRememberedEffortChange,
   compactToolbar = false,
   denseToolbar = false,
+  visualVariant = 'default',
+  middleToolbarSlot,
   topSlot,
   collaboration,
 }: ChatInputProps) {
@@ -3869,6 +3874,7 @@ export function ChatInput({
   // 内部 topSlot 与 textarea 用 1px hairline 分隔但看起来是一张卡。
   const showTopSlot = !!topSlot;
   const showFusedWrapper = showQueuePanel || showTopSlot;
+  const isCreateAgentVariant = visualVariant === 'create-agent';
 
   return (
     <div className="relative flex w-full flex-col items-center gap-4" data-chat-input-root>
@@ -3918,10 +3924,13 @@ export function ChatInput({
         className={cn(
           'flex w-full flex-col gap-0',
           showFusedWrapper && [
-            'overflow-hidden rounded-[12px] border transition-colors',
+            'overflow-hidden border transition-colors',
+            isCreateAgentVariant ? 'rounded-[6px]' : 'rounded-[12px]',
             'bg-[var(--chat-input-bg)]',
             'border-[var(--chat-input-border)]',
-            'focus-within:border-[var(--chat-input-border-focus)]',
+            isCreateAgentVariant
+              ? 'focus-within:border-[var(--create-agent-focus-ring)]'
+              : 'focus-within:border-[var(--chat-input-border-focus)]',
           ],
         )}
       >
@@ -3952,16 +3961,20 @@ export function ChatInput({
         {/* biome-ignore lint/a11y/noStaticElementInteractions: this area handles drag/drop; keyboard attachment flow uses the picker controls. */}
         <div
           className={cn(
-            'relative flex min-h-[86px] max-h-[300px] w-full flex-col justify-between px-[11px] pt-[11px] pb-[6px]',
+            'relative flex max-h-[300px] w-full flex-col justify-between px-[11px] pt-[11px] pb-[6px]',
+            isCreateAgentVariant ? 'min-h-[110px]' : 'min-h-[86px]',
             // Standalone mode: own border + bg + focus-within. Fused mode:
             // outer wrapper handles all of that, we render flat.
             showFusedWrapper
               ? null
               : [
-                  'rounded-[12px] border transition-colors',
+                  'border transition-colors',
+                  isCreateAgentVariant ? 'rounded-[6px]' : 'rounded-[12px]',
                   'bg-[var(--chat-input-bg)]',
                   'border-[var(--chat-input-border)]',
-                  'focus-within:border-[var(--chat-input-border-focus)]',
+                  isCreateAgentVariant
+                    ? 'focus-within:border-[var(--create-agent-focus-ring)]'
+                    : 'focus-within:border-[var(--chat-input-border-focus)]',
                 ],
           )}
         onDragEnter={(e) => {
@@ -4059,7 +4072,10 @@ export function ChatInput({
         {/* Drop overlay (F-FI-1) */}
         {(isDragOver || externalDragOver) && (
           <div
-            className="pointer-events-none absolute inset-0 z-10 rounded-[12px]"
+            className={cn(
+              'pointer-events-none absolute inset-0 z-10',
+              isCreateAgentVariant ? 'rounded-[6px]' : 'rounded-[12px]',
+            )}
             style={{
               backgroundColor: 'var(--drop-overlay-bg)',
               border: '2px dashed var(--drop-overlay-border)',
@@ -4290,16 +4306,22 @@ export function ChatInput({
             // select-none 挂容器而非逐按钮:Chromium 的 user-select:none 只挡
             // "在元素上起选",从相邻可选区起拖再划入时按钮文字仍会被刷蓝
             // (同 sortable.css 侧栏行修过的 selection bleed),容器级禁选才挡得住。
-            'mt-[2px] flex select-none items-center justify-between',
-            effectiveCompactToolbar && 'min-w-0 gap-1',
+            'mt-[2px] flex select-none items-center',
+            effectiveCompactToolbar
+              ? isCreateAgentVariant
+                ? 'min-w-0 flex-nowrap justify-between gap-2 overflow-hidden'
+                : 'min-w-0 flex-nowrap justify-between gap-1 overflow-hidden'
+              : 'justify-between',
           )}
         >
           <div
             className={cn(
-              effectiveCompactToolbar ? 'flex items-center gap-1' : 'flex items-center gap-2',
-              // compact 模式下左侧(permission/extraDirs)是唯一可压缩的区域:
-              // min-w-0 让它能跌破内容宽度, PermissionSelector 内的 truncate 才会触发 "完..."
-              effectiveCompactToolbar && 'min-w-0 shrink',
+              effectiveCompactToolbar
+                ? isCreateAgentVariant
+                  ? 'flex min-w-0 shrink items-center gap-2'
+                  : 'flex min-w-0 shrink items-center gap-1'
+                : 'flex items-center gap-2',
+              // create-agent 按 Figma 使用 hug-content pills;默认会话页仍保留左侧优先压缩。
             )}
           >
             {/* composer 「+」菜单(权限左侧):新建目标 + 计划模式(两端通用、同级)+ 引用目录(仅 cc)。
@@ -4331,6 +4353,7 @@ export function ChatInput({
                 }
                 disabled={disabled}
                 dense={effectiveDenseToolbar}
+                visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
               />
             )}
             <PermissionSelector
@@ -4340,16 +4363,21 @@ export function ChatInput({
               deviceId={deviceLinkDeviceId}
               disabled={disabled}
               dense={effectiveDenseToolbar}
+              visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
             />
           </div>
           <div
             className={cn(
-              effectiveCompactToolbar ? 'flex items-center gap-1' : 'flex items-center gap-2',
-              // compact 模式下右侧(fast/collab/model/voice/send)保持完整宽度,
-              // shrink-0 把所有挤压让给左侧的 permission, 避免出现两行 wrap。
-              effectiveCompactToolbar && 'shrink-0 justify-end',
+              effectiveCompactToolbar
+                ? isCreateAgentVariant
+                  ? 'flex min-w-0 shrink items-center justify-end gap-2'
+                  : 'flex min-w-0 shrink items-center justify-end gap-1'
+                : 'flex items-center gap-2',
+              // compact 模式下所有输入框工具行保持单行;权限 / 模型 pill 内部截断承压,
+              // vendor tab、圆形操作按钮与协同图标按钮保持固定宽,避免控件重叠或掉到第二行。
             )}
           >
+            {middleToolbarSlot}
             {collaboration && (
               <CollaborationModeToggle
                 enabled={collaboration.enabled}
@@ -4381,6 +4409,7 @@ export function ChatInput({
               onNavigateToProviders={handleNavigateToProviders}
               switching={remoteSwitchInFlight}
               disabled={disabled}
+              visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
             />
             <VoiceInputButton
               state={voiceInput.state}
@@ -4393,6 +4422,8 @@ export function ChatInput({
               canReleaseToSend={canReleaseVoiceToSend}
               releaseToSendActive={voiceReleaseToSendActive}
               onReleaseToSendChange={setVoiceReleaseToSendActive}
+              visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
+              className={isCreateAgentVariant ? 'ml-[7px]' : undefined}
             />
             {/* Send / Stop 双槽语义:
                  - 主槽 (最右, 永远占位, sendButtonRef 钉在这里):
@@ -4417,6 +4448,7 @@ export function ChatInput({
                       disabled={false}
                       onClick={onStop ?? (() => {})}
                       isStreaming
+                      visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
                     />
                   )}
                   <span ref={sendButtonRef} className="inline-flex rounded-full">
@@ -4425,6 +4457,7 @@ export function ChatInput({
                         disabled={false}
                         onClick={onStop ?? (() => {})}
                         isStreaming
+                        visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
                       />
                     ) : (
                       <Tip
@@ -4451,6 +4484,7 @@ export function ChatInput({
                           <SendButton
                             disabled={sendButtonDisabled}
                             highlighted={voiceReleaseToSendActive}
+                            visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}
                             ariaLabel={
                               showStopButton
                                 ? t('newChat.sendButton.queue')
@@ -4580,6 +4614,8 @@ function VoiceInputButton({
   canReleaseToSend,
   releaseToSendActive,
   onReleaseToSendChange,
+  visualVariant,
+  className,
 }: {
   state: import('@lizi/voice-input-core').VoiceInputState;
   disabled: boolean;
@@ -4591,6 +4627,8 @@ function VoiceInputButton({
   canReleaseToSend: boolean;
   releaseToSendActive: boolean;
   onReleaseToSendChange: (active: boolean) => void;
+  visualVariant?: 'default' | 'create-agent';
+  className?: string;
 }) {
   const { t } = useTranslation();
   const [longPressActive, setLongPressActive] = useState(false);
@@ -4607,6 +4645,7 @@ function VoiceInputButton({
   const busy = state === 'submitting' || state === 'refining';
   const activeRecording = listening || longPressActive;
   const disabledOrBusy = disabled || (busy && !longPressActive);
+  const isCreateAgentVariant = visualVariant === 'create-agent';
   let label = t('newChat.chatInput.voiceInput.start');
   if (longPressActive) {
     label = t('newChat.chatInput.voiceInput.releaseToStop');
@@ -4716,12 +4755,23 @@ function VoiceInputButton({
       <button
         type="button"
         className={cn(
-          'flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
-          'bg-transparent text-[var(--model-trigger-text)]',
-          'transition-colors hover:bg-[var(--model-trigger-hover)]',
+          'flex shrink-0 items-center justify-center rounded-full transition-colors',
+          isCreateAgentVariant
+            ? [
+                'h-[30px] w-[30px] border border-[var(--create-agent-control-border)]',
+                'bg-[var(--create-agent-control-bg)] text-[var(--create-agent-control-icon)]',
+                'hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)]',
+                'focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
+              ]
+            : [
+                'h-[30px] w-[30px]',
+                'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] border border-[var(--border-default)] text-[var(--composer-pill-icon,#3C3F43)] dark:text-[var(--composer-pill-icon,#D9D9D9)]' /* spec 2026-07-17, token by 一哥 */,
+                'hover:bg-[var(--model-trigger-hover)]',
+              ],
           'focus-visible:outline-none',
           disabledOrBusy && 'cursor-not-allowed opacity-40',
           activeRecording && 'text-[var(--settings-badge-error)]',
+          className,
         )}
         disabled={disabledOrBusy}
         aria-label={label}
@@ -4767,11 +4817,11 @@ function VoiceInputButton({
         }}
       >
         {refining ? (
-          <Spinner size={15} />
+          <Spinner size={isCreateAgentVariant ? 11 : 15} />
         ) : activeRecording ? (
-          <Square size={14} />
+          <Square size={isCreateAgentVariant ? 11 : 14} />
         ) : (
-          <Mic size={15} />
+          <Mic size={isCreateAgentVariant ? 11 : 15} />
         )}
       </button>
     </Tip>

@@ -45,7 +45,12 @@ export interface SidebarInlineSearchProps {
   onSearchActive?: () => void;
 }
 
-export function SidebarInlineSearch({ search, allKnownProjects, openSignal, onSearchActive }: SidebarInlineSearchProps) {
+export function SidebarInlineSearch({
+  search,
+  allKnownProjects,
+  openSignal,
+  onSearchActive,
+}: SidebarInlineSearchProps) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [hovered, setHovered] = useState(false);
@@ -64,7 +69,7 @@ export function SidebarInlineSearch({ search, allKnownProjects, openSignal, onSe
   // 可关闭的 chip 呈现锁定项目,点 X 调 clearLock 解锁回到全局搜索——否则内联形态没有任何解锁入口
   // (筛选面板的项目勾选在锁定时是 disabled),后续从本行发起的普通搜索会一直被限死在该项目内。
   const lockedProject = search.lockedProjectKey
-    ? allKnownProjects.find((project) => project.projectKey === search.lockedProjectKey) ?? null
+    ? (allKnownProjects.find((project) => project.projectKey === search.lockedProjectKey) ?? null)
     : null;
   const lockedProjectLabel = lockedProject?.displayName ?? search.lockedProjectName;
 
@@ -83,7 +88,9 @@ export function SidebarInlineSearch({ search, allKnownProjects, openSignal, onSe
   // 若直接把 onSearchActive 放进 deps,每次路由跳转都会触发本 effect,把用户从
   // 键盘/程序式导航拉回 cc-agent(Codex P2)。改为只依赖 query,回调通过 ref 读取最新值。
   const onSearchActiveRef = useRef(onSearchActive);
-  useEffect(() => { onSearchActiveRef.current = onSearchActive; });
+  useEffect(() => {
+    onSearchActiveRef.current = onSearchActive;
+  });
   useEffect(() => {
     if (search.query.length > 0) onSearchActiveRef.current?.();
   }, [search.query]);
@@ -120,103 +127,103 @@ export function SidebarInlineSearch({ search, allKnownProjects, openSignal, onSe
           : 'border-transparent pr-3',
       )}
     >
-        {/* 与顶部三行 / 项目文件夹图标同规格同色(15/1.8 + meta 灰)。 */}
-        <Search size={15} strokeWidth={1.8} className="shrink-0 text-[var(--cmd-palette-item-meta)]" />
-        {expanded ? (
-          <>
-            {search.lockedProjectKey && (
-              // 锁定项目 chip:展开态显示「在此项目内搜索」锁定的项目名 + 解锁 X。
-              <span className="flex min-w-0 max-w-[48%] shrink items-center gap-1 rounded-full bg-[var(--surface-chip)] py-0.5 pl-2 pr-0.5 text-xs text-[var(--text-secondary)]">
-                <span className="min-w-0 truncate">{lockedProjectLabel}</span>
-                <Tip text={t('ccAgent.search.filter.reset')} side="bottom">
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      // 解锁 → projectSelection 回到 'all',后续普通搜索不再被限死在该项目。
-                      search.clearLock();
-                      event.currentTarget.blur();
-                    }}
-                    aria-label={t('ccAgent.search.filter.reset')}
-                    className={cn(
-                      'flex size-4 shrink-0 items-center justify-center rounded-full',
-                      'text-[var(--text-tertiary)] hover:bg-sidebar-item-hover hover:text-[var(--text-primary)]',
-                    )}
-                  >
-                    <X size={11} />
-                  </button>
-                </Tip>
-              </span>
-            )}
-            <input
-              ref={inputRef}
-              value={search.query}
-              onChange={(event) => search.setQuery(event.target.value)}
-              placeholder={t('ccAgent.search.placeholder')}
-              aria-label={t('ccAgent.search.placeholder')}
-              // leading-none 与静息态「搜索」文字(及其余导航行)完全一致(2026-07
-              // 已随导航行一起去掉 mt-0.5,改为纯 flex 垂直居中),避免 hover 展开成
-              // 输入框时占位符相对「搜索」发生位移。
-              className="min-w-0 flex-1 bg-transparent text-sm leading-none text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
-            />
-            {search.query && (
-              <Tip text={t('ccAgent.search.clear')} side="bottom">
+      {/* 与顶部三行同规格同色(15/1.8 + CINDY nav text)。 */}
+      <Search size={15} strokeWidth={1.8} className="shrink-0 text-[var(--sidebar-nav-text)]" />
+      {expanded ? (
+        <>
+          {search.lockedProjectKey && (
+            // 锁定项目 chip:展开态显示「在此项目内搜索」锁定的项目名 + 解锁 X。
+            <span className="flex min-w-0 max-w-[48%] shrink items-center gap-1 rounded-full bg-[var(--surface-chip)] py-0.5 pl-2 pr-0.5 text-xs text-[var(--text-secondary)]">
+              <span className="min-w-0 truncate">{lockedProjectLabel}</span>
+              <Tip text={t('ccAgent.search.filter.reset')} side="bottom">
                 <button
                   type="button"
                   onClick={(event) => {
-                    search.setQuery('');
-                    // 点击会聚焦到 X 钮(属于本行内 → focus-within 会顶着展开)。清空后主动失焦,
-                    // 释放本行 focus-within,鼠标移开即自动收起(与清空前行为一致)。
+                    // 解锁 → projectSelection 回到 'all',后续普通搜索不再被限死在该项目。
+                    search.clearLock();
                     event.currentTarget.blur();
                   }}
-                  aria-label={t('ccAgent.search.clear')}
+                  aria-label={t('ccAgent.search.filter.reset')}
                   className={cn(
-                    'flex size-5 shrink-0 items-center justify-center rounded-full',
+                    'flex size-4 shrink-0 items-center justify-center rounded-full',
                     'text-[var(--text-tertiary)] hover:bg-sidebar-item-hover hover:text-[var(--text-primary)]',
                   )}
                 >
-                  <X size={13} />
+                  <X size={11} />
                 </button>
               </Tip>
-            )}
-            {/* 选项钮:排序 + 筛选,紧凑纯图标形态,与搜索框合为一体(无分隔线、无文字提示)。
+            </span>
+          )}
+          <input
+            ref={inputRef}
+            value={search.query}
+            onChange={(event) => search.setQuery(event.target.value)}
+            placeholder={t('ccAgent.search.placeholder')}
+            aria-label={t('ccAgent.search.placeholder')}
+            // leading-none 与静息态「搜索」文字(及其余导航行)完全一致(2026-07
+            // 已随导航行一起去掉 mt-0.5,改为纯 flex 垂直居中),避免 hover 展开成
+            // 输入框时占位符相对「搜索」发生位移。
+            className="min-w-0 flex-1 bg-transparent text-sm leading-none text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]"
+          />
+          {search.query && (
+            <Tip text={t('ccAgent.search.clear')} side="bottom">
+              <button
+                type="button"
+                onClick={(event) => {
+                  search.setQuery('');
+                  // 点击会聚焦到 X 钮(属于本行内 → focus-within 会顶着展开)。清空后主动失焦,
+                  // 释放本行 focus-within,鼠标移开即自动收起(与清空前行为一致)。
+                  event.currentTarget.blur();
+                }}
+                aria-label={t('ccAgent.search.clear')}
+                className={cn(
+                  'flex size-5 shrink-0 items-center justify-center rounded-full',
+                  'text-[var(--text-tertiary)] hover:bg-sidebar-item-hover hover:text-[var(--text-primary)]',
+                )}
+              >
+                <X size={13} />
+              </button>
+            </Tip>
+          )}
+          {/* 选项钮:排序 + 筛选,紧凑纯图标形态,与搜索框合为一体(无分隔线、无文字提示)。
                菜单开合上报 → 打开期间保持展开,不因鼠标移到菜单而收起。 */}
-            <SearchSortMenu
-              sortBy={search.sortBy}
-              onChange={search.setSortBy}
-              onOpenChange={setMenuOpen}
-              compact
-            />
-            <SearchFilterMenu
-              status={search.statusFilter}
-              agentKind={search.agentFilter}
-              lastActivity={search.lastActivityFilter}
-              projects={search.projectSelection}
-              allKnownProjects={allKnownProjects}
-              activeCount={search.activeFilterCount}
-              lockedProjectKey={search.lockedProjectKey}
-              lockedProjectName={search.lockedProjectName}
-              onStatusChange={search.setStatusFilter}
-              onAgentKindChange={search.setAgentFilter}
-              onLastActivityChange={search.setLastActivityFilter}
-              onProjectsChange={search.setProjectSelection}
-              onReset={search.resetFilters}
-              onOpenChange={setMenuOpen}
-              compact
-            />
-          </>
-        ) : (
-          // 静息:与其余导航行同款的「搜索」文字(foreground)。鼠标 hover 会先触发展开,
-          // 这颗按钮主要承接键盘聚焦 / 点击(触控)路径。
-          <button
-            type="button"
-            onClick={activate}
-            onFocus={activate}
-            aria-label={t('ccAgent.search.open')}
-            className="min-w-0 flex-1 truncate text-left text-sm font-normal leading-none text-foreground"
-          >
-            {t('ccAgent.search.open')}
-          </button>
-        )}
+          <SearchSortMenu
+            sortBy={search.sortBy}
+            onChange={search.setSortBy}
+            onOpenChange={setMenuOpen}
+            compact
+          />
+          <SearchFilterMenu
+            status={search.statusFilter}
+            agentKind={search.agentFilter}
+            lastActivity={search.lastActivityFilter}
+            projects={search.projectSelection}
+            allKnownProjects={allKnownProjects}
+            activeCount={search.activeFilterCount}
+            lockedProjectKey={search.lockedProjectKey}
+            lockedProjectName={search.lockedProjectName}
+            onStatusChange={search.setStatusFilter}
+            onAgentKindChange={search.setAgentFilter}
+            onLastActivityChange={search.setLastActivityFilter}
+            onProjectsChange={search.setProjectSelection}
+            onReset={search.resetFilters}
+            onOpenChange={setMenuOpen}
+            compact
+          />
+        </>
+      ) : (
+        // 静息:与其余导航行同款的「搜索」文字。鼠标 hover 会先触发展开,
+        // 这颗按钮主要承接键盘聚焦 / 点击(触控)路径。
+        <button
+          type="button"
+          onClick={activate}
+          onFocus={activate}
+          aria-label={t('ccAgent.search.open')}
+          className="min-w-0 flex-1 truncate text-left text-sm font-normal leading-none text-[var(--sidebar-nav-text)]"
+        >
+          {t('ccAgent.search.open')}
+        </button>
+      )}
     </div>
   );
 }

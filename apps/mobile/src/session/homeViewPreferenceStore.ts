@@ -53,7 +53,7 @@ export async function clearHomeViewPreferences(): Promise<void> {
 
 function emptyPreferences(): HomeViewPreferences {
   return {
-    groupByProject: false,
+    groupByProject: true,
     selectedDevice: null,
   };
 }
@@ -64,7 +64,9 @@ function normalizeStoredPreferences(value: unknown): HomeViewPreferences {
   const deviceId = readString(record.deviceId);
   const deviceName = readString(record.deviceName);
   return {
-    groupByProject: record.groupByProject === true,
+    groupByProject: typeof record.groupByProject === 'boolean'
+      ? record.groupByProject
+      : true,
     selectedDevice: deviceId
       ? { deviceId, name: deviceName || deviceId }
       : null,
@@ -83,7 +85,7 @@ function normalizeDevice(device: { deviceId: string; name: string } | null): Hom
 
 function serializePreferences(preferences: HomeViewPreferences): Record<string, unknown> {
   return {
-    ...(preferences.groupByProject ? { groupByProject: true } : {}),
+    groupByProject: preferences.groupByProject,
     ...(preferences.selectedDevice
       ? {
           deviceId: preferences.selectedDevice.deviceId,

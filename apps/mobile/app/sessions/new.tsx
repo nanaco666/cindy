@@ -1,6 +1,7 @@
 import { stripTrailingPathSeparators } from '@lizi/maker-shared/path-text';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import Constants from 'expo-constants';
+import { MOBILE_VISUAL_MOCK_ENABLED } from '@/config/env';
 import { formatMobileBuildLabel, normalizeBuildInfo } from '@/config/buildInfo';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type SetStateAction } from 'react';
 import {
@@ -22,11 +23,9 @@ import {
 import { Text } from '@/components/AppText';
 import type { TextInput as NativeTextInput } from 'react-native';
 import {
-  ArrowUp,
   Camera,
   Check,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
   Folder,
@@ -38,6 +37,7 @@ import {
   Mic,
   Plus,
   Scan,
+  Send,
   Settings,
   Square,
   Target,
@@ -49,6 +49,7 @@ import {
   setAudioModeAsync,
 } from 'expo-audio';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ScreenBackButton } from '@/components/MobilePrimitives';
 import { useDeviceLink } from '@/device-link/DeviceLinkContext';
 import type {
   MobileAgentSkillListResult,
@@ -216,7 +217,7 @@ import {
   type ProviderModelRow,
 } from '@/session/providerModelSections';
 import { ModelPickerSheet } from '@/session/ModelPickerSheet';
-import { MobileProviderMark } from '@/session/MobileProviderMark';
+import { MobileModelBrandMark } from '@/session/MobileProviderMark';
 import { draftModelMemoryFor, hydrateDraftModelMemory } from '@/session/draftModelMemory';
 import { rowFastEditable } from '@/session/modelPickerRows';
 import { useTheme, useThemedStyles, type ThemeColors } from '@/theme';
@@ -254,10 +255,14 @@ export default function NewRemoteSessionScreen() {
     deviceOptions?: string;
     workingDir?: string;
     deviceExplicit?: string;
+    visualFocusComposer?: string;
+    visualDraft?: string;
   }>();
   const routeDeviceId = String(params.deviceId ?? '');
   const routeDeviceName = String(params.deviceName ?? routeDeviceId);
   const initialWorkingDir = readRouteString(params.workingDir);
+  const visualFocusComposer = MOBILE_VISUAL_MOCK_ENABLED && readRouteString(params.visualFocusComposer) === '1';
+  const visualInitialDraft = MOBILE_VISUAL_MOCK_ENABLED ? readRouteString(params.visualDraft) : null;
   const router = useRouter();
   const auth = useAuth();
   const { openLink, subscribe } = useDeviceLink();
@@ -303,6 +308,7 @@ export default function NewRemoteSessionScreen() {
   );
   const [draft, setDraft] = useState<NewSessionDraft>({
     ...DEFAULT_NEW_SESSION_DRAFT,
+    firstMessage: visualInitialDraft ?? DEFAULT_NEW_SESSION_DRAFT.firstMessage,
     // 默认进入「对话」(无项目),对齐桌面;只有从项目入口带了 workingDir 才默认项目模式。
     workspaceKind: initialWorkingDir ? 'project' : 'dialogue',
     workingDir: initialWorkingDir ?? '',
@@ -1473,10 +1479,18 @@ export default function NewRemoteSessionScreen() {
         setContextSheetView('main');
         setContextSheetOpen(true);
       }}
-      style={({ pressed }) => [styles.composerIconButton, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.composerIconButton,
+        contextSheetOpen && styles.composerIconButtonActive,
+        pressed && styles.pressed,
+      ]}
       testID="newSession.attachmentToggleButton"
     >
-      <Plus color={colors.textPrimary} size={iconSize.lg} strokeWidth={iconStroke.regular} />
+      <Plus
+        color={contextSheetOpen ? colors.textPrimary : colors.textSecondary}
+        size={iconSize.sm}
+        strokeWidth={iconStroke.regular}
+      />
     </Pressable>
   );
   const renderCreateButton = () => (
@@ -1498,8 +1512,9 @@ export default function NewRemoteSessionScreen() {
       {creating ? (
         <ActivityIndicator color={colors.textSecondary} size="small" />
       ) : (
-        <ArrowUp
-          color={canCreate ? colors.ctaText : colors.textTertiary}
+        <Send
+          color={canCreate ? colors.ctaText : colors.textSecondary}
+          fill={canCreate ? colors.ctaText : 'transparent'}
           size={iconSize.lg}
           strokeWidth={iconStroke.medium}
         />
@@ -1528,10 +1543,13 @@ export default function NewRemoteSessionScreen() {
         testID="newSession.modelIndicator"
       >
         {activeSourceProvider ? (
-          <MobileProviderMark
-            color={colors.textPrimary}
-            name={activeSourceProvider.name}
-            providerId={activeSourceProvider.id}
+          <MobileModelBrandMark
+            agentKind={draft.agentKind}
+            color={colors.textSecondary}
+            displayName={runtimeOptions.currentModel?.label}
+            fallbackProviderId={activeSourceProvider.id}
+            fallbackProviderName={activeSourceProvider.name}
+            modelId={draft.model}
           />
         ) : null}
         <Text style={styles.modelPillText} numberOfLines={1}>{runtimeSummary.modelSummary}</Text>
@@ -1619,7 +1637,7 @@ export default function NewRemoteSessionScreen() {
         // 与「停止任务」的中性色实心方块区分开。
         <Square color={colors.statusRecording} size={iconSize.sm} strokeWidth={iconStroke.regular} />
       ) : (
-        <Mic color={colors.textPrimary} size={iconSize.lg} strokeWidth={iconStroke.regular} />
+        <Mic color={colors.textSecondary} size={iconSize.sm} strokeWidth={iconStroke.regular} />
       )}
     </Pressable>
   );
@@ -2134,16 +2152,12 @@ export default function NewRemoteSessionScreen() {
       >
         <View style={styles.screen}>
           <View style={styles.topBar}>
-            <Pressable
-              accessibilityLabel="返回"
-              accessibilityRole="button"
+            <ScreenBackButton
               hitSlop={12}
               onPress={handleBack}
-              style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
+              style={styles.backButton}
               testID="newSession.backButton"
-            >
-              <ChevronLeft color={colors.textPrimary} size={iconSize.xl} strokeWidth={iconStroke.regular} />
-            </Pressable>
+            />
             {buildLabel ? (
               <Text numberOfLines={1} style={styles.buildLabel}>{buildLabel}</Text>
             ) : null}
@@ -2502,13 +2516,15 @@ export default function NewRemoteSessionScreen() {
                 <MobileComposerInputRow
                   accessibilityLabel="输入首条消息"
                   accessoryAbove={attachments.length > 0 || pendingUploads.length > 0 || pastePlaceholderCount > 0 ? renderComposerAttachmentTray() : null}
+                  autoFocus={visualFocusComposer}
                   cardActive={composerCardActive}
                   caretHidden={voiceIsListening}
+                  cursorColor={colors.inputCaret}
                   inputRef={firstMessageInputRef}
                   leading={renderComposerCollapsedAttachmentBadge()}
                   inputFrameHeight={composerResize.frameHeight}
                   inputOverlay={renderComposerInputOverlay()}
-                  inputStyle={voiceIsListening && styles.inputVoiceHidden}
+                  inputStyle={[styles.sessionComposerInput, voiceIsListening && styles.inputVoiceHidden]}
                   inputTestID="newSession.firstMessageInput"
                   maxHeight={composerResize.inputMaxHeight}
                   multilineShape={!composerCardActive && composerInputIsMultiline}
@@ -2530,6 +2546,7 @@ export default function NewRemoteSessionScreen() {
                   placeholderTextColor={colors.textTertiary}
                   resizeHandle={composerCardActive ? renderComposerResizeHandle() : null}
                   scrollEnabled={composerInputScrollEnabled}
+                  selectionColor={colors.inputCaret}
                   testID="newSession.actions"
                   toolbar={renderComposerToolbar()}
                   trailing={composerCardActive || !composerShowCreateButton ? null : renderCreateButton()}
@@ -2864,12 +2881,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   backButton: {
-    alignItems: 'center',
-    height: 44,
-    justifyContent: 'center',
-    // 与全局 ScreenBackButton 对齐:裸 chevron,无底无边;左移抵掉视觉留白让图标贴回版心。
-    marginLeft: -spacing.sm,
-    width: 44,
+    flexShrink: 0,
   },
   bottomCluster: {
     flex: 1,
@@ -3175,13 +3187,17 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   composerIconButton: {
     alignItems: 'center',
+    backgroundColor: colors.sheetActionSurface,
+    borderColor: colors.sheetActionBorder,
     borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
     height: MOBILE_COMPOSER_CONTROL_SIZE,
     justifyContent: 'center',
     width: MOBILE_COMPOSER_CONTROL_SIZE,
   },
   composerIconButtonActive: {
     backgroundColor: colors.surfaceChip,
+    borderColor: colors.borderStrong,
   },
   voiceStatusRow: {
     alignItems: 'center',
@@ -3240,19 +3256,29 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // 只在行宽不足时才收缩截断(flexShrink + 文本 numberOfLines)。
   modelPill: {
     alignItems: 'center',
+    backgroundColor: colors.sheetActionSurface,
+    borderColor: colors.sheetActionBorder,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     flexShrink: 1,
-    gap: 6,
+    gap: spacing.xs,
     justifyContent: 'flex-start',
+    minHeight: MOBILE_COMPOSER_CONTROL_SIZE,
     minWidth: 0,
+    paddingHorizontal: spacing.md,
   },
   modelPillText: {
-    color: colors.textSecondary,
+    color: colors.textPrimary,
     flexShrink: 1,
-    fontSize: typeScale.body,
-    fontWeight: fontWeight.medium,
-    lineHeight: lineHeight.body,
+    fontSize: typeScale.caption,
+    fontWeight: fontWeight.semibold,
+    lineHeight: lineHeight.caption,
     minWidth: 0,
+  },
+  sessionComposerInput: {
+    fontSize: typeScale.listBody,
+    lineHeight: lineHeight.listBody,
   },
   inputVoiceHidden: {
     color: 'transparent',
@@ -3260,13 +3286,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   sendButton: {
     alignItems: 'center',
     backgroundColor: colors.cta,
+    borderColor: colors.cta,
     borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
     height: MOBILE_COMPOSER_CONTROL_SIZE,
     justifyContent: 'center',
     width: MOBILE_COMPOSER_CONTROL_SIZE,
   },
-  sendButtonDisabled: { backgroundColor: colors.surfaceChip },
-  sendButtonPressed: { opacity: 0.72 },
+  sendButtonDisabled: {
+    backgroundColor: colors.surfaceChip,
+    borderColor: colors.border,
+  },
+  sendButtonPressed: { opacity: 0.86 },
   pressed: { opacity: 0.65 },
   disabled: { opacity: 0.44 },
 });

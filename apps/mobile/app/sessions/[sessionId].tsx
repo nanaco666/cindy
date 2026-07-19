@@ -1,12 +1,9 @@
-import { useObserve } from 'expo-observe';
 import { isInFlightDeviceLinkError } from '@lizi/device-link';
 import {
   ArrowDown,
-  ArrowUp,
   Camera,
   Check,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   ChevronUp,
   Ellipsis,
@@ -22,6 +19,7 @@ import {
   RefreshCw,
   Scan,
   Search,
+  Send,
   Settings,
   Square,
   Sparkles,
@@ -57,10 +55,11 @@ import {
 } from 'react-native';
 import { Text, TextInput } from '@/components/AppText';
 import type { TextInput as NativeTextInput } from 'react-native';
+import { ScreenBackButton } from '@/components/MobilePrimitives';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/auth/AuthContext';
 import { useGuardedBack } from '@/utils/useGuardedBack';
-import { DEVICE_LINK_API_BASE_URL } from '@/config/env';
+import { DEVICE_LINK_API_BASE_URL, MOBILE_VISUAL_MOCK_ENABLED } from '@/config/env';
 import { ConnectionBanner, useShowConnectionBanner } from '@/components/ConnectionBanner';
 import { useDeviceLink } from '@/device-link/DeviceLinkContext';
 import { useRevokedDevices } from '@/device-link/revokedDevicesStore';
@@ -70,10 +69,12 @@ import { isTransientRemoteError, withTransientRemoteRetry } from '@/device-link/
 import { useRemoteSyncTask } from '@/device-link/remoteSyncTask';
 import { useMobileMakerTransport } from '@/device-link/useMobileMakerTransport';
 import { startFocusedTopicSubscription } from '@/device-link/focusedTopicSubscription';
+import { useObserve } from '@/observability/observe';
 import { InteractionPanel, type MobilePlanViewerState } from '@/session/InteractionPanel';
 import { MessageRenderer } from '@/session/MessageRenderer';
 import { InlineQueueSection } from '@/session/InlineQueueSection';
 import { RewindPreviewPanel } from '@/session/RewindPreviewPanel';
+import { BlurBackdrop } from '@/session/BlurBackdrop';
 import { SheetModal } from '@/session/SheetModal';
 import { SheetGrabber } from '@/session/SheetSurface';
 import {
@@ -99,7 +100,7 @@ import { useDeviceApiKeyStatus, useDeviceModelPricing } from '@/device-link/useD
 import type { DeviceApiKeyStatus } from '@/device-link/deviceModelMetaCache';
 import type { MobileModelMemoryAccessors } from '@/session/draftModelMemory';
 import { ModelPickerSheet } from '@/session/ModelPickerSheet';
-import { MobileProviderMark } from '@/session/MobileProviderMark';
+import { MobileModelBrandMark } from '@/session/MobileProviderMark';
 import { clearSessionMirror, makeSessionMirrorAccessors } from '@/session/sessionModelMirror';
 import { rowFastEditable } from '@/session/modelPickerRows';
 import {
@@ -471,6 +472,9 @@ export default function SessionScreen() {
     draft?: string;
     focusClientId?: string;
     focusRequestKey?: string;
+    visualFocusComposer?: string;
+    visualOpenSearch?: string;
+    visualSearchQuery?: string;
   }>();
   const sessionId = readRouteParam(params.sessionId) ?? '';
   const deviceId = readRouteParam(params.deviceId) ?? remoteSessionStore.getSessionDeviceId(sessionId) ?? '';
@@ -484,6 +488,9 @@ export default function SessionScreen() {
   const routeDraft = readRouteParam(params.draft);
   const routeFocusClientId = readRouteParam(params.focusClientId);
   const routeFocusRequestKey = readRouteParam(params.focusRequestKey);
+  const visualFocusComposer = MOBILE_VISUAL_MOCK_ENABLED && readRouteParam(params.visualFocusComposer) === '1';
+  const visualOpenSearch = MOBILE_VISUAL_MOCK_ENABLED && readRouteParam(params.visualOpenSearch) === '1';
+  const visualSearchQuery = MOBILE_VISUAL_MOCK_ENABLED ? readRouteParam(params.visualSearchQuery) : null;
   const router = useRouter();
   const auth = useAuth();
   const windowDimensions = useWindowDimensions();
@@ -1485,9 +1492,12 @@ export default function SessionScreen() {
           fastOn={composerPillFastOn}
           label={composerRuntimeSummary.modelSummary}
           leading={composerActiveSourceProvider ? (
-            <MobileProviderMark
-              name={composerActiveSourceProvider.name}
-              providerId={composerActiveSourceProvider.id}
+            <MobileModelBrandMark
+              agentKind={sessionAgentKind}
+              displayName={runtimeOptions?.currentModel?.label}
+              fallbackProviderId={composerActiveSourceProvider.id}
+              fallbackProviderName={composerActiveSourceProvider.name}
+              modelId={currentSession?.model ?? ''}
             />
           ) : null}
           onPress={toggleComposerModelPicker}
@@ -2595,6 +2605,12 @@ export default function SessionScreen() {
     setActiveSearchIndex((index) => normalizeMessageSearchIndex(searchHits.length, index));
   }, [searchHits.length]);
 
+  useEffect(() => {
+    if (!visualOpenSearch) return;
+    setSearchOpen(true);
+    if (visualSearchQuery !== null) setSearchQuery(visualSearchQuery);
+  }, [visualOpenSearch, visualSearchQuery]);
+
   const moveSearchHit = useCallback((direction: 'previous' | 'next') => {
     setActiveSearchIndex((index) => nextMessageSearchIndex(searchHits.length, index, direction));
   }, [searchHits.length]);
@@ -3050,7 +3066,7 @@ export default function SessionScreen() {
         // 与「停止任务」的中性色实心方块区分开。
         <Square color={colors.statusRecording} size={iconSize.sm} strokeWidth={iconStroke.regular} />
       ) : (
-        <Mic color={colors.textSecondary} size={iconSize.lg} strokeWidth={iconStroke.regular} />
+        <Mic color={colors.textSecondary} size={iconSize.sm} strokeWidth={iconStroke.regular} />
       )}
     </RouteActionButton>
   );
@@ -3834,7 +3850,7 @@ export default function SessionScreen() {
     >
       <Plus
         color={composerLayout.attachment.active ? colors.textPrimary : colors.textSecondary}
-        size={iconSize.lg}
+        size={iconSize.sm}
         strokeWidth={iconStroke.regular}
       />
     </RouteActionButton>
@@ -3878,13 +3894,24 @@ export default function SessionScreen() {
           disabled={composerLayout.stop.disabled}
           hitSlop={COMPOSER_CONTROL_HIT_SLOP}
           onPress={stopSession}
-          style={styles.composerInlineToolButton}
+          pressedStyle={styles.sendButtonPressed}
+          style={[
+            styles.sendButton,
+            composerLayout.stop.disabled && styles.sendButtonInactive,
+          ]}
           testID="session.stopButton"
         >
           {stopPending ? (
-            <ActivityIndicator color={colors.textSecondary} size="small" />
+            <ActivityIndicator color={composerLayout.stop.disabled ? colors.textSecondary : colors.ctaText} size="small" />
           ) : (
-            <Square color={colors.textSecondary} size={iconSize.md} strokeWidth={iconStroke.regular} />
+            <Square
+              color={composerLayout.stop.disabled ? colors.textSecondary : colors.ctaText}
+              // 停止钮实心 Square:10px 填充块语义(非阶梯图标),零描边即语义本身
+              // (designTokenDiscipline ALLOWLIST 登记豁免)。
+              size={10}
+              strokeWidth={0}
+              fill={composerLayout.stop.disabled ? colors.textSecondary : colors.ctaText}
+            />
           )}
         </RouteActionButton>
       ) : null}
@@ -3898,21 +3925,20 @@ export default function SessionScreen() {
           pressedStyle={styles.sendButtonPressed}
           style={[
             styles.sendButton,
-            styles.sendButtonStop,
             composerLayout.stop.disabled && styles.sendButtonInactive,
           ]}
           testID="session.stopButton"
         >
           {stopPending ? (
-            <ActivityIndicator color={colors.textPrimary} size="small" />
+            <ActivityIndicator color={composerLayout.stop.disabled ? colors.textSecondary : colors.ctaText} size="small" />
           ) : (
             <Square
-              color={composerLayout.stop.disabled ? colors.textSecondary : colors.textPrimary}
+              color={composerLayout.stop.disabled ? colors.textSecondary : colors.ctaText}
               // 停止钮实心 Square:10px 填充块语义(非阶梯图标),零描边即语义本身
               // (designTokenDiscipline ALLOWLIST 登记豁免)。
               size={10}
               strokeWidth={0}
-              fill={composerLayout.stop.disabled ? colors.textSecondary : colors.textPrimary}
+              fill={composerLayout.stop.disabled ? colors.textSecondary : colors.ctaText}
             />
           )}
         </RouteActionButton>
@@ -3936,8 +3962,9 @@ export default function SessionScreen() {
           {sending ? (
             <ActivityIndicator color={colors.textSecondary} size="small" />
           ) : (
-            <ArrowUp
+            <Send
               color={composerSendDisabled ? colors.textSecondary : colors.ctaText}
+              fill={composerSendDisabled ? 'transparent' : colors.ctaText}
               size={iconSize.lg}
               strokeWidth={iconStroke.medium}
             />
@@ -5497,7 +5524,6 @@ export default function SessionScreen() {
           ]}
           testID="session.bottomLayer"
         >
-          <TranslucentBackdrop />
           <View
             pointerEvents="box-none"
             style={[
@@ -5751,16 +5777,18 @@ export default function SessionScreen() {
                     accessibilityLabel="输入远程消息"
                     accessibilityHint={composerLayout.input.disabledReason ?? undefined}
                     accessoryAbove={attachments.length > 0 || pendingUploads.length > 0 || pastePlaceholderCount > 0 ? renderComposerAttachmentTray() : null}
+                    autoFocus={visualFocusComposer}
                     cardActive={composerCardActive}
                     caretHidden={voiceIsListening}
                     compact={compactComposer && !composerCardActive}
                     editable={!composerLayout.input.disabled}
                     floatingVoiceButton={renderComposerVoiceButton}
                     floatingVoiceButtonStyle={composerFloatingVoiceButtonStyle}
+                    cursorColor={colors.inputCaret}
                     inputFrameHeight={composerResize.frameHeight}
                     inputOverlay={renderComposerInputOverlay()}
                     inputRef={composerInputRef}
-                    inputStyle={voiceIsListening && styles.inputVoiceHidden}
+                    inputStyle={[styles.sessionComposerInput, voiceIsListening && styles.inputVoiceHidden]}
                     inputTestID="session.composerInput"
                     leading={renderComposerCollapsedAttachmentBadge()}
                     maxHeight={composerResize.inputMaxHeight}
@@ -5784,6 +5812,7 @@ export default function SessionScreen() {
                     placeholderTextColor={colors.textTertiary}
                     resizeHandle={composerCardActive ? renderComposerResizeHandle() : null}
                     scrollEnabled={composerInputScrollEnabled}
+                    selectionColor={colors.inputCaret}
                     testID="session.composerInputRow"
                     toolbar={renderComposerToolbar()}
                     trailing={composerCardActive ? null : renderComposerTrailingActions()}
@@ -5806,7 +5835,8 @@ type SessionHeaderIcon = typeof Folder;
 
 function TranslucentBackdrop() {
   const styles = useThemedStyles(makeStyles);
-  return <View pointerEvents="none" style={styles.translucentBackdrop} />;
+  const { colors } = useTheme();
+  return <BlurBackdrop intensity={40} overlayColor={colors.chatHeaderSurface} style={styles.translucentBackdrop} />;
 }
 
 function SessionHeaderBar({
@@ -5883,16 +5913,12 @@ function SessionHeaderBar({
 
   return (
     <View style={styles.sessionHeaderBar} testID="session.summary">
-      <RouteActionButton
-        accessibilityLabel="返回"
+      <ScreenBackButton
         hitSlop={4}
         onPress={onBack}
-        pressedStyle={styles.sessionHeaderIconPressed}
         style={styles.sessionHeaderBackButton}
         testID="session.backButton"
-      >
-        <ChevronLeft color={colors.textPrimary} size={iconSize.xl} strokeWidth={iconStroke.regular} />
-      </RouteActionButton>
+      />
 
       <View style={styles.sessionHeaderTextBlock}>
         <View style={styles.sessionHeaderTitleRow}>
@@ -5962,7 +5988,7 @@ function SessionHeaderIconButton({
 }) {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
-  const color = active ? colors.ctaText : colors.textPrimary;
+  const color = colors.textPrimary;
   return (
     <RouteActionButton
       accessibilityHint={accessibilityHint}
@@ -5977,7 +6003,7 @@ function SessionHeaderIconButton({
       ]}
       testID={testID}
     >
-      <Icon color={color} size={iconSize.lg} strokeWidth={iconStroke.regular} />
+      <Icon color={color} size={iconSize.action} strokeWidth={iconStroke.regular} />
       {attention ? (
         <View style={styles.sessionHeaderIconDot} />
       ) : null}
@@ -6073,6 +6099,7 @@ function SessionSearchSheet({
         style={[styles.adhocSheet, { maxHeight: sheetMaxHeight }]}
         testID="search.sheet"
       >
+        <BlurBackdrop intensity={32} overlayColor={colors.surfaceGlassPanel} />
         {/* 把手仅作视觉暗示(SheetSurface 同款 SheetGrabber);本 ad-hoc 面板不接拖动手势,点背板即可关。 */}
         <SheetGrabber style={styles.adhocSheetGrabber} />
         <View style={styles.adhocSheetHeader}>
@@ -6085,6 +6112,7 @@ function SessionSearchSheet({
             accessibilityLabel="搜索当前会话消息"
             autoCapitalize="none"
             autoCorrect={false}
+            autoFocus={MOBILE_VISUAL_MOCK_ENABLED && visible}
             onChangeText={onChangeQuery}
             placeholder="搜索当前会话消息"
             placeholderTextColor={colors.textTertiary}
@@ -6539,6 +6567,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     minHeight: 0,
   },
   sessionBottomLayer: {
+    backgroundColor: colors.surface,
     bottom: 0,
     left: 0,
     overflow: 'hidden',
@@ -6552,7 +6581,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   translucentBackdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: colors.surfaceTranslucent,
   },
   // 排队消息编辑提示条(composer 上方):✎ + 「正在编辑第 N 条排队消息」 + × 放弃。
   queueEditBar: {
@@ -6584,7 +6612,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   sessionHeaderBar: {
     alignItems: 'center',
     backgroundColor: 'transparent',
-    borderBottomColor: colors.borderTranslucent,
+    borderBottomColor: colors.chatHeaderDivider,
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     gap: spacing.xs,
@@ -6593,11 +6621,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   sessionHeaderBackButton: {
-    alignItems: 'center',
-    borderRadius: radius.pill,
-    height: 38,
-    justifyContent: 'center',
-    width: 38,
+    flexShrink: 0,
   },
   sessionHeaderTextBlock: {
     flex: 1,
@@ -6619,7 +6643,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   sessionHeaderNotice: {
     color: colors.textSecondary,
-    fontSize: typeScale.caption,
+    fontSize: typeScale.micro,
     lineHeight: lineHeight.micro,
     marginTop: 2,
   },
@@ -6631,13 +6655,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   sessionHeaderIconButton: {
     alignItems: 'center',
     borderRadius: radius.pill,
-    height: 34,
+    height: 38,
     justifyContent: 'center',
     position: 'relative',
-    width: 34,
+    width: 38,
   },
   sessionHeaderIconButtonActive: {
-    backgroundColor: colors.cta,
+    backgroundColor: colors.surfaceChip,
   },
   sessionHeaderIconPressed: {
     backgroundColor: colors.surfaceChip,
@@ -6657,7 +6681,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingTop: spacing.sm,
   },
   adhocSheet: {
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: 'transparent',
     borderTopColor: colors.border,
     borderTopLeftRadius: radius.container,
     borderTopRightRadius: radius.container,
@@ -6844,7 +6868,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   composerActivityStatus: {
     alignItems: 'center',
     flexDirection: 'row',
-    height: 22,
+    height: 25,
     justifyContent: 'space-between',
     paddingHorizontal: spacing.xs,
   },
@@ -6876,19 +6900,22 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // (flexShrink + 文本 numberOfLines,剩余空间归 toolbarSpacer)。
   composerRuntimePill: {
     alignItems: 'center',
+    backgroundColor: colors.sheetActionSurface,
+    borderColor: colors.sheetActionBorder,
     borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     flexShrink: 1,
-    gap: 4,
-    minHeight: 28,
+    gap: spacing.xs,
+    minHeight: 34,
     minWidth: 0,
-    paddingHorizontal: spacing.xs,
+    paddingHorizontal: spacing.md,
   },
   composerRuntimePillText: {
-    color: colors.textSecondary,
+    color: colors.textPrimary,
     flexShrink: 1,
     fontSize: typeScale.caption,
-    fontWeight: fontWeight.medium,
+    fontWeight: fontWeight.semibold,
     minWidth: 0,
   },
   composerRuntimePillTextRisky: {
@@ -6922,18 +6949,28 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   composerInlineToolButton: {
     alignItems: 'center',
+    backgroundColor: colors.sheetActionSurface,
+    borderColor: colors.sheetActionBorder,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.pill,
     justifyContent: 'center',
-    height: 28,
-    width: 28,
+    height: 34,
+    width: 34,
   },
   composerFloatingVoiceButtonWithInlineStop: {
     right: spacing.md + (MOBILE_COMPOSER_CONTROL_SIZE * 2) + (MOBILE_COMPOSER_TOOL_GAP * 2),
   },
-  composerToolButtonActive: { backgroundColor: colors.surfaceChip },
+  composerToolButtonActive: {
+    backgroundColor: colors.surfaceChip,
+    borderColor: colors.borderStrong,
+  },
   composerToolButtonPrimary: {
-    backgroundColor: colors.textPrimary,
-    borderColor: colors.textPrimary,
+    backgroundColor: colors.surfaceChip,
+    borderColor: colors.borderStrong,
+  },
+  sessionComposerInput: {
+    fontSize: typeScale.listBody,
+    lineHeight: lineHeight.listBody,
   },
   voiceDraftOverlay: {
     ...StyleSheet.absoluteFill,
@@ -7018,21 +7055,17 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.cta,
     borderColor: colors.cta,
     borderRadius: radius.pill,
-    height: 28,
-    width: 28,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 34,
+    width: 34,
     justifyContent: 'center',
   },
   sendButtonInactive: {
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: colors.surfaceChip,
     borderColor: colors.border,
   },
   sendButtonVoiceTarget: {
     borderColor: colors.borderStrong,
-  },
-  sendButtonStop: {
-    backgroundColor: colors.surfaceChip,
-    borderColor: colors.surfaceChip,
-    borderRadius: radius.control,
   },
   sendButtonPressed: { opacity: 0.86 },
   sendButtonDisabled: { opacity: 0.45 },

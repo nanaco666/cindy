@@ -1,4 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, protocol, safeStorage, screen, session, shell } from 'electron';
+import { resolveVibrancyConfig } from './vibrancyConfig';
+import { applyVibrancyToSecondaryWindows } from './secondary-windows';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -1610,7 +1612,9 @@ const createWindow = () => {
 
   // Use nativeTheme to pick initial background color matching OS preference,
   // avoiding white flash on startup for dark mode users.
-  const bgColor = nativeTheme.shouldUseDarkColors ? '#1f1f1e' : '#f8f8f6';
+  // mac:创建期即透明底+sidebar 材质(Electron setBackgroundColor 运行时改 alpha 不可靠,是 vibrancy 不透壁纸的根因;非 CINDY 皮肤 body 不透明会自然盖住,视觉无影响)
+  const bgColor = process.platform === 'darwin' ? '#00000000' : (nativeTheme.shouldUseDarkColors ? '#1f1f1e' : '#f8f8f6');
+  const winBackdropConfig = resolveVibrancyConfig('cindy', nativeTheme.shouldUseDarkColors, process.platform);
 
   // Window state persistence (F-WST-1): remembers position / size / maximized
   // / fullscreen across launches. Falls back to the defaults below on first
@@ -1638,6 +1642,11 @@ const createWindow = () => {
     autoHideMenuBar: true,
     show: false,
     backgroundColor: bgColor,
+    ...(process.platform === 'win32' && winBackdropConfig.backgroundMaterial ? {
+      backgroundMaterial: winBackdropConfig.backgroundMaterial,
+      backgroundColor: winBackdropConfig.backgroundColor,
+    } : {}),
+    ...(process.platform === 'darwin' ? { vibrancy: 'sidebar' as const } : {}),
     acceptFirstMouse: !swallowActivationClick,
     ...platformOptions,
     webPreferences: {
@@ -1932,6 +1941,28 @@ const registerIpcHandlers = () => {
     }
     openSessionInNewWindow(sessionId, mainWindowRef);
   });
+
+// E4D 毛玻璃(R1 audit,用户裁决透壁纸 2026-07-17):仅 CINDY family 启用毛玻璃透壁纸;
+// 其他 family 恢复不透明。macOS 走 setVibrancy + 透明底;Windows 11 走 setBackgroundMaterial
+// (acrylic/mica,见 resolveVibrancyConfig),Windows 10/Linux 回退不透明 surface。
+// family 切换时经 IPC theme:apply-vibrancy 运行时动态调用,同步主窗口与全部副窗口。
+function applyWindowVibrancy(familyId: string, isDark: boolean): void {
+  const win = mainWindowRef;
+  if (!win || win.isDestroyed()) return;
+  const config = resolveVibrancyConfig(familyId, isDark, process.platform);
+  if (process.platform === 'darwin') {
+    win.setVibrancy(config.vibrancy as 'under-window' | null);
+  }
+  if (process.platform === 'win32' && config.backgroundMaterial) {
+    win.setBackgroundMaterial(config.backgroundMaterial);
+  }
+  win.setBackgroundColor(config.backgroundColor);
+  applyVibrancyToSecondaryWindows(familyId, isDark);
+}
+
+ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark: boolean }) => {
+  applyWindowVibrancy(payload.familyId, payload.isDark);
+});
 
   ipcMain.on('get-app-version', (event) => {
     event.returnValue = app.getVersion();

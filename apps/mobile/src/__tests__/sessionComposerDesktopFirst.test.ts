@@ -86,7 +86,7 @@ describe('mobile session composer desktop-first surface', () => {
     const voiceDraftTextStyleEnd = source.indexOf('voiceDraftListeningPrompt:', voiceDraftTextStyleStart);
     const voiceDraftTextStyle = source.slice(voiceDraftTextStyleStart, voiceDraftTextStyleEnd);
 
-    expect(source).toContain('ArrowUp');
+    expect(source).toContain('Send');
     expect(source).toContain('Camera');
     expect(source).toContain('Settings');
     // Context 面板「添加」分组的四个入口 icon(照片 / 截图 / 拍照 / 文件)。
@@ -98,9 +98,10 @@ describe('mobile session composer desktop-first surface', () => {
     expect(composerInputSource).toContain('toolbar={renderComposerToolbar()}');
     expect(source).toContain('const renderComposerToolbar = () => (');
     expect(attachmentButtonSource).toContain('<Plus');
-    expect(source).toContain('<Mic color={colors.textSecondary} size={iconSize.lg} strokeWidth={iconStroke.regular} />');
+    expect(source).toContain('<Mic color={colors.textSecondary} size={iconSize.sm} strokeWidth={iconStroke.regular} />');
     expect(composerInputSource).toContain('trailing={composerCardActive ? null : renderComposerTrailingActions()}');
-    expect(trailingActionsSource).toContain('<ArrowUp');
+    expect(trailingActionsSource).toContain('<Send');
+    expect(trailingActionsSource).toContain("fill={composerSendDisabled ? 'transparent' : colors.ctaText}");
     expect(source).toContain('const composerCardActive = (canUseComposer && composerFocused)');
     // 权限选择已合并进模型浮窗(ModelPickerSheet 二级视图);composer 底排只剩 [+][模型]。
     expect(source).not.toContain('testID="session.composerPermissionButton"');
@@ -140,7 +141,7 @@ describe('mobile session composer desktop-first surface', () => {
     expect(source).toContain('composerActivityMetaText');
     expect(source).toContain('composerActivityFrame');
     expect(source).toContain('marginTop: spacing.lg');
-    expect(source).toContain('height: 22');
+    expect(source).toContain('height: 25');
     expect(source).toContain('composerActivityStatusText');
     expect(composerStatusCallIndex).toBeGreaterThan(-1);
     expect(composerStatusCallIndex).toBeLessThan(composerViewStart);
@@ -148,9 +149,12 @@ describe('mobile session composer desktop-first surface', () => {
     expect(source).toContain('composerRuntimePillTextRisky');
     expect(source).toContain('color: colors.statusAccent');
     expect(source).not.toContain("import { BlurView } from 'expo-blur';");
+    expect(source).toContain("import { BlurBackdrop } from '@/session/BlurBackdrop';");
     expect(source).toContain("function TranslucentBackdrop()");
     expect(source).toContain("<TranslucentBackdrop />");
-    expect(source).toContain("backgroundColor: colors.surfaceTranslucent");
+    expect(source).toContain('return <BlurBackdrop intensity={40} overlayColor={colors.chatHeaderSurface} style={styles.translucentBackdrop} />;');
+    expect(source).toContain("sessionHeaderBar: {\n    alignItems: 'center',\n    backgroundColor: 'transparent'");
+    expect(source).toContain('sessionBottomLayer: {\n    backgroundColor: colors.surface');
     expect(source).not.toContain("colors.glassTint");
     expect(source).not.toContain("colors.glassHighlight");
     expect(composerStyle).not.toContain('borderTopColor');
@@ -164,8 +168,8 @@ describe('mobile session composer desktop-first surface', () => {
     expect(composerInputRowStyle).toContain("flexDirection: 'column'");
     expect(sharedSource).toContain('mainRow: {');
     expect(sharedSource).toContain('cardLayout && toolbar != null');
-    expect(composerInputRowStyle).toContain('backgroundColor: colors.surfaceElevated');
-    expect(composerInputRowStyle).toContain('borderColor: colors.border');
+    expect(composerInputRowStyle).toContain('backgroundColor: colors.chatCodeSurface');
+    expect(composerInputRowStyle).toContain('borderColor: colors.sheetActionBorder');
     expect(composerInputRowStyle).toContain('borderRadius: radius.pill');
     expect(composerInputRowStyle).toContain('borderWidth: StyleSheet.hairlineWidth');
     expect(composerInputRowStyle).toContain('minHeight: 50');
@@ -192,6 +196,19 @@ describe('mobile session composer desktop-first surface', () => {
     expect(source).not.toContain('renderComposerTextInput(false)');
     expect(source).not.toContain('const renderComposerTextInput = () => (');
     expect(composerInputSource).toContain('<MobileComposerInputRow');
+    expect(source).toContain("import { DEVICE_LINK_API_BASE_URL, MOBILE_VISUAL_MOCK_ENABLED } from '@/config/env';");
+    expect(source).toContain("const visualFocusComposer = MOBILE_VISUAL_MOCK_ENABLED && readRouteParam(params.visualFocusComposer) === '1';");
+    expect(source).toContain("const visualOpenSearch = MOBILE_VISUAL_MOCK_ENABLED && readRouteParam(params.visualOpenSearch) === '1';");
+    expect(source).toContain('const visualSearchQuery = MOBILE_VISUAL_MOCK_ENABLED ? readRouteParam(params.visualSearchQuery) : null;');
+    expect(source).toContain('if (!visualOpenSearch) return;');
+    expect(source).toContain('setSearchOpen(true);');
+    expect(source).toContain('if (visualSearchQuery !== null) setSearchQuery(visualSearchQuery);');
+    expect(source).toContain('autoFocus={MOBILE_VISUAL_MOCK_ENABLED && visible}');
+    expect(composerInputSource).toContain('autoFocus={visualFocusComposer}');
+    expect(composerInputSource).toContain('cursorColor={colors.inputCaret}');
+    expect(composerInputSource).toContain('selectionColor={colors.inputCaret}');
+    expect(sharedSource).toContain("autoFocus?: TextInputProps['autoFocus'];");
+    expect(sharedSource).toContain('autoFocus={autoFocus}');
     expect(sharedSource).toContain('multiline = true');
     expect(sharedSource).toContain('multiline={multiline}');
     expect(source).not.toContain('inputCompact: {');
@@ -393,8 +410,8 @@ describe('mobile session composer desktop-first surface', () => {
     expect(sendIndex).toBeGreaterThan(-1);
     expect(floatingVoiceIndex).toBeLessThan(sendIndex);
     expect(floatingVoiceStyleIndex).toBeLessThan(sendIndex);
-    expect(inlineButtonStyle).toContain('height: 28');
-    expect(inlineButtonStyle).toContain('width: 28');
+    expect(inlineButtonStyle).toContain('height: 34');
+    expect(inlineButtonStyle).toContain('width: 34');
     expect(inlineButtonStyle).not.toContain('height: 36');
     expect(inlineButtonStyle).not.toContain('width: 36');
     expect(inlineButtonStyle).not.toContain('height: 42');
@@ -404,8 +421,8 @@ describe('mobile session composer desktop-first surface', () => {
     expect(floatingButtonStyle).toContain('bottom: 11');
     expect(floatingButtonStyle).toContain('zIndex: 2');
     expect(sharedSource).toContain('right: spacing.md + MOBILE_COMPOSER_CONTROL_SIZE + MOBILE_COMPOSER_TOOL_GAP');
-    expect(sendButtonStyle).toContain('height: 28');
-    expect(sendButtonStyle).toContain('width: 28');
+    expect(sendButtonStyle).toContain('height: 34');
+    expect(sendButtonStyle).toContain('width: 34');
     expect(sendButtonStyle).not.toContain('height: 36');
     expect(sendButtonStyle).not.toContain('width: 36');
     expect(sendButtonStyle).not.toContain('height: 42');
@@ -461,10 +478,11 @@ describe('mobile session composer desktop-first surface', () => {
     expect(source).toContain('localVoiceInputHistory,');
     expect(source).toContain('recordHistory: (text) => recordMobileVoiceInputHistoryForHost(deviceId, text)');
     expect(source).toContain('updateHistoryEntry: (entryId, text) => updateMobileVoiceInputHistoryEntryForHost(deviceId, entryId, text)');
-    expect(source).toContain('styles.sendButtonStop');
-    expect(source).toContain('borderRadius: radius.control');
-    expect(source).toContain('backgroundColor: colors.surfaceChip');
-    expect(source).toContain('fill={composerLayout.stop.disabled ? colors.textSecondary : colors.textPrimary}');
+    expect(source).not.toContain('styles.sendButtonStop');
+    expect(source).not.toContain('sendButtonStop:');
+    expect(source).toContain('fill={composerLayout.stop.disabled ? colors.textSecondary : colors.ctaText}');
+    expect(source).toContain('color={composerLayout.stop.disabled ? colors.textSecondary : colors.ctaText}');
+    expect(source).toContain('pressedStyle={styles.sendButtonPressed}');
     expect(source).toContain('pressedStyle === undefined ? styles.routeButtonPressed : pressedStyle');
     expect(source).not.toContain('composerShowStatusRow');
     expect(source).not.toContain('composerStatusRow');
