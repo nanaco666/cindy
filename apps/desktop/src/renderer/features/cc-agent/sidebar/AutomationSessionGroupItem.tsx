@@ -332,7 +332,7 @@ export function AutomationSessionGroupItem({
               vendor={latestSession?.agentKind === 'codex' ? 'codex' : 'cc'}
               size={12}
               running={isRunning}
-              className={hasActiveHidden && !isRunning ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}
+              colorClassName={hasActiveHidden ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}
             />
             {/* Clock 点击跳自动化页对应条目。宿主已是 title <button>,不能嵌套
                 button,用 span role="button" + stopPropagation 拦下行点击。 */}
@@ -369,7 +369,9 @@ export function AutomationSessionGroupItem({
                   strokeWidth={1.75}
                   className={cn(
                     isRunning
-                      ? 'text-[var(--status-bar-accent)] session-status-breathing'
+                      ? hasActiveHidden
+                        ? 'text-[var(--sidebar-item-active-foreground)] session-status-breathing'
+                        : 'text-[var(--status-bar-accent)] session-status-breathing'
                       : hasActiveHidden
                         ? 'text-[var(--sidebar-item-active-foreground)]'
                         : 'text-[var(--cmd-palette-item-meta)] hover:text-foreground transition-colors',
@@ -432,7 +434,7 @@ export function AutomationSessionGroupItem({
                   >
                     <span
                       className="size-2 rounded-full"
-                      style={{ backgroundColor: 'var(--card-status-error)' }}
+                      style={{ backgroundColor: hasActiveHidden ? 'var(--sidebar-item-active-foreground)' : 'var(--card-status-error)' }}
                       aria-hidden
                     />
                   </span>
@@ -445,7 +447,7 @@ export function AutomationSessionGroupItem({
                   >
                     <span
                       className="size-2 rounded-full"
-                      style={{ backgroundColor: 'var(--card-status-awaiting)' }}
+                      style={{ backgroundColor: hasActiveHidden ? 'var(--sidebar-item-active-foreground)' : 'var(--card-status-awaiting)' }}
                       aria-hidden
                     />
                   </span>
@@ -454,7 +456,7 @@ export function AutomationSessionGroupItem({
                     role="img"
                     size={12}
                     strokeWidth={2}
-                    className="size-4 text-sidebar-action-icon"
+                    className={cn('size-4', hasActiveHidden ? 'text-sidebar-item-active-foreground' : 'text-sidebar-action-icon')}
                     aria-label={t('ccAgent.sidebar.status.running', 'Running')}
                     title={t('ccAgent.sidebar.status.running', 'Running')}
                   />
@@ -467,7 +469,7 @@ export function AutomationSessionGroupItem({
                   >
                     <span
                       className="size-2 rounded-full"
-                      style={{ backgroundColor: 'var(--card-status-done)' }}
+                      style={{ backgroundColor: hasActiveHidden ? 'var(--sidebar-item-active-foreground)' : 'var(--card-status-done)' }}
                       aria-hidden
                     />
                   </span>

@@ -101,7 +101,9 @@ export function SessionStatusIcon({
           className={cn(
             'shrink-0',
             isRunning
-              ? 'text-[var(--status-bar-accent)] session-status-breathing'
+              ? isActive
+                ? 'text-[var(--sidebar-item-active-foreground)] session-status-breathing'
+                : 'text-[var(--status-bar-accent)] session-status-breathing'
               : isActive
                 ? 'text-[var(--sidebar-item-active-foreground)]'
                 : 'text-[var(--cmd-palette-item-meta)]',
@@ -114,7 +116,9 @@ export function SessionStatusIcon({
           className={cn(
             'shrink-0',
             isRunning
-              ? 'text-[var(--status-bar-accent)] session-status-breathing'
+              ? isActive
+                ? 'text-[var(--sidebar-item-active-foreground)] session-status-breathing'
+                : 'text-[var(--status-bar-accent)] session-status-breathing'
               : isActive
                 ? 'text-[var(--sidebar-item-active-foreground)]'
                 : 'text-[var(--cmd-palette-item-meta)]',
@@ -125,7 +129,7 @@ export function SessionStatusIcon({
           vendor={vendor}
           size={size ?? (vendor === 'cc' ? 13 : 12)}
           running={isRunning}
-          className={isActive && !isRunning ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}
+          colorClassName={isActive ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}
         />
       )}
       {showAttentionDot && hasAttentionNotification && (
