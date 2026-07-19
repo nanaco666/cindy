@@ -1,8 +1,9 @@
 /**
  * providerModelSections 单测:守住手机 provider-aware 下拉的派生口径与桌面/IM 一致——
  * 只列已连接供应商、同 id 多来源各出一行、可见性按被控端 override + 目录 defaultEnabled
- * 过滤(旧被控端无 overrides → 不过滤降级)、activeSourceId 走「显式选中 ∈ connected 否则
- * nativeDefaultSourceId」、effort reconcile 口径、resolveRowSelection 选行落点。
+ * 过滤(旧被控端无 overrides → 不过滤降级)、activeSourceId 按当前模型收窄(共享
+ * effectiveSourceIdForModel,桌面 0f75dd560 同口径;未传 selectedModelId 保持旧口径)、
+ * effort reconcile 口径、resolveRowSelection 选行落点。
  * 纯逻辑,node env,不 import react-native。
  */
 import { describe, expect, it } from 'vitest';
@@ -140,6 +141,65 @@ describe('buildMobileModelSections', () => {
       provider('xd', { agents: ['claude-code'], cc: [model('claude-opus-4-8')] }),
     ];
     expect(buildMobileModelSections({ providers, agentKind: 'claude-code' }).activeSourceId).toBe('xd');
+  });
+
+  it('activeSourceId 按当前模型收窄:显式来源不提供该模型 → 回落真正提供它的来源', () => {
+    // 会话粘着 providerId=anthropic(仍连接),但当前模型只有 xd 提供
+    // —— 修复前会显示 anthropic 图标(与实际路由分叉),修复后收窄到 xd。
+    const providers = [
+      provider('anthropic', { agents: ['claude-code'], cc: [model('claude-opus-4-8')] }),
+      provider('xd', { agents: ['claude-code'], cc: [model('claude-opus-4-8'), model('claude-fable-5')] }),
+    ];
+    expect(
+      buildMobileModelSections({
+        providers,
+        agentKind: 'claude-code',
+        selectedModelId: 'claude-fable-5',
+        selectedProviderId: 'anthropic',
+      }).activeSourceId,
+    ).toBe('xd');
+    // 显式来源确实提供该模型 → 尊重显式选择。
+    expect(
+      buildMobileModelSections({
+        providers,
+        agentKind: 'claude-code',
+        selectedModelId: 'claude-opus-4-8',
+        selectedProviderId: 'anthropic',
+      }).activeSourceId,
+    ).toBe('anthropic');
+  });
+
+  it('activeSourceId:没有任何已连接来源提供当前模型 → null(不拼不存在的路由)', () => {
+    // cc 会话选了 Opus,但只有 ChatGPT 订阅(openai)连接且它不提供 Opus
+    // —— 修复前兜底到 openai(「OpenAI 图标 + Opus」事故形态),修复后返回 null。
+    const providers = [
+      provider('openai', { agents: ['claude-code'], cc: [model('chatgpt/gpt-5.5')] }),
+    ];
+    expect(
+      buildMobileModelSections({
+        providers,
+        agentKind: 'claude-code',
+        selectedModelId: 'claude-opus-4-8',
+      }).activeSourceId,
+    ).toBeNull();
+  });
+
+  it('activeSourceId 收窄后,选中行的可见性豁免跟着落在真正打 ✓ 的 (来源, 模型) 行上', () => {
+    // claude-fable-5 在 xd 下被用户隐藏;显式来源 anthropic 不提供它 → 生效来源收窄到 xd,
+    // 豁免必须保住 xd 行(否则勾选行从列表消失,出现空选态)。
+    const providers = [
+      provider('anthropic', { agents: ['claude-code'], cc: [model('claude-opus-4-8')] }),
+      provider('xd', { agents: ['claude-code'], cc: [model('claude-fable-5')] }),
+    ];
+    const { sections } = buildMobileModelSections({
+      providers,
+      agentKind: 'claude-code',
+      selectedModelId: 'claude-fable-5',
+      selectedProviderId: 'anthropic',
+      visibilityOverrides: { 'claude-code:xd:claude-fable-5': false },
+    });
+    const rows = flattenProviderSections(sections);
+    expect(rows.map((r) => `${r.provider.id}:${r.model.id}`)).toContain('xd:claude-fable-5');
   });
 });
 
