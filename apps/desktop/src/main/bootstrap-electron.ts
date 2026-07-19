@@ -315,6 +315,11 @@ import {
   writeCompactionPct,
 } from './maker-host/compaction-settings-store.js';
 import {
+  readSubagentModelSettingsState,
+  resetSubagentModelSettings,
+  writeSubagentModelSettingsPatch,
+} from './maker-host/subagent-model-settings-store.js';
+import {
   readLspModeSettings,
   writeLspModeEnabled,
 } from './maker-host/lsp-mode-store.js';
@@ -392,6 +397,11 @@ import {
   type ImDefaultAgentSettings,
   type ImDefaultSettingsPatch,
 } from '../shared/imDefaultSettings.js';
+import {
+  isValidSubagentModelIdInput,
+  normalizeSubagentModelId,
+  type SubagentModelSettingsPatch,
+} from '../shared/subagentModelSettings.js';
 import { isBrowserOpenablePath } from '../shared/browserOpenableExts.js';
 import {
   getClientEndpoint,
@@ -2069,6 +2079,17 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
   ipcMain.handle(MAKER_IPC_INVOKE.IM_DEFAULT_SETTINGS_RESET, async () => {
     resetImDefaultSettings();
     return imDefaultSettingsWire();
+  });
+  ipcMain.handle(MAKER_IPC_INVOKE.SUBAGENT_MODEL_SETTINGS_GET, async () => {
+    return subagentModelSettingsWire();
+  });
+  ipcMain.handle(MAKER_IPC_INVOKE.SUBAGENT_MODEL_SETTINGS_SET, async (_e, patch: unknown) => {
+    writeSubagentModelSettingsPatch(parseSubagentModelSettingsPatch(patch));
+    return subagentModelSettingsWire();
+  });
+  ipcMain.handle(MAKER_IPC_INVOKE.SUBAGENT_MODEL_SETTINGS_RESET, async () => {
+    resetSubagentModelSettings();
+    return subagentModelSettingsWire();
   });
 
   // Claude Code 自动上下文压缩阈值 IPC —— store 跟 Maker 单例无关, 提前注册。
@@ -4883,6 +4904,33 @@ function imDefaultSettingsWire() {
     customizedKeys: state.customizedKeys,
     defaults: state.defaults,
   };
+}
+
+function subagentModelSettingsWire() {
+  const state = readSubagentModelSettingsState();
+  return {
+    ...state.value,
+    isCustomized: state.isCustomized,
+    customizedKeys: state.customizedKeys,
+    defaults: state.defaults,
+  };
+}
+
+function parseSubagentModelSettingsPatch(raw: unknown): SubagentModelSettingsPatch {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throwIpcError('INVALID_PARAMS', 'subagent model settings patch required (object)');
+  }
+  const input = raw as Record<string, unknown>;
+  const patch: SubagentModelSettingsPatch = {};
+  for (const key of ['claudeCode', 'codex'] as const) {
+    if (!(key in input)) continue;
+    const value = input[key];
+    if (!isValidSubagentModelIdInput(value)) {
+      throwIpcError('INVALID_PARAMS', `subagent model ${key} must be a valid string or null`);
+    }
+    patch[key] = normalizeSubagentModelId(value);
+  }
+  return patch;
 }
 
 function parseImDefaultSettingsPatch(raw: unknown): ImDefaultSettingsPatch {

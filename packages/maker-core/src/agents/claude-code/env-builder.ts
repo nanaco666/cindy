@@ -209,6 +209,13 @@ export async function buildClaudeEnv(
     : undefined;
   Object.assign(env, await auth.getAuthEnv(authOptions));
 
+  // Claude Code's documented child-agent model override. Blank / undefined deliberately leaves
+  // the key untouched so the host preserves the pre-existing native selection behavior.
+  const subagentModel = runtimeConfig.subagentModel?.trim();
+  if (subagentModel) {
+    env.CLAUDE_CODE_SUBAGENT_MODEL = subagentModel;
+  }
+
   // 第三道防线: 告诉 CC CLI "provider 路由由 host 接管"。
   // CC 内部 filterSettingsEnv 看到此标记后,会从所有 settings-sourced env 中剥掉
   // ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN 等 provider 相关字段,

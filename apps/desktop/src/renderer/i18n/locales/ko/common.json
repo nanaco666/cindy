@@ -93,6 +93,7 @@
       "personalization": "개인화",
       "chipMetrics": "사용량 표시기",
       "memory": "메모리",
+      "subagentModels": "하위 에이전트 모델",
       "compaction": "컨텍스트 압축",
       "terminalShell": "기본 터미널 셸",
       "linkOpen": "링크 열기 방식",
@@ -1326,6 +1327,14 @@
           "cancel": "취소"
         }
       }
+    },
+    "subagentModels": {
+      "title": "하위 에이전트 모델",
+      "description": "Claude와 Codex 하위 에이전트의 기본 모델을 각각 지정합니다.",
+      "unspecified": "지정 안 함(기본 동작 사용)",
+      "codexUnavailable": "현재 Codex 버전에서는 안전한 재정의를 지원하지 않습니다",
+      "hint": "지정하지 않으면 재정의를 주입하지 않습니다. Claude 변경 사항은 새 세션부터 적용되며, Codex 전체 컨텍스트 fork는 현재 모델 재정의를 지원하지 않습니다.",
+      "saveFailed": "하위 에이전트 모델 저장 실패"
     },
     "compaction": {
       "title": "컨텍스트 압축",

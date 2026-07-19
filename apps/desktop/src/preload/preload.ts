@@ -38,6 +38,10 @@ import type {
   ImDefaultSettingsPatch,
   ImDefaultSettingsState,
 } from '../shared/imDefaultSettings';
+import type {
+  SubagentModelSettingsPatch,
+  SubagentModelSettingsState,
+} from '../shared/subagentModelSettings';
 import type { VoiceInputAsrMode, VoiceInputProviderKind } from '../shared/voiceInputAsrProfiles';
 import type { VoiceInputRefinerProviderKind, VoiceInputRefinerTransport } from '../shared/voiceInputRefinerProfiles';
 import { isIpcErrorCode, type IpcErrorCode } from '../shared/ipc-errors';
@@ -3712,6 +3716,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('maker:im-default-settings:set', patch),
     imDefaultSettingsReset: (): Promise<ImDefaultSettingsState> =>
       ipcRenderer.invoke('maker:im-default-settings:reset'),
+
+    /** 子代理模型覆盖。null 表示不注入覆盖，仅对新建 agent 会话生效。 */
+    subagentModelSettingsGet: (): Promise<SubagentModelSettingsState> =>
+      ipcRenderer.invoke('maker:subagent-model-settings:get'),
+    subagentModelSettingsSet: (
+      patch: SubagentModelSettingsPatch,
+    ): Promise<SubagentModelSettingsState> =>
+      ipcRenderer.invoke('maker:subagent-model-settings:set', patch),
+    subagentModelSettingsReset: (): Promise<SubagentModelSettingsState> =>
+      ipcRenderer.invoke('maker:subagent-model-settings:reset'),
 
     silentEncryptedRetryGet: (): Promise<{ enabled: boolean; isCustomized?: boolean; defaultEnabled?: boolean }> =>
       ipcRenderer.invoke('maker:silent-encrypted-retry:get'),

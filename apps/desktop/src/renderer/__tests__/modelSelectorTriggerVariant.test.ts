@@ -156,6 +156,43 @@ describe('ModelSelector trigger variants', () => {
     ).toBe('Max');
   });
 
+  it('renders an active fallback option without model effort metadata', () => {
+    render(
+      React.createElement(ModelSelector, {
+        modelId: '',
+        effort: 'high',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+        triggerVariant: 'field',
+        fallbackOption: {
+          active: true,
+          label: '不指定（跟随原逻辑）',
+          onSelect: vi.fn(),
+        },
+      }),
+    );
+
+    const trigger = screen.getByRole('button', { name: /不指定（跟随原逻辑）/ });
+    expect(trigger.textContent).toContain('不指定（跟随原逻辑）');
+    expect(trigger.textContent).not.toContain('high');
+  });
+
+  it('can hide model effort and Fast editing controls for model-id-only settings', () => {
+    render(
+      React.createElement(ModelSelectorContent, {
+        modelId: 'claude-opus-4-8',
+        effort: 'high',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+        configurationEnabled: false,
+      }),
+    );
+
+    expect(screen.queryByRole('button', { name: 'newChat.modelSelector.edit' })).toBeNull();
+  });
+
   it('forwards an overlay-specific z-index to model tooltips', () => {
     render(
       React.createElement(ModelSelectorContent, {
