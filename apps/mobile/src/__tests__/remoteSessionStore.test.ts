@@ -1026,3 +1026,93 @@ describe('setDeviceSessions 在途元数据写保护(sessionPendingWrites)', () 
     expect(remoteSessionStore.getSessions().find((s) => s.id === 's1')?.title).toBe('B');
   });
 });
+
+describe('引用调和(2026-07-18 首页重渲染风暴修复)', () => {
+  beforeEach(() => remoteSessionStore.clear());
+
+  it('setDeviceSessions:单会话变化时,其余会话保留旧对象引用', () => {
+    remoteSessionStore.setDeviceSessions('dev-1', 'Mac', [session('s1'), session('s2'), session('s3')]);
+    const before = remoteSessionStore.getSessions();
+    const s1Before = before.find((s) => s.id === 's1');
+    const s3Before = before.find((s) => s.id === 's3');
+    remoteSessionStore.setDeviceSessions('dev-1', 'Mac', [
+      session('s1'),
+      session('s2', { updatedAt: '2026-01-02T00:00:00.000Z' }),
+      session('s3'),
+    ]);
+    const after = remoteSessionStore.getSessions();
+    expect(after).not.toBe(before);
+    expect(after.find((s) => s.id === 's1')).toBe(s1Before);
+    expect(after.find((s) => s.id === 's3')).toBe(s3Before);
+    expect(after.find((s) => s.id === 's2')).not.toBe(before.find((s) => s.id === 's2'));
+  });
+
+  it('upsert 置顶重排:数组换新但内容未变的会话对象引用保留', () => {
+    remoteSessionStore.setDeviceSessions('dev-1', 'Mac', [session('s1'), session('s2')]);
+    const before = remoteSessionStore.getSessions();
+    const s1Before = before.find((s) => s.id === 's1');
+    const s2Before = before.find((s) => s.id === 's2');
+    remoteSessionStore.upsertDeviceSession('dev-1', 'Mac', session('s2'));
+    const after = remoteSessionStore.getSessions();
+    expect(after[0]).toBe(s2Before);
+    expect(after.find((s) => s.id === 's1')).toBe(s1Before);
+  });
+
+  it('设备身份归一化下,与会话内容无关的重算保留 mergedSessions 数组引用', () => {
+    // 归一化分支每轮都会 {...session, canonicalDeviceId} 重铸对象,调和必须能吸收它,
+    // 否则 useSyncExternalStore 快照逐 emit 换新引用,消费屏全量重渲染(风暴根因)。
+    remoteSessionStore.setDeviceIdentity([{ deviceId: 'dev-1', name: 'Mac' }]);
+    remoteSessionStore.setDeviceSessions('dev-1', 'Mac', [session('s1'), session('s2')]);
+    const before = remoteSessionStore.getSessions();
+    remoteSessionStore.setDeviceIdentity([
+      { deviceId: 'dev-1', name: 'Mac' },
+      { deviceId: 'dev-9', name: 'Other' },
+    ]);
+    expect(remoteSessionStore.getSessions()).toBe(before);
+  });
+
+  it('跨设备:另一设备 shard 变化不换本设备会话的对象引用', () => {
+    remoteSessionStore.setDeviceSessions('dev-1', 'Mac', [session('s1')]);
+    const s1Before = remoteSessionStore.getSessions().find((s) => s.id === 's1');
+    remoteSessionStore.setDeviceSessions('dev-2', 'Win', [session('w1')]);
+    expect(remoteSessionStore.getSessions().find((s) => s.id === 's1')).toBe(s1Before);
+    remoteSessionStore.removeDevice('dev-2');
+    expect(remoteSessionStore.getSessions().find((s) => s.id === 's1')).toBe(s1Before);
+  });
+
+  it('风暴不变量:消息/运行态/活动高频 churn + 内容等价重算下,会话列表快照引用零漂移', () => {
+    // 桌面端流式输出 = appendMessage / status / activity 事件以每秒多条的频率灌入,
+    // 其间还夹杂设备表更新等触发 recomputeSessions 的内容等价重算(归一化分支每轮
+    // 都会重铸对象,必须被引用调和吸收)。这些都不改变会话列表内容,getSessions()
+    // 快照必须保持同一引用——它是 useRemoteSessions 消费屏(首页/设备详情)不被
+    // 无关 emit 惊动的结构保证,重构后回归验证的核心断言(2026-07-18 风暴修复;
+    // 每轮 setDeviceIdentity 在修复前的 store 上会真实打红本用例)。
+    remoteSessionStore.setDeviceSessions('dev-1', 'Mac', [session('s1'), session('s2')]);
+    const snapshot = remoteSessionStore.getSessions();
+    for (let i = 0; i < 50; i += 1) {
+      remoteSessionStore.appendMessage('s1', {
+        id: `m${i}`,
+        clientId: `m${i}`,
+        sessionId: 's1',
+        role: 'assistant',
+        content: `chunk ${i}`,
+        toolUseId: null,
+        agentMeta: null,
+        createdAt: `2026-01-01T00:00:${String(i).padStart(2, '0')}.000Z`,
+      });
+      remoteSessionStore.applyMakerEvent('s1', { type: 'status', data: { isRunning: true, tokenUsage: i + 1 } });
+      remoteSessionStore.applySessionActivity('dev-1', {
+        sessionId: 's1',
+        phase: 'running',
+        compactDetail: `step ${i}`,
+      });
+      // 每轮设备表变化(无关设备增补)强制走一次 recomputeSessions:会话内容等价,
+      // 归一化重铸的对象必须被调和吸收,快照引用不许漂移。
+      remoteSessionStore.setDeviceIdentity([
+        { deviceId: 'dev-1', name: 'Mac' },
+        { deviceId: `ghost-${i}`, name: `G${i}` },
+      ]);
+    }
+    expect(remoteSessionStore.getSessions()).toBe(snapshot);
+  });
+});

@@ -161,16 +161,35 @@ function recomputeSessions(): void {
       });
     }
   }
+  // 引用调和:与上一轮 mergedSessions 逐会话浅比较,内容未变的保留旧对象引用。
+  // 每次重算若无脑换新引用(尤其身份归一化分支的 {...session, canonicalDeviceId} 会给
+  // 所有会话铸新对象),首页/设备详情页会话行的 memo 全部失效——一次 store 更新 =
+  // 全列表重渲染;桌面端活跃期 push 高频触发重算,渲染队列滚雪球把 JS 线程打满
+  // 10~90s(2026-07-18 风暴 trace 实锤,React DevTools 逐行供词:item.session
+  // "referentially unequal but deeply equal, consider memoization")。
+  const prevById = new Map(mergedSessions.map((s) => [s.id, s]));
   const next: RemoteSession[] = [];
   for (const { session, physicalDeviceId } of byId.values()) {
-    next.push(session);
+    const prev = prevById.get(session.id);
+    next.push(prev && remoteSessionEqual(prev, session) ? prev : session);
     sessionDeviceIndex.set(session.id, physicalDeviceId);
   }
   for (const sessionId of [...sessionLiveActivity.keys()]) {
     if (!sessionDeviceIndex.has(sessionId)) sessionLiveActivity.delete(sessionId);
   }
-  mergedSessions = next;
+  // 数组级同样调和:全部元素引用与序都未变时保留旧数组引用——useRemoteSessions 的
+  // useSyncExternalStore 快照经 Object.is 即可短路,消费屏对无关 emit 零重渲染。
+  mergedSessions = sameElementRefs(mergedSessions, next) ? mergedSessions : next;
   emit();
+}
+
+/** 数组元素引用逐位相等(长度 + Object.is)。 */
+function sameElementRefs<T>(a: readonly T[], b: readonly T[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (!Object.is(a[i], b[i])) return false;
+  }
+  return true;
 }
 
 function stamp(session: RemoteSession, deviceId: string, deviceName: string): RemoteSession {
@@ -421,7 +440,17 @@ export const remoteSessionStore = {
   setLatestMessageWindow(sessionId: string, list: readonly RemoteMessage[]): void {
     const latestWindow = normalizeMessages(list);
     if (latestWindow.length === 0) {
-      this.setMessages(sessionId, []);
+      // 空窗口仍需保留本地系统卡(mobile-system-*):新会话首条消息发出后服务端
+      // 消息列表可能仍为空,下一次 setLatestMessageWindow 传空数组不能把刚追加的
+      // 本地卡擦掉。
+      const existing = messages.get(sessionId) ?? [];
+      const preserved = existing.filter((item) => messageKey(item).startsWith('mobile-system-'));
+      const next = preserved.length > 0 ? preserved : [];
+      if (!remoteMessageListsEqual(existing, next)) {
+        messages.set(sessionId, next);
+        bumpMessageVersion();
+        emit();
+      }
       return;
     }
 
@@ -443,7 +472,10 @@ export const remoteSessionStore = {
       const createdAt = item.createdAt;
       const isNewerThanLatestPage = createdAt.localeCompare(latestNewestCreatedAt) >= 0;
       const isOlderLoadedPage = hasOverlap && createdAt.localeCompare(latestOldestCreatedAt) < 0;
-      if (isNewerThanLatestPage || isOlderLoadedPage) {
+      // 本地系统卡(/learn、/context 等)没有服务端对应行:不管时序落在窗口哪里都
+      // 不会出现在 latestKeys 里,若不单独保留会被 window 刷新时静默丢弃。
+      const isLocalSystemCard = messageKey(item).startsWith('mobile-system-');
+      if (isNewerThanLatestPage || isOlderLoadedPage || isLocalSystemCard) {
         byKey.set(messageKey(item), item);
       }
     }

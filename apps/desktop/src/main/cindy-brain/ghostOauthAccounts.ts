@@ -313,7 +313,8 @@ export class GhostOauthAccountManager {
     }
     if (!clientId) return null;
     // brokerBounce → 双地址模型:公网弹跳地址由接线处解析器现拼(broker 基
-    // 地址来自端点清单,生产恒非空)。null 仅剩一种来源:宿主未接线
+    // 地址来自端点清单;当前 region 提供该服务时应为非空)。null 仅剩一种
+    // 来源:宿主未接线
     // resolveBrokerPublicUrl(测试/精简宿主)——此时不带 publicRedirectUri,
     // 由 connectAccount 结构化拒绝(refresh 不需要 redirect_uri,照常可用)。
     const publicRedirectUri = decl.brokerBounce

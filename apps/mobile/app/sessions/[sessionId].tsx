@@ -59,7 +59,7 @@ import { Text, TextInput } from '@/components/AppText';
 import type { TextInput as NativeTextInput } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/auth/AuthContext';
-import { goBackGuarded } from '@/utils/backGuard';
+import { useGuardedBack } from '@/utils/useGuardedBack';
 import { DEVICE_LINK_API_BASE_URL } from '@/config/env';
 import { ConnectionBanner, useShowConnectionBanner } from '@/components/ConnectionBanner';
 import { useDeviceLink } from '@/device-link/DeviceLinkContext';
@@ -193,6 +193,18 @@ import { buildSessionComposerLayout } from '@/session/sessionComposerLayout';
 import { discardMobileUploadedAttachment } from '@/session/mobileAttachmentUpload';
 import { buildMobileImageAttachmentCandidate } from '@/session/mobileImageAttachment';
 import { useMobileLocalAttachments } from '@/session/useMobileLocalAttachments';
+import {
+  buildOutboxItem,
+  createOutboxClientId,
+  outboxDisplayItem,
+  outboxItemAttachments,
+  outboxItemReady,
+  outboxItemRetrying,
+  outboxItemWithEnqueueFailure,
+  outboxWithUploadResult,
+  replaceOutboxItem,
+  type MobileOutboxItem,
+} from '@/session/sessionOutbox';
 import {
   AT_RESOURCE_QUERY_DEBOUNCE_MS,
   buildComposerPaletteCacheKey,
@@ -332,6 +344,12 @@ import {
   mergeMobileLocalSlashCommands,
   parseMobileLocalSystemCommand,
 } from '@/session/systemCard';
+import {
+  buildLearnCardData,
+  buildLearnStartRequest,
+  filterMobileDesktopCommands,
+  parseMobileDesktopCommand,
+} from '@/session/desktopSlashCommands';
 import type {
   InputProjection,
   QueuedRemoteMessage,
@@ -342,6 +360,7 @@ import type {
 import type {
   MobileAgentSkillListResult,
   MobileAtResourceItem,
+  MobileDesktopCommandListResult,
   MobileModelPricingMap,
   MobileSlashCommand,
   RemoteDirectoryEntry,
@@ -549,14 +568,23 @@ export default function SessionScreen() {
     retryPendingUpload,
     discardAllPendingUploads,
     waitForPendingUploads,
+    claimActiveUploads,
+    waitForPastePlaceholdersSettled,
+    hasPastePlaceholders,
     getPendingUploadCount,
   } = useMobileLocalAttachments({
     getAccessToken: () => auth.getAccessToken(),
     getAttachmentCount: () => attachmentsRef.current.length,
-    onUploaded: (rawAttachment, candidate) => {
+    onUploaded: (rawAttachment, candidate, localId) => {
       // 标注类 candidate:记录「矢量笔迹 + 原图」再编辑真相并打 annotated wire 标。
       const attachment = composerAnnotationsRef.current
         ?.decorateUploadedAttachment(rawAttachment, candidate) ?? rawAttachment;
+      // outbox 域:任务已随乐观消息发出——附件填回对应消息的槽位,不进 composer
+      // 托盘;再编辑真相同步 forget(消息已离开 composer,与发送成功后的清理同语义)。
+      if (routeUploadToOutboxRef.current(localId, { attachment })) {
+        composerAnnotationsRef.current?.forgetAttachment(attachment.id);
+        return;
+      }
       // send() 在 waitForPendingUploads 落定后同步读 ref,而 setState 到 commit 有
       // 微任务延迟——这里派发时同步镜像,保证「上传完成→立即发送」不丢刚落定的附件。
       attachmentsRef.current = [...attachmentsRef.current, attachment];
@@ -570,9 +598,54 @@ export default function SessionScreen() {
       }
       setAttachments((current) => [...current, attachment]);
     },
-    onError: setAttachmentError,
+    onError: (message, context) => {
+      // outbox 域任务的失败路由给对应消息气泡(标失败可重试),不落 composer 错误条。
+      const uploadLocalId = context?.uploadLocalId;
+      if (uploadLocalId && routeUploadToOutboxRef.current(uploadLocalId, { failed: true })) return;
+      setAttachmentError(message);
+    },
     onPicked: () => setContextSheetOpen(false),
   });
+  // 换会话与退屏的 outbox 回收:未派发条目的文字合并回草稿库(用户已「发出」的文字
+  // 不能静默蒸发,回来时出现在输入框里),在途上传任务丢弃(与托盘退出语义一致,
+  // controller 会中止传输并回收已完成的 OSS 对象),已就绪附件回收中转对象。
+  // 已交接进 pendingQueue / enqueue 在途的消息不在 outbox,不受影响。
+  // deps 安全性:removePendingUpload 是 controller.remove 的稳定引用(controller
+  // useMemo([]) 单例),不会让本 effect 每 render 重建;auth 经 remoteMediaDepsRef 读最新。
+  useEffect(() => {
+    outboxSessionAliveRef.current = sessionId;
+    return () => {
+      // 先撤存活标记:此后到达的派发失败回插 / 上传结果一律走 salvage 降级,
+      // 不会再写进即将清空的 ref 或下一个会话的 outbox。
+      outboxSessionAliveRef.current = null;
+      const items = outboxRef.current;
+      if (items.length === 0) return;
+      outboxRef.current = [];
+      setOutboxItems([]);
+      // 草稿按条目自身归属写回(而非本 effect 捕获的 sessionId):防御性一致,
+      // ref 里理论上只有本会话条目(归属校验保证),按条目写永远不会写错库。
+      const textsBySession = new Map<string, string[]>();
+      for (const item of items) {
+        const text = item.text.trim();
+        if (!text) continue;
+        const list = textsBySession.get(item.sessionId) ?? [];
+        list.push(text);
+        textsBySession.set(item.sessionId, list);
+      }
+      for (const [draftSessionId, texts] of textsBySession) {
+        const existing = readComposerDraftSync(draftSessionId)?.trim();
+        saveComposerDraft(draftSessionId, [...texts, ...(existing ? [existing] : [])].join('\n\n'));
+      }
+      for (const item of items) {
+        for (const localId of [...item.waitingIds, ...item.failedIds]) removePendingUpload(localId);
+        for (const attachment of outboxItemAttachments(item)) {
+          discardMobileUploadedAttachment(attachment, {
+            getToken: () => remoteMediaDepsRef.current.auth.getAccessToken(),
+          });
+        }
+      }
+    };
+  }, [sessionId, removePendingUpload]);
   const [voiceState, setVoiceStateInternal] = useState<MobileVoiceState>('idle');
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [voiceReleaseToSendActive, setVoiceReleaseToSendActive] = useState(false);
@@ -638,6 +711,28 @@ export default function SessionScreen() {
   // ref 在 send() 同步段立即置位,后续点击当场拦下(同 new.tsx creatingRef /
   // voiceStopInFlightRef 的既有模式)。
   const sendInFlightRef = useRef(false);
+  // 本地待发队列(outbox):附件仍在上传时点发送,消息立即以待发气泡上屏并入此队,
+  // 附件落定后按 FIFO 逐条真正 enqueue(状态机纯函数在 sessionOutbox.ts)。ref 是
+  // 同步真源(上传回调 / 派发循环 / send 同步段都要读最新值),state 只驱动渲染。
+  const [outboxItems, setOutboxItems] = useState<readonly MobileOutboxItem[]>([]);
+  const outboxRef = useRef<readonly MobileOutboxItem[]>([]);
+  // 派发循环重入锁 + 路由函数的 ref 中转(onUploaded 闭包声明在组件前部,实际
+  // 路由/派发逻辑声明在 send() 附近,经 ref 断开声明顺序依赖,同 composerAnnotationsRef)。
+  const outboxPumpBusyRef = useRef(false);
+  const routeUploadToOutboxRef = useRef<
+    (localId: string, result: { attachment: RemoteSerializedAttachment } | { failed: true }) => boolean
+  >(() => false);
+  // outbox 宿主存活标记:值 = 当前有 outbox 回收责任的 sessionId,cleanup(切会话
+  // 收尸 / 卸载)时置 null。dispatch 失败回插与上传结果路由据此判断条目所属会话
+  // 是否还在场——不在场就降级 salvage,绝不写进别的会话或没人消费的 ref。
+  const outboxSessionAliveRef = useRef<string | null>(sessionId);
+  // 原地切 session(实例复用)时 render 阶段同步清渲染 state,不闪现旧会话的待发
+  // 气泡;ref 此刻不清——sessionId 键控的 cleanup effect(下方)还要读它做回收。
+  const [prevOutboxSessionId, setPrevOutboxSessionId] = useState(sessionId);
+  if (prevOutboxSessionId !== sessionId) {
+    setPrevOutboxSessionId(sessionId);
+    setOutboxItems([]);
+  }
   const [messageListFollowLatestRequestKey, setMessageListFollowLatestRequestKey] = useState(0);
   const [bottomOverlayContentHeight, setBottomOverlayContentHeight] = useState(0);
   const [topOverlayHeight, setTopOverlayHeight] = useState(0);
@@ -864,6 +959,11 @@ export default function SessionScreen() {
   const slashLoadSeqRef = useRef(0);
   const atLoadSeqRef = useRef(0);
   const capabilitiesLoadSeqRef = useRef(0);
+  // palette 点选的 agent-skill 名字(含 sessionId 绑定):保留到下次发送或再次打开
+  // palette;sessionId 绑定防止切换会话时旧点选污染新会话的 dispatch。
+  // 发送侧在 slashCommands=[] 时仍能区分「点选了 skill」与「直接手输」,确保
+  // 点选的 skill 不被白名单拦截误分流到 learn:start。
+  const pendingSkillSelectionRef = useRef<{ name: string; sid: string } | null>(null);
   const extraDirBrowseSeqRef = useRef(0);
   const autoRetrySyncKeyRef = useRef<string | null>(null);
   const loadedRouteFocusKeyRef = useRef<string | null>(null);
@@ -1647,6 +1747,23 @@ export default function SessionScreen() {
     };
   }, [restoreComposerDraft, routeDraft, sessionId]);
 
+  // 点选意图的有效性跟随草稿前缀与会话:一旦草稿不再以点选的 `/name` 开头
+  // (清空、整段替换、改名)或切换了会话,点选立即作废——覆盖「清稿/替换后手输
+  // /learn 被旧点选绑架」与「跨会话残留」两类误让行(review P1/P2)。
+  // 在 `/name` 后继续追加参数属于同一次点选的自然延续,保留。
+  useEffect(() => {
+    const pending = pendingSkillSelectionRef.current;
+    if (!pending) return;
+    if (pending.sid !== sessionId) {
+      pendingSkillSelectionRef.current = null;
+      return;
+    }
+    const head = /^\/([a-z][\w-]*)/i.exec(draft.trimStart());
+    if (!head || head[1].toLowerCase() !== pending.name.toLowerCase()) {
+      pendingSkillSelectionRef.current = null;
+    }
+  }, [draft, sessionId]);
+
   useEffect(() => {
     if (!canUseComposer || composerTrigger.kind !== 'slash' || !currentSession || !deviceId) {
       slashLoadSeqRef.current += 1;
@@ -1655,6 +1772,8 @@ export default function SessionScreen() {
       setSlashPaletteError(null);
       return;
     }
+    // palette 重新打开:之前的点选意图作废,以本次新选择为准。
+    pendingSkillSelectionRef.current = null;
     const seq = ++slashLoadSeqRef.current;
     const agentKind = agentKindForSession(currentSession);
     const paletteCacheKey = buildComposerPaletteCacheKey(deviceId, agentKind, currentSession.workingDir ?? '');
@@ -1671,7 +1790,7 @@ export default function SessionScreen() {
     setSlashPaletteError(null);
     void withTransientRemoteRetry(async () => {
       await openLink(deviceId);
-      const [builtins, skills] = await Promise.all([
+      const [builtins, skills, desktop] = await Promise.all([
         maker.listAgentCommands(agentKind),
         currentSession.workingDir
           ? maker.listAgentSkills(agentKind, {
@@ -1679,10 +1798,16 @@ export default function SessionScreen() {
               forceReload: false,
             })
           : Promise.resolve({ success: true, skills: [] } satisfies MobileAgentSkillListResult),
+        // desktop 命令是 additive 展示(白名单分流不依赖此清单,清单只参与同名 skill
+        // 让行仲裁,见 desktopSlashCommands):拉取失败(含老被控端无此通道)静默降级
+        // 为不展示,不能拖垮 builtin/skill 两路。
+        maker.listDesktopCommands().catch(
+          () => ({ success: false } satisfies MobileDesktopCommandListResult),
+        ),
       ]);
-      return { builtins, skills };
+      return { builtins, skills, desktop };
     })
-      .then(({ builtins, skills }) => {
+      .then(({ builtins, skills, desktop }) => {
         if (slashLoadSeqRef.current !== seq) return;
         const builtinCommands = builtins.success && Array.isArray(builtins.commands)
           ? builtins.commands
@@ -1690,7 +1815,10 @@ export default function SessionScreen() {
         const skillCommands = skills.success && Array.isArray(skills.skills)
           ? skills.skills
           : [];
-        const merged = mergeSlashCommands(builtinCommands, skillCommands);
+        const desktopCommands = desktop.success && Array.isArray(desktop.commands)
+          ? filterMobileDesktopCommands(desktop.commands)
+          : [];
+        const merged = mergeSlashCommands(builtinCommands, skillCommands, desktopCommands);
         // 刷新失败(整体或部分)且缓存已画:保留缓存行、不置 error——
         // ComposerPaletteFrame 的 errorText 渲染在 children 之前,会把刚画的缓存
         // 整体盖住,可用面板被错误文案顶掉正是本 PR 要消除的体验(codex review R18)。
@@ -1699,7 +1827,10 @@ export default function SessionScreen() {
             : null;
         if (!partialError) {
           setSlashCommands(merged);
-          writeSlashCommandCache(paletteCacheKey, merged);
+          // desktop 命令(kind === 'desktop')不写入共享缓存:缓存被 new.tsx 等
+          // 没有 desktop 命令分流逻辑的页面共读,写入会导致它们展示 /learn 但发送
+          // 时走普通文本透传给 agent(静默失效)。
+          writeSlashCommandCache(paletteCacheKey, merged.filter((c) => c.kind !== 'desktop'));
           setSlashPaletteError(null);
         } else if (!cachedCommands) {
           setSlashCommands(merged);
@@ -2582,8 +2713,13 @@ export default function SessionScreen() {
   }, [deviceId, hasOlderMessages, loadingEarlier, maker, messages, sessionId]);
 
   const selectSlashCommand = useCallback((command: MobileSlashCommand) => {
+    // 点选 agent-skill 时记录名字+会话 id:palette 关闭后 slashCommands 被清,发送侧
+    // 凭此 ref 识别「用户明确选中的 skill」;sid 绑定防止切换会话后旧点选残留。
+    pendingSkillSelectionRef.current = command.kind === 'agent-skill'
+      ? { name: command.name, sid: sessionId }
+      : null;
     setComposerDraft((current) => insertSlashCommand(current, detectComposerTrigger(current), command));
-  }, [setComposerDraft]);
+  }, [sessionId, setComposerDraft]);
 
   const selectAtResource = useCallback((item: MobileAtResourceItem) => {
     setComposerDraft((current) => insertAtResource(current, detectComposerTrigger(current), item));
@@ -2995,6 +3131,178 @@ export default function SessionScreen() {
     ));
   }, [composerResize.dragging]);
 
+  // ————— 本地待发队列(outbox):附件上传中消息先上屏 —————
+  // 状态机纯函数在 sessionOutbox.ts;这里只做 React 接线与 enqueue 派发。
+  // 所有更新经此单点:ref(同步真源)与 state(渲染)一起写。
+  const updateOutbox = (updater: (items: readonly MobileOutboxItem[]) => readonly MobileOutboxItem[]) => {
+    const next = updater(outboxRef.current);
+    if (next === outboxRef.current) return;
+    outboxRef.current = next;
+    setOutboxItems(next);
+  };
+
+  /**
+   * 无法回插 outbox 时的兜底(所属会话已离场 / 屏已卸载):文字合并回**条目所属
+   * 会话**的草稿库(持久化,不静默蒸发),已就绪附件回收 OSS 中转对象。派发失败
+   * 才会走到这里,此时附件必然已全部落定(ready 才派发),没有在途任务要清。
+   */
+  const salvageOutboxItem = (item: MobileOutboxItem) => {
+    const text = item.text.trim();
+    if (text) {
+      const existing = readComposerDraftSync(item.sessionId)?.trim();
+      saveComposerDraft(item.sessionId, [text, ...(existing ? [existing] : [])].join('\n\n'));
+    }
+    for (const attachment of outboxItemAttachments(item)) {
+      discardMobileUploadedAttachment(attachment, {
+        getToken: () => remoteMediaDepsRef.current.auth.getAccessToken(),
+      });
+    }
+  };
+
+  /**
+   * 派发一条就绪的 outbox 条目:构建 queued(权限档用发送时刻快照,model / effort
+   * 等跟随会话最新值)→ 乐观进本地 pendingQueue(待发气泡原位变为排队气泡,同帧
+   * 无跳变)→ enqueue RPC(弱网重试 + 对账,同原发送路径口径)。enqueue 确认未
+   * 应用时条目回 outbox 队首标失败,气泡保留可重试——不恢复草稿(消息还在屏上)。
+   * 全程使用 item.sessionId(而非闭包 sessionId):dispatch 在途窗口用户可能原地
+   * 切会话,消息必须始终发进它所属的会话(review P1)。
+   */
+  const dispatchOutboxItem = async (item: MobileOutboxItem) => {
+    const failItem = (message: string) => {
+      // 归属校验:条目所属会话已离场(切会话 cleanup 已跑 / 屏已卸载)时不回插
+      // 共享 ref——那会把 A 会话的失败气泡画进 B,或写进没人消费的 ref 让文字
+      // 蒸发(review P1)。降级为草稿写回 + 附件回收。
+      if (outboxSessionAliveRef.current !== item.sessionId) {
+        salvageOutboxItem(item);
+        return;
+      }
+      updateOutbox((items) => (
+        items.some((existing) => existing.clientId === item.clientId)
+          ? replaceOutboxItem(items, outboxItemWithEnqueueFailure(item, message))
+          : [outboxItemWithEnqueueFailure(item, message), ...items]
+      ));
+    };
+    const sessionNow = remoteSessionStore.getSessions().find((entry) => entry.id === item.sessionId);
+    if (!sessionNow) {
+      failItem('未找到当前远程会话，请重新同步后再发送。');
+      return;
+    }
+    if (!sessionNow.workingDir) {
+      failItem('当前会话缺少工作目录，不能发送消息。');
+      return;
+    }
+    const sessionAtSend = { ...sessionNow, permissionMode: item.permissionModeAtSend };
+    const queued = buildQueuedTextMessage(sessionAtSend, item.text, new Date(), item.clientId, {
+      attachments: outboxItemAttachments(item),
+    });
+    // 乐观交接:进本地 pendingQueue 的同一同步段把条目移出 outbox,气泡原位从
+    // 「发送中」变「排队中」不闪断;enqueue 成功后用权威 projection 覆盖 reconcile。
+    const projectionBeforeSend = remoteSessionStore.getInputProjection(item.sessionId);
+    remoteSessionStore.setInputProjection(item.sessionId, {
+      ...projectionBeforeSend,
+      sessionId: projectionBeforeSend.sessionId || item.sessionId,
+      pendingQueue: [...projectionBeforeSend.pendingQueue, queued],
+    });
+    updateOutbox((items) => items.filter((entry) => entry.clientId !== item.clientId));
+    try {
+      // 弱网重试与写序边界同 send() 原路径(仅「保证未发出」的 NOT_CONNECTED 自动重发)。
+      let projection: InputProjection | undefined;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          projection = await maker.input.enqueue(item.sessionId, queued, { sendAtMs: Date.now() });
+          break;
+        } catch (err) {
+          if (
+            attempt >= ENQUEUE_RECONNECT_RETRIES
+            || !isNotConnectedError(err)
+            || isInFlightDeviceLinkError(err)
+          ) throw err;
+          await new Promise((resolve) => setTimeout(resolve, ENQUEUE_RECONNECT_BACKOFF_MS * 2 ** attempt));
+        }
+      }
+      remoteSessionStore.setInputProjection(item.sessionId, projection);
+    } catch (err) {
+      // 与原路径同口径:先对账分辨「确实没应用」vs「已应用但响应丢了」。
+      const applied = await (async () => {
+        try {
+          const fresh = await maker.input.getProjection(item.sessionId);
+          remoteSessionStore.setInputProjection(item.sessionId, fresh);
+          return fresh.pendingQueue.some((entry) => entry.clientId === queued.clientId);
+        } catch {
+          return remoteSessionStore.getInputProjection(item.sessionId).pendingQueue
+            .some((entry) => entry.clientId === queued.clientId);
+        }
+      })();
+      if (!applied) {
+        const current = remoteSessionStore.getInputProjection(item.sessionId);
+        remoteSessionStore.setInputProjection(item.sessionId, {
+          ...current,
+          pendingQueue: current.pendingQueue.filter((entry) => entry.clientId !== queued.clientId),
+        });
+        failItem(formatRemoteError(err));
+      }
+      // applied:消息已在桌面队列,按成功继续(不回滚、不报错)。
+    }
+  };
+
+  /** FIFO 派发循环:队首就绪(附件齐、无失败)才派发;失败条目留在队首阻塞后续保顺序。 */
+  const pumpOutbox = async () => {
+    if (outboxPumpBusyRef.current) return;
+    outboxPumpBusyRef.current = true;
+    try {
+      for (;;) {
+        const head = outboxRef.current[0];
+        if (!head || !outboxItemReady(head)) return;
+        updateOutbox((items) => replaceOutboxItem(items, { ...head, phase: 'dispatching' }));
+        await dispatchOutboxItem({ ...head, phase: 'dispatching' });
+      }
+    } finally {
+      outboxPumpBusyRef.current = false;
+    }
+  };
+
+  // 上传结果路由(hook 的 onUploaded/onError 经 ref 调到最新闭包):localId 属于
+  // outbox 条目 → 填槽/标失败并驱动派发,返回 true;否则返回 false 走 composer 托盘。
+  routeUploadToOutboxRef.current = (localId, result) => {
+    const owner = outboxRef.current.find((item) => item.slotByLocalId[localId] !== undefined);
+    if (!owner) return false;
+    const next = outboxWithUploadResult(outboxRef.current, localId, result);
+    if (next !== outboxRef.current) outboxRef.current = next;
+    // 归属校验:条目属于已离场会话(原地切 session 后 cleanup 尚未跑的一帧窗口)
+    // 时只写 ref 等 cleanup 收尸——不 setState(不把旧会话气泡画进新会话)、不
+    // pump(不派发离场条目);成功产物已填进槽位,cleanup 会统一回收(review P1)。
+    if (owner.sessionId !== sessionId) return true;
+    setOutboxItems(outboxRef.current);
+    void pumpOutbox();
+    return true;
+  };
+
+  /** 重试失败条目:失败附件任务重跑(取新鲜 token),enqueue 失败型直接重新派发。 */
+  const retryOutboxItem = (clientId: string) => {
+    const item = outboxRef.current.find((entry) => entry.clientId === clientId);
+    if (!item || item.phase !== 'failed') return;
+    setQueueSelectedClientId(null);
+    for (const localId of item.failedIds) retryPendingUpload(localId);
+    updateOutbox((items) => replaceOutboxItem(items, outboxItemRetrying(item)));
+    void pumpOutbox();
+  };
+
+  /** 删除待发条目:在途上传取消(controller 会回收已完成的 OSS 对象),就绪附件回收。 */
+  const removeOutboxItem = (clientId: string) => {
+    const item = outboxRef.current.find((entry) => entry.clientId === clientId);
+    if (!item) return;
+    setQueueSelectedClientId(null);
+    updateOutbox((items) => items.filter((entry) => entry.clientId !== clientId));
+    for (const localId of [...item.waitingIds, ...item.failedIds]) removePendingUpload(localId);
+    for (const attachment of outboxItemAttachments(item)) {
+      discardMobileUploadedAttachment(attachment, { getToken: () => auth.getAccessToken() });
+    }
+    // 队首失败条目被删除后,后面的条目可能已就绪。
+    void pumpOutbox();
+  };
+
+  const outboxDisplayItems = useMemo(() => outboxItems.map(outboxDisplayItem), [outboxItems]);
+
   async function send(options: { draftOverride?: string } = {}) {
     if (voiceState === 'listening' && options.draftOverride === undefined) {
       await finishVoiceRecording({ sendAfterTranscribe: true });
@@ -3044,6 +3352,89 @@ export default function SessionScreen() {
     // 保存,防止编辑文本被当成一条全新消息发出(PR#709 review P1)。
     const queueEditAtSendStart = queueEditingRef.current;
     requestMessageListFollowLatest();
+    // —— 乐观 outbox 路径:附件仍在上传(或 outbox 已有排队消息,保 FIFO)时不再
+    // 原地等待,消息立即以待发气泡上屏,附件落定后由派发循环真正入队。豁免场景走
+    // 下方原路径:排队编辑保存(语义是改队列原条目)、纯文本本地命令(/context 等,
+    // 本地卡片无顺序问题;此时 composer 域无在途上传,waitForPendingUploads 秒回)。
+    // 粘贴占位窗口(uploadsInFlight 计入占位数)同样走本分支:先等占位落定再划归,
+    // 见分支内注释——不豁免,否则占位窗口内的发送会经原路径直接 enqueue 超车
+    // outbox 在途消息(greptile review P1)。除占位等待外判断与划归全程同步,无竞态窗。
+    const outboxEligible = !queueEditAtSendStart;
+    const uploadsInFlight = outboxEligible ? getPendingUploadCount() : 0;
+    const willHaveAttachments = attachmentsRef.current.length > 0 || uploadsInFlight > 0;
+    const earlyLocalCommand = willHaveAttachments ? null : parseMobileLocalSystemCommand(body);
+    // outboxPumpBusyRef 也算「outbox 在途」:派发起点条目即移出 outbox,enqueue
+    // 弱网重试窗内 outbox 可能为空——此时新消息若走原路径会并发 enqueue 超车
+    // 在途消息,破坏 FIFO(review P1);计入 pump busy 让它同样进 outbox 排队。
+    if (outboxEligible && !earlyLocalCommand
+      && (uploadsInFlight > 0 || outboxRef.current.length > 0 || outboxPumpBusyRef.current)) {
+      try {
+        if (!currentSession.workingDir) {
+          setError('当前会话缺少工作目录，不能发送消息。');
+          restoreDraftAfterFailure();
+          return;
+        }
+        // 粘贴占位窗口:任务尚未入队、无法划归——只等占位落定(兑现的同步段任务
+        // 已入 controller;失败 / 超时 60s 兜底后同样放行,错误 toast 已由占位路径
+        // 给出),不等上传本身。等待通常数百 ms(本机剪贴板),极端跨设备剪贴板由
+        // 发送按钮转圈承载;等待期间 sendInFlightRef 挡住重入。
+        if (hasPastePlaceholders()) await waitForPastePlaceholdersSettled();
+        // 划归:当前全部未 claim 上传任务(active + 失败卡)随本条消息走——离开
+        // composer 托盘与限额,产物经 onUploaded/onError 的 localId 路由回填。
+        const claimedUploads = claimActiveUploads();
+        const readyAttachments = attachmentsRef.current;
+        // 本地预览快照(必须在下方清理 previews 映射之前取):outbox 气泡从第一帧
+        // 就以图片形态渲染,不做「附件行→图片」的形态跳变;缺失时渲染层按 ossRef
+        // 查 sentAttachmentThumbStore 兜底。
+        const readyPreviews = readyAttachments.map((attachment) => attachmentPreviews[attachment.id] ?? null);
+        // 本批映射清理(与原发送成功路径同口径):附件已随消息离开 composer 域。
+        const sentAttachmentIds = new Set(readyAttachments.map((attachment) => attachment.id));
+        setMediaAssetAttachments((current) => Object.fromEntries(
+          Object.entries(current).filter(([, attachmentId]) => !sentAttachmentIds.has(attachmentId)),
+        ));
+        setAttachmentPreviews((current) => Object.fromEntries(
+          Object.entries(current).filter(([attachmentId]) => !sentAttachmentIds.has(attachmentId)),
+        ));
+        for (const attachmentId of sentAttachmentIds) {
+          composerAnnotationsRef.current?.forgetAttachment(attachmentId);
+        }
+        setAttachments([]);
+        attachmentsRef.current = [];
+        setAttachmentError(null);
+        // 引用消费(同原乐观二拍口径,按快照身份精确摘除)。outbox 条目删除 / 失败
+        // 不回填——消息与引用都还在气泡里,重试即可,没有「内容蒸发」窗口。
+        if (quotesAtSend.length > 0) {
+          const pendingConsume = new Set(quotesAtSend);
+          const quotesAfterConsume = getQuotes(sessionId).filter((quote) => !pendingConsume.delete(quote));
+          setQuotes(sessionId, quotesAfterConsume);
+        }
+        // plan 一次性语义:权限档快照进条目(派发按快照发),chip 立即恢复——
+        // 不等附件上传完,与「消息已发出」的乐观语义一致。
+        const permissionModeAtSend = currentSession.permissionMode || 'bypassPermissions';
+        if (permissionModeAtSend === 'plan') {
+          const fallback = runtimeOptions?.permissionOptions.find((option) => option.id !== 'plan')?.id ?? 'ask';
+          const remembered = prePlanPermissionModeRef.current;
+          const restored = remembered && remembered !== 'plan' ? remembered : fallback;
+          void maker.setPermissionMode(sessionId, restored).catch(() => undefined);
+        }
+        updateOutbox((items) => [...items, buildOutboxItem({
+          clientId: createOutboxClientId(),
+          sessionId,
+          text,
+          permissionModeAtSend,
+          readyAttachments,
+          readyPreviews,
+          claimedUploads,
+        })]);
+        voiceDictionaryLearningTrackerRef.current?.flush();
+        requestMessageListFollowLatest();
+        void pumpOutbox();
+      } finally {
+        sendInFlightRef.current = false;
+        setSending(false);
+      }
+      return;
+    }
     try {
       // 拍照 / 选图后立刻点发送是常见路径:等在途图片上传落定(乐观托盘)。
       // 有失败就中止发送——错误文案已由上传回调写入 attachmentError,让用户处理。
@@ -3143,9 +3534,47 @@ export default function SessionScreen() {
       }
       // 命令判定用 body(不含引用块):带引用时 /context 等本地命令仍生效,且不消费引用。
       const localSystemCommand = hasAttachments ? null : parseMobileLocalSystemCommand(body);
-      if (!sessionAtSend.workingDir && !localSystemCommand) {
+      // desktop 命令(/learn)按名字白名单分流;同名 agent-skill 优先让行(对齐桌面
+      // dispatch 语义),清单未加载时白名单兜底拦截。
+      // slashCommands 在 palette 打开时含已加载清单(同名 skill 让行);palette
+      // 关闭时被清为[],退回白名单。例外:用户从 palette 点选了 agent-skill
+      // (pendingSkillSelectionRef 有值)时,即使 slashCommands 已清也应让行——
+      // 点选意图明确,不应被白名单覆盖。点选后再次打开 palette 或发送后 ref 清零。
+      const pendingSkill = pendingSkillSelectionRef.current;
+      pendingSkillSelectionRef.current = null;
+      const parsedDesktopCommand = hasAttachments ? null : parseMobileDesktopCommand(body, slashCommands);
+      // 若用户明确点选了同名 skill(且点选发生在当前会话),优先让行。
+      // sid 验证防止跨会话残留:切换会话后 ref 中的旧会话点选不应影响新会话 dispatch。
+      const desktopCommand =
+        parsedDesktopCommand
+        && pendingSkill?.sid === sessionId
+        && pendingSkill.name === parsedDesktopCommand.name
+          ? null
+          : parsedDesktopCommand;
+      if (!sessionAtSend.workingDir && !localSystemCommand && !desktopCommand) {
         setError('当前会话缺少工作目录，不能发送消息。');
         restoreDraftAfterFailure();
+        return;
+      }
+      if (desktopCommand?.name === 'learn') {
+        // /learn 是被控端宿主功能:直调 learn:start(execute-desktop-command 被
+        // allowlist 永久禁止),绝不进 agent 队列——原样 enqueue 的话 agent 只会当
+        // 普通文本忽略。蒸馏在被控端后台跑,这里以本地系统卡反馈启动结果。
+        let cardData: Record<string, unknown>;
+        try {
+          const { runId } = await maker.learnStart(
+            buildLearnStartRequest(desktopCommand.args, sessionId),
+          );
+          cardData = buildLearnCardData({ runId });
+        } catch (err) {
+          cardData = buildLearnCardData({ errorMessage: formatRemoteError(err) });
+          // 启动失败(LEARN_BUSY / CHANNEL_NOT_ALLOWED 等):恢复草稿供用户重试。
+          restoreDraftAfterFailure();
+        }
+        remoteSessionStore.appendLocalSystemCard(sessionId, 'learn', cardData);
+        voiceDictionaryLearningTrackerRef.current?.flush();
+        // 成功时草稿已在乐观第一拍清空;失败时上方已恢复——两路都跟到底部。
+        requestMessageListFollowLatest();
         return;
       }
       if (localSystemCommand) {
@@ -4252,9 +4681,9 @@ export default function SessionScreen() {
     }
   }, [currentSession, extraDirBrowseOpen, loadExtraDirBrowsePath]);
 
-  const goBackToHome = useCallback(() => {
-    goBackGuarded(router);
-  }, [router]);
+  // 自愈返回:canGoBack 与真实栈不一致时(reload 恢复深路由 / 重复压栈残留),
+  // GO_BACK 会被静默吞掉,生产表现为"点返回永远没反应"——校验兜底见 useGuardedBack。
+  const goBackToHome = useGuardedBack();
 
   // chip「打开」:文件 → Quick Look 预览页(带行号),目录 → 文件浏览器定位。
   // 点击与长按菜单的「快速预览 / 打开文件浏览器」共用这一条。
@@ -5031,13 +5460,16 @@ export default function SessionScreen() {
                             setQueueSelectedClientId(null);
                             removeQueueItem(clientId);
                           }}
+                          onRemoveOutboxItem={removeOutboxItem}
                           onResume={resumeQueue}
                           onRetryError={retryQueueError}
+                          onRetryOutboxItem={retryOutboxItem}
                           onSelect={setQueueSelectedClientId}
                           onSteer={(item) => {
                             setQueueSelectedClientId(null);
                             steerQueueItem(item);
                           }}
+                          outboxItems={outboxDisplayItems}
                           projection={inputProjection}
                           readOnlyReason={queueInlineReadOnlyReason}
                           selectedClientId={queueSelectedClientId}
@@ -5089,7 +5521,13 @@ export default function SessionScreen() {
                   key={`${command.kind}:${command.name}`}
                   onPress={() => selectSlashCommand(command)}
                   primary={`/${command.name}`}
-                  secondary={command.kind === 'agent-skill' ? command.source : 'agent-cmd'}
+                  secondary={
+                    command.kind === 'agent-skill'
+                      ? command.source
+                      : command.kind === 'desktop'
+                        ? 'desktop'
+                        : 'agent-cmd'
+                  }
                   testID="session.slashCommandRow"
                 />
               ))}

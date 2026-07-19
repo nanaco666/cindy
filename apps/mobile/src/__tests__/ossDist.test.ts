@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   sanitizeFileSegment,
   buildAndroidDistTarget,
+  resolveAndroidInstallUrl,
   buildIosDistTargets,
   buildItmsManifestPlist,
   buildItmsUrl,
@@ -31,6 +32,21 @@ describe('buildAndroidDistTarget', () => {
   it('缺 versionCode / cdnBase 抛错', () => {
     expect(() => buildAndroidDistTarget({ ossPrefix: 'p', cdnBase: 'https://c', version: '1', versionCode: '' })).toThrow();
     expect(() => buildAndroidDistTarget({ ossPrefix: 'p', version: '1', versionCode: 1 })).toThrow();
+  });
+});
+
+describe('resolveAndroidInstallUrl', () => {
+  it('商店地址留空时回退 APK CDN 直链', () => {
+    expect(resolveAndroidInstallUrl({ storeUrl: '', apkUrl: 'https://cdn.example/Cindy.apk' }))
+      .toBe('https://cdn.example/Cindy.apk');
+  });
+  it('配置商店地址后优先使用商店 deep link', () => {
+    expect(resolveAndroidInstallUrl({ storeUrl: 'market://details?id=com.xd.cindy', apkUrl: 'https://cdn.example/Cindy.apk' }))
+      .toBe('market://details?id=com.xd.cindy');
+  });
+  it('缺 APK fallback 或商店地址非法时 fail closed', () => {
+    expect(() => resolveAndroidInstallUrl({ storeUrl: '', apkUrl: '' })).toThrow(/apkUrl/);
+    expect(() => resolveAndroidInstallUrl({ storeUrl: 'not-a-url', apkUrl: 'https://cdn/a.apk' })).toThrow(/absolute storeUrl/);
   });
 });
 

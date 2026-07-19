@@ -4,10 +4,11 @@
  * 客户端远程端点清单(`<hotfix CDN base>/endpoint.json`)的 desktop 宿主层。
  *
  * 语义是**清单即唯一事实源 + 阻断式**(2026-07 与 Lizi 定案,三次收紧):
- * app.ready 内、createWindow / 一切更新检查之前解析清单;拉不到 / 清单非法 /
- * 任一字段缺失 → 弹系统错误框(重试 / 退出),用户不重试成功就不放行启动。
+ * app.ready 内、createWindow / 一切更新检查之前解析清单;endpoint 字段允许按
+ * region 缺失或留空,不会阻断启动;拉不到、JSON / schema 无法解析或非空值非法
+ * 时才弹系统错误框(重试 / 退出),用户不重试成功就不放行启动。
  * **没有缓存回退、没有超时后静默继续、没有逐字段烘焙回退**——生效的端点
- * (含更新链 CDN base)全部来自清单,配置错任何一点都在启动时立刻暴露。
+ * (含更新链 CDN base)全部来自清单,非空值配置非法会在启动时立刻暴露。
  *
  * 清单来源按运行形态三选一(resolveEndpointSource,纯函数可单测):
  *  - packaged / dev + --endpoints-cdn:从烘焙自举基址 ENDPOINT_MANIFEST_BASE_URL
@@ -17,7 +18,7 @@
  *    同一条阻断循环,文件缺失 / 非法同样弹框——配置错要炸出来,不静默猜测;
  *    仅本地文件路径放开 allowHttp(localhost 场景),CDN 路径校验零放松。
  *
- * 共享逻辑(schema / 全字段必填校验)在 @lizi/maker-shared/client-endpoints;
+ * 共享逻辑(schema / 非空 URL 校验 / 缺省字段归一)在 @lizi/maker-shared/client-endpoints;
  * 本文件负责 desktop 侧 IO 与 renderer 消费(sendSync IPC,首帧同步可用)。
  *
  * 依赖方向(2026-07 重构后):manifestService(更新链)经 getClientEndpoint

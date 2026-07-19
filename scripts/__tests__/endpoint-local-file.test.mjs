@@ -70,7 +70,7 @@ test('cn 正本缺失 / 非法直接抛错(fail closed,不造半截配置)', () 
 
 test('生成物能过客户端 parser 的 allowHttp 校验(与仓内正本同一守门语义)', async () => {
   // maker-shared 是 TS 源码直发,node --test 下直接 import .ts 不可行;
-  // 这里按 parser 的公开语义做最小同构校验:全字段齐备 + localhost 用 http。
+  // 这里额外守住本地生成器自己的完整输出契约:预期字段齐备 + localhost 用 http。
   const repoRoot = makeRepoRoot(CN_MANIFEST);
   const local = JSON.parse(fs.readFileSync(generateEndpointLocalFile({ repoRoot }), 'utf8'));
   const requiredKeys = [

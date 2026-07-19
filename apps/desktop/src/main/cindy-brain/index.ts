@@ -1255,8 +1255,8 @@ function getGhostOauthAccountManager(): GhostOauthAccountManager {
       openExternal: (url) => shell.openExternal(url),
       // tokenBroker 声明的意识(仅第一方,门控在装入闸与连接闸)经独立
       // oauth-broker 服务换/刷 token:serverApiFetch 自带登录 JWT 注入与
-      // TOKEN_EXPIRED 自动刷新。基地址来自运行期端点清单(全字段必填,
-      // 启动阻断保证非空)——恒指 broker,**不再回退主 server 老路由**
+      // TOKEN_EXPIRED 自动刷新。基地址来自运行期端点清单;当前 region 提供该
+      // 服务时恒指 broker,**不再回退主 server 老路由**
       // (2026-07 apiBaseUrl 清理:旧"编译期注入可能为空 → 回退"的分支随
       // 清单机制成为死代码;配错清单时明确 404 暴露,不静默落主 server)。
       broker: createGhostOauthBrokerClient({
@@ -1269,7 +1269,7 @@ function getGhostOauthAccountManager(): GhostOauthAccountManager {
         hasLoginToken: () => getAccessToken() !== null,
         logger: log,
       }),
-      // brokerBounce 声明的公网弹跳地址:broker 基地址(端点清单,恒非空)
+      // brokerBounce 声明的公网弹跳地址:broker 基地址(端点清单)
       // + 声明路径现拼。不回退主 server——弹跳路由只存在于独立 oauth-broker
       // (slack provider 同款约束:绝不跨服务回退)。
       resolveBrokerPublicUrl: (path) => {

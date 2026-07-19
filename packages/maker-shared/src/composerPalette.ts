@@ -15,7 +15,10 @@ export type ComposerSlashCommand =
       path?: string;
       scope?: string;
       enabled?: boolean;
-    };
+    }
+  // desktop 自有命令(main 进程 DesktopCommandRegistry,如 /learn):由控制端/宿主
+  // 执行,绝不转发给 agent。移动端只放行自己能执行的子集(见 mobile 侧过滤)。
+  | { kind: 'desktop'; name: string; description: string };
 
 export interface ComposerAtResourceItem {
   type: 'file' | 'dir' | 'agent';
@@ -33,11 +36,14 @@ export function detectComposerTrigger(text: string): ComposerTrigger {
 export function mergeSlashCommands(
   agentBuiltin: readonly ComposerSlashCommand[],
   agentSkills: readonly ComposerSlashCommand[],
+  desktopCommands: readonly ComposerSlashCommand[] = [],
 ): ComposerSlashCommand[] {
   const out: ComposerSlashCommand[] = [];
   const seen = new Set<string>();
+  // 重名优先级对齐桌面 slashCommands.ts 的 mergeCommands:agent-skill > desktop > agent-builtin。
   const tiers = [
     [...agentSkills].sort(commandNameCompare),
+    [...desktopCommands].sort(commandNameCompare),
     [...agentBuiltin].sort(commandNameCompare),
   ];
   for (const tier of tiers) {

@@ -536,6 +536,15 @@ describe('normalizeRemoteMessages', () => {
         systemCardType: 'cmd',
         systemCardData: { command: '/context', output: 'Context ok' },
       }),
+      // 回归(#96 review):learn 卡必须在重新归一化后仍被识别为 system 卡,
+      // 否则 /learn 的启动结果卡在消息合并/重拉后会退化成空气泡。
+      message({
+        id: 'local-learn',
+        role: 'system',
+        content: '',
+        systemCardType: 'learn',
+        systemCardData: { runId: 'r-1' },
+      }),
     ]);
 
     expect(items).toEqual([
@@ -557,6 +566,12 @@ describe('normalizeRemoteMessages', () => {
         label: 'system:cmd',
         systemCardType: 'cmd',
         systemCardData: { command: '/context', output: 'Context ok' },
+      }),
+      expect.objectContaining({
+        kind: 'system',
+        label: 'system:learn',
+        systemCardType: 'learn',
+        systemCardData: { runId: 'r-1' },
       }),
     ]);
   });

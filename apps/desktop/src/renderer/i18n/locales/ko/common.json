@@ -4795,9 +4795,8 @@
       "recent": "최근",
       "browseFolder": "다른 폴더 선택",
       "advanced": "고급",
-      "branch": "브랜치",
-      "loading": "로딩 중…",
       "worktree": "worktree",
+      "worktreeHint": "작업 실행 시 프로젝트의 현재 브랜치에서 임시 worktree를 만들고, 지속 세션에서는 같은 디렉터리를 다시 사용합니다",
       "advancedAria": "고급 설정 (worktree)",
       "useWorktreeAria": "worktree 격리 사용",
       "branchHints": {

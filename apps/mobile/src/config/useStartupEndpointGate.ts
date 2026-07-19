@@ -1,6 +1,7 @@
 // 启动端点清单闸门 hook:冷启动时跑 runStartupEndpointResolve,成功前业务树
-// 不挂载。正式包只认 CDN 清单:拉取失败、清单非法或缺任一必填字段
-// 都进入 error 态,由 _layout 渲染错误屏,用户点重试再跑一次;无包内回退。
+// 不挂载。正式包只认 CDN 清单:字段缺失/空白允许放行;拉取失败、JSON/schema
+// 无法解析或非空值非法时进入 error 态,由 _layout 渲染错误屏,用户点重试再跑一次;
+// 无包内回退。
 // __DEV__ 默认放行(零网络,端点初值来自仓内 config/endpoint.json,见 env.ts);
 // EXPO_PUBLIC_ENDPOINTS_CDN=1 时 dev 也走完整 CDN 闸门(测线上清单,与
 // desktop 的 --endpoints-cdn 同语义)。

@@ -19,6 +19,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Effort } from '@lizi/maker-core';
 import type { CatalogModel, ProviderView } from '@lizi/model-providers';
 
 const h = vi.hoisted(() => {
@@ -55,7 +56,7 @@ const h = vi.hoisted(() => {
     resolvedConfig: {
       agentKind: 'claude-code' as const,
       model: 'test-model',
-      effort: undefined as import('@lizi/maker-core').Effort | undefined,
+      effort: undefined as Effort | undefined,
       permissionMode: 'bypassPermissions',
       providerId: null as string | null,
     },

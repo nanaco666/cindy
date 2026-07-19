@@ -29,6 +29,7 @@ export const SELF_HOST_REGIONS = Object.freeze(['cn', 'global']);
 /** 每个 region 必须“加载即非空”的身份字段(dry-run 也要用来打印计划 / 选 bundle)。 */
 const REQUIRED_IDENTITY_FIELDS = Object.freeze([
   'iosBundleId',
+  'iosAppStoreId',
   'androidPackage',
   'npkgExpectBundle',
 ]);
@@ -101,6 +102,19 @@ export function validateSelfHostRegions(value, options = {}) {
     for (const key of REQUIRED_IDENTITY_FIELDS) {
       if (typeof block[key] !== 'string' || !block[key].trim()) {
         throw new Error(`${source} 的 ${region}.${key} 必须是非空字符串`);
+      }
+    }
+    if (!/^\d+$/.test(block.iosAppStoreId.trim())) {
+      throw new Error(`${source} 的 ${region}.iosAppStoreId 必须是纯数字 App Store ID`);
+    }
+    if (typeof block.androidStoreUrl !== 'string') {
+      throw new Error(`${source} 的 ${region}.androidStoreUrl 必须是字符串(可留空,空时回退 OSS APK)`);
+    }
+    if (block.androidStoreUrl.trim()) {
+      try {
+        new URL(block.androidStoreUrl.trim());
+      } catch {
+        throw new Error(`${source} 的 ${region}.androidStoreUrl 必须是绝对 URL 或应用商店 deep link`);
       }
     }
     const tapdb = block.tapdb;

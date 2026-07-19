@@ -157,8 +157,39 @@ const HEIC_EXT_PATTERN = /\.(heic|heif)$/i;
 const HEIC_JPEG_COMPRESS = 0.9;
 
 /**
+ * getAssetInfoAsync 的超时兜底:开了「优化 iPhone 储存空间」时,原图可能整张在
+ * iCloud 上,这一步会触发系统现场下载——慢网下数十秒是真实场景(与粘贴占位的
+ * 超时同口径给 60s),而它自身没有任何超时,挂死会吊住整条上传任务的发送等待。
+ * race 超时后系统下载仍在后台继续,用户重试时大概率已就位,重试即成功。
+ */
+const ASSET_INFO_TIMEOUT_MS = 60_000;
+
+const ICLOUD_DOWNLOAD_TIMEOUT_MESSAGE = '照片还在从 iCloud 下载,等待超时了。请检查网络,稍后重试。';
+const ASSET_NOT_READABLE_MESSAGE = '这张照片暂时无法读取(可能还没从 iCloud 下载完成),请稍后重试。';
+
+async function getAssetInfoWithTimeout(assetId: string): Promise<MediaLibrary.AssetInfo> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  // 竞速输家旁路兜底:超时赢了之后底层 getAssetInfoAsync 稍后 reject 的话,
+  // 没有 catch 的那份 promise 会抛 unhandled rejection 告警。
+  const info = MediaLibrary.getAssetInfoAsync(assetId);
+  info.catch(() => undefined);
+  try {
+    return await Promise.race([
+      info,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(ICLOUD_DOWNLOAD_TIMEOUT_MESSAGE)), ASSET_INFO_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * 把相册资产解析成可上传的 file:// 信息。iOS 的 ph:// 不是文件路径,
- * 必须经 getAssetInfoAsync 换 localUri;拿不到时回退原 uri(Android content:// 原生上传可读)。
+ * 必须经 getAssetInfoAsync 换 localUri(带 iCloud 下载超时兜底);iOS 拿不到
+ * localUri 时直接报错——ph:// 喂给原生上传层只会变成下游玄学失败,就地把
+ * 「照片没就位」说清楚;Android 保留 content:// 回退(原生上传可读)。
  * HEIC / HEIF(iOS 相机默认格式)在这里就地转成 JPEG——附件类型白名单与模型图像
  * 接口都只认 jpeg/png/gif/webp,直接放行 HEIC 会在链路下游变成不可用附件。
  * 转 JPEG 的同一次 manipulate 里顺带把长边压到上传上限(见 mobileImagePreprocess),
@@ -167,8 +198,12 @@ const HEIC_JPEG_COMPRESS = 0.9;
 export async function resolveContextSheetMediaAssetForUpload(
   asset: ContextSheetMediaAsset,
 ): Promise<{ uri: string; filename: string; width?: number; height?: number; optimized?: boolean }> {
-  const info = await MediaLibrary.getAssetInfoAsync(asset.id);
-  const uri = info.localUri?.trim() || asset.uri;
+  const info = await getAssetInfoWithTimeout(asset.id);
+  const localUri = info.localUri?.trim();
+  if (!localUri && Platform.OS === 'ios') {
+    throw new Error(ASSET_NOT_READABLE_MESSAGE);
+  }
+  const uri = localUri || asset.uri;
   if (!HEIC_EXT_PATTERN.test(asset.filename) && !HEIC_EXT_PATTERN.test(uri)) {
     return { filename: asset.filename, uri, width: info.width, height: info.height };
   }

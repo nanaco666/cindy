@@ -23,7 +23,7 @@ const VALID_MANIFEST = {
   mobileUpdateBaseUrl: 'https://mobile-update.example.com',
 };
 
-describe('parseClientEndpointManifest(全字段必填)', () => {
+describe('parseClientEndpointManifest(字段可按 region 缺省)', () => {
   it('接受合法全量清单并归一尾斜杠', () => {
     const result = parseClientEndpointManifest(
       JSON.stringify({ ...VALID_MANIFEST, authApiBaseUrl: 'https://auth.example.com///' }),
@@ -44,13 +44,22 @@ describe('parseClientEndpointManifest(全字段必填)', () => {
     expect(Object.keys(result.endpoints).sort()).toEqual([...CLIENT_ENDPOINT_KEYS].sort());
   });
 
-  it.each(CLIENT_ENDPOINT_KEYS)('缺失字段 %s → 整份拒绝(无烘焙回退)', (key) => {
+  it.each(CLIENT_ENDPOINT_KEYS)('缺失字段 %s → 补空串且不阻断解析', (key) => {
     const manifest: Record<string, unknown> = { ...VALID_MANIFEST };
     delete manifest[key];
-    expect(parseClientEndpointManifest(JSON.stringify(manifest))).toEqual({
-      ok: false,
-      reason: `missing-field:${key}`,
-    });
+    const result = parseClientEndpointManifest(JSON.stringify(manifest));
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) throw new Error('unreachable');
+    expect(result.endpoints[key]).toBe('');
+  });
+
+  it.each(CLIENT_ENDPOINT_KEYS)('空白字段 %s → 归一为空串且不阻断解析', (key) => {
+    const result = parseClientEndpointManifest(
+      JSON.stringify({ ...VALID_MANIFEST, [key]: '   ' }),
+    );
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) throw new Error('unreachable');
+    expect(result.endpoints[key]).toBe('');
   });
 
   it.each([
@@ -86,7 +95,6 @@ describe('parseClientEndpointManifest(全字段必填)', () => {
     ['wss 字段给 ws', { slackHookWsUrl: 'ws://hook.example.com' }, 'invalid-protocol:slackHookWsUrl'],
     ['cdnBaseUrl 给 http', { cdnBaseUrl: 'http://cdn.example.com' }, 'invalid-protocol:cdnBaseUrl'],
     ['非 URL', { websiteUrl: 'not a url' }, 'invalid-field:websiteUrl'],
-    ['空串', { websiteUrl: '   ' }, 'invalid-field:websiteUrl'],
     ['非字符串', { websiteUrl: 42 }, 'invalid-field:websiteUrl'],
     [
       'URL 带凭据',
@@ -174,17 +182,19 @@ describe('allowHttp 宽松模式(仅 dev 本地文件路径)', () => {
     expect(result.endpoints.slackHookWsUrl).toBe('ws://localhost:3346');
   });
 
-  it('allowHttp:true 仍拒绝垃圾输入 / 缺字段 / 带凭据', () => {
+  it('allowHttp:true 仍拒绝垃圾输入 / 带凭据,但允许缺字段', () => {
     expect(parseClientEndpointManifest('broken{{', { allowHttp: true })).toEqual({
       ok: false,
       reason: 'invalid-json',
     });
     const missing: Record<string, unknown> = { ...LOCAL_MANIFEST };
     delete missing.cdnBaseUrl;
-    expect(parseClientEndpointManifest(JSON.stringify(missing), { allowHttp: true })).toEqual({
-      ok: false,
-      reason: 'missing-field:cdnBaseUrl',
+    const missingResult = parseClientEndpointManifest(JSON.stringify(missing), {
+      allowHttp: true,
     });
+    expect(missingResult).toMatchObject({ ok: true });
+    if (!missingResult.ok) throw new Error('unreachable');
+    expect(missingResult.endpoints.cdnBaseUrl).toBe('');
     expect(
       parseClientEndpointManifest(
         JSON.stringify({ ...LOCAL_MANIFEST, authApiBaseUrl: 'http://user:pass@localhost:3344' }),
@@ -215,17 +225,17 @@ describe('resolveClientEndpointsStrict(清单即唯一事实源)', () => {
     expect(resolveClientEndpointsStrict(null)).toEqual({ ok: false, reason: 'fetch-failed' });
   });
 
-  it('清单非法 / 缺字段 → ok:false(不静默降级)', () => {
+  it('清单非法 → ok:false;缺字段 → ok:true 且补空串', () => {
     expect(resolveClientEndpointsStrict('broken{{')).toEqual({
       ok: false,
       reason: 'invalid-json',
     });
     const missing: Record<string, unknown> = { ...VALID_MANIFEST };
     delete missing.heartbeatUrl;
-    expect(resolveClientEndpointsStrict(JSON.stringify(missing))).toEqual({
-      ok: false,
-      reason: 'missing-field:heartbeatUrl',
-    });
+    const missingResult = resolveClientEndpointsStrict(JSON.stringify(missing));
+    expect(missingResult).toMatchObject({ ok: true });
+    if (!missingResult.ok) throw new Error('unreachable');
+    expect(missingResult.endpoints.heartbeatUrl).toBe('');
   });
 
   it('成功:所有字段来自清单本身', () => {

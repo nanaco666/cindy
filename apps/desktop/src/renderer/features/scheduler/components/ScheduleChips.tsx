@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useState, useEffect, useMemo } from 'react';
-import { ChevronDown, ExternalLink, Folder, GitBranch, MessageCircle, Timer, SlidersHorizontal } from 'lucide-react';
+import { ChevronDown, ExternalLink, Folder, MessageCircle, Timer, SlidersHorizontal } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Tip } from '@/components/ui/tooltip';
@@ -10,7 +10,7 @@ import {
   FolderPickerPopover,
   type FolderPickerOption,
 } from '@/components/new-chat/FolderPickerPopover';
-import { useBranches, useDetectCwd } from '@/hooks/useWorktreeQueries';
+import { useDetectCwd } from '@/hooks/useWorktreeQueries';
 import { useAgentCapabilities, type ModelDescriptor } from '@/hooks/useAgentCapabilities';
 import { useProviders } from '@/hooks/useProviders';
 import { ModelSelectorContent, ProviderMark } from '@/components/new-chat/ModelSelector';
@@ -196,14 +196,12 @@ export function ScheduleSettingsButton({
   cwd: string | null;
   enabled: boolean;
   onEnabledChange: (v: boolean) => void;
-  /** true → 隐藏 worktree on/off toggle，仅保留 branch picker。 */
+  /** true → 隐藏 worktree on/off toggle。 */
   lockEnabled?: boolean;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const detect = useDetectCwd(cwd);
-  const baseRepo = detect.data?.repoRoot ?? null;
-  const branches = useBranches(enabled ? baseRepo : null);
 
   const cantUseReason = useMemo<string | null>(() => {
     if (detect.loading) return t('scheduler.chips.branchHints.detecting');
@@ -215,7 +213,6 @@ export function ScheduleSettingsButton({
   }, [detect.data, detect.loading, t]);
 
   const switchDisabled = !!cantUseReason || detect.loading || !cwd;
-  const sourceBranch = branches.current || 'main';
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -245,23 +242,11 @@ export function ScheduleSettingsButton({
           {t('scheduler.chips.advanced')}
         </div>
 
-        <button
-          type="button"
-          disabled={!enabled || branches.loading || branches.branches.length === 0}
-          className={cn(
-            'flex h-8 w-full items-center gap-2 rounded-md px-2 text-[13px] transition-colors',
-            'text-[var(--msg-assistant-text)] hover:bg-[var(--update-btn-hover)] dark:text-[var(--msg-assistant-text)] dark:hover:bg-[var(--settings-btn-secondary-hover-bg)]',
-            'disabled:cursor-not-allowed disabled:opacity-50',
-          )}
-        >
-          <GitBranch size={14} className="shrink-0 text-[var(--cmd-palette-item-meta)] dark:text-[var(--settings-section-desc)]" />
-          <span className="text-[var(--cmd-palette-item-meta)] dark:text-[var(--settings-section-desc)]">{t('scheduler.chips.branch')}</span>
-          <span className="min-w-0 flex-1" />
-          <span className="max-w-[110px] truncate font-medium">
-            {branches.loading ? t('scheduler.chips.loading') : sourceBranch}
-          </span>
-          <ChevronDown size={11} className="shrink-0 text-[var(--cmd-palette-item-meta)] dark:text-[var(--settings-section-desc)]" />
-        </button>
+        {enabled && (
+          <p className="px-2 pb-1 text-[11px] leading-4 text-[var(--cmd-palette-item-meta)] dark:text-[var(--settings-section-desc)]">
+            {t('scheduler.chips.worktreeHint')}
+          </p>
+        )}
 
         {!lockEnabled && (
         <Tip text={switchDisabled && cantUseReason ? cantUseReason : null} side="top" contentClassName="z-[10020]">

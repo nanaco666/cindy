@@ -91,12 +91,29 @@ export type MobileSlashCommand =
       path?: string;
       scope?: string;
       enabled?: boolean;
-    };
+    }
+  // desktop 自有命令(被控端 main 的 DesktopCommandRegistry,如 /learn):
+  // 由控制端按名字分流执行,不转发给 agent。
+  | { kind: 'desktop'; name: string; description: string };
 
 export interface MobileAgentCommandListResult {
   success: boolean;
   error?: string;
   commands?: MobileSlashCommand[];
+}
+
+export interface MobileDesktopCommandListResult {
+  success: boolean;
+  error?: string;
+  commands?: MobileSlashCommand[];
+}
+
+/** learn:start 请求(形状对齐被控端 learn-host 的 LearnStartRequest 校验)。 */
+export interface MobileLearnStartRequest {
+  input: string;
+  sourceKind: 'freetext' | 'session' | 'hub';
+  hubSlug?: string;
+  originSessionId?: string;
 }
 
 export interface MobileAgentSkillListResult {
@@ -342,6 +359,13 @@ export interface MobileMakerTransport {
   /** 草稿「模型 effort/fast」写穿(active 恒 false;老被控端 → 调用方吞掉降级)。 */
   applyNewMakerDraftPref(pref: MobileNewMakerDraftPref): Promise<void>;
   listAgentCommands(agentKind: MobileAgentKind): Promise<MobileAgentCommandListResult>;
+  /** 被控端 desktop 自有 slash 命令清单(palette 展示;移动端只放行可执行子集)。 */
+  listDesktopCommands(): Promise<MobileDesktopCommandListResult>;
+  /**
+   * 触发被控端 learn-host 蒸馏(/learn):全流程(证据收集/staging/技能落盘)都在
+   * 被控端执行,这里只拿 runId;评审 UI 暂只有桌面端,移动端以系统卡提示去桌面评审。
+   */
+  learnStart(req: MobileLearnStartRequest): Promise<{ runId: string }>;
   listAgentSkills(agentKind: MobileAgentKind, opts: { workingDir: string; forceReload?: boolean }): Promise<MobileAgentSkillListResult>;
   scanAtResources(agentKind: MobileAgentKind, opts: { workingDir: string; cap?: number; query?: string }): Promise<MobileAtResourceScanResult>;
   fetchRemoteMedia(url: string, opts?: { skipCache?: boolean; thumbnail?: boolean }): Promise<MobileRemoteMediaFetchResult>;
@@ -486,6 +510,8 @@ export function createMobileMakerTransport({
     setSessionModelPref: (pref) => call('maker:set-session-model-pref', [pref]),
     applyNewMakerDraftPref: (pref) => call('maker:apply-new-maker-draft-pref', [pref]),
     listAgentCommands: (agentKind) => call('maker:list-agent-commands', [agentKind]),
+    listDesktopCommands: () => call('maker:list-desktop-commands', []),
+    learnStart: (req) => call('learn:start', [req]),
     listAgentSkills: (agentKind, opts) => call('maker:list-agent-skills', [agentKind, opts]),
     scanAtResources: (agentKind, opts) => call('maker:scan-at-resources', [agentKind, opts]),
     // skipCache:上次拿到的 ossKey 已悬空(对象被删)时,强制被控端绕过上传去重缓存重传。

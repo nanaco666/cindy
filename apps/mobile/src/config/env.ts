@@ -207,8 +207,8 @@ export function isReviewModeActive(
 
 // 手机版审核模式(清单可选字段 review = 送审版本号,缺失/空串 = 关闭):App 审核
 // 期间线上清单填送审构建的二进制版本号,仅版本命中的构建关闭全部 JS 显式更新检查
-// (启动 JS 热更门 / 整包检查 / resume 静默检查)、设置页隐藏「检查更新 / 检查整包
-// 更新」;存量其它版本用户不受影响。覆盖边界与运维义务(原生层后台检查管不到、
+// (启动 JS 热更门 / 整包检查 / resume 静默检查)、设置页隐藏统一「检查更新」入口;
+// 存量其它版本用户不受影响。覆盖边界与运维义务(原生层后台检查管不到、
 // 过审发布后须清空字段)见 maker-shared clientEndpoints 的 CLIENT_ENDPOINT_REVIEW_KEY
 // 注释。live binding:prod 由启动闸门回填,闸门 ready 前业务树不挂载,消费点
 // (更新 hooks / 设置页)读到的一定是清单值;dev 读仓内正本。仅 mobile 消费,
@@ -234,9 +234,9 @@ export const ENDPOINT_MANIFEST_BASE_URL = configuredValue(
 ).replace(/\/+$/, '');
 
 /**
- * 启动闸门拉到远程端点清单后回写运行期端点(仅覆盖清单中出现的字段;
- * 空值忽略,烘焙值兜底)。auth 字段不分 region——国内/海外两条 CDN 各发
- * 各的清单,无脑取。deviceLinkApiBaseUrl 是清单必填字段,恒被覆写。
+ * 启动闸门拉到远程端点清单后回写运行期端点。`undefined` 表示调用方未提供、
+ * 不修改;空串表示清单缺失/留空后的权威结果,必须清空旧值。auth 字段不分
+ * region——国内/海外两条 CDN 各发各的清单,无脑取。
  */
 export function applyResolvedClientEndpoints(resolved: {
   authApiBaseUrl?: string;
@@ -245,15 +245,15 @@ export function applyResolvedClientEndpoints(resolved: {
   /** 审核模式送审版本号(parser 产出,null = 清单未填;undefined = 不改动)。 */
   reviewVersion?: string | null;
 }): void {
-  if (resolved.authApiBaseUrl) {
-    AUTH_API_BASE_URL = normalizeBaseUrlWithDefault(resolved.authApiBaseUrl, AUTH_API_BASE_URL);
+  if (resolved.authApiBaseUrl !== undefined) {
+    AUTH_API_BASE_URL = normalizeBaseUrlWithDefault(resolved.authApiBaseUrl, '');
   }
-  if (resolved.deviceLinkApiBaseUrl) {
+  if (resolved.deviceLinkApiBaseUrl !== undefined) {
     DEVICE_LINK_API_BASE_URL = resolved.deviceLinkApiBaseUrl.replace(/\/$/, '');
   }
   // 仅自建变体吃清单覆写,保住「非自建 ⇒ OTA_SERVER_BASE_URL 恒空串」不变量
   // (调用点虽都有 IS_OTA_SELFHOST 门控,这里再挡一层,变体身份始终由烧包决定)。
-  if (resolved.mobileUpdateBaseUrl && IS_OTA_SELFHOST) {
+  if (resolved.mobileUpdateBaseUrl !== undefined && IS_OTA_SELFHOST) {
     OTA_SERVER_BASE_URL = resolved.mobileUpdateBaseUrl.replace(/\/+$/, '');
   }
   if (resolved.reviewVersion !== undefined) {

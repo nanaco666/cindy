@@ -205,3 +205,16 @@ export function buildReleaseRecord({ version, buildNumber, runtimeVersion, insta
   if (minVersion) record.minVersion = minVersion;
   return record;
 }
+
+/**
+ * 地区 App Store 数字 ID → 网页地址 + 直接拉起 App Store 的 deep link。
+ * release.json 同时保留两个字段以兼容现有客户端契约；客户端优先打开 itmsUrl。
+ */
+export function buildAppStoreInstallLinks(appStoreId) {
+  const id = String(appStoreId ?? '').trim();
+  if (!/^\d+$/.test(id)) throw new Error('buildAppStoreInstallLinks requires numeric App Store ID');
+  return {
+    installUrl: `https://apps.apple.com/app/id${id}`,
+    itmsUrl: `itms-apps://itunes.apple.com/app/id${id}`,
+  };
+}

@@ -4795,9 +4795,8 @@
       "recent": "最近",
       "browseFolder": "选择其他文件夹",
       "advanced": "高级",
-      "branch": "分支",
-      "loading": "加载中…",
       "worktree": "worktree",
+      "worktreeHint": "任务触发时从项目当前分支创建临时 worktree；持续会话会复用该目录",
       "advancedAria": "高级设置（worktree）",
       "useWorktreeAria": "启用 worktree 隔离",
       "branchHints": {

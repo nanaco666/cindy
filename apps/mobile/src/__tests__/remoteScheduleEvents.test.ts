@@ -75,6 +75,21 @@ describe('remote schedule event store', () => {
     expect(remoteScheduleEventStore.getSnapshot('dev-1').lastProjection?.refresh.runRefresh).toEqual({ mode: 'all' });
   });
 
+  it('unreadClearVersion 只随未读清除类事件(read / all-read)递增', () => {
+    // fired / completed 属非清除类(none / may-increase),不 bump。
+    remoteScheduleEventStore.apply('dev-1', { type: 'fired', scheduleId: 'sched-1', runId: 'run-1' });
+    remoteScheduleEventStore.apply('dev-1', {
+      type: 'completed', scheduleId: 'sched-1', runId: 'run-1', sessionId: 'chat-1',
+    });
+    expect(remoteScheduleEventStore.getSnapshot('dev-1').unreadClearVersion).toBe(0);
+
+    remoteScheduleEventStore.apply('dev-1', { type: 'read', scheduleId: 'sched-1', runIds: ['run-1'] });
+    expect(remoteScheduleEventStore.getSnapshot('dev-1').unreadClearVersion).toBe(1);
+
+    remoteScheduleEventStore.apply('dev-1', { type: 'all-read' });
+    expect(remoteScheduleEventStore.getSnapshot('dev-1').unreadClearVersion).toBe(2);
+  });
+
   it('clears stale device versions when a host disappears', () => {
     remoteScheduleEventStore.apply('dev-1', { type: 'changed', scheduleId: 'sched-1' });
     remoteScheduleEventStore.apply('dev-2', { type: 'changed', scheduleId: 'sched-2' });

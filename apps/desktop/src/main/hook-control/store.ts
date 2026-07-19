@@ -39,7 +39,7 @@ export interface SlackHookStoreDeps {
   legacyFilePath?: string;
   /** 旧 secret 加密文件清理钩子(best-effort; 生产传 safe-storage 目录清理)。 */
   cleanupLegacySecrets?: (legacyIds: string[]) => void;
-  /** 无覆写时的默认服务器地址(生产注入运行期端点清单读取, 必填——烘焙常量已退役)。 */
+  /** 无覆写时的默认服务器地址(生产注入运行期端点清单读取;烘焙常量已退役)。 */
   defaultUrl: () => string;
   log: { info(msg: string): void; warn(msg: string): void };
 }

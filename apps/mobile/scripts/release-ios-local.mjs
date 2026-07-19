@@ -14,9 +14,9 @@
 // prebuild 各阶段内容不同的 ios/ 目录纳入指纹,与内嵌值错位 → 装了最新包仍反复弹整包更新。
 // NPKG 企业重签只换签名、不改 bundle 内 fingerprint 文件,故读出包时的本地 ipa 即权威值。
 //
-// 分发链路:装机流量全走自有 OSS/CDN(itmsUrl 指向 OSS 上的 manifest.plist,其内指向
-// OSS 上的重签 ipa;installUrl 是 OSS 上的安装页)。NPKG 只在发版机上参与企业重签一步
-// ——企业证书(UE5H8B62F9.*)在 NPKG 侧,这一步无法绕开,但用户下载不再经过 NPKG。
+// 分发链路:重签 ipa / manifest / 安装页仍上传自有 OSS/CDN 作为内部安装备份；对客户端广播的
+// release.json 则把 installUrl / itmsUrl 指向当前 region 配置的 App Store 应用。NPKG 只在
+// 发版机上参与企业重签一步——企业证书在 NPKG 侧,但普通用户整包更新不再走企业安装链路。
 //
 // 默认 dry-run(校验环境 + 解析 workspace/scheme + 打印计划,不构建、不上传);
 // --execute 才跑完整链路(需 macOS + Xcode + 已装 dev 证书/描述文件 + NPKG 白名单)。
@@ -46,6 +46,7 @@ import {
   assertBuildNumberMonotonic,
   buildExportOptionsPlist,
   buildReleaseRecord,
+  buildAppStoreInstallLinks,
   fetchBaselineBuildNumber,
   compareBuildNumbers,
   nextDateBuildNumber,
@@ -281,6 +282,7 @@ async function main() {
   const iosS = region.iosSigning ?? {};
   console.log(`sign: team=${sPreview('teamId', iosS.teamId)} profile=${sPreview('profileName', iosS.profileName)} identity="${sPreview('signIdentity', iosS.signIdentity)}"(来自 self-host-regions.json 的 ${region.authRegion}.iosSigning)`);
   console.log(`oss: bucket=${region.oss?.bucket || '(未填)'} cdn=${region.oss?.cdnBaseUrl || '(未填)'}`);
+  console.log(`app store: id=${region.iosAppStoreId}`);
   console.log('steps: prebuild → pod-install → xcodebuild archive/export → 从 .ipa 回读 runtimeVersion → NPKG 企业重签 → 重签 ipa 直传 OSS(manifest.plist + install.html)→ 写 release.json');
   for (const line of formatBakedEnvLines(env)) console.log(line);
   if (!args.execute) {
@@ -311,12 +313,13 @@ async function main() {
   const repackedIpa = downloadRepackedIpa(npkg.childId, env);
 
   const client = createOSSClient();
-  const links = await uploadDistToOSS(client, repackedIpa, version, buildNumber, region.iosBundleId);
+  const enterpriseLinks = await uploadDistToOSS(client, repackedIpa, version, buildNumber, region.iosBundleId);
+  const appStoreLinks = buildAppStoreInstallLinks(region.iosAppStoreId);
 
   if (!args.skipRecord) {
     const record = buildReleaseRecord({
       version, buildNumber, runtimeVersion,
-      installUrl: links.installUrl, itmsUrl: links.itmsUrl,
+      installUrl: appStoreLinks.installUrl, itmsUrl: appStoreLinks.itmsUrl,
       releaseNotes: message || undefined,
     });
     await uploadReleaseRecord(client, record, RELEASE_RECORD_KEY, RELEASE_RECORD_CDN);
@@ -325,7 +328,8 @@ async function main() {
   console.log('');
   console.log('==================== 冷更发布完成 ====================');
   console.log(`  runtimeVersion : ${runtimeVersion}`);
-  console.log(`  install        : ${links.installUrl}(安装页,itms 走 OSS;NPKG 链接仅发版备查)`);
+  console.log(`  app store      : ${appStoreLinks.installUrl}`);
+  console.log(`  enterprise     : ${enterpriseLinks.installUrl}(OSS 内部安装备份)`);
   console.log(`  下一步:纯 JS 改动用 \`${formatSelfHostReleaseCommand('ios', 'ota', region, { execute: true })}\` 发热更(复用此 runtimeVersion)`);
   if (autoBumped) {
     console.log(`  ⚠ app.json ios.buildNumber 已自动 bump 为 ${buildNumber},记得 commit + push 回 main(否则下次 git 闸门会拦)`);

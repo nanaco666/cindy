@@ -7,10 +7,12 @@
  * 应用启动第一步、**先于检查更新**从 CDN 拉取;CDN 清单修改后重启应用生效。
  * 完整拉取地址 = `<烘焙的 region 化 hotfix base>/endpoint.json`。
  *
- * 语义是**清单即唯一事实源**(2026-07 与 Lizi 定案,三次收紧):
- *  - 拉不到 / 清单非法 / **任一字段缺失** → 启动阻断,宿主报错并提供重试;
+ * 语义是**清单即唯一事实源**:
+ *  - 拉不到 / JSON 或 schema 无法解析 / 非空 endpoint 值非法 → 启动阻断,
+ *    宿主报错并提供重试;
+ *  - endpoint 字段允许按 region 缺失或留空,解析结果统一补成空串,不因此阻断启动;
  *  - **没有缓存回退、没有超时后静默继续、没有逐字段烘焙回退**——任何本地兜底
- *    都会把 CDN 配置错误静默掩盖成"部分端点漂移",这里要的是配置错就立刻炸出来;
+ *    都会把非空 CDN 配置错误静默掩盖成"部分端点漂移",这里要的是非法值立刻暴露;
  *    desktop 与 mobile 正式包均遵守本条严格语义。
  *  - 客户端唯一烘焙的远程 URL 是拉清单用的 CDN 基址(自举必需,且防"清单配错
  *    CDN 把自己锁死");**更新/hotfix 链的 CDN base 也来自清单**(cdnBaseUrl)
@@ -25,7 +27,8 @@
  * 校验(仓规则 9)。
  *
  * 校验语义:
- *  - **全字段必填**:CLIENT_ENDPOINT_KEYS 每个字段都必须出现且合法,缺一个整份拒绝;
+ *  - CLIENT_ENDPOINT_KEYS 中的字段缺失或空白时统一解析为 `''`;不同 region 可以
+ *    不提供不适用的业务端点,不会因此阻断整个客户端启动;
  *  - 未知字段忽略(向前兼容:新客户端加字段后,老清单先补字段再发新客户端;
  *    新清单多出的字段老客户端不认识但不报错);
  *  - 协议白名单、禁 URL 凭据、
@@ -57,9 +60,8 @@
 export const CLIENT_ENDPOINTS_SCHEMA_VERSION = 1;
 
 /**
- * 清单字段全集 = 客户端实际消费的端点集合,**每个都是必填**。
- * 不放没有消费方的字段(死配置也是故障点);新增消费点时同步扩这里 + 先给
- * 线上清单补字段再发版(老清单缺新字段会让新版客户端启动阻断)。
+ * 清单字段全集 = 客户端可能消费的端点集合。不同 region 可缺省或留空不适用的
+ * 字段;解析结果仍补齐所有 key,让既有消费方保持稳定的 string 读取接口。
  */
 export const CLIENT_ENDPOINT_KEYS = [
   // apiBaseUrl(老主 server xdt-api)已于 2026-07-18 退役(不 bump,删必填字段
@@ -94,7 +96,7 @@ export const CLIENT_ENDPOINT_KEYS = [
 
 export type ClientEndpointKey = (typeof CLIENT_ENDPOINT_KEYS)[number];
 
-/** 解析成功后的端点全集(全字段必有值,值全部来自清单)。 */
+/** 解析成功后的端点全集(全 key 存在;清单缺失/空白的字段值为 `''`)。 */
 export type ClientEndpointMap = Record<ClientEndpointKey, string>;
 
 /**
@@ -157,7 +159,7 @@ export type ParseClientEndpointManifestResult =
 
 /**
  * 解析并校验一份清单原文。纯函数,输入任意文本都不会抛出。
- * 端点全字段必填:缺失 / 非法 / 协议不符 / 带凭据,任一命中整份拒绝;
+ * 端点缺失 / 空白时写入 `''` 并继续;非空值仍校验 URL、协议与凭据;
  * `review` 可选字符串(送审版本号),缺失 / 空白 = null 即审核模式关闭
  * (语义见 CLIENT_ENDPOINT_REVIEW_KEY)。
  */
@@ -190,11 +192,12 @@ export function parseClientEndpointManifest(
 
   const endpoints = {} as ClientEndpointMap;
   for (const key of CLIENT_ENDPOINT_KEYS) {
-    if (!(key in record)) {
-      return { ok: false, reason: `missing-field:${key}` };
-    }
     const raw = record[key];
-    if (typeof raw !== 'string' || !raw.trim()) {
+    if (raw === undefined || (typeof raw === 'string' && !raw.trim())) {
+      endpoints[key] = '';
+      continue;
+    }
+    if (typeof raw !== 'string') {
       return { ok: false, reason: `invalid-field:${key}` };
     }
     const normalized = raw.trim().replace(/\/+$/, '');
@@ -228,7 +231,7 @@ export type ResolveClientEndpointsResult =
   | { ok: false; reason: string };
 
 /**
- * 严格解析:清单原文 → 完整端点 map(值全部来自清单,无任何本地合并)。
+ * 解析清单原文 → 完整端点 map(缺失/空白字段补 `''`,无任何本地合并)。
  * rawText 为 null(拉取失败/超时)→ ok:false('fetch-failed'),宿主必须阻断并重试。
  */
 export function resolveClientEndpointsStrict(

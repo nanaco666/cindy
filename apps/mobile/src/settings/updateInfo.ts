@@ -17,6 +17,14 @@ type MobileUpdateInfoInput = Pick<
   'updateId' | 'channel' | 'createdAt' | 'isEmbeddedLaunch' | 'runtimeVersion'
 >;
 
+/** 当前实际运行的热更版本:OTA 用短 updateId,内置 bundle 明确标成随整包。 */
+export function currentMobileOtaVersion(
+  currentlyRunning: Pick<CurrentlyRunningInfo, 'updateId' | 'isEmbeddedLaunch'>,
+): string {
+  if (currentlyRunning.isEmbeddedLaunch) return '随整包';
+  return currentlyRunning.updateId?.trim().slice(0, 8) || '未知';
+}
+
 /**
  * 把 expo-updates `useUpdates().currentlyRunning` 整理成设置页「更新信息」的只读行(纯函数,便于单测)。
  * 用途:验证 OTA 热更是否生效 + 一眼看这台机当前跑的是哪个 bundle。

@@ -7,6 +7,7 @@ import {
   assertBuildNumberMonotonic,
   buildExportOptionsPlist,
   buildReleaseRecord,
+  buildAppStoreInstallLinks,
   fetchBaselineBuildNumber,
   nextDateBuildNumber,
   replaceBuildNumberInAppJson,
@@ -101,6 +102,19 @@ describe('buildReleaseRecord', () => {
   it('缺 runtimeVersion 或安装地址抛错', () => {
     expect(() => buildReleaseRecord({ installUrl: 'x' })).toThrow();
     expect(() => buildReleaseRecord({ runtimeVersion: 'r' })).toThrow();
+  });
+});
+
+describe('buildAppStoreInstallLinks', () => {
+  it('数字 App Store ID 生成网页地址与 App Store deep link', () => {
+    expect(buildAppStoreInstallLinks('6788711632')).toEqual({
+      installUrl: 'https://apps.apple.com/app/id6788711632',
+      itmsUrl: 'itms-apps://itunes.apple.com/app/id6788711632',
+    });
+  });
+  it('非数字或空 ID fail closed', () => {
+    expect(() => buildAppStoreInstallLinks('id123')).toThrow(/numeric App Store ID/);
+    expect(() => buildAppStoreInstallLinks('')).toThrow(/numeric App Store ID/);
   });
 });
 

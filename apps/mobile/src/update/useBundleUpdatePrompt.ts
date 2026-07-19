@@ -2,7 +2,7 @@
 //
 // 用在两处(见 docs/self-hosted-ios-build-and-ota.md A6):
 // - 启动时自动检查(app/_layout.tsx);
-// - 设置页"检查整包更新"手动触发(返回 checkNow)。
+// - 设置页统一"检查更新"入口先手动触发整包检查(返回 checkNow 的明确结果)。
 // 判定逻辑全在纯函数 evaluateBundleUpdate 里,本 hook 只管 IO + 交互。
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -12,6 +12,7 @@ import * as Updates from 'expo-updates';
 import { IS_OTA_SELFHOST, REVIEW_MODE } from '@/config/env';
 import { fetchLatestRelease } from './fetchLatestRelease';
 import { evaluateBundleUpdate, preferredInstallUrl } from './bundleUpdate';
+import type { BundleUpdateCheckOutcome } from './manualUpdateCheck';
 import { markForcedPrompted } from './resumeUpdateCheck';
 
 type CheckState = 'idle' | 'checking' | 'up-to-date' | 'update-available' | 'error';
@@ -69,9 +70,10 @@ export function useBundleUpdatePrompt({ auto = true, notifyWhenUpToDate = false 
   const [state, setState] = useState<CheckState>('idle');
   const inFlight = useRef(false);
 
-  const checkNow = useCallback(async () => {
+  const checkNow = useCallback(async (): Promise<BundleUpdateCheckOutcome> => {
     // 审核模式:入口按钮已隐藏,这里再挡一层(状态由代码保证,不依赖 UI 层记得隐藏)。
-    if (!IS_OTA_SELFHOST || REVIEW_MODE || inFlight.current) return;
+    if (!IS_OTA_SELFHOST || REVIEW_MODE) return 'skipped';
+    if (inFlight.current) return 'busy';
     inFlight.current = true;
     setState('checking');
     try {
@@ -86,15 +88,18 @@ export function useBundleUpdatePrompt({ auto = true, notifyWhenUpToDate = false 
       if (evaluation.needsUpdate) {
         setState('update-available');
         promptBundleUpdate(evaluation);
+        return 'update-available';
       } else {
         setState('up-to-date');
         if (notifyWhenUpToDate) Alert.alert('已是最新版本', '当前已是最新整包版本。');
+        return 'up-to-date';
       }
     } catch {
       // fetchLatestRelease 连不上(网络/超时/5xx)时抛错:自动检查静默(尽力而为),
       // 手动检查须提示"检查失败",不能沿用旧行为误报"已是最新"。
       setState('error');
       if (notifyWhenUpToDate) Alert.alert('检查失败', '无法连接更新服务器,请稍后重试。');
+      return 'error';
     } finally {
       inFlight.current = false;
     }
