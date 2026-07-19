@@ -11,8 +11,9 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-// The work-group interaction is under test, not the second-level child cards.
-// Lightweight stubs make their mount state and forwarded streaming props visible.
+// The work-group interaction is under test, not the second-level tool cards.
+// Lightweight stubs make their mount state and forwarded streaming props visible;
+// ThinkingCard remains only as the redacted fallback after normal thinking becomes a direct row.
 vi.mock('@/components/chat/AgentActionsBlock', () => ({
   AgentActionsBlock: (props: { toolCalls: ChatMessage[]; isSessionStreaming?: boolean }) =>
     createElement(
@@ -140,7 +141,9 @@ describe('WorkGroupBlock — running latest-five preview', () => {
     fireEvent.click(screen.getByRole('button'));
     expect(document.querySelector('[data-live-work-preview="true"]')).toBeNull();
     expect(screen.getByTestId('expanded-tools').getAttribute('data-streaming')).toBe('true');
-    expect(screen.getByTestId('expanded-thinking')).toBeTruthy();
+    expect(screen.queryByTestId('expanded-thinking')).toBeNull();
+    expect(screen.getByText('checking the current state')).toBeTruthy();
+    expect(document.querySelectorAll('[data-live-work-activity="thinking"]')).toHaveLength(1);
 
     rerender(
       createElement(WorkGroupBlock, {
@@ -152,6 +155,21 @@ describe('WorkGroupBlock — running latest-five preview', () => {
     );
     expect(screen.getByText('chat.workGroup.worked:12s')).toBeTruthy();
     expect(screen.getByTestId('expanded-tools').getAttribute('data-streaming')).toBe('false');
+    expect(screen.getByText('checking the current state')).toBeTruthy();
+  });
+
+  it('drops empty thinking from expanded history and keeps the redacted fallback', () => {
+    const redacted = { ...mkThinking('hidden', ''), thinkingRedacted: true };
+    render(
+      createElement(WorkGroupBlock, {
+        blockId: 'work:t1',
+        childItems: [thinking(mkThinking('empty', '')), thinking(redacted)],
+      }),
+    );
+
+    fireEvent.click(screen.getByRole('button'));
+    expect(document.querySelectorAll('[data-live-work-activity="thinking"]')).toHaveLength(0);
+    expect(screen.getByTestId('expanded-thinking')).toBeTruthy();
   });
 
   it('marks result/settled tools done and only unresolved tools running', () => {

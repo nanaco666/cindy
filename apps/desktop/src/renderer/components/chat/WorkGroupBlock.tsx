@@ -5,15 +5,15 @@
  * MessageStream 的 groupWorkRuns pass 聚成稳定 work_group item。运行中默认
  * 展示最近 5 条真实活动;结束后收成一行「已工作 Xs ›」摘要。
  *
- * 交互契约(两级展开):
+ * 交互契约:
  *   - 运行中默认露出 latest-five preview;结束后默认 collapsed。组头与
  *     AgentActionsBlock / ThinkingCard 同款视觉(icon 14 + Inter 14 in
  *     `--msg-tool-card-chevron` + trailing chevron)。
- *   - 第一级:点开组只渲染子卡(AgentActionsBlock / ThinkingCard)的折叠头行,
- *     **不**替用户展开子卡内部 — 各子卡保持自身默认折叠态。
- *   - 第二级:用户在组内逐个点开想看的 thinking / 工具调用。
+ *   - 点开组后,thinking 直接显示为与 live preview 同款的单行内容;
+ *     空 thinking 不显示,redacted thinking 保留不可见提示。
+ *   - 工具段仍用 AgentActionsBlock 的折叠头行,用户可再展开某个工具详情。
  *   - 展开状态走 useExpandedBlockMemory(`work:<groupKey>`),app 运行期内记住;
- *     子卡各自独立记忆,与组互不影响。
+ *     工具子卡的独立展开态与组互不影响。
  *
  * 时长缺失(老历史数据没有 createdAt)时退化为「工作过程」文案,不显示时间。
  */
@@ -56,6 +56,17 @@ export type LiveWorkActivity =
 /** 运行中默认只露出最近 5 条真实活动,与 Slack 远控的滚动窗口同一思路。 */
 export const MAX_LIVE_WORK_ACTIVITIES = 5;
 
+/** 把一段可见 thinking 投影成单行动作;empty / redacted 不生成内容行。 */
+function thinkingActivityForMessage(
+  message: ChatMessage,
+): Extract<LiveWorkActivity, { kind: 'thinking' }> | null {
+  if (message.thinkingRedacted) return null;
+  const content = message.content.replace(/\s+/g, ' ').trim();
+  return content
+    ? { kind: 'thinking', key: message.clientId, content }
+    : null;
+}
+
 /** 把完整 work_group 历史投影成轻量 live preview。rendered assistant 文本
  *  不属于动作;空 / redacted thinking 也不生成「Thought for 1s」之类噪音行。 */
 export function collectLiveWorkActivities(
@@ -82,10 +93,10 @@ export function collectLiveWorkActivities(
       }
       continue;
     }
-    if (child.kind !== 'thinking' || child.message.thinkingRedacted) continue;
-    const content = child.message.content.replace(/\s+/g, ' ').trim();
-    if (!content) continue;
-    activities.push({ kind: 'thinking', key: child.message.clientId, content });
+    if (child.kind !== 'thinking') continue;
+    const activity = thinkingActivityForMessage(child.message);
+    if (!activity) continue;
+    activities.push(activity);
     if (activities.length === MAX_LIVE_WORK_ACTIVITIES) return activities.reverse();
   }
   return activities.reverse();
@@ -170,6 +181,23 @@ function ThinkingActivityRow({
   );
 }
 
+/** 已展开工作组里的 thinking:有内容时直接显示单行,redacted 保留原提示。 */
+function ExpandedThinkingRow({ message }: { message: ChatMessage }) {
+  const activity = thinkingActivityForMessage(message);
+  if (activity) return <ThinkingActivityRow activity={activity} />;
+  if (!message.thinkingRedacted) return null;
+  return (
+    <ThinkingCard
+      blockKey={message.clientId}
+      content={message.content}
+      isStreaming={message.isStreaming}
+      startedAt={message.thinkingStartedAt}
+      durationMs={message.thinkingDurationMs}
+      isRedacted
+    />
+  );
+}
+
 export function WorkGroupBlock({
   blockId,
   durationMs,
@@ -195,8 +223,7 @@ export function WorkGroupBlock({
     [childItems, isStreaming],
   );
 
-  // 两级展开:点开组只显示子卡折叠头行,内部 thinking / 工具调用不替用户展开,
-  // 由用户在组内逐个点开。
+  // 点开组后 thinking 直接展示单行内容;工具仍保留子卡详情的第二级展开。
   const onToggle = useCallback(() => {
     setExpanded((v) => !v);
   }, [setExpanded]);
@@ -284,14 +311,9 @@ export function WorkGroupBlock({
                   isSessionStreaming={isStreaming}
                 />
               ) : c.kind === 'thinking' ? (
-                <ThinkingCard
+                <ExpandedThinkingRow
                   key={c.key}
-                  blockKey={c.message.clientId}
-                  content={c.message.content}
-                  isStreaming={c.message.isStreaming}
-                  startedAt={c.message.thinkingStartedAt}
-                  durationMs={c.message.thinkingDurationMs}
-                  isRedacted={c.message.thinkingRedacted}
+                  message={c.message}
                 />
               ) : (
                 <Fragment key={c.key}>{c.renderNode()}</Fragment>
