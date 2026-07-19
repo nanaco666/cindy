@@ -1,9 +1,10 @@
 /**
  * WorkGroupBlock
  * ---------------------------------------------------------------------------
- * 「工作过程」组 — 一段连续的 tool_segment + thinking 从运行开始就由
- * MessageStream 的 groupWorkRuns pass 聚成稳定 work_group item。运行中默认
- * 展示最近 5 条真实活动;结束后收成一行「已工作 Xs ›」摘要。
+ * 「工作过程」组 — 运行中的连续 tool_segment + thinking 由 MessageStream 的
+ * groupWorkRuns pass 聚成稳定 work_group item;turn 完成后,此前持续可见的
+ * assistant 工作文字也按原始顺序并入组内。运行中默认展示最近 5 条真实活动;
+ * 结束后收成一行「已工作 Xs ›」摘要。
  *
  * 交互契约:
  *   - 运行中默认露出 latest-five preview;结束后默认 collapsed。组头与

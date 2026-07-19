@@ -820,7 +820,7 @@ describe('groupWorkRuns — work-group collapsing', () => {
     expect(group.isStreaming).toBe(false);
   });
 
-  it('segments live actions at assistant text, then merges every action before the final answer', () => {
+  it('segments live actions at assistant text, then folds progress and actions in original order', () => {
     const activeMessages = [
       mkUser('u1'),
       mkAssistant('a-progress-1', 'I found the renderer path.'),
@@ -849,24 +849,20 @@ describe('groupWorkRuns — work-group collapsing', () => {
       [...activeMessages, mkAssistant('a-final', 'Everything is ready.')],
       false,
     );
-    expect(completed.map((it) => it.type)).toEqual([
-      'message',
-      'message',
-      'message',
-      'work_group',
-      'message',
-    ]);
-    const completedGroup = completed[3] as Extract<RenderItem, { type: 'work_group' }>;
+    expect(completed.map((it) => it.type)).toEqual(['message', 'work_group', 'message']);
+    const completedGroup = completed[1] as Extract<RenderItem, { type: 'work_group' }>;
     expect(completedGroup.key).toBe('work-t1');
     expect(completedGroup.children.map((child) => child.key)).toEqual([
+      'msg-a-progress-1',
       'seg-t1',
+      'msg-a-progress-2',
       'msg-th2',
       'seg-t2',
     ]);
     expect(completedGroup.isStreaming).toBe(false);
   });
 
-  it('keeps intermediate assistant text visible after streaming stops', () => {
+  it('folds intermediate assistant text after streaming stops', () => {
     const items = build(
       [
         mkUser('u1'),
@@ -876,12 +872,14 @@ describe('groupWorkRuns — work-group collapsing', () => {
       ],
       false,
     );
-    expect(items.map((it) => it.type)).toEqual(['message', 'message', 'work_group', 'message']);
-    const group = items[2] as Extract<RenderItem, { type: 'work_group' }>;
+    expect(items.map((it) => it.type)).toEqual(['message', 'work_group', 'message']);
+    const group = items[1] as Extract<RenderItem, { type: 'work_group' }>;
     expect(group.key).toBe('work-t1');
-    expect(group.children.map((c) => `${c.type}:${c.key}`)).toEqual(['tool_segment:seg-t1']);
-    expect((items[1] as Extract<RenderItem, { type: 'message' }>).message.clientId).toBe('a-draft');
-    const final = items[3] as Extract<RenderItem, { type: 'message' }>;
+    expect(group.children.map((c) => `${c.type}:${c.key}`)).toEqual([
+      'message:msg-a-draft',
+      'tool_segment:seg-t1',
+    ]);
+    const final = items[2] as Extract<RenderItem, { type: 'message' }>;
     expect(final.message.clientId).toBe('a-final');
   });
 
@@ -908,7 +906,7 @@ describe('groupWorkRuns — work-group collapsing', () => {
     expect(completed?.isStreaming).toBe(false);
   });
 
-  it('restores the work anchor while assistant text keeps its own viewport item', () => {
+  it('restores assistant and tool anchors to the completed work group', () => {
     const items = build(
       [
         mkUser('u1'),
@@ -920,9 +918,9 @@ describe('groupWorkRuns — work-group collapsing', () => {
     );
     const visibleItems = items.slice(1);
 
-    expect(visibleItems.map((it) => it.type)).toEqual(['message', 'work_group', 'message']);
+    expect(visibleItems.map((it) => it.type)).toEqual(['work_group', 'message']);
     expect(findRestorableViewportItemIdx(visibleItems, 'msg-a-draft')).toBe(0);
-    expect(findRestorableViewportItemIdx(visibleItems, 'seg-t1')).toBe(1);
+    expect(findRestorableViewportItemIdx(visibleItems, 'seg-t1')).toBe(0);
   });
 
   it('keeps completed prior turns folded while a later turn streams', () => {
@@ -939,18 +937,20 @@ describe('groupWorkRuns — work-group collapsing', () => {
     );
     expect(items.map((it) => it.type)).toEqual([
       'message',
-      'message',
       'work_group',
       'message',
       'message',
       'work_group',
     ]);
-    const group = items[2] as Extract<RenderItem, { type: 'work_group' }>;
+    const group = items[1] as Extract<RenderItem, { type: 'work_group' }>;
     expect(group.key).toBe('work-t1');
-    expect(group.children.map((c) => `${c.type}:${c.key}`)).toEqual(['tool_segment:seg-t1']);
+    expect(group.children.map((c) => `${c.type}:${c.key}`)).toEqual([
+      'message:msg-a1-draft',
+      'tool_segment:seg-t1',
+    ]);
   });
 
-  it('does not create a work group for assistant text alone', () => {
+  it('folds assistant-only progress while keeping the last answer visible', () => {
     const items = build(
       [
         mkUser('u1'),
@@ -959,8 +959,9 @@ describe('groupWorkRuns — work-group collapsing', () => {
       ],
       false,
     );
-    expect(items.map((it) => it.type)).toEqual(['message', 'message', 'message']);
-    expect(items.some((it) => it.type === 'work_group')).toBe(false);
+    expect(items.map((it) => it.type)).toEqual(['message', 'work_group', 'message']);
+    const group = items[1] as Extract<RenderItem, { type: 'work_group' }>;
+    expect(group.children.map((c) => c.key)).toEqual(['msg-a-draft']);
   });
 
   it('keeps trailing work separate when no final answer follows it', () => {
@@ -1013,13 +1014,15 @@ describe('groupWorkRuns — work-group collapsing', () => {
     );
     expect(items.map((it) => it.type)).toEqual([
       'message',
-      'message',
-      'tool_media',
       'work_group',
+      'tool_media',
       'message',
     ]);
-    const group = items[3] as Extract<RenderItem, { type: 'work_group' }>;
-    expect(group.children.map((c) => c.type)).toEqual(['tool_segment']);
+    const group = items[1] as Extract<RenderItem, { type: 'work_group' }>;
+    expect(group.children.map((c) => `${c.type}:${c.key}`)).toEqual([
+      'message:msg-a-draft',
+      'tool_segment:seg-img1',
+    ]);
     const media = items[2] as Extract<RenderItem, { type: 'tool_media' }>;
     expect(media.key).toBe('media-img1');
   });
@@ -1040,9 +1043,7 @@ describe('groupWorkRuns — work-group collapsing', () => {
     );
     expect(items.map((it) => it.type)).toEqual([
       'message',
-      'message',
       'work_group',
-      'message',
       'message',
       'message',
       'work_group',
@@ -1062,10 +1063,12 @@ describe('groupWorkRuns — work-group collapsing', () => {
       ],
       false,
     );
-    expect(items.map((it) => it.type)).toEqual(['message', 'work_group', 'message']);
-    const group = items[1] as Extract<RenderItem, { type: 'work_group' }>;
-    expect(group.children.map((c) => c.type)).toEqual(['tool_segment']);
-    expect((items[0] as Extract<RenderItem, { type: 'message' }>).message.clientId).toBe('a-visible-old');
+    expect(items.map((it) => it.type)).toEqual(['work_group', 'message']);
+    const group = items[0] as Extract<RenderItem, { type: 'work_group' }>;
+    expect(group.children.map((c) => `${c.type}:${c.key}`)).toEqual([
+      'message:msg-a-visible-old',
+      'tool_segment:seg-t1',
+    ]);
   });
 
   it('keeps TodoWrite plan cards visible before the final answer', () => {
@@ -1123,15 +1126,15 @@ describe('groupWorkRuns — work-group collapsing', () => {
       false,
     );
     // thinking 折进「已工作」;两段 assistant 正文都留可见
-    expect(items.map((it) => it.type)).toEqual(['message', 'message', 'work_group', 'message']);
-    const group = items[2] as Extract<RenderItem, { type: 'work_group' }>;
+    expect(items.map((it) => it.type)).toEqual(['message', 'work_group', 'message', 'message']);
+    const group = items[1] as Extract<RenderItem, { type: 'work_group' }>;
     expect(group.children.map((c) => c.type)).toEqual(['message']); // 仅 th-last
     expect((group.children[0] as Extract<RenderItem, { type: 'message' }>).message.role).toBe('thinking');
-    expect((items[1] as Extract<RenderItem, { type: 'message' }>).message.clientId).toBe('a-plan');
+    expect((items[2] as Extract<RenderItem, { type: 'message' }>).message.clientId).toBe('a-plan');
     expect((items[3] as Extract<RenderItem, { type: 'message' }>).message.clientId).toBe('a-final');
   });
 
-  it('keeps assistant prose written before the last thinking visible', () => {
+  it('folds assistant prose written before the last thinking', () => {
     const items = build(
       [
         mkUser('u1'),
@@ -1141,15 +1144,14 @@ describe('groupWorkRuns — work-group collapsing', () => {
       ],
       false,
     );
-    expect(items.map((it) => it.type)).toEqual(['message', 'message', 'work_group', 'message']);
-    const group = items[2] as Extract<RenderItem, { type: 'work_group' }>;
+    expect(items.map((it) => it.type)).toEqual(['message', 'work_group', 'message']);
+    const group = items[1] as Extract<RenderItem, { type: 'work_group' }>;
     expect(group.children.map((c) => (c.type === 'message' ? `message:${c.message.clientId}` : c.type)))
-      .toEqual(['message:th-last']);
-    expect((items[1] as Extract<RenderItem, { type: 'message' }>).message.clientId).toBe('a-early');
-    expect((items[3] as Extract<RenderItem, { type: 'message' }>).message.clientId).toBe('a-final');
+      .toEqual(['message:a-early', 'message:th-last']);
+    expect((items[2] as Extract<RenderItem, { type: 'message' }>).message.clientId).toBe('a-final');
   });
 
-  it('keeps intermediate prose visible when the work contains no thinking', () => {
+  it('folds intermediate prose when the work contains no thinking', () => {
     const items = build(
       [
         mkUser('u1'),
@@ -1159,11 +1161,13 @@ describe('groupWorkRuns — work-group collapsing', () => {
       ],
       false,
     );
-    expect(items.map((it) => it.type)).toEqual(['message', 'message', 'work_group', 'message']);
-    const group = items[2] as Extract<RenderItem, { type: 'work_group' }>;
-    expect(group.children.map((c) => c.type)).toEqual(['tool_segment']);
-    expect((items[1] as Extract<RenderItem, { type: 'message' }>).message.clientId).toBe('a-draft');
-    expect((items[3] as Extract<RenderItem, { type: 'message' }>).message.clientId).toBe('a-final');
+    expect(items.map((it) => it.type)).toEqual(['message', 'work_group', 'message']);
+    const group = items[1] as Extract<RenderItem, { type: 'work_group' }>;
+    expect(group.children.map((c) => `${c.type}:${c.key}`)).toEqual([
+      'message:msg-a-draft',
+      'tool_segment:seg-t1',
+    ]);
+    expect((items[2] as Extract<RenderItem, { type: 'message' }>).message.clientId).toBe('a-final');
   });
 });
 
