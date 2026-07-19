@@ -269,17 +269,20 @@ describe('CINDY · ⑤ E1D 红色体系重构(中性 exact map + 红例外白名
 });
 
 // ===== ⑥ family =====
-describe('CINDY · ⑥ family(cindy 存在 / DEFAULT 不变 / 9 主题快照)', () => {
+describe('CINDY · ⑥ family(cindy 默认且置顶 / Classic 文案 / 9 主题快照)', () => {
   it('cindy family 存在,light/dark 双变体正确', () => {
-    const fam = getThemeFamilies().find((f) => f.id === 'cindy');
+    const families = getThemeFamilies();
+    const fam = families.find((f) => f.id === 'cindy');
     expect(fam, 'cindy family 未注册').toBeTruthy();
-    expect(fam?.name).toBe('CINDY');
+    expect(fam?.name).toBe('Cindy');
     expect(fam?.light?.id).toBe('cindy-light');
     expect(fam?.dark?.id).toBe('cindy-dark');
+    expect(families[0]?.id).toBe('cindy');
   });
 
-  it('DEFAULT_FAMILY_ID 仍是 default(不动默认)', () => {
-    expect(DEFAULT_FAMILY_ID).toBe('default');
+  it('新用户默认选择 cindy,原 default 家族展示为 Classic', () => {
+    expect(DEFAULT_FAMILY_ID).toBe('cindy');
+    expect(getThemeFamilies().find((f) => f.id === 'default')?.name).toBe('Classic');
   });
 
   it('既有 9 主题 keys 快照不变(不增减 builtin 主题)', () => {

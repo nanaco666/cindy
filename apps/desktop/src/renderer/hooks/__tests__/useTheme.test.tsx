@@ -52,13 +52,19 @@ describe('useTheme 跨窗口主题同步(D2-3)', () => {
     expect(themeService.applyTheme).toHaveBeenCalled();
   });
 
-  it('其他窗口切 familyId=cindy → 本窗口 familyId 跟随', () => {
+  it('无存档时默认 cindy,其他窗口切 familyId=default 后本窗口跟随', () => {
+    const { result } = renderHook(() => useTheme(), { wrapper });
+    expect(result.current.familyId).toBe('cindy');
+    act(() => {
+      dispatchStorage('theme.familyId', 'default');
+    });
+    expect(result.current.familyId).toBe('default');
+  });
+
+  it('保留已有用户存储的主题家族选择', () => {
+    localStorage.setItem('theme.familyId', 'default');
     const { result } = renderHook(() => useTheme(), { wrapper });
     expect(result.current.familyId).toBe('default');
-    act(() => {
-      dispatchStorage('theme.familyId', 'cindy');
-    });
-    expect(result.current.familyId).toBe('cindy');
   });
 
   it('非法 theme 值不触发 state 变更', () => {
