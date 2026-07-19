@@ -256,8 +256,8 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'send-btn-pressed-bg': { light: '#25282C', dark: '#D4D4D4' },
   'send-btn-disabled-bg': { light: '#444242', dark: '#444242' },
   'send-btn-disabled-icon': { light: '#585555', dark: '#585555' },
-  'perm-allow-kbd-bg': { light: '#F4F4F4', dark: '#2F2D2D' },
-  'perm-allow-kbd-border': { light: '#DCDFE3', dark: '#434343' },
+  'perm-allow-kbd-bg': { light: 'rgba(255, 255, 255, 0.16)', dark: 'rgba(0, 0, 0, 0.08)' }, // 2026-07-19 修复:kbd 随按钮反相
+  'perm-allow-kbd-border': { light: 'rgba(255, 255, 255, 0.30)', dark: 'rgba(0, 0, 0, 0.20)' },
   'perm-code-bg': { light: '#F5F5F5', dark: '#2B2929' },
   'perm-item-selected-bg': { light: '#F1F1F1', dark: '#2F2D2D' },
   'plan-outline-active-bg': { light: '#F1F1F1', dark: '#2F2D2D' },
