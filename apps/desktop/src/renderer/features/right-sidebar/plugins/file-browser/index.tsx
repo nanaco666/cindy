@@ -43,6 +43,13 @@ export interface FileBrowserState {
   revealFilePath?: string | null;
   /** 文件定位请求序号:同一文件重复打开也要重新触发 reveal。 */
   revealFileNonce?: number;
+  /**
+   * 一次性外部文件打开请求(聊天文件 chip 右键 → workdir 外本地文件):
+   * FileBrowserBody 复用原生文件拖入链路消费，不把绝对路径挂进项目文件树。
+   */
+  externalFilePath?: string | null;
+  /** 外部文件打开请求序号:同一路径重复打开也要重新触发。 */
+  externalFileNonce?: number;
 }
 
 const DEFAULT_STATE: FileBrowserState = {
@@ -101,6 +108,12 @@ const plugin: TabKindPlugin<FileBrowserState> = {
         ? { revealFilePath: obj.revealFilePath }
         : {}),
       ...(typeof obj.revealFileNonce === 'number' ? { revealFileNonce: obj.revealFileNonce } : {}),
+      ...(typeof obj.externalFilePath === 'string' && obj.externalFilePath
+        ? { externalFilePath: obj.externalFilePath }
+        : {}),
+      ...(typeof obj.externalFileNonce === 'number'
+        ? { externalFileNonce: obj.externalFileNonce }
+        : {}),
     };
   },
 };
