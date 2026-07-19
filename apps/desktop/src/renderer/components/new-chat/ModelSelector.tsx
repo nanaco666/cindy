@@ -19,6 +19,7 @@ import { ClaudeMark } from '@/components/icons/ClaudeMark';
 import { CodexMark } from '@/components/icons/CodexMark';
 import { XDIncMark } from '@/components/icons/XDIncMark';
 import { FastModeToggle } from './FastModeToggle';
+import { VendorSegmentedSwitcher } from './VendorSegmentedSwitcher';
 import { useAgentCapabilities, type AgentKind } from '@/hooks/useAgentCapabilities';
 import { useApiKey } from '@/hooks/useApiKey';
 import { useConnectedSource } from '@/hooks/useConnectedSource';
@@ -295,6 +296,17 @@ interface ModelSelectorProps {
   configurationEnabled?: boolean;
   /** 可选的列表首行兜底值，例如“不指定（使用原逻辑）”。 */
   fallbackOption?: { active: boolean; label: string; onSelect: () => void };
+  /**
+   * session-agent-switch:会话内显式两步切换引擎(先选 Agent,再选模型)。
+   * 传入后列表顶部渲染 Claude / Codex 分段;切到非当前引擎的 tab 进入「浏览目标
+   * 引擎模型」态(带提示行,隐藏来源分段与 effort/Fast 配置入口),此时点模型行调
+   * onSwitch(而非 onModelChange),由调用方执行切换事务。切回当前引擎 tab 恢复原
+   * 行为。仅本机已建会话传入;草稿 / device-link / SSH 远程不传(v1 不支持切换)。
+   */
+  agentSwitch?: {
+    currentVendor: 'cc' | 'codex';
+    onSwitch: (targetAgentKind: 'claude-code' | 'codex', modelId: string) => void | Promise<void>;
+  };
 }
 
 interface ModelSelectorContentProps {
@@ -328,6 +340,11 @@ interface ModelSelectorContentProps {
   followSession?: { active: boolean; label: string; onFollow: () => void };
   /** 是否显示模型的 effort / Fast 编辑入口。 */
   configurationEnabled?: boolean;
+  /** 语义同 ModelSelectorProps.agentSwitch(显式两步引擎切换)。 */
+  agentSwitch?: {
+    currentVendor: 'cc' | 'codex';
+    onSwitch: (targetAgentKind: 'claude-code' | 'codex', modelId: string) => void | Promise<void>;
+  };
 }
 
 function vendorKeyToAgentKind(v?: 'cc' | 'codex'): AgentKind | null {
@@ -354,9 +371,23 @@ export function ModelSelectorContent({
   onNavigateToProviders,
   followSession,
   configurationEnabled = true,
+  agentSwitch,
 }: ModelSelectorContentProps) {
   const { t } = useTranslation();
-  const agentKind = vendorKeyToAgentKind(vendorKey);
+  // session-agent-switch:两步式引擎切换的浏览态。browseVendor 初始 = 会话当前引擎;
+  // 切到另一家 tab 只是「浏览目标引擎的模型」,选中模型行才真正触发切换事务。
+  const [browseVendor, setBrowseVendor] = useState<'cc' | 'codex'>(
+    agentSwitch?.currentVendor ?? vendorKey ?? 'cc',
+  );
+  // 会话引擎在外部变化(切换完成 / 换会话)时重置浏览态,跟随新的当前引擎。
+  useEffect(() => {
+    if (agentSwitch) setBrowseVendor(agentSwitch.currentVendor);
+  }, [agentSwitch?.currentVendor]);
+  const browsing = !!agentSwitch && browseVendor !== agentSwitch.currentVendor;
+  const agentKind = agentSwitch
+    ? vendorKeyToAgentKind(browseVendor)
+    : vendorKeyToAgentKind(vendorKey);
+  const browseTargetLabel = browseVendor === 'codex' ? 'Codex' : 'Claude Code';
   // 同时拉两个 agent —— vendorKey 不传时把两边模型一起展示。hooks 必须按固定顺序调用。
   const cc = useAgentCapabilities('claude-code', deviceId);
   const codex = useAgentCapabilities('codex', deviceId);
@@ -451,7 +482,9 @@ export function ModelSelectorContent({
   // ── 来源(供应商)栏 ──────────────────────────────────────────────────────
   // 本机 + device-link 远程会话都支持来源分段:providers 已按 deviceId 切到被控端目录,
   // 远程切来源经隧道 set-model(providerId)生效(见 ChatInput.handleProviderChange 的远程分支)。
-  const sourcesEnabled = !!onProviderChange;
+  // 浏览目标引擎态禁用来源分段:行点击语义是「切换引擎」而非「切本会话来源」,
+  // 来源在切换事务里清空回默认路由(sessionAgentSwitchHandler providerId=null)。
+  const sourcesEnabled = !!onProviderChange && !browsing;
   const connected = useMemo(
     () =>
       sourcesEnabled && currentAgentKind
@@ -563,8 +596,10 @@ export function ModelSelectorContent({
   }, [sections, visibleModels, query]);
 
   // 选中判定:flat 模式只比模型 id;分段模式还要比供应商(同模型多供应商下只高亮当前来源那行)。
+  // 浏览目标引擎态恒 false:当前会话模型属于旧引擎,目标列表里同 id 行(如 gpt-5.5
+  // 两家都提供)高亮会误导成「已选中」。
   const isSelectedRow = (providerId: string | null, id: string): boolean =>
-    id === modelId && (providerId === null || providerId === activeSourceId);
+    !browsing && id === modelId && (providerId === null || providerId === activeSourceId);
 
   // 行内 Fast 闪电:**严格 per-(供应商, 模型)**。选中行 → live fastMode;其余行 → 该 (供应商,模型)
   // 的注入记忆(草稿=providerModelMemory / 会话=sessionModelMemory),缺省 false。不读 provider-agnostic
@@ -611,6 +646,12 @@ export function ModelSelectorContent({
 
   // ── 行选择 / Edit 开合 ───────────────────────────────────────────────────
   const handleRowSelect = (providerId: string | null, id: string) => {
+    // 浏览目标引擎态:选中模型 = 确认切换引擎(两步式的第二步),走切换事务。
+    if (browsing && agentSwitch) {
+      void agentSwitch.onSwitch(browseVendor === 'codex' ? 'codex' : 'claude-code', id);
+      onDismiss?.();
+      return;
+    }
     if (isSelectedRow(providerId, id)) {
       onDismiss?.();
       return;
@@ -701,6 +742,9 @@ export function ModelSelectorContent({
     const rowFastOn = fastOnOf(providerId, model);
     const hasEdit =
       configurationEnabled &&
+      // 浏览目标引擎态不开配置列:effort/Fast 记忆挂在(引擎,来源,模型)上,
+      // 切换前没有会话上下文可写,入口留着只会误导。
+      !browsing &&
       !disabled &&
       (model.efforts.length > 0 || fastEditable(providerId, model));
     const isEditingThis =
@@ -918,6 +962,25 @@ export function ModelSelectorContent({
   // ── 右栏 Pane:固定 320 宽(Edit 配置列开合时列表宽度不抖动)───────────────
   const pane = (
     <div className="flex w-[320px] shrink-0 flex-col gap-1.5 p-2">
+      {/* session-agent-switch:显式两步引擎切换——先在分段里选 Agent,再选模型。
+          复用新建会话的 VendorSegmentedSwitcher 视觉(dense),宽度撑满列表列。 */}
+      {agentSwitch && (
+        <>
+          <VendorSegmentedSwitcher
+            value={browseVendor}
+            onChange={(next) => setBrowseVendor(next === 'codex' ? 'codex' : 'cc')}
+            dense
+            width={304}
+            className="mx-auto"
+          />
+          {browsing && (
+            <div className="px-2 pb-0.5 text-12 text-[var(--text-tertiary)]">
+              {t('newChat.modelSelector.agentSwitch.hint', { agent: browseTargetLabel })}
+            </div>
+          )}
+          <div className="mx-1 h-px bg-[var(--model-dropdown-border)]" />
+        </>
+      )}
       {/* 「跟随会话」行(opt-in,仅 scheduler heartbeat) */}
       {followSession && (
         <>
@@ -1033,6 +1096,7 @@ export function ModelSelector({
   sourceDisconnected = false,
   onProviderChange,
   onNavigateToProviders,
+  agentSwitch,
 }: ModelSelectorProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -1383,6 +1447,7 @@ export function ModelSelector({
           onProviderChange={onProviderChange}
           onNavigateToProviders={onNavigateToProviders}
           configurationEnabled={configurationEnabled}
+          agentSwitch={agentSwitch}
           followSession={
             fallbackOption
               ? {

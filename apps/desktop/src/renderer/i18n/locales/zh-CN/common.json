@@ -3251,6 +3251,9 @@
         "emptyTitle": "暂无可用来源",
         "emptyDesc": "连接一个支持当前模型的来源后即可选择",
         "disconnected": "已断开"
+      },
+      "agentSwitch": {
+        "hint": "选择切换到 {{agent}} 后使用的模型"
       }
     },
     "permissionSelector": {

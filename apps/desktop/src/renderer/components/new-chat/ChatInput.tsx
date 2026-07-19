@@ -3446,23 +3446,6 @@ export function ChatInput({
 
   const handleModelChange = useCallback(
     async (newModelId: string) => {
-      // session-agent-switch:跨引擎选择最先判(先于容量护栏——切换必然重置原生
-      // 上下文,容量护栏语义不适用)。仅本机会话支持;device-link / SSH 远程 v1
-      // 列表仍锁单边,此分支防御性不命中。
-      const sessionAgentKind = vendorKeyToAgentKind(vendorKey);
-      if (sessionId && sessionAgentKind && !deviceLinkDeviceId && !remoteHostId) {
-        const currentOffers = deriveModelsFromProviders(providers, sessionAgentKind).some(
-          (m) => m.id === newModelId,
-        );
-        if (!currentOffers) {
-          const otherKind: 'claude-code' | 'codex' =
-            sessionAgentKind === 'codex' ? 'claude-code' : 'codex';
-          if (deriveModelsFromProviders(providers, otherKind).some((m) => m.id === newModelId)) {
-            await performAgentSwitch(otherKind, newModelId);
-            return;
-          }
-        }
-      }
       // 容量护栏最先跑: 用户取消时直接 return, 不留任何副作用(effort 快照都不动)。
       if (sessionId && newModelId !== activeModel) {
         const proceed = await confirmModelSwitchContextGuard(newModelId);
@@ -3605,7 +3588,7 @@ export function ChatInput({
         );
       }
     },
-    [activeModel, activeEffort, sessionId, selectedProviderId, onModelDidChange, onEffortDidChange, handleFastModeChange, persistFastModeChange, t, getRememberedEffort, setRememberedEffort, rememberProviderChoice, resolveModelEfforts, resolveFast, currentModelAgentKind, effectiveSourceId, modelMemory, modelFastSupported, syncSessionDraftModelPrefs, fastMode, confirmModelSwitchContextGuard, vendorKey, deviceLinkDeviceId, remoteHostId, providers, performAgentSwitch],
+    [activeModel, activeEffort, sessionId, selectedProviderId, onModelDidChange, onEffortDidChange, handleFastModeChange, persistFastModeChange, t, getRememberedEffort, setRememberedEffort, rememberProviderChoice, resolveModelEfforts, resolveFast, currentModelAgentKind, effectiveSourceId, modelMemory, modelFastSupported, syncSessionDraftModelPrefs, fastMode, confirmModelSwitchContextGuard],
   );
 
   const handleEffortChange = useCallback(
@@ -4513,10 +4496,15 @@ export function ChatInput({
               fastMode={fastMode}
               onFastModeChange={handleFastModeChange}
               modelMemory={modelMemory}
-              // session-agent-switch:本机已建会话不锁 vendor —— 列表合并展示两家
-              // 引擎的模型,选中另一家的模型触发 handleModelChange 的引擎切换分支。
-              // 草稿(无 sessionId)与 device-link / SSH 远程会话保持锁定(v1 不支持)。
-              vendorKey={sessionId && !deviceLinkDeviceId && !remoteHostId ? undefined : vendorKey}
+              vendorKey={vendorKey}
+              // session-agent-switch:本机已建会话提供显式两步引擎切换(列表顶部
+              // Claude/Codex 分段,先选 Agent 再选模型)。草稿(无 sessionId)与
+              // device-link / SSH 远程会话不传(v1 不支持切换)。
+              agentSwitch={
+                sessionId && vendorKey && !deviceLinkDeviceId && !remoteHostId
+                  ? { currentVendor: vendorKey, onSwitch: performAgentSwitch }
+                  : undefined
+              }
               deviceId={deviceLinkDeviceId}
               // SSH 远程会话隐藏订阅直连模型(chatgpt/ / xai/):bridge 只挂在本地 compat-proxy,
               // 远程模式走 remoteEndpoint 不经翻译,选了必失败。

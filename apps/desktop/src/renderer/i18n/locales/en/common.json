@@ -3251,6 +3251,9 @@
         "emptyTitle": "No available source",
         "emptyDesc": "Connect a source that supports the current model to select it",
         "disconnected": "Disconnected"
+      },
+      "agentSwitch": {
+        "hint": "Pick the model to use after switching to {{agent}}"
       }
     },
     "permissionSelector": {

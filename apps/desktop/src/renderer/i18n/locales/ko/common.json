@@ -3251,6 +3251,9 @@
         "emptyTitle": "사용 가능한 소스 없음",
         "emptyDesc": "현재 모델을 지원하는 소스를 연결하면 선택할 수 있습니다",
         "disconnected": "연결 끊김"
+      },
+      "agentSwitch": {
+        "hint": "{{agent}}(으)로 전환한 후 사용할 모델을 선택하세요"
       }
     },
     "permissionSelector": {
