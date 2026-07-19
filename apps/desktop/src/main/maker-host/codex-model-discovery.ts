@@ -45,6 +45,13 @@ function hasPriorityTier(tiers: unknown): boolean {
 /** Codex runtime 当前可安全透传的推理档位；cache 可能先于 runtime 暴露 max/ultra。 */
 const CODEX_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh']);
 
+/**
+ * 默认收起的 slug(旧产品目录 defaultEnabled:false 的延续):清单动态化后注册表不带
+ * 可见性梯度(list/hide 之外),legacy 模型的「默认隐藏」是客户端展示策略,不能因
+ * 静态段退役而静默漂移成全部可见。用户仍可在设置里手动开启(override 语义不变)。
+ */
+const DEFAULT_HIDDEN_SLUGS: ReadonlySet<string> = new Set(['gpt-5.4-mini']);
+
 function str(v: unknown): string | null {
   return typeof v === 'string' && v.length > 0 ? v : null;
 }
@@ -118,8 +125,8 @@ export function mapCodexModelsToCatalog(raw: unknown): CatalogModel[] {
       efforts: efforts as CatalogModel['efforts'],
       defaultEffort,
       status: 'active',
-      // 新发现的模型默认可见(用户抱怨过看不到模型);已存在的静态条目在 catalog 合并时 first-wins 保留其自身设置。
-      defaultEnabled: true,
+      // 新发现的模型默认可见(用户抱怨过看不到模型);legacy 模型沿用旧目录的默认隐藏策略。
+      defaultEnabled: !DEFAULT_HIDDEN_SLUGS.has(slug),
     };
     if (efforts.includes('xhigh')) model.effortDisplayNames = { xhigh: 'Extra High' };
     if (hasPriorityTier(m.service_tiers)) model.supportsFastMode = true;

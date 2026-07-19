@@ -45,9 +45,18 @@ export const MODEL_ACCESS_STATUS_CHANNEL = 'model-access:status-change';
  * 客户端字段优先级:本条目 > 产品目录同 id 条目 > 合成默认
  * (active-catalog setXdGatewayModels)。
  */
+/** 单个 runtime tab 上与基线不同的能力字段(服务端 perAgent 覆盖块,客户端按 agent 应用)。 */
+export interface ModelAccessAgentOverride {
+  contextWindow?: number;
+  efforts?: string[];
+  defaultEffort?: string;
+  supportsFastMode?: boolean;
+  defaultEnabled?: boolean;
+}
+
 export interface ModelAccessGatewayModel {
   id: string;
-  /** 进哪些 runtime tab;缺省 = 目录归属 → 仅 claude-code 兜底。 */
+  /** 进哪些 runtime tab;缺省 = 仅 claude-code(网关 /v1/messages 翻译覆盖面最广)。 */
   agents?: ('claude-code' | 'codex')[];
   name?: string;
   group?: string;
@@ -57,4 +66,10 @@ export interface ModelAccessGatewayModel {
   efforts?: string[];
   defaultEffort?: string;
   sortOrder?: number;
+  /** Fast(加速档)支持;缺省按 true 处理(开了没效果无害,但不能没有)。 */
+  supportsFastMode?: boolean;
+  /** 是否默认出现在模型选择器;缺省按 true(默认可见)。 */
+  defaultEnabled?: boolean;
+  /** per-tab 能力覆盖(基线字段之上按 agent 应用)。 */
+  perAgent?: Partial<Record<'claude-code' | 'codex', ModelAccessAgentOverride>>;
 }

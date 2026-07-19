@@ -43,10 +43,19 @@ let discoveredCodex: CatalogModel[] = [];
  * 空/坏数据绝不抹掉静态兜底。由 generic-oauth 的 models 发现流程写入。
  */
 const discoveredByProvider = new Map<string, Partial<Record<AgentKind, CatalogModel[]>>>();
+/** 单 tab 能力覆盖块(shared/modelAccess ModelAccessAgentOverride 同形)。 */
+export interface XdGatewayAgentOverride {
+  contextWindow?: number;
+  efforts?: string[];
+  defaultEffort?: string;
+  supportsFastMode?: boolean;
+  defaultEnabled?: boolean;
+}
+
 /** 服务端下发的 XD 网关聊天模型条目(shared/modelAccess ModelAccessGatewayModel 同形)。 */
 export interface XdGatewayModelInfo {
   id: string;
-  /** 进哪些 runtime tab;缺省 = 目录归属 → 仅 claude-code 兜底。 */
+  /** 进哪些 runtime tab;缺省 = 仅 claude-code 兜底。 */
   agents?: AgentKind[];
   name?: string;
   group?: string;
@@ -55,6 +64,12 @@ export interface XdGatewayModelInfo {
   efforts?: string[];
   defaultEffort?: string;
   sortOrder?: number;
+  /** Fast 支持;缺省按 true(未登记模型的确定性默认:开了没效果无害)。 */
+  supportsFastMode?: boolean;
+  /** 默认可见性;缺省按 true。 */
+  defaultEnabled?: boolean;
+  /** per-tab 能力覆盖。 */
+  perAgent?: Partial<Record<AgentKind, XdGatewayAgentOverride>>;
 }
 
 /**
@@ -70,6 +85,14 @@ export interface XdGatewayModelInfo {
  *  - 目录里有、网关没有 → 不展示。
  */
 let xdGatewayModels: XdGatewayModelInfo[] = [];
+
+/**
+ * Anthropic(Claude.ai 订阅)的**权威模型清单**(2026-07-19 统一重构):由 host 的
+ * anthropic 发现流程注入(登录时 HTTP `/v1/models` + 会话 init 时 SDK supportedModels
+ * 捕获,见 maker-host/model-discovery/anthropic.ts)。未登录 / 未发现时保持空数组,
+ * anthropic 供应商不暴露任何模型——绝不用静态目录冒充。
+ */
+let anthropicModels: CatalogModel[] = [];
 
 const VALID_EFFORTS: ReadonlySet<string> = new Set([
   'minimal',
@@ -125,9 +148,20 @@ function augmentModels(
   return { ...p, models: { ...p.models, [agent]: models } };
 }
 
+/**
+ * bridge tab 默认收起的原始 slug(旧产品目录 chatgpt/* 条目 defaultEnabled:false 的
+ * 延续):cc tab 上 ChatGPT 订阅直连只默认露出旗舰,legacy 模型收起——与 codex tab
+ * 的可见性策略(见 codex-model-discovery DEFAULT_HIDDEN_SLUGS)按 tab 各自维护。
+ */
+const BRIDGE_DEFAULT_HIDDEN_SLUGS: ReadonlySet<string> = new Set(['gpt-5.4', 'gpt-5.4-mini']);
+
 /** Codex 规范模型 → Claude bridge 路由模型；显示元数据保持一致，只改路由 id。 */
 function toChatgptBridgeModel(model: CatalogModel): CatalogModel {
-  return { ...model, id: `${CHATGPT_MODEL_PREFIX}${model.id}` };
+  return {
+    ...model,
+    id: `${CHATGPT_MODEL_PREFIX}${model.id}`,
+    ...(BRIDGE_DEFAULT_HIDDEN_SLUGS.has(model.id) ? { defaultEnabled: false } : {}),
+  };
 }
 
 /**
@@ -152,9 +186,27 @@ function projectCodexModelsToClaude(p: Provider): Provider {
   return augmentModels(withAligned, 'claude-code', codex.map(toChatgptBridgeModel), true);
 }
 
+/** 清单来源唯一化的动态供应商:目录(bundled/远端)里的静态模型一律忽略,清单只来自运行时注入。 */
+const DYNAMIC_LIST_PROVIDER_IDS: ReadonlySet<string> = new Set(['anthropic', 'openai', 'xd']);
+
+/** 把 provider 的全部 per-agent 模型清单清零(保留身份卡);已为空则原样返回。 */
+function withEmptyModels(p: Provider): Provider {
+  const entries = Object.entries(p.models) as [AgentKind, CatalogModel[]][];
+  if (entries.every(([, list]) => list.length === 0)) return p;
+  const models: Provider['models'] = {};
+  for (const [agent] of entries) models[agent] = [];
+  return { ...p, models };
+}
+
 function computeMerged(): Catalog {
   const b = base ?? BUNDLED_CATALOG;
   let providers = b.providers;
+
+  // 动态清单供应商先清零静态模型(2026-07-19 统一重构):无论目录来自 bundled 还是
+  // 远端(含仍带静态段的旧版 v1 OSS 文件),这三家的清单**只信运行时注入**——
+  // 否则过渡期旧 OSS 文件会让静态清单复活,违反「无可用性证明不展示」。
+  const normalized = providers.map((p) => (DYNAMIC_LIST_PROVIDER_IDS.has(p.id) ? withEmptyModels(p) : p));
+  if (normalized.some((p, index) => p !== providers[index])) providers = normalized;
 
   // 同一份规范快照先进入 Codex,再从「静态 first-wins 后的生效 Codex 列表」投影 bridge。
   // 即使 cache 不可用,静态 Codex 新模型也会自动出现在 Claude tab,不会再维护两份名单。
@@ -183,60 +235,67 @@ function computeMerged(): Catalog {
       return next;
     });
   }
-  // XD 网关权威模型清单重建(优先级见 xdGatewayModels 注释)。即使实时清单为空也
-  // 必须重建为空:产品目录只补展示元数据,不能证明某个模型当前在网关可用。
-  // 放在所有 augment 之后:重建的是最终展示清单;只影响 xd 供应商自己的模型列表,
-  // 同 id 模型经其它供应商(如 anthropic 订阅直连)仍照常可用。
+  // Anthropic 权威模型清单重建(2026-07-19 统一重构):清单唯一来源是 SDK / 登录时
+  // HTTP 发现(host 经 setAnthropicDiscoveredModels 注入),目录静态段已退役(bundled
+  // 恒为空数组)。空 = 未发现,anthropic 供应商保留但不暴露任何模型,不用静态数据冒充。
+  if (anthropicModels.length > 0) {
+    providers = providers.map((p) =>
+      p.id === 'anthropic'
+        ? { ...p, models: { ...p.models, 'claude-code': anthropicModels } }
+        : p,
+    );
+  }
+
+  // XD 网关权威模型清单重建。即使实时清单为空也必须重建为空:不能证明某个模型
+  // 当前在网关可用就不显示。元数据**只信服务端下发 + 确定性默认值**(2026-07-19 起
+  // 不再回落产品目录条目——服务端 MODEL_METADATA 已是唯一权威,见 cindy-server):
+  //   - perAgent 覆盖块按 tab 应用在基线字段之上;
+  //   - efforts 字段缺失 = 未登记 → 合成 3 档(low/medium/high,默认 high);
+  //     显式 [] = 登记为不可调 → 尊重为空;
+  //   - supportsFastMode 缺失 → true(开了没效果无害,但不能没有);
+  //   - defaultEnabled 缺失 → 默认可见。
+  // 放在所有 augment 之后:只影响 xd 供应商自己的模型列表,同 id 模型经其它供应商
+  // (如 anthropic 订阅直连)仍照常可用。
   const gwModels = xdGatewayModels;
   providers = providers.map((p) => {
     if (p.id !== 'xd') return p;
-    // 目录条目索引:per-agent(tab 归属兜底)+ 任一 agent(元数据补全,cc 优先)。
-    const catalogByAgent = new Map<AgentKind, Map<string, CatalogModel>>();
-    const catalogAny = new Map<string, CatalogModel>();
-    for (const [agent, list] of Object.entries(p.models) as [AgentKind, CatalogModel[]][]) {
-      catalogByAgent.set(agent, new Map(list.map((m) => [m.id, m])));
-      for (const m of list) if (!catalogAny.has(m.id)) catalogAny.set(m.id, m);
-    }
     const agentKeys = Object.keys(p.models) as AgentKind[];
 
     const models: Provider['models'] = {};
     for (const agent of agentKeys) models[agent] = [];
     for (const gm of gwModels) {
-      const catalogEntry = catalogAny.get(gm.id);
-      // tab 归属:服务端 agents > 目录归属 > 仅 claude-code 兜底
-      const targetAgents: AgentKind[] =
-        gm.agents && gm.agents.length > 0
-          ? gm.agents
-          : catalogEntry
-            ? agentKeys.filter((a) => catalogByAgent.get(a)?.has(gm.id))
-            : ['claude-code'];
-      // 元数据逐字段:服务端 > 目录 > 合成默认(efforts 白名单过滤防坏档位)
-      const efforts = gm.efforts?.filter((e): e is Effort => VALID_EFFORTS.has(e));
-      const defaultEffort =
-        gm.defaultEffort && VALID_EFFORTS.has(gm.defaultEffort)
-          ? (gm.defaultEffort as Effort)
-          : undefined;
+      // tab 归属:服务端 agents > 仅 claude-code(网关 /v1/messages 翻译覆盖面最广,不猜)
+      const targetAgents: AgentKind[] = gm.agents && gm.agents.length > 0 ? gm.agents : ['claude-code'];
       for (const agent of targetAgents) {
         if (!models[agent]) continue; // 未知 agent 键防御(wire 数据)
-        const agentEntry = catalogByAgent.get(agent)?.get(gm.id) ?? catalogEntry;
+        const ov = gm.perAgent?.[agent] ?? {};
+        // efforts:override > 基线;字段"存在"与"空数组"语义不同(缺失=未登记→3档,[]=不可调)
+        const rawEfforts = ov.efforts ?? gm.efforts;
+        const efforts: Effort[] =
+          rawEfforts === undefined
+            ? ['low', 'medium', 'high']
+            : rawEfforts.filter((e): e is Effort => VALID_EFFORTS.has(e));
+        const rawDefault = ov.defaultEffort ?? gm.defaultEffort;
+        const defaultEffort: Effort | null =
+          rawDefault && VALID_EFFORTS.has(rawDefault) && efforts.includes(rawDefault as Effort)
+            ? (rawDefault as Effort)
+            : efforts.includes('high')
+              ? 'high'
+              : efforts.length > 0
+                ? efforts[efforts.length - 1]
+                : null;
+        const defaultEnabled = ov.defaultEnabled ?? gm.defaultEnabled;
         const merged: CatalogModel = {
-          ...(agentEntry ?? {}),
           id: gm.id,
-          name: gm.name ?? agentEntry?.name ?? gm.id,
-          group: gm.group ?? agentEntry?.group ?? 'custom:xd',
-          contextWindow: gm.contextWindow ?? agentEntry?.contextWindow ?? 200_000,
-          efforts: efforts && efforts.length > 0 ? efforts : (agentEntry?.efforts ?? []),
-          defaultEffort: defaultEffort ?? agentEntry?.defaultEffort ?? null,
-          ...(gm.description !== undefined
-            ? { description: gm.description }
-            : agentEntry?.description !== undefined
-              ? { description: agentEntry.description }
-              : {}),
-          ...(gm.sortOrder !== undefined
-            ? { sortOrder: gm.sortOrder }
-            : agentEntry?.sortOrder !== undefined
-              ? { sortOrder: agentEntry.sortOrder }
-              : {}),
+          name: gm.name ?? gm.id,
+          group: gm.group ?? 'custom:xd',
+          contextWindow: ov.contextWindow ?? gm.contextWindow ?? 200_000,
+          efforts,
+          defaultEffort,
+          supportsFastMode: ov.supportsFastMode ?? gm.supportsFastMode ?? true,
+          ...(gm.description !== undefined ? { description: gm.description } : {}),
+          ...(gm.sortOrder !== undefined ? { sortOrder: gm.sortOrder } : {}),
+          ...(defaultEnabled !== undefined ? { defaultEnabled } : {}),
         };
         models[agent]!.push(merged);
       }
@@ -329,4 +388,13 @@ export function setActiveCatalogChangedListener(
   listener: ((nextRevision: number) => void) | null,
 ): void {
   changedListener = listener;
+}
+
+/**
+ * 注入 Anthropic 权威模型清单(model-discovery/anthropic 发现流程写入)。
+ * 传空数组 = 未登录 / 发现不可用,anthropic 供应商保留但不暴露任何模型。
+ */
+export function setAnthropicDiscoveredModels(models: CatalogModel[]): void {
+  anthropicModels = [...models];
+  merged = null;
 }

@@ -13,7 +13,7 @@ import {
   rewriteImplicitModelIdForRoute,
   rewriteSessionModelIdForRoute,
 } from '../provider-route.js';
-import { setCustomProviders, setXdGatewayModels } from '../active-catalog.js';
+import { setCustomProviders, setDiscoveredCodexModels, setXdGatewayModels } from '../active-catalog.js';
 import { setSessionProvider, clearSessionProvider } from '../session-provider-store.js';
 import { ANTHROPIC_DIRECT_UPSTREAM } from '../claude-gateway-config.js';
 
@@ -141,11 +141,15 @@ describe('resolveSessionRouteDecision (per-session 选择 → 路由;no-break fa
     setProviderOAuthTokenReader((providerId, agent) =>
       providerId === 'xai' && agent === 'codex' ? Promise.resolve('xai-live-token') : null,
     );
-    // xd 模型以网关实时清单为准(默认空,见 active-catalog xdGatewayModels):
-    // 注入 gpt-5.4 恢复被测前提——gpt-5.4 属 openai + xd 双来源 → 非唯一 → 不做隐式推断。
+    // openai / xd 都是动态清单供应商(2026-07-19 统一重构,bundled 零静态):
+    // 两边各注入 gpt-5.4 恢复被测前提——gpt-5.4 双来源 → 非唯一 → 不做隐式推断。
     setXdGatewayModels([{ id: 'gpt-5.4', agents: ['codex'] }]);
+    setDiscoveredCodexModels([
+      { id: 'gpt-5.4', name: 'GPT-5.4', contextWindow: 272_000, efforts: [], defaultEffort: null },
+    ]);
     expect(inferProviderIdForModel('xai/grok-4.3', 'codex')).toBe('xai');
     expect(inferProviderIdForModel('gpt-5.4', 'codex')).toBeNull();
+    setDiscoveredCodexModels([]);
     await expect(Promise.resolve(
       resolveImplicitProviderOAuthRouteDecision('xai/grok-4.3', 'codex', KEY),
     )).resolves.toEqual({

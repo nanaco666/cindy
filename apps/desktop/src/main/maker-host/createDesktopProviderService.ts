@@ -34,6 +34,10 @@ import {
   readCodexDiscoveredModels,
   readCodexDiscoveredModelsForAuthRefresh,
 } from './codex-model-discovery.js';
+import {
+  loadAnthropicModelsFromDiskCache,
+  refreshAnthropicModelsFromHttp,
+} from './model-discovery/anthropic.js';
 import { createProviderService, type ProviderService } from './provider-service.js';
 import { listCustomProviders } from './custom-provider-store.js';
 import { setCustomProviderKeyReader, setOAuthTokenReader, setProviderOAuthTokenReader } from './provider-route.js';
@@ -198,8 +202,13 @@ export function ensureActiveCatalogLoaded(): Promise<Catalog> {
           const discovered = await readCodexDiscoveredModels();
           if (discovered !== null) setDiscoveredCodexModels(discovered);
         } catch {
-          /* 读/映射失败:保持纯静态兜底,不影响启动 */
+          /* 读/映射失败:保持现值,不影响启动 */
         }
+        // Anthropic 动态清单:同步加载磁盘缓存(上次成功结果,登录态 gate 在内部),
+        // 让首次 maker 构建的 availableModels 派生就包含它;HTTP 刷新放后台,
+        // 不阻塞 splash(失败保留现值,语义见 model-discovery/anthropic.ts)。
+        await loadAnthropicModelsFromDiskCache();
+        void refreshAnthropicModelsFromHttp();
         activeLoaded = true;
         return catalog;
       })
