@@ -40,8 +40,8 @@ function failCall(callId, message) {
  * ── 聊天卡片供片(卡槽③海报模式,v1.9.0)────────────────────────────
  * 样式对齐 docs/design_docs/cc-agent-view.pen「Ghost Card · Cindy Art」:
  * 过程态 = 题注 + 灰底占位画布;终版 = 全幅大图 + 「题注」 + 落款
- * (Cindy Art · 模型名)。配色用中性灰(#8a8a8a 系)——海报自带色,
- * 明暗主题下都可读,不依赖主机 token。
+ * (Cindy Art · 模型名)。背景与文字消费主机注入的语义色 token,随
+ * light/dark/扩展主题切换;媒体内容本身不改色。
  * 只给图片工具供卡:海报模式点图进的是图片 lightbox,视频供卡会把默认
  * 视频卡顶掉又放不了片,视频调用保持默认渲染(不发 card-update 即回退)。
  */
@@ -74,14 +74,19 @@ function sendProgressCard(callId, prompt, verb) {
       // 布局对齐结果卡(与 xd-mivo 过程卡同规格):画布通栏出血(与结果图
       // 同一左缘,无外层 padding),高度按卡片画布宽 458 取 16:9 ≈ 258px;
       // 题注贴画布上方(与画布同左缘)。
-      '<div style="font-family:system-ui">' +
-      '<div style="margin:0 0 8px;font-size:12px;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">「' + esc(prompt) + '」</div>' +
+      '<div style="height:290px;box-sizing:border-box;padding-top:8px;font-family:system-ui;' +
+      'background:var(--msg-tool-card-bg,var(--surface-elevated,#ffffff));' +
+      'color:var(--msg-tool-card-text,var(--text-primary,#1a1a1a))">' +
+      '<div style="margin:0 0 8px;padding:0 12px;font-size:12px;line-height:16px;' +
+      'color:var(--text-secondary,#6b6b66);text-align:center;' +
+      'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">「' + esc(prompt) + '」</div>' +
       '<div style="height:258px;border-radius:10px;' +
-      'background:linear-gradient(135deg,rgba(127,127,127,.16),rgba(127,127,127,.04) 55%,rgba(127,127,127,.12));' +
+      'background:linear-gradient(135deg,var(--surface-chip,#eeeeec),' +
+      'var(--surface,#f7f7f5) 55%,var(--surface-chip,#eeeeec));' +
       'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px">' +
       '<div style="font-size:26px;line-height:1;animation:ca-bob 1.6s ease-in-out infinite">🎨</div>' +
-      '<div style="font-size:12px;color:#8f8f8f;font-weight:500;animation:ca-breathe 1.6s ease-in-out infinite">' + esc(verb) + '</div>' +
-      '<div style="font-size:10px;color:#a5a5a5">通常 10–30 秒</div>' +
+      '<div style="font-size:12px;color:var(--text-secondary,#6b6b66);font-weight:500;animation:ca-breathe 1.6s ease-in-out infinite">' + esc(verb) + '</div>' +
+      '<div style="font-size:10px;color:var(--text-tertiary,#9a9a94)">通常 10–30 秒</div>' +
       '</div></div>',
     290,
   );
@@ -105,11 +110,13 @@ function sendResultCard(callId, gen, caption, edited) {
   }
   sendCard(
     callId,
-    '<div style="font-family:system-ui">' +
+    '<div style="font-family:system-ui;background:var(--msg-tool-card-bg,var(--surface-elevated,#ffffff));' +
+      'color:var(--msg-tool-card-text,var(--text-primary,#1a1a1a))">' +
       '<img src="' + esc(gen.url) + '" style="display:block;width:100%;height:auto">' +
       '<div style="padding:8px 12px 10px">' +
-      '<div style="font-size:12px;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(label) + '</div>' +
-      '<div style="margin-top:3px;font-size:10px;color:#9a9a9a">' + esc(sig) + '</div>' +
+      '<div style="font-size:12px;color:var(--text-secondary,#6b6b66);text-align:center;' +
+      'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(label) + '</div>' +
+      '<div style="margin-top:3px;font-size:10px;color:var(--text-tertiary,#9a9a94);text-align:center">' + esc(sig) + '</div>' +
       '</div></div>',
     height,
   );
