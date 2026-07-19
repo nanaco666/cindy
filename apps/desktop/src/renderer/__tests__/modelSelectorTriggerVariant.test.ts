@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -15,11 +15,41 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('@/components/ui/popover', () => ({
-  Popover: ({ children }: { children: React.ReactNode }) => children,
-  PopoverTrigger: ({ children }: { children: React.ReactNode }) => children,
-  PopoverContent: () => null,
-}));
+vi.mock('@/components/ui/popover', async () => {
+  const React = await import('react');
+  const OpenContext = React.createContext(true);
+  return {
+    Popover: ({ children, open }: { children: React.ReactNode; open?: boolean }) =>
+      React.createElement(OpenContext.Provider, { value: open ?? true }, children),
+    PopoverTrigger: ({ children }: { children: React.ReactNode }) => children,
+    PopoverAnchor: ({ children }: { children: React.ReactNode }) => children,
+    PopoverContent: ({
+      children,
+      className,
+      onPointerEnter,
+      onPointerLeave,
+    }: {
+      children: React.ReactNode;
+      className?: string;
+      onPointerEnter?: React.PointerEventHandler<HTMLDivElement>;
+      onPointerLeave?: React.PointerEventHandler<HTMLDivElement>;
+    }) => {
+      const open = React.useContext(OpenContext);
+      return open
+        ? React.createElement(
+            'div',
+            {
+              className,
+              'data-testid': 'model-options-popover',
+              onPointerEnter,
+              onPointerLeave,
+            },
+            children,
+          )
+        : null;
+    },
+  };
+});
 
 vi.mock('@/components/ui/tooltip', async () => {
   const React = await import('react');
@@ -52,6 +82,13 @@ vi.mock('@/hooks/useAgentCapabilities', () => ({
             xhigh: 'X-High',
           },
         },
+        {
+          id: 'claude-sonnet-4-6',
+          displayName: 'Sonnet 4.6',
+          contextWindow: 200000,
+          efforts: ['low', 'medium', 'high'],
+          defaultEffort: 'medium',
+        },
       ],
       effortLevels: [{ id: 'xhigh', displayName: 'X-High' }],
       hasFastMode: false,
@@ -72,7 +109,37 @@ vi.mock('@/hooks/useModelPricing', () => ({
 }));
 
 vi.mock('@/hooks/useProviders', () => ({
-  useProviders: () => ({ providers: [] }),
+  useProviders: () => ({
+    providers: [
+      {
+        id: 'anthropic',
+        name: 'Anthropic',
+        source: 'builtin',
+        agents: ['claude-code'],
+        auth: { method: 'oauth' },
+        routing: {},
+        connected: true,
+        models: {
+          'claude-code': [
+            {
+              id: 'claude-opus-4-8',
+              name: 'Opus 4.8',
+              contextWindow: 200000,
+              efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+              defaultEffort: 'high',
+            },
+            {
+              id: 'claude-sonnet-4-6',
+              name: 'Sonnet 4.6',
+              contextWindow: 200000,
+              efforts: ['low', 'medium', 'high'],
+              defaultEffort: 'medium',
+            },
+          ],
+        },
+      },
+    ],
+  }),
 }));
 
 vi.mock('@/hooks/useDeviceProviders', () => ({
@@ -91,6 +158,13 @@ vi.mock('@/lib/providerModels', () => ({
       effortDisplayNames: {
         xhigh: 'X-High',
       },
+    },
+    {
+      id: 'claude-sonnet-4-6',
+      displayName: 'Sonnet 4.6',
+      contextWindow: 200000,
+      efforts: ['low', 'medium', 'high'],
+      defaultEffort: 'medium',
     },
   ],
 }));
@@ -172,5 +246,75 @@ describe('ModelSelector trigger variants', () => {
         .getByRole('option', { name: /Opus 4\.8/ })
         .parentElement?.getAttribute('data-tooltip-class'),
     ).toBe('z-[10020]');
+  });
+
+  it('reveals the selected model options on row hover or keyboard focus without an Edit click', () => {
+    vi.useFakeTimers();
+    render(
+      React.createElement(ModelSelectorContent, {
+        modelId: 'claude-opus-4-8',
+        effort: 'high',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+      }),
+    );
+
+    const row = screen.getByRole('option', { name: /Opus 4\.8/ });
+    expect(screen.queryByRole('group', { name: /Opus 4\.8/ })).toBeNull();
+    expect(screen.queryByText('newChat.modelSelector.edit')).toBeNull();
+
+    fireEvent.pointerEnter(row);
+    expect(screen.getByRole('group', { name: /Opus 4\.8/ })).toBeTruthy();
+    expect(row.getAttribute('data-model-options-active')).toBe('true');
+
+    fireEvent.pointerLeave(row);
+    act(() => vi.advanceTimersByTime(79));
+    expect(screen.getByRole('group', { name: /Opus 4\.8/ })).toBeTruthy();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.queryByRole('group', { name: /Opus 4\.8/ })).toBeNull();
+
+    fireEvent.focus(row);
+    expect(screen.getByRole('group', { name: /Opus 4\.8/ })).toBeTruthy();
+    vi.useRealTimers();
+  });
+
+  it('lets inactive provider rows edit scoped memory without switching the model', () => {
+    const onProviderChange = vi.fn();
+    const setEffort = vi.fn();
+    const modelMemory = {
+      getEffort: vi.fn(),
+      setEffort,
+      getFast: vi.fn(),
+      setFast: vi.fn(),
+    };
+
+    render(
+      React.createElement(ModelSelectorContent, {
+        modelId: 'claude-opus-4-8',
+        effort: 'high',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+        currentProviderId: 'anthropic',
+        onProviderChange,
+        modelMemory,
+      }),
+    );
+
+    const opusRow = screen.getByRole('option', { name: /Opus 4\.8/ });
+    const sonnetRow = screen.getByRole('option', { name: /Sonnet 4\.6/ });
+    fireEvent.pointerEnter(opusRow);
+    expect(screen.getByRole('group', { name: /Opus 4\.8/ })).toBeTruthy();
+
+    fireEvent.pointerEnter(sonnetRow);
+    expect(screen.queryByRole('group', { name: /Opus 4\.8/ })).toBeNull();
+    const options = screen.getByRole('group', { name: /Sonnet 4\.6/ });
+    expect(sonnetRow.getAttribute('data-model-options-active')).toBe('true');
+    expect(opusRow.getAttribute('data-model-options-active')).toBeNull();
+    fireEvent.click(within(options).getByRole('option', { name: 'high' }));
+
+    expect(setEffort).toHaveBeenCalledWith('claude-code', 'anthropic', 'claude-sonnet-4-6', 'high');
+    expect(onProviderChange).not.toHaveBeenCalled();
   });
 });

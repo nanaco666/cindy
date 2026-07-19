@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { flashScrollbar } from '@/lib/scrollbarAutoHide';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tip } from '@/components/ui/tooltip';
 import { ClaudeMark } from '@/components/icons/ClaudeMark';
 import { CodexMark } from '@/components/icons/CodexMark';
@@ -279,7 +279,8 @@ export function ModelSelectorContent({
 
   const visibilityVersion = useModelVisibilityVersion();
   const [query, setQuery] = useState('');
-  // 当前展开 Edit 配置列的目标(供应商id + 模型id)。null = 配置列收起(单栏)。
+  // 当前 hover / focus 展开的浮层目标(供应商id + 模型id)。只把「显示哪一行的选项」
+  // 放在本地；effort / fast 的值和持久化仍走 props + modelMemory SSoT。
   const [editing, setEditing] = useState<{ providerId: string | null; modelId: string } | null>(null);
   // 非选中模型的 effort/fast 改动写进记忆(localStorage),不反映在 props —— 用 tick 触发重渲染读新值。
   const [editTick, setEditTick] = useState(0);
@@ -295,6 +296,30 @@ export function ModelSelectorContent({
   void storeVersion;
 
   const listRef = useRef<HTMLDivElement>(null);
+  const configPanelRef = useRef<HTMLDivElement>(null);
+  const closeOptionsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelOptionsClose = () => {
+    if (closeOptionsTimerRef.current === null) return;
+    clearTimeout(closeOptionsTimerRef.current);
+    closeOptionsTimerRef.current = null;
+  };
+  const scheduleOptionsClose = () => {
+    cancelOptionsClose();
+    // 给鼠标跨过行与 portaled 浮层之间的 4px 缝隙留一小段 grace period。
+    // 80ms 足够接住浮层,又不会产生「鼠标走了选项还赖着」的视觉残留。
+    closeOptionsTimerRef.current = setTimeout(() => {
+      closeOptionsTimerRef.current = null;
+      setEditing(null);
+    }, 80);
+  };
+
+  useEffect(
+    () => () => {
+      if (closeOptionsTimerRef.current !== null) clearTimeout(closeOptionsTimerRef.current);
+    },
+    [],
+  );
 
   // 模型清单来源:本机会话从 live providers 派生(builtin + 自定义合集);device-link 远程会话
   // 必须列**被控端**模型(cc/codex.capabilities.availableModels,deviceId 作用域),不读控制端本地
@@ -494,7 +519,7 @@ export function ModelSelectorContent({
     return () => cancelAnimationFrame(raf);
   }, [sections, flatModels]);
 
-  // ── 行选择 / Edit 开合 ───────────────────────────────────────────────────
+  // ── 行选择 ───────────────────────────────────────────────────────────────
   const handleRowSelect = (providerId: string | null, id: string) => {
     if (isSelectedRow(providerId, id)) {
       onDismiss?.();
@@ -508,13 +533,8 @@ export function ModelSelectorContent({
     }
     onDismiss?.();
   };
-  const toggleEdit = (providerId: string | null, id: string) => {
-    setEditing((prev) =>
-      prev && prev.modelId === id && prev.providerId === providerId ? null : { providerId, modelId: id },
-    );
-  };
 
-  // ── Edit 配置列目标 ──────────────────────────────────────────────────────
+  // ── hover / focus 浮层目标 ───────────────────────────────────────────────
   const editingModel: RowModel | null = useMemo(() => {
     if (!editing) return null;
     if (sections) {
@@ -570,159 +590,16 @@ export function ModelSelectorContent({
     bump();
   };
 
-  // ── 单个模型行 ───────────────────────────────────────────────────────────
-  // provider 非空(分段模式)→ 名字前缀该来源的 mark;null(flat / device-link)→ 无前缀。
-  const renderModelItem = (provider: ProviderView | null, model: RowModel) => {
-    const providerId = provider?.id ?? null;
-    const isSelected = isSelectedRow(providerId, model.id);
-    const isBudgetModel = model.id.startsWith('codex/');
-    const isSubscriptionModel = provider?.access?.kind === 'subscription';
-    const disabled = budgetDisabledOf(model.id);
-    const rowEffort = rowEffortOf(providerId, model);
-    const rowFastOn = fastOnOf(providerId, model);
-    const hasEdit = !disabled && (model.efforts.length > 0 || fastEditable(providerId, model));
-    const isEditingThis =
-      !!editing && editing.modelId === model.id && editing.providerId === providerId;
-    // hover tooltip:最前面拼供应商完整名(分段模式有 provider),再接上下文 / 价格 / 快速。
-    const supplierName = provider ? providerDisplayName(provider, t) : null;
-    const tipText = disabled
-      ? t('newChat.modelSelector.budgetNeedsApiKey')
-      : [supplierName, tooltipFor(model.id)].filter(Boolean).join(' · ') || null;
-    return (
-      <Tip
-        key={`${providerId ?? ''}::${model.id}`}
-        text={tipText}
-        side="left"
-        contentClassName={tooltipContentClassName}
-      >
-        <div
-          role="option"
-          aria-selected={isSelected}
-          aria-disabled={disabled}
-          data-model-selected={isSelected ? 'true' : undefined}
-          tabIndex={disabled ? -1 : 0}
-          onClick={() => {
-            if (disabled) return;
-            handleRowSelect(providerId, model.id);
-          }}
-          onKeyDown={(ev) => {
-            if (ev.target !== ev.currentTarget || disabled) return;
-            if (ev.key !== 'Enter' && ev.key !== ' ') return;
-            ev.preventDefault();
-            handleRowSelect(providerId, model.id);
-          }}
-          className={cn(
-            'group flex w-full cursor-pointer items-center justify-between rounded-[8px] px-3 py-2',
-            'transition-colors hover:bg-[var(--model-item-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
-            isSelected && 'bg-[var(--model-item-hover)]',
-            disabled && 'cursor-not-allowed opacity-50 hover:bg-transparent',
-          )}
-        >
-          {/* 外层 gap-2.5 = icon→名字间距(略宽,与行左内边距更协调);内层 gap-1.5 = 名字→徽标/effort。 */}
-          <span className="flex min-w-0 items-center gap-2.5">
-            {provider && (
-              <ProviderMark
-                providerId={provider.id}
-                name={provider.name}
-                colorClass="text-[var(--text-secondary)]"
-                withMargin={false}
-                dense
-              />
-            )}
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-14 font-medium text-[var(--model-item-text)]">
-                {model.displayName}
-              </span>
-              {isSubscriptionModel && (
-                <span
-                  className="inline-flex shrink-0 items-center rounded-full bg-[var(--surface-chip)] px-2 py-[1px] text-[11px] font-medium text-[var(--text-secondary)]"
-                >
-                  {t('settings.providers.models.subscription')}
-                </span>
-              )}
-              {isBudgetModel && (
-                <span className="inline-flex shrink-0 items-center rounded-full bg-[var(--model-budget-badge-bg)] px-2 py-[1px] text-[11px] font-medium text-[var(--model-budget-badge-text)]">
-                  85% off
-                </span>
-              )}
-              {rowEffort && (
-                <span className="shrink-0 text-13 font-normal text-[var(--text-tertiary)]">
-                  {effortLabelFor(model, rowEffort)}
-                </span>
-              )}
-              {rowFastOn && (
-                <Zap
-                  size={13}
-                  className="shrink-0 text-[var(--text-tertiary)]"
-                  aria-label="Fast"
-                />
-              )}
-            </span>
-          </span>
-          {hasEdit && (
-            <button
-              type="button"
-              onClick={(ev) => {
-                ev.stopPropagation();
-                toggleEdit(providerId, model.id);
-              }}
-              className={cn(
-                'ml-2 shrink-0 rounded-[6px] px-1.5 py-0.5 text-13 font-medium text-[var(--text-secondary)]',
-                'transition-opacity hover:bg-[var(--model-item-hover)] focus-visible:opacity-100',
-                isEditingThis ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
-              )}
-            >
-              {t('newChat.modelSelector.edit')}
-            </button>
-          )}
-        </div>
-      </Tip>
-    );
-  };
-
-  // 0 个可连来源:整张引导卡取代列表(仅 providers 加载完成后判,避免拉取期闪空态)。
-  // device-link 远程会话不显示该引导(控制端无法替被控端连来源)→ 退化为扁平兜底列表。
-  const emptyState =
-    sourcesEnabled && !deviceId && currentAgentKind && !providersLoading && connected.length === 0 ? (
-      <div className="flex flex-col gap-[14px] p-2">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[var(--model-item-hover)]">
-            <Unplug size={16} className="text-[var(--text-secondary)]" />
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-            <span className="truncate text-sm font-medium text-[var(--model-item-text)]">
-              {t('newChat.modelSelector.source.emptyTitle')}
-            </span>
-            <span className="text-12 font-normal text-[var(--text-secondary)]">
-              {t('newChat.modelSelector.source.emptyDesc')}
-            </span>
-          </div>
-        </div>
-        {onNavigateToProviders && (
-          <button
-            type="button"
-            onClick={onNavigateToProviders}
-            className={cn(
-              'flex h-[34px] w-full items-center justify-center rounded-[8px]',
-              'bg-[var(--accent-cta-bg)] transition-opacity hover:opacity-90',
-            )}
-          >
-            <span className="text-13 font-medium text-[var(--accent-pure-cta-fg)]">
-              {t('newChat.modelSelector.source.connectCta')}
-            </span>
-          </button>
-        )}
-      </div>
-    ) : null;
-
-  if (emptyState) return emptyState;
-
-  const hasAnyModel = sections ? sections.length > 0 : (flatModels?.length ?? 0) > 0;
-
-  // ── Edit 配置列(Cursor 左侧面板:Effort 竖排 + Fast Mode)──────────────────
-  const configColumn =
+  // 每个模型行的配置内容由一个独立的 portaled Popover 承载,而不是拼进主菜单宽度。
+  // 这样浮层会像 Hermes 的 Radix submenu 一样贴着当前行移动,切行不触发主菜单重排。
+  const configPanel =
     showConfig && editingModel ? (
-      <div className="flex w-[196px] shrink-0 flex-col gap-0.5 self-stretch bg-[var(--model-dropdown-bg)] p-2">
+      <div
+        ref={configPanelRef}
+        role="group"
+        aria-label={`${editingModel.displayName} ${t('newChat.modelSelector.options')}`}
+        className="flex flex-col gap-0.5"
+      >
         <div className="flex items-center gap-1.5 px-2 py-1.5">
           <SlidersHorizontal size={14} className="shrink-0 text-[var(--text-secondary)]" />
           <span className="min-w-0 truncate text-[13.5px] font-medium text-[var(--model-item-text)]">
@@ -768,7 +645,7 @@ export function ModelSelectorContent({
                   role="option"
                   aria-selected={selected}
                   className={cn(
-                    'flex w-full items-center justify-between rounded-[8px] px-2 py-2 text-left transition-colors',
+                    'flex w-full items-center justify-between rounded-[8px] px-2 py-2 text-left transition-colors duration-100',
                     'hover:bg-[var(--model-item-hover)]',
                     selected && 'bg-[var(--surface-chip)]',
                   )}
@@ -792,7 +669,206 @@ export function ModelSelectorContent({
       </div>
     ) : null;
 
-  // ── 右栏 Pane:固定 320 宽(Edit 配置列开合时列表宽度不抖动)───────────────
+  // ── 单个模型行 ───────────────────────────────────────────────────────────
+  // provider 非空(分段模式)→ 名字前缀该来源的 mark;null(flat / device-link)→ 无前缀。
+  const renderModelItem = (provider: ProviderView | null, model: RowModel) => {
+    const providerId = provider?.id ?? null;
+    const isSelected = isSelectedRow(providerId, model.id);
+    const isBudgetModel = model.id.startsWith('codex/');
+    const isSubscriptionModel = provider?.access?.kind === 'subscription';
+    const disabled = budgetDisabledOf(model.id);
+    const rowEffort = rowEffortOf(providerId, model);
+    const rowFastOn = fastOnOf(providerId, model);
+    const hasConfigControls = model.efforts.length > 0 || fastEditable(providerId, model);
+    // 非选中行的配置不会即时切模型，只能写入精确到 (agent, provider, model) 的记忆。
+    // flat / 表单入口没注入这份记忆时，旧 Edit 面板虽然能打开，点击其实是 no-op；自动
+    // hover 后把该无效入口隐藏，仅保留当前选中行可实时修改的选项。
+    const canRememberInactive = !!modelMemory && !!currentAgentKind && !!providerId;
+    const hasOptions = !disabled && hasConfigControls && (isSelected || canRememberInactive);
+    const isEditingThis =
+      !!editing && editing.modelId === model.id && editing.providerId === providerId;
+    const revealOptions = () => {
+      cancelOptionsClose();
+      setEditing(hasOptions ? { providerId, modelId: model.id } : null);
+    };
+    // hover tooltip:最前面拼供应商完整名(分段模式有 provider),再接上下文 / 价格 / 快速。
+    const supplierName = provider ? providerDisplayName(provider, t) : null;
+    const tipText = disabled
+      ? t('newChat.modelSelector.budgetNeedsApiKey')
+      : [supplierName, tooltipFor(model.id)].filter(Boolean).join(' · ') || null;
+    return (
+      <Popover
+        key={`${providerId ?? ''}::${model.id}`}
+        open={isEditingThis}
+        onOpenChange={(open) => {
+          if (!open && isEditingThis) setEditing(null);
+        }}
+      >
+        <PopoverAnchor asChild>
+          <Tip
+            text={tipText}
+            side="left"
+            controlledOpen={isEditingThis ? false : undefined}
+            contentClassName={tooltipContentClassName}
+          >
+            <div
+              role="option"
+              aria-selected={isSelected}
+              aria-disabled={disabled}
+              data-model-selected={isSelected ? 'true' : undefined}
+              data-model-options-active={isEditingThis ? 'true' : undefined}
+              tabIndex={disabled ? -1 : 0}
+              onPointerEnter={revealOptions}
+              onPointerLeave={scheduleOptionsClose}
+              onFocus={revealOptions}
+              onBlur={(event) => {
+                if (configPanelRef.current?.contains(event.relatedTarget as Node | null)) return;
+                scheduleOptionsClose();
+              }}
+              onClick={() => {
+                if (disabled) return;
+                handleRowSelect(providerId, model.id);
+              }}
+              onKeyDown={(ev) => {
+                if (ev.target !== ev.currentTarget || disabled) return;
+                if (ev.key === 'ArrowLeft' && hasOptions) {
+                  ev.preventDefault();
+                  revealOptions();
+                  requestAnimationFrame(() => {
+                    configPanelRef.current
+                      ?.querySelector<HTMLElement>('button:not(:disabled)')
+                      ?.focus();
+                  });
+                  return;
+                }
+                if (ev.key !== 'Enter' && ev.key !== ' ') return;
+                ev.preventDefault();
+                handleRowSelect(providerId, model.id);
+              }}
+              className={cn(
+                'flex w-full cursor-pointer items-center justify-between rounded-[8px] px-3 py-2',
+                'transition-colors duration-100 hover:bg-[var(--model-item-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
+                isSelected && 'bg-[var(--model-item-hover)]',
+                isEditingThis &&
+                  'bg-[var(--surface-hover)] ring-1 ring-inset ring-[var(--model-dropdown-border)]',
+                disabled && 'cursor-not-allowed opacity-50 hover:bg-transparent',
+              )}
+            >
+              {/* 外层 gap-2.5 = icon→名字间距(略宽,与行左内边距更协调);内层 gap-1.5 = 名字→徽标/effort。 */}
+              <span className="flex min-w-0 items-center gap-2.5">
+                {provider && (
+                  <ProviderMark
+                    providerId={provider.id}
+                    name={provider.name}
+                    colorClass="text-[var(--text-secondary)]"
+                    withMargin={false}
+                    dense
+                  />
+                )}
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate text-14 font-medium text-[var(--model-item-text)]">
+                    {model.displayName}
+                  </span>
+                  {isSubscriptionModel && (
+                    <span
+                      className="inline-flex shrink-0 items-center rounded-full bg-[var(--surface-chip)] px-2 py-[1px] text-[11px] font-medium text-[var(--text-secondary)]"
+                    >
+                      {t('settings.providers.models.subscription')}
+                    </span>
+                  )}
+                  {isBudgetModel && (
+                    <span className="inline-flex shrink-0 items-center rounded-full bg-[var(--model-budget-badge-bg)] px-2 py-[1px] text-[11px] font-medium text-[var(--model-budget-badge-text)]">
+                      85% off
+                    </span>
+                  )}
+                  {rowEffort && (
+                    <span className="shrink-0 text-13 font-normal text-[var(--text-tertiary)]">
+                      {effortLabelFor(model, rowEffort)}
+                    </span>
+                  )}
+                  {rowFastOn && (
+                    <Zap
+                      size={13}
+                      className="shrink-0 text-[var(--text-tertiary)]"
+                      aria-label="Fast"
+                    />
+                  )}
+                </span>
+              </span>
+              {isSelected && (
+                <Check size={15} className="ml-2 shrink-0 text-[var(--model-item-check)]" />
+              )}
+            </div>
+          </Tip>
+        </PopoverAnchor>
+        {isEditingThis && configPanel && (
+          <PopoverContent
+            side="left"
+            align="start"
+            sideOffset={4}
+            collisionPadding={8}
+            onOpenAutoFocus={(event) => event.preventDefault()}
+            onCloseAutoFocus={(event) => event.preventDefault()}
+            onPointerEnter={cancelOptionsClose}
+            onPointerLeave={scheduleOptionsClose}
+            onFocusCapture={cancelOptionsClose}
+            onBlurCapture={(event) => {
+              if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+              scheduleOptionsClose();
+            }}
+            className={cn(
+              'w-[208px] overflow-hidden rounded-[12px] p-2 shadow-[var(--shadow-menu)] duration-100',
+              'border border-[var(--model-dropdown-border)] bg-[var(--model-dropdown-bg)]',
+              tooltipContentClassName,
+            )}
+          >
+            {configPanel}
+          </PopoverContent>
+        )}
+      </Popover>
+    );
+  };
+
+  // 0 个可连来源:整张引导卡取代列表(仅 providers 加载完成后判,避免拉取期闪空态)。
+  // device-link 远程会话不显示该引导(控制端无法替被控端连来源)→ 退化为扁平兜底列表。
+  const emptyState =
+    sourcesEnabled && !deviceId && currentAgentKind && !providersLoading && connected.length === 0 ? (
+      <div className="flex flex-col gap-[14px] p-2">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[var(--model-item-hover)]">
+            <Unplug size={16} className="text-[var(--text-secondary)]" />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+            <span className="truncate text-sm font-medium text-[var(--model-item-text)]">
+              {t('newChat.modelSelector.source.emptyTitle')}
+            </span>
+            <span className="text-12 font-normal text-[var(--text-secondary)]">
+              {t('newChat.modelSelector.source.emptyDesc')}
+            </span>
+          </div>
+        </div>
+        {onNavigateToProviders && (
+          <button
+            type="button"
+            onClick={onNavigateToProviders}
+            className={cn(
+              'flex h-[34px] w-full items-center justify-center rounded-[8px]',
+              'bg-[var(--accent-cta-bg)] transition-opacity hover:opacity-90',
+            )}
+          >
+            <span className="text-13 font-medium text-[var(--accent-pure-cta-fg)]">
+              {t('newChat.modelSelector.source.connectCta')}
+            </span>
+          </button>
+        )}
+      </div>
+    ) : null;
+
+  if (emptyState) return emptyState;
+
+  const hasAnyModel = sections ? sections.length > 0 : (flatModels?.length ?? 0) > 0;
+
+  // ── 主菜单:固定 320 宽,选项浮层 portal 到 body,hover 时主菜单完全不重排 ─────
   const pane = (
     <div className="flex w-[320px] shrink-0 flex-col gap-1.5 p-2">
       {/* 「跟随会话」行(opt-in,仅 scheduler heartbeat) */}
@@ -876,15 +952,7 @@ export function ModelSelectorContent({
     </div>
   );
 
-  // 根容器 fit-content:宽度 = 子项之和(pane 320 [+ config 196 + 分隔线 1])。不写死宽度,
-  // 避免与真实内容宽度不符触发 floating-ui ResizeObserver 反复重定位(列表抖动)。
-  return (
-    <div className="flex items-stretch">
-      {configColumn}
-      {configColumn && <div className="w-px self-stretch bg-[var(--model-dropdown-border)]" />}
-      {pane}
-    </div>
-  );
+  return pane;
 }
 
 export function ModelSelector({
