@@ -530,9 +530,8 @@ function buildDiffPayload(
 export interface AgentActionRowProps {
   message: ChatMessage;
   toolResult?: string;
-  /** 工作过程展开 / live preview 使用:命令类直接显示真实 command,
-   *  不用模型 description 替代,让用户一眼看见实际执行内容。 */
-  preferRawCommand?: boolean;
+  /** 工作过程展开 / live preview 使用：首行保留友好标题，次行直显真实 command。 */
+  showRawCommand?: boolean;
   /**
    * 行级执行状态(issue #450)— 由 AgentActionsBlock 依据 result / settled /
    * isSessionStreaming 计算后传入;缺省按已完成渲染(历史消息路径)。
@@ -555,7 +554,7 @@ function isImagePath(filePath: string): boolean {
 export function AgentActionRow({
   message,
   toolResult,
-  preferRawCommand = false,
+  showRawCommand = false,
   status = 'done',
 }: AgentActionRowProps) {
   const { t } = useTranslation();
@@ -582,24 +581,33 @@ export function AgentActionRow({
   // command 类带模型 description 时,description 自含动词语义("查看工作区
   // 状态"),再渲染英文动词 label 会变成"Ran 查看工作区状态"的中英混排 —
   // 隐藏动词,让 description 独立成句(Claude App 同款形态)。
-  const hideVerb =
-    descriptor.kind === 'command' && !!descriptor.description && !preferRawCommand;
+  const hideVerb = descriptor.kind === 'command' && !!descriptor.description;
   // command intent(codex commandActions / 本地规则解析)命中时,动词换成意图
   // 动词("读取"/"运行测试"),否则走工具名静态映射。description 存在时 intent
   // 不参与(hideVerb 已隐藏动词)。
   const intentAction =
-    descriptor.kind === 'command' && (!descriptor.description || preferRawCommand)
+    descriptor.kind === 'command' && !descriptor.description
       ? descriptor.intent?.action
       : undefined;
+  const isRawCommandFallback =
+    descriptor.kind === 'command' && !descriptor.description && !descriptor.intent && showRawCommand;
   const verbLabel = t(
-    intentAction ? verbLabelKeyForIntent(intentAction) : verbLabelKeyForRow(verbForTool(toolName)),
+    intentAction
+      ? verbLabelKeyForIntent(intentAction)
+      : isRawCommandFallback
+        ? 'chat.agentActionRow.verb.ranCommand'
+        : verbLabelKeyForRow(verbForTool(toolName)),
   );
   // 意识行动词固定"召唤意识"(与其它工具的 Ran/Read 语系并列)。
   const rowVerbLabel = ghostInfo ? t('chat.ghostCall.verb') : verbLabel;
   const displayParam = useMemo(
-    () => extractDisplayParam(descriptor, { preferRawCommand }),
-    [descriptor, preferRawCommand],
+    () => extractDisplayParam(descriptor, { hideRawCommandFallback: showRawCommand }),
+    [descriptor, showRawCommand],
   );
+  const rawCommand =
+    showRawCommand && descriptor.kind === 'command' && descriptor.command
+      ? descriptor.command
+      : null;
   const stats = useMemo(
     () => statsForToolCall(toolName, inp),
     [toolName, inp],
@@ -817,6 +825,15 @@ export function AgentActionRow({
           )}
         </span>
       </button>
+      {rawCommand && (
+        <div
+          data-agent-action-raw-command="true"
+          title={rawCommand}
+          className="min-w-0 truncate px-2 pb-[3px] pl-[30px] font-mono text-[12px] leading-[18px] text-[var(--msg-tool-card-chevron)]"
+        >
+          {rawCommand}
+        </div>
+      )}
       {isFilePathTool && filePath ? fileChipMenu.menu : null}
 
       {/* v10 就地展开内容:命令类工具(Bash/Grep/Glob/WebFetch/WebSearch/...)

@@ -37,7 +37,50 @@ export type CommandIntentAction =
   | 'test'
   | 'build'
   | 'lint'
-  | 'typecheck';
+  | 'typecheck'
+  | 'gitStatus'
+  | 'gitDiff'
+  | 'gitLog'
+  | 'gitShow'
+  | 'gitAdd'
+  | 'gitCommit'
+  | 'gitFetch'
+  | 'gitPull'
+  | 'gitPush'
+  | 'gitWorktreeList'
+  | 'gitWorktreeAdd'
+  | 'gitWorktreeRemove'
+  | 'gitWorktreeMove'
+  | 'gitWorktreePrune'
+  | 'ghPrList'
+  | 'ghPrView'
+  | 'ghPrChecks'
+  | 'ghPrStatus'
+  | 'ghPrDiff'
+  | 'ghPrCreate'
+  | 'ghPrEdit'
+  | 'ghPrComment'
+  | 'ghPrReview'
+  | 'ghPrMerge'
+  | 'ghPrClose'
+  | 'ghPrReopen'
+  | 'ghPrCheckout'
+  | 'ghIssueList'
+  | 'ghIssueView'
+  | 'ghIssueStatus'
+  | 'ghIssueCreate'
+  | 'ghIssueEdit'
+  | 'ghIssueComment'
+  | 'ghIssueClose'
+  | 'ghIssueReopen'
+  | 'ghAuthStatus'
+  | 'ghAuthLogin'
+  | 'ghAuthLogout'
+  | 'ghAuthRefresh'
+  | 'ghAuthSwitch'
+  | 'ghApiQuery'
+  | 'ghApiMutation'
+  | 'ghApiCall';
 
 export interface CommandIntent {
   action: CommandIntentAction;
@@ -128,7 +171,9 @@ export function commandIntentFromActions(raw: unknown, fullCommand?: string): Co
 // ── 命令原文 → intent（本地规则表） ──────────────────────────────────────────
 
 /** 管道尾段允许的纯展示型过滤器；出现其它命令（如 grep / tee / xargs）就放弃解析。 */
-const PIPE_FILTERS = new Set(['head', 'tail', 'wc', 'sort', 'uniq', 'less', 'more', 'cat', 'column', 'nl']);
+const PIPE_FILTERS = new Set([
+  'head', 'tail', 'wc', 'sort', 'uniq', 'less', 'more', 'cat', 'column', 'nl', 'sed',
+]);
 
 /** 单条命令长度上限 —— 超长命令多半是脚本内联，解析价值低且徒增开销。 */
 const COMMAND_MAX_CHARS = 1000;
@@ -173,6 +218,10 @@ function analyzeCommandShape(command: string): string[] | undefined {
     const tail = stripPrefixTokens(tailWords);
     if (!tail || tail.length === 0) return undefined;
     if (!PIPE_FILTERS.has(binaryName(tail[0]))) return undefined;
+    if (binaryName(tail[0]) === 'sed') {
+      if (!sedPipelineFilterIsReadOnly(tail.slice(1))) return undefined;
+      continue;
+    }
     // 白名单过滤器自身的写文件形态也要拒:sort -o FILE / uniq IN OUT。
     // 展示型过滤器在管道里正常不接文件参数,positional 只放行行数类数字
     // (head -n 50 / tail -n +10);-o / --output 一律拒(column -o 是分隔符,
@@ -231,6 +280,11 @@ export function commandIntentFromCommand(command: string): CommandIntent | undef
       if (!file) return undefined;
       return { action: 'read', target: basenameRemotePath(file) || file, path: file };
     }
+    case 'nl': {
+      const file = positionals(rest, NL_VALUE_FLAGS)[0];
+      if (!file) return undefined;
+      return { action: 'read', target: basenameRemotePath(file) || file, path: file };
+    }
     case 'sed': {
       // 只认只读形态 `sed -n '<range>p' <file>`（agent 常用来看文件片段）；
       // -i / --in-place 的就地编辑不解析,保持原文可见。
@@ -285,6 +339,10 @@ export function commandIntentFromCommand(command: string): CommandIntent | undef
       if (!url) return undefined;
       return { action: 'fetch', target: url };
     }
+    case 'git':
+      return gitIntent(rest);
+    case 'gh':
+      return githubCliIntent(rest);
     case 'pnpm':
     case 'npm':
     case 'yarn':
@@ -359,6 +417,223 @@ function hasMutatingCurlFlag(rest: string[]): boolean {
     }
     return false;
   });
+}
+
+/** nl options whose value may be passed as the following argv token. */
+const NL_VALUE_FLAGS = new Set([
+  '-b', '-d', '-f', '-h', '-i', '-l', '-n', '-s', '-v', '-w',
+  '--body-numbering', '--section-delimiter', '--footer-numbering', '--header-numbering',
+  '--line-increment', '--join-blank-lines', '--number-format', '--number-separator',
+  '--starting-line-number', '--number-width',
+]);
+
+interface CliSubcommand {
+  name: string;
+  args: string[];
+}
+
+/** Find the first non-option argv and return it with the untouched tail. */
+function cliSubcommand(tokens: string[], valueFlags: Set<string>): CliSubcommand | undefined {
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token === '--') return undefined;
+    if (token.startsWith('-') && token.length > 1) {
+      if (valueFlags.has(token)) index += 1;
+      continue;
+    }
+    return { name: token.toLowerCase(), args: tokens.slice(index + 1) };
+  }
+  return undefined;
+}
+
+const GIT_GLOBAL_VALUE_FLAGS = new Set([
+  '-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--config-env',
+]);
+
+function hasGitOutputFileFlag(args: string[]): boolean {
+  return args.some((token) => token === '--output' || token.startsWith('--output='));
+}
+
+function gitIntent(rest: string[]): CommandIntent | undefined {
+  const subcommand = cliSubcommand(rest, GIT_GLOBAL_VALUE_FLAGS);
+  if (!subcommand) return undefined;
+
+  switch (subcommand.name) {
+    case 'status':
+      return { action: 'gitStatus' };
+    case 'diff':
+      return hasGitOutputFileFlag(subcommand.args) ? undefined : { action: 'gitDiff' };
+    case 'log':
+      return hasGitOutputFileFlag(subcommand.args) ? undefined : { action: 'gitLog' };
+    case 'show':
+      return hasGitOutputFileFlag(subcommand.args) ? undefined : { action: 'gitShow' };
+    case 'add':
+      return { action: 'gitAdd' };
+    case 'commit':
+      // Amend rewrites existing history rather than creating an ordinary commit;
+      // keep the exact command as the only description in that less-common case.
+      return subcommand.args.includes('--amend') ? undefined : { action: 'gitCommit' };
+    case 'fetch':
+      return { action: 'gitFetch' };
+    case 'pull':
+      return { action: 'gitPull' };
+    case 'push':
+      // Force/deletion forms deserve the raw fallback instead of the neutral
+      // "push changes" title, which would hide their destructive semantics.
+      if (
+        subcommand.args.some(
+          (token) =>
+            token === '-f' ||
+            token === '--force' ||
+            token.startsWith('--force=') ||
+            token.startsWith('--force-with-lease') ||
+            token === '-d' ||
+            token === '--delete' ||
+            token === '--mirror' ||
+            token === '--prune',
+        )
+      ) {
+        return undefined;
+      }
+      return { action: 'gitPush' };
+    case 'worktree': {
+      const worktree = cliSubcommand(subcommand.args, new Set([]));
+      switch (worktree?.name) {
+        case 'list':
+          return { action: 'gitWorktreeList' };
+        case 'add':
+          return { action: 'gitWorktreeAdd' };
+        case 'remove':
+          return { action: 'gitWorktreeRemove' };
+        case 'move':
+          return { action: 'gitWorktreeMove' };
+        case 'prune':
+          return { action: 'gitWorktreePrune' };
+        default:
+          return undefined;
+      }
+    }
+    default:
+      return undefined;
+  }
+}
+
+const GH_GLOBAL_VALUE_FLAGS = new Set(['-R', '--repo', '--hostname']);
+
+const GH_PR_ACTIONS: Readonly<Record<string, CommandIntentAction>> = {
+  list: 'ghPrList',
+  view: 'ghPrView',
+  checks: 'ghPrChecks',
+  status: 'ghPrStatus',
+  diff: 'ghPrDiff',
+  create: 'ghPrCreate',
+  edit: 'ghPrEdit',
+  comment: 'ghPrComment',
+  review: 'ghPrReview',
+  merge: 'ghPrMerge',
+  close: 'ghPrClose',
+  reopen: 'ghPrReopen',
+  checkout: 'ghPrCheckout',
+};
+
+const GH_ISSUE_ACTIONS: Readonly<Record<string, CommandIntentAction>> = {
+  list: 'ghIssueList',
+  view: 'ghIssueView',
+  status: 'ghIssueStatus',
+  create: 'ghIssueCreate',
+  edit: 'ghIssueEdit',
+  comment: 'ghIssueComment',
+  close: 'ghIssueClose',
+  reopen: 'ghIssueReopen',
+};
+
+const GH_AUTH_ACTIONS: Readonly<Record<string, CommandIntentAction>> = {
+  status: 'ghAuthStatus',
+  login: 'ghAuthLogin',
+  logout: 'ghAuthLogout',
+  refresh: 'ghAuthRefresh',
+  switch: 'ghAuthSwitch',
+};
+
+function githubCliIntent(rest: string[]): CommandIntent | undefined {
+  const group = cliSubcommand(rest, GH_GLOBAL_VALUE_FLAGS);
+  if (!group) return undefined;
+  if (group.name === 'api') return githubApiIntent(group.args);
+
+  const operation = cliSubcommand(group.args, GH_GLOBAL_VALUE_FLAGS)?.name;
+  if (!operation) return undefined;
+  switch (group.name) {
+    case 'pr':
+      return GH_PR_ACTIONS[operation] ? { action: GH_PR_ACTIONS[operation] } : undefined;
+    case 'issue':
+      return GH_ISSUE_ACTIONS[operation] ? { action: GH_ISSUE_ACTIONS[operation] } : undefined;
+    case 'auth':
+      return GH_AUTH_ACTIONS[operation] ? { action: GH_AUTH_ACTIONS[operation] } : undefined;
+    default:
+      return undefined;
+  }
+}
+
+function readCliOptionValue(tokens: string[], short: string, long: string): string | undefined {
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token === short || token === long) return tokens[index + 1];
+    if (token.startsWith(`${long}=`)) return token.slice(long.length + 1);
+    if (token.startsWith(short) && token.length > short.length) return token.slice(short.length);
+  }
+  return undefined;
+}
+
+function collectGithubApiFields(tokens: string[]): string[] {
+  const fields: string[] = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token === '-f' || token === '-F' || token === '--raw-field' || token === '--field') {
+      if (tokens[index + 1] !== undefined) fields.push(tokens[index + 1]);
+      index += 1;
+      continue;
+    }
+    for (const flag of ['--raw-field=', '--field=', '-f', '-F']) {
+      if (token.startsWith(flag) && token.length > flag.length) {
+        fields.push(token.slice(flag.length));
+        break;
+      }
+    }
+  }
+  return fields;
+}
+
+const GH_API_VALUE_FLAGS = new Set([
+  '-H', '--header', '--hostname', '--input', '-q', '--jq', '-X', '--method',
+  '-f', '--raw-field', '-F', '--field', '-t', '--template', '--cache',
+]);
+
+function githubApiIntent(args: string[]): CommandIntent {
+  const method = readCliOptionValue(args, '-X', '--method')?.toUpperCase();
+  const hasInput = args.some((token) => token === '--input' || token.startsWith('--input='));
+  const fields = collectGithubApiFields(args);
+  const endpoint = positionals(args, GH_API_VALUE_FLAGS)[0]?.toLowerCase();
+
+  // --input may contain either a GraphQL query or a mutation; without reading
+  // another file the semantic operation is intentionally left unspecified.
+  if (hasInput && (method === undefined || endpoint === 'graphql')) return { action: 'ghApiCall' };
+
+  if (endpoint === 'graphql') {
+    const queryField = fields.find((field) => field.startsWith('query='));
+    const operation = queryField?.slice('query='.length).trim();
+    if (operation && /^mutation\b/i.test(operation)) return { action: 'ghApiMutation' };
+    if (operation && /^(?:query\b|\{)/i.test(operation)) return { action: 'ghApiQuery' };
+    if (method === undefined) return { action: 'ghApiCall' };
+  }
+
+  if (method === 'GET' || method === 'HEAD') return { action: 'ghApiQuery' };
+  if (method && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    return { action: 'ghApiMutation' };
+  }
+  if (method !== undefined) return { action: 'ghApiCall' };
+  if (!endpoint) return { action: 'ghApiCall' };
+  if (fields.length > 0) return { action: 'ghApiMutation' };
+  return { action: 'ghApiQuery' };
 }
 
 /** grep/rg 家族里「取值型」flag —— 解析 positional 时要连着跳过它的值。 */
@@ -553,6 +828,14 @@ function sedTokensAreReadOnly(rest: string[]): boolean {
   const eIndex = rest.findIndex((token) => token === '-e' || token === '--expression');
   const script = eIndex >= 0 ? rest[eIndex + 1] : positionals(rest, new Set([]))[0];
   return script !== undefined && SED_PRINT_ONLY_SCRIPT.test(script);
+}
+
+/** A pipeline filter must consume stdin; an extra file operand would change the displayed source. */
+function sedPipelineFilterIsReadOnly(rest: string[]): boolean {
+  if (!sedTokensAreReadOnly(rest)) return false;
+  const usesExpressionFlag = rest.some((token) => token === '-e' || token === '--expression');
+  const pos = positionals(rest, new Set(['-e', '--expression']));
+  return usesExpressionFlag ? pos.length === 0 : pos.length === 1;
 }
 
 /**

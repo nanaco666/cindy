@@ -157,7 +157,7 @@ describe('commandIntentFromActions — codex commandActions 解析', () => {
 });
 
 describe('commandIntentFromCommand — 本地规则解析', () => {
-  it('parses file reads (cat/head/tail/sed -n)', () => {
+  it('parses file reads (cat/head/tail/nl/sed -n)', () => {
     expect(commandIntentFromCommand('cat /repo/src/app.ts')).toEqual({
       action: 'read',
       target: 'app.ts',
@@ -175,6 +175,18 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
       target: 'main.ts',
       path: 'src/main.ts',
     });
+    expect(commandIntentFromCommand('nl -ba src/main.ts')).toEqual({
+      action: 'read',
+      target: 'main.ts',
+      path: 'src/main.ts',
+    });
+    expect(commandIntentFromCommand("nl -ba src/main.ts | sed -n '20,40p'")).toEqual({
+      action: 'read',
+      target: 'main.ts',
+      path: 'src/main.ts',
+    });
+    expect(commandIntentFromCommand("nl -ba src/main.ts | sed -n '20,40p' other.ts")).toBeUndefined();
+    expect(commandIntentFromCommand("nl src/main.ts | sed -n '1w report.txt'")).toBeUndefined();
     // sed -i 是就地编辑,刻意不解析。
     expect(commandIntentFromCommand("sed -i '' 's/a/b/' f.ts")).toBeUndefined();
   });
@@ -244,6 +256,98 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
     expect(commandIntentFromCommand('wget https://example.com/app.ts')).toBeUndefined();
     expect(commandIntentFromCommand('wget --output-document=x.bin https://example.com/x')).toBeUndefined();
     expect(commandIntentFromCommand('wget --post-data a=1 https://example.com/x')).toBeUndefined();
+  });
+
+  it('parses stable Git reads and writes with explicit actions', () => {
+    const cases: Array<[string, string]> = [
+      ['git status --short', 'gitStatus'],
+      ['git -C /repo --no-pager diff --stat', 'gitDiff'],
+      ['git log -5 --oneline', 'gitLog'],
+      ['git show HEAD:README.md', 'gitShow'],
+      ['git add src/app.ts', 'gitAdd'],
+      ['git commit -m "fix: parser"', 'gitCommit'],
+      ['git fetch origin --prune', 'gitFetch'],
+      ['git pull --ff-only', 'gitPull'],
+      ['git push origin feature', 'gitPush'],
+      ['git worktree list --porcelain', 'gitWorktreeList'],
+      ['git worktree add ../preview feature', 'gitWorktreeAdd'],
+      ['git worktree remove ../preview', 'gitWorktreeRemove'],
+      ['git worktree move ../old ../new', 'gitWorktreeMove'],
+      ['git worktree prune', 'gitWorktreePrune'],
+    ];
+    for (const [command, action] of cases) {
+      expect(commandIntentFromCommand(command), command).toEqual({ action });
+    }
+  });
+
+  it('keeps unusual or destructive Git forms on the raw-command fallback', () => {
+    expect(commandIntentFromCommand('git diff --output=changes.patch')).toBeUndefined();
+    expect(commandIntentFromCommand('git log --output history.txt')).toBeUndefined();
+    expect(commandIntentFromCommand('git commit --amend --no-edit')).toBeUndefined();
+    expect(commandIntentFromCommand('git push --force-with-lease origin feature')).toBeUndefined();
+    expect(commandIntentFromCommand('git push origin --delete old-branch')).toBeUndefined();
+    expect(commandIntentFromCommand('git reset --hard HEAD~1')).toBeUndefined();
+  });
+
+  it('parses common gh pr, issue and auth operations', () => {
+    const cases: Array<[string, string]> = [
+      ['gh pr list --limit 20', 'ghPrList'],
+      ['gh pr view 123 --json title', 'ghPrView'],
+      ['gh --repo xindong/cindy pr checks 123', 'ghPrChecks'],
+      ['gh pr status', 'ghPrStatus'],
+      ['gh pr diff 123', 'ghPrDiff'],
+      ['gh pr create --title fix', 'ghPrCreate'],
+      ['gh pr edit 123 --add-label bug', 'ghPrEdit'],
+      ['gh pr comment 123 --body fixed', 'ghPrComment'],
+      ['gh pr review 123 --approve', 'ghPrReview'],
+      ['gh pr merge 123 --squash', 'ghPrMerge'],
+      ['gh pr close 123', 'ghPrClose'],
+      ['gh pr reopen 123', 'ghPrReopen'],
+      ['gh pr checkout 123', 'ghPrCheckout'],
+      ['gh issue list', 'ghIssueList'],
+      ['gh issue view 7', 'ghIssueView'],
+      ['gh issue status', 'ghIssueStatus'],
+      ['gh issue create --title bug', 'ghIssueCreate'],
+      ['gh issue edit 7 --add-label bug', 'ghIssueEdit'],
+      ['gh issue comment 7 --body fixed', 'ghIssueComment'],
+      ['gh issue close 7', 'ghIssueClose'],
+      ['gh issue reopen 7', 'ghIssueReopen'],
+      ['gh auth status', 'ghAuthStatus'],
+      ['gh auth login', 'ghAuthLogin'],
+      ['gh auth logout', 'ghAuthLogout'],
+      ['gh auth refresh', 'ghAuthRefresh'],
+      ['gh auth switch', 'ghAuthSwitch'],
+    ];
+    for (const [command, action] of cases) {
+      expect(commandIntentFromCommand(command), command).toEqual({ action });
+    }
+    expect(commandIntentFromCommand('gh pr ready 123')).toBeUndefined();
+    expect(commandIntentFromCommand('gh repo delete owner/repo')).toBeUndefined();
+  });
+
+  it('distinguishes gh api queries, mutations and unknown request bodies', () => {
+    expect(commandIntentFromCommand('gh api repos/xindong/cindy/pulls/123')).toEqual({
+      action: 'ghApiQuery',
+    });
+    expect(commandIntentFromCommand('gh api --method GET repos/x/y/issues -f per_page=100')).toEqual({
+      action: 'ghApiQuery',
+    });
+    expect(commandIntentFromCommand('gh api repos/x/y/issues -f title=bug')).toEqual({
+      action: 'ghApiMutation',
+    });
+    expect(commandIntentFromCommand('gh api repos/x/y/issues/1 -X PATCH -f state=closed')).toEqual({
+      action: 'ghApiMutation',
+    });
+    expect(
+      commandIntentFromCommand("gh api graphql -f query='query { viewer { login } }'"),
+    ).toEqual({ action: 'ghApiQuery' });
+    expect(
+      commandIntentFromCommand("gh api graphql -f query='mutation { addComment(input: {}) { clientMutationId } }'"),
+    ).toEqual({ action: 'ghApiMutation' });
+    expect(commandIntentFromCommand('gh api graphql --input request.json')).toEqual({ action: 'ghApiCall' });
+    expect(commandIntentFromCommand('gh api graphql --input request.json -X POST')).toEqual({ action: 'ghApiCall' });
+    expect(commandIntentFromCommand('gh api -f title=bug')).toEqual({ action: 'ghApiCall' });
+    expect(commandIntentFromCommand('gh api repos/x/y -X OPTIONS')).toEqual({ action: 'ghApiCall' });
   });
 
   it('rejects >&file writes, tree output flags, cd-prefix side effects and zsh =() substitution', () => {
@@ -539,7 +643,7 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
     });
     expect(commandIntentFromCommand('grep "unterminated')).toBeUndefined();
     // 认不出的命令与破坏性命令。
-    expect(commandIntentFromCommand('git status')).toBeUndefined();
+    expect(commandIntentFromCommand('docker ps')).toBeUndefined();
     expect(commandIntentFromCommand('rm -rf node_modules')).toBeUndefined();
     expect(commandIntentFromCommand('')).toBeUndefined();
   });

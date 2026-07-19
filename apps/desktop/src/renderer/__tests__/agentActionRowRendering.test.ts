@@ -73,25 +73,41 @@ describe('AgentActionRow — 行主文案', () => {
     expect(screen.queryByText('chat.agentActionRow.verb.ran')).toBeNull();
   });
 
-  it('工作动作模式:Bash 有 description 时仍直接显示真实命令', () => {
+  it('工作动作模式:Bash 首行保留 description，次行直接显示真实命令', () => {
     render(
       createElement(AgentActionRow, {
         message: mkTool('t1', 'Bash', { command: 'git status', description: '查看工作区状态' }),
-        preferRawCommand: true,
+        showRawCommand: true,
       }),
     );
     expect(screen.getByText('git status')).toBeTruthy();
-    expect(screen.queryByText('查看工作区状态')).toBeNull();
+    expect(screen.getByText('查看工作区状态')).toBeTruthy();
+    expect(document.querySelector('[data-agent-action-raw-command="true"]')?.textContent).toBe('git status');
   });
 
-  it('exec 无 description:回退为动词 + 命令文本', () => {
+  it('exec 无法分类时回退为动词 + 命令文本', () => {
     render(
       createElement(AgentActionRow, {
-        message: mkTool('t1', 'exec', { command: 'git status --short' }),
+        message: mkTool('t1', 'exec', { command: 'docker ps' }),
       }),
     );
     expect(screen.getByText('chat.agentActionRow.verb.ran')).toBeTruthy();
+    expect(screen.getByText('docker ps')).toBeTruthy();
+  });
+
+  it('工作动作模式:Codex Git 命令首行友好化，次行保留解包后的真实命令', () => {
+    render(
+      createElement(AgentActionRow, {
+        message: mkTool('t1', 'exec', {
+          command: "/bin/zsh -lc 'git status --short'",
+          displayCommand: 'git status --short',
+        }),
+        showRawCommand: true,
+      }),
+    );
+    expect(screen.getByText('chat.agentActionRow.verb.gitStatus')).toBeTruthy();
     expect(screen.getByText('git status --short')).toBeTruthy();
+    expect(screen.queryByText("/bin/zsh -lc 'git status --short'")).toBeNull();
   });
 
   it('exec 带 codex commandActions:意图动词 + 目标,hover 保留命令原文', () => {
@@ -118,8 +134,8 @@ describe('AgentActionRow — 行主文案', () => {
       }),
     );
     expect(screen.getByText('chat.agentActionRow.verb.ranTests')).toBeTruthy();
-    // 无 target 的意图只换动词,参数仍是命令原文。
-    expect(screen.getByText('pnpm --filter desktop test')).toBeTruthy();
+    // 无 target 的意图首行只留完整标题，真实命令由工作过程的次行/详情承载。
+    expect(screen.queryByText('pnpm --filter desktop test')).toBeNull();
   });
 
   it('MCP 行:显示 server · tool 人话标签,title 保留原始 toolName', () => {

@@ -16,7 +16,7 @@ import {
  * - Claude Code：toolName 为 SDK 原名（Bash/Read/...，MCP 为 `mcp__server__tool`），
  *   input 全量透传；Bash 的 `description` 是模型每次调用填写的一句话描述。
  * - Codex：shell 工具 toolName='exec'（input 无 description，`displayCommand`
- *   是解包 PowerShell wrapper 后的展示命令）；MCP 为 `mcp:server:tool`，另有
+ *   是解包 POSIX / PowerShell wrapper 后的展示命令）；MCP 为 `mcp:server:tool`，另有
  *   `dynamic:ns:tool` / `collab:tool` / `web_search`。
  */
 

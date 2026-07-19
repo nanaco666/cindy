@@ -7,8 +7,8 @@ export interface DisplayParam {
 }
 
 export interface DisplayParamOptions {
-  /** 工作动作行优先直显真实命令,不让模型 description 替代命令文本。 */
-  preferRawCommand?: boolean;
+  /** 真实命令由独立次行展示时，不要再把它重复成首行参数。 */
+  hideRawCommandFallback?: boolean;
 }
 
 /**
@@ -26,12 +26,6 @@ export function extractDisplayParam(
 ): DisplayParam | null {
   switch (descriptor.kind) {
     case 'command': {
-      if (options.preferRawCommand && descriptor.command) {
-        return {
-          text: truncateToolText(descriptor.command, 60),
-          fullTitle: descriptor.command,
-        };
-      }
       if (descriptor.description) {
         return {
           text: descriptor.description,
@@ -48,7 +42,9 @@ export function extractDisplayParam(
               : descriptor.command,
         };
       }
+      if (intent) return null;
       if (!descriptor.command) return null;
+      if (options.hideRawCommandFallback) return null;
       return { text: truncateToolText(descriptor.command, 60), fullTitle: descriptor.command };
     }
     case 'file':

@@ -88,7 +88,13 @@ describe('describeToolUse — command tools', () => {
   it('prefers displayCommand over command for codex exec, never has description', () => {
     expect(
       describeToolUse('exec', { command: 'pwsh -c "git status"', displayCommand: 'git status', cwd: '/repo' }),
-    ).toEqual({ kind: 'command', toolName: 'exec', command: 'git status', cwd: '/repo' });
+    ).toEqual({
+      kind: 'command',
+      toolName: 'exec',
+      command: 'git status',
+      cwd: '/repo',
+      intent: { action: 'gitStatus' },
+    });
     expect(describeToolUse('exec', { command: 'ls -la' })).toEqual({
       kind: 'command',
       toolName: 'exec',
@@ -119,6 +125,21 @@ describe('describeToolUse — command tools', () => {
     ).toMatchObject({ intent: { action: 'test' } });
   });
 
+  it('applies the safety gate to the unwrapped display command before trusting commandActions', () => {
+    const descriptor = describeToolUse('exec', {
+      command: "/bin/zsh -lc 'cat README.md | tee important.conf'",
+      displayCommand: 'cat README.md | tee important.conf',
+      commandActions: [
+        { type: 'read', command: 'cat README.md', name: 'README.md', path: '/repo/README.md' },
+      ],
+    });
+    expect(descriptor).toMatchObject({
+      kind: 'command',
+      command: 'cat README.md | tee important.conf',
+    });
+    expect(descriptor).not.toHaveProperty('intent');
+  });
+
   it('skips intent computation when the model already wrote a description', () => {
     expect(
       describeToolUse('Bash', { command: 'ls src', description: '看看源码目录' }),
@@ -126,7 +147,7 @@ describe('describeToolUse — command tools', () => {
   });
 
   it('omits intent for commands the local parser cannot classify', () => {
-    expect(describeToolUse('Bash', { command: 'git status' })).not.toHaveProperty('intent');
+    expect(describeToolUse('Bash', { command: 'docker ps' })).not.toHaveProperty('intent');
     expect(describeToolUse('exec', { command: 'rm -rf build' })).not.toHaveProperty('intent');
   });
 });

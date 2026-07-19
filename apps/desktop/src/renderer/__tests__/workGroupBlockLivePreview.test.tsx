@@ -16,7 +16,7 @@ vi.mock('react-i18next', () => ({
 vi.mock('@/components/chat/AgentActionRow', () => ({
   AgentActionRow: (props: {
     message: ChatMessage;
-    preferRawCommand?: boolean;
+    showRawCommand?: boolean;
     status?: 'running' | 'done';
     toolResult?: string;
   }) => {
@@ -28,7 +28,7 @@ vi.mock('@/components/chat/AgentActionRow', () => ({
       'div',
       {
         'data-testid': 'direct-tool',
-        'data-prefer-raw': String(Boolean(props.preferRawCommand)),
+        'data-show-raw': String(Boolean(props.showRawCommand)),
         'data-result': props.toolResult,
         'aria-label': `chat.agentActionRow.status.${props.status ?? 'done'}`,
       },
@@ -189,7 +189,7 @@ describe('WorkGroupBlock — running latest-five preview', () => {
     clickGroup('chat.workGroup.working');
     expect(document.querySelector('[data-live-work-preview="true"]')).toBeNull();
     expect(screen.getByTestId('direct-tool').textContent).toBe('git status');
-    expect(screen.getByTestId('direct-tool').getAttribute('data-prefer-raw')).toBe('true');
+    expect(screen.getByTestId('direct-tool').getAttribute('data-show-raw')).toBe('true');
     expect(screen.getByText('checking the current state')).toBeTruthy();
 
     rerender(

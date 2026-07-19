@@ -146,7 +146,7 @@ function ToolActivityRow({ activity }: { activity: Extract<LiveWorkActivity, { k
       <AgentActionRow
         message={activity.message}
         toolResult={activity.toolResult}
-        preferRawCommand
+        showRawCommand
         status={activity.status}
       />
     </div>

@@ -20,7 +20,19 @@ const locales = ['zh-CN', 'en', 'ja', 'ko'] as const;
 const VERBS = ['edited', 'created', 'ran', 'read', 'updated', 'searched', 'fetched', 'used'] as const;
 
 /** command intent 专属动词档(verbLabelKeyForIntent 新增,无聚合 part.* 变体)。 */
-const INTENT_VERBS = ['listed', 'installedDeps', 'ranTests', 'built', 'linted', 'typechecked'] as const;
+const INTENT_VERBS = [
+  'listed', 'installedDeps', 'ranTests', 'built', 'linted', 'typechecked',
+  'gitStatus', 'gitDiff', 'gitLog', 'gitShow', 'gitAdd', 'gitCommit', 'gitFetch', 'gitPull', 'gitPush',
+  'gitWorktreeList', 'gitWorktreeAdd', 'gitWorktreeRemove', 'gitWorktreeMove', 'gitWorktreePrune',
+  'ghPrList', 'ghPrView', 'ghPrChecks', 'ghPrStatus', 'ghPrDiff', 'ghPrCreate', 'ghPrEdit',
+  'ghPrComment', 'ghPrReview', 'ghPrMerge', 'ghPrClose', 'ghPrReopen', 'ghPrCheckout',
+  'ghIssueList', 'ghIssueView', 'ghIssueStatus', 'ghIssueCreate', 'ghIssueEdit', 'ghIssueComment',
+  'ghIssueClose', 'ghIssueReopen',
+  'ghAuthStatus', 'ghAuthLogin', 'ghAuthLogout', 'ghAuthRefresh', 'ghAuthSwitch',
+  'ghApiQuery', 'ghApiMutation', 'ghApiCall',
+] as const;
+
+const COMMAND_FALLBACK_VERBS = ['ranCommand'] as const;
 
 function readLocale(locale: (typeof locales)[number]) {
   return JSON.parse(
@@ -40,7 +52,7 @@ describe('agent actions i18n', () => {
   it('keeps row verb labels and status labels translated in every supported locale', () => {
     for (const locale of locales) {
       const row = readLocale(locale).chat?.agentActionRow;
-      for (const verb of [...VERBS, ...INTENT_VERBS]) {
+      for (const verb of [...VERBS, ...INTENT_VERBS, ...COMMAND_FALLBACK_VERBS]) {
         expect(row?.verb?.[verb], `${locale} chat.agentActionRow.verb.${verb}`).toEqual(
           expect.any(String),
         );
