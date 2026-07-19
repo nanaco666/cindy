@@ -38,6 +38,7 @@ import {
   getModel,
   modelSupportsFastMode,
   providerOffersModel,
+  sourcesForModel,
   type ProviderView,
 } from '@lizi/model-providers';
 import { buildProviderSections } from './sourceSwitch';
@@ -305,7 +306,11 @@ interface ModelSelectorProps {
    */
   agentSwitch?: {
     currentVendor: 'cc' | 'codex';
-    onSwitch: (targetAgentKind: 'claude-code' | 'codex', modelId: string) => void | Promise<void>;
+    onSwitch: (
+      targetAgentKind: 'claude-code' | 'codex',
+      modelId: string,
+      providerId: string | null,
+    ) => void | Promise<void>;
   };
 }
 
@@ -343,7 +348,11 @@ interface ModelSelectorContentProps {
   /** 语义同 ModelSelectorProps.agentSwitch(显式两步引擎切换)。 */
   agentSwitch?: {
     currentVendor: 'cc' | 'codex';
-    onSwitch: (targetAgentKind: 'claude-code' | 'codex', modelId: string) => void | Promise<void>;
+    onSwitch: (
+      targetAgentKind: 'claude-code' | 'codex',
+      modelId: string,
+      providerId: string | null,
+    ) => void | Promise<void>;
   };
 }
 
@@ -482,9 +491,11 @@ export function ModelSelectorContent({
   // ── 来源(供应商)栏 ──────────────────────────────────────────────────────
   // 本机 + device-link 远程会话都支持来源分段:providers 已按 deviceId 切到被控端目录,
   // 远程切来源经隧道 set-model(providerId)生效(见 ChatInput.handleProviderChange 的远程分支)。
-  // 浏览目标引擎态禁用来源分段:行点击语义是「切换引擎」而非「切本会话来源」,
-  // 来源在切换事务里清空回默认路由(sessionAgentSwitchHandler providerId=null)。
-  const sourcesEnabled = !!onProviderChange && !browsing;
+  // 浏览目标引擎态**必须**保留分段:分段走 connectedProvidersForAgent(只列已连接
+  // 来源的模型),与正常模式同口径——flat 列表不过滤连接态,会把未连接来源的模型
+  // 列出来,切过去后来源解析不到(trigger 无 icon、发送必失败)。行点击语义由
+  // handleRowSelect 的 browsing 分支先行接管(连来源一起交给切换事务)。
+  const sourcesEnabled = !!onProviderChange;
   const connected = useMemo(
     () =>
       sourcesEnabled && currentAgentKind
@@ -589,11 +600,18 @@ export function ModelSelectorContent({
   const flatModels = useMemo(() => {
     if (sections) return null;
     const q = query.trim().toLowerCase();
-    if (!q) return visibleModels;
-    return visibleModels.filter(
+    // 浏览目标引擎态的 flat 兜底(目标引擎 0 已连接来源时 sections 为 null)同样
+    // 只列已连接来源提供的模型,与分段口径一致——未连接来源的模型切过去后来源
+    // 解析不到(trigger 无 icon)、发送必失败。非浏览态保持历史行为不变。
+    const base =
+      browsing && agentKind
+        ? visibleModels.filter((m) => sourcesForModel(providers, m.id, agentKind).length > 0)
+        : visibleModels;
+    if (!q) return base;
+    return base.filter(
       (m) => m.displayName.toLowerCase().includes(q) || m.id.toLowerCase().includes(q),
     );
-  }, [sections, visibleModels, query]);
+  }, [sections, visibleModels, query, browsing, agentKind, providers]);
 
   // 选中判定:flat 模式只比模型 id;分段模式还要比供应商(同模型多供应商下只高亮当前来源那行)。
   // 浏览目标引擎态恒 false:当前会话模型属于旧引擎,目标列表里同 id 行(如 gpt-5.5
@@ -647,8 +665,10 @@ export function ModelSelectorContent({
   // ── 行选择 / Edit 开合 ───────────────────────────────────────────────────
   const handleRowSelect = (providerId: string | null, id: string) => {
     // 浏览目标引擎态:选中模型 = 确认切换引擎(两步式的第二步),走切换事务。
+    // providerId 一起带上:切换后 sessions.provider_id 直接落用户选的来源,
+    // trigger 来源 icon / 路由立即正确(null = flat 退化行,交给默认路由)。
     if (browsing && agentSwitch) {
-      void agentSwitch.onSwitch(browseVendor === 'codex' ? 'codex' : 'claude-code', id);
+      void agentSwitch.onSwitch(browseVendor === 'codex' ? 'codex' : 'claude-code', id, providerId);
       onDismiss?.();
       return;
     }

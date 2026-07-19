@@ -3406,16 +3406,17 @@ export function ChatInput({
   // setModel 链路。model 已由 main 落库;这里补 effort 对齐新模型档位并翻转
   // chat store 的 in-memory agentKind(sessions:patched 广播负责其余窗口/列表)。
   const performAgentSwitch = useCallback(
-    async (targetAgentKind: 'claude-code' | 'codex', newModelId: string) => {
+    async (targetAgentKind: 'claude-code' | 'codex', newModelId: string, providerId: string | null = null) => {
       if (!sessionId) return;
       setRemoteSwitchInFlight(true);
       try {
-        // providerId 传 null:旧引擎的显式来源选择对新引擎无意义,清除回默认路由。
+        // providerId = 用户在浏览态分段列表里选中的来源(切换后 sessions.provider_id
+        // 直接落它,trigger 来源 icon / 路由立即正确);null = flat 退化行,交默认路由。
         const result = await window.electronAPI.maker.switchSessionAgent(
           sessionId,
           targetAgentKind,
           newModelId,
-          null,
+          providerId,
         );
         if (!result.switched) return;
         makerChatStore.noteAgentSwitched(sessionId, targetAgentKind);
