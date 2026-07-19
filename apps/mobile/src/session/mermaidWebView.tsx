@@ -66,9 +66,15 @@ export const MermaidDiagramWebView = forwardRef<MermaidDiagramWebViewHandle, {
           reject(new Error('mermaid export timed out'));
         }, EXPORT_TIMEOUT_MS);
         pendingExportsRef.current.set(id, { resolve, reject, timer });
-        webView.injectJavaScript(
-          `window.__cindyMermaidExportPng(${JSON.stringify(id)}, ${EXPORT_PNG_SCALE}); true;`,
-        );
+        // 就绪检查:页面脚本尚未执行到导出函数定义时(极早点击),立即回传
+        // not-ready 失败,不让调用方干等 10s 超时(review P2)。
+        webView.injectJavaScript(`(function () {
+  if (window.__cindyMermaidExportPng) {
+    window.__cindyMermaidExportPng(${JSON.stringify(id)}, ${EXPORT_PNG_SCALE});
+  } else if (window.ReactNativeWebView) {
+    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'mermaid-export', id: ${JSON.stringify(id)}, ok: false, error: 'not-ready' }));
+  }
+})(); true;`);
       });
     },
   }), []);
