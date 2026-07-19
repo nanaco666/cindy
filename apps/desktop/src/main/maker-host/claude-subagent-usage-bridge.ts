@@ -34,8 +34,8 @@ interface TrackedTask extends ClaudeSubagentTaskRegistration {
   normalizedPrompt: string;
   latestInputTokens: number;
   cumulativeOutputTokens: number;
-  matchedResponses: number;
-  registeredAt: number;
+  matchedRequests: number;
+  registrationOrder: number;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -80,6 +80,7 @@ function requestUserTexts(body: Record<string, unknown>): string[] {
 /** In-memory bridge shared by the Claude agent host and loopback proxy observer. */
 export class ClaudeSubagentUsageBridge {
   private readonly tasks = new Map<string, TrackedTask>();
+  private nextRegistrationOrder = 0;
 
   registerTask(task: ClaudeSubagentTaskRegistration): void {
     const normalizedPrompt = normalizePrompt(task.prompt);
@@ -89,8 +90,8 @@ export class ClaudeSubagentUsageBridge {
       normalizedPrompt,
       latestInputTokens: 0,
       cumulativeOutputTokens: 0,
-      matchedResponses: 0,
-      registeredAt: Date.now(),
+      matchedRequests: 0,
+      registrationOrder: this.nextRegistrationOrder++,
     });
     while (this.tasks.size > MAX_TRACKED_TASKS) {
       const oldestTaskId = this.tasks.keys().next().value as string | undefined;
@@ -110,12 +111,19 @@ export class ClaudeSubagentUsageBridge {
     });
     if (candidates.length === 0) return null;
     candidates.sort((left, right) => {
-      if (left.matchedResponses !== right.matchedResponses) {
-        return left.matchedResponses - right.matchedResponses;
+      if (left.normalizedPrompt.length !== right.normalizedPrompt.length) {
+        return right.normalizedPrompt.length - left.normalizedPrompt.length;
       }
-      return left.registeredAt - right.registeredAt;
+      if (left.matchedRequests !== right.matchedRequests) {
+        return left.matchedRequests - right.matchedRequests;
+      }
+      return left.registrationOrder - right.registrationOrder;
     });
-    return candidates[0]?.taskId ?? null;
+    const selected = candidates[0];
+    if (!selected) return null;
+    // 响应头到达时立即预留，避免相同 prompt 的并发 observer 选中同一任务。
+    selected.matchedRequests += 1;
+    return selected.taskId;
   }
 
   recordResponseUsage(taskId: string, usage: Record<string, unknown>): void {
@@ -126,7 +134,6 @@ export class ClaudeSubagentUsageBridge {
       + numberField(usage, 'cache_creation_input_tokens');
     if (inputTokens > 0) task.latestInputTokens = inputTokens;
     task.cumulativeOutputTokens += numberField(usage, 'output_tokens');
-    task.matchedResponses += 1;
   }
 
   getTaskUsage(taskId: string): ClaudeSubagentTaskUsage | undefined {

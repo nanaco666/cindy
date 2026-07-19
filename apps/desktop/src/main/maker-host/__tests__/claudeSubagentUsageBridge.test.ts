@@ -35,13 +35,12 @@ function sse(inputTokens: number, outputTokens: number, cacheReadTokens = 0): Bu
   return Buffer.from(frames.map((frame) => `data: ${JSON.stringify(frame)}\n\n`).join(''));
 }
 
-function observe(
+function openObservation(
   bridge: ClaudeSubagentUsageBridge,
   reqId: number,
   model: string,
   prompt: string,
-  response: Buffer,
-): void {
+) {
   const observer = createClaudeSubagentUsageResponseObserver(bridge);
   const sink = observer({
     reqId,
@@ -54,6 +53,17 @@ function observe(
     requestBody: requestBody(model, prompt),
   });
   expect(sink).toBeTruthy();
+  return sink;
+}
+
+function observe(
+  bridge: ClaudeSubagentUsageBridge,
+  reqId: number,
+  model: string,
+  prompt: string,
+  response: Buffer,
+): void {
+  const sink = openObservation(bridge, reqId, model, prompt);
   sink?.onData?.(response);
   sink?.onEnd?.();
 }
@@ -104,5 +114,58 @@ describe('ClaudeSubagentUsageBridge', () => {
 
     expect(sink).toBeNull();
     expect(bridge.getTaskUsage('agent-a')).toBeUndefined();
+  });
+
+  it('prefers the longest matching prompt when prompts overlap', () => {
+    const bridge = new ClaudeSubagentUsageBridge();
+    bridge.registerTask({
+      taskId: 'agent-short',
+      parentToolUseId: 'toolu-short',
+      prompt: '修复认证问题',
+      model: 'codex/gpt-5.6-terra',
+    });
+    bridge.registerTask({
+      taskId: 'agent-long',
+      parentToolUseId: 'toolu-long',
+      prompt: '修复认证问题并补测试',
+      model: 'codex/gpt-5.6-terra',
+    });
+
+    expect(bridge.matchRequest({
+      model: 'codex/gpt-5.6-terra',
+      messages: [{ role: 'user', content: '修复认证问题并补测试' }],
+    })).toBe('agent-long');
+  });
+
+  it('reserves identical prompt tasks before concurrent responses finish', () => {
+    const bridge = new ClaudeSubagentUsageBridge();
+    for (const suffix of ['a', 'b']) {
+      bridge.registerTask({
+        taskId: `agent-${suffix}`,
+        parentToolUseId: `toolu-${suffix}`,
+        prompt: 'Solve the same calculator problem',
+        model: 'codex/gpt-5.6-terra',
+      });
+    }
+
+    const first = openObservation(
+      bridge,
+      1,
+      'codex/gpt-5.6-terra',
+      'Solve the same calculator problem',
+    );
+    const second = openObservation(
+      bridge,
+      2,
+      'codex/gpt-5.6-terra',
+      'Solve the same calculator problem',
+    );
+    first?.onData?.(sse(100, 10));
+    first?.onEnd?.();
+    second?.onData?.(sse(200, 20));
+    second?.onEnd?.();
+
+    expect(bridge.getTaskUsage('agent-a')).toEqual({ totalTokens: 110 });
+    expect(bridge.getTaskUsage('agent-b')).toEqual({ totalTokens: 220 });
   });
 });
