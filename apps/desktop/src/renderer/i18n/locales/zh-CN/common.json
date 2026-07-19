@@ -3510,6 +3510,7 @@
       "cancelled": "已取消"
     },
     "workGroup": {
+      "working": "正在工作…",
       "worked": "已工作 {{duration}}",
       "workDetails": "工作过程"
     },

@@ -45,8 +45,6 @@ import { Check, ChevronDown, ChevronRight, File as FileIcon } from 'lucide-react
 import { useTranslation } from 'react-i18next';
 import {
   describeToolUse,
-  truncateToolText,
-  type ToolUseDescriptor,
 } from '@lizi/maker-shared';
 
 import { cn, basename } from '@/lib/utils';
@@ -54,6 +52,7 @@ import { Spinner } from '@/components/ui/spinner';
 import type { ChatMessage } from '@/lib/makerChatStore';
 import { verbForTool, verbLabelKeyForIntent, verbLabelKeyForRow } from '@/lib/agent-actions/verbAggregator';
 import { statsForToolCall } from '@/lib/agent-actions/diffStats';
+import { extractDisplayParam } from '@/lib/agent-actions/actionPresentation';
 import { SUPPORTED_IMAGE_EXTS, extractExt } from '@/lib/fileTypes';
 import { toLocalFileUrl } from '@/lib/localPathResolver';
 import { isBrowserOpenablePath } from '../../../shared/browserOpenableExts';
@@ -493,83 +492,6 @@ function formatInlineInput(
       } catch {
         return String(inp);
       }
-  }
-}
-
-interface DisplayParam {
-  text: string;
-  fullTitle?: string;
-}
-
-/**
- * issue #450 — 行主文案从「原始命令 / 生硬工具名」换成人话形态:
- *   - command 带 description(Claude Code Bash):主文案 = 模型写的一句话
- *     描述,hover title = 命令原文;codex exec / 老消息无 description 时回退
- *     命令截断展示。
- *   - MCP / dynamic / collab:`server · tool`(U+00B7 分隔,下划线转空格),
- *     hover title = 原始 toolName(+ input 里抽出的 detail)。
- *   - 文件 / 搜索 / Web 类:参数本身已是最可读形态,维持原样。
- */
-function extractDisplayParam(descriptor: ToolUseDescriptor): DisplayParam | null {
-  switch (descriptor.kind) {
-    case 'command': {
-      if (descriptor.description) {
-        return {
-          text: descriptor.description,
-          ...(descriptor.command ? { fullTitle: descriptor.command } : {}),
-        };
-      }
-      // 代码解析出的意图(codex commandActions / 本地规则,issue #450):动词由
-      // intent 决定(见组件内 verbLabel),参数用意图目标(文件名 / 搜索词 /
-      // URL),hover 仍是命令原文(+作用路径)。无 target 的意图(如 pnpm install)
-      // 只换动词,参数保持命令原文截断。
-      const intent = descriptor.intent;
-      if (intent?.target && descriptor.command) {
-        return {
-          text: truncateToolText(intent.target, 60),
-          fullTitle: intent.path && intent.path !== intent.target
-            ? `${descriptor.command}\n${intent.path}`
-            : descriptor.command,
-        };
-      }
-      if (!descriptor.command) return null;
-      return { text: truncateToolText(descriptor.command, 60), fullTitle: descriptor.command };
-    }
-    case 'file':
-      return { text: descriptor.fileName, fullTitle: descriptor.filePath };
-    case 'search':
-      return { text: descriptor.pattern };
-    case 'web':
-      return { text: descriptor.target };
-    case 'todo':
-      return null;
-    case 'task':
-      return descriptor.description ? { text: descriptor.description } : null;
-    case 'mcp':
-      return {
-        text: `${descriptor.serverLabel} · ${descriptor.toolLabel}`,
-        fullTitle: descriptor.detail
-          ? `${descriptor.toolName}\n${descriptor.detail}`
-          : descriptor.toolName,
-      };
-    case 'dynamic':
-      return {
-        text: descriptor.namespace
-          ? `${descriptor.namespace} · ${descriptor.toolLabel}`
-          : descriptor.toolLabel,
-        fullTitle: descriptor.detail
-          ? `${descriptor.toolName}\n${descriptor.detail}`
-          : descriptor.toolName,
-      };
-    case 'collab':
-      return {
-        text: descriptor.toolLabel,
-        fullTitle: descriptor.detail
-          ? `${descriptor.toolName}\n${descriptor.detail}`
-          : descriptor.toolName,
-      };
-    case 'generic':
-      return { text: descriptor.toolName };
   }
 }
 

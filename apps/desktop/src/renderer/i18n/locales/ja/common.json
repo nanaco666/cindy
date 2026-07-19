@@ -3510,6 +3510,7 @@
       "cancelled": "キャンセル済み"
     },
     "workGroup": {
+      "working": "作業中…",
       "worked": "{{duration}} 作業しました",
       "workDetails": "作業内容"
     },

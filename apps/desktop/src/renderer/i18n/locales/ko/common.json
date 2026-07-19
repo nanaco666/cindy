@@ -3510,6 +3510,7 @@
       "cancelled": "취소됨"
     },
     "workGroup": {
+      "working": "작업 중…",
       "worked": "{{duration}} 동안 작업함",
       "workDetails": "작업 내역"
     },
