@@ -216,8 +216,11 @@ import {
 } from '@/session/composerPaletteCache';
 import {
   buildAgentCapabilitiesCacheKey,
+  commitAgentCapabilities,
+  getAgentCapabilitiesGeneration,
   getCachedAgentCapabilities,
-  setCachedAgentCapabilities,
+  isAgentCapabilitiesGenerationCurrent,
+  subscribeAgentCapabilities,
 } from '@/session/agentCapabilitiesCache';
 import {
   MOBILE_VOICE_MIC_PERMISSION_ERROR,
@@ -1973,12 +1976,21 @@ export default function SessionScreen() {
       return;
     }
     const seq = ++capabilitiesLoadSeqRef.current;
+    let cancelled = false;
     // 能力表按 (设备, agent) 基本不变:缓存命中先画(选择器立即可用、不闪「正在读取
     // 远程运行能力」),后台静默刷新覆盖;miss 才走 loading 态。
     const capabilitiesCacheKey = buildAgentCapabilitiesCacheKey(deviceId, currentAgentKind);
+    const generation = getAgentCapabilitiesGeneration(deviceId);
+    const unsubscribe = subscribeAgentCapabilities(deviceId, currentAgentKind, (next) => {
+      if (cancelled) return;
+      setCapabilities(next);
+      setCapabilitiesLoading(false);
+      setCapabilitiesError(null);
+    });
     const cachedCapabilities = getCachedAgentCapabilities(capabilitiesCacheKey);
     if (cachedCapabilities) {
       setCapabilities(cachedCapabilities);
+      setCapabilitiesLoading(false);
     } else {
       setCapabilitiesLoading(true);
     }
@@ -1991,23 +2003,31 @@ export default function SessionScreen() {
         if (capabilitiesLoadSeqRef.current !== seq) return;
         const normalized = normalizeMobileAgentCapabilities(result);
         if (normalized) {
-          setCapabilities(normalized);
-          setCachedAgentCapabilities(capabilitiesCacheKey, normalized);
-          setCapabilitiesError(null);
+          // state 只经当前代际 commit 的订阅通知更新；revision 前旧请求晚到不会覆盖新快照。
+          commitAgentCapabilities(deviceId, currentAgentKind, generation, normalized);
         } else {
+          if (!isAgentCapabilitiesGenerationCurrent(deviceId, generation)) return;
           if (!cachedCapabilities) setCapabilities(null);
           setCapabilitiesError('远程能力返回格式不支持');
         }
       })
       .catch((err) => {
         if (capabilitiesLoadSeqRef.current !== seq) return;
+        if (!isAgentCapabilitiesGenerationCurrent(deviceId, generation)) return;
         // 缓存已画时保留旧能力表,只报错——静默刷新失败不该把可用面板打回空白。
         if (!cachedCapabilities) setCapabilities(null);
         setCapabilitiesError(formatRemoteError(err));
       })
       .finally(() => {
-        if (capabilitiesLoadSeqRef.current === seq) setCapabilitiesLoading(false);
+        if (
+          capabilitiesLoadSeqRef.current === seq
+          && isAgentCapabilitiesGenerationCurrent(deviceId, generation)
+        ) setCapabilitiesLoading(false);
       });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [currentAgentKind, deviceId, maker, openLink]);
 
   const syncSession = useCallback(async (options: { replaceMessages?: boolean } = {}) => {

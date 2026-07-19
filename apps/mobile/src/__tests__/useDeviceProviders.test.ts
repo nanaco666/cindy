@@ -139,4 +139,39 @@ describe('useDeviceProviders deviceId-aware cache', () => {
     await p2;
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
+
+  it('新快照只通知对应 deviceId 的已挂载订阅者', async () => {
+    const mod = await import('@/device-link/deviceProvidersCache');
+    const dev1 = vi.fn();
+    const dev2 = vi.fn();
+    const off1 = mod.subscribeDeviceProviders('dev-1', dev1);
+    const off2 = mod.subscribeDeviceProviders('dev-2', dev2);
+
+    await mod.fetchDeviceProviders('dev-1', async () => result('dev-1'));
+    expect(dev1).toHaveBeenCalledWith({ providers: [{ id: 'dev-1-xd' }] });
+    expect(dev2).not.toHaveBeenCalled();
+
+    off1();
+    off2();
+  });
+
+  it('revision 后新请求先完成、旧请求后完成时只通知新快照', async () => {
+    const resolvers: Array<(value: Providers) => void> = [];
+    const fetcher = vi.fn(() => new Promise<Providers>((resolve) => resolvers.push(resolve)));
+    const mod = await import('@/device-link/deviceProvidersCache');
+    const listener = vi.fn();
+    mod.subscribeDeviceProviders('dev-1', listener);
+
+    const stale = mod.fetchDeviceProviders('dev-1', fetcher);
+    mod.evictDeviceProviders('dev-1');
+    const fresh = mod.fetchDeviceProviders('dev-1', fetcher);
+    resolvers[1](result('fresh'));
+    await fresh;
+    resolvers[0](result('stale'));
+    await stale;
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenLastCalledWith({ providers: [{ id: 'fresh-xd' }] });
+    expect(mod.getCachedDeviceProviders('dev-1')).toEqual({ providers: [{ id: 'fresh-xd' }] });
+  });
 });

@@ -261,6 +261,16 @@ export function useDeviceLinkRemoteProjects(): void {
       });
     });
 
+    // 被控端 active-catalog 变化：供应商目录与 capabilities.availableModels 必须同代刷新。
+    // 两套缓存订阅会把完整结果原子推给已挂载选择器，刷新期间保留旧列表避免空白跳变。
+    const offRemotePush = window.electronAPI.deviceLink.onRemotePush((push) => {
+      if (disposed || push.channel !== 'maker:provider:changed' || !eligible.has(push.deviceId)) return;
+      evictDeviceProviders(push.deviceId);
+      evictDeviceCapabilities(push.deviceId);
+      void prefetchDeviceProviders(push.deviceId);
+      void prefetchDeviceCapabilities(push.deviceId);
+    });
+
     // WS 重连后:presence 重新对齐 + 对每个已合格设备重新 subscribe + 重新 bootstrap
     // (被控端可能重启过、订阅 registry 清空,这步重建订阅;reseed 补新设备)。
     const offStatus = window.electronAPI.deviceLink.onStatusChanged((p) => {
@@ -321,6 +331,7 @@ export function useDeviceLinkRemoteProjects(): void {
       reseedTimers.clear();
       bootstrapTasks.clear();
       offPresence();
+      offRemotePush();
       offStatus();
       offAccessRevoked();
       offControlTarget();

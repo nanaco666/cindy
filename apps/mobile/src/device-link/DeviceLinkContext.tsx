@@ -24,8 +24,19 @@ import {
   applyAccessRevokedFrame,
   withAccessRevokedHandling,
 } from '@/device-link/accessRevoked';
-import { clearAllDeviceProviders, evictDeviceProviders } from '@/device-link/deviceProvidersCache';
-import { evictAgentCapabilitiesForDevice, resetAgentCapabilitiesCache } from '@/session/agentCapabilitiesCache';
+import {
+  clearAllDeviceProviders,
+  evictDeviceProviders,
+  fetchDeviceProviders,
+  type DeviceProvidersPayload,
+} from '@/device-link/deviceProvidersCache';
+import {
+  commitAgentCapabilities,
+  evictAgentCapabilitiesForDevice,
+  getAgentCapabilitiesGeneration,
+  resetAgentCapabilitiesCache,
+} from '@/session/agentCapabilitiesCache';
+import { normalizeMobileAgentCapabilities } from '@/session/agentCapabilities';
 import { evictComposerPaletteCacheForDevice, resetComposerPaletteCache } from '@/session/composerPaletteCache';
 import { clearAllDeviceModelMeta, evictDeviceModelMeta } from '@/device-link/deviceModelMetaCache';
 import { dispatchFileBrowserWatchEvent } from '@/device-link/fileBrowserWatch';
@@ -346,6 +357,21 @@ export function DeviceLinkProvider({ children }: { children: ReactNode }) {
     });
     const offFrame = client.onFrame((env) => routeFrame(env, {
       onAccessRevoked: (deviceId) => remoteSubscribedTopicsRef.current.delete(deviceId),
+      onProviderChanged: (deviceId) => {
+        // provider 目录与 capabilities.availableModels 是同一份 active catalog 的两种视图。
+        // 同时驱逐并后台重拉；页面保留旧画面，当前代完整快照提交后由订阅一次性更新。
+        evictDeviceProviders(deviceId);
+        evictAgentCapabilitiesForDevice(deviceId);
+        void fetchDeviceProviders(deviceId, () =>
+          sendInvokeWithAccessHandling<DeviceProvidersPayload>(
+            client,
+            deviceId,
+            'maker:provider:list',
+            [],
+          )
+        ).catch(() => { /* 下次进入选择器或重连补齐时继续重试。 */ });
+        void refreshDeviceCapabilities(client, deviceId);
+      },
     }));
     client.start();
 
@@ -494,13 +520,20 @@ function VisualMockDeviceLinkProvider({ children }: { children: ReactNode }) {
   return <DeviceLinkContext.Provider value={value}>{children}</DeviceLinkContext.Provider>;
 }
 
-function routeFrame(env: Envelope, handlers: { onAccessRevoked?: (deviceId: string) => void } = {}): void {
+function routeFrame(env: Envelope, handlers: {
+  onAccessRevoked?: (deviceId: string) => void;
+  onProviderChanged?: (deviceId: string) => void;
+} = {}): void {
   if (applyAccessRevokedFrame(env)) {
     if (env.src) handlers.onAccessRevoked?.(env.src);
     return;
   }
   if (env.kind !== 'push' || !env.src) return;
   const push = env.payload as PushPayload;
+  if (push.channel === 'maker:provider:changed') {
+    handlers.onProviderChanged?.(env.src);
+    return;
+  }
   if (push.channel === 'maker:schedule:event') {
     remoteScheduleEventStore.apply(env.src, push.payload);
   }
@@ -510,6 +543,28 @@ function routeFrame(env: Envelope, handlers: { onAccessRevoked?: (deviceId: stri
     return;
   }
   remoteSessionStore.applyRemotePush(env.src, push.channel, push.payload);
+}
+
+/** provider revision 后并行重拉两种 agent 的能力；旧代或异常结果都不触碰当前页面。 */
+async function refreshDeviceCapabilities(
+  client: DeviceLinkClient,
+  deviceId: string,
+): Promise<void> {
+  const generation = getAgentCapabilitiesGeneration(deviceId);
+  await Promise.allSettled(
+    (['claude-code', 'codex'] as const).map(async (agentKind) => {
+      const raw = await sendInvokeWithAccessHandling<unknown>(
+        client,
+        deviceId,
+        'maker:get-capabilities',
+        [agentKind],
+      );
+      const normalized = normalizeMobileAgentCapabilities(raw);
+      if (normalized) {
+        commitAgentCapabilities(deviceId, agentKind, generation, normalized);
+      }
+    }),
+  );
 }
 
 async function rebuildSessionSnapshot(

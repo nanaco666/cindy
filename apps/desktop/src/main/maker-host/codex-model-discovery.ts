@@ -17,6 +17,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import type { CatalogModel } from '@lizi/model-providers';
+import type { CodexModelListItem } from '@lizi/maker-core';
 
 import { shouldSuppressLocalCodexAuth } from './codex-auth-invalidation.js';
 
@@ -130,6 +131,61 @@ export function mapCodexModelsToCatalog(raw: unknown): CatalogModel[] {
     };
     if (efforts.includes('xhigh')) model.effortDisplayNames = { xhigh: 'Extra High' };
     if (hasPriorityTier(m.service_tiers)) model.supportsFastMode = true;
+    out.push(model);
+  }
+  return out;
+}
+
+/**
+ * app-server `model/list` 快照 → 规范化目录。
+ *
+ * live 协议不暴露 cache 的 context_window / priority，故上下文使用 Codex 当前统一窗口
+ * 272k，排序严格保留 app-server 返回顺序。后续 `models_cache.json` 可读时仍可用上面的
+ * mapper 提供更细元数据；首次 OAuth 的关键是绝不能因为 cache 尚未落盘而发布空目录。
+ */
+export function mapCodexAppServerModelsToCatalog(
+  models: readonly CodexModelListItem[],
+): CatalogModel[] {
+  const out: CatalogModel[] = [];
+  const seen = new Set<string>();
+  for (const [index, raw] of models.entries()) {
+    if (!raw || raw.hidden === true) continue;
+    const slug = str(raw.model) ?? str(raw.id);
+    if (!slug || seen.has(slug)) continue;
+    seen.add(slug);
+
+    const efforts = Array.isArray(raw.supportedReasoningEfforts)
+      ? raw.supportedReasoningEfforts
+          .map((item) => (item && typeof item === 'object' ? str(item.reasoningEffort) : null))
+          .filter((effort): effort is string => effort != null && CODEX_EFFORTS.has(effort))
+      : [];
+    const requestedDefault = str(raw.defaultReasoningEffort);
+    const defaultEffort =
+      requestedDefault && efforts.includes(requestedDefault)
+        ? (requestedDefault as CatalogModel['defaultEffort'])
+        : efforts.length > 0
+          ? (efforts[efforts.length - 1] as CatalogModel['defaultEffort'])
+          : null;
+    const tiers = [
+      ...(Array.isArray(raw.serviceTiers) ? raw.serviceTiers.map((tier) => tier?.id) : []),
+      ...(Array.isArray(raw.additionalSpeedTiers) ? raw.additionalSpeedTiers : []),
+    ];
+    const supportsFastMode = tiers.some((tier) => tier === 'priority' || tier === 'fast');
+    const model: CatalogModel = {
+      id: slug,
+      name: str(raw.displayName) ?? slug,
+      group: 'gpt',
+      // app-server 已按官方 picker 顺序返回；给每项稳定的小数锚点保住该顺序。
+      sortOrder: 17 + index / 1000,
+      ...(str(raw.description) ? { description: raw.description } : {}),
+      contextWindow: 272_000,
+      efforts: efforts as CatalogModel['efforts'],
+      defaultEffort,
+      status: 'active',
+      defaultEnabled: !DEFAULT_HIDDEN_SLUGS.has(slug),
+      ...(supportsFastMode ? { supportsFastMode: true } : {}),
+    };
+    if (efforts.includes('xhigh')) model.effortDisplayNames = { xhigh: 'Extra High' };
     out.push(model);
   }
   return out;

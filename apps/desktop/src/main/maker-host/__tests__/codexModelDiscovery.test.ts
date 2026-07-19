@@ -3,6 +3,7 @@
  * 验证筛选(visibility/supported_in_api)+ 规范化映射 + capability 字段。
  */
 import fsp from 'node:fs/promises';
+import type { CodexModelListItem } from '@lizi/maker-core';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -14,6 +15,7 @@ vi.mock('node:fs/promises', () => ({ default: { readFile: vi.fn() } }));
 
 import {
   mapCodexModelsToCatalog,
+  mapCodexAppServerModelsToCatalog,
   readCodexDiscoveredModels,
   readCodexDiscoveredModelsForAuthRefresh,
 } from '../codex-model-discovery.js';
@@ -87,6 +89,54 @@ describe('mapCodexModelsToCatalog', () => {
     expect(mapCodexModelsToCatalog({})).toEqual([]);
     expect(mapCodexModelsToCatalog({ models: 'nope' })).toEqual([]);
     expect(mapCodexModelsToCatalog({ models: [{ slug: 'x', visibility: 'list', supported_in_api: true }] })[0].efforts).toEqual([]);
+  });
+});
+
+describe('mapCodexAppServerModelsToCatalog', () => {
+  it('保留 app-server 顺序、过滤隐藏/重复项并映射 effort 与 fast tier', () => {
+    const out = mapCodexAppServerModelsToCatalog([
+      {
+        id: 'gpt-5.6',
+        model: 'gpt-5.6',
+        displayName: 'GPT-5.6',
+        description: 'Newest',
+        hidden: false,
+        supportedReasoningEfforts: [
+          { reasoningEffort: 'low', description: '' },
+          { reasoningEffort: 'xhigh', description: '' },
+        ],
+        defaultReasoningEffort: 'xhigh',
+        additionalSpeedTiers: [],
+        serviceTiers: [{ id: 'priority', name: 'Fast', description: '' }],
+        isDefault: true,
+      },
+      {
+        id: 'hidden', model: 'hidden', displayName: 'Hidden', description: '', hidden: true,
+        supportedReasoningEfforts: [], defaultReasoningEffort: 'medium', additionalSpeedTiers: [],
+        serviceTiers: [], isDefault: false,
+      },
+      {
+        id: 'duplicate', model: 'gpt-5.6', displayName: 'Duplicate', description: '', hidden: false,
+        supportedReasoningEfforts: [], defaultReasoningEffort: 'medium', additionalSpeedTiers: [],
+        serviceTiers: [], isDefault: false,
+      },
+      {
+        id: 'gpt-5.4-mini', model: 'gpt-5.4-mini', displayName: 'GPT-5.4 Mini', description: '', hidden: false,
+        supportedReasoningEfforts: [{ reasoningEffort: 'high', description: '' }],
+        defaultReasoningEffort: 'high', additionalSpeedTiers: [], serviceTiers: [], isDefault: false,
+      },
+    ] as CodexModelListItem[]);
+
+    expect(out.map((model) => model.id)).toEqual(['gpt-5.6', 'gpt-5.4-mini']);
+    expect(out[0]).toMatchObject({
+      contextWindow: 272_000,
+      efforts: ['low', 'xhigh'],
+      defaultEffort: 'xhigh',
+      supportsFastMode: true,
+      sortOrder: 17,
+    });
+    expect(out[1].defaultEnabled).toBe(false);
+    expect(out[1].sortOrder).toBe(17.003);
   });
 });
 

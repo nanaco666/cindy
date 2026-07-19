@@ -19,6 +19,7 @@ import {
 import {
   getActiveCatalog,
   setActiveCatalogChangedListener,
+  setDiscoveredCodexModels,
 } from './active-catalog.js';
 import {
   createOrcaWorkerBridgeMcpProvider,
@@ -37,6 +38,7 @@ import {
 } from '../maker-ipc/orcaManualInterrupt.js';
 import { dispatchInterAgentMessage, isSessionInTurn, wireSessionToIpc } from '../maker-ipc/register.js';
 import { MAKER_PUSH } from '../maker-ipc/channels.js';
+import { tapWindowBroadcast } from '../device-link/broadcast-tap.js';
 import { WorktreePool } from '../worktree/index.js';
 import { getReadyBinaryPath, getCachedBinaryStatus } from '../agent-binaries/index.js';
 import {
@@ -102,6 +104,7 @@ import { prepareLocalCodexCredentialModeSwitch } from './codex-credential-switch
 import { createDesktopOrcaTeamStoreAdapter } from './orcaTeamStoreAdapter.js';
 import { broadcastOrcaWorkerChanged } from './orcaWorkerBroadcast.js';
 import { getDesktopMcpToolApprovalPolicy } from './mcp-tool-approval-policy.js';
+import { mapCodexAppServerModelsToCatalog } from './codex-model-discovery.js';
 export { withRehydrateCloseSuppressed };
 
 type RemoteCcQuery = Awaited<
@@ -132,6 +135,7 @@ setActiveCatalogChangedListener((revision) => {
       // Window teardown may race the broadcast; other windows still receive this revision.
     }
   }
+  tapWindowBroadcast(MAKER_PUSH.PROVIDER_CHANGED, { revision });
 });
 /**
  * codexAgent 的模块级引用 —— 仅供 restartCodexAfterAuthModeChange() 在 API 模式切换 /
@@ -375,6 +379,9 @@ export function getMaker(): Maker {
       capabilityAdditions: {
         availableModels: deriveAvailableModels(getActiveCatalog(), 'codex'),
       },
+      onCodexLocalModelsListed: (models) => {
+        setDiscoveredCodexModels(mapCodexAppServerModelsToCatalog(models));
+      },
       prepareCodexLocalCredentialModeSwitch: async (ctx) => {
         const maker = _maker;
         if (!maker) throw new Error('Maker is not initialized for Codex credential mode switch');
@@ -527,6 +534,9 @@ export function getMaker(): Maker {
     // 不重启则隐式会话继续复用旧钥匙形态,新登录不生效(codex review 2026-07-03 P2)。
     // 下次 getHost 会按新 fallback(oauth-bearer)重建并重设 proxy 注入。
     desktopCodexAuthAdapter.setOnLoginSuccess(async () => {
+      // 必须在新 app-server 首次 model/list / Responses 请求之前清：bridge 的旧账号
+      // accessToken/accountId 有 30s 内存缓存，晚清会让新 host 短暂带旧账号凭证请求。
+      clearChatgptBridgeCredentialCache();
       await codexAgent.forceDisposeLocalHostForAuthChange('Codex desktop auth login');
       await broadcastCodexRuntimeRoute();
     });
