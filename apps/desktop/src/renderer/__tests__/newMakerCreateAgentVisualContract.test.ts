@@ -114,6 +114,19 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(colorsSource).toContain("dark: '#2A2828'");
   });
 
+  it('keeps the decorative head image unselectable', () => {
+    const headImageIndex = source.indexOf('data-testid="create-agent-head-image"');
+    expect(headImageIndex).toBeGreaterThan(-1);
+
+    const headImageBlock = source.slice(
+      headImageIndex,
+      source.indexOf('{!logoError', headImageIndex),
+    );
+    expect(headImageBlock).toContain('pointer-events-none');
+    expect(headImageBlock).toContain('select-none');
+    expect(headImageBlock.match(/draggable=\{false\}/g)).toHaveLength(2);
+  });
+
   it('keeps global sidebar chrome out of the route body', () => {
     expect(source).not.toContain('TODO-E4D');
     expect(source).not.toContain('cindy-avatar-account.png');

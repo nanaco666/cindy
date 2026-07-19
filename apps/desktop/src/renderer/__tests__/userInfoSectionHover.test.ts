@@ -52,9 +52,19 @@ describe('UserInfoSection — outer wrapper takes over full-row hover', () => {
 });
 
 describe('UserInfoSection — version label', () => {
-  it('shows only the app version without the retired XD.Inc prefix', () => {
-    expect(source).toContain('{appDisplayVersion}');
-    expect(source).not.toContain('XD.Inc - {appDisplayVersion}');
+  it('shows the build region alongside the app version', () => {
+    expect(source).toContain(
+      "import { CURRENT_CINDY_REGION } from '../../../shared/brandRegion';",
+    );
+    expect(source).toContain(
+      "const appRegionLabel = CURRENT_CINDY_REGION === 'global' ? 'Global' : 'CN';",
+    );
+    expect(source).toContain(
+      'const appVersionLabel = `${appRegionLabel} · ${appDisplayVersion}`;',
+    );
+    expect(source).not.toContain('XD.Inc');
+    expect(source).toContain('{appVersionLabel}');
+    expect(source).toContain('title={appVersionLabelDetail}');
   });
 });
 
