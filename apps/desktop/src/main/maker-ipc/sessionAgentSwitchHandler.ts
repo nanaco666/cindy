@@ -83,6 +83,11 @@ export interface MakerSessionAgentSwitchHandlerDeps {
    * stash/清理等 session 收尾钩子(与 Orca rehydrate 同保护)。
    */
   withCloseSuppressed<T>(sessionId: string, fn: () => Promise<T>): Promise<T>;
+  /**
+   * pending 切换意图注册表。缺省(测试最小 harness)时 turn 运行中回落抛
+   * SESSION_RUNNING 的旧语义。
+   */
+  pendingSwitches?: PendingAgentSwitchRegistry;
   log: {
     info(message: string, fields?: Record<string, unknown>): void;
     warn(message: string, fields?: Record<string, unknown>): void;
@@ -95,6 +100,39 @@ export interface SessionAgentSwitchResult {
   model: string;
   /** 新引擎 live session 是否已就绪;false 时下一条消息走 lazy-create 重试。 */
   engineReady: boolean;
+  /**
+   * turn 运行中登记为 pending:切换不打断当前 turn,推迟到下一条消息发送时刻
+   * 由 send 事务执行(applyPendingAgentSwitchIfIdle)。true 时 switched=false,
+   * 会话状态(DB / 消息流 / chip)保持旧引擎——旧 turn 确实仍由旧引擎驱动。
+   */
+  deferred?: boolean;
+}
+
+/** 运行中登记的切换意图(下一条消息发送时刻执行)。 */
+export interface PendingAgentSwitchIntent {
+  targetAgentKind: AgentKind;
+  model: string;
+  providerId: string | null | undefined;
+}
+
+/**
+ * pending 切换意图注册表(内存;重启丢失可接受——与凭证 deferred 同级的轻量意图,
+ * 用户重开后重新选择即可)。同 session 重复登记 = 覆盖(用户改主意);SET_MODEL /
+ * 同引擎 no-op 切换会清除(用户选回当前引擎)。
+ */
+export interface PendingAgentSwitchRegistry {
+  set(sessionId: string, intent: PendingAgentSwitchIntent): void;
+  get(sessionId: string): PendingAgentSwitchIntent | undefined;
+  clear(sessionId: string): void;
+}
+
+export function createPendingAgentSwitchRegistry(): PendingAgentSwitchRegistry {
+  const pending = new Map<string, PendingAgentSwitchIntent>();
+  return {
+    set: (sessionId, intent) => void pending.set(sessionId, intent),
+    get: (sessionId) => pending.get(sessionId),
+    clear: (sessionId) => void pending.delete(sessionId),
+  };
 }
 
 /** 业务体(纯依赖注入,单测直接调):校验 → 交接 → 提交 → 重建。 */
@@ -105,6 +143,12 @@ export async function performSessionAgentSwitch(
     targetAgentKind: unknown;
     model: unknown;
     providerId?: unknown;
+    /**
+     * pending-apply 路径(send 事务派发前执行):跳过新引擎立即重建——send 随后
+     * 的 lazy-create 会按 DB 新值 spawn(reconcileCreateOptsWithDb 校正兜底),
+     * 不必重复 bootstrap 一次。
+     */
+    skipBootstrap?: boolean;
   },
 ): Promise<SessionAgentSwitchResult> {
   const { sessionId, targetAgentKind, model, providerId } = params;
@@ -138,13 +182,33 @@ export async function performSessionAgentSwitch(
   const toDbKind: DbAgentKind = targetAgentKind === 'codex' ? 'codex' : 'cc';
   if (fromDbKind === toDbKind) {
     // 同引擎 = 纯模型切换,调用方应走 SET_MODEL;这里按 no-op 成功返回。
+    // 顺带清 pending:用户先登记了跨引擎切换、又选回当前引擎 = 改主意取消。
+    deps.pendingSwitches?.clear(sessionId);
     return { switched: false, agentKind: targetAgentKind, model, engineReady: true };
   }
 
   const live = deps.getLiveSession(sessionId);
   if (live?.isTurnRunning()) {
+    // turn 运行中不打断:登记切换意图,推迟到下一条消息发送时刻执行(send 事务
+    // 的 applyPendingAgentSwitchIfIdle)。旧 turn 继续由旧引擎跑完——此期间
+    // DB / 消息流 / 模型 chip 保持旧引擎是**真实**状态,不做乐观翻转。
+    if (deps.pendingSwitches) {
+      deps.pendingSwitches.set(sessionId, {
+        targetAgentKind,
+        model,
+        providerId: providerId as string | null | undefined,
+      });
+      deps.log.info('agent-switch: deferred until next send (turn running)', {
+        sessionId,
+        targetAgentKind,
+        model,
+      });
+      return { switched: false, agentKind: targetAgentKind, model, engineReady: true, deferred: true };
+    }
     throwIpcError('SESSION_RUNNING', `Session ${sessionId} is running a turn`);
   }
+  // 空闲立即切换:本次执行覆盖任何历史 pending(同一意图的最新表达)。
+  deps.pendingSwitches?.clear(sessionId);
 
   // 交接文本先于任何状态变更构造(失败不留半切换状态)。
   const sourceMessages = await deps.listMessagesForHandoff(sessionId);
@@ -184,15 +248,17 @@ export async function performSessionAgentSwitch(
     deps.setPendingHandoff(sessionId, handoff);
 
     let engineReady = true;
-    try {
-      await deps.bootstrapSwitchedSession(sessionId);
-    } catch (err) {
-      engineReady = false;
-      deps.log.warn('agent-switch: bootstrap new engine failed; next send will lazy-create', {
-        sessionId,
-        targetAgentKind,
-        err: err instanceof Error ? err.message : String(err),
-      });
+    if (!params.skipBootstrap) {
+      try {
+        await deps.bootstrapSwitchedSession(sessionId);
+      } catch (err) {
+        engineReady = false;
+        deps.log.warn('agent-switch: bootstrap new engine failed; next send will lazy-create', {
+          sessionId,
+          targetAgentKind,
+          err: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
 
     deps.log.info('agent-switch: switched', {
@@ -205,6 +271,42 @@ export async function performSessionAgentSwitch(
     });
     return { switched: true, agentKind: targetAgentKind, model, engineReady };
   });
+}
+
+/**
+ * send 事务派发前执行 pending 切换(makerSendTransaction.applyPendingAgentSwitch
+ * 钩子的实现体)。语义:
+ *  - 无 pending → no-op;
+ *  - turn 仍在跑(排队消息提前 drain 等竞态)→ 保留 pending 本次不 apply,交给
+ *    send 事务既有的 SESSION_RUNNING guard / coordinator 重试;
+ *  - 空闲 → 清 pending 并执行完整切换事务(skipBootstrap:随后的 lazy-create 会按
+ *    DB 新值 spawn)。执行失败不阻塞发送——log 后按旧引擎继续(意图已清,用户可
+ *    从消息流没有出现分隔线看出切换未生效并重试)。
+ */
+export async function applyPendingAgentSwitchIfIdle(
+  deps: MakerSessionAgentSwitchHandlerDeps,
+  sessionId: string,
+): Promise<void> {
+  const intent = deps.pendingSwitches?.get(sessionId);
+  if (!intent) return;
+  const live = deps.getLiveSession(sessionId);
+  if (live?.isTurnRunning()) return;
+  deps.pendingSwitches?.clear(sessionId);
+  try {
+    await performSessionAgentSwitch(deps, {
+      sessionId,
+      targetAgentKind: intent.targetAgentKind,
+      model: intent.model,
+      providerId: intent.providerId,
+      skipBootstrap: true,
+    });
+  } catch (err) {
+    deps.log.warn('agent-switch: pending apply failed; sending with current engine', {
+      sessionId,
+      targetAgentKind: intent.targetAgentKind,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 export function registerMakerSessionAgentSwitchHandler(

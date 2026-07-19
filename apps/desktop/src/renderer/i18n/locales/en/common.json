@@ -3422,7 +3422,8 @@
       },
       "agentSwitch": {
         "engineNotReady": "Engine switched, but the new engine failed to start; it will retry when you send a message",
-        "failed": "Engine switch failed; not applied"
+        "failed": "Engine switch failed; not applied",
+        "deferred": "Switch scheduled: will change to {{agent}} · {{model}} when your next message is sent"
       }
     },
     "atMention": {

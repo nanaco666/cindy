@@ -3422,7 +3422,8 @@
       },
       "agentSwitch": {
         "engineNotReady": "引擎已切换,但新引擎启动失败;发送消息时会自动重试",
-        "failed": "引擎切换失败,未生效"
+        "failed": "引擎切换失败,未生效",
+        "deferred": "已登记切换:下一条消息发出时将切换到 {{agent}} · {{model}}"
       }
     },
     "atMention": {

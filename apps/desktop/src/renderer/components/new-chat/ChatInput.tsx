@@ -3418,6 +3418,18 @@ export function ChatInput({
           newModelId,
           providerId,
         );
+        if (result.deferred) {
+          // turn 运行中:切换已登记,下一条消息发出时生效。不做任何本地状态翻转——
+          // 旧 turn 仍由旧引擎驱动,chip / 消息流保持旧引擎才是真实状态。
+          toast.success(
+            t('newChat.chatInput.agentSwitch.deferred', {
+              agent: targetAgentKind === 'codex' ? 'Codex' : 'Claude Code',
+              model: newModelId,
+            }),
+            { duration: 4000 },
+          );
+          return;
+        }
         if (!result.switched) return;
         makerChatStore.noteAgentSwitched(sessionId, targetAgentKind);
         const { efforts, defaultEffort } = resolveModelEfforts(newModelId);

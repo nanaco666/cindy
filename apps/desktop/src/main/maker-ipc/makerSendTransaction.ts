@@ -119,6 +119,13 @@ export interface MakerSendTransactionDeps {
    */
   reconcileCreateOptsWithDb?(sessionId: string, createOpts: CreateOpts): Promise<void>;
   /**
+   * session-agent-switch:turn 运行中登记的切换意图在**发送时刻**执行(先于
+   * getSession——apply 会 close 旧引擎,随后本事务按 DB 新值 lazy-create 新引擎,
+   * 交接注入走下面的 pending handoff 通道)。apply 内部自查 turn 空闲,仍在跑则
+   * 保留意图本次不动。undefined = 不启用(测试最小 harness)。
+   */
+  applyPendingAgentSwitch?(sessionId: string): Promise<void>;
+  /**
    * session-agent-switch:pending 交接读取(agentHandoff 注册表)。命中时把交接
    * 文本前置进 wire payload(不影响 persistUserMessage 落库显示内容),并在
    * dispatch 跨过不可逆边界(accepted)后 consume;未 accepted / 抛错保留 pending。
@@ -315,6 +322,10 @@ export function createMakerSendTransaction(deps: MakerSendTransactionDeps): Make
   return {
     async sendToAgentAccepted(sessionId, message, createOpts, sendOpts): Promise<DesktopMakerSendResult> {
       if (typeof sessionId !== 'string') throwIpcError('INVALID_PARAMS', 'sessionId required');
+      // session-agent-switch:pending 切换在发送时刻生效(用户语义:「消息真正发出
+      // 去时才切」)。必须在 getSession 之前——apply 会 close 旧引擎的 live session,
+      // 让下方走 lazy-create 按 DB 新值 spawn 新引擎。
+      await deps.applyPendingAgentSwitch?.(sessionId);
       let sess = deps.getSession(sessionId);
       await deps.ensureRemoteReadyForSessionStart({ session: sess, createOpts });
 

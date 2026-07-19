@@ -259,7 +259,12 @@ import {
 } from './orcaManualInterrupt.js';
 import { tryInjectProjectContext } from './projectContextInject.js';
 import { registerMakerSessionCreateHandler } from './sessionCreateHandler.js';
-import { registerMakerSessionAgentSwitchHandler } from './sessionAgentSwitchHandler.js';
+import {
+  applyPendingAgentSwitchIfIdle,
+  createPendingAgentSwitchRegistry,
+  registerMakerSessionAgentSwitchHandler,
+  type MakerSessionAgentSwitchHandlerDeps,
+} from './sessionAgentSwitchHandler.js';
 import { createAgentHandoffPendingRegistry } from './agentHandoff.js';
 import { type MakerSessionCreateOpts, withCreateSessionStderr } from './sessionRequest.js';
 import { persistAndHydrateSessionProvider } from './sessionProviderBootstrap.js';
@@ -3535,8 +3540,10 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
   // session-agent-switch:pending 交接注册表(内存一级缓存 + DB 确定性重建)。
   // 供切换 handler(set)与 send 事务(peek/consume)共用。
   const agentHandoffPending = createAgentHandoffPendingRegistry(findPendingAgentSwitchHandoff);
+  // turn 运行中登记的切换意图(下一条消息发送时刻由 send 事务 apply)。
+  const agentSwitchPending = createPendingAgentSwitchRegistry();
 
-  registerMakerSessionAgentSwitchHandler(makerSessionRegistry, {
+  const agentSwitchDeps: MakerSessionAgentSwitchHandlerDeps = {
     getSessionRow: async (sessionId) => {
       const db = getDbClient().drizzle;
       const [row] = await db
@@ -3604,8 +3611,10 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       broadcastSessionCreated(sessionId);
     },
     withCloseSuppressed: withRehydrateCloseSuppressed,
+    pendingSwitches: agentSwitchPending,
     log,
-  });
+  };
+  registerMakerSessionAgentSwitchHandler(makerSessionRegistry, agentSwitchDeps);
 
   ipcMain.handle(MAKER_INVOKE.MARK_ORCA_ROLE, async (_e, sessionId: unknown, role: unknown) => {
     if (typeof sessionId !== 'string') throwIpcError('INVALID_PARAMS', 'sessionId required');
@@ -5095,6 +5104,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     },
     peekPendingHandoff: (sessionId) => agentHandoffPending.peek(sessionId),
     consumePendingHandoff: (sessionId) => agentHandoffPending.consume(sessionId),
+    applyPendingAgentSwitch: (sessionId) => applyPendingAgentSwitchIfIdle(agentSwitchDeps, sessionId),
     log,
   });
 
@@ -5799,6 +5809,8 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     ) {
       throwIpcError('INVALID_PARAMS', 'providerId must be string, null, or undefined');
     }
+    // session-agent-switch:同引擎换模型 = 放弃此前登记的跨引擎切换意图。
+    agentSwitchPending.clear(sessionId);
     try {
       const result = await applyRuntimeSetModelChange({
         maker,

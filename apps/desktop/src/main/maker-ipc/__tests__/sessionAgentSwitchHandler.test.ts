@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  applyPendingAgentSwitchIfIdle,
   performSessionAgentSwitch,
   type AgentSwitchSessionRow,
   type MakerSessionAgentSwitchHandlerDeps,
@@ -177,5 +178,77 @@ describe('performSessionAgentSwitch', () => {
     });
     await expect(performSessionAgentSwitch(deps, validParams)).rejects.toThrow('db locked');
     expect(calls).toEqual(['close']);
+  });
+});
+
+describe('deferred switch (turn running)', () => {
+  function makeDepsWithPending(overrides: Partial<MakerSessionAgentSwitchHandlerDeps> = {}) {
+    const base = makeDeps(overrides);
+    const store = new Map<string, { targetAgentKind: 'claude-code' | 'codex'; model: string; providerId: string | null | undefined }>();
+    base.deps.pendingSwitches = {
+      set: (id, intent) => void store.set(id, intent),
+      get: (id) => store.get(id),
+      clear: (id) => void store.delete(id),
+    };
+    return { ...base, store };
+  }
+
+  it('turn 运行中登记 pending 并返回 deferred,不触碰任何状态', async () => {
+    const { deps, calls, store } = makeDepsWithPending({
+      getLiveSession: vi.fn(() => ({ isTurnRunning: () => true })),
+    });
+    const result = await performSessionAgentSwitch(deps, validParams);
+    expect(result).toMatchObject({ switched: false, deferred: true, agentKind: 'codex', model: 'gpt-5.5' });
+    expect(calls).toEqual([]);
+    expect(store.get('s1')).toEqual({ targetAgentKind: 'codex', model: 'gpt-5.5', providerId: null });
+  });
+
+  it('同引擎 no-op 清除已登记的 pending(用户改主意)', async () => {
+    const { deps, store } = makeDepsWithPending();
+    store.set('s1', { targetAgentKind: 'codex', model: 'gpt-5.5', providerId: null });
+    await performSessionAgentSwitch(deps, { ...validParams, targetAgentKind: 'claude-code', model: 'claude-sonnet-5' });
+    expect(store.has('s1')).toBe(false);
+  });
+
+  it('applyPendingAgentSwitchIfIdle:空闲时清 pending 并执行切换(skipBootstrap)', async () => {
+    const { deps, calls, store } = makeDepsWithPending();
+    store.set('s1', { targetAgentKind: 'codex', model: 'gpt-5.5', providerId: 'openai' });
+    await applyPendingAgentSwitchIfIdle(deps, 's1');
+    expect(store.has('s1')).toBe(false);
+    // skipBootstrap:不含 'bootstrap'
+    expect(calls).toEqual(['close', 'db', 'boundary', 'pending']);
+    expect(deps.applyAgentSwitchToDb).toHaveBeenCalledWith('s1', {
+      agentKind: 'codex',
+      model: 'gpt-5.5',
+      providerId: 'openai',
+    });
+  });
+
+  it('applyPendingAgentSwitchIfIdle:turn 仍在跑时保留 pending 本次不动', async () => {
+    const { deps, calls, store } = makeDepsWithPending({
+      getLiveSession: vi.fn(() => ({ isTurnRunning: () => true })),
+    });
+    store.set('s1', { targetAgentKind: 'codex', model: 'gpt-5.5', providerId: null });
+    await applyPendingAgentSwitchIfIdle(deps, 's1');
+    expect(store.has('s1')).toBe(true);
+    expect(calls).toEqual([]);
+  });
+
+  it('applyPendingAgentSwitchIfIdle:无 pending 时 no-op', async () => {
+    const { deps, calls } = makeDepsWithPending();
+    await applyPendingAgentSwitchIfIdle(deps, 's1');
+    expect(calls).toEqual([]);
+  });
+
+  it('applyPendingAgentSwitchIfIdle:执行失败吞掉不抛(不阻塞发送),pending 已清', async () => {
+    const { deps, store } = makeDepsWithPending({
+      applyAgentSwitchToDb: vi.fn(async () => {
+        throw new Error('db locked');
+      }),
+    });
+    store.set('s1', { targetAgentKind: 'codex', model: 'gpt-5.5', providerId: null });
+    await expect(applyPendingAgentSwitchIfIdle(deps, 's1')).resolves.toBeUndefined();
+    expect(store.has('s1')).toBe(false);
+    expect(deps.log.warn).toHaveBeenCalled();
   });
 });
