@@ -681,13 +681,14 @@ export const SessionItem = memo(function SessionItem({
           {/* 绑定徽章优先于"自动化创建"Clock:persistentSession 会话两者皆真,
               只显示信息量更大的绑定徽章,避免双图标挤占 title 宽度。 */}
           {boundSchedules.length > 0 ? (
-            <ScheduleBindingBadge schedules={boundSchedules} />
+            <ScheduleBindingBadge schedules={boundSchedules} activeForeground={isActive} />
           ) : isAutomationGenerated ? (
             <button
               type="button"
               className={cn(
-                'shrink-0 text-[var(--cmd-palette-item-meta)]',
-                'cursor-pointer hover:text-foreground transition-colors focus:outline-none',
+                'shrink-0',
+                isActive ? 'text-[var(--sidebar-item-active-foreground)]' : 'text-[var(--cmd-palette-item-meta)] hover:text-foreground',
+                'cursor-pointer transition-colors focus:outline-none',
               )}
               aria-label={t('ccAgent.sidebar.scheduleBinding.viewTask')}
               title={t('ccAgent.sidebar.automationGenerated')}
@@ -763,7 +764,7 @@ export const SessionItem = memo(function SessionItem({
                 >
                   <span
                     className="size-2 rounded-full"
-                    style={{ backgroundColor: 'var(--card-status-error)' }}
+                    style={{ backgroundColor: isActive ? 'var(--sidebar-item-active-foreground)' : 'var(--card-status-error)' }}
                     aria-hidden
                   />
                 </span>
@@ -776,7 +777,7 @@ export const SessionItem = memo(function SessionItem({
                 >
                   <span
                     className="size-2 rounded-full"
-                    style={{ backgroundColor: 'var(--card-status-awaiting)' }}
+                    style={{ backgroundColor: isActive ? 'var(--sidebar-item-active-foreground)' : 'var(--card-status-awaiting)' }}
                     aria-hidden
                   />
                 </span>
@@ -785,7 +786,7 @@ export const SessionItem = memo(function SessionItem({
                   role="img"
                   size={12}
                   strokeWidth={2}
-                  className="size-4 text-sidebar-action-icon"
+                  className={cn('size-4', isActive ? 'text-sidebar-item-active-foreground' : 'text-sidebar-action-icon')}
                   aria-label={t('ccAgent.sidebar.status.running', 'Running')}
                   title={t('ccAgent.sidebar.status.running', 'Running')}
                 />
@@ -798,7 +799,7 @@ export const SessionItem = memo(function SessionItem({
                 >
                   <span
                     className="size-2 rounded-full"
-                    style={{ backgroundColor: 'var(--card-status-done)' }}
+                    style={{ backgroundColor: isActive ? 'var(--sidebar-item-active-foreground)' : 'var(--card-status-done)' }}
                     aria-hidden
                   />
                 </span>

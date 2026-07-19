@@ -600,7 +600,9 @@ export function SessionCard({
               '[display:-webkit-box] [-webkit-line-clamp:1] [-webkit-box-orient:vertical]',
               'transition-[color] duration-500',
               awaitingText
-                ? 'text-[var(--card-status-awaiting)] font-medium'
+                ? isActive
+                  ? 'text-[var(--sidebar-item-active-foreground)] font-medium'
+                  : 'text-[var(--card-status-awaiting)] font-medium'
                 : isMuted
                   ? 'text-[var(--text-disabled)]'
                   : 'text-[var(--text-secondary)]',
