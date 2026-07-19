@@ -6,10 +6,29 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { defaultValue?: string }) => {
+    t: (
+      key: string,
+      options?: {
+        defaultValue?: string;
+        input?: string;
+        output?: string;
+        source?: string;
+        value?: string;
+      },
+    ) => {
       const translations: Record<string, string> = {
         'effortLevels.xhigh': '超高',
+        'settings.providers.anthropic.title': 'Anthropic',
       };
+      if (key === 'newChat.modelSelector.priceTip') {
+        return `Input ${options?.input} · Output ${options?.output} per 1M tokens`;
+      }
+      if (key === 'newChat.modelSelector.meta.context') {
+        return `${options?.value} context`;
+      }
+      if (key === 'newChat.modelSelector.source.viaSource') {
+        return `Source: ${options?.source}`;
+      }
       return translations[key] ?? options?.defaultValue ?? key;
     },
   }),
@@ -51,19 +70,6 @@ vi.mock('@/components/ui/popover', async () => {
   };
 });
 
-vi.mock('@/components/ui/tooltip', async () => {
-  const React = await import('react');
-  return {
-    Tip: ({
-      children,
-      contentClassName,
-    }: {
-      children: React.ReactElement;
-      contentClassName?: string;
-    }) => React.createElement('div', { 'data-tooltip-class': contentClassName }, children),
-  };
-});
-
 vi.mock('@/lib/scrollbarAutoHide', () => ({
   flashScrollbar: vi.fn(),
 }));
@@ -75,6 +81,7 @@ vi.mock('@/hooks/useAgentCapabilities', () => ({
         {
           id: 'claude-opus-4-8',
           displayName: 'Opus 4.8',
+          description: 'Most capable for ambitious work',
           contextWindow: 200000,
           efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
           defaultEffort: 'high',
@@ -88,6 +95,14 @@ vi.mock('@/hooks/useAgentCapabilities', () => ({
           contextWindow: 200000,
           efforts: ['low', 'medium', 'high'],
           defaultEffort: 'medium',
+        },
+        {
+          id: 'claude-haiku-4-5',
+          displayName: 'Haiku 4.5',
+          description: 'Fastest for quick answers',
+          contextWindow: 200000,
+          efforts: [],
+          defaultEffort: null,
         },
       ],
       effortLevels: [{ id: 'xhigh', displayName: 'X-High' }],
@@ -105,7 +120,12 @@ vi.mock('@/hooks/useConnectedSource', () => ({
 }));
 
 vi.mock('@/hooks/useModelPricing', () => ({
-  useModelPricing: () => ({}),
+  useModelPricing: () => ({
+    'claude-opus-4-8': {
+      inputUsdPerMtok: 3,
+      outputUsdPerMtok: 15,
+    },
+  }),
 }));
 
 vi.mock('@/hooks/useProviders', () => ({
@@ -124,6 +144,7 @@ vi.mock('@/hooks/useProviders', () => ({
             {
               id: 'claude-opus-4-8',
               name: 'Opus 4.8',
+              description: 'Most capable for ambitious work',
               contextWindow: 200000,
               efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
               defaultEffort: 'high',
@@ -134,6 +155,14 @@ vi.mock('@/hooks/useProviders', () => ({
               contextWindow: 200000,
               efforts: ['low', 'medium', 'high'],
               defaultEffort: 'medium',
+            },
+            {
+              id: 'claude-haiku-4-5',
+              name: 'Haiku 4.5',
+              description: 'Fastest for quick answers',
+              contextWindow: 200000,
+              efforts: [],
+              defaultEffort: null,
             },
           ],
         },
@@ -152,6 +181,7 @@ vi.mock('@/lib/providerModels', () => ({
     {
       id: 'claude-opus-4-8',
       displayName: 'Opus 4.8',
+      description: 'Most capable for ambitious work',
       contextWindow: 200000,
       efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
       defaultEffort: 'high',
@@ -165,6 +195,14 @@ vi.mock('@/lib/providerModels', () => ({
       contextWindow: 200000,
       efforts: ['low', 'medium', 'high'],
       defaultEffort: 'medium',
+    },
+    {
+      id: 'claude-haiku-4-5',
+      displayName: 'Haiku 4.5',
+      description: 'Fastest for quick answers',
+      contextWindow: 200000,
+      efforts: [],
+      defaultEffort: null,
     },
   ],
 }));
@@ -229,7 +267,7 @@ describe('ModelSelector trigger variants', () => {
     ).toBe('Max');
   });
 
-  it('forwards an overlay-specific z-index to model tooltips', () => {
+  it('forwards an overlay-specific z-index to the model information panel', () => {
     render(
       React.createElement(ModelSelectorContent, {
         modelId: 'claude-opus-4-8',
@@ -237,15 +275,12 @@ describe('ModelSelector trigger variants', () => {
         onModelChange: vi.fn(),
         onEffortChange: vi.fn(),
         vendorKey: 'cc',
-        tooltipContentClassName: 'z-[10020]',
+        overlayContentClassName: 'z-[10020]',
       }),
     );
 
-    expect(
-      screen
-        .getByRole('option', { name: /Opus 4\.8/ })
-        .parentElement?.getAttribute('data-tooltip-class'),
-    ).toBe('z-[10020]');
+    fireEvent.pointerEnter(screen.getByRole('option', { name: /Opus 4\.8/ }));
+    expect(screen.getByTestId('model-options-popover').className).toContain('z-[10020]');
   });
 
   it('reveals the selected model options on row hover or keyboard focus without an Edit click', () => {
@@ -265,7 +300,12 @@ describe('ModelSelector trigger variants', () => {
     expect(screen.queryByText('newChat.modelSelector.edit')).toBeNull();
 
     fireEvent.pointerEnter(row);
-    expect(screen.getByRole('group', { name: /Opus 4\.8/ })).toBeTruthy();
+    const options = screen.getByRole('group', { name: /Opus 4\.8/ });
+    expect(options).toBeTruthy();
+    expect(within(options).getByText('Most capable for ambitious work')).toBeTruthy();
+    expect(within(options).getByText('Source: Anthropic')).toBeTruthy();
+    expect(within(options).getByText('200K context')).toBeTruthy();
+    expect(within(options).getByText('Input $3 · Output $15 per 1M tokens')).toBeTruthy();
     expect(row.getAttribute('data-model-options-active')).toBe('true');
 
     fireEvent.pointerLeave(row);
@@ -277,6 +317,24 @@ describe('ModelSelector trigger variants', () => {
     fireEvent.focus(row);
     expect(screen.getByRole('group', { name: /Opus 4\.8/ })).toBeTruthy();
     vi.useRealTimers();
+  });
+
+  it('shows model information even when a model has no configurable options', () => {
+    render(
+      React.createElement(ModelSelectorContent, {
+        modelId: 'claude-opus-4-8',
+        effort: 'high',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+      }),
+    );
+
+    fireEvent.pointerEnter(screen.getByRole('option', { name: /Haiku 4\.5/ }));
+    const information = screen.getByRole('group', { name: /Haiku 4\.5/ });
+    expect(within(information).getByText('Fastest for quick answers')).toBeTruthy();
+    expect(within(information).getByText('200K context')).toBeTruthy();
+    expect(within(information).queryByRole('option')).toBeNull();
   });
 
   it('lets inactive provider rows edit scoped memory without switching the model', () => {

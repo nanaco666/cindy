@@ -8,7 +8,7 @@ import { buildProviderSections, isModelVisible, visibleModelUnion } from '../sec
 import type { ProviderView } from '../registry.js';
 import type { CatalogModel } from '../types.js';
 
-function model(id: string, name: string, defaultEnabled?: boolean): CatalogModel {
+function model(id: string, name: string, defaultEnabled?: boolean, description?: string): CatalogModel {
   return {
     id,
     name,
@@ -16,6 +16,7 @@ function model(id: string, name: string, defaultEnabled?: boolean): CatalogModel
     efforts: ['low', 'high'],
     defaultEffort: 'high',
     ...(defaultEnabled !== undefined ? { defaultEnabled } : {}),
+    ...(description !== undefined ? { description } : {}),
   };
 }
 
@@ -61,6 +62,19 @@ describe('buildProviderSections', () => {
     // Opus 在 anthropic + xd 各出现一次
     expect(sections[0].models.map((m) => m.id)).toEqual(['claude-opus-4-8']);
     expect(sections[1].models.map((m) => m.id)).toEqual(['claude-opus-4-8', 'gpt-5.5']);
+  });
+
+  it('保留模型介绍供分段选择器展示', () => {
+    const described = provider('anthropic', 'Anthropic', [
+      model('claude-opus-4-8', 'Opus 4.8', undefined, 'Most capable for ambitious work'),
+    ]);
+    const sections = buildProviderSections({
+      providers: [described],
+      agent: 'claude-code',
+      isVisible: () => true,
+    });
+
+    expect(sections[0].models[0].description).toBe('Most capable for ambitious work');
   });
 
   it('isVisible 过滤隐藏模型,但当前选中的 (供应商, 模型) 即便隐藏也保留', () => {

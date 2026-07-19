@@ -30,6 +30,7 @@ export function isModelVisible(
 export interface SectionModel {
   id: string;
   displayName: string;
+  description?: string;
   efforts: readonly Effort[];
   defaultEffort: Effort | null;
   effortDisplayNames?: Record<string, string>;
@@ -107,6 +108,7 @@ export function buildProviderSections(args: {
         defaultEffort: m.defaultEffort,
         contextWindow: m.contextWindow,
       };
+      if (m.description !== undefined) sm.description = m.description;
       if (m.effortDisplayNames !== undefined) sm.effortDisplayNames = m.effortDisplayNames;
       if (m.supportsFastMode !== undefined) sm.supportsFastMode = m.supportsFastMode;
       models.push(sm);

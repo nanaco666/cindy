@@ -1,11 +1,10 @@
 import { useState, useMemo, useEffect, useRef, type CSSProperties } from 'react';
-import { Check, ChevronDown, PlugZap, Plus, Search, SlidersHorizontal, Unplug, Zap } from 'lucide-react';
+import { Check, ChevronDown, PlugZap, Plus, Search, Unplug, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { flashScrollbar } from '@/lib/scrollbarAutoHide';
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Tip } from '@/components/ui/tooltip';
 import { ClaudeMark } from '@/components/icons/ClaudeMark';
 import { CodexMark } from '@/components/icons/CodexMark';
 import { XDIncMark } from '@/components/icons/XDIncMark';
@@ -55,7 +54,7 @@ export interface ModelMemoryAccessors {
 }
 
 // 供应商完整展示名:三个内置 id 复用设置页 i18n 标题(settings.providers.<id>.title),
-// 自定义供应商回退目录里的 provider.name。用于行 hover tooltip 前缀。
+// 自定义供应商回退目录里的 provider.name。用于模型信息面板的来源说明。
 const PROVIDER_TITLE_KEY: Record<string, string> = {
   anthropic: 'settings.providers.anthropic.title',
   openai: 'settings.providers.openai.title',
@@ -132,6 +131,8 @@ function formatContextWindow(tokens: number): string {
 interface RowModel {
   id: string;
   displayName: string;
+  description?: string;
+  contextWindow: number;
   efforts: readonly Effort[];
   defaultEffort: Effort | null;
   effortDisplayNames?: Partial<Record<string, string>>;
@@ -222,8 +223,8 @@ interface ModelSelectorContentProps {
   excludeSubscriptionDirect?: boolean;
   /** 选中后是否自动关闭。Popover 场景传入,内嵌场景不传。 */
   onDismiss?: () => void;
-  /** 模型行 Tooltip 的额外样式。供嵌套在高层级 overlay 中的调用方覆盖默认 z-index。 */
-  tooltipContentClassName?: string;
+  /** 模型信息 / 选项浮层的额外样式。供嵌套在高层级 overlay 中的调用方覆盖默认 z-index。 */
+  overlayContentClassName?: string;
   currentProviderId?: string | null;
   onProviderChange?: (
     providerId: string | null,
@@ -256,7 +257,7 @@ export function ModelSelectorContent({
   deviceId,
   excludeSubscriptionDirect,
   onDismiss,
-  tooltipContentClassName,
+  overlayContentClassName,
   currentProviderId,
   onProviderChange,
   onNavigateToProviders,
@@ -404,13 +405,7 @@ export function ModelSelectorContent({
     return modelSupportsFastMode(provider, m.id, currentAgentKind);
   };
 
-  // ── 模型单价 / hover tooltip ─────────────────────────────────────────────
-  const modelById = useMemo(() => {
-    const map = new Map<string, (typeof visibleModels)[number]>();
-    for (const m of visibleModels) map.set(m.id, m);
-    return map;
-  }, [visibleModels]);
-
+  // ── 模型单价 ─────────────────────────────────────────────────────────────
   const priceTipOf = (id: string): string | null => {
     const p = pricing?.[id];
     if (!p) return null;
@@ -419,17 +414,6 @@ export function ModelSelectorContent({
       input: fmt(p.inputUsdPerMtok),
       output: fmt(p.outputUsdPerMtok),
     });
-  };
-  const tooltipFor = (id: string): string | null => {
-    const meta = modelById.get(id);
-    const parts: string[] = [];
-    if (meta && meta.contextWindow > 0) {
-      parts.push(t('newChat.modelSelector.meta.context', { value: formatContextWindow(meta.contextWindow) }));
-    }
-    const price = priceTipOf(id);
-    if (price) parts.push(price);
-    if (meta?.supportsFastMode) parts.push(t('newChat.modelSelector.meta.fastBadge'));
-    return parts.length > 0 ? parts.join(' · ') : null;
   };
   const budgetDisabledOf = (id: string): boolean => id.startsWith('codex/') && !hasSavedKey;
 
@@ -548,12 +532,17 @@ export function ModelSelectorContent({
     !!editing &&
     editing.modelId === modelId &&
     (editing.providerId === null || editing.providerId === activeSourceId);
-  const editShowFast = !!editingModel && fastEditable(editing?.providerId ?? null, editingModel);
-  const editHasEfforts = (editingModel?.efforts.length ?? 0) > 0;
-  const showConfig = !!editingModel && (editHasEfforts || editShowFast);
+  const editingProviderId = editing?.providerId ?? null;
+  // 当前行可编辑配置的边界:选中行写实时状态;非选中供应商行必须有精确的 scoped memory。
+  // flat 非选中行没有 provider 作用域,只展示模型信息,避免出现点击后无效果的配置项。
+  const canConfigure =
+    !!editingModel &&
+    (editingIsActive || (!!modelMemory && !!currentAgentKind && !!editingProviderId));
+  const editShowFast =
+    canConfigure && !!editingModel && fastEditable(editingProviderId, editingModel);
+  const editHasEfforts = canConfigure && (editingModel?.efforts.length ?? 0) > 0;
 
   // 配置列当前 effort 值(选中 → live;否则记忆/默认)。
-  const editingProviderId = editing?.providerId ?? null;
   const editEffortValue: Effort | null = editingModel ? rowEffortOf(editingProviderId, editingModel) : null;
   const editFastValue: boolean = editingModel
     ? editingIsActive
@@ -590,22 +579,62 @@ export function ModelSelectorContent({
     bump();
   };
 
-  // 每个模型行的配置内容由一个独立的 portaled Popover 承载,而不是拼进主菜单宽度。
+  const editingProvider = useMemo(() => {
+    if (!editingModel || !currentAgentKind) return undefined;
+    const providerId =
+      editingProviderId ??
+      effectiveSourceIdForModel(providers, currentProviderId, editingModel.id, currentAgentKind);
+    return providerId ? providers.find((provider) => provider.id === providerId) : undefined;
+  }, [editingModel, currentAgentKind, editingProviderId, providers, currentProviderId]);
+  const editingPrice = editingModel ? priceTipOf(editingModel.id) : null;
+
+  // 每个模型行的信息 / 配置内容由一个独立的 portaled Popover 承载,而不是拼进主菜单宽度。
   // 这样浮层会像 Hermes 的 Radix submenu 一样贴着当前行移动,切行不触发主菜单重排。
   const configPanel =
-    showConfig && editingModel ? (
+    editingModel ? (
       <div
         ref={configPanelRef}
         role="group"
         aria-label={`${editingModel.displayName} ${t('newChat.modelSelector.options')}`}
         className="flex flex-col gap-0.5"
       >
-        <div className="flex items-center gap-1.5 px-2 py-1.5">
-          <SlidersHorizontal size={14} className="shrink-0 text-[var(--text-secondary)]" />
-          <span className="min-w-0 truncate text-[13.5px] font-medium text-[var(--model-item-text)]">
+        <div className="flex flex-col gap-1.5 px-2 py-1.5">
+          <span className="min-w-0 text-14 font-medium text-[var(--model-item-text)]">
             {editingModel.displayName}
           </span>
+          {editingModel.description && (
+            <span className="text-12 font-normal leading-[1.45] text-[var(--text-secondary)]">
+              {editingModel.description}
+            </span>
+          )}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-11 font-normal text-[var(--text-tertiary)]">
+            {editingProvider && (
+              <span>
+                {t('newChat.modelSelector.source.viaSource', {
+                  source: providerDisplayName(editingProvider, t),
+                })}
+              </span>
+            )}
+            {editingModel.contextWindow > 0 && (
+              <span>
+                {t('newChat.modelSelector.meta.context', {
+                  value: formatContextWindow(editingModel.contextWindow),
+                })}
+              </span>
+            )}
+            {editingModel.supportsFastMode && (
+              <span>{t('newChat.modelSelector.meta.fastBadge')}</span>
+            )}
+          </div>
+          {editingPrice && (
+            <span className="text-11 font-normal leading-[1.4] text-[var(--text-tertiary)]">
+              {editingPrice}
+            </span>
+          )}
         </div>
+        {(editShowFast || editHasEfforts) && (
+          <div className="mx-1 my-1 h-px bg-[var(--model-dropdown-border)]" />
+        )}
         {editShowFast && (
           <>
             <div className="px-2 py-1.5">
@@ -679,23 +708,14 @@ export function ModelSelectorContent({
     const disabled = budgetDisabledOf(model.id);
     const rowEffort = rowEffortOf(providerId, model);
     const rowFastOn = fastOnOf(providerId, model);
-    const hasConfigControls = model.efforts.length > 0 || fastEditable(providerId, model);
-    // 非选中行的配置不会即时切模型，只能写入精确到 (agent, provider, model) 的记忆。
-    // flat / 表单入口没注入这份记忆时，旧 Edit 面板虽然能打开，点击其实是 no-op；自动
-    // hover 后把该无效入口隐藏，仅保留当前选中行可实时修改的选项。
-    const canRememberInactive = !!modelMemory && !!currentAgentKind && !!providerId;
-    const hasOptions = !disabled && hasConfigControls && (isSelected || canRememberInactive);
+    // 信息面板对所有可用模型开放;能否编辑 effort / Fast 在面板内部另行判定。
+    const hasOptions = !disabled;
     const isEditingThis =
       !!editing && editing.modelId === model.id && editing.providerId === providerId;
     const revealOptions = () => {
       cancelOptionsClose();
       setEditing(hasOptions ? { providerId, modelId: model.id } : null);
     };
-    // hover tooltip:最前面拼供应商完整名(分段模式有 provider),再接上下文 / 价格 / 快速。
-    const supplierName = provider ? providerDisplayName(provider, t) : null;
-    const tipText = disabled
-      ? t('newChat.modelSelector.budgetNeedsApiKey')
-      : [supplierName, tooltipFor(model.id)].filter(Boolean).join(' · ') || null;
     return (
       <Popover
         key={`${providerId ?? ''}::${model.id}`}
@@ -705,13 +725,7 @@ export function ModelSelectorContent({
         }}
       >
         <PopoverAnchor asChild>
-          <Tip
-            text={tipText}
-            side="left"
-            controlledOpen={isEditingThis ? false : undefined}
-            contentClassName={tooltipContentClassName}
-          >
-            <div
+          <div
               role="option"
               aria-selected={isSelected}
               aria-disabled={disabled}
@@ -798,8 +812,7 @@ export function ModelSelectorContent({
               {isSelected && (
                 <Check size={15} className="ml-2 shrink-0 text-[var(--model-item-check)]" />
               )}
-            </div>
-          </Tip>
+          </div>
         </PopoverAnchor>
         {isEditingThis && configPanel && (
           <PopoverContent
@@ -817,9 +830,9 @@ export function ModelSelectorContent({
               scheduleOptionsClose();
             }}
             className={cn(
-              'w-[208px] overflow-hidden rounded-[12px] p-2 shadow-[var(--shadow-menu)] duration-100',
+              'w-[248px] overflow-hidden rounded-[12px] p-2 shadow-[var(--shadow-menu)] duration-100',
               'border border-[var(--model-dropdown-border)] bg-[var(--model-dropdown-bg)]',
-              tooltipContentClassName,
+              overlayContentClassName,
             )}
           >
             {configPanel}
