@@ -90,22 +90,22 @@ describe('findElectronBinaryIssue', () => {
   });
 });
 
-describe('restart:desktop:remote dependency guard order', () => {
-  it('先杀旧 Electron 进程再修复 native deps，避免 Windows 文件锁挡住 restart', () => {
+describe('desktop restart runner', () => {
+  it('远程启动交给无 shell 链的 runner，确保附加参数控制整条流水线', () => {
     const packageJson = JSON.parse(
       fs.readFileSync(path.resolve(__dirname, '../../../../../package.json'), 'utf8'),
     ) as { scripts: Record<string, string> };
     expect(packageJson.scripts['restart:desktop:remote']).toBe(
-      'node scripts/restart-desktop-remote.mjs --kill-only && node scripts/ensure-deps.mjs && node scripts/ensure-dev-runtime-assets.mjs && node scripts/restart-desktop-remote.mjs --wait-ready',
+      'node scripts/desktop-restart-runner.mjs --wait-ready',
     );
   });
 
-  it('本地模式同样先杀旧进程再修复 deps，且两次调用都带 --local', () => {
+  it('本地模式由同一 runner 显式携带 --local', () => {
     const packageJson = JSON.parse(
       fs.readFileSync(path.resolve(__dirname, '../../../../../package.json'), 'utf8'),
     ) as { scripts: Record<string, string> };
     expect(packageJson.scripts['restart:desktop:local']).toBe(
-      'node scripts/restart-desktop-remote.mjs --local --kill-only && node scripts/ensure-deps.mjs && node scripts/ensure-dev-runtime-assets.mjs && node scripts/restart-desktop-remote.mjs --local --wait-ready',
+      'node scripts/desktop-restart-runner.mjs --local --wait-ready',
     );
   });
 });

@@ -587,16 +587,35 @@ async function main() {
   const argv = process.argv.slice(2);
   const killOnly = argv.includes('--kill-only');
   const waitReady = argv.includes('--wait-ready');
+  const preserveRunning = argv.includes('--preserve-running');
   // --local 切换到本地模式(连 localhost:3333);缺省走 remote(连 xdt-api)。
   const mode = argv.includes('--local') ? 'local' : 'remote';
   const startupConfig = applyDesktopDevStartupConfig({ argv, mode });
+  const isolatedArg = argv.find((a) => a === '--isolated' || a.startsWith('--isolated='));
+  if (preserveRunning && killOnly) {
+    throw new Error('--preserve-running cannot be combined with the internal --kill-only stage');
+  }
+  if (preserveRunning && mode === 'local') {
+    throw new Error(
+      '--preserve-running only supports remote mode: sharing remote login storage with a local auth server could invalidate the persisted credential',
+    );
+  }
+  if (preserveRunning && isolatedArg) {
+    throw new Error(
+      '--preserve-running reuses the current Cindy login via shared userData and cannot be combined with --isolated',
+    );
+  }
   console.log(`==> Desktop region: ${startupConfig.region}`);
   // --passive: 定时任务被动模式 —— 本实例不参与自动触发(交给同机另一个实例,
   // 典型场景 dev + release 双开时 dev 让位)。实现方式是置 XDT_SCHEDULER_PASSIVE=1,
   // 经 devEnvPrefix 白名单透传进新开的系统终端 / 直接 spawn 的 dev 进程。
-  if (argv.includes('--passive')) {
+  if (argv.includes('--passive') || preserveRunning) {
     process.env.XDT_SCHEDULER_PASSIVE = '1';
-    console.log('==> Scheduler passive mode: this instance will not auto-fire schedules.');
+    console.log(
+      preserveRunning
+        ? '==> Preserve-running preview: existing Cindy processes stay alive; this instance shares login/data and will not auto-fire schedules.'
+        : '==> Scheduler passive mode: this instance will not auto-fire schedules.',
+    );
   }
   // --endpoints-cdn: dev 不读仓内 config/endpoint.json,改走与 packaged 相同的
   // 线上 CDN 端点清单拉取链路(测线上清单)。实现方式是置 XDT_ENDPOINTS_CDN=1,
@@ -619,7 +638,6 @@ async function main() {
   // 主进程据此派生独立 deviceId(dev-[<名字>-]<机器指纹>,机器指纹只有主进程能取)
   // ——服务端登录凭证按 (user, device) 一对一存,不派生的话沙箱登录会覆盖正式版
   // 的续期凭证,同机互踢。
-  const isolatedArg = argv.find((a) => a === '--isolated' || a.startsWith('--isolated='));
   if (isolatedArg) {
     let isolationName = '';
     if (isolatedArg.includes('=')) {
@@ -642,7 +660,7 @@ async function main() {
   if (!killOnly) ensureDesktopEnv();
 
   const devAncestor = findDevAncestor();
-  if (devAncestor) {
+  if (devAncestor && !preserveRunning) {
     console.error('==> Detected this script is running inside an Cindy desktop dev process tree:');
     console.error(`    ancestor pid ${devAncestor.pid}: ${devAncestor.command.slice(0, 180)}`);
     console.error('==> Refusing to restart from within. Killing the ancestor would terminate this');
@@ -653,11 +671,20 @@ async function main() {
     console.error('    not spawned by the desktop dev tree.');
     process.exit(1);
   }
+  if (devAncestor && preserveRunning) {
+    console.log(
+      `==> Current session is hosted by Cindy desktop dev pid ${devAncestor.pid}; preserving that process tree.`,
+    );
+  }
 
   const targets = listDesktopDevProcesses();
   const darwinTerminalTtys = darwinTerminalTtysForProcesses(targets);
 
-  if (targets.length === 0) {
+  if (preserveRunning) {
+    console.log(
+      `==> Preserving ${targets.length} existing Cindy desktop dev process(es); the preview will start alongside them in passive mode.`,
+    );
+  } else if (targets.length === 0) {
     console.log('==> No existing Cindy desktop dev processes found.');
   } else {
     console.log(`==> Stopping ${targets.length} existing Cindy desktop dev process(es)...`);

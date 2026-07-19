@@ -23,7 +23,7 @@ import {
   formatMobileLocalConfigStatus,
 } from './lib/mobile-local-config.mjs';
 import {
-  extractSimWhoamiPortArgs,
+  extractSimMetroPortArgs,
   resolveMobileSimulatorBundleId,
 } from './lib/sim-whoami.mjs';
 import {
@@ -40,7 +40,7 @@ const worktreeRoot = resolve(mobileDir, '../..');
 /** 解析用户指定的 region 及其实际 Simulator bundle id。 */
 function resolveTarget() {
   const { region, passthrough } = extractMobileDevRegionArgs(process.argv.slice(2));
-  const portArgs = extractSimWhoamiPortArgs(passthrough);
+  const portArgs = extractSimMetroPortArgs(passthrough);
   if (portArgs.passthrough.length > 0) {
     throw new Error(`mobile:sim:whoami 不支持参数: ${portArgs.passthrough.join(' ')}`);
   }

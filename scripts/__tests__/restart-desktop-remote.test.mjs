@@ -10,6 +10,7 @@ import {
 	osascriptLaunchDarwinTerminalArgs,
 	waitForDesktopStartup,
 } from "../restart-desktop-remote.mjs";
+import { buildDesktopRestartSteps } from "../desktop-restart-runner.mjs";
 
 function appleScriptLines(args) {
 	const lines = [];
@@ -60,6 +61,46 @@ test("desktop restart recognizes dev processes from sibling repository worktrees
 		pid: 43,
 		command: "node /repo/unrelated/node_modules/@electron-forge/cli electron-forge start",
 	}, worktrees, 999), false);
+});
+
+test("desktop restart runner keeps the kill-before-deps order by default", () => {
+	const steps = buildDesktopRestartSteps(["--wait-ready"], "/repo/cindy");
+	assert.deepEqual(steps.map((step) => step.args), [
+		["/repo/cindy/scripts/restart-desktop-remote.mjs", "--kill-only"],
+		["/repo/cindy/scripts/ensure-deps.mjs"],
+		["/repo/cindy/scripts/ensure-dev-runtime-assets.mjs"],
+		["/repo/cindy/scripts/restart-desktop-remote.mjs", "--wait-ready"],
+	]);
+});
+
+test("preserve-running skips every kill stage and reaches the readiness start", () => {
+	const steps = buildDesktopRestartSteps(
+		["--wait-ready", "--", "--preserve-running"],
+		"/repo/cindy",
+	);
+	assert.deepEqual(steps.map((step) => step.args), [
+		["/repo/cindy/scripts/ensure-deps.mjs"],
+		["/repo/cindy/scripts/ensure-dev-runtime-assets.mjs"],
+		[
+			"/repo/cindy/scripts/restart-desktop-remote.mjs",
+			"--preserve-running",
+			"--wait-ready",
+		],
+	]);
+});
+
+test("local restart keeps --local on both process-control stages", () => {
+	const steps = buildDesktopRestartSteps(["--local", "--wait-ready"], "/repo/cindy");
+	assert.deepEqual(steps[0].args, [
+		"/repo/cindy/scripts/restart-desktop-remote.mjs",
+		"--local",
+		"--kill-only",
+	]);
+	assert.deepEqual(steps.at(-1).args, [
+		"/repo/cindy/scripts/restart-desktop-remote.mjs",
+		"--local",
+		"--wait-ready",
+	]);
 });
 
 test("desktop readiness status is parsed only after an atomic status file appears", () => {

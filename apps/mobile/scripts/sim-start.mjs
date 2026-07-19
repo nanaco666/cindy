@@ -28,6 +28,7 @@ import {
   extractMobileDevRegionArgs,
   withLocalMobileRegionConfig,
 } from './lib/mobile-dev-region.mjs';
+import { extractSimMetroPortArgs } from './lib/sim-whoami.mjs';
 import {
   ensureMobileLocalRegionConfig,
   formatMobileLocalConfigStatus,
@@ -44,7 +45,8 @@ import {
 const mobileDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const worktreeRoot = resolve(mobileDir, '../..');
 const DEFAULT_PORT = 8081;
-const { region, passthrough } = extractMobileDevRegionArgs(process.argv.slice(2));
+const { region, passthrough: regionPassthrough } = extractMobileDevRegionArgs(process.argv.slice(2));
+const portArgs = extractSimMetroPortArgs(regionPassthrough, DEFAULT_PORT);
 const localConfigResult = ensureMobileLocalRegionConfig({ mobileDir });
 const localConfigStatus = formatMobileLocalConfigStatus(localConfigResult, worktreeRoot);
 if (localConfigStatus) console.log(localConfigStatus);
@@ -67,10 +69,10 @@ function git(args) {
 const branch = git(['branch', '--show-current']) || git(['rev-parse', '--short', 'HEAD']);
 const commit = git(['rev-parse', '--short', 'HEAD']);
 const sourceIdentity = gitSourceIdentity(worktreeRoot);
-const hasExplicitPort = passthrough.some((a) => a === '--port' || a === '-p');
+const hasExplicitPort = portArgs.explicit;
 
 // 未显式指定端口时,坚持 8081(app 默认连这个),并按归属决定起 / 提示 / 拒绝。
-const args = ['exec', 'expo', 'start', '--dev-client', ...passthrough];
+const args = ['exec', 'expo', 'start', '--dev-client', ...portArgs.passthrough];
 if (!hasExplicitPort) {
   if (await portInUse(DEFAULT_PORT)) {
     const pid = listenerPid(DEFAULT_PORT);
@@ -98,8 +100,10 @@ if (!hasExplicitPort) {
     console.error('  或 `pnpm mobile:sim:start -- --port <p>` 显式换端口(需自行把模拟器 app 指过去)。');
     process.exit(1);
   }
-  args.push('--port', String(DEFAULT_PORT));
 }
+// 统一规范化成 Expo 明确支持的 `--port <n>`，避免 `--port=<n>` 被本工具识别、
+// 却在端口归属检查和启动参数之间产生分歧。
+args.push('--port', String(portArgs.port));
 
 console.log(`› sim:start — region=${region} source=${sourceIdentity}`);
 const portArgIdx = args.indexOf('--port');
