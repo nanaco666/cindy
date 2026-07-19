@@ -72,6 +72,7 @@ describe('Markdown target rendering contract', () => {
   });
 
   it('passes already-rewritten remote media image URLs through normalization', () => {
+    expect(markdownRenderer).toContain('remarkPreserveLocalImagePaths');
     expect(markdownRenderer).toContain('normalizeMarkdownImageSrc(');
     const normalizeBlock = localPathResolver.match(
       /export function normalizeMarkdownImageSrc[\s\S]*?return toLocalFileUrl/,

@@ -24,6 +24,9 @@ import remarkStrictInlineMath from './remarkStrictInlineMath';
 import { normalizeMathDelimiters } from '@lizi/maker-shared/math-markdown';
 import remarkLocalPathLinks from './remarkLocalPathLinks';
 import remarkHtmlImages from './remarkHtmlImages';
+import remarkPreserveLocalImagePaths, {
+  RAW_LOCAL_IMAGE_SRC_PROP,
+} from './remarkPreserveLocalImagePaths';
 import remarkSessionLinks from './remarkSessionLinks';
 import type { Components, UrlTransform } from 'react-markdown';
 import type { PluggableList } from 'unified';
@@ -173,6 +176,7 @@ const REMARK_PLUGINS: PluggableList = [
   remarkStrictInlineMath,
   remarkTruncateCjkUrls,
   remarkHtmlImages,
+  remarkPreserveLocalImagePaths,
   remarkLocalPathLinks,
 ];
 const REMARK_PLUGINS_PRIVILEGED: PluggableList = [
@@ -181,6 +185,7 @@ const REMARK_PLUGINS_PRIVILEGED: PluggableList = [
   remarkStrictInlineMath,
   remarkTruncateCjkUrls,
   remarkHtmlImages,
+  remarkPreserveLocalImagePaths,
   remarkSessionLinks,
   remarkLocalPathLinks,
 ];
@@ -1479,18 +1484,21 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
       // renderer 整体替换成带 data-source-line 注入的版本。chat 调用方不传 prop
       // → 默认 false → 整段是 falsy 短路, components 对象与之前完全一致。
       ...(emitSourceLines ? makeSourceLineWrappers() : {}),
-      img: ({ src, alt, ...props }) => {
+      img: ({ src, alt, node, ...props }) => {
+        const rawLocalSrc = node?.properties?.[RAW_LOCAL_IMAGE_SRC_PROP];
         const normalized = normalizeMarkdownImageSrc(
-          src,
+          typeof rawLocalSrc === 'string' ? rawLocalSrc : src,
           workingDir,
           allowPrivilegedLinks,
         );
+        const imageProps = { ...props };
+        delete (imageProps as Record<string, unknown>)[RAW_LOCAL_IMAGE_SRC_PROP];
         return (
           <LightboxImage
             src={normalized ? rewriteToRemoteMediaOrigin(normalized, remoteMediaOrigin) : normalized}
             alt={alt}
             onZoom={setLightboxSrc}
-            {...props}
+            {...imageProps}
           />
         );
       },

@@ -1,8 +1,8 @@
 /**
  * Regression coverage for local Markdown images whose paths contain spaces
- * or literal percent characters. react-markdown URL-encodes those paths
- * before invoking the custom img renderer; our xdt-file conversion must
- * decode that representation exactly once instead of double-encoding it.
+ * or literal percent characters. The renderer must retain the original mdast
+ * destination before react-markdown URL serialization makes those cases
+ * ambiguous.
  */
 
 import { createElement } from 'react';
@@ -11,17 +11,26 @@ import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import { describe, expect, it } from 'vitest';
 
 import { normalizeMarkdownImageSrc } from '@/lib/localPathResolver';
+import remarkPreserveLocalImagePaths, {
+  RAW_LOCAL_IMAGE_SRC_PROP,
+} from '../components/chat/remarkPreserveLocalImagePaths';
 
 function normalizedImageSrc(markdown: string, workingDir = '/repo'): string | undefined {
   let normalized: string | undefined;
   renderToStaticMarkup(
     createElement(ReactMarkdown, {
       components: {
-        img: ({ src }) => {
-          normalized = normalizeMarkdownImageSrc(src, workingDir, true);
+        img: ({ src, node }) => {
+          const rawLocalSrc = node?.properties?.[RAW_LOCAL_IMAGE_SRC_PROP];
+          normalized = normalizeMarkdownImageSrc(
+            typeof rawLocalSrc === 'string' ? rawLocalSrc : src,
+            workingDir,
+            true,
+          );
           return null;
         },
       },
+      remarkPlugins: [remarkPreserveLocalImagePaths],
       urlTransform: defaultUrlTransform,
       children: markdown,
     }),
@@ -40,13 +49,22 @@ describe('Markdown local image path encoding', () => {
     );
   });
 
-  it('preserves a literal percent character while decoding the Markdown URL once', () => {
+  it('preserves a literal percent character next to a real space', () => {
     const path = '/tmp/100% done.png';
 
     expect(normalizedImageSrc(`![percent](<${path}>)`)).toBe(
       `xdt-file://local/?path=${encodeURIComponent(path)}`,
     );
   });
+
+  it.each(['/tmp/report%20final.png', '/tmp/report%2Ffinal.png', '/tmp/report%41final.png'])(
+    'preserves a valid percent sequence in the literal filename: %s',
+    (path) => {
+      expect(normalizedImageSrc(`![percent-sequence](<${path}>)`)).toBe(
+        `xdt-file://local/?path=${encodeURIComponent(path)}`,
+      );
+    },
+  );
 
   it('does not alter already-routable media URLs', () => {
     for (const url of [
@@ -68,9 +86,16 @@ describe('Markdown local image path encoding', () => {
 
   it('normalizes an encoded Windows file URL to a native xdt-file path', () => {
     const path = 'C:/Users/test/My Pictures/image.png';
-    expect(
-      normalizeMarkdownImageSrc('file:///C:/Users/test/My%20Pictures/image.png', '/repo', true),
-    ).toBe(`xdt-file://local/?path=${encodeURIComponent(path)}`);
+    expect(normalizedImageSrc('![windows](<file:///C:/Users/test/My%20Pictures/image.png>)')).toBe(
+      `xdt-file://local/?path=${encodeURIComponent(path)}`,
+    );
+  });
+
+  it('decodes a file URL once while preserving a literal percent sequence', () => {
+    const path = '/tmp/report%20final.png';
+    expect(normalizedImageSrc('![file-url](<file:///tmp/report%2520final.png>)')).toBe(
+      `xdt-file://local/?path=${encodeURIComponent(path)}`,
+    );
   });
 
   it('blocks privileged local paths in untrusted Markdown previews', () => {
