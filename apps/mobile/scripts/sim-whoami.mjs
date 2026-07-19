@@ -14,10 +14,24 @@
 //   pnpm mobile:sim:whoami -- --region=global # global
 
 import { execFileSync, execSync } from 'node:child_process';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { extractMobileDevRegionArgs } from './lib/mobile-dev-region.mjs';
+import {
+  ensureMobileLocalRegionConfig,
+  formatMobileLocalConfigStatus,
+} from './lib/mobile-local-config.mjs';
 import { resolveMobileSimulatorBundleId } from './lib/sim-whoami.mjs';
+import {
+  cwdOfPid,
+  gitSourceIdentity,
+  gitSourceOfPid,
+  isInside,
+} from './sim-metro.mjs';
 
 const PORTS = [8081, 8082, 8083, 8084, 8085, 8086];
+const mobileDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const worktreeRoot = resolve(mobileDir, '../..');
 
 /** 解析用户指定的 region 及其实际 Simulator bundle id。 */
 function resolveTarget() {
@@ -30,12 +44,17 @@ function resolveTarget() {
 
 let target;
 try {
+  const localConfigResult = ensureMobileLocalRegionConfig({ mobileDir });
+  const localConfigStatus = formatMobileLocalConfigStatus(localConfigResult, worktreeRoot);
+  if (localConfigStatus) console.log(localConfigStatus);
   target = resolveTarget();
 } catch (error) {
   console.error(`✗ ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
 }
 const { region, bundleId } = target;
+const expectedSource = gitSourceIdentity(worktreeRoot);
+let healthy = true;
 
 function sh(cmd) {
   try {
@@ -59,13 +78,17 @@ function shFile(command, args) {
 console.log(`==> Mobile dev region: ${region}`);
 console.log('==== booted 模拟器 ====');
 const booted = sh('xcrun simctl list devices booted').split('\n').filter((l) => /\(Booted\)/.test(l));
-if (booted.length === 0) console.log('  (没有 booted 模拟器)');
+if (booted.length === 0) {
+  console.log('  (没有 booted 模拟器)');
+  healthy = false;
+}
 else booted.forEach((l) => console.log('  ' + l.trim()));
 
 console.log(`\n==== 模拟器里装的 ${bundleId}(native 安装包版本)====`);
 const container = shFile('xcrun', ['simctl', 'get_app_container', 'booted', bundleId, 'app']);
 if (!container) {
   console.log('  (未安装 / 无 booted 设备)');
+  healthy = false;
 } else {
   const plist = `${container}/Info.plist`;
   const pb = (key) => shFile('/usr/libexec/PlistBuddy', ['-c', `Print :${key}`, plist]);
@@ -74,28 +97,35 @@ if (!container) {
   console.log('  ⚠️ 版本号只证明装的是哪个 dev client,证明不了 JS bundle 是不是当前分支最新。');
 }
 
-// 读进程 cwd 来判 worktree —— 比解析 `ps -o command` 可靠:命令行常是 `pnpm exec expo`、
-// 取不到 worktree 路径,且各 checkout 目录名不一(如 /workspace/Cindy)。macOS 用 lsof cwd。
-function cwdOf(pid) {
-  const out = sh(`lsof -a -p ${pid} -d cwd -Fn`);
-  const line = out.split('\n').find((l) => l.startsWith('n'));
-  return line ? line.slice(1) : '';
-}
-
 console.log('\n==== Metro 端口归属(哪个端口 = 哪个 worktree)====');
 let anyMetro = false;
+let currentSourceOnDefaultPort = false;
 for (const port of PORTS) {
   const pids = sh(`lsof -nP -iTCP:${port} -sTCP:LISTEN -t`).split('\n').filter(Boolean);
   for (const pid of pids) {
-    const cwd = cwdOf(pid);
+    const cwd = cwdOfPid(pid);
     // Metro 由 sim:start 以 cwd=<worktree>/apps/mobile 启动,故进程 cwd 即 worktree 位置。
     const wt = cwd ? cwd.replace(/\/apps\/mobile$/, '') : '(无法读取进程 cwd)';
     const isMetro = /expo|metro/i.test(sh(`ps -p ${pid} -o command=`));
+    const runningSource = isMetro ? gitSourceOfPid(pid) : null;
     if (isMetro) anyMetro = true;
-    console.log(`  :${port}  pid ${pid}  →  ${wt}${isMetro ? '' : '  (非 Metro?)'}`);
+    console.log(`  :${port}  pid ${pid}  →  ${wt}${runningSource ? `  source=${runningSource}` : isMetro ? '  source=(未注入)' : '  (非 Metro?)'}`);
+    if (port === 8081 && isMetro) {
+      currentSourceOnDefaultPort = Boolean(
+        cwd && isInside(worktreeRoot, cwd) && runningSource === expectedSource,
+      );
+      if (!currentSourceOnDefaultPort) healthy = false;
+    }
   }
 }
 if (!anyMetro) console.log('  (8081-8086 上没发现 Metro;用 `pnpm mobile:sim:start` 启一个)');
+if (!currentSourceOnDefaultPort) healthy = false;
 
-console.log('\n结论:模拟器新建会话页顶部 __DEV__ build label 显示的 host:port,应当指向你当前分支这台 Metro。');
-console.log('若 build label 端口对应的 worktree 不是你正在改的分支 → 你看到的是旧代码,重连正确端口。');
+console.log(`\n当前 worktree 源码指纹:${expectedSource}`);
+console.log(`build label 必须显示这个指纹,且 host:port 必须是当前 worktree 的 8081。`);
+if (healthy) {
+  console.log('✓ PASS:booted dev client、8081 Metro 归属和源码指纹一致。');
+} else {
+  console.error('✗ FAIL:当前模拟器验证链不完整或源码不一致;不要声称“已经启动当前版本”。');
+  process.exitCode = 1;
+}

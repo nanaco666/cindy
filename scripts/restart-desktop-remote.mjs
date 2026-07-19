@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applyDesktopDevStartupConfig } from './shared/desktop-dev-region.mjs';
@@ -10,6 +11,7 @@ const rootDir = path.resolve(__dirname, '..');
 const gracefulTimeoutMs = 3000;
 const forceTimeoutMs = 5000;
 const pollIntervalMs = 150;
+const startupReadyTimeoutMs = 120_000;
 const forceKillLabel = process.platform === 'win32' ? 'taskkill /F /T' : 'kill -9';
 
 /**
@@ -216,6 +218,24 @@ function listPosixProcesses() {
     .filter(Boolean);
 }
 
+export function parseWorktreePaths(text) {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('worktree '))
+    .map((line) => path.resolve(line.slice('worktree '.length)));
+}
+
+function repositoryWorktreePaths() {
+  const result = run('git', ['worktree', 'list', '--porcelain'], { cwd: rootDir });
+  if (result.status !== 0) return [rootDir];
+  const worktrees = parseWorktreePaths(result.stdout);
+  return worktrees.length > 0 ? worktrees : [rootDir];
+}
+
+function hasRepositoryCheckoutPath(command, checkoutPaths = repositoryWorktreePaths()) {
+  return checkoutPaths.some((checkoutPath) => commandContainsPath(command, checkoutPath));
+}
+
 // 沿 ppid 链向上找祖先里有没有 Cindy desktop dev 进程。
 // 用途：拦住"agent 跑在 Cindy desktop dev 进程内还调 restart"这种自杀场景——
 // 一旦 taskkill /T 走到祖先 dev 进程，整棵树（包括正在跑的本脚本）都会被收掉，
@@ -224,6 +244,7 @@ function listPosixProcesses() {
 function findDevAncestor() {
   const processes = process.platform === 'win32' ? listWindowsProcesses() : listPosixProcesses();
   const byPid = new Map(processes.map((proc) => [proc.pid, proc]));
+  const checkoutPaths = repositoryWorktreePaths();
   let cursor = byPid.get(process.pid)?.ppid ?? 0;
   for (let i = 0; cursor && i < 64; i += 1) {
     const ancestor = byPid.get(cursor);
@@ -232,7 +253,7 @@ function findDevAncestor() {
     if (
       !command.includes('apps/claude-code-bin') &&
       !command.includes('apps/codex-bin') &&
-      hasCurrentCheckoutPath(command) &&
+      hasRepositoryCheckoutPath(command, checkoutPaths) &&
       hasDesktopDevSignature(command)
     ) {
       return ancestor;
@@ -240,10 +261,6 @@ function findDevAncestor() {
     cursor = ancestor.ppid;
   }
   return null;
-}
-
-function hasCurrentCheckoutPath(command) {
-  return commandContainsPath(command, rootDir);
 }
 
 function hasDesktopDevSignature(command) {
@@ -262,12 +279,12 @@ function hasDesktopDevSignature(command) {
   );
 }
 
-function shouldKill(proc) {
-  if (!proc.pid || proc.pid === process.pid) return false;
+export function isRepositoryDesktopDevProcess(proc, checkoutPaths, currentPid = process.pid) {
+  if (!proc.pid || proc.pid === currentPid) return false;
   const command = normalize(proc.command);
   if (command.includes('apps/claude-code-bin') || command.includes('apps/codex-bin')) return false;
 
-  return hasCurrentCheckoutPath(command) && hasDesktopDevSignature(command);
+  return hasRepositoryCheckoutPath(command, checkoutPaths) && hasDesktopDevSignature(command);
 }
 
 function killProcess(pid) {
@@ -302,7 +319,8 @@ function sleep(ms) {
 
 function listDesktopDevProcesses() {
   const processes = process.platform === 'win32' ? listWindowsProcesses() : listPosixProcesses();
-  return processes.filter(shouldKill);
+  const checkoutPaths = repositoryWorktreePaths();
+  return processes.filter((proc) => isRepositoryDesktopDevProcess(proc, checkoutPaths));
 }
 
 async function waitForDesktopDevProcessesToExit(timeoutMs) {
@@ -391,19 +409,11 @@ function devScriptForMode(mode) {
 }
 
 function packageManagerCommand(mode) {
-  const devScript = devScriptForMode(mode);
-  const pnpmExecPath = process.env.npm_execpath;
-  if (!pnpmExecPath) {
-    return process.platform === 'win32'
-      ? `set "COREPACK_ENABLE_AUTO_PIN=0" && pnpm ${devScript}`
-      : `COREPACK_ENABLE_AUTO_PIN=0 pnpm ${devScript}`;
-  }
-
+  const runnerPath = path.join(rootDir, 'scripts', 'desktop-dev-runner.mjs');
   if (process.platform === 'win32') {
-    return `${cmdDoubleQuote(process.execPath)} ${cmdDoubleQuote(pnpmExecPath)} ${devScript}`;
+    return `${cmdDoubleQuote(process.execPath)} ${cmdDoubleQuote(runnerPath)} ${mode}`;
   }
-
-  return `${shellSingleQuote(process.execPath)} ${shellSingleQuote(pnpmExecPath)} ${devScript}`;
+  return `${shellSingleQuote(process.execPath)} ${shellSingleQuote(runnerPath)} ${shellSingleQuote(mode)}`;
 }
 
 function darwinEnvPrefix() {
@@ -448,6 +458,8 @@ export function devEnvPrefix(env = process.env) {
     // 启动即自动打开 DevTools(main 的 ready-to-show 里消费;见 bootstrap-electron)。
     // 给"快捷键/菜单打不开 DevTools"的环境兜底,QA 控制台验证依赖它。
     ['OPEN_DEVTOOLS', env.OPEN_DEVTOOLS],
+    // --wait-ready 的一次性状态文件：runner 写失败，Electron main ready-to-show 写成功。
+    ['XDT_DESKTOP_DEV_STARTUP_STATUS_FILE', env.XDT_DESKTOP_DEV_STARTUP_STATUS_FILE],
   ].filter(([, value]) => value);
   if (envEntries.length === 0) return '';
 
@@ -475,7 +487,7 @@ function launchInSystemTerminal(mode) {
       windowsHide: false,
     });
     if (result.status !== 0) process.exit(result.status ?? 1);
-    console.log(`==> Started desktop ${mode} dev in a new cmd window.`);
+    console.log(`==> Opened desktop ${mode} dev in a new cmd window.`);
     return;
   }
 
@@ -490,7 +502,7 @@ function launchInSystemTerminal(mode) {
       console.error('Failed to open Terminal.app');
       process.exit(1);
     }
-    console.log(`==> Started desktop ${mode} dev in a new Terminal window.`);
+    console.log(`==> Opened desktop ${mode} dev in a new Terminal window.`);
     return;
   }
 
@@ -506,19 +518,12 @@ function startDesktopDev(mode) {
     return;
   }
 
-  const devScript = devScriptForMode(mode);
-  const child = process.platform === 'win32'
-    ? spawn('cmd.exe', ['/d', '/s', '/c', `pnpm ${devScript}`], {
-        cwd: rootDir,
-        stdio: 'inherit',
-        windowsHide: false,
-        env: process.env,
-      })
-    : spawn('pnpm', [devScript], {
-        cwd: rootDir,
-        stdio: 'inherit',
-        env: process.env,
-      });
+  const child = spawn(process.execPath, [path.join(rootDir, 'scripts', 'desktop-dev-runner.mjs'), mode], {
+    cwd: rootDir,
+    stdio: 'inherit',
+    windowsHide: false,
+    env: process.env,
+  });
 
   child.on('exit', (code, signal) => {
     if (signal) process.kill(process.pid, signal);
@@ -526,9 +531,62 @@ function startDesktopDev(mode) {
   });
 }
 
+function createStartupStatusPath() {
+  return path.join(
+    os.tmpdir(),
+    `cindy-desktop-startup-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
+  );
+}
+
+export function readDesktopStartupStatus(statusPath) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDesktopStartupStatus(statusPath, status) {
+  const tempPath = `${statusPath}.${process.pid}.tmp`;
+  try {
+    fs.writeFileSync(tempPath, `${JSON.stringify(status)}\n`, { mode: 0o600 });
+    fs.renameSync(tempPath, statusPath);
+  } catch (error) {
+    fs.rmSync(tempPath, { force: true });
+    throw new Error(`Failed to write desktop startup status: ${error.message}`);
+  }
+}
+
+export async function waitForDesktopStartup(statusPath, timeoutMs = startupReadyTimeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const status = readDesktopStartupStatus(statusPath);
+    if (status?.state === 'ready') {
+      console.log(`==> Desktop dev is ready (main window ready-to-show, pid ${status.pid ?? 'unknown'}).`);
+      fs.rmSync(statusPath, { force: true });
+      return;
+    }
+    if (status?.state === 'failed') {
+      fs.rmSync(statusPath, { force: true });
+      throw new Error(
+        `Desktop dev exited before the main window became ready (exit ${status.exitCode ?? 'unknown'}). Check the dev terminal and apps/desktop/logs/.`,
+      );
+    }
+    await sleep(pollIntervalMs);
+  }
+  // Keep a tombstone so a late Electron ready-to-show cannot recreate a stale
+  // status file after this waiter has already reported timeout to its caller.
+  writeDesktopStartupStatus(statusPath, { state: 'abandoned', at: Date.now() });
+  throw new Error(
+    `Desktop dev did not reach main-window readiness within ${Math.round(timeoutMs / 1000)}s. Check the dev terminal and apps/desktop/logs/.`,
+  );
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   const killOnly = argv.includes('--kill-only');
+  const waitReady = argv.includes('--wait-ready');
   // --local 切换到本地模式(连 localhost:3333);缺省走 remote(连 xdt-api)。
   const mode = argv.includes('--local') ? 'local' : 'remote';
   const startupConfig = applyDesktopDevStartupConfig({ argv, mode });
@@ -631,7 +689,14 @@ async function main() {
 
   if (killOnly) return;
 
+  let startupStatusPath = null;
+  if (waitReady) {
+    startupStatusPath = createStartupStatusPath();
+    writeDesktopStartupStatus(startupStatusPath, { state: 'pending', at: Date.now() });
+    process.env.XDT_DESKTOP_DEV_STARTUP_STATUS_FILE = startupStatusPath;
+  }
   startDesktopDev(mode);
+  if (startupStatusPath) await waitForDesktopStartup(startupStatusPath);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

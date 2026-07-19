@@ -2,11 +2,12 @@
 /**
  * ensure-deps — 启动/构建/发布前的依赖守护
  *
- * 四道检查（任一失败都会自动修复）：
- *   1. Lockfile 同步性 — 比对 pnpm-lock.yaml 与 node_modules/.modules.yaml 的 mtime
- *   2. 关键依赖完整性 — 确认子包下 native / binary 依赖的 package.json 存在
- *   3. Electron binary 完整性 — 确认 electron postinstall 已完整解出 dist binary
- *   4. native ABI 隔离 — root 保持 Node ABI，Electron cache 单独准备 native binding
+ * 五道检查（任一失败都会自动修复）：
+ *   1. 协议 submodule — 先初始化 cindy-protocol，避免 pnpm 少发现 workspace
+ *   2. Lockfile 同步性 — 比对 pnpm-lock.yaml 与 node_modules/.modules.yaml 的 mtime
+ *   3. 关键依赖完整性 — 确认 workspace / native / binary 依赖的 package.json 存在
+ *   4. Electron binary 完整性 — 确认 electron postinstall 已完整解出 dist binary
+ *   5. native ABI 隔离 — root 保持 Node ABI，Electron cache 单独准备 native binding
  *
  * 关于 hoisted 模式：项目 .npmrc 指定 node-linker=hoisted，绝大多数依赖被平铺到根
  * node_modules，但原生二进制包（electron、protobufjs 等）必须留
@@ -41,9 +42,23 @@ const err = (msg) => console.error(`\x1b[31m[ensure-deps]\x1b[0m ${msg}`);
 // checkPath 是相对仓库根目录的 package.json 位置
 // pnpm 10 的 hoisted 模式下，这些核心包都 hoist 到根 node_modules（包括 electron）
 const CRITICAL_DEPS = [
+  {
+    name: '@cindy/device-link-protocol',
+    checkPath: 'packages/device-link/node_modules/@cindy/device-link-protocol/package.json',
+  },
+  {
+    name: '@cindy/slack-hook-protocol',
+    checkPath: 'apps/desktop/node_modules/@cindy/slack-hook-protocol/package.json',
+  },
   { name: 'electron', checkPath: 'node_modules/electron/package.json' },
   { name: 'better-sqlite3', checkPath: 'node_modules/better-sqlite3/package.json' },
 ];
+
+const WORKSPACE_CRITICAL_DEPS = CRITICAL_DEPS.slice(0, 2);
+const SUBMODULE_WORKSPACE_FILES = Object.freeze([
+  'cindy-protocol/packages/device-link-protocol/package.json',
+  'cindy-protocol/packages/slack-hook-protocol/package.json',
+]);
 
 // 子包下的残缺目录 —— 这些本不该存在于子包 node_modules（pnpm 10 会 hoist 到根），
 // 但某些 postinstall 残留（例如 electron postinstall 解压的 dist/）可能会让这些路径
@@ -197,9 +212,9 @@ const NODE_MODULES_DIRS = [
   path.join(ROOT, 'apps', 'desktop', 'node_modules'),
 ];
 
-function findBrokenDeps() {
+function findBrokenDeps(deps = CRITICAL_DEPS) {
   const broken = [];
-  for (const { name, checkPath } of CRITICAL_DEPS) {
+  for (const { name, checkPath } of deps) {
     const abs = path.join(ROOT, checkPath);
     if (!fs.existsSync(abs)) {
       // 推断模块根目录（package.json 的上级）用于 remediate 时精准清理
@@ -208,6 +223,58 @@ function findBrokenDeps() {
     }
   }
   return broken;
+}
+
+/** Protocol package manifests that a complete checkout must expose to pnpm. */
+export function findMissingSubmoduleWorkspaceFiles(root = ROOT) {
+  return SUBMODULE_WORKSPACE_FILES.filter((relativePath) => !fs.existsSync(path.join(root, relativePath)));
+}
+
+function ensureSubmoduleWorkspaces() {
+  const missing = findMissingSubmoduleWorkspaceFiles();
+  if (missing.length === 0) return;
+
+  warn(`协议 workspace 缺失：${missing.join(', ')}`);
+  log('运行 git submodule update --init --recursive ...');
+  const result = spawnSync('git', ['submodule', 'update', '--init', '--recursive'], {
+    cwd: ROOT,
+    stdio: 'inherit',
+  });
+  if (result.error || result.status !== 0) {
+    if (result.error) err(result.error.message);
+    err('协议 submodule 初始化失败；未继续安装依赖，避免生成不完整的 pnpm workspace');
+    process.exit(result.status ?? 1);
+  }
+
+  const stillMissing = findMissingSubmoduleWorkspaceFiles();
+  if (stillMissing.length > 0) {
+    err(`submodule 初始化后协议 workspace 仍缺失：${stillMissing.join(', ')}`);
+    process.exit(1);
+  }
+  log('协议 submodule 已就绪');
+}
+
+function ensureWorkspaceOnlyDependencies() {
+  const broken = findBrokenDeps(WORKSPACE_CRITICAL_DEPS);
+  const lockIssue = reasonLockfileOutOfSync();
+  if (broken.length === 0 && !lockIssue) {
+    log('workspace 依赖已同步，跳过');
+    return;
+  }
+
+  if (broken.length > 0) {
+    warn(`workspace 依赖缺失：${broken.map((item) => item.name).join(', ')}`);
+    removeBrokenDirs(broken);
+  }
+  if (lockIssue) log(lockIssue);
+  runInstall(['install']);
+
+  const still = findBrokenDeps(WORKSPACE_CRITICAL_DEPS);
+  if (still.length > 0) {
+    err(`pnpm install 后 workspace 依赖仍缺失：${still.map((item) => item.name).join(', ')}`);
+    process.exit(1);
+  }
+  log('workspace 依赖已同步');
 }
 
 function runInstall(args = ['install']) {
@@ -697,6 +764,13 @@ function ensureElectronNativeBinding(electronVersion, electronArch) {
 }
 
 function main() {
+  ensureSubmoduleWorkspaces();
+
+  if (process.argv.slice(2).includes('--workspace-only')) {
+    ensureWorkspaceOnlyDependencies();
+    return;
+  }
+
   cleanStaleSubpkgDirs();
 
   // 优先级：完整性损坏 > lockfile 不同步

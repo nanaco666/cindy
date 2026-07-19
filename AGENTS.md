@@ -100,8 +100,8 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 | Command | Description |
 |---------|-------------|
-| `pnpm restart:desktop:remote` | **默认**；Agent 启动 / 重启桌面端连**远程 API**；补 `.env`、停所有 Cindy Electron dev 进程、在真 TTY 下启动；支持 `--region=cn|global`（默认 `cn`） |
-| `pnpm restart:desktop:local` | **仅用户明确要求本地时**；连**本地 server**（`http://localhost:3333`）；同样停旧进程、真 TTY 启动;local 端点由 dev 脚本链自动生成的 `config/endpoint.local.json`(gitignored)承载;agent 只起客户端，本地 server 仍由用户自己起 |
+| `pnpm restart:desktop:remote` | **默认**；Agent 启动 / 重启桌面端连**远程 API**；补 `.env`、停所有 Cindy Electron dev 进程、在真 TTY 下启动，并等待 Electron 主窗口 `ready-to-show`（最多 120 秒，早退或超时会失败）；支持 `--region=cn|global`（默认 `cn`） |
+| `pnpm restart:desktop:local` | **仅用户明确要求本地时**；连**本地 server**（`http://localhost:3333`）；同样停旧进程、真 TTY 启动并等待主窗口 ready;local 端点由 dev 脚本链自动生成的 `config/endpoint.local.json`(gitignored)承载;agent 只起客户端，本地 server 仍由用户自己起 |
 | `pnpm dev:desktop:remote` | ⚠️ human-only；**agent 禁止直接调**（无 TTY 兜底、不杀旧进程、不补 `.env`，agent 环境下必失败）——agent 走 `restart:desktop:remote` |
 | `pnpm dev:desktop` | ⚠️ human-only；连本地 server 的底层命令，**agent 禁止直接调**——agent 走 `restart:desktop:local` |
 | `pnpm dev:server` | ⚠️ human-only；到相邻 `cindy-server` checkout（或 `XDT_SERVER_REPO`）启动本地 server，**agent 禁止** |
@@ -135,6 +135,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 ### 启动 → 测试 → 结束
 
 **Step 1 启动**：仓库根执行 `pnpm restart:desktop:remote`（默认）；仅当用户明确要本地时执行 `pnpm restart:desktop:local`。
+- restart 返回成功表示 Electron 主进程已经发出主窗口 `ready-to-show`，不是仅仅打开了 Terminal/cmd 窗口；如果依赖、Forge 或 Electron 早退，或 120 秒内未 ready，命令会失败并提示检查新终端和 `apps/desktop/logs/`。
 - 如果你自己就跑在 Cindy desktop dev 进程内（典型：你是桌面端内嵌的 Claude / Codex agent），脚本会自检并以 exit 1 拒绝执行，打印一条英文提示让你转告用户回他自己的终端手动重启。看到这种 refusal 信息时**不要重试 / 不要换命令**，原样转告用户即可。
 - 改动了 main / preload / MCP / package 代码后必须重新执行；仅改 renderer 代码时热更新生效，无需重启。
 

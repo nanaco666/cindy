@@ -28,12 +28,26 @@ import {
   extractMobileDevRegionArgs,
   withLocalMobileRegionConfig,
 } from './lib/mobile-dev-region.mjs';
-import { cwdOfPid, gitBranchOfPid, isInside, listenerPid, portInUse } from './sim-metro.mjs';
+import {
+  ensureMobileLocalRegionConfig,
+  formatMobileLocalConfigStatus,
+} from './lib/mobile-local-config.mjs';
+import {
+  cwdOfPid,
+  gitSourceIdentity,
+  gitSourceOfPid,
+  isInside,
+  listenerPid,
+  portInUse,
+} from './sim-metro.mjs';
 
 const mobileDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const worktreeRoot = resolve(mobileDir, '../..');
 const DEFAULT_PORT = 8081;
 const { region, passthrough } = extractMobileDevRegionArgs(process.argv.slice(2));
+const localConfigResult = ensureMobileLocalRegionConfig({ mobileDir });
+const localConfigStatus = formatMobileLocalConfigStatus(localConfigResult, worktreeRoot);
+if (localConfigStatus) console.log(localConfigStatus);
 const buildEnv = withLocalMobileRegionConfig(
   mobileClientBuildEnv({ authRegion: region }),
 );
@@ -52,6 +66,7 @@ function git(args) {
 
 const branch = git(['branch', '--show-current']) || git(['rev-parse', '--short', 'HEAD']);
 const commit = git(['rev-parse', '--short', 'HEAD']);
+const sourceIdentity = gitSourceIdentity(worktreeRoot);
 const hasExplicitPort = passthrough.some((a) => a === '--port' || a === '-p');
 
 // 未显式指定端口时,坚持 8081(app 默认连这个),并按归属决定起 / 提示 / 拒绝。
@@ -63,18 +78,18 @@ if (!hasExplicitPort) {
     if (cwd && isInside(worktreeRoot, cwd)) {
       // 是本 worktree 的 Metro —— 但还要确认它注入了**当前分支**的 git env,否则 build label branch
       // 会是旧值/unknown(如手动 `expo start` 起的、或起好后切过分支),"已在跑"就成了假证据。
-      const runningBranch = pid ? gitBranchOfPid(pid) : null;
-      if (runningBranch && runningBranch === branch) {
+      const runningSource = pid ? gitSourceOfPid(pid) : null;
+      if (runningSource && runningSource === sourceIdentity) {
         if (envChanged) {
           console.error('✗ 已补/改 apps/mobile/.env,但 8081 上的 Metro 是用旧 env 启动的(env 在 bundle 时注入)。');
           console.error('  请先停掉它再 `pnpm mobile:sim:start`,新 env 才会生效。');
           process.exit(1);
         }
-        console.log(`✓ Metro 已在 ${DEFAULT_PORT} 运行(本 worktree,已注入分支 ${branch})。改 JS 直接 Fast Refresh,无需重开。`);
+        console.log(`✓ Metro 已在 ${DEFAULT_PORT} 运行(本 worktree,源码指纹 ${sourceIdentity})。改 JS 直接 Fast Refresh,无需重开。`);
         process.exit(0);
       }
-      console.error(`✗ ${DEFAULT_PORT} 上是本 worktree 的 Metro,但未带当前分支 git env(运行中=${runningBranch || '(无)'} ≠ ${branch || '(unknown)'})。`);
-      console.error('  build label 里的 branch 会不准。先停掉它再 `pnpm mobile:sim:start` 重起(确保注入当前 git 信息)。');
+      console.error(`✗ ${DEFAULT_PORT} 上是本 worktree 的 Metro,但源码指纹已过期(运行中=${runningSource || '(无)'} ≠ 当前=${sourceIdentity})。`);
+      console.error('  这通常表示 Metro 启动后又 amend/rebase/reset/改过文件。先停掉它再 `pnpm mobile:sim:start` 重起。');
       process.exit(1);
     }
     console.error(`✗ 端口 ${DEFAULT_PORT} 被另一个 worktree 占用:${cwd || '(未知进程)'}`);
@@ -86,10 +101,10 @@ if (!hasExplicitPort) {
   args.push('--port', String(DEFAULT_PORT));
 }
 
-console.log(`› sim:start — region=${region} branch=${branch || '(unknown)'} commit=${commit || '(unknown)'}`);
+console.log(`› sim:start — region=${region} source=${sourceIdentity}`);
 const portArgIdx = args.indexOf('--port');
 if (portArgIdx >= 0) console.log(`  Metro 端口:${args[portArgIdx + 1]}(模拟器 build label 会显示 host:port,确认没连错分支)`);
-console.log('  注入 EXPO_PUBLIC_XDT_GIT_BRANCH / EXPO_PUBLIC_XDT_GIT_COMMIT 给 __DEV__ build label\n');
+console.log('  注入 EXPO_PUBLIC_XDT_GIT_SOURCE / EXPO_PUBLIC_XDT_GIT_BRANCH / EXPO_PUBLIC_XDT_GIT_COMMIT 给 __DEV__ build label\n');
 
 // 用 `pnpm exec expo`:pnpm 不在 apps/mobile/node_modules/.bin 放 expo bin,但 pnpm exec
 // 能按包依赖解析到 expo CLI(直接 node node_modules/.bin/expo 会 MODULE_NOT_FOUND)。
@@ -101,6 +116,7 @@ const child = spawn('pnpm', args, {
     ...buildEnv,
     EXPO_PUBLIC_XDT_GIT_BRANCH: branch,
     EXPO_PUBLIC_XDT_GIT_COMMIT: commit,
+    EXPO_PUBLIC_XDT_GIT_SOURCE: sourceIdentity,
   },
 });
 

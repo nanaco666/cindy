@@ -245,6 +245,7 @@ export default function NewRemoteSessionScreen() {
   // Dev-only:把构建信息从全局浮层挪到这里的顶部展示(试 Fast Refresh)。
   const buildLabel = __DEV__
     ? formatMobileBuildLabel(normalizeBuildInfo({
+        source: process.env.EXPO_PUBLIC_XDT_GIT_SOURCE,
         branch: process.env.EXPO_PUBLIC_XDT_GIT_BRANCH,
         commit: process.env.EXPO_PUBLIC_XDT_GIT_COMMIT,
         version: Constants.nativeAppVersion ?? Constants.expoConfig?.version,

@@ -96,7 +96,7 @@ describe('restart:desktop:remote dependency guard order', () => {
       fs.readFileSync(path.resolve(__dirname, '../../../../../package.json'), 'utf8'),
     ) as { scripts: Record<string, string> };
     expect(packageJson.scripts['restart:desktop:remote']).toBe(
-      'node scripts/restart-desktop-remote.mjs --kill-only && node scripts/ensure-deps.mjs && node scripts/ensure-dev-runtime-assets.mjs && node scripts/restart-desktop-remote.mjs',
+      'node scripts/restart-desktop-remote.mjs --kill-only && node scripts/ensure-deps.mjs && node scripts/ensure-dev-runtime-assets.mjs && node scripts/restart-desktop-remote.mjs --wait-ready',
     );
   });
 
@@ -105,7 +105,7 @@ describe('restart:desktop:remote dependency guard order', () => {
       fs.readFileSync(path.resolve(__dirname, '../../../../../package.json'), 'utf8'),
     ) as { scripts: Record<string, string> };
     expect(packageJson.scripts['restart:desktop:local']).toBe(
-      'node scripts/restart-desktop-remote.mjs --local --kill-only && node scripts/ensure-deps.mjs && node scripts/ensure-dev-runtime-assets.mjs && node scripts/restart-desktop-remote.mjs --local',
+      'node scripts/restart-desktop-remote.mjs --local --kill-only && node scripts/ensure-deps.mjs && node scripts/ensure-dev-runtime-assets.mjs && node scripts/restart-desktop-remote.mjs --local --wait-ready',
     );
   });
 });
