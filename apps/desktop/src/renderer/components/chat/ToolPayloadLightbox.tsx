@@ -59,19 +59,37 @@ export type ToolPayloadMode =
       text: string;
     };
 
+export interface ToolPayloadTextEditConfig {
+  cancelLabel: string;
+  saveLabel: string;
+  onSave: (text: string) => void;
+}
+
 interface ToolPayloadLightboxProps {
   payload: ToolPayloadMode;
   /** Focus return target — usually the chip / chevron that opened us. */
   triggerRef?: React.RefObject<HTMLElement | null>;
+  /** Opt-in editor for text payloads. Diff / JSON and ordinary text stay read-only. */
+  textEdit?: ToolPayloadTextEditConfig;
   onClose: () => void;
 }
 
-export function ToolPayloadLightbox({ payload, triggerRef, onClose }: ToolPayloadLightboxProps) {
+export function ToolPayloadLightbox({
+  payload,
+  triggerRef,
+  textEdit,
+  onClose,
+}: ToolPayloadLightboxProps) {
   const { t } = useTranslation();
   // 会话文件来源:remote 时 diff 的"定位文件"改为下载缓存副本后定位。
   const fileCtx = useChatSessionFile();
   const [isVisible, setIsVisible] = useState(false);
+  const [draftText, setDraftText] = useState(() =>
+    payload.kind === 'text' ? payload.text : '',
+  );
   const isClosingRef = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const isEditingText = payload.kind === 'text' && textEdit !== undefined;
 
   const handleClose = useCallback(() => {
     if (isClosingRef.current) return;
@@ -94,6 +112,21 @@ export function ToolPayloadLightbox({ payload, triggerRef, onClose }: ToolPayloa
     const raf = requestAnimationFrame(() => setIsVisible(true));
     return () => cancelAnimationFrame(raf);
   }, []);
+
+  // Editable text opens with the primary input focused, per the dialog focus contract.
+  useEffect(() => {
+    if (!isEditingText) return;
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  }, [isEditingText]);
+
+  const handleSaveText = useCallback(() => {
+    if (!textEdit || payload.kind !== 'text') return;
+    textEdit.onSave(draftText);
+    handleClose();
+  }, [draftText, handleClose, payload.kind, textEdit]);
 
   // Esc key
   useEffect(() => {
@@ -141,7 +174,7 @@ export function ToolPayloadLightbox({ payload, triggerRef, onClose }: ToolPayloa
           })
           .join('\n\n');
       } else if (payload.kind === 'text') {
-        text = payload.text;
+        text = isEditingText ? draftText : payload.text;
       } else {
         const inp = JSON.stringify(payload.toolInput, null, 2);
         text = payload.toolResult ? `Input:\n${inp}\n\nResult:\n${payload.toolResult}` : inp;
@@ -307,7 +340,8 @@ export function ToolPayloadLightbox({ payload, triggerRef, onClose }: ToolPayloa
         {/* Body */}
         <div
           className={cn(
-            'flex-1 overflow-auto px-5 py-4 select-text',
+            'flex-1 px-5 py-4 select-text',
+            isEditingText ? 'flex overflow-hidden' : 'overflow-auto',
             'text-[var(--msg-tool-card-text)]',
           )}
         >
@@ -329,17 +363,31 @@ export function ToolPayloadLightbox({ payload, triggerRef, onClose }: ToolPayloa
             </div>
           )}
 
-          {payload.kind === 'text' && (
-            <pre
-              className={cn(
-                'overflow-x-auto rounded-[12px] border border-[var(--msg-code-block-border)]',
-                'bg-[var(--msg-code-block-bg)] p-3 font-mono text-[length:calc(var(--app-code-font-size)_-_1px)] leading-[1.5]',
-                'text-[var(--msg-tool-card-text)] select-text whitespace-pre-wrap break-words',
-              )}
-            >
-              {payload.text}
-            </pre>
-          )}
+          {payload.kind === 'text' &&
+            (isEditingText ? (
+              <textarea
+                ref={textareaRef}
+                value={draftText}
+                onChange={(event) => setDraftText(event.target.value)}
+                spellCheck={false}
+                className={cn(
+                  'h-full min-h-0 w-full resize-none rounded-lg border',
+                  'border-[var(--msg-code-block-border)] bg-[var(--msg-code-block-bg)]',
+                  'p-3 font-mono text-[length:calc(var(--app-code-font-size)_-_1px)] leading-[1.5]',
+                  'text-[var(--msg-tool-card-text)] outline-none',
+                )}
+              />
+            ) : (
+              <pre
+                className={cn(
+                  'overflow-x-auto rounded-[12px] border border-[var(--msg-code-block-border)]',
+                  'bg-[var(--msg-code-block-bg)] p-3 font-mono text-[length:calc(var(--app-code-font-size)_-_1px)] leading-[1.5]',
+                  'text-[var(--msg-tool-card-text)] select-text whitespace-pre-wrap break-words',
+                )}
+              >
+                {payload.text}
+              </pre>
+            ))}
 
           {payload.kind === 'json' && (
             <div className="flex flex-col gap-4">
@@ -376,6 +424,40 @@ export function ToolPayloadLightbox({ payload, triggerRef, onClose }: ToolPayloa
             </div>
           )}
         </div>
+
+        {isEditingText && textEdit && (
+          <div
+            className={cn(
+              'flex shrink-0 items-center justify-end gap-2 px-5 py-3',
+              'border-t border-[var(--msg-tool-card-border)]',
+            )}
+          >
+            <button
+              type="button"
+              onClick={handleClose}
+              className={cn(
+                'h-8 rounded-full border px-4 text-[12px] font-medium',
+                'border-[var(--border-default)] bg-[var(--surface-elevated)]',
+                'text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-soft)]',
+              )}
+            >
+              {textEdit.cancelLabel}
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveText}
+              className={cn(
+                'h-8 rounded-full px-4 text-[12px] font-medium',
+                'bg-[var(--accent-cta-bg)] text-[var(--accent-pure-cta-fg)]',
+                'hover:opacity-90 transition-opacity',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-soft)]',
+              )}
+            >
+              {textEdit.saveLabel}
+            </button>
+          </div>
+        )}
       </div>
 
       <div

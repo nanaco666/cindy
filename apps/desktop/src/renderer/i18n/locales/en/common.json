@@ -3447,7 +3447,10 @@
     },
     "pastedText": {
       "chipLabel": "Pasted text ({{lines}} lines)",
-      "previewTitle": "Pasted text"
+      "previewTitle": "Pasted text",
+      "editTitle": "Edit Pasted Text",
+      "cancelEdit": "Cancel Editing",
+      "saveEdit": "Save Text"
     }
   },
   "voiceInputOverlay": {

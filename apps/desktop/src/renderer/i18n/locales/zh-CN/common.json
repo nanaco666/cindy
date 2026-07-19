@@ -3447,7 +3447,10 @@
     },
     "pastedText": {
       "chipLabel": "粘贴的文本({{lines}} 行)",
-      "previewTitle": "粘贴的文本"
+      "previewTitle": "粘贴的文本",
+      "editTitle": "编辑粘贴的文本",
+      "cancelEdit": "取消编辑",
+      "saveEdit": "保存文本"
     }
   },
   "voiceInputOverlay": {

@@ -3447,7 +3447,10 @@
     },
     "pastedText": {
       "chipLabel": "붙여넣은 텍스트({{lines}}줄)",
-      "previewTitle": "붙여넣은 텍스트"
+      "previewTitle": "붙여넣은 텍스트",
+      "editTitle": "붙여넣은 텍스트 편집",
+      "cancelEdit": "편집 취소",
+      "saveEdit": "텍스트 저장"
     }
   },
   "voiceInputOverlay": {
