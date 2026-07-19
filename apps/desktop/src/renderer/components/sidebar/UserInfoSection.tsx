@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUpdateStatus } from '@/hooks/useUpdateStatus';
 import { useUpdateBannerDismiss } from '@/hooks/useUpdateBannerDismiss';
+import { CURRENT_CINDY_REGION } from '../../../shared/brandRegion';
 
 interface UserInfoSectionProps {
   isCollapsed: boolean;
@@ -41,6 +42,9 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
   const initial = user.name.charAt(0).toUpperCase();
   const appDisplayVersion = window.electronAPI.appDisplayVersion;
   const appDisplayVersionDetail = window.electronAPI.appDisplayVersionDetail;
+  const appRegionLabel = CURRENT_CINDY_REGION === 'global' ? 'Global' : 'CN';
+  const appVersionLabel = `${appRegionLabel} · ${appDisplayVersion}`;
+  const appVersionLabelDetail = `${appRegionLabel} · ${appDisplayVersionDetail}`;
 
   const handleClick = () => {
     if (location.pathname !== '/settings') {
@@ -160,9 +164,9 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
             {/* 2px gap 对齐 cc-agent-view.pen 里 userNameContainer 的 gap: 2 */}
             <p
               className="truncate text-[10.5px] leading-[13px] text-[var(--sidebar-user-card-text)] opacity-80"
-              title={appDisplayVersionDetail}
+              title={appVersionLabelDetail}
             >
-              {appDisplayVersion}
+              {appVersionLabel}
             </p>
           </div>
         </button>
