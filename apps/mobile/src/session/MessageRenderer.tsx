@@ -14,6 +14,8 @@ import {
   ExternalLink,
   File as FileIcon,
   ListTodo,
+  PencilLine,
+  Share as ShareIcon,
   Split,
   Timer,
   Undo2,
@@ -21,6 +23,7 @@ import {
 } from 'lucide-react-native';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Linking,
   Modal,
@@ -226,7 +229,11 @@ import {
   shouldUnpinMobileFollowOnDrag,
 } from '@/session/messageScroll';
 import { ImageLightbox, type ImageLightboxAnnotationConfig } from '@/session/ImageLightbox';
-import { MermaidDiagramWebView } from '@/session/mermaidWebView';
+import {
+  MermaidDiagramWebView,
+  writeMermaidExportPngTemp,
+  type MermaidDiagramWebViewHandle,
+} from '@/session/mermaidWebView';
 import { MathFormulaWebView } from '@/session/mathWebView';
 import { latexToUnicodeApproximation } from '@lizi/maker-shared/math-markdown';
 import type { RemoteTextFilePreviewResult } from '@/device-link/mobileMakerTransport';
@@ -1059,10 +1066,12 @@ export function MessageRenderer({
         />
       ) : (
         <MessagePayloadModal
+          imageAnnotation={imageAnnotation}
           onClose={closePayload}
           onReadTextFilePreview={onReadTextFilePreview}
           onReleaseRemoteMedia={onReleaseRemoteMedia}
           onResolveRemoteMedia={onResolveRemoteMedia}
+          onShareImage={onShareImage}
           payload={payload}
         />
       )}
@@ -2463,30 +2472,21 @@ function MarkdownBody({
         }
         const block = group.block;
         if (block.type === 'mermaid') {
+          // 内联图表按「图片」形态呈现:无卡片 chrome、无标签文字、无按钮,
+          // 就是一块圆角图表;点击任意位置打开沉浸式全屏详情(透明 Pressable
+          // 盖住整块——WebView 会吞掉触摸事件,不盖层拿不到点击)。
           return (
-            <View
-              key={block.key}
-              style={[
-                styles.mermaidCard,
-                {
-                  gap: layout.mermaidCardGap,
-                  padding: layout.mermaidCardPadding,
-                },
-              ]}
-              testID="message.mermaidPreviewButton"
-            >
-              <Text style={styles.mermaidKind}>MERMAID</Text>
-              <Text style={styles.mermaidTitle}>图表预览</Text>
+            <View key={block.key} testID="message.mermaidPreviewButton">
               <MermaidDiagramWebView source={block.text} testID="message.mermaidDiagram" />
-              <MessageContentOpenButton
-                accessibilityLabel="查看 Mermaid 图表和源码"
-                disabled={!onOpenPayload}
-                onPress={onOpenPayload ? () => onOpenPayload(buildMermaidPayload(block.text)) : undefined}
-                style={styles.mermaidSourceButton}
-                testID="message.mermaidSourceButton"
-              >
-                <Text style={styles.toolResultHint}>打开图表 / 源码</Text>
-              </MessageContentOpenButton>
+              {onOpenPayload ? (
+                <Pressable
+                  accessibilityLabel="打开图表详情"
+                  accessibilityRole="button"
+                  onPress={() => onOpenPayload(buildMermaidPayload(block.text))}
+                  style={StyleSheet.absoluteFill}
+                  testID="message.mermaidPreviewTap"
+                />
+              ) : null}
             </View>
           );
         }
@@ -3465,27 +3465,50 @@ function MessageContentOpenButton({
 
 function MessagePayloadModal({
   payload,
+  imageAnnotation,
   onClose,
   onReadTextFilePreview,
   onReleaseRemoteMedia,
   onResolveRemoteMedia,
+  onShareImage,
 }: {
   payload: MessagePayload | null;
+  /** 图表导出图的标注配置(来自聊天 lightbox 的同一份 chatAnnotation)。 */
+  imageAnnotation?: ImageLightboxAnnotationConfig;
   onClose(): void;
   onReadTextFilePreview?: (filePath: string) => Promise<RemoteTextFilePreviewResult>;
   onReleaseRemoteMedia?: (sourceUrl: string, media: MobileResolvedRemoteMedia) => void;
   onResolveRemoteMedia?: ResolveRemoteMediaFn;
+  onShareImage?: ComponentProps<typeof ImageLightbox>['onShareImage'];
 }) {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [payloadCopyState, setPayloadCopyState] = useState<PayloadHeaderCopyState>('idle');
   const payloadCopySeqRef = useRef(0);
-  // iOS 上 presentationStyle="fullScreen" 的 Modal 在独立 UIWindow + slide 呈现动画期间
-  // 就挂载 body,此刻 WKWebView 尚未稳定 attach,页面内的网络加载(mermaid 的 CDN 注入
-  // 脚本、媒体播放器资源)会失败——mermaid 停在源码不渲染。故把 body 内的 WebView
-  // (mermaid / 音视频播放器分支)延迟到 onShow(呈现动画完成、WebView 已 attach)之后
-  // 再挂载;关闭时复位,保证每次打开重新 gate。
-  const [contentReady, setContentReady] = useState(false);
+  // 沉浸式图表查看器的导出:WebView 内光栅化 → 临时 PNG → 系统分享单
+  // (含「存储图像 / 拷贝」,与图片消息同款路径)。
+  const [mermaidExporting, setMermaidExporting] = useState(false);
+  const mermaidViewRef = useRef<MermaidDiagramWebViewHandle | null>(null);
+  // 图表标注:导出图的 lightbox 渲染在**本 Modal 的 children 里**——RN Modal 从
+  // 所在组件树的 VC present,挂在外层(session 屏)树里会因该 VC 已 present 本
+  // Modal 而挂起排队,表现为「点了没反应,关图表后标注才弹出」。嵌进来后 inner
+  // Modal 从本 Modal 的 VC present,真正叠在图表之上;取消回图表,提交两层全关。
+  const [annotatePayload, setAnnotatePayload] = useState<Extract<MessagePayload, { kind: 'media' }> | null>(null);
+  const closeAnnotatePayload = useCallback(() => setAnnotatePayload(null), []);
+  const annotateImages = useMemo(
+    () => annotatePayload ? lightboxImagesForPayload([], annotatePayload) : null,
+    [annotatePayload],
+  );
+  const annotateLightboxAnnotation = useMemo<ImageLightboxAnnotationConfig | undefined>(() => {
+    if (!imageAnnotation) return undefined;
+    return {
+      ...imageAnnotation,
+      onSubmit: async (image, uri, strokes, ctx) => {
+        await imageAnnotation.onSubmit(image, uri, strokes, ctx);
+        onClose(); // 提交成功:图表查看器一并关闭,回聊天看托盘
+      },
+    };
+  }, [imageAnnotation, onClose]);
   const payloadSummary = useMemo(
     () => payload ? summarizeMessagePayload(payload) : null,
     [payload],
@@ -3498,16 +3521,18 @@ function MessagePayloadModal({
   const canCopyPayload = !!payloadSummary?.copyableText?.trim();
   const canOpenPayloadUrl = payloadSummary?.openTarget?.kind === 'url'
     && isDirectPreviewableMediaUrl(payloadSummary.openTarget.value);
-  const { width: screenWidth } = useWindowDimensions();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const safeAreaInsets = useSafeAreaInsets();
   const headerLayout = buildPayloadHeaderLayout({
     canCopy: canCopyPayload,
     canOpen: canOpenPayloadUrl,
     canPageGallery: false, // 图片已走 ImageLightbox,本查看器不再有图库翻页
+    screenHeight,
     screenWidth,
   });
   const modalSafeArea = buildPayloadModalSafeArea({
     androidStatusBarHeight: StatusBar.currentHeight ?? 0,
+    landscape: headerLayout.landscape,
     platform: Platform.OS,
     safeAreaBottom: safeAreaInsets.bottom,
     safeAreaTop: safeAreaInsets.top,
@@ -3517,11 +3542,6 @@ function MessagePayloadModal({
     payloadCopySeqRef.current += 1;
     setPayloadCopyState('idle');
   }, [payloadSummary?.copyableText]);
-
-  useEffect(() => {
-    // Modal 关闭(payload 清空)后复位 gating,下次打开经 onShow 重新置 true。
-    if (!payload) setContentReady(false);
-  }, [payload]);
 
   useEffect(() => {
     if (payloadCopyState === 'idle' || payloadCopyState === 'copying') return;
@@ -3549,16 +3569,116 @@ function MessagePayloadModal({
     void Linking.openURL(target.value).catch(() => undefined);
   }, [payloadSummary?.openTarget]);
 
+  const exportMermaidPng = useCallback(async () => {
+    const handle = mermaidViewRef.current;
+    if (!handle || mermaidExporting) return;
+    setMermaidExporting(true);
+    try {
+      const base64 = await handle.exportPng();
+      const uri = await writeMermaidExportPngTemp(base64);
+      if (!uri) throw new Error('write temp failed');
+      // 动态 import:expo-sharing 在模块顶层 requireNativeModule('ExpoSharing'),
+      // 旧 dev client 缺原生模块时顶层 import 会炸整个 bundle(同 lightbox 先例)。
+      const sharing = await import('expo-sharing');
+      await sharing.shareAsync(uri, { mimeType: 'image/png' });
+    } catch {
+      Alert.alert('导出失败', '图表尚未渲染完成或导出出错,请稍后重试。');
+    } finally {
+      setMermaidExporting(false);
+    }
+  }, [mermaidExporting]);
+
+  // 标注 / 发送到对话:导出 PNG 后打开嵌套标注 lightbox(见 annotatePayload
+  // 注释),标注圆钮、直发进 composer 托盘等能力全部复用图片消息的既有链路。
+  const annotateMermaid = useCallback(async () => {
+    const handle = mermaidViewRef.current;
+    if (!handle || !imageAnnotation || mermaidExporting) return;
+    setMermaidExporting(true);
+    try {
+      const base64 = await handle.exportPng();
+      const uri = await writeMermaidExportPngTemp(base64);
+      if (!uri) throw new Error('write temp failed');
+      setAnnotatePayload(buildMediaPayload(
+        { kind: 'image', url: uri, previewable: true, title: 'Mermaid 图表' },
+        'Mermaid 图表',
+      ));
+    } catch {
+      Alert.alert('标注失败', '图表尚未渲染完成或导出出错,请稍后重试。');
+    } finally {
+      setMermaidExporting(false);
+    }
+  }, [mermaidExporting, imageAnnotation]);
+
+  // mermaid 走沉浸式全屏查看器:图表铺满整个 Modal(标题与源码区都不渲染,
+  // 图表最大化优先),仅右上角浮动「复制源码 / 关闭」;源码用复制按钮获取。
+  const immersiveMermaid = payload?.kind === 'mermaid';
+
   return (
     <Modal
       animationType="slide"
       onRequestClose={onClose}
-      // onShow 与 visible 翻 false 有竞态窗口(极快开关,同 useModalFadeLifecycle):
-      // 已经在关就别再置 ready,否则迟到事件会让下一次打开跳过 gating。
-      onShow={() => { if (payload) setContentReady(true); }}
       presentationStyle="fullScreen"
+      supportedOrientations={['portrait', 'landscape']}
       visible={!!payload}
     >
+      {immersiveMermaid && payload ? (
+        <View style={styles.payloadModal} testID="message.payloadModal">
+          <MermaidDiagramWebView
+            bare
+            deferSource
+            fill
+            ref={mermaidViewRef}
+            source={payload.body}
+            testID="message.payloadMermaidDiagram"
+            zoomable
+          />
+          <View style={[styles.payloadFloatingActions, { top: modalSafeArea.paddingTop }]}>
+            {imageAnnotation ? (
+              <PayloadHeaderActionButton
+                accessibilityLabel="标注并发送到对话"
+                disabled={mermaidExporting}
+                onPress={() => { void annotateMermaid(); }}
+                style={[styles.payloadHeaderButton, styles.payloadFloatingButton]}
+                testID="message.payloadAnnotateButton"
+              >
+                <PencilLine color={colors.textPrimary} size={iconSize.md} strokeWidth={iconStroke.regular} />
+              </PayloadHeaderActionButton>
+            ) : null}
+            <PayloadHeaderActionButton
+              accessibilityLabel="导出图表为图片"
+              disabled={mermaidExporting}
+              onPress={() => { void exportMermaidPng(); }}
+              style={[styles.payloadHeaderButton, styles.payloadFloatingButton]}
+              testID="message.payloadExportButton"
+            >
+              {mermaidExporting ? (
+                <ActivityIndicator color={colors.textSecondary} size="small" />
+              ) : (
+                <ShareIcon color={colors.textPrimary} size={iconSize.md} strokeWidth={iconStroke.regular} />
+              )}
+            </PayloadHeaderActionButton>
+            <PayloadHeaderActionButton
+              accessibilityLabel="关闭详情"
+              onPress={onClose}
+              style={[styles.payloadCloseButton, styles.payloadFloatingButton]}
+              testID="message.payloadCloseButton"
+            >
+              <X color={colors.textPrimary} size={iconSize.lg} strokeWidth={iconStroke.regular} />
+            </PayloadHeaderActionButton>
+          </View>
+          {annotatePayload && annotateImages ? (
+            // 嵌套标注层:必须渲染在本 Modal 的 children 内(见 annotatePayload 注释)。
+            <ImageLightbox
+              annotation={annotateLightboxAnnotation}
+              images={annotateImages}
+              initialUrl={annotatePayload.media.url}
+              onClose={closeAnnotatePayload}
+              onResolveRemoteMedia={onResolveRemoteMedia}
+              onShareImage={onShareImage}
+            />
+          ) : null}
+        </View>
+      ) : (
       <View
         style={[
           styles.payloadModal,
@@ -3573,8 +3693,11 @@ function MessagePayloadModal({
           style={[
             styles.payloadHeader,
             {
+              // 横屏压成紧凑单行(标题/按钮垂直居中),纵向空间全部让给 body。
+              alignItems: headerLayout.landscape ? 'center' : 'flex-start',
               flexDirection: headerLayout.headerDirection,
               gap: headerLayout.headerGap,
+              minHeight: headerLayout.headerMinHeight,
               paddingHorizontal: headerLayout.headerPaddingHorizontal,
             },
           ]}
@@ -3582,7 +3705,7 @@ function MessagePayloadModal({
         >
           <View style={styles.payloadHeaderText}>
             <Text style={styles.payloadTitle} numberOfLines={headerLayout.titleNumberOfLines}>{payloadSummary?.title ?? ''}</Text>
-            {payloadDetailText ? (
+            {payloadDetailText && headerLayout.showSubtitle ? (
               <Text style={styles.payloadGalleryCount} numberOfLines={1} testID="message.payloadSubtitle">
                 {payloadDetailText}
               </Text>
@@ -3593,6 +3716,7 @@ function MessagePayloadModal({
               styles.payloadHeaderActions,
               {
                 alignItems: headerLayout.actionsAlignItems,
+                flexDirection: headerLayout.actionsDirection,
                 width: headerLayout.actionsWidth,
               },
             ]}
@@ -3661,7 +3785,6 @@ function MessagePayloadModal({
         {payload ? (
           <View style={styles.payloadViewerBody} testID="message.payloadViewerBody">
             <MessagePayloadBody
-              contentReady={contentReady}
               onReadTextFilePreview={onReadTextFilePreview}
               onReleaseRemoteMedia={onReleaseRemoteMedia}
               onResolveRemoteMedia={onResolveRemoteMedia}
@@ -3670,6 +3793,7 @@ function MessagePayloadModal({
           </View>
         ) : null}
       </View>
+      )}
     </Modal>
   );
 }
@@ -3728,15 +3852,11 @@ function payloadHeaderDetailText(
 }
 
 function MessagePayloadBody({
-  contentReady,
   payload,
   onReadTextFilePreview,
   onReleaseRemoteMedia,
   onResolveRemoteMedia,
 }: {
-  // Modal 呈现动画完成(onShow)后才为 true;mermaid / 音视频播放器的 WebView 延迟到
-  // 此刻再挂载,规避 iOS fullScreen Modal 独立 UIWindow 未 attach 时页内网络加载失败。
-  contentReady: boolean;
   payload: MessagePayload;
   onReadTextFilePreview?: (filePath: string) => Promise<RemoteTextFilePreviewResult>;
   onReleaseRemoteMedia?: (sourceUrl: string, media: MobileResolvedRemoteMedia) => void;
@@ -3815,22 +3935,15 @@ function MessagePayloadBody({
       <View style={styles.payloadBody}>
         {canInlinePlayer && playerKind ? (
           <View style={[styles.payloadMediaPlayerFrame, { minHeight: payloadLayout.mediaFrameMinHeight }]}>
-            {/* 与 mermaid 分支同一问题:iOS fullScreen Modal 呈现动画期 WebView 未 attach,
-                内页资源加载会失败。延迟到 onShow 后挂载;占位 View 撑住同一 minHeight,
-                状态文案位置不跳变。 */}
-            {contentReady ? (
-              <RemoteMediaPlayerWebView
-                kind={playerKind}
-                mimeType={resolved?.mimeType}
-                onStatusChange={setPlayerStatus}
-                style={[styles.payloadMediaPlayer, { minHeight: payloadLayout.mediaPlayerMinHeight }]}
-                testID="message.remoteMediaPlayer"
-                title={payload.title}
-                url={displayUrl}
-              />
-            ) : (
-              <View style={[styles.payloadMediaPlayer, { minHeight: payloadLayout.mediaPlayerMinHeight }]} />
-            )}
+            <RemoteMediaPlayerWebView
+              kind={playerKind}
+              mimeType={resolved?.mimeType}
+              onStatusChange={setPlayerStatus}
+              style={[styles.payloadMediaPlayer, { minHeight: payloadLayout.mediaPlayerMinHeight }]}
+              testID="message.remoteMediaPlayer"
+              title={payload.title}
+              url={displayUrl}
+            />
             <Text style={styles.payloadMediaPlayerStatus} testID="message.remoteMediaPlayerStatus">
               {formatMediaPlayerStatus(playerStatus, playerKind)}
             </Text>
@@ -3897,40 +4010,7 @@ function MessagePayloadBody({
     );
   }
 
-  if (payload.kind === 'mermaid') {
-    return (
-      <View style={styles.payloadBody}>
-        <View style={[
-          styles.payloadMermaidFrame,
-          {
-            minHeight: payloadLayout.mermaidHeight,
-            padding: payloadLayout.bodyPadding,
-          },
-        ]}>
-          {/* 延迟到 Modal onShow(WebView 已 attach)后挂载,否则 iOS 上 CDN 注入失败
-              停在源码。未就绪时用同尺寸同 chip 面的静态占位盒,挂载瞬间无跳变;
-              源码 ScrollView 始终可见,等待仅一次呈现动画时长。 */}
-          {contentReady ? (
-            <MermaidDiagramWebView
-              height={payloadLayout.mermaidHeight}
-              source={payload.body}
-              testID="message.payloadMermaidDiagram"
-            />
-          ) : (
-            <View style={[styles.payloadMermaidPlaceholder, { height: payloadLayout.mermaidHeight }]} />
-          )}
-        </View>
-        <ScrollView
-          style={[styles.payloadScroll, { maxHeight: payloadLayout.textScrollMaxHeight }]}
-          contentContainerStyle={[styles.payloadScrollContent, { padding: payloadLayout.bodyPadding }]}
-        >
-          <Text selectable style={[styles.payloadText, styles.payloadMonoText]}>
-            {bodyPresentation.bodyText || bodyPresentation.emptyText}
-          </Text>
-        </ScrollView>
-      </View>
-    );
-  }
+  // mermaid 不经过本组件:MessagePayloadModal 里走沉浸式全屏查看器分支。
 
   if (payload.kind === 'diff') {
     return (
@@ -4783,30 +4863,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     fontSize: typeScale.code,
     lineHeight: lineHeight.code,
   },
-  mermaidCard: {
-    backgroundColor: colors.surfaceChip,
-    borderColor: colors.border,
-    borderRadius: radius.container,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: spacing.xs,
-    padding: spacing.md,
-  },
-  mermaidKind: {
-    color: colors.textTertiary,
-    fontSize: typeScale.caption,
-    fontWeight: fontWeight.medium,
-  },
-  mermaidTitle: {
-    color: colors.textPrimary,
-    fontSize: typeScale.body,
-    fontWeight: fontWeight.medium,
-  },
-  mermaidSourceButton: {
-    alignItems: 'flex-start',
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: spacing.sm,
-  },
   markdownTableScroll: {
     maxWidth: '100%',
   },
@@ -5095,11 +5151,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.surface,
     flex: 1,
   },
+  // alignItems / minHeight 由 headerLayout 按横竖屏注入(横屏紧凑单行)。
   payloadHeader: {
-    alignItems: 'flex-start',
     borderBottomColor: colors.border,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    minHeight: 72,
     paddingVertical: spacing.md,
   },
   payloadHeaderText: { flex: 1, minWidth: 0 },
@@ -5152,7 +5207,20 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   payloadScroll: {
     borderTopColor: colors.border,
     borderTopWidth: StyleSheet.hairlineWidth,
+    // 空间不足(典型:横屏)时源码区让位给上方主体(图表/播放器),自身滚动兜底。
+    flexShrink: 1,
     maxHeight: 220,
+  },
+  // 沉浸式 mermaid 查看器的浮动操作区(复制/关闭),悬于图表右上角。
+  payloadFloatingActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    position: 'absolute',
+    right: spacing.lg,
+  },
+  // 浮动按钮需要实底色,否则悬在图表线条上看不清。
+  payloadFloatingButton: {
+    backgroundColor: colors.surface,
   },
   payloadScrollContent: {
     padding: spacing.lg,
@@ -5294,19 +5362,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     lineHeight: lineHeight.code,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-  },
-  payloadMermaidFrame: {
-    flex: 1,
-    minHeight: 360,
-    padding: spacing.lg,
-  },
-  // contentReady 前的静态占位:复刻 MermaidDiagramWebView 容器的 chip 面
-  // (背景/hairline 边框/圆角),挂载瞬间只有内容出现、表面不凭空冒出。
-  payloadMermaidPlaceholder: {
-    backgroundColor: colors.surfaceChip,
-    borderColor: colors.border,
-    borderRadius: radius.container,
-    borderWidth: StyleSheet.hairlineWidth,
   },
   payloadMediaPlayerFrame: {
     backgroundColor: colors.surfaceChip,

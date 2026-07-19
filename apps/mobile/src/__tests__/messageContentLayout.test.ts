@@ -24,8 +24,6 @@ describe('messageContentLayout', () => {
       mediaGap: 6,
       mediaPlaceholderMinHeight: 84,
       mediaPreviewWidth: 145,
-      mermaidCardGap: 6,
-      mermaidCardPadding: 10,
       toolResultMaxLines: 6,
     });
   });
