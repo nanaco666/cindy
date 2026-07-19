@@ -146,6 +146,7 @@ import {
 import {
   markSessionUsedProjectContext,
   readSessionExtraDirsFromDb,
+  readSessionWorkingDirFromDb,
 } from '../maker-host/session-storage.js';
 import {
   clearSessionPersistState,
@@ -4927,6 +4928,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     buildCreateOptsWithStderr,
     synthesizeOrcaVendorOptionsFromDb,
     readSessionExtraDirsFromDb,
+    readSessionWorkingDirFromDb,
     withRehydrateCloseSuppressed,
     bootstrapSession,
     markOrcaRoleIfNeeded,
@@ -6189,6 +6191,7 @@ async function checkWorkDirExists(
   workingDir: string | undefined | null,
   agentKind: AgentKind | undefined,
   remoteHostId?: string | null,
+  opts?: { suppressMissingBroadcast?: boolean },
 ): Promise<boolean> {
   // 远端 session: workdir 在远端机器上, 本地 fs.stat 必然 ENOENT 但完全没意义。
   // 这条 guard 当初是为本地 session 兜底 "用户在 Finder 把目录删了 / 改名了" 的
@@ -6197,10 +6200,17 @@ async function checkWorkDirExists(
   if (remoteHostId) return true;
   if (!workingDir?.trim()) return true;
   const source: AgentKind = agentKind === 'codex' ? 'codex' : 'claude-code';
+  // suppressMissingBroadcast: 调用方(SEND 事务)手里还有 DB 权威值可兜底时,
+  // 首检失败只记日志不广播错误横幅——兜底成功的话用户不该看到假错误。
+  const suppress = opts?.suppressMissingBroadcast === true;
   try {
     const stat = await fsp.stat(workingDir);
     if (!stat.isDirectory()) {
-      emitWorkDirMissingError(sessionId, workingDir, source, 'not-dir');
+      if (suppress) {
+        log.warn('send: workdir not a directory (broadcast suppressed, caller has fallback)', { sessionId, workingDir });
+      } else {
+        emitWorkDirMissingError(sessionId, workingDir, source, 'not-dir');
+      }
       return false;
     }
     return true;
@@ -6212,6 +6222,10 @@ async function checkWorkDirExists(
     if (healed) {
       log.info('send: recreated missing dialogue workdir', { sessionId, workingDir });
       return true;
+    }
+    if (suppress) {
+      log.warn('send: workdir missing (broadcast suppressed, caller has fallback)', { sessionId, workingDir });
+      return false;
     }
     const similar = await findSimilarDirOnDisk(workingDir);
     emitWorkDirMissingError(sessionId, workingDir, source, 'not-exist', similar);
