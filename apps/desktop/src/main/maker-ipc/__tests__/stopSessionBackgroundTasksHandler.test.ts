@@ -9,10 +9,14 @@ describe('stop session background tasks IPC handler', () => {
     const harness = new IpcHarness();
     const closeSession = vi.fn();
     const clearBackgroundActivity = vi.fn();
+    const noteSessionReset = vi.fn();
+    const notifyGoalStop = vi.fn();
 
     registerStopSessionBackgroundTasksHandler(harness, {
       closeSession,
       clearBackgroundActivity,
+      noteSessionReset,
+      notifyGoalStop,
     });
 
     await expect(
@@ -26,6 +30,8 @@ describe('stop session background tasks IPC handler', () => {
     const harness = new IpcHarness();
     const closeSession = vi.fn().mockResolvedValue(undefined);
     const clearBackgroundActivity = vi.fn();
+    const noteSessionReset = vi.fn();
+    const notifyGoalStop = vi.fn();
     // Regression fixture: the old handler called getSession().isTurnRunning() and rejected
     // with SESSION_RUNNING instead of honoring the user's emergency stop request.
     const maker = {
@@ -36,12 +42,16 @@ describe('stop session background tasks IPC handler', () => {
     registerStopSessionBackgroundTasksHandler(harness, {
       closeSession: maker.closeSession,
       clearBackgroundActivity,
+      noteSessionReset,
+      notifyGoalStop,
     });
 
     await expect(
       harness.invoke(MAKER_INVOKE.STOP_SESSION_BACKGROUND_TASKS, 'session-running'),
     ).resolves.toEqual({ ok: true });
     expect(maker.getSession).not.toHaveBeenCalled();
+    expect(noteSessionReset).toHaveBeenCalledWith('session-running');
+    expect(notifyGoalStop).toHaveBeenCalledWith('session-running');
     expect(closeSession).toHaveBeenCalledWith('session-running');
     expect(clearBackgroundActivity).toHaveBeenCalledWith('session-running');
   });
@@ -51,15 +61,21 @@ describe('stop session background tasks IPC handler', () => {
     const error = new Error('close failed');
     const closeSession = vi.fn().mockRejectedValue(error);
     const clearBackgroundActivity = vi.fn();
+    const noteSessionReset = vi.fn();
+    const notifyGoalStop = vi.fn();
 
     registerStopSessionBackgroundTasksHandler(harness, {
       closeSession,
       clearBackgroundActivity,
+      noteSessionReset,
+      notifyGoalStop,
     });
 
     await expect(
       harness.invoke(MAKER_INVOKE.STOP_SESSION_BACKGROUND_TASKS, 'session-1'),
     ).rejects.toBe(error);
+    expect(noteSessionReset).toHaveBeenCalledWith('session-1');
+    expect(notifyGoalStop).toHaveBeenCalledWith('session-1');
     expect(clearBackgroundActivity).not.toHaveBeenCalled();
   });
 });

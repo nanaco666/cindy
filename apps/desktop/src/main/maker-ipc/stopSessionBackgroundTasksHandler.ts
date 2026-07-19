@@ -6,6 +6,8 @@ import type { IpcHandlerRegistry } from './ipcHandlerRegistry.js';
 export interface StopSessionBackgroundTasksHandlerDeps {
   closeSession(sessionId: string): Promise<void>;
   clearBackgroundActivity(sessionId: string): void;
+  noteSessionReset(sessionId: string): void;
+  notifyGoalStop(sessionId: string): void | Promise<void>;
 }
 
 /**
@@ -26,6 +28,8 @@ export function registerStopSessionBackgroundTasksHandler(
         throwIpcError('INVALID_PARAMS', 'sessionId required');
       }
 
+      deps.noteSessionReset(sessionId);
+      await deps.notifyGoalStop(sessionId);
       await deps.closeSession(sessionId);
       // closed 事件的统一清理也会清账；这里显式清一次，确保 renderer 立即收到熄灭广播。
       deps.clearBackgroundActivity(sessionId);

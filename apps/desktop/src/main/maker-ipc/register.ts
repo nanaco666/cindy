@@ -2648,6 +2648,8 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
   registerStopSessionBackgroundTasksHandler(createElectronIpcHandlerRegistry(), {
     closeSession: (sessionId) => maker.closeSession(sessionId),
     clearBackgroundActivity: clearClaudeSessionBackgroundActivity,
+    noteSessionReset: (sessionId) => silentStopAutoResumeGuard.noteSessionReset(sessionId),
+    notifyGoalStop: (sessionId) => goalStopObserver?.(sessionId),
   });
 
   // workflow 逐 agent 进度树(只读)。从活跃会话拿 workDir + sdkSessionId → 推导 Claude Code
