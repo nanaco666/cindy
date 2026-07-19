@@ -29,7 +29,7 @@ describe('mobileNativeShellLayout', () => {
     expect(layout.composerScrollEnabled).toBe(true);
     expect(layout.composerMaxHeight).toBeLessThanOrEqual(264);
     expect(layout.pendingSurfaceMaxHeight).toBeLessThan(667 * 0.62);
-    expect(layout.pendingSurfaceExpandedHeight).toBe(layout.sheetMaxHeight);
+    expect(layout.pendingSurfaceExpandedHeight).toBe(layout.sheetMaxHeight + 34);
     expect(layout.sheetMaxHeight).toBeLessThan(667 * 0.88);
   });
 
@@ -47,8 +47,8 @@ describe('mobileNativeShellLayout', () => {
     expect(layout.keyboardBottomInset).toBe(0);
     expect(layout.composerScrollEnabled).toBe(false);
     expect(layout.composerMaxHeight).toBeGreaterThan(300);
-    expect(layout.pendingSurfaceMaxHeight).toBe(layout.sheetMaxHeight);
-    expect(layout.pendingSurfaceExpandedHeight).toBe(layout.sheetMaxHeight);
+    expect(layout.pendingSurfaceMaxHeight).toBe(layout.sheetMaxHeight + 34);
+    expect(layout.pendingSurfaceExpandedHeight).toBe(layout.sheetMaxHeight + 34);
     expect(layout.sheetMaxHeight).toBe(Math.round(932 * 0.88));
     expect(layout.wideViewport).toBe(false);
     expect(layout.contentMaxWidth).toBe(390);
