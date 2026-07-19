@@ -100,11 +100,12 @@ export function SessionStatusIcon({
           strokeWidth={1.75}
           className={cn(
             'shrink-0',
-            isRunning
-              ? 'text-[var(--status-bar-accent)] session-status-breathing'
-              : isActive
-                ? 'text-[var(--sidebar-item-active-foreground)]'
+            isActive
+              ? 'text-[var(--sidebar-item-active-foreground)]'
+              : isRunning
+                ? 'text-[var(--status-bar-accent)]'
                 : 'text-[var(--cmd-palette-item-meta)]',
+            isRunning && 'session-status-breathing',
           )}
         />
       ) : isAttached ? (
@@ -113,11 +114,12 @@ export function SessionStatusIcon({
           strokeWidth={1.75}
           className={cn(
             'shrink-0',
-            isRunning
-              ? 'text-[var(--status-bar-accent)] session-status-breathing'
-              : isActive
-                ? 'text-[var(--sidebar-item-active-foreground)]'
+            isActive
+              ? 'text-[var(--sidebar-item-active-foreground)]'
+              : isRunning
+                ? 'text-[var(--status-bar-accent)]'
                 : 'text-[var(--cmd-palette-item-meta)]',
+            isRunning && 'session-status-breathing',
           )}
         />
       ) : (
@@ -125,7 +127,7 @@ export function SessionStatusIcon({
           vendor={vendor}
           size={size ?? (vendor === 'cc' ? 13 : 12)}
           running={isRunning}
-          className={isActive && !isRunning ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}
+          className={isActive ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}
         />
       )}
       {showAttentionDot && hasAttentionNotification && (

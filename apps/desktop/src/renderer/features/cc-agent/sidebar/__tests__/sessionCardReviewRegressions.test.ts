@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest';
 const sidebarDir = resolve(__dirname, '..');
 const sessionCardSource = readFileSync(resolve(sidebarDir, 'SessionCard.tsx'), 'utf8');
 const sessionItemSource = readFileSync(resolve(sidebarDir, 'SessionItem.tsx'), 'utf8');
+const sessionStatusIconSource = readFileSync(resolve(sidebarDir, 'SessionStatusIcon.tsx'), 'utf8');
+const automationGroupSource = readFileSync(resolve(sidebarDir, 'AutomationSessionGroupItem.tsx'), 'utf8');
 const globalsSource = readFileSync(resolve(__dirname, '..', '..', '..', '..', 'styles', 'globals.css'), 'utf8');
 
 describe('SessionCard review regressions', () => {
@@ -85,5 +87,46 @@ describe('SessionCard review regressions', () => {
     expect(globalsSource).toContain('color: var(--sidebar-item-active-foreground);');
     expect(sessionItemSource).toContain('text-[var(--sidebar-item-active-foreground)]');
     expect(sessionCardSource).toContain('text-[var(--sidebar-item-active-foreground)]');
+  });
+
+  it('keeps selected running-session icons and spinner on the active foreground color', () => {
+    expect(sessionStatusIconSource).toContain(
+      "className={isActive ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}",
+    );
+    expect(sessionStatusIconSource).toMatch(
+      /isActive\s*\? 'text-\[var\(--sidebar-item-active-foreground\)\]'\s*:\s*isRunning/,
+    );
+    expect(sessionItemSource).toContain(
+      "isActive ? 'text-sidebar-item-active-foreground' : 'text-sidebar-action-icon'",
+    );
+  });
+
+  it('keeps selected sidebar hover actions inside the active color system', () => {
+    expect(sessionItemSource).toContain('isActive={isActive}');
+    expect(sessionItemSource).toContain(
+      "'text-sidebar-item-active-foreground hover:text-sidebar-item-active-foreground hover:bg-[color-mix(in_srgb,var(--sidebar-item-active-foreground)_14%,transparent)]'",
+    );
+    expect(sessionItemSource).toContain(
+      "'text-sidebar-action-icon hover:bg-sidebar-item-hover hover:text-foreground'",
+    );
+  });
+
+  it('keeps selected automation group icons, spinner, and actions in the active color system', () => {
+    expect(automationGroupSource).toContain(
+      "className={hasActiveHidden ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}",
+    );
+    expect(automationGroupSource).toMatch(
+      /hasActiveHidden\s*\? 'text-\[var\(--sidebar-item-active-foreground\)\]'\s*:\s*isRunning/,
+    );
+    expect(automationGroupSource).toContain(
+      "hasActiveHidden ? 'text-sidebar-item-active-foreground' : 'text-sidebar-action-icon'",
+    );
+    expect(automationGroupSource).toContain('actionButtonToneClassName');
+    expect(automationGroupSource).toContain(
+      "? 'text-sidebar-item-active-foreground hover:text-sidebar-item-active-foreground hover:bg-[color-mix(in_srgb,var(--sidebar-item-active-foreground)_14%,transparent)]'",
+    );
+    expect(automationGroupSource).toContain(
+      ": 'text-foreground hover:bg-sidebar-item-hover'",
+    );
   });
 });
