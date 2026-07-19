@@ -14,7 +14,9 @@
  *
  * 身份卡(id / auth / access / routing / titleModel / 媒体模型清单)是随代码走的事实:
  * 改它们必然伴随发版(SDK 集成 / 翻译桥 / 网关协议都是代码),所以写死在这里,
- * 不再经 OSS 下发。OSS `cfg/providers.json`(v2)只承载 xai 清单 + presets 模板。
+ * 不再经 OSS 下发。OSS `cfg/providers.json`(v2)只承载 xai 清单 + presets 模板,
+ * 外加服务端消费的 `cindyModelMeta` 段(model-access-server 的网关模型元数据
+ * 远程覆盖表,经 MODEL_METADATA_URL 指向同一文件热加载;客户端不读该字段)。
  *
  * ⚠️ 顺序契约:BUILTIN_PROVIDERS 的数组序(anthropic → openai → xai → xd)决定
  * 选择器分段顺序与 deriveAvailableModels 的 first-wins 去重优先级,不要改动。
