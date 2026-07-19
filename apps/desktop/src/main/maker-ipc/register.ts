@@ -70,7 +70,8 @@ import {
   loadAgentInputQueueSnapshot,
   saveAgentInputQueueSnapshot,
 } from '../localDb/agentInputQueueSnapshots.js';
-import { ensureDialogueWorkspaceDir } from '../localDb/dialogueWorkspace.js';
+import { ensureDialogueWorkspaceDir, dialogueWorkspaceRootDir } from '../localDb/dialogueWorkspace.js';
+import { healMissingDialogueWorkdir } from '../localDb/dialogueWorkdirSelfHeal.js';
 import { createMessage as createDbMessage } from '../localDb/ipc/messages.js';
 import { visibleMessageTextForConversationSearch } from '../localDb/conversationSearch.pure.js';
 import {
@@ -6204,6 +6205,14 @@ async function checkWorkDirExists(
     }
     return true;
   } catch {
+    // app 托管的 dialogue 工作目录(<userData>/dialogues/<日期>/<id>)本来就是
+    // 空的一次性目录:丢了直接 mkdir 重建放行,不打扰用户(自愈详见
+    // dialogueWorkdirSelfHeal.ts;legacy userData 前缀由启动 sweep 先行改写)。
+    const healed = await healMissingDialogueWorkdir(workingDir, dialogueWorkspaceRootDir());
+    if (healed) {
+      log.info('send: recreated missing dialogue workdir', { sessionId, workingDir });
+      return true;
+    }
     const similar = await findSimilarDirOnDisk(workingDir);
     emitWorkDirMissingError(sessionId, workingDir, source, 'not-exist', similar);
     return false;
