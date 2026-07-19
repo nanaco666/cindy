@@ -24,6 +24,9 @@ import remarkStrictInlineMath from './remarkStrictInlineMath';
 import { normalizeMathDelimiters } from '@lizi/maker-shared/math-markdown';
 import remarkLocalPathLinks from './remarkLocalPathLinks';
 import remarkHtmlImages from './remarkHtmlImages';
+import remarkPreserveLocalImagePaths, {
+  RAW_LOCAL_IMAGE_SRC_PROP,
+} from './remarkPreserveLocalImagePaths';
 import remarkSessionLinks from './remarkSessionLinks';
 import type { Components, UrlTransform } from 'react-markdown';
 import type { PluggableList } from 'unified';
@@ -34,6 +37,7 @@ import { cn, basename } from '@/lib/utils';
 import {
   looksLikeFilePath,
   MODEL_EXT_RE,
+  normalizeMarkdownImageSrc,
   resolveLocalPath,
   resolveLocalPathSmartCached,
   peekResolveLocalPathSmart,
@@ -172,6 +176,7 @@ const REMARK_PLUGINS: PluggableList = [
   remarkStrictInlineMath,
   remarkTruncateCjkUrls,
   remarkHtmlImages,
+  remarkPreserveLocalImagePaths,
   remarkLocalPathLinks,
 ];
 const REMARK_PLUGINS_PRIVILEGED: PluggableList = [
@@ -180,6 +185,7 @@ const REMARK_PLUGINS_PRIVILEGED: PluggableList = [
   remarkStrictInlineMath,
   remarkTruncateCjkUrls,
   remarkHtmlImages,
+  remarkPreserveLocalImagePaths,
   remarkSessionLinks,
   remarkLocalPathLinks,
 ];
@@ -631,52 +637,6 @@ function makeSourceLineWrappers(): Partial<Components> {
     blockquote: wrapWithSourceLine('blockquote', baseComponents.blockquote),
     hr: wrapWithSourceLine('hr', baseComponents.hr),
   };
-}
-
-/**
- * Normalize a markdown image src into a value the renderer can actually load.
- *
- * Pass-through (already a valid URL the browser/renderer accepts):
- *   - data:                — inline base64
- *   - http(s)://           — remote
- *   - xdt-image://         — session image cache (imageProtocol.ts)
- *   - xdt-file://          — already routed through our local-file scheme
- *   - xdt-remote-media://  — device-link remote media proxy
- *
- * Convert (a raw local path that <img> can't load directly):
- *   - file://...           — strip and re-route via xdt-file://
- *   - C:\... / C:/...      — Windows absolute
- *   - /abs/...             — POSIX absolute
- *   - relative/foo.png     — joined with workingDir, then xdt-file://
- *
- * Returns undefined when src is undefined/empty so the caller can render
- * the missing-image placeholder.
- */
-function normalizeImgSrc(
-  src: string | undefined,
-  workingDir: string,
-  allowPrivilegedLinks: boolean,
-): string | undefined {
-  if (!src) return src;
-  if (!allowPrivilegedLinks) {
-    return /^https?:\/\//i.test(src) ? src : undefined;
-  }
-  if (
-    src.startsWith('data:') ||
-    src.startsWith('http://') ||
-    src.startsWith('https://') ||
-    src.startsWith('xdt-image://') ||
-    src.startsWith('cindy-media://') ||
-    src.startsWith('xdt-file://') ||
-    src.startsWith('xdt-remote-media://')
-  ) {
-    return src;
-  }
-  // file:// → strip prefix, then go through xdt-file:// like any other
-  // local path so Chromium's cross-scheme block doesn't silently 404 us.
-  const stripped = src.startsWith('file://') ? src.slice(7) : src;
-  const abs = resolveLocalPath(stripped, workingDir);
-  return toLocalFileUrl(abs);
 }
 
 function stripPrivilegedMarkdownTarget(target: MarkdownTarget): MarkdownTarget {
@@ -1524,14 +1484,21 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
       // renderer 整体替换成带 data-source-line 注入的版本。chat 调用方不传 prop
       // → 默认 false → 整段是 falsy 短路, components 对象与之前完全一致。
       ...(emitSourceLines ? makeSourceLineWrappers() : {}),
-      img: ({ src, alt, ...props }) => {
-        const normalized = normalizeImgSrc(src, workingDir, allowPrivilegedLinks);
+      img: ({ src, alt, node, ...props }) => {
+        const rawLocalSrc = node?.properties?.[RAW_LOCAL_IMAGE_SRC_PROP];
+        const normalized = normalizeMarkdownImageSrc(
+          typeof rawLocalSrc === 'string' ? rawLocalSrc : src,
+          workingDir,
+          allowPrivilegedLinks,
+        );
+        const imageProps = { ...props };
+        delete (imageProps as Record<string, unknown>)[RAW_LOCAL_IMAGE_SRC_PROP];
         return (
           <LightboxImage
             src={normalized ? rewriteToRemoteMediaOrigin(normalized, remoteMediaOrigin) : normalized}
             alt={alt}
             onZoom={setLightboxSrc}
-            {...props}
+            {...imageProps}
           />
         );
       },
