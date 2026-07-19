@@ -38,7 +38,9 @@ import {
  * 直接结构化拒绝(不打无谓的 server 请求)。新增 provider 时同步扩这里
  * 与 server 端路由。
  */
-export const SUPPORTED_TOKEN_BROKERS: ReadonlySet<string> = new Set(['feishu', 'jira', 'slack']);
+// 'slack' slug 已于 2026-07-19 随 cindy-slack 意识退役(Slack 能力并轨 hook
+// 通道, user token 改由 slack-hook-server 在 bind v2 授权时托管)。
+export const SUPPORTED_TOKEN_BROKERS: ReadonlySet<string> = new Set(['feishu', 'jira']);
 
 /**
  * server 401 里明确表示"上游服务商拒绝了这份授权"的错误码白名单——只有命中
@@ -49,7 +51,6 @@ export const SUPPORTED_TOKEN_BROKERS: ReadonlySet<string> = new Set(['feishu', '
 const UPSTREAM_REJECTION_CODES: ReadonlySet<string> = new Set([
   'FEISHU_OAUTH_FAILED',
   'JIRA_OAUTH_FAILED',
-  'SLACK_MCP_OAUTH_FAILED',
 ]);
 
 /** broker 端点的响应形态(apps/server routes/jiraOAuth.ts 的返回契约)。 */

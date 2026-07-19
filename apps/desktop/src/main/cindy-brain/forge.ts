@@ -228,7 +228,7 @@ my-ghost/
       "identity": { "url": "https://api.example.com/userinfo", "labelPath": "email", "displayTemplate": "{team} · {user}", "avatarPath": "data.avatar_thumb" },  // 可选:授权后拉一次身份端点给账号打标签(设置页"已连接为 xxx";url 域名须命中 hosts)。labelPath 应指向**唯一且稳定**字段(如邮箱 / user_id)——它是重复授权时的同身份合并判定键,选 name 这类可重名可改名字段会误合并。displayTemplate 可选:人类可读展示名模板,\`{点分路径}\` 占位符从同一份身份响应取值(至少一个占位符,≤200 字符),任一占位符取不到值整体降级为空、回落显示 labelPath 的值——labelPath 的稳定字段不可读(如 Slack 的 user_id)时声明它,设置页与账号工具展示的就是渲染后的名字(邮箱这类本身可读的服务商不需要)。avatarPath 可选:头像 URL 在身份响应里的点分路径(如飞书的 "data.avatar_thumb")——主机取 https 地址后**不带凭证**下载小图(仅 png/jpeg/webp/gif、≤256KB)转 data URL 存库,\`/oauth\` 回查里以 account.avatarDataUrl 给你的 settingsHtml 展示(<img> 直接用)。**下载仅对第一方官方意识生效**(头像地址不受 hosts 白名单约束,第三方声明合法但恒降级 null)——所以页面必须能没头像也好看(如回落姓名首字圆片)
       "redirectPort": 53682,                        // 可选:loopback 回调固定端口(1024–65535)。服务商要求回调 URI 与注册值精确匹配(如 Atlassian)时声明,回调恒为 http://127.0.0.1:<端口>/callback;缺省 = 随机端口(Google 等允许任意 loopback 端口的服务商不用声明)
       "tokenBroker": "jira",                        // 可选:仅第一方官方意识可用(第三方声明拒装)。声明后 code/refresh 交换经 Cindy 服务端 broker 完成(client secret 在服务端,不随包分发),与 clientSecret 互斥;设置页不再支持自填 client
-      "brokerBounce": { "path": "/slack-mcp/bounce", "callbackPath": "/slack-mcp/callback" }  // 可选:双地址弹跳回调(服务商后台只收 https redirect 时用,如 Slack)。必须与 tokenBroker、redirectPort 同时声明;报给服务商的 redirect_uri = broker 服务基地址 + path(主机运行时拼,清单不落域名),浏览器授权后由弹跳路由 302 回 http://127.0.0.1:<redirectPort><callbackPath>
+      "brokerBounce": { "path": "/example/bounce", "callbackPath": "/example/callback" }  // 可选:双地址弹跳回调(服务商后台只收 https redirect、不收 http loopback 时用)。必须与 tokenBroker、redirectPort 同时声明;报给服务商的 redirect_uri = broker 服务基地址 + path(主机运行时拼,清单不落域名),浏览器授权后由弹跳路由 302 回 http://127.0.0.1:<redirectPort><callbackPath>
     }
   }],
   "connections": [{                                 // 可选 0–2 条:多连接声明——"地址 + 凭证成对多条"(自建实例场景如 GitLab,详见 §4.7「多连接」)。声明了 connections 时 hosts 可缺省/为空(静态域名与动态连接至少有其一);声明 connections 必须同时声明 settingsHtml
@@ -833,7 +833,7 @@ identity.displayTemplate 时,\`/oauth\` 回查与连接结果里 account.label �
   经 broker exchange 透传服务端),不吃 PKCE 的服务商显式 \`"pkce": false\`;
   设置页的 \`/oauth/<key>/client\` 自填通道返回 405(settingsHtml 不要再画
   client 输入区)。
-- \`brokerBounce\`:双地址弹跳回调(随 tokenBroker,同样仅第一方)。Slack 这类
+- \`brokerBounce\`:双地址弹跳回调(随 tokenBroker,同样仅第一方)。部分
   服务商后台只收 https redirect、不收 http loopback——声明后报给服务商的
   redirect_uri 是「broker 服务的 https 弹跳路由」(主机用 broker 基地址 + \`path\`
   运行时拼出),浏览器授权后弹跳路由 302 回本机

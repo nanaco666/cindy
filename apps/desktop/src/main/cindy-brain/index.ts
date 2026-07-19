@@ -86,12 +86,6 @@ import {
   CINDY_GITLAB_GHOST_ID,
   migrateGitlabAccounts,
 } from './gitlabAccountsMigration.js';
-import {
-  LEGACY_SLACK_CONNECTION_FILE,
-  LEGACY_SLACK_RT_FILE,
-  CINDY_SLACK_GHOST_ID,
-  migrateSlackAccounts,
-} from './slackAccountsMigration.js';
 import { GHOST_SCHEME, ghostExternalLinkUrls, parseGhostPartition } from '../../shared/ghost.js';
 import { GhostPipeDispatcher } from './pipeDispatcher.js';
 import { GhostCardService, parseCardHeightReport } from './cardService.js';
@@ -242,6 +236,41 @@ const RENAMED_BUILTIN_GHOSTS: ReadonlyArray<readonly [string, string]> = [
 ];
 
 /**
+ * 内置意识退役台账(整包下线、无接替 id)。种子目录删除后播种器的孤儿回收
+ * 只负责"包收走",不清用户数据 —— 这里补上 uninstall 同款的三连清理:
+ * safeStorage 凭证(OAuth 账号/refresh token)、ghost-kv 偏好、fs 槽私有
+ * 目录。每轮对账幂等执行,长期保留(老设备可能隔很多版本才升级)。
+ */
+const RETIRED_BUILTIN_GHOSTS: readonly string[] = [
+  'cindy-slack', // 2026-07-19 退役:Slack 能力并轨 hook 通道(lizi_slack 网关工具)
+];
+
+/** 退役意识的存量用户数据清理(uninstall 三连的对账版;全程 best-effort)。 */
+function cleanupRetiredGhostData(id: string): void {
+  try {
+    removeGhostSecrets(id);
+  } catch (err) {
+    log.warn('retired ghost secret cleanup failed', {
+      id, error: err instanceof Error ? err.message : String(err),
+    });
+  }
+  for (const target of [
+    path.join(app.getPath('userData'), 'ghost-kv', `${id}.json`),
+    path.join(app.getPath('userData'), 'ghost-fs', id),
+  ]) {
+    try {
+      if (!fs.existsSync(target)) continue;
+      fs.rmSync(target, { recursive: true, force: true });
+      log.info('retired ghost data removed', { id, target });
+    } catch (err) {
+      log.warn('retired ghost data cleanup failed', {
+        id, target, error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+}
+
+/**
  * 改名 KV 搬家:userData/ghost-kv/<旧id>.json → <新id>.json(新 id 名下已有
  * 内容则不覆盖;旧文件保留作回滚余地)。文件级操作,best-effort。
  */
@@ -314,6 +343,10 @@ async function reconcileBuiltinGhosts(reason: string): Promise<void> {
       }),
     );
     migrateGhostKvOnRename(fromId, toId);
+  }
+  // 退役意识的存量数据清理(孤儿回收只删包不删数据;每轮幂等,见台账注释)
+  for (const retiredId of RETIRED_BUILTIN_GHOSTS) {
+    cleanupRetiredGhostData(retiredId);
   }
   // 改名停用态补挂:新 id 本轮首装且旧 id 此前处于停用 → 新目录补 .disabled
   // (播种首装默认启用,这里还原用户选择;放在广播/停靠之前,清单首帧即正确)。
@@ -1807,44 +1840,9 @@ export function registerGhostIpc(): void {
           log.warn('xd-atlassian 搬账意外失败(不阻断启动)', { err: err instanceof Error ? err.message : String(err) });
         }
       }
-      // 老 Slack 官方 MCP 集成 → Cindy Slack 意识的一次性搬账(slack-official
-      // 退役配套):老 rt 与 oauth-broker 同一 Slack 应用,tokenBroker 模式走
-      // 同一 broker 刷新,令牌通用;幂等语义同上。
-      if (manager.list().some((g) => g.manifest.id === CINDY_SLACK_GHOST_ID)) {
-        try {
-          const legacyDir = path.join(app.getPath('userData'), 'safe-storage');
-          migrateSlackAccounts({
-            readLegacyRefreshToken: () => {
-              try {
-                if (!safeStorage.isEncryptionAvailable()) return null;
-                const file = path.join(legacyDir, LEGACY_SLACK_RT_FILE);
-                if (!fs.existsSync(file)) return null;
-                return safeStorage.decryptString(Buffer.from(fs.readFileSync(file, 'utf-8'), 'base64'));
-              } catch {
-                return null;
-              }
-            },
-            readLegacyConnection: () => {
-              try {
-                const raw = JSON.parse(
-                  fs.readFileSync(path.join(legacyDir, LEGACY_SLACK_CONNECTION_FILE), 'utf-8'),
-                ) as { userId?: unknown };
-                return { userId: typeof raw.userId === 'string' ? raw.userId : null };
-              } catch {
-                return null;
-              }
-            },
-            vault: {
-              read: (ghostId, storageKey) => readGhostSecret(ghostId, storageKey),
-              store: (ghostId, storageKey, value) => storeGhostSecret(ghostId, storageKey, value),
-              remove: (ghostId, storageKey) => removeGhostSecret(ghostId, storageKey),
-            },
-            log,
-          });
-        } catch (err) {
-          log.warn('cindy-slack 搬账意外失败(不阻断启动)', { err: err instanceof Error ? err.message : String(err) });
-        }
-      }
+      // 老 Slack 官方 MCP → cindy-slack 意识的搬账已随意识退役删除
+      // (2026-07-19 Slack 能力并轨 hook 通道;存量意识凭证由
+      // RETIRED_BUILTIN_GHOSTS 对账清理)。
       // 老 GitHub 集成 → GitHub 意识(cindy-github)的一次性搬账(lizi_github 退役配套):
       // PAT 直接迁入意识 user 凭证槽;仅迁 github.com 连接(意识白名单静态
       // 钉死 github.com,GHE token 迁了也只会 401);幂等语义同上。

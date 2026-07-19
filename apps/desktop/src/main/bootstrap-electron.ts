@@ -9,6 +9,8 @@ import { execFile, execFileSync, spawn } from 'node:child_process';
 import { machineIdSync } from 'node-machine-id';
 import windowStateKeeper from 'electron-window-state';
 import { BRAND_NAME } from '@lizi/maker-shared/branding';
+import { shouldRequestSingleInstanceLock } from './devCliFlags.js';
+import { acquirePassiveDevLock } from './passiveDevLock.js';
 
 const PROCESS_STARTED_AT_MS = Date.now();
 
@@ -619,6 +621,7 @@ import { initLogger, writeFromRenderer, setLogLevel, getLogLevel, keepRecentSync
 initLogger();
 const dbClientLog = createLogger('DbClient');
 const authBoundaryLog = createLogger('auth-boundary');
+const passiveDevLockLog = createLogger('passive-dev-lock');
 // 主窗 renderer 加载失败可观测性 + dev 启动看门狗(见 renderer-boot-guard.ts 顶部注释)。
 const rendererGuardLog = createLogger('renderer-guard');
 const updatePresentationLog = createLogger('update-presentation');
@@ -1507,9 +1510,24 @@ app.on('open-file', (event, filePath) => {
 });
 
 // ── Single instance lock ─────────────────────────────────────────────────
-// Prevent multiple instances in packaged builds. Skip in dev so that
-// multiple `pnpm dev:desktop*` sessions can run side-by-side.
-if (app.isPackaged) {
+// 正常 dev 与 packaged 一律启用。这是把 OS 因深链(cindy://focus 授权返回 /
+// cindy://session 等)/ 右键 "通过 Cindy 打开" 而拉起的第二个进程 redirect 成
+// "聚焦已运行窗口" 的唯一机制——两个独立 Electron 进程之间没有别的通道能交接焦点。
+//
+// 唯一例外是 dev `--passive`:它的公开契约就是和正式版共享 Cindy userData 双开、
+// 同时让出自动 schedule。正式版已持有同一作用域的锁，passive dev 若也请求会直接
+// quit，契约形同失效；所以只有这个明确模式跳过 Electron 内置锁。此模式没有
+// second-instance redirect，deep link 落到哪个实例由当前 OS 协议注册归属决定。
+// 但 passive 实例之间仍需互斥(同一 userData 的 SQLite 不能并发打开两个写者),
+// 通过 userData 下的 `.passive-dev.lock` 原子文件锁实现。
+//
+// 锁按 userData 目录作用域:默认 dev / packaged 共用 `Cindy` userData → 单实例;
+// `--isolated=<名字>` 沙箱各有独立 userData → 各自独立锁,仍可并行共存。真要多开走
+// `--isolated`(见 AGENTS.md),不再依赖 "dev 无锁" 各开窗口。
+if (shouldRequestSingleInstanceLock({
+  isPackaged: app.isPackaged,
+  schedulerPassive: process.env.XDT_SCHEDULER_PASSIVE === '1',
+})) {
   const gotTheLock = app.requestSingleInstanceLock();
   if (!gotTheLock) {
     app.quit();
@@ -1548,6 +1566,37 @@ if (app.isPackaged) {
       // (deepLink 只向已有窗口投递/排队,不建窗)。
       if (startupWindowCreationAllowed && !focusMainWindow()) {
         createWindow();
+      }
+    });
+  }
+} else {
+  // passive dev 跳过 Electron 的 single-instance lock(避免与正式版冲突),但仍需
+  // 阻止同一 userData 下的第二个 passive 实例并发启动——否则两者同时打开 SQLite
+  // 会产生 busy / migration 竞态。锁用 wx/O_EXCL 原子创建，记录 PID + owner token；
+  // 异常退出可回收 stale 锁，release 也不会误删已经易主的新锁。
+  const userDataDir = app.getPath('userData');
+  const passiveLockPath = path.join(userDataDir, '.passive-dev.lock');
+  const result = acquirePassiveDevLock({
+    lockPath: passiveLockPath,
+    pid: process.pid,
+    startedAtMs: PROCESS_STARTED_AT_MS,
+    onCompromised: (reason) => {
+      passiveDevLockLog.error('passive dev lock compromised; quitting', { reason });
+      app.quit();
+    },
+  });
+  if (!result.acquired) {
+    if (result.reason === 'occupied') {
+      passiveDevLockLog.warn('another passive dev instance owns this userData; quitting', result);
+    } else {
+      passiveDevLockLog.error('passive dev lock acquisition failed; quitting', result);
+    }
+    app.quit();
+  } else {
+    app.on('will-quit', () => {
+      const released = result.lock.release();
+      if (!released.released && released.reason !== 'missing') {
+        passiveDevLockLog.warn('passive dev lock release skipped', released);
       }
     });
   }

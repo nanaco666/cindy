@@ -33,6 +33,18 @@ function testProvider(): McpProvider {
   };
 }
 
+function slackProvider(isBound: () => boolean): McpProvider {
+  return {
+    name: 'lizi_slack',
+    isEnabled: isBound,
+    toClaudeSdkConfig: () => ({
+      type: 'sdk',
+      name: 'lizi_slack',
+      instance: new McpServer({ name: 'lizi_slack', version: '1.0.0' }),
+    }),
+  };
+}
+
 /** 远程 HTTP MCP provider(无 in-process SDK server),带自定义 header。 */
 function remoteHttpProvider(): McpProvider {
   return {
@@ -80,6 +92,26 @@ describe('codexEnvironment', () => {
     expect(firstUrl.origin).toBe(secondUrl.origin);
     expect(firstUrl.pathname).toBe('/mcp/lizi_test');
     expect(secondUrl.pathname).toBe('/mcp/lizi_test');
+  });
+
+  it('Slack 在 bridge 启动后完成绑定时，清缓存会按最新 provider gate 重建', async () => {
+    let bound = false;
+    const providers = [testProvider(), slackProvider(() => bound)];
+    const logger = noopLogger();
+
+    const beforeBind = await getCodexExtraSpawnConfig({ mcpProviders: providers, logger });
+    expect(beforeBind.extraArgs.some((arg) => arg.startsWith('mcp_servers.lizi_slack.'))).toBe(false);
+
+    // Codex 的 provider 集合冻结在首个 cached spawn config；仅改变绑定态还不会出现。
+    bound = true;
+    const stillFrozen = await getCodexExtraSpawnConfig({ mcpProviders: providers, logger });
+    expect(stillFrozen).toBe(beforeBind);
+    expect(stillFrozen.extraArgs.some((arg) => arg.startsWith('mcp_servers.lizi_slack.'))).toBe(false);
+
+    // hook-control 收到 bound gate 翻转后会走同一失效出口，再次构建即可看到工具。
+    await shutdownCodexEnvironment();
+    const afterBind = await getCodexExtraSpawnConfig({ mcpProviders: providers, logger });
+    expect(afterBind.extraArgs.some((arg) => arg.startsWith('mcp_servers.lizi_slack.'))).toBe(true);
   });
 
   it('serializes remote HTTP custom headers as env_http_headers -c overrides (no bridge)', async () => {

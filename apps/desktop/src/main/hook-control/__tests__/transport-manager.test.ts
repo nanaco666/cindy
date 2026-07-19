@@ -11,11 +11,13 @@ import { WebSocketServer, type WebSocket as ServerSocket } from 'ws';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  HOOK_FEATURE_SLACK_TOOLS,
   makeBindUpdate,
   makePing,
   makePrefsState,
   makeQueryRequest,
   makeTaskDispatch,
+  makeToolResponse,
   makeWelcome,
   parseHookMessage,
   serializeHookMessage,
@@ -490,6 +492,76 @@ describe('hook-control transport + manager(真实 ws server)', () => {
     expect(manager.snapshot().binding?.teamName).toBe('xindong');
   });
 
+  it('lizi_slack provider gate 跟随绑定与 server capability，断线抖动不重复刷新', async () => {
+    const { wss, url } = await startServer();
+    const store = memoryStore({ url });
+    const changes: boolean[] = [];
+    const manager = makeManager(store, {
+      onSlackToolProviderEnabledChanged: (enabled) => changes.push(enabled),
+    });
+    cleanups.push(() => manager.dispose());
+
+    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
+    manager.sync();
+    const [sock] = await connPromise;
+    const server = collectFrames(sock);
+    await server.waitFor('hello');
+    sock.send(serializeHookMessage(makeWelcome({ serverName: 'mock', features: [] })));
+    await expect.poll(() => manager.snapshot().status, { timeout: 3000 }).toBe('connected');
+    expect(changes).toEqual([]);
+
+    const confirmed = makeBindUpdate({
+      state: 'confirmed',
+      slackUserId: 'U1',
+      slackUserName: 'lizi',
+      message: null,
+    });
+    sock.send(serializeHookMessage(confirmed));
+    await expect.poll(() => manager.snapshot().binding?.state, { timeout: 3000 }).toBe('confirmed');
+    expect(manager.getSlackToolAvailability()).toMatchObject({
+      bound: true,
+      serverSupportsTools: false,
+    });
+    expect(changes).toEqual([]);
+
+    // 同一绑定下，server 能力升级会打开 provider；重复 welcome 不重复刷新。
+    sock.send(
+      serializeHookMessage(
+        makeWelcome({ serverName: 'mock-new', features: [HOOK_FEATURE_SLACK_TOOLS] }),
+      ),
+    );
+    await expect.poll(() => changes, { timeout: 3000 }).toEqual([true]);
+    sock.send(
+      serializeHookMessage(
+        makeWelcome({ serverName: 'mock-new', features: [HOOK_FEATURE_SLACK_TOOLS] }),
+      ),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(changes).toEqual([true]);
+
+    // 重连到旧 server 时按新 welcome 关闭；再次升级可重新打开。
+    sock.send(serializeHookMessage(makeWelcome({ serverName: 'mock-old', features: [] })));
+    await expect.poll(() => changes, { timeout: 3000 }).toEqual([true, false]);
+    sock.send(
+      serializeHookMessage(
+        makeWelcome({ serverName: 'mock-new', features: [HOOK_FEATURE_SLACK_TOOLS] }),
+      ),
+    );
+    await expect.poll(() => changes, { timeout: 3000 }).toEqual([true, false, true]);
+
+    // confirmed 回放与短暂连接抖动都不改变最近一次成功能力快照。
+    sock.send(serializeHookMessage(confirmed));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(changes).toEqual([true, false, true]);
+    sock.close();
+    await expect.poll(() => manager.snapshot().status, { timeout: 3000 }).not.toBe('connected');
+    expect(manager.getSlackToolAvailability().serverSupportsTools).toBe(true);
+    expect(changes).toEqual([true, false, true]);
+
+    manager.revokeAndDisconnect();
+    expect(changes).toEqual([true, false, true, false]);
+  });
+
   it('armAutoBind: 重开 toggle 撞上 server 回放的旧 pending → 重新发起并弹新链接', async () => {
     // 场景: 本地看门狗超时(3 分钟)早于 server 侧 pending TTL(10 分钟), toggle
     // 弹回后重开, server 按 hello 回放旧 pending —— 必须重发 bind.start 换新链接
@@ -840,5 +912,144 @@ describe('内置 chat 伪目录的清单注入', () => {
     expect([...(resp.payload.workspaces ?? [])].sort()).toEqual(['blog', 'chat', 'xdmaker']);
     // 去重: 即便(历史遗留)存量配置里有 chat 键, 也只出现一次
     expect(resp.payload.workspaces?.filter((w) => w === 'chat')).toHaveLength(1);
+  });
+});
+
+describe('Slack 网关工具代理(tool.request/tool.response)', () => {
+  /** 建连 -> welcome(带/不带 slack-tools)-> 绑定 confirmed 的通用起手。 */
+  async function connectWithTools(opts: {
+    features?: string[];
+    confirmed?: boolean;
+    toolTimeoutMs?: number;
+  }) {
+    const { wss, url } = await startServer();
+    const store = memoryStore({ url, workspaces: WORKSPACES });
+    const manager = makeManager(store, {
+      ...(opts.toolTimeoutMs !== undefined ? { toolTimeoutMs: opts.toolTimeoutMs } : {}),
+    });
+    cleanups.push(() => manager.dispose());
+
+    const connPromise = once(wss, 'connection') as Promise<[ServerSocket]>;
+    manager.sync();
+    const [sock] = await connPromise;
+    const server = collectFrames(sock);
+    sock.send(
+      serializeHookMessage(
+        makeWelcome({ serverName: 'mock', features: opts.features ?? [HOOK_FEATURE_SLACK_TOOLS] }),
+      ),
+    );
+    await expect.poll(() => manager.snapshot().status, { timeout: 3000 }).toBe('connected');
+    if (opts.confirmed !== false) {
+      sock.send(
+        serializeHookMessage(
+          makeBindUpdate({
+            state: 'confirmed',
+            slackUserId: 'U1',
+            slackUserName: 'tester',
+            message: null,
+          }),
+        ),
+      );
+      await expect
+        .poll(() => manager.snapshot().binding?.state, { timeout: 3000 })
+        .toBe('confirmed');
+    }
+    return { manager, sock, server };
+  }
+
+  it('成功往返: tool.request 携带 tool/args, replyTo 配对 resolve 结果', async () => {
+    const { manager, sock, server } = await connectWithTools({});
+    const pending = manager.callSlackTool('callTool', { name: 'search', arguments: { q: 'x' } });
+    const req = await server.waitFor('tool.request');
+    if (req.type !== 'tool.request') throw new Error('unreachable');
+    expect(req.payload.tool).toBe('callTool');
+    expect(req.payload.args).toEqual({ name: 'search', arguments: { q: 'x' } });
+    sock.send(
+      serializeHookMessage(
+        makeToolResponse({ replyTo: req.payload.requestId, ok: true, result: { hit: 1 } }),
+      ),
+    );
+    expect(await pending).toEqual({ ok: true, result: { hit: 1 } });
+    // 可用性快照三真
+    expect(manager.getSlackToolAvailability()).toMatchObject({
+      connected: true,
+      bound: true,
+      serverSupportsTools: true,
+    });
+  });
+
+  it('server 侧结构化错误透传(code/message 原样)', async () => {
+    const { manager, sock, server } = await connectWithTools({});
+    const pending = manager.callSlackTool('listTools');
+    const req = await server.waitFor('tool.request');
+    if (req.type !== 'tool.request') throw new Error('unreachable');
+    sock.send(
+      serializeHookMessage(
+        makeToolResponse({
+          replyTo: req.payload.requestId,
+          ok: false,
+          error: { code: 'NO_USER_TOKEN', message: '需重新授权' },
+        }),
+      ),
+    );
+    const r = await pending;
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toEqual({ code: 'NO_USER_TOKEN', message: '需重新授权' });
+  });
+
+  it('SERVER_TOO_OLD: welcome 未宣告 slack-tools 时短路, 不发帧', async () => {
+    const { manager, server } = await connectWithTools({ features: [] });
+    const r = await manager.callSlackTool('status');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe('SERVER_TOO_OLD');
+    expect(server.frames.some((f) => f.type === 'tool.request')).toBe(false);
+  });
+
+  it('NOT_BOUND: 未绑定时短路, 不发帧', async () => {
+    const { manager, server } = await connectWithTools({ confirmed: false });
+    const r = await manager.callSlackTool('status');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe('NOT_BOUND');
+    expect(server.frames.some((f) => f.type === 'tool.request')).toBe(false);
+  });
+
+  it('HOOK_NOT_CONNECTED: 未连接时短路', async () => {
+    const store = memoryStore({ url: 'ws://127.0.0.1:1', enabled: false });
+    const manager = makeManager(store);
+    cleanups.push(() => manager.dispose());
+    const r = await manager.callSlackTool('status');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe('HOOK_NOT_CONNECTED');
+  });
+
+  it('TIMEOUT: server 不应答时按注入超时收口; 迟到应答静默丢弃', async () => {
+    const { manager, sock, server } = await connectWithTools({ toolTimeoutMs: 60 });
+    const pending = manager.callSlackTool('listTools');
+    const req = await server.waitFor('tool.request');
+    if (req.type !== 'tool.request') throw new Error('unreachable');
+    const r = await pending;
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe('TIMEOUT');
+    // 迟到帧: 不抛不炸(replyTo 已无配对)
+    sock.send(
+      serializeHookMessage(makeToolResponse({ replyTo: req.payload.requestId, ok: true, result: 1 })),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+
+  it('断线 drain: 在途请求 resolve HOOK_NOT_CONNECTED; 能力保留到下一次 welcome 覆盖', async () => {
+    const { manager, sock, server } = await connectWithTools({});
+    const pending = manager.callSlackTool('listTools');
+    await server.waitFor('tool.request');
+    sock.close();
+    const r = await pending;
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe('HOOK_NOT_CONNECTED');
+    // 瞬时断线只让调用期 fail-closed，不触发 Codex 工具清单抖动；下一次 welcome
+    // 会整组覆盖能力快照。
+    expect(manager.getSlackToolAvailability()).toMatchObject({
+      connected: false,
+      serverSupportsTools: true,
+    });
   });
 });

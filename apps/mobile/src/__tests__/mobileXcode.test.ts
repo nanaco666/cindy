@@ -1,6 +1,6 @@
 // @ts-nocheck —— 被测对象是 .mjs 开发工具模块，vitest 跑其纯函数。
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   parseMobileXcodeArgs,
@@ -91,7 +91,7 @@ describe('mobile:xcode workspace 选择', () => {
       'Pods.xcworkspace',
       'Cindy.xcworkspace',
       'Podfile',
-    ])).toBe('/repo/apps/mobile/ios/Cindy.xcworkspace');
+    ])).toBe(join('/repo/apps/mobile/ios', 'Cindy.xcworkspace'));
   });
 
   it('缺失或出现多个 app workspace 时 fail closed', () => {

@@ -73,6 +73,20 @@ export interface DevCliFlags {
   endpointsCdn: boolean;
 }
 
+/**
+ * 是否获取 Electron single-instance lock。
+ *
+ * 正常 dev 与 packaged 共用 userData 时保持单实例，确保 deep link 能交给已运行
+ * 窗口；`--passive` 是明确的共享数据双开契约，dev 实例要让正式版继续持有锁，
+ * 自己跳过获取。packaged 永远锁定，不能被环境变量误切成多实例。
+ */
+export function shouldRequestSingleInstanceLock(input: {
+  isPackaged: boolean;
+  schedulerPassive: boolean;
+}): boolean {
+  return input.isPackaged || !input.schedulerPassive;
+}
+
 export function resolveDevCliFlags(input: DevCliFlagsInput): DevCliFlags {
   if (input.isPackaged) {
     return {

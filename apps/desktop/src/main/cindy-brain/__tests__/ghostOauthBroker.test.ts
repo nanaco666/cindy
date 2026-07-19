@@ -87,54 +87,44 @@ describe('createGhostOauthBrokerClient', () => {
     });
   });
 
-  it('未知 slug:不打请求直接拒;白名单认 jira / slack', async () => {
+  it('未知 slug:不打请求直接拒;白名单认 feishu / jira(slack 已随意识退役)', async () => {
     expect(SUPPORTED_TOKEN_BROKERS.has('jira')).toBe(true);
-    expect(SUPPORTED_TOKEN_BROKERS.has('slack')).toBe(true);
+    expect(SUPPORTED_TOKEN_BROKERS.has('feishu')).toBe(true);
+    expect(SUPPORTED_TOKEN_BROKERS.has('slack')).toBe(false);
     const apiPost = vi.fn();
     const client = createGhostOauthBrokerClient({ apiPost, hasLoginToken: () => true });
     await expect(client.exchange('nope', { code: 'c', redirectUri: 'r' })).resolves.toMatchObject({
       ok: false,
       error: 'EXCHANGE_FAILED',
     });
+    // 退役 slug 同样不放行、不打请求
+    await expect(client.exchange('slack', { code: 'c', redirectUri: 'r' })).resolves.toMatchObject({
+      ok: false,
+      error: 'EXCHANGE_FAILED',
+    });
     expect(apiPost).not.toHaveBeenCalled();
   });
 
-  it('slack slug 放行:exchange POST 到 /api/integrations/slack/oauth/exchange', async () => {
-    const apiPost = vi.fn(async (path: string, body: Record<string, unknown>) => {
-      expect(path).toBe('/api/integrations/slack/oauth/exchange');
-      expect(body).toEqual({ code: 'c-sl', redirectUri: 'https://broker.example.com/slack-mcp/bounce' });
-      return { accessToken: 'at-sl', refreshToken: 'rt-sl', expiresIn: 3600 };
-    });
-    const client = createGhostOauthBrokerClient({ apiPost, hasLoginToken: () => true });
-    const result = await client.exchange('slack', {
-      code: 'c-sl',
-      redirectUri: 'https://broker.example.com/slack-mcp/bounce',
-    });
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.bundle.accessToken).toBe('at-sl');
-    expect(apiPost).toHaveBeenCalledTimes(1);
-  });
-
-  it('slack:401 + SLACK_MCP_OAUTH_FAILED(上游拒绝)→ invalidGrant:true;未知 401 码 → false', async () => {
+  it('feishu:401 + FEISHU_OAUTH_FAILED(上游拒绝)→ invalidGrant:true;未知 401 码 → false', async () => {
     const rejected = createGhostOauthBrokerClient({
       apiPost: vi.fn(async () => {
-        throw apiError('SLACK_MCP_OAUTH_FAILED', 401, 'slack rejected');
+        throw apiError('FEISHU_OAUTH_FAILED', 401, 'feishu rejected');
       }),
       hasLoginToken: () => true,
     });
-    await expect(rejected.refresh('slack', { refreshToken: 'rt-x' })).resolves.toMatchObject({
+    await expect(rejected.refresh('feishu', { refreshToken: 'rt-x' })).resolves.toMatchObject({
       ok: false,
       error: 'EXCHANGE_FAILED',
       invalidGrant: true,
     });
-    // 不认识的 401 码在 slack slug 上同样按登录层故障处理(fail-safe,不销毁授权)。
+    // 不认识的 401 码同样按登录层故障处理(fail-safe,不销毁授权)。
     const unknown = createGhostOauthBrokerClient({
       apiPost: vi.fn(async () => {
         throw apiError('SOME_FUTURE_CODE', 401);
       }),
       hasLoginToken: () => true,
     });
-    await expect(unknown.refresh('slack', { refreshToken: 'rt-x' })).resolves.toMatchObject({
+    await expect(unknown.refresh('feishu', { refreshToken: 'rt-x' })).resolves.toMatchObject({
       ok: false,
       invalidGrant: false,
     });

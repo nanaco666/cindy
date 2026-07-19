@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveDevCliFlags } from '../devCliFlags';
+import { resolveDevCliFlags, shouldRequestSingleInstanceLock } from '../devCliFlags';
 
 const base = {
   argv: ['electron', '.'] as readonly string[],
@@ -192,5 +192,18 @@ describe('resolveDevCliFlags', () => {
     expect(flags.schedulerPassive).toBe(true);
     expect(flags.userDataDirOverride).toBe('/AppData/xdt-maker-dev-feature-a');
     expect(flags.isolationName).toBe('feature-a');
+  });
+});
+
+describe('shouldRequestSingleInstanceLock', () => {
+  it('正常 dev 与 packaged 都保持单实例', () => {
+    expect(shouldRequestSingleInstanceLock({ isPackaged: false, schedulerPassive: false })).toBe(true);
+    expect(shouldRequestSingleInstanceLock({ isPackaged: true, schedulerPassive: false })).toBe(true);
+  });
+
+  it('仅 passive dev 跳过锁，允许与正式版共享数据双开', () => {
+    expect(shouldRequestSingleInstanceLock({ isPackaged: false, schedulerPassive: true })).toBe(false);
+    // packaged 不接受 dev-only passive 语义，即使环境被污染也必须继续持锁。
+    expect(shouldRequestSingleInstanceLock({ isPackaged: true, schedulerPassive: true })).toBe(true);
   });
 });

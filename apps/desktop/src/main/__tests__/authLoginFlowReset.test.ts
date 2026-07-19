@@ -4,7 +4,10 @@ import { describe, expect, it } from 'vitest';
 
 /** Regression guard for login progress that is intentionally owned by Electron main. */
 describe('auth login-flow reset', () => {
-  const source = readFileSync(resolve(process.cwd(), 'src/main/authManager.ts'), 'utf8');
+  const source = readFileSync(resolve(process.cwd(), 'src/main/authManager.ts'), 'utf8').replace(
+    /\r\n/g,
+    '\n',
+  );
 
   it('clears renderer state, provider cache, and private tickets whenever auth is cleared', () => {
     const resetStart = source.indexOf('function resetLoginFlowState(): void {');

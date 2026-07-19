@@ -43,7 +43,7 @@ describe('FORGE_GUIDE · oauth 凭证章节', () => {
     }
   });
 
-  it('brokerBounce / scopeDelimiter 两个授权细节字段在场(§2 样例 + 说明 + 拒装原因,cindy-slack 前置)', () => {
+  it('brokerBounce / scopeDelimiter 两个授权细节字段在场(§2 样例 + 说明 + 拒装原因)', () => {
     for (const marker of [
       '"brokerBounce"',
       '"scopeDelimiter"',
