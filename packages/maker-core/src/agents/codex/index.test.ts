@@ -1328,6 +1328,49 @@ describe('CodexAgent MCP thread context hooks', () => {
     await agent.dispose();
   });
 
+  it('collapses in-flight turn state with a terminal transport error when the local host is force-retired', async () => {
+    // 回归 2026-07-19:auth 失效触发 retiring host with active sessions 时,原实现
+    // 静默清 subscribers 再杀进程,session 收不到任何终态事件 → isTurnRunning 永久
+    // true,上层输入排队 / Stop 锁 / 凭证切换 busy 重试全部卡死。
+    const agent = new CodexAgent(createDeps());
+
+    const handle = await agent.startSession({
+      sessionId: 'session-forced-retire-in-flight-turn',
+      model: 'gpt-5.4',
+      workingDir: '/repo-local',
+    });
+    const iterator = handle.events()[Symbol.asyncIterator]();
+    const transport = createdTransports[0];
+
+    transport.emitMockLine({
+      method: 'turn/started',
+      params: { threadId: 'thread-1', turn: { id: 'turn-forced-retire' } },
+    });
+    await waitForExpectation(() => {
+      expect(handle.isTurnRunning?.()).toBe(true);
+    });
+
+    await agent.forceDisposeLocalHostForAuthChange('test forced retire');
+
+    expect(handle.isTurnRunning?.()).toBe(false);
+    expect(transport.closed).toBe(true);
+    await expect(nextEvent(iterator)).resolves.toMatchObject({
+      type: 'error',
+      data: expect.objectContaining({
+        isTerminal: true,
+        willRetry: false,
+        message: expect.stringContaining('app-server force-retired'),
+      }),
+    });
+    await expect(nextEvent(iterator)).resolves.toMatchObject({
+      type: 'status',
+      data: expect.objectContaining({ status: 'Done', isRunning: false }),
+    });
+
+    await handle.close();
+    await agent.dispose();
+  });
+
   it('retires only the local host when local Codex auth is invalidated', async () => {
     const invalidate = vi.fn(async () => undefined);
     const auth: AuthAdapter = {

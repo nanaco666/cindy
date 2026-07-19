@@ -4421,6 +4421,11 @@ export class CodexAgent extends BaseAgent {
         key,
         activeUseCount,
       });
+      // 强杀 host 不走 Session.close —— 先把终态 transport error 广播给订阅者,
+      // 让每个 session 自己收口 turn 状态 (isTurnInFlight→false + 补发 isRunning:false)。
+      // 不广播的话上层 busy 判定永久 stale:输入排队不派发、Stop 的 abort 锁解不开、
+      // 凭证切换 busy 重试风暴 (2026-07-19 auth app_session_terminated 实排)。
+      host?.notifySubscribersOfForcedRetire(reason);
     }
 
     this.hosts.delete(key);
