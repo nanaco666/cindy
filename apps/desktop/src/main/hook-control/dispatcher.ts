@@ -215,9 +215,10 @@ const TITLE_SNIPPET_MAX = 24;
  * (如纯图片派发)时回退渠道内标识 bareKey。
  * 渠道内标识约定 `dm:` 前缀 = 私聊(见 slack-hook-server externalKeyFor),
  * 私聊会话前缀额外标 `·DM`(`[Slack·DM]`), 与频道驱动的会话在列表里一眼区分。
- * teamName: (multi-team)来源 workspace 显示名, 非空时并入方括号尾段
- * (`[Slack·DM·XD Inc.] ...`)—— 多绑定设备上区分「哪个 workspace 派来的」
- * (老 server / 单绑定不下发); 放括号内保持列表标题统一以 `[` 开头对齐。
+ * teamName: (multi-team)来源 workspace 显示名, 非空时并入方括号**首段**
+ * (`[XD Inc.·Slack·DM] ...`)—— 多绑定设备上区分「哪个 workspace 派来的」,
+ * team 名在前便于列表扫读; 放括号内保持标题统一以 `[` 开头对齐
+ * (老 server / 单绑定不下发, 无 teamName 分支格式不变)。
  */
 export function buildHookSessionTitle(
   providerName: string,
@@ -234,8 +235,8 @@ export function buildHookSessionTitle(
         : flat;
   const dmTag = bareKey.startsWith('dm:') ? '·DM' : '';
   const displayProvider = providerName.charAt(0).toUpperCase() + providerName.slice(1);
-  const teamTag = teamName && teamName.trim().length > 0 ? `·${teamName.trim()}` : '';
-  return `[${displayProvider}${dmTag}${teamTag}] ${snippet}`;
+  const teamTag = teamName && teamName.trim().length > 0 ? `${teamName.trim()}·` : '';
+  return `[${teamTag}${displayProvider}${dmTag}] ${snippet}`;
 }
 
 /** 待执行任务(定位已完成, 排队即执行参数就绪)。 */
