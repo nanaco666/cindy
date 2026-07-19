@@ -233,7 +233,6 @@ import { rehydrateCloseSuppression } from './maker-host/rehydrateCloseSuppressio
 // 静态 import 不会触发 Maker / Agent 的实例化。
 import {
   getMaker as getMakerCore,
-  getMakerIfReady,
   shutdownLspServerPool,
   prepareCodexForAuthModeChange,
   cancelCodexAuthModeChange,
@@ -249,10 +248,7 @@ import {
   refreshCustomProvidersIntoCatalog,
 } from './maker-host/createDesktopProviderService.js';
 import { setClaudeSupportedModelsListener } from '@lizi/maker-core';
-import { getActiveCatalog } from './maker-host/active-catalog.js';
-import { refreshCatalogDerivedModels } from './maker-host/catalog-to-descriptors.js';
 import {
-  configureAnthropicDiscovery,
   noteAnthropicSdkSupportedModels,
   refreshAnthropicModelsFromHttp,
   clearAnthropicDiscoveredModels,
@@ -2242,18 +2238,8 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
   // ── Claude.ai 订阅 OAuth 登录(浏览器流程,凭证落系统 ~/.claude) ────────────────
   // 与鉴权模式开关正交:管理订阅凭证本身(像 Codex 的 OAuth 登录独立于 API 模式)。
   // Anthropic 模型清单动态发现接线(2026-07-19 统一重构):
-  //   - apply 收口 = 原地刷新已建会话 capabilities + 广播 PROVIDER_CHANGED;
+  //   - active-catalog 统一收口 capabilities 刷新 + revision 广播;
   //   - SDK supportedModels 捕获(maker-core 会话 init 后上报)是能力字段权威。
-  configureAnthropicDiscovery({
-    onApplied: () => {
-      const maker = getMakerIfReady();
-      if (maker) refreshCatalogDerivedModels(maker, getActiveCatalog());
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (win.isDestroyed()) continue;
-        try { win.webContents.send(MAKER_PUSH.PROVIDER_CHANGED, {}); } catch { /* no-op */ }
-      }
-    },
-  });
   setClaudeSupportedModelsListener(noteAnthropicSdkSupportedModels);
   ipcMain.handle(MAKER_IPC_INVOKE.CLAUDE_OAUTH_STATUS, async () => {
     return { authorized: hasClaudeAiOAuth() };
@@ -2268,7 +2254,7 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       await broadcastClaudeAuthStateChanged();
       // 订阅余量同步: 换号时清旧账号快照 + 拉新账号余量(内部指纹校验), chip 随 push 更新。
       syncClaudeSubscriptionUsageForAuthChange();
-      // 模型清单动态发现:登录成功即后台拉 /v1/models(完成后经 onApplied 广播刷新,
+      // 模型清单动态发现:登录成功即后台拉 /v1/models(完成后经 active-catalog 广播刷新,
       // 设置页无需等下次会话就能看到清单;失败保留现值,SDK 通道随后仍会精化)。
       // 先作废在途拉取:换号可以不经登出直接覆盖凭证,旧账号的 single-flight 不能吞掉本次补拉。
       invalidateAnthropicDiscoveryInflight();

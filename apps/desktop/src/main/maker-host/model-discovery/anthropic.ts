@@ -52,8 +52,6 @@ const HTTP_TIMEOUT_MS = 15_000;
 /** /v1/models 游标分页的最大页数(现实模型数远小于单页 1000,纯防御)。 */
 const MAX_MODEL_PAGES = 5;
 
-/** apply 后的收口回调(refreshCatalogDerivedModels + PROVIDER_CHANGED 广播),由 bootstrap 注入。 */
-let onApplied: (() => void) | null = null;
 /** 最近一次生效的发现结果(含缓存加载),合并时的能力字段保留源。 */
 let lastApplied: CatalogModel[] = [];
 /** HTTP 明说过 max_input_tokens 的模型窗口(id → tokens);SDK 覆盖时优先于启发式规则。 */
@@ -63,10 +61,6 @@ let authGeneration = 0;
 let httpRefreshInflight: Promise<void> | null = null;
 /** 在途拉取所属的世代;世代已变时新调用不复用旧 promise(换号补拉不被吞)。 */
 let httpRefreshInflightGen = -1;
-
-export function configureAnthropicDiscovery(deps: { onApplied: () => void }): void {
-  onApplied = deps.onApplied;
-}
 
 function cacheFilePath(): string {
   return path.join(app.getPath('userData'), 'model-discovery', 'anthropic-models.json');
@@ -232,7 +226,8 @@ export function mapAnthropicHttpModels(raw: unknown): HttpMappedModel[] {
 }
 
 /**
- * 生效 + 可选持久化 + 收口(能力刷新 / 广播由注入的 onApplied 负责)。
+ * 生效 + 可选持久化。setAnthropicDiscoveredModels 统一经 active-catalog 的
+ * markChanged 收口能力刷新、revision 递增与 PROVIDER_CHANGED 广播。
  * 内容与现值一致时整体跳过(SDK 捕获每会话触发,清单通常一字不变——不做比较会
  * 每开一个会话就白跑一次落盘 + 全窗口广播 + capabilities 重 derive,review P2)。
  */
@@ -260,11 +255,6 @@ async function applyModels(models: CatalogModel[], persist: boolean): Promise<vo
     } catch (err) {
       log.warn('persist anthropic models cache failed', { error: String(err) });
     }
-  }
-  try {
-    onApplied?.();
-  } catch (err) {
-    log.warn('anthropic discovery onApplied threw', { error: String(err) });
   }
 }
 
@@ -427,7 +417,6 @@ export async function clearAnthropicDiscoveredModels(): Promise<void> {
 
 /** 仅测试:重置模块态。 */
 export function resetAnthropicDiscoveryForTest(): void {
-  onApplied = null;
   lastApplied = [];
   explicitWindows.clear();
   authGeneration = 0;

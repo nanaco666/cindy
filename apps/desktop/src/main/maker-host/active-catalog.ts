@@ -396,5 +396,5 @@ export function setActiveCatalogChangedListener(
  */
 export function setAnthropicDiscoveredModels(models: CatalogModel[]): void {
   anthropicModels = [...models];
-  merged = null;
+  markChanged();
 }
