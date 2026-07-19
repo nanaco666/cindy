@@ -1244,6 +1244,7 @@ export async function withSessionInputStoppedForRewind<T>(
   action: () => Promise<T>,
 ): Promise<T> {
   const coordinator = agentInputCoordinatorHolder;
+  let releaseInputLockOnExit = true;
   if (!coordinator) {
     throwIpcError('INTERNAL', 'Agent input coordinator is not initialized');
   }
@@ -1272,14 +1273,29 @@ export async function withSessionInputStoppedForRewind<T>(
       SESSION_REWIND_STOP_TIMEOUT_MS,
     );
     if (!stopped) {
+      // The old turn / interaction is still authoritative. Keep both the input
+      // lock and duplicate-rewind guard after returning the timeout error, then
+      // release them automatically once the real terminal boundary arrives.
+      releaseInputLockOnExit = false;
+      void coordinator
+        .releaseRewindLockWhenIdle(sessionId, SESSION_REWIND_INPUT_LOCK_ID)
+        .then(() => rewindInputSessions.delete(sessionId))
+        .catch((err) => {
+          log.error('failed to release retained rewind input lock', {
+            sessionId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
       throwIpcError('SESSION_RUNNING', 'Timed out waiting for the session to stop before rewind');
     }
 
     return await action();
   } finally {
     coordinator.pausePendingQueueForRewind(sessionId);
-    coordinator.setInteractionLock(sessionId, SESSION_REWIND_INPUT_LOCK_ID, false);
-    rewindInputSessions.delete(sessionId);
+    if (releaseInputLockOnExit) {
+      coordinator.setInteractionLock(sessionId, SESSION_REWIND_INPUT_LOCK_ID, false);
+      rewindInputSessions.delete(sessionId);
+    }
   }
 }
 

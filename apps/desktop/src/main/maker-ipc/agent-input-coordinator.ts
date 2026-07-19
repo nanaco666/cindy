@@ -629,16 +629,28 @@ export class AgentInputCoordinator {
   async waitForRewindBoundaryIdle(
     sessionId: string,
     timeoutMs: number,
+    pollIntervalMs = REWIND_BOUNDARY_POLL_INTERVAL_MS,
   ): Promise<boolean> {
     const deadline = Date.now() + Math.max(0, timeoutMs);
     while (this.hasActiveTurnForRewind(sessionId)) {
       const remainingMs = deadline - Date.now();
       if (remainingMs <= 0) return false;
       await new Promise<void>((resolve) =>
-        setTimeout(resolve, Math.min(REWIND_BOUNDARY_POLL_INTERVAL_MS, remainingMs)),
+        setTimeout(resolve, Math.min(Math.max(1, pollIntervalMs), remainingMs)),
       );
     }
     return true;
+  }
+
+  /**
+   * A timed-out rewind keeps its input lock until the old boundary really
+   * settles. Poll slowly after the user-facing deadline to avoid a hot timer
+   * while still recovering automatically from a delayed vendor terminal event.
+   */
+  async releaseRewindLockWhenIdle(sessionId: string, lockId: string): Promise<void> {
+    await this.waitForRewindBoundaryIdle(sessionId, Number.POSITIVE_INFINITY, 1_000);
+    this.pausePendingQueueForRewind(sessionId);
+    this.setInteractionLock(sessionId, lockId, false);
   }
 
   /** Preserve queued input but keep it paused while rewind changes history. */

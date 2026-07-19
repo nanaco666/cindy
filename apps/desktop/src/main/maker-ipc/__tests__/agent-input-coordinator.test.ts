@@ -3004,6 +3004,31 @@ describe('AgentInputCoordinator stop and drain boundaries', () => {
     }
   });
 
+  it('retains a timed-out rewind lock until the authoritative boundary settles', async () => {
+    vi.useFakeTimers();
+    try {
+      const h = createHarness();
+      const sid = 'rewind-retained-timeout-lock';
+      h.setRunning(true);
+      h.coordinator.setInteractionLock(sid, 'session-rewind', true);
+
+      const release = h.coordinator.releaseRewindLockWhenIdle(sid, 'session-rewind');
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(latestProjection(h.projections).queueInteractionLocks).toContain('session-rewind');
+      await expect(h.coordinator.steer(sid, makeItem('blocked-steer', 'blocked'))).resolves.toBe(
+        false,
+      );
+
+      h.setRunning(false);
+      await vi.advanceTimersByTimeAsync(1_000);
+      await release;
+
+      expect(latestProjection(h.projections).queueInteractionLocks).not.toContain('session-rewind');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('rejects steer while rewind owns the session input boundary', async () => {
     const h = createHarness();
     const sid = 'rewind-blocks-steer';
