@@ -1,71 +1,165 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const commands = [
-  ['mobile:xcode',       '按 --region=cn|global 生成 iOS 工程、打开 Xcode并启动 Metro'],
-  ['dev:desktop',        '启动桌面端（本地 API）'],
-  ['dev:desktop:remote', '启动桌面端（远程 API）'],
-  ['dev:desktop:inspect','启动桌面端 + Chrome DevTools 内存分析'],
-  ['restart:desktop:remote', '重启桌面端远程模式（支持 --region=cn|global）'],
-  ['restart:desktop:local',  '重启桌面端本地模式（支持 --region=cn|global）'],
-  ['build',              '打包桌面端（electron-forge make 裸调,human-only）'],
-  ['package:desktop',          '桌面端打包（当前平台,默认版本无关 + cn + dev,不发布）'],
-  ['package:win',              'Windows x64 打包（同上,只打包不发布）'],
-  ['package:mac:arm64',        'macOS Apple Silicon 打包（只打包不发布）'],
-  ['package:mac:x64',          'macOS Intel 打包（只打包不发布）'],
-  ['package:linux',            'Linux x64 打包（只打包不发布）'],
-  ['release:mac',              'macOS 发布（arm64 + x64,默认进 canary 通道）'],
-  ['release:mac:arm64',        'macOS 发布（仅 Apple Silicon,canary 通道）'],
-  ['release:mac:x64',          'macOS 发布（仅 Intel,canary 通道）'],
-  ['release:win',              'Windows 发布（默认进 canary 通道）'],
-  ['release:promote:win',      'Windows: canary → stable（dry-run，加 --yes 执行）'],
-  ['release:promote:mac',      'macOS: canary → stable，arm64 + x64（加 --yes 执行）'],
-  ['release:promote:mac:arm64','macOS arm64 单独 promote（加 --yes 执行）'],
-  ['release:promote:mac:x64',  'macOS x64 单独 promote（加 --yes 执行）'],
-  ['release:claude-code',      'macOS Claude Code binary 发布（arm64 + x64）'],
-  ['release:claude-code:arm64','macOS Claude Code binary 发布（仅 Apple Silicon）'],
-  ['release:claude-code:x64',  'macOS Claude Code binary 发布（仅 Intel）'],
-  ['release:claude-code:win',  'Windows Claude Code binary 发布'],
-  ['release:codex',            'macOS Codex binary 发布（arm64 + x64）'],
-  ['release:codex:arm64',      'macOS Codex binary 发布（仅 Apple Silicon）'],
-  ['release:codex:x64',        'macOS Codex binary 发布（仅 Intel）'],
-  ['release:codex:win',        'Windows Codex binary 发布'],
-  ['update:claude',            '下载 @anthropic-ai/claude-code 各平台可执行文件'],
-  ['update:codex',             '下载 openai/codex GitHub Release 各平台可执行文件'],
-  ['update:vendors',           '一键更新 claude + codex（顺序执行）'],
-  ['lint',               '全量 lint 检查'],
-  ['format',             '全量代码格式化'],
-  ['test:runner',        '项目级测试 runner 自测'],
-  ['test:unit',          '项目级 unit 测试契约检查'],
-  ['test:all',           '项目级全量测试契约检查（只运行 required tier）'],
-  ['test:db',            '运行 desktop DB 测试入口'],
-  ['test:guard',         '运行 desktop guard 源码结构契约测试'],
-];
-
 export function printHelp(log = console.log) {
-  log('\n  Cindy 客户端仓可用指令\n');
-  for (const [name, desc] of commands) {
-    log(`  pnpm ${name.padEnd(28)} ${desc}`);
-  }
-  log('\n  桌面端区域 dev:');
+  log('\n  Cindy 客户端仓常用指令（按场景分组，可直接复制）');
+
+  log('\n  桌面端启动（以下命令可直接复制）:');
+  log('    # 推荐：先清理已有 Cindy dev 进程，再启动远程 API 模式');
   log('    pnpm restart:desktop:remote --region=cn');
-  log('      国内版，读取 config/endpoint.json（默认）');
+  log('      国内版，读取仓内 config/endpoint.json');
   log('    pnpm restart:desktop:remote --region=global');
-  log('      海外版，读取 config/endpoint.global.json');
+  log('      海外版，读取仓内 config/endpoint.global.json');
   log('    pnpm restart:desktop:remote --region=global --endpoints-cdn');
   log('      海外版，读取对应区域的线上 CDN 端点清单');
-  log('\n  打包/发布拆分 (2026-07):');
-  log('    package:* 只产出本地产物 + build-info.json,不碰 OSS/CDN');
-  log('    可选参数: --region cn|global  --channel dev|release  --version x.y.z|major|minor|patch');
-  log('              --skip-smoke  --allow-unsigned;缺省 = 版本无关包(不参与热更新)');
-  log('    release:* 是旧的打包+发布一体流程,待发布侧重构后退役');
-  log('\n  release 可选参数:');
-  log('    --require-relogin    强制用户更新后重新授权飞书 (release:win / release:mac 系列)');
-  log('\n  灰度通道 (canary-release V0.1):');
-  log('    所有 release:* 默认上传到 manifest-{platform}-canary.json');
-  log('    只有 User.isCanary=true 的用户会拉到该 manifest');
-  log('    验证 OK 后用 release:promote:* 把 canary 复制为 stable');
-  log('    promote 默认 dry-run；加 --yes 才真正覆盖 stable manifest');
+  log('    # Human 可直接启动；不会先清旧进程，Agent 不要使用');
+  log('    pnpm dev:desktop:remote --region=cn');
+  log('    pnpm dev:desktop:remote --region=global');
+  log('    # 连接本地 http://localhost:3333（只起客户端，不起 server）');
+  log('    pnpm restart:desktop:local --region=cn');
+
+  log('\n  桌面端只打包、不上传 OSS/CDN（以下命令可直接复制）:');
+  log('    pnpm package:desktop -- --region cn --channel dev');
+  log('      当前平台，国内版，版本无关开发包');
+  log('    pnpm package:desktop -- --region global --channel dev');
+  log('      当前平台，海外版，版本无关开发包');
+  log('    pnpm package:mac:arm64 -- --region cn --channel dev');
+  log('    pnpm package:mac:x64 -- --region cn --channel dev');
+  log('    pnpm package:win -- --region cn --channel dev');
+  log('    pnpm package:linux -- --region cn --channel dev');
+  log('    pnpm package:desktop -- --region cn --channel release --version patch');
+  log('      当前平台，国内 release 包；基于 CDN 当前版本自动 bump patch');
+  log('    pnpm package:desktop -- --region global --channel release --version patch');
+  log('      当前平台，海外 release 包；基于 CDN 当前版本自动 bump patch');
+  log('    # 调试时可在末尾追加 --skip-smoke；明确允许无签名时追加 --allow-unsigned');
+
+  log('\n  桌面端旧版打包 + 发布一体流程（直接上传 canary）:');
+  log('    pnpm release:mac');
+  log('    pnpm release:win');
+  log('    pnpm release:linux');
+  log('    # 强制用户更新后重新授权飞书');
+  log('    pnpm release:mac -- --require-relogin');
+  log('    pnpm release:win -- --require-relogin');
+  log('    # canary 验证后转 stable：先 dry-run，再正式执行');
+  log('    pnpm release:promote:mac');
+  log('    pnpm release:promote:mac -- --yes');
+  log('    pnpm release:promote:win');
+  log('    pnpm release:promote:win -- --yes');
+  log('    pnpm release:promote:linux');
+  log('    pnpm release:promote:linux -- --yes');
+
+  log('\n  Agent 二进制安装 / 升级（Claude Code、Codex、ripgrep）:');
+  log('    # 按 latest.json 当前 pin 安装到本机，不修改 pin');
+  log('    pnpm install:agent-binaries');
+  log('      安装当前平台的全部三种二进制');
+  log('    pnpm install:claude');
+  log('    pnpm install:codex');
+  log('    pnpm install:ripgrep');
+  log('      只安装当前平台的指定二进制');
+  log('    # 升级到上游最新版：下载全平台二进制，并修改对应 latest.json pin');
+  log('    pnpm update:claude');
+  log('    pnpm update:codex');
+  log('    pnpm update:ripgrep');
+  log('    pnpm update:vendors');
+  log('      依次把三种二进制全部升级到上游最新版');
+  log('    # 固定到指定版本：下面是完整示例，会修改 latest.json pin');
+  log('    pnpm update:claude 2.1.199');
+  log('    pnpm update:codex 0.144.1');
+  log('    pnpm update:ripgrep 15.1.0');
+
+  log('\n  Agent 二进制单独发布（不重新打包 App）:');
+  log('    # 先 dry-run：检查全部四个平台，不上传');
+  log('    pnpm release:claude-code -- --dry-run');
+  log('    pnpm release:codex -- --dry-run');
+  log('    pnpm release:ripgrep -- --dry-run');
+  log('    # 正式发布：上传全部四个平台，并更新各平台 canary manifest');
+  log('    pnpm release:claude-code');
+  log('    pnpm release:codex');
+  log('    pnpm release:ripgrep');
+  log('    # 只发布单个平台');
+  log('    pnpm release:claude-code:arm64');
+  log('    pnpm release:claude-code:x64');
+  log('    pnpm release:claude-code:win');
+  log('    pnpm release:claude-code -- --platform linux-x64');
+  log('    pnpm release:codex:arm64');
+  log('    pnpm release:codex:x64');
+  log('    pnpm release:codex:win');
+  log('    pnpm release:codex -- --platform linux-x64');
+  log('    pnpm release:ripgrep:arm64');
+  log('    pnpm release:ripgrep:x64');
+  log('    pnpm release:ripgrep:win');
+  log('    pnpm release:ripgrep -- --platform linux-x64');
+  log('    # 发布目标：版本化 .gz + manifest-<platform>-canary.json');
+  log('      不是独立沙盒目录；canary 用户先看到，stable 用户暂时不受影响');
+  log('    # 没有“只 promote 某个二进制”的命令；以下会提升整份平台 manifest');
+  log('    pnpm release:promote:mac -- --yes');
+  log('    pnpm release:promote:win -- --yes');
+  log('    pnpm release:promote:linux -- --yes');
+
+  log('\n  Mobile 本地开发（以下命令可直接复制）:');
+  log('    pnpm mobile:xcode');
+  log('      国服：生成 iOS 工程、打开 Xcode 并启动 Metro');
+  log('    pnpm mobile:xcode --region=global');
+  log('      海外版：生成 iOS 工程、打开 Xcode 并启动 Metro');
+  log('    pnpm mobile:sim:rebuild');
+  log('    pnpm mobile:sim:start');
+  log('      国服模拟器：先 rebuild 安装，再 start 启动 Metro');
+  log('    pnpm mobile:sim:rebuild -- --region=global');
+  log('    pnpm mobile:sim:start -- --region=global');
+  log('      海外模拟器：先 rebuild 安装，再 start 启动 Metro');
+  log('    pnpm mobile:sim:whoami');
+  log('      查看当前 Metro 对应的 checkout / branch');
+
+  log('\n  Mobile EAS / TestFlight（默认 dry-run，--execute 才真正发布）:');
+  log('    pnpm mobile:release:check -- --target production');
+  log('      检查正式服应走 OTA 还是完整冷更');
+  log('    pnpm mobile:release:check -- --target staging');
+  log('      检查内部 staging 应走 OTA 还是完整冷更');
+  log('    pnpm mobile:release:check -- --target beta --dev dash');
+  log('      检查 dash 的手机 Beta 应走 OTA 还是完整冷更');
+  log('    pnpm mobile:release:beta -- --dev dash --message "验证本次改动"');
+  log('      手机 Beta dry-run');
+  log('    pnpm mobile:release:beta -- --dev dash --message "验证本次改动" --execute');
+  log('      手机 Beta 正式执行');
+  log('    pnpm mobile:release:prod -- --message "发布本次改动"');
+  log('      production + staging dry-run（必须在干净且已同步 origin/main 的 main 上）');
+  log('    pnpm mobile:release:prod -- --message "发布本次改动" --execute');
+  log('      production + staging 正式执行');
+  log('    pnpm mobile:beta:add-dev -- alice');
+  log('    pnpm mobile:beta:add-dev -- alice --execute');
+  log('      新增 alice 的 Beta 配置：先 dry-run，再正式执行');
+
+  log('\n  Mobile 自建 iOS（完整命令；region 必填，无默认值）:');
+  log('    pnpm mobile:release:ios:check -- --region cn');
+  log('    pnpm mobile:release:ios:local -- --region cn --execute');
+  log('    pnpm mobile:release:ios:ota -- --region cn --execute');
+  log('      国服：依次对应检查、完整冷更打包发布、JS OTA');
+  log('    pnpm mobile:release:ios:check -- --region global');
+  log('    pnpm mobile:release:ios:local -- --region global --execute');
+  log('    pnpm mobile:release:ios:ota -- --region global --execute');
+  log('      海外版：依次对应检查、完整冷更打包发布、JS OTA');
+  log('    pnpm mobile:release:ios:npkg -- from-eas');
+  log('      手动把最近一次 EAS iOS 产物送 NPKG 重签');
+
+  log('\n  Mobile 自建 Android（完整命令；region 必填，无默认值）:');
+  log('    pnpm mobile:release:android:check -- --region cn');
+  log('    pnpm mobile:release:android:local -- --region cn --execute');
+  log('    pnpm mobile:release:android:ota -- --region cn --execute');
+  log('      国服：依次对应检查、完整冷更打包发布、JS OTA');
+  log('    pnpm mobile:release:android:check -- --region global');
+  log('    pnpm mobile:release:android:local -- --region global --execute');
+  log('    pnpm mobile:release:android:ota -- --region global --execute');
+  log('      海外版：依次对应检查、完整冷更打包发布、JS OTA');
+  log('    pnpm mobile:release:android:npkg -- upload /absolute/path/Cindy.apk');
+  log('      仅在需要时手动补传 APK 到 NPKG，不参与正常冷更链路');
+
+  log('\n  开发检查:');
+  log('    pnpm lint');
+  log('    pnpm test:runner');
+  log('    pnpm test:unit');
+  log('    pnpm test:all');
+  log('    pnpm test:db');
+  log('    pnpm test:guard');
   log();
 }
 

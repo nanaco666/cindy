@@ -154,7 +154,7 @@ describe('mobileAttachmentUpload', () => {
     expect(uploadFile).toHaveBeenCalledWith('https://oss.example/upload', 'file:///tmp/photo.png', {
       'Content-Type': 'image/png',
       'x-oss-object-acl': 'private',
-    });
+    }, { signal: expect.any(AbortSignal) });
   });
 
   it('returns an OSS-ref attachment after successful native file upload', async () => {
@@ -178,7 +178,7 @@ describe('mobileAttachmentUpload', () => {
     expect(uploadFile).toHaveBeenCalledWith('https://oss.example/upload', 'file:///tmp/photo.png', {
       'Content-Type': 'image/png',
       'x-oss-object-acl': 'private',
-    });
+    }, { signal: expect.any(AbortSignal) });
     expect(attachment).toMatchObject({
       id: 'mobile-upload-2',
       name: 'photo.png',
@@ -219,7 +219,7 @@ describe('mobileAttachmentUpload', () => {
     expect(uploadFile).toHaveBeenCalledWith('https://oss.example/upload', 'file:///tmp/scan.pdf', {
       'Content-Type': 'application/octet-stream',
       'x-oss-object-acl': 'private',
-    });
+    }, { signal: expect.any(AbortSignal) });
   });
 
   it('surfaces the OSS error code from the native file PUT failure body', async () => {
@@ -282,6 +282,63 @@ describe('mobileAttachmentUpload', () => {
       uploadFile,
     })).rejects.toThrow('附件上传失败:网络传输异常,请检查网络后重试。');
     expect(uploadFile).toHaveBeenCalledTimes(2);
+  });
+
+  it('times out a hung native file PUT (no second 120s round) instead of hanging forever', async () => {
+    // 回归:iOS 前台 NSURLSession 只在「60s 无字节流动」时自行超时,慢速涓涓细流
+    // 可以合法挂很多分钟——JS 层必须有自己的超时出口,且超时不进第二轮重试。
+    vi.useFakeTimers();
+    try {
+      const uploadFile = vi.fn((_url: string, _fileUri: string, _headers: Record<string, string>, opts?: { signal?: AbortSignal }) =>
+        new Promise<{ status: number }>((_resolve, reject) => {
+          opts?.signal?.addEventListener('abort', () => reject(new Error('附件上传已取消。')));
+        }));
+
+      const pending = putMobileAttachmentUploadFromFile('https://oss.example/upload', 'file:///tmp/x.png', 'image/png', {
+        uploadFile,
+      });
+      const expectation = expect(pending).rejects.toThrow('附件上传超时,请检查网络后重试。');
+      await vi.advanceTimersByTimeAsync(120_000);
+      await expectation;
+      expect(uploadFile).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('propagates external cancellation without retrying', async () => {
+    const outer = new AbortController();
+    const uploadFile = vi.fn((_url: string, _fileUri: string, _headers: Record<string, string>, opts?: { signal?: AbortSignal }) =>
+      new Promise<{ status: number }>((_resolve, reject) => {
+        opts?.signal?.addEventListener('abort', () => reject(new Error('附件上传已取消。')));
+      }));
+
+    const pending = putMobileAttachmentUploadFromFile(
+      'https://oss.example/upload',
+      'file:///tmp/x.png',
+      'image/png',
+      { uploadFile },
+      { signal: outer.signal },
+    );
+    const expectation = expect(pending).rejects.toThrow('附件上传已取消。');
+    outer.abort();
+    await expectation;
+    expect(uploadFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects immediately when called with an already-aborted signal', async () => {
+    const outer = new AbortController();
+    outer.abort();
+    const uploadFile = vi.fn();
+
+    await expect(putMobileAttachmentUploadFromFile(
+      'https://oss.example/upload',
+      'file:///tmp/x.png',
+      'image/png',
+      { uploadFile },
+      { signal: outer.signal },
+    )).rejects.toThrow('附件上传已取消。');
+    expect(uploadFile).not.toHaveBeenCalled();
   });
 
   it('deletes the staged OSS object when an uploaded attachment is discarded before send', async () => {

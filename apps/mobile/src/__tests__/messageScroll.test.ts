@@ -7,12 +7,18 @@ import type { RemoteMessage } from '@/session/types';
 import {
   buildMessageLoadEarlierAction,
   buildSearchLoadEarlierAction,
+  createMobileFollowEndPinState,
   DEFAULT_NEAR_BOTTOM_THRESHOLD,
+  evaluateMobileFollowEndContentSizePin,
   findMobileRenderItemKeyByClientId,
   firstNonEmptyMessageLine,
   isNearMessageListBottom,
   isNearMobileMessageListBottom,
   isNearMessageListTop,
+  MOBILE_FOLLOW_END_PIN_HEIGHT_DEAD_ZONE,
+  MOBILE_FOLLOW_END_PIN_MAX_REVERSALS_PER_WINDOW,
+  MOBILE_FOLLOW_END_PIN_SUPPRESS_MS,
+  MOBILE_FOLLOW_END_PIN_WINDOW_MS,
   MOBILE_MESSAGE_LIST_BOTTOM_PADDING,
   MOBILE_NEAR_BOTTOM_THRESHOLD,
   mobileMessageListEndOffset,
@@ -448,5 +454,145 @@ describe('resolveMobileNearBottomOnScroll', () => {
       metrics: { contentHeight: 600, offsetY: 0, viewportHeight: 800 },
       scrollDelta: -10,
     })).toBe(true);
+  });
+});
+
+describe('evaluateMobileFollowEndContentSizePin (贴底补滚振荡断路器)', () => {
+  const allow = { shouldScroll: true, suppressionStarted: false, trippedNow: false };
+  const deny = { shouldScroll: false, suppressionStarted: false, trippedNow: false };
+  // A/B 振荡到跳闸:首次评估(900)建立向上方向,首个 1200 仍同向不算翻转,
+  // 之后每次交替评估 = 1 次翻转;循环 MAX_REVERSALS + 1 步,最后一步是第
+  // MAX_REVERSALS 个翻转,恰好打开断路器。
+  const floodUntilTripped = (
+    state: ReturnType<typeof createMobileFollowEndPinState>,
+    startAt: number,
+  ): { decision: ReturnType<typeof evaluateMobileFollowEndContentSizePin>; now: number } => {
+    let now = startAt;
+    let decision = evaluateMobileFollowEndContentSizePin(state, { now, contentHeight: 900 });
+    for (let step = 0; step <= MOBILE_FOLLOW_END_PIN_MAX_REVERSALS_PER_WINDOW; step += 1) {
+      now += 16;
+      decision = evaluateMobileFollowEndContentSizePin(state, {
+        now,
+        contentHeight: step % 2 === 0 ? 1200 : 900,
+      });
+    }
+    return { decision, now };
+  };
+
+  it('首次补滚放行并登记高度', () => {
+    const state = createMobileFollowEndPinState();
+    expect(evaluateMobileFollowEndContentSizePin(state, { now: 1000, contentHeight: 900 }))
+      .toEqual(allow);
+    expect(state.lastPinnedHeight).toBe(900);
+  });
+
+  it('高度死区内的重复回调不放行(浮点/舍入噪声、同值重复)', () => {
+    const state = createMobileFollowEndPinState();
+    evaluateMobileFollowEndContentSizePin(state, { now: 1000, contentHeight: 900 });
+    for (const height of [900, 901, 899, 900 + MOBILE_FOLLOW_END_PIN_HEIGHT_DEAD_ZONE]) {
+      expect(evaluateMobileFollowEndContentSizePin(state, { now: 1016, contentHeight: height }))
+        .toEqual(deny);
+    }
+    // 死区噪声不构成方向观察,也不制造假翻转。
+    expect(state.reversalTimestamps).toHaveLength(0);
+    expect(state.lastObservedHeight).toBe(900);
+  });
+
+  it('帧级单调快速增长永不跳闸(快流式/冷开分批渲染是合法路径,review P1 核心)', () => {
+    const state = createMobileFollowEndPinState();
+    let height = 900;
+    let now = 1000;
+    for (let index = 0; index < 120; index += 1) {
+      now += 16; // 60/s,远超原「补滚频率」阈值也不许跳闸
+      height += 24;
+      expect(evaluateMobileFollowEndContentSizePin(state, { now, contentHeight: height }))
+        .toEqual(allow);
+    }
+    expect(state.suppressedUntil).toBe(0);
+  });
+
+  it('高度收缩(rewind/删消息/折叠)照常放行,单次翻转不跳闸', () => {
+    const state = createMobileFollowEndPinState();
+    evaluateMobileFollowEndContentSizePin(state, { now: 1000, contentHeight: 2000 });
+    // 收缩:方向翻转 1 次,但补滚照常放行。
+    expect(evaluateMobileFollowEndContentSizePin(state, { now: 1100, contentHeight: 1400 }))
+      .toEqual(allow);
+    // 随后恢复流式增长(再翻转 1 次)同样放行。
+    expect(evaluateMobileFollowEndContentSizePin(state, { now: 1200, contentHeight: 1424 }))
+      .toEqual(allow);
+    expect(state.suppressedUntil).toBe(0);
+  });
+
+  it('窗口内方向翻转到达上限 → 跳闸:suppressionStarted + 首次 trippedNow,停止放行', () => {
+    const state = createMobileFollowEndPinState();
+    const { decision, now } = floodUntilTripped(state, 1000);
+    expect(decision).toEqual({ shouldScroll: false, suppressionStarted: true, trippedNow: true });
+    expect(state.suppressedUntil).toBe(now + MOBILE_FOLLOW_END_PIN_SUPPRESS_MS);
+  });
+
+  it('断路期间一律不放行且不延长断路;振荡停息 + 到期后恢复放行', () => {
+    const state = createMobileFollowEndPinState();
+    const { now: trippedAt } = floodUntilTripped(state, 1000);
+    const suppressedUntil = state.suppressedUntil;
+    expect(evaluateMobileFollowEndContentSizePin(state, { now: trippedAt + 16, contentHeight: 1200 }))
+      .toEqual(deny);
+    expect(state.suppressedUntil).toBe(suppressedUntil);
+    // 断路期振荡停息 → 窗口滚空;到期后的单调增长恢复放行。
+    expect(evaluateMobileFollowEndContentSizePin(state, {
+      now: suppressedUntil + 1,
+      contentHeight: 1500,
+    })).toEqual(allow);
+  });
+
+  it('断路期间振荡持续记账:断路一闭合立即重新跳闸,且不再重复报告 trippedNow', () => {
+    const state = createMobileFollowEndPinState();
+    const { now: trippedAt } = floodUntilTripped(state, 1000);
+    // 断路期内继续以帧间隔振荡(每次评估都是翻转,窗口内计数持续爆表)。
+    let now = trippedAt;
+    let toggle = true;
+    while (now < state.suppressedUntil - 16) {
+      now += 16;
+      expect(evaluateMobileFollowEndContentSizePin(state, {
+        now,
+        contentHeight: toggle ? 900 : 1200,
+      }).shouldScroll).toBe(false);
+      toggle = !toggle;
+    }
+    // 断路到期后的首个翻转:窗口内旧账未清,立刻重新跳闸,但告警不重复。
+    const reopened = evaluateMobileFollowEndContentSizePin(state, {
+      now: state.suppressedUntil + 1,
+      contentHeight: toggle ? 900 : 1200,
+    });
+    expect(reopened).toEqual({ shouldScroll: false, suppressionStarted: true, trippedNow: false });
+  });
+
+  it('稀疏翻转被滚动窗口过滤,永不跳闸(正常阅读/折叠节奏)', () => {
+    const state = createMobileFollowEndPinState();
+    let now = 1000;
+    // 每次翻转间隔超过窗口:计数永远到不了上限。
+    for (let index = 0; index < MOBILE_FOLLOW_END_PIN_MAX_REVERSALS_PER_WINDOW * 3; index += 1) {
+      now += MOBILE_FOLLOW_END_PIN_WINDOW_MS + 100;
+      const decision = evaluateMobileFollowEndContentSizePin(state, {
+        now,
+        contentHeight: index % 2 === 0 ? 900 : 1200,
+      });
+      expect(decision).toEqual(allow);
+    }
+    expect(state.suppressedUntil).toBe(0);
+    // 旧翻转随窗口滚出,计数不累积到上限。
+    expect(state.reversalTimestamps.length).toBeLessThan(MOBILE_FOLLOW_END_PIN_MAX_REVERSALS_PER_WINDOW);
+  });
+
+  it('窗口边界:恰好等于 windowStart 的旧翻转被严格剔除', () => {
+    const state = createMobileFollowEndPinState();
+    evaluateMobileFollowEndContentSizePin(state, { now: 1000, contentHeight: 900 });
+    evaluateMobileFollowEndContentSizePin(state, { now: 1016, contentHeight: 1200 });
+    // 在 t=2000 制造一次翻转记账(900 ← 1200,方向翻转)。
+    evaluateMobileFollowEndContentSizePin(state, { now: 2000, contentHeight: 900 });
+    expect(state.reversalTimestamps).toEqual([2000]);
+    // 下一次翻转发生在 t=3000:windowStart = 2000,`at > windowStart` 为 false,
+    // t=2000 的旧翻转被剔除,窗口内只剩本次。
+    evaluateMobileFollowEndContentSizePin(state, { now: 3000, contentHeight: 1200 });
+    expect(state.reversalTimestamps).toEqual([3000]);
   });
 });

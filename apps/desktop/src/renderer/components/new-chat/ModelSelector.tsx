@@ -1079,7 +1079,10 @@ export function ModelSelector({
   const labelOf = (e: Effort) => modelEffortLabel(t, currentModel, e, effortMeta.get(e));
 
   // 「有没有可选来源」走统一判定 hook(与 ChatInput Send 门禁同一条规则)。
-  const { hasConnectedSource, loading: providersLoading } = useConnectedSource(currentAgentKind, modelId);
+  const { hasConnectedSource, loading: providersLoading } = useConnectedSource(
+    currentAgentKind,
+    modelId,
+  );
   // trigger 左侧来源 icon 必须是当前模型真正可路由的来源，不能拿“支持该 agent 但不提供
   // 此模型”的供应商作兜底。
   const activeSourceId = useMemo<string | null>(
@@ -1211,7 +1214,11 @@ export function ModelSelector({
               <span
                 className={cn(
                   'min-w-0 font-normal text-[var(--text-primary)]',
-                  isCreateAgentVariant ? 'truncate' : isFieldTrigger ? 'max-w-[260px] truncate' : 'truncate',
+                  isCreateAgentVariant
+                    ? 'truncate'
+                    : isFieldTrigger
+                      ? 'max-w-[260px] truncate'
+                      : 'truncate',
                   isCreateAgentVariant ? 'text-[12px]' : dense ? 'text-[12.5px]' : 'text-[13px]',
                 )}
               >
@@ -1252,7 +1259,9 @@ export function ModelSelector({
                   'min-w-0 font-normal',
                   isCreateAgentVariant
                     ? 'truncate'
-                    : isFieldTrigger ? 'max-w-[260px] truncate' : 'truncate',
+                    : isFieldTrigger
+                      ? 'max-w-[260px] truncate'
+                      : 'truncate',
                   !isBudget &&
                     (isCreateAgentVariant
                       ? 'text-[var(--create-agent-control-text)]'
@@ -1289,7 +1298,9 @@ export function ModelSelector({
                         : 'text-[var(--text-primary)]',
                       isCreateAgentVariant
                         ? 'truncate'
-                        : isFieldTrigger ? 'max-w-[120px] truncate' : 'shrink-0 whitespace-nowrap',
+                        : isFieldTrigger
+                          ? 'max-w-[120px] truncate'
+                          : 'shrink-0 whitespace-nowrap',
                       isCreateAgentVariant
                         ? 'text-[12px]'
                         : dense
@@ -1306,7 +1317,9 @@ export function ModelSelector({
                   size={isCreateAgentVariant ? 11 : dense ? 12 : 13}
                   className={cn(
                     'ml-0.5 shrink-0',
-                    isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : 'text-[var(--composer-pill-icon,#3C3F43)] dark:text-[var(--composer-pill-icon,#D9D9D9)]',
+                    isCreateAgentVariant
+                      ? 'text-[var(--create-agent-control-icon)]'
+                      : 'text-[var(--composer-pill-icon,#3C3F43)] dark:text-[var(--composer-pill-icon,#D9D9D9)]',
                   )}
                   aria-label="Fast"
                 />
@@ -1317,7 +1330,9 @@ export function ModelSelector({
             size={isCreateAgentVariant ? 8 : dense ? 13 : 14}
             className={cn(
               'shrink-0',
-              isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : 'text-[var(--composer-pill-icon,#3C3F43)] dark:text-[var(--composer-pill-icon,#D9D9D9)]' /* spec 2026-07-17, token by 一哥 */,
+              isCreateAgentVariant
+                ? 'text-[var(--create-agent-control-icon)]'
+                : 'text-[var(--composer-pill-icon,#3C3F43)] dark:text-[var(--composer-pill-icon,#D9D9D9)]' /* spec 2026-07-17, token by 一哥 */,
               isFieldTrigger && 'ml-auto',
             )}
           />

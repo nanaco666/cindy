@@ -9,7 +9,7 @@
 
 - **本仓没有 `apps/server` / `apps/heartbeat-server`**。下文规则 17 的 server（Prisma）段与规则 19（docker compose 白名单）仅在 `cindy-server` 仓工作时适用，保留在此作为同一套工程口径的参照。
 - **本地 server 由相邻的 `cindy-server` checkout 提供**：`pnpm dev:server` 会定位 `../cindy-server`（或 `XDT_SERVER_REPO` 指定的路径）并执行其 `dev:server`；server 侧 `.env` 配置以该仓文档为准。原单仓的 `pnpm dev:all` 在本仓不存在。
-- **工作流**：尊重宿主和开发者选择的 Git 隔离方式。cwd 已是会话级 / 任务级 worktree 时直接复用，禁止再嵌套创建；cwd 不是任务 worktree 时按用户级 Git workflow 决定是否另建；未配置该 workflow 时先向用户确认，不要直接修改 checkout。不要把新任务混进已有脏 checkout，也不要用破坏性 Git 命令覆盖用户改动。功能完成后跑与风险匹配的验证、提交前对整体 diff review 一次；验证和 review 通过后创建本地 commit，把结果与 commit 信息交给用户确认，**只有用户明确确认后才能 push**（「提 PR」节的测试与对抗性 review 门禁仍然适用，push 本身必须经用户确认）。
+- **工作流与发布**：尊重宿主和开发者选择的 Git 隔离方式。cwd 已是会话级 / 任务级 worktree 时直接复用，禁止再嵌套创建；cwd 不是任务 worktree 时按开发者或宿主 Git workflow 决定是否另建；未配置该 workflow 时先确认隔离方式，不要直接修改不明确的 checkout。不要把新任务混进已有脏 checkout，也不要用破坏性 Git 命令覆盖他人改动。功能完成后跑与风险匹配的验证、提交前对整体 diff review 一次。本仓代码和文档改动默认从非默认分支通过 PR 进入 `main`；只有具备 ruleset bypass 权限的仓库维护者明确选择例外时，才允许按「提 PR」节的额外门禁直推主干。commit / push 的授权时机由开发者或宿主 workflow 决定，不在本仓规定个人确认流程。
 - **SQLite migration 迁移基线**：从旧仓迁入的 SQL 由 `drizzle/migration-baseline.json` 固定 SHA256；数据库变化只能追加新 migration，并运行 `pnpm --filter desktop db:validate` 与 migration replay。本地数据库查询必须使用异步 API；不要对异步 DB client 使用同步 `.all()`。
 - **main 进程禁止运行时动态 `import()`**；依赖使用顶层静态 import。
 - **协议 submodule**：`cindy-protocol` 是协议权威来源。desktop 使用 `@cindy/slack-hook-protocol`，客户端 device-link 包复用 `@cindy/device-link-protocol` 的 relay 层定义；客户端重连、IPC allowlist 与隧道 payload 留在 `packages/device-link`。**升级 submodule 指针前必须确认 `cindy-server` 同步升级**，避免两端 wire protocol 漂移。
@@ -149,7 +149,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 1. **先等 checkout 完成，再确认依赖**：worktree 创建返回时后台的完整 checkout 可能仍在进行（staged copy 只含 `CLAUDE.md` / `.claude` 等少量文件，**不含 `package.json`**）。跑任何 `pnpm` 命令前先确认 `package.json` 存在且 `git status --short` 干净，未就绪就稍等再查。worktree 与 baseRepo 共享 `.git` 但**不共享 node_modules**，创建流程不会自动安装：checkout 完成后若 `node_modules` 缺失，先 `pnpm install`（首次可能数分钟，注意命令超时，必要时分步执行）。
 2. **你的编辑对运行中的 app 无效**：Vite HMR 只 watch 启动 dev 实例的那个 checkout，worktree 下的任何改动既不会热更也不会随重启生效。「改了没反应」不是 bug。验证一律在本 worktree 内跑 `pnpm --filter desktop typecheck` / 定向 `vitest run`；需要运行时验证时，commit + push 后告知用户，由用户启 verify 实例或重启（你无法重启宿主，见上文 refusal 规则）。
 3. **宿主 app 日志不在你的 cwd 下**：dev 日志位于启动 checkout（通常是 baseRepo）的 `apps/desktop/logs/`，读日志时拼 baseRepo 的绝对路径。
-4. **结束前必须 commit（+ push）**：用户**删除或归档会话**时，脏 worktree 的改动会先存为内容快照（`refs/xdt/snapshots/<sessionId>`）再删除目录（确认弹窗有警告；归档会话重开后可一键「恢复工作区」）。`/clear`、鉴权重连、app 退出等瞬态 close 不触发回收（2026-07 P0 重构）；在 worktree 里手动干活时可放 `.worktree-keep` 哨兵文件豁免一切自动回收。仍然不要把未提交的成果留在 worktree 里收工。
+4. **结束前必须 commit，正常发布走任务分支 + PR**：会话被**删除或归档**时，脏 worktree 的改动会先存为内容快照（`refs/xdt/snapshots/<sessionId>`）再删除目录（确认弹窗有警告；归档会话重开后可一键「恢复工作区」）。`/clear`、鉴权重连、app 退出等瞬态 close 不触发回收（2026-07 P0 重构）；在 worktree 里手动干活时可放 `.worktree-keep` 哨兵文件豁免一切自动回收。仍然不要把未提交的成果留在 worktree 里收工；但不得为了回收 worktree 绕过默认 PR 流程。维护者明确选择直推 `main` 时，必须改走「提 PR」节的例外门禁。
 5. **stale prebundle 白屏陷阱**：给 maker-core / maker-cc-manager 等带依赖内部包新增 export 后，运行中实例可能因 stale Vite prebundle 报 `does not provide an export named X` 白屏——这需要受影响实例完整重启（re-optimize），提醒用户即可，不要误诊为自己的代码问题。
 
 ## 手机版出包 / 发版（Agent 规则）
@@ -270,18 +270,17 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 ## 提 PR
 
+本仓默认采用 PR-first：正常情况下，所有代码和文档改动都先进入非默认分支，再通过 GitHub PR 合入 `main`。GitHub ruleset 只为指定维护角色保留受控 bypass；这只提供紧急 / 明确例外能力，不改变所有贡献者的默认流程。直推 `main` 必须由具备 bypass 权限的仓库维护者明确选择，并执行下面的额外门禁；不得仅凭权限存在、测试通过或历史习惯自行直推。发布前必须重新读取本文件的工作流与本节，避免长会话继续使用启动时的旧规则快照。
+
 提 PR 到 `github.com:xindong/cindy-moved` 时，**Description 规范以 `.github/PULL_REQUEST_TEMPLATE.md` 为准**（本仓模板三节：这次改了什么 / 怎么验证的 / 风险——涉及 SQLite migration、system prompt、协议、原生层或跨平台差异时必须在「风险」里说明）。Reviewer 只看 Title + Description 决定要不要 review、怎么 review，写不清楚直接退回。
 
-**提交 PR 前、以及直接推送 commit 到 `main` 前,都必须在仓库根跑一次 `pnpm test:unit` 并确认全部通过——这是硬性门禁,没跑或没通过就不许提 PR / 不许 push main**。直推 main 没有 PR checks 兜底,这条门禁是唯一防线,同样不豁免。具体约束:
-- 有失败必须**先在本地修复到绿灯**再提交,不许带着红灯开 PR 或 push main,也不许用 skip / 注释 / 删用例的方式"制造"绿灯。
+**提交 PR 前、以及直接推送 commit 到 `main` 前，都必须在仓库根跑一次 `pnpm test:unit` 并确认全部通过——这是硬性门禁，没跑或没通过就不许提 PR / 直推主干**。具体约束:
+- 有失败必须**先在本地修复到绿灯**再提交，不许带着红灯开 PR 或 push `main`，也不许用 skip / 注释 / 删用例的方式"制造"绿灯。
 - 修复后要**重新完整跑一遍** `pnpm test:unit` 确认整体通过,不能只跑刚修的那个测试文件就当整体通过。
-- 若失败是主干既有基线问题(与本次改动无关),不要自行放行——先向用户说明并确认处理方式,再决定是否提交。
-- PR 模板「怎么验证的」一节必须**如实**填写测试执行情况:没跑不许写已跑,跑了没过更不许写通过(该节不允许留空)。直推 main 虽无模板兜底,跑测试的义务不变。
+- 若失败是主干既有基线问题(与本次改动无关),不要自行放行——先向 PR 发起人或仓库维护者说明并确认处理方式,再决定是否提交。
+- PR 模板「怎么验证的」一节必须**如实**填写测试执行情况:没跑不许写已跑,跑了没过更不许写通过(该节不允许留空)。直推 `main` 没有模板兜底，测试义务不变。
 
-**直推 `main` 的代码,commit 之前必须先起一个独立 subagent 对本次 diff 做对抗性 review**——这是与 `pnpm test:unit` 并列的硬性门禁,只对「不走 PR、直接推送到 `main`」的改动生效(走 PR 的改动由 PR review 流程兜底,不重复要求)。具体约束:
-- 时序是 **review 在 commit 之前**:改动完成后先把工作区 diff(`git diff` / `git diff --staged`)交给 subagent 审查,review 通过后才允许 `git commit`,不许先 commit 再补 review。
-- subagent 必须**独立审查**:给它的任务是对照本文档「设计实现规范」与「Review guidelines」的严重度口径找问题,不是让它复述"看起来没问题"。review 发现 P0 / P1 必须先修复,修复后把新 diff 重新交 review,直到无 P0 / P1 才能 commit + push。
-- review 结果要**如实向用户汇报**:发现了什么、修了什么、subagent 最终结论,不许静默吞掉 findings。
+**直推 `main` 还必须在 push 前由独立 reviewer 对最终 diff 做一次对抗性 review**。review 要对照本文档「设计实现规范」与「Review guidelines」找实际问题；发现 P0 / P1 必须先修复并重新 review，直到没有 P0 / P1。commit 可以先创建，但 push 的必须是 review 通过的最终 commit；review 结果与修复内容要如实记录。这个额外门禁只用于维护者明确选择的直推例外，正常 PR 由 PR review 流程兜底。
 
 ## Review guidelines
 

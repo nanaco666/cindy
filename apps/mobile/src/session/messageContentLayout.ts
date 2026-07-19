@@ -58,7 +58,7 @@ export function buildMessageContentLayout(input: MessageContentLayoutInput): Mes
     fileChipMinHeight: 32,
     imagePreviewHeight: Math.round(imagePreviewWidth * 0.65),
     imagePreviewWidth,
-    markdownBodyGap: compact ? 8 : 10,
+    markdownBodyGap: compact ? 12 : 14,
     markdownListGap: compact ? 6 : 8,
     markdownListMarkerWidth: compact ? 20 : 24,
     markdownTableCellMinWidth: compact ? 96 : 112,

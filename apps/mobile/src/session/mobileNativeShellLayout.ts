@@ -71,17 +71,24 @@ export function buildSessionNativeShellLayout(
     composerMinHeight,
     composerMaxLimit,
   );
-  const pendingSurfaceMaxHeight = clamp(
-    Math.round(dynamicHeight * (compactByKeyboard ? 0.54 : 0.62)),
-    compactByKeyboard ? shortViewport ? 160 : 210 : shortViewport ? 180 : 280,
-    Math.round(screenHeight * (shortViewport ? 0.68 : 0.72)),
-  );
   const sheetMaxHeight = clamp(
     Math.round(dynamicHeight * (compactByKeyboard ? 0.74 : 0.88)),
     compactByKeyboard ? shortViewport ? 220 : 280 : shortViewport ? 240 : 360,
     Math.round(screenHeight * (shortViewport ? 0.84 : 0.88)),
   );
-  const pendingSurfaceExpandedHeight = sheetMaxHeight;
+  // 键盘收起时允许待处理卡片按内容自然长高到 sheet 上限，避免 ask-user
+  // 的底部操作被屏幕裁掉；键盘弹出后仍收紧高度并通过内部滚动访问内容。
+  const pendingContentMaxHeight = compactByKeyboard
+    ? clamp(
+      Math.round(dynamicHeight * 0.54),
+      shortViewport ? 160 : 210,
+      Math.round(screenHeight * (shortViewport ? 0.68 : 0.72)),
+    )
+    : sheetMaxHeight;
+  // pending surface 延伸到屏幕底部，safe area padding 位于 surface 内部。
+  // 总高度需额外包含 inset，才能维持迁移前相同的内容可用高度。
+  const pendingSurfaceMaxHeight = pendingContentMaxHeight + safeAreaBottomInset;
+  const pendingSurfaceExpandedHeight = sheetMaxHeight + safeAreaBottomInset;
   const paletteMaxHeight = clamp(
     Math.round(dynamicHeight * (compactByKeyboard ? 0.28 : 0.32)),
     compactByKeyboard ? shortViewport ? 96 : 112 : shortViewport ? 118 : 160,

@@ -34,9 +34,10 @@ describe('mobile session header desktop-first surface', () => {
   it('keeps the visible header chrome compact while preserving full settings access', () => {
     const source = readTextLf(resolve(process.cwd(), 'app/sessions/[sessionId].tsx'), 'utf8');
 
-    expect(source).toContain('const goBackToHome = useCallback(() => {');
-    // 空返回栈守卫收敛到共享 helper(见 backGuard.test.ts)
-    expect(source).toContain('goBackGuarded(router);');
+    // 返回自愈:canGoBack 与真实栈不一致(reload 恢复深路由 / 重复压栈残留)时 GO_BACK
+    // 会被静默吞掉,收敛到 useGuardedBack(back 后校验 pathname,没走成 replace 兜底)。
+    expect(source).toContain('const goBackToHome = useGuardedBack();');
+    expect(source).toContain("import { useGuardedBack } from '@/utils/useGuardedBack';");
     expect(source).toContain('onBack={goBackToHome}');
     expect(source).toContain('<Icon color={color} size={iconSize.action} strokeWidth={iconStroke.regular} />');
     expect(source).toContain('testID="session.controlsToggle"');

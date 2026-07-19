@@ -11,11 +11,15 @@ import type Database from 'better-sqlite3';
 import fs from 'node:fs';
 import { promises as fsp } from 'node:fs';
 import { createReadStream } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 
-import { brandUserDataDirName } from '@lizi/maker-shared/brand-identity';
+import {
+  allUserDataDirNames,
+  brandUserDataDirName,
+} from '@lizi/maker-shared/brand-identity';
 import { CURRENT_CINDY_REGION } from '../../shared/brandRegion.js';
 
 import { getCurrentDbClientUserId, getDbClient } from '../localDb/client/current.js';
@@ -164,25 +168,89 @@ export async function importExternalCodexSessions(threadIds: string[]): Promise<
 /** Ensure a Codex thread from another local CODEX_HOME is visible to xdt-maker's app-server. */
 export async function prepareExternalCodexSessionForResume(threadId: string): Promise<void> {
   if (!isLikelyThreadId(threadId)) return;
-  const targetDbPath = findLatestStateDb(getDesktopCodexHome());
+  const targetHome = getDesktopCodexHome();
+  const targetDbPath = findLatestStateDb(targetHome);
   if (!targetDbPath) {
     log.debug('prepare resume skipped: target Codex state DB missing', { threadId });
     return;
   }
 
-  const targetRollout = readThreadRolloutPath(targetDbPath, threadId);
+  let targetRollout = readThreadRolloutPath(targetDbPath, threadId);
   // rollout 文件真实存在 → resume 能直接读,无需任何处理(最热路径,优先短路)。
   // 注意: 这里必须校验文件**真的在磁盘上**, 不能只看 DB 里有没有 rollout_path ——
   // DB threads 行可能指向一个已被删除的 rollout 文件(孤儿), 那种情况要继续往下走恢复。
-  if (targetRollout && fs.existsSync(targetRollout)) return;
+  if (
+    targetRollout
+    && fs.existsSync(targetRollout)
+    && (
+      isPathInside(targetHome, targetRollout)
+      || !isLegacyBrandedCodexLocation(targetHome, targetRollout)
+    )
+  ) return;
 
-  // 尝试从外部 CODEX_HOME(~/.codex、Codex.app 等)导入这个 thread 的 state, 并复用其磁盘
-  // rollout。外部那份 rollout 文件存在时, resume 直接用它最忠实(含完整 reasoning/tool)。
-  const found = findExternalThreadById(threadId);
+  // 尝试从外部 CODEX_HOME(~/.codex、Codex.app、历史品牌 userData 等)导入这个 thread。
+  // rollout 必须接管进当前 Cindy HOME,不能让新 state 长期指向可能被用户清理的老目录。
+  // target row 已指向旧品牌 rollout 时,这个指针比外部 HOME 的 updatedAt 更权威。
+  // 否则 ~/.codex / CODEX_HOME 中较新的同 id thread 会先胜出,linked 分支又因 target
+  // row 已存在而跳过复制,导致旧品牌指针永远没有被接管。
+  const legacyTargetThread = targetRollout
+    && isLegacyBrandedCodexLocation(targetHome, targetRollout)
+    ? findThreadByIdInHome(targetHome, threadId)
+    : null;
+  const found = legacyTargetThread
+    ?? findExternalThreadById(threadId)
+    ?? (targetRollout ? findThreadByIdInHome(targetHome, threadId) : null);
   if (found) {
-    const copied = copyThreadStateToTarget(found, targetDbPath);
-    log.info('prepared external Codex thread for resume', { threadId, copied });
-    if (found.rolloutPath && fs.existsSync(found.rolloutPath)) return;
+    const isBrandMigration = isLegacyBrandedCodexLocation(targetHome, found.sourceHome)
+      || isLegacyBrandedCodexLocation(targetHome, found.rolloutPath);
+    if (isBrandMigration) {
+      const adoptedRolloutPath = targetRolloutPathForExternalThread(found, targetHome);
+      const sourceRolloutExists = !!found.rolloutPath && fs.existsSync(found.rolloutPath);
+      let adoptedRollout = false;
+      if (sourceRolloutExists) {
+        try {
+          adoptedRollout = await copyExternalRolloutAtomically(found.rolloutPath, adoptedRolloutPath);
+        } catch (err) {
+          log.warn('failed to adopt external Codex rollout into current home', {
+            threadId,
+            sourceRolloutPath: found.rolloutPath,
+            targetRolloutPath: adoptedRolloutPath,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
+      // 原文件存在但接管失败时仍指回原文件,保证本次 resume 不因迁移 IO 故障被阻断;
+      // 原文件本就缺失时则把 state 指向当前 HOME,随后由 localDb 历史合成兜底 rollout。
+      const preparedRolloutPath = adoptedRollout || !sourceRolloutExists
+        ? adoptedRolloutPath
+        : found.rolloutPath;
+      const copiedState = copyThreadStateToTarget(found, targetDbPath, {
+        rolloutPathOverride: preparedRolloutPath,
+      });
+      const linkedState = pointThreadAtRollout(targetDbPath, threadId, preparedRolloutPath);
+      targetRollout = readThreadRolloutPath(targetDbPath, threadId);
+      log.info('prepared legacy branded Codex thread for resume', {
+        threadId,
+        sourceHome: found.sourceHome,
+        copiedState,
+        linkedState,
+        adoptedRollout,
+        rolloutPath: targetRollout,
+      });
+    } else {
+      // 显式导入的 ~/.codex / Codex.app 会话保持链接语义,close 时仍同步回原 HOME。
+      const copiedState = copyThreadStateToTarget(found, targetDbPath);
+      targetRollout = readThreadRolloutPath(targetDbPath, threadId);
+      log.info('prepared linked external Codex thread for resume', {
+        threadId,
+        sourceHome: found.sourceHome,
+        copiedState,
+        rolloutPath: targetRollout,
+      });
+    }
+    targetRollout = readThreadRolloutPath(targetDbPath, threadId);
+    if (targetRollout && fs.existsSync(targetRollout)) return;
   }
 
   // 孤儿兜底: state DB 有 threads 行、但 rollout 文件已缺失(典型成因: 旧版 codex logout
@@ -201,6 +269,70 @@ export async function prepareExternalCodexSessionForResume(threadId: string): Pr
     }
   } else if (!targetRollout) {
     log.debug('prepare resume: no rollout_path recorded, cannot synthesize', { threadId });
+  }
+}
+
+/** 为外部 thread 派生当前 Codex HOME 内的稳定 rollout 路径。 */
+function targetRolloutPathForExternalThread(thread: CodexThreadSummary, targetHome: string): string {
+  const relative = path.relative(thread.sourceHome, thread.rolloutPath);
+  const firstSegment = relative.split(path.sep)[0];
+  const isSafeCodexRelativePath = relative !== ''
+    && relative !== '..'
+    && !relative.startsWith(`..${path.sep}`)
+    && !path.isAbsolute(relative)
+    && (firstSegment === 'sessions' || firstSegment === 'archived_sessions');
+  if (isSafeCodexRelativePath) return path.join(targetHome, relative);
+
+  const directory = thread.archived ? 'archived_sessions' : 'sessions';
+  const filename = path.basename(thread.rolloutPath) || `rollout-migrated-${thread.threadId}.jsonl`;
+  return path.join(targetHome, directory, filename);
+}
+
+/** realpath 可用时先消除 macOS `/var` 等路径别名,再做目录边界判断。 */
+function isPathInside(parentDir: string, candidate: string): boolean {
+  const parent = safeRealpathSync(parentDir) ?? path.resolve(parentDir);
+  const child = safeRealpathSync(candidate) ?? path.resolve(candidate);
+  const relative = path.relative(parent, child);
+  return relative === ''
+    || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+
+/** 当前区域的全部历史品牌 Codex HOME;不包含当前 Cindy/CindyGlobal HOME。 */
+function legacyBrandedCodexHomes(targetHome: string): string[] {
+  const userDataParent = path.dirname(path.dirname(targetHome));
+  return allUserDataDirNames(CURRENT_CINDY_REGION)
+    .slice(1)
+    .map((dirName) => path.join(userDataParent, dirName, 'codex-home'));
+}
+
+function isLegacyBrandedCodexLocation(targetHome: string, candidate: string): boolean {
+  return legacyBrandedCodexHomes(targetHome).some((legacyHome) => isPathInside(legacyHome, candidate));
+}
+
+/**
+ * 先复制到同目录临时文件,再用 hard-link 原子发布。并发迁移同一 thread 时只有首个
+ * 发布者成功,其余调用复用已存在目标;删除临时 hard-link 不影响正式文件。
+ */
+async function copyExternalRolloutAtomically(sourcePath: string, targetPath: string): Promise<boolean> {
+  if (samePath(sourcePath, targetPath)) return fs.existsSync(sourcePath);
+  if (!fs.existsSync(sourcePath)) return false;
+  if (fs.existsSync(targetPath)) return true;
+
+  await fsp.mkdir(path.dirname(targetPath), { recursive: true });
+  const tempPath = path.join(
+    path.dirname(targetPath),
+    `.${path.basename(targetPath)}.${randomUUID()}.migration-tmp`,
+  );
+  try {
+    await fsp.copyFile(sourcePath, tempPath, fs.constants.COPYFILE_EXCL);
+    try {
+      await fsp.link(tempPath, targetPath);
+    } catch (err) {
+      if (!fs.existsSync(targetPath)) throw err;
+    }
+    return true;
+  } finally {
+    await fsp.rm(tempPath, { force: true }).catch(() => undefined);
   }
 }
 
@@ -794,25 +926,7 @@ export async function importExternalCodexMessagesForSession(sessionId: string): 
 
 async function discoverExternalCodexHomes(): Promise<string[]> {
   const targetHome = getDesktopCodexHome();
-  const candidates = new Set<string>();
-  const add = (p: string | undefined) => {
-    if (!p) return;
-    candidates.add(path.resolve(p));
-  };
-
-  add(process.env.CODEX_HOME);
-  add(path.join(os.homedir(), '.codex'));
-  if (process.platform === 'darwin') {
-    const appSupport = path.join(os.homedir(), 'Library', 'Application Support');
-    add(path.join(appSupport, 'Codex', 'codex-home'));
-    add(path.join(appSupport, 'Codex'));
-  } else if (process.platform === 'win32') {
-    const appData = process.env.APPDATA;
-    add(appData ? path.join(appData, 'Codex', 'codex-home') : undefined);
-    add(appData ? path.join(appData, 'Codex') : undefined);
-  } else {
-    add(path.join(os.homedir(), '.config', 'codex'));
-  }
+  const candidates = externalCodexHomeCandidates(targetHome);
 
   const targetReal = await realpathOrNull(targetHome);
   const out: string[] = [];
@@ -1267,24 +1381,7 @@ function findExternalThreadByIdFromRollouts(home: string, threadId: string): Cod
 
 function discoverExternalCodexHomesSync(): string[] {
   const targetHome = getDesktopCodexHome();
-  const candidates = new Set<string>();
-  const add = (p: string | undefined) => {
-    if (p) candidates.add(path.resolve(p));
-  };
-
-  add(process.env.CODEX_HOME);
-  add(path.join(os.homedir(), '.codex'));
-  if (process.platform === 'darwin') {
-    const appSupport = path.join(os.homedir(), 'Library', 'Application Support');
-    add(path.join(appSupport, 'Codex', 'codex-home'));
-    add(path.join(appSupport, 'Codex'));
-  } else if (process.platform === 'win32') {
-    const appData = process.env.APPDATA;
-    add(appData ? path.join(appData, 'Codex', 'codex-home') : undefined);
-    add(appData ? path.join(appData, 'Codex') : undefined);
-  } else {
-    add(path.join(os.homedir(), '.config', 'codex'));
-  }
+  const candidates = externalCodexHomeCandidates(targetHome);
 
   const targetReal = safeRealpathSync(targetHome);
   const seen = new Set<string>();
@@ -1296,6 +1393,34 @@ function discoverExternalCodexHomesSync(): string[] {
     out.push(real);
   }
   return out;
+}
+
+/** 统一生成异步扫描与 resume 热路径共享的外部 Codex HOME 候选。 */
+function externalCodexHomeCandidates(targetHome: string): Set<string> {
+  const candidates = new Set<string>();
+  const add = (p: string | undefined) => {
+    if (p) candidates.add(path.resolve(p));
+  };
+
+  add(process.env.CODEX_HOME);
+  add(path.join(os.homedir(), '.codex'));
+
+  // 身份翻转只迁了主库,历史 sessions.sdk_session_id 仍可能指向旧品牌 HOME。
+  // 从统一品牌身份表取 legacy 名称,未来再次改名只需扩表,此处无需再追补字面量。
+  for (const legacyHome of legacyBrandedCodexHomes(targetHome)) add(legacyHome);
+
+  if (process.platform === 'darwin') {
+    const appSupport = path.join(os.homedir(), 'Library', 'Application Support');
+    add(path.join(appSupport, 'Codex', 'codex-home'));
+    add(path.join(appSupport, 'Codex'));
+  } else if (process.platform === 'win32') {
+    const appData = process.env.APPDATA;
+    add(appData ? path.join(appData, 'Codex', 'codex-home') : undefined);
+    add(appData ? path.join(appData, 'Codex') : undefined);
+  } else {
+    add(path.join(os.homedir(), '.config', 'codex'));
+  }
+  return candidates;
 }
 
 function safeRealpathSync(p: string): string | null {
@@ -1494,7 +1619,9 @@ function copyThreadStateToTarget(
         replaceRowsByColumn(sourceDb, targetDb, 'thread_dynamic_tools', 'thread_id', thread.threadId);
         replaceRowsByColumn(sourceDb, targetDb, 'thread_spawn_edges', 'parent_thread_id', thread.threadId);
       } else {
-        copyRowsByColumn(sourceDb, targetDb, 'threads', 'id', thread.threadId);
+        copyRowsByColumn(sourceDb, targetDb, 'threads', 'id', thread.threadId, {
+          ...(opts.rolloutPathOverride ? { rollout_path: opts.rolloutPathOverride } : {}),
+        });
         copyRowsByColumn(sourceDb, targetDb, 'thread_dynamic_tools', 'thread_id', thread.threadId);
         copyRowsByColumn(sourceDb, targetDb, 'thread_spawn_edges', 'parent_thread_id', thread.threadId);
       }
@@ -1520,6 +1647,7 @@ function copyRowsByColumn(
   table: string,
   whereColumn: string,
   whereValue: string,
+  overrides: Record<string, SqlScalar> = {},
 ): void {
   if (!tableExists(source, table) || !tableExists(target, table)) return;
   const commonColumns = intersectColumns(getTableColumns(source, table), getTableColumns(target, table));
@@ -1529,7 +1657,7 @@ function copyRowsByColumn(
   if (rows.length === 0) return;
   const placeholders = commonColumns.map((c) => `@${c}`).join(', ');
   const insert = target.prepare(`INSERT OR IGNORE INTO ${quoteIdent(table)} (${colsSql}) VALUES (${placeholders})`);
-  for (const row of rows) insert.run(row);
+  for (const row of rows) insert.run({ ...row, ...overrides });
 }
 
 function upsertRowsByColumn(
@@ -1588,6 +1716,28 @@ function readThreadRolloutPath(dbPath: string, threadId: string): string | null 
     return row?.rolloutPath ?? null;
   } catch {
     return null;
+  } finally {
+    closeDbQuietly(db);
+  }
+}
+
+/** 已有 target row 只改 rollout_path,不拿较旧外部元数据覆盖当前状态。 */
+function pointThreadAtRollout(dbPath: string, threadId: string, rolloutPath: string): boolean {
+  let db: Database.Database | null = null;
+  try {
+    db = createBetterSqliteDatabase(dbPath);
+    db.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
+    if (!tableExists(db, 'threads')) return false;
+    const result = db.prepare('UPDATE threads SET rollout_path = ? WHERE id = ?')
+      .run(rolloutPath, threadId);
+    return result.changes > 0;
+  } catch (err) {
+    log.warn('failed to point Codex thread at adopted rollout', {
+      threadId,
+      rolloutPath,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return false;
   } finally {
     closeDbQuietly(db);
   }

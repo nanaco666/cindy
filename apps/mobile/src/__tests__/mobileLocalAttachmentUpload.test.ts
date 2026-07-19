@@ -571,3 +571,162 @@ describe('failed-state retry(弱网失败卡保留与重试)', () => {
     expect(idle.failedCount).toBe(1); // a.jpg 的失败卡仍在
   });
 });
+
+describe('claim(划归乐观消息)', () => {
+  it('claim 后任务离开托盘 / 限额 / waitForIdle,产物仍带 localId 回调', async () => {
+    const gate = gatedUpload();
+    const { deps, pendingSnapshots, uploaded } = makeDeps({ upload: gate.upload });
+    const uploadedIds: string[] = [];
+    deps.onUploaded = (attachment, cand, uploadedUri, localId) => {
+      uploaded.push({ attachment, candidate: cand, uploadedUri });
+      uploadedIds.push(localId);
+    };
+    const controller = createMobileLocalAttachmentUploadController(deps);
+    controller.enqueue([candidate('a.jpg')], { token: 't' });
+    await flush();
+    const claimable = controller.claimableTasks();
+    expect(claimable).toEqual([{
+      localId: 'local-attachment-upload-1',
+      failed: false,
+      kind: 'image',
+      previewUri: 'file:///tmp/a.jpg',
+    }]);
+    controller.claim(claimable.map((task) => task.localId));
+    // 托盘同步清空,限额与发送等待不再计入。
+    expect(pendingSnapshots.at(-1)).toHaveLength(0);
+    expect(controller.pendingCount()).toBe(0);
+    expect(controller.hasPending()).toBe(false);
+    const idle = await controller.waitForIdle();
+    expect(idle.failedCount).toBe(0);
+    // 任务本身照跑,完成后带 localId 回调。
+    gate.release('a.jpg');
+    await flush();
+    expect(uploaded).toHaveLength(1);
+    expect(uploadedIds).toEqual(['local-attachment-upload-1']);
+  });
+
+  it('claimed 失败卡不计入 waitForIdle failedCount,retry 对其仍有效', async () => {
+    const gate = gatedUpload();
+    const failedIds: string[] = [];
+    const { deps, uploaded } = makeDeps({ upload: gate.upload });
+    deps.onFailed = (_err, localId) => { failedIds.push(localId); };
+    const controller = createMobileLocalAttachmentUploadController(deps);
+    controller.enqueue([candidate('a.jpg')], { token: 't' });
+    await flush();
+    controller.claim(['local-attachment-upload-1']);
+    gate.fail('a.jpg');
+    await flush();
+    expect(failedIds).toEqual(['local-attachment-upload-1']);
+    // composer 域的发送等待不受 claimed 失败卡影响。
+    const idle = await controller.waitForIdle();
+    expect(idle.failedCount).toBe(0);
+    expect(controller.claimableTasks()).toEqual([]);
+    // outbox 条目重试:同一 localId 重跑完整管线。
+    controller.retry('local-attachment-upload-1', { token: 't2' });
+    await flush();
+    gate.release('a.jpg');
+    await flush();
+    expect(uploaded).toHaveLength(1);
+  });
+
+  it('claim 未知 / 已丢弃任务是安全 no-op', () => {
+    const { deps } = makeDeps();
+    const controller = createMobileLocalAttachmentUploadController(deps);
+    expect(() => controller.claim(['nope'])).not.toThrow();
+    expect(controller.claimableTasks()).toEqual([]);
+  });
+
+  it('removeAll 只丢 composer 域任务,claimed 任务照跑并回调(排队编辑退出不打断已发消息)', async () => {
+    const gate = gatedUpload();
+    const uploadedIds: string[] = [];
+    const { deps } = makeDeps({ upload: gate.upload });
+    deps.onUploaded = (_attachment, _cand, _uri, localId) => { uploadedIds.push(localId); };
+    const controller = createMobileLocalAttachmentUploadController(deps);
+    controller.enqueue([candidate('claimed.jpg'), candidate('tray.jpg')], { token: 't' });
+    await flush();
+    controller.claim(['local-attachment-upload-1']);
+    controller.removeAll();
+    // composer 域任务被丢弃,claimed 任务仍在跑。
+    expect(controller.hasPending()).toBe(false);
+    gate.release('claimed.jpg');
+    gate.release('tray.jpg');
+    await flush();
+    expect(uploadedIds).toEqual(['local-attachment-upload-1']);
+  });
+});
+
+describe('in-flight 取消(abort 传递)', () => {
+  it('remove in-flight 任务时 upload 收到已中止的 signal', async () => {
+    let seenSignal: AbortSignal | undefined;
+    const gate = gatedUpload();
+    const { deps } = makeDeps({
+      upload: (c, fileUri, opts) => {
+        seenSignal = opts.signal;
+        return gate.upload(c, fileUri, opts);
+      },
+    });
+    const controller = createMobileLocalAttachmentUploadController(deps);
+    controller.enqueue([candidate('a.jpg')], { token: 't' });
+    await flush();
+    expect(seenSignal?.aborted).toBe(false);
+    controller.remove('local-attachment-upload-1');
+    expect(seenSignal?.aborted).toBe(true);
+    // 被 abort 的传输随后 reject:任务应结算为 discarded(不产生失败回调)。
+    gate.fail('a.jpg', new Error('附件上传已取消。'));
+    const idle = await controller.waitForIdle();
+    expect(idle.failedCount).toBe(0);
+  });
+
+  it('removeAll 与 dispose 同样中止 in-flight 传输', async () => {
+    const signals: AbortSignal[] = [];
+    const gate = gatedUpload();
+    const { deps } = makeDeps({
+      upload: (c, fileUri, opts) => {
+        if (opts.signal) signals.push(opts.signal);
+        return gate.upload(c, fileUri, opts);
+      },
+    });
+    const controller = createMobileLocalAttachmentUploadController(deps);
+    controller.enqueue([candidate('a.jpg'), candidate('b.jpg')], { token: 't' });
+    await flush();
+    expect(signals).toHaveLength(2);
+    controller.removeAll();
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+
+    const gate2 = gatedUpload();
+    const signals2: AbortSignal[] = [];
+    const second = makeDeps({
+      upload: (c, fileUri, opts) => {
+        if (opts.signal) signals2.push(opts.signal);
+        return gate2.upload(c, fileUri, opts);
+      },
+    });
+    const controller2 = createMobileLocalAttachmentUploadController(second.deps);
+    controller2.enqueue([candidate('c.jpg')], { token: 't' });
+    await flush();
+    controller2.dispose();
+    expect(signals2[0]?.aborted).toBe(true);
+  });
+
+  it('retry 换新 abort 通道:上一轮超时的 aborted signal 不影响重试', async () => {
+    const signals: AbortSignal[] = [];
+    let calls = 0;
+    const { deps, uploaded } = makeDeps({
+      upload: (c, _fileUri, opts) => {
+        if (opts.signal) signals.push(opts.signal);
+        calls += 1;
+        return calls === 1
+          ? Promise.reject(new Error('附件上传超时,请检查网络后重试。'))
+          : Promise.resolve(attachmentFor(c.name));
+      },
+    });
+    const controller = createMobileLocalAttachmentUploadController(deps);
+    controller.enqueue([candidate('a.jpg')], { token: 't' });
+    await controller.waitForIdle();
+    controller.retry('local-attachment-upload-1', { token: 't2' });
+    await controller.waitForIdle();
+    expect(uploaded).toHaveLength(1);
+    expect(signals).toHaveLength(2);
+    expect(signals[0]).not.toBe(signals[1]);
+  });
+});

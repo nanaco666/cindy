@@ -258,6 +258,9 @@ describe('buildClaudeEnv', () => {
       // SDK 默认 sdk-ts 不在其中;dev 下 Electron 由终端 cc 启动继承来的 sdk-ts 同样会
       // 关掉闸门 —— 必须硬覆盖,否则回调静默失效(不报错不打日志)。
       process.env.CLAUDE_CODE_ENTRYPOINT = 'sdk-ts';
+      // 清掉宿主可能自带的 IDE_SKIP,确保断言命中的是 builder 的默认填充分支,
+      // 而不是 process.env 继承(继承时测试假通过,没测到目标逻辑)。
+      delete process.env.CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL;
       const env = await buildClaudeEnv(
         createAuthAdapter({ CLAUDE_CODE_OAUTH_TOKEN: 'at-live' }),
         {},
@@ -270,6 +273,9 @@ describe('buildClaudeEnv', () => {
 
     it('无订阅 token(gateway-key):不动 ENTRYPOINT,保持 SDK 默认语义', async () => {
       delete process.env.CLAUDE_CODE_ENTRYPOINT;
+      // 宿主环境(如 Claude Code IDE 会话)可能自带 IDE_SKIP=1,不清会经 process.env
+      // 继承进 buildClaudeEnv 输出,让下面的 toBeUndefined 断言只在特定环境失败。
+      delete process.env.CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL;
       const env = await buildClaudeEnv(createAuthAdapter({ ANTHROPIC_API_KEY: 'sk-gw' }), {});
       expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
       expect(env.CLAUDE_CODE_ENTRYPOINT).toBeUndefined();

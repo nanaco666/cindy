@@ -4,12 +4,12 @@
  *
  * 发布方式是人肉上传各自 region 的 hotfix CDN(`<base>/endpoint.json`,暂无发布
  * 脚本),这条测试是上传前的唯一自动防线:改 CDN 前必须先改仓内正本并让本测试
- * 通过。客户端语义是**阻断式**——清单校验不过启动直接卡错误框,所以这里保证
- * 正本永远能被客户端 parser 接受。
+ * 通过。客户端仍会在清单原文无法解析时阻断,所以这里保证正本永远能被客户端
+ * parser 接受;region 不适用的 endpoint 字段允许缺失或留空。
  *
  * 构建期自举 CDN 基址直接读取同一份清单的 cdnBaseUrl，不再维护第二份镜像。
- * 清单即唯一事实源:全字段必填,parser 通过即隐含所有字段齐备(缺任一字段客户端
- * 启动阻断)。
+ * 清单即唯一事实源:parser 会把缺失/空白 endpoint 归一为空串,不把 region 差异
+ * 当成全量启动事故。
  *
  * `_` 前缀键约定为正本内注释(JSON 无注释语法;客户端 parser 按未知字段忽略),
  * 未知字段检查对其豁免。
@@ -37,7 +37,7 @@ const MANIFESTS = [
 describe.each(MANIFESTS)('config/endpoint*.json 守门($label)', ({ filePath }) => {
   const rawText = fs.readFileSync(filePath, 'utf8');
 
-  it('必须能被客户端共享 parser 完整接受(阻断语义下坏正本 = 全量启动事故)', () => {
+  it('必须能被客户端共享 parser 接受(JSON/schema/非空 URL 仍需合法)', () => {
     const result = parseClientEndpointManifest(rawText);
     expect(result).toMatchObject({ ok: true });
   });

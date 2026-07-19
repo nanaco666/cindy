@@ -2,9 +2,10 @@
  * clientEndpointStartup —— 客户端端点清单(`<hotfix CDN base>/endpoint.json`)
  * 的 mobile 启动解析(useStartupEndpointGate 的执行体;依赖注入、可纯函数单测)。
  *
- * 语义:**CDN 清单是正式包唯一事实源**。拉不到、非法 JSON、schemaVersion
- * 不兼容、任一必填字段缺失或值非法都返回失败，由启动闸门阻断业务树
- * 并显示重试页。不读包内 `endpoint.json`、不做字段合并、不做整份回退，
+ * 语义:**CDN 清单是正式包唯一事实源**。启动时仍先拉取并解析 JSON,但 endpoint
+ * 字段允许按 region 缺失或留空,不会因此阻断业务树。清单无法获取、JSON / schema
+ * 不可解析或非空 URL 值非法时仍由启动闸门显示重试页。不读包内 `endpoint.json`、
+ * 不做字段合并、不做整份回退，
  * 避免线上配置错误被静默掩盖或不同端点跑在不同版本。
  *
  * 共享逻辑(schema / 校验)在 @lizi/maker-shared/client-endpoints;本文件负责

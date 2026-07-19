@@ -128,7 +128,12 @@ describe('mobile home desktop-first surface', () => {
     expect(vendorIconSource).not.toContain('viewBox="136 137 282 158"');
     expect(vendorIconSource).not.toContain('transform="translate(');
     expect(vendorIconSource).toContain('Easing.inOut(Easing.ease)');
-    expect(homeSource).toContain('remoteSessionStore.isSessionRunning(item.session.id)');
+    // 行运行态经订阅获取(memo 化后命令式读取会 stale,2026-07-18 重渲染风暴修复)
+    expect(homeSource).toContain('const sessionIsRunning = useSessionRunning(item.session.id);');
+    // 保鲜契约:ProjectRow 与 AutomationGroupChildren 内的命令式运行态读取必须各挂一份
+    // storeVersion 订阅(裸语句形态);行内相对时间靠分钟心跳订阅保鲜。丢任何一处都是 stale-UI。
+    expect((homeSource.match(/^  useRemoteSessionStoreVersion\(\);$/gm) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect(homeSource).toContain('useMinuteNow();');
     expect(homeSource).toContain('<RadioTower');
     expect(homeSource).toContain('width: 24');
     expect(homeSource).toContain('width: iconSize.md');
@@ -262,7 +267,9 @@ describe('mobile home desktop-first surface', () => {
     expect(sessionRowSource).toContain('buildRemoteSessionCardPreview(item, { running })');
     expect(sessionRowSource).toContain('testID={`home.sessionRowPreview.${item.session.id}`}');
     expect(sessionRowSource).not.toContain('numberOfLines={2}');
-    expect(sessionRowSource).toContain('formatRemoteSessionSidebarTime(item.lastActivityAt)');
+    // 相对时间下沉到独家订阅分钟心跳的叶子组件(行主体 memo 化后由它单独保鲜,风暴修复)
+    expect(sessionRowSource).toContain('<SessionRelativeTime lastActivityAt={item.lastActivityAt}');
+    expect(source).toContain('formatRemoteSessionSidebarTime(lastActivityAt)');
     expect(sessionRowSource).toContain('item.pendingInteractionCount');
     expect(sessionRowSource).toContain('item.scheduleInfo?.unreadCount');
     expect(sessionRowSource).toContain('item.session.pinnedAt');
