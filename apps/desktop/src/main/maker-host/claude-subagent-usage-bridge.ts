@@ -84,6 +84,21 @@ export class ClaudeSubagentUsageBridge {
   private readonly taskIdByRequestId = new Map<number, string>();
   private nextRegistrationOrder = 0;
 
+  /** Enforces the task cap without evicting entries still referenced by in-flight responses. */
+  private trimTasks(): void {
+    const reservedTaskIds = new Set(this.taskIdByRequestId.values());
+    while (this.tasks.size > MAX_TRACKED_TASKS) {
+      let oldestEvictableTaskId: string | undefined;
+      for (const taskId of this.tasks.keys()) {
+        if (reservedTaskIds.has(taskId)) continue;
+        oldestEvictableTaskId = taskId;
+        break;
+      }
+      if (!oldestEvictableTaskId) break;
+      this.tasks.delete(oldestEvictableTaskId);
+    }
+  }
+
   registerTask(task: ClaudeSubagentTaskRegistration): void {
     const normalizedPrompt = normalizePrompt(task.prompt);
     if (!task.taskId || !task.parentToolUseId || !normalizedPrompt) return;
@@ -95,11 +110,7 @@ export class ClaudeSubagentUsageBridge {
       matchedRequests: 0,
       registrationOrder: this.nextRegistrationOrder++,
     });
-    while (this.tasks.size > MAX_TRACKED_TASKS) {
-      const oldestTaskId = this.tasks.keys().next().value as string | undefined;
-      if (!oldestTaskId) break;
-      this.tasks.delete(oldestTaskId);
-    }
+    this.trimTasks();
   }
 
   private selectTask(body: Record<string, unknown>): TrackedTask | null {
@@ -143,11 +154,14 @@ export class ClaudeSubagentUsageBridge {
     return selected.taskId;
   }
 
-  /** Consumes the task reserved for a proxy request when its response starts. */
-  takeReservedTask(reqId: number): string | null {
-    const taskId = this.taskIdByRequestId.get(reqId) ?? null;
+  /** Reads the task reserved for a proxy request without ending its in-flight protection. */
+  getReservedTask(reqId: number): string | null {
+    return this.taskIdByRequestId.get(reqId) ?? null;
+  }
+
+  /** Ends the in-flight protection after the response is fully handled. */
+  releaseReservedTask(reqId: number): void {
     this.taskIdByRequestId.delete(reqId);
-    return taskId;
   }
 
   recordResponseUsage(taskId: string, usage: Record<string, unknown>): void {
@@ -202,20 +216,23 @@ export function createClaudeSubagentUsageResponseObserver(
     const contentType = (ctx.responseHeaders['content-type'] ?? '').toLowerCase();
     const isSse = contentType.includes('text/event-stream');
     const isJson = contentType.includes('application/json');
-    if (!isSse && !isJson) return null;
-    // 可恢复的中间失败可能复用 reqId；只在最终可计量响应开始时消费预留。
-    const taskId = bridge.takeReservedTask(ctx.reqId);
+    if (!isSse && !isJson) {
+      bridge.releaseReservedTask(ctx.reqId);
+      return null;
+    }
+    const taskId = bridge.getReservedTask(ctx.reqId);
     if (!taskId) return null;
 
     let done = false;
+    let usageCommitted = false;
     let totalBytes = 0;
     let buffer = '';
     let latestInputUsage: Record<string, unknown> | null = null;
     let latestOutputUsage: Record<string, unknown> | null = null;
 
     const commitUsage = (): void => {
-      if (done) return;
-      done = true;
+      if (usageCommitted) return;
+      usageCommitted = true;
       const usage = {
         input_tokens: latestInputUsage ? numberField(latestInputUsage, 'input_tokens') : 0,
         cache_read_input_tokens: latestInputUsage
@@ -227,6 +244,12 @@ export function createClaudeSubagentUsageResponseObserver(
         output_tokens: latestOutputUsage ? numberField(latestOutputUsage, 'output_tokens') : 0,
       };
       bridge.recordResponseUsage(taskId, usage);
+    };
+
+    const finishWithoutUsage = (): void => {
+      if (done) return;
+      done = true;
+      bridge.releaseReservedTask(ctx.reqId);
     };
 
     const processFrame = (frame: string): void => {
@@ -259,7 +282,7 @@ export function createClaudeSubagentUsageResponseObserver(
       if (done) return;
       totalBytes += text.length;
       if (totalBytes > MAX_RESPONSE_BYTES) {
-        done = true;
+        finishWithoutUsage();
         return;
       }
       buffer += text;
@@ -270,15 +293,16 @@ export function createClaudeSubagentUsageResponseObserver(
       if (done) return;
       if (isSse) {
         drain(true);
-        commitUsage();
-        return;
-      }
-      const body = parseJsonObject(buffer);
-      if (body && isPlainObject(body.usage)) {
-        latestInputUsage = body.usage;
-        latestOutputUsage = body.usage;
+      } else {
+        const body = parseJsonObject(buffer);
+        if (body && isPlainObject(body.usage)) {
+          latestInputUsage = body.usage;
+          latestOutputUsage = body.usage;
+        }
       }
       commitUsage();
+      done = true;
+      bridge.releaseReservedTask(ctx.reqId);
     };
 
     const decoder = makeDecompressor(headerValue(ctx.responseHeaders, 'content-encoding'));
@@ -286,7 +310,7 @@ export function createClaudeSubagentUsageResponseObserver(
       decoder.on('data', (chunk: Buffer) => appendText(chunk.toString('utf8')));
       decoder.on('end', finalize);
       decoder.on('error', () => {
-        done = true;
+        finishWithoutUsage();
       });
     }
 
@@ -301,7 +325,7 @@ export function createClaudeSubagentUsageResponseObserver(
         else finalize();
       },
       onError: () => {
-        done = true;
+        finishWithoutUsage();
         decoder?.destroy();
       },
     };

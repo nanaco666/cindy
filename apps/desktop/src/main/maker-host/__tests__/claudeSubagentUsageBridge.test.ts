@@ -175,6 +175,36 @@ describe('ClaudeSubagentUsageBridge', () => {
     expect(bridge.getTaskUsage('agent-a')).toEqual({ totalTokens: 110 });
   });
 
+  it('does not evict a task reserved by an in-flight response at the tracking limit', () => {
+    const bridge = new ClaudeSubagentUsageBridge();
+    bridge.registerTask({
+      taskId: 'agent-inflight',
+      parentToolUseId: 'toolu-inflight',
+      prompt: 'Solve the slow calculator problem',
+      model: 'codex/gpt-5.6-terra',
+    });
+    reserveRequest(bridge, 1, 'codex/gpt-5.6-terra', 'Solve the slow calculator problem');
+    const sink = openObservation(
+      bridge,
+      1,
+      'codex/gpt-5.6-terra',
+      'Solve the slow calculator problem',
+    );
+
+    for (let index = 0; index < 205; index += 1) {
+      bridge.registerTask({
+        taskId: `agent-${index}`,
+        parentToolUseId: `toolu-${index}`,
+        prompt: `Solve calculator problem ${index}`,
+        model: 'codex/gpt-5.6-terra',
+      });
+    }
+
+    sink?.onData?.(sse(100, 10));
+    sink?.onEnd?.();
+    expect(bridge.getTaskUsage('agent-inflight')).toEqual({ totalTokens: 110 });
+  });
+
   it('prefers the longest matching prompt when prompts overlap', () => {
     const bridge = new ClaudeSubagentUsageBridge();
     bridge.registerTask({
