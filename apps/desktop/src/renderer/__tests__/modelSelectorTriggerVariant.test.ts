@@ -306,6 +306,11 @@ describe('ModelSelector trigger variants', () => {
     expect(within(options).getByText('Source: Anthropic')).toBeTruthy();
     expect(within(options).getByText('200K context')).toBeTruthy();
     expect(within(options).getByText('Input $3 · Output $15 per 1M tokens')).toBeTruthy();
+    const firstChoice = within(options).getByRole('option', { name: 'low' });
+    const description = within(options).getByText('Most capable for ambitious work');
+    expect(
+      firstChoice.compareDocumentPosition(description) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(row.getAttribute('data-model-options-active')).toBe('true');
 
     fireEvent.pointerLeave(row);

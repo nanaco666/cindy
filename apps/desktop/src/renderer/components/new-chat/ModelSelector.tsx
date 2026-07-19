@@ -598,68 +598,25 @@ export function ModelSelectorContent({
         aria-label={`${editingModel.displayName} ${t('newChat.modelSelector.options')}`}
         className="flex flex-col gap-0.5"
       >
-        <div className="flex flex-col gap-1.5 px-2 py-1.5">
-          <span className="min-w-0 text-14 font-medium text-[var(--model-item-text)]">
-            {editingModel.displayName}
-          </span>
-          {editingModel.description && (
-            <span className="text-12 font-normal leading-[1.45] text-[var(--text-secondary)]">
-              {editingModel.description}
-            </span>
-          )}
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-11 font-normal text-[var(--text-tertiary)]">
-            {editingProvider && (
-              <span>
-                {t('newChat.modelSelector.source.viaSource', {
-                  source: providerDisplayName(editingProvider, t),
-                })}
-              </span>
-            )}
-            {editingModel.contextWindow > 0 && (
-              <span>
-                {t('newChat.modelSelector.meta.context', {
-                  value: formatContextWindow(editingModel.contextWindow),
-                })}
-              </span>
-            )}
-            {editingModel.supportsFastMode && (
-              <span>{t('newChat.modelSelector.meta.fastBadge')}</span>
-            )}
-          </div>
-          {editingPrice && (
-            <span className="text-11 font-normal leading-[1.4] text-[var(--text-tertiary)]">
-              {editingPrice}
-            </span>
-          )}
-        </div>
-        {(editShowFast || editHasEfforts) && (
-          <div className="mx-1 my-1 h-px bg-[var(--model-dropdown-border)]" />
-        )}
+        {/* 操作区优先贴近 hover 行；说明收到底部，避免信息高度把可点击项推离鼠标。 */}
         {editShowFast && (
-          <>
-            <div className="px-2 py-1.5">
-              <span className="text-11 font-medium text-[var(--text-tertiary)]">
-                {t('newChat.modelSelector.options')}
-              </span>
-            </div>
-            <div className="px-0.5">
-              {/* 遵循设计稿:单色反色(轨/文字 --text-primary,钮 --surface-on-card),不用品牌橙。 */}
-              <FastModeToggle
-                enabled={editFastValue}
-                onToggle={() => handleEditFast(!editFastValue)}
-                hideIcon
-                accentVar="var(--text-primary)"
-                thumbVar="var(--surface-on-card)"
-              />
-            </div>
-          </>
+          <div className="px-0.5">
+            {/* 遵循设计稿:单色反色(轨/文字 --text-primary,钮 --surface-on-card),不用品牌橙。 */}
+            <FastModeToggle
+              enabled={editFastValue}
+              onToggle={() => handleEditFast(!editFastValue)}
+              hideIcon
+              accentVar="var(--text-primary)"
+              thumbVar="var(--surface-on-card)"
+            />
+          </div>
         )}
         {editShowFast && editHasEfforts && (
           <div className="mx-1 my-1 h-px bg-[var(--model-dropdown-border)]" />
         )}
         {editHasEfforts && (
           <>
-            <div className="px-2 py-1.5">
+            <div className="px-2 pb-0.5 pt-1">
               <span className="text-11 font-medium text-[var(--text-tertiary)]">
                 {t('newChat.modelSelector.effortLabel')}
               </span>
@@ -695,6 +652,39 @@ export function ModelSelectorContent({
             })}
           </>
         )}
+        {(editShowFast || editHasEfforts) && (
+          <div className="mx-1 my-1 h-px bg-[var(--model-dropdown-border)]" />
+        )}
+        <div className="flex flex-col gap-1 px-2 py-1.5">
+          <span className="min-w-0 text-14 font-medium text-[var(--model-item-text)]">
+            {editingModel.displayName}
+          </span>
+          {editingModel.description && (
+            <span className="line-clamp-2 text-12 font-normal leading-[1.4] text-[var(--text-secondary)]">
+              {editingModel.description}
+            </span>
+          )}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-11 font-normal leading-[1.4] text-[var(--text-tertiary)]">
+            {editingProvider && (
+              <span>
+                {t('newChat.modelSelector.source.viaSource', {
+                  source: providerDisplayName(editingProvider, t),
+                })}
+              </span>
+            )}
+            {editingModel.contextWindow > 0 && (
+              <span>
+                {t('newChat.modelSelector.meta.context', {
+                  value: formatContextWindow(editingModel.contextWindow),
+                })}
+              </span>
+            )}
+            {editingModel.supportsFastMode && (
+              <span>{t('newChat.modelSelector.meta.fastBadge')}</span>
+            )}
+            {editingPrice && <span>{editingPrice}</span>}
+          </div>
+        </div>
       </div>
     ) : null;
 
