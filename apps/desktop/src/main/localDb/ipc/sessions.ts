@@ -128,6 +128,37 @@ const REMOTE_PERSIST_FIELDS = new Set([
  * (两路按「本机 vs 远程会话」互斥)。故意**不暴露 IPC handler** —— 这不是远程可调 channel,
  * 只是 dispatch 的内部回流,不开放新的远程裸写面。
  */
+/**
+ * session-agent-switch:切换 agent 引擎的 DB 提交(单点,只被
+ * sessionAgentSwitchHandler 调用,不暴露 IPC handler——agent_kind 不进任何
+ * 通用 update 白名单,防裸写)。语义:
+ *  - agent_kind / model 落新引擎值;providerId undefined = 不动,null = 显式清除;
+ *  - sdk_session_id 清空——旧引擎的原生会话 id 对新引擎无意义,残留会让 resume
+ *    以错误引擎解释它(v1 每次切换重新交接,不保留切回指针;旧值快照存在边界行)。
+ *  - 广播 sessions:patched:本机各窗口 sessionsStore/会话视图收敛 + device-link
+ *    tap 让控制端镜像同步(agentKind 翻转驱动 capabilities 缓存按新 key 重取)。
+ */
+export async function applyAgentSwitchToSessionRow(
+  sessionId: string,
+  patch: { agentKind: 'cc' | 'codex'; model: string; providerId: string | null | undefined },
+): Promise<void> {
+  const db = getDbClient().drizzle;
+  const setObj: Partial<typeof sessions.$inferInsert> = {
+    agentKind: patch.agentKind,
+    model: patch.model,
+    sdkSessionId: null,
+    updatedAt: Date.now(),
+  };
+  if (patch.providerId !== undefined) setObj.providerId = patch.providerId;
+  await db.update(sessions).set(setObj).where(eq(sessions.id, sessionId));
+  broadcastSessionPatched(sessionId, {
+    agentKind: patch.agentKind,
+    model: patch.model,
+    sdkSessionId: null,
+    ...(patch.providerId !== undefined ? { providerId: patch.providerId } : {}),
+  });
+}
+
 export async function persistSessionFields(
   sessionId: string,
   patch: Record<string, unknown>,

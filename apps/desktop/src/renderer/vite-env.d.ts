@@ -3604,6 +3604,17 @@ interface ElectronAPI {
       model: string,
       providerId?: string | null,
     ) => Promise<{ deferred: boolean } | undefined>;
+    /**
+     * session-agent-switch:同一会话切换 agent 引擎(claude-code ↔ codex)。
+     * 同引擎换模型走 setModel;跨引擎必须走本方法(main 构造交接 + 重建会话)。
+     * engineReady=false 表示新引擎 spawn 失败,下一条消息经 lazy-create 重试。
+     */
+    switchSessionAgent: (
+      sessionId: string,
+      targetAgentKind: 'claude-code' | 'codex',
+      model: string,
+      providerId?: string | null,
+    ) => Promise<{ switched: boolean; agentKind: 'claude-code' | 'codex'; model: string; engineReady: boolean }>;
     // effort/mode 透传 string —— 合法值由 maker capabilities 决定, vite-env 不重复枚举
     setEffort: (sessionId: string, effort: string) => Promise<void>;
     setPermissionMode: (sessionId: string, mode: string) => Promise<void>;

@@ -242,7 +242,7 @@ export interface ChatMessage {
    * 例外:'goal-complete' 不是 ephemeral —— 它由 mapServerMessages 从持久化的
    * agentMeta.goalCompletion 派生(仿 fork divider 从 session 元数据派生),重开会话仍在。
    */
-  systemCardType?: 'help' | 'cost' | 'context' | 'pwd' | 'status' | 'compact' | 'cmd' | 'goal-complete' | 'goal-resumed' | 'learn' | 'auto-resume';
+  systemCardType?: 'help' | 'cost' | 'context' | 'pwd' | 'status' | 'compact' | 'cmd' | 'goal-complete' | 'goal-resumed' | 'learn' | 'auto-resume' | 'agent-switch';
   systemCardData?: Record<string, unknown>;
   /** FP-3: plan_review message fields */
   planReviewStatus?: 'pending' | 'approved' | 'revised' | 'expired' | 'cancelled';
@@ -6321,6 +6321,21 @@ function sendUiTrigger(sessionId: string, prompt: string): Promise<void> {
     });
 }
 
+/**
+ * session-agent-switch:切换 IPC 成功后由 ChatInput 调用。翻转 in-memory
+ * agentKind(事件 reducer 路由 + createOpts 派生都读它)并清掉旧引擎的
+ * sdkSessionId——否则 buildCreateOpts 会把旧引擎的原生会话 id 当 resume 目标
+ * (main 侧 reconcileCreateOptsWithDb 是兜底,这里是第一现场收敛)。
+ */
+function noteAgentSwitched(sessionId: string, agentKind: 'claude-code' | 'codex'): void {
+  if (!sessionId) return;
+  setState(sessionId, (s) =>
+    s.agentKind === agentKind && s.sdkSessionId === null
+      ? s
+      : { ...s, agentKind, sdkSessionId: null },
+  );
+}
+
 function setSessionRuntime(
   sessionId: string,
   opts: { agentKind?: 'claude-code' | 'codex'; fastMode?: boolean; planModeEnabled?: boolean },
@@ -6455,6 +6470,7 @@ export const makerChatStore = {
   purgeSession: _purgeSession,
   /** Seed runtime-only state before a session view has mounted and loaded DB metadata. */
   setSessionRuntime,
+  noteAgentSwitched,
   /** Update the displayed context window immediately after local model switches. */
   setContextWindow,
   /** MEM-OPT-2: Mark a session view mounted; returns a disposer for unmount. */
@@ -6907,6 +6923,29 @@ function mapServerMessages(serverMsgs: Message[]): ChatMessage[] {
           ...(reason ? { errorReason: reason } : {}),
           // interrupted-turn-resume:「忽略」的持久化标记(updateContent 写入)。
           ...(c.dismissed === true ? { errorDismissed: true } : {}),
+        };
+      }
+      // session-agent-switch:引擎切换边界行 → 'agent-switch' system card(与
+      // compact 分隔同视觉语言)。role 投影成 'assistant' 走 SystemCard 渲染管线
+      // (工作组分组守卫天然排除 systemCardType 消息,无需改 MessageStream);
+      // 交接全文放 systemCardData.handoff,由卡片展开入口按需查看,不进对话正文。
+      if (m.role === 'agent_switch') {
+        const c = (m.content && typeof m.content === 'object'
+          ? m.content
+          : {}) as Record<string, unknown>;
+        return {
+          clientId: m.clientId,
+          role: 'assistant' as const,
+          content: '',
+          isStreaming: false,
+          systemCardType: 'agent-switch' as const,
+          systemCardData: {
+            fromAgentKind: typeof c.fromAgentKind === 'string' ? c.fromAgentKind : '',
+            toAgentKind: typeof c.toAgentKind === 'string' ? c.toAgentKind : '',
+            fromModel: typeof c.fromModel === 'string' ? c.fromModel : null,
+            toModel: typeof c.toModel === 'string' ? c.toModel : null,
+            handoff: typeof c.handoff === 'string' ? c.handoff : '',
+          },
         };
       }
       // image-local-cache: user role messages may have JSON-shaped content

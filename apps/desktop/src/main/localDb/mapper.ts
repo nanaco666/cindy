@@ -177,6 +177,7 @@ export function messageToCamel(row: MessageRow): Message {
     content,
     toolUseId: row.toolUseId,
     agentMeta,
+    agentKind: (row.agentKind as 'cc' | 'codex' | null) ?? null,
     createdAt: new Date(row.createdAt).toISOString(),
   };
 }
@@ -329,6 +330,7 @@ export function messageCreateToRow(
     content: unknown;
     toolUseId?: string;
     agentMeta?: AgentMeta | null;
+    agentKind?: 'cc' | 'codex' | null;
     createdAt?: number;
   },
   now: number,
@@ -344,6 +346,7 @@ export function messageCreateToRow(
       body.agentMeta === undefined || body.agentMeta === null
         ? null
         : safeStringify(body.agentMeta),
+    agentKind: body.agentKind ?? null,
     createdAt: body.createdAt ?? now,
   };
 }

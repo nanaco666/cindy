@@ -3416,6 +3416,10 @@
         "overflowDescription": "当前会话已使用 {{used}} 上下文，超出目标模型窗口（{{total}}，约 {{pct}}%）。切换后回复和压缩都可能失败，建议先点击上下文圆环压缩会话，或新建会话使用该模型。仍要切换吗？",
         "confirmSwitch": "仍然切换模型",
         "cancelSwitch": "取消切换"
+      },
+      "agentSwitch": {
+        "engineNotReady": "引擎已切换,但新引擎启动失败;发送消息时会自动重试",
+        "failed": "引擎切换失败,未生效"
       }
     },
     "atMention": {
@@ -3807,6 +3811,11 @@
       },
       "autoResume": {
         "label": "连接中断，已自动继续"
+      },
+      "agentSwitch": {
+        "label": "已从 {{from}} 切换到 {{to}}",
+        "toggleHint": "查看交接内容",
+        "handoffTitle": "交接内容——切换时发送给新引擎的上下文摘要(不会出现在你的消息里)"
       }
     },
     "markdownRenderer": {

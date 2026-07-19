@@ -606,3 +606,80 @@ describe('maker SEND transaction', () => {
     expect(persistedMessage).not.toHaveProperty('createdAt');
   });
 });
+
+describe('session-agent-switch handoff injection', () => {
+  it('pending 命中时 wire payload 前置交接段,落库内容保持用户原文,accepted 后 consume', async () => {
+    const consumePendingHandoff = vi.fn();
+    const { deps, session } = createDeps({
+      peekPendingHandoff: vi.fn(async () => 'HANDOFF-TEXT'),
+      consumePendingHandoff,
+    });
+    const transaction = createMakerSendTransaction(deps);
+
+    await transaction.sendToAgentAccepted('session-1', { type: 'user', content: '新消息' }, undefined, {
+      persistUserMessage: { clientId: 'client-1', content: '新消息' },
+    });
+
+    // wire:前缀注入
+    expect(session.send).toHaveBeenCalledWith(
+      { type: 'user', content: 'HANDOFF-TEXT\n\n新消息' },
+      expect.anything(),
+    );
+    // 落库:用户原文,不带交接段(display 与 sent 分离)
+    const persisted = vi.mocked(deps.createDbMessage).mock.calls[0]?.[1];
+    expect(persisted?.content).toBe('新消息');
+    expect(consumePendingHandoff).toHaveBeenCalledWith('session-1');
+  });
+
+  it('dispatch 未 accepted 时不 consume(pending 保留下次重试)', async () => {
+    const consumePendingHandoff = vi.fn();
+    const session = createSession({
+      send: vi.fn(async () => ({ accepted: false, reason: 'cancelled-before-dispatch' }) as SessionSendResult),
+    });
+    const { deps } = createDeps({
+      getSession: vi.fn(() => session),
+      peekPendingHandoff: vi.fn(async () => 'HANDOFF-TEXT'),
+      consumePendingHandoff,
+    });
+    const transaction = createMakerSendTransaction(deps);
+
+    await transaction.sendToAgentAccepted('session-1', 'hi', undefined, {});
+    expect(consumePendingHandoff).not.toHaveBeenCalled();
+  });
+
+  it('无 pending 时 wire payload 原样透传', async () => {
+    const consumePendingHandoff = vi.fn();
+    const { deps, session } = createDeps({
+      peekPendingHandoff: vi.fn(async () => null),
+      consumePendingHandoff,
+    });
+    const transaction = createMakerSendTransaction(deps);
+
+    await transaction.sendToAgentAccepted('session-1', { type: 'user', content: '新消息' }, undefined, {});
+    expect(session.send).toHaveBeenCalledWith({ type: 'user', content: '新消息' }, expect.anything());
+    expect(consumePendingHandoff).not.toHaveBeenCalled();
+  });
+
+  it('lazy-create 前调用 reconcileCreateOptsWithDb 以 DB 行校正 createOpts', async () => {
+    const reconcile = vi.fn(async (_sessionId: string, co: MakerSessionCreateOpts) => {
+      co.agentKind = 'codex';
+      co.resumeSessionId = undefined;
+    });
+    const { deps } = createDeps({
+      getSession: vi.fn(() => undefined),
+      reconcileCreateOptsWithDb: reconcile,
+    });
+    const transaction = createMakerSendTransaction(deps);
+
+    await transaction.sendToAgentAccepted(
+      'session-1',
+      'hi',
+      { agentKind: 'claude-code', workingDir: '/tmp/w', resumeSessionId: 'stale-sdk' },
+      {},
+    );
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    const bootstrapOpts = vi.mocked(deps.bootstrapSession).mock.calls[0][0];
+    expect(bootstrapOpts.agentKind).toBe('codex');
+    expect(bootstrapOpts.resumeSessionId).toBeUndefined();
+  });
+});

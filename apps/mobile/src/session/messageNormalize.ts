@@ -208,6 +208,25 @@ export function normalizeRemoteMessages(messages: readonly RemoteMessage[]): Nor
       }
     }
 
+    // session-agent-switch 边界行(desktop 落库 role='agent_switch') → 'agent-switch'
+    // 系统卡。不加分支会 fall through 到末尾通用处理,渲染成生 JSON 的 system 气泡。
+    if (message.role === 'agent_switch') {
+      const c = readRecord(message.content) ?? {};
+      result.push({
+        key: messageNormalizeKey(message),
+        source: message,
+        kind: 'system',
+        role: message.role,
+        label: 'system:agent-switch',
+        body: '',
+        systemCardType: 'agent-switch',
+        systemCardData: c,
+        align: 'agent',
+        createdAt: message.createdAt,
+      });
+      continue;
+    }
+
     const systemCardType = normalizeSystemCardType(message.systemCardType);
     if (systemCardType) {
       result.push({

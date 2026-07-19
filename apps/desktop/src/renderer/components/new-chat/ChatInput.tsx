@@ -3401,8 +3401,68 @@ export function ChatInput({
     [sessionId, confirmDialog, t],
   );
 
+  // session-agent-switch:选中「只属于另一家引擎」的模型 → 走引擎切换事务
+  // (main 构造交接、关旧引擎、清 sdkSessionId、插边界行并重建新引擎),不进普通
+  // setModel 链路。model 已由 main 落库;这里补 effort 对齐新模型档位并翻转
+  // chat store 的 in-memory agentKind(sessions:patched 广播负责其余窗口/列表)。
+  const performAgentSwitch = useCallback(
+    async (targetAgentKind: 'claude-code' | 'codex', newModelId: string) => {
+      if (!sessionId) return;
+      setRemoteSwitchInFlight(true);
+      try {
+        // providerId 传 null:旧引擎的显式来源选择对新引擎无意义,清除回默认路由。
+        const result = await window.electronAPI.maker.switchSessionAgent(
+          sessionId,
+          targetAgentKind,
+          newModelId,
+          null,
+        );
+        if (!result.switched) return;
+        makerChatStore.noteAgentSwitched(sessionId, targetAgentKind);
+        const { efforts, defaultEffort } = resolveModelEfforts(newModelId);
+        const newEffort = resolveEffort({
+          efforts,
+          defaultEffort,
+          activeEffort,
+          providerEffort: undefined,
+          rememberedEffort: getRememberedEffort(newModelId),
+        });
+        await sessionService.update(sessionId, { effort: newEffort });
+        window.electronAPI.maker.setEffort(sessionId, newEffort).catch(() => {});
+        if (!result.engineReady) {
+          // 新引擎 spawn 失败:切换已生效,下一条消息经 lazy-create 重试并走既有错误呈现。
+          toast.error(t('newChat.chatInput.agentSwitch.engineNotReady'), { duration: 4000 });
+        }
+      } catch (err) {
+        toast.error(
+          t(mapIpcErrorToI18nKey(err, { fallback: 'newChat.chatInput.agentSwitch.failed' })),
+        );
+      } finally {
+        setRemoteSwitchInFlight(false);
+      }
+    },
+    [sessionId, activeEffort, resolveModelEfforts, getRememberedEffort, t],
+  );
+
   const handleModelChange = useCallback(
     async (newModelId: string) => {
+      // session-agent-switch:跨引擎选择最先判(先于容量护栏——切换必然重置原生
+      // 上下文,容量护栏语义不适用)。仅本机会话支持;device-link / SSH 远程 v1
+      // 列表仍锁单边,此分支防御性不命中。
+      const sessionAgentKind = vendorKeyToAgentKind(vendorKey);
+      if (sessionId && sessionAgentKind && !deviceLinkDeviceId && !remoteHostId) {
+        const currentOffers = deriveModelsFromProviders(providers, sessionAgentKind).some(
+          (m) => m.id === newModelId,
+        );
+        if (!currentOffers) {
+          const otherKind: 'claude-code' | 'codex' =
+            sessionAgentKind === 'codex' ? 'claude-code' : 'codex';
+          if (deriveModelsFromProviders(providers, otherKind).some((m) => m.id === newModelId)) {
+            await performAgentSwitch(otherKind, newModelId);
+            return;
+          }
+        }
+      }
       // 容量护栏最先跑: 用户取消时直接 return, 不留任何副作用(effort 快照都不动)。
       if (sessionId && newModelId !== activeModel) {
         const proceed = await confirmModelSwitchContextGuard(newModelId);
@@ -3545,7 +3605,7 @@ export function ChatInput({
         );
       }
     },
-    [activeModel, activeEffort, sessionId, selectedProviderId, onModelDidChange, onEffortDidChange, handleFastModeChange, persistFastModeChange, t, getRememberedEffort, setRememberedEffort, rememberProviderChoice, resolveModelEfforts, resolveFast, currentModelAgentKind, effectiveSourceId, modelMemory, modelFastSupported, syncSessionDraftModelPrefs, fastMode, confirmModelSwitchContextGuard],
+    [activeModel, activeEffort, sessionId, selectedProviderId, onModelDidChange, onEffortDidChange, handleFastModeChange, persistFastModeChange, t, getRememberedEffort, setRememberedEffort, rememberProviderChoice, resolveModelEfforts, resolveFast, currentModelAgentKind, effectiveSourceId, modelMemory, modelFastSupported, syncSessionDraftModelPrefs, fastMode, confirmModelSwitchContextGuard, vendorKey, deviceLinkDeviceId, remoteHostId, providers, performAgentSwitch],
   );
 
   const handleEffortChange = useCallback(
@@ -4453,7 +4513,10 @@ export function ChatInput({
               fastMode={fastMode}
               onFastModeChange={handleFastModeChange}
               modelMemory={modelMemory}
-              vendorKey={vendorKey}
+              // session-agent-switch:本机已建会话不锁 vendor —— 列表合并展示两家
+              // 引擎的模型,选中另一家的模型触发 handleModelChange 的引擎切换分支。
+              // 草稿(无 sessionId)与 device-link / SSH 远程会话保持锁定(v1 不支持)。
+              vendorKey={sessionId && !deviceLinkDeviceId && !remoteHostId ? undefined : vendorKey}
               deviceId={deviceLinkDeviceId}
               // SSH 远程会话隐藏订阅直连模型(chatgpt/ / xai/):bridge 只挂在本地 compat-proxy,
               // 远程模式走 remoteEndpoint 不经翻译,选了必失败。

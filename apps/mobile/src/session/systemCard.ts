@@ -24,7 +24,9 @@ export type MobileSystemCardType =
   | 'goal-complete'
   | 'goal-resumed'
   | 'auto-resume'
-  | 'learn';
+  | 'learn'
+  // session-agent-switch 边界卡(desktop 落库 role='agent_switch',读侧派生)。
+  | 'agent-switch';
 export type MobileSystemCardPresentation = SystemCardPresentation;
 
 /** goal 达成记录文案(对齐桌面 GoalCompleteCard 的 goal.complete.record)。 */
@@ -69,9 +71,9 @@ export function buildMobileSystemCardData(
     session: RemoteSession | null;
   },
 ): Record<string, unknown> {
-  // goal / auto-resume 卡的数据由桌面落库的 agentMeta 派生,learn 卡的数据由
+  // goal / auto-resume / agent-switch 卡的数据由桌面落库行派生,learn 卡的数据由
   // 发送侧 buildLearnCardData 直接组装,都不走本地 slash 命令的数据组装。
-  if (type === 'goal-complete' || type === 'goal-resumed' || type === 'auto-resume' || type === 'learn') return {};
+  if (type === 'goal-complete' || type === 'goal-resumed' || type === 'auto-resume' || type === 'learn' || type === 'agent-switch') return {};
   return buildSystemCardData(type, {
     ...options,
     localCommands: MOBILE_LOCAL_SYSTEM_COMMANDS,
@@ -86,8 +88,24 @@ export function formatMobileSystemCard(
   if (type === 'goal-complete') return formatGoalCompleteCard(data);
   if (type === 'goal-resumed') return { title: '用量已恢复，继续目标', rows: [] };
   if (type === 'auto-resume') return { title: '连接中断，已自动继续', rows: [] };
+  if (type === 'agent-switch') return formatAgentSwitchCard(data);
   if (type === 'learn') return formatLearnCard(data);
   return formatSystemCard(type, data);
+}
+
+/**
+ * session-agent-switch 边界卡(对齐桌面 AgentSwitchCard 的分隔条语义)。
+ * 手机端只展示切换事实与目标模型,交接全文不展开(控制端小屏无核查场景)。
+ */
+function formatAgentSwitchCard(data: Record<string, unknown> | undefined): SystemCardPresentation {
+  const engineLabel = (kind: unknown): string => (kind === 'codex' ? 'Codex' : 'Claude Code');
+  const from = engineLabel(data?.fromAgentKind);
+  const to = engineLabel(data?.toAgentKind);
+  const toModel = typeof data?.toModel === 'string' ? data.toModel : '';
+  return {
+    title: `已从 ${from} 切换到 ${to}`,
+    rows: toModel ? [{ label: '模型', value: toModel }] : [],
+  };
 }
 
 /**

@@ -268,7 +268,22 @@ export interface Session {
 // 'error':turn 失败的 terminal error 持久化行(main 的 onTurnErrorEvent 落库)。
 // 让"你没开着会话时发生的失败"重开会话 / 重启 app 后仍可见 —— 此前 error 只存
 // 内存(coordinator projection + store.error),事后点进会话毫无痕迹,红点无从追溯。
-export type MessageRole = 'user' | 'assistant' | 'tool_use' | 'tool_result' | 'ask_user' | 'plan_review' | 'thinking' | 'error';
+// 'agent_switch':session 内 agent 引擎切换边界行(session-agent-switch,main 落库)。
+// content 为 AgentSwitchContent;渲染成分隔条(可展开查看交接摘要),不是对话正文。
+export type MessageRole = 'user' | 'assistant' | 'tool_use' | 'tool_result' | 'ask_user' | 'plan_review' | 'thinking' | 'error' | 'agent_switch';
+
+/**
+ * role='agent_switch' 行的 content 结构(JSON 存于 messages.content)。
+ * handoff 是发给新引擎的交接摘要全文——只用于 UI 展开查看与 debug,
+ * 不作为对话正文渲染,也绝不回发给 agent(注入走 main 的 wire 前缀通道)。
+ */
+export interface AgentSwitchContent {
+  fromAgentKind: 'cc' | 'codex';
+  toAgentKind: 'cc' | 'codex';
+  fromModel: string | null;
+  toModel: string | null;
+  handoff: string;
+}
 
 export interface Message {
   id: string;
@@ -284,8 +299,14 @@ export interface Message {
   toolUseId: string | null;
   /**
    * SDK 元信息。null 表示：老消息 / pending（user echo 之前）/ 非 SDK 来源消息。
-   * 解析时按所属 session.agentKind 走对应 variant。
+   * 解析时按本行 agentKind（null 时回落所属 session.agentKind）走对应 variant。
    */
   agentMeta: AgentMeta | null;
+  /**
+   * 产出本行的 agent 引擎（值域同 session.agentKind:'cc' / 'codex'）。
+   * session-agent-switch 后 session.agentKind 只代表当前活跃引擎,历史行按本字段解析;
+   * null = 切换功能上线前的老消息(回落 session.agentKind)。
+   */
+  agentKind?: 'cc' | 'codex' | null;
   createdAt: string; // ISO 8601
 }

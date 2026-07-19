@@ -3416,6 +3416,10 @@
         "overflowDescription": "This session uses {{used}} of context, exceeding the target model's {{total}} window (about {{pct}}%). After switching, replies and even compaction may fail. Compact the session first (click the context ring) or start a new session for this model. Switch anyway?",
         "confirmSwitch": "Switch model anyway",
         "cancelSwitch": "Cancel switch"
+      },
+      "agentSwitch": {
+        "engineNotReady": "Engine switched, but the new engine failed to start; it will retry when you send a message",
+        "failed": "Engine switch failed; not applied"
       }
     },
     "atMention": {
@@ -3807,6 +3811,11 @@
       },
       "autoResume": {
         "label": "Connection interrupted — resumed automatically"
+      },
+      "agentSwitch": {
+        "label": "Switched from {{from}} to {{to}}",
+        "toggleHint": "View handoff context",
+        "handoffTitle": "Handoff — the context summary sent to the new engine at switch time (never shown in your messages)"
       }
     },
     "markdownRenderer": {

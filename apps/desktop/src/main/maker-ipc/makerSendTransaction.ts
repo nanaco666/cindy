@@ -13,6 +13,10 @@ import {
 } from '../maker-host/send-outcome.js';
 import { isCredentialModeSwitchBusyError } from '../maker-host/codex-credential-switch.js';
 import { throwIpcError } from '../utils/ipcValidate.js';
+import {
+  prependHandoffToUserMessage,
+  type HandoffWireMessage,
+} from './agentHandoff.js';
 import type { MakerSessionCreateOpts } from './sessionRequest.js';
 
 type CreateOpts = MakerSessionCreateOpts;
@@ -107,6 +111,20 @@ export interface MakerSendTransactionDeps {
   commitUserPromptPreview?(sessionId: string, clientId: string | undefined): void;
   rollbackUserPromptPreview?(sessionId: string, clientId: string | undefined, source: string): void;
   isSessionRunningError(err: unknown): boolean;
+  /**
+   * session-agent-switch:lazy-create 前用 DB 行(真源)校正 createOpts。
+   * 切换后 renderer/队列里可能残留旧 agentKind / 旧 resumeSessionId 的 createOpts,
+   * 用它 spawn 会把消息发回旧引擎且丢交接注入;此钩子读 sessions 行,发现漂移时
+   * 原地覆写 agentKind/model/resumeSessionId/providerId。undefined = 不校正(测试用)。
+   */
+  reconcileCreateOptsWithDb?(sessionId: string, createOpts: CreateOpts): Promise<void>;
+  /**
+   * session-agent-switch:pending 交接读取(agentHandoff 注册表)。命中时把交接
+   * 文本前置进 wire payload(不影响 persistUserMessage 落库显示内容),并在
+   * dispatch 跨过不可逆边界(accepted)后 consume;未 accepted / 抛错保留 pending。
+   */
+  peekPendingHandoff?(sessionId: string): Promise<string | null>;
+  consumePendingHandoff?(sessionId: string): void;
   log: MakerSendTransactionLog;
 }
 
@@ -326,6 +344,7 @@ export function createMakerSendTransaction(deps: MakerSendTransactionDeps): Make
       if (!sess) {
         if (!createOpts) throwIpcError('NOT_FOUND', `Session ${sessionId} not found and no createOpts provided`);
         const co = deps.buildCreateOptsWithStderr({ ...(createOpts as CreateOpts), id: sessionId });
+        await deps.reconcileCreateOptsWithDb?.(sessionId, co);
         const lazy = await lazyCreateSession(sessionId, co);
         if (lazy.kind === 'failure') return lazy.result;
         sess = lazy.session;
@@ -335,6 +354,12 @@ export function createMakerSendTransaction(deps: MakerSendTransactionDeps): Make
         throwIpcError('SESSION_RUNNING', `Session ${sessionId} is already running a turn`);
       }
       const normalized = await deps.prepareSendUserMessage(sessionId, message);
+      // session-agent-switch:切换后的首条消息把交接前缀拼进 wire payload。
+      // 落库/显示内容(persistUserMessage.content)不含交接段——display 与 sent 分离。
+      const pendingHandoff = (await deps.peekPendingHandoff?.(sessionId)) ?? null;
+      const outgoing = pendingHandoff
+        ? prependHandoffToUserMessage(normalized as HandoffWireMessage, pendingHandoff)
+        : normalized;
       const meta = await deps.getSessionMeta(sessionId).catch(() => null);
       const so = (sendOpts ?? {}) as MakerSendOptions;
       const persistUserMessage = readPersistUserMessageOption(so);
@@ -347,7 +372,7 @@ export function createMakerSendTransaction(deps: MakerSendTransactionDeps): Make
           await directPreDispatchHook(sessionId);
           directPreDispatchHookStarted = true;
         }
-        const sendResult = await sess.send(normalized as never, {
+        const sendResult = await sess.send(outgoing as never, {
           logTitle: meta?.title,
           messageUuid: so.messageUuid,
           userName: so.userName,
@@ -392,6 +417,10 @@ export function createMakerSendTransaction(deps: MakerSendTransactionDeps): Make
               }
             : undefined,
         });
+        if (pendingHandoff && sendResult.accepted) {
+          // 只有跨过不可逆 dispatch 边界才消费;未派发保留 pending 下次重试。
+          deps.consumePendingHandoff?.(sessionId);
+        }
         if (userPromptPreviewSessionId && userPromptPreviewClientId) {
           if (sendResult.accepted) {
             deps.commitUserPromptPreview?.(userPromptPreviewSessionId, userPromptPreviewClientId);

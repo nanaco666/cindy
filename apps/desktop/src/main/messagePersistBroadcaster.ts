@@ -71,14 +71,38 @@ export function noteSessionClearBoundary(sessionId: string, clearedAt: string | 
 
 type CreateDbMessageBody = Parameters<typeof createDbMessage>[1];
 
+/**
+ * session-agent-switch:每会话当前 agent 引擎('cc'/'codex'),由 register.ts
+ * wireSessionToIpc 在 session 建立时登记。broadcaster 落库的 SDK 事件行
+ * (assistant/tool/thinking/error)逐行 stamp 到 messages.agent_kind——切换后
+ * session.agent_kind 只代表"当前引擎",历史行的 agent_meta 必须按写入时引擎解析。
+ * clearSessionPersistState 时清理。
+ */
+const dbAgentKindBySession = new Map<string, 'cc' | 'codex'>();
+
+export function noteSessionAgentKind(sessionId: string, dbAgentKind: 'cc' | 'codex'): void {
+  dbAgentKindBySession.set(sessionId, dbAgentKind);
+}
+
+export function getSessionDbAgentKind(sessionId: string): 'cc' | 'codex' | null {
+  return dbAgentKindBySession.get(sessionId) ?? null;
+}
+
+function withAgentKindStamp(sessionId: string, body: CreateDbMessageBody): CreateDbMessageBody {
+  if (body.agentKind !== undefined) return body;
+  const kind = dbAgentKindBySession.get(sessionId);
+  return kind ? { ...body, agentKind: kind } : body;
+}
+
 function createVisibleDbMessage(sessionId: string, body: CreateDbMessageBody): ReturnType<typeof createDbMessage> {
-  const createdAt = typeof body.createdAt === 'number' && Number.isFinite(body.createdAt)
-    ? body.createdAt
+  const stamped = withAgentKindStamp(sessionId, body);
+  const createdAt = typeof stamped.createdAt === 'number' && Number.isFinite(stamped.createdAt)
+    ? stamped.createdAt
     : undefined;
   if (createdAt === undefined) {
-    return createDbMessage(sessionId, body);
+    return createDbMessage(sessionId, stamped);
   }
-  return createDbMessage(sessionId, body, {
+  return createDbMessage(sessionId, stamped, {
     shouldBroadcast: () => {
       const latestBoundary = clearBoundaryBySession.get(sessionId);
       return latestBoundary === undefined || createdAt > latestBoundary;
@@ -1076,13 +1100,13 @@ export function onTurnErrorEvent(
         : latestTs + 1;
     await createDbMessage(
       sessionId,
-      {
+      withAgentKindStamp(sessionId, {
         clientId: persistId,
         role: 'error',
         content,
         agentMeta: meta,
         createdAt,
-      },
+      }),
       { shouldBroadcast: () => false },
     );
     for (const win of BrowserWindow.getAllWindows()) {
@@ -1114,6 +1138,7 @@ export function clearSessionPersistState(sessionId: string): void {
   lastPersistedMsgBySession.delete(sessionId);
   lastAssistantPersistIdBySession.delete(sessionId);
   lastAssistantTranscriptUuidBySession.delete(sessionId);
+  dbAgentKindBySession.delete(sessionId);
   _turnStartedAtBySession.delete(sessionId);
   _turnDedupIdBySession.delete(sessionId);
   _savedTurnStartedAtForDeferred.delete(sessionId);

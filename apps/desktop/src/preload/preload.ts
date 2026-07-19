@@ -3625,6 +3625,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
       providerId?: string | null,
     ): Promise<{ deferred: boolean } | undefined> =>
       ipcRenderer.invoke('maker:set-model', sessionId, model, providerId),
+    // session-agent-switch:同一会话切换 agent 引擎(claude-code ↔ codex)。
+    // 与 setModel 的边界:同引擎换模型走 setModel,跨引擎必须走本方法(main 会
+    // 构造交接、关旧引擎、清 sdkSessionId、插边界行并重建新引擎 session)。
+    // engineReady=false 表示新引擎 spawn 失败,下一条消息经 lazy-create 重试。
+    switchSessionAgent: (
+      sessionId: string,
+      targetAgentKind: 'claude-code' | 'codex',
+      model: string,
+      providerId?: string | null,
+    ): Promise<{ switched: boolean; agentKind: 'claude-code' | 'codex'; model: string; engineReady: boolean }> =>
+      ipcRenderer.invoke('maker:switch-session-agent', sessionId, targetAgentKind, model, providerId),
     // effort/mode 透传 string —— 合法值由 maker capabilities 在运行时校验,
     // preload 不重复枚举 (避免 capabilities 加新值时这里也要改)。
     setEffort: (sessionId: string, effort: string): Promise<void> =>

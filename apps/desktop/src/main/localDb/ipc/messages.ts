@@ -601,6 +601,7 @@ function getMessageSelectFields() {
     content: messages.content,
     toolUseId: messages.toolUseId,
     agentMeta: messages.agentMeta,
+    agentKind: messages.agentKind,
     createdAt: messages.createdAt,
     rewindAt: messages.rewindAt,
   };
@@ -633,6 +634,12 @@ export async function createMessage(
     content: unknown;
     toolUseId?: string;
     agentMeta?: AgentMeta | null;
+    /**
+     * 产出本行的 agent 引擎('cc' / 'codex')。session-agent-switch 后按行解析
+     * agentMeta 需要它;main 侧 SDK 事件落库路径必传,renderer pending echo 等
+     * 无 SDK 元信息的行留空(null 回落 session.agentKind)。
+     */
+    agentKind?: 'cc' | 'codex' | null;
     createdAt?: number;
   },
   opts?: {
@@ -810,4 +817,105 @@ export async function patchMessageAgentMeta(
   }
   await updateAgentMeta(sessionId, clientId, JSON.stringify({ ...existing, ...patch }));
   return true;
+}
+
+/**
+ * session-agent-switch:查"切换后是否还没发过第一条 user 消息"。
+ * 判定规则(确定性,重启后可从 DB 重建 pending 状态):
+ *   最新一条未被 rewind、且晚于 /clear 边界的 agent_switch 行之后,
+ *   不存在 user 行 ⟺ 交接注入仍 pending,返回其 content.handoff;否则 null。
+ * 同毫秒并列用 rowid 决序(与 messages list 的 tie-break 口径一致)。
+ */
+export async function findPendingAgentSwitchHandoff(
+  sessionId: string,
+): Promise<string | null> {
+  const db = getDbClient().drizzle;
+  const [sessRow] = await db
+    .select({ clearedAt: sessions.clearedAt })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+  const clearedAt = sessRow?.clearedAt ?? null;
+  const afterClear = clearedAt === null ? undefined : gt(messages.createdAt, clearedAt);
+  const [sw] = await db
+    .select({
+      rowid: messageRowid,
+      content: messages.content,
+      createdAt: messages.createdAt,
+    })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.sessionId, sessionId),
+        eq(messages.role, 'agent_switch'),
+        isNull(messages.rewindAt),
+        afterClear,
+      ),
+    )
+    .orderBy(desc(messages.createdAt), desc(messageRowid))
+    .limit(1);
+  if (!sw) return null;
+  const [userAfter] = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.sessionId, sessionId),
+        eq(messages.role, 'user'),
+        isNull(messages.rewindAt),
+        or(
+          gt(messages.createdAt, sw.createdAt),
+          and(eq(messages.createdAt, sw.createdAt), gt(messageRowid, sw.rowid)),
+        ),
+      ),
+    )
+    .limit(1);
+  if (userAfter) return null;
+  try {
+    const parsed = JSON.parse(sw.content) as { handoff?: unknown };
+    return typeof parsed.handoff === 'string' && parsed.handoff.length > 0
+      ? parsed.handoff
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * session-agent-switch:读取交接素材——本会话未被 rewind、晚于 /clear 边界的
+ * 最近 limit 行(时间正序返回),只取交接需要的最小投影。
+ */
+export async function listMessagesForAgentHandoff(
+  sessionId: string,
+  limit = 400,
+): Promise<Array<{ role: string; content: unknown; createdAt: number }>> {
+  const db = getDbClient().drizzle;
+  const [sessRow] = await db
+    .select({ clearedAt: sessions.clearedAt })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+  const clearedAt = sessRow?.clearedAt ?? null;
+  const afterClear = clearedAt === null ? undefined : gt(messages.createdAt, clearedAt);
+  const rows = await db
+    .select({
+      rowid: messageRowid,
+      role: messages.role,
+      content: messages.content,
+      createdAt: messages.createdAt,
+    })
+    .from(messages)
+    .where(and(eq(messages.sessionId, sessionId), isNull(messages.rewindAt), afterClear))
+    .orderBy(desc(messages.createdAt), desc(messageRowid))
+    .limit(limit);
+  rows.reverse();
+  return rows.map((r) => {
+    let content: unknown = r.content;
+    try {
+      content = JSON.parse(r.content);
+    } catch {
+      // 与 messageToCamel 同口径:非法 JSON 保留原字符串
+    }
+    return { role: r.role, content, createdAt: r.createdAt };
+  });
 }
