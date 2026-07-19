@@ -30,6 +30,7 @@ import {
   createMobileLocalAttachmentUploadController,
   isCameraUnavailableOnSimulator,
   type MobileLocalAttachmentUploadCandidate,
+  type MobileLocalAttachmentUploadController,
   type PendingLocalAttachmentUpload,
 } from '@/session/mobileLocalAttachmentUpload';
 import {
@@ -51,10 +52,16 @@ export interface UseMobileLocalAttachmentsOptions {
   /** 当前已入列附件数(限额用;pending 由 hook 自己计入)。 */
   getAttachmentCount: () => number;
   /** 单个上传成功:页面把 attachment 入列;图片按 candidate.uri 记预览映射,
-   *  candidate.sourceId(相册资产 id)供面板勾选态映射。 */
-  onUploaded: (attachment: RemoteSerializedAttachment, candidate: MobileLocalAttachmentUploadCandidate) => void;
-  /** 错误文案(null = 清除)。 */
-  onError: (message: string | null) => void;
+   *  candidate.sourceId(相册资产 id)供面板勾选态映射。localId 供已 claim
+   *  (随乐观消息先发出)任务的产物路由——页面据此把附件填回对应消息而非托盘。 */
+  onUploaded: (
+    attachment: RemoteSerializedAttachment,
+    candidate: MobileLocalAttachmentUploadCandidate,
+    localId: string,
+  ) => void;
+  /** 错误文案(null = 清除);uploadLocalId = 触发失败的上传任务(已 claim 任务的
+   *  失败由页面路由给对应乐观消息,不该落进 composer 错误条)。 */
+  onError: (message: string | null, context?: { uploadLocalId?: string }) => void;
   /** picker 确认选图 / 拍下照片 / 选中文件后触发(页面用来关 Context 面板)。 */
   onPicked?: () => void;
 }
@@ -97,6 +104,16 @@ export interface UseMobileLocalAttachmentsResult {
   discardAllPendingUploads: () => void;
   /** 等全部在途上传落定;返回期间失败个数(>0 时调用方应中止发送)。 */
   waitForPendingUploads: () => Promise<{ failedCount: number }>;
+  /**
+   * 把当前全部未 claim 上传任务(active + 失败卡)划归一条乐观消息并返回快照
+   * (顺序 = 入队序):任务离开托盘 / 限额 / waitForPendingUploads,产物经
+   * onUploaded / onError 的 localId 路由。快照与 claim 同一同步段完成,无竞态窗。
+   */
+  claimActiveUploads: () => ReturnType<MobileLocalAttachmentUploadController['claimableTasks']>;
+  /** 只等粘贴占位落定(兑现任务已入队 / 失败 / 超时),不等上传完成;详见实现处注释。 */
+  waitForPastePlaceholdersSettled: () => Promise<void>;
+  /** 是否有粘贴占位在途(同步真源):占位兑现前任务尚未入队、无法 claim。 */
+  hasPastePlaceholders: () => boolean;
   /**
    * 限额口径的在途占坑数**同步真源**(非 React state):上传中任务(controller
    * 内部计数)+ 粘贴占位批次总数。所有附件槽位校验(标注信箱串行 drain、
@@ -207,7 +224,7 @@ export function useMobileLocalAttachments(
       getToken: () => optionsRef.current.getAccessToken(),
     }),
     onPendingChange: setPendingUploads,
-    onUploaded: (attachment, candidate, uploadedUri) => {
+    onUploaded: (attachment, candidate, uploadedUri, localId) => {
       // 发送后气泡的本地缩略图兜底:消息里持久化的是 xdt-oss-attach:// 中转引用,
       // 被控端物化改写前(乐观渲染 / 电脑离线窗口)渲染端没有任何预览路径——把
       // 实际上传的文件拷进自有目录记映射,气泡用本地图顶上。fire-and-forget,
@@ -215,9 +232,9 @@ export function useMobileLocalAttachments(
       if (candidate.kind === 'image') {
         void registerSentAttachmentThumb(attachment.url ?? attachment.path, uploadedUri || candidate.uri);
       }
-      optionsRef.current.onUploaded(attachment, candidate);
+      optionsRef.current.onUploaded(attachment, candidate, localId);
     },
-    onFailed: (err) => optionsRef.current.onError(formatRemoteError(err)),
+    onFailed: (err, localId) => optionsRef.current.onError(formatRemoteError(err), { uploadLocalId: localId }),
   }), []);
 
   useEffect(() => () => {
@@ -407,6 +424,17 @@ export function useMobileLocalAttachments(
       await waitForPastePlaceholders();
       return controller.waitForIdle();
     },
+    claimActiveUploads: () => {
+      const snapshot = controller.claimableTasks();
+      controller.claim(snapshot.map((task) => task.localId));
+      return snapshot;
+    },
+    // 只等粘贴占位落定(兑现的同步段任务已入 controller 队列),不等上传本身:
+    // 乐观发送(outbox)在占位窗口内需要它把「尚未入队、无法划归」的粘贴图等成
+    // 可划归任务,再做同步 claim——不能用 waitForPendingUploads(那会退化回
+    // 等整个上传完成)。失败 / 超时同样放行(60s 兜底,错误 toast 已由占位路径给出)。
+    waitForPastePlaceholdersSettled: waitForPastePlaceholders,
+    hasPastePlaceholders: () => getPastePlaceholderTotal() > 0,
     getPendingUploadCount: getPendingSlotCount,
   };
 }

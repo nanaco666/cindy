@@ -25,20 +25,28 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Text } from '@/components/AppText';
 import {
+  AlertCircle,
   ArrowUp,
   ListEnd,
   Paperclip,
   Pause,
   Pencil,
   Play,
+  RotateCcw,
   Trash2,
   type LucideIcon,
 } from 'lucide-react-native';
 import { describeAgentAuthError } from '@/device-link/remoteStatus';
 import { buildQueueRowPresentation } from '@/session/inputProjection';
+import {
+  getSentAttachmentThumbUri,
+  useSentAttachmentThumbsVersion,
+} from '@/session/sentAttachmentThumbStore';
 import { syntheticTriggerKind } from '@lizi/maker-shared/synthetic-trigger';
+import type { MobileOutboxDisplayItem, MobileOutboxThumb } from '@/session/sessionOutbox';
 import type { InputProjection, QueuedRemoteMessage } from '@/session/types';
 import { iconSize, iconStroke, fontWeight, lineHeight, useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 import { radius, spacing, typeScale } from '@/theme/tokens';
@@ -57,6 +65,63 @@ function queueBubbleText(item: Pick<QueuedRemoteMessage, 'text'>): string {
   return item.text;
 }
 
+/**
+ * 排队 / 落定中气泡的图片缩略数据:消息 files 里的图片附件此刻仍是
+ * `xdt-oss-attach://` 中转引用,本地渲染靠 sentAttachmentThumbStore 的兜底映射
+ * (上传成功时已把实际 PUT 的文件拷进自有目录)。非图片附件走计数行。
+ */
+function queuedAttachmentThumbs(
+  item: Pick<QueuedRemoteMessage, 'clientId' | 'files'>,
+): { thumbs: MobileOutboxThumb[]; fileCount: number } {
+  const thumbs: MobileOutboxThumb[] = [];
+  let fileCount = 0;
+  (item.files ?? []).forEach((file, index) => {
+    if (file.category !== 'image') {
+      fileCount += 1;
+      return;
+    }
+    thumbs.push({
+      key: `${item.clientId}-file-${index}`,
+      uri: null,
+      ossRef: file.url ?? file.path,
+      uploading: false,
+    });
+  });
+  return { thumbs, fileCount };
+}
+
+/**
+ * 气泡内图片缩略条:乐观语义下图片从第一帧就以图的形态出现,不做「📎 附件行 →
+ * 正式消息图片」的形态跳变(规则 7 视觉连续性)。uri 缺失时按 ossRef 查
+ * sentAttachmentThumbStore(订阅版本号,hydrate / 注册完成后自动补图);
+ * 两者都拿不到时渲染 chip 底色占位格。上传中的格子压转圈遮罩。
+ */
+function AttachmentThumbStrip({ thumbs }: { thumbs: readonly MobileOutboxThumb[] }) {
+  const styles = useThemedStyles(makeStyles);
+  const { colors } = useTheme();
+  useSentAttachmentThumbsVersion();
+  if (thumbs.length === 0) return null;
+  return (
+    <View style={styles.thumbStrip} testID="queue.inline.thumbStrip">
+      {thumbs.map((thumb) => {
+        const uri = thumb.uri ?? (thumb.ossRef ? getSentAttachmentThumbUri(thumb.ossRef) : null);
+        return (
+          <View key={thumb.key} style={styles.thumbCell}>
+            {uri ? (
+              <Image contentFit="cover" source={{ uri }} style={styles.thumbCellImage} transition={0} />
+            ) : null}
+            {thumb.uploading ? (
+              <View style={styles.thumbUploadingOverlay}>
+                <ActivityIndicator color={colors.ctaText} size="small" />
+              </View>
+            ) : null}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 export interface InlineQueueSectionProps {
   projection: InputProjection;
   busy?: boolean;
@@ -73,10 +138,18 @@ export interface InlineQueueSectionProps {
    * 不闪断。生命周期由屏幕侧跟踪(回流/超时移除)。
    */
   settlingItems?: readonly QueuedRemoteMessage[];
+  /**
+   * 本地待发条目(outbox:附件仍在上传 / enqueue 在途或失败,消息尚未真正入队):
+   * 渲染在排队行之后(它们是最晚发出的),转圈徽标 + 「上传中 k/N」;失败时
+   * 展示错误并提供重试 / 删除。生命周期由屏幕侧 outbox 状态机管理。
+   */
+  outboxItems?: readonly MobileOutboxDisplayItem[];
   onSelect(clientId: string | null): void;
   onSteer(item: QueuedRemoteMessage): void;
   onBeginEdit(item: QueuedRemoteMessage): void;
   onRemove(clientId: string): void;
+  onRetryOutboxItem?(clientId: string): void;
+  onRemoveOutboxItem?(clientId: string): void;
   onResume(): void;
   onRetryError(): void;
   onClearError(): void;
@@ -90,10 +163,13 @@ export function InlineQueueSection({
   editingClientId,
   hiddenClientIds,
   settlingItems,
+  outboxItems,
   onSelect,
   onSteer,
   onBeginEdit,
   onRemove,
+  onRetryOutboxItem,
+  onRemoveOutboxItem,
   onResume,
   onRetryError,
   onClearError,
@@ -111,7 +187,8 @@ export function InlineQueueSection({
     : queue;
 
   const settling = settlingItems ?? [];
-  if (visibleQueue.length === 0 && settling.length === 0
+  const outbox = outboxItems ?? [];
+  if (visibleQueue.length === 0 && settling.length === 0 && outbox.length === 0
     && !projection.queueAbortPending && !projection.error) return null;
 
   const controlsDisabled = busy || !!readOnlyReason;
@@ -174,26 +251,30 @@ export function InlineQueueSection({
         </View>
       ) : null}
 
-      {settling.map((item) => (
-        <View key={`settling-${item.clientId}`} style={styles.rowWrap} testID={`queue.inline.settling.${item.clientId}`}>
-          <View style={styles.bubbleRow}>
-            <View style={styles.badge}>
-              <ActivityIndicator color={colors.textTertiary} size="small" />
-            </View>
-            <View style={[styles.bubble, styles.bubbleSettling]}>
-              {item.text ? (
-                <Text numberOfLines={6} style={styles.bubbleText}>{queueBubbleText(item)}</Text>
-              ) : null}
-              {(item.files?.length ?? 0) > 0 ? (
-                <View style={styles.attachmentLine}>
-                  <Paperclip color={colors.textTertiary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
-                  <Text style={styles.attachmentLineText}>{`${item.files?.length} 个附件`}</Text>
-                </View>
-              ) : null}
+      {settling.map((item) => {
+        const settlingThumbs = queuedAttachmentThumbs(item);
+        return (
+          <View key={`settling-${item.clientId}`} style={styles.rowWrap} testID={`queue.inline.settling.${item.clientId}`}>
+            <View style={styles.bubbleRow}>
+              <View style={styles.badge}>
+                <ActivityIndicator color={colors.textTertiary} size="small" />
+              </View>
+              <View style={[styles.bubble, styles.bubbleSettling]}>
+                {item.text ? (
+                  <Text numberOfLines={6} style={styles.bubbleText}>{queueBubbleText(item)}</Text>
+                ) : null}
+                <AttachmentThumbStrip thumbs={settlingThumbs.thumbs} />
+                {settlingThumbs.fileCount > 0 ? (
+                  <View style={styles.attachmentLine}>
+                    <Paperclip color={colors.textTertiary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
+                    <Text style={styles.attachmentLineText}>{`${settlingThumbs.fileCount} 个附件`}</Text>
+                  </View>
+                ) : null}
+              </View>
             </View>
           </View>
-        </View>
-      ))}
+        );
+      })}
       {visibleRows.map((item) => {
         const originalIndex = queue.findIndex((candidate) => candidate.clientId === item.clientId);
         const presentation = buildQueueRowPresentation({
@@ -206,7 +287,7 @@ export function InlineQueueSection({
         });
         const editing = editingClientId === item.clientId;
         const selected = !editing && selectedClientId === item.clientId;
-        const attachmentCount = item.files?.length ?? 0;
+        const queuedThumbs = queuedAttachmentThumbs(item);
         return (
           <View key={item.clientId} style={styles.rowWrap} testID={`queue.inline.row.${originalIndex + 1}`}>
             <View style={styles.bubbleRow}>
@@ -242,10 +323,11 @@ export function InlineQueueSection({
                     {queueBubbleText(item)}
                   </Text>
                 ) : null}
-                {attachmentCount > 0 ? (
+                <AttachmentThumbStrip thumbs={queuedThumbs.thumbs} />
+                {queuedThumbs.fileCount > 0 ? (
                   <View style={styles.attachmentLine}>
                     <Paperclip color={colors.textTertiary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
-                    <Text style={styles.attachmentLineText}>{`${attachmentCount} 个附件`}</Text>
+                    <Text style={styles.attachmentLineText}>{`${queuedThumbs.fileCount} 个附件`}</Text>
                   </View>
                 ) : null}
                 {editing ? (
@@ -309,6 +391,80 @@ export function InlineQueueSection({
           </QueueTouchButton>
         </View>
       ) : null}
+      {/* 本地待发条目(outbox):恒排在排队行之后——它们是最晚发出的消息。
+          附件仍在上传时消息就已在对话里,这是「点发送即上屏」的乐观语义主体。 */}
+      {outbox.map((item, outboxIndex) => {
+        const selected = selectedClientId === item.clientId;
+        const uploadsPending = item.attachmentCount > 0 && item.uploadedCount < item.attachmentCount;
+        return (
+          <View key={item.clientId} style={styles.rowWrap} testID={`queue.inline.outbox.${outboxIndex + 1}`}>
+            <View style={styles.bubbleRow}>
+              <View style={styles.badge} testID={`queue.inline.outboxBadge.${outboxIndex + 1}`}>
+                {item.failed ? (
+                  <AlertCircle color={colors.errorText} size={iconSize.sm} strokeWidth={iconStroke.regular} />
+                ) : (
+                  <ActivityIndicator color={colors.textTertiary} size="small" />
+                )}
+              </View>
+              <Pressable
+                accessibilityLabel={item.failed
+                  ? `发送失败的消息:${item.text || '附件消息'}`
+                  : `发送中的消息:${item.text || '附件消息'}`}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: selected }}
+                onPress={() => onSelect(selected ? null : item.clientId)}
+                style={({ pressed }) => [
+                  styles.bubble,
+                  selected && styles.bubbleSelected,
+                  pressed && styles.pressed,
+                ]}
+                testID={`queue.inline.outboxBubble.${outboxIndex + 1}`}
+              >
+                {item.text ? (
+                  <Text numberOfLines={selected ? undefined : 6} style={styles.bubbleText}>{item.text}</Text>
+                ) : null}
+                <AttachmentThumbStrip thumbs={item.thumbnails} />
+                {item.fileCount > 0 || uploadsPending ? (
+                  <View style={styles.attachmentLine}>
+                    <Paperclip color={colors.textTertiary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
+                    <Text style={styles.attachmentLineText}>
+                      {uploadsPending
+                        ? `附件上传中 ${item.uploadedCount}/${item.attachmentCount}`
+                        : `${item.fileCount} 个附件`}
+                    </Text>
+                  </View>
+                ) : null}
+                {item.errorText ? (
+                  <Text style={styles.outboxErrorText} testID={`queue.inline.outboxError.${outboxIndex + 1}`}>
+                    {item.errorText}
+                  </Text>
+                ) : null}
+              </Pressable>
+            </View>
+            {selected ? (
+              <View style={styles.actionRow} testID={`queue.inline.outboxActions.${outboxIndex + 1}`}>
+                <ActionPill
+                  busy={busy}
+                  icon={Trash2}
+                  label="删除"
+                  onPress={() => onRemoveOutboxItem?.(item.clientId)}
+                  testID={`queue.inline.outboxRemove.${outboxIndex + 1}`}
+                />
+                {item.failed ? (
+                  <ActionPill
+                    busy={busy}
+                    cta
+                    icon={RotateCcw}
+                    label="重试"
+                    onPress={() => onRetryOutboxItem?.(item.clientId)}
+                    testID={`queue.inline.outboxRetry.${outboxIndex + 1}`}
+                  />
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -469,6 +625,30 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   attachmentLine: { alignItems: 'center', flexDirection: 'row', gap: 4 },
   attachmentLineText: { color: colors.textTertiary, fontSize: typeScale.footnote },
+  // 气泡内图片缩略条(与 ComposerAttachmentTray 缩略卡同一视觉词汇:chip 底 +
+  // hairline 边 + container 圆角;上传中压 overlay 遮罩转圈)。
+  thumbStrip: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, justifyContent: 'flex-end' },
+  thumbCell: {
+    backgroundColor: colors.surfaceChip,
+    borderColor: colors.border,
+    borderRadius: radius.container,
+    borderWidth: StyleSheet.hairlineWidth,
+    height: 72,
+    overflow: 'hidden',
+    width: 72,
+  },
+  thumbCellImage: { height: '100%', width: '100%' },
+  thumbUploadingOverlay: {
+    alignItems: 'center',
+    backgroundColor: colors.overlay,
+    bottom: 0,
+    justifyContent: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  outboxErrorText: { color: colors.errorText, fontSize: typeScale.footnote, lineHeight: lineHeight.caption },
   editingHint: { color: colors.textTertiary, fontSize: typeScale.footnote },
   rowHint: {
     color: colors.textTertiary,
