@@ -1698,8 +1698,8 @@ export function NewMakerDraftRoute() {
             className="relative flex h-full min-w-0 w-full flex-col items-center justify-start px-[26px] pt-[clamp(96px,25.5vh,268px)]"
           >
             <div
-              className="relative flex w-full max-w-[637px] flex-col items-start"
-              style={{ maxWidth: Math.min(inputWidth ?? 637, 637) }}
+              className="relative flex w-full max-w-[920px] flex-col items-start"
+              style={{ maxWidth: Math.min(inputWidth ?? 920, 920) }}
             >
               <FolderPickerPopover
                 open={folderPickerOpen}
