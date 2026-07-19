@@ -45,3 +45,13 @@ describe('主题注册表 · 历史幽灵 token 补注册(D1 地基修复)', () 
     expect(dark['board']).toBe('var(--border-default)');
   });
 });
+
+describe('主题注册表 · Plan 操作卡文字语义', () => {
+  it.each(['plan-action-approve-text', 'plan-action-fb-text'])(
+    '"%s" 使用卡片强调正文而非反相按钮文字',
+    (id) => {
+      expect(colorRegistry.resolveDefault(id, 'light')).toBe('var(--text-primary-emphasis)');
+      expect(colorRegistry.resolveDefault(id, 'dark')).toBe('var(--text-primary-emphasis)');
+    },
+  );
+});

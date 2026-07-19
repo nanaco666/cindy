@@ -1478,9 +1478,9 @@ registerColor('plan-edit-body', {
 
 // Action card
 registerColor('plan-action-approve-text', {
-  light: 'var(--text-primary-inv)',
-  dark: 'var(--text-primary-inv)',
-}, 'Near Black');
+  light: 'var(--text-primary-emphasis)',
+  dark: 'var(--text-primary-emphasis)',
+}, 'Plan 操作卡强调主文字');
 registerColor('plan-action-approve-enter', {
   light: 'var(--text-secondary-cross)',
   dark: 'var(--text-secondary-cross)',
@@ -1498,9 +1498,9 @@ registerColor('plan-action-fb-placeholder', {
   dark: 'var(--text-placeholder)',
 }, 'Placeholder — 收口至 --text-placeholder slot');
 registerColor('plan-action-fb-text', {
-  light: 'var(--text-primary-inv)',
-  dark: 'var(--text-primary-inv)',
-}, 'Near Black');
+  light: 'var(--text-primary-emphasis)',
+  dark: 'var(--text-primary-emphasis)',
+}, 'Plan 反馈输入强调主文字');
 registerColor('plan-action-row-hover-bg', {
   light: 'var(--surface-hover-soft)',
   dark: 'var(--surface-hover-soft)',
