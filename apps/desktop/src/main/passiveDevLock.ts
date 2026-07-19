@@ -12,7 +12,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const DEFAULT_INVALID_LOCK_GRACE_MS = 5_000;
-const DEFAULT_STALE_MS = 60_000;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 10_000;
 const MAX_ACQUIRE_ATTEMPTS = 8;
 
@@ -59,7 +58,6 @@ export interface AcquirePassiveDevLockOptions {
   now?: () => number;
   isProcessAlive?: (pid: number) => boolean;
   invalidLockGraceMs?: number;
-  staleMs?: number;
   heartbeatIntervalMs?: number;
   onCompromised?: (reason: string) => void;
 }
@@ -165,7 +163,10 @@ function claimAndRemove(lockPath: string, observed: LockSnapshot): ClaimResult {
     claimed.snapshot.ino === observed.ino;
   if (!sameObject) {
     try {
-      fs.renameSync(tombPath, lockPath);
+      // link 的目标创建具有 O_EXCL 语义：canonical 已被新 owner 创建时只会
+      // EEXIST，绝不能像 POSIX rename 那样无声覆盖竞争者的新锁。
+      fs.linkSync(tombPath, lockPath);
+      fs.unlinkSync(tombPath);
       return { kind: 'retry' };
     } catch (error) {
       return {
@@ -193,7 +194,6 @@ export function acquirePassiveDevLock(
   const now = options.now ?? Date.now;
   const isProcessAlive = options.isProcessAlive ?? defaultIsProcessAlive;
   const invalidLockGraceMs = options.invalidLockGraceMs ?? DEFAULT_INVALID_LOCK_GRACE_MS;
-  const staleMs = options.staleMs ?? DEFAULT_STALE_MS;
   const heartbeatIntervalMs = options.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
   const record: PassiveDevLockRecord = { pid, startedAtMs, ownerToken };
   const encoded = `${JSON.stringify(record)}\n`;
@@ -207,10 +207,12 @@ export function acquirePassiveDevLock(
   for (let attempt = 0; attempt < MAX_ACQUIRE_ATTEMPTS; attempt += 1) {
     let fd: number | null = null;
     let created = false;
+    let createdIno: bigint | null = null;
     try {
       // O_EXCL / CREATE_NEW 是真正的跨进程互斥点。
       fd = fs.openSync(options.lockPath, 'wx', 0o600);
       created = true;
+      createdIno = fs.fstatSync(fd, { bigint: true }).ino;
       fs.writeFileSync(fd, encoded, 'utf8');
       fs.fsyncSync(fd);
     } catch (error) {
@@ -223,11 +225,12 @@ export function acquirePassiveDevLock(
         fd = null;
       }
       if (errorCode(error) !== 'EEXIST') {
-        if (created) {
-          try {
-            fs.unlinkSync(options.lockPath);
-          } catch {
-            // 无法清理时锁文件留在原地，后续实例会 fail-closed。
+        if (created && createdIno !== null) {
+          const failedWrite = readSnapshot(options.lockPath);
+          if (failedWrite.ok && failedWrite.snapshot.ino === createdIno) {
+            // 不能按路径直接 unlink：写失败后 canonical 理论上可能已经易主。
+            // 先 claim + inode/raw compare，只删除本次 create 的那个对象。
+            claimAndRemove(options.lockPath, failedWrite.snapshot);
           }
         }
         return { acquired: false, reason: 'error', error: errorText(error) };
@@ -253,9 +256,10 @@ export function acquirePassiveDevLock(
         } catch {
           alive = true;
         }
-        // heartbeat 新鲜时 PID 存活即健康；超过 staleMs 允许回收，避免 PID reuse
-        // 把一次崩溃永久变成假占用。
-        if (alive && ageMs <= staleMs) {
+        // 安全优先：只要 PID 存活或状态未知就永不接管。调试器暂停、系统休眠或
+        // event loop 卡顿都可能让 heartbeat 任意久不更新；把 lease 到期当死亡会
+        // 重新引入两个 SQLite writer。PID reuse 宁可 fail-closed。
+        if (alive) {
           return { acquired: false, reason: 'occupied', ownerPid: existingRecord.pid };
         }
       }

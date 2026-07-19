@@ -96,7 +96,7 @@ describe('passiveDevLock', () => {
     if (result.acquired) expect(result.lock.release()).toEqual({ released: true });
   });
 
-  it('heartbeat 过期时即使 PID 被复用也允许接管', () => {
+  it('heartbeat 过期但 PID 仍存活时 fail-closed，不把暂停或休眠误判成死亡', () => {
     fs.writeFileSync(
       lockPath,
       `${JSON.stringify({ pid: 99, startedAtMs: 1, ownerToken: 'reused-pid' })}\n`,
@@ -105,12 +105,10 @@ describe('passiveDevLock', () => {
       lockPath,
       now: () => Date.now() + 120_000,
       isProcessAlive: () => true,
-      staleMs: 60_000,
       heartbeatIntervalMs: 0,
     });
 
-    expect(result.acquired).toBe(true);
-    if (result.acquired) expect(result.lock.release()).toEqual({ released: true });
+    expect(result).toMatchObject({ acquired: false, reason: 'occupied', ownerPid: 99 });
   });
 
   it('release 只删除自己的 owner token，不会删掉新 owner', () => {
