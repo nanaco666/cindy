@@ -72,6 +72,8 @@ interface RightSidebarProps {
   /** M2(mac 交换态):面板当前贴哪条边。透传给 Shell —— 'left' 时 Shell 顶栏
    *  右端渲染 detach / maximize 真按钮(折叠 toggle 恒在 MainLayout 窗口右上浮层)。 */
   panelSide?: 'left' | 'right';
+  /** 本 session 关掉最后一个 tab 时回调,由 MainLayout 用来自动收起侧栏。透传给 Shell。 */
+  onAllTabsClosed?: () => void;
 }
 
 export const RightSidebar = forwardRef<RightSidebarHandle, RightSidebarProps>(function RightSidebar(
@@ -87,6 +89,7 @@ export const RightSidebar = forwardRef<RightSidebarHandle, RightSidebarProps>(fu
     remoteHostId,
     onDetach,
     panelSide,
+    onAllTabsClosed,
   },
   ref,
 ) {
@@ -255,6 +258,7 @@ export const RightSidebar = forwardRef<RightSidebarHandle, RightSidebarProps>(fu
           // B3:主窗口内嵌形态 Tab 条空白处 = 拖面板手势面(窗口拖动走左栏顶行)。
           chromeWindowDrag={false}
           panelSide={panelSide}
+          onAllTabsClosed={onAllTabsClosed}
         />
       </div>
 
