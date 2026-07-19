@@ -82,11 +82,18 @@ export function resolveHookSessionConfig(
   const models = deps.getModels(agentKind);
   const findModel = (id: string) => models.find((m) => m.id === id);
 
-  // 2. model:显式 workspace 偏好始终保留；普通桌面默认仅在当前来源目录可用时采用。
+  // 2. model:显式且在可用清单 > 草稿默认(在清单) > 清单第一个 > 草稿默认裸值。
+  // getModels 来自本次执行实时读取的 provider 目录；目录读取失败时 session-runner 会改用
+  // maker capabilities，因此走到这里的非空清单就是可执行真相，失效 override 必须降级。
   let model: string;
-  if (overrides.model !== null) {
+  if (overrides.model !== null && findModel(overrides.model)) {
     model = overrides.model;
   } else {
+    if (overrides.model !== null) {
+      deps.log.warn(
+        `hook override model '${overrides.model}' not available for ${agentKind}, falling back to desktop default`,
+      );
+    }
     const draft = defaults.agents[agentKind]?.model;
     if (draft && findModel(draft)) {
       model = draft;

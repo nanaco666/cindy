@@ -14,6 +14,11 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import type { ProviderView } from '@lizi/model-providers';
+import { refreshLocalCatalogSnapshot } from '@/lib/localCatalogSnapshot';
+import {
+  getCachedProvidersSnapshot,
+  subscribeProvidersSnapshot,
+} from '@/lib/providersSnapshotStore';
 
 export interface UseProvidersReturn {
   providers: ProviderView[];
@@ -33,53 +38,15 @@ export interface UseProvidersReturn {
  * 后台由 App 的联合刷新静默校正(连接态在两次开页之间几乎不变 → 通常无可见变化)。
  * 只缓存"快照"不缓存"是否在拉取中",故不破坏 refetch 的现有刷新语义。
  */
-let cachedProviders: ProviderView[] | null = null;
-let providersGeneration = 0;
-const providerListeners = new Set<(providers: ProviderView[]) => void>();
-
-/** 为一次 provider 快照读取分配代际；更早请求完成后不得再覆盖缓存。 */
-export function beginProvidersRefresh(): number {
-  providersGeneration += 1;
-  return providersGeneration;
-}
-
-/** 读取 provider 快照。失败向上抛，由调用方保留上一份有效缓存。 */
-export async function loadProvidersSnapshot(): Promise<ProviderView[]> {
-  const result = await window.electronAPI.maker.listProviders();
-  return result.providers;
-}
-
-export function isProvidersRefreshCurrent(generation: number): boolean {
-  return providersGeneration === generation;
-}
-
-/** 仅提交当前代际的完整快照，并一次通知所有 mounted hooks。 */
-export function commitProvidersSnapshot(
-  generation: number,
-  next: ProviderView[],
-): boolean {
-  if (!isProvidersRefreshCurrent(generation)) return false;
-  cachedProviders = next;
-  for (const listener of providerListeners) listener(next);
-  return true;
-}
-
-export async function refreshProviders(): Promise<boolean> {
-  const generation = beginProvidersRefresh();
-  try {
-    return commitProvidersSnapshot(generation, await loadProvidersSnapshot());
-  } catch {
-    return false;
-  }
-}
-
 export function useProviders(): UseProvidersReturn {
-  const [providers, setProviders] = useState<ProviderView[]>(() => cachedProviders ?? []);
+  const [providers, setProviders] = useState<ProviderView[]>(
+    () => getCachedProvidersSnapshot() ?? [],
+  );
   // 有缓存即视为已就绪:重开时第一帧就有可用数据,不再走 loading 态。
-  const [loading, setLoading] = useState(cachedProviders == null);
+  const [loading, setLoading] = useState(getCachedProvidersSnapshot() == null);
 
   const refetch = useCallback(() => {
-    void refreshProviders();
+    void refreshLocalCatalogSnapshot();
   }, []);
 
   useEffect(() => {
@@ -87,10 +54,7 @@ export function useProviders(): UseProvidersReturn {
       setProviders(next);
       setLoading(false);
     };
-    providerListeners.add(onRefresh);
-    return () => {
-      providerListeners.delete(onRefresh);
-    };
+    return subscribeProvidersSnapshot(onRefresh);
   }, []);
 
   return { providers, loading, refetch };

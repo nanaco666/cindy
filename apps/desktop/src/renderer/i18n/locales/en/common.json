@@ -4813,6 +4813,7 @@
         "timezoneRequired": "Timezone is required",
         "selectThread": "Select a target thread",
         "selectProject": "Select a project directory",
+        "modelUnavailable": "Model {{model}} is no longer available. Select another model.",
         "reasoningInvalid": "Reasoning must be one of {{values}}",
         "preRunHookCommandRequired": "Enter the pre-run check command"
       }

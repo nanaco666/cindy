@@ -17,7 +17,7 @@ import {
   commitProvidersSnapshot,
   isProvidersRefreshCurrent,
   loadProvidersSnapshot,
-} from '@/hooks/useProviders';
+} from '@/lib/providersSnapshotStore';
 
 const log = createLogger('localCatalogSnapshot');
 let refreshGeneration = 0;

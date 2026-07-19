@@ -19,7 +19,7 @@ vi.mock('@/hooks/useAgentCapabilities', () => ({
   loadLocalCapabilitiesSnapshot: mocks.loadCapabilities,
 }));
 
-vi.mock('@/hooks/useProviders', () => ({
+vi.mock('@/lib/providersSnapshotStore', () => ({
   beginProvidersRefresh: mocks.beginProviders,
   commitProvidersSnapshot: mocks.commitProviders,
   isProvidersRefreshCurrent: mocks.providersCurrent,

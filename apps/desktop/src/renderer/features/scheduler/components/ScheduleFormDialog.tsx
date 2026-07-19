@@ -25,7 +25,11 @@ import {
   deriveRunMode,
   hasRealBinding,
 } from '../hooks/useScheduleForm';
-import { buildHookCommandForScriptFile, parsePreRunHookTimeoutMs } from '../lib/scheduleFormLogic';
+import {
+  buildHookCommandForScriptFile,
+  isExplicitScheduleModelUnavailable,
+  parsePreRunHookTimeoutMs,
+} from '../lib/scheduleFormLogic';
 import type { RunMode } from '../hooks/useScheduleForm';
 import { BoundSessionCard } from './BoundSessionCard';
 import { TemplateGallery } from './TemplateGallery';
@@ -336,6 +340,16 @@ export function ScheduleFormDialog({
     const err = validate();
     if (err) {
       toast.warning(t(err.key, err.values));
+      return;
+    }
+    if (
+      (form.executionMode ?? 'agent') === 'agent'
+      && isExplicitScheduleModelUnavailable(
+        form.model,
+        caps.capabilities?.availableModels,
+      )
+    ) {
+      toast.warning(t('scheduler.editor.validation.modelUnavailable', { model: form.model }));
       return;
     }
     if (isProjectAutomationMode && projectWorkingDir) {
