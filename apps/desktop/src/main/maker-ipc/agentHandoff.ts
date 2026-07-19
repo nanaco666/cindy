@@ -44,6 +44,25 @@ const HANDOFF_HARD_CAP = 16000;
 /** 合成指令行前缀(makerChatStore isSyntheticTrigger 同款标记),不进交接。 */
 const SYNTHETIC_TRIGGER_PREFIX = '[UI_ACTION_TRIGGER]';
 
+/** 工作状态区:改动文件清单上限。 */
+const CHANGED_FILES_CAP = 20;
+/** 工作状态区:命令清单上限(取最近 N 条)。 */
+const COMMANDS_CAP = 10;
+/** 工作状态区:单条命令摘要上限(字符)。 */
+const COMMAND_LINE_CAP = 120;
+
+/** 会写文件的工具名(Claude 系 + Codex 系),input 里带路径字段。 */
+const FILE_EDIT_TOOL_NAMES = new Set([
+  'Edit',
+  'Write',
+  'MultiEdit',
+  'NotebookEdit',
+  'apply_patch',
+  'str_replace_editor',
+]);
+/** 执行命令的工具名(Claude Bash / Codex shell 系)。 */
+const COMMAND_TOOL_NAMES = new Set(['Bash', 'shell', 'exec_command', 'local_shell']);
+
 function truncate(text: string, cap: number): string {
   if (text.length <= cap) return text;
   return `${text.slice(0, cap)}…(截断)`;
@@ -98,6 +117,45 @@ interface Turn {
   detailLines: string[];
   /** 轮内最后一段 assistant 文本(提要区用)。 */
   lastAssistantText: string;
+}
+
+/**
+ * 工作状态(结构化,社区 handoff packet 公认最有价值的部分——比对话记录更耐久):
+ * 从 tool_use 行确定性提取改动文件与执行过的命令。见 knightli 交接手册 /
+ * claude-handoff 的字段收敛:Changed Files / Verification Run。
+ */
+interface WorkState {
+  changedFiles: string[];
+  commands: string[];
+}
+
+function extractWorkState(messages: HandoffSourceMessage[]): WorkState {
+  const files = new Set<string>();
+  const commands: string[] = [];
+  for (const msg of messages) {
+    if (msg.role !== 'tool_use' || !msg.content || typeof msg.content !== 'object') continue;
+    const c = msg.content as Record<string, unknown>;
+    const name = typeof c.toolName === 'string' ? c.toolName : '';
+    const input = (c.input && typeof c.input === 'object' ? c.input : {}) as Record<string, unknown>;
+    if (FILE_EDIT_TOOL_NAMES.has(name)) {
+      for (const key of ['file_path', 'path', 'notebook_path']) {
+        const v = input[key];
+        if (typeof v === 'string' && v) files.add(v);
+      }
+    } else if (COMMAND_TOOL_NAMES.has(name)) {
+      const raw = input.command;
+      const cmd = typeof raw === 'string'
+        ? raw
+        : Array.isArray(raw)
+          ? raw.filter((x) => typeof x === 'string').join(' ')
+          : '';
+      if (cmd) commands.push(truncate(oneLine(cmd), COMMAND_LINE_CAP));
+    }
+  }
+  return {
+    changedFiles: [...files].slice(-CHANGED_FILES_CAP),
+    commands: commands.slice(-COMMANDS_CAP),
+  };
 }
 
 /** 把消息流按 user 行切成轮次。首个 user 行之前的孤儿行并入首轮 detail。 */
@@ -176,8 +234,26 @@ export function buildHandoffText(
       `本会话此前由 ${opts.fromLabel} 引擎驱动,现在起由你(${opts.toLabel})继续。` +
       `下面是这场对话的既往记录——这是你与用户之间同一场对话的延续,请以第一人称自然续接。` +
       `不要向用户提及本段交接说明,不要说"根据交接摘要/记录"之类的话。` +
-      `对更早的细节没有把握时,优先读取工作目录中的实际文件与代码核实,不要凭摘要臆断。`,
+      `开始改动前先核对工作区实际状态(如 git status / git diff / 读相关文件):` +
+      `记述与工作区冲突时,一律以工作区现状为准;` +
+      `对更早的细节没有把握时,优先读取实际文件与代码核实,不要凭摘要臆断。`,
   );
+
+  // 工作状态区(结构化):比对话记录更耐久的交接载体——新引擎据此了解
+  // 动过哪些文件、跑过哪些命令,避免重复劳动或誤判"还没做过"。
+  const work = extractWorkState(messages);
+  if (work.changedFiles.length > 0 || work.commands.length > 0) {
+    const lines: string[] = [];
+    if (work.changedFiles.length > 0) {
+      lines.push('改动过的文件:');
+      for (const f of work.changedFiles) lines.push(`- ${f}`);
+    }
+    if (work.commands.length > 0) {
+      lines.push('执行过的命令(最近几条):');
+      for (const cmd of work.commands) lines.push(`- ${cmd}`);
+    }
+    sections.push(`== 工作状态(自动提取)==\n${lines.join('\n')}`);
+  }
 
   if (earlier.length > 0) {
     const lines: string[] = [];

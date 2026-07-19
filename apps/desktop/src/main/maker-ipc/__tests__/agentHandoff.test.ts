@@ -158,3 +158,54 @@ describe('createAgentHandoffPendingRegistry', () => {
     expect(query).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('buildHandoffText 工作状态区(社区 handoff packet 口径)', () => {
+  const opts = { fromLabel: 'Claude Code', toLabel: 'Codex' };
+
+  it('从 tool_use 提取改动文件(Claude Edit/Write 与 Codex apply_patch)与命令', () => {
+    const text = buildHandoffText(
+      [
+        msg('user', '改代码'),
+        msg('tool_use', { toolUseId: 't1', toolName: 'Edit', input: { file_path: '/repo/a.ts' } }),
+        msg('tool_use', { toolUseId: 't2', toolName: 'Write', input: { file_path: '/repo/b.ts' } }),
+        msg('tool_use', { toolUseId: 't3', toolName: 'apply_patch', input: { path: '/repo/c.ts' } }),
+        msg('tool_use', { toolUseId: 't4', toolName: 'Bash', input: { command: 'pnpm test:unit' } }),
+        msg('tool_use', { toolUseId: 't5', toolName: 'shell', input: { command: ['git', 'status', '--short'] } }),
+        msg('assistant', '改好了'),
+      ],
+      opts,
+    );
+    expect(text).toContain('== 工作状态(自动提取)==');
+    expect(text).toContain('- /repo/a.ts');
+    expect(text).toContain('- /repo/b.ts');
+    expect(text).toContain('- /repo/c.ts');
+    expect(text).toContain('- pnpm test:unit');
+    expect(text).toContain('- git status --short');
+  });
+
+  it('同一文件多次编辑去重;Read 等只读工具不进清单', () => {
+    const text = buildHandoffText(
+      [
+        msg('user', 'q'),
+        msg('tool_use', { toolUseId: 't1', toolName: 'Edit', input: { file_path: '/repo/a.ts' } }),
+        msg('tool_use', { toolUseId: 't2', toolName: 'Edit', input: { file_path: '/repo/a.ts' } }),
+        msg('tool_use', { toolUseId: 't3', toolName: 'Read', input: { file_path: '/repo/readonly.ts' } }),
+      ],
+      opts,
+    );
+    expect(text.match(/- \/repo\/a\.ts/g)).toHaveLength(1);
+    // Read 的路径可出现在对话区的工具行,但不得进「改动过的文件」清单(行首 '- ')
+    expect(text).not.toContain('- /repo/readonly.ts');
+  });
+
+  it('无工具活动时不渲染工作状态区', () => {
+    const text = buildHandoffText([msg('user', '你好'), msg('assistant', '你好!')], opts);
+    expect(text).not.toContain('== 工作状态');
+  });
+
+  it('framing 包含「先核对工作区、以工作区为准」纪律', () => {
+    const text = buildHandoffText([msg('user', 'q')], opts);
+    expect(text).toContain('git status');
+    expect(text).toContain('以工作区现状为准');
+  });
+});
