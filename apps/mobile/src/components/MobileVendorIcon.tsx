@@ -3,7 +3,7 @@ import { Animated, Easing } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '@/theme';
 
-import { BRAND_ARROW_PATH } from './vendorIconPaths';
+import { CLAUDE_PATH, CODEX_PATH } from './vendorIconPaths';
 
 interface MobileVendorIconProps {
   color?: string;
@@ -46,11 +46,11 @@ export function MobileVendorIcon({ color: colorOverride, running = false, size =
     };
   }, [opacity, running]);
 
-  // Mac D4-1:Claude/Codex 会话行首统一品牌箭头;vendor prop 保留给调用方兼容。
-  void vendor;
+  // 2026-07-19 撤销 D4-1:恢复厂商 glyph(与 Mac 端 VendorIcon 同步)——
+  // 箭头统一后依赖图标区分 agent 类型的场景全部失效。
   const mark = (
     <Svg width={size} height={size} viewBox="0 0 24 24" accessibilityLabel="CINDY">
-      <Path d={BRAND_ARROW_PATH} fill={color} />
+      <Path d={vendor === 'codex' ? CODEX_PATH : CLAUDE_PATH} fill={color} />
     </Svg>
   );
 

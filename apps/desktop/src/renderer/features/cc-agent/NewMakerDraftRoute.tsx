@@ -42,7 +42,10 @@ import { logoDark, logoLight } from '@/hooks/useBrandLogo';
 import { themeService } from '@/themes/theme-service';
 import type { Theme as ColorTheme } from '@/themes/types';
 import { ChatInput } from '@/components/new-chat/ChatInput';
-import { FolderPickerPopover, type FolderPickerSelectSource } from '@/components/new-chat/FolderPickerPopover';
+import {
+  FolderPickerPopover,
+  type FolderPickerSelectSource,
+} from '@/components/new-chat/FolderPickerPopover';
 import { RightSidebarToggle } from '@/components/layout/RightSidebarToggle';
 import { buildDeviceLinkCreateArgs } from './deviceLinkCreateArgs';
 import { VendorSegmentedSwitcher } from '@/components/new-chat/VendorSegmentedSwitcher';
@@ -114,7 +117,10 @@ import { matchNavigationCommandName, tryHandleNavigationCommand } from '@/lib/na
 import { useAgentCapabilities } from '@/hooks/useAgentCapabilities';
 import { useProviders } from '@/hooks/useProviders';
 import { useDeviceProviders } from '@/hooks/useDeviceProviders';
-import { getProjectPickerDisplayName, useProjectPickerOptions } from '@/hooks/useProjectPickerOptions';
+import {
+  getProjectPickerDisplayName,
+  useProjectPickerOptions,
+} from '@/hooks/useProjectPickerOptions';
 import { resolveFastSupported } from '@/lib/providerModels';
 import { effectiveSourceIdForModel } from '@lizi/model-providers';
 import {
@@ -375,7 +381,8 @@ export function NewMakerDraftRoute() {
     effectiveCollab.enabled && effectiveWorkingDir != null && effectiveRemoteHostId == null;
   const projectPickerOptions = useProjectPickerOptions();
   const createAgentModeLabel =
-    getProjectPickerDisplayName(effectiveWorkingDir, projectPickerOptions) ?? t('newChat.folderPicker.dialogue');
+    getProjectPickerDisplayName(effectiveWorkingDir, projectPickerOptions) ??
+    t('newChat.folderPicker.dialogue');
   const draftRightSidebar = useMemo(
     () =>
       resolveNewMakerDraftRightSidebar({
@@ -609,7 +616,7 @@ export function NewMakerDraftRoute() {
       if (!model) return;
       const activeEffort =
         patch.effort ??
-        (patch.fast !== undefined ? dlSel?.effort ?? deviceLinkInitial?.effort : undefined);
+        (patch.fast !== undefined ? (dlSel?.effort ?? deviceLinkInitial?.effort) : undefined);
       window.electronAPI.deviceLink
         .invoke(effectiveDeviceLinkDeviceId, 'maker:apply-new-maker-draft-pref', [
           {
@@ -1727,7 +1734,9 @@ export function NewMakerDraftRoute() {
                     className="shrink-0 text-[var(--create-agent-control-icon)]"
                   />
                   <span className="min-w-0 truncate">
-                    {effectiveCollab.enabled ? t('newChat.collaboration.pillLabel') : createAgentModeLabel}
+                    {effectiveCollab.enabled
+                      ? t('newChat.collaboration.pillLabel')
+                      : createAgentModeLabel}
                   </span>
                   <ChevronDown
                     size={12}
@@ -1887,7 +1896,9 @@ export function NewMakerDraftRoute() {
                             className="text-[var(--create-agent-quick-card-icon)]"
                           />
                         </span>
-                        <span className="min-w-0 pt-0.5 text-[11px] font-semibold leading-[14px]">
+                        {/* min-h 对齐左侧 30px 图标圆:单行/两行文字都相对图标垂直居中,
+                            卡片整体仍 items-start 顶部对齐。 */}
+                        <span className="flex min-h-[30px] min-w-0 items-center text-[11px] font-semibold leading-[14px]">
                           {t(labelKey)}
                         </span>
                       </button>

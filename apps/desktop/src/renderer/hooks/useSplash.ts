@@ -11,16 +11,16 @@ const websiteUrl = () => window.electronAPI.clientEndpoints.websiteUrl;
 
 export type SplashPhase =
   | 'init'
-  | 'splash_checking_update'   // Phase 1: checking manifest for hot-update
-  | 'splash_updating'          // Phase 1: downloading app update
-  | 'splash_update_done'       // Phase 1: update ready, restarting
-  | 'splash_manifest_failed'   // Phase 1: manifest fetch failed
-  | 'splash_download_failed'   // Phase 1: hotfix 下载失败/校验失败，需要用户重试
-  | 'splash_spawn_failed'      // Phase 1: updater spawn 失败（EACCES 等）
-  | 'splash_checking'          // Phase 2: checking CCD binary
-  | 'splash_downloading'       // Phase 2: downloading CCD binary
-  | 'splash_passed'            // All checks done
-  | 'splash_failed'            // CCD check failed
+  | 'splash_checking_update' // Phase 1: checking manifest for hot-update
+  | 'splash_updating' // Phase 1: downloading app update
+  | 'splash_update_done' // Phase 1: update ready, restarting
+  | 'splash_manifest_failed' // Phase 1: manifest fetch failed
+  | 'splash_download_failed' // Phase 1: hotfix 下载失败/校验失败，需要用户重试
+  | 'splash_spawn_failed' // Phase 1: updater spawn 失败（EACCES 等）
+  | 'splash_checking' // Phase 2: checking CCD binary
+  | 'splash_downloading' // Phase 2: downloading CCD binary
+  | 'splash_passed' // All checks done
+  | 'splash_failed' // CCD check failed
   | 'fading_out'
   | 'splash_done'
   | 'splash_skipped';
@@ -31,7 +31,9 @@ interface TipsInfo {
   tipsDestructive: boolean;
 }
 
-const MIN_DISPLAY_MS = 1500;
+// 2026-07-19 用户拍板:1500 → 3000,splash 立绘一闪而过看不清,最短停留延长到 3s
+// (淡出仍需"加载完成 && 满足地板时长"双条件,慢加载时不叠加额外等待)。
+const MIN_DISPLAY_MS = 3000;
 const FADE_FALLBACK_MS = 500;
 // splash_update_done 阶段先让 "更新完成，等待自动重启..." 这段提示文案显示 1.5s，
 // 再自动触发 relaunch，避免下载条刚到 100% 用户还没看清就直接整个窗口黑掉。
@@ -39,7 +41,16 @@ const AUTO_RELAUNCH_DELAY_MS = 1_500;
 
 export function useSplash() {
   const { t } = useTranslation();
-  const { status: envStatus, downloadProgress, downloadInfo, updateVersion, step, totalSteps, resetSignal, checkEnvironment } = useEnvCheck();
+  const {
+    status: envStatus,
+    downloadProgress,
+    downloadInfo,
+    updateVersion,
+    step,
+    totalSteps,
+    resetSignal,
+    checkEnvironment,
+  } = useEnvCheck();
   const { isInitializing: authInitializing } = useAuth();
   const { errorCode: updateErrorCode } = useUpdateStatus();
 
@@ -63,15 +74,33 @@ export function useSplash() {
   // ── Effect 2: envStatus drives phase ──
   useEffect(() => {
     switch (envStatus) {
-      case 'checking_update': setPhase('splash_checking_update'); break;
-      case 'updating': setPhase('splash_updating'); break;
-      case 'update_done': setPhase('splash_update_done'); break;
-      case 'manifest_failed': setPhase('splash_manifest_failed'); break;
-      case 'download_failed': setPhase('splash_download_failed'); break;
-      case 'checking': setPhase('splash_checking'); break;
-      case 'downloading': setPhase('splash_downloading'); break;
-      case 'passed': setPhase('splash_passed'); break;
-      case 'failed': setPhase('splash_failed'); break;
+      case 'checking_update':
+        setPhase('splash_checking_update');
+        break;
+      case 'updating':
+        setPhase('splash_updating');
+        break;
+      case 'update_done':
+        setPhase('splash_update_done');
+        break;
+      case 'manifest_failed':
+        setPhase('splash_manifest_failed');
+        break;
+      case 'download_failed':
+        setPhase('splash_download_failed');
+        break;
+      case 'checking':
+        setPhase('splash_checking');
+        break;
+      case 'downloading':
+        setPhase('splash_downloading');
+        break;
+      case 'passed':
+        setPhase('splash_passed');
+        break;
+      case 'failed':
+        setPhase('splash_failed');
+        break;
     }
   }, [envStatus]);
 
@@ -112,11 +141,23 @@ export function useSplash() {
   const tips: TipsInfo = useMemo<TipsInfo>(() => {
     switch (phase) {
       case 'splash_checking_update':
-        return { tipsText: t('splash.tips.checkingUpdate'), tipsClickable: false, tipsDestructive: false };
+        return {
+          tipsText: t('splash.tips.checkingUpdate'),
+          tipsClickable: false,
+          tipsDestructive: false,
+        };
       case 'splash_updating':
-        return { tipsText: t('splash.tips.updating'), tipsClickable: false, tipsDestructive: false };
+        return {
+          tipsText: t('splash.tips.updating'),
+          tipsClickable: false,
+          tipsDestructive: false,
+        };
       case 'splash_update_done':
-        return { tipsText: t('splash.tips.updateDone'), tipsClickable: false, tipsDestructive: false };
+        return {
+          tipsText: t('splash.tips.updateDone'),
+          tipsClickable: false,
+          tipsDestructive: false,
+        };
       case 'splash_manifest_failed':
         return { tipsText: null, tipsClickable: false, tipsDestructive: false }; // Dialog takes over
       case 'splash_download_failed':
@@ -124,11 +165,19 @@ export function useSplash() {
       case 'splash_spawn_failed':
         return { tipsText: null, tipsClickable: false, tipsDestructive: false }; // Dialog takes over
       case 'splash_checking':
-        return { tipsText: t('splash.tips.checkingEnv'), tipsClickable: false, tipsDestructive: false };
+        return {
+          tipsText: t('splash.tips.checkingEnv'),
+          tipsClickable: false,
+          tipsDestructive: false,
+        };
       case 'splash_downloading': {
         // D 场景（两个 vendor 都需要下载）显示 (x/2) 进度标签；B/C 场景维持单文案。
         const suffix = step && totalSteps ? `(${step}/${totalSteps})` : '';
-        return { tipsText: `${t('splash.tips.waking')}${suffix}`, tipsClickable: false, tipsDestructive: false };
+        return {
+          tipsText: `${t('splash.tips.waking')}${suffix}`,
+          tipsClickable: false,
+          tipsDestructive: false,
+        };
       }
       case 'splash_passed':
       case 'fading_out':
@@ -171,7 +220,8 @@ export function useSplash() {
     const timer = setTimeout(() => {
       autoRelaunchFiredRef.current = true;
       const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
-      void window.electronAPI.autoRelaunchToUpdate(theme)
+      void window.electronAPI
+        .autoRelaunchToUpdate(theme)
         .then((result) => {
           // Conditions may have changed since update-check-startup replied.
           // Re-enter the normal startup flow instead of leaving the user on a
