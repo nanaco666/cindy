@@ -734,8 +734,11 @@ export function ModelSelectorContent({
             handleRowSelect(providerId, model.id);
           }}
           className={cn(
+            // hover 高亮即时切换(不走 transition-colors):背景色是 paint 属性,过渡会让
+            // 快速划过列表时多行同时逐帧重绘(叠加圆角裁剪 + 阴影的 portal 容器放大失效区域),
+            // 是「hover 卡顿」的根因。即时切换只在进/离开各重绘一次,跟手且零逐帧 paint(规则 7)。
             'group flex w-full cursor-pointer items-center justify-between rounded-[8px] px-3 py-2',
-            'transition-colors hover:bg-[var(--model-item-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
+            'hover:bg-[var(--model-item-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
             isSelected && 'bg-[var(--model-item-hover)]',
             disabled && 'cursor-not-allowed opacity-50 hover:bg-transparent',
           )}
