@@ -5156,7 +5156,13 @@ export default function SessionScreen() {
             pointerEvents="box-none"
             style={[
               styles.sessionBottomContent,
-              { paddingBottom: insets.bottom },
+              // 待处理面板把 safe-area 收进自身 root，让问答 surface 延伸到
+              // 屏幕底部且内容仍避开 home indicator；composer 继续由外层留 inset。
+              {
+                paddingBottom: sessionOperationLayout.composerSlot === 'pending-interaction'
+                  ? 0
+                  : insets.bottom,
+              },
               nativeShellLayout.wideViewport && { maxWidth: nativeShellLayout.contentMaxWidth },
             ]}
             testID="session.bottomContent"
@@ -5231,6 +5237,7 @@ export default function SessionScreen() {
                   testID="interaction.bottomScroll"
                 >
                   <InteractionPanel
+                    safeAreaBottomInset={insets.bottom}
                     deviceId={deviceId}
                     fillAvailableHeight
                     sessionId={sessionId}
@@ -5250,6 +5257,7 @@ export default function SessionScreen() {
                   testID="interaction.bottomScroll"
                 >
                 <InteractionPanel
+                  safeAreaBottomInset={insets.bottom}
                   deviceId={deviceId}
                   sessionId={sessionId}
                   interactions={pending}

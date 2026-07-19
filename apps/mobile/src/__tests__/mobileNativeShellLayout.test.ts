@@ -47,6 +47,7 @@ describe('mobileNativeShellLayout', () => {
     expect(layout.keyboardBottomInset).toBe(0);
     expect(layout.composerScrollEnabled).toBe(false);
     expect(layout.composerMaxHeight).toBeGreaterThan(300);
+    expect(layout.pendingSurfaceMaxHeight).toBe(layout.sheetMaxHeight);
     expect(layout.pendingSurfaceExpandedHeight).toBe(layout.sheetMaxHeight);
     expect(layout.sheetMaxHeight).toBe(Math.round(932 * 0.88));
     expect(layout.wideViewport).toBe(false);
@@ -66,6 +67,7 @@ describe('mobileNativeShellLayout', () => {
 
     expect(layout.keyboardBottomInset).toBe(296);
     expect(layout.composerScrollEnabled).toBe(true);
+    expect(layout.pendingSurfaceMaxHeight).toBeLessThan(layout.sheetMaxHeight);
     expect(layout.paletteMaxHeight).toBeLessThanOrEqual(260);
     expect(layout.paletteMaxHeight).toBeLessThan(layout.composerMaxHeight);
   });
