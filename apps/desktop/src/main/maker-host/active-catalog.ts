@@ -84,6 +84,21 @@ type Effort = CatalogModel['efforts'][number];
 /** base + custom + discovered augment 的合并缓存;null = 待重算(惰性)。 */
 let merged: Catalog | null = null;
 
+/**
+ * 目录修订号。所有会改变 getActiveCatalog() 结果的写入都必须经过 markChanged，
+ * 让 main 能先同步刷新 Maker capabilities，再向 renderer 广播同一代目录。
+ */
+let revision = 0;
+
+/** Electron 相关副作用由 desktop host 注入，本模块继续保持纯状态容器。 */
+let changedListener: ((nextRevision: number) => void) | null = null;
+
+function markChanged(): void {
+  merged = null;
+  revision += 1;
+  changedListener?.(revision);
+}
+
 /** additions-only:静态同 id first-wins；Codex 投影可显式要求按 sortOrder 稳定重排。 */
 function augmentModels(
   p: Provider,
@@ -256,7 +271,7 @@ export function getActiveCatalog(): Catalog {
 /** 由 host 的目录加载器(ensureActiveCatalogLoaded)在拉取成功后写入基础目录。 */
 export function setActiveCatalog(catalog: Catalog): void {
   base = catalog;
-  merged = null;
+  markChanged();
 }
 
 /**
@@ -265,7 +280,7 @@ export function setActiveCatalog(catalog: Catalog): void {
  */
 export function setCustomProviders(providers: Provider[]): void {
   custom = [...providers];
-  merged = null;
+  markChanged();
 }
 
 /**
@@ -274,7 +289,7 @@ export function setCustomProviders(providers: Provider[]): void {
  */
 export function setDiscoveredCodexModels(models: CatalogModel[]): void {
   discoveredCodex = [...models];
-  merged = null;
+  markChanged();
 }
 
 /**
@@ -289,7 +304,7 @@ export function setDiscoveredProviderModels(
   const byAgent = discoveredByProvider.get(providerId) ?? {};
   byAgent[agent] = [...models];
   discoveredByProvider.set(providerId, byAgent);
-  merged = null;
+  markChanged();
 }
 
 /**
@@ -298,5 +313,20 @@ export function setDiscoveredProviderModels(
  */
 export function setXdGatewayModels(models: XdGatewayModelInfo[]): void {
   xdGatewayModels = [...models];
-  merged = null;
+  markChanged();
+}
+
+/** 返回当前 active catalog 的单调递增修订号。 */
+export function getActiveCatalogRevision(): number {
+  return revision;
+}
+
+/**
+ * 注册唯一的目录变更收口。监听器必须同步且不可抛错：setter 返回前 capabilities
+ * 已与 active catalog 对齐，随后才允许 renderer 收到对应 revision 的广播。
+ */
+export function setActiveCatalogChangedListener(
+  listener: ((nextRevision: number) => void) | null,
+): void {
+  changedListener = listener;
 }

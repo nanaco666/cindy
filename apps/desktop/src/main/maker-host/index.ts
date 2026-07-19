@@ -16,7 +16,10 @@ import {
   CodexAgent,
   configureDefaultImageResizer,
 } from '@lizi/maker-core';
-import { getActiveCatalog } from './active-catalog.js';
+import {
+  getActiveCatalog,
+  setActiveCatalogChangedListener,
+} from './active-catalog.js';
 import {
   createOrcaWorkerBridgeMcpProvider,
   type OrcaBridgeMcpDeps,
@@ -105,6 +108,30 @@ type RemoteCcQuery = Awaited<
 >;
 
 let _maker: Maker | null = null;
+
+/**
+ * active catalog 的唯一 desktop 收口：先原地刷新两种 agent 的 capabilities，
+ * 再广播同一 revision。这样 provider 列表先变而 backend 仍校验旧模型的窗口不会出现。
+ */
+setActiveCatalogChangedListener((revision) => {
+  try {
+    if (_maker) refreshCatalogDerivedModels(_maker, getActiveCatalog());
+  } catch (error) {
+    desktopMakerLogger.warn('active catalog capabilities refresh failed', {
+      revision,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return;
+  }
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed()) continue;
+    try {
+      win.webContents.send(MAKER_PUSH.PROVIDER_CHANGED, { revision });
+    } catch {
+      // Window teardown may race the broadcast; other windows still receive this revision.
+    }
+  }
+});
 /**
  * codexAgent 的模块级引用 —— 仅供 restartCodexAfterAuthModeChange() 在 API 模式切换 /
  * api_key 变更时 dispose 重建 app-server。getMaker() 构造后回填,resetMaker() 清空。
@@ -512,7 +539,6 @@ export function getMaker(): Maker {
       try {
         clearChatgptBridgeCredentialCache();
         await refreshDiscoveredCodexModels(false);
-        if (_maker) refreshCatalogDerivedModels(_maker, getActiveCatalog());
       } catch (e) {
         // 目录刷新是失效广播的附加收口，不能因其异常让 renderer 错过“请重新登录”。
         desktopMakerLogger.warn('Codex invalidation catalog cleanup failed', {
@@ -706,7 +732,6 @@ export async function finalizeCodexAfterAuthModeChange(): Promise<void> {
   // 重读 codex models_cache 刷新规范化模型快照 —— active-catalog 会同时投影 Codex 与
   // Claude bridge;放在 auth 广播前,renderer refetch 即见最新。
   await refreshDiscoveredCodexModels();
-  if (_maker) refreshCatalogDerivedModels(_maker, getActiveCatalog());
   await broadcastCodexAuthStateChanged();
 }
 

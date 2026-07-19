@@ -75,9 +75,9 @@ describe('resolveHookSessionConfig', () => {
     });
   });
 
-  it('override 模型不在能力清单: 回落草稿默认模型', () => {
+  it('override 模型不在能力清单: 保留显式选择等待快照对齐', () => {
     const r = resolveHookSessionConfig(deps(), over({ model: 'claude-ancient-1' }));
-    expect(r.model).toBe('claude-opus-4-8');
+    expect(r.model).toBe('claude-ancient-1');
   });
 
   it('override effort 不被该模型支持: 回落草稿默认档, 草稿也不支持时用模型默认档', () => {
@@ -103,7 +103,7 @@ describe('resolveHookSessionConfig', () => {
     expect(r).toMatchObject({ model: 'claude-haiku-4-5', effort: undefined });
   });
 
-  it('草稿模型也不可用: 落能力清单第一个', () => {
+  it('普通桌面默认确实不可用: 回落当前来源目录第一项', () => {
     const r = resolveHookSessionConfig(
       deps({
         readDefaults: () => ({

@@ -295,7 +295,8 @@ export function ScheduleFormDialog({
   const { providers } = useProviders();
   const currentModel = useMemo(() => {
     const list = caps.capabilities?.availableModels ?? [];
-    return list.find((m) => m.id === form.model) ?? list[0];
+    if (form.model) return list.find((m) => m.id === form.model);
+    return list[0];
   }, [caps.capabilities, form.model]);
 
   // form.model 为空时回填默认模型（三级回退,所见即所存）。

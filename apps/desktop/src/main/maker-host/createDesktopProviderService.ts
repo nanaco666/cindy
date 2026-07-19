@@ -241,8 +241,9 @@ export async function refreshCustomProvidersIntoCatalog(): Promise<void> {
     setCustomProviders(configs.map((c) => buildUserProvider(c)));
     log.info('custom providers merged into active catalog', { count: configs.length });
   } catch (err) {
-    setCustomProviders([]);
-    log.warn('failed to load custom providers; cleared from active catalog', { err: String(err) });
+    log.warn('failed to load custom providers; keeping last valid active catalog snapshot', {
+      err: String(err),
+    });
   }
 }
 

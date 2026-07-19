@@ -82,16 +82,11 @@ export function resolveHookSessionConfig(
   const models = deps.getModels(agentKind);
   const findModel = (id: string) => models.find((m) => m.id === id);
 
-  // 2. model: 显式且在可用清单 > 草稿默认(在清单) > 清单第一个 > 草稿默认裸值
+  // 2. model:显式 workspace 偏好始终保留；普通桌面默认仅在当前来源目录可用时采用。
   let model: string;
-  if (overrides.model !== null && findModel(overrides.model)) {
+  if (overrides.model !== null) {
     model = overrides.model;
   } else {
-    if (overrides.model !== null) {
-      deps.log.warn(
-        `hook override model '${overrides.model}' not available for ${agentKind}, falling back to desktop default`,
-      );
-    }
     const draft = defaults.agents[agentKind]?.model;
     if (draft && findModel(draft)) {
       model = draft;
@@ -104,7 +99,7 @@ export function resolveHookSessionConfig(
   const descriptor = findModel(model);
   let effort: string | undefined;
   if (descriptor === undefined || descriptor.efforts.length === 0) {
-    effort = undefined; // 模型不支持调档, 不传由 agent 用自身默认
+    effort = undefined; // descriptor 暂缺或模型不支持调档, 不传由 agent/backend 处理
   } else if (overrides.effort !== null && descriptor.efforts.includes(overrides.effort)) {
     effort = overrides.effort;
   } else {
