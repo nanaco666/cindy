@@ -56,7 +56,6 @@ export const CINDY_REQUIRED_COLOR_IDS = [
   'confirm-btn-secondary-hover',
   'confirm-btn-secondary-text',
   'confirm-title',
-  'drop-overlay-bg',
   'file-chip-bg',
   'file-remove-bg',
   'info-700',
@@ -236,7 +235,6 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'confirm-btn-secondary-hover': { light: 'rgba(0, 0, 0, 0.06)', dark: 'rgba(255, 255, 255, 0.08)' },
   'confirm-btn-secondary-text': { light: '#3C3F43', dark: '#D4D4D4' },
   'confirm-title': { light: '#3C3F43', dark: '#D4D4D4' },
-  'drop-overlay-bg': { light: 'rgba(223, 12, 39, 0.10)', dark: 'rgba(223, 12, 39, 0.10)' },
   'file-chip-bg': { light: '#D8D9DB', dark: '#3B3A3A' },
   'file-remove-bg': { light: '#686B72', dark: '#BFC1C4' },
   'info-700': { light: '#1D4ED8', dark: '#93C5FD' },
@@ -320,7 +318,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
 
 // E1D 红色体系重构(用户批准 2026-07-17):三份新 map 替代旧 BRAND_RED_*。
 // 常规主操作反相中性(light #3C3F43/#FCFCFC, dark #EEEEEE/#252222);
-// 红仅限 A 类(brand-login/error)+ C 类保留(migration-bar-fill/drop-overlay/sidebar-item-active)。
+// 红仅限 A 类(brand-login/error)+ C 类保留(migration-bar-fill/sidebar-item-active;drop-overlay 撤红改中性 2026-07-19)。
 export const NEUTRAL_PRIMARY_EXPECTED_BY_ID: Record<string, { light: string; dark: string }> = {
   'accent-cta-bg': { light: '#3C3F43', dark: '#EEEEEE' },
   'accent-cta-bg-pure': { light: '#3C3F43', dark: '#EEEEEE' },
@@ -346,7 +344,6 @@ export const RED_EXCEPTION_ALLOWED_IDS = [
   'brand-login-error-text',
   // C 类保留红(裁决:迁移填充/拖放 overlay/侧栏选中)
   'migration-bar-fill',
-  'drop-overlay-bg',
   'sidebar-item-active',
   // hover/soft token(中性,但 token 名保留在 allowed 防误报)
   'accent-soft',
@@ -384,7 +381,6 @@ export const BRAND_RED_ALLOWED_IDS = [
   'update-btn-text',
   'accent-soft',
   'accent-hover',
-  'drop-overlay-bg',
   'confirm-btn-primary-hover',
   'settings-btn-primary-bg',
   'settings-btn-primary-border',

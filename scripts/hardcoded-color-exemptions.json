@@ -123,5 +123,10 @@
   "glob": "apps/desktop/src/renderer/components/splash/__tests__/SplashScreen.test.tsx",
   "reason": "splash v2 断言值守护(expect rgba),非样式硬编码",
   "owner": "SPLASH-V2"
+ },
+ {
+  "glob": "apps/desktop/src/renderer/components/sidebar/VendorIcon.tsx",
+  "reason": "hsl(var(--sidebar-muted)) 合法 token 消费(规则16 HSL wrap);红胶囊反白重构 2026-07-19 改行形态后入账",
+  "owner": "lead"
  }
 ]
