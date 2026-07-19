@@ -32,4 +32,9 @@ describe('WorkGroupBlock — 两级展开接线静态扫描', () => {
     const onToggle = source.slice(source.indexOf('const onToggle'));
     expect(onToggle).toMatch(/setExpanded\(\(v\) => !v\)/);
   });
+
+  it('thinking 继续通过 ThinkingCard 保持第二级折叠', () => {
+    expect(source).toMatch(/c\.kind === 'thinking'[\s\S]*?<ThinkingCard/);
+    expect(source).not.toMatch(/ExpandedThinkingRow/);
+  });
 });

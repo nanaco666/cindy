@@ -11,15 +11,16 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-// The work-group interaction is under test, not the second-level tool cards.
-// Lightweight stubs make their mount state and forwarded streaming props visible;
-// ThinkingCard remains only as the redacted fallback after normal thinking becomes a direct row.
+// The work-group interaction is under test, not the second-level child cards.
+// Lightweight stubs make mount state and forwarded props visible while preserving
+// the contract that both tools and thinking stay collapsed after the outer click.
 vi.mock('@/components/chat/AgentActionsBlock', () => ({
   AgentActionsBlock: (props: { toolCalls: ChatMessage[]; isSessionStreaming?: boolean }) =>
     createElement(
-      'div',
+      'button',
       {
-        'data-testid': 'expanded-tools',
+        'data-testid': 'collapsed-tools',
+        'aria-expanded': 'false',
         'data-streaming': String(Boolean(props.isSessionStreaming)),
       },
       props.toolCalls.map((message) => message.clientId).join(','),
@@ -28,7 +29,15 @@ vi.mock('@/components/chat/AgentActionsBlock', () => ({
 
 vi.mock('@/components/chat/ThinkingCard', () => ({
   ThinkingCard: (props: { content: string }) =>
-    createElement('div', { 'data-testid': 'expanded-thinking' }, props.content),
+    createElement(
+      'button',
+      {
+        'data-testid': 'collapsed-thinking',
+        'aria-expanded': 'false',
+        'data-content': props.content,
+      },
+      'chat.thinking.collapsed',
+    ),
   formatDuration: (ms: number) => `${Math.max(1, Math.round(ms / 1000))}s`,
 }));
 
@@ -76,6 +85,12 @@ const thinking = (message: ChatMessage): WorkGroupChild => ({
   message,
 });
 
+const rendered = (key: string, text: string): WorkGroupChild => ({
+  kind: 'rendered',
+  key,
+  renderNode: () => createElement('div', { 'data-testid': 'assistant-progress' }, text),
+});
+
 describe('WorkGroupBlock — running latest-five preview', () => {
   it('keeps the latest five tools/reasoning rows in chronological order and drops empty thinking', () => {
     const children: WorkGroupChild[] = [
@@ -99,7 +114,7 @@ describe('WorkGroupBlock — running latest-five preview', () => {
     );
     expect(document.querySelectorAll('[data-live-work-activity]')).toHaveLength(5);
     fireEvent.click(screen.getByRole('button'));
-    expect(screen.getAllByTestId('expanded-tools')[0].textContent).toBe('t1,t2');
+    expect(screen.getAllByTestId('collapsed-tools')[0].textContent).toBe('t1,t2');
   });
 
   it('renders one reasoning row that updates in place as the same block receives deltas', () => {
@@ -124,8 +139,9 @@ describe('WorkGroupBlock — running latest-five preview', () => {
     expect(document.querySelectorAll('[data-live-work-activity="thinking"]')).toHaveLength(1);
   });
 
-  it('shows the collapsed live preview, then reveals full children and keeps expansion on completion', () => {
+  it('shows live preview, then reveals assistant text while child cards stay collapsed', () => {
     const childItems = [
+      rendered('msg-progress', 'I checked the current state.'),
       tools('seg-1', [mkTool('t1', 'git status')]),
       thinking(mkThinking('th1', 'checking the current state')),
     ];
@@ -139,14 +155,18 @@ describe('WorkGroupBlock — running latest-five preview', () => {
 
     expect(screen.getByText('chat.workGroup.working')).toBeTruthy();
     expect(document.querySelector('[data-live-work-preview="true"]')).toBeTruthy();
-    expect(screen.queryByTestId('expanded-tools')).toBeNull();
+    expect(screen.queryByTestId('assistant-progress')).toBeNull();
+    expect(screen.queryByTestId('collapsed-tools')).toBeNull();
+    expect(screen.queryByTestId('collapsed-thinking')).toBeNull();
 
     fireEvent.click(screen.getByRole('button'));
     expect(document.querySelector('[data-live-work-preview="true"]')).toBeNull();
-    expect(screen.getByTestId('expanded-tools').getAttribute('data-streaming')).toBe('true');
-    expect(screen.queryByTestId('expanded-thinking')).toBeNull();
-    expect(screen.getByText('checking the current state')).toBeTruthy();
-    expect(document.querySelectorAll('[data-live-work-activity="thinking"]')).toHaveLength(1);
+    expect(screen.getByTestId('assistant-progress').textContent).toBe('I checked the current state.');
+    expect(screen.getByTestId('collapsed-tools').getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByTestId('collapsed-tools').getAttribute('data-streaming')).toBe('true');
+    expect(screen.getByTestId('collapsed-thinking').getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByTestId('collapsed-thinking').getAttribute('data-content'))
+      .toBe('checking the current state');
 
     rerender(
       createElement(WorkGroupBlock, {
@@ -157,11 +177,12 @@ describe('WorkGroupBlock — running latest-five preview', () => {
       }),
     );
     expect(screen.getByText('chat.workGroup.worked:12s')).toBeTruthy();
-    expect(screen.getByTestId('expanded-tools').getAttribute('data-streaming')).toBe('false');
-    expect(screen.getByText('checking the current state')).toBeTruthy();
+    expect(screen.getByTestId('assistant-progress').textContent).toBe('I checked the current state.');
+    expect(screen.getByTestId('collapsed-tools').getAttribute('data-streaming')).toBe('false');
+    expect(screen.getByTestId('collapsed-thinking').getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('drops empty thinking from expanded history and keeps the redacted fallback', () => {
+  it('keeps empty and redacted thinking behind their own collapsed cards', () => {
     const redacted = { ...mkThinking('hidden', ''), thinkingRedacted: true };
     render(
       createElement(WorkGroupBlock, {
@@ -172,51 +193,10 @@ describe('WorkGroupBlock — running latest-five preview', () => {
 
     fireEvent.click(screen.getByRole('button'));
     expect(document.querySelectorAll('[data-live-work-activity="thinking"]')).toHaveLength(0);
-    expect(screen.getByTestId('expanded-thinking')).toBeTruthy();
-  });
-
-  it('expands multiline thinking in place and preserves the original line breaks', () => {
-    render(
-      createElement(WorkGroupBlock, {
-        blockId: 'work:t1',
-        childItems: [thinking(mkThinking('long', 'first line\nsecond line'))],
-      }),
-    );
-
-    fireEvent.click(screen.getByRole('button'));
-    const thinkingButton = document.querySelector<HTMLButtonElement>(
-      '[data-work-thinking-expandable="true"]',
-    );
-    expect(thinkingButton).toBeTruthy();
-    expect(thinkingButton?.getAttribute('aria-expanded')).toBe('false');
-    expect(thinkingButton?.textContent).toContain('first line second line');
-
-    fireEvent.click(thinkingButton!);
-    expect(thinkingButton?.getAttribute('aria-expanded')).toBe('true');
-    expect(thinkingButton?.textContent).toContain('first line\nsecond line');
-
-    fireEvent.click(thinkingButton!);
-    expect(thinkingButton?.getAttribute('aria-expanded')).toBe('false');
-  });
-
-  it('offers expansion when a single-line thinking row is visually truncated', () => {
-    vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(240);
-    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(120);
-    render(
-      createElement(WorkGroupBlock, {
-        blockId: 'work:t1',
-        childItems: [thinking(mkThinking('long', 'a long reasoning sentence without line breaks'))],
-      }),
-    );
-
-    fireEvent.click(screen.getByRole('button'));
-    const thinkingButton = document.querySelector<HTMLButtonElement>(
-      '[data-work-thinking-expandable="true"]',
-    );
-    expect(thinkingButton).toBeTruthy();
-    fireEvent.click(thinkingButton!);
-    expect(thinkingButton?.getAttribute('aria-expanded')).toBe('true');
-    expect(thinkingButton?.querySelector('.whitespace-pre-wrap')).toBeTruthy();
+    expect(screen.getAllByTestId('collapsed-thinking')).toHaveLength(2);
+    expect(screen.getAllByTestId('collapsed-thinking').every(
+      (card) => card.getAttribute('aria-expanded') === 'false',
+    )).toBe(true);
   });
 
   it('marks result/settled tools done and only unresolved tools running', () => {
