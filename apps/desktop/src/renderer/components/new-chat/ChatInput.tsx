@@ -98,6 +98,7 @@ import {
   isLongPasteText,
   countPasteLines,
   htmlCarriesOwnChipMarkup,
+  LONG_PASTE_MAX_CHARS,
   segmentPastedContent,
   pastedProjectChipAttrs,
   serializeProjectChipText,
@@ -107,6 +108,7 @@ import { docContainsAtomChip } from './composerDocState';
 import {
   applyPastedTextChipEdit,
   PastedTextChipNode,
+  replacePastedTextChipWithPlainText,
   type PastedTextChipAttrs,
 } from './PastedTextChipNode';
 import { ToolPayloadLightbox } from '@/components/chat/ToolPayloadLightbox';
@@ -1831,6 +1833,18 @@ export function ChatInput({
     (text: string) => {
       const currentEditor = editorRef.current;
       if (!currentEditor || !pastedTextEditTarget) return;
+
+      // PastedTextChip 把原文写进 data-pasted-text 以支持复制回环；编辑后
+      // 超过同一硬上限时降级为普通文本，避免超大 DOM attribute 重新引入卡顿。
+      if (text.length > LONG_PASTE_MAX_CHARS) {
+        replacePastedTextChipWithPlainText(
+          currentEditor,
+          pastedTextEditTarget.nodePos,
+          pastedTextEditTarget.originalText,
+          text,
+        );
+        return;
+      }
 
       const nextAttrs =
         text.length === 0

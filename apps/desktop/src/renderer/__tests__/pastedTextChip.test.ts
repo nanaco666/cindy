@@ -5,13 +5,16 @@ import Document from '@tiptap/extension-document';
 import Paragraph from '@tiptap/extension-paragraph';
 import Text from '@tiptap/extension-text';
 import History from '@tiptap/extension-history';
+import HardBreak from '@tiptap/extension-hard-break';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   applyPastedTextChipEdit,
   PastedTextChipNode,
+  replacePastedTextChipWithPlainText,
   type PastedTextChipAttrs,
 } from '@/components/new-chat/PastedTextChipNode';
+import { LONG_PASTE_MAX_CHARS } from '@/components/new-chat/pastePipeline';
 
 // Editor 必须逐个 destroy:EditorView 的异步回调(observer / flush)会在
 // jsdom 环境拆除后触发 `document is not defined` 未处理异常,vitest 全绿
@@ -23,16 +26,20 @@ afterEach(() => {
 
 function makeEditor(): Editor {
   const editor = new Editor({
-    extensions: [Document, Paragraph, Text, History, PastedTextChipNode],
+    extensions: [Document, Paragraph, Text, HardBreak, History, PastedTextChipNode],
     content: { type: 'doc', content: [{ type: 'paragraph', content: [] }] },
   });
   editors.push(editor);
   return editor;
 }
 
-function firstInline(editor: Editor): { type?: string; attrs?: PastedTextChipAttrs } | undefined {
+function firstInline(editor: Editor): {
+  type?: string;
+  attrs?: PastedTextChipAttrs;
+  text?: string;
+} | undefined {
   const paragraph = editor.getJSON().content?.[0] as
-    | { content?: Array<{ type?: string; attrs?: PastedTextChipAttrs }> }
+    | { content?: Array<{ type?: string; attrs?: PastedTextChipAttrs; text?: string }> }
     | undefined;
   return paragraph?.content?.[0];
 }
@@ -130,5 +137,32 @@ describe('PastedTextChipNode', () => {
     const restored = firstInline(editor);
     expect(restored?.type).toBe('pastedTextChip');
     expect(restored?.attrs?.text).toBe('to remove');
+  });
+
+  it('downgrades an edit beyond the DOM attribute cap to ordinary text', () => {
+    const editor = makeEditor();
+    const oversized = `${'x'.repeat(LONG_PASTE_MAX_CHARS + 1)}\nsecond\n\nthird`;
+    editor.commands.insertContent({
+      type: 'pastedTextChip',
+      attrs: { text: 'small', display: 'Pasted text (1 line)' },
+    });
+
+    expect(replacePastedTextChipWithPlainText(editor, 1, 'small', oversized)).toBe(true);
+    const inline = (editor.getJSON().content?.[0]?.content ?? []) as Array<{
+      type?: string;
+      text?: string;
+    }>;
+    expect(inline.map((node) => node.type)).toEqual([
+      'text',
+      'hardBreak',
+      'text',
+      'hardBreak',
+      'hardBreak',
+      'text',
+    ]);
+    expect(inline[0]?.text).toHaveLength(LONG_PASTE_MAX_CHARS + 1);
+    expect(inline[2]?.text).toBe('second');
+    expect(inline[5]?.text).toBe('third');
+    expect(editor.getHTML()).not.toContain('data-pasted-text');
   });
 });
