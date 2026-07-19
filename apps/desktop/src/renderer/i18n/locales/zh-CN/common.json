@@ -4825,6 +4825,7 @@
         "timezoneRequired": "请填写时区",
         "selectThread": "请选择目标会话",
         "selectProject": "请选择项目目录",
+        "modelUnavailable": "模型 {{model}} 已不可用，请重新选择",
         "reasoningInvalid": "Reasoning 必须是 {{values}} 之一",
         "preRunHookCommandRequired": "请填写前置检查脚本命令"
       }

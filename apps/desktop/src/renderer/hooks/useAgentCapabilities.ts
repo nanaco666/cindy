@@ -263,34 +263,60 @@ export function evictDeviceCapabilities(deviceId: string): void {
   deviceGen.set(deviceId, (deviceGen.get(deviceId) ?? 0) + 1);
 }
 
+export type LocalCapabilitiesSnapshot = ReadonlyArray<
+  readonly [AgentKind, AgentCapabilities]
+>;
+
+/** 开始一轮本地 capabilities 刷新，并作废所有更早的本地请求。 */
+export function beginLocalCapabilitiesRefresh(): number {
+  localGen += 1;
+  for (const agent of ['claude-code', 'codex'] as const) {
+    inflight.delete(cacheKey(agent));
+  }
+  return localGen;
+}
+
+/** 读取两种 agent 的完整能力快照；失败向上抛，不触碰现有缓存。 */
+export async function loadLocalCapabilitiesSnapshot(): Promise<LocalCapabilitiesSnapshot> {
+  const api = getMakerApi();
+  if (!api) throw new Error('maker IPC not available');
+  return Promise.all(
+    (['claude-code', 'codex'] as const).map(async (agent) => [
+      agent,
+      await api.getCapabilities(agent),
+    ] as const),
+  );
+}
+
+export function isLocalCapabilitiesRefreshCurrent(generation: number): boolean {
+  return localGen === generation;
+}
+
+/** 仅提交当前代际的完整能力快照，并在提交后统一通知 mounted hooks。 */
+export function commitLocalCapabilitiesSnapshot(
+  generation: number,
+  entries: LocalCapabilitiesSnapshot,
+): boolean {
+  if (!isLocalCapabilitiesRefreshCurrent(generation)) return false;
+  for (const [agent, caps] of entries) cache.set(cacheKey(agent), caps);
+  for (const [agent, caps] of entries) {
+    for (const listener of localListeners) listener(agent, caps);
+  }
+  return true;
+}
+
 /**
  * Codex auth/discovery 广播后的本地热刷新。旧 cache 在两个 IPC 都成功前继续可读；完成后同时
  * 替换 cache 并通知 mounted hooks，避免 provider:list 已更新而 scheduler/selector 仍用旧能力。
  */
 export async function refreshLocalCapabilities(): Promise<void> {
-  const api = getMakerApi();
-  if (!api) {
-    log.warn('refreshLocalCapabilities skipped: maker IPC not available');
-    return;
-  }
-  const generation = ++localGen;
-  for (const agent of ['claude-code', 'codex'] as const) {
-    inflight.delete(cacheKey(agent));
-  }
+  const generation = beginLocalCapabilitiesRefresh();
   try {
-    const entries = await Promise.all(
-      (['claude-code', 'codex'] as const).map(async (agent) => [
-        agent,
-        await api.getCapabilities(agent),
-      ] as const),
-    );
-    if (localGen !== generation) return;
-    for (const [agent, caps] of entries) cache.set(cacheKey(agent), caps);
-    for (const [agent, caps] of entries) {
-      for (const listener of localListeners) listener(agent, caps);
-    }
+    commitLocalCapabilitiesSnapshot(generation, await loadLocalCapabilitiesSnapshot());
   } catch (err) {
-    if (localGen === generation) log.warn('refreshLocalCapabilities failed:', err);
+    if (isLocalCapabilitiesRefreshCurrent(generation)) {
+      log.warn('refreshLocalCapabilities failed:', err);
+    }
   }
 }
 

@@ -26,6 +26,20 @@ export function isEffortValue(v: string): v is EffortValue {
   return (EFFORT_VALUES as readonly string[]).includes(v);
 }
 
+/**
+ * 已完成 capabilities 加载后，判断显式 schedule model 是否已从目录移除。
+ * availableModels 为 undefined 表示快照尚未就绪，此时保留表单值等待联合刷新完成。
+ */
+export function isExplicitScheduleModelUnavailable(
+  model: string,
+  availableModels: readonly { id: string }[] | undefined,
+): boolean {
+  const explicitModel = model.trim();
+  return availableModels !== undefined
+    && explicitModel.length > 0
+    && !availableModels.some((candidate) => candidate.id === explicitModel);
+}
+
 export interface ScheduleFormState {
   name: string;
   prompt: string;

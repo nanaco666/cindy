@@ -1192,7 +1192,7 @@ export function ProvidersSection() {
     null | { mode: 'create' } | { mode: 'edit'; config: CustomProviderConfig }
   >(null);
 
-  // 订阅 maker.auth 变更由 useProviders 内部处理;api-key 类断开后手动 refetch。
+  // maker.auth/catalog 广播由 App 的联合快照刷新处理；api-key 类断开后手动 refetch 连接态。
   const byId = useMemo(() => {
     const map = new Map<string, ProviderView>();
     providers.forEach((p) => map.set(p.id, p));
@@ -1215,7 +1215,7 @@ export function ProvidersSection() {
       });
       if (!ok) return;
       try {
-        // 删配置 + 清密钥;main 广播 PROVIDER_CHANGED → useProviders 自动 refetch。
+        // 删配置 + 清密钥；main 广播 PROVIDER_CHANGED → App 联合刷新目录与 capabilities。
         await deleteCustomProvider(p.id);
         toast.success(t('settings.providers.custom.toast.deleted'));
       } catch {

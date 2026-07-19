@@ -27,10 +27,28 @@ import {
   captureBinding,
   deriveRunMode,
   hasRealBinding,
+  isExplicitScheduleModelUnavailable,
   resolveTemplateAgentFields,
   sessionAgentKindToScheduleAgentKind,
 } from '../scheduleFormLogic';
 import type { ScheduleFormState } from '../scheduleFormLogic';
+
+describe('isExplicitScheduleModelUnavailable', () => {
+  it('does not reject an explicit model before capabilities are ready', () => {
+    expect(isExplicitScheduleModelUnavailable('retained-model', undefined)).toBe(false);
+  });
+
+  it('rejects an explicit model missing from a completed capabilities snapshot', () => {
+    expect(
+      isExplicitScheduleModelUnavailable('removed-model', [{ id: 'available-model' }]),
+    ).toBe(true);
+  });
+
+  it('allows blank follow-session semantics and available explicit models', () => {
+    expect(isExplicitScheduleModelUnavailable('', [])).toBe(false);
+    expect(isExplicitScheduleModelUnavailable('available-model', [{ id: 'available-model' }])).toBe(false);
+  });
+});
 
 function makeForm(overrides: Partial<ScheduleFormState> = {}): ScheduleFormState {
   return {

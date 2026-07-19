@@ -4825,6 +4825,7 @@
         "timezoneRequired": "タイムゾーンは必須です",
         "selectThread": "対象スレッドを選択してください",
         "selectProject": "プロジェクトディレクトリを選択してください",
+        "modelUnavailable": "モデル {{model}} は利用できません。別のモデルを選択してください",
         "reasoningInvalid": "Reasoning は {{values}} のいずれかである必要があります",
         "preRunHookCommandRequired": "事前チェックスクリプトのコマンドを入力してください"
       }

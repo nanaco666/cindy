@@ -14,9 +14,7 @@ import { BrowserWindow } from 'electron';
 import { createLogger } from '../logger.js';
 
 import { readClaudeApiKey } from '../maker-host/auth-adapters.js';
-import { getActiveCatalog } from '../maker-host/active-catalog.js';
 import { clearChatgptBridgeCredentialCache } from '../maker-host/anthropic-responses-bridge-host.js';
-import { refreshCatalogDerivedModels } from '../maker-host/catalog-to-descriptors.js';
 import { refreshDiscoveredCodexModels } from '../maker-host/createDesktopProviderService.js';
 import { registerMakerAuthHandlers } from './authHandlers.js';
 import { createElectronIpcHandlerRegistry } from './electronIpcRegistry.js';
@@ -48,7 +46,6 @@ export function registerMakerAuthIpc(maker: Maker): void {
     async (authenticated) => {
       clearChatgptBridgeCredentialCache();
       await refreshDiscoveredCodexModels(authenticated);
-      refreshCatalogDerivedModels(maker, getActiveCatalog());
     },
   );
 

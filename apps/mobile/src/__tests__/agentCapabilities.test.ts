@@ -136,11 +136,13 @@ describe('mobile agent capabilities', () => {
 
     expect(reconcileRuntimeDraftWithCapabilities({
       model: 'missing-model',
+      providerId: 'removed-provider',
       effort: 'ultra',
       permissionMode: 'bypassPermissions',
       fastMode: true,
     }, capabilities)).toMatchObject({
       model: 'claude-sonnet-4-6',
+      providerId: null,
       effort: 'medium',
       permissionMode: 'ask',
       fastMode: true,
@@ -157,6 +159,21 @@ describe('mobile agent capabilities', () => {
       permissionMode: 'plan',
       fastMode: false,
     });
+  });
+
+  it('preserves only an explicitly selected provider model while its descriptor catches up', () => {
+    const capabilities = normalizeMobileAgentCapabilities(desktopCapabilitiesPayload);
+    const draft = {
+      model: 'new-provider-model',
+      providerId: 'new-provider',
+      effort: 'high',
+      permissionMode: 'bypassPermissions',
+      fastMode: true,
+    };
+
+    expect(reconcileRuntimeDraftWithCapabilities(draft, capabilities, {
+      preserveUnknownModel: true,
+    })).toBe(draft);
   });
 
   it('requires confirmation only for history-incompatible model category switches', () => {

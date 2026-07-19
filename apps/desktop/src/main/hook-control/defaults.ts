@@ -82,7 +82,9 @@ export function resolveHookSessionConfig(
   const models = deps.getModels(agentKind);
   const findModel = (id: string) => models.find((m) => m.id === id);
 
-  // 2. model: 显式且在可用清单 > 草稿默认(在清单) > 清单第一个 > 草稿默认裸值
+  // 2. model:显式且在可用清单 > 草稿默认(在清单) > 清单第一个 > 草稿默认裸值。
+  // getModels 来自本次执行实时读取的 provider 目录；目录读取失败时 session-runner 会改用
+  // maker capabilities，因此走到这里的非空清单就是可执行真相，失效 override 必须降级。
   let model: string;
   if (overrides.model !== null && findModel(overrides.model)) {
     model = overrides.model;
@@ -104,7 +106,7 @@ export function resolveHookSessionConfig(
   const descriptor = findModel(model);
   let effort: string | undefined;
   if (descriptor === undefined || descriptor.efforts.length === 0) {
-    effort = undefined; // 模型不支持调档, 不传由 agent 用自身默认
+    effort = undefined; // descriptor 暂缺或模型不支持调档, 不传由 agent/backend 处理
   } else if (overrides.effort !== null && descriptor.efforts.includes(overrides.effort)) {
     effort = overrides.effort;
   } else {

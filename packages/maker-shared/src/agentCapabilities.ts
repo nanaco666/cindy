@@ -152,8 +152,11 @@ export function reconcileRuntimeDraftWithCapabilities<T extends MobileRuntimeDra
 ): T {
   if (!capabilities) return draft;
   const currentModel = capabilities.availableModels.find((item) => item.id === draft.model)
-    ?? capabilities.availableModels[0]
+    ?? (draft.model ? null : capabilities.availableModels[0])
     ?? null;
+  // 新模型可能已由 provider catalog 选中，但 capabilities 仍在同代刷新。
+  // descriptor 缺失期间保留整份显式草稿，不能套用第一项模型的 effort/fast 元数据。
+  if (!currentModel && draft.model) return draft;
   const model = currentModel?.id ?? draft.model;
   const runtime = buildSessionRuntimeOptions({ model }, capabilities);
   const effortIds = new Set(runtime.effortOptions.map((item) => item.id));
