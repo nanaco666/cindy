@@ -101,6 +101,12 @@ describe('describeToolUse — command tools', () => {
       command: 'ls -la',
       intent: { action: 'list' },
     });
+    expect(describeToolUse('exec', { command: "/bin/zsh -lc 'git status'" })).toEqual({
+      kind: 'command',
+      toolName: 'exec',
+      command: 'git status',
+      intent: { action: 'gitStatus' },
+    });
   });
 
   it('degrades to an empty command when input is unusable', () => {

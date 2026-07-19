@@ -1,4 +1,5 @@
 import { basenameRemotePath } from './filePreview.js';
+import { normalizeDisplayCommand } from './commandDisplay.js';
 import {
   commandIntentFromActions,
   commandIntentFromCommand,
@@ -236,7 +237,10 @@ export function describeToolUse(toolName: string, input: unknown): ToolUseDescri
     }
     case 'exec': {
       // codex shell：displayCommand 是解包 wrapper 后的展示命令，优先。
-      const command = readNonEmptyString(inp?.displayCommand) ?? readNonEmptyString(inp?.command) ?? '';
+      const rawCommand = readNonEmptyString(inp?.command) ?? '';
+      const command = readNonEmptyString(inp?.displayCommand)
+        ?? normalizeDisplayCommand(rawCommand)
+        ?? rawCommand;
       // codex 官方 commandActions（translator 透传）优先,本地规则解析兜底。
       // 完整命令一并传入:commandActions 采纳前先过同一道形态安全闸
       // (防止 `cat a | tee b` 这类后段副作用绕过,见 commandIntent 注释)。

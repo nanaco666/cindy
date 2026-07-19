@@ -38,6 +38,18 @@ export type CommandIntentAction =
   | 'build'
   | 'lint'
   | 'typecheck'
+  | 'runScript'
+  | 'checkSyntax'
+  | 'showVersion'
+  | 'checkFormatting'
+  | 'parseJson'
+  | 'count'
+  | 'showCurrentDirectory'
+  | 'showDateTime'
+  | 'locateCommand'
+  | 'inspectProcesses'
+  | 'inspectPorts'
+  | 'queryDatabase'
   | 'gitStatus'
   | 'gitDiff'
   | 'gitLog'
@@ -47,6 +59,14 @@ export type CommandIntentAction =
   | 'gitFetch'
   | 'gitPull'
   | 'gitPush'
+  | 'gitRemote'
+  | 'gitRevParse'
+  | 'gitBranch'
+  | 'gitGrep'
+  | 'gitMergeBase'
+  | 'gitLsFiles'
+  | 'gitRevList'
+  | 'gitLsRemote'
   | 'gitWorktreeList'
   | 'gitWorktreeAdd'
   | 'gitWorktreeRemove'
@@ -78,6 +98,12 @@ export type CommandIntentAction =
   | 'ghAuthLogout'
   | 'ghAuthRefresh'
   | 'ghAuthSwitch'
+  | 'ghRunList'
+  | 'ghRunView'
+  | 'ghRunWatch'
+  | 'ghSearch'
+  | 'ghRepoList'
+  | 'ghRepoView'
   | 'ghApiQuery'
   | 'ghApiMutation'
   | 'ghApiCall';
@@ -319,8 +345,8 @@ export function commandIntentFromCommand(command: string): CommandIntent | undef
       }
       const nameIndex = rest.findIndex((token) => token === '-name' || token === '-iname');
       const pattern = nameIndex >= 0 ? rest[nameIndex + 1] : undefined;
-      if (!pattern) return undefined;
       const path = rest[0] && !rest[0].startsWith('-') ? rest[0] : undefined;
+      if (!pattern) return { action: 'list', ...(path ? { target: path } : {}) };
       return { action: 'search', target: pattern, ...(path ? { path } : {}) };
     }
     case 'fd': {
@@ -339,15 +365,42 @@ export function commandIntentFromCommand(command: string): CommandIntent | undef
       if (!url) return undefined;
       return { action: 'fetch', target: url };
     }
+    case 'node':
+      return nodeIntent(rest);
+    case 'jq':
+      return jqIntent(rest);
+    case 'wc':
+      return countIntent(rest);
+    case 'pwd':
+      return rest.every((token) => ['-L', '-P', '--logical', '--physical'].includes(token))
+        ? { action: 'showCurrentDirectory' }
+        : undefined;
+    case 'date':
+      return dateIntent(rest);
+    case 'command':
+      return locateCommandIntent(rest);
+    case 'which': {
+      const targets = positionals(rest, new Set([]));
+      return targets[0] ? { action: 'locateCommand', target: targets.join(' ') } : undefined;
+    }
+    case 'ps':
+    case 'pgrep':
+      return { action: 'inspectProcesses' };
+    case 'lsof':
+      return lsofIntent(rest);
+    case 'sqlite3':
+      return sqliteIntent(rest);
     case 'git':
+      if (isVersionRequest(rest)) return { action: 'showVersion', target: 'Git' };
       return gitIntent(rest);
     case 'gh':
+      if (isVersionRequest(rest)) return { action: 'showVersion', target: 'GitHub CLI' };
       return githubCliIntent(rest);
     case 'pnpm':
     case 'npm':
     case 'yarn':
     case 'bun':
-      return packageManagerIntent(rest);
+      return packageManagerIntent(bin, rest);
     case 'npx':
     case 'pnpx':
     case 'bunx': {
@@ -427,6 +480,115 @@ const NL_VALUE_FLAGS = new Set([
   '--starting-line-number', '--number-width',
 ]);
 
+function isVersionRequest(rest: string[]): boolean {
+  return rest.length === 1 && (rest[0] === '-v' || rest[0] === '--version' || rest[0] === '-V');
+}
+
+const NODE_VALUE_FLAGS = new Set([
+  '-r', '--require', '--import', '--loader', '--experimental-loader', '--conditions', '-C',
+]);
+
+function nodeIntent(rest: string[]): CommandIntent | undefined {
+  if (isVersionRequest(rest)) return { action: 'showVersion', target: 'Node.js' };
+  if (rest.some((token) => token === '-e' || token === '--eval' || token === '-p' || token === '--print')) {
+    return undefined;
+  }
+
+  const syntaxFlag = rest.findIndex((token) => token === '-c' || token === '--check');
+  const files = positionals(rest, NODE_VALUE_FLAGS);
+  const script = files[0];
+  if (!script || script === '-') return undefined;
+  const target = basenameRemotePath(script) || script;
+  return syntaxFlag >= 0 ? { action: 'checkSyntax', target } : { action: 'runScript', target };
+}
+
+const JQ_VALUE_FLAGS = new Set(['-L', '--indent', '-f', '--from-file']);
+const JQ_TWO_VALUE_FLAGS = new Set(['--arg', '--argjson', '--slurpfile', '--rawfile', '--argfile']);
+
+function jqIntent(rest: string[]): CommandIntent | undefined {
+  if (isVersionRequest(rest)) return { action: 'showVersion', target: 'jq' };
+  if (rest.includes('-h') || rest.includes('--help')) return undefined;
+  if (rest.some((token) => JQ_TWO_VALUE_FLAGS.has(token))) return { action: 'parseJson' };
+  const files = positionals(rest, JQ_VALUE_FLAGS);
+  const filterComesFromFile = rest.includes('-f') || rest.includes('--from-file');
+  const input = filterComesFromFile ? files[0] : files[1];
+  return {
+    action: 'parseJson',
+    ...(input ? { target: basenameRemotePath(input) || input } : {}),
+  };
+}
+
+function countIntent(rest: string[]): CommandIntent | undefined {
+  if (rest.includes('--help')) return undefined;
+  if (isVersionRequest(rest)) return { action: 'showVersion', target: 'wc' };
+  const files = positionals(rest, new Set(['--files0-from']));
+  const target = files[0];
+  return {
+    action: 'count',
+    ...(target ? { target: basenameRemotePath(target) || target } : {}),
+  };
+}
+
+/** `date` can set the system clock; only known display-only forms get a friendly label. */
+function dateIntent(rest: string[]): CommandIntent | undefined {
+  if (
+    rest.every(
+      (token) =>
+        token === '-u' ||
+        token === '--utc' ||
+        token === '--universal' ||
+        token === '-R' ||
+        token === '--rfc-email' ||
+        token.startsWith('+'),
+    )
+  ) {
+    return { action: 'showDateTime' };
+  }
+  return undefined;
+}
+
+function locateCommandIntent(rest: string[]): CommandIntent | undefined {
+  if (rest.length < 2 || (rest[0] !== '-v' && rest[0] !== '-V')) return undefined;
+  const targets = rest.slice(1).filter((token) => token && !token.startsWith('-'));
+  return targets[0] ? { action: 'locateCommand', target: targets.join(' ') } : undefined;
+}
+
+function lsofIntent(rest: string[]): CommandIntent {
+  for (let index = 0; index < rest.length; index += 1) {
+    const token = rest[index];
+    if (token === '-i') {
+      const target = rest[index + 1];
+      return { action: 'inspectPorts', ...(target && !target.startsWith('-') ? { target } : {}) };
+    }
+    if (token.startsWith('-i') && token.length > 2) {
+      return { action: 'inspectPorts', target: token.slice(2) };
+    }
+  }
+  return { action: 'inspectProcesses' };
+}
+
+const SQLITE_VALUE_FLAGS = new Set(['-separator', '-newline', '-vfs']);
+const SQLITE_UNSAFE_OPTIONS = ['-cmd', '-init'];
+const SQLITE_MUTATING_SQL = /\b(?:insert|update|delete|replace|create|drop|alter|vacuum|attach|detach|reindex|load_extension|writefile)\b/i;
+
+function sqliteIntent(rest: string[]): CommandIntent | undefined {
+  if (!rest.includes('-readonly')) return undefined;
+  if (rest.some((token) => SQLITE_UNSAFE_OPTIONS.some((flag) => token === flag || token.startsWith(`${flag}=`)))) {
+    return undefined;
+  }
+  const pos = positionals(rest, SQLITE_VALUE_FLAGS);
+  const database = pos[0];
+  if (!database) return undefined;
+  const statements = pos.slice(1);
+  if (
+    statements.some((statement) => /^\s*\./.test(statement) || /\n\s*\./.test(statement)) ||
+    SQLITE_MUTATING_SQL.test(statements.join(' '))
+  ) {
+    return undefined;
+  }
+  return { action: 'queryDatabase', target: basenameRemotePath(database) || database };
+}
+
 interface CliSubcommand {
   name: string;
   args: string[];
@@ -452,6 +614,38 @@ const GIT_GLOBAL_VALUE_FLAGS = new Set([
 
 function hasGitOutputFileFlag(args: string[]): boolean {
   return args.some((token) => token === '--output' || token.startsWith('--output='));
+}
+
+const GIT_BRANCH_MUTATING_FLAGS = [
+  '-d', '-D', '-m', '-M', '-c', '-C', '-f', '-u',
+  '--delete', '--move', '--copy', '--force', '--edit-description', '--set-upstream-to', '--unset-upstream',
+];
+
+function gitBranchIsReadOnly(args: string[]): boolean {
+  if (
+    args.some((token) =>
+      GIT_BRANCH_MUTATING_FLAGS.some((flag) => token === flag || token.startsWith(`${flag}=`)) ||
+      (/^-[^-]/.test(token) && /[dDmMcCfu]/.test(token.slice(1))),
+    )
+  ) {
+    return false;
+  }
+  if (args.includes('--list')) return true;
+  const valueFlags = new Set([
+    '--contains', '--no-contains', '--merged', '--no-merged', '--points-at', '--sort', '--format',
+  ]);
+  return positionals(args, valueFlags).length === 0;
+}
+
+function gitRemoteIsReadOnly(args: string[]): boolean {
+  const operation = cliSubcommand(args, new Set([]));
+  return operation === undefined || operation.name === 'show' || operation.name === 'get-url';
+}
+
+function gitGrepIsReadOnly(args: string[]): boolean {
+  return !args.some(
+    (token) => token.startsWith('-O') || token.startsWith('--open-files-in-pager'),
+  );
 }
 
 function gitIntent(rest: string[]): CommandIntent | undefined {
@@ -496,6 +690,24 @@ function gitIntent(rest: string[]): CommandIntent | undefined {
         return undefined;
       }
       return { action: 'gitPush' };
+    case 'remote':
+      return gitRemoteIsReadOnly(subcommand.args) ? { action: 'gitRemote' } : undefined;
+    case 'rev-parse':
+      return { action: 'gitRevParse' };
+    case 'branch':
+      return gitBranchIsReadOnly(subcommand.args) ? { action: 'gitBranch' } : undefined;
+    case 'grep':
+      return gitGrepIsReadOnly(subcommand.args) ? { action: 'gitGrep' } : undefined;
+    case 'merge-base':
+      return { action: 'gitMergeBase' };
+    case 'ls-files':
+      return { action: 'gitLsFiles' };
+    case 'rev-list':
+      return { action: 'gitRevList' };
+    case 'ls-remote':
+      return subcommand.args.some((token) => token === '-u' || token.startsWith('--upload-pack'))
+        ? undefined
+        : { action: 'gitLsRemote' };
     case 'worktree': {
       const worktree = cliSubcommand(subcommand.args, new Set([]));
       switch (worktree?.name) {
@@ -555,12 +767,21 @@ const GH_AUTH_ACTIONS: Readonly<Record<string, CommandIntentAction>> = {
   switch: 'ghAuthSwitch',
 };
 
+const GH_RUN_ACTIONS: Readonly<Record<string, CommandIntentAction>> = {
+  list: 'ghRunList',
+  view: 'ghRunView',
+  watch: 'ghRunWatch',
+};
+
+const GH_SEARCH_GROUPS = new Set(['code', 'commits', 'issues', 'prs', 'repos']);
+
 function githubCliIntent(rest: string[]): CommandIntent | undefined {
   const group = cliSubcommand(rest, GH_GLOBAL_VALUE_FLAGS);
   if (!group) return undefined;
   if (group.name === 'api') return githubApiIntent(group.args);
 
-  const operation = cliSubcommand(group.args, GH_GLOBAL_VALUE_FLAGS)?.name;
+  const operationCommand = cliSubcommand(group.args, GH_GLOBAL_VALUE_FLAGS);
+  const operation = operationCommand?.name;
   if (!operation) return undefined;
   switch (group.name) {
     case 'pr':
@@ -569,6 +790,17 @@ function githubCliIntent(rest: string[]): CommandIntent | undefined {
       return GH_ISSUE_ACTIONS[operation] ? { action: GH_ISSUE_ACTIONS[operation] } : undefined;
     case 'auth':
       return GH_AUTH_ACTIONS[operation] ? { action: GH_AUTH_ACTIONS[operation] } : undefined;
+    case 'run':
+      return GH_RUN_ACTIONS[operation] ? { action: GH_RUN_ACTIONS[operation] } : undefined;
+    case 'search':
+      return GH_SEARCH_GROUPS.has(operation) ? { action: 'ghSearch' } : undefined;
+    case 'repo':
+      if (operation === 'list') return { action: 'ghRepoList' };
+      if (operation === 'view') {
+        const target = positionals(operationCommand?.args ?? [], GH_GLOBAL_VALUE_FLAGS)[0];
+        return { action: 'ghRepoView', ...(target ? { target } : {}) };
+      }
+      return undefined;
     default:
       return undefined;
   }
@@ -696,7 +928,21 @@ function grepIntent(rest: string[]): CommandIntent | undefined {
 /** pnpm/npm/yarn/bun 里「取值型」flag。 */
 const PM_VALUE_FLAGS = new Set(['--filter', '-F', '--dir', '-C', '--cwd', '--prefix']);
 
-function packageManagerIntent(rest: string[]): CommandIntent | undefined {
+const PACKAGE_MANAGER_BUILTINS = new Set([
+  'access', 'add', 'allow-builds', 'approve-builds', 'audit', 'bin', 'bugs', 'cache', 'catalog', 'ci',
+  'completion', 'config', 'constraints', 'create', 'dedupe', 'delete', 'deploy', 'deprecate', 'diff',
+  'dist-tag', 'dlx', 'doctor', 'docs', 'edit', 'env', 'exec', 'explain', 'explore', 'fetch', 'find-dupes',
+  'fund', 'get', 'help', 'help-search', 'hook', 'ignored-builds', 'import', 'info', 'init', 'install',
+  'install-ci-test', 'install-test', 'i', 'link', 'list', 'licenses', 'login', 'logout', 'ls', 'node',
+  'npm', 'org', 'outdated', 'owner', 'pack', 'patch', 'patch-commit', 'ping', 'pkg', 'plugin', 'pm',
+  'prefix', 'profile', 'prune', 'publish', 'query', 'rebuild', 'remove', 'repo', 'root', 'run', 'sbom',
+  'search', 'self-update', 'server', 'set', 'setup', 'shrinkwrap', 'stage', 'star', 'stars', 'store',
+  'team', 'token', 'uninstall', 'unlink', 'unplug', 'unpublish', 'update', 'up', 'upgrade-interactive',
+  'version', 'view', 'whoami', 'why', 'workspace', 'workspaces', 'x',
+]);
+
+function packageManagerIntent(manager: string, rest: string[]): CommandIntent | undefined {
+  if (isVersionRequest(rest)) return { action: 'showVersion', target: manager };
   const pos = positionals(rest, PM_VALUE_FLAGS);
   const sub = pos[0];
   if (!sub) return undefined;
@@ -715,7 +961,7 @@ function packageManagerIntent(rest: string[]): CommandIntent | undefined {
       if (!pos[1]) return undefined;
       // 转发参数可携带写文件 flag(`pnpm run lint -- --fix`),先查再分类。
       if (hasMutatingForwardedArg(argsAfter(rest, pos[1]))) return undefined;
-      return scriptIntent(pos[1]);
+      return scriptIntent(pos[1]) ?? { action: 'runScript', target: pos[1] };
     }
     case 'test':
       // `npm test -- --updateSnapshot` 会改写快照,不能标「运行测试」。
@@ -731,7 +977,12 @@ function packageManagerIntent(rest: string[]): CommandIntent | undefined {
       const forwarded = argsAfter(rest, sub);
       const script = scriptIntent(sub);
       if (script) return hasMutatingForwardedArg(forwarded) ? undefined : script;
-      return toolBinaryIntent(sub, forwarded);
+      const tool = toolBinaryIntent(sub, forwarded);
+      if (tool) return tool;
+      if (KNOWN_TOOL_BINARIES.has(binaryName(sub))) return undefined;
+      return PACKAGE_MANAGER_BUILTINS.has(sub)
+        ? undefined
+        : { action: 'runScript', target: sub };
     }
   }
 }
@@ -758,6 +1009,10 @@ function scriptIntent(script: string): CommandIntent | undefined {
   return undefined;
 }
 
+const KNOWN_TOOL_BINARIES = new Set([
+  'vitest', 'jest', 'pytest', 'eslint', 'tsc', 'prettier', 'node',
+]);
+
 /** 直接调用的工具二进制 → 意图（vitest / eslint / tsc …),args 用于拒绝写文件形态。 */
 function toolBinaryIntent(bin: string | undefined, args: string[] = []): CommandIntent | undefined {
   if (!bin) return undefined;
@@ -780,6 +1035,11 @@ function toolBinaryIntent(bin: string | undefined, args: string[] = []): Command
       if ((args[idx + 1] ?? '').toLowerCase() === 'false') return undefined;
       return { action: 'typecheck' };
     }
+    case 'prettier':
+      if (args.includes('--check') || args.includes('-c')) return { action: 'checkFormatting' };
+      return undefined;
+    case 'node':
+      return nodeIntent(args);
     default:
       return undefined;
   }

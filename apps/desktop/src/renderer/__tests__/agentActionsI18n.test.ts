@@ -22,13 +22,19 @@ const VERBS = ['edited', 'created', 'ran', 'read', 'updated', 'searched', 'fetch
 /** command intent 专属动词档(verbLabelKeyForIntent 新增,无聚合 part.* 变体)。 */
 const INTENT_VERBS = [
   'listed', 'installedDeps', 'ranTests', 'built', 'linted', 'typechecked',
+  'runScript', 'checkSyntax', 'showVersion', 'checkFormatting', 'parseJson', 'count',
+  'showCurrentDirectory', 'showDateTime', 'locateCommand', 'inspectProcesses', 'inspectPorts',
+  'queryDatabase',
   'gitStatus', 'gitDiff', 'gitLog', 'gitShow', 'gitAdd', 'gitCommit', 'gitFetch', 'gitPull', 'gitPush',
+  'gitRemote', 'gitRevParse', 'gitBranch', 'gitGrep', 'gitMergeBase', 'gitLsFiles', 'gitRevList',
+  'gitLsRemote',
   'gitWorktreeList', 'gitWorktreeAdd', 'gitWorktreeRemove', 'gitWorktreeMove', 'gitWorktreePrune',
   'ghPrList', 'ghPrView', 'ghPrChecks', 'ghPrStatus', 'ghPrDiff', 'ghPrCreate', 'ghPrEdit',
   'ghPrComment', 'ghPrReview', 'ghPrMerge', 'ghPrClose', 'ghPrReopen', 'ghPrCheckout',
   'ghIssueList', 'ghIssueView', 'ghIssueStatus', 'ghIssueCreate', 'ghIssueEdit', 'ghIssueComment',
   'ghIssueClose', 'ghIssueReopen',
   'ghAuthStatus', 'ghAuthLogin', 'ghAuthLogout', 'ghAuthRefresh', 'ghAuthSwitch',
+  'ghRunList', 'ghRunView', 'ghRunWatch', 'ghSearch', 'ghRepoList', 'ghRepoView',
   'ghApiQuery', 'ghApiMutation', 'ghApiCall',
 ] as const;
 

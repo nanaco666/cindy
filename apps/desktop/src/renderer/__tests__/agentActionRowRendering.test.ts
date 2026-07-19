@@ -99,12 +99,11 @@ describe('AgentActionRow — 行主文案', () => {
     expect(screen.getByText('docker ps')).toBeTruthy();
   });
 
-  it('工作动作模式:Codex Git 命令首行友好化，命令原文收进点击详情', () => {
+  it('工作动作模式:历史 Codex wrapper 无 displayCommand 也会友好化并在详情解包', () => {
     render(
       createElement(AgentActionRow, {
         message: mkTool('t1', 'exec', {
           command: "/bin/zsh -lc 'git status --short'",
-          displayCommand: 'git status --short',
         }),
         showRawCommand: true,
       }),

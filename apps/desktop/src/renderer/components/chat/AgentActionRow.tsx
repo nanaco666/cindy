@@ -45,6 +45,7 @@ import { Check, ChevronDown, ChevronRight, File as FileIcon } from 'lucide-react
 import { useTranslation } from 'react-i18next';
 import {
   describeToolUse,
+  normalizeDisplayCommand,
   type ToolUseDescriptor,
 } from '@lizi/maker-shared';
 
@@ -439,7 +440,8 @@ export function extractToolResultImageUrls(toolResult: string): string[] {
 
 function commandDisplayText(inp: Record<string, unknown>): string {
   if (typeof inp.displayCommand === 'string') return inp.displayCommand;
-  return typeof inp.command === 'string' ? inp.command : '';
+  if (typeof inp.command !== 'string') return '';
+  return normalizeDisplayCommand(inp.command) ?? inp.command;
 }
 
 function formatInlineInput(

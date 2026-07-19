@@ -144,13 +144,14 @@ describe('F12 — non-file tools → inline details', () => {
     expect(rowSrc).toMatch(/formatInlineInput/);
   });
 
-  it('AgentActionRow uses displayCommand for command display without replacing raw command', () => {
+  it('AgentActionRow prefers displayCommand and normalizes historical raw wrappers', () => {
     // issue #450: 行主文案改走 maker-shared 的 describeToolUse(displayCommand
     // 优先逻辑在共享层,由 toolUseDescriptor.test.ts 覆盖);就地展开区仍走
     // commandDisplayText 保留命令原文。
     expect(rowSrc).toMatch(/function commandDisplayText/);
     expect(rowSrc).toMatch(/inp\.displayCommand/);
     expect(rowSrc).toMatch(/inp\.command/);
+    expect(rowSrc).toMatch(/normalizeDisplayCommand\(inp\.command\)/);
     expect(rowSrc).toMatch(/const cmd = commandDisplayText\(inp\)/);
     expect(rowSrc).toMatch(/describeToolUse/);
   });
