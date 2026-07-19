@@ -143,7 +143,7 @@ describe('sweepLegacyDialogueWorkingDirs', () => {
       ...noDiskFs,
     });
 
-    expect(result).toEqual({ scanned: 2, rewritten: 2 });
+    expect(result).toMatchObject({ scanned: 2, rewritten: 2, deferred: 0 });
     expect(queryCalls[0].params).toEqual([`${legacyRootStored}/%`]);
     expect(queryCalls[0].sql).toContain('remote_host_id IS NULL');
     expect(execCalls).toHaveLength(2);
@@ -165,7 +165,7 @@ describe('sweepLegacyDialogueWorkingDirs', () => {
       ...noDiskFs,
     });
 
-    expect(result).toEqual({ scanned: 2, rewritten: 0 });
+    expect(result).toMatchObject({ scanned: 2, rewritten: 0, deferred: 0 });
     expect(execCalls).toHaveLength(0);
   });
 
@@ -192,7 +192,7 @@ describe('sweepLegacyDialogueWorkingDirs', () => {
       ...noDiskFs,
     });
 
-    expect(result).toEqual({ scanned: 2, rewritten: 1 });
+    expect(result).toMatchObject({ scanned: 2, rewritten: 1, deferred: 0 });
     expect(warn).toHaveBeenCalledOnce();
   });
 
@@ -205,11 +205,11 @@ describe('sweepLegacyDialogueWorkingDirs', () => {
       log: noopLog,
       ...noDiskFs,
     });
-    expect(result).toEqual({ scanned: 0, rewritten: 0 });
+    expect(result).toMatchObject({ scanned: 0, rewritten: 0, deferred: 0 });
     expect(queryCalls).toHaveLength(0);
   });
 
-  it('copies still-existing legacy dir contents before rewriting the row', async () => {
+  it('defers still-existing legacy dirs to background: copy then rewrite', async () => {
     const { db, execCalls } = makeFakeDb([
       { id: 's7', working_dir: `${legacyRootStored}/2026-06-22/s7` },
     ]);
@@ -219,21 +219,49 @@ describe('sweepLegacyDialogueWorkingDirs', () => {
       userDataDir: userData,
       legacyUserDataDirNames: ['xdt-maker'],
       log: noopLog,
-      // 老目录还在、新位置缺失 → 先搬内容再改写。
+      // 老目录还在、新位置缺失 → 转后台先搬内容再改写。
       pathExists: async (p) => p === `${legacyRootStored}/2026-06-22/s7`,
       copyDir: async (src, dest) => {
         copyCalls.push({ src, dest });
       },
     });
 
-    expect(result).toEqual({ scanned: 1, rewritten: 1 });
+    expect(result).toMatchObject({ scanned: 1, rewritten: 0, deferred: 1 });
+    await expect(result.background).resolves.toEqual({ copied: 1, rewritten: 1 });
     expect(copyCalls).toEqual([
       { src: `${legacyRootStored}/2026-06-22/s7`, dest: `${currentRootStored}/2026-06-22/s7` },
     ]);
     expect(execCalls).toHaveLength(1);
   });
 
-  it('skips the row (no rewrite) when content copy fails, to retry next boot', async () => {
+  it('resolves the sweep before background copies finish (does not block ensure-ready)', async () => {
+    const { db, execCalls } = makeFakeDb([
+      { id: 's7b', working_dir: `${legacyRootStored}/2026-06-22/s7b` },
+    ]);
+    let releaseCopy!: () => void;
+    const copyStarted = new Promise<void>((resolve) => {
+      releaseCopy = () => resolve();
+    });
+    const result = await sweepLegacyDialogueWorkingDirs({
+      db,
+      userDataDir: userData,
+      legacyUserDataDirNames: ['xdt-maker'],
+      log: noopLog,
+      pathExists: async (p) => p === `${legacyRootStored}/2026-06-22/s7b`,
+      copyDir: async () => {
+        await copyStarted;
+      },
+    });
+
+    // sweep 已返回而复制仍挂起:同步阶段不含任何复制等待。
+    expect(result).toMatchObject({ scanned: 1, rewritten: 0, deferred: 1 });
+    expect(execCalls).toHaveLength(0);
+    releaseCopy();
+    await expect(result.background).resolves.toEqual({ copied: 1, rewritten: 1 });
+    expect(execCalls).toHaveLength(1);
+  });
+
+  it('skips the row (no rewrite) when background copy fails, to retry next boot', async () => {
     const { db, execCalls } = makeFakeDb([
       { id: 's8', working_dir: `${legacyRootStored}/2026-06-22/s8` },
     ]);
@@ -249,7 +277,8 @@ describe('sweepLegacyDialogueWorkingDirs', () => {
       },
     });
 
-    expect(result).toEqual({ scanned: 1, rewritten: 0 });
+    expect(result).toMatchObject({ scanned: 1, rewritten: 0, deferred: 1 });
+    await expect(result.background).resolves.toEqual({ copied: 0, rewritten: 0 });
     expect(execCalls).toHaveLength(0);
     expect(warn).toHaveBeenCalledOnce();
   });
@@ -268,7 +297,7 @@ describe('sweepLegacyDialogueWorkingDirs', () => {
       copyDir,
     });
 
-    expect(result).toEqual({ scanned: 1, rewritten: 1 });
+    expect(result).toMatchObject({ scanned: 1, rewritten: 1, deferred: 0 });
     expect(copyDir).not.toHaveBeenCalled();
     expect(execCalls).toHaveLength(1);
   });

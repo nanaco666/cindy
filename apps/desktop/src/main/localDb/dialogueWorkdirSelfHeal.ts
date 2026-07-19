@@ -127,8 +127,15 @@ export interface SweepLegacyDialogueWorkingDirsDeps {
 export interface SweepLegacyDialogueWorkingDirsResult {
   /** LIKE 初筛候选行数。 */
   scanned: number;
-  /** 实际改写行数。 */
+  /** 同步阶段实际改写行数(不含转入后台的行)。 */
   rewritten: number;
+  /** 需要内容搬运而转入后台的行数(copy→rewrite 在后台串行完成)。 */
+  deferred: number;
+  /**
+   * 后台搬运完成信号(内部已捕获所有错误,绝不 reject)。调用方可以不 await
+   * ——转入后台的行老目录仍在,改写前会话按老路径照常工作;测试与诊断用。
+   */
+  background: Promise<{ copied: number; rewritten: number }>;
 }
 
 type LegacySessionRow = { id: string; working_dir: string };
@@ -140,9 +147,14 @@ type LegacySessionRow = { id: string; working_dir: string };
  *
  * 内容保全:改写前若老目录仍在磁盘上而新位置缺失,先递归复制内容再改写
  * (agent 可能在 dialogue cwd 里写过真实文件;mToc 首登迁移已复制过 dialogues
- * 的用户此处探测到新位置已存在,直接改写)。复制失败则本轮跳过该行(下次启动
+ * 的用户此处探测到新位置已存在,直接改写)。复制失败则跳过该行(下次启动
  * 重试),绝不让改写把仍然存在的内容孤儿化;老目录已消失的行直接改写,目录
  * 材料化交给发送期的 lazy heal(healMissingDialogueWorkdir)。
+ *
+ * 阻塞边界:调用方在 ensure-ready IPC 返回前 await 本函数,因此**同步阶段只做
+ * 廉价工作**(一条 LIKE 查询 + 每行两次 stat + 纯改写行的 UPDATE);需要递归
+ * 复制内容的行全部转入后台串行处理(copy→rewrite),不阻塞登录。转入后台的
+ * 行在改写前仍指向存在的老目录,会话照常可用,正确性不依赖后台完成时机。
  *
  * SQL LIKE 初筛只做候选收敛(`%`/`_` 通配只会多选不会漏选),真正的精确判定
  * 由 matchDialogueWorkspacePath 在 JS 侧完成,因此无需 ESCAPE 处理。
@@ -167,10 +179,28 @@ export async function sweepLegacyDialogueWorkingDirs(
       // force:false + errorOnExist:false = 不覆盖已存在文件(merge 语义)。
       await fsp.cp(src, dest, { recursive: true, force: false, errorOnExist: false });
     });
+  const rewriteRow = async (row: LegacySessionRow, healedDir: string): Promise<number> => {
+    try {
+      const result = await deps.db.exec(
+        'UPDATE sessions SET working_dir = ? WHERE id = ?',
+        [healedDir, row.id],
+      );
+      return result.changes;
+    } catch (err) {
+      deps.log.warn('dialogue workdir sweep: rewrite failed (non-fatal)', {
+        sessionId: row.id,
+        workingDir: row.working_dir,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return 0;
+    }
+  };
+
   const currentRoot = path.join(deps.userDataDir, DIALOGUES_DIR_NAME);
   const legacyRoots = buildLegacyDialogueRoots(deps.userDataDir, deps.legacyUserDataDirNames);
   let scanned = 0;
   let rewritten = 0;
+  const needsCopy: Array<{ row: LegacySessionRow; healedDir: string }> = [];
   for (const legacyRoot of legacyRoots) {
     // DB 里的 working_dir 是 storage 规范形(Windows 反斜杠已归一为 `/`,见
     // normalizeWorkingDirForStorage),LIKE 前缀必须用同一形态才能命中。
@@ -189,10 +219,21 @@ export async function sweepLegacyDialogueWorkingDirs(
         path.join(currentRoot, match.dayKey, match.sessionIdSegment),
       );
       if (!healedDir) continue;
+      if (!(await pathExists(healedDir)) && (await pathExists(row.working_dir))) {
+        needsCopy.push({ row, healedDir });
+        continue;
+      }
+      rewritten += await rewriteRow(row, healedDir);
+    }
+  }
+  // 需要内容搬运的行转后台串行处理:不阻塞 ensure-ready,失败下次启动重试。
+  const background = (async () => {
+    let copied = 0;
+    let bgRewritten = 0;
+    for (const { row, healedDir } of needsCopy) {
       try {
-        if (!(await pathExists(healedDir)) && (await pathExists(row.working_dir))) {
-          await copyDir(row.working_dir, healedDir);
-        }
+        await copyDir(row.working_dir, healedDir);
+        copied += 1;
       } catch (err) {
         deps.log.warn('dialogue workdir sweep: content copy failed, skip row this round', {
           sessionId: row.id,
@@ -201,27 +242,24 @@ export async function sweepLegacyDialogueWorkingDirs(
         });
         continue;
       }
-      try {
-        const result = await deps.db.exec(
-          'UPDATE sessions SET working_dir = ? WHERE id = ?',
-          [healedDir, row.id],
-        );
-        rewritten += result.changes;
-      } catch (err) {
-        deps.log.warn('dialogue workdir sweep: rewrite failed (non-fatal)', {
-          sessionId: row.id,
-          workingDir: row.working_dir,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
+      bgRewritten += await rewriteRow(row, healedDir);
     }
-  }
-  if (rewritten > 0) {
-    deps.log.info('dialogue workdir sweep: legacy paths rewritten', {
+    if (copied > 0 || bgRewritten > 0) {
+      deps.log.info('dialogue workdir sweep: background content moves completed', {
+        deferred: needsCopy.length,
+        copied,
+        rewritten: bgRewritten,
+      });
+    }
+    return { copied, rewritten: bgRewritten };
+  })();
+  if (rewritten > 0 || needsCopy.length > 0) {
+    deps.log.info('dialogue workdir sweep: legacy paths processed', {
       scanned,
       rewritten,
+      deferred: needsCopy.length,
       legacyRoots,
     });
   }
-  return { scanned, rewritten };
+  return { scanned, rewritten, deferred: needsCopy.length, background };
 }
