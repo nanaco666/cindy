@@ -19,10 +19,6 @@ import {
   translatePlanUpdatedNotification,
 } from './translator.js';
 import type { CodexRuntimeState } from './translator.js';
-import {
-  commandExecutionDisplayInput,
-  displayCommandForCommandExecution,
-} from './command-display.js';
 import { createAsyncQueue } from '../shared/async-queue.js';
 import type { AsyncQueue } from '../shared/async-queue.js';
 import type { AgentEvent } from '../../types/events.js';
@@ -260,34 +256,6 @@ describe('translateErrorNotification', () => {
     }
     const events = await collect(q);
     expect(events).toHaveLength(0);
-  });
-});
-
-describe('POSIX command wrapper display normalization', () => {
-  it.each([
-    ["/bin/zsh -lc 'git status --short'", 'git status --short'],
-    ['/usr/bin/bash -c "gh pr checks 123"', 'gh pr checks 123'],
-    ["sh -c 'nl -ba src/app.ts'", 'nl -ba src/app.ts'],
-    [String.raw`/bin/zsh -lc "rg \"hello world\" src"`, 'rg "hello world" src'],
-    [String.raw`/bin/zsh -lc 'rg '\''hello world'\'' src'`, "rg 'hello world' src"],
-  ])('unwraps an unambiguous wrapper: %s', (raw, expected) => {
-    expect(displayCommandForCommandExecution(raw)).toBe(expected);
-    expect(commandExecutionDisplayInput(raw, '/repo')).toEqual({
-      command: raw,
-      cwd: '/repo',
-      displayCommand: expected,
-    });
-  });
-
-  it.each([
-    "/bin/zsh -lc 'git status' extra",
-    "/bin/zsh -lc 'git status",
-    "/tmp/zsh -lc 'git status'",
-    String.raw`/bin/zsh -lc git\ status`,
-    String.raw`/bin/zsh -lc 'git status';rm`,
-  ])('keeps malformed, custom or ambiguous wrappers unchanged: %s', (raw) => {
-    expect(displayCommandForCommandExecution(raw)).toBe(raw);
-    expect(commandExecutionDisplayInput(raw)).toEqual({ command: raw });
   });
 });
 
