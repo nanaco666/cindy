@@ -1915,7 +1915,7 @@ interface ElectronAPI {
     sessionId: string;
   }) => Promise<{ url: string; name: string; ext: string; mimeType: string; size: number }>;
 
-  /** 图片 lightbox 字节层:http / xdt-remote-media 源取字节(标注/位图复制)。 */
+  /** 图片 lightbox 字节层:http / cindy-remote-media 源取字节(标注/位图复制)。 */
   readImageBytes: (params: {
     url: string;
   }) => Promise<{ base64: string; mimeType: string }>;

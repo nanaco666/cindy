@@ -1,7 +1,7 @@
 /**
- * remoteMediaProtocol.ts — 控制端 `xdt-remote-media://` 自定义 scheme(入方向媒体)。
+ * remoteMediaProtocol.ts — 控制端 `cindy-remote-media://` 自定义 scheme(入方向媒体)。
  * ---------------------------------------------------------------------------
- * renderer 把远程会话里的本机媒体 URL 改写成 `xdt-remote-media://m/{b64(originToken)}/{b64(origUrl)}`
+ * renderer 把远程会话里的本机媒体 URL 改写成 `cindy-remote-media://m/{b64(originToken)}/{b64(origUrl)}`
  * (见 shared/remoteMediaUrl.ts)。本 handler 解出 (origin, origUrl) 后按来源分流:
  * ssh 来源交给 file-browser/ssh-media.ts(file-service 分片 → 磁盘缓存 → range 服务);
  * device 来源走本文件的 OSS 中转管线,经 OSS 向被控端取字节:
@@ -255,7 +255,7 @@ async function serveStream(
 }
 
 /**
- * 核心:处理一个 xdt-remote-media 请求(供 handler + 单测调用)。
+ * 核心:处理一个 cindy-remote-media 请求(供 handler + 单测调用)。
  * 按 origin token 分流:device → 本文件的 OSS 中转管线(原有路径,零变化);
  * ssh → file-browser/ssh-media.ts(file-service 分片拉到磁盘缓存后 range 服务)。
  */

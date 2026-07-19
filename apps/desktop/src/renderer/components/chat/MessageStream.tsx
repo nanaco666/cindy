@@ -652,7 +652,7 @@ export function collectSessionImageSrcs(
   items: RenderItem[],
   mediaOrigin?: RemoteMediaOrigin,
 ): GalleryImage[] {
-  // 远程会话:画廊 src 必须与渲染出的 <img data-gallery-src> 同样改写到 xdt-remote-media://,
+  // 远程会话:画廊 src 必须与渲染出的 <img data-gallery-src> 同样改写到 cindy-remote-media://,
   // 否则 ImageLightbox 的画廊 src 匹配对不上、退化成仅当前窗口翻图 + 计数错。
   const push = (url: string, meta?: Omit<GalleryImage, 'src'>): void =>
     void out.push({ src: rewriteToRemoteMediaOrigin(url, mediaOrigin), ...meta });

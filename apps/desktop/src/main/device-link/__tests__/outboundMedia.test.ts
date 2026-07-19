@@ -21,8 +21,8 @@ import { parseAttachmentOssRef, isAttachmentOssRef } from '../../../shared/attac
 
 beforeEach(() => {
   vi.clearAllMocks();
-  uploadLocalFile.mockResolvedValue({ key: 'xdt-maker/device-link/u/x.png', size: 10, contentType: 'image/png' });
-  uploadBuffer.mockResolvedValue({ key: 'xdt-maker/device-link/u/b.png', size: 5, contentType: 'image/png' });
+  uploadLocalFile.mockResolvedValue({ key: 'cindy/device-link/u/x.png', size: 10, contentType: 'image/png' });
+  uploadBuffer.mockResolvedValue({ key: 'cindy/device-link/u/b.png', size: 5, contentType: 'image/png' });
 });
 
 describe('rewriteOutboundMedia — channel gating', () => {
@@ -50,8 +50,8 @@ describe('rewriteQueued — persistedContent 同批改写 + 去重单上传', ()
   it('files[] 与 persistedContent 的同一附件用同一 OSS 引用,只上传一次', async () => {
     resolveSafe.mockReturnValue({ absPath: '/abs/a.png', mimeType: 'image/png' });
     uploadLocalFile
-      .mockResolvedValueOnce({ key: 'xdt-maker/device-link/u/img.png', size: 1, contentType: 'image/png' })
-      .mockResolvedValueOnce({ key: 'xdt-maker/device-link/u/doc.pdf', size: 1, contentType: 'application/pdf' });
+      .mockResolvedValueOnce({ key: 'cindy/device-link/u/img.png', size: 1, contentType: 'image/png' })
+      .mockResolvedValueOnce({ key: 'cindy/device-link/u/doc.pdf', size: 1, contentType: 'application/pdf' });
 
     const item = {
       clientId: 'c1',
@@ -83,7 +83,7 @@ describe('rewriteQueued — persistedContent 同批改写 + 去重单上传', ()
   });
 
   it('persistedContent 解析失败 → 原样保留(降级),files[] 仍照常改写', async () => {
-    uploadLocalFile.mockResolvedValue({ key: 'xdt-maker/device-link/u/x.png', size: 1, contentType: 'image/png' });
+    uploadLocalFile.mockResolvedValue({ key: 'cindy/device-link/u/x.png', size: 1, contentType: 'image/png' });
     const item = { files: [{ path: '/abs/x.png', mimeType: 'image/png' }], persistedContent: 'not-json{' };
     const out = (await __testing.rewriteQueued(item)) as { files: Array<{ url: string }>; persistedContent: string };
     expect(isAttachmentOssRef(out.files[0].url)).toBe(true);
@@ -102,7 +102,7 @@ describe('rewriteOutboundMedia — send/steer content-block 形态', () => {
     expect(uploadLocalFile).toHaveBeenCalledWith('/cache/a.png', { contentType: 'image/png' });
     const block = (out[1] as { content: Array<{ type: string; path?: string }> }).content[1];
     expect(isAttachmentOssRef(block.path!)).toBe(true);
-    expect(parseAttachmentOssRef(block.path!)?.ossKey).toBe('xdt-maker/device-link/u/x.png');
+    expect(parseAttachmentOssRef(block.path!)?.ossKey).toBe('cindy/device-link/u/x.png');
   });
 
   it('base64 块 → uploadBuffer', async () => {

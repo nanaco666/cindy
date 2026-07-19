@@ -45,7 +45,7 @@ describe('ChatImageView', () => {
 
     rerender(
       React.createElement(ChatImageView, {
-        src: 'xdt-remote-media://m/device/shot',
+        src: 'cindy-remote-media://m/device/shot',
         filename: 'shot.png',
         variant: 'user-attached',
         sessionId: 'sess-1',
@@ -53,7 +53,7 @@ describe('ChatImageView', () => {
     );
 
     const image = screen.getByRole('img', { name: 'shot.png' });
-    expect(image.getAttribute('src')).toBe('xdt-remote-media://m/device/shot');
+    expect(image.getAttribute('src')).toBe('cindy-remote-media://m/device/shot');
   });
 
   // 点击路由:GLB/GLTF(model-viewer 可原生渲染)→ ModelLightbox;其它格式

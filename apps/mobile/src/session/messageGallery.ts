@@ -52,7 +52,7 @@ export function collectMobileMessageGalleryImages(
   const visitMessage = (message: NormalizedRemoteMessage, keyPrefix: string, includeBodyImages: boolean) => {
     message.attachments?.forEach((rawAttachment, index) => {
       if (rawAttachment.kind !== 'image' || !rawAttachment.uri) return;
-      // 与 AttachmentStrip 同源 overlay(xdt-oss-attach:// → 本地缩略兜底):气泡
+      // 与 AttachmentStrip 同源 overlay(cindy-oss-attach:// → 本地缩略兜底):气泡
       // 点开时 initialUrl 是替换后的 file://,图集条目必须同步替换才能匹配进翻页组。
       const attachment = applySentAttachmentThumbOverlay(rawAttachment);
       const payload = buildAttachmentPayload(attachment);

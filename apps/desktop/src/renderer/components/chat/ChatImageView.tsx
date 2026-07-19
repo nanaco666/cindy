@@ -59,7 +59,7 @@ interface ChatImageViewProps {
   modelFile?: ToolMediaModelFile;
   /**
    * 所在会话 id。远程(device-link)会话里图片字节在被控端,需把 src 改写成
-   * xdt-remote-media:// 经 OSS 中转取;本地会话 / 不传 → 原样渲染。
+   * cindy-remote-media:// 经 OSS 中转取;本地会话 / 不传 → 原样渲染。
    */
   sessionId?: string;
   /**
@@ -110,7 +110,7 @@ export function ChatImageView({
   annotationStrokes,
 }: ChatImageViewProps) {
   const { t } = useTranslation();
-  // 远程会话改写到 xdt-remote-media://;本地会话原样。下游一律用 displaySrc(渲染 +
+  // 远程会话改写到 cindy-remote-media://;本地会话原样。下游一律用 displaySrc(渲染 +
   // gallery + lightbox + 本机操作判定),远程媒体的 reveal/copy 自然失效。
   const displaySrc = useRemoteMediaUrl(src, sessionId);
   // 'image' = 2D 预览图 lightbox; 'model' = `<model-viewer>` 3D lightbox。

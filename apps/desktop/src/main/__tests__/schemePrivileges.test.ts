@@ -6,7 +6,7 @@
  * Electron's protocol.registerSchemesAsPrivileged REPLACES the entire
  * privileged-scheme list on every call — it must be called exactly once, with
  * every scheme collected. We shipped the bug once: each protocol module used
- * to self-register, so only the last caller (xdt-remote-media, added
+ * to self-register, so only the last caller (cindy-remote-media, added
  * 2026-06-16) kept its privileges and xdt-model lost supportFetchAPI →
  * <model-viewer>'s fetch() was rejected → 3D preview silently stuck on its
  * poster image.
@@ -58,7 +58,7 @@ const ALL = [
   { entry: localFileSchemePrivilege, scheme: 'xdt-file' },
   { entry: audioFileSchemePrivilege, scheme: 'xdt-audio' },
   { entry: modelSchemePrivilege, scheme: 'xdt-model' },
-  { entry: remoteMediaSchemePrivilege, scheme: 'xdt-remote-media' },
+  { entry: remoteMediaSchemePrivilege, scheme: 'cindy-remote-media' },
   { entry: cindyMediaSchemePrivilege, scheme: 'cindy-media' },
 ];
 

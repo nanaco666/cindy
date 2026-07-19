@@ -21,7 +21,7 @@
  *     + 显式 Content-Length),避免把几 GB 视频整文件读进内存。流式上传的端到端可用性在 #25
  *     本地全栈 e2e 复核(Chromium net 栈支持 duplex half,但个别 endpoint 行为需实测)。
  *   - 下载:整文件下载(小媒体)用 arrayBuffer;range 流式(视频/音频)返回**原始 OSS Response**,
- *     由调用方(`xdt-remote-media://` handler)透传其 body 流,绝不在此 buffer 整个视频。
+ *     由调用方(`cindy-remote-media://` handler)透传其 body 流,绝不在此 buffer 整个视频。
  */
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
@@ -240,7 +240,7 @@ export async function downloadToBuffer(key: string): Promise<DownloadResult> {
 
 /**
  * 打开 OSS 媒体的(可选 range)读取流,返回**原始 OSS Response**。
- * 调用方(控制端 `xdt-remote-media://` handler)直接透传其 status(200/206)、
+ * 调用方(控制端 `cindy-remote-media://` handler)直接透传其 status(200/206)、
  * Content-Range / Content-Length / Content-Type 头与 body 流,实现视频/音频流式 206,
  * 不在此 buffer 整个文件。
  * @param rangeHeader 形如 "bytes=0-1023";不传则整文件 GET。

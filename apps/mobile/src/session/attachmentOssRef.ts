@@ -4,7 +4,11 @@ export interface AttachmentOssRef {
   originalName?: string;
 }
 
-const ATTACH_OSS_SCHEME = 'xdt-oss-attach';
+const ATTACH_OSS_SCHEME = 'cindy-oss-attach';
+// 品牌迁移前的旧 scheme:识别面永久保留(is/parse 双认),生成面只出新 scheme。
+// 旧版本桌面/手机的在途消息、本机 outbox 补发队列、sentAttachmentThumbStore 的
+// 存量映射 key 都可能还是旧引用串,砍掉识别 = 旧引用附件渲染/回收全部失效。
+const LEGACY_ATTACH_OSS_SCHEME = 'xdt-oss-attach';
 const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 export function buildAttachmentOssRef(ref: AttachmentOssRef): string {
@@ -12,12 +16,19 @@ export function buildAttachmentOssRef(ref: AttachmentOssRef): string {
 }
 
 export function isAttachmentOssRef(value: unknown): value is string {
-  return typeof value === 'string' && value.startsWith(`${ATTACH_OSS_SCHEME}://`);
+  return (
+    typeof value === 'string' &&
+    (value.startsWith(`${ATTACH_OSS_SCHEME}://`) ||
+      value.startsWith(`${LEGACY_ATTACH_OSS_SCHEME}://`))
+  );
 }
 
 export function parseAttachmentOssRef(value: string): AttachmentOssRef | null {
   if (!isAttachmentOssRef(value)) return null;
-  const segment = value.slice(`${ATTACH_OSS_SCHEME}://m/`.length).split('/')[0];
+  const scheme = value.startsWith(`${ATTACH_OSS_SCHEME}://`)
+    ? ATTACH_OSS_SCHEME
+    : LEGACY_ATTACH_OSS_SCHEME;
+  const segment = value.slice(`${scheme}://m/`.length).split('/')[0];
   if (!segment) return null;
   try {
     const parsed = JSON.parse(fromBase64Url(segment)) as unknown;

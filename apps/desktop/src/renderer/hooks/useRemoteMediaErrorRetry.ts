@@ -1,7 +1,7 @@
 /**
  * useRemoteMediaErrorRetry — 远程媒体加载失败的自愈重试 state。
  * ---------------------------------------------------------------------------
- * 远程(device-link)会话里 xdt-remote-media:// 的取件失败常是被控端的瞬态
+ * 远程(device-link)会话里 cindy-remote-media:// 的取件失败常是被控端的瞬态
  * 窗口:典型场景是控制端发图后立即渲染,而被控端还差几秒才把 OSS 附件物化
  * 进媒体总仓(media:fetch ENOENT)——同 URL 稍后就能取到。此前 <img> 一次
  * onError 就把丢失占位固化到组件卸载,竞态窗口一过也不恢复(手机版有
@@ -26,7 +26,7 @@ export function useRemoteMediaErrorRetry(src: string): {
   const [errored, setErrored] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   // 错误态必须跟随可展示资源重置:远程会话首帧可能先用本机地址渲染并
-  // onError,随后 deviceId/远程媒体引用就位后 src 才变成 xdt-remote-media://。
+  // onError,随后 deviceId/远程媒体引用就位后 src 才变成 cindy-remote-media://。
   useEffect(() => {
     setErrored(false);
     setRetryCount(0);

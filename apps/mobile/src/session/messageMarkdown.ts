@@ -688,7 +688,7 @@ const SAFE_IMAGE_DIMENSION_RE = /^\d{1,4}$/;
 // 安全图片协议:http(s) + xdt-image/xdt-file(MCP Jira/Confluence 等合同会在 Markdown 里内嵌
 // ![](xdt-image://...);xdt 系经 remote-media resolver 取图,非直连预览)+ cindy-media
 // (媒体总仓迁移后生成图的新地址形态,同走 resolver)。⚠️ 不含桌面端的
-// xdt-remote-media://:它不在手机 resolver 门(isPayloadDesktopLocalMediaUrl)内,点开必失败,
+// cindy-remote-media://:它不在手机 resolver 门(isPayloadDesktopLocalMediaUrl)内,点开必失败,
 // 收进来只会产出死图(review 实捉),留作字面文本更诚实。
 const SAFE_IMAGE_SRC_RE = /^(?:https?|xdt-image|xdt-file|cindy-media):\/\//i;
 

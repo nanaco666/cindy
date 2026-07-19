@@ -48,7 +48,7 @@ import type { ToolAudioTrack } from './AgentActionRow';
 
 interface ChatAudioCardProps {
   track: ToolAudioTrack;
-  /** 远程(device-link)会话:把 audio/cover URL 改写成 xdt-remote-media://;本地 / 不传 → 原样。 */
+  /** 远程(device-link)会话:把 audio/cover URL 改写成 cindy-remote-media://;本地 / 不传 → 原样。 */
   sessionId?: string;
 }
 
@@ -75,7 +75,7 @@ function getLocalAudioPath(audioUrl: string): string | null {
 
 export function ChatAudioCard({ track, sessionId }: ChatAudioCardProps) {
   const { t } = useTranslation();
-  // 远程会话改写音频/封面 URL 到 xdt-remote-media://;本地原样。reveal 从改写后的 URL
+  // 远程会话改写音频/封面 URL 到 cindy-remote-media://;本地原样。reveal 从改写后的 URL
   // 取本地路径 → 远程自然取不到、菜单消失。
   const displayAudioUrl = useRemoteMediaUrl(track.audioUrl, sessionId);
   const displayCoverUrl = useRemoteMediaUrl(track.coverUrl ?? '', sessionId);
@@ -139,7 +139,7 @@ export function ChatAudioCard({ track, sessionId }: ChatAudioCardProps) {
   );
   // cindy-media:// 是本机媒体总仓(意识产物,字节永远在本机),main 侧
   // showItemInFolder 认 url 形态直接解析定位(与 ChatVideoView 同款);
-  // device-link 远程会话下 URL 已被改写成 xdt-remote-media:// → 自然不命中。
+  // device-link 远程会话下 URL 已被改写成 cindy-remote-media:// → 自然不命中。
   const canReveal = localAudioPath !== null || displayAudioUrl.startsWith('cindy-media://');
   const durationLabel = useMemo(() => formatDuration(duration), [duration]);
   const currentLabel = useMemo(() => formatDuration(currentTime), [currentTime]);

@@ -382,7 +382,7 @@ describe('mobile remote-control headless UI flow smoke', () => {
       }
       if (channel === 'device-link:media:fetch') {
         return {
-          ossKey: 'xdt-maker/device-link/user-1/tool-image.png',
+          ossKey: 'cindy/device-link/user-1/tool-image.png',
           mimeType: 'image/png',
           size: 2048,
         };
@@ -575,7 +575,7 @@ describe('mobile remote-control headless UI flow smoke', () => {
         expiresAt: '2026-06-16T11:00:00.000Z',
       }),
     })).resolves.toMatchObject({
-      url: 'https://oss.example/xdt-maker%2Fdevice-link%2Fuser-1%2Ftool-image.png',
+      url: 'https://oss.example/cindy%2Fdevice-link%2Fuser-1%2Ftool-image.png',
       previewable: true,
       mimeType: 'image/png',
       size: 2048,

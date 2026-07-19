@@ -1,7 +1,7 @@
 /**
  * annotationBurnIn — data: image 字节层大小上限回归测试。
  *
- * 背景:loadImageSourceBase64 对 xdt-file / http / xdt-remote-media 三条源都经
+ * 背景:loadImageSourceBase64 对 xdt-file / http / cindy-remote-media 三条源都经
  * main 侧 IPC 强制了 100MB 上限,但 data: 源直接在 renderer 里解码,曾经没有
  * 同等保护——一条超大的 markdown data: 图片会在 Copy / Annotate / 发送到对话
  * 时被硬解进 canvas,冻住或崩掉 renderer(P2 review 发现)。这里只覆盖新加的

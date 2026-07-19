@@ -37,8 +37,8 @@ import { isAttachmentOssRef } from '../../../shared/attachmentOssRef';
 
 beforeEach(() => {
   vi.clearAllMocks();
-  uploadLocalFile.mockResolvedValue({ key: 'xdt-maker/device-link/u/x.png', size: 10, contentType: 'image/png' });
-  uploadBuffer.mockResolvedValue({ key: 'xdt-maker/device-link/u/b.jpg', size: 5, contentType: 'image/jpeg' });
+  uploadLocalFile.mockResolvedValue({ key: 'cindy/device-link/u/x.png', size: 10, contentType: 'image/png' });
+  uploadBuffer.mockResolvedValue({ key: 'cindy/device-link/u/b.jpg', size: 5, contentType: 'image/jpeg' });
   // 与真实实现同口径:png/jpeg 可能压,其它 mime 直通不读盘。
   mayCompressOutboundImage.mockImplementation(
     (mime: string | undefined) => mime === 'image/png' || mime === 'image/jpeg',

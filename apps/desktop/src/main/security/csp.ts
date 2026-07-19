@@ -51,14 +51,14 @@ const CUSTOM_IMG_SCHEMES = [
   'xdt-file:',
   'xdt-video:',
   'xdt-model:',
-  'xdt-remote-media:',
+  'cindy-remote-media:',
   'cindy-media:',
 ];
 const CUSTOM_MEDIA_SCHEMES = [
   'xdt-audio:',
   'xdt-video:',
   'xdt-image:',
-  'xdt-remote-media:',
+  'cindy-remote-media:',
   'cindy-media:',
 ];
 

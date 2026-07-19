@@ -1,5 +1,5 @@
 /**
- * remoteMediaProtocol.test.ts — 控制端 xdt-remote-media:// handler 编排:
+ * remoteMediaProtocol.test.ts — 控制端 cindy-remote-media:// handler 编排:
  *   - 畸形 URL → 400
  *   - cindy-media:// 且本机字节仓命中 → 本地直接服务,不触发远程取件
  *   - 缓存命中 local → 内存切片 200 / range 206
