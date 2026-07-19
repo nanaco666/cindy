@@ -39,6 +39,8 @@ export interface DevCliFlagsInput {
   envIsolationName: string | undefined;
   /** 已显式设置的 XDT_DEVICE_ID_OVERRIDE;非空时隔离模式不再派生独立设备标识。 */
   envDeviceIdOverride: string | undefined;
+  /** XDT_SCHEDULER_PASSIVE 环境变量:严格 '1' = 被动模式(restart 脚本路径)。 */
+  envSchedulerPassive: string | undefined;
   /** XDT_ENDPOINTS_CDN 环境变量:严格 '1' = dev 也走完整 CDN 清单拉取(restart 脚本路径)。 */
   envEndpointsCdn: string | undefined;
 }
@@ -130,7 +132,7 @@ export function resolveDevCliFlags(input: DevCliFlagsInput): DevCliFlags {
     userDataDirOverride = `${input.defaultUserDataDir}-dev${isolationName ? `-${isolationName}` : ''}`;
   }
   return {
-    schedulerPassive: input.argv.includes('--passive'),
+    schedulerPassive: input.argv.includes('--passive') || input.envSchedulerPassive === '1',
     userDataDirOverride,
     needsIsolatedDeviceId: isolated && !input.envDeviceIdOverride?.trim(),
     isolationName,
