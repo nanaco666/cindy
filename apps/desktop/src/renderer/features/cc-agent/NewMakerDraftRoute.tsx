@@ -1742,7 +1742,7 @@ export function NewMakerDraftRoute() {
               >
                 <span
                   data-testid="create-agent-head-image"
-                  className="relative h-[50px] w-[50px] shrink-0"
+                  className="pointer-events-none relative h-[50px] w-[50px] shrink-0 select-none"
                 >
                   {/* head_image 切图(Figma 185:1720/185:2911,边框玻璃圈已烧入);投影按设计 fx 0 4 7.3 @2x 折半 */}
                   <img
