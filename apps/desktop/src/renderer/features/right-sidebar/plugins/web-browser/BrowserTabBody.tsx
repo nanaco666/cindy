@@ -343,11 +343,19 @@ export function BrowserTabBody({ state, ctx, active }: BrowserTabBodyProps) {
     }
   }, [browser, state.url]);
 
-  // 「更多」菜单 —— 用系统默认浏览器打开当前页。取 pageUrlRef 最新值(与页面评论共用)。
+  // 「更多」菜单动作对象 = 地址栏当前显示的链接(state.url)—— 与 BrowserChrome 的
+  // 地址显示、hasValidLink 禁用判据同源,三者永远一致。不用 pageUrlRef(live-first,
+  // 服务页面评论):显式导航后 browser.url 在 did-navigate 前仍是旧页,live-first 会
+  // 让「复制链接」拿到旧地址;而 in-page 导航的 state.url 同步间隙仅一个 effect 周期,
+  // 人手点菜单时早已同步完,取 state.url 无感知差异。
+  const menuUrlRef = useRef(state.url || 'about:blank');
+  menuUrlRef.current = state.url || 'about:blank';
+
+  // 「更多」菜单 —— 用系统默认浏览器打开当前页。
   // 菜单项在无有效链接时已 disabled,这里再兜一层空 / about:blank 保护。
   // openExternal 在被控端(远程控制场景)本机打开,语义正确(见规则 26)。
   const handleOpenInSystemBrowser = useCallback(() => {
-    const url = pageUrlRef.current;
+    const url = menuUrlRef.current;
     if (!url || url === 'about:blank') return;
     void window.electronAPI
       .openExternal(url)
@@ -363,7 +371,7 @@ export function BrowserTabBody({ state, ctx, active }: BrowserTabBodyProps) {
 
   // 「更多」菜单 —— 复制当前页链接到剪贴板(renderer clipboard,项目惯例)。
   const handleCopyLink = useCallback(async () => {
-    const url = pageUrlRef.current;
+    const url = menuUrlRef.current;
     if (!url || url === 'about:blank') return;
     try {
       await navigator.clipboard.writeText(url);
