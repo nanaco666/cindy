@@ -1942,9 +1942,10 @@ const registerIpcHandlers = () => {
     openSessionInNewWindow(sessionId, mainWindowRef);
   });
 
-// E4D 毛玻璃(R1 audit,用户裁决透壁纸 2026-07-17):仅 CINDY family 启用 macOS vibrancy
-// + 透明底(透出桌面壁纸);其他 family 恢复不透明。Windows 无 vibrancy 等价,本轮回退
-// 不透明(留 TODO backgroundMaterial acrylic/mica)。family 切换运行时动态调用。
+// E4D 毛玻璃(R1 audit,用户裁决透壁纸 2026-07-17):仅 CINDY family 启用毛玻璃透壁纸;
+// 其他 family 恢复不透明。macOS 走 setVibrancy + 透明底;Windows 11 走 setBackgroundMaterial
+// (acrylic/mica,见 resolveVibrancyConfig),Windows 10/Linux 回退不透明 surface。
+// family 切换时经 IPC theme:apply-vibrancy 运行时动态调用,同步主窗口与全部副窗口。
 function applyWindowVibrancy(familyId: string, isDark: boolean): void {
   const win = mainWindowRef;
   if (!win || win.isDestroyed()) return;
