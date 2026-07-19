@@ -1505,9 +1505,15 @@ app.on('open-file', (event, filePath) => {
 });
 
 // ── Single instance lock ─────────────────────────────────────────────────
-// Prevent multiple instances in packaged builds. Skip in dev so that
-// multiple `pnpm dev:desktop*` sessions can run side-by-side.
-if (app.isPackaged) {
+// dev 与 packaged 一律启用。这是把 OS 因深链(cindy://focus 授权返回 / cindy://session
+// 等)/ 右键 "通过 Cindy 打开" 而拉起的第二个进程 redirect 成 "聚焦已运行窗口" 的唯一
+// 机制——两个独立 Electron 进程之间没有别的通道能交接焦点。dev 早先跳过此块导致每次点
+// 授权页 "返回 Cindy" 都冷启动一个全新 dev 实例。
+//
+// 锁按 userData 目录作用域:默认 dev / packaged 共用 `Cindy` userData → 单实例;
+// `--isolated=<名字>` 沙箱各有独立 userData → 各自独立锁,仍可并行共存。真要多开走
+// `--isolated`(见 AGENTS.md),不再依赖 "dev 无锁" 各开窗口。
+{
   const gotTheLock = app.requestSingleInstanceLock();
   if (!gotTheLock) {
     app.quit();
