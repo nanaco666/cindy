@@ -78,4 +78,25 @@ describe('stop session background tasks IPC handler', () => {
     expect(notifyGoalStop).toHaveBeenCalledWith('session-1');
     expect(clearBackgroundActivity).not.toHaveBeenCalled();
   });
+
+  it('still closes the session when notifyGoalStop rejects', async () => {
+    const harness = new IpcHarness();
+    const closeSession = vi.fn().mockResolvedValue(undefined);
+    const clearBackgroundActivity = vi.fn();
+    const noteSessionReset = vi.fn();
+    const notifyGoalStop = vi.fn().mockRejectedValue(new Error('goal observer crashed'));
+
+    registerStopSessionBackgroundTasksHandler(harness, {
+      closeSession,
+      clearBackgroundActivity,
+      noteSessionReset,
+      notifyGoalStop,
+    });
+
+    await expect(
+      harness.invoke(MAKER_INVOKE.STOP_SESSION_BACKGROUND_TASKS, 'session-1'),
+    ).resolves.toEqual({ ok: true });
+    expect(closeSession).toHaveBeenCalledWith('session-1');
+    expect(clearBackgroundActivity).toHaveBeenCalledWith('session-1');
+  });
 });
