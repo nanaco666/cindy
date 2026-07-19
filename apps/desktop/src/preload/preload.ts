@@ -3268,7 +3268,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     /** 后台活动活跃会话全量列表(全局 store 挂载时的初始快照,增量走 push 订阅)。 */
     listSessionBackgroundActivity: (): Promise<{ sessionIds: string[] }> =>
       ipcRenderer.invoke('maker:session-background-activity:list'),
-    /** 一键停止会话后台任务(关闭常驻 CC 子进程,会话可续);turn 在跑时抛 [SESSION_RUNNING]。 */
+    /** 一键停止会话全部任务(含当前 turn 与后台子 agent；关闭运行句柄后会话仍可续)。 */
     stopSessionBackgroundTasks: (sessionId: string): Promise<{ ok: true }> =>
       ipcRenderer.invoke('maker:session-background-tasks:stop', sessionId),
     /** 会话后台活动翻转订阅(payload = { sessionId, active },返回 off)。 */

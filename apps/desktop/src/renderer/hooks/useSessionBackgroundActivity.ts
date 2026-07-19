@@ -50,7 +50,7 @@ export function useSessionBackgroundActivity(sessionId: string | undefined): {
       await api.stopSessionBackgroundTasks(sessionId);
       setActive(false);
     } catch {
-      // SESSION_RUNNING(恰好起了新 turn)等:不弹错,状态由 push / turn 事件校正。
+      // 关闭失败时不伪造已停止状态，继续由后台活动 push / turn 事件校正。
     } finally {
       setStopping(false);
     }
