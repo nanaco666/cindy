@@ -72,6 +72,7 @@ export type MobilePlanViewerState = 'half' | 'expanded' | 'minimized' | 'edit';
 type RestorablePlanViewerState = Exclude<MobilePlanViewerState, 'minimized'>;
 
 export function InteractionPanel({
+  safeAreaBottomInset = 0,
   deviceId,
   fillAvailableHeight = false,
   sessionId,
@@ -83,6 +84,7 @@ export function InteractionPanel({
   onError,
   readOnlyReason,
 }: {
+  safeAreaBottomInset?: number;
   deviceId: string;
   fillAvailableHeight?: boolean;
   sessionId: string;
@@ -143,6 +145,7 @@ export function InteractionPanel({
   });
   const rootLayoutStyle = {
     gap: touchLayout.rootGap,
+    paddingBottom: Math.max(spacing.sm, safeAreaBottomInset),
     paddingHorizontal: touchLayout.rootPaddingHorizontal,
   };
   const cardLayoutStyle = {

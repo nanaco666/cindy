@@ -253,7 +253,9 @@ describe('mobile session composer desktop-first surface', () => {
     expect(source).toContain('styles.sessionBottomLayer,');
     expect(source).toContain('testID="session.bottomLayer"');
     expect(source).toContain('testID="session.bottomContent"');
-    expect(source).toContain('{ paddingBottom: insets.bottom }');
+    expect(source).toContain("paddingBottom: sessionOperationLayout.composerSlot === 'pending-interaction'");
+    expect(source).toContain('? 0\n                  : insets.bottom');
+    expect(source.match(/safeAreaBottomInset={insets\.bottom}/g)).toHaveLength(2);
     expect(source).toContain('pointerEvents="box-none"\n            style={[');
     expect(source).toContain('nativeShellLayout.wideViewport && { maxWidth: nativeShellLayout.contentMaxWidth }');
     expect(source).toContain('sessionBottomContent: {');
