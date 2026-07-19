@@ -28,6 +28,7 @@ import type {
   ProxyOptions,
   RecoveryRule,
   RequestTransform,
+  RequestTransformCtx,
   ResponseObserver,
   ResponseObserverSink,
   RoutingDecision,
@@ -229,7 +230,7 @@ function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
  */
 async function runLocalHandler(
   handler: LocalRequestHandler,
-  args: { rawBody: Buffer; parsedBody: unknown; ctx: { method: string; url: string; headers: Record<string, string> }; res: ServerResponse },
+  args: { rawBody: Buffer; parsedBody: unknown; ctx: RequestTransformCtx; res: ServerResponse },
   logger: ProxyLogger,
   reqId: number,
 ): Promise<void> {
@@ -374,7 +375,7 @@ function runTransforms(
   rawBody: Buffer,
   contentType: string,
   transforms: RequestTransform[],
-  ctx: { method: string; url: string; headers: Record<string, string> },
+  ctx: RequestTransformCtx,
   logger: ProxyLogger,
 ): Buffer | null {
   if (transforms.length === 0) return null;
@@ -964,6 +965,7 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
     const method = req.method ?? 'GET';
     const url = req.url ?? '/';
     const headers = flattenRequestHeaders(req.headers);
+    const requestCtx: RequestTransformCtx = { reqId, method, url, headers };
     const contentType = headers['content-type'] ?? '';
 
     // 非 POST / 没 body(GET / HEAD / DELETE 等)→ 不收集 stream,但仍跑一次路由决策:
@@ -974,7 +976,7 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
       let decision: RoutingDecision | null = null;
       if (opts.routingTransform) {
         try {
-          const maybeDecision = opts.routingTransform(undefined, { method, url, headers });
+          const maybeDecision = opts.routingTransform(undefined, requestCtx);
           decision = isPromiseLike<RoutingDecision | null>(maybeDecision)
             ? await maybeDecision
             : maybeDecision;
@@ -987,7 +989,7 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
         logger.debug?.('▶ inbound request from client', { reqId, method, upstreamBase: 'local-handler', url, bytes: 0 });
         await runLocalHandler(
           decision.localHandler,
-          { rawBody: Buffer.alloc(0), parsedBody: undefined, ctx: { method, url, headers }, res },
+          { rawBody: Buffer.alloc(0), parsedBody: undefined, ctx: requestCtx, res },
           logger,
           reqId,
         );
@@ -1068,7 +1070,7 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
     if (opts.routingTransform && contentType.toLowerCase().startsWith('application/json')) {
       try {
         rawParsed = JSON.parse(rawBody.toString('utf8'));
-        const maybeDecision = opts.routingTransform(rawParsed, { method, url, headers });
+        const maybeDecision = opts.routingTransform(rawParsed, requestCtx);
         decision = isPromiseLike<RoutingDecision | null>(maybeDecision)
           ? await maybeDecision
           : maybeDecision;
@@ -1092,7 +1094,7 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
       }
       await runLocalHandler(
         decision.localHandler,
-        { rawBody, parsedBody: rawParsed, ctx: { method, url, headers }, res },
+        { rawBody, parsedBody: rawParsed, ctx: requestCtx, res },
         logger,
         reqId,
       );
@@ -1115,7 +1117,7 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
       });
     }
 
-    const transformed = runTransforms(rawBody, contentType, transforms, { method, url, headers }, logger);
+    const transformed = runTransforms(rawBody, contentType, transforms, requestCtx, logger);
     const outBody = transformed ?? rawBody;
 
     if (transformed) {

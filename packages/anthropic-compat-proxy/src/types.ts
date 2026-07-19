@@ -18,6 +18,8 @@ import type { ServerResponse } from 'node:http';
  *   (改 method/url 没意义,改 headers 通过专用 transform 接口未来再加)
  */
 export interface RequestTransformCtx {
+  /** Monotonic identifier shared with the eventual response observer for this request. */
+  readonly reqId: number;
   readonly method: string;
   readonly url: string;
   readonly headers: Readonly<Record<string, string>>;

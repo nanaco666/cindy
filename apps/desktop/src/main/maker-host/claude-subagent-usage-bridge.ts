@@ -6,7 +6,7 @@
  * 匹配子代理请求，并把真实统计留在 host 内存中供 maker-core 同步读取。
  */
 
-import type { ResponseObserver } from '@lizi/anthropic-compat-proxy';
+import type { RequestTransform, ResponseObserver } from '@lizi/anthropic-compat-proxy';
 import { Buffer } from 'node:buffer';
 
 import {
@@ -17,6 +17,7 @@ import {
 } from './claude-fast-mode-log.js';
 
 const MAX_TRACKED_TASKS = 200;
+const MAX_PENDING_REQUESTS = 1_000;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 
 export interface ClaudeSubagentTaskRegistration {
@@ -80,6 +81,7 @@ function requestUserTexts(body: Record<string, unknown>): string[] {
 /** In-memory bridge shared by the Claude agent host and loopback proxy observer. */
 export class ClaudeSubagentUsageBridge {
   private readonly tasks = new Map<string, TrackedTask>();
+  private readonly taskIdByRequestId = new Map<number, string>();
   private nextRegistrationOrder = 0;
 
   registerTask(task: ClaudeSubagentTaskRegistration): void {
@@ -100,7 +102,7 @@ export class ClaudeSubagentUsageBridge {
     }
   }
 
-  matchRequest(body: Record<string, unknown>): string | null {
+  private selectTask(body: Record<string, unknown>): TrackedTask | null {
     const model = typeof body.model === 'string' ? body.model : undefined;
     const userTexts = requestUserTexts(body);
     if (userTexts.length === 0) return null;
@@ -121,9 +123,31 @@ export class ClaudeSubagentUsageBridge {
     });
     const selected = candidates[0];
     if (!selected) return null;
-    // 响应头到达时立即预留，避免相同 prompt 的并发 observer 选中同一任务。
+    return selected;
+  }
+
+  /** Reserves a task while the proxy is handling the request, before responses can reorder. */
+  reserveRequest(reqId: number, body: Record<string, unknown>): string | null {
+    const reservedTaskId = this.taskIdByRequestId.get(reqId);
+    if (reservedTaskId) return reservedTaskId;
+
+    const selected = this.selectTask(body);
+    if (!selected) return null;
     selected.matchedRequests += 1;
+    this.taskIdByRequestId.set(reqId, selected.taskId);
+    while (this.taskIdByRequestId.size > MAX_PENDING_REQUESTS) {
+      const oldestRequestId = this.taskIdByRequestId.keys().next().value as number | undefined;
+      if (oldestRequestId === undefined) break;
+      this.taskIdByRequestId.delete(oldestRequestId);
+    }
     return selected.taskId;
+  }
+
+  /** Consumes the task reserved for a proxy request when its response starts. */
+  takeReservedTask(reqId: number): string | null {
+    const taskId = this.taskIdByRequestId.get(reqId) ?? null;
+    this.taskIdByRequestId.delete(reqId);
+    return taskId;
   }
 
   recordResponseUsage(taskId: string, usage: Record<string, unknown>): void {
@@ -145,6 +169,7 @@ export class ClaudeSubagentUsageBridge {
 
   clear(): void {
     this.tasks.clear();
+    this.taskIdByRequestId.clear();
   }
 }
 
@@ -155,17 +180,26 @@ function numberField(value: Record<string, unknown>, key: string): number {
 
 export const claudeSubagentUsageBridge = new ClaudeSubagentUsageBridge();
 
+/** Reserves a subagent task at request time without changing the outbound body. */
+export function createClaudeSubagentUsageRequestTransform(
+  bridge: ClaudeSubagentUsageBridge = claudeSubagentUsageBridge,
+): RequestTransform {
+  return (body, ctx) => {
+    if (ctx.method !== 'POST' || !isMessagesPath(ctx.url)) return null;
+    if (isPlainObject(body)) bridge.reserveRequest(ctx.reqId, body);
+    return null;
+  };
+}
+
 /** Creates a read-only response observer that records only matched subagent responses. */
 export function createClaudeSubagentUsageResponseObserver(
   bridge: ClaudeSubagentUsageBridge = claudeSubagentUsageBridge,
 ): ResponseObserver {
   return (ctx) => {
     if (ctx.method !== 'POST' || !isMessagesPath(ctx.url)) return null;
-    if (ctx.status < 200 || ctx.status >= 300) return null;
-    const requestBody = parseJsonObject(ctx.requestBody.toString('utf8'));
-    if (!requestBody) return null;
-    const taskId = bridge.matchRequest(requestBody);
+    const taskId = bridge.takeReservedTask(ctx.reqId);
     if (!taskId) return null;
+    if (ctx.status < 200 || ctx.status >= 300) return null;
 
     const contentType = (ctx.responseHeaders['content-type'] ?? '').toLowerCase();
     const isSse = contentType.includes('text/event-stream');

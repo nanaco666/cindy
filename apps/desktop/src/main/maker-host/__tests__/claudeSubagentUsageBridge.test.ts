@@ -3,17 +3,37 @@ import { Buffer } from 'node:buffer';
 
 import {
   ClaudeSubagentUsageBridge,
+  createClaudeSubagentUsageRequestTransform,
   createClaudeSubagentUsageResponseObserver,
 } from '../claude-subagent-usage-bridge.js';
 
-function requestBody(model: string, prompt: string): Buffer {
-  return Buffer.from(JSON.stringify({
+function requestPayload(model: string, prompt: string): Record<string, unknown> {
+  return {
     model,
     messages: [
       { role: 'user', content: '<system-reminder>context</system-reminder>' },
       { role: 'user', content: prompt },
     ],
-  }));
+  };
+}
+
+function requestBody(model: string, prompt: string): Buffer {
+  return Buffer.from(JSON.stringify(requestPayload(model, prompt)));
+}
+
+function reserveRequest(
+  bridge: ClaudeSubagentUsageBridge,
+  reqId: number,
+  model: string,
+  prompt: string,
+): void {
+  const transform = createClaudeSubagentUsageRequestTransform(bridge);
+  expect(transform(requestPayload(model, prompt), {
+    reqId,
+    method: 'POST',
+    url: '/v1/messages',
+    headers: {},
+  })).toBeNull();
 }
 
 function sse(inputTokens: number, outputTokens: number, cacheReadTokens = 0): Buffer {
@@ -63,6 +83,7 @@ function observe(
   prompt: string,
   response: Buffer,
 ): void {
+  reserveRequest(bridge, reqId, model, prompt);
   const sink = openObservation(bridge, reqId, model, prompt);
   sink?.onData?.(response);
   sink?.onEnd?.();
@@ -100,6 +121,7 @@ describe('ClaudeSubagentUsageBridge', () => {
       prompt: 'Solve calculator problem A',
       model: 'codex/gpt-5.6-terra',
     });
+    reserveRequest(bridge, 1, 'claude-opus-4-6', 'Parent prompt');
     const observer = createClaudeSubagentUsageResponseObserver(bridge);
     const sink = observer({
       reqId: 1,
@@ -131,13 +153,13 @@ describe('ClaudeSubagentUsageBridge', () => {
       model: 'codex/gpt-5.6-terra',
     });
 
-    expect(bridge.matchRequest({
+    expect(bridge.reserveRequest(1, {
       model: 'codex/gpt-5.6-terra',
       messages: [{ role: 'user', content: '修复认证问题并补测试' }],
     })).toBe('agent-long');
   });
 
-  it('reserves identical prompt tasks before concurrent responses finish', () => {
+  it('keeps identical prompt tasks bound to request ids when responses arrive out of order', () => {
     const bridge = new ClaudeSubagentUsageBridge();
     for (const suffix of ['a', 'b']) {
       bridge.registerTask({
@@ -148,22 +170,25 @@ describe('ClaudeSubagentUsageBridge', () => {
       });
     }
 
-    const first = openObservation(
-      bridge,
-      1,
-      'codex/gpt-5.6-terra',
-      'Solve the same calculator problem',
-    );
+    reserveRequest(bridge, 1, 'codex/gpt-5.6-terra', 'Solve the same calculator problem');
+    reserveRequest(bridge, 2, 'codex/gpt-5.6-terra', 'Solve the same calculator problem');
+
     const second = openObservation(
       bridge,
       2,
       'codex/gpt-5.6-terra',
       'Solve the same calculator problem',
     );
-    first?.onData?.(sse(100, 10));
-    first?.onEnd?.();
     second?.onData?.(sse(200, 20));
     second?.onEnd?.();
+    const first = openObservation(
+      bridge,
+      1,
+      'codex/gpt-5.6-terra',
+      'Solve the same calculator problem',
+    );
+    first?.onData?.(sse(100, 10));
+    first?.onEnd?.();
 
     expect(bridge.getTaskUsage('agent-a')).toEqual({ totalTokens: 110 });
     expect(bridge.getTaskUsage('agent-b')).toEqual({ totalTokens: 220 });
