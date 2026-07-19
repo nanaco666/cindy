@@ -1,6 +1,32 @@
 // @ts-nocheck —— 被测对象是 .mjs 开发工具模块，vitest 跑其纯函数。
 import { describe, expect, it, vi } from 'vitest';
-import { resolveMobileSimulatorBundleId } from '../../scripts/lib/sim-whoami.mjs';
+import {
+  extractSimWhoamiPortArgs,
+  resolveMobileSimulatorBundleId,
+} from '../../scripts/lib/sim-whoami.mjs';
+
+describe('mobile:sim:whoami Metro port', () => {
+  it.each([
+    [['--port', '8082'], 8082],
+    [['-p', '8083'], 8083],
+    [['--port=8084'], 8084],
+  ])('accepts an explicit port from %j', (args, port) => {
+    expect(extractSimWhoamiPortArgs(args)).toEqual({ port, passthrough: [] });
+  });
+
+  it('defaults to 8081 and preserves unsupported arguments', () => {
+    expect(extractSimWhoamiPortArgs(['--unknown'])).toEqual({
+      port: 8081,
+      passthrough: ['--unknown'],
+    });
+  });
+
+  it('rejects missing, invalid, or duplicate ports', () => {
+    expect(() => extractSimWhoamiPortArgs(['--port'])).toThrow(/端口无效/);
+    expect(() => extractSimWhoamiPortArgs(['--port', '0'])).toThrow(/端口无效/);
+    expect(() => extractSimWhoamiPortArgs(['--port=8082', '-p', '8083'])).toThrow(/只能传一次/);
+  });
+});
 
 describe('mobile:sim:whoami bundle identity', () => {
   it.each([

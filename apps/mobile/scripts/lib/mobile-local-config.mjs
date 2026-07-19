@@ -51,10 +51,9 @@ export function ensureMobileLocalRegionConfig(options = {}) {
       invalidCandidates.push(sourcePath);
       continue;
     }
-    fs.copyFileSync(sourcePath, configPath, fs.constants.COPYFILE_EXCL);
-    fs.chmodSync(configPath, 0o600);
+    const published = publishValidatedConfig(sourcePath, configPath, validateConfig);
     validateConfig(configPath);
-    return { configPath, copiedFrom: sourcePath };
+    return { configPath, copiedFrom: published ? sourcePath : null };
   }
 
   const invalidHint = invalidCandidates.length > 0
@@ -63,6 +62,25 @@ export function ensureMobileLocalRegionConfig(options = {}) {
   throw new Error(
     `Missing mobile local region config: ${configPath}. Copy self-host-regions.json from a configured Cindy worktree or fill self-host-regions.json.example.${invalidHint}`,
   );
+}
+
+/** Publish a complete config atomically; concurrent bootstraps may safely race. */
+function publishValidatedConfig(sourcePath, configPath, validateConfig) {
+  const tempPath = `${configPath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    fs.copyFileSync(sourcePath, tempPath, fs.constants.COPYFILE_EXCL);
+    fs.chmodSync(tempPath, 0o600);
+    validateConfig(tempPath);
+    try {
+      fs.linkSync(tempPath, configPath);
+      return true;
+    } catch (error) {
+      if (error?.code !== 'EEXIST') throw error;
+      return false;
+    }
+  } finally {
+    fs.rmSync(tempPath, { force: true });
+  }
 }
 
 export function formatMobileLocalConfigStatus(result, worktreeRoot) {

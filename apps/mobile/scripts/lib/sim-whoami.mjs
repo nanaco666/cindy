@@ -6,6 +6,36 @@ import { withLocalMobileRegionConfig } from './mobile-dev-region.mjs';
 
 const mobileDir = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
+/** Parse the optional Metro port that the simulator was manually connected to. */
+export function extractSimWhoamiPortArgs(args, defaultPort = 8081) {
+  let port = defaultPort;
+  let seen = false;
+  const passthrough = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    let value = null;
+    if (arg === '--port' || arg === '-p') {
+      value = args[++index];
+    } else if (arg.startsWith('--port=')) {
+      value = arg.slice('--port='.length);
+    } else {
+      passthrough.push(arg);
+      continue;
+    }
+
+    if (seen) throw new Error('mobile:sim:whoami 的 Metro 端口只能传一次');
+    seen = true;
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+      throw new Error(`mobile:sim:whoami 的 Metro 端口无效: ${value ?? '(缺失)'}`);
+    }
+    port = parsed;
+  }
+
+  return { port, passthrough };
+}
+
 /**
  * 用实际 Expo config 解析本地 Simulator development client 的 bundle id。
  * 测试可注入 execFile,避免真的启动 Expo CLI。

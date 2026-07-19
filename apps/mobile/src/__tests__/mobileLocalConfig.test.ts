@@ -59,6 +59,32 @@ describe('mobile local config bootstrap', () => {
     expect(existsSync(configPath)).toBe(true);
   });
 
+  it('accepts the valid config published by a concurrent bootstrap', () => {
+    const parent = mkdtempSync(join(tmpdir(), 'cindy-mobile-config-'));
+    roots.push(parent);
+    const targetRoot = join(parent, 'cindy-feature');
+    const sourceRoot = join(parent, 'cindy-personal-client');
+    const mobileDir = join(targetRoot, 'apps/mobile');
+    const configPath = join(mobileDir, 'scripts/self-host-regions.json');
+    const sourcePath = join(sourceRoot, 'apps/mobile/scripts/self-host-regions.json');
+    mkdirSync(join(mobileDir, 'scripts'), { recursive: true });
+    mkdirSync(join(sourceRoot, 'apps/mobile/scripts'), { recursive: true });
+    writeFileSync(sourcePath, '{"source":"candidate"}\n');
+
+    const result = ensureMobileLocalRegionConfig({
+      mobileDir,
+      worktreeEntries: [{ path: sourceRoot, branch: 'refs/heads/dash/personal-client-1' }],
+      validateConfig(candidate: string) {
+        if (candidate === sourcePath && !existsSync(configPath)) {
+          writeFileSync(configPath, '{"source":"concurrent-winner"}\n');
+        }
+      },
+    });
+
+    expect(result).toEqual({ configPath, copiedFrom: null });
+    expect(readFileSync(configPath, 'utf8')).toContain('concurrent-winner');
+  });
+
   it('parses worktree branch ownership', () => {
     expect(parseGitWorktreeEntries([
       'worktree /repo/cindy',
