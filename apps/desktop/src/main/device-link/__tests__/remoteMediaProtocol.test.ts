@@ -1,6 +1,7 @@
 /**
  * remoteMediaProtocol.test.ts — 控制端 xdt-remote-media:// handler 编排:
  *   - 畸形 URL → 400
+ *   - cindy-media:// 且本机字节仓命中 → 本地直接服务,不触发远程取件
  *   - 缓存命中 local → 内存切片 200 / range 206
  *   - 未命中 + 图片 → media:fetch → 整下 → 删 OSS(用后删)→ recordLocal → 200
  *   - 未命中 + 视频 → media:fetch → recordStream → OSS range 206 透传(不整下、不删 OSS)
@@ -46,6 +47,18 @@ vi.mock('../../logger', () => ({
 const serveSshRemoteMedia = vi.hoisted(() => vi.fn());
 vi.mock('../../file-browser/ssh-media', () => ({ serveSshRemoteMedia }));
 
+// cindy-media 本地优先短路的依赖:blobStore 解析、ledger LRU 刷新、fs 读盘。
+// 默认(beforeEach)设为「本机无此 blob」,既有远程管线用例语义不变。
+const blobResolveSafe = vi.hoisted(() => vi.fn());
+vi.mock('../../cindy-media/blobStore', () => ({ resolveSafe: blobResolveSafe }));
+const touchBlob = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock('../../cindy-media/ledger', () => ({ touchBlob }));
+const fsReadFile = vi.hoisted(() => vi.fn());
+vi.mock('node:fs/promises', () => ({
+  default: { readFile: fsReadFile },
+  readFile: fsReadFile,
+}));
+
 // fetchRemoteMediaImageBytes 的限流读取:保留真实 collectStreamWithLimit,
 // 只把上限缩小到 16 字节,避免测试造 100MB 数据。
 vi.mock('../../lightboxMediaActions', async (importOriginal) => {
@@ -64,6 +77,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   lookup.mockReturnValue(undefined);
   evictEntry.mockReturnValue(true); // 默认无 in-flight 消费者,可逐出
+  // 默认:本机字节仓不命中(readFile ENOENT)→ cindy-media 用例照走远程管线
+  blobResolveSafe.mockImplementation((url: string) => ({
+    absPath: `/tmp/blobs/${url.slice(-8)}`,
+    mimeType: 'image/png',
+    hash: 'h'.repeat(64),
+  }));
+  fsReadFile.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
 });
 
 describe('handleRemoteMedia', () => {
@@ -86,6 +106,52 @@ describe('handleRemoteMedia', () => {
     expect(remoteInvoke).not.toHaveBeenCalled();
     expect(lookup).not.toHaveBeenCalled();
     expect(r.status).toBe(200);
+  });
+
+  describe('cindy-media 本地优先', () => {
+    const BLOB_URL = `cindy-media://blobs/${'a'.repeat(64)}.png`;
+    const URL_BLOB = buildRemoteMediaUrl({ kind: 'device', deviceId: 'dev-1' }, BLOB_URL);
+
+    it('本机字节仓命中 → 直接本地服务 200 + immutable,不触发远程取件', async () => {
+      fsReadFile.mockResolvedValue(Buffer.from([1, 2, 3, 4]));
+      const r = await handleRemoteMedia(URL_BLOB, null);
+      expect(r.status).toBe(200);
+      expect(r.headers.get('content-type')).toBe('image/png');
+      expect(r.headers.get('cache-control')).toContain('immutable');
+      expect([...new Uint8Array(await r.arrayBuffer())]).toEqual([1, 2, 3, 4]);
+      expect(blobResolveSafe).toHaveBeenCalledWith(BLOB_URL);
+      expect(touchBlob).toHaveBeenCalledWith('h'.repeat(64)); // 刷 LRU,防回收器误清
+      expect(remoteInvoke).not.toHaveBeenCalled();
+      expect(lookup).not.toHaveBeenCalled();
+    });
+
+    it('本机命中 + range → 206 切片(照抄 cindyMediaProtocol 行为)', async () => {
+      fsReadFile.mockResolvedValue(Buffer.from([10, 20, 30, 40]));
+      const r = await handleRemoteMedia(URL_BLOB, 'bytes=1-2');
+      expect(r.status).toBe(206);
+      expect(r.headers.get('content-range')).toBe('bytes 1-2/4');
+      expect([...new Uint8Array(await r.arrayBuffer())]).toEqual([20, 30]);
+      expect(remoteInvoke).not.toHaveBeenCalled();
+    });
+
+    it('本机无此 blob(ENOENT)→ 照常远程取件(发送端竞态之外的正常远端图)', async () => {
+      remoteInvoke.mockResolvedValue({ ok: true, result: { ossKey: 'oss/b.png', mimeType: 'image/png', size: 3 } });
+      downloadToBuffer.mockResolvedValue({ bytes: Buffer.from([7, 8, 9]), contentType: 'image/png' });
+      recordLocal.mockReturnValue({ kind: 'local', bytes: Buffer.from([7, 8, 9]), mimeType: 'image/png' });
+      const r = await handleRemoteMedia(URL_BLOB, null);
+      expect(remoteInvoke).toHaveBeenCalledWith('dev-1', 'device-link:media:fetch', [{ url: BLOB_URL }]);
+      expect(r.status).toBe(200);
+    });
+
+    it('xdt-image:// 不做本地短路(session 级缓存地址两端不可互认)', async () => {
+      remoteInvoke.mockResolvedValue({ ok: true, result: { ossKey: 'oss/k.png', mimeType: 'image/png', size: 3 } });
+      downloadToBuffer.mockResolvedValue({ bytes: Buffer.from([7, 8, 9]), contentType: 'image/png' });
+      recordLocal.mockReturnValue({ kind: 'local', bytes: Buffer.from([7, 8, 9]), mimeType: 'image/png' });
+      await handleRemoteMedia(URL_IMG, null);
+      expect(blobResolveSafe).not.toHaveBeenCalled();
+      expect(fsReadFile).not.toHaveBeenCalled();
+      expect(remoteInvoke).toHaveBeenCalled();
+    });
   });
 
   it('缓存命中 local(无 range)→ 200 整文件,不触发取件', async () => {

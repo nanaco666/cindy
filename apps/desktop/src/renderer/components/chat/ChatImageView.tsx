@@ -23,7 +23,7 @@
  * 走 ImageLightbox 的全局 scroll lock)。
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Box, Copy, FolderOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -40,6 +40,7 @@ import { ImageLightbox } from './ImageLightbox';
 import { ModelLightbox } from './ModelLightbox';
 import { ImageMissingPlaceholder } from './ImageMissingPlaceholder';
 import { useRemoteMediaUrl } from '@/hooks/useRemoteMediaUrl';
+import { useRemoteMediaErrorRetry } from '@/hooks/useRemoteMediaErrorRetry';
 import type { ToolMediaModelFile } from './AgentActionRow';
 
 export type ChatImageVariant = 'user-attached' | 'tool-output';
@@ -115,14 +116,9 @@ export function ChatImageView({
   // 'image' = 2D 预览图 lightbox; 'model' = `<model-viewer>` 3D lightbox。
   // 同一个 state 槽位避免两种 lightbox 同时出现 (且统一受 scroll-lock 影响)。
   const [lightboxOpen, setLightboxOpen] = useState<'image' | 'model' | null>(null);
-  const [errored, setErrored] = useState(false);
-  // 远程会话首帧可能先用本机 xdt-image:// 渲染并触发 onError,随后
-  // deviceId/远程媒体引用就位后 displaySrc 会变成 xdt-remote-media://。
-  // 错误态必须跟随可展示资源重置,否则当前会话会一直显示丢失占位,
-  // 只能靠切换会话 remount 恢复。
-  useEffect(() => {
-    setErrored(false);
-  }, [displaySrc]);
+  // 错误态 + 远程媒体失败自愈(退避重取,覆盖被控端物化竞态窗口)收口在
+  // hook 里;本机 scheme 的失败不重试,行为与从前一致。
+  const { errored, onLoadError } = useRemoteMediaErrorRetry(displaySrc);
   // Right-click → 复制图片 / 打开图片所在目录. Mirrors MarkdownRenderer.LightboxImage
   // and ImageLightbox so user-attached 图和 assistant tool-output 图右键交互一致。
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
@@ -223,7 +219,7 @@ export function ChatImageView({
           e.stopPropagation();
           setMenuPos({ x: e.clientX, y: e.clientY });
         }}
-        onError={() => setErrored(true)}
+        onError={onLoadError}
       />
       {showMenu ? (
         <DropdownMenu

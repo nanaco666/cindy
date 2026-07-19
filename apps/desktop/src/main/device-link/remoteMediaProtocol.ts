@@ -6,6 +6,8 @@
  * ssh 来源交给 file-browser/ssh-media.ts(file-service 分片 → 磁盘缓存 → range 服务);
  * device 来源走本文件的 OSS 中转管线,经 OSS 向被控端取字节:
  *
+ *   cindy-media:// 且本机字节仓命中 → 直接本地服务(内容寻址,字节必一致,
+ *     见 serveLocalCindyMediaBlob)。
  *   缓存命中 → 直接服务(local 从内存切片 / stream 从 OSS range)。
  *   未命中   → remoteInvoke(device-link:media:fetch) 让被控端把媒体传到 OSS → 拿 { ossKey, mimeType, size }
  *     - 视频/音频:记 stream 条目,range 请求从 OSS 流式 206 透传(不整下,OSS 保活)。
@@ -17,11 +19,15 @@
  * 失败语义:取件/流式失败回 5xx,renderer 媒体占位 + 可重试,不阻断会话。
  */
 import { protocol, type CustomScheme } from 'electron';
+import fs from 'node:fs/promises';
 
 import { createLogger } from '../logger';
 import { collectStreamWithLimit, REMOTE_IMAGE_MAX_BYTES } from '../lightboxMediaActions';
 import { parseRemoteMediaUrl, REMOTE_MEDIA_SCHEME } from '../../shared/remoteMediaUrl';
 import { parseRangeHeader } from '../videoProtocol';
+import * as blobStore from '../cindy-media/blobStore';
+import * as ledger from '../cindy-media/ledger';
+import { buildRangedMediaResponse } from '../cindy-media/rangeResponse';
 import { remoteInvoke } from './index';
 import { DL_MEDIA_FETCH_CHANNEL } from '@lizi/device-link';
 import { downloadToBuffer, openMediaStream, removeRemote } from './mediaTransfer';
@@ -46,6 +52,41 @@ function isStreamable(mimeType: string): boolean {
  * 把 main 进程堆撑爆 —— 本地内存缓存只该装小媒体)。
  */
 const LOCAL_BUFFER_MAX = 64 * 1024 * 1024;
+
+/**
+ * `cindy-media://` blob 的本地优先短路:内容寻址下同指纹字节两端逐字节一致,
+ * 本机字节仓命中就直接服务,不必经 OSS 向被控端取。两类场景受益:
+ *   - 控制端自己刚发出的附件(粘贴时已 ingest 进本机总仓)——不走远程即消灭
+ *     「被控端尚未物化落盘 → media:fetch ENOENT → 占位框」的发送端竞态;
+ *   - 两端恰好持有同一内容的 blob(转发/重发)——省一次被控端真实上传。
+ * 本机无此 blob(或形状不合法)返回 null,照常走远程取件,行为零变化。
+ * 响应形态照抄 cindyMediaProtocol(整读 + range 切片 + immutable 缓存头 +
+ * touchBlob 刷 LRU),两条本地取件路径行为一致。
+ */
+async function serveLocalCindyMediaBlob(
+  origUrl: string,
+  rangeHeader: string | null,
+): Promise<Response | null> {
+  let resolved: { absPath: string; mimeType: string; hash: string };
+  try {
+    resolved = blobStore.resolveSafe(origUrl);
+  } catch {
+    return null; // 形状不合法:交远程管线按原语义处理
+  }
+  let buffer: Buffer;
+  try {
+    buffer = await fs.readFile(resolved.absPath);
+  } catch {
+    return null; // 本机无此 blob:走远程取件
+  }
+  void ledger.touchBlob(resolved.hash);
+  return buildRangedMediaResponse({
+    buffer,
+    mimeType: resolved.mimeType,
+    rangeHeader,
+    cacheControl: 'public, max-age=31536000, immutable',
+  });
+}
 
 /** 同 key 取件去重:首次取件期间的并发请求复用同一 Promise。 */
 const inflight = new Map<string, Promise<RemoteMediaEntry>>();
@@ -233,6 +274,10 @@ async function handleRemoteMedia(
   }
   const deviceId = parsed.origin.deviceId;
   try {
+    if (parsed.origUrl.startsWith('cindy-media://')) {
+      const local = await serveLocalCindyMediaBlob(parsed.origUrl, rangeHeader);
+      if (local) return local;
+    }
     const entry = await ensureEntry(deviceId, parsed.origUrl);
     if (entry.kind === 'local') return serveLocal(entry, rangeHeader);
     try {
