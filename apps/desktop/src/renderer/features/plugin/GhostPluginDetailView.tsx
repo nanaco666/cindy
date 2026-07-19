@@ -679,11 +679,16 @@ export function DetailsSection({
                 </button>
                 <button
                   type="button"
-                  onClick={() =>
-                    void window.electronAPI.showItemInFolder({
-                      filePath: detail.installDir ?? undefined,
-                    })
-                  }
+                  onClick={() => {
+                    const installDir = detail.installDir;
+                    if (!installDir) return;
+                    void window.electronAPI.openPath(installDir).then(
+                      (result) => {
+                        if (!result.success) toast.error(t('settings.ghosts.errors.generic'));
+                      },
+                      () => toast.error(t('settings.ghosts.errors.generic')),
+                    );
+                  }}
                   title={t('settings.ghosts.detail.openLocation')}
                   aria-label={t('settings.ghosts.detail.openLocation')}
                   className="grid size-7 shrink-0 place-items-center rounded-md text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-hover-soft)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"

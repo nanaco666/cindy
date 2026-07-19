@@ -1861,9 +1861,9 @@ export function ChatInput({
   const handlePluginSelect = useCallback(
     (ghost: (typeof pluginsForMenu)[number]) => {
       if (!editor || editor.isDestroyed) return;
-      placeGhostAtComposerStart(editor, ghost, pluginsForMenu);
+      placeGhostAtComposerStart(editor, ghost, installedGhosts);
     },
-    [editor, pluginsForMenu],
+    [editor, installedGhosts],
   );
 
   const handleVoiceInputPermissionRequired = useCallback(async () => {
@@ -2517,7 +2517,7 @@ export function ChatInput({
         },
         { silent: true },
       );
-      placeGhostAtComposerStart(editor, ghost, pluginsForMenu);
+      placeGhostAtComposerStart(editor, ghost, installedGhosts);
       return;
     }
 
@@ -2531,7 +2531,7 @@ export function ChatInput({
       { silent: true },
     );
     focusComposerEndNextFrame(editor);
-  }, [editor, ghostsForCommand, pluginsForMenu, storageKey]);
+  }, [editor, ghostsForCommand, installedGhosts, storageKey]);
 
   // chat-text-quote / browser-comment-chip:挂载 / 会话切换时从草稿恢复引用条
   // 与评论胶囊(外部追加走上面的订阅)。

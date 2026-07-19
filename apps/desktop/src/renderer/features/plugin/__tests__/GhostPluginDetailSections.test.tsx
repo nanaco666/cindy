@@ -7,6 +7,10 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const toastMocks = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+
+vi.mock('@/lib/toast', () => ({ toast: toastMocks }));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, options?: Record<string, unknown>) => {
@@ -107,6 +111,9 @@ const detail: GhostPluginDetail = {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  toastMocks.success.mockReset();
+  toastMocks.error.mockReset();
+  Reflect.deleteProperty(window, 'electronAPI');
 });
 
 describe('Ghost plugin detail sections', () => {
@@ -255,6 +262,17 @@ describe('Ghost plugin detail sections', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy Install Location' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('/tmp/cindy-brain/builtin.example'));
+
+    const openPath = vi.fn().mockResolvedValue({ success: false, error: 'file locked' });
+    Object.defineProperty(window, 'electronAPI', {
+      configurable: true,
+      value: { openPath },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Open Install Location' }));
+    await waitFor(() =>
+      expect(openPath).toHaveBeenCalledWith('/tmp/cindy-brain/builtin.example'),
+    );
+    expect(toastMocks.error).toHaveBeenCalledWith('settings.ghosts.errors.generic');
   });
 
   it('does not add expand controls when detail values fit on one line', () => {

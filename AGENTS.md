@@ -17,7 +17,6 @@
 
 ## Architecture Index
 
-- **Cindy Plugin Framework**: [`docs/design_docs/plugin-agent-task-plan.md`](docs/design_docs/plugin-agent-task-plan.md) defines the manifest, runtime boundary, import path, and sharing phases.
 - **Plugin Management UI**: [`apps/desktop/src/renderer/features/plugin/CLAUDE.md`](apps/desktop/src/renderer/features/plugin/CLAUDE.md) maps the shared Plugin/Skill shell, Ghost-backed catalog, factual detail view, and UI-only adapters.
 
 ## 外部关联

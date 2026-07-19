@@ -77,7 +77,7 @@ describe('ChatInput session switch focus contract', () => {
     expect(pluginPageSource).toContain('pendingGhostId: ghost.manifest.id');
     expect(pluginPageSource.match(/focusAtEnd: true/g)).toHaveLength(1);
     expect(
-      chatInputSource.match(/placeGhostAtComposerStart\(editor, ghost, pluginsForMenu\)/g),
+      chatInputSource.match(/placeGhostAtComposerStart\(editor, ghost, installedGhosts\)/g),
     ).toHaveLength(2);
     expect(chatInputSource).toContain('pendingGhostId: undefined');
     expect(chatInputSource).toContain('focusComposerEndNextFrame(editor);');
