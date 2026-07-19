@@ -121,6 +121,59 @@ describe('makerChatStore agent task updates', () => {
       summary: 'Auth flow looks correct',
     });
   });
+
+  it('keeps the authoritative resolved model across task id aliasing and later progress updates', () => {
+    const resolved = handleStreamEvent(
+      { ...EMPTY_SESSION_STATE, messages: [], taskUpdates: new Map() },
+      {
+        sessionId: 's1',
+        type: 'agent_task_update',
+        source: 'claude-code',
+        data: {
+          provider: 'claude-code',
+          taskId: 'agent-a',
+          parentToolUseId: 'toolu-1',
+          status: 'running',
+          model: 'codex/gpt-5.6-sol',
+        },
+      } as CCAgentStreamEvent,
+    );
+    const started = handleStreamEvent(
+      resolved,
+      {
+        sessionId: 's1',
+        type: 'agent_task_update',
+        source: 'claude-code',
+        data: {
+          provider: 'claude-code',
+          taskId: 'task-1',
+          parentToolUseId: 'toolu-1',
+          status: 'running',
+          title: 'Math quiz agent A',
+        },
+      } as CCAgentStreamEvent,
+    );
+    const completed = handleStreamEvent(
+      started,
+      {
+        sessionId: 's1',
+        type: 'agent_task_update',
+        source: 'claude-code',
+        data: {
+          provider: 'claude-code',
+          taskId: 'task-1',
+          status: 'completed',
+        },
+      } as CCAgentStreamEvent,
+    );
+
+    expect(completed.taskUpdates?.get('toolu-1')).toMatchObject({
+      taskId: 'task-1',
+      status: 'completed',
+      model: 'codex/gpt-5.6-sol',
+      title: 'Math quiz agent A',
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

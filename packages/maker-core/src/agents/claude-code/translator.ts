@@ -91,9 +91,14 @@ export interface RuntimeState {
   /** tool_use.id → tool_use.name。用于在 tool_result echo 时区分命令输出和内容结果。 */
   toolUseIdToName: Map<string, string>;
   /**
+   * SDK partial stream 按 parent_tool_use_id 隔离的真实模型。
+   * 并发 subagent 的 stream_event 会交错，不能用会话级元数据推断。
+   */
+  streamModelByParentToolUseId: Map<string, string>;
+  /**
    * 上一次 SDK assistant 消息提取出来的 agentMeta (uuid / sdkSessionId / model / ...).
-   * 跨 stream_event 累积时 (text_delta / thinking_delta / message_delta) 用它兜底,
-   * 让 renderer 拿到 mid-turn 增量事件也能合成完整的 messages.agent_meta 行。
+   * 主 agent 的 stream_event 累积时用它补齐 transcript 锚点；subagent stream
+   * 则必须按 parent_tool_use_id 隔离，不能共享这份会话级状态。
    * 老链路 agentManager.ts:2214 (session.lastAssistantMeta) 同款。
    */
   lastAssistantMeta: Record<string, unknown> | null;
@@ -108,6 +113,7 @@ export function newRuntimeState(): RuntimeState {
   return {
     currentThinking: null,
     toolUseIdToName: new Map(),
+    streamModelByParentToolUseId: new Map(),
     lastAssistantMeta: null,
     lastResultUsageAggregate: null,
   };
@@ -290,6 +296,55 @@ function readToolResultFullText(blockRaw: unknown): { toolUseId: string; fullTex
   return { toolUseId: b.tool_use_id, fullText };
 }
 
+/**
+ * 从 Agent 工具的异步启动回执中提取权威模型。
+ * Claude Code 会把最终解析后的模型放在 tool_use_result.resolvedModel；这比
+ * 流式子消息的时序推断可靠，适合直接补到 AgentTaskUpdate 给任务卡展示。
+ */
+function extractAsyncSubagentModelUpdate(
+  msg: {
+    message?: { content?: unknown };
+    tool_use_result?: unknown;
+    toolUseResult?: unknown;
+  },
+): AgentTaskUpdateEventData | null {
+  const rawResult = msg.tool_use_result ?? msg.toolUseResult;
+  if (!rawResult || typeof rawResult !== 'object' || Array.isArray(rawResult)) return null;
+  const result = rawResult as Record<string, unknown>;
+  const isAsync = result.isAsync === true || result.is_async === true;
+  const status = result.status;
+  if (!isAsync && status !== 'async_launched') return null;
+
+  const model = typeof result.resolvedModel === 'string'
+    ? result.resolvedModel
+    : typeof result.resolved_model === 'string'
+      ? result.resolved_model
+      : undefined;
+  if (!model) return null;
+
+  const content = msg.message?.content;
+  let toolResult: { toolUseId: string; fullText: string } | null = null;
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      toolResult = readToolResultFullText(block);
+      if (toolResult) break;
+    }
+  }
+  if (!toolResult) return null;
+
+  const rawAgentId = result.agentId ?? result.agent_id;
+  const taskId = typeof rawAgentId === 'string' && rawAgentId
+    ? rawAgentId
+    : toolResult.toolUseId;
+  return {
+    provider: 'claude-code',
+    taskId,
+    parentToolUseId: toolResult.toolUseId,
+    status: 'running',
+    model,
+  };
+}
+
 // ── cache 命中率日志格式化 ───────────────────────────────────────────────────
 // hitRate 按"百分比 + 1 位小数"输出, 没数据返 'n/a'。
 // 配 read/create/uncached/apiCalls 一起打, 看 hitRate 时能立刻判断样本量够不够代表性。
@@ -444,6 +499,14 @@ export function translateSdkMessage(
         queue.push({
           type: 'tool_result_full',
           data: { toolUseId: pair.toolUseId, fullText: pair.fullText },
+          source: 'claude-code',
+        });
+      }
+      const subagentModelUpdate = extractAsyncSubagentModelUpdate(msg);
+      if (subagentModelUpdate) {
+        queue.push({
+          type: 'agent_task_update',
+          data: subagentModelUpdate,
           source: 'claude-code',
         });
       }
@@ -880,7 +943,10 @@ function handleAssistant(
 // ── stream_event 子分支(content_block_delta / message_delta / message_start) ──
 
 function handleStreamEvent(
-  msg: { event?: Record<string, unknown> },
+  msg: {
+    event?: Record<string, unknown>;
+    parent_tool_use_id?: string | null;
+  },
   queue: EventQueue,
   ctx: TranslateContext,
 ): void {
@@ -904,11 +970,33 @@ function handleStreamEvent(
     }
   }
 
-  // mid-turn 流式 push 用 lastAssistantMeta 兜底 (这个 turn 内 SDK 已经发过 assistant
-  // 消息时缓存的 meta), 让 renderer 落库 mid-turn 累积块时能合成完整 agent_meta 行,
-  // 进而让 fork/rewind 反向找到 prior assistant 锚点。null 时 push 不带 meta (renderer
-  // ccAgentChatStore 的 incomingMeta?.fallback 兜到 lastAgentMeta)。
-  const fallbackMeta = ctx.rt.lastAssistantMeta ?? undefined;
+  // SDKPartialAssistantMessage 自带 parent_tool_use_id；并发 subagent 会在同一 Query
+  // 事件流中交错，必须按 parent 隔离模型，不能使用会话级 lastAssistantMeta 串联。
+  // 老 SDK / 单测若没有 wrapper 元数据，才保留旧兜底行为。
+  const parentToolUseId = typeof msg.parent_tool_use_id === 'string' && msg.parent_tool_use_id
+    ? msg.parent_tool_use_id
+    : undefined;
+  const streamKey = parentToolUseId ?? '__main__';
+  const eventModel = event.message?.model;
+  if (typeof eventModel === 'string' && eventModel) {
+    ctx.rt.streamModelByParentToolUseId.set(streamKey, eventModel);
+  }
+  const streamModel = typeof eventModel === 'string' && eventModel
+    ? eventModel
+    : ctx.rt.streamModelByParentToolUseId.get(streamKey);
+  const fallbackMeta: Record<string, unknown> | undefined = parentToolUseId
+    ? {
+        parentUuid: parentToolUseId,
+        ...(streamModel ? { model: streamModel } : {}),
+      }
+    : ctx.rt.lastAssistantMeta
+      ? {
+          ...ctx.rt.lastAssistantMeta,
+          ...(streamModel ? { model: streamModel } : {}),
+        }
+      : streamModel
+        ? { model: streamModel }
+        : undefined;
 
   if (event.type === 'content_block_delta') {
     const delta = event.delta as { type?: string; text?: string; thinking?: string } | undefined;
