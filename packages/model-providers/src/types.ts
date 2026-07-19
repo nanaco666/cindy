@@ -343,6 +343,13 @@ export interface Catalog {
    * `sanitizePresets`），绝不因预设数据错误导致整份远端目录回退 bundled。
    */
   presets?: ProviderPreset[];
+  /**
+   * model-access-server 的网关模型元数据远程覆盖表（`{ version: 1, models: {...} }`
+   * 信封，schema 归服务端所有故此处不建型）。生产消费方是服务端热加载；客户端唯一
+   * 消费点是 **dev 模式**下用它本地覆盖服务端下发的 XD 模型元数据以便自测
+   * （apps/desktop model-access devMetaOverlay），packaged 一律不读。
+   */
+  cindyModelMeta?: unknown;
 }
 
 /**

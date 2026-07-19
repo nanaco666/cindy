@@ -27,6 +27,7 @@ export type {
   CloseHandler as CodexAppServerCloseHandler,
   TransportCloseInfo as CodexAppServerCloseInfo,
 } from './agents/codex/app-server/transport.js';
+export type { CodexModelListItem } from './agents/codex/app-server/protocol.js';
 
 // core
 export * from './session.js';

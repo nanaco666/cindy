@@ -10,6 +10,8 @@
 import type { MobileAgentCapabilities } from '@/session/agentCapabilities';
 
 const cache = new Map<string, MobileAgentCapabilities>();
+const deviceGen = new Map<string, number>();
+const listeners = new Map<string, Set<(value: MobileAgentCapabilities) => void>>();
 
 export function buildAgentCapabilitiesCacheKey(deviceId: string, agentKind: string): string {
   return `${deviceId} ${agentKind}`;
@@ -19,8 +21,46 @@ export function getCachedAgentCapabilities(key: string): MobileAgentCapabilities
   return cache.get(key) ?? null;
 }
 
-export function setCachedAgentCapabilities(key: string, value: MobileAgentCapabilities): void {
+/** 捕获设备当前能力代际；请求完成时必须带回同一代际才能提交。 */
+export function getAgentCapabilitiesGeneration(deviceId: string): number {
+  return deviceGen.get(deviceId) ?? 0;
+}
+
+export function isAgentCapabilitiesGenerationCurrent(
+  deviceId: string,
+  generation: number,
+): boolean {
+  return getAgentCapabilitiesGeneration(deviceId) === generation;
+}
+
+/** 订阅某设备某 agent 的当前代能力快照。 */
+export function subscribeAgentCapabilities(
+  deviceId: string,
+  agentKind: string,
+  listener: (value: MobileAgentCapabilities) => void,
+): () => void {
+  const key = buildAgentCapabilitiesCacheKey(deviceId, agentKind);
+  const bucket = listeners.get(key) ?? new Set<(value: MobileAgentCapabilities) => void>();
+  bucket.add(listener);
+  listeners.set(key, bucket);
+  return () => {
+    bucket.delete(listener);
+    if (bucket.size === 0) listeners.delete(key);
+  };
+}
+
+/** 只提交当前设备代际的结果；成功后通知已挂载页面一次性换入完整快照。 */
+export function commitAgentCapabilities(
+  deviceId: string,
+  agentKind: string,
+  generation: number,
+  value: MobileAgentCapabilities,
+): boolean {
+  if (!isAgentCapabilitiesGenerationCurrent(deviceId, generation)) return false;
+  const key = buildAgentCapabilitiesCacheKey(deviceId, agentKind);
   cache.set(key, value);
+  for (const listener of listeners.get(key) ?? []) listener(value);
+  return true;
 }
 
 /** device-link:设备下线 / 切换时按 deviceId 前缀驱逐(与 providers 缓存同时机由调用方触发)。 */
@@ -29,9 +69,18 @@ export function evictAgentCapabilitiesForDevice(deviceId: string): void {
   for (const key of cache.keys()) {
     if (key.startsWith(prefix)) cache.delete(key);
   }
+  deviceGen.set(deviceId, getAgentCapabilitiesGeneration(deviceId) + 1);
 }
 
 /** 清空缓存(登出账号隔离用;测试亦复用)。 */
 export function resetAgentCapabilitiesCache(): void {
+  const deviceIds = new Set(deviceGen.keys());
+  for (const key of [...cache.keys(), ...listeners.keys()]) {
+    const separator = key.lastIndexOf(' ');
+    if (separator > 0) deviceIds.add(key.slice(0, separator));
+  }
+  for (const deviceId of deviceIds) {
+    deviceGen.set(deviceId, getAgentCapabilitiesGeneration(deviceId) + 1);
+  }
   cache.clear();
 }

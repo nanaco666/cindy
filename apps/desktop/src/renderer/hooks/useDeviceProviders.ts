@@ -34,6 +34,25 @@ function getDeviceLink(): DeviceLinkShape | null {
 const cache = new Map<string, ProviderView[]>();
 const inflight = new Map<string, Promise<ProviderView[]>>();
 const deviceGen = new Map<string, number>();
+const listeners = new Map<string, Set<(providers: ProviderView[]) => void>>();
+
+function notifyDeviceProviders(deviceId: string, providers: ProviderView[]): void {
+  for (const listener of listeners.get(deviceId) ?? []) listener(providers);
+}
+
+/** 订阅某设备缓存的新快照；live provider push 后已挂载 hook 也能无空白帧地更新。 */
+export function subscribeDeviceProviders(
+  deviceId: string,
+  listener: (providers: ProviderView[]) => void,
+): () => void {
+  const bucket = listeners.get(deviceId) ?? new Set<(providers: ProviderView[]) => void>();
+  bucket.add(listener);
+  listeners.set(deviceId, bucket);
+  return () => {
+    bucket.delete(listener);
+    if (bucket.size === 0) listeners.delete(deviceId);
+  };
+}
 
 async function fetchDeviceProviders(deviceId: string): Promise<ProviderView[]> {
   const cached = cache.get(deviceId);
@@ -53,6 +72,7 @@ async function fetchDeviceProviders(deviceId: string): Promise<ProviderView[]> {
       if (isCurrent()) {
         cache.set(deviceId, providers);
         inflight.delete(deviceId);
+        notifyDeviceProviders(deviceId, providers);
       }
       return providers;
     })
@@ -84,20 +104,25 @@ export function useDeviceProviders(deviceId?: string): UseDeviceProvidersResult 
       setError(null);
       return;
     }
+    let cancelled = false;
+    const unsubscribe = subscribeDeviceProviders(deviceId, (next) => {
+      if (cancelled) return;
+      setProviders(next);
+      setError(null);
+      setLoading(false);
+    });
     const cached = cache.get(deviceId);
     if (cached) {
       setProviders(cached);
-      return;
+      setError(null);
+      setLoading(false);
+      return unsubscribe;
     }
-    let cancelled = false;
     // cache miss:先清空,避免 fetch 解析前(失败则永远)残留上一设备的供应商。
     setProviders([]);
     setLoading(true);
     setError(null);
     fetchDeviceProviders(deviceId)
-      .then((p) => {
-        if (!cancelled) setProviders(p);
-      })
       .catch((e: unknown) => {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : String(e));
@@ -107,6 +132,7 @@ export function useDeviceProviders(deviceId?: string): UseDeviceProvidersResult 
       });
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [deviceId]);
 

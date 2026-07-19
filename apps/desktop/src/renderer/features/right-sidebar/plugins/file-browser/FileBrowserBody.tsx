@@ -81,6 +81,7 @@ import {
   countFileDragItems,
   hasFileDragPayload,
   isDroppedFilePreviewSupported,
+  runExternalFileOpenRequest,
   splitExternalFilePath,
   type ExternalFileSelection,
 } from './dropExternalFile';
@@ -375,7 +376,7 @@ function FileBrowserBodyWithWorkdir({
   );
 
   const handleDroppedExternalFile = useCallback(
-    async (absPath: string) => {
+    async (absPath: string, isCancelled: () => boolean = () => false) => {
       if (!isDroppedFilePreviewSupported(absPath)) {
         toast.error(t('rightSidebar.fileBrowser.unsupportedDropFile'));
         return;
@@ -384,7 +385,7 @@ function FileBrowserBodyWithWorkdir({
       const localRelPath = !isRemote ? toWorkdirRel(workdir, absPath) : null;
       if (localRelPath) {
         const ok = await confirmSwitchAway(state.selectedFilePath, localRelPath);
-        if (!ok) return;
+        if (isCancelled() || !ok) return;
         setExternalFile(null);
         setMode('tree');
         setFilterQuery('');
@@ -400,7 +401,7 @@ function FileBrowserBodyWithWorkdir({
       }
 
       const ok = await confirmSwitchAway(state.selectedFilePath, null);
-      if (!ok) return;
+      if (isCancelled() || !ok) return;
       setMode('tree');
       setFilterQuery('');
       setExternalFile(external);
@@ -408,6 +409,26 @@ function FileBrowserBodyWithWorkdir({
     },
     [confirmSwitchAway, ctx, isRemote, revealFileInTree, state.selectedFilePath, t, workdir],
   );
+
+  // 聊天文件 chip 的“在侧边栏文件浏览器中打开”可把 workdir 外本地文件写成
+  // 一次性请求。这里直接复用上面的原生拖入处理，确保格式限制、dirty guard、
+  // 只读预览和“仓内路径仍定位文件树”的行为只有一份实现。
+  const externalFilePath = state.externalFilePath ?? null;
+  const externalFileNonce = state.externalFileNonce ?? 0;
+  useEffect(() => {
+    if (!externalFilePath) return;
+    let cancelled = false;
+    void runExternalFileOpenRequest({
+      absPath: externalFilePath,
+      open: handleDroppedExternalFile,
+      isCancelled: () => cancelled,
+      clearRequest: () => ctx.patchState({ externalFilePath: null }),
+    });
+    return () => {
+      cancelled = true;
+    };
+    // ctx / handler 引用变化不应重放已消费的请求；path / nonce 更新会取消旧请求。
+  }, [externalFilePath, externalFileNonce]);
 
   const handleDrop = useCallback(
     (event: DragEvent<HTMLDivElement>) => {

@@ -87,11 +87,25 @@ function parseCommand(raw: unknown): RsbWindowCommand {
     return { type: 'close-orca-workers-tab', sessionId: r.sessionId };
   }
   if (r.type === 'open-file-browser') {
+    if (r.targetKind === 'external-file') {
+      if (typeof r.absPath !== 'string' || r.absPath.length === 0) {
+        throwIpcError('INVALID_PARAMS', 'command.absPath required');
+      }
+      return {
+        type: 'open-file-browser',
+        sessionId: r.sessionId,
+        absPath: r.absPath,
+        targetKind: 'external-file',
+      };
+    }
     if (typeof r.relPath !== 'string' || r.relPath.length === 0) {
       throwIpcError('INVALID_PARAMS', 'command.relPath required');
     }
     if (r.targetKind !== 'file' && r.targetKind !== 'directory') {
-      throwIpcError('INVALID_PARAMS', 'command.targetKind must be file | directory');
+      throwIpcError(
+        'INVALID_PARAMS',
+        'command.targetKind must be file | directory | external-file',
+      );
     }
     return {
       type: 'open-file-browser',

@@ -228,7 +228,7 @@ describe('SkillhubMarketService', () => {
   });
 
   it('maps categories and user departments into renderer result shapes', async () => {
-    const { fetch } = makeFetch([
+    const { fetch, calls } = makeFetch([
       [
         {
           slug: 'devtools',
@@ -241,7 +241,14 @@ describe('SkillhubMarketService', () => {
         },
         { slug: 'writing', name: 'Writing' },
       ],
-      { user: { firstLevelDepartmentIds: ['od-1'], firstLevelDepartmentNames: ['Dept'] } },
+      {
+        departments: [{ deptId: 'od-leaf', name: 'Leaf', path: 'Dept / Leaf' }],
+        firstLevelDepts: [
+          { deptId: 'od-1', name: 'Dept' },
+          { deptId: 'od-1', name: 'Dept (duplicate)' },
+        ],
+        allDeptIds: ['od-1', 'od-leaf'],
+      },
       [{ slug: 'team-a', name: 'Team A', type: 'team' }],
     ]);
     const service = new SkillhubMarketService({ fetch });
@@ -260,6 +267,10 @@ describe('SkillhubMarketService', () => {
       success: true,
       ids: ['od-1'],
       names: ['Dept'],
+    });
+    expect(calls[1]).toEqual({
+      path: '/api/skills-hub/users/departments',
+      opts: undefined,
     });
     await expect(service.listUserTeams()).resolves.toEqual({
       success: true,

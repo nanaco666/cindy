@@ -42,6 +42,7 @@ import type { AgentRuntimeConfig } from '../interfaces/runtime-config.js';
 import type { Logger } from '../interfaces/logger.js';
 import type { McpProvider } from '../interfaces/mcp-provider.js';
 import type { MakerMemoryManager } from '../memory/manager.js';
+import type { CodexModelListItem } from './codex/app-server/protocol.js';
 import type {
   ScanAtResourcesOptions,
   ScanAtResourcesResult,
@@ -175,6 +176,15 @@ export interface AgentDeps {
   prepareCodexLocalCredentialModeSwitch?: (
     ctx: CodexLocalCredentialModeSwitchContext,
   ) => Promise<void>;
+
+  /**
+   * Codex 专用：本地 app-server `model/list` 返回完整分页快照后通知宿主。
+   * maker-core 只负责拿官方运行时清单；如何映射、存入产品目录及广播由 host 决定。
+   * 远端 SSH host 不触发，避免把远端账号的模型清单覆盖本机账号目录。
+   */
+  onCodexLocalModelsListed?: (
+    models: readonly CodexModelListItem[],
+  ) => void | Promise<void>;
 
   /**
    * Codex-only: bind app-server thread ids back to xdt-maker session context
@@ -891,6 +901,16 @@ export abstract class BaseAgent {
 
   logout() {
     return this.deps.auth.logout();
+  }
+
+  /**
+   * 刷新 agent 本机运行时暴露的模型清单。
+   *
+   * 默认无运行时发现能力，返回 false；Codex 覆盖后通过 app-server `model/list`
+   * 拉完整分页快照。返回值表示快照是否仍属于当前 host 且已由宿主成功应用。
+   */
+  async refreshLocalModels(): Promise<boolean> {
+    return false;
   }
 
   /**

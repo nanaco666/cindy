@@ -98,13 +98,19 @@ import {
   isLongPasteText,
   countPasteLines,
   htmlCarriesOwnChipMarkup,
+  LONG_PASTE_MAX_CHARS,
   segmentPastedContent,
   pastedProjectChipAttrs,
   serializeProjectChipText,
 } from './pastePipeline';
 import { upgradePastedPathsToChips, type PendingPathRange } from './pathPaste';
 import { docContainsAtomChip } from './composerDocState';
-import { PastedTextChipNode, type PastedTextChipAttrs } from './PastedTextChipNode';
+import {
+  applyPastedTextChipEdit,
+  PastedTextChipNode,
+  replacePastedTextChipWithPlainText,
+  type PastedTextChipAttrs,
+} from './PastedTextChipNode';
 import { ToolPayloadLightbox } from '@/components/chat/ToolPayloadLightbox';
 import { Fragment, Slice } from '@tiptap/pm/model';
 import * as sessionService from '@/lib/sessionService';
@@ -1106,8 +1112,12 @@ export function ChatInput({
   deviceLinkDeviceIdRef.current = deviceLinkDeviceId;
   const tRef = useRef(t);
   tRef.current = t;
-  // 长文本粘贴 chip 的点击预览(handleClickOn → ToolPayloadLightbox text 模式)。
-  const [pastedTextPreview, setPastedTextPreview] = useState<string | null>(null);
+  // 长文本粘贴 chip 的点击编辑目标。保存时用 nodePos + originalText 双重校验，
+  // 防止弹窗打开期间草稿 / 会话替换后误改同位置上的其它节点。
+  const [pastedTextEditTarget, setPastedTextEditTarget] = useState<{
+    nodePos: number;
+    originalText: string;
+  } | null>(null);
 
   // ── Model / effort / permission — Single Source of Truth ────────────
   // model-selector-xhigh-ui-stale fix (2026-04-21): the previous design held
@@ -1393,11 +1403,14 @@ export function ChatInput({
           return false;
         },
       },
-      handleClickOn(_view, _pos, node, _nodePos, _event, direct) {
-        // 长文本粘贴 chip:点击打开只读预览(ToolPayloadLightbox text 模式)。
+      handleClickOn(_view, _pos, node, nodePos, _event, direct) {
+        // 长文本粘贴 chip:点击打开 ToolPayloadLightbox 的可编辑 text 模式。
         // 仅 direct 命中(点在节点本体上)才消费,避免吞掉普通文本点击。
         if (direct && node.type.name === 'pastedTextChip') {
-          setPastedTextPreview((node.attrs as PastedTextChipAttrs).text);
+          setPastedTextEditTarget({
+            nodePos,
+            originalText: (node.attrs as PastedTextChipAttrs).text,
+          });
           return true;
         }
         return false;
@@ -1815,6 +1828,49 @@ export function ChatInput({
   useEffect(() => {
     editorRef.current = editor;
   }, [editor]);
+
+  const handleSavePastedText = useCallback(
+    (text: string) => {
+      const currentEditor = editorRef.current;
+      if (!currentEditor || !pastedTextEditTarget) return;
+
+      // PastedTextChip 把原文写进 data-pasted-text 以支持复制回环；编辑后
+      // 超过同一硬上限时降级为普通文本，避免超大 DOM attribute 重新引入卡顿。
+      if (text.length > LONG_PASTE_MAX_CHARS) {
+        replacePastedTextChipWithPlainText(
+          currentEditor,
+          pastedTextEditTarget.nodePos,
+          pastedTextEditTarget.originalText,
+          text,
+        );
+        return;
+      }
+
+      const nextAttrs =
+        text.length === 0
+          ? null
+          : {
+              text,
+              display: t('newChat.pastedText.chipLabel', {
+                lines: countPasteLines(text),
+              }),
+            };
+      applyPastedTextChipEdit(
+        currentEditor,
+        pastedTextEditTarget.nodePos,
+        pastedTextEditTarget.originalText,
+        nextAttrs,
+      );
+    },
+    [pastedTextEditTarget, t],
+  );
+
+  const handleClosePastedTextEdit = useCallback(() => {
+    setPastedTextEditTarget(null);
+    // ToolPayloadLightbox calls onClose after its fade-out; restore composer focus
+    // only after the overlay has relinquished its primary textarea.
+    requestAnimationFrame(() => editorRef.current?.commands.focus());
+  }, []);
 
   // 意识指令确认胶囊:清单推给 GhostCommandDecoration(装/卸/唤醒/沉睡即时
   // 反映;plugin 不自己查 listSync,同步 IPC 不进 keystroke 热路径)。
@@ -4550,15 +4606,20 @@ export function ChatInput({
       </div>
       </div>
 
-      {/* 长文本粘贴 chip 的只读预览(editorProps.handleClickOn 打开)。 */}
-      {pastedTextPreview != null && (
+      {/* 长文本粘贴 chip 的编辑弹窗(editorProps.handleClickOn 打开)。 */}
+      {pastedTextEditTarget != null && (
         <ToolPayloadLightbox
           payload={{
             kind: 'text',
-            title: t('newChat.pastedText.previewTitle'),
-            text: pastedTextPreview,
+            title: t('newChat.pastedText.editTitle'),
+            text: pastedTextEditTarget.originalText,
           }}
-          onClose={() => setPastedTextPreview(null)}
+          textEdit={{
+            cancelLabel: t('newChat.pastedText.cancelEdit'),
+            saveLabel: t('newChat.pastedText.saveEdit'),
+            onSave: handleSavePastedText,
+          }}
+          onClose={handleClosePastedTextEdit}
         />
       )}
 

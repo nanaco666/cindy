@@ -32,6 +32,7 @@ describe('maker auth IPC handlers', () => {
     const harness = new IpcHarness();
     const broadcast = vi.fn();
     const onCodexAuthChange = vi.fn().mockResolvedValue(undefined);
+    const refreshAgentLocalModels = vi.fn().mockResolvedValue(true);
     const triggerAgentLogin = vi
       .fn()
       .mockImplementation(async (_agentKind, options: { onProgress: (msg: string) => void }) => {
@@ -47,7 +48,7 @@ describe('maker auth IPC handlers', () => {
 
     registerMakerAuthHandlers(
       harness,
-      createMakerStub({ triggerAgentLogin }),
+      createMakerStub({ triggerAgentLogin, refreshAgentLocalModels }),
       broadcast,
       () => null,
       onCodexAuthChange,
@@ -59,7 +60,8 @@ describe('maker auth IPC handlers', () => {
       identity: { email: 'dev@example.test' },
     });
     expect(onCodexAuthChange).toHaveBeenCalledOnce();
-    expect(onCodexAuthChange).toHaveBeenCalledWith(true);
+    expect(refreshAgentLocalModels).toHaveBeenCalledWith('codex');
+    expect(onCodexAuthChange).toHaveBeenCalledWith(true, true, expect.any(Function));
     expect(broadcast).toHaveBeenNthCalledWith(1, MAKER_PUSH.AUTH_LOGIN_PROGRESS, {
       agentKind: 'codex',
       phase: 'login-pending',
@@ -79,6 +81,63 @@ describe('maker auth IPC handlers', () => {
       authenticated: true,
       authSource: 'oauth',
       identity: { email: 'dev@example.test' },
+    });
+  });
+
+  it('keeps login successful and requests disk fallback when live model refresh fails', async () => {
+    const harness = new IpcHarness();
+    const onCodexAuthChange = vi.fn().mockResolvedValue(undefined);
+    const triggerAgentLogin = vi.fn().mockResolvedValue({ authenticated: true, authSource: 'oauth' });
+    const refreshAgentLocalModels = vi.fn().mockRejectedValue(new Error('model/list unavailable'));
+
+    registerMakerAuthHandlers(
+      harness,
+      createMakerStub({ triggerAgentLogin, refreshAgentLocalModels }),
+      vi.fn(),
+      () => null,
+      onCodexAuthChange,
+    );
+
+    await expect(harness.invoke(MAKER_INVOKE.AUTH_TRIGGER_LOGIN, 'codex')).resolves.toMatchObject({
+      authenticated: true,
+    });
+    expect(onCodexAuthChange).toHaveBeenCalledWith(true, false, expect.any(Function));
+  });
+
+  it('drops a stale login refresh when a concurrent logout establishes a newer auth boundary', async () => {
+    const harness = new IpcHarness();
+    const broadcast = vi.fn();
+    let resolveRefresh!: (value: boolean) => void;
+    const refreshAgentLocalModels = vi.fn(() => new Promise<boolean>((resolve) => {
+      resolveRefresh = resolve;
+    }));
+    const onCodexAuthChange = vi.fn().mockResolvedValue(undefined);
+    const triggerAgentLogin = vi.fn().mockResolvedValue({ authenticated: true, authSource: 'oauth' });
+    const logoutAgent = vi.fn().mockResolvedValue(undefined);
+
+    registerMakerAuthHandlers(
+      harness,
+      createMakerStub({ triggerAgentLogin, refreshAgentLocalModels, logoutAgent }),
+      broadcast,
+      () => null,
+      onCodexAuthChange,
+    );
+
+    const login = harness.invoke(MAKER_INVOKE.AUTH_TRIGGER_LOGIN, 'codex');
+    await vi.waitFor(() => expect(refreshAgentLocalModels).toHaveBeenCalledOnce());
+    await expect(harness.invoke(MAKER_INVOKE.AUTH_LOGOUT, 'codex')).resolves.toBeUndefined();
+    resolveRefresh(true);
+
+    await expect(login).resolves.toEqual({
+      authenticated: false,
+      errorReason: 'auth_mutation_superseded',
+    });
+    expect(onCodexAuthChange).toHaveBeenCalledTimes(1);
+    expect(onCodexAuthChange).toHaveBeenCalledWith(false, false, expect.any(Function));
+    expect(broadcast).toHaveBeenCalledTimes(1);
+    expect(broadcast).toHaveBeenCalledWith(MAKER_PUSH.AUTH_STATE_CHANGED, {
+      agentKind: 'codex',
+      authenticated: false,
     });
   });
 
@@ -170,7 +229,7 @@ describe('maker auth IPC handlers', () => {
 
     await expect(harness.invoke(MAKER_INVOKE.AUTH_LOGOUT, 'codex')).resolves.toBeUndefined();
     expect(calls).toEqual(['logout', 'finalize', 'broadcast']);
-    expect(onCodexAuthChange).toHaveBeenCalledWith(false);
+    expect(onCodexAuthChange).toHaveBeenCalledWith(false, false, expect.any(Function));
     expect(broadcast).toHaveBeenCalledWith(MAKER_PUSH.AUTH_STATE_CHANGED, {
       agentKind: 'codex',
       authenticated: false,

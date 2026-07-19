@@ -11,7 +11,9 @@ import {
   finalizeCodexAfterAuthModeChange,
   cancelCodexAuthModeChange,
 } from '../maker-host/index.js';
-import { setXdGatewayModels } from '../maker-host/active-catalog.js';
+import { getActiveCatalog, setXdGatewayModels } from '../maker-host/active-catalog.js';
+import { isDev } from '../manifestService.js';
+import { overlayCindyModelMeta } from './devMetaOverlay.js';
 import { throwIpcError } from '../utils/ipcValidate.js';
 import {
   MODEL_ACCESS_STATUS_CHANNEL,
@@ -122,8 +124,15 @@ let authGeneration = 0;
 let lastAuthUserId: string | null = null;
 
 function applyGatewayModels(models: ModelAccessGatewayModel[]): void {
+  // dev:本地目录文件(catalog/providers.json)的 cindyModelMeta 段覆盖服务端下发的
+  // 元数据,改本地 json + 重启即可自测,无需发 OSS / 等服务端热加载;只覆盖同 id,
+  // 清单成员资格仍以网关为准。packaged 不走此分支(语义见 devMetaOverlay.ts)。
+  const effective =
+    isDev() && models.length > 0
+      ? overlayCindyModelMeta(models, getActiveCatalog().cindyModelMeta, log)
+      : models;
   // active-catalog 统一收口会原地刷新 Maker capabilities，再广播同一 revision。
-  setXdGatewayModels(models);
+  setXdGatewayModels(effective);
 }
 
 async function runModelsSync(myGen: number): Promise<void> {

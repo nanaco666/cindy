@@ -1755,7 +1755,8 @@
           "removeConfirm": "解绑",
           "cancelPending": "取消",
           "dismiss": "知道了",
-          "addWorkspace": "添加 Slack workspace"
+          "addWorkspace": "添加 Slack workspace",
+          "alreadyBound": "授权的是已绑定的 {{team}}。要添加其它 workspace, 请在 Slack 授权页右上角先切换到目标 workspace 再点允许。"
         }
       },
       "summary": {
@@ -3446,7 +3447,10 @@
     },
     "pastedText": {
       "chipLabel": "粘贴的文本({{lines}} 行)",
-      "previewTitle": "粘贴的文本"
+      "previewTitle": "粘贴的文本",
+      "editTitle": "编辑粘贴的文本",
+      "cancelEdit": "取消编辑",
+      "saveEdit": "保存文本"
     }
   },
   "voiceInputOverlay": {

@@ -5,6 +5,10 @@
  * `catalog/providers.json`(v2)只承载 xai 静态清单 + presets 模板——它仍是
  * ① OSS `cfg/providers.json` 的发布物 ② dev 直读的仓库文件。anthropic/openai/xd
  * 的模型清单运行时动态注入(见 apps/desktop maker-host active-catalog),不再进目录文件。
+ * 目录文件顶层另有 `cindyModelMeta` 段:那是 cindy-server model-access-server 消费的
+ * 网关模型元数据覆盖表(与客户端目录共用一份 OSS 文件)。客户端侧 parseCatalog 不校验
+ * 内容、随目录透传(见 types.ts Catalog.cindyModelMeta);唯一客户端消费点是 dev 模式
+ * 的本地元数据覆盖(apps/desktop model-access devMetaOverlay),packaged 不读。
  */
 
 import type { Catalog, Provider, CatalogModel, AgentKind, Effort, ProviderPreset } from './types.js';

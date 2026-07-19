@@ -227,12 +227,16 @@ export function ensureActiveCatalogLoaded(): Promise<Catalog> {
  * renderer refetch 即能看到最新清单。登出时由 authenticated=false 直接清空；登录边界
  * 读取失败 / cache 缺失时也清空动态快照，回到静态目录，避免继续暴露上一账号的模型。
  */
-export async function refreshDiscoveredCodexModels(authenticated = true): Promise<void> {
+export async function refreshDiscoveredCodexModels(
+  authenticated = true,
+  shouldApply: () => boolean = () => true,
+): Promise<void> {
   if (!authenticated) {
-    setDiscoveredCodexModels([]);
+    if (shouldApply()) setDiscoveredCodexModels([]);
     return;
   }
-  setDiscoveredCodexModels(await readCodexDiscoveredModelsForAuthRefresh());
+  const discovered = await readCodexDiscoveredModelsForAuthRefresh();
+  if (shouldApply()) setDiscoveredCodexModels(discovered);
 }
 
 /**

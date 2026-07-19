@@ -13,6 +13,29 @@ interface SkillhubInstalledSkillForHub {
   version: string;
 }
 
+interface SkillhubUserDepartmentsResponse {
+  departments?: Array<{ deptId: string; name: string; path: string }>;
+  firstLevelDepts?: Array<{ deptId: string; name: string }>;
+  allDeptIds?: string[];
+}
+
+function mapFirstLevelDepartments(
+  firstLevelDepts: readonly { deptId: string; name: string }[] | undefined,
+): { ids: string[]; names: string[] } {
+  const ids: string[] = [];
+  const names: string[] = [];
+  const seen = new Set<string>();
+
+  for (const dept of firstLevelDepts ?? []) {
+    if (seen.has(dept.deptId)) continue;
+    seen.add(dept.deptId);
+    ids.push(dept.deptId);
+    names.push(dept.name);
+  }
+
+  return { ids, names };
+}
+
 export interface SkillhubMarketServiceOptions {
   fetch?: SkillhubMarketFetcher;
 }
@@ -204,16 +227,14 @@ export class SkillhubMarketService {
   }
 
   async getMyDepts() {
-    const me = await this.fetch<{
-      user: {
-        firstLevelDepartmentIds?: string[];
-        firstLevelDepartmentNames?: string[];
-      };
-    }>('/api/user/me');
+    const departments = await this.fetch<SkillhubUserDepartmentsResponse>(
+      '/api/skills-hub/users/departments',
+    );
+    const firstLevel = mapFirstLevelDepartments(departments.firstLevelDepts);
     return {
       success: true as const,
-      ids: me.user.firstLevelDepartmentIds ?? [],
-      names: me.user.firstLevelDepartmentNames ?? [],
+      ids: firstLevel.ids,
+      names: firstLevel.names,
     };
   }
 

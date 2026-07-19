@@ -1472,6 +1472,56 @@ describe('多 workspace 绑定(multi-team)', () => {
     expect(snap.bindings).toEqual([]);
   });
 
+  it('添加流授权落在已绑定 team: 合成 already-bound 终止态提示; 指定 team 重绑不提示', async () => {
+    const { manager, sock, server } = await connectMulti();
+    sock.send(serializeHookMessage(makeBindState({ bindings: [T1] })));
+    await expect.poll(() => manager.snapshot().bindings.length, { timeout: 3000 }).toBe(1);
+
+    // 「添加 workspace」流: 用户在授权页没切 workspace, confirmed 回的还是 T1
+    expect(manager.addBinding()).toBe(true);
+    await server.waitFor('bind.start');
+    sock.send(
+      serializeHookMessage(
+        makeBindUpdate({
+          state: 'confirmed',
+          slackUserId: 'U1',
+          slackUserName: 'lizi',
+          message: null,
+          teamId: 'T1',
+          teamName: 'xindong',
+        }),
+      ),
+    );
+    await expect
+      .poll(() => manager.snapshot().pendingBind?.reason, { timeout: 3000 })
+      .toBe('already-bound');
+    const snap = manager.snapshot();
+    expect(snap.pendingBind?.state).toBe('failed');
+    expect(snap.pendingBind?.teamId).toBe('T1');
+    expect(snap.bindings).toHaveLength(1);
+
+    // 指定 team 的重绑(刷新授权)回到同 team 是预期动作, 不合成提示
+    expect(manager.cancelPendingBind()).toBe(true);
+    expect(manager.rebindTeam('T1')).toBe(true);
+    await expect
+      .poll(() => server.frames.filter((f) => f.type === 'bind.start').length, { timeout: 3000 })
+      .toBe(2);
+    sock.send(
+      serializeHookMessage(
+        makeBindUpdate({
+          state: 'confirmed',
+          slackUserId: 'U1',
+          slackUserName: 'lizi',
+          message: null,
+          teamId: 'T1',
+          teamName: 'xindong',
+        }),
+      ),
+    );
+    await expect.poll(() => manager.snapshot().pendingBind, { timeout: 3000 }).toBeNull();
+    expect(manager.snapshot().bindings).toHaveLength(1);
+  });
+
   it('tool.request 携带 teamId; bound 判据 = 存在可用绑定(无需 legacy confirmed)', async () => {
     const { manager, sock, server } = await connectMulti({
       features: [HOOK_FEATURE_MULTI_TEAM, HOOK_FEATURE_SLACK_TOOLS],

@@ -44,6 +44,7 @@ import {
 } from '@/features/right-sidebar/lib/openInSidebarBrowser';
 import {
   openDirInSidebarFileBrowser,
+  openExternalFileInSidebarFileBrowser,
   openFileInSidebarFileBrowser,
 } from '@/features/right-sidebar/lib/openInSidebarFileBrowser';
 import { isRemoteFileOrigin } from '@/lib/sessionFileOrigin';
@@ -159,16 +160,26 @@ export function useFileChipContextMenu({
     if (!sessionId) return;
     const abs = await getAbsPath();
     const rel = toWorkdirRel(sessionFileCtx.workingDir, abs);
-    if (!rel) {
-      toast.error(t('chat.markdownRenderer.openInSidebarFileBrowserOutsideWorkdir'));
-      return;
-    }
     try {
       if (sidebarFileBrowserKind === 'directory') {
+        if (!rel) {
+          toast.error(t('chat.markdownRenderer.openInSidebarFileBrowserOutsideWorkdir'));
+          return;
+        }
         await openDirInSidebarFileBrowser(sessionId, rel);
         return;
       }
-      await openFileInSidebarFileBrowser(sessionId, rel);
+      if (rel) {
+        await openFileInSidebarFileBrowser(sessionId, rel);
+        return;
+      }
+      // 远程来源的绝对路径位于远端机器，不能按“本机外部拖入”读取；本地来源则
+      // 复用文件浏览器的外部文件拖入语义，以只读方式预览 workdir 外文件。
+      if (remoteOrigin) {
+        toast.error(t('chat.markdownRenderer.openInSidebarFileBrowserOutsideWorkdir'));
+        return;
+      }
+      await openExternalFileInSidebarFileBrowser(sessionId, abs);
     } catch {
       toast.error(t('chat.markdownRenderer.openInSidebarFileBrowserFailed'));
     }

@@ -1755,7 +1755,8 @@
           "removeConfirm": "解除",
           "cancelPending": "キャンセル",
           "dismiss": "閉じる",
-          "addWorkspace": "Slack ワークスペースを追加"
+          "addWorkspace": "Slack ワークスペースを追加",
+          "alreadyBound": "認可されたのはすでに連携済みの {{team}} です。別のワークスペースを追加するには、Slack の認可ページ右上でワークスペースを切り替えてから許可してください。"
         }
       },
       "summary": {
@@ -3446,7 +3447,10 @@
     },
     "pastedText": {
       "chipLabel": "貼り付けたテキスト({{lines}} 行)",
-      "previewTitle": "貼り付けたテキスト"
+      "previewTitle": "貼り付けたテキスト",
+      "editTitle": "貼り付けたテキストを編集",
+      "cancelEdit": "編集をキャンセル",
+      "saveEdit": "テキストを保存"
     }
   },
   "voiceInputOverlay": {

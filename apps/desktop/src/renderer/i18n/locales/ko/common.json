@@ -1755,7 +1755,8 @@
           "removeConfirm": "해제",
           "cancelPending": "취소",
           "dismiss": "닫기",
-          "addWorkspace": "Slack 워크스페이스 추가"
+          "addWorkspace": "Slack 워크스페이스 추가",
+          "alreadyBound": "이미 연동된 {{team}}이(가) 인증되었습니다. 다른 워크스페이스를 추가하려면 Slack 인증 페이지 오른쪽 위에서 워크스페이스를 전환한 후 허용하세요."
         }
       },
       "summary": {
@@ -3446,7 +3447,10 @@
     },
     "pastedText": {
       "chipLabel": "붙여넣은 텍스트({{lines}}줄)",
-      "previewTitle": "붙여넣은 텍스트"
+      "previewTitle": "붙여넣은 텍스트",
+      "editTitle": "붙여넣은 텍스트 편집",
+      "cancelEdit": "편집 취소",
+      "saveEdit": "텍스트 저장"
     }
   },
   "voiceInputOverlay": {

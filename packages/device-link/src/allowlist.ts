@@ -351,6 +351,8 @@ export const PUSH_FORWARD_ALLOWLIST: ReadonlySet<string> = new Set([
   'maker:input:projection',
   'maker:interaction-request',
   'maker:interaction-dismissed',
+  // 被控端 active-catalog revision 变化：控制端按 deviceId 驱逐并重拉 provider 目录。
+  'maker:provider:changed',
   // 注:maker:auth:state-changed 曾在此 —— 但发射点不 tap、控制端也不消费(被控端 agent 鉴权
   // 状态推给控制端语义存疑),是死条目,已移除避免误导。真要转发需先想清控制端如何路由。
   'maker:schedule:event',

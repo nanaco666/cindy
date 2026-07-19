@@ -46,6 +46,12 @@ export type RsbWindowCommand =
       sessionId: string;
       relPath: string;
       targetKind: 'file' | 'directory';
+    }
+  | {
+      type: 'open-file-browser';
+      sessionId: string;
+      absPath: string;
+      targetKind: 'external-file';
     };
 
 /** renderer 请求 main 原子裁决当前 RSB command 的宿主。 */

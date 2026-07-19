@@ -43,6 +43,7 @@ import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { toast } from '@/lib/toast';
 import { extractIpcError } from '@/utils/ipcError';
 import {
+  HOOK_BIND_REASON_ALREADY_BOUND,
   HOOK_BIND_REASON_NOT_INSTALLED,
   HOOK_CHAT_WORKSPACE_ALIAS,
   slackHookInstallUrl,
@@ -653,10 +654,18 @@ export function HookConnectionsSection() {
                 !isNotInstalled ? (
                   <div className="flex items-center gap-2">
                     <span className="min-w-0 flex-1 text-11 leading-relaxed text-[var(--error-fg)]">
-                      {hook.pendingBind.message ??
-                        t(
-                          `settings.remoteControl.hook.binding.state.${hook.pendingBind.state}`,
-                        )}
+                      {hook.pendingBind.reason === HOOK_BIND_REASON_ALREADY_BOUND
+                        ? t('settings.remoteControl.hook.multi.alreadyBound', {
+                            team:
+                              hook.bindings.find((b) => b.teamId === hook.pendingBind?.teamId)
+                                ?.teamName ??
+                              hook.pendingBind.teamId ??
+                              '',
+                          })
+                        : (hook.pendingBind.message ??
+                          t(
+                            `settings.remoteControl.hook.binding.state.${hook.pendingBind.state}`,
+                          ))}
                     </span>
                     <button
                       type="button"
