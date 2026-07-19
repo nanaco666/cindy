@@ -1261,11 +1261,12 @@ export function ChatInput({
       : null;
   }, [providers, currentModelAgentKind, selectedProviderId, activeModel]);
 
-  // 模型预设采用「全局默认 + 当前会话保护」:
+  // 模型预设采用「全局默认 + 已创建会话保护」:
   //   - 本地草稿 / 已创建会话的**非选中行**都读写 providerModelMemory,所以同一
   //     (agent, model) 的 effort/fast 会跨对话、跨来源即时同步。
-  //   - 当前选中行始终由 ModelSelector 读取会话 live props(DB / runtime),不会被其它对话改写。
+  //   - 已创建会话的当前选中行由 ModelSelector 读取 live props(DB / runtime),不会被其它对话改写;
   //     该会话切走后再切回此模型,才会采用最新全局预设。
+  //   - 首页草稿无 live 会话,NewMakerDraftRoute 会把当前显示模型的 props 也从全局预设派生。
   //   - device-link 必须使用被控端镜像 override;旧被控端拿不到镜像时宁可无记忆,也不掺控制端本机。
   const modelMemory = useMemo<ModelMemoryAccessors | undefined>(() => {
     // device-link 远程草稿 / 会话:用纯显示镜像 override(读被控端全局预设、写穿被控端)。

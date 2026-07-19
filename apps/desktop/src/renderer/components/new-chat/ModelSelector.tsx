@@ -40,8 +40,8 @@ export { categorize, CATEGORY_LABEL_KEY, type ModelCategory } from './sourceSwit
  *   - 本地草稿 / 已创建会话 → providerModelMemory(跨对话、跨重启持久)
  *   - device-link 远程草稿 / 会话 → 被控端全局预设的纯显示镜像(写穿被控端),控制端本地不落记忆
  *   - 不传(flat 选择器:CreateWorkerPopover / scheduler)→ 非选中行不读不写任何记忆,只显示模型默认
- * 选中行的 effort/fast 不走这里(草稿走 lastByVendor / props,会话走 DB 的 initialEffort/fastMode),
- * 因此其它对话更新全局预设时,正在使用该模型的会话不会被覆盖。
+ * 选中行仍只读调用方 props:已创建会话的 props 来自 live DB/runtime,因此不会被其它对话覆盖;
+ * 首页草稿的 props 则由 NewMakerDraftRoute 从同一份全局预设派生,没有“当前会话保护”。
  */
 export interface ModelMemoryAccessors {
   getEffort: (agent: AgentKind, providerId: string, modelId: string) => Effort | undefined;
@@ -458,7 +458,7 @@ export function ModelSelectorContent({
   const isSelectedRow = (providerId: string | null, id: string): boolean =>
     id === modelId && (providerId === null || providerId === activeSourceId);
 
-  // 行内 Fast 闪电:选中行 → live fastMode;其余行 → (agent,model) 全局预设(本机 =
+  // 行内 Fast 闪电:选中行 → 调用方 fastMode(会话 = live;首页草稿 = 全局预设派生);其余行 → (agent,model) 全局预设(本机 =
   // providerModelMemory / 远程 = 被控端镜像),并由 fastEditable 按当前来源 capability 过滤。
   const fastOnOf = (providerId: string | null, m: RowModel): boolean => {
     if (!fastEditable(providerId, m)) return false;
@@ -467,7 +467,7 @@ export function ModelSelectorContent({
     return modelMemory?.getFast(currentAgentKind, providerId, m.id) ?? false;
   };
 
-  // 某 (供应商, 模型) 行当前要展示的 effort(选中 → live;否则全局模型预设 → 模型默认)。
+  // 某 (供应商, 模型) 行当前要展示的 effort(选中 → 调用方值;否则全局模型预设 → 模型默认)。
   // 预设若不被该来源支持,在这里按行 capabilities 回落;无 effort 档返回 null。
   const rowEffortOf = (providerId: string | null, m: RowModel): Effort | null => {
     if (!m.efforts || m.efforts.length === 0) return null;

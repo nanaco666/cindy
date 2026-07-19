@@ -70,7 +70,12 @@ import {
   setEffortForModel,
   type VendorPrefs,
 } from '@/state/newMakerDraft';
-import { getProviderModelFast, setProviderModelFast } from '@/state/providerModelMemory';
+import {
+  getProviderModelEffort,
+  getProviderModelFast,
+  setProviderModelFast,
+  useProviderModelMemoryVersion,
+} from '@/state/providerModelMemory';
 import { setPending, setPendingGoal } from '@/state/pendingFirstMessage';
 import {
   clearDraftAndNotify as clearComposerDraftAndNotify,
@@ -111,7 +116,7 @@ import { useProviders } from '@/hooks/useProviders';
 import { evictDeviceProviders, useDeviceProviders } from '@/hooks/useDeviceProviders';
 import { evictDeviceGitSafetySettings } from '@/hooks/useGitSafetySettings';
 import { resolveFastSupported } from '@/lib/providerModels';
-import { effectiveSourceIdForModel } from '@lizi/model-providers';
+import { effectiveSourceIdForModel, getModel } from '@lizi/model-providers';
 import {
   resolveDeviceLinkDraftDefaults,
   type DeviceLinkDraftSelection,
@@ -127,6 +132,7 @@ import {
   DRAFT_RIGHT_SIDEBAR_TOGGLE_DRAG_STYLE,
   resolveNewMakerDraftRightSidebar,
 } from './newMakerDraftRightSidebar';
+import { resolveNewMakerDraftEffort } from './newMakerDraftModelPrefs';
 import { closeAllTabs as closeRightSidebarTabs } from '@/features/right-sidebar/store';
 import { revealOrcaWorkersTab } from '@/features/right-sidebar/plugins/orca-workers/actions';
 
@@ -407,8 +413,6 @@ export function NewMakerDraftRoute() {
   // fallback——草稿态没真实会话目录可写),但 draftKey 用 NEW_MAKER_DRAFT_KEY
   // 让附件能在"切走再切回"时存活。
   const attachmentState = useAttachments(undefined, NEW_MAKER_DRAFT_KEY);
-  const [fastMode, setFastModeState] = useState(() => getFastModeForModel(chatPrefs.model));
-
   const effectiveWorkingDir = draft.workingDir;
   const effectiveRemoteHostId = draft.remoteHostId;
   const isRemoteProjectDraft = effectiveWorkingDir != null && effectiveRemoteHostId != null;
@@ -493,6 +497,30 @@ export function NewMakerDraftRoute() {
     );
   }, [providers, capabilityAgentKind, chatPrefs.providerId, chatPrefs.model]);
 
+  // 首页是“下一次创建会话”的配置草稿,没有正在运行的当前模型需要保护。其它对话更新同一模型
+  // 的全局预设后,即使该模型正显示在首页 trigger 上,也应立即采用新 effort / fast。真实会话仍
+  // 由 CCAgentSessionView 的 live DB/runtime props 保护,不会走这里。
+  const modelPresetVersion = useProviderModelMemoryVersion();
+  const localDraftEffort = useMemo<Effort>(() => {
+    if (isDeviceLinkDraft || !effectiveSourceId) return chatPrefs.effort;
+    const provider = providers.find((item) => item.id === effectiveSourceId);
+    const model = provider ? getModel(provider, chatPrefs.model, capabilityAgentKind) : undefined;
+    return resolveNewMakerDraftEffort({
+      currentEffort: chatPrefs.effort,
+      presetEffort: getProviderModelEffort(capabilityAgentKind, effectiveSourceId, chatPrefs.model),
+      efforts: model?.efforts ?? [],
+      defaultEffort: model?.defaultEffort ?? null,
+    });
+  }, [
+    isDeviceLinkDraft,
+    effectiveSourceId,
+    providers,
+    capabilityAgentKind,
+    chatPrefs.model,
+    chatPrefs.effort,
+    modelPresetVersion,
+  ]);
+
   // 草稿 live fast 读 per-(agent, 来源, 模型) 记忆(与下拉行 fastOnOf / 会话 resolveFast 同口径,
   // 多供应商同名模型不串);该三元组无记录时回退 per-model 旧库 getFastModeForModel —— 仅兜底,
   // 不再是权威读源(retire 计划单列)。device-link 草稿不调本函数(以被控端镜像为准)。
@@ -556,7 +584,14 @@ export function NewMakerDraftRoute() {
     const key = `${effectiveDeviceLinkDeviceId}:${capabilityAgentKind}`;
     if (dlSeedKeyRef.current === key) return;
     dlSeedKeyRef.current = key;
-    setDlSel(resolveDeviceLinkDraftDefaults(capabilities, remoteDraftState.value));
+    setDlSel(
+      resolveDeviceLinkDraftDefaults(
+        capabilities,
+        remoteDraftState.value,
+        undefined,
+        capabilityAgentKind,
+      ),
+    );
   }, [isDeviceLinkDraft, effectiveDeviceLinkDeviceId, capabilityAgentKind, capabilities, remoteDraftState]);
 
   // 远程草稿展示用:已 seed 用 dlSel;seed 完成前(等隧道 / 能力)先用 capabilities 默认占位,
@@ -564,9 +599,11 @@ export function NewMakerDraftRoute() {
   const deviceLinkInitial = useMemo<DeviceLinkDraftSelection | null>(() => {
     if (!isDeviceLinkDraft) return null;
     if (dlSel) return dlSel;
-    if (capabilities) return resolveDeviceLinkDraftDefaults(capabilities, null);
+    if (capabilities) {
+      return resolveDeviceLinkDraftDefaults(capabilities, null, undefined, capabilityAgentKind);
+    }
     return null;
-  }, [isDeviceLinkDraft, dlSel, capabilities]);
+  }, [isDeviceLinkDraft, dlSel, capabilities, capabilityAgentKind]);
 
   // ── device-link 草稿列表「纯显示镜像」(非选中行的 effort/fast) ──────────────────
   // scopeKey 按设备隔离。镜像 = 被控端 providerModelMemory 全量快照(草稿列表行的真实读源),
@@ -606,7 +643,12 @@ export function NewMakerDraftRoute() {
       if (capabilities) {
         setDlSel((prev) => {
           if (!prev) return prev;
-          const re = resolveDeviceLinkDraftDefaults(capabilities, next, prev.model);
+          const re = resolveDeviceLinkDraftDefaults(
+            capabilities,
+            next,
+            prev.model,
+            capabilityAgentKind,
+          );
           return { ...prev, effort: re.effort, fastMode: re.fastMode };
         });
       }
@@ -711,7 +753,7 @@ export function NewMakerDraftRoute() {
       ? deviceLinkInitial?.fastMode ?? false
       : false
     : supportsFastMode
-      ? fastMode
+      ? resolveDraftFast(chatPrefs.model)
       : false;
   // 计划模式草稿态:仅本地草稿支持(device-link 远程草稿 v1 不透传,入口也不显示;
   // 创建后进会话仍可经运行时隧道切换)。
@@ -724,8 +766,8 @@ export function NewMakerDraftRoute() {
     if (isDeviceLinkDraft && deviceLinkInitial) {
       return { model: deviceLinkInitial.model, effort: deviceLinkInitial.effort };
     }
-    return { model: chatPrefs.model, effort: chatPrefs.effort };
-  }, [isDeviceLinkDraft, deviceLinkInitial, chatPrefs.model, chatPrefs.effort]);
+    return { model: chatPrefs.model, effort: localDraftEffort };
+  }, [isDeviceLinkDraft, deviceLinkInitial, chatPrefs.model, localDraftEffort]);
 
   // 远程草稿的权限档 / 来源同样取镜像 holder;本地走 chatPrefs。
   const chatInitialPermissionMode = isDeviceLinkDraft
@@ -734,16 +776,6 @@ export function NewMakerDraftRoute() {
   const chatInitialProviderId = isDeviceLinkDraft
     ? deviceLinkInitial?.providerId ?? null
     : chatPrefs.providerId ?? null;
-
-  useEffect(() => {
-    // device-link 的 fast 由 dlSel 持有,不走本地 fastMode state(避免与镜像值打架)。
-    if (isDeviceLinkDraft) return;
-    if (!supportsFastMode) {
-      setFastModeState(false);
-      return;
-    }
-    setFastModeState(resolveDraftFast(chatPrefs.model));
-  }, [chatPrefs.model, supportsFastMode, isDeviceLinkDraft, resolveDraftFast]);
 
   // ─── 切 vendor ──────────────────────────────────────────────────────
   // 把"当前 vendor 的最新 prefs"落进 lastByVendor[oldVendor],然后切到新 vendor。
@@ -771,7 +803,12 @@ export function NewMakerDraftRoute() {
       // 切到 newModelId:从被控端整张草稿(含 per-model 记忆 effort/fastModeByModel)按目标模型解析,
       // 即「还原被控端为该模型记的 effort/fast」,而非沿用上一个模型 / capabilities 默认。
       // permission/source 非按模型记 → 保留草稿里的当前选择(prev),不被切模型重置。
-      const resolved = resolveDeviceLinkDraftDefaults(capabilities, remoteDraftState.value, newModelId);
+      const resolved = resolveDeviceLinkDraftDefaults(
+        capabilities,
+        remoteDraftState.value,
+        newModelId,
+        capabilityAgentKind,
+      );
       setDlSel((prev) => ({
         ...resolved,
         permissionMode: prev?.permissionMode,
@@ -780,19 +817,9 @@ export function NewMakerDraftRoute() {
       return;
     }
     patchActivePrefs({ model: newModelId });
-    // 本地草稿(已在上方对 device-link 早返回):走统一 helper 现查目标模型的 per-provider supportsFastMode
-    // (与 supportsFastMode memo 同口径)。deviceId=undefined 强制本地 providers。
-    const supportsFast = resolveFastSupported({
-      deviceId: undefined,
-      deviceProviders,
-      localProviders,
-      capabilities,
-      providerId: chatPrefs.providerId ?? null,
-      modelId: newModelId,
-      agentKind: capabilityAgentKind,
-    });
-    setFastModeState(supportsFast ? resolveDraftFast(newModelId) : false);
-  }, [isDeviceLinkDraft, capabilities, remoteDraftState, patchActivePrefs, resolveDraftFast, deviceProviders, localProviders, chatPrefs.providerId, capabilityAgentKind]);
+    // 本地草稿的 Fast 直接由「新 model + 全局预设 + 来源能力」派生,patch 后同步收敛,
+    // 不再维护一份可能与其它对话更新脱节的本地 state。
+  }, [isDeviceLinkDraft, capabilities, remoteDraftState, patchActivePrefs, capabilityAgentKind]);
   const handleFastModeChange = useCallback(
     (enabled: boolean) => {
       if (isDeviceLinkDraft) {
@@ -801,10 +828,8 @@ export function NewMakerDraftRoute() {
         return;
       }
       if (!supportsFastMode) {
-        setFastModeState(false);
         return;
       }
-      setFastModeState(enabled);
       // 权威库:per-(agent, 来源, 模型),与 resolveDraftFast 的读源对齐(ModelSelector 的 Edit 面板
       // 对选中模型也会写这一份;此处显式写一遍,使 onFastModeChange 走任何路径都自洽、不依赖选择器侧写)。
       if (effectiveSourceId) {
