@@ -73,6 +73,17 @@ describe('AgentActionRow — 行主文案', () => {
     expect(screen.queryByText('chat.agentActionRow.verb.ran')).toBeNull();
   });
 
+  it('工作动作模式:Bash 有 description 时仍直接显示真实命令', () => {
+    render(
+      createElement(AgentActionRow, {
+        message: mkTool('t1', 'Bash', { command: 'git status', description: '查看工作区状态' }),
+        preferRawCommand: true,
+      }),
+    );
+    expect(screen.getByText('git status')).toBeTruthy();
+    expect(screen.queryByText('查看工作区状态')).toBeNull();
+  });
+
   it('exec 无 description:回退为动词 + 命令文本', () => {
     render(
       createElement(AgentActionRow, {

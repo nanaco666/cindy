@@ -273,9 +273,26 @@ type ForkOriginRenderItem = {
   forkedAtMessageId: string;
 };
 
-/** work_group 子项的窄类型 — 运行中只收 tool / agent task / thinking,
- *  turn 完成后还会把 assistant 工作文字按原始顺序并入同一组。 */
+/** 原子工作子项:tool / agent task / thinking / assistant 工作文字。 */
 export type WorkChildItem = ToolSegmentRenderItem | AgentTaskRenderItem | MessageRenderItem;
+
+/** work_group 可以嵌套一层:完成态外组装 assistant 文字时间线,其中每段
+ *  连续动作仍是独立的内层「已工作 Xs」。内层继续只收原子工作子项。 */
+type WorkGroupChildItem = WorkChildItem | WorkGroupRenderItem;
+
+interface WorkGroupRenderItem {
+  /** work-group:运行中的连续动作段,或完成态收拢整段工作文字的外层时间线。
+   *  动作段展开后直接显示思考 / 工具行;外层展开后显示 assistant 文字和
+   *  仍保持折叠的内层动作段。tool_media 不参与合并,继续留在组外可见。 */
+  type: 'work_group';
+  key: string;
+  children: WorkGroupChildItem[];
+  durationMs?: number;
+  /** 当前是否是仍在执行的尾部动作段。完成态时间线始终 false。 */
+  isStreaming: boolean;
+  /** 工作段首个真实活动的 epoch ms,供 live elapsed ticker 使用。 */
+  startedAtMs?: number;
+}
 
 export type RenderItem =
   | MessageRenderItem
@@ -319,24 +336,7 @@ export type RenderItem =
        *  留在轮询调用处。仅同 ghostId 的结果可锚入;无回锚时字段缺省。 */
       media?: ToolMediaItem[];
     }
-  | {
-      /** work-group: 一段工作过程。运行中默认展示最近 5 条真实活动,结束后
-       *  折叠成一行「已工作 Xs ›」摘要(WorkGroupBlock)。运行中 assistant
-       *  工作文字留在主消息流;turn 完成后,最终答复阶段之前的 assistant
-       *  工作文字会与 tool / thinking 按原始顺序一起收入 children。
-       *  tool_media 不参与合并,产物继续留在折叠块外可见。
-       *  key 派生自首个真实活动的 clientId(`work-${clientId}`),与子项 key 同源
-       *  稳定。durationMs 是 run 首个真实活动 createdAt → 终结正文消息 createdAt
-       *  的墙钟跨度;历史数据缺时间戳时为 undefined(UI 显示不带时长的文案)。 */
-      type: 'work_group';
-      key: string;
-      children: WorkChildItem[];
-      durationMs?: number;
-      /** 当前是否是仍在执行的尾部工作段。 */
-      isStreaming: boolean;
-      /** 工作段首个真实活动的 epoch ms,供 live elapsed ticker 使用。 */
-      startedAtMs?: number;
-    };
+  | WorkGroupRenderItem;
 
 function isRenderWindowBoundaryItem(item: RenderItem | undefined): boolean {
   return item?.type === 'fork_origin'
@@ -620,13 +620,10 @@ function recoverLostAnchorIdx(items: RenderItem[], lostKey: string): number {
     } else if (it.type === 'agent_task') {
       if (it.toolCall?.clientId === lostCid) return i;
     } else if (it.type === 'work_group') {
-      // work_group 吸收了原 tool_segment / thinking message item — 老锚点
-      // (`seg-${cid}` / `msg-${cid}`)对应的 clientId 现在被 group 覆盖。
+      // work_group 可能嵌套完成态时间线 — 老锚点(`seg-${cid}` /
+      // `msg-${cid}` / `work-${cid}`)递归落到任一后代即由外组接住。
       if (it.key === lostKey || it.key.endsWith(`-${lostCid}`)) return i;
-      for (const child of it.children) {
-        if (child.type === 'message' && child.message.clientId === lostCid) return i;
-        if (child.type === 'tool_segment' && child.toolCalls.some((tc) => tc.clientId === lostCid)) return i;
-      }
+      if (renderItemContainsClientId(it, lostCid)) return i;
     } else if (it.type !== 'fork_origin') {
       // tool_media / agent_plan:其 key 派生自 stable message clientId,精确后缀匹配
       if (it.key === lostKey || it.key.endsWith(`-${lostCid}`)) return i;
@@ -1359,6 +1356,45 @@ function createWorkGroup(
   };
 }
 
+/** 完成态时间线:assistant 工作文字直接成为外组子项,文字之间的连续动作
+ *  继续复用 createWorkGroup 生成内层「已工作 Xs」。外组使用独立 key,
+ *  避免与第一段动作共享展开记忆;内组 key 保持不变,从运行中到完成后连续。 */
+function createCompletedWorkGroup(
+  run: WorkChildItem[],
+  nextItem: RenderItem | undefined,
+): WorkGroupRenderItem {
+  const hasAssistantText = run.some(
+    (item) => item.type === 'message' && item.message.role === 'assistant',
+  );
+  if (!hasAssistantText) return createWorkGroup(run, nextItem);
+
+  const children: WorkGroupChildItem[] = [];
+  let activityRun: WorkChildItem[] = [];
+  const flushActivityRun = (activityNextItem: RenderItem | undefined) => {
+    if (activityRun.length === 0) return;
+    children.push(createWorkGroup(activityRun, activityNextItem));
+    activityRun = [];
+  };
+
+  for (const item of run) {
+    if (isWorkActivityItem(item)) {
+      activityRun.push(item);
+      continue;
+    }
+    flushActivityRun(item);
+    children.push(item);
+  }
+  flushActivityRun(nextItem);
+
+  const outer = createWorkGroup(run, nextItem);
+  return {
+    ...outer,
+    key: `work-summary-${workGroupClientId(run)}`,
+    children,
+    isStreaming: false,
+  };
+}
+
 function groupLegacyWorkRuns(items: RenderItem[]): RenderItem[] {
   const out: RenderItem[] = [];
   let run: WorkChildItem[] = [];
@@ -1420,8 +1456,9 @@ function groupActiveWorkRuns(items: RenderItem[]): RenderItem[] {
 }
 
 /**
- * 已结束的 turn:最终答复阶段之前的 assistant 工作文字、tool、thinking、
- * 已结束 agent task 按原始顺序收入「已工作 Xs」。最后一个真实动作之后
+ * 已结束的 turn:最终答复阶段之前的 assistant 工作文字收入外层
+ * 「已工作 Xs」;文字之间的 tool / thinking / 已结束 agent task 仍各自
+ * 聚成内层「已工作 Xs」。最后一个真实动作之后
  * 连续输出的 assistant 文字视为最终答复阶段,留在组外;若整轮没有真实动作,
  * 只保留最后一条 assistant 正文,此前文字仍视作工作过程。
  *
@@ -1472,7 +1509,7 @@ function groupAnsweredTurnItems(
 
   const flushRun = (nextItem: RenderItem | undefined) => {
     if (run.length === 0) return;
-    out.push(createWorkGroup(run, nextItem));
+    out.push(createCompletedWorkGroup(run, nextItem));
     run = [];
   };
 
@@ -1630,16 +1667,16 @@ function renderWorkGroupChild(
  *
  * 新规则:assistant 文字在运行中始终持续可见,不进最近 5 条动作窗口;
  * 每次文字出现都结束前一个 live 动作片段,后续动作重新开一组。
- * turn 结束后,最终答复阶段之前的 assistant 工作文字与动作按原始顺序
- * 合并进「已工作 Xs」。tool_media 不参与折叠。
+ * turn 结束后,最终答复阶段之前的 assistant 工作文字收入外层「已工作 Xs」,
+ * 各段动作仍是内层「已工作 Xs」并保持原始顺序。tool_media 不参与折叠。
  *
  * 兼容旧规则:如果 turn 里还没有最终文本(例如正在流式执行),继续按连续的
  * tool_segment + thinking run 分组;正在进行中的尾部 run 也立即成为 work_group,
  * 默认仅展示最近 5 条活动,不再把所有卡片平铺到消息流。
  *
- * key 稳定性:分段与完成合并组都使用各自首个真实活动 clientId;
- * 因此第一段从 live 到 completed 的 key 不变。DB prepend 向前合并等场景由
- * recoverLostAnchorIdx 的 work_group 分支兜底找回锚点。
+ * key 稳定性:动作段始终使用首个真实活动 clientId,所以从 live 到完成后的
+ * 内层组 key 不变;完成态外组另用 `work-summary-*`,避免复用展开记忆。
+ * DB prepend 向前合并等场景由 recoverLostAnchorIdx 递归找回锚点。
  *
  * export 仅供单测使用。
  */
@@ -3017,41 +3054,54 @@ export function MessageStream({
               }
 
               if (item.type === 'work_group') {
-                // 折叠的工作过程组 — children 是 WorkChildItem(tool_segment /
-                // agent_task / thinking /完成态 assistant 工作文字),类型系统保证;
-                // 映射成 WorkGroupBlock 的窄类型,保持组件与 RenderItem 解耦。
-                const childItems: WorkGroupChild[] = item.children.map((c) =>
-                  c.type === 'tool_segment'
-                    ? {
-                        kind: 'tools' as const,
-                        key: c.key,
-                        toolCalls: c.toolCalls,
-                        resultMap: c.resultMap,
-                        settledIds: c.settledIds,
-                      }
-                    : c.type === 'message' && c.message.role === 'thinking'
-                      ? { kind: 'thinking' as const, key: c.key, message: c.message }
-                      : {
-                          kind: 'rendered' as const,
-                          key: c.key,
-                          renderNode: () =>
-                            renderWorkGroupChild(c, {
-                              workingDir,
-                              sessionId,
-                              sessionTitle,
-                              agentKind,
-                              remoteHostId,
-                              isSessionStreaming,
-                              firstUserMessageClientId,
-                              lastUserMessageClientId,
-                              localFileRefs,
-                              singleResultMap,
-                              assistantsWithFollowingUserBoundary,
-                              turnFinalAssistantClientIds,
-                              subagentModelByToolUseId,
-                            }),
-                        },
-                );
+                // 完成态外层时间线可包含内层 work_group。递归只负责形状映射,
+                // 具体折叠 / 直接详情逻辑全部复用 WorkGroupBlock。
+                const toWorkGroupChild = (child: WorkGroupChildItem): WorkGroupChild => {
+                  if (child.type === 'work_group') {
+                    return {
+                      kind: 'group',
+                      key: child.key,
+                      blockId: `work:${child.key.slice('work-'.length)}`,
+                      durationMs: child.durationMs,
+                      isStreaming: child.isStreaming,
+                      startedAtMs: child.startedAtMs,
+                      childItems: child.children.map(toWorkGroupChild),
+                    };
+                  }
+                  if (child.type === 'tool_segment') {
+                    return {
+                      kind: 'tools',
+                      key: child.key,
+                      toolCalls: child.toolCalls,
+                      resultMap: child.resultMap,
+                      settledIds: child.settledIds,
+                    };
+                  }
+                  if (child.type === 'message' && child.message.role === 'thinking') {
+                    return { kind: 'thinking', key: child.key, message: child.message };
+                  }
+                  return {
+                    kind: 'rendered',
+                    key: child.key,
+                    renderNode: () =>
+                      renderWorkGroupChild(child, {
+                        workingDir,
+                        sessionId,
+                        sessionTitle,
+                        agentKind,
+                        remoteHostId,
+                        isSessionStreaming,
+                        firstUserMessageClientId,
+                        lastUserMessageClientId,
+                        localFileRefs,
+                        singleResultMap,
+                        assistantsWithFollowingUserBoundary,
+                        turnFinalAssistantClientIds,
+                        subagentModelByToolUseId,
+                      }),
+                  };
+                };
+                const childItems = item.children.map(toWorkGroupChild);
                 return (
                   <WorkGroupBlock
                     key={item.key}

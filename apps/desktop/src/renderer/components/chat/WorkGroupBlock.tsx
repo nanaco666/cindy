@@ -1,20 +1,17 @@
 /**
  * WorkGroupBlock
  * ---------------------------------------------------------------------------
- * 「工作过程」组 — 运行中的连续 tool_segment + thinking 由 MessageStream 的
- * groupWorkRuns pass 聚成稳定 work_group item;turn 完成后,此前持续可见的
- * assistant 工作文字也按原始顺序并入组内。运行中默认展示最近 5 条真实活动;
- * 结束后收成一行「已工作 Xs ›」摘要。
+ * 「工作过程」组 — 运行中的连续动作由 MessageStream 聚成稳定 work_group;
+ * turn 完成后再用外层 work_group 收起此前持续可见的 assistant 工作文字,
+ * 文字之间的动作段仍保留为内层 work_group。运行中默认展示最近 5 条活动。
  *
- * 交互契约(两级展开):
- *   - 运行中默认露出 latest-five preview;结束后默认 collapsed。组头与
- *     AgentActionsBlock / ThinkingCard 同款视觉(icon 14 + Inter 14 in
- *     `--msg-tool-card-chevron` + trailing chevron)。
- *   - 第一级:点开组直接显示 assistant 工作文字,但只渲染 thinking /
- *     AgentActionsBlock 的折叠头行,不替用户展开子卡内部。
- *   - 第二级:用户在组内逐个点开想看的 thinking / 工具调用。
+ * 交互契约:
+ *   - 运行中动作组默认露出 latest-five preview;完成态默认 collapsed。
+ *   - 完成态外组展开后直接显示 assistant 文字,动作仍是内层「已工作 Xs」。
+ *   - 运行态或完成态的动作组展开后直接显示 thinking 内容和工具行;长 thinking
+ *     可再点行展开全文,工具行沿用 AgentActionRow 的详情交互。
  *   - 展开状态走 useExpandedBlockMemory(`work:<groupKey>`),app 运行期内记住;
- *     子卡各自独立记忆,与组互不影响。
+ *     外层、内层和长 thinking 各自独立记忆。
  *
  * 时长缺失(老历史数据没有 createdAt)时退化为「工作过程」文案,不显示时间。
  */
@@ -23,26 +20,21 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
-import { Check, ChevronDown, ChevronRight, Layers, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronRight, Layers, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { describeToolUse } from '@lizi/maker-shared';
 
 import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/lib/makerChatStore';
 import { useExpandedBlockMemory } from '@/hooks/useExpandedBlockMemory';
 import { Spinner } from '@/components/ui/spinner';
-import {
-  verbForTool,
-  verbLabelKeyForIntent,
-  verbLabelKeyForRow,
-} from '@/lib/agent-actions/verbAggregator';
-import { extractDisplayParam } from '@/lib/agent-actions/actionPresentation';
 
-import { AgentActionsBlock } from './AgentActionsBlock';
+import { AgentActionRow } from './AgentActionRow';
 import { ThinkingCard, formatDuration } from './ThinkingCard';
 
 /** work_group 子项的窄类型 — 与 MessageStream 的 RenderItem 解耦,由调用方映射。 */
@@ -55,10 +47,25 @@ export type WorkGroupChild =
       settledIds: Set<string>;
     }
   | { kind: 'thinking'; key: string; message: ChatMessage }
+  | {
+      kind: 'group';
+      key: string;
+      blockId: string;
+      durationMs?: number;
+      isStreaming: boolean;
+      startedAtMs?: number;
+      childItems: WorkGroupChild[];
+    }
   | { kind: 'rendered'; key: string; renderNode: () => ReactNode };
 
 export type LiveWorkActivity =
-  | { kind: 'tool'; key: string; message: ChatMessage; status: 'running' | 'done' }
+  | {
+      kind: 'tool';
+      key: string;
+      message: ChatMessage;
+      toolResult?: string;
+      status: 'running' | 'done';
+    }
   | { kind: 'thinking'; key: string; content: string };
 
 /** 运行中默认只露出最近 5 条真实活动,与 Slack 远控的滚动窗口同一思路。 */
@@ -75,6 +82,23 @@ function thinkingActivityForMessage(
     : null;
 }
 
+/** 工具活动投影同时供 live 最近五条和展开后的完整动作段使用。 */
+function toolActivityForMessage(
+  child: Extract<WorkGroupChild, { kind: 'tools' }>,
+  message: ChatMessage,
+  isStreaming: boolean,
+): Extract<LiveWorkActivity, { kind: 'tool' }> {
+  const done =
+    child.resultMap.has(message.clientId) || child.settledIds.has(message.clientId);
+  return {
+    kind: 'tool',
+    key: message.clientId,
+    message,
+    toolResult: child.resultMap.get(message.clientId),
+    status: isStreaming && !done ? 'running' : 'done',
+  };
+}
+
 /** 把完整 work_group 历史投影成轻量 live preview。rendered assistant 文本
  *  不属于动作;空 / redacted thinking 也不生成「Thought for 1s」之类噪音行。 */
 export function collectLiveWorkActivities(
@@ -89,14 +113,7 @@ export function collectLiveWorkActivities(
     if (child.kind === 'tools') {
       for (let toolIdx = child.toolCalls.length - 1; toolIdx >= 0; toolIdx--) {
         const message = child.toolCalls[toolIdx];
-        const done =
-          child.resultMap.has(message.clientId) || child.settledIds.has(message.clientId);
-        activities.push({
-          kind: 'tool',
-          key: message.clientId,
-          message,
-          status: isStreaming && !done ? 'running' : 'done',
-        });
+        activities.push(toolActivityForMessage(child, message, isStreaming));
         if (activities.length === MAX_LIVE_WORK_ACTIVITIES) return activities.reverse();
       }
       continue;
@@ -111,7 +128,7 @@ export function collectLiveWorkActivities(
 }
 
 export interface WorkGroupBlockProps {
-  /** Stable persistence key, single-layer convention `work:<clientId>`. */
+  /** Stable persistence key:动作段 `work:<clientId>`,外层 `work:summary-<clientId>`. */
   blockId: string;
   /** Wall-clock span of the run; undefined when timestamps are unavailable. */
   durationMs?: number;
@@ -123,45 +140,14 @@ export interface WorkGroupBlockProps {
 }
 
 function ToolActivityRow({ activity }: { activity: Extract<LiveWorkActivity, { kind: 'tool' }> }) {
-  const { t } = useTranslation();
-  const toolName = activity.message.toolName ?? '';
-  const descriptor = useMemo(
-    () => describeToolUse(toolName, activity.message.toolInput),
-    [activity.message.toolInput, toolName],
-  );
-  const displayParam = useMemo(() => extractDisplayParam(descriptor), [descriptor]);
-  const hideVerb = descriptor.kind === 'command' && Boolean(descriptor.description);
-  const intentAction =
-    descriptor.kind === 'command' && !descriptor.description
-      ? descriptor.intent?.action
-      : undefined;
-  const verbLabel = t(
-    intentAction ? verbLabelKeyForIntent(intentAction) : verbLabelKeyForRow(verbForTool(toolName)),
-  );
-  const label = hideVerb
-    ? (displayParam?.text ?? verbLabel)
-    : displayParam
-      ? `${verbLabel} ${displayParam.text}`
-      : verbLabel;
-
   return (
-    <div
-      data-live-work-activity="tool"
-      className="flex min-w-0 items-center gap-[6px] px-2 py-[3px]"
-    >
-      <span
-        role="img"
-        aria-label={t(`chat.agentActionRow.status.${activity.status}`)}
-        className="inline-flex h-[18px] w-4 shrink-0 items-center justify-center text-[var(--msg-tool-card-chevron)]"
-      >
-        {activity.status === 'running' ? <Spinner size={13} /> : <Check size={13} />}
-      </span>
-      <span
-        className="min-w-0 truncate text-[14px] text-[var(--msg-tool-card-chevron)]"
-        title={displayParam?.fullTitle}
-      >
-        {label}
-      </span>
+    <div data-live-work-activity="tool" className="min-w-0">
+      <AgentActionRow
+        message={activity.message}
+        toolResult={activity.toolResult}
+        preferRawCommand
+        status={activity.status}
+      />
     </div>
   );
 }
@@ -189,6 +175,117 @@ function ThinkingActivityRow({
   );
 }
 
+/** 展开动作段里的 thinking:默认直接露出一行;原文多行或视觉溢出时,
+ *  允许再点该行查看完整原文。live preview 继续复用上面的固定单行版本。 */
+function ExpandedThinkingRow({ message }: { message: ChatMessage }) {
+  const activity = thinkingActivityForMessage(message);
+  const rawContent = message.content.trim();
+  const hasExplicitLineBreak = /[\r\n]/.test(rawContent);
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [canExpand, setCanExpand] = useState(hasExplicitLineBreak);
+  const { expanded, setExpanded } = useExpandedBlockMemory(`thinking:${message.clientId}`);
+
+  useLayoutEffect(() => {
+    if (!activity || expanded) return;
+    const textElement = textRef.current;
+    if (!textElement) return;
+    const updateOverflow = () => {
+      setCanExpand(
+        hasExplicitLineBreak || textElement.scrollWidth > textElement.clientWidth + 1,
+      );
+    };
+    updateOverflow();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(updateOverflow);
+    observer.observe(textElement);
+    return () => observer.disconnect();
+  }, [activity?.content, expanded, hasExplicitLineBreak]);
+
+  const onToggle = useCallback(() => {
+    if (canExpand) setExpanded((value) => !value);
+  }, [canExpand, setExpanded]);
+
+  if (!activity) {
+    if (!message.thinkingRedacted) return null;
+    return (
+      <ThinkingCard
+        blockKey={message.clientId}
+        content={message.content}
+        isRedacted
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      data-live-work-activity="thinking"
+      data-work-thinking-expandable={canExpand ? 'true' : 'false'}
+      onClick={onToggle}
+      disabled={!canExpand}
+      aria-expanded={canExpand ? expanded : undefined}
+      className={cn(
+        'flex w-full min-w-0 items-start gap-[6px] px-2 py-[3px] text-left',
+        canExpand && 'cursor-pointer hover:opacity-80 transition-opacity',
+      )}
+    >
+      <span className="inline-flex h-[18px] w-4 shrink-0 items-center justify-center text-[var(--msg-tool-card-chevron)]">
+        <Sparkles size={13} />
+      </span>
+      <span
+        ref={textRef}
+        className={cn(
+          'min-w-0 flex-1 text-[14px] italic text-[var(--thinking-body-text)]',
+          expanded ? 'whitespace-pre-wrap break-words' : 'truncate',
+        )}
+        title={expanded ? undefined : activity.content}
+      >
+        {expanded ? rawContent : activity.content}
+      </span>
+      {canExpand && (
+        <span className="inline-flex h-[18px] shrink-0 items-center text-[var(--msg-tool-card-chevron)]">
+          {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+        </span>
+      )}
+    </button>
+  );
+}
+
+/** 同一个子项渲染器递归服务运行态动作组、完成态内层动作组和外层文字时间线。 */
+function ExpandedWorkGroupChild({
+  child,
+  parentStreaming,
+}: {
+  child: WorkGroupChild;
+  parentStreaming: boolean;
+}) {
+  if (child.kind === 'tools') {
+    return (
+      <>
+        {child.toolCalls.map((message) => {
+          const activity = toolActivityForMessage(child, message, parentStreaming);
+          return <ToolActivityRow key={activity.key} activity={activity} />;
+        })}
+      </>
+    );
+  }
+  if (child.kind === 'thinking') {
+    return <ExpandedThinkingRow message={child.message} />;
+  }
+  if (child.kind === 'group') {
+    return (
+      <WorkGroupBlock
+        blockId={child.blockId}
+        durationMs={child.durationMs}
+        isStreaming={child.isStreaming}
+        startedAtMs={child.startedAtMs}
+        childItems={child.childItems}
+      />
+    );
+  }
+  return <>{child.renderNode()}</>;
+}
+
 export function WorkGroupBlock({
   blockId,
   durationMs,
@@ -214,8 +311,8 @@ export function WorkGroupBlock({
     [childItems, isStreaming],
   );
 
-  // 两级展开:点开组只直接显示 assistant 工作文字;thinking /工具只渲染
-  // 各自的折叠头行,由用户在组内逐个点开详情。
+  // 外层完成态组展开成文字 + 内层动作组;内层动作组与运行态组复用本组件,
+  // 展开后直接渲染 thinking /工具行,不再多套一层子卡摘要。
   const onToggle = useCallback(() => {
     setExpanded((v) => !v);
   }, [setExpanded]);
@@ -293,29 +390,11 @@ export function WorkGroupBlock({
               'flex flex-col gap-2',
             )}
           >
-            {childItems.map((c) =>
-              c.kind === 'tools' ? (
-                <AgentActionsBlock
-                  key={c.key}
-                  toolCalls={c.toolCalls}
-                  resultMap={c.resultMap}
-                  settledIds={c.settledIds}
-                  isSessionStreaming={isStreaming}
-                />
-              ) : c.kind === 'thinking' ? (
-                <ThinkingCard
-                  key={c.key}
-                  blockKey={c.message.clientId}
-                  content={c.message.content}
-                  isStreaming={c.message.isStreaming}
-                  startedAt={c.message.thinkingStartedAt}
-                  durationMs={c.message.thinkingDurationMs}
-                  isRedacted={c.message.thinkingRedacted}
-                />
-              ) : (
-                <Fragment key={c.key}>{c.renderNode()}</Fragment>
-              ),
-            )}
+            {childItems.map((child) => (
+              <Fragment key={child.key}>
+                <ExpandedWorkGroupChild child={child} parentStreaming={isStreaming} />
+              </Fragment>
+            ))}
           </div>
         )}
       </div>

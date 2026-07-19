@@ -11,32 +11,42 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-// The work-group interaction is under test, not the second-level child cards.
-// Lightweight stubs make mount state and forwarded props visible while preserving
-// the contract that both tools and thinking stay collapsed after the outer click.
-vi.mock('@/components/chat/AgentActionsBlock', () => ({
-  AgentActionsBlock: (props: { toolCalls: ChatMessage[]; isSessionStreaming?: boolean }) =>
-    createElement(
-      'button',
+// The work-group interaction is under test. Keep direct tool rows lightweight
+// while exposing the raw-command flag and status forwarded by WorkGroupBlock.
+vi.mock('@/components/chat/AgentActionRow', () => ({
+  AgentActionRow: (props: {
+    message: ChatMessage;
+    preferRawCommand?: boolean;
+    status?: 'running' | 'done';
+    toolResult?: string;
+  }) => {
+    const toolInput = props.message.toolInput as { command?: unknown } | undefined;
+    const command = typeof toolInput?.command === 'string'
+      ? toolInput.command
+      : props.message.clientId;
+    return createElement(
+      'div',
       {
-        'data-testid': 'collapsed-tools',
-        'aria-expanded': 'false',
-        'data-streaming': String(Boolean(props.isSessionStreaming)),
+        'data-testid': 'direct-tool',
+        'data-prefer-raw': String(Boolean(props.preferRawCommand)),
+        'data-result': props.toolResult,
+        'aria-label': `chat.agentActionRow.status.${props.status ?? 'done'}`,
       },
-      props.toolCalls.map((message) => message.clientId).join(','),
-    ),
+      command,
+    );
+  },
 }));
 
 vi.mock('@/components/chat/ThinkingCard', () => ({
-  ThinkingCard: (props: { content: string }) =>
+  ThinkingCard: (props: { content: string; isRedacted?: boolean }) =>
     createElement(
-      'button',
+      'div',
       {
-        'data-testid': 'collapsed-thinking',
-        'aria-expanded': 'false',
+        'data-testid': 'redacted-thinking',
         'data-content': props.content,
+        'data-redacted': String(Boolean(props.isRedacted)),
       },
-      'chat.thinking.collapsed',
+      'chat.thinking.redacted',
     ),
   formatDuration: (ms: number) => `${Math.max(1, Math.round(ms / 1000))}s`,
 }));
@@ -91,6 +101,26 @@ const rendered = (key: string, text: string): WorkGroupChild => ({
   renderNode: () => createElement('div', { 'data-testid': 'assistant-progress' }, text),
 });
 
+const group = (
+  key: string,
+  durationMs: number,
+  childItems: WorkGroupChild[],
+  isStreaming = false,
+): WorkGroupChild => ({
+  kind: 'group',
+  key,
+  blockId: `work:${key}`,
+  durationMs,
+  isStreaming,
+  childItems,
+});
+
+function clickGroup(label: string) {
+  const button = screen.getByText(label).closest('button');
+  if (!button) throw new Error(`Missing work-group button: ${label}`);
+  fireEvent.click(button);
+}
+
 describe('WorkGroupBlock — running latest-five preview', () => {
   it('keeps the latest five tools/reasoning rows in chronological order and drops empty thinking', () => {
     const children: WorkGroupChild[] = [
@@ -113,8 +143,8 @@ describe('WorkGroupBlock — running latest-five preview', () => {
       }),
     );
     expect(document.querySelectorAll('[data-live-work-activity]')).toHaveLength(5);
-    fireEvent.click(screen.getByRole('button'));
-    expect(screen.getAllByTestId('collapsed-tools')[0].textContent).toBe('t1,t2');
+    clickGroup('chat.workGroup.working');
+    expect(screen.getAllByTestId('direct-tool')[0].textContent).toBe('t1');
   });
 
   it('renders one reasoning row that updates in place as the same block receives deltas', () => {
@@ -139,9 +169,8 @@ describe('WorkGroupBlock — running latest-five preview', () => {
     expect(document.querySelectorAll('[data-live-work-activity="thinking"]')).toHaveLength(1);
   });
 
-  it('shows live preview, then reveals assistant text while child cards stay collapsed', () => {
+  it('expands running actions directly and keeps the same detail after completion', () => {
     const childItems = [
-      rendered('msg-progress', 'I checked the current state.'),
       tools('seg-1', [mkTool('t1', 'git status')]),
       thinking(mkThinking('th1', 'checking the current state')),
     ];
@@ -155,18 +184,12 @@ describe('WorkGroupBlock — running latest-five preview', () => {
 
     expect(screen.getByText('chat.workGroup.working')).toBeTruthy();
     expect(document.querySelector('[data-live-work-preview="true"]')).toBeTruthy();
-    expect(screen.queryByTestId('assistant-progress')).toBeNull();
-    expect(screen.queryByTestId('collapsed-tools')).toBeNull();
-    expect(screen.queryByTestId('collapsed-thinking')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button'));
+    clickGroup('chat.workGroup.working');
     expect(document.querySelector('[data-live-work-preview="true"]')).toBeNull();
-    expect(screen.getByTestId('assistant-progress').textContent).toBe('I checked the current state.');
-    expect(screen.getByTestId('collapsed-tools').getAttribute('aria-expanded')).toBe('false');
-    expect(screen.getByTestId('collapsed-tools').getAttribute('data-streaming')).toBe('true');
-    expect(screen.getByTestId('collapsed-thinking').getAttribute('aria-expanded')).toBe('false');
-    expect(screen.getByTestId('collapsed-thinking').getAttribute('data-content'))
-      .toBe('checking the current state');
+    expect(screen.getByTestId('direct-tool').textContent).toBe('git status');
+    expect(screen.getByTestId('direct-tool').getAttribute('data-prefer-raw')).toBe('true');
+    expect(screen.getByText('checking the current state')).toBeTruthy();
 
     rerender(
       createElement(WorkGroupBlock, {
@@ -177,12 +200,57 @@ describe('WorkGroupBlock — running latest-five preview', () => {
       }),
     );
     expect(screen.getByText('chat.workGroup.worked:12s')).toBeTruthy();
-    expect(screen.getByTestId('assistant-progress').textContent).toBe('I checked the current state.');
-    expect(screen.getByTestId('collapsed-tools').getAttribute('data-streaming')).toBe('false');
-    expect(screen.getByTestId('collapsed-thinking').getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByTestId('direct-tool').textContent).toBe('git status');
+    expect(screen.getByText('checking the current state')).toBeTruthy();
   });
 
-  it('keeps empty and redacted thinking behind their own collapsed cards', () => {
+  it('keeps outer assistant text visible while nested actions need one more expansion', () => {
+    render(
+      createElement(WorkGroupBlock, {
+        blockId: 'work:summary-t1',
+        durationMs: 20_000,
+        childItems: [
+          rendered('msg-progress', 'I checked the current state.'),
+          group('inner-t1', 12_000, [
+            tools('seg-1', [mkTool('t1', 'git status')]),
+            thinking(mkThinking('th1', 'checking the current state')),
+          ]),
+        ],
+      }),
+    );
+
+    expect(screen.queryByTestId('assistant-progress')).toBeNull();
+    clickGroup('chat.workGroup.worked:20s');
+    expect(screen.getByTestId('assistant-progress').textContent).toBe('I checked the current state.');
+    expect(screen.getByText('chat.workGroup.worked:12s')).toBeTruthy();
+    expect(screen.queryByTestId('direct-tool')).toBeNull();
+    expect(screen.queryByText('checking the current state')).toBeNull();
+
+    clickGroup('chat.workGroup.worked:12s');
+    expect(screen.getByTestId('direct-tool').textContent).toBe('git status');
+    expect(screen.getByText('checking the current state')).toBeTruthy();
+  });
+
+  it('expands multi-line thinking from its compact single-line row', () => {
+    render(
+      createElement(WorkGroupBlock, {
+        blockId: 'work:t1',
+        durationMs: 3_000,
+        childItems: [thinking(mkThinking('th1', 'first line\nsecond line'))],
+      }),
+    );
+
+    clickGroup('chat.workGroup.worked:3s');
+    const compactText = screen.getByText('first line second line');
+    const thinkingButton = compactText.closest('button');
+    expect(thinkingButton?.getAttribute('aria-expanded')).toBe('false');
+    if (!thinkingButton) throw new Error('Missing expandable thinking row');
+    fireEvent.click(thinkingButton);
+    expect(thinkingButton.getAttribute('aria-expanded')).toBe('true');
+    expect(thinkingButton.textContent).toContain('first line\nsecond line');
+  });
+
+  it('drops empty thinking and renders redacted thinking directly', () => {
     const redacted = { ...mkThinking('hidden', ''), thinkingRedacted: true };
     render(
       createElement(WorkGroupBlock, {
@@ -191,12 +259,10 @@ describe('WorkGroupBlock — running latest-five preview', () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole('button'));
+    clickGroup('chat.workGroup.workDetails');
     expect(document.querySelectorAll('[data-live-work-activity="thinking"]')).toHaveLength(0);
-    expect(screen.getAllByTestId('collapsed-thinking')).toHaveLength(2);
-    expect(screen.getAllByTestId('collapsed-thinking').every(
-      (card) => card.getAttribute('aria-expanded') === 'false',
-    )).toBe(true);
+    expect(screen.getAllByTestId('redacted-thinking')).toHaveLength(1);
+    expect(screen.getByTestId('redacted-thinking').getAttribute('data-redacted')).toBe('true');
   });
 
   it('marks result/settled tools done and only unresolved tools running', () => {

@@ -6,6 +6,11 @@ export interface DisplayParam {
   fullTitle?: string;
 }
 
+export interface DisplayParamOptions {
+  /** 工作动作行优先直显真实命令,不让模型 description 替代命令文本。 */
+  preferRawCommand?: boolean;
+}
+
 /**
  * Tool input → concise human-readable label. Keeping this pure formatter shared
  * prevents the rolling live preview from drifting from AgentActionRow wording.
@@ -15,9 +20,18 @@ export interface DisplayParam {
  * - MCP / dynamic / collab: readable namespace and tool labels;
  * - file/search/web: the most useful target parameter.
  */
-export function extractDisplayParam(descriptor: ToolUseDescriptor): DisplayParam | null {
+export function extractDisplayParam(
+  descriptor: ToolUseDescriptor,
+  options: DisplayParamOptions = {},
+): DisplayParam | null {
   switch (descriptor.kind) {
     case 'command': {
+      if (options.preferRawCommand && descriptor.command) {
+        return {
+          text: truncateToolText(descriptor.command, 60),
+          fullTitle: descriptor.command,
+        };
+      }
       if (descriptor.description) {
         return {
           text: descriptor.description,
