@@ -30,6 +30,7 @@ import {
   createMobileLocalAttachmentUploadController,
   isCameraUnavailableOnSimulator,
   type MobileLocalAttachmentUploadCandidate,
+  type MobileLocalAttachmentUploadController,
   type PendingLocalAttachmentUpload,
 } from '@/session/mobileLocalAttachmentUpload';
 import {
@@ -108,8 +109,10 @@ export interface UseMobileLocalAttachmentsResult {
    * (顺序 = 入队序):任务离开托盘 / 限额 / waitForPendingUploads,产物经
    * onUploaded / onError 的 localId 路由。快照与 claim 同一同步段完成,无竞态窗。
    */
-  claimActiveUploads: () => Array<{ localId: string; failed: boolean }>;
-  /** 是否有粘贴占位在途(同步真源):占位窗口任务尚未入队、无法 claim,发送方需退回等待路径。 */
+  claimActiveUploads: () => ReturnType<MobileLocalAttachmentUploadController['claimableTasks']>;
+  /** 只等粘贴占位落定(兑现任务已入队 / 失败 / 超时),不等上传完成;详见实现处注释。 */
+  waitForPastePlaceholdersSettled: () => Promise<void>;
+  /** 是否有粘贴占位在途(同步真源):占位兑现前任务尚未入队、无法 claim。 */
   hasPastePlaceholders: () => boolean;
   /**
    * 限额口径的在途占坑数**同步真源**(非 React state):上传中任务(controller
@@ -426,6 +429,11 @@ export function useMobileLocalAttachments(
       controller.claim(snapshot.map((task) => task.localId));
       return snapshot;
     },
+    // 只等粘贴占位落定(兑现的同步段任务已入 controller 队列),不等上传本身:
+    // 乐观发送(outbox)在占位窗口内需要它把「尚未入队、无法划归」的粘贴图等成
+    // 可划归任务,再做同步 claim——不能用 waitForPendingUploads(那会退化回
+    // 等整个上传完成)。失败 / 超时同样放行(60s 兜底,错误 toast 已由占位路径给出)。
+    waitForPastePlaceholdersSettled: waitForPastePlaceholders,
     hasPastePlaceholders: () => getPastePlaceholderTotal() > 0,
     getPendingUploadCount: getPendingSlotCount,
   };

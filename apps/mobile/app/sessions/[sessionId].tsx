@@ -569,6 +569,7 @@ export default function SessionScreen() {
     discardAllPendingUploads,
     waitForPendingUploads,
     claimActiveUploads,
+    waitForPastePlaceholdersSettled,
     hasPastePlaceholders,
     getPendingUploadCount,
   } = useMobileLocalAttachments({
@@ -3353,12 +3354,12 @@ export default function SessionScreen() {
     requestMessageListFollowLatest();
     // —— 乐观 outbox 路径:附件仍在上传(或 outbox 已有排队消息,保 FIFO)时不再
     // 原地等待,消息立即以待发气泡上屏,附件落定后由派发循环真正入队。豁免场景走
-    // 下方原路径:排队编辑保存(语义是改队列原条目)、粘贴占位窗口(任务尚未入队、
-    // 无法划归;此时 outbox 非空的话本次发送经等待路径直接 enqueue,是已知的 FIFO
-    // 破例——占位窗口极短且要求「粘贴中还有先前消息在传」双重巧合,不为它引入
-    // 占位划归机制)、纯文本本地命令(/context 等,本地卡片无顺序问题;此时
-    // composer 域无在途上传,waitForPendingUploads 秒回)。判断与划归全程同步,无竞态窗。
-    const outboxEligible = !queueEditAtSendStart && !hasPastePlaceholders();
+    // 下方原路径:排队编辑保存(语义是改队列原条目)、纯文本本地命令(/context 等,
+    // 本地卡片无顺序问题;此时 composer 域无在途上传,waitForPendingUploads 秒回)。
+    // 粘贴占位窗口(uploadsInFlight 计入占位数)同样走本分支:先等占位落定再划归,
+    // 见分支内注释——不豁免,否则占位窗口内的发送会经原路径直接 enqueue 超车
+    // outbox 在途消息(greptile review P1)。除占位等待外判断与划归全程同步,无竞态窗。
+    const outboxEligible = !queueEditAtSendStart;
     const uploadsInFlight = outboxEligible ? getPendingUploadCount() : 0;
     const willHaveAttachments = attachmentsRef.current.length > 0 || uploadsInFlight > 0;
     const earlyLocalCommand = willHaveAttachments ? null : parseMobileLocalSystemCommand(body);
@@ -3373,6 +3374,11 @@ export default function SessionScreen() {
           restoreDraftAfterFailure();
           return;
         }
+        // 粘贴占位窗口:任务尚未入队、无法划归——只等占位落定(兑现的同步段任务
+        // 已入 controller;失败 / 超时 60s 兜底后同样放行,错误 toast 已由占位路径
+        // 给出),不等上传本身。等待通常数百 ms(本机剪贴板),极端跨设备剪贴板由
+        // 发送按钮转圈承载;等待期间 sendInFlightRef 挡住重入。
+        if (hasPastePlaceholders()) await waitForPastePlaceholdersSettled();
         // 划归:当前全部未 claim 上传任务(active + 失败卡)随本条消息走——离开
         // composer 托盘与限额,产物经 onUploaded/onError 的 localId 路由回填。
         const claimedUploads = claimActiveUploads();
