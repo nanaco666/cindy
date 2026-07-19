@@ -70,8 +70,7 @@ import {
   setEffortForModel,
   type VendorPrefs,
 } from '@/state/newMakerDraft';
-import { snapshotForSeed, getProviderModelFast, setProviderModelFast } from '@/state/providerModelMemory';
-import { seedSession } from '@/state/sessionModelMemory';
+import { getProviderModelFast, setProviderModelFast } from '@/state/providerModelMemory';
 import { setPending, setPendingGoal } from '@/state/pendingFirstMessage';
 import {
   clearDraftAndNotify as clearComposerDraftAndNotify,
@@ -343,8 +342,6 @@ export function NewMakerDraftRoute() {
           fastMode,
           remoteHostId: target.hostId,
         });
-        // copy-on-create:新会话内所有供应商模型 effort/fast 默认 = 草稿当前状态。
-        seedSession(session.id, snapshotForSeed());
         navigate(`/cc-agent/${session.id}`);
       } catch (err) {
         // sessionService.create 内部已通过 toast 报错, 这里再 catch 避免 unhandled.
@@ -1130,8 +1127,6 @@ export function NewMakerDraftRoute() {
               toast.error(t('ccAgent.draft.createSessionFailed'));
               return;
             }
-            // copy-on-create:新会话内所有供应商模型 effort/fast 默认 = 草稿当前状态。
-            seedSession(newSession.id, snapshotForSeed());
             // 计划模式是一次性选择:随本次发送被消耗,草稿勾选同步熄灭,
             // 下一次 New Maker 不延续。
             if (effectivePlanMode) patchActivePrefs({ planMode: false });
@@ -1304,8 +1299,6 @@ export function NewMakerDraftRoute() {
             toast.error(t('ccAgent.draft.createSessionFailed'));
             return;
           }
-          // copy-on-create:新会话内所有供应商模型 effort/fast 默认 = 草稿当前状态。
-          seedSession(newSession.id, snapshotForSeed());
           // 计划模式是一次性选择:随本次发送被消耗,草稿勾选同步熄灭。
           if (effectivePlanMode) patchActivePrefs({ planMode: false });
           // 首条消息经 setPending → SessionView 自动发送,createOpts 读 chat store 的
@@ -1510,7 +1503,6 @@ export function NewMakerDraftRoute() {
       if (!newSession) {
         throw new Error(t('ccAgent.draft.createSessionFailed'));
       }
-      seedSession(newSession.id, snapshotForSeed());
       {
         const iso = new Date().toISOString();
         sessionsStore.patchLocal(newSession.id, { userSendAt: iso, updatedAt: iso });

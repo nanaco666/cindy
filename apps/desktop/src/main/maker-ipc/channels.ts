@@ -140,10 +140,9 @@ export const MAKER_INVOKE = {
   /** 计划模式一级开关(与 permissionMode 正交), runtime-only; 持久化由 renderer sessions:update / device-link 回流负责 */
   SET_PLAN_MODE: 'maker:set-plan-mode',
   /**
-   * 会话「非选中模型」effort/fast 写穿(控制端 → 被控端)。选中模型走 SET_MODEL/SET_EFFORT/
-   * SET_FAST_MODE + sessions:patched,不经此 channel。控制端纯显示:改非选中行的预设记忆时发此
-   * invoke,被控端 handler 转发给自身 renderer,renderer 调它原来的本地 setter
-   * (setSessionModelEffort / setSessionModelFast)写真实记忆。入参 =
+   * 旧控制端的会话模型预设写穿兼容 channel。新控制端统一经 APPLY_NEW_MAKER_DRAFT_PREF 写被控端
+   * providerModelMemory 全局预设;旧控制端仍发此 invoke 时,被控端 renderer 也会将其收敛到同一
+   * 全局预设,并保留 session scoped 回流供旧控制端显示。入参 =
    * { sessionId, agent:'claude-code'|'codex', providerId, model, effort?, fast? }。
    */
   SET_SESSION_MODEL_PREF: 'maker:set-session-model-pref',

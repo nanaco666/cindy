@@ -2744,9 +2744,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     });
   });
 
-  // device-link 会话「非选中模型」effort/fast 写穿:控制端经隧道调用 → 跑在**被控端**。转发给自身
-  // renderer(SESSION_PREF_APPLY,非转发 channel,只落本地窗口),renderer 调它原来的本地 setter
-  // (setSessionModelEffort/Fast)写真实会话记忆;变更经 SYNC_SESSION_MODEL_PREF 广播回控制端镜像。
+  // 旧控制端的 device-link 会话模型预设写穿兼容入口。转发给被控端 renderer 后,renderer 将值
+  // 收敛到 providerModelMemory 全局预设,同时经 SYNC_SESSION_MODEL_PREF 回流供旧控制端的
+  // session-scoped 镜像显示。新控制端统一走 APPLY_NEW_MAKER_DRAFT_PREF。
   ipcMain.handle(MAKER_INVOKE.SET_SESSION_MODEL_PREF, (_e, pref: unknown) => {
     if (!pref || typeof pref !== 'object') throwIpcError('INVALID_PARAMS', 'pref required');
     const p = pref as {

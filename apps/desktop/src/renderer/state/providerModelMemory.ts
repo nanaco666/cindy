@@ -250,10 +250,8 @@ export function setProviderModelFast(
 }
 
 /**
- * 快照当前全部槽的 (effortByModel, fastByModel)(丢弃 lastModel),供「从草稿创建会话」时把
- * 草稿当前状态整体种进 sessionModelMemory(copy-on-create)。深拷贝:调用方拿到的快照不随
- * 后续草稿改动变化,种进去的会话记忆也不会反向牵动草稿。返回形状与 sessionModelMemory.seedSession
- * 的入参对齐(结构化,故意不互相 import,保持两个 store 解耦)。
+ * 快照当前全部槽的 (effortByModel, fastByModel)(丢弃 lastModel)。用于 renderer → main 缓存和
+ * device-link 控制端镜像被控设备的全局模型预设。深拷贝,调用方拿到的快照不随后续本地改动变化。
  */
 export function snapshotForSeed(): Record<
   string,

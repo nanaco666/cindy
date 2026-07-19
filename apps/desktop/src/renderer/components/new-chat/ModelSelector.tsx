@@ -18,7 +18,6 @@ import { useDeviceProviders } from '@/hooks/useDeviceProviders';
 import { providerMonogram, selectVisibleModels } from '@/lib/providerModels';
 import type { Effort } from '@/lib/userPreferences.types';
 import { isModelEnabled, useModelVisibilityVersion } from '@/state/modelVisibilityPrefs';
-import { useSessionModelMemoryVersion } from '@/state/sessionModelMemory';
 import { useProviderModelMemoryVersion } from '@/state/providerModelMemory';
 import { useDeviceLinkModelMirrorVersion } from '@/state/deviceLinkModelMirror';
 import {
@@ -36,15 +35,13 @@ import { buildProviderSections } from './sourceSwitch';
 export { categorize, CATEGORY_LABEL_KEY, type ModelCategory } from './sourceSwitch';
 
 /**
- * 【非当前选中】模型行的 effort/fast 记忆读写器,由调用方按上下文注入(ModelSelector 本身
- * 不再耦合任何具体存储)。
- *   - 草稿(NewMakerDraftRoute → ChatInput 无 sessionId)→ providerModelMemory(跨会话持久,草稿专属)
- *   - 已创建会话(ChatInput 有 sessionId、非 device-link)→ sessionModelMemory(运行期,按 sessionId 隔离)
- *   - device-link 远程会话 → 纯显示镜像 override(写穿被控端),控制端本地不落记忆
+ * 【非当前选中】模型行的 effort/fast 全局预设读写器,由调用方按设备边界注入(ModelSelector 本身
+ * 不耦合具体存储)。
+ *   - 本地草稿 / 已创建会话 → providerModelMemory(跨对话、跨重启持久)
+ *   - device-link 远程草稿 / 会话 → 被控端全局预设的纯显示镜像(写穿被控端),控制端本地不落记忆
  *   - 不传(flat 选择器:CreateWorkerPopover / scheduler)→ 非选中行不读不写任何记忆,只显示模型默认
- * 这条隔离正是「草稿默认值被会话内修改污染」bug 的修复边界:
- *     会话写入只会落到会话自己的记忆 / 远程镜像,绝不触达控制端草稿记忆。
- * 选中行的 effort/fast 不走这里(草稿走 lastByVendor / props,会话走 DB 的 initialEffort/fastMode)。
+ * 选中行的 effort/fast 不走这里(草稿走 lastByVendor / props,会话走 DB 的 initialEffort/fastMode),
+ * 因此其它对话更新全局预设时,正在使用该模型的会话不会被覆盖。
  */
 export interface ModelMemoryAccessors {
   getEffort: (agent: AgentKind, providerId: string, modelId: string) => Effort | undefined;
@@ -181,7 +178,7 @@ interface ModelSelectorProps {
   /** Fast Mode 状态 + 回调(从工具栏搬进 Edit 配置列)。不传 → 配置列不显示 Fast 开关。 */
   fastMode?: boolean;
   onFastModeChange?: (enabled: boolean) => void | Promise<void>;
-  /** 非选中模型行的 effort/fast 记忆读写器(草稿 / 会话各注入各的,见 ModelMemoryAccessors)。 */
+  /** 非选中模型行的 effort/fast 全局预设读写器(按本机 / 被控设备隔离)。 */
   modelMemory?: ModelMemoryAccessors;
   /** When provided, only models with this vendorKey are shown in the dropdown. */
   vendorKey?: 'cc' | 'codex';
@@ -283,16 +280,15 @@ export function ModelSelectorContent({
   // 当前 hover / focus 展开的浮层目标(供应商id + 模型id)。只把「显示哪一行的选项」
   // 放在本地；effort / fast 的值和持久化仍走 props + modelMemory SSoT。
   const [editing, setEditing] = useState<{ providerId: string | null; modelId: string } | null>(null);
-  // 非选中模型的 effort/fast 改动写进记忆(localStorage),不反映在 props —— 用 tick 触发重渲染读新值。
+  // 非选中模型的 effort/fast 改动写进全局预设,不反映在 live props —— 用 tick 触发重渲染读新值。
   const [editTick, setEditTick] = useState(0);
   const bump = () => setEditTick((n) => n + 1);
-  // 跨进程 / 远程改动:device-link push 会直接改底层记忆 store(providerModelMemory / sessionModelMemory /
-  // deviceLinkModelMirror),不经本组件的 editTick。订阅三个 store 的版本号,任一变化即重渲染、重算行
-  // effort/fast 显示(本地草稿用 providerModelMemory,本地会话用 sessionModelMemory,远程用镜像)。
+  // 跨进程 / 远程改动:device-link push 会直接改底层 store(providerModelMemory /
+  // deviceLinkModelMirror),不经本组件的 editTick。订阅两份 store 的版本号,任一变化即重渲染、
+  // 重算行 effort/fast 显示(本机用 providerModelMemory,远程用被控端镜像)。
   const storeVersion =
     editTick +
     useProviderModelMemoryVersion() +
-    useSessionModelMemoryVersion() +
     useDeviceLinkModelMirrorVersion();
   void storeVersion;
 
@@ -461,7 +457,7 @@ export function ModelSelectorContent({
     id === modelId && (providerId === null || providerId === activeSourceId);
 
   // 行内 Fast 闪电:**严格 per-(供应商, 模型)**。选中行 → live fastMode;其余行 → 该 (供应商,模型)
-  // 的注入记忆(草稿=providerModelMemory / 会话=sessionModelMemory),缺省 false。不读 provider-agnostic
+  // 的全局预设(本机=providerModelMemory / 远程=被控端镜像),缺省 false。不读 provider-agnostic
   // 的 per-model 记忆 —— 否则同一 model id 跨供应商会串(写了 openai 那份,xd 行 fallback 到共享
   // per-model 也亮 = 之前两个 5.5 一起变的根因)。
   const fastOnOf = (providerId: string | null, m: RowModel): boolean => {
@@ -557,7 +553,7 @@ export function ModelSelectorContent({
     if (editingIsActive) {
       onEffortChange(e);
     } else {
-      // 非选中行:只写注入记忆(草稿 / 会话各自那份);不传 modelMemory(flat 选择器)则纯 no-op。
+      // 非选中行:只写该设备的全局模型预设;不传 modelMemory(flat 选择器)则纯 no-op。
       if (currentAgentKind && editing.providerId) {
         modelMemory?.setEffort(currentAgentKind, editing.providerId, editingModel.id, e);
       }

@@ -2,7 +2,7 @@
  * deviceLinkModelMirror —— 控制端「纯显示镜像」：被控端模型列表里每个 (agent, 来源, 模型) 的
  * effort/fast,按 scope 隔离、进程内、不落盘。
  *
- * 为什么单独一份(而非复用控制端自己的 providerModelMemory / sessionModelMemory):
+ * 为什么单独一份(而非复用控制端自己的 providerModelMemory):
  *   架构契约是「控制端纯镜像 / 被控端单一真相」(见 packages/device-link/src/topics.ts)。控制端
  *   显示被控端的模型列表时，**绝不**写控制端自己的本地记忆(那是控制端给自己本地项目用的)。
  *   远程项目的列表态只活在这份临时镜像里：初始由 pull(maker:get-new-maker-defaults 的
@@ -11,9 +11,10 @@
  *
  * scope 设计:
  *   - 草稿:`draft:${deviceId}` —— 一台被控设备的草稿列表(providerModelMemory 全量)。
- *   - 会话:`session:${sessionId}` —— 一个远程会话的非选中模型记忆(sessionModelMemory 对位)。
- * slot 设计:`${agent}:${providerId}` → {effortByModel, fastByModel},与被控端两个 store 的
- *   snapshot 形状对齐(结构化匹配,不互相 import)。
+ *   - 会话:`session:${sessionId}` —— 一个远程会话视图对被控端全局预设的临时镜像;scope 仅隔离
+ *     控制端页面生命周期,内容仍来自被控端 providerModelMemory。
+ * slot 设计:`${agent}:${providerId}` → {effortByModel, fastByModel},与被控端 providerModelMemory
+ *   snapshot 形状对齐。
  */
 
 import { useSyncExternalStore } from 'react';

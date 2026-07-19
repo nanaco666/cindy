@@ -4,6 +4,8 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
+import type { Effort } from '@/lib/userPreferences.types';
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (
@@ -215,10 +217,6 @@ vi.mock('@/state/modelVisibilityPrefs', () => ({
   useModelVisibilityVersion: () => 0,
 }));
 
-vi.mock('@/state/sessionModelMemory', () => ({
-  useSessionModelMemoryVersion: () => 0,
-}));
-
 vi.mock('@/state/providerModelMemory', () => ({
   useProviderModelMemoryVersion: () => 0,
 }));
@@ -349,7 +347,7 @@ describe('ModelSelector trigger variants', () => {
     expect(within(information).queryByRole('option')).toBeNull();
   });
 
-  it('lets inactive provider rows edit scoped memory without switching the model', () => {
+  it('lets inactive provider rows edit the injected preset without switching the model', () => {
     const onProviderChange = vi.fn();
     const setEffort = vi.fn();
     const modelMemory = {
@@ -386,5 +384,77 @@ describe('ModelSelector trigger variants', () => {
 
     expect(setEffort).toHaveBeenCalledWith('claude-code', 'anthropic', 'claude-sonnet-4-6', 'high');
     expect(onProviderChange).not.toHaveBeenCalled();
+  });
+
+  it('shares inactive model presets across conversations while protecting an active model', () => {
+    const efforts = new Map<string, Effort>();
+    const keyOf = (providerId: string, modelId: string) => `${providerId}:${modelId}`;
+    const modelMemory = {
+      getEffort: vi.fn((_agent: string, providerId: string, modelId: string) =>
+        efforts.get(keyOf(providerId, modelId)),
+      ),
+      setEffort: vi.fn((_agent: string, providerId: string, modelId: string, effort: Effort) => {
+        efforts.set(keyOf(providerId, modelId), effort);
+      }),
+      getFast: vi.fn(),
+      setFast: vi.fn(),
+    };
+
+    // 对话 A 当前用 Sonnet,把非当前的 Opus 全局预设改成 High。
+    const conversationA = render(
+      React.createElement(ModelSelectorContent, {
+        modelId: 'claude-sonnet-4-6',
+        effort: 'medium',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+        currentProviderId: 'anthropic',
+        onProviderChange: vi.fn(),
+        modelMemory,
+      }),
+    );
+    fireEvent.pointerEnter(screen.getByRole('option', { name: /Opus 4\.8/ }));
+    fireEvent.click(within(screen.getByRole('group', { name: /Opus 4\.8/ })).getByRole('option', { name: 'high' }));
+    expect(efforts.get('anthropic:claude-opus-4-8')).toBe('high');
+    conversationA.unmount();
+
+    // 对话 B 当前用别的模型,其 Opus 非当前行立即读取同一份 High 预设。
+    const conversationB = render(
+      React.createElement(ModelSelectorContent, {
+        modelId: 'claude-haiku-4-5',
+        effort: 'medium',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+        currentProviderId: 'anthropic',
+        onProviderChange: vi.fn(),
+        modelMemory,
+      }),
+    );
+    fireEvent.pointerEnter(screen.getByRole('option', { name: /Opus 4\.8/ }));
+    expect(
+      within(screen.getByRole('group', { name: /Opus 4\.8/ }))
+        .getByRole('option', { name: 'high' })
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+    conversationB.unmount();
+
+    // 对话 C 正在用 Opus/Medium:选中行以 live 值为准,不被全局 High 覆盖。
+    render(
+      React.createElement(ModelSelectorContent, {
+        modelId: 'claude-opus-4-8',
+        effort: 'medium',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+        currentProviderId: 'anthropic',
+        onProviderChange: vi.fn(),
+        modelMemory,
+      }),
+    );
+    fireEvent.pointerEnter(screen.getByRole('option', { name: /Opus 4\.8/ }));
+    const activeOptions = screen.getByRole('group', { name: /Opus 4\.8/ });
+    expect(within(activeOptions).getByRole('option', { name: 'medium' }).getAttribute('aria-selected')).toBe('true');
+    expect(within(activeOptions).getByRole('option', { name: 'high' }).getAttribute('aria-selected')).toBe('false');
   });
 });
