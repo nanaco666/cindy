@@ -97,7 +97,7 @@ describe('SplashScreen v2 layout', () => {
     expect(document.documentElement.hasAttribute('data-splash-active')).toBe(false);
   });
 
-  it('centers the complete v2 composition vertically', () => {
+  it('pins the brand assets to the v2 composition instead of stretching the illustration', () => {
     render(<SplashScreen />);
 
     const brand = screen.getByTestId('splash-brand');
@@ -105,12 +105,11 @@ describe('SplashScreen v2 layout', () => {
     const wordmark = screen.getByTestId('splash-wordmark');
     const script = screen.getByTestId('splash-script');
 
-    expect(brand.className).toContain('left-1/2 top-1/2');
-    expect(brand.className).toContain('h-[499.5px] w-[457px]');
+    expect(brand.className).toContain('left-1/2 top-[19.3%]');
+    expect(brand.className).toContain('h-[424.5px] w-[457px]');
     expect(brand.getAttribute('style')).toContain(
-      'translate(-50%, -50%) scale(min(1, calc(100vh / 700px)))',
+      'translateX(-50%) scale(min(1, calc(100vh / 700px)))',
     );
-    expect(brand.getAttribute('style')).toContain('transform-origin: center');
 
     expect(illustration.className).toContain('top-0 h-[457px] w-[457px]');
     expect(illustration.className).not.toMatch(/\bh-full\b|\bw-full\b|object-cover/);
