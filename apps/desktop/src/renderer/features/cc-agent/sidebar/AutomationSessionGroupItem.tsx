@@ -370,10 +370,11 @@ export function AutomationSessionGroupItem({
                   size={10}
                   strokeWidth={1.75}
                   className={cn(
-                    hasActiveHidden
-                      ? 'text-[var(--sidebar-item-active-foreground)]'
-                      : isRunning
-                        ? 'text-[var(--status-bar-accent)]'
+                    // 用户拍板 2026-07-20:running 橙优先于选中态反相前景
+                    isRunning
+                      ? 'text-[var(--status-bar-accent)]'
+                      : hasActiveHidden
+                        ? 'text-[var(--sidebar-item-active-foreground)]'
                         : 'text-[var(--cmd-palette-item-meta)] hover:text-foreground transition-colors',
                     isRunning && 'session-status-breathing',
                   )}

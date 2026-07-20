@@ -97,7 +97,7 @@ export function CollaborationModeToggle({
           aria-pressed
           className={cn(
             'flex shrink-0 items-center gap-1.5 rounded-full font-medium transition-colors',
-            'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] text-[var(--text-primary)]' /* spec 2026-07-17, 去橙中性, token by 一哥 */,
+            'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] text-[var(--warning-accent)]' /* ON 态恢复橙(用户改稿 2026-07-20,覆盖 07-17 去橙中性);OFF 态仍中性 */,
             'border border-[var(--border-default)]',
             'hover:bg-[var(--model-trigger-hover)]',
             pillSizeCn,

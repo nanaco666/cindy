@@ -100,10 +100,11 @@ export function SessionStatusIcon({
           strokeWidth={1.75}
           className={cn(
             'shrink-0',
-            isActive
-              ? 'text-[var(--sidebar-item-active-foreground)]'
-              : isRunning
-                ? 'text-[var(--status-bar-accent)]'
+            // 用户拍板 2026-07-20:running 橙优先于选中态反相前景
+            isRunning
+              ? 'text-[var(--status-bar-accent)]'
+              : isActive
+                ? 'text-[var(--sidebar-item-active-foreground)]'
                 : 'text-[var(--cmd-palette-item-meta)]',
             isRunning && 'session-status-breathing',
           )}
@@ -114,10 +115,11 @@ export function SessionStatusIcon({
           strokeWidth={1.75}
           className={cn(
             'shrink-0',
-            isActive
-              ? 'text-[var(--sidebar-item-active-foreground)]'
-              : isRunning
-                ? 'text-[var(--status-bar-accent)]'
+            // 用户拍板 2026-07-20:running 橙优先于选中态反相前景
+            isRunning
+              ? 'text-[var(--status-bar-accent)]'
+              : isActive
+                ? 'text-[var(--sidebar-item-active-foreground)]'
                 : 'text-[var(--cmd-palette-item-meta)]',
             isRunning && 'session-status-breathing',
           )}

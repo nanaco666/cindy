@@ -130,7 +130,7 @@ export interface ThemeColors {
 /**
  * Default Light —— CINDY 色板(决策表 PRE-2 / U3+U8 批准)。
  * 直映:背景/卡片/边框/正文/二级信息;CTA 中性反相(常规按钮非红,红只留警告/报错)。插值档按决策表 §2(sRGB 每通道 round)。
- * 二级信息色 #9A9DA3 为 U2 裁决忠于 Figma 原值,实测 2.32-2.56:1 低于 AA,进显式例外。
+ * 二级信息色 light 定稿 #8C8E94(用户调参 2026-07-20,自 Figma #9A9DA3 两轮加深,与桌面 text-secondary 同步);仍低于 AA,沿用 U2 显式例外。
  * borderStrong/errorBorder 取表内 AA 中性强调灰 #686B72(与 text-tertiary/ask-checkbox-border/
  * file-remove-bg 同源,非表内直落 id;lead 2026-07-17 确认采纳,errorBorder 跟随)。
  */
@@ -161,7 +161,7 @@ export const lightColors: ThemeColors = {
   borderTranslucent: 'rgba(220, 223, 227, 0.62)',
   borderStrong: '#686B72',
   textPrimary: '#3C3F43',
-  textSecondary: '#9A9DA3',
+  textSecondary: '#8C8E94',
   textTertiary: '#686B72',
   cta: '#3C3F43',
   ctaText: '#FCFCFC',
