@@ -249,17 +249,40 @@ function deleteHeaderVariants(headers: Record<string, string>, name: string): vo
 }
 
 /**
+ * 大读闸挂钩:读体累计超过 thresholdBytes 时调 tryAcquire 申请继续,拿不到
+ * 就地断流返回 gateBusy(闸的占用/释放语义由调用方负责,本函数只问一次)。
+ */
+interface LargeReadGate {
+  thresholdBytes: number;
+  tryAcquire: () => boolean;
+}
+
+/**
  * 流式读响应体,硬顶 maxBytes:超限即停读并取消流。绝不整体缓冲——
  * 白名单域名可能是意识作者自己的服务器,恶意吐超大响应不能拖垮主进程。
  * 无流的响应(204 / 测试假体)退回一次性读取,同样截断。
+ * 传 largeGate 时,累计超过门槛必须先拿到闸才继续读,拿不到返回 gateBusy。
  */
 async function readBodyCapped(
   response: Response,
   maxBytes: number,
-): Promise<{ bytes: Uint8Array; truncated: boolean }> {
+): Promise<{ bytes: Uint8Array; truncated: boolean }>;
+async function readBodyCapped(
+  response: Response,
+  maxBytes: number,
+  largeGate: LargeReadGate,
+): Promise<{ bytes: Uint8Array; truncated: boolean } | { gateBusy: true }>;
+async function readBodyCapped(
+  response: Response,
+  maxBytes: number,
+  largeGate?: LargeReadGate,
+): Promise<{ bytes: Uint8Array; truncated: boolean } | { gateBusy: true }> {
   const body = (response as { body?: ReadableStream<Uint8Array> | null }).body;
   if (!body) {
     const raw = new Uint8Array(await response.arrayBuffer());
+    if (largeGate && raw.byteLength > largeGate.thresholdBytes && !largeGate.tryAcquire()) {
+      return { gateBusy: true };
+    }
     return raw.byteLength > maxBytes
       ? { bytes: raw.slice(0, maxBytes), truncated: true }
       : { bytes: raw, truncated: false };
@@ -268,11 +291,23 @@ async function readBodyCapped(
   const chunks: Uint8Array[] = [];
   let total = 0;
   let truncated = false;
+  let gateAcquired = largeGate === undefined;
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       if (!value || value.byteLength === 0) continue;
+      if (!gateAcquired && largeGate && total + value.byteLength > largeGate.thresholdBytes) {
+        if (!largeGate.tryAcquire()) {
+          try {
+            await reader.cancel();
+          } catch {
+            /* 取消失败不影响拒绝结果 */
+          }
+          return { gateBusy: true };
+        }
+        gateAcquired = true;
+      }
       const remaining = maxBytes - total;
       if (value.byteLength > remaining) {
         chunks.push(value.slice(0, remaining));
@@ -322,6 +357,15 @@ function parseTargetUrl(raw: string): { url: URL } | { error: string } {
  * 就是逐单轮询取件);满了直接结构化拒绝,意识稍后重试即可。
  */
 const MEDIA_READ_GLOBAL_LIMIT = 1;
+
+/**
+ * 文本读体的"大响应"门槛:累计超过此值的文本响应必须占到上面的全局串行闸
+ * 才允许继续读(2026-07-21 文本上限 1MB→50MB 放宽的配套护栏)。绝大多数 API
+ * 响应远小于门槛、完全不碰闸;超门槛的大响应跨意识全局同时只读一单,防
+ * 每意识 4 单并发 × 多意识叠加把 50MB 级缓冲堆成主进程 OOM。闸忙时结构化
+ * 拒绝,意识稍后重试即可。
+ */
+const LARGE_TEXT_GATE_BYTES = 1024 * 1024;
 
 /** 凭证交换(key 换令牌)请求自身的护栏:主机内部动作,不占意识在途名额。 */
 const SECRET_EXCHANGE_TIMEOUT_MS = 15_000;
@@ -922,7 +966,22 @@ export class GhostNetworkSlot {
           message: `响应不是文本类型(${normalizeMime(contentType)})——媒体内容请用 as:'media' 落总仓取件`,
         };
       }
-      const { bytes: rawBytes, truncated } = await readBodyCapped(response, GHOST_FETCH_RESPONSE_MAX_BYTES);
+      // 大文本与媒体/上传共用全局串行闸:超 1MB 才申请,占到后持到 finally
+      // 统一释放(解码 + 回传期间峰值仍在闸内诚实记账);上传单已持闸直接复用。
+      const textRead = await readBodyCapped(response, GHOST_FETCH_RESPONSE_MAX_BYTES, {
+        thresholdBytes: LARGE_TEXT_GATE_BYTES,
+        tryAcquire: () => {
+          if (holdingMediaGate) return true;
+          if (this.mediaReadsInflight >= MEDIA_READ_GLOBAL_LIMIT) return false;
+          this.mediaReadsInflight += 1;
+          holdingMediaGate = true;
+          return true;
+        },
+      });
+      if ('gateBusy' in textRead) {
+        return { ok: false, message: '文本响应超过 1MB 且大响应通道正忙(全局同时只读一单),请稍后重试' };
+      }
+      const { bytes: rawBytes, truncated } = textRead;
       const bodyText = new TextDecoder('utf-8', { fatal: false }).decode(rawBytes);
       this.deps.log?.info('ghost fetch-request done', {
         ghostId, callId, method, host: url.hostname, status: response.status,

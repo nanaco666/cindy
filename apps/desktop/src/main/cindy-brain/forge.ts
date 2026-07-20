@@ -746,7 +746,9 @@ const r = await cindy.fetch({
 });
 // 文本成功:{ ok:true, status: 200, headers: { 'content-type': … }, body: '<响应文本>', truncated? }
 //   注意 4xx/5xx 也是 ok:true(代发成功,对方说不行)——自己看 status 分支。
-//   body 上限 1MB,超限截断并带 truncated:true;文本模式下二进制响应返回 ok:false。
+//   body 上限 50MB,超限截断并带 truncated:true;文本模式下二进制响应返回 ok:false。
+//   超 1MB 的大文本响应与媒体取件共享全局通道(同时只读一单),通道忙时
+//   返回 ok:false「大响应通道正忙」——稍后重试即可,小响应不受影响。
 // 媒体成功(as:'media' 且响应是受支持媒体):
 //   { ok:true, status, headers, media: { url: 'cindy-media://blobs/<指纹>.<后缀>', hash, ext, bytes } }
 //   **字节不进你的沙箱**:主机直接落媒体总仓、记到你名下(与 cindy 代办产物同等待遇:

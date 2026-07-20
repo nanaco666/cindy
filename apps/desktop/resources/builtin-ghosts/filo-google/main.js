@@ -377,7 +377,7 @@ async function toolDrive(args, callId) {
     } else {
       contentUrl = DRIVE_BASE + '/files/' + encodeURIComponent(args.file_id) + '?alt=media';
     }
-    // 文本直读(主机侧 ≤1MB 截断护栏);二进制响应主机会拒文本形态,提示改走 download。
+    // 文本直读(主机侧 ≤50MB 截断护栏,2026-07-21 放宽);二进制响应主机会拒文本形态,提示改走 download。
     var r = await cindy.fetch({ url: contentUrl, headers: { Accept: '*/*' }, callId: callId, authAccount: args.account || undefined });
     if (!r.ok) {
       return { ok: true, result: { file: driveFileView(meta.data), note: '内容不是文本(' + r.message + ');要拿文件本体请用 action=download' } };

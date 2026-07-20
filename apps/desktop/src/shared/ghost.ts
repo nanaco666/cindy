@@ -2614,8 +2614,8 @@ export type GhostFetchMethod = (typeof GHOST_FETCH_METHODS)[number];
 
 /** 请求体上限(UTF-8 字节)。 */
 export const GHOST_FETCH_BODY_MAX_BYTES = 256 * 1024;
-/** 响应体上限(超限截断并标 truncated;v1 只支持文本响应)。 */
-export const GHOST_FETCH_RESPONSE_MAX_BYTES = 1024 * 1024;
+/** 响应体上限(超限截断并标 truncated;2026-07-21 由 1MB 放宽到 50MB,Jira 等大 JSON 不再被截)。 */
+export const GHOST_FETCH_RESPONSE_MAX_BYTES = 50 * 1024 * 1024;
 /** 超时缺省/下限/上限(毫秒;越界 clamp 不拒单)。 */
 export const GHOST_FETCH_TIMEOUT_DEFAULT_MS = 30_000;
 export const GHOST_FETCH_TIMEOUT_MIN_MS = 1_000;
