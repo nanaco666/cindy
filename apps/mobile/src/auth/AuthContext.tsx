@@ -832,7 +832,9 @@ export function useAuth(): AuthContextValue {
 function authClientFor(deviceId: string): CindyAuthClient {
   return new CindyAuthClient({
     baseUrl: AUTH_API_BASE_URL,
-    region: AUTH_REGION,
+    // auth 协议只有 cn/global 两条线;dev 目标行为语义归 cn 系(实际连的
+    // dev-auth 服务器由 AUTH_API_BASE_URL 决定,与线别参数正交)。
+    region: AUTH_REGION === 'global' ? 'global' : 'cn',
     deviceId,
     clientType: 'mobile',
     locale: getAuthLocale(),

@@ -23,8 +23,12 @@ const SCRIPTS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 export const SELF_HOST_REGIONS_PATH = path.join(SCRIPTS_DIR, 'self-host-regions.json');
 export const SELF_HOST_REGIONS_EXAMPLE_PATH = path.join(SCRIPTS_DIR, 'self-host-regions.json.example');
 
-/** 合法地区集合(与 EAS 线 resolveAuthRegion 保持一致)。 */
-export const SELF_HOST_REGIONS = Object.freeze(['cn', 'global']);
+/**
+ * 合法地区集合(与 desktop CindyRegion 同集合)。dev 为第三目标(2026-07-20):
+ * 块结构必须存在,叶子允许留空(装载不炸,真发 dev 时由 resolveSelfHostRegion
+ * 用时强校验)——保证现有 cn/global 打包机在 dev 未配置时零影响。
+ */
+export const SELF_HOST_REGIONS = Object.freeze(['cn', 'global', 'dev']);
 
 /** 每个 region 必须“加载即非空”的身份字段(dry-run 也要用来打印计划 / 选 bundle)。 */
 const REQUIRED_IDENTITY_FIELDS = Object.freeze([
@@ -99,12 +103,14 @@ export function validateSelfHostRegions(value, options = {}) {
     if (block.authRegion !== region) {
       throw new Error(`${source} 的 ${region}.authRegion 必须等于 "${region}"`);
     }
+    // dev 块允许身份留空(装载即校验会拖垮 cn/global 打包;发 dev 时用时强校验)。
+    const requireFilled = region !== 'dev';
     for (const key of REQUIRED_IDENTITY_FIELDS) {
-      if (typeof block[key] !== 'string' || !block[key].trim()) {
-        throw new Error(`${source} 的 ${region}.${key} 必须是非空字符串`);
+      if (typeof block[key] !== 'string' || (requireFilled && !block[key].trim())) {
+        throw new Error(`${source} 的 ${region}.${key} 必须是${requireFilled ? '非空' : ''}字符串`);
       }
     }
-    if (!/^\d+$/.test(block.iosAppStoreId.trim())) {
+    if (block.iosAppStoreId.trim() && !/^\d+$/.test(block.iosAppStoreId.trim())) {
       throw new Error(`${source} 的 ${region}.iosAppStoreId 必须是纯数字 App Store ID`);
     }
     if (typeof block.androidStoreUrl !== 'string') {
@@ -122,14 +128,15 @@ export function validateSelfHostRegions(value, options = {}) {
       throw new Error(`${source} 的 ${region}.tapdb 必须是 object`);
     }
     for (const key of REQUIRED_TAPDB_KEYS) {
-      if (typeof tapdb[key] !== 'string' || !tapdb[key].trim()) {
-        throw new Error(`${source} 的 ${region}.tapdb.${key} 必须是非空字符串`);
+      if (typeof tapdb[key] !== 'string' || (requireFilled && !tapdb[key].trim())) {
+        throw new Error(`${source} 的 ${region}.tapdb.${key} 必须是${requireFilled ? '非空' : ''}字符串`);
       }
     }
     const google = block.google;
-    if (region === 'cn') {
+    if (region !== 'global') {
+      // dev 行为语义归 cn 系:与 cn 同样禁止 google(Google 登录仅 global 线)。
       if (Object.hasOwn(block, 'google')) {
-        throw new Error(`${source} 的 cn 不得配置 google;Google 登录仅允许 global 线`);
+        throw new Error(`${source} 的 ${region} 不得配置 google;Google 登录仅允许 global 线`);
       }
     } else {
       if (!google || typeof google !== 'object' || Array.isArray(google)) {
@@ -204,7 +211,7 @@ export function resolveSelfHostRegion(args, options = {}) {
   const raw = args?.region;
   if (typeof raw !== 'string' || !raw.trim()) {
     throw new Error(
-      '自建线出包必须显式指定 --region cn|global(不提供默认值);例:pnpm mobile:release:ios:local -- --region global',
+      '自建线出包必须显式指定 --region cn|global|dev(不提供默认值);例:pnpm mobile:release:ios:local -- --region global',
     );
   }
   const region = raw.trim();
@@ -214,6 +221,18 @@ export function resolveSelfHostRegion(args, options = {}) {
   const regions = options.regions ?? loadSelfHostRegions();
   const block = regions[region];
   if (!block) throw new Error(`自建线地区配置缺少 region: ${region}`);
+  // dev 块装载时允许留空,真的发 dev 渠道时在此强校验(fail closed,指明要填什么)。
+  if (region === 'dev') {
+    const missing = ['iosBundleId', 'androidPackage', 'npkgExpectBundle'].filter(
+      (key) => !block[key]?.trim(),
+    );
+    if (missing.length > 0) {
+      throw new Error(
+        `dev 渠道尚未配置:请在 self-host-regions.json 的 dev 块填 ${missing.join(' / ')}` +
+          '(建议身份用 com.xd.cindydev,与 desktop CindyDev 同一套命名)',
+      );
+    }
+  }
   return block;
 }
 

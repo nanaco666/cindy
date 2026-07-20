@@ -151,4 +151,7 @@ cn 系(登录线、意识 app-context 等运行时分支与 cn 同待遇,意识�
    不配回落 `FP_DEV_OSS_ACCESS_KEY_*`)。在此之前发 dev 渠道会 fail closed 报缺配置。
 4. **dev 模式运行**(不打包):`pnpm restart:desktop:remote --region=dev` 即读
    `endpoint.dev.json`(dev 服务器可达后可用)。
-5. mobile 侧暂不引入 dev 区域(EXPO 侧仍 cn/global),需要时另行扩展。
+5. **mobile 自建线已同步 dev**:`self-host-regions.json` 加 dev 块(全留空,装载不炸、
+   真发 dev 时按缺失字段报错;身份建议 `com.xd.cindydev`,与桌面同套命名);
+   `--region dev`、`EXPO_PUBLIC_CINDY_AUTH_REGION=dev`(scheme `cindydev`、端点读
+   `endpoint.dev.json`)全链就位。EAS/TestFlight 线不引入 dev(自建线专属)。
