@@ -537,6 +537,7 @@ export function SessionCard({
                 }}
                 containerClassName="min-w-0 flex-1"
                 inputClassName="h-6 text-13 font-semibold text-foreground"
+                activeForeground={isActive}
               />
             ) : (
               <div className="flex min-w-0 flex-1 items-center gap-1">
@@ -705,6 +706,7 @@ export function SessionCard({
               }}
               containerClassName="min-w-0 flex-1"
               inputClassName="h-6 text-[12.5px] font-bold text-foreground"
+              activeForeground={isActive}
             />
           </div>
         ) : (

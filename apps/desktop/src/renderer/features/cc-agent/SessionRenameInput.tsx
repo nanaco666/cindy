@@ -67,6 +67,8 @@ interface SessionRenameInputProps {
   inputClassName?: string;
   /** 外层容器布局类:min-w-0 flex-1 或固定宽度。 */
   containerClassName?: string;
+  /** 位于侧栏 active 反相底色上时，input 与 Magic 按钮都切到配套前景色。 */
+  activeForeground?: boolean;
 }
 
 export function SessionRenameInput({
@@ -77,6 +79,7 @@ export function SessionRenameInput({
   onCancel,
   inputClassName,
   containerClassName,
+  activeForeground = false,
 }: SessionRenameInputProps) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -188,6 +191,7 @@ export function SessionRenameInput({
           'border-[1.5px] border-[var(--focus-ring)]',
           'pr-7',
           inputClassName,
+          activeForeground && 'text-sidebar-item-active-foreground',
         )}
       />
       <button
@@ -213,8 +217,10 @@ export function SessionRenameInput({
         }}
         className={cn(
           'absolute right-[3px] flex h-5 w-5 shrink-0 items-center justify-center rounded',
-          'text-[var(--cmd-palette-item-meta)] transition-colors',
-          'hover:bg-[var(--update-btn-hover)] hover:text-foreground',
+          'transition-colors',
+          activeForeground
+            ? 'text-sidebar-item-active-foreground hover:text-sidebar-item-active-foreground hover:bg-[color-mix(in_srgb,var(--sidebar-item-active-foreground)_14%,transparent)]'
+            : 'text-[var(--cmd-palette-item-meta)] hover:bg-[var(--update-btn-hover)] hover:text-foreground',
           'focus:outline-none',
         )}
       >

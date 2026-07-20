@@ -670,6 +670,7 @@ export const SessionItem = memo(function SessionItem({
           }}
           containerClassName="min-w-0 flex-1"
           inputClassName="h-6 text-sm font-medium text-foreground"
+          activeForeground={isActive}
         />
       ) : (
         //   matchIndices 由父层(useSessionSearch)注入时,渲染高亮 segments;否则
