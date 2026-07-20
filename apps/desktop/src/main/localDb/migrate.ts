@@ -167,10 +167,7 @@ export async function runMigrations(
   }
 
   // F3 V0.4：仅清理 .bak.{ISO}，.bak.clean 配额完全独立
-  pruneIsoBackupsToBudget(dbFilePath, {
-    maxCount: MAX_ISO_BACKUPS,
-    maxTotalBytes: isoBackupTotalBudgetBytes(estimateDbSizeBytes(dbFilePath)),
-  });
+  pruneMigrationBackupsToBudget(dbFilePath);
   log.info(
     JSON.stringify({
       event: 'localDb.migrate.done',
@@ -196,7 +193,7 @@ function formatGB(bytes: number): string {
  *
  * @returns 空串（空间充足/未知）或形如"（磁盘剩余 X，备份约需 Y…）"的报错附注
  */
-function prepareBackupDiskSpace(dbFilePath: string): string {
+export function prepareBackupDiskSpace(dbFilePath: string): string {
   const dbSize = estimateDbSizeBytes(dbFilePath);
   if (dbSize === 0) return ''; // 首次启动无库可备份
   const budget = isoBackupTotalBudgetBytes(dbSize);
@@ -233,6 +230,14 @@ function prepareBackupDiskSpace(dbFilePath: string): string {
     return `（磁盘空间不足：剩余 ${formatGB(free)}，备份约需 ${formatGB(needed)}；已自动清理旧备份仍不足，请清理磁盘后重新启动。数据目录：${dir}）`;
   }
   return '';
+}
+
+/** migration / schema repair 完成后共用的 ISO 备份配额轮转。 */
+export function pruneMigrationBackupsToBudget(dbFilePath: string): string[] {
+  return pruneIsoBackupsToBudget(dbFilePath, {
+    maxCount: MAX_ISO_BACKUPS,
+    maxTotalBytes: isoBackupTotalBudgetBytes(estimateDbSizeBytes(dbFilePath)),
+  });
 }
 
 /**

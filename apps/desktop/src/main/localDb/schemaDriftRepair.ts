@@ -78,6 +78,42 @@ export interface RepairReport {
   residual: ResidualMismatch[];
 }
 
+/** 一条经只读反射确认需要执行的 schema 修复动作。 */
+export interface SchemaDriftRepairAction {
+  table: string;
+  kind: 'add-column' | 'create-index' | 'create-table';
+  ddl: string;
+  failureKind: ResidualMismatch['kind'];
+  failureDetail: string;
+}
+
+/**
+ * schema drift 的只读修复计划。调用方可先看 actions 是否为空，再决定是否值得做
+ * 与 DB 体积线性相关的在线备份。
+ */
+export interface SchemaDriftRepairPlan {
+  actions: SchemaDriftRepairAction[];
+  residual: ResidualMismatch[];
+}
+
+export interface GuardedSchemaDriftRepairOptions {
+  /** 真正写 schema 前执行；生产调用方在这里做备份配额清理与磁盘预检。 */
+  beforeBackup?: () => void;
+  /** 返回 null 表示备份失败，此时绝不执行 plan。 */
+  backup: () => Promise<string | 'NO_DB_TO_BACKUP' | null>;
+  /** backup await 期间连接可能因切账号被替换；false 时放弃本轮写入。 */
+  isConnectionCurrent?: () => boolean;
+  /** apply 完成后的备份配额轮转。 */
+  afterApply?: () => void;
+}
+
+export interface GuardedSchemaDriftRepairResult {
+  outcome: 'no-op' | 'applied' | 'backup-failed' | 'connection-changed';
+  plan: SchemaDriftRepairPlan;
+  report?: RepairReport;
+  backupResult?: string | 'NO_DB_TO_BACKUP';
+}
+
 // ── helpers ────────────────────────────────────────────────────────────────
 
 function tableExists(db: Database.Database, name: string): boolean {
@@ -114,15 +150,15 @@ function defaultToSQL(value: unknown): string | null {
 
 // ── column repair ──────────────────────────────────────────────────────────
 
-function repairColumns(
+function planColumnRepairs(
   db: Database.Database,
   tableName: string,
   drizzleTable: ManagedSchemaTable,
   residual: ResidualMismatch[],
-): string[] {
+): SchemaDriftRepairAction[] {
   const existing = existingColumnNames(db, tableName);
   const expected = getTableColumns(drizzleTable);
-  const repairs: string[] = [];
+  const actions: SchemaDriftRepairAction[] = [];
 
   for (const rawCol of Object.values(expected)) {
     const col = asColumnMeta(rawCol as Column);
@@ -154,41 +190,29 @@ function repairColumns(
     if (def !== null) ddl += ` DEFAULT ${def}`;
     if (col.notNull) ddl += ' NOT NULL';
 
-    try {
-      db.exec(ddl);
-      repairs.push(ddl);
-    } catch (err) {
-      log.error(
-        JSON.stringify({
-          event: 'schema-drift-repair.column-add-failed',
-          table: tableName,
-          column: col.name,
-          ddl,
-          error: String(err),
-        }),
-      );
-      residual.push({
-        table: tableName,
-        kind: 'unknown',
-        detail: `add column ${col.name} failed: ${String(err)}`,
-      });
-    }
+    actions.push({
+      table: tableName,
+      kind: 'add-column',
+      ddl,
+      failureKind: 'unknown',
+      failureDetail: `add column ${col.name} failed`,
+    });
   }
 
-  return repairs;
+  return actions;
 }
 
 // ── index repair ───────────────────────────────────────────────────────────
 
-function repairIndexes(
+function planIndexRepairs(
   db: Database.Database,
   tableName: string,
   drizzleTable: ManagedSchemaTable,
   residual: ResidualMismatch[],
-): string[] {
+): SchemaDriftRepairAction[] {
   const existing = existingIndexNames(db, tableName);
   const { indexes } = getTableConfig(drizzleTable);
-  const repairs: string[] = [];
+  const actions: SchemaDriftRepairAction[] = [];
 
   for (const idx of indexes) {
     const idxName: string = idx.config.name;
@@ -228,28 +252,16 @@ function repairIndexes(
     }
     const ddl = `CREATE ${unique}INDEX IF NOT EXISTS \`${idxName}\` ON \`${tableName}\` (${cols})${whereClause}`;
 
-    try {
-      db.exec(ddl);
-      repairs.push(ddl);
-    } catch (err) {
-      log.error(
-        JSON.stringify({
-          event: 'schema-drift-repair.index-create-failed',
-          table: tableName,
-          index: idxName,
-          ddl,
-          error: String(err),
-        }),
-      );
-      residual.push({
-        table: tableName,
-        kind: where ? 'missing-partial-index' : 'missing-index',
-        detail: `${idxName} create failed: ${String(err)}`,
-      });
-    }
+    actions.push({
+      table: tableName,
+      kind: 'create-index',
+      ddl,
+      failureKind: where ? 'missing-partial-index' : 'missing-index',
+      failureDetail: `${idxName} create failed`,
+    });
   }
 
-  return repairs;
+  return actions;
 }
 
 // ── missing table repair ───────────────────────────────────────────────────
@@ -264,12 +276,10 @@ function repairIndexes(
  * - 不补 FK —— 表都丢了大概率有更深的问题,FK 留给后续 schemaDriftRepair 再跑
  *   (但目前没实现 FK 反射;调用方应该已经走 nuke 路径)
  */
-function repairMissingTable(
-  db: Database.Database,
+function planMissingTableRepair(
   tableName: string,
   drizzleTable: ManagedSchemaTable,
-  residual: ResidualMismatch[],
-): string | null {
+): SchemaDriftRepairAction {
   const expected = getTableColumns(drizzleTable);
   const config = getTableConfig(drizzleTable);
   const compositePks = config.primaryKeys;
@@ -298,33 +308,19 @@ function repairMissingTable(
     colDefs.push(`PRIMARY KEY (${pkCols})`);
   }
 
-  const ddl = `CREATE TABLE IF NOT EXISTS \`${tableName}\` (\n  ${colDefs.join(',\n  ')}\n)`;
-
-  try {
-    db.exec(ddl);
-    return ddl;
-  } catch (err) {
-    log.error(
-      JSON.stringify({
-        event: 'schema-drift-repair.table-create-failed',
-        table: tableName,
-        ddl,
-        error: String(err),
-      }),
-    );
-    residual.push({
-      table: tableName,
-      kind: 'missing-table-fatal',
-      detail: `create table failed: ${String(err)}`,
-    });
-    return null;
-  }
+  return {
+    table: tableName,
+    kind: 'create-table',
+    ddl: `CREATE TABLE IF NOT EXISTS \`${tableName}\` (\n  ${colDefs.join(',\n  ')}\n)`,
+    failureKind: 'missing-table-fatal',
+    failureDetail: 'create table failed',
+  };
 }
 
 // ── entry point ────────────────────────────────────────────────────────────
 
-export function repairSchemaDrift(db: Database.Database): RepairReport {
-  const repaired: string[] = [];
+export function planSchemaDriftRepair(db: Database.Database): SchemaDriftRepairPlan {
+  const actions: SchemaDriftRepairAction[] = [];
   const residual: ResidualMismatch[] = [];
 
   // 防御:db 为空或连接已关闭时直接返回空报告(绝不产出 residual)。
@@ -341,7 +337,7 @@ export function repairSchemaDrift(db: Database.Database): RepairReport {
         open: handle ? handle.open : false,
       }),
     );
-    return { repaired, residual };
+    return { actions, residual };
   }
 
   try {
@@ -349,12 +345,13 @@ export function repairSchemaDrift(db: Database.Database): RepairReport {
       const tableName = getTableName(drizzleTable);
       try {
         if (!tableExists(db, tableName)) {
-          const ddl = repairMissingTable(db, tableName, drizzleTable, residual);
-          if (ddl) repaired.push(ddl);
-          if (!tableExists(db, tableName)) continue; // 建表都失败 → 跳过后续补列
+          // CREATE TABLE 已包含全部列；只需额外计划 schema.ts 声明的索引。
+          actions.push(planMissingTableRepair(tableName, drizzleTable));
+          actions.push(...planIndexRepairs(db, tableName, drizzleTable, residual));
+          continue;
         }
-        repaired.push(...repairColumns(db, tableName, drizzleTable, residual));
-        repaired.push(...repairIndexes(db, tableName, drizzleTable, residual));
+        actions.push(...planColumnRepairs(db, tableName, drizzleTable, residual));
+        actions.push(...planIndexRepairs(db, tableName, drizzleTable, residual));
       } catch (err) {
         log.error(
           JSON.stringify({
@@ -370,33 +367,101 @@ export function repairSchemaDrift(db: Database.Database): RepairReport {
         });
       }
     }
-
-    if (repaired.length > 0) {
-      log.warn(
-        JSON.stringify({
-          event: 'schema-drift-repair.applied',
-          repairedCount: repaired.length,
-          residualCount: residual.length,
-          repaired,
-        }),
-      );
-    } else {
-      log.info(
-        JSON.stringify({
-          event: 'schema-drift-repair.no-op',
-          residualCount: residual.length,
-        }),
-      );
-    }
   } catch (err) {
-    // 顶层兜底:repair 自己崩了也不能阻塞启动
+    // 顶层兜底:plan 自己崩了也不能阻塞启动
     log.error(
       JSON.stringify({
-        event: 'schema-drift-repair.fatal',
+        event: 'schema-drift-repair.plan-fatal',
         error: err instanceof Error ? err.message : String(err),
       }),
     );
   }
 
+  return { actions, residual };
+}
+
+/** 执行一份已经生成的修复计划；单项失败不阻断后续动作。 */
+export function applySchemaDriftRepair(
+  db: Database.Database,
+  plan: SchemaDriftRepairPlan,
+): RepairReport {
+  const repaired: string[] = [];
+  const residual = [...plan.residual];
+
+  for (const action of plan.actions) {
+    // CREATE TABLE 失败后，同表的索引动作没有执行意义，也不应制造一串重复 residual。
+    if (action.kind !== 'create-table' && !tableExists(db, action.table)) continue;
+    try {
+      db.exec(action.ddl);
+      repaired.push(action.ddl);
+    } catch (err) {
+      log.error(
+        JSON.stringify({
+          event: 'schema-drift-repair.action-failed',
+          table: action.table,
+          kind: action.kind,
+          ddl: action.ddl,
+          error: String(err),
+        }),
+      );
+      residual.push({
+        table: action.table,
+        kind: action.failureKind,
+        detail: `${action.failureDetail}: ${String(err)}`,
+      });
+    }
+  }
+
+  if (repaired.length > 0) {
+    log.warn(
+      JSON.stringify({
+        event: 'schema-drift-repair.applied',
+        repairedCount: repaired.length,
+        residualCount: residual.length,
+        repaired,
+      }),
+    );
+  } else {
+    log.info(
+      JSON.stringify({
+        event: 'schema-drift-repair.no-op',
+        residualCount: residual.length,
+      }),
+    );
+  }
+
   return { repaired, residual };
+}
+
+/**
+ * 只在 plan 确认存在实际 DDL 时才备份；备份失败或连接切换时绝不写 schema。
+ * 这把“是否需要备份”绑定到真实修复动作，而不是 migration history 的元数据 drift。
+ */
+export async function repairSchemaDriftWithBackup(
+  db: Database.Database,
+  options: GuardedSchemaDriftRepairOptions,
+): Promise<GuardedSchemaDriftRepairResult> {
+  const plan = planSchemaDriftRepair(db);
+  if (plan.actions.length === 0) {
+    return { outcome: 'no-op', plan, report: applySchemaDriftRepair(db, plan) };
+  }
+
+  options.beforeBackup?.();
+  const backupResult = await options.backup();
+  if (backupResult === null) return { outcome: 'backup-failed', plan };
+  if (options.isConnectionCurrent && !options.isConnectionCurrent()) {
+    return { outcome: 'connection-changed', plan, backupResult };
+  }
+
+  // 在线备份可能持续数分钟；共库的另一实例期间可能已经补过部分 schema。
+  // apply 前重新只读规划，避免执行过时 DDL，也能覆盖“原先缺表、期间被建成残表”的竞态。
+  const applyPlan = planSchemaDriftRepair(db);
+  const report = applySchemaDriftRepair(db, applyPlan);
+  options.afterApply?.();
+  return { outcome: 'applied', plan, report, backupResult };
+}
+
+/** 向后兼容同步调用方与既有测试；生产启动路径使用带备份门禁的版本。 */
+export function repairSchemaDrift(db: Database.Database): RepairReport {
+  return applySchemaDriftRepair(db, planSchemaDriftRepair(db));
 }
