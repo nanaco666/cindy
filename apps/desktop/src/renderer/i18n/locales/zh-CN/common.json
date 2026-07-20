@@ -4074,6 +4074,12 @@
     },
     "userMessage": {
       "attachmentPrefix": "附件：",
+      "saveAttachmentAs": "另存附件 {{name}}",
+      "attachmentSaved": "附件 {{name}} 已保存",
+      "attachmentSavedUnsupported": "附件 {{name}} 已保存，但当前平台可能无法直接使用此文件类型",
+      "attachmentSaveForbidden": "无法保存附件：源文件路径不受信任",
+      "attachmentSourceMissing": "无法保存附件：源文件已不存在",
+      "attachmentSaveFailed": "无法保存附件，请检查目标目录权限后重试",
       "automationSent": "由自动化任务发送",
       "automationSentNamed": "由自动化任务「{{name}}」发送",
       "automationViewTask": "查看自动化任务",

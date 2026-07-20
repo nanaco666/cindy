@@ -5,6 +5,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { pathToFileURL } from 'node:url';
+import { pipeline } from 'node:stream/promises';
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { machineIdSync } from 'node-machine-id';
 import windowStateKeeper from 'electron-window-state';
@@ -139,6 +140,7 @@ import {
   createLightboxMediaHandlers,
   REMOTE_IMAGE_MAX_BYTES,
 } from './lightboxMediaActions';
+import { createChatAttachmentSaveHandler } from './chatAttachmentSave';
 import { sweepStartupDraftImages } from './imageCacheOrphanSweep';
 import { sweepLegacyDialogueWorkingDirs } from './localDb/dialogueWorkdirSelfHeal';
 import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
@@ -3845,6 +3847,46 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
         return { success: false, error: err instanceof Error ? err.message : String(err) };
       }
     },
+  );
+
+  // 安全降级附件“另存为”：源文件必须通过统一路径策略，解析真实路径后还要
+  // 位于聊天附件/远程文件缓存内；建议名在 main 侧清洗，复制完成后不调用
+  // openPath，避免符号链接越界或恢复原扩展名后被自动执行。
+  const saveChatAttachment = createChatAttachmentSaveHandler({
+    isPathAllowed,
+    realpath: (filePath) => fs.promises.realpath(filePath),
+    stat: (filePath) => fs.promises.stat(filePath, { bigint: true }),
+    openSource: async (filePath) => {
+      const noFollow = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
+      const handle = await fs.promises.open(filePath, fs.constants.O_RDONLY | noFollow);
+      return {
+        stat: () => handle.stat({ bigint: true }),
+        copyTo: async (targetPath) => {
+          await pipeline(
+            handle.createReadStream({ autoClose: false, start: 0 }),
+            fs.createWriteStream(targetPath),
+          );
+        },
+        close: () => handle.close(),
+      };
+    },
+    showSaveDialog: async (opts) => {
+      const targetWin = getWindow() ?? BrowserWindow.getFocusedWindow();
+      const result = targetWin
+        ? await dialog.showSaveDialog(targetWin, opts)
+        : await dialog.showSaveDialog(opts);
+      return { canceled: result.canceled, filePath: result.filePath || undefined };
+    },
+    getDownloadsDir: () => app.getPath('downloads'),
+    getAllowedSourceRoots: () => [
+      imageCacheStore.getCacheRoot(),
+      path.join(app.getPath('userData'), 'remote-file-cache'),
+    ],
+  });
+  ipcMain.handle(
+    'chat-attachment:save-as',
+    (_event, params: { sourcePath?: unknown; suggestedName?: unknown }) =>
+      saveChatAttachment(params),
   );
 
   // Settings → About: 打开 <userData>/logs 在系统文件管理器。

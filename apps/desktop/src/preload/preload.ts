@@ -2137,6 +2137,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openPath: (filePath: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('shell:open-path', filePath),
 
+  // 安全降级聊天附件另存为。main 校验源路径并清洗 suggestedName；保存后
+  // 只返回结果，不自动打开或执行目标文件。
+  saveChatAttachmentAs: (params: {
+    sourcePath: string;
+    suggestedName: string;
+  }): Promise<
+    | { status: 'saved'; savedPath: string }
+    | { status: 'canceled' }
+    | {
+        status: 'error';
+        code:
+          | 'invalid_source'
+          | 'forbidden'
+          | 'not_found'
+          | 'not_file'
+          | 'dialog_failed'
+          | 'copy_failed';
+      }
+  > => ipcRenderer.invoke('chat-attachment:save-as', params),
+
   // Open <userData>/logs in the OS file manager (Settings → About).
   openLogsDir: (): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('app:open-logs-dir'),

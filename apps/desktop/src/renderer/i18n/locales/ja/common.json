@@ -4074,6 +4074,12 @@
     },
     "userMessage": {
       "attachmentPrefix": "添付：",
+      "saveAttachmentAs": "添付ファイル {{name}} を別名で保存",
+      "attachmentSaved": "添付ファイル {{name}} を保存しました",
+      "attachmentSavedUnsupported": "添付ファイル {{name}} を保存しましたが、現在のプラットフォームではこのファイル形式を直接使用できない可能性があります",
+      "attachmentSaveForbidden": "保存元のパスを信頼できないため、添付ファイルを保存できません",
+      "attachmentSourceMissing": "保存元のファイルが存在しないため、添付ファイルを保存できません",
+      "attachmentSaveFailed": "添付ファイルを保存できません。保存先フォルダーの権限を確認して再試行してください",
       "automationSent": "自動化タスクから送信",
       "automationSentNamed": "自動化タスク「{{name}}」から送信",
       "automationViewTask": "自動化タスクを表示",
