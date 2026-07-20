@@ -85,7 +85,8 @@ test("help groups copyable desktop, binary, and Mobile workflows", async () => {
 
 	for (const command of [
 		"pnpm dev:desktop:remote --region=global",
-		"pnpm package:desktop -- --region cn --channel release --version patch",
+		"pnpm package:desktop --region cn --version patch",
+		"pnpm package:desktop --region dev",
 		"pnpm install:agent-binaries",
 		"pnpm release:claude-code -- --dry-run",
 		"pnpm release:codex -- --platform linux-x64",
@@ -93,8 +94,10 @@ test("help groups copyable desktop, binary, and Mobile workflows", async () => {
 		"pnpm mobile:release:prod -- --message \"发布本次改动\" --execute",
 		"pnpm mobile:release:ios:local -- --region cn --execute",
 		"pnpm mobile:release:ios:local -- --region global --execute",
+		"pnpm mobile:release:ios:local -- --region dev --execute",
 		"pnpm mobile:release:android:local -- --region cn --execute",
 		"pnpm mobile:release:android:local -- --region global --execute",
+		"pnpm mobile:release:android:local -- --region dev --execute",
 	]) {
 		assert.match(output, new RegExp(command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 	}

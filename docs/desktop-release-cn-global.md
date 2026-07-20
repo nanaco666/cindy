@@ -26,6 +26,9 @@ release 脚本一条龙完成:electron-forge make → 签名(mac 含公证)→ �
   `pnpm release:mac:global --arch arm64`。
 - **渠道首发**(该渠道 CDN 上还没有任何 manifest,典型是 global 首发):bump 关键字无基线可算,
   必须显式传版本号,例如 `pnpm release:mac:global 1.0.0`。脚本会从空 manifest 骨架起步。
+- 只打包命令只用 `--region cn|global|dev` 选择目标，不再提供 package-level
+  `--channel`；产物按 `release/artifacts/<region>/<version|unversioned>/...` 归档。
+  canary / stable 仅由 release / promote 阶段管理。
 
 ### 单独发布 Windows agent 二进制
 

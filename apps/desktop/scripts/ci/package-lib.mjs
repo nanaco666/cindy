@@ -15,7 +15,6 @@ export const VERSIONLESS_VERSION = '0.0.0';
 
 export const SUPPORTED_PLATFORMS = Object.freeze(['win32', 'darwin', 'linux']);
 export const SUPPORTED_REGIONS = Object.freeze(['cn', 'global', 'dev']);
-export const SUPPORTED_CHANNELS = Object.freeze(['dev', 'release']);
 const VERSION_BUMP_KINDS = Object.freeze(['major', 'minor', 'patch']);
 
 const PLATFORM_ARCHS = Object.freeze({
@@ -39,7 +38,6 @@ export function parsePackageArgs(argv, defaults = {}) {
     platform: defaults.platform ?? process.platform,
     arch: defaults.arch ?? process.arch,
     region: 'cn',
-    channel: 'dev',
     versionSpec: null,
     skipSmoke: false,
     allowUnsigned: false,
@@ -56,7 +54,6 @@ export function parsePackageArgs(argv, defaults = {}) {
       case '--platform': out.platform = takeValue(a, i); i++; break;
       case '--arch': out.arch = takeValue(a, i); i++; break;
       case '--region': out.region = takeValue(a, i); i++; break;
-      case '--channel': out.channel = takeValue(a, i); i++; break;
       case '--version': out.versionSpec = takeValue(a, i); i++; break;
       case '--skip-smoke': out.skipSmoke = true; break;
       case '--allow-unsigned': out.allowUnsigned = true; break;
@@ -64,7 +61,7 @@ export function parsePackageArgs(argv, defaults = {}) {
       // 打版本无关包时用它;与 --allow-unsigned(放行"缺凭证")语义互补。
       case '--no-sign': out.noSign = true; out.allowUnsigned = true; break;
       default:
-        throw new Error(`未知参数: ${a}(支持 --platform/--arch/--region/--channel/--version/--skip-smoke/--allow-unsigned/--no-sign)`);
+        throw new Error(`未知参数: ${a}(支持 --platform/--arch/--region/--version/--skip-smoke/--allow-unsigned/--no-sign)`);
     }
   }
 
@@ -77,9 +74,6 @@ export function parsePackageArgs(argv, defaults = {}) {
   }
   if (!SUPPORTED_REGIONS.includes(out.region)) {
     throw new Error(`不支持的 region: ${out.region}(可选 ${SUPPORTED_REGIONS.join('/')})`);
-  }
-  if (!SUPPORTED_CHANNELS.includes(out.channel)) {
-    throw new Error(`不支持的 channel: ${out.channel}(可选 ${SUPPORTED_CHANNELS.join('/')})`);
   }
   if (
     out.versionSpec !== null &&
@@ -132,27 +126,27 @@ export async function resolvePackageVersion(versionSpec, fetchBaseline) {
   return { version: bumpVersion(baseline, versionSpec), versionless: false };
 }
 
-/** 产物目录(相对 apps/desktop/release/):artifacts/<region>-<channel>/<version|dev>/<platformKey> */
-export function artifactRelDir({ region, channel, version, versionless, platformKey }) {
-  const versionSeg = versionless ? 'dev' : version;
-  return ['artifacts', `${region}-${channel}`, versionSeg, platformKey].join('/');
+/** 产物目录(相对 apps/desktop/release/):artifacts/<region>/<version|unversioned>/<platformKey> */
+export function artifactRelDir({ region, version, versionless, platformKey }) {
+  const versionSeg = versionless ? 'unversioned' : version;
+  return ['artifacts', region, versionSeg, platformKey].join('/');
 }
 
 /**
  * 新渠道产物文件基名(老 release 脚本的 xdt-maker-* 命名不动,新产物统一
  * cindy-*)。两区同名(owner 决策):发布渠道靠不同 OSS bucket 区分,本地
- * 产物已按 artifactRelDir 的 `<region>-<channel>/` 目录分层,文件名不再
+ * 产物已按 artifactRelDir 的 `<region>/` 目录分层,文件名不再
  * 叠区域前缀。
  */
 export function artifactBaseName({ version, versionless }) {
-  return `cindy-${versionless ? 'dev' : version}`;
+  return `cindy-${versionless ? 'unversioned' : version}`;
 }
 
 /**
  * 组装 build-info.json 内容(发布侧未来只读它决定上传什么)。
  * 所有字段由编排层收集后传入,本函数保持纯组装。
  * @param {{
- *   version: string, versionless: boolean, region: string, channel: string,
+ *   version: string, versionless: boolean, region: string,
  *   platform: string, arch: string, commitSha: string, electronVersion: string,
  *   schemaVersionMax: number, migrationFiles: string[],
  *   files: Array<{ role: string, name: string, sha256: string, size: number }>,
@@ -161,13 +155,13 @@ export function artifactBaseName({ version, versionless }) {
  */
 export function buildBuildInfo(ctx) {
   return {
-    schemaVersion: 1,
+    // v2 移除无运行语义的 package channel；发布通道只属于 publish 阶段。
+    schemaVersion: 2,
     product: 'cindy-desktop',
     // 版本无关包 version 记 null,占位符不冒充真实版本。
     version: ctx.versionless ? null : ctx.version,
     versionless: ctx.versionless,
     region: ctx.region,
-    channel: ctx.channel,
     platform: ctx.platform,
     arch: ctx.arch,
     platformKey: `${ctx.platform}-${ctx.arch}`,

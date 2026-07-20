@@ -42,13 +42,14 @@ pnpm mobile:beta:add-dev -- alice --execute
 
 ## 自建线地区分包与 canary/stable(region,cn / global / dev)
 
-自建线脚本按所选 region 写入该地区自己的 OSS bucket。`local` / `ota` 默认只发布到 **canary**，验证通过后再执行 `promote --yes` 把指针切到 stable；两条通道共用同一份不可变 bundle / assets。region **必须显式**指定(`cn` / `global` / `dev`，无默认值):
+自建线脚本按所选 region 写入该地区自己的 OSS bucket。`local` / `ota` 默认只发布到 **canary**，验证通过后再执行 `promote --yes` 把指针切到 stable；两条通道共用同一份不可变 bundle / assets。region **必须显式**指定(`cn` / `global` / `dev`，无默认值)。`mobile:release:{ios,android}:{local,ota,check}` 缺少 `--region` 会直接报错；dev 配置未填完整时会在真正使用前 fail closed:
 
 ```bash
 pnpm mobile:release:ios:local     -- --region global --execute
 pnpm mobile:release:android:local -- --region cn     --execute
 pnpm mobile:release:ios:ota       -- --region global --execute
 pnpm mobile:release:android:check -- --region cn
+pnpm mobile:release:ios:check     -- --region dev
 ```
 
 验证通过后提升 stable（默认先 dry-run，只有 --yes 才写 OSS）：
@@ -71,10 +72,11 @@ pnpm mobile:release:android:promote -- --region cn --yes
 客户端只在登录后的 isCanary feature flag 为 true 时请求 canary；canary 指针缺失不会回退 stable，避免灰度用户静默降级。iOS canary 整包记录的 installUrl / itmsUrl 仍来自正常 region 的 App Store 配置，Android 仍使用 androidStoreUrl，为空时回退 OSS APK；不把重签 IPA 当作 canary 的安装入口。EAS/TestFlight 的 mobile:release:check / beta / prod 流程和 eas.json 完全不改。
 
 - 所有**随地区变的非机密分包参数**(iOS bundleId / App Store 数字 ID / Android package / 可选 Android 商店地址 / NPKG 期望包名 / TapDB 公开 clientId·clientToken / global Google 公开 Web·iOS client id 与 URL scheme / OSS 落点 bucket·CDN·prefix·ossRegion / 非机密签名描述符)集中在打包机本地的 `apps/mobile/scripts/self-host-regions.json`(纯值、已 gitignore;复制 `self-host-regions.json.example` 填值)。仓库提供的全部本地构建入口(`mobile:xcode` / `mobile:sim:start` / `mobile:sim:rebuild`)与 self-host release 都按所选 region 读取它;cn=`com.xd.cindycn` / App Store `6788711632`、global=`com.xd.cindy` / App Store `6787894640`;两区 `androidStoreUrl` 当前均留空并回退 OSS APK 直链，未来填绝对 URL/deep link 后自动切商店；Google 配置只允许出现在 `global.google`,本地/自建脚本不读取同名 `EXPO_PUBLIC_CINDY_GOOGLE_*` 环境变量。
-- **真机密仍走 env,按 region 后缀**:Android keystore 两个口令 `XDT_ANDROID_KEYSTORE_PASSWORD_{CN,GLOBAL}` / `XDT_ANDROID_KEY_PASSWORD_{CN,GLOBAL}`(cn 兼容无后缀旧名);OSS AK/SK 同账号继续用 `FP_DEV_OSS_ACCESS_KEY_ID/SECRET`,不同账号用 `XDT_OSS_ACCESS_KEY_ID_{CN,GLOBAL}` / `XDT_OSS_ACCESS_KEY_SECRET_{CN,GLOBAL}`。
+- **真机密仍走 env,按 region 后缀**:Android keystore 两个口令 `XDT_ANDROID_KEYSTORE_PASSWORD_{CN,GLOBAL,DEV}` / `XDT_ANDROID_KEY_PASSWORD_{CN,GLOBAL,DEV}`(cn 兼容无后缀旧名);OSS AK/SK 同账号继续用 `FP_DEV_OSS_ACCESS_KEY_ID/SECRET`,不同账号用 `XDT_OSS_ACCESS_KEY_ID_{CN,GLOBAL,DEV}` / `XDT_OSS_ACCESS_KEY_SECRET_{CN,GLOBAL,DEV}`。
 - OTA 更新域名**不进** region JSON:运行期由对应地区 `endpoint.json` 的 `mobileUpdateBaseUrl` 下发,不烘焙进包。
 - cn / global / dev 是独立 OSS 落点，canary 与 stable 指针互不覆盖。global 上架/重签需另在 NPKG 登记 `com.xd.cindy`(外部 pending)。
 - `dev` 开发包可以没有 App Store ID，但 iOS 自建 canary 冷更必须在 `self-host-regions.json` 的 `dev.iosAppStoreId` 填入纯数字 ID；脚本会在构建/NPKG 前 fail-fast，不会写出没有正常安装入口的 release record。
+- dev 当前允许保留空配置，但执行 dev 出包前必须补齐；各 region 的 OSS 落点与 canary/stable 指针互不覆盖。
 
 ## 脚本契约
 
