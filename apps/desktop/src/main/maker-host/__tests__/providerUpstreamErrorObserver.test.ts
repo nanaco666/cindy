@@ -3,7 +3,8 @@
  *   - 成功响应 / 非 user 供应商流量 → null sink（成功路径零开销，规则 10）；
  *   - 4xx 错误体 tee → 分类 → 经注入 broadcaster 广播结构化事件；
  *   - 同 (providerId, code) 30s 节流；不同 code / 不同 provider 不互相压制；
- *   - gzip 错误体按 content-encoding 解压后再分类。
+ *   - gzip 错误体按 content-encoding 解压后再分类；
+ *   - count_tokens 404 静默（上游未实现的良性缺失，如 Moonshot /anthropic），非 404 照常广播。
  */
 
 import { gzipSync } from 'node:zlib';
@@ -107,6 +108,25 @@ describe('createProviderUpstreamErrorObserver', () => {
       'p2:AUTH_INVALID',
       'p1:AUTH_INVALID',
     ]);
+  });
+
+  it('count_tokens 404 → null sink（上游未实现辅助端点，不弹「检查基础 URL」误报）', () => {
+    const events: ProviderUpstreamErrorEvent[] = [];
+    setProviderUpstreamErrorBroadcaster((e) => events.push(e));
+    const observer = createProviderUpstreamErrorObserver({
+      agent: 'claude-code',
+      resolveUserProviderId: () => 'kimi-moonshot',
+    });
+    // Moonshot /anthropic 实测形态：CLI 带 ?beta=true 的 count_tokens 打到未实现端点回 404。
+    expect(observer(ctx({ status: 404, url: '/v1/messages/count_tokens?beta=true' }))).toBeNull();
+    expect(observer(ctx({ status: 404, url: '/v1/messages/count_tokens' }))).toBeNull();
+    expect(events).toHaveLength(0);
+    // 同路径非 404（如 401）仍是真信号 → 照常广播。
+    drive(observer, ctx({ status: 401, url: '/v1/messages/count_tokens?beta=true' }), Buffer.from(''));
+    expect(events.map((e) => e.code)).toEqual(['AUTH_INVALID']);
+    // 主链路 /v1/messages 的 404 仍照常广播（真·端点配置问题不能被吞掉）。
+    drive(observer, ctx({ status: 404, url: '/v1/messages?beta=true' }), Buffer.from('{"error":"url.not_found"}'));
+    expect(events.map((e) => e.code)).toEqual(['AUTH_INVALID', 'ENDPOINT_NOT_FOUND']);
   });
 
   it('gzip 错误体按 content-encoding 解压后分类（400 模型不存在 → MODEL_NOT_FOUND）', () => {
