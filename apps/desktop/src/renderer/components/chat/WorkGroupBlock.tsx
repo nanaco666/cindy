@@ -6,7 +6,8 @@
  * 文字之间的动作段仍保留为内层 work_group。运行中默认展示最近 5 条活动。
  *
  * 交互契约:
- *   - 运行中动作组默认露出 latest-five preview;完成态默认 collapsed。
+ *   - 运行中动作组默认露出 latest-five preview;点组头先完整收起,再次点开才
+ *     展示全部明细。完成态默认 collapsed。
  *   - 完成态外组展开后直接显示 assistant 文字,动作仍是内层「已工作 Xs」。
  *   - 运行态或完成态的动作组展开后直接显示 thinking 内容和工具行;长 thinking
  *     可再点行展开全文,工具行沿用 AgentActionRow 的详情交互。
@@ -296,7 +297,13 @@ export function WorkGroupBlock({
 }: WorkGroupBlockProps) {
   const { t } = useTranslation();
   const { expanded, setExpanded } = useExpandedBlockMemory(blockId);
+  const {
+    expanded: livePreviewDismissed,
+    setExpanded: setLivePreviewDismissed,
+  } = useExpandedBlockMemory(`${blockId}:live-preview-dismissed`);
   const [elapsedMs, setElapsedMs] = useState(0);
+  // live preview 是首次出现时的自动展示态,不等同于 expanded。用户第一次点
+  // 组头应能把它彻底收起;dismissed 也走 block memory,切走再回来不会复现。
 
   useEffect(() => {
     if (!isStreaming || startedAtMs === undefined) return;
@@ -311,12 +318,22 @@ export function WorkGroupBlock({
     () => collectLiveWorkActivities(childItems, isStreaming),
     [childItems, isStreaming],
   );
+  const isLivePreviewVisible =
+    isStreaming && !expanded && !livePreviewDismissed && liveActivities.length > 0;
+  const isContentVisible = expanded || isLivePreviewVisible;
 
   // 外层完成态组展开成文字 + 内层动作组;内层动作组与运行态组复用本组件,
   // 展开后直接渲染 thinking /工具行,不再多套一层子卡摘要。
   const onToggle = useCallback(() => {
+    if (isLivePreviewVisible) {
+      setLivePreviewDismissed(true);
+      return;
+    }
+    // 若完整详情来自运行期记忆,折叠时也要同步禁掉默认 preview,否则重挂载
+    // 后会从 expanded 退回 preview,表现为第一次点击仍无法完全收起。
+    if (isStreaming && expanded) setLivePreviewDismissed(true);
     setExpanded((v) => !v);
-  }, [setExpanded]);
+  }, [expanded, isLivePreviewVisible, isStreaming, setExpanded, setLivePreviewDismissed]);
 
   if (childItems.length === 0) return null;
 
@@ -340,7 +357,7 @@ export function WorkGroupBlock({
             'hover:opacity-80 transition-opacity',
             'text-left',
           )}
-          aria-expanded={expanded}
+          aria-expanded={isContentVisible}
         >
           <span className="inline-flex h-[1lh] items-center shrink-0">
             {isStreaming ? (
@@ -358,14 +375,14 @@ export function WorkGroupBlock({
               {formatDuration(elapsedMs)}
             </span>
           )}
-          {expanded ? (
+          {isContentVisible ? (
             <ChevronDown size={14} className="shrink-0 text-[var(--msg-tool-card-chevron)]" />
           ) : (
             <ChevronRight size={14} className="shrink-0 text-[var(--msg-tool-card-chevron)]" />
           )}
         </button>
 
-        {isStreaming && !expanded && liveActivities.length > 0 && (
+        {isLivePreviewVisible && (
           <div
             data-live-work-preview="true"
             className={cn(

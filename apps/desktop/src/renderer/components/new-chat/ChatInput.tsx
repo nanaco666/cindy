@@ -183,6 +183,10 @@ import { getSessionDeviceId } from '@/features/device-link/remoteProjectsStore';
 import { makerApiFor } from '@/lib/makerTransport';
 
 const log = createLogger('ChatInput');
+// perf-baseline(与 MessageStream / sidebar 的 perf/session-switch 探针同通道):
+// chat-input:commit 量化每次会话切换时 ChatInput 子树(Lexical 初始化 + 草稿恢复
+// + 工具栏)的首次 commit 主线程占用;<30ms 不打,避免噪音。
+const perfLog = createLogger('perf/session-switch');
 
 const VOICE_INPUT_LONG_PRESS_MS = 450;
 const VOICE_INPUT_SHORTCUT_DEDUPE_MS = 250;
@@ -926,6 +930,24 @@ export function ChatInput({
   // call sites keep working unchanged; NewMakerDraftRoute passes an explicit
   // sentinel to keep the transient draft alive across sidebar switches.
   const storageKey = draftKey ?? sessionId;
+  // perf/session-switch 探针(见文件头 perfLog 注释):按 storageKey 换代计一次
+  // render 起点,layout effect 里量到 commit 完成;覆盖"remount"与"复用组件仅换
+  // key"两种切换形态。纯诊断:所有测量走 import.meta.env.DEV,生产构建里 body
+  // 被 dead-code 消除(hooks 本身按 rules-of-hooks 保持无条件调用,残留可忽略)。
+  const perfCommitKeyRef = useRef<string | null>(null);
+  const perfCommitStartRef = useRef(0);
+  const perfCommitKey = storageKey ?? 'null';
+  if (import.meta.env.DEV && perfCommitKeyRef.current !== perfCommitKey) {
+    perfCommitKeyRef.current = perfCommitKey;
+    perfCommitStartRef.current = performance.now();
+  }
+  useLayoutEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const durMs = performance.now() - perfCommitStartRef.current;
+    if (durMs >= 30) {
+      perfLog.debug(`chat-input:commit key=${perfCommitKey} dur=${Math.round(durMs)}ms`);
+    }
+  }, [perfCommitKey]);
   // composer 「+」菜单 → 新建目标弹窗开关(仅会话中可用)。
   const [newGoalOpen, setNewGoalOpen] = useState(false);
   // 点「新建目标」时把输入框当前文字带进弹窗作默认目标内容。
