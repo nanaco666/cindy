@@ -1225,7 +1225,9 @@ registerColor('settings-integration-avatar-bg', {
 }, 'Card on Card — neutral chip');
 registerColor('settings-integration-avatar-border', {
   light: '#e8e8e6',
-  dark: 'transparent',
+  // dark 不能用 transparent / border-default(#3c3c3a 与默认 chip bg 同色都不可见);
+  // 白色低透明度 hairline 叠在任意暗色主题的 chip 底上都能读出细边,无需各主题 override。
+  dark: 'rgba(255, 255, 255, 0.08)',
 }, 'Hairline');
 registerColor('settings-integration-avatar-icon', {
   light: 'var(--text-primary)',
