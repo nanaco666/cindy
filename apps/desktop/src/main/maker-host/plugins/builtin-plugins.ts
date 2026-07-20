@@ -76,7 +76,7 @@ export type KnownProviderName =
   | 'lizi_ssh'
   | 'lizi_memory'
   | 'lizi_contacts'
-  | 'lizi_xdt_helper'
+  | 'cindy_helper'
   | 'lizi_orca'
   | 'lizi_lsp';
 
@@ -104,7 +104,7 @@ export const PROVIDER_NAME_TO_PLUGIN_ID: Record<KnownProviderName, PluginId> = {
   lizi_ssh: 'ssh',
   lizi_memory: 'memory',
   lizi_contacts: 'contacts',
-  lizi_xdt_helper: 'xdt_helper',
+  cindy_helper: 'xdt_helper',
   lizi_orca: 'collab',
   lizi_lsp: 'lsp',
 };
@@ -154,7 +154,7 @@ const PLUGIN_ID_TO_MCP_ID: Record<PluginId, LiziMcpId | undefined> = {
   ssh: 'lizi_ssh',
   memory: 'lizi_memory',
   contacts: 'lizi_contacts',
-  xdt_helper: 'lizi_xdt_helper',
+  xdt_helper: 'cindy_helper',
   collab: 'lizi_orca',
   lsp: 'lizi_lsp',
 };

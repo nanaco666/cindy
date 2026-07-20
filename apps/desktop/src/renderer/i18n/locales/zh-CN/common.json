@@ -5016,7 +5016,7 @@
         "script": "仅运行脚本"
       },
       "script": {
-        "protocolSummary": "stdout 必须逐行输出 xdt-maker-script/1 的完整 JSON 对象（JSONL）；type 只能是 call 或 complete。普通日志请写入 stderr，并且脚本必须最终输出一个 complete 帧。",
+        "protocolSummary": "stdout 必须逐行输出 cindy-script/1 的完整 JSON 对象（JSONL）；type 只能是 call 或 complete。普通日志请写入 stderr，并且脚本必须最终输出一个 complete 帧。",
         "protocolCapabilities": "如需调用已授权能力，脚本还必须逐行读取 stdin 中 host 发送的 start 和 call_result JSONL 帧，并等待对应调用结果后再继续或输出 complete。",
         "protocolExample": "查看不调用能力的最小 Python 示例",
         "command": "脚本命令",
@@ -5453,7 +5453,7 @@
   },
   "issueAgent": {
     "command": {
-      "instruction": "我想给 {{appName}} 提交一条反馈。请协助我整理成一个高质量的 GitHub issue:先和我确认反馈类型(bug 还是功能建议),并追问必要细节(现象、复现步骤或使用场景、期望行为);信息足够后用 lizi_xdt_helper 的 call_tool 调用 submit_github_issue 工具提交(category=feedback,可先 list_tools 查看参数要求;提交前系统会弹确认卡片给我看)。如果提交失败,如实告诉我原因。{{details}}",
+      "instruction": "我想给 {{appName}} 提交一条反馈。请协助我整理成一个高质量的 GitHub issue:先和我确认反馈类型(bug 还是功能建议),并追问必要细节(现象、复现步骤或使用场景、期望行为);信息足够后用 cindy_helper 的 call_tool 调用 submit_github_issue 工具提交(category=feedback,可先 list_tools 查看参数要求;提交前系统会弹确认卡片给我看)。如果提交失败,如实告诉我原因。{{details}}",
       "detailsPrefix": "\n我的初始描述:{{details}}"
     },
     "confirm": {

@@ -4,17 +4,17 @@
 
 ## 背景
 
-`send_to_session` 原本是 `lizi_xdt_helper` MCP server 里**唯一一个直接顶层注册**的业务工具(其余如 `set_current_session_title` / `rename_sessions` 都注册在内部 registry,走 `list_tools` / `call_tool` 渐进式发现)。
+`send_to_session` 原本是 `cindy_helper` MCP server 里**唯一一个直接顶层注册**的业务工具(其余如 `set_current_session_title` / `rename_sessions` 都注册在内部 registry,走 `list_tools` / `call_tool` 渐进式发现)。
 
 问题:用户想"改 session 名"时,AI 容易**误选** `send_to_session`——它名字带 `session`(撞"操作 session"意图)、又在顶层一步可调;而它不传 `target_session_id` 就会 create 一个新会话,造成凭空建出空会话(见 issue #287)。
 
-本次改动:把 `send_to_session` 从顶层下线,归入 `lizi_xdt_helper` 的**新独立类目 `handoff`**,改为经 `call_tool` 调用。改名工具(`set_current_session_title` / `rename_sessions`)在 `control` 类,与 `handoff` 隔离——这样改名场景在「顶层」和「`list_tools(control)` 返回」两层都接触不到 `send_to_session`,从源头消除误选。
+本次改动:把 `send_to_session` 从顶层下线,归入 `cindy_helper` 的**新独立类目 `handoff`**,改为经 `call_tool` 调用。改名工具(`set_current_session_title` / `rename_sessions`)在 `control` 类,与 `handoff` 隔离——这样改名场景在「顶层」和「`list_tools(control)` 返回」两层都接触不到 `send_to_session`,从源头消除误选。
 
 **参数、create / jump 语义、返回结构、错误码全部不变**,只是调用入口从"顶层直达"变成"经 `call_tool`"。
 
 ## 谁受影响
 
-任何 skill / 自动化 prompt 里直接写了 `mcp__lizi_xdt_helper__send_to_session(...)` 的人。不改 → 调用因"工具不存在"失败。
+任何 skill / 自动化 prompt 里直接写了 `mcp__cindy_helper__send_to_session(...)` 的人。不改 → 调用因"工具不存在"失败。
 
 ## 怎么改(唯一要做的)
 
@@ -23,7 +23,7 @@
 **Before**
 
 ```
-mcp__lizi_xdt_helper__send_to_session({
+mcp__cindy_helper__send_to_session({
   target_session_id: "<sid>",   // 省略 = 新建会话(create);传 = 投递到已有会话(jump)
   message: "...",
   title: "..."                  // create 时新会话标题
@@ -33,7 +33,7 @@ mcp__lizi_xdt_helper__send_to_session({
 **After**
 
 ```
-mcp__lizi_xdt_helper__call_tool({
+mcp__cindy_helper__call_tool({
   name: "send_to_session",
   args: {
     target_session_id: "<sid>",
@@ -46,7 +46,7 @@ mcp__lizi_xdt_helper__call_tool({
 ## 自查 3 步
 
 1. 在你的 skill / prompt 文件里 grep `send_to_session`。
-2. 把每一处 `mcp__lizi_xdt_helper__send_to_session({...})` 按上面包一层 `call_tool({ name: 'send_to_session', args: {...} })`。
+2. 把每一处 `mcp__cindy_helper__send_to_session({...})` 按上面包一层 `call_tool({ name: 'send_to_session', args: {...} })`。
 3. 需要时让 agent 先 `list_tools({category:'handoff'})` 确认它在、schema 没变。
 
 ## 两端兼容性(codex / Claude Code 都能用)

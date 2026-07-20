@@ -92,7 +92,7 @@ const SCRIPT_METHOD_CATALOG: ReadonlyArray<{
   { method: 'jira.add_comment', capability: 'jira.comment', params: '{issue_key, body_text}', description: '向 Jira issue 添加评论' },
   { method: 'feishu.recent_chats', capability: 'feishu.read', params: '{count?≤50}', description: '按活跃时间倒序列最近飞书会话' },
   { method: 'feishu.recent_messages', capability: 'feishu.read', params: '{chat_id, count?≤50, start_time?}', description: '拉指定飞书会话最近消息(新→旧,start_time 增量)' },
-  { method: 'sessions.dispatch', capability: 'sessions.dispatch', params: '{message, title?, target_session_id?}', description: '创建或唤醒 XDMaker 会话并投递消息' },
+  { method: 'sessions.dispatch', capability: 'sessions.dispatch', params: '{message, title?, target_session_id?}', description: '创建或唤醒 Cindy 会话并投递消息' },
 ];
 
 /**
@@ -110,7 +110,7 @@ export class SchedulerScriptCapabilityBroker implements ScriptCapabilityBroker {
       case 'host.capabilities':
         // 元方法,免授权(纯自省、无副作用、不触达外部系统):脚本先 list 再决定怎么 call。
         return {
-          protocol: 'xdt-maker-script/1',
+          protocol: 'cindy-script/1',
           granted: [...granted].sort(),
           methods: SCRIPT_METHOD_CATALOG.map((entry) => ({
             ...entry,

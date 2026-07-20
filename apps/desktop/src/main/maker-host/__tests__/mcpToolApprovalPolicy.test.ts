@@ -12,7 +12,7 @@ describe('desktop Claude read-only allowlist', () => {
     expect(tools).toEqual(expect.arrayContaining([
       'mcp__cindy__ghost_list',
       'mcp__cindy__ghost_forge_guide',
-      'mcp__lizi_xdt_helper__list_tools',
+      'mcp__cindy_helper__list_tools',
       'mcp__lizi_slack__slack_status',
     ]));
     expect(tools).not.toEqual(expect.arrayContaining([
@@ -26,7 +26,7 @@ describe('desktop Claude read-only allowlist', () => {
       'WebSearch',
       'WebFetch',
       'mcp__cindy__ghost_call',
-      'mcp__lizi_xdt_helper__call_tool',
+      'mcp__cindy_helper__call_tool',
       'mcp__lizi_slack__slack_list_tools',
     ]));
     expect(tools.every((tool) => !tool.includes('*'))).toBe(true);

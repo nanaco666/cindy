@@ -2,7 +2,7 @@
   "name": "@lizi/maker-core",
   "version": "0.0.0",
   "private": true,
-  "description": "xdt-maker core: agent abstractions, session orchestration, zero Electron deps",
+  "description": "Cindy core: agent abstractions, session orchestration, zero Electron deps",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

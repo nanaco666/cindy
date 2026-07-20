@@ -6,7 +6,7 @@
 
 ## 问题
 
-`lizi_xdt_helper` MCP 的三个 history 工具(`list_workdirs` / `list_sessions` / `get_chat_history`)只能读**当前进程 profile** 的 DB。host 注入的 reader 在 `apps/desktop/src/main/localDb/chatHistoryReader.ts` 直接调 `getDrizzle()`,绑死了 stable 自己的 singleton。
+`cindy_helper` MCP 的三个 history 工具(`list_workdirs` / `list_sessions` / `get_chat_history`)只能读**当前进程 profile** 的 DB。host 注入的 reader 在 `apps/desktop/src/main/localDb/chatHistoryReader.ts` 直接调 `getDrizzle()`,绑死了 stable 自己的 singleton。
 
 ## 推荐方案
 

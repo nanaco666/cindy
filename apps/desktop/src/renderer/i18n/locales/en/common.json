@@ -5025,7 +5025,7 @@
         "script": "Script only"
       },
       "script": {
-        "protocolSummary": "stdout must emit one complete xdt-maker-script/1 JSON object per line (JSONL); type must be call or complete. Write regular logs to stderr, and always finish with a complete frame.",
+        "protocolSummary": "stdout must emit one complete cindy-script/1 JSON object per line (JSONL); type must be call or complete. Write regular logs to stderr, and always finish with a complete frame.",
         "protocolCapabilities": "When using granted capabilities, the script must also read the host's start and call_result JSONL frames from stdin, then wait for each call result before continuing or emitting complete.",
         "protocolExample": "View minimal Python example without capabilities",
         "command": "Script command",
@@ -5462,7 +5462,7 @@
   },
   "issueAgent": {
     "command": {
-      "instruction": "I'd like to file feedback for {{appName}}. Please help me turn it into a high-quality GitHub issue: first confirm the feedback type (bug or feature request) and ask follow-up questions for the necessary details (symptoms, reproduction steps or use case, expected behavior). Once there is enough information, submit it with the submit_github_issue tool via lizi_xdt_helper call_tool (category=feedback; you can run list_tools first to check the parameters; a confirmation card will be shown to me before submitting). If the submission fails, tell me the reason honestly.{{details}}",
+      "instruction": "I'd like to file feedback for {{appName}}. Please help me turn it into a high-quality GitHub issue: first confirm the feedback type (bug or feature request) and ask follow-up questions for the necessary details (symptoms, reproduction steps or use case, expected behavior). Once there is enough information, submit it with the submit_github_issue tool via cindy_helper call_tool (category=feedback; you can run list_tools first to check the parameters; a confirmation card will be shown to me before submitting). If the submission fails, tell me the reason honestly.{{details}}",
       "detailsPrefix": "\nMy initial description: {{details}}"
     },
     "confirm": {

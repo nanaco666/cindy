@@ -2,7 +2,7 @@
   "name": "@lizi/maker-shared",
   "version": "0.0.0",
   "private": true,
-  "description": "XDMaker shared presentation and contract models for desktop and mobile clients. Zero React/Electron/Expo runtime dependencies.",
+  "description": "Cindy shared presentation and contract models for desktop and mobile clients. Zero React/Electron/Expo runtime dependencies.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

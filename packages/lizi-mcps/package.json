@@ -2,7 +2,7 @@
   "name": "lizi-mcps",
   "version": "0.0.0",
   "private": true,
-  "description": "Reusable Lizi MCP servers for xdt-maker and other hosts",
+  "description": "Reusable MCP servers for Cindy and other hosts",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

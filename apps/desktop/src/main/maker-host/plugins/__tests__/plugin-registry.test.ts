@@ -378,7 +378,7 @@ describe('isEnabled wrap integration (provider → registry gate)', () => {
 
     expect(wrapIsEnabled('lizi_memory', workingDir)).toBe(true);
     expect(wrapIsEnabled('lizi_scheduler', workingDir)).toBe(true);
-    expect(wrapIsEnabled('lizi_xdt_helper', workingDir)).toBe(true);
+    expect(wrapIsEnabled('cindy_helper', workingDir)).toBe(true);
   });
 
   it('all real builtin provider names resolve to known plugin ids (no fail-open)', () => {

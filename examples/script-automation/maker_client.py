@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""XDMaker script-task capability client. No network endpoint or credential."""
+"""Cindy script-task capability client. No network endpoint or credential."""
 
 from __future__ import annotations
 
@@ -85,7 +85,7 @@ def sessions_dispatch(
     title: str = "",
     target_session_id: str | None = None,
 ) -> dict:
-    """创建或唤醒 XDMaker 会话并投递消息。
+    """创建或唤醒 Cindy 会话并投递消息。
 
     只允许这三个参数——新会话的 agent/model/目录等配置由宿主从任务本身派生,
     dispatcher_session_id / use_worktree 等 host-owned 参数脚本传了会被直接拒绝

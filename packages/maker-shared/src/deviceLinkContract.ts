@@ -1,3 +1,5 @@
+import { BRAND_NAME } from './branding.js';
+
 export const DEVICE_LINK_SUBSCRIBE_CHANNEL = 'device-link:subscribe';
 export const DEVICE_LINK_UNSUBSCRIBE_CHANNEL = 'device-link:unsubscribe';
 export const DEVICE_LINK_MEDIA_FETCH_CHANNEL = 'device-link:media:fetch';
@@ -339,7 +341,7 @@ const AGENT_NOT_AUTHENTICATED_RE = /^(?:\[[A-Z_]+\] )?(claude-code|codex) not au
 /**
  * agent 未鉴权错误 → 手机端直出文案(桌面端走 i18n,不用这组)。
  *
- * 密钥 / OAuth 都存在被控电脑的 XDMaker 里(safeStorage),手机端改不了,文案统一
+ * 密钥 / OAuth 都存在被控电脑的 Cindy 里(safeStorage),手机端改不了,文案统一
  * 引导用户回电脑端「设置 → 模型供应商」处理。识别不了的输入返回 null,由调用方
  * 展示原文,不误伤其它错误。
  */
@@ -348,7 +350,7 @@ export function describeAgentAuthError(error: string | null | undefined): string
   const matched = AGENT_NOT_AUTHENTICATED_RE.exec(error.trim());
   if (!matched) return null;
   const agentLabel = matched[1] === 'claude-code' ? 'Claude' : 'Codex';
-  const goSettings = '请在电脑端 XDMaker 的「设置 → 模型供应商」';
+  const goSettings = `请在电脑端 ${BRAND_NAME} 的「设置 → 模型供应商」`;
   switch (matched[2]) {
     case 'no_key':
       return `${agentLabel} 无法使用：电脑端还没有配置可用的 API Key。${goSettings}完成配置后再试。`;
@@ -357,9 +359,9 @@ export function describeAgentAuthError(error: string | null | undefined): string
     case 'no_credentials':
       return `${agentLabel} 无法使用：电脑端尚未登录 ${agentLabel}。${goSettings}完成登录后再试。`;
     case 'no_encryption':
-      return `${agentLabel} 无法使用：电脑端系统安全存储不可用，读取不到已保存的密钥。请在电脑端检查系统钥匙串（macOS）或系统账户加密（Windows）后重启 XDMaker。`;
+      return `${agentLabel} 无法使用：电脑端系统安全存储不可用，读取不到已保存的密钥。请在电脑端检查系统钥匙串（macOS）或系统账户加密（Windows）后重启 ${BRAND_NAME}。`;
     case 'proxy_not_ready':
-      return `${agentLabel} 暂时无法使用：电脑端组件尚未就绪。请稍候重试；若持续出现，请重启电脑端 XDMaker。`;
+      return `${agentLabel} 暂时无法使用：电脑端组件尚未就绪。请稍候重试；若持续出现，请重启电脑端 ${BRAND_NAME}。`;
     default:
       // 动态 reason(如 OAuth 被服务端作废的具体原因):不逐一枚举,统一按登录失效引导,
       // 原始 reason 附在句尾便于反馈排查。

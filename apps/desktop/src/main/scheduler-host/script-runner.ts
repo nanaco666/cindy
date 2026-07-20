@@ -19,7 +19,9 @@ import { buildSkipResultText, executePreRunHook, formatPreRunHookFailure } from 
 import { capAppend, killProcessTree } from './proc-util';
 import type { SchedulerDrizzleDb } from './storage';
 
-const PROTOCOL = 'xdt-maker-script/1';
+const PROTOCOL = 'cindy-script/1' as const;
+const LEGACY_PROTOCOL = 'xdt-maker-script/1' as const;
+type ScriptProtocol = typeof PROTOCOL | typeof LEGACY_PROTOCOL;
 
 const OUTPUT_CAP = 64 * 1024;
 const FRAME_CAP = 256 * 1024;
@@ -65,6 +67,8 @@ export function buildScriptEnv(source: NodeJS.ProcessEnv = process.env): NodeJS.
   // 协议标记:告知脚本客户端"运行在 script runner 下"。Python 端 protocol.py 见到
   // 它会在 import 期就做 fd 级 stdout 接管(真 stdout 私有化给协议帧、fd 1 重定向
   // 到 stderr),让脚本/三方库/子进程的杂音 print 无法污染严格 JSONL 通道。
+  env.CINDY_SCRIPT_PROTOCOL = '1';
+  // 老示例客户端仍读取该标记；保留到旧脚本迁移完成。
   env.XDT_MAKER_SCRIPT_PROTOCOL = '1';
   // 协议通道两个方向都是 UTF-8,但中文 Windows 上 Python 对 pipe stdio 默认按
   // locale(cp936)编解码,中文内容会撕坏 JSON 转义符(实测 BAD_FRAME)。protocol.py
@@ -95,14 +99,14 @@ export interface ScriptScheduleRunnerDeps {
 }
 
 interface CompleteFrame {
-  protocol: typeof PROTOCOL;
+  protocol: ScriptProtocol;
   type: 'complete';
   resultText?: string;
   primarySessionId?: string | null;
 }
 
 interface CallFrame {
-  protocol: typeof PROTOCOL;
+  protocol: ScriptProtocol;
   type: 'call';
   id: string;
   method: string;
@@ -296,10 +300,14 @@ export class ScriptScheduleRunner {
     // 真正进入等待阶段时赋值,之前(子进程尚存活)为 null,onAbort/timer 的行为
     // 不受影响。
     let cutoffReject: ((error: Error) => void) | null = null;
+    // 首帧必须让只认识旧协议名的已部署脚本也能启动。客户端首次回帧后锁定
+    // 它实际使用的协议，后续 call_result 再按同一版本返回。新客户端会接受旧
+    // start 帧、主动用 cindy-script/1 回帧，因此双方可无停机迁移。
+    let peerProtocol: ScriptProtocol | null = null;
 
     const writeFrame = (frame: Record<string, unknown>): void => {
       if (!child.stdin?.writable) return;
-      child.stdin.write(`${JSON.stringify({ protocol: PROTOCOL, ...frame })}\n`);
+      child.stdin.write(`${JSON.stringify({ protocol: peerProtocol ?? LEGACY_PROTOCOL, ...frame })}\n`);
     };
 
     const finalizeCompletion = (frame: CompleteFrame): void => {
@@ -336,7 +344,17 @@ export class ScriptScheduleRunner {
           granted,
           { schedule },
         );
-        writeFrame({ type: 'call_result', id: frame.id, ok: true, result });
+        // capabilities 的 protocol 字段也应反映本轮协商结果。否则旧客户端虽然
+        // 能收发旧帧，却会在自省 payload 里突然看到新协议名，严格校验的脚本仍
+        // 可能被迁移打断。broker 保持返回 canonical 新名称，wire 层在此适配。
+        const responseResult =
+          frame.method === 'host.capabilities' &&
+          result !== null &&
+          typeof result === 'object' &&
+          !Array.isArray(result)
+            ? { ...result, protocol: frame.protocol }
+            : result;
+        writeFrame({ type: 'call_result', id: frame.id, ok: true, result: responseResult });
       } catch (error) {
         writeFrame({ type: 'call_result', id: frame.id, ok: false, error: safeError(error) });
         if (completeReceived && !deferredCallFailure) {
@@ -364,19 +382,25 @@ export class ScriptScheduleRunner {
         const parsed = JSON.parse(line) as unknown;
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
           protocolError = new Error(
-            'script stdout must contain JSONL protocol frames only; each line must be a complete xdt-maker-script/1 JSON object, and logs belong on stderr',
+            'script stdout must contain JSONL protocol frames only; each line must be a complete cindy-script/1 JSON object, and logs belong on stderr',
           );
           killTree();
           return;
         }
         const record = parsed as Record<string, unknown>;
-        if (record.protocol !== PROTOCOL) {
+        if (record.protocol !== PROTOCOL && record.protocol !== LEGACY_PROTOCOL) {
           protocolError = new Error(
-            `script stdout frame has an unsupported protocol; expected "${PROTOCOL}"`,
+            `script stdout frame has an unsupported protocol; expected "${PROTOCOL}" or "${LEGACY_PROTOCOL}"`,
           );
           killTree();
           return;
         }
+        if (peerProtocol !== null && record.protocol !== peerProtocol) {
+          protocolError = new Error('script changed protocol versions within one run');
+          killTree();
+          return;
+        }
+        peerProtocol = record.protocol;
         if (record.type === 'call') {
           frame = record as unknown as CallFrame;
         } else if (record.type === 'complete') {
@@ -390,7 +414,7 @@ export class ScriptScheduleRunner {
         }
       } catch {
         protocolError = new Error(
-          'script stdout must contain JSONL protocol frames only; each line must be valid JSON for an xdt-maker-script/1 frame, and logs belong on stderr',
+          'script stdout must contain JSONL protocol frames only; each line must be valid JSON for a cindy-script/1 frame, and logs belong on stderr',
         );
         killTree();
         return;
@@ -598,7 +622,7 @@ export class ScriptScheduleRunner {
     const finished = completed as CompleteFrame | null;
     if (!finished) {
       throw new Error(
-        'script exited without a complete frame; it must finish with an xdt-maker-script/1 "complete" frame',
+        'script exited without a complete frame; it must finish with a cindy-script/1 "complete" frame',
       );
     }
 

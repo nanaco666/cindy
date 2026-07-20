@@ -1,7 +1,7 @@
 # 「仅运行脚本」自动化 · 接入模板
 
 Cindy 自动化任务支持 **script 执行模式**:触发时不起 agent、零 token,宿主直接
-spawn 你的脚本;脚本通过 stdin/stdout 的 JSONL 协议(`xdt-maker-script/1`)回调
+spawn 你的脚本;脚本通过 stdin/stdout 的 JSONL 协议(`cindy-script/1`)回调
 宿主的受限能力(Jira / 飞书 / 会话派发),能力按任务级白名单授予、默认全拒。
 
 本目录是接入模板与**协议客户端的权威副本**:
@@ -71,17 +71,22 @@ save_cursor(cursor)
 
 ## 协议帧规格(其它语言接入用;Python 直接用 `protocol.py`)
 
-stdin/stdout 各一路 JSONL,每行一帧,所有帧带 `"protocol": "xdt-maker-script/1"`:
+stdin/stdout 各一路 JSONL,每行一帧。新脚本的出站帧使用
+`"protocol": "cindy-script/1"`。为让已部署的旧脚本仍能启动,host 的初始
+`start` 帧暂时使用 `xdt-maker-script/1`;客户端首次回帧后,host 会按客户端选用的
+协议返回后续 `call_result`。当前 host 会通过 `CINDY_SCRIPT_PROTOCOL=1` 环境标记
+声明支持新名称;新版 Python 客户端据此发送新名称,连接只有旧标记的旧 host 时则
+自动沿用旧名称。
 
 ```jsonc
 // host → script(stdin)
 {"protocol":"xdt-maker-script/1","type":"start","context":{"scheduleId":"...","scheduleName":"...","runId":"...","firedAt":1710000000000,"workingDir":"..."}}
-{"protocol":"xdt-maker-script/1","type":"call_result","id":"py-1","ok":true,"result":{...}}
-{"protocol":"xdt-maker-script/1","type":"call_result","id":"py-2","ok":false,"error":{"code":"CAPABILITY_DENIED","message":"..."}}
+{"protocol":"cindy-script/1","type":"call_result","id":"py-1","ok":true,"result":{...}}
+{"protocol":"cindy-script/1","type":"call_result","id":"py-2","ok":false,"error":{"code":"CAPABILITY_DENIED","message":"..."}}
 
 // script → host(stdout)
-{"protocol":"xdt-maker-script/1","type":"call","id":"py-1","method":"jira.get","params":{"issue_key":"DING-1"}}
-{"protocol":"xdt-maker-script/1","type":"complete","resultText":"处理了 3 条","primarySessionId":null}
+{"protocol":"cindy-script/1","type":"call","id":"py-1","method":"jira.get","params":{"issue_key":"DING-1"}}
+{"protocol":"cindy-script/1","type":"complete","resultText":"处理了 3 条","primarySessionId":null}
 ```
 
 约束:单帧 ≤256KB;并发 in-flight call ≤16(超发返回 `TOO_MANY_REQUESTS`);

@@ -522,7 +522,7 @@ function markTurnEndedAfterPersistDrain(sessionId: string): void {
 }
 
 // ─── Orca collab service holder ───────────────────────────────────────────
-// 让其它 main 模块(典型: mcp-integrations/mcp-providers 的 lizi_xdt_helper
+// 让其它 main 模块(典型: mcp-integrations/mcp-providers 的 cindy_helper
 // control deps)能 deferred 拿到 Orca / handoff 业务函数引用。
 //
 // 时序: maker-host 在 app 启动早期就构造 mcp-providers (那时 holder 还是 null
@@ -4380,7 +4380,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
    *
    * 共用 caller:
    *   - SESSION_DISABLE_ORCA IPC handler (renderer 手动 toggle)
-   *   - lizi_xdt_helper end_team MCP tool (Lead agent 自动调)
+   *   - cindy_helper end_team MCP tool (Lead agent 自动调)
    */
   async function disableOrcaInternal(leadSessionId: string): Promise<{ ok: true }> {
     const team = await getActiveTeamByLead(leadSessionId);
@@ -4816,7 +4816,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
   log.info('idleWatcher started');
 
   // ─── 把 internal 业务函数发布到 module-level holder ────────────────────
-  // mcp-providers.ts 的 lizi_xdt_helper control deps 通过
+  // mcp-providers.ts 的 cindy_helper control deps 通过
   // tryGetOrcaCollabService() 拿到这些函数引用, 让 MCP tool
   // 走与 IPC handler 完全相同的业务路径。
   orcaCollabServiceHolder = {
