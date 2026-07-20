@@ -3262,6 +3262,7 @@
     "permissionSelector": {
       "triggerAria": "権限モードを選択：{{label}}",
       "listAria": "権限モード",
+      "autoFallback": "自動レビューは一時的に利用できないため、デフォルト権限に切り替えました。必要な操作は確認します。",
       "modes": {
         "claude-code": {
           "ask": {

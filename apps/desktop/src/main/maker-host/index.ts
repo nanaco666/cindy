@@ -105,7 +105,10 @@ import { hydrateSessionProvider } from './session-provider-store.js';
 import { prepareLocalCodexCredentialModeSwitch } from './codex-credential-switch.js';
 import { createDesktopOrcaTeamStoreAdapter } from './orcaTeamStoreAdapter.js';
 import { broadcastOrcaWorkerChanged } from './orcaWorkerBroadcast.js';
-import { getDesktopMcpToolApprovalPolicy } from './mcp-tool-approval-policy.js';
+import {
+  getDesktopClaudeReadOnlyAllowedTools,
+  getDesktopMcpToolApprovalPolicy,
+} from './mcp-tool-approval-policy.js';
 import { mapCodexAppServerModelsToCatalog } from './codex-model-discovery.js';
 export { withRehydrateCloseSuppressed };
 
@@ -310,6 +313,9 @@ export function getMaker(): Maker {
       resolveCcDebugFile: resolveSessionCcDebugFile,
       mcpProviders: claudeMcpProviders,
       makerMemory: makerMemoryManager,
+      // 第一方只读工具走 SDK allowedTools, 避免 auto 模式为 discovery/read-only
+      // 操作额外调用远程安全分类器; 列表按精确工具名维护, 不放行动态 call_tool。
+      claudeAllowedTools: getDesktopClaudeReadOnlyAllowedTools(),
       // 模型清单 SSoT = 目录（providers.json，OSS 运行时真源 / bundled 兜底）。maker-core 的
       // CLAUDE_MODELS 已删、availableModels 起始为空；host 从账号可选目录派生 cc 列表注入
       // （含 claude 订阅模型 + XD 网关路由的 gpt / 国产 / gemini 等）。active catalog 已在 splash 期

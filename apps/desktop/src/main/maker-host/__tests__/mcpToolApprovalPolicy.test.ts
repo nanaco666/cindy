@@ -1,6 +1,42 @@
 import { describe, expect, it } from 'vitest';
 
-import { getDesktopMcpToolApprovalPolicy } from '../mcp-tool-approval-policy.js';
+import {
+  getDesktopClaudeReadOnlyAllowedTools,
+  getDesktopMcpToolApprovalPolicy,
+} from '../mcp-tool-approval-policy.js';
+
+describe('desktop Claude read-only allowlist', () => {
+  it('allows only explicitly reviewed read-only tools', () => {
+    const tools = getDesktopClaudeReadOnlyAllowedTools();
+
+    expect(tools).toEqual(expect.arrayContaining([
+      'WebSearch',
+      'WebFetch',
+      'mcp__cindy__ghost_list',
+      'mcp__cindy__ghost_forge_guide',
+      'mcp__lizi_xdt_helper__list_tools',
+      'mcp__lizi_slack__slack_status',
+    ]));
+    expect(tools).not.toEqual(expect.arrayContaining([
+      'Bash',
+      'Edit',
+      'Write',
+      'Agent',
+      'Skill',
+      'mcp__cindy__ghost_call',
+      'mcp__lizi_xdt_helper__call_tool',
+      'mcp__lizi_slack__slack_list_tools',
+    ]));
+    expect(tools.every((tool) => !tool.includes('*'))).toBe(true);
+    expect(tools.every((tool) => !tool.endsWith('__call_tool'))).toBe(true);
+  });
+
+  it('returns an isolated copy', () => {
+    const first = getDesktopClaudeReadOnlyAllowedTools();
+    first.push('Bash');
+    expect(getDesktopClaudeReadOnlyAllowedTools()).not.toContain('Bash');
+  });
+});
 
 describe('desktop MCP approval policy', () => {
   it('keeps known safe contacts calls trusted', () => {

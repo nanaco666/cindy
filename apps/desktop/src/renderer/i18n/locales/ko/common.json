@@ -3262,6 +3262,7 @@
     "permissionSelector": {
       "triggerAria": "권한 모드 선택: {{label}}",
       "listAria": "권한 모드",
+      "autoFallback": "자동 리뷰를 일시적으로 사용할 수 없어 기본 권한으로 전환했습니다. 필요한 작업은 확인을 요청합니다.",
       "modes": {
         "claude-code": {
           "ask": {

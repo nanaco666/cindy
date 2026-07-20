@@ -274,6 +274,10 @@ import { testProviderConnection } from '../maker-host/provider-diagnostics.js';
 import { fetchProviderModels } from '../maker-host/provider-model-fetch.js';
 import { setProviderUpstreamErrorBroadcaster } from '../maker-host/provider-upstream-error-observer.js';
 import {
+  createClaudeAutoPermissionFallbackCoordinator,
+  setClaudeAutoClassifierUnavailableListener,
+} from '../maker-host/claude-auto-permission-fallback.js';
+import {
   cancelGenericOAuthLogin,
   deriveModelsDiscoveryUrl,
   discoverGenericOAuthModels,
@@ -2936,6 +2940,21 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       }
     },
   });
+  // Claude Auto 分类器 429/5xx → 单会话切 ask + 持久化 + 结构化提示。
+  // coordinator 内部会复核 DB 仍为 auto,并按 session 去重;listener 只 fire-and-forget,
+  // 绝不阻塞 proxy 响应 pipe,也不自动重放本次 tool call。
+  const handleClaudeAutoClassifierUnavailable = createClaudeAutoPermissionFallbackCoordinator({
+    getSession: (sessionId) => maker.getSession(sessionId),
+    getSessionMeta: (sessionId) => maker.getSessionMeta(sessionId),
+    persistPermissionMode: (sessionId, mode) =>
+      persistSessionFields(sessionId, { permissionMode: mode }),
+    broadcast: (event) => broadcastToAllWindows(MAKER_PUSH.AUTO_PERMISSION_FALLBACK, event),
+    logger: log,
+  });
+  setClaudeAutoClassifierUnavailableListener((signal) => {
+    void handleClaudeAutoClassifierUnavailable(signal);
+  });
+
   // 自定义供应商上游错误(4xx/5xx 分类结果)→ 广播给所有窗口(renderer toast 人话提示)。
   // 观察器本身挂在两个 loopback proxy 上(见 provider-upstream-error-observer),此处只接广播。
   setProviderUpstreamErrorBroadcaster((event) =>

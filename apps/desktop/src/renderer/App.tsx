@@ -26,6 +26,7 @@ import { makerChatStore } from '@/lib/makerChatStore';
 import { installSystemNetworkErrorToastListener } from '@/lib/systemNetworkErrorToast';
 import { installSilentInstallToastListener } from '@/lib/silentInstallToast';
 import { installProviderUpstreamErrorToastListener } from '@/lib/providerUpstreamErrorToast';
+import { installAutoPermissionFallbackToastListener } from '@/lib/autoPermissionFallbackToast';
 import { installCcMgrUpgradeListener } from '@/state/ccMgrUpgradeStore';
 import {
   preloadLocalCatalogSnapshot,
@@ -216,6 +217,12 @@ export function App() {
   // 修复引导。详见 providerUpstreamErrorToast.ts。
   useEffect(() => {
     return installProviderUpstreamErrorToastListener();
+  }, []);
+
+  // Claude Auto classifier 429/5xx 后, main 已把该会话切到 ask; 本机或
+  // device-link 控制端都显示一次可操作的人话提示, 不再让用户盲目重试。
+  useEffect(() => {
+    return installAutoPermissionFallbackToastListener();
   }, []);
 
   // cc-mgr 版本不匹配的 UpgradeBanner: 订阅 main 的 CC_MGR_UPGRADE_AVAILABLE push +

@@ -48,7 +48,7 @@ function createNoopLogger(): Logger {
   return logger;
 }
 
-function createDeps(): AgentDeps {
+function createDeps(overrides: Partial<AgentDeps> = {}): AgentDeps {
   const auth: AuthAdapter = {
     async getState() {
       return { authenticated: true };
@@ -67,6 +67,7 @@ function createDeps(): AgentDeps {
     runtimeConfig: {},
     binaryPath: process.execPath,
     logger: createNoopLogger(),
+    ...overrides,
   };
 }
 
@@ -98,7 +99,7 @@ async function makeTempDir(): Promise<string> {
   return dir;
 }
 
-async function startPlanSession(planMode: boolean) {
+async function startPlanSession(planMode: boolean, depOverrides: Partial<AgentDeps> = {}) {
   const configDir = await makeTempDir();
   process.env.CLAUDE_CONFIG_DIR = configDir;
   const workingDir = await makeTempDir();
@@ -106,7 +107,7 @@ async function startPlanSession(planMode: boolean) {
   const fakeQuery = createFakeQuery();
   sdkMock.query.mockReturnValue(fakeQuery);
 
-  const agent = new ClaudeCodeAgent(createDeps());
+  const agent = new ClaudeCodeAgent(createDeps(depOverrides));
   const handle = await agent.startSession({
     sessionId: 'session-plan',
     model: 'claude-opus-4-6',
@@ -115,7 +116,7 @@ async function startPlanSession(planMode: boolean) {
     planMode,
   });
   const queryOptions = sdkMock.query.mock.calls.at(-1)?.[0]?.options as
-    | { permissionMode?: string; canUseTool?: CanUseToolFn }
+    | { permissionMode?: string; allowedTools?: string[]; canUseTool?: CanUseToolFn }
     | undefined;
   if (!queryOptions) throw new Error('expected sdk query options');
   return { agent, handle, fakeQuery, queryOptions };
@@ -156,7 +157,55 @@ describe('ClaudeCodeAgent plan mode', () => {
     const { handle, queryOptions } = await startPlanSession(false);
 
     expect(queryOptions.permissionMode).toBe('acceptEdits');
+    expect(queryOptions.allowedTools).toBeUndefined();
     expect(handle.getPlanMode?.()).toBe(false);
+    await handle.close();
+  });
+
+  it('passes a session-stable copy of host-owned allowedTools to the local SDK query', async () => {
+    const source = ['WebSearch', 'mcp__cindy__ghost_list'];
+    const { handle, queryOptions } = await startPlanSession(false, {
+      claudeAllowedTools: source,
+    });
+    source.push('Bash');
+
+    expect(queryOptions.allowedTools).toEqual(['WebSearch', 'mcp__cindy__ghost_list']);
+    expect(queryOptions.allowedTools).not.toBe(source);
+    await handle.close();
+  });
+
+  it('passes the same allowedTools snapshot to remote cc-manager start params', async () => {
+    const configDir = await makeTempDir();
+    process.env.CLAUDE_CONFIG_DIR = configDir;
+    const workingDir = await makeTempDir();
+    const starts: Array<Record<string, unknown>> = [];
+    const fakeQuery = createFakeQuery();
+    const source = ['WebFetch', 'mcp__lizi_xdt_helper__list_tools'];
+
+    const remoteCcQueryFactory: NonNullable<AgentDeps['remoteCcQueryFactory']> = async (args) => {
+      starts.push(args.startParams);
+      return fakeQuery as never;
+    };
+    const agent = new ClaudeCodeAgent(createDeps({
+      claudeAllowedTools: source,
+      remoteCcQueryFactory,
+    }));
+    const handle = await agent.startSession({
+      sessionId: 'session-remote-allowed-tools',
+      model: 'claude-opus-4-6',
+      workingDir,
+      remoteHostId: 'remote-1',
+      permissionMode: 'auto',
+    });
+    source.push('Bash');
+
+    expect(starts).toHaveLength(1);
+    expect(starts[0]?.allowedTools).toEqual([
+      'WebFetch',
+      'mcp__lizi_xdt_helper__list_tools',
+    ]);
+    expect(starts[0]?.allowedTools).not.toBe(source);
+    expect(sdkMock.query).not.toHaveBeenCalled();
     await handle.close();
   });
 

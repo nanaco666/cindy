@@ -45,6 +45,7 @@ import {
   resolveSessionRouteDecision,
 } from './provider-route.js';
 import { createProviderUpstreamErrorObserver } from './provider-upstream-error-observer.js';
+import { createClaudeAutoClassifierFailureObserver } from './claude-auto-permission-fallback.js';
 import { emptyThinkingStripController, encryptedStripController } from './thread-strip-controllers.js';
 import { createMakerLogger } from './logger-adapter.js';
 import {
@@ -237,6 +238,8 @@ export async function ensureAnthropicCompatProxyReady(): Promise<void> {
       //   - fast mode 链路核验:tee SSE 抽上游 usage.speed(debug-gated);
       //   - 订阅余量旁路:读 anthropic-ratelimit-unified-* headers(仅订阅直连响应,
       //     同步读 header、零 body 开销),交 usageBroadcaster 落库 + 广播;
+      //   - Auto 权限分类器 429/5xx 检测:只在错误路径解析 request body,通知 session
+      //     coordinator 降级到 ask;不 tee/改写响应;
       //   - 自定义供应商上游错误分类广播(status≥400 且会话路由到 user 供应商时才 tee,
       //     成功路径零开销;30s 节流,见 provider-upstream-error-observer)。
       responseObserver: composeResponseObservers(
@@ -244,6 +247,9 @@ export async function ensureAnthropicCompatProxyReady(): Promise<void> {
         createClaudeRateLimitHeadersObserver(),
         // 后台活动检测:响应流按节流刷新活动时刻(覆盖长 SSE 跨过 turn 结束点仍在吐字的场景)。
         createClaudeSessionActivityResponseObserver((sdkSessionId) =>
+          _resolveCcSessionId ? _resolveCcSessionId(sdkSessionId) : null,
+        ),
+        createClaudeAutoClassifierFailureObserver((sdkSessionId) =>
           _resolveCcSessionId ? _resolveCcSessionId(sdkSessionId) : null,
         ),
         createProviderUpstreamErrorObserver({
