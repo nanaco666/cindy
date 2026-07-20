@@ -11,6 +11,9 @@
  *   - 只对「会话显式路由到自定义(user)供应商」的请求广播 —— 内置来源（订阅 / 网关）已有
  *     各自的失效广播与 rate-limit 观察，重复报会刷屏；providerId 反解不到就静默跳过。
  *   - 同 (providerId, code) 30s 节流：流式会话中同一坏配置会连环 400，不能每个都弹。
+ *   - count_tokens 的 404 不广播：不少 Anthropic 兼容上游（如 Moonshot /anthropic）没实现
+ *     这个辅助计量端点，CLI 自带本地估算兜底、主链路 /v1/messages 不受影响，弹
+ *     「端点不存在，请检查基础 URL」纯属误导（2026-07-21 kimi-moonshot 实测误报）。
  */
 
 import { brotliDecompressSync, gunzipSync, inflateSync } from 'node:zlib';
@@ -44,6 +47,11 @@ type Broadcaster = (event: ProviderUpstreamErrorEvent) => void;
 let _broadcast: Broadcaster = () => {};
 export function setProviderUpstreamErrorBroadcaster(fn: Broadcaster): void {
   _broadcast = fn;
+}
+
+/** 请求路径（去 query）是否为 count_tokens 辅助计量端点。 */
+function isCountTokensUrl(url: string): boolean {
+  return url.split('?', 1)[0].endsWith('/count_tokens');
 }
 
 /** 按 content-encoding 解压错误体（与 proxy 包 debug dump 的解压语义一致；失败回退原文）。 */
@@ -83,6 +91,9 @@ export function createProviderUpstreamErrorObserver(
 
   return (ctx: ResponseObserverCtx) => {
     if (ctx.status < 400) return null; // 成功路径零开销（规则 10）
+    // count_tokens 404 = 上游没实现该辅助端点（良性缺失），不是配置错——见文件头注释。
+    // 其余 status（401/429 等）照常广播：它们与主链路同因，是真信号。
+    if (ctx.status === 404 && isCountTokensUrl(ctx.url)) return null;
     const providerId = opts.resolveUserProviderId(ctx.requestHeaders);
     if (!providerId) return null;
 
