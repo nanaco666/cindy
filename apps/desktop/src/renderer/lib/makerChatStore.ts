@@ -69,6 +69,10 @@ import { toast } from '@/lib/toast';
 import { materializeAnnotatedAttachmentsForSend, needsAnnotationMaterialize } from '@/lib/annotationBurnIn';
 
 const log = createLogger('CcAgentChatStore');
+// perf-baseline(与 MessageStream / sidebar 的 perf/session-switch 探针同通道):
+// history:ingest 量化首次历史加载的同步摄取段(mapServerMessages + mergeMessages
+// + setState),用于会话切换卡顿归因;<30ms 不打,避免噪音。
+const perfLog = createLogger('perf/session-switch');
 export const EMPTY_TASK_UPDATES: ReadonlyMap<string, AgentTaskUpdate> = new Map();
 /** Max consecutive auto auth-retries per remote session before surfacing the error. */
 const MAX_REMOTE_AUTH_RETRIES = 2;
@@ -4218,6 +4222,9 @@ function ensureInitialMessages(sessionId: string): void {
         }
       }
 
+      // perf/session-switch 探针纯诊断:整段测量走 import.meta.env.DEV,生产
+      // 构建里 Vite 把常量折成 false 后 dead-code 消除,零开销。
+      const ingestStartMs = import.meta.env.DEV ? performance.now() : 0;
       const mapped = mapServerMessages(merged);
       const oldestId = oldestRow.id;
       setState(sessionId, (s) => ({
@@ -4231,6 +4238,14 @@ function ensureInitialMessages(sessionId: string): void {
         oldestMessageId: oldestServerMessageIdForWindow(merged, s.messages, s.oldestMessageId, 'newest-first') ?? oldestId,
         hasMoreMessages: hasMore,
       }));
+      if (import.meta.env.DEV) {
+        const ingestDurMs = performance.now() - ingestStartMs;
+        if (ingestDurMs >= 30) {
+          perfLog.debug(
+            `history:ingest sid=${sessionId} rows=${merged.length} dur=${Math.round(ingestDurMs)}ms`,
+          );
+        }
+      }
       _historyFetchInFlight.delete(sessionId);
       // 历史加载完 → 重建当前挂起交互:历史里被转 expired 的 ask/plan 在此翻回 pending
       // (按 requestId 去重,不重复),permission 重新置 pendingPermission。
