@@ -61,7 +61,8 @@ export async function tryInjectProjectContext(workingDir: string): Promise<Injec
 }
 
 async function readToc(workingDir: string): Promise<InjectResult> {
-  await migrateLegacyXdmakerDir(workingDir);
+  const migration = await migrateLegacyXdmakerDir(workingDir);
+  if (!migration.complete) return { injected: false, reason: 'migration-incomplete' };
   const tocPath = path.join(workingDir, TOC_REL_PATH);
   let raw: string;
   try {

@@ -74,23 +74,9 @@ export function migrateLegacyContextRoot(repoRoot: string): void {
       fs.renameSync(oldRoot, newRoot);
       return;
     }
-    for (const entry of fs.readdirSync(oldRoot)) {
-      const from = path.join(oldRoot, entry);
-      const to = path.join(newRoot, entry);
-      if (!fs.existsSync(to)) {
-        fs.renameSync(from, to);
-      } else if (fs.statSync(from).isDirectory() && fs.statSync(to).isDirectory()) {
-        for (const sub of fs.readdirSync(from)) {
-          const subTo = path.join(to, sub);
-          if (!fs.existsSync(subTo)) fs.renameSync(path.join(from, sub), subTo);
-        }
-        if (fs.readdirSync(from).length === 0) fs.rmdirSync(from);
-      }
-    }
-    if (fs.readdirSync(oldRoot).length === 0) fs.rmdirSync(oldRoot);
+    mergeDirSync(oldRoot, newRoot);
+    if (fs.existsSync(oldRoot) && fs.readdirSync(oldRoot).length === 0) fs.rmdirSync(oldRoot);
   } catch (err) {
-    // 如果 .cindy/project-knowledge 不存在但 .xdmaker/project-knowledge 存在,
-    // 说明搬迁真正失败且旧数据会被后续 init 创建的空骨架遮蔽——抛出让用户知晓。
     const newPk = path.join(newRoot, 'project-knowledge');
     const oldPk = path.join(oldRoot, 'project-knowledge');
     if (!fs.existsSync(newPk) && fs.existsSync(oldPk)) {
@@ -100,6 +86,19 @@ export function migrateLegacyContextRoot(repoRoot: string): void {
       );
     }
   }
+}
+
+function mergeDirSync(src: string, dst: string): void {
+  for (const entry of fs.readdirSync(src)) {
+    const from = path.join(src, entry);
+    const to = path.join(dst, entry);
+    if (!fs.existsSync(to)) {
+      fs.renameSync(from, to);
+    } else if (fs.statSync(from).isDirectory() && fs.statSync(to).isDirectory()) {
+      mergeDirSync(from, to);
+    }
+  }
+  if (fs.readdirSync(src).length === 0) fs.rmdirSync(src);
 }
 
 export function loadConfig(configPath: string): ConfigFile {

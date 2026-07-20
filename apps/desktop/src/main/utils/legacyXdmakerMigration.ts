@@ -24,14 +24,23 @@ const log = createLogger('legacy-xdmaker-migration');
 export const LEGACY_DIR_NAME = '.xdmaker';
 export const CINDY_DIR_NAME = '.cindy';
 
+export interface MigrationResult {
+  /** true = migration complete (or nothing to migrate); false = conflict/failure, .cindy may be incomplete */
+  complete: boolean;
+}
+
 /**
  * 同一 root 只做一次（进程内），并发调用 await 同一个 Promise，
  * 确保迁移真正完成后后续读取才继续。
+ *
+ * Returns `{ complete: true }` when migration finished or was unnecessary.
+ * Returns `{ complete: false }` when conflicts or failures leave `.xdmaker`
+ * with unmerged content — callers should skip destructive reconcile.
  */
-const migrating = new Map<string, Promise<void>>();
+const migrating = new Map<string, Promise<MigrationResult>>();
 
-export async function migrateLegacyXdmakerDir(rootDir: string): Promise<void> {
-  if (!rootDir) return;
+export async function migrateLegacyXdmakerDir(rootDir: string): Promise<MigrationResult> {
+  if (!rootDir) return { complete: true };
   const key = path.resolve(rootDir);
   const existing = migrating.get(key);
   if (existing) return existing;
@@ -41,12 +50,27 @@ export async function migrateLegacyXdmakerDir(rootDir: string): Promise<void> {
   return promise;
 }
 
-async function doMigrate(key: string): Promise<void> {
+async function mergeDir(src: string, dst: string): Promise<void> {
+  const entries = await fs.readdir(src);
+  for (const entry of entries) {
+    const from = path.join(src, entry);
+    const to = path.join(dst, entry);
+    const toStat = await fs.stat(to).catch(() => null);
+    if (!toStat) {
+      await fs.rename(from, to);
+    } else if (toStat.isDirectory() && (await fs.stat(from)).isDirectory()) {
+      await mergeDir(from, to);
+    }
+  }
+  if ((await fs.readdir(src)).length === 0) await fs.rmdir(src);
+}
+
+async function doMigrate(key: string): Promise<MigrationResult> {
   const oldRoot = path.join(key, LEGACY_DIR_NAME);
   const newRoot = path.join(key, CINDY_DIR_NAME);
   try {
     const oldStat = await fs.stat(oldRoot).catch(() => null);
-    if (!oldStat?.isDirectory()) return;
+    if (!oldStat?.isDirectory()) return { complete: true };
 
     const newExists = await fs
       .stat(newRoot)
@@ -55,45 +79,34 @@ async function doMigrate(key: string): Promise<void> {
     if (!newExists) {
       await fs.rename(oldRoot, newRoot);
       log.info('migrated legacy .xdmaker dir to .cindy', { rootDir: key });
-      return;
+      return { complete: true };
     }
 
-    const entries = await fs.readdir(oldRoot);
-    for (const entry of entries) {
-      const from = path.join(oldRoot, entry);
-      const to = path.join(newRoot, entry);
-      const toStat = await fs.stat(to).catch(() => null);
-      if (!toStat) {
-        await fs.rename(from, to);
-      } else if (toStat.isDirectory() && (await fs.stat(from)).isDirectory()) {
-        // Both sides have the same sub-directory — recurse one level and
-        // move items missing in the destination (handles empty skeleton case).
-        for (const sub of await fs.readdir(from)) {
-          const subTo = path.join(to, sub);
-          if (!(await fs.stat(subTo).catch(() => null))) {
-            await fs.rename(path.join(from, sub), subTo);
-          }
-        }
-        if ((await fs.readdir(from)).length === 0) await fs.rmdir(from);
-      }
-    }
-    const leftover = await fs.readdir(oldRoot);
-    if (leftover.length === 0) {
-      await fs.rmdir(oldRoot);
+    await mergeDir(oldRoot, newRoot);
+
+    const oldExists = await fs
+      .stat(oldRoot)
+      .then(() => true)
+      .catch(() => false);
+    if (!oldExists) {
       log.info('merged legacy .xdmaker dir into existing .cindy', { rootDir: key });
-    } else {
-      migrating.delete(key);
-      log.warn('legacy .xdmaker dir left non-empty after merge (same-name entries exist in .cindy)', {
-        rootDir: key,
-        leftover,
-      });
+      return { complete: true };
     }
+
+    migrating.delete(key);
+    const leftover = await fs.readdir(oldRoot);
+    log.warn('legacy .xdmaker dir left non-empty after merge (file conflicts in .cindy)', {
+      rootDir: key,
+      leftover,
+    });
+    return { complete: false };
   } catch (err) {
     migrating.delete(key);
     log.warn('failed to migrate legacy .xdmaker dir', {
       rootDir: key,
       error: err instanceof Error ? err.message : String(err),
     });
+    return { complete: false };
   }
 }
 

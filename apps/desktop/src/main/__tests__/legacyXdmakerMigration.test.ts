@@ -70,12 +70,13 @@ describe('migrateLegacyXdmakerDir', () => {
     );
   });
 
-  it('同名子项冲突时保留旧目录且绝不覆盖 .cindy 侧', async () => {
+  it('同名文件冲突时保留旧目录、返回 incomplete、绝不覆盖 .cindy 侧', async () => {
     write('.xdmaker/automations/schedules.json', 'legacy');
     write('.cindy/automations/schedules.json', 'current');
 
-    await migrateLegacyXdmakerDir(root);
+    const result = await migrateLegacyXdmakerDir(root);
 
+    expect(result).toEqual({ complete: false });
     expect(fs.readFileSync(path.join(root, '.cindy', 'automations', 'schedules.json'), 'utf8')).toBe(
       'current',
     );
@@ -107,8 +108,8 @@ describe('migrateLegacyXdmakerDir', () => {
     expect(fs.existsSync(path.join(root, '.cindy'))).toBe(false);
   });
 
-  it('rootDir 为空时静默返回', async () => {
-    await expect(migrateLegacyXdmakerDir('')).resolves.toBeUndefined();
+  it('rootDir 为空时静默返回 complete', async () => {
+    await expect(migrateLegacyXdmakerDir('')).resolves.toEqual({ complete: true });
   });
 
   it('并发调用共享同一 Promise，迁移完成前不会提前返回', async () => {
@@ -120,7 +121,7 @@ describe('migrateLegacyXdmakerDir', () => {
       migrateLegacyXdmakerDir(root),
     ]);
 
-    expect(results).toEqual([undefined, undefined, undefined]);
+    expect(results).toEqual([{ complete: true }, { complete: true }, { complete: true }]);
     expect(fs.existsSync(path.join(root, '.xdmaker'))).toBe(false);
     expect(fs.readFileSync(path.join(root, '.cindy', 'project-knowledge', 'TOC.md'), 'utf8')).toBe(
       '# toc',

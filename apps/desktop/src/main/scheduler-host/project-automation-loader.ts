@@ -70,7 +70,7 @@ export interface ReconcileResult {
   inserted: number;
   updated: number;
   deleted: number;
-  skipped: 'no-file' | 'parse-error' | null;
+  skipped: 'no-file' | 'parse-error' | 'migration-incomplete' | null;
 }
 
 export type ProjectAutomationEvent = {
@@ -86,7 +86,8 @@ export type ProjectAutomationEvent = {
 type CachedRead =
   | { kind: 'loaded'; content: string; configHash: string; schedules: ProjectScheduleConfig[] }
   | { kind: 'missing' }
-  | { kind: 'parse-error' };
+  | { kind: 'parse-error' }
+  | { kind: 'migration-incomplete' };
 
 type Listener = (event: ProjectAutomationEvent) => void;
 
@@ -142,6 +143,9 @@ export class ProjectAutomationLoader {
 
   async reconcile(workingDir: string): Promise<ReconcileResult> {
     const read = await this.readProjectAutomations(workingDir);
+    if (read.kind === 'migration-incomplete') {
+      return { workingDir, inserted: 0, updated: 0, deleted: 0, skipped: 'migration-incomplete' };
+    }
     if (read.kind !== 'loaded') {
       const lastReconciledHash = await this.getLastHash(workingDir);
       const deleted = await this.deleteProjectSchedules(workingDir);
@@ -322,7 +326,8 @@ export class ProjectAutomationLoader {
   }
 
   private async readProjectAutomationsFromDisk(workingDir: string): Promise<CachedRead> {
-    await migrateLegacyXdmakerDir(workingDir);
+    const migration = await migrateLegacyXdmakerDir(workingDir);
+    if (!migration.complete) return { kind: 'migration-incomplete' };
     const filePath = path.join(workingDir, AUTOMATIONS_REL_PATH);
     let content: string;
     try {
