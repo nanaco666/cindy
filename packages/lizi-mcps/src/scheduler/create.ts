@@ -202,7 +202,12 @@ export function registerScheduleCreateTool(
           }
           input = { ...input, targetSessionId: sessionId };
         }
-        if (deps.hookScript?.stabilizeCommand) {
+        if (input.preRunHook?.command?.trim()) {
+          if (!deps.hookScript?.stabilizeCommand) {
+            throw new Error(
+              'invalid request: 当前 host 未提供 pre-run hook 路径稳定化服务，拒绝持久化可能随 cwd 漂移的脚本命令',
+            );
+          }
           input = await stabilizePreRunHookForCreate(input, {
             resolveSessionWorkDir:
               deps.hookScript.resolveSessionWorkDir ?? (async () => undefined),

@@ -20,7 +20,7 @@
  *   - GUI 列表 onEvent 推送实时刷新
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 
@@ -983,6 +983,10 @@ describe('schedule_update — bindToCurrentSession', () => {
         updated.patch = patch;
         return { id, ...patch };
       },
+      updateFromCurrent: async (
+        id: string,
+        buildPatch: (current: Schedule) => Promise<{ targetSessionId?: string }>,
+      ) => fakeScheduler.update(id, await buildPatch({ id } as Schedule)),
     };
     const registry = new SchedulerToolRegistry();
     const sessionCtx: LiziMcpSessionContext = {
@@ -1036,8 +1040,11 @@ describe('schedule_update — pre-run hook 路径稳定化', () => {
     registerScheduleUpdateTool(registry, {
       getScheduler: () =>
         ({
-          get: async () => existing,
-          update: async (_id: string, patch: Record<string, unknown>) => {
+          updateFromCurrent: async (
+            _id: string,
+            buildPatch: (current: Schedule) => Promise<Record<string, unknown>>,
+          ) => {
+            const patch = await buildPatch(existing);
             updates.push(patch);
             return { ...existing, ...patch };
           },
@@ -1069,6 +1076,56 @@ describe('schedule_update — pre-run hook 路径稳定化', () => {
         },
       },
     ]);
+  });
+
+  it('create 带 hook 但 host 未提供稳定化服务时 fail-closed', async () => {
+    const create = vi.fn();
+    const registry = new SchedulerToolRegistry();
+    registerScheduleCreateTool(registry, {
+      getScheduler: () => ({ create }) as never,
+    });
+
+    const result = await registry.call('schedule_create', {
+      ...baseCreate,
+      preRunHook: { command: 'node scripts/check.mjs' },
+    });
+    const env = JSON.parse((result.content[0] as { text: string }).text) as {
+      ok: boolean;
+      code?: string;
+    };
+
+    expect(env.ok).toBe(false);
+    expect(env.code).toBe('INVALID_PARAMS');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('update 已有 hook 但 host 未提供稳定化服务时 fail-closed', async () => {
+    const registry = new SchedulerToolRegistry();
+    const existing = {
+      id: 'sch-1',
+      preRunHook: { command: 'node scripts/check.mjs' },
+    } as Schedule;
+    registerScheduleUpdateTool(registry, {
+      getScheduler: () =>
+        ({
+          updateFromCurrent: async (
+            _id: string,
+            buildPatch: (current: Schedule) => Promise<Record<string, unknown>>,
+          ) => buildPatch(existing),
+        }) as never,
+    });
+
+    const result = await registry.call('schedule_update', {
+      id: 'sch-1',
+      targetSessionId: 'session-b',
+    });
+    const env = JSON.parse((result.content[0] as { text: string }).text) as {
+      ok: boolean;
+      code?: string;
+    };
+
+    expect(env.ok).toBe(false);
+    expect(env.code).toBe('INVALID_PARAMS');
   });
 });
 

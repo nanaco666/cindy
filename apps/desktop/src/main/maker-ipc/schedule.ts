@@ -291,16 +291,15 @@ export function registerScheduleHandlers(getMaker?: () => Maker | null): void {
   ipcMain.handle(MAKER_INVOKE.SCHEDULE_UPDATE, async (_e, id: unknown, patch: unknown) => {
     const scheduleId = requireString(id, 'id');
     requireObject(patch, 'patch');
-    return withScheduler(async ({ scheduler }) => {
-      const existing = await scheduler.get(scheduleId);
-      if (!existing) throw new Error(`Schedule not found: ${scheduleId}`);
-      const normalized = await stabilizePreRunHookForUpdate(
-        existing,
-        patch as UpdateScheduleInput,
-        hookPathDeps,
-      );
-      return scheduler.update(scheduleId, normalized);
-    });
+    return withScheduler(({ scheduler }) =>
+      scheduler.updateFromCurrent(scheduleId, (existing) =>
+        stabilizePreRunHookForUpdate(
+          existing,
+          patch as UpdateScheduleInput,
+          hookPathDeps,
+        ),
+      ),
+    );
   });
 
   ipcMain.handle(MAKER_INVOKE.SCHEDULE_DELETE, async (_e, id: unknown) => {

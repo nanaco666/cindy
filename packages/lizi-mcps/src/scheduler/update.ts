@@ -114,16 +114,22 @@ export function registerScheduleUpdateTool(
           }
           input = { ...input, targetSessionId: sessionId };
         }
-        if (deps.hookScript?.stabilizeCommand) {
-          const existing = await scheduler.get(id);
-          if (!existing) throw new Error(`Schedule not found: ${id}`);
-          input = await stabilizePreRunHookForUpdate(existing, input, {
+        return scheduler.updateFromCurrent(id, async (existing) => {
+          const nextHook = Object.prototype.hasOwnProperty.call(input, 'preRunHook')
+            ? input.preRunHook
+            : existing.preRunHook;
+          if (!nextHook?.command?.trim()) return input;
+          if (!deps.hookScript?.stabilizeCommand) {
+            throw new Error(
+              'invalid request: 当前 host 未提供 pre-run hook 路径稳定化服务，拒绝更新带 hook 的任务',
+            );
+          }
+          return stabilizePreRunHookForUpdate(existing, input, {
             resolveSessionWorkDir:
               deps.hookScript.resolveSessionWorkDir ?? (async () => undefined),
             stabilizeCommand: deps.hookScript.stabilizeCommand,
           });
-        }
-        return scheduler.update(id, input);
+        });
       }),
   });
 }

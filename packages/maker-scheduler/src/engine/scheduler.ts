@@ -882,6 +882,21 @@ export class Scheduler extends EventEmitter {
     return this.serializeScheduleMutation(id, () => this.updateUnlocked(id, patch));
   }
 
+  /**
+   * 在同一条 per-schedule 串行边界内读取最新任务、异步生成 patch 并更新。
+   * 供 patch 依赖当前持久化值的调用方使用，避免锁外快照覆盖并发写入。
+   */
+  async updateFromCurrent(
+    id: string,
+    buildPatch: (current: Schedule) => Promise<UpdateScheduleInput>,
+  ): Promise<Schedule> {
+    return this.serializeScheduleMutation(id, async () => {
+      const current = await this.storage.get(id);
+      if (!current) throw new Error(`Schedule not found: ${id}`);
+      return this.updateUnlocked(id, await buildPatch(current));
+    });
+  }
+
   private async updateUnlocked(id: string, patch: UpdateScheduleInput): Promise<Schedule> {
     patch = this.normalizeManagedWorkingDir(patch);
     // patch 显式给了真实 workingDir 而未指明 workspaceKind 时,同步翻成 project

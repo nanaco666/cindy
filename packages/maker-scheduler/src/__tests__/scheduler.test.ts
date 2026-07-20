@@ -829,6 +829,41 @@ describe('Scheduler', () => {
     await restarted.scheduler.stop();
   });
 
+  it('updateFromCurrent 把读取、生成 patch 与写入放在同一任务锁内', async () => {
+    const sch = await h.scheduler.create({
+      ...baseInput,
+      preRunHook: { command: 'node old.mjs' },
+    });
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let firstEntered!: () => void;
+    const firstEnteredPromise = new Promise<void>((resolve) => {
+      firstEntered = resolve;
+    });
+
+    const first = h.scheduler.updateFromCurrent(sch.id, async () => {
+      firstEntered();
+      await firstGate;
+      return { preRunHook: { command: 'node new.mjs' } };
+    });
+    await firstEnteredPromise;
+
+    let secondSnapshot: Schedule | undefined;
+    const second = h.scheduler.updateFromCurrent(sch.id, async (current) => {
+      secondSnapshot = current;
+      return { name: 'renamed', preRunHook: current.preRunHook };
+    });
+    await Promise.resolve();
+    expect(secondSnapshot).toBeUndefined();
+
+    releaseFirst();
+    await Promise.all([first, second]);
+    expect(secondSnapshot?.preRunHook?.command).toBe('node new.mjs');
+    expect((await h.storage.get(sch.id))?.preRunHook?.command).toBe('node new.mjs');
+  });
+
   it('serializes pause behind an expired schedule revival so active cache stays paused', async () => {
     const sch = await h.scheduler.create({ ...baseInput, recurring: false });
     h.clock.setTo(Date.UTC(2026, 0, 1, 0, 1, 5));
