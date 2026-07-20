@@ -1696,6 +1696,7 @@
           "disabled": "已停用",
           "connecting": "连接中…",
           "connected": "已连接",
+          "standby": "由另一实例连接",
           "error": "连接失败"
         },
         "form": {
@@ -1724,6 +1725,7 @@
           "actionFailed": "操作失败"
         },
         "loginRequired": "需要先登录 {{appName}} 账号, 连接会在登录后自动恢复。",
+        "standbyHint": "本机另一 Cindy 实例正在使用 Slack 连接。关闭它后，重新打开此开关即可接管。",
         "authorizing": "授权中…",
         "statusBound": "已绑定 @{{name}}",
         "statusBoundTeam": "已绑定 {{team}} @{{name}}",

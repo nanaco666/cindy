@@ -1696,6 +1696,7 @@
           "disabled": "無効",
           "connecting": "接続中…",
           "connected": "接続済み",
+          "standby": "別のインスタンスが接続中",
           "error": "接続失敗"
         },
         "form": {
@@ -1724,6 +1725,7 @@
           "actionFailed": "操作に失敗しました"
         },
         "loginRequired": "先に {{appName}} アカウントにログインしてください。ログイン後、接続は自動的に復旧します。",
+        "standbyHint": "このコンピューター上の別の Cindy インスタンスが Slack 接続を使用しています。それを閉じてから、このスイッチをもう一度オンにすると引き継げます。",
         "authorizing": "認可中…",
         "statusBound": "連携済み @{{name}}",
         "statusBoundTeam": "{{team}} に連携済み @{{name}}",

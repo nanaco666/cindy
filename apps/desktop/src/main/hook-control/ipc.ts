@@ -243,6 +243,9 @@ function ensureInstances(): { store: SlackHookStore; manager: HookControlManager
         const ok = await authManager.refresh().catch(() => false);
         return ok ? authManager.getAccessToken() : null;
       },
+      // upgrade 401 表示现有 accessToken 已被服务端拒绝；强制走一次 refresh，
+      // transport 自带单次预算，成功后立即用新 token 重连。
+      refreshAuthToken: () => authManager.refresh().catch(() => false),
       deviceInfo: () => ({
         deviceId: authManager.getDeviceId(),
         deviceName: os.hostname(),
