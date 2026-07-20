@@ -62,7 +62,9 @@ public class XdtIosAppDistributionModule: Module {
         source: "storekit2",
         verification: verification
       )
-    @unknown default:
+    // AppStore.Environment is a RawRepresentable struct, not an enum, so a
+    // plain `default` (not `@unknown default`) is required to stay exhaustive.
+    default:
       return makeInfo(
         environment: "unknown",
         isTestFlight: false,
