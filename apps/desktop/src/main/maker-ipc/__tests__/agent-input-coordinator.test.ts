@@ -3010,7 +3010,7 @@ describe('AgentInputCoordinator stop and drain boundaries', () => {
       const h = createHarness();
       const sid = 'rewind-retained-timeout-lock';
       h.setRunning(true);
-      h.coordinator.setInteractionLock(sid, 'session-rewind', true);
+      h.coordinator.setInteractionLock(sid, 'session-rewind', true, { preserveOnStop: true });
 
       const release = h.coordinator.releaseRewindLockWhenIdle(sid, 'session-rewind');
       await vi.advanceTimersByTimeAsync(2_000);
@@ -3027,6 +3027,24 @@ describe('AgentInputCoordinator stop and drain boundaries', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('keeps a retained rewind lock when the user stops again before the boundary settles', async () => {
+    const h = createHarness();
+    const sid = 'rewind-retained-lock-second-stop';
+    h.setPendingInteraction(true);
+    h.coordinator.setInteractionLock(sid, 'session-rewind', true, { preserveOnStop: true });
+
+    h.coordinator.stop(sid);
+
+    expect(latestProjection(h.projections).queueInteractionLocks).toContain('session-rewind');
+    await expect(h.coordinator.steer(sid, makeItem('blocked-steer', 'blocked'))).resolves.toBe(
+      false,
+    );
+    expect(h.steerToAgent).not.toHaveBeenCalled();
+
+    h.coordinator.setInteractionLock(sid, 'session-rewind', false);
+    expect(latestProjection(h.projections).queueInteractionLocks).not.toContain('session-rewind');
   });
 
   it('rejects steer while rewind owns the session input boundary', async () => {

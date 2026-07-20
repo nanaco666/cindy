@@ -1259,7 +1259,9 @@ export async function withSessionInputStoppedForRewind<T>(
       throwIpcError('INTERNAL', 'Failed to restore queued input before rewind');
     }
 
-    coordinator.setInteractionLock(sessionId, SESSION_REWIND_INPUT_LOCK_ID, true);
+    coordinator.setInteractionLock(sessionId, SESSION_REWIND_INPUT_LOCK_ID, true, {
+      preserveOnStop: true,
+    });
     if (coordinator.hasActiveTurnForRewind(sessionId)) {
       // Pause /goal before abort so the terminal event cannot auto-resume it.
       await goalStopObserver?.(sessionId);

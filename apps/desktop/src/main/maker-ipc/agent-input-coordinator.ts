@@ -239,6 +239,8 @@ interface SessionInputState {
   queuePausedByRestore: boolean;
   queueExpanded: boolean;
   queueInteractionLocks: string[];
+  /** Interaction locks that must survive a later user Stop. */
+  interactionLocksPreservedOnStop: string[];
   queueEditLocks: string[];
   queueAbortPending: boolean;
   activeTurn: ActiveTurn | null;
@@ -278,6 +280,7 @@ function createInitialInputState(generation = 0): SessionInputState {
     queuePausedByRestore: false,
     queueExpanded: false,
     queueInteractionLocks: [],
+    interactionLocksPreservedOnStop: [],
     queueEditLocks: [],
     queueAbortPending: false,
     activeTurn: null,
@@ -1137,7 +1140,9 @@ export class AgentInputCoordinator {
       state.recentEnqueuedClientIds = state.recentEnqueuedClientIds.filter((id) => !droppedIds.has(id));
       state.pendingQueue = [];
       state.pendingCompacts = [];
-      state.queueInteractionLocks = [];
+      state.queueInteractionLocks = state.queueInteractionLocks.filter((lockId) =>
+        state.interactionLocksPreservedOnStop.includes(lockId),
+      );
       state.queueEditLocks = [];
     } else {
       const queuedIds = new Set(state.pendingQueue.map((q) => q.clientId));
@@ -1364,9 +1369,25 @@ export class AgentInputCoordinator {
     return this.getProjection(sessionId);
   }
 
-  setInteractionLock(sessionId: string, lockId: string, locked: boolean): AgentInputProjection {
+  setInteractionLock(
+    sessionId: string,
+    lockId: string,
+    locked: boolean,
+    opts?: { preserveOnStop?: boolean },
+  ): AgentInputProjection {
     const state = this.getState(sessionId);
     state.queueInteractionLocks = toggleList(state.queueInteractionLocks, lockId, locked);
+    if (!locked) {
+      state.interactionLocksPreservedOnStop = state.interactionLocksPreservedOnStop.filter(
+        (id) => id !== lockId,
+      );
+    } else if (opts?.preserveOnStop) {
+      state.interactionLocksPreservedOnStop = toggleList(
+        state.interactionLocksPreservedOnStop,
+        lockId,
+        true,
+      );
+    }
     this.emit(sessionId);
     if (!locked) {
       this.scheduleDrain(sessionId, 'interaction-unlock');
