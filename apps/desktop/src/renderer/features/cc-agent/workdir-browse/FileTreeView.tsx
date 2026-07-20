@@ -649,7 +649,7 @@ function FileTreeRow({
         className={cn(
           'shrink-0',
           selected
-            ? 'text-foreground'
+            ? 'text-sidebar-item-active-foreground'
             : 'text-[var(--cmd-palette-item-meta)]',
         )}
       />
@@ -770,7 +770,7 @@ function RenamingInputRow({ entry, depth, onSubmit, onCancel }: RenamingInputRow
         className={cn(
           'min-w-0 flex-1 bg-transparent text-[13px] leading-none outline-none',
           'border border-[var(--cmd-palette-item-meta)] rounded-sm px-1 py-0.5',
-          'text-foreground placeholder:text-[var(--cmd-palette-item-meta)]',
+          'text-sidebar-item-active-foreground placeholder:text-[var(--cmd-palette-item-meta)]',
         )}
       />
     </div>
@@ -841,7 +841,7 @@ function PendingInputRow({ pending, depth, onSubmit, onCancel }: PendingInputRow
         className={cn(
           'min-w-0 flex-1 bg-transparent text-[13px] leading-none outline-none',
           'border border-[var(--cmd-palette-item-meta)] rounded-sm px-1 py-0.5',
-          'text-foreground placeholder:text-[var(--cmd-palette-item-meta)]',
+          'text-sidebar-item-active-foreground placeholder:text-[var(--cmd-palette-item-meta)]',
         )}
       />
     </div>
