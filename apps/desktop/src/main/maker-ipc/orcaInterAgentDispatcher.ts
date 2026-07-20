@@ -451,6 +451,34 @@ function makeQueuedDispatchOutcome(source: string): CollabDispatchQueuedOutcome 
   };
 }
 
+/**
+ * 按 lead→worker 排队消息的原始派发格式重建正文,供「修改排队消息」能力使用。
+ * text / persistedContent / chatMessage.content / origin.displayText 四处的格式
+ * 耦合与 buildQueuedOrcaInterAgentMessage 同源(formatAgentMessage /
+ * formatOrcaCommunicationMessage);身份与调度字段(clientId / createOpts /
+ * chatMessage.createdAt / origin.senderLabel)全部锚定原条目不变。
+ */
+export function rebuildQueuedOrcaLeadMessage(
+  entry: AgentInputQueuedMessage,
+  rawContent: string,
+  workerId?: string,
+): AgentInputQueuedMessage {
+  const agentMessageText = formatAgentMessage('lead', rawContent, workerId);
+  const persistedContent = formatOrcaCommunicationMessage('lead', rawContent);
+  return {
+    ...entry,
+    text: agentMessageText,
+    persistedContent,
+    chatMessage: {
+      ...entry.chatMessage,
+      content: persistedContent,
+    },
+    ...(entry.origin?.kind === 'orca'
+      ? { origin: { ...entry.origin, displayText: rawContent } }
+      : {}),
+  };
+}
+
 function buildQueuedOrcaInterAgentMessage(params: {
   clientId: string;
   agentMessageText: string;

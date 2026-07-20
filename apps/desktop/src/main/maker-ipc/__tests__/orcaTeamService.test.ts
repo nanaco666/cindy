@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import type { AgentInputQueuedMessage } from '../../../shared/agentInputQueue';
 import {
   createOrcaTeamService,
   findFocusTargetWorker,
@@ -144,6 +145,7 @@ function createDeps(overrides: Partial<OrcaTeamServiceDeps> = {}) {
       return {
         ok: true,
         mode: 'dispatched',
+        clientId: 'client-1',
         dispatchOutcome: {
           kind: 'session-dispatch',
           source: params.dispatchMeta.source,
@@ -154,6 +156,9 @@ function createDeps(overrides: Partial<OrcaTeamServiceDeps> = {}) {
       } satisfies DispatchWorkerMessageResult;
     }),
     sendAutoBridgeToLead: vi.fn(async () => ({ accepted: true })),
+    getSessionQueueSnapshot: vi.fn(async () => ({ pendingQueue: [], steeringClientIds: [] })),
+    removeQueuedMessage: vi.fn(() => true),
+    replaceQueuedMessage: vi.fn(() => true),
     log: {
       warn: vi.fn(),
       info: vi.fn(),
@@ -423,6 +428,7 @@ describe('OrcaTeamService', () => {
         return {
           ok: true,
           mode: 'queued',
+          clientId: 'client-queued-1',
           dispatchOutcome: {
             kind: 'session-dispatch',
             source: params.dispatchMeta.source,
@@ -584,6 +590,7 @@ describe('OrcaTeamService', () => {
           return {
             ok: true,
             mode: 'dispatched',
+            clientId: 'client-a',
             dispatchOutcome: {
               kind: 'session-dispatch',
               source: params.dispatchMeta.source,
@@ -599,6 +606,7 @@ describe('OrcaTeamService', () => {
         return {
           ok: true,
           mode: 'queued',
+          clientId: 'client-b',
           dispatchOutcome: {
             kind: 'session-dispatch',
             source: params.dispatchMeta.source,
@@ -1177,6 +1185,222 @@ describe('OrcaTeamService', () => {
     expect(deps.log.warn).toHaveBeenCalledWith('archiveWorker: close worker session failed', {
       sessionId: 'worker-session-1',
       err: 'close failed',
+    });
+  });
+});
+
+describe('OrcaTeamService worker queued message control', () => {
+  function queuedItem(
+    clientId: string,
+    origin?: AgentInputQueuedMessage['origin'],
+    text = `text-${clientId}`,
+  ): AgentInputQueuedMessage {
+    return {
+      clientId,
+      text,
+      persistedContent: text,
+      model: 'gpt-5.4',
+      effort: 'medium',
+      permissionMode: 'bypassPermissions',
+      workingDir: '/repo',
+      chatMessage: {
+        clientId,
+        role: 'user',
+        content: text,
+        createdAt: '2026-07-21T00:00:00.000Z',
+      },
+      createOpts: {
+        agentKind: 'codex',
+        workingDir: '/repo',
+        model: 'gpt-5.4',
+      },
+      ...(origin ? { origin } : {}),
+    };
+  }
+
+  const leadOrigin = { kind: 'orca' as const, senderLabel: 'Lead', displayText: '原始任务' };
+
+  it('lists queue with content for all sources and marks consuming', async () => {
+    const { deps, service } = createDeps({
+      getSessionQueueSnapshot: vi.fn(async () => ({
+        pendingQueue: [
+          queuedItem('q-lead', leadOrigin),
+          queuedItem('q-user'),
+          queuedItem('q-sched', { kind: 'scheduler', scheduleId: 's1', scheduleName: 'beat' }),
+        ],
+        steeringClientIds: ['q-user'],
+      })),
+    });
+
+    const result = await service.listWorkerQueuedMessages({
+      callerLeadSessionId: 'lead-1',
+      workerRef: 'worker-1',
+    });
+
+    expect(result).toMatchObject({ ok: true, workerId: 'worker-1', workerSessionId: 'worker-session-1' });
+    if (!result.ok) throw new Error('unreachable');
+    // 口径「看得全、只能动自己的」:lead 条目回 displayText 原始正文,用户 /
+    // scheduler 条目回排队正文;可操作性由 update/cancel 的 NOT_LEAD_MESSAGE 把关。
+    expect(result.messages).toEqual([
+      { queuedMessageId: 'q-lead', position: 0, source: 'lead', content: '原始任务', consuming: false },
+      { queuedMessageId: 'q-user', position: 1, source: 'user', content: 'text-q-user', consuming: true },
+      { queuedMessageId: 'q-sched', position: 2, source: 'scheduler', content: 'text-q-sched', consuming: false },
+    ]);
+    expect(deps.getSessionQueueSnapshot).toHaveBeenCalledWith('worker-session-1');
+  });
+
+  it('rejects queue access for a worker outside the caller lead scope', async () => {
+    const { service } = createDeps();
+    await expect(
+      service.listWorkerQueuedMessages({ callerLeadSessionId: 'other-lead', workerRef: 'worker-1' }),
+    ).resolves.toMatchObject({ ok: false, errorCode: 'WORKER_NOT_FOUND' });
+    await expect(
+      service.updateWorkerQueuedMessage({
+        callerLeadSessionId: 'other-lead',
+        workerRef: 'worker-1',
+        queuedMessageId: 'q-lead',
+        message: '新内容',
+      }),
+    ).resolves.toMatchObject({ ok: false, errorCode: 'WORKER_NOT_FOUND' });
+  });
+
+  it('updates a lead queued entry by rebuilding dispatch-format content in place', async () => {
+    const replaceQueuedMessage = vi.fn(() => true);
+    const { service } = createDeps({
+      getSessionQueueSnapshot: vi.fn(async () => ({
+        pendingQueue: [queuedItem('q-lead', leadOrigin)],
+        steeringClientIds: [],
+      })),
+      replaceQueuedMessage,
+    });
+
+    await expect(
+      service.updateWorkerQueuedMessage({
+        callerLeadSessionId: 'lead-1',
+        workerRef: 'worker-1',
+        queuedMessageId: 'q-lead',
+        message: '改后的任务',
+      }),
+    ).resolves.toEqual({ ok: true, workerId: 'worker-1', queuedMessageId: 'q-lead' });
+
+    expect(replaceQueuedMessage).toHaveBeenCalledTimes(1);
+    const [sessionId, clientId, next] = replaceQueuedMessage.mock.calls[0] as unknown as [
+      string,
+      string,
+      AgentInputQueuedMessage,
+    ];
+    expect(sessionId).toBe('worker-session-1');
+    expect(clientId).toBe('q-lead');
+    // 派发格式重建:text 走 formatAgentMessage(lead + workerId 桥注),持久化走
+    // formatOrcaCommunicationMessage(JSON),displayText 是原始正文;身份字段锚定原条目。
+    expect(next.clientId).toBe('q-lead');
+    expect(next.text).toContain('[From Orca Lead]');
+    expect(next.text).toContain('改后的任务');
+    expect(next.text).toContain('worker-1');
+    expect(JSON.parse(next.persistedContent)).toEqual({ orcaSource: 'lead', content: '改后的任务' });
+    expect(next.chatMessage.content).toBe(next.persistedContent);
+    expect(next.chatMessage.createdAt).toBe('2026-07-21T00:00:00.000Z');
+    expect(next.origin).toEqual({ kind: 'orca', senderLabel: 'Lead', displayText: '改后的任务' });
+  });
+
+  it('refuses to touch entries that are missing, non-lead, or consuming', async () => {
+    const removeQueuedMessage = vi.fn(() => true);
+    const replaceQueuedMessage = vi.fn(() => true);
+    const { service } = createDeps({
+      getSessionQueueSnapshot: vi.fn(async () => ({
+        pendingQueue: [
+          queuedItem('q-user'),
+          queuedItem('q-consuming', leadOrigin),
+        ],
+        steeringClientIds: ['q-consuming'],
+      })),
+      removeQueuedMessage,
+      replaceQueuedMessage,
+    });
+    const base = { callerLeadSessionId: 'lead-1', workerRef: 'worker-1' };
+
+    await expect(
+      service.updateWorkerQueuedMessage({ ...base, queuedMessageId: 'q-gone', message: 'x' }),
+    ).resolves.toMatchObject({ ok: false, errorCode: 'QUEUED_MESSAGE_NOT_FOUND' });
+    await expect(
+      service.updateWorkerQueuedMessage({ ...base, queuedMessageId: 'q-user', message: 'x' }),
+    ).resolves.toMatchObject({ ok: false, errorCode: 'NOT_LEAD_MESSAGE' });
+    await expect(
+      service.updateWorkerQueuedMessage({ ...base, queuedMessageId: 'q-consuming', message: 'x' }),
+    ).resolves.toMatchObject({ ok: false, errorCode: 'MESSAGE_CONSUMING' });
+    await expect(
+      service.updateWorkerQueuedMessage({ ...base, queuedMessageId: 'q-user', message: '   ' }),
+    ).resolves.toMatchObject({ ok: false, errorCode: 'INVALID_ARGS' });
+
+    await expect(
+      service.cancelWorkerQueuedMessage({ ...base, queuedMessageId: 'q-user' }),
+    ).resolves.toMatchObject({ ok: false, errorCode: 'NOT_LEAD_MESSAGE' });
+    await expect(
+      service.cancelWorkerQueuedMessage({ ...base, queuedMessageId: 'q-consuming' }),
+    ).resolves.toMatchObject({ ok: false, errorCode: 'MESSAGE_CONSUMING' });
+
+    expect(removeQueuedMessage).not.toHaveBeenCalled();
+    expect(replaceQueuedMessage).not.toHaveBeenCalled();
+  });
+
+  it('cancels a lead queued entry via coordinator remove and reports consumed races', async () => {
+    const removeQueuedMessage = vi.fn(() => true);
+    const { service } = createDeps({
+      getSessionQueueSnapshot: vi.fn(async () => ({
+        pendingQueue: [queuedItem('q-lead', leadOrigin)],
+        steeringClientIds: [],
+      })),
+      removeQueuedMessage,
+    });
+
+    await expect(
+      service.cancelWorkerQueuedMessage({
+        callerLeadSessionId: 'lead-1',
+        workerRef: 'worker-1',
+        queuedMessageId: 'q-lead',
+      }),
+    ).resolves.toEqual({ ok: true, workerId: 'worker-1', queuedMessageId: 'q-lead' });
+    expect(removeQueuedMessage).toHaveBeenCalledWith('worker-session-1', 'q-lead');
+
+    // resolve 与 remove 之间的窄竞态:条目已被 drain 取走 → 明确报已消费。
+    removeQueuedMessage.mockReturnValueOnce(false);
+    await expect(
+      service.cancelWorkerQueuedMessage({
+        callerLeadSessionId: 'lead-1',
+        workerRef: 'worker-1',
+        queuedMessageId: 'q-lead',
+      }),
+    ).resolves.toMatchObject({ ok: false, errorCode: 'QUEUED_MESSAGE_NOT_FOUND' });
+  });
+
+  it('threads queuedMessageId through queued dispatch results', async () => {
+    const { service } = createDeps({
+      getLiveSession: vi.fn(() => ({ isTurnRunning: () => true })),
+      dispatchWorkerMessage: vi.fn(async (params) => ({
+        ok: true,
+        mode: 'queued',
+        clientId: 'client-queued-9',
+        dispatchOutcome: {
+          kind: 'session-dispatch',
+          source: params.dispatchMeta.source,
+          dispatched: true,
+          wakeKind: 'queued',
+        },
+        targetTitle: 'Worker',
+        targetLastUserSendAt: null,
+      } satisfies DispatchWorkerMessageResult)),
+    });
+
+    await expect(
+      service.sendToWorker({
+        callerLeadSessionId: 'lead-1',
+        targetSessionId: 'worker-session-1',
+        message: '排队任务',
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      wakeKind: 'queued',
+      queuedMessageId: 'client-queued-9',
     });
   });
 });

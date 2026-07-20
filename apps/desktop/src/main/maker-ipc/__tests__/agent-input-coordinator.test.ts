@@ -4672,3 +4672,65 @@ describe('AgentInputCoordinator scheduler 排队心跳(review 反馈回归)', ()
     expect(h.coordinator.isQueueRestored(sid)).toBe(true);
   });
 });
+
+describe('AgentInputCoordinator replaceQueuedMessage(Orca lead 排队消息修改)', () => {
+  it('原位整条替换 pending 条目:位置不变、投影与崩溃快照同步新内容', async () => {
+    const h = createHarness();
+    const sid = 'replace-pending';
+    // 解锁崩溃快照持久化:未恢复的会话 maybePersistQueueSnapshot 直接跳过。
+    await h.coordinator.ensureQueueRestored(sid);
+    h.coordinator.enqueue(sid, makeItem('q-1', 'first'));
+    await flush();
+    h.coordinator.enqueue(sid, makeItem('q-2', 'second'));
+    h.coordinator.enqueue(sid, makeItem('q-3', 'third'));
+    await flush();
+
+    const replaced = h.coordinator.replaceQueuedMessage(sid, 'q-2', makeItem('q-2', 'second-edited'));
+
+    expect(replaced).toBe(true);
+    const projection = latestProjection(h.projections);
+    expect(projection.pendingQueue.map((q) => q.clientId)).toEqual(['q-2', 'q-3']);
+    expect(projection.pendingQueue[0]?.text).toBe('second-edited');
+    expect(
+      h.persistQueueSnapshot.mock.calls.at(-1)?.[1].find((item) => item.clientId === 'q-2')?.text,
+    ).toBe('second-edited');
+  });
+
+  it('拒绝身份漂移与不存在的条目', async () => {
+    const h = createHarness();
+    const sid = 'replace-guards';
+    h.coordinator.enqueue(sid, makeItem('q-1', 'first'));
+    await flush();
+    h.coordinator.enqueue(sid, makeItem('q-2', 'second'));
+    await flush();
+
+    // next 的 clientId 必须锚定原条目,防止替换顺带改身份。
+    expect(h.coordinator.replaceQueuedMessage(sid, 'q-2', makeItem('q-x', 'hijack'))).toBe(false);
+    // 已派发(不在 pendingQueue)的条目不可替换。
+    expect(h.coordinator.replaceQueuedMessage(sid, 'q-1', makeItem('q-1', 'late'))).toBe(false);
+    expect(latestProjection(h.projections).pendingQueue[0]?.text).toBe('second');
+  });
+
+  it('steering 中的条目不可替换', async () => {
+    const h = createHarness();
+    h.setAgentKind('codex');
+    const sid = 'replace-steering';
+    const steer = deferred<void>();
+    h.steerToAgent.mockImplementationOnce(() => steer.promise);
+
+    h.coordinator.enqueue(sid, makeItem('q-1', 'first'));
+    await flush();
+    const second = makeItem('q-2', 'second');
+    h.coordinator.enqueue(sid, second);
+    await flush();
+
+    const steerPromise = h.coordinator.steer(sid, second, { removeFromQueue: true });
+    await flush();
+    expect(latestProjection(h.projections).steeringQueueClientIds).toEqual(['q-2']);
+
+    expect(h.coordinator.replaceQueuedMessage(sid, 'q-2', makeItem('q-2', 'edited'))).toBe(false);
+
+    steer.resolve();
+    await steerPromise;
+  });
+});

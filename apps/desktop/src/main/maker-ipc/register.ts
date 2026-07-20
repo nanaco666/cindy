@@ -239,7 +239,7 @@ import {
 import { getAgentIslandService } from '../agent-island/service.js';
 import { createOrcaLifecycleService, ORCA_WORKER_READY_MESSAGE } from './orcaLifecycleService.js';
 import { throwOrcaServiceFailure } from './orcaServiceFailure.js';
-import { createOrcaTeamService, findFocusTargetWorker, type OrcaTeamService, type OrcaWorkerEffort } from './orcaTeamService.js';
+import { createOrcaTeamService, findFocusTargetWorker, type ListWorkerQueuedMessagesResult, type OrcaTeamService, type OrcaWorkerEffort, type WorkerQueuedMessageControlResult } from './orcaTeamService.js';
 import { createOrcaWorkerCreationService, normalizeOrcaWorkerLabel } from './orcaWorkerCreationService.js';
 import { registerOrcaWorkerControlHandlers } from './orcaWorkerControlHandlers.js';
 import {
@@ -711,9 +711,13 @@ interface OrcaCollabService {
   // 永远投递到既有 worker session，绝不创建新 session。holder 只暴露 service
   // 边界的窄契约，避免 sendToSession 的 create 模式漏进 worker 派活语义。
   sendToWorker: (params: { callerLeadSessionId: string; targetSessionId: string; message: string }) => Promise<
-    { ok: true; agentKind: AgentKind; wakeKind: 'resumed' | 'already-active' | 'queued'; targetTitle: string | null; targetLastUserSendAt: string | null }
+    { ok: true; agentKind: AgentKind; wakeKind: 'resumed' | 'already-active' | 'queued'; targetTitle: string | null; targetLastUserSendAt: string | null; queuedMessageId?: string }
     | { ok: false; errorCode: string; message: string }
   >;
+  // 排队消息控制:只作用于 lead 自己发出的 orca 排队条目,归属校验与 send/idle/archive 同一套 resolveWorkerRef。
+  listWorkerQueuedMessages: (params: { callerLeadSessionId: string; workerRef: string }) => Promise<ListWorkerQueuedMessagesResult>;
+  updateWorkerQueuedMessage: (params: { callerLeadSessionId: string; workerRef: string; queuedMessageId: string; message: string }) => Promise<WorkerQueuedMessageControlResult>;
+  cancelWorkerQueuedMessage: (params: { callerLeadSessionId: string; workerRef: string; queuedMessageId: string }) => Promise<WorkerQueuedMessageControlResult>;
   idleWorker: (params: { callerLeadSessionId: string; workerId: string }) => Promise<
     { ok: true; workerId?: string } | { ok: false; errorCode: string; message: string }
   >;
@@ -4660,11 +4664,31 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       return {
         ok: true,
         mode: result.mode,
+        clientId: result.clientId,
         dispatchOutcome: result.dispatchOutcome,
         targetTitle: result.targetTitle ?? null,
         targetLastUserSendAt: result.targetLastUserSendAt ?? null,
       };
     },
+    getSessionQueueSnapshot: async (sessionId) => {
+      // 先补崩溃恢复,保证重启后 lead 仍能看到快照恢复出的排队消息。
+      await inputCoordinator.ensureQueueRestored(sessionId).catch(() => undefined);
+      const projection = inputCoordinator.getProjection(sessionId);
+      return {
+        pendingQueue: projection.pendingQueue,
+        steeringClientIds: projection.steeringQueueClientIds,
+      };
+    },
+    removeQueuedMessage: (sessionId, clientId) => {
+      if (!inputCoordinator.hasQueuedItemWhere(sessionId, (item) => item.clientId === clientId)) {
+        return false;
+      }
+      // remove 内部对 steering 条目静默拒绝,以移除后的队列状态为准判定成败。
+      inputCoordinator.remove(sessionId, clientId);
+      return !inputCoordinator.hasQueuedItemWhere(sessionId, (item) => item.clientId === clientId);
+    },
+    replaceQueuedMessage: (sessionId, clientId, next) =>
+      inputCoordinator.replaceQueuedMessage(sessionId, clientId, next),
     sendAutoBridgeToLead: async (leadSessionId, message, workerId) => {
       const result = await dispatchInterAgentMessage({
         targetSessionId: leadSessionId,
@@ -4899,6 +4923,11 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       targetSessionId,
       message,
     }),
+    // 排队消息控制统一走 OrcaTeamService,复用 resolveWorkerRef 归属校验与
+    // coordinator 的 remove/replace 原语(cancel 经 remove 触发 discard settle)。
+    listWorkerQueuedMessages: (params) => orcaTeamService.listWorkerQueuedMessages(params),
+    updateWorkerQueuedMessage: (params) => orcaTeamService.updateWorkerQueuedMessage(params),
+    cancelWorkerQueuedMessage: (params) => orcaTeamService.cancelWorkerQueuedMessage(params),
     startTeam: async ({ leadSessionId }) => {
       try {
         return await orcaLifecycleService.startTeam({ leadSessionId });

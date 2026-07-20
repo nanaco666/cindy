@@ -75,6 +75,8 @@ export type OrcaWorkerCreationResult =
       softLimitExceeded?: boolean;
       dispatched?: boolean;
       dispatchOutcome?: DispatchWorkerTaskResult['dispatchOutcome'];
+      /** initial_task 入队(未直发)时回传:排队消息的可寻址句柄,供 lead 查看/修改/撤回。 */
+      queuedMessageId?: string;
       resolved: {
         agent: AgentKind;
         model: string;
