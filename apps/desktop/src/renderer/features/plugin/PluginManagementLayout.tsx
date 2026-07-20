@@ -83,8 +83,9 @@ export function PluginManagementHeader({
   const navigate = useNavigate();
   const searchable = query !== undefined && onQueryChange !== undefined;
 
+  // Catalog scroll surfaces reserve a 12px gutter on both edges; mirror it here.
   return (
-    <div className="h-16 shrink-0" style={WINDOW_DRAG_STYLE}>
+    <div className="h-16 shrink-0 px-3" style={WINDOW_DRAG_STYLE}>
       <div className={cn(PLUGIN_MANAGEMENT_FRAME_CLASS, 'flex h-full items-center gap-4')}>
         <div
           className="plugin-motion-tabs inline-flex shrink-0 rounded-full border p-0.5 backdrop-blur-md"

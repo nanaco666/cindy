@@ -76,6 +76,7 @@ describe('PluginManagementLayout', () => {
     const tabFrame = screen.getByRole('tablist').parentElement;
     const pageFrame = screen.getByTestId('page-content').parentElement;
     expect(tabFrame?.className).toContain('max-w-[920px]');
+    expect(tabFrame?.parentElement?.className).toContain('px-3');
     expect(pageFrame?.className).toContain('max-w-[920px]');
   });
 

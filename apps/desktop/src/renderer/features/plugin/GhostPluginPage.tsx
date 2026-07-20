@@ -430,27 +430,24 @@ export function GhostPluginPage() {
         />
       }
     >
-      <main
-        className="min-h-0 w-full flex-1 overflow-y-auto bg-[var(--surface)]"
-        style={{ scrollbarGutter: 'stable' }}
-      >
+      <main className="min-h-0 w-full flex-1 overflow-y-auto bg-[var(--surface)] [scrollbar-gutter:stable_both-edges]">
         <PluginManagementPage>
           <header className="plugin-motion-page-header pb-2">
-            <div className="flex items-start justify-between gap-4">
-              <div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-28 font-medium leading-tight text-[var(--text-primary)]">
                   {t('settings.ghosts.title')}
                 </h1>
-                <p className="mt-2 max-w-2xl text-14 leading-6 text-[var(--text-secondary)]">
-                  {t('settings.ghosts.description')}
-                </p>
+                <PluginScopePicker
+                  scopeDir={scopeDir}
+                  activeSessionWorkingDir={activeSessionWorkingDir ?? undefined}
+                  recentWorkdirs={recentWorkdirs}
+                  onPick={handlePickScope}
+                />
               </div>
-              <PluginScopePicker
-                scopeDir={scopeDir}
-                activeSessionWorkingDir={activeSessionWorkingDir ?? undefined}
-                recentWorkdirs={recentWorkdirs}
-                onPick={handlePickScope}
-              />
+              <p className="mt-2 max-w-2xl text-14 leading-6 text-[var(--text-secondary)]">
+                {t('settings.ghosts.description')}
+              </p>
             </div>
           </header>
 

@@ -52,6 +52,7 @@ import type { GhostPermissionItem, GhostToolDecl, InstalledGhost } from '../../.
 import { type GhostPluginDetail, type GhostPluginOrigin } from './lib/ghostPluginViewModel';
 import { GhostPluginIcon } from './GhostPluginIcon';
 import { ghostPluginSummary } from './lib/ghostPluginDetailModel';
+import './plugin-motion.css';
 
 interface GhostPluginDetailViewProps {
   ghost: InstalledGhost | null;
@@ -171,15 +172,12 @@ export function GhostPluginDetailView({
   }, [detail.id, summary]);
 
   return (
-    <main
-      className="plugin-motion-root h-full min-h-0 w-full overflow-y-auto bg-[var(--surface)]"
-      style={{ scrollbarGutter: 'stable' }}
-    >
-      <article className="mx-auto w-full max-w-[920px] px-8 pb-16 pt-5 max-[760px]:px-6 min-[1120px]:px-10">
+    <main className="plugin-motion-root h-full min-h-0 w-full overflow-y-auto bg-[var(--surface)] [scrollbar-gutter:stable_both-edges]">
+      <article className="plugin-detail-frame mx-auto w-full max-w-[824px] px-8 pb-16 pt-5 max-[760px]:px-6">
         <button
           type="button"
           onClick={onBack}
-          className="mb-7 inline-flex h-9 w-fit select-none items-center gap-2 rounded-full px-3 text-13 text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--surface-hover-soft)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+          className="-ml-3 mb-7 inline-flex h-9 w-fit select-none items-center gap-2 rounded-full px-3 text-13 text-[var(--text-secondary)] transition-colors duration-150 hover:bg-[var(--surface-hover-soft)] hover:text-[var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
           style={WINDOW_NO_DRAG_STYLE}
         >
           <ArrowLeft size={16} aria-hidden="true" />
@@ -187,7 +185,7 @@ export function GhostPluginDetailView({
         </button>
 
         <header>
-          <div className="grid grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-5 max-[760px]:grid-cols-[64px_minmax(0,1fr)]">
+          <div className="plugin-detail-hero grid grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-5">
             <GhostPluginIcon
               iconDataUrl={detail.iconDataUrl}
               iconId={detail.id}
@@ -206,7 +204,7 @@ export function GhostPluginDetailView({
             </div>
 
             <div
-              className="flex shrink-0 items-center gap-3 max-[760px]:col-span-2 max-[760px]:mt-4 max-[760px]:w-full max-[760px]:justify-between"
+              className="plugin-detail-actions flex shrink-0 items-center gap-3"
               style={WINDOW_NO_DRAG_STYLE}
             >
               {detail.installed ? (
@@ -281,7 +279,7 @@ export function GhostPluginDetailView({
             </div>
           </div>
 
-          <div className="mt-5 max-w-[760px]">
+          <div className="mt-5">
             <p
               ref={descriptionRef}
               className={cn(
