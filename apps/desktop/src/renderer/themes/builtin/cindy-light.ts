@@ -123,8 +123,9 @@ const overrides = {
   'titlebar-control-hover': '0.0 0.0% 94.5%', // alias closure: hover
   sidebar: '0.0 0.0% 92.9%', // alias closure: surface
   'sidebar-border': '214.3 11.1% 87.6%', // alias closure: border
-  'sidebar-item-hover': '0.0 0.0% 94.5%', // alias closure: hover
+  'sidebar-item-hover': '0.0 0.0% 0.0% / 0.05', // 玻璃面 hover 半透明化 2026-07-21:黑 5% 叠加(原实色 #F1F1F1 在白底上的等价叠加量),毛玻璃侧栏上壁纸可继续透过
   'sidebar-search-bg': '0.0 0.0% 92.9%', // alias closure: surface
+  'sidebar-search-input-bg': 'rgba(255, 255, 255, 0.55)', // 玻璃面搜索输入框 2026-07-21:白 55% 提亮字段感(与 hover 黑 5% 方向相反,可区分"可输入")
   'sidebar-muted': '220.0 4.7% 62.2%', // E1D 侧栏层级:二级暗灰 #9A9DA3(行首图标普通态)
   'surface-translucent-sidebar': 'rgba(255, 255, 255, 0.80)', // 用户调参 2026-07-20:纯白 85%→80%(透壁纸更多;#F6F6F6 试色后退回纯白)
   'surface-translucent-main': '#EDEDED', // E4D 主面板:用户勘误 2026-07-17 撤销毛玻璃,改不透明等价 surface(原 rgba(255,255,255,0.93))

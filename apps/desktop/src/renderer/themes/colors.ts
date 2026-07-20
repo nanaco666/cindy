@@ -943,6 +943,13 @@ registerColor('surface-translucent-overlay', {
   light: 'var(--surface-elevated)',
   dark: 'var(--surface-elevated)',
 }, 'E4D 浮层半透明底(default surface-elevated;CINDY override rgba #F6F6F6@90%/#252323@80% R1 模式3)');
+// 玻璃侧栏上的搜索输入框底(2026-07-21 玻璃面 hover 半透明化配套):default 透传 surface-elevated
+// 保证其余 9 主题零变化;CINDY override 半透明(light 白 55% 提亮成"可输入"字段感,dark 黑 25%
+// 下陷字段感),方向与 sidebar-item-hover 的叠加方向相反,保证 hover 与输入框视觉可区分。
+registerColor('sidebar-search-input-bg', {
+  light: 'var(--surface-elevated)',
+  dark: 'var(--surface-elevated)',
+}, '玻璃侧栏搜索输入框底(default 等价 surface-elevated;CINDY override rgba 白@55%/黑@25%)');
 registerColor('composer-pill-bg', {
   light: '#FCFCFC',
   dark: '#393838',

@@ -1161,11 +1161,14 @@ body.resizing-pane [data-ghost-webview] {
 /* 模式1 侧栏(light):半透底,壁纸模糊由原生 vibrancy sidebar 材质提供。
    红渐变覆盖层已拆除(用户裁决 2026-07-18:Figma 该两块渐变矩形按装饰废稿处理,不实现);
    CSS backdrop-filter 已撤(A/B 实证:blur 会把透明窗背衬黑箱)。 */
-[data-theme="cindy-light"] .bg-\[var\(--panel-bg\)\],
+/* 2026-07-21 用户裁决:模式1 玻璃只保留左侧栏(aside.bg-sidebar)。
+   .bg-\[var\(--panel-bg\)\] 已从本规则移除 —— 该 class 的消费者全是右侧工具面板族
+   (RSB TabBar/Body、Review、PanelChrome、Ghost 面板、独立窗顶带),被劫持成玻璃后
+   与左侧主区(不透明 content-area)底色打架;移除后回落 CINDY 的 --panel-bg
+   (#EDEDED/#2A2828),与主区同色,右侧面板整体与左边聊天区一致(模式2 口径)。 */
 [data-theme="cindy-light"] aside.bg-sidebar {
   background: var(--surface-translucent-sidebar);
 }
-[data-theme="cindy-dark"] .bg-\[var\(--panel-bg\)\],
 [data-theme="cindy-dark"] aside.bg-sidebar {
   background: var(--surface-translucent-sidebar);
   /* backdrop-filter 移除:CSS blur 采样不到窗外壁纸,且已知会把透明窗背衬渲染成黑;壁纸模糊由原生 vibrancy 材质提供 */

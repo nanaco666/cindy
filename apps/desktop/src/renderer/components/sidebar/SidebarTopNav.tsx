@@ -32,8 +32,12 @@ import { useConversationSearchContext } from '@/features/cc-agent/sidebar/conver
 /** 列表行通用样式 —— 各行同款 pill 行。 */
 const ROW_CLASS =
   'flex h-8 w-full items-center gap-2.5 rounded-full px-3 text-sm font-normal text-[var(--sidebar-nav-text)] transition-colors hover:bg-sidebar-item-hover';
-/** 命中当前视图（自动任务 / Plugin 与 Skill 管理 / issue）时的高亮。 */
-const ROW_ACTIVE_CLASS = 'bg-[var(--chat-input-chip-bg)] font-medium';
+/** 命中当前视图（自动任务 / Plugin 与 Skill 管理 / issue）时的高亮 —— 与下方会话列表
+ *  选中行同款反相胶囊(sidebar-item-active 族;2026-07-21 用户裁决,替代原 chat-input-chip
+ *  灰 chip,顶部导航选中态与对话选中样式统一)。hover:bg-sidebar-item-active 抵消
+ *  ROW_CLASS 的半透明 hover(cn/twMerge last-wins),避免选中胶囊 hover 时闪回半透明。 */
+const ROW_ACTIVE_CLASS =
+  'bg-sidebar-item-active font-medium text-sidebar-item-active-foreground border border-[var(--sidebar-item-active-border)] hover:bg-sidebar-item-active';
 
 export function SidebarTopNav(): React.ReactElement {
   const { t } = useTranslation();
@@ -77,7 +81,15 @@ export function SidebarTopNav(): React.ReactElement {
         aria-label={t('ccAgent.layout.automations')}
         aria-current={onScheduleMatch ? 'page' : undefined}
       >
-        <Clock size={15} strokeWidth={1.8} className="shrink-0 text-[var(--sidebar-nav-text)]" />
+        <Clock
+          size={15}
+          strokeWidth={1.8}
+          className={cn(
+            'shrink-0',
+            // 选中反相胶囊上图标跟随 active 前景(图标自带显式色,行级 text 覆盖不到它)。
+            onScheduleMatch ? 'text-sidebar-item-active-foreground' : 'text-[var(--sidebar-nav-text)]',
+          )}
+        />
         <span className="leading-none">{t('ccAgent.layout.automations')}</span>
       </button>
 
@@ -88,7 +100,15 @@ export function SidebarTopNav(): React.ReactElement {
         aria-label={t('sidebar.tabs.plugins')}
         aria-current={activeKey === 'plugins' ? 'page' : undefined}
       >
-        <Plug size={15} strokeWidth={1.8} className="shrink-0 text-[var(--sidebar-nav-text)]" />
+        <Plug
+          size={15}
+          strokeWidth={1.8}
+          className={cn(
+            'shrink-0',
+            // 同上:选中反相胶囊上图标跟随 active 前景。
+            activeKey === 'plugins' ? 'text-sidebar-item-active-foreground' : 'text-[var(--sidebar-nav-text)]',
+          )}
+        />
         <span className="leading-none">{t('sidebar.tabs.plugins')}</span>
       </button>
 

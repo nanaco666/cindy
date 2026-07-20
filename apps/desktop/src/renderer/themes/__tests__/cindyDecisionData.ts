@@ -125,6 +125,7 @@ export const CINDY_REQUIRED_COLOR_IDS = [
   'surface-translucent-sidebar', // R1 增补(E4D 毛玻璃,用户裁决透壁纸 2026-07-17)
   'surface-translucent-main', // R1 增补(E4D)
   'surface-translucent-overlay', // R1 增补(E4D)
+  'sidebar-search-input-bg', // 玻璃面搜索输入框半透明化(用户裁决 2026-07-21)
   'composer-pill-bg', // E2 composer pill 底(取代错稿 glass-pill-bg,玻璃质感已废)
   'composer-pill-icon', // E2 composer pill 图标
   // E1D send-btn 族纳入值表(lead 裁决反相中性四态 + disabled #444242 系):
@@ -309,7 +310,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'titlebar-control-hover': { light: '0.0 0.0% 94.5%', dark: '0.0 2.2% 18.0%' },
   sidebar: { light: '0.0 0.0% 92.9%', dark: '0.0 2.4% 16.1%' },
   'sidebar-border': { light: '214.3 11.1% 87.6%', dark: '0.0 0.0% 26.3%' },
-  'sidebar-item-hover': { light: '0.0 0.0% 94.5%', dark: '0.0 2.2% 18.0%' },
+  'sidebar-item-hover': { light: '0.0 0.0% 0.0% / 0.05', dark: '0.0 0.0% 100.0% / 0.09' }, // 用户裁决 2026-07-21:玻璃面 hover 半透明化(黑 5% / 白 9% 叠加替代实色,壁纸可透过)
   'sidebar-search-bg': { light: '0.0 0.0% 92.9%', dark: '0.0 2.4% 16.1%' },
   'sidebar-muted': { light: '220.0 4.7% 62.2%', dark: '0 0% 43.5%' }, // E1D 侧栏层级 #9A9DA3/#6F6F6F
   'status-badge-fg': { light: '#1F1F1F', dark: '#1F1F1F' }, // §7 必炸点(lead 裁决)
@@ -317,6 +318,10 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
     light: 'rgba(255, 255, 255, 0.80)',
     dark: 'rgba(18, 15, 15, 0.80)',
   }, // 用户调参 2026-07-20:双端 80%(light #F6F6F6 试色后退回纯白)
+  'sidebar-search-input-bg': {
+    light: 'rgba(255, 255, 255, 0.55)',
+    dark: 'rgba(0, 0, 0, 0.25)',
+  }, // 用户裁决 2026-07-21:玻璃面搜索输入框半透明化(与 hover 叠加方向相反,保证"可输入"字段感)
   'surface-translucent-main': { light: '#EDEDED', dark: '#2A2828' }, // E4D 主面板:用户勘误 2026-07-17 撤销毛玻璃,改不透明等价 surface(原 rgba 半透明)
   'surface-translucent-overlay': {
     light: 'rgba(246, 246, 246, 0.90)',
