@@ -53,11 +53,25 @@ describe('schedule model', () => {
     ]);
 
     expect(normalizeScheduleRuns([
-      { id: 'r1', scheduleId: 'a', status: 'interrupted' },
+      {
+        id: 'r1',
+        scheduleId: 'a',
+        status: 'interrupted',
+        costUsd: 0.125,
+        estimatedValueUsd: 0.25,
+        costAttribution: 'exact',
+      },
       { id: 'r2', scheduleId: 'a', status: 'bad' },
       { id: 'missing schedule' },
     ])).toEqual([
-      { id: 'r1', scheduleId: 'a', status: 'interrupted' },
+      {
+        id: 'r1',
+        scheduleId: 'a',
+        status: 'interrupted',
+        costUsd: 0.125,
+        estimatedValueUsd: 0.25,
+        costAttribution: 'exact',
+      },
       { id: 'r2', scheduleId: 'a', status: 'failed' },
     ]);
 

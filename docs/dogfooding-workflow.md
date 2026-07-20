@@ -22,7 +22,7 @@ Cindy 本身就是 coding agent 宿主，用它开发它自己（dogfooding）�
 
 ## 实例拓扑（推荐稳态）
 
-支撑事实：正常 dev 与打包版在共享 userData 时共用 single-instance lock；任意数量的显式 `--passive` dev 都会跳过锁，以便和 primary 共享数据多开并让出自动 schedule。共享库首次打开时会只读核对 `schema_version`、完整 migration history 与 SQL + companion TS runtime 指纹，只有和当前 checkout 完全一致才继续；passive 不会自行 migration / schema repair，并在存活期持有多 owner reader lease，避免之后启动的 primary 抢跑 migration。不一致时改用 `--isolated`。`--isolated[=<名字>]` 会切独立 userData，因此仍能各自持锁并并行；`XDT_USER_DATA_DIR` 仅 dev 生效，也可用于显式隔离 userData / SQLite。passive 多开不提供 `second-instance` 转发，主 `cindy://` deep link（以及永久兼容的历史 `xdt-maker://`）落到哪个实例由当前 OS 协议注册归属决定；Vite 端口不固定（5173 起按启动顺序递增）。
+支撑事实：single-instance lock 按 flavor 分域——打包版锁真实 userData（release 之间单实例），正常 dev 锁 `<userData>/dev-single-instance-lock` 子目录（dev 之间单实例、深链 redirect 有效），因此正常 dev 与打包版可共库双开、互不阻塞（2026-07-20 起）；任意数量的显式 `--passive` dev 都会跳过锁，以便和 primary 共享数据多开并让出自动 schedule。共享库首次打开时会只读核对 `schema_version`、完整 migration history 与 SQL + companion TS runtime 指纹，只有和当前 checkout 完全一致才继续；passive 不会自行 migration / schema repair，并在存活期持有多 owner reader lease，避免之后启动的 primary 抢跑 migration。不一致时改用 `--isolated`。`--isolated[=<名字>]` 会切独立 userData，因此仍能各自持锁并并行；`XDT_USER_DATA_DIR` 仅 dev 生效，也可用于显式隔离 userData / SQLite。passive 多开不提供 `second-instance` 转发，主 `cindy://` deep link（以及永久兼容的历史 `xdt-maker://`）落到哪个实例由当前 OS 协议注册归属决定；Vite 端口不固定（5173 起按启动顺序递增）。
 
 1. **实例 A——日常主力**。由**人**在自己的终端从 baseRepo 启动（`pnpm restart:desktop:remote`，默认模式）。**承载所有会话**：baseRepo 里的只读 / 运维会话 + 全部 N 个任务 worktree 会话（WorktreeManager 在 `baseRepo/.cindy-worktrees/` 下创建，都归这个实例管；历史 `.xdt-worktrees/` 继续兼容）。代码和文档修改都在任务 worktree 完成。与打包版 app 二选一常驻；必须共享数据同跑时加 `--passive`，需要完全隔离时用 `--isolated` / `XDT_USER_DATA_DIR`。
 2. **实例 B..N——per-worktree verify 实例（短命）**。需要真机验证某个 worktree 的 main / renderer 改动时，由**人**从该 worktree 启动：
@@ -143,7 +143,7 @@ gh pr create --base <source-branch> ...
 | worktree 会话里 skill / 配置陈旧 | `.claude` / `.sivi` 在创建时一次性 copy；之后 baseRepo 的 skill 改动对既有会话不可见 | 改完后重建任务 worktree 会话；发布前重新读取当前 AGENTS / Git workflow，不沿用旧快照 |
 | 「在 worktree 里改了没反应」 | HMR 根在启动 checkout（`vite.renderer.config.ts:222`） | 见心智模型节；verify 实例或 PR 发布后刷新 personal client |
 | 给 maker-core 等加 export 后白屏 | stale optimizeDeps prebundle（`vite.renderer.config.ts:157-177`） | 受影响实例完整重启 |
-| 多个实例争用运行职责 | 正常共享 userData 的实例会被 single-instance lock 拦住；`--passive` 明确允许任意多个 dev 共享数据并让出自动 schedule；migration runtime identity 不完全一致时启动硬闸会拒绝共库，仍有 passive 时 primary 不迁移 | 要共享数据联调就给额外 dev 加 `--passive` / 用 `--preserve-running`；先让同 checkout primary 完成 migration 并发布 runtime 指纹。要数据库 / 登录态完全隔离就用 `--isolated[=<名字>]` 或显式 `XDT_USER_DATA_DIR` |
+| 多个实例争用运行职责 | single-instance lock 按 flavor 分域：同 flavor（dev↔dev、packaged↔packaged）共享 userData 会被拦住，normal dev 与打包版可共库双开；`--passive` 明确允许任意多个 dev 共享数据并让出自动 schedule；migration runtime identity 不完全一致时启动硬闸会拒绝共库，仍有 passive 时 primary 不迁移 | 要共享数据联调就给额外 dev 加 `--passive` / 用 `--preserve-running`；先让同 checkout primary 完成 migration 并发布 runtime 指纹。要数据库 / 登录态完全隔离就用 `--isolated[=<名字>]` 或显式 `XDT_USER_DATA_DIR` |
 | 从 baseRepo restart 误杀 verify 实例 | worktree 路径是 baseRepo 路径子路径，kill 匹配按 rootDir 前缀 | 重启实例 A 前先记住 verify 实例会陪葬，需要就重新启 |
 | deep link 落错实例 | `cindy://`（历史 `xdt-maker://` 同）后注册者赢（`deepLink.ts`） | 接受现状；知道哪个实例最后注册即可 |
 | agent 读错日志 | dev 日志在**启动 checkout** 的 `apps/desktop/logs/`（`logger.ts:311-316`） | 首条消息模板第 2 条 |

@@ -161,8 +161,8 @@ export interface Schedule {
    *   - 首次触发：createdAt + intervalMs
    *   - 周期触发：finishedAt + intervalMs
    *   - 冷启动 / resume：now + intervalMs（不补发漏掉的，重新起 N 倒计时）
-   * 没设（undefined）→ 维持旧 cron 槽位语义；`cronExpr` 仍是这条记录的主表达式
-   * （UI 层 chip 文案、edit 表单回显都用 cronExpr）。
+   * 没设（undefined）→ 维持 cron 槽位语义；`cronExpr` 在 interval 模式下仍保留为
+   * 兼容/显式切回 Cron 时的表达式，但 UI 回显与引擎执行都必须以 intervalMs 为准。
    */
   intervalMs?: number;
   agentKind: AgentKind;
@@ -237,6 +237,12 @@ export interface ScheduleRun {
   finishedAt?: number;
   status: RunStatus;
   errorMsg?: string;
+  /** 本次 run 产生的真实 API 账单费用。 */
+  costUsd?: number;
+  /** 本次 run 的订阅 token 估算价值，不计入真实账单。 */
+  estimatedValueUsd?: number;
+  /** exact = 有持久化 runId 归因；legacy = 历史数据无法精确拆到单次 run。 */
+  costAttribution?: 'exact' | 'legacy';
   /**
    * Agent 这一轮 turn 的最终文本（与飞书正常对话气泡显示内容同源 — 按 isFinal
    * 替换、否则追加 delta，done 时定格）。仅 prompt 类 run 在 success 时填，

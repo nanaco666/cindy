@@ -108,6 +108,8 @@ export interface AgentInputQueuedMessage {
         kind: 'scheduler';
         scheduleId: string;
         scheduleName: string;
+        /** 老队列快照可能没有；新 scheduler run 始终写入。 */
+        runId?: string;
       };
   /**
    * 一次性跳过意识拦截钩(订阅槽①)。**预留字段,v1 无调用点置位**:当前

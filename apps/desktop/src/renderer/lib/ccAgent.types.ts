@@ -24,6 +24,7 @@ export interface MessageAutomationOrigin {
   kind: 'scheduler';
   scheduleId: string;
   scheduleName?: string;
+  runId?: string;
 }
 
 /**

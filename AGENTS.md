@@ -124,7 +124,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 | `--isolated=<名字>` | **命名沙箱**：每个名字一条完全独立的沙箱（目录 `xdt-maker-dev-<名字>`、设备标识 `dev-<名字>-<指纹>`），与默认沙箱、其它命名沙箱、正式版全部互不干扰；名字限 `A-Za-z0-9_-`、≤32 字符（restart 脚本对非法名字直接报错退出） | 用户说「再开一个独立实例 / 第二个沙箱 / 多开几个环境 / 给这个分支单独开一个环境」时。⚠️ 同一 checkout 的 restart 命令启动前会杀掉本 checkout 全部 dev 进程——agent 无法用 restart 同时多开；用户要真正并行多实例时，告知其在自己终端里直跑 `pnpm dev:desktop:remote --isolated=<名字>`（human-only 命令，不杀旧进程）或用多个 checkout |
 
 - 这些参数都不带 = 原行为（共库 + 正常调度），**用户没提就不要主动加**。`--preserve-running` / `--replace-running-root` 是上层编排原语，不代表仓库内置任何个人目录、分支或 baseline 约定。
-- 同一 userData 下只保留一个 normal/packaged primary；其它共享数据的 dev 都用 `--passive` / `--preserve-running`，数量不限。desktop 会在 passive 首次开库时只读核对 `schema_version` + migration history + SQL/TS runtime 指纹，pending / 超前 / hash drift 任一命中都拒绝启动；passive 存活时以 reader lease 阻止 primary 抢跑 migration。先由同 checkout 的 primary 完成迁移并发布指纹，或改用 `--isolated`。
+- single-instance lock 按 flavor 分域：packaged 之间单实例、normal dev 之间单实例，但 **normal dev 与 packaged 互不阻塞，可共库双开**（2026-07-20 起；此前一天曾误改为 dev/packaged 抢同一把锁）。同一 userData 下 normal dev 只保留一个；其它共享数据的 dev 都用 `--passive` / `--preserve-running`，数量不限。desktop 会在 passive 首次开库时只读核对 `schema_version` + migration history + SQL/TS runtime 指纹，pending / 超前 / hash drift 任一命中都拒绝启动；passive 存活时以 reader lease 阻止 primary 抢跑 migration。先由同 checkout 的 primary 完成迁移并发布指纹，或改用 `--isolated`。
 - `--isolated` 已彻底分库，天然不存在定时任务重复问题，无需再叠 `--passive`。
 - 参数只对 dev 生效（packaged 版本主进程忽略这些覆写），不影响用户机器上的正式版。
 

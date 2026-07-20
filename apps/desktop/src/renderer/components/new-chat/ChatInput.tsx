@@ -3981,7 +3981,7 @@ export function ChatInput({
             'bg-[var(--chat-input-bg)]',
             'border-[var(--chat-input-border)]',
             isCreateAgentVariant
-              ? 'focus-within:border-[var(--create-agent-focus-ring)]'
+              ? 'focus-within:border-[var(--chat-input-border-focus)]' // 聚焦描边走 30% 弱化 token;focus-ring 专供键盘 focus-visible(PR#174 review 拆分)
               : 'focus-within:border-[var(--chat-input-border-focus)]',
           ],
         )}
@@ -4025,7 +4025,7 @@ export function ChatInput({
                   'bg-[var(--chat-input-bg)]',
                   'border-[var(--chat-input-border)]',
                   isCreateAgentVariant
-                    ? 'focus-within:border-[var(--create-agent-focus-ring)]'
+                    ? 'focus-within:border-[var(--chat-input-border-focus)]' // 聚焦描边走 30% 弱化 token;focus-ring 专供键盘 focus-visible(PR#174 review 拆分)
                     : 'focus-within:border-[var(--chat-input-border-focus)]',
                 ],
           )}

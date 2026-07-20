@@ -46,6 +46,7 @@ import { useTranslation } from 'react-i18next';
 import {
   describeToolUse,
   normalizeDisplayCommand,
+  type CommandIntent,
   type ToolUseDescriptor,
 } from '@lizi/maker-shared';
 
@@ -575,6 +576,8 @@ export interface AgentActionRowProps {
   toolResult?: string;
   /** 工作过程展开 / live preview 使用：仅无法识别的命令另显原文兜底。 */
   showRawCommand?: boolean;
+  /** Codex 一个 commandExecution 拆出的结构化展示子动作。 */
+  intentOverride?: CommandIntent;
   /**
    * 行级执行状态(issue #450)— 由 AgentActionsBlock 依据 result / settled /
    * isSessionStreaming 计算后传入;缺省按已完成渲染(历史消息路径)。
@@ -614,6 +617,7 @@ export function AgentActionRow({
   message,
   toolResult,
   showRawCommand = false,
+  intentOverride,
   status = 'done',
 }: AgentActionRowProps) {
   const { t } = useTranslation();
@@ -636,7 +640,11 @@ export function AgentActionRow({
     };
   }, [toolName, inp, installedGhosts]);
 
-  const descriptor = useMemo(() => describeToolUse(toolName, inp), [toolName, inp]);
+  const descriptor = useMemo(() => {
+    const resolved = describeToolUse(toolName, inp);
+    if (!intentOverride || resolved.kind !== 'command' || resolved.description) return resolved;
+    return { ...resolved, intent: intentOverride };
+  }, [toolName, inp, intentOverride]);
   const isFileChange = descriptor.kind === 'fileChange';
   // command 类带模型 description 时,description 自含动词语义("查看工作区
   // 状态"),再渲染英文动词 label 会变成"Ran 查看工作区状态"的中英混排 —

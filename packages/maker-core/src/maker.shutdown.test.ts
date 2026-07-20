@@ -41,6 +41,12 @@ function createStorage(): SessionStorage {
       rows.set(id, next);
       return next;
     },
+    async compareAndClearSdkSessionId(id, expectedSdkSessionId) {
+      const prev = rows.get(id);
+      if (!prev || prev.sdkSessionId !== expectedSdkSessionId) return false;
+      rows.set(id, { ...prev, sdkSessionId: undefined, updatedAt: Date.now() });
+      return true;
+    },
     async delete(id) {
       rows.delete(id);
     },

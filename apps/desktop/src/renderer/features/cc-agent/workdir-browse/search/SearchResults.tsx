@@ -187,7 +187,7 @@ function FileHeader({ relPath, matchCount, collapsed, onToggle }: FileHeaderProp
       <span
         className={cn(
           'ml-auto shrink-0 rounded-full bg-sidebar-item-active',
-          'px-1.5 py-px text-11 font-semibold text-foreground',
+          'px-1.5 py-px text-11 font-semibold text-sidebar-item-active-foreground',
         )}
       >
         {matchCount}

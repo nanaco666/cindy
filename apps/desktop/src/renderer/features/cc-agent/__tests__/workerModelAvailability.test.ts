@@ -1,0 +1,108 @@
+import type { ProviderView } from '@lizi/model-providers';
+import { describe, expect, it } from 'vitest';
+
+import type { AgentCapabilities, ModelDescriptor } from '@/hooks/useAgentCapabilities';
+import { selectWorkerModels } from '../workerModelAvailability';
+
+const model = (id: string): ModelDescriptor => ({
+  id,
+  displayName: id,
+  contextWindow: 200_000,
+  efforts: ['high'],
+  defaultEffort: 'high',
+});
+
+const capabilities = (models: ModelDescriptor[]): AgentCapabilities =>
+  ({ availableModels: models }) as AgentCapabilities;
+
+const provider = (
+  id: string,
+  connected: boolean,
+  agent: 'claude-code' | 'codex',
+  models: ModelDescriptor[],
+): ProviderView =>
+  ({
+    id,
+    name: id,
+    connected,
+    agents: [agent],
+    models: {
+      [agent]: models.map((entry) => ({ ...entry, name: entry.displayName })),
+    },
+  }) as unknown as ProviderView;
+
+describe('selectWorkerModels', () => {
+  const standard = model('gpt-5.5');
+  const budget = model('codex/gpt-5.5');
+  const caps = capabilities([standard, budget]);
+
+  it('preserves local budget-model gating by the local XD provider', () => {
+    expect(
+      selectWorkerModels({
+        agent: 'codex',
+        capabilities: caps,
+        providers: [provider('openai', true, 'codex', [standard])],
+        providersLoading: false,
+        providersError: null,
+      }).map((entry) => entry.id),
+    ).toEqual(['gpt-5.5']);
+
+    expect(
+      selectWorkerModels({
+        agent: 'codex',
+        capabilities: caps,
+        providers: [provider('xd', true, 'codex', [budget])],
+        providersLoading: false,
+        providersError: null,
+      }).map((entry) => entry.id),
+    ).toEqual(['gpt-5.5', 'codex/gpt-5.5']);
+  });
+
+  it('uses each controlled device provider snapshot without leaking models across devices', () => {
+    const deviceA = selectWorkerModels({
+      agent: 'codex',
+      capabilities: caps,
+      deviceId: 'device-a',
+      providers: [provider('openai', true, 'codex', [standard])],
+      providersLoading: false,
+      providersError: null,
+    });
+    const deviceB = selectWorkerModels({
+      agent: 'codex',
+      capabilities: caps,
+      deviceId: 'device-b',
+      providers: [provider('xd', true, 'codex', [budget])],
+      providersLoading: false,
+      providersError: null,
+    });
+
+    expect(deviceA.map((entry) => entry.id)).toEqual(['gpt-5.5']);
+    expect(deviceB.map((entry) => entry.id)).toEqual(['codex/gpt-5.5']);
+  });
+
+  it('falls back to controlled-device capabilities for old peers without provider:list', () => {
+    expect(
+      selectWorkerModels({
+        agent: 'codex',
+        capabilities: caps,
+        deviceId: 'old-device',
+        providers: [],
+        providersLoading: false,
+        providersError: 'unknown channel',
+      }),
+    ).toEqual([standard, budget]);
+  });
+
+  it('does not submit a stale selection while a new device provider snapshot is loading', () => {
+    expect(
+      selectWorkerModels({
+        agent: 'codex',
+        capabilities: caps,
+        deviceId: 'device-b',
+        providers: [],
+        providersLoading: true,
+        providersError: null,
+      }),
+    ).toEqual([]);
+  });
+});

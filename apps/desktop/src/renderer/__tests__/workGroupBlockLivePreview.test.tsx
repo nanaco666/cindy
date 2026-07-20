@@ -7,7 +7,11 @@ import { createElement } from 'react';
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, options?: Record<string, unknown>) =>
-      options?.duration ? `${key}:${String(options.duration)}` : key,
+      options?.duration
+        ? `${key}:${String(options.duration)}`
+        : options?.count
+          ? `${key}:${String(options.count)}`
+          : key,
   }),
 }));
 
@@ -19,6 +23,7 @@ vi.mock('@/components/chat/AgentActionRow', () => ({
     showRawCommand?: boolean;
     status?: 'running' | 'done';
     toolResult?: string;
+    intentOverride?: { action: string; target?: string };
   }) => {
     const toolInput = props.message.toolInput as { command?: unknown } | undefined;
     const command = typeof toolInput?.command === 'string'
@@ -30,6 +35,8 @@ vi.mock('@/components/chat/AgentActionRow', () => ({
         'data-testid': 'direct-tool',
         'data-show-raw': String(Boolean(props.showRawCommand)),
         'data-result': props.toolResult,
+        'data-intent': props.intentOverride?.action,
+        'data-target': props.intentOverride?.target,
         'aria-label': `chat.agentActionRow.status.${props.status ?? 'done'}`,
       },
       command,
@@ -170,6 +177,41 @@ describe('WorkGroupBlock — running latest-five preview', () => {
     expect(screen.queryByText('inspecting')).toBeNull();
     expect(screen.getAllByText('inspecting the renderer')).toHaveLength(1);
     expect(document.querySelectorAll('[data-live-work-activity="thinking"]')).toHaveLength(1);
+  });
+
+  it('shows complete commandActions as separate rows and summarizes pure exploration', () => {
+    const command = mkTool('exec-1', 'cat src/a.ts && rg TODO src');
+    command.toolInput = {
+      command: 'cat src/a.ts && rg TODO src',
+      cwd: '/repo',
+      commandActions: [
+        { type: 'read', command: 'cat src/a.ts', name: 'a.ts', path: 'src/a.ts' },
+        { type: 'search', command: 'rg TODO src', query: 'TODO', path: 'src' },
+      ],
+    };
+
+    const { rerender } = render(
+      createElement(WorkGroupBlock, {
+        blockId: 'work:exec-1',
+        isStreaming: true,
+        childItems: [tools('seg-1', [command])],
+      }),
+    );
+
+    const rows = screen.getAllByTestId('direct-tool');
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.getAttribute('data-intent'))).toEqual(['read', 'search']);
+
+    rerender(
+      createElement(WorkGroupBlock, {
+        blockId: 'work:exec-1',
+        isStreaming: false,
+        durationMs: 4_000,
+        childItems: [tools('seg-1', [command])],
+      }),
+    );
+    expect(screen.getByText(/chat\.workGroup\.exploration\.read:1/)).toBeTruthy();
+    expect(screen.getByText(/chat\.workGroup\.exploration\.search:1/)).toBeTruthy();
   });
 
   it('expands running actions directly and keeps the same detail after completion', () => {

@@ -673,6 +673,9 @@ export function scheduleRunToCamel(row: ScheduleRunRow): ScheduleRun {
     finishedAt: row.finishedAt ?? undefined,
     status: row.status as RunStatus,
     errorMsg: row.errorMsg ?? undefined,
+    costUsd: row.costUsd,
+    estimatedValueUsd: row.estimatedValueUsd,
+    costAttribution: row.costAttribution,
     resultText: row.resultText ?? undefined,
     preRunHookResult: parsePreRunHookResult(row.preRunHookResult),
     readAt: row.readAt ?? undefined,
@@ -690,6 +693,10 @@ export function scheduleRunCreateToRow(r: ScheduleRun): ScheduleRunInsert {
     finishedAt: r.finishedAt ?? null,
     status: r.status,
     errorMsg: r.errorMsg ?? null,
+    costUsd: r.costUsd ?? 0,
+    estimatedValueUsd: r.estimatedValueUsd ?? 0,
+    // 新写入的 run 从创建起就带 runId origin；迁移前旧行由列默认值标为 legacy。
+    costAttribution: r.costAttribution ?? 'exact',
     resultText: r.resultText ?? null,
     preRunHookResult: r.preRunHookResult ? JSON.stringify(r.preRunHookResult) : null,
     readAt: r.readAt ?? null,
@@ -715,6 +722,13 @@ export function scheduleRunPatchToRow(
   if (hasKey(patch, 'status'))
     out.status = patch.status as ScheduleRunInsert['status'];
   if (hasKey(patch, 'errorMsg')) out.errorMsg = patch.errorMsg ?? null;
+  if (hasKey(patch, 'costUsd')) out.costUsd = patch.costUsd ?? 0;
+  if (hasKey(patch, 'estimatedValueUsd')) {
+    out.estimatedValueUsd = patch.estimatedValueUsd ?? 0;
+  }
+  if (hasKey(patch, 'costAttribution')) {
+    out.costAttribution = patch.costAttribution ?? 'legacy';
+  }
   if (hasKey(patch, 'resultText')) out.resultText = patch.resultText ?? null;
   if (hasKey(patch, 'preRunHookResult')) {
     out.preRunHookResult = patch.preRunHookResult

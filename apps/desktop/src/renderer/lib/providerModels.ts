@@ -12,6 +12,7 @@
  */
 
 import {
+  providerOffersModel,
   providersForAgent,
   sessionModelSupportsFastMode,
   type AgentKind,
@@ -151,4 +152,29 @@ export function selectVisibleModels(params: {
     merged.push(m);
   }
   return merged;
+}
+
+/**
+ * Resolve one row's agent using the same first-wins order as `selectVisibleModels`.
+ * This is deliberately row-scoped: a merged picker must not classify every row from the currently
+ * selected model's agent when deciding whether the controlled device can route that row.
+ */
+export function resolveVisibleModelAgentKind(params: {
+  modelId: string;
+  agentKind: AgentKind | null;
+  ccModels: ModelDescriptor[];
+  codexModels: ModelDescriptor[];
+  providers: ProviderView[];
+}): AgentKind | null {
+  const { modelId, agentKind, ccModels, codexModels, providers } = params;
+  if (agentKind) return agentKind;
+  if (ccModels.some((model) => model.id === modelId)) return 'claude-code';
+  if (codexModels.some((model) => model.id === modelId)) return 'codex';
+  if (providers.some((provider) => providerOffersModel(provider, modelId, 'claude-code'))) {
+    return 'claude-code';
+  }
+  if (providers.some((provider) => providerOffersModel(provider, modelId, 'codex'))) {
+    return 'codex';
+  }
+  return null;
 }
