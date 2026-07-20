@@ -23,8 +23,14 @@
 //   看到的是设计好的过渡而非生硬接缝。纯白仅用于画布边缘与 OS chrome 融合,
 //   属 DESIGN.md 精神下的系统衔接豁免,不用于内容区。
 //
+// 无文字设计(2026-07-20 v3,Lizi 拍板):背景不放任何位图文字——macOS 26 Finder
+// 背景恒为 1x 绘制,位图文字在 Retina 上必糊(实测无解,社区亦无解);去文字后
+// 窗口内所有可见文字(图标标签、窗口标题)均为 Finder 矢量渲染,零模糊。
+// 品牌感由 app 图标本体 + 卷名 "Cindy Installer" 承载。
+//
 // 布局坐标与 scripts/ci/lib.mjs 的 createMacDMG settings 联动:窗口 660×420,
-// 图标行中心 y=250(app x=175 / Applications x=485),箭头画在两图标之间。改动要两边同步。
+// 图标行中心 y=185(app x=175 / Applications x=485,含标签整体视觉居中),
+// 箭头画在两图标之间。改动要两边同步。
 import AppKit
 
 let W: CGFloat = 900, H: CGFloat = 570   // 画布(宽必须 <990,见上方渲染上限)
@@ -60,22 +66,8 @@ NSGradient(
     ending: NSColor(calibratedWhite: 1, alpha: 1)
 )!.draw(in: NSRect(x: 680, y: 0, width: W - 680, height: H), angle: 0)
 
-// 文字在设计区(660 宽)内水平居中;topY 从画布顶部量(画布顶 = 窗口顶)
-func drawCentered(_ text: String, font: NSFont, color: NSColor, topY: CGFloat) {
-    let s = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: color])
-    let size = s.size()
-    s.draw(at: NSPoint(x: (DW - size.width) / 2, y: H - topY - size.height))
-}
-
-drawCentered("Install Cindy",
-             font: .systemFont(ofSize: 27, weight: .bold),
-             color: NSColor(calibratedWhite: 0.11, alpha: 1), topY: 62)
-drawCentered("Drag Cindy to the Applications folder to complete the installation",
-             font: .systemFont(ofSize: 13, weight: .regular),
-             color: NSColor(calibratedWhite: 0.56, alpha: 1), topY: 104)
-
-// 拖拽引导箭头:图标行中心高度(窗口内 y=250 → 画布底原点坐标 H-250)
-let ay = H - 250
+// 拖拽引导箭头:图标行中心高度(窗口内 y=185 → 画布底原点坐标 H-185)
+let ay = H - 185
 let arrow = NSBezierPath()
 arrow.lineWidth = 5.5
 arrow.lineCapStyle = .round
