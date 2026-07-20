@@ -429,13 +429,21 @@ export function ImageLightbox({
   /**
    * 放弃标注:恢复到打开时的笔迹(编辑模式=上次保存的;发送模式=空)并退出
    * 标注模式。X 按钮与标注中的 Esc 都走这里。
+   *
+   * autoAnnotate 宿主(Mermaid/表格/公式的「标注」入口)整个 lightbox 就是
+   * 为标注而开的临时光栅化图,放弃标注后留在图片界面没有意义——直接关闭
+   * 整个 lightbox 回到原界面。
    */
   const discardAnnotation = useCallback(() => {
+    if (autoAnnotate) {
+      handleClose();
+      return;
+    }
     setStrokes([...baselineStrokesRef.current]);
     setDraftStroke(null);
     setIsDrawing(false);
     setIsAnnotating(false);
-  }, []);
+  }, [autoAnnotate, handleClose]);
 
   const applyViewport = useCallback((next: LightboxViewport) => {
     viewportRef.current = next;
