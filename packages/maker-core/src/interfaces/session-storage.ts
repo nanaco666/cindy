@@ -42,5 +42,7 @@ export interface SessionStorage {
   get(id: string): Promise<SessionMeta | null>;
   list(): Promise<SessionMeta[]>;
   update(id: string, patch: Partial<SessionMeta>): Promise<SessionMeta>;
+  /** 仅当当前 vendor id 仍等于 expectedSdkSessionId 时原子清空，避免旧失败覆盖并发新值。 */
+  compareAndClearSdkSessionId(id: string, expectedSdkSessionId: string): Promise<boolean>;
   delete(id: string): Promise<void>;
 }
