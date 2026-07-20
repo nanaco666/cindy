@@ -15,30 +15,23 @@ function git(repoRoot, args, { allowFailure = false } = {}) {
   return result;
 }
 
-export function resolveRemoteDefaultRef(repoRoot) {
-  const symbolic = git(
-    repoRoot,
-    ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'],
-    { allowFailure: true },
-  );
-  if (symbolic.status === 0 && symbolic.stdout.trim()) return symbolic.stdout.trim();
-  for (const candidate of ['origin/main', 'origin/master']) {
-    if (
-      git(repoRoot, ['rev-parse', '--verify', '--quiet', `${candidate}^{commit}`], {
-        allowFailure: true,
-      }).status === 0
-    ) {
-      return candidate;
-    }
+export function resolveMigrationBaseRef(repoRoot) {
+  const baseRef = 'origin/main';
+  if (
+    git(repoRoot, ['rev-parse', '--verify', '--quiet', `${baseRef}^{commit}`], {
+      allowFailure: true,
+    }).status === 0
+  ) {
+    return baseRef;
   }
   throw new Error(
-    'cannot resolve origin/HEAD, origin/main, or origin/master; fetch origin before starting shared desktop dev',
+    'cannot resolve origin/main; fetch origin before starting shared desktop dev',
   );
 }
 
 /** Find committed branch-only and uncommitted migration artifacts. */
 export function findUnmergedMigrationArtifacts(repoRoot) {
-  const baseRef = resolveRemoteDefaultRef(repoRoot);
+  const baseRef = resolveMigrationBaseRef(repoRoot);
   const committed = git(repoRoot, [
     'diff',
     '--name-only',

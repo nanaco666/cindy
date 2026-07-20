@@ -96,3 +96,32 @@ test('migration becomes shared-safe only after it is canonical on origin/main', 
     fixture.cleanup();
   }
 });
+
+test('stale origin/HEAD cannot replace origin/main as the migration baseline', () => {
+  const fixture = createFixture();
+  try {
+    const migrationPath = path.join(fixture.drizzleDir, '0001_release_only.sql');
+    fs.writeFileSync(migrationPath, 'SELECT 1;\n');
+    git(fixture.repo, 'add', '.');
+    git(fixture.repo, 'commit', '-m', 'release-only migration');
+    git(fixture.repo, 'update-ref', 'refs/remotes/origin/release', 'HEAD');
+    git(
+      fixture.repo,
+      'symbolic-ref',
+      'refs/remotes/origin/HEAD',
+      'refs/remotes/origin/release',
+    );
+
+    assert.deepEqual(findUnmergedMigrationArtifacts(fixture.repo), {
+      baseRef: 'origin/main',
+      committed: ['apps/desktop/drizzle/0001_release_only.sql'],
+      workingTree: [],
+    });
+    assert.throws(
+      () => assertSharedDevMigrationPolicy(fixture.repo, []),
+      /committed: apps\/desktop\/drizzle\/0001_release_only\.sql/,
+    );
+  } finally {
+    fixture.cleanup();
+  }
+});
