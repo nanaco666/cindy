@@ -48,6 +48,32 @@ describe('buildUnionRows', () => {
   });
 });
 
+describe('buildUnionRows — 桥接命名空间归一', () => {
+  it('routing.modelPrefixes 声明的前缀剥掉后合并为一行,byAgent 保留各端真实 id', () => {
+    // OpenAI 形态:codex 原生 gpt-5.5,cc 经 responses-bridge 投影为 chatgpt/gpt-5.5。
+    const bridged = {
+      id: 'openai',
+      name: 'OpenAI',
+      source: 'builtin',
+      agents: ['claude-code', 'codex'],
+      auth: { method: 'oauth' },
+      routing: { 'claude-code': { upstream: 'https://x', modelPrefixes: ['chatgpt/'] } },
+      models: {
+        'claude-code': [model('chatgpt/gpt-5.5')],
+        codex: [model('gpt-5.5', 272_000)],
+      },
+      connected: true,
+    } as unknown as ProviderView;
+    const rows = buildUnionRows(bridged);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe('gpt-5.5');
+    expect(rows[0].avail).toEqual(['claude-code', 'codex']);
+    // 写开关必须用各端真实 id:cc 端仍是带前缀的目录 id。
+    expect(rows[0].byAgent['claude-code']?.id).toBe('chatgpt/gpt-5.5');
+    expect(rows[0].byAgent.codex?.id).toBe('gpt-5.5');
+  });
+});
+
 describe('isRowDiverged', () => {
   it('默认(无 override)不分歧;单端隐藏后分歧;两端同值不分歧', () => {
     const rows = buildUnionRows(provider);

@@ -50,8 +50,9 @@ function formatContextWindow(tokens: number): string {
   return String(tokens);
 }
 
-/** 并集行:同 id 模型跨 agent 合并;byAgent 保留各 agent 的目录条目(元数据可能不同)。 */
+/** 并集行:同一模型跨 agent 合并;byAgent 保留各 agent 的目录条目(id / 元数据可能不同)。 */
 export interface UnionModelRow {
+  /** 规范化 id(剥掉桥接命名空间前缀后的 canonical key;仅用于合并与搜索,写开关用 byAgent 的真实 id)。 */
   id: string;
   name: string;
   byAgent: Partial<Record<AgentKind, CatalogModel>>;
@@ -59,19 +60,36 @@ export interface UnionModelRow {
   avail: AgentKind[];
 }
 
+/**
+ * 规范化模型 id:剥掉该 agent 路由声明的桥接命名空间前缀(数据驱动,来自
+ * routing[agent].modelPrefixes,如 OpenAI cc 桥 = 'chatgpt/')。同一模型经桥投影
+ * 到另一 agent 时 id 带前缀(chatgpt/gpt-5.5 vs gpt-5.5),必须归一后合并,
+ * 否则并集出现两行、各自被误标单端。
+ */
+function canonicalModelKey(provider: ProviderView, agent: AgentKind, id: string): string {
+  for (const prefix of provider.routing[agent]?.modelPrefixes ?? []) {
+    if (id.startsWith(prefix)) return id.slice(prefix.length);
+  }
+  return id;
+}
+
 /** 构建并集(导出供单测):行序 = 第一个 agent 的目录序,后续 agent 独占模型追加其后。 */
 export function buildUnionRows(provider: ProviderView): UnionModelRow[] {
   const rows: UnionModelRow[] = [];
-  const byId = new Map<string, UnionModelRow>();
+  const byKey = new Map<string, UnionModelRow>();
   for (const agent of provider.agents) {
     for (const m of provider.models[agent] ?? []) {
-      const existing = byId.get(m.id);
+      const key = canonicalModelKey(provider, agent, m.id);
+      const existing = byKey.get(key);
       if (existing) {
-        existing.byAgent[agent] = m;
-        existing.avail.push(agent);
+        // 同 agent 内撞 canonical key(理论不该发生)不覆盖首见条目。
+        if (!existing.byAgent[agent]) {
+          existing.byAgent[agent] = m;
+          existing.avail.push(agent);
+        }
       } else {
-        const row: UnionModelRow = { id: m.id, name: m.name, byAgent: { [agent]: m }, avail: [agent] };
-        byId.set(m.id, row);
+        const row: UnionModelRow = { id: key, name: m.name, byAgent: { [agent]: m }, avail: [agent] };
+        byKey.set(key, row);
         rows.push(row);
       }
     }
@@ -157,12 +175,14 @@ export function UnifiedModelList({
   }, [unionRows, provider.id, visibilityVersion]);
   const allOn = counts.total > 0 && counts.on === counts.total;
 
-  /** 单开关:一次写该行全部可用 agent(分歧行拨动即归一)。 */
+  /** 单开关:一次写该行全部可用 agent(分歧行拨动即归一)。写入用各 agent 的**真实模型 id**
+   *  (桥接投影行两端 id 不同:chatgpt/gpt-5.5 vs gpt-5.5),不能用规范化后的 row.id。 */
   const toggleRow = useCallback(
     (row: UnionModelRow) => {
       const next = !rowAnyEnabled(provider.id, row);
       for (const a of row.avail) {
-        setModelVisibility(a, provider.id, row.id, next);
+        const m = row.byAgent[a];
+        if (m) setModelVisibility(a, provider.id, m.id, next);
       }
     },
     [provider.id],
@@ -349,7 +369,7 @@ export function UnifiedModelList({
                               {m ? (
                                 <Switch
                                   checked={isModelEnabled(a, provider.id, m)}
-                                  onCheckedChange={(v) => setModelVisibility(a, provider.id, row.id, v)}
+                                  onCheckedChange={(v) => setModelVisibility(a, provider.id, m.id, v)}
                                   aria-label={`${rep.name} · ${AGENT_LABEL[a]}`}
                                 />
                               ) : (

@@ -979,6 +979,10 @@ export function ProvidersSection() {
   const { providers, loading, refetch } = useProviders();
   // 订阅模型显示开关 version:任一开关变更后整页重算(左栏计数 + 详情列表)。
   useModelVisibilityVersion();
+  // OpenAI 的 reconnect-required 是 useCodexAuth 独有状态(目录 connected 此时为 false):
+  // 该状态下 OpenAI 行必须留在左栏,否则「重新连接」入口不可达,用户被迫从向导重发现。
+  const codexAuth = useCodexAuth();
+  const openaiReconnectRequired = codexAuth.state.kind === 'reconnect-required';
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // 向导:null = 关;{ entry } = 打开(entry 指定直达的供应商,来自检测建议)。
@@ -1019,7 +1023,8 @@ export function ProvidersSection() {
     for (const p of providers) {
       if (p.id === 'xd') continue;
       if (p.source === 'builtin') {
-        if (p.connected) rows.push(p);
+        // reconnect-required 视同占行:凭证失效 ≠ 用户断开,重连入口必须保留。
+        if (p.connected || (p.id === 'openai' && openaiReconnectRequired)) rows.push(p);
         continue;
       }
       if (p.source === 'user' && (providerHasModels(p) || (p.auth.method === 'oauth' && !!p.auth.oauth))) {
@@ -1027,20 +1032,20 @@ export function ProvidersSection() {
       }
     }
     return rows;
-  }, [providers, byId]);
+  }, [providers, byId, openaiReconnectRequired]);
 
-  // 检测建议:CLI 已安装 + 对应渠道存在于目录 + 未连接。
-  const suggestions = useMemo(
-    () =>
-      detections
-        .filter((d) => d.installed)
-        .map((d) => ({ detection: d, provider: byId.get(d.providerId) }))
-        .filter(
-          (s): s is { detection: LocalCliDetection; provider: ProviderView } =>
-            !!s.provider && !s.provider.connected,
-        ),
-    [detections, byId],
-  );
+  // 检测建议:CLI 已安装 + 对应渠道存在于目录 + 未连接,且**未以任何形态占行**
+  // (OpenAI reconnect-required 已在主列表时,不再重复出建议行)。
+  const suggestions = useMemo(() => {
+    const listedIds = new Set(listProviders.map((p) => p.id));
+    return detections
+      .filter((d) => d.installed && !listedIds.has(d.providerId))
+      .map((d) => ({ detection: d, provider: byId.get(d.providerId) }))
+      .filter(
+        (s): s is { detection: LocalCliDetection; provider: ProviderView } =>
+          !!s.provider && !s.provider.connected,
+      );
+  }, [detections, byId, listProviders]);
 
   // 选中项:默认第一行;所选供应商被删除/消失时回退第一行(不留空详情)。
   const effectiveSelected = useMemo(() => {
