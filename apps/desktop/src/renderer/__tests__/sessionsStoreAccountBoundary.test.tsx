@@ -98,4 +98,26 @@ describe('sessionsStore account boundaries', () => {
     expect(sessionsStore.getByFilter('all')?.map(({ id }) => id)).toEqual(['keep-all']);
     expect(mocks.list).not.toHaveBeenCalled();
   });
+
+  it('does not let a request started before delete restore the deleted session', async () => {
+    const staleRequest = deferred<Session[]>();
+    const replacementRequest = deferred<Session[]>();
+    mocks.list
+      .mockImplementationOnce(() => staleRequest.promise)
+      .mockImplementationOnce(() => replacementRequest.promise);
+
+    const staleLoad = sessionsStore.ensureByFilter('all');
+    act(() => sessionsStore.patchLocal('deleted', { status: 'deleted' }));
+
+    expect(mocks.list).toHaveBeenCalledTimes(2);
+    replacementRequest.resolve([session('keep')]);
+    await waitFor(() => {
+      expect(sessionsStore.getByFilter('all')?.map(({ id }) => id)).toEqual(['keep']);
+    });
+
+    staleRequest.resolve([session('deleted'), session('stale')]);
+    await staleLoad;
+
+    expect(sessionsStore.getByFilter('all')?.map(({ id }) => id)).toEqual(['keep']);
+  });
 });

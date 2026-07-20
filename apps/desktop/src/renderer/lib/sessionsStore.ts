@@ -155,6 +155,12 @@ export const sessionsStore = {
   patchLocal(id: string, patch: Partial<Session>): void {
     if (!id || !patch) return;
     if (patch.status === 'deleted') {
+      // 删除前发出的请求可能仍会返回包含该 session 的旧快照。先解除这些
+      // request 对桶的认领，再为对应桶发起替代请求，避免旧响应重新写回。
+      const toRefetch = Array.from(inflight.keys());
+      for (const filter of toRefetch) {
+        inflight.delete(filter);
+      }
       let removed = false;
       for (const [filter, list] of cache) {
         if (!list.some((session) => session.id === id)) continue;
@@ -165,6 +171,11 @@ export const sessionsStore = {
         removed = true;
       }
       if (removed) notify();
+      for (const filter of toRefetch) {
+        void this.ensureByFilter(filter).catch(() => {
+          /* 静默：后续主动操作或 refresh 会再次兜底。 */
+        });
+      }
       return;
     }
     let touched = false;
