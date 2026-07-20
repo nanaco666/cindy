@@ -911,6 +911,73 @@ export async function readPriorUserRoundCost(
  * the persisted field and skip this path.
  */
 async function hydrateLegacyUserTurnCosts(history: Message[]): Promise<Message[]> {
+  const legacyClientIds = new Set(
+    history.flatMap((message) => {
+      const agentMeta = message.agentMeta;
+      return message.role === 'assistant' &&
+        agentMeta &&
+        typeof agentMeta === 'object' &&
+        !Array.isArray(agentMeta) &&
+        typeof agentMeta.turnCostUsd === 'number' &&
+        Number.isFinite(agentMeta.turnCostUsd) &&
+        agentMeta.turnCostUsd > 0 &&
+        !(typeof agentMeta.userTurnCostUsd === 'number' && agentMeta.userTurnCostUsd > 0)
+        ? [message.clientId]
+        : [];
+    }),
+  );
+  if (legacyClientIds.size === 0) return history;
+
+  const sessionId = history[0]?.sessionId;
+  if (!sessionId) return history;
+  const db = getDbClient().drizzle;
+  const [session] = await db
+    .select({ clearedAt: sessions.clearedAt })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+  const visibleAfterClear = session?.clearedAt == null ? [] : [gt(messages.createdAt, session.clearedAt)];
+  const rows = await db
+    .select({
+      clientId: messages.clientId,
+      role: messages.role,
+      agentMeta: messages.agentMeta,
+    })
+    .from(messages)
+    .where(and(
+      eq(messages.sessionId, sessionId),
+      isNull(messages.rewindAt),
+      ...visibleAfterClear,
+    ))
+    .orderBy(asc(messages.createdAt), asc(messageRowid));
+
+  const totalsByClientId = new Map<string, PriorUserRoundCost>();
+  let hasRealUserBoundary = false;
+  let costUsd = 0;
+  let hasEstimatedValue = false;
+  for (const row of rows) {
+    if (row.role === 'user' && !isAutoResumeUserMessage(row.agentMeta)) {
+      hasRealUserBoundary = true;
+      costUsd = 0;
+      hasEstimatedValue = false;
+      continue;
+    }
+    if (row.role !== 'assistant') continue;
+    const meta = parseAgentMetaRecord(row.agentMeta);
+    const segmentCost = meta?.turnCostUsd;
+    if (!hasRealUserBoundary ||
+      typeof segmentCost !== 'number' ||
+      !Number.isFinite(segmentCost) ||
+      segmentCost <= 0) {
+      continue;
+    }
+    costUsd += segmentCost;
+    hasEstimatedValue ||= meta?.turnCostIsEstimate === true;
+    if (legacyClientIds.has(row.clientId)) {
+      totalsByClientId.set(row.clientId, { costUsd, hasEstimatedValue });
+    }
+  }
+
   let hydrated: Message[] | null = null;
   for (let index = 0; index < history.length; index++) {
     const message = history[index];
@@ -927,14 +994,15 @@ async function hydrateLegacyUserTurnCosts(history: Message[]): Promise<Message[]
     ) {
       continue;
     }
-    const prior = await readPriorUserRoundCost(message.sessionId, message.clientId);
+    const total = totalsByClientId.get(message.clientId);
+    if (!total) continue;
     hydrated ??= history.slice();
     hydrated[index] = {
       ...message,
       agentMeta: {
         ...agentMeta,
-        userTurnCostUsd: prior.costUsd + agentMeta.turnCostUsd,
-        userTurnCostIsEstimate: prior.hasEstimatedValue || agentMeta.turnCostIsEstimate === true,
+        userTurnCostUsd: total.costUsd,
+        userTurnCostIsEstimate: total.hasEstimatedValue,
       },
     };
   }

@@ -213,6 +213,7 @@ describe('local-db:messages:list cursor', () => {
     });
 
     registerMessageIpc();
+    const prepareSpy = vi.spyOn(sqlite, 'prepare');
     const listHandler = h.handlers.get('local-db:messages:list');
     const rows = await listHandler?.({}, 's1', { limit: 10 }) as Array<{
       id: string;
@@ -228,6 +229,9 @@ describe('local-db:messages:list cursor', () => {
     expect(JSON.parse(stored.agent_meta)).toEqual({
       turnCostUsd: 0.777042,
     });
+    // list/session + one visibility scan (plus the direct storage assertion);
+    // never one SQLite query set per SDK segment.
+    expect(prepareSpy).toHaveBeenCalledTimes(5);
   });
 });
 

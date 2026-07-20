@@ -231,6 +231,41 @@ describe('makerChatStore per-turn 费用', () => {
     expect(noCost?.turnCostUsd).toBeUndefined();
   });
 
+  it('device-link 旧历史:缺少持久化累计值时按完整用户轮投影', async () => {
+    vi.mocked(messageService.list).mockResolvedValueOnce([
+      serverMessage({
+        clientId: 'user',
+        role: 'user',
+        createdAt: '2026-06-12T00:00:00.000Z',
+      }),
+      serverMessage({
+        clientId: 'segment-1',
+        createdAt: '2026-06-12T00:00:01.000Z',
+        agentMeta: { turnCostUsd: 14.8 },
+      }),
+      serverMessage({
+        clientId: 'auto-resume',
+        role: 'user',
+        createdAt: '2026-06-12T00:00:02.000Z',
+        agentMeta: { autoResume: true },
+      }),
+      serverMessage({
+        clientId: 'final',
+        createdAt: '2026-06-12T00:00:03.000Z',
+        agentMeta: { turnCostUsd: 0.7, turnCostIsEstimate: true },
+      }),
+    ]);
+    makerChatStore.ensureInitialMessages(SID);
+    await flush();
+    await flush();
+
+    const messages = makerChatStore.getSnapshot(SID).messages;
+    expect(messages.find((m) => m.clientId === 'segment-1')?.userTurnCostUsd).toBe(14.8);
+    const final = messages.find((m) => m.clientId === 'final');
+    expect(final?.userTurnCostUsd).toBe(15.5);
+    expect(final?.userTurnCostIsEstimate).toBe(true);
+  });
+
   it('实时推送:按 clientId 同时补原始分段与用户轮累计;未知 clientId → state 引用不变', async () => {
     vi.mocked(messageService.list).mockResolvedValueOnce([
       serverMessage({ clientId: 'a-live' }),

@@ -6818,8 +6818,9 @@ function mapServerMessages(serverMsgs: Message[]): ChatMessage[] {
     }
     return true;
   });
-  const mapped = filtered
-    .sort(compareMessageTimeline)
+  const ordered = filtered.sort(compareMessageTimeline);
+  const legacyUserTurnCosts = projectLegacyUserTurnCosts(ordered);
+  const mapped = ordered
     .map((m) => {
       if (m.role === 'tool_use' && m.content && typeof m.content === 'object') {
         const c = m.content as Record<string, unknown>;
@@ -7108,15 +7109,53 @@ function mapServerMessages(serverMsgs: Message[]): ChatMessage[] {
     const rowid = rowidById.get(cm.clientId);
     const remoteContentTruncated = remoteContentTruncatedById.get(cm.clientId) === true;
     const remoteRowsTrimmed = remoteRowsTrimmedById.get(cm.clientId) === true;
-    if (!iso && rowid === undefined && !remoteContentTruncated && !remoteRowsTrimmed) return cm;
+    const legacyUserTurnCost = legacyUserTurnCosts.get(cm.clientId);
+    if (!iso && rowid === undefined && !remoteContentTruncated && !remoteRowsTrimmed && !legacyUserTurnCost) {
+      return cm;
+    }
     return {
       ...cm,
+      ...(legacyUserTurnCost ?? {}),
       ...(iso ? { createdAt: iso } : {}),
       ...(rowid !== undefined ? { rowid } : {}),
       ...(remoteContentTruncated ? { remoteContentTruncated: true } : {}),
       ...(remoteRowsTrimmed ? { remoteRowsTrimmed: true } : {}),
     };
   });
+}
+
+/**
+ * Device-link can load history from a peer that predates persisted
+ * userTurnCostUsd. Rebuild only those missing display totals from the ordered
+ * rows returned by that peer; raw per-segment values remain untouched.
+ */
+function projectLegacyUserTurnCosts(serverMsgs: Message[]): Map<string, Pick<ChatMessage, 'userTurnCostUsd' | 'userTurnCostIsEstimate'>> {
+  const projected = new Map<string, Pick<ChatMessage, 'userTurnCostUsd' | 'userTurnCostIsEstimate'>>();
+  let hasRealUserBoundary = false;
+  let costUsd = 0;
+  let hasEstimatedValue = false;
+  for (const message of serverMsgs) {
+    if (message.role === 'user' && message.agentMeta?.autoResume !== true) {
+      hasRealUserBoundary = true;
+      costUsd = 0;
+      hasEstimatedValue = false;
+      continue;
+    }
+    if (message.role !== 'assistant' || !hasRealUserBoundary) continue;
+    const meta = message.agentMeta;
+    if (typeof meta?.turnCostUsd !== 'number' || !Number.isFinite(meta.turnCostUsd) || meta.turnCostUsd <= 0) {
+      continue;
+    }
+    costUsd += meta.turnCostUsd;
+    hasEstimatedValue ||= meta.turnCostIsEstimate === true;
+    if (typeof meta.userTurnCostUsd !== 'number' || !(meta.userTurnCostUsd > 0)) {
+      projected.set(message.clientId, {
+        userTurnCostUsd: costUsd,
+        userTurnCostIsEstimate: hasEstimatedValue,
+      });
+    }
+  }
+  return projected;
 }
 
 function formatToolUseSummary(toolName: string, input: unknown): string {

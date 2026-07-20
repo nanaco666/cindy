@@ -3563,7 +3563,8 @@
       "turnCost": "이번 턴 비용",
       "turnCostEstimated": "이번 턴 토큰 가치(API 단가 환산)",
       "turnCostEstimatedValue": "가치 {{cost}}",
-      "userTurnCostTitle": "이번 사용자 턴 누계(토큰 세부 정보는 마지막 세그먼트)"
+      "userTurnCostTotalLine": "이번 사용자 턴 합계: {{cost}}",
+      "userTurnCostDetailsTitle": "마지막 SDK 세그먼트"
     },
     "errorBanner": {
       "retryTitle": "마지막 메시지 다시 보내기",

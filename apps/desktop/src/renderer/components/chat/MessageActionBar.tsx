@@ -283,15 +283,20 @@ export function MessageActionBar({
   const turnCostTooltipNode =
     displayedCostUsd != null && displayedCostUsd > 0 && turnUsageDetails ? (
       <span className="whitespace-pre-line">
+        {isUserTurnTotal && (
+          <>{t('chat.messageActionBar.userTurnCostTotalLine', {
+            cost: formatTurnCostUsd(displayedCostUsd),
+          })}\n</>
+        )}
         {buildTurnUsageTooltipLines({
           details: turnUsageDetails,
-        t,
-        costUsd: displayedCostUsd,
-        isEstimate: displayedCostIsEstimate,
-        // The cost is user-round cumulative, while SDK token detail remains
-        // scoped to this final segment until we persist cumulative usage too.
-        ...(isUserTurnTotal ? { title: t('chat.messageActionBar.userTurnCostTitle') } : {}),
-      }).join('\n')}
+          t,
+          // Token / model detail is currently scoped to this final SDK segment;
+          // never pair it with the user-turn cumulative total above.
+          costUsd: isUserTurnTotal ? turnCostUsd : displayedCostUsd,
+          isEstimate: isUserTurnTotal ? turnCostIsEstimate : displayedCostIsEstimate,
+          ...(isUserTurnTotal ? { title: t('chat.messageActionBar.userTurnCostDetailsTitle') } : {}),
+        }).join('\n')}
       </span>
     ) : (
       t(

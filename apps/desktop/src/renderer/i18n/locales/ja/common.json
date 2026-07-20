@@ -3563,7 +3563,8 @@
       "turnCost": "このターンの消費",
       "turnCostEstimated": "このターンの token 価値(API 単価換算)",
       "turnCostEstimatedValue": "価値 {{cost}}",
-      "userTurnCostTitle": "このユーザーターンの累計（トークン明細は最終セグメント）"
+      "userTurnCostTotalLine": "このユーザーターンの合計: {{cost}}",
+      "userTurnCostDetailsTitle": "最終 SDK セグメント"
     },
     "errorBanner": {
       "retryTitle": "最後のメッセージを再送信",
