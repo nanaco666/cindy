@@ -92,8 +92,8 @@ export function useSessionLifecycleActions(options?: { includeArchived?: ListSta
         // 启发式跳到任意 session,sidebar 高亮"无规律地跳到某行",跟鼠标位置无关。
         //
         // Delete 仍走原来的"先 DB 后清理"流程:delete 不可逆,乐观删除如果 DB 失
-        // 败会让用户看到"行消失又出现"的诡异闪烁,代价比 archive 大;且 delete
-        // 不走 patchLocal(语义是"从桶里移除"不是"改字段"),refreshSessions 负责。
+        // 败会让用户看到"行消失又出现"的诡异闪烁,代价比 archive 大。写库成功
+        // 后再用 patchLocal 从所有桶移除,并由 refreshSessions 刷新当前桶兜底。
         if (sessionId === activeSessionId) {
           flushSync(() => {
             navigate('/cc-agent/new');
