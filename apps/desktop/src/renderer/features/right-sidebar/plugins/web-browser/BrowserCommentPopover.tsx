@@ -317,7 +317,7 @@ export function BrowserCommentPopover({
               disabled={submitting}
               className={cn(
                 'flex h-5 items-center rounded px-1.5 text-[11px]',
-                'text-[var(--text-tertiary)] hover:bg-sidebar-item-active hover:text-foreground',
+                'text-[var(--text-tertiary)] hover:bg-sidebar-item-active hover:text-sidebar-item-active-foreground',
               )}
             >
               {t('rightSidebar.browser.styleReset')}
@@ -338,8 +338,8 @@ export function BrowserCommentPopover({
             className={cn(
               'flex size-6 items-center justify-center rounded-md transition-colors',
               showStyles || changes.length > 0
-                ? 'bg-sidebar-item-active text-foreground'
-                : 'text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-foreground',
+                ? 'bg-sidebar-item-active text-sidebar-item-active-foreground'
+                : 'text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-sidebar-item-active-foreground',
             )}
           >
             <SlidersHorizontal size={13} strokeWidth={2} />
@@ -354,7 +354,7 @@ export function BrowserCommentPopover({
             disabled={submitting}
             className={cn(
               'flex h-6 items-center rounded-md px-2 text-[12px]',
-              'text-[var(--text-secondary)] hover:bg-sidebar-item-active hover:text-foreground',
+              'text-[var(--text-secondary)] hover:bg-sidebar-item-active hover:text-sidebar-item-active-foreground',
               submitting && 'opacity-40',
             )}
           >

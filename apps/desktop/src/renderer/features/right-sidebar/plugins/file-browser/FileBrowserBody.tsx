@@ -721,7 +721,7 @@ function TreeHeader({
             <button
               type="button"
               onClick={onToggleSearch}
-              className="flex size-5 items-center justify-center rounded-md text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-foreground"
+              className="flex size-5 items-center justify-center rounded-md text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-sidebar-item-active-foreground"
             >
               <XIcon size={14} strokeWidth={2} />
             </button>
@@ -732,7 +732,7 @@ function TreeHeader({
               <button
                 type="button"
                 onClick={onToggleSearch}
-                className="flex size-5 items-center justify-center rounded-md text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-foreground"
+                className="flex size-5 items-center justify-center rounded-md text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-sidebar-item-active-foreground"
               >
                 <Search size={14} strokeWidth={2} />
               </button>
@@ -741,7 +741,7 @@ function TreeHeader({
               <button
                 type="button"
                 onClick={onCollapseAll}
-                className="flex size-5 items-center justify-center rounded-md text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-foreground"
+                className="flex size-5 items-center justify-center rounded-md text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-sidebar-item-active-foreground"
               >
                 <ChevronsDownUp size={14} strokeWidth={2} />
               </button>
@@ -750,7 +750,7 @@ function TreeHeader({
               <button
                 type="button"
                 onClick={onRefresh}
-                className="flex size-5 items-center justify-center rounded-md text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-foreground"
+                className="flex size-5 items-center justify-center rounded-md text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-sidebar-item-active-foreground"
               >
                 <RefreshCw size={14} strokeWidth={2} />
               </button>
@@ -787,7 +787,7 @@ function TreeLoadErrorPlaceholder({
         <button
           type="button"
           onClick={onRetry}
-          className="rounded-md px-2 py-1 text-[12px] text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-foreground"
+          className="rounded-md px-2 py-1 text-[12px] text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-sidebar-item-active-foreground"
         >
           {t('ccAgent.workdirBrowse.treeAction.refresh')}
         </button>

@@ -672,8 +672,8 @@ export function WorkdirBrowseSidebar({
                   className={cn(
                     'flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 -ml-1.5',
                     'text-sm font-semibold text-foreground transition-colors',
-                    'hover:bg-sidebar-item-active',
-                    'data-[state=open]:bg-sidebar-item-active',
+                    'hover:bg-sidebar-item-active hover:text-sidebar-item-active-foreground',
+                    'data-[state=open]:bg-sidebar-item-active data-[state=open]:text-sidebar-item-active-foreground',
                   )}
                 >
                   <span className="min-w-0 truncate">{displayName}</span>
@@ -724,7 +724,7 @@ export function WorkdirBrowseSidebar({
               <button
                 type="button"
                 onClick={handleToggleSearchMode}
-                className="flex size-5 items-center justify-center rounded-md text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-foreground"
+                className="flex size-5 items-center justify-center rounded-md text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-sidebar-item-active-foreground"
               >
                 <XIcon size={14} strokeWidth={2} />
               </button>
@@ -735,7 +735,7 @@ export function WorkdirBrowseSidebar({
                 <button
                   type="button"
                   onClick={handleToggleSearchMode}
-                  className="flex size-5 items-center justify-center rounded-md text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-foreground"
+                  className="flex size-5 items-center justify-center rounded-md text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-sidebar-item-active-foreground"
                 >
                   <Search size={14} strokeWidth={2} />
                 </button>
@@ -744,7 +744,7 @@ export function WorkdirBrowseSidebar({
                 <button
                   type="button"
                   onClick={handleCollapseAll}
-                  className="flex size-5 items-center justify-center rounded-md text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-foreground"
+                  className="flex size-5 items-center justify-center rounded-md text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-sidebar-item-active-foreground"
                 >
                   <ChevronsDownUp size={14} strokeWidth={2} />
                 </button>
@@ -753,7 +753,7 @@ export function WorkdirBrowseSidebar({
                 <button
                   type="button"
                   onClick={handleRefresh}
-                  className="flex size-5 items-center justify-center rounded-md text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-foreground"
+                  className="flex size-5 items-center justify-center rounded-md text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-sidebar-item-active-foreground"
                 >
                   <RefreshCw size={14} strokeWidth={2} />
                 </button>

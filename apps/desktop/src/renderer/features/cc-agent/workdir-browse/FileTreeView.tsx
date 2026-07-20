@@ -624,7 +624,7 @@ function FileTreeRow({
         'flex h-7 w-full shrink-0 items-center gap-1.5 rounded-md pr-2',
         'cursor-pointer text-[13px] transition-colors',
         selected
-          ? 'bg-sidebar-item-active font-medium text-foreground'
+          ? 'bg-sidebar-item-active font-medium text-sidebar-item-active-foreground'
           : 'text-foreground hover:bg-sidebar-item-hover',
       )}
     >
@@ -751,7 +751,7 @@ function RenamingInputRow({ entry, depth, onSubmit, onCancel }: RenamingInputRow
       style={{ paddingLeft }}
       className={cn(
         'flex h-7 w-full shrink-0 items-center gap-1.5 rounded-md pr-2',
-        'bg-sidebar-item-active text-foreground',
+        'bg-sidebar-item-active text-sidebar-item-active-foreground',
       )}
     >
       <span aria-hidden className="inline-block w-3 shrink-0" />
@@ -821,7 +821,7 @@ function PendingInputRow({ pending, depth, onSubmit, onCancel }: PendingInputRow
       style={{ paddingLeft }}
       className={cn(
         'flex h-7 w-full shrink-0 items-center gap-1.5 rounded-md pr-2',
-        'bg-sidebar-item-active text-foreground',
+        'bg-sidebar-item-active text-sidebar-item-active-foreground',
       )}
     >
       <span aria-hidden className="inline-block w-3 shrink-0" />
