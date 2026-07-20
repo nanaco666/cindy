@@ -205,6 +205,46 @@ describe('ClaudeSubagentUsageBridge', () => {
     expect(bridge.getTaskUsage('agent-inflight')).toEqual({ totalTokens: 110 });
   });
 
+  it('rejects reservation overflow without dropping protection for older in-flight responses', () => {
+    const bridge = new ClaudeSubagentUsageBridge();
+    bridge.registerTask({
+      taskId: 'agent-inflight',
+      parentToolUseId: 'toolu-inflight',
+      prompt: 'Solve the long-running calculator problem',
+      model: 'codex/gpt-5.6-terra',
+    });
+    const payload = requestPayload(
+      'codex/gpt-5.6-terra',
+      'Solve the long-running calculator problem',
+    );
+
+    for (let reqId = 1; reqId <= 1_000; reqId += 1) {
+      expect(bridge.reserveRequest(reqId, payload)).toBe('agent-inflight');
+    }
+    expect(bridge.reserveRequest(1_001, payload)).toBeNull();
+
+    for (let index = 0; index < 205; index += 1) {
+      bridge.registerTask({
+        taskId: `agent-overflow-${index}`,
+        parentToolUseId: `toolu-overflow-${index}`,
+        prompt: `Solve overflow calculator problem ${index}`,
+        model: 'codex/gpt-5.6-terra',
+      });
+    }
+
+    const oldest = openObservation(
+      bridge,
+      1,
+      'codex/gpt-5.6-terra',
+      'Solve the long-running calculator problem',
+    );
+    oldest?.onData?.(sse(100, 10));
+    oldest?.onEnd?.();
+
+    expect(bridge.getTaskUsage('agent-inflight')).toEqual({ totalTokens: 110 });
+    expect(bridge.reserveRequest(1_001, payload)).toBe('agent-inflight');
+  });
+
   it('prefers the longest matching prompt when prompts overlap', () => {
     const bridge = new ClaudeSubagentUsageBridge();
     bridge.registerTask({

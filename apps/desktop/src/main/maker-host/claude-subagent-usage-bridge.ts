@@ -141,16 +141,14 @@ export class ClaudeSubagentUsageBridge {
   reserveRequest(reqId: number, body: Record<string, unknown>): string | null {
     const reservedTaskId = this.taskIdByRequestId.get(reqId);
     if (reservedTaskId) return reservedTaskId;
+    // Never evict an in-flight reservation to make room: doing so would also
+    // remove its task from trimTasks() protection before the response is recorded.
+    if (this.taskIdByRequestId.size >= MAX_PENDING_REQUESTS) return null;
 
     const selected = this.selectTask(body);
     if (!selected) return null;
     selected.matchedRequests += 1;
     this.taskIdByRequestId.set(reqId, selected.taskId);
-    while (this.taskIdByRequestId.size > MAX_PENDING_REQUESTS) {
-      const oldestRequestId = this.taskIdByRequestId.keys().next().value as number | undefined;
-      if (oldestRequestId === undefined) break;
-      this.taskIdByRequestId.delete(oldestRequestId);
-    }
     return selected.taskId;
   }
 
