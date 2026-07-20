@@ -165,7 +165,7 @@ function pdfjsAssetsPlugin(): Plugin {
  *
  * 排除后这些包走正常 transform 管线(它们的 exports 本就指向 ./src 原始 TS),不再有过期预打包。
  * 但仅排除还不够:这些模块经 node_modules **软链路径**进入模块图(见 renderer 报错 URL
- * `/@fs/.../node_modules/@lizi/xxx/src/index.ts`),而 Vite watcher 默认忽略 `**/node_modules/**`,
+ * `/@fs/.../node_modules/@lizi/xxx/src/index.ts`),而 Vite watcher 默认忽略 node_modules 目录,
  * 源码变更(git pull / 合 PR / 本地编辑)不会失效 transform 缓存——引用方组件热更成引用新导出的
  * 版本后,被引用包仍是旧模块 → `does not provide an export named X` → 白屏且刷新无效。因此下方
  * `server.watch.ignored` 用反向 glob 把这些包从默认忽略里豁免,变更即时失效 + HMR,运行中的实例
