@@ -60,6 +60,14 @@ export interface WorktreeChipsRowProps {
    * 建议名全部经隧道在被控端执行(本机 git 对远程路径必然误报"不是 git 仓库")。
    */
   deviceLinkDeviceId?: string | null;
+  /**
+   * 渲染变体(2026-07-19 恢复 worktree 入口):统一创建页对齐 Figma 后项目选择
+   * 由页面自己的 mode pill 承担,'advancedOnly' 只渲染齿轮 AdvancedPopover
+   * (git 探测/分支/建议名逻辑全保留);缺省 'full' = folder chip + 齿轮原样。
+   */
+  variant?: 'full' | 'advancedOnly';
+  /** true → 齿轮走 30px 紧凑版 + create-agent 控件 token,与新建页 mode pill 同排对齐。 */
+  compact?: boolean;
 }
 
 export function WorktreeChipsRow({
@@ -80,6 +88,8 @@ export function WorktreeChipsRow({
   worktreeDisabled,
   disabled,
   deviceLinkDeviceId,
+  variant = 'full',
+  compact = false,
 }: WorktreeChipsRowProps) {
   const { t } = useTranslation();
   // 统一创建页的 project-picker 模式下, cwd 为空表示即将创建纯对话。
@@ -146,11 +156,32 @@ export function WorktreeChipsRow({
 
   // project 模式下 cwd 为空就是"对话"默认上下文,但 chip 仍可打开 picker
   // 切到项目;folder 模式保留原来的"选择文件夹"语义。
-  const folderSelectLabel = folderPickerMode === 'project' && !cwd
-    ? emptyProjectLabel ?? t('newChat.folderPicker.dialogue')
-    : folderPickerMode === 'project'
-      ? t('newChat.folderPicker.selectProject')
-      : t('newChat.folderPicker.selectFolder');
+  const folderSelectLabel =
+    folderPickerMode === 'project' && !cwd
+      ? (emptyProjectLabel ?? t('newChat.folderPicker.dialogue'))
+      : folderPickerMode === 'project'
+        ? t('newChat.folderPicker.selectProject')
+        : t('newChat.folderPicker.selectFolder');
+
+  // advancedOnly:项目选择交给页面自己的 pill,这里只出齿轮(cwd 为空时随
+  // advancedHidden 整体不渲染,与 full 变体同一套隐藏/清状态 effect)。
+  if (variant === 'advancedOnly') {
+    if (advancedHidden) return null;
+    return (
+      <AdvancedPopover
+        enabled={enabled}
+        onEnabledChange={onEnabledChange}
+        switchDisabled={switchDisabled}
+        cantUseReason={cantUseReason ?? undefined}
+        sourceBranch={sourceBranch || branches.current || 'main'}
+        branches={branches.branches}
+        branchesLoading={branches.loading}
+        onSourceBranchChange={onSourceBranchChange}
+        disabled={disabled || worktreeDisabled}
+        compact={compact}
+      />
+    );
+  }
 
   return (
     <div className="inline-flex items-center gap-2">
@@ -186,6 +217,7 @@ export function WorktreeChipsRow({
           branchesLoading={branches.loading}
           onSourceBranchChange={onSourceBranchChange}
           disabled={disabled || worktreeDisabled}
+          compact={compact}
         />
       )}
     </div>
@@ -244,7 +276,7 @@ function FolderChipBig({
       open={open ?? false}
       onOpenChange={onOpenChange ?? (() => {})}
       onSelect={handleSelect}
-      projectOptions={folderPickerMode === 'project' ? projectOptions ?? [] : undefined}
+      projectOptions={folderPickerMode === 'project' ? (projectOptions ?? []) : undefined}
       onAddRemoteProject={folderPickerMode === 'project' ? onAddRemoteProject : undefined}
     >
       <Tip text={cwd ?? null} mono disabled={suppressTooltip}>
@@ -294,6 +326,7 @@ function AdvancedPopover({
   branchesLoading,
   onSourceBranchChange,
   disabled,
+  compact,
 }: {
   enabled: boolean;
   onEnabledChange: (v: boolean) => void;
@@ -304,6 +337,7 @@ function AdvancedPopover({
   branchesLoading: boolean;
   onSourceBranchChange: (v: string) => void;
   disabled?: boolean;
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -314,18 +348,22 @@ function AdvancedPopover({
     <button
       type="button"
       disabled={disabled}
+      data-testid="create-agent-worktree-advanced"
       className={cn(
-        'inline-flex h-[42px] w-[42px] items-center justify-center rounded-full',
-        'border bg-[var(--chat-input-bg)] transition-colors',
+        'inline-flex items-center justify-center rounded-full border transition-colors',
         'disabled:cursor-not-allowed disabled:opacity-50',
+        // compact:30px 紧凑版,取 create-agent 控件 token 与新建页 mode pill 同排同调
+        compact ? 'h-[30px] w-[30px]' : 'h-[42px] w-[42px] bg-[var(--chat-input-bg)]',
         gearActive
           ? 'border-primary/50 text-primary hover:bg-primary/10'
-          : 'border-border text-muted-foreground hover:bg-sidebar-item-hover hover:text-foreground',
+          : compact
+            ? 'border-[var(--create-agent-control-border)] bg-[var(--create-agent-control-bg)] text-[var(--create-agent-control-icon)] hover:bg-[var(--create-agent-control-bg-hover)]'
+            : 'border-border text-muted-foreground hover:bg-sidebar-item-hover hover:text-foreground',
       )}
       aria-label="Advanced settings (worktree)"
       aria-pressed={gearActive}
     >
-      <SlidersHorizontal size={15} className="shrink-0" />
+      <SlidersHorizontal size={compact ? 13 : 15} className="shrink-0" />
     </button>
   );
 
@@ -390,9 +428,7 @@ function BranchPopRow({
           <GitBranch size={14} className="shrink-0 text-muted-foreground" />
           <span className="text-muted-foreground">Branch</span>
           <span className="flex-1" />
-          <span className="truncate max-w-[120px] font-medium">
-            {loading ? 'Loading…' : value}
-          </span>
+          <span className="truncate max-w-[120px] font-medium">{loading ? 'Loading…' : value}</span>
           <ChevronDown size={11} className="shrink-0 text-muted-foreground" />
         </button>
       </DropdownMenuTrigger>

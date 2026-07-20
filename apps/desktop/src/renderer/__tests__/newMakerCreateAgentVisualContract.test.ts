@@ -33,7 +33,11 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(source).not.toContain('<aside');
     expect(source).not.toContain('createAgentSidebarNav');
     expect(source).not.toContain('createAgentSidebarProjects');
-    expect(source).not.toContain('<WorktreeChipsRow');
+    // 2026-07-19 用户裁决:488cb33 对齐 Figma 时误删 branch/worktree 高级入口
+    // (功能回归,wt* 状态与 send 管线一直健在)。恢复为 advancedOnly 变体挂在
+    // mode pill 右侧——只出齿轮,不回退到旧 folder chip 布局。
+    expect(source).toContain('variant="advancedOnly"');
+    expect(source).toMatch(/<WorktreeChipsRow[\s\S]*?variant="advancedOnly"/);
     expect(source).not.toContain('h-2.5 w-2.5 rounded-full');
     expect(source).not.toContain('surface-translucent-sidebar');
     expect(source).not.toContain('agent-island-annie');
