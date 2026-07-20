@@ -529,6 +529,73 @@ export const GHOST_NETWORK_FORBIDDEN_INJECT_HEADERS: readonly string[] = [
   'content-type',
 ];
 
+/* ── setup 就绪声明(使用前置检查,2026-07-21)──────────────────────────
+ *
+ * 作者用一份声明回答「这段意识用之前必须配好什么」,宿主在用户点「使用」
+ * 时据此做确定性检查(规则 9:检查逻辑在宿主代码,作者只交知识),未就绪
+ * 弹窗引导去配置页。语义:
+ * - requires 组间 = 全部满足(allOf);组内 anyOf = 满足其一即可
+ *   (Web Search 的 Brave / Tavily 任一 key 即典型组内关系);
+ * - 条目三种引用:'secret:<key>'(network.secrets 声明的凭证:user 源查
+ *   已保存、oauth 源查已连接账号)、'connection:<key>'(network.connections
+ *   至少一条)、{ kv: '<key>', label: '...' }(意识 /kv 参数非空——kv 键名
+ *   宿主无先验,label 必填供弹窗展示);
+ * - 'login-email' 源凭证恒就绪,引用它属作者误解 → 拒装;
+ * - 缺省(不声明 setup)= 宿主启发式:声明过凭证/连接的意识,任一项就绪
+ *   即算 ready;什么都没声明的恒 ready。现有内置意识全部被启发式正确覆盖,
+ *   只有启发式判不准才需要写本字段——两种典型:「必须同时配 A 和 B」用
+ *   多组声明;「凭证全是可选项、不配也能用」用 requires: [](显式 opt-out,
+ *   恒就绪,启发式不再兜底)。
+ */
+
+/** setup.requires 需求组条数上限。 */
+export const GHOST_SETUP_MAX_GROUPS = 8;
+/** 每个需求组内 anyOf 条目上限。 */
+export const GHOST_SETUP_MAX_ITEMS_PER_GROUP = 8;
+/** setup kv 引用的键名形状(意识 /kv 顶层键;点号仅作普通字符,不做路径下钻)。 */
+export const GHOST_SETUP_KV_KEY_RE = /^[A-Za-z0-9_.-]{1,64}$/;
+
+/** 归一化后的单条 setup 需求(原始清单里 secret/connection 是字符串引用,kv 是对象)。 */
+export type GhostSetupRequirement =
+  | { kind: 'secret'; key: string }
+  | { kind: 'connection'; key: string }
+  | { kind: 'kv'; key: string; label: string };
+
+/** setup 需求组:组内 anyOf 任一满足即组满足。 */
+export interface GhostSetupGroup {
+  anyOf: GhostSetupRequirement[];
+}
+
+/** setup 就绪声明(见上方块注释;不变量由 validateGhostManifest 保证)。 */
+export interface GhostSetupDecl {
+  requires: GhostSetupGroup[];
+}
+
+/**
+ * 单条需求的就绪展示项(ghosts:setup-status IPC 载荷;main 判定、renderer
+ * 弹窗展示)。kind 决定文案口径:key = 填 API key,oauth = 连接账号,
+ * connection = 添加连接,kv = 填自定义参数。
+ */
+export interface GhostSetupStatusItem {
+  /** 需求引用原文(secret:<key> / connection:<key> / kv:<key>),排障与去重用。 */
+  ref: string;
+  /** 展示名(secret/connection 取 network 声明的 label;kv 取 setup 声明的 label)。 */
+  label: string;
+  kind: 'key' | 'oauth' | 'connection' | 'kv';
+}
+
+/** 意识配置就绪状态(main 侧 evaluateGhostSetup 产出)。 */
+export interface GhostSetupStatus {
+  ready: boolean;
+  /**
+   * 未满足的需求组(每组列出仍缺的条目;组内任一配好即满足,弹窗按
+   * 「A / B」口径展示)。ready 时恒为空。
+   */
+  missingGroups: GhostSetupStatusItem[][];
+  /** OAuth 账号存在但全部过期的条目(文案区分「重新连接」)。ready 时恒为空。 */
+  reauth: GhostSetupStatusItem[];
+}
+
 /** ghost.json 清单(不变量由 validateGhostManifest 保证)。 */
 export interface GhostManifest {
   /** 清单格式版本,恒 2(v1 声明型已于 2026-07-12 移除,无存量不留兼容)。 */
@@ -602,6 +669,12 @@ export interface GhostManifest {
    * 域名白名单 + 凭证声明,装入确认框逐项展示,运行期主机代发并守门。
    */
   network?: GhostNetworkNeeds;
+  /**
+   * 就绪声明(使用前置检查,见 GhostSetupDecl 块注释):作者声明「用之前
+   * 必须配好什么」,宿主点「使用」时确定性检查并引导配置。缺省 = 启发式
+   * (声明过凭证/连接的意识任一项就绪即 ready)。
+   */
+  setup?: GhostSetupDecl;
   /**
    * 显式触发指令(聊天输入框 `/<command>`,与 Skill 共用命令入口;
    * 2026-07-09 Lizi 定案:由意识作者自定,装入时主机与已装意识查重,
@@ -1942,6 +2015,78 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
     };
   }
 
+  // setup 就绪声明:引用必须指向已声明的凭证/连接(悬空引用在装包期拒,
+  // 不留到运行期才发现作者写错);kv 引用要求 settingsHtml(没有设置页
+  // 没人填参数);login-email 源恒就绪,引用它属结构性误解,直接拒装。
+  let setup: GhostSetupDecl | undefined;
+  if (raw.setup !== undefined) {
+    if (!isPlainObject(raw.setup)) {
+      return { ok: false, reason: 'setup 必须是对象(如 { "requires": [{ "anyOf": ["secret:api_key"] }] })' };
+    }
+    const su = raw.setup as Record<string, unknown>;
+    // 空数组是合法的显式 opt-out:「本意识没有使用前置需求」——凭证全为
+    // 可选项的意识用它关掉宿主启发式(不声明才走启发式)。
+    if (!Array.isArray(su.requires) || su.requires.length > GHOST_SETUP_MAX_GROUPS) {
+      return { ok: false, reason: `setup.requires 必须是 0–${GHOST_SETUP_MAX_GROUPS} 组的数组(空数组 = 显式声明无使用前置需求)` };
+    }
+    const secretByKey = new Map((network?.secrets ?? []).map((s) => [s.key, s] as const));
+    const connectionKeys = new Set((network?.connections ?? []).map((c) => c.key));
+    const groups: GhostSetupGroup[] = [];
+    for (const g of su.requires) {
+      if (!isPlainObject(g) || !Array.isArray(g.anyOf) || g.anyOf.length === 0 || g.anyOf.length > GHOST_SETUP_MAX_ITEMS_PER_GROUP) {
+        return { ok: false, reason: `setup.requires 每组必须是 { "anyOf": [...] } 且组内 1–${GHOST_SETUP_MAX_ITEMS_PER_GROUP} 条` };
+      }
+      const items: GhostSetupRequirement[] = [];
+      const seenRefs = new Set<string>();
+      for (const it of g.anyOf) {
+        let item: GhostSetupRequirement;
+        if (typeof it === 'string') {
+          const m = /^(secret|connection):(.+)$/.exec(it);
+          if (!m) {
+            return { ok: false, reason: `setup 条目 ${JSON.stringify(it)} 形态不对(字符串条目须为 "secret:<key>" 或 "connection:<key>";kv 用对象 { "kv": "<key>", "label": "..." })` };
+          }
+          const [, refKind, refKey] = m;
+          if (refKind === 'secret') {
+            const decl = secretByKey.get(refKey);
+            if (!decl) {
+              return { ok: false, reason: `setup 引用了未声明的凭证 ${JSON.stringify(refKey)}(必须逐字取自 network.secrets[].key)` };
+            }
+            if (decl.source === 'login-email') {
+              return { ok: false, reason: `setup 不允许引用 login-email 源凭证 ${JSON.stringify(refKey)}(登录派生身份恒就绪,无配置动作可引导)` };
+            }
+            item = { kind: 'secret', key: refKey };
+          } else {
+            if (!connectionKeys.has(refKey)) {
+              return { ok: false, reason: `setup 引用了未声明的连接 ${JSON.stringify(refKey)}(必须逐字取自 network.connections[].key)` };
+            }
+            item = { kind: 'connection', key: refKey };
+          }
+        } else if (isPlainObject(it)) {
+          if (typeof it.kv !== 'string' || !GHOST_SETUP_KV_KEY_RE.test(it.kv)) {
+            return { ok: false, reason: 'setup kv 条目的 kv 必须是 1–64 位字母/数字/下划线/点/连字符的键名' };
+          }
+          if (typeof it.label !== 'string' || it.label.trim().length === 0 || it.label.length > 64) {
+            return { ok: false, reason: 'setup kv 条目必须带 1–64 字符的 label(kv 键名宿主无先验,弹窗要有名字可展示)' };
+          }
+          if (raw.settingsHtml === undefined) {
+            return { ok: false, reason: 'setup 引用了 kv 参数但没有 settingsHtml——参数由意识设置界面收单,没有界面就没人填' };
+          }
+          item = { kind: 'kv', key: it.kv, label: it.label };
+        } else {
+          return { ok: false, reason: 'setup.requires[].anyOf 每条必须是字符串引用或 { "kv", "label" } 对象' };
+        }
+        const ref = `${item.kind}:${item.key}`;
+        if (seenRefs.has(ref)) {
+          return { ok: false, reason: `setup 同组内含重复条目 ${JSON.stringify(ref)}` };
+        }
+        seenRefs.add(ref);
+        items.push(item);
+      }
+      groups.push({ anyOf: items });
+    }
+    setup = { requires: groups };
+  }
+
   // 显式触发指令:1–32 字符、无空白、无 '/'(允许中文,如 /画图);
   // 必须有工具可干活。跨意识查重在装入时由 GhostManager 执行(需要本地清单)。
   if (raw.command !== undefined) {
@@ -2004,6 +2149,7 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
       ...(cindy !== undefined ? { cindy } : {}),
       ...(subscribe !== undefined ? { subscribe } : {}),
       ...(network !== undefined ? { network } : {}),
+      ...(setup !== undefined ? { setup } : {}),
       ...(raw.command !== undefined ? { command: raw.command as string } : {}),
       ...(keywords !== undefined ? { keywords } : {}),
       ...(panel !== undefined ? { panel } : {}),

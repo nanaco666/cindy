@@ -78,7 +78,7 @@ describe('Markdown target rendering contract', () => {
       /export function normalizeMarkdownImageSrc[\s\S]*?return toLocalFileUrl/,
     );
     expect(normalizeBlock).not.toBeNull();
-    expect(normalizeBlock![0]).toContain("src.startsWith('xdt-remote-media://')");
+    expect(normalizeBlock![0]).toContain("src.startsWith('cindy-remote-media://')");
   });
 
   it('wraps long markdown link text instead of widening the message column', () => {

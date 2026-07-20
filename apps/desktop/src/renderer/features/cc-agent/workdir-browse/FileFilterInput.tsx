@@ -52,7 +52,7 @@ export function FileFilterInput({ value, onChange }: FileFilterInputProps) {
             type="button"
             onClick={() => onChange('')}
             aria-label={t('rightSidebar.fileBrowser.filterClear')}
-            className="absolute right-1 top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-foreground"
+            className="absolute right-1 top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-sidebar-item-active-foreground"
           >
             <XIcon size={12} strokeWidth={2} />
           </button>

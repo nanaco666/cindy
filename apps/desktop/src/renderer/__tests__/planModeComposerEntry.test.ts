@@ -34,6 +34,39 @@ import { ExtraDirsButton } from '@/components/new-chat/ExtraDirsButton';
 import { PlanActionCard } from '@/components/new-chat/PlanActionCard';
 import { PlanModeIndicator } from '@/components/new-chat/PlanModeIndicator';
 import { PlanViewerCard } from '@/components/new-chat/PlanViewerCard';
+import type { InstalledGhost } from '../../shared/ghost';
+
+const installedPlugin: InstalledGhost = {
+  manifest: {
+    schemaVersion: 2,
+    id: 'cindy-art',
+    name: 'Cindy Art',
+    version: '1.0.0',
+    kind: 'chip',
+    entry: 'main.js',
+    slots: ['tool'],
+    tools: [{ name: 'draw', description: 'Draw.' }],
+    command: 'art',
+  },
+  dir: '/tmp/cindy-art',
+  enabled: true,
+};
+
+const installedMermaidPlugin: InstalledGhost = {
+  manifest: {
+    schemaVersion: 2,
+    id: 'cindy-mermaid',
+    name: 'Mermaid',
+    version: '1.0.0',
+    kind: 'chip',
+    entry: 'main.js',
+    slots: ['tool'],
+    tools: [{ name: 'render', description: 'Render a Mermaid diagram.' }],
+    command: 'mermaid',
+  },
+  dir: '/tmp/cindy-mermaid',
+  enabled: true,
+};
 
 afterEach(() => {
   cleanup();
@@ -91,6 +124,43 @@ describe('ExtraDirsButton 计划模式菜单项', () => {
       }),
     );
     expect(container.firstChild).toBeNull();
+  });
+
+  it('展示所有已安装 Plugin，并把可用项交给 composer 放置', () => {
+    const onPluginSelect = vi.fn();
+    render(
+      createElement(ExtraDirsButton, {
+        extraDirs: [],
+        agentKind: 'codex',
+        onChange: () => {},
+        plugins: [installedPlugin],
+        onPluginSelect,
+      }),
+    );
+
+    fireEvent.click(screen.getByLabelText('extraDirs.menuAria'));
+    expect(screen.getByText('extraDirs.pluginsTitle')).toBeTruthy();
+    const pluginRow = screen.getByRole('button', { name: 'Cindy Art' });
+    expect(pluginRow.querySelector('span')?.className).toContain('size-5');
+    fireEvent.click(pluginRow);
+    expect(onPluginSelect).toHaveBeenCalledWith(installedPlugin);
+  });
+
+  it('复用 Plugin 页的功能兜底图标，避免无包内头像时入口不一致', () => {
+    render(
+      createElement(ExtraDirsButton, {
+        extraDirs: [],
+        agentKind: 'codex',
+        onChange: () => {},
+        plugins: [installedMermaidPlugin],
+        onPluginSelect: vi.fn(),
+      }),
+    );
+
+    fireEvent.click(screen.getByLabelText('extraDirs.menuAria'));
+    const pluginRow = screen.getByRole('button', { name: 'Mermaid' });
+    expect(pluginRow.querySelector('svg.lucide-workflow')).toBeTruthy();
+    expect(pluginRow.querySelector('svg.lucide-package')).toBeNull();
   });
 });
 

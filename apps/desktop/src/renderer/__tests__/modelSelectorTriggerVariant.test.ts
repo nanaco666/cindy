@@ -49,12 +49,14 @@ vi.mock('@/components/ui/popover', async () => {
       children,
       className,
       align,
+      sideOffset,
       onPointerEnter,
       onPointerLeave,
     }: {
       children: React.ReactNode;
       className?: string;
       align?: 'start' | 'center' | 'end';
+      sideOffset?: number;
       onPointerEnter?: React.PointerEventHandler<HTMLDivElement>;
       onPointerLeave?: React.PointerEventHandler<HTMLDivElement>;
     }) => {
@@ -66,6 +68,7 @@ vi.mock('@/components/ui/popover', async () => {
               className,
               'data-testid': 'model-options-popover',
               'data-align': align,
+              'data-side-offset': sideOffset,
               onPointerEnter,
               onPointerLeave,
             },
@@ -454,6 +457,7 @@ describe('ModelSelector trigger variants', () => {
     fireEvent.pointerEnter(row);
     const options = screen.getByRole('group', { name: /Opus 4\.8/ });
     expect(screen.getByTestId('model-options-popover').getAttribute('data-align')).toBe('center');
+    expect(screen.getByTestId('model-options-popover').getAttribute('data-side-offset')).toBe('8');
     expect(options).toBeTruthy();
     expect(within(options).getByText('Most capable for ambitious work')).toBeTruthy();
     expect(within(options).getByText('Source: Anthropic')).toBeTruthy();
@@ -477,6 +481,10 @@ describe('ModelSelector trigger variants', () => {
 
     fireEvent.focus(row);
     expect(screen.getByRole('group', { name: /Opus 4\.8/ })).toBeTruthy();
+
+    // 列表滚动不派发 pointerleave,浮层会跟着滚出视口的锚点行跑到菜单外 → 用户滚动必须立即收起。
+    fireEvent.scroll(screen.getByRole('listbox', { name: 'Model list' }));
+    expect(screen.queryByRole('group', { name: /Opus 4\.8/ })).toBeNull();
     vi.useRealTimers();
   });
 

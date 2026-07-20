@@ -21,8 +21,20 @@ describe('fetchLatestRelease —— 区分"无更新"与"连不上"', () => {
   });
 
   it('200 → 返回 JSON 记录', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => resp(200, { runtimeVersion: 'rtv1', version: '1.2.0' })));
+    const fetchMock = vi.fn(async () => resp(200, { runtimeVersion: 'rtv1', version: '1.2.0' }));
+    vi.stubGlobal('fetch', fetchMock);
     await expect(fetchLatestRelease('ios', 8000, BASE)).resolves.toEqual({ runtimeVersion: 'rtv1', version: '1.2.0' });
+    expect(fetchMock).toHaveBeenCalledWith(`${BASE}/latest?platform=ios`, expect.any(Object));
+  });
+
+  it('canary 显式追加 channel，stable URL 保持旧契约', async () => {
+    const fetchMock = vi.fn(async () => resp(200, { runtimeVersion: 'rtv1' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await fetchLatestRelease('android', 8000, BASE, true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${BASE}/latest?platform=android&channel=canary`,
+      expect.any(Object),
+    );
   });
 
   it('404(服务端确认暂无记录)→ null(= 无更新)', async () => {

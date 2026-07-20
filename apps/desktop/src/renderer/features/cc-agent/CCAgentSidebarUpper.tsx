@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { SchedulerEvent } from '@lizi/maker-scheduler';
 import { createPortal } from 'react-dom';
-import { Archive, CirclePlus, Clock, Package, Trash2, X } from 'lucide-react';
+import { Archive, CirclePlus, Clock, Plug, Trash2, X } from 'lucide-react';
 import { useNavigate, useMatch } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -2436,8 +2436,8 @@ function CollapsedView({
     navigate('/cc-agent/scheduled');
   }, [navigate]);
   const onScheduleMatch = useMatch('/cc-agent/scheduled');
-  // 主视图切换(Skill 中心)——与展开态 SidebarTopNav 的 Skill 行同源:
-  // 命中 skillhub 视图时高亮。折叠 rail 之前漏了这颗按钮(与展开态不一致),补上。
+  // 主视图切换(Plugin / Skill 管理)——与展开态 SidebarTopNav 的管理入口同源:
+  // 命中 Plugin 或 Skill 视图时高亮。折叠 rail 之前漏了这颗按钮,现保持两态一致。
   const { activeKey, navigateToView } = useActiveMainView();
 
   // rail 只放置顶——与 redesign 稿一致（pinned cards → rail tiles）。
@@ -2505,12 +2505,12 @@ function CollapsedView({
         onContextMenu={onAutomationsContextMenu}
       />
       <SidebarIconButton
-        icon={Package}
-        label={t('sidebar.tabs.skillhub')}
+        icon={Plug}
+        label={t('sidebar.tabs.plugins')}
         variant="rail"
-        active={activeKey === 'skillhub'}
-        aria-current={activeKey === 'skillhub' ? 'page' : undefined}
-        onClick={() => navigateToView('skillhub')}
+        active={activeKey === 'plugins'}
+        aria-current={activeKey === 'plugins' ? 'page' : undefined}
+        onClick={() => navigateToView('plugins')}
       />
 
       {pinnedSessions.length > 0 && (

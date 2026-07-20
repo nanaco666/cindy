@@ -18,8 +18,8 @@
  *  - 历史兼容锚点(旧 scheme 解析、旧 userData / DB 文件识别)由
  *    `legacySchemes` / `legacyUserDataDirNames` / `legacyDbFilePrefixes`
  *    承载,只增不减:老用户机器上的存量注册与文件可能永远带着旧值。
- *  - 永久不随本配置变化的标识符(settings 键名 `xdtMaker.*`、MCP server 名
- *    `lizi_xdt_helper`、`xdt-image://` 等进程内 scheme、`.cshare` 扩展名、
+ *  - 永久不随本配置变化的标识符(settings 键名 `xdtMaker.*`、
+ *    `xdt-image://` 等进程内 scheme、`.cshare` 扩展名、
  *    localStorage 键等)由各自协议/存储模块维护,
  *    不要试图从这里派生它们。
  *  - `updaterName` = `cindy-updater`(2026-07-17 经 owner 确认随品牌翻转改名,

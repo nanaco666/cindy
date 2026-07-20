@@ -67,7 +67,7 @@ function queueBubbleText(item: Pick<QueuedRemoteMessage, 'text'>): string {
 
 /**
  * 排队 / 落定中气泡的图片缩略数据:消息 files 里的图片附件此刻仍是
- * `xdt-oss-attach://` 中转引用,本地渲染靠 sentAttachmentThumbStore 的兜底映射
+ * `cindy-oss-attach://` 中转引用,本地渲染靠 sentAttachmentThumbStore 的兜底映射
  * (上传成功时已把实际 PUT 的文件拷进自有目录)。非图片附件走计数行。
  */
 function queuedAttachmentThumbs(

@@ -666,6 +666,7 @@ function handleControlResponse(rawMsg: unknown, ctx: TranslateContext): void {
 function handleSystem(
   msg: {
     subtype?: string;
+    uuid?: string;
     session_id?: string;
     model?: string;
     permissionMode?: string;
@@ -761,6 +762,7 @@ function handleSystem(
     queue.push({
       type: 'compact_boundary',
       data: {
+        ...(typeof msg.uuid === 'string' && msg.uuid ? { boundaryId: msg.uuid } : {}),
         trigger: meta.trigger ?? 'auto',
         preTokens: meta.pre_tokens ?? 0,
         postTokens,

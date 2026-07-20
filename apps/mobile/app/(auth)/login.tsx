@@ -18,6 +18,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { SocialProvider, VerificationKind } from '@cindy/auth-client';
 
 import { useAuth } from '@/auth/AuthContext';
+import {
+  CN_PHONE_PREFIX,
+  isCompleteCnPhone,
+  sanitizeCnPhoneInput,
+  toCnE164,
+} from '@/auth/cnPhone';
 import { authErrorText, loginText } from '@/auth/loginMessages';
 import { isNativeSocialProviderSupported } from '@/auth/nativeSocial';
 import { Text, TextInput } from '@/components/AppText';
@@ -149,15 +155,17 @@ export default function LoginScreen() {
       );
     }
     const submit = () => {
-      const value = identifier.trim();
-      if (!value) return;
       if (identifierKind === 'email') {
+        const value = identifier.trim();
+        if (!value) return;
         void auth.dispatchLoginAction({ type: 'discover', email: value });
       } else {
+        // 手机号登录只支持中国大陆号码:UI 固定 +86,输入框只存本地号,提交时拼回完整号码
+        if (!isCompleteCnPhone(identifier)) return;
         void auth.dispatchLoginAction({
           type: 'request-code',
           kind: 'phone',
-          identifier: value,
+          identifier: toCnE164(identifier),
         });
       }
     };
@@ -193,31 +201,49 @@ export default function LoginScreen() {
             ))}
           </View>
         ) : null}
-        <TextInput
-          autoCapitalize="none"
-          autoComplete={identifierKind === 'email' ? 'email' : 'tel'}
-          autoCorrect={false}
-          editable={!disabled}
-          keyboardType={
-            identifierKind === 'email' ? 'email-address' : 'phone-pad'
-          }
-          onChangeText={setIdentifier}
-          onSubmitEditing={submit}
-          placeholder={loginText(
-            identifierKind === 'email'
-              ? 'emailPlaceholder'
-              : 'phonePlaceholder',
-          )}
-          placeholderTextColor={colors.textTertiary}
-          returnKeyType="go"
-          style={styles.input}
-          testID="login.identifierInput"
-          value={identifier}
-        />
+        {identifierKind === 'phone' ? (
+          <View style={styles.phoneRow}>
+            {/* 固定 +86:手机号登录只支持中国大陆号码,前缀不可切换 */}
+            <Text style={styles.phonePrefix}>{CN_PHONE_PREFIX}</Text>
+            <TextInput
+              autoComplete="tel"
+              editable={!disabled}
+              keyboardType="phone-pad"
+              onChangeText={(text) => setIdentifier(sanitizeCnPhoneInput(text))}
+              onSubmitEditing={submit}
+              placeholder={loginText('phonePlaceholder')}
+              placeholderTextColor={colors.textTertiary}
+              returnKeyType="go"
+              style={styles.phoneRowInput}
+              testID="login.identifierInput"
+              value={identifier}
+            />
+          </View>
+        ) : (
+          <TextInput
+            autoCapitalize="none"
+            autoComplete="email"
+            autoCorrect={false}
+            editable={!disabled}
+            keyboardType="email-address"
+            onChangeText={setIdentifier}
+            onSubmitEditing={submit}
+            placeholder={loginText('emailPlaceholder')}
+            placeholderTextColor={colors.textTertiary}
+            returnKeyType="go"
+            style={styles.input}
+            testID="login.identifierInput"
+            value={identifier}
+          />
+        )}
         <MainWindowActionButton
           action={{
             busy: auth.isBusy,
-            disabled: disabled || !identifier.trim(),
+            disabled:
+              disabled ||
+              (identifierKind === 'phone'
+                ? !isCompleteCnPhone(identifier)
+                : !identifier.trim()),
             label: loginText('continue'),
             onPress: submit,
             testID: 'login.continueButton',
@@ -438,12 +464,19 @@ export default function LoginScreen() {
   const renderBinding = () => {
     const state = auth.loginState;
     if (state?.step !== 'binding') return null;
-    const contact = state.contact ?? bindingContact;
+    const isEmail = state.bindType === 'email';
+    // 绑定手机号与登录同规则:只支持中国大陆号码,输入框存本地号,提交拼回 +86
+    const contact =
+      state.contact ??
+      (isEmail ? bindingContact : toCnE164(bindingContact));
+    const contactReady = isEmail
+      ? Boolean(bindingContact.trim())
+      : isCompleteCnPhone(bindingContact);
     const request = () => {
-      if (!bindingContact.trim()) return;
+      if (!contactReady) return;
       void auth.dispatchLoginAction({
         type: 'request-binding-code',
-        contact: bindingContact,
+        contact: isEmail ? bindingContact : toCnE164(bindingContact),
       });
     };
     const verify = () => {
@@ -454,7 +487,6 @@ export default function LoginScreen() {
         code: bindingCode,
       });
     };
-    const isEmail = state.bindType === 'email';
     return (
       <>
         <StepHeader
@@ -465,27 +497,47 @@ export default function LoginScreen() {
         />
         {!state.codeRequested ? (
           <>
-            <TextInput
-              autoCapitalize="none"
-              autoComplete={isEmail ? 'email' : 'tel'}
-              autoCorrect={false}
-              editable={!disabled}
-              keyboardType={isEmail ? 'email-address' : 'phone-pad'}
-              onChangeText={setBindingContact}
-              onSubmitEditing={request}
-              placeholder={loginText(
-                isEmail ? 'emailPlaceholder' : 'phonePlaceholder',
-              )}
-              placeholderTextColor={colors.textTertiary}
-              returnKeyType="go"
-              style={styles.input}
-              testID="login.bindingContactInput"
-              value={bindingContact}
-            />
+            {isEmail ? (
+              <TextInput
+                autoCapitalize="none"
+                autoComplete="email"
+                autoCorrect={false}
+                editable={!disabled}
+                keyboardType="email-address"
+                onChangeText={setBindingContact}
+                onSubmitEditing={request}
+                placeholder={loginText('emailPlaceholder')}
+                placeholderTextColor={colors.textTertiary}
+                returnKeyType="go"
+                style={styles.input}
+                testID="login.bindingContactInput"
+                value={bindingContact}
+              />
+            ) : (
+              <View style={styles.phoneRow}>
+                {/* 固定 +86:同登录首屏,不可切换 */}
+                <Text style={styles.phonePrefix}>{CN_PHONE_PREFIX}</Text>
+                <TextInput
+                  autoComplete="tel"
+                  editable={!disabled}
+                  keyboardType="phone-pad"
+                  onChangeText={(text) =>
+                    setBindingContact(sanitizeCnPhoneInput(text))
+                  }
+                  onSubmitEditing={request}
+                  placeholder={loginText('phonePlaceholder')}
+                  placeholderTextColor={colors.textTertiary}
+                  returnKeyType="go"
+                  style={styles.phoneRowInput}
+                  testID="login.bindingContactInput"
+                  value={bindingContact}
+                />
+              </View>
+            )}
             <MainWindowActionButton
               action={{
                 busy: auth.isBusy,
-                disabled: disabled || !bindingContact.trim(),
+                disabled: disabled || !contactReady,
                 label: loginText('sendCode'),
                 onPress: request,
                 testID: 'login.bindingSendButton',
@@ -780,6 +832,29 @@ const makeStyles = (colors: ThemeColors) =>
       fontSize: typeScale.body,
       minHeight: 48,
       paddingHorizontal: spacing.lg,
+    },
+    // 手机号输入:外层容器沿用 input 视觉,内嵌固定 +86 前缀 + 无边框输入框
+    phoneRow: {
+      alignItems: 'center',
+      backgroundColor: colors.surfaceElevated,
+      borderColor: colors.border,
+      borderRadius: radius.pill,
+      borderWidth: StyleSheet.hairlineWidth,
+      flexDirection: 'row',
+      gap: spacing.xs,
+      minHeight: 48,
+      paddingHorizontal: spacing.lg,
+    },
+    phonePrefix: {
+      color: colors.textPrimary,
+      fontSize: typeScale.body,
+    },
+    phoneRowInput: {
+      color: colors.textPrimary,
+      flex: 1,
+      fontSize: typeScale.body,
+      minHeight: 48,
+      paddingVertical: 0,
     },
     codeInput: {
       fontWeight: fontWeight.semibold,

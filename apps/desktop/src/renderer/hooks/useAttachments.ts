@@ -219,6 +219,8 @@ export function useAttachments(
         attachments: attachmentsRef.current,
         quotes: existing?.quotes ?? [],
         browserComments: existing?.browserComments ?? [],
+        ...(existing?.pendingGhostId ? { pendingGhostId: existing.pendingGhostId } : {}),
+        ...(existing?.focusAtEnd ? { focusAtEnd: true } : {}),
       }, { silent: true });
     };
   }, [storageKey]);
@@ -262,6 +264,8 @@ export function useAttachments(
         attachments,
         quotes: existing?.quotes ?? [],
         browserComments: existing?.browserComments ?? [],
+        ...(existing?.pendingGhostId ? { pendingGhostId: existing.pendingGhostId } : {}),
+        ...(existing?.focusAtEnd ? { focusAtEnd: true } : {}),
       },
       { silent: true },
     );

@@ -19,7 +19,7 @@
  *   复制图片 / 打开所在目录(右键) / 用默认应用打开 / 另存为 / 发送到对话。
  *   可用性按 src scheme 分层,见 `mediaActionCapabilities`:本地源
  *   (xdt-image:// / xdt-file://)全量;http(s):// 与 data:image 只有
- *   另存为 + 发送到对话(main 侧取字节);xdt-remote-media://(远程会话)与
+ *   另存为 + 发送到对话(main 侧取字节);cindy-remote-media://(远程会话)与
  *   其它 scheme 一律只读预览。
  * - 发送到对话:经 `media:cache-for-session` 为当前会话复制一份新缓存,再合入
  *   composerDraftStore(与手机版语义一致——加入输入框附件托盘,不直接发消息)。
@@ -144,6 +144,11 @@ interface ImageLightboxProps {
    * 持久化的笔迹)。与 annotationEdit 互斥使用;出口仍是"发送到对话"。
    */
   initialStrokes?: readonly AnnotationStroke[];
+  /**
+   * 打开即进入标注模式(等价于用户点了笔按钮)。「Mermaid/表格/公式 → 标注」
+   * 这类"光栅化后直奔涂画"的入口用它省一次点击;默认 false 不影响既有场景。
+   */
+  autoAnnotate?: boolean;
 }
 
 /** `xdt-file://local/?path=<enc>` → 绝对路径;非该 scheme 或解析失败返回 null。 */
@@ -187,7 +192,7 @@ function mediaActionCapabilities(src: string, hasSession: boolean) {
   const localFilePath = xdtFileUrlToPath(src);
   const isLocalMedia = isImageCache || localFilePath !== null;
   const isHttp = /^https?:\/\//.test(src);
-  const isRemoteMedia = src.startsWith('xdt-remote-media://');
+  const isRemoteMedia = src.startsWith('cindy-remote-media://');
   const bytesReachable = isImageBytesReachable(src);
   return {
     canCopy: bytesReachable,
@@ -209,7 +214,7 @@ function isDirectCacheable(src: string): boolean {
   if (
     src.startsWith('xdt-image://') ||
     src.startsWith('cindy-media://') ||
-    src.startsWith('xdt-remote-media://')
+    src.startsWith('cindy-remote-media://')
   )
     return true;
   if (/^https?:\/\//.test(src)) return true;
@@ -325,6 +330,7 @@ export function ImageLightbox({
   sessionId: sessionIdProp,
   annotationEdit,
   initialStrokes,
+  autoAnnotate = false,
 }: ImageLightboxProps) {
   const { t } = useTranslation();
   // 会话全量图片列表(MessageStream 下发);非聊天场景无 Provider 时为 null。
@@ -390,7 +396,8 @@ export function ImageLightbox({
   const wheelIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ---- 标注模式状态(鼠标当笔圈点) ----
-  const [isAnnotating, setIsAnnotating] = useState(false);
+  // autoAnnotate 只作初值:打开即进标注,退出/放弃后的行为与手动进入一致。
+  const [isAnnotating, setIsAnnotating] = useState(autoAnnotate);
   // 当前图打开时的基线笔迹:放弃标注(X / Esc)恢复到这里而非一律清空——
   // 画廊翻到持久化标注图后,基线是该图的持久化笔迹。翻页 effect 同步更新。
   const baselineStrokesRef = useRef<readonly AnnotationStroke[]>(
@@ -422,13 +429,21 @@ export function ImageLightbox({
   /**
    * 放弃标注:恢复到打开时的笔迹(编辑模式=上次保存的;发送模式=空)并退出
    * 标注模式。X 按钮与标注中的 Esc 都走这里。
+   *
+   * autoAnnotate 宿主(Mermaid/表格/公式的「标注」入口)整个 lightbox 就是
+   * 为标注而开的临时光栅化图,放弃标注后留在图片界面没有意义——直接关闭
+   * 整个 lightbox 回到原界面。
    */
   const discardAnnotation = useCallback(() => {
+    if (autoAnnotate) {
+      handleClose();
+      return;
+    }
     setStrokes([...baselineStrokesRef.current]);
     setDraftStroke(null);
     setIsDrawing(false);
     setIsAnnotating(false);
-  }, []);
+  }, [autoAnnotate, handleClose]);
 
   const applyViewport = useCallback((next: LightboxViewport) => {
     viewportRef.current = next;
@@ -761,7 +776,7 @@ export function ImageLightbox({
   // 定位远端目录(被控端文件本机 Finder 无从 reveal;缓存图在 workdir 外,
   // 文件浏览器根覆盖不到,不提供)。
   const remoteWorkdirRelPath = (() => {
-    if (!currentSrc.startsWith('xdt-remote-media://') || !workingDir) return null;
+    if (!currentSrc.startsWith('cindy-remote-media://') || !workingDir) return null;
     const parsed = parseRemoteMediaUrl(currentSrc);
     const origPath = parsed ? xdtFileUrlToPath(parsed.origUrl) : null;
     return origPath ? toWorkdirRel(workingDir, origPath) : null;

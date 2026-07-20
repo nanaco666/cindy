@@ -11,7 +11,7 @@ import { AGENT_KIND, EFFORT, EXECUTION_MODE, SCRIPT_CAPABILITY } from './_enums.
 import { assertCronAndTimezoneValid, withScheduler } from './_shared.js';
 import type { LiziMcpSessionContext, SchedulerMcpDeps } from '../types.js';
 import type { SchedulerToolRegistry } from '../lizi_schedulerToolRegistry.js';
-import type { UpdateScheduleInput } from '@lizi/maker-scheduler';
+import { stabilizePreRunHookForUpdate, type UpdateScheduleInput } from '@lizi/maker-scheduler';
 
 export function registerScheduleUpdateTool(
   registry: SchedulerToolRegistry,
@@ -89,7 +89,7 @@ export function registerScheduleUpdateTool(
       expireAt: z.number().int().optional(),
     },
     handler: async ({ id, bindToCurrentSession, ...patch }) =>
-      withScheduler(deps, (scheduler) => {
+      withScheduler(deps, async (scheduler) => {
         let input = patch as UpdateScheduleInput;
         if ((patch as { targetSessionId?: string | null }).targetSessionId === null) {
           // JSON 边界的"解绑"表达:null → 归一成 undefined 但保留 key(storage patch
@@ -114,7 +114,22 @@ export function registerScheduleUpdateTool(
           }
           input = { ...input, targetSessionId: sessionId };
         }
-        return scheduler.update(id, input);
+        return scheduler.updateFromCurrent(id, async (existing) => {
+          const nextHook = Object.prototype.hasOwnProperty.call(input, 'preRunHook')
+            ? input.preRunHook
+            : existing.preRunHook;
+          if (!nextHook?.command?.trim()) return input;
+          if (!deps.hookScript?.stabilizeCommand) {
+            throw new Error(
+              'invalid request: 当前 host 未提供 pre-run hook 路径稳定化服务，拒绝更新带 hook 的任务',
+            );
+          }
+          return stabilizePreRunHookForUpdate(existing, input, {
+            resolveSessionWorkDir:
+              deps.hookScript.resolveSessionWorkDir ?? (async () => undefined),
+            stabilizeCommand: deps.hookScript.stabilizeCommand,
+          });
+        });
       }),
   });
 }

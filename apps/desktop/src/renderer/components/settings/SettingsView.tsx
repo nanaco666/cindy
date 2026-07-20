@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
+import { Navigate, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useSyncExternalStore } from 'react';
 import { ArrowLeft } from 'lucide-react';
@@ -20,11 +20,7 @@ import { KeyboardShortcutsSection } from './KeyboardShortcutsSection';
 import { AgentIslandSection } from './AgentIslandSection';
 import { LanguageSection } from './LanguageSection';
 import { LogoutSection } from './LogoutSection';
-import {
-  ImBotSection,
-  isImBotSettingsGroup,
-  type ImBotSettingsGroup,
-} from './ImBotSection';
+import { ImBotSection, isImBotSettingsGroup, type ImBotSettingsGroup } from './ImBotSection';
 import { AboutSection } from './AboutSection';
 import { UserPromptSection } from './UserPromptSection';
 import { MemorySection } from './MemorySection';
@@ -39,9 +35,6 @@ import { HelpSection } from './HelpSection';
 import { HelpAssistantPanel } from './HelpAssistantPanel';
 import { CollaborationSection } from './CollaborationSection';
 import { BuiltinToolsSection } from './BuiltinToolsSection';
-import { GhostDetailSection } from './GhostDetailSection';
-import { GhostsSection } from './GhostsSection';
-import { useInstalledGhosts } from '@/cindy-brain/useInstalledGhosts';
 import { ContactsSection } from './contacts/ContactsSection';
 import { ComputerUseSection } from './ComputerUseSection';
 import { getLastWorkingDir, subscribeToLastWorkingDir } from '@/state/lastWorkingDir';
@@ -65,32 +58,21 @@ export function SettingsView() {
     getLastWorkingDir,
     getLastWorkingDir,
   );
+  const rawTab = searchParams.get('tab');
+  const shouldRedirectToPlugins =
+    rawTab === 'ghosts' || rawTab === 'api-keys' || rawTab === 'connections';
 
   const activeTab = useMemo<SettingsTab>(() => {
-    const raw = searchParams.get('tab');
+    const raw = rawTab;
     // legacy 别名:旧「远端机器」(remote) /「设备互联」(devices) 已并入「远程控制」(remote-control)。
     if (raw === 'remote' || raw === 'devices') return 'remote-control';
     // legacy 别名:旧「飞书机器人」(feishu-bot) /「Slack 机器人」(slack-bot) 已并入「IM 机器人」(im-bot)。
     if (raw === 'feishu-bot' || raw === 'slack-bot') return 'im-bot';
     // legacy 别名:旧独立「Tina」(tina) 已并入「IM 机器人」(im-bot)。
     if (raw === 'tina') return 'im-bot';
-    // legacy 别名:旧「工具密钥」(api-keys) 已下架——最后一把 mivo key 随
-    // XD Mivo 意识化改由意识设置页收单,深链落到「意识」。
-    if (raw === 'api-keys') return 'ghosts';
-    // legacy 别名:旧「第三方平台」(connections) 已下架——Slack 官方 MCP 随
-    // cindy-slack 意识化收尾(Google/Jira/GitHub/GitLab 此前已迁),深链落到「意识」。
-    if (raw === 'connections') return 'ghosts';
     if (raw === 'agent-island' && !isMac) return 'general';
     return isSettingsTab(raw) ? raw : 'general';
-  }, [isMac, searchParams]);
-
-  // 意识子导航(C2c-2):?ghost=<id> 定位到某张意识的独立设置页。
-  const ghosts = useInstalledGhosts();
-  const activeGhostId = activeTab === 'ghosts' ? searchParams.get('ghost') : null;
-  const activeGhost = useMemo(
-    () => (activeGhostId ? ghosts.find((c) => c.manifest.id === activeGhostId) ?? null : null),
-    [activeGhostId, ghosts],
-  );
+  }, [isMac, rawTab]);
 
   // 「IM 机器人」页内分栏:?imGroup=cindy|personal 定位到某个 tab(深链可直达)。
   // 缺省/非法 imGroup 一律落到默认分栏:旧「飞书机器人」深链落「个人」(飞书在
@@ -103,23 +85,10 @@ export function SettingsView() {
     searchParams.get('tab') === 'feishu-bot' ? 'personal' : 'cindy';
   // 渲染层直接用兜底值,imGroup 缺省时不回写 URL(少一次 replace,深链语义不变)。
   const resolvedImBotGroup: ImBotSettingsGroup | null =
-    activeTab === 'im-bot' ? activeImBotGroup ?? imBotFallbackGroup : null;
+    activeTab === 'im-bot' ? (activeImBotGroup ?? imBotFallbackGroup) : null;
 
   const handleSelectTab = useCallback(
     (tab: SettingsTab) => {
-      // 「插件」是普通 cell(无二级折叠):点击一律回到总览页——
-      // 在某个插件的详情子页时点它也要能退回总览,所以不能走
-      // 下面的 tab === activeTab 早退。
-      if (tab === 'ghosts') {
-        if (activeTab === 'ghosts' && !activeGhostId) return;
-        const next = new URLSearchParams(searchParams);
-        next.delete('openPanel');
-        next.delete('ghost');
-        next.delete('imGroup');
-        next.set('tab', 'ghosts');
-        setSearchParams(next, { replace: true });
-        return;
-      }
       if (tab === activeTab) return;
       const next = new URLSearchParams(searchParams);
       next.delete('openPanel');
@@ -132,18 +101,7 @@ export function SettingsView() {
       }
       setSearchParams(next, { replace: true });
     },
-    [activeGhostId, activeTab, searchParams, setSearchParams],
-  );
-
-  const handleSelectGhost = useCallback(
-    (id: string) => {
-      const next = new URLSearchParams(searchParams);
-      next.delete('openPanel');
-      next.set('tab', 'ghosts');
-      next.set('ghost', id);
-      setSearchParams(next, { replace: true });
-    },
-    [searchParams, setSearchParams],
+    [activeTab, searchParams, setSearchParams],
   );
 
   const handleSelectImBotGroup = useCallback(
@@ -156,14 +114,6 @@ export function SettingsView() {
     },
     [searchParams, setSearchParams],
   );
-
-  // 守卫:ghost 指向的意识不存在(已卸下 / 手改地址)→ 退回意识总览。
-  useEffect(() => {
-    if (activeTab !== 'ghosts' || !activeGhostId || activeGhost) return;
-    const next = new URLSearchParams(searchParams);
-    next.delete('ghost');
-    setSearchParams(next, { replace: true });
-  }, [activeGhostId, activeGhost, activeTab, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (activeTab !== 'help') {
@@ -185,15 +135,20 @@ export function SettingsView() {
   // deep-link: ?section=... → scroll to a section inside General settings.
   useEffect(() => {
     const section = searchParams.get('section');
-    const sectionId = section === 'collaboration'
-      ? 'settings-collaboration'
-      : section === 'notifications'
-        ? 'settings-notifications'
-        : null;
+    const sectionId =
+      section === 'collaboration'
+        ? 'settings-collaboration'
+        : section === 'notifications'
+          ? 'settings-notifications'
+          : null;
     if (!sectionId) return;
     const el = document.getElementById(sectionId);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [searchParams]);
+
+  // The plugin catalog moved to the top-level /plugins route. Keep old links
+  // working without leaving a second plugin management UI under Settings.
+  if (shouldRedirectToPlugins) return <Navigate to="/plugins" replace />;
 
   return (
     <div
@@ -370,26 +325,6 @@ export function SettingsView() {
               </div>
             )}
 
-            {activeTab === 'ghosts' && (
-              <div
-                role="tabpanel"
-                id="settings-panel-ghosts"
-                aria-labelledby="settings-tab-ghosts"
-              >
-                {/* 意识(意识系统 C2c):?ghost=<id> 进单意识独立设置页,否则总览。 */}
-                <section className="pb-[18px]" aria-label={t('settings.ghosts.title')}>
-                  {activeGhost ? (
-                    <GhostDetailSection
-                      ghost={activeGhost}
-                      onBack={() => handleSelectTab('ghosts')}
-                    />
-                  ) : (
-                    <GhostsSection onOpenGhost={handleSelectGhost} workingDir={workingDir ?? undefined} />
-                  )}
-                </section>
-              </div>
-            )}
-
             {activeTab === 'voice-input' && (
               <div
                 role="tabpanel"
@@ -480,11 +415,7 @@ export function SettingsView() {
             )}
 
             {activeTab === 'import' && (
-              <div
-                role="tabpanel"
-                id="settings-panel-import"
-                aria-labelledby="settings-tab-import"
-              >
+              <div role="tabpanel" id="settings-panel-import" aria-labelledby="settings-tab-import">
                 <section aria-label={t('settings.sections.import')}>
                   <SessionImportSection />
                 </section>
@@ -492,11 +423,7 @@ export function SettingsView() {
             )}
 
             {activeTab === 'im-bot' && (
-              <div
-                role="tabpanel"
-                id="settings-panel-im-bot"
-                aria-labelledby="settings-tab-im-bot"
-              >
+              <div role="tabpanel" id="settings-panel-im-bot" aria-labelledby="settings-tab-im-bot">
                 {/* 单页 + 页内分栏 tab:imGroup 缺省时渲染默认分栏 */}
                 <section aria-label={t('settings.sections.imBot')}>
                   {resolvedImBotGroup && (
@@ -510,11 +437,7 @@ export function SettingsView() {
             )}
 
             {activeTab === 'help' && (
-              <div
-                role="tabpanel"
-                id="settings-panel-help"
-                aria-labelledby="settings-tab-help"
-              >
+              <div role="tabpanel" id="settings-panel-help" aria-labelledby="settings-tab-help">
                 <section aria-label={t('settings.sections.help')}>
                   <HelpSection onAskHelp={() => setHelpAssistantOpen(true)} />
                 </section>
@@ -522,11 +445,7 @@ export function SettingsView() {
             )}
 
             {activeTab === 'about' && (
-              <div
-                role="tabpanel"
-                id="settings-panel-about"
-                aria-labelledby="settings-tab-about"
-              >
+              <div role="tabpanel" id="settings-panel-about" aria-labelledby="settings-tab-about">
                 <section aria-label={t('settings.sections.about')}>
                   <AboutSection />
                 </section>

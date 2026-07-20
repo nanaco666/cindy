@@ -43,6 +43,14 @@ export interface ComposerDraft {
   text: JSONContent | null;
   /** Snapshot of attachments at save time. Empty array means no attachments. */
   attachments: AttachedFile[];
+  /** Plugin-page handoff consumed by ChatInput after its editor hydration. */
+  pendingGhostId?: string;
+  /**
+   * One-shot routed-entry intent: hydrate this draft, then place the caret at
+   * the final editable position. ChatInput consumes and clears the flag so a
+   * later ordinary remount does not steal focus.
+   */
+  focusAtEnd?: boolean;
   /**
    * 选中文字引用(chat-text-quote):待随下一条消息发送的引用片段(聊天
    * 消息或文件浏览器来源,后者带 sourcePath)。发送时拼成 markdown

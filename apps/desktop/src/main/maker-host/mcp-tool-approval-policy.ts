@@ -21,7 +21,7 @@ const DESKTOP_CLAUDE_READ_ONLY_ALLOWED_TOOLS = [
   'mcp__lizi_feishu_bot__list_tools',
   'mcp__lizi_scheduler__list_tools',
   'mcp__lizi_ssh__list_tools',
-  'mcp__lizi_xdt_helper__list_tools',
+  'mcp__cindy_helper__list_tools',
   'mcp__lizi_memory__list_tools',
   'mcp__lizi_contacts__list_tools',
   'mcp__lizi_slack__slack_status',

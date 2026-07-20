@@ -15,7 +15,7 @@ describe('mobileAttachmentUpload', () => {
   it('requests a device-link media presign-put with desktop-compatible file metadata', async () => {
     const apiFetch = vi.fn(async () => ({
       putUrl: 'https://oss.example/upload',
-      key: 'xdt-maker/device-link/user-1/spec.pdf',
+      key: 'cindy/device-link/user-1/spec.pdf',
       expiresAt: '2026-06-16T00:00:00.000Z',
     }));
 
@@ -36,7 +36,7 @@ describe('mobileAttachmentUpload', () => {
         ext: 'pdf',
       },
     });
-    expect(result.key).toBe('xdt-maker/device-link/user-1/spec.pdf');
+    expect(result.key).toBe('cindy/device-link/user-1/spec.pdf');
   });
 
   it('uploads bytes with the signed PUT url', async () => {
@@ -66,7 +66,7 @@ describe('mobileAttachmentUpload', () => {
   it('returns an OSS-ref attachment after successful upload', async () => {
     const apiFetch = vi.fn(async () => ({
       putUrl: 'https://oss.example/upload',
-      key: 'xdt-maker/device-link/user-1/photo.png',
+      key: 'cindy/device-link/user-1/photo.png',
       expiresAt: '2026-06-16T00:00:00.000Z',
     }));
     const fetchPut = vi.fn(async () => ({
@@ -94,7 +94,7 @@ describe('mobileAttachmentUpload', () => {
     });
     expect(attachment.url).toBe(attachment.path);
     expect(parseAttachmentOssRef(attachment.path)).toEqual({
-      ossKey: 'xdt-maker/device-link/user-1/photo.png',
+      ossKey: 'cindy/device-link/user-1/photo.png',
       mimeType: 'image/png',
       originalName: 'photo.png',
     });
@@ -160,7 +160,7 @@ describe('mobileAttachmentUpload', () => {
   it('returns an OSS-ref attachment after successful native file upload', async () => {
     const apiFetch = vi.fn(async () => ({
       putUrl: 'https://oss.example/upload',
-      key: 'xdt-maker/device-link/user-1/photo.png',
+      key: 'cindy/device-link/user-1/photo.png',
       expiresAt: '2026-06-16T00:00:00.000Z',
     }));
     const uploadFile = vi.fn(async () => ({ status: 200 }));
@@ -187,7 +187,7 @@ describe('mobileAttachmentUpload', () => {
       size: 12,
     });
     expect(parseAttachmentOssRef(attachment.path)).toEqual({
-      ossKey: 'xdt-maker/device-link/user-1/photo.png',
+      ossKey: 'cindy/device-link/user-1/photo.png',
       mimeType: 'image/png',
       originalName: 'photo.png',
     });
@@ -199,7 +199,7 @@ describe('mobileAttachmentUpload', () => {
     // (2026-07 粘贴图片实撞)。两端必须同源兜底到 octet-stream。
     const apiFetch = vi.fn(async () => ({
       putUrl: 'https://oss.example/upload',
-      key: 'xdt-maker/device-link/user-1/file.pdf',
+      key: 'cindy/device-link/user-1/file.pdf',
       expiresAt: '2026-06-16T00:00:00.000Z',
     }));
     const uploadFile = vi.fn(async () => ({ status: 200 }));
@@ -343,7 +343,7 @@ describe('mobileAttachmentUpload', () => {
 
   it('deletes the staged OSS object when an uploaded attachment is discarded before send', async () => {
     const apiFetch = vi.fn(async () => ({ deleted: true }));
-    const path = buildAttachmentOssRef({ ossKey: 'xdt-maker/device-link/user-1/photo.png', mimeType: 'image/png' });
+    const path = buildAttachmentOssRef({ ossKey: 'cindy/device-link/user-1/photo.png', mimeType: 'image/png' });
 
     discardMobileUploadedAttachment({ path }, {
       getToken: async () => 'token-1',
@@ -355,7 +355,7 @@ describe('mobileAttachmentUpload', () => {
       baseUrl: DEVICE_LINK_API_BASE_URL,
       method: 'DELETE',
       token: 'token-1',
-      body: { key: 'xdt-maker/device-link/user-1/photo.png' },
+      body: { key: 'cindy/device-link/user-1/photo.png' },
     });
   });
 
@@ -373,7 +373,7 @@ describe('mobileAttachmentUpload', () => {
     const failingFetch = vi.fn(async () => {
       throw new Error('network down');
     });
-    const path = buildAttachmentOssRef({ ossKey: 'xdt-maker/device-link/user-1/photo.png' });
+    const path = buildAttachmentOssRef({ ossKey: 'cindy/device-link/user-1/photo.png' });
     discardMobileUploadedAttachment({ path }, {
       getToken: async () => 'token-1',
       deps: { apiFetch: failingFetch as unknown as typeof apiFetchRaw },

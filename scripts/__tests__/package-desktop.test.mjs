@@ -27,13 +27,12 @@ test('global package selects its region before agent binary CDN fallback', () =>
   assert.ok(regionIndex < ensureIndex);
 });
 
-test('parsePackageArgs: 零参数默认 = 当前平台 + cn + dev + 版本无关', () => {
+test('parsePackageArgs: 零参数默认 = 当前平台 + cn + 版本无关', () => {
   const args = parsePackageArgs([], DEFAULTS);
   assert.deepEqual(args, {
     platform: 'win32',
     arch: 'x64',
     region: 'cn',
-    channel: 'dev',
     versionSpec: null,
     skipSmoke: false,
     allowUnsigned: false,
@@ -49,13 +48,12 @@ test('parsePackageArgs: --no-sign 隐含 --allow-unsigned', () => {
 
 test('parsePackageArgs: 完整参数解析', () => {
   const args = parsePackageArgs(
-    ['--platform', 'darwin', '--arch', 'arm64', '--region', 'global', '--channel', 'release', '--version', '1.2.3', '--skip-smoke', '--allow-unsigned'],
+    ['--platform', 'darwin', '--arch', 'arm64', '--region', 'global', '--version', '1.2.3', '--skip-smoke', '--allow-unsigned'],
     DEFAULTS,
   );
   assert.equal(args.platform, 'darwin');
   assert.equal(args.arch, 'arm64');
   assert.equal(args.region, 'global');
-  assert.equal(args.channel, 'release');
   assert.equal(args.versionSpec, '1.2.3');
   assert.equal(args.skipSmoke, true);
   assert.equal(args.allowUnsigned, true);
@@ -63,7 +61,7 @@ test('parsePackageArgs: 完整参数解析', () => {
 
 test('parsePackageArgs: 非法值逐项报错', () => {
   assert.throws(() => parsePackageArgs(['--region', 'us'], DEFAULTS), /region/);
-  assert.throws(() => parsePackageArgs(['--channel', 'canary'], DEFAULTS), /channel/);
+  assert.throws(() => parsePackageArgs(['--channel', 'release'], DEFAULTS), /未知参数/);
   assert.throws(() => parsePackageArgs(['--platform', 'freebsd'], DEFAULTS), /platform/);
   assert.throws(() => parsePackageArgs(['--version', 'v1.2.3'], DEFAULTS), /--version/);
   assert.throws(() => parsePackageArgs(['--version', '1.2'], DEFAULTS), /--version/);
@@ -103,16 +101,20 @@ test('resolvePackageVersion: bump 关键字走 CDN 基线;无有效基线报错'
   await assert.rejects(() => resolvePackageVersion('minor', async () => ''), /基线/);
 });
 
-test('artifactRelDir / artifactBaseName: region-channel 目录 + cindy-* 命名', () => {
+test('artifactRelDir / artifactBaseName: region 目录 + cindy-* 命名', () => {
   assert.equal(
-    artifactRelDir({ region: 'cn', channel: 'dev', version: '0.0.0', versionless: true, platformKey: 'win32-x64' }),
-    'artifacts/cn-dev/dev/win32-x64',
+    artifactRelDir({ region: 'cn', version: '0.0.0', versionless: true, platformKey: 'win32-x64' }),
+    'artifacts/cn/unversioned/win32-x64',
   );
   assert.equal(
-    artifactRelDir({ region: 'global', channel: 'release', version: '1.2.3', versionless: false, platformKey: 'darwin-arm64' }),
-    'artifacts/global-release/1.2.3/darwin-arm64',
+    artifactRelDir({ region: 'global', version: '1.2.3', versionless: false, platformKey: 'darwin-arm64' }),
+    'artifacts/global/1.2.3/darwin-arm64',
   );
-  assert.equal(artifactBaseName({ version: '0.0.0', versionless: true }), 'cindy-dev');
+  assert.equal(
+    artifactRelDir({ region: 'dev', version: '1.2.3', versionless: false, platformKey: 'darwin-arm64' }),
+    'artifacts/dev/1.2.3/darwin-arm64',
+  );
+  assert.equal(artifactBaseName({ version: '0.0.0', versionless: true }), 'cindy-unversioned');
   assert.equal(artifactBaseName({ version: '1.2.3', versionless: false }), 'cindy-1.2.3');
 });
 
@@ -121,24 +123,23 @@ test('buildBuildInfo: 版本无关时 version 记 null,platformKey 拼装正确'
     version: '0.0.0',
     versionless: true,
     region: 'cn',
-    channel: 'dev',
     platform: 'win32',
     arch: 'x64',
     commitSha: 'abc123',
     electronVersion: '41.2.0',
     schemaVersionMax: 42,
     migrationFiles: ['0000_init.sql'],
-    files: [{ role: 'installer', name: 'cindy-dev-Setup.exe', sha256: 'x', size: 1 }],
+    files: [{ role: 'installer', name: 'cindy-unversioned-Setup.exe', sha256: 'x', size: 1 }],
     signing: { installerSigned: false },
   };
   const info = buildBuildInfo(base);
-  assert.equal(info.schemaVersion, 1);
+  assert.equal(info.schemaVersion, 2);
   assert.equal(info.product, 'cindy-desktop');
   assert.equal(info.version, null);
   assert.equal(info.versionless, true);
   assert.equal(info.platformKey, 'win32-x64');
   assert.equal(info.region, 'cn');
-  assert.equal(info.channel, 'dev');
+  assert.equal(Object.hasOwn(info, 'channel'), false);
   assert.ok(typeof info.buildTime === 'string' && info.buildTime.length > 0);
 
   const versioned = buildBuildInfo({ ...base, version: '1.2.3', versionless: false });

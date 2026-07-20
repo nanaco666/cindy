@@ -28,8 +28,8 @@ import {
 
 const DOC_DIR = 'file:///doc/';
 const THUMB_DIR = `${DOC_DIR}${__testing.thumbDirName}`;
-const OSS_REF = 'xdt-oss-attach://m/abc123';
-const OSS_REF_2 = 'xdt-oss-attach://m/def456';
+const OSS_REF = 'cindy-oss-attach://m/abc123';
+const OSS_REF_2 = 'cindy-oss-attach://m/def456';
 
 function makeFsDeps(overrides: Partial<SentAttachmentThumbFsDeps> = {}) {
   const copies: Array<{ from: string; to: string }> = [];
@@ -133,10 +133,10 @@ describe('sentAttachmentThumbStore', () => {
   it('超过条目上限时 LRU 淘汰最老条目并删除其文件', async () => {
     const { deps, removed } = makeFsDeps();
     for (let index = 0; index < __testing.maxEntries + 1; index += 1) {
-      await registerSentAttachmentThumb(`xdt-oss-attach://m/ref-${index}`, `file:///cache/${index}.jpg`, deps);
+      await registerSentAttachmentThumb(`cindy-oss-attach://m/ref-${index}`, `file:///cache/${index}.jpg`, deps);
     }
-    expect(getSentAttachmentThumbUri('xdt-oss-attach://m/ref-0')).toBeNull();
-    expect(getSentAttachmentThumbUri(`xdt-oss-attach://m/ref-${__testing.maxEntries}`)).not.toBeNull();
+    expect(getSentAttachmentThumbUri('cindy-oss-attach://m/ref-0')).toBeNull();
+    expect(getSentAttachmentThumbUri(`cindy-oss-attach://m/ref-${__testing.maxEntries}`)).not.toBeNull();
     expect(removed).toHaveLength(1);
     expect(removed[0]?.startsWith(`${THUMB_DIR}/thumb-`)).toBe(true);
   });
@@ -172,7 +172,7 @@ describe('sentAttachmentThumbStore', () => {
     expect(getSentAttachmentThumbUri(OSS_REF)).toBeNull();
   });
 
-  it('applySentAttachmentThumbOverlay 只替换命中的 xdt-oss-attach:// 图片附件', async () => {
+  it('applySentAttachmentThumbOverlay 只替换命中的 cindy-oss-attach:// 图片附件', async () => {
     const { deps } = makeFsDeps();
     await registerSentAttachmentThumb(OSS_REF, 'file:///cache/a.jpg', deps);
     const localUri = getSentAttachmentThumbUri(OSS_REF)!;

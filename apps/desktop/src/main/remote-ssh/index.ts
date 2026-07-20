@@ -806,7 +806,7 @@ export function registerRemoteSshIpc(): void {
     if (!localAuthPath) {
       throwIpcError(
         'SSH_AGENT_NOT_INSTALLED',
-        'no local Codex auth.json found; log in via xdt-maker (or `codex login`) first',
+        'no local Codex auth.json found; log in via Cindy (or `codex login`) first',
       );
     }
 

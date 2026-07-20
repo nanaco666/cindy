@@ -63,7 +63,7 @@
 - **签名 keystore(已就绪)**:`xdmaker-release.jks`(alias `xdmaker-release`,storeType JKS,RSA 2048,证书 SHA256 `AD:73:7E:7E:13:1A:63:C6:B2:2B:43:D2:E6:76:9C:48:E5:C5:4C:65:25:32:85:A0:43:55:07:11:44:59:92:E4`,有效期至 2053)。文件在**仓库外** `/Users/cn-ios/Documents/xdt/XDMakerMobileCer/Android/`,**不进仓库**;口令同目录 `signing-info.txt`(明文,**严禁复制进仓库工作区**,红线 23)。脚本通过环境变量读取路径与口令(§7),自签即最终生产签名——**NPKG 不重签**,故无 iOS 的证书 Team 校验环节。
 - **NPKG 复用点**:NPKG 上传 API 本身平台无关(`POST /api/v1/packages/`)。但 iOS 的 `release-ios.sh` 核心是**轮询 `type=enterprise` 企业子包 + 校验签名 Team `UE5H8B62F9.*`**——这套**对 Android 不适用**(Android 不重签),需另写简化脚本(§11)。
 - **现成可复用**(均已确认平台无关):`scripts/release-lib.mjs`(参数解析 / git 闸门 / public env 校验 / `decideReleaseMode`)、`scripts/lib/ota-manifest.mjs`(Expo 协议 manifest 组装 / runtime 基线闸门)、`scripts/lib/ios-local.mjs`(`compareBuildNumbers` / `assertBuildNumberMonotonic` / `fetchBaselineBuildNumber` / `buildReleaseRecord` / `parseNpkgInstallLinks`——命名带 ios 但逻辑与平台无关)、`scripts/shared/oss.mjs`(OSS/CDN 原语)。
-- **服务端 `apps/mobile-update-server` 零改动**:`/manifest` 读 `expo-platform` 头、`/latest?platform=android` 解析 `mobile-ota/android/release.json`(`resolveReleaseUrl(cdnBase, otaPrefix, platform)`),已完全平台化。
+- **服务端 `apps/mobile-update-server`**:`/manifest` 读 `expo-platform` 头并按 canary header 选择指针、`/latest?platform=android` 默认解析 stable `release.json`，canary query 解析 `canary-release.json`(`resolveReleaseUrl(cdnBase, otaPrefix, platform, channel)`),已完全平台化。
 
 ## 4. 总体架构
 
@@ -123,7 +123,7 @@ flowchart TD
 复用 `release-lib.mjs` 的参数解析 / git 闸门 / dry-run 风格。步骤:
 
 1. **算指纹**:`npx expo-updates fingerprint:generate --platform android`(self-host 身份 env:`EXPO_PUBLIC_XDT_OTA_SELFHOST=1`;`fingerprint.config.cjs` 的 beta 剥离 hook 仍生效)→ 得 `runtimeVersion`,落盘 `release/android-runtime.json` 供热更脚本复用(镜像 iOS 的 `release/ios-runtime.json`)。
-2. **读并校验 versionCode**:读 committed `apps/mobile/android-version.json`(`{ "versionCode": N }`)——放仓库根而非 `release/`,因为 `apps/mobile/.gitignore` 忽略整个 `/release`(那里只放 per-build 产物如 `android-runtime.json`);经 `assertBuildNumberMonotonic`(复用 `lib/ios-local.mjs`)对 CDN 基线 `mobile-ota/android/release.json` 的上一条 `buildNumber`(即上次 versionCode)做单调校验;经 env `XDT_ANDROID_VERSION_CODE` 传给 prebuild(供 §6.1 注入)。
+2. **读并校验 versionCode**:读 committed `apps/mobile/android-version.json`(`{ "versionCode": N }`)——放仓库根而非 `release/`,因为 `apps/mobile/.gitignore` 忽略整个 `/release`(那里只放 per-build 产物如 `android-runtime.json`);经 `assertBuildNumberMonotonic`(复用 `lib/ios-local.mjs`)对 CDN canary 基线 `mobile-ota/android/canary-release.json`（无 canary 时回退 stable `release.json`）的上一条 `buildNumber`(即上次 versionCode)做单调校验;经 env `XDT_ANDROID_VERSION_CODE` 传给 prebuild(供 §6.1 注入)。
 3. **prebuild**:`expo prebuild -p android --clean`,注入自建变体 env(`EXPO_PUBLIC_XDT_OTA_SELFHOST=1` / `XDT_ANDROID_VERSION_CODE` / 必要的 `EXPO_PUBLIC_*`)。真实更新地址只来自 endpoint 清单。
 4. **注入签名 + 编译**:`android/` 是生成目录(gitignored、每次 prebuild 重建),脚本**幂等 patch** 生成的 `android/app/build.gradle`——把 `release` buildType 的 `signingConfig` 从默认的 `signingConfigs.debug` 改为指向 env 驱动的 release keystore(默认模板 release 用 debug 签名,**必须改**)。keystore 路径与口令经 `-P` gradle property 从环境变量传入 `gradlew assembleRelease`,**绝不落盘明文、绝不写进被 patch 的 build.gradle**(patch 只引用 property 名):
    - `XDT_ANDROID_KEYSTORE_PATH`(默认 `/Users/cn-ios/Documents/xdt/XDMakerMobileCer/Android/xdmaker-release.jks`)
@@ -131,7 +131,7 @@ flowchart TD
    - gradle 环境用 `resolveJavaRuntimeEnv()` 补 JDK 17。
    - 镜像 iOS 脚本"构建期写 `ExportOptions.plist` + 装 profile"的时机——生成物只在临时构建目录,不进仓。
 5. **交付 NPKG**:调用 §11 的 `release-android-npkg.sh upload <apk>`;`--skip-npkg` 时跳过上传与版本记录、只产 APK。
-6. **写整包版本记录**:`buildReleaseRecord({ version, buildNumber: versionCode, runtimeVersion, installUrl, releaseNotes, minVersion? })`(复用 `lib/ios-local.mjs`)→ 上传 `mobile-ota/android/release.json`,供 `/latest?platform=android` 读取。
+6. **写整包版本记录**:`buildReleaseRecord({ version, buildNumber: versionCode, runtimeVersion, installUrl, releaseNotes, minVersion? })`(复用 `lib/ios-local.mjs`)→ 上传 `mobile-ota/android/canary-release.json`,供 `/latest?platform=android&channel=canary` 读取；验证后由 promote 写 stable 指针。
 7. **闸门**:`assertProductionGitGate`(main + clean + `HEAD==origin/main`)、versionCode 单调、**默认 dry-run,`--execute` 才真跑**。逃生开关对齐 iOS:`--skip-git-gate` / `--skip-record` / `--skip-npkg` / `--apk <path>`(直传预构建 APK)。⚠️ `--apk` 逃生路径的元数据一致性硬化(读 APK 内 versionCode/runtimeVersion 与待写记录比对)沿用 iOS 文档 §13.4 的同类 pending 项。
 
 `--execute` 前置:校验 region / endpoint manifest 自举基址,并要求所选 region 的 `self-host-regions.json.tapdb` 完整;需 macOS + Android SDK + JDK 17 + keystore env + NPKG 凭证(除非 `--skip-npkg`)。
@@ -150,11 +150,13 @@ OSS/CDN 复用 `scripts/shared/oss.mjs`(bucket `smash-dev`,region `oss-cn-shangh
 smash-dev/xdt-maker/mobile-ota/
   assets/<sha256>                                   # bundle(.hbc)+ 图片等,内容寻址、永久缓存、天然增量(与 iOS 共享内容寻址目录)
   android/<runtimeVersion>/<updateId>/update.json   # Expo 协议 manifest
-  android/<runtimeVersion>/latest.json              # JS OTA 指针:该 runtimeVersion 最新 updateId
-  android/release.json                              # 整包版本记录(由 release-android-local.mjs 写,供 /latest?platform=android)
+  android/<runtimeVersion>/canary-latest.json       # canary JS OTA 指针(脚本默认写入)
+  android/<runtimeVersion>/latest.json              # stable JS OTA 指针(promote 后写入)
+  android/canary-release.json                       # canary 整包记录(脚本默认写入)
+  android/release.json                              # stable 整包记录(promote 后写入,供 /latest?platform=android)
 ```
 
-4. **runtime 基线闸门**(`--execute`,复用 `assertOtaRuntimeMatchesBaseline`):重算当前工作树 android 指纹,要它等于 CDN `mobile-ota/android/release.json` 的 `runtimeVersion`,不等则原生层已变、须先出冷更整包;`--skip-runtime-check` / `--runtime-version` override 对齐 iOS。
+4. **runtime 基线闸门**(`--execute`,复用 `assertOtaRuntimeMatchesBaseline`):重算当前工作树 android 指纹,要它等于 CDN `mobile-ota/android/canary-release.json`（无 canary 时回退 stable `release.json`）的 `runtimeVersion`,不等则原生层已变、须先出冷更整包;`--skip-runtime-check` / `--runtime-version` override 对齐 iOS。
 5. 默认 dry-run,`--execute` 才真正上传 + 翻新 `latest.json`(先传归档 `update.json` 再翻 `latest.json` 指针,避免指向未就绪产物)。
 
 ## 9. `mobile-update-server`:零改动复用
@@ -162,11 +164,11 @@ smash-dev/xdt-maker/mobile-ota/
 服务已平台化,Android **无需任何改动**:
 
 - **`GET /manifest`**:客户端带 `expo-platform: android` + `expo-runtime-version` → 服务端 `resolveLatestManifestUrl(cdnBase, otaPrefix, 'android', rtv)` 拉 `mobile-ota/android/<rtv>/latest.json` → 包成 `multipart/mixed` 返回;无匹配 → 204。
-- **`GET /latest?platform=android`**:`resolveReleaseUrl(cdnBase, otaPrefix, 'android')` 透传 `mobile-ota/android/release.json`。
+- **`GET /latest?platform=android`**:`resolveReleaseUrl(cdnBase, otaPrefix, 'android')` 默认透传 `mobile-ota/android/release.json`;canary 请求带 `channel=canary` 时透传 `canary-release.json`。`androidStoreUrl` 为空时仍回退 OSS APK。
 
 ## 10. `release-android-check.mjs`:冷/热更只读预判
 
-镜像 `release-ios-check.mjs`:本地算 android 指纹(`--platform android` + self-host env)vs CDN `mobile-ota/android/release.json` 的 `runtimeVersion`,复用 `decideReleaseMode` 输出:
+镜像 `release-ios-check.mjs`:本地算 android 指纹(`--platform android` + self-host env)vs CDN `mobile-ota/android/canary-release.json`（无 canary 时回退 stable `release.json`）的 `runtimeVersion`,复用 `decideReleaseMode` 输出:
 
 - 相等 → `OTA_OK`(发热更即可,`pnpm mobile:release:android:ota -- --execute`)
 - 不等 → `COLD_BUILD_REQUIRED`(必须冷更,`pnpm mobile:release:android:local -- --execute`)
@@ -182,7 +184,7 @@ smash-dev/xdt-maker/mobile-ota/
 - `from-eas [--profile]`:按 profile 精确取最近一次 finished EAS **android** 构建产物(`.apk`;若 EAS 出 `.aab` 需另议)→ 下载 → `upload`。
 - `resolve <parent_id>`:补取已上传父包的链接(自测/补发)。
 - 凭证沿用 iOS 约定:`NPKG_TOKEN` / `NPKG_BASE_URL`(env 优先,回退 `~/.config/xdt-maker/npkg/credentials.env`,`chmod 600`,**不进库**),脚本本体零密钥。
-- `lib/ios-local.mjs` 的 `parseNpkgInstallLinks` 已能抓 `/install/<id>`(Android 输出无 itms,只多一个 download URL);冷更脚本据此拿 `installUrl` 写进 `release.json`。
+- `lib/ios-local.mjs` 的 `parseNpkgInstallLinks` 已能抓 `/install/<id>`(Android 输出无 itms,只多一个 download URL);当前 Android 自建冷更直接把自签 APK 上传 OSS，按 `androidStoreUrl` 或 APK CDN 直链写进 `canary-release.json`。
 
 > ⚠️ NPKG 是否已支持"APK 上传即取下载链接"属外部待确认项(§13)。未确认前,`release-android-local.mjs --skip-npkg` 可只产签名 APK + 跳过 NPKG/记录,链路其余部分照跑。
 

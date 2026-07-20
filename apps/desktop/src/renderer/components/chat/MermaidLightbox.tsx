@@ -8,16 +8,19 @@
  *   - trackpad/mouse wheel pan, with ctrl/cmd+wheel zoom at cursor
  *   - drag to pan (when zoomed in)
  *   - double-click to reset
- *   - bottom toolbar: zoom out / level / zoom in / reset / close
+ *   - bottom toolbar: zoom out / level / zoom in / annotate (host-provided) /
+ *     copy (PNG + source) / close
  *
  * SVG (vector) stays sharp at any zoom level — no rasterization step.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Minus, Plus, RotateCcw, X } from 'lucide-react';
+import { Check, Copy, Minus, Pen, Plus, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { resolveExportBackground, svgToPngBlob } from '@/lib/rasterizeToImage';
+import { useCopyAsImage } from './useCopyAsImage';
 import {
   LIGHTBOX_MAX_SCALE,
   LIGHTBOX_MIN_SCALE,
@@ -32,10 +35,18 @@ import {
 
 interface MermaidLightboxProps {
   svg: string;
+  /** mermaid 原始源码(可选):随「复制图片」附带 text/plain 表示。 */
+  source?: string;
+  /**
+   * 「标注」入口(可选):由宿主提供——先关本 lightbox 再打开 ImageLightbox
+   * 标注层(两层全屏叠加会打架:Esc/关闭链、滚轮手势都会互抢)。不传则不
+   * 显示按钮(文件浏览器等无聊天会话的宿主没有标注出口)。
+   */
+  onAnnotate?: () => void;
   onClose: () => void;
 }
 
-export function MermaidLightbox({ svg, onClose }: MermaidLightboxProps) {
+export function MermaidLightbox({ svg, source, onAnnotate, onClose }: MermaidLightboxProps) {
   const { t } = useTranslation();
   const [isVisible, setIsVisible] = useState(false);
   const [scale, setScale] = useState(1);
@@ -47,7 +58,19 @@ export function MermaidLightbox({ svg, onClose }: MermaidLightboxProps) {
   const isWheelingRef = useRef(false);
   const wheelIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<LightboxViewport>({ scale: 1, tx: 0, ty: 0 });
+
+  // 复制为图片:光栅化用 props 的 SVG 字符串(固有尺寸,与当前缩放无关),
+  // 实底色取 SVG 所在卡片的主题底色(overlay 是半透明遮罩,不可取);plainText
+  // 附带 mermaid 源码(有传才带)。
+  // 标注入口不在此处——聊天块工具栏已提供,双层 lightbox 会打架(Esc/关闭链)。
+  const { copiedImage, copyAsImage } = useCopyAsImage(async () => ({
+    blob: await svgToPngBlob(svg, {
+      background: resolveExportBackground(cardRef.current),
+    }),
+    plainText: source,
+  }));
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => setIsVisible(true));
@@ -244,6 +267,7 @@ export function MermaidLightbox({ svg, onClose }: MermaidLightboxProps) {
         onDoubleClick={reset}
       >
         <div
+          ref={cardRef}
           className={cn(
             'rounded-[12px] border border-[var(--msg-code-block-border)]',
             'bg-[var(--msg-code-block-bg)]',
@@ -296,8 +320,18 @@ export function MermaidLightbox({ svg, onClose }: MermaidLightboxProps) {
           <Plus className="h-4 w-4" />
         </ToolbarButton>
         <div className="mx-1 h-5 w-px bg-[var(--lightbox-toolbar-border)]" />
-        <ToolbarButton onClick={reset} label={t('chat.mermaidLightbox.reset')}>
-          <RotateCcw className="h-4 w-4" />
+        {/* 复位缩放不占按钮位:双击空白处即可复位(handleMouseDown 链上的
+            onDoubleClick={reset}),位置让给更高频的「标注」。 */}
+        {onAnnotate ? (
+          <ToolbarButton onClick={onAnnotate} label={t('chat.mermaid.annotate')}>
+            <Pen className="h-4 w-4" />
+          </ToolbarButton>
+        ) : null}
+        <ToolbarButton
+          onClick={copyAsImage}
+          label={copiedImage ? t('chat.mermaid.copied') : t('chat.mermaid.copy')}
+        >
+          {copiedImage ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
         </ToolbarButton>
         <ToolbarButton onClick={handleClose} label={t('chat.mermaidLightbox.close')}>
           <X className="h-4 w-4" />

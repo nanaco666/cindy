@@ -391,6 +391,13 @@ export const MAKER_INVOKE = {
   PROVIDER_OAUTH_LOGIN: 'maker:provider:oauth:login',
   PROVIDER_OAUTH_LOGOUT: 'maker:provider:oauth:logout',
   PROVIDER_OAUTH_CANCEL: 'maker:provider:oauth:cancel',
+  /**
+   * 本机 agent CLI 安装 / 登录态扫描(设置 → 模型供应商「检测建议」用)。
+   * 只做存在性 stat、不读凭证内容(规则 23);返回查询型结构化结果
+   * { detections: LocalCliDetection[] },扫描失败降级空数组(规则 13 例外条款:
+   * renderer 直接按空列表继续渲染,检测建议是增强而非依赖)。只读、无密钥材料。
+   */
+  PROVIDER_LOCAL_CLI_SCAN: 'maker:provider:local-cli-scan',
   // Scheduler (Phase 4) — 9 个 invoke handler，对应 Scheduler 公共 API
   SCHEDULE_LIST: 'maker:schedule:list',
   SCHEDULE_GET: 'maker:schedule:get',

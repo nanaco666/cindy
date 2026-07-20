@@ -50,6 +50,36 @@ export function buildLiteLlmRealtimeWebSocketUrl(
   return url.toString();
 }
 
+// Handshake-stage failures (issue #220: HTTP 404 when the effective XD
+// gateway does not expose the provider-specific ASR passthrough routes) are
+// undiagnosable without knowing which address was dialed. host + pathname is
+// credential-free: auth rides in headers and the query only carries the model.
+export function describeAsrWebSocketTarget(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.host}${parsed.pathname}`;
+  } catch {
+    return 'invalid-url';
+  }
+}
+
+// Gateway/upstream trace ids observed on XD LiteLLM and common fronting
+// proxies. Surfacing one in the handshake error lets server-side logs be
+// correlated without any client-side secret exposure.
+const ASR_HANDSHAKE_TRACE_HEADERS = ['x-request-id', 'x-litellm-call-id', 'cf-ray'] as const;
+
+export function describeAsrHandshakeTraceId(
+  headers: Record<string, string | string[] | undefined>,
+): string | null {
+  for (const name of ASR_HANDSHAKE_TRACE_HEADERS) {
+    const value = headers[name];
+    const first = Array.isArray(value) ? value[0] : value;
+    const trimmed = first?.trim();
+    if (trimmed) return `${name}=${trimmed}`;
+  }
+  return null;
+}
+
 export function liteLlmRealtimeHeaders(profileOrProvider: VoiceInputAsrProfile | VoiceInputProviderKind): Record<string, string> {
   const profile = typeof profileOrProvider === 'string'
     ? getVoiceInputAsrProfile(profileOrProvider)

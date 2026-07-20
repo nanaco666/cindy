@@ -238,3 +238,27 @@ test("validateReleaseRegions: 结构缺块 / 叶子非字符串一律抛错", ()
   badMac.cn.macSigning = { teamId: 42 };
   assert.throws(() => validateReleaseRegions(badMac), /cn\.macSigning\.teamId/);
 });
+
+test("Windows 独立 Claude/Codex 发布命令显式映射 cn/global/dev", () => {
+  const rootPackage = JSON.parse(
+    fs.readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+  );
+  const desktopPackage = JSON.parse(
+    fs.readFileSync(new URL("../../apps/desktop/package.json", import.meta.url), "utf8"),
+  );
+  for (const kind of ["claude-code", "codex"]) {
+    assert.match(
+      desktopPackage.scripts[`release:${kind}:win`],
+      /--platform win32-x64$/,
+      `${kind} 旧 Windows 命令必须保持默认 cn 的兼容入口`,
+    );
+    for (const region of ["cn", "global", "dev"]) {
+      const name = `release:${kind}:win:${region}`;
+      assert.match(desktopPackage.scripts[name], new RegExp(`--platform win32-x64 --region ${region}$`));
+      assert.equal(
+        rootPackage.scripts[name],
+        `node scripts/ensure-deps.mjs && pnpm --filter desktop ${name}`,
+      );
+    }
+  }
+});

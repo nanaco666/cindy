@@ -42,6 +42,7 @@ import {
 import { buildMobileUpdateInfoRows, currentMobileOtaVersion } from '@/settings/updateInfo';
 import { runManualUpdateCheck } from '@/update/manualUpdateCheck';
 import { useBundleUpdatePrompt } from '@/update/useBundleUpdatePrompt';
+import { useCanaryChannelGate } from '@/update/useCanaryChannelGate';
 import { useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 import { fontWeight, iconSize, iconStroke, lineHeight, radius, spacing, typeScale } from '@/theme/tokens';
 
@@ -110,8 +111,12 @@ export default function SettingsScreen() {
   const { currentlyRunning } = useUpdates();
   const updateInfoRows = useMemo(() => buildMobileUpdateInfoRows(currentlyRunning), [currentlyRunning]);
   const otaVersion = useMemo(() => currentMobileOtaVersion(currentlyRunning), [currentlyRunning]);
+  const canaryChannel = useCanaryChannelGate(IS_OTA_SELFHOST);
   // 自建变体的统一入口先查整包;无整包时再由 checkForUpdate 继续查 JS OTA。
-  const { checkNow: checkBundleUpdate } = useBundleUpdatePrompt({ auto: false });
+  const { checkNow: checkBundleUpdate } = useBundleUpdatePrompt({
+    auto: false,
+    isCanary: canaryChannel.isCanary,
+  });
   const updateCheckEnabled = IS_OTA_SELFHOST || updatesEnabled;
 
   const aboutSection = overview.sections.find((section) => section.id === 'about');

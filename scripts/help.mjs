@@ -19,18 +19,20 @@ export function printHelp(log = console.log) {
   log('    pnpm restart:desktop:local --region=cn');
 
   log('\n  桌面端只打包、不上传 OSS/CDN（以下命令可直接复制）:');
-  log('    pnpm package:desktop -- --region cn --channel dev');
-  log('      当前平台，国内版，版本无关开发包');
-  log('    pnpm package:desktop -- --region global --channel dev');
-  log('      当前平台，海外版，版本无关开发包');
-  log('    pnpm package:mac:arm64 -- --region cn --channel dev');
-  log('    pnpm package:mac:x64 -- --region cn --channel dev');
-  log('    pnpm package:win -- --region cn --channel dev');
-  log('    pnpm package:linux -- --region cn --channel dev');
-  log('    pnpm package:desktop -- --region cn --channel release --version patch');
-  log('      当前平台，国内 release 包；基于 CDN 当前版本自动 bump patch');
-  log('    pnpm package:desktop -- --region global --channel release --version patch');
-  log('      当前平台，海外 release 包；基于 CDN 当前版本自动 bump patch');
+  log('    pnpm package:desktop --region cn');
+  log('      当前平台，国内版，版本无关本地包');
+  log('    pnpm package:desktop --region global');
+  log('      当前平台，海外版，版本无关本地包');
+  log('    pnpm package:desktop --region dev');
+  log('      当前平台，dev 版，版本无关本地包');
+  log('    pnpm package:mac:arm64 --region cn');
+  log('    pnpm package:mac:x64 --region cn');
+  log('    pnpm package:win --region cn');
+  log('    pnpm package:linux --region cn');
+  log('    pnpm package:desktop --region cn --version patch');
+  log('      当前平台，国内有版本包；基于 CDN 当前版本自动 bump patch');
+  log('    pnpm package:desktop --region global --version patch');
+  log('      当前平台，海外有版本包；基于 CDN 当前版本自动 bump patch');
   log('    # 调试时可在末尾追加 --skip-smoke；明确允许无签名时追加 --allow-unsigned');
 
   log('\n  桌面端旧版打包 + 发布一体流程（直接上传 canary）:');
@@ -85,6 +87,13 @@ export function printHelp(log = console.log) {
   log('    pnpm release:codex:x64');
   log('    pnpm release:codex:win');
   log('    pnpm release:codex -- --platform linux-x64');
+  log('    # Windows Claude/Codex 可显式选择 cn / global / dev 发布目标');
+  log('    pnpm release:claude-code:win:cn');
+  log('    pnpm release:claude-code:win:global');
+  log('    pnpm release:claude-code:win:dev');
+  log('    pnpm release:codex:win:cn');
+  log('    pnpm release:codex:win:global');
+  log('    pnpm release:codex:win:dev');
   log('    pnpm release:ripgrep:arm64');
   log('    pnpm release:ripgrep:x64');
   log('    pnpm release:ripgrep:win');
@@ -133,11 +142,18 @@ export function printHelp(log = console.log) {
   log('    pnpm mobile:release:ios:check -- --region cn');
   log('    pnpm mobile:release:ios:local -- --region cn --execute');
   log('    pnpm mobile:release:ios:ota -- --region cn --execute');
+  log('    pnpm mobile:release:ios:promote -- --region cn --yes');
   log('      国服：依次对应检查、完整冷更打包发布、JS OTA');
   log('    pnpm mobile:release:ios:check -- --region global');
   log('    pnpm mobile:release:ios:local -- --region global --execute');
   log('    pnpm mobile:release:ios:ota -- --region global --execute');
+  log('    pnpm mobile:release:ios:promote -- --region global --yes');
   log('      海外版：依次对应检查、完整冷更打包发布、JS OTA');
+  log('      local / ota 先写 canary 指针；promote --yes 验证后才切 stable');
+  log('    pnpm mobile:release:ios:check -- --region dev');
+  log('    pnpm mobile:release:ios:local -- --region dev --execute');
+  log('    pnpm mobile:release:ios:ota -- --region dev --execute');
+  log('      dev 版：需先填好 self-host-regions.json 的 dev 配置');
   log('    pnpm mobile:release:ios:npkg -- from-eas');
   log('      手动把最近一次 EAS iOS 产物送 NPKG 重签');
 
@@ -145,11 +161,18 @@ export function printHelp(log = console.log) {
   log('    pnpm mobile:release:android:check -- --region cn');
   log('    pnpm mobile:release:android:local -- --region cn --execute');
   log('    pnpm mobile:release:android:ota -- --region cn --execute');
+  log('    pnpm mobile:release:android:promote -- --region cn --yes');
   log('      国服：依次对应检查、完整冷更打包发布、JS OTA');
   log('    pnpm mobile:release:android:check -- --region global');
   log('    pnpm mobile:release:android:local -- --region global --execute');
   log('    pnpm mobile:release:android:ota -- --region global --execute');
+  log('    pnpm mobile:release:android:promote -- --region global --yes');
   log('      海外版：依次对应检查、完整冷更打包发布、JS OTA');
+  log('      local / ota 先写 canary 指针；promote --yes 验证后才切 stable');
+  log('    pnpm mobile:release:android:check -- --region dev');
+  log('    pnpm mobile:release:android:local -- --region dev --execute');
+  log('    pnpm mobile:release:android:ota -- --region dev --execute');
+  log('      dev 版：需先填好 self-host-regions.json 的 dev 配置');
   log('    pnpm mobile:release:android:npkg -- upload /absolute/path/Cindy.apk');
   log('      仅在需要时手动补传 APK 到 NPKG，不参与正常冷更链路');
 

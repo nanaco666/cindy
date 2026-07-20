@@ -62,6 +62,12 @@ import {
 import i18n from 'i18next';
 
 import { createLogger } from '@/lib/logger';
+import { toast } from '@/lib/toast';
+import {
+  copyPngBlobToClipboard,
+  resolveExportBackground,
+  svgToPngBlob,
+} from '@/lib/rasterizeToImage';
 
 const log = createLogger('MermaidLivePreview');
 
@@ -314,6 +320,8 @@ export const MERMAID_LIGHTBOX_EVENT = 'xdt-open-mermaid-lightbox';
 
 export interface MermaidLightboxOpenDetail {
   svg: string;
+  /** mermaid 原始源码(可选):lightbox「复制图片」随图附带 text/plain 表示。 */
+  source?: string;
 }
 
 export const MERMAID_EDIT_EVENT = 'xdt-edit-mermaid-source';
@@ -539,11 +547,48 @@ class MermaidWidget extends WidgetType {
         ev.stopPropagation();
         window.dispatchEvent(
           new CustomEvent<MermaidLightboxOpenDetail>(MERMAID_LIGHTBOX_EVENT, {
-            detail: { svg },
+            detail: { svg, source: this.source },
           }),
         );
       });
       tb.appendChild(zoomBtn);
+
+      // Copy (PNG + mermaid source in one ClipboardItem — paste targets pick
+      // their preferred flavor). Vanilla-DOM twin of the chat-side
+      // useCopyAsImage hook: same rasterizer (intrinsic viewBox size, 3x
+      // scale, 4096 cap, themed solid background sampled from the widget
+      // card), same 1.5s check-icon feedback. No annotate entry here — this
+      // editor surface has no chat session to send into.
+      const copyImgBtn = makeToolbarButton(
+        i18n.t('ccAgent.workdirBrowse.mermaidEditor.toolbarCopy'),
+        SVG_COPY,
+      );
+      let copyImgPending = false;
+      let copyImgTimer: ReturnType<typeof setTimeout> | null = null;
+      copyImgBtn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (copyImgPending) return;
+        copyImgPending = true;
+        svgToPngBlob(svg, { background: resolveExportBackground(root) })
+          .then((blob) => copyPngBlobToClipboard(blob, this.source))
+          .then(() => {
+            copyImgBtn.innerHTML = SVG_CHECK;
+            if (copyImgTimer) clearTimeout(copyImgTimer);
+            copyImgTimer = setTimeout(() => {
+              copyImgBtn.innerHTML = SVG_COPY;
+              copyImgTimer = null;
+            }, 1500);
+          })
+          .catch((err) => {
+            log.warn('copy as image failed', err);
+            toast.error(i18n.t('chat.media.copyFailed'));
+          })
+          .finally(() => {
+            copyImgPending = false;
+          });
+      });
+      tb.appendChild(copyImgBtn);
     }
 
     // Hide edit-source when the editor is non-editable: FileBodyView gates
@@ -627,7 +672,7 @@ class MermaidWidget extends WidgetType {
       ev.stopPropagation();
       window.dispatchEvent(
         new CustomEvent<MermaidLightboxOpenDetail>(MERMAID_LIGHTBOX_EVENT, {
-          detail: { svg },
+          detail: { svg, source: this.source },
         }),
       );
     };
@@ -655,6 +700,14 @@ const SVG_EXPAND =
 
 const SVG_CODE2 =
   '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 16 22 12 18 8"/><polyline points="6 8 2 12 6 16"/><line x1="14.5" y1="4" x2="9.5" y2="20"/></svg>';
+
+// lucide `copy`(与聊天块单一「复制」按钮同一图标语义:PNG + 源码双格式)。
+const SVG_COPY =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+
+// lucide `check`(复制成功的 1.5s 反馈态)。
+const SVG_CHECK =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
 
 function parseSvg(svgString: string): SVGElement | null {
   const tmp = document.createElement('div');

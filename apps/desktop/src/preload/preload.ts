@@ -321,6 +321,8 @@ const fanOutLayoutChanged = createIpcFanOut('layout:changed');
 // 意识仓库变化广播 (install/uninstall 后 main 推全量已装清单,多窗口热更新;
 // 见 main/cindy-brain/index.ts)。
 const fanOutGhostsChanged = createIpcFanOut('ghosts:changed');
+// Plugin 顶部已安装快捷行的最近使用顺序，多窗口同步。
+const fanOutGhostRecentUsageChanged = createIpcFanOut('ghosts:recent-usage-changed');
 // 双击 .cindy 转交信号(main 缓存路径,renderer 收信号后来取,统一走应用内确认流程)。
 const fanOutGhostInstallRequested = createIpcFanOut('ghosts:install-requested');
 // 意识运行时状态广播(crashed/fused → 面板原地错误接管态)。
@@ -714,6 +716,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 面板同帧注册进布局引擎(规则 7 无跳变);目录扫描极小,同步读不卡启动。
   ghosts: {
     listSync: (): { ghosts: unknown[] } => ipcRenderer.sendSync('ghosts:list'),
+    recentUsageSync: (): { ids: string[] } => {
+      try {
+        const result = ipcRenderer.sendSync('ghosts:recent-usage') as { ids?: unknown } | null;
+        return {
+          ids: Array.isArray(result?.ids)
+            ? result.ids.filter((id): id is string => typeof id === 'string')
+            : [],
+        };
+      } catch {
+        // MRU 是非关键展示数据；main 不可用 /旧版无 channel 时首屏按空历史渲染。
+        return { ids: [] };
+      }
+    },
+    markUsed: (id: string): Promise<{ ids: string[] }> =>
+      ipcRenderer.invoke('ghosts:mark-used', id),
+    /** 配置就绪检查(插件页「使用」前置门;main 现查凭证/账号/连接/kv)。 */
+    setupStatus: (id: string): Promise<unknown> =>
+      ipcRenderer.invoke('ghosts:setup-status', id),
     install: (lizFilePath: string, opts?: { enable?: boolean }): Promise<{ ghost: unknown }> =>
       ipcRenderer.invoke('ghosts:install', lizFilePath, opts),
     update: (lizFilePath: string): Promise<{ ghost: unknown }> =>
@@ -738,7 +758,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     restoreBuiltin: (id: string): Promise<{ ok: true }> => ipcRenderer.invoke('ghosts:restore-builtin', id),
     setEnabled: (id: string, enabled: boolean): Promise<{ ok: true }> =>
       ipcRenderer.invoke('ghosts:set-enabled', id, enabled),
-    /** 目录级禁用清单(设置 → 插件 项目范围视图;sendSync 保证切换同帧渲染)。 */
+    /** 目录级禁用清单(插件页项目范围视图;sendSync 保证切换同帧渲染)。 */
     workdirPrefsSync: (workdir: string): { disabled: string[] } =>
       ipcRenderer.sendSync('ghosts:workdir-prefs', workdir),
     setWorkdirDisabled: (workdir: string, id: string, disabled: boolean): Promise<{ disabled: string[] }> =>
@@ -746,6 +766,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     takePendingInstall: (): Promise<{ filePath: string | null }> =>
       ipcRenderer.invoke('ghosts:take-pending-install'),
     onChanged: fanOutGhostsChanged,
+    onRecentUsageChanged: fanOutGhostRecentUsageChanged,
     onInstallRequested: fanOutGhostInstallRequested,
     onRuntimeChanged: fanOutGhostRuntimeChanged,
     onPreviewMedia: fanOutGhostPreviewMedia,
@@ -2119,6 +2140,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openPath: (filePath: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('shell:open-path', filePath),
 
+  // 安全降级聊天附件另存为。main 校验源路径并清洗 suggestedName；保存后
+  // 只返回结果，不自动打开或执行目标文件。
+  saveChatAttachmentAs: (params: {
+    sourcePath: string;
+    suggestedName: string;
+  }): Promise<
+    | { status: 'saved'; savedPath: string }
+    | { status: 'canceled' }
+    | {
+        status: 'error';
+        code:
+          | 'invalid_source'
+          | 'forbidden'
+          | 'not_found'
+          | 'not_file'
+          | 'dialog_failed'
+          | 'copy_failed';
+      }
+  > => ipcRenderer.invoke('chat-attachment:save-as', params),
+
   // Open <userData>/logs in the OS file manager (Settings → About).
   openLogsDir: (): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('app:open-logs-dir'),
@@ -2164,7 +2205,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }): Promise<{ url: string; name: string; ext: string; mimeType: string; size: number }> =>
     ipcRenderer.invoke('media:cache-for-session', params),
 
-  // renderer 字节层:http / xdt-remote-media 图取字节(标注烧录、位图复制)。
+  // renderer 字节层:http / cindy-remote-media 图取字节(标注烧录、位图复制)。
   readImageBytes: (params: {
     url: string;
   }): Promise<{ base64: string; mimeType: string }> =>
@@ -3273,6 +3314,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       status?: number;
       detail?: string;
     }> => ipcRenderer.invoke('maker:provider:models-fetch', input),
+    /**
+     * 本机 agent CLI 安装 / 登录态扫描（设置「检测建议」用）。只 stat 不读凭证内容;
+     * 失败降级空数组。
+     */
+    scanLocalCli: (): Promise<{
+      detections: import('../shared/localCliDetect').LocalCliDetection[];
+    }> => ipcRenderer.invoke('maker:provider:local-cli-scan'),
     /** 自定义供应商变更广播订阅（返回 off）。 */
     onProvidersChanged: fanOutMakerProvidersChanged,
 
@@ -4024,7 +4072,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     rewindCommit: (
       sessionId: string,
       clientId: string,
-      opts?: { requireLatestUser?: boolean },
+      opts?: { requireLatestUser?: boolean; stopIfRunning?: boolean },
     ): Promise<unknown> =>
       ipcRenderer.invoke('maker:rewind:commit', sessionId, clientId, opts),
     fork: (sourceSessionId: string, messageClientId: string): Promise<unknown> =>

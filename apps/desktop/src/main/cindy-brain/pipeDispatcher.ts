@@ -88,24 +88,24 @@ export class GhostPipeDispatcher {
     // ── 资格审 ─────────────────────────────────────────────────────────
     const ghost = this.deps.getGhost(ghostId);
     if (!ghost) {
-      return { ok: false, errorCode: 'GHOST_NOT_FOUND', message: `意识 ${ghostId} 未装入或已抽离` };
+      return { ok: false, errorCode: 'GHOST_NOT_FOUND', message: `插件 ${ghostId} 未安装或已卸载` };
     }
     if (!ghost.enabled) {
-      return { ok: false, errorCode: 'GHOST_ASLEEP', message: `意识 ${ghostId} 沉睡中(可在 设置 → 插件 中使其生效)` };
+      return { ok: false, errorCode: 'GHOST_ASLEEP', message: `插件 ${ghostId} 未启用(可在侧栏「插件」中启用)` };
     }
     const declared = ghost.manifest.tools?.some((t) => t.name === tool);
     if (!declared) {
-      return { ok: false, errorCode: 'TOOL_NOT_FOUND', message: `意识 ${ghostId} 没有工具 ${tool}` };
+      return { ok: false, errorCode: 'TOOL_NOT_FOUND', message: `插件 ${ghostId} 没有工具 ${tool}` };
     }
     if (this.deps.runtimeStateOf(ghostId) === 'fused') {
-      return { ok: false, errorCode: 'GHOST_CRASHED', message: `意识 ${ghostId} 已熔断(反复崩溃),重载或重新唤醒后再试` };
+      return { ok: false, errorCode: 'GHOST_CRASHED', message: `插件 ${ghostId} 已熔断(反复崩溃),重载或重新启用后再试` };
     }
 
     // ── 按需拉起 ────────────────────────────────────────────────────────
     if (this.deps.runtimeStateOf(ghostId) !== 'running') {
       const spawned = await this.deps.spawn(ghost);
       if (!spawned.ok) {
-        return { ok: false, errorCode: 'GHOST_CRASHED', message: `意识拉起失败:${spawned.reason}` };
+        return { ok: false, errorCode: 'GHOST_CRASHED', message: `插件启动失败:${spawned.reason}` };
       }
     }
 
@@ -158,7 +158,7 @@ export class GhostPipeDispatcher {
       : {
           ok: false,
           errorCode: 'INTERNAL',
-          message: typeof p.message === 'string' ? p.message : '意识侧执行失败',
+          message: typeof p.message === 'string' ? p.message : '插件执行失败',
         };
     this.settle(p.callId, result);
     return { accepted: true };
@@ -176,8 +176,8 @@ export class GhostPipeDispatcher {
       this.settle(
         callId,
         isCrash
-          ? { ok: false, errorCode: 'GHOST_CRASHED', message: '意识执行中崩溃' }
-          : { ok: false, errorCode: 'GHOST_ASLEEP', message: '意识执行中被熄灯' },
+          ? { ok: false, errorCode: 'GHOST_CRASHED', message: '插件执行中崩溃' }
+          : { ok: false, errorCode: 'GHOST_ASLEEP', message: '插件执行中被停用' },
       );
     }
   }

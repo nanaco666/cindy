@@ -270,7 +270,7 @@ export function createLiziMcpProviders(
       // 绑定 ctx 仅为 schedule_silence_current_run / schedule_notify_current_run 服务：
       // 它们据 sessionId 反查本会话当前 in-flight run,免去 agent 传 runId
       // (杜绝传参漂移 + caller-ownership)。
-      // 与 lizi_xdt_helper 同范式;codex 路径由 HTTP bridge 的 AsyncLocalStorage 补回 ctx。
+      // 与 cindy_helper 同范式;codex 路径由 HTTP bridge 的 AsyncLocalStorage 补回 ctx。
       toClaudeSdkConfig: (ctx) => ({
         type: 'sdk',
         name: 'lizi_scheduler',
@@ -304,10 +304,10 @@ export function createLiziMcpProviders(
     });
   }
 
-  if (opts.xdtHelper && selected(enabled, 'lizi_xdt_helper')) {
+  if (opts.xdtHelper && selected(enabled, 'cindy_helper')) {
     providers.push({
-      name: 'lizi_xdt_helper',
-      // 无门控:任何 cc / codex session 都能让模型查 xdt-maker 自身能力。
+      name: 'cindy_helper',
+      // 无门控:任何 cc / codex session 都能让模型查 Cindy 自身能力。
       // 自省类工具 (get_capabilities / get_current_session_id) 全静态数据/读 ctx, 无 auth、无 IPC。
       // send_to_session 走 host 注入的 deps.sendToSession, ctx 闭包绑定 sessionId 让工具知道 dispatcher 是谁。
       // Codex HTTP bridge 会在工具调用时用 AsyncLocalStorage 恢复当前 thread
@@ -317,7 +317,7 @@ export function createLiziMcpProviders(
       // 协同 team 工具在独立的 lizi_orca server(可关插件)。
       toClaudeSdkConfig: (ctx) => ({
         type: 'sdk',
-        name: 'lizi_xdt_helper',
+        name: 'cindy_helper',
         instance: createXdtHelperMcpServer(opts.xdtHelper!, {
           agentKind: ctx.agentKind === 'codex' ? 'codex' : 'claude-code',
           workingDir: ctx.workingDir,

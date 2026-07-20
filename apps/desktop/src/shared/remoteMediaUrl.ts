@@ -7,9 +7,9 @@
  * 机器**的本地文件 / 缓存,控制端本机并没有这些字节 —— 原样渲染必然 404。本模块把
  * 这些 URL 改写成统一的:
  *
- *     xdt-remote-media://m/{b64url(originToken)}/{b64url(原始媒体URL)}
+ *     cindy-remote-media://m/{b64url(originToken)}/{b64url(原始媒体URL)}
  *
- * 控制端 main 注册的 `xdt-remote-media://` handler 解出 (origin, 原始URL),按来源
+ * 控制端 main 注册的 `cindy-remote-media://` handler 解出 (origin, 原始URL),按来源
  * 分流取字节(见 device-link/remoteMediaProtocol.ts):
  *   - device(跨设备):经 OSS 中转向被控端取(media:fetch,接受任意绝对路径);
  *   - ssh(远端 host):经 remote-file-service 分片拉到本地磁盘缓存再服务
@@ -35,7 +35,7 @@
  */
 
 /** 远程媒体统一 scheme。 */
-export const REMOTE_MEDIA_SCHEME = 'xdt-remote-media';
+export const REMOTE_MEDIA_SCHEME = 'cindy-remote-media';
 /** 固定 host 哨兵(避免把 deviceId 放 host 被小写化)。 */
 export const REMOTE_MEDIA_HOST = 'm';
 
@@ -185,7 +185,7 @@ export function isRemoteMediaUrl(url: unknown): url is string {
 
 /**
  * 解析远程媒体 URL → { origin, origUrl }。非远程媒体 / 畸形 → null。
- * 控制端 main 的 `xdt-remote-media://` handler 用它把请求路由回正确来源 + 原始媒体引用。
+ * 控制端 main 的 `cindy-remote-media://` handler 用它把请求路由回正确来源 + 原始媒体引用。
  */
 export function parseRemoteMediaUrl(
   url: string,

@@ -41,7 +41,7 @@ beforeEach(() => {
   realpathMock.mockImplementation(async (p: string) => p);
   // 默认上传回显 contentType,便于断言 result.mimeType 来源
   uploadLocalFile.mockImplementation(async (_p: string, opts?: { contentType?: string }) => ({
-    key: 'xdt-maker/device-link/u/uuid.ext',
+    key: 'cindy/device-link/u/uuid.ext',
     size: 42,
     contentType: opts?.contentType ?? 'application/octet-stream',
   }));
@@ -57,7 +57,7 @@ describe('fetchLocalMediaToOss — scheme 路由', () => {
     const r = await fetchLocalMediaToOss({ url: 'xdt-image://sess/a.png' });
     expect(imageResolve).toHaveBeenCalledWith('xdt-image://sess/a.png');
     expect(uploadLocalFile).toHaveBeenCalledWith('/cache/a.png', { contentType: 'image/png' });
-    expect(r).toEqual({ ossKey: 'xdt-maker/device-link/u/uuid.ext', mimeType: 'image/png', size: 42 });
+    expect(r).toEqual({ ossKey: 'cindy/device-link/u/uuid.ext', mimeType: 'image/png', size: 42 });
   });
 
   it('xdt-video:// → videoCacheStore.resolveSafe', async () => {

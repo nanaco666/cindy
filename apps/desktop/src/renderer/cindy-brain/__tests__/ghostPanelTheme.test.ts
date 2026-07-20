@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  buildGhostPluginSettingsThemeCss,
   buildGhostSettingsThemeCss,
   buildGhostThemeCss,
   createGhostThemeInjector,
@@ -80,7 +81,15 @@ describe('isSafeGhostThemeValue · 注入值合法性守卫(纵深防御)', () =
   });
 
   it('否决能破 <style> / 声明上下文的字符', () => {
-    for (const v of ['red</style><script>', 'a{}', 'x;color:red', '@import url(x)', 'a\\3c b', 'foo<bar', 'y}z']) {
+    for (const v of [
+      'red</style><script>',
+      'a{}',
+      'x;color:red',
+      '@import url(x)',
+      'a\\3c b',
+      'foo<bar',
+      'y}z',
+    ]) {
       expect(isSafeGhostThemeValue(v)).toBe(false);
     }
   });
@@ -124,6 +133,17 @@ describe('注入基线 CSS(幽灵 token 防线 + 设置区卡片色对齐)', () 
       expect(buildGhostSettingsThemeCss()).toContain(
         'background: var(--settings-theme-card-bg, var(--surface))',
       );
+    });
+  });
+
+  it('设置区基线:宿主设置页与 Plugin 详情页都把 placeholder 明确画成空值提示', () => {
+    withDomStubs(() => {
+      for (const css of [buildGhostSettingsThemeCss(), buildGhostPluginSettingsThemeCss()]) {
+        expect(css).toContain('input::placeholder, textarea::placeholder');
+        expect(css).toContain('color: var(--text-placeholder)');
+        expect(css).toContain('opacity: 0.45');
+        expect(css).toContain('font-weight: 400');
+      }
     });
   });
 });

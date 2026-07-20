@@ -157,6 +157,12 @@ export let AUTH_API_BASE_URL = normalizeBaseUrlWithDefault(
   DEV_MANIFEST.authApiBaseUrl ?? '',
 );
 
+/** 登录后读取用户级 isCanary feature flag；正式包由 endpoint.json 运行期回写。 */
+export let OAUTH_BROKER_API_BASE_URL = normalizeBaseUrlWithDefault(
+  '',
+  DEV_MANIFEST.oauthBrokerApiBaseUrl ?? '',
+);
+
 /** 本地 / self-host 构建只认 region JSON 写入的 Expo extra;EAS 线使用 EXPO_PUBLIC_*。 */
 export function resolveMobileGoogleConfig(
   regionConfigAuthoritative: boolean,
@@ -208,30 +214,39 @@ export const APP_BINARY_VERSION =
   (Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? '').trim();
 
 /**
- * 纯函数:清单 review(送审版本号)与二进制版本号严格相等才进入审核模式;
+ * 纯函数:清单 review(送审版本号)与二进制版本号严格相等、且当前安装不是
+ * TestFlight 时才进入审核模式;
  * 任一侧为空恒 false(清单没填 = 关闭;拿不到版本号 = 宁可不进审核模式,
  * 也不能让线上用户误失去更新通道)。
  */
 export function isReviewModeActive(
   reviewVersion: string | null | undefined,
   appBinaryVersion: string,
+  isTestFlight = false,
 ): boolean {
   const review = reviewVersion?.trim();
   const binary = appBinaryVersion.trim();
-  return Boolean(review) && review === binary;
+  return !isTestFlight && Boolean(review) && review === binary;
 }
 
 // 手机版审核模式(清单可选字段 review = 送审版本号,缺失/空串 = 关闭):App 审核
-// 期间线上清单填送审构建的二进制版本号,仅版本命中的构建关闭全部 JS 显式更新检查
+// 期间线上清单填送审构建的二进制版本号,仅版本命中且 StoreKit 未识别为 TestFlight
+// 的构建关闭全部 JS 显式更新检查(TestFlight 始终保留更新能力)
 // (启动 JS 热更门 / 整包检查 / resume 静默检查)、设置页隐藏统一「检查更新」入口;
 // 存量其它版本用户不受影响。覆盖边界与运维义务(原生层后台检查管不到、
 // 过审发布后须清空字段)见 maker-shared clientEndpoints 的 CLIENT_ENDPOINT_REVIEW_KEY
 // 注释。live binding:prod 由启动闸门回填,闸门 ready 前业务树不挂载,消费点
 // (更新 hooks / 设置页)读到的一定是清单值;dev 读仓内正本。仅 mobile 消费,
 // desktop 忽略该字段。
+let resolvedReviewVersion = DEV_MANIFEST_PARSED?.reviewVersion ?? null;
+
+/** StoreKit 在 endpoint 闸门期间识别出的 TestFlight 状态；供 JS 层同步诊断。 */
+export let IS_TESTFLIGHT_BUILD = false;
+
 export let REVIEW_MODE = isReviewModeActive(
-  DEV_MANIFEST_PARSED?.reviewVersion,
+  resolvedReviewVersion,
   APP_BINARY_VERSION,
+  IS_TESTFLIGHT_BUILD,
 );
 
 // 非 live binding(清单不再承载语音网关地址,启动闸门无覆写路径):env 覆写为空时
@@ -256,13 +271,19 @@ export const ENDPOINT_MANIFEST_BASE_URL = configuredValue(
  */
 export function applyResolvedClientEndpoints(resolved: {
   authApiBaseUrl?: string;
+  oauthBrokerApiBaseUrl?: string;
   deviceLinkApiBaseUrl?: string;
   mobileUpdateBaseUrl?: string;
   /** 审核模式送审版本号(parser 产出,null = 清单未填;undefined = 不改动)。 */
   reviewVersion?: string | null;
+  /** iOS StoreKit 分发环境；TestFlight 必须继续检查更新。 */
+  isTestFlight?: boolean;
 }): void {
   if (resolved.authApiBaseUrl !== undefined) {
     AUTH_API_BASE_URL = normalizeBaseUrlWithDefault(resolved.authApiBaseUrl, '');
+  }
+  if (resolved.oauthBrokerApiBaseUrl !== undefined) {
+    OAUTH_BROKER_API_BASE_URL = normalizeBaseUrlWithDefault(resolved.oauthBrokerApiBaseUrl, '');
   }
   if (resolved.deviceLinkApiBaseUrl !== undefined) {
     DEVICE_LINK_API_BASE_URL = resolved.deviceLinkApiBaseUrl.replace(/\/$/, '');
@@ -273,7 +294,17 @@ export function applyResolvedClientEndpoints(resolved: {
     OTA_SERVER_BASE_URL = resolved.mobileUpdateBaseUrl.replace(/\/+$/, '');
   }
   if (resolved.reviewVersion !== undefined) {
-    REVIEW_MODE = isReviewModeActive(resolved.reviewVersion, APP_BINARY_VERSION);
+    resolvedReviewVersion = resolved.reviewVersion;
+  }
+  if (resolved.isTestFlight !== undefined) {
+    IS_TESTFLIGHT_BUILD = resolved.isTestFlight;
+  }
+  if (resolved.reviewVersion !== undefined || resolved.isTestFlight !== undefined) {
+    REVIEW_MODE = isReviewModeActive(
+      resolvedReviewVersion,
+      APP_BINARY_VERSION,
+      IS_TESTFLIGHT_BUILD,
+    );
   }
 }
 

@@ -12,9 +12,7 @@
 //
 //   --platform win32|darwin|linux   默认当前平台(不支持交叉打包)
 //   --arch     x64|arm64            默认当前 arch
-//   --region   cn|global            默认 cn;烘焙 auth region + 端点清单自举基址
-//   --channel  dev|release          默认 dev;当前只进产物目录与 build-info
-//                                   (per-channel 端点/更新目标随发布侧重构落地)
+//   --region   cn|global|dev        默认 cn;决定应用身份、端点清单与发布目标
 //   --version  x.y.z|major|minor|patch
 //              缺省 = 版本无关打包:占位版本 0.0.0,包不参与热更新
 //              (updateService 对 0.0.0 短路),开源社区拉仓即可打;
@@ -27,8 +25,8 @@
 //                                   npkg 签名产物下载要求内网,非内网机器打
 //                                   版本无关包时用它
 //
-// 产物: release/artifacts/<region>-<channel>/<version|dev>/<platform-arch>/
-//   cindy-<version|dev>-Setup.exe / -<arch>.dmg / .deb   安装包
+// 产物: release/artifacts/<region>/<version|unversioned>/<platform-arch>/
+//   cindy-<version|unversioned>-Setup.exe / -<arch>.dmg / .deb   安装包
 //   cindy-<version>-hotfix.zip                           热更包(仅有版本时)
 //   build-info.json                                      发布侧唯一输入
 // =============================================================================
@@ -326,7 +324,7 @@ async function main() {
     console.error(`ERROR: ${err.message}`);
     process.exit(1);
   }
-  const { platform, arch, region, channel, versionSpec, skipSmoke, allowUnsigned, noSign } = args;
+  const { platform, arch, region, versionSpec, skipSmoke, allowUnsigned, noSign } = args;
   const platformKey = `${platform}-${arch}`;
   // ensureBinary 的 CDN fallback 按此 region 选择清单基址；必须早于二进制准备。
   process.env.CINDY_AUTH_REGION = region;
@@ -347,7 +345,6 @@ async function main() {
   console.log(`==> Package Cindy desktop`);
   console.log(`    platform: ${platformKey}`);
   console.log(`    region:   ${region}`);
-  console.log(`    channel:  ${channel}(当前仅记录进产物;发布目标随发布侧重构生效)`);
   console.log(`    version:  ${versionless ? `(版本无关,占位 ${version},不参与热更新)` : version}`);
   console.log('='.repeat(60));
 
@@ -389,7 +386,7 @@ async function main() {
   // 产物目录
   const artifactDir = path.join(
     RELEASE_DIR,
-    ...artifactRelDir({ region, channel, version, versionless, platformKey }).split('/'),
+    ...artifactRelDir({ region, version, versionless, platformKey }).split('/'),
   );
   fs.rmSync(artifactDir, { recursive: true, force: true });
   fs.mkdirSync(artifactDir, { recursive: true });
@@ -412,7 +409,6 @@ async function main() {
     version,
     versionless,
     region,
-    channel,
     platform,
     arch,
     commitSha: meta.commitSha,

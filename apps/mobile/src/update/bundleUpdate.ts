@@ -4,7 +4,7 @@
 // - expo-updates 只感知"我这个 runtimeVersion 有没有新 JS OTA",不会告知"有更高 runtimeVersion 的整包"。
 // - 所以整包发现靠独立的 `/latest` 通道 + 客户端比对 runtimeVersion:
 //     · latest.runtimeVersion === 当前 runtimeVersion → 无需整包(JS OTA 通道会处理);
-//     · 不同 → 原生层变了,JS OTA 覆盖不到 → 引导用户跳 NPKG 装整包。
+//     · 不同 → 原生层变了,JS OTA 覆盖不到 → 引导用户打开 release record 的正常安装入口。
 // - minVersion(可选)用于强制更新:当前 version 低于它则阻断使用、只留"去更新"。
 
 /** mobile-update-server `/latest` 返回的整包版本记录(release.json 透传)。 */
@@ -116,7 +116,7 @@ export function evaluateBundleUpdate({
   };
 }
 
-/** 引导安装时优先用 itms(直接拉起安装),缺失回退网页安装页。 */
+/** 引导安装时优先用 itms-apps/itms-services 直达入口,缺失回退网页安装页。 */
 export function preferredInstallUrl(target: { itmsUrl?: string; installUrl?: string }): string | null {
   const itms = target.itmsUrl?.trim();
   if (itms) return itms;

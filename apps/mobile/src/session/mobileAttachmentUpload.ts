@@ -332,7 +332,7 @@ export async function deleteMobileAttachmentUpload(
 
 /**
  * 移除未发送附件时回收中转区对象(best-effort)。已上传的本机文件在被 X 掉后不再有任何
- * 引用,不回收会留下 OSS 孤儿对象直到桶生命周期清理。非 `xdt-oss-attach` 引用(远端路径
+ * 引用,不回收会留下 OSS 孤儿对象直到桶生命周期清理。非 `cindy-oss-attach` 引用(远端路径
  * 附件)没有中转对象,直接跳过;删除失败静默——桶生命周期兜底,不值得打断移除交互。
  */
 export function discardMobileUploadedAttachment(

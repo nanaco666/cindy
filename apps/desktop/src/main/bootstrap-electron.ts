@@ -5,11 +5,15 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { pathToFileURL } from 'node:url';
+import { pipeline } from 'node:stream/promises';
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { machineIdSync } from 'node-machine-id';
 import windowStateKeeper from 'electron-window-state';
 import { BRAND_NAME } from '@lizi/maker-shared/branding';
-import { shouldRequestSingleInstanceLock } from './devCliFlags.js';
+import {
+  shouldRequestSingleInstanceLock,
+  resolveSingleInstanceLockUserDataDir,
+} from './devCliFlags.js';
 import { markDesktopDevReady, markDesktopDevStartupFailed } from './devStartupStatus';
 
 const PROCESS_STARTED_AT_MS = Date.now();
@@ -136,6 +140,7 @@ import {
   createLightboxMediaHandlers,
   REMOTE_IMAGE_MAX_BYTES,
 } from './lightboxMediaActions';
+import { createChatAttachmentSaveHandler } from './chatAttachmentSave';
 import { sweepStartupDraftImages } from './imageCacheOrphanSweep';
 import { sweepLegacyDialogueWorkingDirs } from './localDb/dialogueWorkdirSelfHeal';
 import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
@@ -863,7 +868,7 @@ registerGhostIpc();
 // registerSchemesAsPrivileged replaces the whole privileged-scheme list every
 // time it runs, so per-module calls silently wipe each other — only the last
 // caller's scheme keeps its privileges. That exact bug shipped once (xdt-model
-// lost supportFetchAPI when xdt-remote-media registered after it → 3D preview
+// lost supportFetchAPI when cindy-remote-media registered after it → 3D preview
 // stuck on poster). Every protocol module therefore only EXPORTS its privilege
 // entry; this is the one place that registers them.
 //   xdt-image:        locally cached chat images (<img>)
@@ -873,7 +878,7 @@ registerGhostIpc();
 //   xdt-audio:        local audio files (<audio>, Range 同 video 手动处理)
 //   xdt-model:        mivo 3D model cache — <model-viewer> 用 fetch() 拉模型,
 //                     supportFetchAPI 丢失即静默白屏,勿动
-//   xdt-remote-media: device-link 入方向媒体(被控端字节经 OSS 中转)
+//   cindy-remote-media: device-link 入方向媒体(被控端字节经 OSS 中转)
 //   cindy-ghost:      意识沙箱文件供片(handler 挂在每意识专属 session 分区,
 //                     只认自己安装目录;runtime-sandbox.md §3)
 //   cindy-media:      媒体总仓字节仓取件窗口(内容寻址 blob;新写入媒体的
@@ -1532,27 +1537,50 @@ app.on('open-file', (event, filePath) => {
 // cindy://session 等)/ 右键 "通过 Cindy 打开" 而拉起的第二个进程 redirect 成
 // "聚焦已运行窗口" 的唯一机制——两个独立 Electron 进程之间没有别的通道能交接焦点。
 //
-// 唯一例外是 dev `--passive`:它的公开契约就是与正式版 / primary dev 共享同一份
-// Cindy userData 多开、同时让出自动 schedule。所有 passive dev 都跳过 Electron
-// 内置锁，因此一个 primary 后可以并行启动任意多个 preview；SQLite 使用 WAL +
-// busy_timeout，scheduler / device-link / refresh token 各自由现有跨实例仲裁收敛。
-// 此模式没有 second-instance redirect，deep link 落到哪个实例由当前 OS 协议注册
-// 归属决定。localDb 首次开库时会只读核对 schema_version、完整 migration history
-// 与 SQL/companion TS runtime 指纹；pending / 超前 / drift 都拒绝启动。passive 自己
-// 不迁移/repair schema，并用多 reader lease 阻止之后的 primary 抢跑 migration。
+// 锁按 flavor 分域(resolveSingleInstanceLockUserDataDir):packaged 锁真实
+// userData(release 之间单实例);dev 锁 `<userData>/dev-single-instance-lock`
+// 子目录(dev 之间单实例、深链 redirect 保持有效)。因此 dev 与正式版可以共库
+// 双开——这是明确支持的工作流,跨实例并发由 SQLite WAL + busy_timeout、scheduler
+// DB 级原子认领、auth replacement-retry 等既有仲裁收敛(与 --passive 共库多开
+// 同一套)。2026-07-19 曾让 dev 与 packaged 抢同一把锁(修 dev 深链冷启动重复
+// 实例),误伤了 dev + release 双开,2026-07-20 按 flavor 分域恢复,两个目标同时保住。
 //
-// 锁按 userData 目录作用域:默认 dev / packaged 共用 `Cindy` userData → 一个 primary;
-// 额外共享数据实例走 `--passive`，隔离数据实例走 `--isolated[=<名字>]`(见 AGENTS.md)。
+// dev `--passive` 仍完全跳过锁:它的公开契约是与 primary 共享数据任意多开,一个
+// primary 后可并行任意多个 preview。此模式没有 second-instance redirect,deep link
+// 落到哪个实例由当前 OS 协议注册归属决定。localDb 首次开库时会只读核对
+// schema_version、完整 migration history 与 SQL/companion TS runtime 指纹;
+// pending / 超前 / drift 都拒绝启动。passive 自己不迁移/repair schema,并用多
+// reader lease 阻止之后的 primary 抢跑 migration。
+// 隔离数据实例走 `--isolated[=<名字>]`(独立 userData → 独立锁域,见 AGENTS.md)。
 if (shouldRequestSingleInstanceLock({
   isPackaged: app.isPackaged,
   schedulerPassive: process.env.XDT_SCHEDULER_PASSIVE === '1',
 })) {
-  const gotTheLock = app.requestSingleInstanceLock();
+  const realUserDataDir = app.getPath('userData');
+  const lockScopeDir = resolveSingleInstanceLockUserDataDir({
+    isPackaged: app.isPackaged,
+    userDataDir: realUserDataDir,
+  });
+  let gotTheLock: boolean;
+  if (lockScopeDir === realUserDataDir) {
+    gotTheLock = app.requestSingleInstanceLock();
+  } else {
+    // Electron 没有自定义锁作用域的 API:锁文件 / socket 按调用时刻的 userData
+    // 路径生成。这里在同步窗口内临时切换 userData 再还原——主进程单线程,中间
+    // 不会有其它 JS 观察到临时值;锁建立后内部通道与 userData 后续取值无关。
+    fs.mkdirSync(lockScopeDir, { recursive: true });
+    app.setPath('userData', lockScopeDir);
+    try {
+      gotTheLock = app.requestSingleInstanceLock();
+    } finally {
+      app.setPath('userData', realUserDataDir);
+    }
+  }
   if (!gotTheLock) {
     markDesktopDevStartupFailed(
       'SINGLE_INSTANCE_OWNED',
-      'Another Cindy instance already owns this userData single-instance lock.',
-      { userDataDir: app.getPath('userData') },
+      'Another Cindy instance already owns this single-instance lock scope.',
+      { userDataDir: realUserDataDir, lockScopeDir },
     );
     app.quit();
   } else {
@@ -3819,6 +3847,46 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
         return { success: false, error: err instanceof Error ? err.message : String(err) };
       }
     },
+  );
+
+  // 安全降级附件“另存为”：源文件必须通过统一路径策略，解析真实路径后还要
+  // 位于聊天附件/远程文件缓存内；建议名在 main 侧清洗，复制完成后不调用
+  // openPath，避免符号链接越界或恢复原扩展名后被自动执行。
+  const saveChatAttachment = createChatAttachmentSaveHandler({
+    isPathAllowed,
+    realpath: (filePath) => fs.promises.realpath(filePath),
+    stat: (filePath) => fs.promises.stat(filePath, { bigint: true }),
+    openSource: async (filePath) => {
+      const noFollow = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
+      const handle = await fs.promises.open(filePath, fs.constants.O_RDONLY | noFollow);
+      return {
+        stat: () => handle.stat({ bigint: true }),
+        copyTo: async (targetPath) => {
+          await pipeline(
+            handle.createReadStream({ autoClose: false, start: 0 }),
+            fs.createWriteStream(targetPath),
+          );
+        },
+        close: () => handle.close(),
+      };
+    },
+    showSaveDialog: async (opts) => {
+      const targetWin = getWindow() ?? BrowserWindow.getFocusedWindow();
+      const result = targetWin
+        ? await dialog.showSaveDialog(targetWin, opts)
+        : await dialog.showSaveDialog(opts);
+      return { canceled: result.canceled, filePath: result.filePath || undefined };
+    },
+    getDownloadsDir: () => app.getPath('downloads'),
+    getAllowedSourceRoots: () => [
+      imageCacheStore.getCacheRoot(),
+      path.join(app.getPath('userData'), 'remote-file-cache'),
+    ],
+  });
+  ipcMain.handle(
+    'chat-attachment:save-as',
+    (_event, params: { sourcePath?: unknown; suggestedName?: unknown }) =>
+      saveChatAttachment(params),
   );
 
   // Settings → About: 打开 <userData>/logs 在系统文件管理器。

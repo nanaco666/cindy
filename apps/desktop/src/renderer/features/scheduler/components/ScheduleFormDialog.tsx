@@ -51,7 +51,7 @@ import {
 const SCRIPT_PROTOCOL_PYTHON_EXAMPLE = `import json
 
 print(json.dumps({
-    "protocol": "xdt-maker-script/1",
+    "protocol": "cindy-script/1",
     "type": "complete",
     "resultText": "done"
 }))`;

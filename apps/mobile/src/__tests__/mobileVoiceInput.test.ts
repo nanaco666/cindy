@@ -254,7 +254,7 @@ describe('mobileVoiceInput', () => {
   it('requests a device-link media presign-put for the recorded audio', async () => {
     const apiFetch = vi.fn(async () => ({
       putUrl: 'https://oss.example/voice-put',
-      key: 'xdt-maker/device-link/user-1/voice.m4a',
+      key: 'cindy/device-link/user-1/voice.m4a',
       expiresAt: '2026-06-17T00:00:00.000Z',
     }));
 
@@ -275,7 +275,7 @@ describe('mobileVoiceInput', () => {
         ext: 'm4a',
       },
     });
-    expect(result.key).toBe('xdt-maker/device-link/user-1/voice.m4a');
+    expect(result.key).toBe('cindy/device-link/user-1/voice.m4a');
   });
 
   it('uploads recorded bytes with the signed PUT url', async () => {
@@ -303,7 +303,7 @@ describe('mobileVoiceInput', () => {
   it('returns the OSS key and desktop-facing audio metadata after upload', async () => {
     const apiFetch = vi.fn(async () => ({
       putUrl: 'https://oss.example/voice-put',
-      key: 'xdt-maker/device-link/user-1/mobile-voice.m4a',
+      key: 'cindy/device-link/user-1/mobile-voice.m4a',
       expiresAt: '2026-06-17T00:00:00.000Z',
     }));
     const fetchPut = vi.fn(async () => ({
@@ -324,7 +324,7 @@ describe('mobileVoiceInput', () => {
     });
 
     expect(result).toEqual({
-      ossKey: 'xdt-maker/device-link/user-1/mobile-voice.m4a',
+      ossKey: 'cindy/device-link/user-1/mobile-voice.m4a',
       mimeType: 'audio/mp4',
       fileName: 'mobile-voice.m4a',
       size: body.size,

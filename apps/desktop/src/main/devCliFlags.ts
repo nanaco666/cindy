@@ -14,6 +14,7 @@
  * 纯函数、零 electron 依赖 —— index.ts 注入 argv / env / 默认 userData 目录,
  * 便于单元测试。packaged 版本一律返回"无覆写",线上零影响。
  */
+import { join } from 'node:path';
 
 /**
  * 沙箱名字白名单:字母数字下划线连字符、≤32。同时约束两件事——
@@ -80,9 +81,10 @@ export interface DevCliFlags {
 /**
  * 是否获取 Electron single-instance lock。
  *
- * 正常 dev 与 packaged 共用 userData 时保持一个 primary，确保 deep link 能交给
- * 已运行窗口；`--passive` 是明确的共享数据多开契约，所有 passive dev 都让
- * primary / 正式版继续持有锁，自己跳过获取。packaged 永远锁定，不能被环境变量
+ * 正常 dev 与 packaged 各自保持单实例（锁作用域见
+ * `resolveSingleInstanceLockUserDataDir`，dev 与 packaged 分域、互不阻塞），
+ * 确保同 flavor 的 deep link 能交给已运行窗口；`--passive` 是明确的共享数据
+ * 多开契约，所有 passive dev 都跳过获取。packaged 永远锁定，不能被环境变量
  * 误切成多实例。
  */
 export function shouldRequestSingleInstanceLock(input: {
@@ -90,6 +92,27 @@ export function shouldRequestSingleInstanceLock(input: {
   schedulerPassive: boolean;
 }): boolean {
   return input.isPackaged || !input.schedulerPassive;
+}
+
+/**
+ * single-instance lock 的作用域目录（Electron 锁按调用时的 userData 路径生成）。
+ *
+ * packaged 用真实 userData —— release 之间单实例，双击第二份安装包会聚焦已运行
+ * 窗口。dev 用 `<userData>/dev-single-instance-lock` 子目录 —— dev 之间仍单实例
+ * （深链 second-instance redirect 保持有效），但**不再与共库的正式版互斥**：
+ * dev + release 共享 userData 双开是明确支持的工作流（2026-07-19 dev 改为与
+ * packaged 抢同一把锁曾误伤该工作流，2026-07-20 按 flavor 分域恢复）。跨实例
+ * 并发由 SQLite WAL + busy_timeout、scheduler DB 级原子认领、auth
+ * replacement-retry 等既有仲裁收敛，与 `--passive` 共库多开走的是同一套机制。
+ * `--isolated` 沙箱的 userData 本身独立，锁子目录随之独立，语义不变。
+ */
+export function resolveSingleInstanceLockUserDataDir(input: {
+  isPackaged: boolean;
+  userDataDir: string;
+}): string {
+  return input.isPackaged
+    ? input.userDataDir
+    : join(input.userDataDir, 'dev-single-instance-lock');
 }
 
 /**

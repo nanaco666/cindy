@@ -9,7 +9,7 @@
  *
  * 状态(不变):
  *   - idle (默认)   : Stone 灰 #737373 / dark #a3a3a3
- *   - running=true  : 跟随 --sidebar-item-active 强调态;CINDY 2026-07-20 撤红后为中性选中色 + session-breathing 呼吸
+ *   - running=true  : Thinking Orange(--warning-accent,全主题同值)+ session-breathing 呼吸;选中态同样橙(用户拍板 2026-07-20)
  *
  * 设计参考:doc/design_docs/cc-agent-view.pen 节点 ugsrn (方案 C)。
  */
@@ -39,7 +39,9 @@ export function VendorIcon({
   const wrapperClassName = cn(
     'inline-flex shrink-0',
     running && 'session-status-breathing',
-    colorClassName ?? (running ? 'text-sidebar-item-active' : 'text-[hsl(var(--sidebar-muted))]'),
+    // running 呼吸一律 Thinking Orange(--warning-accent,07-17 定稿 running 状态色);
+    // 用户拍板 2026-07-20:选中态也保持橙,优先级高于 colorClassName 反相前景。
+    running ? 'text-[var(--warning-accent)]' : (colorClassName ?? 'text-[hsl(var(--sidebar-muted))]'),
     className,
   );
 

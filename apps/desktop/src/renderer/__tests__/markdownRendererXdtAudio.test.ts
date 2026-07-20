@@ -47,7 +47,7 @@ describe('MarkdownRenderer — <a> renderer routes xdt-audio:// to <audio>', () 
     expect(linkComponentMatch).not.toBeNull();
     const branch = linkComponentMatch![0];
     expect(branch).toContain("target.kind === 'audio'");
-    // device-link 入方向:远程会话把 xdt-audio:// 改写到 xdt-remote-media://(本地会话 no-op)。
+    // device-link 入方向:远程会话把 xdt-audio:// 改写到 cindy-remote-media://(本地会话 no-op)。
     expect(branch).toContain('<InlineXdtAudioPlayer src={rewriteToRemoteMediaOrigin(target.href, remoteMediaOrigin)} />');
   });
 

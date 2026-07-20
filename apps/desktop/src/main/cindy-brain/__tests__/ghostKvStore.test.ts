@@ -2,13 +2,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   GHOST_KV_MAX_BYTES,
   GhostKvError,
   createGhostKvStore,
   isValidGhostKvValue,
+  removeGhostKvBestEffort,
   type GhostKvStore,
 } from '../ghostKvStore.js';
 
@@ -61,6 +62,15 @@ describe('cindy-brain · ghostKvStore(意识自定义参数持久化)', () => {
     expect(store.read('demo')).toEqual({});
   });
 
+  it('readStrict:无文件 → {},正常文件读回内容,损坏 JSON 上抛(setup 检查专用口径)', () => {
+    expect(store.readStrict('demo')).toEqual({});
+    store.write('demo', { workspace: 'team-x' });
+    expect(store.readStrict('demo')).toEqual({ workspace: 'team-x' });
+    fs.writeFileSync(path.join(root, 'demo.json'), '{broken', 'utf8');
+    expect(() => store.readStrict('demo')).toThrow(); // 「查询失败」≠「未配置」
+    expect(store.read('demo')).toEqual({}); // 宽松口径不受影响
+  });
+
   it('写入非 plain object(数组/null/标量)抛 INVALID_VALUE', () => {
     for (const bad of [[1, 2], null, 'str', 42] as unknown[]) {
       expect(
@@ -96,6 +106,28 @@ describe('cindy-brain · ghostKvStore(意识自定义参数持久化)', () => {
     expect(store.read('demo')).toEqual({});
     expect(() => store.remove('demo')).not.toThrow(); // 二次删不抛
     expect(() => store.remove('never-written')).not.toThrow();
+  });
+
+  it('卸载收尾:KV 删除失败只记日志,不阻断后续一致性收尾', () => {
+    const log = { warn: vi.fn() };
+    const finalizeUninstall = vi.fn();
+
+    removeGhostKvBestEffort(
+      {
+        remove: () => {
+          throw new Error('file locked');
+        },
+      },
+      'demo',
+      log,
+    );
+    finalizeUninstall();
+
+    expect(finalizeUninstall).toHaveBeenCalledOnce();
+    expect(log.warn).toHaveBeenCalledWith('ghost KV 清理失败', {
+      ghostId: 'demo',
+      error: 'file locked',
+    });
   });
 
   it('非法 ghostId:写抛 INVALID_GHOST_ID,读回 {},删静默——文件名安全双保险', () => {

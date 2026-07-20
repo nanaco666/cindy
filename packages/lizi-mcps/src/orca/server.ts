@@ -13,8 +13,8 @@
  * 提到顶层直接可见后,"开协同 → start_team" 的路由才确定。代价是这些工具 schema
  * 进系统提示前缀(固定成本、缓存稳定),换路由可靠性。
  *
- * 为什么独立成 server(从 lizi_xdt_helper 拆出): 让协同能力成为用户可关的插件
- * ("协同模式"开关 gate 整个 lizi_orca server), 而 lizi_xdt_helper 是 essential 的
+ * 为什么独立成 server(从 cindy_helper 拆出): 让协同能力成为用户可关的插件
+ * ("协同模式"开关 gate 整个 lizi_orca server), 而 cindy_helper 是 essential 的
  * 自省 + send_to_session handoff 基础设施, 不可关。整个 server 仅在 host 注入
  * deps(且插件开关开启)时注册; 未绑定具体 xdt-maker session 的调用会让
  * start_team 等控制工具按 LEAD_NOT_SUPPORTED 返回。

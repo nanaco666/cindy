@@ -2,7 +2,7 @@
  * github-issue/index.ts —— module holder + 真实依赖接线。
  *
  * register.ts 启动时调 initGithubIssueSubmit(bridge);mcp-providers.ts 通过
- * submitGithubIssueForSession 给 lizi_xdt_helper 注入 githubIssue 回调
+ * submitGithubIssueForSession 给 cindy_helper 注入 githubIssue 回调
  * (deferred-lookup:holder 未就绪时返回 HOST_NOT_READY,模式同 OrcaCollabService)。
  */
 
@@ -36,7 +36,7 @@ export async function submitGithubIssueForSession(
     return {
       ok: false,
       errorCode: 'HOST_NOT_READY',
-      message: 'xdt-maker 主进程 issue 提交服务尚未就绪,请告知用户稍等几秒后重试。',
+      message: 'Cindy 主进程 issue 提交服务尚未就绪,请告知用户稍等几秒后重试。',
     };
   }
   return submitGithubIssueWithConfirm(

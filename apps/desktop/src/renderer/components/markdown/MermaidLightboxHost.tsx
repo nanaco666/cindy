@@ -21,17 +21,23 @@ import {
 } from './markdownMermaidLivePreview';
 
 export function MermaidLightboxHost() {
-  const [svg, setSvg] = useState<string | null>(null);
+  const [detail, setDetail] = useState<MermaidLightboxOpenDetail | null>(null);
 
   useEffect(() => {
     const onOpen = (ev: Event) => {
-      const detail = (ev as CustomEvent<MermaidLightboxOpenDetail>).detail;
-      if (detail?.svg) setSvg(detail.svg);
+      const next = (ev as CustomEvent<MermaidLightboxOpenDetail>).detail;
+      if (next?.svg) setDetail(next);
     };
     window.addEventListener(MERMAID_LIGHTBOX_EVENT, onOpen);
     return () => window.removeEventListener(MERMAID_LIGHTBOX_EVENT, onOpen);
   }, []);
 
-  if (svg == null) return null;
-  return <MermaidLightbox svg={svg} onClose={() => setSvg(null)} />;
+  if (detail == null) return null;
+  return (
+    <MermaidLightbox
+      svg={detail.svg}
+      source={detail.source}
+      onClose={() => setDetail(null)}
+    />
+  );
 }

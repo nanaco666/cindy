@@ -19,7 +19,7 @@ function attachmentFor(name: string): RemoteSerializedAttachment {
   return {
     id: `mobile-upload:key/${name}`,
     name,
-    path: `xdt-oss-attach://key/${name}`,
+    path: `cindy-oss-attach://key/${name}`,
     ext: '.jpg',
     size: 500_000,
     category: 'image',
@@ -192,7 +192,7 @@ describe('outboxDisplayItem', () => {
       {
         key: 'c-1-slot-0',
         uri: 'file:///tmp/ready-preview.jpg',
-        ossRef: 'xdt-oss-attach://key/ready.jpg',
+        ossRef: 'cindy-oss-attach://key/ready.jpg',
         uploading: false,
       },
       { key: 'c-1-slot-1', uri: 'file:///tmp/pending.jpg', ossRef: null, uploading: true },
@@ -204,7 +204,7 @@ describe('outboxDisplayItem', () => {
     expect(display.thumbnails[1]).toEqual({
       key: 'c-1-slot-1',
       uri: 'file:///tmp/pending.jpg',
-      ossRef: 'xdt-oss-attach://key/landed.jpg',
+      ossRef: 'cindy-oss-attach://key/landed.jpg',
       uploading: false,
     });
   });

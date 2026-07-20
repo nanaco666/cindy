@@ -8,6 +8,7 @@ import {
   regionEnvOverrides,
   formatSelfHostReleaseCommand,
   assertRegionOssComplete,
+  assertIosAppStoreConfigured,
   stripSelfHostRegionEnv,
 } from '../../scripts/lib/self-host-region.mjs';
 
@@ -217,6 +218,8 @@ describe('formatSelfHostReleaseCommand', () => {
       .toBe('pnpm mobile:release:ios:local -- --region global --execute');
     expect(formatSelfHostReleaseCommand('android', 'ota', VALID.cn, { execute: true }))
       .toBe('pnpm mobile:release:android:ota -- --region cn --execute');
+    expect(formatSelfHostReleaseCommand('ios', 'promote', VALID.global, { yes: true }))
+      .toBe('pnpm mobile:release:ios:promote -- --region global --yes');
   });
 
   it('不允许无效平台、操作或 region', () => {
@@ -231,5 +234,12 @@ describe('assertRegionOssComplete', () => {
     expect(() => assertRegionOssComplete(VALID.cn)).not.toThrow();
     const partial = { ...VALID.cn, oss: { cdnBaseUrl: 'https://x/y', bucket: '', prefix: 'p', ossRegion: '' } };
     expect(() => assertRegionOssComplete(partial)).toThrow(/bucket, ossRegion/);
+  });
+});
+
+describe('assertIosAppStoreConfigured', () => {
+  it('要求 iOS canary 有正常 App Store 安装入口', () => {
+    expect(assertIosAppStoreConfigured(VALID.cn)).toBe('6788711632');
+    expect(() => assertIosAppStoreConfigured(VALID.dev)).toThrow(/dev\.iosAppStoreId/);
   });
 });

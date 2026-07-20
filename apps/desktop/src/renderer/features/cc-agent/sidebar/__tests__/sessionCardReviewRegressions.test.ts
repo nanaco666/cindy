@@ -94,8 +94,9 @@ describe('SessionCard review regressions', () => {
     expect(sessionStatusIconSource).toContain(
       "colorClassName={isActive ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}" /* colorClassName 覆盖口:选中态前景优先于 running 强调态 */,
     );
+    // 用户拍板 2026-07-20:running 橙(status-bar-accent)优先于选中态反相前景。
     expect(sessionStatusIconSource).toMatch(
-      /isActive\s*\? 'text-\[var\(--sidebar-item-active-foreground\)\]'\s*:\s*isRunning/,
+      /isRunning\s*\? 'text-\[var\(--status-bar-accent\)\]'\s*:\s*isActive/,
     );
     expect(sessionItemSource).toContain(
       "isActive ? 'text-sidebar-item-active-foreground' : 'text-sidebar-action-icon'",
@@ -133,8 +134,9 @@ describe('SessionCard review regressions', () => {
     expect(automationGroupSource).toContain(
       "colorClassName={hasActiveHidden ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}",
     );
+    // 用户拍板 2026-07-20:running 橙优先于选中态反相前景。
     expect(automationGroupSource).toMatch(
-      /hasActiveHidden\s*\? 'text-\[var\(--sidebar-item-active-foreground\)\]'\s*:\s*isRunning/,
+      /isRunning\s*\? 'text-\[var\(--status-bar-accent\)\]'\s*:\s*hasActiveHidden/,
     );
     expect(automationGroupSource).toContain(
       "hasActiveHidden ? 'text-sidebar-item-active-foreground' : 'text-sidebar-action-icon'",

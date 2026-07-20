@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, ChevronDown, ChevronRight, ChevronUp, File as FileIcon, FileText, Folder as FolderIcon, MessageSquareQuote, Sparkles, Target } from 'lucide-react';
+import { Bot, ChevronDown, ChevronRight, ChevronUp, Download, File as FileIcon, FileText, Folder as FolderIcon, MessageSquareQuote, Sparkles, Target } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { cn } from '@/lib/utils';
@@ -21,6 +21,10 @@ import { resolveLocalPath, resolveLocalPathSmart, toLocalFileUrl } from '@/lib/l
 import { isBrowserOpenablePath } from '../../../shared/browserOpenableExts';
 import { toast } from '@/lib/toast';
 import { shouldOpenTextLightboxForOrigin } from '@/lib/filePreview';
+import {
+  isSafetyDowngradedAttachment,
+  saveChatAttachmentWithToasts,
+} from '@/lib/chatAttachmentSave';
 import { saveDraft as saveComposerDraft } from '@/lib/composerDraftStore';
 import { emitPatch as emitSessionPatch } from '@/lib/sessionsBus';
 import { makerChatStore } from '@/lib/makerChatStore';
@@ -114,8 +118,8 @@ interface UserMessageProps {
    *  fork IPC takes (sessionId, clientId) to locate the fork point. When
    *  omitted, the Fork button is not rendered. */
   messageClientId?: string;
-  /** Whether this session currently has an in-flight SDK turn. Rewind still
-   *  needs an idle live query, while fork is allowed from stable history. */
+  /** Whether this session currently has an in-flight SDK turn. Rewind uses it
+   *  to select stop-then-rewind confirmation; fork is allowed from stable history. */
   sessionRunning?: boolean;
   /** Host-side delivery marker. Same-turn steer user rows are unstable while running. */
   delivery?: 'turn' | 'steer';
@@ -499,7 +503,7 @@ export function UserMessage({
   // renderer 'cc' ↔ maker 'claude-code' 别名映射 (DB / Session 用 'cc', maker IPC 用 'claude-code')
   const makerKind: MakerAgentKind = agentKind === 'codex' ? 'codex' : 'claude-code';
   // device-link 远程会话:fork/rewind 能力按被控端读(本机会话 deviceId undefined,行为不变)。
-  // 媒体来源(device/ssh)用于把附件/文件预览 URL 改写到 xdt-remote-media://(入方向媒体)。
+  // 媒体来源(device/ssh)用于把附件/文件预览 URL 改写到 cindy-remote-media://(入方向媒体)。
   // 取自 ChatSessionFileContext(MessageStream 顶层订阅式构造,deviceId 迟到注册时
   // context 更新会穿透 memo 触发重渲,替代旧的 render 期一次性读取)。
   const sessionFileCtx = useChatSessionFile();
@@ -672,12 +676,8 @@ export function UserMessage({
 
   const handleRewind = useCallback(() => {
     if (!sessionId || !messageClientId) return;
-    if (sessionRunning) {
-      toast.error(t('chat.userMessage.rewindBusy'));
-      return;
-    }
     setRewindOpen(true);
-  }, [sessionId, messageClientId, sessionRunning, t]);
+  }, [sessionId, messageClientId]);
 
   const handleRewindCommitted = useCallback(
     (session: Session) => {
@@ -913,41 +913,57 @@ export function UserMessage({
           })}
 
         {/* text-lightbox F1: Chip-Row above the text bubble.
-            Each chip renders the file's basename + file-text icon and opens
-            TextLightbox on click. Pill geometry per pen DLGJ9 / s2N4G. */}
+            Normal files keep the existing preview/system-open action; attachments
+            materialized as .bin use a visible download action instead. */}
         {hasFiles && (
           <div className="flex flex-wrap items-end gap-1.5 justify-end">
-            {files.map((f, idx) => (
-              // v6: chip 本体不再 hover tooltip — 文件名已显示，点击触发
-              //     TextLightbox 看完整内容，tooltip 是冗余噪音。
-              <button
-                key={`file-${idx}-${f.path}`}
-                type="button"
-                onClick={async (e) => {
-                  // F6 focus return: stash the chip so the lightbox can
-                  // restore focus on close.
-                  const btn = e.currentTarget;
-                  if (!(await shouldOpenTextLightboxForOrigin(sessionFileCtx, f.path))) return;
-                  activeFileChipRef.current = btn;
-                  setTextLightboxFile({ path: f.path, name: f.name });
-                }}
-                className={cn(
-                  'inline-flex items-center gap-1.5',
-                  'h-7 px-2.5 py-1.5',
-                  'rounded-[9999px]',
-                  'bg-[var(--msg-user-bg)]',
-                  'border border-[var(--msg-user-border)]',
-                  'text-[13px] font-medium',
-                  'text-[var(--msg-user-text)]',
-                  'hover:bg-[var(--cmd-palette-item-hover)]',
-                  'transition-colors cursor-pointer',
-                  'max-w-[280px]',
-                )}
-              >
-                <FileText size={14} className="shrink-0 text-[var(--msg-user-text)]" />
-                <span className="truncate">{f.name}</span>
-              </button>
-            ))}
+            {files.map((f, idx) => {
+              const downloadOnly = isSafetyDowngradedAttachment(f);
+              return (
+                // v6: chip 本体不再 hover tooltip — 文件名已显示，点击触发
+                // TextLightbox/系统打开；安全降级成 .bin 的附件则显示下载图标并另存。
+                <button
+                  key={`file-${idx}-${f.path}`}
+                  type="button"
+                  aria-label={
+                    downloadOnly
+                      ? t('chat.userMessage.saveAttachmentAs', { name: f.name })
+                      : undefined
+                  }
+                  onClick={async (e) => {
+                    if (downloadOnly) {
+                      await saveChatAttachmentWithToasts(sessionFileCtx, f);
+                      return;
+                    }
+                    // F6 focus return: stash the chip so the lightbox can
+                    // restore focus on close.
+                    const btn = e.currentTarget;
+                    if (!(await shouldOpenTextLightboxForOrigin(sessionFileCtx, f.path))) return;
+                    activeFileChipRef.current = btn;
+                    setTextLightboxFile({ path: f.path, name: f.name });
+                  }}
+                  className={cn(
+                    'inline-flex items-center gap-1.5',
+                    'h-7 px-2.5 py-1.5',
+                    'rounded-[9999px]',
+                    'bg-[var(--msg-user-bg)]',
+                    'border border-[var(--msg-user-border)]',
+                    'text-[13px] font-medium',
+                    'text-[var(--msg-user-text)]',
+                    'hover:bg-[var(--cmd-palette-item-hover)]',
+                    'transition-colors cursor-pointer',
+                    'max-w-[280px]',
+                  )}
+                >
+                  {downloadOnly ? (
+                    <Download size={14} className="shrink-0 text-[var(--msg-user-text)]" />
+                  ) : (
+                    <FileText size={14} className="shrink-0 text-[var(--msg-user-text)]" />
+                  )}
+                  <span className="truncate">{f.name}</span>
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -1197,6 +1213,7 @@ export function UserMessage({
           onOpenChange={setRewindOpen}
           sessionId={sessionId}
           clientId={messageClientId}
+          sessionRunning={sessionRunning === true}
           onCommitted={handleRewindCommitted}
         />
       )}

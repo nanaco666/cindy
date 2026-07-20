@@ -1016,10 +1016,6 @@
         "rotateSuccess": "Key rotated",
         "rotateFailed": "Rotation failed, please try again later"
       },
-      "addCustom": {
-        "title": "Add a custom provider",
-        "subtitle": "Connect any OpenAI / Anthropic-compatible model source; config is stored locally"
-      },
       "custom": {
         "tag": "Custom",
         "editAria": "Edit",
@@ -1127,8 +1123,14 @@
         "subscription": "Subscription",
         "subscriptionProduct": "{{product}} Subscription",
         "noResults": "No matching models",
-        "expandAria": "Expand model list",
-        "collapseAria": "Collapse model list"
+        "splitAdjust": "Adjust per CLI",
+        "splitDone": "Done",
+        "capabilityNote": "Not available in {{agent}}",
+        "divergedChip": "Hidden in {{agent}}",
+        "refreshAria": "Refresh model list (additions only)",
+        "refreshAdded": "Found {{count}} new models",
+        "refreshNoNew": "Model list is up to date — nothing new",
+        "refreshFailed": "Failed to refresh the model list. Please try again later"
       },
       "genericOAuth": {
         "subtitle": "Subscription sign-in (OAuth)",
@@ -1144,6 +1146,53 @@
           "confirm": "Sign out",
           "cancel": "Cancel"
         }
+      },
+      "addProvider": "Add provider",
+      "detail": {
+        "singleAgentNote": "{{agent}} only",
+        "emptyModels": "Models are discovered automatically after you authorize",
+        "emptyList": "Click \"Add provider\" below to connect your first model source",
+        "emptyModelsConnected": "Connected — discovering available models. If it stays empty, try again shortly."
+      },
+      "detect": {
+        "groupLabel": "Detected on this device",
+        "action": "Authorize",
+        "hintLoggedIn": "{{cli}} is signed in on this device — authorize to connect",
+        "hintInstalled": "{{cli}} is installed on this device"
+      },
+      "wizard": {
+        "title": "Add provider",
+        "titleWith": "Add · {{name}}",
+        "closeAria": "Close",
+        "stepPick": "Choose provider",
+        "stepConnect": "Connect",
+        "stepModels": "Choose models",
+        "searchPlaceholder": "Search providers…",
+        "groupSubscription": "Subscription sign-in · recommended, no API key",
+        "groupApiKey": "API key providers · presets update with the catalog",
+        "groupCustom": "Custom",
+        "metaOAuth": "Subscription (OAuth)",
+        "metaApiKey": "API key",
+        "customTitle": "Custom endpoint",
+        "customMeta": "Connect any OpenAI / Anthropic compatible source",
+        "pickHint": "The sign-in method is defined by each provider; OAuth endpoints and base URLs come from presets — nothing to fill in by hand.",
+        "oauthDesc": "Authorize your subscription in the browser — no API key needed",
+        "authorizedToast": "Connected {{name}}",
+        "authorizeFailed": "Failed to authorize {{name}}. Please try again",
+        "nameLabel": "Display name",
+        "onlyAgentNote": "This provider only supports {{agent}}",
+        "docsLink": "View setup docs",
+        "fetching": "Verifying connection and fetching models…",
+        "fetchFailed": "Couldn't fetch the model list — you can finish with the preset's recommended models and refresh later in details",
+        "recommended": "Recommended",
+        "modelsHint": "Checked models appear in the chat model picker and apply to every CLI where they're available; adjust anytime in provider details.",
+        "noModelSelected": "Select at least one model",
+        "createdToast": "Added {{name}}",
+        "createFailed": "Failed to add. Please try again",
+        "next": "Next",
+        "back": "← Back",
+        "finish": "Finish",
+        "cancel": "Cancel"
       }
     },
     "experimental": {
@@ -1974,7 +2023,32 @@
     },
     "ghosts": {
       "title": "Plugins",
-      "description": "Plugins add capabilities and UI to Cindy — install to use, uninstall to remove. Each plugin gets its own settings page.",
+      "description": "Tools and integrations that extend Cindy.",
+      "page": {
+        "search": "Search plugins",
+        "clearSearch": "Clear Plugin Search",
+        "addPlugin": "Add plugin",
+        "addPluginAria": "Plugin add options",
+        "createWithCindy": "Create with Cindy",
+        "createPrompt": "I want to create a Cindy plugin. First call ghost_forge_guide to read the full specification; do not start implementing yet. Begin by asking questions, focusing on one key decision at a time, and work with me to define the problem, target users, interaction flow, required tools and connections, permission boundaries, and acceptance criteria. After I confirm the design, implement and validate it according to the specification, then call ghost_forge_pack to package and install the plugin.",
+        "installedTitle": "Installed Plugins",
+        "installedExpand": "Show {{count}} more installed plugins",
+        "installedCollapse": "Hide additional installed plugins",
+        "allTitle": "All plugins",
+        "filterAll": "All",
+        "filtersAria": "Filter plugins by source",
+        "emptyFiltered": "No matching plugins",
+        "useAction": "Use",
+        "useAria": "Use {{name}}",
+        "installAction": "Install",
+        "installAria": "Install {{name}}",
+        "restoreAria": "Restore {{name}}",
+        "origin": {
+          "builtin": "Built-in",
+          "enterprise": "Team shared",
+          "external": "External / local"
+        }
+      },
       "provisioning": {
         "updating": "Updating built-in plugins…"
       },
@@ -2008,6 +2082,15 @@
         "description": "Its panel and capabilities will be removed. Its layout spot is kept and restored if you install it again.",
         "descriptionBuiltin": "Its panel and capabilities will be removed. This is a built-in plugin — it won't come back automatically, and you can restore it from the list anytime.",
         "cancel": "Cancel"
+      },
+      "setupGate": {
+        "title": "“{{name}}” Needs Setup",
+        "descriptionMissing": "Before using it, set up: {{items}}. Open the plugin settings now?",
+        "descriptionReauth": "Account authorization has expired: {{items}}. Reconnect to keep using it. Open the plugin settings now?",
+        "configure": "Open Settings",
+        "cancel": "Cancel",
+        "anySeparator": " or ",
+        "groupSeparator": ", "
       },
       "toast": {
         "installed": "Installed \"{{name}}\"",
@@ -2097,8 +2180,14 @@
         "infoTitle": "Details",
         "infoId": "Identifier",
         "infoAuthor": "Author",
+        "byAuthor": "By {{author}}",
         "infoPanel": "Panel",
         "infoLocation": "Install location",
+        "expandInfoValue": "Show full {{label}}",
+        "collapseInfoValue": "Collapse {{label}}",
+        "copyLocation": "Copy install location",
+        "locationCopied": "Install location copied",
+        "locationCopyFailed": "Could not copy the install location. Copy it manually.",
         "openLocation": "Open install location",
         "panelDocked": "Docked · min width {{min}}px",
         "panelNotDocked": "Not docked (no layout record yet)",
@@ -2120,10 +2209,26 @@
           },
           "defaultOption": "{{model}} (default)"
         },
-        "toolsTitle": "Registered tools",
+        "toolsTitle": "Tools",
         "permissionsTitle": "Permissions",
         "infoDescription": "Description",
-        "customSlotAsleep": "This plugin is disabled. Enable it to see its settings UI here."
+        "customSlotAsleep": "This plugin is disabled. Enable it to see its settings UI here.",
+        "descriptionExpand": "Show more",
+        "descriptionCollapse": "Show less",
+        "useAction": "Use Plugin",
+        "useDisabled": "Enable this Plugin before using it",
+        "moreActions": "More Plugin Actions",
+        "updateFromFile": "Update from .cindy File…",
+        "settingsTitle": "{{name}} Settings",
+        "settingsUnavailableUntilRestore": "Restore the plugin to use this configuration again.",
+        "configurationTitle": "Configuration",
+        "openTool": "View details for Tool {{name}}",
+        "noToolDescription": "No description is available for this Tool.",
+        "viewAllTools": "See All",
+        "collapseTools": "Collapse Tools",
+        "viewAllPermissions": "See All",
+        "permissionsDialogDescription": "All {{count}} permissions requested by this Plugin",
+        "closeDialog": "Close Dialog"
       },
       "contents": {
         "panel": "Panel",
@@ -3091,6 +3196,7 @@
     "tabs": {
       "projects": "Projects",
       "skillhub": "SkillHub",
+      "plugins": "Plugins",
       "issues": "Issues"
     },
     "user": {
@@ -3729,14 +3835,14 @@
       "zoom": "Zoom",
       "viewDiagram": "View diagram",
       "viewSource": "View source",
-      "copySource": "Copy source",
+      "copy": "Copy",
       "copied": "Copied",
+      "annotate": "Annotate",
       "renderFailed": "mermaid render failed — showing source"
     },
     "mermaidLightbox": {
       "zoomOut": "Zoom out",
       "zoomIn": "Zoom in",
-      "reset": "Reset",
       "close": "Close"
     },
     "lightbox": {
@@ -3953,7 +4059,9 @@
     "markdownRenderer": {
       "codeCopied": "Copied",
       "copyCode": "Copy code",
+      "annotateImage": "Annotate image",
       "copy": "Copy",
+      "blockCopied": "Copied",
       "duplicateFiles": "Found {{count}} files with the same name, please use an absolute path",
       "copyFile": "Copy",
       "copyFilePath": "Copy file path",
@@ -3989,13 +4097,18 @@
     },
     "userMessage": {
       "attachmentPrefix": "Attachments: ",
+      "saveAttachmentAs": "Save attachment {{name}} as",
+      "attachmentSaved": "Attachment {{name}} saved",
+      "attachmentSavedUnsupported": "Attachment {{name}} saved, but this file type may not work on the current platform",
+      "attachmentSaveForbidden": "Cannot save attachment because the source path is not trusted",
+      "attachmentSourceMissing": "Cannot save attachment because the source file no longer exists",
+      "attachmentSaveFailed": "Cannot save attachment. Check the destination folder permissions and retry",
       "automationSent": "Sent by automation",
       "automationSentNamed": "Sent by automation \"{{name}}\"",
       "automationViewTask": "View automation task",
       "expandLongMessage": "Show full message",
       "collapseLongMessage": "Collapse",
       "forkBusy": "Session is currently running — wait for it to finish before forking",
-      "rewindBusy": "Session is currently running — wait for it to finish before rewinding",
       "editStopTimeout": "Timed out waiting for the task to stop — please try again",
       "editQueueNotEmpty": "This session has queued messages — send or remove them before editing",
       "editNotLast": "A newer message exists in this session — this one is no longer the latest and cannot be edited",
@@ -4018,7 +4131,7 @@
       "noFilesToRollback": "No files to roll back, only conversation history will be truncated",
       "errors": {
         "noPriorAssistantPreview": "Please rewind from a question that follows an AI reply (this one has no prior assistant reply)",
-        "sessionRunning": "Session is in progress, cannot rewind",
+        "sessionRunning": "The task did not stop in time — retry the rewind",
         "noLiveQuery": "Session is inactive — send any message first (even just \"ok\") to wake the SDK before rewinding",
         "noPriorAssistantCommit": "Please rewind from a question that follows an AI reply",
         "commitGeneric": "Rewind failed, please retry",
@@ -4033,13 +4146,19 @@
         "continueWillTruncate": "Continuing will still truncate later conversation",
         "noPerFileDiff": "This SDK version does not support per-file diff preview",
         "summaryDefault": "Subsequent messages after this will be discarded, and {{count}} files in the working directory will be rolled back to that moment.",
+        "summaryRunning": "The current task will stop. Later conversation and corresponding file changes will be rewound.",
         "summaryEmpty": "Subsequent messages will be discarded. No files were changed; only history is truncated.",
         "summaryEmptyWithNote": "Subsequent messages will be discarded.",
+        "runningNotice": "The task is still running. Confirming will stop it before recalculating and applying the rewind.",
+        "runningQueueNotice": "Queued messages will be kept paused and will not be sent automatically.",
         "summaryPrefix": "{{count}} files, ",
         "linesSuffix": "lines",
         "errorHint": "Tip: you can fork a new session and continue editing.",
         "cancel": "Cancel",
         "confirm": "Confirm rewind",
+        "confirmRunning": "Stop and Rewind",
+        "rewinding": "Rewinding…",
+        "stoppingAndRewinding": "Stopping and rewinding…",
         "acknowledge": "Got it"
       }
     },
@@ -4688,6 +4807,7 @@
         "targetMissing": "The original mermaid block is no longer in the document; changes were not saved.",
         "toolbarZoom": "Zoom",
         "toolbarEdit": "Edit source",
+        "toolbarCopy": "Copy",
         "renderFailedPrefix": "mermaid render failed: ",
         "errEmpty": "mermaid source is empty",
         "errSvgParse": "SVG parse failed (length={{length}})"
@@ -4925,7 +5045,7 @@
         "script": "Script only"
       },
       "script": {
-        "protocolSummary": "stdout must emit one complete xdt-maker-script/1 JSON object per line (JSONL); type must be call or complete. Write regular logs to stderr, and always finish with a complete frame.",
+        "protocolSummary": "stdout must emit one complete cindy-script/1 JSON object per line (JSONL); type must be call or complete. Write regular logs to stderr, and always finish with a complete frame.",
         "protocolCapabilities": "When using granted capabilities, the script must also read the host's start and call_result JSONL frames from stdin, then wait for each call result before continuing or emitting complete.",
         "protocolExample": "View minimal Python example without capabilities",
         "command": "Script command",
@@ -5362,7 +5482,7 @@
   },
   "issueAgent": {
     "command": {
-      "instruction": "I'd like to file feedback for {{appName}}. Please help me turn it into a high-quality GitHub issue: first confirm the feedback type (bug or feature request) and ask follow-up questions for the necessary details (symptoms, reproduction steps or use case, expected behavior). Once there is enough information, submit it with the submit_github_issue tool via lizi_xdt_helper call_tool (category=feedback; you can run list_tools first to check the parameters; a confirmation card will be shown to me before submitting). If the submission fails, tell me the reason honestly.{{details}}",
+      "instruction": "I'd like to file feedback for {{appName}}. Please help me turn it into a high-quality GitHub issue: first confirm the feedback type (bug or feature request) and ask follow-up questions for the necessary details (symptoms, reproduction steps or use case, expected behavior). Once there is enough information, submit it with the submit_github_issue tool via cindy_helper call_tool (category=feedback; you can run list_tools first to check the parameters; a confirmation card will be shown to me before submitting). If the submission fails, tell me the reason honestly.{{details}}",
       "detailsPrefix": "\nMy initial description: {{details}}"
     },
     "confirm": {
@@ -5412,6 +5532,11 @@
   },
   "skillhub": {
     "home": {
+      "title": "Skills",
+      "description": "Manage local skills, or discover and install more from Skill Hub.",
+      "search": "Search skills",
+      "clearSearch": "Clear skill search",
+      "noSearchResults": "No matching skills found",
       "browseTitle": "Browse Skill Hub",
       "browseDesc": "Discover and install more skills",
       "recommended": "Recommended",
@@ -6101,8 +6226,11 @@
   },
   "extraDirs": {
     "menuAria": "Composer actions",
-    "tooltipEmpty": "New goal / add reference directory",
+    "tooltipEmpty": "More actions",
     "tooltipCount": "{{count}} reference directories",
+    "pluginsTitle": "Installed Plugins",
+    "pluginDisabled": "Disabled",
+    "pluginNoCommand": "Not available here",
     "sectionTitle": "Reference directories (read-only)",
     "empty": "No reference directories yet",
     "add": "Add directory…",

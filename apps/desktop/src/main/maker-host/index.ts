@@ -17,9 +17,11 @@ import {
   configureDefaultImageResizer,
 } from '@lizi/maker-core';
 import {
+  getActiveCatalog,
   setActiveCatalogChangedListener,
   setDiscoveredCodexModels,
 } from './active-catalog.js';
+import { maybeBackfillCodexModels } from './codex-model-backfill.js';
 import {
   createOrcaWorkerBridgeMcpProvider,
   type OrcaBridgeMcpDeps,
@@ -646,6 +648,18 @@ export function getMaker(): Maker {
           });
         },
       },
+    });
+    // 存量已登录用户补拉:maker 首次就绪后,若 Codex 已登录但当前无 codex 模型
+    // (从没跑过会话、models_cache 未生成),fire-and-forget 触发一次 live model/list。
+    // 不阻塞 getMaker 返回 / 启动(类比 refreshAnthropicModelsFromHttp 的后台刷新)。
+    const makerRef = _maker;
+    void maybeBackfillCodexModels({
+      hasCodexLogin: () => desktopCodexAuthAdapter.hasCodexOAuthLogin(),
+      hasCodexModels: () =>
+        (getActiveCatalog().providers.find((p) => p.id === 'openai')?.models.codex?.length ?? 0) > 0,
+      refreshLive: () => makerRef.refreshAgentLocalModels('codex'),
+      onApplied: () => refreshSelectableModelsAndBroadcast({}),
+      log: desktopMakerLogger,
     });
   }
   return _maker;

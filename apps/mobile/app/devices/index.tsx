@@ -2477,9 +2477,13 @@ function SessionStatusMark({
   const orcaLead = item.session.orcaRole === 'lead';
   const attached = readBooleanField(item.session, 'attached') || readBooleanField(item.session, 'deviceLinkAttached');
   const cindyList = variant === 'cindyList';
-  const glyphColor = cindyList
-    ? active ? colors.activeGlyph : colors.textSecondary
-    : running ? colors.statusAccent : colors.textTertiary;
+  // 用户拍板 2026-07-20(对齐桌面):running 一律 Thinking Orange(statusAccent),
+  // 优先级高于 CINDY 选中态 activeGlyph——原 cindyList 分支漏掉 running 导致灰色呼吸。
+  const glyphColor = running
+    ? colors.statusAccent
+    : cindyList
+      ? active ? colors.activeGlyph : colors.textSecondary
+      : colors.textTertiary;
   return (
     <View style={[styles.sessionStatusMark, cindyList && styles.sessionStatusMarkCindy]}>
       {archived ? (

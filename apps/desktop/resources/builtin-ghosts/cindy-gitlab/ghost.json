@@ -2,10 +2,11 @@
   "schemaVersion": 2,
   "id": "cindy-gitlab",
   "name": "Cindy GitLab",
-  "description": "内置的 GitLab 服务意识:支持自建与多实例 GitLab——在设置页添加实例地址与 Personal Access Token(api scope)即可读写 issue / MR / code review / 仓库 / CI / release / 搜索等 107 个操作(两段式目录)。token 由主机加密保管,只注入对应实例的 API 请求。",
-  "whenToUse": "只管 GitLab 实例(gitlab.com/公司/自建),github.com 的链接不归我、找 Cindy GitHub。需要查/建/改 GitLab issue 或 MR,提交/回复/发布 code review,合并或 rebase MR,查仓库/分支/commit/文件内容,查 CI pipeline 与 job 日志,管理 release / tag / 分支,搜索全实例内容,或下载仓库归档时找我(需先在意识设置页添加 GitLab 实例与 token)。",
+  "description": "内置的 GitLab 服务插件:支持自建与多实例 GitLab——在设置页添加实例地址与 Personal Access Token(api scope)即可读写 issue / MR / code review / 仓库 / CI / release / 搜索等 107 个操作(两段式目录)。token 由主机加密保管,只注入对应实例的 API 请求。",
+  "whenToUse": "只管 GitLab 实例(gitlab.com/公司/自建),github.com 的链接不归我、找 Cindy GitHub。需要查/建/改 GitLab issue 或 MR,提交/回复/发布 code review,合并或 rebase MR,查仓库/分支/commit/文件内容,查 CI pipeline 与 job 日志,管理 release / tag / 分支,搜索全实例内容,或下载仓库归档时找我(需先在插件设置页添加 GitLab 实例与 token)。",
   "version": "1.1.1",
   "author": "Cindy",
+  "icon": "assets/icon.png",
   "entry": "main.js",
   "settingsHtml": "settings.html",
   "slots": [
@@ -32,7 +33,7 @@
   "tools": [
     {
       "name": "list_tools",
-      "description": "列出本意识可用的 GitLab 操作(共 107 个,覆盖 issues / merge_requests / repo / commits / events / search / projects / users / pipelines / jobs / discussions / approvals / draft_notes / reactions / groups / environments / wiki / snippets / releases / meta)。不传 category 返回类目概览(类目名+数量+说明);传 category 返回该类目下所有操作的名称、说明与参数。",
+      "description": "列出本插件可用的 GitLab 操作(共 107 个,覆盖 issues / merge_requests / repo / commits / events / search / projects / users / pipelines / jobs / discussions / approvals / draft_notes / reactions / groups / environments / wiki / snippets / releases / meta)。不传 category 返回类目概览(类目名+数量+说明);传 category 返回该类目下所有操作的名称、说明与参数。",
       "parameters": {
         "type": "object",
         "properties": {

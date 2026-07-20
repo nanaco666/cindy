@@ -28,6 +28,8 @@ import remarkPreserveLocalImagePaths, {
   RAW_LOCAL_IMAGE_SRC_PROP,
 } from './remarkPreserveLocalImagePaths';
 import remarkSessionLinks from './remarkSessionLinks';
+import { rehypeMathBlockMarker } from './rehypeMathBlockMarker';
+import { CopyAsImageBlock, mathBlockToLatex, tableToTsv } from './CopyAsImageBlock';
 import type { Components, UrlTransform } from 'react-markdown';
 import type { PluggableList } from 'unified';
 import { Check, Copy, FolderOpen } from 'lucide-react';
@@ -196,9 +198,13 @@ const REMARK_PLUGINS_PRIVILEGED: PluggableList = [
 // `<code class="language-math ...">`,先让 katex 消费掉,否则 highlight 会往
 // 里面塞 hljs span 破坏纯文本结构。strict:'ignore' 静默非致命 LaTeX 告警;
 // errorColor 走语义豁免 error token,解析失败的公式以错误色显示原文。
+// rehypeMathBlockMarker 紧随 rehypeKatex:把裸 `<span class="katex-display">`
+// 包进 `<div data-math-block>`,让下方 div 渲染器能挂「复制为图片」工具栏
+// (components 映射只认 tagName,认不了 class)。
 const REHYPE_PLUGINS: PluggableList = [
   rehypeSlug,
   [rehypeKatex, { strict: 'ignore', errorColor: 'var(--error-fg)' }],
+  rehypeMathBlockMarker,
   rehypeHighlight,
 ];
 const MARKDOWN_LINK_CLASS = 'text-[var(--msg-link)] underline underline-offset-2 cursor-pointer [overflow-wrap:anywhere]';
@@ -218,7 +224,7 @@ const trustedUrlTransform: UrlTransform = (url, key) => {
     url.startsWith('xdt-file://') ||
     url.startsWith('xdt-audio://') ||
     // device-link 入方向远程媒体:远程会话里的媒体 URL 被改写成此 scheme,经 OSS 中转取字节。
-    url.startsWith('xdt-remote-media://') ||
+    url.startsWith('cindy-remote-media://') ||
     isDeepLinkUrl(url) ||
     url.startsWith('file://') ||
     WINDOWS_ABSOLUTE_HREF_RE.test(url) ||
@@ -457,10 +463,15 @@ const baseComponents: Components = {
     return <CodeBlockPre {...props}>{children}</CodeBlockPre>;
   },
 
-  // Tables (GFM)
+  // Tables (GFM)。外层 CopyAsImageBlock 承载「复制为图片 / 标注」hover 工具栏,
+  // overflow 容器下沉为内层(工具栏挂 overflow 容器内会被裁剪并随横滚漂移)。
   table({ children, ...props }) {
     return (
-      <div className="my-3 overflow-x-auto">
+      <CopyAsImageBlock
+        className="my-3"
+        contentClassName="overflow-x-auto"
+        extractPlainText={tableToTsv}
+      >
         <table
           className={cn(
             'w-full border-collapse',
@@ -470,8 +481,19 @@ const baseComponents: Components = {
         >
           {children}
         </table>
-      </div>
+      </CopyAsImageBlock>
     );
+  },
+
+  // 块级 KaTeX 公式(rehypeMathBlockMarker 包装出的 div[data-math-block])。
+  // 其余 div 原样透传——markdown 输出里 div 极少见,不影响其它内容。
+  div({ children, node, ...props }) {
+    if (node?.properties && 'dataMathBlock' in node.properties) {
+      return (
+        <CopyAsImageBlock extractPlainText={mathBlockToLatex}>{children}</CopyAsImageBlock>
+      );
+    }
+    return <div {...props}>{children}</div>;
   },
 
   th({ children, ...props }) {
@@ -1162,7 +1184,7 @@ async function activateResolvedLocalTarget(
       return;
     }
     // 远程:xdt-file://?path= 经 origin 改写(device 全量 / ssh 限 workdir 内)
-    // 后由 xdt-remote-media 管线取字节;改写不了(ssh workdir 外)→ 取回缓存
+    // 后由 cindy-remote-media 管线取字节;改写不了(ssh workdir 外)→ 取回缓存
     // 副本后按本机文件预览。
     const rewritten = rewriteToRemoteMediaOrigin(
       localUrl,
@@ -1226,7 +1248,7 @@ function MarkdownTargetLink({
   setModelLightboxPath: (absPath: string | null) => void;
   anchorProps: Record<string, unknown>;
   allowPrivilegedLinks: boolean;
-  /** 远程会话媒体来源:把 xdt-audio:// 等链接改写到 xdt-remote-media://;本地 undefined。 */
+  /** 远程会话媒体来源:把 xdt-audio:// 等链接改写到 cindy-remote-media://;本地 undefined。 */
   remoteMediaOrigin?: RemoteMediaOrigin;
   /** 当前会话 id;就位时外链 / html 文件左键弹"打开方式"菜单。 */
   sessionId?: string;
@@ -1337,7 +1359,7 @@ function MarkdownTargetLink({
         }
 
         if (target.kind === 'local-image-url') {
-          // 远程会话:本机媒体 scheme 链接改写到 xdt-remote-media://(同内嵌图);本地原样。
+          // 远程会话:本机媒体 scheme 链接改写到 cindy-remote-media://(同内嵌图);本地原样。
           setLightboxSrc(rewriteToRemoteMediaOrigin(target.href, remoteMediaOrigin));
           return;
         }
@@ -1448,7 +1470,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   );
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   // 远程入方向:远程会话里 markdown 的图片/音频 URL 指向远端机器,按来源改写到
-  // xdt-remote-media://(device 经 OSS 中转、ssh 经 file-service 落盘缓存)。本地
+  // cindy-remote-media://(device 经 OSS 中转、ssh 经 file-service 落盘缓存)。本地
   // 会话 → undefined,改写为 no-op。origin 从 ChatSessionFileContext 取(provider
   // 在 MessageStream 顶层统一订阅 remoteProjectsStore,origin-injection race 在那里
   // 处理;context 更新穿透 MessageItem/AssistantMessage 的 memo,deviceId 一就位本

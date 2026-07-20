@@ -5,6 +5,7 @@ import type { AsrEvent, AsrProvider, AudioTrace } from '@lizi/voice-input-core';
 import { createLogger } from '../logger.js';
 import { resamplePcm16 } from './RealtimeAsrWebSocketProvider.js';
 import { mergeRecoveredTranscript } from './transcriptMerge.js';
+import { describeAsrHandshakeTraceId, describeAsrWebSocketTarget } from './voiceInputAsrConfig.js';
 
 type VolcengineSaucAsrProviderOptions = {
   proxyApiKey: string;
@@ -191,7 +192,14 @@ export class VolcengineSaucAsrProvider implements AsrProvider {
         response.resume();
         const statusCode = response.statusCode ?? 'unknown';
         const statusMessage = response.statusMessage ? ` ${response.statusMessage}` : '';
-        fail(new Error(`Volcengine SAUC ASR handshake failed: HTTP ${statusCode}${statusMessage}`), true);
+        // Include the dialed host/path + gateway trace id: a handshake 404
+        // against a gateway missing the ASR passthrough route is otherwise
+        // indistinguishable from an upstream failure (issue #220).
+        const traceId = describeAsrHandshakeTraceId(response.headers);
+        const target = describeAsrWebSocketTarget(toWebSocketUrl(this.baseUrl, this.endpointPath));
+        fail(new Error(
+          `Volcengine SAUC ASR handshake failed: HTTP ${statusCode}${statusMessage} (${target}${traceId ? `, ${traceId}` : ''})`,
+        ), true);
       };
       socket.once('open', onOpen);
       socket.once('error', onError);

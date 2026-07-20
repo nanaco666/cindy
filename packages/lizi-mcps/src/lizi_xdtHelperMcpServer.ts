@@ -4,9 +4,9 @@
  * In-process MCP server exposing xdt-maker 的基础设施自省 + session handoff 能力。
  *
  * 设计:
- *  - server name = `lizi_xdt_helper`,essential(常开,不可被用户关闭)
+ *  - server name = `cindy_helper`,essential(常开,不可被用户关闭)
  *  - 所有工具走 `list_tools` / `call_tool` 两个入口,渐进式发现,分五类:
- *    - 'xdt'     : 只读自省 (get_capabilities / get_current_session_id)
+ *    - 'cindy'   : 只读自省 (get_capabilities / get_current_session_id)
  *    - 'history' : 只读查询本地数据库聊天历史 (list_workdirs / list_sessions /
  *                  get_chat_history / search_chat_history)
  *    - 'control' : 会话状态控制 (set_current_session_title / rename_sessions /
@@ -66,8 +66,8 @@ export type {
 // ── Entry-tool descriptions ─────────────────────────────────────────────────
 
 const D_LIST_TOOLS =
-  '探索 lizi_xdt_helper 可用工具(渐进式发现入口)。不传 category → 返回所有类目+每个类目工具数量。' +
-  `传 category=xdt → ${BRAND_NAME} 自省类只读工具(get_capabilities / get_current_session_id);` +
+  '探索 cindy_helper 可用工具(渐进式发现入口)。不传 category → 返回所有类目+每个类目工具数量。' +
+  `传 category=cindy → ${BRAND_NAME} 自省类只读工具(get_capabilities / get_current_session_id);` +
   '传 category=control → 对话控制工具(set_current_session_title / rename_sessions);' +
   '传 category=history → 只读查询本地数据库聊天历史' +
   '(list_workdirs / list_sessions / get_chat_history 按元数据捞, search_chat_history 按内容语义找),' +
@@ -81,7 +81,7 @@ const D_LIST_TOOLS =
   '(协同 team 工具 start_team / create_worker 等在 lizi_orca server 直接顶层注册, 不在本入口下。)';
 
 const D_CALL_TOOL =
-  '调用 lizi_xdt_helper 中的某个具体工具(如 get_capabilities / get_current_session_id / ' +
+  '调用 cindy_helper 中的某个具体工具(如 get_capabilities / get_current_session_id / ' +
   'set_current_session_title / rename_sessions / send_to_session / list_workdirs / list_sessions / get_chat_history / search_chat_history / submit_github_issue)。' +
   '先用 list_tools 拿工具名 + 简介。' +
   '错误码:`UNKNOWN_TOOL` = 工具名不存在;`INVALID_ARGS` = 参数 schema 校验失败(返回 schema 自纠);' +
@@ -89,9 +89,9 @@ const D_CALL_TOOL =
   '在返回 payload 的 errorCode 字段, 附 data.hint 引导自纠。' +
   'history 类工具返回 hasMore=true 时用响应里的 nextCursor 再次调用本工具拿下一页, 不会丢信息。';
 
-// list_tools 入口类目: xdt(自省) / control(会话标题控制) / history(聊天历史) / feedback(官方反馈提交) / handoff(session 间 handoff)。
+// list_tools 入口类目: cindy(自省) / control(会话标题控制) / history(聊天历史) / feedback(官方反馈提交) / handoff(session 间 handoff)。
 // 协同 team 工具已拆到独立 lizi_orca server(插件开关 gate)。
-const CATEGORY_ENUM = ['xdt', 'control', 'history', 'feedback', 'handoff'] as const;
+const CATEGORY_ENUM = ['cindy', 'control', 'history', 'feedback', 'handoff'] as const;
 
 // ── Entry tool registration ──────────────────────────────────────────────────
 
@@ -174,7 +174,7 @@ function registerCallToolEntry(
       // 之前在这里落一条日志,否则 agent 犯错→自纠 的事件在日志里完全不存在。
       logToolResultErrorCode({
         logger: telemetry.logger,
-        server: 'lizi_xdt_helper',
+        server: 'cindy_helper',
         tool: name,
         result,
         sessionId: telemetry.getSessionId(),
@@ -223,7 +223,7 @@ export interface XdtHelperMcpDeps {
   /**
    * Session handoff 回调。host 注入后, send_to_session 工具注册到 handoff 类目(走
    * call_tool);不注入则工具不出现。此工具是 skill(如 maker-github-issue)做跨会话
-   * 路由的原语, 放在 essential 的 lizi_xdt_helper 下常开保证 skill 永不断。
+   * 路由的原语, 放在 essential 的 cindy_helper 下常开保证 skill 永不断。
    */
   sendToSession?: SendToSessionCallback;
   /**
@@ -264,13 +264,13 @@ export function createXdtHelperMcpServer(
   sessionCtx: XdtHelperMcpSessionCtx,
 ): McpServer {
   const server = new McpServer({
-    name: 'lizi_xdt_helper',
+    name: 'cindy_helper',
     version: '1.0.0',
   });
 
   const registry = new XdtHelperToolRegistry();
 
-  // 'xdt' 类: 自省 (无 host 依赖, 始终注册)。
+  // 'cindy' 类: 自省 (无 host 依赖, 始终注册)。
   registerGetCapabilitiesTool(registry);
   registerGetCurrentSessionIdTool(registry, {
     getSessionContext: () => resolveLiziMcpSessionContext(sessionCtx),

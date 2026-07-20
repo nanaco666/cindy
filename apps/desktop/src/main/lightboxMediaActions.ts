@@ -26,7 +26,7 @@ import { throwIpcError } from './utils/ipcValidate';
 // 纯函数:媒体源分类
 // ---------------------------------------------------------------------------
 
-/** lightbox 图片 src 的来源分类。unsupported 覆盖 xdt-remote-media:// 等无法在本机落地的源。 */
+/** lightbox 图片 src 的来源分类。unsupported 覆盖 cindy-remote-media:// 等无法在本机落地的源。 */
 export type LightboxMediaSource =
   | { kind: 'image-cache'; url: string }
   | { kind: 'local-file'; absPath: string }
@@ -67,7 +67,7 @@ const EXT_BY_MIME: Record<string, string> = {
  * - `xdt-file://` 在这里解出绝对路径并做与协议 handler 相同的三重校验
  *   (绝对路径、resolve 后无 `..` 逃逸、图片扩展名白名单);
  * - `http(s)://` / `data:image/...;base64,` 标记为需取字节的远程/内联源;
- * - 其余(xdt-remote-media:// / blob: / 相对路径等)一律 unsupported。
+ * - 其余(cindy-remote-media:// / blob: / 相对路径等)一律 unsupported。
  */
 export function classifyLightboxMediaUrl(url: string): LightboxMediaSource {
   if (typeof url !== 'string' || url.length === 0) return { kind: 'unsupported' };
@@ -102,7 +102,7 @@ export function classifyLightboxMediaUrl(url: string): LightboxMediaSource {
   if (url.startsWith('http://') || url.startsWith('https://')) {
     return { kind: 'http', url };
   }
-  if (url.startsWith('xdt-remote-media://')) {
+  if (url.startsWith('cindy-remote-media://')) {
     // 远程会话图:字节经协议管线(OSS 中转/SSH)可达,main 侧动作按需取件。
     return { kind: 'remote-media', url };
   }
@@ -268,7 +268,7 @@ export interface LightboxMediaDeps {
   readFile(absPath: string): Promise<Buffer>;
   /** 下载远程图片字节(net.fetch 包装,带超时与大小上限)。 */
   fetchRemoteImage(url: string): Promise<{ buffer: Buffer; mimeType?: string }>;
-  /** 取远程会话媒体字节(xdt-remote-media://,复用协议取件管线)。 */
+  /** 取远程会话媒体字节(cindy-remote-media://,复用协议取件管线)。 */
   fetchRemoteMediaImage(url: string): Promise<{ buffer: Buffer; mimeType: string }>;
   /** 临时目录(远程图"用默认应用打开"落临时文件)。 */
   getTempDir(): string;

@@ -20,5 +20,5 @@ Claude Code, Codex, voice input, and lightweight utility models can use Cindy AI
 
 **Notes:**
 
-- Direct service keys such as Mivo, Brave Search, and Tavily are configured on the matching ghost detail pages under Settings > Ghosts.
+- Direct service keys such as Mivo, Brave Search, and Tavily are configured on the matching plugin detail pages under Plugins.
 - Replacing the Cindy AI key takes effect immediately for new turns; existing in-flight requests use the previous key until they finish.

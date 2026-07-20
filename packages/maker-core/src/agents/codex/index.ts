@@ -317,7 +317,8 @@ function mapBehaviorToApproval(behavior: 'allow' | 'deny'): ApprovalDecision {
   return behavior === 'allow' ? 'accept' : 'decline';
 }
 
-const ASK_USER_DYNAMIC_TOOL_NAMESPACE = 'xdt_maker';
+const ASK_USER_DYNAMIC_TOOL_NAMESPACE = 'cindy';
+const LEGACY_ASK_USER_DYNAMIC_TOOL_NAMESPACE = 'xdt_maker';
 const ASK_USER_DYNAMIC_TOOL_NAME = 'ask_user_question';
 const MAX_REQUEST_USER_INPUT_QUESTIONS = 3;
 const MAX_REQUEST_USER_INPUT_OPTIONS = 10;
@@ -388,7 +389,11 @@ interface ActiveToolContext {
 }
 
 function isAskUserDynamicTool(params: Pick<DynamicToolCallParams, 'namespace' | 'tool'>): boolean {
-  return params.namespace === ASK_USER_DYNAMIC_TOOL_NAMESPACE && params.tool === ASK_USER_DYNAMIC_TOOL_NAME;
+  return (
+    (params.namespace === ASK_USER_DYNAMIC_TOOL_NAMESPACE ||
+      params.namespace === LEGACY_ASK_USER_DYNAMIC_TOOL_NAMESPACE) &&
+    params.tool === ASK_USER_DYNAMIC_TOOL_NAME
+  );
 }
 
 function shouldRegisterAskUserDynamicTool(opts: Pick<StartSessionOptions, 'model' | 'providerId'>): boolean {
@@ -2944,7 +2949,7 @@ export class CodexAgent extends BaseAgent {
       if (!ctx) return 'ask_user_question';
       if (ctx.type === 'mcpToolCall') return 'permission';
       if (ctx.type === 'dynamicToolCall') {
-        return ctx.namespace === ASK_USER_DYNAMIC_TOOL_NAMESPACE && ctx.tool === ASK_USER_DYNAMIC_TOOL_NAME
+        return isAskUserDynamicTool({ namespace: ctx.namespace ?? '', tool: ctx.tool ?? '' })
           ? 'ask_user_question'
           : 'permission';
       }

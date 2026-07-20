@@ -3375,7 +3375,7 @@ describe('CodexAgent MCP thread context hooks', () => {
     };
     expect(startParams.dynamicTools).toEqual([
       expect.objectContaining({
-        namespace: 'xdt_maker',
+        namespace: 'cindy',
         name: 'ask_user_question',
       }),
     ]);
@@ -3397,7 +3397,7 @@ describe('CodexAgent MCP thread context hooks', () => {
     };
     expect(openAiParams.dynamicTools).toEqual([
       expect.objectContaining({
-        namespace: 'xdt_maker',
+        namespace: 'cindy',
         name: 'ask_user_question',
       }),
     ]);
@@ -3415,7 +3415,7 @@ describe('CodexAgent MCP thread context hooks', () => {
     };
     expect(xdParams.dynamicTools).toEqual([
       expect.objectContaining({
-        namespace: 'xdt_maker',
+        namespace: 'cindy',
         name: 'ask_user_question',
       }),
     ]);
@@ -3667,10 +3667,12 @@ describe('CodexAgent MCP thread context hooks', () => {
     });
     const handlers = host.getThreadHandlers();
     if (!handlers?.dynamicToolCall) throw new Error('expected dynamicToolCall handler');
+    let requestCount = 0;
     handle.setInteractionResolver(async (req) => {
+      requestCount += 1;
       expect(req).toMatchObject({
         kind: 'ask_user_question',
-        requestId: 'req-dynamic',
+        requestId: requestCount === 1 ? 'req-dynamic' : 'req-dynamic-legacy',
       });
       return { kind: 'ask_user_question', answers: { 'What next?': 'Keep going' } };
     });
@@ -3679,7 +3681,7 @@ describe('CodexAgent MCP thread context hooks', () => {
       threadId: 'start-thread-id',
       turnId: 'turn-1',
       callId: 'dynamic-call-1',
-      namespace: 'xdt_maker',
+      namespace: 'cindy',
       tool: 'ask_user_question',
       arguments: {
         questions: [{
@@ -3695,6 +3697,24 @@ describe('CodexAgent MCP thread context hooks', () => {
     expect(result.contentItems).toEqual([
       { type: 'inputText', text: JSON.stringify({ q1: { answers: ['Keep going'] } }) },
     ]);
+
+    const legacyResult = await handlers.dynamicToolCall({
+      threadId: 'start-thread-id',
+      turnId: 'turn-1',
+      callId: 'dynamic-call-legacy',
+      namespace: 'xdt_maker',
+      tool: 'ask_user_question',
+      arguments: {
+        questions: [{
+          id: 'q1',
+          header: 'Direction',
+          question: 'What next?',
+          options: [{ label: 'Keep going', description: 'Continue current work' }],
+        }],
+      },
+    }, { requestId: 'req-dynamic-legacy' });
+    expect(legacyResult).toEqual(result);
+    expect(requestCount).toBe(2);
     await handle.close();
   });
 

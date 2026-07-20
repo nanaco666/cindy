@@ -43,7 +43,7 @@ const EXT_BY_MIME: Record<string, string> = {
 };
 
 function tempDirFor(sessionId: string): string {
-  return path.join(app.getPath('temp'), 'xdt-maker-attachments', sessionId);
+  return path.join(app.getPath('temp'), 'cindy-attachments', sessionId);
 }
 
 /** 在 session 临时目录下分配一个唯一文件路径(建目录,不写内容)。 */

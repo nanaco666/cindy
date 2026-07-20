@@ -10,7 +10,7 @@ import {
   categorizeMobileAttachment,
   extractRemoteFileExt,
 } from '@/session/attachments';
-import { parseAttachmentOssRef } from '@/session/attachmentOssRef';
+import { isAttachmentOssRef, parseAttachmentOssRef } from '@/session/attachmentOssRef';
 
 describe('mobile remote file attachments', () => {
   it('parses macOS and Windows remote paths without using local platform path rules', () => {
@@ -53,7 +53,7 @@ describe('mobile remote file attachments', () => {
   it('builds desktop-compatible OSS attachment refs for uploaded mobile files', () => {
     const attachment = buildMobileUploadedAttachment({
       id: 'upload-1',
-      ossKey: 'xdt-maker/device-link/user-1/spec.pdf',
+      ossKey: 'cindy/device-link/user-1/spec.pdf',
       name: '/local/spec.pdf',
       size: 4096,
       mimeType: 'application/pdf',
@@ -69,7 +69,7 @@ describe('mobile remote file attachments', () => {
       originalName: 'spec.pdf',
     });
     expect(parseAttachmentOssRef(attachment!.path)).toEqual({
-      ossKey: 'xdt-maker/device-link/user-1/spec.pdf',
+      ossKey: 'cindy/device-link/user-1/spec.pdf',
       mimeType: 'application/pdf',
       originalName: 'spec.pdf',
     });
@@ -80,14 +80,14 @@ describe('mobile remote file attachments', () => {
 
   it('round-trips uploaded attachment refs with CJK original names', () => {
     const attachment = buildMobileUploadedAttachment({
-      ossKey: 'xdt-maker/device-link/user-1/report.pdf',
+      ossKey: 'cindy/device-link/user-1/report.pdf',
       name: '需求文档.pdf',
       size: 1024,
       mimeType: 'application/pdf',
     });
 
     expect(parseAttachmentOssRef(attachment!.path)).toEqual({
-      ossKey: 'xdt-maker/device-link/user-1/report.pdf',
+      ossKey: 'cindy/device-link/user-1/report.pdf',
       mimeType: 'application/pdf',
       originalName: '需求文档.pdf',
     });
@@ -95,13 +95,13 @@ describe('mobile remote file attachments', () => {
 
   it('uses image refs for image persisted content and file refs for non-images', () => {
     const image = buildMobileUploadedAttachment({
-      ossKey: 'xdt-maker/device-link/user-1/photo.png',
+      ossKey: 'cindy/device-link/user-1/photo.png',
       name: 'photo.png',
       size: 1024,
       mimeType: 'image/png',
     });
     const file = buildMobileUploadedAttachment({
-      ossKey: 'xdt-maker/device-link/user-1/spec.pdf',
+      ossKey: 'cindy/device-link/user-1/spec.pdf',
       name: 'spec.pdf',
       size: 1024,
       mimeType: 'application/pdf',
@@ -122,7 +122,7 @@ describe('mobile remote file attachments', () => {
 
   it('uses the same OSS ref as image url so desktop can materialize uploaded images', () => {
     const attachment = buildMobileUploadedAttachment({
-      ossKey: 'xdt-maker/device-link/user-1/photo.png',
+      ossKey: 'cindy/device-link/user-1/photo.png',
       name: 'photo.png',
       size: 1024,
       mimeType: 'image/png',
@@ -131,21 +131,41 @@ describe('mobile remote file attachments', () => {
     expect(attachment?.category).toBe('image');
     expect(attachment?.url).toBe(attachment?.path);
     expect(parseAttachmentOssRef(attachment!.url!)).toMatchObject({
-      ossKey: 'xdt-maker/device-link/user-1/photo.png',
+      ossKey: 'cindy/device-link/user-1/photo.png',
       originalName: 'photo.png',
     });
   });
 
   it('rejects uploaded mobile files outside desktop attachment limits', () => {
     expect(buildMobileUploadedAttachment({
-      ossKey: 'xdt-maker/device-link/user-1/archive.zip',
+      ossKey: 'cindy/device-link/user-1/archive.zip',
       name: 'archive.zip',
       size: 1024,
     })).toBeNull();
     expect(buildMobileUploadedAttachment({
-      ossKey: 'xdt-maker/device-link/user-1/spec.pdf',
+      ossKey: 'cindy/device-link/user-1/spec.pdf',
       name: 'spec.pdf',
       size: MOBILE_MAX_ATTACHMENT_BYTES + 1,
     })).toBeNull();
+  });
+});
+
+describe('attachmentOssRef legacy 兼容', () => {
+  it('legacy xdt-oss-attach 引用仍可识别与解析(旧版本在途消息 / 本机存量 outbox)', () => {
+    const fresh = buildMobileUploadedAttachment({
+      ossKey: 'cindy/device-link/user-1/legacy.png',
+      name: 'legacy.png',
+      size: 1,
+      mimeType: 'image/png',
+    });
+    const legacyRef = fresh!.path.replace('cindy-oss-attach://', 'xdt-oss-attach://');
+    expect(isAttachmentOssRef(legacyRef)).toBe(true);
+    expect(parseAttachmentOssRef(legacyRef)).toEqual({
+      ossKey: 'cindy/device-link/user-1/legacy.png',
+      mimeType: 'image/png',
+      originalName: 'legacy.png',
+    });
+    // 生成面只出新 scheme
+    expect(fresh!.path.startsWith('cindy-oss-attach://m/')).toBe(true);
   });
 });

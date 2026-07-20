@@ -932,7 +932,7 @@ export function NewMakerDraftRoute() {
       permissionMode: PermissionMode,
       files?: AttachedFile[],
       mentions?: MentionedResource[],
-      opts?: { providerId?: string | null },
+      opts?: { providerId?: string | null; onAccepted?: () => void },
     ): boolean | undefined => {
       if (sendInFlightRef.current) return false;
       // 草稿里选定的来源(供应商):ChatInput 在发送时把"仍连接的显式选择"经 opts 传上来
@@ -1072,6 +1072,7 @@ export function NewMakerDraftRoute() {
             }
             const rehydratedFiles = await rehomeDraftAttachments(files, remoteSessionId);
             setPending(remoteSessionId, { text: message, files: rehydratedFiles, mentions });
+            opts?.onAccepted?.();
             clearComposerDraftAndNotify(NEW_MAKER_DRAFT_KEY);
             attachmentState.clearFiles();
             resetDraftWorkspaceAfterSend();
@@ -1279,7 +1280,7 @@ export function NewMakerDraftRoute() {
                   }
                 }
 
-                makerChatStore.sendMessage(
+                const accepted = await makerChatStore.sendMessage(
                   newSession.id,
                   message,
                   model,
@@ -1289,8 +1290,9 @@ export function NewMakerDraftRoute() {
                   rehomedFiles,
                   mentions,
                 );
-                // sendMessage 是同步 push user message + 异步 dispatch agent,
-                // 这一行 return 之后 messages 已经有 user bubble + isStreaming=true,
+                if (accepted) opts?.onAccepted?.();
+                // sendMessage 会先同步 push user message,再异步返回 enqueue 是否接受。
+                // await 完成时 messages 已经有 user bubble + isStreaming=true,
                 // 此时 clear 让 worktreePreparing 进入 1.6s 平滑期 (overlay 自然
                 // 渐渐让位给已经在串的 chat view)。
                 worktreeCreationStore.clear(newSession.id);
@@ -1380,6 +1382,7 @@ export function NewMakerDraftRoute() {
             files: rehydratedFiles,
             mentions,
           });
+          opts?.onAccepted?.();
           // 草稿已经成功移交给新会话(setPending),清掉 NEW_MAKER_DRAFT_KEY
           // 下的 store 条目,防止下次回到 /cc-agent/new 还看到本次刚发送的内容。
           // 用 clearDraftAndNotify:上面 onSend return false,ChatInput 没清自己的
@@ -1888,6 +1891,7 @@ export function NewMakerDraftRoute() {
                     paletteMaxHeight={240}
                     attachmentState={attachmentState}
                     draftKey={NEW_MAKER_DRAFT_KEY}
+                    focusOnStorageKeyChange
                     // 「+」始终显示(与对话界面一致):无项目裸态也可加引用目录,作为本次对话的上下文。
                     // createSession 各路径都会带上 extraDirs;workingDir=null 时 ExtraDirsButton 跳过重叠校验。
                     extraDirs={effectiveExtraDirs}

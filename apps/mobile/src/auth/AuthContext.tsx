@@ -26,9 +26,12 @@ import { apiFetchRaw, ApiError, type ApiFetchOptions } from '@/api/client';
 import {
   AUTH_API_BASE_URL,
   AUTH_REGION,
+  IS_OTA_SELFHOST,
   MOBILE_VISUAL_MOCK_ENABLED,
   MOBILE_REDIRECT_URL,
+  OAUTH_BROKER_API_BASE_URL,
 } from '@/config/env';
+import { syncCanaryChannelAfterAuth } from '@/auth/canaryChannelSync';
 import { ensureDeviceId } from '@/auth/deviceId';
 import { isAccessTokenExpiring } from '@/auth/jwt';
 import { getAuthLocale } from '@/auth/loginMessages';
@@ -53,6 +56,10 @@ import { clearAllMobileVoiceCredentials } from '@/session/mobileVoiceCredentialS
 import { clearAllMobileVoiceInputHistories } from '@/session/mobileVoiceHistoryStore';
 import { clearMobileVoiceLiteLlmSettings } from '@/session/mobileVoiceLiteLlmSettings';
 import { visualMockApiFetch, visualMockUser } from '@/debug/visualMock';
+import {
+  clearCanaryChannel,
+  syncCanaryChannel,
+} from '@/update/canaryChannelStore';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -168,6 +175,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshTokenMutationRef = useRef<Promise<void>>(Promise.resolve());
   const userProfileMutationRef = useRef<Promise<void>>(Promise.resolve());
 
+  /** 登录态落地后异步刷新灰度标记；失败保留旧值，迟到响应按 auth generation 丢弃。 */
+  const scheduleCanaryChannelSync = useCallback((token: string, expectedAuthGeneration: number) => {
+    // EAS/TestFlight 仍走 Expo 官方更新通道，不参与自建线 canary flag 请求；
+    // 这样自建灰度新增的状态机不会改变 EAS 登录/发版流程。
+    if (!IS_OTA_SELFHOST) return;
+    void syncCanaryChannelAfterAuth(
+      { token, expectedAuthGeneration },
+      {
+        fetchFeatureFlags: (accessToken) => apiFetchRaw('/api/user/feature-flags', {
+          baseUrl: OAUTH_BROKER_API_BASE_URL,
+          token: accessToken,
+        }),
+        readCurrentAuthGeneration: () => authGenerationRef.current,
+        persistFlag: syncCanaryChannel,
+      },
+    ).catch(() => undefined);
+  }, []);
+
   const serializeRefreshTokenMutation = useCallback(
     <T,>(operation: () => Promise<T>): Promise<T> => {
       const run = refreshTokenMutationRef.current.then(operation, operation);
@@ -280,6 +305,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       applyUser(
         mergeMembershipWithExisting(outcome.membership, userRef.current),
       );
+      scheduleCanaryChannelSync(outcome.accessToken, generation);
       updateLoginState(
         reduceAuthFlow(loginStateRef.current, { type: 'outcome', outcome }),
       );
@@ -290,6 +316,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       applyUser,
       loadMe,
+      scheduleCanaryChannelSync,
       serializeRefreshTokenMutation,
       setToken,
       updateLoginState,
@@ -311,7 +338,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const refreshToken = await serializeRefreshTokenMutation(() =>
           getSecureItem(REFRESH_TOKEN_KEY).catch(() => null),
         );
-        if (!refreshToken) return null;
+        if (!refreshToken) {
+          await clearCanaryChannel().catch(() => undefined);
+          return null;
+        }
         try {
           const pair = await authClientFor(did).refresh(refreshToken);
           if (authGenerationRef.current !== generation) return null;
@@ -326,6 +356,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           applyUser(
             mergeMembershipWithExisting(pair.membership, userRef.current),
           );
+          scheduleCanaryChannelSync(pair.accessToken, generation);
           void loadMe(pair.accessToken, did, generation).catch(() => undefined);
           return pair.accessToken;
         } catch (error) {
@@ -339,6 +370,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (!cleared) return null;
             setToken(null);
             applyUser(null);
+            await clearCanaryChannel().catch(() => undefined);
             updateLoginState(null);
             pendingLoginTicketRef.current = null;
             pendingBindTicketRef.current = null;
@@ -354,6 +386,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       applyUser,
       loadMe,
+      scheduleCanaryChannelSync,
       serializeRefreshTokenMutation,
       setToken,
       updateLoginState,
@@ -735,6 +768,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await clearCachedHomeListSnapshot().catch(() => undefined);
     resetComposerPaletteCache();
     resetAgentCapabilitiesCache();
+    await clearCanaryChannel().catch(() => undefined);
     await serializeRefreshTokenMutation(() =>
       deleteSecureItem(REFRESH_TOKEN_KEY).catch(() => undefined),
     );

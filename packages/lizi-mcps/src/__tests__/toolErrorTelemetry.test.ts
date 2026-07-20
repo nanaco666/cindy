@@ -147,7 +147,7 @@ describe('xdt-helper call_tool errorCode telemetry', () => {
 
     expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith('tool call returned errorCode', {
-      server: 'lizi_xdt_helper',
+      server: 'cindy_helper',
       tool: 'no_such_tool',
       errorCode: 'UNKNOWN_TOOL',
       sessionId: 'sess-xdt',
@@ -165,7 +165,7 @@ describe('xdt-helper call_tool errorCode telemetry', () => {
     });
     expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith('tool call returned errorCode', {
-      server: 'lizi_xdt_helper',
+      server: 'cindy_helper',
       tool: 'get_capabilities',
       errorCode: 'INVALID_ARGS',
       sessionId: 'sess-xdt',

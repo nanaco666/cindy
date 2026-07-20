@@ -1,8 +1,9 @@
 /**
  * ExtraDirsButton —— composer 的「+」操作菜单(左置于权限选择器之前)。
  *
- * 合并了两类入口(参考 Codex 的 + 菜单):
+ * 合并了三类入口(参考 Codex 的 + 菜单):
  *   - 新建目标(`onNewGoal` 提供时显示;仅会话中,父组件按 sessionId 决定)→ 打开 NewGoalDialog。
+ *   - 已安装 Plugin:选择后由 ChatInput 把 command 放到消息开头,保留正文并聚焦末尾。
  *   - 附加只读引用目录(Claude vendor;`onChange` 提供时显示)→ 列表 / 添加。
  *
  * 创建时和 session 中途共用同一组件:父组件传 onChange 决定目录持久化路径:
@@ -25,8 +26,10 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tip } from '@/components/ui/tooltip';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { createLogger } from '@/lib/logger';
+import { GhostPluginIcon } from '@/features/plugin/GhostPluginIcon';
 import { stripTrailingPathSeparators } from '../../../shared/pathText';
 import { normalizeWorkingDirForStorage } from '../../../shared/workingDir';
+import type { InstalledGhost } from '../../../shared/ghost';
 
 const log = createLogger('ExtraDirsButton');
 
@@ -47,6 +50,12 @@ export interface ExtraDirsButtonProps {
    * 父组件负责能力门控(capabilities.planMode)与持久化,这里只做 UI。
    */
   planMode?: { enabled: boolean; onToggle: (next: boolean) => void };
+  /** 已安装 Plugin 清单;无指令或未生效项仍展示,但不可选。 */
+  plugins?: readonly InstalledGhost[];
+  /** 当前会话范围内可直接使用的 Plugin id;未命中项保留展示但置灰。 */
+  pluginAvailableIds?: ReadonlySet<string>;
+  /** 选择后由 ChatInput 把 Plugin command 放到正文开头并把光标落到全文末尾。 */
+  onPluginSelect?: (ghost: InstalledGhost) => void;
   disabled?: boolean;
   /** 窄容器下把 trigger 字号/图标各压一档,默认 false。 */
   dense?: boolean;
@@ -109,6 +118,9 @@ export function ExtraDirsButton({
   onChange,
   onNewGoal,
   planMode,
+  plugins = [],
+  pluginAvailableIds,
+  onPluginSelect,
   disabled,
   dense = false,
   visualVariant = 'default',
@@ -120,7 +132,7 @@ export function ExtraDirsButton({
   // 能力感知:新建目标(onNewGoal)/ 计划模式(planMode)两端通用;引用目录仅 cc
   // (Codex 忽略 extraDirs)。三样都没有才不渲染。
   const isCc = agentKind === 'cc';
-  if (!onNewGoal && !planMode && !isCc) return null;
+  if (!onNewGoal && !planMode && !isCc && plugins.length === 0) return null;
 
   const count = extraDirs.length;
   const atLimit = count >= MAX_EXTRA_DIRS;
@@ -142,7 +154,10 @@ export function ExtraDirsButton({
     // UX 预判: 完全重复 / 是 workingDir 子目录 → 静默忽略(main validator 也会兜)。
     if (hasExtraDir(extraDirs, normalizedPicked)) return;
     if (workingDir && isSelfOrSubdir(normalizedPicked, workingDir)) {
-      log.debug('add: silently skipped (subdir of workingDir)', { picked: normalizedPicked, workingDir });
+      log.debug('add: silently skipped (subdir of workingDir)', {
+        picked: normalizedPicked,
+        workingDir,
+      });
       return;
     }
 
@@ -150,8 +165,7 @@ export function ExtraDirsButton({
     if (workingDir && isParentOrAncestor(normalizedPicked, workingDir)) {
       const ok = await confirm({
         title: '添加父目录?',
-        description:
-          `选中的目录是当前工作目录的父级或祖先。这会扩大 agent 的可见范围 —— 它能看到工作目录之外的内容。\n\n要添加吗?\n\n${normalizedPicked}`,
+        description: `选中的目录是当前工作目录的父级或祖先。这会扩大 agent 的可见范围 —— 它能看到工作目录之外的内容。\n\n要添加吗?\n\n${normalizedPicked}`,
         confirmText: '仍然添加',
         cancelText: '取消',
       });
@@ -265,10 +279,70 @@ export function ExtraDirsButton({
           </button>
         )}
 
+        {plugins.length > 0 && (
+          <>
+            {(onNewGoal || planMode) && (
+              <div className="my-1 h-px bg-[var(--model-dropdown-border)]" />
+            )}
+            <div className="px-2 pb-1 pt-1 text-[12px] text-[var(--model-trigger-text)] opacity-70">
+              {t('extraDirs.pluginsTitle')}
+            </div>
+            <div
+              role="list"
+              aria-label={t('extraDirs.pluginsTitle')}
+              className="plugin-motion-root max-h-[200px] overflow-y-auto"
+            >
+              {plugins.map((ghost) => {
+                const availableInScope = pluginAvailableIds
+                  ? pluginAvailableIds.has(ghost.manifest.id)
+                  : ghost.enabled;
+                const selectable = Boolean(
+                  availableInScope && ghost.manifest.command && onPluginSelect,
+                );
+                return (
+                  <button
+                    key={ghost.manifest.id}
+                    type="button"
+                    disabled={!selectable}
+                    onClick={() => {
+                      setOpen(false);
+                      onPluginSelect?.(ghost);
+                    }}
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded-[8px] px-[10px] py-2 text-left',
+                      'transition-colors hover:bg-[var(--model-item-hover)]',
+                      'disabled:cursor-not-allowed disabled:opacity-45',
+                    )}
+                  >
+                    <GhostPluginIcon
+                      iconDataUrl={ghost.iconDataUrl}
+                      iconId={ghost.manifest.id}
+                      iconName={ghost.manifest.name}
+                      size="menu"
+                    />
+                    <span className="min-w-0 flex-1 truncate text-left text-[13px] text-[var(--model-item-text)]">
+                      {ghost.manifest.name}
+                    </span>
+                    {!selectable ? (
+                      <span className="shrink-0 text-[12px] text-[var(--model-trigger-text)] opacity-70">
+                        {t(
+                          ghost.manifest.command
+                            ? 'extraDirs.pluginDisabled'
+                            : 'extraDirs.pluginNoCommand',
+                        )}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+
         {/* 引用目录段:仅 Claude(cc)显示;Codex 忽略 extraDirs,只保留上面的入口项。 */}
         {isCc && (
           <>
-            {(onNewGoal || planMode) && (
+            {(onNewGoal || planMode || plugins.length > 0) && (
               <div className="my-1 h-px bg-[var(--model-dropdown-border)]" />
             )}
 
@@ -277,61 +351,61 @@ export function ExtraDirsButton({
             </div>
 
             {count > 0 ? (
-          <div role="list" aria-label="Extra reference directories" className="mb-1">
-            {extraDirs.map((p) => (
-              <div
-                key={p}
-                className={cn(
-                  'group flex items-center gap-2 rounded-[8px] px-[10px] py-2',
-                  'hover:bg-[var(--model-item-hover)]',
-                )}
-              >
-                <FolderPlus
-                  size={14}
-                  className="shrink-0 text-[var(--model-item-text)] opacity-60"
-                />
-                <Tip text={p} mono side="top">
-                  <span className="min-w-0 flex-1 truncate text-left text-[13px] text-[var(--model-item-text)]">
-                    {basename(p)}
-                  </span>
-                </Tip>
-                <button
-                  type="button"
-                  onClick={() => void handleRemove(p)}
-                  className={cn(
-                    'rounded-full p-1 opacity-0 transition-opacity',
-                    'hover:bg-[var(--model-item-hover)]',
-                    'group-hover:opacity-70 hover:!opacity-100',
-                  )}
-                  aria-label={t('extraDirs.remove', { name: basename(p) })}
-                >
-                  <X size={12} className="text-[var(--model-item-text)]" />
-                </button>
+              <div role="list" aria-label="Extra reference directories" className="mb-1">
+                {extraDirs.map((p) => (
+                  <div
+                    key={p}
+                    className={cn(
+                      'group flex items-center gap-2 rounded-[8px] px-[10px] py-2',
+                      'hover:bg-[var(--model-item-hover)]',
+                    )}
+                  >
+                    <FolderPlus
+                      size={14}
+                      className="shrink-0 text-[var(--model-item-text)] opacity-60"
+                    />
+                    <Tip text={p} mono side="top">
+                      <span className="min-w-0 flex-1 truncate text-left text-[13px] text-[var(--model-item-text)]">
+                        {basename(p)}
+                      </span>
+                    </Tip>
+                    <button
+                      type="button"
+                      onClick={() => void handleRemove(p)}
+                      className={cn(
+                        'rounded-full p-1 opacity-0 transition-opacity',
+                        'hover:bg-[var(--model-item-hover)]',
+                        'group-hover:opacity-70 hover:!opacity-100',
+                      )}
+                      aria-label={t('extraDirs.remove', { name: basename(p) })}
+                    >
+                      <X size={12} className="text-[var(--model-item-text)]" />
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="px-[10px] py-2 text-[12px] text-[var(--model-item-text)] opacity-50">
-            {t('extraDirs.empty')}
-          </div>
-        )}
+            ) : (
+              <div className="px-[10px] py-2 text-[12px] text-[var(--model-item-text)] opacity-50">
+                {t('extraDirs.empty')}
+              </div>
+            )}
 
-        <button
-          type="button"
-          onClick={() => void handleAdd()}
-          disabled={atLimit}
-          className={cn(
-            'flex w-full items-center gap-2 rounded-[8px] px-[10px] py-2',
-            'transition-colors',
-            'hover:bg-[var(--model-item-hover)]',
-            'disabled:cursor-not-allowed disabled:opacity-50',
-          )}
-        >
-          <FolderPlus size={14} className="shrink-0 text-[var(--model-item-text)]" />
-          <span className="text-[13px] text-[var(--model-item-text)]">
-            {atLimit ? t('extraDirs.atLimit', { max: MAX_EXTRA_DIRS }) : t('extraDirs.add')}
-          </span>
-        </button>
+            <button
+              type="button"
+              onClick={() => void handleAdd()}
+              disabled={atLimit}
+              className={cn(
+                'flex w-full items-center gap-2 rounded-[8px] px-[10px] py-2',
+                'transition-colors',
+                'hover:bg-[var(--model-item-hover)]',
+                'disabled:cursor-not-allowed disabled:opacity-50',
+              )}
+            >
+              <FolderPlus size={14} className="shrink-0 text-[var(--model-item-text)]" />
+              <span className="text-[13px] text-[var(--model-item-text)]">
+                {atLimit ? t('extraDirs.atLimit', { max: MAX_EXTRA_DIRS }) : t('extraDirs.add')}
+              </span>
+            </button>
           </>
         )}
       </PopoverContent>

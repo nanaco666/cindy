@@ -278,6 +278,11 @@ export interface SchedulerHookScriptService {
    * meta.workDir 为准。未注入时回落 schedule.workingDir 旧行为。
    */
   resolveSessionWorkDir?(sessionId: string): Promise<string | undefined>;
+  /**
+   * 把受支持的单脚本相对命令固化为绝对路径。任意 shell 命令保持原样；相对脚本
+   * 缺少原 cwd 或文件不存在时必须报错，避免改绑后以 fail-open 静默绕过 hook。
+   */
+  stabilizeCommand?(input: { command: string; workingDir?: string }): Promise<string>;
   install(input: {
     /** agent 写好的脚本内容(Node ESM);与 description 至少给一个,都给时 script 优先。 */
     script?: string;
@@ -493,14 +498,14 @@ export type LiziMcpId =
   | 'lizi_ssh'
   | 'lizi_memory'
   | 'lizi_contacts'
-  | 'lizi_xdt_helper'
+  | 'cindy_helper'
   | 'lizi_orca'
   | 'lizi_lsp';
 
 // ── Host-callback Result pattern ────────────────────────────────────────────
 //
 // Several MCP tools delegate to host-side business code via injected callbacks
-// (e.g. lizi_xdt_helper's sendToSession, lizi_orca's team tools, history
+// (e.g. cindy_helper's sendToSession, lizi_orca's team tools, history
 // readers). Those callbacks return a Result variant rather than throw — host
 // can use `HOST_NOT_READY` to express "service still bootstrapping" and the
 // tool handler maps it to a business errorCode + LLM hint, instead of bubbling

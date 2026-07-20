@@ -454,12 +454,12 @@ describe('messageMarkdown', () => {
       .some((inline) => inline.type === 'image')).toBe(false);
   });
 
-  it('keeps xdt-remote-media urls as literal text (no mobile resolver support)', () => {
-    // xdt-remote-media:// 不在手机 resolver 门(isPayloadDesktopLocalMediaUrl)内,点开必失败;
+  it('keeps cindy-remote-media urls as literal text (no mobile resolver support)', () => {
+    // cindy-remote-media:// 不在手机 resolver 门(isPayloadDesktopLocalMediaUrl)内,点开必失败;
     // 不收进白名单,保持字面文本(codex P2)。xdt-image / xdt-file 仍正常解析。
-    expect(parseMobileMarkdownInlines('![图](xdt-remote-media://host/a.png)')
+    expect(parseMobileMarkdownInlines('![图](cindy-remote-media://host/a.png)')
       .some((inline) => inline.type === 'image')).toBe(false);
-    expect(parseMobileMarkdownInlines('<img src="xdt-remote-media://host/a.png">')
+    expect(parseMobileMarkdownInlines('<img src="cindy-remote-media://host/a.png">')
       .some((inline) => inline.type === 'image')).toBe(false);
     expect(parseMobileMarkdownInlines('![图](xdt-file://workspace/a.png)')).toEqual([
       { type: 'image', alt: '图', url: 'xdt-file://workspace/a.png' },

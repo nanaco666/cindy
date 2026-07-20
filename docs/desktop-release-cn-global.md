@@ -26,6 +26,26 @@ release 脚本一条龙完成:electron-forge make → 签名(mac 含公证)→ �
   `pnpm release:mac:global --arch arm64`。
 - **渠道首发**(该渠道 CDN 上还没有任何 manifest,典型是 global 首发):bump 关键字无基线可算,
   必须显式传版本号,例如 `pnpm release:mac:global 1.0.0`。脚本会从空 manifest 骨架起步。
+- 只打包命令只用 `--region cn|global|dev` 选择目标，不再提供 package-level
+  `--channel`；产物按 `release/artifacts/<region>/<version|unversioned>/...` 归档。
+  canary / stable 仅由 release / promote 阶段管理。
+
+### 单独发布 Windows agent 二进制
+
+只更新 Claude Code / Codex、不重新打包客户端时，同样按 region 读取
+`apps/desktop/scripts/release-regions.json`，并更新该渠道的
+`manifest-win32-x64-canary.json`：
+
+| 二进制 | 国内 cn | 海外 global | dev |
+|---|---|---|---|
+| Claude Code | `pnpm release:claude-code:win:cn` | `pnpm release:claude-code:win:global` | `pnpm release:claude-code:win:dev` |
+| Codex | `pnpm release:codex:win:cn` | `pnpm release:codex:win:global` | `pnpm release:codex:win:dev` |
+
+- 兼容入口 `release:claude-code:win` / `release:codex:win` 仍默认 cn。
+- 底层脚本也支持 `--region cn|global|dev`，可与 `--platform`、`--version`、
+  `--dry-run`、`--force` 组合。
+- 二进制先上传到 `<prefix>/claude-code/...` 或 `<prefix>/codex/...`，再更新同一
+  region 的 canary manifest；提升 stable 仍使用对应的 `release:promote:win:<region>`。
 
 ### 提升到 release(canary → stable)
 

@@ -109,9 +109,10 @@ Android 发版也计划走 **NPKG 企业包**(不上 Google Play),与 iOS 同一
 除上面的 EAS 线外,现已有一条**与 iOS 自建线对称的 Android 自建分发线**(本机 mac 出**自签 APK**,不走 EAS/企业重签,JS 改动走自托管 OTA)。设计与契约见 [`self-hosted-android-build-and-ota.md`](./self-hosted-android-build-and-ota.md)。命令(默认 dry-run,`--execute` 才真跑):
 
 ```bash
-pnpm mobile:release:android:check              # 冷/热更只读预判
-pnpm mobile:release:android:local -- --execute # 冷更:prebuild→gradle 签名 APK→直传 OSS→写 release.json
-pnpm mobile:release:android:ota   -- --execute # JS 热更(自托管 OTA)
+pnpm mobile:release:android:check -- --region cn # 冷/热更只读预判(默认只读 canary 基线)
+pnpm mobile:release:android:local -- --region cn --execute # 冷更:prebuild→gradle 签名 APK→直传 OSS→写 canary-release.json
+pnpm mobile:release:android:ota   -- --region cn --execute # JS 热更(自托管 OTA,写 canary-latest.json)
+pnpm mobile:release:android:promote -- --region cn --yes # 验证后提升 stable 指针
 pnpm mobile:release:android:npkg  -- upload <apk>  # 单独上传 APK 取下载链接(APK 不重签)
 ```
 

@@ -1,9 +1,9 @@
 /**
  * SidebarTopNav —— 侧栏顶部常驻动作/导航列表(取代原 HorizontalTabbar)。
  * ---------------------------------------------------------------------------
- * 一条同级、等权的列表行,按顺序:新建 / 自动任务 / Skill / 搜索 / 远程机器。
+ * 一条同级、等权的列表行,按顺序:新建 / 自动任务 / Plugins / 搜索 / 远程机器。
  *   - 新建 / 自动任务:项目(cc-agent)视图的动作 —— 在任意视图点击都跳回项目视图并执行。
- *   - Skill:主视图切换(navigateToView),命中当前视图时高亮。
+ *   - Plugins:主视图切换(navigateToView),命中当前视图时高亮。
  *   - 搜索(SidebarInlineSearch):静息态与其余行同款「🔍 搜索」;hover / 聚焦
  *     就地展开成搜索框,结果 overlay 由下方功能槽(CCAgentSidebarUpper)绘制。搜索状态经
  *     ConversationSearchProvider 的 context 共享(行在此、overlay 在功能槽,两者是兄弟子树)。
@@ -19,7 +19,7 @@
  */
 
 import { useCallback } from 'react';
-import { CirclePlus, Clock, Package } from 'lucide-react';
+import { CirclePlus, Clock, Plug } from 'lucide-react';
 import { useNavigate, useMatch } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -32,7 +32,7 @@ import { useConversationSearchContext } from '@/features/cc-agent/sidebar/conver
 /** 列表行通用样式 —— 各行同款 pill 行。 */
 const ROW_CLASS =
   'flex h-8 w-full items-center gap-2.5 rounded-full px-3 text-sm font-normal text-[var(--sidebar-nav-text)] transition-colors hover:bg-sidebar-item-hover';
-/** 命中当前视图(自动任务 / Skill / issue)时的高亮。 */
+/** 命中当前视图（自动任务 / Plugin 与 Skill 管理 / issue）时的高亮。 */
 const ROW_ACTIVE_CLASS = 'bg-[var(--chat-input-chip-bg)] font-medium';
 
 export function SidebarTopNav(): React.ReactElement {
@@ -52,7 +52,7 @@ export function SidebarTopNav(): React.ReactElement {
   };
 
   // 搜索结果 overlay 只在 cc-agent 视图(CCAgentSidebarUpper)绘制;本行却在所有非 rail 视图都渲染。
-  // 用户在 skillhub / 设置等视图输入搜索时,先切回 cc-agent 视图,结果才有处显示(同视图为 no-op)。
+  // 用户在 plugins / 设置等视图输入搜索时,先切回 cc-agent 视图,结果才有处显示(同视图为 no-op)。
   const ensureConversationView = useCallback(() => navigateToView('cc-agent'), [navigateToView]);
 
   return (
@@ -81,15 +81,15 @@ export function SidebarTopNav(): React.ReactElement {
         <span className="leading-none">{t('ccAgent.layout.automations')}</span>
       </button>
 
-      {/* 3. Skill —— issue 不在此列表,已移到系统菜单(帮助 → 议题) */}
+      {/* 3. Plugins —— Plugin / Skill 在页面顶部 Tab 内切换 */}
       <button
-        onClick={() => navigateToView('skillhub')}
-        className={cn(ROW_CLASS, activeKey === 'skillhub' && ROW_ACTIVE_CLASS)}
-        aria-label={t('sidebar.tabs.skillhub')}
-        aria-current={activeKey === 'skillhub' ? 'page' : undefined}
+        onClick={() => navigateToView('plugins')}
+        className={cn(ROW_CLASS, activeKey === 'plugins' && ROW_ACTIVE_CLASS)}
+        aria-label={t('sidebar.tabs.plugins')}
+        aria-current={activeKey === 'plugins' ? 'page' : undefined}
       >
-        <Package size={15} strokeWidth={1.8} className="shrink-0 text-[var(--sidebar-nav-text)]" />
-        <span className="leading-none">{t('sidebar.tabs.skillhub')}</span>
+        <Plug size={15} strokeWidth={1.8} className="shrink-0 text-[var(--sidebar-nav-text)]" />
+        <span className="leading-none">{t('sidebar.tabs.plugins')}</span>
       </button>
 
       {/* 4. 搜索 —— 静息态与上面三行同款;hover / 聚焦就地展开成搜索框 */}

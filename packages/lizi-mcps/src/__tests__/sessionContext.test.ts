@@ -192,7 +192,19 @@ describe('dynamic lizi MCP session context', () => {
     expect(getStore).toHaveBeenLastCalledWith('/repo');
   });
 
-  it('lets lizi_xdt_helper resolve the current Codex session id dynamically', async () => {
+  it('advertises Cindy as the helper self-inspection category', async () => {
+    const server = createXdtHelperMcpServer(
+      {},
+      { agentKind: 'codex', workingDir: '', vendorOptions: {} },
+    );
+
+    const listed = await tools(server).list_tools.handler({});
+    expect(parse(listed as never).categories).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: 'cindy' })]),
+    );
+  });
+
+  it('lets cindy_helper resolve the current Codex session id dynamically', async () => {
     const server = createXdtHelperMcpServer(
       {},
       {
@@ -233,7 +245,7 @@ describe('dynamic lizi MCP session context', () => {
     });
   });
 
-  it('lets lizi_xdt_helper update the current session title dynamically', async () => {
+  it('lets cindy_helper update the current session title dynamically', async () => {
     const setCurrentSessionTitle: SetCurrentSessionTitleDeps['setCurrentSessionTitle'] = vi.fn(
       async ({ sessionId, title }) => ({
         ok: true as const,

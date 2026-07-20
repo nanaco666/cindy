@@ -52,7 +52,8 @@ import {
   setGhostWakeHandler,
 } from './runtime/electronSandboxAdapter.js';
 import { CURRENT_CINDY_REGION } from '../../shared/brandRegion.js';
-import { createGhostKvStore } from './ghostKvStore.js';
+import { createGhostKvStore, removeGhostKvBestEffort } from './ghostKvStore.js';
+import { handleGhostSetupStatusRequest } from './ghostSetupStatus.js';
 import { handleGhostSecretsRequest } from './runtime/ghostSecretsEndpoint.js';
 import { handleGhostOauthRequest } from './runtime/ghostOauthEndpoint.js';
 import { handleGhostConnectionsRequest } from './runtime/ghostConnectionsEndpoint.js';
@@ -116,6 +117,7 @@ import {
 } from './subscriptionGateway.js';
 import { GhostExternalLinkGate, GhostPreviewGate, resolveGhostPanelMedia } from './previewGate.js';
 import {
+  ghostSecretSaved,
   readGhostSecret,
   readGhostSecretTail,
   removeGhostSecret,
@@ -134,6 +136,11 @@ import {
   listDisabledGhostIdsForWorkdir,
   setGhostDisabledForWorkdir,
 } from './ghostWorkdirPrefs.js';
+import {
+  forgetGhostRecentUsage,
+  loadGhostRecentIds,
+  markGhostRecentlyUsed,
+} from './ghostRecentUsageStore.js';
 import { getCindyProxyMediaService } from '../mcp-integrations/cindyProxyMedia.js';
 import type { XdproxyImageModel } from '../cindy-proxy-media/types.js';
 import * as blobStore from '../cindy-media/blobStore.js';
@@ -159,6 +166,8 @@ import { eq } from 'drizzle-orm';
  *   与 layout:get 同模式。目录扫描极小,同步读不卡启动。
  * - install (invoke):装入本地 .cindy 文件;失败按分类 throwIpcError。
  * - uninstall (invoke):按 id 卸下。
+ * - setup-status (invoke):按 id 判定配置就绪度(插件页「使用」前置门,
+ *   判定真身 ghostSetupStatus.ts;未装 NOT_FOUND)。
  * - changed (main → renderer 广播):全量已装清单,多窗口热更新。
  */
 
@@ -2067,6 +2076,91 @@ export function registerGhostIpc(): void {
     event.returnValue = { ghosts: manager.list() };
   });
 
+  // Plugin 页的已安装快捷行按最近成功使用排序。历史是主机 UI 状态，不写入
+  // publisher-owned manifest；同步读保证列表首帧不先按扫描序再跳成最近序。
+  ipcMain.on('ghosts:recent-usage', (event) => {
+    try {
+      event.returnValue = { ids: loadGhostRecentIds() };
+    } catch (error) {
+      // 最近使用只是快捷行排序元数据，不得因配置文件损坏 /
+      // 权限异常阻断 Plugin 页首屏。main 记录后空历史降级。
+      log.warn('ghost recent usage 读取失败', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      event.returnValue = { ids: [] };
+    }
+  });
+  ipcMain.handle('ghosts:mark-used', (_event, id: unknown) => {
+    if (typeof id !== 'string' || !isValidGhostId(id)) {
+      throwIpcError('INVALID_PARAMS', 'id must be a valid Ghost id');
+    }
+    if (!manager.list().some((ghost) => ghost.manifest.id === id)) {
+      throwIpcError('NOT_FOUND', `意识 ${id} 未安装`);
+    }
+    try {
+      const ids = markGhostRecentlyUsed(id);
+      broadcastGhostRecentUsageChanged(ids);
+      return { ids };
+    } catch (error) {
+      // 记录 MRU 失败不应把一次已成功的消息发送变成用户错误。
+      log.warn('ghost recent usage 写入失败', {
+        id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { ids: [] };
+    }
+  });
+
+  // ── 配置就绪检查(使用前置门,判定与 handler 主体在 ghostSetupStatus.ts)──
+  // 插件页点「使用」时现查:清单推导需求(有 setup 声明按声明,无则启发式),
+  // 逐项核对保险库 / OAuth 账号 / 连接 / kv。全同步毫秒级、不缓存、不唤沙箱;
+  // oauth 判定用运行时清单(filo-google 的内置 client 是运行时注入的,读原始
+  // 清单会把「开箱即用」误判成未配置)。判定只管存在性:user 凭证只查加密
+  // 文件存在(不解密);key 有效性仍由运行期 networkSlot 出网 fail-fast 兜底。
+  // 探针意外抛错不捕获——invoke reject 后 renderer 放行(fail-open),
+  // 不把「查询失败」折叠成「未配置」误拦。
+  ipcMain.handle('ghosts:setup-status', (_event, id: unknown) =>
+    handleGhostSetupStatusRequest({
+      id,
+      getRuntimeManifest: (ghostId) => {
+        const ghost = manager.list().find((g) => g.manifest.id === ghostId);
+        return ghost ? withRuntimeFiloGoogleClient(ghost.manifest) : null;
+      },
+      probesFor: (runtimeManifest) => {
+        const ghostId = runtimeManifest.id;
+        const oauthManager = getGhostOauthAccountManager();
+        const connectionManager = getGhostConnectionManager();
+        // kv 单意识单文件,同一次判定内最多读一次(多条 kv 需求不重复开盘);
+        // 走 readStrict:IO 异常 / 文件损坏上抛 → invoke reject → renderer
+        // fail-open,不折叠成「未配置」。secrets 探针同口径(statSync 区分
+        // ENOENT 与真 IO 错误)。oauth / connections 沿用与 /oauth、
+        // /connections 设置页端点完全相同的读取真身(保险库读取失败折叠为
+        // 「无账号 / 无连接」)——有意保持两处口径一致:即便极端情况下保险
+        // 库损坏,引导弹窗指向的设置页展示的也是同一状态,不产生自相矛盾的
+        // 界面;且这类故障下运行期注入同样不可用,引导去设置页重连本就是
+        // 正确动作。
+        let kvSnapshot: Record<string, unknown> | null = null;
+        return {
+          secretSaved: (key) => ghostSecretSaved(ghostId, key),
+          oauthStatus: (key) => {
+            const decl = runtimeManifest.network?.secrets?.find((s) => s.key === key)?.oauth;
+            const accounts = oauthManager.listAccounts(ghostId, key);
+            return {
+              clientConfigured: oauthManager.clientConfigured(ghostId, key, decl),
+              connected: accounts.filter((a) => a.status === 'connected').length,
+              expired: accounts.filter((a) => a.status === 'expired').length,
+            };
+          },
+          connectionCount: (key) => connectionManager.list(ghostId, key).length,
+          kvValue: (key) => {
+            if (kvSnapshot === null) kvSnapshot = ghostKv.readStrict(ghostId);
+            return kvSnapshot[key];
+          },
+        };
+      },
+    }),
+  );
+
   // ── 面板媒体换发(拖拽引渡 + 右键菜单)──────────────────────────────
   // 只由宿主 renderer(可信应用层)调用——意识面板零桥碰不到 IPC。
   // 校验链与 preview 闸同纪律(纯逻辑在 previewGate.resolveGhostPanelMedia):
@@ -2106,7 +2200,7 @@ export function registerGhostIpc(): void {
       video: byKind(getCatalogVideoConfig()),
     };
   });
-  // ── 目录级禁用(ghostWorkdirPrefs;设置 → 插件 的项目范围视图)──
+  // ── 目录级禁用(ghostWorkdirPrefs;插件页的项目范围视图)──
   // 读走 sendSync:切换范围时禁用清单要与卡片同帧渲染(规则 7 无跳变),
   // 文件读取极小且带 mtime 缓存。写走 invoke;写后广播 ghosts:changed
   // (renderer 复用同一订阅热更,多窗口同步)。
@@ -2230,12 +2324,14 @@ export function registerGhostIpc(): void {
     }
     runtime.stop(id); // 抽离先熄灯,再删目录
     getGhostSubscriptionGateway().dropGhost(id); // 订阅态随抽离清零
-    const result = await manager.uninstall(id);
+    // GhostManager 先只删目录；内置 tombstone 与 host 清理完成后再
+    // 只广播一次一致快照，避免详情页中途掉回列表且无恢复入口。
+    const result = await manager.uninstall(id, { notify: false });
     if ('rejection' in result) throwUninstallError(result.rejection);
     // network 槽凭证随抽离清空(按前缀扫,含旧版本声明过的孤儿键;幂等)。
     removeGhostSecrets(id);
     // 自定义参数 KV 同点位清除(卸下即清、沉睡保留;幂等)。
-    ghostKv.remove(id);
+    removeGhostKvBestEffort(ghostKv, id, log);
     // fs 槽私有数据目录随抽离整体回收(卸下即清、沉睡保留;best-effort,
     // 失败只 warn——目录被占用不该卡死卸载流程)。id 先过形状闸,防拼路径。
     if (isValidGhostId(id)) {
@@ -2252,6 +2348,19 @@ export function registerGhostIpc(): void {
     if (listBuiltinSeedIds(builtinSeedRootDir()).includes(id)) {
       recordBuiltinTombstone(brainRootDir(), id, log);
     }
+    let recentIds: string[] | null = null;
+    try {
+      recentIds = forgetGhostRecentUsage(id);
+    } catch (error) {
+      // 插件目录已删，MRU 是非关键附属数据；清理失败只记录，
+      // 不能让 renderer 把已完成的卸载误报为失败。
+      log.warn('ghost recent usage 清理失败', {
+        id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    broadcastGhostsChanged(manager.list());
+    if (recentIds) broadcastGhostRecentUsageChanged(recentIds);
     return { ok: true };
   });
 
@@ -2496,6 +2605,14 @@ function broadcastGhostsChanged(ghosts: InstalledGhost[]): void {
   BrowserWindow.getAllWindows().forEach((window) => {
     if (window.isDestroyed()) return;
     window.webContents.send('ghosts:changed', { ghosts });
+  });
+}
+
+/** Plugin 顶部快捷行的 host-owned MRU 快照，多窗口同步。 */
+function broadcastGhostRecentUsageChanged(ids: string[]): void {
+  BrowserWindow.getAllWindows().forEach((window) => {
+    if (window.isDestroyed()) return;
+    window.webContents.send('ghosts:recent-usage-changed', { ids });
   });
 }
 

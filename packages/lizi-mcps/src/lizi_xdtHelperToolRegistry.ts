@@ -5,7 +5,7 @@
  * NOT directly on the McpServer. The MCP server only exposes `list_tools` +
  * `call_tool` entry tools, keeping startup context cost low.
  *
- * 当前只有一个 category 'xdt' 一个工具 get_capabilities,registry 看似过度设计,
+ * 当前只有一个 category 'cindy' 一个工具 get_capabilities,registry 看似过度设计,
  * 但保留它的原因是:
  *  1. 与其他 lizi_* server 一致(维护成本低,新人一眼看懂)
  *  2. 让 list_tools/call_tool 入口代价仍只有两条工具 schema 进系统提示,
@@ -17,18 +17,18 @@ import { z } from 'zod';
 
 /**
  * Category 分两类:
- *  - 'xdt'     : 只读自省 (get_capabilities / get_current_session_id)
+ *  - 'cindy'   : 只读自省 (get_capabilities / get_current_session_id)
  *  - 'history' : 只读查询本地数据库里的历史聊天数据 (list_workdirs /
  *                list_sessions / get_chat_history / search_chat_history),
  *                方便用户自己组织 memory / 知识库系统
  *
- * history 单独成类是因为它和 xdt 自省虽都只读, 但语义不同 (自省 = "我是谁",
+ * history 单独成类是因为它和 cindy 自省虽都只读, 但语义不同 (自省 = "我是谁",
  * 查询 = "我和你聊过啥"), 拆开后 list_tools 入口更清晰。
  *
- * 第三类 'control' 是改变 xdt-maker 状态的副作用工具(当前:set_current_session_title /
+ * 第三类 'control' 是改变 Cindy 状态的副作用工具(当前:set_current_session_title /
  * rename_sessions 改会话标题)。
  *
- * 第四类 'feedback' 是向 XDMaker 官方提交反馈的工具 (submit_github_issue),
+ * 第四类 'feedback' 是向 Cindy 官方提交反馈的工具 (submit_github_issue),
  * 有副作用但提交前由 host 弹系统确认卡片把关。
  *
  * 第五类 'handoff' 是 session 间 handoff 原语 send_to_session(投递消息到一个已知
@@ -36,7 +36,7 @@ import { z } from 'zod';
  * 是为了让 list_tools(control) 的"改会话标题"结果里不混入 handoff,避免 LLM 在"改名"
  * 意图下误选 send_to_session。
  */
-export type XdtHelperToolCategory = 'xdt' | 'history' | 'control' | 'feedback' | 'handoff';
+export type XdtHelperToolCategory = 'cindy' | 'history' | 'control' | 'feedback' | 'handoff';
 
 export type XdtHelperToolContentBlock =
   | { type: 'text'; text: string }
@@ -77,7 +77,7 @@ export class XdtHelperToolRegistry {
     handler: XdtHelperToolHandler<{ [K in keyof T]: z.infer<T[K]> }>;
   }): void {
     if (this.tools.has(def.name)) {
-      throw new Error(`[lizi_xdtHelperToolRegistry] duplicate tool name: ${def.name}`);
+      throw new Error(`[cindyHelperToolRegistry] duplicate tool name: ${def.name}`);
     }
     this.tools.set(def.name, def as unknown as XdtHelperToolDef);
   }

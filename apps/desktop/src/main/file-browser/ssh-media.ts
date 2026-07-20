@@ -1,8 +1,8 @@
 /**
- * ssh-media.ts — SSH 远端会话的聊天媒体取回与服务(xdt-remote-media:// 的 ssh 分支)。
+ * ssh-media.ts — SSH 远端会话的聊天媒体取回与服务(cindy-remote-media:// 的 ssh 分支)。
  * ---------------------------------------------------------------------------
  * renderer 把 SSH 会话里 workdir 内的 `xdt-file://?path=` / `xdt-audio://?path=`
- * 媒体 URL 改写成携带 `{k:'ssh',id,wd}` token 的 xdt-remote-media://(见
+ * 媒体 URL 改写成携带 `{k:'ssh',id,wd}` token 的 cindy-remote-media://(见
  * shared/remoteMediaUrl.ts)。本模块负责控制端 main 侧的服务:
  *
  *   1. 从原始 URL 解出绝对路径 → 换算 workdir 相对 POSIX 路径(workdir 外拒绝
@@ -178,7 +178,7 @@ export function serveCachedFile(
 const noopProgress: FetchProgressFn = () => undefined;
 
 /**
- * 处理一个 ssh 来源的 xdt-remote-media 请求。
+ * 处理一个 ssh 来源的 cindy-remote-media 请求。
  * 失败语义与 device 分支对齐:上游(SSH / file-service)失败 → 502,renderer
  * 媒体占位 + 可重试;路径不合法(workdir 外 / 无路径语义 / 扩展名不在媒体
  * 名单)→ 4xx,不重试。

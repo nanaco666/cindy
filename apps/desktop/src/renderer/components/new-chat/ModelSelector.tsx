@@ -66,6 +66,10 @@ const PROVIDER_TITLE_KEY: Record<string, string> = {
   openai: 'settings.providers.openai.title',
   xd: 'settings.providers.xd.title',
 };
+
+// 配置面板锚在主菜单内缩 8px 的模型行上；补偿这段内缩，让两块面板贴边但不重叠。
+const MODEL_OPTIONS_SIDE_OFFSET = 8;
+
 function providerDisplayName(p: ProviderView, t: (key: string) => string): string {
   const key = PROVIDER_TITLE_KEY[p.id];
   return key ? t(key) : p.name;
@@ -399,6 +403,8 @@ export function ModelSelectorContent({
 
   const listRef = useRef<HTMLDivElement>(null);
   const configPanelRef = useRef<HTMLDivElement>(null);
+  // 选中行对齐是程序化滚动,它触发的 scroll 事件不代表用户意图,不应收起行配置浮层。
+  const suppressScrollDismissRef = useRef(false);
   const closeOptionsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cancelOptionsClose = () => {
@@ -642,7 +648,11 @@ export function ModelSelectorContent({
       const sel = el.querySelector<HTMLElement>('[data-model-selected="true"]');
       if (sel) {
         const delta = sel.getBoundingClientRect().top - el.getBoundingClientRect().top;
-        if (Math.abs(delta) > 1) el.scrollTop = Math.max(0, el.scrollTop + delta);
+        const next = Math.max(0, el.scrollTop + delta);
+        if (Math.abs(delta) > 1 && next !== el.scrollTop) {
+          suppressScrollDismissRef.current = true;
+          el.scrollTop = next;
+        }
       }
       flashScrollbar(el);
     });
@@ -974,7 +984,7 @@ export function ModelSelectorContent({
           <PopoverContent
             side="left"
             align="center"
-            sideOffset={4}
+            sideOffset={MODEL_OPTIONS_SIDE_OFFSET}
             collisionPadding={8}
             onOpenAutoFocus={(event) => event.preventDefault()}
             onCloseAutoFocus={(event) => event.preventDefault()}
@@ -1112,6 +1122,14 @@ export function ModelSelectorContent({
         className="flex max-h-[300px] flex-col gap-0.5 overflow-y-auto"
         role="listbox"
         aria-label="Model list"
+        onScroll={() => {
+          if (suppressScrollDismissRef.current) {
+            suppressScrollDismissRef.current = false;
+            return;
+          }
+          // 滚动不派发 pointerleave,行级配置浮层会跟着滚出视口的锚点行跑到菜单外 → 一滚动就收起。
+          if (editing) setEditing(null);
+        }}
       >
         {!hasAnyModel ? (
           <div className="px-3 py-6 text-center text-13 text-[var(--text-tertiary)]">

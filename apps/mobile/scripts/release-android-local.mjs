@@ -8,7 +8,7 @@
 //       → 从 APK 回读内嵌 runtimeVersion(assets/fingerprint,落盘供 OTA 复用)
 //       → APK 直传 OSS(mobile-dist/android/<versionCode>/)
 //       → installUrl 优先取 region.androidStoreUrl；留空时回退 APK CDN 直链
-//       → 写整包版本记录 release.json 到 OSS(供 mobile-update-server /latest?platform=android)。
+//       → 写整包版本记录 canary-release.json 到 OSS(供 canary 客户端 /latest?platform=android&channel=canary)。
 //
 // runtimeVersion 取“真正烤进 APK 的 assets/fingerprint”为权威值(见 lib/embedded-runtime.mjs 头注):
 // 客户端运行时读该内嵌值与 release.json 比对,不一致就弹整包更新。绝不用 CLI 独立现算——现算会把
@@ -44,7 +44,6 @@ import {
 import {
   assertBuildNumberMonotonic,
   buildReleaseRecord,
-  fetchBaselineBuildNumber,
   compareBuildNumbers,
 } from './lib/ios-local.mjs';
 import { buildAndroidDistTarget, resolveAndroidInstallUrl, parseApkBadging, assertApkMetadata } from './lib/oss-dist.mjs';
@@ -62,6 +61,11 @@ import { readEmbeddedRuntimeVersionFromApk } from './lib/embedded-runtime.mjs';
 import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, OSS_BUCKET, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
 import { mobileClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
 import { formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides, assertRegionOssComplete, stripSelfHostRegionEnv } from './lib/self-host-region.mjs';
+import {
+  baselineBuildNumber,
+  buildReleasePointerLocation,
+  fetchCanaryReleaseBaseline,
+} from './lib/release-pointers.mjs';
 
 // NOTE: 不在模块顶层 refreshOssConfig / 派生 OSS key —— OSS 落点桶由 --region 决定,必须在 main()
 // resolve region、Object.assign 覆盖 XDT_OSS_* 后再 refreshOssConfig(),否则会烤进默认(cn)桶。
@@ -96,11 +100,6 @@ function writeRuntimeFile(runtimeVersion) {
   const file = join(dir, 'android-runtime.json');
   writeFileSync(file, `${JSON.stringify({ runtimeVersion, platform: 'android' }, null, 2)}\n`);
   log(`  ✓ runtimeVersion 落盘 ${file}(release-android-ota.mjs 会复用)`);
-}
-
-// fail-closed 读取冷更基线 versionCode(仅 404/无记录 → null,其它失败抛错);见 lib/ios-local.mjs。
-function fetchPreviousVersionCode(recordCdn) {
-  return fetchBaselineBuildNumber(recordCdn);
 }
 
 function run(cmd, args, opts = {}) {
@@ -213,8 +212,12 @@ async function main() {
   // 按 region 切 OSS 落点桶(bucket/cdn/prefix + 可选 AK/SK 后缀),之后 refreshOssConfig 才生效。
   Object.assign(process.env, regionEnvOverrides(region));
   refreshOssConfig();
-  const RELEASE_RECORD_KEY = `${OSS_PREFIX}/mobile-ota/android/release.json`;
-  const RELEASE_RECORD_CDN = `${CDN_BASE}/mobile-ota/android/release.json`;
+  const canaryRelease = buildReleasePointerLocation({
+    cdnBase: CDN_BASE, ossPrefix: OSS_PREFIX, platform: 'android', channel: 'canary',
+  });
+  const stableRelease = buildReleasePointerLocation({
+    cdnBase: CDN_BASE, ossPrefix: OSS_PREFIX, platform: 'android', channel: 'stable',
+  });
 
   const appJson = readAppJson();
   const version = appJson?.expo?.version ?? '';
@@ -236,14 +239,20 @@ async function main() {
   // buildApk 内仍会再解析一次(取用值);--apk 复用现成包不构建,豁免。
   if (args.execute && !args.apk) resolveAndroidSigningEnv(region, process.env);
 
-  // --skip-record 是"CDN 基线不可读/首发"的逃生开关:此时不写 release.json,versionCode 单调
+  // --skip-record 是"CDN 基线不可读/首发"的逃生开关:此时不写 canary-release.json,versionCode 单调
   // 门禁本就无意义,必须在读基线之前短路(与 iOS 脚本对称,Greptile P1)。
   let previousVersionCode = null;
+  let baselineSource = 'none';
   let autoBumped = false;
   if (args.skipRecord) {
-    log('  --skip-record:跳过冷更基线读取与 versionCode 单调校验(不写 release.json)');
+    log('  --skip-record:跳过冷更基线读取与 versionCode 单调校验(不写 canary-release.json)');
   } else {
-    previousVersionCode = await fetchPreviousVersionCode(RELEASE_RECORD_CDN);
+    const baseline = await fetchCanaryReleaseBaseline({
+      canaryUrl: canaryRelease.url,
+      stableUrl: stableRelease.url,
+    });
+    previousVersionCode = baselineBuildNumber(baseline);
+    baselineSource = baseline.source;
     // 检测到整包但版本文件没 bump(≤ 线上基线)→ 自动自增 android-version.json 的 versionCode:
     // dry-run 只预告不写盘;--execute 写盘发生在 env 构建之前(versionCode 经
     // XDT_ANDROID_VERSION_CODE 注入 fingerprint/prebuild,必须用新号,否则烤进包的
@@ -275,8 +284,8 @@ async function main() {
 
   // 计划打印
   console.log('');
-  console.log(`target: mobile 冷更(android, region=${region.authRegion}, ${region.androidPackage})`);
-  console.log(`version / versionCode: ${version} / ${versionCode}${previousVersionCode ? ` (上一条 ${previousVersionCode})` : (args.skipRecord ? ' (--skip-record,跳过基线)' : ' (首发)')}`);
+  console.log(`target: mobile canary 冷更(android, region=${region.authRegion}, ${region.androidPackage})`);
+  console.log(`version / versionCode: ${version} / ${versionCode}${previousVersionCode ? ` (上一条 ${previousVersionCode},${baselineSource})` : (args.skipRecord ? ' (--skip-record,跳过基线)' : ' (首个 canary)')}`);
   // 签名现值预览:path/alias 来自 region JSON,两个口令来自 env(只报 set/未设,绝不打印值)。严格校验在 buildApk 内。
   const suffix = String(region.authRegion).toUpperCase();
   const aSign = region.androidSigning ?? {};
@@ -284,7 +293,7 @@ async function main() {
   console.log(`sign: 自有 keystore 自签,path=${aSign.keystorePath || '(JSON 未填)'} alias=${aSign.keyAlias || '(JSON 未填)'} storePw(env ${suffix})=${pwPreview('XDT_ANDROID_KEYSTORE_PASSWORD')} keyPw(env ${suffix})=${pwPreview('XDT_ANDROID_KEY_PASSWORD')},终版,不经任何重签`);
   console.log(`oss: bucket=${region.oss?.bucket || '(未填)'} cdn=${region.oss?.cdnBaseUrl || '(未填)'}`);
   console.log(`android store: ${region.androidStoreUrl?.trim() || '(未配置,回退 OSS APK)'}`);
-  console.log(`steps: prebuild → patch build.gradle 签名 → gradlew assembleRelease → 从 APK 回读 runtimeVersion → APK 直传 OSS(${CDN_BASE}/mobile-dist/android/)→ 写 release.json`);
+  console.log(`steps: prebuild → patch build.gradle 签名 → gradlew assembleRelease → 从 APK 回读 runtimeVersion → APK 直传 OSS(${CDN_BASE}/mobile-dist/android/)→ 写 canary-release.json`);
   // XDT_ANDROID_VERSION_CODE 非 EXPO_PUBLIC 前缀,但经 app.config.js 写进原生 versionCode,一并列出
   for (const line of formatBakedEnvLines(env, { extraKeys: ['XDT_ANDROID_VERSION_CODE'] })) console.log(line);
   if (!args.execute) {
@@ -323,14 +332,15 @@ async function main() {
       installUrl,
       releaseNotes: message || undefined,
     });
-    await uploadReleaseRecord(client, record, RELEASE_RECORD_KEY, RELEASE_RECORD_CDN);
+    await uploadReleaseRecord(client, record, canaryRelease.key, canaryRelease.url);
   }
 
   console.log('');
-  console.log('==================== 冷更发布完成 ====================');
+  console.log('==================== Canary 冷更发布完成 ====================');
   console.log(`  runtimeVersion : ${runtimeVersion}`);
   console.log(`  install        : ${installUrl}${region.androidStoreUrl?.trim() ? ' (应用商店)' : ' (OSS APK fallback)'}`);
   console.log(`  下一步:纯 JS 改动用 \`${formatSelfHostReleaseCommand('android', 'ota', region, { execute: true })}\` 发热更(复用此 runtimeVersion)`);
+  console.log(`  验证后提升 stable: \`${formatSelfHostReleaseCommand('android', 'promote', region, { yes: true })}\``);
   if (autoBumped) {
     console.log(`  ⚠ android-version.json versionCode 已自动 bump 为 ${versionCode},记得 commit + push 回 main(否则下次 git 闸门会拦)`);
   }

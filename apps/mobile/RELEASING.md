@@ -40,21 +40,43 @@ pnpm mobile:beta:add-dev -- alice
 pnpm mobile:beta:add-dev -- alice --execute
 ```
 
-## 自建线地区分包(region,cn / global)
+## 自建线地区分包与 canary/stable(region,cn / global / dev)
 
-自建线四个脚本 `mobile:release:{ios,android}:{local,ota,check}` **必须显式带 `--region cn|global`**(无默认值,缺失即报错):
+自建线脚本按所选 region 写入该地区自己的 OSS bucket。`local` / `ota` 默认只发布到 **canary**，验证通过后再执行 `promote --yes` 把指针切到 stable；两条通道共用同一份不可变 bundle / assets。region **必须显式**指定(`cn` / `global` / `dev`，无默认值)。`mobile:release:{ios,android}:{local,ota,check}` 缺少 `--region` 会直接报错；dev 配置未填完整时会在真正使用前 fail closed:
 
 ```bash
 pnpm mobile:release:ios:local     -- --region global --execute
 pnpm mobile:release:android:local -- --region cn     --execute
 pnpm mobile:release:ios:ota       -- --region global --execute
 pnpm mobile:release:android:check -- --region cn
+pnpm mobile:release:ios:check     -- --region dev
 ```
 
+验证通过后提升 stable（默认先 dry-run，只有 --yes 才写 OSS）：
+
+```bash
+pnpm mobile:release:ios:promote -- --region global
+pnpm mobile:release:ios:promote -- --region global --yes
+pnpm mobile:release:android:promote -- --region cn --yes
+```
+
+指针布局：
+
+```text
+<platform>/canary-release.json                         # canary 整包记录
+<platform>/release.json                                # stable 整包记录
+<platform>/<runtimeVersion>/canary-latest.json         # canary OTA
+<platform>/<runtimeVersion>/latest.json                # stable OTA
+```
+
+客户端只在登录后的 isCanary feature flag 为 true 时请求 canary；canary 指针缺失不会回退 stable，避免灰度用户静默降级。iOS canary 整包记录的 installUrl / itmsUrl 仍来自正常 region 的 App Store 配置，Android 仍使用 androidStoreUrl，为空时回退 OSS APK；不把重签 IPA 当作 canary 的安装入口。EAS/TestFlight 的 mobile:release:check / beta / prod 流程和 eas.json 完全不改。
+
 - 所有**随地区变的非机密分包参数**(iOS bundleId / App Store 数字 ID / Android package / 可选 Android 商店地址 / NPKG 期望包名 / TapDB 公开 clientId·clientToken / global Google 公开 Web·iOS client id 与 URL scheme / OSS 落点 bucket·CDN·prefix·ossRegion / 非机密签名描述符)集中在打包机本地的 `apps/mobile/scripts/self-host-regions.json`(纯值、已 gitignore;复制 `self-host-regions.json.example` 填值)。仓库提供的全部本地构建入口(`mobile:xcode` / `mobile:sim:start` / `mobile:sim:rebuild`)与 self-host release 都按所选 region 读取它;cn=`com.xd.cindycn` / App Store `6788711632`、global=`com.xd.cindy` / App Store `6787894640`;两区 `androidStoreUrl` 当前均留空并回退 OSS APK 直链，未来填绝对 URL/deep link 后自动切商店；Google 配置只允许出现在 `global.google`,本地/自建脚本不读取同名 `EXPO_PUBLIC_CINDY_GOOGLE_*` 环境变量。
-- **真机密仍走 env,按 region 后缀**:Android keystore 两个口令 `XDT_ANDROID_KEYSTORE_PASSWORD_{CN,GLOBAL}` / `XDT_ANDROID_KEY_PASSWORD_{CN,GLOBAL}`(cn 兼容无后缀旧名);OSS AK/SK 同账号继续用 `FP_DEV_OSS_ACCESS_KEY_ID/SECRET`,不同账号用 `XDT_OSS_ACCESS_KEY_ID_{CN,GLOBAL}` / `XDT_OSS_ACCESS_KEY_SECRET_{CN,GLOBAL}`。
+- **真机密仍走 env,按 region 后缀**:Android keystore 两个口令 `XDT_ANDROID_KEYSTORE_PASSWORD_{CN,GLOBAL,DEV}` / `XDT_ANDROID_KEY_PASSWORD_{CN,GLOBAL,DEV}`(cn 兼容无后缀旧名);OSS AK/SK 同账号继续用 `FP_DEV_OSS_ACCESS_KEY_ID/SECRET`,不同账号用 `XDT_OSS_ACCESS_KEY_ID_{CN,GLOBAL,DEV}` / `XDT_OSS_ACCESS_KEY_SECRET_{CN,GLOBAL,DEV}`。
 - OTA 更新域名**不进** region JSON:运行期由对应地区 `endpoint.json` 的 `mobileUpdateBaseUrl` 下发,不烘焙进包。
-- cn / global 是两个独立 OSS bucket,`release.json` 等落点互不覆盖。global 上架/重签需另在 NPKG 登记 `com.xd.cindy`(外部 pending)。
+- cn / global / dev 是独立 OSS 落点，canary 与 stable 指针互不覆盖。global 上架/重签需另在 NPKG 登记 `com.xd.cindy`(外部 pending)。
+- `dev` 开发包可以没有 App Store ID，但 iOS 自建 canary 冷更必须在 `self-host-regions.json` 的 `dev.iosAppStoreId` 填入纯数字 ID；脚本会在构建/NPKG 前 fail-fast，不会写出没有正常安装入口的 release record。
+- dev 当前允许保留空配置，但执行 dev 出包前必须补齐；各 region 的 OSS 落点与 canary/stable 指针互不覆盖。
 
 ## 脚本契约
 
@@ -64,7 +86,8 @@ pnpm mobile:release:android:check -- --region cn
 - EAS/TestFlight 的 TapTap/TapDB 客户端公开配置不写进 `eas.json`;在 EAS project environment 的 `production` / `preview` 配好 `EXPO_PUBLIC_TAPTAP_CLIENT_ID` 与 `EXPO_PUBLIC_TAPTAP_CLIENT_TOKEN`。需要覆盖默认渠道或区域时,可同处配置 `EXPO_PUBLIC_TAPDB_CHANNEL` / `EXPO_PUBLIC_TAPDB_REGION`。自建线不依赖这些 env,只读所选 region 的 `self-host-regions.json.tapdb`;发版脚本会主动清掉打包机残留的同名 TapDB env。
 - Google 原生登录只用于 global 线。EAS 云构建的客户端标识不写进 `eas.json`,仍由 EAS project environment 提供 `EXPO_PUBLIC_CINDY_GOOGLE_WEB_CLIENT_ID`、`EXPO_PUBLIC_CINDY_GOOGLE_IOS_CLIENT_ID`、`EXPO_PUBLIC_CINDY_GOOGLE_IOS_URL_SCHEME`;self-host 构建则只读所选 `self-host-regions.json` 的 `global.google`,并写入 Expo extra,不依赖这三个环境变量。三个值来自 GCP 项目 `cindy-ddd51` 的 Google Cloud Console Web / iOS OAuth client;URL scheme 即 iOS client id 反写 `com.googleusercontent.apps.<id>`,prebuild 时由 `@react-native-google-signin` config plugin 注入 Info.plist。Android 无需独立构建变量,但 GCP 项目里必须建 Android OAuth client并登记 `com.xd.cindy` + 发布签名 SHA。⚠️ 配置缺失时客户端会静默隐藏 Google 登录按钮(Android 只看 Web client id,iOS 三个都要);服务端侧还需 auth-server 把 iOS client id 配进 `GOOGLE_IOS_CLIENT_ID`(原生 idToken 的合法 aud,见 `cindy-server` 仓 `docs/auth-server/`)。
 - `mobile:release:ios:npkg` 走 [`docs/npkg-ios-distribution.md`](./docs/npkg-ios-distribution.md):取 EAS iOS `.ipa` 或上传本地 `.ipa`,等待 NPKG 企业重签并输出安装链接;`download` 子命令可把重签子包 `.ipa` 拉回本地。
-- **整包更新入口按地区配置，OSS 保留可安装备份**:`mobile:release:ios:local` 在 NPKG 重签完成后仍把重签 `.ipa`、`manifest.plist` 与 `install.html` 上传 OSS 的 `mobile-dist/ios/<buildNumber>/`，但写入 `release.json` 的 `installUrl` / `itmsUrl` 来自当前 region 的 `iosAppStoreId`，分别指向 App Store 网页与 `itms-apps` deep link。`mobile:release:android:local` 仍将自签 APK 直传 OSS 的 `mobile-dist/android/<versionCode>/`；`androidStoreUrl` 非空时写商店地址到 `installUrl`，为空时写 APK CDN 直链，`itmsUrl` 维持空字符串。发布目标只认 `XDT_CDN_BASE_URL` / `XDT_OSS_BUCKET` / `XDT_OSS_PREFIX` / `XDT_OSS_REGION`（自建线由所选 region 配置注入），凭证使用 `FP_DEV_OSS_ACCESS_KEY_ID` / `FP_DEV_OSS_ACCESS_KEY_SECRET`；不再读取 `production-endpoints.json`。
+- **整包更新入口按地区配置，OSS 保留可安装备份**:`mobile:release:ios:local` 在 NPKG 重签完成后仍把重签 `.ipa`、`manifest.plist` 与 `install.html` 上传 OSS 的 `mobile-dist/ios/<buildNumber>/`，但写入 `canary-release.json` 的 `installUrl` / `itmsUrl` 来自当前 region 的 `iosAppStoreId`，分别指向 App Store 网页与 `itms-apps` deep link；重签 IPA 只是 OSS 内部备份，不作为 canary 广播入口。`mobile:release:android:local` 仍将自签 APK 直传 OSS 的 `mobile-dist/android/<versionCode>/`；`androidStoreUrl` 非空时写商店地址到 `installUrl`，为空时写 APK CDN 直链，`itmsUrl` 维持空字符串。发布目标只认 `XDT_CDN_BASE_URL` / `XDT_OSS_BUCKET` / `XDT_OSS_PREFIX` / `XDT_OSS_REGION`（自建线由所选 region 配置注入），凭证使用 `FP_DEV_OSS_ACCESS_KEY_ID` / `FP_DEV_OSS_ACCESS_KEY_SECRET`；不再读取 `production-endpoints.json`。
+- `promote` 会先备份将被覆盖的 stable 指针；若写入中途失败，会按相反顺序恢复旧指针（首发时原来不存在的 key 会删除），并在回滚失败时打印 backup 路径供人工恢复。
 - `--allow-unknown-baseline` 只用于明确的首次发版语义;production Android/all 冷构建在 Android 正式服启用前会被拒绝。
 - 会写 EAS 的 beta/prod 脚本默认只打印计划;必须传 `--execute` 才执行。
 - 真正的 `eas build` / `eas update` / `eas submit` 不应绕过这些入口。

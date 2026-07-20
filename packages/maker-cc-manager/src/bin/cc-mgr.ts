@@ -190,7 +190,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 function printHelp(): void {
   console.error(
     [
-      'cc-mgr — xdt-maker Claude Code remote daemon',
+      'cc-mgr — Cindy Claude Code remote daemon',
       '',
       'Commands:',
       '  cc-mgr daemon --socket <path>             Run daemon in the foreground',

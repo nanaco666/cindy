@@ -1,6 +1,6 @@
 /**
  * 意识装入的 IPC 错误码 → i18n 文案 key(意识系统 C2c)。
- * 设置页装入(GhostsSection)与窗口拖入(GlobalDropImportListener)共用,
+ * 插件页装入与窗口拖入(GlobalDropImportListener)共用,
  * 两个入口报错口径一致。
  */
 export function ghostInstallErrorKey(code: string | undefined): string {

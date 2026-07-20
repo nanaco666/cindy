@@ -949,6 +949,20 @@ interface ElectronAPI {
   ghosts: {
     /** 首帧同步拉取已装清单(规则 7:意识面板与内置面板同帧注册,无跳变)。 */
     listSync: () => { ghosts: import('../shared/ghost').InstalledGhost[] };
+    /** Plugin 快捷行最近使用顺序(最新在前,首帧同步读取避免排序跳变)。 */
+    recentUsageSync: () => { ids: string[] };
+    /** 成功发送一次 Plugin 指令后记录最近使用。 */
+    markUsed: (id: string) => Promise<{ ids: string[] }>;
+    /**
+     * 配置就绪检查(插件页「使用」前置门):main 按清单推导需求(setup
+     * 声明或启发式)并现查凭证/OAuth 账号/连接/kv,未就绪时 renderer 弹窗
+     * 引导去配置。未装 NOT_FOUND。
+     */
+    setupStatus: (id: string) => Promise<import('../shared/ghost').GhostSetupStatus>;
+    /** 最近使用顺序变化（发送 /卸载），多窗口同步。 */
+    onRecentUsageChanged: (
+      callback: (payload: { ids: string[] }) => void,
+    ) => () => void;
     install: (
       lizFilePath: string,
       /** enable:装入后立即开启(确认框勾选决定;缺省沉睡)。 */
@@ -981,7 +995,7 @@ interface ElectronAPI {
     uninstall: (id: string) => Promise<{ ok: true }>;
     /** 启用/停用(停用 = 面板休眠,布局位置保留)。 */
     setEnabled: (id: string, enabled: boolean) => Promise<{ ok: true }>;
-    /** 目录级禁用清单(设置 → 插件 项目范围视图;sendSync 切换同帧渲染)。 */
+    /** 目录级禁用清单(插件页项目范围视图;sendSync 切换同帧渲染)。 */
     workdirPrefsSync: (workdir: string) => { disabled: string[] };
     /** 写/清一条目录级例外(disabled=false 即清除,回到跟随全局)。 */
     setWorkdirDisabled: (
@@ -1003,6 +1017,7 @@ interface ElectronAPI {
         name: string;
         description?: string;
         version: string;
+        manifest: import('../shared/ghost').GhostManifest;
         tier: 'builtin' | 'enterprise';
         iconDataUrl?: string;
       }>;
@@ -1830,6 +1845,28 @@ interface ElectronAPI {
   openPath: (filePath: string) => Promise<{ success: boolean; error?: string }>;
 
   /**
+   * Save a safely materialized chat attachment under its sanitized original
+   * filename. The main process validates the source and never opens the target.
+   */
+  saveChatAttachmentAs: (params: {
+    sourcePath: string;
+    suggestedName: string;
+  }) => Promise<
+    | { status: 'saved'; savedPath: string }
+    | { status: 'canceled' }
+    | {
+        status: 'error';
+        code:
+          | 'invalid_source'
+          | 'forbidden'
+          | 'not_found'
+          | 'not_file'
+          | 'dialog_failed'
+          | 'copy_failed';
+      }
+  >;
+
+  /**
    * Open the app's log directory (`<userData>/logs`) in the OS file manager.
    * Path is derived in main; renderer cannot pass it. Used by Settings → About.
    */
@@ -1878,7 +1915,7 @@ interface ElectronAPI {
     sessionId: string;
   }) => Promise<{ url: string; name: string; ext: string; mimeType: string; size: number }>;
 
-  /** 图片 lightbox 字节层:http / xdt-remote-media 源取字节(标注/位图复制)。 */
+  /** 图片 lightbox 字节层:http / cindy-remote-media 源取字节(标注/位图复制)。 */
   readImageBytes: (params: {
     url: string;
   }) => Promise<{ base64: string; mimeType: string }>;
@@ -3254,6 +3291,13 @@ interface ElectronAPI {
       status?: number;
       detail?: string;
     }>;
+    /**
+     * 本机 agent CLI 安装 / 登录态扫描（设置「检测建议」用）。只 stat 不读凭证内容;
+     * 失败降级空数组。
+     */
+    scanLocalCli: () => Promise<{
+      detections: import('../shared/localCliDetect').LocalCliDetection[];
+    }>;
     /** 自定义供应商变更广播订阅（返回 off）。 */
     onProvidersChanged: (cb: () => void) => () => void;
 
@@ -3870,7 +3914,7 @@ interface ElectronAPI {
     rewindCommit: (
       sessionId: string,
       clientId: string,
-      opts?: { requireLatestUser?: boolean },
+      opts?: { requireLatestUser?: boolean; stopIfRunning?: boolean },
     ) => Promise<import('@/lib/ccAgent.types').Session>;
     forkStripEncrypted: (
       sourceSessionId: string,

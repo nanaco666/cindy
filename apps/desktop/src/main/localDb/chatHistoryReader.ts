@@ -1,5 +1,5 @@
 /**
- * chatHistoryReader.ts —— 给 lizi_xdt_helper 的 history 类 MCP 工具用的纯查询层。
+ * chatHistoryReader.ts —— 给 cindy_helper 的 history 类 MCP 工具用的纯查询层。
  *
  * 三个函数:
  *  - listWorkdirsForHistory  → 列出所有出现在 sessions.working_dir 里的目录 + 聚合
