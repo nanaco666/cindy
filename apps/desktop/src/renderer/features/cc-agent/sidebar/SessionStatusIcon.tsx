@@ -95,11 +95,10 @@ export function SessionStatusIcon({
           className={isActive ? 'text-[var(--sidebar-item-active-foreground)]' : 'text-[var(--cmd-palette-item-meta)]'}
         />
       ) : isOrcaLead ? (
-        <Puzzle
-          size={size ?? 13}
-          strokeWidth={1.75}
+        // 常驻呼吸动画挂 HTML wrapper,SVG 保持静态(AGENTS 规则 7 SVG 动画红线,PR#226 review)
+        <span
           className={cn(
-            'shrink-0',
+            'inline-flex shrink-0',
             // 用户拍板 2026-07-20:running 橙优先于选中态反相前景
             isRunning
               ? 'text-[var(--status-bar-accent)]'
@@ -108,13 +107,14 @@ export function SessionStatusIcon({
                 : 'text-[var(--cmd-palette-item-meta)]',
             isRunning && 'session-status-breathing',
           )}
-        />
+        >
+          <Puzzle size={size ?? 13} strokeWidth={1.75} className="shrink-0" />
+        </span>
       ) : isAttached ? (
-        <RadioTower
-          size={size ?? 12}
-          strokeWidth={1.75}
+        // 常驻呼吸动画挂 HTML wrapper,SVG 保持静态(AGENTS 规则 7 SVG 动画红线,PR#226 review)
+        <span
           className={cn(
-            'shrink-0',
+            'inline-flex shrink-0',
             // 用户拍板 2026-07-20:running 橙优先于选中态反相前景
             isRunning
               ? 'text-[var(--status-bar-accent)]'
@@ -123,7 +123,9 @@ export function SessionStatusIcon({
                 : 'text-[var(--cmd-palette-item-meta)]',
             isRunning && 'session-status-breathing',
           )}
-        />
+        >
+          <RadioTower size={size ?? 12} strokeWidth={1.75} className="shrink-0" />
+        </span>
       ) : (
         <VendorIcon
           vendor={vendor}

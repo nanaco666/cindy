@@ -366,10 +366,10 @@ export function AutomationSessionGroupItem({
                   className={hasActiveHidden ? 'text-[var(--sidebar-item-active-foreground)]' : 'text-[var(--cmd-palette-item-meta)] hover:text-foreground transition-colors'}
                 />
               ) : (
-                <Clock
-                  size={10}
-                  strokeWidth={1.75}
+                // 常驻呼吸动画挂 HTML wrapper,SVG 保持静态(AGENTS 规则 7 SVG 动画红线,PR#226 review)
+                <span
                   className={cn(
+                    'inline-flex',
                     // 用户拍板 2026-07-20:running 橙优先于选中态反相前景
                     isRunning
                       ? 'text-[var(--status-bar-accent)]'
@@ -378,7 +378,9 @@ export function AutomationSessionGroupItem({
                         : 'text-[var(--cmd-palette-item-meta)] hover:text-foreground transition-colors',
                     isRunning && 'session-status-breathing',
                   )}
-                />
+                >
+                  <Clock size={10} strokeWidth={1.75} />
+                </span>
               )}
             </span>
             <span className="min-w-0 truncate">{group.title}</span>
