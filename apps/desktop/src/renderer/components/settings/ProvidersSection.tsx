@@ -35,6 +35,8 @@ import { CustomProviderDialog } from './CustomProviderDialog';
 import { Switch } from '@/components/ui/switch';
 import { ClaudeMark } from '@/components/icons/ClaudeMark';
 import { CodexMark } from '@/components/icons/CodexMark';
+import { AnthropicMark } from '@/components/icons/AnthropicMark';
+import { OpenAIMark } from '@/components/icons/OpenAIMark';
 import { XDIncMark } from '@/components/icons/XDIncMark';
 import { groupModelsForDisplay, CATEGORY_LABEL_KEY } from '@/components/new-chat/sourceSwitch';
 import {
@@ -561,7 +563,7 @@ function AnthropicRow({ provider, onChanged }: { provider?: ProviderView; onChan
 
   return (
     <ProviderCell
-      icon={<ClaudeMark size={18} />}
+      icon={<AnthropicMark size={18} />}
       title={t('settings.providers.anthropic.title')}
       subtitle={providerSubtitleForDisplay(provider, t('settings.providers.anthropic.modelLabel'), {
         fallback: t('settings.providers.anthropic.subtitle'),
@@ -635,7 +637,7 @@ function OpenAiRow({ provider, onChanged }: { provider?: ProviderView; onChanged
 
   return (
     <ProviderCell
-      icon={<CodexMark size={18} />}
+      icon={<OpenAIMark size={18} />}
       title={t('settings.providers.openai.title')}
       subtitle={t('settings.providers.openai.subtitle')}
       trailing={trailing}

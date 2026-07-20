@@ -1,5 +1,5 @@
 /**
- * VendorSegmentedSwitcher —— NewMaker 主区域内的 vendor 切换控件。
+ * VendorSegmentedSwitcher —— NewMaker 主区域内的 Agent 引擎切换控件。
  * ---------------------------------------------------------------------------
  * 设计稿对照(doc/design_docs/cc-agent-view.pen 节点 HPzt0/wBlHH):
  *   - 容器:pill (9999px),宽 220,padding 3,gap 2
@@ -7,7 +7,7 @@
  *   - segment:pill,padding [6,14],fill_container,justifyContent center,gap 6
  *     · Active : Light Card #ffffff + 1px Board #d7d7d4 / Dark #3c3c3a
  *     · Inactive: 透明,文字 Stone #737373
- *   - icon: 14×14 vendor mark (Claude / OpenAI)
+ *   - icon: 14×14 Agent 身份 mark (Claude Code / Codex CLI)
  *   - 文字: Inter 14, active weight 500,inactive weight 400
  *
  * F-COLLAB (2026-05): 原本第 3 个 "协同模式" tab 已被 ChatInput 底部的

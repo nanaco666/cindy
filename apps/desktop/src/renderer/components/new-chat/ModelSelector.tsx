@@ -5,8 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { flashScrollbar } from '@/lib/scrollbarAutoHide';
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { ClaudeMark } from '@/components/icons/ClaudeMark';
-import { CodexMark } from '@/components/icons/CodexMark';
+import { AnthropicMark } from '@/components/icons/AnthropicMark';
+import { OpenAIMark } from '@/components/icons/OpenAIMark';
 import { XDIncMark } from '@/components/icons/XDIncMark';
 import { FastModeToggle } from './FastModeToggle';
 import { VendorSegmentedSwitcher } from './VendorSegmentedSwitcher';
@@ -91,9 +91,9 @@ export function ProviderMark({
   const markSize = dense ? 12.3 : 13;
   switch (providerId) {
     case 'anthropic':
-      return <ClaudeMark size={markSize} className={common} />;
+      return <AnthropicMark size={markSize} className={common} />;
     case 'openai':
-      return <CodexMark size={markSize} className={common} />;
+      return <OpenAIMark size={markSize} className={common} />;
     case 'xd':
       return (
         <XDIncMark
@@ -146,8 +146,8 @@ export function ModelIconMark({
   if (kind) {
     const common = cn(withMargin && 'mr-1.5', 'shrink-0', colorClass);
     const markSize = dense ? 12.3 : 13;
-    if (kind === 'claude') return <ClaudeMark size={markSize} className={common} />;
-    if (kind === 'codex') return <CodexMark size={markSize} className={common} />;
+    if (kind === 'claude') return <AnthropicMark size={markSize} className={common} />;
+    if (kind === 'codex') return <OpenAIMark size={markSize} className={common} />;
     return (
       <XDIncMark
         size={markSize}

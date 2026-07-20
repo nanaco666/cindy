@@ -68,8 +68,8 @@ function EffortBars({ effort }: { effort: string | null }) {
   );
 }
 
-// Worker avatar — 直接复用 sidebar VendorIcon (ClaudeMark for Claude Code, OpenAI
-// six-petal mark for Codex), 跟侧边栏 vendor icon 视觉 100% 对齐:
+// Worker avatar — 直接复用 sidebar VendorIcon (Claude Code / Codex CLI Agent
+// 身份 glyph),跟侧边栏 Agent icon 视觉 100% 对齐:
 //   - running: VendorIcon 内部自动 status-bar-accent + session-status-breathing
 //   - error:   className override 染 error-flat 红 (twMerge 会让外层 text-* 覆盖
 //              VendorIcon 内置的 sidebar-muted default) —— 错误的显式标记由 WorkerErrorBadge
