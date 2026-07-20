@@ -6382,9 +6382,20 @@ function setContextWindow(sessionId: string, contextWindow: number | undefined):
  */
 function mirrorSessionFields(
   sessionId: string,
-  patch: { fastMode?: unknown; planModeEnabled?: unknown } | null | undefined,
+  patch: { fastMode?: unknown; planModeEnabled?: unknown; agentKind?: unknown } | null | undefined,
 ): void {
   if (!sessionId || !patch) return;
+  // session-agent-switch:引擎翻转必须镜像进 chat in-memory——maker:event 的
+  // reducer 按 state.agentKind 分流(Claude / Codex 两套),非发起窗口若停在旧值,
+  // 新引擎的事件会被旧引擎 reducer 错误处理(2026-07-20 审计实锤)。随引擎翻转
+  // 同步清 sdkSessionId(旧引擎的原生会话 id 对新引擎无意义,与 noteAgentSwitched
+  // 口径一致)。幂等:发起窗口已 noteAgentSwitched → 同值 no-op。
+  if (patch.agentKind === 'cc' || patch.agentKind === 'codex') {
+    const nextKind = patch.agentKind === 'codex' ? ('codex' as const) : ('claude-code' as const);
+    setState(sessionId, (s) =>
+      s.agentKind === nextKind ? s : { ...s, agentKind: nextKind, sdkSessionId: null },
+    );
+  }
   if (typeof patch.fastMode === 'boolean') {
     const next = patch.fastMode;
     setState(sessionId, (s) => (s.fastMode === next ? s : { ...s, fastMode: next }));

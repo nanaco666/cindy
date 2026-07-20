@@ -59,6 +59,8 @@ import {
 } from '../maker-host/codex-credential-switch.js';
 import { ensureDialogueWorkspaceDir } from '../localDb/dialogueWorkspace';
 import { wireSessionToIpc, isSessionInTurn, noteSilentStopUserSend, onSilentStopSettled } from '../maker-ipc/register.js';
+import { agentHandoffPending } from '../maker-ipc/agentHandoffPendingSingleton.js';
+import { prependHandoffToUserMessage } from '../maker-ipc/agentHandoff.js';
 import {
   sanitizeSendOutcomeError,
   toDesktopSessionDispatchOutcome,
@@ -798,7 +800,14 @@ export class MakerScheduleRunner implements ScheduleRunner {
       // 一条 agent 实际没收到的孤儿 scheduler 消息(顺延重试再落一条)。触发面极窄——
       // 常见心跳撞忙都走 B1 活跃礼让(在 send 之前 defer、不落库)或 137-guard(在
       // onAccepted 之前抛、不落库),都不会留孤儿;故接受现状不额外硬化。
-      const sendResult = await session.send({ type: 'user', content: promptToSend }, {
+      // session-agent-switch:本路径直发 session.send(不经 makerSendTransaction),
+      // 交接注入要自己接——切换后首条消息若是定时任务触发,新引擎同样需要交接
+      // 上下文,否则零上下文裸跑(2026-07-20 审计)。落库仍是 prompt 原文。
+      const pendingHandoff = await agentHandoffPending.peek(session.id);
+      const outgoingMessage = pendingHandoff
+        ? prependHandoffToUserMessage({ type: 'user', content: promptToSend }, pendingHandoff)
+        : { type: 'user' as const, content: promptToSend };
+      const sendResult = await session.send(outgoingMessage as never, {
         origin,
         planMode: false,
         onAccepted: async () => {
@@ -836,6 +845,9 @@ export class MakerScheduleRunner implements ScheduleRunner {
           });
         },
       });
+      if (pendingHandoff && sendResult.accepted) {
+        agentHandoffPending.consume(session.id);
+      }
       const outcome = toDesktopSessionDispatchOutcome(sendResult, {
         source: 'scheduler-runner',
         context: sendContext,

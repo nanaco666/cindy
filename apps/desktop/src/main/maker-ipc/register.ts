@@ -73,7 +73,6 @@ import {
 import { ensureDialogueWorkspaceDir } from '../localDb/dialogueWorkspace.js';
 import {
   createMessage as createDbMessage,
-  findPendingAgentSwitchHandoff,
   listMessagesForAgentHandoff,
 } from '../localDb/ipc/messages.js';
 import { visibleMessageTextForConversationSearch } from '../localDb/conversationSearch.pure.js';
@@ -265,7 +264,7 @@ import {
   registerMakerSessionAgentSwitchHandler,
   type MakerSessionAgentSwitchHandlerDeps,
 } from './sessionAgentSwitchHandler.js';
-import { createAgentHandoffPendingRegistry } from './agentHandoff.js';
+import { agentHandoffPending } from './agentHandoffPendingSingleton.js';
 import { type MakerSessionCreateOpts, withCreateSessionStderr } from './sessionRequest.js';
 import { persistAndHydrateSessionProvider } from './sessionProviderBootstrap.js';
 import { registerMakerSessionSendHandler } from './sessionSendHandler.js';
@@ -3537,11 +3536,42 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     },
   );
 
-  // session-agent-switch:pending 交接注册表(内存一级缓存 + DB 确定性重建)。
-  // 供切换 handler(set)与 send 事务(peek/consume)共用。
-  const agentHandoffPending = createAgentHandoffPendingRegistry(findPendingAgentSwitchHandoff);
   // turn 运行中登记的切换意图(下一条消息发送时刻由 send 事务 apply)。
   const agentSwitchPending = createPendingAgentSwitchRegistry();
+
+  // session-agent-switch:lazy-create 前以 DB 行为真源校正 createOpts。切换后
+  // 残留在 renderer store / 排队项里的旧 agentKind/resumeSessionId 若原样 spawn,
+  // 会把会话劫持回旧引擎且丢交接注入(规则 9:代码兜底)。send 事务与
+  // GET_CONTEXT_USAGE 的 lazy 分支共用(后者无校正曾是审计实锤缺口)。
+  async function reconcileCreateOptsAgainstDb(sessionId: string, co: CreateOpts): Promise<void> {
+    try {
+      const db = getDbClient().drizzle;
+      const [row] = await db
+        .select({
+          agentKind: sessions.agentKind,
+          model: sessions.model,
+          sdkSessionId: sessions.sdkSessionId,
+          providerId: sessions.providerId,
+        })
+        .from(sessions)
+        .where(eq(sessions.id, sessionId))
+        .limit(1);
+      if (!row) return;
+      const dbMakerKind = row.agentKind === 'codex' ? 'codex' : 'claude-code';
+      if (co.agentKind === dbMakerKind) return;
+      log.warn('lazy-create: createOpts agentKind drifted from DB (agent switch); reconciling', {
+        sessionId,
+        staleAgentKind: co.agentKind,
+        dbAgentKind: dbMakerKind,
+      });
+      co.agentKind = dbMakerKind;
+      co.model = row.model ?? undefined;
+      co.resumeSessionId = row.sdkSessionId ?? undefined;
+      co.providerId = row.providerId ?? undefined;
+    } catch {
+      // 校正读库失败按原 opts 继续(与切换功能上线前行为一致)。
+    }
+  }
 
   const agentSwitchDeps: MakerSessionAgentSwitchHandlerDeps = {
     getSessionRow: async (sessionId) => {
@@ -5070,38 +5100,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       rollbackAgentIslandUserPrompt(sessionId, clientId, source);
     },
     isSessionRunningError,
-    // session-agent-switch:lazy-create 前以 DB 行为真源校正 createOpts。切换后
-    // 残留在 renderer store / 排队项里的旧 agentKind/resumeSessionId 若原样 spawn,
-    // 消息会发回旧引擎且丢交接注入——发现漂移时按 DB 行覆写(规则 9:代码兜底)。
-    reconcileCreateOptsWithDb: async (sessionId, co) => {
-      try {
-        const db = getDbClient().drizzle;
-        const [row] = await db
-          .select({
-            agentKind: sessions.agentKind,
-            model: sessions.model,
-            sdkSessionId: sessions.sdkSessionId,
-            providerId: sessions.providerId,
-          })
-          .from(sessions)
-          .where(eq(sessions.id, sessionId))
-          .limit(1);
-        if (!row) return;
-        const dbMakerKind = row.agentKind === 'codex' ? 'codex' : 'claude-code';
-        if (co.agentKind === dbMakerKind) return;
-        log.warn('send: createOpts agentKind drifted from DB (agent switch); reconciling', {
-          sessionId,
-          staleAgentKind: co.agentKind,
-          dbAgentKind: dbMakerKind,
-        });
-        co.agentKind = dbMakerKind;
-        co.model = row.model ?? undefined;
-        co.resumeSessionId = row.sdkSessionId ?? undefined;
-        co.providerId = row.providerId ?? undefined;
-      } catch {
-        // 校正读库失败按原 opts 继续(与切换功能上线前行为一致)。
-      }
-    },
+    // session-agent-switch:lazy-create 前以 DB 行为真源校正 createOpts(定义见
+    // reconcileCreateOptsAgainstDb;GET_CONTEXT_USAGE 的 lazy 分支共用)。
+    reconcileCreateOptsWithDb: reconcileCreateOptsAgainstDb,
     peekPendingHandoff: (sessionId) => agentHandoffPending.peek(sessionId),
     consumePendingHandoff: (sessionId) => agentHandoffPending.consume(sessionId),
     applyPendingAgentSwitch: (sessionId) => applyPendingAgentSwitchIfIdle(agentSwitchDeps, sessionId),
@@ -5209,6 +5210,10 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         throwIpcError('NOT_FOUND', `Session ${sessionId} is not running`);
       }
       const co = buildCreateOptsWithStderr({ ...(createOpts as CreateOpts), id: sessionId });
+      // session-agent-switch:先按 DB 行校正再判 claude-only——否则切到 codex 后
+      // 残留的 claude createOpts 会在这里 spawn 出旧引擎的 live session 并被后续
+      // send 复用(会话被劫持回旧引擎,2026-07-20 审计实锤)。
+      await reconcileCreateOptsAgainstDb(sessionId, co);
       if (co.agentKind !== 'claude-code') {
         throwIpcError('UNSUPPORTED_CAPABILITY', `Agent ${co.agentKind} does not support context usage`);
       }

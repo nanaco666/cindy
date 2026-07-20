@@ -76,6 +76,8 @@ import {
   noteSilentStopSessionReset,
   onSilentStopSettled,
 } from '../../maker-ipc/register';
+import { agentHandoffPending } from '../../maker-ipc/agentHandoffPendingSingleton';
+import { prependHandoffToUserMessage } from '../../maker-ipc/agentHandoff';
 import {
   registerPending,
   registerPendingExternal,
@@ -598,7 +600,17 @@ export function createTurnRunner(
     );
 
     try {
-      const sendResult = await state.makerSession.send(item.userMessage, {
+      // session-agent-switch:本路径直发 session.send(不经 makerSendTransaction),
+      // 交接注入自己接——切换后首条消息若来自 IM 渠道,新引擎同样需要交接上下文
+      // (2026-07-20 审计)。落库(persistUserMessage)仍是渠道原文。
+      const pendingHandoff = await agentHandoffPending.peek(rowId);
+      const outgoingMessage = pendingHandoff
+        ? prependHandoffToUserMessage(
+            item.userMessage as Parameters<typeof prependHandoffToUserMessage>[0],
+            pendingHandoff,
+          )
+        : item.userMessage;
+      const sendResult = await state.makerSession.send(outgoingMessage as typeof item.userMessage, {
         planMode: false,
         // B' 阶段: 把渠道用户消息也写本地 messages 表 — 跟 desktop renderer
         // 写自己 user message 等价 (renderer 走 IPC, 我们 main 端直接调函数)。
@@ -615,6 +627,9 @@ export function createTurnRunner(
           });
         },
       });
+      if (pendingHandoff && sendResult.accepted) {
+        agentHandoffPending.consume(rowId);
+      }
       const outcome = toDesktopSessionDispatchOutcome(sendResult, {
         source: `${channel}-runner`,
         context: buildSendContext(rowId),

@@ -193,6 +193,32 @@ async function loadRewindContext(
     );
   }
 
+  // session-agent-switch:禁止跨引擎切换边界 rewind。target 之后存在未回滚的
+  // agent_switch 行 = target 属于上一个引擎时代——当前引擎的原生会话里没有那些
+  // turn 的锚点(Claude 的 assistant uuid / Codex 的 tail turn 计数都会错配),
+  // 强行执行要么报错要么错删。v1 每次切换重新交接,不保留切回指针,故直接拒绝。
+  const [boundaryAfterTarget] = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.sessionId, sessionId),
+        eq(messages.role, 'agent_switch'),
+        isNull(messages.rewindAt),
+        or(
+          gt(messages.createdAt, target.createdAt),
+          and(eq(messages.createdAt, target.createdAt), gt(messages.id, target.id)),
+        ),
+      ),
+    )
+    .limit(1);
+  if (boundaryAfterTarget) {
+    throw rewindError(
+      'REWIND_UNSUPPORTED_HISTORY',
+      '目标消息在引擎切换边界之前,当前引擎的会话历史无法回滚到那里',
+    );
+  }
+
   if (agentKind === 'codex') {
     const tailTurns = await db
       .select()

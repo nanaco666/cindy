@@ -18,6 +18,8 @@ import { isTerminalAgentErrorEvent } from '@lizi/maker-core';
 import type { AgentEvent } from '@lizi/maker-core';
 
 import { buildContinuationDirective, buildFirstTurnDirective } from './directive';
+import { agentHandoffPending } from '../maker-ipc/agentHandoffPendingSingleton';
+import { prependHandoffToUserMessage } from '../maker-ipc/agentHandoff';
 import { classifyTurnUsageLimit } from './usageLimit';
 import { parseVerdict, type GoalVerdict } from './verdict';
 import {
@@ -985,10 +987,20 @@ export class GoalController {
         await this.deps.beforeDispatchUserTurn(sessionId);
         baselineStarted = true;
       }
+      // session-agent-switch:本路径直发 session.send(不经 makerSendTransaction),
+      // 交接注入自己接——切换后 goal 循环的下一轮 directive 同样要带交接上下文
+      // (2026-07-20 审计)。
+      const pendingHandoff = await agentHandoffPending.peek(sessionId);
+      const outgoing = pendingHandoff
+        ? prependHandoffToUserMessage({ type: 'user', content }, pendingHandoff)
+        : { type: 'user' as const, content };
       const result = await session.send(
-        { type: 'user', content },
+        outgoing as { type: 'user'; content: string },
         { origin: { kind: 'goal', goalSessionId: sessionId }, planMode: false },
       );
+      if (pendingHandoff && result.accepted) {
+        agentHandoffPending.consume(sessionId);
+      }
       if (!result.accepted) {
         if (baselineStarted) {
           this.deps.onUndispatchedUserTurn?.(sessionId);
