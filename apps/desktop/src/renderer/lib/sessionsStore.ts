@@ -35,6 +35,7 @@
  *   - electronAPI.sessionsPush.onPatched → patchLocal
  *   - electronAPI.sessionsPush.onCreated → forceRefreshAll
  *     （payload 只带 sessionId 不带完整 row，无法 prepend，需要重拉）
+ *   - electronAPI.onUsageSessionSpendChanged → patchLocal(totalCostUsd)
  *   - maker.schedule.onEvent session-bound → forceRefreshAll
  *     （scheduler runner 在 main 进程创建 session，不一定走 localDb sessionsPush）
  */
@@ -250,6 +251,10 @@ if (typeof window !== 'undefined') {
   onPatch((sessionId, patch) => sessionsStore.patchLocal(sessionId, patch));
   onRefresh(() => {
     void sessionsStore.forceRefreshAll();
+  });
+
+  window.electronAPI?.onUsageSessionSpendChanged?.(({ sessionId, totalCostUsd }) => {
+    sessionsStore.patchLocal(sessionId, { totalCostUsd });
   });
 
   const sessionsPush = window.electronAPI?.localDb?.sessionsPush;
