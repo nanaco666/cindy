@@ -185,10 +185,21 @@ export async function domToPngBlob(
 }
 
 /**
- * PNG Blob → 系统剪贴板。ClipboardItem 仅接受 image/png(Chromium 限制,
- * 与 ImageLightbox 同注);Electron/Chromium 跨平台统一实现,macOS/Windows
- * 无平台分叉。纯内存操作、不落盘。
+ * PNG Blob → 系统剪贴板。位图侧 ClipboardItem 仅接受 image/png(Chromium
+ * 限制,与 ImageLightbox 同注);Electron/Chromium 跨平台统一实现,
+ * macOS/Windows 无平台分叉。纯内存操作、不落盘。
+ *
+ * `plainText`(可选)与图片写进**同一个** ClipboardItem 作为 text/plain 备选
+ * 表示:粘贴目标按自己的偏好取格式——飞书/文档吃图片,代码编辑器/输入框吃
+ * 源码(mermaid 源码 / 表格 TSV / 公式 LaTeX),一次复制两头可用。
  */
-export async function copyPngBlobToClipboard(blob: Blob): Promise<void> {
-  await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+export async function copyPngBlobToClipboard(
+  blob: Blob,
+  plainText?: string,
+): Promise<void> {
+  const representations: Record<string, Blob> = { 'image/png': blob };
+  if (plainText) {
+    representations['text/plain'] = new Blob([plainText], { type: 'text/plain' });
+  }
+  await navigator.clipboard.write([new ClipboardItem(representations)]);
 }

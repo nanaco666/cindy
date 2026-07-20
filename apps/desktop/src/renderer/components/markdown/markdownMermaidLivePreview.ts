@@ -320,6 +320,8 @@ export const MERMAID_LIGHTBOX_EVENT = 'xdt-open-mermaid-lightbox';
 
 export interface MermaidLightboxOpenDetail {
   svg: string;
+  /** mermaid 原始源码(可选):lightbox「复制图片」随图附带 text/plain 表示。 */
+  source?: string;
 }
 
 export const MERMAID_EDIT_EVENT = 'xdt-edit-mermaid-source';
@@ -545,7 +547,7 @@ class MermaidWidget extends WidgetType {
         ev.stopPropagation();
         window.dispatchEvent(
           new CustomEvent<MermaidLightboxOpenDetail>(MERMAID_LIGHTBOX_EVENT, {
-            detail: { svg },
+            detail: { svg, source: this.source },
           }),
         );
       });
@@ -568,7 +570,7 @@ class MermaidWidget extends WidgetType {
         if (copyImgPending) return;
         copyImgPending = true;
         svgToPngBlob(svg, { background: resolveExportBackground(root) })
-          .then(copyPngBlobToClipboard)
+          .then((blob) => copyPngBlobToClipboard(blob, this.source))
           .then(() => {
             copyImgBtn.innerHTML = SVG_CHECK;
             if (copyImgTimer) clearTimeout(copyImgTimer);
@@ -669,7 +671,7 @@ class MermaidWidget extends WidgetType {
       ev.stopPropagation();
       window.dispatchEvent(
         new CustomEvent<MermaidLightboxOpenDetail>(MERMAID_LIGHTBOX_EVENT, {
-          detail: { svg },
+          detail: { svg, source: this.source },
         }),
       );
     };

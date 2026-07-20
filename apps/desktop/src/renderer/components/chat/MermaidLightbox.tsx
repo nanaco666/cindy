@@ -34,10 +34,12 @@ import {
 
 interface MermaidLightboxProps {
   svg: string;
+  /** mermaid 原始源码(可选):随「复制图片」附带 text/plain 表示。 */
+  source?: string;
   onClose: () => void;
 }
 
-export function MermaidLightbox({ svg, onClose }: MermaidLightboxProps) {
+export function MermaidLightbox({ svg, source, onClose }: MermaidLightboxProps) {
   const { t } = useTranslation();
   const [isVisible, setIsVisible] = useState(false);
   const [scale, setScale] = useState(1);
@@ -53,11 +55,15 @@ export function MermaidLightbox({ svg, onClose }: MermaidLightboxProps) {
   const viewportRef = useRef<LightboxViewport>({ scale: 1, tx: 0, ty: 0 });
 
   // 复制为图片:光栅化用 props 的 SVG 字符串(固有尺寸,与当前缩放无关),
-  // 实底色取 SVG 所在卡片的主题底色(overlay 是半透明遮罩,不可取)。
+  // 实底色取 SVG 所在卡片的主题底色(overlay 是半透明遮罩,不可取);plainText
+  // 附带 mermaid 源码(有传才带)。
   // 标注入口不在此处——聊天块工具栏已提供,双层 lightbox 会打架(Esc/关闭链)。
-  const { copiedImage, copyAsImage } = useCopyAsImage(async () =>
-    svgToPngBlob(svg, { background: resolveExportBackground(cardRef.current) }),
-  );
+  const { copiedImage, copyAsImage } = useCopyAsImage(async () => ({
+    blob: await svgToPngBlob(svg, {
+      background: resolveExportBackground(cardRef.current),
+    }),
+    plainText: source,
+  }));
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => setIsVisible(true));

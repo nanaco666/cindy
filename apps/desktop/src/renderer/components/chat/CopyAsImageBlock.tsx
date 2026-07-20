@@ -25,12 +25,47 @@ interface CopyAsImageBlockProps {
   className?: string;
   /** 内层内容容器类(如表格的 `overflow-x-auto`);光栅化以该节点为目标。 */
   contentClassName?: string;
+  /**
+   * 可选:从内容节点提取随图附带的 text/plain 源码表示(表格 → TSV、
+   * 公式 → LaTeX)。粘贴目标自选格式:图片应用吃图,文本编辑器吃源码。
+   */
+  extractPlainText?: (node: HTMLElement) => string | undefined;
+}
+
+/**
+ * GFM 表格 → TSV(制表符分隔,行为单位):这是电子表格软件(Excel /
+ * 飞书表格 / Numbers)约定俗成的粘贴格式,贴过去直接还原成单元格。
+ * 单元格内换行压成空格,避免破坏行结构。
+ */
+export function tableToTsv(node: HTMLElement): string | undefined {
+  const rows = Array.from(node.querySelectorAll('tr'));
+  if (rows.length === 0) return undefined;
+  return rows
+    .map((row) =>
+      Array.from(row.querySelectorAll('th, td'))
+        .map((cell) => (cell as HTMLElement).innerText.replace(/\s*\n\s*/g, ' ').trim())
+        .join('\t'),
+    )
+    .join('\n');
+}
+
+/**
+ * 块级 KaTeX 公式 → LaTeX 源码:KaTeX 渲染产物里保留了原始 TeX
+ * (`<annotation encoding="application/x-tex">`),取出并包回 `$$ … $$`,
+ * 粘贴回 markdown 环境可直接复现公式块。
+ */
+export function mathBlockToLatex(node: HTMLElement): string | undefined {
+  const tex = node
+    .querySelector('annotation[encoding="application/x-tex"]')
+    ?.textContent?.trim();
+  return tex ? `$$\n${tex}\n$$` : undefined;
 }
 
 export function CopyAsImageBlock({
   children,
   className,
   contentClassName,
+  extractPlainText,
 }: CopyAsImageBlockProps) {
   const { t } = useTranslation();
   const contentRef = useRef<HTMLDivElement>(null);
@@ -39,7 +74,10 @@ export function CopyAsImageBlock({
     useCopyAsImage(async () => {
       const node = contentRef.current;
       if (!node) throw new Error('content not mounted');
-      return domToPngBlob(node, { background: resolveExportBackground(node) });
+      const blob = await domToPngBlob(node, {
+        background: resolveExportBackground(node),
+      });
+      return { blob, plainText: extractPlainText?.(node) };
     });
 
   const buttonClass = cn(

@@ -68,16 +68,20 @@ export const MarkdownMermaidBlock = memo(function MarkdownMermaidBlock({
   const blockRef = useRef<HTMLDivElement>(null);
 
   // 复制为图片 / 标注:光栅化用 state 里的 SVG 字符串(与显示一致),实底色
-  // 取块容器的主题底色。svgRef 避免 getBlob 闭包过期。
+  // 取块容器的主题底色;plainText 附带 mermaid 原始源码(粘贴到编辑器时可用)。
+  // ref 避免 getPayload 闭包过期。
   const svgRef = useRef<string | null>(null);
   svgRef.current = svg;
+  const rawRef = useRef(raw);
+  rawRef.current = raw;
   const { copiedImage, copyAsImage, canAnnotate, openAnnotate, annotateNode } =
     useCopyAsImage(async () => {
       const current = svgRef.current;
       if (!current) throw new Error('no svg rendered');
-      return svgToPngBlob(current, {
+      const blob = await svgToPngBlob(current, {
         background: resolveExportBackground(blockRef.current),
       });
+      return { blob, plainText: rawRef.current };
     });
 
   // Re-render when <html class="dark"> toggles. Module-level MutationObserver
@@ -367,7 +371,7 @@ export const MarkdownMermaidBlock = memo(function MarkdownMermaidBlock({
       </div>
 
       {lightboxOpen && svg != null ? (
-        <MermaidLightbox svg={svg} onClose={() => setLightboxOpen(false)} />
+        <MermaidLightbox svg={svg} source={raw} onClose={() => setLightboxOpen(false)} />
       ) : null}
       {annotateNode}
     </div>

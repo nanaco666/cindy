@@ -29,7 +29,7 @@ import remarkPreserveLocalImagePaths, {
 } from './remarkPreserveLocalImagePaths';
 import remarkSessionLinks from './remarkSessionLinks';
 import { rehypeMathBlockMarker } from './rehypeMathBlockMarker';
-import { CopyAsImageBlock } from './CopyAsImageBlock';
+import { CopyAsImageBlock, mathBlockToLatex, tableToTsv } from './CopyAsImageBlock';
 import type { Components, UrlTransform } from 'react-markdown';
 import type { PluggableList } from 'unified';
 import { Check, Copy, FolderOpen } from 'lucide-react';
@@ -467,7 +467,11 @@ const baseComponents: Components = {
   // overflow 容器下沉为内层(工具栏挂 overflow 容器内会被裁剪并随横滚漂移)。
   table({ children, ...props }) {
     return (
-      <CopyAsImageBlock className="my-3" contentClassName="overflow-x-auto">
+      <CopyAsImageBlock
+        className="my-3"
+        contentClassName="overflow-x-auto"
+        extractPlainText={tableToTsv}
+      >
         <table
           className={cn(
             'w-full border-collapse',
@@ -485,7 +489,9 @@ const baseComponents: Components = {
   // 其余 div 原样透传——markdown 输出里 div 极少见,不影响其它内容。
   div({ children, node, ...props }) {
     if (node?.properties && 'dataMathBlock' in node.properties) {
-      return <CopyAsImageBlock>{children}</CopyAsImageBlock>;
+      return (
+        <CopyAsImageBlock extractPlainText={mathBlockToLatex}>{children}</CopyAsImageBlock>
+      );
     }
     return <div {...props}>{children}</div>;
   },

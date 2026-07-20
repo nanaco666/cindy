@@ -2,9 +2,10 @@
  * useCopyAsImage — 消息内容块「复制为图片 / 标注」的共享交互 hook。
  *
  * Mermaid / 表格 / 块级公式三种块的按钮行为完全一致,只有"怎么光栅化"不同,
- * 因此把光栅化收敛为调用方传入的 `getBlob`(mermaid 走 svgToPngBlob,DOM 块
- * 走 domToPngBlob),hook 统一承担:
- *   - 复制:PNG Blob → ClipboardItem(纯内存,不落盘),成功用图标切换反馈
+ * 因此把光栅化收敛为调用方传入的 `getPayload`(mermaid 走 svgToPngBlob,DOM
+ * 块走 domToPngBlob;可附带 plainText 源码表示),hook 统一承担:
+ *   - 复制:PNG + 可选 text/plain 写进同一个 ClipboardItem(纯内存,不落盘;
+ *     粘贴目标自选格式——飞书吃图、编辑器吃源码),成功用图标切换反馈
  *     (与"复制源码"同款 1.5s Check),失败 toast;
  *   - 标注:PNG Blob → data: URL → ImageLightbox(autoAnnotate 直进涂画),
  *     后续复制/发送到对话全部走 lightbox 现有出口(发送经 cindy-media 总仓,
@@ -27,7 +28,13 @@ import { useChatSessionFile } from './ChatSessionFileContext';
 
 const log = createLogger('CopyAsImage');
 
-export function useCopyAsImage(getBlob: () => Promise<Blob>): {
+export interface CopyAsImagePayload {
+  blob: Blob;
+  /** 可选的源码文本表示(mermaid 源码 / 表格 TSV / 公式 LaTeX)。 */
+  plainText?: string;
+}
+
+export function useCopyAsImage(getPayload: () => Promise<CopyAsImagePayload>): {
   /** 复制成功后的 1.5s 反馈窗口(调用方切 Check 图标)。 */
   copiedImage: boolean;
   copyAsImage: () => void;
@@ -53,8 +60,8 @@ export function useCopyAsImage(getBlob: () => Promise<Blob>): {
   function copyAsImage() {
     if (pendingRef.current) return;
     pendingRef.current = true;
-    getBlob()
-      .then(copyPngBlobToClipboard)
+    getPayload()
+      .then(({ blob, plainText }) => copyPngBlobToClipboard(blob, plainText))
       .then(() => {
         setCopiedImage(true);
         if (copyTimerRef.current != null) window.clearTimeout(copyTimerRef.current);
@@ -77,8 +84,8 @@ export function useCopyAsImage(getBlob: () => Promise<Blob>): {
   function openAnnotate() {
     if (pendingRef.current) return;
     pendingRef.current = true;
-    getBlob()
-      .then(blobToDataUrl)
+    getPayload()
+      .then(({ blob }) => blobToDataUrl(blob))
       .then((dataUrl) => setAnnotateUrl(dataUrl))
       .catch((err) => {
         log.warn('rasterize for annotate failed', {
