@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "id": "xd-pages",
   "name": "XD Pages",
-  "description": "Cindy 内置的 XD Pages 站点意识:部署与管理你在 workers.xd.team 的内部站点(部署 / 列表 / 详情 / 删除 / Worker 模板)。身份用当前登录邮箱自动派生,无需任何配置;部署目录经主机过户上传,意识摸不到你的文件。",
+  "description": "Cindy 内置的 XD Pages 站点插件:部署与管理你在 workers.xd.team 的内部站点(部署 / 列表 / 详情 / 删除 / Worker 模板)。身份用当前登录邮箱自动派生,无需任何配置;部署目录经主机过户上传,插件摸不到你的文件。",
   "whenToUse": "需要把本地目录部署成 workers.xd.team 内部站点,或查看 / 管理已部署站点(列站点、查详情、删站点、拿 worker IP 白名单模板)时找我。部署时把构建产物目录的绝对路径放在 ghost_call 顶层 dir 参数交付。",
   "version": "1.2.1",
   "author": "Cindy",

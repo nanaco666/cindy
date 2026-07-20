@@ -2,8 +2,8 @@
   "schemaVersion": 2,
   "id": "xd-feishu",
   "name": "XD Feishu",
-  "description": "内置的飞书(Feishu)服务意识:在设置页连接你的飞书账号(OAuth 授权)后,读写云文档 / 知识库 / 多维表格 / 电子表格 / 消息 / 通讯录 / 日历 / 妙记等(40+ 精品操作 + 100+ 只读直通接口,两段式目录)。令牌由主机与 Cindy 服务端托管并自动刷新,只注入飞书开放平台请求。",
-  "whenToUse": "需要读写飞书云文档(docx)/ 知识库(wiki)/ 多维表格(bitable)/ 电子表格(sheet),搜索或阅读飞书消息、发消息,查通讯录联系人,查/建日程,查会议纪要与妙记,按飞书链接读内容,或上传/下载飞书文件时找我(需先在意识设置页连接飞书账号)。",
+  "description": "内置的飞书(Feishu)服务插件:在设置页连接你的飞书账号(OAuth 授权)后,读写云文档 / 知识库 / 多维表格 / 电子表格 / 消息 / 通讯录 / 日历 / 妙记等(40+ 精品操作 + 100+ 只读直通接口,两段式目录)。令牌由主机与 Cindy 服务端托管并自动刷新,只注入飞书开放平台请求。",
+  "whenToUse": "需要读写飞书云文档(docx)/ 知识库(wiki)/ 多维表格(bitable)/ 电子表格(sheet),搜索或阅读飞书消息、发消息,查通讯录联系人,查/建日程,查会议纪要与妙记,按飞书链接读内容,或上传/下载飞书文件时找我(需先在插件设置页连接飞书账号)。",
   "version": "2.2.0",
   "author": "Cindy",
   "icon": "assets/icon.png",
@@ -86,7 +86,7 @@
   "tools": [
     {
       "name": "list_tools",
-      "description": "列出本意识可用的飞书操作(精品操作 + 只读直通接口,覆盖 docx / wiki / bitable / sheet / im / contact / calendar / minutes / misc / drive / vc / task)。不传 category 返回类目概览(类目名+数量+说明);传 category 返回该类目的 recommended(精品)与 more(只读直通,可用 q 过滤、page 分页)两组操作明细,并附该类目的使用规则。",
+      "description": "列出本插件可用的飞书操作(精品操作 + 只读直通接口,覆盖 docx / wiki / bitable / sheet / im / contact / calendar / minutes / misc / drive / vc / task)。不传 category 返回类目概览(类目名+数量+说明);传 category 返回该类目的 recommended(精品)与 more(只读直通,可用 q 过滤、page 分页)两组操作明细,并附该类目的使用规则。",
       "parameters": {
         "type": "object",
         "properties": {

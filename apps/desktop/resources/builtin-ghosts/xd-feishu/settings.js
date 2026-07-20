@@ -29,7 +29,7 @@
   }
 
   var CONNECT_ERROR_TEXT = {
-    NO_CLIENT_CONFIG: '授权配置缺失,请更新意识后重试',
+    NO_CLIENT_CONFIG: '授权配置缺失,请更新插件后重试',
     TIMEOUT: '授权超时,请重试',
     CANCELLED: '授权已取消',
     CALLBACK_INVALID: '授权回调校验失败,请重试',
@@ -39,7 +39,7 @@
     VAULT_WRITE_FAILED: '本机加密存储不可用,保存失败',
     LISTEN_FAILED: '本机 53684 端口被占用且无法自动释放,请手动关闭占用它的程序后重试',
     INVALID_CONFIG: '授权配置不合法(需已配置授权服务地址),请更新应用后重试',
-    BROKER_FORBIDDEN: '该授权通道仅限官方内置意识使用',
+    BROKER_FORBIDDEN: '该授权通道仅限官方内置插件使用',
   };
 
   /** 头像:有 data URL 用 <img>,没有回落姓名首字圆片(同尺寸,布局不跳)。 */
