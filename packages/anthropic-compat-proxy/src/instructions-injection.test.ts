@@ -9,6 +9,7 @@ import type { ProxyLogger, RequestTransformCtx } from './types.js';
 
 function ctx(headers: Record<string, string>, url = '/v1/responses'): RequestTransformCtx {
   return {
+    reqId: 1,
     method: 'POST',
     url,
     headers,
