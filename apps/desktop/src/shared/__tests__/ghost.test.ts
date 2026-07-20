@@ -738,6 +738,148 @@ describe('ghost · 逐项权限清单(C3c-1)', () => {
   });
 });
 
+describe('ghost · setup 就绪声明校验(使用前置检查,2026-07-21)', () => {
+  /** 带凭证 / 连接 / 设置页的全绿基底,单点破坏它来测 setup 规则。 */
+  function setupBase(): Record<string, unknown> {
+    return {
+      schemaVersion: 2,
+      id: 'setup-demo',
+      name: 'Setup Demo',
+      version: '1.0.0',
+      entry: 'main.js',
+      slots: ['tool', 'network'],
+      tools: [{ name: 'do_it', description: '干活' }],
+      settingsHtml: 'settings.html',
+      network: {
+        hosts: ['api.example.com'],
+        secrets: [
+          { key: 'api_key_a', label: 'Key A', inject: { header: 'Authorization', format: 'Bearer {value}' } },
+          { key: 'api_key_b', label: 'Key B', inject: { header: 'Authorization', format: 'Bearer {value}' } },
+          { key: 'mail_ident', label: '登录身份', source: 'login-email', inject: { header: 'X-User', format: '{value}' } },
+        ],
+        connections: [
+          { key: 'inst_conn', label: '实例连接', inject: { header: 'PRIVATE-TOKEN', format: '{value}' } },
+        ],
+      },
+    };
+  }
+
+  it('合法声明(字符串引用 + kv 对象混合)归一化为结构化条目', () => {
+    const result = validateGhostManifest({
+      ...setupBase(),
+      setup: {
+        requires: [
+          { anyOf: ['secret:api_key_a', 'secret:api_key_b'] },
+          { anyOf: ['connection:inst_conn', { kv: 'default_repo', label: '默认仓库' }] },
+        ],
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.manifest.setup).toEqual({
+      requires: [
+        { anyOf: [{ kind: 'secret', key: 'api_key_a' }, { kind: 'secret', key: 'api_key_b' }] },
+        { anyOf: [{ kind: 'connection', key: 'inst_conn' }, { kind: 'kv', key: 'default_repo', label: '默认仓库' }] },
+      ],
+    });
+  });
+
+  it('不声明 setup 时清单不带该字段(缺省走宿主启发式)', () => {
+    const result = validateGhostManifest(setupBase());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect('setup' in result.manifest).toBe(false);
+  });
+
+  it('引用未声明的凭证拒装', () => {
+    const result = validateGhostManifest({
+      ...setupBase(),
+      setup: { requires: [{ anyOf: ['secret:nope'] }] },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain('未声明的凭证');
+  });
+
+  it('引用未声明的连接拒装', () => {
+    const result = validateGhostManifest({
+      ...setupBase(),
+      setup: { requires: [{ anyOf: ['connection:nope'] }] },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain('未声明的连接');
+  });
+
+  it('引用 login-email 源凭证拒装(恒就绪,无配置动作可引导)', () => {
+    const result = validateGhostManifest({
+      ...setupBase(),
+      setup: { requires: [{ anyOf: ['secret:mail_ident'] }] },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain('login-email');
+  });
+
+  it('kv 条目缺 label 拒装(弹窗要有名字可展示)', () => {
+    const result = validateGhostManifest({
+      ...setupBase(),
+      setup: { requires: [{ anyOf: [{ kv: 'default_repo' }] }] },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain('label');
+  });
+
+  it('kv 条目不允许写成字符串引用(必须对象形态带 label)', () => {
+    const result = validateGhostManifest({
+      ...setupBase(),
+      setup: { requires: [{ anyOf: ['kv:default_repo'] }] },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('kv 引用要求 settingsHtml(没有设置页没人填参数)', () => {
+    const base = setupBase();
+    delete base.settingsHtml;
+    delete base.network; // user 凭证自身也要求 settingsHtml,先摘掉隔离变量
+    (base.slots as string[]).splice((base.slots as string[]).indexOf('network'), 1);
+    const result = validateGhostManifest({
+      ...base,
+      setup: { requires: [{ anyOf: [{ kv: 'default_repo', label: '默认仓库' }] }] },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain('settingsHtml');
+  });
+
+  it('无 network 的意识可以声明纯 kv 需求(带设置页)', () => {
+    const base = setupBase();
+    delete base.network;
+    (base.slots as string[]).splice((base.slots as string[]).indexOf('network'), 1);
+    const result = validateGhostManifest({
+      ...base,
+      setup: { requires: [{ anyOf: [{ kv: 'default_repo', label: '默认仓库' }] }] },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('同组重复条目拒装', () => {
+    const result = validateGhostManifest({
+      ...setupBase(),
+      setup: { requires: [{ anyOf: ['secret:api_key_a', 'secret:api_key_a'] }] },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain('重复');
+  });
+
+  it('requires 空数组 / 空组拒装', () => {
+    expect(validateGhostManifest({ ...setupBase(), setup: { requires: [] } }).ok).toBe(false);
+    expect(validateGhostManifest({ ...setupBase(), setup: { requires: [{ anyOf: [] }] } }).ok).toBe(false);
+  });
+});
+
 describe('ghost · launch 启动模式(2026-07-12)', () => {
   it('缺省合法:不写 launch → 清单不含该字段(运行时按 on-demand 处理)', () => {
     const v = validateGhostManifest(goodManifest());

@@ -953,6 +953,12 @@ interface ElectronAPI {
     recentUsageSync: () => { ids: string[] };
     /** 成功发送一次 Plugin 指令后记录最近使用。 */
     markUsed: (id: string) => Promise<{ ids: string[] }>;
+    /**
+     * 配置就绪检查(插件页「使用」前置门):main 按清单推导需求(setup
+     * 声明或启发式)并现查凭证/OAuth 账号/连接/kv,未就绪时 renderer 弹窗
+     * 引导去配置。未装 NOT_FOUND。
+     */
+    setupStatus: (id: string) => Promise<import('../shared/ghost').GhostSetupStatus>;
     /** 最近使用顺序变化（发送 /卸载），多窗口同步。 */
     onRecentUsageChanged: (
       callback: (payload: { ids: string[] }) => void,

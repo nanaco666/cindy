@@ -2034,6 +2034,15 @@
         "descriptionBuiltin": "パネルと機能が削除されます。これは内蔵プラグインのため自動では戻りません。リストからいつでも復元できます。",
         "cancel": "キャンセル"
       },
+      "setupGate": {
+        "title": "「{{name}}」は設定が必要です",
+        "descriptionMissing": "使用する前に次の設定が必要です:{{items}}。今すぐプラグイン設定に移動しますか?",
+        "descriptionReauth": "アカウントの認証が期限切れです:{{items}}。再接続すると使用できます。今すぐ移動しますか?",
+        "configure": "設定へ",
+        "cancel": "キャンセル",
+        "anySeparator": " または ",
+        "groupSeparator": "、"
+      },
       "toast": {
         "installed": "「{{name}}」をインストールしました",
         "uninstalled": "「{{name}}」をアンインストールしました",

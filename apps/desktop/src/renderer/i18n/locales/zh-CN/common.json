@@ -2034,6 +2034,15 @@
         "descriptionBuiltin": "面板与能力将随之移除;这是内置插件,卸载后不会自动装回,可随时在列表中「恢复」。",
         "cancel": "取消"
       },
+      "setupGate": {
+        "title": "「{{name}}」还需要完成配置",
+        "descriptionMissing": "使用前还需要配置:{{items}}。现在前往插件配置页完成设置吗?",
+        "descriptionReauth": "账号授权已过期:{{items}}。重新连接后才能使用,现在前往吗?",
+        "configure": "去配置",
+        "cancel": "取消",
+        "anySeparator": " 或 ",
+        "groupSeparator": "、"
+      },
       "toast": {
         "installed": "已安装「{{name}}」",
         "uninstalled": "已卸载「{{name}}」",
