@@ -12,7 +12,7 @@
  */
 
 import { useRef, type ReactNode } from 'react';
-import { Check, ImageDown, Pen } from 'lucide-react';
+import { Check, Copy, Pen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
@@ -104,17 +104,17 @@ export function CopyAsImageBlock({
           onClick={copyAsImage}
           aria-label={
             copiedImage
-              ? t('chat.markdownRenderer.imageCopied')
-              : t('chat.markdownRenderer.copyAsImage')
+              ? t('chat.markdownRenderer.blockCopied')
+              : t('chat.markdownRenderer.copy')
           }
           title={
             copiedImage
-              ? t('chat.markdownRenderer.imageCopied')
-              : t('chat.markdownRenderer.copyAsImage')
+              ? t('chat.markdownRenderer.blockCopied')
+              : t('chat.markdownRenderer.copy')
           }
           className={buttonClass}
         >
-          {copiedImage ? <Check className="h-3.5 w-3.5" /> : <ImageDown className="h-3.5 w-3.5" />}
+          {copiedImage ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         </button>
         {canAnnotate ? (
           <button

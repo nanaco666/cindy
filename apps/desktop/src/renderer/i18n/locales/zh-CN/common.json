@@ -3706,10 +3706,8 @@
       "zoom": "放大",
       "viewDiagram": "查看图表",
       "viewSource": "查看源码",
-      "copySource": "复制源码",
+      "copy": "复制",
       "copied": "已复制",
-      "copyImage": "复制图片",
-      "imageCopied": "图片已复制",
       "annotate": "标注",
       "renderFailed": "mermaid 渲染失败 — 显示源码"
     },
@@ -3912,10 +3910,9 @@
     "markdownRenderer": {
       "codeCopied": "已复制",
       "copyCode": "复制代码",
-      "copyAsImage": "复制为图片",
-      "imageCopied": "图片已复制",
       "annotateImage": "标注图片",
       "copy": "复制",
+      "blockCopied": "已复制",
       "duplicateFiles": "找到 {{count}} 个同名文件，请改用绝对路径",
       "copyFile": "复制",
       "copyFilePath": "复制文件路径",
@@ -4640,7 +4637,7 @@
         "targetMissing": "原 mermaid 块已不在文档中,改动未保存。",
         "toolbarZoom": "放大查看",
         "toolbarEdit": "编辑源码",
-        "toolbarCopyImage": "复制图片",
+        "toolbarCopy": "复制",
         "renderFailedPrefix": "mermaid 渲染失败:",
         "errEmpty": "mermaid 源码为空",
         "errSvgParse": "SVG 解析失败 (length={{length}})"

@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ImageDown, Minus, Plus, RotateCcw, X } from 'lucide-react';
+import { Check, Copy, Minus, Plus, RotateCcw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { resolveExportBackground, svgToPngBlob } from '@/lib/rasterizeToImage';
@@ -318,11 +318,9 @@ export function MermaidLightbox({ svg, source, onClose }: MermaidLightboxProps) 
         </ToolbarButton>
         <ToolbarButton
           onClick={copyAsImage}
-          label={
-            copiedImage ? t('chat.mermaid.imageCopied') : t('chat.mermaid.copyImage')
-          }
+          label={copiedImage ? t('chat.mermaid.copied') : t('chat.mermaid.copy')}
         >
-          {copiedImage ? <Check className="h-4 w-4" /> : <ImageDown className="h-4 w-4" />}
+          {copiedImage ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
         </ToolbarButton>
         <ToolbarButton onClick={handleClose} label={t('chat.mermaidLightbox.close')}>
           <X className="h-4 w-4" />

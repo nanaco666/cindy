@@ -21,7 +21,7 @@
  */
 
 import { memo, useEffect, useId, useRef, useState } from 'react';
-import { Check, Code2, Copy, Expand, Eye, ImageDown, Pen } from 'lucide-react';
+import { Check, Code2, Copy, Expand, Eye, Pen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { repairMermaidSource } from '@lizi/maker-shared/mermaid-autofix';
 
@@ -182,7 +182,9 @@ export const MarkdownMermaidBlock = memo(function MarkdownMermaidBlock({
     };
   }, []);
 
-  async function handleCopySource() {
+  // SVG 未渲染(流式中 / 渲染失败)时的复制兜底:只复制源码文本。
+  // 有 SVG 时统一走 copyAsImage(PNG + 源码双格式)。
+  async function handleCopySourceOnly() {
     try {
       await navigator.clipboard.writeText(raw);
       setCopied(true);
@@ -294,25 +296,6 @@ export const MarkdownMermaidBlock = memo(function MarkdownMermaidBlock({
             <Expand className="h-3.5 w-3.5" />
           </button>
         ) : null}
-        {svg != null && !showSourceView ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              copyAsImage();
-            }}
-            aria-label={copiedImage ? t('chat.mermaid.imageCopied') : t('chat.mermaid.copyImage')}
-            title={copiedImage ? t('chat.mermaid.imageCopied') : t('chat.mermaid.copyImage')}
-            className={cn(
-              'inline-flex h-7 w-7 items-center justify-center',
-              'rounded-md border border-[var(--msg-code-block-border)]',
-              'bg-[var(--msg-code-block-bg)] text-[var(--msg-tool-text)]',
-              'hover:bg-[var(--cmd-palette-item-hover)] hover:text-[var(--msg-assistant-text)]',
-            )}
-          >
-            {copiedImage ? <Check className="h-3.5 w-3.5" /> : <ImageDown className="h-3.5 w-3.5" />}
-          </button>
-        ) : null}
         {svg != null && !showSourceView && canAnnotate ? (
           <button
             type="button"
@@ -351,14 +334,17 @@ export const MarkdownMermaidBlock = memo(function MarkdownMermaidBlock({
             {showSourceView ? <Eye className="h-3.5 w-3.5" /> : <Code2 className="h-3.5 w-3.5" />}
           </button>
         ) : null}
+        {/* 单一复制按钮:有 SVG 时写入 PNG + 源码双格式(粘贴目标自选),
+            SVG 未渲染时退化为只复制源码。 */}
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            handleCopySource();
+            if (svg != null) copyAsImage();
+            else void handleCopySourceOnly();
           }}
-          aria-label={copied ? t('chat.mermaid.copied') : t('chat.mermaid.copySource')}
-          title={copied ? t('chat.mermaid.copied') : t('chat.mermaid.copySource')}
+          aria-label={copied || copiedImage ? t('chat.mermaid.copied') : t('chat.mermaid.copy')}
+          title={copied || copiedImage ? t('chat.mermaid.copied') : t('chat.mermaid.copy')}
           className={cn(
             'inline-flex h-7 w-7 items-center justify-center',
             'rounded-md border border-[var(--msg-code-block-border)]',
@@ -366,7 +352,11 @@ export const MarkdownMermaidBlock = memo(function MarkdownMermaidBlock({
             'hover:bg-[var(--cmd-palette-item-hover)] hover:text-[var(--msg-assistant-text)]',
           )}
         >
-          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied || copiedImage ? (
+            <Check className="h-3.5 w-3.5" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
         </button>
       </div>
 
