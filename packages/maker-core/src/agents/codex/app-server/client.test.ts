@@ -6,12 +6,14 @@ import type { Transport, LineHandler, StderrHandler, CloseHandler } from './tran
 
 class FakeTransport implements Transport {
   readonly lines: string[] = [];
+  private writeError: Error | null = null;
   private readonly lineHandlers = new Set<LineHandler>();
   private readonly stderrHandlers = new Set<StderrHandler>();
   private readonly closeHandlers = new Set<CloseHandler>();
 
   async writeLine(line: string): Promise<void> {
     this.lines.push(line);
+    if (this.writeError) throw this.writeError;
   }
 
   onLine(handler: LineHandler): () => void {
@@ -40,6 +42,10 @@ class FakeTransport implements Transport {
 
   emitStderr(line: string): void {
     for (const handler of this.stderrHandlers) handler(line);
+  }
+
+  failWrites(error: Error): void {
+    this.writeError = error;
   }
 }
 
@@ -168,6 +174,56 @@ describe('AppServerClient auth invalidation', () => {
     await expect(second).rejects.toThrow(/token_revoked/i);
     expect(onAuthInvalidated).toHaveBeenCalledTimes(1);
     expect(onAuthInvalidated).toHaveBeenCalledWith('refresh_token_reused');
+  });
+
+  it('keeps auth correlation when an accepted write rejects before its response arrives', async () => {
+    const transport = new FakeTransport();
+    const onAuthInvalidated = vi.fn();
+    const client = new AppServerClient({
+      createTransport: () => transport,
+      logger,
+      onAuthInvalidated,
+    });
+    client.start();
+    transport.failWrites(new Error('write callback failed after bytes were accepted'));
+
+    const request = client.request('turn/start');
+    await expect(request).rejects.toThrow(/write callback failed/i);
+    expect(transport.lines).toHaveLength(1);
+
+    transport.emitLine({
+      id: 1,
+      error: {
+        code: -32000,
+        message: 'token_revoked',
+        data: { reason: 'cloudRequirements', errorCode: 'Auth' },
+      },
+    });
+
+    expect(onAuthInvalidated).toHaveBeenCalledTimes(1);
+    expect(onAuthInvalidated).toHaveBeenCalledWith('token_revoked');
+  });
+
+  it('does not trust structured auth errors for ids the client never issued', () => {
+    const transport = new FakeTransport();
+    const onAuthInvalidated = vi.fn();
+    const client = new AppServerClient({
+      createTransport: () => transport,
+      logger,
+      onAuthInvalidated,
+    });
+    client.start();
+
+    transport.emitLine({
+      id: 999,
+      error: {
+        code: -32000,
+        message: 'token_invalidated',
+        data: { reason: 'cloudRequirements', action: 'relogin' },
+      },
+    });
+
+    expect(onAuthInvalidated).not.toHaveBeenCalled();
   });
 });
 

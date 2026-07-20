@@ -40,6 +40,11 @@ import type { Transport } from './transport.js';
  */
 const DEFAULT_MAX_LINE_BYTES = 16 * 1024 * 1024;
 const MAX_STDERR_LOG_CHARS = 2_000;
+/**
+ * Keep a small bounded correlation window for writes that rejected after the
+ * transport may already have handed bytes to the OS / websocket buffer.
+ */
+const MAX_WRITE_FAILURE_TOMBSTONES = 128;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: ESC 是 ANSI escape 序列的协议字节。
 const ANSI_ESCAPE_RE = /\x1B\[[0-?]*[ -/]*[@-~]/g;
 
@@ -163,6 +168,12 @@ export class AppServerClient {
 
   private nextId = 1;
   private readonly pending = new Map<JsonRpcId, PendingRequest>();
+  /**
+   * A write callback can report failure after the peer has already received
+   * the request. Preserve only the request id/method so a late structured auth
+   * error remains correlated without keeping the already-rejected Promise.
+   */
+  private readonly writeFailureTombstones = new Map<JsonRpcId, string>();
   private readonly notificationHandlers = new Map<string, NotificationHandler>();
   private readonly requestHandlers = new Map<string, ServerRequestHandler>();
 
@@ -250,6 +261,7 @@ export class AppServerClient {
       pending.reject(err);
     }
     this.pending.clear();
+    this.writeFailureTombstones.clear();
 
     if (this.transport) {
       try {
@@ -284,7 +296,11 @@ export class AppServerClient {
       });
       transport.writeLine(payload).then(undefined, (err: Error) => {
         // transport 拒绝就立刻 reject 这一 request, 不要让它在 pending 里等到 close。
+        // 只有 response 尚未先到时才留 tombstone；否则迟到的 write callback 不应
+        // 重新关联已经完成的 id。
+        if (!this.pending.has(id)) return;
         this.pending.delete(id);
+        this.rememberWriteFailure(id, method);
         reject(err);
       });
     });
@@ -376,20 +392,23 @@ export class AppServerClient {
   private dispatchResponse(id: JsonRpcId, result: unknown, error: JsonRpcErrorObject | null): void {
     const pending = this.pending.get(id);
     if (!pending) {
+      const failedWriteMethod = this.writeFailureTombstones.get(id);
+      if (failedWriteMethod !== undefined) {
+        this.writeFailureTombstones.delete(id);
+        this.logger.warn('late response for request with failed write', {
+          id,
+          method: failedWriteMethod,
+          hasError: error !== null,
+        });
+        if (error) this.notifyAuthInvalidated(error);
+        return;
+      }
       this.logger.warn('response for unknown id', { id });
       return;
     }
     this.pending.delete(id);
     if (error) {
-      const authInvalidationReason = detectAuthInvalidationReason(error);
-      if (!this.authInvalidatedFired && this.onAuthInvalidated && authInvalidationReason) {
-        this.authInvalidatedFired = true;
-        try {
-          this.onAuthInvalidated(authInvalidationReason);
-        } catch (e) {
-          this.logger.warn('onAuthInvalidated handler threw', { message: (e as Error).message });
-        }
-      }
+      this.notifyAuthInvalidated(error);
       const err = new Error(`codex app-server ${pending.method} error ${error.code}: ${error.message}`);
       // 把 code/data 挂上, 上层想区分 OVERLOADED 等可以判 (err as any).code。
       Object.assign(err, { code: error.code, data: error.data });
@@ -397,6 +416,28 @@ export class AppServerClient {
       return;
     }
     pending.resolve(result);
+  }
+
+  /** Keep write-failure correlation bounded; oldest ids are least useful. */
+  private rememberWriteFailure(id: JsonRpcId, method: string): void {
+    this.writeFailureTombstones.set(id, method);
+    while (this.writeFailureTombstones.size > MAX_WRITE_FAILURE_TOMBSTONES) {
+      const oldestId = this.writeFailureTombstones.keys().next().value as JsonRpcId | undefined;
+      if (oldestId === undefined) break;
+      this.writeFailureTombstones.delete(oldestId);
+    }
+  }
+
+  /** Notify the host once, but only after the caller has correlated the response. */
+  private notifyAuthInvalidated(error: JsonRpcErrorObject): void {
+    const authInvalidationReason = detectAuthInvalidationReason(error);
+    if (this.authInvalidatedFired || !this.onAuthInvalidated || !authInvalidationReason) return;
+    this.authInvalidatedFired = true;
+    try {
+      this.onAuthInvalidated(authInvalidationReason);
+    } catch (e) {
+      this.logger.warn('onAuthInvalidated handler threw', { message: (e as Error).message });
+    }
   }
 
   private async dispatchNotification(method: string, params: unknown): Promise<void> {
