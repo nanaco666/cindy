@@ -46,6 +46,22 @@ function createOrcaDeps(overrides: Partial<OrcaMcpDeps> = {}): OrcaMcpDeps {
       targetTitle: null,
       targetLastUserSendAt: null,
     })),
+    listWorkerQueuedMessages: vi.fn(async () => ({
+      ok: true as const,
+      workerId: 'worker-1',
+      workerSessionId: 'worker-session-1',
+      messages: [],
+    })),
+    updateWorkerQueuedMessage: vi.fn(async () => ({
+      ok: true as const,
+      workerId: 'worker-1',
+      queuedMessageId: 'queued-1',
+    })),
+    cancelWorkerQueuedMessage: vi.fn(async () => ({
+      ok: true as const,
+      workerId: 'worker-1',
+      queuedMessageId: 'queued-1',
+    })),
     idleWorker: vi.fn(async () => ({ ok: true as const, workerId: 'worker-1' })),
     endTeam: vi.fn(async () => ({ ok: true as const })),
     archiveWorker: vi.fn(async () => ({ ok: true as const, workerId: 'worker-1' })),

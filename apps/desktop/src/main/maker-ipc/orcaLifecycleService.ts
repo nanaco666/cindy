@@ -222,6 +222,7 @@ export function createOrcaLifecycleService(deps: OrcaLifecycleDeps): OrcaLifecyc
       ...created,
       ...(initialTask ? { dispatched: dispatchResult?.dispatched ?? false } : {}),
       ...(dispatchResult ? { dispatchOutcome: dispatchResult.dispatchOutcome } : {}),
+      ...(dispatchResult?.queued === true ? { queuedMessageId: dispatchResult.queuedMessageId } : {}),
     };
   }
 

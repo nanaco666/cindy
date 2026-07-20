@@ -86,7 +86,7 @@ PR #101 之后，Orca 的 main 侧业务由独立 service 承接，`register.ts`
 
 ### MCP 与 IPC 控制面
 
-`lizi_orca` 是独立 MCP server，直接顶层注册 12 个工具：9 个 team 控制工具 + 3 个只读诊断工具（后者从已下线的 `orca_bridge` 桥入，保裸名）。它与 renderer IPC 共用同一组 main 侧 service，因此 MCP 和 UI 操作必须有一致的权限、状态和回滚语义。
+`lizi_orca` 是独立 MCP server，直接顶层注册 15 个工具：12 个 team 控制工具 + 3 个只读诊断工具（后者从已下线的 `orca_bridge` 桥入，保裸名）。它与 renderer IPC 共用同一组 main 侧 service，因此 MCP 和 UI 操作必须有一致的权限、状态和回滚语义。
 
 1. `start_team`
 2. `end_team`
@@ -94,12 +94,17 @@ PR #101 之后，Orca 的 main 侧业务由独立 service 承接，`register.ts`
 4. `list_workers`
 5. `switch_focus`
 6. `send_to_worker`
-7. `idle_worker`
-8. `archive_worker`
-9. `list_available_models`
-10. `get_workspace_info`（只读诊断）
-11. `worker_status`（只读诊断）
-12. `read_worker`（只读诊断）
+7. `list_worker_queue`（排队消息控制）
+8. `update_queued_message`（排队消息控制）
+9. `cancel_queued_message`（排队消息控制）
+10. `idle_worker`
+11. `archive_worker`
+12. `list_available_models`
+13. `get_workspace_info`（只读诊断）
+14. `worker_status`（只读诊断）
+15. `read_worker`（只读诊断）
+
+排队消息控制 3 工具让 Lead 在消息被 worker 消费前管理自己发出的排队消息：`send_to_worker` / `create_worker`（initial_task）在 `wakeKind='queued'` 时回传 `queued_message_id`（coordinator 队列内的 clientId），Lead 可据此列出、整条改写或撤回。实现走 `OrcaTeamService.listWorkerQueuedMessages / updateWorkerQueuedMessage / cancelWorkerQueuedMessage`，语义约束见「协同运行时行为契约 · 消息派发与 auto-bridge」第 6 条。
 
 诊断 3 工具是纯只读，实现走 host `apps/desktop/src/main/maker-ipc/orcaDiagnostics.ts`（读 active team + DB worker 列表 + live session 状态 + 最近 assistant 消息），**无建 team 写副作用**——这是与旧 `orca_bridge` 版本的关键差异（旧版经 `ensureWorkflowForLead` 会顺手建 team）。早期 Lead 侧 `orca_bridge`（门面 + 私有 registry/restore/auto-bridge）已整体删除：Lead→worker/team 工具面唯 `lizi_orca`（C）一套，worker→lead 唯 `orca_worker_bridge`（B，在 `packages/orca-workflow`）一套；`@lizi`/`@fmfsaisai` 的 `orca-workflow` 包通过 B provider 与 `renderOrcaLeadSystemPrompt`/`renderOrcaWorkerSystemPrompt` 两个 render 函数继续被 host 依赖。
 
@@ -168,6 +173,9 @@ Worktree 现状：Orca 与普通 session 对齐，worktree 是可选项，不强
 5. **手动中断不 auto-bridge（状态：不变量）**<br>
    用户手动 stop / abort worker 后，terminal turn 不应把最后消息 auto-bridge 给 Lead。实现指针：`register.ts` 的 stop / abort IPC handlers，以及 `orcaTeamService.ts` 的 `handleWorkerTerminalTurn`。
 
+6. **Lead 只能管理自己的排队消息，撤回必须结清 accepted 暂存（状态：不变量）**<br>
+   `list_worker_queue` / `update_queued_message` / `cancel_queued_message` 经 `resolveWorkerRef` 按 caller Lead 归属校验后，只允许操作目标 worker 队列中 `origin.kind='orca'` 的条目（worker 队列中的 orca 条目只可能来自其 Lead）；队列可见性口径是「看得全、只能动自己的」（2026-07-21 Dash 拍板）——用户手打与 scheduler 排队条目对 Lead 正文可见（供基于完整队列内容编排），但不可改不可撤（`NOT_LEAD_MESSAGE`）。修改是整条正文替换，必须经 `rebuildQueuedOrcaLeadMessage` 按原派发格式重建 `text` / `persistedContent` / `chatMessage.content` / `origin.displayText`，身份字段（clientId / createOpts / createdAt / senderLabel）锚定原条目；不许直接调 coordinator 的 `updateText`（会破坏 orca 派发格式耦合）。撤回必须走 coordinator `remove`（触发 `onDiscardedQueuedMessage` → dispatcher 丢弃该 clientId 的 accepted 暂存回调，与 Stop 清队列同一条 settle 路径），否则 accepted 回调表泄漏。steering 中的条目一律拒绝（`MESSAGE_CONSUMING`）。实现指针：`orcaTeamService.ts` 的 `resolveLeadQueuedMessage` 与三个队列控制方法、`orcaInterAgentDispatcher.ts` 的 `rebuildQueuedOrcaLeadMessage`、`agent-input-coordinator.ts` 的 `replaceQueuedMessage`。
+
 #### Worker 运行态
 
 1. **worker 终态不被失败回滚覆盖（状态：不变量）**<br>
@@ -193,7 +201,7 @@ Worktree 现状：Orca 与普通 session 对齐，worktree 是可选项，不强
 当前文档要求保留以下回归方向：
 
 - Service 边界：`orcaLifecycleService`、`orcaWorkerCreationService`、`orcaTeamService` 的单测覆盖 start/enable/create/dispatch/idle/archive/auto-bridge 关键路径。
-- MCP 工具：`lizi_orca` 12 工具（9 team + 3 只读诊断）的 role gate、ctx 缺失、worker/main 误调用、soft/hard limit、duplicate label、budget model API mode gate；诊断工具的纯只读语义（无 active team 时返回空 workspace、不建 team）。
+- MCP 工具：`lizi_orca` 15 工具（12 team + 3 只读诊断）的 role gate、ctx 缺失、worker/main 误调用、soft/hard limit、duplicate label、budget model API mode gate；诊断工具的纯只读语义（无 active team 时返回空 workspace、不建 team）；排队消息控制 3 工具的归属校验（跨 lead 拒绝）、非 lead 条目拒绝（`NOT_LEAD_MESSAGE`）、steering 拒绝（`MESSAGE_CONSUMING`）、撤回结清 accepted 暂存。
 - Codex MCP context：`CodexMcpThreadContextStore` 覆盖按 threadId 查 context、unknown / missing threadId fail-closed、unregister 后清理、`vendorOptions` 引用保持；`codexHttpBridge` 覆盖从 JSON-RPC `params._meta.threadId` 注入真实 session context。
 - Host 归属校验：`send_to_worker`、`idle_worker`、`archive_worker` 经共享 `resolveWorkerRef`（同时接受 worker_id / session_id 两种 id）必须以 caller 自身 Lead 身份校验，拒绝跨 workflow worker id 与 ctx 缺失；即使模型传错 id 或换用另一种 id，也不能越权操作。
 - UI route：Orca worker 不出现在 sidebar，Lead 自动进 split route，worker deep link 解析到 Lead split route；已有测试守住“不用 fork parentSessionId 或标题推断 Orca mapping”，见 `apps/desktop/src/renderer/__tests__/orcaWorkflowRoute.test.ts` 的 `does not use fork parentSessionId or title-linked worker lookup for Orca mapping`。

@@ -1,11 +1,13 @@
 import type { AgentKind } from '@lizi/maker-core';
 
+import type { AgentInputQueuedMessage } from '../../shared/agentInputQueue.js';
 import { createHostSendFailure } from '../maker-host/send-outcome.js';
 import type {
   CollabDispatchFailureOutcome,
   CollabDispatchQueuedOutcome,
   CollabDispatchSuccessOutcome,
 } from './collabSendOutcome.js';
+import { rebuildQueuedOrcaLeadMessage } from './orcaInterAgentDispatcher.js';
 
 /**
  * OrcaTeamService 只接管已存在 worker 的派活、释放、归档与 auto-bridge。
@@ -62,6 +64,8 @@ export type SendToWorkerResult =
       wakeKind: 'resumed' | 'already-active' | 'queued';
       targetTitle: string | null;
       targetLastUserSendAt: string | null;
+      /** wakeKind='queued' 时回传:排队消息的可寻址句柄,供 lead 后续查看/修改/撤回。 */
+      queuedMessageId?: string;
     }
   | {
       ok: false;
@@ -74,6 +78,8 @@ export type DispatchWorkerMessageResult =
   | {
       ok: true;
       mode: 'dispatched' | 'queued';
+      /** 底层 dispatcher 为该消息生成的 clientId;queued 模式下即队列内寻址句柄。 */
+      clientId: string;
       dispatchOutcome: CollabDispatchSuccessOutcome | CollabDispatchQueuedOutcome;
       targetTitle: string | null;
       targetLastUserSendAt: string | null;
@@ -112,6 +118,8 @@ export type DispatchWorkerTaskResult =
       wakeKind: 'queued';
       targetTitle: string | null;
       targetLastUserSendAt: string | null;
+      /** 排队消息的可寻址句柄(coordinator 队列内的 clientId)。 */
+      queuedMessageId: string;
     }
   | {
       dispatched: false;
@@ -121,6 +129,39 @@ export type DispatchWorkerTaskResult =
 
 /** 简单生命周期操作的 domain result，供 IPC 与 MCP adapter 各自翻译。 */
 export type OrcaOkResult = { ok: true; workerId?: string } | { ok: false; errorCode: string; message: string };
+
+/** worker 排队消息控制(list/update/cancel)对外暴露的失败码。 */
+export type WorkerQueuedMessageFailureCode =
+  | 'WORKER_NOT_FOUND'
+  | 'QUEUED_MESSAGE_NOT_FOUND'
+  | 'NOT_LEAD_MESSAGE'
+  | 'MESSAGE_CONSUMING'
+  | 'INVALID_ARGS'
+  | 'INTERNAL';
+
+/**
+ * worker 队列里单条排队消息的 lead 可见投影。口径是「看得全、只能动自己的」
+ * (2026-07-21 Dash 拍板):三种来源的条目都回传正文(lead 条目取
+ * origin.displayText 原始正文,用户手打 / scheduler 条目取排队正文),让 lead
+ * 能基于完整队列内容做编排决策;但修改 / 撤回仍只对 lead 自己的 orca 条目开放。
+ */
+export interface WorkerQueuedMessageSnapshot {
+  queuedMessageId: string;
+  position: number;
+  source: 'lead' | 'user' | 'scheduler';
+  content: string;
+  /** true = 该条正在 steering 投递中,不可修改 / 撤回。 */
+  consuming: boolean;
+}
+
+/** 排队消息控制的 domain result。 */
+export type WorkerQueuedMessageControlResult =
+  | { ok: true; workerId: string; queuedMessageId: string }
+  | { ok: false; errorCode: WorkerQueuedMessageFailureCode; message: string };
+
+export type ListWorkerQueuedMessagesResult =
+  | { ok: true; workerId: string; workerSessionId: string; messages: WorkerQueuedMessageSnapshot[] }
+  | { ok: false; errorCode: 'WORKER_NOT_FOUND' | 'INTERNAL'; message: string };
 
 /** worker turn 终止后由 register.ts 的事件 adapter 回调 service。 */
 export interface WorkerTerminalTurnParams {
@@ -162,6 +203,18 @@ export interface OrcaTeamServiceDeps {
     onAcceptedRollback?: () => void | Promise<void>;
   }): Promise<DispatchWorkerMessageResult>;
   sendAutoBridgeToLead(leadSessionId: string, message: string, workerId: string): Promise<{ accepted: boolean }>;
+  /**
+   * 读取目标 session 输入队列的当前快照(pendingQueue + steering 中的 clientId)。
+   * 实现方(register.ts)须先 ensureQueueRestored 再读,保证崩溃恢复条目可见。
+   */
+  getSessionQueueSnapshot(sessionId: string): Promise<{
+    pendingQueue: AgentInputQueuedMessage[];
+    steeringClientIds: string[];
+  }>;
+  /** 从队列移除一条排队消息;实现方必须走 coordinator.remove(带 discard settle)。返回是否真的移除。 */
+  removeQueuedMessage(sessionId: string, clientId: string): boolean;
+  /** 整条替换一条排队消息(同 clientId 原位替换);steering / 已派发返回 false。 */
+  replaceQueuedMessage(sessionId: string, clientId: string, next: AgentInputQueuedMessage): boolean;
   log: {
     info(message: string, fields?: Record<string, unknown>): void;
     warn(message: string, fields?: Record<string, unknown>): void;
@@ -178,6 +231,24 @@ export interface OrcaTeamService {
   idleWorker(params: { callerLeadSessionId: string; workerId: string }): Promise<OrcaOkResult>;
   /** 外部调用边界：按 caller lead 校验 worker 可见性。 */
   archiveWorker(params: { callerLeadSessionId: string; workerId: string }): Promise<OrcaOkResult>;
+  /** 外部调用边界：列出目标 worker 输入队列中的排队消息(lead 自己的条目含正文)。 */
+  listWorkerQueuedMessages(params: {
+    callerLeadSessionId: string;
+    workerRef: string;
+  }): Promise<ListWorkerQueuedMessagesResult>;
+  /** 外部调用边界：修改一条尚未派发的 lead 排队消息(整条正文替换,按原派发格式重建)。 */
+  updateWorkerQueuedMessage(params: {
+    callerLeadSessionId: string;
+    workerRef: string;
+    queuedMessageId: string;
+    message: string;
+  }): Promise<WorkerQueuedMessageControlResult>;
+  /** 外部调用边界：撤回一条尚未派发的 lead 排队消息(经 coordinator remove 结清 accepted 暂存)。 */
+  cancelWorkerQueuedMessage(params: {
+    callerLeadSessionId: string;
+    workerRef: string;
+    queuedMessageId: string;
+  }): Promise<WorkerQueuedMessageControlResult>;
   captureWorkerText(sessionId: string, text: string, opts?: { isFinal?: boolean }): void;
   clearAutoBridgeState(sessionId: string): void;
   handleWorkerTurnStarted(sessionId: string): Promise<void>;
@@ -523,6 +594,7 @@ export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamServic
         wakeKind: 'queued',
         targetTitle: result.targetTitle ?? target.session.title,
         targetLastUserSendAt: result.targetLastUserSendAt,
+        queuedMessageId: result.clientId,
       };
     }
 
@@ -572,6 +644,7 @@ export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamServic
       wakeKind: dispatchResult.wakeKind,
       targetTitle: dispatchResult.targetTitle,
       targetLastUserSendAt: dispatchResult.targetLastUserSendAt,
+      ...(dispatchResult.queued === true ? { queuedMessageId: dispatchResult.queuedMessageId } : {}),
     };
   }
 
@@ -604,6 +677,152 @@ export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamServic
     return { ok: true, workerId: worker.id };
   }
 
+  /** 排队消息 source 判定:worker 队列里 orca 条目只可能来自其 lead(通信拓扑为 Lead↔Worker)。 */
+  function queuedMessageSource(item: AgentInputQueuedMessage): WorkerQueuedMessageSnapshot['source'] {
+    if (item.origin?.kind === 'orca') return 'lead';
+    if (item.origin?.kind === 'scheduler') return 'scheduler';
+    return 'user';
+  }
+
+  /**
+   * update / cancel 共用的目标定位与权限校验:worker 归属(resolveWorkerRef)→
+   * 条目存在 → 必须是 lead 自己的 orca 条目(用户 / scheduler 排队消息绝不可动)→
+   * 未进入 steering 投递。全部通过才返回条目与 link。
+   */
+  async function resolveLeadQueuedMessage(params: {
+    callerLeadSessionId: string;
+    workerRef: string;
+    queuedMessageId: string;
+  }): Promise<
+    | { ok: true; link: OrcaWorkerLinkSnapshot; entry: AgentInputQueuedMessage }
+    | { ok: false; errorCode: WorkerQueuedMessageFailureCode; message: string }
+  > {
+    const found = await resolveWorkerRef(params.callerLeadSessionId, params.workerRef);
+    if (!found.ok) {
+      return found.errorCode === 'NOT_FOUND'
+        ? { ok: false, errorCode: 'WORKER_NOT_FOUND', message: `worker ${params.workerRef} not found` }
+        : { ok: false, errorCode: 'INTERNAL', message: found.message };
+    }
+    const snapshot = await deps.getSessionQueueSnapshot(found.worker.sessionId);
+    const entry = snapshot.pendingQueue.find((item) => item.clientId === params.queuedMessageId);
+    if (!entry) {
+      return {
+        ok: false,
+        errorCode: 'QUEUED_MESSAGE_NOT_FOUND',
+        message: `queued message ${params.queuedMessageId} not found — it may have been dispatched or cancelled already`,
+      };
+    }
+    if (entry.origin?.kind !== 'orca') {
+      return {
+        ok: false,
+        errorCode: 'NOT_LEAD_MESSAGE',
+        message: `queued message ${params.queuedMessageId} was not sent by the lead; user/scheduler queued messages cannot be modified`,
+      };
+    }
+    if (snapshot.steeringClientIds.includes(entry.clientId)) {
+      return {
+        ok: false,
+        errorCode: 'MESSAGE_CONSUMING',
+        message: `queued message ${params.queuedMessageId} is being delivered and can no longer be modified`,
+      };
+    }
+    return { ok: true, link: found.link, entry };
+  }
+
+  async function listWorkerQueuedMessages(params: {
+    callerLeadSessionId: string;
+    workerRef: string;
+  }): Promise<ListWorkerQueuedMessagesResult> {
+    const found = await resolveWorkerRef(params.callerLeadSessionId, params.workerRef);
+    if (!found.ok) {
+      return found.errorCode === 'NOT_FOUND'
+        ? { ok: false, errorCode: 'WORKER_NOT_FOUND', message: `worker ${params.workerRef} not found` }
+        : { ok: false, errorCode: 'INTERNAL', message: found.message };
+    }
+    const snapshot = await deps.getSessionQueueSnapshot(found.worker.sessionId);
+    const messages = snapshot.pendingQueue.map((item, index): WorkerQueuedMessageSnapshot => {
+      const source = queuedMessageSource(item);
+      // lead 条目回原始正文(displayText 缺失时回退带派发头的 text,可读性够诊断用);
+      // 用户 / scheduler 条目回排队正文 —— 内容全可见,可操作性仍由 NOT_LEAD_MESSAGE 把关。
+      const content = item.origin?.kind === 'orca'
+        ? item.origin.displayText ?? item.text
+        : item.text;
+      return {
+        queuedMessageId: item.clientId,
+        position: index,
+        source,
+        content,
+        consuming: snapshot.steeringClientIds.includes(item.clientId),
+      };
+    });
+    return {
+      ok: true,
+      workerId: found.worker.id,
+      workerSessionId: found.worker.sessionId,
+      messages,
+    };
+  }
+
+  async function updateWorkerQueuedMessage(params: {
+    callerLeadSessionId: string;
+    workerRef: string;
+    queuedMessageId: string;
+    message: string;
+  }): Promise<WorkerQueuedMessageControlResult> {
+    if (params.message.trim().length === 0) {
+      return { ok: false, errorCode: 'INVALID_ARGS', message: 'message must not be empty' };
+    }
+    const resolved = await resolveLeadQueuedMessage(params);
+    if (!resolved.ok) return resolved;
+    const next = rebuildQueuedOrcaLeadMessage(resolved.entry, params.message, resolved.link.workerId);
+    const replaced = deps.replaceQueuedMessage(
+      resolved.link.workerSessionId,
+      params.queuedMessageId,
+      next,
+    );
+    if (!replaced) {
+      // resolve 与 replace 之间的窄竞态:条目刚被 drain 取走 / steering 挡住。
+      return {
+        ok: false,
+        errorCode: 'QUEUED_MESSAGE_NOT_FOUND',
+        message: `queued message ${params.queuedMessageId} was consumed before the update could apply`,
+      };
+    }
+    deps.log.info('orca lead updated queued worker message', {
+      workerId: resolved.link.workerId,
+      workerSessionId: resolved.link.workerSessionId,
+      queuedMessageId: params.queuedMessageId,
+    });
+    return { ok: true, workerId: resolved.link.workerId, queuedMessageId: params.queuedMessageId };
+  }
+
+  async function cancelWorkerQueuedMessage(params: {
+    callerLeadSessionId: string;
+    workerRef: string;
+    queuedMessageId: string;
+  }): Promise<WorkerQueuedMessageControlResult> {
+    const resolved = await resolveLeadQueuedMessage(params);
+    if (!resolved.ok) return resolved;
+    // coordinator.remove 内部触发 onDiscardedQueuedMessage → dispatcher 丢弃该
+    // clientId 的 accepted 暂存回调,与 Stop 清队列共用同一条 settle 路径
+    // (架构文档「queued accepted 也要同样结算」不变量);queued 未 accepted,
+    // 无运行副作用需要回滚。
+    const removed = deps.removeQueuedMessage(resolved.link.workerSessionId, params.queuedMessageId);
+    if (!removed) {
+      return {
+        ok: false,
+        errorCode: 'QUEUED_MESSAGE_NOT_FOUND',
+        message: `queued message ${params.queuedMessageId} was consumed before the cancel could apply`,
+      };
+    }
+    deps.log.info('orca lead cancelled queued worker message', {
+      workerId: resolved.link.workerId,
+      workerSessionId: resolved.link.workerSessionId,
+      queuedMessageId: params.queuedMessageId,
+    });
+    return { ok: true, workerId: resolved.link.workerId, queuedMessageId: params.queuedMessageId };
+  }
+
   async function closeWorkerSessionBestEffort(sessionId: string, owner: string): Promise<void> {
     try {
       await deps.closeWorkerSession(sessionId);
@@ -620,6 +839,9 @@ export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamServic
     sendToWorker,
     idleWorker,
     archiveWorker,
+    listWorkerQueuedMessages,
+    updateWorkerQueuedMessage,
+    cancelWorkerQueuedMessage,
     captureWorkerText(sessionId, text, opts) {
       const state = autoBridge.get(sessionId);
       if (!state || text.length === 0) return;

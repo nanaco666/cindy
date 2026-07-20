@@ -61,6 +61,20 @@ export {
   type SendToWorkerDeps,
 } from './send_to_worker.js';
 export {
+  registerListWorkerQueueTool,
+  type ListWorkerQueueDeps,
+  type WorkerQueuedMessageEntry,
+} from './list_worker_queue.js';
+export {
+  registerUpdateQueuedMessageTool,
+  type QueuedMessageControlErrorCode,
+  type UpdateQueuedMessageDeps,
+} from './update_queued_message.js';
+export {
+  registerCancelQueuedMessageTool,
+  type CancelQueuedMessageDeps,
+} from './cancel_queued_message.js';
+export {
   registerIdleWorkerTool,
   type IdleWorkerDeps,
 } from './idle_worker.js';

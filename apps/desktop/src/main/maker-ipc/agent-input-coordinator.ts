@@ -1336,6 +1336,29 @@ export class AgentInputCoordinator {
     return this.getProjection(sessionId);
   }
 
+  /**
+   * 整条排队消息原位替换(main 侧受信调用方专用;当前唯一消费者是 Orca lead 的
+   * 「修改排队消息」工具)。与 updateText / updateContent 的差别:替换体由调用方
+   * 全量构造 —— orca 条目的 text / persistedContent / origin.displayText 之间存在
+   * 派发格式耦合(formatAgentMessage / formatOrcaCommunicationMessage),必须由
+   * dispatcher 侧按原格式重建,coordinator 不理解也不该理解该格式。
+   * 守卫与既有编辑一致:steering 中的条目不可改;clientId 必须锚定原条目
+   * (身份不变,防止入队去重窗口与崩溃快照错位)。返回是否完成替换 ——
+   * false = 条目已不在 pendingQueue(已派发 / 已移除)、正在 steering 或身份不符。
+   */
+  replaceQueuedMessage(sessionId: string, clientId: string, next: AgentInputQueuedMessage): boolean {
+    if (next.clientId !== clientId || next.chatMessage.clientId !== clientId) return false;
+    const state = this.getState(sessionId);
+    if (state.steeringQueueClientIds.includes(clientId)) return false;
+    const index = state.pendingQueue.findIndex((q) => q.clientId === clientId);
+    if (index < 0) return false;
+    const nextQueue = [...state.pendingQueue];
+    nextQueue[index] = next;
+    state.pendingQueue = nextQueue;
+    this.emit(sessionId);
+    return true;
+  }
+
   move(sessionId: string, clientId: string, targetIndex: number): AgentInputProjection {
     const state = this.getState(sessionId);
     if (state.steeringQueueClientIds.includes(clientId)) return this.getProjection(sessionId);
