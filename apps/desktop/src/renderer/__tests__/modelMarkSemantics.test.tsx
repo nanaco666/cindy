@@ -39,4 +39,24 @@ describe('model mark semantics', () => {
     expect(firstPath(<ClaudeMark />)).not.toBe(anthropicPath);
     expect(firstPath(<CodexMark />)).not.toBe(openaiPath);
   });
+
+  it('optically strengthens the mono Codex glyph and adapts its sidebar stroke weight', () => {
+    const small = render(<CodexMark size={12} />);
+    const smallGroup = small.container.querySelector('g');
+    const smallPaths = small.container.querySelectorAll('path');
+    expect(smallGroup?.getAttribute('transform')).toBe(
+      'translate(12 12) scale(1.1) translate(-12 -12)',
+    );
+    expect(smallPaths[0]?.getAttribute('stroke-width')).toBe('2');
+    expect(smallPaths[1]?.getAttribute('fill')).toBe('currentColor');
+    expect(smallPaths[1]?.getAttribute('stroke')).toBe('currentColor');
+    expect(smallPaths[1]?.getAttribute('stroke-width')).toBe('0.5');
+
+    const large = render(<CodexMark size={16} />);
+    expect(large.container.querySelector('path')?.getAttribute('stroke-width')).toBe('1.6');
+
+    const brand = render(<CodexMark size={12} variant="brand" />);
+    expect(brand.container.querySelector('g')).toBeNull();
+    expect(brand.container.querySelector('path')?.hasAttribute('stroke')).toBe(false);
+  });
 });

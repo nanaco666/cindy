@@ -1,7 +1,8 @@
 /**
  * CodexMark —— OpenAI Codex 官方 CLI mark(多瓣圆花 + `>_` 终端提示符),双轨:
- *  - variant="mono"(默认):描边花形轮廓(stroke)+ 实心 `>_`(fill),
- *    currentColor 单色,跟随主题/状态染色;
+ *  - variant="mono"(默认):描边花形轮廓(stroke)+ 增重的 `>_`(fill+stroke),
+ *    currentColor 单色,跟随主题/状态染色;小尺寸用更粗描边并整体光学放大,
+ *    与实心 Claude 像素脸保持视觉重量一致;
  *  - variant="brand":官方彩色版——实心花形剪影填蓝紫渐变
  *    (#b1a7ff → #7a9dff → #3941ff),`>_` 为镂空透底(官方资产的白色圆角
  *    方底已去掉,内联场景透明底)。固定品牌色跨主题一致(语义豁免——同
@@ -32,6 +33,7 @@ interface CodexMarkProps {
 
 export function CodexMark({ size = 14, className, variant = 'mono' }: CodexMarkProps) {
   const gradientId = useId();
+  const monoStrokeWidth = size <= 14 ? 2 : 1.6;
   return (
     <svg
       width={size}
@@ -61,16 +63,22 @@ export function CodexMark({ size = 14, className, variant = 'mono' }: CodexMarkP
           </defs>
         </>
       ) : (
-        <>
+        <g transform="translate(12 12) scale(1.1) translate(-12 -12)">
           <path
             fill="none"
             stroke="currentColor"
-            strokeWidth="1.5"
+            strokeWidth={monoStrokeWidth}
             strokeLinejoin="round"
             d={`${FLOWER_OUTLINE}z`}
           />
-          <path fill="currentColor" d={PROMPT_GLYPHS} />
-        </>
+          <path
+            fill="currentColor"
+            stroke="currentColor"
+            strokeWidth="0.5"
+            strokeLinejoin="round"
+            d={PROMPT_GLYPHS}
+          />
+        </g>
       )}
     </svg>
   );
