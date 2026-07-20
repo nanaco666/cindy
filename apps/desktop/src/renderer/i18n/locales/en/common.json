@@ -3321,6 +3321,7 @@
     "branchChip": {
       "label": "Branch",
       "loading": "Loading branches…",
+      "loadFailed": "Failed to load branches — tap to retry",
       "currentTooltip": "Current branch",
       "sourceTooltip": "Worktree source branch",
       "worktreeHint": "Picking another branch starts in an isolated worktree"

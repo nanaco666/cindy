@@ -208,10 +208,16 @@ export function WorktreeChipsRow({
       label={branchLabel}
       branches={branches.branches}
       loading={branches.loading}
+      failed={branches.failed}
+      onRetry={branches.refetch}
       worktreeEnabled={effectiveWorktreeEnabled}
       interactive={branchChipInteractive}
       onPick={handleBranchPick}
-      onOpenRequested={() => setBranchListWanted(true)}
+      onOpenRequested={() => {
+        setBranchListWanted(true);
+        // 上次拉取失败的话,重新打开菜单就自动重试一次,不逼用户去点重试项。
+        if (branches.failed && !branches.loading) branches.refetch();
+      }}
       compact={compact}
     />
   ) : null;
@@ -369,6 +375,8 @@ function BranchChip({
   label,
   branches,
   loading,
+  failed,
+  onRetry,
   worktreeEnabled,
   interactive,
   onPick,
@@ -378,10 +386,13 @@ function BranchChip({
   label: string;
   branches: string[];
   loading: boolean;
+  /** 上次分支列表请求失败(区分于"仓库没分支"),菜单给重试入口。 */
+  failed: boolean;
+  onRetry: () => void;
   worktreeEnabled: boolean;
   interactive: boolean;
   onPick: (branch: string) => void;
-  /** 菜单首次打开时通知上层解锁分支列表懒加载。 */
+  /** 菜单打开时通知上层解锁分支列表懒加载(失败态由上层顺带自动重试)。 */
   onOpenRequested: () => void;
   compact?: boolean;
 }) {
@@ -446,10 +457,22 @@ function BranchChip({
         sideOffset={4}
         className="max-h-[280px] min-w-[200px] overflow-y-auto rounded-xl border border-border bg-popover p-1 shadow-lg"
       >
-        {loading || branches.length === 0 ? (
+        {loading ? (
           <div className="px-3 py-1.5 text-[13px] text-muted-foreground">
             {t('newChat.branchChip.loading')}
           </div>
+        ) : failed || branches.length === 0 ? (
+          /* 失败与空列表都给重试入口(空列表也可能是隧道/瞬时问题);
+             onSelect 阻止默认关闭,重试期间菜单留在原地显示 loading。 */
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              onRetry();
+            }}
+            className="cursor-pointer rounded-md px-3 py-1.5 text-[13px] text-muted-foreground focus:bg-accent focus:text-accent-foreground"
+          >
+            {t('newChat.branchChip.loadFailed')}
+          </DropdownMenuItem>
         ) : (
           branches.map((b) => (
             <DropdownMenuItem

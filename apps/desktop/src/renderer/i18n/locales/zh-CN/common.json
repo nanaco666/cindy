@@ -3321,6 +3321,7 @@
     "branchChip": {
       "label": "分支",
       "loading": "加载分支中…",
+      "loadFailed": "分支列表加载失败,点此重试",
       "currentTooltip": "当前分支",
       "sourceTooltip": "worktree 源分支",
       "worktreeHint": "选择其他分支将以 worktree 隔离启动"
