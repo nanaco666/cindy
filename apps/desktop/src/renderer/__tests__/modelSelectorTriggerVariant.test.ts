@@ -202,7 +202,7 @@ vi.mock('@/lib/providerModels', () => ({
   }: {
     agentKind: 'claude-code' | 'codex' | null;
   }) => agentKind ?? 'claude-code',
-  selectVisibleModels: () => [
+  selectVisibleModels: ({ agentKind }: { agentKind: 'claude-code' | 'codex' | null }) => [
     {
       id: 'claude-opus-4-8',
       displayName: 'Opus 4.8',
@@ -236,7 +236,11 @@ vi.mock('@/lib/providerModels', () => ({
       efforts: ['low', 'medium', 'high'],
       defaultEffort: 'medium',
     },
-  ],
+  ].filter((model) => {
+    if (agentKind === 'claude-code') return model.id.startsWith('claude-');
+    if (agentKind === 'codex') return model.id.startsWith('gpt-');
+    return true;
+  }),
 }));
 
 vi.mock('@/state/modelVisibilityPrefs', () => ({
@@ -543,6 +547,75 @@ describe('ModelSelector trigger variants', () => {
 
     expect(setEffort).toHaveBeenCalledWith('claude-code', 'anthropic', 'claude-sonnet-4-6', 'high');
     expect(onProviderChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps target-agent provider rows and effort memory configurable while browsing Codex', () => {
+    providersRef.providers = [
+      ...providersRef.DEFAULT_PROVIDERS,
+      {
+        id: 'zeta-codex',
+        name: 'Zeta Codex',
+        connected: true,
+        agents: ['codex'],
+        routing: { codex: {} },
+        models: {
+          codex: [
+            {
+              id: 'gpt-5.5',
+              name: 'GPT-5.5',
+              contextWindow: 400000,
+              efforts: ['low', 'medium', 'high'],
+              defaultEffort: 'medium',
+            },
+          ],
+        },
+      },
+    ];
+    const setEffort = vi.fn();
+    const modelMemory = {
+      getEffort: vi.fn((agent: string, providerId: string, modelId: string) =>
+        agent === 'codex' && providerId === 'zeta-codex' && modelId === 'gpt-5.5'
+          ? 'high'
+          : undefined,
+      ),
+      setEffort,
+      getFast: vi.fn(),
+      setFast: vi.fn(),
+    };
+
+    try {
+      render(
+        React.createElement(ModelSelectorContent, {
+          modelId: 'claude-opus-4-8',
+          effort: 'medium',
+          onModelChange: vi.fn(),
+          onEffortChange: vi.fn(),
+          vendorKey: 'cc',
+          currentProviderId: 'anthropic',
+          onProviderChange: vi.fn(),
+          modelMemory,
+          agentSwitch: { currentVendor: 'cc', onSwitch: vi.fn() },
+        }),
+      );
+
+      fireEvent.click(screen.getByRole('tab', { name: /Codex/ }));
+      const row = screen.getByRole('option', { name: /GPT-5\.5/ });
+      // 来源 mark 存在说明目标 Agent 仍走 provider sections，而不是退化成 flat。
+      expect(row.textContent).toContain('Z');
+      // 行尾与悬浮面板同读目标 Agent 的 per-(来源,模型) 记忆，不落模型默认 medium。
+      expect(row.textContent).toContain('high');
+      expect(row.textContent).not.toContain('medium');
+
+      fireEvent.pointerEnter(row);
+      const options = screen.getByRole('group', { name: /GPT-5\.5/ });
+      expect(
+        within(options).getByRole('option', { name: 'high' }).getAttribute('aria-selected'),
+      ).toBe('true');
+      fireEvent.click(within(options).getByRole('option', { name: 'low' }));
+      expect(setEffort).toHaveBeenCalledWith('codex', 'zeta-codex', 'gpt-5.5', 'low');
+    } finally {
+      providersRef.providers = providersRef.DEFAULT_PROVIDERS;
+    }
   });
 
   it('shares inactive model presets across conversations while protecting an active model', () => {

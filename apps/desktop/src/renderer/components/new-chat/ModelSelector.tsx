@@ -454,8 +454,12 @@ export function ModelSelectorContent({
 
   const currentModel = visibleModels.find((m) => m.id === modelId);
 
-  // currentModel 归属的 agent —— effortLevels 标签按它取(不合并两边,避免 Claude/Codex 同 id 标签互覆盖)。
+  // 显式 vendor / 浏览分段已给出 agentKind 时直接采用；浏览目标引擎期间 modelId 仍是
+  // 旧引擎当前模型，通常不在目标 catalog，不能先因 currentModel 缺失判 null（否则目标
+  // 引擎的 connected sources / sections / per-(引擎,来源,模型) 记忆链会全部退化）。
+  // 只有 merged picker 没有显式 agentKind 时，才按 currentModel 判归属。
   const currentAgentKind: AgentKind | null = useMemo(() => {
+    if (agentKind) return agentKind;
     if (!currentModel) return null;
     return resolveVisibleModelAgentKind({
       modelId: currentModel.id,
