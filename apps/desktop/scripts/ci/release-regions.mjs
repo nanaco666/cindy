@@ -42,6 +42,13 @@ export const RELEASE_REGION_ENV_NAMES = Object.freeze({
     prefix: 'XDT_GLOBAL_OSS_PREFIX',
     ossRegion: 'XDT_GLOBAL_OSS_REGION',
   }),
+  // dev 第三渠道:XDT_DEVCH_* 前缀(dev channel,避免与 FP_DEV_* 凭证名混淆)。
+  dev: Object.freeze({
+    cdnBaseUrl: 'XDT_DEVCH_CDN_BASE_URL',
+    bucket: 'XDT_DEVCH_OSS_BUCKET',
+    prefix: 'XDT_DEVCH_OSS_PREFIX',
+    ossRegion: 'XDT_DEVCH_OSS_REGION',
+  }),
 });
 
 const OSS_KEYS = Object.freeze(['cdnBaseUrl', 'bucket', 'prefix', 'ossRegion']);

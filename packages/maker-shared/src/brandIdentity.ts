@@ -36,10 +36,17 @@
 
 import { BRAND_NAME } from './branding.js';
 
-/** 构建期区域维度(与 mobile 的 EXPO_PUBLIC_CINDY_AUTH_REGION 同语义)。 */
-export type CindyRegion = 'cn' | 'global';
+/**
+ * 构建期区域维度(与 mobile 的 EXPO_PUBLIC_CINDY_AUTH_REGION 同语义)。
+ * 2026-07-20 新增第三目标 `dev`:独立系统身份(CindyDev,可与 cn/global 同机
+ * 三装),连接独立的 dev 服务器(config/endpoint.dev.json,服务端就绪前为
+ * 约定占位域名)。行为语义上 dev 归 cn 系(登录线/文案等运行时按区域分支处
+ * 与 cn 同待遇),差异只在端点与身份。注意与「开发模式(未注入区域的本地
+ * dev 构建)」区分:那仍默认 cn 身份。
+ */
+export type CindyRegion = 'cn' | 'global' | 'dev';
 
-/** 默认区域:国内。dev / 未显式注入区域的构建一律落在这里。 */
+/** 默认区域:国内。开发模式 / 未显式注入区域的构建一律落在这里。 */
 export const DEFAULT_CINDY_REGION: CindyRegion = 'cn';
 
 /**
@@ -49,8 +56,8 @@ export const DEFAULT_CINDY_REGION: CindyRegion = 'cn';
 export function resolveCindyRegion(raw?: string | null): CindyRegion {
   const v = raw?.trim().toLowerCase();
   if (!v) return DEFAULT_CINDY_REGION;
-  if (v === 'cn' || v === 'global') return v;
-  throw new Error(`Invalid Cindy region: ${raw}; expected cn or global`);
+  if (v === 'cn' || v === 'global' || v === 'dev') return v;
+  throw new Error(`Invalid Cindy region: ${raw}; expected cn, global or dev`);
 }
 
 /** 标识符层身份配置的完整形状。字段语义见各注释;全部为纯数据,零运行时逻辑。 */
@@ -126,10 +133,12 @@ export const BRAND_IDENTITY: BrandIdentity = Object.freeze({
   executableNameByRegion: Object.freeze({
     cn: 'Cindy',
     global: 'CindyGlobal',
+    dev: 'CindyDev',
   }),
   appIdByRegion: Object.freeze({
     cn: 'com.xd.cindycn',
     global: 'com.xd.cindy',
+    dev: 'com.xd.cindydev',
   }),
   primaryScheme: 'cindy',
   legacySchemes: Object.freeze(['xdt-maker']),
@@ -137,6 +146,7 @@ export const BRAND_IDENTITY: BrandIdentity = Object.freeze({
   userDataDirNameByRegion: Object.freeze({
     cn: 'Cindy',
     global: 'CindyGlobal',
+    dev: 'CindyDev',
   }),
   legacyUserDataDirNames: Object.freeze(['xdt-maker']),
   cdnPrefix: 'cindy',

@@ -1,6 +1,7 @@
-# Desktop 发布:国内(cn)/ 海外(global)双渠道
+# Desktop 发布:国内(cn)/ 海外(global)/ dev 三渠道
 
-> 2026-07-19 整理。发布脚本区域化(`--region cn|global`)后的指令矩阵与差异化配置单点说明。
+> 2026-07-19 整理,2026-07-20 增补 dev 第三目标。发布脚本区域化(`--region cn|global|dev`)
+> 后的指令矩阵与差异化配置单点说明。
 > 相关脚本:`apps/desktop/scripts/release-{macos,windows}.mjs`、`promote-canary-{macos,windows}.mjs`、
 > 共享配置 `scripts/shared/oss.mjs`(发布目标)与 `scripts/shared/client-endpoint-build-env.mjs`(烘焙端点)。
 
@@ -131,3 +132,23 @@ pnpm release:promote:win:global --yes
 
 注意:cn 与 global 的版本号各自独立演进(各看各的 CDN manifest 基线),不要求同步;
 需要对齐时给两边都传同一个显式 `x.y.z`。
+
+## 4. dev 第三目标(2026-07-20,配置接口已留好、服务端待部署)
+
+dev 是与 cn/global 平级的独立目标:独立系统身份 **CindyDev / com.xd.cindydev /
+独立 userData**(可与 cn、global 同机三装),连接独立的 dev 服务器。行为语义归
+cn 系(登录线、意识 app-context 等运行时分支与 cn 同待遇,意识契约不变)。
+
+当前状态与启用步骤:
+
+1. **端点清单** `config/endpoint.dev.json` 已建,占位域名约定为 `dev-<子域>.cindy.com.cn`
+   (如 `dev-auth.cindy.com.cn`);dev 服务器部署时要么按这套域名起,要么改清单。
+2. **打包**:`pnpm package:mac:arm64 --region dev [--version x.y.z]` 已可用(产出
+   CindyDev,签名默认复用 cn 的 X.D. Network 证书,见 release-regions.json `dev.macSigning`)。
+3. **发布**:`release:{mac,win}:dev` / `release:promote:{mac,win}:dev` 指令已就位,
+   但 `release-regions.json` 的 `dev.oss` 四件套留空 —— dev 渠道 bucket/CDN 建好后
+   填入即可(env 面为 `XDT_DEVCH_*` 前缀;凭证可单独配 `XDT_DEVCH_OSS_ACCESS_KEY_*`,
+   不配回落 `FP_DEV_OSS_ACCESS_KEY_*`)。在此之前发 dev 渠道会 fail closed 报缺配置。
+4. **dev 模式运行**(不打包):`pnpm restart:desktop:remote --region=dev` 即读
+   `endpoint.dev.json`(dev 服务器可达后可用)。
+5. mobile 侧暂不引入 dev 区域(EXPO 侧仍 cn/global),需要时另行扩展。
