@@ -4,9 +4,27 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import type { Session } from '@/lib/ccAgent.types';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({
-  list: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+  let spendListener:
+    | ((payload: { sessionId: string; totalCostUsd: number }) => void)
+    | undefined;
+  const onUsageSessionSpendChanged = vi.fn(
+    (listener: (payload: { sessionId: string; totalCostUsd: number }) => void) => {
+      spendListener = listener;
+      return vi.fn();
+    },
+  );
+  Object.defineProperty(window, 'electronAPI', {
+    configurable: true,
+    value: { onUsageSessionSpendChanged },
+  });
+  return {
+    list: vi.fn(),
+    emitSessionSpend(payload: { sessionId: string; totalCostUsd: number }): void {
+      spendListener?.(payload);
+    },
+  };
+});
 
 vi.mock('@/lib/sessionService', () => ({
   list: mocks.list,
@@ -27,8 +45,8 @@ function deferred<T>(): {
   return { promise, resolve };
 }
 
-function session(id: string): Session {
-  return { id } as Session;
+function session(id: string, partial: Partial<Session> = {}): Session {
+  return { id, ...partial } as Session;
 }
 
 describe('sessionsStore account boundaries', () => {
@@ -119,5 +137,78 @@ describe('sessionsStore account boundaries', () => {
     await staleLoad;
 
     expect(sessionsStore.getByFilter('all')?.map(({ id }) => id)).toEqual(['keep']);
+  });
+
+  it('patches only the matching cached session when persisted spend changes', async () => {
+    mocks.list.mockResolvedValueOnce([
+      session('target', { totalCostUsd: 1 }),
+      session('other', { totalCostUsd: 3 }),
+    ]);
+    await sessionsStore.ensureByFilter('active');
+    mocks.list.mockClear();
+    const subscriber = vi.fn();
+    const unsubscribe = sessionsStore.subscribe(subscriber);
+
+    act(() => {
+      mocks.emitSessionSpend({ sessionId: 'target', totalCostUsd: 2 });
+    });
+
+    expect(sessionsStore.getByFilter('active')).toEqual([
+      expect.objectContaining({ id: 'target', totalCostUsd: 2 }),
+      expect.objectContaining({ id: 'other', totalCostUsd: 3 }),
+    ]);
+    expect(subscriber).toHaveBeenCalledTimes(1);
+    expect(mocks.list).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  it('preserves spend received while a stale session list response is in flight', async () => {
+    const staleRequest = deferred<Session[]>();
+    mocks.list.mockImplementationOnce(() => staleRequest.promise);
+
+    const load = sessionsStore.ensureByFilter('active');
+    act(() => {
+      mocks.emitSessionSpend({ sessionId: 'target', totalCostUsd: 2 });
+    });
+    staleRequest.resolve([
+      session('target', { totalCostUsd: 1 }),
+      session('other', { totalCostUsd: 3 }),
+    ]);
+    await load;
+
+    expect(sessionsStore.getByFilter('active')).toEqual([
+      expect.objectContaining({ id: 'target', totalCostUsd: 2 }),
+      expect.objectContaining({ id: 'other', totalCostUsd: 3 }),
+    ]);
+    expect(mocks.list).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears remembered spend overrides at the account boundary', async () => {
+    act(() => {
+      mocks.emitSessionSpend({ sessionId: 'same-id', totalCostUsd: 2 });
+    });
+    sessionsStore.reset();
+    mocks.list.mockResolvedValueOnce([session('same-id', { totalCostUsd: 1 })]);
+
+    await sessionsStore.ensureByFilter('active');
+
+    expect(sessionsStore.getByFilter('active')).toEqual([
+      expect.objectContaining({ id: 'same-id', totalCostUsd: 1 }),
+    ]);
+  });
+
+  it('does not replay an old spend event over a newer list request', async () => {
+    mocks.list.mockResolvedValueOnce([session('target', { totalCostUsd: 1 })]);
+    await sessionsStore.ensureByFilter('active');
+    act(() => {
+      mocks.emitSessionSpend({ sessionId: 'target', totalCostUsd: 2 });
+    });
+    mocks.list.mockResolvedValueOnce([session('target', { totalCostUsd: 3 })]);
+
+    await sessionsStore.forceRefresh('active');
+
+    expect(sessionsStore.getByFilter('active')).toEqual([
+      expect.objectContaining({ id: 'target', totalCostUsd: 3 }),
+    ]);
   });
 });
