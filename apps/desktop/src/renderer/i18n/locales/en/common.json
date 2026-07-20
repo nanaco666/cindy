@@ -1176,7 +1176,6 @@
         "customMeta": "Connect any OpenAI / Anthropic compatible source",
         "pickHint": "The sign-in method is defined by each provider; OAuth endpoints and base URLs come from presets — nothing to fill in by hand.",
         "oauthDesc": "Authorize your subscription in the browser — no API key needed",
-        "authorizing": "Waiting for browser authorization…",
         "authorizedToast": "Connected {{name}}",
         "authorizeFailed": "Failed to authorize {{name}}. Please try again",
         "nameLabel": "Display name",

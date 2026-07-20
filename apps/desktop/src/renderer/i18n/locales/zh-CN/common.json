@@ -1176,7 +1176,6 @@
         "customMeta": "接入任意 OpenAI / Anthropic 兼容的模型来源",
         "pickHint": "鉴权方式由供应商定义决定;OAuth 端点与基础 URL 由预设携带,无需手填。",
         "oauthDesc": "通过浏览器完成订阅授权,无需 API Key",
-        "authorizing": "等待浏览器授权…",
         "authorizedToast": "已连接「{{name}}」",
         "authorizeFailed": "「{{name}}」授权失败,请重试",
         "nameLabel": "显示名称",

@@ -28,6 +28,7 @@ import {
   isModelEnabled,
   setManyVisibility,
   setModelVisibility,
+  useModelVisibilityVersion,
 } from '@/state/modelVisibilityPrefs';
 
 import type { AgentKind, CatalogModel, ProviderView } from '@lizi/model-providers';
@@ -109,6 +110,9 @@ export function UnifiedModelList({
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [splitMode, setSplitMode] = useState(false);
+  // 订阅可见性 version:开关变更后 counts memo 必须重算(否则「全部开启/关闭」
+  // 按钮方向与计数陈旧)。行内开关读取不 memo,天然新鲜;只有 counts 依赖它。
+  const visibilityVersion = useModelVisibilityVersion();
 
   const multiAgent = provider.agents.length > 1;
   const unionRows = useMemo(() => buildUnionRows(provider), [provider]);
@@ -148,7 +152,9 @@ export function UnifiedModelList({
       }
     }
     return { on, total };
-  }, [unionRows, provider.id]);
+    // eslint 视角 visibilityVersion 未在函数体使用,但它是 rowEnabled 读取的外部
+    // store 的失效信号,必须进依赖数组。
+  }, [unionRows, provider.id, visibilityVersion]);
   const allOn = counts.total > 0 && counts.on === counts.total;
 
   /** 单开关:一次写该行全部可用 agent(分歧行拨动即归一)。 */

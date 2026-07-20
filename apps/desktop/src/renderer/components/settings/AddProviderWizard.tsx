@@ -273,6 +273,26 @@ export function AddProviderWizard({
     }
   }, [sel, codexAuth, onDone, t]);
 
+  /**
+   * 取消进行中的 OAuth(与详情头的行为对称):等待授权期间点按钮 / 关弹窗 / 返回
+   * 都必须能中止 main 侧 login runner,否则浏览器流挂起时用户无法重试。
+   */
+  const cancelAuthorize = useCallback(() => {
+    if (!sel || sel.kind !== 'oauth') return;
+    const id = sel.provider.id;
+    if (id === 'anthropic') void window.electronAPI.maker.claudeOAuthCancel();
+    else if (id === 'openai') void codexAuth.cancelLogin();
+    else if (id === 'xai') void window.electronAPI.maker.xaiOAuthCancel();
+    else void window.electronAPI.maker.providerOAuthCancel(id);
+    setLoggingIn(false);
+  }, [sel, codexAuth]);
+
+  /** 关闭向导:授权等待中先取消再关,不留挂起的 login runner。 */
+  const handleClose = useCallback(() => {
+    if (loggingIn) cancelAuthorize();
+    onClose();
+  }, [loggingIn, cancelAuthorize, onClose]);
+
   // OpenAI 走 useCodexAuth:hook 状态翻 connected 时视为完成(triggerLogin 也会返回,
   // oneshot ref 保证只收口一次)。
   const openaiDoneRef = useRef(false);
@@ -439,7 +459,7 @@ export function AddProviderWizard({
             </h3>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               aria-label={t('settings.providers.wizard.closeAria')}
               className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[var(--surface-hover)]"
               style={{ color: 'var(--text-tertiary)' }}
@@ -588,14 +608,14 @@ export function AddProviderWizard({
                 </div>
               </div>
               <div>
+                {/* 等待授权中按钮变「取消」(与详情头对称),不禁用——浏览器流挂起时用户必须能中止重试。 */}
                 <button
                   type="button"
-                  onClick={() => void handleAuthorize()}
-                  disabled={loggingIn}
-                  className={cn(
-                    'flex h-9 items-center justify-center gap-2 rounded-full border px-5 text-13 font-medium transition-colors',
-                    loggingIn && 'cursor-not-allowed opacity-60',
-                  )}
+                  onClick={() => {
+                    if (loggingIn) cancelAuthorize();
+                    else void handleAuthorize();
+                  }}
+                  className="flex h-9 items-center justify-center gap-2 rounded-full border px-5 text-13 font-medium transition-colors hover:bg-[var(--surface-hover)]"
                   style={{
                     backgroundColor: 'var(--settings-btn-secondary-bg)',
                     borderColor: 'var(--settings-btn-secondary-border)',
@@ -605,7 +625,7 @@ export function AddProviderWizard({
                   {loggingIn && <Spinner size={13} />}
                   {t(
                     loggingIn
-                      ? 'settings.providers.wizard.authorizing'
+                      ? 'settings.providers.button.cancel'
                       : 'settings.providers.button.authorize',
                   )}
                 </button>
@@ -768,6 +788,8 @@ export function AddProviderWizard({
             onClick={() => {
               if (step === 3) setStep(2);
               else if (step === 2) {
+                // 返回目录前中止等待中的授权,不留挂起的 login runner。
+                if (loggingIn) cancelAuthorize();
                 setSel(null);
                 setStep(1);
               }
@@ -783,7 +805,7 @@ export function AddProviderWizard({
           <div className="flex items-center gap-2.5">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="flex h-9 items-center justify-center rounded-full border px-5 text-13 font-medium transition-colors hover:bg-[var(--surface-hover)]"
               style={{
                 borderColor: 'var(--settings-btn-secondary-border)',

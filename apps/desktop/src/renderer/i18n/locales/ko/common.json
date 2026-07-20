@@ -1176,7 +1176,6 @@
         "customMeta": "OpenAI / Anthropic 호환 모델 소스를 연결",
         "pickHint": "인증 방식은 공급자 정의에 따라 결정됩니다. OAuth 엔드포인트와 기본 URL은 프리셋에 포함되어 직접 입력할 필요가 없습니다.",
         "oauthDesc": "브라우저에서 구독 인증을 완료합니다. API 키가 필요 없습니다",
-        "authorizing": "브라우저 인증을 기다리는 중…",
         "authorizedToast": "{{name}}에 연결되었습니다",
         "authorizeFailed": "{{name}} 인증에 실패했습니다. 다시 시도해 주세요",
         "nameLabel": "표시 이름",
