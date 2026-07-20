@@ -1164,7 +1164,7 @@ export class ClaudeCodeAgent extends BaseAgent {
       sawCompactBoundary: false,
       hasEmittedText: false,
       uiEmittedText: '',
-      pushedTerminalError: false,
+      pendingApiError: null,
       interruptRequested: false,
       generation: 0,
       interruptGeneration: 0,
@@ -1181,7 +1181,7 @@ export class ClaudeCodeAgent extends BaseAgent {
       turnState.sawCompactBoundary = false;
       turnState.hasEmittedText = false;
       turnState.uiEmittedText = '';
-      turnState.pushedTerminalError = false;
+      turnState.pendingApiError = null;
       // 代际前进: 迟到的被打断 result 据此被 translator 识别为已被本 send 接管。
       turnState.generation += 1;
       // interruptRequested **刻意不在这里清**: watchdog / tool-loop guard 先置
