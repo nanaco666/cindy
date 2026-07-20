@@ -1,7 +1,22 @@
 // Keep beta-only EAS profiles out of the native runtime fingerprint.
 // Production profiles remain transparent: any production EAS/app config change
 // still changes the fingerprint and must be handled intentionally.
+//
+// Self-host package versions are release metadata, not native capability. The
+// CN and Global self-host packages share app.json, so a buildNumber bump made
+// while publishing one region must not change the runtime fingerprint used to
+// check the other region. Keep the existing package-script skip and add the
+// Expo version skip only for self-host commands (they set this env explicitly),
+// leaving EAS/TestFlight fingerprint semantics unchanged.
+const sourceSkips = [
+  'PackageJsonAndroidAndIosScriptsIfNotContainRun',
+  ...(process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST === '1'
+    ? ['ExpoConfigVersions']
+    : []),
+];
+
 module.exports = {
+  sourceSkips,
   fileHookTransform(source, chunk, isEndOfFile) {
     if (source.type !== 'file' || source.filePath !== 'eas.json') {
       return chunk;

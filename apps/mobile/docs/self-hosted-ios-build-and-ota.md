@@ -136,7 +136,7 @@ if (process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST === '1') {
 3. **编译**:`xcodebuild archive` + `-exportArchive`,`ExportOptions.plist` 用 `signingStyle=manual` + `teamID=NTC4BJ542G` + `provisioningProfiles: { "com.xd.lizcn": "lizcn_dev" }` + method `development`,证书取钥匙串 `Apple Development: Jiali LIU` → 产出 `.ipa`。profile 文件在仓库外 `/Users/cn-ios/Documents/xdt/XDMakerMobileCer/iOS/Dev/`,脚本用环境变量指向路径,不入库。
 4. **交付 NPKG**:调用 `release-ios.sh upload <ipa>`;默认校验 bundleId `com.xd.lizcn`,企业签 Team 校验 `UE5H8B62F9.*` 不变。
 5. **写整包版本记录**:把 `{ version, buildNumber, runtimeVersion, installUrl, itmsUrl, releaseNotes, minVersion? }` 上传到 OSS(`mobile-ota/ios/canary-release.json`),供 `/latest?channel=canary` 读取；验证后由 promote 写 stable `release.json`。
-6. **闸门**:沿用 `assertProductionGitGate`(main + clean + `HEAD==origin/main`)、`app.json` 的 `ios.buildNumber` 单调递增(NPKG md5 去重 + iOS 覆盖安装都需要)、**默认 dry-run,`--execute` 才真跑**。
+6. **闸门**:沿用 `assertProductionGitGate`(main + clean + `HEAD==origin/main`)、`app.json` 的 `ios.buildNumber` 单调递增(NPKG md5 去重 + iOS 覆盖安装都需要;self-host fingerprint 排除 `ExpoConfigVersions`,因此它不会单独改变 OTA runtime)、**默认 dry-run,`--execute` 才真跑**。
 
 ## 8. 热更:`apps/mobile/scripts/release-ios-ota.mjs` + OSS/CDN 布局
 
