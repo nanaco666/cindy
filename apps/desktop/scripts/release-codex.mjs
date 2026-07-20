@@ -4,11 +4,12 @@
  * release-codex.mjs — 单独发布 Codex binary（不重新打包 app）
  *
  * 用法:
- *   node scripts/release-codex.mjs [--version 0.125.0] [--platform win32-x64,darwin-arm64,darwin-x64,linux-x64] [--dry-run] [--force]
+ *   node scripts/release-codex.mjs [--version 0.125.0] [--platform win32-x64,darwin-arm64,darwin-x64,linux-x64] [--region cn|global|dev] [--dry-run] [--force]
  *
  * 环境变量（非 dry-run 必需）:
- *   FP_DEV_OSS_ACCESS_KEY_ID     — 阿里云 AK
- *   FP_DEV_OSS_ACCESS_KEY_SECRET — 阿里云 SK
+ *   FP_DEV_OSS_ACCESS_KEY_ID / FP_DEV_OSS_ACCESS_KEY_SECRET — 国内默认阿里云凭证
+ *   XDT_GLOBAL_OSS_ACCESS_KEY_ID / XDT_GLOBAL_OSS_ACCESS_KEY_SECRET — 海外可选独立凭证
+ *   XDT_DEVCH_OSS_ACCESS_KEY_ID / XDT_DEVCH_OSS_ACCESS_KEY_SECRET — dev 可选独立凭证
  *
  * 流程（每个平台）:
  *   1. 读取本地 apps/codex-bin/<platformKey>/codex(.exe)  ← 手动放置
@@ -22,6 +23,7 @@
  * 选项:
  *   --version <semver>  可选；不传时从 host 平台的本地 binary 执行 codex --version 自动探测
  *   --platform <list>   可选，逗号分隔，例如 win32-x64,darwin-arm64,linux-x64
+ *   --region <region>   可选，cn(默认) / global / dev；发布目标来自 release-regions.json
  *   --dry-run           只打印结果，不上传 OSS / 不更新 manifest
  *   --force             即使版本和 hash 相同也强制上传
  */
@@ -38,11 +40,14 @@ import { ensureBinary } from '../../../scripts/ensure-agent-binaries.mjs';
 import { resolveReleaseCdnBaseUrl } from '../../../scripts/shared/release-env.mjs';
 import {
   loadDotenv,
+  refreshOssConfig,
+  resolveOssCredentials,
   uploadVersionedGzImmutable,
   OSS_BUCKET,
   OSS_PREFIX,
   OSS_REGION,
 } from './ci/lib.mjs';
+import { applyReleaseRegionConfigToEnv } from './ci/release-regions.mjs';
 
 const require = createRequire(import.meta.url);
 const OSS = require('ali-oss');
@@ -51,11 +56,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESKTOP_ROOT = path.resolve(__dirname, '..');
 const PROJECT_ROOT = path.resolve(DESKTOP_ROOT, '../..');
 const RELEASE_DIR = path.join(DESKTOP_ROOT, 'release');
-
-// 独立发布与完整 app 发版遵守同一配置时序：先加载 desktop .env，
-// loadDotenv 内部会刷新共享 OSS live bindings，再解析 CDN 地址。
-loadDotenv();
-const CDN_BASE = resolveReleaseCdnBaseUrl();
 
 const ALL_PLATFORMS = ['win32-x64', 'darwin-arm64', 'darwin-x64', 'linux-x64'];
 
@@ -73,6 +73,16 @@ const VERSION_FLAG = getFlag('--version');
 const DRY_RUN = argv.includes('--dry-run');
 const FORCE = argv.includes('--force');
 const platformFilter = getFlag('--platform');
+const REGION = getFlag('--region') ?? 'cn';
+
+// 独立二进制发布与完整 app 发版共用同一地区配置链。先读机密 .env，再以
+// gitignored release-regions.json 补齐该地区的 CDN / bucket / prefix / OSS region；
+// env 显式值始终优先。refreshReleaseConfig=false 避免 loadDotenv 先按默认 cn 刷新。
+loadDotenv(undefined, { refreshReleaseConfig: false });
+applyReleaseRegionConfigToEnv(REGION);
+refreshOssConfig(REGION);
+process.env.CINDY_AUTH_REGION = REGION;
+const CDN_BASE = resolveReleaseCdnBaseUrl(REGION);
 
 const PLATFORMS = platformFilter
   ? ALL_PLATFORMS.filter((p) => platformFilter.split(',').includes(p))
@@ -145,13 +155,7 @@ async function fetchExistingManifest(platformKey) {
 }
 
 function getAKSK() {
-  const accessKeyId = process.env.FP_DEV_OSS_ACCESS_KEY_ID;
-  const accessKeySecret = process.env.FP_DEV_OSS_ACCESS_KEY_SECRET;
-  if (!accessKeyId || !accessKeySecret) {
-    console.error('ERROR: FP_DEV_OSS_ACCESS_KEY_ID and FP_DEV_OSS_ACCESS_KEY_SECRET must be set');
-    process.exit(1);
-  }
-  return { accessKeyId, accessKeySecret };
+  return resolveOssCredentials(REGION);
 }
 
 function createOSSClient() {
@@ -202,6 +206,7 @@ async function main() {
 
   if (DRY_RUN) console.log('==> DRY RUN mode — no uploads will happen\n');
   if (FORCE) console.log('==> FORCE mode — will upload even if version/hash match\n');
+  console.log(`==> Release region: ${REGION}`);
 
   fs.mkdirSync(RELEASE_DIR, { recursive: true });
 

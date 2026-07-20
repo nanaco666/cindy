@@ -85,6 +85,13 @@ export function printHelp(log = console.log) {
   log('    pnpm release:codex:x64');
   log('    pnpm release:codex:win');
   log('    pnpm release:codex -- --platform linux-x64');
+  log('    # Windows Claude/Codex 可显式选择 cn / global / dev 发布目标');
+  log('    pnpm release:claude-code:win:cn');
+  log('    pnpm release:claude-code:win:global');
+  log('    pnpm release:claude-code:win:dev');
+  log('    pnpm release:codex:win:cn');
+  log('    pnpm release:codex:win:global');
+  log('    pnpm release:codex:win:dev');
   log('    pnpm release:ripgrep:arm64');
   log('    pnpm release:ripgrep:x64');
   log('    pnpm release:ripgrep:win');
