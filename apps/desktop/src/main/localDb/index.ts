@@ -300,12 +300,17 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
         .slice(0, 3)
         .map((issue) => issue.kind)
         .join(', ');
+      const databaseIsAhead = compatibility.issues.some(
+        (issue) => issue.kind === 'schema-version-ahead',
+      );
       const message =
-        'passive dev 拒绝打开共享数据库：数据库 migration 与当前 checkout 不完全一致' +
-        `（DB schema_version=${compatibility.databaseVersion}，` +
-        `checkout=${compatibility.checkoutVersion}，问题=${issueSummary || 'unknown'}）。` +
-        'passive 实例不会自行迁移共享 userData；请先用当前 checkout 启动 primary 完成迁移，' +
-        '或改用 --isolated。';
+        `共享数据已是 schema ${compatibility.databaseVersion}，而此开发版只支持到 ` +
+        `${compatibility.checkoutVersion}。为保护数据，Cindy 没有打开它。` +
+        (databaseIsAhead
+          ? '请使用包含该 schema 的 checkout 启动开发版；重启或把当前 checkout 设为 primary 都不会降级数据库。'
+          : '请先关闭共享数据的 passive 实例，再用当前 checkout 作为 primary 完成迁移。') +
+        '如只需隔离测试，可改用 --isolated。' +
+        `（详情：${issueSummary || 'unknown'}）`;
       log.error(
         JSON.stringify({
           event: 'localDb.ensureReady.passiveMigrationMismatch',
@@ -317,7 +322,7 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
         }),
       );
       closeDb({ preserveSchemaMigrationLease: !readerLeaseAcquiredThisCall });
-      showFatalDialog('passive dev 无法共享当前数据库', message);
+      showFatalDialog('当前开发版与本地数据版本不兼容', message);
       return { ready: false, error: { code: 'MIGRATE_FAILED', message } };
     }
     if (schemaStartup.compatibility) {
