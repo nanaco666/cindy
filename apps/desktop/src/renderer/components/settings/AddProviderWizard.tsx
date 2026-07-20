@@ -221,11 +221,19 @@ export function AddProviderWizard({
     ? sortedPresets.filter((p) => p.name.toLowerCase().includes(q))
     : sortedPresets;
 
+  /**
+   * 拉取请求序号:防过期响应(与 CustomProviderDialog 的 fetchRequestSignature 同模式)。
+   * 换选供应商 / 返回目录都会推进序号,慢返回的旧请求结果直接丢弃,不污染新预设的勾选清单。
+   */
+  const fetchSeqRef = useRef(0);
+
   const pickOauth = useCallback((provider: ProviderView) => {
+    fetchSeqRef.current += 1;
     setSel({ kind: 'oauth', provider });
     setStep(2);
   }, []);
   const pickPreset = useCallback((preset: ProviderPreset) => {
+    fetchSeqRef.current += 1;
     setSel({ kind: 'preset', preset });
     setName(preset.name);
     setApiKey('');
@@ -330,6 +338,7 @@ export function AddProviderWizard({
     setPicks(initial);
     setStep(3);
     setFetchState({ status: 'fetching' });
+    const seq = ++fetchSeqRef.current;
     // 拉取端点:优先 claude-code runtime(预设至少一个 runtime)。
     const fetchAgent: AgentKind = preset.runtimes['claude-code'] ? 'claude-code' : 'codex';
     const rt = preset.runtimes[fetchAgent];
@@ -345,6 +354,8 @@ export function AddProviderWizard({
         apiKey: apiKey.trim() || null,
         ...(rt.headers ? { headers: rt.headers } : {}),
       });
+      // 过期响应丢弃:用户已返回 / 换选了其它供应商,旧结果不得合入当前清单。
+      if (seq !== fetchSeqRef.current) return;
       if (r.ok && r.models) {
         setPicks((prev) => {
           const next = new Map(prev);
@@ -361,7 +372,7 @@ export function AddProviderWizard({
         setFetchState({ status: 'done', failed: true });
       }
     } catch {
-      setFetchState({ status: 'done', failed: true });
+      if (seq === fetchSeqRef.current) setFetchState({ status: 'done', failed: true });
     }
   }, [sel, apiKey]);
 
@@ -788,8 +799,10 @@ export function AddProviderWizard({
             onClick={() => {
               if (step === 3) setStep(2);
               else if (step === 2) {
-                // 返回目录前中止等待中的授权,不留挂起的 login runner。
+                // 返回目录前中止等待中的授权,不留挂起的 login runner;
+                // 同时推进拉取序号,让在途的旧模型请求结果作废。
                 if (loggingIn) cancelAuthorize();
+                fetchSeqRef.current += 1;
                 setSel(null);
                 setStep(1);
               }
