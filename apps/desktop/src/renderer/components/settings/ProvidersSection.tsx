@@ -1158,10 +1158,13 @@ export function ProvidersSection() {
         </p>
       </div>
 
-      {/* 先取数据再渲染卡片(规则 7:首帧即终态高度,不出现连接态翻转的跳变帧)。 */}
+      {/* 先取数据再渲染卡片(规则 7:首帧即终态高度,不出现连接态翻转的跳变帧)。
+          高度跟随视口(减去标题栏 + 设置页 chrome + section 标题的约 14rem),窗口越大
+          卡片越高、能显示越多模型;min-h 保底小窗口不塌陷。左右栏各自内部滚动。
+          原来写死 560px 会在大窗口下截断模型列表(不随框体撑高)。 */}
       {!loading && (
         <div
-          className="flex h-[560px] overflow-hidden rounded-xl border"
+          className="flex h-[calc(100vh-14rem)] min-h-[460px] overflow-hidden rounded-xl border"
           style={{
             backgroundColor: 'var(--settings-theme-card-bg)',
             borderColor: 'var(--settings-theme-card-border)',
