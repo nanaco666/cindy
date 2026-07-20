@@ -124,6 +124,13 @@ export class Maker {
   protected readonly lifecycleHooks: SessionLifecycleHooks;
   protected readonly activeSessions = new Map<string, Session>();
   protected readonly listeners = new Set<MakerEventListener>();
+  /**
+   * 同一 business session 的 vendor id 写入必须串行。invalid-resume CAS 只有排在
+   * 已在途的 session_id update 之后执行，才能保证旧写入不会在清空后反向覆盖。
+   */
+  private readonly sdkSessionPersistenceTails = new Map<string, Promise<void>>();
+  /** 已确认失效的 vendor id；用于丢弃 CAS 之后才到达的旧 query session_id 事件。 */
+  private readonly invalidSdkSessionIds = new Map<string, Set<string>>();
   /** Maker Memory 顶层单例 (可选). undefined 时 maker memory 功能整体禁用. */
   public readonly makerMemory: MakerMemoryManager | undefined;
 
@@ -207,7 +214,7 @@ export class Maker {
       onInvalidResumeSession:
         opts.agentKind === 'claude-code' && opts.resumeSessionId
           ? (expectedSdkSessionId) =>
-              this.storage.compareAndClearSdkSessionId(id, expectedSdkSessionId)
+              this.invalidateAndClearSdkSessionId(id, expectedSdkSessionId)
           : undefined,
     });
     this.logger.debug('createSession ↑ agent.startSession returned', {
@@ -280,7 +287,7 @@ export class Maker {
     // 当 SDK 回填 sdkSessionId 时持久化
     session.onEvent((evt) => {
       if (evt.type === 'session_id' && typeof evt.data === 'string' && evt.data) {
-        void this.storage.update(meta.id, { sdkSessionId: evt.data }).catch((e) => {
+        void this.persistSdkSessionId(meta.id, evt.data).catch((e) => {
           this.logger.warn('failed to persist sdkSessionId', { error: String(e) });
         });
       }
@@ -308,6 +315,53 @@ export class Maker {
     this.activeSessions.set(meta.id, session);
     this.emit({ type: 'session:created', session });
     return session;
+  }
+
+  /**
+   * 将同一 session 的 vendor id 持久化操作排成单通道；单次失败不阻断后续操作。
+   */
+  private enqueueSdkSessionPersistence<T>(sessionId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.sdkSessionPersistenceTails.get(sessionId) ?? Promise.resolve();
+    const result = previous.then(operation);
+    const tail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.sdkSessionPersistenceTails.set(sessionId, tail);
+    void tail.finally(() => {
+      if (this.sdkSessionPersistenceTails.get(sessionId) === tail) {
+        this.sdkSessionPersistenceTails.delete(sessionId);
+      }
+    });
+    return result;
+  }
+
+  /** 标记旧 vendor id 失效，并在所有已在途回填完成后执行 compare-and-clear。 */
+  private invalidateAndClearSdkSessionId(sessionId: string, expectedSdkSessionId: string): Promise<boolean> {
+    let invalidIds = this.invalidSdkSessionIds.get(sessionId);
+    if (!invalidIds) {
+      invalidIds = new Set<string>();
+      this.invalidSdkSessionIds.set(sessionId, invalidIds);
+    }
+    // 先标记再排 CAS：CAS 等待期间新到达的同 id 事件也必须在执行时被丢弃。
+    invalidIds.add(expectedSdkSessionId);
+    return this.enqueueSdkSessionPersistence(sessionId, () =>
+      this.storage.compareAndClearSdkSessionId(sessionId, expectedSdkSessionId),
+    );
+  }
+
+  /** 串行持久化有效 vendor id，并屏蔽已判失效 query 的晚到事件。 */
+  private persistSdkSessionId(sessionId: string, sdkSessionId: string): Promise<void> {
+    return this.enqueueSdkSessionPersistence(sessionId, async () => {
+      if (this.invalidSdkSessionIds.get(sessionId)?.has(sdkSessionId)) {
+        this.logger.debug('ignored stale sdkSessionId event after invalid-resume recovery', {
+          sessionId,
+          sdkSessionId,
+        });
+        return;
+      }
+      await this.storage.update(sessionId, { sdkSessionId });
+    });
   }
 
   /** 拿到一个已激活的 session（不发起恢复） */
