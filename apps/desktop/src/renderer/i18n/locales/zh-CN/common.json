@@ -4773,6 +4773,7 @@
     },
     "cell": {
       "subtitlePaused": "已暂停",
+      "subtitleWaitingForResources": "等待执行资源（当前 {{inFlight}}/{{max}}）",
       "subtitleManual": "手动",
       "subtitleOnce": "一次",
       "tagOnce": "一次",

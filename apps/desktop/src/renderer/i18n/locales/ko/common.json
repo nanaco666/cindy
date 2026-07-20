@@ -4773,6 +4773,7 @@
     },
     "cell": {
       "subtitlePaused": "일시 중지됨",
+      "subtitleWaitingForResources": "실행 슬롯 대기 중 ({{inFlight}}/{{max}})",
       "subtitleManual": "수동",
       "subtitleOnce": "1회",
       "tagOnce": "1회",

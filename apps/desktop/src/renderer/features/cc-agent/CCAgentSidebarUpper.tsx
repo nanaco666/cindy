@@ -599,8 +599,12 @@ function ExpandedView({
         const off = window.electronAPI.maker.schedule.onEvent((raw) => {
           const event = raw as SchedulerEvent;
           if (done) return;
-          // 'all-read' 和 'ready' 是全局事件，不含 scheduleId，提前过滤。
-          if (event.type === 'all-read' || event.type === 'ready') return;
+          // 全局事件不含 scheduleId，提前过滤。
+          if (
+            event.type === 'all-read' ||
+            event.type === 'ready' ||
+            event.type === 'runtime-state'
+          ) return;
           if (event.scheduleId !== scheduleId) return;
           if (event.type === 'fired') {
             // 捕获本次 run 的 runId，并释放 busy guard（run 已 fire，允许用户再次点击）
