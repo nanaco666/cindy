@@ -53,6 +53,17 @@ const GHOST_THEME_TOKENS = [
 const GHOST_FONT_STACK = `Inter, system-ui, -apple-system, "Segoe UI", sans-serif`;
 
 /**
+ * 设置页输入框的占位文字基线。
+ *
+ * Cindy 主题为保证 token 本身可读，给 `--text-placeholder` 保留了较高对比度，
+ * 具体的“这是空值而不是已输入内容”层级由组件透明度表达。意识设置页运行在独立
+ * webview，不能继承宿主 Tailwind 样式，因此由主题注入统一补齐普通字重与淡化；
+ * 意识仍可用更高 specificity 覆盖这组基线。
+ */
+const GHOST_SETTINGS_PLACEHOLDER_CSS =
+  'input::placeholder, textarea::placeholder { color: var(--text-placeholder); opacity: 0.45; font-weight: 400; }';
+
+/**
  * 值合法性守卫:白名单 token 的值只该是主机主题色(hex / rgb(a) / hsl(a) /
  * 具名色 / 长度)。这段变量块会原样注进卡片 srcDoc 的 `<style>`(iframe)或
  * 经 insertCSS 灌进面板(webview),值不转义;出现能破 `<style>` / 声明上下文
@@ -102,6 +113,7 @@ export function buildGhostSettingsThemeCss(): string {
   return [
     buildGhostThemeVarsBlock(),
     `body { margin: 0; background: var(--settings-theme-card-bg, var(--surface)); color: var(--text-primary); font-family: ${GHOST_FONT_STACK}; font-size: 13px; }`,
+    GHOST_SETTINGS_PLACEHOLDER_CSS,
   ].join('\n');
 }
 
@@ -110,6 +122,7 @@ export function buildGhostPluginSettingsThemeCss(): string {
   return [
     buildGhostThemeVarsBlock(),
     `body { margin: 0; background: color-mix(in srgb, var(--surface-elevated) 82%, var(--surface)); color: var(--text-primary); font-family: ${GHOST_FONT_STACK}; font-size: 13px; }`,
+    GHOST_SETTINGS_PLACEHOLDER_CSS,
   ].join('\n');
 }
 
