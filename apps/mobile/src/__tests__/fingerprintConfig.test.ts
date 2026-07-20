@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolve } from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
 const CONFIG_PATH = resolve(__dirname, '../../fingerprint.config.cjs');
 
@@ -14,7 +14,7 @@ function loadConfigSourceSkips(env: Record<string, string> = {}): string[] {
     const cfg = require(${JSON.stringify(CONFIG_PATH)});
     process.stdout.write(JSON.stringify(cfg.sourceSkips));
   `;
-  const out = execSync(`node -e '${script.replace(/'/g, "'\\''")}' '${JSON.stringify(env)}'`, {
+  const out = execFileSync(process.execPath, ['-e', script, JSON.stringify(env)], {
     encoding: 'utf8',
     env: { ...process.env, ...env },
   });
