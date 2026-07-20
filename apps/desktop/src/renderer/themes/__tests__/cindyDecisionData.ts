@@ -203,7 +203,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'text-primary-inv': { light: '#FFFFFF', dark: '#2A2828' },
   'text-primary-body-strong': { light: '#3C3F43', dark: '#D4D4D4' },
   'text-primary-hsl': { light: '214.3 5.5% 24.9%', dark: '0.0 0.0% 83.1%' },
-  'text-secondary': { light: '#9A9DA3', dark: '#6F6F6F' },
+  'text-secondary': { light: '#8C8E94', dark: '#6F6F6F' }, // 用户调参 2026-07-20:light 二次加深 #8C8E94
   'text-secondary-cross': { light: '#9A9DA3', dark: '#6F6F6F' },
   'text-secondary-mid': { light: '#686B72', dark: '#BFC1C4' },
   'text-tertiary': { light: '#686B72', dark: '#BFC1C4' },
@@ -316,7 +316,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'surface-translucent-sidebar': {
     light: 'rgba(255, 255, 255, 0.80)',
     dark: 'rgba(18, 15, 15, 0.80)',
-  }, // 用户调参 2026-07-20:双端 80%
+  }, // 用户调参 2026-07-20:双端 80%(light #F6F6F6 试色后退回纯白)
   'surface-translucent-main': { light: '#EDEDED', dark: '#2A2828' }, // E4D 主面板:用户勘误 2026-07-17 撤销毛玻璃,改不透明等价 surface(原 rgba 半透明)
   'surface-translucent-overlay': {
     light: 'rgba(246, 246, 246, 0.90)',

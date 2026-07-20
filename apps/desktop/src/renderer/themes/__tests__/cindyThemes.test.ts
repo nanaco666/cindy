@@ -360,10 +360,10 @@ describe('CINDY · ⑦ WCAG 复算 + U2 例外 allowlist + text-secondary 反向
     }
   });
 
-  it('反向冻结:text-secondary 必须恰等于 Figma 原值 #9A9DA3(light)/#6F6F6F(dark),RGB 归一', () => {
+  it('反向冻结:text-secondary 必须恰等于定稿值 #8C8E94(light,用户调参 2026-07-20 自 Figma #9A9DA3 两轮加深)/#6F6F6F(dark),RGB 归一', () => {
     expect(
-      rgbEqual(toRgb(light['text-secondary']), toRgb('#9A9DA3'), 1),
-      'light text-secondary 须恰等 #9A9DA3',
+      rgbEqual(toRgb(light['text-secondary']), toRgb('#8C8E94'), 1),
+      'light text-secondary 须恰等 #8C8E94(用户调参 2026-07-20)',
     ).toBe(true);
     expect(
       rgbEqual(toRgb(dark['text-secondary']), toRgb('#6F6F6F'), 1),
@@ -443,13 +443,13 @@ describe('CINDY · ⑧ 可证伪自检(注入错值后断言必须变红,还原�
   });
 
   it('反向冻结证伪:注入 #686B72 到 text-secondary → ⑦ 变红', () => {
-    const figma = toRgb('#9A9DA3');
+    const figma = toRgb('#8C8E94'); // 用户调参定稿 2026-07-20(原 Figma #9A9DA3)
     const injected = toRgb('#686B72');
-    expect(rgbEqual(injected, figma, 1), '#686B72 ≠ #9A9DA3,注入后 ⑦ 反向冻结断言必红').toBe(false);
+    expect(rgbEqual(injected, figma, 1), '#686B72 ≠ #8C8E94,注入后 ⑦ 反向冻结断言必红').toBe(false);
     // 正常值仍恰等
     expect(
       rgbEqual(toRgb(cindyLight.colors['text-secondary']), figma, 1),
-      '还原后恰等 Figma 原值',
+      '还原后恰等定稿值',
     ).toBe(true);
   });
 
