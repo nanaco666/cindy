@@ -82,6 +82,7 @@ async function doMigrate(key: string): Promise<void> {
       await fs.rmdir(oldRoot);
       log.info('merged legacy .xdmaker dir into existing .cindy', { rootDir: key });
     } else {
+      migrating.delete(key);
       log.warn('legacy .xdmaker dir left non-empty after merge (same-name entries exist in .cindy)', {
         rootDir: key,
         leftover,
