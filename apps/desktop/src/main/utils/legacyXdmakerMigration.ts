@@ -24,15 +24,24 @@ const log = createLogger('legacy-xdmaker-migration');
 export const LEGACY_DIR_NAME = '.xdmaker';
 export const CINDY_DIR_NAME = '.cindy';
 
-/** 同一 root 只做一次（进程内），避免每次读取都摸盘 stat。 */
-const migrated = new Set<string>();
+/**
+ * 同一 root 只做一次（进程内），并发调用 await 同一个 Promise，
+ * 确保迁移真正完成后后续读取才继续。
+ */
+const migrating = new Map<string, Promise<void>>();
 
 export async function migrateLegacyXdmakerDir(rootDir: string): Promise<void> {
   if (!rootDir) return;
   const key = path.resolve(rootDir);
-  if (migrated.has(key)) return;
-  migrated.add(key);
+  const existing = migrating.get(key);
+  if (existing) return existing;
 
+  const promise = doMigrate(key);
+  migrating.set(key, promise);
+  return promise;
+}
+
+async function doMigrate(key: string): Promise<void> {
   const oldRoot = path.join(key, LEGACY_DIR_NAME);
   const newRoot = path.join(key, CINDY_DIR_NAME);
   try {
@@ -79,5 +88,5 @@ export async function migrateLegacyXdmakerDir(rootDir: string): Promise<void> {
 
 /** 仅供测试：清掉进程内"已搬迁"标记。 */
 export function resetLegacyXdmakerMigrationCacheForTest(): void {
-  migrated.clear();
+  migrating.clear();
 }

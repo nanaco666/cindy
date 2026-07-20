@@ -80,8 +80,17 @@ export function migrateLegacyContextRoot(repoRoot: string): void {
       if (!fs.existsSync(to)) fs.renameSync(from, to);
     }
     if (fs.readdirSync(oldRoot).length === 0) fs.rmdirSync(oldRoot);
-  } catch {
-    // 搬迁失败不阻断命令本身；后续按 .cindy 现状继续。
+  } catch (err) {
+    // 如果 .cindy/project-knowledge 不存在但 .xdmaker/project-knowledge 存在,
+    // 说明搬迁真正失败且旧数据会被后续 init 创建的空骨架遮蔽——抛出让用户知晓。
+    const newPk = path.join(newRoot, 'project-knowledge');
+    const oldPk = path.join(oldRoot, 'project-knowledge');
+    if (!fs.existsSync(newPk) && fs.existsSync(oldPk)) {
+      throw new Error(
+        `Failed to migrate ${LEGACY_CONTEXT_ROOT} → ${CONTEXT_ROOT}: ${err instanceof Error ? err.message : String(err)}. ` +
+          `Please rename "${oldRoot}" to "${newRoot}" manually.`,
+      );
+    }
   }
 }
 

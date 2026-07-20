@@ -110,4 +110,20 @@ describe('migrateLegacyXdmakerDir', () => {
   it('rootDir 为空时静默返回', async () => {
     await expect(migrateLegacyXdmakerDir('')).resolves.toBeUndefined();
   });
+
+  it('并发调用共享同一 Promise，迁移完成前不会提前返回', async () => {
+    write('.xdmaker/project-knowledge/TOC.md', '# toc');
+
+    const results = await Promise.all([
+      migrateLegacyXdmakerDir(root),
+      migrateLegacyXdmakerDir(root),
+      migrateLegacyXdmakerDir(root),
+    ]);
+
+    expect(results).toEqual([undefined, undefined, undefined]);
+    expect(fs.existsSync(path.join(root, '.xdmaker'))).toBe(false);
+    expect(fs.readFileSync(path.join(root, '.cindy', 'project-knowledge', 'TOC.md'), 'utf8')).toBe(
+      '# toc',
+    );
+  });
 });
