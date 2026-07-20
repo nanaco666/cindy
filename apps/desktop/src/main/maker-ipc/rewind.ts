@@ -17,8 +17,29 @@ import { isIpcError, type IpcErrorCode } from '../../shared/ipc-errors.js';
 import { requireString, throwIpcError } from '../utils/ipcValidate.js';
 
 import { MAKER_INVOKE } from './channels.js';
+import { withSessionInputStoppedForRewind } from './register.js';
 
 const log = createLogger('maker-ipc/rewind');
+const STOPPED_REWIND_RETRY_MS = 100;
+const STOPPED_REWIND_TIMEOUT_MS = 15_000;
+
+async function commitAfterStopping(
+  sessionId: string,
+  clientId: string,
+  opts: { requireLatestUser: boolean },
+) {
+  const deadline = Date.now() + STOPPED_REWIND_TIMEOUT_MS;
+  while (true) {
+    try {
+      return await commitRewindAtMessage(sessionId, clientId, opts);
+    } catch (err) {
+      if (!isIpcError(err) || err.code !== 'SESSION_RUNNING' || Date.now() >= deadline) {
+        throw err;
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, STOPPED_REWIND_RETRY_MS));
+    }
+  }
+}
 
 function wrapErr(err: unknown): never {
   const code: IpcErrorCode = isIpcError(err) ? err.code : 'INTERNAL';
@@ -61,8 +82,16 @@ export function registerMakerRewindIpc(): void {
       const requireLatestUser =
         !!opts && typeof opts === 'object' &&
         (opts as { requireLatestUser?: unknown }).requireLatestUser === true;
+      const stopIfRunning =
+        !!opts && typeof opts === 'object' &&
+        (opts as { stopIfRunning?: unknown }).stopIfRunning === true;
       try {
-        const result = await commitRewindAtMessage(sid, cid, { requireLatestUser });
+        // Normal Rewind owns stop -> authoritative idle -> commit as one main
+        // transaction. Edit-last-message keeps its existing direct orchestration.
+        const result = stopIfRunning
+          ? await withSessionInputStoppedForRewind(sid, () =>
+              commitAfterStopping(sid, cid, { requireLatestUser }))
+          : await commitRewindAtMessage(sid, cid, { requireLatestUser });
         // 回滚后会话历史被截断,active 目标若继续就会对着变化后的上下文跑 —— 暂停它
         // (保留计数,用户 review 后可 resume)。fire-and-forget,失败不阻塞 rewind。
         void getGoalController()?.pauseGoal(sid, 'paused: conversation rewound').catch(() => {});
