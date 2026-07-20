@@ -1,8 +1,11 @@
 /**
- * ClaudeMark —— Anthropic 官方 wordmark "AA" path,单色 currentColor 灰阶友好。
+ * ClaudeMark —— Claude Code 官方像素方块脸 mark(CLI 品牌),Anthropic 陶土橙
+ * #d97757 固定品牌色(跨主题一致,语义豁免——同 DESIGN.md Toast 三色逻辑,
+ * 不走主题 token,不吃 currentColor)。
  *
- * SVG path 来自 simpleicons.org 收录的 Anthropic 标准 mark(viewBox 24×24)。
- * Light/Dark 主题切换由父级 fill 颜色驱动(currentColor 继承)。
+ * 2026-07-20 由单色 Anthropic "AA" wordmark 换成彩色品牌 mark(参考 open-design
+ * 的 agent-icons 处理:品牌 mark 原样渲染不做主题染色,辨识度优先)。父级传入
+ * 的着色 class 对本 mark 无效(fill 固定),布局类照常生效。
  */
 
 interface ClaudeMarkProps {
@@ -21,8 +24,10 @@ export function ClaudeMark({ size = 14, className }: ClaudeMarkProps) {
       aria-hidden
     >
       <path
-        d="M13.827 3.52h3.603L24 20h-3.603l-6.57-16.48zm-7.258 0h3.767L16.906 20h-3.674l-1.343-3.461H5.017l-1.344 3.461H0L6.57 3.52zm4.132 9.876L8.453 7.247 6.205 13.396z"
-        fill="currentColor"
+        fill="#d97757"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M20.998 10.949H24v3.102h-3v3.028h-1.487V20H18v-2.921h-1.487V20H15v-2.921H9V20H7.488v-2.921H6V20H4.487v-2.921H3V14.05H0v-3.1h3V5h17.998zM6 10.949h1.488V8.102H6zm10.51 0H18V8.102h-1.49z"
       />
     </svg>
   );
