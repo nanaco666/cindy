@@ -131,6 +131,8 @@ describe('MakerScheduleRunner pre-run hook cwd 解析', () => {
     );
 
     expect(result.skipped).toBe(true);
+    expect(result.sessionId).toBe('');
+    expect(mocks.recordScheduleSkip).not.toHaveBeenCalled();
     expect(getSessionMeta).toHaveBeenCalledWith('sess-bound');
     expect(mocks.executePreRunHook).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -17,7 +17,7 @@ import type {
 import { sessions } from '../localDb/schema';
 import { executePreRunHook } from './pre-run-hook';
 import { capAppend, killProcessTree } from './proc-util';
-import { buildSkipResultText, recordScheduleSkip } from './skip-trace';
+import { buildSkipResultText } from './skip-trace';
 import type { SchedulerDrizzleDb } from './storage';
 
 const PROTOCOL = 'xdt-maker-script/1';
@@ -195,22 +195,9 @@ export class ScriptScheduleRunner {
           exitCode: hook.exitCode,
           durationMs: hook.durationMs,
         });
-        const traceSessionId = this.deps.getDb
-          ? await recordScheduleSkip(
-              {
-                getDb: this.deps.getDb,
-                logger: this.deps.logger,
-                bindSkipLogSession: async (scheduleId, sessionId) => {
-                  await this.deps.scheduler?.update(scheduleId, { skipLogSessionId: sessionId });
-                },
-              },
-              schedule,
-              ctx,
-              hook,
-            )
-          : undefined;
         return {
-          sessionId: traceSessionId ?? '',
+          // exit 2 只保留 schedule_runs 中的 skipped 记录，不创建或更新会话。
+          sessionId: '',
           skipped: true,
           resultText: buildSkipResultText(hook),
         };
