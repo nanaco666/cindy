@@ -10,7 +10,7 @@
  * source backfill 为 'scheduler'，两者都属于 desktop-visible session。
  */
 
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import type {
   AgentKind,
@@ -119,6 +119,19 @@ export class DesktopSessionStorage implements SessionStorage {
     const updated = await this.get(id);
     if (!updated) throw new Error(`Session ${id} not found after update`);
     return updated;
+  }
+
+  async compareAndClearSdkSessionId(
+    id: string,
+    expectedSdkSessionId: string,
+  ): Promise<boolean> {
+    const db = getDbClient().drizzle;
+    const changed = await db
+      .update(sessions)
+      .set({ sdkSessionId: null, updatedAt: Date.now() })
+      .where(and(eq(sessions.id, id), eq(sessions.sdkSessionId, expectedSdkSessionId)))
+      .returning({ id: sessions.id });
+    return changed.length > 0;
   }
 
   async delete(id: string): Promise<void> {

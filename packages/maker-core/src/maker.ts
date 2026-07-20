@@ -199,7 +199,17 @@ export class Maker {
     // provider ctx 时塞到 ctx.sessionId 上 (claude-code/index.ts buildMcpServers)。
     // MCP server 工厂据此闭包绑定 "我属于哪个 session", 控制类工具 (如
     // start_team / create_worker) 需要它把回调路由到对应 session 的业务函数。
-    const handle = await agent.startSession({ ...startOpts, sessionId: id });
+    const handle = await agent.startSession({
+      ...startOpts,
+      sessionId: id,
+      // 强制由 Maker 注入持久化 CAS，不能信任外部 CreateSessionOptions 自带回调。
+      // Claude adapter 只在精确识别 invalid-resume 时调用；Codex 不消费该字段。
+      onInvalidResumeSession:
+        opts.agentKind === 'claude-code' && opts.resumeSessionId
+          ? (expectedSdkSessionId) =>
+              this.storage.compareAndClearSdkSessionId(id, expectedSdkSessionId)
+          : undefined,
+    });
     this.logger.debug('createSession ↑ agent.startSession returned', {
       localSessionId: id,
       sdkSessionId: handle.id,

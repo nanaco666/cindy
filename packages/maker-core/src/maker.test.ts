@@ -37,6 +37,12 @@ function createStorage(): SessionStorage {
       rows.set(id, next);
       return next;
     },
+    async compareAndClearSdkSessionId(id, expectedSdkSessionId) {
+      const row = rows.get(id);
+      if (!row || row.sdkSessionId !== expectedSdkSessionId) return false;
+      rows.set(id, { ...row, sdkSessionId: undefined, updatedAt: Date.now() });
+      return true;
+    },
     async delete(id) {
       rows.delete(id);
     },
@@ -767,5 +773,37 @@ describe('Session turn send guard', () => {
     await expect(session.send('first')).rejects.toBe(firstError);
     await expect(session.send('second')).resolves.toEqual({ accepted: true });
     expect(handle.send).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Maker invalid-resume persistence bridge', () => {
+  it('injects a compare-and-clear callback for resumed Claude sessions', async () => {
+    const storage = createStorage();
+    await storage.create({
+      id: 'session-1',
+      agentKind: 'claude-code',
+      workDir: '/repo',
+      title: 'Resume me',
+      model: 'claude-opus-4-6',
+      sdkSessionId: 'sdk-old',
+    });
+    const startSession = vi.fn(async (opts: CreateSessionOptions) => {
+      expect(await opts.onInvalidResumeSession?.('sdk-old')).toBe(true);
+      expect(await opts.onInvalidResumeSession?.('sdk-old')).toBe(false);
+      return createHandle({ id: '<pending>', agentKind: 'claude-code' });
+    });
+    const maker = new Maker({
+      agents: { 'claude-code': createAgent(startSession, 'claude-code') },
+      storage,
+      logger: createLogger(),
+    });
+    await maker.createSession({
+      id: 'session-1',
+      agentKind: 'claude-code',
+      workingDir: '/repo',
+      model: 'claude-opus-4-6',
+      resumeSessionId: 'sdk-old',
+    });
+    expect((await storage.get('session-1'))?.sdkSessionId).toBeUndefined();
   });
 });

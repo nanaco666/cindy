@@ -496,6 +496,12 @@ export interface StartSessionOptions {
   displayReasoning?: ReasoningDisplay;
   resumeSessionId?: string;
   /**
+   * Maker 内部注入的 invalid-resume CAS 回调。Agent 只有在供应商明确报告
+   * resumeSessionId 不存在时才调用；返回 false 表示持久化值已被并发更新，
+   * 此时不得 fresh fallback 覆盖新会话。
+   */
+  onInvalidResumeSession?: (expectedSdkSessionId: string) => Promise<boolean>;
+  /**
    * Codex-only: whether the resumed thread history already contains xdt-maker's
    * product developer prompt. `false` / `undefined` lets non-proxy resume restore
    * it once; `true` keeps Option A and avoids repeated developer messages.
