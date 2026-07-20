@@ -24,6 +24,18 @@ describe('SelectionQuoteButton — user message floating action exclusion', () =
     expect(buttonSource).toContain('!allowQuoteDisabled && selectionIntersectsFloatingQuoteDisabledArea');
   });
 
+  it('keeps the floating action at its intrinsic width near either viewport edge', () => {
+    const buttonSource = readFileSync(
+      resolve(__dirname, '..', 'components', 'chat', 'SelectionQuoteButton.tsx'),
+      'utf8',
+    );
+
+    expect(buttonSource).toContain('w-max');
+    expect(buttonSource).toContain('whitespace-nowrap');
+    expect(buttonSource).toContain('const BUTTON_MIN_X_PX = 100;');
+    expect(buttonSource).toContain('const BUTTON_RIGHT_MARGIN_PX = 100;');
+  });
+
   it('rejects a selection intersecting any copy-only region', () => {
     const allowed = {} as Element;
     const disabled = {} as Element;
