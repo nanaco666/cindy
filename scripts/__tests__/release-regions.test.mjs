@@ -8,13 +8,15 @@ import path from "node:path";
 
 import {
   RELEASE_REGION_ENV_NAMES,
+  MAC_SIGNING_ENV_NAMES,
   applyReleaseRegionConfigToEnv,
   validateReleaseRegions,
 } from "../../apps/desktop/scripts/ci/release-regions.mjs";
 
-const ALL_ENV_NAMES = Object.values(RELEASE_REGION_ENV_NAMES).flatMap((names) =>
-  Object.values(names),
-);
+const ALL_ENV_NAMES = [
+  ...Object.values(RELEASE_REGION_ENV_NAMES).flatMap((names) => Object.values(names)),
+  ...Object.values(MAC_SIGNING_ENV_NAMES),
+];
 
 function withCleanEnv(fn) {
   const saved = Object.fromEntries(ALL_ENV_NAMES.map((key) => [key, process.env[key]]));
@@ -130,10 +132,98 @@ test("JSON 存在但该渠道字段留空 → 报缺失字段与 env 变量名",
   }
 });
 
+test("macSigning: 按 region 注入 APPLE_*,env 显式值优先,留空回落默认", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "release-regions-"));
+  try {
+    const config = structuredClone(FULL_CONFIG);
+    config.cn.macSigning = { appleId: "", teamId: "TEAMCN0001", signIdentity: "Developer ID Application: CN Corp (TEAMCN0001)" };
+    config.global.macSigning = { appleId: "", teamId: "TEAMGL0001", signIdentity: "Developer ID Application: GL Corp (TEAMGL0001)" };
+    const filePath = writeRegionsFile(dir, config);
+    withCleanEnv(() => {
+      applyReleaseRegionConfigToEnv("cn", { filePath });
+      assert.equal(process.env.APPLE_TEAM_ID, "TEAMCN0001");
+      // appleId 留空 → 不注入(resolveAppleIdentity 无默认值,签名时会 fail closed)
+      assert.equal(process.env.APPLE_ID, undefined);
+    });
+    withCleanEnv(() => {
+      process.env.APPLE_TEAM_ID = "TEAM-FROM-CI";
+      applyReleaseRegionConfigToEnv("global", { filePath });
+      assert.equal(process.env.APPLE_TEAM_ID, "TEAM-FROM-CI");
+      assert.equal(process.env.APPLE_SIGN_IDENTITY, "Developer ID Application: GL Corp (TEAMGL0001)");
+    });
+    // OSS 面走 env(CI 场景)时,JSON 的 macSigning 仍应用
+    withCleanEnv(() => {
+      process.env.XDT_CDN_BASE_URL = "https://cdn.cn.invalid/cindy";
+      process.env.XDT_OSS_BUCKET = "b";
+      process.env.XDT_OSS_PREFIX = "p";
+      process.env.XDT_OSS_REGION = "r";
+      const r = applyReleaseRegionConfigToEnv("cn", { filePath });
+      assert.equal(r.source, "env");
+      assert.equal(process.env.APPLE_TEAM_ID, "TEAMCN0001");
+    });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("macSigning.appPasswordEnv: 密码指针注入 / 显式 env 优先 / 指针空值 fail closed", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "release-regions-"));
+  const saved = { pw: process.env.APPLE_APP_PASSWORD, cnpw: process.env.NOTARY_PW_CN };
+  try {
+    const config = structuredClone(FULL_CONFIG);
+    config.cn.macSigning = { appleId: "a@b.c", teamId: "T1", signIdentity: "S1", appPasswordEnv: "NOTARY_PW_CN" };
+    const filePath = writeRegionsFile(dir, config);
+    withCleanEnv(() => {
+      delete process.env.APPLE_APP_PASSWORD;
+      process.env.NOTARY_PW_CN = "pw-from-pointer";
+      applyReleaseRegionConfigToEnv("cn", { filePath });
+      assert.equal(process.env.APPLE_APP_PASSWORD, "pw-from-pointer");
+    });
+    withCleanEnv(() => {
+      process.env.APPLE_APP_PASSWORD = "explicit-wins";
+      process.env.NOTARY_PW_CN = "pw-from-pointer";
+      applyReleaseRegionConfigToEnv("cn", { filePath });
+      assert.equal(process.env.APPLE_APP_PASSWORD, "explicit-wins");
+    });
+    withCleanEnv(() => {
+      delete process.env.APPLE_APP_PASSWORD;
+      delete process.env.NOTARY_PW_CN;
+      assert.throws(() => applyReleaseRegionConfigToEnv("cn", { filePath }), /NOTARY_PW_CN/);
+    });
+    // 非法 env 名拒绝
+    const bad = structuredClone(FULL_CONFIG);
+    bad.cn.macSigning = { appPasswordEnv: "lower-case" };
+    assert.throws(() => validateReleaseRegions(bad), /appPasswordEnv/);
+  } finally {
+    if (saved.pw === undefined) delete process.env.APPLE_APP_PASSWORD; else process.env.APPLE_APP_PASSWORD = saved.pw;
+    if (saved.cnpw === undefined) delete process.env.NOTARY_PW_CN; else process.env.NOTARY_PW_CN = saved.cnpw;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("resolveAppleIdentity: 零默认值——身份缺失抛错,注入后返回配置值", async () => {
+  const { resolveAppleIdentity } = await import("../../apps/desktop/scripts/ci/lib.mjs");
+  withCleanEnv(() => {
+    assert.throws(() => resolveAppleIdentity(), /APPLE_ID.*APPLE_TEAM_ID.*APPLE_SIGN_IDENTITY/);
+    process.env.APPLE_ID = "notary@example.com";
+    process.env.APPLE_TEAM_ID = "TEAM000001";
+    assert.throws(() => resolveAppleIdentity(), /APPLE_SIGN_IDENTITY/);
+    process.env.APPLE_SIGN_IDENTITY = "Developer ID Application: Example (TEAM000001)";
+    assert.deepEqual(resolveAppleIdentity(), {
+      appleId: "notary@example.com",
+      teamId: "TEAM000001",
+      signIdentity: "Developer ID Application: Example (TEAM000001)",
+    });
+  });
+});
+
 test("validateReleaseRegions: 结构缺块 / 叶子非字符串一律抛错", () => {
   assert.throws(() => validateReleaseRegions(null), /JSON object/);
   assert.throws(() => validateReleaseRegions({ cn: FULL_CONFIG.cn }), /global/);
   const bad = structuredClone(FULL_CONFIG);
   bad.cn.oss.bucket = 123;
   assert.throws(() => validateReleaseRegions(bad), /cn\.oss\.bucket/);
+  const badMac = structuredClone(FULL_CONFIG);
+  badMac.cn.macSigning = { teamId: 42 };
+  assert.throws(() => validateReleaseRegions(badMac), /cn\.macSigning\.teamId/);
 });
