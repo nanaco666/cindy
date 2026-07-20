@@ -1696,6 +1696,7 @@
           "disabled": "비활성화됨",
           "connecting": "연결 중…",
           "connected": "연결됨",
+          "standby": "다른 인스턴스에서 연결됨",
           "error": "연결 실패"
         },
         "form": {
@@ -1724,6 +1725,7 @@
           "actionFailed": "작업에 실패했습니다"
         },
         "loginRequired": "먼저 {{appName}} 계정에 로그인하세요. 로그인 후 연결이 자동으로 복구됩니다.",
+        "standbyHint": "이 컴퓨터의 다른 Cindy 인스턴스가 Slack 연결을 사용 중입니다. 해당 인스턴스를 닫은 뒤 이 스위치를 다시 켜면 연결을 이어받을 수 있습니다.",
         "authorizing": "인증 중…",
         "statusBound": "연동됨 @{{name}}",
         "statusBoundTeam": "{{team}}에 연동됨 @{{name}}",
