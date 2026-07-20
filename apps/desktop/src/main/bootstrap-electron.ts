@@ -1537,8 +1537,9 @@ app.on('open-file', (event, filePath) => {
 // 内置锁，因此一个 primary 后可以并行启动任意多个 preview；SQLite 使用 WAL +
 // busy_timeout，scheduler / device-link / refresh token 各自由现有跨实例仲裁收敛。
 // 此模式没有 second-instance redirect，deep link 落到哪个实例由当前 OS 协议注册
-// 归属决定。带 schema migration 的不同版本仍须由上层在共享数据启动前做兼容性预检，
-// 不能用限制 passive 实例数量代替版本兼容性判断。
+// 归属决定。localDb 首次开库时会只读核对 schema_version、完整 migration history
+// 与 SQL/companion TS runtime 指纹；pending / 超前 / drift 都拒绝启动。passive 自己
+// 不迁移/repair schema，并用多 reader lease 阻止之后的 primary 抢跑 migration。
 //
 // 锁按 userData 目录作用域:默认 dev / packaged 共用 `Cindy` userData → 一个 primary;
 // 额外共享数据实例走 `--passive`，隔离数据实例走 `--isolated[=<名字>]`(见 AGENTS.md)。
@@ -4571,7 +4572,9 @@ app.on('ready', async () => {
       // 如果 worker takeover 失败并进入 inproc fallback,main _db 必须继续保留,
       // 否则 fallback 会拿到已关闭的连接。
       if (dbClientTakeover.shouldReleaseMainDb && process.env.XDT_DB_INPROC !== 'true') {
-        localDbCloseDb();
+        // 只把连接交给 worker，不能释放 shared-passive schema reader lease：worker
+        // 还会长期持有同一 DB；lease 必须留到真正 logout / app quit 才释放。
+        localDbCloseDb({ preserveSchemaMigrationLease: true });
         dbClientLog.info('[DbClient] main-side _db released after worker takeover');
       }
       // 自定义 MCP：先 await 刷新 provider 数组，确保 scheduler 启动时能看到已保存的

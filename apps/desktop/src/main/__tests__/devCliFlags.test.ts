@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveDevCliFlags, shouldRequestSingleInstanceLock } from '../devCliFlags';
+import {
+  resolveDevCliFlags,
+  shouldEnforcePassiveMigrationCompatibility,
+  shouldRequestSingleInstanceLock,
+} from '../devCliFlags';
 
 const base = {
   argv: ['electron', '.'] as readonly string[],
@@ -18,6 +22,7 @@ describe('resolveDevCliFlags', () => {
   it('无参数无 env = 原行为(不覆写、不被动、不派生设备标识)', () => {
     expect(resolveDevCliFlags(base)).toEqual({
       schedulerPassive: false,
+      isolated: false,
       userDataDirOverride: null,
       needsIsolatedDeviceId: false,
       isolationName: null,
@@ -29,6 +34,7 @@ describe('resolveDevCliFlags', () => {
   it('--passive 只开被动,不动 userData / 设备标识', () => {
     const flags = resolveDevCliFlags({ ...base, argv: [...base.argv, '--passive'] });
     expect(flags.schedulerPassive).toBe(true);
+    expect(flags.isolated).toBe(false);
     expect(flags.userDataDirOverride).toBeNull();
     expect(flags.needsIsolatedDeviceId).toBe(false);
   });
@@ -36,13 +42,16 @@ describe('resolveDevCliFlags', () => {
   it('XDT_SCHEDULER_PASSIVE=1 与 --passive 等价，其他字符串不误开启', () => {
     expect(resolveDevCliFlags({ ...base, envSchedulerPassive: '1' }).schedulerPassive).toBe(true);
     for (const value of ['0', 'false', 'true']) {
-      expect(resolveDevCliFlags({ ...base, envSchedulerPassive: value }).schedulerPassive).toBe(false);
+      expect(resolveDevCliFlags({ ...base, envSchedulerPassive: value }).schedulerPassive).toBe(
+        false,
+      );
     }
   });
 
   it('--isolated 默认沙箱:目录 <userData>-dev,要求派生设备标识,无名字', () => {
     const flags = resolveDevCliFlags({ ...base, argv: [...base.argv, '--isolated'] });
     expect(flags.userDataDirOverride).toBe('/AppData/xdt-maker-dev');
+    expect(flags.isolated).toBe(true);
     expect(flags.needsIsolatedDeviceId).toBe(true);
     expect(flags.isolationName).toBeNull();
   });
@@ -62,7 +71,10 @@ describe('resolveDevCliFlags', () => {
     expect(bad.isolationName).toBeNull();
     expect(bad.invalidIsolationName).toBe('我的沙箱');
     // 超长(33 字符)同样非法
-    const long = resolveDevCliFlags({ ...base, argv: [...base.argv, `--isolated=${'a'.repeat(33)}`] });
+    const long = resolveDevCliFlags({
+      ...base,
+      argv: [...base.argv, `--isolated=${'a'.repeat(33)}`],
+    });
     expect(long.invalidIsolationName).toBe('a'.repeat(33));
     expect(long.userDataDirOverride).toBe('/AppData/xdt-maker-dev');
   });
@@ -168,6 +180,7 @@ describe('resolveDevCliFlags', () => {
     });
     expect(flags).toEqual({
       schedulerPassive: false,
+      isolated: false,
       userDataDirOverride: null,
       needsIsolatedDeviceId: false,
       isolationName: null,
@@ -177,7 +190,9 @@ describe('resolveDevCliFlags', () => {
   });
 
   it('--endpoints-cdn / XDT_ENDPOINTS_CDN=1 双通道(与 --passive 同款);开关非 "1" 视为关', () => {
-    expect(resolveDevCliFlags({ ...base, argv: [...base.argv, '--endpoints-cdn'] }).endpointsCdn).toBe(true);
+    expect(
+      resolveDevCliFlags({ ...base, argv: [...base.argv, '--endpoints-cdn'] }).endpointsCdn,
+    ).toBe(true);
     expect(resolveDevCliFlags({ ...base, envEndpointsCdn: '1' }).endpointsCdn).toBe(true);
     for (const v of ['0', 'false', 'true', 'yes']) {
       expect(resolveDevCliFlags({ ...base, envEndpointsCdn: v }).endpointsCdn).toBe(false);
@@ -198,22 +213,56 @@ describe('resolveDevCliFlags', () => {
       argv: [...base.argv, '--passive', '--isolated=feature-a'],
     });
     expect(flags.schedulerPassive).toBe(true);
+    expect(flags.isolated).toBe(true);
     expect(flags.userDataDirOverride).toBe('/AppData/xdt-maker-dev-feature-a');
     expect(flags.isolationName).toBe('feature-a');
   });
 });
 
+describe('shouldEnforcePassiveMigrationCompatibility', () => {
+  it('只对共享 userData 的 passive dev 启用，isolated 与 packaged 不启用', () => {
+    expect(
+      shouldEnforcePassiveMigrationCompatibility({
+        isPackaged: false,
+        schedulerPassive: true,
+        isolated: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldEnforcePassiveMigrationCompatibility({
+        isPackaged: false,
+        schedulerPassive: true,
+        isolated: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldEnforcePassiveMigrationCompatibility({
+        isPackaged: true,
+        schedulerPassive: true,
+        isolated: false,
+      }),
+    ).toBe(false);
+  });
+});
+
 describe('shouldRequestSingleInstanceLock', () => {
   it('正常 dev 与 packaged 都保持单实例', () => {
-    expect(shouldRequestSingleInstanceLock({ isPackaged: false, schedulerPassive: false })).toBe(true);
-    expect(shouldRequestSingleInstanceLock({ isPackaged: true, schedulerPassive: false })).toBe(true);
+    expect(shouldRequestSingleInstanceLock({ isPackaged: false, schedulerPassive: false })).toBe(
+      true,
+    );
+    expect(shouldRequestSingleInstanceLock({ isPackaged: true, schedulerPassive: false })).toBe(
+      true,
+    );
   });
 
   it('所有 passive dev 都跳过锁，允许多个 dev 与正式版共享同一 userData', () => {
     const passivePreviews = Array.from({ length: 3 }, () =>
-      shouldRequestSingleInstanceLock({ isPackaged: false, schedulerPassive: true }));
+      shouldRequestSingleInstanceLock({ isPackaged: false, schedulerPassive: true }),
+    );
     expect(passivePreviews).toEqual([false, false, false]);
     // packaged 不接受 dev-only passive 语义，即使环境被污染也必须继续持锁。
-    expect(shouldRequestSingleInstanceLock({ isPackaged: true, schedulerPassive: true })).toBe(true);
+    expect(shouldRequestSingleInstanceLock({ isPackaged: true, schedulerPassive: true })).toBe(
+      true,
+    );
   });
 });

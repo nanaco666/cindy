@@ -92,7 +92,7 @@ Complete Cindy account sign-in in the Electron window.
 
 除这两个 restart 命令外，禁止任何其它启动形式：`pnpm dev:desktop:remote` / `pnpm dev:desktop` / `pnpm dev:all` / `pnpm --filter desktop dev:remote` / `pnpm --filter desktop dev` / `tail -f /dev/null | pnpm dev:desktop:remote` 都不允许（这些 dev 命令无 TTY 兜底、不杀旧进程、不补 `.env`，agent 环境下必失败——必须走 restart 包装）。
 
-需要在保留现有 Cindy 实例与登录态的前提下并行启动其它 remote dev 时，restart 支持编排专用的 `--preserve-running`。该模式不停止其它实例，并把每个新实例设为 passive；可以从不同 worktree 重复调用，让多个 dev 共享同一 userData / 登录态并存。它仅支持 remote，禁止与 `--isolated` 组合。通用脚本不负责决定哪个实例可替换；上层编排若要交接，必须先证明目标归属，再用 `--replace-running-root=<已注册 worktree>` 精确替换，禁止退回全量 kill。
+需要在保留现有 Cindy 实例与登录态的前提下并行启动其它 remote dev 时，restart 支持编排专用的 `--preserve-running`。该模式不停止其它实例，并把每个新实例设为 passive；可以从不同 worktree 重复调用，让多个 dev 共享同一 userData / 登录态并存。共享库启动时 desktop 会只读核对 `schema_version`、完整 migration history 与 SQL + companion TS runtime 指纹，和当前 checkout 不完全一致就拒绝启动并提示 `--isolated`；passive 自己绝不迁移或执行 schema DDL，并在存活期持有多 owner reader lease，primary 迁移会在仍有 passive 时拒绝启动。它仅支持 remote，禁止与 `--isolated` 组合。通用脚本不负责决定哪个实例可替换；上层编排若要交接，必须先证明目标归属，再用 `--replace-running-root=<已注册 worktree>` 精确替换，禁止退回全量 kill。
 
 restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开系统终端承载 dev 进程（Windows 用 `cmd.exe` 窗口、macOS 用 Terminal.app）、默认停止**所有可识别的 Cindy desktop dev 进程**（跨 checkout/worktree、不分 remote/local）、补齐 `apps/desktop/.env`；`--preserve-running` 是唯一不停止已有进程的例外。绕过它在 agent 环境下必失败。不要直接 `pkill electron` / `taskkill /IM electron.exe`（会误杀其它 Electron 应用）。
 
@@ -119,12 +119,12 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 | 参数 | 作用 | 什么时候用 |
 |------|------|-----------|
 | `--passive` | 定时任务被动模式：本实例不自动触发 schedule（不 tick、不把其它实例的 in-flight run 误标 interrupted），任务管理 UI / MCP / 手动"立即运行"照常；数据仍与其它实例共享，可同时启动多个 passive dev | 用户说「被动模式 / 不要抢定时任务 / 让位给正式版 / 定时任务交给 primary 跑」，或用户反馈多开导致定时任务重复执行且希望继续共享数据时 |
-| `--preserve-running` | **并行 dev 模式**：不停止任何已有 Cindy dev 进程；每个新实例强制 passive，并共享当前 userData / 登录态，可从多个 worktree 重复启动。共享 refresh token 的并发轮换由 auth replacement-retry 收敛，SQLite / device-link 由现有多实例仲裁保护 | 仅供能证明实例归属、能预检共享数据兼容性的上层编排使用，或用户明确要求「不要关闭当前实例、不要重新登录」时。仅 remote；禁止与 `--isolated` 组合 |
+| `--preserve-running` | **并行 dev 模式**：不停止任何已有 Cindy dev 进程；每个新实例强制 passive，并共享当前 userData / 登录态，可从多个 worktree 重复启动。共享 refresh token 的并发轮换由 auth replacement-retry 收敛，SQLite / device-link 由现有多实例仲裁保护；desktop 启动硬闸要求 DB migration runtime identity 与当前 checkout 完全一致，passive 不自行迁移或执行 schema DDL | 仅供能证明实例归属的上层编排使用，或用户明确要求「不要关闭当前实例、不要重新登录」时。migration 不一致会拒绝启动并提示 `--isolated`；仍有 passive 时 primary 不会抢跑 migration。仅 remote；禁止与 `--isolated` 组合 |
 | `--isolated` | dev 使用独立 userData 目录（Windows `%APPDATA%\xdt-maker-dev`、macOS `~/Library/Application Support/xdt-maker-dev`）：数据库 / 登录态 / 会话 / 定时任务与 release 彻底隔离；首次需重新登录 Cindy 账号；**设备身份同步隔离**——自动派生独立 deviceId（`dev-<机器指纹>`），不会覆盖正式版的登录续期凭证、不触发同机互踢（服务端凭证按 user+device 一对一存）；已手动设 `XDT_USER_DATA_DIR` / `XDT_DEVICE_ID_OVERRIDE` 时尊重用户值不覆盖 | 用户说「独立数据库 / 隔离数据 / 沙箱启动 / 不要动我正式版的数据」时 |
 | `--isolated=<名字>` | **命名沙箱**：每个名字一条完全独立的沙箱（目录 `xdt-maker-dev-<名字>`、设备标识 `dev-<名字>-<指纹>`），与默认沙箱、其它命名沙箱、正式版全部互不干扰；名字限 `A-Za-z0-9_-`、≤32 字符（restart 脚本对非法名字直接报错退出） | 用户说「再开一个独立实例 / 第二个沙箱 / 多开几个环境 / 给这个分支单独开一个环境」时。⚠️ 同一 checkout 的 restart 命令启动前会杀掉本 checkout 全部 dev 进程——agent 无法用 restart 同时多开；用户要真正并行多实例时，告知其在自己终端里直跑 `pnpm dev:desktop:remote --isolated=<名字>`（human-only 命令，不杀旧进程）或用多个 checkout |
 
 - 这些参数都不带 = 原行为（共库 + 正常调度），**用户没提就不要主动加**。`--preserve-running` / `--replace-running-root` 是上层编排原语，不代表仓库内置任何个人目录、分支或 baseline 约定。
-- 同一 userData 下只保留一个 normal/packaged primary；其它共享数据的 dev 都用 `--passive` / `--preserve-running`，数量不限。带 SQLite migration 或其它不兼容数据变更的版本不得直接共库，上层必须先做兼容性预检。
+- 同一 userData 下只保留一个 normal/packaged primary；其它共享数据的 dev 都用 `--passive` / `--preserve-running`，数量不限。desktop 会在 passive 首次开库时只读核对 `schema_version` + migration history + SQL/TS runtime 指纹，pending / 超前 / hash drift 任一命中都拒绝启动；passive 存活时以 reader lease 阻止 primary 抢跑 migration。先由同 checkout 的 primary 完成迁移并发布指纹，或改用 `--isolated`。
 - `--isolated` 已彻底分库，天然不存在定时任务重复问题，无需再叠 `--passive`。
 - 参数只对 dev 生效（packaged 版本主进程忽略这些覆写），不影响用户机器上的正式版。
 
@@ -139,7 +139,7 @@ restart 脚本会在非交互式 agent（Claude / Codex）终端里自动打开�
 
 ### 启动 → 测试 → 结束
 
-**Step 1 启动**：仓库根执行 `pnpm restart:desktop:remote`（默认）；仅当用户明确要本地时执行 `pnpm restart:desktop:local`。保留现有实例的并行启动必须由安全编排层调用 `--preserve-running`，并在启动前完成归属与共享数据兼容性检查。
+**Step 1 启动**：仓库根执行 `pnpm restart:desktop:remote`（默认）；仅当用户明确要本地时执行 `pnpm restart:desktop:local`。保留现有实例的并行启动必须由安全编排层调用 `--preserve-running` 并先确认实例归属；共享数据的 migration 兼容性由 desktop 启动硬闸再次确定性核对。
 - restart 返回成功表示 Electron 主进程已经发出主窗口 `ready-to-show`，不是仅仅打开了 Terminal/cmd 窗口；如果依赖、Forge 或 Electron 早退，或 120 秒内未 ready，命令会失败并提示检查新终端和 `apps/desktop/logs/`。
 - 如果你自己就跑在 Cindy desktop dev 进程内（典型：你是桌面端内嵌的 Claude / Codex agent），普通 restart 会自检并以 exit 1 拒绝执行，打印一条英文提示让你转告用户回他自己的终端手动重启。看到这种 refusal 信息时**不要重试 / 不要换命令**，原样转告用户即可。安全编排层可用 `--preserve-running` 并行启动，因为它不会终止祖先进程。
 - 改动了 main / preload / MCP / package 代码后必须重新执行；仅改 renderer 代码时热更新生效，无需重启。
