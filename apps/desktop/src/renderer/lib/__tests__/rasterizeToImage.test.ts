@@ -28,9 +28,13 @@ describe('computeExportScale', () => {
     expect(computeExportScale(100, 2048)).toBe(2);
   });
 
-  it('内容本身超过上限时允许 <1 缩小,但钳在 0.1 下界', () => {
+  it('内容本身超过上限时允许任意小的缩小倍率,maxEdge 是硬上限', () => {
     expect(computeExportScale(8192, 100)).toBe(EXPORT_MAX_EDGE_PX / 8192);
-    expect(computeExportScale(1_000_000, 100)).toBe(0.1);
+    // 超长内容(>40960px)不得为可读性抬倍率突破边长上限(review P1)
+    expect(computeExportScale(1_000_000, 100)).toBe(EXPORT_MAX_EDGE_PX / 1_000_000);
+    expect(1_000_000 * computeExportScale(1_000_000, 100)).toBeLessThanOrEqual(
+      EXPORT_MAX_EDGE_PX,
+    );
   });
 
   it('非法尺寸回退 1', () => {

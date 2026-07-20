@@ -30,8 +30,10 @@ export const EXPORT_PNG_SCALE = 3;
 export const EXPORT_MAX_EDGE_PX = 4096;
 
 /**
- * 倍率收敛(纯函数,单测覆盖):目标倍率对 4096 边长上限取 min,内容本身
- * 超过上限时允许 <1 的缩小倍率,但钳在合理下界避免产出不可读的碎图。
+ * 倍率收敛(纯函数,单测覆盖):目标倍率对 4096 边长上限取 min。maxEdge 是
+ * **硬上限**(内存保护是第一目标):内容本身超长时倍率允许任意小,产物是
+ * 一张有界的整体缩略图——绝不为可读性抬高倍率突破上限(review P1:钳 0.1
+ * 下界会让 50000px 内容导出 5000px 位图,内存峰值超设计值)。
  */
 export function computeExportScale(
   width: number,
@@ -42,10 +44,7 @@ export function computeExportScale(
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
     return 1;
   }
-  const capped = Math.min(desiredScale, maxEdge / Math.max(width, height));
-  // 内容尺寸本身超过 maxEdge 数倍时 capped 会非常小;0.1 以下的导出已不可读,
-  // 直接钳住——canvas 尺寸仍受 maxEdge 保护(此时输出会超限,由调用方兜底)。
-  return Math.max(capped, 0.1);
+  return Math.min(desiredScale, maxEdge / Math.max(width, height));
 }
 
 /**
