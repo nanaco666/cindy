@@ -237,16 +237,42 @@ async function getAutoRelaunchBlockReasonForCurrentState(): Promise<AutoRelaunch
 }
 
 /**
- * Startup update checks used to bypass the unattended-update policy and return
- * `action: relaunch` unconditionally. Keep the patch staged, but enter the app
- * normally whenever the same safety policy would block a background relaunch.
+ * Startup/splash relaunch gate — intentionally looser than the background idle
+ * policy. Startup is the safest moment to apply a staged patch: the app has just
+ * launched, so there is no in-flight agent turn / schedule / active session to
+ * interrupt. We therefore relaunch into the updater as soon as a patch is ready,
+ * gating only on the essentials:
+ *   - `disabled`     — user turned the auto-update relaunch switch off; respect it.
+ *   - `dev`          — the native updater replaces the *installed* app; it can't
+ *                      sanely update a dev / electron-forge instance, so never
+ *                      auto-launch it there.
+ *   - `not-ready`    — no staged patch to apply.
+ *   - `relaunching`  — a relaunch is already in flight; don't double-fire.
+ * The idle / busy / user-active / recent-resume / screen-state checks are NOT
+ * applied here — those protect a long-running session from a surprise restart,
+ * which is not a concern at a fresh launch. (Background auto-relaunch keeps the
+ * full policy via getAutoRelaunchBlockReasonForCurrentState.)
+ */
+async function getStartupRelaunchBlockReason(): Promise<AutoRelaunchBlockReason | null> {
+  if (!readAutoUpdateSettings().autoRelaunchOnIdle) return 'disabled';
+  if (isDev()) return 'dev';
+  if (currentStatus !== 'ready') return 'not-ready';
+  if (isRelaunching || autoRelaunchInProgress) return 'relaunching';
+  return null;
+}
+
+/**
+ * Startup update checks apply a staged patch as soon as it is ready (the historic
+ * behavior), gated only by the lightweight startup policy above. Whenever that
+ * policy blocks (auto-update off / dev / not ready / already relaunching) the
+ * patch stays staged and the app enters normally, surfacing the UpdateBanner.
  */
 async function buildStartupReadyReply(version: string | undefined): Promise<{
   hasUpdate: true;
   action: 'relaunch' | 'none';
   version: string | undefined;
 }> {
-  const blockReason = await getAutoRelaunchBlockReasonForCurrentState();
+  const blockReason = await getStartupRelaunchBlockReason();
   if (blockReason) {
     lastAutoRelaunchBlockReason = blockReason;
     log.info(
@@ -267,8 +293,13 @@ interface AutoRelaunchRequestResult {
 async function requestAutoRelaunch(
   reason: string,
   theme: 'light' | 'dark',
+  useStartupPolicy = false,
 ): Promise<AutoRelaunchRequestResult> {
-  const blockReason = await getAutoRelaunchBlockReasonForCurrentState();
+  // The startup/splash apply path uses the lighter gate (no idle/busy checks —
+  // nothing is in flight at launch); background triggers keep the full policy.
+  const blockReason = useStartupPolicy
+    ? await getStartupRelaunchBlockReason()
+    : await getAutoRelaunchBlockReasonForCurrentState();
   if (blockReason) {
     if (blockReason !== lastAutoRelaunchBlockReason) {
       lastAutoRelaunchBlockReason = blockReason;
@@ -1071,12 +1102,13 @@ export function initUpdateService(): void {
     'update-relaunch-auto',
     async (_event, theme: 'light' | 'dark'): Promise<AutoRelaunchRequestResult> => {
       // Startup checks and the renderer's 1.5 s presentation delay create a
-      // real TOCTOU window. Re-run the complete unattended policy at the apply
-      // boundary so a newly attached remote controller, active turn/schedule,
-      // screen lock, or settings change cannot be cut off by a stale decision.
+      // real TOCTOU window. Re-run the startup policy at the apply boundary so a
+      // settings change / already-in-flight relaunch cannot be cut off by a
+      // stale decision. (Startup deliberately does not gate on idle/busy — there
+      // is no in-flight work to protect at a fresh launch.)
       const resolved = theme === 'light' || theme === 'dark' ? theme : 'dark';
       resolvedRelaunchTheme = resolved;
-      const result = await requestAutoRelaunch('startup-apply-boundary', resolved);
+      const result = await requestAutoRelaunch('startup-apply-boundary', resolved, true);
       if (!result.accepted) {
         log.info(
           'startup automatic relaunch deferred at apply boundary (%s)',

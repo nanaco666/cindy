@@ -410,6 +410,15 @@ registerColor('update-btn-hover', {
   light: 'rgba(0, 0, 0, 0.04)',
   dark: 'rgba(255, 255, 255, 0.06)',
 }, 'Alpha-blended overlay — intentionally not an HSL token; needs transparency over variable backgrounds');
+// Fill background for the relaunch pill. Default themes keep the classic
+// transparent-outline White Pill (transparent → border+text define the shape);
+// E1D neutral themes (cindy) override this to a solid fill so the on-fill text
+// color (update-btn-text) has the intended contrast surface behind it. Non-HSL
+// raw value on purpose (needs a real `transparent`, not an HSL triple).
+registerColor('update-btn-bg', {
+  light: 'transparent',
+  dark: 'transparent',
+}, 'Relaunch pill fill — transparent (outline) by default, solid in E1D neutral themes');
 
 // Content area — Surface single-flat background per full-window rule
 registerColor('content-area', {
