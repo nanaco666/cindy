@@ -291,6 +291,8 @@ export interface AgentSwitchContent {
   fromModel: string | null;
   toModel: string | null;
   handoff: string;
+  /** Phase 2:true = 目标引擎续接(resume)了自己的停泊原生会话,交接为增量模式。 */
+  resumed?: boolean;
 }
 
 export interface Message {

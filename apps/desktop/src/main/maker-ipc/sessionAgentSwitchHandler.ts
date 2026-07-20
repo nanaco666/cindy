@@ -2,19 +2,26 @@
  * session-agent-switch:同一会话在 Claude Code / Codex 引擎间切换的 IPC handler。
  *
  * 切换时序(host 层组合,不动 maker-core 热路径——规则 10 风险面最小化):
- *   校验 → 构造交接文本(纯代码,agentHandoff.buildHandoffText)
- *   → 关旧 live session → DB 提交(agent_kind + model + provider_id,清 sdk_session_id)
- *   → 插 agent_switch 边界行(交接全文持久化于此,UI 可展开)
+ *   校验 → 查目标引擎停泊绑定(Phase 2)→ 构造交接文本(纯代码,
+ *   agentHandoff.buildHandoffText:有停泊绑定 = 增量模式,否则全量)
+ *   → 关旧 live session → DB 提交(agent_kind + model + provider_id;sdk_session_id
+ *   落停泊 id 或 null)→ 插 agent_switch 边界行(交接全文持久化于此,UI 可展开)
  *   → 登记 pending 注入 → 立即重建新引擎 session(消灭多窗口 stale createOpts 竞态)。
+ *
+ * Phase 2(双会话停泊/切回续接):每家引擎的原生会话在离场时"停泊"——离场
+ * 快照(fromSdkSessionId)就存在边界行里,不新增 schema。切回时 resume 停泊
+ * 会话 + 只注入增量交接(离开期间的进展),prompt cache 前缀与引擎自身记忆
+ * 都保住;resume spawn 失败走确定性回落(清停泊 id → 全量交接 → 全新会话)。
  *
  * 失败语义:
  *  - DB 提交之前任何失败 → 原样抛错,会话状态不变;
  *  - DB 提交即切换成功的 commit point;之后边界行插入失败只降级(无分隔条,注入
  *    靠内存 pending 保住本进程内语义),新引擎 spawn 失败返回 engineReady=false,
- *    下一条消息走既有 lazy-create 路径重试并复用其错误呈现。
+ *    下一条消息走既有 lazy-create 路径重试并复用其错误呈现(resume 模式先走
+ *    上述回落再降级)。
  *
- * v1 边界:远程会话(remoteHostId)与 Orca 协同会话不支持切换(UNSUPPORTED_CAPABILITY);
- * turn 进行中拒绝(SESSION_RUNNING);切回不复用旧原生会话——每次切换都重新交接。
+ * 边界:远程会话(remoteHostId)与 Orca 协同会话不支持切换(UNSUPPORTED_CAPABILITY);
+ * turn 进行中登记 pending 推迟到下一条消息发送时刻执行。
  */
 
 import type { AgentKind } from '@lizi/maker-core';
@@ -27,6 +34,13 @@ import {
   type HandoffSourceMessage,
 } from './agentHandoff.js';
 import { throwIpcError } from '../utils/ipcValidate.js';
+
+/** Phase 2:目标引擎的停泊原生会话绑定(localDb findParkedEngineSession 的投影)。 */
+export interface ParkedEngineSessionRef {
+  sdkSessionId: string;
+  watermarkCreatedAt: number;
+  watermarkRowid: number;
+}
 
 /** DB 'cc'/'codex' ↔ maker-core 'claude-code'/'codex' 映射(与 register.ts 各处内联口径一致)。 */
 export function toDbAgentKind(kind: AgentKind): DbAgentKind {
@@ -48,9 +62,17 @@ export interface AgentSwitchBoundaryContent {
   toAgentKind: DbAgentKind;
   fromModel: string | null;
   toModel: string | null;
-  /** 旧引擎的原生 session id 快照(仅取证/未来切回增量续接用,不参与 v1 逻辑)。 */
+  /**
+   * 旧引擎的原生 session id 快照 = 它的停泊绑定:Phase 2 切回该引擎时由
+   * findParkedEngineSession 从最近一条"它离场"的边界行读回,resume 续接。
+   */
   fromSdkSessionId: string | null;
   handoff: string;
+  /**
+   * Phase 2:本次切换是否 resume 了目标引擎的停泊原生会话(交接为增量模式)。
+   * 缺省/false = 全新原生会话 + 全量交接(v1 行为)。
+   */
+  resumed?: boolean;
 }
 
 export interface AgentSwitchSessionRow {
@@ -67,13 +89,44 @@ export interface MakerSessionAgentSwitchHandlerDeps {
   getSessionRow(sessionId: string): Promise<AgentSwitchSessionRow | null>;
   getLiveSession(sessionId: string): { isTurnRunning(): boolean } | null | undefined;
   closeSession(sessionId: string): Promise<void>;
-  listMessagesForHandoff(sessionId: string): Promise<HandoffSourceMessage[]>;
-  /** 提交切换:update agent_kind/model/provider_id + 清 sdk_session_id + 广播 sessions:patched。 */
+  /** after = 停泊水位线(Phase 2 增量交接):只取严格晚于该边界行的消息。 */
+  listMessagesForHandoff(
+    sessionId: string,
+    after?: { createdAt: number; rowid: number },
+  ): Promise<HandoffSourceMessage[]>;
+  /**
+   * Phase 2:查目标引擎的停泊原生会话(边界行派生)。缺省(测试最小 harness /
+   * 显式关闭)= 恒无绑定,回落 v1 全量交接行为。
+   */
+  findParkedEngineSession?(
+    sessionId: string,
+    targetDbKind: DbAgentKind,
+  ): Promise<ParkedEngineSessionRef | null>;
+  /**
+   * 提交切换:update agent_kind/model/provider_id + sdk_session_id + 广播
+   * sessions:patched。sdkSessionId null = 全新原生会话;Phase 2 切回时传停泊 id,
+   * 随后 bootstrap / lazy-create 走标准 resume 路径。
+   */
   applyAgentSwitchToDb(
     sessionId: string,
-    patch: { agentKind: DbAgentKind; model: string; providerId: string | null | undefined },
+    patch: {
+      agentKind: DbAgentKind;
+      model: string;
+      providerId: string | null | undefined;
+      sdkSessionId?: string | null;
+    },
   ): Promise<void>;
-  insertBoundaryMessage(sessionId: string, content: AgentSwitchBoundaryContent): Promise<void>;
+  /** 返回边界行 clientId(resume 回落时 updateBoundaryMessage 定位用)。 */
+  insertBoundaryMessage(sessionId: string, content: AgentSwitchBoundaryContent): Promise<string>;
+  /**
+   * Phase 2:resume bootstrap 失败回落全量交接时,改写边界行 content(交接全文
+   * 与 resumed 标记必须与实际注入一致——DB pending 重建读的就是它)。best-effort。
+   */
+  updateBoundaryMessage?(
+    sessionId: string,
+    clientId: string,
+    content: AgentSwitchBoundaryContent,
+  ): Promise<void>;
   setPendingHandoff(sessionId: string, handoff: string): void;
   /** 从 DB 行(切换已提交后的新值)重建 live session;抛错 = 引擎未就绪。 */
   bootstrapSwitchedSession(sessionId: string): Promise<void>;
@@ -210,14 +263,34 @@ export async function performSessionAgentSwitch(
   // 空闲立即切换:本次执行覆盖任何历史 pending(同一意图的最新表达)。
   deps.pendingSwitches?.clear(sessionId);
 
-  // 交接文本先于任何状态变更构造(失败不留半切换状态)。
-  const sourceMessages = await deps.listMessagesForHandoff(sessionId);
-  const handoff = buildHandoffText(sourceMessages, {
+  // 交接素材与停泊绑定先于任何状态变更取得(失败不留半切换状态)。
+  // Phase 2:目标引擎有停泊原生会话 → resume + 增量交接(只补离开期间的进展,
+  // 工作状态区仍按全量历史提取);无绑定 → v1 全量交接 + 全新原生会话。
+  const parked = deps.findParkedEngineSession
+    ? await deps.findParkedEngineSession(sessionId, toDbKind)
+    : null;
+  const fullSourceMessages = await deps.listMessagesForHandoff(sessionId);
+  const handoffOptsBase = {
     fromLabel: agentEngineLabel(fromDbKind),
     toLabel: agentEngineLabel(toDbKind),
     // 附带早期原文检索指引(get_chat_history / search_chat_history 定向到本会话)。
     sessionId,
-  });
+  };
+  const buildFullHandoff = () => buildHandoffText(fullSourceMessages, handoffOptsBase);
+  let handoff: string;
+  if (parked) {
+    const deltaMessages = await deps.listMessagesForHandoff(sessionId, {
+      createdAt: parked.watermarkCreatedAt,
+      rowid: parked.watermarkRowid,
+    });
+    handoff = buildHandoffText(deltaMessages, {
+      ...handoffOptsBase,
+      mode: 'delta',
+      workStateMessages: fullSourceMessages,
+    });
+  } else {
+    handoff = buildFullHandoff();
+  }
 
   return deps.withCloseSuppressed(sessionId, async () => {
     if (live) {
@@ -229,17 +302,21 @@ export async function performSessionAgentSwitch(
       agentKind: toDbKind,
       model,
       providerId: providerId as string | null | undefined,
+      sdkSessionId: parked?.sdkSessionId ?? null,
     });
 
+    const boundaryContent: AgentSwitchBoundaryContent = {
+      fromAgentKind: fromDbKind,
+      toAgentKind: toDbKind,
+      fromModel: row.model,
+      toModel: model,
+      fromSdkSessionId: row.sdkSessionId,
+      handoff,
+      resumed: !!parked,
+    };
+    let boundaryClientId: string | null = null;
     try {
-      await deps.insertBoundaryMessage(sessionId, {
-        fromAgentKind: fromDbKind,
-        toAgentKind: toDbKind,
-        fromModel: row.model,
-        toModel: model,
-        fromSdkSessionId: row.sdkSessionId,
-        handoff,
-      });
+      boundaryClientId = await deps.insertBoundaryMessage(sessionId, boundaryContent);
     } catch (err) {
       // 降级:分隔条缺失是外观问题;注入语义由下面的内存 pending 保住(本进程内)。
       deps.log.warn('agent-switch: boundary message insert failed (degraded)', {
@@ -250,16 +327,80 @@ export async function performSessionAgentSwitch(
     deps.setPendingHandoff(sessionId, handoff);
 
     let engineReady = true;
-    if (!params.skipBootstrap) {
+    let resumed = !!parked;
+    // resume 模式无视 skipBootstrap:只有 eager spawn 才能确定性观测 resume 失败
+    // 并在同一事务内回落全量交接;交给 lazy-create 的话,失效的停泊 id 会让之后
+    // 每次发送反复失败且无人回落。
+    if (parked || !params.skipBootstrap) {
       try {
         await deps.bootstrapSwitchedSession(sessionId);
       } catch (err) {
-        engineReady = false;
-        deps.log.warn('agent-switch: bootstrap new engine failed; next send will lazy-create', {
-          sessionId,
-          targetAgentKind,
-          err: err instanceof Error ? err.message : String(err),
-        });
+        if (parked) {
+          // ---- resume 回落:清停泊 id → 换全量交接 → 全新原生会话重试 ----
+          // 停泊原生会话可能已失效(transcript 被清理、CLI 升级不兼容等),这些
+          // 只有 spawn 时才暴露。回落是确定性代码路径,不留半 resume 状态。
+          deps.log.warn('agent-switch: resume parked session failed; fallback to fresh + full handoff', {
+            sessionId,
+            targetAgentKind,
+            parkedSdkSessionId: parked.sdkSessionId,
+            err: err instanceof Error ? err.message : String(err),
+          });
+          resumed = false;
+          const fullHandoff = buildFullHandoff();
+          let cleared = false;
+          try {
+            await deps.applyAgentSwitchToDb(sessionId, {
+              agentKind: toDbKind,
+              model,
+              providerId: providerId as string | null | undefined,
+              sdkSessionId: null,
+            });
+            cleared = true;
+          } catch (err2) {
+            // DB 清不掉失效停泊 id(刚写成功过,基本不可达):保守不再重试 spawn,
+            // 按 engineReady=false 降级——lazy-create 带着坏 id 只会重复同一失败。
+            deps.log.warn('agent-switch: clear stale parked sdkSessionId failed', {
+              sessionId,
+              err: err2 instanceof Error ? err2.message : String(err2),
+            });
+          }
+          if (boundaryClientId && deps.updateBoundaryMessage) {
+            try {
+              await deps.updateBoundaryMessage(sessionId, boundaryClientId, {
+                ...boundaryContent,
+                handoff: fullHandoff,
+                resumed: false,
+              });
+            } catch (err2) {
+              deps.log.warn('agent-switch: rewrite boundary content after fallback failed', {
+                sessionId,
+                err: err2 instanceof Error ? err2.message : String(err2),
+              });
+            }
+          }
+          deps.setPendingHandoff(sessionId, fullHandoff);
+          if (cleared) {
+            try {
+              await deps.bootstrapSwitchedSession(sessionId);
+            } catch (err2) {
+              engineReady = false;
+              deps.log.warn('agent-switch: fresh bootstrap after resume fallback failed', {
+                sessionId,
+                targetAgentKind,
+                err: err2 instanceof Error ? err2.message : String(err2),
+              });
+            }
+          } else {
+            engineReady = false;
+          }
+        } else {
+          engineReady = false;
+          deps.log.warn('agent-switch: bootstrap new engine failed; next send will lazy-create', {
+            sessionId,
+            targetAgentKind,
+            err: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
     }
 
@@ -269,6 +410,7 @@ export async function performSessionAgentSwitch(
       to: toDbKind,
       model,
       engineReady,
+      resumed,
       handoffChars: handoff.length,
     });
     return { switched: true, agentKind: targetAgentKind, model, engineReady };

@@ -3902,7 +3902,8 @@
       "agentSwitch": {
         "label": "Switched from {{from}} to {{to}}",
         "toggleHint": "View handoff context",
-        "handoffTitle": "Handoff — the context summary sent to the new engine at switch time (never shown in your messages)"
+        "handoffTitle": "Handoff — the context summary sent to the new engine at switch time (never shown in your messages)",
+        "resumedBadge": "session resumed"
       }
     },
     "markdownRenderer": {

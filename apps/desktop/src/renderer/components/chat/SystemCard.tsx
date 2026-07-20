@@ -787,6 +787,12 @@ function AgentSwitchCard({ data }: { data?: Record<string, unknown> }) {
               <span className="font-mono">{toModel}</span>
             </>
           )}
+          {Boolean(data?.resumed) && (
+            <>
+              <span className="opacity-50">·</span>
+              <span>{t('chat.systemCard.agentSwitch.resumedBadge')}</span>
+            </>
+          )}
           {handoff && (
             <ChevronRight
               size={12}

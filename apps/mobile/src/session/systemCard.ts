@@ -102,9 +102,12 @@ function formatAgentSwitchCard(data: Record<string, unknown> | undefined): Syste
   const from = engineLabel(data?.fromAgentKind);
   const to = engineLabel(data?.toAgentKind);
   const toModel = typeof data?.toModel === 'string' ? data.toModel : '';
+  const rows = toModel ? [{ label: '模型', value: toModel }] : [];
+  // Phase 2:resumed = 目标引擎续接了自己的停泊原生会话(增量交接)。
+  if (data?.resumed === true) rows.push({ label: '会话', value: '已续接' });
   return {
     title: `已从 ${from} 切换到 ${to}`,
-    rows: toModel ? [{ label: '模型', value: toModel }] : [],
+    rows,
   };
 }
 

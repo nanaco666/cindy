@@ -133,20 +133,29 @@ const REMOTE_PERSIST_FIELDS = new Set([
  * sessionAgentSwitchHandler 调用,不暴露 IPC handler——agent_kind 不进任何
  * 通用 update 白名单,防裸写)。语义:
  *  - agent_kind / model 落新引擎值;providerId undefined = 不动,null = 显式清除;
- *  - sdk_session_id 清空——旧引擎的原生会话 id 对新引擎无意义,残留会让 resume
- *    以错误引擎解释它(v1 每次切换重新交接,不保留切回指针;旧值快照存在边界行)。
+ *  - sdk_session_id:缺省 / null = 清空,新引擎从全新原生会话开始(全量交接注入
+ *    承接上下文);Phase 2 切回停泊引擎时传停泊的原生 session id,随后的
+ *    bootstrap / lazy-create 走标准 resume 路径续接(增量交接补齐离开期间进展)。
+ *    旧引擎的原生会话 id 绝不能原样残留——resume 会以错误引擎解释它(离场值
+ *    快照存在边界行 fromSdkSessionId,即停泊绑定)。
  *  - 广播 sessions:patched:本机各窗口 sessionsStore/会话视图收敛 + device-link
  *    tap 让控制端镜像同步(agentKind 翻转驱动 capabilities 缓存按新 key 重取)。
  */
 export async function applyAgentSwitchToSessionRow(
   sessionId: string,
-  patch: { agentKind: 'cc' | 'codex'; model: string; providerId: string | null | undefined },
+  patch: {
+    agentKind: 'cc' | 'codex';
+    model: string;
+    providerId: string | null | undefined;
+    sdkSessionId?: string | null;
+  },
 ): Promise<void> {
   const db = getDbClient().drizzle;
+  const nextSdkSessionId = patch.sdkSessionId ?? null;
   const setObj: Partial<typeof sessions.$inferInsert> = {
     agentKind: patch.agentKind,
     model: patch.model,
-    sdkSessionId: null,
+    sdkSessionId: nextSdkSessionId,
     updatedAt: Date.now(),
   };
   if (patch.providerId !== undefined) setObj.providerId = patch.providerId;
@@ -154,7 +163,7 @@ export async function applyAgentSwitchToSessionRow(
   broadcastSessionPatched(sessionId, {
     agentKind: patch.agentKind,
     model: patch.model,
-    sdkSessionId: null,
+    sdkSessionId: nextSdkSessionId,
     ...(patch.providerId !== undefined ? { providerId: patch.providerId } : {}),
   });
 }

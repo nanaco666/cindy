@@ -231,6 +231,54 @@ describe('buildHandoffText 早期原文检索指引', () => {
   });
 });
 
+describe('buildHandoffText 增量(delta)模式:切回停泊引擎', () => {
+  const opts = { fromLabel: 'Codex', toLabel: 'Claude Code', mode: 'delta' as const };
+
+  it('framing 为归位续接口径,不用全量交接的"此前由 X 驱动"措辞', () => {
+    const text = buildHandoffText([msg('user', '离开期间的问题'), msg('assistant', '回答')], opts);
+    expect(text).toContain('你(Claude Code)此前处理过本会话');
+    expect(text).toContain('切回由你继续');
+    expect(text).toContain('你离开期间发生的进展记录');
+    expect(text).not.toContain('现在起由你(Claude Code)继续');
+    // 纪律保留:不向用户提及 + 以工作区为准
+    expect(text).toContain('不要向用户提及本段交接说明');
+    expect(text).toContain('以工作区现状为准');
+    expect(text.trimEnd().endsWith('== 交接说明结束,以下是用户的新消息 ==')).toBe(true);
+  });
+
+  it('工作状态区按 workStateMessages(全量历史)提取,对话区只含增量', () => {
+    const full: HandoffSourceMessage[] = [
+      msg('user', '最早的问题'),
+      msg('tool_use', { toolUseId: 't1', toolName: 'Edit', input: { file_path: '/repo/early.ts' } }),
+      msg('user', '离开期间的问题'),
+    ];
+    const delta: HandoffSourceMessage[] = [msg('user', '离开期间的问题', 200)];
+    const text = buildHandoffText(delta, { ...opts, workStateMessages: full });
+    expect(text).toContain('- /repo/early.ts'); // 全量工作状态
+    expect(text).toContain('离开期间的问题');
+    expect(text).not.toContain('最早的问题'); // 对话区不含水位线之前的内容
+    expect(text).toContain('== 你离开期间的对话记录 ==');
+  });
+
+  it('空增量(切走后立即切回)显式说明,不留歧义', () => {
+    const text = buildHandoffText([], opts);
+    expect(text).toContain('== 你离开期间没有新的对话消息 ==');
+  });
+
+  it('delta 模式同样附带检索指引(sessionId 提供时)', () => {
+    const text = buildHandoffText([msg('user', 'q')], { ...opts, sessionId: 'sess-d1' });
+    expect(text).toContain('== 早期原文检索(需要时用)==');
+    expect(text).toContain('"session_ids":["sess-d1"]');
+  });
+
+  it('full 模式(缺省)不受 delta 文案影响', () => {
+    const text = buildHandoffText([msg('user', 'q')], { fromLabel: 'Codex', toLabel: 'Claude Code' });
+    expect(text).toContain('现在起由你(Claude Code)继续');
+    expect(text).not.toContain('切回由你继续');
+    expect(text).not.toContain('你离开期间没有新的对话消息');
+  });
+});
+
 describe('buildHandoffText 超限收缩保住首尾', () => {
   it('极端长对话下检索指引与结束标记不被截掉(收缩逐字区而非切尾)', () => {
     const big = 'x'.repeat(50_000);

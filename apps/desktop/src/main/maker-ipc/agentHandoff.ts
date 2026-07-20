@@ -33,6 +33,19 @@ export interface BuildHandoffOptions {
    * 的细节性失忆。两家引擎的会话都挂了该 MCP server。
    */
   sessionId?: string;
+  /**
+   * Phase 2(切回复用停泊原生会话):
+   *  - 'full'(缺省)= 目标引擎全新原生会话,交接覆盖整场对话;
+   *  - 'delta' = 目标引擎 resume 自己的停泊原生会话,已持有离场前的完整记忆,
+   *    messages 只传"离场期间"的增量,framing 改为归位续接口径。
+   */
+  mode?: 'full' | 'delta';
+  /**
+   * 工作状态区(改动文件/命令清单)的提取源,缺省 = messages。delta 模式传
+   * 全量历史:文件/命令清单是最耐久的交接载体,即使 resume 静默失效(原生
+   * 会话过期等不可检测场景),增量交接也保有全局工作现场,不至于失明。
+   */
+  workStateMessages?: HandoffSourceMessage[];
 }
 
 /** 最近多少个用户轮次进入逐字区(其余进单行提要区)。 */
@@ -255,19 +268,35 @@ function assembleHandoffText(
   const earlier = turns.slice(0, -recentCount);
 
   const sections: string[] = [];
-  sections.push(
-    `[会话交接·内部上下文]\n` +
-      `本会话此前由 ${opts.fromLabel} 引擎驱动,现在起由你(${opts.toLabel})继续。` +
-      `下面是这场对话的既往记录——这是你与用户之间同一场对话的延续,请以第一人称自然续接。` +
-      `不要向用户提及本段交接说明,不要说"根据交接摘要/记录"之类的话。` +
-      `开始改动前先核对工作区实际状态(如 git status / git diff / 读相关文件):` +
-      `记述与工作区冲突时,一律以工作区现状为准;` +
-      `对更早的细节没有把握时,优先读取实际文件与代码核实,不要凭摘要臆断。`,
-  );
+  if (opts.mode === 'delta') {
+    // 归位续接:目标引擎 resume 了自己的停泊原生会话,已持有离场前的完整记忆。
+    // 只补"离开期间"的进展;同时防御 resume 静默失效——指引它以工作区与检索为准,
+    // 而不是断言"你一定记得"。
+    sections.push(
+      `[会话交接·内部上下文]\n` +
+        `你(${opts.toLabel})此前处理过本会话,期间曾切换给 ${opts.fromLabel} 引擎接手,现在切回由你继续。` +
+        `你离场前的对话记忆应仍然有效;下面是你离开期间发生的进展记录,请合并进你的理解后以第一人称自然续接。` +
+        `不要向用户提及本段交接说明,也不要提及引擎切换过程。` +
+        `开始改动前先核对工作区实际状态(如 git status / git diff / 读相关文件):` +
+        `记述、你的记忆与工作区三者冲突时,一律以工作区现状为准;` +
+        `对离开期间的细节没有把握时,优先读取实际文件与代码核实,不要凭摘要臆断。`,
+    );
+  } else {
+    sections.push(
+      `[会话交接·内部上下文]\n` +
+        `本会话此前由 ${opts.fromLabel} 引擎驱动,现在起由你(${opts.toLabel})继续。` +
+        `下面是这场对话的既往记录——这是你与用户之间同一场对话的延续,请以第一人称自然续接。` +
+        `不要向用户提及本段交接说明,不要说"根据交接摘要/记录"之类的话。` +
+        `开始改动前先核对工作区实际状态(如 git status / git diff / 读相关文件):` +
+        `记述与工作区冲突时,一律以工作区现状为准;` +
+        `对更早的细节没有把握时,优先读取实际文件与代码核实,不要凭摘要臆断。`,
+    );
+  }
 
   // 工作状态区(结构化):比对话记录更耐久的交接载体——新引擎据此了解
   // 动过哪些文件、跑过哪些命令,避免重复劳动或誤判"还没做过"。
-  const work = extractWorkState(messages);
+  // delta 模式按 workStateMessages(全量历史)提取,见 BuildHandoffOptions 注释。
+  const work = extractWorkState(opts.workStateMessages ?? messages);
   if (work.changedFiles.length > 0 || work.commands.length > 0) {
     const lines: string[] = [];
     if (work.changedFiles.length > 0) {
@@ -302,7 +331,11 @@ function assembleHandoffText(
       }
       digest = `(更早内容已省略)\n${kept.join('\n')}`;
     }
-    sections.push(`== 较早对话提要 ==\n${digest}`);
+    sections.push(
+      opts.mode === 'delta'
+        ? `== 你离开期间·较早进展提要 ==\n${digest}`
+        : `== 较早对话提要 ==\n${digest}`,
+    );
   }
 
   if (recent.length > 0) {
@@ -313,7 +346,14 @@ function assembleHandoffText(
       parts.push(...t.detailLines);
       if (parts.length > 0) blocks.push(parts.join('\n'));
     }
-    sections.push(`== 最近对话记录 ==\n${blocks.join('\n---\n')}`);
+    sections.push(
+      opts.mode === 'delta'
+        ? `== 你离开期间的对话记录 ==\n${blocks.join('\n---\n')}`
+        : `== 最近对话记录 ==\n${blocks.join('\n---\n')}`,
+    );
+  } else if (opts.mode === 'delta') {
+    // 切走后一条消息都没发就切回:显式说明,避免引擎误以为漏了记录。
+    sections.push('== 你离开期间没有新的对话消息 ==');
   }
 
   if (opts.sessionId) {

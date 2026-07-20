@@ -40,6 +40,7 @@ function makeDeps(overrides: Partial<MakerSessionAgentSwitchHandlerDeps> = {}): 
     }),
     insertBoundaryMessage: vi.fn(async () => {
       calls.push('boundary');
+      return 'boundary-client-1';
     }),
     setPendingHandoff: vi.fn(() => {
       calls.push('pending');
@@ -71,6 +72,7 @@ describe('performSessionAgentSwitch', () => {
       agentKind: 'codex',
       model: 'gpt-5.5',
       providerId: null,
+      sdkSessionId: null,
     });
     const boundary = vi.mocked(deps.insertBoundaryMessage).mock.calls[0][1];
     expect(boundary.fromAgentKind).toBe('cc');
@@ -78,6 +80,7 @@ describe('performSessionAgentSwitch', () => {
     expect(boundary.fromModel).toBe('claude-fable-5');
     expect(boundary.toModel).toBe('gpt-5.5');
     expect(boundary.fromSdkSessionId).toBe('sdk-old');
+    expect(boundary.resumed).toBe(false);
     expect(boundary.handoff).toContain('Claude Code');
     // close→bootstrap 全程在抑制窗口内(切换的瞬态 close 不得触发 worktree 回收)
     expect(deps.withCloseSuppressed).toHaveBeenCalledTimes(1);
@@ -221,6 +224,7 @@ describe('deferred switch (turn running)', () => {
       agentKind: 'codex',
       model: 'gpt-5.5',
       providerId: 'openai',
+      sdkSessionId: null,
     });
   });
 
@@ -250,5 +254,120 @@ describe('deferred switch (turn running)', () => {
     await expect(applyPendingAgentSwitchIfIdle(deps, 's1')).resolves.toBeUndefined();
     expect(store.has('s1')).toBe(false);
     expect(deps.log.warn).toHaveBeenCalled();
+  });
+});
+
+describe('Phase 2:切回停泊引擎(resume + 增量交接)', () => {
+  const parked = { sdkSessionId: 'sdk-parked-codex', watermarkCreatedAt: 100, watermarkRowid: 7 };
+
+  function makeResumeDeps(overrides: Partial<MakerSessionAgentSwitchHandlerDeps> = {}) {
+    return makeDeps({
+      findParkedEngineSession: vi.fn(async () => parked),
+      listMessagesForHandoff: vi.fn(async (_sessionId: string, after?: { createdAt: number; rowid: number }) =>
+        after
+          ? [{ role: 'user', content: '离开期间的问题', createdAt: 200 }]
+          : [
+              { role: 'user', content: '最早的问题', createdAt: 1 },
+              { role: 'tool_use', content: { toolUseId: 't1', toolName: 'Edit', input: { file_path: '/repo/a.ts' } }, createdAt: 2 },
+              { role: 'user', content: '离开期间的问题', createdAt: 200 },
+            ],
+      ),
+      updateBoundaryMessage: vi.fn(async () => {}),
+      ...overrides,
+    });
+  }
+
+  it('有停泊绑定:DB 落停泊 id、交接为增量模式、边界行标 resumed', async () => {
+    const { deps } = makeResumeDeps();
+    const result = await performSessionAgentSwitch(deps, validParams);
+    expect(result).toMatchObject({ switched: true, engineReady: true });
+    expect(deps.findParkedEngineSession).toHaveBeenCalledWith('s1', 'codex');
+    expect(deps.applyAgentSwitchToDb).toHaveBeenCalledWith('s1', {
+      agentKind: 'codex',
+      model: 'gpt-5.5',
+      providerId: null,
+      sdkSessionId: 'sdk-parked-codex',
+    });
+    // 增量素材按水位线取
+    expect(deps.listMessagesForHandoff).toHaveBeenCalledWith('s1', {
+      createdAt: 100,
+      rowid: 7,
+    });
+    const boundary = vi.mocked(deps.insertBoundaryMessage).mock.calls[0][1];
+    expect(boundary.resumed).toBe(true);
+    // 增量 framing(归位续接),且工作状态区来自全量历史
+    expect(boundary.handoff).toContain('切回由你继续');
+    expect(boundary.handoff).toContain('- /repo/a.ts');
+    expect(boundary.handoff).not.toContain('最早的问题');
+    expect(boundary.handoff).toContain('离开期间的问题');
+  });
+
+  it('无停泊绑定(查询返回 null):v1 全量行为不变', async () => {
+    const { deps } = makeResumeDeps({ findParkedEngineSession: vi.fn(async () => null) });
+    await performSessionAgentSwitch(deps, validParams);
+    expect(deps.applyAgentSwitchToDb).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({ sdkSessionId: null }),
+    );
+    const boundary = vi.mocked(deps.insertBoundaryMessage).mock.calls[0][1];
+    expect(boundary.resumed).toBe(false);
+    expect(boundary.handoff).toContain('最早的问题');
+  });
+
+  it('resume 模式无视 skipBootstrap:pending-apply 路径也 eager spawn(回落窗口)', async () => {
+    const { deps, calls } = makeResumeDeps();
+    await performSessionAgentSwitch(deps, { ...validParams, skipBootstrap: true });
+    expect(calls).toContain('bootstrap');
+  });
+
+  it('resume bootstrap 失败:清停泊 id → 边界行改写全量交接 → fresh 重试成功', async () => {
+    const bootstrap = vi
+      .fn(async () => {})
+      .mockRejectedValueOnce(new Error('resume transcript missing'));
+    const { deps } = makeResumeDeps({ bootstrapSwitchedSession: bootstrap });
+    const result = await performSessionAgentSwitch(deps, validParams);
+    expect(result).toMatchObject({ switched: true, engineReady: true });
+    // 第二次 applyAgentSwitchToDb 清掉失效停泊 id
+    expect(vi.mocked(deps.applyAgentSwitchToDb).mock.calls[1][1]).toMatchObject({
+      sdkSessionId: null,
+    });
+    // 边界行改写为全量交接 + resumed:false
+    const rewritten = vi.mocked(deps.updateBoundaryMessage!).mock.calls[0];
+    expect(rewritten[1]).toBe('boundary-client-1');
+    expect(rewritten[2].resumed).toBe(false);
+    expect(rewritten[2].handoff).toContain('最早的问题');
+    // pending 最终是全量交接
+    const lastPending = vi.mocked(deps.setPendingHandoff).mock.calls.at(-1)![1];
+    expect(lastPending).toContain('最早的问题');
+    expect(bootstrap).toHaveBeenCalledTimes(2);
+  });
+
+  it('resume 回落中清停泊 id 失败:不再重试 spawn,engineReady=false', async () => {
+    const bootstrap = vi.fn(async () => {
+      throw new Error('resume transcript missing');
+    });
+    const applyDb = vi
+      .fn(async () => {})
+      .mockResolvedValueOnce(undefined) // 首次提交成功
+      .mockRejectedValueOnce(new Error('db locked')); // 回落清 id 失败
+    const { deps } = makeResumeDeps({
+      bootstrapSwitchedSession: bootstrap,
+      applyAgentSwitchToDb: applyDb,
+    });
+    const result = await performSessionAgentSwitch(deps, validParams);
+    expect(result).toMatchObject({ switched: true, engineReady: false });
+    expect(bootstrap).toHaveBeenCalledTimes(1);
+  });
+
+  it('resume 两段 bootstrap 都失败:engineReady=false,pending 为全量交接', async () => {
+    const bootstrap = vi.fn(async () => {
+      throw new Error('spawn failed');
+    });
+    const { deps } = makeResumeDeps({ bootstrapSwitchedSession: bootstrap });
+    const result = await performSessionAgentSwitch(deps, validParams);
+    expect(result).toMatchObject({ switched: true, engineReady: false });
+    expect(bootstrap).toHaveBeenCalledTimes(2);
+    const lastPending = vi.mocked(deps.setPendingHandoff).mock.calls.at(-1)![1];
+    expect(lastPending).toContain('最早的问题');
   });
 });

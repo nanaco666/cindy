@@ -884,10 +884,15 @@ export async function findPendingAgentSwitchHandoff(
 /**
  * session-agent-switch:读取交接素材——本会话未被 rewind、晚于 /clear 边界的
  * 最近 limit 行(时间正序返回),只取交接需要的最小投影。
+ *
+ * `after`(Phase 2 增量交接):只取严格晚于该水位线(createdAt + rowid 决序,
+ * 与 findPendingAgentSwitchHandoff 同 tie-break 口径)的行——即目标引擎停泊
+ * 边界行之后、它"离开期间"的进展。
  */
 export async function listMessagesForAgentHandoff(
   sessionId: string,
   limit = 400,
+  after?: { createdAt: number; rowid: number },
 ): Promise<Array<{ role: string; content: unknown; createdAt: number }>> {
   const db = getDbClient().drizzle;
   const [sessRow] = await db
@@ -897,6 +902,13 @@ export async function listMessagesForAgentHandoff(
     .limit(1);
   const clearedAt = sessRow?.clearedAt ?? null;
   const afterClear = clearedAt === null ? undefined : gt(messages.createdAt, clearedAt);
+  const afterWatermark =
+    after === undefined
+      ? undefined
+      : or(
+          gt(messages.createdAt, after.createdAt),
+          and(eq(messages.createdAt, after.createdAt), gt(messageRowid, after.rowid)),
+        );
   const rows = await db
     .select({
       rowid: messageRowid,
@@ -905,7 +917,9 @@ export async function listMessagesForAgentHandoff(
       createdAt: messages.createdAt,
     })
     .from(messages)
-    .where(and(eq(messages.sessionId, sessionId), isNull(messages.rewindAt), afterClear))
+    .where(
+      and(eq(messages.sessionId, sessionId), isNull(messages.rewindAt), afterClear, afterWatermark),
+    )
     .orderBy(desc(messages.createdAt), desc(messageRowid))
     .limit(limit);
   rows.reverse();
@@ -918,4 +932,92 @@ export async function listMessagesForAgentHandoff(
     }
     return { role: r.role, content, createdAt: r.createdAt };
   });
+}
+
+/** Phase 2:目标引擎的停泊原生会话(由最近一次"它离场"的边界行派生)。 */
+export interface ParkedEngineSession {
+  /** 该引擎离场时的原生 session id(resume 用)。 */
+  sdkSessionId: string;
+  /** 水位线 = 离场边界行的位置;增量交接只取其后的消息。 */
+  watermarkCreatedAt: number;
+  watermarkRowid: number;
+}
+
+/**
+ * session-agent-switch Phase 2:查目标引擎是否有可续接的停泊原生会话。
+ *
+ * 停泊绑定不新增 schema,从边界行确定性派生:最新一条未被 rewind、晚于 /clear
+ * 的 agent_switch 行中,content.fromAgentKind === targetDbKind 的那条——其
+ * fromSdkSessionId 即该引擎离场时的原生会话快照,行位置即水位线。
+ *
+ * 只认"该引擎最近一次离场"那一行:fromSdkSessionId 为空(该引擎上次在场期间
+ * 从未真正 spawn)→ 按无绑定处理,不回退更早的行——更早快照对应的原生会话
+ * 已被后来的全新会话取代,续接它会让引擎拿到与消息流矛盾的记忆。
+ * content 是 JSON,无法在 SQL 里按字段过滤,取有界条数(边界行数量 = 切换次数,
+ * 天然很小)在 JS 里扫。
+ */
+export async function findParkedEngineSession(
+  sessionId: string,
+  targetDbKind: 'cc' | 'codex',
+): Promise<ParkedEngineSession | null> {
+  const db = getDbClient().drizzle;
+  const [sessRow] = await db
+    .select({ clearedAt: sessions.clearedAt })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+  const clearedAt = sessRow?.clearedAt ?? null;
+  const afterClear = clearedAt === null ? undefined : gt(messages.createdAt, clearedAt);
+  const rows = await db
+    .select({
+      rowid: messageRowid,
+      content: messages.content,
+      createdAt: messages.createdAt,
+    })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.sessionId, sessionId),
+        eq(messages.role, 'agent_switch'),
+        isNull(messages.rewindAt),
+        afterClear,
+      ),
+    )
+    .orderBy(desc(messages.createdAt), desc(messageRowid))
+    .limit(50);
+  for (const row of rows) {
+    let parsed: { fromAgentKind?: unknown; fromSdkSessionId?: unknown };
+    try {
+      parsed = JSON.parse(row.content) as typeof parsed;
+    } catch {
+      continue;
+    }
+    if (parsed.fromAgentKind !== targetDbKind) continue;
+    // 命中"该引擎最近一次离场":快照为空即无绑定,不再往更早找。
+    if (typeof parsed.fromSdkSessionId !== 'string' || parsed.fromSdkSessionId.length === 0) {
+      return null;
+    }
+    return {
+      sdkSessionId: parsed.fromSdkSessionId,
+      watermarkCreatedAt: row.createdAt,
+      watermarkRowid: row.rowid,
+    };
+  }
+  return null;
+}
+
+/**
+ * session-agent-switch Phase 2:改写边界行 content 并广播(resume bootstrap 失败
+ * 回落全量交接时,边界卡展示的交接全文与 DB pending 重建源必须跟着换成实际注入
+ * 的版本)。广播复用 created 通道——renderer 对已存在 clientId 走 merge/替换语义。
+ */
+export async function updateAgentSwitchBoundaryContent(
+  sessionId: string,
+  clientId: string,
+  content: unknown,
+): Promise<boolean> {
+  const updated = await updateMessageContent(sessionId, clientId, content);
+  if (!updated) return false;
+  broadcastMessageRow(sessionId, updated);
+  return true;
 }

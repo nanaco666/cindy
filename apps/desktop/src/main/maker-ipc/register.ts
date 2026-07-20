@@ -74,7 +74,9 @@ import { ensureDialogueWorkspaceDir, dialogueWorkspaceRootDir } from '../localDb
 import { healMissingDialogueWorkdir } from '../localDb/dialogueWorkdirSelfHeal.js';
 import {
   createMessage as createDbMessage,
+  findParkedEngineSession,
   listMessagesForAgentHandoff,
+  updateAgentSwitchBoundaryContent,
 } from '../localDb/ipc/messages.js';
 import { visibleMessageTextForConversationSearch } from '../localDb/conversationSearch.pure.js';
 import {
@@ -3620,19 +3622,28 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     },
     getLiveSession: (sessionId) => maker.getSession(sessionId),
     closeSession: (sessionId) => maker.closeSession(sessionId),
-    listMessagesForHandoff: (sessionId) => listMessagesForAgentHandoff(sessionId),
+    listMessagesForHandoff: (sessionId, after) => listMessagesForAgentHandoff(sessionId, 400, after),
+    findParkedEngineSession: (sessionId, targetDbKind) =>
+      findParkedEngineSession(sessionId, targetDbKind),
     applyAgentSwitchToDb: applyAgentSwitchToSessionRow,
     insertBoundaryMessage: async (sessionId, content) => {
+      const clientId = `agent-switch:${createId()}`;
       await createDbMessage(sessionId, {
-        clientId: `agent-switch:${createId()}`,
+        clientId,
         role: 'agent_switch',
         content,
       });
+      return clientId;
+    },
+    updateBoundaryMessage: async (sessionId, clientId, content) => {
+      await updateAgentSwitchBoundaryContent(sessionId, clientId, content);
     },
     setPendingHandoff: (sessionId, handoff) => agentHandoffPending.set(sessionId, handoff),
     bootstrapSwitchedSession: async (sessionId) => {
-      // 切换已提交,从 DB 行(新引擎值)重建 live session;不带 resumeSessionId——
-      // 新引擎从空白原生会话开始,上下文由交接注入承接。
+      // 切换已提交,从 DB 行(新引擎值)重建 live session。resumeSessionId 直接取
+      // 行上的 sdk_session_id:切换事务在有停泊绑定时已把它落成停泊 id(Phase 2
+      // 切回续接),否则为 null = 全新原生会话,上下文由交接注入承接——与
+      // lazy-create(reconcileCreateOptsAgainstDb)同一条 resume 口径。
       const db = getDbClient().drizzle;
       const [row] = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1);
       if (!row) throw new Error(`session ${sessionId} row missing after agent switch`);
@@ -3652,6 +3663,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         permissionMode: (row.permissionMode ?? 'ask') as CreateOpts['permissionMode'],
         planMode: false,
         title: row.title ?? undefined,
+        resumeSessionId: row.sdkSessionId ?? undefined,
       });
       if (co.extraDirs === undefined) {
         try {
