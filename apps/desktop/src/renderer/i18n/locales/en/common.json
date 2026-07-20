@@ -5519,6 +5519,7 @@
     "home": {
       "title": "Skills",
       "description": "Manage local skills, or discover and install more from Skill Hub.",
+      "descriptionLocalOnly": "Manage the local skills installed on this device.",
       "search": "Search skills",
       "clearSearch": "Clear skill search",
       "noSearchResults": "No matching skills found",

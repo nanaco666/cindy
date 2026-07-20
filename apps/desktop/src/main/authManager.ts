@@ -37,6 +37,7 @@ import {
 import { closeDb as closeLocalDb } from './localDb';
 import { readReloginFlag, clearReloginFlag } from './updateService';
 import * as canaryFlagStore from './canaryFlagStore';
+import { decodeAccessTokenOrgSlug } from './authTokenClaims';
 import { getProviderSecretStore } from './secrets/providerSecretStore.js';
 import {
   runRefreshWithReplacementRetry,
@@ -100,6 +101,13 @@ export interface User {
   membershipRole: 'owner' | 'admin' | 'member';
   orgId: string | null;
   orgName: string | null;
+  /**
+   * 组织 slug(access token 的 orgSlug claim,ctx=org 时 auth-server 注入)。
+   * 组织的稳定标识(域名派生、全局唯一,如 'xd'),与 orgId(cuid)/orgName(显示名)
+   * 不同,适合做企业功能分流的配置键。个人身份或旧 token 缺 claim 时为 null。
+   * membership 响应不含此字段,由 snapshotAuthState 出口统一从 access token 解码注入。
+   */
+  orgSlug: string | null;
   passportId: string;
 }
 
@@ -289,6 +297,8 @@ function mapMembershipToAuthUser(membership: AuthMembership, passportId?: string
     membershipRole: membership.role,
     orgId: membership.orgId,
     orgName: membership.orgName,
+    // membership 响应不带 slug;所有出口经 snapshotAuthState 时从 access token 补齐。
+    orgSlug: null,
     passportId: passportId ?? membership.passportId ?? '',
   };
 }
@@ -626,7 +636,9 @@ function broadcastToRenderers(channel: string, payload: unknown): void {
  */
 function snapshotAuthState(): AuthState {
   return {
-    user: currentUser,
+    // orgSlug 在出口处统一从当前 access token 解码注入(token 与 currentUser
+    // 总是成对更新,快照读取时两者一致)。
+    user: currentUser ? { ...currentUser, orgSlug: decodeAccessTokenOrgSlug(accessToken) } : null,
     isAuthenticated: accessToken !== null && currentUser !== null,
     isCanary: currentUser !== null && canaryFlagStore.read(),
     deviceId,
