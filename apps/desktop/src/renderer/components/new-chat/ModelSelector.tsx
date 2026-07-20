@@ -26,6 +26,7 @@ import {
   getModel,
   modelSupportsFastMode,
   providerOffersModel,
+  resolveModelIconKind,
   type ProviderView,
 } from '@lizi/model-providers';
 import { buildProviderSections } from './sourceSwitch';
@@ -113,79 +114,50 @@ export function ProviderMark({
   }
 }
 
-function ModelBrandMark({
-  modelId,
-  displayName,
-  agentKind,
-  fallbackProviderId,
-  fallbackProviderName,
+/**
+ * 模型行 / trigger 的图标 —— 统一规则(桌面与手机同源,见 resolveModelIconKind):
+ * 模型条目带 `icon`(**AI Gateway / 目录设定**)就渲染对应厂牌 mark;缺省或未知值
+ * 回落该行来源供应商标(ProviderMark)。禁止在客户端按 model id 猜厂牌。
+ */
+export function ModelIconMark({
+  icon,
+  providerId,
+  name,
   colorClass = 'text-[var(--model-trigger-text)]',
   withMargin = true,
   dense = false,
 }: {
-  modelId: string;
-  displayName?: string;
-  agentKind: AgentKind | null;
-  fallbackProviderId?: string | null;
-  fallbackProviderName?: string;
+  /** 模型条目的展示图标 id(CatalogModel.icon);undefined = 未设定。 */
+  icon?: string;
+  /** 回落用的来源供应商 id / 展示名(与 ProviderMark 同语义)。 */
+  providerId: string;
+  name?: string;
   colorClass?: string;
   withMargin?: boolean;
   dense?: boolean;
 }) {
-  const common = cn(withMargin && 'mr-1.5', 'shrink-0', colorClass);
-  const markSize = dense ? 12.3 : 13;
-  const brandKind = resolveModelBrandKind({
-    modelId,
-    displayName,
-    agentKind,
-    fallbackProviderId,
-  });
-  if (brandKind === 'claude') {
-    return <ClaudeMark size={markSize} className={common} />;
+  const kind = resolveModelIconKind(icon);
+  if (kind) {
+    const common = cn(withMargin && 'mr-1.5', 'shrink-0', colorClass);
+    const markSize = dense ? 12.3 : 13;
+    if (kind === 'claude') return <ClaudeMark size={markSize} className={common} />;
+    if (kind === 'codex') return <CodexMark size={markSize} className={common} />;
+    return (
+      <XDIncMark
+        size={markSize}
+        className={cn(dense ? 'h-[8.4px] w-[14.2px]' : 'h-[9px] w-[15px]', common)}
+      />
+    );
   }
-  if (brandKind === 'codex') {
-    return <CodexMark size={markSize} className={common} />;
-  }
-  if (!fallbackProviderId) return null;
   return (
     <ProviderMark
-      providerId={fallbackProviderId}
-      name={fallbackProviderName}
+      providerId={providerId}
+      name={name}
       colorClass={colorClass}
       withMargin={withMargin}
       dense={dense}
     />
   );
-}
-
-export type ModelBrandKind = 'claude' | 'codex' | null;
-
-export function resolveModelBrandKind({
-  modelId,
-  displayName,
-  agentKind,
-  fallbackProviderId,
-}: {
-  modelId: string;
-  displayName?: string;
-  agentKind: AgentKind | null;
-  fallbackProviderId?: string | null;
-}): ModelBrandKind {
-  const brandText = `${modelId} ${displayName ?? ''}`.toLowerCase();
-  if (
-    /(^|[\s/])(?:codex|chatgpt|openai)(?:[\s/-]|$)/.test(brandText) ||
-    /(^|[\s/])gpt[-\s]/.test(brandText)
-  ) {
-    return 'codex';
-  }
-  if (/(^|[\s/])(?:claude|opus|sonnet|haiku|fable)(?:[\s/-]|$)/.test(brandText)) {
-    return 'claude';
-  }
-  if (fallbackProviderId === 'openai') return 'codex';
-  if (fallbackProviderId === 'anthropic') return 'claude';
-  if (agentKind === 'codex') return 'codex';
-  if (agentKind === 'claude-code') return 'claude';
-  return null;
 }
 
 // 上下文窗口 tokens → 紧凑展示("1M" / "272K" / "8192")。
@@ -211,6 +183,8 @@ interface RowModel {
   defaultEffort: Effort | null;
   effortDisplayNames?: Partial<Record<string, string>>;
   supportsFastMode?: boolean;
+  /** 展示图标 id(AI Gateway / 目录设定,SectionModel.icon);flat 列表的 ModelDescriptor 无此字段。 */
+  icon?: string;
 }
 
 type Translate = (key: string, options?: { defaultValue?: string }) => string;
@@ -864,7 +838,8 @@ export function ModelSelectorContent({
             {/* 外层 gap-2.5 = icon→名字间距(略宽,与行左内边距更协调);内层 gap-1.5 = 名字→徽标/effort。 */}
             <span className="flex min-w-0 items-center gap-2.5">
               {provider && (
-                <ProviderMark
+                <ModelIconMark
+                  icon={model.icon}
                   providerId={provider.id}
                   name={provider.name}
                   colorClass="text-[var(--text-secondary)]"
@@ -1180,6 +1155,20 @@ export function ModelSelector({
   const triggerActiveProvider = activeSourceId
     ? providers.find((p) => p.id === activeSourceId)
     : undefined;
+  // trigger 图标的统一规则:当前 (来源, 模型) 条目的 icon(AI Gateway / 目录设定)优先,
+  // 缺省回落来源供应商标 —— 与列表行、手机版同一套口径(ModelIconMark)。
+  const triggerModelIcon =
+    triggerActiveProvider && currentAgentKind
+      ? getModel(triggerActiveProvider, modelId, currentAgentKind)?.icon
+      : undefined;
+  // 断开态同一规则,只是来源取「真实断开来源」(currentProviderId)。
+  const disconnectedProvider = currentProviderId
+    ? providers.find((p) => p.id === currentProviderId)
+    : undefined;
+  const disconnectedModelIcon =
+    disconnectedProvider && currentAgentKind
+      ? getModel(disconnectedProvider, modelId, currentAgentKind)?.icon
+      : undefined;
   const triggerFastSupported =
     triggerActiveProvider && currentAgentKind
       ? modelSupportsFastMode(triggerActiveProvider, modelId, currentAgentKind)
@@ -1273,12 +1262,10 @@ export function ModelSelector({
             // ——回落图标会让用户以为在用默认来源,而发送实际按 DB 里的断开来源走(no_oauth 事故)。
             // 错误态用语义豁免 error token(规则 16);trigger 保持可点击,下拉换源即恢复。
             <>
-              <ModelBrandMark
-                modelId={modelId}
-                displayName={currentModel?.displayName}
-                agentKind={currentAgentKind}
-                fallbackProviderId={currentProviderId}
-                fallbackProviderName={providers.find((p) => p.id === currentProviderId)?.name}
+              <ModelIconMark
+                icon={disconnectedModelIcon}
+                providerId={currentProviderId}
+                name={disconnectedProvider?.name}
                 colorClass="text-[var(--error-fg)]"
               />
               <span
@@ -1312,13 +1299,13 @@ export function ModelSelector({
             </>
           ) : (
             <>
+              {/* 图标统一规则:模型条目 icon(AI Gateway / 目录设定)优先,缺省回落
+                  当前真正路由的来源标(activeSourceId)——客户端不按 model id 猜厂牌。 */}
               {activeSourceId && (
-                <ModelBrandMark
-                  modelId={modelId}
-                  displayName={currentModel?.displayName}
-                  agentKind={currentAgentKind}
-                  fallbackProviderId={activeSourceId}
-                  fallbackProviderName={providers.find((p) => p.id === activeSourceId)?.name}
+                <ModelIconMark
+                  icon={triggerModelIcon}
+                  providerId={activeSourceId}
+                  name={providers.find((p) => p.id === activeSourceId)?.name}
                   colorClass={
                     isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : undefined
                   }

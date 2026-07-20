@@ -58,6 +58,11 @@ function validateModel(m: CatalogModel, providerId: string): void {
     assert(isEffort(m.defaultEffort), `model.defaultEffort invalid for '${m.id}'`);
     assert(m.efforts.includes(m.defaultEffort), `model.defaultEffort not listed in efforts for '${m.id}'`);
   }
+  // icon 是可选展示字段:只校验形态,不校验取值(未知值由渲染层回落来源供应商标,
+  // 见 sections.ts resolveModelIconKind)——网关先于客户端登记新图标时不至于 parse 失败。
+  if (m.icon !== undefined) {
+    assert(typeof m.icon === 'string' && m.icon.trim().length > 0, `model.icon must be a non-empty string for '${m.id}'`);
+  }
 }
 
 /** 校验 oauth 描述符（提供了就必须完整——它驱动登录与路由，坏数据必须在 parse 期暴露）。 */
@@ -176,7 +181,8 @@ function validateMediaModels(
 /** 模型派生相关字段的稳定签名（用于跨供应商一致性校验，固定 key 序）。
  *  注：**不含** `supportsFastMode` —— Fast 能力是 per-(provider, agent) 的（见 CatalogModel
  *  文档），同一 model id 在不同供应商下可显式分叉（如某网关剥掉 fast 字段 ⇒ 该来源配 false），
- *  故意排除出一致性校验以放行这种分叉。其余派生字段仍要求跨供应商一致。 */
+ *  故意排除出一致性校验以放行这种分叉。同理**不含** `icon`（展示图标 per-provider 可分叉）
+ *  与 `defaultEnabled`。其余派生字段仍要求跨供应商一致。 */
 function modelSignature(m: CatalogModel): string {
   return JSON.stringify({
     name: m.name,

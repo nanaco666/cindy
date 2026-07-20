@@ -136,6 +136,17 @@ describe('XD 网关权威模型清单重建', () => {
     expect('defaultEnabled' in (cc.find((m) => m.id === 'visible-model') ?? {})).toBe(false);
   });
 
+  it('icon(AI Gateway 展示图标设定)透传;缺省不写键(渲染层回落来源供应商标)', () => {
+    setActiveCatalog(BUNDLED_CATALOG);
+    setXdGatewayModels([
+      { id: 'claude-fable-5', icon: 'claude' },
+      { id: 'plain-model' },
+    ]);
+    const cc = xdModels('claude-code');
+    expect(cc.find((m) => m.id === 'claude-fable-5')?.icon).toBe('claude');
+    expect('icon' in (cc.find((m) => m.id === 'plain-model') ?? {})).toBe(false);
+  });
+
   it('非法 effort 档位被白名单过滤;defaultEffort 不在档位集内时回落 high 规则', () => {
     setActiveCatalog(BUNDLED_CATALOG);
     setXdGatewayModels([

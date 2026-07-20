@@ -32,7 +32,7 @@ vi.mock('@/components/new-chat/ModelSelector', () => ({
   ModelSelectorContent: ({ overlayContentClassName }: { overlayContentClassName?: string }) => (
     <div data-testid="model-selector-content" data-overlay-class={overlayContentClassName} />
   ),
-  ProviderMark: () => null,
+  ModelIconMark: () => null,
 }));
 
 vi.mock('@/hooks/useAgentCapabilities', () => ({

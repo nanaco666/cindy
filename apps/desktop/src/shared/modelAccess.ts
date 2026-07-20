@@ -70,6 +70,11 @@ export interface ModelAccessGatewayModel {
   supportsFastMode?: boolean;
   /** 是否默认出现在模型选择器;缺省按 true(默认可见)。 */
   defaultEnabled?: boolean;
+  /**
+   * 展示图标 id(AI Gateway 侧登记,见 @lizi/model-providers CatalogModel.icon /
+   * resolveModelIconKind);缺省或未知值客户端回落来源供应商标。
+   */
+  icon?: string;
   /** per-tab 能力覆盖(基线字段之上按 agent 应用)。 */
   perAgent?: Partial<Record<'claude-code' | 'codex', ModelAccessAgentOverride>>;
 }
