@@ -23,7 +23,9 @@ import { initMobileTapdb } from '@/analytics/mobileTapdb';
 import { useBundleUpdatePrompt } from '@/update/useBundleUpdatePrompt';
 import { useResumeUpdateCheck } from '@/update/useResumeUpdateCheck';
 import { useStartupOtaGate } from '@/update/useStartupOtaGate';
+import { useCanaryChannelGate } from '@/update/useCanaryChannelGate';
 import { useStartupEndpointGate } from '@/config/useStartupEndpointGate';
+import { IS_OTA_SELFHOST } from '@/config/env';
 import { Observe, ObserveRoot } from '@/observability/observe';
 
 // EAS Observe:启用 expo-router 集成,采集 per-route 导航指标(cold_ttr / warm_ttr / tti)。
@@ -77,16 +79,16 @@ function NavigationGate() {
  * 端点闸门之后的应用主体:OTA 检查更新与业务树都在这里——保证「拉端点清单」
  * 严格先于「检查更新」(本组件只在端点闸门 ready 后才挂载)。
  */
-function RootAfterEndpoints() {
+function RootAfterUpdateChannel({ isCanary }: { isCanary: boolean }) {
   // 自建变体:启动即生效的 JS 热更门(冷启动 check→fetch→reload,本次启动就跑上最新 JS)。
   // 内部 gate 自建 + 非 dev + updates 可用,其余直接 ready=true 不阻塞。见 useStartupOtaGate。
-  const otaReady = useStartupOtaGate();
+  const otaReady = useStartupOtaGate(isCanary);
   // 自建变体:启动时检查整包更新(runtimeVersion 变化 → 引导跳 NPKG)。
   // 内部 IS_OTA_SELFHOST gate,EAS 包为 no-op。JS 热更由上面的门 + expo-updates 处理,与此互补。
-  useBundleUpdatePrompt({ auto: true });
+  useBundleUpdatePrompt({ auto: true, isCanary });
   // 自建变体:后台切回前台时静默补一次检查(OTA 静默 fetch 不 reload、整包仅强更提示)。
   // 内部节流 + IS_OTA_SELFHOST gate,非自建为 no-op。见 useResumeUpdateCheck。
-  useResumeUpdateCheck();
+  useResumeUpdateCheck(isCanary);
   // 热更门未就绪(自建变体冷启动正在 check/fetch/reload)时先渲染 loading,避免闪旧 UI。
   if (!otaReady) {
     return <CenteredScreen title="Cindy" variant="splash" />;
@@ -98,6 +100,14 @@ function RootAfterEndpoints() {
       </DeviceLinkProvider>
     </AuthProvider>
   );
+}
+
+function RootAfterEndpoints() {
+  // 更新检查早于 AuthProvider，必须先恢复上次登录同步到本机的 canary 快照。
+  // 未持久化/读取失败一律 stable；读取完成前不允许发任何 /manifest 或 /latest 请求。
+  const channel = useCanaryChannelGate(IS_OTA_SELFHOST);
+  if (!channel.ready) return <CenteredScreen title="Cindy" variant="splash" />;
+  return <RootAfterUpdateChannel isCanary={channel.isCanary} />;
 }
 
 function RootLayout() {

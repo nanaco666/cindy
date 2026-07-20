@@ -15,12 +15,14 @@ export async function fetchLatestRelease(
   platform = 'ios',
   timeoutMs = DEFAULT_TIMEOUT_MS,
   baseUrl = OTA_SERVER_BASE_URL,
+  isCanary = false,
 ): Promise<unknown | null> {
   if (!baseUrl) return null; // 非自建变体,无自托管服务
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(`${baseUrl}/latest?platform=${encodeURIComponent(platform)}`, {
+    const channelQuery = isCanary ? '&channel=canary' : '';
+    const res = await fetch(`${baseUrl}/latest?platform=${encodeURIComponent(platform)}${channelQuery}`, {
       signal: controller.signal,
       headers: { accept: 'application/json' },
     });

@@ -16,8 +16,9 @@
 > ⚠️ **分发链路变更(2026-07-06,已实现,本文其余章节"引导跳 NPKG 下载"的描述为历史设计)**:
 > 企业重签仍走 NPKG(证书在 NPKG 侧,不可绕开),但 `release-ios-local.mjs` 会把重签后的
 > `.ipa` 经 `release-ios.sh download` 拉回,连同自生成的 `manifest.plist` / `install.html`
-> **直传自有 OSS**(`mobile-dist/ios/<buildNumber>/`);`release.json` 的 `itmsUrl` / `installUrl`
-> 均指向 OSS/CDN,用户装机流量不再经过 NPKG。现状以 `RELEASING.md` 与脚本头注释为准。
+> **直传自有 OSS**(`mobile-dist/ios/<buildNumber>/`)作为内部备份；`canary-release.json` 的
+> `itmsUrl` / `installUrl` 指向当前 region 的正常 App Store 配置，用户装机不使用重签 IPA。
+> 验证后由 promote 复制到 stable。现状以 `RELEASING.md` 与脚本头注释为准。
 >
 > 目标:在本机(mac mini)本地编译 iOS release 包,经 NPKG 企业重签后公司内部分发;**更新走双通道**——纯 JS/TS 改动经自建服务(`mobile-update-server`)做 expo-updates 自托管 OTA(秒级、无感);动了原生层(指纹变化)的整包更新,客户端发现后引导跳 NPKG 下载新整包。**App Store / TestFlight 首期不做**。
 >
@@ -134,7 +135,7 @@ if (process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST === '1') {
 2. **prebuild**:`expo prebuild -p ios --clean`,注入自建变体身份 env(`EXPO_PUBLIC_XDT_OTA_SELFHOST=1` / 必要的 `EXPO_PUBLIC_*`);`pod install`。真实更新地址不参与 build/fingerprint。
 3. **编译**:`xcodebuild archive` + `-exportArchive`,`ExportOptions.plist` 用 `signingStyle=manual` + `teamID=NTC4BJ542G` + `provisioningProfiles: { "com.xd.lizcn": "lizcn_dev" }` + method `development`,证书取钥匙串 `Apple Development: Jiali LIU` → 产出 `.ipa`。profile 文件在仓库外 `/Users/cn-ios/Documents/xdt/XDMakerMobileCer/iOS/Dev/`,脚本用环境变量指向路径,不入库。
 4. **交付 NPKG**:调用 `release-ios.sh upload <ipa>`;默认校验 bundleId `com.xd.lizcn`,企业签 Team 校验 `UE5H8B62F9.*` 不变。
-5. **写整包版本记录**:把 `{ version, buildNumber, runtimeVersion, installUrl, itmsUrl, releaseNotes, minVersion? }` 上传到 OSS(`mobile-ota/ios/release.json`),供 `/latest` 读取。
+5. **写整包版本记录**:把 `{ version, buildNumber, runtimeVersion, installUrl, itmsUrl, releaseNotes, minVersion? }` 上传到 OSS(`mobile-ota/ios/canary-release.json`),供 `/latest?channel=canary` 读取；验证后由 promote 写 stable `release.json`。
 6. **闸门**:沿用 `assertProductionGitGate`(main + clean + `HEAD==origin/main`)、`app.json` 的 `ios.buildNumber` 单调递增(NPKG md5 去重 + iOS 覆盖安装都需要)、**默认 dry-run,`--execute` 才真跑**。
 
 ## 8. 热更:`apps/mobile/scripts/release-ios-ota.mjs` + OSS/CDN 布局
@@ -157,8 +158,10 @@ OSS/CDN 复用桌面端机制(`apps/desktop/scripts/ci/lib.mjs`):
 smash-dev/xdt-maker/mobile-ota/
   assets/<sha256>                               # bundle(.hbc)+ 图片等,内容寻址、永久缓存、天然增量
   ios/<runtimeVersion>/<updateId>/update.json   # 已是 Expo 协议 manifest 形状,服务端零计算
-  ios/<runtimeVersion>/latest.json              # JS OTA 指针:该 runtimeVersion 最新 updateId
-  ios/release.json                              # 整包版本记录(由 release-ios-local.mjs 写,供 /latest)
+  ios/<runtimeVersion>/canary-latest.json       # canary JS OTA 指针(脚本默认写入)
+  ios/<runtimeVersion>/latest.json              # stable JS OTA 指针(promote 后写入)
+  ios/canary-release.json                       # canary 整包记录(脚本默认写入)
+  ios/release.json                              # stable 整包记录(promote 后写入,供 /latest)
 ```
 
 3. `update.json` 直接按 Expo Updates Protocol 的 manifest 字段写好(`id` / `createdAt` / `runtimeVersion` / `launchAsset` / `assets[]` / `metadata` / `extra`),各 url 指向 CDN。
@@ -169,7 +172,7 @@ smash-dev/xdt-maker/mobile-ota/
 > 仓库内 workspace 应用 `apps/mobile-update-server`(部署形态对齐 `apps/heartbeat-server`:TS + Express + pino + Docker + release.sh),部署到 Linux 服务器。无状态、无 DB,数据源就是 CDN 上的 json,服务只做读取与协议翻译。
 
 - **`GET /manifest`(JS OTA,Expo Updates Protocol)**:读请求头 `expo-runtime-version` + `expo-platform`(`expo-channel-name` 首期可忽略)→ 从 CDN 拉 `ios/<rtv>/latest.json` 指向的 `update.json` → 包成 **`multipart/mixed`**(part name `manifest`)返回;无匹配 → **204**(客户端继续跑当前 bundle)。**首期不签名**(决策 3)。
-- **`GET /latest`(整包发现)**:返回 `ios/release.json` 内容(`{ version, buildNumber, runtimeVersion, installUrl, itmsUrl, releaseNotes, minVersion? }`),供客户端比对 runtimeVersion 判断是否需要整包更新。
+- **`GET /latest`(整包发现)**:默认返回 `ios/release.json`;canary 客户端带 `channel=canary` 时返回 `ios/canary-release.json`。两者形状均为 `{ version, buildNumber, runtimeVersion, installUrl, itmsUrl, releaseNotes, minVersion? }`,供客户端比对 runtimeVersion 判断是否需要整包更新。canary 的 iOS 安装地址仍来自 App Store region 配置，重签 IPA 仅作 OSS 内部备份。
 - 技术栈:TypeScript + Express(pino 日志)、Docker 部署,形态与 `apps/heartbeat-server` 一致(`release.sh` → `release/` → `docker compose up -d --build`)。
 
 ## 10. 红线与不变量

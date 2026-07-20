@@ -23,6 +23,7 @@ const APP_ROOT = path.resolve(SRC_ROOT, '..', 'app');
 
 const LIVE_BINDINGS = [
   'AUTH_API_BASE_URL',
+  'OAUTH_BROKER_API_BASE_URL',
   'DEVICE_LINK_API_BASE_URL',
 ];
 

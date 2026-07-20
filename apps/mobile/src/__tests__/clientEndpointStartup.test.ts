@@ -45,6 +45,7 @@ describe('runStartupEndpointResolve(CDN 解析)', () => {
 
     expect(outcome).toEqual({ ok: true, source: 'cdn' });
     expect(env.AUTH_API_BASE_URL).toBe('https://auth-next.example.com');
+    expect(env.OAUTH_BROKER_API_BASE_URL).toBe('https://oauth-next.example.com');
     expect(env.DEVICE_LINK_API_BASE_URL).toBe('https://relay-next.example.com');
     // 语音网关地址与清单解耦(xdGatewayBaseUrl 已退役):保持构建期 env 值不动。
     expect(env.MOBILE_VOICE_LITELLM_BASE_URL).toBe(

@@ -7,7 +7,7 @@
 //       → 从 .ipa 回读内嵌 runtimeVersion(EXUpdates.bundle/fingerprint,落盘供 OTA 复用)
 //       → release-ios.sh upload(NPKG_EXPECT_BUNDLE=com.xd.cindycn,借 NPKG 企业重签)
 //       → release-ios.sh download 拉回重签后的 .ipa → 直传 OSS(ipa + manifest.plist + install.html)
-//       → 写整包版本记录 release.json 到 OSS(供 mobile-update-server /latest)。
+//       → 写整包版本记录 canary-release.json 到 OSS(供 canary 客户端 /latest?channel=canary)。
 //
 // runtimeVersion 取“真正烤进 .ipa 的 fingerprint”为权威值(见 lib/embedded-runtime.mjs 头注):
 // 客户端运行时读该内嵌值与 release.json 比对,不一致就弹整包更新。绝不用 CLI 独立现算——现算会把
@@ -15,7 +15,7 @@
 // NPKG 企业重签只换签名、不改 bundle 内 fingerprint 文件,故读出包时的本地 ipa 即权威值。
 //
 // 分发链路:重签 ipa / manifest / 安装页仍上传自有 OSS/CDN 作为内部安装备份；对客户端广播的
-// release.json 则把 installUrl / itmsUrl 指向当前 region 配置的 App Store 应用。NPKG 只在
+// canary-release.json 则把 installUrl / itmsUrl 指向当前 region 配置的 App Store 应用。NPKG 只在
 // 发版机上参与企业重签一步——企业证书在 NPKG 侧,但普通用户整包更新不再走企业安装链路。
 //
 // 默认 dry-run(校验环境 + 解析 workspace/scheme + 打印计划,不构建、不上传);
@@ -47,7 +47,6 @@ import {
   buildExportOptionsPlist,
   buildReleaseRecord,
   buildAppStoreInstallLinks,
-  fetchBaselineBuildNumber,
   compareBuildNumbers,
   nextDateBuildNumber,
   replaceBuildNumberInAppJson,
@@ -58,7 +57,12 @@ import { clearBundlerCache } from './lib/bundler-cache.mjs';
 import { readEmbeddedRuntimeVersionFromIpa } from './lib/embedded-runtime.mjs';
 import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, OSS_BUCKET, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
 import { mobileClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
-import { formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides, assertRegionOssComplete, stripSelfHostRegionEnv } from './lib/self-host-region.mjs';
+import { assertIosAppStoreConfigured, formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides, assertRegionOssComplete, stripSelfHostRegionEnv } from './lib/self-host-region.mjs';
+import {
+  baselineBuildNumber,
+  buildReleasePointerLocation,
+  fetchCanaryReleaseBaseline,
+} from './lib/release-pointers.mjs';
 
 // NOTE: 不在模块顶层 refreshOssConfig / 派生 OSS key —— OSS 落点桶由 --region 决定,必须在 main()
 // resolve region、Object.assign 覆盖 XDT_OSS_* 后再 refreshOssConfig(),否则会烤进默认(cn)桶。
@@ -91,11 +95,6 @@ function writeRuntimeFile(runtimeVersion) {
   const file = join(dir, 'ios-runtime.json');
   writeFileSync(file, `${JSON.stringify({ runtimeVersion, platform: 'ios' }, null, 2)}\n`);
   log(`  ✓ runtimeVersion 落盘 ${file}(release-ios-ota.mjs 会复用)`);
-}
-
-// fail-closed 读取冷更基线 buildNumber(仅 404/无记录 → null,其它失败抛错);见 lib/ios-local.mjs。
-function fetchPreviousBuildNumber(recordCdn) {
-  return fetchBaselineBuildNumber(recordCdn);
 }
 
 function findWorkspace() {
@@ -181,7 +180,7 @@ function downloadRepackedIpa(childId, env) {
   return dest;
 }
 
-// 重签 ipa + itms manifest plist + 安装页 直传自有 OSS,返回写进 release.json 的链接。
+// 重签 ipa + itms manifest plist + 安装页 直传自有 OSS,返回写进内部备份的链接。
 async function uploadDistToOSS(client, repackedIpaPath, version, buildNumber, bundleId) {
   const targets = buildIosDistTargets({ ossPrefix: OSS_PREFIX, cdnBase: CDN_BASE, version, buildNumber });
   log(`→ 上传重签 ipa → oss://${OSS_BUCKET}/${targets.ipa.key}`);
@@ -202,7 +201,7 @@ async function uploadDistToOSS(client, repackedIpaPath, version, buildNumber, bu
 }
 
 async function uploadReleaseRecord(client, record, recordKey, recordCdn) {
-  const tmp = join(mkdtempSync(join(tmpdir(), 'xdt-rec-')), 'release.json');
+  const tmp = join(mkdtempSync(join(tmpdir(), 'xdt-rec-')), 'canary-release.json');
   writeFileSync(tmp, JSON.stringify(record, null, 2));
   await uploadToOSS(client, recordKey, tmp, { headers: { 'Content-Type': 'application/json' } });
   log(`  ✓ 整包版本记录 → ${recordCdn}`);
@@ -212,11 +211,16 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   // --region 必填(cn|global):选出本次出包身份 + OSS 落点桶 + 签名描述符(见 lib/self-host-region.mjs)。
   const region = resolveSelfHostRegion(args);
+  const iosAppStoreId = assertIosAppStoreConfigured(region);
   // 按 region 切 OSS 落点桶(bucket/cdn/prefix + 可选 AK/SK 后缀),之后 refreshOssConfig 才生效。
   Object.assign(process.env, regionEnvOverrides(region));
   refreshOssConfig();
-  const RELEASE_RECORD_KEY = `${OSS_PREFIX}/mobile-ota/ios/release.json`;
-  const RELEASE_RECORD_CDN = `${CDN_BASE}/mobile-ota/ios/release.json`;
+  const canaryRelease = buildReleasePointerLocation({
+    cdnBase: CDN_BASE, ossPrefix: OSS_PREFIX, platform: 'ios', channel: 'canary',
+  });
+  const stableRelease = buildReleasePointerLocation({
+    cdnBase: CDN_BASE, ossPrefix: OSS_PREFIX, platform: 'ios', channel: 'stable',
+  });
 
   const desktopVersion = await resolveDesktopVersion({
     explicit: typeof args.desktopVersion === 'string' ? args.desktopVersion : process.env.EXPO_PUBLIC_DESKTOP_VERSION,
@@ -239,15 +243,21 @@ async function main() {
   // buildIpa 内仍会再解析一次(取用值);--ipa 复用现成包不构建,豁免。
   if (args.execute && !args.ipa) resolveIosSigningEnv(region);
 
-  // --skip-record 是"CDN 基线不可读/首发"的逃生开关:此时不写 release.json,buildNumber 单调
+  // --skip-record 是"CDN 基线不可读/首发"的逃生开关:此时不写 canary-release.json,buildNumber 单调
   // 门禁本就无意义,必须在读基线之前短路——否则 fetchBaselineBuildNumber 的 fail-closed 抛错会
   // 让 --skip-record --execute 也走不下去,逃生开关名不副实(Greptile P1)。
   let previousBuildNumber = null;
+  let baselineSource = 'none';
   let autoBumped = false;
   if (args.skipRecord) {
-    log('  --skip-record:跳过冷更基线读取与 buildNumber 单调校验(不写 release.json)');
+    log('  --skip-record:跳过冷更基线读取与 buildNumber 单调校验(不写 canary-release.json)');
   } else {
-    previousBuildNumber = await fetchPreviousBuildNumber(RELEASE_RECORD_CDN);
+    const baseline = await fetchCanaryReleaseBaseline({
+      canaryUrl: canaryRelease.url,
+      stableUrl: stableRelease.url,
+    });
+    previousBuildNumber = baselineBuildNumber(baseline);
+    baselineSource = baseline.source;
     // 检测到整包但版本文件没 bump(≤ 线上基线)→ 自动自增 app.json 的 ios.buildNumber:
     // dry-run 只预告不写盘;--execute 写盘发生在 fingerprint/prebuild 之前,保证烤进包、
     // 记录进 release.json 的是同一个新号。写盘后工作区会脏(git 闸门已过),完成后需 commit 回 main。
@@ -275,15 +285,15 @@ async function main() {
 
   // 计划打印
   console.log('');
-  console.log(`target: mobile 冷更(ios, region=${region.authRegion}, ${region.iosBundleId})`);
-  console.log(`version / buildNumber: ${version} / ${buildNumber}${previousBuildNumber ? ` (上一条 ${previousBuildNumber})` : (args.skipRecord ? ' (--skip-record,跳过基线)' : ' (首发)')}`);
+  console.log(`target: mobile canary 冷更(ios, region=${region.authRegion}, ${region.iosBundleId})`);
+  console.log(`version / buildNumber: ${version} / ${buildNumber}${previousBuildNumber ? ` (上一条 ${previousBuildNumber},${baselineSource})` : (args.skipRecord ? ' (--skip-record,跳过基线)' : ' (首个 canary)')}`);
   // 签名描述符来自 region JSON(非机密);此处只预览取值,严格校验在 buildIpa 内(--ipa 复用现成包时不需要)。
   const sPreview = (name, value) => value?.trim() || `(${region.authRegion}.iosSigning.${name} 未填,--execute 构建时必填)`;
   const iosS = region.iosSigning ?? {};
   console.log(`sign: team=${sPreview('teamId', iosS.teamId)} profile=${sPreview('profileName', iosS.profileName)} identity="${sPreview('signIdentity', iosS.signIdentity)}"(来自 self-host-regions.json 的 ${region.authRegion}.iosSigning)`);
   console.log(`oss: bucket=${region.oss?.bucket || '(未填)'} cdn=${region.oss?.cdnBaseUrl || '(未填)'}`);
-  console.log(`app store: id=${region.iosAppStoreId}`);
-  console.log('steps: prebuild → pod-install → xcodebuild archive/export → 从 .ipa 回读 runtimeVersion → NPKG 企业重签 → 重签 ipa 直传 OSS(manifest.plist + install.html)→ 写 release.json');
+  console.log(`app store: id=${iosAppStoreId}`);
+  console.log('steps: prebuild → pod-install → xcodebuild archive/export → 从 .ipa 回读 runtimeVersion → NPKG 企业重签 → 重签 ipa 直传 OSS(manifest.plist + install.html)→ 写 canary-release.json');
   for (const line of formatBakedEnvLines(env)) console.log(line);
   if (!args.execute) {
     console.log('dry-run: 传 --execute 才真正构建 + 上传(需 macOS + Xcode + 证书 + NPKG 白名单 + OSS AK/SK env)');
@@ -314,7 +324,7 @@ async function main() {
 
   const client = createOSSClient();
   const enterpriseLinks = await uploadDistToOSS(client, repackedIpa, version, buildNumber, region.iosBundleId);
-  const appStoreLinks = buildAppStoreInstallLinks(region.iosAppStoreId);
+  const appStoreLinks = buildAppStoreInstallLinks(iosAppStoreId);
 
   if (!args.skipRecord) {
     const record = buildReleaseRecord({
@@ -322,15 +332,16 @@ async function main() {
       installUrl: appStoreLinks.installUrl, itmsUrl: appStoreLinks.itmsUrl,
       releaseNotes: message || undefined,
     });
-    await uploadReleaseRecord(client, record, RELEASE_RECORD_KEY, RELEASE_RECORD_CDN);
+    await uploadReleaseRecord(client, record, canaryRelease.key, canaryRelease.url);
   }
 
   console.log('');
-  console.log('==================== 冷更发布完成 ====================');
+  console.log('==================== Canary 冷更发布完成 ====================');
   console.log(`  runtimeVersion : ${runtimeVersion}`);
   console.log(`  app store      : ${appStoreLinks.installUrl}`);
   console.log(`  enterprise     : ${enterpriseLinks.installUrl}(OSS 内部安装备份)`);
   console.log(`  下一步:纯 JS 改动用 \`${formatSelfHostReleaseCommand('ios', 'ota', region, { execute: true })}\` 发热更(复用此 runtimeVersion)`);
+  console.log(`  验证后提升 stable: \`${formatSelfHostReleaseCommand('ios', 'promote', region, { yes: true })}\``);
   if (autoBumped) {
     console.log(`  ⚠ app.json ios.buildNumber 已自动 bump 为 ${buildNumber},记得 commit + push 回 main(否则下次 git 闸门会拦)`);
   }

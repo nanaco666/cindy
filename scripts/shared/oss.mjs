@@ -209,3 +209,8 @@ export async function uploadToOSS(client, ossKey, localPath, options = {}) {
     await client.put(ossKey, localPath, options);
   }
 }
+
+/** 删除一个可变 OSS 指针，供需要回滚“原来不存在的 key”的发布流程使用。 */
+export async function deleteFromOSS(client, ossKey) {
+  await client.delete(ossKey);
+}

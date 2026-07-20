@@ -1,20 +1,20 @@
 #!/usr/bin/env node
 // =============================================================================
-// release-ios-ota.mjs —— 自建线 JS 热更(OTA)发布
+// release-ios-ota.mjs —— 自建线 JS 热更(OTA)发布到 canary
 //
 // 流程:算 runtimeVersion(须与冷更整包同源)→ expo export → 按 Expo Updates Protocol
-//       组装 manifest → 上传 bundle/assets(内容寻址)+ update.json + latest.json 到 OSS。
+//       组装 manifest → 上传 bundle/assets(内容寻址)+ update.json + canary-latest.json 到 OSS。
 //
 // 关键:runtimeVersion 必须与本机冷更 ipa 烧进的值逐字节一致(见 docs 红线 2)。因此优先
 //       复用冷更脚本落盘的 release/ios-runtime.json;缺失才在同一 self-host env 下现算。
 //
-// 默认 dry-run(只算 + export + 打印计划);--execute 才真正上传并翻新 latest.json。
+// 默认 dry-run(只算 + export + 打印计划);--execute 才真正上传并翻新 canary-latest.json。
 // --execute 前会先校验必需 public env(assertPublicEnv:缺 auth-server 区域/地址等则
 // 中止,避免把空值烤进 bundle 后所有自建用户登录崩),再过两道发布闸门(与 release-ios-local.mjs
 // 对称,均可用逃生开关跳过):
 //   · git 闸门 assertProductionGitGate()(main/clean/HEAD;--skip-git-gate 跳过);
 //   · runtime 基线校验:--execute 会**重算当前工作树指纹**(不信任可能过期的
-//     release/ios-runtime.json),要它等于 CDN 冷更装机包记录 mobile-ota/ios/release.json
+//     release/ios-runtime.json),要它等于 CDN 冷更装机包记录 mobile-ota/ios/canary-release.json
 //     的 runtimeVersion,否则原生层已变、热更会推给跑着不同原生面的客户端,须先出冷更整包;
 //     --skip-runtime-check 跳过,显式 --runtime-version 作人工 override(仍过基线校验)。
 // OSS/CDN 配置统一由 scripts/shared/oss.mjs 在发布环境中解析。
@@ -32,6 +32,12 @@ import { buildAssetEntry, buildManifest, sha256Hex, assertOtaRuntimeMatchesBasel
 import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
 import { mobileClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
 import { formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides, assertRegionOssComplete, stripSelfHostRegionEnv } from './lib/self-host-region.mjs';
+import {
+  baselineRuntimeVersion,
+  buildOtaPointerLocation,
+  buildReleasePointerLocation,
+  fetchCanaryReleaseBaseline,
+} from './lib/release-pointers.mjs';
 
 // NOTE: 不在模块顶层 refreshOssConfig / 派生 OSS key —— OSS 落点桶由 --region 决定,以下 OTA_ROOT /
 // ASSET_DIR / RELEASE_RECORD_CDN 在 main() resolve region、覆盖 XDT_OSS_* 后 refreshOssConfig() 时赋值。
@@ -39,7 +45,9 @@ const MOBILE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const NPX = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 let OTA_ROOT;              // `${OSS_PREFIX}/mobile-ota`(OSS key 前缀)
 let ASSET_DIR;            // `${OTA_ROOT}/assets`(内容寻址目录)
-let RELEASE_RECORD_CDN;   // `${CDN_BASE}/mobile-ota/ios/release.json`(冷更装机包记录,release-ios-local 写)
+let CANARY_RELEASE_RECORD_CDN;
+let STABLE_RELEASE_RECORD_CDN;
+let BASELINE_RECORD_CDN;
 const cdnUrl = (sha) => `${CDN_BASE}/mobile-ota/assets/${sha}`; // 读 live CDN_BASE(refresh 之后才调用)
 
 function log(msg) { console.error(msg); }
@@ -47,15 +55,12 @@ function log(msg) { console.error(msg); }
 // 读 CDN 冷更装机包记录的 runtimeVersion —— 在装客户端实际运行的原生 runtime 基线。
 // 无记录(尚未出过冷更整包)或网络失败返回 null,由调用方按闸门策略处理。
 async function fetchColdBaselineRuntime() {
-  try {
-    // 可变指针 release.json:加 ?t= cache-bust,避免刚发完冷更就读到 CDN 边缘缓存的旧 runtime。
-    const url = `${RELEASE_RECORD_CDN}?t=${Date.now()}`;
-    const res = await fetch(url, { headers: { accept: 'application/json', 'cache-control': 'no-cache' } });
-    if (!res.ok) return null;
-    return (await res.json())?.runtimeVersion ?? null;
-  } catch {
-    return null;
-  }
+  const baseline = await fetchCanaryReleaseBaseline({
+    canaryUrl: CANARY_RELEASE_RECORD_CDN,
+    stableUrl: STABLE_RELEASE_RECORD_CDN,
+  });
+  BASELINE_RECORD_CDN = baseline.url ?? CANARY_RELEASE_RECORD_CDN;
+  return { runtimeVersion: baselineRuntimeVersion(baseline), source: baseline.source };
 }
 
 // runtime 基线闸门(--execute 用):判定逻辑在 lib/ota-manifest.mjs(纯函数,已单测),
@@ -65,7 +70,7 @@ function assertRuntimeMatchesColdBaseline({ runtimeVersion, baselineRuntime, ski
     runtimeVersion,
     baselineRuntime,
     skip,
-    recordUrl: RELEASE_RECORD_CDN,
+    recordUrl: BASELINE_RECORD_CDN,
     coldBuildCommand: formatSelfHostReleaseCommand('ios', 'local', region, { execute: true }),
   });
   if (r.skipped) log('  warn: --skip-runtime-check,跳过 runtime 基线校验(仅在明确知情时用)');
@@ -89,7 +94,7 @@ function selfhostEnv(region, desktopVersion) {
 // 现算当前工作树的 expo-updates 指纹(self-host env)—— 本次 export 的 JS 真正对应的原生面。
 // ⚠️ TODO(runtimeVersion 一致性,后续 PR):此处 CLI 现算会把已生成的 ios/(prebuild 各阶段内容不同)
 // 纳入指纹,与冷更包真正烤进的内嵌 fingerprint 不一定相等(release-ios-local 已改为从 .ipa 回读内嵌值
-// 写 release.json)。二者错位时,本脚本的 runtime 基线闸门会误判、且热更会发布到客户端查不到的路径。
+// 写 canary-release.json)。二者错位时,本脚本的 runtime 基线闸门会误判、且热更会发布到客户端查不到的路径。
 // 治本方案是让 CLI 指纹忽略生成的 ios/ + 构建产物(fingerprint.config.cjs),使 CLI 值 == 内嵌值。
 function computeFingerprint(env) {
   log('→ 算 runtimeVersion(expo-updates fingerprint,self-host env,约 30-60s)…');
@@ -177,7 +182,12 @@ async function main() {
   refreshOssConfig();
   OTA_ROOT = `${OSS_PREFIX}/mobile-ota`;
   ASSET_DIR = `${OTA_ROOT}/assets`;
-  RELEASE_RECORD_CDN = `${CDN_BASE}/mobile-ota/ios/release.json`;
+  CANARY_RELEASE_RECORD_CDN = buildReleasePointerLocation({
+    cdnBase: CDN_BASE, ossPrefix: OSS_PREFIX, platform: 'ios', channel: 'canary',
+  }).url;
+  STABLE_RELEASE_RECORD_CDN = buildReleasePointerLocation({
+    cdnBase: CDN_BASE, ossPrefix: OSS_PREFIX, platform: 'ios', channel: 'stable',
+  }).url;
 
   const desktopVersion = await resolveDesktopVersion({
     explicit: typeof args.desktopVersion === 'string' ? args.desktopVersion : process.env.EXPO_PUBLIC_DESKTOP_VERSION,
@@ -191,7 +201,8 @@ async function main() {
 
   // dry-run 用缓存/参数值快速预览;--execute 会重算当前工作树指纹作为权威发布值(见下)。
   let runtimeVersion = runtimeFromFileOrCompute(args, env);
-  const baselineRuntime = await fetchColdBaselineRuntime();
+  const baseline = await fetchColdBaselineRuntime();
+  const baselineRuntime = baseline.runtimeVersion;
   let runtimeMatchesBaseline = baselineRuntime != null && baselineRuntime === runtimeVersion;
 
   // 发布闸门只在 --execute 生效,且早于 expo export —— 缺配置/mismatch 快速失败,不白跑一次导出。
@@ -223,24 +234,30 @@ async function main() {
   const { manifest, uploads } = collectUpdate(distDir, runtimeVersion, expoClient);
 
   const manifestKey = `${OTA_ROOT}/ios/${runtimeVersion}/${manifest.id}/update.json`;
-  const latestKey = `${OTA_ROOT}/ios/${runtimeVersion}/latest.json`;
+  const canaryLatest = buildOtaPointerLocation({
+    cdnBase: CDN_BASE,
+    ossPrefix: OSS_PREFIX,
+    platform: 'ios',
+    runtimeVersion,
+    channel: 'canary',
+  });
   const manifestJson = JSON.stringify(manifest);
 
   // ── 计划打印 ──
   console.log('');
-  console.log(`target: mobile OTA (ios, runtimeVersion=${runtimeVersion})`);
-  console.log(`baseline: 冷更装机包 runtimeVersion=${baselineRuntime ?? '(无记录)'}${runtimeMatchesBaseline ? ' — 一致 ✓' : ' — 不一致/缺失 ✗'}`);
+  console.log(`target: mobile canary OTA (ios, runtimeVersion=${runtimeVersion})`);
+  console.log(`baseline: ${baseline.source} 冷更 runtimeVersion=${baselineRuntime ?? '(无记录)'}${runtimeMatchesBaseline ? ' — 一致 ✓' : ' — 不一致/缺失 ✗'}`);
   console.log(`updateId: ${manifest.id}`);
   console.log(`assets: ${uploads.length}(launch + ${uploads.length - 1})`);
   console.log(`manifest → ${manifestKey}`);
-  console.log(`latest   → ${latestKey}`);
+  console.log(`latest   → ${canaryLatest.key}`);
   console.log(`cdn base : ${CDN_BASE}/mobile-ota`);
   if (!args.execute) {
     console.log('note: 上方 runtimeVersion 为缓存/参数快照;--execute 会重算当前工作树指纹并与基线严格比对');
     if (!runtimeMatchesBaseline) {
       console.log('warn: 缓存 runtime 与冷更基线不一致/缺失,--execute 大概率被拦截(需先出冷更整包,或显式 --skip-runtime-check)');
     }
-    console.log('dry-run: 传 --execute 才真正上传并翻新 latest.json');
+    console.log('dry-run: 传 --execute 才真正上传并翻新 canary-latest.json');
     return;
   }
 
@@ -254,18 +271,19 @@ async function main() {
   }
   log(`  ✓ assets 上传 ${uploaded} 个,复用已存在 ${skipped} 个`);
 
-  // 先传归档 update.json,再翻新 latest.json 指针(latest 最后,避免指向未就绪产物)。
+  // 先传归档 update.json,再翻新 canary-latest.json 指针(指针最后,避免指向未就绪产物)。
   const { writeFileSync, mkdtempSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const tmp = join(mkdtempSync(join(tmpdir(), 'xdt-ota-')), 'update.json');
   writeFileSync(tmp, manifestJson);
   await uploadToOSS(client, manifestKey, tmp, { headers: { 'Content-Type': 'application/json' } });
-  await uploadToOSS(client, latestKey, tmp, { headers: { 'Content-Type': 'application/json' } });
+  await uploadToOSS(client, canaryLatest.key, tmp, { headers: { 'Content-Type': 'application/json' } });
   console.log('');
-  console.log('==================== OTA 发布完成 ====================');
+  console.log('==================== Canary OTA 发布完成 ====================');
   console.log(`  runtimeVersion : ${runtimeVersion}`);
   console.log(`  updateId       : ${manifest.id}`);
-  console.log(`  manifest(CDN) : ${CDN_BASE}/mobile-ota/ios/${runtimeVersion}/latest.json`);
+  console.log(`  manifest(CDN) : ${canaryLatest.url}`);
+  console.log(`  验证后提升 stable: \`${formatSelfHostReleaseCommand('ios', 'promote', region, { yes: true })}\``);
   console.log('======================================================');
 }
 

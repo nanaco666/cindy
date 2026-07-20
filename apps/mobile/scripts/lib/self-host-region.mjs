@@ -237,21 +237,38 @@ export function resolveSelfHostRegion(args, options = {}) {
 }
 
 /**
+ * iOS 自建冷更的 canary release record 必须指向正常 App Store 配置。
+ * dev 在 app.config.js 中允许没有商店 ID（开发包仍可构建），但一旦走
+ * 自建 iOS 发布就不能把空值写进 release.json；在构建/NPKG 之前 fail-fast。
+ */
+export function assertIosAppStoreConfigured(regionConfig) {
+  const id = String(regionConfig?.iosAppStoreId ?? '').trim();
+  if (!/^\d+$/.test(id)) {
+    throw new Error(
+      `iOS 自建 canary 发布需要 ${regionConfig?.authRegion ?? '?'}.iosAppStoreId 为纯数字 App Store ID;` +
+        'dev 开发包可以留空，但不能发布到自建 canary(否则客户端没有正常安装入口)',
+    );
+  }
+  return id;
+}
+
+/**
  * 生成自建线发版命令,确保后续操作沿用当前地区,不回落到隐式默认值。
  * @param {'ios' | 'android'} platform
- * @param {'check' | 'local' | 'ota'} action
+ * @param {'check' | 'local' | 'ota' | 'promote'} action
  * @param {string | { authRegion?: string }} region
- * @param {{ execute?: boolean }} [options]
+ * @param {{ execute?: boolean; yes?: boolean }} [options]
  */
 export function formatSelfHostReleaseCommand(platform, action, region, options = {}) {
   if (!['ios', 'android'].includes(platform)) throw new Error(`未知自建线平台: ${platform}`);
-  if (!['check', 'local', 'ota'].includes(action)) throw new Error(`未知自建线操作: ${action}`);
+  if (!['check', 'local', 'ota', 'promote'].includes(action)) throw new Error(`未知自建线操作: ${action}`);
   const authRegion = typeof region === 'string' ? region : region?.authRegion;
   if (!SELF_HOST_REGIONS.includes(authRegion)) {
     throw new Error(`自建线命令 region 只能是 ${SELF_HOST_REGIONS.join(' 或 ')},收到: ${authRegion}`);
   }
   const execute = options.execute === true ? ' --execute' : '';
-  return `pnpm mobile:release:${platform}:${action} -- --region ${authRegion}${execute}`;
+  const yes = options.yes === true ? ' --yes' : '';
+  return `pnpm mobile:release:${platform}:${action} -- --region ${authRegion}${execute}${yes}`;
 }
 
 /** region 对应的 env 后缀(CN / GLOBAL),用于机密类 env 变量名。 */

@@ -157,6 +157,12 @@ export let AUTH_API_BASE_URL = normalizeBaseUrlWithDefault(
   DEV_MANIFEST.authApiBaseUrl ?? '',
 );
 
+/** 登录后读取用户级 isCanary feature flag；正式包由 endpoint.json 运行期回写。 */
+export let OAUTH_BROKER_API_BASE_URL = normalizeBaseUrlWithDefault(
+  '',
+  DEV_MANIFEST.oauthBrokerApiBaseUrl ?? '',
+);
+
 /** 本地 / self-host 构建只认 region JSON 写入的 Expo extra;EAS 线使用 EXPO_PUBLIC_*。 */
 export function resolveMobileGoogleConfig(
   regionConfigAuthoritative: boolean,
@@ -256,6 +262,7 @@ export const ENDPOINT_MANIFEST_BASE_URL = configuredValue(
  */
 export function applyResolvedClientEndpoints(resolved: {
   authApiBaseUrl?: string;
+  oauthBrokerApiBaseUrl?: string;
   deviceLinkApiBaseUrl?: string;
   mobileUpdateBaseUrl?: string;
   /** 审核模式送审版本号(parser 产出,null = 清单未填;undefined = 不改动)。 */
@@ -263,6 +270,9 @@ export function applyResolvedClientEndpoints(resolved: {
 }): void {
   if (resolved.authApiBaseUrl !== undefined) {
     AUTH_API_BASE_URL = normalizeBaseUrlWithDefault(resolved.authApiBaseUrl, '');
+  }
+  if (resolved.oauthBrokerApiBaseUrl !== undefined) {
+    OAUTH_BROKER_API_BASE_URL = normalizeBaseUrlWithDefault(resolved.oauthBrokerApiBaseUrl, '');
   }
   if (resolved.deviceLinkApiBaseUrl !== undefined) {
     DEVICE_LINK_API_BASE_URL = resolved.deviceLinkApiBaseUrl.replace(/\/$/, '');
