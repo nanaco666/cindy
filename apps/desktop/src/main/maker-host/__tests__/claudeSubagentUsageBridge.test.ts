@@ -245,6 +245,46 @@ describe('ClaudeSubagentUsageBridge', () => {
     expect(bridge.reserveRequest(1_001, payload)).toBe('agent-inflight');
   });
 
+  it('moves active streaming responses out of the pending cap while keeping their task protected', () => {
+    const bridge = new ClaudeSubagentUsageBridge();
+    bridge.registerTask({
+      taskId: 'agent-streaming',
+      parentToolUseId: 'toolu-streaming',
+      prompt: 'Solve the streaming calculator problem',
+      model: 'codex/gpt-5.6-terra',
+    });
+    const payload = requestPayload(
+      'codex/gpt-5.6-terra',
+      'Solve the streaming calculator problem',
+    );
+    const sinks: Array<ReturnType<typeof openObservation>> = [];
+
+    for (let reqId = 1; reqId <= 1_001; reqId += 1) {
+      expect(bridge.reserveRequest(reqId, payload)).toBe('agent-streaming');
+      sinks.push(
+        openObservation(
+          bridge,
+          reqId,
+          'codex/gpt-5.6-terra',
+          'Solve the streaming calculator problem',
+        ),
+      );
+    }
+
+    for (let index = 0; index < 205; index += 1) {
+      bridge.registerTask({
+        taskId: `agent-stream-pressure-${index}`,
+        parentToolUseId: `toolu-stream-pressure-${index}`,
+        prompt: `Solve stream pressure problem ${index}`,
+        model: 'codex/gpt-5.6-terra',
+      });
+    }
+
+    sinks[0]?.onData?.(sse(100, 10));
+    sinks[0]?.onEnd?.();
+    expect(bridge.getTaskUsage('agent-streaming')).toEqual({ totalTokens: 110 });
+  });
+
   it('prefers the longest matching prompt when prompts overlap', () => {
     const bridge = new ClaudeSubagentUsageBridge();
     bridge.registerTask({

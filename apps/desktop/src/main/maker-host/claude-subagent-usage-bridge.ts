@@ -82,11 +82,15 @@ function requestUserTexts(body: Record<string, unknown>): string[] {
 export class ClaudeSubagentUsageBridge {
   private readonly tasks = new Map<string, TrackedTask>();
   private readonly taskIdByRequestId = new Map<number, string>();
+  private readonly activeResponseCountByTaskId = new Map<string, number>();
   private nextRegistrationOrder = 0;
 
   /** Enforces the task cap without evicting entries still referenced by in-flight responses. */
   private trimTasks(): void {
-    const reservedTaskIds = new Set(this.taskIdByRequestId.values());
+    const reservedTaskIds = new Set([
+      ...this.taskIdByRequestId.values(),
+      ...this.activeResponseCountByTaskId.keys(),
+    ]);
     while (this.tasks.size > MAX_TRACKED_TASKS) {
       let oldestEvictableTaskId: string | undefined;
       for (const taskId of this.tasks.keys()) {
@@ -152,14 +156,29 @@ export class ClaudeSubagentUsageBridge {
     return selected.taskId;
   }
 
-  /** Reads the task reserved for a proxy request without ending its in-flight protection. */
-  getReservedTask(reqId: number): string | null {
-    return this.taskIdByRequestId.get(reqId) ?? null;
+  /** Transfers request protection to a compact per-task counter once the response starts. */
+  activateReservedTask(reqId: number): string | null {
+    const taskId = this.taskIdByRequestId.get(reqId);
+    if (!taskId) return null;
+    this.taskIdByRequestId.delete(reqId);
+    this.activeResponseCountByTaskId.set(
+      taskId,
+      (this.activeResponseCountByTaskId.get(taskId) ?? 0) + 1,
+    );
+    return taskId;
   }
 
   /** Ends the in-flight protection after the response is fully handled. */
   releaseReservedTask(reqId: number): void {
     this.taskIdByRequestId.delete(reqId);
+  }
+
+  /** Ends task protection after an active response has committed or been abandoned. */
+  releaseActiveTask(taskId: string): void {
+    const count = this.activeResponseCountByTaskId.get(taskId);
+    if (!count) return;
+    if (count === 1) this.activeResponseCountByTaskId.delete(taskId);
+    else this.activeResponseCountByTaskId.set(taskId, count - 1);
   }
 
   recordResponseUsage(taskId: string, usage: Record<string, unknown>): void {
@@ -182,6 +201,7 @@ export class ClaudeSubagentUsageBridge {
   clear(): void {
     this.tasks.clear();
     this.taskIdByRequestId.clear();
+    this.activeResponseCountByTaskId.clear();
   }
 }
 
@@ -218,7 +238,7 @@ export function createClaudeSubagentUsageResponseObserver(
       bridge.releaseReservedTask(ctx.reqId);
       return null;
     }
-    const taskId = bridge.getReservedTask(ctx.reqId);
+    const taskId = bridge.activateReservedTask(ctx.reqId);
     if (!taskId) return null;
 
     let done = false;
@@ -247,7 +267,7 @@ export function createClaudeSubagentUsageResponseObserver(
     const finishWithoutUsage = (): void => {
       if (done) return;
       done = true;
-      bridge.releaseReservedTask(ctx.reqId);
+      bridge.releaseActiveTask(taskId);
     };
 
     const processFrame = (frame: string): void => {
@@ -300,7 +320,7 @@ export function createClaudeSubagentUsageResponseObserver(
       }
       commitUsage();
       done = true;
-      bridge.releaseReservedTask(ctx.reqId);
+      bridge.releaseActiveTask(taskId);
     };
 
     const decoder = makeDecompressor(headerValue(ctx.responseHeaders, 'content-encoding'));
