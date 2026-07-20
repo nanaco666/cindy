@@ -36,7 +36,7 @@ vi.mock('../../client/current', () => ({
   getDbClient: () => ({ drizzle: h.db }),
 }));
 
-import { registerMessageIpc } from '../messages';
+import { readPriorUserRoundCost, registerMessageIpc } from '../messages';
 
 function createDb(): Database.Database {
   const sqlite = new Database(':memory:');
@@ -75,6 +75,31 @@ function insertMessage(sqlite: Database.Database, input: { id: string; createdAt
       clientId: input.id,
       content: JSON.stringify(input.content),
       createdAt: input.createdAt,
+    });
+}
+
+function insertCostMessage(
+  sqlite: Database.Database,
+  input: {
+    id: string;
+    role: 'user' | 'assistant';
+    createdAt: number;
+    agentMeta?: Record<string, unknown>;
+    rewindAt?: number | null;
+  },
+): void {
+  sqlite
+    .prepare(`
+      INSERT INTO messages (
+        id, client_id, session_id, role, content, tool_use_id, agent_meta, created_at, rewind_at
+      ) VALUES (
+        @id, @id, 's1', @role, '""', NULL, @agentMeta, @createdAt, @rewindAt
+      )
+    `)
+    .run({
+      ...input,
+      agentMeta: input.agentMeta ? JSON.stringify(input.agentMeta) : null,
+      rewindAt: input.rewindAt ?? null,
     });
 }
 
@@ -156,5 +181,125 @@ describe('local-db:messages:list cursor', () => {
       2,
       3,
     ]);
+  });
+
+  it('历史消息读取时投影完整用户轮成本，但不回写原始分段', async () => {
+    const sqlite = createDb();
+    sqlite.prepare('INSERT INTO sessions (id, cleared_at) VALUES (?, NULL)').run('s1');
+    insertCostMessage(sqlite, { id: 'user', role: 'user', createdAt: 1_000 });
+    insertCostMessage(sqlite, {
+      id: 'segment-1',
+      role: 'assistant',
+      createdAt: 1_100,
+      agentMeta: { turnCostUsd: 14.801987 },
+    });
+    insertCostMessage(sqlite, {
+      id: 'segment-2',
+      role: 'assistant',
+      createdAt: 1_200,
+      agentMeta: { turnCostUsd: 4.132204 },
+    });
+    insertCostMessage(sqlite, {
+      id: 'segment-3',
+      role: 'assistant',
+      createdAt: 1_300,
+      agentMeta: { turnCostUsd: 32.517991 },
+    });
+    insertCostMessage(sqlite, {
+      id: 'final',
+      role: 'assistant',
+      createdAt: 1_400,
+      agentMeta: { turnCostUsd: 0.777042 },
+    });
+
+    registerMessageIpc();
+    const prepareSpy = vi.spyOn(sqlite, 'prepare');
+    const listHandler = h.handlers.get('local-db:messages:list');
+    const rows = await listHandler?.({}, 's1', { limit: 10 }) as Array<{
+      id: string;
+      agentMeta: Record<string, unknown> | null;
+    }>;
+    const final = rows.find((row) => row.id === 'final');
+    expect(final?.agentMeta).toMatchObject({
+      turnCostUsd: 0.777042,
+      userTurnCostUsd: 52.229224,
+      userTurnCostIsEstimate: false,
+    });
+    const stored = sqlite.prepare('SELECT agent_meta FROM messages WHERE id = ?').get('final') as { agent_meta: string };
+    expect(JSON.parse(stored.agent_meta)).toEqual({
+      turnCostUsd: 0.777042,
+    });
+    // list/session + one visibility scan (plus the direct storage assertion);
+    // never one SQLite query set per SDK segment.
+    expect(prepareSpy).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe('readPriorUserRoundCost', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('跨多个 SDK done 累计真实用户轮，跳过 autoResume，并以 rowid 处理同毫秒消息', async () => {
+    const sqlite = createDb();
+    sqlite.prepare('INSERT INTO sessions (id, cleared_at) VALUES (?, NULL)').run('s1');
+    insertCostMessage(sqlite, { id: 'user', role: 'user', createdAt: 1_000 });
+    insertCostMessage(sqlite, {
+      id: 'segment-1',
+      role: 'assistant',
+      createdAt: 1_100,
+      agentMeta: { turnCostUsd: 14.801987 },
+    });
+    insertCostMessage(sqlite, {
+      id: 'auto-resume',
+      role: 'user',
+      createdAt: 1_200,
+      agentMeta: { autoResume: true },
+    });
+    insertCostMessage(sqlite, {
+      id: 'segment-2',
+      role: 'assistant',
+      createdAt: 1_300,
+      agentMeta: { turnCostUsd: 4.132204, turnCostIsEstimate: true },
+    });
+    // target 与上一个分段同毫秒，必须靠 rowid 排除 target 本身。
+    insertCostMessage(sqlite, { id: 'target', role: 'assistant', createdAt: 1_300 });
+
+    await expect(readPriorUserRoundCost('s1', 'target')).resolves.toEqual({
+      costUsd: 18.934191,
+      hasEstimatedValue: true,
+    });
+  });
+
+  it('忽略 /clear 前和 rewind 的分段', async () => {
+    const sqlite = createDb();
+    sqlite.prepare('INSERT INTO sessions (id, cleared_at) VALUES (?, ?)').run('s1', 1_000);
+    insertCostMessage(sqlite, { id: 'old-user', role: 'user', createdAt: 900 });
+    insertCostMessage(sqlite, {
+      id: 'old-segment',
+      role: 'assistant',
+      createdAt: 950,
+      agentMeta: { turnCostUsd: 99 },
+    });
+    insertCostMessage(sqlite, { id: 'user', role: 'user', createdAt: 1_100 });
+    insertCostMessage(sqlite, {
+      id: 'visible-segment',
+      role: 'assistant',
+      createdAt: 1_200,
+      agentMeta: { turnCostUsd: 0.5 },
+    });
+    insertCostMessage(sqlite, {
+      id: 'rewound-segment',
+      role: 'assistant',
+      createdAt: 1_300,
+      agentMeta: { turnCostUsd: 10 },
+      rewindAt: 1_400,
+    });
+    insertCostMessage(sqlite, { id: 'target', role: 'assistant', createdAt: 1_500 });
+
+    await expect(readPriorUserRoundCost('s1', 'target')).resolves.toEqual({
+      costUsd: 0.5,
+      hasEstimatedValue: false,
+    });
   });
 });

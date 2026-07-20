@@ -2,7 +2,7 @@
  * messageTurnCost.test.ts
  * ---------------------------------------------------------------------------
  * per-turn 费用展示(MessageActionBar"本轮消耗")的 renderer 侧:
- *   - formatTurnCostUsd:小额费用的分档精度($0.003 不能被抹成 $0.00)。
+ *   - formatTurnCostUsd:用户可见费用统一保留两位小数。
  *   - makerChatStore:历史加载从 agentMeta 提取 turnCostUsd;本机 IPC 与 device-link
  *     remote push 都按 clientId 命中消息补字段;clientId 不存在 → state 引用不变(no-op)。
  */
@@ -56,14 +56,15 @@ import * as messageService from '@/lib/messageService';
 import type { Message } from '@/lib/ccAgent.types';
 
 describe('formatTurnCostUsd', () => {
-  it('分档精度:两位 / 三位小数 / 下限 / 紧凑', () => {
+  it('始终保留两位小数，小于一美分显示下限', () => {
     expect(formatTurnCostUsd(0.15)).toBe('$0.15');
+    expect(formatTurnCostUsd(0.7)).toBe('$0.70');
     expect(formatTurnCostUsd(0.01)).toBe('$0.01');
-    expect(formatTurnCostUsd(0.003)).toBe('$0.003');
-    expect(formatTurnCostUsd(0.001)).toBe('$0.001');
-    expect(formatTurnCostUsd(0.0004)).toBe('<$0.001');
+    expect(formatTurnCostUsd(0.003)).toBe('<$0.01');
+    expect(formatTurnCostUsd(0.0004)).toBe('<$0.01');
     expect(formatTurnCostUsd(9.99)).toBe('$9.99');
-    expect(formatTurnCostUsd(12)).toBe('$12');
+    expect(formatTurnCostUsd(12)).toBe('$12.00');
+    expect(formatTurnCostUsd(52.22922325)).toBe('$52.23');
   });
 });
 
@@ -171,11 +172,17 @@ describe('makerChatStore per-turn 费用', () => {
     vi.clearAllMocks();
   });
 
-  it('历史加载:assistant 的 agentMeta.turnCostUsd 映射进 ChatMessage;无值不映射', async () => {
+  it('历史加载:原始分段与用户轮累计成本分别映射;无值不映射', async () => {
     vi.mocked(messageService.list).mockResolvedValueOnce([
       serverMessage({
         clientId: 'a-with-cost',
-        agentMeta: { turnCostUsd: 0.05, turnCostIsEstimate: true, turnUsageDetails: DETAILS ?? undefined },
+        agentMeta: {
+          turnCostUsd: 0.05,
+          turnCostIsEstimate: true,
+          userTurnCostUsd: 12.34,
+          userTurnCostIsEstimate: true,
+          turnUsageDetails: DETAILS ?? undefined,
+        },
       }),
       serverMessage({
         clientId: 'a-stale-estimate',
@@ -213,6 +220,8 @@ describe('makerChatStore per-turn 费用', () => {
     const noCost = snap.messages.find((m) => m.clientId === 'a-no-cost');
     expect(withCost?.turnCostUsd).toBe(0.05);
     expect(withCost?.turnCostIsEstimate).toBe(true);
+    expect(withCost?.userTurnCostUsd).toBe(12.34);
+    expect(withCost?.userTurnCostIsEstimate).toBe(true);
     expect(withCost?.turnUsageDetails).toEqual(DETAILS);
     expect(staleEstimate?.turnCostUsd).toBeCloseTo(2.011);
     expect(staleEstimate?.turnCostIsEstimate).toBe(true);
@@ -222,7 +231,42 @@ describe('makerChatStore per-turn 费用', () => {
     expect(noCost?.turnCostUsd).toBeUndefined();
   });
 
-  it('实时推送:按 clientId 命中消息补 turnCostUsd;未知 clientId → state 引用不变', async () => {
+  it('device-link 旧历史:缺少持久化累计值时按完整用户轮投影', async () => {
+    vi.mocked(messageService.list).mockResolvedValueOnce([
+      serverMessage({
+        clientId: 'user',
+        role: 'user',
+        createdAt: '2026-06-12T00:00:00.000Z',
+      }),
+      serverMessage({
+        clientId: 'segment-1',
+        createdAt: '2026-06-12T00:00:01.000Z',
+        agentMeta: { turnCostUsd: 14.8 },
+      }),
+      serverMessage({
+        clientId: 'auto-resume',
+        role: 'user',
+        createdAt: '2026-06-12T00:00:02.000Z',
+        agentMeta: { autoResume: true },
+      }),
+      serverMessage({
+        clientId: 'final',
+        createdAt: '2026-06-12T00:00:03.000Z',
+        agentMeta: { turnCostUsd: 0.7, turnCostIsEstimate: true },
+      }),
+    ]);
+    makerChatStore.ensureInitialMessages(SID);
+    await flush();
+    await flush();
+
+    const messages = makerChatStore.getSnapshot(SID).messages;
+    expect(messages.find((m) => m.clientId === 'segment-1')?.userTurnCostUsd).toBe(14.8);
+    const final = messages.find((m) => m.clientId === 'final');
+    expect(final?.userTurnCostUsd).toBe(15.5);
+    expect(final?.userTurnCostIsEstimate).toBe(true);
+  });
+
+  it('实时推送:按 clientId 同时补原始分段与用户轮累计;未知 clientId → state 引用不变', async () => {
     vi.mocked(messageService.list).mockResolvedValueOnce([
       serverMessage({ clientId: 'a-live' }),
     ]);
@@ -237,6 +281,8 @@ describe('makerChatStore per-turn 费用', () => {
       clientId: 'a-live',
       turnCostUsd: 0.042,
       turnCostIsEstimate: false,
+      userTurnCostUsd: 52.229224,
+      userTurnCostIsEstimate: false,
       turnUsageDetails: DETAILS,
     });
 
@@ -244,6 +290,8 @@ describe('makerChatStore per-turn 费用', () => {
     const msg = snap.messages.find((m) => m.clientId === 'a-live');
     expect(msg?.turnCostUsd).toBe(0.042);
     expect(msg?.turnCostIsEstimate).toBe(false);
+    expect(msg?.userTurnCostUsd).toBe(52.229224);
+    expect(msg?.userTurnCostIsEstimate).toBe(false);
     expect(msg?.turnUsageDetails).toEqual(DETAILS);
 
     // 未知 clientId / 非法金额 → no-op(state 引用不变)。
@@ -296,7 +344,7 @@ describe('makerChatStore per-turn 费用', () => {
     expect(msg?.turnCostIsEstimate).toBe(true);
   });
 
-  it('device-link remote push:按 clientId 命中消息补 turnCostUsd', async () => {
+  it('device-link remote push:按 clientId 命中消息补用户轮累计成本', async () => {
     vi.mocked(messageService.list).mockResolvedValueOnce([
       serverMessage({ clientId: 'a-remote' }),
     ]);
@@ -309,11 +357,20 @@ describe('makerChatStore per-turn 费用', () => {
     cb!({
       deviceId: 'dev-1',
       channel: 'usage:message-turn-cost',
-      payload: { sessionId: SID, clientId: 'a-remote', turnCostUsd: 0.08, turnCostIsEstimate: true },
+      payload: {
+        sessionId: SID,
+        clientId: 'a-remote',
+        turnCostUsd: 0.08,
+        turnCostIsEstimate: true,
+        userTurnCostUsd: 2.08,
+        userTurnCostIsEstimate: true,
+      },
     });
 
     const msg = makerChatStore.getSnapshot(SID).messages.find((m) => m.clientId === 'a-remote');
     expect(msg?.turnCostUsd).toBe(0.08);
     expect(msg?.turnCostIsEstimate).toBe(true);
+    expect(msg?.userTurnCostUsd).toBe(2.08);
+    expect(msg?.userTurnCostIsEstimate).toBe(true);
   });
 });

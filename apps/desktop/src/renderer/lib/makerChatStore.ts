@@ -324,6 +324,9 @@ export interface ChatMessage {
   turnCostUsd?: number;
   /** true = 订阅模式下的 token 价值;false = API 账单 cost / API 单价折算 cost。 */
   turnCostIsEstimate?: boolean;
+  /** 用户从最近一条真实输入至本消息的累计成本；只用于消息旁展示。 */
+  userTurnCostUsd?: number;
+  userTurnCostIsEstimate?: boolean;
   /** 本轮 token/cache 明细;旧消息或未拿到 usage 时缺省。 */
   turnUsageDetails?: TurnUsageDetails;
   /**
@@ -3226,12 +3229,17 @@ function initGlobalListeners(): void {
       clientId?: string;
       turnCostUsd?: number;
       turnCostIsEstimate?: boolean;
+      userTurnCostUsd?: number;
+      userTurnCostIsEstimate?: boolean;
       turnUsageDetails?: unknown;
     } | null;
     if (!p?.sessionId || !p.clientId) return;
     if (typeof p.turnCostUsd !== 'number' || !(p.turnCostUsd > 0)) return;
     const { sessionId, clientId, turnCostUsd } = p;
     const turnCostIsEstimate = p.turnCostIsEstimate === true;
+    const userTurnCostUsd = typeof p.userTurnCostUsd === 'number' && p.userTurnCostUsd > 0
+      ? p.userTurnCostUsd
+      : undefined;
     const turnUsageDetails = normalizeTurnUsageDetails(p.turnUsageDetails);
     const resolvedTurnCostUsd = resolveEstimatedTurnCostUsd(turnCostUsd, turnCostIsEstimate, turnUsageDetails);
     setState(sessionId, (s) => {
@@ -3242,6 +3250,10 @@ function initGlobalListeners(): void {
         ...msgs[idx],
         turnCostUsd: resolvedTurnCostUsd,
         turnCostIsEstimate,
+        ...(userTurnCostUsd ? {
+          userTurnCostUsd,
+          userTurnCostIsEstimate: p.userTurnCostIsEstimate === true,
+        } : {}),
         ...(turnUsageDetails ? { turnUsageDetails } : {}),
       };
       return { ...s, messages: msgs };
@@ -6806,8 +6818,9 @@ function mapServerMessages(serverMsgs: Message[]): ChatMessage[] {
     }
     return true;
   });
-  const mapped = filtered
-    .sort(compareMessageTimeline)
+  const ordered = filtered.sort(compareMessageTimeline);
+  const legacyUserTurnCosts = projectLegacyUserTurnCosts(ordered);
+  const mapped = ordered
     .map((m) => {
       if (m.role === 'tool_use' && m.content && typeof m.content === 'object') {
         const c = m.content as Record<string, unknown>;
@@ -7058,6 +7071,12 @@ function mapServerMessages(serverMsgs: Message[]): ChatMessage[] {
               return {
                 turnCostUsd,
                 turnCostIsEstimate: m.agentMeta.turnCostIsEstimate === true,
+                ...(typeof m.agentMeta.userTurnCostUsd === 'number' && m.agentMeta.userTurnCostUsd > 0
+                  ? {
+                      userTurnCostUsd: m.agentMeta.userTurnCostUsd,
+                      userTurnCostIsEstimate: m.agentMeta.userTurnCostIsEstimate === true,
+                    }
+                  : {}),
                 ...(turnUsageDetails ? { turnUsageDetails } : {}),
               };
             })()
@@ -7090,15 +7109,53 @@ function mapServerMessages(serverMsgs: Message[]): ChatMessage[] {
     const rowid = rowidById.get(cm.clientId);
     const remoteContentTruncated = remoteContentTruncatedById.get(cm.clientId) === true;
     const remoteRowsTrimmed = remoteRowsTrimmedById.get(cm.clientId) === true;
-    if (!iso && rowid === undefined && !remoteContentTruncated && !remoteRowsTrimmed) return cm;
+    const legacyUserTurnCost = legacyUserTurnCosts.get(cm.clientId);
+    if (!iso && rowid === undefined && !remoteContentTruncated && !remoteRowsTrimmed && !legacyUserTurnCost) {
+      return cm;
+    }
     return {
       ...cm,
+      ...(legacyUserTurnCost ?? {}),
       ...(iso ? { createdAt: iso } : {}),
       ...(rowid !== undefined ? { rowid } : {}),
       ...(remoteContentTruncated ? { remoteContentTruncated: true } : {}),
       ...(remoteRowsTrimmed ? { remoteRowsTrimmed: true } : {}),
     };
   });
+}
+
+/**
+ * Device-link can load history from a peer that predates persisted
+ * userTurnCostUsd. Rebuild only those missing display totals from the ordered
+ * rows returned by that peer; raw per-segment values remain untouched.
+ */
+function projectLegacyUserTurnCosts(serverMsgs: Message[]): Map<string, Pick<ChatMessage, 'userTurnCostUsd' | 'userTurnCostIsEstimate'>> {
+  const projected = new Map<string, Pick<ChatMessage, 'userTurnCostUsd' | 'userTurnCostIsEstimate'>>();
+  let hasRealUserBoundary = false;
+  let costUsd = 0;
+  let hasEstimatedValue = false;
+  for (const message of serverMsgs) {
+    if (message.role === 'user' && message.agentMeta?.autoResume !== true) {
+      hasRealUserBoundary = true;
+      costUsd = 0;
+      hasEstimatedValue = false;
+      continue;
+    }
+    if (message.role !== 'assistant' || !hasRealUserBoundary) continue;
+    const meta = message.agentMeta;
+    if (typeof meta?.turnCostUsd !== 'number' || !Number.isFinite(meta.turnCostUsd) || meta.turnCostUsd <= 0) {
+      continue;
+    }
+    costUsd += meta.turnCostUsd;
+    hasEstimatedValue ||= meta.turnCostIsEstimate === true;
+    if (typeof meta.userTurnCostUsd !== 'number' || !(meta.userTurnCostUsd > 0)) {
+      projected.set(message.clientId, {
+        userTurnCostUsd: costUsd,
+        userTurnCostIsEstimate: hasEstimatedValue,
+      });
+    }
+  }
+  return projected;
 }
 
 function formatToolUseSummary(toolName: string, input: unknown): string {

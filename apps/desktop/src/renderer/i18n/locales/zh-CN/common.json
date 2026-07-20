@@ -2560,7 +2560,8 @@
       "cycleUsed": "本周期已用 ${{spend}} / ${{budget}} ({{pct}}%)",
       "remaining": "剩余 ${{remain}}",
       "nextReset": "下次重置: {{at}}",
-      "latestTurnTitle": "最近一轮"
+      "latestTurnTitle": "最近一轮",
+      "latestUserTurnTitle": "最近一轮用户请求累计"
     }
   },
   "usageDetails": {
@@ -3561,7 +3562,9 @@
       "edit": "编辑",
       "turnCost": "本轮消耗",
       "turnCostEstimated": "本轮 token 价值(按 API 单价折算)",
-      "turnCostEstimatedValue": "价值 {{cost}}"
+      "turnCostEstimatedValue": "价值 {{cost}}",
+      "userTurnCostTotalLine": "本轮累计：{{cost}}",
+      "userTurnCostDetailsTitle": "最后一个 SDK 分段"
     },
     "errorBanner": {
       "retryTitle": "重新发送最后一条消息",

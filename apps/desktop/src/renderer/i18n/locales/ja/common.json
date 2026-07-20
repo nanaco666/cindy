@@ -2560,7 +2560,8 @@
       "cycleUsed": "今期使用 ${{spend}} / ${{budget}} ({{pct}}%)",
       "remaining": "残り ${{remain}}",
       "nextReset": "次回リセット: {{at}}",
-      "latestTurnTitle": "直近のターン"
+      "latestTurnTitle": "直近のターン",
+      "latestUserTurnTitle": "直近のユーザーターン合計"
     }
   },
   "usageDetails": {
@@ -3561,7 +3562,9 @@
       "edit": "編集",
       "turnCost": "このターンの消費",
       "turnCostEstimated": "このターンの token 価値(API 単価換算)",
-      "turnCostEstimatedValue": "価値 {{cost}}"
+      "turnCostEstimatedValue": "価値 {{cost}}",
+      "userTurnCostTotalLine": "このユーザーターンの合計: {{cost}}",
+      "userTurnCostDetailsTitle": "最終 SDK セグメント"
     },
     "errorBanner": {
       "retryTitle": "最後のメッセージを再送信",

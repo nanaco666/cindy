@@ -2560,7 +2560,8 @@
       "cycleUsed": "Cycle used ${{spend}} / ${{budget}} ({{pct}}%)",
       "remaining": "Remaining ${{remain}}",
       "nextReset": "Next reset: {{at}}",
-      "latestTurnTitle": "Latest turn"
+      "latestTurnTitle": "Latest turn",
+      "latestUserTurnTitle": "Latest user-turn total"
     }
   },
   "usageDetails": {
@@ -3561,7 +3562,9 @@
       "edit": "Edit",
       "turnCost": "Cost this turn",
       "turnCostEstimated": "Token value this turn (API-price equivalent)",
-      "turnCostEstimatedValue": "Worth {{cost}}"
+      "turnCostEstimatedValue": "Worth {{cost}}",
+      "userTurnCostTotalLine": "User-turn total: {{cost}}",
+      "userTurnCostDetailsTitle": "Final SDK segment"
     },
     "errorBanner": {
       "retryTitle": "Resend the last message",
