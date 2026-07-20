@@ -144,6 +144,8 @@ describe('WorkGroupBlock — running latest-five preview', () => {
     );
     expect(document.querySelectorAll('[data-live-work-activity]')).toHaveLength(5);
     clickGroup('chat.workGroup.working');
+    expect(document.querySelectorAll('[data-live-work-activity]')).toHaveLength(0);
+    clickGroup('chat.workGroup.working');
     expect(screen.getAllByTestId('direct-tool')[0].textContent).toBe('t1');
   });
 
@@ -185,9 +187,21 @@ describe('WorkGroupBlock — running latest-five preview', () => {
 
     expect(screen.getByText('chat.workGroup.working')).toBeTruthy();
     expect(document.querySelector('[data-live-work-preview="true"]')).toBeTruthy();
+    expect(
+      screen.getByText('chat.workGroup.working').closest('button')?.getAttribute('aria-expanded'),
+    ).toBe('true');
 
+    // The automatic latest-five preview is visibly open, so the first click
+    // must collapse it completely instead of replacing it with full details.
     clickGroup('chat.workGroup.working');
     expect(document.querySelector('[data-live-work-preview="true"]')).toBeNull();
+    expect(screen.queryByTestId('direct-tool')).toBeNull();
+    expect(screen.queryByText('checking the current state')).toBeNull();
+    expect(
+      screen.getByText('chat.workGroup.working').closest('button')?.getAttribute('aria-expanded'),
+    ).toBe('false');
+
+    clickGroup('chat.workGroup.working');
     expect(screen.getByTestId('direct-tool').textContent).toBe('git status');
     expect(screen.getByTestId('direct-tool').getAttribute('data-show-raw')).toBe('true');
     expect(screen.getByText('checking the current state')).toBeTruthy();
@@ -203,6 +217,50 @@ describe('WorkGroupBlock — running latest-five preview', () => {
     expect(screen.getByText('chat.workGroup.worked:12s')).toBeTruthy();
     expect(screen.getByTestId('direct-tool').textContent).toBe('git status');
     expect(screen.getByText('checking the current state')).toBeTruthy();
+  });
+
+  it('keeps a running group fully collapsed across remounts', () => {
+    const childItems = [tools('seg-1', [mkTool('t1', 'git status')])];
+    const first = render(
+      createElement(WorkGroupBlock, {
+        blockId: 'work:t1',
+        isStreaming: true,
+        childItems,
+      }),
+    );
+
+    clickGroup('chat.workGroup.working');
+    expect(screen.queryByTestId('direct-tool')).toBeNull();
+    first.unmount();
+
+    render(
+      createElement(WorkGroupBlock, {
+        blockId: 'work:t1',
+        isStreaming: true,
+        childItems,
+      }),
+    );
+    expect(screen.queryByTestId('direct-tool')).toBeNull();
+    expect(document.querySelector('[data-live-work-preview="true"]')).toBeNull();
+
+    clickGroup('chat.workGroup.working');
+    expect(screen.getByTestId('direct-tool').textContent).toBe('git status');
+  });
+
+  it('does not fall back to live preview when collapsing restored full details', () => {
+    expandMemory.setExpanded('work:t1', true);
+    render(
+      createElement(WorkGroupBlock, {
+        blockId: 'work:t1',
+        isStreaming: true,
+        childItems: [tools('seg-1', [mkTool('t1', 'git status')])],
+      }),
+    );
+
+    expect(screen.getByTestId('direct-tool').textContent).toBe('git status');
+    clickGroup('chat.workGroup.working');
+    expect(screen.queryByTestId('direct-tool')).toBeNull();
+    expect(document.querySelector('[data-live-work-preview="true"]')).toBeNull();
   });
 
   it('keeps outer assistant text visible while nested actions need one more expansion', () => {
