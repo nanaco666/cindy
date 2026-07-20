@@ -9,8 +9,8 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
 
 function resolveRegion(value) {
   const region = value?.trim() || 'cn';
-  if (region !== 'cn' && region !== 'global') {
-    throw new Error(`Invalid Cindy auth region: ${region}; expected cn or global`);
+  if (region !== 'cn' && region !== 'global' && region !== 'dev') {
+    throw new Error(`Invalid Cindy auth region: ${region}; expected cn, global or dev`);
   }
   return region;
 }
@@ -20,7 +20,7 @@ function loadMobileClientBuildEnv() {
   const manifestPath = path.join(
     REPO_ROOT,
     'config',
-    region === 'global' ? 'endpoint.global.json' : 'endpoint.json',
+    { cn: 'endpoint.json', global: 'endpoint.global.json', dev: 'endpoint.dev.json' }[region],
   );
   let parsed;
   try {

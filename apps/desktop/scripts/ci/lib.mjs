@@ -80,6 +80,7 @@ export const PACKAGED_APP_NAME = 'Cindy';
 export const PACKAGED_APP_NAME_BY_REGION = Object.freeze({
   cn: 'Cindy',
   global: 'CindyGlobal',
+  dev: 'CindyDev',
 });
 
 export function packagedAppName(region = 'cn') {
@@ -97,6 +98,7 @@ export function packagedAppName(region = 'cn') {
 export const RELEASE_ARTIFACT_BASENAME_BY_REGION = Object.freeze({
   cn: 'cindy',
   global: 'cindy-global',
+  dev: 'cindy-dev',
 });
 
 export function releaseArtifactBasename(region = 'cn') {
@@ -649,27 +651,98 @@ export function notarizeMacApp(appPath, identity) {
   exec(`/usr/bin/xcrun stapler staple "${appPath}"`);
 }
 
+// ── DMG 安装界面(dmgbuild)─────────────────────────────────────────────────
+//
+// DMG 用 dmgbuild(pip,纯 Python 无原生依赖)生成:带品牌背景图 + 图标定位的
+// 安装窗口,替代裸 hdiutil 的无布局窗口。背景资产与视觉约束见
+// resources/dmg/render-background.swift 头注释(macOS 26 Finder 只认
+// 72dpi + sRGB + 1x 尺寸的 PNG,HiDPI TIFF 不渲染)。
+
 /**
- * 生成含 /Applications 快捷方式的 UDZO DMG 并签名。
+ * dmgbuild pin 版本;bump 前先在本机验证背景仍能渲染(macOS 26 Finder 很挑剔)。
+ * ⚠️ 不得低于 1.6.6:旧版给背景写 bookmark 记录,macOS 26 Finder 不渲染
+ * (electron-builder#9072 同源问题),1.6.6+ 才是 alias-only 实现。
+ */
+const DMGBUILD_VERSION = '1.6.7';
+
+/** dmgbuild 1.6.6+ 要求 python >= 3.10;系统 /usr/bin/python3(CLT 3.9)不够 */
+const PYTHON_MIN_MINOR = 10;
+
+/** 从候选里找 >= 3.10 的 python3(PATH 优先,兼容 homebrew / CLT 新版) */
+function findPython3() {
+  const candidates = ['python3', '/opt/homebrew/bin/python3', '/usr/local/bin/python3', '/usr/bin/python3'];
+  for (const cand of candidates) {
+    const r = spawnSync(cand, ['--version'], { encoding: 'utf8' });
+    if (r.status !== 0) continue;
+    const m = `${r.stdout}${r.stderr}`.match(/Python 3\.(\d+)/);
+    if (m && Number(m[1]) >= PYTHON_MIN_MINOR) return cand;
+  }
+  throw new Error(
+    `No python3 >= 3.${PYTHON_MIN_MINOR} found (required by dmgbuild ${DMGBUILD_VERSION}); ` +
+      'install one via https://python.org or homebrew',
+  );
+}
+
+/**
+ * 确保 dmgbuild 可用,返回其可执行文件路径。
+ * venv 建在系统临时目录并按版本号隔离(幂等复用);凭证不入仓、生成物不进工作区。
+ * 首次创建需要网络(pip);失败直接抛错阻断构建,不静默回退成无背景 DMG。
+ */
+function ensureDmgbuild() {
+  const venvDir = path.join(os.tmpdir(), `cindy-dmgbuild-venv-${DMGBUILD_VERSION}`);
+  const bin = path.join(venvDir, 'bin', 'dmgbuild');
+  if (fs.existsSync(bin)) return bin;
+  console.log(`    Installing dmgbuild ${DMGBUILD_VERSION} (one-time venv)...`);
+  exec(`"${findPython3()}" -m venv "${venvDir}"`);
+  exec(`"${path.join(venvDir, 'bin', 'pip')}" install --quiet dmgbuild==${DMGBUILD_VERSION}`);
+  return bin;
+}
+
+/**
+ * 生成带品牌安装界面的 UDZO DMG 并签名:浅色渐变背景(Install Cindy 标题 +
+ * 拖拽引导箭头)、app 居左 / Applications 软链居右、660×420 固定窗口。
+ * 布局坐标与 resources/dmg/render-background.swift 内的箭头/文案位置联动,改动需两边同步。
  * @param {{ signIdentity: string }} identity
  */
 export function createMacDMG(appPath, dmgPath, volumeName, identity) {
-  const stagingDir = dmgPath + '.staging';
+  const dmgbuildBin = ensureDmgbuild();
+  const backgroundPath = path.join(DESKTOP_ROOT, 'resources', 'dmg', 'background.png');
+  if (!fs.existsSync(backgroundPath)) {
+    throw new Error(`DMG background missing: ${backgroundPath}`);
+  }
 
-  if (fs.existsSync(stagingDir)) fs.rmSync(stagingDir, { recursive: true });
-  fs.mkdirSync(stagingDir, { recursive: true });
-
-  exec(`cp -R "${appPath}" "${stagingDir}/"`);
-  fs.symlinkSync('/Applications', path.join(stagingDir, 'Applications'));
+  const appName = path.basename(appPath); // Cindy.app / CindyGlobal.app(global 线)
+  // JSON.stringify 产出合法 Python 字符串字面量(转义引号/反斜杠语义一致)
+  const py = (s) => JSON.stringify(s);
+  const settings = [
+    `files = [${py(appPath)}]`,
+    `symlinks = {'Applications': '/Applications'}`,
+    `background = ${py(backgroundPath)}`,
+    // 与旧 hdiutil 产物格式保持一致(dmgbuild 默认 UDBZ)
+    `format = 'UDZO'`,
+    `window_rect = ((200, 140), (660, 420))`,
+    `icon_size = 110`,
+    `text_size = 13`,
+    `icon_locations = {`,
+    `    ${py(appName)}: (175, 250),`,
+    `    'Applications': (485, 250),`,
+    // 背景文件本体对默认设置的用户不可见;把坐标挪出窗口,照顾开了"显示隐藏文件"的用户
+    `    '.background.png': (900, 900),`,
+    `}`,
+  ].join('\n');
+  const settingsPath = path.join(os.tmpdir(), `cindy-dmg-settings-${process.pid}.py`);
+  fs.writeFileSync(settingsPath, settings);
 
   if (fs.existsSync(dmgPath)) fs.unlinkSync(dmgPath);
-  console.log('    Creating DMG...');
-  exec(`/usr/bin/hdiutil create "${dmgPath}" -volname "${volumeName}" -srcfolder "${stagingDir}" -ov -format UDZO`);
+  console.log('    Creating DMG (dmgbuild)...');
+  try {
+    exec(`"${dmgbuildBin}" -s "${settingsPath}" "${volumeName}" "${dmgPath}"`);
+  } finally {
+    fs.rmSync(settingsPath, { force: true });
+  }
 
   console.log('    Signing DMG...');
   exec(`/usr/bin/codesign --force --timestamp --sign "${identity.signIdentity}" "${dmgPath}"`);
-
-  fs.rmSync(stagingDir, { recursive: true });
 }
 
 // ── Smoke test (启动 packaged app) ──────────────────────────────────────────

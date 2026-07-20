@@ -2560,7 +2560,8 @@
       "cycleUsed": "今期使用 ${{spend}} / ${{budget}} ({{pct}}%)",
       "remaining": "残り ${{remain}}",
       "nextReset": "次回リセット: {{at}}",
-      "latestTurnTitle": "直近のターン"
+      "latestTurnTitle": "直近のターン",
+      "latestUserTurnTitle": "直近のユーザーターン合計"
     }
   },
   "usageDetails": {
@@ -3262,6 +3263,7 @@
     "permissionSelector": {
       "triggerAria": "権限モードを選択：{{label}}",
       "listAria": "権限モード",
+      "autoFallback": "自動レビューは一時的に利用できないため、デフォルト権限に切り替えました。必要な操作は確認します。",
       "modes": {
         "claude-code": {
           "ask": {
@@ -3318,6 +3320,14 @@
       "notGitRepo": "現在のディレクトリは git リポジトリではありません",
       "alreadyInWorktree": "すでに worktree 内です。ネストは禁止です"
     },
+    "branchChip": {
+      "label": "ブランチ",
+      "loading": "ブランチを読み込み中…",
+      "loadFailed": "ブランチの読み込みに失敗しました。タップして再試行",
+      "currentTooltip": "現在のブランチ",
+      "sourceTooltip": "worktree のソースブランチ",
+      "worktreeHint": "別のブランチを選択すると worktree 分離で開始します"
+    },
     "folderPicker": {
       "selectFolder": "フォルダを選択",
       "selectProject": "プロジェクトを選択",
@@ -3327,7 +3337,9 @@
       "browseFolder": "別のフォルダを選択",
       "browseProjectFolder": "別のプロジェクトフォルダを選択",
       "dialogue": "対話",
-      "dialogueOrSelectProject": "対話またはプロジェクトを選択"
+      "dialogueOrSelectProject": "対話またはプロジェクトを選択",
+      "removeFromList": "リストから削除",
+      "missingDir": "フォルダが見つかりません"
     },
     "pendingQueue": {
       "regionAria": "送信待ちメッセージのキュー",
@@ -3561,7 +3573,9 @@
       "edit": "編集",
       "turnCost": "このターンの消費",
       "turnCostEstimated": "このターンの token 価値(API 単価換算)",
-      "turnCostEstimatedValue": "価値 {{cost}}"
+      "turnCostEstimatedValue": "価値 {{cost}}",
+      "userTurnCostTotalLine": "このユーザーターンの合計: {{cost}}",
+      "userTurnCostDetailsTitle": "最終 SDK セグメント"
     },
     "errorBanner": {
       "retryTitle": "最後のメッセージを再送信",
@@ -4704,7 +4718,7 @@
       },
       "cell": {
         "tag": "プロジェクト",
-        "tooltip": ".xdmaker/automations/schedules.json によって管理されているため、UI では編集できません"
+        "tooltip": ".cindy/automations/schedules.json によって管理されているため、UI では編集できません"
       }
     },
     "button": {
@@ -4750,7 +4764,7 @@
       "removeProject": {
         "menu": "プロジェクトから削除",
         "confirmTitle": "プロジェクトオートメーションから削除しますか？",
-        "confirmDescription": ".xdmaker/automations/schedules.json から \"{{name}}\" を削除します。commit 後はすべての共同作業者に影響します。",
+        "confirmDescription": ".cindy/automations/schedules.json から \"{{name}}\" を削除します。commit 後はすべての共同作業者に影響します。",
         "confirm": "削除",
         "demote": "削除して個人用コピーを保持",
         "demoteSuccess": "プロジェクトから削除し、個人用として保持しました"
@@ -4808,6 +4822,26 @@
         "success": "成功",
         "skip": "スキップ",
         "fail": "失敗"
+      },
+      "preRun": {
+        "status": {
+          "passed": "事前チェック成功",
+          "skipped": "条件を満たしていません",
+          "failed": "事前チェック失敗",
+          "timed_out": "事前チェックがタイムアウトしました",
+          "aborted": "事前チェックが中止されました"
+        },
+        "decision": {
+          "run": "タスクを実行",
+          "skip": "タスクをスキップ",
+          "block": "実行を阻止"
+        },
+        "duration": "{{ms}} ms",
+        "exitCode": "終了コード {{code}}",
+        "stdout": "stdout",
+        "stderr": "stderr",
+        "truncated": "出力は切り詰められました",
+        "noOutput": "出力なし"
       }
     },
     "editor": {
@@ -4897,16 +4931,16 @@
       "preRunHook": {
         "label": "事前チェック",
         "enable": "有効化",
-        "tooltip": "タスクの起動時にこのスクリプトを先に実行します。終了コード 0 で今回の実行を許可し、終了コード 2 で今回をスキップします（agent は起動せず、トークンも消費しません）。スクリプトのエラーやタイムアウト時は通常どおり実行し、警告をログに記録します。スクリプトはタスクの作業ディレクトリで実行されます。Windows では明示的なインタープリタ（例: node check.mjs）を指定してください。",
+        "tooltip": "タスクの起動時にこのスクリプトを先に実行します。終了コード 0 で今回の実行を許可し、終了コード 2 で今回をスキップします（agent は起動せず、トークンも消費しません）。スクリプトのエラーやタイムアウト時は実行を阻止し、失敗結果を記録します。スクリプトはタスクの作業ディレクトリで実行されます。Windows では明示的なインタープリタ（例: node check.mjs）を指定してください。",
         "infoAria": "事前チェックのルールを表示",
-        "protocol": "スクリプトの書き方:終了コード 0 = 今回タスクを実行、終了コード 2 = 今回はスキップ(使用量を消費しません)。エラーやタイムアウトでもタスクは止まりません",
+        "protocol": "スクリプトの書き方:終了コード 0 = 今回タスクを実行、終了コード 2 = 今回はスキップ(使用量を消費しません)。その他の終了コード、エラー、タイムアウトは実行を阻止します",
         "commandPlaceholder": "node scripts/schedule-checks/check.mjs",
         "test": "テスト",
         "testing": "テスト中…",
         "resultRun": "exit {{code}} · {{ms}}ms — 今回は実行されます",
         "resultSkip": "exit 2 · {{ms}}ms — 今回はスキップされます",
-        "resultTimeout": "タイムアウト — 許可として扱い、実行を続けます",
-        "resultError": "実行に失敗（{{error}}）— 許可として扱い、実行を続けます",
+        "resultTimeout": "タイムアウト — 今回の実行を阻止します",
+        "resultError": "実行に失敗（{{error}}）— 今回の実行を阻止します",
         "aiCreate": "AI で生成",
         "aiModify": "AI で修正",
         "aiPlaceholder": "タスクを実行すべき条件を記述してください。例:リポジトリに未処理の新しい PR がある場合のみ実行",

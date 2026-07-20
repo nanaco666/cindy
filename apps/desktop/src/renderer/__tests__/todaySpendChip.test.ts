@@ -13,6 +13,16 @@ const sourcePath = resolve(__dirname, '..', 'components', 'status', 'TodaySpendC
 const source = readFileSync(sourcePath, 'utf8');
 
 describe('TodaySpendChip dashboard routing', () => {
+  it('separates the latest user-round total from final-segment token details', () => {
+    expect(source).toContain('const userTurnCostUsd = typeof message.userTurnCostUsd');
+    expect(source).toContain('? { costUsd: userTurnCostUsd }');
+    expect(source).toContain('isUserTurnTotal: userTurnCostUsd != null');
+    expect(source).toContain("'todaySpend.tooltip.latestUserTurnTitle'");
+    expect(source).toContain('segmentCostUsd: message.turnCostUsd');
+    expect(source).toContain('costUsd: summary.isUserTurnTotal ? summary.segmentCostUsd : summary.costUsd');
+    expect(source).toContain("'chat.messageActionBar.userTurnCostDetailsTitle'");
+  });
+
   it('routes codex-oauth / cc+chatgpt bridge to OpenAI usage, xai provider/bridge to xAI, claude subscription to claude.ai, codex-api to the proxy dashboard', () => {
     expect(source).toContain('https://chatgpt.com/codex/settings/usage');
     expect(source).toContain('https://accounts.x.ai');

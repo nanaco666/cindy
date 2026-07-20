@@ -168,7 +168,7 @@ gh pr create --base <source-branch> ...
 - 「改动」tab 非 git 真相，且无 commit / push / PR 按钮——分支提交与 PR 发布全靠终端。
 - stale prebundle 白屏陷阱只能靠文档规避。
 
-**P2（锦上添花）**：worktree 名不可编辑 / 不可复用、`xdt/*` 分支与 stash 无 GC、dev 构建原生通知不可靠、Orca per-worker worktree（未来项）、Codex sandbox 与 pnpm hoisted 路径冲突、`.xdmaker/project-knowledge` 待刷新。
+**P2（锦上添花）**：worktree 名不可编辑 / 不可复用、`xdt/*` 分支与 stash 无 GC、dev 构建原生通知不可靠、Orca per-worker worktree（未来项）、Codex sandbox 与 pnpm hoisted 路径冲突、`.cindy/project-knowledge` 待刷新。
 
 **推荐推进顺序**（每步本身就是 dogfooding 任务，按当前能力递增）：Day 0 人工验证闭环（登录 shell 启实例、`gh auth status`、跑一个 trivial worktree 会话到 PR）→ 纯文档契约（本文档 + AGENTS.md 节）→ 任务 worktree 里的小 UX 修复练手 → `scripts/dev-worktree.mjs`（P0-1）→ createWorktree 后台 install（P0-2）→ 持久化审批白名单 / auto-stash 确认 UX / `.claude` 重同步（P1）→ git 真相 review tab + commit / PR 按钮（最大件）。
 

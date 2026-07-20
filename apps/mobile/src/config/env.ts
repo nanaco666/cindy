@@ -2,7 +2,7 @@ import Constants from 'expo-constants';
 
 import { parseClientEndpointManifest } from '@lizi/maker-shared/client-endpoints';
 
-export type CindyAuthRegion = 'cn' | 'global';
+export type CindyAuthRegion = 'cn' | 'global' | 'dev';
 
 export interface MobileGoogleConfig {
   webClientId: string;
@@ -27,9 +27,11 @@ function configuredValue(key: string): string {
   return process.env[key]?.trim() || configuredBuildEnv[key]?.trim() || '';
 }
 
-export const AUTH_REGION: CindyAuthRegion =
-  configuredValue('EXPO_PUBLIC_CINDY_AUTH_REGION') === 'global' ? 'global' : 'cn';
-export const APP_SCHEME = AUTH_REGION === 'global' ? 'cindy' : 'cindycn';
+export const AUTH_REGION: CindyAuthRegion = (() => {
+  const value = configuredValue('EXPO_PUBLIC_CINDY_AUTH_REGION');
+  return value === 'global' ? 'global' : value === 'dev' ? 'dev' : 'cn';
+})();
+export const APP_SCHEME = { cn: 'cindycn', global: 'cindy', dev: 'cindydev' }[AUTH_REGION];
 export const MOBILE_REDIRECT_URL = `${APP_SCHEME}://auth`;
 
 // __DEV__ 端点初值来源:metro 构建期按 AUTH_REGION 把仓内
@@ -41,14 +43,20 @@ export const MOBILE_REDIRECT_URL = `${APP_SCHEME}://auth`;
 // live binding,闸门放行前业务树不挂载,初值空串不会被真实消费。
 const DEV_MANIFEST_PARSED = (() => {
   if (!__DEV__) return null;
-  const manifestPath =
-    AUTH_REGION === 'global' ? 'config/endpoint.global.json' : 'config/endpoint.json';
+  const manifestPath = {
+    cn: 'config/endpoint.json',
+    global: 'config/endpoint.global.json',
+    dev: 'config/endpoint.dev.json',
+  }[AUTH_REGION];
   const raw: unknown =
     AUTH_REGION === 'global'
       ? // eslint-disable-next-line @typescript-eslint/no-require-imports
         require('../../../../config/endpoint.global.json')
-      : // eslint-disable-next-line @typescript-eslint/no-require-imports
-        require('../../../../config/endpoint.json');
+      : AUTH_REGION === 'dev'
+        ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+          require('../../../../config/endpoint.dev.json')
+        : // eslint-disable-next-line @typescript-eslint/no-require-imports
+          require('../../../../config/endpoint.json');
   const parsed = parseClientEndpointManifest(JSON.stringify(raw), { allowHttp: true });
   if (!parsed.ok) {
     throw new Error(`${manifestPath} invalid (${parsed.reason}) — dev 端点正本必须能过客户端 parser`);

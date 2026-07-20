@@ -42,6 +42,7 @@ import { logoDark, logoLight } from '@/hooks/useBrandLogo';
 import { themeService } from '@/themes/theme-service';
 import type { Theme as ColorTheme } from '@/themes/types';
 import { ChatInput } from '@/components/new-chat/ChatInput';
+import { WorktreeChipsRow } from '@/components/new-chat/WorktreeChipsRow';
 import {
   FolderPickerPopover,
   type FolderPickerSelectSource,
@@ -65,11 +66,11 @@ import {
   type VendorPrefs,
 } from '@/state/newMakerDraft';
 import {
-  snapshotForSeed,
+  getProviderModelEffort,
   getProviderModelFast,
   setProviderModelFast,
+  useProviderModelMemoryVersion,
 } from '@/state/providerModelMemory';
-import { seedSession } from '@/state/sessionModelMemory';
 import { setPending, setPendingGoal } from '@/state/pendingFirstMessage';
 import {
   clearDraftAndNotify as clearComposerDraftAndNotify,
@@ -122,7 +123,7 @@ import {
   useProjectPickerOptions,
 } from '@/hooks/useProjectPickerOptions';
 import { resolveFastSupported } from '@/lib/providerModels';
-import { effectiveSourceIdForModel } from '@lizi/model-providers';
+import { effectiveSourceIdForModel, getModel } from '@lizi/model-providers';
 import {
   resolveDeviceLinkDraftDefaults,
   type DeviceLinkDraftSelection,
@@ -134,6 +135,7 @@ import {
   DRAFT_RIGHT_SIDEBAR_TOGGLE_DRAG_STYLE,
   resolveNewMakerDraftRightSidebar,
 } from './newMakerDraftRightSidebar';
+import { resolveNewMakerDraftEffort } from './newMakerDraftModelPrefs';
 import { closeAllTabs as closeRightSidebarTabs } from '@/features/right-sidebar/store';
 import { revealOrcaWorkersTab } from '@/features/right-sidebar/plugins/orca-workers/actions';
 import headImageDark from '@/assets/head-image-dark.png';
@@ -364,8 +366,6 @@ export function NewMakerDraftRoute() {
   // fallback——草稿态没真实会话目录可写),但 draftKey 用 NEW_MAKER_DRAFT_KEY
   // 让附件能在"切走再切回"时存活。
   const attachmentState = useAttachments(undefined, NEW_MAKER_DRAFT_KEY);
-  const [fastMode, setFastModeState] = useState(() => getFastModeForModel(chatPrefs.model));
-
   const effectiveWorkingDir = draft.workingDir;
   const effectiveRemoteHostId = draft.remoteHostId;
   const isRemoteProjectDraft = effectiveWorkingDir != null && effectiveRemoteHostId != null;
@@ -436,9 +436,9 @@ export function NewMakerDraftRoute() {
 
   // 草稿当前**生效来源 id**(= ModelSelector 高亮 / ChatInput effectiveSourceId 同口径):显式选中且
   // 仍可连、并提供当前模型 → 它;否则只在当前模型的可用来源中取原生默认。fast/effort 的
-  // per-(供应商,模型) 记忆按它做 key —— 多供应商
-  // 同名模型(如 Anthropic 与 XD 网关都有 Opus)各记各的,切来源 / 选回不串。仅本地草稿用;device-link
-  // 走 dlSel 镜像、不读本机记忆(下方 resolveDraftFast 只在本地分支调用)。
+  // 模型级全局预设不靠它隔离,但仍用它校验来源 capability、保留旧 v2 兼容副本并路由
+  // device-link 写穿。仅本地草稿用;device-link 走 dlSel 镜像、不读本机记忆
+  // (下方 resolveDraftFast 只在本地分支调用)。
   const effectiveSourceId = useMemo<string | null>(() => {
     return effectiveSourceIdForModel(
       providers,
@@ -447,6 +447,30 @@ export function NewMakerDraftRoute() {
       capabilityAgentKind,
     );
   }, [providers, capabilityAgentKind, chatPrefs.providerId, chatPrefs.model]);
+
+  // 首页是“下一次创建会话”的配置草稿,没有正在运行的当前模型需要保护。其它对话更新同一模型
+  // 的全局预设后,即使该模型正显示在首页 trigger 上,也应立即采用新 effort / fast。真实会话仍
+  // 由 CCAgentSessionView 的 live DB/runtime props 保护,不会走这里。
+  const modelPresetVersion = useProviderModelMemoryVersion();
+  const localDraftEffort = useMemo<Effort>(() => {
+    if (isDeviceLinkDraft || !effectiveSourceId) return chatPrefs.effort;
+    const provider = providers.find((item) => item.id === effectiveSourceId);
+    const model = provider ? getModel(provider, chatPrefs.model, capabilityAgentKind) : undefined;
+    return resolveNewMakerDraftEffort({
+      currentEffort: chatPrefs.effort,
+      presetEffort: getProviderModelEffort(capabilityAgentKind, effectiveSourceId, chatPrefs.model),
+      efforts: model?.efforts ?? [],
+      defaultEffort: model?.defaultEffort ?? null,
+    });
+  }, [
+    isDeviceLinkDraft,
+    effectiveSourceId,
+    providers,
+    capabilityAgentKind,
+    chatPrefs.model,
+    chatPrefs.effort,
+    modelPresetVersion,
+  ]);
 
   // 草稿 live fast 读 per-(agent, 来源, 模型) 记忆(与下拉行 fastOnOf / 会话 resolveFast 同口径,
   // 多供应商同名模型不串);该三元组无记录时回退 per-model 旧库 getFastModeForModel —— 仅兜底,
@@ -511,7 +535,14 @@ export function NewMakerDraftRoute() {
     const key = `${effectiveDeviceLinkDeviceId}:${capabilityAgentKind}`;
     if (dlSeedKeyRef.current === key) return;
     dlSeedKeyRef.current = key;
-    setDlSel(resolveDeviceLinkDraftDefaults(capabilities, remoteDraftState.value));
+    setDlSel(
+      resolveDeviceLinkDraftDefaults(
+        capabilities,
+        remoteDraftState.value,
+        undefined,
+        capabilityAgentKind,
+      ),
+    );
   }, [
     isDeviceLinkDraft,
     effectiveDeviceLinkDeviceId,
@@ -525,9 +556,11 @@ export function NewMakerDraftRoute() {
   const deviceLinkInitial = useMemo<DeviceLinkDraftSelection | null>(() => {
     if (!isDeviceLinkDraft) return null;
     if (dlSel) return dlSel;
-    if (capabilities) return resolveDeviceLinkDraftDefaults(capabilities, null);
+    if (capabilities) {
+      return resolveDeviceLinkDraftDefaults(capabilities, null, undefined, capabilityAgentKind);
+    }
     return null;
-  }, [isDeviceLinkDraft, dlSel, capabilities]);
+  }, [isDeviceLinkDraft, dlSel, capabilities, capabilityAgentKind]);
 
   // ── device-link 草稿列表「纯显示镜像」(非选中行的 effort/fast) ──────────────────
   // scopeKey 按设备隔离。镜像 = 被控端 providerModelMemory 全量快照(草稿列表行的真实读源),
@@ -568,7 +601,12 @@ export function NewMakerDraftRoute() {
       if (capabilities) {
         setDlSel((prev) => {
           if (!prev) return prev;
-          const re = resolveDeviceLinkDraftDefaults(capabilities, next, prev.model);
+          const re = resolveDeviceLinkDraftDefaults(
+            capabilities,
+            next,
+            prev.model,
+            capabilityAgentKind,
+          );
           return { ...prev, effort: re.effort, fastMode: re.fastMode };
         });
       }
@@ -589,6 +627,9 @@ export function NewMakerDraftRoute() {
             providerId,
             modelId: model,
             active: false,
+            ...(patch.markModelChoice !== undefined
+              ? { markModelChoice: patch.markModelChoice }
+              : {}),
             ...(patch.effort !== undefined ? { effort: patch.effort } : {}),
             ...(patch.fast !== undefined ? { fast: patch.fast } : {}),
           },
@@ -605,8 +646,8 @@ export function NewMakerDraftRoute() {
   //
   // ⚠️ 与 deviceLinkDraftMemory(active=false)是**互补**而非重复,勿当"双写"清理掉其一:
   //   - 本路径(active=true,providerId 可能为空)→ 被控端 patchVendorPrefs 更 trigger 激活档(provider 无关)。
-  //   - mirror 路径(active=false,providerId=ChatInput 解析出的真实来源)→ 被控端 setProviderModelChoice
-  //     才真正落 providerModelMemory[来源][模型](切走再回的还原源)。
+  //   - mirror 路径(active=false,providerId=ChatInput 解析出的真实来源)→ 非选中编辑只改模型预设;
+  //     真正选择模型时额外带 markModelChoice=true 更新该来源 lastModel。
   // 选中模型编辑时两路都会触发(effort 经 ChatInput.rememberProviderChoice + onEffortDidChange;
   // fast 经 ModelSelector.handleEditFast + onFastModeChange),各司其职,缺一会丢 trigger 或 provider 记忆。
   const pushActiveDraftPref = useCallback(
@@ -673,7 +714,7 @@ export function NewMakerDraftRoute() {
       ? (deviceLinkInitial?.fastMode ?? false)
       : false
     : supportsFastMode
-      ? fastMode
+      ? resolveDraftFast(chatPrefs.model)
       : false;
   // 计划模式草稿态:仅本地草稿支持(device-link 远程草稿 v1 不透传,入口也不显示;
   // 创建后进会话仍可经运行时隧道切换)。
@@ -686,8 +727,8 @@ export function NewMakerDraftRoute() {
     if (isDeviceLinkDraft && deviceLinkInitial) {
       return { model: deviceLinkInitial.model, effort: deviceLinkInitial.effort };
     }
-    return { model: chatPrefs.model, effort: chatPrefs.effort };
-  }, [isDeviceLinkDraft, deviceLinkInitial, chatPrefs.model, chatPrefs.effort]);
+    return { model: chatPrefs.model, effort: localDraftEffort };
+  }, [isDeviceLinkDraft, deviceLinkInitial, chatPrefs.model, localDraftEffort]);
 
   // 远程草稿的权限档 / 来源同样取镜像 holder;本地走 chatPrefs。
   const chatInitialPermissionMode = isDeviceLinkDraft
@@ -696,16 +737,6 @@ export function NewMakerDraftRoute() {
   const chatInitialProviderId = isDeviceLinkDraft
     ? (deviceLinkInitial?.providerId ?? null)
     : (chatPrefs.providerId ?? null);
-
-  useEffect(() => {
-    // device-link 的 fast 由 dlSel 持有,不走本地 fastMode state(避免与镜像值打架)。
-    if (isDeviceLinkDraft) return;
-    if (!supportsFastMode) {
-      setFastModeState(false);
-      return;
-    }
-    setFastModeState(resolveDraftFast(chatPrefs.model));
-  }, [chatPrefs.model, supportsFastMode, isDeviceLinkDraft, resolveDraftFast]);
 
   // ─── 切 vendor ──────────────────────────────────────────────────────
   // 把"当前 vendor 的最新 prefs"落进 lastByVendor[oldVendor],然后切到新 vendor。
@@ -738,6 +769,7 @@ export function NewMakerDraftRoute() {
           capabilities,
           remoteDraftState.value,
           newModelId,
+          capabilityAgentKind,
         );
         setDlSel((prev) => ({
           ...resolved,
@@ -747,30 +779,10 @@ export function NewMakerDraftRoute() {
         return;
       }
       patchActivePrefs({ model: newModelId });
-      // 本地草稿(已在上方对 device-link 早返回):走统一 helper 现查目标模型的 per-provider supportsFastMode
-      // (与 supportsFastMode memo 同口径)。deviceId=undefined 强制本地 providers。
-      const supportsFast = resolveFastSupported({
-        deviceId: undefined,
-        deviceProviders,
-        localProviders,
-        capabilities,
-        providerId: chatPrefs.providerId ?? null,
-        modelId: newModelId,
-        agentKind: capabilityAgentKind,
-      });
-      setFastModeState(supportsFast ? resolveDraftFast(newModelId) : false);
+      // 本地草稿的 Fast 直接由「新 model + 全局预设 + 来源能力」派生,patch 后同步收敛,
+      // 不再维护一份可能与其它对话更新脱节的本地 state。
     },
-    [
-      isDeviceLinkDraft,
-      capabilities,
-      remoteDraftState,
-      patchActivePrefs,
-      resolveDraftFast,
-      deviceProviders,
-      localProviders,
-      chatPrefs.providerId,
-      capabilityAgentKind,
-    ],
+    [isDeviceLinkDraft, capabilities, remoteDraftState, patchActivePrefs, capabilityAgentKind],
   );
   const handleFastModeChange = useCallback(
     (enabled: boolean) => {
@@ -780,10 +792,8 @@ export function NewMakerDraftRoute() {
         return;
       }
       if (!supportsFastMode) {
-        setFastModeState(false);
         return;
       }
-      setFastModeState(enabled);
       // 权威库:per-(agent, 来源, 模型),与 resolveDraftFast 的读源对齐(ModelSelector 的 Edit 面板
       // 对选中模型也会写这一份;此处显式写一遍,使 onFastModeChange 走任何路径都自洽、不依赖选择器侧写)。
       if (effectiveSourceId) {
@@ -1142,8 +1152,6 @@ export function NewMakerDraftRoute() {
               toast.error(t('ccAgent.draft.createSessionFailed'));
               return;
             }
-            // copy-on-create:新会话内所有供应商模型 effort/fast 默认 = 草稿当前状态。
-            seedSession(newSession.id, snapshotForSeed());
             // 计划模式是一次性选择:随本次发送被消耗,草稿勾选同步熄灭,
             // 下一次 New Maker 不延续。
             if (effectivePlanMode) patchActivePrefs({ planMode: false });
@@ -1322,8 +1330,6 @@ export function NewMakerDraftRoute() {
             toast.error(t('ccAgent.draft.createSessionFailed'));
             return;
           }
-          // copy-on-create:新会话内所有供应商模型 effort/fast 默认 = 草稿当前状态。
-          seedSession(newSession.id, snapshotForSeed());
           // 计划模式是一次性选择:随本次发送被消耗,草稿勾选同步熄灭。
           if (effectivePlanMode) patchActivePrefs({ planMode: false });
           // 首条消息经 setPending → SessionView 自动发送,createOpts 读 chat store 的
@@ -1537,7 +1543,6 @@ export function NewMakerDraftRoute() {
       if (!newSession) {
         throw new Error(t('ccAgent.draft.createSessionFailed'));
       }
-      seedSession(newSession.id, snapshotForSeed());
       {
         const iso = new Date().toISOString();
         sessionsStore.patchLocal(newSession.id, { userSendAt: iso, updatedAt: iso });
@@ -1713,38 +1718,62 @@ export function NewMakerDraftRoute() {
               className="relative flex w-full max-w-[800px] flex-col items-start"
               style={{ maxWidth: Math.min(inputWidth ?? 800, 800) }}
             >
-              <FolderPickerPopover
-                open={folderPickerOpen}
-                onOpenChange={handleFolderPickerOpenChange}
-                onSelect={handleModePickerSelect}
-                projectOptions={projectPickerOptions}
-                side="bottom"
-                align="end"
-                sideOffset={6}
-              >
-                <button
-                  type="button"
-                  data-testid="create-agent-mode-pill"
-                  className="absolute right-0 top-[22px] inline-flex h-[30px] min-w-20 max-w-[220px] items-center justify-center gap-1.5 rounded-full border border-[var(--create-agent-control-border)] bg-[var(--create-agent-control-bg)] px-3 text-[12px] font-medium leading-[14px] text-[var(--create-agent-control-text)] transition-colors hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]"
-                  aria-label={t('newChat.collaboration.modeLabel')}
+              {/* mode pill + worktree 高级入口同排(齿轮在 pill 右侧,对齐旧 F1-E 布局)。
+                  2026-07-19 修复:488cb33 对齐 Figma 重排时把 WorktreeChipsRow 注入删丢,
+                  branch/worktree 入口消失(wt* 状态与 send 管线一直健在),以 advancedOnly
+                  变体接回。 */}
+              <div className="absolute right-0 top-[22px] z-10 inline-flex items-center gap-2">
+                <FolderPickerPopover
+                  open={folderPickerOpen}
+                  onOpenChange={handleFolderPickerOpenChange}
+                  onSelect={handleModePickerSelect}
+                  projectOptions={projectPickerOptions}
+                  side="bottom"
+                  align="end"
+                  sideOffset={6}
                 >
-                  <MessageSquare
-                    size={12}
-                    strokeWidth={2}
-                    className="shrink-0 text-[var(--create-agent-control-icon)]"
-                  />
-                  <span className="min-w-0 truncate">
-                    {effectiveCollab.enabled
-                      ? t('newChat.collaboration.pillLabel')
-                      : createAgentModeLabel}
-                  </span>
-                  <ChevronDown
-                    size={12}
-                    strokeWidth={2}
-                    className="shrink-0 text-[var(--create-agent-control-icon)]"
-                  />
-                </button>
-              </FolderPickerPopover>
+                  <button
+                    type="button"
+                    data-testid="create-agent-mode-pill"
+                    className="inline-flex h-[30px] min-w-20 max-w-[220px] items-center justify-center gap-1.5 rounded-full border border-[var(--create-agent-control-border)] bg-[var(--create-agent-control-bg)] px-3 text-[12px] font-medium leading-[14px] text-[var(--create-agent-control-text)] transition-colors hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]"
+                    aria-label={t('newChat.collaboration.modeLabel')}
+                  >
+                    <MessageSquare
+                      size={12}
+                      strokeWidth={2}
+                      className="shrink-0 text-[var(--create-agent-control-icon)]"
+                    />
+                    <span className="min-w-0 truncate">
+                      {effectiveCollab.enabled
+                        ? t('newChat.collaboration.pillLabel')
+                        : createAgentModeLabel}
+                    </span>
+                    <ChevronDown
+                      size={12}
+                      strokeWidth={2}
+                      className="shrink-0 text-[var(--create-agent-control-icon)]"
+                    />
+                  </button>
+                </FolderPickerPopover>
+                <WorktreeChipsRow
+                  variant="advancedOnly"
+                  compact
+                  cwd={effectiveWorkingDir ?? null}
+                  folderPickerMode="project"
+                  projectOptions={projectPickerOptions}
+                  enabled={wtEnabled}
+                  onEnabledChange={handleWtEnabledChange}
+                  sourceBranch={wtSourceBranch}
+                  onSourceBranchChange={handleWtSourceBranchChange}
+                  onBaseRepoChange={handleWtBaseRepoChange}
+                  onSuggestedNameChange={handleWtNameChange}
+                  // SSH 远程仍禁用 worktree(远端 git 探测未落地);device-link 远程可用:
+                  // 探测/建议名/创建全部经隧道在被控端执行(与 488cb33 前口径一致)。
+                  worktreeDisabled={isRemoteProjectDraft}
+                  deviceLinkDeviceId={effectiveDeviceLinkDeviceId ?? null}
+                  disabled={wtCreating}
+                />
+              </div>
               <div
                 data-testid="create-agent-brand-lockup"
                 className="mb-[15px] flex h-[50px] items-center gap-[9px]"

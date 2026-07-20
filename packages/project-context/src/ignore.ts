@@ -32,6 +32,8 @@ const BUILTIN_IGNORE: string[] = [
   '*.min.css',
   '*.snap',
   '*.map',
+  '.cindy',
+  // 旧目录约定（已迁移为 .cindy）；保留忽略项防止存量残留目录被当内容扫描。
   '.xdmaker',
 ];
 

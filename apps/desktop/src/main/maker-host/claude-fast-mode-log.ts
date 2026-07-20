@@ -49,7 +49,7 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
 }
 
 /** 大小写不敏感取 header 值;无则空串。 */
-function headerValue(headers: Readonly<Record<string, string>>, name: string): string {
+export function headerValue(headers: Readonly<Record<string, string>>, name: string): string {
   const lower = name.toLowerCase();
   for (const [k, v] of Object.entries(headers)) {
     if (k.toLowerCase() === lower && typeof v === 'string') return v;
@@ -67,7 +67,7 @@ function requestHasFastBeta(headers: Readonly<Record<string, string>>): boolean 
  * observer 拿到的是 raw 上游字节(主路径字节级 pipe,客户端自己解压),所以这里要先解。
  * identity / 空 / 未知编码 → null(直接按文本读)。
  */
-function makeDecompressor(contentEncoding: string): Transform | null {
+export function makeDecompressor(contentEncoding: string): Transform | null {
   switch (contentEncoding.trim().toLowerCase()) {
     case 'gzip':
     case 'x-gzip':
@@ -82,7 +82,7 @@ function makeDecompressor(contentEncoding: string): Transform | null {
 }
 
 /** url 去掉 query 后是否命中 Anthropic Messages API。 */
-function isMessagesPath(url: string): boolean {
+export function isMessagesPath(url: string): boolean {
   const path = url.split('?', 1)[0] ?? url;
   return path === '/v1/messages' || path.endsWith('/messages');
 }
@@ -109,7 +109,7 @@ export function extractResponseSpeed(data: Record<string, unknown>): string | nu
 }
 
 /** 解析一个 SSE frame(可能含 event: / 多行 data:),返回 data JSON。 */
-function readSseFrameData(frame: string): Record<string, unknown> | null {
+export function readSseFrameData(frame: string): Record<string, unknown> | null {
   const dataLines: string[] = [];
   for (const part of frame.split(/\r?\n/)) {
     if (part.startsWith('data:')) dataLines.push(part.slice('data:'.length).trimStart());

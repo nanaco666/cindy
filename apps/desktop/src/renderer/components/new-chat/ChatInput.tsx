@@ -134,15 +134,12 @@ import { useAgentCapabilities, type AgentKind } from '@/hooks/useAgentCapabiliti
 import { useConnectedSource } from '@/hooks/useConnectedSource';
 import { useProviders } from '@/hooks/useProviders';
 import { useDeviceProviders } from '@/hooks/useDeviceProviders';
-import {
-  connectedProvidersForAgent,
-  effectiveSourceIdForModel,
-  sourcesForModel,
-} from '@lizi/model-providers';
+import { effectiveSourceIdForModel, sourcesForModel } from '@lizi/model-providers';
 import { deriveModelsFromProviders, resolveFastSupported } from '@/lib/providerModels';
 import {
   getProviderModelEffort,
   setProviderModelChoice,
+  setProviderModelEffort,
   getProviderModelFast,
   setProviderModelFast,
 } from '@/state/providerModelMemory';
@@ -152,13 +149,6 @@ import {
   setEffortForModel,
   setFastModeForModel,
 } from '@/state/newMakerDraft';
-import {
-  getSessionModelEffort,
-  setSessionModelEffort,
-  getSessionModelFast,
-  setSessionModelFast,
-  pickMemoryScope,
-} from '@/state/sessionModelMemory';
 import type { MessageDeliveryMode, QueuedMessage } from '@/lib/makerChatStore';
 import { makerChatStore } from '@/lib/makerChatStore';
 // 切模型前的上下文容量预检(大窗口 → 小窗口护栏), 纯函数与 main 共用。
@@ -259,9 +249,9 @@ interface ChatInputProps {
    */
   deviceLinkDeviceId?: string;
   /**
-   * device-link「纯显示镜像」记忆 override:非空时**优先于** pickMemoryScope 注入 ModelSelector,
+   * device-link「纯显示镜像」记忆 override:非空时优先于本机全局模型预设注入 ModelSelector,
    * 用于远程草稿 / 远程会话——非选中行读被控端镜像、改动经隧道写穿被控端,绝不碰控制端本地记忆
-   * (newMakerDraft / providerModelMemory / sessionModelMemory)。由 NewMakerDraftRoute(草稿)/
+   * (newMakerDraft / providerModelMemory)。由 NewMakerDraftRoute(草稿)/
    * CCAgentSessionView(会话)用 deviceLinkModelMirror.makeMirrorAccessors 构建并传入。
    */
   modelMemoryOverride?: ModelMemoryAccessors;
@@ -1308,53 +1298,40 @@ export function ChatInput({
       : null;
   }, [providers, currentModelAgentKind, selectedProviderId, activeModel]);
 
-  // 非选中模型行的 effort/fast 记忆按上下文路由(隔离草稿与各会话,见 ModelMemoryAccessors /
-  // pickMemoryScope)。这是「草稿默认值被会话内修改污染」bug 的核心隔离点:
-  //   - 已创建会话(有 sessionId,本地或 device-link)→ sessionModelMemory(运行期、按 sessionId 隔离;
-  //     会话内改动绝不写回草稿;device-link 会话的预设在选中时经隧道推给被控端,见 handleProviderChange)
-  //   - device-link 草稿(无 sessionId)→ undefined(草稿期能力 / 记忆以被控端为准,不掺本机)
-  //   - 本地草稿(无 sessionId)→ providerModelMemory(跨会话持久、草稿专属)
+  // 模型预设采用「全局默认 + 已创建会话保护」:
+  //   - 本地草稿 / 已创建会话的**非选中行**都读写 providerModelMemory,所以同一
+  //     (agent, model) 的 effort/fast 会跨对话、跨来源即时同步。
+  //   - 已创建会话的当前选中行由 ModelSelector 读取 live props(DB / runtime),不会被其它对话改写;
+  //     该会话切走后再切回此模型,才会采用最新全局预设。
+  //   - 首页草稿无 live 会话,NewMakerDraftRoute 会把当前显示模型的 props 也从全局预设派生。
+  //   - device-link 必须使用被控端镜像 override;旧被控端拿不到镜像时宁可无记忆,也不掺控制端本机。
   const modelMemory = useMemo<ModelMemoryAccessors | undefined>(() => {
-    // device-link 远程草稿 / 会话:用纯显示镜像 override(读被控端镜像、写穿被控端),优先于本地 scope。
+    // device-link 远程草稿 / 会话:用纯显示镜像 override(读被控端全局预设、写穿被控端)。
     if (modelMemoryOverride) return modelMemoryOverride;
-    const scope = pickMemoryScope({ sessionId, deviceLinkDeviceId });
-    if (scope === 'none') return undefined;
-    if (scope === 'session') {
-      const sid = sessionId as string;
-      // 本地会话(含被控端自身正被控的会话)写本地 sessionModelMemory;再 syncSessionModelPref 把变更
-      // 镜像给 main → 转发给订阅了 session:<id> 的控制端(无控制者时 main 端 0 fan-out,近似 no-op)。
-      // 控制端的 device-link 会话走 modelMemoryOverride,不进本分支,故无回环。
-      return {
-        getEffort: (a, p, m) => getSessionModelEffort(sid, a, p, m),
-        setEffort: (a, p, m, e) => {
-          setSessionModelEffort(sid, a, p, m, e);
-          window.electronAPI.syncSessionModelPref({ sessionId: sid, agent: a, providerId: p, model: m, effort: e });
-        },
-        getFast: (a, p, m) => getSessionModelFast(sid, a, p, m),
-        setFast: (a, p, m, en) => {
-          setSessionModelFast(sid, a, p, m, en);
-          window.electronAPI.syncSessionModelPref({ sessionId: sid, agent: a, providerId: p, model: m, fast: en });
-        },
-      };
-    }
+    if (deviceLinkDeviceId) return undefined;
     return {
       getEffort: getProviderModelEffort,
-      setEffort: setProviderModelChoice,
+      setEffort: setProviderModelEffort,
+      setChoice: setProviderModelChoice,
       getFast: getProviderModelFast,
       setFast: setProviderModelFast,
     };
-  }, [sessionId, deviceLinkDeviceId, modelMemoryOverride]);
+  }, [deviceLinkDeviceId, modelMemoryOverride]);
 
-  // 把「用户在当前来源下选定的 (model, effort)」记进当前上下文的记忆(会话→会话记忆,草稿→草稿记忆;
-  // 切回该来源/模型时恢复)。agent / 来源缺失(未知模型 / 0 已连接来源)/ device-link 时静默跳过。
+  // 把「用户在当前来源下选定的 (model, effort)」记进模型全局预设,供其它非活跃行和之后的
+  // 模型切换恢复。agent / 来源缺失(未知模型 / 0 已连接来源)/ device-link 无镜像时静默跳过。
   const rememberProviderChoice = useCallback(
     (modelId: string, eff: Effort) => {
       const kind = currentModelAgentKind;
       if (kind && effectiveSourceId && modelId) {
-        modelMemory?.setEffort(kind, effectiveSourceId, modelId, eff);
+        if (modelMemory?.setChoice) {
+          modelMemory.setChoice(kind, effectiveSourceId, modelId, eff);
+        } else if (!deviceLinkDeviceId) {
+          setProviderModelChoice(kind, effectiveSourceId, modelId, eff);
+        }
       }
     },
-    [currentModelAgentKind, effectiveSourceId, modelMemory],
+    [currentModelAgentKind, effectiveSourceId, modelMemory, deviceLinkDeviceId],
   );
 
   const folderOpen = folderPickerOpen ?? internalFolderOpen;
@@ -3245,9 +3222,9 @@ export function ChatInput({
     [deviceLinkDeviceId, currentModelAgentKind, providers],
   );
 
-  // 解析切到某 (供应商, 模型) 时应恢复的 fast —— 与 effort 同套(per agent/provider/model 记忆 >
-  // per-model 记忆 > false)。模型不支持 Fast → 恒 false。device-link 已创建会话现在也参与
-  // (modelMemory 非 undefined,见 pickMemoryScope):handleProviderChange 的远程分支用它把 fast 经隧道
+  // 解析切到某 (供应商, 模型) 时应恢复的 fast —— 先读 (agent, model) 全局预设,再按目标来源
+  // capability 校验;不支持 Fast → 恒 false。device-link 已创建会话通过被控端
+  // 全局预设镜像参与:handleProviderChange 的远程分支用它把 fast 经隧道
   // (onFastModeChange → makerChatStore.setFastMode)推给被控端,与本地分支同口径。
   // 某 (模型, 来源) 是否支持 Fast —— 统一走 resolveFastSupported(本地 + device-link 同一套共享逻辑;
   // device-link 用被控端隧道 providers 现查 per-provider,旧被控端回退拍平 caps;控制端不另写远程判断)。
@@ -3276,8 +3253,8 @@ export function ChatInput({
   const resolveFast = useCallback(
     (targetModelId: string, providerId: string | null): boolean => {
       if (!modelFastSupported(targetModelId, providerId)) return false;
-      // 严格 per-(供应商, 模型);无 providerId / device-link(modelMemory 为 undefined)→ false
-      // (不读 provider-agnostic 记忆,也不掺被控端记忆)。会话读会话记忆,草稿读草稿记忆。
+      // providerId 只用于来源 capability 与旧 v2 兼容回退;新预设按 (agent, model) 跨来源共享。
+      // 无 providerId / device-link(modelMemory 为 undefined)→ false,且不掺控制端本机记忆。
       if (!currentModelAgentKind || !providerId || !modelMemory) return false;
       return modelMemory.getFast(currentModelAgentKind, providerId, targetModelId) ?? false;
     },
@@ -3438,7 +3415,7 @@ export function ChatInput({
       }
 
       // effort 档走 catalog(含自定义供应商模型);恢复优先级:
-      // (agent,provider,model) 精确记忆 > per-model 记忆 > 沿用当前 > 模型默认。
+      // (agent,model) 全局预设 > 旧 per-model 记忆 > 沿用当前 > 模型默认。
       const { efforts, defaultEffort } = resolveModelEfforts(newModelId);
       const providerEffort =
         modelMemory && currentModelAgentKind && effectiveSourceId
@@ -3543,7 +3520,7 @@ export function ChatInput({
         }
 
         // 草稿态:全本地生效。onModelDidChange/onEffortDidChange → 父级 patchVendorPrefs 落
-        // lastByVendor(localStorage,按 agent 分槽);per-(供应商,模型) 记忆走 rememberProviderChoice。
+        // lastByVendor(localStorage,按 agent 分槽);全局模型预设走 rememberProviderChoice。
         // 不再写服务端默认偏好——离线 / 登录态失效时草稿选择必须照常工作。
         onModelDidChange?.(newModelId);
         onEffortDidChange?.(newEffort);
@@ -3611,7 +3588,7 @@ export function ChatInput({
         }
 
         // 草稿态:全本地生效(同 handleModelChange 草稿分支)。onEffortDidChange → 父级
-        // patchVendorPrefs 落 lastByVendor;per-(供应商,模型) 记忆走 rememberProviderChoice。
+        // patchVendorPrefs 落 lastByVendor;全局模型预设走 rememberProviderChoice。
         // 不再写服务端默认偏好——此前 await 服务端成功才刷 UI,token 失效时表现为"档位点不动"。
         onEffortDidChange?.(newEffort);
         if (activeModel) rememberProviderChoice(activeModel, newEffort);
@@ -3629,8 +3606,8 @@ export function ChatInput({
   //   - sessionService.update({ providerId }):落盘 sessions.provider_id,跨重启可恢复。
   // 乐观更新本地 selectedProviderId(无 SSoT 回流前的即时反馈)。null = 清除显式选择。
   // 切来源时为目标模型决定 effort —— 与 handleModelChange 同套 resolveEffort 策略(共用纯函数)。
-  // providerId = 目标来源:据它查 (agent,provider,model) 精确记忆,选回来恢复该来源下这个模型上次的档。
-  // 优先级:preferred(resolveSourceSwitch 带回的 hint)> (agent,provider,model) 记忆 >
+  // providerId = 目标来源:用来校验 capability / 兼容读取旧来源槽;新值按 (agent,model) 全局共享。
+  // 优先级:preferred(resolveSourceSwitch 带回的 hint)> (agent,model) 全局预设 >
   // per-model 记忆 > 沿用当前 > 模型默认。effort 档走 catalog(含自定义供应商模型)。
   const resolveSwitchEffort = useCallback(
     (targetModelId: string, providerId: string | null, preferred?: Effort): Effort => {
@@ -3681,8 +3658,8 @@ export function ChatInput({
       if (sessionId && isRemoteSession) {
         const targetModel =
           reconciledModelId && reconciledModelId !== activeModel ? reconciledModelId : activeModel;
-        // effort/fast 从**本远程会话**的 sessionModelMemory 恢复(切到目标 (来源, 模型) 上次/预设的档),
-        // 与本地切换同口径;modelMemory 现对 device-link 会话也非 undefined(见 pickMemoryScope)。
+        // effort/fast 从**被控端全局模型预设**恢复;该远程会话当前正在使用的模型仍由 live
+        // session 状态保护,只有切到目标 (来源, 模型) 时才应用这个预设。
         // resolveSwitchEffort / resolveFast 内部已按目标模型支持的档位校验、不支持 fast 的模型恒 false。
         const targetEffort = resolveSwitchEffort(targetModel, newProviderId, reconciledEffort);
         const restoredFast = resolveFast(targetModel, newProviderId);
@@ -3732,7 +3709,7 @@ export function ChatInput({
       };
       // 应用「目标 model + effort」:会话态落盘 sessions.{model,effort,providerId} + 即时切运行时路由;
       // 草稿态(无 sessionId)providerId 本就不持久化,只通知父级刷新 SSoT(草稿 vendor prefs)。
-      // 两态都写本地记忆(lastByVendor 经父级回调 + per-(供应商,模型) 的 remember),无服务端偏好写入。
+      // 两态都写本地记忆(lastByVendor 经父级回调 + 全局模型预设),无服务端偏好写入。
       const applyModelAndEffort = async (modelId: string, eff: Effort) => {
         if (sessionId) {
           // 切来源+模型:fast 恢复目标 (供应商, 模型) 的记忆值(对齐 effort);不支持 → false。
@@ -3793,11 +3770,9 @@ export function ChatInput({
           );
           return;
         }
-        // 同模型只切来源:effort/fast 必须落到**新来源**下该模型自己的记忆(无 → 模型默认),
-        // **绝不沿用当前来源的 activeEffort**(那正是同一 modelId 跨来源串档的根因:之前这里
-        // remember(activeModel, activeEffort) 把当前来源的档写进了新来源槽 —— 改了 A 来源 Opus 的
-        // effort,选 B 来源的同名 Opus 也跟着变成 A 的档)。严格 per-(agent, 新来源, 模型),不读
-        // provider-agnostic 记忆。reconciledEffort(来源切换 hint,当前 picker 不传)仍受支持时优先。
+        // 同模型只切来源:effort/fast 采用同一份 (agent,model) 全局预设,但仍按新来源 capability
+        // 校验;不支持的档位回落模型默认。reconciledEffort(来源切换 hint,当前 picker 不传)
+        // 仍受支持时优先。
         const { efforts, defaultEffort } = resolveModelEfforts(activeModel);
         const providerEffort =
           modelMemory && currentModelAgentKind && newProviderId
@@ -3810,9 +3785,8 @@ export function ChatInput({
           preferred: reconciledEffort,
           fallbackEffort: activeEffort,
         });
-        // applyModelAndEffort 同时按新来源 resolveFast 对齐 fast(provider-scoped),并把
-        // (activeModel, targetEffort) 记进**新来源**槽 —— 整条都是 per-(供应商, 模型),
-        // 与当前来源 / 草稿 / 其它会话隔离。模型不变,model 字段照写 activeModel(幂等)。
+        // applyModelAndEffort 同时按新来源 capability 校验 fast,并把 (activeModel, targetEffort)
+        // 写回模型级全局预设。模型不变,model 字段照写 activeModel(幂等)。
         await applyModelAndEffort(activeModel, targetEffort);
       } catch (err) {
         const rollbackProvider = rollbackProviderAfterPersistFailure as {

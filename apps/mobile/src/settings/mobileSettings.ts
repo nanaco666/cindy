@@ -3,7 +3,7 @@ import { relayStatusHint, relayStatusLabel } from '@lizi/maker-shared/device-lin
 
 export interface MobileSettingsOverviewInput {
   authBaseUrl: string;
-  authRegion: 'cn' | 'global';
+  authRegion: 'cn' | 'global' | 'dev';
   deviceId: string | null;
   deviceName: string;
   lastSyncedAt?: number | null;

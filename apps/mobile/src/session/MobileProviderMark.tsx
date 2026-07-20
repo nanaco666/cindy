@@ -20,7 +20,7 @@ import {
 } from '@/components/vendorIconPaths';
 import { useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 import { fontWeight as fontWeightToken, radius, typeScale } from '@/theme/tokens';
-import type { AgentKind } from '@lizi/model-providers/types';
+import { resolveModelIconKind } from '@lizi/model-providers/sections';
 
 import { providerMonogram } from './providerModelSections';
 
@@ -110,89 +110,46 @@ export function MobileProviderMark({ providerId, name, color }: MobileProviderMa
   }
 }
 
-export type MobileModelBrandKind = 'claude' | 'codex' | null;
-
-export function resolveMobileModelBrandKind({
-  modelId,
-  displayName,
-  agentKind,
-  fallbackProviderId,
-}: {
-  modelId: string;
-  displayName?: string;
-  agentKind: AgentKind | null;
-  fallbackProviderId?: string | null;
-}): MobileModelBrandKind {
-  const brandText = `${modelId} ${displayName ?? ''}`.toLowerCase();
-  if (
-    /(^|[\s/])(?:codex|chatgpt|openai)(?:[\s/-]|$)/.test(brandText) ||
-    /(^|[\s/])gpt[-\s]/.test(brandText)
-  ) {
-    return 'codex';
-  }
-  if (/(^|[\s/])(?:claude|opus|sonnet|haiku|fable)(?:[\s/-]|$)/.test(brandText)) {
-    return 'claude';
-  }
-  if (fallbackProviderId === 'openai') return 'codex';
-  if (fallbackProviderId === 'anthropic') return 'claude';
-  if (agentKind === 'codex') return 'codex';
-  if (agentKind === 'claude-code') return 'claude';
-  return null;
-}
-
-export interface MobileModelBrandMarkProps {
-  modelId: string;
-  displayName?: string;
-  agentKind: AgentKind | null;
-  fallbackProviderId?: string | null;
-  fallbackProviderName?: string;
+export interface MobileModelIconMarkProps {
+  /** 模型条目的展示图标 id(CatalogModel.icon,AI Gateway / 目录设定);undefined = 未设定。 */
+  icon?: string;
+  /** 回落用的来源供应商 id / 展示名(与 MobileProviderMark 同语义)。 */
+  providerId?: string;
+  name: string;
   color?: string;
 }
 
-/** 模型品牌徽标:按 model id/displayName 优先解析 Claude/Codex,否则回落来源徽标。 */
-export function MobileModelBrandMark({
-  modelId,
-  displayName,
-  agentKind,
-  fallbackProviderId,
-  fallbackProviderName,
-  color,
-}: MobileModelBrandMarkProps) {
+/**
+ * 模型行 / composer 药丸的图标 —— 统一规则(与桌面 ModelIconMark 同源,共享
+ * resolveModelIconKind 口径):模型条目带 `icon`(**AI Gateway / 目录设定**)就渲染
+ * 对应厂牌 mark;缺省或未知值回落来源供应商标。禁止在客户端按 model id 猜厂牌。
+ */
+export function MobileModelIconMark({ icon, providerId, name, color }: MobileModelIconMarkProps) {
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
-  const fill = color ?? colors.textSecondary;
-  const glyph = 13;
-  const brandKind = resolveMobileModelBrandKind({
-    modelId,
-    displayName,
-    agentKind,
-    fallbackProviderId,
-  });
-
-  if (brandKind === 'claude') {
+  const kind = resolveModelIconKind(icon);
+  if (kind) {
+    const fill = color ?? colors.textSecondary;
+    const glyph = 13;
+    if (kind === 'cindy') {
+      const w = glyph + 2; // 同 MobileProviderMark:XD mark 横长,宽给补偿。
+      return (
+        <View accessible={false} style={styles.markBox}>
+          <Svg width={w} height={w * XD_ASPECT} viewBox={XD_VIEW_BOX}>
+            {XD_SYMBOL_PATHS.map((p) => (
+              <Path key={p} d={p} fill={fill} />
+            ))}
+          </Svg>
+        </View>
+      );
+    }
     return (
       <View accessible={false} style={styles.markBox}>
         <Svg width={glyph} height={glyph} viewBox="0 0 24 24">
-          <Path d={CLAUDE_PATH} fill={fill} />
+          <Path d={kind === 'claude' ? CLAUDE_PATH : CODEX_PATH} fill={fill} />
         </Svg>
       </View>
     );
   }
-  if (brandKind === 'codex') {
-    return (
-      <View accessible={false} style={styles.markBox}>
-        <Svg width={glyph} height={glyph} viewBox="0 0 24 24">
-          <Path d={CODEX_PATH} fill={fill} />
-        </Svg>
-      </View>
-    );
-  }
-  if (!fallbackProviderId) return null;
-  return (
-    <MobileProviderMark
-      color={color}
-      name={fallbackProviderName ?? fallbackProviderId}
-      providerId={fallbackProviderId}
-    />
-  );
+  return <MobileProviderMark color={color} name={name} providerId={providerId} />;
 }

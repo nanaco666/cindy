@@ -79,6 +79,7 @@ import {
   getSessionRowSnapshot,
   isUntitledDraftSessionBeforeFirstInput,
   persistSessionFields,
+  persistSessionPermissionModeIfAuto,
 } from '../localDb/ipc/sessions.js';
 // sidebar-card-mode: turn-done 后触发任务现状摘要生成
 import { maybeGenerateSessionTaskSummary } from '../sessionTaskSummary.js';
@@ -273,6 +274,10 @@ import { getActiveCatalog, setDiscoveredProviderModels } from '../maker-host/act
 import { testProviderConnection } from '../maker-host/provider-diagnostics.js';
 import { fetchProviderModels } from '../maker-host/provider-model-fetch.js';
 import { setProviderUpstreamErrorBroadcaster } from '../maker-host/provider-upstream-error-observer.js';
+import {
+  createClaudeAutoPermissionFallbackCoordinator,
+  setClaudeAutoClassifierUnavailableListener,
+} from '../maker-host/claude-auto-permission-fallback.js';
 import {
   cancelGenericOAuthLogin,
   deriveModelsDiscoveryUrl,
@@ -2764,9 +2769,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     });
   });
 
-  // device-link 会话「非选中模型」effort/fast 写穿:控制端经隧道调用 → 跑在**被控端**。转发给自身
-  // renderer(SESSION_PREF_APPLY,非转发 channel,只落本地窗口),renderer 调它原来的本地 setter
-  // (setSessionModelEffort/Fast)写真实会话记忆;变更经 SYNC_SESSION_MODEL_PREF 广播回控制端镜像。
+  // 旧控制端的 device-link 会话模型预设写穿兼容入口。转发给被控端 renderer 后,renderer 将值
+  // 收敛到 providerModelMemory 全局预设,同时经 SYNC_SESSION_MODEL_PREF 回流供旧控制端的
+  // session-scoped 镜像显示。新控制端统一走 APPLY_NEW_MAKER_DRAFT_PREF。
   ipcMain.handle(MAKER_INVOKE.SET_SESSION_MODEL_PREF, (_e, pref: unknown) => {
     if (!pref || typeof pref !== 'object') throwIpcError('INVALID_PARAMS', 'pref required');
     const p = pref as {
@@ -2936,6 +2941,20 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       }
     },
   });
+  // Claude Auto 分类器 429/5xx → 单会话切 ask + 持久化 + 结构化提示。
+  // coordinator 内部会复核 DB 仍为 auto,并按 session 去重;listener 只 fire-and-forget,
+  // 绝不阻塞 proxy 响应 pipe,也不自动重放本次 tool call。
+  const handleClaudeAutoClassifierUnavailable = createClaudeAutoPermissionFallbackCoordinator({
+    getSession: (sessionId) => maker.getSession(sessionId),
+    getSessionMeta: (sessionId) => maker.getSessionMeta(sessionId),
+    persistPermissionModeIfAuto: (sessionId) => persistSessionPermissionModeIfAuto(sessionId),
+    broadcast: (event) => broadcastToAllWindows(MAKER_PUSH.AUTO_PERMISSION_FALLBACK, event),
+    logger: log,
+  });
+  setClaudeAutoClassifierUnavailableListener((signal) => {
+    void handleClaudeAutoClassifierUnavailable(signal);
+  });
+
   // 自定义供应商上游错误(4xx/5xx 分类结果)→ 广播给所有窗口(renderer toast 人话提示)。
   // 观察器本身挂在两个 loopback proxy 上(见 provider-upstream-error-observer),此处只接广播。
   setProviderUpstreamErrorBroadcaster((event) =>
@@ -3144,7 +3163,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
 
   /**
    * project-knowledge inject 共用逻辑：CREATE_SESSION adapter + SEND lazy-create 都用。
-   * 自动开启——任何 session 创建都会尝试读 cwd 下 .xdmaker/project-knowledge/，存在就注入；
+   * 自动开启——任何 session 创建都会尝试读 cwd 下 .cindy/project-knowledge/，存在就注入；
    * 不再依赖 renderer 显式开关。tryInjectProjectContext silently fallback——目录缺失 / 文件
    * 读失败都走 injected:false 分支，不抛错也不阻塞 session 创建。
    * 副作用：mutate o.userPrompt（追加 wrapper）；返回是否真的注入了内容。
@@ -3152,7 +3171,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
   async function applyProjectContextInjection(o: CreateOpts): Promise<boolean> {
     if (!o.workingDir) return false;
     // remote session: workingDir 是远端主机上的路径。本机若恰好存在同路径且带
-    // .xdmaker/project-knowledge/,tryInjectProjectContext 会把**本机**的项目知识注入给
+    // .cindy/project-knowledge/,tryInjectProjectContext 会把**本机**的项目知识注入给
     // 远端 agent,污染远端仓库的回答。远端 project-context 需经远端 host 读取(后续特性),
     // 未落地前 remote session 一律跳过本地注入。注意:仅影响 remote,local 注入行为不变。
     if (o.remoteHostId) {

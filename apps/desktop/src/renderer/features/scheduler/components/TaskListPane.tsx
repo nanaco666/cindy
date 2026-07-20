@@ -51,7 +51,7 @@ interface Props {
   runNowBusyIds?: ReadonlySet<string>;
   /** Scheduler 运行时快照；用于标识真实被并发闸门扣住的到期任务。 */
   runtimeSnapshot: SchedulerRuntimeSnapshot | null;
-  /** Project-level action: open .xdmaker/automations/schedules.json. */
+  /** Project-level action: open .cindy/automations/schedules.json. */
   onOpenProjectConfig: (workingDir: string) => void | Promise<void>;
   /** Project-level action: reconcile this workingDir's automation config. */
   onReloadProject: (workingDir: string) => void | Promise<void>;

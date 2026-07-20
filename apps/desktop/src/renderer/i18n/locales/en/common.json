@@ -2560,7 +2560,8 @@
       "cycleUsed": "Cycle used ${{spend}} / ${{budget}} ({{pct}}%)",
       "remaining": "Remaining ${{remain}}",
       "nextReset": "Next reset: {{at}}",
-      "latestTurnTitle": "Latest turn"
+      "latestTurnTitle": "Latest turn",
+      "latestUserTurnTitle": "Latest user-turn total"
     }
   },
   "usageDetails": {
@@ -3262,6 +3263,7 @@
     "permissionSelector": {
       "triggerAria": "Select permission mode: {{label}}",
       "listAria": "Permission modes",
+      "autoFallback": "Auto-review is temporarily unavailable. Switched to Default permissions and will ask when needed.",
       "modes": {
         "claude-code": {
           "ask": {
@@ -3318,6 +3320,14 @@
       "notGitRepo": "Current directory is not a git repository",
       "alreadyInWorktree": "Already inside a worktree, nesting is not allowed"
     },
+    "branchChip": {
+      "label": "Branch",
+      "loading": "Loading branches…",
+      "loadFailed": "Failed to load branches — tap to retry",
+      "currentTooltip": "Current branch",
+      "sourceTooltip": "Worktree source branch",
+      "worktreeHint": "Picking another branch starts in an isolated worktree"
+    },
     "folderPicker": {
       "selectFolder": "Select folder",
       "selectProject": "Select project",
@@ -3327,7 +3337,9 @@
       "browseFolder": "Choose a different folder",
       "browseProjectFolder": "Choose another project folder",
       "dialogue": "Dialogue",
-      "dialogueOrSelectProject": "Dialogue or select project"
+      "dialogueOrSelectProject": "Dialogue or select project",
+      "removeFromList": "Remove from list",
+      "missingDir": "Folder not found"
     },
     "pendingQueue": {
       "regionAria": "Pending message queue",
@@ -3561,7 +3573,9 @@
       "edit": "Edit",
       "turnCost": "Cost this turn",
       "turnCostEstimated": "Token value this turn (API-price equivalent)",
-      "turnCostEstimatedValue": "Worth {{cost}}"
+      "turnCostEstimatedValue": "Worth {{cost}}",
+      "userTurnCostTotalLine": "User-turn total: {{cost}}",
+      "userTurnCostDetailsTitle": "Final SDK segment"
     },
     "errorBanner": {
       "retryTitle": "Resend the last message",
@@ -4713,7 +4727,7 @@
       },
       "cell": {
         "tag": "Project",
-        "tooltip": "Managed by .xdmaker/automations/schedules.json — cannot edit in UI"
+        "tooltip": "Managed by .cindy/automations/schedules.json — cannot edit in UI"
       }
     },
     "button": {
@@ -4759,7 +4773,7 @@
       "removeProject": {
         "menu": "Remove from project",
         "confirmTitle": "Remove from project automation?",
-        "confirmDescription": "Removes \"{{name}}\" from .xdmaker/automations/schedules.json. After commit this affects all collaborators.",
+        "confirmDescription": "Removes \"{{name}}\" from .cindy/automations/schedules.json. After commit this affects all collaborators.",
         "confirm": "Remove",
         "demote": "Remove and keep personal copy",
         "demoteSuccess": "Removed from project, kept as personal"
@@ -4817,6 +4831,26 @@
         "success": "Success",
         "skip": "Skip",
         "fail": "Fail"
+      },
+      "preRun": {
+        "status": {
+          "passed": "Pre-run check passed",
+          "skipped": "Condition not met",
+          "failed": "Pre-run check failed",
+          "timed_out": "Pre-run check timed out",
+          "aborted": "Pre-run check aborted"
+        },
+        "decision": {
+          "run": "Run task",
+          "skip": "Skip task",
+          "block": "Block run"
+        },
+        "duration": "{{ms}} ms",
+        "exitCode": "Exit code {{code}}",
+        "stdout": "stdout",
+        "stderr": "stderr",
+        "truncated": "output truncated",
+        "noOutput": "No output"
       }
     },
     "editor": {
@@ -4906,16 +4940,16 @@
       "preRunHook": {
         "label": "Pre-run check",
         "enable": "Enable",
-        "tooltip": "Runs this script when the task fires: exit code 0 lets the round proceed; exit code 2 skips this round (no agent started, no tokens used); script errors or timeouts fail open — the run proceeds and a warning is logged. The script runs in the task's working directory; on Windows use an explicit interpreter (e.g. node check.mjs).",
+        "tooltip": "Runs this script when the task fires: exit code 0 lets the round proceed; exit code 2 skips this round (no agent started, no tokens used); script errors or timeouts block the run and record a failure. The script runs in the task's working directory; on Windows use an explicit interpreter (e.g. node check.mjs).",
         "infoAria": "View pre-run check rules",
-        "protocol": "How to write it: exit code 0 = run the task this round, exit code 2 = skip this round (no usage cost); errors or timeouts never block the task",
+        "protocol": "How to write it: exit code 0 = run the task this round, exit code 2 = skip this round (no usage cost); other exit codes, errors, or timeouts block the run",
         "commandPlaceholder": "node scripts/schedule-checks/check.mjs",
         "test": "Test",
         "testing": "Testing…",
         "resultRun": "exit {{code}} · {{ms}}ms — this round would run",
         "resultSkip": "exit 2 · {{ms}}ms — this round would be skipped",
-        "resultTimeout": "Timed out — treated as pass, run proceeds",
-        "resultError": "Failed to execute ({{error}}) — treated as pass, run proceeds",
+        "resultTimeout": "Timed out — this round would be blocked",
+        "resultError": "Failed to execute ({{error}}) — this round would be blocked",
         "aiCreate": "Generate with AI",
         "aiModify": "Modify with AI",
         "aiPlaceholder": "Describe when the task should run, e.g. only when the repo has new open PRs",

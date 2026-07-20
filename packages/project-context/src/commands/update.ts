@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import chalk from 'chalk';
 import { findRepoRoot, getCurrentHead, getDiff, getDiffText } from '../git.js';
-import { loadConfig, resolvePaths } from '../config.js';
+import { loadConfig, migrateLegacyContextRoot, resolvePaths } from '../config.js';
 import { buildIgnoreFilter } from '../ignore.js';
 import { readKnowledgeFile, writeKnowledgeFile } from '../knowledge.js';
 import {
@@ -49,11 +49,12 @@ Rules:
 export async function runUpdate(options: UpdateOptions = {}): Promise<UpdateResult> {
   const cwd = options.cwd ?? process.cwd();
   const repoRoot = await findRepoRoot(cwd);
+  migrateLegacyContextRoot(repoRoot);
   const paths = resolvePaths(repoRoot);
 
   if (!fs.existsSync(paths.contextDir)) {
     throw new Error(
-      `No .xdmaker/project-knowledge/ found in ${repoRoot}. Run \`project-context init\` first.`,
+      `No .cindy/project-knowledge/ found in ${repoRoot}. Run \`project-context init\` first.`,
     );
   }
 

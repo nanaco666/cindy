@@ -74,6 +74,7 @@ describe('topicForPush', () => {
     );
     expect(topicForPush('maker:interaction-request', { sessionId: 's4' })).toBe('session:s4');
     expect(topicForPush('maker:interaction-dismissed', { sessionId: 's5' })).toBe('session:s5');
+    expect(topicForPush('maker:auto-permission:fallback', { sessionId: 's5' })).toBe('session:s5');
     expect(topicForPush('local-db:messages:created', { sessionId: 's6', message: {} })).toBe(
       'session:s6',
     );

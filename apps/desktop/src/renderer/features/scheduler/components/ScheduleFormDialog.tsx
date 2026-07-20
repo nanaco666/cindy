@@ -523,7 +523,7 @@ export function ScheduleFormDialog({
             )}
 
 
-            {/* 项目自动化(.xdmaker/automations/schedules.json)的 config schema 尚无
+            {/* 项目自动化(.cindy/automations/schedules.json)的 config schema 尚无
                 executionMode/scriptConfig 字段,展示切换器会让 script 配置被静默丢弃
                 ——该形态下隐藏,项目自动化对 script 模式的支持另行迭代。 */}
             {!isProjectAutomationMode && (
@@ -845,7 +845,7 @@ export function ScheduleFormDialog({
             )}
 
             {/* 前置检查(Pre-run Hook):触发时先执行脚本,exit 0 放行 / exit 2 跳过本轮
-                (不启动 agent、零 token);报错 / 超时 fail-open 照常运行。
+                (不启动 agent、零 token);报错 / 超时会阻止本轮并记录失败。
                 设计稿:docs/design_docs/schedule.pen「创建自动化 · 前置检查集成 (Dark)」。
                 仅 agent 模式展示——script 模式任务本体就是脚本,再叠一层脚本闸门是套娃。 */}
             {!isScriptMode && (
@@ -1059,19 +1059,21 @@ export function ScheduleFormDialog({
                   {hookTestResult && (
                     <div className="flex flex-wrap items-center gap-2 rounded-lg bg-[var(--chat-input-chip-bg)] px-3 py-2 dark:bg-[var(--cmd-palette-bg)]">
                       <span className="text-xs text-[var(--settings-btn-secondary-text)]">
-                        {hookTestResult.spawnError
-                          ? t('scheduler.editor.preRunHook.resultError', {
-                              error: hookTestResult.spawnError,
-                            })
-                          : hookTestResult.timedOut
-                            ? t('scheduler.editor.preRunHook.resultTimeout')
-                            : hookTestResult.decision === 'skip'
-                              ? t('scheduler.editor.preRunHook.resultSkip', {
-                                  ms: hookTestResult.durationMs,
-                                })
-                              : t('scheduler.editor.preRunHook.resultRun', {
+                        {hookTestResult.status === 'timed_out'
+                          ? t('scheduler.editor.preRunHook.resultTimeout')
+                          : hookTestResult.status === 'skipped'
+                            ? t('scheduler.editor.preRunHook.resultSkip', {
+                                ms: hookTestResult.durationMs,
+                              })
+                            : hookTestResult.status === 'passed'
+                              ? t('scheduler.editor.preRunHook.resultRun', {
                                   code: hookTestResult.exitCode ?? 0,
                                   ms: hookTestResult.durationMs,
+                                })
+                              : t('scheduler.editor.preRunHook.resultError', {
+                                  error:
+                                    hookTestResult.error ??
+                                    `exit ${hookTestResult.exitCode ?? '?'}`,
                                 })}
                       </span>
                       {(hookTestResult.stdout.trim() || hookTestResult.stderr.trim()) && (

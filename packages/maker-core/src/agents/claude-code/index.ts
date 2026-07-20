@@ -793,6 +793,11 @@ export class ClaudeCodeAgent extends BaseAgent {
     }
 
     const mcpProviders = this.deps.mcpProviders ?? [];
+    // host-owned 只读白名单在 session 启动时快照; 与 hooks / MCP 注册同样保持整条
+    // 会话稳定, 避免中途改数组导致 CLI 权限规则与 prompt cache 前缀漂移。
+    const claudeAllowedTools = this.deps.claudeAllowedTools?.length
+      ? [...this.deps.claudeAllowedTools]
+      : undefined;
     const buildMcpServers = (): Record<string, McpServerConfig> | undefined => {
       const providers = mcpProviders;
       if (providers.length === 0) return undefined;
@@ -1521,6 +1526,9 @@ export class ClaudeCodeAgent extends BaseAgent {
           // gate 过 remoteHostId 非空。
           env: remoteEnv ?? env,
           permissionMode: remotePermissionMode,
+          // cc-manager 的 QueryStartParams 已原生支持 allowedTools; 传副本避免 RPC
+          // 序列化前后任一侧原地改写 session 快照。
+          ...(claudeAllowedTools ? { allowedTools: [...claudeAllowedTools] } : {}),
           systemPrompt: (() => {
             const appendText = [
               MAKER_SYSTEM_PROMPT_APPEND,
@@ -1822,6 +1830,9 @@ export class ClaudeCodeAgent extends BaseAgent {
                 },
               }
             : {}),
+          // 第一方只读工具由 host 精确列名, 直接走 SDK public allowlist, 避免
+          // permissionMode=auto 时再调用远程安全分类器。动态聚合入口不在列表中。
+          ...(claudeAllowedTools ? { allowedTools: [...claudeAllowedTools] } : {}),
           canUseTool,
           settingSources: ['user', 'project', 'local'],
           // Settings (SDK "flag settings" 层, 优先级最高 — 覆盖 user/project/local 文件层):
@@ -2050,6 +2061,9 @@ export class ClaudeCodeAgent extends BaseAgent {
     //         本 loop 退出, 但 eventQueue 不能关 —— 新 buildQuery 后还要继续 push 事件。
     //
     // 每条 SDK message 都通知 watchdog (受 pendingToolIds 守卫不起 timer 那段见上方注释)。
+    const registerClaudeSubagentTask = this.deps.registerClaudeSubagentTask;
+    const getClaudeSubagentTaskUsage = this.deps.getClaudeSubagentTaskUsage;
+
     function startForwardLoop(currentQ: Query): void {
       // q 换代: 上一代 q 的 pending interrupted result 不可能从新 q drain 出来,
       // 残留的 interruptRequested 会错误抑制新 q 首个真实 is_error 终态 —— 兜底清。
@@ -2119,6 +2133,13 @@ export class ClaudeCodeAgent extends BaseAgent {
                   sdkSessionId = sid;
                   eventQueue.push({ type: 'session_id', data: sid, source: 'claude-code' });
                 }
+              },
+              onSubagentTaskLaunched: (task) => {
+                registerClaudeSubagentTask?.(task);
+              },
+              getSubagentTaskUsage: (taskId) => {
+                const usage = getClaudeSubagentTaskUsage?.(taskId);
+                return usage ? { totalTokens: usage.totalTokens } : undefined;
               },
               onTurnEnd: () => {
                 // 兜底: 防 watchdog interrupt / SDK 异常路径留下未配对的 tool_use_id。

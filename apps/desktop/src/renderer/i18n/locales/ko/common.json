@@ -2560,7 +2560,8 @@
       "cycleUsed": "이번 주기 사용 ${{spend}} / ${{budget}} ({{pct}}%)",
       "remaining": "남음 ${{remain}}",
       "nextReset": "다음 재설정: {{at}}",
-      "latestTurnTitle": "최근 턴"
+      "latestTurnTitle": "최근 턴",
+      "latestUserTurnTitle": "최근 사용자 턴 합계"
     }
   },
   "usageDetails": {
@@ -3262,6 +3263,7 @@
     "permissionSelector": {
       "triggerAria": "권한 모드 선택: {{label}}",
       "listAria": "권한 모드",
+      "autoFallback": "자동 리뷰를 일시적으로 사용할 수 없어 기본 권한으로 전환했습니다. 필요한 작업은 확인을 요청합니다.",
       "modes": {
         "claude-code": {
           "ask": {
@@ -3318,6 +3320,14 @@
       "notGitRepo": "현재 디렉터리는 git 리포지토리가 아닙니다",
       "alreadyInWorktree": "이미 worktree 안에 있어 중첩이 금지됩니다"
     },
+    "branchChip": {
+      "label": "브랜치",
+      "loading": "브랜치 불러오는 중…",
+      "loadFailed": "브랜치를 불러오지 못했습니다. 눌러서 다시 시도",
+      "currentTooltip": "현재 브랜치",
+      "sourceTooltip": "worktree 소스 브랜치",
+      "worktreeHint": "다른 브랜치를 선택하면 worktree 격리로 시작됩니다"
+    },
     "folderPicker": {
       "selectFolder": "폴더 선택",
       "selectProject": "프로젝트 선택",
@@ -3327,7 +3337,9 @@
       "browseFolder": "다른 폴더 선택",
       "browseProjectFolder": "다른 프로젝트 폴더 선택",
       "dialogue": "대화",
-      "dialogueOrSelectProject": "대화 또는 프로젝트 선택"
+      "dialogueOrSelectProject": "대화 또는 프로젝트 선택",
+      "removeFromList": "목록에서 제거",
+      "missingDir": "폴더를 찾을 수 없음"
     },
     "pendingQueue": {
       "regionAria": "전송 대기 중인 메시지 큐",
@@ -3561,7 +3573,9 @@
       "edit": "편집",
       "turnCost": "이번 턴 비용",
       "turnCostEstimated": "이번 턴 토큰 가치(API 단가 환산)",
-      "turnCostEstimatedValue": "가치 {{cost}}"
+      "turnCostEstimatedValue": "가치 {{cost}}",
+      "userTurnCostTotalLine": "이번 사용자 턴 합계: {{cost}}",
+      "userTurnCostDetailsTitle": "마지막 SDK 세그먼트"
     },
     "errorBanner": {
       "retryTitle": "마지막 메시지 다시 보내기",
@@ -4704,7 +4718,7 @@
       },
       "cell": {
         "tag": "프로젝트",
-        "tooltip": ".xdmaker/automations/schedules.json에서 관리되며 UI에서 편집할 수 없습니다"
+        "tooltip": ".cindy/automations/schedules.json에서 관리되며 UI에서 편집할 수 없습니다"
       }
     },
     "button": {
@@ -4750,7 +4764,7 @@
       "removeProject": {
         "menu": "프로젝트에서 제거",
         "confirmTitle": "프로젝트 오토메이션에서 제거할까요?",
-        "confirmDescription": ".xdmaker/automations/schedules.json에서 \"{{name}}\"을 제거합니다. commit 후 모든 협업자에게 영향을 줍니다.",
+        "confirmDescription": ".cindy/automations/schedules.json에서 \"{{name}}\"을 제거합니다. commit 후 모든 협업자에게 영향을 줍니다.",
         "confirm": "제거",
         "demote": "제거하고 개인 복사본 유지",
         "demoteSuccess": "프로젝트에서 제거하고 개인 작업으로 유지했습니다"
@@ -4808,6 +4822,26 @@
         "success": "성공",
         "skip": "건너뜀",
         "fail": "실패"
+      },
+      "preRun": {
+        "status": {
+          "passed": "사전 검사 통과",
+          "skipped": "조건이 충족되지 않음",
+          "failed": "사전 검사 실패",
+          "timed_out": "사전 검사 시간 초과",
+          "aborted": "사전 검사 중단됨"
+        },
+        "decision": {
+          "run": "작업 실행",
+          "skip": "작업 건너뜀",
+          "block": "실행 차단"
+        },
+        "duration": "{{ms}} ms",
+        "exitCode": "종료 코드 {{code}}",
+        "stdout": "stdout",
+        "stderr": "stderr",
+        "truncated": "출력이 잘림",
+        "noOutput": "출력 없음"
       }
     },
     "editor": {
@@ -4897,16 +4931,16 @@
       "preRunHook": {
         "label": "사전 검사",
         "enable": "사용",
-        "tooltip": "작업이 트리거될 때 이 스크립트를 먼저 실행합니다. 종료 코드 0이면 이번 회차를 진행하고, 종료 코드 2면 이번 회차를 건너뜁니다(agent를 시작하지 않고 토큰도 사용하지 않음). 스크립트 오류나 시간 초과 시에는 정상적으로 실행하며 경고를 로그에 기록합니다. 스크립트는 작업 디렉터리에서 실행됩니다. Windows에서는 명시적 인터프리터(예: node check.mjs)를 사용하세요.",
+        "tooltip": "작업이 트리거될 때 이 스크립트를 먼저 실행합니다. 종료 코드 0이면 이번 회차를 진행하고, 종료 코드 2면 이번 회차를 건너뜁니다(agent를 시작하지 않고 토큰도 사용하지 않음). 스크립트 오류나 시간 초과 시에는 실행을 차단하고 실패 결과를 기록합니다. 스크립트는 작업 디렉터리에서 실행됩니다. Windows에서는 명시적 인터프리터(예: node check.mjs)를 사용하세요.",
         "infoAria": "사전 검사 규칙 보기",
-        "protocol": "스크립트 작성 규칙: 종료 코드 0 = 이번 회차 실행, 종료 코드 2 = 이번 회차 건너뜀(사용량 소모 없음). 오류나 시간 초과 시에도 작업은 막히지 않습니다",
+        "protocol": "스크립트 작성 규칙: 종료 코드 0 = 이번 회차 실행, 종료 코드 2 = 이번 회차 건너뜀(사용량 소모 없음). 그 외 종료 코드, 오류, 시간 초과는 실행을 차단합니다",
         "commandPlaceholder": "node scripts/schedule-checks/check.mjs",
         "test": "테스트",
         "testing": "테스트 중…",
         "resultRun": "exit {{code}} · {{ms}}ms — 이번 회차가 실행됩니다",
         "resultSkip": "exit 2 · {{ms}}ms — 이번 회차를 건너뜁니다",
-        "resultTimeout": "시간 초과 — 통과로 처리되어 실행이 진행됩니다",
-        "resultError": "실행 실패({{error}}) — 통과로 처리되어 실행이 진행됩니다",
+        "resultTimeout": "시간 초과 — 이번 실행이 차단됩니다",
+        "resultError": "실행 실패({{error}}) — 이번 실행이 차단됩니다",
         "aiCreate": "AI로 생성",
         "aiModify": "AI로 수정",
         "aiPlaceholder": "작업을 실행해야 하는 조건을 설명하세요. 예: 저장소에 처리되지 않은 새 PR이 있을 때만 실행",

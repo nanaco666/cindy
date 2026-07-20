@@ -1647,11 +1647,80 @@ describe('Scheduler passive mode', () => {
   });
 });
 
-describe('Scheduler preRunHook skipped', () => {
+describe('Scheduler preRunHook results', () => {
+  it('前置检查结果落库暂时失败时不覆盖 skip 判定', async () => {
+    const logger: Logger = { warn: vi.fn() };
+    const preRunHookResult: NonNullable<ScheduleRun['preRunHookResult']> = {
+      status: 'skipped',
+      decision: 'skip',
+      exitCode: 2,
+      durationMs: 6,
+      stdout: 'no work',
+      stderr: '',
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      timedOut: false,
+      aborted: false,
+    };
+    const h = makeHarness({
+      logger,
+      runnerImpl: async (_schedule, ctx) => {
+        await ctx.onPreRunHookCompleted?.(preRunHookResult);
+        return { sessionId: '', skipped: true, resultText: 'exit 2: no work' };
+      },
+    });
+    const sch = await h.scheduler.create({ ...baseInput });
+    vi.spyOn(h.storage, 'updateRun').mockRejectedValueOnce(new Error('SQLITE_BUSY'));
+    const failedEvents: unknown[] = [];
+    h.scheduler.on('failed', (event) => failedEvents.push(event));
+
+    const { runId } = await h.scheduler.runNow(sch.id);
+    const run = (await h.scheduler.listRuns(sch.id)).find((item) => item.id === runId);
+
+    expect(run?.status).toBe('skipped');
+    expect(run?.readAt).toBeDefined();
+    expect(run?.preRunHookResult).toBeUndefined();
+    expect(failedEvents).toHaveLength(0);
+    expect(logger.warn).toHaveBeenCalledWith('persist pre-run hook result failed', {
+      runId,
+      error: 'SQLITE_BUSY',
+    });
+  });
+
+  it('runNow fail-closed:检查结果在无 session 时仍落库，run 记 failed 且未读', async () => {
+    const preRunHookResult: NonNullable<ScheduleRun['preRunHookResult']> = {
+      status: 'failed',
+      decision: 'block',
+      exitCode: 1,
+      durationMs: 6,
+      stdout: '',
+      stderr: 'syntax error',
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      timedOut: false,
+      aborted: false,
+    };
+    const h = makeHarness({
+      runnerImpl: async (_schedule, ctx) => {
+        await ctx.onPreRunHookCompleted?.(preRunHookResult);
+        throw new Error('pre-run hook failed with exit code 1');
+      },
+    });
+    const sch = await h.scheduler.create({ ...baseInput });
+
+    const { runId } = await h.scheduler.runNow(sch.id);
+    const run = (await h.scheduler.listRuns(sch.id)).find((item) => item.id === runId);
+
+    expect(run?.status).toBe('failed');
+    expect(run?.sessionId).toBeUndefined();
+    expect(run?.readAt).toBeUndefined();
+    expect(run?.preRunHookResult).toEqual(preRunHookResult);
+  });
+
   it('cron fire skipped: run 保留为 skipped(生而已读)、照常重排、发 skipped 事件', async () => {
     const h = makeHarness({
       runnerImpl: async () => ({
-        sessionId: 'skip-log-sess',
+        sessionId: '',
         skipped: true,
         resultText: 'exit 2: no new PRs',
       }),
@@ -1676,7 +1745,7 @@ describe('Scheduler preRunHook skipped', () => {
     // 生而已读:不产生未读红点
     expect(runs[0].readAt).toBe(Date.UTC(2026, 0, 1, 0, 1, 5));
     expect(runs[0].resultText).toBe('exit 2: no new PRs');
-    expect(runs[0].sessionId).toBe('skip-log-sess');
+    expect(runs[0].sessionId).toBeUndefined();
 
     // 与 deferred 不同:照常按 cron 重排下一槽位,不是短延重试
     const after = await h.storage.get(sch.id);
@@ -1684,7 +1753,7 @@ describe('Scheduler preRunHook skipped', () => {
     expect(after?.lastFiredAt).toBe(Date.UTC(2026, 0, 1, 0, 1, 5));
 
     expect(skippedEvents).toHaveLength(1);
-    expect(skippedEvents[0].sessionId).toBe('skip-log-sess');
+    expect(skippedEvents[0].sessionId).toBe('');
     expect(completedEvents).toHaveLength(0);
     expect(failedEvents).toHaveLength(0);
   });

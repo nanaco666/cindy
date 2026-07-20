@@ -24,15 +24,14 @@ export function formatUsd(n: number): string {
 }
 
 /**
- * Per-turn 小额费用 (MessageActionBar"本轮消耗"):
- * ≥$10 走紧凑格式; ≥$0.01 两位小数; ≥$0.001 三位小数; 再小显示下限 "<$0.001"。
- * 单轮费用常在分位以下, formatUsd 的两位小数会把 $0.003 抹成 $0.00, 故单独一档。
+ * Per-turn / per-model USD cost (MessageActionBar and its tooltip):
+ * always renders two decimal places so the displayed amount matches the
+ * monetary total users compare across models and turns. Values below one cent
+ * retain a lower-bound label instead of misleadingly rendering as $0.00.
  */
 export function formatTurnCostUsd(n: number): string {
-  if (n >= 10) return formatCompactUsd(n);
   if (n >= 0.01) return `$${n.toFixed(2)}`;
-  if (n >= 0.001) return `$${n.toFixed(3)}`;
-  return '<$0.001';
+  return '<$0.01';
 }
 
 /**

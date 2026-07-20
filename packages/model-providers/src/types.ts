@@ -202,6 +202,15 @@ export interface CatalogModel {
    * 不能读跨 provider 拍平去重后的列表（那只保留首个 provider 的值，会错）。
    */
   supportsFastMode?: boolean;
+  /**
+   * 展示图标 id —— 模型行 / composer 药丸上显示什么图标,**以 AI Gateway / 目录设定为准**
+   * (XD 模型经 model-access-server GET /models 下发,其它供应商可由 OSS 目录配置)。
+   * 已知取值见 sections.ts `resolveModelIconKind`('claude' | 'codex' | 'cindy' 及别名);
+   * 缺省或未知值 ⇒ 客户端回落该行来源供应商标(ProviderMark),桌面与手机同一套规则。
+   * 故意**不纳入** `modelSignature` 跨供应商一致性校验:同一 model id 在不同供应商下
+   * 允许配不同图标(与 supportsFastMode / defaultEnabled 同理)。
+   */
+  icon?: string;
   cost?: ModelCost;
   modalities?: { input: string[]; output: string[] };
   capabilities?: {

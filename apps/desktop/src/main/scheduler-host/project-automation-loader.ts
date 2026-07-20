@@ -15,10 +15,12 @@ import type {
 
 import { projectAutomationConsents, schedules, sessions } from '../localDb/schema';
 import { projectAutomationConsentToRow } from '../localDb/mapper';
+import { PROJECT_AUTOMATION_REL_SEGMENTS } from '../../shared/projectAutomationPaths';
+import { migrateLegacyXdmakerDir } from '../utils/legacyXdmakerMigration';
 import type { DrizzleScheduleStorage, SchedulerDrizzleDb } from './storage';
 
 /**
- * ProjectAutomationLoader reads .xdmaker/automations/schedules.json and syncs it
+ * ProjectAutomationLoader reads .cindy/automations/schedules.json and syncs it
  * into the scheduler DB.
  *
  * Project schedules are mandatory project-lead configuration, similar to lint
@@ -27,7 +29,7 @@ import type { DrizzleScheduleStorage, SchedulerDrizzleDb } from './storage';
  * last successfully reconciled hash so renderer toasts can be deduped. The old
  * consent meaning is deprecated.
  */
-const AUTOMATIONS_REL_PATH = path.join('.xdmaker', 'automations', 'schedules.json');
+const AUTOMATIONS_REL_PATH = path.join(...PROJECT_AUTOMATION_REL_SEGMENTS);
 const CACHE_TTL_MS = 5_000;
 const PROJECT_SCHEDULE_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -68,7 +70,7 @@ export interface ReconcileResult {
   inserted: number;
   updated: number;
   deleted: number;
-  skipped: 'no-file' | 'parse-error' | null;
+  skipped: 'no-file' | 'parse-error' | 'migration-incomplete' | null;
 }
 
 export type ProjectAutomationEvent = {
@@ -84,7 +86,8 @@ export type ProjectAutomationEvent = {
 type CachedRead =
   | { kind: 'loaded'; content: string; configHash: string; schedules: ProjectScheduleConfig[] }
   | { kind: 'missing' }
-  | { kind: 'parse-error' };
+  | { kind: 'parse-error' }
+  | { kind: 'migration-incomplete' };
 
 type Listener = (event: ProjectAutomationEvent) => void;
 
@@ -140,6 +143,9 @@ export class ProjectAutomationLoader {
 
   async reconcile(workingDir: string): Promise<ReconcileResult> {
     const read = await this.readProjectAutomations(workingDir);
+    if (read.kind === 'migration-incomplete') {
+      return { workingDir, inserted: 0, updated: 0, deleted: 0, skipped: 'migration-incomplete' };
+    }
     if (read.kind !== 'loaded') {
       const lastReconciledHash = await this.getLastHash(workingDir);
       const deleted = await this.deleteProjectSchedules(workingDir);
@@ -320,6 +326,8 @@ export class ProjectAutomationLoader {
   }
 
   private async readProjectAutomationsFromDisk(workingDir: string): Promise<CachedRead> {
+    const migration = await migrateLegacyXdmakerDir(workingDir);
+    if (!migration.complete) return { kind: 'migration-incomplete' };
     const filePath = path.join(workingDir, AUTOMATIONS_REL_PATH);
     let content: string;
     try {
