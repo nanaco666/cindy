@@ -9,6 +9,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { createChatAttachmentSaveHandler } from '../chatAttachmentSave';
 
 const userDataDir = path.join(os.tmpdir(), `image-cache-ext-${randomUUID()}`);
 
@@ -67,6 +68,36 @@ describe('imageCacheStore.copyFromPath — extension preservation', () => {
     expect(await copiedExt('image.dmg')).toBe('.bin');
     expect(await copiedExt('tool.app')).toBe('.bin');
     expect(await copiedExt('lib.jar')).toBe('.bin');
+  });
+
+  it('round-trips setup.exe → .bin cache → Save As setup.exe without opening it', async () => {
+    const sourcePath = await makeSource('installer-bytes');
+    const cached = await imageCacheStore.copyFromPath({
+      sessionId: 'sess-ext',
+      sourcePath,
+      originalName: 'setup.exe',
+      lifecycle: 'committed',
+    });
+    const cachedPath = imageCacheStore.resolveSafe(cached.url).absPath;
+    expect(path.extname(cachedPath).toLowerCase()).toBe('.bin');
+
+    const targetDir = path.join(os.tmpdir(), `ext-save-${randomUUID()}`);
+    const targetPath = path.join(targetDir, 'chosen-setup.exe');
+    await fs.mkdir(targetDir, { recursive: true });
+    const showSaveDialog = vi.fn(async () => ({ canceled: false, filePath: targetPath }));
+    const result = await createChatAttachmentSaveHandler({
+      isPathAllowed: () => true,
+      stat: (filePath) => fs.stat(filePath),
+      copyFile: (from, to) => fs.copyFile(from, to),
+      showSaveDialog,
+      getDownloadsDir: () => targetDir,
+    })({ sourcePath: cachedPath, suggestedName: 'setup.exe' });
+
+    expect(showSaveDialog).toHaveBeenCalledWith({
+      defaultPath: path.join(targetDir, 'setup.exe'),
+    });
+    expect(result).toEqual({ status: 'saved', savedPath: targetPath });
+    expect(await fs.readFile(targetPath, 'utf8')).toBe('installer-bytes');
   });
 });
 

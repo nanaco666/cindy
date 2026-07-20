@@ -1830,6 +1830,28 @@ interface ElectronAPI {
   openPath: (filePath: string) => Promise<{ success: boolean; error?: string }>;
 
   /**
+   * Save a safely materialized chat attachment under its sanitized original
+   * filename. The main process validates the source and never opens the target.
+   */
+  saveChatAttachmentAs: (params: {
+    sourcePath: string;
+    suggestedName: string;
+  }) => Promise<
+    | { status: 'saved'; savedPath: string }
+    | { status: 'canceled' }
+    | {
+        status: 'error';
+        code:
+          | 'invalid_source'
+          | 'forbidden'
+          | 'not_found'
+          | 'not_file'
+          | 'dialog_failed'
+          | 'copy_failed';
+      }
+  >;
+
+  /**
    * Open the app's log directory (`<userData>/logs`) in the OS file manager.
    * Path is derived in main; renderer cannot pass it. Used by Settings → About.
    */

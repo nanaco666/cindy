@@ -136,6 +136,7 @@ import {
   createLightboxMediaHandlers,
   REMOTE_IMAGE_MAX_BYTES,
 } from './lightboxMediaActions';
+import { createChatAttachmentSaveHandler } from './chatAttachmentSave';
 import { sweepStartupDraftImages } from './imageCacheOrphanSweep';
 import { sweepLegacyDialogueWorkingDirs } from './localDb/dialogueWorkdirSelfHeal';
 import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
@@ -3819,6 +3820,27 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
         return { success: false, error: err instanceof Error ? err.message : String(err) };
       }
     },
+  );
+
+  // 安全降级附件“另存为”：源文件必须通过统一路径策略，建议名在 main 侧
+  // 清洗，复制完成后不调用 openPath，避免恢复原扩展名后被自动执行。
+  const saveChatAttachment = createChatAttachmentSaveHandler({
+    isPathAllowed,
+    stat: (filePath) => fs.promises.stat(filePath),
+    copyFile: (sourcePath, targetPath) => fs.promises.copyFile(sourcePath, targetPath),
+    showSaveDialog: async (opts) => {
+      const targetWin = getWindow() ?? BrowserWindow.getFocusedWindow();
+      const result = targetWin
+        ? await dialog.showSaveDialog(targetWin, opts)
+        : await dialog.showSaveDialog(opts);
+      return { canceled: result.canceled, filePath: result.filePath || undefined };
+    },
+    getDownloadsDir: () => app.getPath('downloads'),
+  });
+  ipcMain.handle(
+    'chat-attachment:save-as',
+    (_event, params: { sourcePath?: unknown; suggestedName?: unknown }) =>
+      saveChatAttachment(params),
   );
 
   // Settings → About: 打开 <userData>/logs 在系统文件管理器。
