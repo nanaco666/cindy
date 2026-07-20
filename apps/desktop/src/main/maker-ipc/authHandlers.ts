@@ -8,8 +8,11 @@
 import type { AgentKind, AuthState, Maker } from '@lizi/maker-core';
 
 import { requireEnum, throwIpcError } from '../utils/ipcValidate.js';
+import { createLogger } from '../logger.js';
 import { MAKER_INVOKE, MAKER_PUSH } from './channels.js';
 import type { IpcHandlerRegistry } from './ipcHandlerRegistry.js';
+
+const log = createLogger('maker-ipc:authHandlers');
 
 /** main → renderer 的 push 广播能力。 */
 export type MakerIpcBroadcast = (channel: string, payload: unknown) => void;
@@ -70,8 +73,13 @@ export function registerMakerAuthHandlers(
       let liveModelsApplied = false;
       try {
         liveModelsApplied = await maker.refreshAgentLocalModels('codex');
-      } catch {
+      } catch (e) {
         // 登录本身已成功；实时模型发现失败时由 host 回退磁盘快照，不能把登录判失败。
+        // 但记异常原因(原先静默吞掉,首登无模型时无从诊断是 app-server 起不来还是
+        // model/list RPC 出错)——走统一 logger(规则 12),不影响登录结果。
+        log.warn(
+          `codex live model refresh threw during login: ${e instanceof Error ? e.message : String(e)}`,
+        );
       }
       if (!isCurrent()) return supersededAuthState();
       await onCodexAuthChange?.(true, liveModelsApplied, isCurrent);
