@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { Effort } from '@/lib/userPreferences.types';
 
-vi.mock('react-i18next', () => ({
+vi.mock('react-i18next', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('react-i18next')>()),
   useTranslation: () => ({
     t: (
       key: string,
@@ -121,7 +122,14 @@ vi.mock('@/hooks/useApiKey', () => ({
 }));
 
 vi.mock('@/hooks/useConnectedSource', () => ({
-  useConnectedSource: () => ({ hasConnectedSource: true, loading: false }),
+  useConnectedSource: (agent: string | null, modelId?: string) => ({
+    hasConnectedSource:
+      !agent ||
+      !modelId ||
+      (agent === 'claude-code' && modelId.startsWith('claude-')) ||
+      (agent === 'codex' && modelId === 'gpt-5.5'),
+    loading: false,
+  }),
 }));
 
 vi.mock('@/hooks/useModelPricing', () => ({
@@ -218,6 +226,13 @@ vi.mock('@/lib/providerModels', () => ({
       efforts: [],
       defaultEffort: null,
     },
+    {
+      id: 'gpt-5.5',
+      displayName: 'GPT-5.5',
+      contextWindow: 400000,
+      efforts: ['low', 'medium', 'high'],
+      defaultEffort: 'medium',
+    },
   ],
 }));
 
@@ -239,8 +254,95 @@ import {
   ModelSelectorContent,
   modelEffortLabel,
 } from '@/components/new-chat/ModelSelector';
+import { makerChatStore } from '@/lib/makerChatStore';
 
 describe('ModelSelector trigger variants', () => {
+  it('shows the intent model and its default source after registering an agent switch', () => {
+    const sessionId = 'model-selector-agent-switch-intent';
+    providersRef.providers = [
+      {
+        id: 'anthropic',
+        name: 'Anthropic',
+        connected: true,
+        agents: ['claude-code'],
+        routing: { 'claude-code': {} },
+        models: {
+          'claude-code': [
+            {
+              id: 'claude-opus-4-8',
+              name: 'Opus 4.8',
+              contextWindow: 200000,
+              efforts: ['high'],
+              defaultEffort: 'high',
+            },
+          ],
+        },
+      },
+      {
+        id: 'zeta-codex',
+        name: 'Zeta Codex',
+        connected: true,
+        agents: ['codex'],
+        routing: { codex: {} },
+        models: {
+          codex: [
+            {
+              id: 'gpt-5.5',
+              name: 'GPT-5.5',
+              contextWindow: 400000,
+              efforts: ['medium'],
+              defaultEffort: 'medium',
+            },
+          ],
+        },
+      },
+    ];
+
+    function IntentTrigger({ refresh }: { refresh: number }) {
+      void refresh;
+      const lightState = React.useSyncExternalStore(
+        (onStoreChange) => makerChatStore.subscribeLight(sessionId, onStoreChange),
+        () => makerChatStore.getLightSnapshot(sessionId),
+      );
+      // 复刻 CCAgentSessionView(订阅轻快照决定 vendor) + ChatInput(直接读 intent
+      // 覆盖 model/provider)的组合窗口。refresh 模拟其它状态带来的无关重渲染。
+      const intent = makerChatStore.getAgentSwitchIntent(sessionId);
+      const displayAgent = lightState.agentSwitchIntent?.target ?? 'claude-code';
+      return React.createElement(ModelSelector, {
+        modelId: intent?.model ?? 'claude-opus-4-8',
+        effort: (intent?.effort ?? 'high') as Effort,
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: displayAgent === 'codex' ? 'codex' : 'cc',
+        currentProviderId: intent?.providerId ?? null,
+        onProviderChange: vi.fn(),
+        onNavigateToProviders: vi.fn(),
+      });
+    }
+
+    const view = render(React.createElement(IntentTrigger, { refresh: 0 }));
+    try {
+      act(() => {
+        makerChatStore.noteAgentSwitchIntent(sessionId, 'codex', {
+          model: 'gpt-5.5',
+          providerId: null,
+          effort: 'medium',
+        });
+      });
+      view.rerender(React.createElement(IntentTrigger, { refresh: 1 }));
+
+      const trigger = screen.getByRole('button', { name: /Current: GPT-5\.5/ });
+      expect(trigger.textContent).toContain('GPT-5.5');
+      // providerId=null 仍应按目标模型的默认可连来源解析 icon。
+      expect(trigger.textContent).toContain('Z');
+      expect(trigger.textContent).not.toContain('newChat.modelSelector.source.connect');
+    } finally {
+      view.unmount();
+      makerChatStore.purgeSession(sessionId);
+      providersRef.providers = providersRef.DEFAULT_PROVIDERS;
+    }
+  });
+
   it('renders the field trigger as a settings input and localizes effort before provider labels', () => {
     render(
       React.createElement(ModelSelector, {

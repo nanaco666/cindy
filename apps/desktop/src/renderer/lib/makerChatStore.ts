@@ -3708,6 +3708,7 @@ function selectLightState(state: SessionChatState): SessionChatLightState {
 
 function lightStateEquals(a: SessionChatLightState, b: SessionChatLightState): boolean {
   return (
+    a.agentSwitchIntent === b.agentSwitchIntent &&
     a.agentStatus === b.agentStatus &&
     a.isStreaming === b.isStreaming &&
     a.error === b.error &&

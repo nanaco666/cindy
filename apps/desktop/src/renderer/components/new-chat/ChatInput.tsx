@@ -1196,6 +1196,13 @@ export function ChatInput({
     setSelectedProviderId(initialProviderId ?? null);
   }, [initialProviderId, pendingRemoteSwitch]);
 
+  // 意图期的来源与模型/Agent 同属一份乐观展示快照。不能让旧会话的
+  // selectedProviderId 继续参与断开态、默认来源与发送来源解析，否则会形成
+  // 「目标 Agent + 目标模型 + 旧来源」的混合状态；null 仍表示跟随目标引擎默认路由。
+  const activeProviderId = agentSwitchIntent
+    ? agentSwitchIntent.providerId
+    : selectedProviderId;
+
   // 乐观切换解除:props(被控端 echo 回流的 mirror)追上目标三元组即交回 props;否则 5s 兜底解除
   // (被控端把 effort 降级等导致永不相等时,避免 selector 永久置灰)。
   useEffect(() => {
@@ -1286,7 +1293,7 @@ export function ChatInput({
       providers,
       agent: currentModelAgentKind,
       modelId: activeModel,
-      selectedProviderId,
+      selectedProviderId: activeProviderId,
       providersLoading,
     });
 
@@ -1296,8 +1303,8 @@ export function ChatInput({
   const effectiveSourceId = useMemo<string | null>(() => {
     const kind = currentModelAgentKind;
     if (!kind) return null;
-    return effectiveSourceIdForModel(providers, selectedProviderId, activeModel, kind);
-  }, [providers, currentModelAgentKind, selectedProviderId, activeModel]);
+    return effectiveSourceIdForModel(providers, activeProviderId, activeModel, kind);
+  }, [providers, currentModelAgentKind, activeProviderId, activeModel]);
 
   // 发送(草稿态建会话)时携带的**显式来源**:仅当本地选择仍在已连接来源栏内才带上
   // (与 effectiveSourceId 的高亮口径一致,即"所见即所得");否则带 null。
@@ -1306,11 +1313,11 @@ export function ChatInput({
   //   会改走 catalog gateway-key 路由(见 provider-route.ts),破坏默认 cohort 的路由/缓存基线。
   const sendProviderId = useMemo<string | null>(() => {
     const kind = currentModelAgentKind;
-    if (!kind || !selectedProviderId) return null;
-    return effectiveSourceIdForModel(providers, selectedProviderId, activeModel, kind) === selectedProviderId
-      ? selectedProviderId
+    if (!kind || !activeProviderId) return null;
+    return effectiveSourceIdForModel(providers, activeProviderId, activeModel, kind) === activeProviderId
+      ? activeProviderId
       : null;
-  }, [providers, currentModelAgentKind, selectedProviderId, activeModel]);
+  }, [providers, currentModelAgentKind, activeProviderId, activeModel]);
 
   // 模型预设采用「全局默认 + 已创建会话保护」:
   //   - 本地草稿 / 已创建会话的**非选中行**都读写 providerModelMemory,所以同一
@@ -4656,7 +4663,7 @@ export function ChatInput({
               excludeSubscriptionDirect={!!remoteHostId}
               dense={effectiveDenseToolbar}
               // 意图期显示用户在浏览态选中的来源(null = flat 退化行,跟随默认路由)。
-              currentProviderId={agentSwitchIntent ? agentSwitchIntent.providerId : selectedProviderId}
+              currentProviderId={activeProviderId}
               sourceDisconnected={selectedSourceDisconnected}
               onProviderChange={handleProviderChange}
               onNavigateToProviders={handleNavigateToProviders}
