@@ -4,7 +4,14 @@ import { extractIpcError } from '@/utils/ipcError';
 
 interface CollaborationStartErrorOptions {
   continueAsSingleSession?: boolean;
+  remoteDevice?: boolean;
 }
+
+const ACTIONABLE_COLLABORATION_ERROR_CODES = new Set([
+  'INVALID_PARAMS',
+  'NO_PROVIDER_FOR_AGENT',
+  'BUDGET_MODEL_REQUIRES_API_MODE',
+]);
 
 /**
  * 协同启动错误的 renderer 文案边界。
@@ -16,12 +23,13 @@ export function getCollaborationStartErrorMessage(
   options: CollaborationStartErrorOptions = {},
 ): string {
   const ipcError = extractIpcError(err);
-  if (ipcError?.code === 'BUDGET_MODEL_REQUIRES_API_MODE') {
-    return t(
-      options.continueAsSingleSession
-        ? 'newChat.collaboration.errors.BUDGET_MODEL_REQUIRES_API_MODE_CONTINUE'
-        : 'newChat.collaboration.errors.BUDGET_MODEL_REQUIRES_API_MODE',
-    );
+  if (ipcError && ACTIONABLE_COLLABORATION_ERROR_CODES.has(ipcError.code)) {
+    const suffix = options.remoteDevice
+      ? '_REMOTE'
+      : options.continueAsSingleSession
+        ? '_CONTINUE'
+        : '';
+    return t(`newChat.collaboration.errors.${ipcError.code}${suffix}`);
   }
   return t(
     options.continueAsSingleSession

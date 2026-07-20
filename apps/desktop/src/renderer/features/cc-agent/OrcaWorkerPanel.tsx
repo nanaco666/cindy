@@ -20,6 +20,8 @@ import type { ConversationSearchJump } from '../../../shared/conversationSearchJ
 
 export interface OrcaWorkerPanelProps {
   leadSessionId: string;
+  /** device-link controlled device that owns the Lead and its Worker team. */
+  deviceId?: string;
   /** tab active && RSB 未折叠 && 窗口可见。挂载但不可见时不能清红点 / ack 消息。 */
   viewVisible: boolean;
   /** 重型聊天 snapshot 是否实时刷新；隐藏 keep-alive worker pane 会冻结 messages。 */
@@ -43,6 +45,7 @@ function sameVisibleSessionPayload(
 
 export function OrcaWorkerPanel({
   leadSessionId,
+  deviceId,
   viewVisible,
   chatRealtime = true,
   focusWorkerSessionId,
@@ -70,6 +73,7 @@ export function OrcaWorkerPanel({
     handleArchiveWorker,
   } = useOrcaWorkerSelection({
     leadSessionId,
+    deviceId,
     focusWorkerSessionId,
     focusWorkerHintRevision,
     searchJump,
@@ -145,6 +149,7 @@ export function OrcaWorkerPanel({
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreate={handleCreateWorker}
+        deviceId={deviceId}
       />
     </div>
   );

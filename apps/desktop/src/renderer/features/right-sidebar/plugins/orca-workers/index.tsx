@@ -138,6 +138,7 @@ function OrcaWorkersTabBody({
   return (
     <OrcaWorkerPanel
       leadSessionId={ctx.sessionId}
+      deviceId={leadSession?.deviceLinkDeviceId}
       viewVisible={viewVisible}
       chatRealtime={chatRealtime}
       focusWorkerSessionId={state.focusWorkerSessionId}

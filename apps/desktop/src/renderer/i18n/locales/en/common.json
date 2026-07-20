@@ -3401,8 +3401,15 @@
       "archiveWorkerConfirmConfirm": "Archive worker",
       "archiveWorkerConfirmCancel": "Cancel",
       "errors": {
+        "INVALID_PARAMS": "The selected model or collaboration settings are no longer available. Choose again and retry.",
+        "INVALID_PARAMS_CONTINUE": "The selected model or collaboration settings are no longer available. Collaboration was not started, and this message is continuing as a single session. Choose again and retry.",
+        "INVALID_PARAMS_REMOTE": "The controlled device does not support the selected model or collaboration settings. Choose a model available on that device and retry.",
+        "NO_PROVIDER_FOR_AGENT": "This device has no connected model provider for that agent. Connect one in Settings, then retry.",
+        "NO_PROVIDER_FOR_AGENT_CONTINUE": "This device has no connected model provider for that agent. Collaboration was not started, and this message is continuing as a single session. Connect one in Settings, then retry.",
+        "NO_PROVIDER_FOR_AGENT_REMOTE": "The controlled device has no connected model provider for that agent. Connect one on the controlled device, then retry.",
         "BUDGET_MODEL_REQUIRES_API_MODE": "Budget Codex models require an API key. Configure it in Settings, then try again.",
-        "BUDGET_MODEL_REQUIRES_API_MODE_CONTINUE": "Budget Codex models require an API key. Collaboration was not started, and this message is continuing as a single session. Configure it in Settings, then try again."
+        "BUDGET_MODEL_REQUIRES_API_MODE_CONTINUE": "Budget Codex models require an API key. Collaboration was not started, and this message is continuing as a single session. Configure it in Settings, then try again.",
+        "BUDGET_MODEL_REQUIRES_API_MODE_REMOTE": "The controlled device does not have the API key required for budget Codex models. Configure it on that device, then retry."
       }
     },
     "chatInput": {
