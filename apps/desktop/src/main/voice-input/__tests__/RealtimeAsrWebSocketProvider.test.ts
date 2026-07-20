@@ -19,6 +19,8 @@ import {
   LITELLM_QWEN3_REALTIME_TRANSCRIPTION_PATH,
   buildLiteLlmRealtimeWebSocketUrl,
   buildProxyEndpointUrl,
+  describeAsrHandshakeTraceId,
+  describeAsrWebSocketTarget,
   estimateVoiceInputAsrCostUsd,
   getVoiceInputAsrProfiles,
   isRealtimeAsrProvider,
@@ -65,6 +67,19 @@ describe('RealtimeAsrWebSocketProvider helpers', () => {
       'x-litellm-model': 'gpt-realtime-whisper',
     });
     expect(liteLlmRealtimeHeaders('litellm-qwen3-asr-flash-realtime')).toEqual({});
+  });
+
+  it('describes handshake targets without credentials and picks known gateway trace headers', () => {
+    expect(describeAsrWebSocketTarget('wss://llm.example.com/dashscope/api-ws/v1/realtime?model=qwen3-asr-flash-realtime'))
+      .toBe('llm.example.com/dashscope/api-ws/v1/realtime');
+    expect(describeAsrWebSocketTarget('ws://127.0.0.1:8080/volcengine/api/v3/sauc/bigmodel_async'))
+      .toBe('127.0.0.1:8080/volcengine/api/v3/sauc/bigmodel_async');
+    expect(describeAsrWebSocketTarget('not a url')).toBe('invalid-url');
+
+    expect(describeAsrHandshakeTraceId({ 'x-request-id': 'req-1', 'cf-ray': 'ray-2' })).toBe('x-request-id=req-1');
+    expect(describeAsrHandshakeTraceId({ 'x-litellm-call-id': ['call-3'] })).toBe('x-litellm-call-id=call-3');
+    expect(describeAsrHandshakeTraceId({ 'content-type': 'text/html' })).toBeNull();
+    expect(describeAsrHandshakeTraceId({ 'x-request-id': '  ' })).toBeNull();
   });
 
   it('classifies realtime ASR providers and model ids', () => {
@@ -240,7 +255,11 @@ describe('RealtimeAsrWebSocketProvider helpers', () => {
       });
       provider.onEvent(() => {});
 
-      await expect(provider.start()).rejects.toThrow('Realtime ASR handshake failed: HTTP 403 Forbidden');
+      // The dialed host/path must ride along so a route-level 404/403 can be
+      // attributed to the exact gateway address (issue #220 diagnosability).
+      await expect(provider.start()).rejects.toThrow(
+        `Realtime ASR handshake failed: HTTP 403 Forbidden (127.0.0.1:${address.port}/v1/realtime)`,
+      );
     } finally {
       await provider?.stop();
       await new Promise<void>((resolve) => server.close(() => resolve()));
