@@ -162,7 +162,7 @@ describe('OrcaWorkflowRoute source invariants', () => {
     expect(collaborationModeToggleSource).not.toContain('<Puzzle');
     expect(sessionStatusIconSource).toContain('<UsersRound');
     expect(sessionStatusIconSource).not.toContain('<Puzzle');
-    expect(sessionStatusIconSource).toContain("'text-[var(--text-secondary-mid)]'");
+    expect(sessionStatusIconSource).toContain("'text-[var(--cmd-palette-item-meta)]'");
   });
 
   it('keeps /orca as a legacy compatibility redirect to the plain lead route', () => {

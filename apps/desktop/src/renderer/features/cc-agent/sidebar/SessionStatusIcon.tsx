@@ -104,7 +104,7 @@ export function SessionStatusIcon({
               ? 'text-[var(--sidebar-item-active-foreground)]'
               : isRunning
                 ? 'text-[var(--status-bar-accent)]'
-                : 'text-[var(--text-secondary-mid)]',
+                : 'text-[var(--cmd-palette-item-meta)]',
             isRunning && 'session-status-breathing',
           )}
         />
