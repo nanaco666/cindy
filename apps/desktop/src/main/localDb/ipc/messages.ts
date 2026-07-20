@@ -1068,6 +1068,19 @@ export async function findPendingAgentSwitchHandoff(
     .orderBy(desc(messages.createdAt), desc(messageRowid))
     .limit(1);
   if (!sw) return null;
+  let parsed: { handoff?: unknown; consumed?: unknown };
+  try {
+    parsed = JSON.parse(sw.content) as typeof parsed;
+  } catch {
+    return null;
+  }
+  const handoff = typeof parsed.handoff === 'string' && parsed.handoff.length > 0
+    ? parsed.handoff
+    : null;
+  if (!handoff || parsed.consumed === true) return null;
+  // v2 边界以持久消费位为真源:失败首发可能已先落 user 行；只要 vendor 尚未
+  // accepted,重启后仍必须恢复交接。缺字段的 v1 老行才走 user-row 启发式。
+  if (parsed.consumed === false) return handoff;
   const [userAfter] = await db
     .select({ id: messages.id })
     .from(messages)
@@ -1084,14 +1097,7 @@ export async function findPendingAgentSwitchHandoff(
     )
     .limit(1);
   if (userAfter) return null;
-  try {
-    const parsed = JSON.parse(sw.content) as { handoff?: unknown };
-    return typeof parsed.handoff === 'string' && parsed.handoff.length > 0
-      ? parsed.handoff
-      : null;
-  } catch {
-    return null;
-  }
+  return handoff;
 }
 
 /**
@@ -1233,4 +1239,58 @@ export async function updateAgentSwitchBoundaryContent(
   if (!updated) return false;
   broadcastMessageRow(sessionId, updated);
   return true;
+}
+
+/** vendor accepted 后持久化消费位；内存 registry 的 consume 不等待这笔辅助写。 */
+export async function markLatestAgentSwitchConsumed(sessionId: string): Promise<void> {
+  const db = getDbClient().drizzle;
+  const [sessRow] = await db
+    .select({ clearedAt: sessions.clearedAt })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+  const clearedAt = sessRow?.clearedAt ?? null;
+  const afterClear = clearedAt === null ? undefined : gt(messages.createdAt, clearedAt);
+  const [boundary] = await db
+    .select({ clientId: messages.clientId, content: messages.content })
+    .from(messages)
+    .where(and(
+      eq(messages.sessionId, sessionId),
+      eq(messages.role, 'agent_switch'),
+      isNull(messages.rewindAt),
+      afterClear,
+    ))
+    .orderBy(desc(messages.createdAt), desc(messageRowid))
+    .limit(1);
+  if (!boundary) return;
+  let parsed: Record<string, unknown>;
+  try {
+    const value = JSON.parse(boundary.content) as unknown;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    parsed = value as Record<string, unknown>;
+  } catch {
+    return;
+  }
+  if (parsed.consumed === true) return;
+  await updateAgentSwitchBoundaryContent(sessionId, boundary.clientId, {
+    ...parsed,
+    consumed: true,
+  });
+}
+
+/** 原子事务提交后只读并广播边界新行，不做第二次写入。 */
+export async function rebroadcastAgentSwitchBoundary(
+  sessionId: string,
+  boundaryClientId: string,
+): Promise<void> {
+  const db = getDbClient().drizzle;
+  const [row] = await db
+    .select()
+    .from(messages)
+    .where(and(
+      eq(messages.sessionId, sessionId),
+      eq(messages.clientId, boundaryClientId),
+    ))
+    .limit(1);
+  if (row) broadcastMessageRow(sessionId, messageToCamel(row));
 }

@@ -22,6 +22,7 @@ import {
   EMPTY_SESSION_STATE,
   EMPTY_TASK_UPDATES,
   type AgentStatus,
+  type AgentSwitchIntentRecord,
   type AgentTaskUpdate,
   type AskUserDraft,
   type AskUserViewerState,
@@ -46,6 +47,8 @@ const log = createLogger('UseCCAgentChat');
 export type { AgentStatus, AgentTaskUpdate, AskUserDraft, AskUserViewerState, ChatMessage, PendingPermission, PendingAskUser, PendingPlanReview, PendingRenameSessionsConfirm, PendingGhostGrantConfirm, PlanViewerState, QueuedMessage };
 
 interface UseCCAgentChatReturn {
+  /** 仅用于乐观展示的下一次发送切换目标。 */
+  agentSwitchIntent: AgentSwitchIntentRecord | null;
   messages: ChatMessage[];
   taskUpdates: ReadonlyMap<string, AgentTaskUpdate>;
   agentStatus: AgentStatus;
@@ -645,6 +648,7 @@ export function useCCAgentChat(
   );
 
   return {
+    agentSwitchIntent: lightState.agentSwitchIntent,
     messages: heavyState.messages,
     taskUpdates: heavyState.taskUpdates ?? EMPTY_TASK_UPDATES,
     agentStatus: lightState.agentStatus,

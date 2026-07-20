@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   applyPendingAgentSwitchIfIdle,
+  applySetModelThenCancelAgentSwitchIntent,
   performSessionAgentSwitch,
   type AgentSwitchSessionRow,
   type MakerSessionAgentSwitchHandlerDeps,
@@ -42,6 +43,9 @@ function makeDeps(overrides: Partial<MakerSessionAgentSwitchHandlerDeps> = {}): 
       calls.push('boundary');
       return 'boundary-client-1';
     }),
+    applyResumeFallbackAtomically: vi.fn(async () => {
+      calls.push('fallback-db');
+    }),
     setPendingHandoff: vi.fn(() => {
       calls.push('pending');
     }),
@@ -81,6 +85,7 @@ describe('performSessionAgentSwitch', () => {
     expect(boundary.toModel).toBe('gpt-5.5');
     expect(boundary.fromSdkSessionId).toBe('sdk-old');
     expect(boundary.resumed).toBe(false);
+    expect(boundary.consumed).toBe(false);
     expect(boundary.handoff).toContain('Claude Code');
     // close→bootstrap 全程在抑制窗口内(切换的瞬态 close 不得触发 worktree 回收)
     expect(deps.withCloseSuppressed).toHaveBeenCalledTimes(1);
@@ -308,7 +313,7 @@ describe('deferred switch (turn running)', () => {
     expect(calls).toEqual([]);
   });
 
-  it('applyPendingAgentSwitchIfIdle:执行失败吞掉不抛(不阻塞发送),pending 已清', async () => {
+  it('applyPendingAgentSwitchIfIdle:执行失败吞掉不抛(不阻塞发送),pending 保留供下次重试', async () => {
     const { deps, store } = makeDepsWithPending({
       applyAgentSwitchToDb: vi.fn(async () => {
         throw new Error('db locked');
@@ -316,8 +321,71 @@ describe('deferred switch (turn running)', () => {
     });
     store.set('s1', { targetAgentKind: 'codex', model: 'gpt-5.5', providerId: null });
     await expect(applyPendingAgentSwitchIfIdle(deps, 's1')).resolves.toBeUndefined();
-    expect(store.has('s1')).toBe(false);
+    expect(store.has('s1')).toBe(true);
     expect(deps.log.warn).toHaveBeenCalled();
+  });
+
+  it('applyPendingAgentSwitchIfIdle:同 session 并发调用复用同一 in-flight,只执行一次切换', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const { deps, store } = makeDepsWithPending({
+      applyAgentSwitchToDb: vi.fn(async () => gate),
+    });
+    store.set('s1', { targetAgentKind: 'codex', model: 'gpt-5.5', providerId: null });
+    const first = applyPendingAgentSwitchIfIdle(deps, 's1');
+    const second = applyPendingAgentSwitchIfIdle(deps, 's1');
+    expect(second).toBe(first);
+    release();
+    await Promise.all([first, second]);
+    expect(deps.applyAgentSwitchToDb).toHaveBeenCalledTimes(1);
+    expect(store.has('s1')).toBe(false);
+  });
+
+  it('applyPendingAgentSwitchIfIdle:pre-check 后 running 竞态失败仍保留 intent', async () => {
+    let reads = 0;
+    const { deps, store } = makeDepsWithPending({
+      getLiveSession: vi.fn(() => ({ isTurnRunning: () => ++reads > 1 })),
+    });
+    store.set('s1', { targetAgentKind: 'codex', model: 'gpt-5.5', providerId: null });
+    await applyPendingAgentSwitchIfIdle(deps, 's1');
+    expect(store.has('s1')).toBe(true);
+    expect(deps.applyAgentSwitchToDb).not.toHaveBeenCalled();
+  });
+});
+
+describe('SET_MODEL cancels agent switch intent only after success', () => {
+  it('成功后清 main intent 并广播 renderer rollback', async () => {
+    const registry = {
+      set: vi.fn(),
+      get: vi.fn(),
+      clear: vi.fn(),
+    };
+    const broadcast = vi.fn();
+    await expect(applySetModelThenCancelAgentSwitchIntent(
+      registry,
+      's1',
+      async () => 'ok',
+      broadcast,
+    )).resolves.toBe('ok');
+    expect(registry.clear).toHaveBeenCalledWith('s1');
+    expect(broadcast).toHaveBeenCalledWith('s1');
+  });
+
+  it('SET_MODEL 失败时 main intent 与 renderer 乐观态都保留', async () => {
+    const registry = {
+      set: vi.fn(),
+      get: vi.fn(),
+      clear: vi.fn(),
+    };
+    const broadcast = vi.fn();
+    await expect(applySetModelThenCancelAgentSwitchIntent(
+      registry,
+      's1',
+      async () => { throw new Error('set model failed'); },
+      broadcast,
+    )).rejects.toThrow('set model failed');
+    expect(registry.clear).not.toHaveBeenCalled();
+    expect(broadcast).not.toHaveBeenCalled();
   });
 });
 
@@ -336,7 +404,6 @@ describe('Phase 2:切回停泊引擎(resume + 增量交接)', () => {
               { role: 'user', content: '离开期间的问题', createdAt: 200 },
             ],
       ),
-      updateBoundaryMessage: vi.fn(async () => {}),
       ...overrides,
     });
   }
@@ -391,12 +458,8 @@ describe('Phase 2:切回停泊引擎(resume + 增量交接)', () => {
     const { deps } = makeResumeDeps({ bootstrapSwitchedSession: bootstrap });
     const result = await performSessionAgentSwitch(deps, validParams);
     expect(result).toMatchObject({ switched: true, engineReady: true });
-    // 第二次 applyAgentSwitchToDb 清掉失效停泊 id
-    expect(vi.mocked(deps.applyAgentSwitchToDb).mock.calls[1][1]).toMatchObject({
-      sdkSessionId: null,
-    });
-    // 边界行改写为全量交接 + resumed:false
-    const rewritten = vi.mocked(deps.updateBoundaryMessage!).mock.calls[0];
+    // 同一原子事务清掉失效 id并改写边界为全量交接 + resumed:false
+    const rewritten = vi.mocked(deps.applyResumeFallbackAtomically).mock.calls[0];
     expect(rewritten[1]).toBe('boundary-client-1');
     expect(rewritten[2].resumed).toBe(false);
     expect(rewritten[2].handoff).toContain('最早的问题');
@@ -406,21 +469,62 @@ describe('Phase 2:切回停泊引擎(resume + 增量交接)', () => {
     expect(bootstrap).toHaveBeenCalledTimes(2);
   });
 
-  it('resume 回落中清停泊 id 失败:不再重试 spawn,engineReady=false', async () => {
+  it('resume 原子回落失败:不再重试 spawn,engineReady=false 并保留完整切换意图', async () => {
     const bootstrap = vi.fn(async () => {
       throw new Error('resume transcript missing');
     });
-    const applyDb = vi
-      .fn(async () => {})
-      .mockResolvedValueOnce(undefined) // 首次提交成功
-      .mockRejectedValueOnce(new Error('db locked')); // 回落清 id 失败
+    const store = new Map<string, Parameters<NonNullable<MakerSessionAgentSwitchHandlerDeps['pendingSwitches']>['set']>[1]>();
     const { deps } = makeResumeDeps({
       bootstrapSwitchedSession: bootstrap,
-      applyAgentSwitchToDb: applyDb,
+      applyResumeFallbackAtomically: vi.fn(async () => {
+        throw new Error('db locked');
+      }),
+      pendingSwitches: {
+        set: (id, intent) => void store.set(id, intent),
+        get: (id) => store.get(id),
+        clear: (id) => void store.delete(id),
+      },
     });
-    const result = await performSessionAgentSwitch(deps, validParams);
-    expect(result).toMatchObject({ switched: true, engineReady: false });
+    const result = await performSessionAgentSwitch(deps, { ...validParams, applyNow: true });
+    expect(result).toMatchObject({ switched: true, engineReady: false, retryPending: true });
     expect(bootstrap).toHaveBeenCalledTimes(1);
+    expect(store.get('s1')).toMatchObject({
+      targetAgentKind: 'codex',
+      model: 'gpt-5.5',
+      providerId: null,
+      resumeFallbackRecovery: {
+        boundaryClientId: 'boundary-client-1',
+        boundaryContent: { resumed: false },
+      },
+    });
+  });
+
+  it('resume 原子回落失败后,下一次 send 自动重试恢复并清 intent', async () => {
+    const store = new Map<string, Parameters<NonNullable<MakerSessionAgentSwitchHandlerDeps['pendingSwitches']>['set']>[1]>();
+    const fallback = vi
+      .fn(async () => {})
+      .mockRejectedValueOnce(new Error('db temporarily locked'));
+    const { deps } = makeResumeDeps({
+      bootstrapSwitchedSession: vi.fn(async () => { throw new Error('parked session missing'); }),
+      applyResumeFallbackAtomically: fallback,
+      pendingSwitches: {
+        set: (id, intent) => void store.set(id, intent),
+        get: (id) => store.get(id),
+        clear: (id) => void store.delete(id),
+      },
+    });
+    store.set('s1', { targetAgentKind: 'codex', model: 'gpt-5.5', providerId: null });
+
+    await applyPendingAgentSwitchIfIdle(deps, 's1');
+    expect(store.get('s1')?.resumeFallbackRecovery).toBeDefined();
+    await applyPendingAgentSwitchIfIdle(deps, 's1');
+
+    expect(fallback).toHaveBeenCalledTimes(2);
+    expect(store.has('s1')).toBe(false);
+    expect(deps.setPendingHandoff).toHaveBeenLastCalledWith(
+      's1',
+      expect.stringContaining('最早的问题'),
+    );
   });
 
   it('resume 两段 bootstrap 都失败:engineReady=false,pending 为全量交接', async () => {

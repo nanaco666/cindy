@@ -128,6 +128,7 @@ interface MessageRow {
   content: string;
   toolUseId: string | null;
   agentMeta: string | null;
+  agentKind: string | null;
   createdAt: number;
   rewindAt: number | null;
 }
@@ -585,6 +586,7 @@ async function readMessageRows(sessionId: string, clearedAt: number | null): Pro
       role, content,
       tool_use_id AS toolUseId,
       agent_meta AS agentMeta,
+      agent_kind AS agentKind,
       created_at AS createdAt,
       rewind_at AS rewindAt
     FROM messages WHERE session_id = ? ${clearCond}

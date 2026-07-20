@@ -240,6 +240,7 @@ function makeSessionRow(over: Partial<Record<string, unknown>> = {}) {
 
 function makeUserMessageRow(over: Partial<Record<string, unknown>> = {}) {
   return {
+    rowid: 10,
     id: 'msg-id',
     clientId: 'client-id',
     sessionId: 'sess-1',
@@ -259,6 +260,7 @@ function makeUserMessageRow(over: Partial<Record<string, unknown>> = {}) {
 
 function makeAssistantMessageRow(over: Partial<Record<string, unknown>> = {}) {
   return {
+    rowid: 9,
     id: 'asst-1',
     clientId: 'asst-client-1',
     sessionId: 'sess-1',
@@ -972,7 +974,7 @@ describe('commitRewindAtMessage', () => {
   });
   it('目标在 agent_switch 边界之前 → REWIND_UNSUPPORTED_HISTORY,SDK 与 DB 均未执行', async () => {
     selectQueue.push([makeUserMessageRow()]);   // target user msg
-    selectQueue.push([{ id: 'switch-row' }]);   // agent_switch 边界守卫:target 之后存在边界
+    selectQueue.push([{ rowid: 11 }]);   // agent_switch 边界守卫:同毫秒也按插入顺序识别
 
     await expect(
       commitRewindAtMessage('sess-1', 'client-id'),

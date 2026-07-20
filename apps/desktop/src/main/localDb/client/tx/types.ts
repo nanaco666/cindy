@@ -13,6 +13,7 @@ export type DbTxName =
   | 'orca.cancelStaleTeams'
   | 'sessions.renameTitles'
   | 'sessions.setStatus'
+  | 'session.agentSwitchFallback'
   | 'session.importShare';
 
 export interface CodexImportMessagesArgs {
@@ -193,6 +194,14 @@ export interface SessionsSetStatusArgs {
   status: 'active' | 'archived';
 }
 
+/** resume 停泊失败后的原子回落:清失效绑定并把边界改成全量交接。 */
+export interface SessionAgentSwitchFallbackArgs {
+  sessionId: string;
+  boundaryClientId: string;
+  boundaryContent: string;
+  updatedAt: number;
+}
+
 export interface SessionsSetStatusResultItem {
   sessionId: string;
   title: string | null;
@@ -245,6 +254,8 @@ export interface SessionImportShareArgs {
     content: string;
     toolUseId: string | null;
     agentMeta: string | null;
+    /** 产出该行的 agent；旧分享包缺失时导入为 NULL。 */
+    agentKind?: string | null;
     createdAt: number;
     rewindAt: number | null;
   }>;
@@ -265,6 +276,7 @@ export type DbTxArgsByName = {
   'orca.cancelStaleTeams': OrcaCancelStaleTeamsArgs;
   'sessions.renameTitles': SessionsRenameTitlesArgs;
   'sessions.setStatus': SessionsSetStatusArgs;
+  'session.agentSwitchFallback': SessionAgentSwitchFallbackArgs;
   'session.importShare': SessionImportShareArgs;
 };
 
@@ -283,5 +295,6 @@ export type DbTxResultByName = {
   'orca.cancelStaleTeams': undefined;
   'sessions.renameTitles': SessionsRenameTitleResult[];
   'sessions.setStatus': SessionsSetStatusResultItem[];
+  'session.agentSwitchFallback': undefined;
   'session.importShare': { messageCount: number };
 };

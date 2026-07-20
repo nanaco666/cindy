@@ -75,6 +75,11 @@ export interface AgentSwitchBoundaryContent {
    * 缺省/false = 全新原生会话 + 全量交接(v1 行为)。
    */
   resumed?: boolean;
+  /**
+   * 交接前缀是否已被某条 user 消息跨过 vendor accepted 边界消费。
+   * 缺失表示 v1 老行,重建时继续使用“边界后是否存在 user 行”的兼容启发式。
+   */
+  consumed?: boolean;
 }
 
 export interface AgentSwitchSessionRow {
@@ -121,13 +126,13 @@ export interface MakerSessionAgentSwitchHandlerDeps {
       fastMode?: boolean;
     },
   ): Promise<void>;
-  /** 返回边界行 clientId(resume 回落时 updateBoundaryMessage 定位用)。 */
+  /** 返回边界行 clientId(resume 回落时原子改写定位用)。 */
   insertBoundaryMessage(sessionId: string, content: AgentSwitchBoundaryContent): Promise<string>;
   /**
-   * Phase 2:resume bootstrap 失败回落全量交接时,改写边界行 content(交接全文
-   * 与 resumed 标记必须与实际注入一致——DB pending 重建读的就是它)。best-effort。
+   * Phase 2:resume bootstrap 失败时,在单个 SQLite 事务内清 sdk_session_id 并
+   * 把边界行改成全量交接。任一目标行不存在或写失败都整体回滚。
    */
-  updateBoundaryMessage?(
+  applyResumeFallbackAtomically(
     sessionId: string,
     clientId: string,
     content: AgentSwitchBoundaryContent,
@@ -164,6 +169,8 @@ export interface SessionAgentSwitchResult {
    * 会话状态(DB / 消息流 / chip)保持旧引擎——旧 turn 确实仍由旧引擎驱动。
    */
   deferred?: boolean;
+  /** resume 回落的原子事务失败,保留切换意图供下一条消息重试恢复尾段。 */
+  retryPending?: boolean;
 }
 
 /** 登记的切换意图(下一条消息发送时刻执行;effort/fastMode 由 renderer 按目标引擎解析好带入)。 */
@@ -173,6 +180,12 @@ export interface PendingAgentSwitchIntent {
   providerId: string | null | undefined;
   effort?: string;
   fastMode?: boolean;
+  /** resume 回落事务失败后的内部恢复载荷；下一次 send 先重试这笔原子事务。 */
+  resumeFallbackRecovery?: {
+    boundaryClientId: string | null;
+    boundaryContent: AgentSwitchBoundaryContent;
+    handoff: string;
+  };
 }
 
 /**
@@ -193,6 +206,19 @@ export function createPendingAgentSwitchRegistry(): PendingAgentSwitchRegistry {
     get: (sessionId) => pending.get(sessionId),
     clear: (sessionId) => void pending.delete(sessionId),
   };
+}
+
+/** SET_MODEL 成功后才取消跨引擎意图；apply 抛错时 registry 与 renderer 都不动。 */
+export async function applySetModelThenCancelAgentSwitchIntent<T>(
+  pendingSwitches: PendingAgentSwitchRegistry,
+  sessionId: string,
+  applySetModel: () => Promise<T>,
+  broadcastCanceled: (sessionId: string) => void,
+): Promise<T> {
+  const result = await applySetModel();
+  pendingSwitches.clear(sessionId);
+  broadcastCanceled(sessionId);
+  return result;
 }
 
 /** 业务体(纯依赖注入,单测直接调):校验 → 交接 → 提交 → 重建。 */
@@ -282,8 +308,6 @@ export async function performSessionAgentSwitch(
     // 竞态兜底:仍在跑就拒绝,绝不打断进行中的 turn。
     throwIpcError('SESSION_RUNNING', `Session ${sessionId} is running a turn`);
   }
-  deps.pendingSwitches?.clear(sessionId);
-
   // 交接素材与停泊绑定先于任何状态变更取得(失败不留半切换状态)。
   // Phase 2:目标引擎有停泊原生会话 → resume + 增量交接(只补离开期间的进展,
   // 工作状态区仍按全量历史提取);无绑定 → v1 全量交接 + 全新原生会话。
@@ -336,6 +360,7 @@ export async function performSessionAgentSwitch(
       fromSdkSessionId: row.sdkSessionId,
       handoff,
       resumed: !!parked,
+      consumed: false,
     };
     let boundaryClientId: string | null = null;
     try {
@@ -351,6 +376,7 @@ export async function performSessionAgentSwitch(
 
     let engineReady = true;
     let resumed = !!parked;
+    let retryPending = false;
     // resume 模式无视 skipBootstrap:只有 eager spawn 才能确定性观测 resume 失败
     // 并在同一事务内回落全量交接;交给 lazy-create 的话,失效的停泊 id 会让之后
     // 每次发送反复失败且无人回落。
@@ -370,41 +396,65 @@ export async function performSessionAgentSwitch(
           });
           resumed = false;
           const fullHandoff = buildFullHandoff();
-          let cleared = false;
-          try {
-            await deps.applyAgentSwitchToDb(sessionId, {
-              agentKind: toDbKind,
-              model,
-              providerId: providerId as string | null | undefined,
-              sdkSessionId: null,
-              ...(typeof params.effort === 'string' && params.effort ? { effort: params.effort } : {}),
-              ...(typeof params.fastMode === 'boolean' ? { fastMode: params.fastMode } : {}),
-            });
-            cleared = true;
-          } catch (err2) {
-            // DB 清不掉失效停泊 id(刚写成功过,基本不可达):保守不再重试 spawn,
-            // 按 engineReady=false 降级——lazy-create 带着坏 id 只会重复同一失败。
-            deps.log.warn('agent-switch: clear stale parked sdkSessionId failed', {
-              sessionId,
-              err: err2 instanceof Error ? err2.message : String(err2),
-            });
-          }
-          if (boundaryClientId && deps.updateBoundaryMessage) {
+          const fallbackBoundaryContent = {
+            ...boundaryContent,
+            handoff: fullHandoff,
+            resumed: false,
+          };
+          let fallbackCommitted = false;
+          if (boundaryClientId) {
             try {
-              await deps.updateBoundaryMessage(sessionId, boundaryClientId, {
-                ...boundaryContent,
-                handoff: fullHandoff,
-                resumed: false,
-              });
+              await deps.applyResumeFallbackAtomically(
+                sessionId,
+                boundaryClientId,
+                fallbackBoundaryContent,
+              );
+              fallbackCommitted = true;
             } catch (err2) {
-              deps.log.warn('agent-switch: rewrite boundary content after fallback failed', {
+              // 清 id 与改边界必须同成同败。失败后重新登记完整意图与恢复载荷,
+              // 下一条消息先重试原子恢复尾段,而不是带半状态继续 lazy-create。
+              deps.pendingSwitches?.set(sessionId, {
+                targetAgentKind,
+                model,
+                providerId: providerId as string | null | undefined,
+                ...(typeof params.effort === 'string' && params.effort ? { effort: params.effort } : {}),
+                ...(typeof params.fastMode === 'boolean' ? { fastMode: params.fastMode } : {}),
+                resumeFallbackRecovery: {
+                  boundaryClientId,
+                  boundaryContent: fallbackBoundaryContent,
+                  handoff: fullHandoff,
+                },
+              });
+              engineReady = false;
+              retryPending = true;
+              deps.log.warn('agent-switch: atomic resume fallback failed; intent retained for retry', {
                 sessionId,
                 err: err2 instanceof Error ? err2.message : String(err2),
               });
             }
+          } else {
+            // 边界插入失败时无法原子保证“清 id + 改边界”。保留意图自愈,
+            // 避免只清 sdk id 后 DB pending 与实际注入内容分叉。
+            deps.pendingSwitches?.set(sessionId, {
+              targetAgentKind,
+              model,
+              providerId: providerId as string | null | undefined,
+              ...(typeof params.effort === 'string' && params.effort ? { effort: params.effort } : {}),
+              ...(typeof params.fastMode === 'boolean' ? { fastMode: params.fastMode } : {}),
+              resumeFallbackRecovery: {
+                boundaryClientId: null,
+                boundaryContent: fallbackBoundaryContent,
+                handoff: fullHandoff,
+              },
+            });
+            engineReady = false;
+            retryPending = true;
+            deps.log.warn('agent-switch: resume fallback has no boundary row; intent retained for retry', {
+              sessionId,
+            });
           }
           deps.setPendingHandoff(sessionId, fullHandoff);
-          if (cleared) {
+          if (fallbackCommitted) {
             try {
               await deps.bootstrapSwitchedSession(sessionId);
             } catch (err2) {
@@ -415,8 +465,6 @@ export async function performSessionAgentSwitch(
                 err: err2 instanceof Error ? err2.message : String(err2),
               });
             }
-          } else {
-            engineReady = false;
           }
         } else {
           engineReady = false;
@@ -438,7 +486,13 @@ export async function performSessionAgentSwitch(
       resumed,
       handoffChars: handoff.length,
     });
-    return { switched: true, agentKind: targetAgentKind, model, engineReady };
+    return {
+      switched: true,
+      agentKind: targetAgentKind,
+      model,
+      engineReady,
+      ...(retryPending ? { retryPending: true } : {}),
+    };
   });
 }
 
@@ -448,37 +502,73 @@ export async function performSessionAgentSwitch(
  *  - 无 pending → no-op;
  *  - turn 仍在跑(排队消息提前 drain 等竞态)→ 保留 pending 本次不 apply,交给
  *    send 事务既有的 SESSION_RUNNING guard / coordinator 重试;
- *  - 空闲 → 清 pending 并执行完整切换事务(skipBootstrap:随后的 lazy-create 会按
- *    DB 新值 spawn)。执行失败不阻塞发送——log 后按旧引擎继续(意图已清,用户可
- *    从消息流没有出现分隔线看出切换未生效并重试)。
+ *  - 空闲 → 执行完整切换事务(skipBootstrap:随后的 lazy-create 会按 DB 新值
+ *    spawn),成功后才以 CAS 清 pending;
+ *  - 执行失败不阻塞发送,但保留原意图,下一条消息自动重试。resume 回落事务
+ *    已进入 commit point 后若失败,则只重试其原子恢复尾段。
  */
-export async function applyPendingAgentSwitchIfIdle(
+const pendingAgentSwitchApplyInFlight = new Map<string, Promise<void>>();
+
+export function applyPendingAgentSwitchIfIdle(
   deps: MakerSessionAgentSwitchHandlerDeps,
   sessionId: string,
 ): Promise<void> {
-  const intent = deps.pendingSwitches?.get(sessionId);
-  if (!intent) return;
-  const live = deps.getLiveSession(sessionId);
-  if (live?.isTurnRunning()) return;
-  deps.pendingSwitches?.clear(sessionId);
-  try {
-    await performSessionAgentSwitch(deps, {
-      sessionId,
-      targetAgentKind: intent.targetAgentKind,
-      model: intent.model,
-      providerId: intent.providerId,
-      effort: intent.effort,
-      fastMode: intent.fastMode,
-      skipBootstrap: true,
-      applyNow: true,
-    });
-  } catch (err) {
-    deps.log.warn('agent-switch: pending apply failed; sending with current engine', {
-      sessionId,
-      targetAgentKind: intent.targetAgentKind,
-      err: err instanceof Error ? err.message : String(err),
-    });
-  }
+  const existing = pendingAgentSwitchApplyInFlight.get(sessionId);
+  if (existing) return existing;
+
+  let run: Promise<void>;
+  run = (async () => {
+    const intent = deps.pendingSwitches?.get(sessionId);
+    if (!intent) return;
+    const live = deps.getLiveSession(sessionId);
+    if (live?.isTurnRunning()) return;
+    try {
+      if (intent.resumeFallbackRecovery) {
+        const recovery = intent.resumeFallbackRecovery;
+        const boundaryClientId = recovery.boundaryClientId ??
+          await deps.insertBoundaryMessage(sessionId, recovery.boundaryContent);
+        // 边界补写成功、原子事务仍失败时记住 id；下次只重试事务，不重复插边界。
+        recovery.boundaryClientId = boundaryClientId;
+        await deps.applyResumeFallbackAtomically(
+          sessionId,
+          boundaryClientId,
+          recovery.boundaryContent,
+        );
+        deps.setPendingHandoff(sessionId, recovery.handoff);
+        if (deps.pendingSwitches?.get(sessionId) === intent) {
+          deps.pendingSwitches.clear(sessionId);
+        }
+        return;
+      }
+      const result = await performSessionAgentSwitch(deps, {
+        sessionId,
+        targetAgentKind: intent.targetAgentKind,
+        model: intent.model,
+        providerId: intent.providerId,
+        effort: intent.effort,
+        fastMode: intent.fastMode,
+        skipBootstrap: true,
+        applyNow: true,
+      });
+      // CAS 语义:执行期间用户可能又选了另一个目标,不能把新意图一起清掉。
+      if (!result.retryPending && deps.pendingSwitches?.get(sessionId) === intent) {
+        deps.pendingSwitches.clear(sessionId);
+      }
+    } catch (err) {
+      // 失败(包括 pre-check 后 running guard 的竞态)保留原 intent,下一次发送重试。
+      deps.log.warn('agent-switch: pending apply failed; intent retained for next send', {
+        sessionId,
+        targetAgentKind: intent.targetAgentKind,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+  })().finally(() => {
+    if (pendingAgentSwitchApplyInFlight.get(sessionId) === run) {
+      pendingAgentSwitchApplyInFlight.delete(sessionId);
+    }
+  });
+  pendingAgentSwitchApplyInFlight.set(sessionId, run);
+  return run;
 }
 
 export function registerMakerSessionAgentSwitchHandler(

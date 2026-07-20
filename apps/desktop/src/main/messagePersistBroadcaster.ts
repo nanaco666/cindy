@@ -95,14 +95,13 @@ function withAgentKindStamp(sessionId: string, body: CreateDbMessageBody): Creat
 }
 
 function createVisibleDbMessage(sessionId: string, body: CreateDbMessageBody): ReturnType<typeof createDbMessage> {
-  const stamped = withAgentKindStamp(sessionId, body);
-  const createdAt = typeof stamped.createdAt === 'number' && Number.isFinite(stamped.createdAt)
-    ? stamped.createdAt
+  const createdAt = typeof body.createdAt === 'number' && Number.isFinite(body.createdAt)
+    ? body.createdAt
     : undefined;
   if (createdAt === undefined) {
-    return createDbMessage(sessionId, stamped);
+    return createDbMessage(sessionId, body);
   }
-  return createDbMessage(sessionId, stamped, {
+  return createDbMessage(sessionId, body, {
     shouldBroadcast: () => {
       const latestBoundary = clearBoundaryBySession.get(sessionId);
       return latestBoundary === undefined || createdAt > latestBoundary;
@@ -236,6 +235,16 @@ function enqueueWrite(label: string, fn: () => Promise<unknown>): void {
     });
 }
 
+/** 在事件入队时冻结 agent_kind，避免 writeChain 延迟执行时读到切换后的可变 Map。 */
+function enqueueVisibleDbMessage(
+  label: string,
+  sessionId: string,
+  body: CreateDbMessageBody,
+): void {
+  const stamped = withAgentKindStamp(sessionId, body);
+  enqueueWrite(label, () => createVisibleDbMessage(sessionId, stamped));
+}
+
 /**
  * 把外部 db write 串到同一 writeChain FIFO, 返回 typed 结果。给 session storage /
  * 其他 desktop-side 持久化用 — 让它们跟 message + cursor 写共享 FIFO 序列化,
@@ -292,15 +301,13 @@ function enqueuePersistAssistant(
   createdAt: number,
 ): void {
   noteAssistantTranscriptUuid(sessionId, agentMeta);
-  enqueueWrite(`assistant:${sessionId}:${clientId}`, () =>
-    createVisibleDbMessage(sessionId, {
-      clientId,
-      role: 'assistant',
-      content,
-      agentMeta: agentMeta ?? null,
-      createdAt,
-    }),
-  );
+  enqueueVisibleDbMessage(`assistant:${sessionId}:${clientId}`, sessionId, {
+    clientId,
+    role: 'assistant',
+    content,
+    agentMeta: agentMeta ?? null,
+    createdAt,
+  });
   notePersistedMessage(sessionId, 'assistant', clientId, content);
   lastAssistantPersistIdBySession.set(sessionId, clientId);
 }
@@ -399,16 +406,14 @@ export function onToolUseEvent(
   const persistId = createId();
   const meta = agentMeta ?? lastAgentMetaBySession.get(sessionId) ?? null;
   noteAssistantTranscriptUuid(sessionId, meta);
-  enqueueWrite(`tool_use:${sessionId}:${persistId}`, () =>
-    createVisibleDbMessage(sessionId, {
-      clientId: persistId,
-      role: 'tool_use',
-      content: { toolUseId, toolName, input: data.input },
-      toolUseId: toolUseId || undefined,
-      agentMeta: meta,
-      createdAt,
-    }),
-  );
+  enqueueVisibleDbMessage(`tool_use:${sessionId}:${persistId}`, sessionId, {
+    clientId: persistId,
+    role: 'tool_use',
+    content: { toolUseId, toolName, input: data.input },
+    toolUseId: toolUseId || undefined,
+    agentMeta: meta,
+    createdAt,
+  });
   if (toolName === 'update_plan' && toolUseId) {
     rememberPlanToolUsePersistId(sessionId, toolUseId, persistId);
   }
@@ -479,27 +484,23 @@ export function onThinkingEvent(
     const finishedAt = Date.now();
     const text = typeof data.text === 'string' ? data.text : '';
     const durationMs = typeof data.durationMs === 'number' ? data.durationMs : 0;
-    enqueueWrite(`thinking:${sessionId}:${blockId}`, () =>
-      createVisibleDbMessage(sessionId, {
-        clientId: blockId,
-        role: 'thinking',
-        content: { kind: 'thinking', text, durationMs, isRedacted: false, finishedAt },
-        agentMeta: meta,
-        createdAt: finishedAt,
-      }),
-    );
+    enqueueVisibleDbMessage(`thinking:${sessionId}:${blockId}`, sessionId, {
+      clientId: blockId,
+      role: 'thinking',
+      content: { kind: 'thinking', text, durationMs, isRedacted: false, finishedAt },
+      agentMeta: meta,
+      createdAt: finishedAt,
+    });
     notePersistedMessage(sessionId, 'thinking', blockId);
   } else if (data.stage === 'redacted') {
     const finishedAt = Date.now();
-    enqueueWrite(`thinking_redacted:${sessionId}:${blockId}`, () =>
-      createVisibleDbMessage(sessionId, {
-        clientId: blockId,
-        role: 'thinking',
-        content: { kind: 'thinking', text: '', durationMs: 0, isRedacted: true, finishedAt },
-        agentMeta: meta,
-        createdAt: finishedAt,
-      }),
-    );
+    enqueueVisibleDbMessage(`thinking_redacted:${sessionId}:${blockId}`, sessionId, {
+      clientId: blockId,
+      role: 'thinking',
+      content: { kind: 'thinking', text: '', durationMs: 0, isRedacted: true, finishedAt },
+      agentMeta: meta,
+      createdAt: finishedAt,
+    });
     notePersistedMessage(sessionId, 'thinking', blockId);
   }
 }
@@ -597,16 +598,14 @@ export function onToolResultEvent(
   const persistId = createId();
   for (const id of ids) idMap.set(id, persistId);
   contentMap.set(persistId, content);
-  enqueueWrite(`tool_result:${sessionId}:${persistId}`, () =>
-    createVisibleDbMessage(sessionId, {
-      clientId: persistId,
-      role: 'tool_result',
-      content,
-      toolUseId: primaryToolUseId,
-      agentMeta: toolResultMeta(sessionId, agentMeta),
-      createdAt,
-    }),
-  );
+  enqueueVisibleDbMessage(`tool_result:${sessionId}:${persistId}`, sessionId, {
+    clientId: persistId,
+    role: 'tool_result',
+    content,
+    toolUseId: primaryToolUseId,
+    agentMeta: toolResultMeta(sessionId, agentMeta),
+    createdAt,
+  });
   notePersistedMessage(sessionId, 'tool_result', persistId);
   return { persistId, content };
 }
@@ -642,16 +641,14 @@ export function onToolResultFullEvent(
       idMap.set(toolUseId, persistId);
       pending.delete(toolUseId);
       contentMap.set(persistId, fullText);
-      enqueueWrite(`tool_result_eager:${sessionId}:${persistId}`, () =>
-        createVisibleDbMessage(sessionId, {
-          clientId: persistId,
-          role: 'tool_result',
-          content: fullText,
-          toolUseId,
-          agentMeta: toolResultMeta(sessionId, agentMeta),
-          createdAt,
-        }),
-      );
+      enqueueVisibleDbMessage(`tool_result_eager:${sessionId}:${persistId}`, sessionId, {
+        clientId: persistId,
+        role: 'tool_result',
+        content: fullText,
+        toolUseId,
+        agentMeta: toolResultMeta(sessionId, agentMeta),
+        createdAt,
+      });
       notePersistedMessage(sessionId, 'tool_result', persistId);
       return { persistId, content: fullText };
     }
@@ -692,15 +689,13 @@ export function onInteractionMessage(
 
   if (req.kind === 'ask_user_question') {
     const persistId = createId();
-    enqueueWrite(`ask_user:${sessionId}:${persistId}`, () =>
-      createVisibleDbMessage(sessionId, {
-        clientId: persistId,
-        role: 'ask_user',
-        content: { requestId, questions: req.questions ?? [], status: 'pending', answers: null },
-        agentMeta: meta,
-        createdAt,
-      }),
-    );
+    enqueueVisibleDbMessage(`ask_user:${sessionId}:${persistId}`, sessionId, {
+      clientId: persistId,
+      role: 'ask_user',
+      content: { requestId, questions: req.questions ?? [], status: 'pending', answers: null },
+      agentMeta: meta,
+      createdAt,
+    });
     notePersistedMessage(sessionId, 'ask_user', persistId);
     return persistId;
   }
@@ -709,15 +704,13 @@ export function onInteractionMessage(
     if (typeof req.plan !== 'string' || !req.plan) return undefined;
     const planFilePath = typeof req.planFilePath === 'string' ? req.planFilePath : '';
     const persistId = createId();
-    enqueueWrite(`plan_review:${sessionId}:${persistId}`, () =>
-      createVisibleDbMessage(sessionId, {
-        clientId: persistId,
-        role: 'plan_review',
-        content: { requestId, plan: req.plan, planFilePath, status: 'pending', feedback: null },
-        agentMeta: meta,
-        createdAt,
-      }),
-    );
+    enqueueVisibleDbMessage(`plan_review:${sessionId}:${persistId}`, sessionId, {
+      clientId: persistId,
+      role: 'plan_review',
+      content: { requestId, plan: req.plan, planFilePath, status: 'pending', feedback: null },
+      agentMeta: meta,
+      createdAt,
+    });
     notePersistedMessage(sessionId, 'plan_review', persistId);
     return persistId;
   }
@@ -801,16 +794,14 @@ export function flushOrphanToolResults(sessionId: string, agentMeta: AgentMeta |
     const persistId = createId();
     idMap.set(toolUseId, persistId);
     contentMap.set(persistId, text);
-    enqueueWrite(`tool_result_orphan:${sessionId}:${persistId}`, () =>
-      createVisibleDbMessage(sessionId, {
-        clientId: persistId,
-        role: 'tool_result',
-        content: text,
-        toolUseId,
-        agentMeta: meta,
-        createdAt: clampAfterToolUse(sessionId, toolUseId, createdAt),
-      }),
-    );
+    enqueueVisibleDbMessage(`tool_result_orphan:${sessionId}:${persistId}`, sessionId, {
+      clientId: persistId,
+      role: 'tool_result',
+      content: text,
+      toolUseId,
+      agentMeta: meta,
+      createdAt: clampAfterToolUse(sessionId, toolUseId, createdAt),
+    });
     notePersistedMessage(sessionId, 'tool_result', persistId);
   };
 
@@ -1068,6 +1059,7 @@ export function onTurnErrorEvent(
   if (typeof data?.reason === 'string' && data.reason) content.reason = data.reason;
   if (typeof data?.sdkError === 'string' && data.sdkError) content.sdkError = data.sdkError;
   const meta = agentMeta ?? lastAgentMetaBySession.get(sessionId) ?? null;
+  const dbAgentKindSnapshot = getSessionDbAgentKind(sessionId) ?? undefined;
   enqueueWrite(`turn_error:${sessionId}:${persistId}`, async () => {
     // 两个分支统一 +1：保证 error.createdAt 严格晚于本轮所有已入库行。
     // 注意：register.ts 在 flushAssistantBlock 之后调本函数，blockCreatedAt
@@ -1100,13 +1092,14 @@ export function onTurnErrorEvent(
         : latestTs + 1;
     await createDbMessage(
       sessionId,
-      withAgentKindStamp(sessionId, {
+      {
         clientId: persistId,
         role: 'error',
         content,
         agentMeta: meta,
+        agentKind: dbAgentKindSnapshot,
         createdAt,
-      }),
+      },
       { shouldBroadcast: () => false },
     );
     for (const win of BrowserWindow.getAllWindows()) {

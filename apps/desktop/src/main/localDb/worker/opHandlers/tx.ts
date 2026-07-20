@@ -44,11 +44,39 @@ export function tx(db: Database.Database, args: unknown): unknown {
       return sessionsRenameTitles(db, txArgs);
     case 'sessions.setStatus':
       return sessionsSetStatus(db, txArgs);
+    case 'session.agentSwitchFallback':
+      return sessionAgentSwitchFallback(db, txArgs);
     case 'session.importShare':
       return sessionImportShare(db, txArgs);
     default:
       throw Object.assign(new Error(`unknown tx: ${name}`), { code: 'UNKNOWN_TX' });
   }
+}
+
+/** 清失效停泊 id 与改写交接边界必须同成同败,防止重启后重建出错误 pending。 */
+function sessionAgentSwitchFallback(db: Database.Database, args: unknown): void {
+  const payload = asRecord(args, 'session.agentSwitchFallback args');
+  const sessionId = expectString(payload.sessionId, 'sessionId');
+  const boundaryClientId = expectString(payload.boundaryClientId, 'boundaryClientId');
+  const boundaryContent = expectString(payload.boundaryContent, 'boundaryContent');
+  const updatedAt = expectNumber(payload.updatedAt, 'updatedAt');
+  const transaction = db.transaction(() => {
+    const sessionResult = db.prepare(
+      'UPDATE sessions SET sdk_session_id = NULL, updated_at = ? WHERE id = ?',
+    ).run(updatedAt, sessionId);
+    if (sessionResult.changes !== 1) {
+      throw Object.assign(new Error(`Session 不存在: ${sessionId}`), { code: 'NOT_FOUND' });
+    }
+    const boundaryResult = db.prepare(
+      "UPDATE messages SET content = ? WHERE session_id = ? AND client_id = ? AND role = 'agent_switch' AND rewind_at IS NULL",
+    ).run(boundaryContent, sessionId, boundaryClientId);
+    if (boundaryResult.changes !== 1) {
+      throw Object.assign(new Error(`Agent switch boundary 不存在: ${boundaryClientId}`), {
+        code: 'NOT_FOUND',
+      });
+    }
+  });
+  transaction();
 }
 
 function sessionsRenameTitles(db: Database.Database, args: unknown): Array<{
@@ -426,7 +454,7 @@ function forkSession(db: Database.Database, args: unknown): { messageCount: numb
   const uuidMap = normalizeUuidMap(payload.uuidMap);
   const newMessageIds = normalizeNewMessageIds(payload.newMessageIds);
   const sourceMessages = db.prepare(
-    `SELECT role, content, tool_use_id, agent_meta, created_at
+    `SELECT role, content, tool_use_id, agent_meta, agent_kind, created_at
        FROM messages
       WHERE session_id = ?
         AND created_at < ?
@@ -437,6 +465,7 @@ function forkSession(db: Database.Database, args: unknown): { messageCount: numb
     content: string;
     tool_use_id: string | null;
     agent_meta: string | null;
+    agent_kind: string | null;
     created_at: number;
   }>;
   if (newMessageIds.length !== sourceMessages.length) {
@@ -446,8 +475,8 @@ function forkSession(db: Database.Database, args: unknown): { messageCount: numb
   }
   const insertMessage = db.prepare(
     `INSERT INTO messages
-      (id, client_id, session_id, role, content, tool_use_id, agent_meta, created_at, rewind_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+      (id, client_id, session_id, role, content, tool_use_id, agent_meta, agent_kind, created_at, rewind_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
   );
   const transaction = db.transaction(() => {
     db.prepare(
@@ -500,6 +529,7 @@ function forkSession(db: Database.Database, args: unknown): { messageCount: numb
         message.content,
         message.tool_use_id,
         remapAgentMetaUuid(message.agent_meta, uuidMap),
+        message.agent_kind,
         message.created_at,
       );
     }
@@ -521,8 +551,8 @@ function sessionImportShare(db: Database.Database, args: unknown): { messageCoun
   const sessionId = expectString(session.id, 'session.id');
   const insertMessage = db.prepare(
     `INSERT INTO messages
-      (id, client_id, session_id, role, content, tool_use_id, agent_meta, created_at, rewind_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, client_id, session_id, role, content, tool_use_id, agent_meta, agent_kind, created_at, rewind_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const transaction = db.transaction(() => {
     const existing = db.prepare('SELECT id FROM sessions WHERE id = ? LIMIT 1').get(sessionId);
@@ -579,6 +609,7 @@ function sessionImportShare(db: Database.Database, args: unknown): { messageCoun
         expectString(m.content, 'message.content'),
         nullableString(m.toolUseId),
         nullableString(m.agentMeta),
+        nullableString(m.agentKind),
         expectNumber(m.createdAt, 'message.createdAt'),
         nullableNumber(m.rewindAt),
       );

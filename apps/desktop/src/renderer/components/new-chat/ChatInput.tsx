@@ -1168,8 +1168,9 @@ export function ChatInput({
   const localVendorDefaults = getDraft().lastByVendor[vendorKey === 'codex' ? 'codex' : 'cc'];
   // session-agent-switch 意图制:意图期内 chip / 选择器显示用户选择的目标
   // (model/effort/provider/fast),props(镜像 DB)仍是旧引擎值——真切换在下一条
-  // 消息发送时刻 apply,patched 回流后意图清除、显示交回 props。渲染期直接读
-  // store 意图表:意图登记/撤销都伴随 store agentKind setState,必然触发重渲染。
+  // 消息发送时刻 apply,patched 回流后意图清除、显示交回 props。意图存放在
+  // SessionChatState 独立槽位,登记/撤销通过 setState 驱动重渲染,不会改真实
+  // agentKind reducer 路由。
   const agentSwitchIntent =
     sessionId && !deviceLinkDeviceId && !remoteHostId
       ? makerChatStore.getAgentSwitchIntent(sessionId)
@@ -3500,8 +3501,8 @@ export function ChatInput({
           targetFast,
         );
         if (result.deferred) {
-          // 意图已登记:乐观呈现目标引擎/模型/档位(store 翻 agentKind,本组件
-          // 经 getAgentSwitchIntent 覆盖 model/effort/provider/fast 显示)。真切换
+          // 意图已登记:乐观呈现目标引擎/模型/档位(独立 intent 覆盖
+          // model/effort/provider/fast 显示,不改真实 reducer agentKind)。真切换
           // 在下一条消息发送时刻执行;turn 运行中额外提示旧 turn 不受影响。
           makerChatStore.noteAgentSwitchIntent(sessionId, targetAgentKind, {
             model: newModelId,
@@ -3521,7 +3522,7 @@ export function ChatInput({
           return;
         }
         if (!result.switched) {
-          // 同引擎 no-op = 用户选回当前引擎:撤销意图(还原乐观翻转),再把这次
+          // 同引擎 no-op = 用户选回当前引擎:撤销展示意图,再把这次
           // 点选当作普通的模型/来源切换应用到当前引擎。
           makerChatStore.clearAgentSwitchIntent(sessionId);
           if (providerId) void sameEngineReselectRef.current.byProvider(providerId, newModelId);

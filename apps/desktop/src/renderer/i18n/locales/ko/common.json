@@ -3974,6 +3974,7 @@
       "editSend": "전송",
       "editRollbackHint": "전송하면 이전 턴에서 변경된 파일 {{count}}개가 되돌려집니다",
       "forkErrors": {
+        "unsupportedHistory": "이 지점은 에이전트 전환 경계를 지나므로 분기할 수 없습니다",
         "noPriorAssistant": "AI 응답 뒤의 메시지에서 분기하세요",
         "sourceNeverRan": "원본 세션이 아직 실행되지 않아 분기할 수 없습니다",
         "generic": "분기 실패, 다시 시도하세요"

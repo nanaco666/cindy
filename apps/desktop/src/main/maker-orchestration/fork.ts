@@ -32,7 +32,8 @@ export type ForkErrorCode =
   | 'NOT_CODEX_SESSION'
   | 'REMOTE_NOT_SUPPORTED'
   | 'SOURCE_NEVER_RAN'
-  | 'NO_PRIOR_ASSISTANT';
+  | 'NO_PRIOR_ASSISTANT'
+  | 'UNSUPPORTED_HISTORY';
 
 function forkError(code: ForkErrorCode, message: string): Error {
   const err = new Error(message);
@@ -44,6 +45,31 @@ function normalizePositiveInt(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
     ? Math.floor(value)
     : 0;
+}
+
+/** SDK 副作用前拒绝复制任何跨过 agent_switch 的混合引擎历史。 */
+async function assertForkRangeDoesNotCrossAgentSwitch(
+  sourceSessionId: string,
+  clearedAt: number | null,
+  boundaryCreatedAt: number,
+): Promise<void> {
+  const boundary = await getDbClient().queryOne<{ id: string }>(
+    `SELECT id FROM messages
+      WHERE session_id = ?
+        AND role = 'agent_switch'
+        AND rewind_at IS NULL
+        AND created_at < ?
+        AND (? IS NULL OR created_at > ?)
+      ORDER BY created_at DESC, rowid DESC
+      LIMIT 1`,
+    [sourceSessionId, boundaryCreatedAt, clearedAt, clearedAt],
+  );
+  if (boundary) {
+    throw forkError(
+      'UNSUPPORTED_HISTORY',
+      '目标消息之前包含引擎切换边界,无法把混合引擎历史复制到单一原生会话',
+    );
+  }
 }
 
 function augmentClaudeForkUuidMapForSyntheticRows(
@@ -141,6 +167,12 @@ export async function forkSessionAtMessage(
       .limit(1);
     boundaryCreatedAt = nextUser ? nextUser.createdAt : Number.MAX_SAFE_INTEGER;
   }
+
+  await assertForkRangeDoesNotCrossAgentSwitch(
+    sourceSessionId,
+    source.clearedAt,
+    boundaryCreatedAt,
+  );
 
   // 3. 计算 agent 侧截断信息。
   //
@@ -323,6 +355,12 @@ export async function forkSessionStripEncrypted(sourceSessionId: string): Promis
     0,
   );
   const copyBeforeCreatedAt = maxCreatedAt + 1;
+
+  await assertForkRangeDoesNotCrossAgentSwitch(
+    sourceSessionId,
+    source.clearedAt,
+    copyBeforeCreatedAt,
+  );
 
   const newTitle = source.title.startsWith('[Fork·已剥离]')
     ? source.title

@@ -60,6 +60,11 @@ const DIGEST_BUDGET = 3000;
 const DIGEST_LINE_CAP = 120;
 /** 最终交接文本硬上限(字符)——最后一道保险,正常路径不应触达。 */
 const HANDOFF_HARD_CAP = 16000;
+/** 单轮详细行最多保留首尾各 20 条；防工具密集轮撑爆全部预算。 */
+const DETAIL_LINES_EDGE_CAP = 20;
+/** 工具密集/多 assistant block 单轮的详细区字符预算。 */
+const DETAIL_LINES_CHAR_BUDGET = 9000;
+const DETAIL_LINE_COMPACT_CAP = 240;
 
 /** 合成指令行前缀(makerChatStore isSyntheticTrigger 同款标记),不进交接。 */
 const SYNTHETIC_TRIGGER_PREFIX = '[UI_ACTION_TRIGGER]';
@@ -236,6 +241,21 @@ function splitTurns(messages: HandoffSourceMessage[]): Turn[] {
   return turns;
 }
 
+function collapseDetailLines(lines: string[]): string[] {
+  const totalChars = lines.reduce((sum, line) => sum + line.length + 1, 0);
+  const normalized = totalChars > DETAIL_LINES_CHAR_BUDGET
+    ? lines.map((line) => truncate(line, DETAIL_LINE_COMPACT_CAP))
+    : lines;
+  const kept = DETAIL_LINES_EDGE_CAP * 2;
+  if (normalized.length <= kept) return normalized;
+  const omitted = normalized.length - kept;
+  return [
+    ...normalized.slice(0, DETAIL_LINES_EDGE_CAP),
+    `(中间 ${omitted} 条工具调用略)`,
+    ...normalized.slice(-DETAIL_LINES_EDGE_CAP),
+  ];
+}
+
 /**
  * 确定性构造交接文本:framing(第一人称续接 + 不向用户提及)+ 更早轮次提要 +
  * 最近 RECENT_TURNS 轮逐字记录。总长受各区预算约束,最终有 HANDOFF_HARD_CAP 保险。
@@ -343,7 +363,7 @@ function assembleHandoffText(
     for (const t of recent) {
       const parts: string[] = [];
       if (t.userText) parts.push(`[用户]\n${truncate(t.userText, RECENT_TEXT_CAP)}`);
-      parts.push(...t.detailLines);
+      parts.push(...collapseDetailLines(t.detailLines));
       if (parts.length > 0) blocks.push(parts.join('\n'));
     }
     sections.push(
@@ -416,6 +436,7 @@ export interface AgentHandoffPendingRegistry {
 
 export function createAgentHandoffPendingRegistry(
   queryPending: (sessionId: string) => Promise<string | null>,
+  onConsume?: (sessionId: string) => void,
 ): AgentHandoffPendingRegistry {
   const pending = new Map<string, string | null>();
   return {
@@ -436,6 +457,7 @@ export function createAgentHandoffPendingRegistry(
     },
     consume(sessionId) {
       pending.set(sessionId, null);
+      onConsume?.(sessionId);
     },
     clear(sessionId) {
       pending.delete(sessionId);

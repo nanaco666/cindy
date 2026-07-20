@@ -112,6 +112,7 @@ function baseMessages(): Array<Record<string, unknown>> {
       content: JSON.stringify([{ type: 'text', text: '看图 xdt-image://xdt-session-1/img.png' }]),
       toolUseId: null,
       agentMeta: null,
+      agentKind: 'cc',
       createdAt: 1700000000100,
       rewindAt: null,
     },
@@ -122,6 +123,7 @@ function baseMessages(): Array<Record<string, unknown>> {
       content: JSON.stringify([{ type: 'text', text: 'ok' }]),
       toolUseId: null,
       agentMeta: '{"sdkSessionId":"sid-b"}',
+      agentKind: 'codex',
       createdAt: 1700000000200,
       rewindAt: null,
     },
@@ -176,6 +178,10 @@ describe('exportSessionShare', () => {
 
     const messagesJsonl = await zip.file('messages.jsonl')!.async('string');
     expect(messagesJsonl.split('\n')).toHaveLength(2);
+    expect(messagesJsonl.split('\n').map((line) => JSON.parse(line).agentKind)).toEqual([
+      'cc',
+      'codex',
+    ]);
 
     const mediaMap = JSON.parse(await zip.file('media-map.json')!.async('string')) as {
       entries: Array<{ url: string; kind: string; zipPath: string | null; imageHost?: string }>;

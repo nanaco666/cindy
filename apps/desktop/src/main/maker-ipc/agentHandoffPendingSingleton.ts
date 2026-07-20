@@ -17,12 +17,28 @@
  *   if (handoff && result.accepted) agentHandoffPending.consume(sessionId);
  */
 
-import { findPendingAgentSwitchHandoff } from '../localDb/ipc/messages.js';
+import {
+  findPendingAgentSwitchHandoff,
+  markLatestAgentSwitchConsumed,
+} from '../localDb/ipc/messages.js';
+import { createLogger } from '../logger.js';
 import { createAgentHandoffPendingRegistry } from './agentHandoff.js';
+
+const log = createLogger('agent-handoff-pending');
 
 // 查询函数包一层 lambda 在**调用期**解析:单测普遍 vi.mock 了 messages.js 且不含
 // 本导出,模块求值期直接引用会让所有传递 import 本单例的 suite 崩在 mock 缺口上;
 // 调用期访问失败则落进 registry.peek 的 try/catch(按无 pending 处理),两全。
 export const agentHandoffPending = createAgentHandoffPendingRegistry((sessionId) =>
   findPendingAgentSwitchHandoff(sessionId),
+  (sessionId) => {
+    void markLatestAgentSwitchConsumed(sessionId).catch((err) => {
+      // accepted 已跨不可逆边界,持久标记失败不能把这次 send 改判失败；内存态
+      // 仍已消费,日志用于定位极少见的重启后重复注入风险。
+      log.warn('mark consumed failed', {
+        sessionId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    });
+  },
 );

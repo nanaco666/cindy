@@ -123,12 +123,14 @@ describe('prependHandoffToUserMessage', () => {
 describe('createAgentHandoffPendingRegistry', () => {
   it('set → peek 命中内存,consume 后不再注入且不回查 DB', async () => {
     const query = vi.fn(async () => 'from-db');
-    const reg = createAgentHandoffPendingRegistry(query);
+    const consumed = vi.fn();
+    const reg = createAgentHandoffPendingRegistry(query, consumed);
     reg.set('s1', 'H1');
     expect(await reg.peek('s1')).toBe('H1');
     reg.consume('s1');
     expect(await reg.peek('s1')).toBeNull();
     expect(query).not.toHaveBeenCalled();
+    expect(consumed).toHaveBeenCalledWith('s1');
   });
 
   it('内存 miss 时经 DB 重建并缓存(重启恢复语义)', async () => {
@@ -295,6 +297,27 @@ describe('buildHandoffText 超限收缩保住首尾', () => {
     expect(text.length).toBeLessThanOrEqual(16_000);
     expect(text).toContain('== 早期原文检索(需要时用)==');
     expect(text).toContain('"session_ids":["sess-tail"]');
+    expect(text.trimEnd().endsWith('== 交接说明结束,以下是用户的新消息 ==')).toBe(true);
+  });
+
+  it('单轮 100 条 tool_use 折叠中部,且硬上限/检索段/结束标记全部存活', () => {
+    const messages: HandoffSourceMessage[] = [msg('user', '执行大量工具')];
+    for (let i = 0; i < 100; i++) {
+      messages.push(msg('tool_use', {
+        toolUseId: `tool-${i}`,
+        toolName: 'Read',
+        input: { file_path: `/repo/${i}-${'x'.repeat(200)}.ts` },
+      }));
+    }
+    const text = buildHandoffText(messages, {
+      fromLabel: 'Claude Code',
+      toLabel: 'Codex',
+      sessionId: 'sess-tools',
+    });
+    expect(text.length).toBeLessThanOrEqual(16_000);
+    expect(text).toContain('(中间 60 条工具调用略)');
+    expect(text).toContain('== 早期原文检索(需要时用)==');
+    expect(text).toContain('"session_ids":["sess-tools"]');
     expect(text.trimEnd().endsWith('== 交接说明结束,以下是用户的新消息 ==')).toBe(true);
   });
 });

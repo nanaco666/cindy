@@ -3974,6 +3974,7 @@
       "editSend": "送信",
       "editRollbackHint": "送信すると前のターンで変更された {{count}} 個のファイルが元に戻ります",
       "forkErrors": {
+        "unsupportedHistory": "この位置はエージェント切替境界をまたぐため、分岐できません",
         "noPriorAssistant": "AI の返信より後のメッセージで分岐してください",
         "sourceNeverRan": "元のセッションがまだ実行されていないため分岐できません",
         "generic": "分岐に失敗しました。再試行してください"

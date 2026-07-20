@@ -76,11 +76,12 @@ import {
   createMessage as createDbMessage,
   findParkedEngineSession,
   listMessagesForAgentHandoff,
-  updateAgentSwitchBoundaryContent,
 } from '../localDb/ipc/messages.js';
 import { visibleMessageTextForConversationSearch } from '../localDb/conversationSearch.pure.js';
 import {
   applyAgentSwitchToSessionRow,
+  applyAgentSwitchResumeFallbackAtomically,
+  broadcastSessionPatched,
   clearSessionContextInDb,
   getSessionRowSnapshot,
   isUntitledDraftSessionBeforeFirstInput,
@@ -267,6 +268,7 @@ import { tryInjectProjectContext } from './projectContextInject.js';
 import { registerMakerSessionCreateHandler } from './sessionCreateHandler.js';
 import {
   applyPendingAgentSwitchIfIdle,
+  applySetModelThenCancelAgentSwitchIntent,
   createPendingAgentSwitchRegistry,
   registerMakerSessionAgentSwitchHandler,
   type MakerSessionAgentSwitchHandlerDeps,
@@ -3659,9 +3661,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       });
       return clientId;
     },
-    updateBoundaryMessage: async (sessionId, clientId, content) => {
-      await updateAgentSwitchBoundaryContent(sessionId, clientId, content);
-    },
+    applyResumeFallbackAtomically: applyAgentSwitchResumeFallbackAtomically,
     setPendingHandoff: (sessionId, handoff) => agentHandoffPending.set(sessionId, handoff),
     bootstrapSwitchedSession: async (sessionId) => {
       // 切换已提交,从 DB 行(新引擎值)重建 live session。resumeSessionId 直接取
@@ -5878,21 +5878,24 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     ) {
       throwIpcError('INVALID_PARAMS', 'providerId must be string, null, or undefined');
     }
-    // session-agent-switch:同引擎换模型 = 放弃此前登记的跨引擎切换意图。
-    agentSwitchPending.clear(sessionId);
     try {
-      const result = await applyRuntimeSetModelChange({
-        maker,
+      const result = await applySetModelThenCancelAgentSwitchIntent(
+        agentSwitchPending,
         sessionId,
-        model,
-        providerId,
-        isSessionInTurn,
-        registerPendingCredentialSwitch: registerPendingCredentialSwitchForSession,
-        clearPendingCredentialSwitch: clearPendingCredentialSwitchForSession,
-        wakeSessionInputQueue: wakeSessionInputAfterCredentialSwitch,
-        getPendingCredentialSwitch: getPendingCredentialSwitchTarget,
-        logger: log,
-      });
+        () => applyRuntimeSetModelChange({
+          maker,
+          sessionId,
+          model,
+          providerId,
+          isSessionInTurn,
+          registerPendingCredentialSwitch: registerPendingCredentialSwitchForSession,
+          clearPendingCredentialSwitch: clearPendingCredentialSwitchForSession,
+          wakeSessionInputQueue: wakeSessionInputAfterCredentialSwitch,
+          getPendingCredentialSwitch: getPendingCredentialSwitchTarget,
+          logger: log,
+        }),
+        (id) => broadcastSessionPatched(id, { agentSwitchIntentCanceled: true }),
+      );
       // deferred = 会话自己在跑,选择已登记、turn 结束自动生效。renderer 据此提示
       // "任务结束后生效"而不是当成已即时切换。
       return { deferred: result.status === 'deferred' };

@@ -37,6 +37,7 @@ import {
   listInterruptedPendingSessionIds,
   setOnSessionTurnEndedPersisted,
 } from '../sessionActiveTurn';
+import { rebroadcastAgentSwitchBoundary } from './messages';
 
 const log = createLogger('sessions');
 const DEFAULT_DRAFT_SESSION_TITLE = 'New Maker';
@@ -176,6 +177,35 @@ export async function applyAgentSwitchToSessionRow(
     ...(patch.providerId !== undefined ? { providerId: patch.providerId } : {}),
     ...(patch.effort !== undefined ? { effort: patch.effort } : {}),
     ...(patch.fastMode !== undefined ? { fastMode: patch.fastMode } : {}),
+  });
+}
+
+/** resume 停泊失败的原子 DB 回落,提交成功后再把 session 与边界新状态广播。 */
+export async function applyAgentSwitchResumeFallbackAtomically(
+  sessionId: string,
+  boundaryClientId: string,
+  content: unknown,
+): Promise<void> {
+  let boundaryContent: string;
+  try {
+    boundaryContent = JSON.stringify(content);
+  } catch {
+    throwIpcError('INVALID_PARAMS', 'agent switch boundary content must be JSON serializable');
+  }
+  await getDbClient().tx('session.agentSwitchFallback', {
+    sessionId,
+    boundaryClientId,
+    boundaryContent,
+    updatedAt: Date.now(),
+  });
+  broadcastSessionPatched(sessionId, { sdkSessionId: null });
+  await rebroadcastAgentSwitchBoundary(sessionId, boundaryClientId).catch((err) => {
+    // DB 事务已提交，广播失败不能让上层误判为“原子回落失败”并重复事务。
+    log.warn('agent-switch fallback boundary broadcast failed', {
+      sessionId,
+      boundaryClientId,
+      err: err instanceof Error ? err.message : String(err),
+    });
   });
 }
 
