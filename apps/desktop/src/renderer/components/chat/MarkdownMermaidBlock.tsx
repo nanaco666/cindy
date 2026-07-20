@@ -361,7 +361,21 @@ export const MarkdownMermaidBlock = memo(function MarkdownMermaidBlock({
       </div>
 
       {lightboxOpen && svg != null ? (
-        <MermaidLightbox svg={svg} source={raw} onClose={() => setLightboxOpen(false)} />
+        <MermaidLightbox
+          svg={svg}
+          source={raw}
+          onAnnotate={
+            canAnnotate
+              ? () => {
+                  // 先关矢量预览再开 ImageLightbox 标注层,避免两层全屏叠加
+                  // (Esc/滚轮手势互抢);annotateNode 挂在本组件,不受影响。
+                  setLightboxOpen(false);
+                  openAnnotate();
+                }
+              : undefined
+          }
+          onClose={() => setLightboxOpen(false)}
+        />
       ) : null}
       {annotateNode}
     </div>

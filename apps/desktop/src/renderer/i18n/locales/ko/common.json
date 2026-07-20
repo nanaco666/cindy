@@ -3714,7 +3714,6 @@
     "mermaidLightbox": {
       "zoomOut": "축소",
       "zoomIn": "확대",
-      "reset": "초기화",
       "close": "닫기"
     },
     "lightbox": {

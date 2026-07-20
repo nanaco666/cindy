@@ -3714,7 +3714,6 @@
     "mermaidLightbox": {
       "zoomOut": "Zoom out",
       "zoomIn": "Zoom in",
-      "reset": "Reset",
       "close": "Close"
     },
     "lightbox": {

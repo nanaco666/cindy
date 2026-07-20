@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, Copy, Minus, Plus, RotateCcw, X } from 'lucide-react';
+import { Check, Copy, Minus, Pen, Plus, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { resolveExportBackground, svgToPngBlob } from '@/lib/rasterizeToImage';
@@ -36,10 +36,16 @@ interface MermaidLightboxProps {
   svg: string;
   /** mermaid 原始源码(可选):随「复制图片」附带 text/plain 表示。 */
   source?: string;
+  /**
+   * 「标注」入口(可选):由宿主提供——先关本 lightbox 再打开 ImageLightbox
+   * 标注层(两层全屏叠加会打架:Esc/关闭链、滚轮手势都会互抢)。不传则不
+   * 显示按钮(文件浏览器等无聊天会话的宿主没有标注出口)。
+   */
+  onAnnotate?: () => void;
   onClose: () => void;
 }
 
-export function MermaidLightbox({ svg, source, onClose }: MermaidLightboxProps) {
+export function MermaidLightbox({ svg, source, onAnnotate, onClose }: MermaidLightboxProps) {
   const { t } = useTranslation();
   const [isVisible, setIsVisible] = useState(false);
   const [scale, setScale] = useState(1);
@@ -313,9 +319,13 @@ export function MermaidLightbox({ svg, source, onClose }: MermaidLightboxProps) 
           <Plus className="h-4 w-4" />
         </ToolbarButton>
         <div className="mx-1 h-5 w-px bg-[var(--lightbox-toolbar-border)]" />
-        <ToolbarButton onClick={reset} label={t('chat.mermaidLightbox.reset')}>
-          <RotateCcw className="h-4 w-4" />
-        </ToolbarButton>
+        {/* 复位缩放不占按钮位:双击空白处即可复位(handleMouseDown 链上的
+            onDoubleClick={reset}),位置让给更高频的「标注」。 */}
+        {onAnnotate ? (
+          <ToolbarButton onClick={onAnnotate} label={t('chat.mermaid.annotate')}>
+            <Pen className="h-4 w-4" />
+          </ToolbarButton>
+        ) : null}
         <ToolbarButton
           onClick={copyAsImage}
           label={copiedImage ? t('chat.mermaid.copied') : t('chat.mermaid.copy')}
