@@ -679,6 +679,44 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
       target: 'foo',
       path: 'src/a.ts',
     });
+    expect(commandIntentFromCommand('rg -n turnCostUsd src | cut -d: -f1 | sort -u')).toEqual({
+      action: 'search',
+      target: 'turnCostUsd',
+      path: 'src',
+    });
+    expect(commandIntentFromCommand('ps aux | rg Cindy')).toEqual({ action: 'inspectProcesses' });
+    expect(commandIntentFromCommand('ps aux | rg --pre=touch Cindy')).toBeUndefined();
+    expect(commandIntentFromCommand('ps aux | rg Cindy process.txt')).toBeUndefined();
+    expect(commandIntentFromCommand('cat a.txt | cut -d: -f1 b.txt')).toBeUndefined();
+  });
+
+  it('summarizes safe composite command chains without hiding unknown or mutating segments', () => {
+    expect(
+      commandIntentFromCommand(
+        "sed -n '1,80p' src/register.ts && sed -n '80,160p' src/register.ts",
+      ),
+    ).toEqual({ action: 'read', target: 'register.ts', path: 'src/register.ts' });
+    expect(
+      commandIntentFromCommand("sed -n '1,80p' src/a.ts && sed -n '1,80p' src/b.ts"),
+    ).toEqual({ action: 'inspect' });
+    expect(
+      commandIntentFromCommand("rg -n send src && sed -n '1,80p' src/register.ts"),
+    ).toEqual({ action: 'inspect' });
+    expect(commandIntentFromCommand('rg -n send src && rg -n receive src')).toEqual({
+      action: 'search',
+    });
+    expect(commandIntentFromCommand('git status --short && git diff --stat')).toEqual({
+      action: 'inspectRepository',
+    });
+    expect(commandIntentFromCommand('pnpm typecheck && pnpm test')).toEqual({ action: 'verify' });
+    expect(
+      commandIntentFromCommand(
+        "cd /repo && sed -n '1,80p' src/a.ts && sed -n '1,80p' src/b.ts",
+      ),
+    ).toEqual({ action: 'inspect' });
+    expect(commandIntentFromCommand('rg TODO src && rm -rf build')).toBeUndefined();
+    expect(commandIntentFromCommand('git add . && git commit -m done')).toBeUndefined();
+    expect(commandIntentFromCommand('cat a.txt > out.txt && cat b.txt')).toBeUndefined();
   });
 
   it('bails out on file-writing redirection but keeps harmless stream forms', () => {
@@ -719,10 +757,8 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
   });
 
   it('bails out on complex or unparseable shapes', () => {
-    // 管道尾段不是纯展示过滤器。
-    expect(commandIntentFromCommand('ps aux | grep node')).toBeUndefined();
-    // 多段命令链 / 分支 / 子命令替换 / 多行。
-    expect(commandIntentFromCommand('pnpm build && pnpm test')).toBeUndefined();
+    // 能安全归纳的验证链会显示友好摘要；分支 / 子命令替换 / 多行仍拒绝。
+    expect(commandIntentFromCommand('pnpm build && pnpm test')).toEqual({ action: 'verify' });
     expect(commandIntentFromCommand('pnpm test || echo failed')).toBeUndefined();
     expect(commandIntentFromCommand('echo $(date)')).toBeUndefined();
     expect(commandIntentFromCommand('cat <<EOF\nhi\nEOF')).toBeUndefined();

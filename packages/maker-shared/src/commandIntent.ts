@@ -15,9 +15,10 @@ import { basenameRemotePath } from './filePreview.js';
  *
  * 安全不变量（review 逐条钉死的口径）：**有副作用的命令绝不能被贴上无害的
  * 人话动词**（「读取 / 搜索 / 列出」），必须回退原文可见。所有形态级安全检查
- * 统一收在 `analyzeCommandShape`：命令链（&& / ; / &）、非展示型管道尾
- * （tee / xargs …）、写文件重定向（含紧贴形态 `a>b`）、子命令替换 / heredoc /
- * 多行,任一命中即整体放弃解析。`commandActions` 路径在采纳任何 action 前也
+ * 统一收在 `analyzeCommandShape`：非展示型管道尾（tee / xargs …）、写文件重定向
+ * （含紧贴形态 `a>b`）、子命令替换 / heredoc / 多行,任一命中即整体放弃解析。
+ * `&&` 只在每一段都能独立通过同一道闸、且属于明确的同类动作时才归纳；`;`、
+ * 后台 `&` 与 `||` 仍整体拒绝。`commandActions` 路径在采纳任何 action 前也
  * 必须先过同一道闸（防止「首个 action 无害、后段有副作用」的组合绕过），并
  * 对 read / search / listFiles action 各自再做语义门控（executable-read、
  * sed 就地编辑、破坏性 find）。`rm` 等破坏性命令**刻意不进规则表**。
@@ -32,6 +33,9 @@ export type CommandIntentAction =
   | 'read'
   | 'list'
   | 'search'
+  | 'inspect'
+  | 'inspectRepository'
+  | 'verify'
   | 'fetch'
   | 'install'
   | 'test'
@@ -196,9 +200,16 @@ export function commandIntentFromActions(raw: unknown, fullCommand?: string): Co
 
 // ── 命令原文 → intent（本地规则表） ──────────────────────────────────────────
 
-/** 管道尾段允许的纯展示型过滤器；出现其它命令（如 grep / tee / xargs）就放弃解析。 */
+/** 管道尾段允许的纯展示型过滤器；出现其它命令（如 tee / xargs）就放弃解析。 */
 const PIPE_FILTERS = new Set([
   'head', 'tail', 'wc', 'sort', 'uniq', 'less', 'more', 'cat', 'column', 'nl', 'sed',
+  'cut', 'tr', 'grep', 'egrep', 'fgrep', 'rg',
+]);
+
+const PIPE_SEARCH_FILTERS = new Set(['grep', 'egrep', 'fgrep', 'rg']);
+const CUT_VALUE_FLAGS = new Set([
+  '-b', '-c', '-d', '-f',
+  '--bytes', '--characters', '--delimiter', '--fields', '--output-delimiter',
 ]);
 
 /** 单条命令长度上限 —— 超长命令多半是脚本内联，解析价值低且徒增开销。 */
@@ -227,10 +238,7 @@ function analyzeCommandShape(command: string): string[] | undefined {
   // 验证该段真的只是 `cd <dir>` —— `cd repo > touched && cat a` 的 cd 段
   // 带写文件重定向,不能无检查跳过。
   while (chain.length > 1 && /^cd(\s|$)/.test(chain[0])) {
-    const cdWords = tokenize(chain[0]);
-    if (!cdWords) return undefined;
-    const cdArgv = stripPrefixTokens(cdWords);
-    if (!cdArgv || cdArgv.length > 2 || binaryName(cdArgv[0] ?? '') !== 'cd') return undefined;
+    if (!isCleanCdSegment(chain[0])) return undefined;
     chain.shift();
   }
   if (chain.length !== 1) return undefined;
@@ -243,11 +251,33 @@ function analyzeCommandShape(command: string): string[] | undefined {
     // 尾段同样过副作用检查:`| head -5 > out` 的写文件重定向不能藏进管道尾。
     const tail = stripPrefixTokens(tailWords);
     if (!tail || tail.length === 0) return undefined;
-    if (!PIPE_FILTERS.has(binaryName(tail[0]))) return undefined;
-    if (binaryName(tail[0]) === 'sed') {
+    const tailBin = binaryName(tail[0]);
+    if (!PIPE_FILTERS.has(tailBin)) return undefined;
+    if (tailBin === 'sed') {
       if (!sedPipelineFilterIsReadOnly(tail.slice(1))) return undefined;
       continue;
     }
+    if (PIPE_SEARCH_FILTERS.has(tailBin)) {
+      // grep/rg 只允许真正消费 stdin 的纯搜索形态。带路径会改读其它文件，
+      // --files / --pre 等形态也不能被当成首段命令的展示过滤器。
+      const filterIntent = grepIntent(tail.slice(1));
+      if (
+        filterIntent?.action !== 'search' ||
+        filterIntent.path ||
+        searchCommandHasSideEffects(pipeline[index])
+      ) {
+        return undefined;
+      }
+      continue;
+    }
+    if (tailBin === 'cut') {
+      // cut 允许额外 file operand；管道摘要只接受消费 stdin 的形态，避免
+      // `cat a | cut -f1 b` 被误写成只读取 a。写重定向已由 stripPrefixTokens 拦截。
+      if (positionals(tail.slice(1), CUT_VALUE_FLAGS).length > 0) return undefined;
+      continue;
+    }
+    // tr 的 positional 都是字符集，不接受输入文件，只会转换 stdin → stdout。
+    if (tailBin === 'tr') continue;
     // 白名单过滤器自身的写文件形态也要拒:sort -o FILE / uniq IN OUT。
     // 展示型过滤器在管道里正常不接文件参数,positional 只放行行数类数字
     // (head -n 50 / tail -n +10);-o / --output 一律拒(column -o 是分隔符,
@@ -274,11 +304,80 @@ function analyzeCommandShape(command: string): string[] | undefined {
   return argv;
 }
 
+const COMPOSITE_CONTENT_ACTIONS = new Set<CommandIntentAction>([
+  'read', 'list', 'search', 'parseJson', 'count',
+]);
+
+const COMPOSITE_REPOSITORY_ACTIONS = new Set<CommandIntentAction>([
+  'gitStatus', 'gitDiff', 'gitLog', 'gitShow', 'gitRemote', 'gitRevParse', 'gitBranch',
+  'gitGrep', 'gitMergeBase', 'gitLsFiles', 'gitRevList', 'gitLsRemote', 'gitWorktreeList',
+  'ghPrList', 'ghPrView', 'ghPrChecks', 'ghPrStatus', 'ghPrDiff',
+  'ghIssueList', 'ghIssueView', 'ghIssueStatus', 'ghAuthStatus',
+  'ghRunList', 'ghRunView', 'ghRunWatch', 'ghSearch', 'ghRepoList', 'ghRepoView', 'ghApiQuery',
+]);
+
+const COMPOSITE_VERIFICATION_ACTIONS = new Set<CommandIntentAction>([
+  'test', 'build', 'lint', 'typecheck', 'checkSyntax', 'checkFormatting',
+]);
+
+function isCleanCdSegment(segment: string): boolean {
+  const words = tokenize(segment);
+  if (!words) return false;
+  const argv = stripPrefixTokens(words);
+  return !!argv && argv.length <= 2 && binaryName(argv[0] ?? '') === 'cd';
+}
+
+function sameIntent(left: CommandIntent, right: CommandIntent): boolean {
+  return left.action === right.action && left.target === right.target && left.path === right.path;
+}
+
+/**
+ * Codex 常把一次查阅拆成 `rg ... && sed ... && sed ...`。每一段都先走单命令
+ * 解析与副作用闸；只有整组落在同一类可归纳动作时才返回友好摘要。任一段未知、
+ * 写盘或属于 mutation，整条链仍回退「运行命令」，不拿首段掩盖后续动作。
+ */
+function commandIntentFromCompositeCommand(command: string): CommandIntent | undefined {
+  if (typeof command !== 'string') return undefined;
+  const trimmed = command.trim();
+  if (!trimmed || trimmed.length > COMMAND_MAX_CHARS) return undefined;
+  if (/[`\n]|\$\(|<</.test(trimmed)) return undefined;
+
+  const chain = splitTopLevel(trimmed, ['&&']);
+  if (!chain || chain.length < 2) return undefined;
+  while (chain.length > 1 && /^cd(\s|$)/.test(chain[0])) {
+    if (!isCleanCdSegment(chain[0])) return undefined;
+    chain.shift();
+  }
+  if (chain.length < 2) return undefined;
+
+  const intents = chain.map(commandIntentFromSingleCommand);
+  if (intents.some((intent) => !intent)) return undefined;
+  const resolved = intents as CommandIntent[];
+
+  const groups: Array<[ReadonlySet<CommandIntentAction>, CommandIntentAction]> = [
+    [COMPOSITE_CONTENT_ACTIONS, 'inspect'],
+    [COMPOSITE_REPOSITORY_ACTIONS, 'inspectRepository'],
+    [COMPOSITE_VERIFICATION_ACTIONS, 'verify'],
+  ];
+  const summary = groups.find(([actions]) => resolved.every((intent) => actions.has(intent.action)));
+  if (!summary) return undefined;
+
+  const first = resolved[0];
+  if (resolved.every((intent) => sameIntent(first, intent))) return first;
+  // 多个不同搜索词仍可准确概括为「搜索」，无需泛化成「查阅内容」。
+  if (resolved.every((intent) => intent.action === 'search')) return { action: 'search' };
+  return { action: summary[1] };
+}
+
 /**
  * 从命令原文解析意图。可靠性优先：形态安全检查见 `analyzeCommandShape`；
  * 通过后按首段 argv 的二进制名走规则表，握不准一律返回 undefined 回退原文。
  */
 export function commandIntentFromCommand(command: string): CommandIntent | undefined {
+  return commandIntentFromCompositeCommand(command) ?? commandIntentFromSingleCommand(command);
+}
+
+function commandIntentFromSingleCommand(command: string): CommandIntent | undefined {
   const argv = typeof command === 'string' ? analyzeCommandShape(command) : undefined;
   if (!argv) return undefined;
 

@@ -21,7 +21,8 @@ const VERBS = ['edited', 'created', 'ran', 'read', 'updated', 'searched', 'fetch
 
 /** command intent 专属动词档(verbLabelKeyForIntent 新增,无聚合 part.* 变体)。 */
 const INTENT_VERBS = [
-  'listed', 'installedDeps', 'ranTests', 'built', 'linted', 'typechecked',
+  'listed', 'inspect', 'inspectRepository', 'verify',
+  'installedDeps', 'ranTests', 'built', 'linted', 'typechecked',
   'runScript', 'checkSyntax', 'showVersion', 'checkFormatting', 'parseJson', 'count',
   'showCurrentDirectory', 'showDateTime', 'locateCommand', 'inspectProcesses', 'inspectPorts',
   'queryDatabase',
