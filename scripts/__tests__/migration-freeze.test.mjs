@@ -25,6 +25,12 @@ function createFixture() {
   fs.mkdirSync(drizzleDir, { recursive: true });
   const initialSql = 'CREATE TABLE sample (id TEXT PRIMARY KEY);\n';
   fs.writeFileSync(path.join(drizzleDir, '0000_init.sql'), initialSql);
+  const scriptsDir = path.join(drizzleDir, 'scripts');
+  fs.mkdirSync(scriptsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(scriptsDir, '0000_init.ts'),
+    'function run() {}\nmodule.exports = { run };\n',
+  );
   fs.writeFileSync(
     path.join(drizzleDir, 'migration-baseline.json'),
     `${JSON.stringify({
@@ -83,6 +89,76 @@ test('new repository main baseline keeps freezing committed migrations', () => {
       resolveMainBaseline(fixture.repo, { XDT_MIGRATION_BASE_REF: fixture.anchor }),
       { ref: fixture.anchor, commit: fixture.anchor },
     );
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('new repository main baseline freezes companion runtime scripts', () => {
+  const fixture = createFixture();
+  const scriptPath = path.join(
+    fixture.repo,
+    'apps',
+    'desktop',
+    'drizzle',
+    'scripts',
+    '0000_init.ts',
+  );
+  try {
+    fs.writeFileSync(
+      scriptPath,
+      'function run() { return 1; }\nmodule.exports = { run };\n',
+    );
+    assert.deepEqual(findFrozenMigrationChanges(fixture.repo, fixture.anchor).violations, [
+      { path: 'apps/desktop/drizzle/scripts/0000_init.ts', kind: 'modified' },
+    ]);
+
+    fs.rmSync(scriptPath);
+    assert.deepEqual(findFrozenMigrationChanges(fixture.repo, fixture.anchor).violations, [
+      { path: 'apps/desktop/drizzle/scripts/0000_init.ts', kind: 'deleted' },
+    ]);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('adding a runtime script to an already-frozen SQL changes its identity', () => {
+  const fixture = createFixture();
+  const scriptPath = path.join(
+    fixture.repo,
+    'apps',
+    'desktop',
+    'drizzle',
+    'scripts',
+    '0000_init.ts',
+  );
+  try {
+    fs.rmSync(scriptPath);
+    git(fixture.repo, 'add', '-u');
+    git(fixture.repo, 'commit', '-m', 'baseline without runtime script');
+    const noScriptAnchor = git(fixture.repo, 'rev-parse', 'HEAD');
+    fs.writeFileSync(scriptPath, 'function run() {}\nmodule.exports = { run };\n');
+    assert.deepEqual(findFrozenMigrationChanges(fixture.repo, noScriptAnchor).violations, [
+      {
+        path: 'apps/desktop/drizzle/scripts/0000_init.ts',
+        kind: 'added-runtime-script',
+      },
+    ]);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('a new migration may add its companion runtime script', () => {
+  const fixture = createFixture();
+  try {
+    const drizzleDir = path.join(fixture.repo, 'apps', 'desktop', 'drizzle');
+    fs.writeFileSync(path.join(drizzleDir, '0001_new.sql'), 'SELECT 1;\n');
+    fs.writeFileSync(
+      path.join(drizzleDir, 'scripts', '0001_new.ts'),
+      'function run() {}\nmodule.exports = { run };\n',
+    );
+    assert.deepEqual(findFrozenMigrationChanges(fixture.repo, fixture.anchor).violations, []);
   } finally {
     fixture.cleanup();
   }
