@@ -324,6 +324,9 @@ export interface ChatMessage {
   turnCostUsd?: number;
   /** true = 订阅模式下的 token 价值;false = API 账单 cost / API 单价折算 cost。 */
   turnCostIsEstimate?: boolean;
+  /** 用户从最近一条真实输入至本消息的累计成本；只用于消息旁展示。 */
+  userTurnCostUsd?: number;
+  userTurnCostIsEstimate?: boolean;
   /** 本轮 token/cache 明细;旧消息或未拿到 usage 时缺省。 */
   turnUsageDetails?: TurnUsageDetails;
   /**
@@ -3226,12 +3229,17 @@ function initGlobalListeners(): void {
       clientId?: string;
       turnCostUsd?: number;
       turnCostIsEstimate?: boolean;
+      userTurnCostUsd?: number;
+      userTurnCostIsEstimate?: boolean;
       turnUsageDetails?: unknown;
     } | null;
     if (!p?.sessionId || !p.clientId) return;
     if (typeof p.turnCostUsd !== 'number' || !(p.turnCostUsd > 0)) return;
     const { sessionId, clientId, turnCostUsd } = p;
     const turnCostIsEstimate = p.turnCostIsEstimate === true;
+    const userTurnCostUsd = typeof p.userTurnCostUsd === 'number' && p.userTurnCostUsd > 0
+      ? p.userTurnCostUsd
+      : undefined;
     const turnUsageDetails = normalizeTurnUsageDetails(p.turnUsageDetails);
     const resolvedTurnCostUsd = resolveEstimatedTurnCostUsd(turnCostUsd, turnCostIsEstimate, turnUsageDetails);
     setState(sessionId, (s) => {
@@ -3242,6 +3250,10 @@ function initGlobalListeners(): void {
         ...msgs[idx],
         turnCostUsd: resolvedTurnCostUsd,
         turnCostIsEstimate,
+        ...(userTurnCostUsd ? {
+          userTurnCostUsd,
+          userTurnCostIsEstimate: p.userTurnCostIsEstimate === true,
+        } : {}),
         ...(turnUsageDetails ? { turnUsageDetails } : {}),
       };
       return { ...s, messages: msgs };
@@ -7058,6 +7070,12 @@ function mapServerMessages(serverMsgs: Message[]): ChatMessage[] {
               return {
                 turnCostUsd,
                 turnCostIsEstimate: m.agentMeta.turnCostIsEstimate === true,
+                ...(typeof m.agentMeta.userTurnCostUsd === 'number' && m.agentMeta.userTurnCostUsd > 0
+                  ? {
+                      userTurnCostUsd: m.agentMeta.userTurnCostUsd,
+                      userTurnCostIsEstimate: m.agentMeta.userTurnCostIsEstimate === true,
+                    }
+                  : {}),
                 ...(turnUsageDetails ? { turnUsageDetails } : {}),
               };
             })()

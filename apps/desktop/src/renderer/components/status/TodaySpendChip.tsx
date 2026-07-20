@@ -619,6 +619,7 @@ function buildClaudeSubscriptionTooltipNode(
 interface LatestTurnUsageSummary {
   costUsd?: number;
   isEstimate?: boolean;
+  isUserTurnTotal: boolean;
   details: TurnUsageDetails;
 }
 
@@ -626,11 +627,19 @@ function findLatestTurnUsageSummary(messages: ChatMessage[]): LatestTurnUsageSum
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
     if (message.role !== 'assistant' || !message.turnUsageDetails) continue;
+    const userTurnCostUsd = typeof message.userTurnCostUsd === 'number' && message.userTurnCostUsd > 0
+      ? message.userTurnCostUsd
+      : undefined;
     return {
-      ...(typeof message.turnCostUsd === 'number' && message.turnCostUsd > 0
-        ? { costUsd: message.turnCostUsd }
+      ...(userTurnCostUsd != null
+        ? { costUsd: userTurnCostUsd }
+        : typeof message.turnCostUsd === 'number' && message.turnCostUsd > 0
+          ? { costUsd: message.turnCostUsd }
         : {}),
-      ...(message.turnCostIsEstimate === true ? { isEstimate: true } : {}),
+      ...((userTurnCostUsd != null
+        ? message.userTurnCostIsEstimate
+        : message.turnCostIsEstimate) === true ? { isEstimate: true } : {}),
+      isUserTurnTotal: userTurnCostUsd != null,
       details: message.turnUsageDetails,
     };
   }
@@ -676,7 +685,9 @@ function appendLatestTurnUsageLines(
     t,
     costUsd: summary.costUsd,
     isEstimate: summary.isEstimate,
-    title: t('todaySpend.tooltip.latestTurnTitle'),
+    title: t(summary.isUserTurnTotal
+      ? 'todaySpend.tooltip.latestUserTurnTitle'
+      : 'todaySpend.tooltip.latestTurnTitle'),
   }));
 }
 

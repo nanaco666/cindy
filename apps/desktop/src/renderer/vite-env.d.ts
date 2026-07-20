@@ -2768,6 +2768,8 @@ interface ElectronAPI {
       clientId: string;
       turnCostUsd: number;
       turnCostIsEstimate: boolean;
+      userTurnCostUsd: number;
+      userTurnCostIsEstimate: boolean;
       turnUsageDetails?: import('../shared/turnUsageDetails').TurnUsageDetails;
     }) => void,
   ) => () => void;

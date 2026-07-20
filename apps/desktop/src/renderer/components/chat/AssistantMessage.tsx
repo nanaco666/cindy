@@ -170,6 +170,8 @@ interface AssistantMessageProps {
   turnCostUsd?: number;
   /** true = 订阅模式下的 token 价值;false = API 账单 cost / API 单价折算 cost。 */
   turnCostIsEstimate?: boolean;
+  userTurnCostUsd?: number;
+  userTurnCostIsEstimate?: boolean;
   /** Per-turn token/cache 明细。 */
   turnUsageDetails?: TurnUsageDetails;
   /** 本轮模型降级标记(main turn 结束检测命中时挂到收尾 assistant 上),
@@ -195,6 +197,8 @@ export const AssistantMessage = memo(function AssistantMessage({
   showActionBar = false,
   turnCostUsd,
   turnCostIsEstimate,
+  userTurnCostUsd,
+  userTurnCostIsEstimate,
   turnUsageDetails,
   modelMismatch,
   ghostReplyPending,
@@ -340,6 +344,8 @@ export const AssistantMessage = memo(function AssistantMessage({
           onFork={canFork ? handleFork : undefined}
           turnCostUsd={turnCostUsd}
           turnCostIsEstimate={turnCostIsEstimate}
+          userTurnCostUsd={userTurnCostUsd}
+          userTurnCostIsEstimate={userTurnCostIsEstimate}
           turnUsageDetails={turnUsageDetails}
         />
       )}

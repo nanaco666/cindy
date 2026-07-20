@@ -226,6 +226,22 @@ describe('resolveTurnCost', () => {
 });
 
 describe('resolveClaudeTurnCostSinks — 订阅轮排除', () => {
+  it('同一 done 的主 agent 与付费 subagent 一并计入消息分段成本', () => {
+    const { turnTotalUsd, perModel } = resolveClaudeTurnCostSinks(
+      [
+        // 真实 Claude modelUsage 会同时带主模型与 Task/subagent 模型。
+        delta('claude-fable-5', { costUsdDelta: 14.226789 }),
+        delta('claude-opus-4-8[1m]', { costUsdDelta: 0.57519775 }),
+      ],
+      null,
+    );
+    expect(turnTotalUsd).toBeCloseTo(14.80198675, 8);
+    expect(perModel).toMatchObject([
+      { model: 'claude-fable-5', costUsd: 14.226789 },
+      { model: 'claude-opus-4-8', costUsd: 0.57519775 },
+    ]);
+  });
+
   it('主 Anthropic + 子 agent 走 bridge(chatgpt/): turnTotal 只含 Anthropic, 订阅轮 cost 0', () => {
     const { turnTotalUsd, perModel } = resolveClaudeTurnCostSinks(
       [

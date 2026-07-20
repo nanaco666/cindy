@@ -74,6 +74,9 @@ interface MessageActionBarProps {
   /** Per-turn 费用 (USD) — 仅该轮最后一条 assistant 有值, 时间旁显示。 */
   turnCostUsd?: number;
   turnCostIsEstimate?: boolean;
+  /** User-visible cumulative cost for the surrounding user round. */
+  userTurnCostUsd?: number;
+  userTurnCostIsEstimate?: boolean;
   /** Per-turn token/cache 明细。旧消息没有时 tooltip 保持旧文案。 */
   turnUsageDetails?: TurnUsageDetails;
 }
@@ -95,6 +98,8 @@ export function MessageActionBar({
   rewindInFlight = false,
   turnCostUsd,
   turnCostIsEstimate = false,
+  userTurnCostUsd,
+  userTurnCostIsEstimate = false,
   turnUsageDetails,
 }: MessageActionBarProps) {
   const { t } = useTranslation();
@@ -266,27 +271,37 @@ export function MessageActionBar({
     </Tooltip.Root>
   );
 
-  // Per-turn 费用 — 样式与 timeText 完全一致(12px + 同色 + 0.5px 光学修正)。
+  // 用户轮累计优先；没有新字段的历史消息继续显示原始 SDK 分段成本。
+  const displayedCostUsd = userTurnCostUsd ?? turnCostUsd;
+  const displayedCostIsEstimate = userTurnCostUsd != null
+    ? userTurnCostIsEstimate
+    : turnCostIsEstimate;
+  const isUserTurnTotal = userTurnCostUsd != null;
+
+  // 费用 — 样式与 timeText 完全一致(12px + 同色 + 0.5px 光学修正)。
   // 仅 assistant(align='left')会拿到值;估算值(Codex 折算)表达为 token 价值。
   const turnCostTooltipNode =
-    turnCostUsd != null && turnCostUsd > 0 && turnUsageDetails ? (
+    displayedCostUsd != null && displayedCostUsd > 0 && turnUsageDetails ? (
       <span className="whitespace-pre-line">
         {buildTurnUsageTooltipLines({
           details: turnUsageDetails,
-          t,
-          costUsd: turnCostUsd,
-          isEstimate: turnCostIsEstimate,
-        }).join('\n')}
+        t,
+        costUsd: displayedCostUsd,
+        isEstimate: displayedCostIsEstimate,
+        // The cost is user-round cumulative, while SDK token detail remains
+        // scoped to this final segment until we persist cumulative usage too.
+        ...(isUserTurnTotal ? { title: t('chat.messageActionBar.userTurnCostTitle') } : {}),
+      }).join('\n')}
       </span>
     ) : (
       t(
-        turnCostIsEstimate
+        displayedCostIsEstimate
           ? 'chat.messageActionBar.turnCostEstimated'
           : 'chat.messageActionBar.turnCost',
       )
     );
 
-  const costText = turnCostUsd != null && turnCostUsd > 0 && (
+  const costText = displayedCostUsd != null && displayedCostUsd > 0 && (
     <Tooltip.Root key="cost">
       <Tooltip.Trigger asChild>
         <span
@@ -299,11 +314,11 @@ export function MessageActionBar({
             'text-[var(--settings-section-desc)] cursor-default',
           )}
         >
-          {turnCostIsEstimate
+          {displayedCostIsEstimate
             ? t('chat.messageActionBar.turnCostEstimatedValue', {
-                cost: formatTurnCostUsd(turnCostUsd),
+                cost: formatTurnCostUsd(displayedCostUsd),
               })
-            : formatTurnCostUsd(turnCostUsd)}
+            : formatTurnCostUsd(displayedCostUsd)}
         </span>
       </Tooltip.Trigger>
       <Tooltip.Content>
