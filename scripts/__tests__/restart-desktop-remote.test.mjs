@@ -163,30 +163,33 @@ test("structured startup failures keep their actionable reason", () => {
 	assert.equal(
 		formatDesktopStartupFailure({
 			state: "failed",
-			code: "PASSIVE_USER_DATA_OCCUPIED",
-			message: "Another passive instance owns the slot.",
-			detail: { ownerPid: 88 },
+			code: "SINGLE_INSTANCE_OWNED",
+			message: "Another Cindy instance owns the primary slot.",
+			detail: { userDataDir: "/tmp/Cindy" },
 		}),
-		"[PASSIVE_USER_DATA_OCCUPIED] Another passive instance owns the slot. (ownerPid=88)",
+		"[SINGLE_INSTANCE_OWNED] Another Cindy instance owns the primary slot. (userDataDir=/tmp/Cindy)",
 	);
 });
 
-test("desktop whoami identifies renderer readiness and passive ownership", () => {
+test("desktop whoami identifies multiple passive previews sharing one userData", () => {
 	const worktrees = parseWorktreeEntries([
 		"worktree /repo/cindy-preview",
 		"HEAD abc123",
 		"branch refs/heads/dash/preview/example",
+		"",
+		"worktree /repo/cindy-preview-two",
+		"HEAD def456",
+		"branch refs/heads/dash/preview/two",
 	].join("\n"));
 	const processes = [
 		{ pid: 10, ppid: 9, command: "/repo/cindy-preview/node_modules/electron/dist/Electron ." },
 		{ pid: 11, ppid: 10, command: "/repo/cindy-preview/node_modules/electron/helper --type=renderer --user-data-dir=/tmp/Cindy --app-path=/repo/cindy-preview/apps/desktop" },
-		{ pid: 9, ppid: 8, command: "node /repo/cindy-preview/apps/desktop/scripts/dev-remote-env.mjs electron-forge start" },
+		{ pid: 9, ppid: 8, command: "XDT_SCHEDULER_PASSIVE='1' node /repo/cindy-preview/apps/desktop/scripts/dev-remote-env.mjs electron-forge start" },
+		{ pid: 20, ppid: 19, command: "/repo/cindy-preview-two/node_modules/electron/dist/Electron ." },
+		{ pid: 21, ppid: 20, command: "/repo/cindy-preview-two/node_modules/electron/helper --type=renderer --user-data-dir=/tmp/Cindy --app-path=/repo/cindy-preview-two/apps/desktop" },
+		{ pid: 19, ppid: 18, command: "set \"XDT_SCHEDULER_PASSIVE=1\" && node /repo/cindy-preview-two/apps/desktop/scripts/dev-remote-env.mjs electron-forge start" },
 	];
-	const instances = identifyDesktopProcesses(
-		processes,
-		worktrees,
-		new Map([["/tmp/Cindy", 10]]),
-	);
+	const instances = identifyDesktopProcesses(processes, worktrees);
 
 	assert.deepEqual(instances, [{
 		pid: 10,
@@ -201,7 +204,32 @@ test("desktop whoami identifies renderer readiness and passive ownership", () =>
 		commit: null,
 		commitVerified: false,
 		source: "process-scan",
+	}, {
+		pid: 20,
+		rootDir: "/repo/cindy-preview-two",
+		branch: "dash/preview/two",
+		state: "ready",
+		ready: true,
+		mode: "remote",
+		passive: true,
+		isolated: null,
+		userDataDir: "/tmp/Cindy",
+		commit: null,
+		commitVerified: false,
+		source: "process-scan",
 	}]);
+});
+
+test("passive previews do not use a one-slot userData lock", () => {
+	const bootstrap = fs.readFileSync(
+		new URL("../../apps/desktop/src/main/bootstrap-electron.ts", import.meta.url),
+		"utf8",
+	);
+	assert.equal(bootstrap.includes(".passive-dev.lock"), false);
+	assert.equal(
+		fs.existsSync(new URL("../../apps/desktop/src/main/passiveDevLock.ts", import.meta.url)),
+		false,
+	);
 });
 
 test("desktop whoami prefers launch-time commit metadata over process inference", () => {

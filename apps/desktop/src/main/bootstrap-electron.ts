@@ -10,7 +10,6 @@ import { machineIdSync } from 'node-machine-id';
 import windowStateKeeper from 'electron-window-state';
 import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import { shouldRequestSingleInstanceLock } from './devCliFlags.js';
-import { acquirePassiveDevLock } from './passiveDevLock.js';
 import { markDesktopDevReady, markDesktopDevStartupFailed } from './devStartupStatus';
 
 const PROCESS_STARTED_AT_MS = Date.now();
@@ -641,7 +640,6 @@ import { initLogger, writeFromRenderer, setLogLevel, getLogLevel, keepRecentSync
 initLogger();
 const dbClientLog = createLogger('DbClient');
 const authBoundaryLog = createLogger('auth-boundary');
-const passiveDevLockLog = createLogger('passive-dev-lock');
 // 主窗 renderer 加载失败可观测性 + dev 启动看门狗(见 renderer-boot-guard.ts 顶部注释)。
 const rendererGuardLog = createLogger('renderer-guard');
 const updatePresentationLog = createLogger('update-presentation');
@@ -1534,16 +1532,16 @@ app.on('open-file', (event, filePath) => {
 // cindy://session 等)/ 右键 "通过 Cindy 打开" 而拉起的第二个进程 redirect 成
 // "聚焦已运行窗口" 的唯一机制——两个独立 Electron 进程之间没有别的通道能交接焦点。
 //
-// 唯一例外是 dev `--passive`:它的公开契约就是和正式版共享 Cindy userData 双开、
-// 同时让出自动 schedule。正式版已持有同一作用域的锁，passive dev 若也请求会直接
-// quit，契约形同失效；所以只有这个明确模式跳过 Electron 内置锁。此模式没有
-// second-instance redirect，deep link 落到哪个实例由当前 OS 协议注册归属决定。
-// 但 passive 实例之间仍需互斥(同一 userData 的 SQLite 不能并发打开两个写者),
-// 通过 userData 下的 `.passive-dev.lock` 原子文件锁实现。
+// 唯一例外是 dev `--passive`:它的公开契约就是与正式版 / primary dev 共享同一份
+// Cindy userData 多开、同时让出自动 schedule。所有 passive dev 都跳过 Electron
+// 内置锁，因此一个 primary 后可以并行启动任意多个 preview；SQLite 使用 WAL +
+// busy_timeout，scheduler / device-link / refresh token 各自由现有跨实例仲裁收敛。
+// 此模式没有 second-instance redirect，deep link 落到哪个实例由当前 OS 协议注册
+// 归属决定。带 schema migration 的不同版本仍须由上层在共享数据启动前做兼容性预检，
+// 不能用限制 passive 实例数量代替版本兼容性判断。
 //
-// 锁按 userData 目录作用域:默认 dev / packaged 共用 `Cindy` userData → 单实例;
-// `--isolated=<名字>` 沙箱各有独立 userData → 各自独立锁,仍可并行共存。真要多开走
-// `--isolated`(见 AGENTS.md),不再依赖 "dev 无锁" 各开窗口。
+// 锁按 userData 目录作用域:默认 dev / packaged 共用 `Cindy` userData → 一个 primary;
+// 额外共享数据实例走 `--passive`，隔离数据实例走 `--isolated[=<名字>]`(见 AGENTS.md)。
 if (shouldRequestSingleInstanceLock({
   isPackaged: app.isPackaged,
   schedulerPassive: process.env.XDT_SCHEDULER_PASSIVE === '1',
@@ -1591,52 +1589,6 @@ if (shouldRequestSingleInstanceLock({
       // (deepLink 只向已有窗口投递/排队,不建窗)。
       if (startupWindowCreationAllowed && !focusMainWindow()) {
         createWindow();
-      }
-    });
-  }
-} else {
-  // passive dev 跳过 Electron 的 single-instance lock(避免与正式版冲突),但仍需
-  // 阻止同一 userData 下的第二个 passive 实例并发启动——否则两者同时打开 SQLite
-  // 会产生 busy / migration 竞态。锁用 wx/O_EXCL 原子创建，记录 PID + owner token；
-  // 异常退出可回收 stale 锁，release 也不会误删已经易主的新锁。
-  const userDataDir = app.getPath('userData');
-  const passiveLockPath = path.join(userDataDir, '.passive-dev.lock');
-  const result = acquirePassiveDevLock({
-    lockPath: passiveLockPath,
-    pid: process.pid,
-    startedAtMs: PROCESS_STARTED_AT_MS,
-    onCompromised: (reason) => {
-      passiveDevLockLog.error('passive dev lock compromised; quitting', { reason });
-      markDesktopDevStartupFailed(
-        'PASSIVE_LOCK_COMPROMISED',
-        'The passive dev lock changed while this instance was running.',
-        { reason, userDataDir },
-      );
-      app.quit();
-    },
-  });
-  if (!result.acquired) {
-    if (result.reason === 'occupied') {
-      passiveDevLockLog.warn('another passive dev instance owns this userData; quitting', result);
-      markDesktopDevStartupFailed(
-        'PASSIVE_USER_DATA_OCCUPIED',
-        'Another passive desktop dev instance already owns this shared userData slot.',
-        { userDataDir, ...(result.ownerPid ? { ownerPid: result.ownerPid } : {}) },
-      );
-    } else {
-      passiveDevLockLog.error('passive dev lock acquisition failed; quitting', result);
-      markDesktopDevStartupFailed(
-        'PASSIVE_LOCK_ERROR',
-        'The passive desktop dev lock could not be acquired safely.',
-        { userDataDir, error: result.error },
-      );
-    }
-    app.quit();
-  } else {
-    app.on('will-quit', () => {
-      const released = result.lock.release();
-      if (!released.released && released.reason !== 'missing') {
-        passiveDevLockLog.warn('passive dev lock release skipped', released);
       }
     });
   }

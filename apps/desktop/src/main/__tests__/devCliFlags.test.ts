@@ -209,8 +209,10 @@ describe('shouldRequestSingleInstanceLock', () => {
     expect(shouldRequestSingleInstanceLock({ isPackaged: true, schedulerPassive: false })).toBe(true);
   });
 
-  it('仅 passive dev 跳过锁，允许与正式版共享数据双开', () => {
-    expect(shouldRequestSingleInstanceLock({ isPackaged: false, schedulerPassive: true })).toBe(false);
+  it('所有 passive dev 都跳过锁，允许多个 dev 与正式版共享同一 userData', () => {
+    const passivePreviews = Array.from({ length: 3 }, () =>
+      shouldRequestSingleInstanceLock({ isPackaged: false, schedulerPassive: true }));
+    expect(passivePreviews).toEqual([false, false, false]);
     // packaged 不接受 dev-only passive 语义，即使环境被污染也必须继续持锁。
     expect(shouldRequestSingleInstanceLock({ isPackaged: true, schedulerPassive: true })).toBe(true);
   });

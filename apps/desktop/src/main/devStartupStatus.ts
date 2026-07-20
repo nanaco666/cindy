@@ -96,7 +96,7 @@ function updateTrackedInstance(
 }
 
 /**
- * Register this Electron main process before single-instance/passive lock arbitration.
+ * Register this Electron main process before single-instance arbitration.
  * The returned cleanup only removes the record when its random instanceId still owns it.
  */
 export function beginDesktopDevInstance(
