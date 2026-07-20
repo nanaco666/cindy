@@ -4973,6 +4973,8 @@
         "cronHint": "Runs at calendar clock slots.",
         "intervalHint": "Waits this long after the previous run finishes.",
         "intervalUnsupportedHint": "This exact interval is preserved. Choosing a minute or hour preset will replace it.",
+        "currentExact": "Current · {{schedule}}",
+        "exactIntervalPanelHint": "Choose a minute or hour preset on the left only when you want to replace this exact interval.",
         "cronChip": "Cron · {{schedule}}",
         "intervalChip": "After completion · {{schedule}}"
       },

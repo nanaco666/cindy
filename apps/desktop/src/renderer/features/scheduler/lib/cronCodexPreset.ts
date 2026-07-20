@@ -269,6 +269,26 @@ export function intervalMsToCronExpr(intervalMs: number): string | undefined {
   return undefined;
 }
 
+export type ScheduleTimingPresentation =
+  | { kind: 'cron'; displayCronExpr: string }
+  | { kind: 'intervalPreset'; displayCronExpr: string }
+  | { kind: 'intervalExact' };
+
+/**
+ * 决定时间编辑器如何呈现当前权威调度值。不可由现有预设精确表达的 interval
+ * 必须进入独立 exact 状态，禁止伪造一个 5 分钟 Cron 配置参与显示或保存。
+ */
+export function resolveScheduleTimingPresentation(
+  cronExpr: string,
+  intervalMs: number | undefined,
+): ScheduleTimingPresentation {
+  if (intervalMs === undefined) return { kind: 'cron', displayCronExpr: cronExpr };
+  const displayCronExpr = intervalMsToCronExpr(intervalMs);
+  return displayCronExpr
+    ? { kind: 'intervalPreset', displayCronExpr }
+    : { kind: 'intervalExact' };
+}
+
 export const DEFAULT_SCHEDULE_INTERVAL_MS = 5 * 60_000;
 
 /** Cron / 相对间隔显式切换的单一确定性入口。 */

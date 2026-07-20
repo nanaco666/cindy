@@ -32,7 +32,12 @@ import {
   sessionAgentKindToScheduleAgentKind,
 } from '../scheduleFormLogic';
 import type { ScheduleFormState } from '../scheduleFormLogic';
-import { cronExprToIntervalMs, intervalMsToCronExpr, switchScheduleTimingMode } from '../cronCodexPreset';
+import {
+  cronExprToIntervalMs,
+  intervalMsToCronExpr,
+  resolveScheduleTimingPresentation,
+  switchScheduleTimingMode,
+} from '../cronCodexPreset';
 
 describe('isExplicitScheduleModelUnavailable', () => {
   it('does not reject an explicit model before capabilities are ready', () => {
@@ -110,6 +115,16 @@ describe('schedule timing mode conversion', () => {
     expect(intervalMsToCronExpr(10 * 60_000)).toBe('*/10 * * * *');
     expect(intervalMsToCronExpr(2 * 60 * 60_000)).toBe('0 */2 * * *');
     expect(intervalMsToCronExpr(90_000)).toBeUndefined();
+  });
+
+  it('uses an exact presentation instead of fabricating a five-minute preset', () => {
+    expect(resolveScheduleTimingPresentation('*/5 * * * *', 90_000)).toEqual({
+      kind: 'intervalExact',
+    });
+    expect(resolveScheduleTimingPresentation('*/5 * * * *', 10 * 60_000)).toEqual({
+      kind: 'intervalPreset',
+      displayCronExpr: '*/10 * * * *',
+    });
   });
 
   it('switches between cron and relative interval without reusing a stale cron value', () => {
