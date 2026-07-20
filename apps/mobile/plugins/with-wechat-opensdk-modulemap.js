@@ -11,7 +11,7 @@ const { withPodfile } = require("@expo/config-plugins");
 // WechatOpenSDK,XdtWechatLogin 的 Swift 编译就依赖这份 modulemap,与微信登录是否启用无关。
 const HOOK_MARKER = "xdt-wechat-login: WechatOpenSDK modulemap";
 const SIMULATOR_HOOK_MARKER =
-  "xdt-wechat-login: arm64 simulator stub linkage v2";
+  "xdt-wechat-login: arm64 simulator stub linkage v3";
 const MODULEMAP_HOOK = `
     # ${HOOK_MARKER}(clang 只按 modulemap 所在目录解析 header 相对路径,拷到 SDK 头文件旁)
     require 'fileutils'
@@ -29,7 +29,10 @@ const SIMULATOR_HOOK = `
     # 从 iphonesimulator 排除。iOS 26 Simulator 已不能安装这样产出的 x86_64 app。
     # Simulator 由 XdtWechatAuthCoordinator 的 targetEnvironment stub 承载，所以这里:
     # 1. 不让 device-only SDK 把整个 app 迫成 x86_64;
-    # 2. 从通用 linker flags 移除 WechatOpenSDK，再只为 iphoneos 加回，避免 simulator 链接设备库。
+    # 2. 从通用 linker flags 移除 WechatOpenSDK，再只为 iphoneos 加回，避免 simulator 链接设备库;
+    # 3. podspec 的 user_target_xcconfig 会把同样的 EXCLUDED_ARCHS 传进聚合 xcconfig
+    #    (Pods-<App>.*.xcconfig)迫使 app target 也变 x86_64——一并剥掉(v3;只影响
+    #    simulator 构建设置,iphoneos 出包不读该条件化 key)。
     wechat_excluded_archs_key = 'EXCLUDED_ARCHS[sdk=iphonesimulator*]'
     installer.pods_project.targets.each do |target|
       next unless target.name == 'WechatOpenSDK'
@@ -39,11 +42,18 @@ const SIMULATOR_HOOK = `
     end
     installer.aggregate_targets.each do |aggregate_target|
       aggregate_target.xcconfigs.each do |configuration_name, xcconfig|
+        changed = false
         # Xcodeproj::Config 会把 -l 库单独存在 other_linker_flags，不能从 attributes 读取。
-        next unless xcconfig.other_linker_flags[:libraries].delete?('WechatOpenSDK')
-        xcconfig.attributes['OTHER_LDFLAGS[sdk=iphoneos*]'] =
-          '$(inherited) -l"WechatOpenSDK"'
-        xcconfig.save_as(aggregate_target.xcconfig_path(configuration_name))
+        if xcconfig.other_linker_flags[:libraries].delete?('WechatOpenSDK')
+          xcconfig.attributes['OTHER_LDFLAGS[sdk=iphoneos*]'] =
+            '$(inherited) -l"WechatOpenSDK"'
+          changed = true
+        end
+        if xcconfig.attributes[wechat_excluded_archs_key].to_s.include?('arm64')
+          xcconfig.attributes.delete(wechat_excluded_archs_key)
+          changed = true
+        end
+        xcconfig.save_as(aggregate_target.xcconfig_path(configuration_name)) if changed
       end
     end
 `;
