@@ -26,8 +26,19 @@ describe('collaboration error i18n', () => {
 
       expect(collaboration?.startFailed, locale).toEqual(expect.any(String));
       expect(collaboration?.startFailedContinue, locale).toEqual(expect.any(String));
-      expect(collaboration?.errors?.BUDGET_MODEL_REQUIRES_API_MODE, locale).toEqual(expect.any(String));
-      expect(collaboration?.errors?.BUDGET_MODEL_REQUIRES_API_MODE_CONTINUE, locale).toEqual(expect.any(String));
+      for (const code of [
+        'INVALID_PARAMS',
+        'NO_PROVIDER_FOR_AGENT',
+        'BUDGET_MODEL_REQUIRES_API_MODE',
+      ]) {
+        expect(collaboration?.errors?.[code], `${locale}:${code}`).toEqual(expect.any(String));
+        expect(collaboration?.errors?.[`${code}_CONTINUE`], `${locale}:${code}_CONTINUE`).toEqual(
+          expect.any(String),
+        );
+        expect(collaboration?.errors?.[`${code}_REMOTE`], `${locale}:${code}_REMOTE`).toEqual(
+          expect.any(String),
+        );
+      }
     }
   });
 });

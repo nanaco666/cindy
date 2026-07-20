@@ -216,7 +216,8 @@ describe('OrcaWorkflowRoute source invariants', () => {
   });
 
   it('maps manual collaboration start failures through i18n instead of raw IPC messages', () => {
-    expect(sessionViewSource).toContain('getCollaborationStartErrorMessage(err, t)');
+    expect(sessionViewSource).toContain('getCollaborationStartErrorMessage(err, t, {');
+    expect(sessionViewSource).toContain('remoteDevice: Boolean(remoteDeviceId)');
     expect(sessionViewSource).not.toContain("ipcError?.message ?? t('newChat.collaboration.startFailed'");
   });
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLocation, useSearchParams } from 'react-router-dom';
 
 import { toast } from '@/lib/toast';
@@ -8,6 +9,7 @@ import {
   type ConversationSearchJump,
 } from '../../../../shared/conversationSearchJump';
 import type { CreateWorkerForm } from '../CreateWorkerPopover';
+import { getCollaborationStartErrorMessage } from '../collaborationErrors';
 import { createWorkerLabel } from '../workerLabel';
 import { useWorkers } from './useWorkers';
 
@@ -18,6 +20,7 @@ function parseSearchJump(state: unknown): ConversationSearchJump | null {
 
 export interface UseOrcaWorkerSelectionOptions {
   leadSessionId: string;
+  deviceId?: string;
   focusWorkerSessionId?: string | null;
   focusWorkerHintRevision?: number;
   searchJump?: ConversationSearchJump | null;
@@ -27,12 +30,14 @@ export interface UseOrcaWorkerSelectionOptions {
 
 export function useOrcaWorkerSelection({
   leadSessionId,
+  deviceId,
   focusWorkerSessionId,
   focusWorkerHintRevision,
   searchJump: searchJumpProp,
   onFocusWorkerSessionIdConsumed,
   onSelectionIntentCleared,
 }: UseOrcaWorkerSelectionOptions) {
+  const { t } = useTranslation();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const { workers, focusedWorker, activeWorkerCount, softLimit, hardLimit, refresh } =
@@ -255,11 +260,12 @@ export function useOrcaWorkerSelection({
           refresh();
         })
         .catch((err: unknown) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          toast.error(msg);
+          toast.error(
+            getCollaborationStartErrorMessage(err, t, { remoteDevice: Boolean(deviceId) }),
+          );
         });
     },
-    [leadSessionId, refresh, workers],
+    [deviceId, leadSessionId, refresh, t, workers],
   );
 
   const handleSwitchFocus = useCallback(

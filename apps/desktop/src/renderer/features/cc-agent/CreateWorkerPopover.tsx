@@ -5,9 +5,11 @@ import { X } from 'lucide-react';
 import { FastModeToggle } from '@/components/new-chat/FastModeToggle';
 import { ModelSelector } from '@/components/new-chat/ModelSelector';
 import { useAgentCapabilities } from '@/hooks/useAgentCapabilities';
+import { useDeviceProviders } from '@/hooks/useDeviceProviders';
 import { useProviders } from '@/hooks/useProviders';
 import { cn } from '@/lib/utils';
 import type { Effort } from '@/lib/userPreferences.types';
+import { selectWorkerModels } from './workerModelAvailability';
 
 const PREDEFINED_ROLES = ['developer', 'designer', 'reviewer', 'tester', 'merger'] as const;
 const PREFS_KEY = 'workerCreationPrefs';
@@ -77,6 +79,8 @@ export interface CreateWorkerPopoverProps {
   title?: string;
   submitLabel?: string;
   className?: string;
+  /** device-link controlled device; omitted for a local Lead session. */
+  deviceId?: string;
 }
 
 export function CreateWorkerPopover({
@@ -86,6 +90,7 @@ export function CreateWorkerPopover({
   title,
   submitLabel,
   className,
+  deviceId,
 }: CreateWorkerPopoverProps) {
   const { t } = useTranslation();
   const [role, setRole] = useState('developer');
@@ -97,18 +102,24 @@ export function CreateWorkerPopover({
   const [initialTask, setInitialTask] = useState('');
   const [prefs, setPrefs] = useState<WorkerPrefs>(DEFAULT_PREFS);
 
-  const ccCaps = useAgentCapabilities('claude-code');
-  const codexCaps = useAgentCapabilities('codex');
-  // codex/ 骨折模型是「XD 网关来源」:连了 XD 网关(有 key)即可选用,与是否登录 OAuth 无关。
-  const { providers, loading: providersLoading } = useProviders();
-  const xdConnected = providers.some((p) => p.id === 'xd' && p.connected);
-  const activeModels = useMemo(() => {
-    const caps = agent === 'codex' ? codexCaps.capabilities : ccCaps.capabilities;
-    const models = caps?.availableModels ?? [];
-    if (agent !== 'codex') return models;
-    return models.filter((m) => xdConnected || !m.id.startsWith('codex/'));
-  }, [agent, xdConnected, ccCaps.capabilities, codexCaps.capabilities]);
+  const ccCaps = useAgentCapabilities('claude-code', deviceId);
+  const codexCaps = useAgentCapabilities('codex', deviceId);
+  const localProviders = useProviders();
+  const remoteProviders = useDeviceProviders(deviceId);
+  const providers = deviceId ? remoteProviders.providers : localProviders.providers;
+  const providersLoading = deviceId ? remoteProviders.loading : localProviders.loading;
+  const providersError = deviceId ? remoteProviders.error : null;
   const activeCaps = agent === 'codex' ? codexCaps.capabilities : ccCaps.capabilities;
+  const activeModels = useMemo(() => {
+    return selectWorkerModels({
+      agent,
+      capabilities: activeCaps,
+      deviceId,
+      providers,
+      providersLoading,
+      providersError,
+    });
+  }, [activeCaps, agent, deviceId, providers, providersError, providersLoading]);
   const currentModel = activeModels.find((m) => m.id === model);
   const currentModelSupportsFast = Boolean(
     agent === 'codex' && activeCaps?.hasFastMode && currentModel?.supportsFastMode,
@@ -296,6 +307,7 @@ export function CreateWorkerPopover({
               onModelChange={updateModel}
               onEffortChange={updateEffort}
               vendorKey={vendorKey}
+              deviceId={deviceId}
               popoverSide="bottom"
             />
           </div>
