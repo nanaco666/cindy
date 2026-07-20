@@ -486,7 +486,7 @@ interface ChatInputProps {
   topSlot?: React.ReactNode;
   /**
    * 协同模式开关 (Claude / Codex Lead session 中途 toggle Worker)。
-   * 提供时:底部工具行右侧渲染 puzzle pill (CollaborationModeToggle),
+   * 提供时:底部工具行右侧渲染双人像 pill (CollaborationModeToggle),
    *        ON 态点击 pill 即触发关闭 (由 parent 决定确认弹窗)。
    * 不提供时:不渲染 (老调用方零迁移)。
    * 状态完全由 parent 持有 (controlled);ChatInput 只做展示与事件转发。

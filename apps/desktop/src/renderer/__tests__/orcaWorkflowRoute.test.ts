@@ -79,6 +79,22 @@ const chatInputSource = readTextLf(
   resolve(__dirname, '..', 'components', 'new-chat', 'ChatInput.tsx'),
   'utf8',
 );
+const collaborationModeToggleSource = readTextLf(
+  resolve(__dirname, '..', 'components', 'new-chat', 'CollaborationModeToggle.tsx'),
+  'utf8',
+);
+const sessionStatusIconSource = readTextLf(
+  resolve(__dirname, '..', 'features', 'cc-agent', 'sidebar', 'SessionStatusIcon.tsx'),
+  'utf8',
+);
+const rightSidebarTabBarSource = readTextLf(
+  resolve(__dirname, '..', 'features', 'right-sidebar', 'TabBar.tsx'),
+  'utf8',
+);
+const orcaWorkersPluginSource = readTextLf(
+  resolve(__dirname, '..', 'features', 'right-sidebar', 'plugins', 'orca-workers', 'index.tsx'),
+  'utf8',
+);
 const messageStreamSource = readTextLf(
   resolve(__dirname, '..', 'components', 'chat', 'MessageStream.tsx'),
   'utf8',
@@ -139,6 +155,16 @@ describe('OrcaWorkflowRoute worker session lookup contract', () => {
 });
 
 describe('OrcaWorkflowRoute source invariants', () => {
+  it('uses the right-sidebar UsersRound mark for every collaboration entry point', () => {
+    expect(rightSidebarTabBarSource).toContain("'orca-workers': UsersRound");
+    expect(orcaWorkersPluginSource).toContain('<UsersRound size={13} />');
+    expect(collaborationModeToggleSource.match(/<UsersRound/g)).toHaveLength(3);
+    expect(collaborationModeToggleSource).not.toContain('<Puzzle');
+    expect(sessionStatusIconSource).toContain('<UsersRound');
+    expect(sessionStatusIconSource).not.toContain('<Puzzle');
+    expect(sessionStatusIconSource).toContain("'text-[var(--text-secondary-mid)]'");
+  });
+
   it('keeps /orca as a legacy compatibility redirect to the plain lead route', () => {
     expect(routeSource).toContain('const { sessions, isLoading } = useCCSessions()');
     expect(routeSource).toContain('if (!sessionId || isLoading) return;');
