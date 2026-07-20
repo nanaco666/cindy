@@ -874,8 +874,10 @@ describe('ghost · setup 就绪声明校验(使用前置检查,2026-07-21)', () 
     expect(result.reason).toContain('重复');
   });
 
-  it('requires 空数组 / 空组拒装', () => {
-    expect(validateGhostManifest({ ...setupBase(), setup: { requires: [] } }).ok).toBe(false);
+  it('requires 空数组 = 显式 opt-out(合法,恒就绪声明);空组仍拒装', () => {
+    const optOut = validateGhostManifest({ ...setupBase(), setup: { requires: [] } });
+    expect(optOut.ok).toBe(true);
+    if (optOut.ok) expect(optOut.manifest.setup).toEqual({ requires: [] });
     expect(validateGhostManifest({ ...setupBase(), setup: { requires: [{ anyOf: [] }] } }).ok).toBe(false);
   });
 });

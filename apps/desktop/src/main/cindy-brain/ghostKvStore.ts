@@ -36,6 +36,13 @@ export interface GhostKvStore {
   /** 读某意识的 KV;无文件 / 损坏 → {}(永不抛)。 */
   read(ghostId: string): Record<string, unknown>;
   /**
+   * 严格读:无文件 → {},但 IO 异常 / JSON 损坏**原样上抛**。setup 就绪
+   * 检查(ghosts:setup-status)专用——「查询失败」≠「未配置」,不能拿
+   * read 的宽松口径把存储层故障误判成缺配置去拦用户;设置页协议端点
+   * 仍走 read(损坏不炸设置页的语义不变)。
+   */
+  readStrict(ghostId: string): Record<string, unknown>;
+  /**
    * 整体覆盖写;值非 plain object 或序列化超限时抛带 code 的错
    * ('INVALID_VALUE' | 'TOO_LARGE' | 'INVALID_GHOST_ID'),由端点层折叠成状态码。
    */
@@ -147,6 +154,20 @@ export function createGhostKvStore(options: {
         log?.warn('ghost KV 文件损坏,按空对象处理', { ghostId });
         return {};
       }
+    },
+
+    readStrict(ghostId) {
+      const file = fileFor(ghostId);
+      let text: string;
+      try {
+        text = fs.readFileSync(file, 'utf8');
+      } catch (err) {
+        // 无文件 = 从未写过(合法的"未配置");其它 IO 异常上抛给调用方。
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return {};
+        throw err;
+      }
+      const parsed: unknown = JSON.parse(text); // 损坏即抛,不折叠成"未配置"
+      return isPlainObject(parsed) ? parsed : {};
     },
 
     write(ghostId, value) {

@@ -296,14 +296,15 @@ export function GhostPluginPage() {
   }, [navigate, t]);
 
   // 打开插件详情并滚到「配置」区(就绪弹窗的「去配置」动作)。详情视图
-  // 可能尚未挂载,滚动排到渲染之后的下一帧。
+  // 可能尚未挂载,滚动排到渲染之后的下一帧;减弱动效时改即时定位。
   const openGhostConfiguration = useCallback((id: string) => {
     setSelectedId(id);
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         document
           .getElementById('ghost-configuration-title')
-          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          ?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
       });
     });
   }, []);
@@ -327,6 +328,8 @@ export function GhostPluginPage() {
           description: formatSetupGateDescription(setupStatus, t),
           confirmText: t('settings.ghosts.setupGate.configure'),
           cancelText: t('settings.ghosts.setupGate.cancel'),
+          // 主操作「去配置」非破坏性,默认焦点落主按钮(弹窗契约的适用场景)。
+          autoFocusConfirm: true,
         });
         if (goConfigure) openGhostConfiguration(id);
         return;

@@ -2085,9 +2085,9 @@
       },
       "setupGate": {
         "title": "「{{name}}」は設定が必要です",
-        "descriptionMissing": "使用する前に次の設定が必要です:{{items}}。今すぐプラグイン設定に移動しますか?",
-        "descriptionReauth": "アカウントの認証が期限切れです:{{items}}。再接続すると使用できます。今すぐ移動しますか?",
-        "configure": "設定へ",
+        "descriptionMissing": "使用する前に次の設定が必要です：{{items}}。今すぐプラグイン設定を開きますか？",
+        "descriptionReauth": "アカウントの認証が期限切れです：{{items}}。再接続すると使用できます。今すぐ設定を開きますか？",
+        "configure": "設定を開く",
         "cancel": "キャンセル",
         "anySeparator": " または ",
         "groupSeparator": "、"

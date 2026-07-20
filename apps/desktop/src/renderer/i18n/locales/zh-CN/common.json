@@ -2085,9 +2085,9 @@
       },
       "setupGate": {
         "title": "「{{name}}」还需要完成配置",
-        "descriptionMissing": "使用前还需要配置:{{items}}。现在前往插件配置页完成设置吗?",
-        "descriptionReauth": "账号授权已过期:{{items}}。重新连接后才能使用,现在前往吗?",
-        "configure": "去配置",
+        "descriptionMissing": "使用前还需要配置：{{items}}。现在前往插件配置页完成设置吗？",
+        "descriptionReauth": "账号授权已过期：{{items}}。重新连接后才能使用，现在前往吗？",
+        "configure": "打开插件设置",
         "cancel": "取消",
         "anySeparator": " 或 ",
         "groupSeparator": "、"

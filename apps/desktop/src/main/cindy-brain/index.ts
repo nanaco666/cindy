@@ -53,7 +53,7 @@ import {
 } from './runtime/electronSandboxAdapter.js';
 import { CURRENT_CINDY_REGION } from '../../shared/brandRegion.js';
 import { createGhostKvStore, removeGhostKvBestEffort } from './ghostKvStore.js';
-import { evaluateGhostSetup } from './ghostSetupStatus.js';
+import { handleGhostSetupStatusRequest } from './ghostSetupStatus.js';
 import { handleGhostSecretsRequest } from './runtime/ghostSecretsEndpoint.js';
 import { handleGhostOauthRequest } from './runtime/ghostOauthEndpoint.js';
 import { handleGhostConnectionsRequest } from './runtime/ghostConnectionsEndpoint.js';
@@ -117,6 +117,7 @@ import {
 } from './subscriptionGateway.js';
 import { GhostExternalLinkGate, GhostPreviewGate, resolveGhostPanelMedia } from './previewGate.js';
 import {
+  ghostSecretSaved,
   readGhostSecret,
   readGhostSecretTail,
   removeGhostSecret,
@@ -2110,41 +2111,55 @@ export function registerGhostIpc(): void {
     }
   });
 
-  // ── 配置就绪检查(使用前置门,判定真身 ghostSetupStatus.ts)────────────
+  // ── 配置就绪检查(使用前置门,判定与 handler 主体在 ghostSetupStatus.ts)──
   // 插件页点「使用」时现查:清单推导需求(有 setup 声明按声明,无则启发式),
   // 逐项核对保险库 / OAuth 账号 / 连接 / kv。全同步毫秒级、不缓存、不唤沙箱;
   // oauth 判定用运行时清单(filo-google 的内置 client 是运行时注入的,读原始
-  // 清单会把「开箱即用」误判成未配置)。判定只管存在性,key 有效性仍由运行期
-  // networkSlot 出网 fail-fast 兜底。
-  ipcMain.handle('ghosts:setup-status', (_event, id: unknown) => {
-    if (typeof id !== 'string' || !isValidGhostId(id)) {
-      throwIpcError('INVALID_PARAMS', 'id must be a valid Ghost id');
-    }
-    const ghost = manager.list().find((g) => g.manifest.id === id);
-    if (!ghost) throwIpcError('NOT_FOUND', `意识 ${id} 未安装`);
-    const runtimeManifest = withRuntimeFiloGoogleClient(ghost.manifest);
-    const oauthManager = getGhostOauthAccountManager();
-    const connectionManager = getGhostConnectionManager();
-    // kv 单意识单文件,同一次判定内最多读一次(多条 kv 需求不重复开盘)。
-    let kvSnapshot: Record<string, unknown> | null = null;
-    return evaluateGhostSetup(runtimeManifest, {
-      secretSaved: (key) => readGhostSecret(id, key) !== null,
-      oauthStatus: (key) => {
-        const decl = runtimeManifest.network?.secrets?.find((s) => s.key === key)?.oauth;
-        const accounts = oauthManager.listAccounts(id, key);
+  // 清单会把「开箱即用」误判成未配置)。判定只管存在性:user 凭证只查加密
+  // 文件存在(不解密);key 有效性仍由运行期 networkSlot 出网 fail-fast 兜底。
+  // 探针意外抛错不捕获——invoke reject 后 renderer 放行(fail-open),
+  // 不把「查询失败」折叠成「未配置」误拦。
+  ipcMain.handle('ghosts:setup-status', (_event, id: unknown) =>
+    handleGhostSetupStatusRequest({
+      id,
+      getRuntimeManifest: (ghostId) => {
+        const ghost = manager.list().find((g) => g.manifest.id === ghostId);
+        return ghost ? withRuntimeFiloGoogleClient(ghost.manifest) : null;
+      },
+      probesFor: (runtimeManifest) => {
+        const ghostId = runtimeManifest.id;
+        const oauthManager = getGhostOauthAccountManager();
+        const connectionManager = getGhostConnectionManager();
+        // kv 单意识单文件,同一次判定内最多读一次(多条 kv 需求不重复开盘);
+        // 走 readStrict:IO 异常 / 文件损坏上抛 → invoke reject → renderer
+        // fail-open,不折叠成「未配置」。secrets 探针同口径(statSync 区分
+        // ENOENT 与真 IO 错误)。oauth / connections 沿用与 /oauth、
+        // /connections 设置页端点完全相同的读取真身(保险库读取失败折叠为
+        // 「无账号 / 无连接」)——有意保持两处口径一致:即便极端情况下保险
+        // 库损坏,引导弹窗指向的设置页展示的也是同一状态,不产生自相矛盾的
+        // 界面;且这类故障下运行期注入同样不可用,引导去设置页重连本就是
+        // 正确动作。
+        let kvSnapshot: Record<string, unknown> | null = null;
         return {
-          clientConfigured: oauthManager.clientConfigured(id, key, decl),
-          connected: accounts.filter((a) => a.status === 'connected').length,
-          expired: accounts.filter((a) => a.status === 'expired').length,
+          secretSaved: (key) => ghostSecretSaved(ghostId, key),
+          oauthStatus: (key) => {
+            const decl = runtimeManifest.network?.secrets?.find((s) => s.key === key)?.oauth;
+            const accounts = oauthManager.listAccounts(ghostId, key);
+            return {
+              clientConfigured: oauthManager.clientConfigured(ghostId, key, decl),
+              connected: accounts.filter((a) => a.status === 'connected').length,
+              expired: accounts.filter((a) => a.status === 'expired').length,
+            };
+          },
+          connectionCount: (key) => connectionManager.list(ghostId, key).length,
+          kvValue: (key) => {
+            if (kvSnapshot === null) kvSnapshot = ghostKv.readStrict(ghostId);
+            return kvSnapshot[key];
+          },
         };
       },
-      connectionCount: (key) => connectionManager.list(id, key).length,
-      kvValue: (key) => {
-        if (kvSnapshot === null) kvSnapshot = ghostKv.read(id);
-        return kvSnapshot[key];
-      },
-    });
-  });
+    }),
+  );
 
   // ── 面板媒体换发(拖拽引渡 + 右键菜单)──────────────────────────────
   // 只由宿主 renderer(可信应用层)调用——意识面板零桥碰不到 IPC。

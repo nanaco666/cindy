@@ -300,6 +300,25 @@ export function readGhostSecret(ghostId: string, secretKey: string): string | nu
 }
 
 /**
+ * 只查某意识凭证是否已入库(加密文件存在性,**不解密**)。插件页 setup
+ * 就绪检查专用:判定只需要「存没存」,解密既无必要,还会把 safeStorage
+ * 读取异常折叠成「未配置」造成误拦——存在性口径下,文件在就算已配置
+ * (即便当下解密不可用,那是注入期要处理的问题,不该拦在使用入口)。
+ * ENOENT 之外的真 IO 异常(如权限)**原样上抛**:「查询失败」≠「未配置」,
+ * 调用方(ghosts:setup-status)让 invoke reject,renderer 侧 fail-open。
+ * 键名走 ghostSecretStorageKey(官方别名同 read 侧)。
+ */
+export function ghostSecretSaved(ghostId: string, secretKey: string): boolean {
+  try {
+    fs.statSync(path.join(secretDir(), `${ghostSecretStorageKey(ghostId, secretKey)}.enc`));
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw err;
+  }
+}
+
+/**
  * 写入某意识的某条 network 槽凭证(**main 侧 /secrets 只写通道专用**,
  * input:'ghost' 凭证由意识 settingsHtml 收单后经协议一次性交来)。
  * 键名走 ghostSecretStorageKey(官方别名同 read 侧),与 renderer 写入的
