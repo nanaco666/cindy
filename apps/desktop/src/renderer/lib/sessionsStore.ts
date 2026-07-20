@@ -143,9 +143,10 @@ export const sessionsStore = {
    * 局部合并（rename / pin / title / updatedAt / model / clearSession 等
    * "字段变化"全部走这里）。遍历所有桶：命中即合并字段，保留位置不重排序。
    *
-   * 跨桶迁移特例：当 patch.status 出现时，session 的桶归属可能变化
-   * （active ↔ archived，或被 delete 移出所有桶）。patchLocal 只能就地改字段，
-   * 既无法把 session 加进新桶，也无法把它从旧桶移除——会导致：
+   * 跨桶迁移特例：当 patch.status 出现时，session 的桶归属可能变化。
+   * deleted 的归属是确定的，直接从所有已加载桶移除，不依赖后台重拉；
+   * active ↔ archived 既要移出旧桶、又可能加入已加载的新桶，仍需 drop 不一致的桶重拉。
+   * 如果只就地改字段而不修正归属，会导致：
    *   1. 旧桶里"假活着"（status 已变但条目仍在）
    *   2. 新桶 cache 命中但缺这一条（用户切桶后看不到）
    * 因此 status 变更后,把所有桶归属判定与实际不符的桶 drop 掉,下次
@@ -153,6 +154,19 @@ export const sessionsStore = {
    */
   patchLocal(id: string, patch: Partial<Session>): void {
     if (!id || !patch) return;
+    if (patch.status === 'deleted') {
+      let removed = false;
+      for (const [filter, list] of cache) {
+        if (!list.some((session) => session.id === id)) continue;
+        cache.set(
+          filter,
+          list.filter((session) => session.id !== id),
+        );
+        removed = true;
+      }
+      if (removed) notify();
+      return;
+    }
     let touched = false;
     for (const [k, list] of cache) {
       const idx = list.findIndex((s) => s.id === id);
@@ -166,7 +180,6 @@ export const sessionsStore = {
     if (patch.status !== undefined) {
       const newStatus = patch.status;
       const belongsIn = (filter: ListStatusFilter): boolean => {
-        if (newStatus === 'deleted') return false;
         if (filter === 'all') return true;
         return filter === newStatus;
       };

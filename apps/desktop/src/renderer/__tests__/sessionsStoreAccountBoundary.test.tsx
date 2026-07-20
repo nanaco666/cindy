@@ -83,4 +83,19 @@ describe('sessionsStore account boundaries', () => {
     });
     expect(view.result.current.isLoading).toBe(false);
   });
+
+  it('removes a deleted session from every loaded filter without refetching', async () => {
+    mocks.list
+      .mockResolvedValueOnce([session('deleted'), session('keep-active')])
+      .mockResolvedValueOnce([session('deleted'), session('keep-all')]);
+    await sessionsStore.ensureByFilter('active');
+    await sessionsStore.ensureByFilter('all');
+    mocks.list.mockReset();
+
+    act(() => sessionsStore.patchLocal('deleted', { status: 'deleted' }));
+
+    expect(sessionsStore.getByFilter('active')?.map(({ id }) => id)).toEqual(['keep-active']);
+    expect(sessionsStore.getByFilter('all')?.map(({ id }) => id)).toEqual(['keep-all']);
+    expect(mocks.list).not.toHaveBeenCalled();
+  });
 });
