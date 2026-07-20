@@ -72,16 +72,26 @@ function firstSystemText(system: unknown): string | null {
 }
 
 /**
- * 精确识别 Claude Code 内部 Auto 安全分类器请求。
+ * 分类器输出恒为小 token(一个 verdict 或短 thinking):观测到的三种请求形态 max_tokens
+ * 为 64+k(2-stage 第一阶段)、256+k(fast)、8192+k(thinking 第二阶段)。取 2x 余量的上界
+ * 作防御性副判据——最大形态是 8192+k,16384 远高于它、不会重新引入漏检,同时能把"恰好
+ * 以分类器前缀开头的大输出普通请求"挡在外面。
+ */
+const CLASSIFIER_MAX_TOKENS_CEILING = 16384;
+
+/**
+ * 精确识别 Claude Code 内部 Auto 安全分类器请求。双判据都满足才算命中:
  *
- * 判据是分类器独有的 system 前缀:分类器请求带 `skipSystemPromptPrefix`,其 system 段
+ * 主判据 —— 分类器独有的 system 前缀:分类器请求带 `skipSystemPromptPrefix`,其 system 段
  * 恒以 CLASSIFIER_SYSTEM_PREFIX 开头;普通主 turn 的 system 是 Claude Code 常规 prompt,
- * 二者完全区分,故前缀是充分且无误伤的判据。
+ * 二者完全区分。前缀是分类器身份,本身已足够;
  *
- * 不用 max_tokens 做判据:分类器有三种请求形态,max_tokens 分别是 256+k(fast)、
- * 64+k(2-stage 第一阶段)、8192+k(thinking 第二阶段)——用任一定值(早期实现取 64)都会
- * 漏检其余两条路径,漏检时该路径下的分类器 429/5xx 不会触发降级,会话继续 fail-closed。
- * 只在 429/5xx 错误路径调用,parse 一次 body 成本可忽略;畸形/无前缀一律 false。
+ * 副判据 —— max_tokens 上界(防御性,收窄理论碰撞面):不用固定值(分类器三种形态 max_tokens
+ * 各不相同,早期实现取定值 64 只覆盖一条、漏检 fast/thinking,漏检时降级不触发、会话继续
+ * fail-closed),改用覆盖全部形态的宽松上界,把"同会话中恰好以分类器前缀开头的大输出请求"
+ * 排除掉,避免把它的 429/5xx 误判成分类器故障而错误降级。
+ *
+ * 只在 429/5xx 错误路径调用,parse 一次 body 成本可忽略;畸形/无 max_tokens/超上界/无前缀一律 false。
  */
 export function isClaudeAutoClassifierRequest(requestBody: Buffer): boolean {
   let parsed: unknown;
@@ -91,6 +101,9 @@ export function isClaudeAutoClassifierRequest(requestBody: Buffer): boolean {
     return false;
   }
   if (!isRecord(parsed)) return false;
+  if (typeof parsed.max_tokens !== 'number' || parsed.max_tokens > CLASSIFIER_MAX_TOKENS_CEILING) {
+    return false;
+  }
   return firstSystemText(parsed.system)?.startsWith(CLASSIFIER_SYSTEM_PREFIX) === true;
 }
 

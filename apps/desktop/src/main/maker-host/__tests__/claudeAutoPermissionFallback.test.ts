@@ -65,17 +65,11 @@ describe('Claude Auto classifier request detection', () => {
   });
 
   it('detects every classifier max_tokens shape (fast 256 / stage1 64 / thinking 8192)', () => {
-    // 判据是 system 前缀,不再依赖固定 max_tokens——三条分类器路径都必须命中,
+    // 不再依赖固定 max_tokens——三条分类器路径(含 +k 变体)都必须命中,
     // 否则 fast / thinking 路径的 429 会漏检、不触发降级。
-    for (const max_tokens of [64, 256, 8192, 65, 320, 8256]) {
+    for (const max_tokens of [64, 256, 8192, 65, 320, 8256, 16384]) {
       expect(isClaudeAutoClassifierRequest(requestBody({ max_tokens }))).toBe(true);
     }
-    // 甚至缺省 max_tokens 时,只要 system 前缀命中仍识别。
-    expect(
-      isClaudeAutoClassifierRequest(
-        Buffer.from(JSON.stringify({ system: [{ type: 'text', text: CLASSIFIER_PREFIX }] })),
-      ),
-    ).toBe(true);
   });
 
   it('fails closed for malformed or lookalike requests', () => {
@@ -88,6 +82,15 @@ describe('Claude Auto classifier request detection', () => {
     expect(
       isClaudeAutoClassifierRequest(
         requestBody({ system: 'You are Claude Code, Anthropic official CLI' }),
+      ),
+    ).toBe(false);
+    // 防御性副判据:即便 system 恰好以分类器前缀开头,大输出请求(超上界)也不误判为
+    // 分类器故障——闭合「前缀碰撞 → 错误降级」的理论窗口。
+    expect(isClaudeAutoClassifierRequest(requestBody({ max_tokens: 32000 }))).toBe(false);
+    // 缺省 max_tokens(分类器恒会设置)同样不命中。
+    expect(
+      isClaudeAutoClassifierRequest(
+        Buffer.from(JSON.stringify({ system: [{ type: 'text', text: CLASSIFIER_PREFIX }] })),
       ),
     ).toBe(false);
   });
