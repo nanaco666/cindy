@@ -21,10 +21,11 @@ apply". Treat the following as a contract, not optional steps:
   *different* branch). "The app opened" ≠ "it loaded my bundle".
 - **Evidence required before trusting the simulator:**
   1. The `__DEV__` build label at the top of the new-session screen shows
-     `branch · vX (build) · <metro host:port>`, and that branch is **your**
-     branch. (Injected by `mobile:sim:start`; see below.)
-  2. `pnpm mobile:sim:whoami` confirms the booted install + maps each Metro port
-     to its worktree — the label's port must map to your worktree.
+     `branch@commit+dirty-fingerprint · vX (build) · <metro host:port>`, and the
+     fingerprint is **your current worktree**. (Injected by `mobile:sim:start`; see below.)
+  2. `pnpm mobile:sim:whoami` exits nonzero unless a booted development client,
+     the current worktree's `8081` Metro, and the exact source fingerprint all
+     agree; the label's port must map to your worktree.
   3. The Metro terminal printed a fresh `iOS Bundled …` after your edit.
 
 ### Tools (use these instead of ad-hoc `lsof`/`PlistBuddy`/deep-link dances)
@@ -38,17 +39,25 @@ pnpm mobile:sim:whoami -- --region=global # inspect the global native app + Metr
 pnpm mobile:sim:rebuild    # rebuild + reinstall the cn native dev app (native changes only)
 ```
 
-`mobile:sim:start` and `mobile:sim:rebuild` default to `cn`. They synchronize
+`mobile:sim:start` and `mobile:sim:rebuild` default to `cn`. Before touching
+Expo, all `mobile:sim:*` commands initialize the protocol submodule and repair
+the workspace dependencies when needed. The start/rebuild scripts also
+synchronize
 the selected build region and the matching `config/endpoint*.json` bootstrap
 base into `apps/mobile/.env`. Local Xcode / Simulator builds also read the selected
 block from the gitignored `apps/mobile/scripts/self-host-regions.json` for bundle
-identity, TapDB, and global Google client configuration; copy and fill
-`self-host-regions.json.example` first. You do not need to inject those public
-values or endpoint variables into `.env` by hand.
+identity, TapDB, and global Google client configuration. If this gitignored file
+is absent, the scripts automatically reuse and validate it from a registered
+personal-client or main worktree without printing its values; if no valid copy
+exists, copy and fill `self-host-regions.json.example` first. You do not need to
+inject those public values or endpoint variables into `.env` by hand.
 
-The new-session build label reads branch/commit from `EXPO_PUBLIC_XDT_GIT_*` (set by
-`mobile:sim:start`) and the Metro host from `Constants.expoConfig.hostUri`. It is
-`__DEV__`-only and compiled out of release builds. branch/commit are
+The new-session build label reads the exact source fingerprint plus branch/commit
+from `EXPO_PUBLIC_XDT_GIT_*` (set by `mobile:sim:start`) and the Metro host from
+`Constants.expoConfig.hostUri`. The fingerprint is `branch@commit` for a clean
+worktree and adds a hash of tracked/known untracked changes for a dirty one, so
+an amend/rebase/reset or later edit cannot masquerade as the old Metro. It is
+`__DEV__`-only and compiled out of release builds. branch/commit/fingerprint are
 intentionally NOT injected via `app.config.js`/`extra`: that would change the
 `@expo/fingerprint` runtime version on every commit and break OTA. `EXPO_PUBLIC_*`
 lives in the JS bundle and does not affect the fingerprint. The sim scripts also
@@ -67,6 +76,9 @@ input — adding a script there would bump the mobile runtime version.
   (you can only run one mobile dev session at a time); if it's this worktree's own
   Metro it just says "already running". Use `mobile:sim:whoami` to see who owns
   each port. Override with `-- --port <p>` only if you'll point the app there yourself.
+- If `8081` belongs to this worktree but its injected fingerprint no longer equals
+  the current worktree, `mobile:sim:start` refuses instead of claiming Metro is
+  reusable. Stop it and start Metro again after the amend/rebase/reset or edit.
 
 ### Native build gotcha
 
@@ -158,7 +170,9 @@ pnpm mobile:sim:whoami -- --region=global # global
 
 `mobile:sim:whoami` resolves the selected identity from `app.config.js` plus the
 gitignored `scripts/self-host-regions.json`, then prints the installed version
-and build number from that app's `Info.plist`. Expected version values come from
+and build number from that app's `Info.plist`. It is a doctor command: no booted
+device, no selected native app, no current-worktree `8081` Metro, or a source
+fingerprint mismatch makes it exit nonzero. Expected version values come from
 `apps/mobile/app.json`:
 
 - `ios.bundleIdentifier`

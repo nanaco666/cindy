@@ -1,12 +1,14 @@
 // Entry: Electron startup → bootstrap-electron.ts (dynamic import).
 import fixPath from 'fix-path';
 import { app } from 'electron';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { setDefaultAutoSelectFamilyAttemptTimeout } from 'node:net';
 import { exit, stderr } from 'node:process';
 import { CURRENT_CINDY_REGION } from '../shared/brandRegion.js';
 import { resolveRegionUserDataDirName } from './regionUserData.js';
 import { createLogger, initLogger } from './logger.js';
+import { beginDesktopDevInstance, type DesktopDevMode } from './devStartupStatus.js';
 
 // 同机双装(cn/global):global 构建把 userData 切到区域目录(CindyGlobal),
 // 与 cn 版(productName 默认 'Cindy')彻底分库;数据库 / 登录态 / 单实例锁 /
@@ -79,6 +81,7 @@ const devFlags = resolveDevCliFlags({
   envIsolated: process.env.XDT_ISOLATED,
   envIsolationName: process.env.XDT_ISOLATED_NAME,
   envDeviceIdOverride: process.env.XDT_DEVICE_ID_OVERRIDE,
+  envSchedulerPassive: process.env.XDT_SCHEDULER_PASSIVE,
   envEndpointsCdn: process.env.XDT_ENDPOINTS_CDN,
 });
 if (devFlags.schedulerPassive) {
@@ -124,6 +127,33 @@ if (devFlags.needsIsolatedDeviceId) {
   }
   process.env.XDT_DEVICE_ID_OVERRIDE = isolatedDeviceId;
   stderr.write(`[cindy] dev isolated deviceId → ${isolatedDeviceId}\n`);
+}
+
+if (!app.isPackaged) {
+  const rootDir = path.resolve(app.getAppPath(), '..', '..');
+  let commit: string | null = null;
+  try {
+    commit = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: rootDir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim() || null;
+  } catch {
+    // Source provenance remains useful without a commit in exported/unusual checkouts.
+  }
+  const declaredMode = process.env.XDT_DESKTOP_DEV_MODE;
+  const mode: DesktopDevMode = declaredMode === 'remote' || declaredMode === 'local'
+    ? declaredMode
+    : 'unknown';
+  const cleanupDevInstance = beginDesktopDevInstance({
+    userDataDir: app.getPath('userData'),
+    rootDir,
+    commit,
+    mode,
+    passive: devFlags.schedulerPassive,
+    isolated: Boolean(devFlags.userDataDirOverride),
+  });
+  app.once('will-quit', cleanupDevInstance);
 }
 
 async function dispatch(): Promise<void> {

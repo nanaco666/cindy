@@ -2724,7 +2724,11 @@
       "styleTweaks": "样式调整",
       "styleReset": "重置",
       "styleTextLabel": "文本",
-      "moreToolsComingSoon": "更多工具(开发中)",
+      "moreTools": "更多",
+      "openInSystemBrowser": "在系统浏览器打开",
+      "copyLink": "复制链接",
+      "linkCopied": "已复制链接到剪贴板",
+      "copyLinkFailed": "复制链接失败",
       "crash": {
         "crashedTitle": "页面崩溃",
         "crashedDesc": "网页进程意外终止,请重新加载",

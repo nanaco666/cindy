@@ -22,7 +22,7 @@ if (!command) {
 }
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-const env = { ...process.env };
+const env = { ...process.env, XDT_DESKTOP_DEV_MODE: 'local' };
 if (!env.XDT_ENDPOINT_MANIFEST_FILE?.trim()) {
   env.XDT_ENDPOINT_MANIFEST_FILE = generateEndpointLocalFile({ repoRoot });
   console.log(`[dev-local-env] endpoint manifest → ${env.XDT_ENDPOINT_MANIFEST_FILE}`);
