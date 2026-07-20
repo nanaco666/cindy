@@ -31,10 +31,15 @@ import fs from 'node:fs';
 import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
 
 import { createBetterSqliteDatabase } from './betterSqliteFactory';
-import { runMigrations } from './migrate';
+import {
+  getDrizzleDir,
+  prepareBackupDiskSpace,
+  pruneMigrationBackupsToBudget,
+  runMigrations,
+} from './migrate';
 import { tryRestoreWithFallback, backupDb, restrictLegacyBackupPermissions } from './backup';
 import { detectSchemaDrift } from './schemaDriftDetector';
-import { repairSchemaDrift } from './schemaDriftRepair';
+import { repairSchemaDriftWithBackup } from './schemaDriftRepair';
 import { reconcileKnownEquivalentMigrationHashes } from './schemaDriftCompatibility';
 import { cleanupStaleOrcaLeadIndex } from './orcaStaleIndexCleanup';
 import { reconcileStrandedOrcaLeads } from './orcaStrandedLeadReconcile';
@@ -43,6 +48,17 @@ import { dialogueWorkspaceRootDir } from './dialogueWorkspace';
 import { repairManagedDialogueWorkspaceSessions } from './managedDialogueWorkspaceRepair';
 import * as schema from './schema';
 import { loadSqliteVec, resetSqliteVecState } from './sqliteVecLoader';
+import {
+  checkMigrationCompatibility,
+  prepareMigrationRuntimeManifest,
+  readSchemaVersion,
+} from './migrationRunner';
+import {
+  acquireSchemaMigrationWriterLease,
+  SchemaMigrationReaderLeaseLifecycle,
+  type SchemaMigrationLease,
+} from './schemaMigrationLease';
+import { runSchemaStartupPolicy } from './schemaStartupPolicy';
 
 import { createLogger } from '../logger';
 
@@ -53,6 +69,7 @@ let _drizzle: BetterSQLite3Database<typeof schema> | null = null;
 let _currentUserId: string | null = null;
 let _currentDbPath: string | null = null;
 let _optimizeTimer: NodeJS.Timeout | null = null;
+const schemaMigrationReaderLeaseLifecycle = new SchemaMigrationReaderLeaseLifecycle();
 
 // PRAGMA optimize 周期 (SQLite 官方对长连接的推荐: 启动一次 + 周期一次 + 关闭前一次)
 const OPTIMIZE_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -85,7 +102,13 @@ function dbPath(userId: string): string {
 
 export type EnsureReadyResult =
   | { ready: true }
-  | { ready: false; error: { code: 'DB_INIT_FAILED' | 'DB_CORRUPT_NO_BACKUP' | 'MIGRATE_FAILED'; message: string } };
+  | {
+      ready: false;
+      error: {
+        code: 'DB_INIT_FAILED' | 'DB_CORRUPT_NO_BACKUP' | 'MIGRATE_FAILED';
+        message: string;
+      };
+    };
 
 /**
  * 按 userId 准备本地 db。
@@ -119,6 +142,42 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
   }
 
   const filePath = dbPath(userId);
+  const passiveSharedUserData = !app.isPackaged && process.env.XDT_PASSIVE_SHARED_USER_DATA === '1';
+  let startupWriterLease: SchemaMigrationLease | null = null;
+  let readerLeaseAcquiredThisCall = false;
+
+  if (passiveSharedUserData) {
+    const leaseResult = schemaMigrationReaderLeaseLifecycle.ensure(filePath);
+    if (!leaseResult.acquired) {
+      const message =
+        'passive dev 暂时无法打开共享数据库：另一个实例正在执行 schema migration。' +
+        '请稍后重试，或改用 --isolated。';
+      showFatalDialog('passive dev 等待数据库迁移', message);
+      return { ready: false, error: { code: 'MIGRATE_FAILED', message } };
+    }
+    readerLeaseAcquiredThisCall = leaseResult.newlyAcquired;
+  } else {
+    const leaseResult = acquireSchemaMigrationWriterLease(filePath);
+    if (!leaseResult.acquired) {
+      const readerHint = leaseResult.activeReaderCount
+        ? `（当前有 ${leaseResult.activeReaderCount} 个 passive 实例）`
+        : '';
+      const message =
+        `当前不能执行数据库 schema 启动维护${readerHint}。` +
+        '请先关闭共享该 userData 的 passive dev 后重试，或让这些实例使用 --isolated。';
+      showFatalDialog('数据库 schema 正被其它实例使用', message);
+      return { ready: false, error: { code: 'MIGRATE_FAILED', message } };
+    }
+    startupWriterLease = leaseResult.lease;
+  }
+
+  const releaseSchemaLeasesAfterFailure = (): void => {
+    startupWriterLease?.release();
+    startupWriterLease = null;
+    if (readerLeaseAcquiredThisCall) {
+      schemaMigrationReaderLeaseLifecycle.release();
+    }
+  };
   log.info(
     JSON.stringify({
       event: 'localDb.ensureReady.open',
@@ -134,9 +193,21 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
     const message = err instanceof Error ? err.message : String(err);
     const errCode = (err as { code?: string }).code ?? '';
     if (errCode === 'SQLITE_CORRUPT' || /corrupt/i.test(message)) {
+      if (passiveSharedUserData) {
+        const passiveMessage =
+          'passive dev 检测到共享数据库损坏，但不会在其它实例可能运行时自动恢复。' +
+          '请关闭 passive 实例后用 primary 启动恢复，或改用 --isolated。';
+        showFatalDialog('passive dev 无法恢复共享数据库', passiveMessage);
+        releaseSchemaLeasesAfterFailure();
+        return {
+          ready: false,
+          error: { code: 'DB_CORRUPT_NO_BACKUP', message: passiveMessage },
+        };
+      }
       const restored = tryRestoreWithFallback(filePath);
       if (!restored) {
         showFatalDialog('数据库损坏且无可用备份', message);
+        releaseSchemaLeasesAfterFailure();
         return { ready: false, error: { code: 'DB_CORRUPT_NO_BACKUP', message } };
       }
       try {
@@ -144,6 +215,7 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
       } catch (reopenErr) {
         const reopenMsg = reopenErr instanceof Error ? reopenErr.message : String(reopenErr);
         showFatalDialog('数据库恢复后仍无法打开', reopenMsg);
+        releaseSchemaLeasesAfterFailure();
         return { ready: false, error: { code: 'DB_CORRUPT_NO_BACKUP', message: reopenMsg } };
       }
       // 通知所有渲染窗一次性 toast（M-FE6 useCorruptionRestoredToast 消费）
@@ -160,6 +232,7 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
       }
     } else {
       showFatalDialog('无法初始化本地数据库', message);
+      releaseSchemaLeasesAfterFailure();
       return { ready: false, error: { code: 'DB_INIT_FAILED', message } };
     }
   }
@@ -168,6 +241,7 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
   if (!db) {
     const message = 'localDb connection missing after open';
     showFatalDialog('无法初始化本地数据库', message);
+    releaseSchemaLeasesAfterFailure();
     return { ready: false, error: { code: 'DB_INIT_FAILED', message } };
   }
 
@@ -197,32 +271,94 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
   }
 
   try {
-    await runMigrations(db, filePath);
+    const schemaStartup = await runSchemaStartupPolicy({
+      sharedPassive: passiveSharedUserData,
+      checkCompatibility: () => checkMigrationCompatibility(db, getDrizzleDir(), filePath),
+      prepareRuntimeManifest: () => {
+        const prepared = prepareMigrationRuntimeManifest(
+          filePath,
+          getDrizzleDir(),
+          readSchemaVersion(db),
+        );
+        if (prepared.bootstrappedLegacyBaseline) {
+          log.warn(
+            JSON.stringify({
+              event: 'localDb.migrationRuntimeManifest.legacyBaselineBootstrapped',
+              userId,
+              dbPath: filePath,
+            }),
+          );
+        }
+      },
+      runMigrations: () => runMigrations(db, filePath),
+      handleSchemaDrift: () => handleSchemaDrift(filePath),
+      cleanupSchemaDdl: () => cleanupStaleOrcaLeadIndex(db),
+    });
+    if (!schemaStartup.ready) {
+      const compatibility = schemaStartup.compatibility;
+      const issueSummary = compatibility.issues
+        .slice(0, 3)
+        .map((issue) => issue.kind)
+        .join(', ');
+      const message =
+        'passive dev 拒绝打开共享数据库：数据库 migration 与当前 checkout 不完全一致' +
+        `（DB schema_version=${compatibility.databaseVersion}，` +
+        `checkout=${compatibility.checkoutVersion}，问题=${issueSummary || 'unknown'}）。` +
+        'passive 实例不会自行迁移共享 userData；请先用当前 checkout 启动 primary 完成迁移，' +
+        '或改用 --isolated。';
+      log.error(
+        JSON.stringify({
+          event: 'localDb.ensureReady.passiveMigrationMismatch',
+          userId,
+          dbPath: filePath,
+          databaseVersion: compatibility.databaseVersion,
+          checkoutVersion: compatibility.checkoutVersion,
+          issues: compatibility.issues,
+        }),
+      );
+      closeDb({ preserveSchemaMigrationLease: !readerLeaseAcquiredThisCall });
+      showFatalDialog('passive dev 无法共享当前数据库', message);
+      return { ready: false, error: { code: 'MIGRATE_FAILED', message } };
+    }
+    if (schemaStartup.compatibility) {
+      log.info(
+        JSON.stringify({
+          event: 'localDb.ensureReady.passiveMigrationCompatible',
+          userId,
+          dbPath: filePath,
+          schemaVersion: schemaStartup.compatibility.databaseVersion,
+        }),
+      );
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log.error(
-      JSON.stringify({ event: 'localDb.ensureReady.migrateFailed', userId, dbPath: filePath, message }),
+      JSON.stringify({
+        event: 'localDb.ensureReady.migrateFailed',
+        userId,
+        dbPath: filePath,
+        message,
+      }),
     );
-    closeDb();
+    closeDb({ preserveSchemaMigrationLease: !readerLeaseAcquiredThisCall });
     showFatalDialog('本地数据库 schema 迁移失败', message);
     return { ready: false, error: { code: 'MIGRATE_FAILED', message } };
+  } finally {
+    startupWriterLease?.release();
+    startupWriterLease = null;
   }
-
-  // #37 schema-drift 检测与处置 ─────────────────────────────────────────
-  // 触发场景:多人协作分支冲突后 main 重排了 migration 编号,本地 schema_version
-  // 已推进但物理表实际没跑过新版 sql。dev 端跑反射 repair 自愈;release 端先收敛
-  // 已确认等价的历史 hash 变更,未知 drift 继续 log + toast 提示用户升级或联系支持。
-  await handleSchemaDrift(filePath);
 
   try {
     const repaired = repairManagedDialogueWorkspaceSessions(db, dialogueWorkspaceRootDir());
     if (repaired > 0) {
-      log.info(JSON.stringify({
-        event: 'localDb.ensureReady.managedDialogueWorkspaceRepair',
-        userId,
-        dbPath: filePath,
-        repaired,
-      }));
+      log.info(
+        JSON.stringify({
+          event: 'localDb.ensureReady.managedDialogueWorkspaceRepair',
+          userId,
+          dbPath: filePath,
+          repaired,
+        }),
+      );
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -241,14 +377,14 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log.warn(
-      JSON.stringify({ event: 'localDb.ensureReady.codexHistoryPromptInitFailed', userId, dbPath: filePath, message }),
+      JSON.stringify({
+        event: 'localDb.ensureReady.codexHistoryPromptInitFailed',
+        userId,
+        dbPath: filePath,
+        message,
+      }),
     );
   }
-
-  // F-COLLAB:每次启动幂等清理残留的全表 unique 索引(自愈不变量,见 orcaStaleIndexCleanup.ts)。
-  // 必须在 schema-drift 之后跑 — 如果旧 worktree 的 drift-repair 在别的时刻把它建回来了,
-  // 这里在本进程启动时把它再清掉,保证当前 lead session 协同 toggle 不再撞 stale unique。
-  cleanupStaleOrcaLeadIndex(db);
 
   // F-COLLAB:每次启动幂等修复「悬空 Lead」——orca_role='lead' 但已无 active team 的会话
   // (上一次关闭协同被中途打断遗留)。不修的话会被永久困在空 split view 且点 X 也关不掉,
@@ -260,9 +396,7 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
   runOptimize(0x10002);
   startOptimizeSchedule();
 
-  log.info(
-    JSON.stringify({ event: 'localDb.ensureReady.ok', userId, dbPath: filePath }),
-  );
+  log.info(JSON.stringify({ event: 'localDb.ensureReady.ok', userId, dbPath: filePath }));
   return { ready: true };
 }
 
@@ -322,7 +456,12 @@ function stopOptimizeSchedule(): void {
   }
 }
 
-export function closeDb(): void {
+export interface CloseDbOptions {
+  /** worker takeover 只关闭 main 连接；schema reader lease 仍由本 app 生命周期持有。 */
+  preserveSchemaMigrationLease?: boolean;
+}
+
+export function closeDb(options: CloseDbOptions = {}): void {
   // 关连接前再跑一次 optimize, 把会话期内积累的统计变化落盘 (官方推荐)
   stopOptimizeSchedule();
   runOptimize();
@@ -335,6 +474,9 @@ export function closeDb(): void {
   _drizzle = null;
   _currentUserId = null;
   _currentDbPath = null;
+  if (!options.preserveSchemaMigrationLease) {
+    schemaMigrationReaderLeaseLifecycle.closeConnection(false);
+  }
   resetSqliteVecState();
 }
 
@@ -347,9 +489,10 @@ export function closeDb(): void {
  *   - release (`app.isPackaged`):仍有未知 drift 时只 log + 推一次性 toast 给 renderer,
  *     不自动改 schema,提示用户升级或联系支持。
  *   - dev (`!app.isPackaged`):
- *       1. 先检测 drift,若有则提前备份(`db.backup .bak.drift-{ISO}`),备份失败不阻断
- *       2. 不管有没有 drift 都跑一次 schemaDriftRepair —— 因为存量 drift(0026 backfill
- *          之前已经偏掉的)hash 检测不出来,需要靠反射兜底
+ *       1. 不管 migration history 是否 drift,先只读生成 schema repair plan —— 因为存量
+ *          drift(0026 backfill 之前已经偏掉的)hash 检测不出来,仍需靠反射兜底
+ *       2. plan 无 DDL → 不备份；plan 有 DDL → 复用 migration 的磁盘预检/配额清理，
+ *          在线备份成功后才 apply，完成后再轮转配额
  *       3. repair 报 residual(改类型/删列等反射修不了的)→ 弹 dev-only 对话框让用户选 nuke
  *
  * 整个流程顶层包 try/catch,自己崩了也不阻塞启动 —— drift 处置本就是辅助路径。
@@ -432,43 +575,62 @@ async function handleSchemaDrift(filePath: string): Promise<void> {
           })),
         }),
       );
-      // best-effort 备份,失败不阻断 repair
-      try {
-        const backupResult = await backupDb(db, filePath);
-        if (typeof backupResult === 'string') {
-          log.warn(
-            JSON.stringify({
-              event: 'localDb.schemaDrift.dev.backup.ok',
-              backupPath: backupResult,
-            }),
-          );
-        }
-      } catch (err) {
-        log.warn(
-          JSON.stringify({
-            event: 'localDb.schemaDrift.dev.backup.failed',
-            error: err instanceof Error ? err.message : String(err),
-          }),
-        );
-      }
     }
 
-    // await backupDb 期间若并发 ensureReady/closeDb 切走了连接,`_db` 已不再是开工时
-    // 的 `db`(被置 null 或换成新连接)。此时旧 `db` 句柄要么已关闭、要么属于别的账号,
-    // 继续跑 repair 只会拿到失效连接 → 误判 residual → 把好库 nuke 掉。直接放弃本轮处置。
-    if (_db !== db) {
+    let diskHint = '';
+    const guardedRepair = await repairSchemaDriftWithBackup(db, {
+      beforeBackup: () => {
+        diskHint = prepareBackupDiskSpace(filePath);
+      },
+      backup: async () => {
+        try {
+          const backupResult = await backupDb(db, filePath);
+          if (typeof backupResult === 'string') {
+            log.warn(
+              JSON.stringify({
+                event: 'localDb.schemaDrift.dev.backup.ok',
+                backupPath: backupResult,
+              }),
+            );
+          }
+          return backupResult;
+        } catch (err) {
+          log.warn(
+            JSON.stringify({
+              event: 'localDb.schemaDrift.dev.backup.failed',
+              error: err instanceof Error ? err.message : String(err),
+            }),
+          );
+          return null;
+        }
+      },
+      isConnectionCurrent: () => _db === db,
+      afterApply: () => {
+        pruneMigrationBackupsToBudget(filePath);
+      },
+    });
+
+    if (guardedRepair.outcome === 'backup-failed') {
       log.warn(
-        JSON.stringify({ event: 'localDb.schemaDrift.connectionChangedDuringDrift' }),
+        JSON.stringify({
+          event: 'localDb.schemaDrift.dev.backup.failed',
+          diskHint,
+          plannedActions: guardedRepair.plan.actions.length,
+        }),
       );
       return;
     }
 
-    // 不管 hash detector 报不报 drift 都跑一次 repair:
-    // 0026 backfill 之前已经偏掉的存量 drift hash 查不出来,只能靠反射兜底。
-    // 无 drift 时 repair 是 no-op(每张表跑一次 PRAGMA 都不缺东西),开销可忽略。
-    const repair = repairSchemaDrift(db);
+    // await backupDb 期间若并发 ensureReady/closeDb 切走了连接,旧句柄可能已关闭或属于
+    // 别的账号；放弃本轮写入，绝不能把基础设施竞态升级成 nuke 提示。
+    if (guardedRepair.outcome === 'connection-changed') {
+      log.warn(JSON.stringify({ event: 'localDb.schemaDrift.connectionChangedDuringDrift' }));
+      return;
+    }
 
-    if (repair.residual.length > 0) {
+    const repair = guardedRepair.report;
+
+    if (repair && repair.residual.length > 0) {
       log.error(
         JSON.stringify({
           event: 'localDb.schemaDrift.dev.residual',
@@ -518,9 +680,7 @@ function promptDevNukeOnResidual(
       cancelId: 1,
     });
     if (choice !== 0) {
-      log.warn(
-        JSON.stringify({ event: 'localDb.schemaDrift.dev.nuke.declined' }),
-      );
+      log.warn(JSON.stringify({ event: 'localDb.schemaDrift.dev.nuke.declined' }));
       return;
     }
     closeDb();

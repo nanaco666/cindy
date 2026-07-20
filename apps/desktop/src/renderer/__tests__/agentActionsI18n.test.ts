@@ -20,7 +20,25 @@ const locales = ['zh-CN', 'en', 'ja', 'ko'] as const;
 const VERBS = ['edited', 'created', 'ran', 'read', 'updated', 'searched', 'fetched', 'used'] as const;
 
 /** command intent 专属动词档(verbLabelKeyForIntent 新增,无聚合 part.* 变体)。 */
-const INTENT_VERBS = ['listed', 'installedDeps', 'ranTests', 'built', 'linted', 'typechecked'] as const;
+const INTENT_VERBS = [
+  'listed', 'installedDeps', 'ranTests', 'built', 'linted', 'typechecked',
+  'runScript', 'checkSyntax', 'showVersion', 'checkFormatting', 'parseJson', 'count',
+  'showCurrentDirectory', 'showDateTime', 'locateCommand', 'inspectProcesses', 'inspectPorts',
+  'queryDatabase',
+  'gitStatus', 'gitDiff', 'gitLog', 'gitShow', 'gitAdd', 'gitCommit', 'gitFetch', 'gitPull', 'gitPush',
+  'gitRemote', 'gitRevParse', 'gitBranch', 'gitGrep', 'gitMergeBase', 'gitLsFiles', 'gitRevList',
+  'gitLsRemote',
+  'gitWorktreeList', 'gitWorktreeAdd', 'gitWorktreeRemove', 'gitWorktreeMove', 'gitWorktreePrune',
+  'ghPrList', 'ghPrView', 'ghPrChecks', 'ghPrStatus', 'ghPrDiff', 'ghPrCreate', 'ghPrEdit',
+  'ghPrComment', 'ghPrReview', 'ghPrMerge', 'ghPrClose', 'ghPrReopen', 'ghPrCheckout',
+  'ghIssueList', 'ghIssueView', 'ghIssueStatus', 'ghIssueCreate', 'ghIssueEdit', 'ghIssueComment',
+  'ghIssueClose', 'ghIssueReopen',
+  'ghAuthStatus', 'ghAuthLogin', 'ghAuthLogout', 'ghAuthRefresh', 'ghAuthSwitch',
+  'ghRunList', 'ghRunView', 'ghRunWatch', 'ghSearch', 'ghRepoList', 'ghRepoView',
+  'ghApiQuery', 'ghApiMutation', 'ghApiCall',
+] as const;
+
+const COMMAND_FALLBACK_VERBS = ['ranCommand'] as const;
 
 function readLocale(locale: (typeof locales)[number]) {
   return JSON.parse(
@@ -28,6 +46,7 @@ function readLocale(locale: (typeof locales)[number]) {
   ) as {
     chat?: {
       agentActionRow?: {
+        fileChange?: Record<string, unknown>;
         verb?: Record<string, unknown>;
         status?: Record<string, unknown>;
       };
@@ -40,13 +59,16 @@ describe('agent actions i18n', () => {
   it('keeps row verb labels and status labels translated in every supported locale', () => {
     for (const locale of locales) {
       const row = readLocale(locale).chat?.agentActionRow;
-      for (const verb of [...VERBS, ...INTENT_VERBS]) {
+      for (const verb of [...VERBS, ...INTENT_VERBS, ...COMMAND_FALLBACK_VERBS]) {
         expect(row?.verb?.[verb], `${locale} chat.agentActionRow.verb.${verb}`).toEqual(
           expect.any(String),
         );
       }
       expect(row?.status?.running, `${locale} status.running`).toEqual(expect.any(String));
       expect(row?.status?.done, `${locale} status.done`).toEqual(expect.any(String));
+      for (const key of ['deleted', 'renamed', 'files', 'rawData']) {
+        expect(row?.fileChange?.[key], `${locale} fileChange.${key}`).toEqual(expect.any(String));
+      }
     }
   });
 

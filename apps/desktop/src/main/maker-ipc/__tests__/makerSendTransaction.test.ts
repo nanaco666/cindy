@@ -35,6 +35,7 @@ function createDeps(overrides: Partial<MakerSendTransactionDeps> = {}) {
     buildCreateOptsWithStderr: vi.fn((opts: MakerSessionCreateOpts) => opts),
     synthesizeOrcaVendorOptionsFromDb: vi.fn(async () => false),
     readSessionExtraDirsFromDb: vi.fn(async () => []),
+    readSessionWorkingDirFromDb: vi.fn(async () => null),
     withRehydrateCloseSuppressed: vi.fn(async (_sessionId, fn) => await fn()),
     bootstrapSession: vi.fn(async (opts: MakerSessionCreateOpts) => ({
       session: createSession({
@@ -310,6 +311,53 @@ describe('maker SEND transaction', () => {
 
     expect(deps.checkWorkDirExists).toHaveBeenCalledWith('session-1', 'C:\\repo', 'codex', null);
     expect(session.send).not.toHaveBeenCalled();
+  });
+
+  it('lazy-create adopts the DB working_dir when the caller-provided one is stale', async () => {
+    // 场景:输入队列崩溃快照回放,createOpts 内嵌启动 sweep 改写前的老路径。
+    const staleDir = '/data/xdt-maker/dialogues/2026-06-22/lazy-1';
+    const dbDir = '/data/Cindy/dialogues/2026-06-22/lazy-1';
+    const checkWorkDirExists = vi.fn(async (_sid: string, dir: string | undefined | null) => dir === dbDir);
+    const { deps } = createDeps({
+      getSession: vi.fn(() => undefined),
+      checkWorkDirExists,
+      readSessionWorkingDirFromDb: vi.fn(async () => dbDir),
+    });
+    const transaction = createMakerSendTransaction(deps);
+
+    await expect(
+      transaction.sendToAgentAccepted('lazy-1', 'hello', {
+        agentKind: 'codex',
+        model: 'gpt-5.5',
+        workingDir: staleDir,
+      }),
+    ).resolves.toMatchObject({ accepted: true });
+
+    // 首检拿 caller 值且静默(有 DB 兜底候选);兜底检拿 DB 值正常广播语义。
+    expect(checkWorkDirExists).toHaveBeenNthCalledWith(1, 'lazy-1', staleDir, 'codex', undefined, {
+      suppressMissingBroadcast: true,
+    });
+    expect(checkWorkDirExists).toHaveBeenNthCalledWith(2, 'lazy-1', dbDir, 'codex', undefined);
+    // bootstrap 用采纳后的 DB 路径 spawn。
+    expect(deps.bootstrapSession).toHaveBeenCalledWith(expect.objectContaining({ workingDir: dbDir }));
+  });
+
+  it('lazy-create still fails with WORKDIR_MISSING when caller and DB workdirs are both gone', async () => {
+    const { deps } = createDeps({
+      getSession: vi.fn(() => undefined),
+      checkWorkDirExists: vi.fn(async () => false),
+      readSessionWorkingDirFromDb: vi.fn(async () => '/db/also-gone'),
+    });
+    const transaction = createMakerSendTransaction(deps);
+
+    await expect(
+      transaction.sendToAgentAccepted('lazy-2', 'hello', {
+        agentKind: 'codex',
+        model: 'gpt-5.5',
+        workingDir: '/stale/gone',
+      }),
+    ).resolves.toMatchObject({ accepted: false, reason: 'WORKDIR_MISSING' });
+    expect(deps.bootstrapSession).not.toHaveBeenCalled();
   });
 
   it('rejects missing sessions when create opts are not provided', async () => {

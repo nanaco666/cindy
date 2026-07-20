@@ -13,7 +13,7 @@
  * F-FP-5:   workingDir read-only display
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Profiler, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useLocation, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -142,7 +142,12 @@ import {
   getSessionDeviceId,
   remoteProjectsStore,
 } from '@/features/device-link/remoteProjectsStore';
-import { makeMirrorAccessors, clearScope } from '@/state/deviceLinkModelMirror';
+import {
+  makeMirrorAccessors,
+  replaceScope,
+  clearScope,
+  type RemoteModelMemorySnapshot,
+} from '@/state/deviceLinkModelMirror';
 import type { ModelMemoryAccessors } from '@/components/new-chat/ModelSelector';
 // 完整对等:context-usage / extra-dirs / orca 等会话级操作按 sessionId 来源路由
 // (本机走本地 maker,远程 device-link 会话走隧道)。
@@ -160,6 +165,20 @@ import {
 } from '../../../shared/conversationSearchJump';
 
 const log = createLogger('CCAgentSessionView');
+// perf-baseline(与 MessageStream / sidebar 的 perf/session-switch 探针同通道):
+// stream:profile 记录 MessageStream 子树每次 ≥50ms 的 React commit(phase +
+// actualDuration),与 perf/interaction 的 longtask 时长对齐即可判定长任务
+// 是消耗在 React 渲染内还是渲染外(store 监听器 / 布局等)。
+const perfLog = createLogger('perf/session-switch');
+const onStreamProfile = (
+  _id: string,
+  phase: 'mount' | 'update' | 'nested-update',
+  actualDuration: number,
+): void => {
+  if (actualDuration >= 50) {
+    perfLog.debug(`stream:profile phase=${phase} actual=${Math.round(actualDuration)}ms`);
+  }
+};
 
 interface HandoffFromState {
   kind: 'handoff';
@@ -554,31 +573,52 @@ export function CCAgentSessionView({
   const remoteLinkIssue = useDeviceLinkConnectionIssue(!!remoteDeviceId);
   const remoteSessionUnavailable = remoteConn === 'reconnecting' || remoteConn === 'host-offline';
 
-  // device-link 远程会话:模型列表里的 effort/fast 走「纯显示镜像」(deviceLinkModelMirror),改动经隧道
-  // 写穿被控端会话记忆 + 被控端 New Maker 草稿记忆,绝不碰控制端本地 sessionModelMemory(纯显示原则)。
-  // 镜像由 makerChatStore 的
-  // session-model-pref:changed push 填充(被控端本地改 / 应用控制端写后回流);初始为空(非选中行先显
-  // 默认,改动后收敛)。选中模型仍走 DB(initialModel/effort + sessions:patched),不经此 channel。
-  // 本机会话(remoteDeviceId undefined)→ undefined → ChatInput 回落 scope='session' 本地记忆(行为不变)。
-  const sessionModelMemoryOverride = useMemo<ModelMemoryAccessors | undefined>(() => {
-    if (!remoteDeviceId || !sessionId) return undefined;
+  // device-link 远程会话:非选中行镜像**被控端自己的全局模型预设**。先 pull 一次,再订阅
+  // NEW_MAKER_DRAFT_CHANGED 全量回流;本地控制端只显示 / 乐观更新镜像,绝不污染自己的预设。
+  // 选中模型仍走远程 session 的 DB/runtime live 值,所以其它对话改同一模型预设时不会覆盖它。
+  const remoteModelMemoryScopeKey = remoteDeviceId && sessionId ? `session:${sessionId}` : null;
+
+  useEffect(() => {
+    if (!remoteDeviceId || !remoteModelMemoryScopeKey) return;
     const deviceId = remoteDeviceId;
-    const sid = sessionId;
-    return makeMirrorAccessors(`session:${sid}`, (agent, providerId, model, patch) => {
-      window.electronAPI.deviceLink
-        .invoke(deviceId, 'maker:set-session-model-pref', [
-          {
-            sessionId: sid,
-            agent,
-            providerId,
-            model,
-            ...(patch.effort !== undefined ? { effort: patch.effort } : {}),
-            ...(patch.fast !== undefined ? { fast: patch.fast } : {}),
-          },
-        ])
-        .catch(() => {
-          // CHANNEL_NOT_ALLOWED(旧版被控端)/ 离线 → 吞掉,保留控制端乐观镜像(优雅降级)。
-        });
+    const scopeKey = remoteModelMemoryScopeKey;
+    const agent = session?.agentKind === 'codex' ? 'codex' : 'claude-code';
+    const vendorSlot = agent === 'codex' ? 'codex' : 'claudeCode';
+    let cancelled = false;
+
+    const applySnapshot = (snapshot: RemoteModelMemorySnapshot | undefined) => {
+      if (!cancelled) replaceScope(scopeKey, snapshot);
+    };
+
+    window.electronAPI.deviceLink
+      .invoke(deviceId, 'maker:get-new-maker-defaults', [agent])
+      .then((value) => {
+        const defaults = value as { providerModelMemory?: RemoteModelMemorySnapshot } | null;
+        applySnapshot(defaults?.providerModelMemory);
+      })
+      .catch(() => {
+        // 旧版被控端无该 channel / 离线:保持空镜像,非选中行回落模型默认。
+      });
+
+    const off = window.electronAPI.deviceLink.onRemotePush((push) => {
+      if (push.deviceId !== deviceId || push.channel !== 'maker:new-maker-draft:changed') return;
+      const payload = push.payload as
+        | Record<string, { providerModelMemory?: RemoteModelMemorySnapshot } | undefined>
+        | null;
+      applySnapshot(payload?.[vendorSlot]?.providerModelMemory);
+    });
+
+    return () => {
+      cancelled = true;
+      off();
+      clearScope(scopeKey);
+    };
+  }, [remoteDeviceId, remoteModelMemoryScopeKey, session?.agentKind]);
+
+  const remoteModelMemoryOverride = useMemo<ModelMemoryAccessors | undefined>(() => {
+    if (!remoteDeviceId || !remoteModelMemoryScopeKey) return undefined;
+    const deviceId = remoteDeviceId;
+    return makeMirrorAccessors(remoteModelMemoryScopeKey, (agent, providerId, model, patch) => {
       window.electronAPI.deviceLink
         .invoke(deviceId, 'maker:apply-new-maker-draft-pref', [
           {
@@ -586,22 +626,16 @@ export function CCAgentSessionView({
             providerId,
             modelId: model,
             active: false,
+            ...(patch.markModelChoice !== undefined ? { markModelChoice: patch.markModelChoice } : {}),
             ...(patch.effort !== undefined ? { effort: patch.effort } : {}),
             ...(patch.fast !== undefined ? { fast: patch.fast } : {}),
           },
         ])
         .catch(() => {
-          // 旧版被控端 / 离线时仍保留当前会话镜像,下次新建聊天回落被控端既有默认。
+          // 旧版被控端 / 离线时仍保留控制端乐观镜像,不回退写本机预设。
         });
     });
-  }, [remoteDeviceId, sessionId]);
-
-  // 切走 / 卸载远程会话时清掉该会话的显示镜像,避免泄漏。
-  useEffect(() => {
-    if (!remoteDeviceId || !sessionId) return;
-    const scopeKey = `session:${sessionId}`;
-    return () => clearScope(scopeKey);
-  }, [remoteDeviceId, sessionId]);
+  }, [remoteDeviceId, remoteModelMemoryScopeKey]);
 
   // device-link 边界:正在查看的远程会话 origin 从 remoteProjectsStore 消失 → 优雅退回 /cc-agent,
   // 避免停留在 session=null 的失效视图。但必须区分"消失"的来因(以 store 真相 + 本机链路状态判定):
@@ -2229,6 +2263,37 @@ export function CCAgentSessionView({
     </>
   );
 
+  // MessageStream 提成变量:perf/session-switch 的 <Profiler> 是纯诊断,只在 DEV
+  // 包裹(见下方渲染处),生产直接渲染此 el,不引入多余 Profiler fiber。
+  const messageStreamEl = (
+    <MessageStream
+      key={sessionId}
+      sessionId={sessionId}
+      sessionTitle={session?.title ?? null}
+      // 透传 agentKind 让 UserMessage 能按 capabilities.fork / rewind 决定
+      // 消息下方 Fork / Rewind icon 的显示 (Codex rewind=false → 隐藏)。
+      agentKind={session?.agentKind}
+      remoteHostId={session?.remoteHostId ?? null}
+      // text-lightbox-trigger-extension F1/F2: cwd flows from session
+      // owner down through MessageStream → AssistantMessage / UserMessage.
+      // The spec guarantees `session.workingDir` is set; `?? ''` is purely
+      // a TS-narrowing fallback, never expected to fire at runtime.
+      workingDir={session?.workingDir ?? ''}
+      messages={messages}
+      taskUpdates={taskUpdates}
+      isSessionStreaming={isStreaming}
+      onLoadMore={loadOlderMessages}
+      isLoadingMore={isLoadingMore}
+      hasMoreMessages={hasMoreMessages}
+      bottomPadding={overlayHeight}
+      contentWidth={messageWidth}
+      focusMessageClientId={focusedMessageTarget?.clientId ?? null}
+      focusMessageRequestId={focusedMessageTarget?.requestId ?? 0}
+      forkOrigin={forkOrigin}
+      onOpenForkOrigin={handleOpenForkOrigin}
+    />
+  );
+
   const content = (
     // Layout: single scroll container (full height) + sticky input overlay at bottom.
     // FP-7: when the Plan Viewer is expanded/edit, the viewer needs to occupy
@@ -2396,32 +2461,15 @@ export function CCAgentSessionView({
            key={sessionId}: force a full remount on session switch so scroll state,
            refs, and ResizeObservers are fresh — guarantees per-session isolation. */}
       <div className="relative min-h-0 flex-1">
-        <MessageStream
-          key={sessionId}
-          sessionId={sessionId}
-          sessionTitle={session?.title ?? null}
-          // 透传 agentKind 让 UserMessage 能按 capabilities.fork / rewind 决定
-          // 消息下方 Fork / Rewind icon 的显示 (Codex rewind=false → 隐藏)。
-          agentKind={session?.agentKind}
-          remoteHostId={session?.remoteHostId ?? null}
-          // text-lightbox-trigger-extension F1/F2: cwd flows from session
-          // owner down through MessageStream → AssistantMessage / UserMessage.
-          // The spec guarantees `session.workingDir` is set; `?? ''` is purely
-          // a TS-narrowing fallback, never expected to fire at runtime.
-          workingDir={session?.workingDir ?? ''}
-          messages={messages}
-          taskUpdates={taskUpdates}
-          isSessionStreaming={isStreaming}
-          onLoadMore={loadOlderMessages}
-          isLoadingMore={isLoadingMore}
-          hasMoreMessages={hasMoreMessages}
-          bottomPadding={overlayHeight}
-          contentWidth={messageWidth}
-          focusMessageClientId={focusedMessageTarget?.clientId ?? null}
-          focusMessageRequestId={focusedMessageTarget?.requestId ?? 0}
-          forkOrigin={forkOrigin}
-          onOpenForkOrigin={handleOpenForkOrigin}
-        />
+        {/* perf/session-switch 探针纯诊断:仅 DEV 用 Profiler 量 MessageStream commit,
+            生产直接渲染 el(见上方 messageStreamEl),不引入多余 Profiler fiber。 */}
+        {import.meta.env.DEV ? (
+          <Profiler id="message-stream" onRender={onStreamProfile}>
+            {messageStreamEl}
+          </Profiler>
+        ) : (
+          messageStreamEl
+        )}
       </div>
 
       {/* Input overlay — sticky at bottom with gradient fade.
@@ -2691,7 +2739,7 @@ export function CCAgentSessionView({
                   initialWorkingDir={session?.workingDir}
                   remoteHostId={session?.remoteHostId ?? null}
                   deviceLinkDeviceId={remoteDeviceId}
-                  modelMemoryOverride={sessionModelMemoryOverride}
+                  modelMemoryOverride={remoteModelMemoryOverride}
                   initialModel={session?.model}
                   initialProviderId={session?.providerId ?? null}
                   initialEffort={session?.effort}

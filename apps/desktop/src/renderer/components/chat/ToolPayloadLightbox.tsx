@@ -3,7 +3,7 @@
  * ---------------------------------------------------------------------------
  * F11 / F12 (cc-agent-compact-blocks v2) — full-screen overlay for showing
  * tool payloads:
- *   - mode: 'diff' → renders DiffView (Edit / Write / MultiEdit)
+ *   - mode: 'diff' → renders file diffs (Claude Edit/Write or Codex file_change)
  *   - mode: 'json' → renders Input JSON + tool_result side-by-side blocks
  *   - mode: 'text' → renders a single plain-text block (in-memory content,
  *     e.g. ChatInput 长文本粘贴 chip 的预览 — 无文件路径可给 TextLightbox)
@@ -30,17 +30,35 @@ import { toast } from '@/lib/toast';
 import { Tooltip } from '@/components/ui/tooltip';
 
 import { DiffView } from './DiffView';
+import { MarkdownDiffBlock } from './MarkdownDiffBlock';
 import { isRemoteFileOrigin } from '@/lib/sessionFileOrigin';
 import { revealRemoteChatFile } from '@/lib/remoteFileOpen';
 import { useChatSessionFile } from './ChatSessionFileContext';
 
+export type ToolDiffSegment =
+  | {
+      key: string;
+      oldString: string;
+      newString: string;
+      label?: string;
+    }
+  | {
+      key: string;
+      rawDiff: string;
+      label?: string;
+    };
+
+export interface ToolDiffFile {
+  key: string;
+  filePath: string;
+  diffs: ToolDiffSegment[];
+}
+
 export type ToolPayloadMode =
   | {
       kind: 'diff';
-      /** Full path used for toolbar display + clipboard copy. */
-      filePath: string;
-      /** One or more diff segments. MultiEdit produces N. */
-      diffs: Array<{ key: string; oldString: string; newString: string; label?: string }>;
+      /** Claude Edit/Write and Codex file_change share this file-oriented model. */
+      files: ToolDiffFile[];
     }
   | {
       kind: 'json';
@@ -90,6 +108,8 @@ export function ToolPayloadLightbox({
   const isClosingRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const isEditingText = payload.kind === 'text' && textEdit !== undefined;
+  const diffFiles = payload.kind === 'diff' ? payload.files : [];
+  const singleDiffFile = diffFiles.length === 1 ? diffFiles[0] : null;
 
   const handleClose = useCallback(() => {
     if (isClosingRef.current) return;
@@ -148,8 +168,13 @@ export function ToolPayloadLightbox({
 
   // ── Toolbar bits ────────────────────────────────────────────────────────
   const displayName =
-    payload.kind === 'diff' ? basename(payload.filePath) : payload.title;
-  const fullTitle = payload.kind === 'diff' ? payload.filePath : payload.title;
+    payload.kind === 'diff'
+      ? singleDiffFile
+        ? basename(singleDiffFile.filePath)
+        : t('chat.agentActionRow.fileChange.files', { count: diffFiles.length })
+      : payload.title;
+  const fullTitle =
+    payload.kind === 'diff' ? diffFiles.map((file) => file.filePath).join('\n') : payload.title;
 
   async function copyTitle() {
     try {
@@ -164,13 +189,20 @@ export function ToolPayloadLightbox({
     try {
       let text = '';
       if (payload.kind === 'diff') {
-        text = payload.diffs
-          .map((d, i) => {
-            const head =
-              payload.diffs.length > 1
-                ? `--- Edit ${i + 1}/${payload.diffs.length} ---\n`
-                : '';
-            return `${head}--- old\n${d.oldString}\n+++ new\n${d.newString}`;
+        text = payload.files
+          .map((file) => {
+            const fileHead = payload.files.length > 1 ? `--- ${file.filePath} ---\n` : '';
+            const body = file.diffs
+              .map((diff, index) => {
+                const diffHead =
+                  file.diffs.length > 1
+                    ? `--- ${diff.label ?? `Edit ${index + 1}/${file.diffs.length}`} ---\n`
+                    : '';
+                if ('rawDiff' in diff) return `${diffHead}${diff.rawDiff}`;
+                return `${diffHead}--- old\n${diff.oldString}\n+++ new\n${diff.newString}`;
+              })
+              .join('\n\n');
+            return `${fileHead}${body}`;
           })
           .join('\n\n');
       } else if (payload.kind === 'text') {
@@ -187,14 +219,15 @@ export function ToolPayloadLightbox({
   }
 
   async function showInFolder() {
-    if (payload.kind !== 'diff') return;
+    if (payload.kind !== 'diff' || payload.files.length !== 1) return;
+    const filePath = payload.files[0].filePath;
     // remote 会话:远端路径本机不存在(或更糟,存在同路径本机文件)——
     // 下载缓存副本后定位副本。
     if (isRemoteFileOrigin(fileCtx.origin)) {
-      await revealRemoteChatFile(fileCtx.origin, fileCtx.workingDir, payload.filePath);
+      await revealRemoteChatFile(fileCtx.origin, fileCtx.workingDir, filePath);
       return;
     }
-    const res = await window.electronAPI.showItemInFolder({ filePath: payload.filePath });
+    const res = await window.electronAPI.showItemInFolder({ filePath });
     if (!res.success) {
       toast.error(res.error || t('chat.media.openFolderFailed'));
     }
@@ -284,7 +317,7 @@ export function ToolPayloadLightbox({
           </Tooltip.Root>
 
           <div className="flex items-center gap-1">
-            {payload.kind === 'diff' && (
+            {payload.kind === 'diff' && singleDiffFile && (
               <Tooltip.Root>
                 <Tooltip.Trigger asChild>
                   <button
@@ -347,17 +380,44 @@ export function ToolPayloadLightbox({
         >
           {payload.kind === 'diff' && (
             <div className="flex flex-col gap-3">
-              {payload.diffs.map((d, i) => (
+              {payload.files.map((file) => (
                 <div
-                  key={d.key}
-                  className="flex flex-col gap-1"
+                  key={file.key}
+                  data-tool-payload-diff-file={file.filePath}
+                  className="flex flex-col gap-2"
                 >
-                  {payload.diffs.length > 1 && (
-                    <div className="text-12 text-[var(--msg-tool-card-chevron)]">
-                      {d.label ?? t('chat.lightbox.editIndex', { index: i + 1, total: payload.diffs.length })}
+                  {payload.files.length > 1 && (
+                    <div
+                      title={file.filePath}
+                      className="truncate text-[14px] font-medium text-[var(--msg-tool-card-text)]"
+                    >
+                      {basename(file.filePath)}
                     </div>
                   )}
-                  <DiffView oldString={d.oldString} newString={d.newString} />
+                  {file.diffs.length === 0 ? (
+                    <span className="text-[13px] text-[var(--msg-tool-card-chevron)]">
+                      {t('chat.agentActionRow.noContent')}
+                    </span>
+                  ) : (
+                    file.diffs.map((diff, index) => (
+                      <div key={diff.key} className="flex flex-col gap-1">
+                        {file.diffs.length > 1 && (
+                          <div className="text-12 text-[var(--msg-tool-card-chevron)]">
+                            {diff.label ??
+                              t('chat.lightbox.editIndex', {
+                                index: index + 1,
+                                total: file.diffs.length,
+                              })}
+                          </div>
+                        )}
+                        {'rawDiff' in diff ? (
+                          <MarkdownDiffBlock raw={diff.rawDiff} />
+                        ) : (
+                          <DiffView oldString={diff.oldString} newString={diff.newString} />
+                        )}
+                      </div>
+                    ))
+                  )}
                 </div>
               ))}
             </div>

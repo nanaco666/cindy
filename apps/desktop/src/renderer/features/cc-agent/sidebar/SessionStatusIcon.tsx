@@ -127,7 +127,7 @@ export function SessionStatusIcon({
           vendor={vendor}
           size={size ?? (vendor === 'cc' ? 13 : 12)}
           running={isRunning}
-          className={isActive ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}
+          colorClassName={isActive ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}
         />
       )}
       {showAttentionDot && hasAttentionNotification && (

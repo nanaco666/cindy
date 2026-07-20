@@ -13,9 +13,9 @@
  *   FP_DEV_OSS_ACCESS_KEY_ID     — 必填，阿里云 AK
  *   FP_DEV_OSS_ACCESS_KEY_SECRET — 必填，阿里云 SK
  *   APPLE_APP_PASSWORD           — 必填，App-specific password（切勿入库）
- *   APPLE_ID                     — 可选，默认 jiali@magiclizi.com
- *   APPLE_TEAM_ID                — 可选，默认 WJ6LYABL8Z
- *   APPLE_SIGN_IDENTITY          — 可选，默认 Developer ID Application: Jiali Liu (WJ6LYABL8Z)
+ *   APPLE_ID / APPLE_TEAM_ID / APPLE_SIGN_IDENTITY — 通常无需设置:由
+ *   release-regions.json 的 <region>.macSigning 按区域注入(env 显式值可覆盖;
+ *   无代码默认值,两处都缺直接报错)
  *
  * 流程（每个架构）:
  *   1. 设置 production 环境变量
@@ -101,10 +101,13 @@ const CDN_BASE = resolveReleaseCdnBaseUrl(REGION);
 const APP_NAME = packagedAppName(REGION);
 const ARTIFACT_BASENAME = releaseArtifactBasename(REGION);
 
-// Apple signing config(身份默认值单点在 ci/lib.mjs 的 resolveAppleIdentity,此处
+// Apple signing config(身份解析单点在 ci/lib.mjs 的 resolveAppleIdentity,此处
 // 在 .env 加载之后调用)。APPLE_APP_PASSWORD 是敏感凭据,绝对不允许 fallback 到源码
 // 里的硬编码默认值 —— 从 env / .env 读不到就直接 abort。
 const { appleId: APPLE_ID, teamId: APPLE_TEAM_ID, signIdentity: SIGN_IDENTITY } = resolveAppleIdentity();
+// 区域证书由 release-regions.json 的 macSigning 注入(cn X.D. Network / global
+// XD Entertainment);这里显式打印,防止静默回落到代码默认身份签错证书。
+console.log(`==> Sign identity: ${SIGN_IDENTITY} (team ${APPLE_TEAM_ID}, notary ${APPLE_ID})`);
 const APPLE_APP_PASSWORD = process.env.APPLE_APP_PASSWORD;
 
 if (!APPLE_APP_PASSWORD) {

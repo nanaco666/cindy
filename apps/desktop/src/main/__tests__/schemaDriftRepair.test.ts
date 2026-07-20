@@ -12,7 +12,11 @@ vi.mock('../logger', () => ({
   }),
 }));
 
-import { getManagedSchemaTableNames, repairSchemaDrift } from '../localDb/schemaDriftRepair';
+import {
+  getManagedSchemaTableNames,
+  repairSchemaDrift,
+  repairSchemaDriftWithBackup,
+} from '../localDb/schemaDriftRepair';
 
 describe('repairSchemaDrift', () => {
   it('derives managed tables from every sqliteTable export in schema.ts', () => {
@@ -64,6 +68,80 @@ describe('repairSchemaDrift', () => {
           AND name = 'uniq_orca_workers_session_id'
       `).get();
       expect(regularIndex).toBeTruthy();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('does not back up when metadata drift has no physical schema repair actions', async () => {
+    const db = new Database(':memory:');
+    try {
+      // 先构造完整物理 schema；上层即使仍检测到 migration-history drift，也不应备份。
+      expect(repairSchemaDrift(db).residual).toEqual([]);
+      const backup = vi.fn(async () => '/tmp/should-not-exist');
+
+      const result = await repairSchemaDriftWithBackup(db, { backup });
+
+      expect(result.outcome).toBe('no-op');
+      expect(result.plan.actions).toEqual([]);
+      expect(backup).not.toHaveBeenCalled();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('backs up before a real schema repair and skips backup on the second pass', async () => {
+    const db = new Database(':memory:');
+    const events: string[] = [];
+    try {
+      const backup = vi.fn(async () => {
+        events.push('backup');
+        expect(
+          db
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_aliases'")
+            .get(),
+        ).toBeUndefined();
+        return '/tmp/schema-drift.bak';
+      });
+
+      const first = await repairSchemaDriftWithBackup(db, {
+        beforeBackup: () => events.push('prepare'),
+        backup,
+        afterApply: () => events.push('prune'),
+      });
+
+      expect(first.outcome).toBe('applied');
+      expect(first.report?.repaired.length).toBeGreaterThan(0);
+      expect(first.report?.residual).toEqual([]);
+      expect(events).toEqual(['prepare', 'backup', 'prune']);
+      expect(
+        db
+          .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_aliases'")
+          .get(),
+      ).toBeTruthy();
+
+      const second = await repairSchemaDriftWithBackup(db, { backup });
+      expect(second.outcome).toBe('no-op');
+      expect(backup).toHaveBeenCalledTimes(1);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('does not mutate schema when the required backup fails', async () => {
+    const db = new Database(':memory:');
+    try {
+      const result = await repairSchemaDriftWithBackup(db, {
+        backup: async () => null,
+      });
+
+      expect(result.outcome).toBe('backup-failed');
+      expect(result.plan.actions.length).toBeGreaterThan(0);
+      expect(
+        db
+          .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_aliases'")
+          .get(),
+      ).toBeUndefined();
     } finally {
       db.close();
     }

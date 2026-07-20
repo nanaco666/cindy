@@ -19,7 +19,7 @@
  *   - workdir 为空串 = remote session 或还没解析,plugin 自行降级渲染占位。
  */
 
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { createLogger } from '@/lib/logger';
@@ -96,6 +96,12 @@ interface RightSidebarShellProps {
    *  MainLayout 窗口右上浮层,不下沉进面板);'right'(默认)与 maximize 撑满态
    *  维持浮层 + 让位 spacer。仅 mac unifiedTopbar 形态消费。 */
   panelSide?: 'left' | 'right';
+  /**
+   * 本 session 的 tab 数从 >0 变为 0(用户关掉最后一个 tab)时回调一次。
+   * host(MainLayout)据此自动收起右侧栏。只在「关闭动作」触发 —— 展开一个本就
+   * 无 tab 的 session 不会触发(见下方 effect 的 prev>0 判据)。detached 子窗口不传。
+   */
+  onAllTabsClosed?: () => void;
 }
 
 export function RightSidebarShell({
@@ -111,6 +117,7 @@ export function RightSidebarShell({
   onDetach,
   chromeWindowDrag = true,
   panelSide = 'right',
+  onAllTabsClosed,
 }: RightSidebarShellProps) {
   const { t } = useTranslation();
 
@@ -158,6 +165,24 @@ export function RightSidebarShell({
 
   const tabs = bucket.tabs;
   const activeTabId = bucket.activeTabId;
+
+  // 关掉最后一个 tab → 通知 host 自动收起侧栏。只在 tab 数「从 >0 变 0」的转变时
+  // 触发,不是"等于 0"就触发:
+  //   - hydrated 后首帧 prev===null 不触发(区分"刚加载出来就是空"与"关到空");
+  //   - 展开一个本就 0-tab 的 session 也不会被立刻折叠,用户仍能在 EmptyState 加 tab。
+  // sessionId 变化时重置计数,避免"切到一个空 session"被误判成"关空"。
+  const prevTabCountRef = useRef<number | null>(null);
+  useEffect(() => {
+    prevTabCountRef.current = null;
+  }, [sessionId]);
+  useEffect(() => {
+    if (!bucket.hydrated) return; // 未 hydrate 的空数组不算"关空"
+    const prev = prevTabCountRef.current;
+    prevTabCountRef.current = tabs.length;
+    if (prev !== null && prev > 0 && tabs.length === 0) {
+      onAllTabsClosed?.();
+    }
+  }, [bucket.hydrated, tabs.length, onAllTabsClosed]);
 
   const handleAdd = useCallback(
     (kind: TabKindId) => {

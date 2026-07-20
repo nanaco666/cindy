@@ -719,7 +719,7 @@ describe('groupWorkRuns — work-group collapsing', () => {
     taskUpdates?: Parameters<typeof buildRenderItems>[1],
   ) => groupWorkRuns(buildRenderItems(messages, taskUpdates).items, streaming);
 
-  it('collapses a run (thinking + tools) once a text message follows, even while streaming', () => {
+  it('marks a run complete as soon as assistant text follows, even while the turn streams', () => {
     const items = build(
       [mkUser('u1'), mkThinking('th1'), mkTool('t1', 'Bash'), mkAssistant('a1', 'done')],
       true,
@@ -729,15 +729,25 @@ describe('groupWorkRuns — work-group collapsing', () => {
     const group = items[1] as Extract<RenderItem, { type: 'work_group' }>;
     expect(group.key).toBe('work-th1'); // 首子项(thinking)的 clientId
     expect(group.children.map((c) => c.type)).toEqual(['message', 'tool_segment']);
+    expect(group.isStreaming).toBe(false);
   });
 
-  it('keeps the trailing run un-collapsed while streaming (no text after it yet)', () => {
+  it('groups the trailing run immediately while streaming and keeps live metadata', () => {
     const items = build(
-      [mkUser('u1'), mkAssistant('a1', 'working on it'), mkTool('t1', 'Bash'), mkThinking('th1')],
+      [
+        mkUser('u1'),
+        mkAssistant('a1', 'working on it'),
+        withTs(mkTool('t1', 'Bash'), '2026-06-24T00:00:02.000Z'),
+        mkThinking('th1'),
+      ],
       true,
     );
-    // 尾部 run 平铺:tool_segment + thinking message 原样保留
-    expect(items.map((it) => it.type)).toEqual(['message', 'message', 'tool_segment', 'message']);
+    expect(items.map((it) => it.type)).toEqual(['message', 'message', 'work_group']);
+    const group = items[2] as Extract<RenderItem, { type: 'work_group' }>;
+    expect(group.key).toBe('work-t1');
+    expect(group.isStreaming).toBe(true);
+    expect(group.startedAtMs).toBe(Date.parse('2026-06-24T00:00:02.000Z'));
+    expect(group.children.map((c) => c.type)).toEqual(['tool_segment', 'message']);
   });
 
   it('collapses the trailing run once the session stops streaming (turn end)', () => {
@@ -749,6 +759,7 @@ describe('groupWorkRuns — work-group collapsing', () => {
     expect(items.map((it) => it.type)).toEqual(['message', 'message', 'work_group']);
     const group = items[2] as Extract<RenderItem, { type: 'work_group' }>;
     expect(group.key).toBe('work-t1');
+    expect(group.isStreaming).toBe(false);
   });
 
   it('collapses a single-card run too (threshold = 1)', () => {
@@ -792,7 +803,7 @@ describe('groupWorkRuns — work-group collapsing', () => {
     expect(group.children.map((c) => c.type)).toEqual(['agent_task']);
   });
 
-  it('keeps intermediate assistant text visible while streaming', () => {
+  it('keeps assistant progress visible and uses it to close the preceding live group', () => {
     const items = build(
       [
         mkUser('u1'),
@@ -803,14 +814,61 @@ describe('groupWorkRuns — work-group collapsing', () => {
       true,
     );
     expect(items.map((it) => it.type)).toEqual(['message', 'message', 'work_group', 'message']);
-    const draft = items[1] as Extract<RenderItem, { type: 'message' }>;
-    expect(draft.message.clientId).toBe('a-draft');
     const group = items[2] as Extract<RenderItem, { type: 'work_group' }>;
     expect(group.key).toBe('work-t1');
     expect(group.children.map((c) => c.type)).toEqual(['tool_segment']);
+    expect(group.isStreaming).toBe(false);
   });
 
-  it('folds intermediate assistant text before the final answer after streaming stops', () => {
+  it('segments live actions at assistant text, then folds progress and actions in original order', () => {
+    const activeMessages = [
+      mkUser('u1'),
+      mkAssistant('a-progress-1', 'I found the renderer path.'),
+      mkTool('t1', 'Bash'),
+      mkAssistant('a-progress-2', 'The first check passed.'),
+      mkThinking('th2'),
+      mkTool('t2', 'Read'),
+    ];
+    const active = build(activeMessages, true);
+    expect(active.map((it) => it.type)).toEqual([
+      'message',
+      'message',
+      'work_group',
+      'message',
+      'work_group',
+    ]);
+    const activeGroups = active.filter(
+      (it): it is Extract<RenderItem, { type: 'work_group' }> => it.type === 'work_group',
+    );
+    expect(activeGroups.map((group) => [group.key, group.isStreaming])).toEqual([
+      ['work-t1', false],
+      ['work-th2', true],
+    ]);
+
+    const completed = build(
+      [...activeMessages, mkAssistant('a-final', 'Everything is ready.')],
+      false,
+    );
+    expect(completed.map((it) => it.type)).toEqual(['message', 'work_group', 'message']);
+    const completedGroup = completed[1] as Extract<RenderItem, { type: 'work_group' }>;
+    expect(completedGroup.key).toBe('work-summary-t1');
+    expect(completedGroup.children.map((child) => child.key)).toEqual([
+      'msg-a-progress-1',
+      'work-t1',
+      'msg-a-progress-2',
+      'work-th2',
+    ]);
+    const nestedGroups = completedGroup.children.filter(
+      (child): child is Extract<RenderItem, { type: 'work_group' }> => child.type === 'work_group',
+    );
+    expect(nestedGroups.map((group) => group.children.map((child) => child.key))).toEqual([
+      ['seg-t1'],
+      ['msg-th2', 'seg-t2'],
+    ]);
+    expect(completedGroup.isStreaming).toBe(false);
+  });
+
+  it('folds intermediate assistant text after streaming stops', () => {
     const items = build(
       [
         mkUser('u1'),
@@ -822,17 +880,44 @@ describe('groupWorkRuns — work-group collapsing', () => {
     );
     expect(items.map((it) => it.type)).toEqual(['message', 'work_group', 'message']);
     const group = items[1] as Extract<RenderItem, { type: 'work_group' }>;
-    expect(group.key).toBe('work-a-draft');
-    expect(
-      group.children.map((c) =>
-        c.type === 'message' ? `${c.type}:${c.message.clientId}` : `${c.type}:${c.key}`,
-      ),
-    ).toEqual(['message:a-draft', 'tool_segment:seg-t1']);
+    expect(group.key).toBe('work-summary-t1');
+    expect(group.children.map((c) => `${c.type}:${c.key}`)).toEqual([
+      'message:msg-a-draft',
+      'work_group:work-t1',
+    ]);
     const final = items[2] as Extract<RenderItem, { type: 'message' }>;
     expect(final.message.clientId).toBe('a-final');
   });
 
-  it('restores viewport anchors that moved into a folded work group', () => {
+  it('keeps the live action-group key on the nested completed segment', () => {
+    const liveMessages = [
+      mkUser('u1'),
+      mkAssistant('a-draft', 'I will inspect this first.'),
+      mkTool('t1', 'Bash'),
+    ];
+    const completedMessages = [
+      ...liveMessages,
+      mkAssistant('a-final', 'The fix is done.'),
+    ];
+    const live = build(liveMessages, true).find(
+      (item): item is Extract<RenderItem, { type: 'work_group' }> => item.type === 'work_group',
+    );
+    const completed = build(completedMessages, false).find(
+      (item): item is Extract<RenderItem, { type: 'work_group' }> => item.type === 'work_group',
+    );
+
+    expect(live?.key).toBe('work-t1');
+    expect(live?.isStreaming).toBe(true);
+    expect(completed?.key).toBe('work-summary-t1');
+    expect(completed?.isStreaming).toBe(false);
+    const nested = completed?.children.find(
+      (child): child is Extract<RenderItem, { type: 'work_group' }> => child.type === 'work_group',
+    );
+    expect(nested?.key).toBe(live?.key);
+    expect(nested?.isStreaming).toBe(false);
+  });
+
+  it('restores assistant and tool anchors to the completed work group', () => {
     const items = build(
       [
         mkUser('u1'),
@@ -866,18 +951,17 @@ describe('groupWorkRuns — work-group collapsing', () => {
       'work_group',
       'message',
       'message',
-      'tool_segment',
+      'work_group',
     ]);
     const group = items[1] as Extract<RenderItem, { type: 'work_group' }>;
-    expect(group.key).toBe('work-a1-draft');
-    expect(
-      group.children.map((c) =>
-        c.type === 'message' ? `${c.type}:${c.message.clientId}` : `${c.type}:${c.key}`,
-      ),
-    ).toEqual(['message:a1-draft', 'tool_segment:seg-t1']);
+    expect(group.key).toBe('work-summary-t1');
+    expect(group.children.map((c) => `${c.type}:${c.key}`)).toEqual([
+      'message:msg-a1-draft',
+      'work_group:work-t1',
+    ]);
   });
 
-  it('folds a single intermediate assistant message before the final answer', () => {
+  it('folds assistant-only progress while keeping the last answer visible', () => {
     const items = build(
       [
         mkUser('u1'),
@@ -888,32 +972,38 @@ describe('groupWorkRuns — work-group collapsing', () => {
     );
     expect(items.map((it) => it.type)).toEqual(['message', 'work_group', 'message']);
     const group = items[1] as Extract<RenderItem, { type: 'work_group' }>;
-    expect(group.children.map((c) => c.type)).toEqual(['message']);
-    expect((group.children[0] as Extract<RenderItem, { type: 'message' }>).message.clientId).toBe('a-draft');
+    expect(group.children.map((c) => c.key)).toEqual(['msg-a-draft']);
   });
 
-  it('folds work after the final answer once the session stops streaming', () => {
+  it('keeps trailing work separate when no final answer follows it', () => {
     const items = build(
       [
         mkUser('u1'),
         mkTool('t1', 'Bash'),
-        mkAssistant('a-final', 'Final answer.'),
+        mkAssistant('a-progress', 'Still working.'),
         mkTool('t2', 'Read'),
       ],
       false,
     );
-    expect(items.map((it) => it.type)).toEqual(['message', 'work_group', 'message', 'work_group']);
-    const trailingGroup = items[3] as Extract<RenderItem, { type: 'work_group' }>;
-    expect(trailingGroup.key).toBe('work-t2');
-    expect(trailingGroup.children.map((c) => c.type)).toEqual(['tool_segment']);
+    expect(items.map((it) => it.type)).toEqual([
+      'message',
+      'work_group',
+      'message',
+      'work_group',
+    ]);
+    const groups = items.filter(
+      (it): it is Extract<RenderItem, { type: 'work_group' }> => it.type === 'work_group',
+    );
+    expect(groups.map((group) => group.key)).toEqual(['work-t1', 'work-t2']);
   });
 
   it('tool_media stays outside the group and does not trigger collapse by itself while streaming', () => {
     const tu = mkTool('img1', 'image_generate');
     const tr = mkResult('imgr1', 'tu-img1', JSON.stringify({ xdt_image_url: 'xdt-image://art/a.png' }));
-    // 还没有正文 → run 不折叠;media 卡保持平铺在 segment 后面
+    // 还没有正文 → live run 已进入 work_group;media 卡仍保持组外可见
     const streaming = build([mkUser('u1'), tu, tr, mkTool('t2', 'Read')], true);
-    expect(streaming.map((it) => it.type)).toEqual(['message', 'tool_segment', 'tool_media']);
+    expect(streaming.map((it) => it.type)).toEqual(['message', 'work_group', 'tool_media']);
+    expect((streaming[1] as Extract<RenderItem, { type: 'work_group' }>).isStreaming).toBe(true);
 
     // turn 结束 → segment 折叠进 work_group,media 卡留在组外可见
     const ended = build([mkUser('u1'), tu, tr, mkTool('t2', 'Read')], false);
@@ -933,9 +1023,17 @@ describe('groupWorkRuns — work-group collapsing', () => {
       ],
       false,
     );
-    expect(items.map((it) => it.type)).toEqual(['message', 'work_group', 'tool_media', 'message']);
+    expect(items.map((it) => it.type)).toEqual([
+      'message',
+      'work_group',
+      'tool_media',
+      'message',
+    ]);
     const group = items[1] as Extract<RenderItem, { type: 'work_group' }>;
-    expect(group.children.map((c) => c.type)).toEqual(['message', 'tool_segment']);
+    expect(group.children.map((c) => `${c.type}:${c.key}`)).toEqual([
+      'message:msg-a-draft',
+      'work_group:work-img1',
+    ]);
     const media = items[2] as Extract<RenderItem, { type: 'tool_media' }>;
     expect(media.key).toBe('media-img1');
   });
@@ -963,8 +1061,8 @@ describe('groupWorkRuns — work-group collapsing', () => {
       'message',
     ]);
     const groups = items.filter((it): it is Extract<RenderItem, { type: 'work_group' }> => it.type === 'work_group');
-    expect(groups.map((g) => g.key)).toEqual(['work-a1-draft', 'work-a2-draft']);
-    expect(groups[0].children.some((c) => c.type === 'tool_segment' && c.key === 'seg-t2')).toBe(false);
+    expect(groups.map((g) => g.key)).toEqual(['work-summary-t1', 'work-summary-t2']);
+    expect(groups[0].children.some((c) => c.type === 'work_group' && c.key === 'work-t2')).toBe(false);
   });
 
   it('applies final-answer folding even when the visible window starts mid-turn', () => {
@@ -978,8 +1076,10 @@ describe('groupWorkRuns — work-group collapsing', () => {
     );
     expect(items.map((it) => it.type)).toEqual(['work_group', 'message']);
     const group = items[0] as Extract<RenderItem, { type: 'work_group' }>;
-    expect(group.children.map((c) => c.type)).toEqual(['message', 'tool_segment']);
-    expect((group.children[0] as Extract<RenderItem, { type: 'message' }>).message.clientId).toBe('a-visible-old');
+    expect(group.children.map((c) => `${c.type}:${c.key}`)).toEqual([
+      'message:msg-a-visible-old',
+      'work_group:work-t1',
+    ]);
   });
 
   it('keeps TodoWrite plan cards visible before the final answer', () => {
@@ -1006,6 +1106,29 @@ describe('groupWorkRuns — work-group collapsing', () => {
     const items = build(seq, false);
     const group = items.find((it): it is Extract<RenderItem, { type: 'work_group' }> => it.type === 'work_group');
     expect(group?.durationMs).toBe(140_000); // 10:00:05 → 10:02:25 = 2m20s
+  });
+
+  it('computes each nested action duration between assistant work updates', () => {
+    const items = build(
+      [
+        withTs(mkUser('u1'), '2026-06-10T10:00:00.000Z'),
+        withTs(mkAssistant('a-progress-1', 'First update.'), '2026-06-10T10:00:01.000Z'),
+        withTs(mkTool('t1', 'Bash'), '2026-06-10T10:00:02.000Z'),
+        withTs(mkAssistant('a-progress-2', 'Second update.'), '2026-06-10T10:00:10.000Z'),
+        withTs(mkTool('t2', 'Read'), '2026-06-10T10:00:12.000Z'),
+        withTs(mkAssistant('a-final', 'Done.'), '2026-06-10T10:00:20.000Z'),
+      ],
+      false,
+    );
+    const outer = items[1] as Extract<RenderItem, { type: 'work_group' }>;
+    const nested = outer.children.filter(
+      (child): child is Extract<RenderItem, { type: 'work_group' }> => child.type === 'work_group',
+    );
+    expect(outer.durationMs).toBe(18_000);
+    expect(nested.map((group) => [group.key, group.durationMs])).toEqual([
+      ['work-t1', 8_000],
+      ['work-t2', 8_000],
+    ]);
   });
 
   it('omits durationMs when timestamps are missing (legacy history)', () => {
@@ -1036,7 +1159,7 @@ describe('groupWorkRuns — work-group collapsing', () => {
       ],
       false,
     );
-    // thinking 折进「已工作」;它之后的两段正文都留可见
+    // thinking 折进「已工作」;两段 assistant 正文都留可见
     expect(items.map((it) => it.type)).toEqual(['message', 'work_group', 'message', 'message']);
     const group = items[1] as Extract<RenderItem, { type: 'work_group' }>;
     expect(group.children.map((c) => c.type)).toEqual(['message']); // 仅 th-last
@@ -1055,16 +1178,17 @@ describe('groupWorkRuns — work-group collapsing', () => {
       ],
       false,
     );
-    // a-early 在最后一段 thinking 之前 → 连同 thinking 折进「已工作」;只有 a-final 可见
     expect(items.map((it) => it.type)).toEqual(['message', 'work_group', 'message']);
     const group = items[1] as Extract<RenderItem, { type: 'work_group' }>;
-    expect(
-      group.children.map((c) => (c.type === 'message' ? `message:${c.message.clientId}` : c.type)),
-    ).toEqual(['message:a-early', 'message:th-last']);
+    expect(group.children.map((c) => (c.type === 'message' ? `message:${c.message.clientId}` : c.type)))
+      .toEqual(['message:a-early', 'work_group']);
+    const thinkingGroup = group.children[1] as Extract<RenderItem, { type: 'work_group' }>;
+    expect(thinkingGroup.key).toBe('work-th-last');
+    expect(thinkingGroup.children.map((child) => child.key)).toEqual(['msg-th-last']);
     expect((items[2] as Extract<RenderItem, { type: 'message' }>).message.clientId).toBe('a-final');
   });
 
-  it('no thinking → original design (intermediate prose folds, only final answer visible)', () => {
+  it('folds intermediate prose when the work contains no thinking', () => {
     const items = build(
       [
         mkUser('u1'),
@@ -1074,12 +1198,12 @@ describe('groupWorkRuns — work-group collapsing', () => {
       ],
       false,
     );
-    // 无 thinking → 不触发"thinking 之后"规则:中间正文 a-draft 仍折叠
     expect(items.map((it) => it.type)).toEqual(['message', 'work_group', 'message']);
     const group = items[1] as Extract<RenderItem, { type: 'work_group' }>;
-    expect(
-      group.children.map((c) => (c.type === 'message' ? `message:${c.message.clientId}` : c.type)),
-    ).toEqual(['message:a-draft', 'tool_segment']);
+    expect(group.children.map((c) => `${c.type}:${c.key}`)).toEqual([
+      'message:msg-a-draft',
+      'work_group:work-t1',
+    ]);
     expect((items[2] as Extract<RenderItem, { type: 'message' }>).message.clientId).toBe('a-final');
   });
 });

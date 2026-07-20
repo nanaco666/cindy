@@ -69,7 +69,14 @@ export interface MakerSendTransactionDeps {
     workingDir: string | undefined | null,
     agentKind: AgentKind | undefined,
     remoteHostId?: string | null,
+    opts?: { suppressMissingBroadcast?: boolean },
   ): Promise<boolean>;
+  /**
+   * 读 DB 里既有会话的权威 working_dir(行不存在 → null)。lazy-create /
+   * rehydrate 在 caller 传入的 workingDir 校验失败时用它兜底——输入队列崩溃
+   * 快照等缓存的 createOpts 可能内嵌已被启动 sweep 改写掉的老路径。
+   */
+  readSessionWorkingDirFromDb(sessionId: string): Promise<string | null>;
   isOrcaMcpHydrated(sessionId: string): boolean;
   buildCreateOptsWithStderr(opts: CreateOpts): CreateOpts;
   synthesizeOrcaVendorOptionsFromDb(sessionId: string, opts: CreateOpts): Promise<boolean>;
@@ -177,16 +184,56 @@ export function createMakerSendTransaction(deps: MakerSendTransactionDeps): Make
     }
   }
 
+  /**
+   * workDir 校验 + DB 权威值兜底。caller 传入的 createOpts.workingDir 可能是
+   * 缓存的陈旧值(典型:输入队列崩溃快照在启动 sweep 改写 DB 之前入的库,
+   * 回放时仍内嵌老路径,2026-07-20 实报)——校验失败时读 DB 行的 working_dir
+   * 重试,通过则就地采纳进 createOpts(后续 bootstrap 用新 cwd spawn)。
+   * 存在兜底候选时首检静默,避免"先弹错误横幅再静默成功"的假错误。
+   */
+  async function ensureWorkDirWithDbFallback(
+    sessionId: string,
+    createOpts: CreateOpts,
+  ): Promise<boolean> {
+    const dbDir = await deps.readSessionWorkingDirFromDb(sessionId).catch(() => null);
+    const fallbackDir = dbDir && dbDir !== createOpts.workingDir ? dbDir : null;
+    const ok = fallbackDir
+      ? await deps.checkWorkDirExists(
+          sessionId,
+          createOpts.workingDir,
+          createOpts.agentKind,
+          createOpts.remoteHostId,
+          { suppressMissingBroadcast: true },
+        )
+      : await deps.checkWorkDirExists(
+          sessionId,
+          createOpts.workingDir,
+          createOpts.agentKind,
+          createOpts.remoteHostId,
+        );
+    if (ok) return true;
+    if (!fallbackDir) return false;
+    const okDb = await deps.checkWorkDirExists(
+      sessionId,
+      fallbackDir,
+      createOpts.agentKind,
+      createOpts.remoteHostId,
+    );
+    if (!okDb) return false;
+    deps.log.info('send: adopted DB working_dir over stale caller createOpts', {
+      sessionId,
+      staleWorkingDir: createOpts.workingDir,
+      workingDir: fallbackDir,
+    });
+    createOpts.workingDir = fallbackDir;
+    return true;
+  }
+
   async function rehydrateActiveOrcaSession(
     sessionId: string,
     createOpts: CreateOpts,
   ): Promise<ResolveSessionResult> {
-    const okRehydrate = await deps.checkWorkDirExists(
-      sessionId,
-      createOpts.workingDir,
-      createOpts.agentKind,
-      createOpts.remoteHostId,
-    );
+    const okRehydrate = await ensureWorkDirWithDbFallback(sessionId, createOpts);
     if (!okRehydrate) {
       return {
         kind: 'failure',
@@ -240,12 +287,7 @@ export function createMakerSendTransaction(deps: MakerSendTransactionDeps): Make
     sessionId: string,
     createOpts: CreateOpts,
   ): Promise<ResolveSessionResult> {
-    const okLazy = await deps.checkWorkDirExists(
-      sessionId,
-      createOpts.workingDir,
-      createOpts.agentKind,
-      createOpts.remoteHostId,
-    );
+    const okLazy = await ensureWorkDirWithDbFallback(sessionId, createOpts);
     if (!okLazy) {
       return {
         kind: 'failure',

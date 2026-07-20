@@ -1,22 +1,30 @@
 {
-    "cn":
-    {
-        "oss":
-        {
+    "cn": {
+        "oss": {
             "cdnBaseUrl": "",
             "bucket": "",
             "prefix": "",
             "ossRegion": ""
+        },
+        "macSigning": {
+            "appleId": "",
+            "teamId": "",
+            "signIdentity": "",
+            "appPasswordEnv": ""
         }
     },
-    "global":
-    {
-        "oss":
-        {
+    "global": {
+        "oss": {
             "cdnBaseUrl": "",
             "bucket": "",
             "prefix": "",
             "ossRegion": ""
+        },
+        "macSigning": {
+            "appleId": "",
+            "teamId": "",
+            "signIdentity": "",
+            "appPasswordEnv": ""
         }
     }
 }

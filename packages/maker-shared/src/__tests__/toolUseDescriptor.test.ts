@@ -88,12 +88,24 @@ describe('describeToolUse — command tools', () => {
   it('prefers displayCommand over command for codex exec, never has description', () => {
     expect(
       describeToolUse('exec', { command: 'pwsh -c "git status"', displayCommand: 'git status', cwd: '/repo' }),
-    ).toEqual({ kind: 'command', toolName: 'exec', command: 'git status', cwd: '/repo' });
+    ).toEqual({
+      kind: 'command',
+      toolName: 'exec',
+      command: 'git status',
+      cwd: '/repo',
+      intent: { action: 'gitStatus' },
+    });
     expect(describeToolUse('exec', { command: 'ls -la' })).toEqual({
       kind: 'command',
       toolName: 'exec',
       command: 'ls -la',
       intent: { action: 'list' },
+    });
+    expect(describeToolUse('exec', { command: "/bin/zsh -lc 'git status'" })).toEqual({
+      kind: 'command',
+      toolName: 'exec',
+      command: 'git status',
+      intent: { action: 'gitStatus' },
     });
   });
 
@@ -119,6 +131,21 @@ describe('describeToolUse — command tools', () => {
     ).toMatchObject({ intent: { action: 'test' } });
   });
 
+  it('applies the safety gate to the unwrapped display command before trusting commandActions', () => {
+    const descriptor = describeToolUse('exec', {
+      command: "/bin/zsh -lc 'cat README.md | tee important.conf'",
+      displayCommand: 'cat README.md | tee important.conf',
+      commandActions: [
+        { type: 'read', command: 'cat README.md', name: 'README.md', path: '/repo/README.md' },
+      ],
+    });
+    expect(descriptor).toMatchObject({
+      kind: 'command',
+      command: 'cat README.md | tee important.conf',
+    });
+    expect(descriptor).not.toHaveProperty('intent');
+  });
+
   it('skips intent computation when the model already wrote a description', () => {
     expect(
       describeToolUse('Bash', { command: 'ls src', description: '看看源码目录' }),
@@ -126,7 +153,7 @@ describe('describeToolUse — command tools', () => {
   });
 
   it('omits intent for commands the local parser cannot classify', () => {
-    expect(describeToolUse('Bash', { command: 'git status' })).not.toHaveProperty('intent');
+    expect(describeToolUse('Bash', { command: 'docker ps' })).not.toHaveProperty('intent');
     expect(describeToolUse('exec', { command: 'rm -rf build' })).not.toHaveProperty('intent');
   });
 });
@@ -154,6 +181,79 @@ describe('describeToolUse — file tools', () => {
   it('falls back from file_path to path, then degrades to generic', () => {
     expect(describeToolUse('Read', { path: '/repo/b.ts' })).toMatchObject({ filePath: '/repo/b.ts' });
     expect(describeToolUse('Read', {})).toEqual({ kind: 'generic', toolName: 'Read' });
+  });
+});
+
+describe('describeToolUse — Codex file_change', () => {
+  it('normalizes add/update/delete and rename changes', () => {
+    expect(describeToolUse('file_change', {
+      changes: [
+        { path: '/repo/src/new.ts', kind: { type: 'add' }, diff: '+++ b/src/new.ts\n+hello' },
+        { path: '/repo/src/app.ts', kind: { type: 'update' }, diff: '-old\n+new' },
+        { path: '/repo/src/old.ts', kind: { type: 'delete' }, diff: '-gone' },
+        {
+          path: '/repo/src/before.ts',
+          kind: { type: 'update', move_path: '/repo/src/after.ts' },
+          diff: '',
+        },
+      ],
+    })).toEqual({
+      kind: 'fileChange',
+      toolName: 'file_change',
+      changes: [
+        {
+          action: 'add',
+          path: '/repo/src/new.ts',
+          fileName: 'new.ts',
+          diff: '+++ b/src/new.ts\n+hello',
+        },
+        {
+          action: 'update',
+          path: '/repo/src/app.ts',
+          fileName: 'app.ts',
+          diff: '-old\n+new',
+        },
+        {
+          action: 'delete',
+          path: '/repo/src/old.ts',
+          fileName: 'old.ts',
+          diff: '-gone',
+        },
+        {
+          action: 'move',
+          path: '/repo/src/before.ts',
+          fileName: 'before.ts',
+          movePath: '/repo/src/after.ts',
+          moveFileName: 'after.ts',
+          diff: '',
+        },
+      ],
+    });
+  });
+
+  it('accepts camelCase/top-level move fields and preserves unknown actions', () => {
+    expect(describeToolUse('file_change', {
+      changes: [
+        { path: 'C:\\repo\\a.ts', kind: { type: 'update', movePath: 'C:\\repo\\b.ts' }, diff: '' },
+        { path: '/repo/custom.bin', kind: { type: 'chmod' }, diff: '' },
+      ],
+    })).toMatchObject({
+      kind: 'fileChange',
+      changes: [
+        { action: 'move', fileName: 'a.ts', moveFileName: 'b.ts' },
+        { action: 'unknown', fileName: 'custom.bin' },
+      ],
+    });
+  });
+
+  it('degrades the whole call to generic when changes are empty or malformed', () => {
+    expect(describeToolUse('file_change', { changes: [] })).toEqual({
+      kind: 'generic',
+      toolName: 'file_change',
+    });
+    expect(describeToolUse('file_change', {
+      changes: [{ path: '/repo/a.ts', kind: { type: 'update' } }],
+    })).toEqual({ kind: 'generic', toolName: 'file_change' });
   });
 });
 

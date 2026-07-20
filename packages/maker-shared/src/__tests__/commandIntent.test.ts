@@ -157,7 +157,7 @@ describe('commandIntentFromActions — codex commandActions 解析', () => {
 });
 
 describe('commandIntentFromCommand — 本地规则解析', () => {
-  it('parses file reads (cat/head/tail/sed -n)', () => {
+  it('parses file reads (cat/head/tail/nl/sed -n)', () => {
     expect(commandIntentFromCommand('cat /repo/src/app.ts')).toEqual({
       action: 'read',
       target: 'app.ts',
@@ -175,6 +175,18 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
       target: 'main.ts',
       path: 'src/main.ts',
     });
+    expect(commandIntentFromCommand('nl -ba src/main.ts')).toEqual({
+      action: 'read',
+      target: 'main.ts',
+      path: 'src/main.ts',
+    });
+    expect(commandIntentFromCommand("nl -ba src/main.ts | sed -n '20,40p'")).toEqual({
+      action: 'read',
+      target: 'main.ts',
+      path: 'src/main.ts',
+    });
+    expect(commandIntentFromCommand("nl -ba src/main.ts | sed -n '20,40p' other.ts")).toBeUndefined();
+    expect(commandIntentFromCommand("nl src/main.ts | sed -n '1w report.txt'")).toBeUndefined();
     // sed -i 是就地编辑,刻意不解析。
     expect(commandIntentFromCommand("sed -i '' 's/a/b/' f.ts")).toBeUndefined();
   });
@@ -201,6 +213,10 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
       target: '*.test.ts',
       path: 'src',
     });
+    expect(commandIntentFromCommand('find apps/desktop -type f')).toEqual({
+      action: 'list',
+      target: 'apps/desktop',
+    });
     // find 的 -exec / -delete 是破坏性形态,与 rm 同理不解析。
     expect(commandIntentFromCommand('find . -name "*.tmp" -exec rm {} \\;')).toBeUndefined();
     expect(commandIntentFromCommand('find . -name "*.log" -delete')).toBeUndefined();
@@ -220,6 +236,67 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
     expect(commandIntentFromCommand('tsc --noEmit')).toEqual({ action: 'typecheck' });
     expect(commandIntentFromCommand('cargo clippy')).toEqual({ action: 'lint' });
     expect(commandIntentFromCommand('go test ./...')).toEqual({ action: 'test' });
+    expect(commandIntentFromCommand('pnpm restart:desktop:remote')).toEqual({
+      action: 'runScript',
+      target: 'restart:desktop:remote',
+    });
+    expect(commandIntentFromCommand('pnpm run restart:desktop:remote')).toEqual({
+      action: 'runScript',
+      target: 'restart:desktop:remote',
+    });
+    expect(commandIntentFromCommand('pnpm --version')).toEqual({ action: 'showVersion', target: 'pnpm' });
+    expect(commandIntentFromCommand('pnpm exec prettier --check .')).toEqual({ action: 'checkFormatting' });
+    expect(commandIntentFromCommand('pnpm exec prettier --write .')).toBeUndefined();
+    expect(commandIntentFromCommand('pnpm publish')).toBeUndefined();
+    expect(commandIntentFromCommand('npm set registry https://example.com')).toBeUndefined();
+  });
+
+  it('parses common read-only runtime and inspection commands', () => {
+    expect(commandIntentFromCommand('node scripts/release.mjs')).toEqual({
+      action: 'runScript',
+      target: 'release.mjs',
+    });
+    expect(commandIntentFromCommand('node --check src/index.js')).toEqual({
+      action: 'checkSyntax',
+      target: 'index.js',
+    });
+    expect(commandIntentFromCommand('node --version')).toEqual({ action: 'showVersion', target: 'Node.js' });
+    expect(commandIntentFromCommand('node -e "console.log(1)"')).toBeUndefined();
+    expect(commandIntentFromCommand("node <<'NODE'\nconsole.log(1)\nNODE")).toBeUndefined();
+
+    expect(commandIntentFromCommand("jq '.name' package.json")).toEqual({
+      action: 'parseJson',
+      target: 'package.json',
+    });
+    expect(commandIntentFromCommand('jq --help')).toBeUndefined();
+    expect(commandIntentFromCommand('wc -l src/index.ts')).toEqual({ action: 'count', target: 'index.ts' });
+    expect(commandIntentFromCommand('wc --help')).toBeUndefined();
+    expect(commandIntentFromCommand('pwd -P')).toEqual({ action: 'showCurrentDirectory' });
+    expect(commandIntentFromCommand("date '+%Y-%m-%d %H:%M'")).toEqual({ action: 'showDateTime' });
+    expect(commandIntentFromCommand('date -s tomorrow')).toBeUndefined();
+    expect(commandIntentFromCommand('command -v pnpm')).toEqual({ action: 'locateCommand', target: 'pnpm' });
+    expect(commandIntentFromCommand('which -a node pnpm')).toEqual({
+      action: 'locateCommand',
+      target: 'node pnpm',
+    });
+    expect(commandIntentFromCommand('ps aux')).toEqual({ action: 'inspectProcesses' });
+    expect(commandIntentFromCommand('pgrep -fl Cindy')).toEqual({ action: 'inspectProcesses' });
+    expect(commandIntentFromCommand('lsof -i :3333')).toEqual({ action: 'inspectPorts', target: ':3333' });
+  });
+
+  it('only describes sqlite commands that stay in read-only query mode', () => {
+    expect(commandIntentFromCommand("sqlite3 -readonly data.db 'select count(*) from messages'"))
+      .toEqual({ action: 'queryDatabase', target: 'data.db' });
+    expect(commandIntentFromCommand("sqlite3 data.db 'select count(*) from messages'"))
+      .toBeUndefined();
+    expect(commandIntentFromCommand("sqlite3 -readonly data.db '.shell rm -rf build'"))
+      .toBeUndefined();
+    expect(commandIntentFromCommand("sqlite3 -readonly data.db 'delete from messages'"))
+      .toBeUndefined();
+    expect(commandIntentFromCommand("sqlite3 -readonly data.db \"select load_extension('/tmp/x')\""))
+      .toBeUndefined();
+    expect(commandIntentFromCommand("sqlite3 -readonly -cmd '.shell touch pwned' data.db 'select 1'"))
+      .toBeUndefined();
   });
 
   it('parses network fetches but rejects mutating curl/wget forms', () => {
@@ -244,6 +321,124 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
     expect(commandIntentFromCommand('wget https://example.com/app.ts')).toBeUndefined();
     expect(commandIntentFromCommand('wget --output-document=x.bin https://example.com/x')).toBeUndefined();
     expect(commandIntentFromCommand('wget --post-data a=1 https://example.com/x')).toBeUndefined();
+  });
+
+  it('parses stable Git reads and writes with explicit actions', () => {
+    const cases: Array<[string, string]> = [
+      ['git status --short', 'gitStatus'],
+      ['git -C /repo --no-pager diff --stat', 'gitDiff'],
+      ['git log -5 --oneline', 'gitLog'],
+      ['git show HEAD:README.md', 'gitShow'],
+      ['git add src/app.ts', 'gitAdd'],
+      ['git commit -m "fix: parser"', 'gitCommit'],
+      ['git fetch origin --prune', 'gitFetch'],
+      ['git pull --ff-only', 'gitPull'],
+      ['git push origin feature', 'gitPush'],
+      ['git remote -v', 'gitRemote'],
+      ['git rev-parse --show-toplevel', 'gitRevParse'],
+      ['git branch --show-current', 'gitBranch'],
+      ['git grep TODO -- src', 'gitGrep'],
+      ['git merge-base main HEAD', 'gitMergeBase'],
+      ['git ls-files src', 'gitLsFiles'],
+      ['git rev-list --count main..HEAD', 'gitRevList'],
+      ['git ls-remote origin HEAD', 'gitLsRemote'],
+      ['git worktree list --porcelain', 'gitWorktreeList'],
+      ['git worktree add ../preview feature', 'gitWorktreeAdd'],
+      ['git worktree remove ../preview', 'gitWorktreeRemove'],
+      ['git worktree move ../old ../new', 'gitWorktreeMove'],
+      ['git worktree prune', 'gitWorktreePrune'],
+    ];
+    for (const [command, action] of cases) {
+      expect(commandIntentFromCommand(command), command).toEqual({ action });
+    }
+  });
+
+  it('keeps unusual or destructive Git forms on the raw-command fallback', () => {
+    expect(commandIntentFromCommand('git diff --output=changes.patch')).toBeUndefined();
+    expect(commandIntentFromCommand('git log --output history.txt')).toBeUndefined();
+    expect(commandIntentFromCommand('git commit --amend --no-edit')).toBeUndefined();
+    expect(commandIntentFromCommand('git push --force-with-lease origin feature')).toBeUndefined();
+    expect(commandIntentFromCommand('git push origin --delete old-branch')).toBeUndefined();
+    expect(commandIntentFromCommand('git reset --hard HEAD~1')).toBeUndefined();
+    expect(commandIntentFromCommand('git branch new-feature')).toBeUndefined();
+    expect(commandIntentFromCommand('git branch -D old-feature')).toBeUndefined();
+    expect(commandIntentFromCommand('git branch -Dold-feature')).toBeUndefined();
+    expect(commandIntentFromCommand('git remote set-url origin git@example.com:x/y.git')).toBeUndefined();
+    expect(commandIntentFromCommand('git ls-remote --upload-pack=touch origin')).toBeUndefined();
+    expect(commandIntentFromCommand('git grep -Ovim TODO')).toBeUndefined();
+  });
+
+  it('parses common gh pr, issue and auth operations', () => {
+    const cases: Array<[string, string]> = [
+      ['gh pr list --limit 20', 'ghPrList'],
+      ['gh pr view 123 --json title', 'ghPrView'],
+      ['gh --repo xindong/cindy pr checks 123', 'ghPrChecks'],
+      ['gh pr status', 'ghPrStatus'],
+      ['gh pr diff 123', 'ghPrDiff'],
+      ['gh pr create --title fix', 'ghPrCreate'],
+      ['gh pr edit 123 --add-label bug', 'ghPrEdit'],
+      ['gh pr comment 123 --body fixed', 'ghPrComment'],
+      ['gh pr review 123 --approve', 'ghPrReview'],
+      ['gh pr merge 123 --squash', 'ghPrMerge'],
+      ['gh pr close 123', 'ghPrClose'],
+      ['gh pr reopen 123', 'ghPrReopen'],
+      ['gh pr checkout 123', 'ghPrCheckout'],
+      ['gh issue list', 'ghIssueList'],
+      ['gh issue view 7', 'ghIssueView'],
+      ['gh issue status', 'ghIssueStatus'],
+      ['gh issue create --title bug', 'ghIssueCreate'],
+      ['gh issue edit 7 --add-label bug', 'ghIssueEdit'],
+      ['gh issue comment 7 --body fixed', 'ghIssueComment'],
+      ['gh issue close 7', 'ghIssueClose'],
+      ['gh issue reopen 7', 'ghIssueReopen'],
+      ['gh auth status', 'ghAuthStatus'],
+      ['gh auth login', 'ghAuthLogin'],
+      ['gh auth logout', 'ghAuthLogout'],
+      ['gh auth refresh', 'ghAuthRefresh'],
+      ['gh auth switch', 'ghAuthSwitch'],
+      ['gh run list --limit 10', 'ghRunList'],
+      ['gh run view 123 --log', 'ghRunView'],
+      ['gh run watch 123', 'ghRunWatch'],
+      ['gh repo list xindong', 'ghRepoList'],
+    ];
+    for (const [command, action] of cases) {
+      expect(commandIntentFromCommand(command), command).toEqual({ action });
+    }
+    expect(commandIntentFromCommand('gh pr ready 123')).toBeUndefined();
+    expect(commandIntentFromCommand('gh repo delete owner/repo')).toBeUndefined();
+    expect(commandIntentFromCommand('gh repo view owner/repo')).toEqual({
+      action: 'ghRepoView',
+      target: 'owner/repo',
+    });
+    expect(commandIntentFromCommand('gh search prs "is:open review-requested:@me"')).toEqual({
+      action: 'ghSearch',
+    });
+    expect(commandIntentFromCommand('gh run delete 123')).toBeUndefined();
+  });
+
+  it('distinguishes gh api queries, mutations and unknown request bodies', () => {
+    expect(commandIntentFromCommand('gh api repos/xindong/cindy/pulls/123')).toEqual({
+      action: 'ghApiQuery',
+    });
+    expect(commandIntentFromCommand('gh api --method GET repos/x/y/issues -f per_page=100')).toEqual({
+      action: 'ghApiQuery',
+    });
+    expect(commandIntentFromCommand('gh api repos/x/y/issues -f title=bug')).toEqual({
+      action: 'ghApiMutation',
+    });
+    expect(commandIntentFromCommand('gh api repos/x/y/issues/1 -X PATCH -f state=closed')).toEqual({
+      action: 'ghApiMutation',
+    });
+    expect(
+      commandIntentFromCommand("gh api graphql -f query='query { viewer { login } }'"),
+    ).toEqual({ action: 'ghApiQuery' });
+    expect(
+      commandIntentFromCommand("gh api graphql -f query='mutation { addComment(input: {}) { clientMutationId } }'"),
+    ).toEqual({ action: 'ghApiMutation' });
+    expect(commandIntentFromCommand('gh api graphql --input request.json')).toEqual({ action: 'ghApiCall' });
+    expect(commandIntentFromCommand('gh api graphql --input request.json -X POST')).toEqual({ action: 'ghApiCall' });
+    expect(commandIntentFromCommand('gh api -f title=bug')).toEqual({ action: 'ghApiCall' });
+    expect(commandIntentFromCommand('gh api repos/x/y -X OPTIONS')).toEqual({ action: 'ghApiCall' });
   });
 
   it('rejects >&file writes, tree output flags, cd-prefix side effects and zsh =() substitution', () => {
@@ -539,7 +734,7 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
     });
     expect(commandIntentFromCommand('grep "unterminated')).toBeUndefined();
     // 认不出的命令与破坏性命令。
-    expect(commandIntentFromCommand('git status')).toBeUndefined();
+    expect(commandIntentFromCommand('docker ps')).toBeUndefined();
     expect(commandIntentFromCommand('rm -rf node_modules')).toBeUndefined();
     expect(commandIntentFromCommand('')).toBeUndefined();
   });

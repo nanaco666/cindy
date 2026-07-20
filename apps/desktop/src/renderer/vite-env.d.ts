@@ -2772,6 +2772,16 @@ interface ElectronAPI {
     }) => void,
   ) => () => void;
 
+  // per-message 维度: turn 结束检测到模型被上游降级 / 替换时 main 推标记
+  // (挂在该轮最后一条 assistant 上,AssistantMessage 渲染降级提示行)。
+  onUsageMessageModelMismatch: (
+    cb: (data: {
+      sessionId: string;
+      clientId: string;
+      modelMismatch: import('../shared/modelMismatch').ModelMismatchInfo;
+    }) => void,
+  ) => () => void;
+
   // ── 首登轻量数据迁移(mToc) — 老 userData → Cindy 一次性复制迁移弹窗 ──
   legacyMigration: {
     /** 订阅弹窗阶段推送。payload: { phase } */

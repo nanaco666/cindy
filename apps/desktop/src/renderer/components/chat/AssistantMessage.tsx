@@ -38,8 +38,9 @@
 
 import { memo, useMemo, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2 } from 'lucide-react';
+import { Loader2, TriangleAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatModelShortLabel } from '@/lib/modelShortLabel';
 import { stripGoalVerdictBlock } from '@/lib/goalVerdict';
 import { getGhostCardEntry, subscribeGhostCards } from '@/cindy-brain/ghostCardStore';
 import { GhostToolCard } from './GhostToolCard';
@@ -171,6 +172,9 @@ interface AssistantMessageProps {
   turnCostIsEstimate?: boolean;
   /** Per-turn token/cache 明细。 */
   turnUsageDetails?: TurnUsageDetails;
+  /** 本轮模型降级标记(main turn 结束检测命中时挂到收尾 assistant 上),
+   *  正文下方渲染一条常显的降级提示行。 */
+  modelMismatch?: { selected: string; actual: string };
   /** 出口钩子(will-assistant-message)后台处理中:回复已显示、意识还在跑那段
    *  (润色/自绘,最长 5 分钟)挂一条"意识处理中"轻指示;完成/超时由 main 清。 */
   ghostReplyPending?: boolean;
@@ -192,6 +196,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   turnCostUsd,
   turnCostIsEstimate,
   turnUsageDetails,
+  modelMismatch,
   ghostReplyPending,
 }: AssistantMessageProps) {
   const { t } = useTranslation();
@@ -303,6 +308,19 @@ export const AssistantMessage = memo(function AssistantMessage({
               <Loader2 size={11} />
             </span>
             {t('chat.ghostHook.processing')}
+          </div>
+        )}
+        {/* 模型降级提示:所选模型本轮被上游静默替换(main turn 结束检测,详见
+            shared/modelMismatch.ts)。常显不随 hover —— 用户需要在不悬停的情况
+            下知道这轮不是自己选的模型回答的;icon 用 warning 语义色(token 豁免
+            簇),文字保持 tertiary 灰阶,不喧宾夺主。 */}
+        {modelMismatch && (
+          <div className="mt-1 flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>
+            <TriangleAlert size={11} style={{ color: 'var(--warning-fg)' }} aria-hidden />
+            {t('chat.modelMismatch.notice', {
+              actual: formatModelShortLabel(modelMismatch.actual) || modelMismatch.actual,
+              selected: formatModelShortLabel(modelMismatch.selected) || modelMismatch.selected,
+            })}
           </div>
         )}
       </div>

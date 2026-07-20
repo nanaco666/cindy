@@ -159,9 +159,10 @@ export interface HookPendingBindView {
  *  - disabled:   开关关闭, 不建连
  *  - connecting: 正在建连 / 退避重连中(含已开 WS 但尚未收到 welcome)
  *  - connected:  握手完成(hello -> welcome), 可收派发
+ *  - standby:    同机另一实例已持有 first-wins 连接, 本实例低频探测接管
  *  - error:      最近一次连接失败(仍在退避重试), lastError 给原因
  */
-export type HookConnectionStatus = 'disabled' | 'connecting' | 'connected' | 'error';
+export type HookConnectionStatus = 'disabled' | 'connecting' | 'connected' | 'standby' | 'error';
 
 /** 渲染层可见的 Slack Hook 快照(单连接)。 */
 export interface SlackHookView {

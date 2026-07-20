@@ -69,6 +69,7 @@ import {
   artifactBaseName,
   buildBuildInfo,
 } from './ci/package-lib.mjs';
+import { applyMacSigningConfigToEnv } from './ci/release-regions.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -328,6 +329,9 @@ async function main() {
   const platformKey = `${platform}-${arch}`;
   // ensureBinary 的 CDN fallback 按此 region 选择清单基址；必须早于二进制准备。
   process.env.CINDY_AUTH_REGION = region;
+  // mac 签名身份按区域从 release-regions.json 注入(文件缺失时静默跳过,
+  // 届时签名要求身份齐备,由 resolveAppleIdentity fail closed)。
+  applyMacSigningConfigToEnv(region);
 
   if (platform !== process.platform) {
     console.error(`ERROR: 不支持交叉打包(当前 ${process.platform},目标 ${platform});请在目标平台机器上执行。`);

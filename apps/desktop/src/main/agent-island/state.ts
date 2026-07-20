@@ -118,6 +118,13 @@ interface AgentIslandSessionState {
   } | null;
   messagePreviewQueue: AgentIslandActivityLine[];
   startedAt: number;
+  /**
+   * Sidebar-style sort clock: the latest user/scheduler prompt accepted for
+   * this session. Agent replies, streaming text and tool progress must not
+   * bump it. Sessions first observed through an agent event use startedAt as
+   * the same fallback role as the sidebar's `userSendAt ?? updatedAt`.
+   */
+  sortActivityAt: number;
   lastActivityAt: number;
 }
 
@@ -407,6 +414,7 @@ export function applyAgentIslandUserPrompt(
   clearAssistantStream(session);
   const line = appendActivityLine(session, 'user', text);
   if (line) enqueueMessagePreview(session, line, now);
+  session.sortActivityAt = now;
   session.lastActivityAt = now;
   return true;
 }
@@ -932,6 +940,7 @@ export function buildAgentIslandDisplayState(
     state,
     orderSessionsForAutomaticTransientStack(sortedSessions, activeTransient, manualExpanded),
     manualExpanded,
+    now,
   );
   const decision = buildDisplayDecision(state, orderedSessions, manualExpanded, now);
   const current = decision.surface.current;
@@ -1457,6 +1466,7 @@ function orderSessionsForCurrentSurface(
   state: AgentIslandState,
   sortedSessions: AgentIslandSessionState[],
   manualExpanded: boolean,
+  now: number,
 ): AgentIslandSessionState[] {
   if (!manualExpanded) {
     state.expandedSessionOrder = null;
@@ -1464,15 +1474,14 @@ function orderSessionsForCurrentSurface(
   }
 
   if (!state.expandedSessionOrder) {
-    const ordered = orderCompletedSessionsFirst(sortedSessions);
-    state.expandedSessionOrder = ordered.map((session) => session.sessionId);
-    return ordered;
+    state.expandedSessionOrder = sortedSessions.map((session) => session.sessionId);
+    return sortedSessions;
   }
 
   const rank = new Map(state.expandedSessionOrder.map((sessionId, index) => [sessionId, index]));
   const ordered = sortedSessions.slice().sort((a, b) => {
-    const phaseRankDelta = completedFirstRank(b) - completedFirstRank(a);
-    if (phaseRankDelta !== 0) return phaseRankDelta;
+    const priorityDelta = priorityRank(state, b, now) - priorityRank(state, a, now);
+    if (priorityDelta !== 0) return priorityDelta;
     const aRank = rank.get(a.sessionId);
     const bRank = rank.get(b.sessionId);
     if (aRank !== undefined && bRank !== undefined) return aRank - bRank;
@@ -1489,21 +1498,11 @@ function orderSessionsForAutomaticTransientStack(
   activeTransient: AgentIslandSessionState | null,
   manualExpanded: boolean,
 ): AgentIslandSessionState[] {
-  if (manualExpanded || !activeTransient) return sortedSessions;
+  if (manualExpanded || !activeTransient || sortedSessions.some(isBlockingSession)) return sortedSessions;
   return [
     activeTransient,
-    ...orderCompletedSessionsFirst(
-      sortedSessions.filter((session) => session.sessionId !== activeTransient.sessionId),
-    ),
+    ...sortedSessions.filter((session) => session.sessionId !== activeTransient.sessionId),
   ];
-}
-
-function orderCompletedSessionsFirst(sessions: AgentIslandSessionState[]): AgentIslandSessionState[] {
-  return sessions.slice().sort((a, b) => completedFirstRank(b) - completedFirstRank(a));
-}
-
-function completedFirstRank(session: AgentIslandSessionState): number {
-  return session.phase === 'completed' ? 1 : 0;
 }
 
 function buildDisplayDecision(
@@ -1909,6 +1908,7 @@ function getOrCreateSession(
     messagePreview: null,
     messagePreviewQueue: [],
     startedAt: now,
+    sortActivityAt: now,
     lastActivityAt: now,
   };
   state.sessions.set(meta.sessionId, session);
@@ -2070,10 +2070,10 @@ function compareSessionsForDisplay(
   b: AgentIslandSessionState,
   now: number,
 ): number {
-  const activityDelta = b.lastActivityAt - a.lastActivityAt;
-  if (activityDelta !== 0) return activityDelta;
   const rankDelta = priorityRank(state, b, now) - priorityRank(state, a, now);
   if (rankDelta !== 0) return rankDelta;
+  const activityDelta = b.sortActivityAt - a.sortActivityAt;
+  if (activityDelta !== 0) return activityDelta;
   return b.startedAt - a.startedAt;
 }
 

@@ -20,7 +20,7 @@ vi.mock('../plugins', () => ({}));
 
 import { RightSidebarShell } from '../RightSidebarShell';
 import { _resetRsbBrowserBridgeForTests } from '../lib/rsbBrowserBridge';
-import { _resetStore } from '../store';
+import { _resetStore, closeTab } from '../store';
 
 interface RightSidebarTabsIpcStub {
   list: ReturnType<typeof vi.fn>;
@@ -443,5 +443,99 @@ describe('RightSidebarShell empty state', () => {
     expect(tabbar.className).toContain('h-[36px]');
     // isMac=true → showWindowControls=false,右端不渲染窗口控件块。
     expect(screen.queryByLabelText('rightSidebar.tabs.controls.closeAria')).toBeNull();
+  });
+
+  it('fires onAllTabsClosed exactly once when the last tab is closed', async () => {
+    tabsIpc.list.mockResolvedValueOnce({
+      tabs: [
+        { id: 'tab-a', kind: 'file-browser', state: null },
+        { id: 'tab-b', kind: 'terminal', state: null },
+      ],
+      activeTabId: 'tab-a',
+    });
+    const onAllTabsClosed = vi.fn();
+    render(
+      createElement(RightSidebarShell, {
+        sessionId: 's1',
+        workdir: '/tmp/repo',
+        remoteHostId: null,
+        isMac: true,
+        unifiedTopbar: true,
+        onAllTabsClosed,
+      }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText('rightSidebar.tabs.kinds.fileBrowser')).toBeTruthy(),
+    );
+    // 关掉第一个 → 还剩 1 个,不触发(prev>0 但 now≠0)。
+    await act(async () => {
+      await closeTab('s1', 'tab-a');
+    });
+    expect(onAllTabsClosed).not.toHaveBeenCalled();
+    // 关掉最后一个 → tab 数 1→0,触发一次。
+    await act(async () => {
+      await closeTab('s1', 'tab-b');
+    });
+    expect(onAllTabsClosed).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fire onAllTabsClosed for a session that is empty from the start', async () => {
+    tabsIpc.list.mockResolvedValueOnce({ tabs: [], activeTabId: null });
+    const onAllTabsClosed = vi.fn();
+    render(
+      createElement(RightSidebarShell, {
+        sessionId: 's1',
+        workdir: '/tmp/repo',
+        remoteHostId: null,
+        isMac: true,
+        unifiedTopbar: true,
+        onAllTabsClosed,
+      }),
+    );
+
+    // hydrated 后一直是 0(从未 >0),首帧 prev===null 不触发。
+    await waitFor(() => expect(screen.getByText('rightSidebar.tabs.empty.title')).toBeTruthy());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onAllTabsClosed).not.toHaveBeenCalled();
+  });
+
+  it('does not fire onAllTabsClosed when switching to an empty session', async () => {
+    tabsIpc.list
+      .mockResolvedValueOnce({
+        tabs: [{ id: 'tab-a', kind: 'file-browser', state: null }],
+        activeTabId: 'tab-a',
+      })
+      .mockResolvedValueOnce({ tabs: [], activeTabId: null });
+    const onAllTabsClosed = vi.fn();
+    const { rerender } = render(
+      createElement(RightSidebarShell, {
+        sessionId: 's1',
+        workdir: '/tmp/repo',
+        remoteHostId: null,
+        isMac: true,
+        unifiedTopbar: true,
+        onAllTabsClosed,
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText('rightSidebar.tabs.kinds.fileBrowser')).toBeTruthy(),
+    );
+
+    // 切到本就空的 s2:sessionId effect 把计数重置为 null,不应把"换到空 session"
+    // 误判成"关掉最后一个 tab"。
+    rerender(
+      createElement(RightSidebarShell, {
+        sessionId: 's2',
+        workdir: '/tmp/repo',
+        remoteHostId: null,
+        isMac: true,
+        unifiedTopbar: true,
+        onAllTabsClosed,
+      }),
+    );
+    await waitFor(() => expect(screen.getByText('rightSidebar.tabs.empty.title')).toBeTruthy());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onAllTabsClosed).not.toHaveBeenCalled();
   });
 });

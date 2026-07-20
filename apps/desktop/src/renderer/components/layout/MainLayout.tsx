@@ -598,6 +598,19 @@ export function MainLayout() {
     });
   }, [rightSidebarSessionId, rsbDetached, rsbWindow.loaded, rsbWindow.open]);
 
+  // 关掉右侧栏最后一个 tab 时自动收起(由 RightSidebarShell 在 tab 数 >0→0 时回调)。
+  // detached 子窗口形态不在此处理(那时主窗根本不渲染内嵌 Shell,也收不到此回调)。
+  // 走 requestAnimateNextChange 让收起有 250ms 动画,与用户手动折叠观感一致(规则 7)。
+  // sessionId 用 ref 取最新值,避免回调闭包捕获旧 session。
+  const handleRightSidebarEmptied = useCallback(() => {
+    if (rsbDetached) return;
+    const sessionId = rightSidebarSessionIdRef.current;
+    if (sessionId == null) return;
+    rightSidebarRef.current?.requestAnimateNextChange();
+    setIsRightSidebarCollapsed(true);
+    writeCollapsedFor(sessionId, true);
+  }, [rsbDetached]);
+
   // sessionId 切换时按新 session 的存档刷新折叠态。无需 prime 动画 —— RightSidebar 默认
   // 直接同步,切 session "瞬间生效"(用户体感:不应看着一栏慢慢展开/收起)。
   useLayoutEffect(() => {
@@ -1166,6 +1179,7 @@ export function MainLayout() {
                   // M2:面板贴左时 detach / maximize 由 Shell 顶栏右端自渲染
                   // (面板自属控件跟面板走);折叠 toggle 恒在窗口右上浮层,不下沉。
                   panelSide={rightSidebarSide}
+                  onAllTabsClosed={handleRightSidebarEmptied}
                 />
               ) : null,
           }}

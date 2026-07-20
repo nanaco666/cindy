@@ -10,7 +10,7 @@ import { machineIdSync } from 'node-machine-id';
 import windowStateKeeper from 'electron-window-state';
 import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import { shouldRequestSingleInstanceLock } from './devCliFlags.js';
-import { acquirePassiveDevLock } from './passiveDevLock.js';
+import { markDesktopDevReady, markDesktopDevStartupFailed } from './devStartupStatus';
 
 const PROCESS_STARTED_AT_MS = Date.now();
 
@@ -137,6 +137,8 @@ import {
   REMOTE_IMAGE_MAX_BYTES,
 } from './lightboxMediaActions';
 import { sweepStartupDraftImages } from './imageCacheOrphanSweep';
+import { sweepLegacyDialogueWorkingDirs } from './localDb/dialogueWorkdirSelfHeal';
+import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
 import * as videoCacheStore from './videoCacheStore';
 import { imageSchemePrivilege, registerImageProtocolHandler } from './imageProtocol';
 import { videoSchemePrivilege, registerVideoProtocolHandler } from './videoProtocol';
@@ -638,7 +640,6 @@ import { initLogger, writeFromRenderer, setLogLevel, getLogLevel, keepRecentSync
 initLogger();
 const dbClientLog = createLogger('DbClient');
 const authBoundaryLog = createLogger('auth-boundary');
-const passiveDevLockLog = createLogger('passive-dev-lock');
 // 主窗 renderer 加载失败可观测性 + dev 启动看门狗(见 renderer-boot-guard.ts 顶部注释)。
 const rendererGuardLog = createLogger('renderer-guard');
 const updatePresentationLog = createLogger('update-presentation');
@@ -1531,22 +1532,28 @@ app.on('open-file', (event, filePath) => {
 // cindy://session 等)/ 右键 "通过 Cindy 打开" 而拉起的第二个进程 redirect 成
 // "聚焦已运行窗口" 的唯一机制——两个独立 Electron 进程之间没有别的通道能交接焦点。
 //
-// 唯一例外是 dev `--passive`:它的公开契约就是和正式版共享 Cindy userData 双开、
-// 同时让出自动 schedule。正式版已持有同一作用域的锁，passive dev 若也请求会直接
-// quit，契约形同失效；所以只有这个明确模式跳过 Electron 内置锁。此模式没有
-// second-instance redirect，deep link 落到哪个实例由当前 OS 协议注册归属决定。
-// 但 passive 实例之间仍需互斥(同一 userData 的 SQLite 不能并发打开两个写者),
-// 通过 userData 下的 `.passive-dev.lock` 原子文件锁实现。
+// 唯一例外是 dev `--passive`:它的公开契约就是与正式版 / primary dev 共享同一份
+// Cindy userData 多开、同时让出自动 schedule。所有 passive dev 都跳过 Electron
+// 内置锁，因此一个 primary 后可以并行启动任意多个 preview；SQLite 使用 WAL +
+// busy_timeout，scheduler / device-link / refresh token 各自由现有跨实例仲裁收敛。
+// 此模式没有 second-instance redirect，deep link 落到哪个实例由当前 OS 协议注册
+// 归属决定。localDb 首次开库时会只读核对 schema_version、完整 migration history
+// 与 SQL/companion TS runtime 指纹；pending / 超前 / drift 都拒绝启动。passive 自己
+// 不迁移/repair schema，并用多 reader lease 阻止之后的 primary 抢跑 migration。
 //
-// 锁按 userData 目录作用域:默认 dev / packaged 共用 `Cindy` userData → 单实例;
-// `--isolated=<名字>` 沙箱各有独立 userData → 各自独立锁,仍可并行共存。真要多开走
-// `--isolated`(见 AGENTS.md),不再依赖 "dev 无锁" 各开窗口。
+// 锁按 userData 目录作用域:默认 dev / packaged 共用 `Cindy` userData → 一个 primary;
+// 额外共享数据实例走 `--passive`，隔离数据实例走 `--isolated[=<名字>]`(见 AGENTS.md)。
 if (shouldRequestSingleInstanceLock({
   isPackaged: app.isPackaged,
   schedulerPassive: process.env.XDT_SCHEDULER_PASSIVE === '1',
 })) {
   const gotTheLock = app.requestSingleInstanceLock();
   if (!gotTheLock) {
+    markDesktopDevStartupFailed(
+      'SINGLE_INSTANCE_OWNED',
+      'Another Cindy instance already owns this userData single-instance lock.',
+      { userDataDir: app.getPath('userData') },
+    );
     app.quit();
   } else {
     app.on('second-instance', (_event, argv) => {
@@ -1583,37 +1590,6 @@ if (shouldRequestSingleInstanceLock({
       // (deepLink 只向已有窗口投递/排队,不建窗)。
       if (startupWindowCreationAllowed && !focusMainWindow()) {
         createWindow();
-      }
-    });
-  }
-} else {
-  // passive dev 跳过 Electron 的 single-instance lock(避免与正式版冲突),但仍需
-  // 阻止同一 userData 下的第二个 passive 实例并发启动——否则两者同时打开 SQLite
-  // 会产生 busy / migration 竞态。锁用 wx/O_EXCL 原子创建，记录 PID + owner token；
-  // 异常退出可回收 stale 锁，release 也不会误删已经易主的新锁。
-  const userDataDir = app.getPath('userData');
-  const passiveLockPath = path.join(userDataDir, '.passive-dev.lock');
-  const result = acquirePassiveDevLock({
-    lockPath: passiveLockPath,
-    pid: process.pid,
-    startedAtMs: PROCESS_STARTED_AT_MS,
-    onCompromised: (reason) => {
-      passiveDevLockLog.error('passive dev lock compromised; quitting', { reason });
-      app.quit();
-    },
-  });
-  if (!result.acquired) {
-    if (result.reason === 'occupied') {
-      passiveDevLockLog.warn('another passive dev instance owns this userData; quitting', result);
-    } else {
-      passiveDevLockLog.error('passive dev lock acquisition failed; quitting', result);
-    }
-    app.quit();
-  } else {
-    app.on('will-quit', () => {
-      const released = result.lock.release();
-      if (!released.released && released.reason !== 'missing') {
-        passiveDevLockLog.warn('passive dev lock release skipped', released);
       }
     });
   }
@@ -1712,7 +1688,7 @@ const createWindow = () => {
       backgroundMaterial: winBackdropConfig.backgroundMaterial,
       backgroundColor: winBackdropConfig.backgroundColor,
     } : {}),
-    ...(process.platform === 'darwin' ? { vibrancy: 'sidebar' as const } : {}),
+    ...(process.platform === 'darwin' ? { vibrancy: 'hud' as const } : {}), // 创建期材质与缺省定稿一致(hud);运行时按主题族经 applyWindowVibrancy 修正
     acceptFirstMouse: !swallowActivationClick,
     ...platformOptions,
     webPreferences: {
@@ -1798,6 +1774,7 @@ const createWindow = () => {
   // Show window only after content is rendered — eliminates theme flash
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    if (!app.isPackaged) markDesktopDevReady();
     // `open` may successfully start the updated process while macOS refuses
     // frontmost activation at the lock/login window. Presentation is not an
     // installation-health signal; retain a one-shot focus grant for unlock.
@@ -4595,7 +4572,9 @@ app.on('ready', async () => {
       // 如果 worker takeover 失败并进入 inproc fallback,main _db 必须继续保留,
       // 否则 fallback 会拿到已关闭的连接。
       if (dbClientTakeover.shouldReleaseMainDb && process.env.XDT_DB_INPROC !== 'true') {
-        localDbCloseDb();
+        // 只把连接交给 worker，不能释放 shared-passive schema reader lease：worker
+        // 还会长期持有同一 DB；lease 必须留到真正 logout / app quit 才释放。
+        localDbCloseDb({ preserveSchemaMigrationLease: true });
         dbClientLog.info('[DbClient] main-side _db released after worker takeover');
       }
       // 自定义 MCP：先 await 刷新 provider 数组，确保 scheduler 启动时能看到已保存的
@@ -4608,6 +4587,22 @@ app.on('ready', async () => {
         await refreshCustomMcpProviders();
       } catch (err) {
         accountSwitchLog.warn('refreshCustomMcpProviders on account switch failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      // 身份翻转遗留的 dialogue 工作目录自愈:把 legacy userData 前缀的
+      // sessions.working_dir 批量改写到当前 userData(详见 dialogueWorkdirSelfHeal.ts)。
+      // 必须 await:ensure-ready IPC 返回后 renderer 才拉会话列表,在此之前改写完
+      // 才能保证 renderer 拿到的就是新路径(改写后不再命中,稳态零开销)。
+      try {
+        await sweepLegacyDialogueWorkingDirs({
+          db: getDbClient(),
+          userDataDir: app.getPath('userData'),
+          legacyUserDataDirNames: BRAND_IDENTITY.legacyUserDataDirNames,
+          log: createLogger('dialogue-workdir-self-heal'),
+        });
+      } catch (err) {
+        dbClientLog.warn('legacy dialogue workdir sweep failed (non-fatal)', {
           error: err instanceof Error ? err.message : String(err),
         });
       }
