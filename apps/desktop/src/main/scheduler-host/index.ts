@@ -11,6 +11,7 @@
  */
 
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 import { app } from 'electron';
 import type { BrowserWindow } from 'electron';
@@ -108,6 +109,8 @@ export async function startScheduler(deps: StartSchedulerDeps): Promise<Schedule
     runner,
     logger: deps.logger,
     passive,
+    instanceId: `${process.pid}:${randomUUID()}`,
+    processId: process.pid,
     // 对话工作区根目录(userData/dialogues)下的路径都是 app 内部分配的会话 cwd。
     // agent 在对话里建任务时常把自己的 cwd 当 workingDir 传入 —— 引擎据此归一成
     // 对话任务,避免任务/会话错误归入项目分组。path.relative 同时兼容两端分隔符。
@@ -122,7 +125,7 @@ export async function startScheduler(deps: StartSchedulerDeps): Promise<Schedule
     getDb: deps.getDb,
     logger: deps.logger,
   });
-  // archived / skip-trace 兜底要 scheduler.pause/update，runner 反向持有 scheduler
+  // archived 兜底要 scheduler.pause/update，runner 反向持有 scheduler
   promptRunner.attachScheduler(scheduler);
   scriptRunner.attachScheduler(scheduler);
 

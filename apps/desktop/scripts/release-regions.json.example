@@ -26,5 +26,19 @@
             "signIdentity": "",
             "appPasswordEnv": ""
         }
+    },
+    "dev": {
+        "oss": {
+            "cdnBaseUrl": "",
+            "bucket": "",
+            "prefix": "",
+            "ossRegion": ""
+        },
+        "macSigning": {
+            "appleId": "",
+            "teamId": "",
+            "signIdentity": "",
+            "appPasswordEnv": ""
+        }
     }
 }

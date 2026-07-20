@@ -140,10 +140,9 @@ export const MAKER_INVOKE = {
   /** 计划模式一级开关(与 permissionMode 正交), runtime-only; 持久化由 renderer sessions:update / device-link 回流负责 */
   SET_PLAN_MODE: 'maker:set-plan-mode',
   /**
-   * 会话「非选中模型」effort/fast 写穿(控制端 → 被控端)。选中模型走 SET_MODEL/SET_EFFORT/
-   * SET_FAST_MODE + sessions:patched,不经此 channel。控制端纯显示:改非选中行的预设记忆时发此
-   * invoke,被控端 handler 转发给自身 renderer,renderer 调它原来的本地 setter
-   * (setSessionModelEffort / setSessionModelFast)写真实记忆。入参 =
+   * 旧控制端的会话模型预设写穿兼容 channel。新控制端统一经 APPLY_NEW_MAKER_DRAFT_PREF 写被控端
+   * providerModelMemory 全局预设;旧控制端仍发此 invoke 时,被控端 renderer 也会将其收敛到同一
+   * 全局预设,并保留 session scoped 回流供旧控制端显示。入参 =
    * { sessionId, agent:'claude-code'|'codex', providerId, model, effort?, fast? }。
    */
   SET_SESSION_MODEL_PREF: 'maker:set-session-model-pref',
@@ -406,6 +405,7 @@ export const MAKER_INVOKE = {
   SCHEDULE_DELETE_RUN: 'maker:schedule:delete-run',
   /** Renderer 在 delete/pause 前查这条 schedule 当前有多少个 in-flight run,>0 时弹二次确认。 */
   SCHEDULE_GET_INFLIGHT_COUNT: 'maker:schedule:get-inflight-count',
+  SCHEDULE_GET_RUNTIME_STATE: 'maker:schedule:get-runtime-state',
   /** Sidebar 未读 badge —— 全局未读 run 数量（终态且 read_at IS NULL）。 */
   SCHEDULE_GET_UNREAD_COUNT: 'maker:schedule:get-unread-count',
   /** 用户点 history 的 "Open session" 时调，把该单条 run 标已读。 */
@@ -524,7 +524,7 @@ export const MAKER_SEND = {
   SYNC_NEW_MAKER_DRAFT: 'maker:sync-new-maker-draft',
   /**
    * 被控端 renderer → 自身 main:把 providerModelMemory 的全量快照(snapshotForSeed():
-   * `${agent}:${providerId}` → {effortByModel, fastByModel})镜像给 main 缓存。device-link 草稿
+   * `${agent}:*` 为模型级全局预设,来源槽为旧 v2 兼容副本)镜像给 main 缓存。device-link 草稿
    * 列表行的真实读源是 providerModelMemory(非选中行 = modelMemory.getEffort/getFast),旧的
    * newMakerDraft.effortByModel 已不再写非选中 → 必须把这一层也镜像出去,控制端才能完整镜像被控端
    * 草稿模型列表(req1)。main 把它并入 getRemoteNewMakerDefaults().providerModelMemory 返回 +
@@ -573,6 +573,11 @@ export const MAKER_PUSH = {
    * renderer 据 code 显示 providerError.* i18n toast + 修复引导。
    */
   PROVIDER_UPSTREAM_ERROR: 'maker:provider:upstream-error',
+  /**
+   * Claude Auto 权限分类器不可用后的会话级降级通知。
+   * payload = { sessionId, from:'auto', to:'ask', reason:'classifier_unavailable', status }。
+   */
+  AUTO_PERMISSION_FALLBACK: 'maker:auto-permission:fallback',
   /** Agent 登录子进程进度 (Codex OAuth 子进程 stdout/stderr; Claude 不发) */
   AUTH_LOGIN_PROGRESS: 'maker:auth:login-progress',
   /** Codex app-server spawn-time 路由变化 (OAuth bearer vs gateway env key)。 */

@@ -1,20 +1,10 @@
 import { useState, useMemo, useEffect, useRef, type CSSProperties } from 'react';
-import {
-  Check,
-  ChevronDown,
-  PlugZap,
-  Plus,
-  Search,
-  SlidersHorizontal,
-  Unplug,
-  Zap,
-} from 'lucide-react';
+import { Check, ChevronDown, PlugZap, Plus, Search, Unplug, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { flashScrollbar } from '@/lib/scrollbarAutoHide';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Tip } from '@/components/ui/tooltip';
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ClaudeMark } from '@/components/icons/ClaudeMark';
 import { CodexMark } from '@/components/icons/CodexMark';
 import { XDIncMark } from '@/components/icons/XDIncMark';
@@ -25,10 +15,13 @@ import { useConnectedSource } from '@/hooks/useConnectedSource';
 import { useModelPricing } from '@/hooks/useModelPricing';
 import { useProviders } from '@/hooks/useProviders';
 import { useDeviceProviders } from '@/hooks/useDeviceProviders';
-import { providerMonogram, selectVisibleModels } from '@/lib/providerModels';
+import {
+  providerMonogram,
+  resolveVisibleModelAgentKind,
+  selectVisibleModels,
+} from '@/lib/providerModels';
 import type { Effort } from '@/lib/userPreferences.types';
 import { isModelEnabled, useModelVisibilityVersion } from '@/state/modelVisibilityPrefs';
-import { useSessionModelMemoryVersion } from '@/state/sessionModelMemory';
 import { useProviderModelMemoryVersion } from '@/state/providerModelMemory';
 import { useDeviceLinkModelMirrorVersion } from '@/state/deviceLinkModelMirror';
 import {
@@ -37,6 +30,7 @@ import {
   getModel,
   modelSupportsFastMode,
   providerOffersModel,
+  resolveModelIconKind,
   type ProviderView,
 } from '@lizi/model-providers';
 import { buildProviderSections } from './sourceSwitch';
@@ -46,25 +40,25 @@ import { buildProviderSections } from './sourceSwitch';
 export { categorize, CATEGORY_LABEL_KEY, type ModelCategory } from './sourceSwitch';
 
 /**
- * 【非当前选中】模型行的 effort/fast 记忆读写器,由调用方按上下文注入(ModelSelector 本身
- * 不再耦合任何具体存储)。
- *   - 草稿(NewMakerDraftRoute → ChatInput 无 sessionId)→ providerModelMemory(跨会话持久,草稿专属)
- *   - 已创建会话(ChatInput 有 sessionId、非 device-link)→ sessionModelMemory(运行期,按 sessionId 隔离)
- *   - device-link 远程会话 → 纯显示镜像 override(写穿被控端),控制端本地不落记忆
+ * 【非当前选中】模型行的 effort/fast 全局预设读写器,由调用方按设备边界注入(ModelSelector 本身
+ * 不耦合具体存储)。
+ *   - 本地草稿 / 已创建会话 → providerModelMemory(跨对话、跨重启持久)
+ *   - device-link 远程草稿 / 会话 → 被控端全局预设的纯显示镜像(写穿被控端),控制端本地不落记忆
  *   - 不传(flat 选择器:CreateWorkerPopover / scheduler)→ 非选中行不读不写任何记忆,只显示模型默认
- * 这条隔离正是「草稿默认值被会话内修改污染」bug 的修复边界:
- *     会话写入只会落到会话自己的记忆 / 远程镜像,绝不触达控制端草稿记忆。
- * 选中行的 effort/fast 不走这里(草稿走 lastByVendor / props,会话走 DB 的 initialEffort/fastMode)。
+ * 选中行仍只读调用方 props:已创建会话的 props 来自 live DB/runtime,因此不会被其它对话覆盖;
+ * 首页草稿的 props 则由 NewMakerDraftRoute 从同一份全局预设派生,没有“当前会话保护”。
  */
 export interface ModelMemoryAccessors {
   getEffort: (agent: AgentKind, providerId: string, modelId: string) => Effort | undefined;
   setEffort: (agent: AgentKind, providerId: string, modelId: string, effort: Effort) => void;
+  /** 真正选中 / 使用模型时同时更新该来源 lastModel;只编辑非选中行不调用。 */
+  setChoice?: (agent: AgentKind, providerId: string, modelId: string, effort: Effort) => void;
   getFast: (agent: AgentKind, providerId: string, modelId: string) => boolean | undefined;
   setFast: (agent: AgentKind, providerId: string, modelId: string, enabled: boolean) => void;
 }
 
 // 供应商完整展示名:三个内置 id 复用设置页 i18n 标题(settings.providers.<id>.title),
-// 自定义供应商回退目录里的 provider.name。用于行 hover tooltip 前缀。
+// 自定义供应商回退目录里的 provider.name。用于模型信息面板的来源说明。
 const PROVIDER_TITLE_KEY: Record<string, string> = {
   anthropic: 'settings.providers.anthropic.title',
   openai: 'settings.providers.openai.title',
@@ -124,79 +118,50 @@ export function ProviderMark({
   }
 }
 
-function ModelBrandMark({
-  modelId,
-  displayName,
-  agentKind,
-  fallbackProviderId,
-  fallbackProviderName,
+/**
+ * 模型行 / trigger 的图标 —— 统一规则(桌面与手机同源,见 resolveModelIconKind):
+ * 模型条目带 `icon`(**AI Gateway / 目录设定**)就渲染对应厂牌 mark;缺省或未知值
+ * 回落该行来源供应商标(ProviderMark)。禁止在客户端按 model id 猜厂牌。
+ */
+export function ModelIconMark({
+  icon,
+  providerId,
+  name,
   colorClass = 'text-[var(--model-trigger-text)]',
   withMargin = true,
   dense = false,
 }: {
-  modelId: string;
-  displayName?: string;
-  agentKind: AgentKind | null;
-  fallbackProviderId?: string | null;
-  fallbackProviderName?: string;
+  /** 模型条目的展示图标 id(CatalogModel.icon);undefined = 未设定。 */
+  icon?: string;
+  /** 回落用的来源供应商 id / 展示名(与 ProviderMark 同语义)。 */
+  providerId: string;
+  name?: string;
   colorClass?: string;
   withMargin?: boolean;
   dense?: boolean;
 }) {
-  const common = cn(withMargin && 'mr-1.5', 'shrink-0', colorClass);
-  const markSize = dense ? 12.3 : 13;
-  const brandKind = resolveModelBrandKind({
-    modelId,
-    displayName,
-    agentKind,
-    fallbackProviderId,
-  });
-  if (brandKind === 'claude') {
-    return <ClaudeMark size={markSize} className={common} />;
+  const kind = resolveModelIconKind(icon);
+  if (kind) {
+    const common = cn(withMargin && 'mr-1.5', 'shrink-0', colorClass);
+    const markSize = dense ? 12.3 : 13;
+    if (kind === 'claude') return <ClaudeMark size={markSize} className={common} />;
+    if (kind === 'codex') return <CodexMark size={markSize} className={common} />;
+    return (
+      <XDIncMark
+        size={markSize}
+        className={cn(dense ? 'h-[8.4px] w-[14.2px]' : 'h-[9px] w-[15px]', common)}
+      />
+    );
   }
-  if (brandKind === 'codex') {
-    return <CodexMark size={markSize} className={common} />;
-  }
-  if (!fallbackProviderId) return null;
   return (
     <ProviderMark
-      providerId={fallbackProviderId}
-      name={fallbackProviderName}
+      providerId={providerId}
+      name={name}
       colorClass={colorClass}
       withMargin={withMargin}
       dense={dense}
     />
   );
-}
-
-export type ModelBrandKind = 'claude' | 'codex' | null;
-
-export function resolveModelBrandKind({
-  modelId,
-  displayName,
-  agentKind,
-  fallbackProviderId,
-}: {
-  modelId: string;
-  displayName?: string;
-  agentKind: AgentKind | null;
-  fallbackProviderId?: string | null;
-}): ModelBrandKind {
-  const brandText = `${modelId} ${displayName ?? ''}`.toLowerCase();
-  if (
-    /(^|[\s/])(?:codex|chatgpt|openai)(?:[\s/-]|$)/.test(brandText) ||
-    /(^|[\s/])gpt[-\s]/.test(brandText)
-  ) {
-    return 'codex';
-  }
-  if (/(^|[\s/])(?:claude|opus|sonnet|haiku|fable)(?:[\s/-]|$)/.test(brandText)) {
-    return 'claude';
-  }
-  if (fallbackProviderId === 'openai') return 'codex';
-  if (fallbackProviderId === 'anthropic') return 'claude';
-  if (agentKind === 'codex') return 'codex';
-  if (agentKind === 'claude-code') return 'claude';
-  return null;
 }
 
 // 上下文窗口 tokens → 紧凑展示("1M" / "272K" / "8192")。
@@ -216,10 +181,14 @@ function formatContextWindow(tokens: number): string {
 interface RowModel {
   id: string;
   displayName: string;
+  description?: string;
+  contextWindow: number;
   efforts: readonly Effort[];
   defaultEffort: Effort | null;
   effortDisplayNames?: Partial<Record<string, string>>;
   supportsFastMode?: boolean;
+  /** 展示图标 id(AI Gateway / 目录设定,SectionModel.icon);flat 列表的 ModelDescriptor 无此字段。 */
+  icon?: string;
 }
 
 type Translate = (key: string, options?: { defaultValue?: string }) => string;
@@ -264,7 +233,7 @@ interface ModelSelectorProps {
   /** Fast Mode 状态 + 回调(从工具栏搬进 Edit 配置列)。不传 → 配置列不显示 Fast 开关。 */
   fastMode?: boolean;
   onFastModeChange?: (enabled: boolean) => void | Promise<void>;
-  /** 非选中模型行的 effort/fast 记忆读写器(草稿 / 会话各注入各的,见 ModelMemoryAccessors)。 */
+  /** 非选中模型行的 effort/fast 全局预设读写器(按本机 / 被控设备隔离)。 */
   modelMemory?: ModelMemoryAccessors;
   /** When provided, only models with this vendorKey are shown in the dropdown. */
   vendorKey?: 'cc' | 'codex';
@@ -312,8 +281,8 @@ interface ModelSelectorContentProps {
   excludeSubscriptionDirect?: boolean;
   /** 选中后是否自动关闭。Popover 场景传入,内嵌场景不传。 */
   onDismiss?: () => void;
-  /** 模型行 Tooltip 的额外样式。供嵌套在高层级 overlay 中的调用方覆盖默认 z-index。 */
-  tooltipContentClassName?: string;
+  /** 模型信息 / 选项浮层的额外样式。供嵌套在高层级 overlay 中的调用方覆盖默认 z-index。 */
+  overlayContentClassName?: string;
   currentProviderId?: string | null;
   onProviderChange?: (
     providerId: string | null,
@@ -348,7 +317,7 @@ export function ModelSelectorContent({
   deviceId,
   excludeSubscriptionDirect,
   onDismiss,
-  tooltipContentClassName,
+  overlayContentClassName,
   currentProviderId,
   onProviderChange,
   onNavigateToProviders,
@@ -361,7 +330,8 @@ export function ModelSelectorContent({
   const cc = useAgentCapabilities('claude-code', deviceId);
   const codex = useAgentCapabilities('codex', deviceId);
   const pricing = useModelPricing();
-  // 骨折GPT (codex/) 永远显示(恒走 gateway api key);没配 key → 置灰 + 提示去配置。
+  // 本机骨折 GPT 仍按本机 API key gate；device-link 必须只看被控端 provider 状态。
+  // 旧被控端不支持 provider:list 时按远端 capabilities 退化，不得误用控制端 key。
   const { hasSavedKey } = useApiKey();
   // 供应商来源:本机会话用本机 useProviders;device-link 远程会话用**被控端**供应商目录
   // (useDeviceProviders,隧道 maker:provider:list)。两 hook 都无条件调用(hooks 规则),按 deviceId 取。
@@ -372,24 +342,46 @@ export function ModelSelectorContent({
 
   const visibilityVersion = useModelVisibilityVersion();
   const [query, setQuery] = useState('');
-  // 当前展开 Edit 配置列的目标(供应商id + 模型id)。null = 配置列收起(单栏)。
+  // 当前 hover / focus 展开的浮层目标(供应商id + 模型id)。只把「显示哪一行的选项」
+  // 放在本地；effort / fast 的值和持久化仍走 props + modelMemory SSoT。
   const [editing, setEditing] = useState<{ providerId: string | null; modelId: string } | null>(
     null,
   );
-  // 非选中模型的 effort/fast 改动写进记忆(localStorage),不反映在 props —— 用 tick 触发重渲染读新值。
+  // 非选中模型的 effort/fast 改动写进全局预设,不反映在 live props —— 用 tick 触发重渲染读新值。
   const [editTick, setEditTick] = useState(0);
   const bump = () => setEditTick((n) => n + 1);
-  // 跨进程 / 远程改动:device-link push 会直接改底层记忆 store(providerModelMemory / sessionModelMemory /
-  // deviceLinkModelMirror),不经本组件的 editTick。订阅三个 store 的版本号,任一变化即重渲染、重算行
-  // effort/fast 显示(本地草稿用 providerModelMemory,本地会话用 sessionModelMemory,远程用镜像)。
+  // 跨进程 / 远程改动:device-link push 会直接改底层 store(providerModelMemory /
+  // deviceLinkModelMirror),不经本组件的 editTick。订阅两份 store 的版本号,任一变化即重渲染、
+  // 重算行 effort/fast 显示(本机用 providerModelMemory,远程用被控端镜像)。
   const storeVersion =
-    editTick +
-    useProviderModelMemoryVersion() +
-    useSessionModelMemoryVersion() +
-    useDeviceLinkModelMirrorVersion();
+    editTick + useProviderModelMemoryVersion() + useDeviceLinkModelMirrorVersion();
   void storeVersion;
 
   const listRef = useRef<HTMLDivElement>(null);
+  const configPanelRef = useRef<HTMLDivElement>(null);
+  const closeOptionsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelOptionsClose = () => {
+    if (closeOptionsTimerRef.current === null) return;
+    clearTimeout(closeOptionsTimerRef.current);
+    closeOptionsTimerRef.current = null;
+  };
+  const scheduleOptionsClose = () => {
+    cancelOptionsClose();
+    // 给鼠标跨过行与 portaled 浮层之间的 4px 缝隙留一小段 grace period。
+    // 80ms 足够接住浮层,又不会产生「鼠标走了选项还赖着」的视觉残留。
+    closeOptionsTimerRef.current = setTimeout(() => {
+      closeOptionsTimerRef.current = null;
+      setEditing(null);
+    }, 80);
+  };
+
+  useEffect(
+    () => () => {
+      if (closeOptionsTimerRef.current !== null) clearTimeout(closeOptionsTimerRef.current);
+    },
+    [],
+  );
 
   // 模型清单来源:本机会话从 live providers 派生(builtin + 自定义合集);device-link 远程会话
   // 必须列**被控端**模型(cc/codex.capabilities.availableModels,deviceId 作用域),不读控制端本地
@@ -418,16 +410,15 @@ export function ModelSelectorContent({
 
   // currentModel 归属的 agent —— effortLevels 标签按它取(不合并两边,避免 Claude/Codex 同 id 标签互覆盖)。
   const currentAgentKind: AgentKind | null = useMemo(() => {
-    if (agentKind) return agentKind;
     if (!currentModel) return null;
-    if (providers.some((p) => providerOffersModel(p, currentModel.id, 'claude-code'))) {
-      return 'claude-code';
-    }
-    if (providers.some((p) => providerOffersModel(p, currentModel.id, 'codex'))) {
-      return 'codex';
-    }
-    return null;
-  }, [currentModel, providers, agentKind]);
+    return resolveVisibleModelAgentKind({
+      modelId: currentModel.id,
+      agentKind,
+      ccModels: cc.capabilities?.availableModels ?? [],
+      codexModels: codex.capabilities?.availableModels ?? [],
+      providers,
+    });
+  }, [agentKind, cc.capabilities, codex.capabilities, currentModel, providers]);
 
   const effortMeta = useMemo(() => {
     const levels =
@@ -480,13 +471,7 @@ export function ModelSelectorContent({
     return modelSupportsFastMode(provider, m.id, currentAgentKind);
   };
 
-  // ── 模型单价 / hover tooltip ─────────────────────────────────────────────
-  const modelById = useMemo(() => {
-    const map = new Map<string, (typeof visibleModels)[number]>();
-    for (const m of visibleModels) map.set(m.id, m);
-    return map;
-  }, [visibleModels]);
-
+  // ── 模型单价 ─────────────────────────────────────────────────────────────
   const priceTipOf = (id: string): string | null => {
     const p = pricing?.[id];
     if (!p) return null;
@@ -496,20 +481,25 @@ export function ModelSelectorContent({
       output: fmt(p.outputUsdPerMtok),
     });
   };
-  const tooltipFor = (id: string): string | null => {
-    const meta = modelById.get(id);
-    const parts: string[] = [];
-    if (meta && meta.contextWindow > 0) {
-      parts.push(
-        t('newChat.modelSelector.meta.context', { value: formatContextWindow(meta.contextWindow) }),
-      );
-    }
-    const price = priceTipOf(id);
-    if (price) parts.push(price);
-    if (meta?.supportsFastMode) parts.push(t('newChat.modelSelector.meta.fastBadge'));
-    return parts.length > 0 ? parts.join(' · ') : null;
+  const modelDisabledOf = (id: string): boolean => {
+    if (!deviceId) return id.startsWith('codex/') && !hasSavedKey;
+    if (remoteProviders.loading) return true;
+    if (remoteProviders.error) return false;
+    const rowAgentKind = resolveVisibleModelAgentKind({
+      modelId: id,
+      agentKind,
+      ccModels: cc.capabilities?.availableModels ?? [],
+      codexModels: codex.capabilities?.availableModels ?? [],
+      providers,
+    });
+    if (!rowAgentKind) return true;
+    return !providers.some(
+      (provider) =>
+        provider.connected &&
+        provider.agents.includes(rowAgentKind) &&
+        providerOffersModel(provider, id, rowAgentKind),
+    );
   };
-  const budgetDisabledOf = (id: string): boolean => id.startsWith('codex/') && !hasSavedKey;
 
   // ── 供应商分段 / flat 列表 ────────────────────────────────────────────────
   // sections 非空 = 按供应商分段(每行 = (供应商, 模型));null = flat(无供应商概念)。
@@ -566,10 +556,8 @@ export function ModelSelectorContent({
   const isSelectedRow = (providerId: string | null, id: string): boolean =>
     id === modelId && (providerId === null || providerId === activeSourceId);
 
-  // 行内 Fast 闪电:**严格 per-(供应商, 模型)**。选中行 → live fastMode;其余行 → 该 (供应商,模型)
-  // 的注入记忆(草稿=providerModelMemory / 会话=sessionModelMemory),缺省 false。不读 provider-agnostic
-  // 的 per-model 记忆 —— 否则同一 model id 跨供应商会串(写了 openai 那份,xd 行 fallback 到共享
-  // per-model 也亮 = 之前两个 5.5 一起变的根因)。
+  // 行内 Fast 闪电:选中行 → 调用方 fastMode(会话 = live;首页草稿 = 全局预设派生);其余行 → (agent,model) 全局预设(本机 =
+  // providerModelMemory / 远程 = 被控端镜像),并由 fastEditable 按当前来源 capability 过滤。
   const fastOnOf = (providerId: string | null, m: RowModel): boolean => {
     if (!fastEditable(providerId, m)) return false;
     if (isSelectedRow(providerId, m.id)) return fastMode;
@@ -577,9 +565,8 @@ export function ModelSelectorContent({
     return modelMemory?.getFast(currentAgentKind, providerId, m.id) ?? false;
   };
 
-  // 某 (供应商, 模型) 行当前要展示的 effort(选中 → live;否则注入记忆 → 模型默认)。无 effort 档返回 null。
-  // 严格只读 per-(供应商, 模型) 记忆,不再回退到 provider-agnostic 的 newMakerDraft.effortByModel
-  // (那份会让会话/草稿、跨供应商互相串,与 fast 的严格口径对齐)。
+  // 某 (供应商, 模型) 行当前要展示的 effort(选中 → 调用方值;否则全局模型预设 → 模型默认)。
+  // 预设若不被该来源支持,在这里按行 capabilities 回落;无 effort 档返回 null。
   const rowEffortOf = (providerId: string | null, m: RowModel): Effort | null => {
     if (!m.efforts || m.efforts.length === 0) return null;
     if (isSelectedRow(providerId, m.id)) {
@@ -609,7 +596,7 @@ export function ModelSelectorContent({
     return () => cancelAnimationFrame(raf);
   }, [sections, flatModels]);
 
-  // ── 行选择 / Edit 开合 ───────────────────────────────────────────────────
+  // ── 行选择 ───────────────────────────────────────────────────────────────
   const handleRowSelect = (providerId: string | null, id: string) => {
     if (isSelectedRow(providerId, id)) {
       onDismiss?.();
@@ -623,15 +610,7 @@ export function ModelSelectorContent({
     }
     onDismiss?.();
   };
-  const toggleEdit = (providerId: string | null, id: string) => {
-    setEditing((prev) =>
-      prev && prev.modelId === id && prev.providerId === providerId
-        ? null
-        : { providerId, modelId: id },
-    );
-  };
-
-  // ── Edit 配置列目标 ──────────────────────────────────────────────────────
+  // ── hover / focus 浮层目标 ───────────────────────────────────────────────
   const editingModel: RowModel | null = useMemo(() => {
     if (!editing) return null;
     if (sections) {
@@ -645,12 +624,18 @@ export function ModelSelectorContent({
     !!editing &&
     editing.modelId === modelId &&
     (editing.providerId === null || editing.providerId === activeSourceId);
-  const editShowFast = !!editingModel && fastEditable(editing?.providerId ?? null, editingModel);
-  const editHasEfforts = (editingModel?.efforts.length ?? 0) > 0;
-  const showConfig = !!editingModel && (editHasEfforts || editShowFast);
+  const editingProviderId = editing?.providerId ?? null;
+  // 当前行可编辑配置的边界:选中行写实时状态;非选中供应商行写模型级全局预设。
+  // flat 非选中行没有来源 capability / 写穿上下文,只展示模型信息,避免出现点击后无效果的配置项。
+  const canConfigure =
+    configurationEnabled &&
+    !!editingModel &&
+    (editingIsActive || (!!modelMemory && !!currentAgentKind && !!editingProviderId));
+  const editShowFast =
+    canConfigure && !!editingModel && fastEditable(editingProviderId, editingModel);
+  const editHasEfforts = canConfigure && (editingModel?.efforts.length ?? 0) > 0;
 
   // 配置列当前 effort 值(选中 → live;否则记忆/默认)。
-  const editingProviderId = editing?.providerId ?? null;
   const editEffortValue: Effort | null = editingModel
     ? rowEffortOf(editingProviderId, editingModel)
     : null;
@@ -667,7 +652,7 @@ export function ModelSelectorContent({
     if (editingIsActive) {
       onEffortChange(e);
     } else {
-      // 非选中行:只写注入记忆(草稿 / 会话各自那份);不传 modelMemory(flat 选择器)则纯 no-op。
+      // 非选中行:只写该设备的全局模型预设;不传 modelMemory(flat 选择器)则纯 no-op。
       if (currentAgentKind && editing.providerId) {
         modelMemory?.setEffort(currentAgentKind, editing.providerId, editingModel.id, e);
       }
@@ -681,13 +666,126 @@ export function ModelSelectorContent({
       // ChatInput 同步草稿默认;这里不能预写 modelMemory,否则 device-link 远程失败会污染被控端草稿。
       void onFastModeChange?.(enabled);
     } else {
-      // 非选中行:只写 per-(供应商, 模型) 注入记忆(不写 provider-agnostic 的 per-model,避免跨供应商串)。
+      // 非选中行:只写该设备的模型级全局预设;来源参数用于 capability / device-link 写穿路由。
       if (currentAgentKind && editing.providerId) {
         modelMemory?.setFast(currentAgentKind, editing.providerId, editingModel.id, enabled);
       }
     }
     bump();
   };
+
+  const editingProvider = useMemo(() => {
+    if (!editingModel || !currentAgentKind) return undefined;
+    const providerId =
+      editingProviderId ??
+      effectiveSourceIdForModel(providers, currentProviderId, editingModel.id, currentAgentKind);
+    return providerId ? providers.find((provider) => provider.id === providerId) : undefined;
+  }, [editingModel, currentAgentKind, editingProviderId, providers, currentProviderId]);
+  const editingPrice = editingModel ? priceTipOf(editingModel.id) : null;
+
+  // 每个模型行的信息 / 配置内容由一个独立的 portaled Popover 承载,而不是拼进主菜单宽度。
+  // 这样浮层会像 Hermes 的 Radix submenu 一样贴着当前行移动,切行不触发主菜单重排。
+  const configPanel = editingModel ? (
+    <div
+      ref={configPanelRef}
+      role="group"
+      aria-label={`${editingModel.displayName} ${t('newChat.modelSelector.options')}`}
+      className="flex flex-col gap-0.5"
+    >
+      {/* 名字 / 简介先帮助确认模型；面板整体居中后，操作区仍贴近当前 hover 行。 */}
+      <div className="flex flex-col gap-1 px-2 py-1.5">
+        <span className="min-w-0 text-14 font-medium text-[var(--model-item-text)]">
+          {editingModel.displayName}
+        </span>
+        {editingModel.description && (
+          <span className="line-clamp-2 text-12 font-normal leading-[1.4] text-[var(--text-secondary)]">
+            {editingModel.description}
+          </span>
+        )}
+      </div>
+      {(editShowFast || editHasEfforts) && (
+        <div className="mx-1 my-1 h-px bg-[var(--model-dropdown-border)]" />
+      )}
+      {editShowFast && (
+        <div className="px-0.5">
+          {/* 遵循设计稿:单色反色(轨/文字 --text-primary,钮 --surface-on-card),不用品牌橙。 */}
+          <FastModeToggle
+            enabled={editFastValue}
+            onToggle={() => handleEditFast(!editFastValue)}
+            hideIcon
+            accentVar="var(--text-primary)"
+            thumbVar="var(--surface-on-card)"
+          />
+        </div>
+      )}
+      {editShowFast && editHasEfforts && (
+        <div className="mx-1 my-1 h-px bg-[var(--model-dropdown-border)]" />
+      )}
+      {editHasEfforts && (
+        <>
+          <div className="px-2 pb-0.5 pt-1">
+            <span className="text-11 font-medium text-[var(--text-tertiary)]">
+              {t('newChat.modelSelector.effortLabel')}
+            </span>
+          </div>
+          {editingModel.efforts.map((e) => {
+            const selected = editEffortValue === e;
+            return (
+              <button
+                type="button"
+                key={e}
+                onClick={() => handleEditEffort(e)}
+                role="option"
+                aria-selected={selected}
+                className={cn(
+                  'flex w-full items-center justify-between rounded-[8px] px-2 py-2 text-left transition-colors duration-100',
+                  'hover:bg-[var(--model-item-hover)]',
+                  selected && 'bg-[var(--surface-chip)]',
+                )}
+              >
+                <span
+                  className={cn(
+                    'truncate text-[13.5px] text-[var(--model-item-text)]',
+                    selected ? 'font-medium' : 'font-normal',
+                  )}
+                >
+                  {effortLabelFor(editingModel, e)}
+                </span>
+                {selected && (
+                  <Check size={15} className="ml-2 shrink-0 text-[var(--model-item-check)]" />
+                )}
+              </button>
+            );
+          })}
+        </>
+      )}
+      {(editShowFast || editHasEfforts) && (
+        <div className="mx-1 my-1 h-px bg-[var(--model-dropdown-border)]" />
+      )}
+      <div className="px-2 py-1.5">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-11 font-normal leading-[1.4] text-[var(--text-tertiary)]">
+          {editingProvider && (
+            <span>
+              {t('newChat.modelSelector.source.viaSource', {
+                source: providerDisplayName(editingProvider, t),
+              })}
+            </span>
+          )}
+          {editingModel.contextWindow > 0 && (
+            <span>
+              {t('newChat.modelSelector.meta.context', {
+                value: formatContextWindow(editingModel.contextWindow),
+              })}
+            </span>
+          )}
+          {editingModel.supportsFastMode && (
+            <span>{t('newChat.modelSelector.meta.fastBadge')}</span>
+          )}
+          {editingPrice && <span>{editingPrice}</span>}
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   // ── 单个模型行 ───────────────────────────────────────────────────────────
   // provider 非空(分段模式)→ 名字前缀该来源的 mark;null(flat / device-link)→ 无前缀。
@@ -696,106 +794,139 @@ export function ModelSelectorContent({
     const isSelected = isSelectedRow(providerId, model.id);
     const isBudgetModel = model.id.startsWith('codex/');
     const isSubscriptionModel = provider?.access?.kind === 'subscription';
-    const disabled = budgetDisabledOf(model.id);
+    const disabled = modelDisabledOf(model.id);
     const rowEffort = rowEffortOf(providerId, model);
     const rowFastOn = fastOnOf(providerId, model);
-    const hasEdit =
-      configurationEnabled &&
-      !disabled &&
-      (model.efforts.length > 0 || fastEditable(providerId, model));
+    // 信息面板对所有可用模型开放;能否编辑 effort / Fast 在面板内部另行判定。
+    const hasOptions = !disabled;
     const isEditingThis =
       !!editing && editing.modelId === model.id && editing.providerId === providerId;
-    // hover tooltip:最前面拼供应商完整名(分段模式有 provider),再接上下文 / 价格 / 快速。
-    const supplierName = provider ? providerDisplayName(provider, t) : null;
-    const tipText = disabled
-      ? t('newChat.modelSelector.budgetNeedsApiKey')
-      : [supplierName, tooltipFor(model.id)].filter(Boolean).join(' · ') || null;
+    const revealOptions = () => {
+      cancelOptionsClose();
+      setEditing(hasOptions ? { providerId, modelId: model.id } : null);
+    };
     return (
-      <Tip
+      <Popover
         key={`${providerId ?? ''}::${model.id}`}
-        text={tipText}
-        side="left"
-        contentClassName={tooltipContentClassName}
+        open={isEditingThis}
+        onOpenChange={(open) => {
+          if (!open && isEditingThis) setEditing(null);
+        }}
       >
-        <div
-          role="option"
-          aria-selected={isSelected}
-          aria-disabled={disabled}
-          data-model-selected={isSelected ? 'true' : undefined}
-          tabIndex={disabled ? -1 : 0}
-          onClick={() => {
-            if (disabled) return;
-            handleRowSelect(providerId, model.id);
-          }}
-          onKeyDown={(ev) => {
-            if (ev.target !== ev.currentTarget || disabled) return;
-            if (ev.key !== 'Enter' && ev.key !== ' ') return;
-            ev.preventDefault();
-            handleRowSelect(providerId, model.id);
-          }}
-          className={cn(
-            // hover 高亮即时切换(不走 transition-colors):背景色是 paint 属性,过渡会让
-            // 快速划过列表时多行同时逐帧重绘(叠加圆角裁剪 + 阴影的 portal 容器放大失效区域),
-            // 是「hover 卡顿」的根因。即时切换只在进/离开各重绘一次,跟手且零逐帧 paint(规则 7)。
-            'group flex w-full cursor-pointer items-center justify-between rounded-[8px] px-3 py-2',
-            'hover:bg-[var(--model-item-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
-            isSelected && 'bg-[var(--model-item-hover)]',
-            disabled && 'cursor-not-allowed opacity-50 hover:bg-transparent',
-          )}
-        >
-          {/* 外层 gap-2.5 = icon→名字间距(略宽,与行左内边距更协调);内层 gap-1.5 = 名字→徽标/effort。 */}
-          <span className="flex min-w-0 items-center gap-2.5">
-            {provider && (
-              <ProviderMark
-                providerId={provider.id}
-                name={provider.name}
-                colorClass="text-[var(--text-secondary)]"
-                withMargin={false}
-                dense
-              />
+        <PopoverAnchor asChild>
+          <div
+            role="option"
+            aria-selected={isSelected}
+            aria-disabled={disabled}
+            data-model-selected={isSelected ? 'true' : undefined}
+            data-model-options-active={isEditingThis ? 'true' : undefined}
+            tabIndex={disabled ? -1 : 0}
+            onPointerEnter={revealOptions}
+            onPointerLeave={scheduleOptionsClose}
+            onFocus={revealOptions}
+            onBlur={(event) => {
+              if (configPanelRef.current?.contains(event.relatedTarget as Node | null)) return;
+              scheduleOptionsClose();
+            }}
+            onClick={() => {
+              if (disabled) return;
+              handleRowSelect(providerId, model.id);
+            }}
+            onKeyDown={(ev) => {
+              if (ev.target !== ev.currentTarget || disabled) return;
+              if (ev.key === 'ArrowLeft' && hasOptions) {
+                ev.preventDefault();
+                revealOptions();
+                requestAnimationFrame(() => {
+                  configPanelRef.current
+                    ?.querySelector<HTMLElement>('button:not(:disabled)')
+                    ?.focus();
+                });
+                return;
+              }
+              if (ev.key !== 'Enter' && ev.key !== ' ') return;
+              ev.preventDefault();
+              handleRowSelect(providerId, model.id);
+            }}
+            className={cn(
+              'flex w-full cursor-pointer items-center justify-between rounded-[8px] px-3 py-2',
+              'transition-colors duration-100 hover:bg-[var(--model-item-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
+              isSelected && 'bg-[var(--model-item-hover)]',
+              isEditingThis &&
+                'bg-[var(--surface-hover)] ring-1 ring-inset ring-[var(--model-dropdown-border)]',
+              disabled && 'cursor-not-allowed opacity-50 hover:bg-transparent',
             )}
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-14 font-medium text-[var(--model-item-text)]">
-                {model.displayName}
+          >
+            {/* 外层 gap-2.5 = icon→名字间距(略宽,与行左内边距更协调);内层 gap-1.5 = 名字→徽标/effort。 */}
+            <span className="flex min-w-0 items-center gap-2.5">
+              {provider && (
+                <ModelIconMark
+                  icon={model.icon}
+                  providerId={provider.id}
+                  name={provider.name}
+                  colorClass="text-[var(--text-secondary)]"
+                  withMargin={false}
+                  dense
+                />
+              )}
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span className="truncate text-14 font-medium text-[var(--model-item-text)]">
+                  {model.displayName}
+                </span>
+                {isSubscriptionModel && (
+                  <span className="inline-flex shrink-0 items-center rounded-full bg-[var(--surface-chip)] px-2 py-[1px] text-[11px] font-medium text-[var(--text-secondary)]">
+                    {t('settings.providers.models.subscription')}
+                  </span>
+                )}
+                {isBudgetModel && (
+                  <span className="inline-flex shrink-0 items-center rounded-full bg-[var(--model-budget-badge-bg)] px-2 py-[1px] text-[11px] font-medium text-[var(--model-budget-badge-text)]">
+                    85% off
+                  </span>
+                )}
+                {rowEffort && (
+                  <span className="shrink-0 text-13 font-normal text-[var(--text-tertiary)]">
+                    {effortLabelFor(model, rowEffort)}
+                  </span>
+                )}
+                {rowFastOn && (
+                  <Zap
+                    size={13}
+                    className="shrink-0 text-[var(--text-tertiary)]"
+                    aria-label="Fast"
+                  />
+                )}
               </span>
-              {isSubscriptionModel && (
-                <span className="inline-flex shrink-0 items-center rounded-full bg-[var(--surface-chip)] px-2 py-[1px] text-[11px] font-medium text-[var(--text-secondary)]">
-                  {t('settings.providers.models.subscription')}
-                </span>
-              )}
-              {isBudgetModel && (
-                <span className="inline-flex shrink-0 items-center rounded-full bg-[var(--model-budget-badge-bg)] px-2 py-[1px] text-[11px] font-medium text-[var(--model-budget-badge-text)]">
-                  85% off
-                </span>
-              )}
-              {rowEffort && (
-                <span className="shrink-0 text-13 font-normal text-[var(--text-tertiary)]">
-                  {effortLabelFor(model, rowEffort)}
-                </span>
-              )}
-              {rowFastOn && (
-                <Zap size={13} className="shrink-0 text-[var(--text-tertiary)]" aria-label="Fast" />
-              )}
             </span>
-          </span>
-          {hasEdit && (
-            <button
-              type="button"
-              onClick={(ev) => {
-                ev.stopPropagation();
-                toggleEdit(providerId, model.id);
-              }}
-              className={cn(
-                'ml-2 shrink-0 rounded-[6px] px-1.5 py-0.5 text-13 font-medium text-[var(--text-secondary)]',
-                'transition-opacity hover:bg-[var(--model-item-hover)] focus-visible:opacity-100',
-                isEditingThis ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
-              )}
-            >
-              {t('newChat.modelSelector.edit')}
-            </button>
-          )}
-        </div>
-      </Tip>
+            {isSelected && (
+              <Check size={15} className="ml-2 shrink-0 text-[var(--model-item-check)]" />
+            )}
+          </div>
+        </PopoverAnchor>
+        {isEditingThis && configPanel && (
+          <PopoverContent
+            side="left"
+            align="center"
+            sideOffset={4}
+            collisionPadding={8}
+            onOpenAutoFocus={(event) => event.preventDefault()}
+            onCloseAutoFocus={(event) => event.preventDefault()}
+            onPointerEnter={cancelOptionsClose}
+            onPointerLeave={scheduleOptionsClose}
+            onFocusCapture={cancelOptionsClose}
+            onBlurCapture={(event) => {
+              if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+              scheduleOptionsClose();
+            }}
+            className={cn(
+              'w-[248px] overflow-hidden rounded-[12px] p-2 shadow-[var(--shadow-menu)] duration-100',
+              'border border-[var(--model-dropdown-border)] bg-[var(--model-dropdown-bg)]',
+              overlayContentClassName,
+            )}
+          >
+            {configPanel}
+          </PopoverContent>
+        )}
+      </Popover>
     );
   };
 
@@ -842,80 +973,7 @@ export function ModelSelectorContent({
 
   const hasAnyModel = sections ? sections.length > 0 : (flatModels?.length ?? 0) > 0;
 
-  // ── Edit 配置列(Cursor 左侧面板:Effort 竖排 + Fast Mode)──────────────────
-  const configColumn =
-    showConfig && editingModel ? (
-      <div className="flex w-[196px] shrink-0 flex-col gap-0.5 self-stretch bg-[var(--model-dropdown-bg)] p-2">
-        <div className="flex items-center gap-1.5 px-2 py-1.5">
-          <SlidersHorizontal size={14} className="shrink-0 text-[var(--text-secondary)]" />
-          <span className="min-w-0 truncate text-[13.5px] font-medium text-[var(--model-item-text)]">
-            {editingModel.displayName}
-          </span>
-        </div>
-        {editShowFast && (
-          <>
-            <div className="px-2 py-1.5">
-              <span className="text-11 font-medium text-[var(--text-tertiary)]">
-                {t('newChat.modelSelector.options')}
-              </span>
-            </div>
-            <div className="px-0.5">
-              {/* 遵循设计稿:单色反色(轨/文字 --text-primary,钮 --surface-on-card),不用品牌橙。 */}
-              <FastModeToggle
-                enabled={editFastValue}
-                onToggle={() => handleEditFast(!editFastValue)}
-                hideIcon
-                accentVar="var(--text-primary)"
-                thumbVar="var(--surface-on-card)"
-              />
-            </div>
-          </>
-        )}
-        {editShowFast && editHasEfforts && (
-          <div className="mx-1 my-1 h-px bg-[var(--model-dropdown-border)]" />
-        )}
-        {editHasEfforts && (
-          <>
-            <div className="px-2 py-1.5">
-              <span className="text-11 font-medium text-[var(--text-tertiary)]">
-                {t('newChat.modelSelector.effortLabel')}
-              </span>
-            </div>
-            {editingModel.efforts.map((e) => {
-              const selected = editEffortValue === e;
-              return (
-                <button
-                  type="button"
-                  key={e}
-                  onClick={() => handleEditEffort(e)}
-                  role="option"
-                  aria-selected={selected}
-                  className={cn(
-                    'flex w-full items-center justify-between rounded-[8px] px-2 py-2 text-left transition-colors',
-                    'hover:bg-[var(--model-item-hover)]',
-                    selected && 'bg-[var(--surface-chip)]',
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'truncate text-[13.5px] text-[var(--model-item-text)]',
-                      selected ? 'font-medium' : 'font-normal',
-                    )}
-                  >
-                    {effortLabelFor(editingModel, e)}
-                  </span>
-                  {selected && (
-                    <Check size={15} className="ml-2 shrink-0 text-[var(--model-item-check)]" />
-                  )}
-                </button>
-              );
-            })}
-          </>
-        )}
-      </div>
-    ) : null;
-
-  // ── 右栏 Pane:固定 320 宽(Edit 配置列开合时列表宽度不抖动)───────────────
+  // ── 主菜单:固定 320 宽,选项浮层 portal 到 body,hover 时主菜单完全不重排 ─────
   const pane = (
     <div className="flex w-[320px] shrink-0 flex-col gap-1.5 p-2">
       {/* 「跟随会话」行(opt-in,仅 scheduler heartbeat) */}
@@ -999,15 +1057,7 @@ export function ModelSelectorContent({
     </div>
   );
 
-  // 根容器 fit-content:宽度 = 子项之和(pane 320 [+ config 196 + 分隔线 1])。不写死宽度,
-  // 避免与真实内容宽度不符触发 floating-ui ResizeObserver 反复重定位(列表抖动)。
-  return (
-    <div className="flex items-stretch">
-      {configColumn}
-      {configColumn && <div className="w-px self-stretch bg-[var(--model-dropdown-border)]" />}
-      {pane}
-    </div>
-  );
+  return pane;
 }
 
 export function ModelSelector({
@@ -1127,6 +1177,20 @@ export function ModelSelector({
   const triggerActiveProvider = activeSourceId
     ? providers.find((p) => p.id === activeSourceId)
     : undefined;
+  // trigger 图标的统一规则:当前 (来源, 模型) 条目的 icon(AI Gateway / 目录设定)优先,
+  // 缺省回落来源供应商标 —— 与列表行、手机版同一套口径(ModelIconMark)。
+  const triggerModelIcon =
+    triggerActiveProvider && currentAgentKind
+      ? getModel(triggerActiveProvider, modelId, currentAgentKind)?.icon
+      : undefined;
+  // 断开态同一规则,只是来源取「真实断开来源」(currentProviderId)。
+  const disconnectedProvider = currentProviderId
+    ? providers.find((p) => p.id === currentProviderId)
+    : undefined;
+  const disconnectedModelIcon =
+    disconnectedProvider && currentAgentKind
+      ? getModel(disconnectedProvider, modelId, currentAgentKind)?.icon
+      : undefined;
   const triggerFastSupported =
     triggerActiveProvider && currentAgentKind
       ? modelSupportsFastMode(triggerActiveProvider, modelId, currentAgentKind)
@@ -1180,7 +1244,7 @@ export function ModelSelector({
                     : [
                         'h-[30px] min-w-[72px] max-w-full shrink overflow-hidden',
                         noSource
-                          ? 'bg-[var(--surface-chip)] px-2.5 hover:bg-[var(--surface-hover)]'
+                          ? 'border border-[var(--border-default)] bg-[var(--composer-pill-bg,#FCFCFC)] px-2.5 hover:bg-[var(--model-trigger-hover)]'
                           : 'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] px-2.5 border border-[var(--border-default)] hover:bg-[var(--model-trigger-hover)]' /* spec 2026-07-17, token by 一哥 */,
                       ],
                 ),
@@ -1220,12 +1284,10 @@ export function ModelSelector({
             // ——回落图标会让用户以为在用默认来源,而发送实际按 DB 里的断开来源走(no_oauth 事故)。
             // 错误态用语义豁免 error token(规则 16);trigger 保持可点击,下拉换源即恢复。
             <>
-              <ModelBrandMark
-                modelId={modelId}
-                displayName={currentModel?.displayName}
-                agentKind={currentAgentKind}
-                fallbackProviderId={currentProviderId}
-                fallbackProviderName={providers.find((p) => p.id === currentProviderId)?.name}
+              <ModelIconMark
+                icon={disconnectedModelIcon}
+                providerId={currentProviderId}
+                name={disconnectedProvider?.name}
                 colorClass="text-[var(--error-fg)]"
               />
               <span
@@ -1259,13 +1321,13 @@ export function ModelSelector({
             </>
           ) : (
             <>
+              {/* 图标统一规则:模型条目 icon(AI Gateway / 目录设定)优先,缺省回落
+                  当前真正路由的来源标(activeSourceId)——客户端不按 model id 猜厂牌。 */}
               {activeSourceId && (
-                <ModelBrandMark
-                  modelId={modelId}
-                  displayName={currentModel?.displayName}
-                  agentKind={currentAgentKind}
-                  fallbackProviderId={activeSourceId}
-                  fallbackProviderName={providers.find((p) => p.id === activeSourceId)?.name}
+                <ModelIconMark
+                  icon={triggerModelIcon}
+                  providerId={activeSourceId}
+                  name={providers.find((p) => p.id === activeSourceId)?.name}
                   colorClass={
                     isCreateAgentVariant ? 'text-[var(--create-agent-control-icon)]' : undefined
                   }

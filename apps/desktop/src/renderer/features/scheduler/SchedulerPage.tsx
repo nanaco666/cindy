@@ -124,7 +124,7 @@ export function SchedulerPage() {
   // useSchedules 内部还会在 'fired'/'completed' 事件下维护 runningById，
   // 但 master-detail 改版后 running 视觉表达全在 right-pane 的 history card 上
   // （首张 run 自带 Running chip + 脉冲点），左侧 cell 不再叠加 running 态指示，所以这里不解构。
-  const { schedules, loading, error, refresh } = useSchedules();
+  const { schedules, runtimeSnapshot, loading, error, refresh } = useSchedules();
   const { confirm, confirmThree } = useConfirmDialog();
   const { requestDeleteSchedule, deleteScheduleDialog } = useDeleteScheduleWithSessions({
     onDeleted: () => refresh(),
@@ -577,6 +577,7 @@ export function SchedulerPage() {
               onRemoveProjectSchedule={handleRemoveProjectSchedule}
               onRunNow={handleRunNow}
               runNowBusyIds={runNowBusyIds}
+              runtimeSnapshot={runtimeSnapshot}
               width={taskListWidth}
               onResizeStart={handlePaneResizeStart}
               onResizeReset={handlePaneResizeReset}
@@ -588,7 +589,6 @@ export function SchedulerPage() {
                 onTogglePause={handleTogglePause}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
-                costSummary={costSummaries.get(selected.id)}
                 runNowBusy={runNowBusyIds.has(selected.id)}
               />
             )}

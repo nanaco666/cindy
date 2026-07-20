@@ -10,7 +10,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // vi.mock 工厂会被 hoist 到 import 之上,引用模块级 let 会报未初始化;用 vi.hoisted 兜住。
-const h = vi.hoisted(() => ({ captured: null as Record<string, unknown> | null }));
+const h = vi.hoisted(() => ({
+  captured: null as Record<string, unknown> | null,
+  updateSet: null as Record<string, unknown> | null,
+  updateReturning: [] as Array<{ id: string }>,
+  whereCalled: false,
+}));
 
 vi.mock('../../localDb/client/current.js', () => ({
   getDbClient: () => ({
@@ -19,6 +24,17 @@ vi.mock('../../localDb/client/current.js', () => ({
         values: (row: Record<string, unknown>) => {
           h.captured = row;
           return Promise.resolve();
+        },
+      }),
+      update: () => ({
+        set: (patch: Record<string, unknown>) => {
+          h.updateSet = patch;
+          return {
+            where: () => {
+              h.whereCalled = true;
+              return { returning: async () => h.updateReturning };
+            },
+          };
         },
       }),
     },
@@ -119,5 +135,23 @@ describe('DesktopSessionStorage.create workingDir 规范化', () => {
     });
     expect(h.captured?.workingDir).toBe('D:/repo/project');
     expect(created.workDir).toBe('D:/repo/project');
+  });
+});
+
+describe('DesktopSessionStorage.compareAndClearSdkSessionId', () => {
+  beforeEach(() => {
+    h.updateSet = null;
+    h.updateReturning = [];
+    h.whereCalled = false;
+  });
+  it('用单条条件 update 清空旧 id，并按 returning 报告 CAS 是否命中', async () => {
+    const storage = new DesktopSessionStorage();
+    h.updateReturning = [{ id: 'session-1' }];
+    await expect(storage.compareAndClearSdkSessionId('session-1', 'sdk-old')).resolves.toBe(true);
+    expect(h.updateSet?.sdkSessionId).toBeNull();
+    expect(h.updateSet?.updatedAt).toEqual(expect.any(Number));
+    expect(h.whereCalled).toBe(true);
+    h.updateReturning = [];
+    await expect(storage.compareAndClearSdkSessionId('session-1', 'sdk-stale')).resolves.toBe(false);
   });
 });

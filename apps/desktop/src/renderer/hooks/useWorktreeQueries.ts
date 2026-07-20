@@ -106,24 +106,35 @@ interface BranchesState {
   branches: string[];
   current: string | null;
   loading: boolean;
+  /** true = 上次请求失败(与"仓库没有分支"的空列表区分开,UI 据此给重试入口)。 */
+  failed: boolean;
+  /** 重新拉一次(与 useSuggestName.regenerate 同款 tick 惯例)。 */
+  refetch: () => void;
 }
 
 /**
  * 拉 baseRepo 的本地分支列表。baseRepo 为 null 时返回空集合。
+ * 失败置 failed(hook 不自动重试),由调用方经 refetch() 重拉。
  */
 export function useBranches(
   baseRepo: string | null,
   deviceLinkDeviceId?: string | null,
 ): BranchesState {
-  const [state, setState] = useState<BranchesState>({
+  const [state, setState] = useState<Omit<BranchesState, 'refetch'>>({
     branches: [],
     current: null,
     loading: false,
+    failed: false,
   });
+  const [tick, setTick] = useState(0);
+
+  const refetch = useCallback(() => {
+    setTick((t) => t + 1);
+  }, []);
 
   useEffect(() => {
     if (!baseRepo) {
-      setState({ branches: [], current: null, loading: false });
+      setState({ branches: [], current: null, loading: false, failed: false });
       return;
     }
     let cancelled = false;
@@ -135,19 +146,20 @@ export function useBranches(
           branches: res.branches ?? [],
           current: res.current ?? null,
           loading: false,
+          failed: false,
         });
       })
       .catch((err: unknown) => {
         if (cancelled) return;
         log.warn('[useBranches] failed:', err);
-        setState({ branches: [], current: null, loading: false });
+        setState({ branches: [], current: null, loading: false, failed: true });
       });
     return () => {
       cancelled = true;
     };
-  }, [baseRepo, deviceLinkDeviceId]);
+  }, [baseRepo, deviceLinkDeviceId, tick]);
 
-  return state;
+  return { ...state, refetch };
 }
 
 interface SuggestNameState {

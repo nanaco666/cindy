@@ -12,22 +12,40 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-const newMakerDraftRouteSource = readFileSync(resolve(__dirname, '..', 'features', 'cc-agent', 'NewMakerDraftRoute.tsx'), 'utf8');
+const newMakerDraftRouteSource = readFileSync(
+  resolve(__dirname, '..', 'features', 'cc-agent', 'NewMakerDraftRoute.tsx'),
+  'utf8',
+);
 
-const worktreeChipsSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'WorktreeChipsRow.tsx'), 'utf8');
+const worktreeChipsSource = readFileSync(
+  resolve(__dirname, '..', 'components', 'new-chat', 'WorktreeChipsRow.tsx'),
+  'utf8',
+);
 
-const folderPickerPopoverSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'FolderPickerPopover.tsx'), 'utf8');
+const folderPickerPopoverSource = readFileSync(
+  resolve(__dirname, '..', 'components', 'new-chat', 'FolderPickerPopover.tsx'),
+  'utf8',
+);
 
-const addRemoteProjectDialogSource = readFileSync(resolve(__dirname, '..', 'components', 'new-chat', 'AddRemoteProjectDialog.tsx'), 'utf8');
+const addRemoteProjectDialogSource = readFileSync(
+  resolve(__dirname, '..', 'components', 'new-chat', 'AddRemoteProjectDialog.tsx'),
+  'utf8',
+);
 
-const projectPickerOptionsHookSource = readFileSync(resolve(__dirname, '..', 'hooks', 'useProjectPickerOptions.ts'), 'utf8');
+const projectPickerOptionsHookSource = readFileSync(
+  resolve(__dirname, '..', 'hooks', 'useProjectPickerOptions.ts'),
+  'utf8',
+);
 
 const scheduleFormDialogSource = readFileSync(
   resolve(__dirname, '..', 'features', 'scheduler', 'components', 'ScheduleFormDialog.tsx'),
   'utf8',
 );
 
-const scheduleChipsSource = readFileSync(resolve(__dirname, '..', 'features', 'scheduler', 'components', 'ScheduleChips.tsx'), 'utf8');
+const scheduleChipsSource = readFileSync(
+  resolve(__dirname, '..', 'features', 'scheduler', 'components', 'ScheduleChips.tsx'),
+  'utf8',
+);
 
 describe('Shared create project picker', () => {
   it('builds project options from the persistent recent_workdirs table, not from live sessions', () => {
@@ -36,19 +54,27 @@ describe('Shared create project picker', () => {
     expect(projectPickerOptionsHookSource).toContain('useRecentWorkdirs()');
     expect(projectPickerOptionsHookSource).toContain('extractDisplayName(');
     expect(projectPickerOptionsHookSource).toContain('getProjectPickerEmptyLabelKey');
-    expect(newMakerDraftRouteSource).toContain('const projectPickerOptions = useProjectPickerOptions()');
+    expect(newMakerDraftRouteSource).toContain(
+      'const projectPickerOptions = useProjectPickerOptions()',
+    );
     // 反向防回退:旧的从 sessions 反推路径已下线,不要再被引入。
     expect(newMakerDraftRouteSource).not.toContain('groupSessions(projectCandidates).projects');
     expect(newMakerDraftRouteSource).not.toContain('sortProjectsForSidebar(');
   });
 
   it('keeps the CREATE AGENT route from rendering internal project/sidebar chrome', () => {
-    expect(newMakerDraftRouteSource).not.toContain('folderPickerMode="project"');
     expect(newMakerDraftRouteSource).toContain('projectOptions={projectPickerOptions}');
     expect(newMakerDraftRouteSource).toContain('data-testid="create-agent-mode-pill"');
     expect(newMakerDraftRouteSource).not.toContain('emptyProjectLabel={emptyProjectLabel}');
-    expect(newMakerDraftRouteSource).not.toContain('getProjectPickerEmptyLabelKey(workspacePrompt)');
-    expect(newMakerDraftRouteSource).not.toContain('<WorktreeChipsRow');
+    expect(newMakerDraftRouteSource).not.toContain(
+      'getProjectPickerEmptyLabelKey(workspacePrompt)',
+    );
+    // 2026-07-19 恢复 worktree 高级入口(用户裁决,488cb33 误删回归;详见
+    // newMakerCreateAgentVisualContract):路由允许且仅允许一个 advancedOnly
+    // 齿轮变体的 WorktreeChipsRow(folderPickerMode="project" 仅为其 advancedHidden
+    // 语义服务),不回退 folder chip 版;项目选择仍由 mode pill 独占。
+    expect(newMakerDraftRouteSource).toMatch(/<WorktreeChipsRow[\s\S]*?variant="advancedOnly"/);
+    expect((newMakerDraftRouteSource.match(/<WorktreeChipsRow/g) ?? []).length).toBe(1);
     expect(newMakerDraftRouteSource).not.toContain('data-testid="create-agent-sidebar"');
     expect(worktreeChipsSource).toContain("t('newChat.folderPicker.dialogue')");
     expect(worktreeChipsSource).toContain('emptyProjectLabel ??');
@@ -73,9 +99,15 @@ describe('Shared create project picker', () => {
   });
 
   it('keeps dialogue outside of the project group in the picker menu', () => {
-    const topHeadingIndex = folderPickerPopoverSource.indexOf("t('newChat.folderPicker.dialogueOrSelectProject')");
-    const dialogueOptionIndex = folderPickerPopoverSource.indexOf("t('newChat.folderPicker.dialogue')");
-    const projectsHeadingIndex = folderPickerPopoverSource.indexOf("t('newChat.folderPicker.projects')");
+    const topHeadingIndex = folderPickerPopoverSource.indexOf(
+      "t('newChat.folderPicker.dialogueOrSelectProject')",
+    );
+    const dialogueOptionIndex = folderPickerPopoverSource.indexOf(
+      "t('newChat.folderPicker.dialogue')",
+    );
+    const projectsHeadingIndex = folderPickerPopoverSource.indexOf(
+      "t('newChat.folderPicker.projects')",
+    );
 
     expect(topHeadingIndex).toBeGreaterThanOrEqual(0);
     expect(dialogueOptionIndex).toBeGreaterThan(topHeadingIndex);
@@ -84,32 +116,44 @@ describe('Shared create project picker', () => {
   });
 
   it('keeps route-local placeholder state out of CREATE AGENT after sidebar ownership moved to the app shell', () => {
-    expect(newMakerDraftRouteSource).not.toContain('getWorkspacePromptFromRouteState(location.state)');
+    expect(newMakerDraftRouteSource).not.toContain(
+      'getWorkspacePromptFromRouteState(location.state)',
+    );
     expect(newMakerDraftRouteSource).not.toContain("setWorkspacePrompt('dialogue')");
     expect(newMakerDraftRouteSource).not.toContain("workspacePrompt === 'generic'");
-    expect(newMakerDraftRouteSource).not.toContain('[location.key, location.state, routeWorkspacePrompt]');
+    expect(newMakerDraftRouteSource).not.toContain(
+      '[location.key, location.state, routeWorkspacePrompt]',
+    );
   });
 
   it('hides Advanced worktree controls for pure-dialogue drafts without a selected project', () => {
     // advancedHidden 把 "project 模式 + 无 cwd" 归到 dialogue 上下文,
     // 让齿轮按钮 / worktree state effect / effectiveWorktreeEnabled 用同一个 flag 拦掉。
-    expect(worktreeChipsSource).toContain("const advancedHidden = folderPickerMode === 'project' && !cwd");
+    expect(worktreeChipsSource).toContain(
+      "const advancedHidden = folderPickerMode === 'project' && !cwd",
+    );
     expect(worktreeChipsSource).toContain('if (advancedHidden && enabled) onEnabledChange(false)');
     expect(worktreeChipsSource).toContain('{!advancedHidden && (');
-    expect(worktreeChipsSource).toContain('const effectiveWorktreeEnabled = enabled && !advancedHidden && !worktreeDisabled');
+    expect(worktreeChipsSource).toContain(
+      'const effectiveWorktreeEnabled = enabled && !advancedHidden && !worktreeDisabled',
+    );
   });
 
   it('keeps remote project drafts out of local workspace probes', () => {
     expect(newMakerDraftRouteSource).toContain('if (wd && !isRemoteProjectDraft)');
     // device-link 草稿的 git 探测经隧道在被控端执行(本机 git 对远程路径必然误报);
     // SSH(worktreeDisabled)仍不探测。
-    expect(worktreeChipsSource).toContain('useDetectCwd(worktreeDisabled ? null : (cwd ?? null), deviceLinkDeviceId)');
+    expect(worktreeChipsSource).toContain(
+      'useDetectCwd(worktreeDisabled ? null : (cwd ?? null), deviceLinkDeviceId)',
+    );
   });
 
   it('keeps remote project entry UI out of the CREATE AGENT route body', () => {
     // device-link / SSH 入口属于应用外壳或共享弹窗,CREATE AGENT 路由不能再内绘入口。
     expect(newMakerDraftRouteSource).not.toContain('import { useHasAnyRemoteTarget }');
-    expect(newMakerDraftRouteSource).not.toContain('const hasAnyRemoteTarget = useHasAnyRemoteTarget()');
+    expect(newMakerDraftRouteSource).not.toContain(
+      'const hasAnyRemoteTarget = useHasAnyRemoteTarget()',
+    );
     expect(newMakerDraftRouteSource).not.toContain('onAddRemoteProject={hasAnyRemoteTarget ?');
     // 弹窗统一两类来源:SSH ready hosts + device-link 可控设备(optgroup 区分)。
     expect(addRemoteProjectDialogSource).toContain("res.hosts.filter((h) => h.status === 'ready')");
@@ -124,8 +168,12 @@ describe('Shared create project picker', () => {
 
   it('keeps recent-folder storage out of project-option selection', () => {
     expect(folderPickerPopoverSource).toContain('projectOptions?: readonly FolderPickerOption[]');
-    expect(folderPickerPopoverSource).toContain('const isProjectPicker = projectOptions !== undefined');
-    expect(folderPickerPopoverSource).toContain('open && !isProjectPicker ? getRecentFolders() : []');
+    expect(folderPickerPopoverSource).toContain(
+      'const isProjectPicker = projectOptions !== undefined',
+    );
+    expect(folderPickerPopoverSource).toContain(
+      'open && !isProjectPicker ? getRecentFolders() : []',
+    );
     expect(worktreeChipsSource).toContain("if (source !== 'project') addRecentFolder(path)");
   });
 });

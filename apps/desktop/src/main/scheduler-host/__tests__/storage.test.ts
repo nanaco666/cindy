@@ -243,6 +243,13 @@ function baseRunRow(
     finishedAt: null,
     status: 'success',
     errorMsg: null,
+    costUsd: 0,
+    estimatedValueUsd: 0,
+    costAttribution: 'legacy',
+    resultText: null,
+    preRunHookResult: null,
+    readAt: null,
+    heartbeatAt: null,
     ...overrides,
   } as ScheduleRunRowLike;
 }
@@ -264,6 +271,25 @@ describe('scheduleRunToCamel / scheduleRunCreateToRow', () => {
       finishedAt: 1_700_000_010_000,
       status: 'failed',
       errorMsg: 'timeout',
+      costUsd: 0.42,
+      estimatedValueUsd: 0.19,
+      costAttribution: 'exact',
+      resultText: undefined,
+      preRunHookResult: {
+        status: 'timed_out',
+        decision: 'block',
+        exitCode: null,
+        durationMs: 5000,
+        stdout: '',
+        stderr: 'timed out',
+        stdoutTruncated: false,
+        stderrTruncated: false,
+        timedOut: true,
+        aborted: false,
+        error: 'pre-run hook timed out after 5000ms',
+      },
+      readAt: undefined,
+      heartbeatAt: undefined,
     };
     const row = scheduleRunCreateToRow(original);
     const back = scheduleRunToCamel(row as ScheduleRunRowLike);
@@ -281,6 +307,7 @@ describe('scheduleRunToCamel / scheduleRunCreateToRow', () => {
     expect(row.sessionId).toBeNull();
     expect(row.finishedAt).toBeNull();
     expect(row.errorMsg).toBeNull();
+    expect(row.preRunHookResult).toBeNull();
   });
 });
 
@@ -294,6 +321,25 @@ describe('scheduleRunPatchToRow', () => {
     expect('finishedAt' in out).toBe(true);
     expect(out.finishedAt).toBeNull();
     expect('errorMsg' in out).toBe(false);
+  });
+
+  it('preRunHookResult undefined 显式清空，结构化结果序列化为 JSON', () => {
+    expect(scheduleRunPatchToRow({ preRunHookResult: undefined }).preRunHookResult).toBeNull();
+    const result: NonNullable<ScheduleRun['preRunHookResult']> = {
+      status: 'passed',
+      decision: 'run',
+      exitCode: 0,
+      durationMs: 12,
+      stdout: 'ok',
+      stderr: '',
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      timedOut: false,
+      aborted: false,
+    };
+    expect(scheduleRunPatchToRow({ preRunHookResult: result }).preRunHookResult).toBe(
+      JSON.stringify(result),
+    );
   });
 
   it('空 patch → 空 set', () => {

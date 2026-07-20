@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { normalizeWorkingDir } from '@/features/cc-agent/lib/projectGrouping';
-import type { Schedule } from '@lizi/maker-scheduler';
+import type { Schedule, SchedulerRuntimeSnapshot } from '@lizi/maker-scheduler';
 
 import { TaskListCell } from './TaskListCell';
 import { TaskListFilterPopover, type StatusFilter } from './TaskListFilterPopover';
@@ -49,7 +49,9 @@ interface Props {
   onRunNow?: (s: Schedule) => void | Promise<void>;
   /** 页面级 runNow busy 守卫集合；has(s.id) === true 时对应行按钮禁用。 */
   runNowBusyIds?: ReadonlySet<string>;
-  /** Project-level action: open .xdmaker/automations/schedules.json. */
+  /** Scheduler 运行时快照；用于标识真实被并发闸门扣住的到期任务。 */
+  runtimeSnapshot: SchedulerRuntimeSnapshot | null;
+  /** Project-level action: open .cindy/automations/schedules.json. */
   onOpenProjectConfig: (workingDir: string) => void | Promise<void>;
   /** Project-level action: reconcile this workingDir's automation config. */
   onReloadProject: (workingDir: string) => void | Promise<void>;
@@ -81,6 +83,7 @@ export function TaskListPane({
   onRemoveProjectSchedule,
   onRunNow,
   runNowBusyIds,
+  runtimeSnapshot,
   onOpenProjectConfig,
   onReloadProject,
   onCreateProjectSchedule,
@@ -90,6 +93,10 @@ export function TaskListPane({
 }: Props) {
   const { t } = useTranslation();
   const [collapsed, toggleCollapsed] = useCollapsedProjects();
+  const waitingScheduleIds = useMemo(
+    () => new Set(runtimeSnapshot?.waitingSchedules.map((waiting) => waiting.scheduleId) ?? []),
+    [runtimeSnapshot],
+  );
   const groups = useMemo(() => {
     const grouped = new Map<string, Schedule[]>();
     for (const schedule of schedules) {
@@ -242,6 +249,14 @@ export function TaskListPane({
                         }
                         onRunNow={onRunNow}
                         runBusy={runNowBusyIds?.has(s.id) ?? false}
+                        waitingForResources={
+                          waitingScheduleIds.has(s.id) && runtimeSnapshot
+                            ? {
+                                inFlight: runtimeSnapshot.inFlight,
+                                maxConcurrentRuns: runtimeSnapshot.maxConcurrentRuns,
+                              }
+                            : undefined
+                        }
                       />
                     </li>
                   ))}

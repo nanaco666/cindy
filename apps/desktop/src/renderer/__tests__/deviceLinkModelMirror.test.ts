@@ -35,6 +35,16 @@ describe('replaceScope / get*', () => {
     expect(getMirrorFast(DRAFT, 'codex', 'openai', 'unknown')).toBeUndefined();
   });
 
+  it('新快照的全局槽优先于来源兼容副本', () => {
+    replaceScope(DRAFT, {
+      'claude-code:*': { effortByModel: { opus: 'xhigh' }, fastByModel: { opus: true } },
+      'claude-code:anthropic': { effortByModel: { opus: 'high' }, fastByModel: { opus: false } },
+    });
+    expect(getMirrorEffort(DRAFT, 'claude-code', 'anthropic', 'opus')).toBe('xhigh');
+    expect(getMirrorEffort(DRAFT, 'claude-code', 'xd', 'opus')).toBe('xhigh');
+    expect(getMirrorFast(DRAFT, 'claude-code', 'xd', 'opus')).toBe(true);
+  });
+
   it('replaceScope(undefined) 等于清空该 scope', () => {
     replaceScope(DRAFT, { 'claude-code:anthropic': { effortByModel: { m: 'low' }, fastByModel: {} } });
     replaceScope(DRAFT, undefined);
@@ -60,11 +70,13 @@ describe('scope 隔离', () => {
     expect(getMirrorEffort(SESSION, 'claude-code', 'anthropic', 'opus')).toBe('low');
   });
 
-  it('同 model id 跨 (agent, provider) 各记各的', () => {
+  it('同 agent/model 跨 provider 共享,不同 agent 仍隔离', () => {
     setMirrorFast(DRAFT, 'claude-code', 'anthropic', 'opus', true);
+    expect(getMirrorFast(DRAFT, 'claude-code', 'xd', 'opus')).toBe(true);
     setMirrorFast(DRAFT, 'claude-code', 'xd', 'opus', false);
-    expect(getMirrorFast(DRAFT, 'claude-code', 'anthropic', 'opus')).toBe(true);
+    expect(getMirrorFast(DRAFT, 'claude-code', 'anthropic', 'opus')).toBe(false);
     expect(getMirrorFast(DRAFT, 'claude-code', 'xd', 'opus')).toBe(false);
+    expect(getMirrorFast(DRAFT, 'codex', 'xd', 'opus')).toBeUndefined();
   });
 });
 
@@ -96,6 +108,17 @@ describe('makeMirrorAccessors', () => {
     acc.setFast('codex', 'openai', 'gpt-5.4', true);
     expect(acc.getFast('codex', 'openai', 'gpt-5.4')).toBe(true);
     expect(onWrite).toHaveBeenCalledWith('codex', 'openai', 'gpt-5.4', { fast: true });
+  });
+
+  it('setChoice:共享预设并显式标记真正选中模型', () => {
+    const onWrite = vi.fn();
+    const acc = makeMirrorAccessors(SESSION, onWrite);
+    acc.setChoice?.('claude-code', 'anthropic', 'opus', 'high');
+    expect(acc.getEffort('claude-code', 'xd', 'opus')).toBe('high');
+    expect(onWrite).toHaveBeenCalledWith('claude-code', 'anthropic', 'opus', {
+      effort: 'high',
+      markModelChoice: true,
+    });
   });
 
   it('get* 透过 accessor 读对应 scope 的镜像(被控端 push 写入后能读到)', () => {

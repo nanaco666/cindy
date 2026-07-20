@@ -41,12 +41,14 @@ describe('useSplash startup auto relaunch', () => {
     mocks.autoRelaunchToUpdate.mockReset();
     mocks.autoRelaunchToUpdate.mockResolvedValue({ accepted: false, blockReason: 'busy' });
     mocks.relaunchToUpdate.mockClear();
-    (window as unknown as {
-      electronAPI: {
-        autoRelaunchToUpdate: typeof mocks.autoRelaunchToUpdate;
-        relaunchToUpdate: typeof mocks.relaunchToUpdate;
-      };
-    }).electronAPI = {
+    (
+      window as unknown as {
+        electronAPI: {
+          autoRelaunchToUpdate: typeof mocks.autoRelaunchToUpdate;
+          relaunchToUpdate: typeof mocks.relaunchToUpdate;
+        };
+      }
+    ).electronAPI = {
       autoRelaunchToUpdate: mocks.autoRelaunchToUpdate,
       relaunchToUpdate: mocks.relaunchToUpdate,
     };

@@ -20,7 +20,14 @@ vi.mock('../logger.js', () => ({
   createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }));
 vi.mock('../localDb/ipc/messages.js', () => ({
-  patchMessageAgentMeta: vi.fn(async () => true),
+  patchMessageAgentMetaWithResult: vi.fn(async (_sessionId: string, _clientId: string, patch: Record<string, unknown>) => ({
+    previous: {},
+    next: patch,
+  })),
+  readPriorUserRoundCost: vi.fn(async () => ({ costUsd: 0, hasEstimatedValue: false })),
+}));
+vi.mock('../scheduler-host/runCostLedger.js', () => ({
+  applyScheduleRunCostMetaChange: vi.fn(async () => undefined),
 }));
 vi.mock('../messagePersistBroadcaster.js', () => ({
   enqueueDurableWrite: vi.fn((_label: string, fn: () => unknown) => Promise.resolve(fn())),
@@ -37,21 +44,41 @@ import {
   type TurnUsageDetails,
 } from '../../shared/turnUsageDetails.js';
 
-function makeDeps(patchResult: boolean | Error = true) {
+function makeDeps(
+  patchResult: boolean | Error = true,
+  prior: { costUsd: number; hasEstimatedValue: boolean } | Error = {
+    costUsd: 0,
+    hasEstimatedValue: false,
+  },
+  previousAgentMeta: Record<string, unknown> = {},
+) {
   const broadcasts: MessageTurnCostPayload[] = [];
   const patchCalls: Array<{ sessionId: string; clientId: string; patch: Record<string, unknown> }> = [];
+  const runCostCalls: Array<{
+    previous: Record<string, unknown>;
+    next: Record<string, unknown>;
+  }> = [];
   const deps: TurnCostDeps = {
     patchAgentMeta: vi.fn(async (sessionId, clientId, patch) => {
       patchCalls.push({ sessionId, clientId, patch });
       if (patchResult instanceof Error) throw patchResult;
-      return patchResult;
+      return patchResult
+        ? { previous: previousAgentMeta, next: { ...previousAgentMeta, ...patch } }
+        : null;
+    }),
+    applyScheduleRunCostChange: vi.fn(async (previous, next) => {
+      runCostCalls.push({ previous, next });
+    }),
+    readPriorUserRoundCost: vi.fn(async () => {
+      if (prior instanceof Error) throw prior;
+      return prior;
     }),
     enqueue: (_label, fn) => Promise.resolve(fn()),
     broadcast: (payload) => {
       broadcasts.push(payload);
     },
   };
-  return { deps, broadcasts, patchCalls };
+  return { deps, broadcasts, patchCalls, runCostCalls };
 }
 
 const ARGS = { sessionId: 's1', clientId: 'm1', costUsd: 0.042, isEstimate: false };
@@ -68,18 +95,30 @@ beforeEach(() => {
 });
 
 describe('recordTurnCostOnMessage', () => {
-  it('patch 成功 → 写入 turnCostUsd/turnCostIsEstimate 并广播同值', async () => {
+  it('patch 成功 → 写入原始分段与本用户轮累计，并广播同值', async () => {
     const { deps, broadcasts, patchCalls } = makeDeps(true);
     await recordTurnCostOnMessage(ARGS, deps);
     expect(patchCalls).toEqual([
       {
         sessionId: 's1',
         clientId: 'm1',
-        patch: { turnCostUsd: 0.042, turnCostIsEstimate: false },
+        patch: {
+          turnCostUsd: 0.042,
+          turnCostIsEstimate: false,
+          userTurnCostUsd: 0.042,
+          userTurnCostIsEstimate: false,
+        },
       },
     ]);
     expect(broadcasts).toEqual([
-      { sessionId: 's1', clientId: 'm1', turnCostUsd: 0.042, turnCostIsEstimate: false },
+      {
+        sessionId: 's1',
+        clientId: 'm1',
+        turnCostUsd: 0.042,
+        turnCostIsEstimate: false,
+        userTurnCostUsd: 0.042,
+        userTurnCostIsEstimate: false,
+      },
     ]);
   });
 
@@ -89,6 +128,8 @@ describe('recordTurnCostOnMessage', () => {
     expect(patchCalls[0]?.patch).toEqual({
       turnCostUsd: 0.042,
       turnCostIsEstimate: false,
+      userTurnCostUsd: 0.042,
+      userTurnCostIsEstimate: false,
       turnUsageDetails: DETAILS,
     });
     expect(broadcasts[0]).toEqual({
@@ -96,6 +137,8 @@ describe('recordTurnCostOnMessage', () => {
       clientId: 'm1',
       turnCostUsd: 0.042,
       turnCostIsEstimate: false,
+      userTurnCostUsd: 0.042,
+      userTurnCostIsEstimate: false,
       turnUsageDetails: DETAILS,
     });
   });
@@ -104,6 +147,60 @@ describe('recordTurnCostOnMessage', () => {
     const { deps, broadcasts } = makeDeps(true);
     await recordTurnCostOnMessage({ ...ARGS, isEstimate: true }, deps);
     expect(broadcasts[0]?.turnCostIsEstimate).toBe(true);
+    expect(broadcasts[0]?.userTurnCostIsEstimate).toBe(true);
+  });
+
+  it('scheduler turn 持久化 runId origin，并同步 run 费用账本', async () => {
+    const { deps, patchCalls, runCostCalls } = makeDeps(true);
+    const turnOrigin = {
+      kind: 'scheduler',
+      scheduleId: 'schedule-1',
+      scheduleName: 'PR 反馈监控',
+      runId: 'run-1',
+    } as const;
+
+    await recordTurnCostOnMessage({ ...ARGS, turnOrigin }, deps);
+
+    expect(patchCalls[0]?.patch.origin).toEqual(turnOrigin);
+    expect(runCostCalls).toEqual([{
+      previous: {},
+      next: expect.objectContaining({
+        origin: turnOrigin,
+        turnCostUsd: 0.042,
+        turnCostIsEstimate: false,
+      }),
+    }]);
+  });
+
+  it('多段 SDK done 的展示累计完整，但原始分段成本不变', async () => {
+    const { deps, broadcasts, patchCalls } = makeDeps(true, {
+      costUsd: 51.452182,
+      hasEstimatedValue: false,
+    });
+    await recordTurnCostOnMessage({ ...ARGS, costUsd: 0.777042 }, deps);
+
+    expect(patchCalls[0]?.patch).toEqual({
+      turnCostUsd: 0.777042,
+      turnCostIsEstimate: false,
+      userTurnCostUsd: 52.229224,
+      userTurnCostIsEstimate: false,
+    });
+    expect(broadcasts[0]).toMatchObject({
+      turnCostUsd: 0.777042,
+      userTurnCostUsd: 52.229224,
+    });
+  });
+
+  it('先前任一分段为估算值时，累计展示也标为估算', async () => {
+    const { deps, broadcasts } = makeDeps(true, {
+      costUsd: 1.2,
+      hasEstimatedValue: true,
+    });
+    await recordTurnCostOnMessage(ARGS, deps);
+    expect(broadcasts[0]).toMatchObject({
+      userTurnCostUsd: 1.242,
+      userTurnCostIsEstimate: true,
+    });
   });
 
   it('patch 返回 false(行不存在,典型 rewind 已删)→ 不广播', async () => {
@@ -132,6 +229,13 @@ describe('recordTurnCostOnMessage', () => {
   it('patch 抛错 → 吞掉不传播、不广播', async () => {
     const { deps, broadcasts } = makeDeps(new Error('db locked'));
     await expect(recordTurnCostOnMessage(ARGS, deps)).resolves.toBeUndefined();
+    expect(broadcasts).toHaveLength(0);
+  });
+
+  it('读取累计失败 → 不写入错误的单段展示值，也不广播', async () => {
+    const { deps, broadcasts, patchCalls } = makeDeps(true, new Error('db locked'));
+    await expect(recordTurnCostOnMessage(ARGS, deps)).resolves.toBeUndefined();
+    expect(patchCalls).toHaveLength(0);
     expect(broadcasts).toHaveLength(0);
   });
 });

@@ -371,17 +371,17 @@ describe('CINDY · ⑦ WCAG 复算 + U2 例外 allowlist + text-secondary 反向
     ).toBe(true);
   });
 
-  it('E1D 侧栏层级:二级暗灰(sidebar-muted)明显弱于正文(text-primary)×surface + 选中胶囊反白', () => {
-    // lead 侧栏层级整改 2026-07-17:标题正文 > 图标/时间戳/分组(二级暗灰) > 选中胶囊红反白 > 强调箭头红
+  it('CINDY 侧栏层级:二级暗灰(sidebar-muted)明显弱于正文(text-primary)×surface + 中性选中 pill', () => {
+    // 侧栏层级:标题正文 > 图标/时间戳/分组(二级暗灰) > 中性选中 pill 前景。
     for (const [name, theme] of THEMES) {
       const c = theme.colors as unknown as Record<string, string>;
       const sec = contrast(c['sidebar-muted'], c['surface']);
       const pri = contrast(c['text-primary-hsl'], c['surface']);
       expect(sec, `${name} 二级暗灰 ${sec.toFixed(2)} 应明显弱于正文 ${pri.toFixed(2)}`).toBeLessThan(pri);
     }
-    // 选中胶囊前景反白(light #FCFCFC/dark #D4D4D4)— ③ exact 已守,此处补层级:前景×红底 ≥4.5
-    expect(contrast(cindyLight.colors['sidebar-item-active-foreground']!, cindyLight.colors['sidebar-item-active']!), 'light 选中胶囊 前景×红底').toBeGreaterThanOrEqual(4.5);
-    expect(contrast(cindyDark.colors['sidebar-item-active-foreground']!, cindyDark.colors['sidebar-item-active']!), 'dark 选中胶囊 前景×红底').toBeGreaterThanOrEqual(4.5);
+    // ③ exact 已守,此处补层级:选中 pill 前景×中性底 ≥4.5。
+    expect(contrast(cindyLight.colors['sidebar-item-active-foreground']!, cindyLight.colors['sidebar-item-active']!), 'light 选中胶囊 前景×中性底').toBeGreaterThanOrEqual(4.5);
+    expect(contrast(cindyDark.colors['sidebar-item-active-foreground']!, cindyDark.colors['sidebar-item-active']!), 'dark 选中胶囊 前景×中性底').toBeGreaterThanOrEqual(4.5);
   });
 });
 

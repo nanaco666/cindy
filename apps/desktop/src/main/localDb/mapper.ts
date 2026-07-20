@@ -27,6 +27,7 @@ import type {
   AgentKind as SchedulerAgentKind,
   ScriptExecutionConfig,
   ScriptCapability,
+  PreRunHookRunResult,
 } from '@lizi/maker-scheduler';
 import { normalizeSessionSource } from '../../shared/sessionSource.js';
 import { normalizeWorkingDirForStorage } from '../../shared/workingDir.js';
@@ -436,6 +437,41 @@ function parseScriptConfig(raw: string | null): ScriptExecutionConfig | undefine
   }
 }
 
+const PRE_RUN_HOOK_STATUSES = new Set([
+  'passed',
+  'skipped',
+  'failed',
+  'timed_out',
+  'aborted',
+]);
+const PRE_RUN_HOOK_DECISIONS = new Set(['run', 'skip', 'block']);
+
+/** 兼容损坏/手工写入的 JSON：非法结果不应让整个运行历史加载失败。 */
+function parsePreRunHookResult(raw: string | null): PreRunHookRunResult | undefined {
+  if (!raw) return undefined;
+  try {
+    const value = JSON.parse(raw) as Record<string, unknown>;
+    if (!PRE_RUN_HOOK_STATUSES.has(String(value.status))) return undefined;
+    if (!PRE_RUN_HOOK_DECISIONS.has(String(value.decision))) return undefined;
+    if (value.exitCode !== null && typeof value.exitCode !== 'number') return undefined;
+    if (typeof value.durationMs !== 'number' || !Number.isFinite(value.durationMs)) return undefined;
+    if (typeof value.stdout !== 'string' || typeof value.stderr !== 'string') return undefined;
+    if (
+      typeof value.stdoutTruncated !== 'boolean' ||
+      typeof value.stderrTruncated !== 'boolean' ||
+      typeof value.timedOut !== 'boolean' ||
+      typeof value.aborted !== 'boolean'
+    ) {
+      return undefined;
+    }
+    if (value.spawnError !== undefined && typeof value.spawnError !== 'string') return undefined;
+    if (value.error !== undefined && typeof value.error !== 'string') return undefined;
+    return value as unknown as PreRunHookRunResult;
+  } catch {
+    return undefined;
+  }
+}
+
 function serializeScriptConfig(config: ScriptExecutionConfig | undefined): string | null {
   return config ? JSON.stringify(config) : null;
 }
@@ -476,7 +512,6 @@ export function scheduleToCamel(row: ScheduleRow): Schedule {
           timeoutMs: row.preRunHookTimeoutMs ?? undefined,
         }
       : undefined,
-    skipLogSessionId: row.skipLogSessionId ?? undefined,
     notify: {
       desktop: !!row.notifyDesktop,
       feishu: !!row.notifyFeishu,
@@ -522,7 +557,6 @@ export function scheduleCreateToRow(s: Schedule): ScheduleInsert {
     silentWhenIdle: !!s.silentWhenIdle,
     preRunHookCommand: s.preRunHook?.command ?? null,
     preRunHookTimeoutMs: s.preRunHook?.timeoutMs ?? null,
-    skipLogSessionId: s.skipLogSessionId ?? null,
     notifyDesktop: s.notify.desktop,
     notifyFeishu: s.notify.feishu,
     status: s.status,
@@ -585,8 +619,6 @@ export function schedulePatchToRow(patch: Partial<Schedule>): Partial<ScheduleIn
     out.preRunHookCommand = patch.preRunHook?.command ?? null;
     out.preRunHookTimeoutMs = patch.preRunHook?.timeoutMs ?? null;
   }
-  if (hasKey(patch, 'skipLogSessionId'))
-    out.skipLogSessionId = patch.skipLogSessionId ?? null;
   if (hasKey(patch, 'notify')) {
     // 嵌套对象整体替换：必须两列同时写
     const n = patch.notify ?? { desktop: false, feishu: false };
@@ -641,7 +673,11 @@ export function scheduleRunToCamel(row: ScheduleRunRow): ScheduleRun {
     finishedAt: row.finishedAt ?? undefined,
     status: row.status as RunStatus,
     errorMsg: row.errorMsg ?? undefined,
+    costUsd: row.costUsd,
+    estimatedValueUsd: row.estimatedValueUsd,
+    costAttribution: row.costAttribution,
     resultText: row.resultText ?? undefined,
+    preRunHookResult: parsePreRunHookResult(row.preRunHookResult),
     readAt: row.readAt ?? undefined,
     heartbeatAt: row.heartbeatAt ?? undefined,
   };
@@ -657,7 +693,12 @@ export function scheduleRunCreateToRow(r: ScheduleRun): ScheduleRunInsert {
     finishedAt: r.finishedAt ?? null,
     status: r.status,
     errorMsg: r.errorMsg ?? null,
+    costUsd: r.costUsd ?? 0,
+    estimatedValueUsd: r.estimatedValueUsd ?? 0,
+    // 新写入的 run 从创建起就带 runId origin；迁移前旧行由列默认值标为 legacy。
+    costAttribution: r.costAttribution ?? 'exact',
     resultText: r.resultText ?? null,
+    preRunHookResult: r.preRunHookResult ? JSON.stringify(r.preRunHookResult) : null,
     readAt: r.readAt ?? null,
     heartbeatAt: r.heartbeatAt ?? null,
   };
@@ -681,7 +722,19 @@ export function scheduleRunPatchToRow(
   if (hasKey(patch, 'status'))
     out.status = patch.status as ScheduleRunInsert['status'];
   if (hasKey(patch, 'errorMsg')) out.errorMsg = patch.errorMsg ?? null;
+  if (hasKey(patch, 'costUsd')) out.costUsd = patch.costUsd ?? 0;
+  if (hasKey(patch, 'estimatedValueUsd')) {
+    out.estimatedValueUsd = patch.estimatedValueUsd ?? 0;
+  }
+  if (hasKey(patch, 'costAttribution')) {
+    out.costAttribution = patch.costAttribution ?? 'legacy';
+  }
   if (hasKey(patch, 'resultText')) out.resultText = patch.resultText ?? null;
+  if (hasKey(patch, 'preRunHookResult')) {
+    out.preRunHookResult = patch.preRunHookResult
+      ? JSON.stringify(patch.preRunHookResult)
+      : null;
+  }
   if (hasKey(patch, 'readAt')) out.readAt = patch.readAt ?? null;
   if (hasKey(patch, 'heartbeatAt')) out.heartbeatAt = patch.heartbeatAt ?? null;
   return out;

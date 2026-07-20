@@ -47,12 +47,19 @@ export interface TurnState {
    */
   uiEmittedText: string;
   /**
-   * 本 turn 是否已推过 isTerminal error 事件(目前唯一置位点:API-error envelope)。
-   * turn-end 的 is_error 兜底判据:envelope 已收尾过的失败 turn 保持现状(仍发
-   * status Done + done, 与既有下游收口行为一致);没推过的才补 terminal error,
-   * 避免"失败 turn 只发 done"被通知链路当成正常完成。
+   * SDK API retry / assistant error envelope 的暂存详情。两者都不是可靠的 turn
+   * 终态: Claude Code 可能随后自动重试并返回成功 result。只有最终
+   * result.is_error 才把它推成 terminal error；成功 result 直接丢弃，避免下游
+   * 提前收口重试中的 turn。
    */
-  pushedTerminalError: boolean;
+  pendingApiError: {
+    message: string;
+    sdkError: string;
+    agentMeta?: Record<string, unknown>;
+    errorStatus?: number | null;
+    retryAttempt?: number;
+    maxRetries?: number;
+  } | null;
   /**
    * 本 turn 是否由 maker 侧主动 interrupt(用户点停止 handle.abort() / upstream
    * idle watchdog, 都走 q.interrupt())。SDK 被 interrupt 后会 drain 出
@@ -91,9 +98,18 @@ export interface RuntimeState {
   /** tool_use.id → tool_use.name。用于在 tool_result echo 时区分命令输出和内容结果。 */
   toolUseIdToName: Map<string, string>;
   /**
+   * SDK partial stream 按 parent_tool_use_id 隔离的真实模型。
+   * 并发 subagent 的 stream_event 会交错，不能用会话级元数据推断。
+   */
+  streamModelByParentToolUseId: Map<string, string>;
+  /** Agent 异步启动回执里的权威模型，优先级高于流式事件里的 wire model。 */
+  resolvedSubagentModelByParentToolUseId: Map<string, string>;
+  /** task_id 到启动它的 Agent tool_use.id 的别名映射。 */
+  subagentParentToolUseIdByTaskId: Map<string, string>;
+  /**
    * 上一次 SDK assistant 消息提取出来的 agentMeta (uuid / sdkSessionId / model / ...).
-   * 跨 stream_event 累积时 (text_delta / thinking_delta / message_delta) 用它兜底,
-   * 让 renderer 拿到 mid-turn 增量事件也能合成完整的 messages.agent_meta 行。
+   * 主 agent 的 stream_event 累积时用它补齐 transcript 锚点；subagent stream
+   * 则必须按 parent_tool_use_id 隔离，不能共享这份会话级状态。
    * 老链路 agentManager.ts:2214 (session.lastAssistantMeta) 同款。
    */
   lastAssistantMeta: Record<string, unknown> | null;
@@ -108,6 +124,9 @@ export function newRuntimeState(): RuntimeState {
   return {
     currentThinking: null,
     toolUseIdToName: new Map(),
+    streamModelByParentToolUseId: new Map(),
+    resolvedSubagentModelByParentToolUseId: new Map(),
+    subagentParentToolUseIdByTaskId: new Map(),
     lastAssistantMeta: null,
     lastResultUsageAggregate: null,
   };
@@ -124,7 +143,7 @@ function resetTurnState(turn: TurnState): void {
   turn.sawCompactBoundary = false;
   turn.hasEmittedText = false;
   turn.uiEmittedText = '';
-  turn.pushedTerminalError = false;
+  turn.pendingApiError = null;
   turn.interruptRequested = false;
   turn.lastAssistantMsgHadSubstance = true;
   // generation / interruptGeneration 刻意不清: 代际跨 turn 单调递增(见字段注释)。
@@ -290,6 +309,62 @@ function readToolResultFullText(blockRaw: unknown): { toolUseId: string; fullTex
   return { toolUseId: b.tool_use_id, fullText };
 }
 
+/**
+ * 从 Agent 工具的异步启动回执中提取权威模型。
+ * Claude Code 会把最终解析后的模型放在 tool_use_result.resolvedModel；这比
+ * 流式子消息的时序推断可靠，适合直接补到 AgentTaskUpdate 给任务卡展示。
+ */
+interface AsyncSubagentLaunch {
+  taskId: string;
+  parentToolUseId: string;
+  prompt?: string;
+  model?: string;
+}
+
+function extractAsyncSubagentLaunch(
+  msg: {
+    message?: { content?: unknown };
+    tool_use_result?: unknown;
+    toolUseResult?: unknown;
+  },
+): AsyncSubagentLaunch | null {
+  const rawResult = msg.tool_use_result ?? msg.toolUseResult;
+  if (!rawResult || typeof rawResult !== 'object' || Array.isArray(rawResult)) return null;
+  const result = rawResult as Record<string, unknown>;
+  const isAsync = result.isAsync === true || result.is_async === true;
+  const status = result.status;
+  if (!isAsync && status !== 'async_launched') return null;
+
+  const model = typeof result.resolvedModel === 'string'
+    ? result.resolvedModel
+    : typeof result.resolved_model === 'string'
+      ? result.resolved_model
+      : undefined;
+  const content = msg.message?.content;
+  let toolResult: { toolUseId: string; fullText: string } | null = null;
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      toolResult = readToolResultFullText(block);
+      if (toolResult) break;
+    }
+  }
+  if (!toolResult) return null;
+
+  const rawAgentId = result.agentId ?? result.agent_id;
+  const taskId = typeof rawAgentId === 'string' && rawAgentId
+    ? rawAgentId
+    : toolResult.toolUseId;
+  const prompt = typeof result.prompt === 'string' && result.prompt
+    ? result.prompt
+    : undefined;
+  return {
+    taskId,
+    parentToolUseId: toolResult.toolUseId,
+    model,
+    prompt,
+  };
+}
+
 // ── cache 命中率日志格式化 ───────────────────────────────────────────────────
 // hitRate 按"百分比 + 1 位小数"输出, 没数据返 'n/a'。
 // 配 read/create/uncached/apiCalls 一起打, 看 hitRate 时能立刻判断样本量够不够代表性。
@@ -377,6 +452,13 @@ interface TranslateContext {
    * watchdog 整 turn 失效。
    */
   onToolResultDone?: (toolUseId: string, output: string) => void;
+  onSubagentTaskLaunched?: (task: {
+    taskId: string;
+    parentToolUseId: string;
+    prompt: string;
+    model?: string;
+  }) => void;
+  getSubagentTaskUsage?: (taskId: string) => AgentTaskUsage | undefined;
   /**
    * Maker Memory flush 观察器 — 翻译 status / message_delta event 时, push 完
    * eventQueue 后调一下 (传当前 contextTokens / contextWindow 让 controller 算 ratio)。
@@ -446,6 +528,30 @@ export function translateSdkMessage(
           data: { toolUseId: pair.toolUseId, fullText: pair.fullText },
           source: 'claude-code',
         });
+      }
+      const subagentLaunch = extractAsyncSubagentLaunch(msg);
+      if (subagentLaunch) {
+        const { taskId, parentToolUseId, model, prompt } = subagentLaunch;
+        ctx.rt.subagentParentToolUseIdByTaskId.set(taskId, parentToolUseId);
+        if (model) {
+          ctx.rt.resolvedSubagentModelByParentToolUseId.set(parentToolUseId, model);
+        }
+        if (prompt) {
+          ctx.onSubagentTaskLaunched?.({ taskId, parentToolUseId, prompt, model });
+        }
+        if (model) {
+          queue.push({
+            type: 'agent_task_update',
+            data: {
+              provider: 'claude-code',
+              taskId,
+              parentToolUseId,
+              status: 'running',
+              model,
+            },
+            source: 'claude-code',
+          });
+        }
       }
       // 单独遍历: 不能复用 extractToolResultFullText, 见 onToolResultDone JSDoc。
       const completedToolUseIds = new Set(fullPairs.map((pair) => pair.toolUseId));
@@ -575,6 +681,11 @@ function handleSystem(
     summary?: string;
     usage?: Record<string, number | undefined>;
     last_tool_name?: string;
+    attempt?: number;
+    max_retries?: number;
+    retry_delay_ms?: number;
+    error_status?: number | null;
+    error?: string;
     // task_updated 专属:增量补丁(SDKTaskUpdatedMessage.patch)。只声明渲染需要的字段,
     // end_time / total_paused_ms / is_backgrounded 目前不进事件流。
     patch?: { status?: string; description?: string; error?: string };
@@ -609,6 +720,37 @@ function handleSystem(
     }
     return;
   }
+  if (msg.subtype === 'api_retry') {
+    // SDKAPIRetryMessage 明确表示本次 API 失败仍在自动重试，不是 turn 终态。
+    // 除日志外也暂存最后一次 retry 的错误详情，覆盖 SDK 没有额外发送
+    // assistant.error envelope、最终 ResultMessage 又没有 result 文本的路径。
+    // 已有 envelope 时保留其中的人话文案与 transcript metadata，只补 retry 元数据。
+    const previous = ctx.turn.pendingApiError;
+    const hasAssistantEnvelope = previous?.agentMeta !== undefined;
+    const sdkError = hasAssistantEnvelope ? previous.sdkError : (msg.error || 'unknown');
+    const statusLabel = msg.error_status == null ? 'connection error' : `HTTP ${msg.error_status}`;
+    const retryLabel = typeof msg.attempt === 'number' && typeof msg.max_retries === 'number'
+      ? `, retry ${msg.attempt}/${msg.max_retries}`
+      : '';
+    ctx.turn.pendingApiError = {
+      message: hasAssistantEnvelope
+        ? previous.message
+        : `SDK API request failed: ${sdkError} (${statusLabel}${retryLabel})`,
+      sdkError,
+      ...(hasAssistantEnvelope ? { agentMeta: previous.agentMeta } : {}),
+      errorStatus: msg.error_status,
+      retryAttempt: msg.attempt,
+      maxRetries: msg.max_retries,
+    };
+    ctx.log.info('SDK API request retrying', {
+      attempt: msg.attempt,
+      maxRetries: msg.max_retries,
+      retryDelayMs: msg.retry_delay_ms,
+      errorStatus: msg.error_status,
+      sdkError: msg.error,
+    });
+    return;
+  }
   if (msg.subtype === 'compact_boundary') {
     const meta = msg.compact_metadata ?? {};
     ctx.log.info('SDK ◾ compact_boundary', meta);
@@ -634,7 +776,7 @@ function handleSystem(
     msg.subtype === 'task_progress' ||
     msg.subtype === 'task_notification'
   ) {
-    const update = toClaudeTaskUpdate(msg);
+    const update = toClaudeTaskUpdate(msg, ctx.rt, ctx.getSubagentTaskUsage);
     if (update) {
       queue.push({
         type: 'agent_task_update',
@@ -684,17 +826,33 @@ function toClaudeTaskUpdate(msg: {
   summary?: string;
   usage?: Record<string, number | undefined>;
   last_tool_name?: string;
-}): AgentTaskUpdateEventData | null {
+}, rt: RuntimeState, getSubagentTaskUsage?: (taskId: string) => AgentTaskUsage | undefined): AgentTaskUpdateEventData | null {
   if (!msg.task_id) return null;
+  const parentToolUseId = msg.tool_use_id
+    ?? rt.subagentParentToolUseIdByTaskId.get(msg.task_id);
+  if (parentToolUseId) {
+    rt.subagentParentToolUseIdByTaskId.set(msg.task_id, parentToolUseId);
+  }
   let status: AgentTaskStatus = 'running';
   if (msg.subtype === 'task_notification') {
     status = msg.status === 'failed' || msg.status === 'stopped' ? msg.status : 'completed';
   }
-  const usage = toClaudeTaskUsage(msg.usage);
+  const sdkUsage = toClaudeTaskUsage(msg.usage);
+  const hostUsage = msg.subtype === 'task_notification'
+    ? getSubagentTaskUsage?.(msg.task_id)
+    : undefined;
+  // SDK 有非零统计时继续信任 SDK；只有明确为 0 / 缺失时才用 host 观测值修正。
+  const usage = hostUsage && (sdkUsage?.totalTokens ?? 0) === 0
+    ? { ...sdkUsage, totalTokens: hostUsage.totalTokens }
+    : sdkUsage;
+  const model = parentToolUseId
+    ? rt.resolvedSubagentModelByParentToolUseId.get(parentToolUseId)
+      ?? rt.streamModelByParentToolUseId.get(parentToolUseId)
+    : undefined;
   return {
     provider: 'claude-code',
     taskId: msg.task_id,
-    ...(msg.tool_use_id ? { parentToolUseId: msg.tool_use_id } : {}),
+    ...(parentToolUseId ? { parentToolUseId } : {}),
     status,
     ...(msg.description ? { title: msg.description } : {}),
     ...(msg.prompt ? { description: msg.prompt } : {}),
@@ -704,6 +862,7 @@ function toClaudeTaskUpdate(msg: {
     ...(msg.workflow_name ? { workflowName: msg.workflow_name } : {}),
     ...(msg.last_tool_name ? { lastToolName: msg.last_tool_name } : {}),
     ...(usage ? { usage } : {}),
+    ...(model ? { model } : {}),
   };
 }
 
@@ -764,11 +923,10 @@ function handleAssistant(
   ctx: TranslateContext,
 ): void {
   // agent-meta: 抽 SDK uuid / parent_tool_use_id / sdkSessionId / model / ...
-  // 给本 turn 内所有 push 用 + 缓存到 ctx.rt.lastAssistantMeta 给 stream_event 兜底
+  // 给本 turn 内所有 push 用；正常消息才缓存到 ctx.rt.lastAssistantMeta 给 stream_event 兜底
   // (mid-turn text_delta / message_delta 没有自己的 uuid, 落库时取最近一条 assistant
   // 的 meta 作为 fallback, 让 messages.agent_meta 行能被 fork/rewind 反查到)。
   const assistantMeta = extractAssistantMeta(msg);
-  ctx.rt.lastAssistantMeta = assistantMeta;
 
   // SDK API-error envelope: msg.error 是 SDKAssistantMessageError tag
   // (invalid_request / authentication_failed / rate_limit / server_error /
@@ -777,9 +935,9 @@ function handleAssistant(
   // "Run /rewind to recover.", CREDIT_BALANCE_TOO_LOW_ERROR_MESSAGE 等)。
   // SDK 内部用 isApiErrorMessage 标识这条不是真 turn, 但跨 SDK JSON 边界这个
   // flag 没透出, 只剩 msg.error。这里早走两件事:
-  //  1) 把人话提取出来塞进 error event 的 message, banner 直接显示有用信息
-  //     (旧实现只塞 'SDK error: <tag>', 把上下文太长 / 工具配对错乱 / 余额不足
-  //     这些完全不同的 fail mode 全打成一句话, 用户没法自救);
+  //  1) 暂存人话错误详情,等最终 ResultMessage 决定是否报错。envelope 后 SDK
+  //     仍可能自动重试成功,此时提前推 terminal error 会让 desktop / Slack 先
+  //     收口当前 turn,后续成功结果无法修正;
   //  2) **不**把 content 里的 text 当普通 assistant text 推到 chat —— 旧实现
   //     会推, 导致同一条人话既出现在聊天气泡又出现在 banner, 而且作为普通
   //     assistant message 落库, 后续 fork/rewind 把它一起带走, 旧 session 的
@@ -793,19 +951,20 @@ function handleAssistant(
       .filter(Boolean)
       .join('\n')
       .trim();
-    queue.push({
-      type: 'error',
-      data: {
-        message: errorText || `SDK error: ${msg.error}`,
-        sdkError: msg.error,
-        isTerminal: true,
-      },
-      source: 'claude-code',
+    ctx.turn.pendingApiError = {
+      ...ctx.turn.pendingApiError,
+      message: errorText || `SDK error: ${msg.error}`,
+      sdkError: msg.error,
       agentMeta: assistantMeta,
-    });
-    ctx.turn.pushedTerminalError = true;
+    };
     return;
   }
+
+  // 一条正常 assistant 消息证明先前 API-error envelope 已恢复；避免同一 turn
+  // 后续另一次失败误用旧 envelope 的错误详情。错误 envelope 也不能成为
+  // lastAssistantMeta，避免恢复后的 fallback text 错绑到错误消息的 transcript 锚点。
+  ctx.turn.pendingApiError = null;
+  ctx.rt.lastAssistantMeta = assistantMeta;
 
   const content = msg.message?.content ?? [];
   // silent-stop 观测素材: 本条消息是否带实质内容(非空 text / tool_use;thinking 不算)。
@@ -880,7 +1039,10 @@ function handleAssistant(
 // ── stream_event 子分支(content_block_delta / message_delta / message_start) ──
 
 function handleStreamEvent(
-  msg: { event?: Record<string, unknown> },
+  msg: {
+    event?: Record<string, unknown>;
+    parent_tool_use_id?: string | null;
+  },
   queue: EventQueue,
   ctx: TranslateContext,
 ): void {
@@ -904,11 +1066,33 @@ function handleStreamEvent(
     }
   }
 
-  // mid-turn 流式 push 用 lastAssistantMeta 兜底 (这个 turn 内 SDK 已经发过 assistant
-  // 消息时缓存的 meta), 让 renderer 落库 mid-turn 累积块时能合成完整 agent_meta 行,
-  // 进而让 fork/rewind 反向找到 prior assistant 锚点。null 时 push 不带 meta (renderer
-  // ccAgentChatStore 的 incomingMeta?.fallback 兜到 lastAgentMeta)。
-  const fallbackMeta = ctx.rt.lastAssistantMeta ?? undefined;
+  // SDKPartialAssistantMessage 自带 parent_tool_use_id；并发 subagent 会在同一 Query
+  // 事件流中交错，必须按 parent 隔离模型，不能使用会话级 lastAssistantMeta 串联。
+  // 老 SDK / 单测若没有 wrapper 元数据，才保留旧兜底行为。
+  const parentToolUseId = typeof msg.parent_tool_use_id === 'string' && msg.parent_tool_use_id
+    ? msg.parent_tool_use_id
+    : undefined;
+  const streamKey = parentToolUseId ?? '__main__';
+  const eventModel = event.message?.model;
+  if (typeof eventModel === 'string' && eventModel) {
+    ctx.rt.streamModelByParentToolUseId.set(streamKey, eventModel);
+  }
+  const streamModel = typeof eventModel === 'string' && eventModel
+    ? eventModel
+    : ctx.rt.streamModelByParentToolUseId.get(streamKey);
+  const fallbackMeta: Record<string, unknown> | undefined = parentToolUseId
+    ? {
+        parentUuid: parentToolUseId,
+        ...(streamModel ? { model: streamModel } : {}),
+      }
+    : ctx.rt.lastAssistantMeta
+      ? {
+          ...ctx.rt.lastAssistantMeta,
+          ...(streamModel ? { model: streamModel } : {}),
+        }
+      : streamModel
+        ? { model: streamModel }
+        : undefined;
 
   if (event.type === 'content_block_delta') {
     const delta = event.delta as { type?: string; text?: string; thinking?: string } | undefined;
@@ -1372,8 +1556,8 @@ function handleResult(
       terminalReason: msg.terminal_reason,
     });
     // 终态收尾: 只发一条 isTerminal error 就结束本 turn, **不再**发 status Done / done。
-    // 与已有的 msg.error envelope 路径(push error 后直接 return)同范式。若在 terminal
-    // error 之后再发 done, 同一 turn 会被下游双重收尾:
+    // 这个零用量异常无需 done 记账。若在 terminal error 之后再发 done, 同一 turn
+    // 会被下游双重收尾:
     //   - session.ts: done / 终止型 error 都会清 currentTurnOrigin, 先来的 terminal error
     //     清掉后, 后随 done 拿不到 origin → IM/orca 按 origin 收口的卡片永不 finalize。
     //   - register.ts: done→onTurnEnd 与 terminal error→onTurnAbort 同 turn 都触发。
@@ -1395,8 +1579,11 @@ function handleResult(
     ctx.onTurnEnd?.();
     return;
   }
-  // is_error result 且本 turn 没推过任何 terminal error(无 API-error envelope、
-  // 非空响应轮):此前直接走 status Done + done, renderer 的 state.error 不置位 →
+  // is_error result 才是 API-error envelope 的权威终态。此前 envelope 会立即推
+  // terminal error,即使 SDK 随后自动重试成功也会让下游提前收口；现在成功 result
+  // 会在 resetTurnState 中丢弃 pendingApiError，失败 result 则在这里一次性报错。
+  // 无 API-error envelope 的 is_error 也继续走同一兜底，避免 renderer 的 state.error
+  // 不置位 →
   // running→stopped 的通知链路把这次失败当正常完成(桌面/飞书通知"已完成")。
   // 这里补一条 terminal error, 然后**继续**走下方 status Done + done 收尾——与
   // API-error envelope 场景的既有失败序列(error → status Done → done)完全同构,
@@ -1405,20 +1592,39 @@ function handleResult(
   // 四个 sink)只从 done 的 result payload(usage / modelUsage / total_cost_usd)
   // 读数, is_error turn 有真实消耗, 砍 done 会丢整轮账(Codex review P2)。
   // empty-response 轮不同: usage 全 0 无账可丢, 保持其"只发 error"的收尾不变。
-  // envelope 已推过 terminal error 的失败 turn(pushedTerminalError=true)不重复推。
   // interruptRequested(用户 stop / watchdog 主动 interrupt)也跳过: SDK 被 interrupt
   // 后 drain 出的 error_during_execution result 不是上游失败, 补 error 会把"用户点
   // 停止"误报成"执行失败"、并让 watchdog 场景双发 banner(见 TurnState 字段注释)。
-  if (msg.is_error && !ctx.turn.pushedTerminalError && !ctx.turn.interruptRequested) {
+  if (msg.is_error && !ctx.turn.interruptRequested) {
+    const pendingApiError = ctx.turn.pendingApiError;
     const errDetail = typeof msg.result === 'string' ? msg.result.trim() : '';
+    const errorMessage = pendingApiError?.agentMeta
+      ? pendingApiError.message
+      : errDetail || pendingApiError?.message;
     queue.push({
       type: 'error',
-      data: errDetail
+      data: pendingApiError
+        ? {
+            message: errorMessage,
+            sdkError: pendingApiError.sdkError,
+            isTerminal: true,
+            ...(pendingApiError.errorStatus !== undefined
+              ? { errorStatus: pendingApiError.errorStatus }
+              : {}),
+            ...(pendingApiError.retryAttempt !== undefined
+              ? { retryAttempt: pendingApiError.retryAttempt }
+              : {}),
+            ...(pendingApiError.maxRetries !== undefined
+              ? { maxRetries: pendingApiError.maxRetries }
+              : {}),
+          }
+        : errDetail
         ? { message: errDetail, isTerminal: true }
         // reason 是稳定 key, renderer 按它走 i18n(规则 18); message 仅作非
         // renderer 消费方(IM/orca)的兜底文案。
         : { message: '任务执行失败（模型未返回错误详情）。', isTerminal: true, reason: 'turn-failed' },
       source: 'claude-code',
+      ...(pendingApiError?.agentMeta ? { agentMeta: pendingApiError.agentMeta } : {}),
     });
   }
   // turn end status: isRunning=false + status='Done'; 数值全部走 endSnapshot

@@ -117,6 +117,9 @@ export interface RemoteScheduleRun {
   status: RemoteScheduleRunStatus;
   errorMsg?: string;
   resultText?: string;
+  costUsd?: number;
+  estimatedValueUsd?: number;
+  costAttribution?: 'exact' | 'legacy';
   readAt?: RemoteTimestamp;
 }
 

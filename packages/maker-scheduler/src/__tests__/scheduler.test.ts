@@ -14,6 +14,7 @@ import type {
 } from '../types.js';
 import type { ScheduleStorage } from '../interfaces/schedule-storage.js';
 import type { FireContext, FireResult, ScheduleRunner } from '../interfaces/schedule-runner.js';
+import type { Logger } from '../interfaces/logger.js';
 
 class InMemoryStorage implements ScheduleStorage {
   schedules = new Map<string, Schedule>();
@@ -165,6 +166,7 @@ function makeHarness(opts?: {
   generateId?: () => string;
   passive?: boolean;
   maxConcurrentRuns?: number;
+  logger?: Logger;
 }): Harness {
   const storage = opts?.storage ?? new InMemoryStorage();
   const clock = opts?.clock ?? new FakeClock();
@@ -187,6 +189,9 @@ function makeHarness(opts?: {
     isManagedWorkspaceDir: opts?.isManagedWorkspaceDir,
     passive: opts?.passive,
     maxConcurrentRuns: opts?.maxConcurrentRuns,
+    logger: opts?.logger,
+    instanceId: 'test-scheduler',
+    processId: 1234,
   });
   return { scheduler, storage, clock, runner, fireCalls };
 }
@@ -1642,11 +1647,80 @@ describe('Scheduler passive mode', () => {
   });
 });
 
-describe('Scheduler preRunHook skipped', () => {
+describe('Scheduler preRunHook results', () => {
+  it('前置检查结果落库暂时失败时不覆盖 skip 判定', async () => {
+    const logger: Logger = { warn: vi.fn() };
+    const preRunHookResult: NonNullable<ScheduleRun['preRunHookResult']> = {
+      status: 'skipped',
+      decision: 'skip',
+      exitCode: 2,
+      durationMs: 6,
+      stdout: 'no work',
+      stderr: '',
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      timedOut: false,
+      aborted: false,
+    };
+    const h = makeHarness({
+      logger,
+      runnerImpl: async (_schedule, ctx) => {
+        await ctx.onPreRunHookCompleted?.(preRunHookResult);
+        return { sessionId: '', skipped: true, resultText: 'exit 2: no work' };
+      },
+    });
+    const sch = await h.scheduler.create({ ...baseInput });
+    vi.spyOn(h.storage, 'updateRun').mockRejectedValueOnce(new Error('SQLITE_BUSY'));
+    const failedEvents: unknown[] = [];
+    h.scheduler.on('failed', (event) => failedEvents.push(event));
+
+    const { runId } = await h.scheduler.runNow(sch.id);
+    const run = (await h.scheduler.listRuns(sch.id)).find((item) => item.id === runId);
+
+    expect(run?.status).toBe('skipped');
+    expect(run?.readAt).toBeDefined();
+    expect(run?.preRunHookResult).toBeUndefined();
+    expect(failedEvents).toHaveLength(0);
+    expect(logger.warn).toHaveBeenCalledWith('persist pre-run hook result failed', {
+      runId,
+      error: 'SQLITE_BUSY',
+    });
+  });
+
+  it('runNow fail-closed:检查结果在无 session 时仍落库，run 记 failed 且未读', async () => {
+    const preRunHookResult: NonNullable<ScheduleRun['preRunHookResult']> = {
+      status: 'failed',
+      decision: 'block',
+      exitCode: 1,
+      durationMs: 6,
+      stdout: '',
+      stderr: 'syntax error',
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      timedOut: false,
+      aborted: false,
+    };
+    const h = makeHarness({
+      runnerImpl: async (_schedule, ctx) => {
+        await ctx.onPreRunHookCompleted?.(preRunHookResult);
+        throw new Error('pre-run hook failed with exit code 1');
+      },
+    });
+    const sch = await h.scheduler.create({ ...baseInput });
+
+    const { runId } = await h.scheduler.runNow(sch.id);
+    const run = (await h.scheduler.listRuns(sch.id)).find((item) => item.id === runId);
+
+    expect(run?.status).toBe('failed');
+    expect(run?.sessionId).toBeUndefined();
+    expect(run?.readAt).toBeUndefined();
+    expect(run?.preRunHookResult).toEqual(preRunHookResult);
+  });
+
   it('cron fire skipped: run 保留为 skipped(生而已读)、照常重排、发 skipped 事件', async () => {
     const h = makeHarness({
       runnerImpl: async () => ({
-        sessionId: 'skip-log-sess',
+        sessionId: '',
         skipped: true,
         resultText: 'exit 2: no new PRs',
       }),
@@ -1671,7 +1745,7 @@ describe('Scheduler preRunHook skipped', () => {
     // 生而已读:不产生未读红点
     expect(runs[0].readAt).toBe(Date.UTC(2026, 0, 1, 0, 1, 5));
     expect(runs[0].resultText).toBe('exit 2: no new PRs');
-    expect(runs[0].sessionId).toBe('skip-log-sess');
+    expect(runs[0].sessionId).toBeUndefined();
 
     // 与 deferred 不同:照常按 cron 重排下一槽位,不是短延重试
     const after = await h.storage.get(sch.id);
@@ -1679,7 +1753,7 @@ describe('Scheduler preRunHook skipped', () => {
     expect(after?.lastFiredAt).toBe(Date.UTC(2026, 0, 1, 0, 1, 5));
 
     expect(skippedEvents).toHaveLength(1);
-    expect(skippedEvents[0].sessionId).toBe('skip-log-sess');
+    expect(skippedEvents[0].sessionId).toBe('');
     expect(completedEvents).toHaveLength(0);
     expect(failedEvents).toHaveLength(0);
   });
@@ -2116,5 +2190,130 @@ describe('Scheduler concurrency gate(并发闸门)', () => {
     expect(h.fireCalls[2].schedule.id).toBe(b.id);
     runnerCtl.resolveNext();
     await tick2;
+  });
+
+  it('runtime snapshot 精确列出 in-flight 来源和真实排队任务', async () => {
+    const runnerCtl = makePendingRunner();
+    const runtimeEvents: unknown[] = [];
+    const info = vi.fn();
+    const h = makeHarness({
+      maxConcurrentRuns: 1,
+      runnerImpl: runnerCtl.impl,
+      logger: { info },
+    });
+    h.scheduler.on('runtime-state', (event) => runtimeEvents.push(event.snapshot));
+    const a = await h.scheduler.create({ ...baseInput, name: 'A' });
+    const b = await h.scheduler.create({
+      ...baseInput,
+      name: 'B',
+      executionMode: 'script',
+      workspaceKind: 'project',
+      workingDir: '/repo',
+      scriptConfig: { command: 'node task.mjs', capabilities: [] },
+    });
+
+    h.clock.setTo(Date.UTC(2026, 0, 1, 0, 1, 5));
+    const tick = h.scheduler.tick();
+    await vi.waitFor(() => expect(h.runner.fire).toHaveBeenCalledTimes(1));
+
+    const snapshot = h.scheduler.getRuntimeSnapshot();
+    expect(snapshot).toMatchObject({
+      schedulerInstanceId: 'test-scheduler',
+      processId: 1234,
+      inFlight: 1,
+      maxConcurrentRuns: 1,
+    });
+    expect(snapshot.inFlightRuns).toEqual([
+      expect.objectContaining({
+        scheduleId: a.id,
+        scheduleName: 'A',
+        source: 'automatic',
+        executionMode: 'agent',
+        slotWaitMs: 5_000,
+        phase: 'running',
+      }),
+    ]);
+    expect(snapshot.waitingSchedules).toEqual([
+      { scheduleId: b.id, scheduleName: 'B', waitingSince: b.nextFireAt },
+    ]);
+    expect(info).toHaveBeenCalledWith(
+      'scheduler: concurrency gate holding due fires',
+      expect.objectContaining({
+        schedulerInstanceId: 'test-scheduler',
+        processId: 1234,
+        inFlightRuns: [
+          expect.objectContaining({ scheduleId: a.id, source: 'automatic', phase: 'claiming' }),
+        ],
+        gatedSchedules: [expect.objectContaining({ scheduleId: b.id, scheduleName: 'B' })],
+      }),
+    );
+    expect(runtimeEvents.length).toBeGreaterThan(0);
+
+    runnerCtl.resolveNext();
+    await tick;
+  });
+
+  it('runNow 合法超额时标明来源，完成终态仍配对释放', async () => {
+    const info = vi.fn();
+    const runnerCtl = makePendingRunner();
+    const h = makeHarness({
+      maxConcurrentRuns: 1,
+      runnerImpl: runnerCtl.impl,
+      logger: { info },
+    });
+    const a = await h.scheduler.create({ ...baseInput, name: 'A' });
+    const b = await h.scheduler.create({ ...baseInput, name: 'B' });
+    h.clock.setTo(Date.UTC(2026, 0, 1, 0, 1, 5));
+    const automatic = h.scheduler.tick();
+    await vi.waitFor(() => expect(h.runner.fire).toHaveBeenCalledTimes(1));
+    const manual = h.scheduler.runNow(b.id);
+    await vi.waitFor(() => expect(h.runner.fire).toHaveBeenCalledTimes(2));
+
+    expect(h.scheduler.getRuntimeSnapshot().inFlightRuns).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ scheduleId: a.id, source: 'automatic' }),
+        expect.objectContaining({ scheduleId: b.id, source: 'run-now' }),
+      ]),
+    );
+    expect(h.scheduler.getRuntimeSnapshot().inFlight).toBe(2);
+
+    runnerCtl.resolveNext();
+    runnerCtl.resolveNext();
+    await automatic;
+    await manual;
+    expect(h.scheduler.getRuntimeSnapshot().inFlight).toBe(0);
+    expect(info.mock.calls.filter(([message]) => message === 'scheduler: in-flight run registered')).toHaveLength(2);
+    expect(info.mock.calls.filter(([message]) => message === 'scheduler: in-flight run released')).toHaveLength(2);
+  });
+
+  it('stop 立即清空结构化占用，迟到 finally 不会把计数减成负数', async () => {
+    const runnerCtl = makePendingRunner();
+    const h = makeHarness({ runnerImpl: runnerCtl.impl });
+    const schedule = await h.scheduler.create({ ...baseInput });
+    const run = h.scheduler.runNow(schedule.id);
+    await vi.waitFor(() => expect(h.runner.fire).toHaveBeenCalledTimes(1));
+    expect(h.scheduler.getRuntimeSnapshot().inFlight).toBe(1);
+
+    await h.scheduler.stop();
+    expect(h.scheduler.getRuntimeSnapshot().inFlight).toBe(0);
+    runnerCtl.resolveNext();
+    await run;
+    expect(h.scheduler.getRuntimeSnapshot().inFlight).toBe(0);
+  });
+
+  it('runner 抛错时也释放结构化占用', async () => {
+    const info = vi.fn();
+    const h = makeHarness({
+      runnerImpl: async () => {
+        throw new Error('runner exploded');
+      },
+      logger: { info },
+    });
+    const schedule = await h.scheduler.create({ ...baseInput });
+
+    await expect(h.scheduler.runNow(schedule.id)).resolves.toEqual({ runId: expect.any(String) });
+    expect(h.scheduler.getRuntimeSnapshot().inFlight).toBe(0);
+    expect(info.mock.calls.filter(([message]) => message === 'scheduler: in-flight run registered')).toHaveLength(1);
+    expect(info.mock.calls.filter(([message]) => message === 'scheduler: in-flight run released')).toHaveLength(1);
   });
 });

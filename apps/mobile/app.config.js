@@ -35,6 +35,7 @@ function loadRegionBuildConfig(region) {
   }
   const file = real;
   const block = JSON.parse(fs.readFileSync(file, 'utf8'))[region];
+  // dev 块允许暂未配置身份——本函数只在启用本地区域配置构建时调用,届时缺什么报什么。
   if (!block?.iosBundleId || !block?.androidPackage) {
     throw new Error(
       `${path.basename(file)} 缺少 region "${region}" 的 iosBundleId/androidPackage`,
@@ -99,21 +100,30 @@ const REGION_CONFIG = {
     iosBundleIdentifier: 'com.xd.cindy',
     androidPackage: 'com.xd.cindy',
   },
+  // dev 第三目标(与 desktop CindyDev 同一套身份命名,可同机三装)。
+  dev: {
+    scheme: 'cindydev',
+    iosBundleIdentifier: 'com.xd.cindydev',
+    androidPackage: 'com.xd.cindydev',
+  },
 };
 
 function resolveRegion() {
   const region = process.env.EXPO_PUBLIC_CINDY_AUTH_REGION?.trim() || 'cn';
-  if (region !== 'cn' && region !== 'global') {
+  if (region !== 'cn' && region !== 'global' && region !== 'dev') {
     throw new Error(
-      `EXPO_PUBLIC_CINDY_AUTH_REGION must be cn or global, got: ${region}`,
+      `EXPO_PUBLIC_CINDY_AUTH_REGION must be cn, global or dev, got: ${region}`,
     );
   }
   return region;
 }
 
 function resolveAppStoreId(region) {
-  const regionKey =
-    region === 'cn' ? 'CINDY_CN_APP_STORE_ID' : 'CINDY_GLOBAL_APP_STORE_ID';
+  const regionKey = {
+    cn: 'CINDY_CN_APP_STORE_ID',
+    global: 'CINDY_GLOBAL_APP_STORE_ID',
+    dev: 'CINDY_DEV_APP_STORE_ID', // dev 不上架,仅显式要求时才校验(与下方 requiresId 同语义)
+  }[region];
   const value = (process.env[regionKey] || '').trim();
   const requiresId =
     process.env.XDT_REQUIRE_APP_STORE_ID === '1' ||

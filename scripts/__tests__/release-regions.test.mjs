@@ -54,6 +54,11 @@ const FULL_CONFIG = {
       ossRegion: "oss-ap-southeast-1",
     },
   },
+  // dev 第三渠道(2026-07-20):结构必须存在,叶子允许留空(bucket 未建时
+  // 只在真的发 dev 渠道时才 fail closed)。
+  dev: {
+    oss: { cdnBaseUrl: "", bucket: "", prefix: "", ossRegion: "" },
+  },
 };
 
 test("JSON 完整时按 region 注入对应 env 变量", () => {
@@ -72,6 +77,12 @@ test("JSON 完整时按 region 注入对应 env 变量", () => {
       assert.equal(g.source, "file");
       assert.equal(process.env.XDT_GLOBAL_OSS_PREFIX, "prefix-global");
       assert.equal(process.env.XDT_GLOBAL_OSS_REGION, "oss-ap-southeast-1");
+
+      // dev 渠道:块存在但留空 → 发 dev 时报缺字段与 XDT_DEVCH_* env 名
+      assert.throws(
+        () => applyReleaseRegionConfigToEnv("dev", { filePath }),
+        /dev\.oss\.bucket.*XDT_DEVCH_OSS_BUCKET/,
+      );
     });
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

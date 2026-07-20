@@ -422,6 +422,11 @@ export function registerScheduleHandlers(getMaker?: () => Maker | null): void {
     );
   });
 
+  // Renderer 首次进入页面时补取一次运行快照，避免错过更早广播的 runtime-state。
+  ipcMain.handle(MAKER_INVOKE.SCHEDULE_GET_RUNTIME_STATE, async () =>
+    withScheduler(({ scheduler }) => Promise.resolve(scheduler.getRuntimeSnapshot())),
+  );
+
   ipcMain.handle(MAKER_INVOKE.SCHEDULE_GET_UNREAD_COUNT, async () =>
     withScheduler(({ storage }) => storage.getUnreadRunCount()),
   );
@@ -532,6 +537,7 @@ export function attachSchedulerEventListeners(
   scheduler.on('skipped', broadcastSchedulerEvent);
   scheduler.on('session-bound', broadcastSchedulerEvent);
   scheduler.on('changed', broadcastSchedulerEvent);
+  scheduler.on('runtime-state', broadcastSchedulerEvent);
 
   // 必须在 .on 全挂完之后调:setSchedulerReady 会立即 resolve 在途 await,
   // 之后业务 IPC 跑起来可能触发 changed/fired,listener 漏挂会丢事件。

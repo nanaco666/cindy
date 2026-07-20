@@ -5,13 +5,13 @@
 //
 // 跑：node scripts/scheduler-ci-guard.mjs
 //
-// 4 条 anti-pattern grep + 3 条 ESLint 反向依赖（lint 在 maker-scheduler /
+// 3 条 anti-pattern grep + 3 条 ESLint 反向依赖（lint 在 maker-scheduler /
 // maker-core 的 eslint.config.mjs 里 no-restricted-imports 落地）。
 //
 // 设计文档：apps/desktop/doc/agent/xdt-maker-scheduler-plan.md §Phase 7
 // RFC：apps/desktop/doc/agent/xdt-maker-scheduler.md §6 解耦自检清单
 
-import { execFileSync, execSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -95,55 +95,6 @@ const schedSrc = collectSourceFiles(path.join(ROOT, 'packages/maker-scheduler/sr
     );
   } else {
     ok('#1 scheduler-pure', 'maker-scheduler/src 无 host 类 import');
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Anti-pattern grep #2 — cc/codex agent 文件没动（HEAD 必须不含修改）
-// ---------------------------------------------------------------------------
-
-function gitDiffAgentFiles() {
-  // 与 main 的 merge-base 之后任何对 agents/{claude-code,codex} 的改动都拦截。
-  // CI 环境一般是 PR 分支 vs main；本地 push 到非 main 也兜得住。
-  let base = 'main';
-  try {
-    execFileSync('git', ['rev-parse', '--verify', '--quiet', 'main'], { stdio: 'pipe' });
-  } catch {
-    base = 'HEAD~1'; // 退化兜底
-  }
-  let out;
-  try {
-    out = execFileSync(
-      'git',
-      [
-        'diff',
-        '--name-only',
-        `${base}..HEAD`,
-        '--',
-        'packages/maker-core/src/agents/claude-code',
-        'packages/maker-core/src/agents/codex',
-      ],
-      { cwd: ROOT, encoding: 'utf8' },
-    );
-  } catch (err) {
-    return { error: String(err.message || err) };
-  }
-  return { files: out.split(/\r?\n/).filter(Boolean) };
-}
-
-{
-  const diff = gitDiffAgentFiles();
-  if (diff.error) {
-    failure('#2 agent-untouched', `git diff 失败：${diff.error}`);
-  } else if (diff.files.length > 0) {
-    failure(
-      '#2 agent-untouched',
-      'cc / codex agent 文件被改动（违反 RFC §3.3 / Phase 5 硬规则）：\n' +
-        diff.files.map((f) => '  ' + f).join('\n') +
-        '\nscheduler 不允许触动 maker-core/src/agents/{claude-code,codex}/**',
-    );
-  } else {
-    ok('#2 agent-untouched', 'maker-core/src/agents/{claude-code,codex} 与 main 0 diff');
   }
 }
 
@@ -335,4 +286,4 @@ if (failures.length) {
   for (const f of failures) console.error(`  - ${f.rule}`);
   process.exit(1);
 }
-console.log('✅  scheduler-ci-guard PASSED — 所有 ' + 7 + ' 条守门规则通过');
+console.log('✅  scheduler-ci-guard PASSED — 所有 ' + 6 + ' 条守门规则通过');

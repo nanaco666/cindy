@@ -1,9 +1,9 @@
 import type { Schedule } from '@lizi/maker-scheduler';
 
-import { cronExprToIntervalMs } from './cronCodexPreset';
 import { buildPreRunHook } from './scheduleFormLogic';
 import type { ScheduleFormState } from '../hooks/useScheduleForm';
 import { stripTrailingPathSeparators } from '../../../../shared/pathText';
+import { PROJECT_AUTOMATION_REL_SEGMENTS } from '../../../../shared/projectAutomationPaths';
 
 export interface ProjectScheduleConfig {
   id: string;
@@ -39,7 +39,7 @@ export function generateProjectScheduleId(): string {
 export function projectAutomationConfigPath(workingDir: string): string {
   const trimmed = stripTrailingPathSeparators(workingDir);
   const sep = trimmed.includes('\\') ? '\\' : '/';
-  return `${trimmed}${sep}.xdmaker${sep}automations${sep}schedules.json`;
+  return [trimmed, ...PROJECT_AUTOMATION_REL_SEGMENTS].join(sep);
 }
 
 export function scheduleToProjectConfig(
@@ -82,7 +82,7 @@ export function formToProjectConfig(
     timezone: form.timezone.trim(),
     recurring: form.recurring,
     manual: form.manual,
-    intervalMs: cronExprToIntervalMs(cronExpr),
+    intervalMs: form.intervalMs,
     agentKind: form.agentKind,
     model: form.model.trim() || undefined,
     effort: form.effort || undefined,

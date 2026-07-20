@@ -129,6 +129,18 @@ describe('bundled catalog validity (dynamic-first contract)', () => {
     }
   });
 
+  it('model.icon 可选:合法字符串放行,空白串拒绝(展示图标以 AI Gateway / 目录设定为准)', () => {
+    const ok = JSON.parse(JSON.stringify(BUNDLED_CATALOG)) as Catalog;
+    const xaiOk = ok.providers.find((p) => p.id === 'xai')!;
+    xaiOk.models['claude-code']![0].icon = 'claude';
+    expect(() => parseCatalog(ok)).not.toThrow();
+
+    const bad = JSON.parse(JSON.stringify(BUNDLED_CATALOG)) as Catalog;
+    const xaiBad = bad.providers.find((p) => p.id === 'xai')!;
+    xaiBad.models['claude-code']![0].icon = '  ';
+    expect(() => parseCatalog(bad)).toThrow(/icon/);
+  });
+
   it('ships custom-provider presets (OSS 热更的第三方模板)', () => {
     const presets = BUNDLED_CATALOG.presets ?? [];
     expect(presets.length).toBeGreaterThan(0);

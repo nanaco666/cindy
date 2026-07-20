@@ -68,7 +68,7 @@ export interface AgentInputSendOpts {
    * agentMeta.origin(renderer 渲染"自动化任务"标签)。仅 scheduler 队列项携带;
    * 其它路径(用户输入 / orca)不设,行为不变。
    */
-  origin?: { kind: 'scheduler'; scheduleId: string; scheduleName: string };
+  origin?: { kind: 'scheduler'; scheduleId: string; scheduleName: string; runId?: string };
   persistUserMessage?: {
     clientId: string;
     content: string;

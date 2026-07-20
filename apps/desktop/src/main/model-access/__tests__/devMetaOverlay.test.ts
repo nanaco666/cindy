@@ -61,6 +61,29 @@ describe('overlayCindyModelMeta', () => {
     expect(m.contextWindow).toBe(999_000);
   });
 
+  it('icon(展示图标)可经本地条目覆盖 / 撤销:字符串透传,非字符串条目整条拒绝', () => {
+    const [withIcon] = overlayCindyModelMeta(
+      [SERVER_MODEL],
+      envelope({ 'gpt-5.5': { ...LOCAL_ENTRY, icon: 'codex' } }),
+    );
+    expect(withIcon.icon).toBe('codex');
+    // 本地条目未带 icon → 覆盖后的条目也不带(整体替换语义,服务端 icon 不残留)。
+    const serverWithIcon: ModelAccessGatewayModel = { ...SERVER_MODEL, icon: 'claude' };
+    const [replaced] = overlayCindyModelMeta(
+      [serverWithIcon],
+      envelope({ 'gpt-5.5': LOCAL_ENTRY }),
+    );
+    expect('icon' in replaced).toBe(false);
+    const warn = vi.fn();
+    const [kept] = overlayCindyModelMeta(
+      [serverWithIcon],
+      envelope({ 'gpt-5.5': { ...LOCAL_ENTRY, icon: 42 } }),
+      { warn, info: vi.fn() },
+    );
+    expect(kept.icon).toBe('claude'); // 非法条目跳过,保留服务端原值
+    expect(warn).toHaveBeenCalled();
+  });
+
   it('null = 撤销登记:剥掉全部元数据只留网关权威字段', () => {
     const [m] = overlayCindyModelMeta([SERVER_MODEL], envelope({ 'gpt-5.5': null }));
     expect(m).toEqual({ id: 'gpt-5.5', contextWindow: 272_000, maxOutputTokens: 32_000 });

@@ -22,7 +22,7 @@ import { authErrorText, loginText } from '@/auth/loginMessages';
 import { isNativeSocialProviderSupported } from '@/auth/nativeSocial';
 import { Text, TextInput } from '@/components/AppText';
 import { MainWindowActionButton } from '@/components/MobilePrimitives';
-import { AUTH_REGION, getMobileConfigIssues } from '@/config/env';
+import { getMobileConfigIssues } from '@/config/env';
 import { useObserve } from '@/observability/observe';
 import { useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 import {
@@ -83,6 +83,21 @@ export default function LoginScreen() {
     void auth.dispatchLoginAction({ type: 'reset' });
   };
 
+  // 返回按钮固定在屏幕顶栏，不随各步骤内容渲染：首屏(identifier)无返回；
+  // SSO 企业 ID 子视图退回首屏输入；其余步骤(选方式/验证码/选身份/绑定)整体重置。
+  const step = auth.loginState?.step;
+  const backAction =
+    step === 'identifier'
+      ? ssoOrgMode
+        ? () => {
+            auth.clearAuthError();
+            setSsoOrgMode(false);
+          }
+        : null
+      : step
+        ? reset
+        : null;
+
   const renderIdentifier = () => {
     const state = auth.loginState;
     if (state?.step !== 'identifier') return null;
@@ -99,13 +114,6 @@ export default function LoginScreen() {
       };
       return (
         <>
-          <BackButton
-            disabled={disabled}
-            onPress={() => {
-              auth.clearAuthError();
-              setSsoOrgMode(false);
-            }}
-          />
           <StepHeader
             title={loginText('ssoOrgTitle')}
             subtitle={loginText('ssoOrgSubtitle')}
@@ -266,7 +274,6 @@ export default function LoginScreen() {
     const orgName = ssoMethods[0]?.orgName;
     return (
       <>
-        <BackButton disabled={disabled} onPress={reset} />
         <StepHeader
           title={loginText('chooseMethod')}
           subtitle={
@@ -340,7 +347,6 @@ export default function LoginScreen() {
     };
     return (
       <>
-        <BackButton disabled={disabled} onPress={reset} />
         <StepHeader
           title={loginText('enterCode')}
           subtitle={`${loginText('codeSentTo')} ${state.identifier}`}
@@ -386,7 +392,6 @@ export default function LoginScreen() {
     if (state?.step !== 'account-selection') return null;
     return (
       <>
-        <BackButton disabled={disabled} onPress={reset} />
         <StepHeader
           title={loginText('chooseAccount')}
           subtitle={loginText('chooseAccountSubtitle')}
@@ -452,7 +457,6 @@ export default function LoginScreen() {
     const isEmail = state.bindType === 'email';
     return (
       <>
-        <BackButton disabled={disabled} onPress={reset} />
         <StepHeader
           title={loginText(isEmail ? 'bindEmailTitle' : 'bindPhoneTitle')}
           subtitle={loginText(
@@ -526,6 +530,12 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} testID="login.screen">
+      {/* 顶栏恒占位(固定高度)：返回按钮出现/消失时不引起下方内容跳动 */}
+      <View style={styles.topBar}>
+        {backAction ? (
+          <BackButton disabled={disabled} onPress={backAction} />
+        ) : null}
+      </View>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex}
@@ -537,22 +547,9 @@ export default function LoginScreen() {
           <View style={styles.brandBlock}>
             <View style={styles.brandRow}>
               <Text style={styles.product}>{loginText('product')}</Text>
-              {/* 区域标识仅 global 构建显示，国内版不特意标注 */}
-              {AUTH_REGION === 'global' ? (
-                <View style={styles.regionBadge}>
-                  <Text style={styles.regionText}>
-                    {loginText('regionGlobal')}
-                  </Text>
-                </View>
-              ) : null}
             </View>
             <Text style={styles.title} testID="login.title">
               {loginText('title')}
-            </Text>
-            <Text style={styles.subtitle}>
-              {loginText(
-                AUTH_REGION === 'global' ? 'subtitleGlobal' : 'subtitleCn',
-              )}
             </Text>
           </View>
 
@@ -707,9 +704,15 @@ const makeStyles = (colors: ThemeColors) =>
     scrollContent: {
       flexGrow: 1,
       gap: spacing.xl,
-      justifyContent: 'center',
+      // 顶部锚定(不垂直居中):各步骤卡片高度不同,居中布局会让品牌区/标题
+      // 在步骤切换时整体上下重排;固定从顶部排,标题位置跨步骤稳定不跳动。
       paddingHorizontal: spacing.xl,
       paddingVertical: spacing.xxl,
+    },
+    topBar: {
+      justifyContent: 'center',
+      minHeight: 44,
+      paddingHorizontal: spacing.xl,
     },
     brandBlock: { gap: spacing.sm },
     brandRow: {
@@ -723,26 +726,10 @@ const makeStyles = (colors: ThemeColors) =>
       fontWeight: fontWeight.semibold,
       textTransform: 'uppercase',
     },
-    regionBadge: {
-      backgroundColor: colors.surfaceChip,
-      borderRadius: radius.pill,
-      paddingHorizontal: spacing.sm,
-      paddingVertical: spacing.xs,
-    },
-    regionText: {
-      color: colors.textSecondary,
-      fontSize: typeScale.micro,
-      fontWeight: fontWeight.medium,
-    },
     title: {
       color: colors.textPrimary,
       fontSize: typeScale.hero,
       fontWeight: fontWeight.bold,
-    },
-    subtitle: {
-      color: colors.textSecondary,
-      fontSize: typeScale.body,
-      lineHeight: lineHeight.bodyRelaxed,
     },
     card: {
       backgroundColor: colors.surfaceElevated,

@@ -163,11 +163,15 @@ function pdfjsAssetsPlugin(): Plugin {
  * 软链包的源码内容**。于是给某个内部包「新增一个导出」后,旧缓存(新增导出之前生成)仍被服务 →
  * `does not provide an export named X` → renderer 在挂载前抛错 → 整页黑屏(且静态检查发现不了)。
  *
- * 排除后这些包走正常 transform 管线(它们的 exports 本就指向 ./src 原始 TS),新增导出即时生效 +
- * 走 HMR,永远不会有过期预打包。这里**自动扫描** `packages/*` 而非手写名单:未来新增的纯内部包
- * 会被自动覆盖,不会漏。
+ * 排除后这些包走正常 transform 管线(它们的 exports 本就指向 ./src 原始 TS),不再有过期预打包。
+ * 但仅排除还不够:这些模块经 node_modules **软链路径**进入模块图(见 renderer 报错 URL
+ * `/@fs/.../node_modules/@lizi/xxx/src/index.ts`),而 Vite watcher 默认忽略 node_modules 目录,
+ * 源码变更(git pull / 合 PR / 本地编辑)不会失效 transform 缓存——引用方组件热更成引用新导出的
+ * 版本后,被引用包仍是旧模块 → `does not provide an export named X` → 白屏且刷新无效。因此下方
+ * `server.watch.ignored` 用反向 glob 把这些包从默认忽略里豁免,变更即时失效 + HMR,运行中的实例
+ * 无需重启。这里**自动扫描** `packages/<package>` 而非手写名单:未来新增的纯内部包会被自动覆盖,不会漏。
  *
- * 「是不是内部包」按**位置**判定(`pnpm-workspace.yaml` 声明 `packages/*` 即 workspace 包),
+ * 「是不是内部包」按**位置**判定(`pnpm-workspace.yaml` 声明 packages 下的包即 workspace 包),
  * 而非按包名前缀(`@lizi/`)——后者会漏掉 `lizi-im` / `lizi-mcps` / `@fmfsaisai/*` 这类不带该
  * scope 的内部包。位置是权威信号,包名 scope 不是。
  *
@@ -177,14 +181,15 @@ function pdfjsAssetsPlugin(): Plugin {
  *
  * 仅作用于 dev server;`vite build`(release 打包)走 Rollup、根本不读 optimizeDeps,零影响。
  */
-function discoverPureInternalPackageSpecifiers(): string[] {
+function discoverPureInternalPackages(): { specifiers: string[]; names: string[] } {
   const packagesDir = path.resolve(__dirname, '../../packages');
   const specifiers: string[] = [];
+  const names: string[] = [];
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(packagesDir, { withFileTypes: true });
   } catch {
-    return specifiers;
+    return { specifiers, names };
   }
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
@@ -201,6 +206,7 @@ function discoverPureInternalPackageSpecifiers(): string[] {
       if (typeof name !== 'string' || name.length === 0) continue;
       // 仅「零第三方依赖」的纯源码包(无 CJS 子依赖 → 排除安全)。
       if (Object.keys(pkg.dependencies ?? {}).length !== 0) continue;
+      names.push(name);
       // 主入口 + 所有 subpath 导出都要排除(subpath 在预打包里是独立条目,如 .../cron)。
       const exportsField = pkg.exports;
       if (exportsField && typeof exportsField === 'object') {
@@ -214,10 +220,11 @@ function discoverPureInternalPackageSpecifiers(): string[] {
       // 跳过无法解析的 package.json。
     }
   }
-  return specifiers;
+  return { specifiers, names };
 }
 
-const INTERNAL_PURE_PACKAGE_EXCLUDES = discoverPureInternalPackageSpecifiers();
+const { specifiers: INTERNAL_PURE_PACKAGE_EXCLUDES, names: INTERNAL_PURE_PACKAGE_NAMES } =
+  discoverPureInternalPackages();
 
 /**
  * 「带第三方依赖」的内部 workspace 包(maker-core / maker-cc-manager 等)仍走 optimizeDeps
@@ -250,7 +257,7 @@ function collectPrebundledInternalPackageDirs(): string[] {
       const pkg = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8')) as {
         dependencies?: Record<string, string>;
       };
-      // 与 discoverPureInternalPackageSpecifiers 互补:纯源码包已被 exclude,无预打包缓存
+      // 与 discoverPureInternalPackages 互补:纯源码包已被 exclude,无预打包缓存
       // 可言;只有 dep-bearing 包(仍被预打包)的源码变化需要触发缓存失效。
       if (Object.keys(pkg.dependencies ?? {}).length === 0) continue;
       dirs.push(pkgDir);
@@ -334,6 +341,14 @@ const rendererConfig = {
       ...INTERNAL_PURE_PACKAGE_EXCLUDES,
     ],
     include: ['@tiptap/react'],
+  },
+  server: {
+    watch: {
+      // 被 exclude 的内部包以 node_modules 软链路径进模块图,默认 `**/node_modules/**`
+      // 忽略规则会让 watcher 对它们的源码变更全盲(变更后引用新导出的组件热更、被引用包
+      // 却停在旧模块 → 白屏,见 discoverPureInternalPackages 顶注)。反向 glob 豁免之。
+      ignored: INTERNAL_PURE_PACKAGE_NAMES.map((name) => `!**/node_modules/${name}/**`),
+    },
   },
   build: {
     // Force outDir relative to project root (not renderer root),

@@ -30,7 +30,7 @@ type MakerSendOptions = {
    * scheduler 排队消息的来源标记(coordinator drain 透传,见 AgentInputSendOpts.origin)。
    * 打到 sess.send 的 origin(本轮 turnOrigin)并合进落库 user 消息 agentMeta.origin。
    */
-  origin?: { kind: 'scheduler'; scheduleId: string; scheduleName: string };
+  origin?: { kind: 'scheduler'; scheduleId: string; scheduleName: string; runId?: string };
   persistUserMessage?: {
     clientId?: unknown;
     content?: unknown;

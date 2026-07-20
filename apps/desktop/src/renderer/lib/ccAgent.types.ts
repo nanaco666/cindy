@@ -24,6 +24,7 @@ export interface MessageAutomationOrigin {
   kind: 'scheduler';
   scheduleId: string;
   scheduleName?: string;
+  runId?: string;
 }
 
 /**
@@ -96,6 +97,10 @@ export interface CcMeta {
   turnCostUsd?: number;
   /** true = Codex token × 价格表折算的估算值; false / 缺省 = SDK 实报。 */
   turnCostIsEstimate?: boolean;
+  /** 用户从最近一条真实输入至本消息的累计成本（用于展示，不参与账单汇总）。 */
+  userTurnCostUsd?: number;
+  /** 累计值含订阅 token 价值估算时为 true。 */
+  userTurnCostIsEstimate?: boolean;
   /** Per-turn token/cache 明细,与 turnCostUsd 同时由 main patch 到 agent_meta。 */
   turnUsageDetails?: TurnUsageDetails;
 
@@ -227,7 +232,7 @@ export interface Session {
    */
   worktreePath?: string | null;
   /**
-   * project-context 实验功能：本 session 创建时是否注入了 .xdmaker/project-knowledge/ 内的项目知识。
+   * project-context 实验功能：本 session 创建时是否注入了 .cindy/project-knowledge/ 内的项目知识。
    * Render 端用此字段决定 sidebar stripe / chat header chip 显示。
    * 升级前已存在的 session 默认 false（不追溯）。
    */

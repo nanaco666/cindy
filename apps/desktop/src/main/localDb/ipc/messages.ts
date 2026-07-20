@@ -48,6 +48,16 @@ export interface EstimatedSessionValueEntry {
   costUsd: number;
 }
 
+/**
+ * The already-recorded cost segments for the visible user round immediately
+ * before an assistant message. `turnCostUsd` remains deliberately segment
+ * scoped; callers use this value only to produce a user-facing round total.
+ */
+export interface PriorUserRoundCost {
+  costUsd: number;
+  hasEstimatedValue: boolean;
+}
+
 const VALID_ROLES: ReadonlySet<MessageRole> = new Set([
   'user',
   'assistant',
@@ -127,7 +137,7 @@ export function registerMessageIpc(): void {
         .where(whereExpr)
         .orderBy(desc(messages.createdAt), desc(messageRowid))
         .limit(limit);
-      return rows.map(messageToCamelWithRowid);
+      return hydrateLegacyUserTurnCosts(rows.map(messageToCamelWithRowid));
     },
   );
 
@@ -207,7 +217,7 @@ export function registerMessageIpc(): void {
         .orderBy(asc(messages.createdAt), asc(messageRowid))
         .limit(radius);
 
-      return [...before.reverse(), anchor, ...after].map(messageToCamelWithRowid);
+      return hydrateLegacyUserTurnCosts([...before.reverse(), anchor, ...after].map(messageToCamelWithRowid));
     },
   );
 
@@ -287,7 +297,7 @@ export function registerMessageIpc(): void {
         .orderBy(asc(messages.createdAt), asc(messageRowid))
         .limit(radius);
 
-      return [...before.reverse(), anchor, ...after].map(messageToCamelWithRowid);
+      return hydrateLegacyUserTurnCosts([...before.reverse(), anchor, ...after].map(messageToCamelWithRowid));
     },
   );
 
@@ -783,11 +793,17 @@ export function extractEstimatedSessionValueEntries(
  *
  * 用于 turnCostBroadcaster:turn 结束后把 per-turn 费用挂到该轮最后一条 assistant。
  */
-export async function patchMessageAgentMeta(
+export interface MessageAgentMetaPatchResult {
+  previous: Record<string, unknown>;
+  next: Record<string, unknown>;
+}
+
+/** 与 patchMessageAgentMeta 相同，但返回补丁前后的元数据供幂等账本计算。 */
+export async function patchMessageAgentMetaWithResult(
   sessionId: string,
   clientId: string,
   patch: Record<string, unknown>,
-): Promise<boolean> {
+): Promise<MessageAgentMetaPatchResult | null> {
   const db = getDbClient().drizzle;
   const rows = await db
     .select({ agentMeta: messages.agentMeta })
@@ -796,18 +812,221 @@ export async function patchMessageAgentMeta(
       and(eq(messages.sessionId, sessionId), eq(messages.clientId, clientId)),
     )
     .limit(1);
-  if (rows.length === 0) return false;
-  let existing: Record<string, unknown> = {};
-  if (rows[0].agentMeta) {
-    try {
-      const parsed = JSON.parse(rows[0].agentMeta);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        existing = parsed as Record<string, unknown>;
-      }
-    } catch {
-      // 损坏的 JSON 以 {} 为底重建(补丁字段仍写入,旧字段无法挽救)。
+  if (rows.length === 0) return null;
+  // 损坏的 JSON 以 {} 为底重建(补丁字段仍写入,旧字段无法挽救)。
+  const previous = parseAgentMetaRecord(rows[0].agentMeta) ?? {};
+  const next = { ...previous, ...patch };
+  await updateAgentMeta(sessionId, clientId, JSON.stringify(next));
+  return { previous, next };
+}
+
+export async function patchMessageAgentMeta(
+  sessionId: string,
+  clientId: string,
+  patch: Record<string, unknown>,
+): Promise<boolean> {
+  return (await patchMessageAgentMetaWithResult(sessionId, clientId, patch)) !== null;
+}
+
+/**
+ * Sums prior assistant cost segments back to the latest real user message.
+ *
+ * An agent can emit several SDK `done` segments while completing one visible
+ * user request (for example, background audit progress followed by a final
+ * summary). Those segments must stay separate for billing and analytics, but
+ * the final message needs their user-round total. This reads only the current
+ * round, honours /clear + rewind visibility, and deliberately skips synthetic
+ * `autoResume` user rows so an automatic "continue" cannot split a round.
+ */
+export async function readPriorUserRoundCost(
+  sessionId: string,
+  assistantClientId: string,
+): Promise<PriorUserRoundCost> {
+  const db = getDbClient().drizzle;
+  const [target] = await db
+    .select({ createdAt: messages.createdAt, rowid: messageRowid })
+    .from(messages)
+    .where(and(
+      eq(messages.sessionId, sessionId),
+      eq(messages.clientId, assistantClientId),
+      eq(messages.role, 'assistant'),
+      isNull(messages.rewindAt),
+    ))
+    .limit(1);
+  if (!target) return { costUsd: 0, hasEstimatedValue: false };
+
+  const [session] = await db
+    .select({ clearedAt: sessions.clearedAt })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+  const visibleAfterClear = session?.clearedAt == null ? [] : [gt(messages.createdAt, session.clearedAt)];
+  const beforeTarget = or(
+    lt(messages.createdAt, target.createdAt),
+    and(eq(messages.createdAt, target.createdAt), lt(messageRowid, target.rowid)),
+  );
+
+  const userRows = await db
+    .select({ createdAt: messages.createdAt, rowid: messageRowid, agentMeta: messages.agentMeta })
+    .from(messages)
+    .where(and(
+      eq(messages.sessionId, sessionId),
+      eq(messages.role, 'user'),
+      isNull(messages.rewindAt),
+      beforeTarget,
+      ...visibleAfterClear,
+    ))
+    .orderBy(desc(messages.createdAt), desc(messageRowid));
+  const boundary = userRows.find((row) => !isAutoResumeUserMessage(row.agentMeta));
+  if (!boundary) return { costUsd: 0, hasEstimatedValue: false };
+
+  const afterBoundary = or(
+    gt(messages.createdAt, boundary.createdAt),
+    and(eq(messages.createdAt, boundary.createdAt), gt(messageRowid, boundary.rowid)),
+  );
+  const assistantRows = await db
+    .select({ agentMeta: messages.agentMeta })
+    .from(messages)
+    .where(and(
+      eq(messages.sessionId, sessionId),
+      eq(messages.role, 'assistant'),
+      isNull(messages.rewindAt),
+      afterBoundary,
+      beforeTarget,
+      ...visibleAfterClear,
+    ));
+
+  let costUsd = 0;
+  let hasEstimatedValue = false;
+  for (const row of assistantRows) {
+    const meta = parseAgentMetaRecord(row.agentMeta);
+    const segmentCost = meta?.turnCostUsd;
+    if (typeof segmentCost !== 'number' || !Number.isFinite(segmentCost) || segmentCost <= 0) continue;
+    costUsd += segmentCost;
+    hasEstimatedValue ||= meta?.turnCostIsEstimate === true;
+  }
+  return { costUsd, hasEstimatedValue };
+}
+
+/**
+ * Compatibility projection for messages created before userTurnCostUsd existed.
+ *
+ * This is deliberately read-only: a history page can immediately display the
+ * correct user-round total without rewriting legacy data or changing the raw
+ * segment values used by every billing aggregate. New messages already carry
+ * the persisted field and skip this path.
+ */
+async function hydrateLegacyUserTurnCosts(history: Message[]): Promise<Message[]> {
+  const legacyClientIds = new Set(
+    history.flatMap((message) => {
+      const agentMeta = message.agentMeta;
+      return message.role === 'assistant' &&
+        agentMeta &&
+        typeof agentMeta === 'object' &&
+        !Array.isArray(agentMeta) &&
+        typeof agentMeta.turnCostUsd === 'number' &&
+        Number.isFinite(agentMeta.turnCostUsd) &&
+        agentMeta.turnCostUsd > 0 &&
+        !(typeof agentMeta.userTurnCostUsd === 'number' && agentMeta.userTurnCostUsd > 0)
+        ? [message.clientId]
+        : [];
+    }),
+  );
+  if (legacyClientIds.size === 0) return history;
+
+  const sessionId = history[0]?.sessionId;
+  if (!sessionId) return history;
+  const db = getDbClient().drizzle;
+  const [session] = await db
+    .select({ clearedAt: sessions.clearedAt })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .limit(1);
+  const visibleAfterClear = session?.clearedAt == null ? [] : [gt(messages.createdAt, session.clearedAt)];
+  const rows = await db
+    .select({
+      clientId: messages.clientId,
+      role: messages.role,
+      agentMeta: messages.agentMeta,
+    })
+    .from(messages)
+    .where(and(
+      eq(messages.sessionId, sessionId),
+      isNull(messages.rewindAt),
+      ...visibleAfterClear,
+    ))
+    .orderBy(asc(messages.createdAt), asc(messageRowid));
+
+  const totalsByClientId = new Map<string, PriorUserRoundCost>();
+  let hasRealUserBoundary = false;
+  let costUsd = 0;
+  let hasEstimatedValue = false;
+  for (const row of rows) {
+    if (row.role === 'user' && !isAutoResumeUserMessage(row.agentMeta)) {
+      hasRealUserBoundary = true;
+      costUsd = 0;
+      hasEstimatedValue = false;
+      continue;
+    }
+    if (row.role !== 'assistant') continue;
+    const meta = parseAgentMetaRecord(row.agentMeta);
+    const segmentCost = meta?.turnCostUsd;
+    if (!hasRealUserBoundary ||
+      typeof segmentCost !== 'number' ||
+      !Number.isFinite(segmentCost) ||
+      segmentCost <= 0) {
+      continue;
+    }
+    costUsd += segmentCost;
+    hasEstimatedValue ||= meta?.turnCostIsEstimate === true;
+    if (legacyClientIds.has(row.clientId)) {
+      totalsByClientId.set(row.clientId, { costUsd, hasEstimatedValue });
     }
   }
-  await updateAgentMeta(sessionId, clientId, JSON.stringify({ ...existing, ...patch }));
-  return true;
+
+  let hydrated: Message[] | null = null;
+  for (let index = 0; index < history.length; index++) {
+    const message = history[index];
+    const agentMeta = message.agentMeta;
+    if (
+      message.role !== 'assistant' ||
+      !agentMeta ||
+      typeof agentMeta !== 'object' ||
+      Array.isArray(agentMeta) ||
+      typeof agentMeta.turnCostUsd !== 'number' ||
+      !Number.isFinite(agentMeta.turnCostUsd) ||
+      agentMeta.turnCostUsd <= 0 ||
+      (typeof agentMeta.userTurnCostUsd === 'number' && agentMeta.userTurnCostUsd > 0)
+    ) {
+      continue;
+    }
+    const total = totalsByClientId.get(message.clientId);
+    if (!total) continue;
+    hydrated ??= history.slice();
+    hydrated[index] = {
+      ...message,
+      agentMeta: {
+        ...agentMeta,
+        userTurnCostUsd: total.costUsd,
+        userTurnCostIsEstimate: total.hasEstimatedValue,
+      },
+    };
+  }
+  return hydrated ?? history;
+}
+
+function isAutoResumeUserMessage(agentMeta: string | null): boolean {
+  return parseAgentMetaRecord(agentMeta)?.autoResume === true;
+}
+
+function parseAgentMetaRecord(agentMeta: string | null): Record<string, unknown> | null {
+  if (!agentMeta) return null;
+  try {
+    const parsed = JSON.parse(agentMeta);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
 }

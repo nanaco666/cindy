@@ -84,9 +84,8 @@ export function useRuns(scheduleId: string | null, limit = 50): UseRunsResult {
         void refresh();
         return;
       }
-      // 'ready' 是 scheduler 实例就绪信号(冷启 / relogin),没有 scheduleId,
-      // 也跟"某条 schedule 的 run 列表"无关 — useRuns 不需要做任何事。
-      if (ev.type === 'ready') return;
+      // 全局事件没有 scheduleId，也跟"某条 schedule 的 run 列表"无关。
+      if (ev.type === 'ready' || ev.type === 'runtime-state') return;
       if (ev.scheduleId !== scheduleId) return;
       if (
         ev.type === 'fired' ||

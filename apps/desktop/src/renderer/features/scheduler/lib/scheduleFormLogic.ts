@@ -16,8 +16,6 @@
 
 import type { CreateScheduleInput, ScheduleTemplate, ScheduleWorkspaceKind, ScriptCapability } from '@lizi/maker-scheduler';
 
-import { cronExprToIntervalMs } from './cronCodexPreset';
-
 /** Effort 白名单 — 与 Phase 2 mapper enum 一致;UI 提交前的最后一道关卡。 */
 export const EFFORT_VALUES = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type EffortValue = (typeof EFFORT_VALUES)[number];
@@ -49,6 +47,11 @@ export interface ScheduleFormState {
   scriptTimeoutSec?: string;
   scriptCapabilities?: ScriptCapability[];
   cronExpr: string;
+  /**
+   * 相对间隔模式的权威间隔。非空 = 上次完成后等待 N 毫秒；undefined = Cron 槽位模式。
+   * cronExpr 在 interval 模式下只保留兼容/切换用的表达式，不能反向覆盖本字段。
+   */
+  intervalMs?: number;
   timezone: string;
   recurring: boolean;
   /** 手动模式:true → 创建后永不自动 fire,只能 Run now。UI 上需要 recurring=false 才能勾。 */
@@ -293,7 +296,7 @@ export function buildHookCommandForScriptFile(
       // macOS 无裸 `python`(仅 python3);Windows 官方安装器装的是 `python`
       return `${win ? 'python' : 'python3'} ${quote(ref)}`;
     case 'sh':
-      // Windows 下依赖 git-bash 在 PATH;失败会被执行器 fail-open 兜住
+      // Windows 下依赖 git-bash 在 PATH;缺失时执行器会阻止本轮并展示错误
       return `bash ${quote(ref)}`;
     case 'ps1':
       // Windows 内置 powershell;macOS/Linux 只有 PowerShell Core(pwsh)
@@ -350,7 +353,6 @@ export function buildScheduleInput(form: ScheduleFormState): CreateScheduleInput
   const isHeartbeat = !!form.targetSessionId.trim();
   const isScript = (form.executionMode ?? 'agent') === 'script';
   const cronExpr = form.cronExpr.trim();
-  const intervalMs = cronExprToIntervalMs(cronExpr);
   const base: CreateScheduleInput = {
     name: form.name.trim(),
     prompt: form.prompt,
@@ -361,7 +363,9 @@ export function buildScheduleInput(form: ScheduleFormState): CreateScheduleInput
     timezone: form.timezone.trim(),
     recurring: form.recurring,
     manual: form.manual,
-    intervalMs,
+    // 恒带 key：编辑 Cron 任务时 undefined 会沿 storage patch 契约清空旧 intervalMs；
+    // 相对间隔任务则原样保留权威值，不能从可能陈旧的 cronExpr 重新推导。
+    intervalMs: form.intervalMs,
     agentKind: form.agentKind,
     workspaceKind: form.workspaceKind,
     useWorktree: !isScript && form.workspaceKind === 'project' && form.useWorktree,

@@ -83,4 +83,41 @@ describe('sessionsStore account boundaries', () => {
     });
     expect(view.result.current.isLoading).toBe(false);
   });
+
+  it('removes a deleted session from every loaded filter without refetching', async () => {
+    mocks.list
+      .mockResolvedValueOnce([session('deleted'), session('keep-active')])
+      .mockResolvedValueOnce([session('deleted'), session('keep-all')]);
+    await sessionsStore.ensureByFilter('active');
+    await sessionsStore.ensureByFilter('all');
+    mocks.list.mockReset();
+
+    act(() => sessionsStore.patchLocal('deleted', { status: 'deleted' }));
+
+    expect(sessionsStore.getByFilter('active')?.map(({ id }) => id)).toEqual(['keep-active']);
+    expect(sessionsStore.getByFilter('all')?.map(({ id }) => id)).toEqual(['keep-all']);
+    expect(mocks.list).not.toHaveBeenCalled();
+  });
+
+  it('does not let a request started before delete restore the deleted session', async () => {
+    const staleRequest = deferred<Session[]>();
+    const replacementRequest = deferred<Session[]>();
+    mocks.list
+      .mockImplementationOnce(() => staleRequest.promise)
+      .mockImplementationOnce(() => replacementRequest.promise);
+
+    const staleLoad = sessionsStore.ensureByFilter('all');
+    act(() => sessionsStore.patchLocal('deleted', { status: 'deleted' }));
+
+    expect(mocks.list).toHaveBeenCalledTimes(2);
+    replacementRequest.resolve([session('keep')]);
+    await waitFor(() => {
+      expect(sessionsStore.getByFilter('all')?.map(({ id }) => id)).toEqual(['keep']);
+    });
+
+    staleRequest.resolve([session('deleted'), session('stale')]);
+    await staleLoad;
+
+    expect(sessionsStore.getByFilter('all')?.map(({ id }) => id)).toEqual(['keep']);
+  });
 });

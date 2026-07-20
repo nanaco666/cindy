@@ -17,7 +17,7 @@ function createTurnState(): TurnState {
     sawCompactBoundary: false,
     hasEmittedText: false,
     uiEmittedText: '',
-    pushedTerminalError: false,
+    pendingApiError: null,
     interruptRequested: false,
     generation: 0,
     interruptGeneration: 0,

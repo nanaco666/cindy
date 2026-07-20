@@ -154,7 +154,7 @@ export const sessions = sqliteTable(
     imBotContextId: text('im_bot_context_id'),
     imUserId: text('im_user_id'),
     /**
-     * 本 session 创建时是否注入了 project-context 知识（来自 .xdmaker/project-knowledge/）。
+     * 本 session 创建时是否注入了 project-context 知识（来自 .cindy/project-knowledge/）。
      * 仅在创建瞬间由 main IPC 写入；后续不变。
      * Render 端用此字段决定 sidebar stripe / chat header chip 显示。
      * 详见 docs/project-context.md + plan partitioned-dazzling-rainbow.md。
@@ -551,11 +551,11 @@ export const schedules = sqliteTable(
     /**
      * 前置检查脚本(Pre-run Hook)命令。NULL = 未启用,完全走原有流程。
      * 非空 → runner fire 前先经系统 shell 执行该命令(cwd=本轮工作目录):
-     * exit 0 放行 / exit 2 跳过本轮(run 记 'skipped') / 其它、超时 fail-open。
+     * exit 0 放行 / exit 2 跳过本轮(run 记 'skipped') / 其它、超时阻止本轮并记 failed。
      * 内存对象里与 timeout 合成 `Schedule.preRunHook` 嵌套对象(同 notify 的拆列模式)。
      */
     preRunHookCommand: text('pre_run_hook_command'),
-    /** 前置检查脚本超时毫秒。NULL = runner 默认(10s)。仅 command 非空时有意义。 */
+    /** 前置检查脚本超时毫秒。NULL = 不限时。仅 command 非空时有意义。 */
     preRunHookTimeoutMs: integer('pre_run_hook_timeout_ms'),
     /**
      * 跳过留痕承载会话 id(runner 管理)。前置检查拦截时合成的"已跳过"消息写进
@@ -704,12 +704,22 @@ export const scheduleRuns = sqliteTable(
       enum: ['running', 'success', 'failed', 'aborted', 'interrupted', 'skipped'],
     }).notNull(),
     errorMsg: text('error_msg'),
+    /** 单次 run 的真实 API 账单费用；与订阅估值严格分栏。 */
+    costUsd: real('cost_usd').notNull().default(0),
+    /** 单次 run 的订阅 token 估算价值，不计入真实账单。 */
+    estimatedValueUsd: real('estimated_value_usd').notNull().default(0),
+    /** legacy 表示迁移前数据缺少 runId，不能精确拆分到单次执行。 */
+    costAttribution: text('cost_attribution', { enum: ['exact', 'legacy'] })
+      .notNull()
+      .default('legacy'),
     /**
      * Prompt 类 run 在 success 时存 agent 这一轮 turn 的最终文本（与飞书正常对话
      * 气泡显示同源，按 text 事件 isFinal 语义聚合）。失败 run 留 NULL。
      * 供 schedule 完成通知 / UI 历史回顾使用。
      */
     resultText: text('result_text'),
+    /** 前置检查一次执行的结构化 JSON 结果；NULL 表示本轮未配置/未执行检查。 */
+    preRunHookResult: text('pre_run_hook_result'),
     readAt: integer('read_at'),
     /**
      * In-flight 心跳时间戳（毫秒）——跨实例的"仍有活实例在跑"租约信号。

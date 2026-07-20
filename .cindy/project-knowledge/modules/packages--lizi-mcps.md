@@ -123,7 +123,7 @@ Desktop host 注入路径：`apps/desktop/src/main/maker-host/index.ts` → 全�
 
   **Codex 暂不支持**：标准 MCP `tools/call` 不携带 caller thread_id，Codex 又用共享 app-server 子进程 N session 多路复用同一个 MCP client；handler 拿不到 per-session workdir。这是**上游协议级限制**（codex-rs），不是 in-house 能解的。Phase 1 选择不做兼容 workaround（providers.ts 通过 `Boolean(ctx.workingDir)` gate 自动把 Codex 全局 ctx 关掉），等上游演进。
 
-  **Agent A/B 量化结论**（详见 `.xdmaker/benchmarks/agent-ab-report.md` + `agent-ab-noisy-report.md`）：
+  **Agent A/B 量化结论**（详见 `.cindy/benchmarks/agent-ab-report.md` + `agent-ab-noisy-report.md`）：
 
   | 任务噪音度 | 工具调用 | 成本 | 谁赢 |
   |---|---|---|---|

@@ -221,6 +221,21 @@ describe('messagePresentation', () => {
       },
     })).label).toBe('读取 app.ts');
 
+    const compositeCases = [
+      ["rg -n send src && sed -n '1,80p' src/register.ts", '查阅内容'],
+      ['git status --short && git diff --stat', '检查仓库'],
+      ['pnpm typecheck && pnpm test', '运行验证'],
+    ] as const;
+    for (const [command, label] of compositeCases) {
+      expect(summarizeToolRowPresentation(message(`bash-${label}`, {
+        source: {
+          clientId: `bash-${label}`,
+          content: { toolName: 'Bash', input: { command } },
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      })).label).toBe(label);
+    }
+
     // Git 命令使用稳定的人话标题，真实命令留在次行。
     const shortRow = summarizeToolRowPresentation(message('bash-raw', {
       source: {

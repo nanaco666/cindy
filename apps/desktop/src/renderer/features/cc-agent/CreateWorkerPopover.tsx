@@ -5,9 +5,11 @@ import { X } from 'lucide-react';
 import { FastModeToggle } from '@/components/new-chat/FastModeToggle';
 import { ModelSelector } from '@/components/new-chat/ModelSelector';
 import { useAgentCapabilities } from '@/hooks/useAgentCapabilities';
+import { useDeviceProviders } from '@/hooks/useDeviceProviders';
 import { useProviders } from '@/hooks/useProviders';
 import { cn } from '@/lib/utils';
 import type { Effort } from '@/lib/userPreferences.types';
+import { selectWorkerModels } from './workerModelAvailability';
 
 const PREDEFINED_ROLES = ['developer', 'designer', 'reviewer', 'tester', 'merger'] as const;
 const PREFS_KEY = 'workerCreationPrefs';
@@ -77,6 +79,8 @@ export interface CreateWorkerPopoverProps {
   title?: string;
   submitLabel?: string;
   className?: string;
+  /** device-link controlled device; omitted for a local Lead session. */
+  deviceId?: string;
 }
 
 export function CreateWorkerPopover({
@@ -86,6 +90,7 @@ export function CreateWorkerPopover({
   title,
   submitLabel,
   className,
+  deviceId,
 }: CreateWorkerPopoverProps) {
   const { t } = useTranslation();
   const [role, setRole] = useState('developer');
@@ -97,18 +102,24 @@ export function CreateWorkerPopover({
   const [initialTask, setInitialTask] = useState('');
   const [prefs, setPrefs] = useState<WorkerPrefs>(DEFAULT_PREFS);
 
-  const ccCaps = useAgentCapabilities('claude-code');
-  const codexCaps = useAgentCapabilities('codex');
-  // codex/ 骨折模型是「XD 网关来源」:连了 XD 网关(有 key)即可选用,与是否登录 OAuth 无关。
-  const { providers, loading: providersLoading } = useProviders();
-  const xdConnected = providers.some((p) => p.id === 'xd' && p.connected);
-  const activeModels = useMemo(() => {
-    const caps = agent === 'codex' ? codexCaps.capabilities : ccCaps.capabilities;
-    const models = caps?.availableModels ?? [];
-    if (agent !== 'codex') return models;
-    return models.filter((m) => xdConnected || !m.id.startsWith('codex/'));
-  }, [agent, xdConnected, ccCaps.capabilities, codexCaps.capabilities]);
+  const ccCaps = useAgentCapabilities('claude-code', deviceId);
+  const codexCaps = useAgentCapabilities('codex', deviceId);
+  const localProviders = useProviders();
+  const remoteProviders = useDeviceProviders(deviceId);
+  const providers = deviceId ? remoteProviders.providers : localProviders.providers;
+  const providersLoading = deviceId ? remoteProviders.loading : localProviders.loading;
+  const providersError = deviceId ? remoteProviders.error : null;
   const activeCaps = agent === 'codex' ? codexCaps.capabilities : ccCaps.capabilities;
+  const activeModels = useMemo(() => {
+    return selectWorkerModels({
+      agent,
+      capabilities: activeCaps,
+      deviceId,
+      providers,
+      providersLoading,
+      providersError,
+    });
+  }, [activeCaps, agent, deviceId, providers, providersError, providersLoading]);
   const currentModel = activeModels.find((m) => m.id === model);
   const currentModelSupportsFast = Boolean(
     agent === 'codex' && activeCaps?.hasFastMode && currentModel?.supportsFastMode,
@@ -148,32 +159,41 @@ export function CreateWorkerPopover({
   }, [currentModel, currentModelSupportsFast, fast]);
 
   const vendorKey = agent === 'codex' ? 'codex' : 'cc';
-  const updateAgent = useCallback((nextAgent: 'claude-code' | 'codex') => {
-    setAgent(nextAgent);
-    const remembered = prefs[nextAgent];
-    setModel(remembered.model);
-    setEffort(remembered.effort);
-    setFast(remembered.fast);
-  }, [prefs]);
+  const updateAgent = useCallback(
+    (nextAgent: 'claude-code' | 'codex') => {
+      setAgent(nextAgent);
+      const remembered = prefs[nextAgent];
+      setModel(remembered.model);
+      setEffort(remembered.effort);
+      setFast(remembered.fast);
+    },
+    [prefs],
+  );
 
-  const updateModel = useCallback((nextModel: string) => {
-    setModel(nextModel);
-    const available = activeModels.find((m) => m.id === nextModel);
-    if (available && available.efforts.length > 0 && !available.efforts.includes(effort)) {
-      setEffort(available.defaultEffort ?? available.efforts[available.efforts.length - 1]);
-    }
-    if (!available?.supportsFastMode) {
-      setFast(false);
-    }
-  }, [activeModels, effort]);
+  const updateModel = useCallback(
+    (nextModel: string) => {
+      setModel(nextModel);
+      const available = activeModels.find((m) => m.id === nextModel);
+      if (available && available.efforts.length > 0 && !available.efforts.includes(effort)) {
+        setEffort(available.defaultEffort ?? available.efforts[available.efforts.length - 1]);
+      }
+      if (!available?.supportsFastMode) {
+        setFast(false);
+      }
+    },
+    [activeModels, effort],
+  );
 
   const updateEffort = setEffort;
 
   const activeRole = customRole || role;
-  const customRoleError = customRole.length > 0 && PREDEFINED_ROLES.includes(customRole as typeof PREDEFINED_ROLES[number])
-    ? t('orca.createWorker.customRolePredefinedError')
-    : null;
-  const canCreate = activeRole.length >= 1 && activeRole.length <= 32 && !customRoleError && !!currentModel;
+  const customRoleError =
+    customRole.length > 0 &&
+    PREDEFINED_ROLES.includes(customRole as (typeof PREDEFINED_ROLES)[number])
+      ? t('orca.createWorker.customRolePredefinedError')
+      : null;
+  const canCreate =
+    activeRole.length >= 1 && activeRole.length <= 32 && !customRoleError && !!currentModel;
   const resolvedTitle = title ?? t('orca.createWorker.title');
   const resolvedSubmitLabel = submitLabel ?? t('orca.createWorker.submit');
 
@@ -230,7 +250,9 @@ export function CreateWorkerPopover({
         </div>
 
         <div className="mb-4">
-          <div className="mb-2 text-12 font-medium uppercase tracking-[0.5px] text-[var(--text-tertiary)]">{t('orca.createWorker.roleLabel')}</div>
+          <div className="mb-2 text-12 font-medium uppercase tracking-[0.5px] text-[var(--text-tertiary)]">
+            {t('orca.createWorker.roleLabel')}
+          </div>
           <div className="flex flex-wrap gap-2">
             {PREDEFINED_ROLES.map((r) => (
               <button
@@ -239,10 +261,13 @@ export function CreateWorkerPopover({
                 className={cn(
                   'rounded-full px-3 py-1.5 text-13 leading-none border transition-colors',
                   activeRole === r
-                    ? 'bg-[var(--surface-chip)] border-transparent text-[var(--text-primary)] font-medium'
+                    ? 'bg-[var(--surface-chip)] border-[var(--text-secondary)] text-[var(--text-primary)] font-medium'
                     : 'border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--surface-chip)]',
                 )}
-                onClick={() => { setRole(r); setCustomRole(''); }}
+                onClick={() => {
+                  setRole(r);
+                  setCustomRole('');
+                }}
               >
                 {r}
               </button>
@@ -254,7 +279,10 @@ export function CreateWorkerPopover({
             placeholder={t('orca.createWorker.customRolePlaceholder')}
             value={customRole}
             maxLength={32}
-            onChange={(e) => { setCustomRole(e.target.value); setRole(''); }}
+            onChange={(e) => {
+              setCustomRole(e.target.value);
+              setRole('');
+            }}
           />
           {customRoleError && (
             <div className="mt-1 text-11 text-[var(--error-fg)]">{customRoleError}</div>
@@ -262,17 +290,19 @@ export function CreateWorkerPopover({
         </div>
 
         <div className="mb-4">
-          <div className="mb-2 text-12 font-medium uppercase tracking-[0.5px] text-[var(--text-tertiary)]">{t('orca.createWorker.agentLabel')}</div>
+          <div className="mb-2 text-12 font-medium uppercase tracking-[0.5px] text-[var(--text-tertiary)]">
+            {t('orca.createWorker.agentLabel')}
+          </div>
           <div className="inline-flex rounded-lg bg-[var(--surface-elevated)] border border-[var(--border-default)] p-1">
             {(['codex', 'claude-code'] as const).map((a) => (
               <button
                 key={a}
                 type="button"
                 className={cn(
-                  'rounded-md px-4 py-1.5 text-13 leading-none transition-colors',
+                  'rounded-md px-4 py-1.5 text-13 leading-none border transition-colors',
                   agent === a
-                    ? 'bg-[var(--surface-chip)] text-[var(--text-primary)] font-medium'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
+                    ? 'bg-[var(--surface-chip)] border-[var(--text-secondary)] text-[var(--text-primary)] font-medium'
+                    : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
                 )}
                 onClick={() => updateAgent(a)}
               >
@@ -296,6 +326,7 @@ export function CreateWorkerPopover({
               onModelChange={updateModel}
               onEffortChange={updateEffort}
               vendorKey={vendorKey}
+              deviceId={deviceId}
               popoverSide="bottom"
             />
           </div>
@@ -303,7 +334,10 @@ export function CreateWorkerPopover({
 
         <div className="mb-5">
           <div className="mb-2 text-12 font-medium uppercase tracking-[0.5px] text-[var(--text-tertiary)]">
-            {t('orca.createWorker.initialTaskLabel')} <span className="font-normal normal-case tracking-normal">{t('orca.createWorker.optional')}</span>
+            {t('orca.createWorker.initialTaskLabel')}{' '}
+            <span className="font-normal normal-case tracking-normal">
+              {t('orca.createWorker.optional')}
+            </span>
           </div>
           <textarea
             className="h-[96px] w-full resize-none rounded-xl border border-[var(--border-default)] bg-transparent px-3.5 py-2.5 text-13 leading-snug text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none"

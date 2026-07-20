@@ -73,8 +73,8 @@ try {
 const REGION = (() => {
   const idx = process.argv.indexOf('--region');
   const value = idx !== -1 && process.argv[idx + 1] ? process.argv[idx + 1] : 'cn';
-  if (!['cn', 'global'].includes(value)) {
-    console.error(`ERROR: --region must be cn or global (got "${value}")`);
+  if (!['cn', 'global', 'dev'].includes(value)) {
+    console.error(`ERROR: --region must be cn, global or dev (got "${value}")`);
     process.exit(1);
   }
   return value;
