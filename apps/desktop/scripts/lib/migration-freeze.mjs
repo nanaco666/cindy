@@ -3,7 +3,8 @@
  *
  * 从旧仓迁入的 migration 由 drizzle/migration-baseline.json 固定内容 hash，
  * 不再依赖 notice 或旧仓 Git 历史。新仓 main 中已经存在的 migration 继续用
- * Git tree 做增量冻结，因此只允许追加新 migration，不允许改写或删除历史文件。
+ * Git tree 做增量冻结，因此只允许追加新 migration，不允许改写或删除历史 SQL，
+ * 也不允许增删或改写已经发布的 companion TS runtime script。
  */
 /* global process */
 
@@ -13,6 +14,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const MIGRATION_PATH_RE = /^apps\/desktop\/drizzle\/\d{4}_.+\.sql$/;
+const MIGRATION_SCRIPT_PATH_RE = /^apps\/desktop\/drizzle\/scripts\/\d{4}_.+\.ts$/;
 const BASELINE_FILE = path.join(
   'apps',
   'desktop',
@@ -100,10 +102,15 @@ export function resolveCommit(repoRoot, ref) {
   return runGit(repoRoot, ['rev-parse', '--verify', `${ref}^{commit}`]).trim();
 }
 
-/** 比较某个新仓 commit 中已有的 migration SQL 与当前工作树。 */
+function companionScriptPath(sqlPath) {
+  const fileName = path.posix.basename(sqlPath).replace(/\.sql$/, '.ts');
+  return `apps/desktop/drizzle/scripts/${fileName}`;
+}
+
+/** 比较某个新仓 commit 中已有的 migration SQL + companion TS 与当前工作树。 */
 export function findFrozenMigrationChanges(repoRoot, ref) {
   const commit = resolveCommit(repoRoot, ref);
-  const migrationPaths = runGit(repoRoot, [
+  const treePaths = runGit(repoRoot, [
     'ls-tree',
     '-r',
     '--name-only',
@@ -112,7 +119,11 @@ export function findFrozenMigrationChanges(repoRoot, ref) {
     'apps/desktop/drizzle',
   ])
     .split(/\r?\n/)
-    .filter((gitPath) => MIGRATION_PATH_RE.test(gitPath));
+    .filter(Boolean);
+  const migrationPaths = treePaths.filter((gitPath) => MIGRATION_PATH_RE.test(gitPath));
+  const frozenScriptPaths = new Set(
+    treePaths.filter((gitPath) => MIGRATION_SCRIPT_PATH_RE.test(gitPath)),
+  );
 
   const violations = [];
   for (const gitPath of migrationPaths) {
@@ -126,8 +137,33 @@ export function findFrozenMigrationChanges(repoRoot, ref) {
     if (normalizedSha256(frozenContent) !== normalizedSha256(currentContent)) {
       violations.push({ path: gitPath, kind: 'modified' });
     }
+
+    const scriptPath = companionScriptPath(gitPath);
+    const scriptExistsAtBaseline = frozenScriptPaths.has(scriptPath);
+    const currentScriptPath = path.join(repoRoot, ...scriptPath.split('/'));
+    const scriptExistsNow = fs.existsSync(currentScriptPath);
+    if (!scriptExistsAtBaseline && scriptExistsNow) {
+      violations.push({ path: scriptPath, kind: 'added-runtime-script' });
+      continue;
+    }
+    if (scriptExistsAtBaseline && !scriptExistsNow) {
+      violations.push({ path: scriptPath, kind: 'deleted' });
+      continue;
+    }
+    if (scriptExistsAtBaseline) {
+      const frozenScript = runGit(repoRoot, ['show', `${commit}:${scriptPath}`]);
+      const currentScript = fs.readFileSync(currentScriptPath, 'utf-8');
+      if (normalizedSha256(frozenScript) !== normalizedSha256(currentScript)) {
+        violations.push({ path: scriptPath, kind: 'modified' });
+      }
+    }
   }
-  return { commit, migrationCount: migrationPaths.length, violations };
+  return {
+    commit,
+    migrationCount: migrationPaths.length,
+    runtimeScriptCount: frozenScriptPaths.size,
+    violations,
+  };
 }
 
 function githubPullRequestBase(env) {

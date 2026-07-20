@@ -3,6 +3,8 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { assertSharedDevMigrationPolicy } from './dev-migration-policy.mjs';
+
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
@@ -61,8 +63,13 @@ function runStep(step) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
+export function runDesktopRestart(argv, root = rootDir, stepRunner = runStep) {
+  assertSharedDevMigrationPolicy(root, argv);
+  for (const step of buildDesktopRestartSteps(argv, root)) stepRunner(step);
+}
+
 function main() {
-  for (const step of buildDesktopRestartSteps(process.argv.slice(2))) runStep(step);
+  runDesktopRestart(process.argv.slice(2));
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
