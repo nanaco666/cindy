@@ -6,8 +6,10 @@
  * 不能广播任何部分成功的 patch。
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 const h = vi.hoisted(() => ({
   tx: vi.fn(),
@@ -16,12 +18,14 @@ const h = vi.hoisted(() => ({
   closeSession: vi.fn(),
   isSessionStillRemovable: vi.fn(),
   recycleWorktreeForRemovedSession: vi.fn(),
+  userDataPath: '',
   agentIslandService: {
     handleSessionMetadataPatch: vi.fn(),
   },
 }));
 
 vi.mock('electron', () => ({
+  app: { getPath: () => h.userDataPath },
   ipcMain: { handle: vi.fn() },
   BrowserWindow: {
     getAllWindows: () => [{ isDestroyed: () => false, webContents: { send: h.webContentsSend } }],
@@ -51,9 +55,14 @@ import { setSessionsStatusInDb } from '../localDb/ipc/sessions.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  h.userDataPath = fs.mkdtempSync(path.join(os.tmpdir(), 'cindy-set-sessions-status-'));
   h.closeSession.mockResolvedValue(undefined);
   h.isSessionStillRemovable.mockResolvedValue(true);
   h.recycleWorktreeForRemovedSession.mockResolvedValue(undefined);
+});
+
+afterEach(() => {
+  fs.rmSync(h.userDataPath, { recursive: true, force: true });
 });
 
 describe('setSessionsStatusInDb', () => {
