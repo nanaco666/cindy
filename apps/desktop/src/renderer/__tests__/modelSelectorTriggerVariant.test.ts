@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -39,11 +39,35 @@ vi.mock('react-i18next', async (importOriginal) => ({
 
 vi.mock('@/components/ui/popover', async () => {
   const React = await import('react');
-  const OpenContext = React.createContext(true);
+  const OpenContext = React.createContext<{
+    open: boolean;
+    onOpenChange?: (open: boolean) => void;
+  }>({ open: true });
   return {
-    Popover: ({ children, open }: { children: React.ReactNode; open?: boolean }) =>
-      React.createElement(OpenContext.Provider, { value: open ?? true }, children),
-    PopoverTrigger: ({ children }: { children: React.ReactNode }) => children,
+    Popover: ({
+      children,
+      open,
+      onOpenChange,
+    }: {
+      children: React.ReactNode;
+      open?: boolean;
+      onOpenChange?: (open: boolean) => void;
+    }) =>
+      React.createElement(
+        OpenContext.Provider,
+        { value: { open: open ?? true, onOpenChange } },
+        children,
+      ),
+    PopoverTrigger: ({ children }: { children: React.ReactNode }) => {
+      const state = React.useContext(OpenContext);
+      const child = children as React.ReactElement<{ onClick?: React.MouseEventHandler }>;
+      return React.cloneElement(child, {
+        onClick: (event) => {
+          child.props.onClick?.(event);
+          state.onOpenChange?.(!state.open);
+        },
+      });
+    },
     PopoverAnchor: ({ children }: { children: React.ReactNode }) => children,
     PopoverContent: ({
       children,
@@ -60,8 +84,8 @@ vi.mock('@/components/ui/popover', async () => {
       onPointerEnter?: React.PointerEventHandler<HTMLDivElement>;
       onPointerLeave?: React.PointerEventHandler<HTMLDivElement>;
     }) => {
-      const open = React.useContext(OpenContext);
-      return open
+      const state = React.useContext(OpenContext);
+      return state.open
         ? React.createElement(
             'div',
             {
@@ -72,6 +96,12 @@ vi.mock('@/components/ui/popover', async () => {
               onPointerEnter,
               onPointerLeave,
             },
+            React.createElement('button', {
+              hidden: true,
+              type: 'button',
+              'data-testid': 'mock-popover-dismiss',
+              onClick: () => state.onOpenChange?.(false),
+            }),
             children,
           )
         : null;
@@ -549,7 +579,7 @@ describe('ModelSelector trigger variants', () => {
     expect(onProviderChange).not.toHaveBeenCalled();
   });
 
-  it('keeps target-agent provider rows and effort memory configurable while browsing Codex', () => {
+  it('keeps target-agent provider rows and effort memory configurable while browsing Codex', async () => {
     providersRef.providers = [
       ...providersRef.DEFAULT_PROVIDERS,
       {
@@ -572,6 +602,8 @@ describe('ModelSelector trigger variants', () => {
       },
     ];
     const setEffort = vi.fn();
+    const confirmBrowseSwitch = vi.fn(async () => true);
+    const onSwitch = vi.fn();
     const modelMemory = {
       getEffort: vi.fn((agent: string, providerId: string, modelId: string) =>
         agent === 'codex' && providerId === 'zeta-codex' && modelId === 'gpt-5.5'
@@ -594,12 +626,13 @@ describe('ModelSelector trigger variants', () => {
           currentProviderId: 'anthropic',
           onProviderChange: vi.fn(),
           modelMemory,
-          agentSwitch: { currentVendor: 'cc', onSwitch: vi.fn() },
+          agentSwitch: { currentVendor: 'cc', confirmBrowseSwitch, onSwitch },
         }),
       );
 
       fireEvent.click(screen.getByRole('tab', { name: /Codex/ }));
-      const row = screen.getByRole('option', { name: /GPT-5\.5/ });
+      const row = await screen.findByRole('option', { name: /GPT-5\.5/ });
+      expect(confirmBrowseSwitch).toHaveBeenCalledTimes(1);
       // 来源 mark 存在说明目标 Agent 仍走 provider sections，而不是退化成 flat。
       expect(row.textContent).toContain('Z');
       // 行尾与悬浮面板同读目标 Agent 的 per-(来源,模型) 记忆，不落模型默认 medium。
@@ -613,9 +646,78 @@ describe('ModelSelector trigger variants', () => {
       ).toBe('true');
       fireEvent.click(within(options).getByRole('option', { name: 'low' }));
       expect(setEffort).toHaveBeenCalledWith('codex', 'zeta-codex', 'gpt-5.5', 'low');
+      expect(confirmBrowseSwitch).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(row);
+      expect(onSwitch).toHaveBeenCalledWith('codex', 'gpt-5.5', 'zeta-codex');
+      // 模型确认与意图期配置不再触发确认；确认门只在 Agent 分段切换。
+      expect(confirmBrowseSwitch).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(screen.getByRole('tab', { name: /Claude/ }));
+      await waitFor(() =>
+        expect(screen.getByRole('tab', { name: /Claude/ }).getAttribute('aria-selected')).toBe(
+          'true',
+        ),
+      );
+      // 返回当前引擎直接切分段，不重复确认。
+      expect(confirmBrowseSwitch).toHaveBeenCalledTimes(1);
     } finally {
       providersRef.providers = providersRef.DEFAULT_PROVIDERS;
     }
+  });
+
+  it('keeps the current Agent tab when pre-browse confirmation is canceled', async () => {
+    const confirmBrowseSwitch = vi.fn(async () => false);
+    render(
+      React.createElement(ModelSelectorContent, {
+        modelId: 'claude-opus-4-8',
+        effort: 'high',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+        agentSwitch: { currentVendor: 'cc', confirmBrowseSwitch, onSwitch: vi.fn() },
+      }),
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Codex/ }));
+    await waitFor(() => expect(confirmBrowseSwitch).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('tab', { name: /Claude/ }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: /Codex/ }).getAttribute('aria-selected')).toBe('false');
+    expect(screen.queryByText('newChat.modelSelector.agentSwitch.hint')).toBeNull();
+  });
+
+  it('keeps the expanded model panel open while Agent browse confirmation is shown', async () => {
+    let resolveConfirmation!: (confirmed: boolean) => void;
+    const confirmBrowseSwitch = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveConfirmation = resolve;
+        }),
+    );
+    render(
+      React.createElement(ModelSelector, {
+        modelId: 'claude-opus-4-8',
+        effort: 'high',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+        agentSwitch: { currentVendor: 'cc', confirmBrowseSwitch, onSwitch: vi.fn() },
+      }),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Current: Opus 4\.8/ }));
+    fireEvent.click(screen.getByRole('tab', { name: /Codex/ }));
+    await waitFor(() => expect(confirmBrowseSwitch).toHaveBeenCalledTimes(1));
+
+    // 模拟 AlertDialog 被 Popover 判成外部交互而发出的 close 请求；确认未结束时
+    // 面板仍留在原 Agent 页签，取消后也不发生关闭再打开的闪烁。
+    fireEvent.click(screen.getByTestId('mock-popover-dismiss'));
+    expect(screen.getByTestId('model-options-popover')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /Claude/ }).getAttribute('aria-selected')).toBe('true');
+
+    await act(async () => resolveConfirmation(false));
+    await waitFor(() => expect(screen.getByTestId('model-options-popover')).toBeTruthy());
+    expect(screen.getByRole('tab', { name: /Claude/ }).getAttribute('aria-selected')).toBe('true');
   });
 
   it('shares inactive model presets across conversations while protecting an active model', () => {

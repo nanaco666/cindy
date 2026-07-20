@@ -66,10 +66,7 @@ import {
   subscribeDraft as subscribeComposerDraft,
 } from '@/lib/composerDraftStore';
 import { ModelSelector, type ModelMemoryAccessors } from './ModelSelector';
-import {
-  confirmAgentSwitchRisk,
-  type AgentSwitchConfirmationReason,
-} from './agentSwitchConfirmation';
+import { confirmAgentSwitchRisk } from './agentSwitchConfirmation';
 import { isSelectedSourceDisconnected, resolveEffort, resolveProviderSwitchEffort } from './sourceSwitch';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { PermissionSelector } from './PermissionSelector';
@@ -3474,7 +3471,6 @@ export function ChatInput({
           {
             fastMode: enabled,
             effort: intent.effort as Effort | undefined,
-            confirmationReason: 'intent-preference-update',
           },
         );
         return;
@@ -3557,6 +3553,22 @@ export function ChatInput({
     byProvider: (providerId: string, modelId: string) => void | Promise<void>;
     byModel: (modelId: string) => void | Promise<void>;
   }>({ byProvider: () => {}, byModel: () => {} });
+  const confirmAgentBrowseSwitch = useCallback(
+    () =>
+      confirmAgentSwitchRisk({
+        // 意图存在 = 用户进入目标浏览态时已经确认过；改选与撤销均不重复弹。
+        hasSwitchIntent: !!sessionId && !!makerChatStore.getAgentSwitchIntent(sessionId),
+        confirm: confirmDialog,
+        copy: {
+          title: t('newChat.chatInput.agentSwitch.confirmation.title'),
+          description: t('newChat.chatInput.agentSwitch.confirmation.description'),
+          confirmText: t('newChat.chatInput.agentSwitch.confirmation.confirm'),
+          cancelText: t('newChat.chatInput.agentSwitch.confirmation.cancel'),
+          dontShowAgainLabel: t('newChat.chatInput.agentSwitch.confirmation.dontShowAgain'),
+        },
+      }),
+    [sessionId, confirmDialog, t],
+  );
   const performAgentSwitch = useCallback(
     async (
       targetAgentKind: 'claude-code' | 'codex',
@@ -3566,30 +3578,10 @@ export function ChatInput({
       overrides?: {
         effort?: Effort;
         fastMode?: boolean;
-        confirmationReason?: AgentSwitchConfirmationReason;
       },
     ) => {
       if (!sessionId) return;
       try {
-        // 首次选择另一家 Agent、以及意图期内改选目标模型/来源，都必须在向 main
-        // 登记意图前说明交接损失。选回原引擎是撤销意图，不弹；意图期只调
-        // effort / Fast 也不是再次确认切换。取消在任何派生/IPC/乐观状态写入前 return。
-        const existingIntent = makerChatStore.getAgentSwitchIntent(sessionId);
-        const confirmed = await confirmAgentSwitchRisk({
-          existingIntentTarget: existingIntent?.target,
-          targetAgentKind,
-          reason: overrides?.confirmationReason ?? 'model-selection',
-          confirm: confirmDialog,
-          copy: {
-            title: t('newChat.chatInput.agentSwitch.confirmation.title'),
-            description: t('newChat.chatInput.agentSwitch.confirmation.description'),
-            confirmText: t('newChat.chatInput.agentSwitch.confirmation.confirm'),
-            cancelText: t('newChat.chatInput.agentSwitch.confirmation.cancel'),
-            dontShowAgainLabel: t('newChat.chatInput.agentSwitch.confirmation.dontShowAgain'),
-          },
-        });
-        if (!confirmed) return;
-
         // effort 档按**目标引擎**目录解析(resolveModelEfforts 锚定当前引擎,
         // 同 id 模型两家档位可不同、目标独占模型在当前目录里查不到);浏览态
         // 悬浮面板写下的 per-(目标引擎,来源,模型) 预设在此恢复。
@@ -3693,7 +3685,6 @@ export function ChatInput({
       localProviders.providers,
       ccCaps.capabilities,
       codexCaps.capabilities,
-      confirmDialog,
     ],
   );
   // 声明顺序在 performAgentSwitch 之前的 handler(handleFastModeChange)经此 ref
@@ -3864,7 +3855,6 @@ export function ChatInput({
         void performAgentSwitch(intent.target, intent.model, intent.providerId, {
           effort: newEffort,
           fastMode: intent.fastMode,
-          confirmationReason: 'intent-preference-update',
         });
         return;
       }
@@ -4792,7 +4782,11 @@ export function ChatInput({
               // device-link / SSH 远程会话不传(v1 不支持切换)。
               agentSwitch={
                 sessionId && vendorKey && !deviceLinkDeviceId && !remoteHostId
-                  ? { currentVendor: vendorKey, onSwitch: performAgentSwitch }
+                  ? {
+                      currentVendor: vendorKey,
+                      confirmBrowseSwitch: confirmAgentBrowseSwitch,
+                      onSwitch: performAgentSwitch,
+                    }
                   : undefined
               }
               deviceId={deviceLinkDeviceId}

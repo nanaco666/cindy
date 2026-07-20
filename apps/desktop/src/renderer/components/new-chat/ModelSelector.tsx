@@ -273,12 +273,14 @@ interface ModelSelectorProps {
   /**
    * session-agent-switch:会话内显式两步切换引擎(先选 Agent,再选模型)。
    * 传入后列表顶部渲染 Claude / Codex 分段;切到非当前引擎的 tab 进入「浏览目标
-   * 引擎模型」态(带提示行,隐藏来源分段与 effort/Fast 配置入口),此时点模型行调
-   * onSwitch(而非 onModelChange),由调用方执行切换事务。切回当前引擎 tab 恢复原
-   * 行为。仅本机已建会话传入;草稿 / device-link / SSH 远程不传(v1 不支持切换)。
+   * 引擎模型」态(带提示行),此时点模型行调 onSwitch(而非 onModelChange),由调用方
+   * 执行切换事务。切回当前引擎 tab 恢复原行为。仅本机已建会话传入;草稿 /
+   * device-link / SSH 远程不传(v1 不支持切换)。
    */
   agentSwitch?: {
     currentVendor: 'cc' | 'codex';
+    /** 进入非当前 Agent 浏览态前确认；false 时保持原分段，什么都不改。 */
+    confirmBrowseSwitch?: () => Promise<boolean>;
     onSwitch: (
       targetAgentKind: 'claude-code' | 'codex',
       modelId: string,
@@ -321,6 +323,7 @@ interface ModelSelectorContentProps {
   /** 语义同 ModelSelectorProps.agentSwitch(显式两步引擎切换)。 */
   agentSwitch?: {
     currentVendor: 'cc' | 'codex';
+    confirmBrowseSwitch?: () => Promise<boolean>;
     onSwitch: (
       targetAgentKind: 'claude-code' | 'codex',
       modelId: string,
@@ -361,6 +364,21 @@ export function ModelSelectorContent({
   const [browseVendor, setBrowseVendor] = useState<'cc' | 'codex'>(
     agentSwitch?.currentVendor ?? vendorKey ?? 'cc',
   );
+  const browseSwitchPendingRef = useRef(false);
+  const handleBrowseVendorChange = async (next: 'cc' | 'codex') => {
+    if (next === browseVendor || browseSwitchPendingRef.current) return;
+    // 返回当前引擎（含已有意图时浏览原引擎准备撤销）不需要确认；只有从
+    // currentVendor 进入另一 Agent 浏览态才调用上层风险确认。确认前绝不翻分段。
+    if (agentSwitch && next !== agentSwitch.currentVendor && agentSwitch.confirmBrowseSwitch) {
+      browseSwitchPendingRef.current = true;
+      try {
+        if (!(await agentSwitch.confirmBrowseSwitch())) return;
+      } finally {
+        browseSwitchPendingRef.current = false;
+      }
+    }
+    setBrowseVendor(next);
+  };
   // 会话引擎在外部变化(切换完成 / 换会话)时重置浏览态,跟随新的当前引擎。
   useEffect(() => {
     if (agentSwitch) setBrowseVendor(agentSwitch.currentVendor);
@@ -1064,7 +1082,7 @@ export function ModelSelectorContent({
         <>
           <VendorSegmentedSwitcher
             value={browseVendor}
-            onChange={(next) => setBrowseVendor(next === 'codex' ? 'codex' : 'cc')}
+            onChange={(next) => void handleBrowseVendorChange(next === 'codex' ? 'codex' : 'cc')}
             dense
             width={304}
             className="mx-auto"
@@ -1199,6 +1217,27 @@ export function ModelSelector({
 }: ModelSelectorProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [keepOpenForAgentConfirmation, setKeepOpenForAgentConfirmation] = useState(false);
+
+  // AlertDialog 打开时会被 Popover 视作外部交互并请求关闭。Agent 分段确认期间
+  // 强制保留已展开的模型面板；确认结束后把底层 open 恢复为 true，避免弹窗关闭
+  // 时的焦点回落再次把面板收掉。模型行确认及其它消费者不经过这层包装。
+  const contentAgentSwitch = useMemo(() => {
+    const confirmBrowseSwitch = agentSwitch?.confirmBrowseSwitch;
+    if (!confirmBrowseSwitch) return agentSwitch;
+    return {
+      ...agentSwitch,
+      confirmBrowseSwitch: async () => {
+        setKeepOpenForAgentConfirmation(true);
+        try {
+          return await confirmBrowseSwitch();
+        } finally {
+          setOpen(true);
+          setKeepOpenForAgentConfirmation(false);
+        }
+      },
+    };
+  }, [agentSwitch]);
 
   const agentKind = vendorKeyToAgentKind(vendorKey);
   const cc = useAgentCapabilities('claude-code', deviceId);
@@ -1332,7 +1371,10 @@ export function ModelSelector({
     : undefined;
 
   return (
-    <Popover open={open && !disabled} onOpenChange={(next) => setOpen(disabled ? false : next)}>
+    <Popover
+      open={(open || keepOpenForAgentConfirmation) && !disabled}
+      onOpenChange={(next) => setOpen(disabled ? false : next)}
+    >
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -1558,7 +1600,7 @@ export function ModelSelector({
           onProviderChange={onProviderChange}
           onNavigateToProviders={onNavigateToProviders}
           configurationEnabled={configurationEnabled}
-          agentSwitch={agentSwitch}
+          agentSwitch={contentAgentSwitch}
           followSession={
             fallbackOption
               ? {
