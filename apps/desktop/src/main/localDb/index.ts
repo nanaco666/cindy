@@ -59,6 +59,7 @@ import {
   type SchemaMigrationLease,
 } from './schemaMigrationLease';
 import { runSchemaStartupPolicy } from './schemaStartupPolicy';
+import { buildSharedDbCompatibilityMessage } from './sharedDbCompatibilityMessage';
 
 import { createLogger } from '../logger';
 
@@ -296,21 +297,7 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
     });
     if (!schemaStartup.ready) {
       const compatibility = schemaStartup.compatibility;
-      const issueSummary = compatibility.issues
-        .slice(0, 3)
-        .map((issue) => issue.kind)
-        .join(', ');
-      const databaseIsAhead = compatibility.issues.some(
-        (issue) => issue.kind === 'schema-version-ahead',
-      );
-      const message =
-        `共享数据已是 schema ${compatibility.databaseVersion}，而此开发版只支持到 ` +
-        `${compatibility.checkoutVersion}。为保护数据，Cindy 没有打开它。` +
-        (databaseIsAhead
-          ? '请使用包含该 schema 的 checkout 启动开发版；重启或把当前 checkout 设为 primary 都不会降级数据库。'
-          : '请先关闭共享数据的 passive 实例，再用当前 checkout 作为 primary 完成迁移。') +
-        '如只需隔离测试，可改用 --isolated。' +
-        `（详情：${issueSummary || 'unknown'}）`;
+      const message = buildSharedDbCompatibilityMessage(compatibility);
       log.error(
         JSON.stringify({
           event: 'localDb.ensureReady.passiveMigrationMismatch',
