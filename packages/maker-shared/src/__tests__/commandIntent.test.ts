@@ -421,6 +421,12 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
     expect(commandIntentFromCommand('git commit --amend --no-edit')).toBeUndefined();
     expect(commandIntentFromCommand('git push --force-with-lease origin feature')).toBeUndefined();
     expect(commandIntentFromCommand('git push origin --delete old-branch')).toBeUndefined();
+    expect(commandIntentFromCommand("git rebase --exec 'rm -rf /tmp/generated' origin/main")).toBeUndefined();
+    expect(commandIntentFromCommand("git rebase --exec='rm -rf /tmp/generated' origin/main")).toBeUndefined();
+    expect(commandIntentFromCommand("git rebase -x 'rm -rf /tmp/generated' origin/main")).toBeUndefined();
+    expect(commandIntentFromCommand("git rebase -x'rm -rf /tmp/generated' origin/main")).toBeUndefined();
+    expect(commandIntentFromCommand("git submodule foreach 'git reset --hard'")).toBeUndefined();
+    expect(commandIntentFromCommand("git submodule --quiet foreach --recursive 'rm -rf build'")).toBeUndefined();
     expect(commandIntentFromCommand('git reset --hard HEAD~1')).toBeUndefined();
     expect(commandIntentFromCommand('git branch new-feature')).toBeUndefined();
     expect(commandIntentFromCommand('git branch -D old-feature')).toBeUndefined();

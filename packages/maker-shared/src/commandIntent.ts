@@ -968,6 +968,25 @@ function gitGrepIsReadOnly(args: string[]): boolean {
   );
 }
 
+function gitRebaseInvokesShell(args: string[]): boolean {
+  for (const token of args) {
+    if (token === '--') return false;
+    if (
+      token === '--exec' ||
+      token.startsWith('--exec=') ||
+      token === '-x' ||
+      token.startsWith('-x')
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function gitSubmoduleInvokesShell(args: string[]): boolean {
+  return cliSubcommand(args, new Set([]))?.name === 'foreach';
+}
+
 function gitIntent(rest: string[]): CommandIntent | undefined {
   const subcommand = cliSubcommand(rest, GIT_GLOBAL_VALUE_FLAGS);
   if (!subcommand) return undefined;
@@ -1011,7 +1030,7 @@ function gitIntent(rest: string[]): CommandIntent | undefined {
       }
       return { action: 'gitPush' };
     case 'rebase':
-      return { action: 'gitRebase' };
+      return gitRebaseInvokesShell(subcommand.args) ? undefined : { action: 'gitRebase' };
     case 'merge':
       return { action: 'gitMerge' };
     case 'cherry-pick':
@@ -1021,7 +1040,7 @@ function gitIntent(rest: string[]): CommandIntent | undefined {
     case 'restore':
       return { action: 'gitRestore' };
     case 'submodule':
-      return { action: 'gitSubmodule' };
+      return gitSubmoduleInvokesShell(subcommand.args) ? undefined : { action: 'gitSubmodule' };
     case 'remote':
       return gitRemoteIsReadOnly(subcommand.args) ? { action: 'gitRemote' } : undefined;
     case 'rev-parse':
