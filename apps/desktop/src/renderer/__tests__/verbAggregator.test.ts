@@ -58,6 +58,7 @@ describe('verbForTool', () => {
   it('maps the canonical tools', () => {
     expect(verbForTool('Edit')).toBe('edited');
     expect(verbForTool('MultiEdit')).toBe('edited');
+    expect(verbForTool('file_change')).toBe('edited');
     expect(verbForTool('Write')).toBe('created');
     expect(verbForTool('Bash')).toBe('ran');
     expect(verbForTool('exec')).toBe('ran');

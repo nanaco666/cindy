@@ -273,9 +273,26 @@ type ForkOriginRenderItem = {
   forkedAtMessageId: string;
 };
 
-/** work_group 子项的窄类型 — groupWorkRuns 的 isWorkChild 类型守卫保证
- *  children 只会是 tool_segment / agent_task / thinking / 中间 assistant 正文。 */
+/** 原子工作子项:tool / agent task / thinking / assistant 工作文字。 */
 export type WorkChildItem = ToolSegmentRenderItem | AgentTaskRenderItem | MessageRenderItem;
+
+/** work_group 可以嵌套一层:完成态外组装 assistant 文字时间线,其中每段
+ *  连续动作仍是独立的内层「已工作 Xs」。内层继续只收原子工作子项。 */
+type WorkGroupChildItem = WorkChildItem | WorkGroupRenderItem;
+
+interface WorkGroupRenderItem {
+  /** work-group:运行中的连续动作段,或完成态收拢整段工作文字的外层时间线。
+   *  动作段展开后直接显示思考 / 工具行;外层展开后显示 assistant 文字和
+   *  仍保持折叠的内层动作段。tool_media 不参与合并,继续留在组外可见。 */
+  type: 'work_group';
+  key: string;
+  children: WorkGroupChildItem[];
+  durationMs?: number;
+  /** 当前是否是仍在执行的尾部动作段。完成态时间线始终 false。 */
+  isStreaming: boolean;
+  /** 工作段首个真实活动的 epoch ms,供 live elapsed ticker 使用。 */
+  startedAtMs?: number;
+}
 
 export type RenderItem =
   | MessageRenderItem
@@ -319,19 +336,7 @@ export type RenderItem =
        *  留在轮询调用处。仅同 ghostId 的结果可锚入;无回锚时字段缺省。 */
       media?: ToolMediaItem[];
     }
-  | {
-      /** work-group: 一段工作过程,在最终 assistant 正文出现(或会话结束流式)
-       *  后折叠成一行「已工作 Xs ›」摘要(WorkGroupBlock)。children 复用现有
-       *  tool/thinking 折叠,并可包含最终正文前的中间 assistant 正文。
-       *  tool_media 不参与合并,产物继续留在折叠块外可见。
-       *  key 派生自首个子项的消息 clientId(`work-${clientId}`),与子项 key 同源
-       *  稳定。durationMs 是 run 首消息 createdAt → 终结正文消息 createdAt 的
-       *  墙钟跨度;历史数据缺时间戳时为 undefined(UI 显示不带时长的文案)。 */
-      type: 'work_group';
-      key: string;
-      children: WorkChildItem[];
-      durationMs?: number;
-    };
+  | WorkGroupRenderItem;
 
 function isRenderWindowBoundaryItem(item: RenderItem | undefined): boolean {
   return item?.type === 'fork_origin'
@@ -615,13 +620,10 @@ function recoverLostAnchorIdx(items: RenderItem[], lostKey: string): number {
     } else if (it.type === 'agent_task') {
       if (it.toolCall?.clientId === lostCid) return i;
     } else if (it.type === 'work_group') {
-      // work_group 吸收了原 tool_segment / thinking message item — 老锚点
-      // (`seg-${cid}` / `msg-${cid}`)对应的 clientId 现在被 group 覆盖。
+      // work_group 可能嵌套完成态时间线 — 老锚点(`seg-${cid}` /
+      // `msg-${cid}` / `work-${cid}`)递归落到任一后代即由外组接住。
       if (it.key === lostKey || it.key.endsWith(`-${lostCid}`)) return i;
-      for (const child of it.children) {
-        if (child.type === 'message' && child.message.clientId === lostCid) return i;
-        if (child.type === 'tool_segment' && child.toolCalls.some((tc) => tc.clientId === lostCid)) return i;
-      }
+      if (renderItemContainsClientId(it, lostCid)) return i;
     } else if (it.type !== 'fork_origin') {
       // tool_media / agent_plan:其 key 派生自 stable message clientId,精确后缀匹配
       if (it.key === lostKey || it.key.endsWith(`-${lostCid}`)) return i;
@@ -1153,7 +1155,9 @@ export function buildRenderItems(
 // Work-group pass(buildRenderItems 之后的第二层后处理)
 // ---------------------------------------------------------------------------
 
-/** work_group 可合并的子项:tool_segment / agent_task / thinking / 中间 assistant。 */
+/** 完成态 work_group 可合并的子项:tool_segment / agent_task / thinking /
+ *  assistant 工作文字。运行态只通过 isWorkActivityItem 收动作,所以不会提前
+ *  折叠正在输出的 assistant 文字。 */
 function isWorkChild(it: RenderItem): it is WorkChildItem {
   return (
     it.type === 'tool_segment'
@@ -1179,6 +1183,19 @@ function isRunningAgentTask(it: RenderItem): boolean {
   return status === 'running';
 }
 
+/** preview 中计为一条真实活动的 render item。assistant 进度文字
+ *  始终留在主消息流,不占最近 5 条活动窗口。 */
+function isWorkActivityItem(it: RenderItem): it is WorkChildItem {
+  return (
+    !isRunningAgentTask(it)
+    && (
+      it.type === 'tool_segment'
+      || it.type === 'agent_task'
+      || (it.type === 'message' && it.message.role === 'thinking')
+    )
+  );
+}
+
 /** 最终可见正文候选:同一用户 turn 内最后一条普通 assistant 文本。 */
 function isAssistantAnswerCandidate(it: RenderItem): it is MessageRenderItem {
   return (
@@ -1187,11 +1204,6 @@ function isAssistantAnswerCandidate(it: RenderItem): it is MessageRenderItem {
     && !it.message.systemCardType
     && it.message.content.trim().length > 0
   );
-}
-
-/** thinking 消息 render item。 */
-function isThinkingItem(it: RenderItem): it is MessageRenderItem {
-  return it.type === 'message' && it.message.role === 'thinking';
 }
 
 /** 子项的稳定 clientId(group key 派生用)。 */
@@ -1204,6 +1216,15 @@ function workChildClientId(it: WorkChildItem): string {
       ?? (it.key.startsWith('task-update-') ? it.key.slice('task-update-'.length) : it.key);
   }
   return it.message.clientId;
+}
+
+/** group 的身份锚在首个真实活动(tool / thinking / agent task)。
+ *  完成后的合并组沿用第一段的锚点,保持该段的手动展开态。 */
+function workGroupClientId(run: WorkChildItem[]): string {
+  const firstActivity = run.find((it) => (
+    it.type !== 'message' || it.message.role === 'thinking'
+  ));
+  return workChildClientId(firstActivity ?? run[0]);
 }
 
 function renderItemContainsClientId(item: RenderItem, clientId: string): boolean {
@@ -1313,8 +1334,12 @@ function workRunFallbackEndTs(run: WorkChildItem[]): number | null {
 function createWorkGroup(
   run: WorkChildItem[],
   nextItem: RenderItem | undefined,
+  isStreaming = false,
 ): Extract<RenderItem, { type: 'work_group' }> {
-  const startTs = workRunStartTs(run[0]);
+  const firstActivity = run.find((it) => (
+    it.type !== 'message' || it.message.role === 'thinking'
+  ));
+  const startTs = workRunStartTs(firstActivity ?? run[0]);
   const endTs =
     nextItem && nextItem.type === 'message'
       ? messageTs(nextItem.message)
@@ -1323,46 +1348,102 @@ function createWorkGroup(
     startTs !== null && endTs !== null && endTs >= startTs ? endTs - startTs : undefined;
   return {
     type: 'work_group',
-    key: `work-${workChildClientId(run[0])}`,
+    key: `work-${workGroupClientId(run)}`,
     children: run,
     durationMs,
+    isStreaming,
+    ...(startTs !== null ? { startedAtMs: startTs } : {}),
   };
 }
 
-function groupLegacyWorkRuns(items: RenderItem[], isSessionStreaming: boolean): RenderItem[] {
-  let lastTextIdx = -1;
-  for (let i = items.length - 1; i >= 0; i--) {
-    const item = items[i];
-    if (item.type === 'message' && item.message.role !== 'thinking') {
-      lastTextIdx = i;
-      break;
-    }
-  }
+/** 完成态时间线:assistant 工作文字直接成为外组子项,文字之间的连续动作
+ *  继续复用 createWorkGroup 生成内层「已工作 Xs」。外组使用独立 key,
+ *  避免与第一段动作共享展开记忆;内组 key 保持不变,从运行中到完成后连续。 */
+function createCompletedWorkGroup(
+  run: WorkChildItem[],
+  nextItem: RenderItem | undefined,
+): WorkGroupRenderItem {
+  const hasAssistantText = run.some(
+    (item) => item.type === 'message' && item.message.role === 'assistant',
+  );
+  if (!hasAssistantText) return createWorkGroup(run, nextItem);
 
+  const children: WorkGroupChildItem[] = [];
+  let activityRun: WorkChildItem[] = [];
+  const flushActivityRun = (activityNextItem: RenderItem | undefined) => {
+    if (activityRun.length === 0) return;
+    children.push(createWorkGroup(activityRun, activityNextItem));
+    activityRun = [];
+  };
+
+  for (const item of run) {
+    if (isWorkActivityItem(item)) {
+      activityRun.push(item);
+      continue;
+    }
+    flushActivityRun(item);
+    children.push(item);
+  }
+  flushActivityRun(nextItem);
+
+  const outer = createWorkGroup(run, nextItem);
+  return {
+    ...outer,
+    key: `work-summary-${workGroupClientId(run)}`,
+    children,
+    isStreaming: false,
+  };
+}
+
+function groupLegacyWorkRuns(items: RenderItem[]): RenderItem[] {
   const out: RenderItem[] = [];
   let run: WorkChildItem[] = [];
-  let runLastIdx = -1;
 
   const flushRun = (nextItem: RenderItem | undefined) => {
     if (run.length === 0) return;
-    const shouldCollapse = !isSessionStreaming || runLastIdx < lastTextIdx;
-    if (shouldCollapse) out.push(createWorkGroup(run, nextItem));
-    else out.push(...run);
+    out.push(createWorkGroup(run, nextItem));
     run = [];
   };
 
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
     // 运行中的子 Agent 不算可折叠 child —— 触发 flushRun 折掉它之前的 run,
-    // 自身平铺,不被 shouldCollapse 卷入「已工作 Xs」(见 isRunningAgentTask)。
-    const isLegacyChild =
-      !isRunningAgentTask(it)
-      && (
-        it.type === 'tool_segment'
-        || it.type === 'agent_task'
-        || (it.type === 'message' && it.message.role === 'thinking')
-      );
-    if (isLegacyChild) {
+    // 自身平铺,不被卷入「已工作 Xs」(见 isRunningAgentTask)。
+    if (isWorkActivityItem(it)) {
+      run.push(it);
+    } else {
+      flushRun(it);
+      out.push(it);
+    }
+  }
+  flushRun(undefined);
+  return out;
+}
+
+/** Active turn 专用分组:
+ *  - assistant 文字始终作为普通 message 留在主消息流;
+ *  - 文字是动作组的分段边界:新文字一出现,前一段立即变为已完成;
+ *  - 最后一段之后还没有 assistant 文字时,该段才标成 streaming,
+ *    默认显示 latest-five preview。
+ */
+function groupActiveWorkRuns(items: RenderItem[]): RenderItem[] {
+  let lastAssistantTextIdx = -1;
+  for (let i = 0; i < items.length; i++) {
+    if (isAssistantAnswerCandidate(items[i])) lastAssistantTextIdx = i;
+  }
+
+  const out: RenderItem[] = [];
+  let run: WorkChildItem[] = [];
+  let runLastIdx = -1;
+  const flushRun = (nextItem: RenderItem | undefined) => {
+    if (run.length === 0) return;
+    out.push(createWorkGroup(run, nextItem, runLastIdx > lastAssistantTextIdx));
+    run = [];
+  };
+
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    if (isWorkActivityItem(it)) {
       run.push(it);
       runLastIdx = i;
     } else {
@@ -1375,14 +1456,15 @@ function groupLegacyWorkRuns(items: RenderItem[], isSessionStreaming: boolean): 
 }
 
 /**
- * 已结束的 turn:把工作过程折成「已工作 Xs」,但保留这些"可见锚点"留在主消息流:
- *   1. 最终普通 assistant 正文(最后一条);
- *   2. 最后一段 thinking **之后**的所有 assistant 正文 —— 即"答复阶段"的文字。
- *      thinking 本身仍折进「已工作」,但它之后写给用户的正文不该被一并折掉,否则
- *      引用上文的结尾句(如「等你确认第 1 点」)会变成看不到上文的无头句。
- * 最后一段 thinking 之前 / 之内的 thinking / 工具 / 中间正文照折。
- * 没有最终正文(被中断 / 停在工具)时返回 handled:false,交回 groupLegacyWorkRuns
- * 兜底折叠(维持原行为)。tool_media 等非 work child 一律留可见。
+ * 已结束的 turn:最终答复阶段之前的 assistant 工作文字收入外层
+ * 「已工作 Xs」;文字之间的 tool / thinking / 已结束 agent task 仍各自
+ * 聚成内层「已工作 Xs」。最后一个真实动作之后
+ * 连续输出的 assistant 文字视为最终答复阶段,留在组外;若整轮没有真实动作,
+ * 只保留最后一条 assistant 正文,此前文字仍视作工作过程。
+ *
+ * 没有最终正文(被中断 / 停在工具)或最终正文后仍有已完成动作时返回
+ * handled:false,交回 groupLegacyWorkRuns 按连续动作折叠。tool_media /
+ * agent_plan /运行中子 Agent 等非可归档项保持可见,并作为顺序锚点切开工作组。
  */
 function groupAnsweredTurnItems(
   turnItems: RenderItem[],
@@ -1396,31 +1478,48 @@ function groupAnsweredTurnItems(
   }
   if (lastAnswerIdx < 0) return { items: turnItems, handled: false };
 
-  let lastThinkingIdx = -1;
-  for (let i = turnItems.length - 1; i >= 0; i--) {
-    if (isThinkingItem(turnItems[i])) {
-      lastThinkingIdx = i;
+  const hasWorkAfterLastAnswer = turnItems.some(
+    (item, index) =>
+      index > lastAnswerIdx && isWorkActivityItem(item),
+  );
+  if (hasWorkAfterLastAnswer) return { items: turnItems, handled: false };
+
+  let lastWorkActivityIdx = -1;
+  for (let i = lastAnswerIdx - 1; i >= 0; i--) {
+    if (isWorkActivityItem(turnItems[i])) {
+      lastWorkActivityIdx = i;
       break;
+    }
+  }
+
+  // 最后一个真实动作之后连续输出的多段 assistant 正文共同构成最终答复。
+  // 没有真实动作时只保留最后一条,避免 assistant-only 的工作进度永远散在外面。
+  let finalAnswerStartIdx = lastAnswerIdx;
+  if (lastWorkActivityIdx >= 0) {
+    while (
+      finalAnswerStartIdx > lastWorkActivityIdx + 1
+      && isAssistantAnswerCandidate(turnItems[finalAnswerStartIdx - 1])
+    ) {
+      finalAnswerStartIdx--;
     }
   }
 
   const out: RenderItem[] = [];
   let run: WorkChildItem[] = [];
+
   const flushRun = (nextItem: RenderItem | undefined) => {
     if (run.length === 0) return;
-    out.push(createWorkGroup(run, nextItem));
+    out.push(createCompletedWorkGroup(run, nextItem));
     run = [];
   };
 
   for (let i = 0; i < turnItems.length; i++) {
     const it = turnItems[i];
-    // 可见:最终正文,或"最后一段 thinking 之后"的任意 assistant 正文,
-    // 或仍在运行的子 Agent 卡片(未完成不折进「已工作 Xs」)。
-    const isVisibleAnchor =
-      i === lastAnswerIdx
-      || (lastThinkingIdx >= 0 && i > lastThinkingIdx && isAssistantAnswerCandidate(it))
-      || isRunningAgentTask(it);
-    if (!isVisibleAnchor && isWorkChild(it)) {
+    const isFinalAnswerItem =
+      i >= finalAnswerStartIdx
+      && i <= lastAnswerIdx
+      && isAssistantAnswerCandidate(it);
+    if (!isFinalAnswerItem && !isRunningAgentTask(it) && isWorkChild(it)) {
       run.push(it);
     } else {
       flushRun(it);
@@ -1566,17 +1665,18 @@ function renderWorkGroupChild(
 /**
  * 把每个 user turn 内最终 assistant 正文前的工作过程聚成 work_group item。
  *
- * 新规则:同一 turn 内如果已经有最终普通 assistant 文本,它之前的 thinking /
- * tool_segment / 中间 assistant 文本折叠为「已工作 Xs」,把最终文本留在
- * 主消息流;并额外把"最后一段 thinking 之后"的 assistant 正文也留可见(答复阶段
- * 的文字,避免引用上文的结尾句因上文被折而变无头句)。tool_media 不参与折叠。
+ * 新规则:assistant 文字在运行中始终持续可见,不进最近 5 条动作窗口;
+ * 每次文字出现都结束前一个 live 动作片段,后续动作重新开一组。
+ * turn 结束后,最终答复阶段之前的 assistant 工作文字收入外层「已工作 Xs」,
+ * 各段动作仍是内层「已工作 Xs」并保持原始顺序。tool_media 不参与折叠。
  *
- * 兼容旧规则:如果 turn 里还没有最终文本(例如正在流式执行),继续只折叠旧的
- * tool_segment + thinking run;正在进行中的尾部 run 保持平铺,turn 结束后兜底折叠。
+ * 兼容旧规则:如果 turn 里还没有最终文本(例如正在流式执行),继续按连续的
+ * tool_segment + thinking run 分组;正在进行中的尾部 run 也立即成为 work_group,
+ * 默认仅展示最近 5 条活动,不再把所有卡片平铺到消息流。
  *
- * key 稳定性:group key = `work-${首子项消息 clientId}` — 与子项 key 同源,
- * 流式期间 run 平铺(子项自身 key),折叠瞬间切换为 group key;DB prepend 向前
- * 合并等场景由 recoverLostAnchorIdx 的 work_group 分支兜底找回锚点。
+ * key 稳定性:动作段始终使用首个真实活动 clientId,所以从 live 到完成后的
+ * 内层组 key 不变;完成态外组另用 `work-summary-*`,避免复用展开记忆。
+ * DB prepend 向前合并等场景由 recoverLostAnchorIdx 递归找回锚点。
  *
  * export 仅供单测使用。
  */
@@ -1587,10 +1687,13 @@ export function groupWorkRuns(items: RenderItem[], isSessionStreaming: boolean):
   const flushTurn = (isActiveTail: boolean) => {
     if (currentTurn.length === 0) return;
     const activeStreaming = isActiveTail && isSessionStreaming;
-    const grouped = activeStreaming
-      ? { items: currentTurn, handled: false }
-      : groupAnsweredTurnItems(currentTurn);
-    out.push(...(grouped.handled ? grouped.items : groupLegacyWorkRuns(currentTurn, activeStreaming)));
+    if (activeStreaming) {
+      out.push(...groupActiveWorkRuns(currentTurn));
+      currentTurn = [];
+      return;
+    }
+    const grouped = groupAnsweredTurnItems(currentTurn);
+    out.push(...(grouped.handled ? grouped.items : groupLegacyWorkRuns(currentTurn)));
     currentTurn = [];
   };
 
@@ -2951,35 +3054,54 @@ export function MessageStream({
               }
 
               if (item.type === 'work_group') {
-                // 折叠的工作过程组 — children 是 WorkChildItem(tool_segment /
-                // agent_task / thinking message / 中间正文),类型系统保证;映射成 WorkGroupBlock 的窄
-                // 类型,保持组件与 RenderItem 解耦。
-                const childItems: WorkGroupChild[] = item.children.map((c) =>
-                  c.type === 'tool_segment'
-                    ? { kind: 'tools' as const, key: c.key, toolCalls: c.toolCalls, resultMap: c.resultMap }
-                    : c.type === 'message' && c.message.role === 'thinking'
-                      ? { kind: 'thinking' as const, key: c.key, message: c.message }
-                      : {
-                          kind: 'rendered' as const,
-                          key: c.key,
-                          renderNode: () =>
-                            renderWorkGroupChild(c, {
-                              workingDir,
-                              sessionId,
-                              sessionTitle,
-                              agentKind,
-                              remoteHostId,
-                              isSessionStreaming,
-                              firstUserMessageClientId,
-                              lastUserMessageClientId,
-                              localFileRefs,
-                              singleResultMap,
-                              assistantsWithFollowingUserBoundary,
-                              turnFinalAssistantClientIds,
-                              subagentModelByToolUseId,
-                            }),
-                        },
-                );
+                // 完成态外层时间线可包含内层 work_group。递归只负责形状映射,
+                // 具体折叠 / 直接详情逻辑全部复用 WorkGroupBlock。
+                const toWorkGroupChild = (child: WorkGroupChildItem): WorkGroupChild => {
+                  if (child.type === 'work_group') {
+                    return {
+                      kind: 'group',
+                      key: child.key,
+                      blockId: `work:${child.key.slice('work-'.length)}`,
+                      durationMs: child.durationMs,
+                      isStreaming: child.isStreaming,
+                      startedAtMs: child.startedAtMs,
+                      childItems: child.children.map(toWorkGroupChild),
+                    };
+                  }
+                  if (child.type === 'tool_segment') {
+                    return {
+                      kind: 'tools',
+                      key: child.key,
+                      toolCalls: child.toolCalls,
+                      resultMap: child.resultMap,
+                      settledIds: child.settledIds,
+                    };
+                  }
+                  if (child.type === 'message' && child.message.role === 'thinking') {
+                    return { kind: 'thinking', key: child.key, message: child.message };
+                  }
+                  return {
+                    kind: 'rendered',
+                    key: child.key,
+                    renderNode: () =>
+                      renderWorkGroupChild(child, {
+                        workingDir,
+                        sessionId,
+                        sessionTitle,
+                        agentKind,
+                        remoteHostId,
+                        isSessionStreaming,
+                        firstUserMessageClientId,
+                        lastUserMessageClientId,
+                        localFileRefs,
+                        singleResultMap,
+                        assistantsWithFollowingUserBoundary,
+                        turnFinalAssistantClientIds,
+                        subagentModelByToolUseId,
+                      }),
+                  };
+                };
+                const childItems = item.children.map(toWorkGroupChild);
                 return (
                   <WorkGroupBlock
                     key={item.key}
@@ -2987,6 +3109,8 @@ export function MessageStream({
                     // 去掉 `work-` 后拼 `<role>:<id>`,与 agent: / thinking: 同构。
                     blockId={`work:${item.key.slice('work-'.length)}`}
                     durationMs={item.durationMs}
+                    isStreaming={item.isStreaming}
+                    startedAtMs={item.startedAtMs}
                     childItems={childItems}
                   />
                 );

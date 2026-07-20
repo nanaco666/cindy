@@ -11,9 +11,9 @@
  *       state machine.
  *   F10 MessageStream wraps render items in `gap-3.5` (= 14 px), exactly
  *       half of the v1 `gap-7` (28 px).
- *   F11 AgentActionRow renders Edit/Write/MultiEdit/Read file paths as a
- *       real **chip** (chat-input-chip-* tokens) and routes activation to
- *       a Lightbox — not an inline 2nd-level expand.
+ *   F11 AgentActionRow renders Claude and Codex single-file actions as a real
+ *       **chip** (chat-input-chip-* tokens) and routes edits to one shared
+ *       Lightbox — not an inline 2nd-level expand.
  *   F12 Other tools (Bash/Grep/...) toggle inline input/output details,
  *       not the payload Lightbox.
  */
@@ -113,10 +113,12 @@ describe('F11 — file chip + diff lightbox', () => {
     expect(rowSrc).not.toMatch(/RowJsonBody/);
   });
 
-  it('Edit / Write / MultiEdit route to ToolPayloadLightbox in diff mode', () => {
+  it('Claude Edit / Write / MultiEdit and Codex file_change share diff mode', () => {
     expect(rowSrc).toMatch(/buildDiffPayload/);
     expect(rowSrc).toMatch(/kind:\s*'diff'/);
+    expect(rowSrc).toMatch(/rawDiff:\s*change\.diff/);
     expect(rowSrc).toMatch(/ToolPayloadLightbox/);
+    expect(rowSrc).not.toMatch(/FileChangeDetails/);
   });
 
   it('Read tool routes to TextLightbox', () => {
@@ -142,13 +144,14 @@ describe('F12 — non-file tools → inline details', () => {
     expect(rowSrc).toMatch(/formatInlineInput/);
   });
 
-  it('AgentActionRow uses displayCommand for command display without replacing raw command', () => {
+  it('AgentActionRow prefers displayCommand and normalizes historical raw wrappers', () => {
     // issue #450: 行主文案改走 maker-shared 的 describeToolUse(displayCommand
     // 优先逻辑在共享层,由 toolUseDescriptor.test.ts 覆盖);就地展开区仍走
     // commandDisplayText 保留命令原文。
     expect(rowSrc).toMatch(/function commandDisplayText/);
     expect(rowSrc).toMatch(/inp\.displayCommand/);
     expect(rowSrc).toMatch(/inp\.command/);
+    expect(rowSrc).toMatch(/normalizeDisplayCommand\(inp\.command\)/);
     expect(rowSrc).toMatch(/const cmd = commandDisplayText\(inp\)/);
     expect(rowSrc).toMatch(/describeToolUse/);
   });
@@ -157,6 +160,7 @@ describe('F12 — non-file tools → inline details', () => {
     expect(toolPayloadSrc).toMatch(/kind:\s*'diff'/);
     expect(toolPayloadSrc).toMatch(/kind:\s*'json'/);
     expect(toolPayloadSrc).toMatch(/<DiffView/);
+    expect(toolPayloadSrc).toMatch(/<MarkdownDiffBlock/);
     expect(toolPayloadSrc).toMatch(/e\.key\s*===\s*'Escape'/);
     expect(toolPayloadSrc).toMatch(/onClick=\{handleClose\}/);
   });
@@ -169,7 +173,7 @@ describe('F12 — non-file tools → inline details', () => {
     expect(buildDiffPayloadBlock).toContain("key: 'write:0'");
     expect(buildDiffPayloadBlock).toMatch(/edits\.map\(\(e, index\) =>/);
     expect(buildDiffPayloadBlock).toMatch(/key:\s*`edit:\$\{index\}`/);
-    expect(toolPayloadSrc).toContain('key={d.key}');
+    expect(toolPayloadSrc).toContain('key={diff.key}');
   });
 });
 
