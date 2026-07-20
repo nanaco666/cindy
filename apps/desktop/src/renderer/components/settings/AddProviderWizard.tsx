@@ -174,10 +174,15 @@ export function AddProviderWizard({
     | { status: 'fetching' }
     | { status: 'done'; failed: boolean }
   >({ status: 'idle' });
-  /** 勾选清单:id → { name, checked, recommended }。Map 保序(推荐在前,拉取新增在后)。 */
-  const [picks, setPicks] = useState<Map<string, { name: string; checked: boolean; recommended: boolean }>>(
-    new Map(),
-  );
+  /**
+   * 勾选清单:id → { name, checked, recommended, agents }。Map 保序(推荐在前,拉取新增在后)。
+   * agents = 该模型归属的 runtime:预设推荐模型归属「预设里列出它的那些 runtime」;拉取新增
+   * 归属「实际返回它的那个端点的 runtime」——完成创建时按归属分发,**不**把统一列表复制进
+   * 每个 runtime(双 runtime 预设两端模型集可以不同,cc-only 模型不能写进 codex,反之亦然)。
+   */
+  const [picks, setPicks] = useState<
+    Map<string, { name: string; checked: boolean; recommended: boolean; agents: AgentKind[] }>
+  >(new Map());
 
   useEffect(() => {
     let cancelled = false;
@@ -287,11 +292,19 @@ export function AddProviderWizard({
   const startFetch = useCallback(async () => {
     if (!sel || sel.kind !== 'preset') return;
     const preset = sel.preset;
-    // 预设推荐模型先入清单(预勾)。
-    const initial = new Map<string, { name: string; checked: boolean; recommended: boolean }>();
+    // 预设推荐模型先入清单(预勾);归属 = 预设里列出该模型的全部 runtime。
+    const initial = new Map<
+      string,
+      { name: string; checked: boolean; recommended: boolean; agents: AgentKind[] }
+    >();
     for (const agent of Object.keys(preset.runtimes) as AgentKind[]) {
       for (const m of preset.runtimes[agent]?.models ?? []) {
-        if (!initial.has(m.id)) initial.set(m.id, { name: m.name, checked: true, recommended: true });
+        const existing = initial.get(m.id);
+        if (existing) {
+          if (!existing.agents.includes(agent)) existing.agents.push(agent);
+        } else {
+          initial.set(m.id, { name: m.name, checked: true, recommended: true, agents: [agent] });
+        }
       }
     }
     setPicks(initial);
@@ -316,7 +329,10 @@ export function AddProviderWizard({
         setPicks((prev) => {
           const next = new Map(prev);
           for (const m of r.models!) {
-            if (!next.has(m.id)) next.set(m.id, { name: m.name, checked: false, recommended: false });
+            // 拉取新增只归属实际返回它的端点的 runtime(另一端未证实可服务,不越界写入)。
+            if (!next.has(m.id)) {
+              next.set(m.id, { name: m.name, checked: false, recommended: false, agents: [fetchAgent] });
+            }
           }
           return next;
         });
@@ -335,7 +351,7 @@ export function AddProviderWizard({
     const preset = sel.preset;
     const selected = [...picks.entries()]
       .filter(([, v]) => v.checked)
-      .map(([id, v]) => ({ id, name: v.name }));
+      .map(([id, v]) => ({ id, name: v.name, agents: v.agents }));
     if (selected.length === 0) {
       toast.error(t('settings.providers.wizard.noModelSelected'));
       return;
@@ -349,15 +365,24 @@ export function AddProviderWizard({
       for (const agent of Object.keys(preset.runtimes) as AgentKind[]) {
         const rt = preset.runtimes[agent];
         if (!rt) continue;
+        // 只写归属该 runtime 的勾选模型;一个模型都没选中的 runtime 整个跳过
+        // (空模型 runtime 无意义,且避免把另一端的模型 id 越界写入)。
+        const agentModels = selected
+          .filter((m) => m.agents.includes(agent))
+          .map((m) => ({ id: m.id, name: m.name }));
+        if (agentModels.length === 0) continue;
         runtimes[agent] = {
           baseUrl: rt.baseUrl,
-          // 勾选结果写进每个 runtime(预设声明几个 runtime 就写几份,与编辑表单同构)。
-          models: selected.map((m) => ({ ...m })),
+          models: agentModels,
           ...(rt.headers ? { headers: rt.headers } : {}),
           ...(rt.modelsUrl ? { modelsUrl: rt.modelsUrl } : {}),
         };
         const k = apiKey.trim();
         if (k) keys[agent] = k;
+      }
+      if (Object.keys(runtimes).length === 0) {
+        toast.error(t('settings.providers.wizard.noModelSelected'));
+        return;
       }
       await createCustomProvider({ id, name: name.trim() || preset.name, runtimes }, keys);
       toast.success(t('settings.providers.wizard.createdToast', { name: name.trim() || preset.name }));
@@ -705,6 +730,14 @@ export function AddProviderWizard({
                         >
                           {v.name}
                         </span>
+                        {/* 双 runtime 预设里单端归属的模型,标注能力事实(与管理页同措辞)。 */}
+                        {presetAgents.length > 1 && v.agents.length === 1 && (
+                          <span className="shrink-0 text-12" style={{ color: 'var(--text-tertiary)' }}>
+                            {t('settings.providers.models.capabilityNote', {
+                              agent: AGENT_LABEL[v.agents[0] === 'claude-code' ? 'codex' : 'claude-code'],
+                            })}
+                          </span>
+                        )}
                         {v.recommended && (
                           <span
                             className="flex h-[18px] shrink-0 items-center rounded-full px-2 text-11 font-medium"
