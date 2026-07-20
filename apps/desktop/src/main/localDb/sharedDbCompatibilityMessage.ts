@@ -17,6 +17,12 @@ function hasIssue(
   return issues.some((issue) => issue.kind === kind);
 }
 
+function hasNonVersionIssue(issues: readonly MigrationCompatibilityIssue[]): boolean {
+  return issues.some(
+    (issue) => issue.kind !== 'schema-version-ahead' && issue.kind !== 'schema-version-behind',
+  );
+}
+
 export function buildSharedDbCompatibilityMessage(
   compatibility: MigrationCompatibilityReport,
 ): string {
@@ -24,6 +30,14 @@ export function buildSharedDbCompatibilityMessage(
     .slice(0, 3)
     .map((issue) => issue.kind)
     .join(', ');
+
+  if (hasNonVersionIssue(compatibility.issues)) {
+    return (
+      '共享数据的 schema、migration 记录或运行时身份与当前开发版不一致。为保护数据，Cindy 没有打开它。' +
+      '请使用与该数据匹配的 checkout，或改用 --isolated。' +
+      `（详情：${issueSummary || 'unknown'}）`
+    );
+  }
 
   if (hasIssue(compatibility.issues, 'schema-version-ahead')) {
     return (
@@ -45,9 +59,5 @@ export function buildSharedDbCompatibilityMessage(
     );
   }
 
-  return (
-    '共享数据的 migration 记录或运行时身份与当前开发版不一致。为保护数据，Cindy 没有打开它。' +
-    '请使用与该数据匹配的 checkout，或改用 --isolated。' +
-    `（详情：${issueSummary || 'unknown'}）`
-  );
+  return '共享数据的 migration 兼容性状态未知。请改用 --isolated。';
 }

@@ -35,7 +35,23 @@ describe('buildSharedDbCompatibilityMessage', () => {
       issues: [{ kind: 'runtime-manifest-mismatch' }],
     });
 
-    expect(message).toContain('migration 记录或运行时身份');
+    expect(message).toContain('schema、migration 记录或运行时身份');
+    expect(message).toContain('请使用与该数据匹配的 checkout，或改用 --isolated');
+    expect(message).not.toContain('作为 primary 完成迁移');
+  });
+
+  it('does not direct mixed version and history mismatches to primary migration', () => {
+    const message = buildSharedDbCompatibilityMessage({
+      compatible: false,
+      databaseVersion: 7,
+      checkoutVersion: 8,
+      issues: [
+        { kind: 'schema-version-behind', databaseVersion: 7, checkoutVersion: 8 },
+        { kind: 'history-entry-missing', seq: 7, fileName: '0007_missing.sql' },
+      ],
+    });
+
+    expect(message).toContain('schema、migration 记录或运行时身份');
     expect(message).toContain('请使用与该数据匹配的 checkout，或改用 --isolated');
     expect(message).not.toContain('作为 primary 完成迁移');
   });
