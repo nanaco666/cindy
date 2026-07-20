@@ -3318,6 +3318,13 @@
       "notGitRepo": "현재 디렉터리는 git 리포지토리가 아닙니다",
       "alreadyInWorktree": "이미 worktree 안에 있어 중첩이 금지됩니다"
     },
+    "branchChip": {
+      "label": "브랜치",
+      "loading": "브랜치 불러오는 중…",
+      "currentTooltip": "현재 브랜치",
+      "sourceTooltip": "worktree 소스 브랜치",
+      "worktreeHint": "다른 브랜치를 선택하면 worktree 격리로 시작됩니다"
+    },
     "folderPicker": {
       "selectFolder": "폴더 선택",
       "selectProject": "프로젝트 선택",

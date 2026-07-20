@@ -3318,6 +3318,13 @@
       "notGitRepo": "現在のディレクトリは git リポジトリではありません",
       "alreadyInWorktree": "すでに worktree 内です。ネストは禁止です"
     },
+    "branchChip": {
+      "label": "ブランチ",
+      "loading": "ブランチを読み込み中…",
+      "currentTooltip": "現在のブランチ",
+      "sourceTooltip": "worktree のソースブランチ",
+      "worktreeHint": "別のブランチを選択すると worktree 分離で開始します"
+    },
     "folderPicker": {
       "selectFolder": "フォルダを選択",
       "selectProject": "プロジェクトを選択",
