@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pencil, Play, Pause, Trash2, History } from 'lucide-react';
+import { ChevronDown, Pencil, Play, Pause, Trash2, History } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
@@ -27,11 +27,13 @@ import { useCCSessions } from '@/hooks/useCCSessions';
 import { clearSessionAttentionMany } from '@/lib/sessionAttentionStore';
 
 import { useRuns } from '../hooks/useRuns';
-import type { ScheduleCostSummary } from '../hooks/useScheduleCostSummaries';
 import { cronToConfig, summarizeConfig } from '../lib/cronCodexPreset';
 import { basenameOf, describeDestination, humanizeAgentKind } from '../lib/formatters';
+import { groupRunsForHistory } from '../lib/runHistoryGrouping';
 
 import { RunHistoryCard } from './RunHistoryCard';
+
+const PERSISTENT_SESSION_PREVIEW_LIMIT = 3;
 
 interface Props {
   schedule: Schedule;
@@ -39,7 +41,6 @@ interface Props {
   onTogglePause: (s: Schedule) => void | Promise<void>;
   onEdit: (s: Schedule) => void;
   onDelete: (s: Schedule) => void | Promise<void>;
-  costSummary?: ScheduleCostSummary;
   /**
    * 页面级 runNow busy 守卫（由 SchedulerPage 传入）。
    * true 表示同一 schedule 已在 TaskListCell 行按钮处触发了 runNow 且 IPC 未回执，
@@ -54,7 +55,6 @@ export function RunHistoryPane({
   onTogglePause,
   onEdit,
   onDelete,
-  costSummary,
   runNowBusy = false,
 }: Props) {
   const { t } = useTranslation();
@@ -67,6 +67,9 @@ export function RunHistoryPane({
   const isCurrent = runsScheduleId === s.id;
   const busyScheduleIdsRef = useRef<Set<string>>(new Set());
   const [busyScheduleIds, setBusyScheduleIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [expandedSessionIds, setExpandedSessionIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const { confirm } = useConfirmDialog();
 
   // 历史 cell 上的 agent icon 应反映"这次 run 实际用的 agent"，而不是 schedule 当前选的。
@@ -82,43 +85,33 @@ export function RunHistoryPane({
     }
     return m;
   }, [allSessions]);
-  const sessionCostMap = useMemo(() => {
-    const m = new Map<string, { totalCostUsd: number; totalEstimatedValueUsd: number }>();
-    for (const session of costSummary?.sessions ?? []) {
-      m.set(session.sessionId, session);
-    }
-    return m;
-  }, [costSummary]);
   const resolveRunAgent = useCallback(
     (run: ScheduleRun): AgentKind =>
       (run.sessionId && sessionAgentMap.get(run.sessionId)) || s.agentKind,
     [sessionAgentMap, s.agentKind],
   );
-  const resolveRunCost = useCallback(
-    (run: ScheduleRun): { totalCostUsd?: number; totalEstimatedValueUsd?: number } =>
-      run.sessionId ? (sessionCostMap.get(run.sessionId) ?? {}) : {},
-    [sessionCostMap],
+  const displayEntries = useMemo(
+    () => groupRunsForHistory(
+      runs,
+      isCurrent && (s.persistentSession === true || Boolean(s.targetSessionId)),
+    ),
+    [isCurrent, runs, s.persistentSession, s.targetSessionId],
   );
-
-  // 持续会话(及任何 heartbeat 型) schedule 的多次 fire 共享同一 sessionId,
-  // 点进去看到的也是同一会话。历史列表里按 sessionId 折叠成一条,只展示最近一次,
-  // 避免几十条 "打开会话" 都指向同一处的冗余。无 sessionId 的 run(创建 session 前就失败的)
-  // 各自保留。runs 来自 useRuns 默认 firedAt desc, 这里 first-write-wins 自然就是最新那条。
-  const displayRuns = useMemo(() => {
-    const seen = new Set<string>();
-    const out: ScheduleRun[] = [];
-    for (const r of runs) {
-      if (!r.sessionId) {
-        out.push(r);
-        continue;
-      }
-      if (seen.has(r.sessionId)) continue;
-      seen.add(r.sessionId);
-      out.push(r);
-    }
-    return out;
-  }, [runs]);
-
+  const currentPersistentSessionId = useMemo(
+    () => displayEntries.find((entry) => entry.kind === 'session')?.sessionId,
+    [displayEntries],
+  );
+  useEffect(() => {
+    setExpandedSessionIds(new Set());
+  }, [s.id]);
+  const toggleSessionGroup = useCallback((sessionId: string) => {
+    setExpandedSessionIds((current) => {
+      const next = new Set(current);
+      if (next.has(sessionId)) next.delete(sessionId);
+      else next.add(sessionId);
+      return next;
+    });
+  }, []);
   useEffect(() => {
     if (!isCurrent) return;
     const sessionIds = runs
@@ -285,10 +278,10 @@ export function RunHistoryPane({
       </header>
 
       {/* Recent runs label —— 跟下面的列表区一起挂载/卸载，避免数字 0→N 跳变。
-          count 用折叠后的 displayRuns —— 视图上看到几条就显示几,跟下面卡片列表对齐。 */}
+          count 与逐 run 卡片数量一致；持续会话也不再按 sessionId 折叠。 */}
       {hasLoaded && (
         <div className="px-6 pb-2 pt-4 text-10 font-medium tracking-[0.6px] text-[var(--cmd-palette-item-meta)]">
-          {t('scheduler.detail.recentRuns', { count: displayRuns.length })}
+          {t('scheduler.detail.recentRuns', { count: runs.length })}
         </div>
       )}
 
@@ -299,7 +292,7 @@ export function RunHistoryPane({
             <p className="text-xs text-[var(--cmd-palette-item-meta)]">
               {t('scheduler.detail.runsLoadFailed', { error })}
             </p>
-          ) : isCurrent && displayRuns.length === 0 ? (
+          ) : isCurrent && runs.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <div className="flex flex-col items-center gap-2 py-12 text-center">
                 <History
@@ -315,23 +308,92 @@ export function RunHistoryPane({
                 </p>
               </div>
             </div>
-          ) : displayRuns.length > 0 ? (
+          ) : runs.length > 0 ? (
             // isCurrent=false 时这里仍渲染上一条 schedule 的 runs，等新数据到达原子替换。
             // resolveRunAgent 用 sessionAgentMap fallback 当前 schedule.agentKind，过渡期
             // 短暂不一致可忽略；新数据落地后立刻矫正。
             <ul className="flex flex-col gap-3">
-              {displayRuns.map((r) => (
-                <li key={r.id}>
-                  <RunHistoryCard
-                    run={r}
-                    agentKind={resolveRunAgent(r)}
-                    sessionCostUsd={resolveRunCost(r).totalCostUsd}
-                    sessionEstimatedValueUsd={resolveRunCost(r).totalEstimatedValueUsd}
-                    onDelete={handleDeleteRun}
-                    onRestart={handleRestartRun}
-                  />
-                </li>
-              ))}
+              {displayEntries.map((entry) => {
+                if (entry.kind === 'run') {
+                  const r = entry.run;
+                  return (
+                    <li key={entry.key}>
+                      <RunHistoryCard
+                        run={r}
+                        agentKind={resolveRunAgent(r)}
+                        onDelete={handleDeleteRun}
+                        onRestart={handleRestartRun}
+                      />
+                    </li>
+                  );
+                }
+
+                const isCurrentSession = entry.sessionId === currentPersistentSessionId;
+                const isExpanded = expandedSessionIds.has(entry.sessionId);
+                const visibleRuns = isExpanded
+                  ? entry.runs
+                  : isCurrentSession
+                    ? entry.runs.slice(0, PERSISTENT_SESSION_PREVIEW_LIMIT)
+                    : [];
+                const hiddenCount = entry.runs.length - visibleRuns.length;
+                const canToggle = !isCurrentSession || entry.runs.length > PERSISTENT_SESSION_PREVIEW_LIMIT;
+                const toggleLabel = isExpanded
+                  ? t('scheduler.runs.collapseSessionRuns')
+                  : isCurrentSession
+                    ? t('scheduler.runs.expandRemainingRuns', { count: hiddenCount })
+                    : t('scheduler.runs.expandSessionRuns', { count: entry.runs.length });
+
+                return (
+                  <li key={entry.key}>
+                    <section className="flex flex-col gap-3">
+                      <button
+                        type="button"
+                        onClick={() => toggleSessionGroup(entry.sessionId)}
+                        disabled={!canToggle}
+                        aria-expanded={isExpanded || (isCurrentSession && hiddenCount === 0)}
+                        className={cn(
+                          'flex w-full items-center justify-between gap-3 rounded-xl border border-[var(--cmd-palette-border)]',
+                          'bg-[hsl(var(--content-area))] px-4 py-2.5 text-left',
+                          'text-xs text-[var(--cmd-palette-item-meta)]',
+                          'enabled:hover:text-[var(--msg-assistant-text)]',
+                          'disabled:cursor-default',
+                        )}
+                      >
+                        <span className="truncate font-medium text-[var(--msg-assistant-text)]">
+                          {t('scheduler.runs.persistentSessionGroup', {
+                            session: entry.sessionId.slice(0, 8),
+                            count: entry.runs.length,
+                          })}
+                        </span>
+                        {canToggle && (
+                          <span className="inline-flex shrink-0 items-center gap-1.5">
+                            {toggleLabel}
+                            <ChevronDown
+                              size={14}
+                              className={cn('transition-transform', isExpanded && 'rotate-180')}
+                              aria-hidden
+                            />
+                          </span>
+                        )}
+                      </button>
+                      {visibleRuns.length > 0 && (
+                        <ul className="ml-3 flex flex-col gap-3 border-l border-[var(--cmd-palette-border)] pl-3">
+                          {visibleRuns.map((r) => (
+                            <li key={r.id}>
+                              <RunHistoryCard
+                                run={r}
+                                agentKind={resolveRunAgent(r)}
+                                onDelete={handleDeleteRun}
+                                onRestart={handleRestartRun}
+                              />
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+                  </li>
+                );
+              })}
             </ul>
           ) : null)}
       </div>

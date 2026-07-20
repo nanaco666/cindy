@@ -14,12 +14,18 @@
  */
 
 import { BrowserWindow } from 'electron';
+import type { SendOrigin } from '@lizi/maker-core';
 
 import type { TurnUsageDetails } from '../shared/turnUsageDetails.js';
-import { patchMessageAgentMeta, readPriorUserRoundCost } from './localDb/ipc/messages.js';
+import {
+  patchMessageAgentMetaWithResult,
+  readPriorUserRoundCost,
+  type MessageAgentMetaPatchResult,
+} from './localDb/ipc/messages.js';
 import { enqueueDurableWrite } from './messagePersistBroadcaster.js';
 import { createLogger } from './logger.js';
 import { tapWindowBroadcast } from './device-link/broadcast-tap.js';
+import { applyScheduleRunCostMetaChange } from './scheduler-host/runCostLedger.js';
 
 const log = createLogger('turnCostBroadcaster');
 
@@ -47,7 +53,11 @@ export interface TurnCostDeps {
     sessionId: string,
     clientId: string,
     patch: Record<string, unknown>,
-  ): Promise<boolean>;
+  ): Promise<MessageAgentMetaPatchResult | null>;
+  applyScheduleRunCostChange(
+    previous: Record<string, unknown>,
+    next: Record<string, unknown>,
+  ): Promise<void>;
   readPriorUserRoundCost(sessionId: string, clientId: string): Promise<{
     costUsd: number;
     hasEstimatedValue: boolean;
@@ -57,7 +67,8 @@ export interface TurnCostDeps {
 }
 
 const defaultDeps: TurnCostDeps = {
-  patchAgentMeta: patchMessageAgentMeta,
+  patchAgentMeta: patchMessageAgentMetaWithResult,
+  applyScheduleRunCostChange: applyScheduleRunCostMetaChange,
   readPriorUserRoundCost,
   enqueue: enqueueDurableWrite,
   broadcast(payload) {
@@ -84,10 +95,11 @@ export async function recordTurnCostOnMessage(
     costUsd: number;
     isEstimate: boolean;
     turnUsageDetails?: TurnUsageDetails | null;
+    turnOrigin?: SendOrigin;
   },
   deps: TurnCostDeps = defaultDeps,
 ): Promise<void> {
-  const { sessionId, clientId, costUsd, isEstimate, turnUsageDetails } = args;
+  const { sessionId, clientId, costUsd, isEstimate, turnUsageDetails, turnOrigin } = args;
   if (!sessionId || !clientId) return;
   if (!Number.isFinite(costUsd) || costUsd < 1e-10) return;
   try {
@@ -108,8 +120,19 @@ export async function recordTurnCostOnMessage(
         userTurnCostUsd,
         userTurnCostIsEstimate,
       };
+      if (turnOrigin?.kind === 'scheduler' && typeof turnOrigin.runId === 'string' && turnOrigin.runId) {
+        patch.origin = turnOrigin;
+      }
       if (turnUsageDetails) patch.turnUsageDetails = turnUsageDetails;
-      return deps.patchAgentMeta(sessionId, clientId, patch);
+      const result = await deps.patchAgentMeta(sessionId, clientId, patch);
+      if (!result) return null;
+      try {
+        await deps.applyScheduleRunCostChange(result.previous, result.next);
+      } catch (err) {
+        // 消息上的 runId + 单段费用已经持久化，后续读取仍可据此恢复；不阻断消息费用展示。
+        log.warn('schedule run cost update failed:', err instanceof Error ? err.message : String(err));
+      }
+      return result;
     });
     if (!patched) return;
     deps.broadcast({

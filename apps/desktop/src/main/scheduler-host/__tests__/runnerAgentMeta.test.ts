@@ -202,6 +202,7 @@ describe('MakerScheduleRunner agentMeta automation origin', () => {
         kind: 'scheduler',
         scheduleId: 'schedule-1',
         scheduleName: 'pr follow-up',
+        runId: 'run-1',
       },
     });
   });
@@ -221,6 +222,7 @@ describe('MakerScheduleRunner agentMeta automation origin', () => {
       kind: 'scheduler',
       scheduleId: 'schedule-1',
       scheduleName: 'pr follow-up',
+      runId: 'run-1',
     });
   });
 

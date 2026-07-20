@@ -913,7 +913,7 @@ describe('automation-generated sessions', () => {
     expect(formatUsd(1.234)).toBe('$1.23');
     expect(storageSource).toContain('listCostSummaries');
     expect(storageSource).toContain('messages.agentMeta');
-    expect(storageSource).toContain('scheduleOriginIdFromAgentMeta');
+    expect(storageSource).toContain('scheduleOriginFromAgentMeta');
     expect(storageSource).toContain("origin?.kind !== 'scheduler'");
     expect(storageSource).toContain('turnCostFromAgentMeta');
     expect(storageSource).toContain('turnCostIsEstimate === true');
@@ -936,16 +936,22 @@ describe('automation-generated sessions', () => {
     expect(taskListPaneSource).toContain('costSummariesLoaded');
     expect(taskListCellSource).toContain('scheduler.cell.totalCost');
     expect(taskListCellSource).toContain('formatUsd(totalCostUsd)');
-    expect(runHistoryPaneSource).toContain('sessionCostMap');
-    expect(runHistoryPaneSource).toContain('sessionCostUsd={resolveRunCost(r).totalCostUsd}');
+    expect(runHistoryPaneSource).toContain('groupRunsForHistory');
+    expect(runHistoryPaneSource).toContain('PERSISTENT_SESSION_PREVIEW_LIMIT = 3');
+    expect(runHistoryPaneSource).toContain('expandRemainingRuns');
+    expect(runHistoryPaneSource).not.toContain('sessionCostMap');
     expect(runHistoryCardSource).toContain('isLegacySessionRun');
     expect(runHistoryCardSource).toContain("!isLegacySessionRun && run.status !== 'running'");
-    expect(runHistoryCardSource).toContain('scheduler.runs.sessionCost');
-    expect(runHistoryCardSource).toContain('formatUsd(sessionCostUsd)');
+    expect(runHistoryCardSource).toContain('scheduler.runs.runCost');
+    expect(runHistoryCardSource).toContain("run.costAttribution === 'legacy'");
     expect(zh.scheduler.cell.totalCost).toBe('开销 {{cost}}');
     expect(zh.scheduler.cell.totalValue).toBe('价值 {{value}}');
     expect(zh.scheduler.runs.sessionCost).toBe('会话开销 {{cost}}');
     expect(zh.scheduler.runs.sessionValue).toBe('会话价值 {{value}}');
+    expect(zh.scheduler.runs.runCost).toBe('本次开销 {{cost}}');
+    expect(zh.scheduler.runs.legacyCostUnavailable).toBe('历史费用无法拆分');
+    expect(zh.scheduler.runs.persistentSessionGroup).toBe('持续会话 {{session}} · {{count}} 次运行');
+    expect(zh.scheduler.runs.expandRemainingRuns).toBe('展开另外 {{count}} 次');
   });
 
   it('routes automation group menu actions through the scheduler APIs', () => {

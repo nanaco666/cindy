@@ -1314,7 +1314,7 @@ export interface SchedulerQueuedPromptRequest {
   text: string;
   /** 落库与队列气泡展示的用户原始 prompt(不含隐藏协议)。 */
   persistedContent: string;
-  origin: { kind: 'scheduler'; scheduleId: string; scheduleName: string };
+  origin: { kind: 'scheduler'; scheduleId: string; scheduleName: string; runId?: string };
   /** 排队项被 drain 派发、turn 已被会话接受时回调(等价直发路径的 send onAccepted)。 */
   onAccepted: () => void | Promise<void>;
   /** 派发已 accept 但最终未成为运行 turn(取消/回滚)时回调。 */
@@ -1750,7 +1750,20 @@ async function handleSilentStopTurnEnd(
               content: SILENT_STOP_RESUME_PROMPT,
               // autoResume: renderer 据此隐藏用户气泡、渲染「已自动继续」分隔线;
               // 也是审计标记(DB/transcript 里可查每次自动续跑)。
-              agentMeta: { delivery: 'turn', autoResume: true },
+              agentMeta: {
+                delivery: 'turn',
+                autoResume: true,
+                ...(turnOrigin?.kind === 'scheduler' && turnOrigin.scheduleId
+                  ? {
+                      origin: {
+                        kind: 'scheduler' as const,
+                        scheduleId: turnOrigin.scheduleId,
+                        ...(turnOrigin.scheduleName ? { scheduleName: turnOrigin.scheduleName } : {}),
+                        ...(turnOrigin.runId ? { runId: turnOrigin.runId } : {}),
+                      },
+                    }
+                  : {}),
+              },
             });
           },
         },
@@ -2305,6 +2318,7 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
                 costUsd: turnTotalUsd,
                 isEstimate: false,
                 turnUsageDetails,
+                turnOrigin: event.turnOrigin,
               });
             }
           } else if (turnAssistantPersistId) {
@@ -2335,6 +2349,7 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
                 costUsd: turnEstimatedValueUsd,
                 isEstimate: true,
                 turnUsageDetails,
+                turnOrigin: event.turnOrigin,
               });
             }
           }
@@ -2367,6 +2382,7 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
                 costUsd: delta,
                 isEstimate: false,
                 turnUsageDetails,
+                turnOrigin: event.turnOrigin,
               });
             }
           })();
@@ -2504,6 +2520,7 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
                   costUsd: cost,
                   isEstimate: isSubscriptionValue,
                   turnUsageDetails,
+                  turnOrigin: event.turnOrigin,
                 });
               }
             }

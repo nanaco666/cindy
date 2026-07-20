@@ -169,9 +169,9 @@ function pdfjsAssetsPlugin(): Plugin {
  * 源码变更(git pull / 合 PR / 本地编辑)不会失效 transform 缓存——引用方组件热更成引用新导出的
  * 版本后,被引用包仍是旧模块 → `does not provide an export named X` → 白屏且刷新无效。因此下方
  * `server.watch.ignored` 用反向 glob 把这些包从默认忽略里豁免,变更即时失效 + HMR,运行中的实例
- * 无需重启。这里**自动扫描** `packages/*` 而非手写名单:未来新增的纯内部包会被自动覆盖,不会漏。
+ * 无需重启。这里**自动扫描** `packages/<package>` 而非手写名单:未来新增的纯内部包会被自动覆盖,不会漏。
  *
- * 「是不是内部包」按**位置**判定(`pnpm-workspace.yaml` 声明 `packages/*` 即 workspace 包),
+ * 「是不是内部包」按**位置**判定(`pnpm-workspace.yaml` 声明 packages 下的包即 workspace 包),
  * 而非按包名前缀(`@lizi/`)——后者会漏掉 `lizi-im` / `lizi-mcps` / `@fmfsaisai/*` 这类不带该
  * scope 的内部包。位置是权威信号,包名 scope 不是。
  *

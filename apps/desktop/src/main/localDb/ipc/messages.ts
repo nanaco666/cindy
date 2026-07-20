@@ -793,11 +793,17 @@ export function extractEstimatedSessionValueEntries(
  *
  * 用于 turnCostBroadcaster:turn 结束后把 per-turn 费用挂到该轮最后一条 assistant。
  */
-export async function patchMessageAgentMeta(
+export interface MessageAgentMetaPatchResult {
+  previous: Record<string, unknown>;
+  next: Record<string, unknown>;
+}
+
+/** 与 patchMessageAgentMeta 相同，但返回补丁前后的元数据供幂等账本计算。 */
+export async function patchMessageAgentMetaWithResult(
   sessionId: string,
   clientId: string,
   patch: Record<string, unknown>,
-): Promise<boolean> {
+): Promise<MessageAgentMetaPatchResult | null> {
   const db = getDbClient().drizzle;
   const rows = await db
     .select({ agentMeta: messages.agentMeta })
@@ -806,20 +812,20 @@ export async function patchMessageAgentMeta(
       and(eq(messages.sessionId, sessionId), eq(messages.clientId, clientId)),
     )
     .limit(1);
-  if (rows.length === 0) return false;
-  let existing: Record<string, unknown> = {};
-  if (rows[0].agentMeta) {
-    try {
-      const parsed = JSON.parse(rows[0].agentMeta);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        existing = parsed as Record<string, unknown>;
-      }
-    } catch {
-      // 损坏的 JSON 以 {} 为底重建(补丁字段仍写入,旧字段无法挽救)。
-    }
-  }
-  await updateAgentMeta(sessionId, clientId, JSON.stringify({ ...existing, ...patch }));
-  return true;
+  if (rows.length === 0) return null;
+  // 损坏的 JSON 以 {} 为底重建(补丁字段仍写入,旧字段无法挽救)。
+  const previous = parseAgentMetaRecord(rows[0].agentMeta) ?? {};
+  const next = { ...previous, ...patch };
+  await updateAgentMeta(sessionId, clientId, JSON.stringify(next));
+  return { previous, next };
+}
+
+export async function patchMessageAgentMeta(
+  sessionId: string,
+  clientId: string,
+  patch: Record<string, unknown>,
+): Promise<boolean> {
+  return (await patchMessageAgentMetaWithResult(sessionId, clientId, patch)) !== null;
 }
 
 /**

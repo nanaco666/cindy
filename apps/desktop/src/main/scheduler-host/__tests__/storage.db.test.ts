@@ -131,6 +131,9 @@ const SCHEDULER_DDL = [
       finished_at INTEGER,
       status TEXT NOT NULL,
       error_msg TEXT,
+      cost_usd REAL NOT NULL DEFAULT 0,
+      estimated_value_usd REAL NOT NULL DEFAULT 0,
+      cost_attribution TEXT NOT NULL DEFAULT 'legacy',
       result_text TEXT,
       pre_run_hook_result TEXT,
       read_at INTEGER,
@@ -186,7 +189,12 @@ describe('DrizzleScheduleStorage (in-memory)', () => {
       expect(updated?.nextFireAt).toBeUndefined();
       expect(await harness.storage.listActive()).toEqual([]);
 
-      await expect(harness.storage.insertRun(run)).resolves.toEqual(run);
+      await expect(harness.storage.insertRun(run)).resolves.toEqual({
+        ...run,
+        costUsd: 0,
+        estimatedValueUsd: 0,
+        costAttribution: 'exact',
+      });
       const completed = await harness.storage.updateRun(run.id, {
         finishedAt: 1_700_000_110_000,
         resultText: 'done',
@@ -206,6 +214,111 @@ describe('DrizzleScheduleStorage (in-memory)', () => {
       });
       await harness.storage.delete(schedule.id);
       await expect(harness.storage.get(schedule.id)).resolves.toBeNull();
+    } finally {
+      harness.close();
+    }
+  });
+
+  it('hydrates exact run cost from persisted assistant runId metadata', async () => {
+    const harness = createStorageHarness();
+    const schedule = baseSchedule({ id: 'sch-run-cost' });
+    try {
+      harness.db.run(sql`
+        INSERT INTO sessions (id, title, source, workspace_kind, created_at, updated_at, total_cost_usd)
+        VALUES ('sess-run-cost', 'Persistent schedule session', 'desktop', 'dialogue', 1, 1, 0)
+      `);
+      await harness.storage.insert(schedule);
+      await harness.storage.insertRun({
+        id: 'run-exact',
+        scheduleId: schedule.id,
+        sessionId: 'sess-run-cost',
+        firedAt: 10,
+        finishedAt: 20,
+        status: 'success',
+      });
+      harness.db.run(sql`
+        INSERT INTO messages (id, client_id, session_id, role, content, agent_meta, created_at)
+        VALUES
+          ('run-exact-assistant-1', 'run-exact-assistant-1', 'sess-run-cost', 'assistant', '{}',
+            '{"origin":{"kind":"scheduler","scheduleId":"sch-run-cost","runId":"run-exact"},"turnCostUsd":0.42}', 11),
+          ('run-exact-assistant-2', 'run-exact-assistant-2', 'sess-run-cost', 'assistant', '{}',
+            '{"origin":{"kind":"scheduler","scheduleId":"sch-run-cost","runId":"run-exact"},"turnCostUsd":0.29,"turnCostIsEstimate":true}', 12)
+      `);
+
+      await expect(harness.storage.listRuns(schedule.id)).resolves.toEqual([
+        expect.objectContaining({
+          id: 'run-exact',
+          costUsd: 0.42,
+          estimatedValueUsd: 0.29,
+          costAttribution: 'exact',
+        }),
+      ]);
+    } finally {
+      harness.close();
+    }
+  });
+
+  it('isolates two schedules and manual turns inside one persistent session', async () => {
+    const harness = createStorageHarness();
+    const scheduleA = baseSchedule({ id: 'sch-a', targetSessionId: 'sess-shared' });
+    const scheduleB = baseSchedule({ id: 'sch-b', targetSessionId: 'sess-shared' });
+    try {
+      harness.db.run(sql`
+        INSERT INTO sessions (id, title, source, workspace_kind, created_at, updated_at, total_cost_usd)
+        VALUES ('sess-shared', 'Shared persistent session', 'desktop', 'dialogue', 1, 1, 1.1)
+      `);
+      await harness.storage.insert(scheduleA);
+      await harness.storage.insert(scheduleB);
+      for (const run of [
+        { id: 'run-a1', scheduleId: 'sch-a', firedAt: 10 },
+        { id: 'run-b1', scheduleId: 'sch-b', firedAt: 30 },
+        { id: 'run-a2', scheduleId: 'sch-a', firedAt: 50 },
+      ]) {
+        await harness.storage.insertRun({
+          ...run,
+          sessionId: 'sess-shared',
+          finishedAt: run.firedAt + 5,
+          status: 'success',
+        });
+      }
+      harness.db.run(sql`
+        INSERT INTO messages (id, client_id, session_id, role, content, agent_meta, created_at)
+        VALUES
+          ('user-a1', 'user-a1', 'sess-shared', 'user', '{}',
+            '{"origin":{"kind":"scheduler","scheduleId":"sch-a","runId":"run-a1"}}', 10),
+          ('assistant-a1', 'assistant-a1', 'sess-shared', 'assistant', '{}',
+            '{"origin":{"kind":"scheduler","scheduleId":"sch-a","runId":"run-a1"},"turnCostUsd":0.1}', 11),
+          ('manual-user', 'manual-user', 'sess-shared', 'user', '{}', NULL, 20),
+          ('manual-assistant', 'manual-assistant', 'sess-shared', 'assistant', '{}',
+            '{"turnCostUsd":0.5}', 21),
+          ('user-b1', 'user-b1', 'sess-shared', 'user', '{}',
+            '{"origin":{"kind":"scheduler","scheduleId":"sch-b","runId":"run-b1"}}', 30),
+          ('assistant-b1', 'assistant-b1', 'sess-shared', 'assistant', '{}',
+            '{"origin":{"kind":"scheduler","scheduleId":"sch-b","runId":"run-b1"},"turnCostUsd":0.2}', 31),
+          ('user-a2', 'user-a2', 'sess-shared', 'user', '{}',
+            '{"origin":{"kind":"scheduler","scheduleId":"sch-a","runId":"run-a2"}}', 50),
+          ('assistant-a2', 'assistant-a2', 'sess-shared', 'assistant', '{}',
+            '{"origin":{"kind":"scheduler","scheduleId":"sch-a","runId":"run-a2"},"turnCostUsd":0.3}', 51)
+      `);
+
+      const summaries = new Map(
+        (await harness.storage.listCostSummaries()).map((summary) => [summary.scheduleId, summary]),
+      );
+      expect(summaries.get('sch-a')).toMatchObject({
+        totalCostUsd: 0.4,
+        totalEstimatedValueUsd: 0,
+      });
+      expect(summaries.get('sch-b')).toMatchObject({
+        totalCostUsd: 0.2,
+        totalEstimatedValueUsd: 0,
+      });
+      expect(await harness.storage.listRuns('sch-a')).toEqual([
+        expect.objectContaining({ id: 'run-a2', costUsd: 0.3 }),
+        expect.objectContaining({ id: 'run-a1', costUsd: 0.1 }),
+      ]);
+      expect(await harness.storage.listRuns('sch-b')).toEqual([
+        expect.objectContaining({ id: 'run-b1', costUsd: 0.2 }),
+      ]);
     } finally {
       harness.close();
     }
