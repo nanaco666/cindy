@@ -8,12 +8,19 @@
  * 映射表设计为数据驱动(cliId → 建议 providerId),后续扩国产 CLI(qwen / iflow /
  * gemini / kimi 等)只需加条目;当前只做 claude / codex 两条(优先级最高、判据最稳)。
  *
- * 检测只做**存在性 stat**,绝不读取 / 解析 / 复制凭证内容(CLAUDE.md 规则 23:
- * 凭证不入仓、不落盘、不进日志;这里更进一步——连读都不读)。
+ * 登录态判据只做**存在性判断**,绝不落盘 / 不进日志(CLAUDE.md 规则 23):
+ *   - `file` 探测:stat 凭证文件是否存在(Codex 的 ~/.codex/auth.json)。
+ *   - `claude-oauth` 探测:Claude Code 登录态跨平台存两处——macOS 在系统 Keychain
+ *     (service `Claude Code-credentials`),其它平台才是 ~/.claude/.credentials.json。
+ *     只 stat 文件会漏掉 Mac 上正常登录(且可能连 ~/.claude 目录都没有)的用户,
+ *     故改用 host 侧现成的 `hasClaudeAiOAuth()`(只返 boolean,不暴露凭证内容)。
  */
 
 /** 可检测的本机 CLI 标识。 */
 export type LocalCliId = 'claude-cli' | 'codex-cli';
+
+/** 登录态探测方式:文件存在性 / Claude 跨平台凭证存(Keychain + 文件)。 */
+export type CredentialProbe = 'file' | 'claude-oauth';
 
 /** 单条检测结果:CLI 是否安装 / 是否已登录 + 建议接入的供应商 id。 */
 export interface LocalCliDetection {
@@ -35,19 +42,22 @@ export const LOCAL_CLI_DETECT_MAP: ReadonlyArray<{
   providerId: string;
   /** 配置目录(相对 home 的路径段)。 */
   configDirSegments: readonly string[];
-  /** 登录态凭证文件(相对 home 的路径段)。 */
-  credentialFileSegments: readonly string[];
+  /** 登录态探测方式。 */
+  credentialProbe: CredentialProbe;
+  /** `file` 探测用的凭证文件(相对 home 的路径段);`claude-oauth` 探测不用它。 */
+  credentialFileSegments?: readonly string[];
 }> = [
   {
     cli: 'claude-cli',
     providerId: 'anthropic',
     configDirSegments: ['.claude'],
-    credentialFileSegments: ['.claude', '.credentials.json'],
+    credentialProbe: 'claude-oauth',
   },
   {
     cli: 'codex-cli',
     providerId: 'openai',
     configDirSegments: ['.codex'],
+    credentialProbe: 'file',
     credentialFileSegments: ['.codex', 'auth.json'],
   },
 ];

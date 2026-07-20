@@ -671,7 +671,7 @@ export function AddProviderWizard({
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-12 font-medium" style={{ color: 'var(--text-secondary)' }}>
-                  API Key
+                  {t('settings.providers.custom.fields.apiKey')}
                 </label>
                 <input
                   type="password"

@@ -11,6 +11,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { stat } from 'node:fs/promises';
 
+import { hasClaudeAiOAuth } from '../maker-host/claude-credentials-store.js';
 import { LOCAL_CLI_DETECT_MAP, type LocalCliDetection } from '../../shared/localCliDetect.js';
 
 export interface LocalCliScanDeps {
@@ -19,9 +20,14 @@ export interface LocalCliScanDeps {
   isDirectory(path: string): Promise<boolean>;
   /** 路径存在且是普通文件。 */
   isFile(path: string): Promise<boolean>;
+  /**
+   * Claude Code 是否已登录 claude.ai(跨平台:macOS Keychain / 其它平台文件)。
+   * 生产 = hasClaudeAiOAuth();只返 boolean,不暴露凭证内容(规则 23)。
+   */
+  hasClaudeLogin(): boolean;
 }
 
-/** 生产 deps:真实 home + fs.stat(异常一律 false)。 */
+/** 生产 deps:真实 home + fs.stat(异常一律 false)+ Claude 跨平台登录探测。 */
 export function createLocalCliScanDeps(): LocalCliScanDeps {
   return {
     homeDir: homedir(),
@@ -39,19 +45,35 @@ export function createLocalCliScanDeps(): LocalCliScanDeps {
         return false;
       }
     },
+    hasClaudeLogin: () => {
+      try {
+        return hasClaudeAiOAuth();
+      } catch {
+        return false;
+      }
+    },
   };
 }
 
-/** 按映射表扫描全部条目;installed=false 时 loggedIn 恒 false(不再探测文件)。 */
+/**
+ * 按映射表扫描全部条目。登录态探测分派:
+ *   - `claude-oauth`:走跨平台 hasClaudeLogin()(覆盖 macOS Keychain 登录、且可能无
+ *     ~/.claude 目录的用户);已登录必然算已安装(installed = 目录存在 || 已登录)。
+ *   - `file`:目录存在时再 stat 凭证文件(installed=false 时 loggedIn 恒 false)。
+ */
 export async function scanLocalCliAuth(deps: LocalCliScanDeps): Promise<LocalCliDetection[]> {
   const results: LocalCliDetection[] = [];
   for (const entry of LOCAL_CLI_DETECT_MAP) {
     const configDir = join(deps.homeDir, ...entry.configDirSegments);
-    const installed = await deps.isDirectory(configDir);
+    const dirExists = await deps.isDirectory(configDir);
+    let installed = dirExists;
     let loggedIn = false;
-    if (installed) {
-      const credFile = join(deps.homeDir, ...entry.credentialFileSegments);
-      loggedIn = await deps.isFile(credFile);
+    if (entry.credentialProbe === 'claude-oauth') {
+      loggedIn = deps.hasClaudeLogin();
+      // Keychain 登录的 Mac 用户可能连 ~/.claude 目录都没有——登录了就算已安装。
+      installed = dirExists || loggedIn;
+    } else if (dirExists && entry.credentialFileSegments) {
+      loggedIn = await deps.isFile(join(deps.homeDir, ...entry.credentialFileSegments));
     }
     results.push({ cli: entry.cli, providerId: entry.providerId, installed, loggedIn });
   }
