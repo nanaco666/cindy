@@ -4046,6 +4046,9 @@
       "viewOriginal": "原文を表示",
       "viewGhostCard": "プラグインカードを表示"
     },
+    "modelMismatch": {
+      "notice": "このターンは選択中の {{selected}} ではなく {{actual}} が応答しました(プロバイダー側で一時的にダウングレード)"
+    },
     "ghostNotify": {
       "secretSaved": "認証情報「{{name}}」を保存しました",
       "oauthConnected": "認可に成功し、{{label}} に接続しました",

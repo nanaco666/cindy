@@ -108,6 +108,26 @@ export function formatMessageTurnCostUsd(costUsd: number, isEstimate = false): s
   return isEstimate ? `价值 ${value}` : value;
 }
 
+/**
+ * raw model id → 短品牌标签(与桌面 renderer/lib/modelShortLabel.ts 同口径的
+ * 精简版:去 [1m] / 日期尾缀 / vendor 前缀,Claude 家族折成「Family major.minor」)。
+ * 用于模型降级提示行;未知形态兜底原样返回清洗后的 id。
+ */
+export function formatModelShortLabel(modelId: string | undefined | null): string {
+  if (typeof modelId !== 'string') return '';
+  let id = modelId.trim();
+  if (!id) return '';
+  id = id.replace(/\[1m\]$/i, '');
+  id = id.replace(/-\d{8}$/, '');
+  id = id.replace(/^us\.anthropic\./i, '').replace(/^anthropic\./i, '').replace(/^codex\//i, '');
+  const claude = /^claude-([a-z]+)-(\d+)(?:-(\d+))?$/i.exec(id);
+  if (claude) {
+    const family = claude[1][0].toUpperCase() + claude[1].slice(1).toLowerCase();
+    return claude[3] ? `${family} ${claude[2]}.${claude[3]}` : `${family} ${claude[2]}`;
+  }
+  return id;
+}
+
 function pad2(value: number): string {
   return String(value).padStart(2, '0');
 }

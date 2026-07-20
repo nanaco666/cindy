@@ -179,6 +179,8 @@ import {
   recordSessionTurnTokens,
 } from '../sessionSpendBroadcaster.js';
 import { codexUsageToTokens, recordTurnCostOnMessage } from '../turnCostBroadcaster.js';
+import { recordModelMismatchOnMessage } from '../modelMismatchBroadcaster.js';
+import { detectClaudeModelMismatch } from '../../shared/modelMismatch.js';
 import { triggerClaudeAccountUsageRefresh } from '../usage/claudeAccountUsage.js';
 import { getCodexBudgetEffectiveCostMultiplier, getCodexSubscriptionValuePrice, getModelPricing, getModelPricingForModel, getSubscriptionDirectValuePrice } from '../usage/modelPricing.js';
 import { computeModelUsageDeltas, type ModelUsageCumulative, type ModelUsageDeltaEntry } from '../usage/modelUsageDelta.js';
@@ -2192,6 +2194,29 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
       const prevReportedCost = lastReportedCostUsdBySession.get(session.id) ?? 0;
       if (typeof cumulative === 'number' && cumulative >= 0) {
         lastReportedCostUsdBySession.set(session.id, cumulative);
+      }
+      // 模型降级检测:所选模型(turn start 快照)整轮缺席于实际 modelUsage delta →
+      // 判定主线被上游静默替换(如 fable-5 高负载被路由到 opus-4-8),把标记挂到本轮
+      // 收尾 assistant 的 agent_meta 上(AssistantMessage 渲染降级提示行)。
+      // fire-and-forget,与记账 sink 互不阻塞;判定纯函数见 shared/modelMismatch.ts。
+      if (turnAssistantPersistId && modelUsageDeltas && modelUsageDeltas.length > 0) {
+        const mismatchClientId = turnAssistantPersistId;
+        const actualEntries = modelUsageDeltas.map((d) => ({
+          model: d.model,
+          outputTokens: d.outputTokensDelta,
+        }));
+        void modelPromise
+          .then((selectedModel) => {
+            const mismatch = detectClaudeModelMismatch(selectedModel, actualEntries);
+            if (mismatch) {
+              return recordModelMismatchOnMessage({
+                sessionId: session.id,
+                clientId: mismatchClientId,
+                mismatch,
+              });
+            }
+          })
+          .catch(() => { /* 模型解析失败:跳过降级检测,非致命 */ });
       }
       if (modelUsageDeltas && modelUsageDeltas.length > 0) {
         // 主路径: 逐模型 HYBRID 定价 (Anthropic→SDK, 非 Anthropic→gateway), 四个 sink

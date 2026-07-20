@@ -4046,6 +4046,9 @@
       "viewOriginal": "원문 보기",
       "viewGhostCard": "플러그인 카드 보기"
     },
+    "modelMismatch": {
+      "notice": "이번 턴은 선택한 {{selected}} 대신 {{actual}} 모델이 응답했습니다(제공자 측 임시 다운그레이드)"
+    },
     "ghostNotify": {
       "secretSaved": "자격 증명 \"{{name}}\"이(가) 저장되었습니다",
       "oauthConnected": "인증 성공, {{label}}에 연결되었습니다",

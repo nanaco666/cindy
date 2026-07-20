@@ -3367,6 +3367,7 @@ const MessageItem = memo(function MessageItem({
           turnCostUsd={message.turnCostUsd}
           turnCostIsEstimate={message.turnCostIsEstimate}
           turnUsageDetails={message.turnUsageDetails}
+          modelMismatch={message.modelMismatch}
           ghostReplyPending={message.ghostReplyPending}
         />
       );

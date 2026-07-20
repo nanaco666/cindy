@@ -4046,6 +4046,9 @@
       "viewOriginal": "查看原文",
       "viewGhostCard": "查看插件卡片"
     },
+    "modelMismatch": {
+      "notice": "本轮由 {{actual}} 响应,而非所选的 {{selected}}(服务端临时降级)"
+    },
     "ghostNotify": {
       "secretSaved": "凭证「{{name}}」已保存",
       "oauthConnected": "授权成功,已连接 {{label}}",

@@ -824,6 +824,29 @@ describe('remoteSessionStore', () => {
     });
   });
 
+  it('patches existing messages from realtime model mismatch pushes', () => {
+    remoteSessionStore.setMessages('s1', [message('m1', 's1')]);
+
+    remoteSessionStore.applyRemotePush('dev-1', 'usage:message-model-mismatch', {
+      sessionId: 's1',
+      clientId: 'm1',
+      modelMismatch: { selected: 'claude-fable-5', actual: 'claude-opus-4-8' },
+    });
+
+    expect(remoteSessionStore.getMessages('s1')[0].agentMeta).toMatchObject({
+      modelMismatch: { selected: 'claude-fable-5', actual: 'claude-opus-4-8' },
+    });
+
+    // 字段不全的 push 一律忽略,不写入半截标记。
+    remoteSessionStore.setMessages('s2', [message('m2', 's2')]);
+    remoteSessionStore.applyRemotePush('dev-1', 'usage:message-model-mismatch', {
+      sessionId: 's2',
+      clientId: 'm2',
+      modelMismatch: { selected: 'claude-fable-5' },
+    });
+    expect(remoteSessionStore.getMessages('s2')[0].agentMeta?.modelMismatch).toBeUndefined();
+  });
+
   it('applies input projection push and exposes an empty stable fallback', () => {
     expect(remoteSessionStore.getInputProjection('missing')).toBe(
       remoteSessionStore.getInputProjection('missing'),

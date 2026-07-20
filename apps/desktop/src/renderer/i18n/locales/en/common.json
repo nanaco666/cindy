@@ -4055,6 +4055,9 @@
       "viewOriginal": "View original",
       "viewGhostCard": "View plugin card"
     },
+    "modelMismatch": {
+      "notice": "This turn was answered by {{actual}} instead of the selected {{selected}} (temporarily downgraded by the provider)"
+    },
     "ghostNotify": {
       "secretSaved": "Credential \"{{name}}\" saved",
       "oauthConnected": "Authorized — connected as {{label}}",

@@ -322,6 +322,12 @@ export interface ChatMessage {
   turnCostIsEstimate?: boolean;
   /** 本轮 token/cache 明细;旧消息或未拿到 usage 时缺省。 */
   turnUsageDetails?: TurnUsageDetails;
+  /**
+   * 本轮模型降级标记 — main 在 turn 结束检测到所选模型家族整轮缺席于实际
+   * modelUsage 时挂到该轮收尾 assistant 上(agentMeta.modelMismatch 持久化 +
+   * usage:message-model-mismatch 实时推送)。AssistantMessage 渲染降级提示行。
+   */
+  modelMismatch?: { selected: string; actual: string };
   /** 历史行由 device-link 压缩过;merge 时不能覆盖控制端已有的完整实时内容。 */
   remoteContentTruncated?: boolean;
   /** 历史页由 device-link 裁掉过部分行;分页状态需保持可继续加载。 */
@@ -3238,6 +3244,28 @@ function initGlobalListeners(): void {
     });
   }
 
+  // 模型降级标记实时推送(main 的 modelMismatchBroadcaster,与 turn-cost 同款
+  // 「落库 agent_meta + 广播」两路;历史加载路径由 buildChatMessages 兜底)。
+  function handleUsageMessageModelMismatchRaw(raw: unknown): void {
+    const p = raw as {
+      sessionId?: string;
+      clientId?: string;
+      modelMismatch?: { selected?: unknown; actual?: unknown } | null;
+    } | null;
+    if (!p?.sessionId || !p.clientId) return;
+    const mm = p.modelMismatch;
+    if (!mm || typeof mm.selected !== 'string' || !mm.selected || typeof mm.actual !== 'string' || !mm.actual) return;
+    const { sessionId, clientId } = p;
+    const modelMismatch = { selected: mm.selected, actual: mm.actual };
+    setState(sessionId, (s) => {
+      const idx = s.messages.findIndex((m) => m.clientId === clientId);
+      if (idx < 0) return s;
+      const msgs = s.messages.slice();
+      msgs[idx] = { ...msgs[idx], modelMismatch };
+      return { ...s, messages: msgs };
+    });
+  }
+
   // ── device-link:被控端转发回来的 renderer 广播事件,喂进上面同一套 handler ──
   // payload = { deviceId, channel, payload };按原 channel 路由到对应 handler,
   // 按 sessionId 命中既有 reducer —— 远程会话因此和本地会话共用一套流式 / 审批 / 消息渲染。
@@ -3276,6 +3304,9 @@ function initGlobalListeners(): void {
           break;
         case 'usage:message-turn-cost':
           handleUsageMessageTurnCostRaw(push.payload);
+          break;
+        case 'usage:message-model-mismatch':
+          handleUsageMessageModelMismatchRaw(push.payload);
           break;
         case 'local-db:sessions:patched': {
           // 被控端会话元数据 / 设置变更 → 就地镜像到远程项目分片(取代乐观覆盖)。
@@ -3415,6 +3446,11 @@ function initGlobalListeners(): void {
     (cb) => window.electronAPI.onUsageMessageTurnCost?.(cb),
     handleUsageMessageTurnCostRaw,
     'usage-message-turn-cost',
+  );
+  bindIpc(
+    (cb) => window.electronAPI.onUsageMessageModelMismatch?.(cb),
+    handleUsageMessageModelMismatchRaw,
+    'usage-message-model-mismatch',
   );
 
   // ── 意识拦截(订阅槽①):用户消息被钩子拦下 ──
@@ -7009,6 +7045,14 @@ function mapServerMessages(serverMsgs: Message[]): ChatMessage[] {
                 ...(turnUsageDetails ? { turnUsageDetails } : {}),
               };
             })()
+          : {}),
+        // assistant 上挂的模型降级标记(main turn 结束检测命中时 patch 进 agent_meta)
+        ...(m.role === 'assistant' &&
+        typeof m.agentMeta?.modelMismatch?.selected === 'string' &&
+        m.agentMeta.modelMismatch.selected &&
+        typeof m.agentMeta.modelMismatch.actual === 'string' &&
+        m.agentMeta.modelMismatch.actual
+          ? { modelMismatch: m.agentMeta.modelMismatch }
           : {}),
         // subagent-model-chip: 历史重载时,纯文本子代理(全程不调工具)的子消息是
         // assistant/thinking 而非 tool_use,模型只在它们的 agentMeta 上。这里和
