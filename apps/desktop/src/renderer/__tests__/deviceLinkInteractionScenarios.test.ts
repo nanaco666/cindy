@@ -582,7 +582,9 @@ describe('远程交互接线不变式', () => {
     const activeEffort = body.indexOf('const activeEffort =');
     const payloadEffort = body.indexOf('...(activeEffort !== undefined ? { effort: activeEffort } : {})');
     expect(activeEffort).toBeGreaterThan(-1);
-    expect(body).toContain('patch.fast !== undefined ? dlSel?.effort ?? deviceLinkInitial?.effort : undefined');
+    expect(body).toContain(
+      'patch.fast !== undefined ? (dlSel?.effort ?? deviceLinkInitial?.effort) : undefined',
+    );
     expect(payloadEffort).toBeGreaterThan(activeEffort);
   });
 
