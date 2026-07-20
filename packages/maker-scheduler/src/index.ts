@@ -1,4 +1,5 @@
 export * from './types.js';
+export * from './pre-run-hook-update.js';
 export * from './builtin-templates.js';
 export * from './engine/scheduler.js';
 export * from './engine/cron.js';

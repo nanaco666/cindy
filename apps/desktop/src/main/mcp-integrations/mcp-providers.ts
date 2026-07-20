@@ -17,6 +17,7 @@ import { feishuIm } from '../im';
 import { getSlackToolBridge } from '../hook-control/slackToolBridge.js';
 import { createLogger } from '../logger.js';
 import { getScheduler } from '../scheduler-host/index.js';
+import { stabilizeHookCommand } from '../scheduler-host/hook-script-generator.js';
 import { searchSessionsFn } from '../maker-host/session-search.js';
 import { readLspModeSettings } from '../maker-host/lsp-mode-store.js';
 import { tryGetOrcaCollabService } from '../maker-ipc/register.js';
@@ -153,6 +154,8 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
             return undefined;
           }
         },
+        stabilizeCommand: async ({ command, workingDir }) =>
+          stabilizeHookCommand(command, workingDir),
         install: async (input) => {
           const [{ installHookScript }, { getMaker }, { app }] = await Promise.all([
             import('../scheduler-host/hook-script-generator.js'),
