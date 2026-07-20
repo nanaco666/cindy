@@ -660,12 +660,21 @@ describe('anthropic-compat-proxy routingTransform', () => {
     upstreamClose = upstream.close;
     const chunks: string[] = [];
     let observedEnd = false;
-    let observedCtx: { url: string; status: number; upstreamBase: string } | null = null;
+    let transformedReqId: number | null = null;
+    let observedCtx: { reqId: number; url: string; status: number; upstreamBase: string } | null = null;
     proxy = await createAnthropicCompatProxy({
       upstream: upstream.url,
-      transformRequest: [],
+      transformRequest: [(_body, ctx) => {
+        transformedReqId = ctx.reqId;
+        return null;
+      }],
       responseObserver: (ctx) => {
-        observedCtx = { url: ctx.url, status: ctx.status, upstreamBase: ctx.upstreamBase };
+        observedCtx = {
+          reqId: ctx.reqId,
+          url: ctx.url,
+          status: ctx.status,
+          upstreamBase: ctx.upstreamBase,
+        };
         return {
           onData: (chunk) => chunks.push(chunk.toString('utf8')),
           onEnd: () => { observedEnd = true; },
@@ -677,7 +686,13 @@ describe('anthropic-compat-proxy routingTransform', () => {
 
     expect(r.status).toBe(200);
     expect(JSON.parse(r.text)).toEqual({ id: 'resp_123', service_tier: 'priority' });
-    expect(observedCtx).toEqual({ url: '/v1/responses', status: 200, upstreamBase: upstream.url });
+    expect(transformedReqId).toBeTypeOf('number');
+    expect(observedCtx).toEqual({
+      reqId: transformedReqId,
+      url: '/v1/responses',
+      status: 200,
+      upstreamBase: upstream.url,
+    });
     expect(chunks.join('')).toBe(r.text);
     expect(observedEnd).toBe(true);
   });

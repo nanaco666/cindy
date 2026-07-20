@@ -14,6 +14,7 @@
  */
 import {
   connectedProvidersForAgent,
+  effectiveSourceIdForModel,
   getModel,
   modelSupportsFastMode,
   nativeDefaultSourceId,
@@ -44,7 +45,11 @@ export interface MobileModelSections {
   sections: ProviderSection[];
   /** 该 agent 已连接的供应商(来源栏)。 */
   connected: ProviderView[];
-  /** 当前高亮的来源 id:显式选中且在 connected 内则用它,否则取被控端原生默认来源。 */
+  /**
+   * 当前高亮的来源 id(按当前模型收窄,桌面 effectiveSourceIdForModel 同口径):
+   * 显式选中且已连接且提供当前模型 → 用它;否则在提供该模型的已连接来源里取原生默认;
+   * 没有任何已连接来源提供该模型 → null(药丸无来源图标、列表无 ✓)。
+   */
   activeSourceId: string | null;
 }
 
@@ -64,12 +69,30 @@ export function buildMobileModelSections(args: {
 }): MobileModelSections {
   const connected = connectedProvidersForAgent([...args.providers], args.agentKind);
 
+  // 生效来源必须按当前模型收窄(共享 effectiveSourceIdForModel,与桌面 0f75dd560 修复同口径):
+  // 显式选中的来源要「已连接且**确实提供当前模型**」才用它;否则在提供该模型的已连接来源里取
+  // 原生默认;一个都没有 → null(绝不拼出「来源 A 图标 + 只有来源 B 提供的模型」的不存在路由,
+  // 也不再让断开/不提供该模型的显式来源粘在药丸上)。未传 selectedModelId(无从收窄)时保持
+  // 旧口径:显式已连接来源 → agent 原生默认。
+  const activeSourceId = args.selectedModelId
+    ? effectiveSourceIdForModel(
+        [...args.providers],
+        args.selectedProviderId ?? null,
+        args.selectedModelId,
+        args.agentKind,
+      )
+    : args.selectedProviderId && connected.some((p) => p.id === args.selectedProviderId)
+      ? args.selectedProviderId
+      : nativeDefaultSourceId(connected, args.agentKind);
+
   const overrides = args.visibilityOverrides;
   const sections = buildProviderSections({
     providers: connected,
     agent: args.agentKind,
     selectedModelId: args.selectedModelId,
-    selectedProviderId: args.selectedProviderId,
+    // 「选中行即使被隐藏也保留」的豁免必须指向真正会打 ✓ 的那行 —— 用解析后的
+    // activeSourceId(桌面同口径),而不是可能失效的原始 selectedProviderId。
+    selectedProviderId: activeSourceId,
     // key 形如 `${agent}:${providerId}:${modelId}`,与桌面 modelVisibilityPrefs.keyOf /
     // main model-visibility-mirror.keyOf 一致(三处需保持同步)。
     isVisible: overrides
@@ -81,11 +104,6 @@ export function buildMobileModelSections(args: {
       : () => true,
     query: args.query,
   });
-
-  const activeSourceId =
-    args.selectedProviderId && connected.some((p) => p.id === args.selectedProviderId)
-      ? args.selectedProviderId
-      : nativeDefaultSourceId(connected, args.agentKind);
 
   return { sections, connected, activeSourceId };
 }

@@ -148,4 +148,25 @@ describe('resolveDeviceLinkDraftDefaults', () => {
     expect(sel.effort).toBe('xhigh'); // 用激活档,不是记忆的 high
     expect(sel.fastMode).toBe(true);
   });
+
+  it('首页当前显示模型也采用被控端全局模型预设', () => {
+    const sel = resolveDeviceLinkDraftDefaults(
+      caps(),
+      {
+        model: 'claude-opus-4-8',
+        effort: 'high',
+        fastMode: false,
+        providerModelMemory: {
+          'claude-code:*': {
+            effortByModel: { 'claude-opus-4-8': 'xhigh' },
+            fastByModel: { 'claude-opus-4-8': true },
+          },
+        },
+      },
+      undefined,
+      'claude-code',
+    );
+    expect(sel.effort).toBe('xhigh');
+    expect(sel.fastMode).toBe(true);
+  });
 });

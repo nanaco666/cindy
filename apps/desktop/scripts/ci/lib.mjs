@@ -80,6 +80,7 @@ export const PACKAGED_APP_NAME = 'Cindy';
 export const PACKAGED_APP_NAME_BY_REGION = Object.freeze({
   cn: 'Cindy',
   global: 'CindyGlobal',
+  dev: 'CindyDev',
 });
 
 export function packagedAppName(region = 'cn') {
@@ -97,6 +98,7 @@ export function packagedAppName(region = 'cn') {
 export const RELEASE_ARTIFACT_BASENAME_BY_REGION = Object.freeze({
   cn: 'cindy',
   global: 'cindy-global',
+  dev: 'cindy-dev',
 });
 
 export function releaseArtifactBasename(region = 'cn') {

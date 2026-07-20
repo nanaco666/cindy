@@ -171,13 +171,6 @@ export interface Schedule {
    * 详见 PreRunHookConfig。
    */
   preRunHook?: PreRunHookConfig;
-  /**
-   * 跳过留痕承载会话 id（runner 管理，UI 不直接编辑）。前置检查拦截时 runner
-   * 把「本轮已跳过」的合成消息写进该会话；首次跳过时创建并经 scheduler.update
-   * 回写本字段，后续跳过复用（避免高频任务每次跳过都新建会话刷屏侧边栏）。
-   * heartbeat / persistentSession 任务不用本字段——跳过消息直接进绑定会话。
-   */
-  skipLogSessionId?: string;
   notify: ScheduleNotifyConfig;
   status: ScheduleStatus;
   createdAt: number;
@@ -262,8 +255,6 @@ export interface CreateScheduleInput {
    * create 时 null 与 undefined 同义,引擎归一成 undefined）。
    */
   preRunHook?: PreRunHookConfig | null;
-  /** 跳过留痕承载会话 id（runner 经 update 回写用，创建时通常不传）。 */
-  skipLogSessionId?: string;
   notify: ScheduleNotifyConfig;
   expireAt?: number;
 }

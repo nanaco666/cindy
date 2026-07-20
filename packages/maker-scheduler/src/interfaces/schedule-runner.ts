@@ -87,7 +87,7 @@ export interface FireResult {
    * 未消耗 token。engine 据此:把预插的 running run 改成 status='skipped'(带
    * readAt,生而已读、不通知不亮红点)、emit 'skipped' 事件,并**照常**按 recurring
    * 语义重排下一次触发(与 deferred 的短延重试不同——跳过就是这一轮的最终结果)。
-   * sessionId 指向跳过留痕会话(runner 写入合成"已跳过"消息的那个),可为空串。
+   * sessionId 在跳过时为空串：本轮不创建或更新会话，跳过原因通过 resultText 保存。
    * resultText 可携带跳过原因摘要(脚本 stdout),落进 run 记录供历史回顾。
    */
   skipped?: boolean;

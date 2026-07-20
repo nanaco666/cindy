@@ -1,36 +1,77 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
+import type { Effort } from '@/lib/userPreferences.types';
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { defaultValue?: string }) => {
+    t: (
+      key: string,
+      options?: {
+        defaultValue?: string;
+        input?: string;
+        output?: string;
+        source?: string;
+        value?: string;
+      },
+    ) => {
       const translations: Record<string, string> = {
         'effortLevels.xhigh': '超高',
+        'settings.providers.anthropic.title': 'Anthropic',
       };
+      if (key === 'newChat.modelSelector.priceTip') {
+        return `Input ${options?.input} · Output ${options?.output} per 1M tokens`;
+      }
+      if (key === 'newChat.modelSelector.meta.context') {
+        return `${options?.value} context`;
+      }
+      if (key === 'newChat.modelSelector.source.viaSource') {
+        return `Source: ${options?.source}`;
+      }
       return translations[key] ?? options?.defaultValue ?? key;
     },
   }),
 }));
 
-vi.mock('@/components/ui/popover', () => ({
-  Popover: ({ children }: { children: React.ReactNode }) => children,
-  PopoverTrigger: ({ children }: { children: React.ReactNode }) => children,
-  PopoverContent: () => null,
-}));
-
-vi.mock('@/components/ui/tooltip', async () => {
+vi.mock('@/components/ui/popover', async () => {
   const React = await import('react');
+  const OpenContext = React.createContext(true);
   return {
-    Tip: ({
+    Popover: ({ children, open }: { children: React.ReactNode; open?: boolean }) =>
+      React.createElement(OpenContext.Provider, { value: open ?? true }, children),
+    PopoverTrigger: ({ children }: { children: React.ReactNode }) => children,
+    PopoverAnchor: ({ children }: { children: React.ReactNode }) => children,
+    PopoverContent: ({
       children,
-      contentClassName,
+      className,
+      align,
+      onPointerEnter,
+      onPointerLeave,
     }: {
-      children: React.ReactElement;
-      contentClassName?: string;
-    }) => React.createElement('div', { 'data-tooltip-class': contentClassName }, children),
+      children: React.ReactNode;
+      className?: string;
+      align?: 'start' | 'center' | 'end';
+      onPointerEnter?: React.PointerEventHandler<HTMLDivElement>;
+      onPointerLeave?: React.PointerEventHandler<HTMLDivElement>;
+    }) => {
+      const open = React.useContext(OpenContext);
+      return open
+        ? React.createElement(
+            'div',
+            {
+              className,
+              'data-testid': 'model-options-popover',
+              'data-align': align,
+              onPointerEnter,
+              onPointerLeave,
+            },
+            children,
+          )
+        : null;
+    },
   };
 });
 
@@ -45,12 +86,28 @@ vi.mock('@/hooks/useAgentCapabilities', () => ({
         {
           id: 'claude-opus-4-8',
           displayName: 'Opus 4.8',
+          description: 'Most capable for ambitious work',
           contextWindow: 200000,
           efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
           defaultEffort: 'high',
           effortDisplayNames: {
             xhigh: 'X-High',
           },
+        },
+        {
+          id: 'claude-sonnet-4-6',
+          displayName: 'Sonnet 4.6',
+          contextWindow: 200000,
+          efforts: ['low', 'medium', 'high'],
+          defaultEffort: 'medium',
+        },
+        {
+          id: 'claude-haiku-4-5',
+          displayName: 'Haiku 4.5',
+          description: 'Fastest for quick answers',
+          contextWindow: 200000,
+          efforts: [],
+          defaultEffort: null,
         },
       ],
       effortLevels: [{ id: 'xhigh', displayName: 'X-High' }],
@@ -68,11 +125,59 @@ vi.mock('@/hooks/useConnectedSource', () => ({
 }));
 
 vi.mock('@/hooks/useModelPricing', () => ({
-  useModelPricing: () => ({}),
+  useModelPricing: () => ({
+    'claude-opus-4-8': {
+      inputUsdPerMtok: 3,
+      outputUsdPerMtok: 15,
+    },
+  }),
 }));
 
+// 可变 providers mock:默认 = anthropic fixture(分段/hover 用例依赖),
+// 个别来源解析用例可临时替换,用完必须还原 DEFAULT_PROVIDERS。
+const providersRef = vi.hoisted(() => {
+  const DEFAULT_PROVIDERS = [
+    {
+      id: 'anthropic',
+      name: 'Anthropic',
+      source: 'builtin',
+      agents: ['claude-code'],
+      auth: { method: 'oauth' },
+      routing: {},
+      connected: true,
+      models: {
+        'claude-code': [
+          {
+            id: 'claude-opus-4-8',
+            name: 'Opus 4.8',
+            description: 'Most capable for ambitious work',
+            contextWindow: 200000,
+            efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+            defaultEffort: 'high',
+          },
+          {
+            id: 'claude-sonnet-4-6',
+            name: 'Sonnet 4.6',
+            contextWindow: 200000,
+            efforts: ['low', 'medium', 'high'],
+            defaultEffort: 'medium',
+          },
+          {
+            id: 'claude-haiku-4-5',
+            name: 'Haiku 4.5',
+            description: 'Fastest for quick answers',
+            contextWindow: 200000,
+            efforts: [],
+            defaultEffort: null,
+          },
+        ],
+      },
+    },
+  ] as unknown[];
+  return { DEFAULT_PROVIDERS, providers: DEFAULT_PROVIDERS };
+});
 vi.mock('@/hooks/useProviders', () => ({
-  useProviders: () => ({ providers: [] }),
+  useProviders: () => ({ providers: providersRef.providers }),
 }));
 
 vi.mock('@/hooks/useDeviceProviders', () => ({
@@ -85,6 +190,7 @@ vi.mock('@/lib/providerModels', () => ({
     {
       id: 'claude-opus-4-8',
       displayName: 'Opus 4.8',
+      description: 'Most capable for ambitious work',
       contextWindow: 200000,
       efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
       defaultEffort: 'high',
@@ -92,16 +198,27 @@ vi.mock('@/lib/providerModels', () => ({
         xhigh: 'X-High',
       },
     },
+    {
+      id: 'claude-sonnet-4-6',
+      displayName: 'Sonnet 4.6',
+      contextWindow: 200000,
+      efforts: ['low', 'medium', 'high'],
+      defaultEffort: 'medium',
+    },
+    {
+      id: 'claude-haiku-4-5',
+      displayName: 'Haiku 4.5',
+      description: 'Fastest for quick answers',
+      contextWindow: 200000,
+      efforts: [],
+      defaultEffort: null,
+    },
   ],
 }));
 
 vi.mock('@/state/modelVisibilityPrefs', () => ({
   isModelEnabled: () => true,
   useModelVisibilityVersion: () => 0,
-}));
-
-vi.mock('@/state/sessionModelMemory', () => ({
-  useSessionModelMemoryVersion: () => 0,
 }));
 
 vi.mock('@/state/providerModelMemory', () => ({
@@ -116,7 +233,6 @@ import {
   ModelSelector,
   ModelSelectorContent,
   modelEffortLabel,
-  resolveModelBrandKind,
 } from '@/components/new-chat/ModelSelector';
 
 describe('ModelSelector trigger variants', () => {
@@ -151,9 +267,9 @@ describe('ModelSelector trigger variants', () => {
     expect(
       modelEffortLabel(t, { effortDisplayNames: { xhigh: 'Extra High' } }, 'xhigh', 'X-High'),
     ).toBe('超高');
-    expect(
-      modelEffortLabel(t, { effortDisplayNames: { xhigh: 'Extra High' } }, 'max', 'Max'),
-    ).toBe('Max');
+    expect(modelEffortLabel(t, { effortDisplayNames: { xhigh: 'Extra High' } }, 'max', 'Max')).toBe(
+      'Max',
+    );
   });
 
   it('renders an active fallback option without model effort metadata', () => {
@@ -190,10 +306,13 @@ describe('ModelSelector trigger variants', () => {
       }),
     );
 
-    expect(screen.queryByRole('button', { name: 'newChat.modelSelector.edit' })).toBeNull();
+    fireEvent.pointerEnter(screen.getByRole('option', { name: /Opus 4\.8/ }));
+    const information = screen.getByRole('group', { name: /Opus 4\.8/ });
+    expect(within(information).getByText('Most capable for ambitious work')).toBeTruthy();
+    expect(within(information).queryByRole('option')).toBeNull();
   });
 
-  it('forwards an overlay-specific z-index to model tooltips', () => {
+  it('forwards an overlay-specific z-index to the model information panel', () => {
     render(
       React.createElement(ModelSelectorContent, {
         modelId: 'claude-opus-4-8',
@@ -201,33 +320,279 @@ describe('ModelSelector trigger variants', () => {
         onModelChange: vi.fn(),
         onEffortChange: vi.fn(),
         vendorKey: 'cc',
-        tooltipContentClassName: 'z-[10020]',
+        overlayContentClassName: 'z-[10020]',
       }),
     );
 
-    expect(
-      screen
-        .getByRole('option', { name: /Opus 4\.8/ })
-        .parentElement?.getAttribute('data-tooltip-class'),
-    ).toBe('z-[10020]');
+    fireEvent.pointerEnter(screen.getByRole('option', { name: /Opus 4\.8/ }));
+    expect(screen.getByTestId('model-options-popover').className).toContain('z-[10020]');
   });
 
-  it('resolves the model mark from the model brand before the current runtime', () => {
-    expect(
-      resolveModelBrandKind({
-        modelId: 'gpt-5.5',
-        displayName: 'GPT-5.5 · 中',
-        agentKind: 'claude-code',
-        fallbackProviderId: 'anthropic',
-      }),
-    ).toBe('codex');
-    expect(
-      resolveModelBrandKind({
+  it('reveals the selected model options on row hover or keyboard focus without an Edit click', () => {
+    vi.useFakeTimers();
+    render(
+      React.createElement(ModelSelectorContent, {
         modelId: 'claude-opus-4-8',
-        displayName: 'Opus 4.8',
-        agentKind: 'codex',
-        fallbackProviderId: 'openai',
+        effort: 'high',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
       }),
-    ).toBe('claude');
+    );
+
+    const row = screen.getByRole('option', { name: /Opus 4\.8/ });
+    expect(screen.queryByRole('group', { name: /Opus 4\.8/ })).toBeNull();
+    expect(screen.queryByText('newChat.modelSelector.edit')).toBeNull();
+
+    fireEvent.pointerEnter(row);
+    const options = screen.getByRole('group', { name: /Opus 4\.8/ });
+    expect(screen.getByTestId('model-options-popover').getAttribute('data-align')).toBe('center');
+    expect(options).toBeTruthy();
+    expect(within(options).getByText('Most capable for ambitious work')).toBeTruthy();
+    expect(within(options).getByText('Source: Anthropic')).toBeTruthy();
+    expect(within(options).getByText('200K context')).toBeTruthy();
+    const price = within(options).getByText('Input $3 · Output $15 per 1M tokens');
+    const firstChoice = within(options).getByRole('option', { name: 'low' });
+    const description = within(options).getByText('Most capable for ambitious work');
+    expect(
+      description.compareDocumentPosition(firstChoice) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(firstChoice.compareDocumentPosition(price) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(row.getAttribute('data-model-options-active')).toBe('true');
+
+    fireEvent.pointerLeave(row);
+    act(() => vi.advanceTimersByTime(79));
+    expect(screen.getByRole('group', { name: /Opus 4\.8/ })).toBeTruthy();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.queryByRole('group', { name: /Opus 4\.8/ })).toBeNull();
+
+    fireEvent.focus(row);
+    expect(screen.getByRole('group', { name: /Opus 4\.8/ })).toBeTruthy();
+    vi.useRealTimers();
+  });
+
+  it('shows model information even when a model has no configurable options', () => {
+    render(
+      React.createElement(ModelSelectorContent, {
+        modelId: 'claude-opus-4-8',
+        effort: 'high',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+      }),
+    );
+
+    fireEvent.pointerEnter(screen.getByRole('option', { name: /Haiku 4\.5/ }));
+    const information = screen.getByRole('group', { name: /Haiku 4\.5/ });
+    expect(within(information).getByText('Fastest for quick answers')).toBeTruthy();
+    expect(within(information).getByText('200K context')).toBeTruthy();
+    expect(within(information).queryByRole('option')).toBeNull();
+  });
+
+  it('lets inactive provider rows edit the injected preset without switching the model', () => {
+    const onProviderChange = vi.fn();
+    const setEffort = vi.fn();
+    const modelMemory = {
+      getEffort: vi.fn(),
+      setEffort,
+      getFast: vi.fn(),
+      setFast: vi.fn(),
+    };
+
+    render(
+      React.createElement(ModelSelectorContent, {
+        modelId: 'claude-opus-4-8',
+        effort: 'high',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+        currentProviderId: 'anthropic',
+        onProviderChange,
+        modelMemory,
+      }),
+    );
+
+    const opusRow = screen.getByRole('option', { name: /Opus 4\.8/ });
+    const sonnetRow = screen.getByRole('option', { name: /Sonnet 4\.6/ });
+    fireEvent.pointerEnter(opusRow);
+    expect(screen.getByRole('group', { name: /Opus 4\.8/ })).toBeTruthy();
+
+    fireEvent.pointerEnter(sonnetRow);
+    expect(screen.queryByRole('group', { name: /Opus 4\.8/ })).toBeNull();
+    const options = screen.getByRole('group', { name: /Sonnet 4\.6/ });
+    expect(sonnetRow.getAttribute('data-model-options-active')).toBe('true');
+    expect(opusRow.getAttribute('data-model-options-active')).toBeNull();
+    fireEvent.click(within(options).getByRole('option', { name: 'high' }));
+
+    expect(setEffort).toHaveBeenCalledWith('claude-code', 'anthropic', 'claude-sonnet-4-6', 'high');
+    expect(onProviderChange).not.toHaveBeenCalled();
+  });
+
+  it('shares inactive model presets across conversations while protecting an active model', () => {
+    const efforts = new Map<string, Effort>();
+    const keyOf = (providerId: string, modelId: string) => `${providerId}:${modelId}`;
+    const modelMemory = {
+      getEffort: vi.fn((_agent: string, providerId: string, modelId: string) =>
+        efforts.get(keyOf(providerId, modelId)),
+      ),
+      setEffort: vi.fn((_agent: string, providerId: string, modelId: string, effort: Effort) => {
+        efforts.set(keyOf(providerId, modelId), effort);
+      }),
+      getFast: vi.fn(),
+      setFast: vi.fn(),
+    };
+
+    // 对话 A 当前用 Sonnet,把非当前的 Opus 全局预设改成 High。
+    const conversationA = render(
+      React.createElement(ModelSelectorContent, {
+        modelId: 'claude-sonnet-4-6',
+        effort: 'medium',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+        currentProviderId: 'anthropic',
+        onProviderChange: vi.fn(),
+        modelMemory,
+      }),
+    );
+    fireEvent.pointerEnter(screen.getByRole('option', { name: /Opus 4\.8/ }));
+    fireEvent.click(
+      within(screen.getByRole('group', { name: /Opus 4\.8/ })).getByRole('option', {
+        name: 'high',
+      }),
+    );
+    expect(efforts.get('anthropic:claude-opus-4-8')).toBe('high');
+    conversationA.unmount();
+
+    // 对话 B 当前用别的模型,其 Opus 非当前行立即读取同一份 High 预设。
+    const conversationB = render(
+      React.createElement(ModelSelectorContent, {
+        modelId: 'claude-haiku-4-5',
+        effort: 'medium',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+        currentProviderId: 'anthropic',
+        onProviderChange: vi.fn(),
+        modelMemory,
+      }),
+    );
+    fireEvent.pointerEnter(screen.getByRole('option', { name: /Opus 4\.8/ }));
+    expect(
+      within(screen.getByRole('group', { name: /Opus 4\.8/ }))
+        .getByRole('option', { name: 'high' })
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+    conversationB.unmount();
+
+    // 对话 C 正在用 Opus/Medium:选中行以 live 值为准,不被全局 High 覆盖。
+    render(
+      React.createElement(ModelSelectorContent, {
+        modelId: 'claude-opus-4-8',
+        effort: 'medium',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+        currentProviderId: 'anthropic',
+        onProviderChange: vi.fn(),
+        modelMemory,
+      }),
+    );
+    fireEvent.pointerEnter(screen.getByRole('option', { name: /Opus 4\.8/ }));
+    const activeOptions = screen.getByRole('group', { name: /Opus 4\.8/ });
+    expect(
+      within(activeOptions).getByRole('option', { name: 'medium' }).getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(
+      within(activeOptions).getByRole('option', { name: 'high' }).getAttribute('aria-selected'),
+    ).toBe('false');
+  });
+
+  it('renders the routed source mark on the trigger instead of guessing a model brand', () => {
+    // claude-* 模型经自定义网关路由时,trigger 必须显示该来源的 monogram,
+    // 不能按 model id 猜成 Claude 厂牌图标(否则订阅直连与网关来源同貌,用户无法自查)。
+    providersRef.providers = [
+      {
+        id: 'zeta-gw',
+        name: 'Zeta',
+        connected: true,
+        agents: ['claude-code'],
+        routing: { 'claude-code': {} },
+        models: {
+          'claude-code': [
+            {
+              id: 'claude-opus-4-8',
+              name: 'Opus 4.8',
+              contextWindow: 200000,
+              efforts: ['high'],
+              defaultEffort: 'high',
+            },
+          ],
+        },
+      },
+    ];
+    try {
+      render(
+        React.createElement(ModelSelector, {
+          modelId: 'claude-opus-4-8',
+          effort: 'high',
+          onModelChange: vi.fn(),
+          onEffortChange: vi.fn(),
+          vendorKey: 'cc',
+        }),
+      );
+
+      const trigger = screen.getByRole('button', { name: /Current: Opus 4\.8/ });
+      // ProviderMark 自定义供应商分支渲染 name 首字母 monogram。
+      expect(trigger.textContent).toContain('Z');
+      expect(trigger.textContent).toContain('Opus 4.8');
+    } finally {
+      providersRef.providers = providersRef.DEFAULT_PROVIDERS;
+    }
+  });
+
+  it('honors the gateway-configured model icon over the source mark fallback', () => {
+    // 统一规则:模型条目带 icon(AI Gateway / 目录设定)→ 渲染厂牌 mark(此处 Claude svg),
+    // 不再显示来源 monogram;缺省才回落来源标(上一个用例)。
+    providersRef.providers = [
+      {
+        id: 'zeta-gw',
+        name: 'Zeta',
+        connected: true,
+        agents: ['claude-code'],
+        routing: { 'claude-code': {} },
+        models: {
+          'claude-code': [
+            {
+              id: 'claude-opus-4-8',
+              name: 'Opus 4.8',
+              contextWindow: 200000,
+              efforts: ['high'],
+              defaultEffort: 'high',
+              icon: 'claude',
+            },
+          ],
+        },
+      },
+    ];
+    try {
+      render(
+        React.createElement(ModelSelector, {
+          modelId: 'claude-opus-4-8',
+          effort: 'high',
+          onModelChange: vi.fn(),
+          onEffortChange: vi.fn(),
+          vendorKey: 'cc',
+        }),
+      );
+
+      const trigger = screen.getByRole('button', { name: /Current: Opus 4\.8/ });
+      expect(trigger.textContent).not.toContain('Z');
+      expect(trigger.textContent).toContain('Opus 4.8');
+    } finally {
+      providersRef.providers = providersRef.DEFAULT_PROVIDERS;
+    }
   });
 });

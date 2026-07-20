@@ -59,6 +59,7 @@ import {
   type SchemaMigrationLease,
 } from './schemaMigrationLease';
 import { runSchemaStartupPolicy } from './schemaStartupPolicy';
+import { buildSharedDbCompatibilityMessage } from './sharedDbCompatibilityMessage';
 
 import { createLogger } from '../logger';
 
@@ -296,16 +297,7 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
     });
     if (!schemaStartup.ready) {
       const compatibility = schemaStartup.compatibility;
-      const issueSummary = compatibility.issues
-        .slice(0, 3)
-        .map((issue) => issue.kind)
-        .join(', ');
-      const message =
-        'passive dev 拒绝打开共享数据库：数据库 migration 与当前 checkout 不完全一致' +
-        `（DB schema_version=${compatibility.databaseVersion}，` +
-        `checkout=${compatibility.checkoutVersion}，问题=${issueSummary || 'unknown'}）。` +
-        'passive 实例不会自行迁移共享 userData；请先用当前 checkout 启动 primary 完成迁移，' +
-        '或改用 --isolated。';
+      const message = buildSharedDbCompatibilityMessage(compatibility);
       log.error(
         JSON.stringify({
           event: 'localDb.ensureReady.passiveMigrationMismatch',
@@ -317,7 +309,7 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
         }),
       );
       closeDb({ preserveSchemaMigrationLease: !readerLeaseAcquiredThisCall });
-      showFatalDialog('passive dev 无法共享当前数据库', message);
+      showFatalDialog('当前开发版与本地数据版本不兼容', message);
       return { ready: false, error: { code: 'MIGRATE_FAILED', message } };
     }
     if (schemaStartup.compatibility) {

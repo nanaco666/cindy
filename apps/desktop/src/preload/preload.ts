@@ -295,7 +295,8 @@ const fanOutSelectionContextMenuAddToChat = createIpcFanOut(SELECTION_CONTEXT_ME
 const fanOutUsageSessionSpendChanged = createIpcFanOut('usage:session-spend-changed');
 const fanOutUsageSessionTokensChanged = createIpcFanOut('usage:session-tokens-changed');
 // per-message 维度: turn 结束后 main 把该轮费用挂到最后一条 assistant 并推送
-// (MessageActionBar 显示)。payload: { sessionId, clientId, turnCostUsd, turnCostIsEstimate }。
+// (MessageActionBar 显示)。payload 同时带原始 SDK 分段成本 turnCost* 与展示用
+// 用户轮累计 userTurnCost*；账单汇总只消费前者。
 const fanOutUsageMessageTurnCost = createIpcFanOut('usage:message-turn-cost');
 // per-message 维度: turn 结束检测到模型被上游降级 / 替换时推标记(AssistantMessage
 // 渲染降级提示行)。payload: { sessionId, clientId, modelMismatch: { selected, actual } }。
@@ -2896,7 +2897,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUsageSessionSpendChanged: fanOutUsageSessionSpendChanged,
   /** 订阅 session 级"终身累计 token"变化。payload: { sessionId, totalTokens }。 */
   onUsageSessionTokensChanged: fanOutUsageSessionTokensChanged,
-  /** 订阅单条消息的 per-turn 费用推送。payload: { sessionId, clientId, turnCostUsd, turnCostIsEstimate }。 */
+  /** 订阅单条消息的 per-turn 成本推送（含原始分段与展示用用户轮累计）。 */
   onUsageMessageTurnCost: fanOutUsageMessageTurnCost,
   /** 订阅单条消息的模型降级标记推送。payload: { sessionId, clientId, modelMismatch }。 */
   onUsageMessageModelMismatch: fanOutUsageMessageModelMismatch,
@@ -2951,6 +2952,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       /** 列出"最近工作目录"按 lastUsedAt desc;sessions 归档/删除不影响本表。 */
       list: (): Promise<unknown> =>
         ipcRenderer.invoke('local-db:recent-workdirs:list'),
+      /** 从最近列表移除一条(列表卫生,不动 sessions / 磁盘;再次使用会重新入列)。 */
+      remove: (input: { path: string }): Promise<unknown> =>
+        ipcRenderer.invoke('local-db:recent-workdirs:remove', input),
+      /** Broadcast: 任一窗口/远程调用删除条目后通知,其它窗口据此重拉列表。 */
+      onChanged: createIpcFanOut('local-db:recent-workdirs:changed'),
     },
     rightSidebarTabs: {
       /** 按 sessionId 拉 tab 列表 + activeTabId。 */

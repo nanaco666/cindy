@@ -186,7 +186,7 @@ describe('createModelRoutingTransform —— session-less 控制面请求(桶③
     host.setCodexProxyAuthInjection('oauth-bearer');
     const transform = host.createModelRoutingTransform();
     // GET /models: body=undefined, headers 无 thread-id → 解析不出 session。
-    expect(transform(undefined, { method: 'GET', url: '/models?client_version=0.135.0', headers: {} }))
+    expect(transform(undefined, { reqId: 1, method: 'GET', url: '/models?client_version=0.135.0', headers: {} }))
       .toEqual({ upstreamOverride: CHATGPT });
   });
 
@@ -194,7 +194,7 @@ describe('createModelRoutingTransform —— session-less 控制面请求(桶③
     const host = await import('../codex-proxy-host.js');
     host.setCodexProxyAuthInjection('env-key');
     const transform = host.createModelRoutingTransform();
-    expect(transform(undefined, { method: 'GET', url: '/models', headers: {} })).toBeNull();
+    expect(transform(undefined, { reqId: 1, method: 'GET', url: '/models', headers: {} })).toBeNull();
   });
 
   it('provider-oauth + 无 session + 无 model(GET /models)→ 路由到 provider OAuth 上游', async () => {
@@ -207,7 +207,7 @@ describe('createModelRoutingTransform —— session-less 控制面请求(桶③
     const transform = host.createModelRoutingTransform();
 
     await expect(Promise.resolve(
-      transform(undefined, { method: 'GET', url: '/models', headers: {} }),
+      transform(undefined, { reqId: 1, method: 'GET', url: '/models', headers: {} }),
     )).resolves.toEqual({
       upstreamOverride: 'https://api.x.ai/v1',
       headerOverride: { authorization: 'Bearer xai-live-token' },
@@ -224,7 +224,7 @@ describe('createModelRoutingTransform —— session-less 控制面请求(桶③
     const transform = host.createModelRoutingTransform();
     // codex/ 骨折模型 + 无 session: 若被桶③劫持会返回 { upstreamOverride: CHATGPT };
     // 正确行为是落 ② decideCodexRoute → 换 gateway key。
-    expect(transform({ model: 'codex/gpt-5.5', input: [] }, { method: 'POST', url: '/responses', headers: {} }))
+    expect(transform({ model: 'codex/gpt-5.5', input: [] }, { reqId: 1, method: 'POST', url: '/responses', headers: {} }))
       .toEqual({ headerOverride: { authorization: 'Bearer gw' } });
   });
 
@@ -240,7 +240,7 @@ describe('createModelRoutingTransform —— session-less 控制面请求(桶③
 
     await expect(Promise.resolve(transform(
       { model: 'xai/grok-4.3', input: [] },
-      { method: 'POST', url: '/responses', headers: { 'thread-id': 'thread-xai-route' } },
+      { reqId: 1, method: 'POST', url: '/responses', headers: { 'thread-id': 'thread-xai-route' } },
     ))).resolves.toEqual({
       upstreamOverride: 'https://api.x.ai/v1',
       headerOverride: { authorization: 'Bearer xai-token' },
@@ -263,7 +263,7 @@ describe('createModelRoutingTransform —— session-less 控制面请求(桶③
 
     await expect(Promise.resolve(transform(
       { model: 'xai/grok-4.3', input: [] },
-      { method: 'POST', url: '/responses', headers: { 'thread-id': 'thread-xai-implicit-route' } },
+      { reqId: 1, method: 'POST', url: '/responses', headers: { 'thread-id': 'thread-xai-implicit-route' } },
     ))).resolves.toEqual({
       upstreamOverride: 'https://api.x.ai/v1',
       headerOverride: { authorization: 'Bearer xai-token' },
@@ -286,14 +286,14 @@ describe('createModelRoutingTransform —— session-less 控制面请求(桶③
 
     expect(transform(
       { model: 'gpt-5.5', input: [] },
-      { method: 'POST', url: '/responses', headers: { 'thread-id': 'thread-xai-fallback' } },
+      { reqId: 1, method: 'POST', url: '/responses', headers: { 'thread-id': 'thread-xai-fallback' } },
     )).toEqual({ headerOverride: { authorization: 'Bearer gw-key' } });
 
     // 没网关 key → 保持 null(passthrough,预期 401),不额外兜底。
     host.setCodexProxyGatewayKeyReader(() => null);
     expect(transform(
       { model: 'gpt-5.5', input: [] },
-      { method: 'POST', url: '/responses', headers: { 'thread-id': 'thread-xai-fallback' } },
+      { reqId: 2, method: 'POST', url: '/responses', headers: { 'thread-id': 'thread-xai-fallback' } },
     )).toBeNull();
 
     clearSessionProvider('session-xai-fallback');

@@ -35,12 +35,12 @@ const OSS = require('ali-oss');
 // 发布区域(国内 cn / 海外 global)各自一套独立发布目标:cn 沿用既有 XDT_* 变量名,
 // global 用 XDT_GLOBAL_*。两套渠道(bucket / prefix / CDN 域名)不互相兜底,
 // 少配一项就 fail closed,防止海外产物误发进国内渠道(反之亦然)。
-export const RELEASE_REGIONS = Object.freeze(['cn', 'global']);
+export const RELEASE_REGIONS = Object.freeze(['cn', 'global', 'dev']);
 
 export function resolveReleaseRegion(region) {
   const normalized = region?.trim() || 'cn';
   if (!RELEASE_REGIONS.includes(normalized)) {
-    throw new Error(`Invalid release region: ${normalized}; expected cn or global`);
+    throw new Error(`Invalid release region: ${normalized}; expected cn, global or dev`);
   }
   return normalized;
 }
@@ -57,6 +57,15 @@ const OSS_ENV_NAMES_BY_REGION = Object.freeze({
     bucket: 'XDT_GLOBAL_OSS_BUCKET',
     prefix: 'XDT_GLOBAL_OSS_PREFIX',
     region: 'XDT_GLOBAL_OSS_REGION',
+  },
+  // dev 第三渠道(2026-07-20 预留):dev 服务器/bucket 就绪后填 release-regions.json
+  // 或以下 env;在此之前 dev 渠道的发布会因缺配置 fail closed。
+  // 前缀用 XDT_DEVCH_(dev channel),避免与既有 FP_DEV_* 凭证名混淆。
+  dev: {
+    cdnBase: 'XDT_DEVCH_CDN_BASE_URL',
+    bucket: 'XDT_DEVCH_OSS_BUCKET',
+    prefix: 'XDT_DEVCH_OSS_PREFIX',
+    region: 'XDT_DEVCH_OSS_REGION',
   },
 });
 
@@ -132,11 +141,13 @@ export async function gzipFile(srcPath, destPath) {
 // 可单独设 XDT_GLOBAL_OSS_ACCESS_KEY_*,不设则回落 FP_DEV_*(同账号跨区域场景)。
 export function resolveOssCredentials(releaseRegion = 'cn') {
   const region = resolveReleaseRegion(releaseRegion);
+  const regionKeyId = { global: 'XDT_GLOBAL_OSS_ACCESS_KEY_ID', dev: 'XDT_DEVCH_OSS_ACCESS_KEY_ID' }[region];
+  const regionKeySecret = { global: 'XDT_GLOBAL_OSS_ACCESS_KEY_SECRET', dev: 'XDT_DEVCH_OSS_ACCESS_KEY_SECRET' }[region];
   const accessKeyId =
-    (region === 'global' && process.env.XDT_GLOBAL_OSS_ACCESS_KEY_ID?.trim()) ||
+    (regionKeyId && process.env[regionKeyId]?.trim()) ||
     process.env.FP_DEV_OSS_ACCESS_KEY_ID;
   const accessKeySecret =
-    (region === 'global' && process.env.XDT_GLOBAL_OSS_ACCESS_KEY_SECRET?.trim()) ||
+    (regionKeySecret && process.env[regionKeySecret]?.trim()) ||
     process.env.FP_DEV_OSS_ACCESS_KEY_SECRET;
   if (!accessKeyId || !accessKeySecret) {
     console.error('ERROR: FP_DEV_OSS_ACCESS_KEY_ID and FP_DEV_OSS_ACCESS_KEY_SECRET must be set');

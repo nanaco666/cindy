@@ -2560,7 +2560,8 @@
       "cycleUsed": "Cycle used ${{spend}} / ${{budget}} ({{pct}}%)",
       "remaining": "Remaining ${{remain}}",
       "nextReset": "Next reset: {{at}}",
-      "latestTurnTitle": "Latest turn"
+      "latestTurnTitle": "Latest turn",
+      "latestUserTurnTitle": "Latest user-turn total"
     }
   },
   "usageDetails": {
@@ -3318,6 +3319,14 @@
       "notGitRepo": "Current directory is not a git repository",
       "alreadyInWorktree": "Already inside a worktree, nesting is not allowed"
     },
+    "branchChip": {
+      "label": "Branch",
+      "loading": "Loading branches…",
+      "loadFailed": "Failed to load branches — tap to retry",
+      "currentTooltip": "Current branch",
+      "sourceTooltip": "Worktree source branch",
+      "worktreeHint": "Picking another branch starts in an isolated worktree"
+    },
     "folderPicker": {
       "selectFolder": "Select folder",
       "selectProject": "Select project",
@@ -3327,7 +3336,9 @@
       "browseFolder": "Choose a different folder",
       "browseProjectFolder": "Choose another project folder",
       "dialogue": "Dialogue",
-      "dialogueOrSelectProject": "Dialogue or select project"
+      "dialogueOrSelectProject": "Dialogue or select project",
+      "removeFromList": "Remove from list",
+      "missingDir": "Folder not found"
     },
     "pendingQueue": {
       "regionAria": "Pending message queue",
@@ -3561,7 +3572,9 @@
       "edit": "Edit",
       "turnCost": "Cost this turn",
       "turnCostEstimated": "Token value this turn (API-price equivalent)",
-      "turnCostEstimatedValue": "Worth {{cost}}"
+      "turnCostEstimatedValue": "Worth {{cost}}",
+      "userTurnCostTotalLine": "User-turn total: {{cost}}",
+      "userTurnCostDetailsTitle": "Final SDK segment"
     },
     "errorBanner": {
       "retryTitle": "Resend the last message",

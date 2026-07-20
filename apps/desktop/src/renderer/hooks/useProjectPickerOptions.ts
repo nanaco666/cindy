@@ -28,6 +28,7 @@ export function useProjectPickerOptions(): FolderPickerOption[] {
         path: entry.path,
         name,
         description: posix,
+        missing: entry.exists === false,
       };
     });
   }, [entries]);

@@ -10,13 +10,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-export const CLIENT_BUILD_REGIONS = Object.freeze(['cn', 'global']);
+export const CLIENT_BUILD_REGIONS = Object.freeze(['cn', 'global', 'dev']);
 
 /** 规范化并校验构建 region。 */
 export function resolveClientBuildRegion(authRegion) {
   const region = authRegion?.trim() || 'cn';
   if (!CLIENT_BUILD_REGIONS.includes(region)) {
-    throw new Error(`Invalid Cindy auth region: ${region}; expected cn or global`);
+    throw new Error(`Invalid Cindy auth region: ${region}; expected cn, global or dev`);
   }
   return region;
 }
@@ -24,7 +24,8 @@ export function resolveClientBuildRegion(authRegion) {
 /** 返回 region 对应的仓内端点清单正本路径。 */
 export function clientEndpointManifestPath(authRegion, repoRoot = REPO_ROOT) {
   const region = resolveClientBuildRegion(authRegion);
-  return path.join(repoRoot, 'config', region === 'global' ? 'endpoint.global.json' : 'endpoint.json');
+  const fileByRegion = { cn: 'endpoint.json', global: 'endpoint.global.json', dev: 'endpoint.dev.json' };
+  return path.join(repoRoot, 'config', fileByRegion[region]);
 }
 
 /**

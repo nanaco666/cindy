@@ -2560,7 +2560,8 @@
       "cycleUsed": "本周期已用 ${{spend}} / ${{budget}} ({{pct}}%)",
       "remaining": "剩余 ${{remain}}",
       "nextReset": "下次重置: {{at}}",
-      "latestTurnTitle": "最近一轮"
+      "latestTurnTitle": "最近一轮",
+      "latestUserTurnTitle": "最近一轮用户请求累计"
     }
   },
   "usageDetails": {
@@ -3318,6 +3319,14 @@
       "notGitRepo": "当前目录不是 git 仓库",
       "alreadyInWorktree": "已在 worktree 中，禁止嵌套"
     },
+    "branchChip": {
+      "label": "分支",
+      "loading": "加载分支中…",
+      "loadFailed": "分支列表加载失败,点此重试",
+      "currentTooltip": "当前分支",
+      "sourceTooltip": "worktree 源分支",
+      "worktreeHint": "选择其他分支将以 worktree 隔离启动"
+    },
     "folderPicker": {
       "selectFolder": "选择文件夹",
       "selectProject": "选择项目",
@@ -3327,7 +3336,9 @@
       "browseFolder": "选择其他文件夹",
       "browseProjectFolder": "选择其他项目文件夹",
       "dialogue": "对话",
-      "dialogueOrSelectProject": "对话或选择项目"
+      "dialogueOrSelectProject": "对话或选择项目",
+      "removeFromList": "从列表中移除",
+      "missingDir": "目录不存在"
     },
     "pendingQueue": {
       "regionAria": "待发送消息队列",
@@ -3561,7 +3572,9 @@
       "edit": "编辑",
       "turnCost": "本轮消耗",
       "turnCostEstimated": "本轮 token 价值(按 API 单价折算)",
-      "turnCostEstimatedValue": "价值 {{cost}}"
+      "turnCostEstimatedValue": "价值 {{cost}}",
+      "userTurnCostTotalLine": "本轮累计：{{cost}}",
+      "userTurnCostDetailsTitle": "最后一个 SDK 分段"
     },
     "errorBanner": {
       "retryTitle": "重新发送最后一条消息",

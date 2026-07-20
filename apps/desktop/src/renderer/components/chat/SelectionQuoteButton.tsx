@@ -38,8 +38,11 @@ interface SelectionAnchor {
 const BUTTON_GAP_PX = 8;
 const BUTTON_HEIGHT_ESTIMATE_PX = 28;
 const BUTTON_MIN_TOP_PX = 44;
-const BUTTON_MIN_X_PX = 80;
-const BUTTON_RIGHT_MARGIN_PX = 80;
+// The fixed-position element's auto width is otherwise shrink-to-fit from its
+// untransformed `left` edge. Keep a full pill-width clearance on both sides:
+// the visual centering transform does not participate in that calculation.
+const BUTTON_MIN_X_PX = 100;
+const BUTTON_RIGHT_MARGIN_PX = 100;
 const FLOATING_QUOTE_DISABLED_SELECTOR = '[data-selection-floating-quote-disabled]';
 
 interface RectBounds {
@@ -268,7 +271,7 @@ export function SelectionQuoteButton({
       // mousedown 先于 click 触发浏览器清选区;preventDefault 保住选区与按钮。
       onMouseDown={(e) => e.preventDefault()}
       onClick={handleAdd}
-      className="fixed z-[60] flex items-center gap-2.5 rounded-full px-3 py-1.5 text-[12px] shadow-[var(--shadow-menu)]"
+      className="fixed z-[60] flex w-max items-center gap-2.5 whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] shadow-[var(--shadow-menu)]"
       style={{
         left: clamp(anchor.x, BUTTON_MIN_X_PX, window.innerWidth - BUTTON_RIGHT_MARGIN_PX),
         top:

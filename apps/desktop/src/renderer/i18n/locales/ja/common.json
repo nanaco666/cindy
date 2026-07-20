@@ -2560,7 +2560,8 @@
       "cycleUsed": "今期使用 ${{spend}} / ${{budget}} ({{pct}}%)",
       "remaining": "残り ${{remain}}",
       "nextReset": "次回リセット: {{at}}",
-      "latestTurnTitle": "直近のターン"
+      "latestTurnTitle": "直近のターン",
+      "latestUserTurnTitle": "直近のユーザーターン合計"
     }
   },
   "usageDetails": {
@@ -3318,6 +3319,14 @@
       "notGitRepo": "現在のディレクトリは git リポジトリではありません",
       "alreadyInWorktree": "すでに worktree 内です。ネストは禁止です"
     },
+    "branchChip": {
+      "label": "ブランチ",
+      "loading": "ブランチを読み込み中…",
+      "loadFailed": "ブランチの読み込みに失敗しました。タップして再試行",
+      "currentTooltip": "現在のブランチ",
+      "sourceTooltip": "worktree のソースブランチ",
+      "worktreeHint": "別のブランチを選択すると worktree 分離で開始します"
+    },
     "folderPicker": {
       "selectFolder": "フォルダを選択",
       "selectProject": "プロジェクトを選択",
@@ -3327,7 +3336,9 @@
       "browseFolder": "別のフォルダを選択",
       "browseProjectFolder": "別のプロジェクトフォルダを選択",
       "dialogue": "対話",
-      "dialogueOrSelectProject": "対話またはプロジェクトを選択"
+      "dialogueOrSelectProject": "対話またはプロジェクトを選択",
+      "removeFromList": "リストから削除",
+      "missingDir": "フォルダが見つかりません"
     },
     "pendingQueue": {
       "regionAria": "送信待ちメッセージのキュー",
@@ -3561,7 +3572,9 @@
       "edit": "編集",
       "turnCost": "このターンの消費",
       "turnCostEstimated": "このターンの token 価値(API 単価換算)",
-      "turnCostEstimatedValue": "価値 {{cost}}"
+      "turnCostEstimatedValue": "価値 {{cost}}",
+      "userTurnCostTotalLine": "このユーザーターンの合計: {{cost}}",
+      "userTurnCostDetailsTitle": "最終 SDK セグメント"
     },
     "errorBanner": {
       "retryTitle": "最後のメッセージを再送信",

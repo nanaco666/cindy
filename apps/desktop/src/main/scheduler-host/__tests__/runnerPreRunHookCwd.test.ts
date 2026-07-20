@@ -13,7 +13,6 @@ import type { FireContext, Logger, Notifier, Schedule } from '@lizi/maker-schedu
 const mocks = vi.hoisted(() => ({
   executePreRunHook: vi.fn(),
   formatPreRunHookFailure: vi.fn(() => 'pre-run hook failed with exit code 1'),
-  recordScheduleSkip: vi.fn(),
   buildSkipResultText: vi.fn(() => 'skipped'),
   createMessage: vi.fn(),
   getSessionRowSnapshot: vi.fn(),
@@ -26,9 +25,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../pre-run-hook', () => ({
   executePreRunHook: mocks.executePreRunHook,
   formatPreRunHookFailure: mocks.formatPreRunHookFailure,
-}));
-vi.mock('../skip-trace', () => ({
-  recordScheduleSkip: mocks.recordScheduleSkip,
   buildSkipResultText: mocks.buildSkipResultText,
 }));
 vi.mock('../../localDb/ipc/messages.js', () => ({
@@ -124,7 +120,6 @@ describe('MakerScheduleRunner pre-run hook cwd 解析', () => {
       stderrTruncated: false,
       aborted: false,
     });
-    mocks.recordScheduleSkip.mockResolvedValue(null);
     mocks.buildSkipResultText.mockReturnValue('skipped');
   });
 
@@ -138,6 +133,7 @@ describe('MakerScheduleRunner pre-run hook cwd 解析', () => {
     );
 
     expect(result.skipped).toBe(true);
+    expect(result.sessionId).toBe('');
     expect(getSessionMeta).toHaveBeenCalledWith('sess-bound');
     expect(mocks.executePreRunHook).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -197,7 +193,6 @@ describe('MakerScheduleRunner pre-run hook cwd 解析', () => {
     await expect(
       runner.fire(baseSchedule({ workingDir: '/repo/project' }), createFireContext()),
     ).rejects.toThrow(/aborted/i);
-    expect(mocks.recordScheduleSkip).not.toHaveBeenCalled();
   });
 
   it('hook 异常会持久化结果并在创建 session 前阻止执行', async () => {

@@ -17,6 +17,7 @@ function buf(obj: unknown): Buffer {
 }
 
 const ctx: RequestTransformCtx = {
+  reqId: 1,
   method: 'POST',
   url: '/v1/responses',
   headers: { 'thread-id': 'thread-a' },

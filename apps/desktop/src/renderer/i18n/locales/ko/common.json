@@ -2560,7 +2560,8 @@
       "cycleUsed": "이번 주기 사용 ${{spend}} / ${{budget}} ({{pct}}%)",
       "remaining": "남음 ${{remain}}",
       "nextReset": "다음 재설정: {{at}}",
-      "latestTurnTitle": "최근 턴"
+      "latestTurnTitle": "최근 턴",
+      "latestUserTurnTitle": "최근 사용자 턴 합계"
     }
   },
   "usageDetails": {
@@ -3318,6 +3319,14 @@
       "notGitRepo": "현재 디렉터리는 git 리포지토리가 아닙니다",
       "alreadyInWorktree": "이미 worktree 안에 있어 중첩이 금지됩니다"
     },
+    "branchChip": {
+      "label": "브랜치",
+      "loading": "브랜치 불러오는 중…",
+      "loadFailed": "브랜치를 불러오지 못했습니다. 눌러서 다시 시도",
+      "currentTooltip": "현재 브랜치",
+      "sourceTooltip": "worktree 소스 브랜치",
+      "worktreeHint": "다른 브랜치를 선택하면 worktree 격리로 시작됩니다"
+    },
     "folderPicker": {
       "selectFolder": "폴더 선택",
       "selectProject": "프로젝트 선택",
@@ -3327,7 +3336,9 @@
       "browseFolder": "다른 폴더 선택",
       "browseProjectFolder": "다른 프로젝트 폴더 선택",
       "dialogue": "대화",
-      "dialogueOrSelectProject": "대화 또는 프로젝트 선택"
+      "dialogueOrSelectProject": "대화 또는 프로젝트 선택",
+      "removeFromList": "목록에서 제거",
+      "missingDir": "폴더를 찾을 수 없음"
     },
     "pendingQueue": {
       "regionAria": "전송 대기 중인 메시지 큐",
@@ -3561,7 +3572,9 @@
       "edit": "편집",
       "turnCost": "이번 턴 비용",
       "turnCostEstimated": "이번 턴 토큰 가치(API 단가 환산)",
-      "turnCostEstimatedValue": "가치 {{cost}}"
+      "turnCostEstimatedValue": "가치 {{cost}}",
+      "userTurnCostTotalLine": "이번 사용자 턴 합계: {{cost}}",
+      "userTurnCostDetailsTitle": "마지막 SDK 세그먼트"
     },
     "errorBanner": {
       "retryTitle": "마지막 메시지 다시 보내기",

@@ -67,8 +67,7 @@ import {
 import { resolveWorkingDir } from './workdir-resolver';
 import type { SchedulerDrizzleDb } from './storage';
 import { backfillSessionMeta } from './runners/_shared';
-import { executePreRunHook, formatPreRunHookFailure } from './pre-run-hook';
-import { buildSkipResultText, recordScheduleSkip } from './skip-trace';
+import { buildSkipResultText, executePreRunHook, formatPreRunHookFailure } from './pre-run-hook';
 import { defaultModelFor } from './model-defaults';
 
 const ALLOWED_EFFORT = new Set<string>([
@@ -339,23 +338,9 @@ export class MakerScheduleRunner implements ScheduleRunner {
           exitCode: hook.exitCode,
           durationMs: hook.durationMs,
         });
-        const traceSessionId = await recordScheduleSkip(
-          {
-            getDb: this.deps.getDb,
-            logger: this.deps.logger,
-            bindSkipLogSession: async (scheduleId, sessionId) => {
-              await this.scheduler?.update(scheduleId, { skipLogSessionId: sessionId });
-            },
-            // 绑定会话正在跑 turn(用户远程控制中)时不往里插合成消息,回落
-            // 专属留痕会话 —— 与下方 B1/B2 对 busy 会话的礼让口径一致。
-            isSessionBusy: (sessionId) => isSessionInTurn(sessionId),
-          },
-          schedule,
-          ctx,
-          hook,
-        );
         return {
-          sessionId: traceSessionId ?? '',
+          // exit 2 只保留 schedule_runs 中的 skipped 记录，不创建或更新会话。
+          sessionId: '',
           skipped: true,
           resultText: buildSkipResultText(hook),
         };

@@ -99,8 +99,10 @@ describe('mobile auth-server login', () => {
       'matchesOAuthCallbackUrl(callbackUrl, MOBILE_REDIRECT_URL)',
     );
     expect(authSource).toContain('exchangeAuthorizationCode(');
+    // scheme 派生 2026-07-20 起为三区域查表(cn/global/dev),断言仍锚定
+    // 「按区域取回调 scheme」这一形状。
     expect(envSource).toContain(
-      "AUTH_REGION === 'global' ? 'cindy' : 'cindycn'",
+      "{ cn: 'cindycn', global: 'cindy', dev: 'cindydev' }[AUTH_REGION]",
     );
   });
 

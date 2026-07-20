@@ -96,6 +96,10 @@ export interface CcMeta {
   turnCostUsd?: number;
   /** true = Codex token × 价格表折算的估算值; false / 缺省 = SDK 实报。 */
   turnCostIsEstimate?: boolean;
+  /** 用户从最近一条真实输入至本消息的累计成本（用于展示，不参与账单汇总）。 */
+  userTurnCostUsd?: number;
+  /** 累计值含订阅 token 价值估算时为 true。 */
+  userTurnCostIsEstimate?: boolean;
   /** Per-turn token/cache 明细,与 turnCostUsd 同时由 main patch 到 agent_meta。 */
   turnUsageDetails?: TurnUsageDetails;
 

@@ -91,9 +91,18 @@ export interface RuntimeState {
   /** tool_use.id → tool_use.name。用于在 tool_result echo 时区分命令输出和内容结果。 */
   toolUseIdToName: Map<string, string>;
   /**
+   * SDK partial stream 按 parent_tool_use_id 隔离的真实模型。
+   * 并发 subagent 的 stream_event 会交错，不能用会话级元数据推断。
+   */
+  streamModelByParentToolUseId: Map<string, string>;
+  /** Agent 异步启动回执里的权威模型，优先级高于流式事件里的 wire model。 */
+  resolvedSubagentModelByParentToolUseId: Map<string, string>;
+  /** task_id 到启动它的 Agent tool_use.id 的别名映射。 */
+  subagentParentToolUseIdByTaskId: Map<string, string>;
+  /**
    * 上一次 SDK assistant 消息提取出来的 agentMeta (uuid / sdkSessionId / model / ...).
-   * 跨 stream_event 累积时 (text_delta / thinking_delta / message_delta) 用它兜底,
-   * 让 renderer 拿到 mid-turn 增量事件也能合成完整的 messages.agent_meta 行。
+   * 主 agent 的 stream_event 累积时用它补齐 transcript 锚点；subagent stream
+   * 则必须按 parent_tool_use_id 隔离，不能共享这份会话级状态。
    * 老链路 agentManager.ts:2214 (session.lastAssistantMeta) 同款。
    */
   lastAssistantMeta: Record<string, unknown> | null;
@@ -108,6 +117,9 @@ export function newRuntimeState(): RuntimeState {
   return {
     currentThinking: null,
     toolUseIdToName: new Map(),
+    streamModelByParentToolUseId: new Map(),
+    resolvedSubagentModelByParentToolUseId: new Map(),
+    subagentParentToolUseIdByTaskId: new Map(),
     lastAssistantMeta: null,
     lastResultUsageAggregate: null,
   };
@@ -290,6 +302,62 @@ function readToolResultFullText(blockRaw: unknown): { toolUseId: string; fullTex
   return { toolUseId: b.tool_use_id, fullText };
 }
 
+/**
+ * 从 Agent 工具的异步启动回执中提取权威模型。
+ * Claude Code 会把最终解析后的模型放在 tool_use_result.resolvedModel；这比
+ * 流式子消息的时序推断可靠，适合直接补到 AgentTaskUpdate 给任务卡展示。
+ */
+interface AsyncSubagentLaunch {
+  taskId: string;
+  parentToolUseId: string;
+  prompt?: string;
+  model?: string;
+}
+
+function extractAsyncSubagentLaunch(
+  msg: {
+    message?: { content?: unknown };
+    tool_use_result?: unknown;
+    toolUseResult?: unknown;
+  },
+): AsyncSubagentLaunch | null {
+  const rawResult = msg.tool_use_result ?? msg.toolUseResult;
+  if (!rawResult || typeof rawResult !== 'object' || Array.isArray(rawResult)) return null;
+  const result = rawResult as Record<string, unknown>;
+  const isAsync = result.isAsync === true || result.is_async === true;
+  const status = result.status;
+  if (!isAsync && status !== 'async_launched') return null;
+
+  const model = typeof result.resolvedModel === 'string'
+    ? result.resolvedModel
+    : typeof result.resolved_model === 'string'
+      ? result.resolved_model
+      : undefined;
+  const content = msg.message?.content;
+  let toolResult: { toolUseId: string; fullText: string } | null = null;
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      toolResult = readToolResultFullText(block);
+      if (toolResult) break;
+    }
+  }
+  if (!toolResult) return null;
+
+  const rawAgentId = result.agentId ?? result.agent_id;
+  const taskId = typeof rawAgentId === 'string' && rawAgentId
+    ? rawAgentId
+    : toolResult.toolUseId;
+  const prompt = typeof result.prompt === 'string' && result.prompt
+    ? result.prompt
+    : undefined;
+  return {
+    taskId,
+    parentToolUseId: toolResult.toolUseId,
+    model,
+    prompt,
+  };
+}
+
 // ── cache 命中率日志格式化 ───────────────────────────────────────────────────
 // hitRate 按"百分比 + 1 位小数"输出, 没数据返 'n/a'。
 // 配 read/create/uncached/apiCalls 一起打, 看 hitRate 时能立刻判断样本量够不够代表性。
@@ -377,6 +445,13 @@ interface TranslateContext {
    * watchdog 整 turn 失效。
    */
   onToolResultDone?: (toolUseId: string, output: string) => void;
+  onSubagentTaskLaunched?: (task: {
+    taskId: string;
+    parentToolUseId: string;
+    prompt: string;
+    model?: string;
+  }) => void;
+  getSubagentTaskUsage?: (taskId: string) => AgentTaskUsage | undefined;
   /**
    * Maker Memory flush 观察器 — 翻译 status / message_delta event 时, push 完
    * eventQueue 后调一下 (传当前 contextTokens / contextWindow 让 controller 算 ratio)。
@@ -446,6 +521,30 @@ export function translateSdkMessage(
           data: { toolUseId: pair.toolUseId, fullText: pair.fullText },
           source: 'claude-code',
         });
+      }
+      const subagentLaunch = extractAsyncSubagentLaunch(msg);
+      if (subagentLaunch) {
+        const { taskId, parentToolUseId, model, prompt } = subagentLaunch;
+        ctx.rt.subagentParentToolUseIdByTaskId.set(taskId, parentToolUseId);
+        if (model) {
+          ctx.rt.resolvedSubagentModelByParentToolUseId.set(parentToolUseId, model);
+        }
+        if (prompt) {
+          ctx.onSubagentTaskLaunched?.({ taskId, parentToolUseId, prompt, model });
+        }
+        if (model) {
+          queue.push({
+            type: 'agent_task_update',
+            data: {
+              provider: 'claude-code',
+              taskId,
+              parentToolUseId,
+              status: 'running',
+              model,
+            },
+            source: 'claude-code',
+          });
+        }
       }
       // 单独遍历: 不能复用 extractToolResultFullText, 见 onToolResultDone JSDoc。
       const completedToolUseIds = new Set(fullPairs.map((pair) => pair.toolUseId));
@@ -634,7 +733,7 @@ function handleSystem(
     msg.subtype === 'task_progress' ||
     msg.subtype === 'task_notification'
   ) {
-    const update = toClaudeTaskUpdate(msg);
+    const update = toClaudeTaskUpdate(msg, ctx.rt, ctx.getSubagentTaskUsage);
     if (update) {
       queue.push({
         type: 'agent_task_update',
@@ -684,17 +783,33 @@ function toClaudeTaskUpdate(msg: {
   summary?: string;
   usage?: Record<string, number | undefined>;
   last_tool_name?: string;
-}): AgentTaskUpdateEventData | null {
+}, rt: RuntimeState, getSubagentTaskUsage?: (taskId: string) => AgentTaskUsage | undefined): AgentTaskUpdateEventData | null {
   if (!msg.task_id) return null;
+  const parentToolUseId = msg.tool_use_id
+    ?? rt.subagentParentToolUseIdByTaskId.get(msg.task_id);
+  if (parentToolUseId) {
+    rt.subagentParentToolUseIdByTaskId.set(msg.task_id, parentToolUseId);
+  }
   let status: AgentTaskStatus = 'running';
   if (msg.subtype === 'task_notification') {
     status = msg.status === 'failed' || msg.status === 'stopped' ? msg.status : 'completed';
   }
-  const usage = toClaudeTaskUsage(msg.usage);
+  const sdkUsage = toClaudeTaskUsage(msg.usage);
+  const hostUsage = msg.subtype === 'task_notification'
+    ? getSubagentTaskUsage?.(msg.task_id)
+    : undefined;
+  // SDK 有非零统计时继续信任 SDK；只有明确为 0 / 缺失时才用 host 观测值修正。
+  const usage = hostUsage && (sdkUsage?.totalTokens ?? 0) === 0
+    ? { ...sdkUsage, totalTokens: hostUsage.totalTokens }
+    : sdkUsage;
+  const model = parentToolUseId
+    ? rt.resolvedSubagentModelByParentToolUseId.get(parentToolUseId)
+      ?? rt.streamModelByParentToolUseId.get(parentToolUseId)
+    : undefined;
   return {
     provider: 'claude-code',
     taskId: msg.task_id,
-    ...(msg.tool_use_id ? { parentToolUseId: msg.tool_use_id } : {}),
+    ...(parentToolUseId ? { parentToolUseId } : {}),
     status,
     ...(msg.description ? { title: msg.description } : {}),
     ...(msg.prompt ? { description: msg.prompt } : {}),
@@ -704,6 +819,7 @@ function toClaudeTaskUpdate(msg: {
     ...(msg.workflow_name ? { workflowName: msg.workflow_name } : {}),
     ...(msg.last_tool_name ? { lastToolName: msg.last_tool_name } : {}),
     ...(usage ? { usage } : {}),
+    ...(model ? { model } : {}),
   };
 }
 
@@ -880,7 +996,10 @@ function handleAssistant(
 // ── stream_event 子分支(content_block_delta / message_delta / message_start) ──
 
 function handleStreamEvent(
-  msg: { event?: Record<string, unknown> },
+  msg: {
+    event?: Record<string, unknown>;
+    parent_tool_use_id?: string | null;
+  },
   queue: EventQueue,
   ctx: TranslateContext,
 ): void {
@@ -904,11 +1023,33 @@ function handleStreamEvent(
     }
   }
 
-  // mid-turn 流式 push 用 lastAssistantMeta 兜底 (这个 turn 内 SDK 已经发过 assistant
-  // 消息时缓存的 meta), 让 renderer 落库 mid-turn 累积块时能合成完整 agent_meta 行,
-  // 进而让 fork/rewind 反向找到 prior assistant 锚点。null 时 push 不带 meta (renderer
-  // ccAgentChatStore 的 incomingMeta?.fallback 兜到 lastAgentMeta)。
-  const fallbackMeta = ctx.rt.lastAssistantMeta ?? undefined;
+  // SDKPartialAssistantMessage 自带 parent_tool_use_id；并发 subagent 会在同一 Query
+  // 事件流中交错，必须按 parent 隔离模型，不能使用会话级 lastAssistantMeta 串联。
+  // 老 SDK / 单测若没有 wrapper 元数据，才保留旧兜底行为。
+  const parentToolUseId = typeof msg.parent_tool_use_id === 'string' && msg.parent_tool_use_id
+    ? msg.parent_tool_use_id
+    : undefined;
+  const streamKey = parentToolUseId ?? '__main__';
+  const eventModel = event.message?.model;
+  if (typeof eventModel === 'string' && eventModel) {
+    ctx.rt.streamModelByParentToolUseId.set(streamKey, eventModel);
+  }
+  const streamModel = typeof eventModel === 'string' && eventModel
+    ? eventModel
+    : ctx.rt.streamModelByParentToolUseId.get(streamKey);
+  const fallbackMeta: Record<string, unknown> | undefined = parentToolUseId
+    ? {
+        parentUuid: parentToolUseId,
+        ...(streamModel ? { model: streamModel } : {}),
+      }
+    : ctx.rt.lastAssistantMeta
+      ? {
+          ...ctx.rt.lastAssistantMeta,
+          ...(streamModel ? { model: streamModel } : {}),
+        }
+      : streamModel
+        ? { model: streamModel }
+        : undefined;
 
   if (event.type === 'content_block_delta') {
     const delta = event.delta as { type?: string; text?: string; thinking?: string } | undefined;

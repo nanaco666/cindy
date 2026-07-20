@@ -1,5 +1,5 @@
 /** Desktop dev 支持的区域身份。 */
-export const DESKTOP_DEV_REGIONS = Object.freeze(["cn", "global"]);
+export const DESKTOP_DEV_REGIONS = Object.freeze(["cn", "global", "dev"]);
 
 /**
  * 解析 desktop dev 区域。命令行显式值优先，保留 CINDY_AUTH_REGION 作为
@@ -14,12 +14,12 @@ export function resolveDesktopDevRegion(argv, env = process.env) {
     if (arg === "--region") {
       value = argv[index + 1];
       if (!value || value.startsWith("--")) {
-        throw new Error("--region requires a value: cn or global");
+        throw new Error("--region requires a value: cn, global or dev");
       }
       index += 1;
     } else if (arg.startsWith("--region=")) {
       value = arg.slice("--region=".length);
-      if (!value) throw new Error("--region requires a value: cn or global");
+      if (!value) throw new Error("--region requires a value: cn, global or dev");
     } else {
       continue;
     }
@@ -33,7 +33,7 @@ export function resolveDesktopDevRegion(argv, env = process.env) {
   const region = (cliRegion ?? env.CINDY_AUTH_REGION?.trim()) || "cn";
   if (!DESKTOP_DEV_REGIONS.includes(region)) {
     throw new Error(
-      `invalid desktop dev region: ${region}; expected cn or global`,
+      `invalid desktop dev region: ${region}; expected cn, global or dev`,
     );
   }
   return region;
@@ -70,7 +70,7 @@ export function resolveDesktopDevStartupConfig({
   const endpointManifestFile =
     configuredManifestFile ||
     (mode === "remote" && !endpointsCdn
-      ? `config/${region === "global" ? "endpoint.global.json" : "endpoint.json"}`
+      ? `config/${{ cn: "endpoint.json", global: "endpoint.global.json", dev: "endpoint.dev.json" }[region]}`
       : undefined);
   return { region, endpointsCdn, endpointManifestFile };
 }

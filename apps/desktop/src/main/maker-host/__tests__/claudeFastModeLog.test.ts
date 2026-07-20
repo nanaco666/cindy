@@ -58,7 +58,7 @@ describe('createClaudeFastModeRequestTransform (开头)', () => {
     const transform = createClaudeFastModeRequestTransform(log);
     const out = transform(
       { model: 'claude-opus-4-8', speed: 'fast' },
-      { method: 'POST', url: '/v1/messages?beta=true', headers: { 'anthropic-beta': 'fast-mode-2026-02-01' } },
+      { reqId: 1, method: 'POST', url: '/v1/messages?beta=true', headers: { 'anthropic-beta': 'fast-mode-2026-02-01' } },
     );
     expect(out).toBeNull();
     expect(log.debug).toHaveBeenCalledWith(
@@ -72,7 +72,7 @@ describe('createClaudeFastModeRequestTransform (开头)', () => {
     const transform = createClaudeFastModeRequestTransform(log);
     const out = transform(
       { model: 'claude-opus-4-8', speed: 'fast' },
-      { method: 'POST', url: '/v1/messages', headers: {} },
+      { reqId: 1, method: 'POST', url: '/v1/messages', headers: {} },
     );
     expect(out).toBeNull();
     expect(log.debug).not.toHaveBeenCalled();
@@ -81,7 +81,7 @@ describe('createClaudeFastModeRequestTransform (开头)', () => {
   it('ignores non-messages paths', () => {
     const log = makeLogger();
     const transform = createClaudeFastModeRequestTransform(log);
-    transform({ model: 'x' }, { method: 'POST', url: '/v1/messages/count_tokens', headers: {} });
+    transform({ model: 'x' }, { reqId: 1, method: 'POST', url: '/v1/messages/count_tokens', headers: {} });
     expect(log.debug).not.toHaveBeenCalled();
   });
 });

@@ -1,12 +1,20 @@
-import { Stack, useRouter, useSegments } from 'expo-router';
+import {
+  DarkTheme as NavigationDarkTheme,
+  DefaultTheme as NavigationLightTheme,
+  Stack,
+  ThemeProvider as NavigationThemeProvider,
+  useRouter,
+  useSegments,
+} from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, type ReactElement } from 'react';
+import { useEffect, useMemo, type ReactElement } from 'react';
 import { StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '@/auth/AuthContext';
 import { DeviceLinkProvider } from '@/device-link/DeviceLinkContext';
 import { GestureHandlerRootView } from '@/platform/gestureHandler';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
+import { createNavigationTheme } from '@/theme/navigationTheme';
 import { CenteredScreen } from '@/components/CenteredScreen';
 import { StartupBlockedScreen } from '@/components/StartupBlockedScreen';
 import { registerDevCacheMenu } from '@/debug/devCacheMenu';
@@ -27,6 +35,13 @@ function NavigationGate() {
   const router = useRouter();
   const segments = useSegments();
   const { mode, colors } = useTheme();
+  const navigationTheme = useMemo(
+    () => createNavigationTheme(
+      mode === 'dark' ? NavigationDarkTheme : NavigationLightTheme,
+      colors,
+    ),
+    [mode, colors],
+  );
 
   useEffect(() => {
     if (!auth.initialized) return;
@@ -41,7 +56,7 @@ function NavigationGate() {
   }, [auth.initialized, auth.isAuthenticated, router, segments]);
 
   return (
-    <>
+    <NavigationThemeProvider value={navigationTheme}>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
       <Stack
         screenOptions={{
@@ -54,7 +69,7 @@ function NavigationGate() {
           gestureResponseDistance: { end: 44 },
         }}
       />
-    </>
+    </NavigationThemeProvider>
   );
 }
 

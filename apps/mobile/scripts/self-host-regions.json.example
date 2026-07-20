@@ -1,72 +1,89 @@
 {
-    "cn":
-    {
+    "cn": {
         "authRegion": "",
         "iosBundleId": "",
         "iosAppStoreId": "",
         "androidPackage": "",
         "androidStoreUrl": "",
         "npkgExpectBundle": "",
-        "tapdb":
-        {
+        "tapdb": {
             "clientId": "",
             "clientToken": ""
         },
-        "oss":
-        {
+        "oss": {
             "cdnBaseUrl": "",
             "bucket": "",
             "prefix": "",
             "ossRegion": ""
         },
-        "iosSigning":
-        {
+        "iosSigning": {
             "teamId": "",
             "profileName": "",
             "signIdentity": "",
             "profilePath": ""
         },
-        "androidSigning":
-        {
+        "androidSigning": {
             "keyAlias": "",
             "keystorePath": ""
         }
     },
-    "global":
-    {
+    "global": {
         "authRegion": "",
         "iosBundleId": "",
         "iosAppStoreId": "",
         "androidPackage": "",
         "androidStoreUrl": "",
         "npkgExpectBundle": "",
-        "google":
-        {
+        "google": {
             "webClientId": "",
             "iosClientId": "",
             "iosUrlScheme": ""
         },
-        "tapdb":
-        {
+        "tapdb": {
             "clientId": "",
             "clientToken": ""
         },
-        "oss":
-        {
+        "oss": {
             "cdnBaseUrl": "",
             "bucket": "",
             "prefix": "",
             "ossRegion": ""
         },
-        "iosSigning":
-        {
+        "iosSigning": {
             "teamId": "",
             "profileName": "",
             "signIdentity": "",
             "profilePath": ""
         },
-        "androidSigning":
-        {
+        "androidSigning": {
+            "keyAlias": "",
+            "keystorePath": ""
+        }
+    },
+    "dev": {
+        "authRegion": "dev",
+        "iosBundleId": "",
+        "iosAppStoreId": "",
+        "androidPackage": "",
+        "androidStoreUrl": "",
+        "npkgExpectBundle": "",
+        "tapdb": {
+            "clientId": "",
+            "clientToken": ""
+        },
+        "oss": {
+            "cdnBaseUrl": "",
+            "bucket": "",
+            "prefix": "",
+            "ossRegion": ""
+        },
+        "iosSigning": {
+            "teamId": "",
+            "profileName": "",
+            "signIdentity": "",
+            "profilePath": ""
+        },
+        "androidSigning": {
             "keyAlias": "",
             "keystorePath": ""
         }

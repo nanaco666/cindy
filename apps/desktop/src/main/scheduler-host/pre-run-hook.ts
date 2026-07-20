@@ -83,6 +83,18 @@ export function resolveHookCommand(command: string): {
 
 export type PreRunHookResult = PreRunHookRunResult;
 
+/** 构造 skipped run 的历史摘要，不创建会话或写入消息。 */
+export function buildSkipResultText(hook: PreRunHookResult): string {
+  const head = `pre-run hook exit ${hook.exitCode ?? '?'} — ${hook.durationMs}ms`;
+  const out = hook.stdout.trim();
+  return out ? `${head} — ${firstLine(out)}` : head;
+}
+
+function firstLine(text: string): string {
+  const line = text.split(/\r?\n/, 1)[0] ?? '';
+  return line.length > 200 ? `${line.slice(0, 200)}…` : line;
+}
+
 /** 显式配置的正数才启用超时;未传 / 非法 / ≤0 → undefined(不限时)。 */
 export function resolvePreRunHookTimeoutMs(timeoutMs: number | undefined): number | undefined {
   if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
