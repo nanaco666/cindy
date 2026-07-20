@@ -37,13 +37,21 @@ test('parsePackageArgs: 零参数默认 = 当前平台 + cn + 版本无关', () 
   const args = parsePackageArgs([], DEFAULTS);
   assert.deepEqual(args, {
     platform: 'win32',
-    arch: 'x64',
     region: 'cn',
     versionSpec: null,
     skipSmoke: false,
     allowUnsigned: false,
     noSign: false,
+    archs: ['x64'],
   });
+});
+
+test('parsePackageArgs: darwin 缺省双架构连打,显式 --arch 只打单架构', () => {
+  const darwinDefaults = { platform: 'darwin', arch: 'arm64' };
+  assert.deepEqual(parsePackageArgs([], darwinDefaults).archs, ['arm64', 'x64']);
+  assert.deepEqual(parsePackageArgs(['--arch', 'x64'], darwinDefaults).archs, ['x64']);
+  // win 机器上 --platform darwin(会被编排层交叉打包硬闸拦,解析层同样给双架构)
+  assert.deepEqual(parsePackageArgs(['--platform', 'darwin'], DEFAULTS).archs, ['arm64', 'x64']);
 });
 
 test('parsePackageArgs: --no-sign 隐含 --allow-unsigned', () => {
@@ -58,7 +66,7 @@ test('parsePackageArgs: 完整参数解析', () => {
     DEFAULTS,
   );
   assert.equal(args.platform, 'darwin');
-  assert.equal(args.arch, 'arm64');
+  assert.deepEqual(args.archs, ['arm64']);
   assert.equal(args.region, 'global');
   assert.equal(args.versionSpec, '1.2.3');
   assert.equal(args.skipSmoke, true);

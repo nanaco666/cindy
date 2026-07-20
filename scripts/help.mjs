@@ -25,6 +25,7 @@ export function printHelp(log = console.log) {
   log('      当前平台，海外版，版本无关本地包');
   log('    pnpm package:desktop --region dev');
   log('      当前平台，dev 版，版本无关本地包');
+  log('    # mac 上缺省双架构连打（arm64 + x64）；下面两条只打单架构');
   log('    pnpm package:mac:arm64 --region cn');
   log('    pnpm package:mac:x64 --region cn');
   log('    pnpm package:win --region cn');
@@ -35,20 +36,27 @@ export function printHelp(log = console.log) {
   log('      当前平台，海外有版本包；基于 CDN 当前版本自动 bump patch');
   log('    # 调试时可在末尾追加 --skip-smoke；明确允许无签名时追加 --allow-unsigned');
 
-  log('\n  桌面端旧版打包 + 发布一体流程（直接上传 canary）:');
-  log('    pnpm release:mac');
-  log('    pnpm release:win');
-  log('    pnpm release:linux');
-  log('    # 强制用户更新后重新授权飞书');
-  log('    pnpm release:mac -- --require-relogin');
-  log('    pnpm release:win -- --require-relogin');
-  log('    # canary 验证后转 stable：先 dry-run，再正式执行');
+  log('\n  桌面端发布三步管线：打包 → canary → promote（Mac 包在 Mac 打、Win 包在 Win 打）:');
+  log('    # 第一步 打包：有版本本地包，产出 release/artifacts/<region>/<version>/');
+  log('    #   mac 上一条命令双架构连打（arm64 + x64 共用同一版本号）');
+  log('    pnpm release:package --region cn --version patch');
+  log('      国内版；基于 CDN 当前版本自动 bump patch，也可显式 --version x.y.z');
+  log('    pnpm release:package --region global --version patch');
+  log('      海外版');
+  log('    # 第二步 canary 发布：缺省 dry-run 只校验；--execute 才上传 OSS 并更新 canary manifest');
+  log('    pnpm release:canary -- --region cn --version 0.2.3');
+  log('    pnpm release:canary -- --region cn --version 0.2.3 --execute');
+  log('      --version 填第一步打包定死的显式版本；跨平台代传可加 --platform win32|darwin');
+  log('    pnpm release:canary -- --region cn --version 0.2.3 --execute --require-relogin');
+  log('      强制用户更新后重新登录');
+  log('    # 第三步 promote：canary 验证后切 stable；先 dry-run，再 --yes');
   log('    pnpm release:promote:mac');
   log('    pnpm release:promote:mac -- --yes');
   log('    pnpm release:promote:win');
   log('    pnpm release:promote:win -- --yes');
-  log('    pnpm release:promote:linux');
-  log('    pnpm release:promote:linux -- --yes');
+  log('    # 海外版 promote');
+  log('    pnpm release:promote:mac:global -- --yes');
+  log('    pnpm release:promote:win:global -- --yes');
 
   log('\n  Agent 二进制安装 / 升级（Claude Code、Codex、ripgrep）:');
   log('    # 按 latest.json 当前 pin 安装到本机，不修改 pin');
@@ -118,25 +126,6 @@ export function printHelp(log = console.log) {
   log('      海外模拟器：先 rebuild 安装，再 start 启动 Metro');
   log('    pnpm mobile:sim:whoami');
   log('      查看当前 Metro 对应的 checkout / branch');
-
-  log('\n  Mobile EAS / TestFlight（默认 dry-run，--execute 才真正发布）:');
-  log('    pnpm mobile:release:check -- --target production');
-  log('      检查正式服应走 OTA 还是完整冷更');
-  log('    pnpm mobile:release:check -- --target staging');
-  log('      检查内部 staging 应走 OTA 还是完整冷更');
-  log('    pnpm mobile:release:check -- --target beta --dev dash');
-  log('      检查 dash 的手机 Beta 应走 OTA 还是完整冷更');
-  log('    pnpm mobile:release:beta -- --dev dash --message "验证本次改动"');
-  log('      手机 Beta dry-run');
-  log('    pnpm mobile:release:beta -- --dev dash --message "验证本次改动" --execute');
-  log('      手机 Beta 正式执行');
-  log('    pnpm mobile:release:prod -- --message "发布本次改动"');
-  log('      production + staging dry-run（必须在干净且已同步 origin/main 的 main 上）');
-  log('    pnpm mobile:release:prod -- --message "发布本次改动" --execute');
-  log('      production + staging 正式执行');
-  log('    pnpm mobile:beta:add-dev -- alice');
-  log('    pnpm mobile:beta:add-dev -- alice --execute');
-  log('      新增 alice 的 Beta 配置：先 dry-run，再正式执行');
 
   log('\n  Mobile 自建 iOS（完整命令；region 必填，无默认值）:');
   log('    pnpm mobile:release:ios:check -- --region cn');

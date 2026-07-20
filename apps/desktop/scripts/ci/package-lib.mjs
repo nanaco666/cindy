@@ -30,19 +30,21 @@ export function isExplicitVersion(value) {
 
 /**
  * 解析 package-desktop.mjs 的命令行参数。非法输入直接 throw(编排层统一打印)。
+ * 返回的 archs 是数组:显式 --arch 只打单架构;缺省时 darwin 双架构连打
+ * (发布侧 canary/promote 对 mac 默认就是双架构,打包侧对齐),其它平台单 arch。
  * @param {string[]} argv  process.argv.slice(2)
  * @param {{ platform?: string, arch?: string }} [defaults]  默认取当前机器
  */
 export function parsePackageArgs(argv, defaults = {}) {
   const out = {
     platform: defaults.platform ?? process.platform,
-    arch: defaults.arch ?? process.arch,
     region: 'cn',
     versionSpec: null,
     skipSmoke: false,
     allowUnsigned: false,
     noSign: false,
   };
+  let archFlag = null;
   const takeValue = (flag, i) => {
     const v = argv[i + 1];
     if (!v || v.startsWith('--')) throw new Error(`${flag} 需要一个值`);
@@ -55,7 +57,7 @@ export function parsePackageArgs(argv, defaults = {}) {
       // (pnpm 10 对 run-script 参数不做剥离),裸 `--` 按分隔符跳过。
       case '--': break;
       case '--platform': out.platform = takeValue(a, i); i++; break;
-      case '--arch': out.arch = takeValue(a, i); i++; break;
+      case '--arch': archFlag = takeValue(a, i); i++; break;
       case '--region': out.region = takeValue(a, i); i++; break;
       case '--version': out.versionSpec = takeValue(a, i); i++; break;
       case '--skip-smoke': out.skipSmoke = true; break;
@@ -71,9 +73,22 @@ export function parsePackageArgs(argv, defaults = {}) {
   if (!SUPPORTED_PLATFORMS.includes(out.platform)) {
     throw new Error(`不支持的 platform: ${out.platform}(可选 ${SUPPORTED_PLATFORMS.join('/')})`);
   }
-  const archs = PLATFORM_ARCHS[out.platform];
-  if (!archs.includes(out.arch)) {
-    throw new Error(`platform ${out.platform} 不支持 arch: ${out.arch}(可选 ${archs.join('/')})`);
+  const supportedArchs = PLATFORM_ARCHS[out.platform];
+  if (archFlag !== null) {
+    if (!supportedArchs.includes(archFlag)) {
+      throw new Error(`platform ${out.platform} 不支持 arch: ${archFlag}(可选 ${supportedArchs.join('/')})`);
+    }
+    out.archs = [archFlag];
+  } else if (out.platform === 'darwin') {
+    // mac 缺省双架构连打:Apple Silicon 主机经 Rosetta 2 能跑 darwin-x64,
+    // smoke test 同样可过(老一体式 release-macos.mjs 验证过的模式)。
+    out.archs = [...PLATFORM_ARCHS.darwin];
+  } else {
+    const fallbackArch = defaults.arch ?? process.arch;
+    if (!supportedArchs.includes(fallbackArch)) {
+      throw new Error(`platform ${out.platform} 不支持 arch: ${fallbackArch}(可选 ${supportedArchs.join('/')})`);
+    }
+    out.archs = [fallbackArch];
   }
   if (!SUPPORTED_REGIONS.includes(out.region)) {
     throw new Error(`不支持的 region: ${out.region}(可选 ${SUPPORTED_REGIONS.join('/')})`);

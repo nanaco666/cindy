@@ -73,7 +73,7 @@ test("help groups copyable desktop, binary, and Mobile workflows", async () => {
 	const output = lines.join("\n");
 	const rootScripts = Object.keys(readRootScripts());
 	const documentedWorkflowScripts = rootScripts.filter((name) =>
-		/^(mobile:xcode|mobile:sim:|mobile:release:|mobile:beta:)/.test(name) ||
+		/^(mobile:xcode|mobile:sim:|mobile:release:(ios|android):)/.test(name) ||
 		/^(install:(agent-binaries|claude|codex|ripgrep)|update:(vendors|claude|codex|ripgrep))$/.test(name) ||
 		/^release:(claude-code|codex|ripgrep)(:arm64|:x64|:win)?$/.test(name),
 	);
@@ -91,7 +91,10 @@ test("help groups copyable desktop, binary, and Mobile workflows", async () => {
 		"pnpm release:claude-code -- --dry-run",
 		"pnpm release:codex -- --platform linux-x64",
 		"pnpm release:ripgrep:win",
-		"pnpm mobile:release:prod -- --message \"发布本次改动\" --execute",
+		"pnpm release:package --region cn --version patch",
+		"pnpm release:canary -- --region cn --version 0.2.3 --execute",
+		"pnpm release:promote:mac -- --yes",
+		"pnpm release:promote:win -- --yes",
 		"pnpm mobile:release:ios:local -- --region cn --execute",
 		"pnpm mobile:release:ios:local -- --region global --execute",
 		"pnpm mobile:release:ios:local -- --region dev --execute",
