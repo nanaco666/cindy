@@ -21,6 +21,7 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
 import type { Maker } from '@lizi/maker-core';
+import type { PreRunHookRunResult } from '@lizi/maker-scheduler';
 
 /** 生成请求的输入(IPC 层已完成参数校验)。 */
 export interface GenerateHookScriptInput {
@@ -80,11 +81,11 @@ export function buildHookScriptPrompt(input: {
     '',
     'Hard protocol (must follow exactly):',
     '- The script is executed with Node.js (>= 18) as an ES module (.mjs file).',
-    '- Exit code 0 = let the task run this round. Exit code 2 = skip this round. Any other exit code or a crash = the scheduler runs the task anyway (fail-open), so prefer explicit process.exit(0) / process.exit(2).',
+    '- Exit code 0 = let the task run this round. Exit code 2 = skip this round. Any other exit code, crash, or timeout blocks the task (fail-closed), so prefer explicit process.exit(0) / process.exit(2).',
     '- The working directory is the task project directory (if any). stdin receives a JSON payload ({ scheduleId, scheduleName, firedAt, workingDir, lastFinishedAt }) — reading it is optional.',
     '- CAUTION: lastFinishedAt is also refreshed by rounds this very script skips (exit 2). Never build "run only if enough time passed since the last real run" on top of it — the script would lock itself out forever. Persist your own timestamp file if you need that.',
     '- Use only Node.js built-in modules (node:fs, node:child_process, node:https, ...). No npm dependencies.',
-    '- External CLI tools (git, gh, curl ...) may be invoked via child_process, but wrap them in try/catch and process.exit(0) on unexpected failures (fail-open, never block the task by accident).',
+    '- External CLI tools (git, gh, curl ...) may be invoked via child_process. Unexpected failures must exit non-zero so the scheduler blocks the task instead of silently bypassing the gate.',
     '- Keep it short (usually < 80 lines), with brief comments in Chinese explaining the check.',
     `- Target platform: ${input.platform === 'win32' ? 'Windows' : input.platform === 'darwin' ? 'macOS' : 'Linux'}. Avoid platform-specific shell syntax; do everything inside Node.`,
     '',
@@ -311,19 +312,8 @@ export async function generateHookScript(
 
 // ── 统一安装通道(UI「AI 生成」与 MCP schedule_set_pre_run_hook 共用)───────────
 
-/**
- * 自测结果(pre-run-hook 执行器 PreRunHookResult 的 type-only 复制,避免循环依赖;
- * 不含 `aborted`——自测路径不传 abort 信号,该字段恒 false,契约里无意义)。
- */
-export interface HookScriptSelfTest {
-  decision: 'run' | 'skip';
-  exitCode: number | null;
-  timedOut: boolean;
-  spawnError?: string;
-  durationMs: number;
-  stdout: string;
-  stderr: string;
-}
+/** 自测与生产执行共用同一份 fail-closed 结果协议。 */
+export type HookScriptSelfTest = PreRunHookRunResult;
 
 export interface InstallHookScriptInput extends Omit<GenerateHookScriptInput, 'description'> {
   /** 自然语言需求;script 模式下可省略。 */

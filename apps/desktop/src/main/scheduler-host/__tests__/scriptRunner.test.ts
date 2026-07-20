@@ -13,6 +13,10 @@ vi.mock('node:child_process', () => ({
 vi.mock('../pre-run-hook', () => ({
   executePreRunHook: executePreRunHookMock,
   buildSkipResultText: (hook: { exitCode?: number | null }) => `exit ${hook.exitCode ?? '?'}`,
+  formatPreRunHookFailure: (hook: { error?: string; exitCode?: number | null }) =>
+    hook.error
+      ? `pre-run hook failed: ${hook.error}`
+      : `pre-run hook failed with exit code ${hook.exitCode ?? 'unknown'}`,
 }));
 
 vi.mock('../../localDb/schema', () => ({
@@ -162,6 +166,56 @@ describe('ScriptScheduleRunner', () => {
     expect(spawnMock).toHaveBeenCalledWith(
       'python auto.py',
       expect.objectContaining({ shell: true, cwd: 'C:\\project' }),
+    );
+  });
+
+  it('pre-run hook 失败时保存检查结果、阻止主脚本并发送失败通知', async () => {
+    executePreRunHookMock.mockResolvedValue({
+      status: 'failed',
+      decision: 'block',
+      exitCode: 1,
+      timedOut: false,
+      aborted: false,
+      durationMs: 8,
+      stdout: '',
+      stderr: 'dependency unavailable',
+      stdoutTruncated: false,
+      stderrTruncated: false,
+    });
+    const notifier = { notify: vi.fn(async () => undefined) };
+    const onPreRunHookCompleted = vi.fn(async () => undefined);
+    const runner = new ScriptScheduleRunner({
+      broker: { call: vi.fn() },
+      logger: {},
+      notifier,
+    });
+    const resultPromise = runner.fire(
+      { ...schedule(), preRunHook: { command: 'node check.mjs' } },
+      {
+        runId: 'run-hook-failed',
+        firedAt: 2,
+        signal: new AbortController().signal,
+        onPreRunHookCompleted,
+      },
+    );
+
+    await expect(resultPromise).rejects.toThrow('pre-run hook failed with exit code 1');
+    expect(onPreRunHookCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'failed',
+        decision: 'block',
+        exitCode: 1,
+        stderr: 'dependency unavailable',
+      }),
+    );
+    expect(spawnMock).not.toHaveBeenCalled();
+    expect(notifier.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'script-schedule' }),
+      expect.objectContaining({
+        id: 'run-hook-failed',
+        status: 'failed',
+        errorMsg: 'pre-run hook failed with exit code 1',
+      }),
     );
   });
 

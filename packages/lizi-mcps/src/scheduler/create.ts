@@ -38,7 +38,7 @@ export function registerScheduleCreateTool(
       '(5) 默认 useWorktree=false / notify={desktop:true, feishu:false}；' +
       '(6) 删除前模型自己用 schedule_get / schedule_list 跟用户确认，不要静默删；' +
       '(7) 用户说"静默运行 / 没事别打扰我 / 只记录不用每次提醒"之类 → silentWhenIdle=true；如果用户定义了提醒条件，把条件保留在 prompt 里（如 CI 失败/新评论时提醒），runner 只会注入很短的主动上报协议；' +
-      '(8) 轮询型任务（"有新 PR 才 review / CI 挂了才处理"）优先配 preRunHook 前置检查（exit 0=放行、exit 2=跳过本轮不烧 token；报错/超时 fail-open 照常运行）。**脚本一律经 schedule_set_pre_run_hook 创建/修改**（落盘路径、协议、自测由宿主代码统一保证），不要自己写脚本文件再手填 preRunHook.command——先调它拿 command 再来创建，或创建后传 scheduleId 让它直接挂载；' +
+      '(8) 轮询型任务（"有新 PR 才 review / CI 挂了才处理"）优先配 preRunHook 前置检查（exit 0=放行、exit 2=跳过本轮不烧 token；报错/超时 fail-closed 阻止本轮并记录失败）。**脚本一律经 schedule_set_pre_run_hook 创建/修改**（落盘路径、协议、自测由宿主代码统一保证），不要自己写脚本文件再手填 preRunHook.command——先调它拿 command 再来创建，或创建后传 scheduleId 让它直接挂载；' +
       '(9) **参数缺失时先问用户，禁止盲猜**：用户主动让你建任务时，凡是用户没说清、又会实质影响任务行为的参数——触发时间/频率、用哪个 agent（及模型）执行、prompt 里的关键实体（城市/仓库/监控对象等）、通知渠道、是否静默运行、要不要前置检查（轮询型才需要）——一律先用 AskUserQuestion（或一句话追问）确认后再创建，**不要自作主张填默认值再事后告知**。用户已明确说了的不重复问；由既有流程/脚本自动化创建（无人在线）的场景才允许用文档默认值。' +
       '(10) **仅运行脚本模式（零 token）**：executionMode="script" 时不启动 agent，宿主直接执行 scriptConfig.command（cwd=workingDir，必填本地项目目录）；脚本经 stdout/stdin 的 xdt-maker-script/1 JSONL 协议回调宿主受限能力，能力按 scriptConfig.capabilities 白名单授予（默认全拒）。script 模式不需要 prompt（可省），且不支持 useWorktree / targetSessionId / bindToCurrentSession / persistentSession。与 preRunHook 的分工：preRunHook 只是"要不要跑"的闸门，script 模式是"任务本体就是脚本"。',
     inputShape: {
@@ -137,13 +137,13 @@ export function registerScheduleCreateTool(
           command: z
             .string()
             .min(1)
-            .describe('经系统 shell 执行的命令（cwd=任务工作目录）。exit 0 放行本轮；exit 2 跳过本轮（不启动 agent、零 token，run 记 skipped）；其它/超时 fail-open 照常运行。Windows 写显式解释器（node x.mjs）。'),
+            .describe('经系统 shell 执行的命令（cwd=任务工作目录）。exit 0 放行本轮；exit 2 跳过本轮（不启动 agent、零 token，run 记 skipped）；其它异常/超时阻止本轮并将 run 记 failed。Windows 写显式解释器（node x.mjs）。'),
           timeoutMs: z
             .number()
             .int()
             .positive()
             .optional()
-            .describe('超时毫秒，可选；未配置则不限时（脚本卡死会阻塞该轮触发）；超时按放行（fail-open）处理'),
+            .describe('超时毫秒，可选；未配置则不限时（脚本卡死会阻塞该轮触发）；超时会阻止本轮并将 run 记 failed'),
         })
         .optional()
         .describe('前置检查脚本（Pre-run Hook）。轮询型任务用它把"要不要跑"判断放到脚本里，空转轮次直接跳过不烧 token。建议流程：先写脚本→自测 exit code→再挂到任务上。'),

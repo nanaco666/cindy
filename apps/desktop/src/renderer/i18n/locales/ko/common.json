@@ -4821,6 +4821,26 @@
         "success": "성공",
         "skip": "건너뜀",
         "fail": "실패"
+      },
+      "preRun": {
+        "status": {
+          "passed": "사전 검사 통과",
+          "skipped": "조건이 충족되지 않음",
+          "failed": "사전 검사 실패",
+          "timed_out": "사전 검사 시간 초과",
+          "aborted": "사전 검사 중단됨"
+        },
+        "decision": {
+          "run": "작업 실행",
+          "skip": "작업 건너뜀",
+          "block": "실행 차단"
+        },
+        "duration": "{{ms}} ms",
+        "exitCode": "종료 코드 {{code}}",
+        "stdout": "stdout",
+        "stderr": "stderr",
+        "truncated": "출력이 잘림",
+        "noOutput": "출력 없음"
       }
     },
     "editor": {
@@ -4910,16 +4930,16 @@
       "preRunHook": {
         "label": "사전 검사",
         "enable": "사용",
-        "tooltip": "작업이 트리거될 때 이 스크립트를 먼저 실행합니다. 종료 코드 0이면 이번 회차를 진행하고, 종료 코드 2면 이번 회차를 건너뜁니다(agent를 시작하지 않고 토큰도 사용하지 않음). 스크립트 오류나 시간 초과 시에는 정상적으로 실행하며 경고를 로그에 기록합니다. 스크립트는 작업 디렉터리에서 실행됩니다. Windows에서는 명시적 인터프리터(예: node check.mjs)를 사용하세요.",
+        "tooltip": "작업이 트리거될 때 이 스크립트를 먼저 실행합니다. 종료 코드 0이면 이번 회차를 진행하고, 종료 코드 2면 이번 회차를 건너뜁니다(agent를 시작하지 않고 토큰도 사용하지 않음). 스크립트 오류나 시간 초과 시에는 실행을 차단하고 실패 결과를 기록합니다. 스크립트는 작업 디렉터리에서 실행됩니다. Windows에서는 명시적 인터프리터(예: node check.mjs)를 사용하세요.",
         "infoAria": "사전 검사 규칙 보기",
-        "protocol": "스크립트 작성 규칙: 종료 코드 0 = 이번 회차 실행, 종료 코드 2 = 이번 회차 건너뜀(사용량 소모 없음). 오류나 시간 초과 시에도 작업은 막히지 않습니다",
+        "protocol": "스크립트 작성 규칙: 종료 코드 0 = 이번 회차 실행, 종료 코드 2 = 이번 회차 건너뜀(사용량 소모 없음). 그 외 종료 코드, 오류, 시간 초과는 실행을 차단합니다",
         "commandPlaceholder": "node scripts/schedule-checks/check.mjs",
         "test": "테스트",
         "testing": "테스트 중…",
         "resultRun": "exit {{code}} · {{ms}}ms — 이번 회차가 실행됩니다",
         "resultSkip": "exit 2 · {{ms}}ms — 이번 회차를 건너뜁니다",
-        "resultTimeout": "시간 초과 — 통과로 처리되어 실행이 진행됩니다",
-        "resultError": "실행 실패({{error}}) — 통과로 처리되어 실행이 진행됩니다",
+        "resultTimeout": "시간 초과 — 이번 실행이 차단됩니다",
+        "resultError": "실행 실패({{error}}) — 이번 실행이 차단됩니다",
         "aiCreate": "AI로 생성",
         "aiModify": "AI로 수정",
         "aiPlaceholder": "작업을 실행해야 하는 조건을 설명하세요. 예: 저장소에 처리되지 않은 새 PR이 있을 때만 실행",

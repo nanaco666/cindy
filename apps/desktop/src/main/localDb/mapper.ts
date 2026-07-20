@@ -27,6 +27,7 @@ import type {
   AgentKind as SchedulerAgentKind,
   ScriptExecutionConfig,
   ScriptCapability,
+  PreRunHookRunResult,
 } from '@lizi/maker-scheduler';
 import { normalizeSessionSource } from '../../shared/sessionSource.js';
 import { normalizeWorkingDirForStorage } from '../../shared/workingDir.js';
@@ -436,6 +437,41 @@ function parseScriptConfig(raw: string | null): ScriptExecutionConfig | undefine
   }
 }
 
+const PRE_RUN_HOOK_STATUSES = new Set([
+  'passed',
+  'skipped',
+  'failed',
+  'timed_out',
+  'aborted',
+]);
+const PRE_RUN_HOOK_DECISIONS = new Set(['run', 'skip', 'block']);
+
+/** 兼容损坏/手工写入的 JSON：非法结果不应让整个运行历史加载失败。 */
+function parsePreRunHookResult(raw: string | null): PreRunHookRunResult | undefined {
+  if (!raw) return undefined;
+  try {
+    const value = JSON.parse(raw) as Record<string, unknown>;
+    if (!PRE_RUN_HOOK_STATUSES.has(String(value.status))) return undefined;
+    if (!PRE_RUN_HOOK_DECISIONS.has(String(value.decision))) return undefined;
+    if (value.exitCode !== null && typeof value.exitCode !== 'number') return undefined;
+    if (typeof value.durationMs !== 'number' || !Number.isFinite(value.durationMs)) return undefined;
+    if (typeof value.stdout !== 'string' || typeof value.stderr !== 'string') return undefined;
+    if (
+      typeof value.stdoutTruncated !== 'boolean' ||
+      typeof value.stderrTruncated !== 'boolean' ||
+      typeof value.timedOut !== 'boolean' ||
+      typeof value.aborted !== 'boolean'
+    ) {
+      return undefined;
+    }
+    if (value.spawnError !== undefined && typeof value.spawnError !== 'string') return undefined;
+    if (value.error !== undefined && typeof value.error !== 'string') return undefined;
+    return value as unknown as PreRunHookRunResult;
+  } catch {
+    return undefined;
+  }
+}
+
 function serializeScriptConfig(config: ScriptExecutionConfig | undefined): string | null {
   return config ? JSON.stringify(config) : null;
 }
@@ -638,6 +674,7 @@ export function scheduleRunToCamel(row: ScheduleRunRow): ScheduleRun {
     status: row.status as RunStatus,
     errorMsg: row.errorMsg ?? undefined,
     resultText: row.resultText ?? undefined,
+    preRunHookResult: parsePreRunHookResult(row.preRunHookResult),
     readAt: row.readAt ?? undefined,
     heartbeatAt: row.heartbeatAt ?? undefined,
   };
@@ -654,6 +691,7 @@ export function scheduleRunCreateToRow(r: ScheduleRun): ScheduleRunInsert {
     status: r.status,
     errorMsg: r.errorMsg ?? null,
     resultText: r.resultText ?? null,
+    preRunHookResult: r.preRunHookResult ? JSON.stringify(r.preRunHookResult) : null,
     readAt: r.readAt ?? null,
     heartbeatAt: r.heartbeatAt ?? null,
   };
@@ -678,6 +716,11 @@ export function scheduleRunPatchToRow(
     out.status = patch.status as ScheduleRunInsert['status'];
   if (hasKey(patch, 'errorMsg')) out.errorMsg = patch.errorMsg ?? null;
   if (hasKey(patch, 'resultText')) out.resultText = patch.resultText ?? null;
+  if (hasKey(patch, 'preRunHookResult')) {
+    out.preRunHookResult = patch.preRunHookResult
+      ? JSON.stringify(patch.preRunHookResult)
+      : null;
+  }
   if (hasKey(patch, 'readAt')) out.readAt = patch.readAt ?? null;
   if (hasKey(patch, 'heartbeatAt')) out.heartbeatAt = patch.heartbeatAt ?? null;
   return out;

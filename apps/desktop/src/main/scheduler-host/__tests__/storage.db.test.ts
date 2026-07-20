@@ -132,6 +132,7 @@ const SCHEDULER_DDL = [
       status TEXT NOT NULL,
       error_msg TEXT,
       result_text TEXT,
+      pre_run_hook_result TEXT,
       read_at INTEGER,
       heartbeat_at INTEGER
     )

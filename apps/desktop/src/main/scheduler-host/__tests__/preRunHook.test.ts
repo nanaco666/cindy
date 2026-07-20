@@ -1,6 +1,6 @@
 /**
- * pre-run-hook 执行器测试:exit code 协议(0 放行 / 2 跳过 / 其它 fail-open)、
- * stdin JSON 上下文、超时 fail-open、输出捕获。
+ * pre-run-hook 执行器测试:exit code 协议(0 放行 / 2 跳过 / 其它 fail-closed)、
+ * stdin JSON 上下文、超时拦截、输出捕获。
  * 全部用 `node -e` 保证 macOS / Windows 双平台可跑(shell:true 下 cmd.exe 只
  * 识别双引号,内嵌 JS 一律用单引号字符串)。
  *
@@ -31,6 +31,7 @@ describe('executePreRunHook', () => {
       stdinPayload: payload,
     });
     expect(result.decision).toBe('run');
+    expect(result.status).toBe('passed');
     expect(result.exitCode).toBe(0);
     expect(result.timedOut).toBe(false);
     expect(result.spawnError).toBeUndefined();
@@ -42,15 +43,17 @@ describe('executePreRunHook', () => {
       stdinPayload: payload,
     });
     expect(result.decision).toBe('skip');
+    expect(result.status).toBe('skipped');
     expect(result.exitCode).toBe(2);
   });
 
-  it('其它退出码 fail-open → decision run', async () => {
+  it('其它退出码 fail-closed → decision block', async () => {
     const result = await executePreRunHook({
       command: 'node -e "process.exit(3)"',
       stdinPayload: payload,
     });
-    expect(result.decision).toBe('run');
+    expect(result.decision).toBe('block');
+    expect(result.status).toBe('failed');
     expect(result.exitCode).toBe(3);
   });
 
@@ -65,22 +68,24 @@ describe('executePreRunHook', () => {
     expect(result.stdout).toContain('sid=s1');
   });
 
-  it('超时 fail-open → decision run + timedOut', async () => {
+  it('超时 fail-closed → decision block + timedOut', async () => {
     const result = await executePreRunHook({
       command: 'node -e "setTimeout(function(){process.exit(2)},30000)"',
       timeoutMs: 400,
       stdinPayload: payload,
     });
     expect(result.timedOut).toBe(true);
-    expect(result.decision).toBe('run');
+    expect(result.decision).toBe('block');
+    expect(result.status).toBe('timed_out');
   }, 15_000);
 
-  it('命令不存在(shell 报错退出)fail-open → decision run', async () => {
+  it('命令不存在(shell 报错退出)fail-closed → decision block', async () => {
     const result = await executePreRunHook({
       command: 'definitely-not-a-real-command-xdmaker-test',
       stdinPayload: payload,
     });
-    expect(result.decision).toBe('run');
+    expect(result.decision).toBe('block');
+    expect(result.status).toBe('failed');
     expect(result.exitCode).not.toBe(2);
   });
 
@@ -93,6 +98,37 @@ describe('executePreRunHook', () => {
     expect(result.stderr).toContain('to-err');
   });
 
+  it('JavaScript 语法错误会阻止执行', async () => {
+    const result = await executePreRunHook({
+      command: 'node -e "const ="',
+      stdinPayload: payload,
+    });
+    expect(result.status).toBe('failed');
+    expect(result.decision).toBe('block');
+    expect(result.exitCode).not.toBe(0);
+  });
+
+  it('spawn 失败会保留启动错误并阻止执行', async () => {
+    const result = await executePreRunHook({
+      command: 'node -e "process.exit(0)"',
+      cwd: 'Z:/definitely/not/a/real/pre-run-hook-directory',
+      stdinPayload: payload,
+    });
+    expect(result.status).toBe('failed');
+    expect(result.decision).toBe('block');
+    expect(result.spawnError || result.error).toBeTruthy();
+  });
+
+  it('stdout 超过 8KB 会截断并留下标记', async () => {
+    const result = await executePreRunHook({
+      command: 'node -e "process.stdout.write(\'x\'.repeat(9000))"',
+      stdinPayload: payload,
+    });
+    expect(result.status).toBe('passed');
+    expect(result.stdout).toHaveLength(8 * 1024);
+    expect(result.stdoutTruncated).toBe(true);
+  });
+
   it('信号已 abort(任务已 pause/delete)→ 不 spawn 直接返回 aborted', async () => {
     const controller = new AbortController();
     controller.abort();
@@ -102,7 +138,8 @@ describe('executePreRunHook', () => {
       stdinPayload: payload,
     });
     expect(result.aborted).toBe(true);
-    expect(result.decision).toBe('run');
+    expect(result.status).toBe('aborted');
+    expect(result.decision).toBe('block');
     expect(result.exitCode).toBeNull();
   });
 
@@ -118,7 +155,8 @@ describe('executePreRunHook', () => {
     setTimeout(() => controller.abort(), 300);
     const result = await pending;
     expect(result.aborted).toBe(true);
-    expect(result.decision).toBe('run');
+    expect(result.status).toBe('aborted');
+    expect(result.decision).toBe('block');
     // 树杀 + 1s 强制 settle 兜底:远小于 60s 超时即返回
     expect(Date.now() - startedAt).toBeLessThan(10_000);
   }, 15_000);
