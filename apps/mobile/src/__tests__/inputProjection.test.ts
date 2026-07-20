@@ -140,7 +140,7 @@ describe('inputProjection', () => {
   it('keeps uploaded mobile OSS refs in every desktop materialization slot', () => {
     const attachment = buildMobileUploadedAttachment({
       id: 'mobile-upload-1',
-      ossKey: 'xdt-maker/device-link/user-1/spec.pdf',
+      ossKey: 'cindy/device-link/user-1/spec.pdf',
       name: 'spec.pdf',
       size: 2048,
       mimeType: 'application/pdf',
@@ -153,7 +153,7 @@ describe('inputProjection', () => {
     const persisted = JSON.parse(queued.persistedContent) as { files: Array<{ name: string; path: string }> };
 
     expect(parseAttachmentOssRef(queued.files?.[0]?.path ?? '')).toMatchObject({
-      ossKey: 'xdt-maker/device-link/user-1/spec.pdf',
+      ossKey: 'cindy/device-link/user-1/spec.pdf',
     });
     expect(persisted.files).toEqual([{ name: 'spec.pdf', path: attachment!.path }]);
     expect(queued.chatMessage.files).toEqual([{ name: 'spec.pdf', path: attachment!.path }]);
@@ -162,7 +162,7 @@ describe('inputProjection', () => {
   it('persists image attachments in images[] while keeping files[] for desktop materialization', () => {
     const attachment = buildMobileUploadedAttachment({
       id: 'mobile-upload-image',
-      ossKey: 'xdt-maker/device-link/user-1/photo.png',
+      ossKey: 'cindy/device-link/user-1/photo.png',
       name: 'photo.png',
       size: 1024,
       mimeType: 'image/png',
@@ -178,7 +178,7 @@ describe('inputProjection', () => {
     };
 
     expect(parseAttachmentOssRef(queued.files?.[0]?.url ?? '')).toMatchObject({
-      ossKey: 'xdt-maker/device-link/user-1/photo.png',
+      ossKey: 'cindy/device-link/user-1/photo.png',
     });
     // originalName(而非 name)是桌面 ImageRef schema 的字段;写错字段名
     // 会让桌面 renderer 静默丢弃图片引用(手机贴图桌面不显示,2026-07 实踩)。

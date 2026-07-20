@@ -526,7 +526,7 @@ export function MessageRenderer({
   }
   const itemKeys = useMemo(() => listData.map((item) => item.key), [listData]);
   const firstItemKey = itemKeys[0] ?? null;
-  // 本地缩略兜底映射版本:collect 内部对 xdt-oss-attach:// 附件读全局 store 做 overlay,
+  // 本地缩略兜底映射版本:collect 内部对 cindy-oss-attach:// 附件读全局 store 做 overlay,
   // hydrate / 新注册后 gallery 需要重建,否则点开气泡本地图时 initialUrl 对不上图集条目。
   const sentThumbsVersion = useSentAttachmentThumbsVersion();
   const galleryImages = useMemo(
@@ -2985,7 +2985,7 @@ function AttachmentStrip({
   onResolveRemoteMedia?: ResolveRemoteMediaFn;
 }) {
   const styles = useThemedStyles(makeStyles);
-  // 订阅本地缩略兜底版本:hydrate / 新注册落盘后,已渲染的 xdt-oss-attach:// 气泡
+  // 订阅本地缩略兜底版本:hydrate / 新注册落盘后,已渲染的 cindy-oss-attach:// 气泡
   // 自动从占位卡切到本地图(返回值不消费,订阅本身驱动重渲染)。
   useSentAttachmentThumbsVersion();
   const { imageAttachments, fileAttachments } = partitionMessageAttachments(attachments);
@@ -2994,7 +2994,7 @@ function AttachmentStrip({
   return (
     <View style={[styles.attachmentStrip, alignStyle, { gap: layout.attachmentGap }]}>
       {/* 图片附件对齐桌面版:逐张竖排(不换行拼贴),各自按原始宽高比 contain。
-          overlay:本机上传的图在被控端物化改写前 url 仍是 xdt-oss-attach://,本地
+          overlay:本机上传的图在被控端物化改写前 url 仍是 cindy-oss-attach://,本地
           兜底命中时替换成 file:// 直接渲染(payload 同源替换,点开查看器同图)。 */}
       {imageAttachments.map(applySentAttachmentThumbOverlay).map((item, index) => (
         <MediaPreview

@@ -38,7 +38,7 @@ interface ChatVideoViewProps {
   src: string;
   filename: string;
   variant: ChatVideoVariant;
-  /** 远程(device-link)会话:把 src 改写成 xdt-remote-media:// 经 OSS 流式取;本地 / 不传 → 原样。 */
+  /** 远程(device-link)会话:把 src 改写成 cindy-remote-media:// 经 OSS 流式取;本地 / 不传 → 原样。 */
   sessionId?: string;
 }
 
@@ -66,7 +66,7 @@ export function ChatVideoView({ src, filename, variant, sessionId }: ChatVideoVi
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [errored, setErrored] = useState(false);
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
-  // 远程会话改写到 xdt-remote-media://(OSS range 流式);本地原样。下游统一用 displaySrc。
+  // 远程会话改写到 cindy-remote-media://(OSS range 流式);本地原样。下游统一用 displaySrc。
   const displaySrc = useRemoteMediaUrl(src, sessionId);
 
   if (errored) {

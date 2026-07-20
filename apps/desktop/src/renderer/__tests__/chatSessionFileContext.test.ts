@@ -188,7 +188,7 @@ describe('collectSessionImageSrcs 与渲染改写同源契约', () => {
       rewriteToRemoteMediaOrigin('xdt-image://sess/up.png', origin),
     ]);
     // 改写确实发生(不是 no-op),防止两侧同时退化成原样输出而契约空转。
-    expect(out[0]).toMatch(/^xdt-remote-media:\/\//);
+    expect(out[0]).toMatch(/^cindy-remote-media:\/\//);
   });
 
   it('ssh 远程会话:cache-id 型 xdt-image:// 不改写(远端取不到,保持本机语义)', () => {

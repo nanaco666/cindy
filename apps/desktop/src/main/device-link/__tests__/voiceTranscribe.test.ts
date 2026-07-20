@@ -36,11 +36,11 @@ describe('transcribeRemoteVoiceInput', () => {
     });
 
     const result = await transcribeRemoteVoiceInput({
-      ossKey: 'xdt-maker/device-link/user-1/voice.m4a',
+      ossKey: 'cindy/device-link/user-1/voice.m4a',
       fileName: 'voice.m4a',
     });
 
-    expect(downloadToBuffer).toHaveBeenCalledWith('xdt-maker/device-link/user-1/voice.m4a');
+    expect(downloadToBuffer).toHaveBeenCalledWith('cindy/device-link/user-1/voice.m4a');
     expect(transcribeVoiceInputAudioFile).toHaveBeenCalledWith({
       bytes,
       mimeType: 'audio/mp4',
@@ -53,7 +53,7 @@ describe('transcribeRemoteVoiceInput', () => {
       model: 'elevenlabs/scribe_v2',
       audioBytes: bytes.byteLength,
     });
-    expect(removeRemote).toHaveBeenCalledWith('xdt-maker/device-link/user-1/voice.m4a');
+    expect(removeRemote).toHaveBeenCalledWith('cindy/device-link/user-1/voice.m4a');
   });
 
   it('lets request mime type override the downloaded content type', async () => {

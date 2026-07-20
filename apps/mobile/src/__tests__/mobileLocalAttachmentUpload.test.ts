@@ -23,7 +23,7 @@ function attachmentFor(name: string): RemoteSerializedAttachment {
   return {
     id: `mobile-upload:key/${name}`,
     name,
-    path: `xdt-oss-attach://key/${name}`,
+    path: `cindy-oss-attach://key/${name}`,
     ext: '.jpg',
     size: 500_000,
     category: 'image',

@@ -64,7 +64,7 @@ export function xdtFileUrlToPath(url: string): string | null {
  *                      main 按扩展名/魔数统一推导,含 svg/bmp/ico)
  *   - data:            base64 直取;非 base64 形式 fetch 归一化(data: 同源)
  *   - http(s)://       经 main 下载(net.fetch,流式限流)
- *   - xdt-remote-media 经 main 复用协议取件管线(OSS 中转 / SSH)
+ *   - cindy-remote-media 经 main 复用协议取件管线(OSS 中转 / SSH)
  * 其余 scheme 抛错(调用方能力判定应已挡住,这里是防御)。
  */
 export async function loadImageSourceBase64(
@@ -92,7 +92,7 @@ export async function loadImageSourceBase64(
   if (
     xdtFileUrlToPath(src) !== null ||
     /^https?:\/\//.test(src) ||
-    src.startsWith('xdt-remote-media://')
+    src.startsWith('cindy-remote-media://')
   ) {
     const res = await window.electronAPI.readImageBytes({ url: src });
     return { base64: res.base64, mimeType: cleanImageMime(res.mimeType) };
@@ -108,7 +108,7 @@ export function isImageBytesReachable(src: string): boolean {
     xdtFileUrlToPath(src) !== null ||
     /^data:image\//i.test(src) ||
     /^https?:\/\//.test(src) ||
-    src.startsWith('xdt-remote-media://')
+    src.startsWith('cindy-remote-media://')
   );
 }
 

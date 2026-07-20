@@ -868,7 +868,7 @@ registerGhostIpc();
 // registerSchemesAsPrivileged replaces the whole privileged-scheme list every
 // time it runs, so per-module calls silently wipe each other — only the last
 // caller's scheme keeps its privileges. That exact bug shipped once (xdt-model
-// lost supportFetchAPI when xdt-remote-media registered after it → 3D preview
+// lost supportFetchAPI when cindy-remote-media registered after it → 3D preview
 // stuck on poster). Every protocol module therefore only EXPORTS its privilege
 // entry; this is the one place that registers them.
 //   xdt-image:        locally cached chat images (<img>)
@@ -878,7 +878,7 @@ registerGhostIpc();
 //   xdt-audio:        local audio files (<audio>, Range 同 video 手动处理)
 //   xdt-model:        mivo 3D model cache — <model-viewer> 用 fetch() 拉模型,
 //                     supportFetchAPI 丢失即静默白屏,勿动
-//   xdt-remote-media: device-link 入方向媒体(被控端字节经 OSS 中转)
+//   cindy-remote-media: device-link 入方向媒体(被控端字节经 OSS 中转)
 //   cindy-ghost:      意识沙箱文件供片(handler 挂在每意识专属 session 分区,
 //                     只认自己安装目录;runtime-sandbox.md §3)
 //   cindy-media:      媒体总仓字节仓取件窗口(内容寻址 blob;新写入媒体的

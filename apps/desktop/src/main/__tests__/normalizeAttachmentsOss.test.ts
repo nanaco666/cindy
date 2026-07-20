@@ -76,7 +76,7 @@ beforeEach(() => {
 
 describe('normalizeUserMessage — device-link 出方向 OSS 引用物化', () => {
   it('OSS 引用块 → 流式下载到临时文件 → path 变本地 → 删 OSS', async () => {
-    const ref = buildAttachmentOssRef({ ossKey: 'xdt-maker/device-link/u/x.png', mimeType: 'image/png' });
+    const ref = buildAttachmentOssRef({ ossKey: 'cindy/device-link/u/x.png', mimeType: 'image/png' });
     const out = await normalizeUserMessage('sess-1', {
       type: 'user',
       content: [
@@ -86,12 +86,12 @@ describe('normalizeUserMessage — device-link 出方向 OSS 引用物化', () =
     });
     expect(downloadToFile).toHaveBeenCalledTimes(1);
     const [ossKeyArg, destArg] = downloadToFile.mock.calls[0] as unknown as [string, string];
-    expect(ossKeyArg).toBe('xdt-maker/device-link/u/x.png');
-    expect(destArg).toMatch(/xdt-maker-attachments[\\/]sess-1[\\/].+\.png$/);
+    expect(ossKeyArg).toBe('cindy/device-link/u/x.png');
+    expect(destArg).toMatch(/cindy-attachments[\\/]sess-1[\\/].+\.png$/);
     const block = (out as { content: Array<{ type: string; path?: string; mimeType?: string }> }).content[1];
     expect(block.path).toBe(destArg); // path 指向下载目标
     expect(block.mimeType).toBe('image/png');
-    expect(removeRemote).toHaveBeenCalledWith('xdt-maker/device-link/u/x.png');
+    expect(removeRemote).toHaveBeenCalledWith('cindy/device-link/u/x.png');
   });
 
   it('下载失败 → 丢该附件(turn 仍发出),不删 OSS', async () => {

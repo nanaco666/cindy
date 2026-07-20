@@ -70,10 +70,10 @@ describe('buildContentSecurityPolicy — shared invariants', () => {
 
     it(`[${label}] allow-lists custom media protocols in img-src / media-src`, () => {
       const d = parsePolicy(buildContentSecurityPolicy(ctx));
-      for (const scheme of ['xdt-image:', 'xdt-file:', 'xdt-video:', 'xdt-model:', 'xdt-remote-media:', 'cindy-media:']) {
+      for (const scheme of ['xdt-image:', 'xdt-file:', 'xdt-video:', 'xdt-model:', 'cindy-remote-media:', 'cindy-media:']) {
         expect(d['img-src']).toContain(scheme);
       }
-      for (const scheme of ['xdt-audio:', 'xdt-video:', 'xdt-remote-media:', 'cindy-media:']) {
+      for (const scheme of ['xdt-audio:', 'xdt-video:', 'cindy-remote-media:', 'cindy-media:']) {
         expect(d['media-src']).toContain(scheme);
       }
       // data: / blob: needed for canvas, object URLs, inline assets.

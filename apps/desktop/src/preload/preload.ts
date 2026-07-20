@@ -2205,7 +2205,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }): Promise<{ url: string; name: string; ext: string; mimeType: string; size: number }> =>
     ipcRenderer.invoke('media:cache-for-session', params),
 
-  // renderer 字节层:http / xdt-remote-media 图取字节(标注烧录、位图复制)。
+  // renderer 字节层:http / cindy-remote-media 图取字节(标注烧录、位图复制)。
   readImageBytes: (params: {
     url: string;
   }): Promise<{ base64: string; mimeType: string }> =>

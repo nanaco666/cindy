@@ -225,7 +225,7 @@ export function useMobileLocalAttachments(
     }),
     onPendingChange: setPendingUploads,
     onUploaded: (attachment, candidate, uploadedUri, localId) => {
-      // 发送后气泡的本地缩略图兜底:消息里持久化的是 xdt-oss-attach:// 中转引用,
+      // 发送后气泡的本地缩略图兜底:消息里持久化的是 cindy-oss-attach:// 中转引用,
       // 被控端物化改写前(乐观渲染 / 电脑离线窗口)渲染端没有任何预览路径——把
       // 实际上传的文件拷进自有目录记映射,气泡用本地图顶上。fire-and-forget,
       // 失败静默(store 内部兜),绝不挡上传回调主流程。

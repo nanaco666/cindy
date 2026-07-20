@@ -49,7 +49,7 @@ import {
 const PUT_PATH = '/api/device-link/media/presign-put';
 const GET_PATH = '/api/device-link/media/presign-get';
 const DEL_PATH = '/api/device-link/media';
-const KEY = 'xdt-maker/device-link/user-aaa/uuid.png';
+const KEY = 'cindy/device-link/user-aaa/uuid.png';
 
 /** 默认 presign 路由:put→putUrl/key、get→getUrl、delete→deleted。 */
 function wirePresign() {
