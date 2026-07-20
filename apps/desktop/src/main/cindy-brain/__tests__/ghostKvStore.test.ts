@@ -2,13 +2,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   GHOST_KV_MAX_BYTES,
   GhostKvError,
   createGhostKvStore,
   isValidGhostKvValue,
+  removeGhostKvBestEffort,
   type GhostKvStore,
 } from '../ghostKvStore.js';
 
@@ -96,6 +97,28 @@ describe('cindy-brain · ghostKvStore(意识自定义参数持久化)', () => {
     expect(store.read('demo')).toEqual({});
     expect(() => store.remove('demo')).not.toThrow(); // 二次删不抛
     expect(() => store.remove('never-written')).not.toThrow();
+  });
+
+  it('卸载收尾:KV 删除失败只记日志,不阻断后续一致性收尾', () => {
+    const log = { warn: vi.fn() };
+    const finalizeUninstall = vi.fn();
+
+    removeGhostKvBestEffort(
+      {
+        remove: () => {
+          throw new Error('file locked');
+        },
+      },
+      'demo',
+      log,
+    );
+    finalizeUninstall();
+
+    expect(finalizeUninstall).toHaveBeenCalledOnce();
+    expect(log.warn).toHaveBeenCalledWith('ghost KV 清理失败', {
+      ghostId: 'demo',
+      error: 'file locked',
+    });
   });
 
   it('非法 ghostId:写抛 INVALID_GHOST_ID,读回 {},删静默——文件名安全双保险', () => {

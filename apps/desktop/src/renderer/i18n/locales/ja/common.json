@@ -2023,7 +2023,32 @@
     },
     "ghosts": {
       "title": "プラグイン",
-      "description": "プラグインで Cindy に能力と画面を追加できます。インストールすればすぐ使え、アンインストールすれば消えます。各プラグインには専用の設定ページがあります。",
+      "description": "Cindy の機能を広げるツールと連携。",
+      "page": {
+        "search": "プラグインを検索",
+        "clearSearch": "プラグイン検索をクリア",
+        "addPlugin": "プラグインを追加",
+        "addPluginAria": "プラグイン追加オプション",
+        "createWithCindy": "Cindy で作成",
+        "createPrompt": "Cindy プラグインを作成したいです。まず ghost_forge_guide を呼び出して完全な仕様を読み、すぐに実装を始めないでください。質問から始め、毎回一つの重要な判断に集中しながら、解決する課題、対象ユーザー、操作フロー、必要なツールと接続、権限の境界、受け入れ条件を段階的に確認してください。設計を確認した後、仕様に沿って実装と検証を行い、最後に ghost_forge_pack を呼び出してプラグインをパッケージ化し、インストールしてください。",
+        "installedTitle": "インストール済みプラグイン",
+        "installedExpand": "インストール済みプラグインをさらに {{count}} 件表示",
+        "installedCollapse": "追加のインストール済みプラグインを隠す",
+        "allTitle": "すべてのプラグイン",
+        "filterAll": "すべて",
+        "filtersAria": "提供元でプラグインを絞り込む",
+        "emptyFiltered": "一致するプラグインがありません",
+        "useAction": "使用",
+        "useAria": "{{name}} を使用",
+        "installAction": "インストール",
+        "installAria": "{{name}} をインストール",
+        "restoreAria": "{{name}} を復元",
+        "origin": {
+          "builtin": "内蔵",
+          "enterprise": "チーム共有",
+          "external": "外部 / ローカル"
+        }
+      },
       "provisioning": {
         "updating": "内蔵プラグインを更新中…"
       },
@@ -2146,8 +2171,14 @@
         "infoTitle": "詳細情報",
         "infoId": "識別子",
         "infoAuthor": "作者",
+        "byAuthor": "作者 {{author}}",
         "infoPanel": "パネル",
         "infoLocation": "インストール場所",
+        "expandInfoValue": "{{label}}をすべて表示",
+        "collapseInfoValue": "{{label}}を折りたたむ",
+        "copyLocation": "インストール場所をコピー",
+        "locationCopied": "インストール場所をコピーしました",
+        "locationCopyFailed": "インストール場所をコピーできませんでした。手動でコピーしてください",
         "openLocation": "インストール場所を開く",
         "panelDocked": "ドッキング済み · 最小幅 {{min}}px",
         "panelNotDocked": "未ドッキング(レイアウトに位置記録なし)",
@@ -2169,10 +2200,26 @@
           },
           "defaultOption": "{{model}}(既定)"
         },
-        "toolsTitle": "登録ツール",
+        "toolsTitle": "Tools",
         "permissionsTitle": "権限",
         "infoDescription": "説明",
-        "customSlotAsleep": "このプラグインは無効です。有効化すると、ここに設定画面が表示されます。"
+        "customSlotAsleep": "このプラグインは無効です。有効化すると、ここに設定画面が表示されます。",
+        "descriptionExpand": "もっと見る",
+        "descriptionCollapse": "折りたたむ",
+        "useAction": "Plugin を使用",
+        "useDisabled": "使用する前に Plugin を有効にしてください",
+        "moreActions": "その他の Plugin 操作",
+        "updateFromFile": ".cindy ファイルから更新…",
+        "settingsTitle": "{{name}} の設定",
+        "settingsUnavailableUntilRestore": "この設定を再び使用するには、プラグインを復元してください。",
+        "configurationTitle": "設定",
+        "openTool": "Tool {{name}} の詳細を表示",
+        "noToolDescription": "この Tool には説明がありません。",
+        "viewAllTools": "さらに表示",
+        "collapseTools": "Tool を折りたたむ",
+        "viewAllPermissions": "さらに表示",
+        "permissionsDialogDescription": "この Plugin が要求する全 {{count}} 項目の権限",
+        "closeDialog": "ダイアログを閉じる"
       },
       "contents": {
         "panel": "パネル",
@@ -3140,6 +3187,7 @@
     "tabs": {
       "projects": "プロジェクト",
       "skillhub": "スキルハブ",
+      "plugins": "プラグイン",
       "issues": "問題"
     },
     "user": {
@@ -5437,6 +5485,11 @@
   },
   "skillhub": {
     "home": {
+      "title": "スキル",
+      "description": "ローカルスキルを管理し、Skill Hub から新しいスキルを見つけてインストールできます。",
+      "search": "スキルを検索",
+      "clearSearch": "スキル検索をクリア",
+      "noSearchResults": "一致するスキルが見つかりません",
       "browseTitle": "Skill Hub を見る",
       "browseDesc": "もっと多くのスキルを見つけてインストール",
       "recommended": "おすすめ",
@@ -6125,8 +6178,11 @@
   },
   "extraDirs": {
     "menuAria": "操作メニュー",
-    "tooltipEmpty": "新しい目標 / 参照ディレクトリを追加",
+    "tooltipEmpty": "その他の操作",
     "tooltipCount": "参照ディレクトリ {{count}} 件",
+    "pluginsTitle": "インストール済みプラグイン",
+    "pluginDisabled": "無効",
+    "pluginNoCommand": "ここでは使用できません",
     "sectionTitle": "参照ディレクトリ(読み取り専用)",
     "empty": "参照ディレクトリはまだありません",
     "add": "ディレクトリを追加…",

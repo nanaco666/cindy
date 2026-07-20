@@ -22,6 +22,7 @@ import { SkillhubDetailView } from '@/features/skillhub/SkillhubDetailView';
 import { SkillhubMarketListView } from '@/features/skillhub/SkillhubMarketListView';
 import { MakerExperimentalView } from '@/features/maker-experimental/MakerExperimentalView';
 import { SchedulerPage } from '@/features/scheduler';
+import { GhostPluginPage } from '@/features/plugin/GhostPluginPage';
 
 /**
  * 三层路由架构：
@@ -112,7 +113,10 @@ export const router = createHashRouter([
                       {
                         path: 'local',
                         children: [
-                          { index: true, element: <SkillhubHomeView /> },
+                          {
+                            index: true,
+                            element: <SkillhubHomeView />,
+                          },
                           { path: ':kind/global/:name', element: <SkillhubDetailView /> },
                           {
                             path: ':kind/project/:projectHash/:name',
@@ -140,6 +144,7 @@ export const router = createHashRouter([
                     ],
                   },
                   { path: 'settings', element: <SettingsView /> },
+                  { path: 'plugins', element: <GhostPluginPage /> },
                   // 一阶段重构：新链路验证页面（独立路由，不影响现有 chat）
                   // 详见 doc/agent/xdt-maker-architecture.md
                   { path: 'maker-experimental', element: <MakerExperimentalView /> },

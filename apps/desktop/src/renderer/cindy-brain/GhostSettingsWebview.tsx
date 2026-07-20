@@ -3,8 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { CircleAlert, LayoutGrid, MoonStar } from 'lucide-react';
 import type { WebviewTag } from 'electron';
 
+import { cn } from '@/lib/utils';
 import { GHOST_SCHEME, ghostPartition, type InstalledGhost } from '../../shared/ghost';
-import { buildGhostSettingsThemeCss, createGhostThemeInjector, observeHostTheme } from './ghostPanelTheme';
+import {
+  buildGhostPluginSettingsThemeCss,
+  buildGhostSettingsThemeCss,
+  createGhostThemeInjector,
+  observeHostTheme,
+} from './ghostPanelTheme';
 import {
   loadGhostSettingsSnapshot,
   saveGhostSettingsSnapshot,
@@ -93,12 +99,17 @@ const SNAPSHOT_FAILSAFE_MS = 5000;
 const lastMeasuredHeights = new Map<string, number>();
 
 /** 沉睡态提示(attach 闸只放行唤醒的意识,沉睡时不建 webview,否则必被拒成白屏)。 */
-function AsleepHint(): ReactNode {
+function AsleepHint({ appearance }: { appearance: 'settings' | 'plugin' }): ReactNode {
   const { t } = useTranslation();
   return (
     <div className="flex flex-col items-center gap-1.5 px-6 py-9">
       <MoonStar size={20} className="text-[var(--text-tertiary)] opacity-60" />
-      <p className="text-center text-12 text-[var(--text-tertiary)] opacity-70">
+      <p
+        className={cn(
+          'text-center text-[var(--text-tertiary)] opacity-70',
+          appearance === 'plugin' ? 'text-13 leading-5' : 'text-12',
+        )}
+      >
         {t('settings.ghosts.detail.customSlotAsleep')}
       </p>
     </div>
@@ -106,18 +117,32 @@ function AsleepHint(): ReactNode {
 }
 
 /** 崩溃接管(卡片内嵌小态;设置页本来就有沉睡开关,不再放"关闭意识"按钮)。 */
-function CrashedHint({ onReload }: { onReload: () => void }): ReactNode {
+function CrashedHint({
+  onReload,
+  appearance,
+}: {
+  onReload: () => void;
+  appearance: 'settings' | 'plugin';
+}): ReactNode {
   const { t } = useTranslation();
   return (
     <div className="flex flex-col items-center gap-3 px-6 py-9">
       <CircleAlert size={20} className="text-[var(--error-fg)]" />
-      <p className="text-center text-12 leading-relaxed text-[var(--text-secondary)]">
+      <p
+        className={cn(
+          'text-center text-[var(--text-secondary)]',
+          appearance === 'plugin' ? 'text-13 leading-5' : 'text-12 leading-relaxed',
+        )}
+      >
         {t('settings.ghosts.panelError.crashed')}
       </p>
       <button
         type="button"
         onClick={onReload}
-        className="rounded-full border border-[var(--border-default)] px-3.5 py-1.5 text-12 font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-chip)]"
+        className={cn(
+          'rounded-full border border-[var(--border-default)] px-3.5 py-1.5 font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-chip)]',
+          appearance === 'plugin' ? 'text-13 leading-5' : 'text-12',
+        )}
       >
         {t('settings.ghosts.panelError.reload')}
       </button>
@@ -126,13 +151,21 @@ function CrashedHint({ onReload }: { onReload: () => void }): ReactNode {
 }
 
 /** webview 体:与 GhostChipPanelBody 同款装载/主题/崩溃模板(无媒体右键分支)。 */
-function SettingsWebviewBody({ ghost }: { ghost: InstalledGhost }): ReactNode {
+function SettingsWebviewBody({
+  ghost,
+  appearance,
+}: {
+  ghost: InstalledGhost;
+  appearance: 'settings' | 'plugin';
+}): ReactNode {
   const [crashed, setCrashed] = useState(false);
   const [generation, setGeneration] = useState(0);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const { manifest } = ghost;
   const settingsHtml = manifest.settingsHtml;
   const fixedHeight = manifest.settingsHeight;
+  const buildSettingsThemeCss =
+    appearance === 'plugin' ? buildGhostPluginSettingsThemeCss : buildGhostSettingsThemeCss;
   // 首帧贴的快照(仅 mount 时决定一次;版本/主题/DPR 现场比对,宽度等布局后
   // 由下方 layout effect 补验)。失配 = null,走透明占位 + 淡入的老路径。
   const [snapshot, setSnapshot] = useState<GhostSettingsSnapshot | null>(() => {
@@ -140,7 +173,7 @@ function SettingsWebviewBody({ ghost }: { ghost: InstalledGhost }): ReactNode {
     if (!snap) return null;
     const ctx = {
       version: manifest.version,
-      themeCss: buildGhostSettingsThemeCss(),
+      themeCss: buildSettingsThemeCss(),
       dpr: window.devicePixelRatio,
     };
     return snapshotMatchesContext(snap, ctx) ? snap : null;
@@ -166,7 +199,6 @@ function SettingsWebviewBody({ ghost }: { ghost: InstalledGhost }): ReactNode {
     }
     // 仅首帧校验:后续容器宽度变化(拖窗口)时快照多半已撤;没撤也只是
     // 位图被拉伸 180ms,随换真身消失,不值得挂 ResizeObserver。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -194,7 +226,7 @@ function SettingsWebviewBody({ ghost }: { ghost: InstalledGhost }): ReactNode {
     const measureTimers: Array<ReturnType<typeof setTimeout>> = [];
     // 状态机见 createGhostThemeInjector:换肤误触发去重、dom-ready 无条件重灌。
     // 基线用设置卡片色(buildGhostSettingsThemeCss),与宿主卡片无缝。
-    const injector = createGhostThemeInjector(webview, buildGhostSettingsThemeCss);
+    const injector = createGhostThemeInjector(webview, buildSettingsThemeCss);
     // 拍快照(debounce):等渲染尘埃落定后把 guest 画面存进快照缓存,给下次
     // 进入贴首帧用。guest 内部滚动过(内容超 800 clamp)时跳过——快照永远
     // 存"从头开始"的画面,与下次装载的初始滚动位一致。失败静默:快照只是
@@ -230,7 +262,7 @@ function SettingsWebviewBody({ ghost }: { ghost: InstalledGhost }): ReactNode {
               width: rect.width,
               height: rect.height,
               dpr: window.devicePixelRatio,
-              themeCss: buildGhostSettingsThemeCss(),
+              themeCss: buildSettingsThemeCss(),
               version: manifest.version,
               capturedAt: Date.now(),
             });
@@ -359,6 +391,7 @@ function SettingsWebviewBody({ ghost }: { ghost: InstalledGhost }): ReactNode {
   if (crashed) {
     return (
       <CrashedHint
+        appearance={appearance}
         onReload={() => {
           setGeneration((g) => g + 1);
           setCrashed(false);
@@ -389,19 +422,45 @@ function SettingsWebviewBody({ ghost }: { ghost: InstalledGhost }): ReactNode {
 }
 
 /** 卡片宿主:标题行 + 按启用态分派(沉睡提示 / 沙箱 webview)。 */
-export function GhostSettingsWebview({ ghost }: { ghost: InstalledGhost }): ReactNode {
+export function GhostSettingsWebview({
+  ghost,
+  title,
+  appearance = 'settings',
+}: {
+  ghost: InstalledGhost;
+  /** Product-facing section title; settings keeps the legacy fallback. */
+  title?: string;
+  /** Plugin detail uses the same shared surface as Tool and Permission cards. */
+  appearance?: 'settings' | 'plugin';
+}): ReactNode {
   const { t } = useTranslation();
   const { manifest } = ghost;
   if (!manifest.settingsHtml) return null;
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-[var(--settings-theme-card-border)] bg-[var(--settings-theme-card-bg)] px-5 py-4">
+    <div
+      className={cn(
+        'flex flex-col gap-3 rounded-xl border px-5 py-4',
+        appearance === 'plugin'
+          ? 'border-[color-mix(in_srgb,var(--border-default)_72%,transparent)] bg-[color-mix(in_srgb,var(--surface-elevated)_82%,var(--surface))]'
+          : 'border-[var(--settings-theme-card-border)] bg-[var(--settings-theme-card-bg)]',
+      )}
+    >
       <div className="flex items-center gap-2">
         <LayoutGrid size={14} className="text-[var(--text-tertiary)]" />
-        <p className="text-13 font-medium text-[var(--text-primary)]">
-          {t('settings.ghosts.detail.customSlotTitle')}
+        <p
+          className={cn(
+            'font-medium text-[var(--text-primary)]',
+            appearance === 'plugin' ? 'text-14 leading-[22px]' : 'text-13',
+          )}
+        >
+          {title ?? t('settings.ghosts.detail.customSlotTitle')}
         </p>
       </div>
-      {ghost.enabled ? <SettingsWebviewBody ghost={ghost} /> : <AsleepHint />}
+      {ghost.enabled ? (
+        <SettingsWebviewBody ghost={ghost} appearance={appearance} />
+      ) : (
+        <AsleepHint appearance={appearance} />
+      )}
     </div>
   );
 }

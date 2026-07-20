@@ -44,6 +44,25 @@ export interface GhostKvStore {
   remove(ghostId: string): void;
 }
 
+/**
+ * 卸载目录已经删除后，KV 只是附属清理；文件锁或权限异常只能记日志，
+ * 不能阻断墓碑记录、最终列表广播等卸载收尾。
+ */
+export function removeGhostKvBestEffort(
+  store: Pick<GhostKvStore, 'remove'>,
+  ghostId: string,
+  log: GhostKvLogger,
+): void {
+  try {
+    store.remove(ghostId);
+  } catch (error) {
+    log.warn('ghost KV 清理失败', {
+      ghostId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 /** 带 code 的存储层错误(端点层据此映射 400/413,不外泄内部细节)。 */
 export class GhostKvError extends Error {
   constructor(

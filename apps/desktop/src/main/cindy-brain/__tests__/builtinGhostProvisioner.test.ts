@@ -353,6 +353,7 @@ describe('listRestorableBuiltinGhosts · 可恢复清单(设置页灰态行数�
     expect(list.map((r) => r.id)).toEqual(['art']);
     expect(list[0].name).toBe('Builtin art');
     expect(list[0].version).toBe('1.0.0');
+    expect(list[0].manifest.tools).toEqual([{ name: 'do_thing', description: '做点事' }]);
 
     // 恢复 = 清墓碑 + 对账装回,恢复后不再出现在可恢复清单
     clearBuiltinTombstone(repoRootDir, 'art');

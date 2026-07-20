@@ -19,7 +19,6 @@ import {
   Info,
   Package,
   ShieldCheck,
-  Sparkles,
   Wrench,
 } from 'lucide-react';
 
@@ -27,6 +26,7 @@ import { toast } from '@/lib/toast';
 import { extractIpcError } from '@/utils/ipcError';
 import { GhostPermissionRows } from '@/cindy-brain/GhostPermissionList';
 import { GhostSettingsWebview } from '@/cindy-brain/GhostSettingsWebview';
+import { CindyCapabilityPrefs } from '@/cindy-brain/CindyCapabilityPrefs';
 import { findSplitChildByPanelKind } from '../../../shared/layoutTree';
 import {
   ghostContentKeys,
@@ -63,98 +63,6 @@ function InfoRow({
         {value}
       </span>
       {action}
-    </div>
-  );
-}
-
-/** 跟随默认在 <select> 里的哨兵值(覆盖表里"没有这项"= 跟随默认)。 */
-const FOLLOW_DEFAULT_VALUE = '__default__';
-
-/**
- * 「Cindy 能力」区:意识申请的每项 cindy 能力一行,可钉后端(供应商×模型),
- * 缺省跟随系统默认(自带 proxy 基座)。这是选型解析表的第②层(意识专属
- * 覆盖)的 UI 落点;首帧同步读偏好(规则 7,无跳变)。
- */
-function CindyCapabilityPrefs({
-  ghostId,
-  capabilities,
-}: {
-  ghostId: string;
-  /** 能力键全名列表(image.generate / video.edit …,来自身份卡详单)。 */
-  capabilities: string[];
-}) {
-  const { t } = useTranslation();
-  const [prefs] = useState(() => window.electronAPI.ghosts.cindyPrefsSync(ghostId));
-  const [overrides, setOverrides] = useState<Record<string, string>>(prefs.overrides);
-
-  const handleChange = useCallback(
-    async (capability: string, value: string) => {
-      const model = value === FOLLOW_DEFAULT_VALUE ? null : value;
-      const prev = overrides;
-      // 先改显示后落盘(本地写极快,失败再回滚 + toast)。
-      setOverrides((cur) => {
-        const next = { ...cur };
-        if (model === null) delete next[capability];
-        else next[capability] = model;
-        return next;
-      });
-      try {
-        const res = await window.electronAPI.ghosts.setCindyPref(ghostId, capability, model);
-        setOverrides(res.overrides);
-      } catch {
-        setOverrides(prev);
-        toast.error(t('settings.ghosts.errors.generic'));
-      }
-    },
-    [ghostId, overrides, t],
-  );
-
-  return (
-    <div className="flex flex-col gap-3 rounded-xl border border-[var(--settings-theme-card-border)] bg-[var(--settings-theme-card-bg)] px-5 py-4">
-      <div className="flex items-center gap-2">
-        <Sparkles size={14} className="text-[var(--text-tertiary)]" />
-        <p className="text-13 font-medium text-[var(--text-primary)]">
-          {t('settings.ghosts.detail.cindyPrefs.title')}
-        </p>
-      </div>
-      <p className="text-12 text-[var(--text-tertiary)]">
-        {t('settings.ghosts.detail.cindyPrefs.desc')}
-      </p>
-      {capabilities.map((capability) => {
-        // 下拉数据按能力键类目取(image/video 各一份清单与默认,C3c-5)。
-        const kind = capability.startsWith('video.') ? prefs.video : prefs.image;
-        return (
-          <div key={capability} className="flex items-center justify-between gap-4">
-            <span className="text-12 text-[var(--text-secondary)]">
-              {t(`settings.ghosts.detail.cindyPrefs.cap.${capability}`)}
-            </span>
-            {/* 清单即全部模型,默认那一款自带"(默认)"标注:选中它 = 不写覆盖
-                (跟随默认,将来目录换默认自动跟走),不另设"跟随默认"行。
-                历史覆盖若恰好钉的就是当前默认款,同样归一化为跟随。 */}
-            <select
-              value={
-                overrides[capability] && overrides[capability] !== kind.defaultModel.id
-                  ? overrides[capability]
-                  : FOLLOW_DEFAULT_VALUE
-              }
-              onChange={(e) => void handleChange(capability, e.target.value)}
-              aria-label={t(`settings.ghosts.detail.cindyPrefs.cap.${capability}`)}
-              className="h-8 w-[300px] shrink-0 appearance-none rounded-full border border-[var(--settings-input-border)] bg-[var(--settings-input-bg)] py-0 pl-3 pr-8 text-12 text-[var(--settings-input-text)] outline-none focus:ring-2 focus:ring-[var(--focus-ring-soft)]"
-            >
-              {kind.options.map((o) => {
-                const isDefault = o.id === kind.defaultModel.id;
-                return (
-                  <option key={o.id} value={isDefault ? FOLLOW_DEFAULT_VALUE : o.id}>
-                    {isDefault
-                      ? t('settings.ghosts.detail.cindyPrefs.defaultOption', { model: o.label })
-                      : o.label}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-        );
-      })}
     </div>
   );
 }

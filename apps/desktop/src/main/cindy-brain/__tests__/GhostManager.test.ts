@@ -198,6 +198,17 @@ describe('GhostManager · uninstall', () => {
     expect(onChanged.mock.calls[0][0]).toEqual([]);
   });
 
+  it('host 可延后卸载广播，先完成 tombstone 等事务后再发一致快照', async () => {
+    await manager.install(await makeCindy('a.cindy', goodManifest()));
+    onChanged.mockClear();
+
+    const result = await manager.uninstall('hello', { notify: false });
+
+    expect('ok' in result).toBe(true);
+    expect(manager.list()).toEqual([]);
+    expect(onChanged).not.toHaveBeenCalled();
+  });
+
   it('卸未装的 id → not-installed', async () => {
     const result = await manager.uninstall('ghost');
     expect((result as { rejection: { code: string } }).rejection.code).toBe('not-installed');

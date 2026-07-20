@@ -15,6 +15,10 @@
 - **协议 submodule**：`cindy-protocol` 是协议权威来源。desktop 使用 `@cindy/slack-hook-protocol`，客户端 device-link 包复用 `@cindy/device-link-protocol` 的 relay 层定义；客户端重连、IPC allowlist 与隧道 payload 留在 `packages/device-link`。**升级 submodule 指针前必须确认 `cindy-server` 同步升级**，避免两端 wire protocol 漂移。
 - **dev 数据目录为 `Cindy` userData**（2026-07-17 身份翻转起由 `productName: Cindy` 派生；从空开始，不再沿用老 `xdt-maker` 目录的历史数据）；用户未明确要求隔离时，不加 `--isolated`、不设置 `XDT_USER_DATA_DIR`（参数语义见下文启动参数表）。
 
+## Architecture Index
+
+- **Plugin Management UI**: [`apps/desktop/src/renderer/features/plugin/CLAUDE.md`](apps/desktop/src/renderer/features/plugin/CLAUDE.md) maps the shared Plugin/Skill shell, Ghost-backed catalog, factual detail view, and UI-only adapters.
+
 ## 外部关联
 
 - **Slack 频道**：`#xd-maker`（channel_id `C0B3D62NPTQ`, workspace `xindong.slack.com`）。项目相关的 Slack 讨论、通知、搜索默认走该频道；用户说「发到 Slack / 搜一下 Slack / Slack 上的讨论」而未指定频道时，默认定位到 `#xd-maker`，可直接以 `C0B3D62NPTQ` 作为 `channel_id` 调用 Slack 工具，无需再查。

@@ -70,6 +70,10 @@ import { isSelectedSourceDisconnected, resolveEffort, resolveProviderSwitchEffor
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { PermissionSelector } from './PermissionSelector';
 import { ExtraDirsButton } from './ExtraDirsButton';
+import {
+  focusComposerEndNextFrame,
+  placeGhostAtComposerStart,
+} from './ghostComposerPlacement';
 import { NewGoalDialog } from './NewGoalDialog';
 import { PlanModeIndicator } from './PlanModeIndicator';
 import { PendingQueuePanel } from './PendingQueuePanel';
@@ -80,7 +84,11 @@ import {
   addRecentFolder,
 } from './FolderPickerPopover';
 import { SlashCommandPalette } from './SlashCommandPalette';
-import { expandGhostCommand } from '@/cindy-brain/ghostCommand';
+import {
+  expandGhostCommand,
+  findGhostByCommand,
+  parseGhostCommandWord,
+} from '@/cindy-brain/ghostCommand';
 import { filterGhostsForWorkdir } from '@/cindy-brain/ghostWorkdirFilter';
 import { useInstalledGhosts } from '@/cindy-brain/useInstalledGhosts';
 import {
@@ -230,6 +238,12 @@ interface ChatInputProps {
       providerId?: string | null;
       /** chat-text-quote:message 开头的 blockquote 为引用功能拼接产出。 */
       quotesEncoded?: boolean;
+      /**
+       * New Maker 会异步创建会话并自己清理草稿，onSend 为保留编辑器
+       * 始终返回 false。它在消息真正移交给新会话后调本回调，与
+       * false（未接受）语义解耦。
+       */
+      onAccepted?: () => void;
     },
   ) => boolean | void | Promise<boolean | void>;
   /** Session ID for binding workingDir. When absent, folder picker is hidden. */
@@ -1347,9 +1361,11 @@ export function ChatInput({
   // headings / lists / marks we don't want in a chat input.
   const editor = useEditor({
     // Match the legacy textarea's `autoFocus` prop — on mount, focus the
-    // editor so the user can type immediately after opening New Chat.
+    // editor at the end so the user can continue typing after restored text.
+    // Tiptap treats boolean `true` as `focus('start')`; its deferred mount
+    // autofocus would otherwise overwrite routed Plugin/Create end-focus.
     // doc 模式下必须关掉,理由见上方 disableAutofocus prop 注释。
-    autofocus: !disableAutofocus && !disabled,
+    autofocus: !disableAutofocus && !disabled ? 'end' : false,
     editable: !disabled,
     extensions: [
       Document,
@@ -1876,13 +1892,35 @@ export function ChatInput({
   // 目录级禁用同判(ghostWorkdirFilter):被禁用的意识胶囊不亮——渲染层
   // 绝不比发送层乐观;禁用变更会广播 ghosts:changed,清单引用变化时重滤。
   const installedGhosts = useInstalledGhosts();
+  const pluginsForMenu = useMemo(
+    () => installedGhosts.filter(
+      (ghost) => ghost.manifest.id !== 'cindy-mivo'
+        || !installedGhosts.some((candidate) => candidate.manifest.id === 'xd-mivo'),
+    ),
+    [installedGhosts],
+  );
   const ghostsForCommand = useMemo(
     () => filterGhostsForWorkdir(installedGhosts, workingDir),
     [installedGhosts, workingDir],
   );
+  const pluginAvailableIds = useMemo(
+    () => new Set(
+      ghostsForCommand
+        .filter((ghost) => ghost.enabled && ghost.manifest.command)
+        .map((ghost) => ghost.manifest.id),
+    ),
+    [ghostsForCommand],
+  );
   useEffect(() => {
     setGhostCommandRoster(editor, ghostsForCommand);
   }, [editor, ghostsForCommand]);
+  const handlePluginSelect = useCallback(
+    (ghost: (typeof pluginsForMenu)[number]) => {
+      if (!editor || editor.isDestroyed) return;
+      placeGhostAtComposerStart(editor, ghost, installedGhosts);
+    },
+    [editor, installedGhosts],
+  );
 
   const handleVoiceInputPermissionRequired = useCallback(async () => {
     const confirmed = await confirmDialog({
@@ -2354,6 +2392,7 @@ export function ChatInput({
     if (!editor) return;
     latestStorageKeyRef.current = storageKey;
     const prevEditorKey = editorStorageKeyRef.current;
+    const storageKeyFocusAnchor = document.activeElement;
     // Skip if the editor is already aligned with this storageKey.
     // (Possible when only `editor` flipped to non-null but the key
     // was already current.)
@@ -2379,13 +2418,19 @@ export function ChatInput({
       storageKeyForDraftRef.current = storageKey;
       // composer-draft-mount-race 修复 (issue #40):放行后续 onUpdate 写 store。
       hasHydratedRef.current = true;
+      if (focusOnStorageKeyChangeRef.current && !disableAutofocusRef.current && !disabledRef.current) {
+        window.requestAnimationFrame(() => {
+          if (editor.isDestroyed || !editor.isEditable) return;
+          if (latestStorageKeyRef.current !== storageKey) return;
+          if (hasFocusMovedToInteractiveElement(storageKeyFocusAnchor, editor)) return;
+          editor.commands.focus('end');
+        });
+      }
       return;
     }
 
     const transitionSeq = storageKeyTransitionSeqRef.current + 1;
     storageKeyTransitionSeqRef.current = transitionSeq;
-    const storageKeyFocusAnchor = document.activeElement;
-
     const saveCurrentEditorDraft = () => {
       if (!prevEditorKey) return;
       if (!hasHydratedRef.current) return;
@@ -2504,6 +2549,45 @@ export function ChatInput({
       }
     });
   }, [editor, storageKey]);
+
+  // Plugin page routed entry: wait until the editor has hydrated its existing
+  // draft, then reuse the exact same insertion/focus path as the in-composer
+  // `$` / `+` selectors. This preserves body text and replaces an existing
+  // Plugin command instead of treating the command as prefilled plain text.
+  useEffect(() => {
+    if (!editor || !storageKey || !hasHydratedRef.current) return;
+    const draft = getComposerDraft(storageKey);
+    if (!draft) return;
+
+    if (draft.pendingGhostId) {
+      const ghost = ghostsForCommand.find(
+        (candidate) => candidate.manifest.id === draft.pendingGhostId,
+      );
+      if (!ghost) return;
+      saveComposerDraft(
+        storageKey,
+        {
+          ...draft,
+          pendingGhostId: undefined,
+          focusAtEnd: false,
+        },
+        { silent: true },
+      );
+      placeGhostAtComposerStart(editor, ghost, installedGhosts);
+      return;
+    }
+
+    if (!draft.focusAtEnd) return;
+    saveComposerDraft(
+      storageKey,
+      {
+        ...draft,
+        focusAtEnd: false,
+      },
+      { silent: true },
+    );
+    focusComposerEndNextFrame(editor);
+  }, [editor, ghostsForCommand, installedGhosts, storageKey]);
 
   // chat-text-quote / browser-comment-chip:挂载 / 会话切换时从草稿恢复引用条
   // 与评论胶囊(外部追加走上面的订阅)。
@@ -3085,10 +3169,26 @@ export function ChatInput({
     // 追加"必须走 cindy 总机"的机器指令;未命中原样发送。
     // listSync 是既有同步 IPC(首帧同款,极小),每次发送现查,装/卸即时反映;
     // 目录级禁用同判(与胶囊 / main 侧生效点同源),被禁用 = 原样发送。
-    const textToSend = expandGhostCommand(
-      text,
-      filterGhostsForWorkdir(window.electronAPI.ghosts.listSync().ghosts, workingDirRef.current),
+    const eligibleGhosts = filterGhostsForWorkdir(
+      window.electronAPI.ghosts.listSync().ghosts,
+      workingDirRef.current,
     );
+    const ghostCommandWord = parseGhostCommandWord(text);
+    const usedGhost = ghostCommandWord
+      ? findGhostByCommand(eligibleGhosts, ghostCommandWord)
+      : null;
+    const textToSend = expandGhostCommand(text, eligibleGhosts);
+    let recentUsageMarked = false;
+    const markRecentPluginUsage = () => {
+      if (!usedGhost || recentUsageMarked) return;
+      recentUsageMarked = true;
+      void window.electronAPI.ghosts.markUsed(usedGhost.manifest.id).catch((error) => {
+        log.warn(
+          'failed to persist recent Plugin usage:',
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+    };
     dispatchSendInFlightRef.current = true;
     setSendDispatchInFlight(true);
     let result: boolean | void;
@@ -3104,6 +3204,7 @@ export function ChatInput({
           deliveryMode,
           providerId: sendProviderId,
           ...(quotesRef.current.length > 0 ? { quotesEncoded: true } : {}),
+          ...(usedGhost ? { onAccepted: markRecentPluginUsage } : {}),
         },
       );
     } catch (error) {
@@ -3114,6 +3215,7 @@ export function ChatInput({
       setSendDispatchInFlight(false);
     }
     if (result === false) return;
+    markRecentPluginUsage();
     // Suppress onUpdate's draft-save during the post-send clearContent so
     // we don't write a transient empty-doc entry that we're about to drop.
     isRestoringRef.current = true;
@@ -4380,12 +4482,15 @@ export function ChatInput({
                 显示条件:有新建目标入口(会话内 → 内部 NewGoalDialog;首页 → onNewGoal 回调)、
                 计划模式入口(capability + 接线齐备),或 cc 有引用目录。
                 agentKind 透传真实 vendor(ExtraDirsButton 内部按能力裁剪菜单)。 */}
-            {(inSessionGoalEnabled || onNewGoal || planModeEntry || (vendorKey === 'cc' && extraDirs !== undefined && onExtraDirsChange)) && (
+            {(inSessionGoalEnabled || onNewGoal || planModeEntry || pluginsForMenu.length > 0 || (vendorKey === 'cc' && extraDirs !== undefined && onExtraDirsChange)) && (
               <ExtraDirsButton
                 extraDirs={extraDirs ?? []}
                 workingDir={workingDir}
                 agentKind={vendorKey === 'cc' ? 'cc' : 'codex'}
                 planMode={planModeEntry}
+                plugins={pluginsForMenu}
+                pluginAvailableIds={pluginAvailableIds}
+                onPluginSelect={handlePluginSelect}
                 onChange={onExtraDirsChange ?? (() => {})}
                 onNewGoal={
                   inSessionGoalEnabled || onNewGoal

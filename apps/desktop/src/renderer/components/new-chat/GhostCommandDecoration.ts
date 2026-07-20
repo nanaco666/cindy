@@ -24,7 +24,10 @@ import { Plugin, PluginKey, type EditorState, type Transaction } from '@tiptap/p
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 
-import { findGhostByCommand } from '@/cindy-brain/ghostCommand';
+import {
+  findGhostByCommand,
+  findGhostByCommandIncludingDisabled,
+} from '@/cindy-brain/ghostCommand';
 import type { InstalledGhost } from '../../../shared/ghost';
 
 const PLUGIN_KEY = new PluginKey<GhostCommandPluginState>('ghostCommandDecoration');
@@ -64,6 +67,7 @@ export interface GhostCommandMatch {
 export function findGhostCommandMatch(
   doc: PMNode,
   ghosts: InstalledGhost[],
+  options: { includeDisabled?: boolean } = {},
 ): GhostCommandMatch | null {
   if (ghosts.length === 0) return null;
   let paraPos = 0;
@@ -99,7 +103,9 @@ export function findGhostCommandMatch(
             const next = ci + 1 < para.childCount ? para.child(ci + 1) : null;
             if (next && next.type.name !== 'hardBreak') return null;
           }
-          const ghost = findGhostByCommand(ghosts, word);
+          const ghost = options.includeDisabled
+            ? findGhostByCommandIncludingDisabled(ghosts, word)
+            : findGhostByCommand(ghosts, word);
           if (!ghost) return null;
           return { from: childPos + i, to: childPos + after, ghost };
         }

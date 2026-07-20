@@ -949,6 +949,14 @@ interface ElectronAPI {
   ghosts: {
     /** 首帧同步拉取已装清单(规则 7:意识面板与内置面板同帧注册,无跳变)。 */
     listSync: () => { ghosts: import('../shared/ghost').InstalledGhost[] };
+    /** Plugin 快捷行最近使用顺序(最新在前,首帧同步读取避免排序跳变)。 */
+    recentUsageSync: () => { ids: string[] };
+    /** 成功发送一次 Plugin 指令后记录最近使用。 */
+    markUsed: (id: string) => Promise<{ ids: string[] }>;
+    /** 最近使用顺序变化（发送 /卸载），多窗口同步。 */
+    onRecentUsageChanged: (
+      callback: (payload: { ids: string[] }) => void,
+    ) => () => void;
     install: (
       lizFilePath: string,
       /** enable:装入后立即开启(确认框勾选决定;缺省沉睡)。 */
@@ -1003,6 +1011,7 @@ interface ElectronAPI {
         name: string;
         description?: string;
         version: string;
+        manifest: import('../shared/ghost').GhostManifest;
         tier: 'builtin' | 'enterprise';
         iconDataUrl?: string;
       }>;

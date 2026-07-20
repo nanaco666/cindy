@@ -2023,7 +2023,32 @@
     },
     "ghosts": {
       "title": "Plugins",
-      "description": "Plugins add capabilities and UI to Cindy — install to use, uninstall to remove. Each plugin gets its own settings page.",
+      "description": "Tools and integrations that extend Cindy.",
+      "page": {
+        "search": "Search plugins",
+        "clearSearch": "Clear Plugin Search",
+        "addPlugin": "Add plugin",
+        "addPluginAria": "Plugin add options",
+        "createWithCindy": "Create with Cindy",
+        "createPrompt": "I want to create a Cindy plugin. First call ghost_forge_guide to read the full specification; do not start implementing yet. Begin by asking questions, focusing on one key decision at a time, and work with me to define the problem, target users, interaction flow, required tools and connections, permission boundaries, and acceptance criteria. After I confirm the design, implement and validate it according to the specification, then call ghost_forge_pack to package and install the plugin.",
+        "installedTitle": "Installed Plugins",
+        "installedExpand": "Show {{count}} more installed plugins",
+        "installedCollapse": "Hide additional installed plugins",
+        "allTitle": "All plugins",
+        "filterAll": "All",
+        "filtersAria": "Filter plugins by source",
+        "emptyFiltered": "No matching plugins",
+        "useAction": "Use",
+        "useAria": "Use {{name}}",
+        "installAction": "Install",
+        "installAria": "Install {{name}}",
+        "restoreAria": "Restore {{name}}",
+        "origin": {
+          "builtin": "Built-in",
+          "enterprise": "Team shared",
+          "external": "External / local"
+        }
+      },
       "provisioning": {
         "updating": "Updating built-in plugins…"
       },
@@ -2146,8 +2171,14 @@
         "infoTitle": "Details",
         "infoId": "Identifier",
         "infoAuthor": "Author",
+        "byAuthor": "By {{author}}",
         "infoPanel": "Panel",
         "infoLocation": "Install location",
+        "expandInfoValue": "Show full {{label}}",
+        "collapseInfoValue": "Collapse {{label}}",
+        "copyLocation": "Copy install location",
+        "locationCopied": "Install location copied",
+        "locationCopyFailed": "Could not copy the install location. Copy it manually.",
         "openLocation": "Open install location",
         "panelDocked": "Docked · min width {{min}}px",
         "panelNotDocked": "Not docked (no layout record yet)",
@@ -2169,10 +2200,26 @@
           },
           "defaultOption": "{{model}} (default)"
         },
-        "toolsTitle": "Registered tools",
+        "toolsTitle": "Tools",
         "permissionsTitle": "Permissions",
         "infoDescription": "Description",
-        "customSlotAsleep": "This plugin is disabled. Enable it to see its settings UI here."
+        "customSlotAsleep": "This plugin is disabled. Enable it to see its settings UI here.",
+        "descriptionExpand": "Show more",
+        "descriptionCollapse": "Show less",
+        "useAction": "Use Plugin",
+        "useDisabled": "Enable this Plugin before using it",
+        "moreActions": "More Plugin Actions",
+        "updateFromFile": "Update from .cindy File…",
+        "settingsTitle": "{{name}} Settings",
+        "settingsUnavailableUntilRestore": "Restore the plugin to use this configuration again.",
+        "configurationTitle": "Configuration",
+        "openTool": "View details for Tool {{name}}",
+        "noToolDescription": "No description is available for this Tool.",
+        "viewAllTools": "See All",
+        "collapseTools": "Collapse Tools",
+        "viewAllPermissions": "See All",
+        "permissionsDialogDescription": "All {{count}} permissions requested by this Plugin",
+        "closeDialog": "Close Dialog"
       },
       "contents": {
         "panel": "Panel",
@@ -3140,6 +3187,7 @@
     "tabs": {
       "projects": "Projects",
       "skillhub": "SkillHub",
+      "plugins": "Plugins",
       "issues": "Issues"
     },
     "user": {
@@ -5446,6 +5494,11 @@
   },
   "skillhub": {
     "home": {
+      "title": "Skills",
+      "description": "Manage local skills, or discover and install more from Skill Hub.",
+      "search": "Search skills",
+      "clearSearch": "Clear skill search",
+      "noSearchResults": "No matching skills found",
       "browseTitle": "Browse Skill Hub",
       "browseDesc": "Discover and install more skills",
       "recommended": "Recommended",
@@ -6135,8 +6188,11 @@
   },
   "extraDirs": {
     "menuAria": "Composer actions",
-    "tooltipEmpty": "New goal / add reference directory",
+    "tooltipEmpty": "More actions",
     "tooltipCount": "{{count}} reference directories",
+    "pluginsTitle": "Installed Plugins",
+    "pluginDisabled": "Disabled",
+    "pluginNoCommand": "Not available here",
     "sectionTitle": "Reference directories (read-only)",
     "empty": "No reference directories yet",
     "add": "Add directory…",

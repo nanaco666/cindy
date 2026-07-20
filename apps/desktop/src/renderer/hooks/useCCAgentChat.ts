@@ -89,7 +89,7 @@ interface UseCCAgentChatReturn {
     files?: AttachedFile[],
     mentions?: MentionedResource[],
     opts?: { vendorOptions?: Record<string, unknown>; quotesEncoded?: boolean },
-  ) => void;
+  ) => Promise<boolean>;
   compactSession: (
     model: string,
     effort: string,
@@ -316,9 +316,19 @@ export function useCCAgentChat(
       files?: AttachedFile[],
       mentions?: MentionedResource[],
       opts?: { vendorOptions?: Record<string, unknown>; quotesEncoded?: boolean },
-    ) => {
-      if (!sessionId) return;
-      makerChatStore.sendMessage(sessionId, text, model, effort, permissionMode, workingDir, files, mentions, opts);
+    ): Promise<boolean> => {
+      if (!sessionId) return Promise.resolve(false);
+      return makerChatStore.sendMessage(
+        sessionId,
+        text,
+        model,
+        effort,
+        permissionMode,
+        workingDir,
+        files,
+        mentions,
+        opts,
+      );
     },
     [sessionId],
   );

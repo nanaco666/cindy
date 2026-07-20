@@ -6,6 +6,7 @@
   "whenToUse": "需要生成图片、画画、插画、配图、头像、海报,基于已生成的图改图、加元素、换风格、P 图,或想生成短视频、让一张图动起来时找我。",
   "version": "1.9.2",
   "author": "Cindy",
+  "icon": "assets/icon.png",
   "entry": "main.js",
   "slots": [
     "cindy",
@@ -61,7 +62,7 @@
     },
     {
       "name": "edit_image",
-      "description": "改图(重绘/加元素/风格化,最多 4 张源图融合)。源图两种:①本意识之前生成的图,用 gen_image / edit_image 返回的地址(cindy-media://…)填 images;②用户随消息发来的图,把其 xdt-image:// 地址放进 ghost_call 顶层 attachments(主机会过户注入,不用填 images)。",
+      "description": "改图(重绘/加元素/风格化,最多 4 张源图融合)。源图两种:①本插件之前生成的图,用 gen_image / edit_image 返回的地址(cindy-media://…)填 images;②用户随消息发来的图,把其 xdt-image:// 地址放进 ghost_call 顶层 attachments(主机会过户注入,不用填 images)。",
       "parameters": {
         "type": "object",
         "properties": {
@@ -76,7 +77,7 @@
             },
             "minItems": 1,
             "maxItems": 4,
-            "description": "可选:本意识之前生成的源图地址(cindy-media://blobs/<指纹>.<后缀> 或裸指纹)。只改用户发来的图时不填,把用户图放 ghost_call 顶层 attachments 即可(images 与 attachments 至少有一路)。"
+            "description": "可选:本插件之前生成的源图地址(cindy-media://blobs/<指纹>.<后缀> 或裸指纹)。只改用户发来的图时不填,把用户图放 ghost_call 顶层 attachments 即可(images 与 attachments 至少有一路)。"
           },
           "model": {
             "type": "string",
@@ -120,7 +121,7 @@
     },
     {
       "name": "edit_video",
-      "description": "参考图生视频:1 张=让这张图动起来(首帧),2 张=首尾帧过渡(分钟级耗时)。参考图两种:①本意识生成过的图,用其 cindy-media:// 地址填 images;②用户随消息发来的图,放 ghost_call 顶层 attachments(主机过户注入)。",
+      "description": "参考图生视频:1 张=让这张图动起来(首帧),2 张=首尾帧过渡(分钟级耗时)。参考图两种:①本插件生成过的图,用其 cindy-media:// 地址填 images;②用户随消息发来的图,放 ghost_call 顶层 attachments(主机过户注入)。",
       "parameters": {
         "type": "object",
         "properties": {
@@ -135,7 +136,7 @@
             },
             "minItems": 1,
             "maxItems": 2,
-            "description": "可选:本意识名下参考图地址(cindy-media://… 或裸指纹),1–2 张。只用用户发来的图时不填,走 attachments(两路至少有一路)。"
+            "description": "可选:本插件名下参考图地址(cindy-media://… 或裸指纹),1–2 张。只用用户发来的图时不填,走 attachments(两路至少有一路)。"
           },
           "model": {
             "type": "string",

@@ -32,7 +32,7 @@
     ACCOUNT_LIMIT: '账号数量已达上限(8 个)',
     VAULT_WRITE_FAILED: '本机加密存储不可用,保存失败',
     LISTEN_FAILED: '本机回调端口监听失败,请重试',
-    INVALID_CONFIG: '授权配置不合法,请意识作者检查声明',
+    INVALID_CONFIG: '授权配置不合法,请插件作者检查声明',
   };
 
   function renderAccounts(entry) {
