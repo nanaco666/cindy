@@ -1066,7 +1066,7 @@ export function ModelEffortChip({
             if (reconciledEffort) onChangeEffort(reconciledEffort as EffortValue);
           }}
           onNavigateToProviders={onNavigateToProviders}
-          tooltipContentClassName="z-[10020]"
+          overlayContentClassName="z-[10020]"
           followSession={
             followSession
               ? {

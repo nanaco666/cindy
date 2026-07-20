@@ -211,7 +211,7 @@ export function createCardBuilders(
     buildModelPickerCard(args) {
       const { sessionId, agentKind, sections, currentModelId, currentProviderId, currentEffort, defaultEffortByModel } =
         args;
-      // 当前选中模型展示名:跨所有分段按 id 找(SectionModel 无 description,当前行描述留空)。
+      // 当前选中模型展示名:跨所有分段按 id 找;IM 卡片当前仍保持描述留空。
       const currentLabel =
         sections.flatMap((s) => s.models).find((m) => m.id === currentModelId)?.displayName ??
         currentModelId;

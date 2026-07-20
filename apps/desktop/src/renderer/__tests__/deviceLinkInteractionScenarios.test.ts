@@ -41,7 +41,10 @@ vi.mock('@/lib/imageRef', () => ({
 }));
 vi.mock('@/lib/composerDraftStore', () => ({
   saveDraft: vi.fn(),
-  plainTextToTiptapDoc: (s: string) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: s }] }] }),
+  plainTextToTiptapDoc: (s: string) => ({
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text: s }] }],
+  }),
 }));
 
 import { makerChatStore } from '@/lib/makerChatStore';
@@ -56,12 +59,18 @@ function makeFakeHost(deviceId: string) {
   let pushCb: ((p: RemotePush) => void) | null = null;
   const resolved: ResolveCall[] = [];
   // 被控端「当前挂起交互」快照(maker:get-pending-interactions 返回它)。
-  const pending = new Map<string, Array<{ request: Record<string, unknown>; persistId?: string }>>();
+  const pending = new Map<
+    string,
+    Array<{ request: Record<string, unknown>; persistId?: string }>
+  >();
 
   const invoke = vi.fn(async (_d: string, channel: string, args: unknown[]) => {
     switch (channel) {
       case 'maker:resolve-interaction':
-        resolved.push({ requestId: args[0] as string, decision: args[1] as Record<string, unknown> });
+        resolved.push({
+          requestId: args[0] as string,
+          decision: args[1] as Record<string, unknown>,
+        });
         return null;
       case 'maker:get-pending-interactions':
         return pending.get(args[0] as string) ?? [];
@@ -103,7 +112,12 @@ function makeFakeHost(deviceId: string) {
      * reason==='resolved'(被某端答了)时 main 会带上 decision(ask answers / plan behavior+reason),
      * 让对端 live 渲染「已回答」卡片;真·放弃(timeout / mode_changed / session_closed)不带。
      */
-    hostDismiss(sessionId: string, requestId: string, reason = 'session_closed', decision?: unknown): void {
+    hostDismiss(
+      sessionId: string,
+      requestId: string,
+      reason = 'session_closed',
+      decision?: unknown,
+    ): void {
       pushCb?.({
         deviceId,
         channel: 'maker:interaction-dismissed',
@@ -120,7 +134,9 @@ function stubElectronApi(host: FakeHost) {
   const fanOut = () => () => () => {};
   const localResolveInteraction = vi.fn(async () => {});
   const localSetPermissionMode = vi.fn(async () => {});
-  const localGetPendingInteractions = vi.fn(async () => [] as Array<{ request: { kind: string; requestId: string }; persistId?: string }>);
+  const localGetPendingInteractions = vi.fn(
+    async () => [] as Array<{ request: { kind: string; requestId: string }; persistId?: string }>,
+  );
   (globalThis as { window?: unknown }).window = {
     electronAPI: {
       maker: {
@@ -149,9 +165,17 @@ function stubElectronApi(host: FakeHost) {
 
 function emptyProjection(sessionId: string) {
   return {
-    sessionId, pendingQueue: [], steeringQueueClientIds: [], queuePaused: false,
-    queueExpanded: false, queueInteractionLocks: [], queueEditLocks: [], queueAbortPending: false,
-    error: null, recovery: null, errorRetryText: null,
+    sessionId,
+    pendingQueue: [],
+    steeringQueueClientIds: [],
+    queuePaused: false,
+    queueExpanded: false,
+    queueInteractionLocks: [],
+    queueEditLocks: [],
+    queueAbortPending: false,
+    error: null,
+    recovery: null,
+    errorRetryText: null,
   };
 }
 
@@ -186,7 +210,12 @@ afterEach(() => {
 describe('device-link 远程交互往返 — permission', () => {
   it('被控端 permission 请求 → 控制端置 pendingPermission → allow 经隧道回传', async () => {
     const s = openRemoteSession();
-    host.hostInteraction(s, { kind: 'permission', requestId: 'perm-1', toolName: 'Bash', input: { command: 'ls' } });
+    host.hostInteraction(s, {
+      kind: 'permission',
+      requestId: 'perm-1',
+      toolName: 'Bash',
+      input: { command: 'ls' },
+    });
     await flush();
 
     const pending = makerChatStore.getSnapshot(s).pendingPermission;
@@ -206,7 +235,12 @@ describe('device-link 远程交互往返 — permission', () => {
 
   it('permission deny 同样经隧道回传 behavior=deny', async () => {
     const s = openRemoteSession();
-    host.hostInteraction(s, { kind: 'permission', requestId: 'perm-2', toolName: 'Write', input: {} });
+    host.hostInteraction(s, {
+      kind: 'permission',
+      requestId: 'perm-2',
+      toolName: 'Write',
+      input: {},
+    });
     await flush();
     makerChatStore.respondToPermission(s, { behavior: 'deny', message: '不允许' });
     await flush();
@@ -222,7 +256,12 @@ describe('device-link 远程交互往返 — plan_review', () => {
     const s = openRemoteSession();
     host.hostInteraction(
       s,
-      { kind: 'plan_review', requestId: 'plan-1', plan: '# 计划\n步骤一', planFilePath: '/tmp/p.md' },
+      {
+        kind: 'plan_review',
+        requestId: 'plan-1',
+        plan: '# 计划\n步骤一',
+        planFilePath: '/tmp/p.md',
+      },
       'persist-plan-1',
     );
     await flush();
@@ -239,7 +278,11 @@ describe('device-link 远程交互往返 — plan_review', () => {
 
   it('plan reject → behavior=deny + reason=feedback', async () => {
     const s = openRemoteSession();
-    host.hostInteraction(s, { kind: 'plan_review', requestId: 'plan-2', plan: 'x', planFilePath: '' }, 'persist-plan-2');
+    host.hostInteraction(
+      s,
+      { kind: 'plan_review', requestId: 'plan-2', plan: 'x', planFilePath: '' },
+      'persist-plan-2',
+    );
     await flush();
     makerChatStore.respondToPlanReview(s, 'plan-2', false, '再想想边界条件');
     await flush();
@@ -254,12 +297,14 @@ describe('device-link 远程 fastMode 持久化', () => {
   it('setFastMode 隧道失败时 reject 给调用方,避免草稿默认误同步', async () => {
     const s = openRemoteSession();
     const err = new Error('[REMOTE] relay down');
-    host.invoke.mockImplementationOnce(async (deviceId: string, channel: string, args: unknown[]) => {
-      expect(deviceId).toBe(DEVICE_ID);
-      expect(channel).toBe('maker:set-fast-mode');
-      expect(args).toEqual([s, true]);
-      throw err;
-    });
+    host.invoke.mockImplementationOnce(
+      async (deviceId: string, channel: string, args: unknown[]) => {
+        expect(deviceId).toBe(DEVICE_ID);
+        expect(channel).toBe('maker:set-fast-mode');
+        expect(args).toEqual([s, true]);
+        throw err;
+      },
+    );
 
     await expect(makerChatStore.setFastMode(s, true)).rejects.toThrow('relay down');
     expect(host.invoke).toHaveBeenCalledWith(DEVICE_ID, 'maker:set-fast-mode', [s, true]);
@@ -275,7 +320,14 @@ describe('device-link 远程交互往返 — ask_user_question', () => {
       {
         kind: 'ask_user_question',
         requestId: 'ask-1',
-        questions: [{ question: '用哪个库?', header: 'lib', options: [{ label: 'A', description: '' }], multiSelect: false }],
+        questions: [
+          {
+            question: '用哪个库?',
+            header: 'lib',
+            options: [{ label: 'A', description: '' }],
+            multiSelect: false,
+          },
+        ],
       },
       'persist-ask-1',
     );
@@ -297,7 +349,18 @@ describe('device-link 远程交互往返 — ask_user_question', () => {
     const s = openRemoteSession();
     host.hostInteraction(
       s,
-      { kind: 'ask_user_question', requestId: 'ask-f1', questions: [{ question: 'X?', header: 'h', options: [{ label: 'A', description: '' }], multiSelect: false }] },
+      {
+        kind: 'ask_user_question',
+        requestId: 'ask-f1',
+        questions: [
+          {
+            question: 'X?',
+            header: 'h',
+            options: [{ label: 'A', description: '' }],
+            multiSelect: false,
+          },
+        ],
+      },
       'persist-ask-f1',
     );
     await flush();
@@ -314,7 +377,12 @@ describe('device-link 远程交互往返 — ask_user_question', () => {
 describe('device-link 远程交互 — dismissed / 顺序 / 本机零回归', () => {
   it('interaction-dismissed push → 清掉对应 pending 卡片(无需控制端响应)', async () => {
     const s = openRemoteSession();
-    host.hostInteraction(s, { kind: 'permission', requestId: 'perm-d', toolName: 'Bash', input: {} });
+    host.hostInteraction(s, {
+      kind: 'permission',
+      requestId: 'perm-d',
+      toolName: 'Bash',
+      input: {},
+    });
     await flush();
     expect(makerChatStore.getSnapshot(s).pendingPermission?.requestId).toBe('perm-d');
 
@@ -330,17 +398,33 @@ describe('device-link 远程交互 — dismissed / 顺序 / 本机零回归', ()
     const s = openRemoteSession();
     host.hostInteraction(
       s,
-      { kind: 'ask_user_question', requestId: 'ask-other', questions: [{ question: 'X?', header: 'h', options: [{ label: 'A', description: '' }], multiSelect: false }] },
+      {
+        kind: 'ask_user_question',
+        requestId: 'ask-other',
+        questions: [
+          {
+            question: 'X?',
+            header: 'h',
+            options: [{ label: 'A', description: '' }],
+            multiSelect: false,
+          },
+        ],
+      },
       'persist-ask-other',
     );
     await flush();
     expect(makerChatStore.getSnapshot(s).pendingAskUser?.requestId).toBe('ask-other');
 
     // 对端答了 → 被控端 resolve handler 广播 dismissed('resolved') 并带上 answers。
-    host.hostDismiss(s, 'ask-other', 'resolved', { kind: 'ask_user_question', answers: { 'X?': 'A' } });
+    host.hostDismiss(s, 'ask-other', 'resolved', {
+      kind: 'ask_user_question',
+      answers: { 'X?': 'A' },
+    });
     await flush();
     expect(makerChatStore.getSnapshot(s).pendingAskUser).toBeNull();
-    const askMsg = makerChatStore.getSnapshot(s).messages.find((m) => m.askUserRequestId === 'ask-other');
+    const askMsg = makerChatStore
+      .getSnapshot(s)
+      .messages.find((m) => m.askUserRequestId === 'ask-other');
     expect(askMsg?.askUserStatus).toBe('answered'); // 与答题端一致,而非 expired
     expect(askMsg?.askUserAnswers).toEqual({ 'X?': 'A' });
   });
@@ -349,27 +433,50 @@ describe('device-link 远程交互 — dismissed / 顺序 / 本机零回归', ()
     const s = openRemoteSession();
     host.hostInteraction(
       s,
-      { kind: 'ask_user_question', requestId: 'ask-noamt', questions: [{ question: 'X?', header: 'h', options: [{ label: 'A', description: '' }], multiSelect: false }] },
+      {
+        kind: 'ask_user_question',
+        requestId: 'ask-noamt',
+        questions: [
+          {
+            question: 'X?',
+            header: 'h',
+            options: [{ label: 'A', description: '' }],
+            multiSelect: false,
+          },
+        ],
+      },
       'persist-ask-noamt',
     );
     await flush();
     host.hostDismiss(s, 'ask-noamt', 'session_closed'); // 无 decision
     await flush();
     expect(makerChatStore.getSnapshot(s).pendingAskUser).toBeNull();
-    const askMsg = makerChatStore.getSnapshot(s).messages.find((m) => m.askUserRequestId === 'ask-noamt');
+    const askMsg = makerChatStore
+      .getSnapshot(s)
+      .messages.find((m) => m.askUserRequestId === 'ask-noamt');
     expect(askMsg?.askUserStatus).toBe('expired');
   });
 
   it('对端解决 plan(reject+feedback)→ 本端清 pendingPlanReview + 卡片转 revised 带 feedback', async () => {
     const s = openRemoteSession();
-    host.hostInteraction(s, { kind: 'plan_review', requestId: 'plan-other', plan: '# P', planFilePath: '' }, 'persist-plan-other');
+    host.hostInteraction(
+      s,
+      { kind: 'plan_review', requestId: 'plan-other', plan: '# P', planFilePath: '' },
+      'persist-plan-other',
+    );
     await flush();
     expect(makerChatStore.getSnapshot(s).pendingPlanReview?.requestId).toBe('plan-other');
 
-    host.hostDismiss(s, 'plan-other', 'resolved', { kind: 'plan_review', behavior: 'deny', reason: '改一下范围' });
+    host.hostDismiss(s, 'plan-other', 'resolved', {
+      kind: 'plan_review',
+      behavior: 'deny',
+      reason: '改一下范围',
+    });
     await flush();
     expect(makerChatStore.getSnapshot(s).pendingPlanReview).toBeNull();
-    const planMsg = makerChatStore.getSnapshot(s).messages.find((m) => m.planReviewRequestId === 'plan-other');
+    const planMsg = makerChatStore
+      .getSnapshot(s)
+      .messages.find((m) => m.planReviewRequestId === 'plan-other');
     expect(planMsg?.planReviewStatus).toBe('revised'); // 与答题端一致,而非 expired
     expect(planMsg?.planReviewFeedback).toBe('改一下范围');
   });
@@ -377,8 +484,18 @@ describe('device-link 远程交互 — dismissed / 顺序 / 本机零回归', ()
   it('多会话各自的 interaction 互不串台,resolve 命中正确 requestId', async () => {
     const s1 = openRemoteSession();
     const s2 = openRemoteSession();
-    host.hostInteraction(s1, { kind: 'permission', requestId: 'p-s1', toolName: 'Bash', input: {} });
-    host.hostInteraction(s2, { kind: 'permission', requestId: 'p-s2', toolName: 'Write', input: {} });
+    host.hostInteraction(s1, {
+      kind: 'permission',
+      requestId: 'p-s1',
+      toolName: 'Bash',
+      input: {},
+    });
+    host.hostInteraction(s2, {
+      kind: 'permission',
+      requestId: 'p-s2',
+      toolName: 'Write',
+      input: {},
+    });
     await flush();
     expect(makerChatStore.getSnapshot(s1).pendingPermission?.requestId).toBe('p-s1');
     expect(makerChatStore.getSnapshot(s2).pendingPermission?.requestId).toBe('p-s2');
@@ -393,13 +510,21 @@ describe('device-link 远程交互 — dismissed / 顺序 / 本机零回归', ()
   it('本机会话零回归:未注册 origin → resolve 走本机 IPC,不经隧道', async () => {
     const s = sid(); // 不注册进 remoteProjectsStore → 本机
     // 直接喂一个本机 interaction-request(模拟本机 onInteractionRequest 行为,共用同一 reducer)。
-    host.hostInteraction(s, { kind: 'permission', requestId: 'local-perm', toolName: 'Bash', input: {} });
+    host.hostInteraction(s, {
+      kind: 'permission',
+      requestId: 'local-perm',
+      toolName: 'Bash',
+      input: {},
+    });
     await flush();
     expect(makerChatStore.getSnapshot(s).pendingPermission?.requestId).toBe('local-perm');
 
     makerChatStore.respondToPermission(s, { behavior: 'allow' });
     await flush();
-    expect(local.localResolveInteraction).toHaveBeenCalledWith('local-perm', expect.objectContaining({ kind: 'permission', behavior: 'allow' }));
+    expect(local.localResolveInteraction).toHaveBeenCalledWith(
+      'local-perm',
+      expect.objectContaining({ kind: 'permission', behavior: 'allow' }),
+    );
     expect(host.resolved).toHaveLength(0); // 本机会话不经隧道
   });
 });
@@ -407,7 +532,12 @@ describe('device-link 远程交互 — dismissed / 顺序 / 本机零回归', ()
 describe('device-link 交互快照重建 — 窗口在交互挂起之后才打开(无 live push)', () => {
   it('permission:被控端已挂起 + 不发 push → ensureInitialMessages 后重建 pendingPermission', async () => {
     const s = openRemoteSession();
-    host.seedPending(s, { kind: 'permission', requestId: 'perm-mid', toolName: 'Bash', input: { command: 'ls' } });
+    host.seedPending(s, {
+      kind: 'permission',
+      requestId: 'perm-mid',
+      toolName: 'Bash',
+      input: { command: 'ls' },
+    });
     // 关键:不调 host.hostInteraction(不发 live push)—— 模拟新窗口错过了那条实时推送。
     makerChatStore.ensureInitialMessages(s);
     await flush();
@@ -420,7 +550,18 @@ describe('device-link 交互快照重建 — 窗口在交互挂起之后才打�
     const s = openRemoteSession();
     host.seedPending(
       s,
-      { kind: 'ask_user_question', requestId: 'ask-mid', questions: [{ question: 'X?', header: 'h', options: [{ label: 'A', description: '' }], multiSelect: false }] },
+      {
+        kind: 'ask_user_question',
+        requestId: 'ask-mid',
+        questions: [
+          {
+            question: 'X?',
+            header: 'h',
+            options: [{ label: 'A', description: '' }],
+            multiSelect: false,
+          },
+        ],
+      },
       'persist-ask-mid',
     );
     makerChatStore.ensureInitialMessages(s);
@@ -431,7 +572,11 @@ describe('device-link 交互快照重建 — 窗口在交互挂起之后才打�
 
   it('plan_review:无 push → 快照重建 pendingPlanReview', async () => {
     const s = openRemoteSession();
-    host.seedPending(s, { kind: 'plan_review', requestId: 'plan-mid', plan: '# P', planFilePath: '' }, 'persist-plan-mid');
+    host.seedPending(
+      s,
+      { kind: 'plan_review', requestId: 'plan-mid', plan: '# P', planFilePath: '' },
+      'persist-plan-mid',
+    );
     makerChatStore.ensureInitialMessages(s);
     await flush();
     await flush();
@@ -440,12 +585,25 @@ describe('device-link 交互快照重建 — 窗口在交互挂起之后才打�
 
   it('去重:同 requestId 重复喂 ask(push + 快照重建)→ messages 里该 ask 仍只有 1 条', async () => {
     const s = openRemoteSession();
-    const ask = { kind: 'ask_user_question', requestId: 'ask-dup', questions: [{ question: 'X?', header: 'h', options: [{ label: 'A', description: '' }], multiSelect: false }] };
+    const ask = {
+      kind: 'ask_user_question',
+      requestId: 'ask-dup',
+      questions: [
+        {
+          question: 'X?',
+          header: 'h',
+          options: [{ label: 'A', description: '' }],
+          multiSelect: false,
+        },
+      ],
+    };
     host.hostInteraction(s, ask, 'persist-ask-dup'); // live push 建 1 条
     await flush();
     host.hostInteraction(s, ask, 'persist-ask-dup'); // 重复(模拟快照重建再喂一次)
     await flush();
-    const askMsgs = makerChatStore.getSnapshot(s).messages.filter((m) => m.role === 'ask_user' && m.askUserRequestId === 'ask-dup');
+    const askMsgs = makerChatStore
+      .getSnapshot(s)
+      .messages.filter((m) => m.role === 'ask_user' && m.askUserRequestId === 'ask-dup');
     expect(askMsgs).toHaveLength(1);
     expect(askMsgs[0].askUserStatus).toBe('pending');
   });
@@ -499,9 +657,15 @@ describe('远程交互接线不变式', () => {
     expect(start).toBeGreaterThan(-1);
     const body = src.slice(start, start + 1000);
     expect(body).toContain('const persisted = await persistFastModeChange(enabled);');
-    expect(body.indexOf('if (!persisted) return;')).toBeLessThan(body.indexOf('syncSessionDraftModelPrefs'));
-    expect(body.indexOf('if (!persisted) return;')).toBeLessThan(body.indexOf('modelMemory?.setFast'));
-    expect(body.indexOf('modelMemory?.setFast')).toBeLessThan(body.indexOf('syncSessionDraftModelPrefs'));
+    expect(body.indexOf('if (!persisted) return;')).toBeLessThan(
+      body.indexOf('syncSessionDraftModelPrefs'),
+    );
+    expect(body.indexOf('if (!persisted) return;')).toBeLessThan(
+      body.indexOf('modelMemory?.setFast'),
+    );
+    expect(body.indexOf('modelMemory?.setFast')).toBeLessThan(
+      body.indexOf('syncSessionDraftModelPrefs'),
+    );
   });
 
   it('ModelSelector 当前模型 Fast 编辑不能先写 modelMemory 镜像', () => {
@@ -525,9 +689,13 @@ describe('远程交互接线不变式', () => {
     const start = src.indexOf('if (getSessionDeviceId(sessionId))');
     expect(start).toBeGreaterThan(-1);
     const body = src.slice(start, start + 2800);
-    const persist = body.indexOf('const fastPersisted = await persistFastModeChange(restoredFast, { silent: true });');
+    const persist = body.indexOf(
+      'const fastPersisted = await persistFastModeChange(restoredFast, { silent: true });',
+    );
     const sync = body.indexOf('syncSessionDraftModelPrefs(newModelId');
-    expect(persist).toBeGreaterThan(body.indexOf('await makerApiFor(sessionId).setEffort(sessionId, newEffort);'));
+    expect(persist).toBeGreaterThan(
+      body.indexOf('await makerApiFor(sessionId).setEffort(sessionId, newEffort);'),
+    );
     expect(persist).toBeGreaterThan(-1);
     expect(sync).toBeGreaterThan(-1);
     expect(persist).toBeLessThan(sync);
@@ -541,10 +709,14 @@ describe('远程交互接线不变式', () => {
     const start = src.indexOf('if (sessionId && isRemoteSession)');
     expect(start).toBeGreaterThan(-1);
     const body = src.slice(start, start + 2600);
-    const persist = body.indexOf('const fastPersisted = await persistFastModeChange(restoredFast, { silent: true });');
+    const persist = body.indexOf(
+      'const fastPersisted = await persistFastModeChange(restoredFast, { silent: true });',
+    );
     const sync = body.indexOf('syncSessionDraftModelPrefs(');
     const finalize = body.indexOf('onModelDidChange?.(targetModel);');
-    expect(persist).toBeGreaterThan(body.indexOf('await makerApiFor(sessionId).setEffort(sessionId, targetEffort);'));
+    expect(persist).toBeGreaterThan(
+      body.indexOf('await makerApiFor(sessionId).setEffort(sessionId, targetEffort);'),
+    );
     expect(persist).toBeGreaterThan(-1);
     expect(sync).toBeGreaterThan(-1);
     expect(body.slice(persist, sync)).not.toContain('return;');
@@ -564,7 +736,9 @@ describe('远程交互接线不变式', () => {
     expect(syncBody).not.toContain('patchVendorPrefs(vendor');
 
     const appSrc = read('App.tsx');
-    expect(appSrc).toContain('markModelChoice === false ? patchVendorPrefsPreservingModelChoice : patchVendorPrefs');
+    expect(appSrc).toContain(
+      'markModelChoice === false ? patchVendorPrefsPreservingModelChoice : patchVendorPrefs',
+    );
 
     const newMakerDraftRouteSrc = read('features/cc-agent/NewMakerDraftRoute.tsx');
     const pushActiveStart = newMakerDraftRouteSrc.indexOf('const pushActiveDraftPref');
@@ -580,9 +754,13 @@ describe('远程交互接线不变式', () => {
     expect(start).toBeGreaterThan(-1);
     const body = src.slice(start, start + 1500);
     const activeEffort = body.indexOf('const activeEffort =');
-    const payloadEffort = body.indexOf('...(activeEffort !== undefined ? { effort: activeEffort } : {})');
+    const payloadEffort = body.indexOf(
+      '...(activeEffort !== undefined ? { effort: activeEffort } : {})',
+    );
     expect(activeEffort).toBeGreaterThan(-1);
-    expect(body).toContain('patch.fast !== undefined ? dlSel?.effort ?? deviceLinkInitial?.effort : undefined');
+    expect(body).toMatch(
+      /patch\.fast !== undefined\s*\?\s*\(?dlSel\?\.effort \?\? deviceLinkInitial\?\.effort\)?\s*:\s*undefined/,
+    );
     expect(payloadEffort).toBeGreaterThan(activeEffort);
   });
 
@@ -591,7 +769,9 @@ describe('远程交互接线不变式', () => {
     const start = src.indexOf('if (active) {');
     expect(start).toBeGreaterThan(-1);
     const body = src.slice(start, start + 700);
-    expect(body).toContain('const shouldPatchActiveModel = markModelChoice !== false || effort !== undefined;');
+    expect(body).toContain(
+      'const shouldPatchActiveModel = markModelChoice !== false || effort !== undefined;',
+    );
     expect(body).toContain('if (shouldPatchActiveModel) {');
   });
 
@@ -601,12 +781,16 @@ describe('远程交互接线不变式', () => {
     expect(handleStart).toBeGreaterThan(-1);
     const handleBody = src.slice(handleStart, handleStart + 900);
     expect(handleBody).toContain('memoryProviderId = effectiveSourceId');
-    expect(handleBody).toContain('modelMemory?.setFast(currentModelAgentKind, memoryProviderId, modelId, enabled)');
+    expect(handleBody).toContain(
+      'modelMemory?.setFast(currentModelAgentKind, memoryProviderId, modelId, enabled)',
+    );
 
     const applyStart = src.indexOf('const applyModelAndEffort = async');
     expect(applyStart).toBeGreaterThan(-1);
     const applyBody = src.slice(applyStart, applyStart + 3200);
-    expect(applyBody).toContain('handleFastModeChange(restoredFast, modelId, eff, false, newProviderId)');
+    expect(applyBody).toContain(
+      'handleFastModeChange(restoredFast, modelId, eff, false, newProviderId)',
+    );
   });
 
   it('ChatInput 本地切来源先过 main credential gate,再写 DB / UI', () => {
@@ -616,7 +800,9 @@ describe('远程交互接线不变式', () => {
     const end = src.indexOf('const handleNavigateToProviders', start);
     expect(end).toBeGreaterThan(start);
     const body = src.slice(start, end);
-    const runtimeGate = body.indexOf('await window.electronAPI.maker.setModel(sessionId, modelId, newProviderId)');
+    const runtimeGate = body.indexOf(
+      'await window.electronAPI.maker.setModel(sessionId, modelId, newProviderId)',
+    );
     const persist = body.indexOf('await sessionService.update(sessionId, {');
     const applyUi = body.indexOf('applyProviderSelection();');
     expect(runtimeGate).toBeGreaterThan(-1);
@@ -633,7 +819,9 @@ describe('远程交互接线不变式', () => {
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
     const body = src.slice(start, end);
-    const runtimeGate = body.indexOf('await window.electronAPI.maker.setModel(sessionId, newModelId)');
+    const runtimeGate = body.indexOf(
+      'await window.electronAPI.maker.setModel(sessionId, newModelId)',
+    );
     const persist = body.indexOf('await sessionService.update(sessionId, { model: newModelId');
     const applyUi = body.indexOf('onModelDidChange?.(newModelId)');
     expect(runtimeGate).toBeGreaterThan(-1);
@@ -707,7 +895,7 @@ describe('远程交互接线不变式', () => {
     const predicate = src.slice(predicateStart, predicateStart + 500);
     expect(predicate).toContain("if (value === 'sessions') return true");
     expect(predicate).toContain("if (value.startsWith('session:'))");
-    expect(predicate).toContain("return parseFsWatchTopic(value) !== null");
+    expect(predicate).toContain('return parseFsWatchTopic(value) !== null');
 
     const start = src.indexOf('function handleSubscriptionFrame');
     expect(start).toBeGreaterThan(-1);

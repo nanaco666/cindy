@@ -3361,8 +3361,9 @@ function initGlobalListeners(): void {
           break;
         }
         case 'maker:session-model-pref:changed': {
-          // 被控端会话「非选中模型」effort/fast 变更 → 写控制端纯显示镜像(session:<id> scope),
-          // ModelSelector 据此重渲染。控制端纯显示:只更新镜像、绝不碰本地 sessionModelMemory、不回写被控端。
+          // 旧被控端 / 旧控制端的 session-scoped pref 回流兼容:只更新当前控制端显示镜像,
+          // 不碰本机 providerModelMemory、不回写被控端。新链路以 NEW_MAKER_DRAFT_CHANGED 的
+          // providerModelMemory 全量镜像为权威。
           const p = push.payload as {
             sessionId?: string;
             agent?: AgentKind;

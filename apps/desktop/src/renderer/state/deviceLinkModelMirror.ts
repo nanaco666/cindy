@@ -1,8 +1,8 @@
 /**
- * deviceLinkModelMirror —— 控制端「纯显示镜像」：被控端模型列表里每个 (agent, 来源, 模型) 的
- * effort/fast,按 scope 隔离、进程内、不落盘。
+ * deviceLinkModelMirror —— 控制端「纯显示镜像」：被控端每个 (agent, model) 的全局
+ * effort/fast 预设,按 scope 隔离、进程内、不落盘。
  *
- * 为什么单独一份(而非复用控制端自己的 providerModelMemory / sessionModelMemory):
+ * 为什么单独一份(而非复用控制端自己的 providerModelMemory):
  *   架构契约是「控制端纯镜像 / 被控端单一真相」(见 packages/device-link/src/topics.ts)。控制端
  *   显示被控端的模型列表时，**绝不**写控制端自己的本地记忆(那是控制端给自己本地项目用的)。
  *   远程项目的列表态只活在这份临时镜像里：初始由 pull(maker:get-new-maker-defaults 的
@@ -11,9 +11,10 @@
  *
  * scope 设计:
  *   - 草稿:`draft:${deviceId}` —— 一台被控设备的草稿列表(providerModelMemory 全量)。
- *   - 会话:`session:${sessionId}` —— 一个远程会话的非选中模型记忆(sessionModelMemory 对位)。
- * slot 设计:`${agent}:${providerId}` → {effortByModel, fastByModel},与被控端两个 store 的
- *   snapshot 形状对齐(结构化匹配,不互相 import)。
+ *   - 会话:`session:${sessionId}` —— 一个远程会话视图对被控端全局预设的临时镜像;scope 仅隔离
+ *     控制端页面生命周期,内容仍来自被控端 providerModelMemory。
+ * slot 设计与被控端 providerModelMemory snapshot 对齐:`${agent}:*` 是权威模型预设,
+ * `${agent}:${providerId}` 是旧 v2 兼容副本。全局槽优先,旧快照没有它时回退来源槽。
  */
 
 import { useSyncExternalStore } from 'react';
@@ -21,6 +22,7 @@ import { useSyncExternalStore } from 'react';
 import type { AgentKind } from '@/hooks/useAgentCapabilities';
 import type { Effort } from '@/lib/userPreferences.types';
 import type { ModelMemoryAccessors } from '@/components/new-chat/ModelSelector';
+import { MODEL_PRESET_SLOT_ID } from '@/state/providerModelMemory';
 
 /** 单槽:被控端某 (agent, 来源) 下每个模型的 effort/fast 镜像。 */
 interface Slot {
@@ -113,7 +115,8 @@ export function getMirrorEffort(
   model: string,
 ): Effort | undefined {
   if (!scopeKey || !providerId || !model) return undefined;
-  return getSlot(scopeKey, agent, providerId, false)?.effortByModel[model];
+  return getSlot(scopeKey, agent, MODEL_PRESET_SLOT_ID, false)?.effortByModel[model]
+    ?? getSlot(scopeKey, agent, providerId, false)?.effortByModel[model];
 }
 
 export function getMirrorFast(
@@ -123,7 +126,8 @@ export function getMirrorFast(
   model: string,
 ): boolean | undefined {
   if (!scopeKey || !providerId || !model) return undefined;
-  return getSlot(scopeKey, agent, providerId, false)?.fastByModel[model];
+  return getSlot(scopeKey, agent, MODEL_PRESET_SLOT_ID, false)?.fastByModel[model]
+    ?? getSlot(scopeKey, agent, providerId, false)?.fastByModel[model];
 }
 
 /** 乐观本地写镜像(控制端编辑时 snappy 显示 / 被控端 push 回流时刷新)。同值短路。 */
@@ -135,9 +139,11 @@ export function setMirrorEffort(
   effort: Effort,
 ): void {
   if (!scopeKey || !providerId || !model || !effort) return;
-  const slot = getSlot(scopeKey, agent, providerId, true)!;
-  if (slot.effortByModel[model] === effort) return;
-  slot.effortByModel[model] = effort;
+  const providerSlot = getSlot(scopeKey, agent, providerId, true)!;
+  const presetSlot = getSlot(scopeKey, agent, MODEL_PRESET_SLOT_ID, true)!;
+  if (providerSlot.effortByModel[model] === effort && presetSlot.effortByModel[model] === effort) return;
+  providerSlot.effortByModel[model] = effort;
+  presetSlot.effortByModel[model] = effort;
   scopeSerial.delete(scopeKey); // 直接改了 slot → 失效 replaceScope 同值缓存,下次全量 echo 必重新比对/应用
   emit();
 }
@@ -150,9 +156,11 @@ export function setMirrorFast(
   enabled: boolean,
 ): void {
   if (!scopeKey || !providerId || !model) return;
-  const slot = getSlot(scopeKey, agent, providerId, true)!;
-  if (slot.fastByModel[model] === enabled) return;
-  slot.fastByModel[model] = enabled;
+  const providerSlot = getSlot(scopeKey, agent, providerId, true)!;
+  const presetSlot = getSlot(scopeKey, agent, MODEL_PRESET_SLOT_ID, true)!;
+  if (providerSlot.fastByModel[model] === enabled && presetSlot.fastByModel[model] === enabled) return;
+  providerSlot.fastByModel[model] = enabled;
+  presetSlot.fastByModel[model] = enabled;
   scopeSerial.delete(scopeKey); // 同 setMirrorEffort:失效同值缓存
   emit();
 }
@@ -168,7 +176,7 @@ export function makeMirrorAccessors(
     agent: AgentKind,
     providerId: string,
     model: string,
-    patch: { effort?: Effort; fast?: boolean },
+    patch: { effort?: Effort; fast?: boolean; markModelChoice?: boolean },
   ) => void,
 ): ModelMemoryAccessors {
   return {
@@ -177,6 +185,10 @@ export function makeMirrorAccessors(
     setEffort: (agent, providerId, model, effort) => {
       setMirrorEffort(scopeKey, agent, providerId, model, effort);
       onWrite(agent, providerId, model, { effort });
+    },
+    setChoice: (agent, providerId, model, effort) => {
+      setMirrorEffort(scopeKey, agent, providerId, model, effort);
+      onWrite(agent, providerId, model, { effort, markModelChoice: true });
     },
     setFast: (agent, providerId, model, enabled) => {
       setMirrorFast(scopeKey, agent, providerId, model, enabled);
