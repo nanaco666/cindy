@@ -78,7 +78,7 @@ export function SearchInput({
             'flex h-[22px] min-w-[22px] shrink-0 items-center justify-center rounded-[4px] px-1',
             'text-11 font-semibold leading-none transition-colors',
             caseSensitive
-              ? 'bg-sidebar-item-active text-foreground'
+              ? 'bg-sidebar-item-active text-sidebar-item-active-foreground'
               : 'text-sidebar-muted hover:bg-sidebar-item-hover hover:text-foreground',
           )}
         >
