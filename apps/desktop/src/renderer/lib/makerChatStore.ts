@@ -2458,18 +2458,29 @@ export function handleStreamEvent(inputState: SessionChatState, event: CCAgentSt
       // the boundary embedded in transcript-loaded messages, so we'd risk
       // double-rendering if we wrote this row to DB.
       const data = event.data as {
+        boundaryId?: string;
         trigger: 'manual' | 'auto';
         preTokens: number;
         postTokens: number;
         durationMs: number;
       };
+      const boundaryId = typeof data.boundaryId === 'string' && data.boundaryId
+        ? data.boundaryId
+        : undefined;
+      const clientId = boundaryId ? `compact:${boundaryId}` : crypto.randomUUID();
+      // History replay and the live stream can deliver the same SDK boundary.
+      // Deduplicate before finalizing anything so a replay cannot end the new
+      // work segment that started after the original boundary.
+      if (boundaryId && state.messages.some((message) => message.clientId === clientId)) {
+        return state;
+      }
       const finalized = finalizeStreamingInState(state);
       return {
         ...finalized,
         messages: [
           ...finalized.messages,
           {
-            clientId: crypto.randomUUID(),
+            clientId,
             role: 'assistant' as const,
             content: '',
             isStreaming: false,

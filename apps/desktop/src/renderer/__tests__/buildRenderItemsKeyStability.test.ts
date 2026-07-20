@@ -46,6 +46,19 @@ const mkAssistant = (id: string, content = 'ok'): ChatMessage => ({
   content,
 });
 
+const mkCompactBoundary = (id: string): ChatMessage => ({
+  clientId: id,
+  role: 'assistant',
+  content: '',
+  systemCardType: 'compact',
+  systemCardData: {
+    trigger: 'auto',
+    preTokens: 100,
+    postTokens: 20,
+    durationMs: 1000,
+  },
+});
+
 const mkTool = (id: string, toolName: string, toolInput: unknown = {}): ChatMessage => ({
   clientId: id,
   role: 'tool_use',
@@ -748,6 +761,33 @@ describe('groupWorkRuns — work-group collapsing', () => {
     expect(group.isStreaming).toBe(true);
     expect(group.startedAtMs).toBe(Date.parse('2026-06-24T00:00:02.000Z'));
     expect(group.children.map((c) => c.type)).toEqual(['tool_segment', 'message']);
+  });
+
+  it('finishes the previous live work group at an auto-compaction boundary', () => {
+    const items = build(
+      [
+        mkUser('u1'),
+        mkTool('t-before', 'Read'),
+        mkCompactBoundary('compact-1'),
+        mkThinking('th-after'),
+        mkTool('t-after', 'Bash'),
+      ],
+      true,
+    );
+
+    expect(items.map((it) => it.type)).toEqual([
+      'message',
+      'work_group',
+      'message',
+      'work_group',
+    ]);
+    const groups = items.filter(
+      (it): it is Extract<RenderItem, { type: 'work_group' }> => it.type === 'work_group',
+    );
+    expect(groups.map((group) => [group.key, group.isStreaming])).toEqual([
+      ['work-t-before', false],
+      ['work-th-after', true],
+    ]);
   });
 
   it('collapses the trailing run once the session stops streaming (turn end)', () => {
