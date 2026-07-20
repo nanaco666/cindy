@@ -636,8 +636,8 @@ card/container
 
 ### 15.2 三份红 exact map(品牌红边界)
 
-- **BRAND_RED_EXPECTED_BY_ID**(必须等于品牌红/深红):`accent-cta-bg`/`accent-cta-bg-pure`/`accent-emphasis`/`confirm-btn-primary-bg`/`migration-bar-fill`/`perm-allow-btn-bg`/`update-btn-border`/`update-btn-text`(均 `#DF0C27`);`primary`/`sidebar-item-active`(HSL `352.3 89.8% 46.1%`,RGB 归一等价品牌红)。
-- **BRAND_RED_ALLOWED_IDS**(允许含红全集 = EXPECTED ∪ 派生):上述 + `accent-soft`/`accent-hover`/`drop-overlay-bg`/`confirm-btn-primary-hover`/`settings-btn-primary-bg`/`settings-btn-primary-border`/`settings-btn-primary-hover-bg`。
+- **BRAND_RED_EXPECTED_BY_ID**(必须等于品牌红/深红):`accent-cta-bg`/`accent-cta-bg-pure`/`accent-emphasis`/`confirm-btn-primary-bg`/`perm-allow-btn-bg`/`update-btn-border`/`update-btn-text`(均 `#DF0C27`);`primary`/`sidebar-item-active`(HSL `352.3 89.8% 46.1%`,RGB 归一等价品牌红)。`migration-bar-fill` 已随主干迁移条退役移出(2026-07-19)。
+- **BRAND_RED_ALLOWED_IDS**(允许含红全集 = EXPECTED ∪ 派生):上述 + `accent-soft`/`accent-hover`/`confirm-btn-primary-hover`/`settings-btn-primary-bg`/`settings-btn-primary-border`/`settings-btn-primary-hover-bg`。`drop-overlay-bg` 已于 2026-07-19 撤红移出名单(见 §15.13 C 类勘误)。
 - **CTA_FOREGROUND_WHITE_IDS**(红底白前景):`accent-pure-cta-fg`/`confirm-btn-primary-text`/`perm-allow-btn-text`/`primary-foreground`/`settings-btn-primary-text`。
 
 单向禁止:`ALLOWED` 之外任何 token 出现 `#DF0C27`/`#A61629` = 测试红。
@@ -708,17 +708,17 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 
 常规主操作不再用品牌红,改反相中性(light 底 `#3C3F43`/字 `#FCFCFC`,dark 底 `#EEEEEE`/字 `#252222`;WCAG 10.32/13.60:1)。红色仅限语义例外:
 - **A 类(保留红)**:`brand-login-bg`/`brand-login-error-border`/`brand-login-error-text`(品牌海报/错误);
-- **C 类(保留红)**:`migration-bar-fill`(进度)、`drop-overlay-bg`(红10%)、`sidebar-item-active`(light `#DF0C27`/dark `#A61629` 选中);
+- **C 类(保留红)**:`sidebar-item-active`(light `#DF0C27`/dark `#A61629` 选中);~~`migration-bar-fill`~~ 已随主干迁移条退役(2026-07-19,token 已删非撤红);~~`drop-overlay-bg` 红10%~~ 已于 2026-07-19 撤红(用户实机否决:整窗红罩语义似警报,回落 default 中性灰遮罩);
 - **语义色**:`destructive`/delete、`error-*`、warning、diff 红、status 点;
 - **B 类(改中性 11 项)**:`accent-cta-bg`/`-pure`/`-emphasis`/`-soft`/`-hover`、`update-btn-border`/`-text`、`confirm-btn-primary`、`perm-allow-btn`、`primary`、`settings-btn-primary`(alias)、`accent-pure-cta-fg`/`settings-btn-primary-text`(中性字);
-- **C 类裁决**:confirm(普通中性,danger 另设)、perm-allow(中性,警示橙 chip)、primary(中性)、sidebar-item-active(light 红胶囊/dark 深红)、migration-bar-fill(保留红)、drop-overlay(保留红10%)、brand-login-cta(不动);
+- **C 类裁决**:confirm(普通中性,danger 另设)、perm-allow(中性,警示橙 chip)、primary(中性)、sidebar-item-active(light 红胶囊/dark 深红)、migration-bar-fill(保留红)、drop-overlay(原保留红10%,2026-07-19 撤红改中性)、brand-login-cta(不动);
 - **中性按钮四态**:light 底`#3C3F43`/字`#FCFCFC`、hover`#2E3237`、pressed`#25282C`;dark 底`#EEEEEE`/字`#252222`、hover`#E2E2E2`、pressed`#D4D4D4`。
 - **send-btn 族纳入值表(E1D 扩,lead 裁决 2026-07-17)**:`send-btn-bg`(default alias `--accent-cta-bg`)/`-icon`/`-hover-bg`/`-pressed-bg`/`-disabled-bg`/`-disabled-icon` CINDY override 全族走上述四态反相中性 + disabled 灰 `#444242`/`#585555`(R4 D1 实证);hover/pressed 为 E1D 新增 token(default 同 bg,默认皮肤维持 opacity-85 hover,膘叔 E3 组件层消费 var() 即全局生效);全族入 cindyDecisionData REQUIRED_IDS + CINDY_EXPECTED,③ 断言守。
 - **侧栏颜色层级整改(E1D 扩,用户并排指错 2026-07-17,lead 钉死 light/dark 同套)**:
   - 正文(会话标题)= `text-foreground`(=`text-primary` light `#3C3F43`/dark `#D4D4D4`,不动);
   - 二级暗灰(行首图标普通态/时间戳/meta/分组标签)= light `#9A9DA3`/dark `#6F6F6F`(与 `text-secondary` 同值);CINDY override `sidebar-muted`/`sidebar-action-icon`(HSL `220.0 4.7% 62.2%`/`0 0% 43.5%`)+ 新增 `cmd-palette-item-meta` CINDY override(hex);
   - 选中胶囊 = `sidebar-item-active`(light `#DF0C27`/dark `#A61629`,E1D 第 4 项裁决)反白前景 = 新增 `sidebar-item-active-foreground` token(light `#FCFCFC`/dark `#D4D4D4`,× 红底 5.33/4.91 ≥4.5);SessionItem/SessionCard isActive 容器+title+time+RemoteProjectIcon 条件切反白;
-  - 强调行(running)行首箭头 = 品牌红系 `sidebar-item-active`(light `#DF0C27`/dark `#A61629`,D4-1 Figma 三态实证),VendorIcon running 从 `status-bar-accent`(橙)切 `hsl(var(--sidebar-item-active))`;**与 E5D 状态点新橙 `#EA6B17` 解耦——状态点归橙,行首强调箭头归红**。
+  - 强调行(running)行首厂商图标(Claude AA/Codex 六瓣 glyph,2026-07-19 撤销 D4-1 统一箭头恢复厂商区分)= 品牌红系 `sidebar-item-active`(light `#DF0C27`/dark `#A61629`),VendorIcon running 从 `status-bar-accent`(橙)切 `hsl(var(--sidebar-item-active))`;**与 E5D 状态点新橙 `#EA6B17` 解耦——状态点归橙,行首强调图标归红**。
   - 断言:③ CINDY_EXPECTED 守 4 token 值;⑦ 新增层级断言(二级暗灰 contrast 明显弱于正文 + 选中胶囊前景×红底 ≥4.5)。
 - **backlog(R2 §4.3 五点差异,lead 裁决 2026-07-17 本轮不做,入 backlog)**:Project_List 三态拆分(active-task-pill/project-card/flat-list-row 不共用 `sidebar-item-active`);项目 header/list card 选中应中性底(#312F2F/#F6F6F6 非 #DF0C27 大红);去 Project_List 选中组 `focus-ring-soft` 蓝 ring,改 card stroke #DCDFE3/#434343;小箭头 #A61629 强调(非整行红底)。详见 `2026-07-17-r2-ui-specs.md` §4.3。本轮收敛不扩战线,后续另开。
 
@@ -735,12 +735,12 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 
 ### 15.12 毛玻璃(vibrancy)体系(用户定稿 2026-07-18,macOS)
 
-- **唯一半透面 token**:`surface-translucent-sidebar`——CINDY light `rgba(255, 255, 255, 0.85)` / dark `rgba(18, 15, 15, 0.75)`(default 主题下 = `var(--surface)` 不透明,非 CINDY 主题零影响)。左侧栏(`aside.bg-sidebar`)与 splash 根容器共用同一 token(用户裁决"一劳永逸");后续新增半透明表面**默认复用此 token**,不另造 rgba 值。
+- **唯一半透面 token**:`surface-translucent-sidebar`——CINDY light `rgba(255, 255, 255, 0.85)` / dark `rgba(18, 15, 15, 0.75)`(default 主题下 = `var(--surface)` 不透明,非 CINDY 主题零影响)。消费方为左侧栏(`aside.bg-sidebar`);后续新增半透明表面**默认复用此 token**,不另造 rgba 值。splash 根容器已于 2026-07-19 改为不透明 `--surface`(用户拍板:加载完成前必须完全遮盖底下已挂载的主界面,不再共用半透 token)。
 - **透壁纸三重管线,缺一即死黑**(2026-07-18 实机 A/B 实证,详证据见换肤工程 sidebar-glass 补编终稿追记):
   1. **窗口创建期**即设 `backgroundColor: '#00000000'` + vibrancy(`bootstrap-electron.ts` / `vibrancyConfig.ts`);运行时再 setBackgroundColor 改 alpha 不可靠。
   2. CINDY 主题下**根容器让路**:globals.css 把 `.h-screen.bg-content-area`(及 splash 在场垫层)置 transparent,否则整窗不透明垫底挡死。
   3. **禁止 CSS `backdrop-filter`**——它会把透明窗背衬渲染成黑箱;壁纸模糊完全由原生 vibrancy 材质负责,CSS 层只铺半透底色。
-- 材质经 `XDT_VIBRANCY_MATERIAL` 环境旋钮选择(缺省 sidebar;用户实测定稿 **hud**)。Windows 无 vibrancy 等价物,降级为不透明 `--surface`(backlog)。
+- 材质经 `XDT_VIBRANCY_MATERIAL` 环境旋钮选择,**代码缺省 hud**(用户实测定稿,2026-07-19 由 sidebar 回写为缺省值)。Windows 侧 Win11+ 走 `backgroundMaterial`(缺省 acrylic,`XDT_BACKDROP_MATERIAL` 旋钮,未经实机验证);Win10/非 CINDY 回退不透明 `--surface`。
 - 半透面上**不叠渐变覆盖层**——浅色红渐变层 2026-07-18 经用户确认设计稿无此元素,已整层砍除;splash 的渐变辉光层同样未实现(backlog 待用户表态)。
 - `surface-translucent-sidebar` 的 alpha 是主题冻结区**唯一开放的观感旋钮**,调整必须三处同步(`cindy-light.ts` / `cindy-dark.ts` / `cindyDecisionData.ts`)且 themes 套件跑绿。
 
@@ -781,7 +781,7 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 
 #### 图标规范
 
-- 会话 / 品牌 glyph 统一使用 `BrandArrow`,Mac 与移动端同源资产;不要再各端各画一套箭头。
+- 会话行首 agent 图标按厂商区分:Claude AA 字标 / Codex 六瓣,Mac(`VendorIcon`)与移动端(`MobileVendorIcon`)同源资产(2026-07-19 撤销"统一 `BrandArrow` 箭头"旧规——箭头让依赖图标区分 agent 类型的场景失效;`BrandArrow` 资产保留,仅品牌装饰场景可用)。
 - 模型选择按 model brand 出图。Mac 已替换过的品牌图标,移动端直接复用同源资产;其余使用现有图标库(lucide)中语义等价的图形。
 - 发送语义统一使用填充纸飞机 `Send`,颜色跟随中性反相 CTA token;不要用红色发送按钮或红色发送图标表达普通发送。
 

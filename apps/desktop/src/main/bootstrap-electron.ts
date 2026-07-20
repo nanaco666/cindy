@@ -1735,7 +1735,7 @@ const createWindow = () => {
       backgroundMaterial: winBackdropConfig.backgroundMaterial,
       backgroundColor: winBackdropConfig.backgroundColor,
     } : {}),
-    ...(process.platform === 'darwin' ? { vibrancy: 'sidebar' as const } : {}),
+    ...(process.platform === 'darwin' ? { vibrancy: 'hud' as const } : {}), // 创建期材质与缺省定稿一致(hud);运行时按主题族经 applyWindowVibrancy 修正
     acceptFirstMouse: !swallowActivationClick,
     ...platformOptions,
     webPreferences: {

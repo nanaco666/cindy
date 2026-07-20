@@ -62,7 +62,7 @@ describe('useSplash startup auto relaunch', () => {
     expect(result.current.phase).toBe('splash_update_done');
 
     await act(async () => {
-      vi.advanceTimersByTime(1_500);
+      vi.advanceTimersByTime(3_000);
       await Promise.resolve();
     });
 
@@ -76,11 +76,30 @@ describe('useSplash startup auto relaunch', () => {
     renderHook(() => useSplash());
 
     await act(async () => {
-      vi.advanceTimersByTime(1_500);
+      vi.advanceTimersByTime(3_000);
       await Promise.resolve();
     });
 
     expect(mocks.autoRelaunchToUpdate).toHaveBeenCalledTimes(1);
     expect(mocks.checkEnvironment).not.toHaveBeenCalled();
+  });
+
+  it('holds the update relaunch until the 3s splash display floor elapses', async () => {
+    // 热更路径不许绕过 MIN_DISPLAY_MS(3s)地板:update_done 在挂载即达时,
+    // relaunch 延时 = max(提示最短 1.5s, 地板剩余 3s) = 3s。
+    mocks.autoRelaunchToUpdate.mockResolvedValue({ accepted: true });
+    renderHook(() => useSplash());
+
+    await act(async () => {
+      vi.advanceTimersByTime(2_999);
+      await Promise.resolve();
+    });
+    expect(mocks.autoRelaunchToUpdate).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+      await Promise.resolve();
+    });
+    expect(mocks.autoRelaunchToUpdate).toHaveBeenCalledTimes(1);
   });
 });
