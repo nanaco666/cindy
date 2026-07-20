@@ -1016,10 +1016,6 @@
         "rotateSuccess": "키를 교체했습니다",
         "rotateFailed": "교체에 실패했습니다. 나중에 다시 시도해 주세요"
       },
-      "addCustom": {
-        "title": "사용자 지정 제공자 추가",
-        "subtitle": "OpenAI / Anthropic 호환 모델 소스를 연결하세요. 설정은 로컬에 저장됩니다"
-      },
       "custom": {
         "tag": "사용자 지정",
         "editAria": "편집",
@@ -1127,8 +1123,14 @@
         "subscription": "구독",
         "subscriptionProduct": "{{product}} 구독",
         "noResults": "일치하는 모델 없음",
-        "expandAria": "모델 목록 펼치기",
-        "collapseAria": "모델 목록 접기"
+        "splitAdjust": "CLI별 조정",
+        "splitDone": "완료",
+        "capabilityNote": "{{agent}}에서는 사용 불가",
+        "divergedChip": "{{agent}}에서 숨김",
+        "refreshAria": "모델 목록 새로고침(추가만)",
+        "refreshAdded": "새 모델 {{count}}개를 발견했습니다",
+        "refreshNoNew": "모델 목록이 최신 상태입니다. 새 항목이 없습니다",
+        "refreshFailed": "모델 목록 새로고침에 실패했습니다. 잠시 후 다시 시도해 주세요"
       },
       "genericOAuth": {
         "subtitle": "구독 인증 로그인 (OAuth)",
@@ -1144,6 +1146,53 @@
           "confirm": "로그아웃",
           "cancel": "취소"
         }
+      },
+      "addProvider": "공급자 추가",
+      "detail": {
+        "singleAgentNote": "{{agent}} 전용",
+        "emptyModels": "인증하면 사용 가능한 모델이 자동으로 검색됩니다",
+        "emptyList": "왼쪽 아래 '공급자 추가'에서 첫 모델 소스를 연결하세요"
+      },
+      "detect": {
+        "groupLabel": "이 기기에서 감지됨",
+        "action": "인증하기",
+        "hintLoggedIn": "{{cli}}이(가) 이 기기에 로그인되어 있습니다. 인증하여 바로 연결할 수 있습니다",
+        "hintInstalled": "이 기기에 {{cli}}이(가) 설치되어 있습니다"
+      },
+      "wizard": {
+        "title": "공급자 추가",
+        "titleWith": "추가 · {{name}}",
+        "closeAria": "닫기",
+        "stepPick": "공급자 선택",
+        "stepConnect": "연결",
+        "stepModels": "모델 선택",
+        "searchPlaceholder": "공급자 검색…",
+        "groupSubscription": "구독 인증 · 권장, API 키 불필요",
+        "groupApiKey": "API 키 공급자 · 프리셋은 카탈로그와 함께 업데이트",
+        "groupCustom": "사용자 지정",
+        "metaOAuth": "구독 인증",
+        "metaApiKey": "API 키",
+        "customTitle": "사용자 지정 엔드포인트",
+        "customMeta": "OpenAI / Anthropic 호환 모델 소스를 연결",
+        "pickHint": "인증 방식은 공급자 정의에 따라 결정됩니다. OAuth 엔드포인트와 기본 URL은 프리셋에 포함되어 직접 입력할 필요가 없습니다.",
+        "oauthDesc": "브라우저에서 구독 인증을 완료합니다. API 키가 필요 없습니다",
+        "authorizing": "브라우저 인증을 기다리는 중…",
+        "authorizedToast": "{{name}}에 연결되었습니다",
+        "authorizeFailed": "{{name}} 인증에 실패했습니다. 다시 시도해 주세요",
+        "nameLabel": "표시 이름",
+        "onlyAgentNote": "이 공급자는 {{agent}}만 지원합니다",
+        "docsLink": "연동 문서 보기",
+        "fetching": "연결을 확인하고 모델 목록을 가져오는 중…",
+        "fetchFailed": "모델 목록을 가져오지 못했습니다. 프리셋 추천 모델로 추가를 완료한 뒤 나중에 상세에서 새로고침할 수 있습니다",
+        "recommended": "추천",
+        "modelsHint": "선택한 모델은 대화 모델 선택기에 표시되며 사용 가능한 모든 CLI에 동시에 적용됩니다. 공급자 상세에서 언제든지 조정할 수 있습니다.",
+        "noModelSelected": "모델을 하나 이상 선택해 주세요",
+        "createdToast": "{{name}}을(를) 추가했습니다",
+        "createFailed": "추가하지 못했습니다. 다시 시도해 주세요",
+        "next": "다음",
+        "back": "← 이전",
+        "finish": "추가 완료",
+        "cancel": "취소"
       }
     },
     "experimental": {

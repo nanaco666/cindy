@@ -3254,6 +3254,13 @@ interface ElectronAPI {
       status?: number;
       detail?: string;
     }>;
+    /**
+     * 本机 agent CLI 安装 / 登录态扫描（设置「检测建议」用）。只 stat 不读凭证内容;
+     * 失败降级空数组。
+     */
+    scanLocalCli: () => Promise<{
+      detections: import('../shared/localCliDetect').LocalCliDetection[];
+    }>;
     /** 自定义供应商变更广播订阅（返回 off）。 */
     onProvidersChanged: (cb: () => void) => () => void;
 

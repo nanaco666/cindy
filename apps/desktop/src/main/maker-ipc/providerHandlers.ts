@@ -16,6 +16,8 @@
 
 import type { AgentKind, CustomProviderConfig, ProviderPreset, ProviderView } from '@lizi/model-providers';
 
+import type { LocalCliDetection } from '../../shared/localCliDetect.js';
+
 import { throwIpcError } from '../utils/ipcValidate.js';
 import {
   createCustomProvider,
@@ -62,6 +64,11 @@ export interface ProviderHandlerDeps {
   oauthCancel(providerId: string): void;
   /** 删除自定义供应商时清理其 OAuth 凭证 blob（生产 = logoutGenericOAuth；幂等）。 */
   clearOAuthCredentials(providerId: string): void;
+  /**
+   * 本机 agent CLI 安装 / 登录态扫描(生产 = scanLocalCliAuth(createLocalCliScanDeps());
+   * 单测注入 stub 不碰真实 home)。只 stat 不读内容(规则 23)。
+   */
+  scanLocalCli(): Promise<LocalCliDetection[]>;
 }
 
 /** 校验 PROVIDER_TEST_CONNECTION 入参形状（确定性代码校验，非法直接 INVALID_PARAMS）。 */
@@ -216,6 +223,16 @@ export function registerProviderHandlers(
     const parsed = parseModelsFetchInput(input);
     if (!parsed) throwIpcError('INVALID_PARAMS', 'invalid models-fetch input');
     return deps.fetchModels(parsed);
+  });
+
+  // 本机 CLI 扫描：查询型；任何失败降级空数组（检测建议是增强,不是功能依赖,
+  // renderer 空列表即不显示建议区,规则 13 例外条款）。
+  registry.handle(MAKER_INVOKE.PROVIDER_LOCAL_CLI_SCAN, async () => {
+    try {
+      return { detections: await deps.scanLocalCli() };
+    } catch {
+      return { detections: [] as LocalCliDetection[] };
+    }
   });
 
   // 通用 OAuth 登录 / 登出 / 取消。login 是查询型返回（{ok, reason}——取消/超时是正常流程

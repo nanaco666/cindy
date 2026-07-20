@@ -1016,10 +1016,6 @@
         "rotateSuccess": "キーをローテーションしました",
         "rotateFailed": "ローテーションに失敗しました。後でもう一度お試しください"
       },
-      "addCustom": {
-        "title": "カスタムプロバイダーを追加",
-        "subtitle": "OpenAI / Anthropic 互換の任意のモデルソースを接続。設定はローカルに保存されます"
-      },
       "custom": {
         "tag": "カスタム",
         "editAria": "編集",
@@ -1127,8 +1123,14 @@
         "subscription": "サブスク",
         "subscriptionProduct": "{{product}} サブスク",
         "noResults": "一致するモデルがありません",
-        "expandAria": "モデル一覧を展開",
-        "collapseAria": "モデル一覧を折りたたむ"
+        "splitAdjust": "CLI ごとに調整",
+        "splitDone": "完了",
+        "capabilityNote": "{{agent}} では利用不可",
+        "divergedChip": "{{agent}} で非表示",
+        "refreshAria": "モデル一覧を更新(追加のみ)",
+        "refreshAdded": "新しいモデルを {{count}} 件検出しました",
+        "refreshNoNew": "モデル一覧は最新です。新規はありません",
+        "refreshFailed": "モデル一覧の更新に失敗しました。しばらくしてからもう一度お試しください"
       },
       "genericOAuth": {
         "subtitle": "サブスクリプション認証（OAuth）",
@@ -1144,6 +1146,53 @@
           "confirm": "ログアウト",
           "cancel": "キャンセル"
         }
+      },
+      "addProvider": "プロバイダーを追加",
+      "detail": {
+        "singleAgentNote": "{{agent}} のみ対応",
+        "emptyModels": "認証すると利用可能なモデルが自動的に検出されます",
+        "emptyList": "左下の「プロバイダーを追加」から最初のモデルソースを接続してください"
+      },
+      "detect": {
+        "groupLabel": "このデバイスで検出",
+        "action": "認証する",
+        "hintLoggedIn": "{{cli}} はこのデバイスでログイン済みです。認証してすぐに接続できます",
+        "hintInstalled": "このデバイスに {{cli}} がインストールされています"
+      },
+      "wizard": {
+        "title": "プロバイダーを追加",
+        "titleWith": "追加 · {{name}}",
+        "closeAria": "閉じる",
+        "stepPick": "プロバイダーを選択",
+        "stepConnect": "接続",
+        "stepModels": "モデルを選択",
+        "searchPlaceholder": "プロバイダーを検索…",
+        "groupSubscription": "サブスクリプション認証 · 推奨、API キー不要",
+        "groupApiKey": "API キープロバイダー · プリセットはカタログと同期",
+        "groupCustom": "カスタム",
+        "metaOAuth": "サブスクリプション認証",
+        "metaApiKey": "API キー",
+        "customTitle": "カスタムエンドポイント",
+        "customMeta": "OpenAI / Anthropic 互換の任意のモデルソースを接続",
+        "pickHint": "認証方式はプロバイダーの定義で決まります。OAuth エンドポイントとベース URL はプリセットに含まれ、手入力は不要です。",
+        "oauthDesc": "ブラウザでサブスクリプション認証を完了します。API キーは不要です",
+        "authorizing": "ブラウザでの認証を待っています…",
+        "authorizedToast": "「{{name}}」に接続しました",
+        "authorizeFailed": "「{{name}}」の認証に失敗しました。もう一度お試しください",
+        "nameLabel": "表示名",
+        "onlyAgentNote": "このプロバイダーは {{agent}} のみ対応です",
+        "docsLink": "接続ドキュメントを見る",
+        "fetching": "接続を確認してモデル一覧を取得しています…",
+        "fetchFailed": "モデル一覧を取得できませんでした。プリセットの推奨モデルで追加を完了し、あとで詳細から更新できます",
+        "recommended": "推奨",
+        "modelsHint": "チェックしたモデルはチャットのモデル選択に表示され、利用可能なすべての CLI に同時に適用されます。プロバイダー詳細からいつでも調整できます。",
+        "noModelSelected": "モデルを 1 つ以上選択してください",
+        "createdToast": "「{{name}}」を追加しました",
+        "createFailed": "追加に失敗しました。もう一度お試しください",
+        "next": "次へ",
+        "back": "← 戻る",
+        "finish": "追加を完了",
+        "cancel": "キャンセル"
       }
     },
     "experimental": {
