@@ -186,6 +186,11 @@ vi.mock('@/hooks/useDeviceProviders', () => ({
 
 vi.mock('@/lib/providerModels', () => ({
   providerMonogram: (name: string) => name.slice(0, 1).toUpperCase(),
+  resolveVisibleModelAgentKind: ({
+    agentKind,
+  }: {
+    agentKind: 'claude-code' | 'codex' | null;
+  }) => agentKind ?? 'claude-code',
   selectVisibleModels: () => [
     {
       id: 'claude-opus-4-8',
