@@ -434,7 +434,7 @@ export function GhostPluginPage() {
         <PluginManagementPage>
           <header className="plugin-motion-page-header pb-2">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <h1 className="text-28 font-medium leading-tight text-[var(--text-primary)]">
                   {t('settings.ghosts.title')}
                 </h1>
