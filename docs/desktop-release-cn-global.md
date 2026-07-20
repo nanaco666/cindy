@@ -62,7 +62,7 @@ canary 与 stable 共享同一批底层文件。覆盖前自动把当前 stable 
 - macOS 公证账号:`APPLE_APP_PASSWORD`(必填,env,zhouyi@xd.com 名下的 App 专用密码)
   + `macSigning.appleId = zhouyi@xd.com`(该账号对两个 team 均有公证权限,已实测;
   换公证账号时两处必须成对更新——App 专用密码与 Apple ID 一一绑定)。签名**证书**按区域走 `macSigning`(见上表)。
-- Windows 签名:`NPKG_TOKEN`(不设则跳过签名;npkg 服务在内网)。
+- Windows 签名:`NPKG_TOKEN` **必填硬闸**(npkg 内网签名服务)——缺 token 构建前终止,签名后对安装器与热更包主 exe 做 Authenticode 验签,非 Valid 一律中止;未签名 exe 禁止出渠道(调试用 `package-desktop.mjs --allow-unsigned`)。
 - 渠道冻结硬闸:任一区域都禁止把 OSS prefix 指到已冻结的老 `/xdt-maker` 渠道
   (`assertNotPublishingCindyToLegacyChannel`)。
 

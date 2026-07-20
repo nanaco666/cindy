@@ -10,6 +10,9 @@
  *   (XDT_* vs XDT_GLOBAL_* 的 OSS/CDN),见 docs/desktop-release-cn-global.md。
  *
  * 环境变量:
+ *   NPKG_TOKEN            — 必填,npkg 内网签名服务 token(缺失/签名失败/验签
+ *                           不过一律立即中止:未签名 exe 禁止出渠道;调试产
+ *                           未签名包走 package-desktop.mjs --allow-unsigned)
  *   OSS_ACCESS_KEY_ID     — 阿里云 AK
  *   OSS_ACCESS_KEY_SECRET — 阿里云 SK
  *   OSS_REGION            — 可选，默认 oss-cn-beijing
@@ -94,6 +97,16 @@ const CDN_BASE = resolveReleaseCdnBaseUrl(REGION);
 // 安装包 / 热更 zip 文件名用发布渠道基名(cn 'cindy' / global 'cindy-global')。
 const APP_NAME = packagedAppName(REGION);
 const ARTIFACT_BASENAME = releaseArtifactBasename(REGION);
+
+// NPKG 签名硬闸(fail fast):正式发布绝不允许未签名 exe 出渠道,缺 token 在
+// 构建前就终止,不浪费一次完整 forge make。确需未签名包(调试/演练)不走
+// release,用 package-desktop.mjs --allow-unsigned / --no-sign。
+const NPKG_TOKEN = process.env.NPKG_TOKEN?.trim();
+if (!NPKG_TOKEN) {
+  console.error('ERROR: NPKG_TOKEN is required for Windows release (npkg 内网签名服务).');
+  console.error('       未签名安装包禁止发布;调试用 package-desktop.mjs --allow-unsigned。');
+  process.exit(1);
+}
 
 // ── Helpers ──
 
@@ -353,6 +366,24 @@ function signWindowsExe(exePath, token) {
   });
 }
 
+/**
+ * Authenticode 验签硬闸:状态必须是 Valid,否则立即中止发布。
+ * 拦两类事故:npkg 服务返回了未签/坏签产物、forge make 阶段签名被静默跳过。
+ */
+function assertAuthenticodeSigned(exePath) {
+  console.log(`==> Verifying Authenticode signature: ${path.basename(exePath)}`);
+  const status = execSync(
+    `powershell -NoProfile -Command "(Get-AuthenticodeSignature -FilePath '${path.resolve(exePath).replace(/'/g, "''")}').Status"`,
+    { encoding: 'utf8' },
+  ).trim();
+  if (status !== 'Valid') {
+    console.error(`ERROR: Authenticode status is "${status}" (expected "Valid"): ${exePath}`);
+    console.error('       签名无效的 exe 禁止发布,已中止。');
+    process.exit(1);
+  }
+  console.log('    Authenticode: Valid');
+}
+
 // ── Main ──
 
 function bumpPatch(ver) {
@@ -529,14 +560,12 @@ async function main() {
   const releaseExePath = path.join(RELEASE_DIR, releaseExeName);
   fs.copyFileSync(exePath, releaseExePath);
 
-  // 4a. Code-sign the installer (optional — set NPKG_TOKEN to enable)
-  const npkgToken = process.env.NPKG_TOKEN;
-  if (npkgToken) {
-    console.log('==> Signing installer via npkg...');
-    await signWindowsExe(releaseExePath, npkgToken);
-  } else {
-    console.log('==> NPKG_TOKEN not set, skipping code signing');
-  }
+  // 4a. npkg 签名(token 已在启动硬闸校验;sign.py 非零退出会抛错中止发布)
+  console.log('==> Signing installer via npkg...');
+  signWindowsExe(releaseExePath, NPKG_TOKEN);
+
+  // 4a2. Authenticode 验签兜底:签名服务静默失败 / 产物实际未签在这里拦下。
+  assertAuthenticodeSigned(releaseExePath);
 
   // 4b. SHA256 + size (computed AFTER signing so hash matches the signed binary)
   const hash = sha256(releaseExePath);
@@ -547,6 +576,9 @@ async function main() {
 
   // 5. Create hotfix ZIP from packaged app (for auto-update, no installer overhead)
   const packagedDir = path.join(DESKTOP_ROOT, 'out', `${APP_NAME}-win32-x64`);
+  // 热更 zip 会被 updater 原样落盘,包内主 exe 同样不允许未签名(内部 exe 由
+  // forge make 阶段的 signPackagedExes 签,这里验签兜底)。
+  assertAuthenticodeSigned(path.join(packagedDir, `${APP_NAME}.exe`));
   const hotfixZipName = `${ARTIFACT_BASENAME}-${version}.zip`;
   const hotfixZipPath = path.join(RELEASE_DIR, hotfixZipName);
   console.log('==> Creating hotfix ZIP from packaged app...');
