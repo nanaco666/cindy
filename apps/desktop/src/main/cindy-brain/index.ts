@@ -66,10 +66,7 @@ import {
   migrateFiloGoogleAccounts,
   type LegacyGoogleAccountRow,
 } from './googleAccountsMigration.js';
-import {
-  migrateLegacyBundledFiloGoogleClientConfig,
-  withFiloGoogleBuildClientConfig,
-} from './filoGoogleClientConfig.js';
+import { withFiloGoogleBuildClientConfig } from './filoGoogleClientConfig.js';
 import {
   LEGACY_JIRA_CONNECTION_FILE,
   LEGACY_JIRA_RT_FILE,
@@ -1753,28 +1750,6 @@ export function registerGhostIpc(): void {
   //    的显式例外——作者声明过、装入确认框摊过牌)。刻意排在首次对账之后,新
   //    播种的常驻意识同一趟点火;后续对账装上的由 reconcile 自己点火。
   void app.whenReady().then(() => {
-    // 新仓不再提交 Google OAuth client。播种器覆盖旧内置意识前，先把旧包
-    // 已落在 userData manifest 里的 client 搬进 safeStorage，老账号无感续用。
-    try {
-      const installedManifestPath = path.join(
-        brainRootDir(),
-        FILO_GOOGLE_GHOST_ID,
-        'ghost.json',
-      );
-      const rawInstalledManifest = JSON.parse(fs.readFileSync(installedManifestPath, 'utf-8')) as unknown;
-      const migrated = migrateLegacyBundledFiloGoogleClientConfig(rawInstalledManifest, {
-        read: (ghostId, storageKey) => readGhostSecret(ghostId, storageKey),
-        store: (ghostId, storageKey, value) => storeGhostSecret(ghostId, storageKey, value),
-        remove: (ghostId, storageKey) => removeGhostSecret(ghostId, storageKey),
-      });
-      if (migrated) log.info('filo-google bundled OAuth client migrated to safeStorage');
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-        log.warn('filo-google bundled OAuth client migration skipped', {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
     scheduleBuiltinReconcile('startup');
     onAuthStateChange(() => scheduleBuiltinReconcile('auth-change'));
     builtinReconcileChain = builtinReconcileChain.then(() => {
