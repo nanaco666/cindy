@@ -14,6 +14,7 @@ import type {
 } from '../types.js';
 import type { ScheduleStorage } from '../interfaces/schedule-storage.js';
 import type { FireContext, FireResult, ScheduleRunner } from '../interfaces/schedule-runner.js';
+import type { Logger } from '../interfaces/logger.js';
 
 class InMemoryStorage implements ScheduleStorage {
   schedules = new Map<string, Schedule>();
@@ -165,6 +166,7 @@ function makeHarness(opts?: {
   generateId?: () => string;
   passive?: boolean;
   maxConcurrentRuns?: number;
+  logger?: Logger;
 }): Harness {
   const storage = opts?.storage ?? new InMemoryStorage();
   const clock = opts?.clock ?? new FakeClock();
@@ -187,6 +189,7 @@ function makeHarness(opts?: {
     isManagedWorkspaceDir: opts?.isManagedWorkspaceDir,
     passive: opts?.passive,
     maxConcurrentRuns: opts?.maxConcurrentRuns,
+    logger: opts?.logger,
   });
   return { scheduler, storage, clock, runner, fireCalls };
 }
@@ -1643,6 +1646,45 @@ describe('Scheduler passive mode', () => {
 });
 
 describe('Scheduler preRunHook results', () => {
+  it('前置检查结果落库暂时失败时不覆盖 skip 判定', async () => {
+    const logger: Logger = { warn: vi.fn() };
+    const preRunHookResult: NonNullable<ScheduleRun['preRunHookResult']> = {
+      status: 'skipped',
+      decision: 'skip',
+      exitCode: 2,
+      durationMs: 6,
+      stdout: 'no work',
+      stderr: '',
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      timedOut: false,
+      aborted: false,
+    };
+    const h = makeHarness({
+      logger,
+      runnerImpl: async (_schedule, ctx) => {
+        await ctx.onPreRunHookCompleted?.(preRunHookResult);
+        return { sessionId: '', skipped: true, resultText: 'exit 2: no work' };
+      },
+    });
+    const sch = await h.scheduler.create({ ...baseInput });
+    vi.spyOn(h.storage, 'updateRun').mockRejectedValueOnce(new Error('SQLITE_BUSY'));
+    const failedEvents: unknown[] = [];
+    h.scheduler.on('failed', (event) => failedEvents.push(event));
+
+    const { runId } = await h.scheduler.runNow(sch.id);
+    const run = (await h.scheduler.listRuns(sch.id)).find((item) => item.id === runId);
+
+    expect(run?.status).toBe('skipped');
+    expect(run?.readAt).toBeDefined();
+    expect(run?.preRunHookResult).toBeUndefined();
+    expect(failedEvents).toHaveLength(0);
+    expect(logger.warn).toHaveBeenCalledWith('persist pre-run hook result failed', {
+      runId,
+      error: 'SQLITE_BUSY',
+    });
+  });
+
   it('runNow fail-closed:检查结果在无 session 时仍落库，run 记 failed 且未读', async () => {
     const preRunHookResult: NonNullable<ScheduleRun['preRunHookResult']> = {
       status: 'failed',

@@ -1405,7 +1405,16 @@ export class Scheduler extends EventEmitter {
     runId: string,
   ): (result: PreRunHookRunResult) => Promise<void> {
     return async (result: PreRunHookRunResult) => {
-      await this.storage.updateRun(runId, { preRunHookResult: result });
+      try {
+        await this.storage.updateRun(runId, { preRunHookResult: result });
+      } catch (err) {
+        // 诊断结果落库是 best-effort：短暂 BUSY / I/O 错误不能覆盖已经得到的
+        // run / skip / block 业务判定，最终 run 状态仍由 fire 主流程收敛。
+        this.logger?.warn?.('persist pre-run hook result failed', {
+          runId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     };
   }
 
