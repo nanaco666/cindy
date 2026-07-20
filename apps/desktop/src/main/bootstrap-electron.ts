@@ -3822,10 +3822,12 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     },
   );
 
-  // 安全降级附件“另存为”：源文件必须通过统一路径策略，建议名在 main 侧
-  // 清洗，复制完成后不调用 openPath，避免恢复原扩展名后被自动执行。
+  // 安全降级附件“另存为”：源文件必须通过统一路径策略，解析真实路径后还要
+  // 位于聊天附件/远程文件缓存内；建议名在 main 侧清洗，复制完成后不调用
+  // openPath，避免符号链接越界或恢复原扩展名后被自动执行。
   const saveChatAttachment = createChatAttachmentSaveHandler({
     isPathAllowed,
+    realpath: (filePath) => fs.promises.realpath(filePath),
     stat: (filePath) => fs.promises.stat(filePath),
     copyFile: (sourcePath, targetPath) => fs.promises.copyFile(sourcePath, targetPath),
     showSaveDialog: async (opts) => {
@@ -3836,6 +3838,10 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       return { canceled: result.canceled, filePath: result.filePath || undefined };
     },
     getDownloadsDir: () => app.getPath('downloads'),
+    getAllowedSourceRoots: () => [
+      imageCacheStore.getCacheRoot(),
+      path.join(app.getPath('userData'), 'remote-file-cache'),
+    ],
   });
   ipcMain.handle(
     'chat-attachment:save-as',

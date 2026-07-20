@@ -87,10 +87,12 @@ describe('imageCacheStore.copyFromPath — extension preservation', () => {
     const showSaveDialog = vi.fn(async () => ({ canceled: false, filePath: targetPath }));
     const result = await createChatAttachmentSaveHandler({
       isPathAllowed: () => true,
+      realpath: (filePath) => fs.realpath(filePath),
       stat: (filePath) => fs.stat(filePath),
       copyFile: (from, to) => fs.copyFile(from, to),
       showSaveDialog,
       getDownloadsDir: () => targetDir,
+      getAllowedSourceRoots: () => [imageCacheStore.getCacheRoot()],
     })({ sourcePath: cachedPath, suggestedName: 'setup.exe' });
 
     expect(showSaveDialog).toHaveBeenCalledWith({

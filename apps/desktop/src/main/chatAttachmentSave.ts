@@ -24,10 +24,21 @@ export type ChatAttachmentSaveResult =
 /** “另存为”业务体依赖；生产由 Electron 注入，测试使用内存 fake。 */
 export interface ChatAttachmentSaveDeps {
   isPathAllowed(filePath: string): boolean;
+  realpath(filePath: string): Promise<string>;
   stat(filePath: string): Promise<{ isFile(): boolean }>;
   copyFile(sourcePath: string, targetPath: string): Promise<void>;
   showSaveDialog(opts: { defaultPath: string }): Promise<{ canceled: boolean; filePath?: string }>;
   getDownloadsDir(): string;
+  getAllowedSourceRoots(): readonly string[];
+}
+
+/** 已解析真实路径是否位于某个受控缓存根内（含根自身）。 */
+function isPathInsideRoot(filePath: string, rootPath: string): boolean {
+  const relative = path.relative(rootPath, filePath);
+  return (
+    relative === '' ||
+    (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
+  );
 }
 
 /**
@@ -62,8 +73,40 @@ export function createChatAttachmentSaveHandler(deps: ChatAttachmentSaveDeps) {
       return { status: 'error', code: 'forbidden' };
     }
 
+    let resolvedSourcePath: string;
     try {
-      const stat = await deps.stat(sourcePath);
+      resolvedSourcePath = await deps.realpath(sourcePath);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException | null)?.code;
+      return { status: 'error', code: code === 'ENOENT' ? 'not_found' : 'forbidden' };
+    }
+    if (!deps.isPathAllowed(resolvedSourcePath)) {
+      return { status: 'error', code: 'forbidden' };
+    }
+
+    let sourceIsInControlledCache = false;
+    try {
+      for (const root of deps.getAllowedSourceRoots()) {
+        if (!root || !path.isAbsolute(root)) continue;
+        try {
+          const resolvedRoot = await deps.realpath(root);
+          if (isPathInsideRoot(resolvedSourcePath, resolvedRoot)) {
+            sourceIsInControlledCache = true;
+            break;
+          }
+        } catch {
+          // 未创建或不可访问的缓存根不可能授权当前源文件，继续检查其它根。
+        }
+      }
+    } catch {
+      return { status: 'error', code: 'forbidden' };
+    }
+    if (!sourceIsInControlledCache) {
+      return { status: 'error', code: 'forbidden' };
+    }
+
+    try {
+      const stat = await deps.stat(resolvedSourcePath);
       if (!stat.isFile()) return { status: 'error', code: 'not_file' };
     } catch (err) {
       const code = (err as NodeJS.ErrnoException | null)?.code;
@@ -84,7 +127,8 @@ export function createChatAttachmentSaveHandler(deps: ChatAttachmentSaveDeps) {
     if (dialogResult.canceled || !dialogResult.filePath) return { status: 'canceled' };
 
     try {
-      await deps.copyFile(sourcePath, dialogResult.filePath);
+      // 使用已解析的真实路径复制，避免校验后再次跟随可被替换的源 symlink。
+      await deps.copyFile(resolvedSourcePath, dialogResult.filePath);
       return { status: 'saved', savedPath: dialogResult.filePath };
     } catch {
       return { status: 'error', code: 'copy_failed' };
