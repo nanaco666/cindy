@@ -40,6 +40,8 @@
         "oauth": {
           "authorizeUrl": "https://accounts.google.com/o/oauth2/v2/auth",
           "tokenUrl": "https://oauth2.googleapis.com/token",
+          "clientId": "966060737739-d3dfjdsaace1ur4thk03h3aj4hpnjucq.apps.googleusercontent.com",
+          "clientSecret": "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",
           "scopes": [
             "openid",
             "https://www.googleapis.com/auth/userinfo.email",
