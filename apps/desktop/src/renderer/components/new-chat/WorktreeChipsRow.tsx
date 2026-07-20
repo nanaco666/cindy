@@ -174,9 +174,12 @@ export function WorktreeChipsRow({
 
   // ── 分支 chip 状态 ──
   const currentBranch = detect.data?.currentBranch ?? null;
-  // worktree ON 显源分支;OFF 显仓库当前 HEAD 分支。空(detached / 未探测)则不出 chip。
+  // worktree ON 显源分支,列表加载失败/未返回时回退 'main'(与发送管线的源分支
+  // 回退值一致,也是旧 Advanced popover 的默认显示)—— ON 状态下 chip 是唯一的
+  // 分支入口,绝不能因加载失败而消失。OFF 显仓库当前 HEAD 分支,空(detached /
+  // 未探测)则不出 chip。
   const branchLabel = effectiveWorktreeEnabled
-    ? sourceBranch || branches.current || ''
+    ? sourceBranch || branches.current || 'main'
     : (currentBranch ?? '');
   const showBranchChip = !advancedHidden && !!detect.data?.isGitRepo && branchLabel !== '';
   // 只读场景:worktree 开不了(已在 worktree 内 / 探测中)时 chip 仅展示不弹菜单。
