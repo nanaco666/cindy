@@ -161,8 +161,8 @@ export interface Schedule {
    *   - 首次触发：createdAt + intervalMs
    *   - 周期触发：finishedAt + intervalMs
    *   - 冷启动 / resume：now + intervalMs（不补发漏掉的，重新起 N 倒计时）
-   * 没设（undefined）→ 维持旧 cron 槽位语义；`cronExpr` 仍是这条记录的主表达式
-   * （UI 层 chip 文案、edit 表单回显都用 cronExpr）。
+   * 没设（undefined）→ 维持 cron 槽位语义；`cronExpr` 在 interval 模式下仍保留为
+   * 兼容/显式切回 Cron 时的表达式，但 UI 回显与引擎执行都必须以 intervalMs 为准。
    */
   intervalMs?: number;
   agentKind: AgentKind;
