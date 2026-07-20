@@ -114,8 +114,11 @@ describe('mobile home desktop-first surface', () => {
     );
 
     expect(desktopVendorIconSource).toContain('VendorIcon — sidebar session 行的 vendor + running 状态指示器');
-    // D4-1:Claude/Codex glyph 统一为品牌箭头(BrandArrow),vendor prop 保留兼容。
-    expect(desktopVendorIconSource).toContain('BrandArrow');
+    // 2026-07-19 撤销 D4-1:双端恢复厂商 glyph(Claude AA 字标 / Codex 六瓣),按 vendor 分支渲染
+    // ——箭头统一后依赖图标区分 agent 类型的场景(创建自动化 chips / 侧栏混排)全部失效。
+    expect(desktopVendorIconSource).toContain('ClaudeMark');
+    expect(desktopVendorIconSource).toContain('CodexMark');
+    expect(desktopVendorIconSource).toContain("vendor === 'codex' ? <CodexMark size={size} /> : <ClaudeMark size={size} />");
     expect(desktopVendorIconSource).toContain("vendor: 'cc' | 'codex'");
     expect(desktopVendorIconSource).toContain('session-status-breathing');
     expect(vendorIconSource).not.toContain('XD_SYMBOL_PATHS');
@@ -124,10 +127,10 @@ describe('mobile home desktop-first surface', () => {
     expect(vendorIconSource).toContain('width={size}');
     expect(vendorIconSource).toContain('height={size}');
     expect(vendorIconSource).toContain('viewBox="0 0 24 24"');
-    expect(vendorPathsSource).toContain('BRAND_ARROW_PATH');
-    expect(vendorPathsSource).toContain('M19 10.7224V13.2775L7 22');
-    expect(vendorIconSource).toContain("import { BRAND_ARROW_PATH } from './vendorIconPaths';");
-    expect(vendorIconSource).toContain('void vendor;');
+    expect(vendorPathsSource).toContain('CLAUDE_PATH');
+    expect(vendorPathsSource).toContain('CODEX_PATH');
+    expect(vendorIconSource).toContain("import { CLAUDE_PATH, CODEX_PATH } from './vendorIconPaths';");
+    expect(vendorIconSource).toContain("vendor === 'codex' ? CODEX_PATH : CLAUDE_PATH");
     expect(vendorIconSource).not.toContain('viewBox="136 137 282 158"');
     expect(vendorIconSource).not.toContain('transform="translate(');
     expect(vendorIconSource).toContain('Easing.inOut(Easing.ease)');

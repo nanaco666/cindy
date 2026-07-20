@@ -31,10 +31,10 @@ import fs from 'node:fs';
 import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
 
 import { createBetterSqliteDatabase } from './betterSqliteFactory';
-import { runMigrations } from './migrate';
+import { prepareBackupDiskSpace, pruneMigrationBackupsToBudget, runMigrations } from './migrate';
 import { tryRestoreWithFallback, backupDb, restrictLegacyBackupPermissions } from './backup';
 import { detectSchemaDrift } from './schemaDriftDetector';
-import { repairSchemaDrift } from './schemaDriftRepair';
+import { repairSchemaDriftWithBackup } from './schemaDriftRepair';
 import { reconcileKnownEquivalentMigrationHashes } from './schemaDriftCompatibility';
 import { cleanupStaleOrcaLeadIndex } from './orcaStaleIndexCleanup';
 import { reconcileStrandedOrcaLeads } from './orcaStrandedLeadReconcile';
@@ -347,9 +347,10 @@ export function closeDb(): void {
  *   - release (`app.isPackaged`):仍有未知 drift 时只 log + 推一次性 toast 给 renderer,
  *     不自动改 schema,提示用户升级或联系支持。
  *   - dev (`!app.isPackaged`):
- *       1. 先检测 drift,若有则提前备份(`db.backup .bak.drift-{ISO}`),备份失败不阻断
- *       2. 不管有没有 drift 都跑一次 schemaDriftRepair —— 因为存量 drift(0026 backfill
- *          之前已经偏掉的)hash 检测不出来,需要靠反射兜底
+ *       1. 不管 migration history 是否 drift,先只读生成 schema repair plan —— 因为存量
+ *          drift(0026 backfill 之前已经偏掉的)hash 检测不出来,仍需靠反射兜底
+ *       2. plan 无 DDL → 不备份；plan 有 DDL → 复用 migration 的磁盘预检/配额清理，
+ *          在线备份成功后才 apply，完成后再轮转配额
  *       3. repair 报 residual(改类型/删列等反射修不了的)→ 弹 dev-only 对话框让用户选 nuke
  *
  * 整个流程顶层包 try/catch,自己崩了也不阻塞启动 —— drift 处置本就是辅助路径。
@@ -432,43 +433,62 @@ async function handleSchemaDrift(filePath: string): Promise<void> {
           })),
         }),
       );
-      // best-effort 备份,失败不阻断 repair
-      try {
-        const backupResult = await backupDb(db, filePath);
-        if (typeof backupResult === 'string') {
-          log.warn(
-            JSON.stringify({
-              event: 'localDb.schemaDrift.dev.backup.ok',
-              backupPath: backupResult,
-            }),
-          );
-        }
-      } catch (err) {
-        log.warn(
-          JSON.stringify({
-            event: 'localDb.schemaDrift.dev.backup.failed',
-            error: err instanceof Error ? err.message : String(err),
-          }),
-        );
-      }
     }
 
-    // await backupDb 期间若并发 ensureReady/closeDb 切走了连接,`_db` 已不再是开工时
-    // 的 `db`(被置 null 或换成新连接)。此时旧 `db` 句柄要么已关闭、要么属于别的账号,
-    // 继续跑 repair 只会拿到失效连接 → 误判 residual → 把好库 nuke 掉。直接放弃本轮处置。
-    if (_db !== db) {
+    let diskHint = '';
+    const guardedRepair = await repairSchemaDriftWithBackup(db, {
+      beforeBackup: () => {
+        diskHint = prepareBackupDiskSpace(filePath);
+      },
+      backup: async () => {
+        try {
+          const backupResult = await backupDb(db, filePath);
+          if (typeof backupResult === 'string') {
+            log.warn(
+              JSON.stringify({
+                event: 'localDb.schemaDrift.dev.backup.ok',
+                backupPath: backupResult,
+              }),
+            );
+          }
+          return backupResult;
+        } catch (err) {
+          log.warn(
+            JSON.stringify({
+              event: 'localDb.schemaDrift.dev.backup.failed',
+              error: err instanceof Error ? err.message : String(err),
+            }),
+          );
+          return null;
+        }
+      },
+      isConnectionCurrent: () => _db === db,
+      afterApply: () => {
+        pruneMigrationBackupsToBudget(filePath);
+      },
+    });
+
+    if (guardedRepair.outcome === 'backup-failed') {
       log.warn(
-        JSON.stringify({ event: 'localDb.schemaDrift.connectionChangedDuringDrift' }),
+        JSON.stringify({
+          event: 'localDb.schemaDrift.dev.backup.failed',
+          diskHint,
+          plannedActions: guardedRepair.plan.actions.length,
+        }),
       );
       return;
     }
 
-    // 不管 hash detector 报不报 drift 都跑一次 repair:
-    // 0026 backfill 之前已经偏掉的存量 drift hash 查不出来,只能靠反射兜底。
-    // 无 drift 时 repair 是 no-op(每张表跑一次 PRAGMA 都不缺东西),开销可忽略。
-    const repair = repairSchemaDrift(db);
+    // await backupDb 期间若并发 ensureReady/closeDb 切走了连接,旧句柄可能已关闭或属于
+    // 别的账号；放弃本轮写入，绝不能把基础设施竞态升级成 nuke 提示。
+    if (guardedRepair.outcome === 'connection-changed') {
+      log.warn(JSON.stringify({ event: 'localDb.schemaDrift.connectionChangedDuringDrift' }));
+      return;
+    }
 
-    if (repair.residual.length > 0) {
+    const repair = guardedRepair.report;
+
+    if (repair && repair.residual.length > 0) {
       log.error(
         JSON.stringify({
           event: 'localDb.schemaDrift.dev.residual',

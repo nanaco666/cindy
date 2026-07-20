@@ -13,7 +13,7 @@
  * F-FP-5:   workingDir read-only display
  */
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Profiler, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useLocation, useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -160,6 +160,20 @@ import {
 } from '../../../shared/conversationSearchJump';
 
 const log = createLogger('CCAgentSessionView');
+// perf-baseline(与 MessageStream / sidebar 的 perf/session-switch 探针同通道):
+// stream:profile 记录 MessageStream 子树每次 ≥50ms 的 React commit(phase +
+// actualDuration),与 perf/interaction 的 longtask 时长对齐即可判定长任务
+// 是消耗在 React 渲染内还是渲染外(store 监听器 / 布局等)。
+const perfLog = createLogger('perf/session-switch');
+const onStreamProfile = (
+  _id: string,
+  phase: 'mount' | 'update' | 'nested-update',
+  actualDuration: number,
+): void => {
+  if (actualDuration >= 50) {
+    perfLog.debug(`stream:profile phase=${phase} actual=${Math.round(actualDuration)}ms`);
+  }
+};
 
 interface HandoffFromState {
   kind: 'handoff';
@@ -2229,6 +2243,37 @@ export function CCAgentSessionView({
     </>
   );
 
+  // MessageStream 提成变量:perf/session-switch 的 <Profiler> 是纯诊断,只在 DEV
+  // 包裹(见下方渲染处),生产直接渲染此 el,不引入多余 Profiler fiber。
+  const messageStreamEl = (
+    <MessageStream
+      key={sessionId}
+      sessionId={sessionId}
+      sessionTitle={session?.title ?? null}
+      // 透传 agentKind 让 UserMessage 能按 capabilities.fork / rewind 决定
+      // 消息下方 Fork / Rewind icon 的显示 (Codex rewind=false → 隐藏)。
+      agentKind={session?.agentKind}
+      remoteHostId={session?.remoteHostId ?? null}
+      // text-lightbox-trigger-extension F1/F2: cwd flows from session
+      // owner down through MessageStream → AssistantMessage / UserMessage.
+      // The spec guarantees `session.workingDir` is set; `?? ''` is purely
+      // a TS-narrowing fallback, never expected to fire at runtime.
+      workingDir={session?.workingDir ?? ''}
+      messages={messages}
+      taskUpdates={taskUpdates}
+      isSessionStreaming={isStreaming}
+      onLoadMore={loadOlderMessages}
+      isLoadingMore={isLoadingMore}
+      hasMoreMessages={hasMoreMessages}
+      bottomPadding={overlayHeight}
+      contentWidth={messageWidth}
+      focusMessageClientId={focusedMessageTarget?.clientId ?? null}
+      focusMessageRequestId={focusedMessageTarget?.requestId ?? 0}
+      forkOrigin={forkOrigin}
+      onOpenForkOrigin={handleOpenForkOrigin}
+    />
+  );
+
   const content = (
     // Layout: single scroll container (full height) + sticky input overlay at bottom.
     // FP-7: when the Plan Viewer is expanded/edit, the viewer needs to occupy
@@ -2396,32 +2441,15 @@ export function CCAgentSessionView({
            key={sessionId}: force a full remount on session switch so scroll state,
            refs, and ResizeObservers are fresh — guarantees per-session isolation. */}
       <div className="relative min-h-0 flex-1">
-        <MessageStream
-          key={sessionId}
-          sessionId={sessionId}
-          sessionTitle={session?.title ?? null}
-          // 透传 agentKind 让 UserMessage 能按 capabilities.fork / rewind 决定
-          // 消息下方 Fork / Rewind icon 的显示 (Codex rewind=false → 隐藏)。
-          agentKind={session?.agentKind}
-          remoteHostId={session?.remoteHostId ?? null}
-          // text-lightbox-trigger-extension F1/F2: cwd flows from session
-          // owner down through MessageStream → AssistantMessage / UserMessage.
-          // The spec guarantees `session.workingDir` is set; `?? ''` is purely
-          // a TS-narrowing fallback, never expected to fire at runtime.
-          workingDir={session?.workingDir ?? ''}
-          messages={messages}
-          taskUpdates={taskUpdates}
-          isSessionStreaming={isStreaming}
-          onLoadMore={loadOlderMessages}
-          isLoadingMore={isLoadingMore}
-          hasMoreMessages={hasMoreMessages}
-          bottomPadding={overlayHeight}
-          contentWidth={messageWidth}
-          focusMessageClientId={focusedMessageTarget?.clientId ?? null}
-          focusMessageRequestId={focusedMessageTarget?.requestId ?? 0}
-          forkOrigin={forkOrigin}
-          onOpenForkOrigin={handleOpenForkOrigin}
-        />
+        {/* perf/session-switch 探针纯诊断:仅 DEV 用 Profiler 量 MessageStream commit,
+            生产直接渲染 el(见上方 messageStreamEl),不引入多余 Profiler fiber。 */}
+        {import.meta.env.DEV ? (
+          <Profiler id="message-stream" onRender={onStreamProfile}>
+            {messageStreamEl}
+          </Profiler>
+        ) : (
+          messageStreamEl
+        )}
       </div>
 
       {/* Input overlay — sticky at bottom with gradient fade.

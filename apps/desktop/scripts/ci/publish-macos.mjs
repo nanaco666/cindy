@@ -10,9 +10,9 @@
 //   FP_DEV_OSS_ACCESS_KEY_SECRET   — 阿里云 SK
 //   APPLE_APP_PASSWORD             — Apple 公证密码
 // 可选:
-//   APPLE_ID                       — 默认 jiali@magiclizi.com
-//   APPLE_TEAM_ID                  — 默认 WJ6LYABL8Z
-//   APPLE_SIGN_IDENTITY            — 默认 Developer ID Application: Jiali Liu (WJ6LYABL8Z)
+//   APPLE_ID / APPLE_TEAM_ID / APPLE_SIGN_IDENTITY — 由 release-regions.json 的
+//   macSigning 注入或 env 显式提供(无代码默认值,缺失报错;本脚本属 cn 单渠道
+//   legacy CI 线,默认应用 cn.macSigning)
 //
 // 前置条件:
 //   build-macos.mjs 已执行成功，out/<PACKAGED_APP_NAME>-darwin-<arch>/<PACKAGED_APP_NAME>.app 存在
@@ -40,6 +40,7 @@ import {
   notarizeMacApp,
   createMacDMG,
   PACKAGED_APP_NAME, assertNotPublishingCindyToLegacyChannel } from './lib.mjs';
+import { applyMacSigningConfigToEnv } from './release-regions.mjs';
 
 loadDotenv();
 // 渠道冻结硬闸:Cindy 布局产物禁止发布到老 /xdt-maker 前缀(见 lib.mjs)。
@@ -68,7 +69,9 @@ function parseArgs() {
 
 // ── 环境变量校验 ──────────────────────────────────────────────────────────
 
-// 身份默认值单点在 lib.mjs 的 resolveAppleIdentity(loadDotenv() 之后调用,.env 覆盖生效)。
+// 身份解析单点在 lib.mjs 的 resolveAppleIdentity(零默认值);本脚本是 cn 单渠道
+// legacy CI 线,先应用 cn.macSigning(文件缺失时要求 env 显式提供)。
+applyMacSigningConfigToEnv('cn');
 const { appleId: APPLE_ID, teamId: APPLE_TEAM_ID, signIdentity: SIGN_IDENTITY } = resolveAppleIdentity();
 const APPLE_APP_PASSWORD = process.env.APPLE_APP_PASSWORD;
 

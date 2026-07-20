@@ -11,6 +11,7 @@ import windowStateKeeper from 'electron-window-state';
 import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import { shouldRequestSingleInstanceLock } from './devCliFlags.js';
 import { acquirePassiveDevLock } from './passiveDevLock.js';
+import { markDesktopDevReady, markDesktopDevStartupFailed } from './devStartupStatus';
 
 const PROCESS_STARTED_AT_MS = Date.now();
 
@@ -137,6 +138,8 @@ import {
   REMOTE_IMAGE_MAX_BYTES,
 } from './lightboxMediaActions';
 import { sweepStartupDraftImages } from './imageCacheOrphanSweep';
+import { sweepLegacyDialogueWorkingDirs } from './localDb/dialogueWorkdirSelfHeal';
+import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
 import * as videoCacheStore from './videoCacheStore';
 import { imageSchemePrivilege, registerImageProtocolHandler } from './imageProtocol';
 import { videoSchemePrivilege, registerVideoProtocolHandler } from './videoProtocol';
@@ -1547,6 +1550,11 @@ if (shouldRequestSingleInstanceLock({
 })) {
   const gotTheLock = app.requestSingleInstanceLock();
   if (!gotTheLock) {
+    markDesktopDevStartupFailed(
+      'SINGLE_INSTANCE_OWNED',
+      'Another Cindy instance already owns this userData single-instance lock.',
+      { userDataDir: app.getPath('userData') },
+    );
     app.quit();
   } else {
     app.on('second-instance', (_event, argv) => {
@@ -1599,14 +1607,29 @@ if (shouldRequestSingleInstanceLock({
     startedAtMs: PROCESS_STARTED_AT_MS,
     onCompromised: (reason) => {
       passiveDevLockLog.error('passive dev lock compromised; quitting', { reason });
+      markDesktopDevStartupFailed(
+        'PASSIVE_LOCK_COMPROMISED',
+        'The passive dev lock changed while this instance was running.',
+        { reason, userDataDir },
+      );
       app.quit();
     },
   });
   if (!result.acquired) {
     if (result.reason === 'occupied') {
       passiveDevLockLog.warn('another passive dev instance owns this userData; quitting', result);
+      markDesktopDevStartupFailed(
+        'PASSIVE_USER_DATA_OCCUPIED',
+        'Another passive desktop dev instance already owns this shared userData slot.',
+        { userDataDir, ...(result.ownerPid ? { ownerPid: result.ownerPid } : {}) },
+      );
     } else {
       passiveDevLockLog.error('passive dev lock acquisition failed; quitting', result);
+      markDesktopDevStartupFailed(
+        'PASSIVE_LOCK_ERROR',
+        'The passive desktop dev lock could not be acquired safely.',
+        { userDataDir, error: result.error },
+      );
     }
     app.quit();
   } else {
@@ -1712,7 +1735,7 @@ const createWindow = () => {
       backgroundMaterial: winBackdropConfig.backgroundMaterial,
       backgroundColor: winBackdropConfig.backgroundColor,
     } : {}),
-    ...(process.platform === 'darwin' ? { vibrancy: 'sidebar' as const } : {}),
+    ...(process.platform === 'darwin' ? { vibrancy: 'hud' as const } : {}), // 创建期材质与缺省定稿一致(hud);运行时按主题族经 applyWindowVibrancy 修正
     acceptFirstMouse: !swallowActivationClick,
     ...platformOptions,
     webPreferences: {
@@ -1798,6 +1821,7 @@ const createWindow = () => {
   // Show window only after content is rendered — eliminates theme flash
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    if (!app.isPackaged) markDesktopDevReady();
     // `open` may successfully start the updated process while macOS refuses
     // frontmost activation at the lock/login window. Presentation is not an
     // installation-health signal; retain a one-shot focus grant for unlock.
@@ -4608,6 +4632,22 @@ app.on('ready', async () => {
         await refreshCustomMcpProviders();
       } catch (err) {
         accountSwitchLog.warn('refreshCustomMcpProviders on account switch failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      // 身份翻转遗留的 dialogue 工作目录自愈:把 legacy userData 前缀的
+      // sessions.working_dir 批量改写到当前 userData(详见 dialogueWorkdirSelfHeal.ts)。
+      // 必须 await:ensure-ready IPC 返回后 renderer 才拉会话列表,在此之前改写完
+      // 才能保证 renderer 拿到的就是新路径(改写后不再命中,稳态零开销)。
+      try {
+        await sweepLegacyDialogueWorkingDirs({
+          db: getDbClient(),
+          userDataDir: app.getPath('userData'),
+          legacyUserDataDirNames: BRAND_IDENTITY.legacyUserDataDirNames,
+          log: createLogger('dialogue-workdir-self-heal'),
+        });
+      } catch (err) {
+        dbClientLog.warn('legacy dialogue workdir sweep failed (non-fatal)', {
           error: err instanceof Error ? err.message : String(err),
         });
       }

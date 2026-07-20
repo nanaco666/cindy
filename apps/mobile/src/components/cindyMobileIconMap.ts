@@ -1,10 +1,11 @@
 /**
  * CINDY mobile icon slot map for M1/M2 UI alignment.
  *
- * This is pure metadata: M1 wires BrandArrow; model marks follow the unified
+ * This is pure metadata: M1 wires vendor glyphs; model marks follow the unified
  * gateway-driven rule (CatalogModel.icon from AI Gateway, provider mark fallback,
  * see MobileModelIconMark). Page-level replacement for folder/FAB/action-sheet
  * slots stays in the M2 layout pass.
+ * (2026-07-19 撤销 D4-1:sessionLeadingGlyph 目标从 BrandArrow 回到厂商 glyph。)
  */
 export type CindyMobileIconSlot =
   | 'sessionLeadingGlyph'
@@ -31,7 +32,7 @@ export const cindyMobileIconSpecs: readonly CindyMobileIconSpec[] = [
   {
     slot: 'sessionLeadingGlyph',
     currentAsset: 'MobileVendorIcon Claude/Codex glyph',
-    targetAsset: 'BrandArrow',
+    targetAsset: 'MobileVendorIcon Claude/Codex glyph',
     status: 'wired',
     colorToken: 'textTertiary / statusAccent',
     figmaNode: '301:854 / 301:881 / 301:1077 / 301:1096',

@@ -27,6 +27,7 @@ const startupConfig = applyDesktopDevStartupConfig({ argv: rawArgs, mode: 'remot
 const args = stripDesktopDevRegionArgs(rawArgs);
 const env = {
   ...process.env,
+  XDT_DESKTOP_DEV_MODE: 'remote',
   VITE_CINDY_AUTH_REGION: startupConfig.region,
 };
 const isWindows = process.platform === 'win32';

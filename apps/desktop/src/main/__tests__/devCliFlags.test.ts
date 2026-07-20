@@ -10,6 +10,7 @@ const base = {
   envIsolated: undefined as string | undefined,
   envIsolationName: undefined as string | undefined,
   envDeviceIdOverride: undefined as string | undefined,
+  envSchedulerPassive: undefined as string | undefined,
   envEndpointsCdn: undefined as string | undefined,
 };
 
@@ -30,6 +31,13 @@ describe('resolveDevCliFlags', () => {
     expect(flags.schedulerPassive).toBe(true);
     expect(flags.userDataDirOverride).toBeNull();
     expect(flags.needsIsolatedDeviceId).toBe(false);
+  });
+
+  it('XDT_SCHEDULER_PASSIVE=1 与 --passive 等价，其他字符串不误开启', () => {
+    expect(resolveDevCliFlags({ ...base, envSchedulerPassive: '1' }).schedulerPassive).toBe(true);
+    for (const value of ['0', 'false', 'true']) {
+      expect(resolveDevCliFlags({ ...base, envSchedulerPassive: value }).schedulerPassive).toBe(false);
+    }
   });
 
   it('--isolated 默认沙箱:目录 <userData>-dev,要求派生设备标识,无名字', () => {

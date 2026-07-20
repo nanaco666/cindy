@@ -297,6 +297,9 @@ const fanOutUsageSessionTokensChanged = createIpcFanOut('usage:session-tokens-ch
 // per-message 维度: turn 结束后 main 把该轮费用挂到最后一条 assistant 并推送
 // (MessageActionBar 显示)。payload: { sessionId, clientId, turnCostUsd, turnCostIsEstimate }。
 const fanOutUsageMessageTurnCost = createIpcFanOut('usage:message-turn-cost');
+// per-message 维度: turn 结束检测到模型被上游降级 / 替换时推标记(AssistantMessage
+// 渲染降级提示行)。payload: { sessionId, clientId, modelMismatch: { selected, actual } }。
+const fanOutUsageMessageModelMismatch = createIpcFanOut('usage:message-model-mismatch');
 // FeiShu Bot：状态变化 + 冲突检测 + 注册流程 push channel。
 const fanOutFeishuBotStatusChange = createIpcFanOut('feishuBot:status-change');
 const fanOutFeishuBotConflict = createIpcFanOut('feishuBot:conflict');
@@ -2895,6 +2898,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUsageSessionTokensChanged: fanOutUsageSessionTokensChanged,
   /** 订阅单条消息的 per-turn 费用推送。payload: { sessionId, clientId, turnCostUsd, turnCostIsEstimate }。 */
   onUsageMessageTurnCost: fanOutUsageMessageTurnCost,
+  /** 订阅单条消息的模型降级标记推送。payload: { sessionId, clientId, modelMismatch }。 */
+  onUsageMessageModelMismatch: fanOutUsageMessageModelMismatch,
 
   // ── 首登轻量数据迁移(mToc):老 userData → Cindy 的一次性复制迁移 ──
   // main 在 ensureReady 前推送弹窗阶段;renderer 全局弹窗组件消费。

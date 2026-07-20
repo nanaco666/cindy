@@ -154,6 +154,10 @@ import {
 } from '@/features/scheduler/hooks/useDeleteScheduleWithSessions';
 
 const log = createLogger('CCAgentSidebarUpper');
+// perf-baseline(与 MessageStream 的 perf/session-switch 探针同通道):
+// sidebar:click 打点补上「点击时刻 → stream:mount」这段既有探针的盲区,
+// 三条日志(click / mount / first-paint)按 sid + 时间戳对齐即得端到端耗时。
+const perfLog = createLogger('perf/session-switch');
 
 function makeNewMakerRouteState(workspacePrompt: 'generic' | 'dialogue') {
   return { workspacePrompt };
@@ -1216,6 +1220,7 @@ function ExpandedView({
       markAutomationSessionRunsRead(id);
       clearSystemSessionAttention(id);
       if (id === activeSessionId) return; // No duplicate navigate.
+      if (import.meta.env.DEV) perfLog.debug(`sidebar:click sid=${id}`); // 纯诊断,生产剔除
       const target = sessions.find((s) => s.id === id);
       navigate(await resolveSessionRoute(id, target));
     },

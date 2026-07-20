@@ -40,6 +40,19 @@ export function computeDiffStats(oldStr: string, newStr: string): DiffStat {
   return { add, del };
 }
 
+/** Count additions/deletions in an already-materialized unified diff. */
+export function computeUnifiedDiffStats(raw: string): DiffStat | null {
+  let add = 0;
+  let del = 0;
+  for (const rawLine of raw.split('\n')) {
+    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
+    if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('@@')) continue;
+    if (line.startsWith('+')) add += 1;
+    else if (line.startsWith('-')) del += 1;
+  }
+  return add > 0 || del > 0 ? { add, del } : null;
+}
+
 /**
  * Resolve diff stats from a tool-call (toolName + toolInput).
  * Returns null for tools without a meaningful diff (everything except
@@ -79,6 +92,24 @@ export function statsForToolCall(
       del += s.del;
     }
     return { add, del };
+  }
+
+  if (toolName === 'file_change') {
+    const changes = Array.isArray(inp.changes) ? inp.changes : [];
+    let add = 0;
+    let del = 0;
+    let hasDiff = false;
+    for (const change of changes) {
+      if (!change || typeof change !== 'object') continue;
+      const diff = (change as Record<string, unknown>).diff;
+      if (typeof diff !== 'string') continue;
+      const stats = computeUnifiedDiffStats(diff);
+      if (!stats) continue;
+      hasDiff = true;
+      add += stats.add;
+      del += stats.del;
+    }
+    return hasDiff ? { add, del } : null;
   }
 
   return null;

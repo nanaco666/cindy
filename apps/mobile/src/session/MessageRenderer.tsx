@@ -18,6 +18,7 @@ import {
   Share as ShareIcon,
   Split,
   Timer,
+  TriangleAlert,
   Undo2,
   X,
 } from 'lucide-react-native';
@@ -105,6 +106,7 @@ import {
   formatMessageAbsoluteTime,
   formatMessageRelativeTime,
   formatMessageTurnCostUsd,
+  formatModelShortLabel,
   writeClipboardText,
   type MobileMessageControlActionId,
   type CopyMessageStatus,
@@ -1572,6 +1574,16 @@ function MessageBubble({
       ) : null}
       {attachmentStripNode}
       {hasBubbleContent || (!attachmentStripNode && !leadingQuotes) ? bubble : null}
+      {item.message.kind === 'assistant' && item.message.modelMismatch ? (
+        // 模型降级提示(对齐桌面 AssistantMessage):所选模型本轮被上游静默替换,
+        // 常显在气泡下方,icon 用 warning 橙、文字保持 tertiary 灰阶。
+        <View style={styles.modelMismatchRow} testID="message.modelMismatch">
+          <TriangleAlert color={colors.statusAccent} size={iconSize.xs} strokeWidth={iconStroke.thin} />
+          <Text numberOfLines={2} style={styles.modelMismatchText}>
+            {`本轮由 ${formatModelShortLabel(item.message.modelMismatch.actual) || item.message.modelMismatch.actual} 响应,而非所选的 ${formatModelShortLabel(item.message.modelMismatch.selected) || item.message.modelMismatch.selected}(服务端临时降级)`}
+          </Text>
+        </View>
+      ) : null}
       {hasActions ? (
         <View
           style={[
@@ -4700,6 +4712,18 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     maxWidth: '86%',
   },
   automationOriginText: {
+    color: colors.textTertiary,
+    flexShrink: 1,
+    fontSize: typeScale.caption,
+    lineHeight: lineHeight.caption,
+  },
+  modelMismatchRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+    maxWidth: '86%',
+  },
+  modelMismatchText: {
     color: colors.textTertiary,
     flexShrink: 1,
     fontSize: typeScale.caption,

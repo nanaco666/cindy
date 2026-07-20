@@ -30,6 +30,8 @@ export interface ScheduleBindingBadgeProps {
   /** Timer 图标尺寸,sidebar 10 / header 13。 */
   size?: number;
   className?: string;
+  /** 宿主行处于红胶囊选中态 → Timer 反白(用户规则 2026-07-19:选中态前景与文字同色)。 */
+  activeForeground?: boolean;
 }
 
 /** 单条 schedule 的触发频率文案(与 RunHistoryPane 同源逻辑)。 */
@@ -46,6 +48,7 @@ export function ScheduleBindingBadge({
   schedules,
   size = 10,
   className,
+  activeForeground = false,
 }: ScheduleBindingBadgeProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -76,7 +79,9 @@ export function ScheduleBindingBadge({
             size={size}
             strokeWidth={1.75}
             className={cn(
-              'text-[var(--cmd-palette-item-meta)] hover:text-foreground transition-colors',
+              activeForeground
+                ? 'text-[var(--sidebar-item-active-foreground)]'
+                : 'text-[var(--cmd-palette-item-meta)] hover:text-foreground transition-colors',
               allPaused && 'opacity-60',
             )}
             aria-hidden
@@ -86,8 +91,11 @@ export function ScheduleBindingBadge({
               aria-hidden
               className={cn(
                 'absolute -bottom-1 -right-1 flex size-2.5 items-center justify-center rounded-full',
-                'border border-[var(--cmd-palette-border)]',
-                'bg-[var(--chat-input-chip-bg)] text-[var(--cmd-palette-item-meta)]',
+                // 反白态下角标随红胶囊取色(底=胶囊底遮住 Timer,前景反白),
+                // 否则沿用页面级 chip 配色。
+                activeForeground
+                  ? 'border border-[var(--sidebar-item-active-border)] bg-sidebar-item-active text-[var(--sidebar-item-active-foreground)]'
+                  : 'border border-[var(--cmd-palette-border)] bg-[var(--chat-input-chip-bg)] text-[var(--cmd-palette-item-meta)]',
               )}
             >
               <Pause size={6} strokeWidth={3} />

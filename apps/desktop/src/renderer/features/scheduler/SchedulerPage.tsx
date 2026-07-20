@@ -646,8 +646,8 @@ function EmptyState({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="flex h-full w-full flex-col overflow-y-auto px-8 pt-12 pb-8">
-      <div className="mx-auto flex w-full max-w-[920px] flex-col gap-8">
+    <div className="flex h-full w-full flex-col overflow-y-auto px-8 pt-12 pb-8 [scrollbar-gutter:stable_both-edges]">
+      <div className="mx-auto flex w-full max-w-[800px] flex-col gap-8">
         <div className="flex flex-col items-center gap-3 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--chat-input-chip-bg)]">
             <Clock size={28} strokeWidth={1.5} className="text-[var(--cmd-palette-item-meta)]" />

@@ -100,6 +100,14 @@ export interface CcMeta {
   turnUsageDetails?: TurnUsageDetails;
 
   /**
+   * Host-side 模型降级标记:turn 结束时 main 检测到「所选模型家族在本轮实际
+   * modelUsage 里整轮缺席」(上游静默降级,如 fable-5 高负载被路由到 opus-4-8)
+   * → patch 到该轮收尾 assistant 的 agent_meta(modelMismatchBroadcaster)。
+   * AssistantMessage 据此渲染降级提示行。判定纯函数见 shared/modelMismatch.ts。
+   */
+  modelMismatch?: { selected: string; actual: string };
+
+  /**
    * device-link host-side marker:被控端为满足单帧上限返回了压缩历史内容。
    * 控制端 merge 时用它避免压缩历史覆盖已通过实时 push 收到的完整内容。
    */

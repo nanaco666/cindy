@@ -12,6 +12,7 @@
 // 而 EXPO_PUBLIC_* 是 JS bundle 层注入,不进 fingerprint(实测验证)。
 
 export interface BuildInfoSources {
+  source?: string | null;
   branch?: string | null;
   commit?: string | null;
   version?: string | null;
@@ -20,6 +21,7 @@ export interface BuildInfoSources {
 }
 
 export interface MobileBuildInfo {
+  source: string | null;
   branch: string | null;
   commit: string | null;
   version: string;
@@ -30,6 +32,7 @@ export interface MobileBuildInfo {
 /** 把各路来源(env / Constants)归一成稳定结构;纯函数,便于测试。 */
 export function normalizeBuildInfo(sources: BuildInfoSources): MobileBuildInfo {
   return {
+    source: cleanStr(sources.source),
     branch: cleanStr(sources.branch),
     commit: cleanStr(sources.commit),
     version: cleanStr(sources.version) ?? '0.0.0',
@@ -38,9 +41,9 @@ export function normalizeBuildInfo(sources: BuildInfoSources): MobileBuildInfo {
   };
 }
 
-/** 紧凑单行标签:`branch · v1.0.0 (2026062608) · 127.0.0.1:8082`。 */
+/** 紧凑单行标签:`source · v1.0.0 (2026062608) · 127.0.0.1:8082`。 */
 export function formatMobileBuildLabel(info: MobileBuildInfo): string {
-  const source = info.branch ?? info.commit ?? 'unknown';
+  const source = info.source ?? info.branch ?? info.commit ?? 'unknown';
   const version = info.buildNumber ? `v${info.version} (${info.buildNumber})` : `v${info.version}`;
   const metro = info.metroHost ? ` · ${info.metroHost}` : '';
   return `${source} · ${version}${metro}`;
