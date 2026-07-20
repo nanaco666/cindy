@@ -335,7 +335,10 @@ export function RightSidebarShell({
       {unifiedTopbar ? (
         <div
           data-testid="right-sidebar-unified-topbar"
-          className="relative flex h-[46px] shrink-0 flex-none items-center border-b border-[var(--border-default)] bg-content-area px-2"
+          // bg 走 --panel-bg 与下方 TabBar / Body 同源(2026-07-21 用户裁决:CINDY 下
+          // globals.css 会把 .bg-[var(--panel-bg)] 统一映射到玻璃底,原 bg-content-area
+          // 是不透明灰,导致顶栏与面板体两种底色打架;其他 family 两 token 同为 surface,零变化)。
+          className="relative flex h-[46px] shrink-0 flex-none items-center border-b border-[var(--border-default)] bg-[var(--panel-bg)] px-2"
           style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
         >
           {/* pillVariant="chip":pills 垂直居中的浮动 chip(完整圆角 + 四边框),

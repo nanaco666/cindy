@@ -132,10 +132,11 @@ describe('CINDY · ② 覆盖完备(分母=决策表冻结 exact id 数组)', ()
 
 // ===== ③ 值格式按消费契约 =====
 describe('CINDY · ③ 值格式按消费契约', () => {
-  const HSL_PAT = /^[\d.]+\s+[\d.]+%\s+[\d.]+%$/;
+  // 消费契约是 hsl(var(--x)),CSS Color 4 允许三元组带 `/ alpha`(2026-07-21 玻璃面 hover 半透明化启用)
+  const HSL_PAT = /^[\d.]+\s+[\d.]+%\s+[\d.]+%(\s*\/\s*(0|1|0?\.\d+))?$/;
   const hslSet = new Set<string>(HSL_FORMAT_IDS);
 
-  it('HSL_FORMAT_IDS(42)的 override 必须 HSL 三元组;其余 id 不得误填 HSL', () => {
+  it('HSL_FORMAT_IDS(42)的 override 必须 HSL 三元组(可带 / alpha);其余 id 不得误填 HSL', () => {
     for (const [name, theme] of THEMES) {
       for (const [id, val] of Object.entries(theme.colors)) {
         const isHslSlot = hslSet.has(id);
