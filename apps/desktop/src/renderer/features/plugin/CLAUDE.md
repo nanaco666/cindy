@@ -16,6 +16,7 @@ This module owns the renderer-only Plugin management surface and the shared Plug
 - List/detail adapters expose only manifest and install-record facts. Marketplace metrics or inferred source/location labels are forbidden.
 - Plugin package icons are rendered from `InstalledGhost.iconDataUrl`; packages without one receive a restrained, theme-aware functional symbol selected from local renderer icons. The host does not maintain a parallel brand icon registry.
 - Plugin and Skill retain one shared width, toolbar, search behavior, and transition system through `PluginManagementLayout`.
+- The "团队共享"(enterprise) group is membership-gated: only `useAuth().user.membershipKind === 'org'` renders the enterprise filter tab or lists enterprise-origin entries (catalog and installed shortcuts). Personal or missing identity fails closed to hidden. Detail deep links stay reachable so already-installed enterprise plugins remain manageable.
 
 ## Inventory
 
@@ -31,6 +32,7 @@ This module owns the renderer-only Plugin management surface and the shared Plug
 - `__tests__/GhostPluginCard.test.tsx` — installed/restorable card action coverage.
 - `__tests__/GhostPluginDetailSections.test.tsx` — Tool, permission, and metadata disclosure coverage.
 - `__tests__/ghostSetupGateModel.test.ts` — setup-gate dialog description formatting coverage.
+- `__tests__/ghostPluginViewModel.test.ts` — membership-gated enterprise group visibility coverage.
 
 ## Verification
 

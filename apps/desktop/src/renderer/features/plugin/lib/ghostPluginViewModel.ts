@@ -74,6 +74,25 @@ export function ghostFallbackIconKind(name: string, id: string): GhostFallbackIc
 }
 
 /**
+ * 「团队共享」(enterprise)分组的可见性:仅组织(org)成员登录可见。
+ * 个人版登录或登录态缺失时按不可见处理(fail-closed)——面向组织受众的
+ * 团队共享插件不对个人账号展示筛选 tab 与目录条目。
+ */
+export function showsEnterpriseGhostGroup(
+  membershipKind: 'personal' | 'org' | undefined,
+): boolean {
+  return membershipKind === 'org';
+}
+
+/** 按团队共享可见性裁剪列表:不可见时滤掉 enterprise 来源条目。 */
+export function visibleGhostPluginItems<T extends GhostPluginListItem>(
+  items: readonly T[],
+  showEnterprise: boolean,
+): T[] {
+  return showEnterprise ? [...items] : items.filter((item) => item.origin !== 'enterprise');
+}
+
+/**
  * Applies the Plugin list's search and source semantics in one place so the
  * result list and every source-tab count use the same matching set.
  */

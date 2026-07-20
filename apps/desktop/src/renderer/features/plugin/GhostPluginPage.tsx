@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { toast } from '@/lib/toast';
 import { extractIpcError } from '@/utils/ipcError';
+import { useAuth } from '@/contexts/AuthContext';
 import { useInstalledGhosts } from '@/cindy-brain/useInstalledGhosts';
 import { NEW_MAKER_DRAFT_KEY } from '@/features/cc-agent/newMakerDraftKeys';
 import {
@@ -45,7 +46,9 @@ import {
   toRestorableGhostPluginListItem,
   countGhostPluginOrigins,
   filterGhostPluginItems,
+  showsEnterpriseGhostGroup,
   sortGhostPluginItemsByRecentUse,
+  visibleGhostPluginItems,
   type GhostPluginListItem,
   type GhostPluginOrigin,
 } from './lib/ghostPluginViewModel';
@@ -83,6 +86,10 @@ export function GhostPluginPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { confirm, confirmWithCheckbox } = useConfirmDialog();
+  const { user } = useAuth();
+  // 个人版登录隐藏「团队共享」:tab 不渲染,目录与已安装快捷区不列企业档条目。
+  // 详情深链不拦 —— 存量已装的企业插件仍可进详情停用/卸载,不留不可管理的暗态。
+  const showEnterprise = showsEnterpriseGhostGroup(user?.membershipKind);
   const ghosts = useInstalledGhosts();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -181,8 +188,12 @@ export function GhostPluginPage() {
     [builtinIds, enterpriseIds, ghosts],
   );
   const installedShortcutItems = useMemo(
-    () => sortGhostPluginItemsByRecentUse(installedItems, recentGhostIds),
-    [installedItems, recentGhostIds],
+    () =>
+      sortGhostPluginItemsByRecentUse(
+        visibleGhostPluginItems(installedItems, showEnterprise),
+        recentGhostIds,
+      ),
+    [installedItems, recentGhostIds, showEnterprise],
   );
   const installedIds = useMemo(
     () => new Set(installedItems.map((item) => item.id)),
@@ -202,13 +213,20 @@ export function GhostPluginPage() {
     [builtinStatus.restorable, installedIds],
   );
   const allItems = useMemo(
-    () => [...installedItems, ...restorableItems],
-    [installedItems, restorableItems],
+    () => visibleGhostPluginItems([...installedItems, ...restorableItems], showEnterprise),
+    [installedItems, restorableItems, showEnterprise],
   );
+  const originFilters = useMemo(
+    () => (showEnterprise ? ORIGIN_FILTERS : ORIGIN_FILTERS.filter((f) => f !== 'enterprise')),
+    [showEnterprise],
+  );
+  // tab 隐藏后残留的 enterprise 选中态(如登录身份变化)折算回「全部」。
+  const effectiveOriginFilter =
+    !showEnterprise && originFilter === 'enterprise' ? 'all' : originFilter;
   const searchedItems = useMemo(() => filterGhostPluginItems(allItems, query), [allItems, query]);
   const items = useMemo(
-    () => filterGhostPluginItems(searchedItems, '', originFilter),
-    [originFilter, searchedItems],
+    () => filterGhostPluginItems(searchedItems, '', effectiveOriginFilter),
+    [effectiveOriginFilter, searchedItems],
   );
   const originCounts = useMemo(() => countGhostPluginOrigins(searchedItems), [searchedItems]);
   const selectedGhost = selectedId
@@ -553,8 +571,8 @@ export function GhostPluginPage() {
                 aria-label={t('settings.ghosts.page.filtersAria')}
                 style={WINDOW_NO_DRAG_STYLE}
               >
-                {ORIGIN_FILTERS.map((filter) => {
-                  const selected = originFilter === filter;
+                {originFilters.map((filter) => {
+                  const selected = effectiveOriginFilter === filter;
                   const count = filter === 'all' ? searchedItems.length : originCounts[filter];
                   return (
                     <button
