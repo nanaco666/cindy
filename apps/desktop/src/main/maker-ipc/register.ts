@@ -79,6 +79,7 @@ import {
   getSessionRowSnapshot,
   isUntitledDraftSessionBeforeFirstInput,
   persistSessionFields,
+  persistSessionPermissionModeIfAuto,
 } from '../localDb/ipc/sessions.js';
 // sidebar-card-mode: turn-done 后触发任务现状摘要生成
 import { maybeGenerateSessionTaskSummary } from '../sessionTaskSummary.js';
@@ -2946,8 +2947,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
   const handleClaudeAutoClassifierUnavailable = createClaudeAutoPermissionFallbackCoordinator({
     getSession: (sessionId) => maker.getSession(sessionId),
     getSessionMeta: (sessionId) => maker.getSessionMeta(sessionId),
-    persistPermissionMode: (sessionId, mode) =>
-      persistSessionFields(sessionId, { permissionMode: mode }),
+    persistPermissionModeIfAuto: (sessionId) => persistSessionPermissionModeIfAuto(sessionId),
     broadcast: (event) => broadcastToAllWindows(MAKER_PUSH.AUTO_PERMISSION_FALLBACK, event),
     logger: log,
   });

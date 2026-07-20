@@ -10,8 +10,6 @@ describe('desktop Claude read-only allowlist', () => {
     const tools = getDesktopClaudeReadOnlyAllowedTools();
 
     expect(tools).toEqual(expect.arrayContaining([
-      'WebSearch',
-      'WebFetch',
       'mcp__cindy__ghost_list',
       'mcp__cindy__ghost_forge_guide',
       'mcp__lizi_xdt_helper__list_tools',
@@ -23,6 +21,10 @@ describe('desktop Claude read-only allowlist', () => {
       'Write',
       'Agent',
       'Skill',
+      // 外发网络请求(搜索词/URL 出境),与 maker-core READ_ONLY_CLAUDE_TOOLS 边界一致,
+      // 不免审批(Greptile P1 security)。
+      'WebSearch',
+      'WebFetch',
       'mcp__cindy__ghost_call',
       'mcp__lizi_xdt_helper__call_tool',
       'mcp__lizi_slack__slack_list_tools',

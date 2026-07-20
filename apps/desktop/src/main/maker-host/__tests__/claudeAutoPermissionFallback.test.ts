@@ -44,7 +44,7 @@ function createDeps(overrides: Partial<ClaudeAutoPermissionFallbackDeps> = {}) {
   const deps: ClaudeAutoPermissionFallbackDeps = {
     getSession: vi.fn(() => ({ agentKind: 'claude-code', setPermissionMode })),
     getSessionMeta: vi.fn(async () => ({ permissionMode: 'auto' as const })),
-    persistPermissionMode: vi.fn(async () => {}),
+    persistPermissionModeIfAuto: vi.fn(async () => true),
     broadcast: vi.fn(),
     logger: { info: vi.fn(), warn: vi.fn() },
     ...overrides,
@@ -116,8 +116,9 @@ describe('createClaudeAutoPermissionFallbackCoordinator', () => {
     const order: string[] = [];
     const { deps, setPermissionMode } = createDeps({
       getSessionMeta: vi.fn(async () => ({ permissionMode: 'auto' as const })),
-      persistPermissionMode: vi.fn(async () => {
+      persistPermissionModeIfAuto: vi.fn(async () => {
         order.push('persist');
+        return true;
       }),
       broadcast: vi.fn(() => {
         order.push('broadcast');
@@ -130,7 +131,7 @@ describe('createClaudeAutoPermissionFallbackCoordinator', () => {
 
     await expect(fallback({ sessionId: 'session-1', status: 429 })).resolves.toBe(true);
     expect(order).toEqual(['runtime', 'persist', 'broadcast']);
-    expect(deps.persistPermissionMode).toHaveBeenCalledWith('session-1', 'ask');
+    expect(deps.persistPermissionModeIfAuto).toHaveBeenCalledWith('session-1');
     expect(deps.broadcast).toHaveBeenCalledWith({
       sessionId: 'session-1',
       from: 'auto',
@@ -154,15 +155,16 @@ describe('createClaudeAutoPermissionFallbackCoordinator', () => {
     await expect(fallback({ sessionId: 'session-1', status: 503 })).resolves.toBe(false);
     release();
     await expect(first).resolves.toBe(true);
-    expect(deps.persistPermissionMode).toHaveBeenCalledTimes(1);
+    expect(deps.persistPermissionModeIfAuto).toHaveBeenCalledTimes(1);
   });
 
-  it('does not override a user permission change racing with the fallback', async () => {
+  it('restores the racing user choice when the conditional persist does not apply', async () => {
     const { deps, setPermissionMode } = createDeps({
       getSessionMeta: vi
         .fn()
         .mockResolvedValueOnce({ permissionMode: 'auto' })
         .mockResolvedValueOnce({ permissionMode: 'bypassPermissions' }),
+      persistPermissionModeIfAuto: vi.fn(async () => false),
     });
     const fallback = createClaudeAutoPermissionFallbackCoordinator(deps);
 
@@ -171,7 +173,21 @@ describe('createClaudeAutoPermissionFallbackCoordinator', () => {
       'ask',
       'bypassPermissions',
     ]);
-    expect(deps.persistPermissionMode).not.toHaveBeenCalled();
+    expect(deps.broadcast).not.toHaveBeenCalled();
+  });
+
+  it('keeps runtime at ask without re-push when the racing user choice is also ask', async () => {
+    const { deps, setPermissionMode } = createDeps({
+      getSessionMeta: vi
+        .fn()
+        .mockResolvedValueOnce({ permissionMode: 'auto' })
+        .mockResolvedValueOnce({ permissionMode: 'ask' }),
+      persistPermissionModeIfAuto: vi.fn(async () => false),
+    });
+    const fallback = createClaudeAutoPermissionFallbackCoordinator(deps);
+
+    await expect(fallback({ sessionId: 'session-1', status: 429 })).resolves.toBe(false);
+    expect(setPermissionMode.mock.calls.map(([mode]) => mode)).toEqual(['ask']);
     expect(deps.broadcast).not.toHaveBeenCalled();
   });
 
@@ -199,13 +215,13 @@ describe('createClaudeAutoPermissionFallbackCoordinator', () => {
       }),
     ).resolves.toBe(false);
     expect(notAuto.setPermissionMode).not.toHaveBeenCalled();
-    expect(codex.deps.persistPermissionMode).not.toHaveBeenCalled();
+    expect(codex.deps.persistPermissionModeIfAuto).not.toHaveBeenCalled();
   });
 
   it('rolls runtime back to persisted mode when persistence fails', async () => {
     const { deps, setPermissionMode } = createDeps({
       getSessionMeta: vi.fn(async () => ({ permissionMode: 'auto' as const })),
-      persistPermissionMode: vi.fn(async () => {
+      persistPermissionModeIfAuto: vi.fn(async () => {
         throw new Error('db unavailable');
       }),
     });

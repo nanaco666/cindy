@@ -163,13 +163,16 @@ describe('ClaudeCodeAgent plan mode', () => {
   });
 
   it('passes a session-stable copy of host-owned allowedTools to the local SDK query', async () => {
-    const source = ['WebSearch', 'mcp__cindy__ghost_list'];
+    const source = ['mcp__cindy__ghost_list', 'mcp__lizi_memory__list_tools'];
     const { handle, queryOptions } = await startPlanSession(false, {
       claudeAllowedTools: source,
     });
     source.push('Bash');
 
-    expect(queryOptions.allowedTools).toEqual(['WebSearch', 'mcp__cindy__ghost_list']);
+    expect(queryOptions.allowedTools).toEqual([
+      'mcp__cindy__ghost_list',
+      'mcp__lizi_memory__list_tools',
+    ]);
     expect(queryOptions.allowedTools).not.toBe(source);
     await handle.close();
   });
@@ -180,7 +183,7 @@ describe('ClaudeCodeAgent plan mode', () => {
     const workingDir = await makeTempDir();
     const starts: Array<Record<string, unknown>> = [];
     const fakeQuery = createFakeQuery();
-    const source = ['WebFetch', 'mcp__lizi_xdt_helper__list_tools'];
+    const source = ['mcp__cindy__ghost_forge_guide', 'mcp__lizi_xdt_helper__list_tools'];
 
     const remoteCcQueryFactory: NonNullable<AgentDeps['remoteCcQueryFactory']> = async (args) => {
       starts.push(args.startParams);
@@ -201,7 +204,7 @@ describe('ClaudeCodeAgent plan mode', () => {
 
     expect(starts).toHaveLength(1);
     expect(starts[0]?.allowedTools).toEqual([
-      'WebFetch',
+      'mcp__cindy__ghost_forge_guide',
       'mcp__lizi_xdt_helper__list_tools',
     ]);
     expect(starts[0]?.allowedTools).not.toBe(source);

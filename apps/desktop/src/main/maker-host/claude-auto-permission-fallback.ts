@@ -40,7 +40,11 @@ interface FallbackLogger {
 export interface ClaudeAutoPermissionFallbackDeps {
   getSession(sessionId: string): FallbackSession | undefined;
   getSessionMeta(sessionId: string): Promise<{ permissionMode?: PermissionMode } | null>;
-  persistPermissionMode(sessionId: string, mode: 'ask'): Promise<void>;
+  /**
+   * 条件持久化(SQL 级 compare-and-swap):仅当持久态仍为 'auto' 时写成 'ask'。
+   * 返回 false = 用户并发切到了其它档,写库被放弃,调用方按最新持久态回滚 runtime。
+   */
+  persistPermissionModeIfAuto(sessionId: string): Promise<boolean>;
   broadcast(event: ClaudeAutoPermissionFallbackEvent): void;
   logger: FallbackLogger;
 }
@@ -125,18 +129,18 @@ export function createClaudeAutoPermissionFallbackCoordinator(
       session = deps.getSession(signal.sessionId);
       if (!session || session.agentKind !== 'claude-code') return false;
 
-      // 先切 runtime，立刻阻止 CLI 后续动作继续进入 classifier；随后重新读 DB，
-      // 若用户正好并发手动切档，则恢复到用户选择，不用 fallback 覆盖它。
+      // 先切 runtime，立刻阻止 CLI 后续动作继续进入 classifier；持久化用 SQL 级
+      // 条件写(仅持久态仍为 auto 时命中)，彻底闭合「读到 auto 之后、写库之前用户
+      // 手动切档」的窗口——未命中时以用户刚保存的选择为准恢复 runtime，不广播降级。
       await session.setPermissionMode('ask');
-      const latest = await deps.getSessionMeta(signal.sessionId);
-      if (latest?.permissionMode !== 'auto') {
+      const applied = await deps.persistPermissionModeIfAuto(signal.sessionId);
+      if (!applied) {
+        const latest = await deps.getSessionMeta(signal.sessionId);
         if (latest?.permissionMode && latest.permissionMode !== 'ask') {
           await session.setPermissionMode(latest.permissionMode);
         }
         return false;
       }
-
-      await deps.persistPermissionMode(signal.sessionId, 'ask');
       const event: ClaudeAutoPermissionFallbackEvent = {
         sessionId: signal.sessionId,
         from: 'auto',

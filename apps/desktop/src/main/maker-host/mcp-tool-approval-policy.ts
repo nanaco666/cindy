@@ -6,13 +6,13 @@ import { canAutoApproveContactsMcpTool } from 'lizi-mcps';
 /**
  * Claude Code `options.allowedTools` 的第一方只读白名单。
  *
- * 这里只收录工具整体都无写副作用的精确名称，禁止 wildcard / 前缀匹配：
+ * 这里只收录工具整体都无写副作用、且不外发数据的精确名称，禁止 wildcard / 前缀匹配：
  * progressive `call_tool`、`ghost_call` 等聚合入口的风险取决于内层 action，不能
- * 因 server 属于第一方就粗粒度放行。新增工具默认继续走原权限链，必须 review 后显式加入。
+ * 因 server 属于第一方就粗粒度放行。`WebSearch` / `WebFetch` 虽只读但会把搜索词 / URL
+ * 发往外部服务（exfiltration 面），与 maker-core `READ_ONLY_CLAUDE_TOOLS` 的既有边界
+ * 保持一致，不列入免审批。新增工具默认继续走原权限链，必须 review 后显式加入。
  */
 const DESKTOP_CLAUDE_READ_ONLY_ALLOWED_TOOLS = [
-  'WebSearch',
-  'WebFetch',
   'mcp__cindy__ghost_list',
   'mcp__cindy__ghost_forge_guide',
   'mcp__lizi_browser__list_tools',
