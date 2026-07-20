@@ -879,7 +879,9 @@ export async function patchSessionMetaInDb(
           err: err instanceof Error ? err.message : String(err),
         });
       });
-    // hook 入站附件目录回收: 删 userData/hook-attachments/<sessionId>/
+  }
+  // hook 入站附件目录回收: deleted 与 archived 都是终态, 文件在 turn 送出后即无用。
+  if (patch.status === 'deleted' || patch.status === 'archived') {
     const attachRoot = path.join(app.getPath('userData'), 'hook-attachments');
     const attachDir = path.join(attachRoot, sessionId);
     if (attachDir.startsWith(attachRoot + path.sep)) {
