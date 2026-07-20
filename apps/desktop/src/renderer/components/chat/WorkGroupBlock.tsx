@@ -38,6 +38,13 @@ import { Spinner } from '@/components/ui/spinner';
 import { AgentActionRow } from './AgentActionRow';
 import { ThinkingCard, formatDuration } from './ThinkingCard';
 import { ThinkingText } from './ThinkingText';
+import {
+  projectRecentWorkActivities,
+  projectWorkActivities,
+  type ProjectedThinkingActivity,
+  type ProjectedToolActivity,
+  type ProjectedWorkActivity,
+} from '@/lib/agent-actions/workActivityProjection';
 
 /** work_group 子项的窄类型 — 与 MessageStream 的 RenderItem 解耦,由调用方映射。 */
 export type WorkGroupChild =
@@ -60,15 +67,7 @@ export type WorkGroupChild =
     }
   | { kind: 'rendered'; key: string; renderNode: () => ReactNode };
 
-export type LiveWorkActivity =
-  | {
-      kind: 'tool';
-      key: string;
-      message: ChatMessage;
-      toolResult?: string;
-      status: 'running' | 'done';
-    }
-  | { kind: 'thinking'; key: string; content: string };
+export type LiveWorkActivity = ProjectedWorkActivity;
 
 /** 运行中默认只露出最近 5 条真实活动,与 Slack 远控的滚动窗口同一思路。 */
 export const MAX_LIVE_WORK_ACTIVITIES = 5;
@@ -76,29 +75,12 @@ export const MAX_LIVE_WORK_ACTIVITIES = 5;
 /** 把一段可见 thinking 投影成单行动作;empty / redacted 不生成内容行。 */
 function thinkingActivityForMessage(
   message: ChatMessage,
-): Extract<LiveWorkActivity, { kind: 'thinking' }> | null {
+): ProjectedThinkingActivity | null {
   if (message.thinkingRedacted) return null;
   const content = message.content.replace(/\s+/g, ' ').trim();
   return content
     ? { kind: 'thinking', key: message.clientId, content }
     : null;
-}
-
-/** 工具活动投影同时供 live 最近五条和展开后的完整动作段使用。 */
-function toolActivityForMessage(
-  child: Extract<WorkGroupChild, { kind: 'tools' }>,
-  message: ChatMessage,
-  isStreaming: boolean,
-): Extract<LiveWorkActivity, { kind: 'tool' }> {
-  const done =
-    child.resultMap.has(message.clientId) || child.settledIds.has(message.clientId);
-  return {
-    kind: 'tool',
-    key: message.clientId,
-    message,
-    toolResult: child.resultMap.get(message.clientId),
-    status: isStreaming && !done ? 'running' : 'done',
-  };
 }
 
 /** 把完整 work_group 历史投影成轻量 live preview。rendered assistant 文本
@@ -107,26 +89,7 @@ export function collectLiveWorkActivities(
   childItems: WorkGroupChild[],
   isStreaming: boolean,
 ): LiveWorkActivity[] {
-  const activities: LiveWorkActivity[] = [];
-  // 从尾部反扫,收够 5 条就停。live reasoning 每个 delta 都会触发 renderer
-  // 更新,不能在这条热路径上反复 flatten 整段长历史。
-  for (let childIdx = childItems.length - 1; childIdx >= 0; childIdx--) {
-    const child = childItems[childIdx];
-    if (child.kind === 'tools') {
-      for (let toolIdx = child.toolCalls.length - 1; toolIdx >= 0; toolIdx--) {
-        const message = child.toolCalls[toolIdx];
-        activities.push(toolActivityForMessage(child, message, isStreaming));
-        if (activities.length === MAX_LIVE_WORK_ACTIVITIES) return activities.reverse();
-      }
-      continue;
-    }
-    if (child.kind !== 'thinking') continue;
-    const activity = thinkingActivityForMessage(child.message);
-    if (!activity) continue;
-    activities.push(activity);
-    if (activities.length === MAX_LIVE_WORK_ACTIVITIES) return activities.reverse();
-  }
-  return activities.reverse();
+  return projectRecentWorkActivities(childItems, isStreaming, MAX_LIVE_WORK_ACTIVITIES);
 }
 
 export interface WorkGroupBlockProps {
@@ -141,7 +104,7 @@ export interface WorkGroupBlockProps {
   childItems: WorkGroupChild[];
 }
 
-function ToolActivityRow({ activity }: { activity: Extract<LiveWorkActivity, { kind: 'tool' }> }) {
+function ToolActivityRow({ activity }: { activity: ProjectedToolActivity }) {
   return (
     <div data-live-work-activity="tool" className="min-w-0">
       <AgentActionRow
@@ -149,6 +112,7 @@ function ToolActivityRow({ activity }: { activity: Extract<LiveWorkActivity, { k
         toolResult={activity.toolResult}
         showRawCommand
         status={activity.status}
+        intentOverride={activity.intentOverride}
       />
     </div>
   );
@@ -157,7 +121,7 @@ function ToolActivityRow({ activity }: { activity: Extract<LiveWorkActivity, { k
 function ThinkingActivityRow({
   activity,
 }: {
-  activity: Extract<LiveWorkActivity, { kind: 'thinking' }>;
+  activity: ProjectedThinkingActivity;
 }) {
   return (
     <div
@@ -256,18 +220,17 @@ function ExpandedThinkingRow({ message }: { message: ChatMessage }) {
 /** 同一个子项渲染器递归服务运行态动作组、完成态内层动作组和外层文字时间线。 */
 function ExpandedWorkGroupChild({
   child,
-  parentStreaming,
+  toolActivities,
 }: {
   child: WorkGroupChild;
-  parentStreaming: boolean;
+  toolActivities?: ProjectedToolActivity[];
 }) {
   if (child.kind === 'tools') {
     return (
       <>
-        {child.toolCalls.map((message) => {
-          const activity = toolActivityForMessage(child, message, parentStreaming);
-          return <ToolActivityRow key={activity.key} activity={activity} />;
-        })}
+        {toolActivities?.map((activity) => (
+          <ToolActivityRow key={activity.key} activity={activity} />
+        ))}
       </>
     );
   }
@@ -315,12 +278,18 @@ export function WorkGroupBlock({
   }, [isStreaming, startedAtMs]);
 
   const liveActivities = useMemo(
-    () => collectLiveWorkActivities(childItems, isStreaming),
+    () => projectRecentWorkActivities(childItems, isStreaming, MAX_LIVE_WORK_ACTIVITIES),
     [childItems, isStreaming],
   );
   const isLivePreviewVisible =
     isStreaming && !expanded && !livePreviewDismissed && liveActivities.length > 0;
   const isContentVisible = expanded || isLivePreviewVisible;
+  // 完成态只计算一次完整摘要；运行态保持折叠时走上面的反向 latest-five
+  // 热路径，用户主动展开后才投影全部历史。
+  const activityProjection = useMemo(
+    () => (expanded || !isStreaming ? projectWorkActivities(childItems, isStreaming) : null),
+    [childItems, expanded, isStreaming],
+  );
 
   // 外层完成态组展开成文字 + 内层动作组;内层动作组与运行态组复用本组件,
   // 展开后直接渲染 thinking /工具行,不再多套一层子卡摘要。
@@ -339,11 +308,33 @@ export function WorkGroupBlock({
 
   // durationMs === 0(同毫秒时间戳的极短 run)也显示时长 — formatDuration
   // 自带最小 1s 钳制;只有时间戳缺失(undefined)才退化为无时长文案。
-  const summaryText = isStreaming
+  const baseSummaryText = isStreaming
     ? t('chat.workGroup.working')
     : durationMs !== undefined
       ? t('chat.workGroup.worked', { duration: formatDuration(durationMs) })
       : t('chat.workGroup.workDetails');
+  const explorationSummary = activityProjection?.isPureExploration
+    ? [
+        activityProjection.explorationCounts.read > 0
+          ? t('chat.workGroup.exploration.read', {
+              count: activityProjection.explorationCounts.read,
+            })
+          : null,
+        activityProjection.explorationCounts.search > 0
+          ? t('chat.workGroup.exploration.search', {
+              count: activityProjection.explorationCounts.search,
+            })
+          : null,
+        activityProjection.explorationCounts.list > 0
+          ? t('chat.workGroup.exploration.list', {
+              count: activityProjection.explorationCounts.list,
+            })
+          : null,
+      ].filter((part): part is string => part !== null).join(' · ')
+    : '';
+  const summaryText = explorationSummary
+    ? `${baseSummaryText} · ${explorationSummary}`
+    : baseSummaryText;
 
   return (
     <div className="flex w-full justify-start">
@@ -410,7 +401,14 @@ export function WorkGroupBlock({
           >
             {childItems.map((child) => (
               <Fragment key={child.key}>
-                <ExpandedWorkGroupChild child={child} parentStreaming={isStreaming} />
+                <ExpandedWorkGroupChild
+                  child={child}
+                  toolActivities={
+                    child.kind === 'tools'
+                      ? activityProjection?.toolActivitiesByChildKey.get(child.key)
+                      : undefined
+                  }
+                />
               </Fragment>
             ))}
           </div>
