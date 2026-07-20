@@ -153,11 +153,12 @@ export function registerRecentWorkdirsIpc(): void {
     const normalized = normalizeRecentWorkdirPath(raw);
     if (!normalized) return { deleted: false };
     const db = getDbClient().drizzle;
-    // better-sqlite3 driver 的 DML 结果是 RunResult;经 worker 代理时形态可能
-    // 退化,这里防御性读 changes,读不到就按 0 处理(deleted 仅用于遥测语义)。
+    // 必须显式 .run():worker 代理的 DbClient 对隐式 await 的 DML 走 executeAll,
+    // 会丢弃 RunResult(见 drizzleProxy.test.ts),导致真删了也报 deleted:false。
     const result = (await db
       .delete(recentWorkdirs)
-      .where(eq(recentWorkdirs.path, normalized))) as unknown as { changes?: number } | undefined;
+      .where(eq(recentWorkdirs.path, normalized))
+      .run()) as { changes?: number } | undefined;
     const deleted = (result?.changes ?? 0) > 0;
     log.info('[localDb] recent workdir removed by user', { path: normalized, deleted });
     return { deleted };

@@ -231,6 +231,9 @@ export function FolderPickerPopover({
                     <button
                       type="button"
                       aria-label={t('newChat.folderPicker.removeFromList')}
+                      // 键盘事件也要拦:Enter/Space 的 keydown 会先冒泡到外层
+                      // div[role=button] 触发"选中项目",必须在按钮层截断。
+                      onKeyDown={(e) => e.stopPropagation()}
                       onClick={(e) => {
                         e.stopPropagation();
                         void recentWorkdirsStore.remove(project.path);
