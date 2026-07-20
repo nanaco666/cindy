@@ -5,6 +5,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { pathToFileURL } from 'node:url';
+import { pipeline } from 'node:stream/promises';
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { machineIdSync } from 'node-machine-id';
 import windowStateKeeper from 'electron-window-state';
@@ -3828,8 +3829,21 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
   const saveChatAttachment = createChatAttachmentSaveHandler({
     isPathAllowed,
     realpath: (filePath) => fs.promises.realpath(filePath),
-    stat: (filePath) => fs.promises.stat(filePath),
-    copyFile: (sourcePath, targetPath) => fs.promises.copyFile(sourcePath, targetPath),
+    stat: (filePath) => fs.promises.stat(filePath, { bigint: true }),
+    openSource: async (filePath) => {
+      const noFollow = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
+      const handle = await fs.promises.open(filePath, fs.constants.O_RDONLY | noFollow);
+      return {
+        stat: () => handle.stat({ bigint: true }),
+        copyTo: async (targetPath) => {
+          await pipeline(
+            handle.createReadStream({ autoClose: false, start: 0 }),
+            fs.createWriteStream(targetPath),
+          );
+        },
+        close: () => handle.close(),
+      };
+    },
     showSaveDialog: async (opts) => {
       const targetWin = getWindow() ?? BrowserWindow.getFocusedWindow();
       const result = targetWin

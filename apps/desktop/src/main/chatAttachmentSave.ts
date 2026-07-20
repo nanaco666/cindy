@@ -21,12 +21,26 @@ export type ChatAttachmentSaveResult =
   | { status: 'canceled' }
   | { status: 'error'; code: ChatAttachmentSaveErrorCode };
 
+/** 用于确认“校验过的路径”和“实际打开的句柄”仍指向同一文件对象。 */
+export interface ChatAttachmentSourceStat {
+  dev: bigint;
+  ino: bigint;
+  isFile(): boolean;
+}
+
+/** 已打开的只读源文件；复制必须复用该句柄，不能再次按路径名打开。 */
+export interface ChatAttachmentOpenedSource {
+  stat(): Promise<ChatAttachmentSourceStat>;
+  copyTo(targetPath: string): Promise<void>;
+  close(): Promise<void>;
+}
+
 /** “另存为”业务体依赖；生产由 Electron 注入，测试使用内存 fake。 */
 export interface ChatAttachmentSaveDeps {
   isPathAllowed(filePath: string): boolean;
   realpath(filePath: string): Promise<string>;
-  stat(filePath: string): Promise<{ isFile(): boolean }>;
-  copyFile(sourcePath: string, targetPath: string): Promise<void>;
+  stat(filePath: string): Promise<ChatAttachmentSourceStat>;
+  openSource(filePath: string): Promise<ChatAttachmentOpenedSource>;
   showSaveDialog(opts: { defaultPath: string }): Promise<{ canceled: boolean; filePath?: string }>;
   getDownloadsDir(): string;
   getAllowedSourceRoots(): readonly string[];
@@ -39,6 +53,14 @@ function isPathInsideRoot(filePath: string, rootPath: string): boolean {
     relative === '' ||
     (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
   );
+}
+
+/** `dev + ino` 是已打开句柄与校验时文件对象之间的稳定身份；0 inode fail closed。 */
+function isSameFileObject(
+  expected: ChatAttachmentSourceStat,
+  actual: ChatAttachmentSourceStat,
+): boolean {
+  return expected.ino !== 0n && expected.dev === actual.dev && expected.ino === actual.ino;
 }
 
 /**
@@ -105,9 +127,11 @@ export function createChatAttachmentSaveHandler(deps: ChatAttachmentSaveDeps) {
       return { status: 'error', code: 'forbidden' };
     }
 
+    let validatedSourceStat: ChatAttachmentSourceStat;
     try {
       const stat = await deps.stat(resolvedSourcePath);
       if (!stat.isFile()) return { status: 'error', code: 'not_file' };
+      validatedSourceStat = stat;
     } catch (err) {
       const code = (err as NodeJS.ErrnoException | null)?.code;
       return { status: 'error', code: code === 'ENOENT' ? 'not_found' : 'not_file' };
@@ -126,12 +150,24 @@ export function createChatAttachmentSaveHandler(deps: ChatAttachmentSaveDeps) {
     }
     if (dialogResult.canceled || !dialogResult.filePath) return { status: 'canceled' };
 
+    let openedSource: ChatAttachmentOpenedSource | null = null;
     try {
-      // 使用已解析的真实路径复制，避免校验后再次跟随可被替换的源 symlink。
-      await deps.copyFile(resolvedSourcePath, dialogResult.filePath);
+      openedSource = await deps.openSource(resolvedSourcePath);
+      const openedStat = await openedSource.stat();
+      if (!openedStat.isFile()) return { status: 'error', code: 'not_file' };
+      if (!isSameFileObject(validatedSourceStat, openedStat)) {
+        return { status: 'error', code: 'forbidden' };
+      }
+      // 从已经 fstat 核对过的同一文件句柄流式复制，杜绝再次按路径名打开。
+      await openedSource.copyTo(dialogResult.filePath);
       return { status: 'saved', savedPath: dialogResult.filePath };
-    } catch {
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException | null)?.code;
+      if (code === 'ENOENT') return { status: 'error', code: 'not_found' };
+      if (code === 'ELOOP') return { status: 'error', code: 'forbidden' };
       return { status: 'error', code: 'copy_failed' };
+    } finally {
+      if (openedSource) await openedSource.close().catch(() => undefined);
     }
   };
 }

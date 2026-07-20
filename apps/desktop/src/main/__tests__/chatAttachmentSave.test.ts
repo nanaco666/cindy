@@ -5,14 +5,31 @@ import {
   createChatAttachmentSaveHandler,
   sanitizeAttachmentSaveName,
   type ChatAttachmentSaveDeps,
+  type ChatAttachmentOpenedSource,
+  type ChatAttachmentSourceStat,
 } from '../chatAttachmentSave';
+
+function fileStat(dev = 1n, ino = 1n): ChatAttachmentSourceStat {
+  return { dev, ino, isFile: () => true };
+}
+
+function openedSource(
+  overrides: Partial<ChatAttachmentOpenedSource> = {},
+): ChatAttachmentOpenedSource {
+  return {
+    stat: vi.fn(async () => fileStat()),
+    copyTo: vi.fn(async () => {}),
+    close: vi.fn(async () => {}),
+    ...overrides,
+  };
+}
 
 function makeDeps(overrides: Partial<ChatAttachmentSaveDeps> = {}): ChatAttachmentSaveDeps {
   return {
     isPathAllowed: () => true,
     realpath: vi.fn(async (filePath) => filePath),
-    stat: vi.fn(async () => ({ isFile: () => true })),
-    copyFile: vi.fn(async () => {}),
+    stat: vi.fn(async () => fileStat()),
+    openSource: vi.fn(async () => openedSource()),
     showSaveDialog: vi.fn(async ({ defaultPath }) => ({
       canceled: false,
       filePath: `${defaultPath}.saved`,
@@ -34,7 +51,8 @@ describe('sanitizeAttachmentSaveName', () => {
 
 describe('createChatAttachmentSaveHandler', () => {
   it('restores the sanitized original name for a .bin cache file without opening it', async () => {
-    const deps = makeDeps();
+    const source = openedSource();
+    const deps = makeDeps({ openSource: vi.fn(async () => source) });
     const sourcePath = path.resolve('cache', 'random.bin');
     const result = await createChatAttachmentSaveHandler(deps)({
       sourcePath,
@@ -43,7 +61,9 @@ describe('createChatAttachmentSaveHandler', () => {
 
     const defaultPath = path.join(path.resolve('downloads'), 'setup.exe');
     expect(deps.showSaveDialog).toHaveBeenCalledWith({ defaultPath });
-    expect(deps.copyFile).toHaveBeenCalledWith(sourcePath, `${defaultPath}.saved`);
+    expect(deps.openSource).toHaveBeenCalledWith(sourcePath);
+    expect(source.copyTo).toHaveBeenCalledWith(`${defaultPath}.saved`);
+    expect(source.close).toHaveBeenCalledOnce();
     expect(result).toEqual({ status: 'saved', savedPath: `${defaultPath}.saved` });
   });
 
@@ -54,7 +74,7 @@ describe('createChatAttachmentSaveHandler', () => {
       suggestedName: 'setup.exe',
     });
     expect(result).toEqual({ status: 'canceled' });
-    expect(deps.copyFile).not.toHaveBeenCalled();
+    expect(deps.openSource).not.toHaveBeenCalled();
   });
 
   it('rejects relative, forbidden, missing, and non-file sources before opening the dialog', async () => {
@@ -88,7 +108,9 @@ describe('createChatAttachmentSaveHandler', () => {
       }),
     ).resolves.toEqual({ status: 'error', code: 'not_found' });
 
-    const directory = makeDeps({ stat: vi.fn(async () => ({ isFile: () => false })) });
+    const directory = makeDeps({
+      stat: vi.fn(async () => ({ ...fileStat(), isFile: () => false })),
+    });
     await expect(
       createChatAttachmentSaveHandler(directory)({
         sourcePath: path.resolve('cache', 'folder'),
@@ -135,9 +157,11 @@ describe('createChatAttachmentSaveHandler', () => {
     const cacheRoot = path.resolve('cache');
     const symlinkPath = path.join(cacheRoot, 'attachment.bin');
     const resolvedPath = path.join(cacheRoot, 'real-attachment.bin');
+    const source = openedSource();
     const deps = makeDeps({
       getAllowedSourceRoots: () => [cacheRoot],
       realpath: vi.fn(async (filePath) => (filePath === symlinkPath ? resolvedPath : filePath)),
+      openSource: vi.fn(async () => source),
     });
 
     const result = await createChatAttachmentSaveHandler(deps)({
@@ -147,8 +171,27 @@ describe('createChatAttachmentSaveHandler', () => {
 
     const targetPath = `${path.join(path.resolve('downloads'), 'setup.exe')}.saved`;
     expect(deps.stat).toHaveBeenCalledWith(resolvedPath);
-    expect(deps.copyFile).toHaveBeenCalledWith(resolvedPath, targetPath);
+    expect(deps.openSource).toHaveBeenCalledWith(resolvedPath);
+    expect(source.copyTo).toHaveBeenCalledWith(targetPath);
     expect(result).toEqual({ status: 'saved', savedPath: targetPath });
+  });
+
+  it('rejects a source replaced after validation and never copies from the new file object', async () => {
+    const replacement = openedSource({ stat: vi.fn(async () => fileStat(1n, 2n)) });
+    const deps = makeDeps({
+      stat: vi.fn(async () => fileStat(1n, 1n)),
+      openSource: vi.fn(async () => replacement),
+    });
+
+    await expect(
+      createChatAttachmentSaveHandler(deps)({
+        sourcePath: path.resolve('cache', 'attachment.bin'),
+        suggestedName: 'setup.exe',
+      }),
+    ).resolves.toEqual({ status: 'error', code: 'forbidden' });
+
+    expect(replacement.copyTo).not.toHaveBeenCalled();
+    expect(replacement.close).toHaveBeenCalledOnce();
   });
 
   it('reports dialog and copy failures without claiming a save', async () => {
@@ -164,10 +207,13 @@ describe('createChatAttachmentSaveHandler', () => {
       }),
     ).resolves.toEqual({ status: 'error', code: 'dialog_failed' });
 
-    const copyFailure = makeDeps({
-      copyFile: vi.fn(async () => {
+    const copyFailureSource = openedSource({
+      copyTo: vi.fn(async () => {
         throw new Error('EACCES');
       }),
+    });
+    const copyFailure = makeDeps({
+      openSource: vi.fn(async () => copyFailureSource),
     });
     await expect(
       createChatAttachmentSaveHandler(copyFailure)({
@@ -175,5 +221,6 @@ describe('createChatAttachmentSaveHandler', () => {
         suggestedName: 'a.exe',
       }),
     ).resolves.toEqual({ status: 'error', code: 'copy_failed' });
+    expect(copyFailureSource.close).toHaveBeenCalledOnce();
   });
 });

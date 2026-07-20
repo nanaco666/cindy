@@ -7,7 +7,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'node:path';
 import os from 'node:os';
+import { pipeline } from 'node:stream/promises';
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { createChatAttachmentSaveHandler } from '../chatAttachmentSave';
 
@@ -88,8 +90,19 @@ describe('imageCacheStore.copyFromPath — extension preservation', () => {
     const result = await createChatAttachmentSaveHandler({
       isPathAllowed: () => true,
       realpath: (filePath) => fs.realpath(filePath),
-      stat: (filePath) => fs.stat(filePath),
-      copyFile: (from, to) => fs.copyFile(from, to),
+      stat: (filePath) => fs.stat(filePath, { bigint: true }),
+      openSource: async (filePath) => {
+        const handle = await fs.open(filePath, fsSync.constants.O_RDONLY);
+        return {
+          stat: () => handle.stat({ bigint: true }),
+          copyTo: (to) =>
+            pipeline(
+              handle.createReadStream({ autoClose: false, start: 0 }),
+              fsSync.createWriteStream(to),
+            ),
+          close: () => handle.close(),
+        };
+      },
       showSaveDialog,
       getDownloadsDir: () => targetDir,
       getAllowedSourceRoots: () => [imageCacheStore.getCacheRoot()],
