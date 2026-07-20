@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { join } from 'node:path';
+
 import {
   resolveDevCliFlags,
+  resolveSingleInstanceLockUserDataDir,
   shouldEnforcePassiveMigrationCompatibility,
   shouldRequestSingleInstanceLock,
 } from '../devCliFlags';
@@ -264,5 +267,39 @@ describe('shouldRequestSingleInstanceLock', () => {
     expect(shouldRequestSingleInstanceLock({ isPackaged: true, schedulerPassive: true })).toBe(
       true,
     );
+  });
+});
+
+describe('resolveSingleInstanceLockUserDataDir', () => {
+  const userDataDir = join('/AppData', 'Cindy');
+
+  it('packaged 锁真实 userData(release 之间单实例)', () => {
+    expect(resolveSingleInstanceLockUserDataDir({ isPackaged: true, userDataDir })).toBe(
+      userDataDir,
+    );
+  });
+
+  it('dev 锁独立子目录,与共库的 packaged 分域互不阻塞', () => {
+    const devScope = resolveSingleInstanceLockUserDataDir({ isPackaged: false, userDataDir });
+    expect(devScope).toBe(join(userDataDir, 'dev-single-instance-lock'));
+    // 与 packaged 的锁域必须不同——dev + release 共享 userData 双开是明确支持的工作流。
+    expect(devScope).not.toBe(
+      resolveSingleInstanceLockUserDataDir({ isPackaged: true, userDataDir }),
+    );
+  });
+
+  it('dev 之间同一 userData 得到同一锁域(深链 second-instance 去重仍有效)', () => {
+    const a = resolveSingleInstanceLockUserDataDir({ isPackaged: false, userDataDir });
+    const b = resolveSingleInstanceLockUserDataDir({ isPackaged: false, userDataDir });
+    expect(a).toBe(b);
+  });
+
+  it('isolated 沙箱 userData 独立,锁域随之独立', () => {
+    const sandbox = resolveSingleInstanceLockUserDataDir({
+      isPackaged: false,
+      userDataDir: join('/AppData', 'Cindy-dev-foo'),
+    });
+    expect(sandbox).toBe(join('/AppData', 'Cindy-dev-foo', 'dev-single-instance-lock'));
+    expect(sandbox).not.toBe(resolveSingleInstanceLockUserDataDir({ isPackaged: false, userDataDir }));
   });
 });
