@@ -35,10 +35,14 @@ describe('cnPhone(手机号登录固定 +86)', () => {
     );
   });
 
-  it('完整性校验只认恰好 11 位', () => {
+  it('完整性校验:恰好 11 位且命中大陆手机号段(1[3-9] 开头)', () => {
     expect(isCompleteCnPhone('13812345678')).toBe(true);
+    expect(isCompleteCnPhone('19912345678')).toBe(true);
     expect(isCompleteCnPhone('1381234567')).toBe(false);
     expect(isCompleteCnPhone('')).toBe(false);
+    // 11 位但号段非法:86 开头(误当区号)、12x 非手机号段——本地拦截,不发给服务端
+    expect(isCompleteCnPhone('86123456789')).toBe(false);
+    expect(isCompleteCnPhone('12345678901')).toBe(false);
   });
 
   it('提交号码拼回 +86 前缀', () => {
