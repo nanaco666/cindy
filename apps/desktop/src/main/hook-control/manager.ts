@@ -60,6 +60,8 @@ export interface HookControlManagerDeps {
   createTransport: (opts: HookTransportOpts) => HookTransport;
   /** 登录 accessToken 源(transport 每次建连实时取; null = 未登录)。 */
   getAuthToken: () => Promise<string | null>;
+  /** upgrade 401 后强制刷新一次登录凭证；成功后 transport 立即重连。 */
+  refreshAuthToken: () => Promise<boolean>;
   /** hello 用的设备身份(authManager deviceId + hostname)。 */
   deviceInfo: () => { deviceId: string; deviceName: string };
   /** hello 声明的可用 agent 类型。 */
@@ -260,6 +262,8 @@ function toViewStatus(s: HookTransportStatus | null, enabled: boolean): HookConn
   switch (s) {
     case 'connected':
       return 'connected';
+    case 'standby':
+      return 'standby';
     case 'error':
       return 'error';
     case 'stopped':
@@ -275,6 +279,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     store,
     createTransport,
     getAuthToken,
+    refreshAuthToken,
     deviceInfo,
     agents,
     notifyStatus,
@@ -1134,6 +1139,7 @@ export function createHookControlManager(deps: HookControlManagerDeps): HookCont
     created = createTransport({
       url: store.effectiveUrl(),
       getAuthToken,
+      refreshAuthToken,
       buildHello,
       onMessage: handleBusinessMessage,
       onWelcome: (payload) => {

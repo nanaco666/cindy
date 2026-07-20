@@ -1,4 +1,5 @@
 import { basenameRemotePath } from './filePreview.js';
+import { normalizeDisplayCommand } from './commandDisplay.js';
 import {
   commandIntentFromActions,
   commandIntentFromCommand,
@@ -16,7 +17,7 @@ import {
  * - Claude Code：toolName 为 SDK 原名（Bash/Read/...，MCP 为 `mcp__server__tool`），
  *   input 全量透传；Bash 的 `description` 是模型每次调用填写的一句话描述。
  * - Codex：shell 工具 toolName='exec'（input 无 description，`displayCommand`
- *   是解包 PowerShell wrapper 后的展示命令）；MCP 为 `mcp:server:tool`，另有
+ *   是解包 POSIX / PowerShell wrapper 后的展示命令）；MCP 为 `mcp:server:tool`，另有
  *   `dynamic:ns:tool` / `collab:tool` / `web_search`。
  */
 
@@ -96,6 +97,18 @@ export type ToolUseDescriptor =
       action: 'read' | 'edit' | 'create';
       filePath: string;
       fileName: string;
+    }
+  | {
+      kind: 'fileChange';
+      toolName: string;
+      changes: Array<{
+        action: 'add' | 'delete' | 'update' | 'move' | 'unknown';
+        path: string;
+        fileName: string;
+        movePath?: string;
+        moveFileName?: string;
+        diff: string;
+      }>;
     }
   | {
       kind: 'search';
@@ -224,7 +237,10 @@ export function describeToolUse(toolName: string, input: unknown): ToolUseDescri
     }
     case 'exec': {
       // codex shell：displayCommand 是解包 wrapper 后的展示命令，优先。
-      const command = readNonEmptyString(inp?.displayCommand) ?? readNonEmptyString(inp?.command) ?? '';
+      const rawCommand = readNonEmptyString(inp?.command) ?? '';
+      const command = readNonEmptyString(inp?.displayCommand)
+        ?? normalizeDisplayCommand(rawCommand)
+        ?? rawCommand;
       // codex 官方 commandActions（translator 透传）优先,本地规则解析兜底。
       // 完整命令一并传入:commandActions 采纳前先过同一道形态安全闸
       // (防止 `cat a | tee b` 这类后段副作用绕过,见 commandIntent 注释)。
@@ -232,6 +248,8 @@ export function describeToolUse(toolName: string, input: unknown): ToolUseDescri
         commandIntentFromActions(inp?.commandActions, command) ?? commandIntentFromCommand(command);
       return { kind: 'command', toolName, command, ...withCwd(inp), ...(intent ? { intent } : {}) };
     }
+    case 'file_change':
+      return fileChangeDescriptor(toolName, inp);
     case 'Read':
       return fileDescriptor(toolName, 'read', inp);
     case 'Edit':
@@ -300,6 +318,56 @@ function fileDescriptor(
     filePath,
     fileName: basenameRemotePath(filePath) || filePath,
   };
+}
+
+/**
+ * Codex file_change 一次可以携带多个文件；这里只把协议形态收敛成稳定的
+ * 展示模型。任一 change 缺关键字段时整次降级 generic，避免 UI 只展示半套
+ * 变更而让用户误以为剩余文件没有被修改。
+ */
+function fileChangeDescriptor(
+  toolName: string,
+  inp: Record<string, unknown> | null,
+): ToolUseDescriptor {
+  if (!Array.isArray(inp?.changes) || inp.changes.length === 0) {
+    return genericDescriptor(toolName, inp);
+  }
+
+  const changes: Extract<ToolUseDescriptor, { kind: 'fileChange' }>['changes'] = [];
+  for (const rawChange of inp.changes) {
+    const change = readRecord(rawChange);
+    const kind = readRecord(change?.kind);
+    const path = readNonEmptyString(change?.path);
+    const kindType = readNonEmptyString(kind?.type);
+    if (!change || !kind || !path || !kindType || typeof change.diff !== 'string') {
+      return genericDescriptor(toolName, inp);
+    }
+
+    const movePath = readNonEmptyString(kind.move_path)
+      ?? readNonEmptyString(kind.movePath)
+      ?? readNonEmptyString(change.move_path)
+      ?? readNonEmptyString(change.movePath);
+    const action = movePath
+      ? 'move'
+      : kindType === 'add' || kindType === 'delete' || kindType === 'update'
+        ? kindType
+        : 'unknown';
+
+    changes.push({
+      action,
+      path,
+      fileName: basenameRemotePath(path) || path,
+      ...(movePath
+        ? {
+            movePath,
+            moveFileName: basenameRemotePath(movePath) || movePath,
+          }
+        : {}),
+      diff: change.diff,
+    });
+  }
+
+  return { kind: 'fileChange', toolName, changes };
 }
 
 function genericDescriptor(toolName: string, inp: Record<string, unknown> | null): ToolUseDescriptor {

@@ -45,7 +45,7 @@ import { Check, ChevronDown, ChevronRight, File as FileIcon } from 'lucide-react
 import { useTranslation } from 'react-i18next';
 import {
   describeToolUse,
-  truncateToolText,
+  normalizeDisplayCommand,
   type ToolUseDescriptor,
 } from '@lizi/maker-shared';
 
@@ -54,6 +54,7 @@ import { Spinner } from '@/components/ui/spinner';
 import type { ChatMessage } from '@/lib/makerChatStore';
 import { verbForTool, verbLabelKeyForIntent, verbLabelKeyForRow } from '@/lib/agent-actions/verbAggregator';
 import { statsForToolCall } from '@/lib/agent-actions/diffStats';
+import { extractDisplayParam } from '@/lib/agent-actions/actionPresentation';
 import { SUPPORTED_IMAGE_EXTS, extractExt } from '@/lib/fileTypes';
 import { toLocalFileUrl } from '@/lib/localPathResolver';
 import { isBrowserOpenablePath } from '../../../shared/browserOpenableExts';
@@ -68,7 +69,6 @@ import { TextLightbox } from './TextLightbox';
 import { ToolPayloadLightbox, type ToolPayloadMode } from './ToolPayloadLightbox';
 import { useFileChipContextMenu } from './useFileChipContextMenu';
 
-const DIFF_TOOLS = new Set(['Edit', 'Write', 'MultiEdit']);
 const FILE_PATH_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'Read']);
 
 /**
@@ -440,7 +440,8 @@ export function extractToolResultImageUrls(toolResult: string): string[] {
 
 function commandDisplayText(inp: Record<string, unknown>): string {
   if (typeof inp.displayCommand === 'string') return inp.displayCommand;
-  return typeof inp.command === 'string' ? inp.command : '';
+  if (typeof inp.command !== 'string') return '';
+  return normalizeDisplayCommand(inp.command) ?? inp.command;
 }
 
 function formatInlineInput(
@@ -496,110 +497,74 @@ function formatInlineInput(
   }
 }
 
-interface DisplayParam {
-  text: string;
-  fullTitle?: string;
-}
+type FileChangeDescriptor = Extract<ToolUseDescriptor, { kind: 'fileChange' }>;
 
 /**
- * issue #450 — 行主文案从「原始命令 / 生硬工具名」换成人话形态:
- *   - command 带 description(Claude Code Bash):主文案 = 模型写的一句话
- *     描述,hover title = 命令原文;codex exec / 老消息无 description 时回退
- *     命令截断展示。
- *   - MCP / dynamic / collab:`server · tool`(U+00B7 分隔,下划线转空格),
- *     hover title = 原始 toolName(+ input 里抽出的 detail)。
- *   - 文件 / 搜索 / Web 类:参数本身已是最可读形态,维持原样。
+ * Normalize Claude Edit/Write/MultiEdit and Codex file_change into the same
+ * file-oriented lightbox payload. The outer interaction and presentation stay
+ * provider-agnostic; only the diff source differs (old/new strings vs unified
+ * diff text).
  */
-function extractDisplayParam(descriptor: ToolUseDescriptor): DisplayParam | null {
-  switch (descriptor.kind) {
-    case 'command': {
-      if (descriptor.description) {
-        return {
-          text: descriptor.description,
-          ...(descriptor.command ? { fullTitle: descriptor.command } : {}),
-        };
-      }
-      // 代码解析出的意图(codex commandActions / 本地规则,issue #450):动词由
-      // intent 决定(见组件内 verbLabel),参数用意图目标(文件名 / 搜索词 /
-      // URL),hover 仍是命令原文(+作用路径)。无 target 的意图(如 pnpm install)
-      // 只换动词,参数保持命令原文截断。
-      const intent = descriptor.intent;
-      if (intent?.target && descriptor.command) {
-        return {
-          text: truncateToolText(intent.target, 60),
-          fullTitle: intent.path && intent.path !== intent.target
-            ? `${descriptor.command}\n${intent.path}`
-            : descriptor.command,
-        };
-      }
-      if (!descriptor.command) return null;
-      return { text: truncateToolText(descriptor.command, 60), fullTitle: descriptor.command };
-    }
-    case 'file':
-      return { text: descriptor.fileName, fullTitle: descriptor.filePath };
-    case 'search':
-      return { text: descriptor.pattern };
-    case 'web':
-      return { text: descriptor.target };
-    case 'todo':
-      return null;
-    case 'task':
-      return descriptor.description ? { text: descriptor.description } : null;
-    case 'mcp':
-      return {
-        text: `${descriptor.serverLabel} · ${descriptor.toolLabel}`,
-        fullTitle: descriptor.detail
-          ? `${descriptor.toolName}\n${descriptor.detail}`
-          : descriptor.toolName,
-      };
-    case 'dynamic':
-      return {
-        text: descriptor.namespace
-          ? `${descriptor.namespace} · ${descriptor.toolLabel}`
-          : descriptor.toolLabel,
-        fullTitle: descriptor.detail
-          ? `${descriptor.toolName}\n${descriptor.detail}`
-          : descriptor.toolName,
-      };
-    case 'collab':
-      return {
-        text: descriptor.toolLabel,
-        fullTitle: descriptor.detail
-          ? `${descriptor.toolName}\n${descriptor.detail}`
-          : descriptor.toolName,
-      };
-    case 'generic':
-      return { text: descriptor.toolName };
-  }
-}
-
-/** Build a diff payload for the lightbox from an Edit/Write/MultiEdit input. */
 function buildDiffPayload(
-  toolName: string,
+  descriptor: ToolUseDescriptor,
   inp: Record<string, unknown> | null,
-  filePath: string,
 ): ToolPayloadMode | null {
-  if (!inp) return null;
+  if (descriptor.kind === 'fileChange') {
+    return {
+      kind: 'diff',
+      files: descriptor.changes.map((change, index) => ({
+        key: `${change.path}:${change.movePath ?? ''}:${index}`,
+        filePath: change.movePath ?? change.path,
+        diffs: change.diff.trim() ? [{ key: `file-change:${index}`, rawDiff: change.diff }] : [],
+      })),
+    };
+  }
+  if (descriptor.kind !== 'file' || descriptor.action === 'read' || !inp) return null;
+
+  const { filePath, toolName } = descriptor;
   if (toolName === 'Edit') {
     const o = typeof inp.old_string === 'string' ? inp.old_string : '';
     const n = typeof inp.new_string === 'string' ? inp.new_string : '';
-    return { kind: 'diff', filePath, diffs: [{ key: 'edit:0', oldString: o, newString: n }] };
+    return {
+      kind: 'diff',
+      files: [
+        {
+          key: filePath,
+          filePath,
+          diffs: [{ key: 'edit:0', oldString: o, newString: n }],
+        },
+      ],
+    };
   }
   if (toolName === 'Write') {
     const c = typeof inp.content === 'string' ? inp.content : '';
-    return { kind: 'diff', filePath, diffs: [{ key: 'write:0', oldString: '', newString: c }] };
+    return {
+      kind: 'diff',
+      files: [
+        {
+          key: filePath,
+          filePath,
+          diffs: [{ key: 'write:0', oldString: '', newString: c }],
+        },
+      ],
+    };
   }
   if (toolName === 'MultiEdit') {
     const edits = Array.isArray(inp.edits) ? inp.edits : [];
     return {
       kind: 'diff',
-      filePath,
-      diffs: edits.map((e, index) => {
-        const er = e as Record<string, unknown> | null;
-        const o = er && typeof er.old_string === 'string' ? er.old_string : '';
-        const n = er && typeof er.new_string === 'string' ? er.new_string : '';
-        return { key: `edit:${index}`, oldString: String(o), newString: String(n) };
-      }),
+      files: [
+        {
+          key: filePath,
+          filePath,
+          diffs: edits.map((e, index) => {
+            const er = e as Record<string, unknown> | null;
+            const o = er && typeof er.old_string === 'string' ? er.old_string : '';
+            const n = er && typeof er.new_string === 'string' ? er.new_string : '';
+            return { key: `edit:${index}`, oldString: String(o), newString: String(n) };
+          }),
+        },
+      ],
     };
   }
   return null;
@@ -608,6 +573,8 @@ function buildDiffPayload(
 export interface AgentActionRowProps {
   message: ChatMessage;
   toolResult?: string;
+  /** 工作过程展开 / live preview 使用：仅无法识别的命令另显原文兜底。 */
+  showRawCommand?: boolean;
   /**
    * 行级执行状态(issue #450)— 由 AgentActionsBlock 依据 result / settled /
    * isSessionStreaming 计算后传入;缺省按已完成渲染(历史消息路径)。
@@ -621,13 +588,34 @@ type LightboxState =
   | { kind: 'image'; src: string }
   | { kind: 'payload'; payload: ToolPayloadMode };
 
+function fileChangeVerbKey(descriptor: FileChangeDescriptor): string {
+  if (descriptor.changes.length !== 1) return 'chat.agentActionRow.verb.updated';
+  switch (descriptor.changes[0].action) {
+    case 'add':
+      return 'chat.agentActionRow.verb.created';
+    case 'delete':
+      return 'chat.agentActionRow.fileChange.deleted';
+    case 'move':
+      return 'chat.agentActionRow.fileChange.renamed';
+    case 'update':
+      return 'chat.agentActionRow.verb.edited';
+    default:
+      return 'chat.agentActionRow.verb.updated';
+  }
+}
+
 /** True when the file extension is one ImageLightbox can render via xdt-file://. */
 function isImagePath(filePath: string): boolean {
   const ext = extractExt(filePath).toLowerCase();
   return ext !== '' && SUPPORTED_IMAGE_EXTS.has(ext);
 }
 
-export function AgentActionRow({ message, toolResult, status = 'done' }: AgentActionRowProps) {
+export function AgentActionRow({
+  message,
+  toolResult,
+  showRawCommand = false,
+  status = 'done',
+}: AgentActionRowProps) {
   const { t } = useTranslation();
   // 会话文件来源:remote 时 Read 图片走远程媒体改写、文件打开走远程分流。
   const fileCtx = useChatSessionFile();
@@ -649,6 +637,7 @@ export function AgentActionRow({ message, toolResult, status = 'done' }: AgentAc
   }, [toolName, inp, installedGhosts]);
 
   const descriptor = useMemo(() => describeToolUse(toolName, inp), [toolName, inp]);
+  const isFileChange = descriptor.kind === 'fileChange';
   // command 类带模型 description 时,description 自含动词语义("查看工作区
   // 状态"),再渲染英文动词 label 会变成"Ran 查看工作区状态"的中英混排 —
   // 隐藏动词,让 description 独立成句(Claude App 同款形态)。
@@ -657,23 +646,48 @@ export function AgentActionRow({ message, toolResult, status = 'done' }: AgentAc
   // 动词("读取"/"运行测试"),否则走工具名静态映射。description 存在时 intent
   // 不参与(hideVerb 已隐藏动词)。
   const intentAction =
-    descriptor.kind === 'command' && !descriptor.description ? descriptor.intent?.action : undefined;
+    descriptor.kind === 'command' && !descriptor.description
+      ? descriptor.intent?.action
+      : undefined;
+  const isRawCommandFallback =
+    descriptor.kind === 'command' && !descriptor.description && !descriptor.intent && showRawCommand;
   const verbLabel = t(
-    intentAction ? verbLabelKeyForIntent(intentAction) : verbLabelKeyForRow(verbForTool(toolName)),
+    intentAction
+      ? verbLabelKeyForIntent(intentAction)
+      : isRawCommandFallback
+        ? 'chat.agentActionRow.verb.ranCommand'
+        : isFileChange
+          ? fileChangeVerbKey(descriptor)
+          : verbLabelKeyForRow(verbForTool(toolName)),
   );
   // 意识行动词固定"召唤意识"(与其它工具的 Ran/Read 语系并列)。
   const rowVerbLabel = ghostInfo ? t('chat.ghostCall.verb') : verbLabel;
-  const displayParam = useMemo(() => extractDisplayParam(descriptor), [descriptor]);
+  const displayParam = useMemo(
+    () => extractDisplayParam(descriptor, { hideRawCommandFallback: showRawCommand }),
+    [descriptor, showRawCommand],
+  );
+  const fileChangeCountText = isFileChange && descriptor.changes.length > 1
+    ? t('chat.agentActionRow.fileChange.files', { count: descriptor.changes.length })
+    : null;
+  const rawCommand =
+    showRawCommand &&
+    descriptor.kind === 'command' &&
+    !descriptor.description &&
+    !descriptor.intent &&
+    descriptor.command
+      ? descriptor.command
+      : null;
   const stats = useMemo(
     () => statsForToolCall(toolName, inp),
     [toolName, inp],
   );
-  const isDiffTool = DIFF_TOOLS.has(toolName);
   const isFilePathTool = FILE_PATH_TOOLS.has(toolName);
-  const filePath =
-    isFilePathTool && inp && typeof inp.file_path === 'string' ? inp.file_path : '';
-  // v10: 命令类工具(非文件路径工具)走就地展开,而非 lightbox。
-  const isInlineExpand = !isFilePathTool;
+  const filePath = descriptor.kind === 'file' ? descriptor.filePath : '';
+  const singleFileChange =
+    isFileChange && descriptor.changes.length === 1 ? descriptor.changes[0] : null;
+  const chipFilePath = filePath || singleFileChange?.movePath || singleFileChange?.path || '';
+  // v10:命令类工具走就地展开；Claude/Codex 文件编辑统一走 diff lightbox。
+  const isInlineExpand = !isFilePathTool && !isFileChange;
 
   const [lightbox, setLightbox] = useState<LightboxState>({ kind: 'none' });
   const [expanded, setExpanded] = useState(false);
@@ -683,21 +697,21 @@ export function AgentActionRow({ message, toolResult, status = 'done' }: AgentAc
   /**
    * 行/chevron 激活时的分流:
    *   - 命令类(isInlineExpand) → toggle 就地展开,绝不开 lightbox
-   *   - 文件类(Edit/Write/MultiEdit/Read) → 开 lightbox(diff 或 文稿浏览器)
+   *   - Claude/Codex 文件编辑 → 同一个 diff lightbox
+   *   - Read → 文稿/图片 lightbox
    */
   const onActivate = async (anchor: HTMLElement) => {
+    const diffPayload = buildDiffPayload(descriptor, inp);
+    if (diffPayload) {
+      triggerRef.current = anchor;
+      setLightbox({ kind: 'payload', payload: diffPayload });
+      return;
+    }
     if (isInlineExpand) {
       setExpanded((prev) => !prev);
       return;
     }
     triggerRef.current = anchor;
-    if (isDiffTool && filePath) {
-      const payload = buildDiffPayload(toolName, inp, filePath);
-      if (payload) {
-        setLightbox({ kind: 'payload', payload });
-        return;
-      }
-    }
     if (toolName === 'Read' && filePath) {
       // 按扩展名分流:图片 → ImageLightbox(xdt-file:// 协议直接渲染),
       // 其他 → TextLightbox(文稿浏览器)。镜像 MarkdownRenderer / UserMessage
@@ -732,16 +746,14 @@ export function AgentActionRow({ message, toolResult, status = 'done' }: AgentAc
   );
 
   // v12: 文件 chip 右键菜单 (复制 / 复制文件路径 / 打开文件所在目录)。
-  // filePath 直接来自 tool_input.file_path,已是绝对路径,无需 resolveLocalPathSmart。
-  // Hook 无条件调用以满足 React Rules of Hooks; getAbsPath 在非文件类工具时
-  // 不会被触发(menu 只渲染在 isFilePathTool 分支),所以空字符串兜底即可。
+  // Claude 取 file_path，Codex 单文件 change 取目标路径；均已是绝对路径。
   const fileChipMenu = useFileChipContextMenu({
-    getAbsPath: () => filePath,
-    canOpenInBrowser: isBrowserOpenablePath(filePath),
+    getAbsPath: () => chipFilePath,
+    canOpenInBrowser: isBrowserOpenablePath(chipFilePath),
   });
 
   // ── Display-param cell variants ──────────────────────────────────────────
-  // Edit/Write/MultiEdit/Read → rendered as a real chip; click → lightbox.
+  // Claude Edit/Write/MultiEdit/Read + Codex 单文件 file_change → real chip.
   // Other tools → plain neutral text inline; row/chevron click toggles inline
   //   details.
   // v6: chip 本体不再 hover tooltip — 文件名已在 chip 上显示，点击又能开
@@ -756,8 +768,15 @@ export function AgentActionRow({ message, toolResult, status = 'done' }: AgentAc
         </span>
       );
     }
+    if (fileChangeCountText) {
+      return (
+        <span className="min-w-0 truncate text-[14px] font-medium text-[var(--msg-tool-card-chevron)]">
+          {fileChangeCountText}
+        </span>
+      );
+    }
     if (!displayParam) return null;
-    if (isFilePathTool && filePath) {
+    if (chipFilePath) {
       return (
         <span
           ref={fileChipRef}
@@ -790,14 +809,14 @@ export function AgentActionRow({ message, toolResult, status = 'done' }: AgentAc
   })();
 
   const onRowContextMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
-    if (!isFilePathTool || !filePath) return;
+    if (!chipFilePath) return;
     if (!(e.target instanceof Element)) return;
     if (!e.target.closest('[data-agent-action-file-chip="true"]')) return;
     fileChipMenu.onContextMenu(e);
   };
 
   const onRowKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
-    if (!isFilePathTool || !filePath) return;
+    if (!chipFilePath) return;
     if (e.key !== 'ContextMenu' && !(e.shiftKey && e.key === 'F10')) return;
     e.preventDefault();
     e.stopPropagation();
@@ -818,10 +837,10 @@ export function AgentActionRow({ message, toolResult, status = 'done' }: AgentAc
         aria-label={
           ghostInfo
             ? `${rowVerbLabel} ${ghostInfo.name} ${ghostInfo.tool}`
-            : displayParam
+            : displayParam || fileChangeCountText
               ? hideVerb
-                ? displayParam.text
-                : `${rowVerbLabel} ${displayParam.text}`
+                ? displayParam?.text ?? fileChangeCountText ?? ''
+                : `${rowVerbLabel} ${displayParam?.text ?? fileChangeCountText ?? ''}`
               : rowVerbLabel
         }
         className={cn(
@@ -881,11 +900,20 @@ export function AgentActionRow({ message, toolResult, status = 'done' }: AgentAc
           )}
         </span>
       </button>
-      {isFilePathTool && filePath ? fileChipMenu.menu : null}
+      {rawCommand && !expanded && (
+        <div
+          data-agent-action-raw-command="true"
+          title={rawCommand}
+          className="min-w-0 truncate px-2 pb-[3px] pl-[30px] font-mono text-[12px] leading-[18px] text-[var(--msg-tool-card-chevron)]"
+        >
+          {rawCommand}
+        </div>
+      )}
+      {chipFilePath ? fileChipMenu.menu : null}
 
       {/* v10 就地展开内容:命令类工具(Bash/Grep/Glob/WebFetch/WebSearch/...)
-          点击行/chevron 后展示 input + tool_result。文件类工具走 lightbox,
-          这里不渲染。布局:cornerRadius 6, padding [8,10], 字号 13/mono。
+          点击行/chevron 后展示 input + tool_result。Claude/Codex 文件编辑
+          共用 diff lightbox,这里不渲染。布局:cornerRadius 6, padding [8,10], 字号 13/mono。
           v11 (2026-04-20):背景色 + 边框对齐"用户输入气泡"
           (`--msg-user-bg` + `--msg-user-border`),与 hover 嵌入式 inline-code
           灰区分开,把就地展开视觉上提升为一个独立"卡片"。 */}

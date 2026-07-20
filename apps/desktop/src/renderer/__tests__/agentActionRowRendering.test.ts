@@ -12,7 +12,8 @@
  *   - MCP 行:`server · tool` 人话形态
  *   - 状态图标:running spinner / done 灰勾(经 aria-label);块头 Bot ↔
  *     spinner 切换;settledIds(orca 隐藏结果)按 done 渲染
- *   - 就地展开区:命令原文保留、`# description` 前缀不再出现
+ *   - 友好命令不重复显示次行，点击后仍可查看命令原文
+ *   - Codex file_change 与 Claude 文件编辑共用 diff lightbox
  */
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -31,7 +32,9 @@ vi.mock('react-i18next', () => ({
 // 避免拖进重型依赖(DiffView / 文稿浏览器)。
 vi.mock('@/components/chat/TextLightbox', () => ({ TextLightbox: () => null }));
 vi.mock('@/components/chat/ImageLightbox', () => ({ ImageLightbox: () => null }));
-vi.mock('@/components/chat/ToolPayloadLightbox', () => ({ ToolPayloadLightbox: () => null }));
+vi.mock('@/components/chat/ToolPayloadLightbox', () => ({
+  ToolPayloadLightbox: ({ payload }: { payload: unknown }) => JSON.stringify(payload),
+}));
 vi.mock('@/components/chat/useFileChipContextMenu', () => ({
   useFileChipContextMenu: () => ({
     menu: null,
@@ -73,14 +76,59 @@ describe('AgentActionRow — 行主文案', () => {
     expect(screen.queryByText('chat.agentActionRow.verb.ran')).toBeNull();
   });
 
-  it('exec 无 description:回退为动词 + 命令文本', () => {
+  it('工作动作模式:Bash 首行保留 description，命令原文收进点击详情', () => {
     render(
       createElement(AgentActionRow, {
-        message: mkTool('t1', 'exec', { command: 'git status --short' }),
+        message: mkTool('t1', 'Bash', { command: 'git status', description: '查看工作区状态' }),
+        showRawCommand: true,
+      }),
+    );
+    expect(screen.getByText('查看工作区状态')).toBeTruthy();
+    expect(document.querySelector('[data-agent-action-raw-command="true"]')).toBeNull();
+    fireEvent.click(screen.getByRole('button'));
+    expect(screen.getByText('git status')).toBeTruthy();
+  });
+
+  it('exec 无法分类时回退为动词 + 命令文本', () => {
+    render(
+      createElement(AgentActionRow, {
+        message: mkTool('t1', 'exec', { command: 'docker ps' }),
       }),
     );
     expect(screen.getByText('chat.agentActionRow.verb.ran')).toBeTruthy();
+    expect(screen.getByText('docker ps')).toBeTruthy();
+  });
+
+  it('工作动作模式:历史 Codex wrapper 无 displayCommand 也会友好化并在详情解包', () => {
+    render(
+      createElement(AgentActionRow, {
+        message: mkTool('t1', 'exec', {
+          command: "/bin/zsh -lc 'git status --short'",
+        }),
+        showRawCommand: true,
+      }),
+    );
+    expect(screen.getByText('chat.agentActionRow.verb.gitStatus')).toBeTruthy();
+    expect(document.querySelector('[data-agent-action-raw-command="true"]')).toBeNull();
+    fireEvent.click(screen.getByRole('button'));
     expect(screen.getByText('git status --short')).toBeTruthy();
+    expect(screen.queryByText("/bin/zsh -lc 'git status --short'")).toBeNull();
+  });
+
+  it('工作动作模式:无法识别的命令仍用第二行原文兜底', () => {
+    render(
+      createElement(AgentActionRow, {
+        message: mkTool('t1', 'exec', { command: 'docker ps' }),
+        showRawCommand: true,
+      }),
+    );
+    expect(screen.getByText('chat.agentActionRow.verb.ranCommand')).toBeTruthy();
+    expect(document.querySelector('[data-agent-action-raw-command="true"]')?.textContent).toBe(
+      'docker ps',
+    );
+    fireEvent.click(screen.getByRole('button'));
+    expect(document.querySelector('[data-agent-action-raw-command="true"]')).toBeNull();
+    expect(screen.getByText('docker ps')).toBeTruthy();
   });
 
   it('exec 带 codex commandActions:意图动词 + 目标,hover 保留命令原文', () => {
@@ -107,8 +155,8 @@ describe('AgentActionRow — 行主文案', () => {
       }),
     );
     expect(screen.getByText('chat.agentActionRow.verb.ranTests')).toBeTruthy();
-    // 无 target 的意图只换动词,参数仍是命令原文。
-    expect(screen.getByText('pnpm --filter desktop test')).toBeTruthy();
+    // 无 target 的意图首行只留完整标题，真实命令由工作过程的次行/详情承载。
+    expect(screen.queryByText('pnpm --filter desktop test')).toBeNull();
   });
 
   it('MCP 行:显示 server · tool 人话标签,title 保留原始 toolName', () => {
@@ -120,6 +168,57 @@ describe('AgentActionRow — 行主文案', () => {
     const label = screen.getByText('feishu · read by url');
     expect(label.getAttribute('title')).toContain('mcp__feishu__read_by_url');
     expect(screen.getByText('chat.agentActionRow.verb.used')).toBeTruthy();
+  });
+
+  it('file_change:主行显示文件数与总 diff，点击后直接进入共享 diff lightbox', () => {
+    render(
+      createElement(AgentActionRow, {
+        message: mkTool('t1', 'file_change', {
+          changes: [
+            {
+              path: '/repo/src/app.ts',
+              kind: { type: 'update' },
+              diff: '--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new',
+            },
+            {
+              path: '/repo/src/new.ts',
+              kind: { type: 'add' },
+              diff: '+++ b/src/new.ts\n+one\n+two',
+            },
+          ],
+        }),
+        toolResult: 'update /repo/src/app.ts\nadd /repo/src/new.ts',
+      }),
+    );
+
+    expect(screen.getByText('chat.agentActionRow.verb.updated')).toBeTruthy();
+    expect(screen.getByText('chat.agentActionRow.fileChange.files:2')).toBeTruthy();
+    expect(screen.getByText('+3')).toBeTruthy();
+    expect(screen.getByText('-1')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button'));
+    expect(document.body.textContent).toContain('"kind":"diff"');
+    expect(document.body.textContent).toContain('"filePath":"/repo/src/app.ts"');
+    expect(document.body.textContent).toContain('"rawDiff":"--- a/src/app.ts');
+    expect(document.body.textContent).not.toContain('chat.agentActionRow.fileChange.rawData');
+    expect(document.querySelector('[data-agent-file-change-details="true"]')).toBeNull();
+  });
+
+  it('file_change:单文件重命名直接显示源文件和目标文件', () => {
+    render(
+      createElement(AgentActionRow, {
+        message: mkTool('t1', 'file_change', {
+          changes: [{
+            path: '/repo/src/old.ts',
+            kind: { type: 'update', move_path: '/repo/src/new.ts' },
+            diff: '',
+          }],
+        }),
+      }),
+    );
+    expect(screen.getByText('chat.agentActionRow.fileChange.renamed')).toBeTruthy();
+    expect(screen.getByText('old.ts → new.ts')).toBeTruthy();
+    expect(document.querySelector('[data-agent-action-file-chip="true"]')).toBeTruthy();
   });
 
   it('状态图标:running / done 经 aria-label 可达,缺省为 done', () => {

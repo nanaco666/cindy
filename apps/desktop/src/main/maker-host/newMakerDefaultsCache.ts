@@ -35,7 +35,8 @@ let cache: NewMakerDraftSnapshot | null = null;
 
 /**
  * providerModelMemory 全量快照镜像(renderer 经 SYNC_PROVIDER_MODEL_MEMORY 推)。
- * 形状 = providerModelMemory.snapshotForSeed():`${agent}:${providerId}` → {effortByModel, fastByModel}。
+ * 形状 = providerModelMemory.snapshotForSeed():`${agent}:*` 是模型级全局预设,
+ * `${agent}:${providerId}` 是旧 v2 兼容副本。
  * device-link 草稿列表行的真实读源(非选中行),控制端据此完整镜像被控端草稿模型列表。
  */
 export type ProviderModelMemorySnapshot = Record<
@@ -102,10 +103,9 @@ export interface RemoteNewMakerDefaults {
   effortByModel?: Record<string, string>;
   fastModeByModel?: Record<string, boolean>;
   /**
-   * providerModelMemory 全量快照(`${agent}:${providerId}` → {effortByModel, fastByModel})。
-   * device-link 草稿列表行(非选中模型)的真实权威读源:控制端据此 1:1 镜像被控端草稿里**每个供应商
-   * 每个模型**的 effort/fast(req1 完整列表镜像)。跨 agent 共享(key 带 agent 前缀),控制端按
-   * `${agent}:` 前缀过滤。旧版被控端不回 → undefined → 控制端非选中行回落 capabilities 默认。
+   * providerModelMemory 全量快照;`${agent}:*` 是模型级全局预设,来源槽保留旧 v2 兼容副本。
+   * device-link 草稿列表行(非选中模型)的真实权威读源:控制端据此镜像被控端每个模型的
+   * effort/fast。跨 agent 隔离(key 带 agent 前缀);旧版被控端不回 → undefined → 回落默认。
    */
   providerModelMemory?: Record<
     string,
@@ -117,7 +117,7 @@ export function getRemoteNewMakerDefaults(
   agentKind: 'claude-code' | 'codex',
 ): RemoteNewMakerDefaults {
   // providerModelMemory(草稿列表行真实读源)与「该 vendor 是否选过模型」无关:即便 cache 未就绪 /
-  // 该 vendor 无选中模型(lastByVendor 空),只要被控端有 per-(provider,model) 记忆就要全量回给控制端,
+  // 该 vendor 无选中模型(lastByVendor 空),只要被控端有模型级预设就要全量回给控制端,
   // 否则 req1「完整镜像被控端草稿模型列表」在这条边界上回落 capabilities 默认。故在所有早返回里都带上它。
   const providerModelMemory = providerMemoryCache ?? undefined;
   if (!cache) return providerModelMemory ? { providerModelMemory } : {};

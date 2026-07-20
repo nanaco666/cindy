@@ -168,6 +168,7 @@ describe('runLegacyUserDataMigration', () => {
       userId: 'u1',
       sourceDb: null,
       mediaCopied: false,
+      dialoguesCopied: false,
       browserProfileCopied: false,
     });
   });
@@ -185,6 +186,7 @@ describe('runLegacyUserDataMigration', () => {
       status: 'migrated',
       sourceDb: 'xdt-maker-u1.db',
       mediaCopied: false,
+      dialoguesCopied: false,
       browserProfileCopied: false,
     });
     expect(memfs.read(path.join(USER_DATA, 'cindy-u1.db'))).toBe('db-u1');
@@ -237,6 +239,7 @@ describe('runLegacyUserDataMigration', () => {
       status: 'migrated',
       sourceDb: null,
       mediaCopied: true,
+      dialoguesCopied: false,
       browserProfileCopied: false,
     });
     expect(memfs.read(path.join(USER_DATA, 'cindy-u1.db'))).toBe('existing-new-db');
@@ -258,6 +261,7 @@ describe('runLegacyUserDataMigration', () => {
       status: 'migrated',
       sourceDb: null,
       mediaCopied: true,
+      dialoguesCopied: false,
       browserProfileCopied: false,
     });
     expect(memfs.has(path.join(USER_DATA, 'cindy-u1.db'))).toBe(false);
@@ -356,6 +360,42 @@ describe('runLegacyUserDataMigration', () => {
     expect(memfs.has(path.join(USER_DATA, 'cindy-u1.db'))).toBe(false);
     expect(phases).toEqual(['confirm', 'running', 'failed']);
     expect(deps.log.warn).toHaveBeenCalled();
+  });
+
+  it('dialogues 无文件夹对话工作目录整树随迁,老目录只读保留', async () => {
+    const memfs = createMemFs();
+    memfs.addDir(USER_DATA);
+    memfs.addDir(LEGACY);
+    memfs.addFile(path.join(LEGACY, 'dialogues', '2026-06-22', 'sess-1', 'note.md'), 'agent-output');
+    memfs.addFile(path.join(LEGACY, 'dialogues', '2026-05-20', 'sess-2', 'data.json'), '{}');
+    // 空的 dialogue 工作目录(最常见形态)也要随迁成目录。
+    memfs.addDir(path.join(LEGACY, 'dialogues', '2026-07-01', 'sess-3'));
+    const { deps } = makeDeps(memfs);
+
+    const result = await runLegacyUserDataMigration('u1', deps);
+
+    expect(result).toMatchObject({ status: 'migrated', dialoguesCopied: true });
+    expect(memfs.read(path.join(USER_DATA, 'dialogues', '2026-06-22', 'sess-1', 'note.md'))).toBe(
+      'agent-output',
+    );
+    expect(memfs.read(path.join(USER_DATA, 'dialogues', '2026-05-20', 'sess-2', 'data.json'))).toBe('{}');
+    // 老目录只读:源文件原样保留。
+    expect(memfs.read(path.join(LEGACY, 'dialogues', '2026-06-22', 'sess-1', 'note.md'))).toBe(
+      'agent-output',
+    );
+    expect(readMarker(memfs)).toMatchObject({ dialoguesCopied: true });
+  });
+
+  it('老目录无 dialogues → 步骤跳过,dialoguesCopied=false', async () => {
+    const memfs = createMemFs();
+    memfs.addDir(USER_DATA);
+    memfs.addFile(path.join(LEGACY, 'xdt-maker-u1.db'), 'db', 1);
+    const { deps } = makeDeps(memfs);
+
+    const result = await runLegacyUserDataMigration('u1', deps);
+
+    expect(result).toMatchObject({ status: 'migrated', dialoguesCopied: false });
+    expect(memfs.has(path.join(USER_DATA, 'dialogues'))).toBe(false);
   });
 
   it('agent 浏览器 profile:browser/XDMaker 复制为 browser/Cindy,缓存目录与 Singleton 锁跳过', async () => {

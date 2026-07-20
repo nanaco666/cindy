@@ -227,6 +227,77 @@ describeMigrationReplay('migration replay', () => {
     }
   });
 
+  it('bridges the exact legacy migration lineage through 0074 replay', () => {
+    const { db, cleanup } = createTempDb();
+    try {
+      db.exec(`
+        CREATE TABLE migration_meta (
+          key TEXT PRIMARY KEY NOT NULL,
+          value TEXT NOT NULL
+        );
+        CREATE TABLE migration_history (
+          seq INTEGER PRIMARY KEY NOT NULL,
+          file_name TEXT NOT NULL,
+          content_hash TEXT NOT NULL,
+          applied_at INTEGER NOT NULL
+        );
+        CREATE TABLE sessions (
+          id TEXT PRIMARY KEY NOT NULL,
+          permission_mode TEXT
+        );
+        CREATE TABLE schedule_runs (
+          id TEXT PRIMARY KEY NOT NULL
+        );
+        INSERT INTO sessions (id, permission_mode) VALUES ('legacy-plan', 'plan');
+        INSERT INTO migration_history (seq, file_name, content_hash, applied_at) VALUES
+          (47, '0047_add_session_summary.sql', '44c224320ca6f5059d5184deae8f5d074f97bfa6502f3d73a54894a962edaf15', 1047),
+          (60, '0060_orange_penance.sql', 'd1dcd9ee1279ef86f5e0a136b8e1b786b11d462373f8ed464476ae3062312ffb', 1060),
+          (62, '0062_third_pepper_potts.sql', '8a3ba2f92ebc495995f23a3727a65398fce1a877ffcb08d99df8705f21f49837', 1062),
+          (63, '0063_secret_dreaming_celestial.sql', 'd07bdac33796fe1ba80230207f0bf5834d0bf9c9df0c68fe372cbbba42bc7ee8', 1063),
+          (64, '0064_amusing_white_tiger.sql', 'ef297d4140b49cb3f6e87d58ea76e7f5a427fc6b3857a02210b9108650dcab23', 1064);
+      `);
+
+      const result = runMigrationReplay(db, {
+        drizzleDir: drizzleDir(),
+        currentVersion: 73,
+      });
+
+      // 0074 桥接 legacy lineage 后,session-agent-switch 的 0075(messages.agent_kind,
+      // 守卫脚本对无 messages 表的 fixture no-op)也在同一次 replay 里补上。
+      expect(result.applied.map((migration) => migration.seq)).toEqual([74, 75]);
+      expect(
+        db
+          .prepare(`SELECT permission_mode, plan_mode_enabled FROM sessions WHERE id = ?`)
+          .get('legacy-plan'),
+      ).toEqual({ permission_mode: 'ask', plan_mode_enabled: 1 });
+      expect(columnNames(db, 'sessions')).toEqual(
+        expect.arrayContaining(['active_turn_started_at', 'active_turn_pid']),
+      );
+      expect(columnNames(db, 'schedule_runs')).toContain('heartbeat_at');
+      expect(tableExists(db, 'project_aliases')).toBe(true);
+      expect(tableExists(db, 'device_link_ownership')).toBe(true);
+      expect(
+        db
+          .prepare(
+            `SELECT seq, file_name
+           FROM migration_history
+           WHERE seq IN (47, 60, 62, 63, 64, 74)
+           ORDER BY seq`,
+          )
+          .all(),
+      ).toEqual([
+        { seq: 47, file_name: '0047_lame_malice.sql' },
+        { seq: 60, file_name: '0060_orange_penance.sql' },
+        { seq: 62, file_name: '0062_flaky_mimic.sql' },
+        { seq: 63, file_name: '0063_handy_tenebrous.sql' },
+        { seq: 64, file_name: '0064_icy_bruce_banner.sql' },
+        { seq: 74, file_name: '0074_bridge_legacy_migration_lineage.sql' },
+      ]);
+    } finally {
+      cleanup();
+    }
+  });
+
   it('keeps migration committed when the history side-write fails', () => {
     const { db, cleanup: cleanupDb } = createTempDb();
     const { dir, cleanup: cleanupDrizzle } = createTempDrizzleDir();

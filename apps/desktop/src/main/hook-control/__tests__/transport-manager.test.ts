@@ -5,7 +5,9 @@
  * 未登录不发起连接、setEnabled(false) 停线。依赖全部注入, 不需要 Electron。
  */
 
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
+import type { Duplex } from 'node:stream';
 
 import { WebSocketServer, type WebSocket as ServerSocket } from 'ws';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -32,7 +34,7 @@ import {
   HookPrefsTimeoutError,
   type HookControlManagerDeps,
 } from '../manager';
-import { createHookTransport } from '../transport';
+import { createHookTransport, type HookTransportOpts } from '../transport';
 import type { SlackHookStore, SlackHookConfigState } from '../store';
 
 const noopLog = { info: () => {}, warn: () => {} };
@@ -75,6 +77,7 @@ function makeManager(
     store,
     createTransport: createHookTransport,
     getAuthToken: async () => 'jwt-token-1',
+    refreshAuthToken: async () => false,
     deviceInfo: () => ({ deviceId: 'dev-1', deviceName: 'TestBox' }),
     agents: ['claude-code', 'codex'],
     notifyStatus: () => {},
@@ -118,6 +121,124 @@ async function startServer(): Promise<{ wss: WebSocketServer; url: string }> {
   cleanups.push(() => wss.close());
   return { wss, url: `ws://127.0.0.1:${addr.port}` };
 }
+
+async function startUpgradeServer(
+  onUpgrade: (req: IncomingMessage, socket: Duplex, head: Buffer) => void,
+): Promise<{ url: string }> {
+  const server = createServer((_req: IncomingMessage, res: ServerResponse) => {
+    res.writeHead(404).end();
+  });
+  server.on('upgrade', onUpgrade);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const addr = server.address();
+  if (addr === null || typeof addr === 'string') throw new Error('no port');
+  cleanups.push(() => server.close());
+  return { url: `ws://127.0.0.1:${addr.port}` };
+}
+
+function transportOpts(
+  url: string,
+  overrides: Partial<HookTransportOpts> = {},
+): HookTransportOpts {
+  return {
+    url,
+    getAuthToken: async () => 'jwt-token-1',
+    refreshAuthToken: async () => false,
+    buildHello: () => ({
+      deviceId: 'dev-1',
+      deviceName: 'TestBox',
+      workspaces: ['chat'],
+      agents: ['codex'],
+    }),
+    onMessage: () => {},
+    onStatus: () => {},
+    timing: { backoffBaseMs: 10, backoffMaxMs: 20, standbyRetryMs: 200 },
+    log: noopLog,
+    ...overrides,
+  };
+}
+
+describe('hook-control transport handshake recovery', () => {
+  it('upgrade 401 只刷新一次凭证，并立即用新 token 重连', async () => {
+    let upgrades = 0;
+    const authHeaders: Array<string | undefined> = [];
+    const wss = new WebSocketServer({ noServer: true });
+    cleanups.push(() => wss.close());
+    const { url } = await startUpgradeServer((req, socket, head) => {
+      upgrades += 1;
+      authHeaders.push(req.headers.authorization);
+      if (upgrades === 1) {
+        socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit('connection', ws, req);
+      });
+    });
+    let token = 'stale-token';
+    let refreshes = 0;
+    const statuses: string[] = [];
+    const transport = createHookTransport(
+      transportOpts(url, {
+        getAuthToken: async () => token,
+        refreshAuthToken: async () => {
+          refreshes += 1;
+          token = 'fresh-token';
+          return true;
+        },
+        onStatus: (status) => statuses.push(status),
+      }),
+    );
+    cleanups.push(() => transport.dispose());
+
+    const [sock] = (await once(wss, 'connection')) as [ServerSocket];
+    sock.send(serializeHookMessage(makeWelcome({ serverName: 'mock', features: [] })));
+    await expect.poll(() => statuses.at(-1), { timeout: 3000 }).toBe('connected');
+    expect(refreshes).toBe(1);
+    expect(authHeaders).toEqual(['Bearer stale-token', 'Bearer fresh-token']);
+  });
+
+  it('服务端 close 4000 进入 standby，且仅按低频周期探测接管', async () => {
+    const { wss, url } = await startServer();
+    let connections = 0;
+    wss.on('connection', (sock) => {
+      connections += 1;
+      sock.on('message', () => sock.close(4000, 'device already connected'));
+    });
+    const statuses: string[] = [];
+    const transport = createHookTransport(
+      transportOpts(url, { onStatus: (status) => statuses.push(status) }),
+    );
+    cleanups.push(() => transport.dispose());
+
+    await expect.poll(() => statuses.at(-1), { timeout: 3000 }).toBe('standby');
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(connections).toBe(1);
+    await expect.poll(() => connections, { timeout: 3000 }).toBe(2);
+    expect(statuses.at(-1)).toBe('standby');
+    expect(statuses.filter((status) => status === 'standby')).toHaveLength(2);
+  });
+
+  it('upgrade 503 保持 error 并按退避重连，不误判 standby', async () => {
+    let upgrades = 0;
+    const { url } = await startUpgradeServer((_req, socket) => {
+      upgrades += 1;
+      socket.write('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+    });
+    const statuses: string[] = [];
+    const transport = createHookTransport(
+      transportOpts(url, { onStatus: (status) => statuses.push(status) }),
+    );
+    cleanups.push(() => transport.dispose());
+
+    await expect.poll(() => upgrades, { timeout: 3000 }).toBeGreaterThanOrEqual(2);
+    expect(statuses).toContain('error');
+    expect(statuses).not.toContain('standby');
+  });
+});
 
 const WORKSPACES = { xdmaker: 'E:\\AIWork\\XDMaker', blog: 'D:\\repos\\blog' };
 

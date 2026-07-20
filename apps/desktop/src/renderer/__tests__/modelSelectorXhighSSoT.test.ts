@@ -17,7 +17,7 @@
  * 根因：草稿分支 `await updatePreferences(服务端 PATCH)` 成功后才调 onEffortDidChange,
  *       服务端失败被 catch 静默吞掉 → UI 永不刷新。
  * 修复：默认模型/档位偏好全量本地化(newMakerDraft.lastByVendor 按 agent 分槽 +
- *       providerModelMemory 按 (agent, 供应商, 模型) 记忆),handler 不再有任何服务端
+ *       providerModelMemory 按 (agent, 模型) 全局记忆),handler 不再有任何服务端
  *       偏好写入;草稿分支直接同步上抛 onXxxDidChange。
  *
  * 本测试不依赖 React/jsdom，只验证契约的核心不变量：

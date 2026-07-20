@@ -126,18 +126,28 @@ export function assertNotPublishingCindyToLegacyChannel(ossPrefix) {
 }
 
 // ── Apple 公证/签名身份(macOS release / publish 共用;单点定义)────────────
-// 均为公开身份信息(非密钥;APPLE_APP_PASSWORD 才是密钥,只从 env 读、无默认)。
-// 默认值与 .gitlab-ci.env 保持一致;CI / 本机可用同名 env 覆盖。
-// 必须是函数而非模块级 const:env 在调用时读取——消费脚本先 loadDotenv()/读
-// apps/desktop/.env 再调用,.env 里的覆盖值才生效(模块体在 import 阶段先于
-// 消费方 .env 加载执行)。
+// 均为公开身份信息(非密钥;APPLE_APP_PASSWORD 才是密钥,只从 env 读)。
+// 2026-07-20 起**零代码默认值**:身份来自 release-regions.json 的 <region>.macSigning
+// (经 applyReleaseRegionConfigToEnv / applyMacSigningConfigToEnv 注入 env)或显式
+// env,缺失直接抛错——此前默认回落个人证书,会在密码/证书换主体后静默签错身份。
+// 必须是函数而非模块级 const:env 在调用时读取——消费脚本先注入配置再调用。
 export function resolveAppleIdentity() {
-  return {
-    appleId: process.env.APPLE_ID || 'jiali@magiclizi.com',
-    teamId: process.env.APPLE_TEAM_ID || 'WJ6LYABL8Z',
-    signIdentity:
-      process.env.APPLE_SIGN_IDENTITY || 'Developer ID Application: Jiali Liu (WJ6LYABL8Z)',
-  };
+  const appleId = process.env.APPLE_ID?.trim();
+  const teamId = process.env.APPLE_TEAM_ID?.trim();
+  const signIdentity = process.env.APPLE_SIGN_IDENTITY?.trim();
+  const missing = [
+    !appleId && 'APPLE_ID',
+    !teamId && 'APPLE_TEAM_ID',
+    !signIdentity && 'APPLE_SIGN_IDENTITY',
+  ].filter(Boolean);
+  if (missing.length > 0) {
+    throw new Error(
+      `mac 签名/公证身份缺失: ${missing.join(' / ')}。` +
+        '配置途径(推荐): apps/desktop/scripts/release-regions.json 的 <region>.macSigning' +
+        '(appleId / teamId / signIdentity);或直接设置同名环境变量。身份无代码默认值。',
+    );
+  }
+  return { appleId, teamId, signIdentity };
 }
 
 // ── .env 读取 ──────────────────────────────────────────────────────────────

@@ -89,14 +89,14 @@ function findFlatAgentTask(items: RenderItems, clientId: string) {
   );
 }
 
-/** 是否有任一 work_group 的 children 里含该子 Agent。 */
+/** 是否有任一层 work_group 的 children 里含该子 Agent。 */
 function isFoldedIntoWorkGroup(items: RenderItems, clientId: string): boolean {
+  const containsAgentTask = (item: RenderItems[number]): boolean => {
+    if (item.type === 'agent_task') return item.toolCall?.clientId === clientId;
+    return item.type === 'work_group' && item.children.some(containsAgentTask);
+  };
   return items.some(
-    (it) =>
-      it.type === 'work_group' &&
-      it.children.some(
-        (c) => c.type === 'agent_task' && c.toolCall?.clientId === clientId,
-      ),
+    (item) => item.type === 'work_group' && item.children.some(containsAgentTask),
   );
 }
 

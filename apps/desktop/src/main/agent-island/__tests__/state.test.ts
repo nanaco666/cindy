@@ -160,7 +160,7 @@ describe('Agent Island display state', () => {
     expect(display.shadowVisible).toBe(false);
   });
 
-  it('uses the most recently active session as the compact current item', () => {
+  it('uses sidebar-style prompt recency for the compact running session', () => {
     const state = createAgentIslandState();
     applyAgentIslandEvent(state, { sessionId: 'a', title: 'A', agentKind: 'codex' }, statusEvent(true, 'Thinking'), 1_000);
     applyAgentIslandEvent(state, { sessionId: 'b', title: 'B', agentKind: 'codex' }, statusEvent(true, 'Running'), 1_100);
@@ -178,12 +178,18 @@ describe('Agent Island display state', () => {
 
     applyAgentIslandEvent(state, { sessionId: 'a', title: 'A', agentKind: 'codex' }, statusEvent(true, 'Still running'), 4_500);
     const secondDisplay = buildAgentIslandDisplayState(state, 4_550);
-    expect(secondDisplay.currentSessionId).toBe('a');
-    expect(secondDisplay.pillSnapshot.priorityId).toBe('a');
-    expect(secondDisplay.sessions.map((session) => session.sessionId)).toEqual(['a', 'b']);
+    expect(secondDisplay.currentSessionId).toBe('b');
+    expect(secondDisplay.pillSnapshot.priorityId).toBe('b');
+    expect(secondDisplay.sessions.map((session) => session.sessionId)).toEqual(['b', 'a']);
+
+    applyAgentIslandUserPrompt(state, { sessionId: 'a', title: 'A', agentKind: 'codex' }, 'new task', 6_000);
+    const afterUserSend = buildAgentIslandDisplayState(state, 6_050);
+    expect(afterUserSend.currentSessionId).toBe('a');
+    expect(afterUserSend.pillSnapshot.priorityId).toBe('a');
+    expect(afterUserSend.sessions.map((session) => session.sessionId)).toEqual(['a', 'b']);
   });
 
-  it('keeps the compact running session stable during rapid same-priority updates', () => {
+  it('does not let agent progress reorder same-priority sessions after compact dwell', () => {
     const state = createAgentIslandState();
     applyAgentIslandEvent(state, { sessionId: 'a', title: 'A', agentKind: 'codex' }, statusEvent(true, 'Thinking'), 1_000);
     applyAgentIslandEvent(state, { sessionId: 'b', title: 'B', agentKind: 'codex' }, statusEvent(true, 'Running'), 1_100);
@@ -191,8 +197,9 @@ describe('Agent Island display state', () => {
     const firstDisplay = buildAgentIslandDisplayState(state, 1_200);
     expect(firstDisplay.currentSessionId).toBe('b');
 
-    applyAgentIslandEvent(state, { sessionId: 'a', title: 'A', agentKind: 'codex' }, statusEvent(true, 'Still running'), 1_500);
-    const stableDisplay = buildAgentIslandDisplayState(state, 1_600);
+    applyAgentIslandEvent(state, { sessionId: 'a', title: 'A', agentKind: 'codex' }, finalTextEvent('Still running'), 4_500);
+    applyAgentIslandEvent(state, { sessionId: 'a', title: 'A', agentKind: 'codex' }, toolUseEvent('tool-a'), 4_600);
+    const stableDisplay = buildAgentIslandDisplayState(state, 4_700);
 
     expect(stableDisplay.currentSessionId).toBe('b');
     expect(stableDisplay.sessions.map((session) => session.sessionId)).toEqual(['b', 'a']);
@@ -674,10 +681,12 @@ describe('Agent Island display state', () => {
 
   it('prioritizes interaction, terminal error, completion, then running sessions', () => {
     const state = createAgentIslandState();
-    applyAgentIslandEvent(state, { sessionId: 'running', title: 'Running' }, statusEvent(true, 'Generating'), 1_000);
-    applyAgentIslandEvent(state, { sessionId: 'completed', title: 'Completed' }, doneEvent(), 1_100);
-    applyAgentIslandEvent(state, { sessionId: 'error', title: 'Error' }, terminalErrorEvent('failed'), 1_200);
-    applyAgentIslandInteractionRequest(state, { sessionId: 'ask', title: 'Ask' }, permissionRequest('r1'), 1_300);
+    // Deliberately create the lower-priority states later: phase priority must
+    // win before the sidebar-style prompt/fallback time is considered.
+    applyAgentIslandInteractionRequest(state, { sessionId: 'ask', title: 'Ask' }, permissionRequest('r1'), 1_000);
+    applyAgentIslandEvent(state, { sessionId: 'error', title: 'Error' }, terminalErrorEvent('failed'), 1_100);
+    applyAgentIslandEvent(state, { sessionId: 'completed', title: 'Completed' }, doneEvent(), 1_200);
+    applyAgentIslandEvent(state, { sessionId: 'running', title: 'Running' }, statusEvent(true, 'Generating'), 1_300);
 
     const display = buildAgentIslandDisplayState(state, 1_400);
 
@@ -1407,7 +1416,7 @@ describe('Agent Island display state', () => {
     expect(compactUnread.pillSnapshot.unreadCompletedCount).toBe(1);
   });
 
-  it('keeps active completion reveal through newer running activity until dwell expires', () => {
+  it('keeps unread completion ahead of running activity after reveal dwell expires', () => {
     const state = createAgentIslandState();
     applyAgentIslandEvent(state, { sessionId: 'running', title: 'Running' }, statusEvent(true, 'Generating'), 1_000);
     applyAgentIslandEvent(state, { sessionId: 'done', title: 'Done' }, doneEvent(), 2_000);
@@ -1424,8 +1433,8 @@ describe('Agent Island display state', () => {
     const display = buildAgentIslandDisplayState(state, 14_200);
 
     expect(display.mode).toBe('compact');
-    expect(display.currentSessionId).toBe('running');
-    expect(display.sessions.map((session) => session.sessionId)).toEqual(['running', 'done']);
+    expect(display.currentSessionId).toBe('done');
+    expect(display.sessions.map((session) => session.sessionId)).toEqual(['done', 'running']);
     expect(display.pillSnapshot.unreadCompletedCount).toBe(1);
   });
 
@@ -1524,7 +1533,7 @@ describe('Agent Island display state', () => {
     expect(expanded.mode).toBe('expanded');
     expect(expanded.sessions.map((session) => session.sessionId)).toEqual(['b', 'a']);
 
-    applyAgentIslandEvent(state, { sessionId: 'a', title: 'A' }, statusEvent(true, 'Now latest'), 1_900);
+    applyAgentIslandUserPrompt(state, { sessionId: 'a', title: 'A' }, 'Now latest', 1_900);
     const stillExpanded = buildAgentIslandDisplayState(state, 2_000);
     expect(stillExpanded.mode).toBe('expanded');
     expect(stillExpanded.sessions.map((session) => session.sessionId)).toEqual(['b', 'a']);

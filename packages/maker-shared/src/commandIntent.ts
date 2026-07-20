@@ -37,7 +37,76 @@ export type CommandIntentAction =
   | 'test'
   | 'build'
   | 'lint'
-  | 'typecheck';
+  | 'typecheck'
+  | 'runScript'
+  | 'checkSyntax'
+  | 'showVersion'
+  | 'checkFormatting'
+  | 'parseJson'
+  | 'count'
+  | 'showCurrentDirectory'
+  | 'showDateTime'
+  | 'locateCommand'
+  | 'inspectProcesses'
+  | 'inspectPorts'
+  | 'queryDatabase'
+  | 'gitStatus'
+  | 'gitDiff'
+  | 'gitLog'
+  | 'gitShow'
+  | 'gitAdd'
+  | 'gitCommit'
+  | 'gitFetch'
+  | 'gitPull'
+  | 'gitPush'
+  | 'gitRemote'
+  | 'gitRevParse'
+  | 'gitBranch'
+  | 'gitGrep'
+  | 'gitMergeBase'
+  | 'gitLsFiles'
+  | 'gitRevList'
+  | 'gitLsRemote'
+  | 'gitWorktreeList'
+  | 'gitWorktreeAdd'
+  | 'gitWorktreeRemove'
+  | 'gitWorktreeMove'
+  | 'gitWorktreePrune'
+  | 'ghPrList'
+  | 'ghPrView'
+  | 'ghPrChecks'
+  | 'ghPrStatus'
+  | 'ghPrDiff'
+  | 'ghPrCreate'
+  | 'ghPrEdit'
+  | 'ghPrComment'
+  | 'ghPrReview'
+  | 'ghPrMerge'
+  | 'ghPrClose'
+  | 'ghPrReopen'
+  | 'ghPrCheckout'
+  | 'ghIssueList'
+  | 'ghIssueView'
+  | 'ghIssueStatus'
+  | 'ghIssueCreate'
+  | 'ghIssueEdit'
+  | 'ghIssueComment'
+  | 'ghIssueClose'
+  | 'ghIssueReopen'
+  | 'ghAuthStatus'
+  | 'ghAuthLogin'
+  | 'ghAuthLogout'
+  | 'ghAuthRefresh'
+  | 'ghAuthSwitch'
+  | 'ghRunList'
+  | 'ghRunView'
+  | 'ghRunWatch'
+  | 'ghSearch'
+  | 'ghRepoList'
+  | 'ghRepoView'
+  | 'ghApiQuery'
+  | 'ghApiMutation'
+  | 'ghApiCall';
 
 export interface CommandIntent {
   action: CommandIntentAction;
@@ -128,7 +197,9 @@ export function commandIntentFromActions(raw: unknown, fullCommand?: string): Co
 // ── 命令原文 → intent（本地规则表） ──────────────────────────────────────────
 
 /** 管道尾段允许的纯展示型过滤器；出现其它命令（如 grep / tee / xargs）就放弃解析。 */
-const PIPE_FILTERS = new Set(['head', 'tail', 'wc', 'sort', 'uniq', 'less', 'more', 'cat', 'column', 'nl']);
+const PIPE_FILTERS = new Set([
+  'head', 'tail', 'wc', 'sort', 'uniq', 'less', 'more', 'cat', 'column', 'nl', 'sed',
+]);
 
 /** 单条命令长度上限 —— 超长命令多半是脚本内联，解析价值低且徒增开销。 */
 const COMMAND_MAX_CHARS = 1000;
@@ -173,6 +244,10 @@ function analyzeCommandShape(command: string): string[] | undefined {
     const tail = stripPrefixTokens(tailWords);
     if (!tail || tail.length === 0) return undefined;
     if (!PIPE_FILTERS.has(binaryName(tail[0]))) return undefined;
+    if (binaryName(tail[0]) === 'sed') {
+      if (!sedPipelineFilterIsReadOnly(tail.slice(1))) return undefined;
+      continue;
+    }
     // 白名单过滤器自身的写文件形态也要拒:sort -o FILE / uniq IN OUT。
     // 展示型过滤器在管道里正常不接文件参数,positional 只放行行数类数字
     // (head -n 50 / tail -n +10);-o / --output 一律拒(column -o 是分隔符,
@@ -231,6 +306,11 @@ export function commandIntentFromCommand(command: string): CommandIntent | undef
       if (!file) return undefined;
       return { action: 'read', target: basenameRemotePath(file) || file, path: file };
     }
+    case 'nl': {
+      const file = positionals(rest, NL_VALUE_FLAGS)[0];
+      if (!file) return undefined;
+      return { action: 'read', target: basenameRemotePath(file) || file, path: file };
+    }
     case 'sed': {
       // 只认只读形态 `sed -n '<range>p' <file>`（agent 常用来看文件片段）；
       // -i / --in-place 的就地编辑不解析,保持原文可见。
@@ -265,8 +345,8 @@ export function commandIntentFromCommand(command: string): CommandIntent | undef
       }
       const nameIndex = rest.findIndex((token) => token === '-name' || token === '-iname');
       const pattern = nameIndex >= 0 ? rest[nameIndex + 1] : undefined;
-      if (!pattern) return undefined;
       const path = rest[0] && !rest[0].startsWith('-') ? rest[0] : undefined;
+      if (!pattern) return { action: 'list', ...(path ? { target: path } : {}) };
       return { action: 'search', target: pattern, ...(path ? { path } : {}) };
     }
     case 'fd': {
@@ -285,11 +365,42 @@ export function commandIntentFromCommand(command: string): CommandIntent | undef
       if (!url) return undefined;
       return { action: 'fetch', target: url };
     }
+    case 'node':
+      return nodeIntent(rest);
+    case 'jq':
+      return jqIntent(rest);
+    case 'wc':
+      return countIntent(rest);
+    case 'pwd':
+      return rest.every((token) => ['-L', '-P', '--logical', '--physical'].includes(token))
+        ? { action: 'showCurrentDirectory' }
+        : undefined;
+    case 'date':
+      return dateIntent(rest);
+    case 'command':
+      return locateCommandIntent(rest);
+    case 'which': {
+      const targets = positionals(rest, new Set([]));
+      return targets[0] ? { action: 'locateCommand', target: targets.join(' ') } : undefined;
+    }
+    case 'ps':
+    case 'pgrep':
+      return { action: 'inspectProcesses' };
+    case 'lsof':
+      return lsofIntent(rest);
+    case 'sqlite3':
+      return sqliteIntent(rest);
+    case 'git':
+      if (isVersionRequest(rest)) return { action: 'showVersion', target: 'Git' };
+      return gitIntent(rest);
+    case 'gh':
+      if (isVersionRequest(rest)) return { action: 'showVersion', target: 'GitHub CLI' };
+      return githubCliIntent(rest);
     case 'pnpm':
     case 'npm':
     case 'yarn':
     case 'bun':
-      return packageManagerIntent(rest);
+      return packageManagerIntent(bin, rest);
     case 'npx':
     case 'pnpx':
     case 'bunx': {
@@ -361,6 +472,402 @@ function hasMutatingCurlFlag(rest: string[]): boolean {
   });
 }
 
+/** nl options whose value may be passed as the following argv token. */
+const NL_VALUE_FLAGS = new Set([
+  '-b', '-d', '-f', '-h', '-i', '-l', '-n', '-s', '-v', '-w',
+  '--body-numbering', '--section-delimiter', '--footer-numbering', '--header-numbering',
+  '--line-increment', '--join-blank-lines', '--number-format', '--number-separator',
+  '--starting-line-number', '--number-width',
+]);
+
+function isVersionRequest(rest: string[]): boolean {
+  return rest.length === 1 && (rest[0] === '-v' || rest[0] === '--version' || rest[0] === '-V');
+}
+
+const NODE_VALUE_FLAGS = new Set([
+  '-r', '--require', '--import', '--loader', '--experimental-loader', '--conditions', '-C',
+]);
+
+function nodeIntent(rest: string[]): CommandIntent | undefined {
+  if (isVersionRequest(rest)) return { action: 'showVersion', target: 'Node.js' };
+  if (rest.some((token) => token === '-e' || token === '--eval' || token === '-p' || token === '--print')) {
+    return undefined;
+  }
+
+  const syntaxFlag = rest.findIndex((token) => token === '-c' || token === '--check');
+  const files = positionals(rest, NODE_VALUE_FLAGS);
+  const script = files[0];
+  if (!script || script === '-') return undefined;
+  const target = basenameRemotePath(script) || script;
+  return syntaxFlag >= 0 ? { action: 'checkSyntax', target } : { action: 'runScript', target };
+}
+
+const JQ_VALUE_FLAGS = new Set(['-L', '--indent', '-f', '--from-file']);
+const JQ_TWO_VALUE_FLAGS = new Set(['--arg', '--argjson', '--slurpfile', '--rawfile', '--argfile']);
+
+function jqIntent(rest: string[]): CommandIntent | undefined {
+  if (isVersionRequest(rest)) return { action: 'showVersion', target: 'jq' };
+  if (rest.includes('-h') || rest.includes('--help')) return undefined;
+  if (rest.some((token) => JQ_TWO_VALUE_FLAGS.has(token))) return { action: 'parseJson' };
+  const files = positionals(rest, JQ_VALUE_FLAGS);
+  const filterComesFromFile = rest.includes('-f') || rest.includes('--from-file');
+  const input = filterComesFromFile ? files[0] : files[1];
+  return {
+    action: 'parseJson',
+    ...(input ? { target: basenameRemotePath(input) || input } : {}),
+  };
+}
+
+function countIntent(rest: string[]): CommandIntent | undefined {
+  if (rest.includes('--help')) return undefined;
+  if (isVersionRequest(rest)) return { action: 'showVersion', target: 'wc' };
+  const files = positionals(rest, new Set(['--files0-from']));
+  const target = files[0];
+  return {
+    action: 'count',
+    ...(target ? { target: basenameRemotePath(target) || target } : {}),
+  };
+}
+
+/** `date` can set the system clock; only known display-only forms get a friendly label. */
+function dateIntent(rest: string[]): CommandIntent | undefined {
+  if (
+    rest.every(
+      (token) =>
+        token === '-u' ||
+        token === '--utc' ||
+        token === '--universal' ||
+        token === '-R' ||
+        token === '--rfc-email' ||
+        token.startsWith('+'),
+    )
+  ) {
+    return { action: 'showDateTime' };
+  }
+  return undefined;
+}
+
+function locateCommandIntent(rest: string[]): CommandIntent | undefined {
+  if (rest.length < 2 || (rest[0] !== '-v' && rest[0] !== '-V')) return undefined;
+  const targets = rest.slice(1).filter((token) => token && !token.startsWith('-'));
+  return targets[0] ? { action: 'locateCommand', target: targets.join(' ') } : undefined;
+}
+
+function lsofIntent(rest: string[]): CommandIntent {
+  for (let index = 0; index < rest.length; index += 1) {
+    const token = rest[index];
+    if (token === '-i') {
+      const target = rest[index + 1];
+      return { action: 'inspectPorts', ...(target && !target.startsWith('-') ? { target } : {}) };
+    }
+    if (token.startsWith('-i') && token.length > 2) {
+      return { action: 'inspectPorts', target: token.slice(2) };
+    }
+  }
+  return { action: 'inspectProcesses' };
+}
+
+const SQLITE_VALUE_FLAGS = new Set(['-separator', '-newline', '-vfs']);
+const SQLITE_UNSAFE_OPTIONS = ['-cmd', '-init'];
+const SQLITE_MUTATING_SQL = /\b(?:insert|update|delete|replace|create|drop|alter|vacuum|attach|detach|reindex|load_extension|writefile)\b/i;
+
+function sqliteIntent(rest: string[]): CommandIntent | undefined {
+  if (!rest.includes('-readonly')) return undefined;
+  if (rest.some((token) => SQLITE_UNSAFE_OPTIONS.some((flag) => token === flag || token.startsWith(`${flag}=`)))) {
+    return undefined;
+  }
+  const pos = positionals(rest, SQLITE_VALUE_FLAGS);
+  const database = pos[0];
+  if (!database) return undefined;
+  const statements = pos.slice(1);
+  if (
+    statements.some((statement) => /^\s*\./.test(statement) || /\n\s*\./.test(statement)) ||
+    SQLITE_MUTATING_SQL.test(statements.join(' '))
+  ) {
+    return undefined;
+  }
+  return { action: 'queryDatabase', target: basenameRemotePath(database) || database };
+}
+
+interface CliSubcommand {
+  name: string;
+  args: string[];
+}
+
+/** Find the first non-option argv and return it with the untouched tail. */
+function cliSubcommand(tokens: string[], valueFlags: Set<string>): CliSubcommand | undefined {
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token === '--') return undefined;
+    if (token.startsWith('-') && token.length > 1) {
+      if (valueFlags.has(token)) index += 1;
+      continue;
+    }
+    return { name: token.toLowerCase(), args: tokens.slice(index + 1) };
+  }
+  return undefined;
+}
+
+const GIT_GLOBAL_VALUE_FLAGS = new Set([
+  '-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--config-env',
+]);
+
+function hasGitOutputFileFlag(args: string[]): boolean {
+  return args.some((token) => token === '--output' || token.startsWith('--output='));
+}
+
+const GIT_BRANCH_MUTATING_FLAGS = [
+  '-d', '-D', '-m', '-M', '-c', '-C', '-f', '-u',
+  '--delete', '--move', '--copy', '--force', '--edit-description', '--set-upstream-to', '--unset-upstream',
+];
+
+function gitBranchIsReadOnly(args: string[]): boolean {
+  if (
+    args.some((token) =>
+      GIT_BRANCH_MUTATING_FLAGS.some((flag) => token === flag || token.startsWith(`${flag}=`)) ||
+      (/^-[^-]/.test(token) && /[dDmMcCfu]/.test(token.slice(1))),
+    )
+  ) {
+    return false;
+  }
+  if (args.includes('--list')) return true;
+  const valueFlags = new Set([
+    '--contains', '--no-contains', '--merged', '--no-merged', '--points-at', '--sort', '--format',
+  ]);
+  return positionals(args, valueFlags).length === 0;
+}
+
+function gitRemoteIsReadOnly(args: string[]): boolean {
+  const operation = cliSubcommand(args, new Set([]));
+  return operation === undefined || operation.name === 'show' || operation.name === 'get-url';
+}
+
+function gitGrepIsReadOnly(args: string[]): boolean {
+  return !args.some(
+    (token) => token.startsWith('-O') || token.startsWith('--open-files-in-pager'),
+  );
+}
+
+function gitIntent(rest: string[]): CommandIntent | undefined {
+  const subcommand = cliSubcommand(rest, GIT_GLOBAL_VALUE_FLAGS);
+  if (!subcommand) return undefined;
+
+  switch (subcommand.name) {
+    case 'status':
+      return { action: 'gitStatus' };
+    case 'diff':
+      return hasGitOutputFileFlag(subcommand.args) ? undefined : { action: 'gitDiff' };
+    case 'log':
+      return hasGitOutputFileFlag(subcommand.args) ? undefined : { action: 'gitLog' };
+    case 'show':
+      return hasGitOutputFileFlag(subcommand.args) ? undefined : { action: 'gitShow' };
+    case 'add':
+      return { action: 'gitAdd' };
+    case 'commit':
+      // Amend rewrites existing history rather than creating an ordinary commit;
+      // keep the exact command as the only description in that less-common case.
+      return subcommand.args.includes('--amend') ? undefined : { action: 'gitCommit' };
+    case 'fetch':
+      return { action: 'gitFetch' };
+    case 'pull':
+      return { action: 'gitPull' };
+    case 'push':
+      // Force/deletion forms deserve the raw fallback instead of the neutral
+      // "push changes" title, which would hide their destructive semantics.
+      if (
+        subcommand.args.some(
+          (token) =>
+            token === '-f' ||
+            token === '--force' ||
+            token.startsWith('--force=') ||
+            token.startsWith('--force-with-lease') ||
+            token === '-d' ||
+            token === '--delete' ||
+            token === '--mirror' ||
+            token === '--prune',
+        )
+      ) {
+        return undefined;
+      }
+      return { action: 'gitPush' };
+    case 'remote':
+      return gitRemoteIsReadOnly(subcommand.args) ? { action: 'gitRemote' } : undefined;
+    case 'rev-parse':
+      return { action: 'gitRevParse' };
+    case 'branch':
+      return gitBranchIsReadOnly(subcommand.args) ? { action: 'gitBranch' } : undefined;
+    case 'grep':
+      return gitGrepIsReadOnly(subcommand.args) ? { action: 'gitGrep' } : undefined;
+    case 'merge-base':
+      return { action: 'gitMergeBase' };
+    case 'ls-files':
+      return { action: 'gitLsFiles' };
+    case 'rev-list':
+      return { action: 'gitRevList' };
+    case 'ls-remote':
+      return subcommand.args.some((token) => token === '-u' || token.startsWith('--upload-pack'))
+        ? undefined
+        : { action: 'gitLsRemote' };
+    case 'worktree': {
+      const worktree = cliSubcommand(subcommand.args, new Set([]));
+      switch (worktree?.name) {
+        case 'list':
+          return { action: 'gitWorktreeList' };
+        case 'add':
+          return { action: 'gitWorktreeAdd' };
+        case 'remove':
+          return { action: 'gitWorktreeRemove' };
+        case 'move':
+          return { action: 'gitWorktreeMove' };
+        case 'prune':
+          return { action: 'gitWorktreePrune' };
+        default:
+          return undefined;
+      }
+    }
+    default:
+      return undefined;
+  }
+}
+
+const GH_GLOBAL_VALUE_FLAGS = new Set(['-R', '--repo', '--hostname']);
+
+const GH_PR_ACTIONS: Readonly<Record<string, CommandIntentAction>> = {
+  list: 'ghPrList',
+  view: 'ghPrView',
+  checks: 'ghPrChecks',
+  status: 'ghPrStatus',
+  diff: 'ghPrDiff',
+  create: 'ghPrCreate',
+  edit: 'ghPrEdit',
+  comment: 'ghPrComment',
+  review: 'ghPrReview',
+  merge: 'ghPrMerge',
+  close: 'ghPrClose',
+  reopen: 'ghPrReopen',
+  checkout: 'ghPrCheckout',
+};
+
+const GH_ISSUE_ACTIONS: Readonly<Record<string, CommandIntentAction>> = {
+  list: 'ghIssueList',
+  view: 'ghIssueView',
+  status: 'ghIssueStatus',
+  create: 'ghIssueCreate',
+  edit: 'ghIssueEdit',
+  comment: 'ghIssueComment',
+  close: 'ghIssueClose',
+  reopen: 'ghIssueReopen',
+};
+
+const GH_AUTH_ACTIONS: Readonly<Record<string, CommandIntentAction>> = {
+  status: 'ghAuthStatus',
+  login: 'ghAuthLogin',
+  logout: 'ghAuthLogout',
+  refresh: 'ghAuthRefresh',
+  switch: 'ghAuthSwitch',
+};
+
+const GH_RUN_ACTIONS: Readonly<Record<string, CommandIntentAction>> = {
+  list: 'ghRunList',
+  view: 'ghRunView',
+  watch: 'ghRunWatch',
+};
+
+const GH_SEARCH_GROUPS = new Set(['code', 'commits', 'issues', 'prs', 'repos']);
+
+function githubCliIntent(rest: string[]): CommandIntent | undefined {
+  const group = cliSubcommand(rest, GH_GLOBAL_VALUE_FLAGS);
+  if (!group) return undefined;
+  if (group.name === 'api') return githubApiIntent(group.args);
+
+  const operationCommand = cliSubcommand(group.args, GH_GLOBAL_VALUE_FLAGS);
+  const operation = operationCommand?.name;
+  if (!operation) return undefined;
+  switch (group.name) {
+    case 'pr':
+      return GH_PR_ACTIONS[operation] ? { action: GH_PR_ACTIONS[operation] } : undefined;
+    case 'issue':
+      return GH_ISSUE_ACTIONS[operation] ? { action: GH_ISSUE_ACTIONS[operation] } : undefined;
+    case 'auth':
+      return GH_AUTH_ACTIONS[operation] ? { action: GH_AUTH_ACTIONS[operation] } : undefined;
+    case 'run':
+      return GH_RUN_ACTIONS[operation] ? { action: GH_RUN_ACTIONS[operation] } : undefined;
+    case 'search':
+      return GH_SEARCH_GROUPS.has(operation) ? { action: 'ghSearch' } : undefined;
+    case 'repo':
+      if (operation === 'list') return { action: 'ghRepoList' };
+      if (operation === 'view') {
+        const target = positionals(operationCommand?.args ?? [], GH_GLOBAL_VALUE_FLAGS)[0];
+        return { action: 'ghRepoView', ...(target ? { target } : {}) };
+      }
+      return undefined;
+    default:
+      return undefined;
+  }
+}
+
+function readCliOptionValue(tokens: string[], short: string, long: string): string | undefined {
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token === short || token === long) return tokens[index + 1];
+    if (token.startsWith(`${long}=`)) return token.slice(long.length + 1);
+    if (token.startsWith(short) && token.length > short.length) return token.slice(short.length);
+  }
+  return undefined;
+}
+
+function collectGithubApiFields(tokens: string[]): string[] {
+  const fields: string[] = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token === '-f' || token === '-F' || token === '--raw-field' || token === '--field') {
+      if (tokens[index + 1] !== undefined) fields.push(tokens[index + 1]);
+      index += 1;
+      continue;
+    }
+    for (const flag of ['--raw-field=', '--field=', '-f', '-F']) {
+      if (token.startsWith(flag) && token.length > flag.length) {
+        fields.push(token.slice(flag.length));
+        break;
+      }
+    }
+  }
+  return fields;
+}
+
+const GH_API_VALUE_FLAGS = new Set([
+  '-H', '--header', '--hostname', '--input', '-q', '--jq', '-X', '--method',
+  '-f', '--raw-field', '-F', '--field', '-t', '--template', '--cache',
+]);
+
+function githubApiIntent(args: string[]): CommandIntent {
+  const method = readCliOptionValue(args, '-X', '--method')?.toUpperCase();
+  const hasInput = args.some((token) => token === '--input' || token.startsWith('--input='));
+  const fields = collectGithubApiFields(args);
+  const endpoint = positionals(args, GH_API_VALUE_FLAGS)[0]?.toLowerCase();
+
+  // --input may contain either a GraphQL query or a mutation; without reading
+  // another file the semantic operation is intentionally left unspecified.
+  if (hasInput && (method === undefined || endpoint === 'graphql')) return { action: 'ghApiCall' };
+
+  if (endpoint === 'graphql') {
+    const queryField = fields.find((field) => field.startsWith('query='));
+    const operation = queryField?.slice('query='.length).trim();
+    if (operation && /^mutation\b/i.test(operation)) return { action: 'ghApiMutation' };
+    if (operation && /^(?:query\b|\{)/i.test(operation)) return { action: 'ghApiQuery' };
+    if (method === undefined) return { action: 'ghApiCall' };
+  }
+
+  if (method === 'GET' || method === 'HEAD') return { action: 'ghApiQuery' };
+  if (method && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    return { action: 'ghApiMutation' };
+  }
+  if (method !== undefined) return { action: 'ghApiCall' };
+  if (!endpoint) return { action: 'ghApiCall' };
+  if (fields.length > 0) return { action: 'ghApiMutation' };
+  return { action: 'ghApiQuery' };
+}
+
 /** grep/rg 家族里「取值型」flag —— 解析 positional 时要连着跳过它的值。 */
 const GREP_VALUE_FLAGS = new Set([
   '-A', '-B', '-C', '-m', '-d', '-g', '-t', '-T', '-f',
@@ -421,7 +928,21 @@ function grepIntent(rest: string[]): CommandIntent | undefined {
 /** pnpm/npm/yarn/bun 里「取值型」flag。 */
 const PM_VALUE_FLAGS = new Set(['--filter', '-F', '--dir', '-C', '--cwd', '--prefix']);
 
-function packageManagerIntent(rest: string[]): CommandIntent | undefined {
+const PACKAGE_MANAGER_BUILTINS = new Set([
+  'access', 'add', 'allow-builds', 'approve-builds', 'audit', 'bin', 'bugs', 'cache', 'catalog', 'ci',
+  'completion', 'config', 'constraints', 'create', 'dedupe', 'delete', 'deploy', 'deprecate', 'diff',
+  'dist-tag', 'dlx', 'doctor', 'docs', 'edit', 'env', 'exec', 'explain', 'explore', 'fetch', 'find-dupes',
+  'fund', 'get', 'help', 'help-search', 'hook', 'ignored-builds', 'import', 'info', 'init', 'install',
+  'install-ci-test', 'install-test', 'i', 'link', 'list', 'licenses', 'login', 'logout', 'ls', 'node',
+  'npm', 'org', 'outdated', 'owner', 'pack', 'patch', 'patch-commit', 'ping', 'pkg', 'plugin', 'pm',
+  'prefix', 'profile', 'prune', 'publish', 'query', 'rebuild', 'remove', 'repo', 'root', 'run', 'sbom',
+  'search', 'self-update', 'server', 'set', 'setup', 'shrinkwrap', 'stage', 'star', 'stars', 'store',
+  'team', 'token', 'uninstall', 'unlink', 'unplug', 'unpublish', 'update', 'up', 'upgrade-interactive',
+  'version', 'view', 'whoami', 'why', 'workspace', 'workspaces', 'x',
+]);
+
+function packageManagerIntent(manager: string, rest: string[]): CommandIntent | undefined {
+  if (isVersionRequest(rest)) return { action: 'showVersion', target: manager };
   const pos = positionals(rest, PM_VALUE_FLAGS);
   const sub = pos[0];
   if (!sub) return undefined;
@@ -440,7 +961,7 @@ function packageManagerIntent(rest: string[]): CommandIntent | undefined {
       if (!pos[1]) return undefined;
       // 转发参数可携带写文件 flag(`pnpm run lint -- --fix`),先查再分类。
       if (hasMutatingForwardedArg(argsAfter(rest, pos[1]))) return undefined;
-      return scriptIntent(pos[1]);
+      return scriptIntent(pos[1]) ?? { action: 'runScript', target: pos[1] };
     }
     case 'test':
       // `npm test -- --updateSnapshot` 会改写快照,不能标「运行测试」。
@@ -456,7 +977,12 @@ function packageManagerIntent(rest: string[]): CommandIntent | undefined {
       const forwarded = argsAfter(rest, sub);
       const script = scriptIntent(sub);
       if (script) return hasMutatingForwardedArg(forwarded) ? undefined : script;
-      return toolBinaryIntent(sub, forwarded);
+      const tool = toolBinaryIntent(sub, forwarded);
+      if (tool) return tool;
+      if (KNOWN_TOOL_BINARIES.has(binaryName(sub))) return undefined;
+      return PACKAGE_MANAGER_BUILTINS.has(sub)
+        ? undefined
+        : { action: 'runScript', target: sub };
     }
   }
 }
@@ -483,6 +1009,10 @@ function scriptIntent(script: string): CommandIntent | undefined {
   return undefined;
 }
 
+const KNOWN_TOOL_BINARIES = new Set([
+  'vitest', 'jest', 'pytest', 'eslint', 'tsc', 'prettier', 'node',
+]);
+
 /** 直接调用的工具二进制 → 意图（vitest / eslint / tsc …),args 用于拒绝写文件形态。 */
 function toolBinaryIntent(bin: string | undefined, args: string[] = []): CommandIntent | undefined {
   if (!bin) return undefined;
@@ -505,6 +1035,11 @@ function toolBinaryIntent(bin: string | undefined, args: string[] = []): Command
       if ((args[idx + 1] ?? '').toLowerCase() === 'false') return undefined;
       return { action: 'typecheck' };
     }
+    case 'prettier':
+      if (args.includes('--check') || args.includes('-c')) return { action: 'checkFormatting' };
+      return undefined;
+    case 'node':
+      return nodeIntent(args);
     default:
       return undefined;
   }
@@ -553,6 +1088,14 @@ function sedTokensAreReadOnly(rest: string[]): boolean {
   const eIndex = rest.findIndex((token) => token === '-e' || token === '--expression');
   const script = eIndex >= 0 ? rest[eIndex + 1] : positionals(rest, new Set([]))[0];
   return script !== undefined && SED_PRINT_ONLY_SCRIPT.test(script);
+}
+
+/** A pipeline filter must consume stdin; an extra file operand would change the displayed source. */
+function sedPipelineFilterIsReadOnly(rest: string[]): boolean {
+  if (!sedTokensAreReadOnly(rest)) return false;
+  const usesExpressionFlag = rest.some((token) => token === '-e' || token === '--expression');
+  const pos = positionals(rest, new Set(['-e', '--expression']));
+  return usesExpressionFlag ? pos.length === 0 : pos.length === 1;
 }
 
 /**

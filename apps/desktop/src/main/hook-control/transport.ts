@@ -29,16 +29,19 @@ import {
 } from '@cindy/slack-hook-protocol';
 
 /** transport 对外状态(manager 映射为 HookConnectionStatus)。 */
-export type HookTransportStatus = 'connecting' | 'connected' | 'error' | 'stopped';
+export type HookTransportStatus = 'connecting' | 'connected' | 'standby' | 'error' | 'stopped';
 
 export interface HookTransportOpts {
   url: string;
   /**
-   * 建连时实时取登录 accessToken(每次重连重取; 现值缺失时调用方内部可
-   * refresh)。返回 null = 当前未登录, 本轮跳过并按退避重试 —— 登录事件
-   * 会经 manager.sync 重建 transport, 不依赖这里的轮询。
+   * 建连时实时取登录 accessToken(每次重连重取; null = 当前未登录)。
    */
   getAuthToken: () => Promise<string | null>;
+  /**
+   * WS upgrade 被 401 拒绝时强制刷新一次登录凭证。单个 transport 生命周期内
+   * 最多调用一次，避免坏凭证形成 refresh 风暴；成功后立即用新 token 重连。
+   */
+  refreshAuthToken: () => Promise<boolean>;
   /** 每次连接成功后发送的 hello 内容(重读配置, 别名变更即时生效)。 */
   buildHello: () => HelloInput;
   /** welcome / ping / pong 之外的消息透传(dispatch 等业务帧)。send 返回是否送出。 */
@@ -49,6 +52,8 @@ export interface HookTransportOpts {
    */
   onWelcome?: (payload: WelcomePayload) => void;
   onStatus: (status: HookTransportStatus, lastError: string | null) => void;
+  /** 测试注入重连时间参数；生产缺省 1s → 30s。 */
+  timing?: { backoffBaseMs?: number; backoffMaxMs?: number; standbyRetryMs?: number };
   log: { info(msg: string): void; warn(msg: string): void; debug?(msg: string): void };
 }
 
@@ -59,24 +64,40 @@ export interface HookTransport {
 
 const BACKOFF_BASE_MS = 1000;
 const BACKOFF_MAX_MS = 30_000;
+/** 服务端 first-wins：同账号同 deviceId 的后续 hello 被此 close code 拒绝。 */
+const DUPLICATE_DEVICE_CLOSE_CODE = 4000;
+const DUPLICATE_DEVICE_CLOSE_REASON = 'device already connected';
+/** transport 向 manager 暴露的稳定错误标识；renderer 据此本地化，不解析原始英文。 */
+export const HOOK_TRANSPORT_ERROR_NOT_LOGGED_IN = 'not logged in';
+/** standby 下低频探测首实例是否已退出；避免永久停驻，同时不形成重连风暴。 */
+const STANDBY_RETRY_MS = 30_000;
 /** 心跳发送间隔。 */
 const PING_INTERVAL_MS = 25_000;
 /** 空闲看门狗: 超过该时长没收到任何帧视为死链, 主动断开触发重连。 */
 const IDLE_TIMEOUT_MS = 65_000;
 
 export function createHookTransport(opts: HookTransportOpts): HookTransport {
-  const { url, getAuthToken, buildHello, onMessage, onStatus, log } = opts;
+  const { url, getAuthToken, refreshAuthToken, buildHello, onMessage, onStatus, log } = opts;
+  const backoffBaseMs = opts.timing?.backoffBaseMs ?? BACKOFF_BASE_MS;
+  const backoffMaxMs = opts.timing?.backoffMaxMs ?? BACKOFF_MAX_MS;
+  const standbyRetryMs = opts.timing?.standbyRetryMs ?? STANDBY_RETRY_MS;
 
   let ws: WebSocket | null = null;
   let stopped = false;
+  let standby = false;
   let attempt = 0;
+  let authRefreshAttempted = false;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let pingTimer: ReturnType<typeof setInterval> | null = null;
   let lastFrameAt = 0;
   let lastError: string | null = null;
+  let unexpectedHttpStatus: number | null = null;
 
   function setStatus(status: HookTransportStatus): void {
     if (stopped && status !== 'stopped') return;
+    // standby 的低频探测在内部仍会经历 connecting/error，但产品状态应持续
+    // 表达“另一实例持有”，直到探测真正收到 welcome 或 transport 被重建。
+    if (standby && status !== 'connected' && status !== 'stopped') return;
     onStatus(status, lastError);
   }
 
@@ -91,9 +112,10 @@ export function createHookTransport(opts: HookTransportOpts): HookTransport {
     }
   }
 
-  function scheduleRetry(): void {
+  function scheduleRetry(delayOverrideMs?: number): void {
     if (stopped || retryTimer) return;
-    const delay = Math.min(BACKOFF_BASE_MS * 2 ** attempt, BACKOFF_MAX_MS);
+    const delay =
+      delayOverrideMs ?? Math.min(backoffBaseMs * 2 ** attempt, backoffMaxMs);
     attempt += 1;
     retryTimer = setTimeout(() => {
       retryTimer = null;
@@ -128,20 +150,44 @@ export function createHookTransport(opts: HookTransportOpts): HookTransport {
 
   function connect(): void {
     if (stopped) return;
+    unexpectedHttpStatus = null;
     setStatus('connecting');
     void getAuthToken()
       .catch(() => null)
       .then((token) => {
         if (stopped) return;
         if (!token) {
-          // 未登录: 不发起无凭证连接(必 401), 记状态按退避重试;
+          // 未登录:不发起无凭证连接(必 401),记状态按退避重试;
           // 登录事件会经 manager.sync 重建 transport 即时恢复
-          lastError = 'not logged in';
+          lastError = HOOK_TRANSPORT_ERROR_NOT_LOGGED_IN;
           setStatus('error');
           scheduleRetry();
           return;
         }
         openSocket(token);
+      });
+  }
+
+  function handleUnauthorized(): void {
+    if (authRefreshAttempted) {
+      lastError = 'Unexpected server response: 401';
+      setStatus('error');
+      scheduleRetry();
+      return;
+    }
+    authRefreshAttempted = true;
+    void refreshAuthToken()
+      .catch(() => false)
+      .then((ok) => {
+        if (stopped) return;
+        if (ok) {
+          lastError = null;
+          connect();
+          return;
+        }
+        lastError = 'Unexpected server response: 401';
+        setStatus('error');
+        scheduleRetry();
       });
   }
 
@@ -161,8 +207,22 @@ export function createHookTransport(opts: HookTransportOpts): HookTransport {
     }
     ws = socket;
 
+    socket.on('unexpected-response', (_req, response) => {
+      if (stopped) return;
+      unexpectedHttpStatus = response.statusCode ?? null;
+      // 注册 listener 后 ws 不再自动 abort 握手，必须显式销毁半开连接。
+      socket.terminate();
+      if (unexpectedHttpStatus === 401) {
+        log.warn('ws upgrade rejected: 401, refreshing auth token once');
+        return;
+      }
+      lastError = `Unexpected server response: ${unexpectedHttpStatus ?? 'unknown'}`;
+      log.warn(`ws upgrade rejected: ${unexpectedHttpStatus ?? 'unknown'}`);
+    });
+
     socket.on('open', () => {
       if (stopped) return;
+      unexpectedHttpStatus = null;
       // open 只代表 TCP/WS 通了; connected 状态等 welcome —— 先自报家门
       send(makeHello(buildHello()));
       startHeartbeat();
@@ -183,7 +243,9 @@ export function createHookTransport(opts: HookTransportOpts): HookTransport {
       }
       if (msg.type === 'pong') return;
       if (msg.type === 'welcome') {
+        standby = false;
         attempt = 0;
+        authRefreshAttempted = false;
         lastError = null;
         log.info(`handshake complete with ${msg.payload.serverName}`);
         // 能力宣告先于 connected: 上层在状态回调里可能立刻发帧, 特性集必须已就位
@@ -195,17 +257,36 @@ export function createHookTransport(opts: HookTransportOpts): HookTransport {
     });
 
     socket.on('error', (err) => {
+      // unexpected-response 已保留真实 HTTP status；terminate 半开握手会额外产生
+      // “closed before established”，不能让它覆盖可诊断的 401/503。
+      if (unexpectedHttpStatus !== null) return;
       lastError = err instanceof Error ? err.message : String(err);
       log.warn(`ws error: ${lastError}`);
     });
 
-    socket.on('close', (code) => {
+    socket.on('close', (code, reason) => {
       if (pingTimer) {
         clearInterval(pingTimer);
         pingTimer = null;
       }
       ws = null;
       if (stopped) return;
+
+      const reasonText = reason.toString('utf-8');
+      if (code === DUPLICATE_DEVICE_CLOSE_CODE && reasonText === DUPLICATE_DEVICE_CLOSE_REASON) {
+        standby = true;
+        lastError = null;
+        log.info(`duplicate device connection rejected; entering standby, retrying in ${standbyRetryMs}ms`);
+        onStatus('standby', null);
+        scheduleRetry(standbyRetryMs);
+        return;
+      }
+      if (unexpectedHttpStatus === 401) {
+        unexpectedHttpStatus = null;
+        handleUnauthorized();
+        return;
+      }
+
       log.info(`ws closed (code=${code}), scheduling reconnect`);
       setStatus(lastError ? 'error' : 'connecting');
       scheduleRetry();

@@ -13,6 +13,7 @@
     "./branding": "./src/branding.ts",
     "./brand-identity": "./src/brandIdentity.ts",
     "./chat-quotes": "./src/chatQuotes.ts",
+    "./command-display": "./src/commandDisplay.ts",
     "./client-endpoints": "./src/clientEndpoints.ts",
     "./composer-palette": "./src/composerPalette.ts",
     "./device-list": "./src/deviceList.ts",

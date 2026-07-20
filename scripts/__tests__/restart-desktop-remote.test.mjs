@@ -1,8 +1,23 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-import { osascriptLaunchDarwinTerminalArgs } from "../restart-desktop-remote.mjs";
+import {
+	isRepositoryDesktopDevProcess,
+	formatDesktopStartupFailure,
+	readDesktopStartupStatus,
+	parseWorktreePaths,
+	osascriptLaunchDarwinTerminalArgs,
+	waitForDesktopStartup,
+} from "../restart-desktop-remote.mjs";
+import {
+	identifyDesktopProcesses,
+	mergeDesktopInstanceRecords,
+	parseWorktreeEntries,
+} from "../desktop-whoami.mjs";
+import { buildDesktopRestartSteps } from "../desktop-restart-runner.mjs";
 
 function appleScriptLines(args) {
 	const lines = [];
@@ -11,6 +26,11 @@ function appleScriptLines(args) {
 	}
 	return lines;
 }
+
+// 被测脚本用 path.join / path.resolve 生成路径,分隔符随平台变(Windows 反斜杠、
+// 且 path.resolve 会补盘符)。测试的合成路径也必须走同一套 path API,才能在
+// macOS / Windows 上都与生产实际所见一致——硬编码 POSIX 字面量只在 *nix 成立。
+const stepScript = (root, name) => path.join(root, "scripts", name);
 
 test("macOS Terminal launch runs command before activating Terminal", () => {
 	const lines = appleScriptLines(osascriptLaunchDarwinTerminalArgs("echo test"));
@@ -31,4 +51,241 @@ test("desktop restart no longer depends on the retired Feishu build app id", () 
 		"utf8",
 	);
 	assert.equal(source.includes("VITE_FEISHU_APP_ID"), false);
+});
+
+test("desktop restart recognizes dev processes from sibling repository worktrees", () => {
+	const mainRoot = path.resolve("/repo/cindy");
+	const featureRoot = path.resolve("/repo/cindy-feature");
+	const unrelatedRoot = path.resolve("/repo/unrelated");
+	const worktrees = parseWorktreePaths([
+		`worktree ${mainRoot}`,
+		"HEAD abc123",
+		"branch refs/heads/main",
+		"",
+		`worktree ${featureRoot}`,
+		"HEAD def456",
+		"branch refs/heads/dash/feature",
+	].join("\n"));
+
+	assert.deepEqual(worktrees, [mainRoot, featureRoot]);
+	assert.equal(isRepositoryDesktopDevProcess({
+		pid: 42,
+		command: `node ${path.join(featureRoot, "node_modules/@electron-forge/cli")} electron-forge start`,
+	}, worktrees, 999), true);
+	assert.equal(isRepositoryDesktopDevProcess({
+		pid: 43,
+		command: `node ${path.join(unrelatedRoot, "node_modules/@electron-forge/cli")} electron-forge start`,
+	}, worktrees, 999), false);
+});
+
+test("desktop restart runner keeps the kill-before-deps order by default", () => {
+	const root = "/repo/cindy";
+	const steps = buildDesktopRestartSteps(["--wait-ready"], root);
+	assert.deepEqual(steps.map((step) => step.args), [
+		[stepScript(root, "restart-desktop-remote.mjs"), "--kill-only"],
+		[stepScript(root, "ensure-deps.mjs")],
+		[stepScript(root, "ensure-dev-runtime-assets.mjs")],
+		[stepScript(root, "restart-desktop-remote.mjs"), "--wait-ready"],
+	]);
+});
+
+test("preserve-running skips every kill stage and reaches the readiness start", () => {
+	const root = "/repo/cindy";
+	const steps = buildDesktopRestartSteps(
+		["--wait-ready", "--", "--preserve-running"],
+		root,
+	);
+	assert.deepEqual(steps.map((step) => step.args), [
+		[stepScript(root, "ensure-deps.mjs")],
+		[stepScript(root, "ensure-dev-runtime-assets.mjs")],
+		[
+			stepScript(root, "restart-desktop-remote.mjs"),
+			"--preserve-running",
+			"--wait-ready",
+		],
+	]);
+});
+
+test("precise replacement stays in the preserve-running pipeline", () => {
+	const root = "/repo/cindy";
+	const steps = buildDesktopRestartSteps(
+		["--wait-ready", "--", "--preserve-running", "--replace-running-root=/repo/old-preview"],
+		root,
+	);
+	assert.deepEqual(steps.map((step) => step.args), [
+		[stepScript(root, "ensure-deps.mjs")],
+		[stepScript(root, "ensure-dev-runtime-assets.mjs")],
+		[
+			stepScript(root, "restart-desktop-remote.mjs"),
+			"--preserve-running",
+			"--replace-running-root=/repo/old-preview",
+			"--wait-ready",
+		],
+	]);
+});
+
+test("local restart keeps --local on both process-control stages", () => {
+	const root = "/repo/cindy";
+	const steps = buildDesktopRestartSteps(["--local", "--wait-ready"], root);
+	assert.deepEqual(steps[0].args, [
+		stepScript(root, "restart-desktop-remote.mjs"),
+		"--local",
+		"--kill-only",
+	]);
+	assert.deepEqual(steps.at(-1).args, [
+		stepScript(root, "restart-desktop-remote.mjs"),
+		"--local",
+		"--wait-ready",
+	]);
+});
+
+test("desktop readiness status is parsed only after an atomic status file appears", () => {
+	const statusPath = new URL(`./startup-${process.pid}.json`, import.meta.url);
+	try {
+		assert.equal(readDesktopStartupStatus(statusPath), null);
+		fs.writeFileSync(statusPath, '{"state":"ready","pid":123}\n');
+		assert.deepEqual(readDesktopStartupStatus(statusPath), { state: "ready", pid: 123 });
+	} finally {
+		fs.rmSync(statusPath, { force: true });
+	}
+});
+
+test("desktop readiness waiter removes an acknowledged ready status", async () => {
+	const statusPath = fileURLToPath(new URL(`./startup-ready-${process.pid}.json`, import.meta.url));
+	try {
+		fs.writeFileSync(statusPath, '{"state":"ready","pid":123}\n');
+		await waitForDesktopStartup(statusPath, 10);
+		assert.equal(fs.existsSync(statusPath), false);
+	} finally {
+		fs.rmSync(statusPath, { force: true });
+	}
+});
+
+test("desktop readiness timeout leaves an abandoned tombstone for late Electron events", async () => {
+	const statusPath = fileURLToPath(new URL(`./startup-timeout-${process.pid}.json`, import.meta.url));
+	try {
+		fs.writeFileSync(statusPath, '{"state":"pending"}\n');
+		await assert.rejects(waitForDesktopStartup(statusPath, 0), /did not reach main-window readiness/);
+		assert.equal(readDesktopStartupStatus(statusPath)?.state, "abandoned");
+	} finally {
+		fs.rmSync(statusPath, { force: true });
+	}
+});
+
+test("structured startup failures keep their actionable reason", () => {
+	assert.equal(
+		formatDesktopStartupFailure({
+			state: "failed",
+			code: "SINGLE_INSTANCE_OWNED",
+			message: "Another Cindy instance owns the primary slot.",
+			detail: { userDataDir: "/tmp/Cindy" },
+		}),
+		"[SINGLE_INSTANCE_OWNED] Another Cindy instance owns the primary slot. (userDataDir=/tmp/Cindy)",
+	);
+});
+
+test("desktop whoami identifies multiple passive previews sharing one userData", () => {
+	const previewRoot = path.resolve("/repo/cindy-preview");
+	const previewRootTwo = path.resolve("/repo/cindy-preview-two");
+	const userData = path.resolve("/tmp/Cindy");
+	const worktrees = parseWorktreeEntries([
+		`worktree ${previewRoot}`,
+		"HEAD abc123",
+		"branch refs/heads/dash/preview/example",
+		"",
+		`worktree ${previewRootTwo}`,
+		"HEAD def456",
+		"branch refs/heads/dash/preview/two",
+	].join("\n"));
+	const electronMain = path.join(previewRoot, "node_modules", "electron", "dist", "Electron");
+	const electronHelper = path.join(previewRoot, "node_modules", "electron", "helper");
+	const appPath = path.join(previewRoot, "apps", "desktop");
+	const devEnv = path.join(previewRoot, "apps", "desktop", "scripts", "dev-remote-env.mjs");
+	const electronMainTwo = path.join(previewRootTwo, "node_modules", "electron", "dist", "Electron");
+	const electronHelperTwo = path.join(previewRootTwo, "node_modules", "electron", "helper");
+	const appPathTwo = path.join(previewRootTwo, "apps", "desktop");
+	const devEnvTwo = path.join(previewRootTwo, "apps", "desktop", "scripts", "dev-remote-env.mjs");
+	const processes = [
+		{ pid: 10, ppid: 9, command: `${electronMain} .` },
+		{ pid: 11, ppid: 10, command: `${electronHelper} --type=renderer --user-data-dir=${userData} --app-path=${appPath}` },
+		{ pid: 9, ppid: 8, command: `XDT_SCHEDULER_PASSIVE='1' node ${devEnv} electron-forge start` },
+		{ pid: 20, ppid: 19, command: `${electronMainTwo} .` },
+		{ pid: 21, ppid: 20, command: `${electronHelperTwo} --type=renderer --user-data-dir=${userData} --app-path=${appPathTwo}` },
+		{ pid: 19, ppid: 18, command: `set "XDT_SCHEDULER_PASSIVE=1" && node ${devEnvTwo} electron-forge start` },
+	];
+	const instances = identifyDesktopProcesses(processes, worktrees);
+
+	assert.deepEqual(instances, [{
+		pid: 10,
+		rootDir: previewRoot,
+		branch: "dash/preview/example",
+		state: "ready",
+		ready: true,
+		mode: "remote",
+		passive: true,
+		isolated: null,
+		userDataDir: userData,
+		commit: null,
+		commitVerified: false,
+		source: "process-scan",
+	}, {
+		pid: 20,
+		rootDir: previewRootTwo,
+		branch: "dash/preview/two",
+		state: "ready",
+		ready: true,
+		mode: "remote",
+		passive: true,
+		isolated: null,
+		userDataDir: userData,
+		commit: null,
+		commitVerified: false,
+		source: "process-scan",
+	}]);
+});
+
+test("passive previews do not use a one-slot userData lock", () => {
+	const bootstrap = fs.readFileSync(
+		new URL("../../apps/desktop/src/main/bootstrap-electron.ts", import.meta.url),
+		"utf8",
+	);
+	assert.equal(bootstrap.includes(".passive-dev.lock"), false);
+	assert.equal(
+		fs.existsSync(new URL("../../apps/desktop/src/main/passiveDevLock.ts", import.meta.url)),
+		false,
+	);
+});
+
+test("desktop whoami prefers launch-time commit metadata over process inference", () => {
+	const worktrees = [{ rootDir: "/repo/cindy-preview", branch: "dash/preview/example" }];
+	const scanned = [{
+		pid: 10,
+		rootDir: "/repo/cindy-preview",
+		branch: "dash/preview/example",
+		state: "ready",
+		ready: true,
+		mode: "unknown",
+		passive: false,
+		isolated: null,
+		userDataDir: "/tmp/Cindy",
+		commit: null,
+		commitVerified: false,
+		source: "process-scan",
+	}];
+	const merged = mergeDesktopInstanceRecords(scanned, [{
+		pid: 10,
+		rootDir: "/repo/cindy-preview",
+		state: "ready",
+		mode: "remote",
+		passive: true,
+		isolated: false,
+		userDataDir: "/tmp/Cindy",
+		commit: "abc123",
+		startedAtMs: 1,
+		updatedAtMs: 2,
+	}], worktrees);
+
+	assert.equal(merged[0].commit, "abc123");
+	assert.equal(merged[0].commitVerified, true);
+	assert.equal(merged[0].source, "record");
 });

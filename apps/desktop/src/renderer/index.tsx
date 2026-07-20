@@ -40,6 +40,7 @@ import {
   installPerformanceTimelineCleanupInterval,
 } from './lib/foregroundRecoveryDiagnostics';
 import { installRenderLoopWatchdog } from './lib/renderLoopWatchdog';
+import { installInteractionJankProbe } from './lib/interactionJankProbe';
 import { installSwallowActivationClick } from './lib/swallowActivationClick';
 import { getSwallowActivationClickEnabled } from './hooks/useSwallowActivationClickSettings';
 import { bootstrapLocalThemesSync } from './themes/local-themes';
@@ -102,11 +103,15 @@ const disposeSwallowActivationClick =
 // 录制期间临时把这段注释掉即可。
 if (import.meta.env.DEV) {
   const disposePerformanceTimelineCleanupInterval = installPerformanceTimelineCleanupInterval();
+  // 交互卡顿探针(诊断用):longtask + Event Timing,只在主视图装,浮窗窗口没有交互归因价值。
+  const disposeInteractionJankProbe =
+    !isVoiceInputOverlay && !isVoiceInputDictionaryToast ? installInteractionJankProbe() : (): void => {};
   import.meta.hot?.dispose(() => {
     disposeForegroundRecoveryDiagnostics();
     disposeRenderLoopWatchdog();
     disposePerformanceTimelineCleanupInterval();
     disposeSwallowActivationClick();
+    disposeInteractionJankProbe();
   });
 }
 

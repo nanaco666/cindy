@@ -70,7 +70,8 @@ import {
   loadAgentInputQueueSnapshot,
   saveAgentInputQueueSnapshot,
 } from '../localDb/agentInputQueueSnapshots.js';
-import { ensureDialogueWorkspaceDir } from '../localDb/dialogueWorkspace.js';
+import { ensureDialogueWorkspaceDir, dialogueWorkspaceRootDir } from '../localDb/dialogueWorkspace.js';
+import { healMissingDialogueWorkdir } from '../localDb/dialogueWorkdirSelfHeal.js';
 import {
   createMessage as createDbMessage,
   listMessagesForAgentHandoff,
@@ -149,6 +150,7 @@ import {
 import {
   markSessionUsedProjectContext,
   readSessionExtraDirsFromDb,
+  readSessionWorkingDirFromDb,
 } from '../maker-host/session-storage.js';
 import {
   clearSessionPersistState,
@@ -183,6 +185,8 @@ import {
   recordSessionTurnTokens,
 } from '../sessionSpendBroadcaster.js';
 import { codexUsageToTokens, recordTurnCostOnMessage } from '../turnCostBroadcaster.js';
+import { recordModelMismatchOnMessage } from '../modelMismatchBroadcaster.js';
+import { detectClaudeModelMismatch } from '../../shared/modelMismatch.js';
 import { triggerClaudeAccountUsageRefresh } from '../usage/claudeAccountUsage.js';
 import { getCodexBudgetEffectiveCostMultiplier, getCodexSubscriptionValuePrice, getModelPricing, getModelPricingForModel, getSubscriptionDirectValuePrice } from '../usage/modelPricing.js';
 import { computeModelUsageDeltas, type ModelUsageCumulative, type ModelUsageDeltaEntry } from '../usage/modelUsageDelta.js';
@@ -2208,6 +2212,29 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
       if (typeof cumulative === 'number' && cumulative >= 0) {
         lastReportedCostUsdBySession.set(session.id, cumulative);
       }
+      // 模型降级检测:所选模型(turn start 快照)整轮缺席于实际 modelUsage delta →
+      // 判定主线被上游静默替换(如 fable-5 高负载被路由到 opus-4-8),把标记挂到本轮
+      // 收尾 assistant 的 agent_meta 上(AssistantMessage 渲染降级提示行)。
+      // fire-and-forget,与记账 sink 互不阻塞;判定纯函数见 shared/modelMismatch.ts。
+      if (turnAssistantPersistId && modelUsageDeltas && modelUsageDeltas.length > 0) {
+        const mismatchClientId = turnAssistantPersistId;
+        const actualEntries = modelUsageDeltas.map((d) => ({
+          model: d.model,
+          outputTokens: d.outputTokensDelta,
+        }));
+        void modelPromise
+          .then((selectedModel) => {
+            const mismatch = detectClaudeModelMismatch(selectedModel, actualEntries);
+            if (mismatch) {
+              return recordModelMismatchOnMessage({
+                sessionId: session.id,
+                clientId: mismatchClientId,
+                mismatch,
+              });
+            }
+          })
+          .catch(() => { /* 模型解析失败:跳过降级检测,非致命 */ });
+      }
       if (modelUsageDeltas && modelUsageDeltas.length > 0) {
         // 主路径: 逐模型 HYBRID 定价 (Anthropic→SDK, 非 Anthropic→gateway), 四个 sink
         // 由同一份解析结果驱动。价格表走 main 端内存 + 磁盘缓存, stale 快返并后台刷新。
@@ -2754,9 +2781,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     });
   });
 
-  // device-link 会话「非选中模型」effort/fast 写穿:控制端经隧道调用 → 跑在**被控端**。转发给自身
-  // renderer(SESSION_PREF_APPLY,非转发 channel,只落本地窗口),renderer 调它原来的本地 setter
-  // (setSessionModelEffort/Fast)写真实会话记忆;变更经 SYNC_SESSION_MODEL_PREF 广播回控制端镜像。
+  // 旧控制端的 device-link 会话模型预设写穿兼容入口。转发给被控端 renderer 后,renderer 将值
+  // 收敛到 providerModelMemory 全局预设,同时经 SYNC_SESSION_MODEL_PREF 回流供旧控制端的
+  // session-scoped 镜像显示。新控制端统一走 APPLY_NEW_MAKER_DRAFT_PREF。
   ipcMain.handle(MAKER_INVOKE.SET_SESSION_MODEL_PREF, (_e, pref: unknown) => {
     if (!pref || typeof pref !== 'object') throwIpcError('INVALID_PARAMS', 'pref required');
     const p = pref as {
@@ -5053,6 +5080,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     buildCreateOptsWithStderr,
     synthesizeOrcaVendorOptionsFromDb,
     readSessionExtraDirsFromDb,
+    readSessionWorkingDirFromDb,
     withRehydrateCloseSuppressed,
     bootstrapSession,
     markOrcaRoleIfNeeded,
@@ -6333,6 +6361,7 @@ async function checkWorkDirExists(
   workingDir: string | undefined | null,
   agentKind: AgentKind | undefined,
   remoteHostId?: string | null,
+  opts?: { suppressMissingBroadcast?: boolean },
 ): Promise<boolean> {
   // 远端 session: workdir 在远端机器上, 本地 fs.stat 必然 ENOENT 但完全没意义。
   // 这条 guard 当初是为本地 session 兜底 "用户在 Finder 把目录删了 / 改名了" 的
@@ -6341,14 +6370,33 @@ async function checkWorkDirExists(
   if (remoteHostId) return true;
   if (!workingDir?.trim()) return true;
   const source: AgentKind = agentKind === 'codex' ? 'codex' : 'claude-code';
+  // suppressMissingBroadcast: 调用方(SEND 事务)手里还有 DB 权威值可兜底时,
+  // 首检失败只记日志不广播错误横幅——兜底成功的话用户不该看到假错误。
+  const suppress = opts?.suppressMissingBroadcast === true;
   try {
     const stat = await fsp.stat(workingDir);
     if (!stat.isDirectory()) {
-      emitWorkDirMissingError(sessionId, workingDir, source, 'not-dir');
+      if (suppress) {
+        log.warn('send: workdir not a directory (broadcast suppressed, caller has fallback)', { sessionId, workingDir });
+      } else {
+        emitWorkDirMissingError(sessionId, workingDir, source, 'not-dir');
+      }
       return false;
     }
     return true;
   } catch {
+    // app 托管的 dialogue 工作目录(<userData>/dialogues/<日期>/<id>)本来就是
+    // 空的一次性目录:丢了直接 mkdir 重建放行,不打扰用户(自愈详见
+    // dialogueWorkdirSelfHeal.ts;legacy userData 前缀由启动 sweep 先行改写)。
+    const healed = await healMissingDialogueWorkdir(workingDir, dialogueWorkspaceRootDir());
+    if (healed) {
+      log.info('send: recreated missing dialogue workdir', { sessionId, workingDir });
+      return true;
+    }
+    if (suppress) {
+      log.warn('send: workdir missing (broadcast suppressed, caller has fallback)', { sessionId, workingDir });
+      return false;
+    }
     const similar = await findSimilarDirOnDisk(workingDir);
     emitWorkDirMissingError(sessionId, workingDir, source, 'not-exist', similar);
     return false;

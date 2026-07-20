@@ -59,6 +59,8 @@ function statusDot(status: SlackHookView['status']): string {
       return 'var(--remote-status-ready)';
     case 'connecting':
       return 'var(--remote-status-progress)';
+    case 'standby':
+      return 'var(--remote-status-disconnected)';
     case 'error':
       return 'var(--remote-status-failed)';
     default:
@@ -391,7 +393,7 @@ export function HookConnectionsSection() {
       : [t(`settings.remoteControl.hook.status.${hook.status}`), bindingLabel]
           .filter(Boolean)
           .join(' · ');
-  // 未登录的连接错误换成人话(transport 上报固定串 'not logged in')
+  // transport 的稳定错误标识换成人话；其它瞬时网络错误保留原文供诊断。
   const errorText =
     hook.lastError === 'not logged in'
       ? t('settings.remoteControl.hook.loginRequired')
@@ -417,6 +419,10 @@ export function HookConnectionsSection() {
             <span className="truncate text-11 text-[var(--text-tertiary)]">{statusLine}</span>
             {hook.status === 'error' && errorText ? (
               <span className="truncate text-11 text-[var(--error-fg)]">{errorText}</span>
+            ) : hook.status === 'standby' ? (
+              <span className="truncate text-11 text-[var(--text-tertiary)]">
+                {t('settings.remoteControl.hook.standbyHint')}
+              </span>
             ) : null}
           </div>
           {/* 授权进行中的唯一附加动作: 复制授权链接 —— 远程控制时 openExternal
