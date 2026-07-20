@@ -3327,7 +3327,9 @@
       "browseFolder": "选择其他文件夹",
       "browseProjectFolder": "选择其他项目文件夹",
       "dialogue": "对话",
-      "dialogueOrSelectProject": "对话或选择项目"
+      "dialogueOrSelectProject": "对话或选择项目",
+      "removeFromList": "从列表中移除",
+      "missingDir": "目录不存在"
     },
     "pendingQueue": {
       "regionAria": "待发送消息队列",

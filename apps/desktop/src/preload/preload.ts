@@ -2951,6 +2951,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       /** 列出"最近工作目录"按 lastUsedAt desc;sessions 归档/删除不影响本表。 */
       list: (): Promise<unknown> =>
         ipcRenderer.invoke('local-db:recent-workdirs:list'),
+      /** 从最近列表移除一条(列表卫生,不动 sessions / 磁盘;再次使用会重新入列)。 */
+      remove: (input: { path: string }): Promise<unknown> =>
+        ipcRenderer.invoke('local-db:recent-workdirs:remove', input),
     },
     rightSidebarTabs: {
       /** 按 sessionId 拉 tab 列表 + activeTabId。 */

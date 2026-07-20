@@ -1,8 +1,9 @@
-import { Folder, FolderPlus, Globe, MessageCircle } from 'lucide-react';
+import { Folder, FolderPlus, Globe, MessageCircle, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { recentWorkdirsStore } from '@/lib/recentWorkdirsStore';
 
 const RECENT_FOLDERS_KEY = 'cc-agent-recent-folders';
 const MAX_RECENT = 5;
@@ -16,6 +17,8 @@ export interface FolderPickerOption {
   path: string;
   name: string;
   description?: string;
+  /** true = 目录已不在磁盘上(迁移/删除),行置灰并提示,仍可选(磁盘可能重新挂载)。 */
+  missing?: boolean;
 }
 
 export type FolderPickerSelectSource = 'project' | 'recent' | 'browse' | 'dialogue';
@@ -168,31 +171,82 @@ export function FolderPickerPopover({
             >
               {effectiveProjectOptions.length > 0 ? (
                 effectiveProjectOptions.map((project) => (
-                  <button
+                  /* 行内有嵌套的删除按钮,外层不能再用 <button>(非法嵌套),
+                     改 div[role=button] + 键盘激活,视觉与其它行一致。 */
+                  <div
                     key={project.path}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => handleSelectPath(project.path, 'project')}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleSelectPath(project.path, 'project');
+                      }
+                    }}
                     className={cn(
-                      'flex w-full items-center gap-3 rounded-[8px] px-3 py-[10px] text-left',
+                      'group flex w-full cursor-pointer items-center gap-3 rounded-[8px] px-3 py-[10px] text-left',
                       'transition-colors outline-none',
                       'hover:bg-[var(--folder-item-hover)]',
                     )}
                   >
-                    <Folder size={20} className="shrink-0 text-[var(--folder-item-icon)]" />
+                    <Folder
+                      size={20}
+                      className={cn(
+                        'shrink-0 text-[var(--folder-item-icon)]',
+                        project.missing && 'opacity-50',
+                      )}
+                    />
                     <div className="flex min-w-0 flex-1 flex-col items-start">
                       {/* w-full 缺失 → truncate 不生效;长 UUID / 长路径会撑爆容器
                           触发横向滚动条。description 那行已有 w-full 是对的,这里
                           补上。 */}
-                      <span className="w-full truncate text-sm font-medium text-[var(--folder-item-name)]">
+                      <span
+                        className={cn(
+                          'w-full truncate text-sm font-medium text-[var(--folder-item-name)]',
+                          project.missing && 'opacity-50',
+                        )}
+                      >
                         {project.name}
                       </span>
-                      {project.description && (
-                        <span className="w-full truncate text-xs text-[var(--folder-item-path)]">
+                      {(project.description || project.missing) && (
+                        <span
+                          className={cn(
+                            'w-full truncate text-xs text-[var(--folder-item-path)]',
+                            project.missing && 'opacity-50',
+                          )}
+                        >
+                          {project.missing && (
+                            <span className="text-[var(--error-fg)]">
+                              {t('newChat.folderPicker.missingDir')}
+                              {project.description ? ' · ' : ''}
+                            </span>
+                          )}
                           {project.description}
                         </span>
                       )}
                     </div>
-                  </button>
+                    {/* hover / 键盘聚焦时浮现;删除 = 从最近列表移除(main 侧
+                        recent_workdirs 行),不动 sessions / 磁盘。 */}
+                    <button
+                      type="button"
+                      aria-label={t('newChat.folderPicker.removeFromList')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void recentWorkdirsStore.remove(project.path);
+                      }}
+                      className={cn(
+                        'flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px]',
+                        'text-[var(--folder-item-path)] opacity-0 transition-opacity',
+                        'group-hover:opacity-100 focus-visible:opacity-100',
+                        // 行 hover 已是 --folder-item-hover,内层按钮要再深一档才可辨
+                        'hover:bg-[var(--surface-hover)] hover:text-[var(--folder-item-name)]',
+                        'outline-none',
+                      )}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                 ))
               ) : (
                 <div className="px-3 py-[10px] text-sm text-[var(--folder-item-path)]">

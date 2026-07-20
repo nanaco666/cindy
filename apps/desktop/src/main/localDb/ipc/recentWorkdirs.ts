@@ -3,20 +3,29 @@
  *
  * 设计:
  *  - 列表读取走 IPC `local-db:recent-workdirs:list`,renderer 给 NewMakerDraft
- *    的"项目"下拉用。返回 path + lastUsedAt(ms),displayName 由 renderer 端
+ *    的"项目"下拉用。返回 path + lastUsedAt(ms) + exists(目录是否仍在磁盘上,
+ *    项目迁移/删除后 UI 据此置灰引导用户手动移除),displayName 由 renderer 端
  *    用 projectGrouping.extractDisplayName 实时算(相对当前全集做同名消歧)。
- *  - 写入不暴露 IPC —— 由 main 内部在 session 创建路径上调用 upsertRecentWorkdir,
+ *  - 删除走 IPC `local-db:recent-workdirs:remove` —— 唯一的 renderer 写入口,
+ *    语义是"从最近列表移除"(列表卫生),不动 sessions/磁盘。目录下再次创建
+ *    session 会经 upsertRecentWorkdir 重新入列,已迁移的死路径则一去不返。
+ *    注意:该表同时是 device-link remote-workdir-guard 的白名单来源之一,
+ *    删除后被控端若无该目录下的 session,手机端将无法再远程打开它(预期行为)。
+ *  - upsert 不暴露 IPC —— 由 main 内部在 session 创建路径上调用 upsertRecentWorkdir,
  *    避免 renderer 私自污染该表。生命周期与 session 解耦:归档 / 删除 session
  *    都不影响这张表。
- *  - 失败仅日志,不抛 —— 这是"用户体验增强"数据,不该挡住 session 创建主流程。
+ *  - upsert 失败仅日志,不抛 —— 这是"用户体验增强"数据,不该挡住 session 创建主流程。
  */
 
+import { access } from 'node:fs/promises';
+
 import { ipcMain } from 'electron';
-import { desc, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 
 import { getDbClient } from '../client/current';
 import { recentWorkdirs } from '../schema';
 import { createLogger } from '../../logger';
+import { requireString } from '../../utils/ipcValidate.js';
 import { getManagedWorktreeBasePath } from '../../../shared/managedWorktreePaths';
 
 const log = createLogger('recentWorkdirs');
@@ -101,6 +110,20 @@ export async function upsertRecentWorkdir(
   }
 }
 
+/**
+ * 目录存在性探测。表内 path 已是 posix 归一形态,Node fs 在 Windows 上同样
+ * 接受正斜杠;任何 fs 错误(不存在 / 无权限 / 网络盘断连)都按"不存在"处理
+ * —— 这个字段只驱动 UI 置灰提示,fail-closed 到 false 无害。
+ */
+async function dirExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function registerRecentWorkdirsIpc(): void {
   ipcMain.handle('local-db:recent-workdirs:list', async () => {
     const db = getDbClient().drizzle;
@@ -112,10 +135,31 @@ export function registerRecentWorkdirsIpc(): void {
       .from(recentWorkdirs)
       .orderBy(desc(recentWorkdirs.lastUsedAt))
       .limit(MAX_RECENT_WORKDIRS);
+    // 存在性探测:最多 10 条本地路径的并发 access,开销可忽略。
+    const exists = await Promise.all(rows.map((r) => dirExists(r.path)));
     // 返回 ISO 字符串避免序列化数字时区岐义 —— 跟 sessions IPC 输出风格一致。
-    return rows.map((r) => ({
+    return rows.map((r, i) => ({
       path: r.path,
       lastUsedAt: new Date(r.lastUsedAt).toISOString(),
+      exists: exists[i],
     }));
+  });
+
+  ipcMain.handle('local-db:recent-workdirs:remove', async (_evt, input: unknown) => {
+    const body = (input ?? {}) as { path?: unknown };
+    const raw = requireString(body.path, 'path');
+    // 归一化后再删,保证与写入侧同一主键形态;归一失败(纯空白等)当 no-op,
+    // 删除本身幂等,不值得为它抛错。
+    const normalized = normalizeRecentWorkdirPath(raw);
+    if (!normalized) return { deleted: false };
+    const db = getDbClient().drizzle;
+    // better-sqlite3 driver 的 DML 结果是 RunResult;经 worker 代理时形态可能
+    // 退化,这里防御性读 changes,读不到就按 0 处理(deleted 仅用于遥测语义)。
+    const result = (await db
+      .delete(recentWorkdirs)
+      .where(eq(recentWorkdirs.path, normalized))) as unknown as { changes?: number } | undefined;
+    const deleted = (result?.changes ?? 0) > 0;
+    log.info('[localDb] recent workdir removed by user', { path: normalized, deleted });
+    return { deleted };
   });
 }

@@ -3327,7 +3327,9 @@
       "browseFolder": "Choose a different folder",
       "browseProjectFolder": "Choose another project folder",
       "dialogue": "Dialogue",
-      "dialogueOrSelectProject": "Dialogue or select project"
+      "dialogueOrSelectProject": "Dialogue or select project",
+      "removeFromList": "Remove from list",
+      "missingDir": "Folder not found"
     },
     "pendingQueue": {
       "regionAria": "Pending message queue",
