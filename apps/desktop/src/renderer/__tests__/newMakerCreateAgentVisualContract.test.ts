@@ -230,7 +230,8 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
 
   it('aligns the real sidebar colors and user capsule with the CREATE AGENT Figma frame', () => {
     expect(sidebarTopNavSource).toContain('text-[var(--sidebar-nav-text)]');
-    expect(vendorIconSource).toContain('text-[hsl(var(--sidebar-muted))]');
+    expect(vendorIconSource).toContain('text-[var(--text-secondary-mid)]');
+    expect(vendorIconSource).not.toContain('text-[hsl(var(--sidebar-muted))]');
 
     expect(userInfoSectionSource).toContain(
       'rounded-full border border-[var(--sidebar-user-card-border)]',

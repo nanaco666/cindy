@@ -8,6 +8,7 @@ import { ClaudeMark } from '@/components/icons/ClaudeMark';
 import { CodexMark } from '@/components/icons/CodexMark';
 import { OpenAIMark } from '@/components/icons/OpenAIMark';
 import { ModelIconMark, ProviderMark } from '@/components/new-chat/ModelSelector';
+import { VendorIcon } from '@/components/sidebar/VendorIcon';
 
 function firstPath(ui: React.ReactNode): string | null {
   return render(ui).container.querySelector('path')?.getAttribute('d') ?? null;
@@ -58,5 +59,25 @@ describe('model mark semantics', () => {
     const brand = render(<CodexMark size={12} variant="brand" />);
     expect(brand.container.querySelector('g')).toBeNull();
     expect(brand.container.querySelector('path')?.hasAttribute('stroke')).toBe(false);
+  });
+
+  it('brightens only idle sidebar Agent marks and preserves state/override colors', () => {
+    const idleClaude = render(<VendorIcon vendor="cc" />).container.firstElementChild;
+    const idleCodex = render(<VendorIcon vendor="codex" />).container.firstElementChild;
+    expect(idleClaude?.getAttribute('class')).toContain('text-[var(--text-secondary-mid)]');
+    expect(idleCodex?.getAttribute('class')).toContain('text-[var(--text-secondary-mid)]');
+
+    const running = render(<VendorIcon vendor="codex" running />).container.firstElementChild;
+    expect(running?.getAttribute('class')).toContain('session-status-breathing');
+    expect(running?.getAttribute('class')).toContain('text-sidebar-item-active');
+    expect(running?.getAttribute('class')).not.toContain('text-[var(--text-secondary-mid)]');
+
+    const overridden = render(
+      <VendorIcon vendor="cc" running colorClassName="text-sidebar-item-active-foreground" />,
+    ).container.firstElementChild;
+    expect(overridden?.getAttribute('class')).toContain('session-status-breathing');
+    expect(overridden?.getAttribute('class')).toContain('text-sidebar-item-active-foreground');
+    expect(overridden?.classList.contains('text-sidebar-item-active')).toBe(false);
+    expect(overridden?.getAttribute('class')).not.toContain('text-[var(--text-secondary-mid)]');
   });
 });

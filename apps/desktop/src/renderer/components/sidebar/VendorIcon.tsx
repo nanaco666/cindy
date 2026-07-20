@@ -7,8 +7,8 @@
  *   D4-1 曾统一替换为品牌箭头(BrandArrow),实测后发现依赖图标区分 agent 类型的
  *   场景(创建自动化 chips、侧栏混排)全部失效,故换回按 vendor 分支渲染。
  *
- * 状态(不变):
- *   - idle (默认)   : Stone 灰 #737373 / dark #a3a3a3
+ * 状态语义(running 与显式覆盖不变):
+ *   - idle (默认)   : --text-secondary-mid,比 sidebar-muted 提亮一档
  *   - running=true  : 跟随 --sidebar-item-active 强调态;CINDY 2026-07-20 撤红后为中性选中色 + session-breathing 呼吸
  *
  * 设计参考:doc/design_docs/cc-agent-view.pen 节点 ugsrn (方案 C)。
@@ -39,7 +39,7 @@ export function VendorIcon({
   const wrapperClassName = cn(
     'inline-flex shrink-0',
     running && 'session-status-breathing',
-    colorClassName ?? (running ? 'text-sidebar-item-active' : 'text-[hsl(var(--sidebar-muted))]'),
+    colorClassName ?? (running ? 'text-sidebar-item-active' : 'text-[var(--text-secondary-mid)]'),
     className,
   );
 
