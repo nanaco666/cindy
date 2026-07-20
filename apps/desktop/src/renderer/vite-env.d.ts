@@ -4116,6 +4116,7 @@ interface ElectronAPI {
       listCostSummaries: () => Promise<unknown[]>;
       deleteRun: (runId: string) => Promise<void>;
       getInflightCount: (id: string) => Promise<number>;
+      getRuntimeState: () => Promise<unknown>;
       getUnreadRunCount: () => Promise<number>;
       markRunRead: (runId: string) => Promise<void>;
       markAllRunsRead: () => Promise<number>;

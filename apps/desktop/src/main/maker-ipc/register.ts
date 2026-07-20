@@ -1245,6 +1245,7 @@ const pendingFailedTurnAssistantPersistId = new Map<string, string>();
 const sendToSessionLocks = new Map<string, Promise<unknown>>();
 let agentInputCoordinatorHolder: AgentInputCoordinator | null = null;
 let pendingCredentialSwitchHolder: PendingCredentialSwitchService | null = null;
+let pendingAgentSwitchApplyHolder: ((sessionId: string) => Promise<void>) | null = null;
 let gitSnapshotCoordinator: GitSnapshotCoordinator | null = null;
 const sessionTurnActivityTracker = new SessionTurnActivityTracker();
 
@@ -1271,6 +1272,17 @@ export function createAutomationUserTurnGitBaselineHooks(): AutomationUserTurnGi
 
 export function isSessionInTurn(sessionId: string): boolean {
   return sessionTurnActivityTracker.isSessionInTurn(sessionId);
+}
+
+/**
+ * Goal / IM / scheduler 直发 `Session.send()` 前的 deferred agent-switch 桥。
+ *
+ * 与 renderer 的 makerSendTransaction 不同,这些调用方没有后续 lazy-create 阶段;
+ * holder 因此要求 apply 成功时同步 bootstrap 新引擎,调用方再重新读取 live session。
+ * 启动期 holder 尚未就绪时不可能已有进程内 pending intent,no-op 即可。
+ */
+export async function applyPendingAgentSwitchForDirectSend(sessionId: string): Promise<void> {
+  await pendingAgentSwitchApplyHolder?.(sessionId);
 }
 
 /**
@@ -1331,7 +1343,7 @@ export interface SchedulerQueuedPromptRequest {
   text: string;
   /** 落库与队列气泡展示的用户原始 prompt(不含隐藏协议)。 */
   persistedContent: string;
-  origin: { kind: 'scheduler'; scheduleId: string; scheduleName: string };
+  origin: { kind: 'scheduler'; scheduleId: string; scheduleName: string; runId?: string };
   /** 排队项被 drain 派发、turn 已被会话接受时回调(等价直发路径的 send onAccepted)。 */
   onAccepted: () => void | Promise<void>;
   /** 派发已 accept 但最终未成为运行 turn(取消/回滚)时回调。 */
@@ -1767,7 +1779,20 @@ async function handleSilentStopTurnEnd(
               content: SILENT_STOP_RESUME_PROMPT,
               // autoResume: renderer 据此隐藏用户气泡、渲染「已自动继续」分隔线;
               // 也是审计标记(DB/transcript 里可查每次自动续跑)。
-              agentMeta: { delivery: 'turn', autoResume: true },
+              agentMeta: {
+                delivery: 'turn',
+                autoResume: true,
+                ...(turnOrigin?.kind === 'scheduler' && turnOrigin.scheduleId
+                  ? {
+                      origin: {
+                        kind: 'scheduler' as const,
+                        scheduleId: turnOrigin.scheduleId,
+                        ...(turnOrigin.scheduleName ? { scheduleName: turnOrigin.scheduleName } : {}),
+                        ...(turnOrigin.runId ? { runId: turnOrigin.runId } : {}),
+                      },
+                    }
+                  : {}),
+              },
             });
           },
         },
@@ -2326,6 +2351,7 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
                 costUsd: turnTotalUsd,
                 isEstimate: false,
                 turnUsageDetails,
+                turnOrigin: event.turnOrigin,
               });
             }
           } else if (turnAssistantPersistId) {
@@ -2356,6 +2382,7 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
                 costUsd: turnEstimatedValueUsd,
                 isEstimate: true,
                 turnUsageDetails,
+                turnOrigin: event.turnOrigin,
               });
             }
           }
@@ -2388,6 +2415,7 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
                 costUsd: delta,
                 isEstimate: false,
                 turnUsageDetails,
+                turnOrigin: event.turnOrigin,
               });
             }
           })();
@@ -2525,6 +2553,7 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
                   costUsd: cost,
                   isEstimate: isSubscriptionValue,
                   turnUsageDetails,
+                  turnOrigin: event.turnOrigin,
                 });
               }
             }
@@ -3708,6 +3737,8 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     log,
   };
   registerMakerSessionAgentSwitchHandler(makerSessionRegistry, agentSwitchDeps);
+  pendingAgentSwitchApplyHolder = (sessionId) =>
+    applyPendingAgentSwitchIfIdle(agentSwitchDeps, sessionId, { bootstrapAfterSwitch: true });
 
   ipcMain.handle(MAKER_INVOKE.MARK_ORCA_ROLE, async (_e, sessionId: unknown, role: unknown) => {
     if (typeof sessionId !== 'string') throwIpcError('INVALID_PARAMS', 'sessionId required');

@@ -262,10 +262,10 @@ describeMigrationReplay('migration replay', () => {
         currentVersion: 73,
       });
 
-      // 0074 桥接 legacy lineage 后,0075(schedule_runs 前置检查)与 session-agent-switch
-      // 的 0076(messages.agent_kind,守卫脚本对无 messages 表的 fixture no-op)也在
-      // 同一次 replay 里补上。
-      expect(result.applied.map((migration) => migration.seq)).toEqual([74, 75, 76]);
+      // 0074 桥接 legacy lineage 后,0075(schedule_runs 前置检查)、0076(run 费用)
+      // 与 session-agent-switch 的 0077(messages.agent_kind,守卫脚本对无 messages
+      // 表的 fixture no-op)也在同一次 replay 里补上。
+      expect(result.applied.map((migration) => migration.seq)).toEqual([74, 75, 76, 77]);
       expect(
         db
           .prepare(`SELECT permission_mode, plan_mode_enabled FROM sessions WHERE id = ?`)
@@ -275,7 +275,13 @@ describeMigrationReplay('migration replay', () => {
         expect.arrayContaining(['active_turn_started_at', 'active_turn_pid']),
       );
       expect(columnNames(db, 'schedule_runs')).toEqual(
-        expect.arrayContaining(['heartbeat_at', 'pre_run_hook_result']),
+        expect.arrayContaining([
+          'heartbeat_at',
+          'pre_run_hook_result',
+          'cost_usd',
+          'estimated_value_usd',
+          'cost_attribution',
+        ]),
       );
       expect(tableExists(db, 'project_aliases')).toBe(true);
       expect(tableExists(db, 'device_link_ownership')).toBe(true);
@@ -284,7 +290,7 @@ describeMigrationReplay('migration replay', () => {
           .prepare(
             `SELECT seq, file_name
            FROM migration_history
-           WHERE seq IN (47, 60, 62, 63, 64, 74, 75)
+           WHERE seq IN (47, 60, 62, 63, 64, 74, 75, 76)
            ORDER BY seq`,
           )
           .all(),
@@ -296,6 +302,7 @@ describeMigrationReplay('migration replay', () => {
         { seq: 64, file_name: '0064_icy_bruce_banner.sql' },
         { seq: 74, file_name: '0074_bridge_legacy_migration_lineage.sql' },
         { seq: 75, file_name: '0075_complex_strong_guy.sql' },
+        { seq: 76, file_name: '0076_melted_post.sql' },
       ]);
     } finally {
       cleanup();

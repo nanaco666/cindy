@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "7b6e948c-cf83-4745-ba9f-28f5b142a418",
+  "id": "4f31b741-4298-4c90-a0b5-8c8426177e00",
   "prevId": "8e1d1da4-40c9-4b15-a932-b668de6f1a13",
   "tables": {
     "account_usage_snapshots": {
@@ -905,13 +905,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "agent_kind": {
-          "name": "agent_kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "integer",
@@ -1515,6 +1508,30 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "cost_usd": {
+          "name": "cost_usd",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "estimated_value_usd": {
+          "name": "estimated_value_usd",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "cost_attribution": {
+          "name": "cost_attribution",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'legacy'"
         },
         "result_text": {
           "name": "result_text",

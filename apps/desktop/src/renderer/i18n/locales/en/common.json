@@ -3404,8 +3404,15 @@
       "archiveWorkerConfirmConfirm": "Archive worker",
       "archiveWorkerConfirmCancel": "Cancel",
       "errors": {
+        "INVALID_PARAMS": "The selected model or collaboration settings are no longer available. Choose again and retry.",
+        "INVALID_PARAMS_CONTINUE": "The selected model or collaboration settings are no longer available. Collaboration was not started, and this message is continuing as a single session. Choose again and retry.",
+        "INVALID_PARAMS_REMOTE": "The controlled device does not support the selected model or collaboration settings. Choose a model available on that device and retry.",
+        "NO_PROVIDER_FOR_AGENT": "This device has no connected model provider for that agent. Connect one in Settings, then retry.",
+        "NO_PROVIDER_FOR_AGENT_CONTINUE": "This device has no connected model provider for that agent. Collaboration was not started, and this message is continuing as a single session. Connect one in Settings, then retry.",
+        "NO_PROVIDER_FOR_AGENT_REMOTE": "The controlled device has no connected model provider for that agent. Connect one on the controlled device, then retry.",
         "BUDGET_MODEL_REQUIRES_API_MODE": "Budget Codex models require an API key. Configure it in Settings, then try again.",
-        "BUDGET_MODEL_REQUIRES_API_MODE_CONTINUE": "Budget Codex models require an API key. Collaboration was not started, and this message is continuing as a single session. Configure it in Settings, then try again."
+        "BUDGET_MODEL_REQUIRES_API_MODE_CONTINUE": "Budget Codex models require an API key. Collaboration was not started, and this message is continuing as a single session. Configure it in Settings, then try again.",
+        "BUDGET_MODEL_REQUIRES_API_MODE_REMOTE": "The controlled device does not have the API key required for budget Codex models. Configure it on that device, then retry."
       }
     },
     "chatInput": {
@@ -3538,7 +3545,15 @@
     "workGroup": {
       "working": "Working…",
       "worked": "Worked for {{duration}}",
-      "workDetails": "Work details"
+      "workDetails": "Work details",
+      "exploration": {
+        "read_one": "Read 1 file",
+        "read_other": "Read {{count}} files",
+        "search_one": "Searched once",
+        "search_other": "Searched {{count}} times",
+        "list_one": "Listed files once",
+        "list_other": "Listed files {{count}} times"
+      }
     },
     "agentTask": {
       "emptyTitle": "Subagent task",
@@ -3778,12 +3793,21 @@
         "fetched": "Fetched",
         "used": "Used",
         "listed": "Listed",
+        "inspect": "Inspect content",
+        "inspectRepository": "Inspect repository",
+        "inspectEnvironment": "Check development environment",
+        "modifyRepository": "Modify repository",
+        "verify": "Run checks",
         "installedDeps": "Installed deps",
         "ranTests": "Ran tests",
         "built": "Built",
         "linted": "Linted",
         "typechecked": "Type-checked",
         "runScript": "Run script",
+        "runNodeScript": "Run Node.js script",
+        "runPythonScript": "Run Python script",
+        "runPerlScript": "Run Perl script",
+        "runSwiftScript": "Run Swift script",
         "checkSyntax": "Check syntax",
         "showVersion": "Check version",
         "checkFormatting": "Check formatting",
@@ -3805,6 +3829,12 @@
         "gitFetch": "Fetch remote updates",
         "gitPull": "Pull remote updates",
         "gitPush": "Push code changes",
+        "gitRebase": "Rebase branch",
+        "gitMerge": "Merge branch",
+        "gitCherryPick": "Cherry-pick commit",
+        "gitStash": "Manage stashed changes",
+        "gitRestore": "Restore files",
+        "gitSubmodule": "Manage submodules",
         "gitRemote": "View Git remotes",
         "gitRevParse": "Resolve Git reference",
         "gitBranch": "View branches",
@@ -4797,6 +4827,7 @@
     },
     "cell": {
       "subtitlePaused": "Paused",
+      "subtitleWaitingForResources": "Waiting for a slot ({{inFlight}}/{{max}})",
       "subtitleManual": "Manual",
       "subtitleOnce": "Once",
       "tagOnce": "Once",
@@ -4838,6 +4869,13 @@
       "markReadTitle": "Click to mark as read",
       "sessionCost": "Session cost {{cost}}",
       "sessionValue": "Session value {{value}}",
+      "runCost": "Run cost {{cost}}",
+      "runValue": "Estimated run value {{value}}",
+      "legacyCostUnavailable": "Historical cost unavailable",
+      "persistentSessionGroup": "Persistent session {{session}} · {{count}} runs",
+      "expandRemainingRuns": "Show {{count}} more",
+      "expandSessionRuns": "Show {{count}} runs",
+      "collapseSessionRuns": "Collapse history",
       "restart": "Restart",
       "moreAria": "More actions",
       "delete": "Delete",
@@ -5001,6 +5039,17 @@
         "gitMissing": "Git is not installed",
         "notRepo": "Selected folder is not a git repository",
         "insideWorktree": "Already inside a worktree"
+      },
+      "timingMode": {
+        "cron": "Cron",
+        "interval": "Relative interval",
+        "cronHint": "Runs at calendar clock slots.",
+        "intervalHint": "Waits this long after the previous run finishes.",
+        "intervalUnsupportedHint": "This exact interval is preserved. Choosing a minute or hour preset will replace it.",
+        "currentExact": "Current · {{schedule}}",
+        "exactIntervalPanelHint": "Choose a minute or hour preset on the left only when you want to replace this exact interval.",
+        "cronChip": "Cron · {{schedule}}",
+        "intervalChip": "After completion · {{schedule}}"
       },
       "scheduleMenu": {
         "intervalMinutes": "Minutes (every N minutes)",

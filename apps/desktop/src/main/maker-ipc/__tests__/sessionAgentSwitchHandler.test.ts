@@ -297,6 +297,20 @@ describe('deferred switch (turn running)', () => {
     });
   });
 
+  it('applyPendingAgentSwitchIfIdle:直发路径可要求切换后同步 bootstrap', async () => {
+    const { deps, store } = makeDepsWithPending();
+    store.set('s1', {
+      targetAgentKind: 'codex',
+      model: 'gpt-5.5-codex',
+      providerId: null,
+    });
+
+    await applyPendingAgentSwitchIfIdle(deps, 's1', { bootstrapAfterSwitch: true });
+
+    expect(deps.bootstrapSwitchedSession).toHaveBeenCalledWith('s1');
+    expect(store.has('s1')).toBe(false);
+  });
+
   it('applyPendingAgentSwitchIfIdle:turn 仍在跑时保留 pending 本次不动', async () => {
     const { deps, calls, store } = makeDepsWithPending({
       getLiveSession: vi.fn(() => ({ isTurnRunning: () => true })),

@@ -202,6 +202,7 @@ const EXTENDED_INVOKE_CHANNELS: readonly string[] = [
   'maker:schedule:list-sidebar-index-runs',
   'maker:schedule:list-cost-summaries',
   'maker:schedule:delete-run',
+  'maker:schedule:get-runtime-state',
   'maker:schedule:get-inflight-count',
   'maker:schedule:get-unread-count',
   'maker:schedule:mark-run-read',

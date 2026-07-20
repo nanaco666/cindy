@@ -402,6 +402,31 @@ describe('GoalController', () => {
     expect(h.persistedLimits).toHaveLength(0);
   });
 
+  it('applies a deferred agent switch before Goal sends and uses the refreshed live session', async () => {
+    const oldSession = new FakeSession('s1', 'claude-code');
+    const switchedSession = new FakeSession('s1', 'codex');
+    let live = oldSession;
+    const applyPendingAgentSwitch = vi.fn(async () => {
+      live = switchedSession;
+    });
+    const local = makeController({
+      getSession: () => live,
+      ensureSession: async () => live,
+      applyPendingAgentSwitch,
+    });
+
+    await local.controller.setGoal({
+      sessionId: 's1',
+      objective: 'continue on the selected engine',
+      agentKind: 'claude-code',
+    });
+
+    expect(applyPendingAgentSwitch).toHaveBeenCalledWith('s1');
+    expect(oldSession.sends).toHaveLength(0);
+    expect(switchedSession.sends).toHaveLength(1);
+    expect(switchedSession.sends[0].originKind).toBe('goal');
+  });
+
   it('aborts the git baseline when a goal continuation send is not accepted', async () => {
     const order: string[] = [];
     const beforeDispatchUserTurn = vi.fn(async () => {

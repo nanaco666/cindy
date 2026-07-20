@@ -512,6 +512,7 @@ const pendingAgentSwitchApplyInFlight = new Map<string, Promise<void>>();
 export function applyPendingAgentSwitchIfIdle(
   deps: MakerSessionAgentSwitchHandlerDeps,
   sessionId: string,
+  opts?: { bootstrapAfterSwitch?: boolean },
 ): Promise<void> {
   const existing = pendingAgentSwitchApplyInFlight.get(sessionId);
   if (existing) return existing;
@@ -547,7 +548,10 @@ export function applyPendingAgentSwitchIfIdle(
         providerId: intent.providerId,
         effort: intent.effort,
         fastMode: intent.fastMode,
-        skipBootstrap: true,
+        // 普通 maker send 随后会按 DB 真源 lazy-create,无需在 apply 内多 spawn 一次;
+        // Goal / IM / scheduler 三条直发路径没有该 lazy-create 事务,必须先把新引擎
+        // bootstrap 好再拿 live session 发送,否则会继续持有已关闭的旧 session。
+        skipBootstrap: opts?.bootstrapAfterSwitch !== true,
         applyNow: true,
       });
       // CAS 语义:执行期间用户可能又选了另一个目标,不能把新意图一起清掉。

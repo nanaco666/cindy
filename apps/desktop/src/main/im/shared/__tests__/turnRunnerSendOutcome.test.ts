@@ -451,6 +451,85 @@ describe('turnRunner send outcome policy (feishu adapter characterization)', () 
     runner = null;
   });
 
+  it('keeps IM persistence, ack, card, and completion exactly-once when Maker recovery is transparent', async () => {
+    const streamingHandle = {
+      messageId: 'stream-recovered',
+      append: vi.fn(),
+      replace: vi.fn(),
+      finalize: vi.fn(),
+      close: vi.fn(),
+    };
+    mocks.feishuIm.startStreamingText.mockResolvedValue(streamingHandle);
+    const h = setupSession(async () => ({ accepted: true }));
+    const onTurnComplete = vi.fn();
+    await runDefaultTurn(onTurnComplete);
+    // invalid-resume 的旧失败已由 maker-core 吞掉；IM 只看到 fresh query 的公开事件。
+    h.emit({ type: 'session_id', data: 'sdk-fresh', source: 'claude-code' });
+    h.emit({ type: 'text', data: { text: 'fresh answer', isFinal: true }, source: 'claude-code' });
+    await flushMicrotasks();
+    h.emit({ type: 'done', data: {}, source: 'claude-code' });
+    await waitForAssertion(() => {
+      expect(onTurnComplete).toHaveBeenCalledTimes(1);
+      expect(streamingHandle.finalize).toHaveBeenCalledTimes(1);
+    });
+    expect(h.send).toHaveBeenCalledTimes(1);
+    expect(mocks.persistUserMessage).toHaveBeenCalledTimes(1);
+    expect(mocks.feishuIm.reactToMessage).toHaveBeenCalledTimes(1);
+    expect(mocks.feishuIm.removeMessageReaction).toHaveBeenCalledTimes(1);
+    expect(mocks.feishuIm.sendText).not.toHaveBeenCalledWith(
+      'ou_user',
+      expect.stringContaining('错误'),
+      expect.anything(),
+    );
+  });
+
+  it('applies a deferred switch and sends the first queued IM message through the refreshed session', async () => {
+    const oldSession = createSessionHarness(async () => ({
+      accepted: false,
+      reason: 'old-session-must-not-send',
+    }));
+    const switchedSession = createSessionHarness(async () => ({
+      accepted: false,
+      reason: 'cancelled-before-dispatch',
+    }));
+    let live: Session | undefined = oldSession.session;
+    const maker = {
+      createSession: vi.fn(async () => oldSession.session),
+      getSession: vi.fn(() => live),
+      on: vi.fn((listener: (event: MakerEvent) => void) => {
+        makerEventListeners.push(listener);
+        return () => {
+          makerEventListeners = makerEventListeners.filter((candidate) => candidate !== listener);
+        };
+      }),
+    };
+    mocks.getMaker.mockReturnValue(maker);
+    const applyPendingAgentSwitch = vi.fn(async () => {
+      live = switchedSession.session;
+      emitMakerEvent({ type: 'session:closed', sessionId: 'feishu-session' });
+    });
+    const localRunner = createTurnRunner(fakeAdapter, fakeRepo, fakeCards, {
+      applyPendingAgentSwitch,
+    });
+
+    try {
+      await localRunner.runAgentTurn({
+        botContextId: 'cli_test_bot',
+        userId: 'ou_user',
+        userMessageId: 'msg-agent-switch',
+        text: 'send after switch',
+        attachments: [],
+      });
+
+      expect(applyPendingAgentSwitch).toHaveBeenCalledWith('feishu-session');
+      expect(oldSession.send).not.toHaveBeenCalled();
+      expect(switchedSession.send).toHaveBeenCalledTimes(1);
+      expect(mocks.wireSessionToIpcExternal).toHaveBeenLastCalledWith(switchedSession.session);
+    } finally {
+      localRunner.disposeAllSessions();
+    }
+  });
+
   it('treats accepted:false as pre-dispatch failure with exactly-once cleanup and user notification', async () => {
     const h = setupSession(async () => ({
       accepted: false,

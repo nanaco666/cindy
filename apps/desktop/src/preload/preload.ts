@@ -4181,6 +4181,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       /** delete/pause 前查这条 schedule 当前 in-flight run 数,>0 时 renderer 弹二次确认。 */
       getInflightCount: (id: string): Promise<number> =>
         ipcRenderer.invoke('maker:schedule:get-inflight-count', id),
+      /** 当前 Scheduler 实例的 in-flight / 并发等待瞬时快照。 */
+      getRuntimeState: (): Promise<unknown> =>
+        ipcRenderer.invoke('maker:schedule:get-runtime-state'),
       /** Sidebar Automations badge 用：全局未读 run 数。 */
       getUnreadRunCount: (): Promise<number> =>
         ipcRenderer.invoke('maker:schedule:get-unread-count'),

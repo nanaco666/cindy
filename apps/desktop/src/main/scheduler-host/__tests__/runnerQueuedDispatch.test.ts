@@ -300,6 +300,7 @@ describe('MakerScheduleRunner queued dispatch (busy bound session)', () => {
       kind: 'scheduler',
       scheduleId: 'schedule-hb',
       scheduleName: 'PR #971 心跳',
+      runId: 'run-q1',
     });
     // 不直发、不自行落库(coordinator drain 负责)。
     expect(harness.send).not.toHaveBeenCalled();

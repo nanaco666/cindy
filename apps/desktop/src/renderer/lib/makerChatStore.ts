@@ -7090,6 +7090,7 @@ function mapServerMessages(serverMsgs: Message[]): ChatMessage[] {
             fromModel: typeof c.fromModel === 'string' ? c.fromModel : null,
             toModel: typeof c.toModel === 'string' ? c.toModel : null,
             handoff: typeof c.handoff === 'string' ? c.handoff : '',
+            resumed: c.resumed === true,
           },
         };
       }

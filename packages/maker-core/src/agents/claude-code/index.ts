@@ -69,6 +69,7 @@ import { buildClaudeFlagSettings } from './flag-settings.js';
 import { resolveAgentCredentialMode } from '../credential-mode.js';
 import { repairForkedClaudeSessionJsonl, type RepairForkedClaudeJsonlResult } from './fork-jsonl-repair.js';
 import { ensureClaudeTranscriptInWorkingDir } from './transcript-relocation.js';
+import { isClaudeResumeSessionNotFound } from './invalid-resume.js';
 import { translateSdkMessage, newRuntimeState, type TurnState, type RuntimeState } from './translator.js';
 import type { Effort, PermissionMode } from '../../types/common.js';
 import type {
@@ -1144,7 +1145,15 @@ export class ClaudeCodeAgent extends BaseAgent {
     usageTracker.setContextWindow(modelContextWindows.get(mutableModel) ?? 0);
 
     // ── 跨 turn 共享状态 ───────────────────────────────────────────────────
-    let sdkSessionId: string | undefined = opts.resumeSessionId;
+    let configuredResumeSessionId: string | undefined = opts.resumeSessionId;
+    let sdkSessionId: string | undefined = configuredResumeSessionId;
+    // 只在首次 resume 尚未被真实内容证明成功前允许自愈；成功一轮后即关闭分类窗口，
+    // 避免后续普通 turn 中碰巧出现同文案时误清上下文。
+    let resumeValidationPending = !!configuredResumeSessionId;
+    let resumeRecoveryAttempted = false;
+    // 当前 turn 已经交给 SDK 的精确输入。invalid-resume fresh rebuild 只重放这一份，
+    // 不重新经过 Session.send/onAccepted，因此不会重复持久化用户消息或渠道 ack。
+    let replayableUserInput: SdkUserInput | null = null;
     // 仅用于诊断日志: 调用方 (register.ts) 在每次 send 前从 storage 取最新 title 透传进来,
     // translator 打 SDK ▷ token usage 等行时会一起带上, 不参与任何业务逻辑。
     let lastSendTitle: string | undefined;
@@ -1164,7 +1173,7 @@ export class ClaudeCodeAgent extends BaseAgent {
       sawCompactBoundary: false,
       hasEmittedText: false,
       uiEmittedText: '',
-      pushedTerminalError: false,
+      pendingApiError: null,
       interruptRequested: false,
       generation: 0,
       interruptGeneration: 0,
@@ -1181,7 +1190,7 @@ export class ClaudeCodeAgent extends BaseAgent {
       turnState.sawCompactBoundary = false;
       turnState.hasEmittedText = false;
       turnState.uiEmittedText = '';
-      turnState.pushedTerminalError = false;
+      turnState.pendingApiError = null;
       // 代际前进: 迟到的被打断 result 据此被 translator 识别为已被本 send 接管。
       turnState.generation += 1;
       // interruptRequested **刻意不在这里清**: watchdog / tool-loop guard 先置
@@ -1421,17 +1430,18 @@ export class ClaudeCodeAgent extends BaseAgent {
       resumeSessionAt?: string;
       forkSession?: boolean;
       permissionMode?: SdkPermissionMode;
+      fresh?: boolean;
     }): Promise<Query> => {
       const currentSdkModel = sdkModelFor(mutableModel);
       const currentSdkEffort = getSdkEffortForModel(mutableModel, mutableEffort);
       const baseResumeAt = vo.resumeSessionAt as string | undefined;
       const baseFork = vo.forkSession as boolean | undefined;
-      const finalResumeAt = extra?.resumeSessionAt ?? baseResumeAt;
-      const finalFork = extra?.forkSession ?? baseFork;
+      const finalResumeAt = extra?.fresh ? undefined : (extra?.resumeSessionAt ?? baseResumeAt);
+      const finalFork = extra?.fresh ? false : (extra?.forkSession ?? baseFork);
       const mcpServers = buildMcpServers();
       // resume 优先用当前的 sdkSessionId (rewind 重启时它指向上一轮 SDK 给的 id);
       // 缺省回到 startSession 入参的 resumeSessionId (新会话首次起 query 时用)。
-      const resumeSdkSid = sdkSessionId ?? opts.resumeSessionId;
+      let resumeSdkSid = sdkSessionId ?? configuredResumeSessionId;
 
       // ── 远端 cc 分支 (Phase 4.3) ──
       // session 标了 remoteHostId 且 host 注入了 remoteCcQueryFactory → 走远端
@@ -1445,9 +1455,10 @@ export class ClaudeCodeAgent extends BaseAgent {
       //  - inputQueue (maker-core push 的 user 消息) 没法直接给 RemoteQuery
       //    (它走 send RPC 而非 AsyncIterable consume), 这里启动一个 fire-and-forget
       //    forwarder 把 inputQueue 转成 remoteQuery.send 调用
-      //  - rewind/fork (extra 非空) MVP 不支持 — 远端 cc-mgr 协议没暴露 SDK 重建语义
+      //  - rewind/fork 字段 MVP 不支持；fresh rebuild 只换 Query + 不带 resume，
+      //    沿用普通 start 语义，可用于 invalid-resume 自愈
       if (opts.remoteHostId && this.deps.remoteCcQueryFactory) {
-        if (extra) {
+        if (extra?.resumeSessionAt || extra?.forkSession) {
           throw new Error(
             'rewind / forkSession are not supported on remote Claude Code sessions yet (MVP)',
           );
@@ -1511,7 +1522,7 @@ export class ClaudeCodeAgent extends BaseAgent {
           log.warn('cc remote: dropping in-process MCP servers (MVP not supported)', { dropped });
         }
         // 计划模式开启时远端 SDK 同样跑 plan; 读 mutable 值让 rewind 重建也拿到当前档。
-        const remotePermissionMode = effectiveSdkPermissionMode();
+        const remotePermissionMode = extra?.permissionMode ?? effectiveSdkPermissionMode();
         sdkInPlanMode = remotePermissionMode === 'plan';
 
         const startParams: Record<string, unknown> = {
@@ -1733,10 +1744,17 @@ export class ClaudeCodeAgent extends BaseAgent {
               workingDir: opts.workingDir,
             });
           } else if (outcome === 'missing') {
-            log.warn('resume transcript not found in any project dir (CLI resume may fail)', {
-              resumeSdkSid,
-              workingDir: opts.workingDir,
-            });
+            const cleared = await clearInvalidResumeSession(resumeSdkSid, 'transcript_preflight');
+            if (cleared) {
+              // 本地 CLI 没有转录就不可能恢复。spawn 前转 fresh，当前用户消息尚未
+              // dispatch，不需要运行期 replay，也不会产生任何失败边界事件。
+              resumeSdkSid = undefined;
+            } else {
+              log.warn('resume transcript not found in any project dir (CLI resume may fail)', {
+                resumeSdkSid,
+                workingDir: opts.workingDir,
+              });
+            }
           }
         } catch (e) {
           log.warn('resume transcript bootstrap failed (continuing)', {
@@ -2014,8 +2032,42 @@ export class ClaudeCodeAgent extends BaseAgent {
     //  做 turn finalization / abort 副作用, 泄漏出去会和 done 泄漏一样把用户消息当作"第二 turn"。
     //  UI 上损失一次错误提示可接受: 若 SDK 真死, 后续用户 turn 也会失败并走真正的错误路径;
     //  bridge 期间的 compact 失败静默恢复(warn 日志保留供排查)是最安全的语义。
+    // CLI 的 missing-conversation 事故形态可能是「先给无详情 is_error result，紧接着
+    // iterator 抛带详情的 exit error」。首个 resumed turn 对这种 result 暂存 50ms，
+    // 给紧随其后的精确错误一个关联窗口；只延迟失败边界，不碰正常 token 热路径。
+    const RESUME_ERROR_CORRELATION_MS = 50;
+    let deferResumeFailureBoundary = false;
+    let deferredResumeFailureEvents: AgentEvent[] = [];
+    let deferredResumeTurnEnd = false;
+    let deferredResumeFailureTimer: NodeJS.Timeout | null = null;
+    function flushDeferredResumeFailure(): void {
+      if (deferredResumeFailureTimer) {
+        clearTimeout(deferredResumeFailureTimer);
+        deferredResumeFailureTimer = null;
+      }
+      const events = deferredResumeFailureEvents;
+      const shouldFinishTurn = deferredResumeTurnEnd;
+      deferredResumeFailureEvents = [];
+      deferredResumeTurnEnd = false;
+      deferResumeFailureBoundary = false;
+      for (const event of events) eventQueue.push(event);
+      if (shouldFinishTurn) completeTranslatedTurnEnd();
+    }
+    function discardDeferredResumeFailure(): void {
+      if (deferredResumeFailureTimer) {
+        clearTimeout(deferredResumeFailureTimer);
+        deferredResumeFailureTimer = null;
+      }
+      deferredResumeFailureEvents = [];
+      deferredResumeTurnEnd = false;
+      deferResumeFailureBoundary = false;
+    }
     const forwardEventSink: AsyncQueue<AgentEvent> = {
       push(e: AgentEvent) {
+        if (deferResumeFailureBoundary) {
+          deferredResumeFailureEvents.push(e);
+          return true;
+        }
         // 后台任务表旁路观察(O(1) type check,task 事件低频,不碰热路径逻辑)。
         noteBackgroundTaskEvent(e);
         if (queuedBridgeTurns > 0) {
@@ -2063,7 +2115,33 @@ export class ClaudeCodeAgent extends BaseAgent {
     // 每条 SDK message 都通知 watchdog (受 pendingToolIds 守卫不起 timer 那段见上方注释)。
     const registerClaudeSubagentTask = this.deps.registerClaudeSubagentTask;
     const getClaudeSubagentTaskUsage = this.deps.getClaudeSubagentTaskUsage;
-
+    function completeTranslatedTurnEnd(): void {
+      pendingToolIds.clear();
+      if (queuedBridgeTurns > 0) {
+        queuedBridgeTurns -= 1;
+        log.debug('onTurnEnd: consumed one bridge turn, keeping turnInFlight + plan state', {
+          queuedBridgeTurns,
+          planTurnActive,
+          sdkInPlanMode,
+        });
+        armUpstreamResponseIdle();
+        return;
+      }
+      resumeValidationPending = false;
+      replayableUserInput = null;
+      if (planTurnActive) {
+        planTurnActive = false;
+        if (!mutablePlanMode) {
+          sdkInPlanMode = false;
+          void q.setPermissionMode(effectiveSdkPermissionMode()).catch((e) => {
+            log.warn('plan turn end setPermissionMode failed', { error: String(e) });
+          });
+        }
+      }
+      turnInFlight = false;
+      clearUpstreamResponseIdle();
+      triggerAutoCompactIfNeeded();
+    }
     function startForwardLoop(currentQ: Query): void {
       // q 换代: 上一代 q 的 pending interrupted result 不可能从新 q drain 出来,
       // 残留的 interruptRequested 会错误抑制新 q 首个真实 is_error 终态 —— 兜底清。
@@ -2087,6 +2165,20 @@ export class ClaudeCodeAgent extends BaseAgent {
               bridgeSuppressedDoneData = undefined;
             }
             const rawType = (rawMsg as { type?: string } | null)?.type;
+            const expectedResumeSessionId = resumeValidationPending ? configuredResumeSessionId : undefined;
+            const rawRecord = rawMsg as { type?: unknown; is_error?: unknown; error?: unknown } | null;
+            const isResumeErrorCandidate =
+              (rawType === 'result' && rawRecord?.is_error === true) ||
+              (rawType === 'assistant' && typeof rawRecord?.error === 'string');
+            if (expectedResumeSessionId && isResumeErrorCandidate &&
+                isClaudeResumeSessionNotFound(rawMsg, expectedResumeSessionId)) {
+              if (await recoverInvalidResume(currentQ, expectedResumeSessionId, rawMsg)) return;
+              surfaceUnrecoverableInvalidResume(rawMsg);
+              return;
+            }
+            if (deferredResumeFailureEvents.length > 0 || deferredResumeTurnEnd) {
+              flushDeferredResumeFailure();
+            }
             // 自动续跑 turn 的 in-flight 补登记:后台 subagent 完成后 SDK 经
             // task_notification 自动续跑新 turn,**不经过 handle.send**,turnInFlight
             // 停留在 false → isTurnRunning() 误报空闲,session.send 的 SESSION_RUNNING
@@ -2117,6 +2209,10 @@ export class ClaudeCodeAgent extends BaseAgent {
               turnInFlight = true;
             }
             noteUpstreamResponseActivity(typeof rawType === 'string' ? rawType : 'unknown');
+            const shouldCorrelateResumeFailure =
+              resumeValidationPending && rawType === 'result' &&
+              (rawMsg as { is_error?: unknown } | null)?.is_error === true;
+            if (shouldCorrelateResumeFailure) deferResumeFailureBoundary = true;
             translateSdkMessage(rawMsg, forwardEventSink, {
               rt: runtimeState,
               turn: turnState,
@@ -2142,51 +2238,11 @@ export class ClaudeCodeAgent extends BaseAgent {
                 return usage ? { totalTokens: usage.totalTokens } : undefined;
               },
               onTurnEnd: () => {
-                // 兜底: 防 watchdog interrupt / SDK 异常路径留下未配对的 tool_use_id。
-                pendingToolIds.clear();
-                // 桥接 turn (bridge) 消费必须**先**处理, 优先级高于 plan cleanup / turnInFlight
-                // 清理 (Codex review 3535545475): rebuild 尾部注入的 /compact 是 SDK 独立 turn,
-                // 其 result 走到这里时 planTurnActive / sdkInPlanMode 是**为下一轮用户 plan turn
-                // 准备的**状态, 绝不能当作"plan turn 已结束"去消费掉 (否则用户的 one-shot plan
-                // turn 会被 /compact 吃掉 plan 状态, 真消息以普通 turn 跑, plan_review 走不到)。
-                //
-                // 计数 >0 说明后面还有已注入的桥接 / 用户 turn:
-                //  - turnInFlight 保持 true (清 → 用户 turn 期间 isTurnRunning 返 false,
-                //    rewind preview 守卫失守; 保持 true 也让 triggerAutoCompactIfNeeded
-                //    自然 no-op, 避免在同一 rebuild 内二次排队 /compact 死循环)
-                //  - watchdog 需要为下一 turn 重新起表 (SDK 首个 message 到来前的等待
-                //    窗口就要被守住, 与常规 send 入口 arm 时机一致)
-                //  - **不触碰 plan 状态**: 留给真正的用户 turn 消费
-                //  - activeBridgeRewindResumeAt 继续保留到下一条 SDK message 到达:若
-                //    SDK 只跑完 /compact、还没拉起后续真实用户 turn,此时用户 Stop 仍应按
-                //    bridge cancel 处理(清 queued input + close query + 下次从 rewind point 重建)。
-                if (queuedBridgeTurns > 0) {
-                  queuedBridgeTurns -= 1;
-                  log.debug('onTurnEnd: consumed one bridge turn, keeping turnInFlight + plan state', {
-                    queuedBridgeTurns,
-                    planTurnActive,
-                    sdkInPlanMode,
-                  });
-                  armUpstreamResponseIdle();
-                  // 不调 triggerAutoCompactIfNeeded — turnInFlight=true 内部会 no-op,
-                  // 且我们不想在桥接期间再叠一层排队。
+                if (deferResumeFailureBoundary) {
+                  deferredResumeTurnEnd = true;
                   return;
                 }
-                // 计划模式一次性语义: 本轮 plan turn 未经批准就结束(取消审阅 / 模型
-                // 没提交计划 / deny 后收尾) → 循环结束, SDK 切回底层权限档。
-                // 批准路径已在 ExitPlanMode 分支提前收尾, 这里为 no-op。
-                if (planTurnActive) {
-                  planTurnActive = false;
-                  if (!mutablePlanMode) {
-                    sdkInPlanMode = false;
-                    void q.setPermissionMode(effectiveSdkPermissionMode()).catch((e) => {
-                      log.warn('plan turn end setPermissionMode failed', { error: String(e) });
-                    });
-                  }
-                }
-                turnInFlight = false;
-                clearUpstreamResponseIdle();
-                triggerAutoCompactIfNeeded();
+                completeTranslatedTurnEnd();
               },
               onToolUseStart: (id: string, toolName?: unknown, input?: unknown) => {
                 pendingToolIds.add(id);
@@ -2257,7 +2313,15 @@ export class ClaudeCodeAgent extends BaseAgent {
                   }
                 : {}),
             });
+            if (shouldCorrelateResumeFailure) {
+              deferResumeFailureBoundary = false;
+              deferredResumeFailureTimer = setTimeout(
+                flushDeferredResumeFailure,
+                RESUME_ERROR_CORRELATION_MS,
+              );
+            }
           }
+          flushDeferredResumeFailure();
           log.debug('event loop done (stream_end)');
           if (closed) {
             eventQueue.push({ type: 'done', data: { reason: 'stream_end' }, source: 'claude-code' });
@@ -2340,9 +2404,16 @@ export class ClaudeCodeAgent extends BaseAgent {
           // 注: upstream-response-idle watchdog 触发走的是 q.interrupt(), 不会让 for-await
           // 抛 abort — SDK 会继续 drain 出 ResultMessage(error_during_execution), 走正常
           // result 路径进 translator.onTurnEnd; 不在这里识别 watchdog 状态。
-          if (closed) {
+          const expectedResumeSessionId = resumeValidationPending ? configuredResumeSessionId : undefined;
+          if (!closed && expectedResumeSessionId &&
+              isClaudeResumeSessionNotFound(e, expectedResumeSessionId)) {
+            if (await recoverInvalidResume(currentQ, expectedResumeSessionId, e)) return;
+            surfaceUnrecoverableInvalidResume(e);
+          } else if (closed) {
+            flushDeferredResumeFailure();
             log.debug('event loop exited (closed)', { reason: String(e) });
           } else if (pendingRewindTo || rewindTransitionQueries.has(currentQ) || canceledBridgeQueries.has(currentQ)) {
+            flushDeferredResumeFailure();
             log.debug('event loop exited (rewind/canceled bridge transition)', {
               reason: String(e),
               pendingRewindTo,
@@ -2366,6 +2437,7 @@ export class ClaudeCodeAgent extends BaseAgent {
               pendingToolIds.clear();
             }
           } else if (activeBridgeRewindResumeAt) {
+            flushDeferredResumeFailure();
             log.error('event loop crashed during bridge turn', {
               error: String(e),
               activeBridgeRewindResumeAt,
@@ -2382,6 +2454,7 @@ export class ClaudeCodeAgent extends BaseAgent {
             }
             teardownDeadHandle('bridge crash teardown');
           } else {
+            flushDeferredResumeFailure();
             // ③ 真异常: SDK 流抛错 = 底层 q 已死且没有新 q 接管。本地路径也会走到这里 ——
             // 典型: resume 失败时 CLI 先吐 is_error result 再以非零码退出, SDK readMessages
             // 把 exit error 替换成 "Claude Code returned an error result: ..." 抛进流里。
@@ -2414,6 +2487,104 @@ export class ClaudeCodeAgent extends BaseAgent {
           if (closed) eventQueue.end();
         }
       })();
+    }
+
+    async function clearInvalidResumeSession(
+      expectedResumeSessionId: string,
+      source: 'transcript_preflight' | 'sdk_runtime',
+    ): Promise<boolean> {
+      if (resumeRecoveryAttempted || !opts.onInvalidResumeSession) return false;
+      try {
+        const cleared = await opts.onInvalidResumeSession(expectedResumeSessionId);
+        if (!cleared) {
+          log.warn('invalid resume CAS did not match; refusing to overwrite concurrent session id', {
+            expectedResumeSessionId, source,
+          });
+          return false;
+        }
+        resumeRecoveryAttempted = true;
+        resumeValidationPending = false;
+        configuredResumeSessionId = undefined;
+        sdkSessionId = undefined;
+        log.warn('invalid resume id cleared; switching to a fresh Claude conversation', {
+          expectedResumeSessionId, source,
+        });
+        return true;
+      } catch (error) {
+        log.error('invalid resume CAS failed', {
+          expectedResumeSessionId, source,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return false;
+      }
+    }
+    async function recoverInvalidResume(
+      currentQ: Query,
+      expectedResumeSessionId: string,
+      evidence: unknown,
+    ): Promise<boolean> {
+      if (!replayableUserInput) return false;
+      if (!(await clearInvalidResumeSession(expectedResumeSessionId, 'sdk_runtime'))) return false;
+      const replayInput = replayableUserInput;
+      discardDeferredResumeFailure();
+      log.warn('recovering invalid resume with one fresh retry', {
+        expectedResumeSessionId,
+        evidence: evidence instanceof Error ? evidence.message : String(evidence),
+      });
+      clearUpstreamResponseIdle();
+      pendingToolIds.clear();
+      try { inputQueue.end(); } catch (error) {
+        log.debug('invalid resume recovery: old input queue end failed', { error: String(error) });
+      }
+      try { await Promise.resolve(currentQ.close()); } catch (error) {
+        log.debug('invalid resume recovery: old query close failed', { error: String(error) });
+      }
+      inputQueue = createAsyncQueue<SdkUserInput>();
+      abortController = new AbortController();
+      runtimeState.lastResultUsageAggregate = null;
+      beginNewTurn();
+      toolLoopGuard?.resetTurn();
+      turnInFlight = true;
+      try {
+        q = await buildQuery({ permissionMode: currentTurnSdkPermissionMode(), fresh: true });
+        startForwardLoop(q);
+        if (!inputQueue.push(replayInput)) throw new Error('fresh retry input queue rejected replay');
+        armUpstreamResponseIdle();
+        return true;
+      } catch (error) {
+        log.error('invalid resume fresh retry failed to start', {
+          expectedResumeSessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        eventQueue.push({
+          type: 'error',
+          data: {
+            message: `Claude 会话已失效，自动创建新会话时失败：${error instanceof Error ? error.message : String(error)}`,
+            isTerminal: true,
+            reason: 'resume_session_recovery_failed',
+          },
+          source: 'claude-code',
+        });
+        if (turnInFlight) emitTurnBoundary('resume_session_recovery_failed');
+        teardownDeadHandle('invalid resume recovery failed');
+        return true;
+      }
+    }
+    function surfaceUnrecoverableInvalidResume(evidence: unknown): void {
+      discardDeferredResumeFailure();
+      eventQueue.push({
+        type: 'error',
+        data: {
+          message: evidence instanceof Error
+            ? evidence.message
+            : 'Claude 会话已失效，且本地会话 ID 已被并发更新，未执行自动覆盖。请重试。',
+          isTerminal: true,
+          reason: 'resume_session_not_found',
+        },
+        source: 'claude-code',
+      });
+      if (turnInFlight) emitTurnBoundary('resume_session_not_found');
+      teardownDeadHandle('unrecoverable invalid resume');
     }
 
     // ── 首次起 q + 启动 forward loop ─────────────────────────────────────────
@@ -2804,12 +2975,13 @@ export class ClaudeCodeAgent extends BaseAgent {
           // Claude Code streaming-input 协议要求 message 包装层,漏掉会 exit code 1。
           // sendOpts.messageUuid 注入到 SDK input.uuid — SDK 透传当作 file checkpoint
           // snapshot 的 messageId, rewind preview 拿同款 uuid 调 rewindFiles dryRun。
-          const accepted = inputQueue.push({
+          const sdkInput: SdkUserInput = {
             type: 'user',
             message: { role: 'user', content },
             parent_tool_use_id: null,
             ...(sendOpts?.messageUuid ? { uuid: sendOpts.messageUuid } : {}),
-          });
+          };
+          const accepted = inputQueue.push(sdkInput);
           if (!accepted) {
             // close() can win while content conversion is still preparing files or
             // images. Renderer now treats send resolve as "agent accepted"; so a
@@ -2817,6 +2989,7 @@ export class ClaudeCodeAgent extends BaseAgent {
             // get persisted and removed even though Claude never received them.
             throw new Error('Claude input queue is closed');
           }
+          replayableUserInput = sdkInput;
           // upstream-response-idle watchdog 起表 — 放在 inputQueue.push 之后, 避免把
           // client 端的 toClaudeSdkContent (多模态 image-resizer 同步等几秒) 算进上游
           // 响应配额。否则 warn 日志里 lastEventType=null + msSinceLast=null 会指错方向

@@ -583,6 +583,10 @@ export class GoalController {
     if (this.unsubscribers.has(sessionId)) return; // 已在管(非 dormant)
     const state = await this.deps.storage.get(sessionId);
     if (!state || state.status !== 'active') return; // 只续 active dormant;paused/blocked 走手动 resume
+    // deferred agent switch 的 commit 会关闭旧 live session。必须在 ensureSession
+    // 之前执行,随后重新读取/bootstrap 的才是目标引擎;否则这一轮 directive 会继续
+    // 发给 fireTurn 开始时捕获的旧 session。
+    await this.deps.applyPendingAgentSwitch?.(sessionId);
     const session = await this.deps.ensureSession(sessionId);
     if (!session) return; // 活化失败(如 device-link 远程不可用)→ 留 dormant,下次打开再试
     this.resetTurn(sessionId);
@@ -965,6 +969,9 @@ export class GoalController {
       this.scheduleContinuation(sessionId);
       return;
     }
+    // fireTurn 每次都可能是登记 deferred intent 后的第一条直发消息。apply 会关闭
+    // 旧引擎并 bootstrap 目标引擎,所以必须在拿 session 引用之前执行。
+    await this.deps.applyPendingAgentSwitch?.(sessionId);
     const session = await this.deps.ensureSession(sessionId);
     if (!session) {
       this.deps.logger.warn('[goal] no live session to fire (resume failed)', { sessionId, kind });

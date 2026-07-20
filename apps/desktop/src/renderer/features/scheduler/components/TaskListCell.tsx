@@ -71,6 +71,8 @@ interface Props {
    * 确保两个入口任一触发后对方也立即禁用，防止同一 schedule 双发 runNow。
    */
   runBusy?: boolean;
+  /** 仅在 Scheduler 明确把本任务列入并发等待队列时传入。 */
+  waitingForResources?: { inFlight: number; maxConcurrentRuns: number };
 }
 
 export function TaskListCell({
@@ -89,6 +91,7 @@ export function TaskListCell({
   onRemoveProjectSchedule,
   onRunNow,
   runBusy = false,
+  waitingForResources,
 }: Props) {
   const { t } = useTranslation();
   // 右键菜单：复用 ProjectNode 的"controlled DropdownMenu + 不可见 trigger 跟 click 坐标"模式。
@@ -144,7 +147,12 @@ export function TaskListCell({
   const lastText = formatLastRun(s.lastFiredAt);
   const nextText = s.status === 'active' ? formatNextRun(s.nextFireAt) : null;
   let subtitle: string | null;
-  if (s.status === 'paused') {
+  if (waitingForResources) {
+    subtitle = t('scheduler.cell.subtitleWaitingForResources', {
+      inFlight: waitingForResources.inFlight,
+      max: waitingForResources.maxConcurrentRuns,
+    });
+  } else if (s.status === 'paused') {
     subtitle = t('scheduler.cell.subtitlePaused');
   } else if (s.manual) {
     subtitle = lastText ?? t('scheduler.cell.subtitleManual');

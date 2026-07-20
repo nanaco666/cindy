@@ -5,6 +5,53 @@ export type ScheduleWorkspaceKind = 'project' | 'dialogue';
 export type ScheduleExecutionMode = 'agent' | 'script';
 export type ScriptCapability = 'jira.read' | 'jira.comment' | 'sessions.dispatch' | 'feishu.read';
 
+/** 一次调度执行由自动到点触发，还是由用户显式 runNow 触发。 */
+export type ScheduleFireSource = 'automatic' | 'run-now';
+
+/**
+ * Scheduler 内部执行阶段。阶段只用于运行期诊断，不持久化到 schedule_runs。
+ * 它覆盖从抢占排期到终态落库的整个槽位生命周期。
+ */
+export type ScheduleRunPhase =
+  | 'loading'
+  | 'claiming'
+  | 'persisting'
+  | 'running'
+  | 'finalizing';
+
+/** 当前 Scheduler 实例中的一条结构化 in-flight 记录。 */
+export interface SchedulerInflightRun {
+  scheduleId: string;
+  scheduleName?: string;
+  runId: string;
+  source: ScheduleFireSource;
+  executionMode?: ScheduleExecutionMode;
+  startedAt: number;
+  /** 自动任务从到期到真正获得槽位的等待时间；runNow 没有此字段。 */
+  slotWaitMs?: number;
+  phase: ScheduleRunPhase;
+}
+
+/** 因自动并发闸门而尚未获得槽位的到期任务。 */
+export interface SchedulerWaitingSchedule {
+  scheduleId: string;
+  scheduleName: string;
+  /** 任务原定到期时间；当前等待时长可由 now - waitingSince 计算。 */
+  waitingSince: number;
+}
+
+/**
+ * Scheduler 的瞬时运行快照。通过 IPC 查询并在变化时推送给 renderer；不写数据库。
+ */
+export interface SchedulerRuntimeSnapshot {
+  schedulerInstanceId: string;
+  processId?: number;
+  inFlight: number;
+  maxConcurrentRuns: number;
+  inFlightRuns: SchedulerInflightRun[];
+  waitingSchedules: SchedulerWaitingSchedule[];
+}
+
 /**
  * script 模式可授予的全量能力目录(单一来源):引擎校验白名单与 UI 能力选择器
  * 都从这里枚举——host 侧新增能力时只改这一处,选择器自动出现新项。
@@ -114,8 +161,8 @@ export interface Schedule {
    *   - 首次触发：createdAt + intervalMs
    *   - 周期触发：finishedAt + intervalMs
    *   - 冷启动 / resume：now + intervalMs（不补发漏掉的，重新起 N 倒计时）
-   * 没设（undefined）→ 维持旧 cron 槽位语义；`cronExpr` 仍是这条记录的主表达式
-   * （UI 层 chip 文案、edit 表单回显都用 cronExpr）。
+   * 没设（undefined）→ 维持 cron 槽位语义；`cronExpr` 在 interval 模式下仍保留为
+   * 兼容/显式切回 Cron 时的表达式，但 UI 回显与引擎执行都必须以 intervalMs 为准。
    */
   intervalMs?: number;
   agentKind: AgentKind;
@@ -190,6 +237,12 @@ export interface ScheduleRun {
   finishedAt?: number;
   status: RunStatus;
   errorMsg?: string;
+  /** 本次 run 产生的真实 API 账单费用。 */
+  costUsd?: number;
+  /** 本次 run 的订阅 token 估算价值，不计入真实账单。 */
+  estimatedValueUsd?: number;
+  /** exact = 有持久化 runId 归因；legacy = 历史数据无法精确拆到单次 run。 */
+  costAttribution?: 'exact' | 'legacy';
   /**
    * Agent 这一轮 turn 的最终文本（与飞书正常对话气泡显示内容同源 — 按 isFinal
    * 替换、否则追加 delta，done 时定格）。仅 prompt 类 run 在 success 时填，
@@ -300,6 +353,8 @@ export type SchedulerEvent =
    */
   | { type: 'session-bound'; scheduleId: string; runId: string; sessionId: string }
   | { type: 'changed'; scheduleId: string }
+  /** in-flight 数量或并发闸门等待队列发生变化。 */
+  | { type: 'runtime-state'; snapshot: SchedulerRuntimeSnapshot }
   /** 主进程在标记某个 schedule 下的已完成 run 为已读后广播，让 sidebar 未读 badge 重新拉数。 */
   | { type: 'read'; scheduleId: string }
   /** 主进程在 "Mark all as read" 一次性清掉全部未读后广播；不带 scheduleId,所有 schedule 都受影响。 */

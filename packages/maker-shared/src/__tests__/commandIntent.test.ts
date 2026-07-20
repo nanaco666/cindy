@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { commandIntentFromActions, commandIntentFromCommand } from '../commandIntent';
+import {
+  commandIntentFromActions,
+  commandIntentsFromActions,
+  commandIntentFromCommand,
+} from '../commandIntent';
 
 describe('commandIntentFromActions — codex commandActions 解析', () => {
   it('maps read actions with name and path', () => {
@@ -43,6 +47,26 @@ describe('commandIntentFromActions — codex commandActions 解析', () => {
         { type: 'search', command: 'grep node', query: 'node' },
       ]),
     ).toEqual({ action: 'search', target: 'node' });
+  });
+
+  it('preserves every safe structured action for multi-row presentation', () => {
+    const actions = [
+      { type: 'read', command: 'cat src/a.ts', name: 'a.ts', path: '/repo/src/a.ts' },
+      { type: 'search', command: 'rg TODO src', query: 'TODO', path: 'src' },
+      { type: 'listFiles', command: 'ls tests', path: 'tests' },
+    ];
+    expect(commandIntentsFromActions(actions)).toEqual([
+      { action: 'read', target: 'a.ts', path: '/repo/src/a.ts' },
+      { action: 'search', target: 'TODO', path: 'src' },
+      { action: 'list', target: 'tests' },
+    ]);
+    expect(
+      commandIntentsFromActions(actions, 'cat src/a.ts && rg TODO src; ls tests'),
+    ).toHaveLength(3);
+    expect(
+      commandIntentsFromActions(actions.slice(0, 1), 'cat src/a.ts && rm -rf build'),
+    ).toEqual([]);
+    expect(commandIntentsFromActions('not-an-array')).toEqual([]);
   });
 
   it('rejects read actions whose command is not a known read command (executed binaries)', () => {
@@ -261,8 +285,28 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
       target: 'index.js',
     });
     expect(commandIntentFromCommand('node --version')).toEqual({ action: 'showVersion', target: 'Node.js' });
-    expect(commandIntentFromCommand('node -e "console.log(1)"')).toBeUndefined();
+    expect(commandIntentFromCommand('node -e "console.log(1)"')).toEqual({ action: 'runNodeScript' });
     expect(commandIntentFromCommand("node <<'NODE'\nconsole.log(1)\nNODE")).toBeUndefined();
+
+    expect(commandIntentFromCommand('python3 scripts/audit.py --days 7')).toEqual({
+      action: 'runScript',
+      target: 'audit.py',
+    });
+    expect(commandIntentFromCommand('python3 -c "print(1)"')).toEqual({ action: 'runPythonScript' });
+    expect(commandIntentFromCommand("perl -0ne 'print' input.txt")).toEqual({ action: 'runPerlScript' });
+    expect(commandIntentFromCommand('perl -I lib -c scripts/check.pl')).toEqual({
+      action: 'checkSyntax',
+      target: 'check.pl',
+    });
+    expect(commandIntentFromCommand('swiftc -typecheck native/helper.swift')).toEqual({
+      action: 'typecheck',
+      target: 'helper.swift',
+    });
+    expect(commandIntentFromCommand('swiftc native/helper.swift -O -o /tmp/helper')).toEqual({
+      action: 'build',
+      target: 'helper.swift',
+    });
+    expect(commandIntentFromCommand("xcrun swift -e 'print(1)'")).toEqual({ action: 'runSwiftScript' });
 
     expect(commandIntentFromCommand("jq '.name' package.json")).toEqual({
       action: 'parseJson',
@@ -282,11 +326,23 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
     expect(commandIntentFromCommand('ps aux')).toEqual({ action: 'inspectProcesses' });
     expect(commandIntentFromCommand('pgrep -fl Cindy')).toEqual({ action: 'inspectProcesses' });
     expect(commandIntentFromCommand('lsof -i :3333')).toEqual({ action: 'inspectPorts', target: ':3333' });
+    expect(commandIntentFromCommand('stat -f "%Sm %N" package.json')).toEqual({ action: 'inspect' });
+    expect(commandIntentFromCommand('file -C -m custom.magic')).toBeUndefined();
+    expect(commandIntentFromCommand('plutil -p /Applications/Cindy.app/Contents/Info.plist'))
+      .toEqual({ action: 'inspect' });
+    expect(commandIntentFromCommand('defaults read com.example.Cindy')).toEqual({ action: 'inspectEnvironment' });
+    expect(commandIntentFromCommand('xcrun simctl list devices available')).toEqual({
+      action: 'inspectEnvironment',
+    });
   });
 
   it('only describes sqlite commands that stay in read-only query mode', () => {
     expect(commandIntentFromCommand("sqlite3 -readonly data.db 'select count(*) from messages'"))
       .toEqual({ action: 'queryDatabase', target: 'data.db' });
+    expect(commandIntentFromCommand("sqlite3 -readonly -header -column data.db '.tables'"))
+      .toEqual({ action: 'queryDatabase', target: 'data.db' });
+    expect(commandIntentFromCommand("sqlite3 'file:data.db?mode=ro' 'select 1'"))
+      .toMatchObject({ action: 'queryDatabase' });
     expect(commandIntentFromCommand("sqlite3 data.db 'select count(*) from messages'"))
       .toBeUndefined();
     expect(commandIntentFromCommand("sqlite3 -readonly data.db '.shell rm -rf build'"))
@@ -334,6 +390,12 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
       ['git fetch origin --prune', 'gitFetch'],
       ['git pull --ff-only', 'gitPull'],
       ['git push origin feature', 'gitPush'],
+      ['git rebase origin/main', 'gitRebase'],
+      ['git merge --no-ff feature', 'gitMerge'],
+      ['git cherry-pick --abort', 'gitCherryPick'],
+      ['git stash list', 'gitStash'],
+      ['git restore src/app.ts', 'gitRestore'],
+      ['git submodule update --init --recursive', 'gitSubmodule'],
       ['git remote -v', 'gitRemote'],
       ['git rev-parse --show-toplevel', 'gitRevParse'],
       ['git branch --show-current', 'gitBranch'],
@@ -359,6 +421,12 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
     expect(commandIntentFromCommand('git commit --amend --no-edit')).toBeUndefined();
     expect(commandIntentFromCommand('git push --force-with-lease origin feature')).toBeUndefined();
     expect(commandIntentFromCommand('git push origin --delete old-branch')).toBeUndefined();
+    expect(commandIntentFromCommand("git rebase --exec 'rm -rf /tmp/generated' origin/main")).toBeUndefined();
+    expect(commandIntentFromCommand("git rebase --exec='rm -rf /tmp/generated' origin/main")).toBeUndefined();
+    expect(commandIntentFromCommand("git rebase -x 'rm -rf /tmp/generated' origin/main")).toBeUndefined();
+    expect(commandIntentFromCommand("git rebase -x'rm -rf /tmp/generated' origin/main")).toBeUndefined();
+    expect(commandIntentFromCommand("git submodule foreach 'git reset --hard'")).toBeUndefined();
+    expect(commandIntentFromCommand("git submodule --quiet foreach --recursive 'rm -rf build'")).toBeUndefined();
     expect(commandIntentFromCommand('git reset --hard HEAD~1')).toBeUndefined();
     expect(commandIntentFromCommand('git branch new-feature')).toBeUndefined();
     expect(commandIntentFromCommand('git branch -D old-feature')).toBeUndefined();
@@ -674,11 +742,85 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
   it('strips cd prefixes, env assignments and display-only pipe filters', () => {
     expect(commandIntentFromCommand('cd /repo && pnpm test')).toEqual({ action: 'test' });
     expect(commandIntentFromCommand('NODE_ENV=test pnpm vitest run')).toEqual({ action: 'test' });
+    expect(commandIntentFromCommand('env -u NODE_DEBUG PATH=/opt/node/bin:$PATH node --version'))
+      .toEqual({ action: 'showVersion', target: 'Node.js' });
     expect(commandIntentFromCommand('grep -n foo src/a.ts | head -20')).toEqual({
       action: 'search',
       target: 'foo',
       path: 'src/a.ts',
     });
+    expect(commandIntentFromCommand('rg -n turnCostUsd src | cut -d: -f1 | sort -u')).toEqual({
+      action: 'search',
+      target: 'turnCostUsd',
+      path: 'src',
+    });
+    expect(commandIntentFromCommand('ps aux | rg Cindy')).toEqual({ action: 'inspectProcesses' });
+    expect(commandIntentFromCommand('ps aux | rg --pre=touch Cindy')).toBeUndefined();
+    expect(commandIntentFromCommand('ps aux | rg Cindy process.txt')).toBeUndefined();
+    expect(commandIntentFromCommand('cat a.txt | cut -d: -f1 b.txt')).toBeUndefined();
+    expect(commandIntentFromCommand("find ~/Code -maxdepth 5 \\( -iname '*cindy*' -o -iname '*maker*' \\) -print"))
+      .toEqual({ action: 'search', target: '*cindy*', path: '~/Code' });
+  });
+
+  it('summarizes safe composite command chains without hiding unknown or mutating segments', () => {
+    expect(
+      commandIntentFromCommand(
+        "sed -n '1,80p' src/register.ts && sed -n '80,160p' src/register.ts",
+      ),
+    ).toEqual({ action: 'read', target: 'register.ts', path: 'src/register.ts' });
+    expect(
+      commandIntentFromCommand("sed -n '1,80p' src/a.ts && sed -n '1,80p' src/b.ts"),
+    ).toEqual({ action: 'inspect' });
+    expect(
+      commandIntentFromCommand("rg -n send src && sed -n '1,80p' src/register.ts"),
+    ).toEqual({ action: 'inspect' });
+    expect(commandIntentFromCommand('rg -n send src && rg -n receive src')).toEqual({
+      action: 'search',
+    });
+    expect(commandIntentFromCommand('git status --short && git diff --stat')).toEqual({
+      action: 'inspectRepository',
+    });
+    expect(commandIntentFromCommand('pnpm typecheck && pnpm test')).toEqual({ action: 'verify' });
+    expect(commandIntentFromCommand('node --version && pnpm --version && which pnpm')).toEqual({
+      action: 'inspectEnvironment',
+    });
+    expect(commandIntentFromCommand('pwd && git status --short')).toEqual({ action: 'gitStatus' });
+    expect(commandIntentFromCommand('pgrep -fl Cindy || true')).toEqual({ action: 'inspectProcesses' });
+    expect(commandIntentFromCommand('test -d node_modules && echo present || echo missing')).toEqual({
+      action: 'inspectEnvironment',
+    });
+    expect(
+      commandIntentFromCommand(
+        "nl -ba README.md | sed -n '1,20p'; printf '\\n--- package ---\\n'; nl -ba package.json | sed -n '1,20p'",
+      ),
+    ).toEqual({ action: 'inspect' });
+    expect(
+      commandIntentFromCommand(
+        "cd /repo && sed -n '1,80p' src/a.ts && sed -n '1,80p' src/b.ts",
+      ),
+    ).toEqual({ action: 'inspect' });
+    expect(commandIntentFromCommand('rg TODO src && rm -rf build')).toBeUndefined();
+    expect(commandIntentFromCommand('git add . && git commit -m done')).toEqual({
+      action: 'modifyRepository',
+    });
+    expect(
+      commandIntentFromCommand(
+        'git cherry-pick --abort && git status --short --branch && git merge --no-ff feature',
+      ),
+    ).toEqual({ action: 'modifyRepository' });
+    expect(commandIntentFromCommand('git status --short; rm -rf build')).toBeUndefined();
+    expect(commandIntentFromCommand("rg TODO src; printf -v result '%s' ok")).toBeUndefined();
+    expect(commandIntentFromCommand('cat a.txt > out.txt && cat b.txt')).toBeUndefined();
+  });
+
+  it('parses long known Git/GitHub commands but caps oversized inline payloads', () => {
+    const longGitAdd = `git add ${Array.from({ length: 220 }, (_, index) => `src/file-${index}.ts`).join(' ')}`;
+    expect(longGitAdd.length).toBeGreaterThan(1000);
+    expect(commandIntentFromCommand(longGitAdd)).toEqual({ action: 'gitAdd' });
+
+    const longGraphql = `gh api graphql -f query='query { repository(owner: "x", name: "y") { ${'issues '.repeat(300)} } }'`;
+    expect(commandIntentFromCommand(longGraphql)).toEqual({ action: 'ghApiQuery' });
+    expect(commandIntentFromCommand(`git add ${'x'.repeat(8200)}`)).toBeUndefined();
   });
 
   it('bails out on file-writing redirection but keeps harmless stream forms', () => {
@@ -719,11 +861,15 @@ describe('commandIntentFromCommand — 本地规则解析', () => {
   });
 
   it('bails out on complex or unparseable shapes', () => {
-    // 管道尾段不是纯展示过滤器。
-    expect(commandIntentFromCommand('ps aux | grep node')).toBeUndefined();
-    // 多段命令链 / 分支 / 子命令替换 / 多行。
-    expect(commandIntentFromCommand('pnpm build && pnpm test')).toBeUndefined();
-    expect(commandIntentFromCommand('pnpm test || echo failed')).toBeUndefined();
+    // 能安全归纳的验证链与无害 fallback 分支会显示友好摘要。
+    expect(commandIntentFromCommand('pnpm build && pnpm test')).toEqual({ action: 'verify' });
+    expect(commandIntentFromCommand('pnpm test || echo failed')).toEqual({ action: 'test' });
+    expect(commandIntentFromCommand('pnpm test 2>&1; pnpm lint 2>/dev/null')).toEqual({
+      action: 'verify',
+    });
+    expect(commandIntentFromCommand('pnpm test &>/dev/null; pnpm lint')).toEqual({ action: 'verify' });
+    expect(commandIntentFromCommand('pnpm test &>test.log; pnpm lint')).toBeUndefined();
+    expect(commandIntentFromCommand('pnpm test || rm -rf build')).toBeUndefined();
     expect(commandIntentFromCommand('echo $(date)')).toBeUndefined();
     expect(commandIntentFromCommand('cat <<EOF\nhi\nEOF')).toBeUndefined();
     // 引号里的分隔符不影响解析,未闭合引号放弃。

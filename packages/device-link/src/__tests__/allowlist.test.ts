@@ -50,6 +50,7 @@ describe('REMOTE_INVOKE_ALLOWLIST', () => {
   it('放行 M4 完整控制面(scheduler / orca / rewind / 只读 usage)', () => {
     for (const ch of [
       'maker:schedule:create',
+      'maker:schedule:get-runtime-state',
       'maker:worker:create',
       'maker:session:enable-orca',
       'maker:rewind:commit',

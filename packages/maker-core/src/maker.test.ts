@@ -37,6 +37,12 @@ function createStorage(): SessionStorage {
       rows.set(id, next);
       return next;
     },
+    async compareAndClearSdkSessionId(id, expectedSdkSessionId) {
+      const row = rows.get(id);
+      if (!row || row.sdkSessionId !== expectedSdkSessionId) return false;
+      rows.set(id, { ...row, sdkSessionId: undefined, updatedAt: Date.now() });
+      return true;
+    },
     async delete(id) {
       rows.delete(id);
     },
@@ -767,5 +773,135 @@ describe('Session turn send guard', () => {
     await expect(session.send('first')).rejects.toBe(firstError);
     await expect(session.send('second')).resolves.toEqual({ accepted: true });
     expect(handle.send).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Maker invalid-resume persistence bridge', () => {
+  it('injects a compare-and-clear callback for resumed Claude sessions', async () => {
+    const storage = createStorage();
+    await storage.create({
+      id: 'session-1',
+      agentKind: 'claude-code',
+      workDir: '/repo',
+      title: 'Resume me',
+      model: 'claude-opus-4-6',
+      sdkSessionId: 'sdk-old',
+    });
+    const startSession = vi.fn(async (opts: CreateSessionOptions) => {
+      expect(await opts.onInvalidResumeSession?.('sdk-old')).toBe(true);
+      expect(await opts.onInvalidResumeSession?.('sdk-old')).toBe(false);
+      return createHandle({ id: '<pending>', agentKind: 'claude-code' });
+    });
+    const maker = new Maker({
+      agents: { 'claude-code': createAgent(startSession, 'claude-code') },
+      storage,
+      logger: createLogger(),
+    });
+    await maker.createSession({
+      id: 'session-1',
+      agentKind: 'claude-code',
+      workingDir: '/repo',
+      model: 'claude-opus-4-6',
+      resumeSessionId: 'sdk-old',
+    });
+    expect((await storage.get('session-1'))?.sdkSessionId).toBeUndefined();
+  });
+
+  it('clears after in-flight writes and ignores stale session_id events that arrive after recovery', async () => {
+    const baseStorage = createStorage();
+    await baseStorage.create({
+      id: 'session-1',
+      agentKind: 'claude-code',
+      workDir: '/repo',
+      title: 'Resume me',
+      model: 'claude-opus-4-6',
+      sdkSessionId: 'sdk-old',
+    });
+
+    let releaseOldWrite!: () => void;
+    let markOldWriteStarted!: () => void;
+    const oldWriteStarted = new Promise<void>((resolve) => {
+      markOldWriteStarted = resolve;
+    });
+    const oldWriteGate = new Promise<void>((resolve) => {
+      releaseOldWrite = resolve;
+    });
+    let shouldBlockOldWrite = true;
+    const persistedSdkSessionIds: string[] = [];
+    const compareAndClear = vi.fn((id: string, expectedSdkSessionId: string) =>
+      baseStorage.compareAndClearSdkSessionId(id, expectedSdkSessionId),
+    );
+    const storage: SessionStorage = {
+      ...baseStorage,
+      async update(id, patch) {
+        if (typeof patch.sdkSessionId === 'string') {
+          persistedSdkSessionIds.push(patch.sdkSessionId);
+          if (patch.sdkSessionId === 'sdk-old' && shouldBlockOldWrite) {
+            shouldBlockOldWrite = false;
+            markOldWriteStarted();
+            await oldWriteGate;
+          }
+        }
+        return baseStorage.update(id, patch);
+      },
+      compareAndClearSdkSessionId: compareAndClear,
+    };
+
+    const oldEvents = createAsyncQueue<AgentEvent>();
+    const freshEvents = createAsyncQueue<AgentEvent>();
+    const oldHandle = createHandle({ id: '<pending>', agentKind: 'claude-code' });
+    oldHandle.events = () => oldEvents;
+    oldHandle.close = vi.fn(async () => oldEvents.end());
+    const freshHandle = createHandle({ id: '<pending>', agentKind: 'claude-code' });
+    freshHandle.events = () => freshEvents;
+    freshHandle.close = vi.fn(async () => freshEvents.end());
+
+    let startCount = 0;
+    const startSession = vi.fn(async (opts: CreateSessionOptions) => {
+      startCount += 1;
+      if (startCount === 1) return oldHandle;
+      expect(await opts.onInvalidResumeSession?.('sdk-old')).toBe(true);
+      return freshHandle;
+    });
+    const maker = new Maker({
+      agents: { 'claude-code': createAgent(startSession, 'claude-code') },
+      storage,
+      logger: createLogger(),
+    });
+
+    await maker.createSession({
+      id: 'session-1',
+      agentKind: 'claude-code',
+      workingDir: '/repo',
+      model: 'claude-opus-4-6',
+      resumeSessionId: 'sdk-old',
+    });
+    oldEvents.push({ type: 'session_id', data: 'sdk-old', source: 'claude-code' });
+    await oldWriteStarted;
+    await maker.closeSession('session-1');
+
+    const recoveredSessionPromise = maker.createSession({
+      id: 'session-1',
+      agentKind: 'claude-code',
+      workingDir: '/repo',
+      model: 'claude-opus-4-6',
+      resumeSessionId: 'sdk-old',
+    });
+    await vi.waitFor(() => expect(startSession).toHaveBeenCalledTimes(2));
+    expect(compareAndClear).not.toHaveBeenCalled();
+
+    releaseOldWrite();
+    await recoveredSessionPromise;
+    expect(compareAndClear).toHaveBeenCalledTimes(1);
+    expect((await storage.get('session-1'))?.sdkSessionId).toBeUndefined();
+
+    // CAS 后晚到的旧 query 事件必须跳过；fresh query 的新 id 仍按原路径回填。
+    freshEvents.push({ type: 'session_id', data: 'sdk-old', source: 'claude-code' });
+    freshEvents.push({ type: 'session_id', data: 'sdk-fresh', source: 'claude-code' });
+    await vi.waitFor(async () =>
+      expect((await storage.get('session-1'))?.sdkSessionId).toBe('sdk-fresh'),
+    );
+    expect(persistedSdkSessionIds).toEqual(['sdk-old', 'sdk-fresh']);
+    await maker.closeSession('session-1');
   });
 });

@@ -11,7 +11,11 @@ import { randomUUID } from 'node:crypto';
 import type { Maker } from '@lizi/maker-core';
 
 import { createLogger } from '../logger.js';
-import { isSessionInTurn, wireSessionToIpc } from '../maker-ipc/register.js';
+import {
+  applyPendingAgentSwitchForDirectSend,
+  isSessionInTurn,
+  wireSessionToIpc,
+} from '../maker-ipc/register.js';
 import { createMessage } from '../localDb/ipc/messages.js';
 import { getSessionRowSnapshot } from '../localDb/ipc/sessions.js';
 import { readGoalSettings, writeGoalSettings } from '../maker-host/goal-settings-store.js';
@@ -75,6 +79,7 @@ export function startGoalController(deps: StartGoalControllerDeps): GoalControll
         return undefined;
       }
     },
+    applyPendingAgentSwitch: applyPendingAgentSwitchForDirectSend,
     isSessionInTurn,
     beforeDispatchUserTurn: deps.beforeDispatchUserTurn,
     onUndispatchedUserTurn: deps.onUndispatchedUserTurn,

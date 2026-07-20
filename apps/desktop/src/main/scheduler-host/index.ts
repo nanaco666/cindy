@@ -11,6 +11,7 @@
  */
 
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 import { app } from 'electron';
 import type { BrowserWindow } from 'electron';
@@ -22,6 +23,7 @@ import type { FeishuIM } from 'lizi-im';
 
 import { dialogueWorkspaceRootDir } from '../localDb/dialogueWorkspace';
 import {
+  applyPendingAgentSwitchForDirectSend,
   enqueueSchedulerPrompt,
   hasQueuedSchedulerPrompt,
   isSchedulerPromptTracked,
@@ -67,6 +69,7 @@ export async function startScheduler(deps: StartSchedulerDeps): Promise<Schedule
     logger: deps.logger,
     beforeDispatchUserTurn: deps.beforeDispatchUserTurn,
     onUndispatchedUserTurn: deps.onUndispatchedUserTurn,
+    applyPendingAgentSwitch: applyPendingAgentSwitchForDirectSend,
     // 心跳撞忙排队桥:实现挂在 maker-ipc/register.ts 的 coordinator 装配处
     // (holder 未就绪时 isSessionBusy 返回 false → runner 走原直发路径)。
     schedulerQueue: {
@@ -108,6 +111,8 @@ export async function startScheduler(deps: StartSchedulerDeps): Promise<Schedule
     runner,
     logger: deps.logger,
     passive,
+    instanceId: `${process.pid}:${randomUUID()}`,
+    processId: process.pid,
     // 对话工作区根目录(userData/dialogues)下的路径都是 app 内部分配的会话 cwd。
     // agent 在对话里建任务时常把自己的 cwd 当 workingDir 传入 —— 引擎据此归一成
     // 对话任务,避免任务/会话错误归入项目分组。path.relative 同时兼容两端分隔符。

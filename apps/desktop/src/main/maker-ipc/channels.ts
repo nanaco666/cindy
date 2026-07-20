@@ -412,6 +412,7 @@ export const MAKER_INVOKE = {
   SCHEDULE_DELETE_RUN: 'maker:schedule:delete-run',
   /** Renderer 在 delete/pause 前查这条 schedule 当前有多少个 in-flight run,>0 时弹二次确认。 */
   SCHEDULE_GET_INFLIGHT_COUNT: 'maker:schedule:get-inflight-count',
+  SCHEDULE_GET_RUNTIME_STATE: 'maker:schedule:get-runtime-state',
   /** Sidebar 未读 badge —— 全局未读 run 数量（终态且 read_at IS NULL）。 */
   SCHEDULE_GET_UNREAD_COUNT: 'maker:schedule:get-unread-count',
   /** 用户点 history 的 "Open session" 时调，把该单条 run 标已读。 */

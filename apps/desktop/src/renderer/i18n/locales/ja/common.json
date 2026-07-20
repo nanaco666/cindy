@@ -3404,8 +3404,15 @@
       "archiveWorkerConfirmConfirm": "worker をアーカイブ",
       "archiveWorkerConfirmCancel": "キャンセル",
       "errors": {
+        "INVALID_PARAMS": "選択したモデルまたは協同設定は利用できません。選び直して再試行してください。",
+        "INVALID_PARAMS_CONTINUE": "選択したモデルまたは協同設定は利用できません。協同は開始されず、このメッセージは単一セッションとして続行されます。選び直して再試行してください。",
+        "INVALID_PARAMS_REMOTE": "被操作デバイスは選択したモデルまたは協同設定に対応していません。そのデバイスで利用可能なモデルを選んで再試行してください。",
+        "NO_PROVIDER_FOR_AGENT": "このデバイスには、その Agent 用の接続済みモデル Provider がありません。設定で接続してから再試行してください。",
+        "NO_PROVIDER_FOR_AGENT_CONTINUE": "このデバイスには、その Agent 用の接続済みモデル Provider がありません。協同は開始されず、このメッセージは単一セッションとして続行されます。設定で接続してから再試行してください。",
+        "NO_PROVIDER_FOR_AGENT_REMOTE": "被操作デバイスには、その Agent 用の接続済みモデル Provider がありません。被操作デバイスで接続してから再試行してください。",
         "BUDGET_MODEL_REQUIRES_API_MODE": "割引版 Codex モデルを使うには API key が必要です。設定で構成してから再試行してください。",
-        "BUDGET_MODEL_REQUIRES_API_MODE_CONTINUE": "割引版 Codex モデルを使うには API key が必要です。協同は開始されず、このメッセージは単一セッションとして続行します。設定で構成してから再試行してください。"
+        "BUDGET_MODEL_REQUIRES_API_MODE_CONTINUE": "割引版 Codex モデルを使うには API key が必要です。協同は開始されず、このメッセージは単一セッションとして続行します。設定で構成してから再試行してください。",
+        "BUDGET_MODEL_REQUIRES_API_MODE_REMOTE": "被操作デバイスに割引版 Codex モデル用の API key が設定されていません。被操作デバイスで設定してから再試行してください。"
       }
     },
     "chatInput": {
@@ -3538,7 +3545,15 @@
     "workGroup": {
       "working": "作業中…",
       "worked": "{{duration}} 作業しました",
-      "workDetails": "作業内容"
+      "workDetails": "作業内容",
+      "exploration": {
+        "read_one": "{{count}} ファイルを読み取り",
+        "read_other": "{{count}} ファイルを読み取り",
+        "search_one": "{{count}} 回検索",
+        "search_other": "{{count}} 回検索",
+        "list_one": "{{count}} 回ファイルを一覧表示",
+        "list_other": "{{count}} 回ファイルを一覧表示"
+      }
     },
     "agentTask": {
       "emptyTitle": "サブエージェントタスク",
@@ -3778,12 +3793,21 @@
         "fetched": "取得",
         "used": "使用",
         "listed": "一覧表示",
+        "inspect": "内容を確認",
+        "inspectRepository": "リポジトリを確認",
+        "inspectEnvironment": "開発環境を確認",
+        "modifyRepository": "リポジトリを変更",
+        "verify": "検証を実行",
         "installedDeps": "依存関係のインストール",
         "ranTests": "テスト実行",
         "built": "ビルド",
         "linted": "Lint チェック",
         "typechecked": "型チェック",
         "runScript": "スクリプトを実行",
+        "runNodeScript": "Node.js スクリプトを実行",
+        "runPythonScript": "Python スクリプトを実行",
+        "runPerlScript": "Perl スクリプトを実行",
+        "runSwiftScript": "Swift スクリプトを実行",
         "checkSyntax": "構文を確認",
         "showVersion": "バージョンを確認",
         "checkFormatting": "フォーマットを確認",
@@ -3805,6 +3829,12 @@
         "gitFetch": "リモート更新を取得",
         "gitPull": "リモート更新をプル",
         "gitPush": "コード変更をプッシュ",
+        "gitRebase": "ブランチをリベース",
+        "gitMerge": "ブランチをマージ",
+        "gitCherryPick": "コミットをチェリーピック",
+        "gitStash": "作業内容をスタッシュ",
+        "gitRestore": "ファイルを復元",
+        "gitSubmodule": "サブモジュールを管理",
         "gitRemote": "Git リモートを確認",
         "gitRevParse": "Git 参照を解決",
         "gitBranch": "ブランチを確認",
@@ -4788,6 +4818,7 @@
     },
     "cell": {
       "subtitlePaused": "一時停止中",
+      "subtitleWaitingForResources": "実行スロット待ち（{{inFlight}}/{{max}}）",
       "subtitleManual": "手動",
       "subtitleOnce": "1回",
       "tagOnce": "1回",
@@ -4829,6 +4860,13 @@
       "markReadTitle": "クリックして既読にする",
       "sessionCost": "セッションコスト {{cost}}",
       "sessionValue": "セッション価値 {{value}}",
+      "runCost": "実行コスト {{cost}}",
+      "runValue": "実行の推定価値 {{value}}",
+      "legacyCostUnavailable": "過去のコストは実行別に分割できません",
+      "persistentSessionGroup": "継続セッション {{session}} · {{count}} 回の実行",
+      "expandRemainingRuns": "残り {{count}} 回を表示",
+      "expandSessionRuns": "{{count}} 回の実行を表示",
+      "collapseSessionRuns": "履歴を折りたたむ",
       "restart": "再実行",
       "moreAria": "その他の操作",
       "delete": "削除",
@@ -4992,6 +5030,17 @@
         "gitMissing": "Git がインストールされていません",
         "notRepo": "選択されたフォルダは Git リポジトリではありません",
         "insideWorktree": "すでに worktree 内にいます"
+      },
+      "timingMode": {
+        "cron": "Cron スケジュール",
+        "interval": "相対間隔",
+        "cronHint": "カレンダー時刻の固定スロットで実行します。",
+        "intervalHint": "前回の実行完了後に指定時間待ってから実行します。",
+        "intervalUnsupportedHint": "現在の正確な間隔は保持されます。分または時間のプリセットを選ぶと置き換わります。",
+        "currentExact": "現在値 · {{schedule}}",
+        "exactIntervalPanelHint": "この正確な間隔を置き換える場合にのみ、左側の分または時間プリセットを選択してください。",
+        "cronChip": "Cron · {{schedule}}",
+        "intervalChip": "完了後に計時 · {{schedule}}"
       },
       "scheduleMenu": {
         "intervalMinutes": "Minutes（N 分ごと）",

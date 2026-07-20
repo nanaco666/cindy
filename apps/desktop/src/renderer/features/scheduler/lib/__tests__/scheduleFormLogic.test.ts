@@ -32,6 +32,12 @@ import {
   sessionAgentKindToScheduleAgentKind,
 } from '../scheduleFormLogic';
 import type { ScheduleFormState } from '../scheduleFormLogic';
+import {
+  cronExprToIntervalMs,
+  intervalMsToCronExpr,
+  resolveScheduleTimingPresentation,
+  switchScheduleTimingMode,
+} from '../cronCodexPreset';
 
 describe('isExplicitScheduleModelUnavailable', () => {
   it('does not reject an explicit model before capabilities are ready', () => {
@@ -55,6 +61,7 @@ function makeForm(overrides: Partial<ScheduleFormState> = {}): ScheduleFormState
     name: 'follow-up',
     prompt: 'check the PR',
     cronExpr: '*/10 * * * *',
+    intervalMs: undefined,
     timezone: 'Asia/Shanghai',
     recurring: true,
     manual: false,
@@ -80,6 +87,57 @@ function makeForm(overrides: Partial<ScheduleFormState> = {}): ScheduleFormState
 
 const hasKey = (obj: object, key: string): boolean =>
   Object.prototype.hasOwnProperty.call(obj, key);
+
+describe('schedule timing mode conversion', () => {
+  it('preserves the authoritative interval when cronExpr is stale', () => {
+    const input = buildScheduleInput(makeForm({
+      cronExpr: '*/5 * * * *',
+      intervalMs: 10 * 60_000,
+      name: 'renamed only',
+    }));
+
+    expect(input.cronExpr).toBe('*/5 * * * *');
+    expect(input.intervalMs).toBe(10 * 60_000);
+  });
+
+  it('keeps pure cron schedules in cron mode even for interval-shaped expressions', () => {
+    const input = buildScheduleInput(makeForm({
+      cronExpr: '*/10 * * * *',
+      intervalMs: undefined,
+    }));
+
+    expect(hasKey(input, 'intervalMs')).toBe(true);
+    expect(input.intervalMs).toBeUndefined();
+  });
+
+  it('converts only the minute/hour presets supported by the timing-mode switch', () => {
+    expect(cronExprToIntervalMs('*/10 * * * *')).toBe(10 * 60_000);
+    expect(intervalMsToCronExpr(10 * 60_000)).toBe('*/10 * * * *');
+    expect(intervalMsToCronExpr(2 * 60 * 60_000)).toBe('0 */2 * * *');
+    expect(intervalMsToCronExpr(90_000)).toBeUndefined();
+  });
+
+  it('uses an exact presentation instead of fabricating a five-minute preset', () => {
+    expect(resolveScheduleTimingPresentation('*/5 * * * *', 90_000)).toEqual({
+      kind: 'intervalExact',
+    });
+    expect(resolveScheduleTimingPresentation('*/5 * * * *', 10 * 60_000)).toEqual({
+      kind: 'intervalPreset',
+      displayCronExpr: '*/10 * * * *',
+    });
+  });
+
+  it('switches between cron and relative interval without reusing a stale cron value', () => {
+    expect(switchScheduleTimingMode('*/5 * * * *', 10 * 60_000, 'cron')).toEqual({
+      cronExpr: '*/10 * * * *',
+      intervalMs: undefined,
+    });
+    expect(switchScheduleTimingMode('*/2 * * * *', undefined, 'interval')).toEqual({
+      cronExpr: '*/2 * * * *',
+      intervalMs: 2 * 60_000,
+    });
+  });
+});
 
 function makeTemplate(overrides: Partial<ScheduleTemplate> = {}): ScheduleTemplate {
   return {
@@ -497,6 +555,17 @@ describe('buildScheduleInput — preRunHook 超时归一化', () => {
 });
 
 describe('formToProjectConfig — preRunHook 序列化(项目自动化)', () => {
+  it('保留与 cronExpr 不一致的权威 intervalMs', async () => {
+    const { formToProjectConfig } = await import('../projectAutomationConfig');
+    const config = formToProjectConfig(
+      makeForm({ cronExpr: '*/5 * * * *', intervalMs: 10 * 60_000 }),
+      'auto-interval',
+    );
+
+    expect(config.cronExpr).toBe('*/5 * * * *');
+    expect(config.intervalMs).toBe(10 * 60_000);
+  });
+
   it('启用 hook 时写进 project config;未启用省略字段', async () => {
     const { formToProjectConfig } = await import('../projectAutomationConfig');
     const on = formToProjectConfig(

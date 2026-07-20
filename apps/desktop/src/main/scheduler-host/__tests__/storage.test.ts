@@ -243,6 +243,9 @@ function baseRunRow(
     finishedAt: null,
     status: 'success',
     errorMsg: null,
+    costUsd: 0,
+    estimatedValueUsd: 0,
+    costAttribution: 'legacy',
     resultText: null,
     preRunHookResult: null,
     readAt: null,
@@ -268,6 +271,10 @@ describe('scheduleRunToCamel / scheduleRunCreateToRow', () => {
       finishedAt: 1_700_000_010_000,
       status: 'failed',
       errorMsg: 'timeout',
+      costUsd: 0.42,
+      estimatedValueUsd: 0.19,
+      costAttribution: 'exact',
+      resultText: undefined,
       preRunHookResult: {
         status: 'timed_out',
         decision: 'block',
@@ -281,6 +288,8 @@ describe('scheduleRunToCamel / scheduleRunCreateToRow', () => {
         aborted: false,
         error: 'pre-run hook timed out after 5000ms',
       },
+      readAt: undefined,
+      heartbeatAt: undefined,
     };
     const row = scheduleRunCreateToRow(original);
     const back = scheduleRunToCamel(row as ScheduleRunRowLike);

@@ -132,6 +132,10 @@ import {
   shouldRevealOrcaWorkersBeforeFirstPaint,
 } from './lib/orcaPassiveReveal';
 import {
+  didOpenOrcaWorkersTab,
+  revealOrcaWorkersWithRetry,
+} from './lib/orcaWorkersRevealRetry';
+import {
   closeOrcaWorkersTabAfterTeamEnd,
   ensureOrcaWorkersTab,
   revealOrcaWorkersTab,
@@ -1549,9 +1553,16 @@ export function CCAgentSessionView({
       const previousWorker = collabWorker;
       let workersTabOpened = false;
       const revealWorkersTab = !isCompactRail
-        ? revealOrcaWorkersTab(collabSessionId)
-            .then(() => {
-              workersTabOpened = true;
+        ? revealOrcaWorkersWithRetry({
+            reveal: () => revealOrcaWorkersTab(collabSessionId),
+          })
+            .then((routeResult) => {
+              workersTabOpened = didOpenOrcaWorkersTab(routeResult);
+              if (routeResult === 'stale-context') {
+                log.warn('revealOrcaWorkersTab remained stale after bounded retries', {
+                  sessionId: collabSessionId,
+                });
+              }
             })
             .catch((err) => {
               log.warn('revealOrcaWorkersTab failed before enableOrca', err);
@@ -1586,12 +1597,16 @@ export function CCAgentSessionView({
         }
         setCollabWorker(previousWorker);
         log.error('enableOrca failed', err);
-        toast.error(getCollaborationStartErrorMessage(err, t));
+        toast.error(
+          getCollaborationStartErrorMessage(err, t, {
+            remoteDevice: Boolean(remoteDeviceId),
+          }),
+        );
       } finally {
         setEnableBusy(false);
       }
     },
-    [collabSessionId, collabWorker, enableBusy, isCompactRail, t],
+    [collabSessionId, collabWorker, enableBusy, isCompactRail, remoteDeviceId, t],
   );
 
   // "本次会话改动文件列表"已迁移到 RSB review tab(单一入口),原 SessionDiffPanel
@@ -3013,6 +3028,7 @@ export function CCAgentSessionView({
         onCreate={(form) => void requestEnableCollab(form)}
         title={t('orca.createWorker.enableCollabTitle')}
         submitLabel={t('orca.createWorker.enableCollabSubmit')}
+        deviceId={remoteDeviceId}
       />
 
       {/* 来自 Automations 的入口浮动返回按钮：固定在聊天区左上角，

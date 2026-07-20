@@ -132,15 +132,26 @@ function legacyScheduleKey(input: {
   return `${input.workspaceKind}\u0000${dir}\u0000${input.name}`;
 }
 
-function scheduleOriginIdFromAgentMeta(agentMeta: string | null): string | null {
+interface PersistedSchedulerOrigin {
+  scheduleId: string;
+  runId?: string;
+}
+
+function scheduleOriginFromAgentMeta(agentMeta: string | null): PersistedSchedulerOrigin | null {
   if (!agentMeta) return null;
   try {
     const parsed = JSON.parse(agentMeta) as {
-      origin?: { kind?: unknown; scheduleId?: unknown };
+      origin?: { kind?: unknown; scheduleId?: unknown; runId?: unknown };
     };
     const origin = parsed.origin;
     if (origin?.kind !== 'scheduler' || typeof origin.scheduleId !== 'string') return null;
-    return origin.scheduleId.length > 0 ? origin.scheduleId : null;
+    if (origin.scheduleId.length === 0) return null;
+    return {
+      scheduleId: origin.scheduleId,
+      ...(typeof origin.runId === 'string' && origin.runId.length > 0
+        ? { runId: origin.runId }
+        : {}),
+    };
   } catch {
     return null;
   }
@@ -194,6 +205,9 @@ function legacyRunFromSession(
     firedAt,
     finishedAt,
     status: 'success',
+    costUsd: 0,
+    estimatedValueUsd: 0,
+    costAttribution: 'legacy',
     // Legacy fallback sessions have no schedule_runs.read_at row. Treat them as read
     // so old imported history does not create new attention dots.
     readAt: finishedAt,
@@ -349,7 +363,7 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
       // 最近的一次在前，便于 UI 抽屉直接展示
       .orderBy(desc(scheduleRuns.firedAt))
       .limit(cap);
-    const runs = rows.map(scheduleRunToCamel);
+    const runs = await this.hydrateRunCostsFromMessages(db, rows.map(scheduleRunToCamel));
     if (!scheduleRow) return runs;
 
     const linkedSessionIds = new Set(
@@ -363,6 +377,58 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
       legacyAliases,
     );
     return [...runs, ...legacyRuns].sort((a, b) => b.firedAt - a.firedAt).slice(0, cap);
+  }
+
+  /**
+   * message agent_meta 是 runId + 单段费用的持久化账本。正常路径已同步更新
+   * schedule_runs 聚合；这里在读取时用消息账本覆盖，修复进程恰好在两次写之间退出
+   * 留下的短暂不一致。legacy run 没有 runId，保持“不可精确拆分”。
+   */
+  private async hydrateRunCostsFromMessages(
+    db: SchedulerDrizzleDb,
+    runs: ScheduleRun[],
+  ): Promise<ScheduleRun[]> {
+    const exactRunIds = new Set(
+      runs.filter((run) => run.costAttribution === 'exact').map((run) => run.id),
+    );
+    const sessionIds = new Set(
+      runs
+        .filter((run) => exactRunIds.has(run.id))
+        .map((run) => run.sessionId)
+        .filter((id): id is string => Boolean(id)),
+    );
+    if (exactRunIds.size === 0 || sessionIds.size === 0) return runs;
+
+    const rows = (
+      await Promise.all(
+        chunkArray([...sessionIds], SQLITE_IN_CHUNK_SIZE).map((sessionIdChunk) =>
+          db
+            .select({ agentMeta: messages.agentMeta })
+            .from(messages)
+            .where(
+              and(
+                inArray(messages.sessionId, sessionIdChunk),
+                eq(messages.role, 'assistant'),
+              ),
+            ),
+        ),
+      )
+    ).flat();
+    const ledger = new Map<string, { costUsd: number; estimatedValueUsd: number }>();
+    for (const row of rows) {
+      const origin = scheduleOriginFromAgentMeta(row.agentMeta);
+      if (!origin?.runId || !exactRunIds.has(origin.runId)) continue;
+      const cost = turnCostFromAgentMeta(row.agentMeta);
+      const current = ledger.get(origin.runId) ?? { costUsd: 0, estimatedValueUsd: 0 };
+      current.costUsd += cost.costUsd;
+      current.estimatedValueUsd += cost.estimatedValueUsd;
+      ledger.set(origin.runId, current);
+    }
+
+    return runs.map((run) => {
+      const persisted = ledger.get(run.id);
+      return persisted ? { ...run, ...persisted } : run;
+    });
   }
 
   /**
@@ -558,7 +624,7 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
         activeScheduleId = null;
       }
       if (row.role === 'user') {
-        activeScheduleId = scheduleOriginIdFromAgentMeta(row.agentMeta);
+        activeScheduleId = scheduleOriginFromAgentMeta(row.agentMeta)?.scheduleId ?? null;
         continue;
       }
       if (row.role !== 'assistant') continue;
@@ -571,10 +637,12 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
           (billableMessageCostBySessionId.get(row.sessionId) ?? 0) + cost,
         );
       }
-      if (!activeScheduleId || !linkedScheduleIds.has(activeScheduleId)) {
+      const assistantScheduleId = scheduleOriginFromAgentMeta(row.agentMeta)?.scheduleId;
+      const attributedScheduleId = assistantScheduleId ?? activeScheduleId;
+      if (!attributedScheduleId || !linkedScheduleIds.has(attributedScheduleId)) {
         continue;
       }
-      const entry = bySchedule.get(activeScheduleId) ?? {
+      const entry = bySchedule.get(attributedScheduleId) ?? {
         totalCostUsd: 0,
         totalEstimatedValueUsd: 0,
         sessionIds: new Set<string>(),
@@ -590,7 +658,7 @@ export class DrizzleScheduleStorage implements ScheduleStorage {
       sessionCost.totalCostUsd += cost;
       sessionCost.totalEstimatedValueUsd += turnCost.estimatedValueUsd;
       entry.sessionCosts.set(row.sessionId, sessionCost);
-      bySchedule.set(activeScheduleId, entry);
+      bySchedule.set(attributedScheduleId, entry);
     }
 
     for (const session of legacySessions) {

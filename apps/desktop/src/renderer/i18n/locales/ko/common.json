@@ -3404,8 +3404,15 @@
       "archiveWorkerConfirmConfirm": "worker 아카이브",
       "archiveWorkerConfirmCancel": "취소",
       "errors": {
+        "INVALID_PARAMS": "선택한 모델 또는 협업 설정을 사용할 수 없습니다. 다시 선택한 후 재시도하세요.",
+        "INVALID_PARAMS_CONTINUE": "선택한 모델 또는 협업 설정을 사용할 수 없습니다. 협업은 시작되지 않았고 이 메시지는 단일 세션으로 계속됩니다. 다시 선택한 후 재시도하세요.",
+        "INVALID_PARAMS_REMOTE": "제어 대상 기기가 선택한 모델 또는 협업 설정을 지원하지 않습니다. 해당 기기에서 사용할 수 있는 모델을 선택한 후 재시도하세요.",
+        "NO_PROVIDER_FOR_AGENT": "이 기기에 해당 Agent용으로 연결된 모델 Provider가 없습니다. 설정에서 연결한 후 재시도하세요.",
+        "NO_PROVIDER_FOR_AGENT_CONTINUE": "이 기기에 해당 Agent용으로 연결된 모델 Provider가 없습니다. 협업은 시작되지 않았고 이 메시지는 단일 세션으로 계속됩니다. 설정에서 연결한 후 재시도하세요.",
+        "NO_PROVIDER_FOR_AGENT_REMOTE": "제어 대상 기기에 해당 Agent용으로 연결된 모델 Provider가 없습니다. 제어 대상 기기에서 연결한 후 재시도하세요.",
         "BUDGET_MODEL_REQUIRES_API_MODE": "할인형 Codex 모델을 사용하려면 API key가 필요합니다. 설정에서 구성한 뒤 다시 시도하세요.",
-        "BUDGET_MODEL_REQUIRES_API_MODE_CONTINUE": "할인형 Codex 모델을 사용하려면 API key가 필요합니다. 협업은 시작되지 않았고 이 메시지는 단일 세션으로 계속됩니다. 설정에서 구성한 뒤 다시 시도하세요."
+        "BUDGET_MODEL_REQUIRES_API_MODE_CONTINUE": "할인형 Codex 모델을 사용하려면 API key가 필요합니다. 협업은 시작되지 않았고 이 메시지는 단일 세션으로 계속됩니다. 설정에서 구성한 뒤 다시 시도하세요.",
+        "BUDGET_MODEL_REQUIRES_API_MODE_REMOTE": "제어 대상 기기에 할인형 Codex 모델에 필요한 API key가 설정되어 있지 않습니다. 제어 대상 기기에서 설정한 후 재시도하세요."
       }
     },
     "chatInput": {
@@ -3538,7 +3545,15 @@
     "workGroup": {
       "working": "작업 중…",
       "worked": "{{duration}} 동안 작업함",
-      "workDetails": "작업 내역"
+      "workDetails": "작업 내역",
+      "exploration": {
+        "read_one": "파일 {{count}}개 읽음",
+        "read_other": "파일 {{count}}개 읽음",
+        "search_one": "{{count}}회 검색",
+        "search_other": "{{count}}회 검색",
+        "list_one": "{{count}}회 파일 목록 확인",
+        "list_other": "{{count}}회 파일 목록 확인"
+      }
     },
     "agentTask": {
       "emptyTitle": "하위 에이전트 작업",
@@ -3778,12 +3793,21 @@
         "fetched": "조회",
         "used": "사용",
         "listed": "목록 조회",
+        "inspect": "내용 확인",
+        "inspectRepository": "저장소 확인",
+        "inspectEnvironment": "개발 환경 확인",
+        "modifyRepository": "저장소 변경",
+        "verify": "검증 실행",
         "installedDeps": "의존성 설치",
         "ranTests": "테스트 실행",
         "built": "빌드",
         "linted": "린트 검사",
         "typechecked": "타입 검사",
         "runScript": "스크립트 실행",
+        "runNodeScript": "Node.js 스크립트 실행",
+        "runPythonScript": "Python 스크립트 실행",
+        "runPerlScript": "Perl 스크립트 실행",
+        "runSwiftScript": "Swift 스크립트 실행",
         "checkSyntax": "구문 검사",
         "showVersion": "버전 확인",
         "checkFormatting": "서식 확인",
@@ -3805,6 +3829,12 @@
         "gitFetch": "원격 업데이트 가져오기",
         "gitPull": "원격 업데이트 풀",
         "gitPush": "코드 변경사항 푸시",
+        "gitRebase": "브랜치 리베이스",
+        "gitMerge": "브랜치 병합",
+        "gitCherryPick": "커밋 체리픽",
+        "gitStash": "작업 내용 스태시",
+        "gitRestore": "파일 복원",
+        "gitSubmodule": "서브모듈 관리",
         "gitRemote": "Git 원격 저장소 확인",
         "gitRevParse": "Git 참조 확인",
         "gitBranch": "브랜치 확인",
@@ -4788,6 +4818,7 @@
     },
     "cell": {
       "subtitlePaused": "일시 중지됨",
+      "subtitleWaitingForResources": "실행 슬롯 대기 중 ({{inFlight}}/{{max}})",
       "subtitleManual": "수동",
       "subtitleOnce": "1회",
       "tagOnce": "1회",
@@ -4829,6 +4860,13 @@
       "markReadTitle": "클릭하여 읽음으로 표시",
       "sessionCost": "세션 비용 {{cost}}",
       "sessionValue": "세션 가치 {{value}}",
+      "runCost": "실행 비용 {{cost}}",
+      "runValue": "실행 추정 가치 {{value}}",
+      "legacyCostUnavailable": "이전 비용은 실행별로 구분할 수 없습니다",
+      "persistentSessionGroup": "지속 세션 {{session}} · {{count}}회 실행",
+      "expandRemainingRuns": "나머지 {{count}}회 보기",
+      "expandSessionRuns": "{{count}}회 실행 보기",
+      "collapseSessionRuns": "기록 접기",
       "restart": "재실행",
       "moreAria": "추가 작업",
       "delete": "삭제",
@@ -4992,6 +5030,17 @@
         "gitMissing": "Git이 설치되지 않았습니다",
         "notRepo": "선택한 폴더는 Git 저장소가 아닙니다",
         "insideWorktree": "이미 worktree 내부에 있습니다"
+      },
+      "timingMode": {
+        "cron": "Cron 일정",
+        "interval": "상대 간격",
+        "cronHint": "달력 시계의 고정 시간대에 실행합니다.",
+        "intervalHint": "이전 실행이 끝난 뒤 지정된 시간만큼 기다립니다.",
+        "intervalUnsupportedHint": "현재 정확한 간격은 그대로 유지됩니다. 분 또는 시간 프리셋을 선택하면 대체됩니다.",
+        "currentExact": "현재 값 · {{schedule}}",
+        "exactIntervalPanelHint": "이 정확한 간격을 바꾸려는 경우에만 왼쪽의 분 또는 시간 프리셋을 선택하세요.",
+        "cronChip": "Cron · {{schedule}}",
+        "intervalChip": "완료 후 대기 · {{schedule}}"
       },
       "scheduleMenu": {
         "intervalMinutes": "Minutes (N분마다)",

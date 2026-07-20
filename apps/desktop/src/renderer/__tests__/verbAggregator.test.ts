@@ -91,6 +91,9 @@ describe('verbLabelKeyForIntent', () => {
     expect(verbLabelKeyForIntent('search')).toBe('chat.agentActionRow.verb.searched');
     expect(verbLabelKeyForIntent('fetch')).toBe('chat.agentActionRow.verb.fetched');
     expect(enT(verbLabelKeyForIntent('list'))).toBe('Listed');
+    expect(enT(verbLabelKeyForIntent('inspect'))).toBe('Inspect content');
+    expect(enT(verbLabelKeyForIntent('inspectRepository'))).toBe('Inspect repository');
+    expect(enT(verbLabelKeyForIntent('verify'))).toBe('Run checks');
     expect(enT(verbLabelKeyForIntent('install'))).toBe('Installed deps');
     expect(enT(verbLabelKeyForIntent('test'))).toBe('Ran tests');
     expect(enT(verbLabelKeyForIntent('build'))).toBe('Built');
