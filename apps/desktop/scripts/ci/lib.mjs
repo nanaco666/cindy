@@ -724,8 +724,8 @@ export function createMacDMG(appPath, dmgPath, volumeName, identity) {
     `icon_size = 110`,
     `text_size = 13`,
     `icon_locations = {`,
-    `    ${py(appName)}: (175, 250),`,
-    `    'Applications': (485, 250),`,
+    `    ${py(appName)}: (175, 185),`,
+    `    'Applications': (485, 185),`,
     // 背景文件本体对默认设置的用户不可见;把坐标挪到远超可拉伸范围之外,
     // 照顾开了"显示隐藏文件"的用户(背景画布 900×570,窗口可被拉得比这更大)
     `    '.background.png': (1600, 1200),`,
