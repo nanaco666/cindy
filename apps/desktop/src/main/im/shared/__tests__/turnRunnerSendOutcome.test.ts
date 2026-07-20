@@ -486,7 +486,7 @@ describe('turnRunner send outcome policy (feishu adapter characterization)', () 
   it('applies a deferred switch and sends the first queued IM message through the refreshed session', async () => {
     const oldSession = createSessionHarness(async () => ({
       accepted: false,
-      reason: 'old-session-must-not-send',
+      reason: 'cancelled-before-dispatch',
     }));
     const switchedSession = createSessionHarness(async () => ({
       accepted: false,
