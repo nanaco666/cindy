@@ -58,6 +58,12 @@ test('parsePublishArgs: 默认 dry-run + cn + 全 arch', () => {
   });
 });
 
+test('parsePublishArgs: 容忍 pnpm 透传的裸 --(pnpm 10 不剥离 run-script 分隔符)', () => {
+  const args = parsePublishArgs(['--', '--region', 'cn', '--version', '1.2.3'], DEFAULTS);
+  assert.equal(args.region, 'cn');
+  assert.equal(args.version, '1.2.3');
+});
+
 test('parsePublishArgs: 完整参数解析', () => {
   const args = parsePublishArgs(
     ['--region', 'global', '--version', '2.0.0', '--platform', 'darwin', '--arch', 'arm64', '--execute', '--require-relogin', '--force'],

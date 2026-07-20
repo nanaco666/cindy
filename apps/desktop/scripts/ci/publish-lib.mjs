@@ -32,6 +32,8 @@ export function parsePublishArgs(argv, defaults = {}) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     switch (a) {
+      // 同 package-lib:pnpm 会把 run-script 后的 `--` 原样透传,裸 `--` 跳过。
+      case '--': break;
       case '--region': out.region = takeValue(a, i); i++; break;
       case '--version': out.version = takeValue(a, i); i++; break;
       case '--platform': out.platform = takeValue(a, i); i++; break;

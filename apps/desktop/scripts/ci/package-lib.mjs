@@ -51,6 +51,9 @@ export function parsePackageArgs(argv, defaults = {}) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     switch (a) {
+      // pnpm 会把 `pnpm release:package -- --region cn` 里的 `--` 原样透传给脚本
+      // (pnpm 10 对 run-script 参数不做剥离),裸 `--` 按分隔符跳过。
+      case '--': break;
       case '--platform': out.platform = takeValue(a, i); i++; break;
       case '--arch': out.arch = takeValue(a, i); i++; break;
       case '--region': out.region = takeValue(a, i); i++; break;

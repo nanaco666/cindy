@@ -27,6 +27,12 @@ test('global package selects its region before agent binary CDN fallback', () =>
   assert.ok(regionIndex < ensureIndex);
 });
 
+test('parsePackageArgs: 容忍 pnpm 透传的裸 --(pnpm 10 不剥离 run-script 分隔符)', () => {
+  const args = parsePackageArgs(['--', '--region', 'cn', '--version', '0.1.0'], DEFAULTS);
+  assert.equal(args.region, 'cn');
+  assert.equal(args.versionSpec, '0.1.0');
+});
+
 test('parsePackageArgs: 零参数默认 = 当前平台 + cn + 版本无关', () => {
   const args = parsePackageArgs([], DEFAULTS);
   assert.deepEqual(args, {
