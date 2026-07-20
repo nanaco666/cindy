@@ -17,7 +17,7 @@ export const SUPPORTED_PLATFORMS = Object.freeze(['win32', 'darwin', 'linux']);
 export const SUPPORTED_REGIONS = Object.freeze(['cn', 'global', 'dev']);
 const VERSION_BUMP_KINDS = Object.freeze(['major', 'minor', 'patch']);
 
-const PLATFORM_ARCHS = Object.freeze({
+export const PLATFORM_ARCHS = Object.freeze({
   win32: ['x64'],
   darwin: ['arm64', 'x64'],
   linux: ['x64'],

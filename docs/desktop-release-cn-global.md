@@ -9,10 +9,29 @@
 
 所有指令在仓库根目录执行(也可 `pnpm --filter desktop <同名指令>`)。
 
-### 打包 + 发布到 canary 通道
+### 三步拆分管线(2026-07 打包/发布拆分,推荐)
+
+打包与发布是两个独立脚本,靠 `build-info.json` 衔接;canary 验证后 promote 到 stable:
+
+| 步骤 | 命令 | 干什么 |
+|---|---|---|
+| ① 打包 | `pnpm release:package -- --region cn --version 0.1.0` | `package-desktop.mjs`:forge make + 签名(mac 含公证)+ smoke,产出本地产物 + `build-info.json`,**不碰 OSS/CDN** |
+| ② 发布灰度 | `pnpm release:canary -- --region cn --version 0.1.0 --execute` | `publish-desktop.mjs`:校验 build-info(完整性 / 签名 / 版本单调性)→ 上传安装包 / 热更包 / agent 二进制 → 写 canary manifest;**缺省 dry-run,`--execute` 才上传** |
+| ③ 正式发布 | `pnpm release:promote:win:cn --yes`(按平台/区域) | canary manifest 覆盖为 stable(覆盖前自动备份) |
+
+- ① 的版本必须显式 `x.y.z`(发布链路禁用版本无关包);② 只认与 ① 相同的显式版本。
+- ② 默认发布产物目录里该平台的全部 arch(mac 双架构一次发完),`--arch` 可限定;
+  发布必须在**目标平台的发版机**上执行(agent 二进制版本探测要运行目标平台的
+  claude/codex,跨平台代传会被硬闸拒绝)。
+- ② 的安全门禁全部 fail closed:未签名拒发、build-info 与 region/版本不符拒发、
+  版本回退拒发(`--force` 放行)、远端同名对象内容不同拒覆盖(防 CDN 边缘缓存字节分裂)、
+  manifest 出闸前断言 claudeCode / codex 段完整(防全新渠道发出无法自举的 manifest)。
+
+### 打包 + 发布到 canary 通道(一体式,legacy)
 
 release 脚本一条龙完成:electron-forge make → 签名(mac 含公证)→ 安装包 + 热更 zip →
 上传 OSS → 更新 `manifest-<platform>-canary.json`。**默认只动 canary,不碰 stable。**
+三步管线验证稳定后本节脚本(`release-{macos,windows}.mjs`)将退役。
 
 | 平台 | 国内 cn | 海外 global |
 |---|---|---|
