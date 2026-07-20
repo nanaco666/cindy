@@ -96,9 +96,9 @@ const overrides = {
   'settings-theme-auto-dark': '#2A2828', // Auto 预览 dark 固定
   'sidebar-action-icon': '220.0 4.7% 62.2%', // E1D 侧栏层级:二级暗灰 #9A9DA3(时间戳/RemoteProjectIcon)
   'cmd-palette-item-meta': '#9A9DA3', // E1D 侧栏层级:二级暗灰(分组标签/meta)
-  'sidebar-item-active-foreground': '#3C3F43', // 用户改稿 2026-07-20:选中态撤红,前景回正文色
-  'sidebar-item-active-border': '#DCDFE3', // 用户改稿 2026-07-20:选中态撤红,描边用中性边框
-  'sidebar-item-active': '0.0 0.0% 94.5%', // 用户改稿 2026-07-20:选中态撤红,中性 pill #F1F1F1
+  'sidebar-item-active-foreground': '#FCFCFC', // 用户二次改稿 2026-07-20:反相胶囊,light 深底浅字(同 accent-pure-cta-fg)
+  'sidebar-item-active-border': 'transparent', // 用户三次改稿 2026-07-20:选中胶囊彻底去描边
+  'sidebar-item-active': '214.3 5.5% 24.9%', // 用户二次改稿 2026-07-20:反相胶囊 #3C3F43 深底(同 accent-cta-bg)
   'splash-bg': '0.0 0.0% 92.9%', // 背景 -> HSL
   'splash-text': '222.0 4.6% 42.7%', // AA splash text
   'splash-text-destructive': '214.3 5.5% 24.9%', // destructive splash text

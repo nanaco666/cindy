@@ -804,6 +804,10 @@ body.resizing-pane [data-ghost-webview] {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+/* 纵横滚动条交汇角件默认是不跟主题的白色方块(dark 下刺眼),置透明全皮肤通吃 */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
 ::-webkit-scrollbar-thumb {
   background-color: transparent;
   background-clip: padding-box;
