@@ -79,6 +79,8 @@ const SESSION_LIST_CHANNELS: ReadonlySet<string> = new Set([
  * 全局消费)。低频,并入 `sessions` topic 随列表订阅一起走,避免再开一档 topic。
  */
 const ACCOUNT_CHANNELS: ReadonlySet<string> = new Set([
+  // provider 目录是设备级快照；控制端订阅 sessions 后按来源 deviceId 精确刷新。
+  'maker:provider:changed',
   'maker:schedule:event',
   'maker:project-automation:event',
   // 被控端「当前 New Maker 草稿」全量变更:账号 / 全局级(无 sessionId),并入 `sessions` topic

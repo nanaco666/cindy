@@ -137,6 +137,7 @@ interface ToolSummaryVerbEntry {
 const TOOL_SUMMARY_VERB_BY_LABEL: Record<string, ToolSummaryVerb> = {
   Edit: 'edited',
   MultiEdit: 'edited',
+  file_change: 'edited',
   Write: 'created',
   Bash: 'ran',
   exec: 'ran',
@@ -177,7 +178,11 @@ const TOOL_ROW_VERB_ZH = {
   read: '读取',
   edit: '编辑',
   create: '创建',
+  delete: '删除',
+  rename: '重命名',
+  update: '更新',
   run: '运行',
+  runCommand: '运行命令',
   search: '搜索',
   fetch: '访问',
   use: '调用',
@@ -195,6 +200,75 @@ const INTENT_VERB_ZH: Record<CommandIntentAction, string> = {
   build: '构建',
   lint: '代码检查',
   typecheck: '类型检查',
+  runScript: '运行脚本',
+  checkSyntax: '检查语法',
+  showVersion: '查看版本',
+  checkFormatting: '检查格式',
+  parseJson: '解析 JSON',
+  count: '统计',
+  showCurrentDirectory: '查看当前目录',
+  showDateTime: '查看日期时间',
+  locateCommand: '查找命令',
+  inspectProcesses: '查看进程',
+  inspectPorts: '查看端口',
+  queryDatabase: '查询数据库',
+  gitStatus: '查看工作区状态',
+  gitDiff: '查看代码变更',
+  gitLog: '查看提交记录',
+  gitShow: '查看提交内容',
+  gitAdd: '暂存代码变更',
+  gitCommit: '提交代码变更',
+  gitFetch: '获取远端更新',
+  gitPull: '拉取远端更新',
+  gitPush: '推送代码变更',
+  gitRemote: '查看远端仓库',
+  gitRevParse: '解析 Git 引用',
+  gitBranch: '查看分支',
+  gitGrep: '搜索仓库内容',
+  gitMergeBase: '查找共同祖先',
+  gitLsFiles: '查看已跟踪文件',
+  gitRevList: '查看提交范围',
+  gitLsRemote: '查看远端引用',
+  gitWorktreeList: '查看工作树',
+  gitWorktreeAdd: '创建工作树',
+  gitWorktreeRemove: '删除工作树',
+  gitWorktreeMove: '移动工作树',
+  gitWorktreePrune: '清理工作树',
+  ghPrList: '查看 PR 列表',
+  ghPrView: '查看 PR',
+  ghPrChecks: '查看 PR 检查',
+  ghPrStatus: '查看 PR 状态',
+  ghPrDiff: '查看 PR 变更',
+  ghPrCreate: '创建 PR',
+  ghPrEdit: '编辑 PR',
+  ghPrComment: '评论 PR',
+  ghPrReview: '评审 PR',
+  ghPrMerge: '合并 PR',
+  ghPrClose: '关闭 PR',
+  ghPrReopen: '重新打开 PR',
+  ghPrCheckout: '检出 PR',
+  ghIssueList: '查看 Issue 列表',
+  ghIssueView: '查看 Issue',
+  ghIssueStatus: '查看 Issue 状态',
+  ghIssueCreate: '创建 Issue',
+  ghIssueEdit: '编辑 Issue',
+  ghIssueComment: '评论 Issue',
+  ghIssueClose: '关闭 Issue',
+  ghIssueReopen: '重新打开 Issue',
+  ghAuthStatus: '查看 GitHub 登录状态',
+  ghAuthLogin: '登录 GitHub',
+  ghAuthLogout: '退出 GitHub',
+  ghAuthRefresh: '刷新 GitHub 授权',
+  ghAuthSwitch: '切换 GitHub 账号',
+  ghRunList: '查看工作流运行',
+  ghRunView: '查看工作流运行',
+  ghRunWatch: '监视工作流运行',
+  ghSearch: '搜索 GitHub',
+  ghRepoList: '查看仓库列表',
+  ghRepoView: '查看仓库',
+  ghApiQuery: '查询 GitHub API',
+  ghApiMutation: '修改 GitHub 数据',
+  ghApiCall: '调用 GitHub API',
 };
 
 const TOOL_ROW_TEXT_MAX_CHARS = 60;
@@ -320,7 +394,7 @@ function toolRowDescriptor(tool: MessagePresentationToolLike): ToolUseDescriptor
  * - Bash 有模型 description → 独立成句，命令原文降为次要细节；
  * - command intent（codex commandActions / 本地规则）命中 → 意图动词 + 目标；
  * - MCP / dynamic / collab → `调用 server · tool`；
- * - 其余按工具类型给动词 + 参数，解析不出时回退命令 / 工具名原文。
+ * - 无法分类的命令显示「运行命令」，真实命令保留在 detail；其它工具按类型回退。
  */
 function formatToolRowText(descriptor: ToolUseDescriptor): { label: string; detail?: string } {
   switch (descriptor.kind) {
@@ -333,18 +407,19 @@ function formatToolRowText(descriptor: ToolUseDescriptor): { label: string; deta
       }
       const intent = descriptor.intent;
       if (intent) {
-        const target = intent.target ?? descriptor.command;
+        const label = intent.target
+          ? joinVerb(INTENT_VERB_ZH[intent.action], truncateToolText(intent.target, TOOL_ROW_TEXT_MAX_CHARS))
+          : INTENT_VERB_ZH[intent.action];
         return {
-          label: joinVerb(INTENT_VERB_ZH[intent.action], truncateToolText(target, TOOL_ROW_TEXT_MAX_CHARS)),
-          // target 存在时命令原文总进次行;target 回退命令原文时只有被截断才需要次行兜底。
-          ...(intent.target ? commandDetail(descriptor.command) : commandDetailIfTruncated(descriptor.command)),
+          label,
+          // 友好标题负责扫读，真实命令固定留在次行负责准确性与审计。
+          ...commandDetail(descriptor.command),
         };
       }
       if (!descriptor.command) return { label: descriptor.toolName };
       return {
-        label: joinVerb(TOOL_ROW_VERB_ZH.run, truncateToolText(descriptor.command, TOOL_ROW_TEXT_MAX_CHARS)),
-        // 长命令被 label 截断时,次行保留(更长的)原文,便于审计实际执行了什么。
-        ...commandDetailIfTruncated(descriptor.command),
+        label: TOOL_ROW_VERB_ZH.runCommand,
+        ...commandDetail(descriptor.command),
       };
     }
     case 'file': {
@@ -356,6 +431,31 @@ function formatToolRowText(descriptor: ToolUseDescriptor): { label: string; deta
       return {
         label: joinVerb(verb, descriptor.fileName),
         ...(descriptor.filePath !== descriptor.fileName ? { detail: descriptor.filePath } : {}),
+      };
+    }
+    case 'fileChange': {
+      if (descriptor.changes.length > 1) {
+        return { label: `${TOOL_ROW_VERB_ZH.update} ${descriptor.changes.length} 个文件` };
+      }
+      const change = descriptor.changes[0];
+      const verb = change.action === 'add'
+        ? TOOL_ROW_VERB_ZH.create
+        : change.action === 'delete'
+          ? TOOL_ROW_VERB_ZH.delete
+          : change.action === 'move'
+            ? TOOL_ROW_VERB_ZH.rename
+            : change.action === 'update'
+              ? TOOL_ROW_VERB_ZH.edit
+              : TOOL_ROW_VERB_ZH.update;
+      const target = change.action === 'move' && change.moveFileName
+        ? `${change.fileName} → ${change.moveFileName}`
+        : change.fileName;
+      const detail = change.action === 'move' && change.movePath
+        ? `${change.path} → ${change.movePath}`
+        : change.path;
+      return {
+        label: joinVerb(verb, target),
+        ...(detail !== target ? { detail } : {}),
       };
     }
     case 'search':
@@ -409,13 +509,6 @@ function joinVerb(verb: string, target: string): string {
 
 function commandDetail(command: string): { detail?: string } {
   return command ? { detail: truncateToolText(command, COMMAND_DETAIL_MAX_CHARS) } : {};
-}
-
-/** 命令超出 label 截断长度才给次行:label 已含完整原文时不重复占一行。 */
-function commandDetailIfTruncated(command: string): { detail?: string } {
-  return command.trim().length > TOOL_ROW_TEXT_MAX_CHARS
-    ? { detail: truncateToolText(command, COMMAND_DETAIL_MAX_CHARS) }
-    : {};
 }
 
 function toolRowStatus(

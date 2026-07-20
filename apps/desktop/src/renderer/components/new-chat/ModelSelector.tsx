@@ -291,6 +291,10 @@ interface ModelSelectorProps {
   visualVariant?: 'default' | 'create-agent';
   /** Popover 弹出方向,默认 "top"（底部工具栏向上弹），dialog 内嵌场景传 "bottom"。 */
   popoverSide?: 'top' | 'bottom';
+  /** 关闭模型的 effort / Fast 编辑入口；只选择模型 id 的设置项使用。 */
+  configurationEnabled?: boolean;
+  /** 可选的列表首行兜底值，例如“不指定（使用原逻辑）”。 */
+  fallbackOption?: { active: boolean; label: string; onSelect: () => void };
 }
 
 interface ModelSelectorContentProps {
@@ -322,6 +326,8 @@ interface ModelSelectorContentProps {
    * 在模型列表顶部加一行,选中 = model 留空(跟随绑定会话的模型 / 来源)。
    */
   followSession?: { active: boolean; label: string; onFollow: () => void };
+  /** 是否显示模型的 effort / Fast 编辑入口。 */
+  configurationEnabled?: boolean;
 }
 
 function vendorKeyToAgentKind(v?: 'cc' | 'codex'): AgentKind | null {
@@ -347,6 +353,7 @@ export function ModelSelectorContent({
   onProviderChange,
   onNavigateToProviders,
   followSession,
+  configurationEnabled = true,
 }: ModelSelectorContentProps) {
   const { t } = useTranslation();
   const agentKind = vendorKeyToAgentKind(vendorKey);
@@ -692,7 +699,10 @@ export function ModelSelectorContent({
     const disabled = budgetDisabledOf(model.id);
     const rowEffort = rowEffortOf(providerId, model);
     const rowFastOn = fastOnOf(providerId, model);
-    const hasEdit = !disabled && (model.efforts.length > 0 || fastEditable(providerId, model));
+    const hasEdit =
+      configurationEnabled &&
+      !disabled &&
+      (model.efforts.length > 0 || fastEditable(providerId, model));
     const isEditingThis =
       !!editing && editing.modelId === model.id && editing.providerId === providerId;
     // hover tooltip:最前面拼供应商完整名(分段模式有 provider),再接上下文 / 价格 / 快速。
@@ -724,8 +734,11 @@ export function ModelSelectorContent({
             handleRowSelect(providerId, model.id);
           }}
           className={cn(
+            // hover 高亮即时切换(不走 transition-colors):背景色是 paint 属性,过渡会让
+            // 快速划过列表时多行同时逐帧重绘(叠加圆角裁剪 + 阴影的 portal 容器放大失效区域),
+            // 是「hover 卡顿」的根因。即时切换只在进/离开各重绘一次,跟手且零逐帧 paint(规则 7)。
             'group flex w-full cursor-pointer items-center justify-between rounded-[8px] px-3 py-2',
-            'transition-colors hover:bg-[var(--model-item-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
+            'hover:bg-[var(--model-item-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
             isSelected && 'bg-[var(--model-item-hover)]',
             disabled && 'cursor-not-allowed opacity-50 hover:bg-transparent',
           )}
@@ -1014,6 +1027,8 @@ export function ModelSelector({
   triggerVariant = 'toolbar',
   visualVariant = 'default',
   popoverSide = 'top',
+  configurationEnabled = true,
+  fallbackOption,
   currentProviderId,
   sourceDisconnected = false,
   onProviderChange,
@@ -1051,7 +1066,9 @@ export function ModelSelector({
   );
 
   const currentModel = visibleModels.find((m) => m.id === modelId);
-  const displayLabel = currentModel?.displayName ?? 'Select model';
+  const displayLabel = fallbackOption?.active
+    ? fallbackOption.label
+    : (currentModel?.displayName ?? 'Select model');
   const efforts = currentModel?.efforts ?? [];
 
   const currentAgentKind: AgentKind | null = useMemo(() => {
@@ -1102,7 +1119,7 @@ export function ModelSelector({
     !providersLoading &&
     !hasConnectedSource;
   // trigger 上仍展示当前模型的 effort(模型支持时)。
-  const showEffort = efforts.length > 0 && efforts.includes(effort);
+  const showEffort = !fallbackOption?.active && efforts.length > 0 && efforts.includes(effort);
   const effortLabel = showEffort ? labelOf(effort) : null;
   // Fast 工具栏按钮已移除 → trigger 上用闪电标出当前是否 Fast(模型支持 + 已开启时)。
   // 支持性按「当前生效来源」现查 per-provider 条目;无法解析来源(flat / device-link 退化)时
@@ -1365,6 +1382,16 @@ export function ModelSelector({
           currentProviderId={currentProviderId}
           onProviderChange={onProviderChange}
           onNavigateToProviders={onNavigateToProviders}
+          configurationEnabled={configurationEnabled}
+          followSession={
+            fallbackOption
+              ? {
+                  active: fallbackOption.active,
+                  label: fallbackOption.label,
+                  onFollow: fallbackOption.onSelect,
+                }
+              : undefined
+          }
         />
       </PopoverContent>
     </Popover>

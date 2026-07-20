@@ -49,6 +49,8 @@ export interface NormalizedRemoteMessage {
   isStreaming?: boolean;
   turnCostUsd?: number;
   turnCostIsEstimate?: boolean;
+  /** assistant 专用:本轮模型降级标记(agentMeta.modelMismatch,桌面 main 在 turn 结束检测命中时落库)。 */
+  modelMismatch?: { selected: string; actual: string };
   /** Orca 协同卡片(Lead 派活 / worker 回报);存在时由 MessageRenderer 渲染成专属卡片而非普通气泡。 */
   orcaCard?: OrcaCollabCard;
   /** tool 消息专用:tool_result 是否已到达(含被隐藏的 orca 空结果),驱动工具行 running/done 状态。 */
@@ -292,6 +294,7 @@ export function normalizeRemoteMessages(messages: readonly RemoteMessage[]): Nor
       createdAt: message.createdAt,
       isStreaming: readMessageStreaming(message) || undefined,
       ...readTurnCost(message),
+      ...readModelMismatch(message),
       ...(message.role === 'user' ? readAutomationOrigin(message) : {}),
     });
   }
@@ -585,6 +588,18 @@ function readTurnCost(message: RemoteMessage): Pick<NormalizedRemoteMessage, 'tu
     turnCostUsd: cost,
     turnCostIsEstimate: message.agentMeta?.turnCostIsEstimate === true,
   };
+}
+
+// 桌面 main 在 turn 结束检测到模型被上游降级时写 agentMeta.modelMismatch =
+// { selected, actual }(modelMismatchBroadcaster);字段不全的一律忽略。
+function readModelMismatch(message: RemoteMessage): Pick<NormalizedRemoteMessage, 'modelMismatch'> {
+  if (message.role !== 'assistant') return {};
+  const mm = readRecord(message.agentMeta?.modelMismatch);
+  if (!mm) return {};
+  const selected = readString(mm.selected);
+  const actual = readString(mm.actual);
+  if (!selected || !actual) return {};
+  return { modelMismatch: { selected, actual } };
 }
 
 // scheduler runner 落库时在 agentMeta.origin 写 { kind:'scheduler', scheduleId, scheduleName? }

@@ -2,8 +2,15 @@
 // release-regions.mjs —— desktop 发布「地区渠道」配置的唯一加载入口(cn / global)
 //
 // 对齐 mobile 自建线的 self-host-regions 模式(apps/mobile/scripts/lib/self-host-region.mjs):
-// 随地区变化的**非机密**发布目标(CDN 基址 / OSS bucket / prefix / ossRegion)集中在
-// 发版机本地的 scripts/release-regions.json 里(纯值,不入仓;只提交 .json.example)。
+// 随地区变化的**非机密**发布参数集中在发版机本地的 scripts/release-regions.json 里
+// (纯值,不入仓;只提交 .json.example):
+//   - oss:发布目标(CDN 基址 / OSS bucket / prefix / ossRegion);
+//   - macSigning(可选):mac 签名/公证身份(appleId / teamId / signIdentity,
+//     以及可选 appPasswordEnv——公证密码改从哪个 env 变量读,供两区域使用不同
+//     公证账号/密码时按区域指路;密码值本身永远只在 env,不进 JSON。
+//     证书私钥本体在 macOS 钥匙串,按 signIdentity 名字取)——国内/海外用不同
+//     Developer ID 证书(X.D. Network / XD Entertainment)时在此按区域声明;
+//     resolveAppleIdentity 无代码默认值,JSON 与 env 都缺时在签名前 fail closed。
 // 真机密(阿里云 AK/SK、APPLE_APP_PASSWORD、NPKG_TOKEN)仍走 env / .env,凭证不入仓。
 //
 // 与既有 env 驱动(XDT_* / XDT_GLOBAL_*,CI secret 场景)的关系:
@@ -38,6 +45,14 @@ export const RELEASE_REGION_ENV_NAMES = Object.freeze({
 });
 
 const OSS_KEYS = Object.freeze(['cdnBaseUrl', 'bucket', 'prefix', 'ossRegion']);
+
+/** macSigning 字段 → resolveAppleIdentity 读取的 env 名(两区域同名:一次发布只有一个 region)。 */
+export const MAC_SIGNING_ENV_NAMES = Object.freeze({
+  appleId: 'APPLE_ID',
+  teamId: 'APPLE_TEAM_ID',
+  signIdentity: 'APPLE_SIGN_IDENTITY',
+});
+const MAC_SIGNING_KEYS = Object.freeze(Object.keys(MAC_SIGNING_ENV_NAMES));
 
 /** 解析真文件路径;显式 env 覆盖仅供测试 / 特殊发版机。 */
 export function resolveReleaseRegionsPath(filePath = process.env.CINDY_RELEASE_REGIONS_FILE) {
@@ -100,7 +115,28 @@ export function validateReleaseRegions(value, options = {}) {
       }
       normalizedOss[key] = oss[key].trim();
     }
-    result[region] = Object.freeze({ oss: Object.freeze(normalizedOss) });
+    const normalized = { oss: Object.freeze(normalizedOss) };
+    if (block.macSigning !== undefined) {
+      const mac = block.macSigning;
+      if (!mac || typeof mac !== 'object' || Array.isArray(mac)) {
+        throw new Error(`${source} 的 ${region}.macSigning 必须是 object(可整体省略)`);
+      }
+      const normalizedMac = {};
+      for (const key of MAC_SIGNING_KEYS) {
+        const value = mac[key] ?? '';
+        if (typeof value !== 'string') {
+          throw new Error(`${source} 的 ${region}.macSigning.${key} 必须是字符串(可留空,回落代码默认身份)`);
+        }
+        normalizedMac[key] = value.trim();
+      }
+      const passwordEnv = mac.appPasswordEnv ?? '';
+      if (typeof passwordEnv !== 'string' || (passwordEnv.trim() && !/^[A-Z][A-Z0-9_]*$/.test(passwordEnv.trim()))) {
+        throw new Error(`${source} 的 ${region}.macSigning.appPasswordEnv 必须是合法 env 变量名(全大写,可留空 = 读 APPLE_APP_PASSWORD)`);
+      }
+      normalizedMac.appPasswordEnv = passwordEnv.trim();
+      normalized.macSigning = Object.freeze(normalizedMac);
+    }
+    result[region] = Object.freeze(normalized);
   }
   return Object.freeze(result);
 }
@@ -120,9 +156,15 @@ export function applyReleaseRegionConfigToEnv(region, options = {}) {
   const normalized = resolveReleaseRegion(region);
   const envNames = RELEASE_REGION_ENV_NAMES[normalized];
   const missingFromEnv = OSS_KEYS.filter((key) => !process.env[envNames[key]]?.trim());
-  if (missingFromEnv.length === 0) return { source: 'env' };
-
   const configPath = resolveReleaseRegionsPath(options.filePath);
+  if (missingFromEnv.length === 0) {
+    // OSS 面由 env 提供(CI secret 场景);JSON 存在时仍应用其 macSigning 身份。
+    if (fs.existsSync(configPath)) {
+      applyMacSigningEnv(loadReleaseRegions({ filePath: options.filePath })[normalized].macSigning);
+    }
+    return { source: 'env' };
+  }
+
   if (!fs.existsSync(configPath)) {
     throw new Error(
       `缺少 ${normalized} 渠道发布配置。二选一:\n` +
@@ -146,5 +188,47 @@ export function applyReleaseRegionConfigToEnv(region, options = {}) {
   if (stillMissing.length > 0) {
     throw new Error(`${configPath} 的 ${normalized} 渠道配置不完整,缺: ${stillMissing.join(', ')}`);
   }
+  applyMacSigningEnv(regions[normalized].macSigning);
   return { source: 'file' };
+}
+
+/**
+ * 只应用 macSigning 身份、不要求 oss 配置——供「只打包不发布」的入口
+ * (package-desktop.mjs)使用:签名需要身份,但本地打包不需要发布目标。
+ * 文件不存在时静默跳过(身份可由 env 提供;都没有则 resolveAppleIdentity 抛错)。
+ * @param {string} region cn | global
+ * @param {{ filePath?: string }} [options]
+ * @returns {boolean} 是否读到了配置文件
+ */
+export function applyMacSigningConfigToEnv(region, options = {}) {
+  const normalized = resolveReleaseRegion(region);
+  const configPath = resolveReleaseRegionsPath(options.filePath);
+  if (!fs.existsSync(configPath)) return false;
+  applyMacSigningEnv(loadReleaseRegions({ filePath: options.filePath })[normalized].macSigning);
+  return true;
+}
+
+/**
+ * 把 region 的 macSigning 身份注入 APPLE_* env(仅补 env 缺失的键;留空的字段
+ * 跳过——resolveAppleIdentity 无默认值,最终仍缺会在签名前抛错)。
+ * @param {{ appleId?: string, teamId?: string, signIdentity?: string } | undefined} macSigning
+ */
+function applyMacSigningEnv(macSigning) {
+  if (!macSigning) return;
+  for (const key of MAC_SIGNING_KEYS) {
+    const envName = MAC_SIGNING_ENV_NAMES[key];
+    if (process.env[envName]?.trim()) continue;
+    if (macSigning[key]) process.env[envName] = macSigning[key];
+  }
+  // appPasswordEnv:公证密码指针。显式 APPLE_APP_PASSWORD 仍优先(与全局 env-first
+  // 一致);声明了指针但目标 env 为空则 fail closed——声明即承诺,不许静默降级。
+  if (macSigning.appPasswordEnv && !process.env.APPLE_APP_PASSWORD?.trim()) {
+    const value = process.env[macSigning.appPasswordEnv]?.trim();
+    if (!value) {
+      throw new Error(
+        `macSigning.appPasswordEnv 指向的环境变量 ${macSigning.appPasswordEnv} 未设置或为空(公证密码缺失)`,
+      );
+    }
+    process.env.APPLE_APP_PASSWORD = value;
+  }
 }

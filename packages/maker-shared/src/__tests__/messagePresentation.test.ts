@@ -168,6 +168,15 @@ describe('messagePresentation', () => {
     );
   });
 
+  it('counts Codex file_change as an edited file action', () => {
+    const group: MessageRenderToolGroupItem<TestMessage> = {
+      type: 'tool_group',
+      key: 'tools-file-change',
+      tools: [message('file-change-summary', { label: 'file_change' })],
+    };
+    expect(summarizeToolGroupPresentation(group).title).toBe('编辑 1 个文件');
+  });
+
   it('renders humanized tool row labels from tool_use descriptors (issue #450 mobile)', () => {
     // Bash 带模型 description:独立成句,命令原文降为次要细节。
     expect(summarizeToolRowPresentation(message('bash-desc', {
@@ -212,7 +221,7 @@ describe('messagePresentation', () => {
       },
     })).label).toBe('读取 app.ts');
 
-    // 解析不出的短命令维持「运行 + 原文」,label 已含完整命令,不再重复占一行 detail。
+    // Git 命令使用稳定的人话标题，真实命令留在次行。
     const shortRow = summarizeToolRowPresentation(message('bash-raw', {
       source: {
         clientId: 'bash-raw',
@@ -220,10 +229,10 @@ describe('messagePresentation', () => {
         createdAt: '2026-01-01T00:00:00.000Z',
       },
     }));
-    expect(shortRow.label).toBe('运行 git status');
-    expect(shortRow.detail).toBeUndefined();
+    expect(shortRow.label).toBe('查看工作区状态');
+    expect(shortRow.detail).toBe('git status');
 
-    // 解析不出且超出 label 截断长度的长命令:次行保留原文,可审计实际执行内容(PR #495 review)。
+    // 解析不出的命令回退「运行命令」，次行仍保留原文供审计。
     const longCommand = 'docker run --rm -v /repo:/w -w /w node:22 bash -lc "pnpm install --frozen-lockfile && pnpm build"';
     const longRow = summarizeToolRowPresentation(message('bash-long', {
       source: {
@@ -232,10 +241,10 @@ describe('messagePresentation', () => {
         createdAt: '2026-01-01T00:00:00.000Z',
       },
     }));
-    expect(longRow.label.endsWith('...')).toBe(true);
+    expect(longRow.label).toBe('运行命令');
     expect(longRow.detail).toBe(longCommand);
 
-    // intent 无 target(动词换档、参数回退命令原文)且命令超长:同样保留次行原文。
+    // intent 无 target 时首行只显示完整意图标题，次行保留真实命令。
     const longTestCommand = 'pnpm --filter @lizi/maker-shared exec vitest run src/__tests__/messagePresentation.test.ts --reporter verbose';
     const longIntentRow = summarizeToolRowPresentation(message('bash-long-test', {
       source: {
@@ -244,7 +253,7 @@ describe('messagePresentation', () => {
         createdAt: '2026-01-01T00:00:00.000Z',
       },
     }));
-    expect(longIntentRow.label.startsWith('运行测试 ')).toBe(true);
+    expect(longIntentRow.label).toBe('运行测试');
     expect(longIntentRow.detail).toBe(longTestCommand);
 
     // MCP 工具:调用 server · tool(下划线转空格)。
@@ -269,6 +278,45 @@ describe('messagePresentation', () => {
       label: '读取 app.ts',
       detail: '/repo/src/app.ts',
     });
+
+    const fileChangeSource = {
+      clientId: 'file-change-1',
+      content: {
+        toolName: 'file_change',
+        input: {
+          changes: [{
+            path: '/repo/src/old.ts',
+            kind: { type: 'update', move_path: '/repo/src/new.ts' },
+            diff: '',
+          }],
+        },
+      },
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
+    expect(summarizeToolRowPresentation(message('file-change-1', {
+      label: 'file_change',
+      source: fileChangeSource,
+    }))).toMatchObject({
+      label: '重命名 old.ts → new.ts',
+      detail: '/repo/src/old.ts → /repo/src/new.ts',
+    });
+
+    expect(summarizeToolRowPresentation(message('file-change-many', {
+      label: 'file_change',
+      source: {
+        ...fileChangeSource,
+        clientId: 'file-change-many',
+        content: {
+          toolName: 'file_change',
+          input: {
+            changes: [
+              { path: '/repo/a.ts', kind: { type: 'update' }, diff: '-a\n+b' },
+              { path: '/repo/b.ts', kind: { type: 'add' }, diff: '+b' },
+            ],
+          },
+        },
+      },
+    }))).toMatchObject({ label: '更新 2 个文件' });
   });
 
   it('marks unsettled tool rows running only while the session is streaming', () => {

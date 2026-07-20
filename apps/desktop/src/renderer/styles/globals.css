@@ -83,6 +83,13 @@
     caret-color: var(--caret-accent);
   }
 
+  /* 可拖拽 textarea 的原生 resize 角标(::-webkit-resizer)默认是不跟主题的
+     白色方块,dark 下呈反白 BUG(设置自定义提示词 / 创建自动化提示词等所有
+     resize-y 文本框)。置透明:保留拖拽功能,去掉视觉噪音,light/dark 通吃。 */
+  textarea::-webkit-resizer {
+    background: transparent;
+  }
+
   /* F2: Global disable element drag — prevent image and element dragging */
   *:not(input):not(textarea):not([contenteditable='true']) {
     -webkit-user-drag: none;

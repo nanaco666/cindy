@@ -43,6 +43,7 @@ import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { toast } from '@/lib/toast';
 import { extractIpcError } from '@/utils/ipcError';
 import {
+  HOOK_BIND_REASON_ALREADY_BOUND,
   HOOK_BIND_REASON_NOT_INSTALLED,
   HOOK_CHAT_WORKSPACE_ALIAS,
   slackHookInstallUrl,
@@ -58,6 +59,8 @@ function statusDot(status: SlackHookView['status']): string {
       return 'var(--remote-status-ready)';
     case 'connecting':
       return 'var(--remote-status-progress)';
+    case 'standby':
+      return 'var(--remote-status-disconnected)';
     case 'error':
       return 'var(--remote-status-failed)';
     default:
@@ -390,7 +393,7 @@ export function HookConnectionsSection() {
       : [t(`settings.remoteControl.hook.status.${hook.status}`), bindingLabel]
           .filter(Boolean)
           .join(' · ');
-  // 未登录的连接错误换成人话(transport 上报固定串 'not logged in')
+  // transport 的稳定错误标识换成人话；其它瞬时网络错误保留原文供诊断。
   const errorText =
     hook.lastError === 'not logged in'
       ? t('settings.remoteControl.hook.loginRequired')
@@ -416,6 +419,10 @@ export function HookConnectionsSection() {
             <span className="truncate text-11 text-[var(--text-tertiary)]">{statusLine}</span>
             {hook.status === 'error' && errorText ? (
               <span className="truncate text-11 text-[var(--error-fg)]">{errorText}</span>
+            ) : hook.status === 'standby' ? (
+              <span className="truncate text-11 text-[var(--text-tertiary)]">
+                {t('settings.remoteControl.hook.standbyHint')}
+              </span>
             ) : null}
           </div>
           {/* 授权进行中的唯一附加动作: 复制授权链接 —— 远程控制时 openExternal
@@ -653,10 +660,18 @@ export function HookConnectionsSection() {
                 !isNotInstalled ? (
                   <div className="flex items-center gap-2">
                     <span className="min-w-0 flex-1 text-11 leading-relaxed text-[var(--error-fg)]">
-                      {hook.pendingBind.message ??
-                        t(
-                          `settings.remoteControl.hook.binding.state.${hook.pendingBind.state}`,
-                        )}
+                      {hook.pendingBind.reason === HOOK_BIND_REASON_ALREADY_BOUND
+                        ? t('settings.remoteControl.hook.multi.alreadyBound', {
+                            team:
+                              hook.bindings.find((b) => b.teamId === hook.pendingBind?.teamId)
+                                ?.teamName ??
+                              hook.pendingBind.teamId ??
+                              '',
+                          })
+                        : (hook.pendingBind.message ??
+                          t(
+                            `settings.remoteControl.hook.binding.state.${hook.pendingBind.state}`,
+                          ))}
                     </span>
                     <button
                       type="button"

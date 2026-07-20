@@ -113,6 +113,13 @@ export const HOOK_BIND_REASON_NOT_INSTALLED = 'not-installed';
 export const HOOK_BIND_REASON_SUPERSEDED = 'superseded';
 
 /**
+ * (multi-team)本地合成的终止态 reason: 「添加 workspace」授权落在已绑定的
+ * 活跃 team 上(用户没在 Slack 授权页右上角切换 workspace)。仅 desktop 本地
+ * 使用, 不过网线; renderer 据此显示切换指引而非通用失败文案。
+ */
+export const HOOK_BIND_REASON_ALREADY_BOUND = 'already-bound';
+
+/**
  * (multi-team)单个已确认的 Slack workspace 绑定行(bind.state 快照 +
  * confirmed/revoked 事件维护; displaced 行来自本地缓存 diff 或 superseded 事件)。
  */
@@ -152,9 +159,10 @@ export interface HookPendingBindView {
  *  - disabled:   开关关闭, 不建连
  *  - connecting: 正在建连 / 退避重连中(含已开 WS 但尚未收到 welcome)
  *  - connected:  握手完成(hello -> welcome), 可收派发
+ *  - standby:    同机另一实例已持有 first-wins 连接, 本实例低频探测接管
  *  - error:      最近一次连接失败(仍在退避重试), lastError 给原因
  */
-export type HookConnectionStatus = 'disabled' | 'connecting' | 'connected' | 'error';
+export type HookConnectionStatus = 'disabled' | 'connecting' | 'connected' | 'standby' | 'error';
 
 /** 渲染层可见的 Slack Hook 快照(单连接)。 */
 export interface SlackHookView {

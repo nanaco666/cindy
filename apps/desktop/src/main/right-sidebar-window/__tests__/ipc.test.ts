@@ -185,6 +185,48 @@ describe('right-sidebar-window IPC', () => {
     ).rejects.toThrow(/searchJump/);
   });
 
+  it('validates and forwards external-file browser commands', async () => {
+    const controller = makeController();
+    const { handler, mainWebContents } = registerController(controller);
+
+    await handler(
+      { sender: mainWebContents },
+      {
+        command: {
+          type: 'open-file-browser',
+          sessionId: 's1',
+          absPath: 'C:\\tmp\\note.md',
+          targetKind: 'external-file',
+        },
+        allowOpen: true,
+      },
+    );
+
+    expect(controller.routeCommand).toHaveBeenCalledWith({
+      command: {
+        type: 'open-file-browser',
+        sessionId: 's1',
+        absPath: 'C:\\tmp\\note.md',
+        targetKind: 'external-file',
+      },
+      allowOpen: true,
+    });
+
+    await expect(
+      handler(
+        { sender: mainWebContents },
+        {
+          command: {
+            type: 'open-file-browser',
+            sessionId: 's1',
+            targetKind: 'external-file',
+          },
+          allowOpen: true,
+        },
+      ),
+    ).rejects.toThrow(/command.absPath required/);
+  });
+
   it('drops commands from secondary renderers but still validates their payloads', async () => {
     const controller = makeController();
     const { handler } = registerController(controller);

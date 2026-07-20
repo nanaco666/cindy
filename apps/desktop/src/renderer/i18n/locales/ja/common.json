@@ -93,6 +93,7 @@
       "personalization": "パーソナライズ",
       "chipMetrics": "使用量インジケーター",
       "memory": "メモリ",
+      "subagentModels": "サブエージェントモデル",
       "compaction": "コンテキスト圧縮",
       "terminalShell": "デフォルトターミナルシェル",
       "linkOpen": "リンクの開き方",
@@ -1327,6 +1328,14 @@
         }
       }
     },
+    "subagentModels": {
+      "title": "サブエージェントモデル",
+      "description": "Claude と Codex のサブエージェントに個別のデフォルトモデルを指定します。",
+      "unspecified": "指定しない（既定の動作を使用）",
+      "codexUnavailable": "現在の Codex バージョンでは安全な上書きに未対応です",
+      "hint": "未指定の場合は上書きを注入しません。Claude の変更は新規セッションから有効です。Codex の完全コンテキスト fork は現在モデル上書きに対応していません。",
+      "saveFailed": "サブエージェントモデルの保存に失敗しました"
+    },
     "compaction": {
       "title": "コンテキスト圧縮",
       "description": "Claude Code がいつ自動的にコンテキストを圧縮するかを制御します。",
@@ -1687,6 +1696,7 @@
           "disabled": "無効",
           "connecting": "接続中…",
           "connected": "接続済み",
+          "standby": "別のインスタンスが接続中",
           "error": "接続失敗"
         },
         "form": {
@@ -1715,6 +1725,7 @@
           "actionFailed": "操作に失敗しました"
         },
         "loginRequired": "先に {{appName}} アカウントにログインしてください。ログイン後、接続は自動的に復旧します。",
+        "standbyHint": "このコンピューター上の別の Cindy インスタンスが Slack 接続を使用しています。それを閉じてから、このスイッチをもう一度オンにすると引き継げます。",
         "authorizing": "認可中…",
         "statusBound": "連携済み @{{name}}",
         "statusBoundTeam": "{{team}} に連携済み @{{name}}",
@@ -1746,7 +1757,8 @@
           "removeConfirm": "解除",
           "cancelPending": "キャンセル",
           "dismiss": "閉じる",
-          "addWorkspace": "Slack ワークスペースを追加"
+          "addWorkspace": "Slack ワークスペースを追加",
+          "alreadyBound": "認可されたのはすでに連携済みの {{team}} です。別のワークスペースを追加するには、Slack の認可ページ右上でワークスペースを切り替えてから許可してください。"
         }
       },
       "summary": {
@@ -2761,7 +2773,11 @@
       "styleTweaks": "スタイル調整",
       "styleReset": "リセット",
       "styleTextLabel": "テキスト",
-      "moreToolsComingSoon": "その他のツール(開発中)",
+      "moreTools": "その他",
+      "openInSystemBrowser": "システムブラウザで開く",
+      "copyLink": "リンクをコピー",
+      "linkCopied": "リンクをクリップボードにコピーしました",
+      "copyLinkFailed": "リンクのコピーに失敗しました",
       "crash": {
         "crashedTitle": "ページがクラッシュしました",
         "crashedDesc": "ページプロセスが予期せず終了しました。再読み込みしてください。",
@@ -3485,7 +3501,10 @@
     },
     "pastedText": {
       "chipLabel": "貼り付けたテキスト({{lines}} 行)",
-      "previewTitle": "貼り付けたテキスト"
+      "previewTitle": "貼り付けたテキスト",
+      "editTitle": "貼り付けたテキストを編集",
+      "cancelEdit": "編集をキャンセル",
+      "saveEdit": "テキストを保存"
     }
   },
   "voiceInputOverlay": {
@@ -3545,6 +3564,7 @@
       "cancelled": "キャンセル済み"
     },
     "workGroup": {
+      "working": "作業中…",
       "worked": "{{duration}} 作業しました",
       "workDetails": "作業内容"
     },
@@ -3768,6 +3788,12 @@
     },
     "agentActionRow": {
       "noContent": "表示できる内容はありません",
+      "fileChange": {
+        "deleted": "削除",
+        "renamed": "名前変更",
+        "files": "{{count}} ファイル",
+        "rawData": "元データを表示"
+      },
       "verb": {
         "edited": "編集",
         "created": "作成",
@@ -3782,7 +3808,77 @@
         "ranTests": "テスト実行",
         "built": "ビルド",
         "linted": "Lint チェック",
-        "typechecked": "型チェック"
+        "typechecked": "型チェック",
+        "runScript": "スクリプトを実行",
+        "checkSyntax": "構文を確認",
+        "showVersion": "バージョンを確認",
+        "checkFormatting": "フォーマットを確認",
+        "parseJson": "JSON を解析",
+        "count": "件数を集計",
+        "showCurrentDirectory": "現在のディレクトリを確認",
+        "showDateTime": "日時を確認",
+        "locateCommand": "コマンドを検索",
+        "inspectProcesses": "プロセスを確認",
+        "inspectPorts": "ポートを確認",
+        "queryDatabase": "データベースを照会",
+        "ranCommand": "コマンドを実行",
+        "gitStatus": "作業ツリーの状態を確認",
+        "gitDiff": "コード変更を確認",
+        "gitLog": "コミット履歴を確認",
+        "gitShow": "コミット内容を確認",
+        "gitAdd": "コード変更をステージ",
+        "gitCommit": "コード変更をコミット",
+        "gitFetch": "リモート更新を取得",
+        "gitPull": "リモート更新をプル",
+        "gitPush": "コード変更をプッシュ",
+        "gitRemote": "Git リモートを確認",
+        "gitRevParse": "Git 参照を解決",
+        "gitBranch": "ブランチを確認",
+        "gitGrep": "リポジトリ内を検索",
+        "gitMergeBase": "共通祖先を検索",
+        "gitLsFiles": "追跡ファイルを確認",
+        "gitRevList": "コミット範囲を確認",
+        "gitLsRemote": "リモート参照を確認",
+        "gitWorktreeList": "作業ツリーを一覧表示",
+        "gitWorktreeAdd": "作業ツリーを作成",
+        "gitWorktreeRemove": "作業ツリーを削除",
+        "gitWorktreeMove": "作業ツリーを移動",
+        "gitWorktreePrune": "作業ツリーを整理",
+        "ghPrList": "PR を一覧表示",
+        "ghPrView": "PR を表示",
+        "ghPrChecks": "PR のチェックを確認",
+        "ghPrStatus": "PR の状態を確認",
+        "ghPrDiff": "PR の変更を確認",
+        "ghPrCreate": "PR を作成",
+        "ghPrEdit": "PR を編集",
+        "ghPrComment": "PR にコメント",
+        "ghPrReview": "PR をレビュー",
+        "ghPrMerge": "PR をマージ",
+        "ghPrClose": "PR を閉じる",
+        "ghPrReopen": "PR を再開",
+        "ghPrCheckout": "PR をチェックアウト",
+        "ghIssueList": "Issue を一覧表示",
+        "ghIssueView": "Issue を表示",
+        "ghIssueStatus": "Issue の状態を確認",
+        "ghIssueCreate": "Issue を作成",
+        "ghIssueEdit": "Issue を編集",
+        "ghIssueComment": "Issue にコメント",
+        "ghIssueClose": "Issue を閉じる",
+        "ghIssueReopen": "Issue を再開",
+        "ghAuthStatus": "GitHub のログイン状態を確認",
+        "ghAuthLogin": "GitHub にログイン",
+        "ghAuthLogout": "GitHub からログアウト",
+        "ghAuthRefresh": "GitHub の認証を更新",
+        "ghAuthSwitch": "GitHub アカウントを切り替え",
+        "ghRunList": "ワークフロー実行を一覧表示",
+        "ghRunView": "ワークフロー実行を表示",
+        "ghRunWatch": "ワークフロー実行を監視",
+        "ghSearch": "GitHub を検索",
+        "ghRepoList": "リポジトリを一覧表示",
+        "ghRepoView": "リポジトリを表示",
+        "ghApiQuery": "GitHub API を照会",
+        "ghApiMutation": "GitHub データを変更",
+        "ghApiCall": "GitHub API を呼び出し"
       },
       "status": {
         "running": "実行中",
@@ -3999,6 +4095,9 @@
       "processing": "プラグイン処理中…",
       "viewOriginal": "原文を表示",
       "viewGhostCard": "プラグインカードを表示"
+    },
+    "modelMismatch": {
+      "notice": "このターンは選択中の {{selected}} ではなく {{actual}} が応答しました(プロバイダー側で一時的にダウングレード)"
     },
     "ghostNotify": {
       "secretSaved": "認証情報「{{name}}」を保存しました",

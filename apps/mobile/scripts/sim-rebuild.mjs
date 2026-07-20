@@ -58,8 +58,18 @@ import {
   extractMobileDevRegionArgs,
   withLocalMobileRegionConfig,
 } from './lib/mobile-dev-region.mjs';
+import {
+  ensureMobileLocalRegionConfig,
+  formatMobileLocalConfigStatus,
+} from './lib/mobile-local-config.mjs';
 import { podInstallBounded } from './sim-pod-install.mjs';
-import { cwdOfPid, gitBranchOfPid, isInside, listenerPid } from './sim-metro.mjs';
+import {
+  cwdOfPid,
+  gitSourceIdentity,
+  gitSourceOfPid,
+  isInside,
+  listenerPid,
+} from './sim-metro.mjs';
 
 const mobileDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const worktreeRoot = resolve(mobileDir, '../..');
@@ -69,6 +79,9 @@ const { region, passthrough } = extractMobileDevRegionArgs(process.argv.slice(2)
 const clean = passthrough.includes('--clean');
 const forceBuild = passthrough.includes('--force-build');
 const buildOnly = passthrough.includes('--build-only');
+const localConfigResult = ensureMobileLocalRegionConfig({ mobileDir });
+const localConfigStatus = formatMobileLocalConfigStatus(localConfigResult, worktreeRoot);
+if (localConfigStatus) console.log(localConfigStatus);
 const buildEnv = withLocalMobileRegionConfig(
   mobileClientBuildEnv({ authRegion: region }),
 );
@@ -210,12 +223,12 @@ const metroPid = listenerPid(8081);
 if (metroPid) {
   const metroCwd = cwdOfPid(metroPid);
   const foreign = !metroCwd || !isInside(worktreeRoot, metroCwd);
-  const curBranch = capture('git', ['branch', '--show-current']) || capture('git', ['rev-parse', '--short', 'HEAD']);
-  const envBranch = gitBranchOfPid(metroPid);
-  if (foreign || envBranch !== curBranch) {
+  const currentSource = gitSourceIdentity(worktreeRoot);
+  const runningSource = gitSourceOfPid(metroPid);
+  if (foreign || runningSource !== currentSource) {
     const why = foreign
       ? `属于别的 worktree(${metroCwd || '未知'})`
-      : `未带当前分支 git env(运行中=${envBranch || '无'} ≠ ${curBranch || 'unknown'})`;
+      : `源码指纹已过期(运行中=${runningSource || '无'} ≠ 当前=${currentSource})`;
     console.log(`\n✓ native 包已安装(${bundleId})。`);
     console.error(`⚠️ 未自动启动:8081 上的 Metro ${why}。`);
     console.error('   直接启动会让 app 加载错分支的 JS(native 是本分支、JS 不是)。');

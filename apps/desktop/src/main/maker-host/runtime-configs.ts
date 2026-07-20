@@ -19,6 +19,7 @@ import codexSystemPrompt from './codex-system-prompt.md?raw';
 import hostSystemPrompt from './host-system-prompt.md?raw';
 import { readCompactionPct } from './compaction-settings-store.js';
 import { readMemorySettings } from './memory-settings-store.js';
+import { readSubagentModelSettings } from './subagent-model-settings-store.js';
 
 // host 层 system prompt 拼接：先 host 共用段 (host-system-prompt.md)，再 agent 专属段
 // (claude-system-prompt.md / codex-system-prompt.md)。空段被过滤，避免出现孤零零的 \n\n。
@@ -157,6 +158,11 @@ export function buildDesktopClaudeRuntimeConfig(endpointFn: () => string): Agent
   });
   Object.defineProperty(config, 'autoCompactThresholdPct', {
     get: () => readCompactionPct(),
+    enumerable: true,
+    configurable: false,
+  });
+  Object.defineProperty(config, 'subagentModel', {
+    get: () => readSubagentModelSettings().claudeCode ?? undefined,
     enumerable: true,
     configurable: false,
   });

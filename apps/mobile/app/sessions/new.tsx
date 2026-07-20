@@ -91,8 +91,11 @@ import {
 } from '@/session/composerPaletteCache';
 import {
   buildAgentCapabilitiesCacheKey,
+  commitAgentCapabilities,
+  getAgentCapabilitiesGeneration,
   getCachedAgentCapabilities,
-  setCachedAgentCapabilities,
+  isAgentCapabilitiesGenerationCurrent,
+  subscribeAgentCapabilities,
 } from '@/session/agentCapabilitiesCache';
 import {
   ContextSheet,
@@ -242,6 +245,7 @@ export default function NewRemoteSessionScreen() {
   // Dev-only:把构建信息从全局浮层挪到这里的顶部展示(试 Fast Refresh)。
   const buildLabel = __DEV__
     ? formatMobileBuildLabel(normalizeBuildInfo({
+        source: process.env.EXPO_PUBLIC_XDT_GIT_SOURCE,
         branch: process.env.EXPO_PUBLIC_XDT_GIT_BRANCH,
         commit: process.env.EXPO_PUBLIC_XDT_GIT_COMMIT,
         version: Constants.nativeAppVersion ?? Constants.expoConfig?.version,
@@ -886,12 +890,27 @@ export default function NewRemoteSessionScreen() {
       return;
     }
     const seq = ++capabilitiesSeqRef.current;
+    let cancelled = false;
     const agentKind = draft.agentKind;
     // 能力表按 (设备, agent) 基本不变:缓存命中先画(选择器立即可用),后台静默刷新。
     const capabilitiesCacheKey = buildAgentCapabilitiesCacheKey(selectedDeviceId, agentKind);
+    const generation = getAgentCapabilitiesGeneration(selectedDeviceId);
+    const applyCapabilities = (next: MobileAgentCapabilities): void => {
+      if (cancelled) return;
+      setCapabilities(next);
+      setCapabilitiesLoading(false);
+      setCapabilitiesError(null);
+      setDraft((current) => current.agentKind === agentKind
+        ? reconcileRuntimeDraftWithCapabilities(current, next, {
+          preserveUnknownModel: explicitProviderModelSelectionRef.current === current.model,
+        })
+        : current);
+    };
+    const unsubscribe = subscribeAgentCapabilities(selectedDeviceId, agentKind, applyCapabilities);
     const cachedCapabilities = getCachedAgentCapabilities(capabilitiesCacheKey);
     if (cachedCapabilities) {
       setCapabilities(cachedCapabilities);
+      setCapabilitiesLoading(false);
       setDraft((current) => current.agentKind === agentKind
         ? reconcileRuntimeDraftWithCapabilities(current, cachedCapabilities, {
           preserveUnknownModel: explicitProviderModelSelectionRef.current === current.model,
@@ -908,7 +927,12 @@ export default function NewRemoteSessionScreen() {
       .then((result) => {
         if (capabilitiesSeqRef.current !== seq) return;
         const normalized = normalizeMobileAgentCapabilities(result);
-        if (normalized) setCachedAgentCapabilities(capabilitiesCacheKey, normalized);
+        if (normalized) {
+          // state/draft 只经当前代际 commit 的订阅通知更新，旧请求无法覆盖 revision 新快照。
+          commitAgentCapabilities(selectedDeviceId, agentKind, generation, normalized);
+          return;
+        }
+        if (!isAgentCapabilitiesGenerationCurrent(selectedDeviceId, generation)) return;
         if (!normalized && cachedCapabilities) {
           // 缓存已画时保留旧能力表,只报错。
           setCapabilitiesError('远程能力返回格式不支持');
@@ -916,16 +940,10 @@ export default function NewRemoteSessionScreen() {
         }
         setCapabilities(normalized);
         setCapabilitiesError(normalized ? null : '远程能力返回格式不支持');
-        if (normalized) {
-          setDraft((current) => current.agentKind === agentKind
-            ? reconcileRuntimeDraftWithCapabilities(current, normalized, {
-              preserveUnknownModel: explicitProviderModelSelectionRef.current === current.model,
-            })
-            : current);
-        }
       })
       .catch((err) => {
         if (capabilitiesSeqRef.current !== seq) return;
+        if (!isAgentCapabilitiesGenerationCurrent(selectedDeviceId, generation)) return;
         if (cachedCapabilities) {
           setCapabilitiesError(formatRemoteError(err));
           return;
@@ -934,8 +952,15 @@ export default function NewRemoteSessionScreen() {
         setCapabilitiesError(formatRemoteError(err));
       })
       .finally(() => {
-        if (capabilitiesSeqRef.current === seq) setCapabilitiesLoading(false);
+        if (
+          capabilitiesSeqRef.current === seq
+          && isAgentCapabilitiesGenerationCurrent(selectedDeviceId, generation)
+        ) setCapabilitiesLoading(false);
       });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [selectedDeviceId, draft.agentKind, maker, openLink]);
 
   useEffect(() => {

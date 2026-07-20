@@ -53,14 +53,16 @@ canary 与 stable 共享同一批底层文件。覆盖前自动把当前 stable 
 | 热更 CDN(客户端视角) | `https://hotfix.cindy.com.cn/cindy` | `https://hotfix.cindy.app/cindy` | 各 endpoint*.json 的 `cdnBaseUrl` |
 | 发布 CDN 基址 + OSS 目标(bucket / prefix / region) | `release-regions.json` 的 `cn.oss.*` | `release-regions.json` 的 `global.oss.*` | `apps/desktop/scripts/ci/release-regions.mjs`(env `XDT_*` / `XDT_GLOBAL_*` 可覆盖) |
 | 阿里云 AK/SK | `FP_DEV_OSS_ACCESS_KEY_ID/SECRET` | 同左;跨账号时改配 `XDT_GLOBAL_OSS_ACCESS_KEY_ID/SECRET` | `scripts/shared/oss.mjs` `resolveOssCredentials` |
+| mac 签名证书(Developer ID) | X.D. Network Inc.(`NTC4BJ542G`) | XD Entertainment Pte Ltd(`SX9RG894L5`) | `release-regions.json` 的 `<region>.macSigning`(证书私钥在钥匙串,按 signIdentity 名字取;身份**无代码默认值**,JSON 与 env 都缺时签名前报错) |
 | 发布产物文件名基名(安装包/热更 zip,下载可见) | `cindy-*` | `cindy-global-*` | `ci/lib.mjs` `RELEASE_ARTIFACT_BASENAME_BY_REGION`(老 `xdt-maker-*` 只属于已冻结渠道) |
 | agent 二进制下载 fallback(ensureBinary) | cn 清单基址 | global 清单基址 | 读 `CINDY_AUTH_REGION`(release 脚本已自动注入) |
 
 **两条渠道相同、与区域无关的配置**(同一份 `.env`):
 
-- macOS 签名/公证:`APPLE_APP_PASSWORD`(必填)、`APPLE_ID` / `APPLE_TEAM_ID` /
-  `APPLE_SIGN_IDENTITY`(有默认值)—— 同一个 Apple Developer 账号签两个 bundle id。
-- Windows 签名:`NPKG_TOKEN`(不设则跳过签名;npkg 服务在内网)。
+- macOS 公证账号:`APPLE_APP_PASSWORD`(必填,env,zhouyi@xd.com 名下的 App 专用密码)
+  + `macSigning.appleId = zhouyi@xd.com`(该账号对两个 team 均有公证权限,已实测;
+  换公证账号时两处必须成对更新——App 专用密码与 Apple ID 一一绑定)。签名**证书**按区域走 `macSigning`(见上表)。
+- Windows 签名:`NPKG_TOKEN` **必填硬闸**(npkg 内网签名服务)——缺 token 构建前终止,签名后对安装器与热更包主 exe 做 Authenticode 验签,非 Valid 一律中止;未签名 exe 禁止出渠道(调试用 `package-desktop.mjs --allow-unsigned`)。
 - 渠道冻结硬闸:任一区域都禁止把 OSS prefix 指到已冻结的老 `/xdt-maker` 渠道
   (`assertNotPublishingCindyToLegacyChannel`)。
 
@@ -74,10 +76,24 @@ canary 与 stable 共享同一批底层文件。覆盖前自动把当前 stable 
 
 ```json
 {
-    "cn":     { "oss": { "cdnBaseUrl": "…", "bucket": "…", "prefix": "…", "ossRegion": "…" } },
-    "global": { "oss": { "cdnBaseUrl": "…", "bucket": "…", "prefix": "…", "ossRegion": "…" } }
+    "cn": {
+        "oss":        { "cdnBaseUrl": "…", "bucket": "…", "prefix": "…", "ossRegion": "…" },
+        "macSigning": { "appleId": "zhouyi@xd.com", "teamId": "NTC4BJ542G", "signIdentity": "Developer ID Application: X.D. Network Inc. (NTC4BJ542G)" }
+    },
+    "global": {
+        "oss":        { "cdnBaseUrl": "…", "bucket": "…", "prefix": "…", "ossRegion": "…" },
+        "macSigning": { "appleId": "zhouyi@xd.com", "teamId": "SX9RG894L5", "signIdentity": "Developer ID Application: XD Entertainment Pte Ltd (SX9RG894L5)" }
+    }
 }
 ```
+
+`macSigning` 三字段(appleId / teamId / signIdentity)是签名与公证身份的唯一配置点;
+可选第四字段 `appPasswordEnv` 指定该区域公证密码改从哪个 env 变量读(留空 = 读
+`APPLE_APP_PASSWORD`)——两区域改用不同公证账号时,各自指向如 `APPLE_APP_PASSWORD_CN` /
+`APPLE_APP_PASSWORD_GLOBAL`,密码值本身仍只在 env、不进 JSON;声明了指针但目标变量为空会直接报错
+(`resolveAppleIdentity` **无代码默认值**,JSON 与同名 env 都缺时直接报错);对应的
+Developer ID 证书(含私钥)必须已导入发版机钥匙串。`package-desktop.mjs` 带版本签名
+打包同样读这里(只取 macSigning,不要求 oss)。
 
 优先级:env(`XDT_*` / `XDT_GLOBAL_*`,CI secret 场景)> JSON > 报错。JSON 只补 env
 缺失的键;env 四件套齐全时不要求 JSON 文件存在。加载单点:

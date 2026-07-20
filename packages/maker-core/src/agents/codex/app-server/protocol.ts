@@ -100,6 +100,41 @@ export interface InitializeResponse {
   [k: string]: unknown;
 }
 
+// ── ModelList (v2.rs) ───────────────────────────────────────────────────────
+
+/**
+ * `model/list` 返回的单个运行时模型。这里只维护 desktop 动态目录需要的字段子集；
+ * app-server 后续增加字段时由结构化类型自然忽略，避免把整份生成协议复制进 maker-core。
+ */
+export interface CodexModelListItem {
+  id: string;
+  /** 真正传给 turn/thread 的模型 slug；当前通常与 id 相同。 */
+  model: string;
+  displayName: string;
+  description: string;
+  hidden: boolean;
+  supportedReasoningEfforts: Array<{
+    reasoningEffort: ReasoningEffort;
+    description: string;
+  }>;
+  defaultReasoningEffort: ReasoningEffort;
+  additionalSpeedTiers: string[];
+  serviceTiers: Array<{ id: string; name: string; description: string }>;
+  isDefault: boolean;
+  [k: string]: unknown;
+}
+
+export interface CodexModelListParams {
+  cursor?: string | null;
+  limit?: number | null;
+  includeHidden?: boolean | null;
+}
+
+export interface CodexModelListResponse {
+  data: CodexModelListItem[];
+  nextCursor: string | null;
+}
+
 // ── ThreadStart / TurnStart / TurnInterrupt (v2.rs) ───────────────────────────
 
 /**
@@ -936,6 +971,7 @@ export type ServerNotification =
 
 export const Method = {
   Initialize: 'initialize',
+  ModelList: 'model/list',
   SkillsList: 'skills/list',
   ThreadStart: 'thread/start',
   ThreadResume: 'thread/resume',

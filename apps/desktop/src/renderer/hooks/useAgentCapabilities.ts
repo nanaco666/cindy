@@ -112,6 +112,8 @@ const inflight = new Map<CacheKey, Promise<AgentCapabilities>>();
 let localGen = 0;
 /** 已挂载 hook 的本地能力订阅者；刷新完成后一次性切到新快照，避免中途空白帧。 */
 const localListeners = new Set<(agent: AgentKind, caps: AgentCapabilities) => void>();
+/** 已挂载的远程能力订阅者；key 同缓存，provider revision 后可原子换入新快照。 */
+const remoteListeners = new Map<CacheKey, Set<(caps: AgentCapabilities) => void>>();
 /**
  * 每被控设备的能力「代际」。`evictDeviceCapabilities` 时自增——在途的 fetchCapabilities 完成
  * 回调据此判断「本次请求是否已被驱逐」:被驱逐则**丢弃结果**,既不回写 cache、也不动 inflight
@@ -120,6 +122,30 @@ const localListeners = new Set<(agent: AgentKind, caps: AgentCapabilities) => vo
  * 本机用 localGen 处理目录热刷新；远端继续按 deviceGen 隔离。
  */
 const deviceGen = new Map<string, number>();
+
+function notifyRemoteCapabilities(
+  deviceId: string,
+  agentKind: AgentKind,
+  caps: AgentCapabilities,
+): void {
+  for (const listener of remoteListeners.get(cacheKey(agentKind, deviceId)) ?? []) listener(caps);
+}
+
+/** 订阅某被控端某 agent 的能力快照；只通知当前代际成功提交的完整结果。 */
+export function subscribeDeviceCapabilities(
+  deviceId: string,
+  agentKind: AgentKind,
+  listener: (caps: AgentCapabilities) => void,
+): () => void {
+  const key = cacheKey(agentKind, deviceId);
+  const bucket = remoteListeners.get(key) ?? new Set<(caps: AgentCapabilities) => void>();
+  bucket.add(listener);
+  remoteListeners.set(key, bucket);
+  return () => {
+    bucket.delete(listener);
+    if (bucket.size === 0) remoteListeners.delete(key);
+  };
+}
 
 async function fetchCapabilities(agentKind: AgentKind, deviceId?: string): Promise<AgentCapabilities> {
   const key = cacheKey(agentKind, deviceId);
@@ -151,6 +177,7 @@ async function fetchCapabilities(agentKind: AgentKind, deviceId?: string): Promi
       if (isCurrent()) {
         cache.set(key, caps);
         inflight.delete(key);
+        if (deviceId) notifyRemoteCapabilities(deviceId, agentKind, caps);
       } else if (!deviceId) {
         // 本地热刷新可能已原子换入更新快照；旧请求的调用方也应拿当前 cache，不能在
         // listener 更新之后又把 hook state 覆盖回旧对象。刷新仍在途时保留旧对象，完成后再通知。
@@ -183,12 +210,16 @@ export function useAgentCapabilities(
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!agentKind || deviceId) return undefined;
-    const onRefresh = (refreshedAgent: AgentKind, caps: AgentCapabilities): void => {
-      if (refreshedAgent !== agentKind) return;
+    if (!agentKind) return undefined;
+    const applySnapshot = (caps: AgentCapabilities): void => {
       setCapabilities(caps);
       setLoading(false);
       setError(null);
+    };
+    if (deviceId) return subscribeDeviceCapabilities(deviceId, agentKind, applySnapshot);
+    const onRefresh = (refreshedAgent: AgentKind, caps: AgentCapabilities): void => {
+      if (refreshedAgent !== agentKind) return;
+      applySnapshot(caps);
     };
     localListeners.add(onRefresh);
     return () => {
@@ -212,13 +243,17 @@ export function useAgentCapabilities(
     setCapabilities(null);
     setLoading(true);
     setError(null);
+    const remoteGeneration = deviceId ? deviceGen.get(deviceId) ?? 0 : null;
     fetchCapabilities(agentKind, deviceId)
       .then((caps) => {
-        if (cancelled) return;
+        // 远程成功结果只经「当前代际 cache commit → listener」更新，避免 revision 前的
+        // 旧 Promise 晚到后直接把已刷新的 hook state 覆盖回旧快照。
+        if (cancelled || deviceId) return;
         setCapabilities(caps);
       })
       .catch((e: unknown) => {
         if (cancelled) return;
+        if (deviceId && (deviceGen.get(deviceId) ?? 0) !== remoteGeneration) return;
         setError(e instanceof Error ? e.message : String(e));
       })
       .finally(() => {

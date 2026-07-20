@@ -45,7 +45,28 @@ import {
   parseResponsesSse,
   type TitleOneShotDeps,
 } from '../title-one-shot.js';
-import { setXdGatewayModels } from '../active-catalog.js';
+import { setDiscoveredCodexModels, setXdGatewayModels } from '../active-catalog.js';
+
+/** openai 是动态清单供应商(2026-07-19 统一重构):注入 codex 注册表快照模拟运行时形态。 */
+async function withDiscoveredMini<T>(fn: () => T | Promise<T>): Promise<T> {
+  setDiscoveredCodexModels([
+    {
+      id: 'gpt-5.4-mini',
+      name: 'GPT-5.4-Mini',
+      group: 'gpt',
+      sortOrder: 22,
+      contextWindow: 272_000,
+      efforts: ['low', 'medium', 'high', 'xhigh'],
+      defaultEffort: 'high',
+      status: 'active',
+    },
+  ]);
+  try {
+    return await fn();
+  } finally {
+    setDiscoveredCodexModels([]);
+  }
+}
 import type { ProviderView } from '@lizi/model-providers';
 
 /** 造一个 fetch 替身:按传入 handler 返回类 Response 对象,并记录调用。 */
@@ -171,13 +192,22 @@ describe('buildTitleTarget(锁定 catalog titleModel 配置)', () => {
       upstream: 'https://api.anthropic.com',
     });
   });
-  it('openai → gpt-5.4-mini / Responses,最低 effort=low', () => {
-    expect(buildTitleTarget('openai')).toEqual({
+  it('openai → gpt-5.4-mini / Responses,最低 effort=low(效仿运行时注入注册表快照)', async () => {
+    await withDiscoveredMini(() => {
+      expect(buildTitleTarget('openai')).toEqual({
+        providerId: 'openai',
+        model: 'gpt-5.4-mini',
+        effort: 'low',
+        wire: 'codex-responses',
+        upstream: 'https://chatgpt.com/backend-api/codex',
+      });
+    });
+  });
+  it('openai 注册表未注入(清单为空)→ effort=null(SDK 默认档),标题请求仍可发', () => {
+    expect(buildTitleTarget('openai')).toMatchObject({
       providerId: 'openai',
       model: 'gpt-5.4-mini',
-      effort: 'low',
-      wire: 'codex-responses',
-      upstream: 'https://chatgpt.com/backend-api/codex',
+      effort: null,
     });
   });
   it('xd → gpt-5.4-mini / 网关 chat-completions(/v1 upstream)', () => {
@@ -267,14 +297,16 @@ describe('generateTitleViaProvider — openai(codex Responses SSE)', () => {
 
   it('200 SSE → 解析 output_text;header/body 正确,带最低 effort', async () => {
     const fetchImpl = fakeFetch(() => ({ text: SSE }));
-    const title = await generateTitleViaProvider(
-      { sessionId: 's2', agentKind: 'codex', prompt: '起个标题' },
-      {
-        fetchImpl,
-        readSessionProviderId: async () => 'openai',
-        listConnectedProviders: async () => [],
-        readCodexCreds: () => ({ accessToken: 'ctok', accountId: 'acc-1' }),
-      },
+    const title = await withDiscoveredMini(() =>
+      generateTitleViaProvider(
+        { sessionId: 's2', agentKind: 'codex', prompt: '起个标题' },
+        {
+          fetchImpl,
+          readSessionProviderId: async () => 'openai',
+          listConnectedProviders: async () => [],
+          readCodexCreds: () => ({ accessToken: 'ctok', accountId: 'acc-1' }),
+        },
+      ),
     );
     expect(title).toBe('接力测试');
     const [url, init] = vi.mocked(fetchImpl).mock.calls[0] as [string, { headers: Record<string, string>; body: string }];

@@ -17,6 +17,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import type { CatalogModel } from '@lizi/model-providers';
+import type { CodexModelListItem } from '@lizi/maker-core';
 
 import { shouldSuppressLocalCodexAuth } from './codex-auth-invalidation.js';
 
@@ -44,6 +45,13 @@ function hasPriorityTier(tiers: unknown): boolean {
 
 /** Codex runtime 当前可安全透传的推理档位；cache 可能先于 runtime 暴露 max/ultra。 */
 const CODEX_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh']);
+
+/**
+ * 默认收起的 slug(旧产品目录 defaultEnabled:false 的延续):清单动态化后注册表不带
+ * 可见性梯度(list/hide 之外),legacy 模型的「默认隐藏」是客户端展示策略,不能因
+ * 静态段退役而静默漂移成全部可见。用户仍可在设置里手动开启(override 语义不变)。
+ */
+const DEFAULT_HIDDEN_SLUGS: ReadonlySet<string> = new Set(['gpt-5.4-mini']);
 
 function str(v: unknown): string | null {
   return typeof v === 'string' && v.length > 0 ? v : null;
@@ -118,11 +126,66 @@ export function mapCodexModelsToCatalog(raw: unknown): CatalogModel[] {
       efforts: efforts as CatalogModel['efforts'],
       defaultEffort,
       status: 'active',
-      // 新发现的模型默认可见(用户抱怨过看不到模型);已存在的静态条目在 catalog 合并时 first-wins 保留其自身设置。
-      defaultEnabled: true,
+      // 新发现的模型默认可见(用户抱怨过看不到模型);legacy 模型沿用旧目录的默认隐藏策略。
+      defaultEnabled: !DEFAULT_HIDDEN_SLUGS.has(slug),
     };
     if (efforts.includes('xhigh')) model.effortDisplayNames = { xhigh: 'Extra High' };
     if (hasPriorityTier(m.service_tiers)) model.supportsFastMode = true;
+    out.push(model);
+  }
+  return out;
+}
+
+/**
+ * app-server `model/list` 快照 → 规范化目录。
+ *
+ * live 协议不暴露 cache 的 context_window / priority，故上下文使用 Codex 当前统一窗口
+ * 272k，排序严格保留 app-server 返回顺序。后续 `models_cache.json` 可读时仍可用上面的
+ * mapper 提供更细元数据；首次 OAuth 的关键是绝不能因为 cache 尚未落盘而发布空目录。
+ */
+export function mapCodexAppServerModelsToCatalog(
+  models: readonly CodexModelListItem[],
+): CatalogModel[] {
+  const out: CatalogModel[] = [];
+  const seen = new Set<string>();
+  for (const [index, raw] of models.entries()) {
+    if (!raw || raw.hidden === true) continue;
+    const slug = str(raw.model) ?? str(raw.id);
+    if (!slug || seen.has(slug)) continue;
+    seen.add(slug);
+
+    const efforts = Array.isArray(raw.supportedReasoningEfforts)
+      ? raw.supportedReasoningEfforts
+          .map((item) => (item && typeof item === 'object' ? str(item.reasoningEffort) : null))
+          .filter((effort): effort is string => effort != null && CODEX_EFFORTS.has(effort))
+      : [];
+    const requestedDefault = str(raw.defaultReasoningEffort);
+    const defaultEffort =
+      requestedDefault && efforts.includes(requestedDefault)
+        ? (requestedDefault as CatalogModel['defaultEffort'])
+        : efforts.length > 0
+          ? (efforts[efforts.length - 1] as CatalogModel['defaultEffort'])
+          : null;
+    const tiers = [
+      ...(Array.isArray(raw.serviceTiers) ? raw.serviceTiers.map((tier) => tier?.id) : []),
+      ...(Array.isArray(raw.additionalSpeedTiers) ? raw.additionalSpeedTiers : []),
+    ];
+    const supportsFastMode = tiers.some((tier) => tier === 'priority' || tier === 'fast');
+    const model: CatalogModel = {
+      id: slug,
+      name: str(raw.displayName) ?? slug,
+      group: 'gpt',
+      // app-server 已按官方 picker 顺序返回；给每项稳定的小数锚点保住该顺序。
+      sortOrder: 17 + index / 1000,
+      ...(str(raw.description) ? { description: raw.description } : {}),
+      contextWindow: 272_000,
+      efforts: efforts as CatalogModel['efforts'],
+      defaultEffort,
+      status: 'active',
+      defaultEnabled: !DEFAULT_HIDDEN_SLUGS.has(slug),
+      ...(supportsFastMode ? { supportsFastMode: true } : {}),
+    };
+    if (efforts.includes('xhigh')) model.effortDisplayNames = { xhigh: 'Extra High' };
     out.push(model);
   }
   return out;

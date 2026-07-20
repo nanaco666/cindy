@@ -16,7 +16,8 @@ import splashScript from '@/assets/splash/script.png'; // 手写体 alpha(mask �
  * Splash v2 双模式启动画面。
  *
  * 状态机零删改(useSplash.ts 未动):14 phase 文案/进度/3 失败弹窗全保留,仅重排品牌块。
- * 背景半透跟随侧栏毛玻璃 token,不使用 CSS backdrop-filter;壁纸模糊交给原生 vibrancy。
+ * 背景为不透明 --surface(2026-07-19 用户拍板:加载完成前完全遮盖底下主界面),
+ * 不使用 CSS backdrop-filter。
  */
 export function SplashScreen() {
   const { t } = useTranslation();
@@ -82,7 +83,9 @@ export function SplashScreen() {
       )}
       style={
         {
-          background: 'var(--surface-translucent-sidebar)',
+          // 2026-07-19 用户拍板:splash 期间必须完全盖住底下已挂载的主界面——
+          // 换不透明 --surface(全主题皆不透明);半透明侧栏材质会把 app UI 透出来。
+          background: 'var(--surface)',
           transition: 'opacity var(--splash-fade-duration) var(--splash-fade-easing)',
           WebkitAppRegion: 'drag',
         } as React.CSSProperties

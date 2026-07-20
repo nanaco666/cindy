@@ -23,6 +23,25 @@ export type DeviceProvidersFetcher = () => Promise<DeviceProvidersPayload>;
 const cache = new Map<string, DeviceProvidersPayload>();
 const inflight = new Map<string, Promise<DeviceProvidersPayload>>();
 const deviceGen = new Map<string, number>();
+const listeners = new Map<string, Set<(payload: DeviceProvidersPayload) => void>>();
+
+function notifyDeviceProviders(deviceId: string, payload: DeviceProvidersPayload): void {
+  for (const listener of listeners.get(deviceId) ?? []) listener(payload);
+}
+
+/** 订阅某设备缓存的新快照；provider revision push 刷新后通知已挂载 hook。 */
+export function subscribeDeviceProviders(
+  deviceId: string,
+  listener: (payload: DeviceProvidersPayload) => void,
+): () => void {
+  const bucket = listeners.get(deviceId) ?? new Set<(payload: DeviceProvidersPayload) => void>();
+  bucket.add(listener);
+  listeners.set(deviceId, bucket);
+  return () => {
+    bucket.delete(listener);
+    if (bucket.size === 0) listeners.delete(deviceId);
+  };
+}
 
 /** 读缓存命中(同步),供 hook 初始化 state 用。 */
 export function getCachedDeviceProviders(deviceId: string): DeviceProvidersPayload | undefined {
@@ -57,6 +76,7 @@ export async function fetchDeviceProviders(
       if (isCurrent()) {
         cache.set(deviceId, payload);
         inflight.delete(deviceId);
+        notifyDeviceProviders(deviceId, payload);
       }
       return payload;
     })

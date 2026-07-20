@@ -9,6 +9,7 @@ vi.mock('../openInSidebarBrowser', () => ({
 }));
 vi.mock('../openInSidebarFileBrowser', () => ({
   openDirInSidebarFileBrowser: vi.fn(async () => undefined),
+  openExternalFileInSidebarFileBrowser: vi.fn(async () => undefined),
   openFileInSidebarFileBrowser: vi.fn(async () => undefined),
 }));
 vi.mock('../../plugins/orca-workers/actions', () => ({
@@ -24,6 +25,7 @@ import {
 import { executeSidebarCommand } from '../executeSidebarCommand';
 import {
   openDirInSidebarFileBrowser,
+  openExternalFileInSidebarFileBrowser,
   openFileInSidebarFileBrowser,
 } from '../openInSidebarFileBrowser';
 import { openUrlInSidebarBrowser } from '../openInSidebarBrowser';
@@ -57,6 +59,12 @@ describe('executeSidebarCommand', () => {
       targetKind: 'file',
     });
     await executeSidebarCommand({
+      type: 'open-file-browser',
+      sessionId: 's1',
+      absPath: 'C:\\tmp\\note.md',
+      targetKind: 'external-file',
+    });
+    await executeSidebarCommand({
       type: 'ensure-orca-workers-tab',
       sessionId: 's1',
       focusWorkerSessionId: 'worker-1',
@@ -70,6 +78,7 @@ describe('executeSidebarCommand', () => {
     expect(openUrlInSidebarBrowser).toHaveBeenCalledWith('s1', 'https://example.com/');
     expect(openDirInSidebarFileBrowser).toHaveBeenCalledWith('s1', 'src');
     expect(openFileInSidebarFileBrowser).toHaveBeenCalledWith('s1', 'src/App.tsx');
+    expect(openExternalFileInSidebarFileBrowser).toHaveBeenCalledWith('s1', 'C:\\tmp\\note.md');
     expect(ensureOrcaWorkersTab).toHaveBeenCalledWith('s1', {
       focusWorkerSessionId: 'worker-1',
       searchJump,

@@ -25,13 +25,25 @@ export function registerMakerAuthHandlers(
   readApiKey: () => string | null,
   /**
    * Codex(OpenAI)账号成功登录/登出后的额外回调(可选,可 async)；参数是边界后的登录态。
-   * 生产注入两件事(见 auth.ts):清 bridge 凭证缓存(旧 accessToken/accountId 已失效,
-   * 否则新账号登录后 30s 内仍带旧凭证发请求)+ 重读 codex models_cache 刷新 chatgpt/
-   * 发现清单。handler 在 AUTH_STATE_CHANGED 广播**之前** await 它 —— renderer 收到广播
-   * 后 refetch 的必须已是最新目录,否则新模型要等重启才出现在选择器里。
+   * 生产注入收口(见 auth.ts):live `model/list` 已应用时保留该快照；否则重读
+   * models_cache(缺失即清空旧账号清单)。handler 在 AUTH_STATE_CHANGED 广播**之前**
+   * await 它 —— renderer 收到广播后 refetch 的必须已是最新目录。
    */
-  onCodexAuthChange?: (authenticated: boolean) => void | Promise<void>,
+  onCodexAuthChange?: (
+    authenticated: boolean,
+    liveModelsApplied: boolean,
+    isCurrent: () => boolean,
+  ) => void | Promise<void>,
 ): void {
+  const mutationGeneration = new Map<AgentKind, number>();
+  const beginMutation = (kind: AgentKind): number => {
+    const generation = (mutationGeneration.get(kind) ?? 0) + 1;
+    mutationGeneration.set(kind, generation);
+    return generation;
+  };
+  const isMutationCurrent = (kind: AgentKind, generation: number): boolean =>
+    (mutationGeneration.get(kind) ?? 0) === generation;
+
   registry.handle(MAKER_INVOKE.AUTH_GET_STATE, async (_e, agentKind: unknown): Promise<AuthState> => {
     return maker.getAgentAuthState(requireAgentKind(agentKind));
   });
@@ -44,13 +56,26 @@ export function registerMakerAuthHandlers(
 
   registry.handle(MAKER_INVOKE.AUTH_TRIGGER_LOGIN, async (_e, agentKind: unknown): Promise<AuthState> => {
     const kind = requireAgentKind(agentKind);
+    const generation = beginMutation(kind);
+    const isCurrent = (): boolean => isMutationCurrent(kind, generation);
     const result = await maker.triggerAgentLogin(kind, {
       onProgress: (msg) => {
-        broadcast(MAKER_PUSH.AUTH_LOGIN_PROGRESS, toLoginProgressPayload(kind, msg));
+        if (isCurrent()) {
+          broadcast(MAKER_PUSH.AUTH_LOGIN_PROGRESS, toLoginProgressPayload(kind, msg));
+        }
       },
     });
+    if (!isCurrent()) return supersededAuthState();
     if (kind === 'codex' && result.authenticated && result.authSource === 'oauth') {
-      await onCodexAuthChange?.(true);
+      let liveModelsApplied = false;
+      try {
+        liveModelsApplied = await maker.refreshAgentLocalModels('codex');
+      } catch {
+        // 登录本身已成功；实时模型发现失败时由 host 回退磁盘快照，不能把登录判失败。
+      }
+      if (!isCurrent()) return supersededAuthState();
+      await onCodexAuthChange?.(true, liveModelsApplied, isCurrent);
+      if (!isCurrent()) return supersededAuthState();
     }
     broadcast(MAKER_PUSH.AUTH_STATE_CHANGED, { agentKind: kind, ...result });
     return result;
@@ -62,14 +87,23 @@ export function registerMakerAuthHandlers(
 
   registry.handle(MAKER_INVOKE.AUTH_LOGOUT, async (_e, agentKind: unknown): Promise<void> => {
     const kind = requireAgentKind(agentKind);
+    const generation = beginMutation(kind);
+    const isCurrent = (): boolean => isMutationCurrent(kind, generation);
     try {
       await maker.logoutAgent(kind);
     } catch (err) {
       throwIpcError('INTERNAL', err instanceof Error ? err.message : String(err));
     }
-    if (kind === 'codex') await onCodexAuthChange?.(false);
+    if (!isCurrent()) return;
+    if (kind === 'codex') await onCodexAuthChange?.(false, false, isCurrent);
+    if (!isCurrent()) return;
     broadcast(MAKER_PUSH.AUTH_STATE_CHANGED, { agentKind: kind, authenticated: false });
   });
+}
+
+/** 被更新的 auth mutation 作废时，旧 IPC 调用方不得再把过期成功结果写回 UI。 */
+function supersededAuthState(): AuthState {
+  return { authenticated: false, errorReason: 'auth_mutation_superseded' };
 }
 
 function requireAgentKind(value: unknown): AgentKind {

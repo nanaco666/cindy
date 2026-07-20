@@ -526,6 +526,11 @@ export class Maker {
     return this.requireAgent(agentKind).logout();
   }
 
+  /** 刷新指定 agent 的本机运行时模型清单；不支持或结果已过期时返回 false。 */
+  async refreshAgentLocalModels(agentKind: AgentKind): Promise<boolean> {
+    return this.requireAgent(agentKind).refreshLocalModels();
+  }
+
   /** Codex 浏览器登录中途取消; Claude 之类同步弹窗式登录调到底层 no-op。 */
   cancelAgentLogin(agentKind: AgentKind): void {
     this.requireAgent(agentKind).cancelLogin();

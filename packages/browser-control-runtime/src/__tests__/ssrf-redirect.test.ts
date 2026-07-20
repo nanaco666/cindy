@@ -16,15 +16,37 @@ import { fetchWithSsrFGuard, isSameRedirectOrigin } from '../shim/ssrf-runtime.j
  */
 const POLICY = { allowedHostnames: ['127.0.0.1'], dangerouslyAllowPrivateNetwork: true };
 
+// `listen(0)` may return a Fetch-standard blocked port (for example 6000).
+// Undici rejects such URLs before connecting, which makes these real-server tests
+// flaky even though the SSRF behavior under test is unrelated to the port number.
+const FETCH_BLOCKED_PORTS = new Set([
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87,
+  95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137, 139, 143,
+  161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532, 540, 548, 554, 556,
+  563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045, 4190,
+  5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080,
+]);
+
 const openServers: http.Server[] = [];
 function startServer(handler: http.RequestListener): Promise<number> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const server = http.createServer(handler);
-    openServers.push(server);
-    server.listen(0, '127.0.0.1', () => {
-      const addr = server.address();
-      resolve(typeof addr === 'object' && addr ? addr.port : 0);
-    });
+    const listen = (): void => {
+      const onError = (error: Error): void => reject(error);
+      server.once('error', onError);
+      server.listen(0, '127.0.0.1', () => {
+        server.off('error', onError);
+        const addr = server.address();
+        const port = typeof addr === 'object' && addr ? addr.port : 0;
+        if (FETCH_BLOCKED_PORTS.has(port)) {
+          server.close(listen);
+          return;
+        }
+        openServers.push(server);
+        resolve(port);
+      });
+    };
+    listen();
   });
 }
 

@@ -15,7 +15,7 @@ const result = (deviceId: string): Providers => ({ providers: [{ id: `${deviceId
 
 /** stub window.electronAPI.deviceLink.invoke,返回 spy。 */
 function stubDeviceLink() {
-  const invoke = vi.fn(async (deviceId: string, _channel: string, _args: unknown[]) => result(deviceId));
+  const invoke = vi.fn(async (deviceId: string) => result(deviceId));
   vi.stubGlobal('window', { electronAPI: { deviceLink: { invoke } } });
   return invoke;
 }
@@ -97,5 +97,42 @@ describe('useDeviceProviders deviceId-aware cache', () => {
     await mod.prefetchDeviceProviders('dev-old'); // swallow
     await mod.prefetchDeviceProviders('dev-old'); // 上次失败未缓存 → 再发
     expect(call).toBe(2);
+  });
+
+  it('新快照只通知对应 deviceId 的已挂载订阅者', async () => {
+    const invoke = stubDeviceLink();
+    const mod = await import('@/hooks/useDeviceProviders');
+    const dev1 = vi.fn();
+    const dev2 = vi.fn();
+    const off1 = mod.subscribeDeviceProviders('dev-1', dev1);
+    const off2 = mod.subscribeDeviceProviders('dev-2', dev2);
+
+    await mod.prefetchDeviceProviders('dev-1');
+    expect(dev1).toHaveBeenCalledWith([{ id: 'dev-1-xd' }]);
+    expect(dev2).not.toHaveBeenCalled();
+
+    off1();
+    off2();
+    expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it('revision 后新请求先完成、旧请求后完成时只通知新快照', async () => {
+    const resolvers: Array<(value: Providers) => void> = [];
+    const invoke = vi.fn(() => new Promise<Providers>((resolve) => resolvers.push(resolve)));
+    vi.stubGlobal('window', { electronAPI: { deviceLink: { invoke } } });
+    const mod = await import('@/hooks/useDeviceProviders');
+    const listener = vi.fn();
+    mod.subscribeDeviceProviders('dev-1', listener);
+
+    const stale = mod.prefetchDeviceProviders('dev-1');
+    mod.evictDeviceProviders('dev-1');
+    const fresh = mod.prefetchDeviceProviders('dev-1');
+    resolvers[1](result('fresh'));
+    await fresh;
+    resolvers[0](result('stale'));
+    await stale;
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenLastCalledWith([{ id: 'fresh-xd' }]);
   });
 });

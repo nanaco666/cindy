@@ -8,6 +8,7 @@ import {
 } from '../plugins/orca-workers/actions';
 import {
   openDirInSidebarFileBrowser,
+  openExternalFileInSidebarFileBrowser,
   openFileInSidebarFileBrowser,
 } from './openInSidebarFileBrowser';
 import { openUrlInSidebarBrowser } from './openInSidebarBrowser';
@@ -19,7 +20,9 @@ export async function executeSidebarCommand(command: RsbWindowCommand): Promise<
     return;
   }
   if (command.type === 'open-file-browser') {
-    if (command.targetKind === 'directory') {
+    if (command.targetKind === 'external-file') {
+      await openExternalFileInSidebarFileBrowser(command.sessionId, command.absPath);
+    } else if (command.targetKind === 'directory') {
       await openDirInSidebarFileBrowser(command.sessionId, command.relPath);
     } else {
       await openFileInSidebarFileBrowser(command.sessionId, command.relPath);

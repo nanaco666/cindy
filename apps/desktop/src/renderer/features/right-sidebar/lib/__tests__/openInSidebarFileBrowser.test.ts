@@ -34,6 +34,7 @@ import { requestRightSidebarVisibility } from '../sidebarCommands';
 import { routeSidebarCommand } from '../detachedSidebarRouting';
 import {
   openDirInSidebarFileBrowser,
+  openExternalFileInSidebarFileBrowser,
   openFileInSidebarFileBrowser,
 } from '../openInSidebarFileBrowser';
 
@@ -87,11 +88,40 @@ describe('openInSidebarFileBrowser', () => {
     });
   });
 
+  it('writes an external-file request for FileBrowserBody to consume through the drop path', async () => {
+    await openExternalFileInSidebarFileBrowser('s1', 'C:\\tmp\\note.md');
+
+    expect(addTab).toHaveBeenCalledWith('s1', 'file-browser', {
+      selectedFilePath: null,
+      externalFilePath: 'C:\\tmp\\note.md',
+      externalFileNonce: 1,
+    });
+    expect(requestRightSidebarVisibility).toHaveBeenCalledWith('open', { sessionId: 's1' });
+  });
+
+  it('reuses an existing file-browser tab for repeated external-file requests', async () => {
+    bucket = {
+      tabs: [{ id: 't1', kind: 'file-browser', state: { selectedFilePath: 'old.ts' } }],
+      activeTabId: 't1',
+    };
+
+    await openExternalFileInSidebarFileBrowser('s1', 'C:\\tmp\\note.md');
+
+    const updater = vi.mocked(patchTabState).mock.calls[0]?.[2] as
+      ((current: unknown) => unknown) | undefined;
+    expect(updater?.({ selectedFilePath: 'old.ts', externalFileNonce: 2 })).toEqual({
+      selectedFilePath: 'old.ts',
+      externalFilePath: 'C:\\tmp\\note.md',
+      externalFileNonce: 3,
+    });
+  });
+
   it('routes detached file and directory opens without writing the main renderer store', async () => {
     vi.mocked(routeSidebarCommand).mockResolvedValue('routed');
 
     await openFileInSidebarFileBrowser('remote-lead', 'src/App.tsx');
     await openDirInSidebarFileBrowser('remote-lead', 'src/components');
+    await openExternalFileInSidebarFileBrowser('remote-lead', 'C:\\tmp\\note.md');
 
     expect(routeSidebarCommand).toHaveBeenNthCalledWith(1, {
       type: 'open-file-browser',
@@ -104,6 +134,12 @@ describe('openInSidebarFileBrowser', () => {
       sessionId: 'remote-lead',
       relPath: 'src/components',
       targetKind: 'directory',
+    });
+    expect(routeSidebarCommand).toHaveBeenNthCalledWith(3, {
+      type: 'open-file-browser',
+      sessionId: 'remote-lead',
+      absPath: 'C:\\tmp\\note.md',
+      targetKind: 'external-file',
     });
     expect(ensureHydrated).not.toHaveBeenCalled();
     expect(addTab).not.toHaveBeenCalled();

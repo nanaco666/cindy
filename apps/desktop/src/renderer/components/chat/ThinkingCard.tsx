@@ -33,8 +33,10 @@ import { Sparkles, ChevronDown, ChevronRight, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useExpandedBlockMemory } from '@/hooks/useExpandedBlockMemory';
 
+import { ThinkingText } from './ThinkingText';
+
 interface ThinkingCardProps {
-  /** Plaintext thinking content. Empty for redacted blocks. */
+  /** Thinking content with lightweight inline emphasis. Empty for redacted blocks. */
   content: string;
   /** True while the model is still streaming this block (delta still
    *  arriving). Drives the in-progress dots + duration ticker. */
@@ -197,7 +199,7 @@ export function ThinkingCard({
             <BodyRail>
               {content ? (
                 <p className="whitespace-pre-wrap italic text-14 leading-[1.6] text-[var(--thinking-body-text)]">
-                  {content}
+                  <ThinkingText content={content} />
                 </p>
               ) : (
                 <p className="italic text-14 leading-[1.6] text-[var(--thinking-body-text)] opacity-70">
@@ -257,7 +259,7 @@ export function ThinkingCard({
           <BodyRail>
             {content ? (
               <p className="whitespace-pre-wrap italic text-14 leading-[1.6] text-[var(--thinking-body-text)]">
-                {content}
+                <ThinkingText content={content} />
               </p>
             ) : (
               <p className="italic text-14 leading-[1.6] text-[var(--thinking-body-text)] opacity-70">

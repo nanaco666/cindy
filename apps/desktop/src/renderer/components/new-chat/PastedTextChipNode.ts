@@ -4,8 +4,8 @@
  * 用户往输入框粘贴超过阈值的大段文本(log / diff / 报错栈)时,不直接灌进
  * 编辑器(会把输入框撑爆),折叠成一枚可点开预览的 chip,交互对齐 Claude
  * Code CLI 的 `[Pasted text #N]` 心智:
- *   - chip 显示「粘贴的文本」标签 + 行数;点击打开只读预览(ChatInput 的
- *     editorProps.handleClickOn 分支 → ToolPayloadLightbox text 模式);
+ *   - chip 显示「粘贴的文本」标签 + 行数;点击打开可编辑弹窗(ChatInput 的
+ *     editorProps.handleClickOn 分支 → ToolPayloadLightbox text 编辑模式);
  *   - Backspace 整删、光标整体跳过,与 mentionChip 同一套原子节点行为;
  *   - 发送时 serializeEditorContent 把 `text` attr 原文内联进消息正文——
  *     对 agent / 远程会话 / 手机端而言它就是普通文本,无任何附件通道依赖,
@@ -20,13 +20,86 @@
  * i18n 注意:toDOM 是纯 HTML(无 React context),label 文案由插入方在
  * attrs.display 里传入(ChatInput 用 t() 生成),节点本身不做翻译。
  */
-import { Node, mergeAttributes } from '@tiptap/core';
+import { Node, mergeAttributes, type Editor } from '@tiptap/core';
+import { closeHistory } from '@tiptap/pm/history';
+import { Fragment, type Node as ProseMirrorNode } from '@tiptap/pm/model';
 
 export interface PastedTextChipAttrs {
   /** 粘贴的完整原文(发送时原样内联)。 */
   text: string;
   /** chip 上显示的完整文案(插入方已本地化,含行数,如「粘贴的文本(87 行)」)。 */
   display: string;
+}
+
+/**
+ * 原位提交长文本 chip 的编辑结果。捕获的位置或 payload 已失效时 fail closed，
+ * 避免弹窗打开期间草稿 / 会话被替换后误改同一位置上的其它节点。
+ * `nextAttrs=null` 表示用户清空文本，直接删除 atom chip。
+ */
+export function applyPastedTextChipEdit(
+  editor: Editor,
+  nodePos: number,
+  expectedText: string,
+  nextAttrs: PastedTextChipAttrs | null,
+): boolean {
+  const { doc } = editor.state;
+  if (!Number.isInteger(nodePos) || nodePos < 0 || nodePos >= doc.content.size) return false;
+  const current = doc.nodeAt(nodePos);
+  if (
+    !current ||
+    current.type.name !== 'pastedTextChip' ||
+    (current.attrs as PastedTextChipAttrs).text !== expectedText
+  ) {
+    return false;
+  }
+
+  const tr = nextAttrs
+    ? editor.state.tr.setNodeMarkup(nodePos, undefined, { ...current.attrs, ...nextAttrs })
+    : editor.state.tr.delete(nodePos, nodePos + current.nodeSize);
+  // 弹窗编辑是一个独立用户动作:即使紧跟粘贴发生,Undo 也只回滚本次编辑，
+  // 不应把创建 chip 的粘贴事务一起撤销。
+  editor.view.dispatch(closeHistory(tr));
+  return true;
+}
+
+/**
+ * 将已展开到超大体积的 chip 降级回普通文本。PastedTextChip 的原文会写进
+ * `data-pasted-text` 以支持剪贴板回环，因此不能承载超过 pastePipeline
+ * 上限的编辑结果；普通文本沿用默认粘贴的无属性路径，内容保持无损。
+ */
+export function replacePastedTextChipWithPlainText(
+  editor: Editor,
+  nodePos: number,
+  expectedText: string,
+  nextText: string,
+): boolean {
+  const { doc } = editor.state;
+  if (!Number.isInteger(nodePos) || nodePos < 0 || nodePos >= doc.content.size) return false;
+  const current = doc.nodeAt(nodePos);
+  if (
+    !current ||
+    current.type.name !== 'pastedTextChip' ||
+    (current.attrs as PastedTextChipAttrs).text !== expectedText
+  ) {
+    return false;
+  }
+
+  // 与默认超限粘贴保持同一降级语义：换行必须是 hardBreak；裸 `\n` 塞进
+  // text node 会在 contenteditable 中塌缩成空白，导致所见内容与发送内容不一致。
+  const hardBreak = editor.state.schema.nodes.hardBreak;
+  if (!hardBreak) return false;
+  const nodes: ProseMirrorNode[] = [];
+  nextText.split('\n').forEach((line, index) => {
+    if (index > 0) nodes.push(hardBreak.create());
+    if (line) nodes.push(editor.state.schema.text(line));
+  });
+  const tr = editor.state.tr.replaceWith(
+    nodePos,
+    nodePos + current.nodeSize,
+    Fragment.from(nodes),
+  );
+  editor.view.dispatch(closeHistory(tr));
+  return true;
 }
 
 export const PastedTextChipNode = Node.create<Record<string, never>, Record<string, never>>({

@@ -4,9 +4,11 @@
  * 身份翻转(2026-07-17)后 userData 目录从 `xdt-maker` 变为 `Cindy`,老用户的
  * 主库与媒体总仓留在同级的老目录里。本模块在「用户首次登录成功、db 尚未打开」
  * 时(registerLocalDbIpc 的 beforeEnsureReady 钩子)做一次**只读老目录**的简单
- * 迁移:复制主库(+wal/shm 附属文件)、`cindy-media` 目录、agent 浏览器 profile
- * (`browser-runtime/browser/XDMaker` → `browser/Cindy`,登录态随迁)到新 userData,
- * 完成后写 marker 文件 `<userData>/mToc` 防重入。
+ * 迁移:复制主库(+wal/shm 附属文件)、`cindy-media` 目录、`dialogues` 无文件夹
+ * 对话工作目录(agent 可能在里面写过真实文件,必须随迁;DB 里的 working_dir
+ * 前缀改写由 db ready 后的 sweepLegacyDialogueWorkingDirs 完成)、agent 浏览器
+ * profile(`browser-runtime/browser/XDMaker` → `browser/Cindy`,登录态随迁)到新
+ * userData,完成后写 marker 文件 `<userData>/mToc` 防重入。
  *
  * 设计要点:
  *  - 使用独立的 mToc marker，不复用更新器状态。
@@ -36,6 +38,12 @@ export const LEGACY_MIGRATION_MARKER_FILENAME = 'mToc';
 
 /** 老目录里媒体总仓的目录名(与新 userData 下同名,原样平移)。 */
 const CINDY_MEDIA_DIR_NAME = 'cindy-media';
+
+/**
+ * 老目录里无文件夹对话工作目录的根目录名(与新 userData 下同名,原样平移;
+ * 与 localDb/dialogueWorkspace.ts、localDb/dialogueWorkdirSelfHeal.ts 一致)。
+ */
+const DIALOGUES_DIR_NAME = 'dialogues';
 
 /**
  * agent 浏览器登录态的搬运路径:老 `<legacy>/browser-runtime/browser/XDMaker` →
@@ -125,6 +133,7 @@ export type LegacyUserDataMigrationResult =
       status: 'migrated';
       sourceDb: string | null;
       mediaCopied: boolean;
+      dialoguesCopied: boolean;
       browserProfileCopied: boolean;
     }
   | { status: 'failed'; error: string };
@@ -256,6 +265,7 @@ async function writeMarker(
   userId: string,
   sourceDb: string | null,
   mediaCopied: boolean,
+  dialoguesCopied: boolean,
   browserProfileCopied: boolean,
 ): Promise<void> {
   await deps.fs.writeFile(
@@ -267,6 +277,7 @@ async function writeMarker(
         userId,
         sourceDb,
         mediaCopied,
+        dialoguesCopied,
         browserProfileCopied,
       },
       null,
@@ -300,7 +311,7 @@ export async function runLegacyUserDataMigration(
     }
     if (legacyDir == null) {
       // 全新用户:无可迁,静默写 marker,不打扰。
-      await writeMarker(deps, userId, null, false, false);
+      await writeMarker(deps, userId, null, false, false, false);
       deps.log.info('legacy userData migration: no legacy dir, marker written silently');
       return { status: 'no-legacy-dir' };
     }
@@ -353,6 +364,21 @@ export async function runLegacyUserDataMigration(
         mediaCopied = true;
       }
 
+      // 3c2. dialogues 无文件夹对话工作目录递归 merge(与 media 同语义):agent
+      // 可能在这些 cwd 里写过真实文件,必须随迁,否则老目录一旦被清理,老会话
+      // 的工作目录内容就永久丢失(DB 里 working_dir 的前缀改写由 db ready 后的
+      // sweepLegacyDialogueWorkingDirs 统一完成,二者同一次登录内先后衔接)。
+      let dialoguesCopied = false;
+      const legacyDialoguesDir = path.join(legacyDir, DIALOGUES_DIR_NAME);
+      if (await deps.fs.pathExists(legacyDialoguesDir)) {
+        await mergeCopyDir(
+          deps.fs,
+          legacyDialoguesDir,
+          path.join(deps.userDataDir, DIALOGUES_DIR_NAME),
+        );
+        dialoguesCopied = true;
+      }
+
       // 3d. agent 浏览器 profile(登录态):老 browser/XDMaker → 新 browser/Cindy,
       // 搬运即完成品牌改名。Chrome 重建型缓存目录与 Singleton 锁跳过(登录态在
       // Cookies / Login Data / Local State 等小文件里);老目录没有则跳过。
@@ -383,9 +409,15 @@ export async function runLegacyUserDataMigration(
       }
 
       // 3e. 全部成功 → 写 marker → done。
-      await writeMarker(deps, userId, copiedSourceDb, mediaCopied, browserProfileCopied);
+      await writeMarker(deps, userId, copiedSourceDb, mediaCopied, dialoguesCopied, browserProfileCopied);
       deps.ui.publish('done');
-      return { status: 'migrated', sourceDb: copiedSourceDb, mediaCopied, browserProfileCopied };
+      return {
+        status: 'migrated',
+        sourceDb: copiedSourceDb,
+        mediaCopied,
+        dialoguesCopied,
+        browserProfileCopied,
+      };
     } catch (err) {
       // 3f. 复制阶段失败:不写 marker(下次登录重试),failed 弹窗,不阻塞登录。
       const message = err instanceof Error ? err.message : String(err);

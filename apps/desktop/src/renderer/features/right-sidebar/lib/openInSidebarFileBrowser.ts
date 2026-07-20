@@ -99,3 +99,50 @@ export async function openFileInSidebarFileBrowser(
   }
   requestRightSidebarVisibility('open', { sessionId });
 }
+
+/**
+ * 在指定 session 的侧边栏文件浏览器里打开 workdir 外的本地文件。
+ * FileBrowserBody 会复用外部文件拖入链路消费该请求，因此格式校验、dirty guard
+ * 与只读预览语义保持一致；绝对路径不会被挂进当前 workdir 的文件树。
+ */
+export async function openExternalFileInSidebarFileBrowser(
+  sessionId: string,
+  absFilePath: string,
+): Promise<void> {
+  const routeResult = await routeSidebarCommand({
+    type: 'open-file-browser',
+    sessionId,
+    absPath: absFilePath,
+    targetKind: 'external-file',
+  });
+  if (routeResult !== 'attached') {
+    if (routeResult !== 'routed') return;
+    requestRightSidebarVisibility('open', { sessionId });
+    return;
+  }
+  await ensureHydrated(sessionId);
+  const bucket = getBucket(sessionId);
+  const existing = bucket.tabs.find((t) => t.kind === 'file-browser');
+  if (existing) {
+    if (bucket.activeTabId !== existing.id) {
+      await setActiveTab(sessionId, existing.id);
+    }
+    await patchTabState(sessionId, existing.id, (current) => {
+      const base =
+        typeof current === 'object' && current !== null ? (current as Record<string, unknown>) : {};
+      const nonce = typeof base.externalFileNonce === 'number' ? base.externalFileNonce : 0;
+      return {
+        ...base,
+        externalFilePath: absFilePath,
+        externalFileNonce: nonce + 1,
+      };
+    });
+  } else {
+    await addTab(sessionId, 'file-browser', {
+      selectedFilePath: null,
+      externalFilePath: absFilePath,
+      externalFileNonce: 1,
+    });
+  }
+  requestRightSidebarVisibility('open', { sessionId });
+}

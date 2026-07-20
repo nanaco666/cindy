@@ -117,36 +117,47 @@ describe('sanitizeGhostCardHtml', () => {
 describe('内置意识 cindy-art 的卡片排版守卫(净化器与 builtin 供片不漂移)', () => {
   it('过程卡与终版卡的标签/样式全量存活', () => {
     const progress =
-      '<div style="font-family:system-ui">' +
-      '<div style="margin:0 0 8px;font-size:12px;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">「一只猫」</div>' +
+      '<div style="height:290px;box-sizing:border-box;padding-top:8px;font-family:system-ui;' +
+      'background:var(--msg-tool-card-bg,var(--surface-elevated,#ffffff));' +
+      'color:var(--msg-tool-card-text,var(--text-primary,#1a1a1a))">' +
+      '<div style="margin:0 0 8px;padding:0 12px;font-size:12px;line-height:16px;' +
+      'color:var(--text-secondary,#6b6b66);text-align:center;' +
+      'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">「一只猫」</div>' +
       '<div style="height:258px;border-radius:10px;' +
-      'background:linear-gradient(135deg,rgba(127,127,127,.16),rgba(127,127,127,.04) 55%,rgba(127,127,127,.12));' +
+      'background:linear-gradient(135deg,var(--surface-chip,#eeeeec),' +
+      'var(--surface,#f7f7f5) 55%,var(--surface-chip,#eeeeec));' +
       'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px">' +
       '<div style="font-size:26px;line-height:1">🎨</div>' +
-      '<div style="font-size:12px;color:#8f8f8f;font-weight:500">正在起草</div>' +
-      '<div style="font-size:10px;color:#a5a5a5">通常 10–30 秒</div>' +
+      '<div style="font-size:12px;color:var(--text-secondary,#6b6b66);font-weight:500">正在起草</div>' +
+      '<div style="font-size:10px;color:var(--text-tertiary,#9a9a94)">通常 10–30 秒</div>' +
       '</div></div>';
     const p = sanitizeGhostCardHtml(progress);
     expect(p.ok).toBe(true);
     if (p.ok) {
-      expect(p.html).toContain('linear-gradient(135deg,rgba(127,127,127,.16)');
+      expect(p.html).toContain('background:var(--msg-tool-card-bg,var(--surface-elevated,#ffffff))');
+      expect(p.html).toContain('linear-gradient(135deg,var(--surface-chip,#eeeeec)');
       expect(p.html).toContain('display:flex');
+      expect(p.html).toContain('text-align:center');
       expect(p.html).toContain('🎨');
       expect(p.html).toContain('「一只猫」');
     }
 
     const result =
-      '<div style="font-family:system-ui">' +
+      '<div style="font-family:system-ui;background:var(--msg-tool-card-bg,var(--surface-elevated,#ffffff));' +
+      'color:var(--msg-tool-card-text,var(--text-primary,#1a1a1a))">' +
       `<img src="${GOOD_IMG}" style="display:block;width:100%;height:auto">` +
       '<div style="padding:8px 12px 10px">' +
-      '<div style="font-size:12px;color:#8a8a8a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">「一只猫」</div>' +
-      '<div style="margin-top:3px;font-size:10px;color:#9a9a9a">Cindy Art · GPT Image 2</div>' +
+      '<div style="font-size:12px;color:var(--text-secondary,#6b6b66);text-align:center;' +
+      'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">「一只猫」</div>' +
+      '<div style="margin-top:3px;font-size:10px;color:var(--text-tertiary,#9a9a94);text-align:center">Cindy Art · GPT Image 2</div>' +
       '</div></div>';
     const r = sanitizeGhostCardHtml(result);
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.html).toContain(`src="${GOOD_IMG}"`);
       expect(r.html).toContain('height:auto');
+      expect(r.html).toContain('background:var(--msg-tool-card-bg,var(--surface-elevated,#ffffff))');
+      expect(r.html).toContain('text-align:center');
       expect(r.html).toContain('Cindy Art · GPT Image 2');
     }
   });
