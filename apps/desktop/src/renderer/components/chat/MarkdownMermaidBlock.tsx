@@ -21,13 +21,15 @@
  */
 
 import { memo, useEffect, useId, useRef, useState } from 'react';
-import { Check, Code2, Copy, Expand, Eye } from 'lucide-react';
+import { Check, Code2, Copy, Expand, Eye, Pen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { repairMermaidSource } from '@lizi/maker-shared/mermaid-autofix';
 
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
+import { resolveExportBackground, svgToPngBlob } from '@/lib/rasterizeToImage';
 import { MermaidLightbox } from './MermaidLightbox';
+import { useCopyAsImage } from './useCopyAsImage';
 
 interface MarkdownMermaidBlockProps {
   raw: string;
@@ -63,6 +65,24 @@ export const MarkdownMermaidBlock = memo(function MarkdownMermaidBlock({
   const [copied, setCopied] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const copyTimerRef = useRef<number | null>(null);
+  const blockRef = useRef<HTMLDivElement>(null);
+
+  // 复制为图片 / 标注:光栅化用 state 里的 SVG 字符串(与显示一致),实底色
+  // 取块容器的主题底色;plainText 附带 mermaid 原始源码(粘贴到编辑器时可用)。
+  // ref 避免 getPayload 闭包过期。
+  const svgRef = useRef<string | null>(null);
+  svgRef.current = svg;
+  const rawRef = useRef(raw);
+  rawRef.current = raw;
+  const { copiedImage, copyAsImage, canAnnotate, openAnnotate, annotateNode } =
+    useCopyAsImage(async () => {
+      const current = svgRef.current;
+      if (!current) throw new Error('no svg rendered');
+      const blob = await svgToPngBlob(current, {
+        background: resolveExportBackground(blockRef.current),
+      });
+      return { blob, plainText: rawRef.current };
+    });
 
   // Re-render when <html class="dark"> toggles. Module-level MutationObserver
   // would be cheaper but the cost here is negligible (1 observer per visible
@@ -162,7 +182,9 @@ export const MarkdownMermaidBlock = memo(function MarkdownMermaidBlock({
     };
   }, []);
 
-  async function handleCopySource() {
+  // SVG 未渲染(流式中 / 渲染失败)时的复制兜底:只复制源码文本。
+  // 有 SVG 时统一走 copyAsImage(PNG + 源码双格式)。
+  async function handleCopySourceOnly() {
     try {
       await navigator.clipboard.writeText(raw);
       setCopied(true);
@@ -181,7 +203,7 @@ export const MarkdownMermaidBlock = memo(function MarkdownMermaidBlock({
   const showSourceView = showSource || (svg == null && error != null);
 
   return (
-    <div className="group relative my-3">
+    <div ref={blockRef} className="group relative my-3">
       {showSourceView ? (
         <pre
           className={cn(
@@ -274,6 +296,25 @@ export const MarkdownMermaidBlock = memo(function MarkdownMermaidBlock({
             <Expand className="h-3.5 w-3.5" />
           </button>
         ) : null}
+        {svg != null && !showSourceView && canAnnotate ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              openAnnotate();
+            }}
+            aria-label={t('chat.mermaid.annotate')}
+            title={t('chat.mermaid.annotate')}
+            className={cn(
+              'inline-flex h-7 w-7 items-center justify-center',
+              'rounded-md border border-[var(--msg-code-block-border)]',
+              'bg-[var(--msg-code-block-bg)] text-[var(--msg-tool-text)]',
+              'hover:bg-[var(--cmd-palette-item-hover)] hover:text-[var(--msg-assistant-text)]',
+            )}
+          >
+            <Pen className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
         {svg != null ? (
           <button
             type="button"
@@ -293,14 +334,17 @@ export const MarkdownMermaidBlock = memo(function MarkdownMermaidBlock({
             {showSourceView ? <Eye className="h-3.5 w-3.5" /> : <Code2 className="h-3.5 w-3.5" />}
           </button>
         ) : null}
+        {/* 单一复制按钮:有 SVG 时写入 PNG + 源码双格式(粘贴目标自选),
+            SVG 未渲染时退化为只复制源码。 */}
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            handleCopySource();
+            if (svg != null) copyAsImage();
+            else void handleCopySourceOnly();
           }}
-          aria-label={copied ? t('chat.mermaid.copied') : t('chat.mermaid.copySource')}
-          title={copied ? t('chat.mermaid.copied') : t('chat.mermaid.copySource')}
+          aria-label={copied || copiedImage ? t('chat.mermaid.copied') : t('chat.mermaid.copy')}
+          title={copied || copiedImage ? t('chat.mermaid.copied') : t('chat.mermaid.copy')}
           className={cn(
             'inline-flex h-7 w-7 items-center justify-center',
             'rounded-md border border-[var(--msg-code-block-border)]',
@@ -308,13 +352,32 @@ export const MarkdownMermaidBlock = memo(function MarkdownMermaidBlock({
             'hover:bg-[var(--cmd-palette-item-hover)] hover:text-[var(--msg-assistant-text)]',
           )}
         >
-          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied || copiedImage ? (
+            <Check className="h-3.5 w-3.5" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
         </button>
       </div>
 
       {lightboxOpen && svg != null ? (
-        <MermaidLightbox svg={svg} onClose={() => setLightboxOpen(false)} />
+        <MermaidLightbox
+          svg={svg}
+          source={raw}
+          onAnnotate={
+            canAnnotate
+              ? () => {
+                  // 先关矢量预览再开 ImageLightbox 标注层,避免两层全屏叠加
+                  // (Esc/滚轮手势互抢);annotateNode 挂在本组件,不受影响。
+                  setLightboxOpen(false);
+                  openAnnotate();
+                }
+              : undefined
+          }
+          onClose={() => setLightboxOpen(false)}
+        />
       ) : null}
+      {annotateNode}
     </div>
   );
 });

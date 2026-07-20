@@ -3769,14 +3769,14 @@
       "zoom": "확대",
       "viewDiagram": "다이어그램 보기",
       "viewSource": "소스 보기",
-      "copySource": "소스 복사",
+      "copy": "복사",
       "copied": "복사됨",
+      "annotate": "주석",
       "renderFailed": "mermaid 렌더링 실패 — 소스 표시"
     },
     "mermaidLightbox": {
       "zoomOut": "축소",
       "zoomIn": "확대",
-      "reset": "초기화",
       "close": "닫기"
     },
     "lightbox": {
@@ -3987,7 +3987,9 @@
     "markdownRenderer": {
       "codeCopied": "복사됨",
       "copyCode": "코드 복사",
+      "annotateImage": "이미지 주석",
       "copy": "복사",
+      "blockCopied": "복사됨",
       "duplicateFiles": "동일한 이름의 파일 {{count}}개를 찾았습니다. 절대 경로를 사용해 주세요",
       "copyFile": "복사",
       "copyFilePath": "파일 경로 복사",
@@ -4712,6 +4714,7 @@
         "targetMissing": "원본 mermaid 블록이 문서에서 사라져 변경 사항이 저장되지 않았습니다.",
         "toolbarZoom": "확대",
         "toolbarEdit": "소스 편집",
+        "toolbarCopy": "복사",
         "renderFailedPrefix": "mermaid 렌더링 실패: ",
         "errEmpty": "mermaid 소스가 비어 있습니다",
         "errSvgParse": "SVG 분석 실패 (length={{length}})"

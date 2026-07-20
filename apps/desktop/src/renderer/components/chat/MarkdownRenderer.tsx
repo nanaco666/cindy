@@ -28,6 +28,8 @@ import remarkPreserveLocalImagePaths, {
   RAW_LOCAL_IMAGE_SRC_PROP,
 } from './remarkPreserveLocalImagePaths';
 import remarkSessionLinks from './remarkSessionLinks';
+import { rehypeMathBlockMarker } from './rehypeMathBlockMarker';
+import { CopyAsImageBlock, mathBlockToLatex, tableToTsv } from './CopyAsImageBlock';
 import type { Components, UrlTransform } from 'react-markdown';
 import type { PluggableList } from 'unified';
 import { Check, Copy, FolderOpen } from 'lucide-react';
@@ -196,9 +198,13 @@ const REMARK_PLUGINS_PRIVILEGED: PluggableList = [
 // `<code class="language-math ...">`,先让 katex 消费掉,否则 highlight 会往
 // 里面塞 hljs span 破坏纯文本结构。strict:'ignore' 静默非致命 LaTeX 告警;
 // errorColor 走语义豁免 error token,解析失败的公式以错误色显示原文。
+// rehypeMathBlockMarker 紧随 rehypeKatex:把裸 `<span class="katex-display">`
+// 包进 `<div data-math-block>`,让下方 div 渲染器能挂「复制为图片」工具栏
+// (components 映射只认 tagName,认不了 class)。
 const REHYPE_PLUGINS: PluggableList = [
   rehypeSlug,
   [rehypeKatex, { strict: 'ignore', errorColor: 'var(--error-fg)' }],
+  rehypeMathBlockMarker,
   rehypeHighlight,
 ];
 const MARKDOWN_LINK_CLASS = 'text-[var(--msg-link)] underline underline-offset-2 cursor-pointer [overflow-wrap:anywhere]';
@@ -457,10 +463,15 @@ const baseComponents: Components = {
     return <CodeBlockPre {...props}>{children}</CodeBlockPre>;
   },
 
-  // Tables (GFM)
+  // Tables (GFM)。外层 CopyAsImageBlock 承载「复制为图片 / 标注」hover 工具栏,
+  // overflow 容器下沉为内层(工具栏挂 overflow 容器内会被裁剪并随横滚漂移)。
   table({ children, ...props }) {
     return (
-      <div className="my-3 overflow-x-auto">
+      <CopyAsImageBlock
+        className="my-3"
+        contentClassName="overflow-x-auto"
+        extractPlainText={tableToTsv}
+      >
         <table
           className={cn(
             'w-full border-collapse',
@@ -470,8 +481,19 @@ const baseComponents: Components = {
         >
           {children}
         </table>
-      </div>
+      </CopyAsImageBlock>
     );
+  },
+
+  // 块级 KaTeX 公式(rehypeMathBlockMarker 包装出的 div[data-math-block])。
+  // 其余 div 原样透传——markdown 输出里 div 极少见,不影响其它内容。
+  div({ children, node, ...props }) {
+    if (node?.properties && 'dataMathBlock' in node.properties) {
+      return (
+        <CopyAsImageBlock extractPlainText={mathBlockToLatex}>{children}</CopyAsImageBlock>
+      );
+    }
+    return <div {...props}>{children}</div>;
   },
 
   th({ children, ...props }) {
