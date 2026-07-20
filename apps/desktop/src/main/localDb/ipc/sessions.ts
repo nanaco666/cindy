@@ -5,7 +5,10 @@
  * 失败时 throw `Error("[CODE] message")`，service 层包装回 `ApiError`。
  */
 
-import { ipcMain, BrowserWindow } from 'electron';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+
+import { ipcMain, app, BrowserWindow } from 'electron';
 import { eq, ne, and, desc, count, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 
 import { getDbClient } from '../client/current';
@@ -876,6 +879,17 @@ export async function patchSessionMetaInDb(
           err: err instanceof Error ? err.message : String(err),
         });
       });
+    // hook 入站附件目录回收: 删 userData/hook-attachments/<sessionId>/
+    const attachRoot = path.join(app.getPath('userData'), 'hook-attachments');
+    const attachDir = path.join(attachRoot, sessionId);
+    if (attachDir.startsWith(attachRoot + path.sep)) {
+      void fs.rm(attachDir, { recursive: true, force: true }).catch((err) => {
+        log.warn('hook attachment dir cleanup failed', {
+          sessionId,
+          err: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
   }
   scheduleWorktreeRecycleForStatusChange(sessionId, patch.status);
   notifyGhostSessionStatusChange(sessionId, patch.status, updated.workingDir);

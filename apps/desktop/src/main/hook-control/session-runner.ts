@@ -665,8 +665,8 @@ export function createMakerHookSessionRunner(deps: {
       //   - 非图片文件写 hook 附件目录(userData/hook-attachments/<sessionId>/,
       //     文件名消毒 + 随机前缀防碰撞): sendContent 用 file block(cc/codex
       //     adapter 原生支持, 能否消费交给 agent), 落库 files:[{name,path}]
-      //     让聊天记录渲染文件 chip。该目录暂无回收器 —— v1 取舍, 单个附件
-      //     server 端已限 5MB、每任务最多 8 个, 增长可控。
+      //     让聊天记录渲染文件 chip。删会话时 sessions.ts 随 removeSessionRefs
+      //     一起 rm -rf 该 sessionId 子目录。
       // 入站图没有草稿期,ingest 时直接挂 session-attachment 引用(等价老
       // lifecycle committed),删会话时随 removeSessionRefs 回收。
       const decoded =
@@ -699,8 +699,11 @@ export function createMakerHookSessionRunner(deps: {
       const fileBlocks: UserContentBlock[] = [];
       const fileRefs: Array<{ name: string; path: string }> = [];
       if (decoded.files.length > 0) {
-        const attachDir = path.join(app.getPath('userData'), 'hook-attachments', session.id);
-        try {
+        const attachRoot = path.join(app.getPath('userData'), 'hook-attachments');
+        const attachDir = path.join(attachRoot, session.id);
+        if (!attachDir.startsWith(attachRoot + path.sep)) {
+          log.warn(`hook attachment dir escapes root (sessionId=${session.id}), skipping file attachments`);
+        } else try {
           await fs.mkdir(attachDir, { recursive: true });
           for (const file of decoded.files) {
             const safeName = sanitizeAttachmentName(file.name);
