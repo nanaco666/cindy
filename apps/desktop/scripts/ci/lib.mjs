@@ -726,8 +726,9 @@ export function createMacDMG(appPath, dmgPath, volumeName, identity) {
     `icon_locations = {`,
     `    ${py(appName)}: (175, 250),`,
     `    'Applications': (485, 250),`,
-    // 背景文件本体对默认设置的用户不可见;把坐标挪出窗口,照顾开了"显示隐藏文件"的用户
-    `    '.background.png': (900, 900),`,
+    // 背景文件本体对默认设置的用户不可见;把坐标挪到远超可拉伸范围之外,
+    // 照顾开了"显示隐藏文件"的用户(背景画布 900×570,窗口可被拉得比这更大)
+    `    '.background.png': (1600, 1200),`,
     `}`,
   ].join('\n');
   const settingsPath = path.join(os.tmpdir(), `cindy-dmg-settings-${process.pid}.py`);
