@@ -62,11 +62,20 @@ async function doMigrate(key: string): Promise<void> {
     for (const entry of entries) {
       const from = path.join(oldRoot, entry);
       const to = path.join(newRoot, entry);
-      const toExists = await fs
-        .stat(to)
-        .then(() => true)
-        .catch(() => false);
-      if (!toExists) await fs.rename(from, to);
+      const toStat = await fs.stat(to).catch(() => null);
+      if (!toStat) {
+        await fs.rename(from, to);
+      } else if (toStat.isDirectory() && (await fs.stat(from)).isDirectory()) {
+        // Both sides have the same sub-directory — recurse one level and
+        // move items missing in the destination (handles empty skeleton case).
+        for (const sub of await fs.readdir(from)) {
+          const subTo = path.join(to, sub);
+          if (!(await fs.stat(subTo).catch(() => null))) {
+            await fs.rename(path.join(from, sub), subTo);
+          }
+        }
+        if ((await fs.readdir(from)).length === 0) await fs.rmdir(from);
+      }
     }
     const leftover = await fs.readdir(oldRoot);
     if (leftover.length === 0) {
@@ -79,6 +88,7 @@ async function doMigrate(key: string): Promise<void> {
       });
     }
   } catch (err) {
+    migrating.delete(key);
     log.warn('failed to migrate legacy .xdmaker dir', {
       rootDir: key,
       error: err instanceof Error ? err.message : String(err),

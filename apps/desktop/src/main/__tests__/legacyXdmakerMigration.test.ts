@@ -126,4 +126,41 @@ describe('migrateLegacyXdmakerDir', () => {
       '# toc',
     );
   });
+
+  it('同名子目录递归合并缺失项（空骨架不遮蔽旧数据）', async () => {
+    write('.xdmaker/project-knowledge/manifest.yaml', 'modules: []');
+    write('.xdmaker/project-knowledge/modules/foo.md', '# foo');
+    // .cindy/project-knowledge exists but is empty (simulates failed prior init)
+    fs.mkdirSync(path.join(root, '.cindy', 'project-knowledge'), { recursive: true });
+
+    await migrateLegacyXdmakerDir(root);
+
+    expect(
+      fs.readFileSync(path.join(root, '.cindy', 'project-knowledge', 'manifest.yaml'), 'utf8'),
+    ).toBe('modules: []');
+    expect(
+      fs.readFileSync(path.join(root, '.cindy', 'project-knowledge', 'modules', 'foo.md'), 'utf8'),
+    ).toBe('# foo');
+    expect(fs.existsSync(path.join(root, '.xdmaker'))).toBe(false);
+  });
+
+  it('失败的迁移不被永久缓存，后续调用可重试', async () => {
+    write('.xdmaker/project-knowledge/TOC.md', '# toc');
+    // Block rename by placing a file (not dir) at .cindy — renameSync will fail
+    // because .xdmaker is a dir and .cindy already exists as a file
+    fs.writeFileSync(path.join(root, '.cindy'), 'blocker');
+
+    await migrateLegacyXdmakerDir(root);
+    // Should have failed (warn-only, not thrown)
+    expect(fs.existsSync(path.join(root, '.xdmaker', 'project-knowledge', 'TOC.md'))).toBe(true);
+
+    // Remove the blocker, retry — should succeed now because cache was cleared on failure
+    fs.unlinkSync(path.join(root, '.cindy'));
+    await migrateLegacyXdmakerDir(root);
+
+    expect(fs.existsSync(path.join(root, '.xdmaker'))).toBe(false);
+    expect(fs.readFileSync(path.join(root, '.cindy', 'project-knowledge', 'TOC.md'), 'utf8')).toBe(
+      '# toc',
+    );
+  });
 });

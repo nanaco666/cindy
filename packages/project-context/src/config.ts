@@ -77,7 +77,15 @@ export function migrateLegacyContextRoot(repoRoot: string): void {
     for (const entry of fs.readdirSync(oldRoot)) {
       const from = path.join(oldRoot, entry);
       const to = path.join(newRoot, entry);
-      if (!fs.existsSync(to)) fs.renameSync(from, to);
+      if (!fs.existsSync(to)) {
+        fs.renameSync(from, to);
+      } else if (fs.statSync(from).isDirectory() && fs.statSync(to).isDirectory()) {
+        for (const sub of fs.readdirSync(from)) {
+          const subTo = path.join(to, sub);
+          if (!fs.existsSync(subTo)) fs.renameSync(path.join(from, sub), subTo);
+        }
+        if (fs.readdirSync(from).length === 0) fs.rmdirSync(from);
+      }
     }
     if (fs.readdirSync(oldRoot).length === 0) fs.rmdirSync(oldRoot);
   } catch (err) {
