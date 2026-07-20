@@ -3557,7 +3557,7 @@
         "deferred": "Switch scheduled: will change to {{agent}} · {{model}} when your next message is sent",
         "confirmation": {
           "title": "Switch Agent?",
-          "description": "The new agent continues from a handoff summary instead of the current engine’s full native memory; switching back can resume the original engine’s session. Switching also interrupts the prompt cache once, and the two engines may respond in different styles.",
+          "description": "The new Agent engine continues through a handoff summary, so reasoning and other content cannot be guaranteed to carry over perfectly; switching back still lets you continue the original engine’s session. Switching also interrupts the prompt cache once and may increase token usage.",
           "confirm": "Switch Agent",
           "cancel": "Keep Current Agent",
           "dontShowAgain": "Don’t remind me again"

@@ -38,6 +38,8 @@ export async function confirmAgentSwitchRisk({
   return confirm({
     title: copy.title,
     description: copy.description,
+    // 仅 Agent 切换风险文案禁选；其它 ConfirmDialog 仍保留复制能力。
+    textClassName: 'select-none',
     confirmText: copy.confirmText,
     cancelText: copy.cancelText,
     dontShowAgainKey: AGENT_SWITCH_CONFIRMATION_OVERRIDE_KEY,

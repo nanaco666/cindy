@@ -70,7 +70,9 @@ describe('Agent switch confirmation', () => {
     renderHarness({ onBrowse });
 
     fireEvent.click(screen.getByRole('button', { name: 'Browse Target Agent' }));
-    expect(await screen.findByText(COPY.title)).toBeTruthy();
+    const title = await screen.findByText(COPY.title);
+    expect(title.className).toContain('select-none');
+    expect(screen.getByText(COPY.description).className).toContain('select-none');
 
     fireEvent.click(screen.getByRole('checkbox', { name: COPY.dontShowAgainLabel }));
     fireEvent.click(screen.getByRole('button', { name: COPY.cancelText }));

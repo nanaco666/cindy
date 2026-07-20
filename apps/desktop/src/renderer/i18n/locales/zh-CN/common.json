@@ -3557,7 +3557,7 @@
         "deferred": "已登记切换:下一条消息发出时将切换到 {{agent}} · {{model}}",
         "confirmation": {
           "title": "切换 Agent？",
-          "description": "新 Agent 会通过交接摘要续接，而不是继承当前引擎的完整原生记忆；切回时仍可继续原引擎会话。切换还会让 prompt 缓存中断一次，两家引擎的回答风格也可能不同。",
+          "description": "新 Agent 引擎会通过交接摘要续接,思考内容等不能保证完美继承;切回时仍可继续原引擎会话。切换还会让 prompt 缓存中断一次,可能造成 Token 消耗的增加。",
           "confirm": "切换 Agent",
           "cancel": "保留当前 Agent",
           "dontShowAgain": "下次不再提醒"
