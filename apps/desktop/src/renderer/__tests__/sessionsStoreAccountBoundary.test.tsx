@@ -161,4 +161,54 @@ describe('sessionsStore account boundaries', () => {
     expect(mocks.list).not.toHaveBeenCalled();
     unsubscribe();
   });
+
+  it('preserves spend received while a stale session list response is in flight', async () => {
+    const staleRequest = deferred<Session[]>();
+    mocks.list.mockImplementationOnce(() => staleRequest.promise);
+
+    const load = sessionsStore.ensureByFilter('active');
+    act(() => {
+      mocks.emitSessionSpend({ sessionId: 'target', totalCostUsd: 2 });
+    });
+    staleRequest.resolve([
+      session('target', { totalCostUsd: 1 }),
+      session('other', { totalCostUsd: 3 }),
+    ]);
+    await load;
+
+    expect(sessionsStore.getByFilter('active')).toEqual([
+      expect.objectContaining({ id: 'target', totalCostUsd: 2 }),
+      expect.objectContaining({ id: 'other', totalCostUsd: 3 }),
+    ]);
+    expect(mocks.list).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears remembered spend overrides at the account boundary', async () => {
+    act(() => {
+      mocks.emitSessionSpend({ sessionId: 'same-id', totalCostUsd: 2 });
+    });
+    sessionsStore.reset();
+    mocks.list.mockResolvedValueOnce([session('same-id', { totalCostUsd: 1 })]);
+
+    await sessionsStore.ensureByFilter('active');
+
+    expect(sessionsStore.getByFilter('active')).toEqual([
+      expect.objectContaining({ id: 'same-id', totalCostUsd: 1 }),
+    ]);
+  });
+
+  it('does not replay an old spend event over a newer list request', async () => {
+    mocks.list.mockResolvedValueOnce([session('target', { totalCostUsd: 1 })]);
+    await sessionsStore.ensureByFilter('active');
+    act(() => {
+      mocks.emitSessionSpend({ sessionId: 'target', totalCostUsd: 2 });
+    });
+    mocks.list.mockResolvedValueOnce([session('target', { totalCostUsd: 3 })]);
+
+    await sessionsStore.forceRefresh('active');
+
+    expect(sessionsStore.getByFilter('active')).toEqual([
+      expect.objectContaining({ id: 'target', totalCostUsd: 3 }),
+    ]);
+  });
 });

@@ -51,6 +51,14 @@ const DEFAULT_LIMIT = 1000;
 
 const cache = new Map<ListStatusFilter, Session[]>();
 const inflight = new Map<ListStatusFilter, Promise<Session[]>>();
+/** 列表请求期间收到的 session 费用权威值及其本地事件版本。 */
+interface SessionSpendOverride {
+  revision: number;
+  totalCostUsd: number;
+}
+
+const sessionSpendOverrides = new Map<string, SessionSpendOverride>();
+let sessionSpendRevision = 0;
 type StoreChange = 'updated' | 'reset';
 
 const subs = new Set<(change: StoreChange) => void>();
@@ -71,10 +79,25 @@ function mergeSession(prev: Session, patch: Partial<Session>): Session {
   return next;
 }
 
+/** 仅重放请求启动后到达的费用事件，避免旧事件覆盖未来数据库刷新。 */
+function applySessionSpendOverrides(list: Session[], afterRevision: number): Session[] {
+  let changed = false;
+  const next = list.map((session) => {
+    const override = sessionSpendOverrides.get(session.id);
+    if (!override || override.revision <= afterRevision) return session;
+    if (override.totalCostUsd === session.totalCostUsd) return session;
+    changed = true;
+    return mergeSession(session, { totalCostUsd: override.totalCostUsd });
+  });
+  return changed ? next : list;
+}
+
 async function fetchFilter(filter: ListStatusFilter): Promise<Session[]> {
   // chat-data-localization round-5：IPC 'all'/undefined 与 HTTP 旧默认行为
   // 不一致，必须把 filter 原样透传，由 IPC handler 决定过滤语义。
-  return sessionService.list(DEFAULT_LIMIT, filter);
+  const spendRevisionAtStart = sessionSpendRevision;
+  const sessions = await sessionService.list(DEFAULT_LIMIT, filter);
+  return applySessionSpendOverrides(sessions, spendRevisionAtStart);
 }
 
 export const sessionsStore = {
@@ -156,6 +179,7 @@ export const sessionsStore = {
   patchLocal(id: string, patch: Partial<Session>): void {
     if (!id || !patch) return;
     if (patch.status === 'deleted') {
+      sessionSpendOverrides.delete(id);
       // 删除前发出的请求可能仍会返回包含该 session 的旧快照。先解除这些
       // request 对桶的认领，再为对应桶发起替代请求，避免旧响应重新写回。
       const toRefetch = Array.from(inflight.keys());
@@ -178,6 +202,13 @@ export const sessionsStore = {
         });
       }
       return;
+    }
+    if (patch.totalCostUsd !== undefined) {
+      sessionSpendRevision += 1;
+      sessionSpendOverrides.set(id, {
+        revision: sessionSpendRevision,
+        totalCostUsd: patch.totalCostUsd,
+      });
     }
     let touched = false;
     for (const [k, list] of cache) {
@@ -239,6 +270,7 @@ export const sessionsStore = {
   reset(): void {
     cache.clear();
     inflight.clear();
+    sessionSpendOverrides.clear();
     notify('reset');
   },
 };
