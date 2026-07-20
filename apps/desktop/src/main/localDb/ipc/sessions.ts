@@ -5,7 +5,10 @@
  * 失败时 throw `Error("[CODE] message")`，service 层包装回 `ApiError`。
  */
 
-import { ipcMain, BrowserWindow } from 'electron';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+
+import { ipcMain, app, BrowserWindow } from 'electron';
 import { eq, ne, and, desc, count, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 
 import { getDbClient } from '../client/current';
@@ -785,6 +788,7 @@ export function registerSessionIpc(): void {
     });
     scheduleWorktreeRecycleForStatusChange(sid, p.status);
     notifyGhostSessionStatusChange(sid, p.status, updated.workingDir);
+    removeHookAttachmentDir(sid, p.status);
     return updated;
   });
 
@@ -877,6 +881,7 @@ export async function patchSessionMetaInDb(
         });
       });
   }
+  removeHookAttachmentDir(sessionId, patch.status);
   scheduleWorktreeRecycleForStatusChange(sessionId, patch.status);
   notifyGhostSessionStatusChange(sessionId, patch.status, updated.workingDir);
   // 远程 / MCP 改动绕过 renderer 乐观更新,故主动广播 sessions:patched:
@@ -1008,6 +1013,7 @@ export async function setSessionsStatusInDb(
     broadcastSessionPatched(item.sessionId, { status: item.status });
     scheduleWorktreeRecycleForStatusChange(item.sessionId, item.status);
     notifyGhostSessionStatusChange(item.sessionId, item.status, item.workingDir);
+    removeHookAttachmentDir(item.sessionId, item.status);
   }
   return applied.map((item) => ({
     sessionId: item.sessionId,
@@ -1015,6 +1021,23 @@ export async function setSessionsStatusInDb(
     workingDir: item.workingDir,
     status: item.status,
   }));
+}
+
+/**
+ * hook 入站附件目录回收(fire-and-forget): deleted/archived 都是终态,
+ * 文件在 turn 送出后即无用。所有把 session 置为终态的路径都应调用。
+ */
+function removeHookAttachmentDir(sessionId: string, status: unknown): void {
+  if (status !== 'deleted' && status !== 'archived') return;
+  const attachRoot = path.join(app.getPath('userData'), 'hook-attachments');
+  const attachDir = path.join(attachRoot, sessionId);
+  if (!attachDir.startsWith(attachRoot + path.sep)) return;
+  void fs.rm(attachDir, { recursive: true, force: true }).catch((err) => {
+    log.warn('hook attachment dir cleanup failed', {
+      sessionId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  });
 }
 
 /** 单行 SELECT + messages count：LEFT JOIN + GROUP BY 保证 0 条消息时 count 为 0。
