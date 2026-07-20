@@ -3263,6 +3263,7 @@
     "permissionSelector": {
       "triggerAria": "Select permission mode: {{label}}",
       "listAria": "Permission modes",
+      "autoFallback": "Auto-review is temporarily unavailable. Switched to Default permissions and will ask when needed.",
       "modes": {
         "claude-code": {
           "ask": {

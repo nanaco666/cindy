@@ -3287,6 +3287,16 @@ interface ElectronAPI {
         detail?: string;
       }) => void,
     ) => () => void;
+    /** Claude Auto classifier 失败后降级到 ask 的会话级通知。 */
+    onAutoPermissionFallback: (
+      cb: (event: {
+        sessionId: string;
+        from: 'auto';
+        to: 'ask';
+        reason: 'classifier_unavailable';
+        status: number;
+      }) => void,
+    ) => () => void;
     /** 会话后台活动只读快照(turn 已结束但 CC 子进程仍在调模型)。 */
     getSessionBackgroundActivity: (sessionId: string) => Promise<{ active: boolean }>;
     /** 后台活动活跃会话全量列表(全局 store 挂载时的初始快照,增量走 push 订阅)。 */

@@ -280,6 +280,16 @@ export interface AgentDeps {
   }) => void;
 
   /**
+   * Claude 专用: host 明确认定可无提示执行的只读工具名, 透传到 SDK
+   * `options.allowedTools`。maker-core 不维护任何产品工具名, 也不做 wildcard /
+   * 前缀推断; 远端 cc-manager 分支必须透传同一份列表, 避免本地与 SSH 会话权限
+   * 语义分叉。
+   *
+   * 缺省 / undefined → 不传 allowedTools, 行为与改动前一致。Codex 不消费此字段。
+   */
+  claudeAllowedTools?: readonly string[];
+
+  /**
    * Claude 专用 SDK hook 注入点。host 在构造 ClaudeCodeAgent 时按 HookEvent
    * (PreToolUse / PostToolUse / UserPromptSubmit / SessionStart / ...) 注册一组
    * in-process JS 回调; ClaudeCodeAgent.startSession 透传给 SDK options.hooks。

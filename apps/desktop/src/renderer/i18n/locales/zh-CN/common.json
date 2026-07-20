@@ -3263,6 +3263,7 @@
     "permissionSelector": {
       "triggerAria": "选择权限模式：{{label}}",
       "listAria": "权限模式",
+      "autoFallback": "自动审批暂时不可用，已切换为默认权限；需要时会询问你。",
       "modes": {
         "claude-code": {
           "ask": {

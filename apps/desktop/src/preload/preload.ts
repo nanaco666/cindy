@@ -376,6 +376,8 @@ const fanOutMakerProvidersChanged = createIpcFanOut('maker:provider:changed');
 const fanOutMakerMcpChanged = createIpcFanOut('maker:mcp:changed');
 // 自定义供应商上游错误的结构化广播（payload = { agent, providerId, code, retryable, status }）。
 const fanOutMakerProviderUpstreamError = createIpcFanOut('maker:provider:upstream-error');
+// Claude Auto classifier 失败后单会话降级到 ask 的结构化广播。
+const fanOutMakerAutoPermissionFallback = createIpcFanOut('maker:auto-permission:fallback');
 const fanOutMakerCodexRuntimeRouteChanged = createIpcFanOut('maker:codex-runtime-route-changed');
 // 延迟凭证切换在 turn 结束兑现的广播(payload = { sessionId, model, providerId })。
 const fanOutMakerSessionCredentialSwitchApplied = createIpcFanOut('maker:session-credential-switch-applied');
@@ -3293,6 +3295,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onMcpChanged: fanOutMakerMcpChanged,
     /** 自定义供应商上游错误订阅（payload = { agent, providerId, code, retryable, status, detail? }）。 */
     onProviderUpstreamError: fanOutMakerProviderUpstreamError,
+    /** Claude Auto classifier 失败后降级到 ask 的会话级通知。 */
+    onAutoPermissionFallback: fanOutMakerAutoPermissionFallback,
     /** 会话后台活动只读快照(turn 已结束但 CC 子进程仍在调模型)。 */
     getSessionBackgroundActivity: (sessionId: string): Promise<{ active: boolean }> =>
       ipcRenderer.invoke('maker:session-background-activity', sessionId),
