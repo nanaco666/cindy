@@ -127,4 +127,15 @@ if (typeof window !== 'undefined') {
       });
     });
   }
+  // 删除广播:别的窗口(或 device-link 远程调用)移除条目时,本窗口的模块级
+  // 缓存也要跟上,否则删掉的项目在这里仍可选。发起删除的窗口自己已乐观 patch,
+  // 重拉一次幂等无害。
+  const recentApi = window.electronAPI?.localDb?.recentWorkdirs;
+  if (recentApi?.onChanged) {
+    recentApi.onChanged(() => {
+      void recentWorkdirsStore.forceRefresh().catch(() => {
+        /* 静默:同上 */
+      });
+    });
+  }
 }

@@ -19,6 +19,7 @@ const h = vi.hoisted(() => ({
   db: null as ReturnType<typeof drizzle> | null,
   sqlite: null as InstanceType<typeof import('better-sqlite3')> | null,
   handlers: new Map<string, (...args: unknown[]) => unknown>(),
+  webContentsSend: null as ReturnType<typeof vi.fn> | null,
 }));
 
 vi.mock('electron', () => ({
@@ -26,6 +27,11 @@ vi.mock('electron', () => ({
     handle: vi.fn((channel: string, handler: (...args: unknown[]) => unknown) => {
       h.handlers.set(channel, handler);
     }),
+  },
+  BrowserWindow: {
+    getAllWindows: () => [
+      { isDestroyed: () => false, webContents: { send: h.webContentsSend } },
+    ],
   },
 }));
 vi.mock('../../../logger', () => ({
@@ -80,11 +86,12 @@ afterAll(() => {
 describe('local-db:recent-workdirs:remove', () => {
   beforeEach(() => {
     h.handlers.clear();
+    h.webContentsSend = vi.fn();
     createDb();
     registerRecentWorkdirsIpc();
   });
 
-  it('deletes the row by exact normalized path', async () => {
+  it('deletes the row by exact normalized path and broadcasts to windows', async () => {
     seed('/repo/project-a', 1000);
     seed('/repo/project-b', 2000);
 
@@ -94,6 +101,10 @@ describe('local-db:recent-workdirs:remove', () => {
 
     expect(res.deleted).toBe(true);
     expect(rows()).toEqual([{ path: '/repo/project-b' }]);
+    // 其它窗口靠这条广播刷新各自的模块级缓存,漏发 = 别的窗口残留可选的已删项目。
+    expect(h.webContentsSend).toHaveBeenCalledWith('local-db:recent-workdirs:changed', {
+      path: '/repo/project-a',
+    });
   });
 
   it('normalizes separators and trailing slashes before deleting', async () => {
@@ -108,11 +119,12 @@ describe('local-db:recent-workdirs:remove', () => {
     expect(rows()).toEqual([]);
   });
 
-  it('is idempotent: missing path resolves deleted:false without throwing', async () => {
+  it('is idempotent: missing path resolves deleted:false without broadcasting', async () => {
     const res = (await invoke('local-db:recent-workdirs:remove', {
       path: '/not/in/table',
     })) as { deleted: boolean };
     expect(res.deleted).toBe(false);
+    expect(h.webContentsSend).not.toHaveBeenCalled();
   });
 
   it('rejects non-string / blank path with INVALID_PARAMS', async () => {

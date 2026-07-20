@@ -19,7 +19,7 @@
 
 import { access } from 'node:fs/promises';
 
-import { ipcMain } from 'electron';
+import { BrowserWindow, ipcMain } from 'electron';
 import { desc, eq, sql } from 'drizzle-orm';
 
 import { getDbClient } from '../client/current';
@@ -161,6 +161,17 @@ export function registerRecentWorkdirsIpc(): void {
       .run()) as { changes?: number } | undefined;
     const deleted = (result?.changes ?? 0) > 0;
     log.info('[localDb] recent workdir removed by user', { path: normalized, deleted });
+    // 广播到本机所有窗口:发起删除的 renderer 已乐观 patch 自己的 store,
+    // 其它窗口(以及 device-link 远程调用落地时的被控端窗口)靠这个刷新,
+    // 否则模块级缓存只在 sessions:created 时重拉,删掉的项目会在别的窗口
+    // 里残留可选。真删了才广播;no-op 不打扰。
+    if (deleted) {
+      for (const w of BrowserWindow.getAllWindows()) {
+        if (!w.isDestroyed()) {
+          w.webContents.send('local-db:recent-workdirs:changed', { path: normalized });
+        }
+      }
+    }
     return { deleted };
   });
 }
