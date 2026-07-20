@@ -1,25 +1,25 @@
 /**
- * ProvidersSection —— 设置 → 模型供应商页(按 .pen Q0RH66 1:1 还原,颜色走主题 token)。
+ * ProvidersSection —— 设置 → 模型供应商页(2026-07 重构:双栏管理)。
  *
- * 一张 Providers Card,内含若干行(1px divider 分隔),每行由 listProviders() 的
- * ProviderView 驱动(按 provider.id 匹配 anthropic / openai / xd 三个已知来源 +
- * 一行 disabled 占位)。本页**不发明新的连接 IPC**,复用既有鉴权流:
- *   - Anthropic: maker.claudeOAuth*(授权 / 登出 / 状态)。
- *   - OpenAI:    useCodexAuth()(授权 / 登出,内部走 maker.auth.* codex 通道)。
- *   - XD 网关:  凭据由 model-access 自动下发(useModelAccessStatus 驱动状态;断开 = clearKey 清本机存量;无手填入口)。
+ * 布局:一张卡片内左右双栏 ——
+ *   - 左栏:扁平供应商列表。Cindy AI(xd)固定置顶(产品自己的服务);其余行只在
+ *     「已连接 / 已添加」后出现;底部「＋ 添加供应商」打开三步向导。未连接的内置
+ *     渠道不再常驻占行 —— 入口在向导目录里,另有「检测建议」组:本机装了
+ *     Claude Code / Codex CLI 时置一条建议行,点击直达该渠道的授权步。
+ *   - 右栏:选中供应商的详情 = 鉴权头部(复用既有各 Row 的连接/断开/授权逻辑,
+ *     **不发明新的连接 IPC**)+ 统一模型可见性列表(UnifiedModelList:并集 +
+ *     单开关同写双 agent,「分别调整」兜底,见该组件头注释)。
  *
- * 连接态通常以 useProviders() 的 provider.connected 为准；OpenAI 行由 useCodexAuth
- * 保留更具体的 reconnect-required 状态，provider 快照只在初始加载时兜底。
- *
- * 模型显示控制(展开态):每个「有模型」的来源行尾带 chevron,展开后是该来源支持的模型清单,
- * 每个模型一个开关 —— 控制它是否出现在对话的模型选择器里(见 modelVisibilityPrefs +
- * ModelSelector 的右栏过滤)。多 agent 来源(XD)展开后顶部有 agent 切换器,每个 agent 的
- * 模型清单 / 开关 / 计数各自独立(同名模型如 gpt-5.5 在 cc=1M / codex=272k 也分开记)。
+ * 鉴权通道(与重构前一致):
+ *   - Anthropic: maker.claudeOAuth*;OpenAI: useCodexAuth();xAI: maker.xaiOAuth*。
+ *   - XD 网关: 凭据由 model-access 自动下发(useModelAccessStatus;无手填入口)。
+ *   - 自定义供应商: CRUD IPC + safeStorage 密钥;「刷新模型」= 读回密钥后走
+ *     fetchProviderModels,additions-only 合并进配置(与 OAuth 动态发现同语义)。
  */
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronDown, ChevronRight, ChevronUp, Pencil, Plus, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { Check, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { useProviders } from '@/hooks/useProviders';
@@ -28,42 +28,29 @@ import { useApiKey } from '@/hooks/useApiKey';
 import { useModelAccessStatus } from '@/hooks/useModelAccessStatus';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog-provider';
 import { toast } from '@/lib/toast';
-import { deleteCustomProvider } from '@/lib/customProviders';
+import {
+  deleteCustomProvider,
+  readCustomProviderKey,
+  updateCustomProvider,
+} from '@/lib/customProviders';
 import { providerMonogram } from '@/lib/providerModels';
 import { customProviderSubtitleForDisplay, providerSubtitleForDisplay } from '@/lib/providerSubtitle';
 import { CustomProviderDialog } from './CustomProviderDialog';
-import { Switch } from '@/components/ui/switch';
+import { AddProviderWizard, type WizardEntry } from './AddProviderWizard';
+import { UnifiedModelList } from './UnifiedModelList';
 import { ClaudeMark } from '@/components/icons/ClaudeMark';
 import { CodexMark } from '@/components/icons/CodexMark';
 import { XDIncMark } from '@/components/icons/XDIncMark';
-import { groupModelsForDisplay, CATEGORY_LABEL_KEY } from '@/components/new-chat/sourceSwitch';
-import {
-  isModelEnabled,
-  setManyVisibility,
-  setModelVisibility,
-  useModelVisibilityVersion,
-} from '@/state/modelVisibilityPrefs';
+import { isModelEnabled, useModelVisibilityVersion } from '@/state/modelVisibilityPrefs';
 
-
-import type { AgentKind, CatalogModel, CustomProviderConfig, ProviderView } from '@lizi/model-providers';
+import type { LocalCliDetection } from '../../../shared/localCliDetect';
+import type { CustomProviderConfig, ProviderView } from '@lizi/model-providers';
 
 // ---------------------------------------------------------------------------
-// 工具:上下文窗口 tokens → 紧凑展示("1M" / "272K" / "8192")。与 ModelSelector 同口径。
+// 工具
 // ---------------------------------------------------------------------------
 
-function formatContextWindow(tokens: number): string {
-  if (tokens >= 1_000_000) {
-    const m = tokens / 1_000_000;
-    return `${Number.isInteger(m) ? m : Number(m.toFixed(1))}M`;
-  }
-  if (tokens >= 1000) {
-    const k = tokens / 1000;
-    return `${Number.isInteger(k) ? k : Number(k.toFixed(0))}K`;
-  }
-  return String(tokens);
-}
-
-/** 该来源跨「所有它服务的 agent」的模型开启数 / 总数(供名字旁的合计 chip)。 */
+/** 该来源跨「所有它服务的 agent」的模型开启数 / 总数(左栏行计数 + 详情头计数)。 */
 function combinedCount(provider: ProviderView): { on: number; total: number } {
   let on = 0;
   let total = 0;
@@ -80,8 +67,16 @@ function providerHasModels(provider: ProviderView): boolean {
   return provider.agents.some((a) => (provider.models[a]?.length ?? 0) > 0);
 }
 
+/** 供应商行图标(内置品牌 mark / 首字母 monogram)。 */
+function providerIcon(p: ProviderView, size: number): ReactNode {
+  if (p.id === 'xd') return <XDIncMark size={size} />;
+  if (p.id === 'anthropic') return <ClaudeMark size={size} />;
+  if (p.id === 'openai') return <CodexMark size={size} />;
+  return <span className="text-15 font-semibold leading-none">{providerMonogram(p.name)}</span>;
+}
+
 // ---------------------------------------------------------------------------
-// Connected pill —— `✓ 已连接`,中性灰底(豁免色场景之外的普通 chip,走 token)。
+// 通用小件(与重构前一致)
 // ---------------------------------------------------------------------------
 
 function ConnectedPill() {
@@ -117,10 +112,6 @@ function ReconnectRequiredPill() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Count chip —— 名字旁的「已开启/总数」合计(跨 agent)。视觉同 ConnectedPill 但更小。
-// ---------------------------------------------------------------------------
-
 function CountChip({ on, total }: { on: number; total: number }) {
   return (
     <span
@@ -134,10 +125,6 @@ function CountChip({ on, total }: { on: number; total: number }) {
     </span>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Secondary pill button(授权 / 登出 / 连接 / 断开)—— rounded-full,1px border。
-// ---------------------------------------------------------------------------
 
 function PillButton({
   label,
@@ -169,214 +156,37 @@ function PillButton({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Agent 切换器(仅多 agent 来源)—— pill 分段控件,视觉对齐 VendorSegmentedSwitcher。
-// ---------------------------------------------------------------------------
-
-const AGENT_META: Record<AgentKind, { label: string; Mark: ComponentType<{ size?: number; className?: string }> }> = {
-  'claude-code': { label: 'Claude', Mark: ClaudeMark },
-  codex: { label: 'Codex', Mark: CodexMark },
-};
-
-function AgentSwitcher({
-  agents,
-  active,
-  onChange,
-}: {
-  agents: readonly AgentKind[];
-  active: AgentKind;
-  onChange: (agent: AgentKind) => void;
-}) {
+function CustomTag({ label }: { label: string }) {
   return (
-    <div
-      className="flex h-8 w-[220px] items-center gap-0.5 rounded-full p-[3px]"
-      style={{ backgroundColor: 'var(--surface-chip)' }}
-      role="tablist"
-      aria-label="Agent switcher"
+    <span
+      className="flex h-[18px] shrink-0 items-center rounded-full px-2 text-11 font-medium"
+      style={{ border: '1px solid var(--settings-integration-avatar-border)', color: 'var(--text-tertiary)' }}
     >
-      {agents.map((a) => {
-        const meta = AGENT_META[a];
-        if (!meta) return null;
-        const isActive = a === active;
-        const Mark = meta.Mark;
-        return (
-          <button
-            key={a}
-            type="button"
-            role="tab"
-            aria-selected={isActive}
-            onClick={() => {
-              if (!isActive) onChange(a);
-            }}
-            className={cn(
-              // flex-1 让两个 tab 等分容器宽度 —— 与标签长短无关,始终一样大(对齐 VendorSegmentedSwitcher)。
-              'flex h-[26px] flex-1 items-center justify-center gap-1.5 rounded-full px-2 text-13 leading-none transition-colors',
-              isActive ? 'font-medium' : 'font-normal',
-            )}
-            style={
-              isActive
-                ? {
-                    backgroundColor: 'var(--surface-elevated)',
-                    border: '1px solid var(--border-default)',
-                    color: 'var(--settings-section-title)',
-                  }
-                : { color: 'var(--text-secondary)' }
-            }
-          >
-            <Mark size={14} className="shrink-0" />
-            <span className="whitespace-nowrap">{meta.label}</span>
-          </button>
-        );
-      })}
-    </div>
+      {label}
+    </span>
+  );
+}
+
+function RowIconButton({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[var(--surface-hover)]"
+      style={{ color: 'var(--text-tertiary)' }}
+    >
+      {icon}
+    </button>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Model list panel —— 展开后的模型清单(搜索 + 计数 + 全部开关 + 分组 + 逐模型开关)。
-// 多 agent 来源顶部带 agent 切换器,每个 agent 各自独立。
+// 详情头部 —— avatar + 标题(+计数/订阅/自定义 tag)/副标题 + 右侧鉴权操作区。
+// (重构前的 ProviderCell 去掉展开逻辑;模型列表由详情容器统一渲染。)
 // ---------------------------------------------------------------------------
 
-function ModelListPanel({ provider }: { provider: ProviderView }) {
-  const { t } = useTranslation();
-  const agents = provider.agents;
-  const multiAgent = agents.length > 1;
-  const [activeAgent, setActiveAgent] = useState<AgentKind>(
-    () => agents.find((a) => (provider.models[a]?.length ?? 0) > 0) ?? agents[0],
-  );
-  const [query, setQuery] = useState('');
-
-  const models = provider.models[activeAgent] ?? [];
-  // 该来源任一 agent 下模型数较多 → 显示搜索框(切 agent 不抖动:阈值取所有 agent 的最大值)。
-  const maxLen = Math.max(...agents.map((a) => provider.models[a]?.length ?? 0));
-  const showSearch = maxLen > 8;
-  // 跨多个厂商分组才显示分组小标题(单一分组如 Anthropic 直接平铺)。基于完整列表判定,稳定不随搜索变化。
-  const showGroupHeaders = useMemo(() => groupModelsForDisplay(models).length > 1, [models]);
-
-  const q = query.trim().toLowerCase();
-  const groups = useMemo(() => {
-    const filtered = q
-      ? models.filter((m) => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q))
-      : models;
-    return groupModelsForDisplay(filtered);
-  }, [models, q]);
-
-  const total = models.length;
-  const enabledCount = models.filter((m) => isModelEnabled(activeAgent, provider.id, m)).length;
-  const allOn = total > 0 && enabledCount === total;
-
-  const handleBulk = useCallback(() => {
-    setManyVisibility(activeAgent, provider.id, models.map((m) => m.id), !allOn);
-  }, [activeAgent, provider.id, models, allOn]);
-
-  return (
-    <div
-      className="flex flex-col border-t"
-      style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--settings-theme-card-border)' }}
-    >
-      {multiAgent && (
-        <div className="px-5 pt-3.5">
-          <AgentSwitcher
-            agents={agents}
-            active={activeAgent}
-            onChange={(a) => {
-              setActiveAgent(a);
-              setQuery('');
-            }}
-          />
-        </div>
-      )}
-
-      {/* 头部:搜索框(多模型)或「可用模型」标签 + 当前 agent 计数(多 agent)+ 全部开关 */}
-      <div className="flex items-center gap-3 px-5 py-2.5">
-        {showSearch ? (
-          <div
-            className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-full px-3"
-            style={{ backgroundColor: 'var(--surface-elevated)', border: '1px solid var(--border-default)' }}
-          >
-            <Search size={14} className="shrink-0" style={{ color: 'var(--text-tertiary)' }} />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t('settings.providers.models.search')}
-              aria-label={t('settings.providers.models.search')}
-              className="min-w-0 flex-1 bg-transparent text-13 outline-none placeholder:text-[var(--text-tertiary)]"
-              style={{ color: 'var(--settings-section-title)' }}
-            />
-          </div>
-        ) : (
-          <span className="flex-1 text-13 font-medium" style={{ color: 'var(--text-secondary)' }}>
-            {t('settings.providers.models.available')}
-          </span>
-        )}
-        {multiAgent && (
-          <span className="shrink-0 text-12 font-medium tabular-nums" style={{ color: 'var(--text-tertiary)' }}>
-            {t('settings.providers.models.enabledCount', { on: enabledCount, total })}
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={handleBulk}
-          className="shrink-0 text-12 font-medium transition-opacity hover:opacity-80"
-          style={{ color: 'var(--text-secondary)' }}
-        >
-          {t(allOn ? 'settings.providers.models.disableAll' : 'settings.providers.models.enableAll')}
-        </button>
-      </div>
-
-      {/* 分组 + 逐模型开关 */}
-      <div className="flex flex-col gap-4 px-5 pb-4 pt-0.5">
-        {groups.length === 0 ? (
-          <div className="py-4 text-center text-13" style={{ color: 'var(--text-tertiary)' }}>
-            {t('settings.providers.models.noResults')}
-          </div>
-        ) : (
-          groups.map((g) => (
-            <div key={g.category} className="flex flex-col">
-              {showGroupHeaders && (
-                <span
-                  className="pb-0.5 text-11 font-semibold uppercase"
-                  style={{ color: 'var(--text-tertiary)', letterSpacing: '0.4px' }}
-                >
-                  {t(CATEGORY_LABEL_KEY[g.category])}
-                </span>
-              )}
-              {g.models.map((m: CatalogModel) => {
-                const enabled = isModelEnabled(activeAgent, provider.id, m);
-                return (
-                  <div key={m.id} className="flex items-center gap-3 py-[7px]">
-                    <span
-                      className="min-w-0 flex-1 truncate text-14 font-medium"
-                      style={{ color: enabled ? 'var(--settings-section-title)' : 'var(--text-tertiary)' }}
-                    >
-                      {m.name}
-                    </span>
-                    <span className="shrink-0 text-12 tabular-nums" style={{ color: 'var(--text-tertiary)' }}>
-                      {formatContextWindow(m.contextWindow)}
-                    </span>
-                    <Switch
-                      checked={enabled}
-                      onCheckedChange={(v) => setModelVisibility(activeAgent, provider.id, m.id, v)}
-                      aria-label={m.name}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Provider cell —— avatar + 标题(+计数 chip)/副标题 + 右侧 trailing + chevron;
-// 可选 detail(XD 的 masked-key 行);展开后接 ModelListPanel。
-// ---------------------------------------------------------------------------
-
-function ProviderCell({
+function DetailHeader({
   icon,
   title,
   subtitle,
@@ -384,7 +194,6 @@ function ProviderCell({
   provider,
   detail,
   badge,
-  onUnavailableExpand,
 }: {
   icon: ReactNode;
   title: string;
@@ -392,103 +201,75 @@ function ProviderCell({
   trailing: ReactNode;
   provider?: ProviderView;
   detail?: ReactNode;
-  /** 标题旁的额外徽标（自定义供应商的「自定义」tag）。 */
   badge?: ReactNode;
-  /** 来源行需要保留展开入口、但实时模型清单不可用时的点击反馈。 */
-  onUnavailableExpand?: () => void;
 }) {
   const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(false);
   const hasModels = !!provider && providerHasModels(provider);
-  const expandable = hasModels || !!onUnavailableExpand;
-  const effectiveExpanded = hasModels && expanded;
   const counts = hasModels && provider ? combinedCount(provider) : null;
   const subscriptionProduct =
     provider?.access?.kind === 'subscription' ? provider.access.product : null;
+  // 单 agent 供应商在头部统一说明(行级不再逐条标注,见 UnifiedModelList 头注释)。
+  const singleAgentNote =
+    provider && provider.agents.length === 1
+      ? t('settings.providers.detail.singleAgentNote', {
+          agent: provider.agents[0] === 'claude-code' ? 'Claude Code' : 'Codex',
+        })
+      : null;
 
   return (
-    <div className="flex flex-col">
-      <div className={cn('flex flex-col px-5 py-4', detail && 'gap-3')}>
-        <div className="flex items-center gap-3">
-          <div
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
-            style={{
-              backgroundColor: 'var(--settings-integration-avatar-bg)',
-              border: '1px solid var(--settings-integration-avatar-border)',
-              color: 'var(--settings-integration-avatar-icon)',
-            }}
-          >
-            {icon}
-          </div>
-
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <div className="flex items-center gap-2">
-              <span
-                className="min-w-0 truncate text-14 font-medium leading-tight"
-                style={{ color: 'var(--settings-section-title)' }}
-              >
-                {title}
-              </span>
-              {counts && <CountChip on={counts.on} total={counts.total} />}
-              {subscriptionProduct && (
-                <CustomTag
-                  label={t('settings.providers.models.subscriptionProduct', {
-                    product: subscriptionProduct,
-                  })}
-                />
-              )}
-              {badge}
-            </div>
-            <span
-              className="truncate text-13 leading-tight"
-              style={{ color: 'var(--settings-integration-subtitle)' }}
-            >
-              {subtitle}
-            </span>
-          </div>
-
-          {trailing}
-
-          {expandable && (
-            <button
-              type="button"
-              onClick={() => {
-                if (!hasModels) {
-                  onUnavailableExpand?.();
-                  return;
-                }
-                setExpanded((v) => !v);
-              }}
-              aria-expanded={effectiveExpanded}
-              aria-label={t(
-                effectiveExpanded
-                  ? 'settings.providers.models.collapseAria'
-                  : 'settings.providers.models.expandAria',
-              )}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-[var(--surface-hover)]"
-            >
-              {effectiveExpanded ? (
-                <ChevronUp size={18} style={{ color: 'var(--text-tertiary)' }} />
-              ) : (
-                <ChevronDown size={18} style={{ color: 'var(--text-tertiary)' }} />
-              )}
-            </button>
-          )}
+    <div className={cn('flex flex-col px-5 py-4', detail && 'gap-3')}>
+      <div className="flex items-center gap-3">
+        <div
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+          style={{
+            backgroundColor: 'var(--settings-integration-avatar-bg)',
+            border: '1px solid var(--settings-integration-avatar-border)',
+            color: 'var(--settings-integration-avatar-icon)',
+          }}
+        >
+          {icon}
         </div>
 
-        {detail}
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex items-center gap-2">
+            <span
+              className="min-w-0 truncate text-14 font-medium leading-tight"
+              style={{ color: 'var(--settings-section-title)' }}
+            >
+              {title}
+            </span>
+            {counts && <CountChip on={counts.on} total={counts.total} />}
+            {subscriptionProduct && (
+              <CustomTag
+                label={t('settings.providers.models.subscriptionProduct', {
+                  product: subscriptionProduct,
+                })}
+              />
+            )}
+            {badge}
+          </div>
+          <span
+            className="truncate text-13 leading-tight"
+            style={{ color: 'var(--settings-integration-subtitle)' }}
+          >
+            {subtitle}
+            {singleAgentNote ? ` · ${singleAgentNote}` : ''}
+          </span>
+        </div>
+
+        {trailing}
       </div>
 
-      {effectiveExpanded && provider && <ModelListPanel provider={provider} />}
+      {detail}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Anthropic row —— OAuth(Claude.ai 订阅),复用 maker.claudeOAuth*。
+// Anthropic —— OAuth(Claude.ai 订阅),复用 maker.claudeOAuth*。
 // ---------------------------------------------------------------------------
 
-function AnthropicRow({ provider, onChanged }: { provider?: ProviderView; onChanged: () => void }) {
+function AnthropicHeader({ provider, onChanged }: { provider?: ProviderView; onChanged: () => void }) {
   const { t } = useTranslation();
   const { confirm } = useConfirmDialog();
   const [busy, setBusy] = useState(false);
@@ -560,7 +341,7 @@ function AnthropicRow({ provider, onChanged }: { provider?: ProviderView; onChan
   );
 
   return (
-    <ProviderCell
+    <DetailHeader
       icon={<ClaudeMark size={18} />}
       title={t('settings.providers.anthropic.title')}
       subtitle={providerSubtitleForDisplay(provider, t('settings.providers.anthropic.modelLabel'), {
@@ -573,17 +354,15 @@ function AnthropicRow({ provider, onChanged }: { provider?: ProviderView; onChan
 }
 
 // ---------------------------------------------------------------------------
-// OpenAI row —— OAuth(ChatGPT 订阅 / Codex),复用 useCodexAuth()。
+// OpenAI —— OAuth(ChatGPT 订阅 / Codex),复用 useCodexAuth()。
 // ---------------------------------------------------------------------------
 
-function OpenAiRow({ provider, onChanged }: { provider?: ProviderView; onChanged: () => void }) {
+function OpenAiHeader({ provider, onChanged }: { provider?: ProviderView; onChanged: () => void }) {
   const { t } = useTranslation();
   const { confirm } = useConfirmDialog();
   const { state, triggerLogin, cancelLogin, logout } = useCodexAuth();
   const reconnectRequired = state.kind === 'reconnect-required';
   const loggingIn = state.kind === 'login-pending';
-  // useCodexAuth 是这条连接的权威状态；provider 目录只在 hook 尚未完成首次读取时兜底。
-  // 这样失效或重连中都不会因为目录刷新较慢而短暂显示“已连接”。
   const connected = isChatGptConnectionConnected(state, provider?.connected ?? false);
 
   const handleLogout = useCallback(async () => {
@@ -634,7 +413,7 @@ function OpenAiRow({ provider, onChanged }: { provider?: ProviderView; onChanged
   );
 
   return (
-    <ProviderCell
+    <DetailHeader
       icon={<CodexMark size={18} />}
       title={t('settings.providers.openai.title')}
       subtitle={t('settings.providers.openai.subtitle')}
@@ -645,10 +424,10 @@ function OpenAiRow({ provider, onChanged }: { provider?: ProviderView; onChanged
 }
 
 // ---------------------------------------------------------------------------
-// xAI row —— OAuth(SuperGrok 订阅),复用 maker.xaiOAuth*。形态对齐 Anthropic row。
+// xAI —— OAuth(SuperGrok 订阅),复用 maker.xaiOAuth*。
 // ---------------------------------------------------------------------------
 
-function XaiRow({ provider, onChanged }: { provider?: ProviderView; onChanged: () => void }) {
+function XaiHeader({ provider, onChanged }: { provider?: ProviderView; onChanged: () => void }) {
   const { t } = useTranslation();
   const { confirm } = useConfirmDialog();
   const [busy, setBusy] = useState(false);
@@ -718,7 +497,7 @@ function XaiRow({ provider, onChanged }: { provider?: ProviderView; onChanged: (
   );
 
   return (
-    <ProviderCell
+    <DetailHeader
       icon={<span className="text-15 font-semibold leading-none">{providerMonogram(provider?.name ?? 'xAI')}</span>}
       title={t('settings.providers.xai.title')}
       subtitle={providerSubtitleForDisplay(provider, t('settings.providers.xai.modelLabel'), {
@@ -731,11 +510,10 @@ function XaiRow({ provider, onChanged }: { provider?: ProviderView; onChanged: (
 }
 
 // ---------------------------------------------------------------------------
-// 通用 OAuth row —— 目录 auth.oauth 描述符驱动的供应商(非 bespoke 四家)。
-// 登录/登出走 PROVIDER_OAUTH_* IPC(generic-oauth Runner),目录推数据即插即用。
+// 通用 OAuth —— 目录 auth.oauth 描述符驱动的供应商(非 bespoke 四家)。
 // ---------------------------------------------------------------------------
 
-function GenericOAuthRow({ provider, onChanged }: { provider: ProviderView; onChanged: () => void }) {
+function GenericOAuthHeader({ provider, onChanged }: { provider: ProviderView; onChanged: () => void }) {
   const { t } = useTranslation();
   const { confirm } = useConfirmDialog();
   const [busy, setBusy] = useState(false);
@@ -805,7 +583,7 @@ function GenericOAuthRow({ provider, onChanged }: { provider: ProviderView; onCh
   );
 
   return (
-    <ProviderCell
+    <DetailHeader
       icon={<span className="text-15 font-semibold leading-none">{providerMonogram(provider.name)}</span>}
       title={provider.name}
       subtitle={t('settings.providers.genericOAuth.subtitle')}
@@ -816,16 +594,16 @@ function GenericOAuthRow({ provider, onChanged }: { provider: ProviderView; onCh
 }
 
 // ---------------------------------------------------------------------------
-// XD 网关 row —— managed gateway key(useApiKey)。连接时多出一行 masked key chip。
+// XD 网关(Cindy AI)—— managed gateway key(useApiKey)。
+// 套餐引导 / 计费展示待服务端接口就绪后单独实现(2026-07-20 决策:本次剥离)。
 // ---------------------------------------------------------------------------
 
 function maskKey(key: string): string {
-  // sk-•••••• + 末 4 位(参考 .pen keychip 形态)。拿不到真值时给通用遮罩。
   if (key && key.length >= 4) return `sk-••••••${key.slice(-4)}`;
   return 'sk-••••••••';
 }
 
-function XdGatewayRow({ provider, onChanged }: { provider?: ProviderView; onChanged: () => void }) {
+function XdGatewayHeader({ provider, onChanged }: { provider?: ProviderView; onChanged: () => void }) {
   const { t } = useTranslation();
   const { confirm } = useConfirmDialog();
   const { key, hasSavedKey, clearKey } = useApiKey();
@@ -833,12 +611,9 @@ function XdGatewayRow({ provider, onChanged }: { provider?: ProviderView; onChan
   const connected = provider?.connected ?? false;
   const [rotating, setRotating] = useState(false);
 
-  // 凭据一律由服务端自动下发(个人 / 已接入企业),**无手填入口**(2026-07-17 定案):
-  // 连接态由登录同步驱动;失败只提供重试;「断开」仅用于清理本机存量 key。
+  // 凭据一律由服务端自动下发(个人 / 已接入企业),**无手填入口**(2026-07-17 定案)。
   const serverManaged = syncStatus.state === 'ok' && syncStatus.source === 'server';
 
-  // 同步状态翻 ok(main 侧已写入新 key)→ 刷新供应商列表,让 provider.connected
-  // 立即反映自动下发结果(useProviders 不订阅 key 变化,需要显式 refetch)。
   const prevSyncStateRef = useRef(syncStatus.state);
   useEffect(() => {
     if (prevSyncStateRef.current === syncStatus.state) return;
@@ -865,12 +640,6 @@ function XdGatewayRow({ provider, onChanged }: { provider?: ProviderView; onChan
       .catch(() => undefined);
   }, [onChanged]);
 
-  const handleUnavailableExpand = useCallback(() => {
-    toast.error(t('settings.providers.xd.sync.modelsFetchFailed'));
-  }, [t]);
-
-  // 轮换密钥(泄露自救):旧 key 立即失效,进行中的会话 / 远端会话 / 手机语音
-  // 会用旧 key 收到 401,新会话自动用新 key —— 确认文案明示这一影响。
   const handleRotate = useCallback(async () => {
     const confirmed = await confirm({
       title: t('settings.providers.xd.rotateConfirm.title'),
@@ -894,7 +663,6 @@ function XdGatewayRow({ provider, onChanged }: { provider?: ProviderView; onChan
   const trailing = (() => {
     switch (syncStatus.state) {
       case 'unsupported':
-        // 企业未开通:不提供任何入口(含手填),置灰说明。
         return (
           <span className="shrink-0 text-12" style={{ color: 'var(--text-tertiary)' }}>
             {t('settings.providers.xd.sync.unsupported')}
@@ -919,7 +687,6 @@ function XdGatewayRow({ provider, onChanged }: { provider?: ProviderView; onChan
         }
         break;
       case 'failed':
-        // 自动获取失败:只提供重试;本地既有 key 不受影响(仍显示已连接)。
         return (
           <div className="flex shrink-0 items-center gap-2.5">
             {connected && <ConnectedPill />}
@@ -929,8 +696,6 @@ function XdGatewayRow({ provider, onChanged }: { provider?: ProviderView; onChan
       default:
         break;
     }
-    // idle(未登录/未同步)/ disabled(服务端灰度未启用):
-    // 有存量 key → 已连接 + 断开(清本机);无 key → 置灰说明,等登录自动下发。
     return connected ? (
       <div className="flex shrink-0 items-center gap-2.5">
         <ConnectedPill />
@@ -945,11 +710,8 @@ function XdGatewayRow({ provider, onChanged }: { provider?: ProviderView; onChan
     );
   })();
 
-  // 已连接时:masked key chip 已存本地才有真实末 4 位,否则通用遮罩。
   const maskedKey = useMemo(() => maskKey(hasSavedKey ? key : ''), [hasSavedKey, key]);
 
-  // 连接后的缩进行(masked key + 次操作)——对齐到文字块(avatar 36 + gap 12 = 48px)。
-  // server 托管态的次操作是「重新获取凭据」;存量本机 key 无次操作(只读展示)。
   const detail =
     connected && syncStatus.state !== 'unsupported' ? (
       <div className="flex items-center gap-2.5 pl-12">
@@ -978,7 +740,7 @@ function XdGatewayRow({ provider, onChanged }: { provider?: ProviderView; onChan
     ) : undefined;
 
   return (
-    <ProviderCell
+    <DetailHeader
       icon={<XDIncMark size={18} />}
       title={t('settings.providers.xd.title')}
       subtitle={providerSubtitleForDisplay(provider, t('settings.providers.xd.modelLabel'), {
@@ -988,17 +750,15 @@ function XdGatewayRow({ provider, onChanged }: { provider?: ProviderView; onChan
       trailing={trailing}
       provider={provider}
       detail={detail}
-      onUnavailableExpand={handleUnavailableExpand}
     />
   );
 }
 
 // ---------------------------------------------------------------------------
-// Custom (user) provider row —— 复用 ProviderCell（自动获得展开 + 模型开关），
-// trailing 用「编辑 / 删除」图标按钮替代「断开」，标题旁带「自定义」描边 tag。
+// 自定义供应商详情头 —— 编辑 / 删除;OAuth 形态另有授权/登出。
 // ---------------------------------------------------------------------------
 
-/** ProviderView（标准 Provider + connected）→ 编辑表单用的 CustomProviderConfig（per-runtime，不含密钥）。 */
+/** ProviderView → 编辑表单用的 CustomProviderConfig(per-runtime,不含密钥)。 */
 function providerViewToConfig(p: ProviderView): CustomProviderConfig {
   const runtimes: CustomProviderConfig['runtimes'] = {};
   for (const agent of p.agents) {
@@ -1010,45 +770,18 @@ function providerViewToConfig(p: ProviderView): CustomProviderConfig {
       ...(routing?.headerOverride && Object.keys(routing.headerOverride).length > 0
         ? { headers: { ...routing.headerOverride } }
         : {}),
-      // 列模型端点随 routing 回带（buildUserProvider 写入），编辑保存不丢持久化字段。
       ...(routing?.modelsUrl ? { modelsUrl: routing.modelsUrl } : {}),
     };
   }
   return {
     id: p.id,
     name: p.name,
-    // OAuth 形态回填（编辑态需要描述符原值；ProviderView 继承 Provider，auth 就在其中）。
     ...(p.auth.method === 'oauth' && p.auth.oauth ? { auth: { method: 'oauth' as const, oauth: p.auth.oauth } } : {}),
     runtimes,
   };
 }
 
-function RowIconButton({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      className="flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[var(--surface-hover)]"
-      style={{ color: 'var(--text-tertiary)' }}
-    >
-      {icon}
-    </button>
-  );
-}
-
-function CustomTag({ label }: { label: string }) {
-  return (
-    <span
-      className="flex h-[18px] shrink-0 items-center rounded-full px-2 text-11 font-medium"
-      style={{ border: '1px solid var(--settings-integration-avatar-border)', color: 'var(--text-tertiary)' }}
-    >
-      {label}
-    </span>
-  );
-}
-
-function CustomProviderRow({
+function CustomProviderHeader({
   provider,
   onEdit,
   onDelete,
@@ -1059,7 +792,6 @@ function CustomProviderRow({
 }) {
   const { t } = useTranslation();
   const [loggingIn, setLoggingIn] = useState(false);
-  // OAuth 形态自定义供应商：编辑/删除之外还有「授权登录 / 退出」（走通用 OAuth IPC）。
   const isOAuth = provider.auth.method === 'oauth' && !!provider.auth.oauth;
   const handleOAuthClick = useCallback(async () => {
     if (provider.connected) {
@@ -1089,6 +821,7 @@ function CustomProviderRow({
       setLoggingIn(false);
     }
   }, [loggingIn, provider.connected, provider.id, provider.name, t]);
+
   const trailing = (
     <div className="flex shrink-0 items-center gap-1">
       {isOAuth && (
@@ -1116,7 +849,7 @@ function CustomProviderRow({
     </div>
   );
   return (
-    <ProviderCell
+    <DetailHeader
       icon={<span className="text-15 font-semibold leading-none">{providerMonogram(provider.name)}</span>}
       title={provider.name}
       subtitle={customProviderSubtitleForDisplay(provider)}
@@ -1128,52 +861,112 @@ function CustomProviderRow({
 }
 
 // ---------------------------------------------------------------------------
-// Add custom provider entry —— 可点入口行（打开新建表单），列表最底部。
+// 左栏列表
 // ---------------------------------------------------------------------------
 
-function AddCustomRow({ onClick }: { onClick: () => void }) {
+function ListRow({
+  provider,
+  selected,
+  onSelect,
+}: {
+  provider: ProviderView;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   const { t } = useTranslation();
+  const counts = providerHasModels(provider) ? combinedCount(provider) : null;
+  const title = provider.id === 'xd' ? t('settings.providers.xd.title') : provider.name;
   return (
     <button
       type="button"
-      onClick={onClick}
-      className="flex w-full items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-[var(--surface-hover)]"
+      onClick={onSelect}
+      aria-current={selected}
+      className={cn(
+        'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors',
+        !selected && 'hover:bg-[var(--surface-hover)]',
+      )}
+      style={selected ? { backgroundColor: 'var(--surface-chip)' } : undefined}
     >
       <div
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md"
         style={{
-          backgroundColor: 'var(--surface)',
-          border: '1px solid var(--settings-btn-secondary-border)',
-          color: 'var(--settings-section-desc)',
+          backgroundColor: 'var(--settings-integration-avatar-bg)',
+          border: '1px solid var(--settings-integration-avatar-border)',
+          color: 'var(--settings-integration-avatar-icon)',
         }}
       >
-        <Plus size={18} />
+        {providerIcon(provider, 14)}
       </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span
-          className="text-14 font-medium leading-tight"
-          style={{ color: 'var(--settings-section-title)' }}
-        >
-          {t('settings.providers.addCustom.title')}
+      <span
+        className="min-w-0 flex-1 truncate text-13 font-medium"
+        style={{ color: 'var(--settings-section-title)' }}
+      >
+        {title}
+      </span>
+      {counts && (
+        <span className="shrink-0 text-11 tabular-nums" style={{ color: 'var(--text-tertiary)' }}>
+          {counts.on}/{counts.total}
         </span>
-        <span
-          className="truncate text-13 leading-tight"
-          style={{ color: 'var(--settings-integration-subtitle)' }}
-        >
-          {t('settings.providers.addCustom.subtitle')}
-        </span>
-      </div>
-      <ChevronRight size={18} style={{ color: 'var(--text-tertiary)' }} />
+      )}
+      <span
+        className="h-1.5 w-1.5 shrink-0 rounded-full"
+        style={{
+          backgroundColor: provider.connected ? 'var(--remote-status-ready)' : 'var(--border-default)',
+        }}
+      />
     </button>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Divider
-// ---------------------------------------------------------------------------
-
-function Divider() {
-  return <div className="border-t" style={{ borderColor: 'var(--settings-theme-card-border)' }} />;
+/** 检测建议行:本机 CLI 已安装且对应渠道未连接时出现;点击直达向导的授权步。 */
+function SuggestionRow({
+  detection,
+  provider,
+  onClick,
+}: {
+  detection: LocalCliDetection;
+  provider: ProviderView;
+  onClick: () => void;
+}) {
+  const { t } = useTranslation();
+  const cliName = detection.cli === 'claude-cli' ? 'Claude Code CLI' : 'Codex CLI';
+  const title = provider.id === 'xd' ? t('settings.providers.xd.title') : provider.name;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={t(
+        detection.loggedIn
+          ? 'settings.providers.detect.hintLoggedIn'
+          : 'settings.providers.detect.hintInstalled',
+        { cli: cliName },
+      )}
+      className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-[var(--surface-hover)]"
+    >
+      <div
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-70"
+        style={{
+          backgroundColor: 'var(--settings-integration-avatar-bg)',
+          border: '1px solid var(--settings-integration-avatar-border)',
+          color: 'var(--settings-integration-avatar-icon)',
+        }}
+      >
+        {providerIcon(provider, 14)}
+      </div>
+      <span className="min-w-0 flex-1 truncate text-13" style={{ color: 'var(--text-secondary)' }}>
+        {title}
+      </span>
+      <span
+        className="flex h-[22px] shrink-0 items-center rounded-full border px-2.5 text-11 font-medium"
+        style={{
+          borderColor: 'var(--settings-btn-secondary-border)',
+          color: 'var(--text-secondary)',
+        }}
+      >
+        {t('settings.providers.detect.action')}
+      </span>
+    </button>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1184,26 +977,83 @@ export function ProvidersSection() {
   const { t } = useTranslation();
   const { confirm } = useConfirmDialog();
   const { providers, loading, refetch } = useProviders();
-  // 订阅模型显示开关 version:任一开关变更后整页重算(名字旁计数 chip + 展开面板)。
+  // 订阅模型显示开关 version:任一开关变更后整页重算(左栏计数 + 详情列表)。
   useModelVisibilityVersion();
+  // OpenAI 的 reconnect-required 是 useCodexAuth 独有状态(目录 connected 此时为 false):
+  // 该状态下 OpenAI 行必须留在左栏,否则「重新连接」入口不可达,用户被迫从向导重发现。
+  const codexAuth = useCodexAuth();
+  const openaiReconnectRequired = codexAuth.state.kind === 'reconnect-required';
 
-  // 自定义供应商表单弹窗:null = 关闭;{} = 新建;{config} = 编辑。
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // 向导:null = 关;{ entry } = 打开(entry 指定直达的供应商,来自检测建议)。
+  const [wizard, setWizard] = useState<null | { entry?: WizardEntry }>(null);
+  // 自定义供应商完整表单(编辑,或从向导「自定义端点」进入新建)。
   const [dialog, setDialog] = useState<
     null | { mode: 'create' } | { mode: 'edit'; config: CustomProviderConfig }
   >(null);
+  const [detections, setDetections] = useState<LocalCliDetection[]>([]);
+  const [refreshingModels, setRefreshingModels] = useState(false);
 
-  // maker.auth/catalog 广播由 App 的联合快照刷新处理；api-key 类断开后手动 refetch 连接态。
+  // 本机 CLI 扫描:挂载时一次(失败静默空数组;检测建议是增强,不是依赖)。
+  useEffect(() => {
+    let cancelled = false;
+    void window.electronAPI.maker
+      .scanLocalCli()
+      .then((r) => {
+        if (!cancelled) setDetections(r.detections);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const byId = useMemo(() => {
     const map = new Map<string, ProviderView>();
     providers.forEach((p) => map.set(p.id, p));
     return map;
   }, [providers]);
 
-  // 自定义(user)供应商行,按 listProviders 顺序(sortOrder)。
-  const customProviders = useMemo(
-    () => providers.filter((p) => p.source === 'user'),
-    [providers],
-  );
+  // 左栏行集合:xd 置顶;内置/通用 OAuth 渠道只在已连接后占行(未连接的入口在向导
+  // 目录 + 检测建议);自定义供应商保持既有过滤(有模型或 OAuth 形态)。
+  const listProviders = useMemo(() => {
+    const rows: ProviderView[] = [];
+    const xd = byId.get('xd');
+    if (xd) rows.push(xd);
+    for (const p of providers) {
+      if (p.id === 'xd') continue;
+      if (p.source === 'builtin') {
+        // reconnect-required 视同占行:凭证失效 ≠ 用户断开,重连入口必须保留。
+        if (p.connected || (p.id === 'openai' && openaiReconnectRequired)) rows.push(p);
+        continue;
+      }
+      if (p.source === 'user' && (providerHasModels(p) || (p.auth.method === 'oauth' && !!p.auth.oauth))) {
+        rows.push(p);
+      }
+    }
+    return rows;
+  }, [providers, byId, openaiReconnectRequired]);
+
+  // 检测建议:CLI 已安装 + 对应渠道存在于目录 + 未连接,且**未以任何形态占行**
+  // (OpenAI reconnect-required 已在主列表时,不再重复出建议行)。
+  const suggestions = useMemo(() => {
+    const listedIds = new Set(listProviders.map((p) => p.id));
+    return detections
+      .filter((d) => d.installed && !listedIds.has(d.providerId))
+      .map((d) => ({ detection: d, provider: byId.get(d.providerId) }))
+      .filter(
+        (s): s is { detection: LocalCliDetection; provider: ProviderView } =>
+          !!s.provider && !s.provider.connected,
+      );
+  }, [detections, byId, listProviders]);
+
+  // 选中项:默认第一行;所选供应商被删除/消失时回退第一行(不留空详情)。
+  const effectiveSelected = useMemo(() => {
+    if (selectedId && listProviders.some((p) => p.id === selectedId)) {
+      return listProviders.find((p) => p.id === selectedId) ?? null;
+    }
+    return listProviders[0] ?? null;
+  }, [selectedId, listProviders]);
 
   const handleDelete = useCallback(
     async (p: ProviderView) => {
@@ -1215,7 +1065,6 @@ export function ProvidersSection() {
       });
       if (!ok) return;
       try {
-        // 删配置 + 清密钥；main 广播 PROVIDER_CHANGED → App 联合刷新目录与 capabilities。
         await deleteCustomProvider(p.id);
         toast.success(t('settings.providers.custom.toast.deleted'));
       } catch {
@@ -1225,49 +1074,75 @@ export function ProvidersSection() {
     [confirm, t],
   );
 
-  // 内置四家(bespoke)行无条件保留——它们是应用内置的连接入口,清单统一重构后模型
-  // 全靠连接后动态发现,零模型时行也必须在,否则未登录用户没有「授权」按钮可点,
-  // 发现永远无法发生(鸡生蛋死锁)。零模型时 ProviderCell 自身不画计数与展开箭头。
-  // 「有模型才占行」的过滤只适用于自定义 API-key 供应商(见下方 customProviders 循环)。
-  const providerRows: Array<{ key: string; node: ReactNode }> = [];
-  const pushBuiltin = (id: string, render: (p: ProviderView) => ReactNode) => {
-    const p = byId.get(id);
-    if (p) providerRows.push({ key: id, node: render(p) });
+  /**
+   * 自定义供应商「刷新模型」:读回各 runtime 密钥 → fetchProviderModels →
+   * additions-only 合并进配置(与 OAuth 动态发现同语义:只增不删不改,用户手工
+   * 精简过的列表不被打回)。
+   */
+  const handleRefreshModels = useCallback(
+    async (p: ProviderView) => {
+      setRefreshingModels(true);
+      try {
+        const config = providerViewToConfig(p);
+        let added = 0;
+        let anyOk = false;
+        for (const agent of p.agents) {
+          const rt = config.runtimes[agent];
+          if (!rt?.baseUrl) continue;
+          const apiKey = await readCustomProviderKey(p.id, agent);
+          const r = await window.electronAPI.maker.fetchProviderModels({
+            agent,
+            baseUrl: rt.baseUrl,
+            modelsUrl: rt.modelsUrl ?? null,
+            apiKey,
+            ...(rt.headers ? { headers: rt.headers } : {}),
+          });
+          if (!r.ok || !r.models) continue;
+          anyOk = true;
+          const known = new Set(rt.models.map((m) => m.id));
+          for (const m of r.models) {
+            if (!known.has(m.id)) {
+              rt.models.push({ id: m.id, name: m.name });
+              known.add(m.id);
+              added += 1;
+            }
+          }
+        }
+        if (!anyOk) {
+          toast.error(t('settings.providers.models.refreshFailed'));
+          return;
+        }
+        if (added > 0) {
+          await updateCustomProvider(config, {});
+          toast.success(t('settings.providers.models.refreshAdded', { count: added }));
+        } else {
+          toast.success(t('settings.providers.models.refreshNoNew'));
+        }
+        refetch();
+      } catch {
+        toast.error(t('settings.providers.models.refreshFailed'));
+      } finally {
+        setRefreshingModels(false);
+      }
+    },
+    [refetch, t],
+  );
+
+  // 详情头部按供应商类型分派(鉴权逻辑与重构前一致)。
+  const renderDetailHeader = (p: ProviderView): ReactNode => {
+    if (p.id === 'xd') return <XdGatewayHeader provider={p} onChanged={refetch} />;
+    if (p.id === 'anthropic') return <AnthropicHeader provider={p} onChanged={refetch} />;
+    if (p.id === 'openai') return <OpenAiHeader provider={p} onChanged={refetch} />;
+    if (p.id === 'xai') return <XaiHeader provider={p} onChanged={refetch} />;
+    if (p.source === 'builtin') return <GenericOAuthHeader provider={p} onChanged={refetch} />;
+    return (
+      <CustomProviderHeader
+        provider={p}
+        onEdit={() => setDialog({ mode: 'edit', config: providerViewToConfig(p) })}
+        onDelete={() => void handleDelete(p)}
+      />
+    );
   };
-  // Cindy AI 行固定置顶,即使实时模型清单为空也保留:用户仍需要看到凭据状态 / 重试入口,
-  // 点击展开则由 XdGatewayRow 给出明确的「模型列表拉取失败」提示。
-  const xdProvider = byId.get('xd');
-  if (xdProvider) {
-    providerRows.push({
-      key: 'xd',
-      node: <XdGatewayRow provider={xdProvider} onChanged={refetch} />,
-    });
-  }
-  pushBuiltin('anthropic', (p) => <AnthropicRow provider={p} onChanged={refetch} />);
-  pushBuiltin('openai', (p) => <OpenAiRow provider={p} onChanged={refetch} />);
-  pushBuiltin('xai', (p) => <XaiRow provider={p} onChanged={refetch} />);
-  // 通用 OAuth 供应商(目录 auth.oauth 描述符驱动、非上面 bespoke 四家):目录推数据即出现。
-  // OAuth 形态**不要求已有模型**:模型在授权成功后动态发现,零模型时行必须保留,
-  // 否则用户没有「授权」按钮可点,发现永远无法发生(鸡生蛋死锁)。自定义 OAuth 行同理。
-  for (const p of providers) {
-    if (p.source !== 'builtin' || ['anthropic', 'openai', 'xai', 'xd'].includes(p.id)) continue;
-    if (!(p.auth.method === 'oauth' && p.auth.oauth)) continue;
-    providerRows.push({ key: p.id, node: <GenericOAuthRow provider={p} onChanged={refetch} /> });
-  }
-  for (const p of customProviders) {
-    if (providerHasModels(p) || (p.auth.method === 'oauth' && p.auth.oauth)) {
-      providerRows.push({
-        key: p.id,
-        node: (
-          <CustomProviderRow
-            provider={p}
-            onEdit={() => setDialog({ mode: 'edit', config: providerViewToConfig(p) })}
-            onDelete={() => void handleDelete(p)}
-          />
-        ),
-      });
-    }
-  }
 
   return (
     <div className="flex flex-col gap-[14px]">
@@ -1283,27 +1158,128 @@ export function ProvidersSection() {
         </p>
       </div>
 
-      {/* 先取数据再渲染卡片:仅首次冷启(无模块快照)时 loading 为 true,此时不画行——
-          否则会按"未连接"画出矮的 XD 行,IPC 返回后 connected 翻 true 又撑高一行
-          masked-key chip,造成跳变一帧(规则 7)。重开时 useProviders 有快照,loading
-          立即为 false,第一帧即终态高度。卡片只在顶部,门控期间无下方内容被推挤。 */}
+      {/* 先取数据再渲染卡片(规则 7:首帧即终态高度,不出现连接态翻转的跳变帧)。
+          高度跟随视口(减去标题栏 + 设置页 chrome + section 标题的约 14rem),窗口越大
+          卡片越高、能显示越多模型;min-h 保底小窗口不塌陷。左右栏各自内部滚动。
+          原来写死 560px 会在大窗口下截断模型列表(不随框体撑高)。 */}
       {!loading && (
         <div
-          className={cn('flex flex-col rounded-xl', 'border')}
+          className="flex h-[calc(100vh-14rem)] min-h-[460px] overflow-hidden rounded-xl border"
           style={{
             backgroundColor: 'var(--settings-theme-card-bg)',
             borderColor: 'var(--settings-theme-card-border)',
           }}
         >
-          {providerRows.map((row, i) => (
-            <Fragment key={row.key}>
-              {i > 0 && <Divider />}
-              {row.node}
-            </Fragment>
-          ))}
-          {providerRows.length > 0 && <Divider />}
-          <AddCustomRow onClick={() => setDialog({ mode: 'create' })} />
+          {/* 左栏 */}
+          <div
+            className="flex w-[224px] shrink-0 flex-col border-r"
+            style={{ borderColor: 'var(--settings-theme-card-border)' }}
+          >
+            <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto p-2">
+              {listProviders.map((p) => (
+                <ListRow
+                  key={p.id}
+                  provider={p}
+                  selected={effectiveSelected?.id === p.id}
+                  onSelect={() => setSelectedId(p.id)}
+                />
+              ))}
+              {suggestions.length > 0 && (
+                <>
+                  <span
+                    className="px-2.5 pb-1 pt-3 text-11 font-semibold uppercase"
+                    style={{ color: 'var(--text-tertiary)', letterSpacing: '0.4px' }}
+                  >
+                    {t('settings.providers.detect.groupLabel')}
+                  </span>
+                  {suggestions.map((s) => (
+                    <SuggestionRow
+                      key={s.detection.cli}
+                      detection={s.detection}
+                      provider={s.provider}
+                      onClick={() => setWizard({ entry: { kind: 'builtin', providerId: s.provider.id } })}
+                    />
+                  ))}
+                </>
+              )}
+            </div>
+            <div className="border-t p-2" style={{ borderColor: 'var(--settings-theme-card-border)' }}>
+              <button
+                type="button"
+                onClick={() => setWizard({})}
+                className="flex h-9 w-full items-center justify-center gap-1.5 rounded-full border border-dashed text-13 font-medium transition-colors hover:bg-[var(--surface-hover)]"
+                style={{
+                  borderColor: 'var(--settings-btn-secondary-border)',
+                  color: 'var(--settings-section-desc)',
+                }}
+              >
+                <Plus size={15} />
+                {t('settings.providers.addProvider')}
+              </button>
+            </div>
+          </div>
+
+          {/* 右栏详情 */}
+          <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+            {effectiveSelected ? (
+              <>
+                {renderDetailHeader(effectiveSelected)}
+                {providerHasModels(effectiveSelected) && (
+                  <>
+                    <div className="border-t" style={{ borderColor: 'var(--settings-theme-card-border)' }} />
+                    <UnifiedModelList
+                      provider={effectiveSelected}
+                      {...(effectiveSelected.source === 'user' && effectiveSelected.auth.method !== 'oauth'
+                        ? {
+                            onRefresh: () => void handleRefreshModels(effectiveSelected),
+                            refreshing: refreshingModels,
+                          }
+                        : {})}
+                    />
+                  </>
+                )}
+                {!providerHasModels(effectiveSelected) && (
+                  <div
+                    className="flex flex-1 items-center justify-center px-8 text-center text-13"
+                    style={{ color: 'var(--text-tertiary)' }}
+                  >
+                    {/* 已连接却无模型(如 Codex 刚登录、models_cache 未生成;或网关清单拉取失败)
+                        不能沿用未连接的「授权后…」文案——那对已连接供应商自相矛盾。 */}
+                    {t(
+                      effectiveSelected.connected
+                        ? 'settings.providers.detail.emptyModelsConnected'
+                        : 'settings.providers.detail.emptyModels',
+                    )}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div
+                className="flex flex-1 items-center justify-center px-8 text-center text-13"
+                style={{ color: 'var(--text-tertiary)' }}
+              >
+                {t('settings.providers.detail.emptyList')}
+              </div>
+            )}
+          </div>
         </div>
+      )}
+
+      {wizard && (
+        <AddProviderWizard
+          providers={providers}
+          entry={wizard.entry}
+          onOpenCustomForm={() => {
+            setWizard(null);
+            setDialog({ mode: 'create' });
+          }}
+          onClose={() => setWizard(null)}
+          onDone={(providerId) => {
+            setWizard(null);
+            if (providerId) setSelectedId(providerId);
+            refetch();
+          }}
+        />
       )}
 
       {dialog && (
@@ -1313,7 +1289,6 @@ export function ProvidersSection() {
           onClose={() => setDialog(null)}
           onSaved={() => {
             setDialog(null);
-            // 兜底刷新(广播也会触发,双保险无害)。
             refetch();
           }}
         />

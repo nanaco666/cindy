@@ -262,6 +262,7 @@ import { persistAndHydrateSessionProvider } from './sessionProviderBootstrap.js'
 import { registerMakerSessionSendHandler } from './sessionSendHandler.js';
 import { registerStopSessionBackgroundTasksHandler } from './stopSessionBackgroundTasksHandler.js';
 import { registerProviderHandlers } from './providerHandlers.js';
+import { createLocalCliScanDeps, scanLocalCliAuth } from './localCliDetect.js';
 import { registerMcpHandlers } from './mcpHandlers.js';
 import { refreshCustomMcpProviders } from '../mcp-integrations/custom-mcp-registry.js';
 import {
@@ -2866,6 +2867,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     listPresets: () => getActiveCatalog().presets ?? [],
     testConnection: (input) => testProviderConnection(input),
     fetchModels: (spec) => fetchProviderModels(spec),
+    scanLocalCli: () => scanLocalCliAuth(createLocalCliScanDeps()),
     // 通用 OAuth（目录 auth.oauth 描述符驱动）：login 成功后 best-effort 拉动态模型发现
     // (additions-only merge 进 active-catalog) 并广播 PROVIDER_CHANGED 让 UI 刷新连接态。
     oauthLogin: async (providerId) => {

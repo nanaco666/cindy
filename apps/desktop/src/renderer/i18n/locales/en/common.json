@@ -1016,10 +1016,6 @@
         "rotateSuccess": "Key rotated",
         "rotateFailed": "Rotation failed, please try again later"
       },
-      "addCustom": {
-        "title": "Add a custom provider",
-        "subtitle": "Connect any OpenAI / Anthropic-compatible model source; config is stored locally"
-      },
       "custom": {
         "tag": "Custom",
         "editAria": "Edit",
@@ -1127,8 +1123,14 @@
         "subscription": "Subscription",
         "subscriptionProduct": "{{product}} Subscription",
         "noResults": "No matching models",
-        "expandAria": "Expand model list",
-        "collapseAria": "Collapse model list"
+        "splitAdjust": "Adjust per CLI",
+        "splitDone": "Done",
+        "capabilityNote": "Not available in {{agent}}",
+        "divergedChip": "Hidden in {{agent}}",
+        "refreshAria": "Refresh model list (additions only)",
+        "refreshAdded": "Found {{count}} new models",
+        "refreshNoNew": "Model list is up to date — nothing new",
+        "refreshFailed": "Failed to refresh the model list. Please try again later"
       },
       "genericOAuth": {
         "subtitle": "Subscription sign-in (OAuth)",
@@ -1144,6 +1146,53 @@
           "confirm": "Sign out",
           "cancel": "Cancel"
         }
+      },
+      "addProvider": "Add provider",
+      "detail": {
+        "singleAgentNote": "{{agent}} only",
+        "emptyModels": "Models are discovered automatically after you authorize",
+        "emptyList": "Click \"Add provider\" below to connect your first model source",
+        "emptyModelsConnected": "Connected — discovering available models. If it stays empty, try again shortly."
+      },
+      "detect": {
+        "groupLabel": "Detected on this device",
+        "action": "Authorize",
+        "hintLoggedIn": "{{cli}} is signed in on this device — authorize to connect",
+        "hintInstalled": "{{cli}} is installed on this device"
+      },
+      "wizard": {
+        "title": "Add provider",
+        "titleWith": "Add · {{name}}",
+        "closeAria": "Close",
+        "stepPick": "Choose provider",
+        "stepConnect": "Connect",
+        "stepModels": "Choose models",
+        "searchPlaceholder": "Search providers…",
+        "groupSubscription": "Subscription sign-in · recommended, no API key",
+        "groupApiKey": "API key providers · presets update with the catalog",
+        "groupCustom": "Custom",
+        "metaOAuth": "Subscription (OAuth)",
+        "metaApiKey": "API key",
+        "customTitle": "Custom endpoint",
+        "customMeta": "Connect any OpenAI / Anthropic compatible source",
+        "pickHint": "The sign-in method is defined by each provider; OAuth endpoints and base URLs come from presets — nothing to fill in by hand.",
+        "oauthDesc": "Authorize your subscription in the browser — no API key needed",
+        "authorizedToast": "Connected {{name}}",
+        "authorizeFailed": "Failed to authorize {{name}}. Please try again",
+        "nameLabel": "Display name",
+        "onlyAgentNote": "This provider only supports {{agent}}",
+        "docsLink": "View setup docs",
+        "fetching": "Verifying connection and fetching models…",
+        "fetchFailed": "Couldn't fetch the model list — you can finish with the preset's recommended models and refresh later in details",
+        "recommended": "Recommended",
+        "modelsHint": "Checked models appear in the chat model picker and apply to every CLI where they're available; adjust anytime in provider details.",
+        "noModelSelected": "Select at least one model",
+        "createdToast": "Added {{name}}",
+        "createFailed": "Failed to add. Please try again",
+        "next": "Next",
+        "back": "← Back",
+        "finish": "Finish",
+        "cancel": "Cancel"
       }
     },
     "experimental": {

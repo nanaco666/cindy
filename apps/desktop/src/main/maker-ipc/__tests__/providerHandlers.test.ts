@@ -68,6 +68,7 @@ function makeDeps(over: Partial<ProviderHandlerDeps> = {}): ProviderHandlerDeps 
     oauthLogout: vi.fn(async () => {}),
     oauthCancel: vi.fn(() => {}),
     clearOAuthCredentials: vi.fn(() => {}),
+    scanLocalCli: vi.fn(async () => []),
     ...over,
   };
 }
