@@ -558,7 +558,15 @@ export default function AutomationsScreen() {
   const requestDeleteSchedule = useCallback((schedule: RemoteSchedule) => {
     if (busyAction) return;
     const target = buildScheduleDeleteTarget(schedule);
-    const cachedPreview = buildScheduleDeletePreview(runsBySchedule.get(schedule.id) ?? []);
+    // 透传 schedule.targetSessionId 作为 excludeSessionId —— 手绑的用户既有会话必须
+    // 从预览/处置集合里排除,否则 runDeleteSchedule 的 patchSessionMeta 会误软删它
+    // (与桌面端收集层 isAutomationGeneratedSession 首选 + targetSessionId 保底同口径)。
+    const cachedPreview = buildScheduleDeletePreview(
+      runsBySchedule.get(schedule.id) ?? [],
+      0,
+      [],
+      schedule.targetSessionId,
+    );
     setDeleteState({
       schedule,
       target,
@@ -578,7 +586,12 @@ export default function AutomationsScreen() {
             maker.schedule.getInflightCount(schedule.id).catch(() => 0),
           ]);
         });
-        const preview = buildScheduleDeletePreview(normalizeScheduleRuns(runs), inflight);
+        const preview = buildScheduleDeletePreview(
+          normalizeScheduleRuns(runs),
+          inflight,
+          [],
+          schedule.targetSessionId,
+        );
         setDeleteState((prev) => {
           if (!prev || prev.schedule.id !== schedule.id) return prev;
           return {

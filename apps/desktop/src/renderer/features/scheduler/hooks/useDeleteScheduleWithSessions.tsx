@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 import { Archive, MessageSquare, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { ScheduleRun } from '@lizi/maker-scheduler';
+import type { Schedule, ScheduleRun } from '@lizi/maker-scheduler';
 
 import { cn } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
@@ -22,6 +22,17 @@ export interface DeleteScheduleTarget {
   workingDir?: string;
   projectConfigId?: string;
   knownSessionIds?: readonly string[];
+  /**
+   * 手绑到该 schedule 的用户既有会话 id(schedule.targetSessionId)。
+   *
+   * runner 在心跳模式下把 targetSessionId 当每轮 run 的 sessionId 落进
+   * schedule_runs(见 scheduler-host/runner.ts),收集"本任务生成的会话"时
+   * 必须排除它,否则会被 applyGeneratedSessionDisposition 误软删。
+   * 硬不变量:删除 schedule 时绝不能软删/归档一个不是本任务生成的会话。
+   *
+   * 调用方未传入时,collectGeneratedSessionIds 会自取 schedule 记录兜底解析。
+   */
+  targetSessionId?: string;
 }
 
 export interface DeletedScheduleGeneratedSessionResult {
@@ -93,17 +104,21 @@ export function useDeleteScheduleWithSessions(options: UseDeleteScheduleWithSess
       });
       setTarget(null);
       if (failedSessionIds.length > 0) {
-        toast.error(t('scheduler.deleteDialog.sessionUpdatePartial', {
-          ok: sessionIds.length - failedSessionIds.length,
-          fail: failedSessionIds.length,
-        }));
+        toast.error(
+          t('scheduler.deleteDialog.sessionUpdatePartial', {
+            ok: sessionIds.length - failedSessionIds.length,
+            fail: failedSessionIds.length,
+          }),
+        );
       } else {
         toast.success(t('scheduler.toast.deleted'));
       }
     } catch (error) {
-      toast.error(t('scheduler.toast.deleteFailed', {
-        error: error instanceof Error ? error.message : String(error),
-      }));
+      toast.error(
+        t('scheduler.toast.deleteFailed', {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
     } finally {
       setLoading(false);
     }
@@ -126,17 +141,36 @@ export function useDeleteScheduleWithSessions(options: UseDeleteScheduleWithSess
   return { requestDeleteSchedule, deleteScheduleDialog: dialog };
 }
 
+async function resolveBoundSessionId(target: DeleteScheduleTarget): Promise<string | undefined> {
+  // 调用方已显式传入手绑会话 id 时直接用;否则自取 schedule 记录兜底,
+  // 保证手绑的用户既有会话一定从处置集合里排除(硬不变量)。
+  if (target.targetSessionId !== undefined) return target.targetSessionId;
+  try {
+    const list = (await window.electronAPI.maker.schedule.list()) as Schedule[] | undefined;
+    return list?.find((s) => s?.id === target.id)?.targetSessionId;
+  } catch {
+    return undefined;
+  }
+}
+
 async function collectGeneratedSessionIds(target: DeleteScheduleTarget): Promise<string[]> {
+  // 收集层单闸门:两来源(run 历史 ids + knownSessionIds)统一排除手绑的 boundSessionId
+  // (schedule.targetSessionId)—— runner 心跳模式把它当每轮 run 的 sessionId 落进
+  // schedule_runs,不过滤会误把用户既有会话算进处置集合被软删。与共享 helper、mobile
+  // 同一 id 排除机制(共享层是纯工具拿不到 session 对象,亦走 id 排除保底)。
+  const boundSessionId = await resolveBoundSessionId(target);
   const ids = new Set<string>();
+  const shouldKeep = (id: string | undefined): id is string =>
+    !!id && id !== boundSessionId;
   for (const id of target.knownSessionIds ?? []) {
-    if (id) ids.add(id);
+    if (shouldKeep(id)) ids.add(id);
   }
   const runs = (await window.electronAPI.maker.schedule.listRuns(
     target.id,
     RUNS_PER_DELETE_PREVIEW_LIMIT,
   )) as ScheduleRun[];
   for (const run of runs) {
-    if (run.sessionId) ids.add(run.sessionId);
+    if (shouldKeep(run.sessionId)) ids.add(run.sessionId);
   }
   return [...ids];
 }
@@ -336,7 +370,8 @@ function DeleteScheduleWithSessionsDialog({
                 'active:scale-[0.98]',
                 'bg-[var(--confirm-btn-primary-bg)] text-[var(--confirm-btn-primary-text)]',
                 'hover:bg-[var(--confirm-btn-primary-hover)] focus-visible:ring-[var(--confirm-btn-primary-bg)]',
-                loading && 'cursor-default opacity-80 active:scale-100 hover:bg-[var(--confirm-btn-primary-bg)]',
+                loading &&
+                  'cursor-default opacity-80 active:scale-100 hover:bg-[var(--confirm-btn-primary-bg)]',
               )}
             >
               {loading ? (
