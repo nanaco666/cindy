@@ -50,6 +50,7 @@ const overrides = {
   'ask-checkbox-border': '#BFC1C4', // AA checkbox border
   background: '0.0 2.4% 16.1%', // 背景 -> HSL
   'chat-input-bg': '#312F2F', // 输入框
+  'chat-input-border-focus': 'rgba(191, 193, 196, 0.30)', // 用户改稿 2026-07-20:输入框聚焦描边降至 30%
   'chat-input-chip-border': '#434343', // 边框
   'chat-input-text': '#D4D4D4', // 正文
   'color-primary': '#D4D4D4', // 正文
@@ -94,9 +95,9 @@ const overrides = {
   'settings-theme-auto-dark': '#2A2828', // Auto 预览 dark 固定
   'sidebar-action-icon': '0 0% 43.5%', // E1D 侧栏层级:二级暗灰 #6F6F6F(时间戳/RemoteProjectIcon)
   'cmd-palette-item-meta': '#6F6F6F', // E1D 侧栏层级:二级暗灰(分组标签/meta)
-  'sidebar-item-active-foreground': '#D4D4D4', // E1D 选中胶囊反白前景(近白)
-  'sidebar-item-active-border': '#C24152', // 补编 §3:dark 浅红描边(light 深红,别装反)
-  'sidebar-item-active': '352.1 76.6% 36.9%', // E1D C 类裁决 4:dark 深红 #A61629(light 保持红)
+  'sidebar-item-active-foreground': '#252222', // 用户二次改稿 2026-07-20:反相胶囊,dark 浅底深字(同 accent-pure-cta-fg)
+  'sidebar-item-active-border': 'transparent', // 用户三次改稿 2026-07-20:选中胶囊彻底去描边
+  'sidebar-item-active': '0.0 0.0% 93.3%', // 用户二次改稿 2026-07-20:反相胶囊 #EEEEEE 浅底(同 accent-cta-bg)
   'splash-bg': '0.0 2.4% 16.1%', // 背景 -> HSL
   'splash-text': '216.0 4.1% 75.9%', // AA splash text
   'splash-text-destructive': '0.0 0.0% 100.0%', // destructive splash text
@@ -125,7 +126,7 @@ const overrides = {
   'sidebar-item-hover': '0.0 2.2% 18.0%', // alias closure: hover
   'sidebar-search-bg': '0.0 2.4% 16.1%', // alias closure: surface
   'sidebar-muted': '0 0% 43.5%', // E1D 侧栏层级:二级暗灰 #6F6F6F(行首图标普通态)
-  'surface-translucent-sidebar': 'rgba(18, 15, 15, 0.75)', // 用户观感定稿(2026-07-18:75%)
+  'surface-translucent-sidebar': 'rgba(18, 15, 15, 0.80)', // 用户调参 2026-07-20:75%→80%(壁纸透入略收)
   'surface-translucent-main': '#2A2828', // E4D 主面板:用户勘误 2026-07-17 撤销毛玻璃,改不透明等价 surface(原 rgba(18,15,15,0.85))
   'surface-translucent-overlay': 'rgba(37, 35, 35, 0.80)', // E4D R1 模式3
   'composer-pill-bg': '#393838', // E2 composer pill 底(dark,lead Figma 实测 §2-3;取代错稿 glass-pill)

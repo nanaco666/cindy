@@ -92,7 +92,7 @@ describe('SessionCard review regressions', () => {
 
   it('keeps selected running-session icons and spinner on the active foreground color', () => {
     expect(sessionStatusIconSource).toContain(
-      "colorClassName={isActive ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}" /* colorClassName 覆盖口(VendorIcon,running 红类确定性让位) */,
+      "colorClassName={isActive ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}" /* colorClassName 覆盖口:选中态前景优先于 running 强调态 */,
     );
     expect(sessionStatusIconSource).toMatch(
       /isActive\s*\? 'text-\[var\(--sidebar-item-active-foreground\)\]'\s*:\s*isRunning/,
