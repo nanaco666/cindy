@@ -231,7 +231,7 @@ export interface Session {
    */
   worktreePath?: string | null;
   /**
-   * project-context 实验功能：本 session 创建时是否注入了 .xdmaker/project-knowledge/ 内的项目知识。
+   * project-context 实验功能：本 session 创建时是否注入了 .cindy/project-knowledge/ 内的项目知识。
    * Render 端用此字段决定 sidebar stripe / chat header chip 显示。
    * 升级前已存在的 session 默认 false（不追溯）。
    */

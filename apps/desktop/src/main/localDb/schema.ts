@@ -154,7 +154,7 @@ export const sessions = sqliteTable(
     imBotContextId: text('im_bot_context_id'),
     imUserId: text('im_user_id'),
     /**
-     * 本 session 创建时是否注入了 project-context 知识（来自 .xdmaker/project-knowledge/）。
+     * 本 session 创建时是否注入了 project-context 知识（来自 .cindy/project-knowledge/）。
      * 仅在创建瞬间由 main IPC 写入；后续不变。
      * Render 端用此字段决定 sidebar stripe / chat header chip 显示。
      * 详见 docs/project-context.md + plan partitioned-dazzling-rainbow.md。

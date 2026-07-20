@@ -56,7 +56,7 @@ downloads/
 # CODEX_HOME：包含 auth.json 与本机 skill symlink。
 apps/desktop/codex-home/
 # 项目知识正文需要提交，只忽略运行时锁。
-.xdmaker/project-knowledge/.lock
+.cindy/project-knowledge/.lock
 
 # ── 设计与开发临时产物 ───────────────────────────────────────
 docs/design_docs/.tmp_screenshots/

@@ -4718,7 +4718,7 @@
       },
       "cell": {
         "tag": "项目",
-        "tooltip": "由 .xdmaker/automations/schedules.json 管理，不能在 UI 中编辑"
+        "tooltip": "由 .cindy/automations/schedules.json 管理，不能在 UI 中编辑"
       }
     },
     "button": {
@@ -4764,7 +4764,7 @@
       "removeProject": {
         "menu": "从项目移除",
         "confirmTitle": "从项目移除自动化？",
-        "confirmDescription": "将从 .xdmaker/automations/schedules.json 中删除 \"{{name}}\"，此操作会影响所有协作者（commit 后）。",
+        "confirmDescription": "将从 .cindy/automations/schedules.json 中删除 \"{{name}}\"，此操作会影响所有协作者（commit 后）。",
         "confirm": "移除",
         "demote": "移除并保留个人副本",
         "demoteSuccess": "已移除项目自动化并保留为个人任务"

@@ -4727,7 +4727,7 @@
       },
       "cell": {
         "tag": "Project",
-        "tooltip": "Managed by .xdmaker/automations/schedules.json — cannot edit in UI"
+        "tooltip": "Managed by .cindy/automations/schedules.json — cannot edit in UI"
       }
     },
     "button": {
@@ -4773,7 +4773,7 @@
       "removeProject": {
         "menu": "Remove from project",
         "confirmTitle": "Remove from project automation?",
-        "confirmDescription": "Removes \"{{name}}\" from .xdmaker/automations/schedules.json. After commit this affects all collaborators.",
+        "confirmDescription": "Removes \"{{name}}\" from .cindy/automations/schedules.json. After commit this affects all collaborators.",
         "confirm": "Remove",
         "demote": "Remove and keep personal copy",
         "demoteSuccess": "Removed from project, kept as personal"
