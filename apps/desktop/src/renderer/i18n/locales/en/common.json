@@ -2035,10 +2035,10 @@
         "cancel": "Cancel"
       },
       "setupGate": {
-        "title": "\"{{name}}\" needs setup",
-        "descriptionMissing": "Before using it, please set up: {{items}}. Go to the plugin settings now?",
-        "descriptionReauth": "Account authorization has expired: {{items}}. Reconnect to keep using it. Go there now?",
-        "configure": "Set up",
+        "title": "“{{name}}” Needs Setup",
+        "descriptionMissing": "Before using it, set up: {{items}}. Open the plugin settings now?",
+        "descriptionReauth": "Account authorization has expired: {{items}}. Reconnect to keep using it. Open the plugin settings now?",
+        "configure": "Open Settings",
         "cancel": "Cancel",
         "anySeparator": " or ",
         "groupSeparator": ", "

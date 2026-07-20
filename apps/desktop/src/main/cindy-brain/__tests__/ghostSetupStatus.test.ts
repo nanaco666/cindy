@@ -1,12 +1,17 @@
 /**
- * evaluateGhostSetup 判定纯函数测试(使用前置检查,2026-07-21):
- * 启发式回落、setup 声明逐组判定、oauth 过期 reauth 分支、kv 存在性口径。
+ * evaluateGhostSetup 判定纯函数 + ghosts:setup-status handler 主体测试
+ * (使用前置检查,2026-07-21):启发式回落、setup 声明逐组判定、空 requires
+ * opt-out、oauth 过期 reauth 分支、kv 存在性口径、IPC 参数与错误路径。
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { validateGhostManifest, type GhostManifest } from '../../../shared/ghost';
-import { evaluateGhostSetup, type GhostSetupProbes } from '../ghostSetupStatus';
+import {
+  evaluateGhostSetup,
+  handleGhostSetupStatusRequest,
+  type GhostSetupProbes,
+} from '../ghostSetupStatus';
 
 /** 全部探针缺省「什么都没配」,单测按需覆写。 */
 function probes(overrides: Partial<GhostSetupProbes> = {}): GhostSetupProbes {
@@ -246,5 +251,86 @@ describe('evaluateGhostSetup · setup 显式声明', () => {
     // optional_key 未配置,但声明只要求 key_a → 就绪。
     const status = evaluateGhostSetup(partial, probes({ secretSaved: (key) => key === 'key_a' }));
     expect(status.ready).toBe(true);
+  });
+});
+
+describe('evaluateGhostSetup · requires: [] 显式 opt-out', () => {
+  it('声明了可选凭证但 requires 为空 → 恒就绪(启发式不再兜底)', () => {
+    const m = manifest({
+      slots: ['tool', 'network'],
+      tools: [{ name: 'work', description: '干活' }],
+      settingsHtml: 'settings.html',
+      network: {
+        hosts: ['api.example.com'],
+        secrets: [{ key: 'optional_key', label: '可选 Key', inject: INJECT }],
+      },
+      setup: { requires: [] },
+    });
+    // 同一份声明去掉 setup 时启发式会拦(对照组),opt-out 后放行。
+    expect(evaluateGhostSetup(m, probes())).toEqual({ ready: true, missingGroups: [], reauth: [] });
+  });
+});
+
+describe('handleGhostSetupStatusRequest · IPC handler 主体(规则 14)', () => {
+  const readyManifest = manifest({
+    slots: ['tool'],
+    tools: [{ name: 'work', description: '干活' }],
+  });
+
+  it('非法 id 形态 → INVALID_PARAMS', () => {
+    for (const bad of [null, 42, 'UPPER_CASE!', '']) {
+      expect(() =>
+        handleGhostSetupStatusRequest({
+          id: bad,
+          getRuntimeManifest: () => readyManifest,
+          probesFor: () => probes(),
+        }),
+      ).toThrow(/INVALID_PARAMS/);
+    }
+  });
+
+  it('未安装的意识 → NOT_FOUND', () => {
+    expect(() =>
+      handleGhostSetupStatusRequest({
+        id: 'nope',
+        getRuntimeManifest: () => null,
+        probesFor: () => probes(),
+      }),
+    ).toThrow(/NOT_FOUND/);
+  });
+
+  it('正常路径:清单经 getRuntimeManifest 现查,状态透传判定结果', () => {
+    const getRuntimeManifest = vi.fn(() => readyManifest);
+    const status = handleGhostSetupStatusRequest({
+      id: 'demo',
+      getRuntimeManifest,
+      probesFor: () => probes(),
+    });
+    expect(getRuntimeManifest).toHaveBeenCalledWith('demo');
+    expect(status).toEqual({ ready: true, missingGroups: [], reauth: [] });
+  });
+
+  it('探针意外抛错原样上抛(不折叠成「未配置」;renderer 侧 fail-open)', () => {
+    const m = manifest({
+      slots: ['tool', 'network'],
+      tools: [{ name: 'work', description: '干活' }],
+      settingsHtml: 'settings.html',
+      network: {
+        hosts: ['api.example.com'],
+        secrets: [{ key: 'api_key', label: 'API Key', inject: INJECT }],
+      },
+    });
+    expect(() =>
+      handleGhostSetupStatusRequest({
+        id: 'demo',
+        getRuntimeManifest: () => m,
+        probesFor: () =>
+          probes({
+            secretSaved: () => {
+              throw new Error('vault io failed');
+            },
+          }),
+      }),
+    ).toThrow('vault io failed');
   });
 });

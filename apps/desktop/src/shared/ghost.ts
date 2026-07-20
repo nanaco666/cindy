@@ -543,7 +543,9 @@ export const GHOST_NETWORK_FORBIDDEN_INJECT_HEADERS: readonly string[] = [
  * - 'login-email' 源凭证恒就绪,引用它属作者误解 → 拒装;
  * - 缺省(不声明 setup)= 宿主启发式:声明过凭证/连接的意识,任一项就绪
  *   即算 ready;什么都没声明的恒 ready。现有内置意识全部被启发式正确覆盖,
- *   只有启发式判不准(如「必须同时配 A 和 B」)才需要写本字段。
+ *   只有启发式判不准才需要写本字段——两种典型:「必须同时配 A 和 B」用
+ *   多组声明;「凭证全是可选项、不配也能用」用 requires: [](显式 opt-out,
+ *   恒就绪,启发式不再兜底)。
  */
 
 /** setup.requires 需求组条数上限。 */
@@ -2022,8 +2024,10 @@ export function validateGhostManifest(raw: unknown): ManifestValidation {
       return { ok: false, reason: 'setup 必须是对象(如 { "requires": [{ "anyOf": ["secret:api_key"] }] })' };
     }
     const su = raw.setup as Record<string, unknown>;
-    if (!Array.isArray(su.requires) || su.requires.length === 0 || su.requires.length > GHOST_SETUP_MAX_GROUPS) {
-      return { ok: false, reason: `setup.requires 必须是 1–${GHOST_SETUP_MAX_GROUPS} 组的数组` };
+    // 空数组是合法的显式 opt-out:「本意识没有使用前置需求」——凭证全为
+    // 可选项的意识用它关掉宿主启发式(不声明才走启发式)。
+    if (!Array.isArray(su.requires) || su.requires.length > GHOST_SETUP_MAX_GROUPS) {
+      return { ok: false, reason: `setup.requires 必须是 0–${GHOST_SETUP_MAX_GROUPS} 组的数组(空数组 = 显式声明无使用前置需求)` };
     }
     const secretByKey = new Map((network?.secrets ?? []).map((s) => [s.key, s] as const));
     const connectionKeys = new Set((network?.connections ?? []).map((c) => c.key));

@@ -2035,10 +2035,10 @@
         "cancel": "취소"
       },
       "setupGate": {
-        "title": "\"{{name}}\" 플러그인은 설정이 필요합니다",
-        "descriptionMissing": "사용하기 전에 다음 설정이 필요합니다: {{items}}. 지금 플러그인 설정으로 이동할까요?",
-        "descriptionReauth": "계정 인증이 만료되었습니다: {{items}}. 다시 연결해야 사용할 수 있습니다. 지금 이동할까요?",
-        "configure": "설정으로 이동",
+        "title": "“{{name}}” 플러그인은 설정이 필요합니다",
+        "descriptionMissing": "사용하기 전에 다음 설정이 필요합니다: {{items}}. 지금 플러그인 설정을 열까요?",
+        "descriptionReauth": "계정 인증이 만료되었습니다: {{items}}. 다시 연결해야 사용할 수 있습니다. 지금 설정을 열까요?",
+        "configure": "설정 열기",
         "cancel": "취소",
         "anySeparator": " 또는 ",
         "groupSeparator": ", "
