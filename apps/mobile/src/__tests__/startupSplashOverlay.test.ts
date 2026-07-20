@@ -8,7 +8,8 @@ import { describe, expect, it } from 'vitest';
  * splash,交接 remount 会露出 surface 底色,产生"红→白→红"闪帧(2026-07 用户实报)。
  */
 describe('startup splash overlay', () => {
-  const read = (rel: string) => readFileSync(resolve(process.cwd(), rel), 'utf8');
+  // Windows 检出(core.autocrlf)下源文件是 CRLF,归一化行尾让含 \n 的断言跨平台成立。
+  const read = (rel: string) => readFileSync(resolve(process.cwd(), rel), 'utf8').replace(/\r\n/g, '\n');
 
   it('root layout mounts a single persistent splash overlay above the gate chain', () => {
     const layout = read('app/_layout.tsx');
