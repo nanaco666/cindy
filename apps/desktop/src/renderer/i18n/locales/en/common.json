@@ -3319,6 +3319,14 @@
       "notGitRepo": "Current directory is not a git repository",
       "alreadyInWorktree": "Already inside a worktree, nesting is not allowed"
     },
+    "branchChip": {
+      "label": "Branch",
+      "loading": "Loading branches…",
+      "loadFailed": "Failed to load branches — tap to retry",
+      "currentTooltip": "Current branch",
+      "sourceTooltip": "Worktree source branch",
+      "worktreeHint": "Picking another branch starts in an isolated worktree"
+    },
     "folderPicker": {
       "selectFolder": "Select folder",
       "selectProject": "Select project",
