@@ -8,7 +8,8 @@
  *   - trackpad/mouse wheel pan, with ctrl/cmd+wheel zoom at cursor
  *   - drag to pan (when zoomed in)
  *   - double-click to reset
- *   - bottom toolbar: zoom out / level / zoom in / reset / close
+ *   - bottom toolbar: zoom out / level / zoom in / annotate (host-provided) /
+ *     copy (PNG + source) / close
  *
  * SVG (vector) stays sharp at any zoom level — no rasterization step.
  */
