@@ -293,6 +293,7 @@ async function writeClaudeJsonl(
 describe('commitRewindAtMessage', () => {
   it('happy path: calls maker session.commitRewindFiles(userUuid, priorAsstUuid) + soft-delete + reset', async () => {
     selectQueue.push([makeUserMessageRow()]);                  // target user msg
+    selectQueue.push([]); // agent_switch 边界守卫:无边界
     selectQueue.push([makeAssistantMessageRow()]);             // prior assistants asc
     selectQueue.push([makeSessionRow({ contextTokens: 0, contextWindow: 0 })]); // post-update select
 
@@ -337,6 +338,7 @@ describe('commitRewindAtMessage', () => {
   it('requireLatestUser: target 仍最新 → 标志透传进 rewind.commit 事务参数(worker 临界区内最终断言)', async () => {
     selectQueue.push([makeUserMessageRow()]);              // target user msg
     selectQueue.push([]);                                  // 前置校验:无更新 user 行
+    selectQueue.push([]); // agent_switch 边界守卫:无边界
     selectQueue.push([makeAssistantMessageRow()]);         // visible assistants
     selectQueue.push([makeSessionRow()]);                  // post-update select
 
@@ -350,6 +352,7 @@ describe('commitRewindAtMessage', () => {
   it('requireLatestUser: 事务临界区内断言失败不被 warn 吞掉,以 REWIND_TARGET_NOT_LATEST 上抛', async () => {
     selectQueue.push([makeUserMessageRow()]);
     selectQueue.push([]);                                  // 前置校验通过
+    selectQueue.push([]); // agent_switch 边界守卫:无边界
     selectQueue.push([makeAssistantMessageRow()]);
     txMock.mockRejectedValueOnce(
       new Error('REWIND_TARGET_NOT_LATEST: newer visible user message exists'),
@@ -362,6 +365,7 @@ describe('commitRewindAtMessage', () => {
 
   it('不传 requireLatestUser(Rewind 按钮路径)→ 无前置校验查询,事务参数不带守卫标志', async () => {
     selectQueue.push([makeUserMessageRow()]);
+    selectQueue.push([]); // agent_switch 边界守卫:无边界
     selectQueue.push([makeAssistantMessageRow()]);
     selectQueue.push([makeSessionRow()]);
 
@@ -376,6 +380,7 @@ describe('commitRewindAtMessage', () => {
 
   it('uses target transcriptParentUuid as prior assistant anchor when DB timestamps are inverted', async () => {
     selectQueue.push([makeUserMessageRow({ createdAt: 3000 })]); // target user msg
+    selectQueue.push([]); // agent_switch 边界守卫:无边界
     selectQueue.push([makeAssistantMessageRow({ createdAt: 3001 })]); // prior assistant persisted after target
     selectQueue.push([makeSessionRow()]);
 
@@ -427,6 +432,7 @@ describe('commitRewindAtMessage', () => {
         }),
       }),
     ]);
+    selectQueue.push([]); // agent_switch 边界守卫:无边界
     selectQueue.push([
       makeAssistantMessageRow({
         agentMeta: JSON.stringify({ uuid: 'stale-db-parent-uuid', sdkSessionId: 'sdk-uuid-old' }),
@@ -481,6 +487,7 @@ describe('commitRewindAtMessage', () => {
         }),
       }),
     ]);
+    selectQueue.push([]); // agent_switch 边界守卫:无边界
     selectQueue.push([
       makeAssistantMessageRow({
         agentMeta: JSON.stringify({ uuid: 'stale-db-parent-uuid', sdkSessionId: 'sdk-uuid-old' }),
@@ -520,6 +527,7 @@ describe('commitRewindAtMessage', () => {
         }),
       }),
     ]);
+    selectQueue.push([]); // agent_switch 边界守卫:无边界
     selectQueue.push([
       makeAssistantMessageRow({
         agentMeta: JSON.stringify({
@@ -578,6 +586,7 @@ describe('commitRewindAtMessage', () => {
         }),
       }),
     ]);
+    selectQueue.push([]); // agent_switch 边界守卫:无边界
     selectQueue.push([
       makeAssistantMessageRow({
         agentMeta: JSON.stringify({ uuid: 'top-level-assistant-uuid', sdkSessionId: 'sdk-uuid-old' }),
@@ -625,6 +634,7 @@ describe('commitRewindAtMessage', () => {
         }),
       }),
     ]);
+    selectQueue.push([]); // agent_switch 边界守卫:无边界
     selectQueue.push([
       makeAssistantMessageRow({
         agentMeta: JSON.stringify({ uuid: 'stale-db-parent-uuid', sdkSessionId: 'sdk-uuid-old' }),
@@ -666,6 +676,7 @@ describe('commitRewindAtMessage', () => {
         }),
       }),
     ]);
+    selectQueue.push([]); // agent_switch 边界守卫:无边界
     selectQueue.push([
       makeAssistantMessageRow({
         agentMeta: JSON.stringify({ uuid: 'stale-db-parent-uuid', sdkSessionId: 'sdk-uuid-old' }),
@@ -708,6 +719,7 @@ describe('commitRewindAtMessage', () => {
         }),
       }),
     ]);
+    selectQueue.push([]); // agent_switch 边界守卫:无边界
     selectQueue.push([
       makeAssistantMessageRow({
         agentMeta: JSON.stringify({ uuid: 'stale-source-parent-uuid', sdkSessionId: 'sdk-uuid-source' }),
@@ -751,6 +763,7 @@ describe('commitRewindAtMessage', () => {
         }),
       }),
     ]);
+    selectQueue.push([]); // agent_switch 边界守卫:无边界
     selectQueue.push([
       makeAssistantMessageRow({
         agentMeta: JSON.stringify({ uuid: 'stale-source-parent-uuid', sdkSessionId: 'sdk-uuid-source' }),
@@ -772,6 +785,7 @@ describe('commitRewindAtMessage', () => {
       return Promise.reject(new Error('tx failed'));
     });
     selectQueue.push([makeUserMessageRow()]);
+    selectQueue.push([]); // agent_switch 边界守卫:无边界
     selectQueue.push([makeAssistantMessageRow()]);
     selectQueue.push([makeSessionRow()]);
 
@@ -812,6 +826,7 @@ describe('commitRewindAtMessage', () => {
     selectQueue.push([makeUserMessageRow({
       agentMeta: JSON.stringify({ uuid: 'sdk-msg-uuid-target', sdkSessionId: 'sdk-uuid-old' }),
     })]); // target without transcript parent
+    selectQueue.push([]); // agent_switch 边界守卫:无边界
     selectQueue.push([]);                     // prior assistants — empty
 
     await expect(
@@ -824,6 +839,7 @@ describe('commitRewindAtMessage', () => {
 
   it('OLD message (user uuid missing) still commits, calls commitRewindFiles with empty userUuid', async () => {
     selectQueue.push([makeUserMessageRow({ agentMeta: null })]);  // target with NULL agent_meta
+    selectQueue.push([]); // agent_switch 边界守卫:无边界
     selectQueue.push([makeAssistantMessageRow()]);                 // prior assistants
     selectQueue.push([makeSessionRow()]);                          // post-update select
 
@@ -842,6 +858,7 @@ describe('commitRewindAtMessage', () => {
     useFakeSession('codex');
     commitRewindFilesMock.mockResolvedValueOnce({ sdkSessionId: 'rollback-thread-id' });
     selectQueue.push([makeUserMessageRow({ agentMeta: null })]); // target user
+    selectQueue.push([]); // agent_switch 边界守卫:无边界
     selectQueue.push([
       makeUserMessageRow({ clientId: 'client-id', createdAt: 3000 }),
       makeUserMessageRow({ clientId: 'later-user', createdAt: 5000 }),
@@ -867,7 +884,7 @@ describe('commitRewindAtMessage', () => {
     detectCwdMock.mockResolvedValueOnce({ gitInstalled: true, isGitRepo: true, repoRoot: '/repo', isInsideWorktree: false });
     listSnapshotsMock.mockResolvedValueOnce([{ commit: 'sp1', sessionId: 'sess-1', kind: 'after-edit', branch: 'main', parentCount: 1, anchor: 'client-id' }]);
     gitExecMock.mockResolvedValueOnce({ stdout: '3\t1\tsrc/a.ts\n-\t-\tbin.dat\n', stderr: '' });
-    selectQueue.push([makeUserMessageRow({ agentMeta: null })], [makeUserMessageRow({ clientId: 'client-id', createdAt: 3000 })]);
+    selectQueue.push([makeUserMessageRow({ agentMeta: null })], [], [makeUserMessageRow({ clientId: 'client-id', createdAt: 3000 })]);
 
     await expect(previewRewindAtMessage('sess-1', 'client-id')).resolves.toEqual({ canRewind: true, filesChanged: ['src/a.ts', 'bin.dat'], insertions: 1, deletions: 3 });
   });
@@ -877,7 +894,7 @@ describe('commitRewindAtMessage', () => {
     detectCwdMock.mockResolvedValueOnce({ gitInstalled: true, isGitRepo: true, repoRoot: '/repo', isInsideWorktree: false });
     listSnapshotsMock.mockResolvedValueOnce([]);
     getHeadMock.mockRejectedValueOnce(new Error('unborn HEAD'));
-    selectQueue.push([makeUserMessageRow({ agentMeta: null })], [makeUserMessageRow({ clientId: 'client-id', createdAt: 3000 })], [makeSessionRow({ agentKind: 'codex' })]);
+    selectQueue.push([makeUserMessageRow({ agentMeta: null })], [], [makeUserMessageRow({ clientId: 'client-id', createdAt: 3000 })], [makeSessionRow({ agentKind: 'codex' })]);
 
     await commitRewindAtMessage('sess-1', 'client-id');
 
@@ -896,6 +913,7 @@ describe('commitRewindAtMessage', () => {
     listSnapshotsMock.mockResolvedValueOnce([]);
     selectQueue.push(
       [makeUserMessageRow({ agentMeta: null })],
+      [], // agent_switch 边界守卫:无边界
       [makeUserMessageRow({ clientId: 'client-id', createdAt: 3000 })],
     );
 
@@ -939,7 +957,7 @@ describe('commitRewindAtMessage', () => {
       }),
     );
     commitRewindFilesMock.mockRejectedValueOnce(new Error('thread rollback failed'));
-    selectQueue.push([makeUserMessageRow({ agentMeta: null })], [
+    selectQueue.push([makeUserMessageRow({ agentMeta: null })], [], [
       makeUserMessageRow({ clientId: 'client-id', createdAt: 3000 }),
     ]);
 
@@ -951,5 +969,16 @@ describe('commitRewindAtMessage', () => {
       expect.objectContaining({ commitThreadRollback: expect.any(Function), onCompensationError: expect.any(Function) }),
     );
     expect(commitRewindFilesMock).toHaveBeenCalledWith('', '', { tailTurnsToDrop: 1 });
+  });
+  it('目标在 agent_switch 边界之前 → REWIND_UNSUPPORTED_HISTORY,SDK 与 DB 均未执行', async () => {
+    selectQueue.push([makeUserMessageRow()]);   // target user msg
+    selectQueue.push([{ id: 'switch-row' }]);   // agent_switch 边界守卫:target 之后存在边界
+
+    await expect(
+      commitRewindAtMessage('sess-1', 'client-id'),
+    ).rejects.toMatchObject({ code: 'REWIND_UNSUPPORTED_HISTORY' });
+
+    expect(commitRewindFilesMock).not.toHaveBeenCalled();
+    expect(txCalls).toHaveLength(0);
   });
 });
