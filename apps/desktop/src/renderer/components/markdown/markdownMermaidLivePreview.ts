@@ -62,6 +62,12 @@ import {
 import i18n from 'i18next';
 
 import { createLogger } from '@/lib/logger';
+import { toast } from '@/lib/toast';
+import {
+  copyPngBlobToClipboard,
+  resolveExportBackground,
+  svgToPngBlob,
+} from '@/lib/rasterizeToImage';
 
 const log = createLogger('MermaidLivePreview');
 
@@ -544,6 +550,42 @@ class MermaidWidget extends WidgetType {
         );
       });
       tb.appendChild(zoomBtn);
+
+      // Copy as PNG. Vanilla-DOM twin of the chat-side useCopyAsImage hook:
+      // same rasterizer (intrinsic viewBox size, 3x scale, 4096 cap, themed
+      // solid background sampled from the widget card), same 1.5s check-icon
+      // feedback. No annotate entry here — this editor surface has no chat
+      // session to send into.
+      const copyImgBtn = makeToolbarButton(
+        i18n.t('ccAgent.workdirBrowse.mermaidEditor.toolbarCopyImage'),
+        SVG_IMAGE_DOWN,
+      );
+      let copyImgPending = false;
+      let copyImgTimer: ReturnType<typeof setTimeout> | null = null;
+      copyImgBtn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (copyImgPending) return;
+        copyImgPending = true;
+        svgToPngBlob(svg, { background: resolveExportBackground(root) })
+          .then(copyPngBlobToClipboard)
+          .then(() => {
+            copyImgBtn.innerHTML = SVG_CHECK;
+            if (copyImgTimer) clearTimeout(copyImgTimer);
+            copyImgTimer = setTimeout(() => {
+              copyImgBtn.innerHTML = SVG_IMAGE_DOWN;
+              copyImgTimer = null;
+            }, 1500);
+          })
+          .catch((err) => {
+            log.warn('copy as image failed', err);
+            toast.error(i18n.t('chat.media.copyFailed'));
+          })
+          .finally(() => {
+            copyImgPending = false;
+          });
+      });
+      tb.appendChild(copyImgBtn);
     }
 
     // Hide edit-source when the editor is non-editable: FileBodyView gates
@@ -655,6 +697,14 @@ const SVG_EXPAND =
 
 const SVG_CODE2 =
   '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 16 22 12 18 8"/><polyline points="6 8 2 12 6 16"/><line x1="14.5" y1="4" x2="9.5" y2="20"/></svg>';
+
+// lucide `image-down`(与聊天块「复制图片」同一图标语义)。
+const SVG_IMAGE_DOWN =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10l-3.1-3.1a2 2 0 0 0-2.814.014L6 21"/><path d="m14 19 3 3v-5.5"/><path d="m17 22 3-3"/><circle cx="9" cy="9" r="2"/></svg>';
+
+// lucide `check`(复制成功的 1.5s 反馈态)。
+const SVG_CHECK =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
 
 function parseSvg(svgString: string): SVGElement | null {
   const tmp = document.createElement('div');

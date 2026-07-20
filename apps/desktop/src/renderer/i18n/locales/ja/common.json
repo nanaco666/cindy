@@ -3708,6 +3708,9 @@
       "viewSource": "ソースを表示",
       "copySource": "ソースをコピー",
       "copied": "コピー済み",
+      "copyImage": "画像をコピー",
+      "imageCopied": "画像をコピーしました",
+      "annotate": "注釈",
       "renderFailed": "mermaid のレンダリングに失敗 — ソースを表示"
     },
     "mermaidLightbox": {
@@ -3909,6 +3912,9 @@
     "markdownRenderer": {
       "codeCopied": "コピー済み",
       "copyCode": "コードをコピー",
+      "copyAsImage": "画像としてコピー",
+      "imageCopied": "画像をコピーしました",
+      "annotateImage": "画像に注釈",
       "copy": "コピー",
       "duplicateFiles": "同名のファイルが {{count}} 件見つかりました。絶対パスを使用してください",
       "copyFile": "コピー",
@@ -4634,6 +4640,7 @@
         "targetMissing": "元の mermaid ブロックがドキュメントから削除されているため、変更は保存されませんでした。",
         "toolbarZoom": "拡大表示",
         "toolbarEdit": "ソース編集",
+        "toolbarCopyImage": "画像をコピー",
         "renderFailedPrefix": "mermaid のレンダリングに失敗しました: ",
         "errEmpty": "mermaid ソースが空です",
         "errSvgParse": "SVG の解析に失敗しました (length={{length}})"

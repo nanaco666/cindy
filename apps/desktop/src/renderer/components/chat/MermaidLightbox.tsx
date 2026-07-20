@@ -15,9 +15,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Minus, Plus, RotateCcw, X } from 'lucide-react';
+import { Check, ImageDown, Minus, Plus, RotateCcw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { resolveExportBackground, svgToPngBlob } from '@/lib/rasterizeToImage';
+import { useCopyAsImage } from './useCopyAsImage';
 import {
   LIGHTBOX_MAX_SCALE,
   LIGHTBOX_MIN_SCALE,
@@ -47,7 +49,15 @@ export function MermaidLightbox({ svg, onClose }: MermaidLightboxProps) {
   const isWheelingRef = useRef(false);
   const wheelIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<LightboxViewport>({ scale: 1, tx: 0, ty: 0 });
+
+  // 复制为图片:光栅化用 props 的 SVG 字符串(固有尺寸,与当前缩放无关),
+  // 实底色取 SVG 所在卡片的主题底色(overlay 是半透明遮罩,不可取)。
+  // 标注入口不在此处——聊天块工具栏已提供,双层 lightbox 会打架(Esc/关闭链)。
+  const { copiedImage, copyAsImage } = useCopyAsImage(async () =>
+    svgToPngBlob(svg, { background: resolveExportBackground(cardRef.current) }),
+  );
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => setIsVisible(true));
@@ -244,6 +254,7 @@ export function MermaidLightbox({ svg, onClose }: MermaidLightboxProps) {
         onDoubleClick={reset}
       >
         <div
+          ref={cardRef}
           className={cn(
             'rounded-[12px] border border-[var(--msg-code-block-border)]',
             'bg-[var(--msg-code-block-bg)]',
@@ -298,6 +309,14 @@ export function MermaidLightbox({ svg, onClose }: MermaidLightboxProps) {
         <div className="mx-1 h-5 w-px bg-[var(--lightbox-toolbar-border)]" />
         <ToolbarButton onClick={reset} label={t('chat.mermaidLightbox.reset')}>
           <RotateCcw className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton
+          onClick={copyAsImage}
+          label={
+            copiedImage ? t('chat.mermaid.imageCopied') : t('chat.mermaid.copyImage')
+          }
+        >
+          {copiedImage ? <Check className="h-4 w-4" /> : <ImageDown className="h-4 w-4" />}
         </ToolbarButton>
         <ToolbarButton onClick={handleClose} label={t('chat.mermaidLightbox.close')}>
           <X className="h-4 w-4" />

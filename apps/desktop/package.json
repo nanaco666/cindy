@@ -78,6 +78,7 @@
   "license": "UNLICENSED",
   "dependencies": {
     "@cindy/auth-client": "workspace:*",
+    "@cindy/slack-hook-protocol": "workspace:*",
     "@codemirror/commands": "^6.10.3",
     "@codemirror/lang-cpp": "^6.0.3",
     "@codemirror/lang-css": "^6.3.1",
@@ -111,7 +112,6 @@
     "@lizi/file-browser-core": "workspace:*",
     "@lizi/github-client": "workspace:*",
     "@lizi/heartbeat-client": "workspace:*",
-    "@cindy/slack-hook-protocol": "workspace:*",
     "@lizi/maker-cc-manager": "workspace:*",
     "@lizi/maker-core": "workspace:*",
     "@lizi/maker-remote-ssh": "workspace:*",
@@ -159,6 +159,7 @@
     "gray-matter": "^4.0.3",
     "harmonyos-sans-sc-webfont-splitted": "^1.1.0",
     "highlight.js": "^11.11.1",
+    "html-to-image": "^1.11.13",
     "i18next": "^26.1.0",
     "js-yaml": "^4.1.0",
     "jszip": "^3.10.1",

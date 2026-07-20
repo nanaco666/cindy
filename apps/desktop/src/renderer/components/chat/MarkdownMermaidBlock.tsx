@@ -21,13 +21,15 @@
  */
 
 import { memo, useEffect, useId, useRef, useState } from 'react';
-import { Check, Code2, Copy, Expand, Eye } from 'lucide-react';
+import { Check, Code2, Copy, Expand, Eye, ImageDown, Pen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { repairMermaidSource } from '@lizi/maker-shared/mermaid-autofix';
 
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
+import { resolveExportBackground, svgToPngBlob } from '@/lib/rasterizeToImage';
 import { MermaidLightbox } from './MermaidLightbox';
+import { useCopyAsImage } from './useCopyAsImage';
 
 interface MarkdownMermaidBlockProps {
   raw: string;
@@ -63,6 +65,20 @@ export const MarkdownMermaidBlock = memo(function MarkdownMermaidBlock({
   const [copied, setCopied] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const copyTimerRef = useRef<number | null>(null);
+  const blockRef = useRef<HTMLDivElement>(null);
+
+  // 复制为图片 / 标注:光栅化用 state 里的 SVG 字符串(与显示一致),实底色
+  // 取块容器的主题底色。svgRef 避免 getBlob 闭包过期。
+  const svgRef = useRef<string | null>(null);
+  svgRef.current = svg;
+  const { copiedImage, copyAsImage, canAnnotate, openAnnotate, annotateNode } =
+    useCopyAsImage(async () => {
+      const current = svgRef.current;
+      if (!current) throw new Error('no svg rendered');
+      return svgToPngBlob(current, {
+        background: resolveExportBackground(blockRef.current),
+      });
+    });
 
   // Re-render when <html class="dark"> toggles. Module-level MutationObserver
   // would be cheaper but the cost here is negligible (1 observer per visible
@@ -181,7 +197,7 @@ export const MarkdownMermaidBlock = memo(function MarkdownMermaidBlock({
   const showSourceView = showSource || (svg == null && error != null);
 
   return (
-    <div className="group relative my-3">
+    <div ref={blockRef} className="group relative my-3">
       {showSourceView ? (
         <pre
           className={cn(
@@ -274,6 +290,44 @@ export const MarkdownMermaidBlock = memo(function MarkdownMermaidBlock({
             <Expand className="h-3.5 w-3.5" />
           </button>
         ) : null}
+        {svg != null && !showSourceView ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              copyAsImage();
+            }}
+            aria-label={copiedImage ? t('chat.mermaid.imageCopied') : t('chat.mermaid.copyImage')}
+            title={copiedImage ? t('chat.mermaid.imageCopied') : t('chat.mermaid.copyImage')}
+            className={cn(
+              'inline-flex h-7 w-7 items-center justify-center',
+              'rounded-md border border-[var(--msg-code-block-border)]',
+              'bg-[var(--msg-code-block-bg)] text-[var(--msg-tool-text)]',
+              'hover:bg-[var(--cmd-palette-item-hover)] hover:text-[var(--msg-assistant-text)]',
+            )}
+          >
+            {copiedImage ? <Check className="h-3.5 w-3.5" /> : <ImageDown className="h-3.5 w-3.5" />}
+          </button>
+        ) : null}
+        {svg != null && !showSourceView && canAnnotate ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              openAnnotate();
+            }}
+            aria-label={t('chat.mermaid.annotate')}
+            title={t('chat.mermaid.annotate')}
+            className={cn(
+              'inline-flex h-7 w-7 items-center justify-center',
+              'rounded-md border border-[var(--msg-code-block-border)]',
+              'bg-[var(--msg-code-block-bg)] text-[var(--msg-tool-text)]',
+              'hover:bg-[var(--cmd-palette-item-hover)] hover:text-[var(--msg-assistant-text)]',
+            )}
+          >
+            <Pen className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
         {svg != null ? (
           <button
             type="button"
@@ -315,6 +369,7 @@ export const MarkdownMermaidBlock = memo(function MarkdownMermaidBlock({
       {lightboxOpen && svg != null ? (
         <MermaidLightbox svg={svg} onClose={() => setLightboxOpen(false)} />
       ) : null}
+      {annotateNode}
     </div>
   );
 });

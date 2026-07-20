@@ -3708,6 +3708,9 @@
       "viewSource": "View source",
       "copySource": "Copy source",
       "copied": "Copied",
+      "copyImage": "Copy image",
+      "imageCopied": "Image copied",
+      "annotate": "Annotate",
       "renderFailed": "mermaid render failed — showing source"
     },
     "mermaidLightbox": {
@@ -3909,6 +3912,9 @@
     "markdownRenderer": {
       "codeCopied": "Copied",
       "copyCode": "Copy code",
+      "copyAsImage": "Copy as image",
+      "imageCopied": "Image copied",
+      "annotateImage": "Annotate image",
       "copy": "Copy",
       "duplicateFiles": "Found {{count}} files with the same name, please use an absolute path",
       "copyFile": "Copy",
@@ -4643,6 +4649,7 @@
         "targetMissing": "The original mermaid block is no longer in the document; changes were not saved.",
         "toolbarZoom": "Zoom",
         "toolbarEdit": "Edit source",
+        "toolbarCopyImage": "Copy image",
         "renderFailedPrefix": "mermaid render failed: ",
         "errEmpty": "mermaid source is empty",
         "errSvgParse": "SVG parse failed (length={{length}})"

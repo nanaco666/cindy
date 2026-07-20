@@ -144,6 +144,11 @@ interface ImageLightboxProps {
    * 持久化的笔迹)。与 annotationEdit 互斥使用;出口仍是"发送到对话"。
    */
   initialStrokes?: readonly AnnotationStroke[];
+  /**
+   * 打开即进入标注模式(等价于用户点了笔按钮)。「Mermaid/表格/公式 → 标注」
+   * 这类"光栅化后直奔涂画"的入口用它省一次点击;默认 false 不影响既有场景。
+   */
+  autoAnnotate?: boolean;
 }
 
 /** `xdt-file://local/?path=<enc>` → 绝对路径;非该 scheme 或解析失败返回 null。 */
@@ -325,6 +330,7 @@ export function ImageLightbox({
   sessionId: sessionIdProp,
   annotationEdit,
   initialStrokes,
+  autoAnnotate = false,
 }: ImageLightboxProps) {
   const { t } = useTranslation();
   // 会话全量图片列表(MessageStream 下发);非聊天场景无 Provider 时为 null。
@@ -390,7 +396,8 @@ export function ImageLightbox({
   const wheelIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ---- 标注模式状态(鼠标当笔圈点) ----
-  const [isAnnotating, setIsAnnotating] = useState(false);
+  // autoAnnotate 只作初值:打开即进标注,退出/放弃后的行为与手动进入一致。
+  const [isAnnotating, setIsAnnotating] = useState(autoAnnotate);
   // 当前图打开时的基线笔迹:放弃标注(X / Esc)恢复到这里而非一律清空——
   // 画廊翻到持久化标注图后,基线是该图的持久化笔迹。翻页 effect 同步更新。
   const baselineStrokesRef = useRef<readonly AnnotationStroke[]>(
