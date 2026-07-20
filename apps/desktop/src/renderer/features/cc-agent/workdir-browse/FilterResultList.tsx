@@ -80,7 +80,7 @@ export function FilterResultList({
               className={cn(
                 'flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm',
                 selected
-                  ? 'bg-sidebar-item-active font-medium text-foreground'
+                  ? 'bg-sidebar-item-active font-medium text-sidebar-item-active-foreground'
                   : 'text-foreground hover:bg-sidebar-item-hover',
               )}
             >

@@ -294,8 +294,8 @@ export const BrowserChrome = forwardRef<BrowserChromeHandle, BrowserChromeProps>
             aria-label={t('rightSidebar.browser.moreTools')}
             className={cn(
               'flex size-6 shrink-0 items-center justify-center rounded-md transition-colors',
-              'text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-foreground',
-              'data-[state=open]:bg-sidebar-item-active data-[state=open]:text-foreground',
+              'text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-sidebar-item-active-foreground',
+              'data-[state=open]:bg-sidebar-item-active data-[state=open]:text-sidebar-item-active-foreground',
             )}
           >
             <Ellipsis size={14} strokeWidth={2} />
@@ -351,8 +351,8 @@ function ChromeIconButton({
         disabled
           ? 'text-[var(--text-tertiary)] opacity-40'
           : active
-            ? 'bg-sidebar-item-active text-foreground'
-            : 'text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-foreground',
+            ? 'bg-sidebar-item-active text-sidebar-item-active-foreground'
+            : 'text-sidebar-action-icon hover:bg-sidebar-item-active hover:text-sidebar-item-active-foreground',
       )}
     >
       <Icon size={size} strokeWidth={2} />

@@ -144,7 +144,10 @@ describe('NewMakerDraftRoute CREATE AGENT visual contract', () => {
     expect(source).toContain('visualVariant="create-agent"');
 
     expect(chatInputSource).toContain("visualVariant={isCreateAgentVariant ? 'create-agent' : 'default'}");
-    expect(chatInputSource).toContain('focus-within:border-[var(--create-agent-focus-ring)]');
+    // 聚焦描边已拆分:输入框容器走 chat-input-border-focus(CINDY 30% 弱化),
+    // create-agent-focus-ring 专供键盘 focus-visible ring(PR#174 review 2026-07-20)。
+    expect(chatInputSource).toContain('focus-within:border-[var(--chat-input-border-focus)]');
+    expect(chatInputSource).not.toContain('focus-within:border-[var(--create-agent-focus-ring)]');
     expect(chatInputSource).toContain("'min-w-0 flex-nowrap justify-between gap-2 overflow-hidden'");
     const permissionSelectorIndex = chatInputSource.indexOf('<PermissionSelector');
     const middleToolbarSlotIndex = chatInputSource.indexOf('{middleToolbarSlot}');
