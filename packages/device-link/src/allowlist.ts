@@ -148,6 +148,10 @@ const CORE_INVOKE_CHANNELS: readonly string[] = [
   // 以 message clientId 定位上下文,供移动端轻量跳转 / fork 来源定位；只读,与 messages:around 同安全级。
   'local-db:messages:around-client-id',
   'local-db:recent-workdirs:list',
+  // 窄口径写:从被控端「最近项目」列表移除一条(专用 handler,path 归一后按主键删,
+  // 幂等,不动 sessions / 磁盘)。控制端项目选择器的删除入口与本机语义对等;
+  // 老被控端无此 handler → CHANNEL_NOT_ALLOWED → 控制端隐藏/忽略删除能力即可。
+  'local-db:recent-workdirs:remove',
   // 窄口径元数据写:仅 status / title / pinnedAt(归档/删除/恢复/重命名/置顶)。专用
   // handler、白名单字段、不是裸 update(update 写任意字段、不放行)。支撑远程删/归档/改名/置顶对等。
   'local-db:sessions:patch-meta',

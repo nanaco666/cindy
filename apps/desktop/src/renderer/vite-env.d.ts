@@ -2880,7 +2880,11 @@ interface ElectronAPI {
     };
     recentWorkdirs: {
       /** 列出"最近工作目录"按 lastUsedAt desc;归档/删除 session 都不影响本列表。 */
-      list: () => Promise<Array<{ path: string; lastUsedAt: string }>>;
+      list: () => Promise<Array<{ path: string; lastUsedAt: string; exists: boolean }>>;
+      /** 从最近列表移除一条(列表卫生,不动 sessions / 磁盘;再次使用会重新入列)。 */
+      remove: (input: { path: string }) => Promise<{ deleted: boolean }>;
+      /** Broadcast: 任一窗口/远程调用删除条目后通知;返回退订函数。 */
+      onChanged: (callback: (data: { path: string }) => void) => () => void;
     };
     rightSidebarTabs: {
       /** 按 sessionId 拉 tab 列表 + activeTabId(右侧栏多 Tab 容器)。 */

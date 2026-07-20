@@ -3336,7 +3336,9 @@
       "browseFolder": "다른 폴더 선택",
       "browseProjectFolder": "다른 프로젝트 폴더 선택",
       "dialogue": "대화",
-      "dialogueOrSelectProject": "대화 또는 프로젝트 선택"
+      "dialogueOrSelectProject": "대화 또는 프로젝트 선택",
+      "removeFromList": "목록에서 제거",
+      "missingDir": "폴더를 찾을 수 없음"
     },
     "pendingQueue": {
       "regionAria": "전송 대기 중인 메시지 큐",

@@ -3336,7 +3336,9 @@
       "browseFolder": "別のフォルダを選択",
       "browseProjectFolder": "別のプロジェクトフォルダを選択",
       "dialogue": "対話",
-      "dialogueOrSelectProject": "対話またはプロジェクトを選択"
+      "dialogueOrSelectProject": "対話またはプロジェクトを選択",
+      "removeFromList": "リストから削除",
+      "missingDir": "フォルダが見つかりません"
     },
     "pendingQueue": {
       "regionAria": "送信待ちメッセージのキュー",
