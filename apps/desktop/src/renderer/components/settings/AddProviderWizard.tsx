@@ -339,41 +339,47 @@ export function AddProviderWizard({
     setStep(3);
     setFetchState({ status: 'fetching' });
     const seq = ++fetchSeqRef.current;
-    // 拉取端点:优先 claude-code runtime(预设至少一个 runtime)。
-    const fetchAgent: AgentKind = preset.runtimes['claude-code'] ? 'claude-code' : 'codex';
-    const rt = preset.runtimes[fetchAgent];
-    if (!rt) {
-      setFetchState({ status: 'done', failed: true });
-      return;
-    }
-    try {
-      const r = await window.electronAPI.maker.fetchProviderModels({
-        agent: fetchAgent,
-        baseUrl: rt.baseUrl,
-        modelsUrl: rt.modelsUrl ?? null,
-        apiKey: apiKey.trim() || null,
-        ...(rt.headers ? { headers: rt.headers } : {}),
-      });
-      // 过期响应丢弃:用户已返回 / 换选了其它供应商,旧结果不得合入当前清单。
-      if (seq !== fetchSeqRef.current) return;
-      if (r.ok && r.models) {
-        setPicks((prev) => {
-          const next = new Map(prev);
-          for (const m of r.models!) {
-            // 拉取新增只归属实际返回它的端点的 runtime(另一端未证实可服务,不越界写入)。
-            if (!next.has(m.id)) {
-              next.set(m.id, { name: m.name, checked: false, recommended: false, agents: [fetchAgent] });
+    // 并行拉取**每个已配置 runtime** 的列模型端点:双 runtime 预设两端各自发现,
+    // 返回结果按「实际返回它的端点」归属合并——某模型两端都返回则归属两端。
+    const agents = Object.keys(preset.runtimes) as AgentKind[];
+    const results = await Promise.all(
+      agents.map(async (agent) => {
+        const rt = preset.runtimes[agent];
+        if (!rt) return { agent, ok: false, models: [] as { id: string; name: string }[] };
+        try {
+          const r = await window.electronAPI.maker.fetchProviderModels({
+            agent,
+            baseUrl: rt.baseUrl,
+            modelsUrl: rt.modelsUrl ?? null,
+            apiKey: apiKey.trim() || null,
+            ...(rt.headers ? { headers: rt.headers } : {}),
+          });
+          return { agent, ok: !!(r.ok && r.models), models: r.models ?? [] };
+        } catch {
+          return { agent, ok: false, models: [] as { id: string; name: string }[] };
+        }
+      }),
+    );
+    // 过期响应丢弃:用户已返回 / 换选了其它供应商,旧结果不得合入当前清单。
+    if (seq !== fetchSeqRef.current) return;
+    setPicks((prev) => {
+      const next = new Map(prev);
+      for (const { agent, models } of results) {
+        for (const m of models) {
+          const existing = next.get(m.id);
+          if (existing) {
+            if (!existing.agents.includes(agent)) {
+              next.set(m.id, { ...existing, agents: [...existing.agents, agent] });
             }
+          } else {
+            next.set(m.id, { name: m.name, checked: false, recommended: false, agents: [agent] });
           }
-          return next;
-        });
-        setFetchState({ status: 'done', failed: false });
-      } else {
-        setFetchState({ status: 'done', failed: true });
+        }
       }
-    } catch {
-      if (seq === fetchSeqRef.current) setFetchState({ status: 'done', failed: true });
-    }
+      return next;
+    });
+    // 全部端点都失败才算失败(单端失败仍可按另一端 + 预设推荐完成)。
+    setFetchState({ status: 'done', failed: !results.some((r) => r.ok) });
   }, [sel, apiKey]);
 
   // ── 完成创建(预设)────────────────────────────────────────────────────
