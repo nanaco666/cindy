@@ -1151,7 +1151,8 @@
       "detail": {
         "singleAgentNote": "{{agent}} 전용",
         "emptyModels": "인증하면 사용 가능한 모델이 자동으로 검색됩니다",
-        "emptyList": "왼쪽 아래 '공급자 추가'에서 첫 모델 소스를 연결하세요"
+        "emptyList": "왼쪽 아래 '공급자 추가'에서 첫 모델 소스를 연결하세요",
+        "emptyModelsConnected": "연결됨 — 사용 가능한 모델을 검색하는 중입니다. 계속 비어 있으면 잠시 후 다시 시도해 주세요."
       },
       "detect": {
         "groupLabel": "이 기기에서 감지됨",

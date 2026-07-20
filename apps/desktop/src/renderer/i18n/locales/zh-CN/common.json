@@ -1151,7 +1151,8 @@
       "detail": {
         "singleAgentNote": "仅支持 {{agent}}",
         "emptyModels": "授权后自动发现可用模型",
-        "emptyList": "点击左下角「添加供应商」接入你的第一个模型来源"
+        "emptyList": "点击左下角「添加供应商」接入你的第一个模型来源",
+        "emptyModelsConnected": "已连接,正在自动发现可用模型;若持续为空,请稍后重试。"
       },
       "detect": {
         "groupLabel": "检测到本机 CLI",

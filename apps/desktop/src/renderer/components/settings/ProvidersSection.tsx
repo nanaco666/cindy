@@ -1240,7 +1240,13 @@ export function ProvidersSection() {
                     className="flex flex-1 items-center justify-center px-8 text-center text-13"
                     style={{ color: 'var(--text-tertiary)' }}
                   >
-                    {t('settings.providers.detail.emptyModels')}
+                    {/* 已连接却无模型(如 Codex 刚登录、models_cache 未生成;或网关清单拉取失败)
+                        不能沿用未连接的「授权后…」文案——那对已连接供应商自相矛盾。 */}
+                    {t(
+                      effectiveSelected.connected
+                        ? 'settings.providers.detail.emptyModelsConnected'
+                        : 'settings.providers.detail.emptyModels',
+                    )}
                   </div>
                 )}
               </>

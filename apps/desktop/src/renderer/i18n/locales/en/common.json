@@ -1151,7 +1151,8 @@
       "detail": {
         "singleAgentNote": "{{agent}} only",
         "emptyModels": "Models are discovered automatically after you authorize",
-        "emptyList": "Click \"Add provider\" below to connect your first model source"
+        "emptyList": "Click \"Add provider\" below to connect your first model source",
+        "emptyModelsConnected": "Connected — discovering available models. If it stays empty, try again shortly."
       },
       "detect": {
         "groupLabel": "Detected on this device",
