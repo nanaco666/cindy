@@ -1166,8 +1166,21 @@ export function ChatInput({
   // (localStorage,按 agent 分槽、sanitize 恒有种子值)。默认模型/档位偏好已全量本地化,
   // 不再依赖服务端 UserPreferences(登录态失效/离线时模型与档位选择必须照常工作)。
   const localVendorDefaults = getDraft().lastByVendor[vendorKey === 'codex' ? 'codex' : 'cc'];
-  const activeModel = pendingRemoteSwitch?.model ?? initialModel ?? localVendorDefaults.model;
-  const activeEffort = pendingRemoteSwitch?.effort ?? initialEffort ?? localVendorDefaults.effort;
+  // session-agent-switch 意图制:意图期内 chip / 选择器显示用户选择的目标
+  // (model/effort/provider/fast),props(镜像 DB)仍是旧引擎值——真切换在下一条
+  // 消息发送时刻 apply,patched 回流后意图清除、显示交回 props。渲染期直接读
+  // store 意图表:意图登记/撤销都伴随 store agentKind setState,必然触发重渲染。
+  const agentSwitchIntent =
+    sessionId && !deviceLinkDeviceId && !remoteHostId
+      ? makerChatStore.getAgentSwitchIntent(sessionId)
+      : null;
+  const activeModel =
+    agentSwitchIntent?.model ?? pendingRemoteSwitch?.model ?? initialModel ?? localVendorDefaults.model;
+  const activeEffort =
+    (agentSwitchIntent?.effort as Effort | undefined) ??
+    pendingRemoteSwitch?.effort ??
+    initialEffort ??
+    localVendorDefaults.effort;
   const activePermissionMode: PermissionMode = initialPermissionMode ?? 'acceptEdits';
 
   // per-session 来源(供应商)选择。session.providerId 尚未在 Session 类型回流前,
@@ -3335,6 +3348,19 @@ export function ChatInput({
       syncDraft = true,
       memoryProviderId = effectiveSourceId,
     ) => {
+      // 切换意图期:Fast 改动是"更新意图"而不是改当前会话实时状态(否则普通
+      // SET_FAST 链路会让 main 清意图、renderer 乐观态失配)。经 ref 调用——
+      // performAgentSwitch 声明在本回调之后(TDZ)。
+      if (sessionId && makerChatStore.getAgentSwitchIntent(sessionId)) {
+        const intent = makerChatStore.getAgentSwitchIntent(sessionId)!;
+        void performAgentSwitchRef.current(
+          intent.target,
+          intent.model,
+          intent.providerId,
+          { fastMode: enabled, effort: intent.effort as Effort | undefined },
+        );
+        return;
+      }
       const persisted = await persistFastModeChange(enabled);
       if (!persisted) return;
       if (modelId && currentModelAgentKind && memoryProviderId) {
@@ -3343,6 +3369,7 @@ export function ChatInput({
       if (syncDraft && modelId) syncSessionDraftModelPrefs(modelId, { effort, fast: enabled });
     },
     [
+      sessionId,
       activeModel,
       activeEffort,
       currentModelAgentKind,
@@ -3400,41 +3427,31 @@ export function ChatInput({
     [sessionId, confirmDialog, t],
   );
 
-  // session-agent-switch:选中「只属于另一家引擎」的模型 → 走引擎切换事务
-  // (main 构造交接、关旧引擎、清 sdkSessionId、插边界行并重建新引擎),不进普通
-  // setModel 链路。model 已由 main 落库;这里补 effort 对齐新模型档位并翻转
-  // chat store 的 in-memory agentKind(sessions:patched 广播负责其余窗口/列表)。
+  // session-agent-switch 意图制:选中「只属于另一家引擎」的模型 → 只向 main 登记
+  // 切换意图并乐观呈现(chip / 选择器立即跟随目标引擎),真正的交接、关旧引擎、
+  // 边界行与重建全部推迟到下一条消息发送时刻由 send 事务执行——用户反复改选
+  // 零成本,不反复切换/交接(2026-07-20 Dash 反馈)。effort / Fast 的目标值在此
+  // 按目标引擎目录与 per-(引擎,来源,模型) 预设解析好,随意图带给 main,apply 时
+  // 一并落库;renderer 不再做切换后补写。
+  // handleModelChange / handleProviderChange 声明在本回调之后,经 ref 引用避免
+  // TDZ(仅在"选回当前引擎"分支的调用时刻解引用)。
+  const sameEngineReselectRef = useRef<{
+    byProvider: (providerId: string, modelId: string) => void | Promise<void>;
+    byModel: (modelId: string) => void | Promise<void>;
+  }>({ byProvider: () => {}, byModel: () => {} });
   const performAgentSwitch = useCallback(
-    async (targetAgentKind: 'claude-code' | 'codex', newModelId: string, providerId: string | null = null) => {
+    async (
+      targetAgentKind: 'claude-code' | 'codex',
+      newModelId: string,
+      providerId: string | null = null,
+      // 意图期内的档位/Fast 改动经此显式覆盖(用户手选优先于记忆/默认解析)。
+      overrides?: { effort?: Effort; fastMode?: boolean },
+    ) => {
       if (!sessionId) return;
-      setRemoteSwitchInFlight(true);
       try {
-        // providerId = 用户在浏览态分段列表里选中的来源(切换后 sessions.provider_id
-        // 直接落它,trigger 来源 icon / 路由立即正确);null = flat 退化行,交默认路由。
-        const result = await window.electronAPI.maker.switchSessionAgent(
-          sessionId,
-          targetAgentKind,
-          newModelId,
-          providerId,
-        );
-        if (result.deferred) {
-          // turn 运行中:切换已登记,下一条消息发出时生效。不做任何本地状态翻转——
-          // 旧 turn 仍由旧引擎驱动,chip / 消息流保持旧引擎才是真实状态。
-          toast.success(
-            t('newChat.chatInput.agentSwitch.deferred', {
-              agent: targetAgentKind === 'codex' ? 'Codex' : 'Claude Code',
-              model: newModelId,
-            }),
-            { duration: 4000 },
-          );
-          return;
-        }
-        if (!result.switched) return;
-        makerChatStore.noteAgentSwitched(sessionId, targetAgentKind);
-        // effort 档按**目标引擎**目录解析:resolveModelEfforts 锚定切换前的旧引擎,
-        // 同 id 模型两家档位可不同、目标独占模型在旧引擎目录里查不到;浏览态悬浮
-        // 面板写下的 per-(目标引擎,来源,模型) 全局预设在此恢复(providerEffort 优先
-        // 级与 handleModelChange 一致)。
+        // effort 档按**目标引擎**目录解析(resolveModelEfforts 锚定当前引擎,
+        // 同 id 模型两家档位可不同、目标独占模型在当前目录里查不到);浏览态
+        // 悬浮面板写下的 per-(目标引擎,来源,模型) 预设在此恢复。
         const targetCatalog = deriveModelsFromProviders(providers, targetAgentKind).find(
           (x) => x.id === newModelId,
         );
@@ -3445,20 +3462,22 @@ export function ChatInput({
           modelMemory && providerId
             ? modelMemory.getEffort(targetAgentKind, providerId, newModelId)
             : undefined;
-        const newEffort = resolveEffort({
-          efforts,
-          defaultEffort,
-          activeEffort,
-          providerEffort,
-          rememberedEffort: getRememberedEffort(newModelId),
-        });
-        await sessionService.update(sessionId, { effort: newEffort });
-        window.electronAPI.maker.setEffort(sessionId, newEffort).catch(() => {});
-        // Fast 同口径恢复:旧引擎的 fastMode 不能原样带进新引擎(目标 (来源,模型) 可能
-        // 不支持 Fast)。目标行支持时按目标引擎全局预设恢复,否则归 false。memory /
-        // draft 同步不走 handleFastModeChange —— 那些闭包仍锚定切换前的旧引擎 kind。
-        const restoredFast =
-          !!providerId &&
+        const newEffort =
+          overrides?.effort && efforts.includes(overrides.effort)
+            ? overrides.effort
+            : resolveEffort({
+                efforts,
+                defaultEffort,
+                activeEffort,
+                providerEffort,
+                rememberedEffort: getRememberedEffort(newModelId),
+              });
+        // Fast 目标值:目标 (来源,模型) 支持时按目标引擎全局预设,否则 false——
+        // 旧引擎的 fastMode 不能原样带进新引擎。
+        const targetFast =
+          overrides?.fastMode !== undefined
+            ? overrides.fastMode
+            : !!providerId &&
           !!modelMemory &&
           resolveFastSupported({
             deviceId: deviceLinkDeviceId,
@@ -3471,20 +3490,53 @@ export function ChatInput({
             agentKind: targetAgentKind,
           }) &&
           (modelMemory.getFast(targetAgentKind, providerId, newModelId) ?? false);
-        if (restoredFast !== fastMode) {
-          void persistFastModeChange(restoredFast, { silent: true });
-          window.electronAPI.maker.setFastMode(sessionId, restoredFast).catch(() => {});
+
+        const result = await window.electronAPI.maker.switchSessionAgent(
+          sessionId,
+          targetAgentKind,
+          newModelId,
+          providerId,
+          newEffort,
+          targetFast,
+        );
+        if (result.deferred) {
+          // 意图已登记:乐观呈现目标引擎/模型/档位(store 翻 agentKind,本组件
+          // 经 getAgentSwitchIntent 覆盖 model/effort/provider/fast 显示)。真切换
+          // 在下一条消息发送时刻执行;turn 运行中额外提示旧 turn 不受影响。
+          makerChatStore.noteAgentSwitchIntent(sessionId, targetAgentKind, {
+            model: newModelId,
+            providerId,
+            effort: newEffort,
+            fastMode: targetFast,
+          });
+          if (makerChatStore.getSnapshot(sessionId).agentStatus.isRunning) {
+            toast.success(
+              t('newChat.chatInput.agentSwitch.deferred', {
+                agent: targetAgentKind === 'codex' ? 'Codex' : 'Claude Code',
+                model: newModelId,
+              }),
+              { duration: 4000 },
+            );
+          }
+          return;
         }
+        if (!result.switched) {
+          // 同引擎 no-op = 用户选回当前引擎:撤销意图(还原乐观翻转),再把这次
+          // 点选当作普通的模型/来源切换应用到当前引擎。
+          makerChatStore.clearAgentSwitchIntent(sessionId);
+          if (providerId) void sameEngineReselectRef.current.byProvider(providerId, newModelId);
+          else void sameEngineReselectRef.current.byModel(newModelId);
+          return;
+        }
+        // 立即切换路径(harness / registry 缺省兜底,生产不走):维持旧收敛语义。
+        makerChatStore.noteAgentSwitched(sessionId, targetAgentKind);
         if (!result.engineReady) {
-          // 新引擎 spawn 失败:切换已生效,下一条消息经 lazy-create 重试并走既有错误呈现。
           toast.error(t('newChat.chatInput.agentSwitch.engineNotReady'), { duration: 4000 });
         }
       } catch (err) {
         toast.error(
           t(mapIpcErrorToI18nKey(err, { fallback: 'newChat.chatInput.agentSwitch.failed' })),
         );
-      } finally {
-        setRemoteSwitchInFlight(false);
       }
     },
     [
@@ -3500,10 +3552,12 @@ export function ChatInput({
       localProviders.providers,
       ccCaps.capabilities,
       codexCaps.capabilities,
-      fastMode,
-      persistFastModeChange,
     ],
   );
+  // 声明顺序在 performAgentSwitch 之前的 handler(handleFastModeChange)经此 ref
+  // 调用,避免 TDZ;每次渲染刷新指向最新闭包。
+  const performAgentSwitchRef = useRef(performAgentSwitch);
+  performAgentSwitchRef.current = performAgentSwitch;
 
   const handleModelChange = useCallback(
     async (newModelId: string) => {
@@ -3511,6 +3565,14 @@ export function ChatInput({
       if (sessionId && newModelId !== activeModel) {
         const proceed = await confirmModelSwitchContextGuard(newModelId);
         if (!proceed) return;
+      }
+      // 切换意图期:此时列表展示的是目标引擎(乐观翻转),改选模型 = 更新意图,
+      // 绝不能走普通 SET_MODEL 链路(main 会清意图、renderer 乐观态失配)。
+      // flat 路径无来源信息,交默认路由(null)。
+      if (sessionId && makerChatStore.getAgentSwitchIntent(sessionId)) {
+        const intent = makerChatStore.getAgentSwitchIntent(sessionId)!;
+        void performAgentSwitch(intent.target, newModelId, null);
+        return;
       }
       let rollbackModelAfterPersistFailure: { model: string; seq: number } | null = null;
       // 切换前先快照旧模型的当前 effort, 这样 user 切回来时能拿回原选择。
@@ -3649,11 +3711,20 @@ export function ChatInput({
         );
       }
     },
-    [activeModel, activeEffort, sessionId, selectedProviderId, onModelDidChange, onEffortDidChange, handleFastModeChange, persistFastModeChange, t, getRememberedEffort, setRememberedEffort, rememberProviderChoice, resolveModelEfforts, resolveFast, currentModelAgentKind, effectiveSourceId, modelMemory, modelFastSupported, syncSessionDraftModelPrefs, fastMode, confirmModelSwitchContextGuard],
+    [activeModel, activeEffort, sessionId, selectedProviderId, onModelDidChange, onEffortDidChange, handleFastModeChange, persistFastModeChange, t, getRememberedEffort, setRememberedEffort, rememberProviderChoice, resolveModelEfforts, resolveFast, currentModelAgentKind, effectiveSourceId, modelMemory, modelFastSupported, syncSessionDraftModelPrefs, fastMode, confirmModelSwitchContextGuard, performAgentSwitch],
   );
 
   const handleEffortChange = useCallback(
     async (newEffort: Effort) => {
+      // 切换意图期:effort 改动 = 更新意图(重登记),不走普通 setEffort 链路。
+      if (sessionId && makerChatStore.getAgentSwitchIntent(sessionId)) {
+        const intent = makerChatStore.getAgentSwitchIntent(sessionId)!;
+        void performAgentSwitch(intent.target, intent.model, intent.providerId, {
+          effort: newEffort,
+          fastMode: intent.fastMode,
+        });
+        return;
+      }
       // 用户在当前模型上显式选了 effort → 记下来, 切走再切回来时能恢复
       if (activeModel) {
         setRememberedEffort(activeModel, newEffort);
@@ -3701,7 +3772,7 @@ export function ChatInput({
         log.warn('effort change failed:', err);
       }
     },
-    [activeModel, sessionId, selectedProviderId, onEffortDidChange, setRememberedEffort, t, rememberProviderChoice, syncSessionDraftModelPrefs, fastMode],
+    [activeModel, sessionId, selectedProviderId, onEffortDidChange, setRememberedEffort, t, rememberProviderChoice, syncSessionDraftModelPrefs, fastMode, performAgentSwitch],
   );
 
   // per-session 来源切换。镜像 model 持久化路径(handleModelChange 里的
@@ -3743,6 +3814,13 @@ export function ChatInput({
       if (sessionId && reconciledModelId && reconciledModelId !== activeModel) {
         const proceed = await confirmModelSwitchContextGuard(reconciledModelId);
         if (!proceed) return;
+      }
+      // 切换意图期:列表展示的是目标引擎(乐观翻转),(来源,模型) 改选 = 更新意图,
+      // 不走普通 set-model 链路(main 会清意图、renderer 乐观态失配)。
+      if (sessionId && makerChatStore.getAgentSwitchIntent(sessionId)) {
+        const intent = makerChatStore.getAgentSwitchIntent(sessionId)!;
+        void performAgentSwitch(intent.target, reconciledModelId ?? intent.model, newProviderId);
+        return;
       }
       let rollbackProviderAfterPersistFailure: { model: string; providerId: string | null; seq: number } | null = null;
       const applyProviderSelection = () => {
@@ -3943,8 +4021,15 @@ export function ChatInput({
       selectedProviderId,
       t,
       confirmModelSwitchContextGuard,
+      performAgentSwitch,
     ],
   );
+
+  // performAgentSwitch 的"选回当前引擎"分支经 ref 调用(两 handler 声明在其后,TDZ)。
+  sameEngineReselectRef.current = {
+    byProvider: (providerId, modelId) => handleProviderChange(providerId, modelId),
+    byModel: (modelId) => handleModelChange(modelId),
+  };
 
   const handleNavigateToProviders = useCallback(() => {
     navigate('/settings?tab=providers');
@@ -4551,7 +4636,8 @@ export function ChatInput({
               effort={activeEffort}
               onModelChange={handleModelChange}
               onEffortChange={handleEffortChange}
-              fastMode={fastMode}
+              // 意图期显示目标引擎下解析出的 fast(apply 时才落库),无意图走真实态。
+              fastMode={agentSwitchIntent?.fastMode ?? fastMode}
               onFastModeChange={handleFastModeChange}
               modelMemory={modelMemory}
               vendorKey={vendorKey}
@@ -4568,7 +4654,8 @@ export function ChatInput({
               // 远程模式走 remoteEndpoint 不经翻译,选了必失败。
               excludeSubscriptionDirect={!!remoteHostId}
               dense={effectiveDenseToolbar}
-              currentProviderId={selectedProviderId}
+              // 意图期显示用户在浏览态选中的来源(null = flat 退化行,跟随默认路由)。
+              currentProviderId={agentSwitchIntent ? agentSwitchIntent.providerId : selectedProviderId}
               sourceDisconnected={selectedSourceDisconnected}
               onProviderChange={handleProviderChange}
               onNavigateToProviders={handleNavigateToProviders}

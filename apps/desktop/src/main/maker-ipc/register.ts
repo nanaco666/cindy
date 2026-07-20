@@ -3606,13 +3606,18 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         .limit(1);
       if (!row) return;
       const dbMakerKind = row.agentKind === 'codex' ? 'codex' : 'claude-code';
-      if (co.agentKind === dbMakerKind) return;
-      log.warn('lazy-create: createOpts agentKind drifted from DB (agent switch); reconciling', {
-        sessionId,
-        staleAgentKind: co.agentKind,
-        dbAgentKind: dbMakerKind,
-      });
-      co.agentKind = dbMakerKind;
+      if (co.agentKind !== dbMakerKind) {
+        log.warn('lazy-create: createOpts agentKind drifted from DB (agent switch); reconciling', {
+          sessionId,
+          staleAgentKind: co.agentKind,
+          dbAgentKind: dbMakerKind,
+        });
+        co.agentKind = dbMakerKind;
+      }
+      // 意图制切换下,renderer 的 createOpts 快照构建于 send 事务内 apply 之前
+      // (乐观翻转后 agentKind 可能已一致,但 model/resume/providerId 仍是旧值,
+      // 尤其 resumeSessionId 可能是**旧引擎**的原生会话 id——resume 会以错误引擎
+      // 解释它)。lazy-create 时刻 DB 行是唯一真源,三个字段无条件对齐。
       co.model = row.model ?? undefined;
       co.resumeSessionId = row.sdkSessionId ?? undefined;
       co.providerId = row.providerId ?? undefined;

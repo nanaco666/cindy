@@ -1,12 +1,14 @@
 /**
  * session-agent-switch:同一会话在 Claude Code / Codex 引擎间切换的 IPC handler。
  *
- * 切换时序(host 层组合,不动 maker-core 热路径——规则 10 风险面最小化):
+ * 意图制(2026-07-20):外部调用(IPC)只登记切换意图并返回 deferred——用户在
+ * 选择器里反复改选零成本;renderer 乐观呈现意图。真切换在下一条消息发送时刻由
+ * send 事务(applyPendingAgentSwitchIfIdle → applyNow=true)执行一次:
  *   校验 → 查目标引擎停泊绑定(Phase 2)→ 构造交接文本(纯代码,
  *   agentHandoff.buildHandoffText:有停泊绑定 = 增量模式,否则全量)
- *   → 关旧 live session → DB 提交(agent_kind + model + provider_id;sdk_session_id
- *   落停泊 id 或 null)→ 插 agent_switch 边界行(交接全文持久化于此,UI 可展开)
- *   → 登记 pending 注入 → 立即重建新引擎 session(消灭多窗口 stale createOpts 竞态)。
+ *   → 关旧 live session → DB 提交(agent_kind + model + provider_id + effort/fast;
+ *   sdk_session_id 落停泊 id 或 null)→ 插 agent_switch 边界行(交接全文持久化
+ *   于此,UI 可展开)→ 登记 pending 注入 →(resume 时)立即重建新引擎 session。
  *
  * Phase 2(双会话停泊/切回续接):每家引擎的原生会话在离场时"停泊"——离场
  * 快照(fromSdkSessionId)就存在边界行里,不新增 schema。切回时 resume 停泊
@@ -114,6 +116,9 @@ export interface MakerSessionAgentSwitchHandlerDeps {
       model: string;
       providerId: string | null | undefined;
       sdkSessionId?: string | null;
+      /** 目标引擎下的 effort / fastMode(意图登记时由 renderer 解析,apply 时一并落库)。 */
+      effort?: string;
+      fastMode?: boolean;
     },
   ): Promise<void>;
   /** 返回边界行 clientId(resume 回落时 updateBoundaryMessage 定位用)。 */
@@ -161,11 +166,13 @@ export interface SessionAgentSwitchResult {
   deferred?: boolean;
 }
 
-/** 运行中登记的切换意图(下一条消息发送时刻执行)。 */
+/** 登记的切换意图(下一条消息发送时刻执行;effort/fastMode 由 renderer 按目标引擎解析好带入)。 */
 export interface PendingAgentSwitchIntent {
   targetAgentKind: AgentKind;
   model: string;
   providerId: string | null | undefined;
+  effort?: string;
+  fastMode?: boolean;
 }
 
 /**
@@ -196,12 +203,22 @@ export async function performSessionAgentSwitch(
     targetAgentKind: unknown;
     model: unknown;
     providerId?: unknown;
+    /** 目标引擎下应生效的 effort / fastMode(renderer 按目标目录与预设解析好带入)。 */
+    effort?: unknown;
+    fastMode?: unknown;
     /**
      * pending-apply 路径(send 事务派发前执行):跳过新引擎立即重建——send 随后
      * 的 lazy-create 会按 DB 新值 spawn(reconcileCreateOptsWithDb 校正兜底),
      * 不必重复 bootstrap 一次。
      */
     skipBootstrap?: boolean;
+    /**
+     * 意图制(2026-07-20 Dash 反馈"切换应以消息实际发出为准"):外部调用(IPC)
+     * 一律只登记意图立即返回 deferred——用户在选择器里反复改选零成本,不反复
+     * 关引擎/建交接/插边界行;真正的切换事务只在下一条消息发送时刻由
+     * applyPendingAgentSwitchIfIdle 以 applyNow=true 执行一次。
+     */
+    applyNow?: boolean;
   },
 ): Promise<SessionAgentSwitchResult> {
   const { sessionId, targetAgentKind, model, providerId } = params;
@@ -240,27 +257,31 @@ export async function performSessionAgentSwitch(
     return { switched: false, agentKind: targetAgentKind, model, engineReady: true };
   }
 
+  // 意图制:外部调用(非 applyNow)一律只登记意图——空闲/运行中同一语义,
+  // 用户反复改选零成本;renderer 乐观显示意图,真切换在下一条消息发送时刻执行。
+  // 重复登记 = 覆盖(同一意图的最新表达)。
+  if (!params.applyNow && deps.pendingSwitches) {
+    deps.pendingSwitches.set(sessionId, {
+      targetAgentKind,
+      model,
+      providerId: providerId as string | null | undefined,
+      ...(typeof params.effort === 'string' && params.effort ? { effort: params.effort } : {}),
+      ...(typeof params.fastMode === 'boolean' ? { fastMode: params.fastMode } : {}),
+    });
+    deps.log.info('agent-switch: intent registered (applies on next send)', {
+      sessionId,
+      targetAgentKind,
+      model,
+    });
+    return { switched: false, agentKind: targetAgentKind, model, engineReady: true, deferred: true };
+  }
+
   const live = deps.getLiveSession(sessionId);
   if (live?.isTurnRunning()) {
-    // turn 运行中不打断:登记切换意图,推迟到下一条消息发送时刻执行(send 事务
-    // 的 applyPendingAgentSwitchIfIdle)。旧 turn 继续由旧引擎跑完——此期间
-    // DB / 消息流 / 模型 chip 保持旧引擎是**真实**状态,不做乐观翻转。
-    if (deps.pendingSwitches) {
-      deps.pendingSwitches.set(sessionId, {
-        targetAgentKind,
-        model,
-        providerId: providerId as string | null | undefined,
-      });
-      deps.log.info('agent-switch: deferred until next send (turn running)', {
-        sessionId,
-        targetAgentKind,
-        model,
-      });
-      return { switched: false, agentKind: targetAgentKind, model, engineReady: true, deferred: true };
-    }
+    // applyNow 只应在空闲时被调用(applyPendingAgentSwitchIfIdle 已前置检查);
+    // 竞态兜底:仍在跑就拒绝,绝不打断进行中的 turn。
     throwIpcError('SESSION_RUNNING', `Session ${sessionId} is running a turn`);
   }
-  // 空闲立即切换:本次执行覆盖任何历史 pending(同一意图的最新表达)。
   deps.pendingSwitches?.clear(sessionId);
 
   // 交接素材与停泊绑定先于任何状态变更取得(失败不留半切换状态)。
@@ -303,6 +324,8 @@ export async function performSessionAgentSwitch(
       model,
       providerId: providerId as string | null | undefined,
       sdkSessionId: parked?.sdkSessionId ?? null,
+      ...(typeof params.effort === 'string' && params.effort ? { effort: params.effort } : {}),
+      ...(typeof params.fastMode === 'boolean' ? { fastMode: params.fastMode } : {}),
     });
 
     const boundaryContent: AgentSwitchBoundaryContent = {
@@ -354,6 +377,8 @@ export async function performSessionAgentSwitch(
               model,
               providerId: providerId as string | null | undefined,
               sdkSessionId: null,
+              ...(typeof params.effort === 'string' && params.effort ? { effort: params.effort } : {}),
+              ...(typeof params.fastMode === 'boolean' ? { fastMode: params.fastMode } : {}),
             });
             cleared = true;
           } catch (err2) {
@@ -442,7 +467,10 @@ export async function applyPendingAgentSwitchIfIdle(
       targetAgentKind: intent.targetAgentKind,
       model: intent.model,
       providerId: intent.providerId,
+      effort: intent.effort,
+      fastMode: intent.fastMode,
       skipBootstrap: true,
+      applyNow: true,
     });
   } catch (err) {
     deps.log.warn('agent-switch: pending apply failed; sending with current engine', {
@@ -465,6 +493,16 @@ export function registerMakerSessionAgentSwitchHandler(
       targetAgentKind: unknown,
       model: unknown,
       providerId: unknown,
-    ) => performSessionAgentSwitch(deps, { sessionId, targetAgentKind, model, providerId }),
+      effort: unknown,
+      fastMode: unknown,
+    ) =>
+      performSessionAgentSwitch(deps, {
+        sessionId,
+        targetAgentKind,
+        model,
+        providerId,
+        effort,
+        fastMode,
+      }),
   );
 }

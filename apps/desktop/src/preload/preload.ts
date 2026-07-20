@@ -3641,17 +3641,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ): Promise<{ deferred: boolean } | undefined> =>
       ipcRenderer.invoke('maker:set-model', sessionId, model, providerId),
     // session-agent-switch:同一会话切换 agent 引擎(claude-code ↔ codex)。
-    // 与 setModel 的边界:同引擎换模型走 setModel,跨引擎必须走本方法(main 会
-    // 构造交接、关旧引擎、清 sdkSessionId、插边界行并重建新引擎 session)。
-    // engineReady=false 表示新引擎 spawn 失败,下一条消息经 lazy-create 重试;
-    // deferred=true 表示 turn 运行中已登记意图,下一条消息发送时刻生效。
+    // 与 setModel 的边界:同引擎换模型走 setModel,跨引擎必须走本方法。
+    // 意图制:本调用只登记切换意图(deferred=true 为常态返回),真正的交接与
+    // 引擎重建在下一条消息发送时刻执行;effort/fastMode 为目标引擎下应生效的值
+    // (renderer 按目标目录与预设解析好带入,apply 时一并落库)。
+    // switched=false 且无 deferred = 同引擎 no-op(用户选回当前引擎,意图已清)。
     switchSessionAgent: (
       sessionId: string,
       targetAgentKind: 'claude-code' | 'codex',
       model: string,
       providerId?: string | null,
+      effort?: string,
+      fastMode?: boolean,
     ): Promise<{ switched: boolean; agentKind: 'claude-code' | 'codex'; model: string; engineReady: boolean; deferred?: boolean }> =>
-      ipcRenderer.invoke('maker:switch-session-agent', sessionId, targetAgentKind, model, providerId),
+      ipcRenderer.invoke('maker:switch-session-agent', sessionId, targetAgentKind, model, providerId, effort, fastMode),
     // effort/mode 透传 string —— 合法值由 maker capabilities 在运行时校验,
     // preload 不重复枚举 (避免 capabilities 加新值时这里也要改)。
     setEffort: (sessionId: string, effort: string): Promise<void> =>

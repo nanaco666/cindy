@@ -4131,8 +4131,13 @@ function ensureInitialMessages(sessionId: string): void {
     .then((session) => {
       setState(sessionId, (s) => {
         const updates: Partial<SessionChatState> = {};
-        const nextAgentKind = dbAgentKindToMakerKind(session.agentKind);
-        if (s.agentKind !== nextAgentKind) {
+        // 意图期守卫(与 mirrorSessionFields 同口径):DB seed 的旧引擎值不得
+        // 翻回乐观显示;seed 值 == 意图目标则清意图收敛。
+        const nextAgentKind = reconcileAgentKindWithIntent(
+          sessionId,
+          dbAgentKindToMakerKind(session.agentKind),
+        );
+        if (nextAgentKind !== null && s.agentKind !== nextAgentKind) {
           updates.agentKind = nextAgentKind;
         }
         // Remote codex target (P2): restore from DB so lazy-create after
@@ -4141,7 +4146,13 @@ function ensureInitialMessages(sessionId: string): void {
         if (s.remoteHostId !== nextRemoteHostId) {
           updates.remoteHostId = nextRemoteHostId;
         }
-        if (session.sdkSessionId && s.sdkSessionId !== session.sdkSessionId) {
+        // 意图期不 seed sdkSessionId:那是旧引擎的原生会话 id,种回来会和乐观翻转
+        // 后的目标 agentKind 拼成错误 resume 组合(撤销意图时由 clearAgentSwitchIntent 还原)。
+        if (
+          session.sdkSessionId &&
+          s.sdkSessionId !== session.sdkSessionId &&
+          !_agentSwitchIntent.has(sessionId)
+        ) {
           updates.sdkSessionId = session.sdkSessionId;
         }
         // Restore persisted fastMode so FastToggle reflects the DB state on session switch / restart.
@@ -6400,6 +6411,89 @@ function noteAgentSwitched(sessionId: string, agentKind: 'claude-code' | 'codex'
   );
 }
 
+/**
+ * session-agent-switch 意图制:main 侧只登记切换意图(deferred),真切换在下一条
+ * 消息发送时刻执行。renderer 用本表把用户的选择**乐观**呈现出来(chip / 选择器 /
+ * capabilities 立即跟随目标引擎),DB 与引擎保持旧值——mirror/seed 的回流守卫
+ * (reconcileAgentKindWithIntent)防止旧值在意图期把 UI 翻回去;真切换 apply 后的
+ * sessions:patched(agentKind = 目标)到达时清意图收敛。窗口 reload 丢意图属可
+ * 接受降级:main 侧意图仍在,下一条消息照常切换,patched 回流后 UI 收敛。
+ */
+interface AgentSwitchIntentRecord {
+  target: 'claude-code' | 'codex';
+  /** 登记前的引擎与原生会话 id,用户改主意(选回当前引擎)时原样还原。 */
+  original: 'claude-code' | 'codex';
+  originalSdkSessionId: string | null;
+  model: string;
+  providerId: string | null;
+  effort?: string;
+  fastMode?: boolean;
+}
+const _agentSwitchIntent = new Map<string, AgentSwitchIntentRecord>();
+
+function noteAgentSwitchIntent(
+  sessionId: string,
+  target: 'claude-code' | 'codex',
+  opts: { model: string; providerId: string | null; effort?: string; fastMode?: boolean },
+): void {
+  if (!sessionId) return;
+  const s = getOrCreateState(sessionId);
+  const existing = _agentSwitchIntent.get(sessionId);
+  // 反复改选只更新目标,original 锚定第一次登记前的真实状态。
+  _agentSwitchIntent.set(sessionId, {
+    target,
+    original: existing?.original ?? s.agentKind,
+    originalSdkSessionId: existing?.originalSdkSessionId ?? s.sdkSessionId,
+    model: opts.model,
+    providerId: opts.providerId,
+    effort: opts.effort,
+    fastMode: opts.fastMode,
+  });
+  // sdkSessionId 必须一并清掉:renderer 侧 createOpts 若把旧引擎的原生会话 id
+  // 和目标 agentKind 拼在一起,resume 会以错误引擎解释它(main 的 reconcile 兜底,
+  // 这里是第一现场)。撤销时的还原见 clearAgentSwitchIntent。
+  setState(sessionId, (st) =>
+    st.agentKind === target && st.sdkSessionId === null
+      ? st
+      : { ...st, agentKind: target, sdkSessionId: null },
+  );
+}
+
+/** 用户选回当前引擎(同引擎 no-op)= 撤销意图:还原登记前的引擎与原生会话 id。 */
+function clearAgentSwitchIntent(sessionId: string): void {
+  const intent = _agentSwitchIntent.get(sessionId);
+  if (!intent) return;
+  _agentSwitchIntent.delete(sessionId);
+  setState(sessionId, (s) => ({
+    ...s,
+    agentKind: intent.original,
+    sdkSessionId: intent.originalSdkSessionId,
+  }));
+}
+
+function getAgentSwitchIntent(sessionId: string): AgentSwitchIntentRecord | null {
+  return _agentSwitchIntent.get(sessionId) ?? null;
+}
+
+/**
+ * mirror/seed 回流守卫:意图期内,来自 DB 的 agentKind 回流按下列规则收敛——
+ *  - 回流值 == 意图目标 → 真切换已 apply,清意图放行(UI 已在目标,幂等);
+ *  - 其它值(旧引擎回声)→ 返回 null 表示丢弃该字段,保持乐观显示。
+ * 无意图时原样放行。
+ */
+function reconcileAgentKindWithIntent(
+  sessionId: string,
+  incoming: 'claude-code' | 'codex',
+): 'claude-code' | 'codex' | null {
+  const intent = _agentSwitchIntent.get(sessionId);
+  if (!intent) return incoming;
+  if (incoming === intent.target) {
+    _agentSwitchIntent.delete(sessionId);
+    return incoming;
+  }
+  return null;
+}
+
 function setSessionRuntime(
   sessionId: string,
   opts: { agentKind?: 'claude-code' | 'codex'; fastMode?: boolean; planModeEnabled?: boolean },
@@ -6455,10 +6549,16 @@ function mirrorSessionFields(
   // 同步清 sdkSessionId(旧引擎的原生会话 id 对新引擎无意义,与 noteAgentSwitched
   // 口径一致)。幂等:发起窗口已 noteAgentSwitched → 同值 no-op。
   if (patch.agentKind === 'cc' || patch.agentKind === 'codex') {
-    const nextKind = patch.agentKind === 'codex' ? ('codex' as const) : ('claude-code' as const);
-    setState(sessionId, (s) =>
-      s.agentKind === nextKind ? s : { ...s, agentKind: nextKind, sdkSessionId: null },
+    // 意图期守卫:旧引擎回声不得翻回乐观显示;回流 == 意图目标则清意图收敛。
+    const nextKind = reconcileAgentKindWithIntent(
+      sessionId,
+      patch.agentKind === 'codex' ? 'codex' : 'claude-code',
     );
+    if (nextKind !== null) {
+      setState(sessionId, (s) =>
+        s.agentKind === nextKind ? s : { ...s, agentKind: nextKind, sdkSessionId: null },
+      );
+    }
   }
   if (typeof patch.fastMode === 'boolean') {
     const next = patch.fastMode;
@@ -6546,6 +6646,9 @@ export const makerChatStore = {
   /** Seed runtime-only state before a session view has mounted and loaded DB metadata. */
   setSessionRuntime,
   noteAgentSwitched,
+  noteAgentSwitchIntent,
+  clearAgentSwitchIntent,
+  getAgentSwitchIntent,
   /** Update the displayed context window immediately after local model switches. */
   setContextWindow,
   /** MEM-OPT-2: Mark a session view mounted; returns a disposer for unmount. */

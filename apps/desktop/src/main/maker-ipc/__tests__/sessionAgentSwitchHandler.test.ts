@@ -187,7 +187,16 @@ describe('performSessionAgentSwitch', () => {
 describe('deferred switch (turn running)', () => {
   function makeDepsWithPending(overrides: Partial<MakerSessionAgentSwitchHandlerDeps> = {}) {
     const base = makeDeps(overrides);
-    const store = new Map<string, { targetAgentKind: 'claude-code' | 'codex'; model: string; providerId: string | null | undefined }>();
+    const store = new Map<
+      string,
+      {
+        targetAgentKind: 'claude-code' | 'codex';
+        model: string;
+        providerId: string | null | undefined;
+        effort?: string;
+        fastMode?: boolean;
+      }
+    >();
     base.deps.pendingSwitches = {
       set: (id, intent) => void store.set(id, intent),
       get: (id) => store.get(id),
@@ -204,6 +213,61 @@ describe('deferred switch (turn running)', () => {
     expect(result).toMatchObject({ switched: false, deferred: true, agentKind: 'codex', model: 'gpt-5.5' });
     expect(calls).toEqual([]);
     expect(store.get('s1')).toEqual({ targetAgentKind: 'codex', model: 'gpt-5.5', providerId: null });
+  });
+
+  it('意图制:空闲时外部调用同样只登记意图(不关引擎/不建交接/不插边界行)', async () => {
+    const { deps, calls, store } = makeDepsWithPending();
+    const result = await performSessionAgentSwitch(deps, {
+      ...validParams,
+      effort: 'xhigh',
+      fastMode: true,
+    });
+    expect(result).toMatchObject({ switched: false, deferred: true });
+    expect(calls).toEqual([]);
+    expect(deps.listMessagesForHandoff).not.toHaveBeenCalled();
+    expect(store.get('s1')).toEqual({
+      targetAgentKind: 'codex',
+      model: 'gpt-5.5',
+      providerId: null,
+      effort: 'xhigh',
+      fastMode: true,
+    });
+  });
+
+  it('意图制:反复改选只覆盖意图,applyNow 才执行真切换', async () => {
+    const { deps, calls, store } = makeDepsWithPending();
+    await performSessionAgentSwitch(deps, validParams);
+    await performSessionAgentSwitch(deps, { ...validParams, model: 'gpt-5.5-codex' });
+    expect(calls).toEqual([]);
+    expect(store.get('s1')).toMatchObject({ model: 'gpt-5.5-codex' });
+    const result = await performSessionAgentSwitch(deps, {
+      ...validParams,
+      model: 'gpt-5.5-codex',
+      applyNow: true,
+      skipBootstrap: true,
+    });
+    expect(result).toMatchObject({ switched: true });
+    expect(calls).toEqual(['close', 'db', 'boundary', 'pending']);
+  });
+
+  it('意图制:effort/fastMode 经意图透传到 applyAgentSwitchToDb', async () => {
+    const { deps, store } = makeDepsWithPending();
+    store.set('s1', {
+      targetAgentKind: 'codex',
+      model: 'gpt-5.5',
+      providerId: 'openai',
+      effort: 'high',
+      fastMode: true,
+    });
+    await applyPendingAgentSwitchIfIdle(deps, 's1');
+    expect(deps.applyAgentSwitchToDb).toHaveBeenCalledWith('s1', {
+      agentKind: 'codex',
+      model: 'gpt-5.5',
+      providerId: 'openai',
+      sdkSessionId: null,
+      effort: 'high',
+      fastMode: true,
+    });
   });
 
   it('同引擎 no-op 清除已登记的 pending(用户改主意)', async () => {

@@ -148,6 +148,9 @@ export async function applyAgentSwitchToSessionRow(
     model: string;
     providerId: string | null | undefined;
     sdkSessionId?: string | null;
+    /** 目标引擎下的 effort / fastMode(意图登记时 renderer 按目标目录解析,apply 一并落库)。 */
+    effort?: string;
+    fastMode?: boolean;
   },
 ): Promise<void> {
   const db = getDbClient().drizzle;
@@ -159,12 +162,20 @@ export async function applyAgentSwitchToSessionRow(
     updatedAt: Date.now(),
   };
   if (patch.providerId !== undefined) setObj.providerId = patch.providerId;
+  // effort 值域由 renderer 按目标引擎 capabilities 解析(schema 列是字面量联合,
+  // 跨层传输后此处以 string 到达;非法值与直改 DB 同级,运行时由引擎侧收敛)。
+  if (patch.effort !== undefined) {
+    setObj.effort = patch.effort as (typeof sessions.$inferInsert)['effort'];
+  }
+  if (patch.fastMode !== undefined) setObj.fastMode = patch.fastMode;
   await db.update(sessions).set(setObj).where(eq(sessions.id, sessionId));
   broadcastSessionPatched(sessionId, {
     agentKind: patch.agentKind,
     model: patch.model,
     sdkSessionId: nextSdkSessionId,
     ...(patch.providerId !== undefined ? { providerId: patch.providerId } : {}),
+    ...(patch.effort !== undefined ? { effort: patch.effort } : {}),
+    ...(patch.fastMode !== undefined ? { fastMode: patch.fastMode } : {}),
   });
 }
 

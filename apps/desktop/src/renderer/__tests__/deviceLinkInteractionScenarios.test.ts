@@ -655,7 +655,9 @@ describe('远程交互接线不变式', () => {
 
     const start = src.indexOf('const handleFastModeChange');
     expect(start).toBeGreaterThan(-1);
-    const body = src.slice(start, start + 1000);
+    // 窗口覆盖:函数头部的切换意图拦截块(session-agent-switch 意图制)之后
+    // 才是本用例断言的 persist→memory→draft 顺序,取 2200 字符保证包住全体。
+    const body = src.slice(start, start + 2200);
     expect(body).toContain('const persisted = await persistFastModeChange(enabled);');
     expect(body.indexOf('if (!persisted) return;')).toBeLessThan(
       body.indexOf('syncSessionDraftModelPrefs'),
@@ -779,7 +781,7 @@ describe('远程交互接线不变式', () => {
     const src = read('components/new-chat/ChatInput.tsx');
     const handleStart = src.indexOf('const handleFastModeChange');
     expect(handleStart).toBeGreaterThan(-1);
-    const handleBody = src.slice(handleStart, handleStart + 900);
+    const handleBody = src.slice(handleStart, handleStart + 2200);
     expect(handleBody).toContain('memoryProviderId = effectiveSourceId');
     expect(handleBody).toContain(
       'modelMemory?.setFast(currentModelAgentKind, memoryProviderId, modelId, enabled)',
