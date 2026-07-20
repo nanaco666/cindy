@@ -2561,7 +2561,7 @@
       "remaining": "Remaining ${{remain}}",
       "nextReset": "Next reset: {{at}}",
       "latestTurnTitle": "Latest turn",
-      "latestUserTurnTitle": "Latest user turn (token details: final segment)"
+      "latestUserTurnTitle": "Latest user-turn total"
     }
   },
   "usageDetails": {

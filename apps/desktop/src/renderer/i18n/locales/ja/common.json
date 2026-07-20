@@ -2561,7 +2561,7 @@
       "remaining": "残り ${{remain}}",
       "nextReset": "次回リセット: {{at}}",
       "latestTurnTitle": "直近のターン",
-      "latestUserTurnTitle": "直近のユーザーターン（トークン明細は最終セグメント）"
+      "latestUserTurnTitle": "直近のユーザーターン合計"
     }
   },
   "usageDetails": {

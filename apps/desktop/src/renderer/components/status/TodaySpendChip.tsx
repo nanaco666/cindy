@@ -35,7 +35,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 
 import { cn } from '@/lib/utils';
-import { DAILY_SOFT_LIMIT_FACTOR, formatCompactTokens, formatCompactUsd } from '@/lib/usageFormat';
+import { DAILY_SOFT_LIMIT_FACTOR, formatCompactTokens, formatCompactUsd, formatTurnCostUsd } from '@/lib/usageFormat';
 import { Tip } from '@/components/ui/tooltip';
 import { useApiKey } from '@/hooks/useApiKey';
 import { useClaudeOAuthConnected } from '@/hooks/useClaudeOAuthConnected';
@@ -619,6 +619,8 @@ function buildClaudeSubscriptionTooltipNode(
 interface LatestTurnUsageSummary {
   costUsd?: number;
   isEstimate?: boolean;
+  segmentCostUsd?: number;
+  segmentIsEstimate?: boolean;
   isUserTurnTotal: boolean;
   details: TurnUsageDetails;
 }
@@ -639,6 +641,12 @@ function findLatestTurnUsageSummary(messages: ChatMessage[]): LatestTurnUsageSum
       ...((userTurnCostUsd != null
         ? message.userTurnCostIsEstimate
         : message.turnCostIsEstimate) === true ? { isEstimate: true } : {}),
+      ...(userTurnCostUsd != null && typeof message.turnCostUsd === 'number' && message.turnCostUsd > 0
+        ? {
+            segmentCostUsd: message.turnCostUsd,
+            segmentIsEstimate: message.turnCostIsEstimate === true,
+          }
+        : {}),
       isUserTurnTotal: userTurnCostUsd != null,
       details: message.turnUsageDetails,
     };
@@ -680,13 +688,21 @@ function appendLatestTurnUsageLines(
 ): void {
   if (!summary) return;
   if (lines.length > 0) lines.push('');
+  if (summary.isUserTurnTotal && summary.costUsd != null) {
+    lines.push(t('todaySpend.tooltip.latestUserTurnTitle'));
+    lines.push(t(summary.isEstimate ? 'usageDetails.valueLine' : 'usageDetails.costLine', {
+      cost: formatTurnCostUsd(summary.costUsd),
+    }));
+  }
   lines.push(...buildTurnUsageTooltipLines({
     details: summary.details,
     t,
-    costUsd: summary.costUsd,
-    isEstimate: summary.isEstimate,
+    // Token / model detail remains scoped to the final SDK segment. Keep its
+    // cost line separate from the user-turn total shown above.
+    costUsd: summary.isUserTurnTotal ? summary.segmentCostUsd : summary.costUsd,
+    isEstimate: summary.isUserTurnTotal ? summary.segmentIsEstimate : summary.isEstimate,
     title: t(summary.isUserTurnTotal
-      ? 'todaySpend.tooltip.latestUserTurnTitle'
+      ? 'chat.messageActionBar.userTurnCostDetailsTitle'
       : 'todaySpend.tooltip.latestTurnTitle'),
   }));
 }

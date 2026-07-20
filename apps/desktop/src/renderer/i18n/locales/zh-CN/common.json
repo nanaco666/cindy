@@ -2561,7 +2561,7 @@
       "remaining": "剩余 ${{remain}}",
       "nextReset": "下次重置: {{at}}",
       "latestTurnTitle": "最近一轮",
-      "latestUserTurnTitle": "最近一轮用户请求（Token 明细为最后分段）"
+      "latestUserTurnTitle": "最近一轮用户请求累计"
     }
   },
   "usageDetails": {

@@ -2561,7 +2561,7 @@
       "remaining": "남음 ${{remain}}",
       "nextReset": "다음 재설정: {{at}}",
       "latestTurnTitle": "최근 턴",
-      "latestUserTurnTitle": "최근 사용자 턴(토큰 세부 정보는 마지막 세그먼트)"
+      "latestUserTurnTitle": "최근 사용자 턴 합계"
     }
   },
   "usageDetails": {
