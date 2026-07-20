@@ -15,10 +15,12 @@ import type {
 
 import { projectAutomationConsents, schedules, sessions } from '../localDb/schema';
 import { projectAutomationConsentToRow } from '../localDb/mapper';
+import { PROJECT_AUTOMATION_REL_SEGMENTS } from '../../shared/projectAutomationPaths';
+import { migrateLegacyXdmakerDir } from '../utils/legacyXdmakerMigration';
 import type { DrizzleScheduleStorage, SchedulerDrizzleDb } from './storage';
 
 /**
- * ProjectAutomationLoader reads .xdmaker/automations/schedules.json and syncs it
+ * ProjectAutomationLoader reads .cindy/automations/schedules.json and syncs it
  * into the scheduler DB.
  *
  * Project schedules are mandatory project-lead configuration, similar to lint
@@ -27,7 +29,7 @@ import type { DrizzleScheduleStorage, SchedulerDrizzleDb } from './storage';
  * last successfully reconciled hash so renderer toasts can be deduped. The old
  * consent meaning is deprecated.
  */
-const AUTOMATIONS_REL_PATH = path.join('.xdmaker', 'automations', 'schedules.json');
+const AUTOMATIONS_REL_PATH = path.join(...PROJECT_AUTOMATION_REL_SEGMENTS);
 const CACHE_TTL_MS = 5_000;
 const PROJECT_SCHEDULE_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -320,6 +322,7 @@ export class ProjectAutomationLoader {
   }
 
   private async readProjectAutomationsFromDisk(workingDir: string): Promise<CachedRead> {
+    await migrateLegacyXdmakerDir(workingDir);
     const filePath = path.join(workingDir, AUTOMATIONS_REL_PATH);
     let content: string;
     try {

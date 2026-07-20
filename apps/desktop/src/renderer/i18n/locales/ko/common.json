@@ -4704,7 +4704,7 @@
       },
       "cell": {
         "tag": "프로젝트",
-        "tooltip": ".xdmaker/automations/schedules.json에서 관리되며 UI에서 편집할 수 없습니다"
+        "tooltip": ".cindy/automations/schedules.json에서 관리되며 UI에서 편집할 수 없습니다"
       }
     },
     "button": {
@@ -4750,7 +4750,7 @@
       "removeProject": {
         "menu": "프로젝트에서 제거",
         "confirmTitle": "프로젝트 오토메이션에서 제거할까요?",
-        "confirmDescription": ".xdmaker/automations/schedules.json에서 \"{{name}}\"을 제거합니다. commit 후 모든 협업자에게 영향을 줍니다.",
+        "confirmDescription": ".cindy/automations/schedules.json에서 \"{{name}}\"을 제거합니다. commit 후 모든 협업자에게 영향을 줍니다.",
         "confirm": "제거",
         "demote": "제거하고 개인 복사본 유지",
         "demoteSuccess": "프로젝트에서 제거하고 개인 작업으로 유지했습니다"

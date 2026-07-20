@@ -85,8 +85,8 @@ pnpm --filter project-context dev   # tsx watch src/cli.ts
 node packages/project-context/dist/cli.js init
 
 # 2) 看产出
-ls .xdmaker/project-knowledge/modules/
-cat .xdmaker/project-knowledge/manifest.yaml
+ls .cindy/project-knowledge/modules/
+cat .cindy/project-knowledge/manifest.yaml
 
 # 3) 模拟有 diff 时的 dry-run（不调 LLM、只算映射）
 node packages/project-context/dist/cli.js update --since HEAD~5 --check-only
@@ -104,7 +104,7 @@ node packages/project-context/dist/cli.js query --files packages/maker-core/src/
 扫描仓库、按 package manager 约定建 `modules/` 骨架。**幂等**：已存在的 .md 不覆盖。
 
 发现优先级：
-1. `.xdmaker/project-knowledge/config.yaml` 的 `module_roots`（显式）
+1. `.cindy/project-knowledge/config.yaml` 的 `module_roots`（显式）
 2. `pnpm-workspace.yaml` 的 `packages` 字段
 3. `package.json` 的 `workspaces` 字段
 4. 都找不到 → 报错让你写 config.yaml
@@ -128,8 +128,8 @@ project-context init
     + apps--desktop
     + apps--landing-page
     + ...
-  wrote default .xdmaker/project-knowledge/config.yaml
-  manifest: .xdmaker/project-knowledge/manifest.yaml
+  wrote default .cindy/project-knowledge/config.yaml
+  manifest: .cindy/project-knowledge/manifest.yaml
 ```
 
 ### `update [--since <ref>] [--check-only]`
@@ -137,7 +137,7 @@ project-context init
 按 git diff 增量更新受影响的知识文件。
 
 流程：
-1. 拿一个文件锁（`.xdmaker/project-knowledge/.lock`），抢不到就跳过本次（防并发）
+1. 拿一个文件锁（`.cindy/project-knowledge/.lock`），抢不到就跳过本次（防并发）
 2. 算 `last_synced_commit..HEAD` 的 diff
 3. 过 `.gitignore` + 内置 ignore + config.ignore 三层过滤
 4. 反查每个改动文件覆盖的知识 ID
@@ -248,10 +248,10 @@ node packages/project-context/dist/cli.js query \
 
 ---
 
-## 产出物（`.xdmaker/project-knowledge/` 长什么样）
+## 产出物（`.cindy/project-knowledge/` 长什么样）
 
 ```
-<repo-root>/.xdmaker/project-knowledge/
+<repo-root>/.cindy/project-knowledge/
 ├── config.yaml          # 用户可编辑配置（init 时写默认）
 ├── manifest.yaml        # 索引（机器维护，可从 .md 重建）
 ├── .lock                # update 运行时的临时锁文件（自动清理）
@@ -313,7 +313,7 @@ schema_version: 1
 
 ---
 
-## 配置（`.xdmaker/project-knowledge/config.yaml`）
+## 配置（`.cindy/project-knowledge/config.yaml`）
 
 `init` 第一次跑时会写一份默认配置，后续手动编辑：
 
@@ -367,10 +367,10 @@ MVP 内置一个 adapter：`claude-code`。
 
 ### XDMaker Desktop（本仓库默认 harness，开箱即用）
 
-XDMaker Desktop 已内置自动注入：每次创建新 cc-agent / codex session 时，main 进程会探测 cwd 下是否有 `.xdmaker/project-knowledge/`，存在就把 `modules/` + `concerns/` 下所有 .md 拼成 `<project-context>` wrapper 注入到 `systemPromptAppend`，缺失则 silently skip。
+Cindy Desktop 已内置自动注入：每次创建新 cc-agent / codex session 时，main 进程会探测 cwd 下是否有 `.cindy/project-knowledge/TOC.md`，存在就把这份预渲染 TOC 包成 `<project-context-toc>` wrapper 注入，缺失则 silently skip。
 
 - **无需任何 UI 开关**：所有用户默认启用（不再走"实验功能"入口）
-- **目录探测**：以 cwd 为根，命中 `.xdmaker/project-knowledge/modules/*.md` 才触发
+- **目录探测**：以 cwd 为根，命中 `.cindy/project-knowledge/TOC.md` 才触发
 - **per-session 快照**：是否注入会回写到 `sessions.used_project_context` 列；老 session 维持启动时刻状态，不被后续追溯
 - **可视提示**：chat footer 的 Brain icon + tooltip "项目知识库已加载"（4 语言已对齐）
 
@@ -423,7 +423,7 @@ Claude Code 的 hooks 配置里加：
 
 **冻结某个 module（不让 update 改）：**
 
-编辑 `.xdmaker/project-knowledge/modules/<id>.md` 的 frontmatter，加：
+编辑 `.cindy/project-knowledge/modules/<id>.md` 的 frontmatter，加：
 
 ```yaml
 auto_update: false
@@ -464,7 +464,7 @@ node packages/project-context/dist/cli.js refresh --all
 - 仅 `claude-code` adapter；codex / custom 待做
 - `depends_on` 字段写入但 query 不做扩展（一跳）
 - 没有 token budget 排序
-- 没有"跨进程更稳的锁"——`.xdmaker/project-knowledge/.lock` 是简单文件锁，崩溃时可能残留（手动删）
+- 没有"跨进程更稳的锁"——`.cindy/project-knowledge/.lock` 是简单文件锁，崩溃时可能残留（手动删）
 - 演进备忘没有膨胀防护（Phase 3）
 
 完整决策列表见 `docs/project-context.md` §12 Decisions Log。
@@ -478,7 +478,7 @@ node packages/project-context/dist/cli.js refresh --all
 | `Not inside a git repository` | 当前目录不是 git 仓库。`git init` 或换路径 |
 | `Discovery returned 0 modules` | 没有 pnpm-workspace.yaml / package.json workspaces，或都没匹配。在 config.yaml 写 `module_roots` |
 | `Detected go.mod / Cargo.toml` | MVP 不支持 Go/Rust 自动发现。手写 `module_roots` 即可 |
-| update 输出 `another instance is running` | 上次跑挂了残留 .lock。删 `.xdmaker/project-knowledge/.lock` 重试 |
+| update 输出 `another instance is running` | 上次跑挂了残留 .lock。删 `.cindy/project-knowledge/.lock` 重试 |
 | update 报 `claude CLI not found` | 装 Claude Code CLI 或在 config.yaml 写 `agent_options.command` 指自定义路径 |
 | init 报某个目录是 orphan 但不该是 | 该目录里全是非源码后缀。要么手动建一份 .md（init 不会覆盖），要么扩展 `SOURCE_EXTENSIONS`（src/discovery.ts） |
 

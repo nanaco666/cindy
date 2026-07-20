@@ -3144,7 +3144,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
 
   /**
    * project-knowledge inject 共用逻辑：CREATE_SESSION adapter + SEND lazy-create 都用。
-   * 自动开启——任何 session 创建都会尝试读 cwd 下 .xdmaker/project-knowledge/，存在就注入；
+   * 自动开启——任何 session 创建都会尝试读 cwd 下 .cindy/project-knowledge/，存在就注入；
    * 不再依赖 renderer 显式开关。tryInjectProjectContext silently fallback——目录缺失 / 文件
    * 读失败都走 injected:false 分支，不抛错也不阻塞 session 创建。
    * 副作用：mutate o.userPrompt（追加 wrapper）；返回是否真的注入了内容。
@@ -3152,7 +3152,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
   async function applyProjectContextInjection(o: CreateOpts): Promise<boolean> {
     if (!o.workingDir) return false;
     // remote session: workingDir 是远端主机上的路径。本机若恰好存在同路径且带
-    // .xdmaker/project-knowledge/,tryInjectProjectContext 会把**本机**的项目知识注入给
+    // .cindy/project-knowledge/,tryInjectProjectContext 会把**本机**的项目知识注入给
     // 远端 agent,污染远端仓库的回答。远端 project-context 需经远端 host 读取(后续特性),
     // 未落地前 remote session 一律跳过本地注入。注意:仅影响 remote,local 注入行为不变。
     if (o.remoteHostId) {

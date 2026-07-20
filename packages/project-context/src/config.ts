@@ -3,7 +3,13 @@ import path from 'node:path';
 import yaml from 'js-yaml';
 import type { ConfigFile } from './types.js';
 
-export const CONTEXT_DIR = '.xdmaker/project-knowledge';
+export const CONTEXT_DIR = '.cindy/project-knowledge';
+/**
+ * 品牌迁移前的旧目录约定（2026-07-20 起硬切为 `.cindy/`）。只在命令入口做一次性
+ * 搬迁（rename），除此之外代码不再识别 `.xdmaker` 路径。
+ */
+export const LEGACY_CONTEXT_ROOT = '.xdmaker';
+export const CONTEXT_ROOT = '.cindy';
 export const CONFIG_FILENAME = 'config.yaml';
 export const MANIFEST_FILENAME = 'manifest.yaml';
 export const MODULES_SUBDIR = 'modules';
@@ -52,6 +58,31 @@ export function resolvePaths(repoRoot: string): ResolvedPaths {
     lockPath: path.join(contextDir, LOCK_FILENAME),
     tocPath: path.join(contextDir, TOC_FILENAME),
   };
+}
+
+/**
+ * 一次性把旧 `.xdmaker/` 目录搬迁为 `.cindy/`（幂等，失败静默——调用方随后会按
+ * `.cindy` 缺失的语义正常报错/初始化）。`.cindy` 已存在时逐个搬缺失的子项，
+ * 搬空后删掉旧空壳；非空说明两边都有同名子项，保留旧目录让用户自行处置。
+ */
+export function migrateLegacyContextRoot(repoRoot: string): void {
+  const oldRoot = path.join(repoRoot, LEGACY_CONTEXT_ROOT);
+  const newRoot = path.join(repoRoot, CONTEXT_ROOT);
+  try {
+    if (!fs.existsSync(oldRoot) || !fs.statSync(oldRoot).isDirectory()) return;
+    if (!fs.existsSync(newRoot)) {
+      fs.renameSync(oldRoot, newRoot);
+      return;
+    }
+    for (const entry of fs.readdirSync(oldRoot)) {
+      const from = path.join(oldRoot, entry);
+      const to = path.join(newRoot, entry);
+      if (!fs.existsSync(to)) fs.renameSync(from, to);
+    }
+    if (fs.readdirSync(oldRoot).length === 0) fs.rmdirSync(oldRoot);
+  } catch {
+    // 搬迁失败不阻断命令本身；后续按 .cindy 现状继续。
+  }
 }
 
 export function loadConfig(configPath: string): ConfigFile {

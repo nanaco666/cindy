@@ -523,7 +523,7 @@ export function ScheduleFormDialog({
             )}
 
 
-            {/* 项目自动化(.xdmaker/automations/schedules.json)的 config schema 尚无
+            {/* 项目自动化(.cindy/automations/schedules.json)的 config schema 尚无
                 executionMode/scriptConfig 字段,展示切换器会让 script 配置被静默丢弃
                 ——该形态下隐藏,项目自动化对 script 模式的支持另行迭代。 */}
             {!isProjectAutomationMode && (

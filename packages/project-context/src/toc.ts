@@ -1,7 +1,7 @@
 /**
  * TOC renderer + writer.
  *
- * Generates `.xdmaker/project-knowledge/TOC.md`, a pre-rendered index of all
+ * Generates `.cindy/project-knowledge/TOC.md`, a pre-rendered index of all
  * module/concern knowledge files plus per-entry short summaries. Consumers
  * (currently apps/desktop) inject this verbatim into agent system prompts at
  * session-create time, replacing the older "read every .md and extract summary

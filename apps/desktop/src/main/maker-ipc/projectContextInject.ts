@@ -4,7 +4,7 @@
  * 在 createSession IPC 之前调用，向 systemPrompt 注入一段「项目模块知识 TOC + 摘要」，
  * 引导 agent 用 Read 工具按需打开完整 .md 文件取细节。
  *
- * 数据源唯一性：直接读 `.xdmaker/project-knowledge/TOC.md`。这是
+ * 数据源唯一性：直接读 `.cindy/project-knowledge/TOC.md`。这是
  * `project-context` CLI 在 init/update/refresh 时预生成的派生物，跟 manifest 和各
  * 模块 .md 一起入 git、由 CI 集中维护。desktop 端不做任何 markdown 解析、不做
  * 摘要抽取、不感知 manifest schema —— 渲染逻辑统一在 `packages/project-context/src/toc.ts`。
@@ -19,10 +19,11 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 
 import { createLogger } from '../logger.js';
+import { migrateLegacyXdmakerDir } from '../utils/legacyXdmakerMigration.js';
 
 const log = createLogger('project-context-inject');
 
-const TOC_REL_PATH = path.join('.xdmaker', 'project-knowledge', 'TOC.md');
+const TOC_REL_PATH = path.join('.cindy', 'project-knowledge', 'TOC.md');
 
 const CACHE_TTL_MS = 5_000;
 const cache = new Map<string, { result: InjectResult; ts: number }>();
@@ -60,6 +61,7 @@ export async function tryInjectProjectContext(workingDir: string): Promise<Injec
 }
 
 async function readToc(workingDir: string): Promise<InjectResult> {
+  await migrateLegacyXdmakerDir(workingDir);
   const tocPath = path.join(workingDir, TOC_REL_PATH);
   let raw: string;
   try {

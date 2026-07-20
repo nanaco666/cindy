@@ -49,7 +49,7 @@ interface Props {
   onRunNow?: (s: Schedule) => void | Promise<void>;
   /** 页面级 runNow busy 守卫集合；has(s.id) === true 时对应行按钮禁用。 */
   runNowBusyIds?: ReadonlySet<string>;
-  /** Project-level action: open .xdmaker/automations/schedules.json. */
+  /** Project-level action: open .cindy/automations/schedules.json. */
   onOpenProjectConfig: (workingDir: string) => void | Promise<void>;
   /** Project-level action: reconcile this workingDir's automation config. */
   onReloadProject: (workingDir: string) => void | Promise<void>;
