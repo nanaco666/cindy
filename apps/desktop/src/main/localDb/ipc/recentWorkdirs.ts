@@ -17,7 +17,7 @@
  *  - upsert 失败仅日志,不抛 —— 这是"用户体验增强"数据,不该挡住 session 创建主流程。
  */
 
-import { access } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 
 import { BrowserWindow, ipcMain } from 'electron';
 import { desc, eq, sql } from 'drizzle-orm';
@@ -112,13 +112,14 @@ export async function upsertRecentWorkdir(
 
 /**
  * 目录存在性探测。表内 path 已是 posix 归一形态,Node fs 在 Windows 上同样
- * 接受正斜杠;任何 fs 错误(不存在 / 无权限 / 网络盘断连)都按"不存在"处理
- * —— 这个字段只驱动 UI 置灰提示,fail-closed 到 false 无害。
+ * 接受正斜杠;必须确认是目录 —— 路径被普通文件顶替时 access 也会成功,会让
+ * 选择器把不可用条目当正常项目。stat 跟随符号链接(指向目录的 symlink 算存在);
+ * 任何 fs 错误(不存在 / 无权限 / 网络盘断连)都按"不存在"处理 —— 这个字段
+ * 只驱动 UI 置灰提示,fail-closed 到 false 无害。
  */
 async function dirExists(path: string): Promise<boolean> {
   try {
-    await access(path);
-    return true;
+    return (await stat(path)).isDirectory();
   } catch {
     return false;
   }

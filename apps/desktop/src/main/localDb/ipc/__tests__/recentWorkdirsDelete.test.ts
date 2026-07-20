@@ -7,7 +7,7 @@
  *  - delete 入参非法(非字符串 / 空白)→ INVALID_PARAMS / no-op
  *  - list 返回 exists 字段:磁盘上真实存在的目录 true,已迁移的死路径 false
  */
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -157,8 +157,12 @@ describe('local-db:recent-workdirs:list exists probe', () => {
     registerRecentWorkdirsIpc();
   });
 
-  it('marks live dirs exists:true and vanished dirs exists:false', async () => {
-    seed(existingDir.replace(/\\/g, '/'), 2000);
+  it('marks live dirs exists:true; vanished paths and plain files exists:false', async () => {
+    // 路径被普通文件顶替时必须判不存在 —— access 探测会误报 true(review 已踩)。
+    const filePath = join(existingDir, 'not-a-dir.txt');
+    writeFileSync(filePath, 'x');
+    seed(existingDir.replace(/\\/g, '/'), 3000);
+    seed(filePath.replace(/\\/g, '/'), 2000);
     seed('/definitely/not/a/real/dir/xyz', 1000);
 
     const list = (await invoke('local-db:recent-workdirs:list')) as Array<{
@@ -167,10 +171,11 @@ describe('local-db:recent-workdirs:list exists probe', () => {
       exists: boolean;
     }>;
 
-    expect(list).toHaveLength(2);
-    // 按 lastUsedAt desc:存在的目录在前。
+    expect(list).toHaveLength(3);
+    // 按 lastUsedAt desc:真目录 → 文件 → 不存在路径。
     expect(list[0].exists).toBe(true);
     expect(list[1].exists).toBe(false);
+    expect(list[2].exists).toBe(false);
     expect(typeof list[0].lastUsedAt).toBe('string');
   });
 });
