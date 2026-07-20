@@ -4759,6 +4759,7 @@
     },
     "cell": {
       "subtitlePaused": "一時停止中",
+      "subtitleWaitingForResources": "実行スロット待ち（{{inFlight}}/{{max}}）",
       "subtitleManual": "手動",
       "subtitleOnce": "1回",
       "tagOnce": "1回",

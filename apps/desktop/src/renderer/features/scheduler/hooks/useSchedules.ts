@@ -17,8 +17,12 @@
  *   2. store 切账号 logout listener 清 cache → relogin 后 'ready' 后台预热
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import type { Schedule, SchedulerEvent } from '@lizi/maker-scheduler';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type {
+  Schedule,
+  SchedulerEvent,
+  SchedulerRuntimeSnapshot,
+} from '@lizi/maker-scheduler';
 
 import {
   schedulesStore,
@@ -30,6 +34,8 @@ export interface UseSchedulesResult {
   schedules: Schedule[];
   /** scheduleId → ephemeral runningRunId(用于 chip 短暂闪 'running')。 */
   runningById: Record<string, string | undefined>;
+  /** 当前实例的并发占用与真实等待队列。 */
+  runtimeSnapshot: SchedulerRuntimeSnapshot | null;
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
@@ -39,6 +45,8 @@ export function useSchedules(): UseSchedulesResult {
   const snapshot = useSchedulesSnapshot();
   const error = useSchedulesError();
   const [runningById, setRunningById] = useState<Record<string, string | undefined>>({});
+  const [runtimeSnapshot, setRuntimeSnapshot] = useState<SchedulerRuntimeSnapshot | null>(null);
+  const runtimeRevisionRef = useRef(0);
 
   const refresh = useCallback(async () => {
     await schedulesStore.forceRefresh().catch(() => {
@@ -52,9 +60,29 @@ export function useSchedules(): UseSchedulesResult {
       /* 同上 */
     });
     // 订阅 fired/completed/failed → runningById(ephemeral state,不进 store)
+    const refreshRuntimeState = (): void => {
+      const getRuntimeState = window.electronAPI.maker.schedule.getRuntimeState;
+      if (!getRuntimeState) return;
+      const revision = runtimeRevisionRef.current;
+      void getRuntimeState()
+        .then((snapshot) => {
+          // 查询期间如果先收到了更新事件，不能让较旧响应覆盖新快照。
+          if (runtimeRevisionRef.current === revision) {
+            setRuntimeSnapshot(snapshot as SchedulerRuntimeSnapshot);
+          }
+        })
+        .catch(() => {
+          /* 瞬时诊断状态失败不影响任务列表主数据。 */
+        });
+    };
     const off = window.electronAPI.maker.schedule.onEvent((raw) => {
       const ev = raw as SchedulerEvent;
-      if (ev.type === 'fired') {
+      if (ev.type === 'runtime-state') {
+        runtimeRevisionRef.current += 1;
+        setRuntimeSnapshot(ev.snapshot);
+      } else if (ev.type === 'ready') {
+        refreshRuntimeState();
+      } else if (ev.type === 'fired') {
         setRunningById((m) => ({ ...m, [ev.scheduleId]: ev.runId }));
       } else if (
         ev.type === 'completed' ||
@@ -73,12 +101,14 @@ export function useSchedules(): UseSchedulesResult {
         });
       }
     });
+    refreshRuntimeState();
     return off;
   }, []);
 
   return {
     schedules: snapshot ?? [],
     runningById,
+    runtimeSnapshot,
     // loading 仅在"从未加载过 且 也没错误"时为 true;
     // 有错误时 SchedulerPage 走 error 分支显示文案,不应该再显示 loading。
     loading: snapshot === null && error === null,

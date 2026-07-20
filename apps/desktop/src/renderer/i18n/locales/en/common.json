@@ -4768,6 +4768,7 @@
     },
     "cell": {
       "subtitlePaused": "Paused",
+      "subtitleWaitingForResources": "Waiting for a slot ({{inFlight}}/{{max}})",
       "subtitleManual": "Manual",
       "subtitleOnce": "Once",
       "tagOnce": "Once",

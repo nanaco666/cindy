@@ -76,3 +76,19 @@ describe('TaskListCell 立即运行按钮', () => {
     expect(onRunNow).not.toHaveBeenCalled();
   });
 });
+
+describe('TaskListCell 并发等待提示', () => {
+  it('仅在运行时快照明确标记等待时替换过期的 Next 文案', () => {
+    render(
+      createElement(TaskListCell, {
+        schedule: { ...schedule, nextFireAt: Date.now() - 60_000 },
+        selected: false,
+        onSelect: vi.fn(),
+        waitingForResources: { inFlight: 4, maxConcurrentRuns: 4 },
+      }),
+    );
+
+    expect(screen.getByText('scheduler.cell.subtitleWaitingForResources')).toBeTruthy();
+    expect(screen.queryByText(/Next less than 1 min/)).toBeNull();
+  });
+});

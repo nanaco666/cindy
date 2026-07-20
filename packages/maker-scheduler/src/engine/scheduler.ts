@@ -6,6 +6,10 @@ import type {
   UpdateScheduleInput,
   ListFilter,
   SchedulerEvent,
+  SchedulerInflightRun,
+  SchedulerRuntimeSnapshot,
+  SchedulerWaitingSchedule,
+  ScheduleRunPhase,
   ScriptCapability,
   ScriptExecutionConfig,
 } from '../types.js';
@@ -107,6 +111,10 @@ export interface SchedulerOptions {
    * 无上限并发触发在任务堆积时会耗尽宿主内存(2026-07-07 凌晨实际 OOM 崩溃)。
    */
   maxConcurrentRuns?: number;
+  /** 宿主注入的 Scheduler 实例标识，用于区分同机多实例日志。 */
+  instanceId?: string;
+  /** 可选宿主进程标识；package 本身不读取 process，保持运行环境解耦。 */
+  processId?: number;
 }
 
 const DEFAULT_TICK_MS = 1_000;
@@ -116,6 +124,9 @@ export const DEFAULT_MAX_CONCURRENT_RUNS = 4;
 
 /** 并发闸门「有任务在排队」日志的节流间隔 —— tick 每秒一次,不节流会刷屏。 */
 const GATE_LOG_THROTTLE_MS = 30_000;
+
+/** 单条执行超过该时长后输出周期性长跑诊断。 */
+const LONG_RUNNING_DIAGNOSTIC_MS = 10 * 60_000;
 
 /**
  * In-flight run 心跳续期间隔。执行实例每隔这么久把自己 in-flight run 的
@@ -155,6 +166,15 @@ export const RUN_LEGACY_STALE_MS = 2 * 60 * 60 * 1000;
  * 触发互斥不依赖本同步(靠 claimDueFire 的 CAS),同步只解决"不漏、不永久滞后"。
  */
 const DB_SYNC_INTERVAL_MS = 30_000;
+
+/** 公开快照字段之外，再保留最近一次长跑诊断时间用于日志节流。 */
+interface InflightAttempt extends SchedulerInflightRun {
+  lastLongRunningLogAt?: number;
+}
+
+interface InflightRunDiagnostic extends SchedulerInflightRun {
+  durationMs: number;
+}
 
 export class Scheduler extends EventEmitter {
   private readonly storage: ScheduleStorage;
@@ -207,12 +227,13 @@ export class Scheduler extends EventEmitter {
   private lastDbSyncAt = 0;
 
   // ── 并发闸门状态 ──────────────────────────────────────────────────────────
-  // in-flight fire 计数:fireOne / runNow 包装层**同步**增减(进入方法体第一行 ++,
-  // finally --),tick 的槽位计算读它。刻意不用 inflightControllers.size 做门槛:
-  // registerInflight 发生在 claimDueFire 等多个 await 之后,重叠 tick 会在注册完成
-  // 前看到偏小的值而超发;同步计数没有这个窗口。
+  // fireOne / runNow 包装层在第一次 await 前同步写入 attempts，tick 直接读取 Map.size。
+  // 这样既保留原计数的无超发窗口，又让每个占用都能追溯到具体 run/source/phase。
   private readonly maxConcurrentRuns: number;
-  private inFlightFireCount = 0;
+  private readonly schedulerInstanceId: string;
+  private readonly processId?: number;
+  private readonly inflightAttempts = new Map<string, InflightAttempt>();
+  private readonly waitingSchedules = new Map<string, SchedulerWaitingSchedule>();
   private lastGateLogAt = 0;
 
   constructor(opts: SchedulerOptions) {
@@ -226,6 +247,8 @@ export class Scheduler extends EventEmitter {
     this.isManagedWorkspaceDir = opts.isManagedWorkspaceDir;
     this.passive = opts.passive ?? false;
     this.maxConcurrentRuns = Math.max(1, opts.maxConcurrentRuns ?? DEFAULT_MAX_CONCURRENT_RUNS);
+    this.schedulerInstanceId = opts.instanceId ?? `scheduler-${defaultGenerateId()}`;
+    this.processId = opts.processId;
   }
 
   /**
@@ -314,6 +337,18 @@ export class Scheduler extends EventEmitter {
         this.logger?.warn?.('scheduler.stop: controller.abort threw', err);
       }
     }
+    if (this.inflightAttempts.size > 0) {
+      const now = this.clock.now();
+      this.logger?.info?.('scheduler: releasing in-flight runs on stop', {
+        schedulerInstanceId: this.schedulerInstanceId,
+        processId: this.processId,
+        inFlightBefore: this.inflightAttempts.size,
+        inFlightAfter: 0,
+        runs: this.describeInflightRuns(now),
+      });
+    }
+    this.inflightAttempts.clear();
+    this.waitingSchedules.clear();
     this.inflightControllers.clear();
     this.inflightByschedule.clear();
     this.stopHeartbeatLoopIfIdle();
@@ -322,6 +357,7 @@ export class Scheduler extends EventEmitter {
     this.runIdToBoundSessionId.clear();
     this.activeSchedules.clear();
     this.started = false;
+    this.emitRuntimeState();
   }
 
   // Public for testing — tests construct Scheduler with a long tickIntervalMs to disable
@@ -361,42 +397,67 @@ export class Scheduler extends EventEmitter {
         due.push(sch);
       }
     }
-    if (due.length === 0) return;
+    if (due.length === 0) {
+      this.syncWaitingSchedules([]);
+      return;
+    }
     // 并发闸门:只放行「上限 - 当前 in-flight」个触发,等得最久的优先。未放行的
     // **不从 activeSchedules 删除** —— nextFireAt 停在过去,下个 tick 天然重试,
     // 这就是等待队列本身:无新增状态、无新增持久化,进程重启后由 start() 归一接管。
     // 排队任务的认领(claimDueFire)只在真正放行时发生,跨实例互斥语义不变。
     due.sort((a, b) => (a.nextFireAt ?? 0) - (b.nextFireAt ?? 0));
-    const slots = Math.max(0, this.maxConcurrentRuns - this.inFlightFireCount);
+    const slots = Math.max(0, this.maxConcurrentRuns - this.inflightAttempts.size);
     const toFire = due.slice(0, slots);
-    const gated = due.length - toFire.length;
-    if (gated > 0 && now - this.lastGateLogAt >= GATE_LOG_THROTTLE_MS) {
-      this.lastGateLogAt = now;
-      this.logger?.info?.('scheduler: concurrency gate holding due fires', {
-        inFlight: this.inFlightFireCount,
-        maxConcurrentRuns: this.maxConcurrentRuns,
-        gated,
-      });
-    }
-    if (toFire.length === 0) return;
+    const gatedSchedules = due.slice(slots);
+    const gated = gatedSchedules.length;
     for (const sch of toFire) {
       // Synchronous removal prevents another concurrent tick from picking the same one.
       this.activeSchedules.delete(sch.id);
     }
-    await Promise.all(toFire.map((s) => this.fireOne(s)));
+    // 调用 async fireOne 会在返回 promise 前同步登记 attempt；先构造 promises 再记 gate
+    // 日志，日志里的 inFlightRuns 就同时包含本 tick 刚占槽的 run，不再出现 0/1 却 gated。
+    const firePromises = toFire.map((schedule) => this.fireOne(schedule));
+    this.syncWaitingSchedules(gatedSchedules);
+    if (gated > 0 && now - this.lastGateLogAt >= GATE_LOG_THROTTLE_MS) {
+      this.lastGateLogAt = now;
+      this.logger?.info?.('scheduler: concurrency gate holding due fires', {
+        schedulerInstanceId: this.schedulerInstanceId,
+        processId: this.processId,
+        inFlight: this.inflightAttempts.size,
+        maxConcurrentRuns: this.maxConcurrentRuns,
+        inFlightRuns: this.describeInflightRuns(now),
+        gatedSchedules: gatedSchedules.map((schedule) => ({
+          scheduleId: schedule.id,
+          scheduleName: schedule.name,
+          waitingMs: Math.max(0, now - (schedule.nextFireAt ?? now)),
+        })),
+      });
+    }
+    if (firePromises.length === 0) return;
+    await Promise.all(firePromises);
   }
 
-  /** 并发计数包装:同步 ++/-- 让 tick 的槽位计算无超发窗口(见字段注释)。 */
+  /** 并发登记包装:同步注册/释放让 tick 的槽位计算无超发窗口(见字段注释)。 */
   private async fireOne(schedule: Schedule): Promise<void> {
-    this.inFlightFireCount++;
+    const runId = this.generateId();
+    const now = this.clock.now();
+    this.beginInflightAttempt({
+      scheduleId: schedule.id,
+      scheduleName: schedule.name,
+      runId,
+      source: 'automatic',
+      executionMode: schedule.executionMode ?? 'agent',
+      slotWaitMs: Math.max(0, now - (schedule.nextFireAt ?? now)),
+      phase: 'claiming',
+    });
     try {
-      await this.fireOneInner(schedule);
+      await this.fireOneInner(schedule, runId);
     } finally {
-      this.inFlightFireCount--;
+      this.finishInflightAttempt(runId);
     }
   }
 
-  private async fireOneInner(schedule: Schedule): Promise<void> {
+  private async fireOneInner(schedule: Schedule, runId: string): Promise<void> {
     // 跨进程互斥:先在 DB 对这次触发做原子认领(CAS:nextFireAt 必须仍等于本进程
     // 内存里看到的值)。dev / release 双开共用同一 DB 时两边引擎会同时判定"到点
     // 了",只有认领成功的一方真正执行;失败方刷新内存副本后放弃,保证同一次到点
@@ -431,7 +492,7 @@ export class Scheduler extends EventEmitter {
       }
       schedule = claimed;
     }
-    const runId = this.generateId();
+    this.updateInflightAttempt(runId, 'persisting');
     const firedAt = this.clock.now();
     const initialRun: ScheduleRun = {
       id: runId,
@@ -464,6 +525,7 @@ export class Scheduler extends EventEmitter {
     let deferred = false;
     let deferRetryMs: number | undefined;
     let skipped = false;
+    this.updateInflightAttempt(runId, 'running');
     try {
       const result = await this.runner.fire(schedule, {
         runId,
@@ -483,6 +545,7 @@ export class Scheduler extends EventEmitter {
       this.logger?.warn?.('schedule fire failed', { scheduleId: schedule.id, runId, error: runError });
     } finally {
       this.unregisterInflight(schedule.id, runId);
+      this.updateInflightAttempt(runId, 'finalizing');
     }
 
     // 如果是被 delete/pause 主动 abort 的,把 run 标 'aborted' 而非 'failed' —— 让 UI
@@ -636,18 +699,24 @@ export class Scheduler extends EventEmitter {
   async runNow(id: string): Promise<{ runId: string }> {
     // 手动触发不受并发闸门拦截(用户显式动作要即时响应),但计入 in-flight 占用,
     // 会挤压后续自动触发的槽位。
-    this.inFlightFireCount++;
+    const runId = this.generateId();
+    this.beginInflightAttempt({
+      scheduleId: id,
+      runId,
+      source: 'run-now',
+      phase: 'loading',
+    });
     try {
-      return await this.runNowInner(id);
+      return await this.runNowInner(id, runId);
     } finally {
-      this.inFlightFireCount--;
+      this.finishInflightAttempt(runId);
     }
   }
 
-  private async runNowInner(id: string): Promise<{ runId: string }> {
+  private async runNowInner(id: string, runId: string): Promise<{ runId: string }> {
     const schedule = await this.storage.get(id);
     if (!schedule) throw new Error(`Schedule not found: ${id}`);
-    const runId = this.generateId();
+    this.updateInflightAttempt(runId, 'persisting', schedule);
     const firedAt = this.clock.now();
     const initialRun: ScheduleRun = {
       id: runId,
@@ -681,6 +750,7 @@ export class Scheduler extends EventEmitter {
     let deferred = false;
     let deferRetryMs: number | undefined;
     let skipped = false;
+    this.updateInflightAttempt(runId, 'running');
     try {
       const result = await this.runner.fire(schedule, {
         runId,
@@ -699,6 +769,7 @@ export class Scheduler extends EventEmitter {
       runError = err instanceof Error ? err.message : String(err);
     } finally {
       this.unregisterInflight(schedule.id, runId);
+      this.updateInflightAttempt(runId, 'finalizing');
     }
     finishedAt = this.clock.now();
 
@@ -1077,6 +1148,30 @@ export class Scheduler extends EventEmitter {
   }
 
   /**
+   * 返回当前实例的瞬时执行/排队快照。用于 renderer 首次加载补快照和运行期诊断，
+   * 不查 DB、不修改调度状态。
+   */
+  getRuntimeSnapshot(): SchedulerRuntimeSnapshot {
+    return {
+      schedulerInstanceId: this.schedulerInstanceId,
+      ...(this.processId !== undefined ? { processId: this.processId } : {}),
+      inFlight: this.inflightAttempts.size,
+      maxConcurrentRuns: this.maxConcurrentRuns,
+      inFlightRuns: [...this.inflightAttempts.values()].map((attempt) => ({
+        scheduleId: attempt.scheduleId,
+        scheduleName: attempt.scheduleName,
+        runId: attempt.runId,
+        source: attempt.source,
+        executionMode: attempt.executionMode,
+        startedAt: attempt.startedAt,
+        slotWaitMs: attempt.slotWaitMs,
+        phase: attempt.phase,
+      })),
+      waitingSchedules: [...this.waitingSchedules.values()].map((waiting) => ({ ...waiting })),
+    };
+  }
+
+  /**
    * 返回该 schedule 当前有多少个 in-flight run(被 runner.fire 正在执行的)。
    * UI 在 delete/pause 前用它决定是否弹"有 N 次执行正在进行"二次确认。
    * 无 in-flight → 0(包括 schedule 已 paused / expired / 不存在的情况)。
@@ -1203,20 +1298,154 @@ export class Scheduler extends EventEmitter {
     if (this.heartbeatHandle !== null) return;
     this.heartbeatHandle = setInterval(() => {
       const runIds = [...this.inflightControllers.keys()];
-      if (runIds.length === 0) return;
-      void this.storage.touchRunHeartbeats(runIds, this.clock.now()).catch((err) => {
-        this.logger?.warn?.('scheduler: touchRunHeartbeats failed', err);
-      });
+      const now = this.clock.now();
+      this.logLongRunningAttempts(now);
+      if (runIds.length > 0) {
+        void this.storage.touchRunHeartbeats(runIds, now).catch((err) => {
+          this.logger?.warn?.('scheduler: touchRunHeartbeats failed', err);
+        });
+      }
     }, RUN_HEARTBEAT_INTERVAL_MS);
     // 不让心跳定时器拖住进程退出(Electron main 常驻无感,vitest / CLI 宿主有感)。
     (this.heartbeatHandle as unknown as { unref?: () => void }).unref?.();
   }
 
   private stopHeartbeatLoopIfIdle(): void {
-    if (this.inflightControllers.size === 0 && this.heartbeatHandle !== null) {
+    if (this.inflightAttempts.size === 0 && this.heartbeatHandle !== null) {
       clearInterval(this.heartbeatHandle);
       this.heartbeatHandle = null;
     }
+  }
+
+  /** 在第一次 await 前同步登记一次槽位占用，并输出可配对的注册日志。 */
+  private beginInflightAttempt(input: Omit<SchedulerInflightRun, 'startedAt'>): void {
+    if (this.inflightAttempts.has(input.runId)) {
+      throw new Error(`duplicate scheduler run id: ${input.runId}`);
+    }
+    const before = this.inflightAttempts.size;
+    const attempt: InflightAttempt = { ...input, startedAt: this.clock.now() };
+    this.inflightAttempts.set(input.runId, attempt);
+    this.startHeartbeatLoopIfNeeded();
+    this.logger?.info?.('scheduler: in-flight run registered', {
+      schedulerInstanceId: this.schedulerInstanceId,
+      processId: this.processId,
+      ...this.describeInflightRun(attempt, attempt.startedAt),
+      inFlightBefore: before,
+      inFlightAfter: this.inflightAttempts.size,
+      maxConcurrentRuns: this.maxConcurrentRuns,
+    });
+    this.emitRuntimeState();
+  }
+
+  /** 推进诊断阶段；runNow 在读到 schedule 后也通过这里补齐名称与 runner 类型。 */
+  private updateInflightAttempt(
+    runId: string,
+    phase: ScheduleRunPhase,
+    schedule?: Schedule,
+  ): void {
+    const current = this.inflightAttempts.get(runId);
+    if (!current) return;
+    current.phase = phase;
+    if (schedule) {
+      current.scheduleName = schedule.name;
+      current.executionMode = schedule.executionMode ?? 'agent';
+    }
+  }
+
+  /** finally 配对释放；stop() 已统一清空时，迟到的 finally 保持幂等 no-op。 */
+  private finishInflightAttempt(runId: string): void {
+    const attempt = this.inflightAttempts.get(runId);
+    if (!attempt) return;
+    const before = this.inflightAttempts.size;
+    this.inflightAttempts.delete(runId);
+    const now = this.clock.now();
+    this.logger?.info?.('scheduler: in-flight run released', {
+      schedulerInstanceId: this.schedulerInstanceId,
+      processId: this.processId,
+      ...this.describeInflightRun(attempt, now),
+      inFlightBefore: before,
+      inFlightAfter: this.inflightAttempts.size,
+      maxConcurrentRuns: this.maxConcurrentRuns,
+    });
+    this.stopHeartbeatLoopIfIdle();
+    this.emitRuntimeState();
+  }
+
+  /** 同步真实被并发闸门扣住的任务集合；无变化时不重复广播。 */
+  private syncWaitingSchedules(schedules: Schedule[]): void {
+    const next = new Map<string, SchedulerWaitingSchedule>();
+    const now = this.clock.now();
+    for (const schedule of schedules) {
+      next.set(schedule.id, {
+        scheduleId: schedule.id,
+        scheduleName: schedule.name,
+        waitingSince: schedule.nextFireAt ?? now,
+      });
+    }
+    const unchanged =
+      next.size === this.waitingSchedules.size &&
+      [...next].every(([id, value]) => {
+        const previous = this.waitingSchedules.get(id);
+        return (
+          previous?.scheduleName === value.scheduleName &&
+          previous.waitingSince === value.waitingSince
+        );
+      });
+    if (unchanged) return;
+    this.waitingSchedules.clear();
+    for (const [id, value] of next) this.waitingSchedules.set(id, value);
+    this.emitRuntimeState();
+  }
+
+  /** 心跳周期内对超长执行输出节流诊断，即使当前没有其它任务排队也能被发现。 */
+  private logLongRunningAttempts(now: number): void {
+    const due: InflightRunDiagnostic[] = [];
+    for (const attempt of this.inflightAttempts.values()) {
+      const durationMs = Math.max(0, now - attempt.startedAt);
+      if (durationMs < LONG_RUNNING_DIAGNOSTIC_MS) continue;
+      if (
+        attempt.lastLongRunningLogAt !== undefined &&
+        now - attempt.lastLongRunningLogAt < LONG_RUNNING_DIAGNOSTIC_MS
+      ) {
+        continue;
+      }
+      attempt.lastLongRunningLogAt = now;
+      due.push(this.describeInflightRun(attempt, now));
+    }
+    if (due.length === 0) return;
+    this.logger?.warn?.('scheduler: long-running in-flight runs detected', {
+      schedulerInstanceId: this.schedulerInstanceId,
+      processId: this.processId,
+      thresholdMs: LONG_RUNNING_DIAGNOSTIC_MS,
+      runs: due,
+    });
+  }
+
+  private describeInflightRun(
+    attempt: SchedulerInflightRun,
+    now: number,
+  ): InflightRunDiagnostic {
+    return {
+      scheduleId: attempt.scheduleId,
+      scheduleName: attempt.scheduleName,
+      runId: attempt.runId,
+      source: attempt.source,
+      executionMode: attempt.executionMode,
+      phase: attempt.phase,
+      startedAt: attempt.startedAt,
+      slotWaitMs: attempt.slotWaitMs,
+      durationMs: Math.max(0, now - attempt.startedAt),
+    };
+  }
+
+  private describeInflightRuns(now: number): InflightRunDiagnostic[] {
+    return [...this.inflightAttempts.values()].map((attempt) =>
+      this.describeInflightRun(attempt, now),
+    );
+  }
+
+  private emitRuntimeState(): void {
+    this.emitEvent({ type: 'runtime-state', snapshot: this.getRuntimeSnapshot() });
   }
 
   /**
@@ -1332,6 +1561,7 @@ export class Scheduler extends EventEmitter {
   on(event: 'skipped', listener: (e: Extract<SchedulerEvent, { type: 'skipped' }>) => void): this;
   on(event: 'session-bound', listener: (e: Extract<SchedulerEvent, { type: 'session-bound' }>) => void): this;
   on(event: 'changed', listener: (e: Extract<SchedulerEvent, { type: 'changed' }>) => void): this;
+  on(event: 'runtime-state', listener: (e: Extract<SchedulerEvent, { type: 'runtime-state' }>) => void): this;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   on(event: string | symbol, listener: (...args: any[]) => void): this {
     return super.on(event, listener);
