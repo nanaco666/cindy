@@ -2130,7 +2130,15 @@ export function registerGhostIpc(): void {
         const ghostId = runtimeManifest.id;
         const oauthManager = getGhostOauthAccountManager();
         const connectionManager = getGhostConnectionManager();
-        // kv 单意识单文件,同一次判定内最多读一次(多条 kv 需求不重复开盘)。
+        // kv 单意识单文件,同一次判定内最多读一次(多条 kv 需求不重复开盘);
+        // 走 readStrict:IO 异常 / 文件损坏上抛 → invoke reject → renderer
+        // fail-open,不折叠成「未配置」。secrets 探针同口径(statSync 区分
+        // ENOENT 与真 IO 错误)。oauth / connections 沿用与 /oauth、
+        // /connections 设置页端点完全相同的读取真身(保险库读取失败折叠为
+        // 「无账号 / 无连接」)——有意保持两处口径一致:即便极端情况下保险
+        // 库损坏,引导弹窗指向的设置页展示的也是同一状态,不产生自相矛盾的
+        // 界面;且这类故障下运行期注入同样不可用,引导去设置页重连本就是
+        // 正确动作。
         let kvSnapshot: Record<string, unknown> | null = null;
         return {
           secretSaved: (key) => ghostSecretSaved(ghostId, key),
@@ -2145,7 +2153,7 @@ export function registerGhostIpc(): void {
           },
           connectionCount: (key) => connectionManager.list(ghostId, key).length,
           kvValue: (key) => {
-            if (kvSnapshot === null) kvSnapshot = ghostKv.read(ghostId);
+            if (kvSnapshot === null) kvSnapshot = ghostKv.readStrict(ghostId);
             return kvSnapshot[key];
           },
         };
