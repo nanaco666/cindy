@@ -4,10 +4,25 @@ import { PassThrough } from 'node:stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const spawnMock = vi.fn();
+const executePreRunHookMock = vi.hoisted(() => vi.fn());
 
 vi.mock('node:child_process', () => ({
   spawn: (...args: unknown[]) => spawnMock(...args),
 }));
+
+vi.mock('../pre-run-hook', () => ({
+  executePreRunHook: executePreRunHookMock,
+  buildSkipResultText: (hook: { exitCode?: number | null }) => `exit ${hook.exitCode ?? '?'}`,
+  formatPreRunHookFailure: (hook: { error?: string; exitCode?: number | null }) =>
+    hook.error
+      ? `pre-run hook failed: ${hook.error}`
+      : `pre-run hook failed with exit code ${hook.exitCode ?? 'unknown'}`,
+}));
+
+vi.mock('../../localDb/schema', () => ({
+  sessions: { id: 'id' },
+}));
+
 
 // killProcessTree 的 OS 级树杀机制(taskkill 重试/进程组信号/后代兜底)由
 // proc-util.test.ts / procUtilRetry.test.ts 单独覆盖;这里只关心 script-runner
@@ -81,7 +96,38 @@ function schedule() {
 describe('ScriptScheduleRunner', () => {
   beforeEach(() => {
     spawnMock.mockReset();
+    executePreRunHookMock.mockReset();
     killProcessTreeMock.mockClear();
+  });
+
+  it('pre-run hook exit 2 skips without creating a session or spawning the script', async () => {
+    executePreRunHookMock.mockResolvedValue({
+      decision: 'skip',
+      exitCode: 2,
+      timedOut: false,
+      spawnError: undefined,
+      durationMs: 5,
+      stdout: 'no changes',
+      stderr: '',
+    });
+    const runner = new ScriptScheduleRunner({
+      broker: { call: vi.fn() },
+      logger: {},
+      getDb: vi.fn(),
+    });
+
+    await expect(
+      runner.fire(
+        { ...schedule(), preRunHook: { command: 'node check.mjs' } },
+        { runId: 'run-skip', firedAt: 1, signal: new AbortController().signal },
+      ),
+    ).resolves.toEqual({
+      sessionId: '',
+      skipped: true,
+      resultText: expect.stringContaining('exit 2'),
+    });
+    expect(spawnMock).not.toHaveBeenCalled();
+    expect(executePreRunHookMock).toHaveBeenCalledTimes(1);
   });
 
   it('services host calls and returns the terminal summary without an agent session', async () => {
@@ -120,6 +166,56 @@ describe('ScriptScheduleRunner', () => {
     expect(spawnMock).toHaveBeenCalledWith(
       'python auto.py',
       expect.objectContaining({ shell: true, cwd: 'C:\\project' }),
+    );
+  });
+
+  it('pre-run hook 失败时保存检查结果、阻止主脚本并发送失败通知', async () => {
+    executePreRunHookMock.mockResolvedValue({
+      status: 'failed',
+      decision: 'block',
+      exitCode: 1,
+      timedOut: false,
+      aborted: false,
+      durationMs: 8,
+      stdout: '',
+      stderr: 'dependency unavailable',
+      stdoutTruncated: false,
+      stderrTruncated: false,
+    });
+    const notifier = { notify: vi.fn(async () => undefined) };
+    const onPreRunHookCompleted = vi.fn(async () => undefined);
+    const runner = new ScriptScheduleRunner({
+      broker: { call: vi.fn() },
+      logger: {},
+      notifier,
+    });
+    const resultPromise = runner.fire(
+      { ...schedule(), preRunHook: { command: 'node check.mjs' } },
+      {
+        runId: 'run-hook-failed',
+        firedAt: 2,
+        signal: new AbortController().signal,
+        onPreRunHookCompleted,
+      },
+    );
+
+    await expect(resultPromise).rejects.toThrow('pre-run hook failed with exit code 1');
+    expect(onPreRunHookCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'failed',
+        decision: 'block',
+        exitCode: 1,
+        stderr: 'dependency unavailable',
+      }),
+    );
+    expect(spawnMock).not.toHaveBeenCalled();
+    expect(notifier.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'script-schedule' }),
+      expect.objectContaining({
+        id: 'run-hook-failed',
+        status: 'failed',
+        errorMsg: 'pre-run hook failed with exit code 1',
+      }),
     );
   });
 

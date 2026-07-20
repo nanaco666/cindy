@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f4a6a28e-0fde-40e2-8246-7ae6853e49c1",
+  "id": "8e1d1da4-40c9-4b15-a932-b668de6f1a13",
   "prevId": "afe8a96e-e64e-4155-b57a-64064809be38",
   "tables": {
     "account_usage_snapshots": {
@@ -905,13 +905,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "agent_kind": {
-          "name": "agent_kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "integer",
@@ -1518,6 +1511,13 @@
         },
         "result_text": {
           "name": "result_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pre_run_hook_result": {
+          "name": "pre_run_hook_result",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

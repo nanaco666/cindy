@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import chalk from 'chalk';
 import { findRepoRoot, getCurrentHead } from '../git.js';
-import { loadConfig, resolvePaths, writeDefaultConfigIfMissing } from '../config.js';
+import { loadConfig, migrateLegacyContextRoot, resolvePaths, writeDefaultConfigIfMissing } from '../config.js';
 import { discoverModules, defaultCoversForPath } from '../discovery.js';
 import { createSkeletonBody, makeFrontmatter, writeKnowledgeFile } from '../knowledge.js';
 import { rebuildManifestFromDisk, writeManifest } from '../manifest.js';
@@ -26,6 +26,7 @@ export interface InitResult {
 export async function runInit(options: InitOptions = {}): Promise<InitResult> {
   const cwd = options.cwd ?? process.cwd();
   const repoRoot = await findRepoRoot(cwd);
+  migrateLegacyContextRoot(repoRoot);
   const paths = resolvePaths(repoRoot);
 
   fs.mkdirSync(paths.contextDir, { recursive: true });
@@ -39,7 +40,7 @@ export async function runInit(options: InitOptions = {}): Promise<InitResult> {
   if (modules.length === 0) {
     throw new Error(
       'Discovery returned 0 modules. Check pnpm-workspace.yaml / package.json workspaces ' +
-        'or set `module_roots` in .xdmaker/project-knowledge/config.yaml.',
+        'or set `module_roots` in .cindy/project-knowledge/config.yaml.',
     );
   }
 

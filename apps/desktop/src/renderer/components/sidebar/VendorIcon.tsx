@@ -7,7 +7,7 @@
  *
  * 状态(不变):
  *   - idle (默认)   : Stone 灰 #737373 / dark #a3a3a3
- *   - running=true  : 品牌红系(== --sidebar-item-active,E1D 侧栏强调态;与 E5D 状态点新橙解耦——状态点归橙,行首强调图标归红)+ session-breathing 呼吸
+ *   - running=true  : 跟随 --sidebar-item-active 强调态;CINDY 2026-07-20 撤红后为中性选中色 + session-breathing 呼吸
  *
  * 设计参考:doc/design_docs/cc-agent-view.pen 节点 ugsrn (方案 C)。
  */
@@ -22,7 +22,7 @@ interface VendorIconProps {
   /** true → 切 Thinking Orange + 呼吸动画,复用 .session-status-breathing */
   running?: boolean;
   className?: string;
-  /** 覆盖默认取色(如红胶囊选中态传反白前景 —— 用户规则 2026-07-19:选中态上
+  /** 覆盖默认取色(如选中态传 active 前景 —— 用户规则 2026-07-20:选中态上
    *  所有前景元素与文字同色);running 呼吸动画不受影响。 */
   colorClassName?: string;
 }

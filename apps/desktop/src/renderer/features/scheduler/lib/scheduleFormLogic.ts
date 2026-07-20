@@ -293,7 +293,7 @@ export function buildHookCommandForScriptFile(
       // macOS 无裸 `python`(仅 python3);Windows 官方安装器装的是 `python`
       return `${win ? 'python' : 'python3'} ${quote(ref)}`;
     case 'sh':
-      // Windows 下依赖 git-bash 在 PATH;失败会被执行器 fail-open 兜住
+      // Windows 下依赖 git-bash 在 PATH;缺失时执行器会阻止本轮并展示错误
       return `bash ${quote(ref)}`;
     case 'ps1':
       // Windows 内置 powershell;macOS/Linux 只有 PowerShell Core(pwsh)

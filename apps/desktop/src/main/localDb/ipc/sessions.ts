@@ -168,6 +168,28 @@ export async function applyAgentSwitchToSessionRow(
   });
 }
 
+/**
+ * Auto 权限分类器降级专用的条件持久化:仅当持久态仍为 'auto' 时把 permissionMode
+ * 写成 'ask'(SQL 级 compare-and-swap)。用户在降级过程中并发手动切档时 UPDATE 不
+ * 命中,回读到的用户选择原样保留,调用方据返回值决定是否广播降级/回滚 runtime。
+ * 返回 true = 写库后(或并发用户恰好也切到 ask 时)持久态已是 'ask'。
+ */
+export async function persistSessionPermissionModeIfAuto(sessionId: string): Promise<boolean> {
+  const db = getDbClient().drizzle;
+  await db
+    .update(sessions)
+    .set({ permissionMode: 'ask' })
+    .where(and(eq(sessions.id, sessionId), eq(sessions.permissionMode, 'auto')));
+  const row = await db
+    .select({ permissionMode: sessions.permissionMode })
+    .from(sessions)
+    .where(eq(sessions.id, sessionId))
+    .get();
+  const applied = row?.permissionMode === 'ask';
+  if (applied) broadcastSessionPatched(sessionId, { permissionMode: 'ask' });
+  return applied;
+}
+
 export async function persistSessionFields(
   sessionId: string,
   patch: Record<string, unknown>,

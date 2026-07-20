@@ -907,7 +907,7 @@ V1A 可以先只有 `Devices/Sessions/Settings`,但路由结构要给 `Automatio
 - 参数表单。
 - 运行模式: fresh / persistent / bound。
 - Agent、model、effort、fast mode。
-- project automation: 写 `.xdmaker/automations/schedules.json`。
+- project automation: 写 `.cindy/automations/schedules.json`。
 - pause / resume / delete / rename / promote to project / clone to user / reload project config。
 - schedule 生成的会话会在聊天侧边栏有绑定和未读标识。
 

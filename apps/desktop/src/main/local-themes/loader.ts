@@ -27,7 +27,49 @@ interface FileEntry {
 }
 
 export function getLocalThemesDir(): string {
+  // 所有消费方（loader / writer / open-dir IPC）都经这里拿路径，先确保一次性搬迁完成。
+  migrateLegacyThemesDirOnce();
+  return path.join(os.homedir(), '.cindy', 'themes');
+}
+
+/** 品牌迁移前的旧主题目录（2026-07-20 起硬切为 ~/.cindy/themes），仅用于一次性搬迁。 */
+function getLegacyLocalThemesDir(): string {
   return path.join(os.homedir(), '.xdmaker', 'themes');
+}
+
+let themesMigrationDone = false;
+
+/** 仅供测试：清掉进程内"已搬迁"标记。 */
+export function resetLocalThemesMigrationForTest(): void {
+  themesMigrationDone = false;
+}
+
+/**
+ * 一次性把 ~/.xdmaker/themes 搬到 ~/.cindy/themes（老在新不在 → rename）。
+ * 同步实现：loadLocalThemesSync 在 renderer 启动的同步 IPC 里跑，搬迁必须
+ * 发生在它第一次扫描目录之前。幂等（进程内只跑一次），失败仅 warn 不阻断——
+ * 后续按新目录为空的语义继续。搬空后的 ~/.xdmaker 空壳顺手删掉（失败忽略）。
+ */
+function migrateLegacyThemesDirOnce(): void {
+  if (themesMigrationDone) return;
+  themesMigrationDone = true;
+  const oldDir = getLegacyLocalThemesDir();
+  // 不走 getLocalThemesDir()（它会回调本函数），直接拼新路径。
+  const newDir = path.join(os.homedir(), '.cindy', 'themes');
+  try {
+    if (!fs.existsSync(oldDir) || !fs.statSync(oldDir).isDirectory()) return;
+    if (fs.existsSync(newDir)) return;
+    fs.mkdirSync(path.dirname(newDir), { recursive: true });
+    fs.renameSync(oldDir, newDir);
+    log.info(`Migrated local themes dir from '${oldDir}' to '${newDir}'.`);
+    try {
+      fs.rmdirSync(path.dirname(oldDir));
+    } catch {
+      // 旧 ~/.xdmaker 非空（还有别的东西）或删除失败：保留即可。
+    }
+  } catch (error) {
+    log.warn(`Failed to migrate legacy local themes dir: ${normalizeError(error)}`);
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

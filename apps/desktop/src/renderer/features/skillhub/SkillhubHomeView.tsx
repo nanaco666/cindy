@@ -12,7 +12,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Bot, ChevronRight, Download, Package, SquareTerminal, Store, type LucideIcon } from 'lucide-react';
+import {
+  Bot,
+  ChevronRight,
+  Download,
+  Package,
+  SquareTerminal,
+  Store,
+  type LucideIcon,
+} from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { InvisibleWindowDragStrip } from '@/components/layout/windowDrag';
@@ -90,7 +98,9 @@ export function SkillhubHomeView() {
   };
 
   return (
-    <div className="relative h-full w-full overflow-y-auto px-8 [scrollbar-gutter:stable_both-edges]">
+    // overflow-x-hidden:浏览抽屉收起时 translate 到容器右侧屏外,transform 仍计入
+    // scrollable overflow,会撑出横向滚动条 + 白色原生 scrollbar-corner(2026-07-20)
+    <div className="relative h-full w-full overflow-y-auto overflow-x-hidden px-8 [scrollbar-gutter:stable_both-edges]">
       {/* 本页不渲染通用 ContentHeader,垫一条透明窗口拖拽条(mac) */}
       <InvisibleWindowDragStrip />
       <div className="mx-auto flex w-full max-w-[800px] flex-col gap-8 py-8">
@@ -140,7 +150,9 @@ export function SkillhubHomeView() {
               ))}
             </div>
           ) : recommended.length === 0 ? (
-            <p className="text-sm text-[var(--cmd-palette-item-meta)]">{t('skillhub.home.recommendedEmpty')}</p>
+            <p className="text-sm text-[var(--cmd-palette-item-meta)]">
+              {t('skillhub.home.recommendedEmpty')}
+            </p>
           ) : (
             <div className="grid grid-cols-2 gap-3">
               {recommended.map((s) => (
@@ -164,7 +176,9 @@ export function SkillhubHomeView() {
                     )}
                   </div>
                   {s.description && (
-                    <p className="line-clamp-2 text-xs text-[var(--cmd-palette-item-meta)]">{s.description}</p>
+                    <p className="line-clamp-2 text-xs text-[var(--cmd-palette-item-meta)]">
+                      {s.description}
+                    </p>
                   )}
                   <div className="flex items-center gap-2 text-11 text-[var(--cmd-palette-item-meta)]">
                     <span className="min-w-0 truncate">{s.authorName}</span>
@@ -191,10 +205,21 @@ export function SkillhubHomeView() {
           ) : (
             <div className="flex flex-col gap-4">
               {globalSkills.length > 0 && (
-                <LocalGroup label={t('skillhub.home.globalScope')} skills={globalSkills} syncResults={syncResults} onOpen={openLocal} />
+                <LocalGroup
+                  label={t('skillhub.home.globalScope')}
+                  skills={globalSkills}
+                  syncResults={syncResults}
+                  onOpen={openLocal}
+                />
               )}
               {projectGroups.map((g) => (
-                <LocalGroup key={g.root} label={g.label} skills={g.skills} syncResults={syncResults} onOpen={openLocal} />
+                <LocalGroup
+                  key={g.root}
+                  label={g.label}
+                  skills={g.skills}
+                  syncResults={syncResults}
+                  onOpen={openLocal}
+                />
               ))}
             </div>
           )}
@@ -265,8 +290,14 @@ function LocalGroup({
             onClick={() => onOpen(s)}
             className="group flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-left text-sm transition-colors hover:bg-sidebar-item-hover"
           >
-            <Icon size={16} strokeWidth={1.75} className="shrink-0 text-[var(--cmd-palette-item-meta)]" />
-            <span className="min-w-0 flex-1 truncate text-[var(--msg-assistant-text)]">{s.name}</span>
+            <Icon
+              size={16}
+              strokeWidth={1.75}
+              className="shrink-0 text-[var(--cmd-palette-item-meta)]"
+            />
+            <span className="min-w-0 flex-1 truncate text-[var(--msg-assistant-text)]">
+              {s.name}
+            </span>
             {s.description && (
               <span className="hidden min-w-0 max-w-[55%] truncate text-xs text-[var(--cmd-palette-item-meta)] sm:block">
                 {s.description}

@@ -292,15 +292,7 @@ export interface SchedulerHookScriptService {
     filePath: string;
     content: string;
     /** 落盘后立即执行一次的自测结果。 */
-    test: {
-      decision: 'run' | 'skip';
-      exitCode: number | null;
-      timedOut: boolean;
-      spawnError?: string;
-      durationMs: number;
-      stdout: string;
-      stderr: string;
-    };
+    test: import('@lizi/maker-scheduler').PreRunHookRunResult;
   }>;
 }
 

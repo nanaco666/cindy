@@ -579,6 +579,11 @@ export const MAKER_PUSH = {
    * renderer 据 code 显示 providerError.* i18n toast + 修复引导。
    */
   PROVIDER_UPSTREAM_ERROR: 'maker:provider:upstream-error',
+  /**
+   * Claude Auto 权限分类器不可用后的会话级降级通知。
+   * payload = { sessionId, from:'auto', to:'ask', reason:'classifier_unavailable', status }。
+   */
+  AUTO_PERMISSION_FALLBACK: 'maker:auto-permission:fallback',
   /** Agent 登录子进程进度 (Codex OAuth 子进程 stdout/stderr; Claude 不发) */
   AUTH_LOGIN_PROGRESS: 'maker:auth:login-progress',
   /** Codex app-server spawn-time 路由变化 (OAuth bearer vs gateway env key)。 */

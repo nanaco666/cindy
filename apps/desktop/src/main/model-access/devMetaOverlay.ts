@@ -106,7 +106,7 @@ function parseEntry(raw: unknown): { meta: MetaEntry } | { reason: string } {
   if (typeof raw.name !== 'string' || !raw.name.trim()) return { reason: 'name 必须是非空字符串' };
 
   const meta: MetaEntry = { agents: raw.agents as Agent[], name: raw.name };
-  for (const k of ['group', 'description'] as const) {
+  for (const k of ['group', 'description', 'icon'] as const) {
     if (raw[k] !== undefined) {
       if (typeof raw[k] !== 'string') return { reason: `${k} 必须是字符串` };
       meta[k] = raw[k] as string;
@@ -152,6 +152,7 @@ function rebuildModel(m: ModelAccessGatewayModel, meta: MetaEntry): ModelAccessG
     name: meta.name,
     ...(meta.group ? { group: meta.group } : {}),
     ...(meta.description ? { description: meta.description } : {}),
+    ...(meta.icon ? { icon: meta.icon } : {}),
     ...(meta.efforts ? { efforts: meta.efforts } : {}),
     ...(meta.defaultEffort ? { defaultEffort: meta.defaultEffort } : {}),
     ...(meta.sortOrder !== undefined ? { sortOrder: meta.sortOrder } : {}),

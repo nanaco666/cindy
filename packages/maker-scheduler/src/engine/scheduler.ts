@@ -8,6 +8,7 @@ import type {
   SchedulerEvent,
   ScriptCapability,
   ScriptExecutionConfig,
+  PreRunHookRunResult,
 } from '../types.js';
 import { SCRIPT_CAPABILITIES } from '../types.js';
 import type { ScheduleStorage } from '../interfaces/schedule-storage.js';
@@ -470,6 +471,7 @@ export class Scheduler extends EventEmitter {
         firedAt,
         signal: controller.signal,
         onSessionBound: this.buildOnSessionBound(schedule.id, runId),
+        onPreRunHookCompleted: this.buildOnPreRunHookCompleted(runId),
         onTurnActive: this.buildOnTurnActive(runId),
         createChildRun: this.buildCreateChildRun(schedule.id, firedAt),
       });
@@ -539,7 +541,7 @@ export class Scheduler extends EventEmitter {
       // 前置检查拦截(preRunHook exit 2):run 记录保留为 'skipped'(与 deferred 的
       // "撤销不留痕"不同——跳过是本轮的最终结果,用户要能在历史里看到"这几轮是
       // hook 拦的",与"调度器坏了"区分)。生而已读(readAt),不通知不亮红点;
-      // sessionId 指向跳过留痕会话(可为空)。schedule 行照常走下方重排逻辑。
+      // sessionId: 跳过时为空(不再创建留痕会话)。schedule 行照常走下方重排逻辑。
       await this.storage.updateRun(runId, {
         status: 'skipped',
         sessionId: sessionId || undefined,
@@ -687,6 +689,7 @@ export class Scheduler extends EventEmitter {
         firedAt,
         signal: controller.signal,
         onSessionBound: this.buildOnSessionBound(schedule.id, runId),
+        onPreRunHookCompleted: this.buildOnPreRunHookCompleted(runId),
         onTurnActive: this.buildOnTurnActive(runId),
         createChildRun: this.buildCreateChildRun(schedule.id, firedAt),
       });
@@ -1393,6 +1396,24 @@ export class Scheduler extends EventEmitter {
         }
       } catch (err) {
         this.logger?.warn?.('updateRun(sessionId) failed', err);
+      }
+    };
+  }
+
+  /** 前置检查发生在 session 创建之前，结束后立即把完整结果写到当前 run。 */
+  private buildOnPreRunHookCompleted(
+    runId: string,
+  ): (result: PreRunHookRunResult) => Promise<void> {
+    return async (result: PreRunHookRunResult) => {
+      try {
+        await this.storage.updateRun(runId, { preRunHookResult: result });
+      } catch (err) {
+        // 诊断结果落库是 best-effort：短暂 BUSY / I/O 错误不能覆盖已经得到的
+        // run / skip / block 业务判定，最终 run 状态仍由 fire 主流程收敛。
+        this.logger?.warn?.('persist pre-run hook result failed', {
+          runId,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     };
   }

@@ -7,7 +7,7 @@
 //
 // 协议(apps/desktop/src/main/scheduler-host/pre-run-hook.ts):
 //   exit 2 = 跳过本轮(不创建会话,零 token);exit 0 = 放行;
-//   其它退出码 / 超时 → 宿主 fail-open 放行。
+//   其它退出码 / 超时 → 宿主 fail-closed 阻止本轮并记录失败。
 //
 // 只在「确定没活」时 exit 2:
 //   1. review-pr 互斥锁被占(上一轮 auto 还在跑,TTL 60min 内)——对齐 skill auto
@@ -29,15 +29,16 @@
 //      ⚠️ 心跳基准只能用 state.savedAt(真 session 内落盘),不能用
 //      宿主 stdin 的 lastFinishedAt——skip 轮次也会刷新它(见 pre-run-hook.ts 注释),
 //      用它会永久自锁。
-// 其余一切情况(有候选且指纹变了 / 无 state、gh 缺失 / 未登录、网络失败、lib.mjs 异常…)
-// 一律 exit 0 放行:「查不了」≠「没活」,让会话内 prepare.mjs / pick.mjs 兜底,gh 掉登录
-// 等异常仍走 skill 的飞书异常汇总,不能在这里吞成静默 skip。
+// 本脚本对“无法证明没活”的情况(有候选且指纹变了 / 无 state、gh 缺失 / 未登录、
+// 网络失败、lib.mjs 异常…)显式 exit 0:「查不了」≠「没活」,让会话内 prepare.mjs /
+// pick.mjs 复核并走飞书异常汇总。这是本业务脚本主动给出的“需要运行”结论，不是宿主
+// 对非零退出码的 fail-open 兜底；语法错误、文件不存在等未形成 exit 0 的故障仍会阻止任务。
 //
 // 会话内的 pick.mjs / prepare.mjs 照旧执行(hook 输出到不了会话,且 hook 通过到会话
 // 启动之间 PR 集合可能变化);本脚本只省掉「起一个 agent 会话才发现没活」的空转成本。
 // 建议 schedule 配置显式 preRunHook.timeoutMs(如 60000)双保险——宿主协议「未配置 =
 // 不限时」,本脚本虽自带 gh 超时,宿主侧超时兜底可防任何意外挂死阻塞该轮 fire
-// (超时 = fail-open 放行,不会造成漏审)。
+// (宿主超时会 fail-closed 阻止本轮并告警；脚本内部的 gh 超时会被捕获并显式 exit 0)。
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -48,7 +49,7 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(SCRIPT_DIR, '..', '..'); // <repo>/scripts/review-pr → <repo>
 
 // Electron 主进程 spawn 出来的环境可能没有 shell profile 的 PATH(Finder 启动的 app),
-// gh 常在 Homebrew 路径下;补齐后再跑,补了仍找不到就走 fail-open。
+// gh 常在 Homebrew 路径下;补齐后再跑,补了仍找不到就按“无法证明没活”显式放行。
 if (process.platform !== 'win32') {
   process.env.PATH = [process.env.PATH, '/opt/homebrew/bin', '/usr/local/bin']
     .filter(Boolean)
@@ -104,7 +105,7 @@ try {
   if (lockHeld()) skip('lock-held');
 
   // 候选判定与 pick.mjs 同源:复用 lib.mjs 的 gh / parseRepo。动态 import——
-  // lib.mjs 异常时进 catch 走 fail-open,而不是模块加载期炸成 exit 1。
+  // lib.mjs 异常时进 catch 给出显式 run 结论,而不是模块加载期炸成 exit 1。
   process.chdir(REPO_ROOT); // parseRepo 从 cwd 的 git remote 解析 slug
   const { gh, parseRepo, fetchOpenPrSnapshot, computePrSetFingerprint, SCAN_STATE_FILE } =
     await import(new URL('./lib.mjs', import.meta.url));
@@ -132,7 +133,7 @@ try {
       if (!Number.isNaN(savedAtMs) && Date.now() - savedAtMs < HEARTBEAT_MS) {
         const fp = computePrSetFingerprint(fetchOpenPrSnapshot({ owner, repo, timeoutMs: 30_000 }));
         // heldIssues 逐条比对 updatedAt:白名单同意留言只动 issue、不动 PR 指纹,必须显式查。
-        // 任何一条读不到 / 落盘值缺失 / 时间不一致 → 视为「有变化」放行(fail-open)。
+        // 任何一条读不到 / 落盘值缺失 / 时间不一致 → 视为「有变化」并显式放行。
         const heldIssuesUnchanged = state.heldIssues.every((h) => {
           if (!h || typeof h.number !== 'number' || typeof h.updatedAt !== 'string') return false;
           const r = gh(['api', `repos/${owner}/${repo}/issues/${h.number}`], { allowFail: true, timeoutMs: 30_000 });
@@ -151,13 +152,13 @@ try {
       }
     }
   } catch {
-    /* 指纹判据不可用 → 放行(fail-open) */
+    /* 指纹判据不可用 → 无法证明没活，显式放行 */
   }
 
   process.stdout.write(JSON.stringify({ decision: 'run', candidateCount }) + '\n');
   process.exit(0);
 } catch (e) {
-  // 任何异常都放行(fail-open):「查不了」≠「没活」。
-  console.error(`[pre-check] fail-open: ${e && e.message ? e.message : e}`);
+  // 业务策略:无法证明没活时显式请求运行，让会话内流程复核并汇总异常。
+  console.error(`[pre-check] fallback-run: ${e && e.message ? e.message : e}`);
   process.exit(0);
 }

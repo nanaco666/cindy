@@ -371,11 +371,11 @@ registerColor('sidebar-item-active', {
 registerColor('sidebar-item-active-foreground', {
   light: 'var(--foreground)',
   dark: 'var(--foreground)',
-}, 'Selected pill 文字/图标前景(default=foreground 正文;CINDY override 反白 #FCFCFC/#D4D4D4,E1D 侧栏层级)');
+}, 'Selected pill 文字/图标前景(default=foreground 正文;CINDY 2026-07-20 撤红后跟正文色)');
 registerColor('sidebar-item-active-border', {
   light: 'var(--sidebar-item-active)',
   dark: 'var(--sidebar-item-active)',
-}, 'Selected pill 1px 描边(default=invisible 同 pill bg;CINDY override light 深红 #A00A1D/dark 浅红 #C24152,补编 §3,别装反)');
+}, 'Selected pill 1px 描边(default=invisible 同 pill bg;CINDY 2026-07-20 撤红后跟中性边框)');
 registerColor('sidebar-search-bg', {
   light: 'var(--surface-hsl)',
   dark: 'var(--surface-hsl)',

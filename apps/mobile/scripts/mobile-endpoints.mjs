@@ -36,6 +36,7 @@ export function injectMobileEndpointsIntoEasFile(
         : {
             cn: mobileClientBuildEnv({ authRegion: 'cn' }),
             global: mobileClientBuildEnv({ authRegion: 'global' }),
+            dev: mobileClientBuildEnv({ authRegion: 'dev' }),
           }
     );
     const fallbackEndpointEnv = options.endpointEnv ?? endpointEnvByRegion?.cn;
@@ -210,7 +211,7 @@ function resolveProfileAuthRegion(buildProfiles, profileName, seen = new Set()) 
   }
   const profile = buildProfiles[profileName];
   const ownRegion = profile?.env?.EXPO_PUBLIC_CINDY_AUTH_REGION;
-  if (ownRegion === 'cn' || ownRegion === 'global') return ownRegion;
+  if (ownRegion === 'cn' || ownRegion === 'global' || ownRegion === 'dev') return ownRegion;
   if (profile?.extends) {
     return resolveProfileAuthRegion(
       buildProfiles,

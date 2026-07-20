@@ -148,32 +148,41 @@ export function CreateWorkerPopover({
   }, [currentModel, currentModelSupportsFast, fast]);
 
   const vendorKey = agent === 'codex' ? 'codex' : 'cc';
-  const updateAgent = useCallback((nextAgent: 'claude-code' | 'codex') => {
-    setAgent(nextAgent);
-    const remembered = prefs[nextAgent];
-    setModel(remembered.model);
-    setEffort(remembered.effort);
-    setFast(remembered.fast);
-  }, [prefs]);
+  const updateAgent = useCallback(
+    (nextAgent: 'claude-code' | 'codex') => {
+      setAgent(nextAgent);
+      const remembered = prefs[nextAgent];
+      setModel(remembered.model);
+      setEffort(remembered.effort);
+      setFast(remembered.fast);
+    },
+    [prefs],
+  );
 
-  const updateModel = useCallback((nextModel: string) => {
-    setModel(nextModel);
-    const available = activeModels.find((m) => m.id === nextModel);
-    if (available && available.efforts.length > 0 && !available.efforts.includes(effort)) {
-      setEffort(available.defaultEffort ?? available.efforts[available.efforts.length - 1]);
-    }
-    if (!available?.supportsFastMode) {
-      setFast(false);
-    }
-  }, [activeModels, effort]);
+  const updateModel = useCallback(
+    (nextModel: string) => {
+      setModel(nextModel);
+      const available = activeModels.find((m) => m.id === nextModel);
+      if (available && available.efforts.length > 0 && !available.efforts.includes(effort)) {
+        setEffort(available.defaultEffort ?? available.efforts[available.efforts.length - 1]);
+      }
+      if (!available?.supportsFastMode) {
+        setFast(false);
+      }
+    },
+    [activeModels, effort],
+  );
 
   const updateEffort = setEffort;
 
   const activeRole = customRole || role;
-  const customRoleError = customRole.length > 0 && PREDEFINED_ROLES.includes(customRole as typeof PREDEFINED_ROLES[number])
-    ? t('orca.createWorker.customRolePredefinedError')
-    : null;
-  const canCreate = activeRole.length >= 1 && activeRole.length <= 32 && !customRoleError && !!currentModel;
+  const customRoleError =
+    customRole.length > 0 &&
+    PREDEFINED_ROLES.includes(customRole as (typeof PREDEFINED_ROLES)[number])
+      ? t('orca.createWorker.customRolePredefinedError')
+      : null;
+  const canCreate =
+    activeRole.length >= 1 && activeRole.length <= 32 && !customRoleError && !!currentModel;
   const resolvedTitle = title ?? t('orca.createWorker.title');
   const resolvedSubmitLabel = submitLabel ?? t('orca.createWorker.submit');
 
@@ -230,7 +239,9 @@ export function CreateWorkerPopover({
         </div>
 
         <div className="mb-4">
-          <div className="mb-2 text-12 font-medium uppercase tracking-[0.5px] text-[var(--text-tertiary)]">{t('orca.createWorker.roleLabel')}</div>
+          <div className="mb-2 text-12 font-medium uppercase tracking-[0.5px] text-[var(--text-tertiary)]">
+            {t('orca.createWorker.roleLabel')}
+          </div>
           <div className="flex flex-wrap gap-2">
             {PREDEFINED_ROLES.map((r) => (
               <button
@@ -239,10 +250,13 @@ export function CreateWorkerPopover({
                 className={cn(
                   'rounded-full px-3 py-1.5 text-13 leading-none border transition-colors',
                   activeRole === r
-                    ? 'bg-[var(--surface-chip)] border-transparent text-[var(--text-primary)] font-medium'
+                    ? 'bg-[var(--surface-chip)] border-[var(--text-secondary)] text-[var(--text-primary)] font-medium'
                     : 'border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--surface-chip)]',
                 )}
-                onClick={() => { setRole(r); setCustomRole(''); }}
+                onClick={() => {
+                  setRole(r);
+                  setCustomRole('');
+                }}
               >
                 {r}
               </button>
@@ -254,7 +268,10 @@ export function CreateWorkerPopover({
             placeholder={t('orca.createWorker.customRolePlaceholder')}
             value={customRole}
             maxLength={32}
-            onChange={(e) => { setCustomRole(e.target.value); setRole(''); }}
+            onChange={(e) => {
+              setCustomRole(e.target.value);
+              setRole('');
+            }}
           />
           {customRoleError && (
             <div className="mt-1 text-11 text-[var(--error-fg)]">{customRoleError}</div>
@@ -262,17 +279,19 @@ export function CreateWorkerPopover({
         </div>
 
         <div className="mb-4">
-          <div className="mb-2 text-12 font-medium uppercase tracking-[0.5px] text-[var(--text-tertiary)]">{t('orca.createWorker.agentLabel')}</div>
+          <div className="mb-2 text-12 font-medium uppercase tracking-[0.5px] text-[var(--text-tertiary)]">
+            {t('orca.createWorker.agentLabel')}
+          </div>
           <div className="inline-flex rounded-lg bg-[var(--surface-elevated)] border border-[var(--border-default)] p-1">
             {(['codex', 'claude-code'] as const).map((a) => (
               <button
                 key={a}
                 type="button"
                 className={cn(
-                  'rounded-md px-4 py-1.5 text-13 leading-none transition-colors',
+                  'rounded-md px-4 py-1.5 text-13 leading-none border transition-colors',
                   agent === a
-                    ? 'bg-[var(--surface-chip)] text-[var(--text-primary)] font-medium'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
+                    ? 'bg-[var(--surface-chip)] border-[var(--text-secondary)] text-[var(--text-primary)] font-medium'
+                    : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
                 )}
                 onClick={() => updateAgent(a)}
               >
@@ -303,7 +322,10 @@ export function CreateWorkerPopover({
 
         <div className="mb-5">
           <div className="mb-2 text-12 font-medium uppercase tracking-[0.5px] text-[var(--text-tertiary)]">
-            {t('orca.createWorker.initialTaskLabel')} <span className="font-normal normal-case tracking-normal">{t('orca.createWorker.optional')}</span>
+            {t('orca.createWorker.initialTaskLabel')}{' '}
+            <span className="font-normal normal-case tracking-normal">
+              {t('orca.createWorker.optional')}
+            </span>
           </div>
           <textarea
             className="h-[96px] w-full resize-none rounded-xl border border-[var(--border-default)] bg-transparent px-3.5 py-2.5 text-13 leading-snug text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] outline-none"

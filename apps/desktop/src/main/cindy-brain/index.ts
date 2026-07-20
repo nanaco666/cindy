@@ -5,6 +5,7 @@ import path from 'node:path';
 import { createLogger } from '../logger.js';
 import { throwIpcError } from '../utils/ipcValidate.js';
 import {
+  type GhostAppRegion,
   GHOST_CARD_HEIGHT_DEFAULT,
   GHOST_CARD_HEIGHT_MAX,
   GHOST_CARD_HEIGHT_MIN,
@@ -163,9 +164,15 @@ import { eq } from 'drizzle-orm';
 
 const log = createLogger('brain');
 
-/** 电子脑管子与 settingsHtml `/app-context` 共用,避免两条 region 口径漂移。 */
+/**
+ * 电子脑管子与 settingsHtml `/app-context` 共用,避免两条 region 口径漂移。
+ * dev 区域(第三系统身份,2026-07-20)对意识映射为 'cn':意识契约
+ * GhostAppRegion 维持 cn|global 两值(FORGE_GUIDE §4.1 不变),dev 的行为
+ * 语义本就归 cn 系,意识按区域选公开配置时应与 cn 同待遇。
+ */
 function currentGhostAppContext() {
-  return { ok: true as const, context: { region: CURRENT_CINDY_REGION } };
+  const region: GhostAppRegion = CURRENT_CINDY_REGION === 'global' ? 'global' : 'cn';
+  return { ok: true as const, context: { region } };
 }
 
 let managerSingleton: GhostManager | null = null;

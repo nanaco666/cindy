@@ -150,13 +150,13 @@ function resolveModuleRoots(repoRoot: string, config: ConfigFile): string[] {
   if (fs.existsSync(goModPath) || fs.existsSync(cargoTomlPath)) {
     throw new Error(
       'Detected go.mod / Cargo.toml. MVP does not auto-discover non-JS module roots. ' +
-        'Please write `module_roots` (glob list) in .xdmaker/project-knowledge/config.yaml.',
+        'Please write `module_roots` (glob list) in .cindy/project-knowledge/config.yaml.',
     );
   }
 
   throw new Error(
     'Could not auto-discover module roots. Please write `module_roots` ' +
-      '(e.g. ["packages/*", "apps/*"]) in .xdmaker/project-knowledge/config.yaml.',
+      '(e.g. ["packages/*", "apps/*"]) in .cindy/project-knowledge/config.yaml.',
   );
 }
 

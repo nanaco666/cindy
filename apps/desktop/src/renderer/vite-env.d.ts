@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_CINDY_AUTH_REGION: 'cn' | 'global';
+  readonly VITE_CINDY_AUTH_REGION: 'cn' | 'global' | 'dev';
   /** 端点清单自举基址(唯一烘焙远程 URL);业务端点走 electronAPI.clientEndpoints。 */
   readonly VITE_ENDPOINT_MANIFEST_BASE_URL: string;
 }
@@ -2768,6 +2768,8 @@ interface ElectronAPI {
       clientId: string;
       turnCostUsd: number;
       turnCostIsEstimate: boolean;
+      userTurnCostUsd: number;
+      userTurnCostIsEstimate: boolean;
       turnUsageDetails?: import('../shared/turnUsageDetails').TurnUsageDetails;
     }) => void,
   ) => () => void;
@@ -2878,7 +2880,11 @@ interface ElectronAPI {
     };
     recentWorkdirs: {
       /** 列出"最近工作目录"按 lastUsedAt desc;归档/删除 session 都不影响本列表。 */
-      list: () => Promise<Array<{ path: string; lastUsedAt: string }>>;
+      list: () => Promise<Array<{ path: string; lastUsedAt: string; exists: boolean }>>;
+      /** 从最近列表移除一条(列表卫生,不动 sessions / 磁盘;再次使用会重新入列)。 */
+      remove: (input: { path: string }) => Promise<{ deleted: boolean }>;
+      /** Broadcast: 任一窗口/远程调用删除条目后通知;返回退订函数。 */
+      onChanged: (callback: (data: { path: string }) => void) => () => void;
     };
     rightSidebarTabs: {
       /** 按 sessionId 拉 tab 列表 + activeTabId(右侧栏多 Tab 容器)。 */
@@ -3279,6 +3285,16 @@ interface ElectronAPI {
         retryable: boolean;
         status: number;
         detail?: string;
+      }) => void,
+    ) => () => void;
+    /** Claude Auto classifier 失败后降级到 ask 的会话级通知。 */
+    onAutoPermissionFallback: (
+      cb: (event: {
+        sessionId: string;
+        from: 'auto';
+        to: 'ask';
+        reason: 'classifier_unavailable';
+        status: number;
       }) => void,
     ) => () => void;
     /** 会话后台活动只读快照(turn 已结束但 CC 子进程仍在调模型)。 */
@@ -4052,13 +4068,18 @@ interface ElectronAPI {
         targetSessionId?: string;
         scheduleName?: string;
       }) => Promise<{
-        decision: 'run' | 'skip';
+        status: 'passed' | 'skipped' | 'failed' | 'timed_out' | 'aborted';
+        decision: 'run' | 'skip' | 'block';
         exitCode: number | null;
-        timedOut: boolean;
-        spawnError?: string;
         durationMs: number;
         stdout: string;
         stderr: string;
+        stdoutTruncated: boolean;
+        stderrTruncated: boolean;
+        timedOut: boolean;
+        aborted: boolean;
+        spawnError?: string;
+        error?: string;
       }>;
       /** 表单「AI 生成」:生成前置检查脚本并落盘(落盘即自测),返回可填入的命令 + 自测结果。 */
       generatePreRunHook: (params: {
@@ -4073,13 +4094,18 @@ interface ElectronAPI {
         filePath: string;
         content: string;
         test: {
-          decision: 'run' | 'skip';
+          status: 'passed' | 'skipped' | 'failed' | 'timed_out' | 'aborted';
+          decision: 'run' | 'skip' | 'block';
           exitCode: number | null;
-          timedOut: boolean;
-          spawnError?: string;
           durationMs: number;
           stdout: string;
           stderr: string;
+          stdoutTruncated: boolean;
+          stderrTruncated: boolean;
+          timedOut: boolean;
+          aborted: boolean;
+          spawnError?: string;
+          error?: string;
         };
       }>;
       listRuns: (id: string, limit?: number) => Promise<unknown[]>;

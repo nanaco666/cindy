@@ -13,8 +13,13 @@ import {
 import { useDetectCwd } from '@/hooks/useWorktreeQueries';
 import { useAgentCapabilities, type ModelDescriptor } from '@/hooks/useAgentCapabilities';
 import { useProviders } from '@/hooks/useProviders';
-import { ModelSelectorContent, ProviderMark } from '@/components/new-chat/ModelSelector';
-import { connectedProvidersForAgent, nativeDefaultSourceId } from '@lizi/model-providers';
+import { ModelIconMark, ModelSelectorContent } from '@/components/new-chat/ModelSelector';
+import {
+  connectedProvidersForAgent,
+  effectiveSourceIdForModel,
+  getModel,
+  nativeDefaultSourceId,
+} from '@lizi/model-providers';
 import * as sessionService from '@/lib/sessionService';
 import type { Session } from '@/lib/ccAgent.types';
 import { cn } from '@/lib/utils';
@@ -1009,9 +1014,17 @@ export function ModelEffortChip({
     () => nativeDefaultSourceId(railSources, agentKind),
     [railSources, agentKind],
   );
-  // 当前生效来源(显式选中且仍可连 → 它;否则原生默认)—— 与聊天 trigger 同口径,用于 chip 左侧来源 icon。
-  const activeSourceId =
-    providerId && railSources.some((p) => p.id === providerId) ? providerId : nativeDefault;
+  // 当前生效来源 —— 与聊天 trigger 同口径(effectiveSourceIdForModel):按「已连接且**确实
+  // 提供当前模型**」收窄后再应用显式选择 / 原生默认。只查「已连接」会在显式来源不提供
+  // effectiveId 时渲染错误来源的标识(如 providerId=openai 而默认模型只有 xd 提供);
+  // followSession(effectiveId 为空)无从收窄,返回 null,icon 分支本就被 isFollowingSession 挡住。
+  const activeSourceId = useMemo(
+    () =>
+      effectiveId
+        ? effectiveSourceIdForModel(providers, providerId || null, effectiveId, agentKind)
+        : null,
+    [providers, providerId, effectiveId, agentKind],
+  );
   const activeProvider = providers.find((p) => p.id === activeSourceId);
 
   return (
@@ -1020,7 +1033,10 @@ export function ModelEffortChip({
         <ChipButton
           icon={
             !isFollowingSession && activeSourceId ? (
-              <ProviderMark
+              // 图标统一规则(与聊天 trigger 同口径):模型条目 icon(AI Gateway / 目录设定)
+              // 优先,缺省回落来源供应商标。
+              <ModelIconMark
+                icon={activeProvider ? getModel(activeProvider, effectiveId, agentKind)?.icon : undefined}
                 providerId={activeSourceId}
                 name={activeProvider?.name}
                 colorClass=""

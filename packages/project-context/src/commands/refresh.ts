@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import chalk from 'chalk';
 import { findRepoRoot } from '../git.js';
-import { loadConfig, resolvePaths } from '../config.js';
+import { loadConfig, migrateLegacyContextRoot, resolvePaths } from '../config.js';
 import { readKnowledgeFile, writeKnowledgeFile } from '../knowledge.js';
 import { readManifest, rebuildManifestFromDisk, writeManifest } from '../manifest.js';
 import { makeAdapter } from '../adapters/factory.js';
@@ -54,11 +54,12 @@ Avoid:
 export async function runRefresh(options: RefreshOptions): Promise<RefreshResult> {
   const cwd = options.cwd ?? process.cwd();
   const repoRoot = await findRepoRoot(cwd);
+  migrateLegacyContextRoot(repoRoot);
   const paths = resolvePaths(repoRoot);
 
   if (!fs.existsSync(paths.contextDir)) {
     throw new Error(
-      `No .xdmaker/project-knowledge/ found in ${repoRoot}. Run \`project-context init\` first.`,
+      `No .cindy/project-knowledge/ found in ${repoRoot}. Run \`project-context init\` first.`,
     );
   }
 

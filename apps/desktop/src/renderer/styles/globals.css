@@ -804,6 +804,10 @@ body.resizing-pane [data-ghost-webview] {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+/* 纵横滚动条交汇角件默认是不跟主题的白色方块(dark 下刺眼),置透明全皮肤通吃 */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
 ::-webkit-scrollbar-thumb {
   background-color: transparent;
   background-clip: padding-box;
@@ -1165,6 +1169,15 @@ body.resizing-pane [data-ghost-webview] {
 [data-theme="cindy-dark"] aside.bg-sidebar {
   background: var(--surface-translucent-sidebar);
   /* backdrop-filter 移除:CSS blur 采样不到窗外壁纸,且已知会把透明窗背衬渲染成黑;壁纸模糊由原生 vibrancy 材质提供 */
+}
+/* Sidebar peek 抽屉是 fixed overlay,它覆盖的是应用内容而不是窗外壁纸;这里需要
+   单独 blur 被覆盖的应用 UI,避免 hover 预览时正文直接透出来。常规展开态仍交给
+   原生 vibrancy,非 CINDY family 不命中。 */
+[data-theme="cindy-light"] aside.bg-sidebar[data-sidebar-peek-drawer],
+[data-theme="cindy-dark"] aside.bg-sidebar[data-sidebar-peek-drawer] {
+  background: var(--surface-translucent-sidebar);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
 }
 /* 模式2 主面板:用户勘误 2026-07-17 — 主内容区不透壁纸(macOS 标准范式),撤销 blur。
    content-area 回落 --content-area(=var(--surface-hsl) 不透明 #EDEDED/#2A2828),无 blur。

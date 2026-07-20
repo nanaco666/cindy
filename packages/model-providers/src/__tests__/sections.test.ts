@@ -4,7 +4,12 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { buildProviderSections, isModelVisible, visibleModelUnion } from '../sections.js';
+import {
+  buildProviderSections,
+  isModelVisible,
+  resolveModelIconKind,
+  visibleModelUnion,
+} from '../sections.js';
 import type { ProviderView } from '../registry.js';
 import type { CatalogModel } from '../types.js';
 
@@ -107,6 +112,39 @@ describe('buildProviderSections', () => {
       isVisible: (pid) => pid === 'xd', // 只放行 xd
     });
     expect(sections.map((s) => s.provider.id)).toEqual(['xd']);
+  });
+
+  it('目录条目的 icon(AI Gateway 设定)透传进 SectionModel;缺省不带字段', () => {
+    const withIcon = provider('xd', 'XD', [
+      { ...model('claude-fable-5', 'Fable 5'), icon: 'claude' },
+      model('gpt-5.5', 'GPT-5.5'),
+    ]);
+    const sections = buildProviderSections({
+      providers: [withIcon],
+      agent: 'claude-code',
+      isVisible: () => true,
+    });
+    const models = sections[0].models;
+    expect(models.find((m) => m.id === 'claude-fable-5')?.icon).toBe('claude');
+    expect('icon' in (models.find((m) => m.id === 'gpt-5.5') ?? {})).toBe(false);
+  });
+});
+
+describe('resolveModelIconKind', () => {
+  it('已知取值与别名(大小写不敏感)映射到客户端图标种类', () => {
+    expect(resolveModelIconKind('claude')).toBe('claude');
+    expect(resolveModelIconKind('Anthropic')).toBe('claude');
+    expect(resolveModelIconKind('codex')).toBe('codex');
+    expect(resolveModelIconKind('openai')).toBe('codex');
+    expect(resolveModelIconKind('GPT')).toBe('codex');
+    expect(resolveModelIconKind('cindy')).toBe('cindy');
+    expect(resolveModelIconKind(' xd ')).toBe('cindy');
+  });
+  it('缺省 / 空串 / 未知值返回 null(渲染层回落来源供应商标)', () => {
+    expect(resolveModelIconKind(undefined)).toBeNull();
+    expect(resolveModelIconKind('')).toBeNull();
+    expect(resolveModelIconKind('grok')).toBeNull();
+    expect(resolveModelIconKind('https://evil.example/icon.svg')).toBeNull();
   });
 });
 

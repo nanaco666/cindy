@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3';
 
 /**
- * 0075 — 幂等添加 messages.agent_kind(text, nullable)。
+ * 0076 — 幂等添加 messages.agent_kind(text, nullable)。
  *
  * session-agent-switch:同一会话可在 Claude Code / Codex 间切换后,
  * sessions.agent_kind 只代表"当前活跃 agent";历史消息行的 agent_meta JSON 形态

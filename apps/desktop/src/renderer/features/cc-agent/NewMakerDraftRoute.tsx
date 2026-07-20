@@ -42,6 +42,7 @@ import { logoDark, logoLight } from '@/hooks/useBrandLogo';
 import { themeService } from '@/themes/theme-service';
 import type { Theme as ColorTheme } from '@/themes/types';
 import { ChatInput } from '@/components/new-chat/ChatInput';
+import { WorktreeChipsRow } from '@/components/new-chat/WorktreeChipsRow';
 import {
   FolderPickerPopover,
   type FolderPickerSelectSource,
@@ -1717,38 +1718,62 @@ export function NewMakerDraftRoute() {
               className="relative flex w-full max-w-[800px] flex-col items-start"
               style={{ maxWidth: Math.min(inputWidth ?? 800, 800) }}
             >
-              <FolderPickerPopover
-                open={folderPickerOpen}
-                onOpenChange={handleFolderPickerOpenChange}
-                onSelect={handleModePickerSelect}
-                projectOptions={projectPickerOptions}
-                side="bottom"
-                align="end"
-                sideOffset={6}
-              >
-                <button
-                  type="button"
-                  data-testid="create-agent-mode-pill"
-                  className="absolute right-0 top-[22px] inline-flex h-[30px] min-w-20 max-w-[220px] items-center justify-center gap-1.5 rounded-full border border-[var(--create-agent-control-border)] bg-[var(--create-agent-control-bg)] px-3 text-[12px] font-medium leading-[14px] text-[var(--create-agent-control-text)] transition-colors hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]"
-                  aria-label={t('newChat.collaboration.modeLabel')}
+              {/* mode pill + worktree 高级入口同排(齿轮在 pill 右侧,对齐旧 F1-E 布局)。
+                  2026-07-19 修复:488cb33 对齐 Figma 重排时把 WorktreeChipsRow 注入删丢,
+                  branch/worktree 入口消失(wt* 状态与 send 管线一直健在),以 advancedOnly
+                  变体接回。 */}
+              <div className="absolute right-0 top-[22px] z-10 inline-flex items-center gap-2">
+                <FolderPickerPopover
+                  open={folderPickerOpen}
+                  onOpenChange={handleFolderPickerOpenChange}
+                  onSelect={handleModePickerSelect}
+                  projectOptions={projectPickerOptions}
+                  side="bottom"
+                  align="end"
+                  sideOffset={6}
                 >
-                  <MessageSquare
-                    size={12}
-                    strokeWidth={2}
-                    className="shrink-0 text-[var(--create-agent-control-icon)]"
-                  />
-                  <span className="min-w-0 truncate">
-                    {effectiveCollab.enabled
-                      ? t('newChat.collaboration.pillLabel')
-                      : createAgentModeLabel}
-                  </span>
-                  <ChevronDown
-                    size={12}
-                    strokeWidth={2}
-                    className="shrink-0 text-[var(--create-agent-control-icon)]"
-                  />
-                </button>
-              </FolderPickerPopover>
+                  <button
+                    type="button"
+                    data-testid="create-agent-mode-pill"
+                    className="inline-flex h-[30px] min-w-20 max-w-[220px] items-center justify-center gap-1.5 rounded-full border border-[var(--create-agent-control-border)] bg-[var(--create-agent-control-bg)] px-3 text-[12px] font-medium leading-[14px] text-[var(--create-agent-control-text)] transition-colors hover:bg-[var(--create-agent-control-bg-hover)] active:bg-[var(--create-agent-control-bg-pressed)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]"
+                    aria-label={t('newChat.collaboration.modeLabel')}
+                  >
+                    <MessageSquare
+                      size={12}
+                      strokeWidth={2}
+                      className="shrink-0 text-[var(--create-agent-control-icon)]"
+                    />
+                    <span className="min-w-0 truncate">
+                      {effectiveCollab.enabled
+                        ? t('newChat.collaboration.pillLabel')
+                        : createAgentModeLabel}
+                    </span>
+                    <ChevronDown
+                      size={12}
+                      strokeWidth={2}
+                      className="shrink-0 text-[var(--create-agent-control-icon)]"
+                    />
+                  </button>
+                </FolderPickerPopover>
+                <WorktreeChipsRow
+                  variant="advancedOnly"
+                  compact
+                  cwd={effectiveWorkingDir ?? null}
+                  folderPickerMode="project"
+                  projectOptions={projectPickerOptions}
+                  enabled={wtEnabled}
+                  onEnabledChange={handleWtEnabledChange}
+                  sourceBranch={wtSourceBranch}
+                  onSourceBranchChange={handleWtSourceBranchChange}
+                  onBaseRepoChange={handleWtBaseRepoChange}
+                  onSuggestedNameChange={handleWtNameChange}
+                  // SSH 远程仍禁用 worktree(远端 git 探测未落地);device-link 远程可用:
+                  // 探测/建议名/创建全部经隧道在被控端执行(与 488cb33 前口径一致)。
+                  worktreeDisabled={isRemoteProjectDraft}
+                  deviceLinkDeviceId={effectiveDeviceLinkDeviceId ?? null}
+                  disabled={wtCreating}
+                />
+              </div>
               <div
                 data-testid="create-agent-brand-lockup"
                 className="mb-[15px] flex h-[50px] items-center gap-[9px]"

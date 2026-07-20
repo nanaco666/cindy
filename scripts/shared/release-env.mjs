@@ -4,7 +4,9 @@
  * XDT_GLOBAL_CDN_BASE_URL,与 scripts/shared/oss.mjs 的发布目标同一套命名。
  */
 export function resolveReleaseCdnBaseUrl(releaseRegion = 'cn') {
-  const envName = releaseRegion === 'global' ? 'XDT_GLOBAL_CDN_BASE_URL' : 'XDT_CDN_BASE_URL';
+  const envName =
+    { global: 'XDT_GLOBAL_CDN_BASE_URL', dev: 'XDT_DEVCH_CDN_BASE_URL' }[releaseRegion] ??
+    'XDT_CDN_BASE_URL';
   const raw = process.env[envName]?.trim();
   if (!raw) {
     throw new Error(`缺少发布 CDN 配置: 请设置 ${envName}`);

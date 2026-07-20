@@ -412,9 +412,9 @@ end
     const upgradedPodfile = plugin.injectPostInstallHooks(oldPodfile);
     expect(upgradedPodfile.match(/WechatOpenSDK modulemap/g)).toHaveLength(1);
     expect(upgradedPodfile).toContain(
-      'xdt-wechat-login: arm64 simulator stub linkage v2',
+      'xdt-wechat-login: arm64 simulator stub linkage v3',
     );
-    expect(upgradedPodfile.match(/arm64 simulator stub linkage v2/g)).toHaveLength(1);
+    expect(upgradedPodfile.match(/arm64 simulator stub linkage v3/g)).toHaveLength(1);
     expect(plugin.injectPostInstallHooks(upgradedPodfile)).toBe(upgradedPodfile);
   });
 });

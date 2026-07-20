@@ -14,7 +14,7 @@
 export const VERSIONLESS_VERSION = '0.0.0';
 
 export const SUPPORTED_PLATFORMS = Object.freeze(['win32', 'darwin', 'linux']);
-export const SUPPORTED_REGIONS = Object.freeze(['cn', 'global']);
+export const SUPPORTED_REGIONS = Object.freeze(['cn', 'global', 'dev']);
 export const SUPPORTED_CHANNELS = Object.freeze(['dev', 'release']);
 const VERSION_BUMP_KINDS = Object.freeze(['major', 'minor', 'patch']);
 

@@ -42,13 +42,49 @@ const VALID = {
     iosSigning: { teamId: 'T2', profileName: 'P2', signIdentity: 'I2', profilePath: '' },
     androidSigning: { keyAlias: 'ag', keystorePath: '/kg.jks' },
   },
+  // dev 第三目标(2026-07-20):块必须存在,叶子允许留空(用时才强校验)。
+  dev: {
+    authRegion: 'dev',
+    iosBundleId: '',
+    iosAppStoreId: '',
+    androidPackage: '',
+    androidStoreUrl: '',
+    npkgExpectBundle: '',
+    tapdb: { clientId: '', clientToken: '' },
+    oss: { cdnBaseUrl: '', bucket: '', prefix: '', ossRegion: '' },
+    iosSigning: { teamId: '', profileName: '', signIdentity: '', profilePath: '' },
+    androidSigning: { keyAlias: '', keystorePath: '' },
+  },
 };
 
 const clone = () => JSON.parse(JSON.stringify(VALID));
 
 describe('SELF_HOST_REGIONS', () => {
-  it('只认 cn / global', () => {
-    expect([...SELF_HOST_REGIONS]).toEqual(['cn', 'global']);
+  it('只认 cn / global / dev', () => {
+    expect([...SELF_HOST_REGIONS]).toEqual(['cn', 'global', 'dev']);
+  });
+});
+
+describe('dev 第三目标(装载宽松、用时强校验)', () => {
+  it('dev 块全留空 → 装载通过(不拖垮 cn/global 打包机)', () => {
+    expect(() => validateSelfHostRegions(clone())).not.toThrow();
+  });
+  it('dev 不得配置 google(行为语义归 cn 系)', () => {
+    const bad = clone();
+    bad.dev.google = { webClientId: 'x', iosClientId: 'y', iosUrlScheme: 'z' };
+    expect(() => validateSelfHostRegions(bad)).toThrow(/dev 不得配置 google/);
+  });
+  it('resolve dev 且身份未填 → 报缺失字段与建议命名', () => {
+    expect(() => resolveSelfHostRegion({ region: 'dev' }, { regions: validateSelfHostRegions(clone()) }))
+      .toThrow(/dev 渠道尚未配置[\s\S]*iosBundleId[\s\S]*com\.xd\.cindydev/);
+  });
+  it('resolve dev 且身份已填 → 正常返回块', () => {
+    const filled = clone();
+    filled.dev.iosBundleId = 'com.xd.cindydev';
+    filled.dev.androidPackage = 'com.xd.cindydev';
+    filled.dev.npkgExpectBundle = 'com.xd.cindydev';
+    const block = resolveSelfHostRegion({ region: 'dev' }, { regions: validateSelfHostRegions(filled) });
+    expect(block.iosBundleId).toBe('com.xd.cindydev');
   });
 });
 

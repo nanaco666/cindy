@@ -50,6 +50,7 @@ const overrides = {
   'ask-checkbox-border': '#686B72', // AA checkbox border
   background: '0.0 0.0% 92.9%', // 背景 -> HSL
   'chat-input-bg': '#F8F8F8', // 输入框
+  'chat-input-border-focus': 'rgba(104, 107, 114, 0.30)', // 用户改稿 2026-07-20:输入框聚焦描边降至 30%
   'chat-input-chip-border': '#DCDFE3', // 边框
   'chat-input-text': '#3C3F43', // 正文
   'color-primary': '#3C3F43', // 正文
@@ -94,9 +95,9 @@ const overrides = {
   'settings-theme-auto-dark': '#2A2828', // Auto 预览 dark 固定
   'sidebar-action-icon': '220.0 4.7% 62.2%', // E1D 侧栏层级:二级暗灰 #9A9DA3(时间戳/RemoteProjectIcon)
   'cmd-palette-item-meta': '#9A9DA3', // E1D 侧栏层级:二级暗灰(分组标签/meta)
-  'sidebar-item-active-foreground': '#FCFCFC', // E1D 选中胶囊反白前景(近白)
-  'sidebar-item-active-border': '#A00A1D', // 补编 §3:light 深红描边(dark 浅红,别装反)
-  'sidebar-item-active': '352.3 89.8% 46.1%', // active 品牌红
+  'sidebar-item-active-foreground': '#FCFCFC', // 用户二次改稿 2026-07-20:反相胶囊,light 深底浅字(同 accent-pure-cta-fg)
+  'sidebar-item-active-border': 'transparent', // 用户三次改稿 2026-07-20:选中胶囊彻底去描边
+  'sidebar-item-active': '214.3 5.5% 24.9%', // 用户二次改稿 2026-07-20:反相胶囊 #3C3F43 深底(同 accent-cta-bg)
   'splash-bg': '0.0 0.0% 92.9%', // 背景 -> HSL
   'splash-text': '222.0 4.6% 42.7%', // AA splash text
   'splash-text-destructive': '214.3 5.5% 24.9%', // destructive splash text
@@ -125,7 +126,7 @@ const overrides = {
   'sidebar-item-hover': '0.0 0.0% 94.5%', // alias closure: hover
   'sidebar-search-bg': '0.0 0.0% 92.9%', // alias closure: surface
   'sidebar-muted': '220.0 4.7% 62.2%', // E1D 侧栏层级:二级暗灰 #9A9DA3(行首图标普通态)
-  'surface-translucent-sidebar': 'rgba(255, 255, 255, 0.85)', // 用户观感定稿(2026-07-18:纯白 85%)
+  'surface-translucent-sidebar': 'rgba(255, 255, 255, 0.80)', // 用户调参 2026-07-20:纯白 85%→80%(透壁纸更多)
   'surface-translucent-main': '#EDEDED', // E4D 主面板:用户勘误 2026-07-17 撤销毛玻璃,改不透明等价 surface(原 rgba(255,255,255,0.93))
   'surface-translucent-overlay': 'rgba(246, 246, 246, 0.90)', // E4D R1 模式3 浮层半透明
   'composer-pill-bg': '#FCFCFC', // E2 composer pill 底(light,lead Figma 实测 §2-3;取代错稿 glass-pill)

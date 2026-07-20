@@ -2560,7 +2560,8 @@
       "cycleUsed": "本周期已用 ${{spend}} / ${{budget}} ({{pct}}%)",
       "remaining": "剩余 ${{remain}}",
       "nextReset": "下次重置: {{at}}",
-      "latestTurnTitle": "最近一轮"
+      "latestTurnTitle": "最近一轮",
+      "latestUserTurnTitle": "最近一轮用户请求累计"
     }
   },
   "usageDetails": {
@@ -3265,6 +3266,7 @@
     "permissionSelector": {
       "triggerAria": "选择权限模式：{{label}}",
       "listAria": "权限模式",
+      "autoFallback": "自动审批暂时不可用，已切换为默认权限；需要时会询问你。",
       "modes": {
         "claude-code": {
           "ask": {
@@ -3321,6 +3323,14 @@
       "notGitRepo": "当前目录不是 git 仓库",
       "alreadyInWorktree": "已在 worktree 中，禁止嵌套"
     },
+    "branchChip": {
+      "label": "分支",
+      "loading": "加载分支中…",
+      "loadFailed": "分支列表加载失败,点此重试",
+      "currentTooltip": "当前分支",
+      "sourceTooltip": "worktree 源分支",
+      "worktreeHint": "选择其他分支将以 worktree 隔离启动"
+    },
     "folderPicker": {
       "selectFolder": "选择文件夹",
       "selectProject": "选择项目",
@@ -3330,7 +3340,9 @@
       "browseFolder": "选择其他文件夹",
       "browseProjectFolder": "选择其他项目文件夹",
       "dialogue": "对话",
-      "dialogueOrSelectProject": "对话或选择项目"
+      "dialogueOrSelectProject": "对话或选择项目",
+      "removeFromList": "从列表中移除",
+      "missingDir": "目录不存在"
     },
     "pendingQueue": {
       "regionAria": "待发送消息队列",
@@ -3569,7 +3581,9 @@
       "edit": "编辑",
       "turnCost": "本轮消耗",
       "turnCostEstimated": "本轮 token 价值(按 API 单价折算)",
-      "turnCostEstimatedValue": "价值 {{cost}}"
+      "turnCostEstimatedValue": "价值 {{cost}}",
+      "userTurnCostTotalLine": "本轮累计：{{cost}}",
+      "userTurnCostDetailsTitle": "最后一个 SDK 分段"
     },
     "errorBanner": {
       "retryTitle": "重新发送最后一条消息",
@@ -4718,7 +4732,7 @@
       },
       "cell": {
         "tag": "项目",
-        "tooltip": "由 .xdmaker/automations/schedules.json 管理，不能在 UI 中编辑"
+        "tooltip": "由 .cindy/automations/schedules.json 管理，不能在 UI 中编辑"
       }
     },
     "button": {
@@ -4764,7 +4778,7 @@
       "removeProject": {
         "menu": "从项目移除",
         "confirmTitle": "从项目移除自动化？",
-        "confirmDescription": "将从 .xdmaker/automations/schedules.json 中删除 \"{{name}}\"，此操作会影响所有协作者（commit 后）。",
+        "confirmDescription": "将从 .cindy/automations/schedules.json 中删除 \"{{name}}\"，此操作会影响所有协作者（commit 后）。",
         "confirm": "移除",
         "demote": "移除并保留个人副本",
         "demoteSuccess": "已移除项目自动化并保留为个人任务"
@@ -4821,6 +4835,26 @@
         "success": "成功",
         "skip": "跳过",
         "fail": "失败"
+      },
+      "preRun": {
+        "status": {
+          "passed": "前置检查通过",
+          "skipped": "条件不满足",
+          "failed": "前置检查失败",
+          "timed_out": "前置检查超时",
+          "aborted": "前置检查已中止"
+        },
+        "decision": {
+          "run": "执行任务",
+          "skip": "跳过任务",
+          "block": "阻止执行"
+        },
+        "duration": "{{ms}} ms",
+        "exitCode": "退出码 {{code}}",
+        "stdout": "stdout",
+        "stderr": "stderr",
+        "truncated": "输出已截断",
+        "noOutput": "无输出"
       }
     },
     "editor": {
@@ -4910,16 +4944,16 @@
       "preRunHook": {
         "label": "前置检查",
         "enable": "启用",
-        "tooltip": "任务触发时先执行该脚本：退出码 0 放行本轮；退出码 2 跳过本轮（不启动 agent、不消耗 token）；脚本报错或超时将照常运行并记录日志。脚本在任务工作目录下执行，Windows 上请写显式解释器（如 node check.mjs）。",
+        "tooltip": "任务触发时先执行该脚本：退出码 0 放行本轮；退出码 2 跳过本轮（不启动 agent、不消耗 token）；脚本报错或超时将阻止执行并记录失败结果。脚本在任务工作目录下执行，Windows 上请写显式解释器（如 node check.mjs）。",
         "infoAria": "查看前置检查规则",
-        "protocol": "脚本写法：结束时退出码 0 = 本轮执行任务，退出码 2 = 本轮跳过（不消耗用量）；报错或超时不会拦截，任务照常运行",
+        "protocol": "脚本写法：结束时退出码 0 = 本轮执行任务，退出码 2 = 本轮跳过（不消耗用量）；其他退出码、报错或超时会阻止执行",
         "commandPlaceholder": "node scripts/schedule-checks/check.mjs",
         "test": "测试",
         "testing": "测试中…",
         "resultRun": "exit {{code}} · {{ms}}ms — 本轮将放行",
         "resultSkip": "exit 2 · {{ms}}ms — 本轮将跳过",
-        "resultTimeout": "执行超时 — 将按放行处理",
-        "resultError": "执行失败（{{error}}）— 将按放行处理",
+        "resultTimeout": "执行超时 — 将阻止本轮执行",
+        "resultError": "执行失败（{{error}}）— 将阻止本轮执行",
         "aiCreate": "AI 生成",
         "aiModify": "AI 修改",
         "aiPlaceholder": "描述什么情况才需要运行任务，例如：仓库有新的未处理 PR 时才运行",

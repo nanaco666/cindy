@@ -204,8 +204,8 @@ export interface AppServerHostOptions {
    */
   notificationBufferTtlMs?: number;
   /**
-   * 子进程 stderr 命中"refresh token 失效"模式时调用一次 (单次 latch 在 client 内)。
-   * 上层 (CodexAgent) 接到后做 logout + 通知 UI 重登, 否则错误只埋在后台日志。
+   * 关联中的 JSON-RPC response 明确返回 cloudRequirements Auth/relogin 时调用一次
+   * (单次 latch 在 client 内)。stderr 始终只作为诊断日志。
    */
   onAuthInvalidated?: (reason: string) => void;
   /**

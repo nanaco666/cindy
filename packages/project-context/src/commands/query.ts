@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { findRepoRoot } from '../git.js';
-import { resolvePaths } from '../config.js';
+import { migrateLegacyContextRoot, resolvePaths } from '../config.js';
 import { findKnowledgeIdsForFile, findEntryById, readManifest } from '../manifest.js';
 
 export type QueryFormat = 'ids' | 'paths' | 'json';
@@ -20,6 +20,7 @@ export interface QueryResult {
 export async function runQuery(options: QueryOptions): Promise<QueryResult> {
   const cwd = options.cwd ?? process.cwd();
   const repoRoot = await findRepoRoot(cwd);
+  migrateLegacyContextRoot(repoRoot);
   const paths = resolvePaths(repoRoot);
   const manifest = readManifest(paths.manifestPath);
 
