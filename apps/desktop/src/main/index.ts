@@ -71,7 +71,10 @@ installInvokeCapture();
 //   - --passive / XDT_SCHEDULER_PASSIVE:定时任务自动触发让位给同机另一实例。
 // 必须在 app 'ready' 前调用。仅 dev(非 packaged)生效,生产忽略,零线上影响。
 import { machineIdSync } from 'node-machine-id';
-import { resolveDevCliFlags } from './devCliFlags.js';
+import {
+  resolveDevCliFlags,
+  shouldEnforcePassiveMigrationCompatibility,
+} from './devCliFlags.js';
 
 const devFlags = resolveDevCliFlags({
   argv: process.argv,
@@ -88,6 +91,18 @@ if (devFlags.schedulerPassive) {
   // 统一收敛到 env:scheduler-host 只认 XDT_SCHEDULER_PASSIVE,不重复解析 argv。
   process.env.XDT_SCHEDULER_PASSIVE = '1';
   stderr.write('[cindy] dev scheduler passive mode (--passive)\n');
+}
+if (shouldEnforcePassiveMigrationCompatibility({
+  isPackaged: app.isPackaged,
+  schedulerPassive: devFlags.schedulerPassive,
+  isolated: devFlags.isolated,
+})) {
+  // 内部启动契约：共享 userData 的 passive dev 只能打开与当前 checkout migration
+  // 完全一致的数据库，且不得自行迁移。localDb 在用户数据库首次打开时消费本标记。
+  process.env.XDT_PASSIVE_SHARED_USER_DATA = '1';
+} else {
+  // 防止 shell 中同名 ambient env 污染 packaged / isolated 启动语义。
+  delete process.env.XDT_PASSIVE_SHARED_USER_DATA;
 }
 if (devFlags.endpointsCdn) {
   // 统一收敛到 env:clientEndpointsService 只认 XDT_ENDPOINTS_CDN,不重复解析 argv。

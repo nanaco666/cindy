@@ -48,6 +48,8 @@ export interface DevCliFlagsInput {
 export interface DevCliFlags {
   /** --passive:本实例定时任务不自动触发(scheduler-host 读 XDT_SCHEDULER_PASSIVE)。 */
   schedulerPassive: boolean;
+  /** 是否由 --isolated / XDT_ISOLATED 明确进入独立 userData 沙箱。 */
+  isolated: boolean;
   /**
    * 生效的 userData 覆写目录;null = 不覆写。来源优先级:
    * 显式 XDT_USER_DATA_DIR > 隔离模式默认沙箱目录(<userData>-dev[-<名字>])> 不覆写。
@@ -78,9 +80,10 @@ export interface DevCliFlags {
 /**
  * 是否获取 Electron single-instance lock。
  *
- * 正常 dev 与 packaged 共用 userData 时保持单实例，确保 deep link 能交给已运行
- * 窗口；`--passive` 是明确的共享数据双开契约，dev 实例要让正式版继续持有锁，
- * 自己跳过获取。packaged 永远锁定，不能被环境变量误切成多实例。
+ * 正常 dev 与 packaged 共用 userData 时保持一个 primary，确保 deep link 能交给
+ * 已运行窗口；`--passive` 是明确的共享数据多开契约，所有 passive dev 都让
+ * primary / 正式版继续持有锁，自己跳过获取。packaged 永远锁定，不能被环境变量
+ * 误切成多实例。
  */
 export function shouldRequestSingleInstanceLock(input: {
   isPackaged: boolean;
@@ -89,10 +92,26 @@ export function shouldRequestSingleInstanceLock(input: {
   return input.isPackaged || !input.schedulerPassive;
 }
 
+/**
+ * passive 只有在共享 userData 时才需要禁止 migration。
+ *
+ * 显式 isolated 沙箱没有其它实例替它初始化数据库，仍按正常启动路径迁移；packaged
+ * 不接受任何 dev-only passive 语义。调用方会把这个纯判定同步成内部 env，供延后加载
+ * 的 localDb 模块在首次打开用户数据库时执行硬闸。
+ */
+export function shouldEnforcePassiveMigrationCompatibility(input: {
+  isPackaged: boolean;
+  schedulerPassive: boolean;
+  isolated: boolean;
+}): boolean {
+  return !input.isPackaged && input.schedulerPassive && !input.isolated;
+}
+
 export function resolveDevCliFlags(input: DevCliFlagsInput): DevCliFlags {
   if (input.isPackaged) {
     return {
       schedulerPassive: false,
+      isolated: false,
       userDataDirOverride: null,
       needsIsolatedDeviceId: false,
       isolationName: null,
@@ -133,6 +152,7 @@ export function resolveDevCliFlags(input: DevCliFlagsInput): DevCliFlags {
   }
   return {
     schedulerPassive: input.argv.includes('--passive') || input.envSchedulerPassive === '1',
+    isolated,
     userDataDirOverride,
     needsIsolatedDeviceId: isolated && !input.envDeviceIdOverride?.trim(),
     isolationName,

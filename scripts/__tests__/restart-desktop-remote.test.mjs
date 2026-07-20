@@ -176,36 +176,44 @@ test("structured startup failures keep their actionable reason", () => {
 	assert.equal(
 		formatDesktopStartupFailure({
 			state: "failed",
-			code: "PASSIVE_USER_DATA_OCCUPIED",
-			message: "Another passive instance owns the slot.",
-			detail: { ownerPid: 88 },
+			code: "SINGLE_INSTANCE_OWNED",
+			message: "Another Cindy instance owns the primary slot.",
+			detail: { userDataDir: "/tmp/Cindy" },
 		}),
-		"[PASSIVE_USER_DATA_OCCUPIED] Another passive instance owns the slot. (ownerPid=88)",
+		"[SINGLE_INSTANCE_OWNED] Another Cindy instance owns the primary slot. (userDataDir=/tmp/Cindy)",
 	);
 });
 
-test("desktop whoami identifies renderer readiness and passive ownership", () => {
+test("desktop whoami identifies multiple passive previews sharing one userData", () => {
 	const previewRoot = path.resolve("/repo/cindy-preview");
+	const previewRootTwo = path.resolve("/repo/cindy-preview-two");
 	const userData = path.resolve("/tmp/Cindy");
 	const worktrees = parseWorktreeEntries([
 		`worktree ${previewRoot}`,
 		"HEAD abc123",
 		"branch refs/heads/dash/preview/example",
+		"",
+		`worktree ${previewRootTwo}`,
+		"HEAD def456",
+		"branch refs/heads/dash/preview/two",
 	].join("\n"));
 	const electronMain = path.join(previewRoot, "node_modules", "electron", "dist", "Electron");
 	const electronHelper = path.join(previewRoot, "node_modules", "electron", "helper");
 	const appPath = path.join(previewRoot, "apps", "desktop");
 	const devEnv = path.join(previewRoot, "apps", "desktop", "scripts", "dev-remote-env.mjs");
+	const electronMainTwo = path.join(previewRootTwo, "node_modules", "electron", "dist", "Electron");
+	const electronHelperTwo = path.join(previewRootTwo, "node_modules", "electron", "helper");
+	const appPathTwo = path.join(previewRootTwo, "apps", "desktop");
+	const devEnvTwo = path.join(previewRootTwo, "apps", "desktop", "scripts", "dev-remote-env.mjs");
 	const processes = [
 		{ pid: 10, ppid: 9, command: `${electronMain} .` },
 		{ pid: 11, ppid: 10, command: `${electronHelper} --type=renderer --user-data-dir=${userData} --app-path=${appPath}` },
-		{ pid: 9, ppid: 8, command: `node ${devEnv} electron-forge start` },
+		{ pid: 9, ppid: 8, command: `XDT_SCHEDULER_PASSIVE='1' node ${devEnv} electron-forge start` },
+		{ pid: 20, ppid: 19, command: `${electronMainTwo} .` },
+		{ pid: 21, ppid: 20, command: `${electronHelperTwo} --type=renderer --user-data-dir=${userData} --app-path=${appPathTwo}` },
+		{ pid: 19, ppid: 18, command: `set "XDT_SCHEDULER_PASSIVE=1" && node ${devEnvTwo} electron-forge start` },
 	];
-	const instances = identifyDesktopProcesses(
-		processes,
-		worktrees,
-		new Map([[userData, 10]]),
-	);
+	const instances = identifyDesktopProcesses(processes, worktrees);
 
 	assert.deepEqual(instances, [{
 		pid: 10,
@@ -220,7 +228,32 @@ test("desktop whoami identifies renderer readiness and passive ownership", () =>
 		commit: null,
 		commitVerified: false,
 		source: "process-scan",
+	}, {
+		pid: 20,
+		rootDir: previewRootTwo,
+		branch: "dash/preview/two",
+		state: "ready",
+		ready: true,
+		mode: "remote",
+		passive: true,
+		isolated: null,
+		userDataDir: userData,
+		commit: null,
+		commitVerified: false,
+		source: "process-scan",
 	}]);
+});
+
+test("passive previews do not use a one-slot userData lock", () => {
+	const bootstrap = fs.readFileSync(
+		new URL("../../apps/desktop/src/main/bootstrap-electron.ts", import.meta.url),
+		"utf8",
+	);
+	assert.equal(bootstrap.includes(".passive-dev.lock"), false);
+	assert.equal(
+		fs.existsSync(new URL("../../apps/desktop/src/main/passiveDevLock.ts", import.meta.url)),
+		false,
+	);
 });
 
 test("desktop whoami prefers launch-time commit metadata over process inference", () => {

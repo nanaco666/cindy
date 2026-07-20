@@ -32,6 +32,47 @@ export interface MigrationHistoryWriteFailure {
   error: unknown;
 }
 
+export interface MigrationRuntimeIdentity {
+  seq: number;
+  fileName: string;
+  sqlHash: string;
+  scriptHash: string | null;
+}
+
+export interface MigrationRuntimeManifest {
+  version: 1;
+  /** 首次引入 sidecar 时由当前 primary 明确认领的 legacy schema 上界。 */
+  legacyBaselineVersion: number;
+  migrations: MigrationRuntimeIdentity[];
+}
+
+export type MigrationCompatibilityIssue =
+  | {
+      kind: 'schema-version-behind' | 'schema-version-ahead';
+      databaseVersion: number;
+      checkoutVersion: number;
+    }
+  | { kind: 'history-unavailable'; error: string }
+  | { kind: 'manifest-unavailable'; error: string }
+  | { kind: 'runtime-manifest-unavailable'; error: string }
+  | { kind: 'runtime-manifest-mismatch' }
+  | { kind: 'history-entry-missing'; seq: number; fileName: string }
+  | { kind: 'history-entry-unexpected'; seq: number; fileName: string }
+  | {
+      kind: 'history-entry-mismatch';
+      seq: number;
+      expectedFileName: string;
+      actualFileName: string;
+      hashMatches: boolean;
+    };
+
+export interface MigrationCompatibilityReport {
+  compatible: boolean;
+  databaseVersion: number;
+  checkoutVersion: number;
+  issues: MigrationCompatibilityIssue[];
+}
+
 export interface RunMigrationReplayOptions {
   drizzleDir: string;
   currentVersion?: number;
@@ -48,6 +89,132 @@ export function hashMigrationFile(filePath: string): string {
   const raw = fs.readFileSync(filePath, 'utf-8');
   const normalized = raw.replace(/\r\n/g, '\n');
   return crypto.createHash('sha256').update(normalized).digest('hex');
+}
+
+/**
+ * 生成 migration 实际执行面的完整指纹：SQL 与可选 companion TS 缺一不可。
+ *
+ * `migration_history` 是既有数据库契约，只记录 SQL hash；runtime manifest 作为
+ * userData 内的并行启动旁路元数据补齐 TS 身份，无需篡改历史 migration 或 schema。
+ */
+export function createMigrationRuntimeManifest(drizzleDir: string): MigrationRuntimeManifest {
+  return {
+    version: 1,
+    legacyBaselineVersion: -1,
+    migrations: listMigrations(drizzleDir).map((migration) => ({
+      seq: migration.seq,
+      fileName: migration.fileName,
+      sqlHash: hashMigrationFile(migration.sqlPath),
+      scriptHash: migration.tsScriptPath ? hashMigrationFile(migration.tsScriptPath) : null,
+    })),
+  };
+}
+
+export function migrationRuntimeManifestPath(dbFilePath: string): string {
+  return `${dbFilePath}.migration-runtime.json`;
+}
+
+function writeMigrationRuntimeManifestFile(
+  dbFilePath: string,
+  manifest: MigrationRuntimeManifest,
+): void {
+  const targetPath = migrationRuntimeManifestPath(dbFilePath);
+  const tempPath = `${targetPath}.${process.pid}.${crypto.randomUUID()}.tmp`;
+  fs.writeFileSync(tempPath, `${JSON.stringify(manifest)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  });
+  try {
+    fs.renameSync(tempPath, targetPath);
+  } finally {
+    try {
+      fs.unlinkSync(tempPath);
+    } catch {
+      /* rename 成功或清理失败都不影响目标文件。 */
+    }
+  }
+}
+
+function sameRuntimeIdentity(
+  left: MigrationRuntimeIdentity,
+  right: MigrationRuntimeIdentity,
+): boolean {
+  return (
+    left.seq === right.seq &&
+    left.fileName === right.fileName &&
+    left.sqlHash === right.sqlHash &&
+    left.scriptHash === right.scriptHash
+  );
+}
+
+function readMigrationRuntimeManifest(dbFilePath: string): MigrationRuntimeManifest | null {
+  try {
+    const parsed = JSON.parse(
+      fs.readFileSync(migrationRuntimeManifestPath(dbFilePath), 'utf8'),
+    ) as MigrationRuntimeManifest;
+    if (
+      parsed.version !== 1 ||
+      !Number.isSafeInteger(parsed.legacyBaselineVersion) ||
+      !Array.isArray(parsed.migrations)
+    ) {
+      throw new Error('invalid migration runtime manifest');
+    }
+    return parsed;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+/**
+ * primary 在执行 migration 前准备 runtime identity intent。
+ *
+ * 已经落入 `schema_version` 的 identity 永远不可被另一 checkout 覆盖；只有尚未执行的
+ * pending 部分可以随当前 checkout 重写。sidecar 首次出现时，无法追溯旧版本 companion
+ * TS 的历史 hash，因此由持有 writer lease 的 primary 一次性认领 legacy baseline，之后
+ * 同一 seq 的身份永久冻结。intent 先于 DB 事务写入；若进程中途退出，下一次启动依据
+ * 实际 schema_version 只冻结已提交部分，未执行部分仍可安全替换。
+ */
+export function prepareMigrationRuntimeManifest(
+  dbFilePath: string,
+  drizzleDir: string,
+  databaseVersion: number,
+): { bootstrappedLegacyBaseline: boolean } {
+  if (!Number.isSafeInteger(databaseVersion) || databaseVersion < -1) {
+    throw new Error(`invalid database schema_version for runtime manifest: ${databaseVersion}`);
+  }
+  const expected = createMigrationRuntimeManifest(drizzleDir);
+  const existing = readMigrationRuntimeManifest(dbFilePath);
+  if (existing) {
+    const expectedBySeq = new Map(expected.migrations.map((identity) => [identity.seq, identity]));
+    const existingBySeq = new Map(existing.migrations.map((identity) => [identity.seq, identity]));
+    for (const identity of existing.migrations) {
+      if (identity.seq > databaseVersion) continue;
+      const current = expectedBySeq.get(identity.seq);
+      if (!current || !sameRuntimeIdentity(identity, current)) {
+        throw new Error(
+          `applied migration runtime identity changed at seq ${identity.seq} (${identity.fileName})`,
+        );
+      }
+    }
+    for (const identity of expected.migrations) {
+      if (identity.seq > databaseVersion) continue;
+      const applied = existingBySeq.get(identity.seq);
+      if (!applied || !sameRuntimeIdentity(identity, applied)) {
+        throw new Error(`applied migration runtime identity missing at seq ${identity.seq}`);
+      }
+    }
+  }
+
+  const next: MigrationRuntimeManifest = {
+    version: 1,
+    legacyBaselineVersion: existing?.legacyBaselineVersion ?? databaseVersion,
+    migrations: expected.migrations,
+  };
+  if (!existing || JSON.stringify(existing) !== JSON.stringify(next)) {
+    writeMigrationRuntimeManifestFile(dbFilePath, next);
+  }
+  return { bootstrappedLegacyBaseline: existing === null };
 }
 
 export function listMigrations(drizzleDir: string): MigrationFile[] {
@@ -73,16 +240,153 @@ export function listMigrations(drizzleDir: string): MigrationFile[] {
 export function readSchemaVersion(db: Database.Database): number {
   try {
     const row = db.prepare(`SELECT value FROM migration_meta WHERE key='schema_version'`).get() as
-      | { value: string }
-      | undefined;
+      { value: string } | undefined;
     return row ? parseInt(row.value, 10) : -1;
   } catch {
     return -1;
   }
 }
 
+function readSchemaVersionStrict(db: Database.Database): number | null {
+  try {
+    const row = db.prepare(`SELECT value FROM migration_meta WHERE key='schema_version'`).get() as
+      { value: unknown } | undefined;
+    if (!row || typeof row.value !== 'string' || !/^(?:0|[1-9]\d*)$/.test(row.value)) {
+      return null;
+    }
+    const version = Number(row.value);
+    return Number.isSafeInteger(version) ? version : null;
+  } catch {
+    return null;
+  }
+}
+
 export function listPendingMigrations(drizzleDir: string, currentVersion: number): MigrationFile[] {
   return listMigrations(drizzleDir).filter((migration) => migration.seq > currentVersion);
+}
+
+/**
+ * 只读核对数据库 migration 状态是否与当前 checkout 完全一致。
+ *
+ * 该检查专门守住共享 userData 的 passive dev：它既不能把旧 primary 正在使用的库
+ * 升级，也不能用旧代码打开已被新 checkout 升级过的库。除 schema_version 必须相等
+ * 外，migration_history 的 seq / 文件名 / 内容 hash 也必须逐条完全匹配；任何不可读
+ * 状态都 fail closed。函数不写数据库，调用方可在通过后直接跳过 migration。
+ */
+export function checkMigrationCompatibility(
+  db: Database.Database,
+  drizzleDir: string,
+  dbFilePath?: string,
+): MigrationCompatibilityReport {
+  const strictDatabaseVersion = readSchemaVersionStrict(db);
+  const databaseVersion = strictDatabaseVersion ?? -1;
+  let migrations: MigrationFile[];
+  let expectedHashes: Map<number, string>;
+  try {
+    migrations = listMigrations(drizzleDir);
+    expectedHashes = new Map(
+      migrations.map((migration) => [migration.seq, hashMigrationFile(migration.sqlPath)]),
+    );
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    return {
+      compatible: false,
+      databaseVersion,
+      checkoutVersion: -1,
+      issues: [{ kind: 'manifest-unavailable', error }],
+    };
+  }
+
+  const checkoutVersion = migrations.at(-1)?.seq ?? -1;
+  const issues: MigrationCompatibilityIssue[] = [];
+  if (strictDatabaseVersion === null) {
+    issues.push({
+      kind: 'history-unavailable',
+      error: 'migration_meta.schema_version is missing or invalid',
+    });
+  }
+  if (databaseVersion < checkoutVersion) {
+    issues.push({ kind: 'schema-version-behind', databaseVersion, checkoutVersion });
+  } else if (databaseVersion > checkoutVersion) {
+    issues.push({ kind: 'schema-version-ahead', databaseVersion, checkoutVersion });
+  }
+
+  let historyRows: Array<{ seq: number; file_name: string; content_hash: string }>;
+  try {
+    historyRows = db
+      .prepare(
+        `SELECT seq, file_name, content_hash
+         FROM migration_history
+         ORDER BY seq`,
+      )
+      .all() as Array<{ seq: number; file_name: string; content_hash: string }>;
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    issues.push({ kind: 'history-unavailable', error });
+    return { compatible: false, databaseVersion, checkoutVersion, issues };
+  }
+
+  const expectedBySeq = new Map(migrations.map((migration) => [migration.seq, migration]));
+  const actualBySeq = new Map(historyRows.map((row) => [Number(row.seq), row]));
+  for (const migration of migrations) {
+    const actual = actualBySeq.get(migration.seq);
+    if (!actual) {
+      issues.push({
+        kind: 'history-entry-missing',
+        seq: migration.seq,
+        fileName: migration.fileName,
+      });
+      continue;
+    }
+    const expectedHash = expectedHashes.get(migration.seq);
+    const hashMatches = expectedHash !== undefined && actual.content_hash === expectedHash;
+    if (actual.file_name !== migration.fileName || !hashMatches) {
+      issues.push({
+        kind: 'history-entry-mismatch',
+        seq: migration.seq,
+        expectedFileName: migration.fileName,
+        actualFileName: actual.file_name,
+        hashMatches,
+      });
+    }
+  }
+  for (const row of historyRows) {
+    const seq = Number(row.seq);
+    if (!expectedBySeq.has(seq)) {
+      issues.push({
+        kind: 'history-entry-unexpected',
+        seq,
+        fileName: row.file_name,
+      });
+    }
+  }
+
+  if (dbFilePath) {
+    try {
+      const raw = fs.readFileSync(migrationRuntimeManifestPath(dbFilePath), 'utf8');
+      const actual = JSON.parse(raw) as MigrationRuntimeManifest;
+      const expected = createMigrationRuntimeManifest(drizzleDir);
+      if (
+        actual.version !== 1 ||
+        !Array.isArray(actual.migrations) ||
+        JSON.stringify(actual.migrations) !== JSON.stringify(expected.migrations)
+      ) {
+        issues.push({ kind: 'runtime-manifest-mismatch' });
+      }
+    } catch (err) {
+      issues.push({
+        kind: 'runtime-manifest-unavailable',
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  return {
+    compatible: issues.length === 0,
+    databaseVersion,
+    checkoutVersion,
+    issues,
+  };
 }
 
 export function runMigrationReplay(

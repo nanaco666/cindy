@@ -4,7 +4,7 @@
  * 回归 state/providerModelMemory.ts 的核心约定:
  *   1. 默认无记录 → getProviderModelChoice 返回 undefined
  *   2. set/get 往返 + localStorage 持久化(模拟 app 重启后恢复)
- *   3. 按 (agent, providerId) 分槽:同一来源 'xd' 在 cc / codex 下互不覆盖
+ *   3. 同一 agent/model 跨来源共享,不同 agent 仍隔离
  *   4. 同值写入短路(不抛,值保持)
  *   5. 空 providerId / model / effort 入参被静默忽略
  *   6. schema 损坏的 localStorage → 静默回退空表,不抛
@@ -115,7 +115,7 @@ describe('providerModelMemory store', () => {
   });
 });
 
-describe('providerModelMemory v2 —— (agent, provider, model) 多槽 effort', () => {
+describe('providerModelMemory v2 —— (agent, model) 全局 effort + provider lastModel', () => {
   it('同一来源不同模型各记各的 effort,lastModel 切换不覆盖旧模型 effort', async () => {
     const m = await loadModule();
     m.setProviderModelChoice('claude-code', 'anthropic', 'claude-opus-4-8', 'high');
@@ -130,22 +130,44 @@ describe('providerModelMemory v2 —— (agent, provider, model) 多槽 effort',
     });
   });
 
-  it('同一 model id 跨来源各记各的 effort(opus 在 anthropic=high / xd=medium)', async () => {
+  it('首页在一个来源调整模型后,其它来源 / 对话读取同一份最新 effort', async () => {
     const m = await loadModule();
     m.setProviderModelChoice('claude-code', 'anthropic', 'claude-opus-4-8', 'high');
+    expect(m.getProviderModelEffort('claude-code', 'xd', 'claude-opus-4-8')).toBe('high');
     m.setProviderModelChoice('claude-code', 'xd', 'claude-opus-4-8', 'medium');
-    expect(m.getProviderModelEffort('claude-code', 'anthropic', 'claude-opus-4-8')).toBe('high');
+    expect(m.getProviderModelEffort('claude-code', 'anthropic', 'claude-opus-4-8')).toBe('medium');
     expect(m.getProviderModelEffort('claude-code', 'xd', 'claude-opus-4-8')).toBe('medium');
   });
 
-  it('getProviderModelEffort:未记录模型 / 未记录来源 / 空参 → undefined', async () => {
+  it('只编辑非选中模型的 effort 不会篡改该来源 lastModel', async () => {
+    const m = await loadModule();
+    m.setProviderModelChoice('claude-code', 'anthropic', 'claude-sonnet-4-6', 'medium');
+    m.setProviderModelEffort('claude-code', 'anthropic', 'claude-opus-4-8', 'high');
+    expect(m.getProviderModelChoice('claude-code', 'anthropic')).toEqual({
+      model: 'claude-sonnet-4-6',
+      effort: 'medium',
+    });
+    expect(m.getProviderModelEffort('claude-code', 'xd', 'claude-opus-4-8')).toBe('high');
+  });
+
+  it('getProviderModelEffort:未记录模型 / 空参 → undefined,来源不再隔离同模型', async () => {
     const m = await loadModule();
     m.setProviderModelChoice('codex', 'openai', 'gpt-5.5', 'high');
     expect(m.getProviderModelEffort('codex', 'openai', 'gpt-5.5')).toBe('high');
     expect(m.getProviderModelEffort('codex', 'openai', 'unknown-model')).toBeUndefined();
-    expect(m.getProviderModelEffort('codex', 'xd', 'gpt-5.5')).toBeUndefined();
+    expect(m.getProviderModelEffort('codex', 'xd', 'gpt-5.5')).toBe('high');
     expect(m.getProviderModelEffort('codex', '', 'gpt-5.5')).toBeUndefined();
     expect(m.getProviderModelEffort('codex', 'openai', '')).toBeUndefined();
+  });
+
+  it('snapshot 带 `${agent}:*` 权威槽,供 device-link 跨来源镜像', async () => {
+    const m = await loadModule();
+    m.setProviderModelEffort('claude-code', 'anthropic', 'claude-opus-4-8', 'xhigh');
+    m.setProviderModelFast('claude-code', 'xd', 'claude-opus-4-8', true);
+    expect(m.snapshotForSeed()['claude-code:*']).toEqual({
+      effortByModel: { 'claude-opus-4-8': 'xhigh' },
+      fastByModel: { 'claude-opus-4-8': true },
+    });
   });
 
   it('多模型 effort 跨重启持久化(v2)', async () => {
@@ -221,16 +243,15 @@ describe('providerModelMemory v2 —— (agent, provider, model) 多槽 effort',
 });
 
 // ---------------------------------------------------------------------------
-// fast 与 effort 同维度:per-(agent, provider, model)。回归本次 bug —— 「选中后 Fast ⚡ 掉档」
-// 的根因是消费侧读了 provider-agnostic 的旧库;存储侧本就严格按 (agent, provider, model) 记 fast,
-// 这里固化该不变量,确保多供应商同名模型(Anthropic 与 XD 网关都有 Opus)的 fast 互不串。
+// fast 与 effort 同维度:per-(agent, model) 全局共享。providerId 只保留 capability / 旧 v2 回退用途。
 // ---------------------------------------------------------------------------
-describe('providerModelMemory —— (agent, provider, model) fast 隔离', () => {
-  it('同一 model id 跨来源各记各的 fast(opus 在 anthropic=on / xd=off)', async () => {
+describe('providerModelMemory —— (agent, model) fast 全局预设', () => {
+  it('同一 model id 跨来源读取最后一次 fast 设置', async () => {
     const m = await loadModule();
     m.setProviderModelFast('claude-code', 'anthropic', 'claude-opus-4-8', true);
+    expect(m.getProviderModelFast('claude-code', 'xd', 'claude-opus-4-8')).toBe(true);
     m.setProviderModelFast('claude-code', 'xd', 'claude-opus-4-8', false);
-    expect(m.getProviderModelFast('claude-code', 'anthropic', 'claude-opus-4-8')).toBe(true);
+    expect(m.getProviderModelFast('claude-code', 'anthropic', 'claude-opus-4-8')).toBe(false);
     expect(m.getProviderModelFast('claude-code', 'xd', 'claude-opus-4-8')).toBe(false);
   });
 
@@ -246,12 +267,12 @@ describe('providerModelMemory —— (agent, provider, model) fast 隔离', () =
     expect(m.getProviderModelFast('claude-code', 'anthropic', 'claude-opus-4-8')).toBe(true);
   });
 
-  it('getProviderModelFast:未记录模型 / 未记录来源 / 空参 → undefined(可与 false 区分,供 ?? 兜底)', async () => {
+  it('getProviderModelFast:未记录模型 / 空参 → undefined,显式 false 跨来源保留', async () => {
     const m = await loadModule();
     m.setProviderModelFast('claude-code', 'anthropic', 'claude-opus-4-8', false);
     expect(m.getProviderModelFast('claude-code', 'anthropic', 'claude-opus-4-8')).toBe(false);
     expect(m.getProviderModelFast('claude-code', 'anthropic', 'unknown-model')).toBeUndefined();
-    expect(m.getProviderModelFast('claude-code', 'xd', 'claude-opus-4-8')).toBeUndefined();
+    expect(m.getProviderModelFast('claude-code', 'xd', 'claude-opus-4-8')).toBe(false);
     expect(m.getProviderModelFast('claude-code', '', 'claude-opus-4-8')).toBeUndefined();
     expect(m.getProviderModelFast('claude-code', 'anthropic', '')).toBeUndefined();
   });

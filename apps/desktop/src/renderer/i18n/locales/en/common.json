@@ -1696,6 +1696,7 @@
           "disabled": "Disabled",
           "connecting": "Connecting…",
           "connected": "Connected",
+          "standby": "Connected by another instance",
           "error": "Connection failed"
         },
         "form": {
@@ -1724,6 +1725,7 @@
           "actionFailed": "Operation failed"
         },
         "loginRequired": "Sign in to your {{appName}} account first; the connection resumes automatically after login.",
+        "standbyHint": "Another Cindy instance on this computer is using the Slack connection. Close it, then turn this switch back on to take over.",
         "authorizing": "Authorizing…",
         "statusBound": "Linked as @{{name}}",
         "statusBoundTeam": "Linked to {{team}} as @{{name}}",

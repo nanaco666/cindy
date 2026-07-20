@@ -45,10 +45,10 @@ import {
 import {
   snapshotForSeed,
   setProviderModelChoice,
+  setProviderModelEffort,
   setProviderModelFast,
   subscribeProviderModelMemory,
 } from '@/state/providerModelMemory';
-import { setSessionModelEffort, setSessionModelFast } from '@/state/sessionModelMemory';
 import type { Effort } from '@/lib/userPreferences.types';
 
 import { router } from './router';
@@ -135,8 +135,8 @@ export function App() {
   }, []);
 
   // device-link 被控端单一真相:把 providerModelMemory(草稿模型列表行的真实读源)全量镜像给 main,
-  // 让控制端经 maker:get-new-maker-defaults / NEW_MAKER_DRAFT_CHANGED 完整看到被控端草稿每个供应商
-  // 每个模型的 effort/fast(旧 newMakerDraft.effortByModel 已不再写非选中行,故必须单独镜像这一层)。
+  // 让控制端经 maker:get-new-maker-defaults / NEW_MAKER_DRAFT_CHANGED 完整看到被控端每个模型的
+  // 全局 effort/fast 预设(旧 newMakerDraft.effortByModel 已不再写非选中行,故必须单独镜像这一层)。
   // 启动推一次 + 变化增量推,fire-and-forget;无控制者订阅时 main 端转发近似 no-op。
   useEffect(() => {
     const sync = () => window.electronAPI.syncProviderModelMemory(snapshotForSeed());
@@ -144,10 +144,9 @@ export function App() {
     return subscribeProviderModelMemory(sync);
   }, []);
 
-  // device-link 被控端:接收控制端写穿的「模型 effort/fast」pref,调**被控端原来的本地 setter**
-  // 写真实草稿 / 会话记忆(控制端是纯显示,改动经隧道发来这里执行)。收到通知只写本地、不回通知 →
-  // 单跳无环;写入触发既有 store emit + 上面的镜像 effect → 自动经 NEW_MAKER_DRAFT_CHANGED /
-  // SYNC_SESSION_MODEL_PREF 回流控制端显示。控制端进程从不收到这两个 channel(只本地窗口),监听不误触发。
+  // device-link 被控端:接收控制端写穿的「模型 effort/fast」pref,写被控端自己的全局模型预设。
+  // 当前正在使用该模型的会话仍由各自 live DB/runtime 值保护;其它对话的非选中行和之后的切换
+  // 通过 providerModelMemory 同步。写入触发上面的镜像 effect → NEW_MAKER_DRAFT_CHANGED 回流控制端。
   useEffect(() => {
     const offDraft = window.electronAPI.onMakerDraftPrefApply(
       ({ agent, providerId, modelId, active, effort, fast, markModelChoice }) => {
@@ -164,7 +163,11 @@ export function App() {
           }
         }
         if (effort !== undefined) {
-          setProviderModelChoice(agent, providerId, modelId, effort as Effort);
+          if (markModelChoice === true || (active && markModelChoice !== false)) {
+            setProviderModelChoice(agent, providerId, modelId, effort as Effort);
+          } else {
+            setProviderModelEffort(agent, providerId, modelId, effort as Effort);
+          }
           if (active) setEffortForModel(modelId, effort as Effort); // 旧层兜底保持一致
         }
         if (fast !== undefined) {
@@ -176,12 +179,11 @@ export function App() {
     const offSession = window.electronAPI.onMakerSessionPrefApply(
       ({ sessionId, agent, providerId, model, effort, fast }) => {
         if (effort !== undefined) {
-          setSessionModelEffort(sessionId, agent, providerId, model, effort as Effort);
+          setProviderModelEffort(agent, providerId, model, effort as Effort);
         }
-        if (fast !== undefined) setSessionModelFast(sessionId, agent, providerId, model, fast);
-        // 被控端是 session pref 的唯一广播 hub:应用控制端写穿后**再回流一次**,使**其它**控制端
-        // (多控制端同看一会话)也收敛(对齐草稿侧 providerModelMemory 的全局回流)。回到发起方控制端
-        // 是同值幂等(其 mirror 同值短路、不重渲染、不回 invoke),不成环;被控端不收自己的 tap 转发。
+        if (fast !== undefined) setProviderModelFast(agent, providerId, model, fast);
+        // 兼容旧控制端仍按 session scope 监听的回流;新控制端同时会从 providerModelMemory 的
+        // NEW_MAKER_DRAFT_CHANGED 全量镜像收敛。两条都是同值幂等,不会反向 invoke。
         window.electronAPI.syncSessionModelPref({
           sessionId,
           agent,

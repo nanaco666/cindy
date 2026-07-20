@@ -29,8 +29,8 @@ vi.mock('@/components/ui/popover', () => ({
 }));
 
 vi.mock('@/components/new-chat/ModelSelector', () => ({
-  ModelSelectorContent: ({ tooltipContentClassName }: { tooltipContentClassName?: string }) => (
-    <div data-testid="model-selector-content" data-tooltip-class={tooltipContentClassName} />
+  ModelSelectorContent: ({ overlayContentClassName }: { overlayContentClassName?: string }) => (
+    <div data-testid="model-selector-content" data-overlay-class={overlayContentClassName} />
   ),
   ModelIconMark: () => null,
 }));
@@ -58,7 +58,7 @@ vi.mock('@/hooks/useProviders', () => ({
 import { ModelEffortChip } from '@/features/scheduler/components/ScheduleChips';
 
 describe('scheduler model popover overlay behavior', () => {
-  it('keeps wheel events inside the model popover and raises model tooltips above it', () => {
+  it('keeps wheel events inside the model popover and raises nested model options above it', () => {
     const onOuterWheel = vi.fn();
 
     render(
@@ -78,7 +78,7 @@ describe('scheduler model popover overlay behavior', () => {
     fireEvent.wheel(screen.getByTestId('model-selector-content'), { deltaY: 120 });
 
     expect(onOuterWheel).not.toHaveBeenCalled();
-    expect(screen.getByTestId('model-selector-content').getAttribute('data-tooltip-class')).toBe(
+    expect(screen.getByTestId('model-selector-content').getAttribute('data-overlay-class')).toBe(
       'z-[10020]',
     );
   });

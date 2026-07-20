@@ -139,8 +139,14 @@ function inferMode(commands) {
   return 'unknown';
 }
 
+function inferPassive(commands) {
+  return commands.some((command) =>
+    /XDT_SCHEDULER_PASSIVE=['"]?1(?:['"]|\b)/.test(command) ||
+    /(?:^|\s)--passive(?:\s|$)/.test(command));
+}
+
 /** Identify Electron main processes and renderer readiness without trusting stale marker files. */
-export function identifyDesktopProcesses(processes, worktrees, passiveOwners = new Map()) {
+export function identifyDesktopProcesses(processes, worktrees) {
   const byPid = new Map(processes.map((item) => [item.pid, item]));
   const result = [];
   for (const worktree of worktrees) {
@@ -168,7 +174,7 @@ export function identifyDesktopProcesses(processes, worktrees, passiveOwners = n
         state: renderer ? 'ready' : 'starting',
         ready: Boolean(renderer),
         mode: inferMode(commands),
-        passive: userDataDir ? passiveOwners.get(path.resolve(userDataDir)) === proc.pid : false,
+        passive: inferPassive(commands),
         isolated: null,
         userDataDir,
         commit: null,
@@ -236,17 +242,6 @@ function readInstanceRecords(userDataDirs, worktrees) {
     }
   }
   return records;
-}
-
-function passiveOwners(userDataDirs) {
-  const owners = new Map();
-  for (const userDataDir of userDataDirs) {
-    const record = readJson(path.join(userDataDir, '.passive-dev.lock'));
-    if (Number.isInteger(record?.pid) && record.pid > 0) {
-      owners.set(path.resolve(userDataDir), record.pid);
-    }
-  }
-  return owners;
 }
 
 function gitHead(root) {
@@ -322,8 +317,7 @@ function main() {
     path.resolve(options.userDataDir ?? process.env.XDT_USER_DATA_DIR ?? defaultUserDataDir()),
     ...preliminary.map((item) => item.userDataDir).filter(Boolean).map((item) => path.resolve(item)),
   ]);
-  const owners = passiveOwners(userDataDirs);
-  const scanned = identifyDesktopProcesses(processes, worktrees, owners);
+  const scanned = preliminary;
   const records = readInstanceRecords(userDataDirs, worktrees);
   const allInstances = mergeDesktopInstanceRecords(scanned, records, worktrees);
   const expectedCommit = gitHead(rootDir);
