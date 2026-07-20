@@ -236,6 +236,52 @@ describe('Claude Code translator is_error result guard', () => {
     expect(events.some((e) => e.type === 'done'), 'done tail preserved for envelope-closed turns').toBe(true);
   });
 
+  it('keeps api_retry details when the final failure has no assistant error envelope', async () => {
+    const tracker = new UsageTracker();
+    const queue = createAsyncQueue<AgentEvent>();
+    const ctx = createCtx(tracker);
+
+    translateSdkMessage(
+      {
+        type: 'system',
+        subtype: 'api_retry',
+        attempt: 3,
+        max_retries: 3,
+        retry_delay_ms: 4_000,
+        error_status: null,
+        error: 'unknown',
+      },
+      queue,
+      ctx,
+    );
+    translateSdkMessage(
+      {
+        type: 'result',
+        is_error: true,
+        stop_reason: 'end_turn',
+        total_cost_usd: 0,
+        usage: { input_tokens: 100, output_tokens: 0 },
+        modelUsage: { 'codex/gpt-5.5': { inputTokens: 100, outputTokens: 0, costUSD: 0, contextWindow: 272_000 } },
+      },
+      queue,
+      ctx,
+    );
+
+    const events = await drain(queue);
+    const errors = events.filter((e) => e.type === 'error');
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.data).toMatchObject({
+      message: 'SDK API request failed: unknown (connection error, retry 3/3)',
+      sdkError: 'unknown',
+      errorStatus: null,
+      retryAttempt: 3,
+      maxRetries: 3,
+      isTerminal: true,
+    });
+    expect(errors[0]?.agentMeta, 'api_retry has no assistant transcript anchor').toBeUndefined();
+    expect(events.some((e) => e.type === 'done'), 'done tail remains available for usage accounting').toBe(true);
+  });
+
   it('does NOT emit a fallback error for an interrupted turn (user stop / watchdog)', async () => {
     // 用户点停止(handle.abort)与 watchdog 都走 q.interrupt(), SDK 随后 drain 出
     // error_during_execution 的 is_error result——这不是上游失败, 不能补 terminal

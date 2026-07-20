@@ -47,14 +47,18 @@ export interface TurnState {
    */
   uiEmittedText: string;
   /**
-   * SDK assistant API-error envelope 的暂存详情。envelope 不是可靠的 turn 终态:
-   * Claude Code 可能随后自动重试并返回成功 result。只有最终 result.is_error 才
-   * 把它推成 terminal error；成功 result 直接丢弃，避免下游提前收口重试中的 turn。
+   * SDK API retry / assistant error envelope 的暂存详情。两者都不是可靠的 turn
+   * 终态: Claude Code 可能随后自动重试并返回成功 result。只有最终
+   * result.is_error 才把它推成 terminal error；成功 result 直接丢弃，避免下游
+   * 提前收口重试中的 turn。
    */
   pendingApiError: {
     message: string;
     sdkError: string;
-    agentMeta: Record<string, unknown>;
+    agentMeta?: Record<string, unknown>;
+    errorStatus?: number | null;
+    retryAttempt?: number;
+    maxRetries?: number;
   } | null;
   /**
    * 本 turn 是否由 maker 侧主动 interrupt(用户点停止 handle.abort() / upstream
@@ -718,8 +722,26 @@ function handleSystem(
   }
   if (msg.subtype === 'api_retry') {
     // SDKAPIRetryMessage 明确表示本次 API 失败仍在自动重试，不是 turn 终态。
-    // 仅记录诊断信息；若同时收到 assistant.error envelope，其详情由
-    // pendingApiError 暂存，等最终 ResultMessage 决定是否向上层报错。
+    // 除日志外也暂存最后一次 retry 的错误详情，覆盖 SDK 没有额外发送
+    // assistant.error envelope、最终 ResultMessage 又没有 result 文本的路径。
+    // 已有 envelope 时保留其中的人话文案与 transcript metadata，只补 retry 元数据。
+    const previous = ctx.turn.pendingApiError;
+    const hasAssistantEnvelope = previous?.agentMeta !== undefined;
+    const sdkError = hasAssistantEnvelope ? previous.sdkError : (msg.error || 'unknown');
+    const statusLabel = msg.error_status == null ? 'connection error' : `HTTP ${msg.error_status}`;
+    const retryLabel = typeof msg.attempt === 'number' && typeof msg.max_retries === 'number'
+      ? `, retry ${msg.attempt}/${msg.max_retries}`
+      : '';
+    ctx.turn.pendingApiError = {
+      message: hasAssistantEnvelope
+        ? previous.message
+        : `SDK API request failed: ${sdkError} (${statusLabel}${retryLabel})`,
+      sdkError,
+      ...(hasAssistantEnvelope ? { agentMeta: previous.agentMeta } : {}),
+      errorStatus: msg.error_status,
+      retryAttempt: msg.attempt,
+      maxRetries: msg.max_retries,
+    };
     ctx.log.info('SDK API request retrying', {
       attempt: msg.attempt,
       maxRetries: msg.max_retries,
@@ -930,6 +952,7 @@ function handleAssistant(
       .join('\n')
       .trim();
     ctx.turn.pendingApiError = {
+      ...ctx.turn.pendingApiError,
       message: errorText || `SDK error: ${msg.error}`,
       sdkError: msg.error,
       agentMeta: assistantMeta,
@@ -1575,13 +1598,25 @@ function handleResult(
   if (msg.is_error && !ctx.turn.interruptRequested) {
     const pendingApiError = ctx.turn.pendingApiError;
     const errDetail = typeof msg.result === 'string' ? msg.result.trim() : '';
+    const errorMessage = pendingApiError?.agentMeta
+      ? pendingApiError.message
+      : errDetail || pendingApiError?.message;
     queue.push({
       type: 'error',
       data: pendingApiError
         ? {
-            message: pendingApiError.message,
+            message: errorMessage,
             sdkError: pendingApiError.sdkError,
             isTerminal: true,
+            ...(pendingApiError.errorStatus !== undefined
+              ? { errorStatus: pendingApiError.errorStatus }
+              : {}),
+            ...(pendingApiError.retryAttempt !== undefined
+              ? { retryAttempt: pendingApiError.retryAttempt }
+              : {}),
+            ...(pendingApiError.maxRetries !== undefined
+              ? { maxRetries: pendingApiError.maxRetries }
+              : {}),
           }
         : errDetail
         ? { message: errDetail, isTerminal: true }
@@ -1589,7 +1624,7 @@ function handleResult(
         // renderer 消费方(IM/orca)的兜底文案。
         : { message: '任务执行失败（模型未返回错误详情）。', isTerminal: true, reason: 'turn-failed' },
       source: 'claude-code',
-      ...(pendingApiError ? { agentMeta: pendingApiError.agentMeta } : {}),
+      ...(pendingApiError?.agentMeta ? { agentMeta: pendingApiError.agentMeta } : {}),
     });
   }
   // turn end status: isRunning=false + status='Done'; 数值全部走 endSnapshot
