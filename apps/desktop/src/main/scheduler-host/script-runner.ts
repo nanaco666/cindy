@@ -15,9 +15,8 @@ import type {
 } from '@lizi/maker-scheduler';
 
 import { sessions } from '../localDb/schema';
-import { executePreRunHook } from './pre-run-hook';
+import { buildSkipResultText, executePreRunHook } from './pre-run-hook';
 import { capAppend, killProcessTree } from './proc-util';
-import { buildSkipResultText } from './skip-trace';
 import type { SchedulerDrizzleDb } from './storage';
 
 const PROTOCOL = 'xdt-maker-script/1';

@@ -67,8 +67,7 @@ import {
 import { resolveWorkingDir } from './workdir-resolver';
 import type { SchedulerDrizzleDb } from './storage';
 import { backfillSessionMeta } from './runners/_shared';
-import { executePreRunHook } from './pre-run-hook';
-import { buildSkipResultText } from './skip-trace';
+import { buildSkipResultText, executePreRunHook } from './pre-run-hook';
 import { defaultModelFor } from './model-defaults';
 
 const ALLOWED_EFFORT = new Set<string>([

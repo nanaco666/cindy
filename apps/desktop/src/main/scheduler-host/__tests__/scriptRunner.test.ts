@@ -12,15 +12,13 @@ vi.mock('node:child_process', () => ({
 
 vi.mock('../pre-run-hook', () => ({
   executePreRunHook: executePreRunHookMock,
+  buildSkipResultText: (hook: { exitCode?: number | null }) => `exit ${hook.exitCode ?? '?'}`,
 }));
 
 vi.mock('../../localDb/schema', () => ({
   sessions: { id: 'id' },
 }));
 
-vi.mock('../skip-trace', () => ({
-  buildSkipResultText: (hook: { exitCode?: number | null }) => `exit ${hook.exitCode ?? '?'}`,
-}));
 
 // killProcessTree 的 OS 级树杀机制(taskkill 重试/进程组信号/后代兜底)由
 // proc-util.test.ts / procUtilRetry.test.ts 单独覆盖;这里只关心 script-runner
