@@ -21,6 +21,7 @@ import {
   installHookScript,
   parseGeneratedScriptPath,
   resolveHookScriptPath,
+  stabilizeHookCommand,
 } from '../hook-script-generator';
 
 const fakeMaker = {} as Maker;
@@ -88,6 +89,31 @@ describe('hookScriptSlug / parseGeneratedScriptPath / buildHookCommand', () => {
     expect(buildHookCommand(spaced, wd)).toBe(`node ${shellQuote('my scripts/check.mjs')}`);
   });
 
+  it('stabilizeHookCommand 把支持的相对脚本命令固化为绝对路径', () => {
+    const wd = path.join(tmpdir(), 'hook-stable');
+    const script = path.join(wd, 'scripts', 'schedule-checks', 'check.mjs');
+    expect(
+      stabilizeHookCommand('node scripts/schedule-checks/check.mjs', wd, (p) => p === script),
+    ).toBe(`node ${shellQuote(script)}`);
+  });
+
+  it('stabilizeHookCommand 在文件不存在或缺少原 cwd 时明确报错', () => {
+    expect(() => stabilizeHookCommand('node scripts/check.mjs', undefined)).toThrow(
+      /original working directory/,
+    );
+    expect(() => stabilizeHookCommand('node scripts/check.mjs', tmpdir(), () => false)).toThrow(
+      /not found/,
+    );
+  });
+
+  it('stabilizeHookCommand 保留任意 cwd 命令与绝对脚本命令', () => {
+    const absolute = path.join(tmpdir(), 'check.mjs');
+    expect(stabilizeHookCommand('pnpm check', tmpdir())).toBe('pnpm check');
+    expect(stabilizeHookCommand(`node ${shellQuote(absolute)}`, tmpdir())).toBe(
+      `node ${shellQuote(absolute)}`,
+    );
+  });
+
   it('resolveHookScriptPath:复用修改流路径;新建避让同名文件', () => {
     const taken = new Set([path.join('/fb', 'check.mjs')]);
     const reuse = resolveHookScriptPath({
@@ -143,7 +169,7 @@ describe('generateHookScript(编排)', () => {
       },
       { description: 'run when ci fails', scheduleName: 'CI Watch', workingDir: dir },
     );
-    expect(result.command).toBe('node scripts/schedule-checks/ci-watch.mjs');
+    expect(result.command).toBe(`node ${shellQuote(result.filePath)}`);
     expect(existsSync(result.filePath)).toBe(true);
     expect(readFileSync(result.filePath, 'utf8')).toBe('process.exit(2)\n');
   });
@@ -187,7 +213,7 @@ describe('generateHookScript(编排)', () => {
     expect(result.filePath).toBe(old);
     expect(readFileSync(old, 'utf8')).toBe('process.exit(2)\n');
     expect(seenPrompt).toContain('MODIFIED');
-    expect(result.command).toBe('node scripts/schedule-checks/ci-watch.mjs');
+    expect(result.command).toBe(`node ${shellQuote(result.filePath)}`);
   });
 
   it('模型响应无代码块 → throw 且不落盘', async () => {
@@ -234,7 +260,7 @@ describe('installHookScript(统一安装通道:script/description 双模式 + �
         workingDir: dir,
       },
     );
-    expect(result.command).toBe('node scripts/schedule-checks/pr-watch.mjs');
+    expect(result.command).toBe(`node ${shellQuote(result.filePath)}`);
     expect(readFileSync(result.filePath, 'utf8')).toBe('process.exit(2)\n');
     expect(result.test.decision).toBe('skip');
     expect(result.test.exitCode).toBe(2);
@@ -309,7 +335,7 @@ describe('运行时探测:系统无 node 时命令用 xdt-node 兜底', () => {
       },
       { description: 'always run', scheduleName: 'X Y', workingDir: dir },
     );
-    expect(result.command).toBe('xdt-node scripts/schedule-checks/x-y.mjs');
+    expect(result.command).toBe(`xdt-node ${shellQuote(result.filePath)}`);
     // 自测走执行器的 xdt-node 解析(测试环境 execPath 即 node),照样能跑
     expect(result.test.exitCode).toBe(0);
   });
@@ -323,7 +349,7 @@ describe('运行时探测:系统无 node 时命令用 xdt-node 兜底', () => {
       },
       { script: 'process.exit(0)', workingDir: dir, scheduleName: 'Plain' },
     );
-    expect(result.command).toBe('node scripts/schedule-checks/plain.mjs');
+    expect(result.command).toBe(`node ${shellQuote(result.filePath)}`);
   });
 
   it('修改流识别 xdt-node 前缀命令并覆写同一路径', async () => {

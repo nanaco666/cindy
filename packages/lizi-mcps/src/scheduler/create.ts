@@ -20,6 +20,7 @@ import { assertCronAndTimezoneValid, withScheduler } from './_shared.js';
 import type { LiziMcpSessionContext, SchedulerMcpDeps } from '../types.js';
 import type { SchedulerToolRegistry } from '../lizi_schedulerToolRegistry.js';
 import type { CreateScheduleInput } from '@lizi/maker-scheduler';
+import { stabilizePreRunHookForCreate } from '@lizi/maker-scheduler';
 
 export function registerScheduleCreateTool(
   registry: SchedulerToolRegistry,
@@ -160,7 +161,7 @@ export function registerScheduleCreateTool(
         .describe('Unix ms 截止时间戳（可选）；超过后 scheduler 不再触发'),
     },
     handler: async (args) =>
-      withScheduler(deps, (scheduler) => {
+      withScheduler(deps, async (scheduler) => {
         const { bindToCurrentSession, ...rest } = args as CreateScheduleInput & {
           bindToCurrentSession?: boolean;
         };
@@ -200,6 +201,13 @@ export function registerScheduleCreateTool(
             );
           }
           input = { ...input, targetSessionId: sessionId };
+        }
+        if (deps.hookScript?.stabilizeCommand) {
+          input = await stabilizePreRunHookForCreate(input, {
+            resolveSessionWorkDir:
+              deps.hookScript.resolveSessionWorkDir ?? (async () => undefined),
+            stabilizeCommand: deps.hookScript.stabilizeCommand,
+          });
         }
         return scheduler.create(input);
       }),

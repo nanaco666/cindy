@@ -159,6 +159,97 @@ export function parseGeneratedScriptPath(command: string | undefined): string | 
   return m ? (m[1] ?? m[2] ?? m[3]) : null;
 }
 
+interface ParsedSingleFileHookCommand {
+  prefix: string;
+  scriptPath: string;
+  extensions: ReadonlySet<string>;
+}
+
+const NODE_SCRIPT_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
+const PYTHON_SCRIPT_EXTENSIONS = new Set(['.py']);
+const SHELL_SCRIPT_EXTENSIONS = new Set(['.sh']);
+const POWERSHELL_SCRIPT_EXTENSIONS = new Set(['.ps1']);
+const DIRECT_SCRIPT_EXTENSIONS = new Set(['.bat', '.cmd', '.exe']);
+
+function parsedPath(match: RegExpExecArray, offset: number): string {
+  return match[offset] ?? match[offset + 1] ?? match[offset + 2];
+}
+
+/** Parse the single-script command shapes emitted by the scheduler UI/installer. */
+function parseSingleFileHookCommand(command: string): ParsedSingleFileHookCommand | null {
+  const trimmed = command.trim();
+  let match = /^(node|xdt-node)\s+(?:"([^"]+)"|'([^']+)'|(\S+))\s*$/i.exec(trimmed);
+  if (match) {
+    return {
+      prefix: match[1],
+      scriptPath: parsedPath(match, 2),
+      extensions: NODE_SCRIPT_EXTENSIONS,
+    };
+  }
+  match = /^(python|python3)\s+(?:"([^"]+)"|'([^']+)'|(\S+))\s*$/i.exec(trimmed);
+  if (match) {
+    return {
+      prefix: match[1],
+      scriptPath: parsedPath(match, 2),
+      extensions: PYTHON_SCRIPT_EXTENSIONS,
+    };
+  }
+  match = /^(bash)\s+(?:"([^"]+)"|'([^']+)'|(\S+))\s*$/i.exec(trimmed);
+  if (match) {
+    return {
+      prefix: match[1],
+      scriptPath: parsedPath(match, 2),
+      extensions: SHELL_SCRIPT_EXTENSIONS,
+    };
+  }
+  match = /^(powershell|pwsh)\s+-ExecutionPolicy\s+Bypass\s+-File\s+(?:"([^"]+)"|'([^']+)'|(\S+))\s*$/i.exec(
+    trimmed,
+  );
+  if (match) {
+    return {
+      prefix: `${match[1]} -ExecutionPolicy Bypass -File`,
+      scriptPath: parsedPath(match, 2),
+      extensions: POWERSHELL_SCRIPT_EXTENSIONS,
+    };
+  }
+  match = /^(?:"([^"]+)"|'([^']+)'|(\S+))\s*$/.exec(trimmed);
+  if (match) {
+    return {
+      prefix: '',
+      scriptPath: parsedPath(match, 1),
+      extensions: DIRECT_SCRIPT_EXTENSIONS,
+    };
+  }
+  return null;
+}
+
+/**
+ * Make a supported single-file hook command independent from its execution cwd.
+ * Arbitrary shell commands (for example `pnpm check`) intentionally stay cwd-relative.
+ */
+export function stabilizeHookCommand(
+  command: string,
+  workingDir?: string,
+  exists: (filePath: string) => boolean = existsSync,
+): string {
+  const parsed = parseSingleFileHookCommand(command);
+  if (!parsed) return command;
+  const extension = path.extname(parsed.scriptPath).toLowerCase();
+  if (!parsed.extensions.has(extension)) return command;
+  if (path.isAbsolute(parsed.scriptPath)) return command;
+  if (!workingDir?.trim()) {
+    throw new Error(
+      `invalid pre-run hook configuration: cannot stabilize relative script without its original working directory: ${parsed.scriptPath}`,
+    );
+  }
+  const absolutePath = path.resolve(workingDir, parsed.scriptPath);
+  if (!exists(absolutePath)) {
+    throw new Error(`invalid pre-run hook configuration: script not found: ${absolutePath}`);
+  }
+  const quotedPath = shellQuotePath(absolutePath);
+  return parsed.prefix ? `${parsed.prefix} ${quotedPath}` : quotedPath;
+}
+
 /** 目标路径解析(纯函数,可测):修改流复用旧路径;新建避让已存在的同名文件。 */
 export function resolveHookScriptPath(input: {
   workingDir?: string;
@@ -299,7 +390,8 @@ export async function generateHookScript(
   mkdirSync(path.dirname(filePath), { recursive: true });
   writeFileSync(filePath, content.endsWith('\n') ? content : `${content}\n`, 'utf8');
 
-  const command = buildHookCommand(filePath, input.workingDir, await resolveRunner(deps));
+  // Persist an absolute path so a later session/workdir rebind cannot retarget the script.
+  const command = buildHookCommand(filePath, undefined, await resolveRunner(deps));
   deps.logger?.info?.('[hook-script-generator] script written', {
     filePath,
     command,
@@ -376,7 +468,8 @@ export async function installHookScript(
     writeFileSync(filePath, script.endsWith('\n') ? script : `${script}\n`, 'utf8');
     // script 模式内容同为 Node ESM(工具契约),执行方同样按探测结果选
     written = {
-      command: buildHookCommand(filePath, input.workingDir, await resolveRunner(deps)),
+      // Persist an absolute path so a later session/workdir rebind cannot retarget the script.
+      command: buildHookCommand(filePath, undefined, await resolveRunner(deps)),
       filePath,
       content: script,
     };

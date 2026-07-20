@@ -52,12 +52,17 @@ import type {
 import {
   BUILTIN_TEMPLATES,
   applyTemplateParams,
+  stabilizePreRunHookForCreate,
+  stabilizePreRunHookForUpdate,
 } from '@lizi/maker-scheduler';
 
 import { createLogger } from '../logger.js';
 import type { DrizzleScheduleStorage } from '../scheduler-host/storage.js';
 import { executePreRunHook } from '../scheduler-host/pre-run-hook.js';
-import { installHookScript } from '../scheduler-host/hook-script-generator.js';
+import {
+  installHookScript,
+  stabilizeHookCommand,
+} from '../scheduler-host/hook-script-generator.js';
 import { resolveScriptCapabilityStatuses } from '../scheduler-host/script-capability-status.js';
 import { getGhostManager } from '../cindy-brain/index.js';
 import { throwIpcError, requireString, requireObject } from '../utils/ipcValidate.js';
@@ -247,6 +252,20 @@ function buildCreateScheduleInput(
 export function registerScheduleHandlers(getMaker?: () => Maker | null): void {
   log.info('registering maker:schedule:* IPC handlers (boot-eager, awaiting readiness)');
 
+  const resolveSessionWorkDir = async (sessionId: string): Promise<string | undefined> => {
+    try {
+      const meta = await getMaker?.()?.getSessionMeta(sessionId);
+      return meta?.workDir?.trim() ? meta.workDir : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const hookPathDeps = {
+    resolveSessionWorkDir,
+    stabilizeCommand: async (input: { command: string; workingDir?: string }) =>
+      stabilizeHookCommand(input.command, input.workingDir),
+  };
+
   ipcMain.handle(MAKER_INVOKE.SCHEDULE_LIST, async (_e, filter: unknown) =>
     withScheduler(({ scheduler }) =>
       scheduler.list((filter ?? undefined) as ListFilter | undefined),
@@ -260,15 +279,28 @@ export function registerScheduleHandlers(getMaker?: () => Maker | null): void {
 
   ipcMain.handle(MAKER_INVOKE.SCHEDULE_CREATE, async (_e, input: unknown) => {
     requireObject(input, 'input');
-    return withScheduler(({ scheduler }) => scheduler.create(input as CreateScheduleInput));
+    return withScheduler(async ({ scheduler }) => {
+      const normalized = await stabilizePreRunHookForCreate(
+        input as CreateScheduleInput,
+        hookPathDeps,
+      );
+      return scheduler.create(normalized);
+    });
   });
 
   ipcMain.handle(MAKER_INVOKE.SCHEDULE_UPDATE, async (_e, id: unknown, patch: unknown) => {
     const scheduleId = requireString(id, 'id');
     requireObject(patch, 'patch');
-    return withScheduler(({ scheduler }) =>
-      scheduler.update(scheduleId, patch as UpdateScheduleInput),
-    );
+    return withScheduler(async ({ scheduler }) => {
+      const existing = await scheduler.get(scheduleId);
+      if (!existing) throw new Error(`Schedule not found: ${scheduleId}`);
+      const normalized = await stabilizePreRunHookForUpdate(
+        existing,
+        patch as UpdateScheduleInput,
+        hookPathDeps,
+      );
+      return scheduler.update(scheduleId, normalized);
+    });
   });
 
   ipcMain.handle(MAKER_INVOKE.SCHEDULE_DELETE, async (_e, id: unknown) => {
@@ -335,8 +367,7 @@ export function registerScheduleHandlers(getMaker?: () => Maker | null): void {
         : undefined;
     if (!targetSessionId) return undefined;
     try {
-      const meta = await getMaker?.()?.getSessionMeta(targetSessionId);
-      return meta?.workDir?.trim() ? meta.workDir : undefined;
+      return await resolveSessionWorkDir(targetSessionId);
     } catch {
       return undefined;
     }

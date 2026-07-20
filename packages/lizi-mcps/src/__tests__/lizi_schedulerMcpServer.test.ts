@@ -1023,6 +1023,55 @@ describe('schedule_update — bindToCurrentSession', () => {
   });
 });
 
+describe('schedule_update — pre-run hook 路径稳定化', () => {
+  it('改绑会话时用旧任务目录固化未修改的相对脚本命令', async () => {
+    const updates: Array<Record<string, unknown>> = [];
+    const existing = {
+      id: 'sch-1',
+      name: 'check',
+      workingDir: '/project-a',
+      preRunHook: { command: 'node scripts/check.mjs', timeoutMs: 5_000 },
+    } as Schedule;
+    const registry = new SchedulerToolRegistry();
+    registerScheduleUpdateTool(registry, {
+      getScheduler: () =>
+        ({
+          get: async () => existing,
+          update: async (_id: string, patch: Record<string, unknown>) => {
+            updates.push(patch);
+            return { ...existing, ...patch };
+          },
+        }) as never,
+      hookScript: {
+        resolveSessionWorkDir: async (sessionId) =>
+          sessionId === 'session-b' ? '/project-b' : undefined,
+        stabilizeCommand: async ({ command, workingDir }) => `${command}@${workingDir}`,
+        install: async () => {
+          throw new Error('not used');
+        },
+      },
+    });
+
+    const result = await registry.call('schedule_update', {
+      id: 'sch-1',
+      targetSessionId: 'session-b',
+      preRunHook: { command: 'node scripts/check.mjs', timeoutMs: 5_000 },
+    });
+    const env = JSON.parse((result.content[0] as { text: string }).text) as { ok: boolean };
+
+    expect(env.ok).toBe(true);
+    expect(updates).toEqual([
+      {
+        targetSessionId: 'session-b',
+        preRunHook: {
+          command: 'node scripts/check.mjs@/project-a',
+          timeoutMs: 5_000,
+        },
+      },
+    ]);
+  });
+});
+
 // ── 网关 strict:未知字段必须报错,不能静默丢弃 ────────────────────────────────
 
 describe('SchedulerToolRegistry — strict args (no silent drop)', () => {
