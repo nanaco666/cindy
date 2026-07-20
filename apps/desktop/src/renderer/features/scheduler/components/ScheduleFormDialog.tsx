@@ -648,7 +648,14 @@ export function ScheduleFormDialog({
               {/* 自动模式:cron chip + 一次(recurring 反向)。手动模式:两者全部隐藏——cron 占位值仍在 form 里,提交合法。 */}
               {!form.manual && (
                 <>
-                  <ScheduleChip cronExpr={form.cronExpr} onChangeCron={(v) => setField('cronExpr', v)} />
+                  <ScheduleChip
+                    cronExpr={form.cronExpr}
+                    intervalMs={form.intervalMs}
+                    onChangeSchedule={(value) => {
+                      setField('cronExpr', value.cronExpr);
+                      setField('intervalMs', value.intervalMs);
+                    }}
+                  />
                   <button
                     type="button"
                     role="checkbox"

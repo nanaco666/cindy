@@ -4967,6 +4967,15 @@
         "notRepo": "Selected folder is not a git repository",
         "insideWorktree": "Already inside a worktree"
       },
+      "timingMode": {
+        "cron": "Cron",
+        "interval": "Relative interval",
+        "cronHint": "Runs at calendar clock slots.",
+        "intervalHint": "Waits this long after the previous run finishes.",
+        "intervalUnsupportedHint": "This exact interval is preserved. Choosing a minute or hour preset will replace it.",
+        "cronChip": "Cron · {{schedule}}",
+        "intervalChip": "After completion · {{schedule}}"
+      },
       "scheduleMenu": {
         "intervalMinutes": "Minutes (every N minutes)",
         "interval": "Hourly (every N hours)",

@@ -1,6 +1,5 @@
 import type { Schedule } from '@lizi/maker-scheduler';
 
-import { cronExprToIntervalMs } from './cronCodexPreset';
 import { buildPreRunHook } from './scheduleFormLogic';
 import type { ScheduleFormState } from '../hooks/useScheduleForm';
 import { stripTrailingPathSeparators } from '../../../../shared/pathText';
@@ -82,7 +81,7 @@ export function formToProjectConfig(
     timezone: form.timezone.trim(),
     recurring: form.recurring,
     manual: form.manual,
-    intervalMs: cronExprToIntervalMs(cronExpr),
+    intervalMs: form.intervalMs,
     agentKind: form.agentKind,
     model: form.model.trim() || undefined,
     effort: form.effort || undefined,

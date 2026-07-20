@@ -4958,6 +4958,15 @@
         "notRepo": "선택한 폴더는 Git 저장소가 아닙니다",
         "insideWorktree": "이미 worktree 내부에 있습니다"
       },
+      "timingMode": {
+        "cron": "Cron 일정",
+        "interval": "상대 간격",
+        "cronHint": "달력 시계의 고정 시간대에 실행합니다.",
+        "intervalHint": "이전 실행이 끝난 뒤 지정된 시간만큼 기다립니다.",
+        "intervalUnsupportedHint": "현재 정확한 간격은 그대로 유지됩니다. 분 또는 시간 프리셋을 선택하면 대체됩니다.",
+        "cronChip": "Cron · {{schedule}}",
+        "intervalChip": "완료 후 대기 · {{schedule}}"
+      },
       "scheduleMenu": {
         "intervalMinutes": "Minutes (N분마다)",
         "interval": "Hourly (N시간마다)",

@@ -232,7 +232,7 @@ function clampIntervalMinutes(n: number): number {
 //   - `0 *\/N * * *` (N: 1-23) → N * 3_600_000
 // 其它任何 cron（daily/weekly/custom）→ undefined，让该任务继续走 cron 槽位语义。
 //
-// 用途：表单 submit 时同时写 cronExpr 和 intervalMs；引擎层有同名逻辑负责老数据回填。
+// 用途：用户显式切到相对间隔模式时，从当前 Cron preset 初始化 intervalMs。
 export function cronExprToIntervalMs(expr: string): number | undefined {
   const trimmed = expr.trim();
   if (trimmed === '* * * * *') return 60_000;
@@ -250,6 +250,44 @@ export function cronExprToIntervalMs(expr: string): number | undefined {
     return undefined;
   }
   return undefined;
+}
+
+/**
+ * 把当前 UI 可编辑的相对间隔转换成等价 Cron preset，供 interval 回显和显式切回
+ * Cron 使用。返回 undefined 表示该间隔无法由现有“每 N 分钟/小时”控件精确表达。
+ */
+export function intervalMsToCronExpr(intervalMs: number): string | undefined {
+  if (!Number.isFinite(intervalMs) || intervalMs <= 0) return undefined;
+  if (intervalMs % (60 * 60_000) === 0) {
+    const hours = intervalMs / (60 * 60_000);
+    if (hours >= 1 && hours <= 23) return hours === 1 ? '0 * * * *' : `0 */${hours} * * *`;
+  }
+  if (intervalMs % 60_000 === 0) {
+    const minutes = intervalMs / 60_000;
+    if (minutes >= 1 && minutes <= 59) return minutes === 1 ? '* * * * *' : `*/${minutes} * * * *`;
+  }
+  return undefined;
+}
+
+export const DEFAULT_SCHEDULE_INTERVAL_MS = 5 * 60_000;
+
+/** Cron / 相对间隔显式切换的单一确定性入口。 */
+export function switchScheduleTimingMode(
+  cronExpr: string,
+  intervalMs: number | undefined,
+  nextMode: 'cron' | 'interval',
+): { cronExpr: string; intervalMs?: number } {
+  if (nextMode === 'interval') {
+    const nextIntervalMs = cronExprToIntervalMs(cronExpr) ?? DEFAULT_SCHEDULE_INTERVAL_MS;
+    return {
+      cronExpr: intervalMsToCronExpr(nextIntervalMs) ?? '*/5 * * * *',
+      intervalMs: nextIntervalMs,
+    };
+  }
+  return {
+    cronExpr: intervalMsToCronExpr(intervalMs ?? DEFAULT_SCHEDULE_INTERVAL_MS) ?? cronExpr,
+    intervalMs: undefined,
+  };
 }
 
 /** chip 文案：mode + 关键参数；"每天 09:00" / "工作日 09:00" / "每 2 小时" */

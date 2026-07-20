@@ -29,8 +29,12 @@ import {
 } from '@/hooks/useProjectPickerOptions';
 import {
   configToCron,
+  cronExprToIntervalMs,
   cronToConfig,
+  DEFAULT_SCHEDULE_INTERVAL_MS,
+  intervalMsToCronExpr,
   summarizeConfig,
+  switchScheduleTimingMode,
   WEEKDAY_LABELS,
   DEFAULT_CONFIG,
   type CodexScheduleConfig,
@@ -311,6 +315,27 @@ const SCHEDULE_MENU_MODES: ReadonlyArray<ScheduleMenuMode> = [
   'monthly',
 ];
 
+const INTERVAL_MENU_MODES: ReadonlyArray<ScheduleMenuMode> = [
+  'intervalMinutes',
+  'interval',
+];
+
+function formatIntervalDuration(intervalMs: number, locale: string): string {
+  const units: ReadonlyArray<{ factor: number; unit: string }> = [
+    { factor: 24 * 60 * 60_000, unit: 'day' },
+    { factor: 60 * 60_000, unit: 'hour' },
+    { factor: 60_000, unit: 'minute' },
+    { factor: 1_000, unit: 'second' },
+    { factor: 1, unit: 'millisecond' },
+  ];
+  const selected = units.find(({ factor }) => intervalMs % factor === 0) ?? units[units.length - 1];
+  return new Intl.NumberFormat(locale, {
+    style: 'unit',
+    unit: selected.unit,
+    unitDisplay: 'long',
+  }).format(intervalMs / selected.factor);
+}
+
 const WEEKDAY_SHORT: Record<number, string> = {
   1: 'Mo',
   2: 'Tu',
@@ -323,31 +348,60 @@ const WEEKDAY_SHORT: Record<number, string> = {
 
 export function ScheduleChip({
   cronExpr,
-  onChangeCron,
+  intervalMs,
+  onChangeSchedule,
   disabled,
 }: {
   cronExpr: string;
-  onChangeCron: (v: string) => void;
+  intervalMs?: number;
+  onChangeSchedule: (value: { cronExpr: string; intervalMs?: number }) => void;
   disabled?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
-  const [config, setConfig] = useState<CodexScheduleConfig>(() => normalizeScheduleConfig(cronToConfig(cronExpr)));
+  const timingMode = intervalMs === undefined ? 'cron' : 'interval';
+  const displayCronExpr = intervalMs === undefined
+    ? cronExpr
+    : (intervalMsToCronExpr(intervalMs) ?? '*/5 * * * *');
+  const [config, setConfig] = useState<CodexScheduleConfig>(() => normalizeScheduleConfig(cronToConfig(displayCronExpr)));
 
   useEffect(() => {
     setConfig((prev) => {
-      const next = normalizeScheduleConfig(cronToConfig(cronExpr));
-      if (configToCron(prev) === cronExpr) return prev;
+      const next = normalizeScheduleConfig(cronToConfig(displayCronExpr));
+      if (configToCron(prev) === displayCronExpr) return prev;
       return next;
     });
-  }, [cronExpr]);
+  }, [displayCronExpr]);
 
   const activeMode = toMenuMode(config);
+  const availableModes = timingMode === 'interval' ? INTERVAL_MENU_MODES : SCHEDULE_MENU_MODES;
+  const intervalIsPreset = intervalMs === undefined || intervalMsToCronExpr(intervalMs) !== undefined;
+  const scheduleSummary = intervalMs === undefined
+    ? summarizeConfig(normalizeScheduleConfig(config))
+    : formatIntervalDuration(intervalMs, i18n.resolvedLanguage ?? i18n.language);
+  const chipLabel = t(`scheduler.chips.timingMode.${timingMode}Chip`, { schedule: scheduleSummary });
 
   const update = (patch: Partial<CodexScheduleConfig>) => {
     const next = normalizeScheduleConfig({ ...config, ...patch });
+    const nextCronExpr = configToCron(next);
     setConfig(next);
-    onChangeCron(configToCron(next));
+    onChangeSchedule({
+      cronExpr: nextCronExpr,
+      intervalMs: timingMode === 'interval'
+        ? (cronExprToIntervalMs(nextCronExpr) ?? intervalMs ?? DEFAULT_SCHEDULE_INTERVAL_MS)
+        : undefined,
+    });
+  };
+
+  const setTimingMode = (nextMode: 'cron' | 'interval') => {
+    if (nextMode === timingMode) return;
+    const next = switchScheduleTimingMode(
+      nextMode === 'cron' ? cronExpr : configToCron(config),
+      intervalMs,
+      nextMode,
+    );
+    setConfig(normalizeScheduleConfig(cronToConfig(next.cronExpr)));
+    onChangeSchedule(next);
   };
 
   const setMode = (mode: ScheduleMenuMode) => {
@@ -362,7 +416,7 @@ export function ScheduleChip({
   return (
     <Popover open={open} onOpenChange={(v) => !disabled && setOpen(v)}>
       <PopoverTrigger asChild>
-        <ChipButton icon={<Timer size={14} />} label={summarizeConfig(normalizeScheduleConfig(config))} active={open} disabled={disabled} variant="pill" className="max-w-[260px] [&>span:nth-child(2)]:translate-y-[0.5px]" />
+        <ChipButton icon={<Timer size={14} />} label={chipLabel} active={open} disabled={disabled} variant="pill" className="max-w-[300px] [&>span:nth-child(2)]:translate-y-[0.5px]" />
       </PopoverTrigger>
       <PopoverContent
         align="start"
@@ -372,14 +426,45 @@ export function ScheduleChip({
         onWheel={stopWheel}
       >
         <div
-          className="flex items-start gap-2"
+          className="flex flex-col gap-2"
           onPointerDown={(e) => {
             if (e.target === e.currentTarget) setOpen(false);
           }}
         >
-          <div className="w-[260px] shrink-0 rounded-xl border border-[var(--cmd-palette-border)] bg-[var(--cmd-palette-bg)] p-2 shadow-lg dark:border-[var(--cmd-palette-border)] dark:bg-[var(--cmd-palette-bg)]">
-            <div className="flex flex-col gap-[2px]">
-              {SCHEDULE_MENU_MODES.map((mode) => {
+          <div className="rounded-xl border border-[var(--cmd-palette-border)] bg-[var(--cmd-palette-bg)] p-2 shadow-lg dark:border-[var(--cmd-palette-border)] dark:bg-[var(--cmd-palette-bg)]">
+            <div className="flex h-[34px] items-center gap-1 rounded-lg bg-[var(--chat-input-chip-bg)] p-[3px]">
+              {(['cron', 'interval'] as const).map((mode) => {
+                const active = timingMode === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setTimingMode(mode)}
+                    className={cn(
+                      'h-full flex-1 rounded-md border px-3 text-12 font-medium transition-colors',
+                      active
+                        ? 'border-[var(--confirm-btn-secondary-border)] bg-[var(--cmd-palette-bg)] text-[var(--msg-assistant-text)]'
+                        : 'border-transparent text-[var(--cmd-palette-item-meta)] hover:text-[var(--msg-assistant-text)]',
+                    )}
+                  >
+                    {t(`scheduler.chips.timingMode.${mode}`)}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="px-1 pt-1.5 text-[11px] leading-4 text-[var(--cmd-palette-item-meta)] dark:text-[var(--settings-section-desc)]">
+              {t(
+                timingMode === 'interval' && !intervalIsPreset
+                  ? 'scheduler.chips.timingMode.intervalUnsupportedHint'
+                  : `scheduler.chips.timingMode.${timingMode}Hint`,
+              )}
+            </p>
+          </div>
+          <div className="flex items-start gap-2">
+            <div className="w-[260px] shrink-0 rounded-xl border border-[var(--cmd-palette-border)] bg-[var(--cmd-palette-bg)] p-2 shadow-lg dark:border-[var(--cmd-palette-border)] dark:bg-[var(--cmd-palette-bg)]">
+              <div className="flex flex-col gap-[2px]">
+                {availableModes.map((mode) => {
                 const active = activeMode === mode;
                 return (
                   <button
@@ -396,15 +481,16 @@ export function ScheduleChip({
                     {t(`scheduler.chips.scheduleMenu.${mode}`)}
                   </button>
                 );
-              })}
+                })}
+              </div>
             </div>
+            <ScheduleConfigPanel
+              mode={activeMode}
+              config={config}
+              onUpdate={update}
+              onCommitMode={setMode}
+            />
           </div>
-          <ScheduleConfigPanel
-            mode={activeMode}
-            config={config}
-            onUpdate={update}
-            onCommitMode={setMode}
-          />
         </div>
       </PopoverContent>
     </Popover>
