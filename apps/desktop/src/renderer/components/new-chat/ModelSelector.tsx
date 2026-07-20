@@ -1222,7 +1222,7 @@ export function ModelSelector({
                     : [
                         'h-[30px] min-w-[72px] max-w-full shrink overflow-hidden',
                         noSource
-                          ? 'bg-[var(--surface-chip)] px-2.5 hover:bg-[var(--surface-hover)]'
+                          ? 'border border-[var(--border-default)] bg-[var(--composer-pill-bg,#FCFCFC)] px-2.5 hover:bg-[var(--model-trigger-hover)]'
                           : 'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] px-2.5 border border-[var(--border-default)] hover:bg-[var(--model-trigger-hover)]' /* spec 2026-07-17, token by 一哥 */,
                       ],
                 ),

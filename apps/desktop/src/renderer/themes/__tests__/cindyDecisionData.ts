@@ -46,9 +46,11 @@ export const CINDY_REQUIRED_COLOR_IDS = [
   'ask-checkbox-border',
   'background',
   'chat-input-bg',
+  'chat-input-border-focus',
   'chat-input-chip-border',
   'chat-input-text',
   'color-primary',
+  'create-agent-focus-ring',
   'confirm-bg',
   'confirm-btn-primary-bg',
   'confirm-btn-primary-text',
@@ -88,8 +90,8 @@ export const CINDY_REQUIRED_COLOR_IDS = [
   'settings-source-link',
   'settings-theme-auto-dark',
   'sidebar-action-icon',
-  'sidebar-item-active-foreground', // E1D 新增(选中胶囊反白前景)
-  'sidebar-item-active-border', // 补编 §3(选中 pill 描边)
+  'sidebar-item-active-foreground', // 用户改稿 2026-07-20:选中胶囊中性前景
+  'sidebar-item-active-border', // 用户改稿 2026-07-20:选中 pill 中性描边
   'cmd-palette-item-meta', // E1D 侧栏层级(分组标签/meta 二级暗灰)
   'sidebar-item-active',
   'splash-bg',
@@ -223,9 +225,11 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'ask-checkbox-border': { light: '#686B72', dark: '#BFC1C4' },
   background: { light: '0.0 0.0% 92.9%', dark: '0.0 2.4% 16.1%' },
   'chat-input-bg': { light: '#F8F8F8', dark: '#312F2F' },
+  'chat-input-border-focus': { light: 'rgba(104, 107, 114, 0.30)', dark: 'rgba(191, 193, 196, 0.30)' }, // 用户改稿 2026-07-20:输入框聚焦描边降至 30%
   'chat-input-chip-border': { light: '#DCDFE3', dark: '#434343' },
   'chat-input-text': { light: '#3C3F43', dark: '#D4D4D4' },
   'color-primary': { light: '#3C3F43', dark: '#D4D4D4' },
+  'create-agent-focus-ring': { light: 'rgba(104, 107, 114, 0.30)', dark: 'rgba(191, 193, 196, 0.30)' }, // 用户改稿 2026-07-20:新建页输入框聚焦描边降至 30%
   'confirm-bg': { light: '#F8F8F8', dark: '#312F2F' },
   'confirm-btn-primary-bg': { light: '#3C3F43', dark: '#EEEEEE' }, // E1D
   'confirm-btn-primary-text': { light: '#FCFCFC', dark: '#252222' }, // E1D
@@ -273,9 +277,9 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'settings-theme-auto-dark': { light: '#2A2828', dark: '#2A2828' },
   'sidebar-action-icon': { light: '220.0 4.7% 62.2%', dark: '0 0% 43.5%' }, // E1D 侧栏层级 #9A9DA3/#6F6F6F
   'cmd-palette-item-meta': { light: '#9A9DA3', dark: '#6F6F6F' }, // E1D 侧栏二级暗灰
-  'sidebar-item-active-foreground': { light: '#FCFCFC', dark: '#D4D4D4' }, // E1D 选中胶囊反白
-  'sidebar-item-active-border': { light: '#A00A1D', dark: '#C24152' }, // 补编 §3(light 深红/dark 浅红)
-  'sidebar-item-active': { light: '352.3 89.8% 46.1%', dark: '352.1 76.6% 36.9%' }, // E1D
+  'sidebar-item-active-foreground': { light: '#3C3F43', dark: '#D4D4D4' }, // 用户改稿 2026-07-20:选中态撤红
+  'sidebar-item-active-border': { light: '#DCDFE3', dark: '#434343' }, // 用户改稿 2026-07-20:选中态撤红
+  'sidebar-item-active': { light: '0.0 0.0% 94.5%', dark: '0.0 2.2% 18.0%' }, // 用户改稿 2026-07-20:中性 pill
   'splash-bg': { light: '0.0 0.0% 92.9%', dark: '0.0 2.4% 16.1%' },
   'splash-text': { light: '222.0 4.6% 42.7%', dark: '216.0 4.1% 75.9%' },
   'splash-text-destructive': { light: '214.3 5.5% 24.9%', dark: '0.0 0.0% 100.0%' },
@@ -305,7 +309,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'sidebar-search-bg': { light: '0.0 0.0% 92.9%', dark: '0.0 2.4% 16.1%' },
   'sidebar-muted': { light: '220.0 4.7% 62.2%', dark: '0 0% 43.5%' }, // E1D 侧栏层级 #9A9DA3/#6F6F6F
   'status-badge-fg': { light: '#1F1F1F', dark: '#1F1F1F' }, // §7 必炸点(lead 裁决)
-  'surface-translucent-sidebar': { light: 'rgba(255, 255, 255, 0.85)', dark: 'rgba(18, 15, 15, 0.75)' }, // 用户观感定稿 2026-07-18
+  'surface-translucent-sidebar': { light: 'rgba(255, 255, 255, 0.80)', dark: 'rgba(18, 15, 15, 0.80)' }, // 用户调参 2026-07-20:双端 80%
   'surface-translucent-main': { light: '#EDEDED', dark: '#2A2828' }, // E4D 主面板:用户勘误 2026-07-17 撤销毛玻璃,改不透明等价 surface(原 rgba 半透明)
   'surface-translucent-overlay': { light: 'rgba(246, 246, 246, 0.90)', dark: 'rgba(37, 35, 35, 0.80)' }, // E4D R1 模式3
   'composer-pill-bg': { light: '#FCFCFC', dark: '#393838' }, // E2 composer pill 底(取代 glass-pill-bg)
@@ -314,7 +318,7 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
 
 // E1D 红色体系重构(用户批准 2026-07-17):三份新 map 替代旧 BRAND_RED_*。
 // 常规主操作反相中性(light #3C3F43/#FCFCFC, dark #EEEEEE/#252222);
-// 红仅限 A 类(brand-login/error)+ C 类保留(sidebar-item-active);migration-bar 随迁移进度条退役、drop-overlay 撤红改中性(均 2026-07-19)。
+// 红仅限 A 类(brand-login/error);sidebar-item-active 已于 2026-07-20 按用户改稿撤红改中性。
 export const NEUTRAL_PRIMARY_EXPECTED_BY_ID: Record<string, { light: string; dark: string }> = {
   'accent-cta-bg': { light: '#3C3F43', dark: '#EEEEEE' },
   'accent-cta-bg-pure': { light: '#3C3F43', dark: '#EEEEEE' },
@@ -338,8 +342,6 @@ export const RED_EXCEPTION_ALLOWED_IDS = [
   'brand-login-bg',
   'brand-login-error-border',
   'brand-login-error-text',
-  // C 类保留红(裁决:迁移填充/拖放 overlay/侧栏选中)
-  'sidebar-item-active',
   // hover/soft token(中性,但 token 名保留在 allowed 防误报)
   'accent-soft',
   'accent-hover',
@@ -357,7 +359,6 @@ export const BRAND_RED_EXPECTED_BY_ID: Record<string, string> = {
   'confirm-btn-primary-bg': '#DF0C27',
   'perm-allow-btn-bg': '#DF0C27',
   'primary': '352.3 89.8% 46.1%',
-  'sidebar-item-active': '352.3 89.8% 46.1%',
   'update-btn-border': '#DF0C27',
   'update-btn-text': '#DF0C27',
 };
@@ -369,7 +370,6 @@ export const BRAND_RED_ALLOWED_IDS = [
   'confirm-btn-primary-bg',
   'perm-allow-btn-bg',
   'primary',
-  'sidebar-item-active',
   'update-btn-border',
   'update-btn-text',
   'accent-soft',
