@@ -56,7 +56,7 @@ const { normalizeSourceSkips } = require('@expo/fingerprint/build/Config.js');
 
 const fingerprintConfigPath = require.resolve('../../fingerprint.config.cjs');
 
-function loadFingerprintConfig(selfHost) {
+function loadFingerprintConfig(selfHost: boolean) {
   const previous = process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST;
   if (selfHost) process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST = '1';
   else delete process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST;
@@ -74,6 +74,12 @@ async function normalizedExpoConfig({
   versionCode = 10,
   bundleIdentifier = 'com.example.cindyfixture',
   sourceSkips,
+}: {
+  version?: string;
+  buildNumber?: string;
+  versionCode?: number;
+  bundleIdentifier?: string;
+  sourceSkips?: string[];
 } = {}) {
   const sources = await getExpoConfigSourcesAsync('/tmp', {
     exp: {
@@ -84,7 +90,7 @@ async function normalizedExpoConfig({
       android: { package: bundleIdentifier, versionCode },
     },
   }, [], { platforms: ['ios', 'android'], sourceSkips: normalizeSourceSkips(sourceSkips) });
-  const expoConfigSource = sources.find((source) => source.id === 'expoConfig');
+  const expoConfigSource = sources.find((source: { id: string; contents: string }) => source.id === 'expoConfig');
   if (!expoConfigSource) throw new Error('expoConfig source missing');
   return JSON.parse(expoConfigSource.contents);
 }
