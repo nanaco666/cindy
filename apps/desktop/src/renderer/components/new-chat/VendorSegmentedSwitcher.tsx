@@ -29,8 +29,13 @@ interface VendorSegmentedSwitcherProps {
   className?: string;
   width?: number;
   dense?: boolean;
-  /** CREATE AGENT 首页按 Figma 185:2724 使用独立私有 token。 */
-  visualVariant?: 'default' | 'create-agent';
+  /**
+   * CREATE AGENT 首页按 Figma 185:2724 使用独立私有 token。
+   * dropdown:模型选择器浮层内使用(session-agent-switch 两步切换)——浮层表面与
+   * default 的暗色 active 填充(#3c3c3a 级)几乎同色,选中段会融进背景看不清;
+   * 该变体把 active 段换成黑白反转强 CTA(--accent-cta-bg),当前 Agent 一眼可辨。
+   */
+  visualVariant?: 'default' | 'create-agent' | 'dropdown';
 }
 
 interface SegmentOption {
@@ -101,11 +106,15 @@ export function VendorSegmentedSwitcher({
                     'font-medium',
                     isCreateAgentVariant
                       ? 'border border-[var(--create-agent-control-border)] bg-[var(--create-agent-control-bg)] text-[var(--create-agent-control-text)]'
-                      : [
-                          // Active: Card 色凸起 + 1px Board 描边
-                          'bg-[var(--chat-input-chip-bg)] text-[var(--chat-input-chip-text)] border border-[var(--cmd-palette-border)]',
-                          'dark:border-transparent',
-                        ],
+                      : visualVariant === 'dropdown'
+                        ? // 浮层内:黑白反转强对比(同 emptyState CTA 的 token 对),
+                          // default 的 Card 色凸起在深色浮层表面上分不出来。
+                          'bg-[var(--accent-cta-bg)] text-[var(--accent-pure-cta-fg)]'
+                        : [
+                            // Active: Card 色凸起 + 1px Board 描边
+                            'bg-[var(--chat-input-chip-bg)] text-[var(--chat-input-chip-text)] border border-[var(--cmd-palette-border)]',
+                            'dark:border-transparent',
+                          ],
                   )
                 : cn(
                     'font-normal',
