@@ -1,73 +1,114 @@
-// DMG 安装窗口背景图生成器(background.png 的唯一来源,改视觉先改这里再重新生成)。
+// DMG 安装窗口背景生成器(background.pdf 的唯一来源,改视觉先改这里再重新生成)。
 //
-// 再生成步骤(两步都必须,顺序不能少):
+// 再生成:在本目录(apps/desktop/resources/dmg)下执行
 //   swift render-background.swift
-//   sips -m "/System/Library/ColorSync/Profiles/sRGB Profile.icc" \
-//        -s dpiWidth 72 -s dpiHeight 72 -s format png \
-//        background-raw.png --out background.png && rm background-raw.png
+// 直接产出 background.pdf,无需任何后处理。
 //
-// ⚠️ macOS 26 (Tahoe) Finder 对 DMG 背景图的硬约束(2026-07 实测,违反任一项背景静默不渲染):
-//   - 只认 PNG;多分辨率 HiDPI TIFF(tiffutil -cathidpicheck)不渲染;
-//   - 必须 72dpi(144dpi 不渲染);
-//   - 必须带 sRGB IEC61966-2.1 profile(NSBitmapImageRep 直出的 calibratedRGB 不渲染,
-//     所以上面的 sips 归一化是必须步骤);
-//   - 宽度有渲染上限:914 可渲染、990 不渲染(上限落在两者之间,本画布 900 压线可用);
-//   - 目录里不要出现 background@2x.png 同名配对,dmgbuild 会自动合成 TIFF 导致背景消失;
-//   - Finder 按 1:1 像素、左上角锚定、超窗裁切绘制,完全不缩放 → Retina 高清背景无解
-//     (位图文字必有 1x 上采样发虚,OS 级硬上限);大字号粗体耐模糊,小字灰字最吃亏。
+// ── 为什么是 PDF(2026-07-20 实测结论,当时社区无人发现)──
+// macOS 26 (Tahoe) Finder 对位图背景只按 1px=1pt 绘制且拒绝一切高清投喂
+// (144dpi PNG/TIFF/JPEG/HEIC、多页 HiDPI TIFF、>990px 宽图全部静默不渲染),
+// 位图背景在 Retina 上必然发虚。但 Finder 会按 Retina backing scale 光栅化
+// **PDF 背景**:矢量元素无限清晰,PDF 内嵌的高清位图(914px 立绘 → 219pt 盒)
+// 也能吃到 2x 密度——这是 macOS 26 上唯一的高清通道。
 //
-// 画布策略(2026-07-20 v2,解决"拉大窗口出现双背景色"):
-//   画布 900×570 > 默认窗口 660×420;设计内容全部锚在左上 660×420 设计区
-//   (默认打开视觉与 660×420 版逐像素一致),右侧 / 底部的画布延伸区渐隐到纯白,
-//   与 Finder 窗口自身的白底(设背景图后固定浅色渲染)无缝衔接——用户拉大窗口
-//   看到的是设计好的过渡而非生硬接缝。纯白仅用于画布边缘与 OS chrome 融合,
-//   属 DESIGN.md 精神下的系统衔接豁免,不用于内容区。
+// ── PDF 上下文的两个坑(改动时别踩)──
+// 1. sourceIn 等 blend mode 在 PDF 上下文不生效:mask 着色(如手写体)必须
+//    先离屏渲染成位图再嵌入,本脚本 tintedScript() 即为此;
+// 2. 超缓渐变(几个百分点亮度跨数百 pt)PDF 光栅化无抖动会出横向色带:
+//    主底用纯色,渐变只用于短跨度、大色差的边缘渐白。
 //
-// 无文字设计(2026-07-20 v3,Lizi 拍板):背景不放任何位图文字——macOS 26 Finder
-// 背景恒为 1x 绘制,位图文字在 Retina 上必糊(实测无解,社区亦无解);去文字后
-// 窗口内所有可见文字(图标标签、窗口标题)均为 Finder 矢量渲染,零模糊。
-// 品牌感由 app 图标本体 + 卷名 "Cindy Installer" 承载。
+// ── 画布策略(同位图时代 v2)──
+// 画布 900×610pt > 默认窗口 660×460;内容锚定左上 660×460 设计区,右/下延伸区
+// 渐隐到纯白,与 Finder 窗口白底衔接,用户拉大窗口看到过渡而非接缝
+// (Finder 按 1pt=1pt 左上锚定裁切绘制,不缩放)。
 //
-// 布局坐标与 scripts/ci/lib.mjs 的 createMacDMG settings 联动:窗口 660×420,
-// 图标行中心 y=185(app x=175 / Applications x=485,含标签整体视觉居中),
-// 箭头画在两图标之间。改动要两边同步。
+// 布局坐标与 scripts/ci/lib.mjs 的 createMacDMG settings 联动:窗口 660×460,
+// 图标行中心 y=335(app x=175 / Applications x=485),箭头画在两图标之间;
+// 品牌块按 SplashScreen.tsx 布局等比 0.48 缩放。改动要两边同步。
 import AppKit
 
-let W: CGFloat = 900, H: CGFloat = 570   // 画布(宽必须 <990,见上方渲染上限)
-let DW: CGFloat = 660, DH: CGFloat = 420 // 设计区 = 默认窗口尺寸
+let W: CGFloat = 900, H: CGFloat = 610   // 画布 = PDF 页面(pt)
+let DW: CGFloat = 660, DH: CGFloat = 460 // 设计区 = 默认窗口尺寸
 
-let rep = NSBitmapImageRep(
-    bitmapDataPlanes: nil, pixelsWide: Int(W), pixelsHigh: Int(H),
-    bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
-    colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0
-)!
-rep.size = NSSize(width: W, height: H)
+// Splash 素材(与启动画面同源,高清:立绘 914²、字标 459×156、手写体 907×259)
+let ASSETS = "../../src/renderer/assets/splash"
 
+func img(_ name: String) -> NSImage {
+    guard let i = NSImage(contentsOfFile: "\(ASSETS)/\(name)") else {
+        fatalError("missing asset \(ASSETS)/\(name) — 请在 apps/desktop/resources/dmg 目录下运行")
+    }
+    return i
+}
+
+/// script.png 是 alpha mask,按 splash 浅色规格 #949AA2 离屏着色(PDF 里 sourceIn 无效)
+func tintedScript() -> NSImage {
+    let src = img("script.png")
+    let w = 907, h = 259
+    let rep = NSBitmapImageRep(
+        bitmapDataPlanes: nil, pixelsWide: w, pixelsHigh: h,
+        bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+        colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0
+    )!
+    NSGraphicsContext.saveGraphicsState()
+    let ctx = NSGraphicsContext(bitmapImageRep: rep)!
+    NSGraphicsContext.current = ctx
+    src.draw(in: NSRect(x: 0, y: 0, width: w, height: h))
+    ctx.cgContext.setBlendMode(.sourceIn)
+    NSColor(calibratedRed: 0.580, green: 0.600, blue: 0.635, alpha: 1).setFill()
+    NSRect(x: 0, y: 0, width: w, height: h).fill()
+    NSGraphicsContext.restoreGraphicsState()
+    let out = NSImage(size: NSSize(width: w, height: h))
+    out.addRepresentation(rep)
+    return out
+}
+
+let url = URL(fileURLWithPath: "background.pdf") as CFURL
+var mediaBox = CGRect(x: 0, y: 0, width: W, height: H)
+let cg = CGContext(url, mediaBox: &mediaBox, nil)!
+cg.beginPDFPage(nil)
+let ns = NSGraphicsContext(cgContext: cg, flipped: false)
 NSGraphicsContext.saveGraphicsState()
-NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)!
+NSGraphicsContext.current = ns
+ns.imageInterpolation = .high
 
-// 主渐变带:全宽、画布顶部往下 420px——默认窗口可视区,顶亮底稍暗,不出现纯白
-let topBand = NSRect(x: 0, y: H - DH, width: W, height: DH)
+// 浅色 surface 纯色底(splash flat --surface 浅色系;不用渐变,防 PDF banding)
+NSColor(calibratedRed: 0.929, green: 0.929, blue: 0.929, alpha: 1).setFill()
+NSRect(x: 0, y: H - DH, width: W, height: DH).fill()
+// 底部延伸带(y>460 才可见):渐隐到白,接 Finder 窗口白底
 NSGradient(
-    starting: NSColor(calibratedRed: 0.980, green: 0.980, blue: 0.984, alpha: 1),
-    ending: NSColor(calibratedRed: 0.925, green: 0.925, blue: 0.933, alpha: 1)
-)!.draw(in: topBand, angle: -90)
-
-// 底部延伸带(y>420 才可见):从主渐变末色继续渐隐到白,接 Finder 窗口白底
-let bottomBand = NSRect(x: 0, y: 0, width: W, height: H - DH)
-NSGradient(
-    starting: NSColor(calibratedRed: 0.925, green: 0.925, blue: 0.933, alpha: 1),
+    starting: NSColor(calibratedRed: 0.929, green: 0.929, blue: 0.929, alpha: 1),
     ending: NSColor.white
-)!.draw(in: bottomBand, angle: -90)
-
-// 右侧白色渐隐罩(x>660 才可见):x=680 → 900 从透明到不透明白
+)!.draw(in: NSRect(x: 0, y: 0, width: W, height: H - DH), angle: -90)
+// 右侧白色渐隐罩(x>660 才可见)
 NSGradient(
     starting: NSColor(calibratedWhite: 1, alpha: 0),
     ending: NSColor(calibratedWhite: 1, alpha: 1)
 )!.draw(in: NSRect(x: 680, y: 0, width: W - 680, height: H), angle: 0)
 
-// 拖拽引导箭头:图标行中心高度(窗口内 y=185 → 画布底原点坐标 H-185)
-let ay = H - 185
+// 从顶部量的 rect → AppKit 坐标(画布顶 = 窗口顶)
+func rectTop(_ x: CGFloat, _ topY: CGFloat, _ w: CGFloat, _ h: CGFloat) -> NSRect {
+    NSRect(x: x, y: H - topY - h, width: w, height: h)
+}
+
+// ── 品牌块(SplashScreen.tsx 布局等比 0.48,块中心 x=330)──
+let S: CGFloat = 0.48
+let illusSize = 457 * S
+let blockLeft = DW / 2 - illusSize / 2
+let blockTop: CGFloat = 14
+
+// 少女立绘(自带 alpha 渐隐,融进 surface 底)
+img("illustration.webp").draw(in: rectTop(blockLeft, blockTop, illusSize, illusSize))
+
+// CINDY 深色字标:叠在立绘下三分之一,水平居中
+let wmW = 229.5 * S, wmH = 78 * S
+img("wordmark-light.png").draw(in: rectTop(DW / 2 - wmW / 2, blockTop + 352.5 * S, wmW, wmH))
+
+// 手写体 "Dream it Create it":字标右缘,略与字标底部交叠
+let scW = 225.5 * S, scH = 89.5 * S
+tintedScript().draw(in: rectTop(blockLeft + 352.25 * S, blockTop + 410 * S, scW, scH))
+
+// ── 拖拽引导箭头(矢量;图标行中心 y=335)──
+let ay = H - 335
 let arrow = NSBezierPath()
 arrow.lineWidth = 5.5
 arrow.lineCapStyle = .round
@@ -81,6 +122,6 @@ NSColor(calibratedWhite: 0.62, alpha: 1).setStroke()
 arrow.stroke()
 
 NSGraphicsContext.restoreGraphicsState()
-try! rep.representation(using: .png, properties: [:])!
-    .write(to: URL(fileURLWithPath: "background-raw.png"))
-print("wrote background-raw.png — 记得跑头部注释里的 sips 归一化,否则 Finder 不渲染")
+cg.endPDFPage()
+cg.closePDF()
+print("wrote background.pdf")
