@@ -26,6 +26,53 @@ function createTurnState(): TurnState {
 }
 
 describe('Claude Code translator context window', () => {
+  it('preserves the SDK uuid as the compact boundary identity', async () => {
+    const tracker = new UsageTracker();
+    const queue = createAsyncQueue<AgentEvent>();
+
+    translateSdkMessage(
+      {
+        type: 'system',
+        subtype: 'compact_boundary',
+        uuid: 'compact-boundary-1',
+        compact_metadata: {
+          trigger: 'auto',
+          pre_tokens: 200_000,
+          post_tokens: 20_000,
+          duration_ms: 100,
+        },
+      },
+      queue,
+      {
+        rt: newRuntimeState(),
+        turn: createTurnState(),
+        log: {
+          debug: vi.fn(),
+          info: vi.fn(),
+          warn: vi.fn(),
+        },
+        getModel: () => 'gpt-5.4',
+        getEffort: () => 'high',
+        getPermissionMode: () => 'auto',
+        onSessionId: vi.fn(),
+        getSdkSessionId: () => undefined,
+        getLogTitle: () => undefined,
+        tracker,
+      },
+    );
+
+    queue.end();
+    const events: AgentEvent[] = [];
+    for await (const event of queue) events.push(event);
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: 'compact_boundary',
+        data: expect.objectContaining({ boundaryId: 'compact-boundary-1' }),
+      }),
+    ]);
+  });
+
   it('emits provider-neutral task updates from Claude task system messages', async () => {
     const tracker = new UsageTracker();
     const queue = createAsyncQueue<AgentEvent>();

@@ -259,6 +259,35 @@ describe('translateErrorNotification', () => {
   });
 });
 
+describe('translateItemNotification contextCompaction', () => {
+  it('preserves the Codex item id as the compact boundary identity', async () => {
+    const rt = newCodexRuntimeState();
+    const q = createAsyncQueue<AgentEvent>();
+
+    translateItemNotification(
+      'completed',
+      {
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        item: {
+          type: 'contextCompaction',
+          id: 'compact-item-1',
+        },
+      },
+      q,
+      makeCtx(rt),
+    );
+
+    const events = await collect(q);
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: 'compact_boundary',
+        data: expect.objectContaining({ boundaryId: 'compact-item-1' }),
+      }),
+    ]);
+  });
+});
+
 describe('translateItemNotification commandExecution output normalization', () => {
   it('keeps the raw PowerShell wrapper command and emits a display command for tool_use display', async () => {
     const rt = newCodexRuntimeState();
