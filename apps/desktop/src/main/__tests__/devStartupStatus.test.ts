@@ -70,22 +70,22 @@ describe('devStartupStatus', () => {
     });
 
     markDesktopDevStartupFailed(
-      'PASSIVE_USER_DATA_OCCUPIED',
-      'Another passive desktop dev instance owns the slot.',
-      { ownerPid: 88 },
+      'SINGLE_INSTANCE_OWNED',
+      'Another Cindy instance owns the primary slot.',
+      { userDataDir: '/tmp/Cindy' },
     );
 
     expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({
       state: 'failed',
-      code: 'PASSIVE_USER_DATA_OCCUPIED',
-      detail: { ownerPid: 88 },
+      code: 'SINGLE_INSTANCE_OWNED',
+      detail: { userDataDir: '/tmp/Cindy' },
     });
     expect(JSON.parse(fs.readFileSync(
       path.join(tempDir, '.dev-instances', '4243.json'),
       'utf8',
     ))).toMatchObject({
       state: 'failed',
-      failure: { code: 'PASSIVE_USER_DATA_OCCUPIED' },
+      failure: { code: 'SINGLE_INSTANCE_OWNED' },
     });
   });
 

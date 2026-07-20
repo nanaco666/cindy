@@ -641,9 +641,10 @@ async function main() {
     );
   }
   console.log(`==> Desktop region: ${startupConfig.region}`);
-  // --passive: 定时任务被动模式 —— 本实例不参与自动触发(交给同机另一个实例,
-  // 典型场景 dev + release 双开时 dev 让位)。实现方式是置 XDT_SCHEDULER_PASSIVE=1,
-  // 经 devEnvPrefix 白名单透传进新开的系统终端 / 直接 spawn 的 dev 进程。
+  // --passive: 定时任务被动模式 —— 本实例不参与自动触发(交给同机 primary,
+  // 典型场景多个 dev preview 与 release/primary 共享数据时 preview 让位)。
+  // 实现方式是置 XDT_SCHEDULER_PASSIVE=1,经 devEnvPrefix 白名单透传进新开的
+  // 系统终端 / 直接 spawn 的 dev 进程。
   if (argv.includes('--passive') || preserveRunning) {
     process.env.XDT_SCHEDULER_PASSIVE = '1';
     console.log(
