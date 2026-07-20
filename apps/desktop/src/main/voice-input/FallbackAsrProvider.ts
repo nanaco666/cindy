@@ -66,6 +66,7 @@ export class FallbackAsrProvider implements AsrProvider {
 
   async start(): Promise<void> {
     let lastError: unknown = null;
+    const failures: Array<{ kind: VoiceInputProviderKind; phase: 'create' | 'start'; message: string }> = [];
     for (const [index, candidate] of this.candidates.entries()) {
       // The host can dispose this wrapper while a candidate is still mid
       // connect (every `await` below is a suspension point). Re-check after
@@ -77,7 +78,7 @@ export class FallbackAsrProvider implements AsrProvider {
         provider = await candidate.create();
       } catch (error) {
         lastError = error;
-        this.handleCandidateFailure(candidate.kind, index, 'create', error);
+        failures.push(this.handleCandidateFailure(candidate.kind, index, 'create', error));
         continue;
       }
       if (this.disposed) {
@@ -99,7 +100,7 @@ export class FallbackAsrProvider implements AsrProvider {
         await provider.start();
       } catch (error) {
         lastError = error;
-        this.handleCandidateFailure(candidate.kind, index, 'start', error);
+        failures.push(this.handleCandidateFailure(candidate.kind, index, 'start', error));
         void provider.dispose?.().catch((disposeError: unknown) => {
           log.debug('failed ASR candidate dispose error ignored', {
             provider: candidate.kind,
@@ -130,9 +131,20 @@ export class FallbackAsrProvider implements AsrProvider {
       this.flushPendingAudio(provider);
       return;
     }
-    throw lastError instanceof Error
-      ? lastError
-      : new Error('All voice input ASR providers failed to start.');
+    // Aggregate every candidate's failure instead of surfacing only the last
+    // one: a chain-wide outage (e.g. issue #220, gateway missing all ASR
+    // passthrough routes) is undiagnosable from a single tail error. Keep the
+    // original error object when only one candidate exists so callers see its
+    // exact type/stack (e.g. missing-credential messages).
+    if (failures.length <= 1) {
+      throw lastError instanceof Error
+        ? lastError
+        : new Error('All voice input ASR providers failed to start.');
+    }
+    const details = failures
+      .map((failure) => `[${failure.kind} ${failure.phase}] ${failure.message}`)
+      .join('; ');
+    throw new Error(`All ${failures.length} voice input ASR providers failed to start: ${details}`);
   }
 
   async stop(): Promise<void> {
@@ -191,7 +203,7 @@ export class FallbackAsrProvider implements AsrProvider {
     index: number,
     phase: 'create' | 'start',
     error: unknown,
-  ): void {
+  ): { kind: VoiceInputProviderKind; phase: 'create' | 'start'; message: string } {
     const message = error instanceof Error ? error.message : String(error);
     markVoiceInputProviderFailure('asr', kind, `${phase} failed: ${message}`);
     log.warn('asr fallback candidate failed, trying next', {
@@ -201,6 +213,7 @@ export class FallbackAsrProvider implements AsrProvider {
       phase,
       error: message,
     });
+    return { kind, phase, message };
   }
 
   private flushPendingAudio(provider: AsrProvider): void {

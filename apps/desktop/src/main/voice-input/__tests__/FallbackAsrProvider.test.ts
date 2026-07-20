@@ -114,13 +114,42 @@ describe('FallbackAsrProvider', () => {
     expect(fallback.activeProviderKind).toBe('litellm-qwen3-asr-flash-realtime');
   });
 
-  it('rejects with the last error when every candidate fails', async () => {
+  it('rejects with an aggregate of every candidate failure when the whole chain fails', async () => {
     const fallback = new FallbackAsrProvider([
-      candidate('litellm-volcengine-sauc-asr', makeMockProvider({ startError: new Error('first down') })),
-      candidate('litellm-qwen3-asr-flash-realtime', makeMockProvider({ startError: new Error('second down') })),
+      candidate('litellm-volcengine-sauc-asr', makeMockProvider({
+        startError: new Error('Volcengine SAUC ASR handshake failed: HTTP 404 (gw.example.com/volcengine/api/v3/sauc/bigmodel_async)'),
+      })),
+      candidate('litellm-qwen3-asr-flash-realtime', async () => {
+        throw new Error('missing credential');
+      }),
+      candidate('litellm-gpt-realtime-whisper', makeMockProvider({
+        startError: new Error('Realtime ASR handshake failed: HTTP 404 (gw.example.com/openai/passthrough/v1/realtime)'),
+      })),
     ]);
 
-    await expect(fallback.start()).rejects.toThrow('second down');
+    const startError = await fallback.start().then(
+      () => null,
+      (error: unknown) => (error instanceof Error ? error : new Error(String(error))),
+    );
+    expect(startError).not.toBeNull();
+    expect(startError!.message).toContain('All 3 voice input ASR providers failed to start');
+    expect(startError!.message).toContain(
+      '[litellm-volcengine-sauc-asr start] Volcengine SAUC ASR handshake failed: HTTP 404 (gw.example.com/volcengine/api/v3/sauc/bigmodel_async)',
+    );
+    expect(startError!.message).toContain('[litellm-qwen3-asr-flash-realtime create] missing credential');
+    expect(startError!.message).toContain(
+      '[litellm-gpt-realtime-whisper start] Realtime ASR handshake failed: HTTP 404 (gw.example.com/openai/passthrough/v1/realtime)',
+    );
+    expect(fallback.activeProviderKind).toBeNull();
+  });
+
+  it('keeps the original error object when a single-candidate chain fails', async () => {
+    const original = new Error('only candidate down');
+    const fallback = new FallbackAsrProvider([
+      candidate('litellm-volcengine-sauc-asr', makeMockProvider({ startError: original })),
+    ]);
+
+    await expect(fallback.start()).rejects.toBe(original);
     expect(fallback.activeProviderKind).toBeNull();
   });
 

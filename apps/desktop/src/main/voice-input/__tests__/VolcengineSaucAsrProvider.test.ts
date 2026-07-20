@@ -318,7 +318,11 @@ describe('VolcengineSaucAsrProvider protocol helpers', () => {
       });
       provider.onEvent(() => {});
 
-      await expect(provider.start()).rejects.toThrow('Volcengine SAUC ASR handshake failed: HTTP 403 Forbidden');
+      // The dialed host/path must ride along so a route-level 404/403 can be
+      // attributed to the exact gateway address (issue #220 diagnosability).
+      await expect(provider.start()).rejects.toThrow(
+        `Volcengine SAUC ASR handshake failed: HTTP 403 Forbidden (127.0.0.1:${address.port}/volcengine/api/v3/sauc/bigmodel_async)`,
+      );
     } finally {
       await provider?.stop();
       await new Promise<void>((resolve) => server.close(() => resolve()));

@@ -4,6 +4,7 @@ import type { AsrEvent, AsrProvider, AudioTrace } from '@lizi/voice-input-core';
 import type { VoiceInputRealtimeProtocolProfile } from '../../shared/voiceInputAsrProfiles.js';
 import { createLogger } from '../logger.js';
 import { openAiLanguageCode } from './language.js';
+import { describeAsrHandshakeTraceId, describeAsrWebSocketTarget } from './voiceInputAsrConfig.js';
 import {
   VoiceInputSessionRecorder,
   isVoiceInputRecordingEnabled,
@@ -770,7 +771,14 @@ export class RealtimeAsrWebSocketProvider implements AsrProvider {
         response.resume();
         const statusCode = response.statusCode ?? 'unknown';
         const statusMessage = response.statusMessage ? ` ${response.statusMessage}` : '';
-        fail(new Error(`Realtime ASR handshake failed: HTTP ${statusCode}${statusMessage}`), true);
+        // Include the dialed host/path + gateway trace id: a handshake 404
+        // against a gateway missing the ASR passthrough route is otherwise
+        // indistinguishable from an upstream failure (issue #220).
+        const traceId = describeAsrHandshakeTraceId(response.headers);
+        const target = describeAsrWebSocketTarget(this.realtimeUrl);
+        fail(new Error(
+          `Realtime ASR handshake failed: HTTP ${statusCode}${statusMessage} (${target}${traceId ? `, ${traceId}` : ''})`,
+        ), true);
       };
       this.startResolve = () => {
         if (settled) return;
