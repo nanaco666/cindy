@@ -75,7 +75,6 @@ export function migrateLegacyContextRoot(repoRoot: string): void {
       return;
     }
     mergeDirSync(oldRoot, newRoot);
-    if (fs.existsSync(oldRoot) && fs.readdirSync(oldRoot).length === 0) fs.rmdirSync(oldRoot);
   } catch (err) {
     const newPk = path.join(newRoot, 'project-knowledge');
     const oldPk = path.join(oldRoot, 'project-knowledge');
@@ -83,6 +82,18 @@ export function migrateLegacyContextRoot(repoRoot: string): void {
       throw new Error(
         `Failed to migrate ${LEGACY_CONTEXT_ROOT} → ${CONTEXT_ROOT}: ${err instanceof Error ? err.message : String(err)}. ` +
           `Please rename "${oldRoot}" to "${newRoot}" manually.`,
+      );
+    }
+    return;
+  }
+  if (fs.existsSync(oldRoot)) {
+    const leftover = fs.readdirSync(oldRoot);
+    if (leftover.length === 0) {
+      fs.rmdirSync(oldRoot);
+    } else {
+      throw new Error(
+        `Migration incomplete: ${LEGACY_CONTEXT_ROOT} still contains conflicting entries (${leftover.join(', ')}). ` +
+          `Please merge "${oldRoot}" into "${newRoot}" manually, then remove "${oldRoot}".`,
       );
     }
   }
