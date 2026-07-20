@@ -7,7 +7,7 @@
  *   - stdin 注入一段 JSON 上下文(scheduleId / name / firedAt / workingDir 等),
  *     脚本可读可不读。
  *   - exit 0 → 放行本轮;exit 2 → 跳过本轮;其它退出码 / 超时 / spawn 失败 →
- *     fail-open 放行 + 记警告(fail-closed 会让脚本一坏任务就无声停摆)。
+ *     fail-closed 阻止本轮并记录失败，避免前置检查异常时绕过闸门。
  *   - 超时**仅在显式配置 timeoutMs 时生效**,未配置 = 不限时(产品决策:
  *     不设默认超时;代价是 hook 卡死会阻塞该轮 fire,由配置方自担)。
  *
@@ -18,6 +18,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import type { PreRunHookRunResult } from '@lizi/maker-scheduler';
 import { capAppend as capAppendBase, killProcessTree } from './proc-util';
 import os from 'node:os';
 
@@ -43,7 +44,7 @@ export interface PreRunHookStdinPayload {
 
 export interface PreRunHookInput {
   command: string;
-  /** 未传 / 非法值 = 不限时;显式配置为正数时到点杀进程并 fail-open 放行。 */
+  /** 未传 / 非法值 = 不限时;显式配置为正数时到点杀进程并阻止本轮执行。 */
   timeoutMs?: number;
   /** 脚本 cwd。未传回落 os.homedir()(此时脚本内应使用绝对路径)。 */
   cwd?: string;
@@ -80,20 +81,7 @@ export function resolveHookCommand(command: string): {
   return { command, extraEnv: {} };
 }
 
-export interface PreRunHookResult {
-  /** 'run' = 放行(含 fail-open);'skip' = exit 2 明确拦截。 */
-  decision: 'run' | 'skip';
-  /** 进程退出码;spawn 失败 / 超时被杀时可能为 null。 */
-  exitCode: number | null;
-  timedOut: boolean;
-  /** 被 input.signal 中止(任务 pause/delete)。调用方应立即收束本轮,不做任何后续。 */
-  aborted: boolean;
-  /** spawn 自身失败(命令不存在等)的错误信息;正常执行为 undefined。 */
-  spawnError?: string;
-  durationMs: number;
-  stdout: string;
-  stderr: string;
-}
+export type PreRunHookResult = PreRunHookRunResult;
 
 /** 显式配置的正数才启用超时;未传 / 非法 / ≤0 → undefined(不限时)。 */
 export function resolvePreRunHookTimeoutMs(timeoutMs: number | undefined): number | undefined {
@@ -104,8 +92,8 @@ export function resolvePreRunHookTimeoutMs(timeoutMs: number | undefined): numbe
 }
 
 /**
- * 执行前置检查脚本。**永不 throw**——任何异常都折叠成 fail-open 的
- * `decision: 'run'` 结果,由调用方记日志;只有明确 exit 2 才返回 'skip'。
+ * 执行前置检查脚本。**永不 throw**——任何进程异常都折叠成结构化结果，由调用方
+ * 按 fail-closed 协议处理；只有 exit 0 会返回 `decision: 'run'`。
  */
 export async function executePreRunHook(input: PreRunHookInput): Promise<PreRunHookResult> {
   const timeoutMs = resolvePreRunHookTimeoutMs(input.timeoutMs);
@@ -113,13 +101,16 @@ export async function executePreRunHook(input: PreRunHookInput): Promise<PreRunH
   // 进门先查:任务已被 pause/delete(信号已 abort)→ 不 spawn,直接返回
   if (input.signal?.aborted) {
     return {
-      decision: 'run',
+      status: 'aborted',
+      decision: 'block',
       exitCode: null,
-      timedOut: false,
-      aborted: true,
       durationMs: 0,
       stdout: '',
       stderr: '',
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      timedOut: false,
+      aborted: true,
     };
   }
   return new Promise<PreRunHookResult>((resolve) => {
@@ -127,30 +118,52 @@ export async function executePreRunHook(input: PreRunHookInput): Promise<PreRunH
     let stderr = '';
     let timedOut = false;
     let aborted = false;
+    let stdoutTruncated = false;
+    let stderrTruncated = false;
     let settled = false;
     let child: ReturnType<typeof spawn>;
 
-    const settle = (partial: Pick<PreRunHookResult, 'exitCode' | 'spawnError'>): void => {
+    const settle = (partial: { exitCode: number | null; spawnError?: string }): void => {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
       input.signal?.removeEventListener('abort', onAbort);
       const exitCode = partial.exitCode;
+      const status = aborted
+        ? 'aborted'
+        : timedOut
+          ? 'timed_out'
+          : partial.spawnError
+            ? 'failed'
+            : exitCode === 0
+              ? 'passed'
+              : exitCode === 2
+                ? 'skipped'
+                : 'failed';
       resolve({
-        decision:
-          !timedOut && !aborted && !partial.spawnError && exitCode === 2 ? 'skip' : 'run',
+        status,
+        decision: status === 'passed' ? 'run' : status === 'skipped' ? 'skip' : 'block',
         exitCode,
-        timedOut,
-        aborted,
-        spawnError: partial.spawnError,
         durationMs: Date.now() - startedAt,
         stdout,
         stderr,
+        stdoutTruncated,
+        stderrTruncated,
+        timedOut,
+        aborted,
+        spawnError: partial.spawnError,
+        error:
+          partial.spawnError ??
+          (timedOut
+            ? `pre-run hook timed out after ${timeoutMs ?? 0}ms`
+            : !aborted && exitCode === null
+              ? 'pre-run hook exited without a valid result'
+              : undefined),
       });
     };
 
     // taskkill / SIGKILL 后 close 会跟上;再兜一层 1s 强制 settle,防止句柄异常
-    // 导致 close 永不触发(fail-open,方向安全)。⚠️ 计时器必须等 killProcessTree
+    // 导致 close 永不触发。强制收敛仍返回 block，不会绕过检查。⚠️ 计时器必须等 killProcessTree
     // 的 onSettled 回调(它已把重试/后代兜底都跑完)才武装,不能紧跟 kill 调用
     // 就起跑——否则跟收敛动作并行赛跑、大概率在真正杀干净前抢跑(proc-util 侧
     // Greptile 二次 review 发现,这里是同款计时器,同样得改)。
@@ -194,10 +207,14 @@ export async function executePreRunHook(input: PreRunHookInput): Promise<PreRunH
     }
 
     child.stdout?.on('data', (chunk: Buffer) => {
-      stdout = capAppendBase(stdout, chunk.toString('utf8'), OUTPUT_CAP);
+      const text = chunk.toString('utf8');
+      if (stdout.length + text.length > OUTPUT_CAP) stdoutTruncated = true;
+      stdout = capAppendBase(stdout, text, OUTPUT_CAP);
     });
     child.stderr?.on('data', (chunk: Buffer) => {
-      stderr = capAppendBase(stderr, chunk.toString('utf8'), OUTPUT_CAP);
+      const text = chunk.toString('utf8');
+      if (stderr.length + text.length > OUTPUT_CAP) stderrTruncated = true;
+      stderr = capAppendBase(stderr, text, OUTPUT_CAP);
     });
     child.on('error', (err) => {
       settle({ exitCode: null, spawnError: err.message });
@@ -215,4 +232,11 @@ export async function executePreRunHook(input: PreRunHookInput): Promise<PreRunH
       /* ignore stdin write failures */
     }
   });
+}
+
+/** 给 run 错误、通知和日志共用的前置检查失败摘要。 */
+export function formatPreRunHookFailure(result: PreRunHookResult): string {
+  if (result.status === 'timed_out') return result.error ?? 'pre-run hook timed out';
+  if (result.error) return `pre-run hook failed: ${result.error}`;
+  return `pre-run hook failed with exit code ${result.exitCode ?? 'unknown'}`;
 }

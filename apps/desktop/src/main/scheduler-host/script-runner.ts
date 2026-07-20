@@ -15,7 +15,7 @@ import type {
 } from '@lizi/maker-scheduler';
 
 import { sessions } from '../localDb/schema';
-import { executePreRunHook } from './pre-run-hook';
+import { executePreRunHook, formatPreRunHookFailure } from './pre-run-hook';
 import { capAppend, killProcessTree } from './proc-util';
 import { buildSkipResultText, recordScheduleSkip } from './skip-trace';
 import type { SchedulerDrizzleDb } from './storage';
@@ -181,6 +181,7 @@ export class ScriptScheduleRunner {
           lastFinishedAt: schedule.lastFinishedAt,
         },
       });
+      await ctx.onPreRunHookCompleted?.(hook);
       if (hook.aborted || ctx.signal.aborted) {
         this.deps.logger.info?.('[script-runner] pre-run hook aborted by pause/delete', {
           scheduleId: schedule.id,
@@ -215,23 +216,24 @@ export class ScriptScheduleRunner {
           resultText: buildSkipResultText(hook),
         };
       }
-      if (hook.exitCode !== 0 || hook.timedOut || hook.spawnError) {
-        this.deps.logger.warn?.('[script-runner] pre-run hook did not exit 0; fail-open (script proceeds)', {
+      if (hook.decision === 'block') {
+        const errMsg = formatPreRunHookFailure(hook);
+        this.deps.logger.warn?.('[script-runner] pre-run hook failed; fail-closed (script blocked)', {
           scheduleId: schedule.id,
           runId: ctx.runId,
+          status: hook.status,
           exitCode: hook.exitCode,
-          timedOut: hook.timedOut,
-          spawnError: hook.spawnError,
+          error: hook.error,
           stderr: hook.stderr.slice(0, 500),
         });
-      } else {
-        this.deps.logger.info?.('[script-runner] pre-run hook passed (exit 0); script proceeds', {
-          scheduleId: schedule.id,
-          runId: ctx.runId,
-          durationMs: hook.durationMs,
-          stdout: hook.stdout.slice(0, 200),
-        });
+        throw new Error(errMsg);
       }
+      this.deps.logger.info?.('[script-runner] pre-run hook passed (exit 0); script proceeds', {
+        scheduleId: schedule.id,
+        runId: ctx.runId,
+        durationMs: hook.durationMs,
+        stdout: hook.stdout.slice(0, 200),
+      });
     }
 
     const granted = new Set(config.capabilities);

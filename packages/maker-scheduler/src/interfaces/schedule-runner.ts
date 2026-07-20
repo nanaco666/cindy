@@ -1,4 +1,4 @@
-import type { RunStatus, Schedule } from '../types.js';
+import type { PreRunHookRunResult, RunStatus, Schedule } from '../types.js';
 
 export interface ChildRunInput {
   sessionId?: string;
@@ -56,6 +56,11 @@ export interface FireContext {
    * 引擎注入实现，runner 只需提供子任务结果数据。
    */
   createChildRun?: (input: ChildRunInput) => Promise<string>;
+  /**
+   * 前置检查结束后立即持久化结果。检查发生在 session / agent 创建之前，不能等
+   * fire() 返回后再保存，否则 fail-closed 的抛错路径会丢失诊断信息。
+   */
+  onPreRunHookCompleted?: (result: PreRunHookRunResult) => Promise<void> | void;
 }
 
 export interface FireResult {

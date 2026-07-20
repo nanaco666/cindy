@@ -243,9 +243,9 @@ self-approve 解死锁的 PR 重审通过并合并时,「已合并」行末尾�
 
 ### 空转预检(scheduler pre-run hook,skill 外围)
 
-scheduler 每轮触发前先跑 `scripts/review-pr/pre-check.mjs`(preRunHook 协议:exit 2 = 本轮不创建会话、零 token;exit 0 = 放行;其它退出码 / 超时 → fail-open 放行)。它只在「确定没活」时 skip,共三条判据:① 互斥锁被占;② 仓库一个 open PR 都没有(**只剩 draft 不算没活**——被产品/架构门 hold 的 PR 就是 draft,得靠判据 ③ 决定);③ **空转指纹一致**——上轮 auto 扫描结论是「全 skip」,且当前 open PR 集合的状态(head commit / CI 聚合态 / 未 resolve 数 / 冲突态 / draft 态 / reviewDecision)与上轮 `--scan-all` 落盘的 `.last-scan.json` 指纹逐字节一致,**且落盘的 heldIssues(被 hold PR 的讨论 issue)逐条 updatedAt 未变**(白名单同意留言只动 issue、不动 PR 状态,不显式比对会把「同意 → 自动放行」饿死);另有 **6 小时强制心跳**(state 超龄一律放行),保证停滞催办(≥24h 阈值)、产品 issue sweep 这些**时间驱动**的动作不会因「PR 状态一直没变」而饿死,同时兜底「会话在扫描落盘后、放行动作前挂掉」的极端窗口。预检**只比对指纹、绝不重演 auto 分流判定**——判定逻辑单一来源在 `context.mjs`,双份维护漂移会导致「该审的被 hook 永久拦掉」;指纹误敏感的最坏结果只是多跑一轮 session(方向安全)。
+scheduler 每轮触发前先跑 `scripts/review-pr/pre-check.mjs`(preRunHook 协议:exit 2 = 本轮不创建会话、零 token;exit 0 = 放行;其它退出码 / 超时 → fail-closed 阻止本轮并记录失败)。它只在「确定没活」时 skip,共三条判据:① 互斥锁被占;② 仓库一个 open PR 都没有(**只剩 draft 不算没活**——被产品/架构门 hold 的 PR 就是 draft,得靠判据 ③ 决定);③ **空转指纹一致**——上轮 auto 扫描结论是「全 skip」,且当前 open PR 集合的状态(head commit / CI 聚合态 / 未 resolve 数 / 冲突态 / draft 态 / reviewDecision)与上轮 `--scan-all` 落盘的 `.last-scan.json` 指纹逐字节一致,**且落盘的 heldIssues(被 hold PR 的讨论 issue)逐条 updatedAt 未变**(白名单同意留言只动 issue、不动 PR 状态,不显式比对会把「同意 → 自动放行」饿死);另有 **6 小时强制心跳**(state 超龄一律放行),保证停滞催办(≥24h 阈值)、产品 issue sweep 这些**时间驱动**的动作不会因「PR 状态一直没变」而饿死,同时兜底「会话在扫描落盘后、放行动作前挂掉」的极端窗口。预检**只比对指纹、绝不重演 auto 分流判定**——判定逻辑单一来源在 `context.mjs`,双份维护漂移会导致「该审的被 hook 永久拦掉」;指纹误敏感的最坏结果只是多跑一轮 session(方向安全)。
 
-对 skill 流程的影响:**零**——会话真被创建时 pick / prepare / scan 照旧执行,预检只省掉「起一个会话才发现没活」的空转成本;skill 侧唯一的配合点是阶段 1 用 `--scan-all`(指纹由它落盘)。建议 schedule 的 preRunHook 配置显式 `timeoutMs`(如 60000)——宿主协议「未配置 = 不限时」,超时兜底可防 hook 意外挂死阻塞该轮触发(超时 = 放行,不会漏审)。
+对 skill 流程的影响:**零**——会话真被创建时 pick / prepare / scan 照旧执行,预检只省掉「起一个会话才发现没活」的空转成本;skill 侧唯一的配合点是阶段 1 用 `--scan-all`(指纹由它落盘)。建议 schedule 的 preRunHook 配置显式 `timeoutMs`(如 60000)——宿主协议「未配置 = 不限时」,超时兜底可防 hook 意外挂死阻塞该轮触发；超时会阻止本轮并在运行历史告警。脚本自身对 gh / state 等“无法证明没活”的异常会显式 `exit 0`,让会话内流程继续复核。
 
 ### 自动模式检测
 

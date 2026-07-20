@@ -49,8 +49,7 @@ export interface ScheduleNotifyConfig {
  * 真正启动 agent（不启动 = 零 token 消耗）。协议对齐 Claude Code hooks：
  *   - exit 0 → 放行本轮
  *   - exit 2 → 跳过本轮（run 记 'skipped'，照常重排下一次触发）
- *   - 其它退出码 / 超时 / 脚本不存在 → fail-open：照常运行并记录警告日志
- *     （fail-closed 会让脚本一坏任务就无声停摆，排查困难）
+ *   - 其它退出码 / 超时 / 脚本不存在 → fail-closed：阻止本轮并记录失败结果
  * 脚本语言无关：command 是一条经系统 shell 执行的命令字符串，cwd = 本轮工作目录，
  * stdin 收到 JSON 上下文（scheduleId / name / firedAt / workingDir 等）。
  * Windows 下 shebang 不生效，command 应写显式解释器（`node x.mjs` / `python x.py`）。
@@ -58,8 +57,35 @@ export interface ScheduleNotifyConfig {
 export interface PreRunHookConfig {
   /** 经系统 shell 执行的命令字符串。 */
   command: string;
-  /** 超时毫秒；超时按 fail-open 放行。未配置 = 不限时（无默认超时）。 */
+  /** 超时毫秒；超时会阻止本轮执行。未配置 = 不限时（无默认超时）。 */
   timeoutMs?: number;
+}
+
+/** 前置检查一次执行的最终状态。 */
+export type PreRunHookRunStatus = 'passed' | 'skipped' | 'failed' | 'timed_out' | 'aborted';
+
+/** 前置检查对本轮任务的最终判定。 */
+export type PreRunHookDecision = 'run' | 'skip' | 'block';
+
+/**
+ * 单轮前置检查的结构化结果。它独立于 agent 的 resultText：检查可能在创建 session
+ * 之前就失败，也可能通过后继续得到正常的 agent 结果。
+ */
+export interface PreRunHookRunResult {
+  status: PreRunHookRunStatus;
+  decision: PreRunHookDecision;
+  exitCode: number | null;
+  durationMs: number;
+  stdout: string;
+  stderr: string;
+  stdoutTruncated: boolean;
+  stderrTruncated: boolean;
+  /** 兼容现有执行/测试调用点的显式状态位。 */
+  timedOut: boolean;
+  aborted: boolean;
+  spawnError?: string;
+  /** spawn 失败或未形成有效退出结果时的诊断信息。 */
+  error?: string;
 }
 
 export interface Schedule {
@@ -177,6 +203,8 @@ export interface ScheduleRun {
    * 失败 run 留 undefined。供通知渲染 / 历史回顾用。
    */
   resultText?: string;
+  /** 本轮实际执行过前置检查时的结构化结果。 */
+  preRunHookResult?: PreRunHookRunResult;
   /** 用户已读时间戳（毫秒）；NULL 表示未读。仅对终态 run 有意义。 */
   readAt?: number;
   /**

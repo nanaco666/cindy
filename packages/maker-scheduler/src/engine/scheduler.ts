@@ -8,6 +8,7 @@ import type {
   SchedulerEvent,
   ScriptCapability,
   ScriptExecutionConfig,
+  PreRunHookRunResult,
 } from '../types.js';
 import { SCRIPT_CAPABILITIES } from '../types.js';
 import type { ScheduleStorage } from '../interfaces/schedule-storage.js';
@@ -470,6 +471,7 @@ export class Scheduler extends EventEmitter {
         firedAt,
         signal: controller.signal,
         onSessionBound: this.buildOnSessionBound(schedule.id, runId),
+        onPreRunHookCompleted: this.buildOnPreRunHookCompleted(runId),
         onTurnActive: this.buildOnTurnActive(runId),
         createChildRun: this.buildCreateChildRun(schedule.id, firedAt),
       });
@@ -687,6 +689,7 @@ export class Scheduler extends EventEmitter {
         firedAt,
         signal: controller.signal,
         onSessionBound: this.buildOnSessionBound(schedule.id, runId),
+        onPreRunHookCompleted: this.buildOnPreRunHookCompleted(runId),
         onTurnActive: this.buildOnTurnActive(runId),
         createChildRun: this.buildCreateChildRun(schedule.id, firedAt),
       });
@@ -1394,6 +1397,15 @@ export class Scheduler extends EventEmitter {
       } catch (err) {
         this.logger?.warn?.('updateRun(sessionId) failed', err);
       }
+    };
+  }
+
+  /** 前置检查发生在 session 创建之前，结束后立即把完整结果写到当前 run。 */
+  private buildOnPreRunHookCompleted(
+    runId: string,
+  ): (result: PreRunHookRunResult) => Promise<void> {
+    return async (result: PreRunHookRunResult) => {
+      await this.storage.updateRun(runId, { preRunHookResult: result });
     };
   }
 

@@ -13,7 +13,7 @@
  * 状态 chip：success/running 实色 grayscale；failed/aborted 描边。
  */
 
-import { ExternalLink, MoreHorizontal, RotateCw, Trash2 } from 'lucide-react';
+import { ChevronDown, ExternalLink, MoreHorizontal, RotateCw, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -58,6 +58,62 @@ function StatusChip({ status }: { status: RunStatus }) {
       )}
       {label}
     </span>
+  );
+}
+
+/** 单轮前置检查摘要与完整诊断。异常/跳过默认展开，通过默认折叠。 */
+function PreRunHookResultDetails({ result }: { result: NonNullable<ScheduleRun['preRunHookResult']> }) {
+  const { t } = useTranslation();
+  const defaultOpen = result.status !== 'passed';
+  const outputSections = [
+    { key: 'stdout', value: result.stdout, truncated: result.stdoutTruncated },
+    { key: 'stderr', value: result.stderr, truncated: result.stderrTruncated },
+  ].filter((section) => section.value.trim());
+
+  return (
+    <details
+      open={defaultOpen}
+      className="group/precheck rounded-[8px] bg-[hsl(var(--content-area))] text-[var(--settings-section-desc)]"
+    >
+      <summary
+        className={cn(
+          'flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5',
+          'text-11 [&::-webkit-details-marker]:hidden',
+        )}
+      >
+        <span className="min-w-0 truncate">
+          {t(`scheduler.runs.preRun.status.${result.status}`)} ·{' '}
+          {t(`scheduler.runs.preRun.decision.${result.decision}`)} ·{' '}
+          {t('scheduler.runs.preRun.duration', { ms: result.durationMs })}
+        </span>
+        <ChevronDown
+          size={13}
+          className="shrink-0 transition-transform group-open/precheck:rotate-180"
+          aria-hidden
+        />
+      </summary>
+      <div className="flex flex-col gap-2 border-t border-[var(--cmd-palette-border)] px-2 py-2 text-11">
+        <div className="flex flex-wrap gap-x-3 gap-y-1">
+          <span>{t('scheduler.runs.preRun.exitCode', { code: result.exitCode ?? '—' })}</span>
+          {result.error && <span className="break-words">{result.error}</span>}
+        </div>
+        {outputSections.length === 0 ? (
+          <span>{t('scheduler.runs.preRun.noOutput')}</span>
+        ) : (
+          outputSections.map((section) => (
+            <section key={section.key} className="flex flex-col gap-1">
+              <span className="font-medium">
+                {t(`scheduler.runs.preRun.${section.key}`)}
+                {section.truncated ? ` · ${t('scheduler.runs.preRun.truncated')}` : ''}
+              </span>
+              <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border border-[var(--cmd-palette-border)] p-2 font-mono text-11">
+                {section.value}
+              </pre>
+            </section>
+          ))
+        )}
+      </div>
+    </details>
   );
 }
 
@@ -289,7 +345,9 @@ export function RunHistoryCard({
 
       {/* skipped:展示前置检查摘要(exit code / 耗时 / stdout 首行),灰阶弱化 —— 让
           "为什么这轮没跑"在历史里可追溯,与调度器故障区分。 */}
-      {run.status === 'skipped' && run.resultText && (
+      {run.preRunHookResult && <PreRunHookResultDetails result={run.preRunHookResult} />}
+
+      {run.status === 'skipped' && !run.preRunHookResult && run.resultText && (
         <p
           className={cn(
             'rounded-[8px] px-2 py-1.5 font-mono text-11 break-words',

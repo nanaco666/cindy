@@ -1180,12 +1180,16 @@ describe('schedule_set_pre_run_hook — 统一安装通道', () => {
                   filePath: '/repo/scripts/schedule-checks/x.mjs',
                   content: 'process.exit(2)',
                   test: {
+                    status: 'skipped' as const,
                     decision: 'skip' as const,
                     exitCode: 2,
                     timedOut: false,
+                    aborted: false,
                     durationMs: 5,
                     stdout: '',
                     stderr: '',
+                    stdoutTruncated: false,
+                    stderrTruncated: false,
                   },
                 };
               },

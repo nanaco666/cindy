@@ -1,0 +1,81 @@
+// @vitest-environment jsdom
+
+import { cleanup, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ScheduleRun } from '@lizi/maker-scheduler';
+
+import { RunHistoryCard } from '../RunHistoryCard';
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
+
+afterEach(cleanup);
+
+function renderRun(run: ScheduleRun) {
+  return render(
+    <MemoryRouter>
+      <RunHistoryCard run={run} agentKind="codex" />
+    </MemoryRouter>,
+  );
+}
+
+describe('RunHistoryCard 前置检查结果', () => {
+  it('通过结果显示摘要且默认折叠', () => {
+    const { container } = renderRun({
+      id: 'run-passed',
+      scheduleId: 'schedule-1',
+      firedAt: 1,
+      finishedAt: 11,
+      status: 'success',
+      readAt: 11,
+      preRunHookResult: {
+        status: 'passed',
+        decision: 'run',
+        exitCode: 0,
+        durationMs: 10,
+        stdout: '',
+        stderr: '',
+        stdoutTruncated: false,
+        stderrTruncated: false,
+        timedOut: false,
+        aborted: false,
+      },
+    });
+
+    expect(screen.getByText(/scheduler\.runs\.preRun\.status\.passed/)).toBeTruthy();
+    expect(container.querySelector('details')?.open).toBe(false);
+  });
+
+  it('失败结果默认展开并展示错误、stdout、stderr 与截断提示', () => {
+    const { container } = renderRun({
+      id: 'run-failed',
+      scheduleId: 'schedule-1',
+      firedAt: 1,
+      finishedAt: 11,
+      status: 'failed',
+      errorMsg: 'pre-run hook failed',
+      readAt: 11,
+      preRunHookResult: {
+        status: 'failed',
+        decision: 'block',
+        exitCode: 1,
+        durationMs: 10,
+        stdout: 'captured stdout',
+        stderr: 'captured stderr',
+        stdoutTruncated: true,
+        stderrTruncated: false,
+        timedOut: false,
+        aborted: false,
+        error: 'command failed',
+      },
+    });
+
+    expect(container.querySelector('details')?.open).toBe(true);
+    expect(screen.getByText('command failed')).toBeTruthy();
+    expect(screen.getByText('captured stdout')).toBeTruthy();
+    expect(screen.getByText('captured stderr')).toBeTruthy();
+    expect(screen.getByText(/scheduler\.runs\.preRun\.truncated/)).toBeTruthy();
+  });
+});

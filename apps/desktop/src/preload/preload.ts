@@ -4105,13 +4105,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
         targetSessionId?: string;
         scheduleName?: string;
       }): Promise<{
-        decision: 'run' | 'skip';
+        status: 'passed' | 'skipped' | 'failed' | 'timed_out' | 'aborted';
+        decision: 'run' | 'skip' | 'block';
         exitCode: number | null;
-        timedOut: boolean;
-        spawnError?: string;
         durationMs: number;
         stdout: string;
         stderr: string;
+        stdoutTruncated: boolean;
+        stderrTruncated: boolean;
+        timedOut: boolean;
+        aborted: boolean;
+        spawnError?: string;
+        error?: string;
       }> => ipcRenderer.invoke('maker:schedule:test-pre-run-hook', params),
       /** 表单「AI 生成」:生成前置检查脚本并落盘(落盘即自测),返回可填入的命令 + 自测结果。 */
       generatePreRunHook: (params: {
@@ -4126,13 +4131,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
         filePath: string;
         content: string;
         test: {
-          decision: 'run' | 'skip';
+          status: 'passed' | 'skipped' | 'failed' | 'timed_out' | 'aborted';
+          decision: 'run' | 'skip' | 'block';
           exitCode: number | null;
-          timedOut: boolean;
-          spawnError?: string;
           durationMs: number;
           stdout: string;
           stderr: string;
+          stdoutTruncated: boolean;
+          stderrTruncated: boolean;
+          timedOut: boolean;
+          aborted: boolean;
+          spawnError?: string;
+          error?: string;
         };
       }> => ipcRenderer.invoke('maker:schedule:generate-pre-run-hook', params),
       listRuns: (id: string, limit?: number): Promise<unknown[]> =>

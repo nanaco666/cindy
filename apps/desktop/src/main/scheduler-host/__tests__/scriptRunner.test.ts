@@ -123,6 +123,50 @@ describe('ScriptScheduleRunner', () => {
     );
   });
 
+  it('pre-run hook 失败时保存检查结果、阻止主脚本并发送失败通知', async () => {
+    const hookChild = childProcess();
+    spawnMock.mockReturnValue(hookChild);
+    const notifier = { notify: vi.fn(async () => undefined) };
+    const onPreRunHookCompleted = vi.fn(async () => undefined);
+    const runner = new ScriptScheduleRunner({
+      broker: { call: vi.fn() },
+      logger: {},
+      notifier,
+    });
+    const resultPromise = runner.fire(
+      { ...schedule(), preRunHook: { command: 'node check.mjs' } },
+      {
+        runId: 'run-hook-failed',
+        firedAt: 2,
+        signal: new AbortController().signal,
+        onPreRunHookCompleted,
+      },
+    );
+
+    hookChild.stderr.write('dependency unavailable');
+    hookChild.emit('close', 1);
+
+    await expect(resultPromise).rejects.toThrow('pre-run hook failed with exit code 1');
+    expect(onPreRunHookCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'failed',
+        decision: 'block',
+        exitCode: 1,
+        stderr: 'dependency unavailable',
+      }),
+    );
+    // 只有前置检查进程被启动，任务本体脚本不会 spawn。
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+    expect(notifier.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'script-schedule' }),
+      expect.objectContaining({
+        id: 'run-hook-failed',
+        status: 'failed',
+        errorMsg: 'pre-run hook failed with exit code 1',
+      }),
+    );
+  });
+
   it('does not finalize a run while a host call is still in flight (codex review #966)', async () => {
     // sessions.dispatch/jira.add_comment 这类写操作:complete 帧比 broker.call()
     // 的 resolve 先到达时,不能立即视为终态关 stdin——否则写操作真失败会被静默

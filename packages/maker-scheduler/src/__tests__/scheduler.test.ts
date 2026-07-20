@@ -1642,7 +1642,37 @@ describe('Scheduler passive mode', () => {
   });
 });
 
-describe('Scheduler preRunHook skipped', () => {
+describe('Scheduler preRunHook results', () => {
+  it('runNow fail-closed:检查结果在无 session 时仍落库，run 记 failed 且未读', async () => {
+    const preRunHookResult: NonNullable<ScheduleRun['preRunHookResult']> = {
+      status: 'failed',
+      decision: 'block',
+      exitCode: 1,
+      durationMs: 6,
+      stdout: '',
+      stderr: 'syntax error',
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      timedOut: false,
+      aborted: false,
+    };
+    const h = makeHarness({
+      runnerImpl: async (_schedule, ctx) => {
+        await ctx.onPreRunHookCompleted?.(preRunHookResult);
+        throw new Error('pre-run hook failed with exit code 1');
+      },
+    });
+    const sch = await h.scheduler.create({ ...baseInput });
+
+    const { runId } = await h.scheduler.runNow(sch.id);
+    const run = (await h.scheduler.listRuns(sch.id)).find((item) => item.id === runId);
+
+    expect(run?.status).toBe('failed');
+    expect(run?.sessionId).toBeUndefined();
+    expect(run?.readAt).toBeUndefined();
+    expect(run?.preRunHookResult).toEqual(preRunHookResult);
+  });
+
   it('cron fire skipped: run 保留为 skipped(生而已读)、照常重排、发 skipped 事件', async () => {
     const h = makeHarness({
       runnerImpl: async () => ({

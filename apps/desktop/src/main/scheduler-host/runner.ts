@@ -67,7 +67,7 @@ import {
 import { resolveWorkingDir } from './workdir-resolver';
 import type { SchedulerDrizzleDb } from './storage';
 import { backfillSessionMeta } from './runners/_shared';
-import { executePreRunHook } from './pre-run-hook';
+import { executePreRunHook, formatPreRunHookFailure } from './pre-run-hook';
 import { buildSkipResultText, recordScheduleSkip } from './skip-trace';
 import { defaultModelFor } from './model-defaults';
 
@@ -288,12 +288,12 @@ export class MakerScheduleRunner implements ScheduleRunner {
     // 1.5 前置检查脚本(Pre-run Hook):放在一切查询 / worktree 创建 / session 创建
     // 之前 —— 被拦截的轮次除了跑一个脚本什么都不做,零 token 零副作用。
     // exit 0 放行;exit 2 跳过(写留痕消息后返回 skipped,engine 落 'skipped' run);
-    // 其它退出码 / 超时 / spawn 失败 fail-open 照常运行(见 executePreRunHook 注释)。
+    // 其它退出码 / 超时 / spawn 失败 fail-closed：持久化检查结果并阻止 agent。
     if (schedule.preRunHook?.command?.trim()) {
       // cwd:heartbeat(绑定会话)任务以会话 meta.workDir 为**权威**(与步骤 3 的
       // workingDir 解析口径一致)—— schedule.workingDir 可能为空,也可能是"project
       // 任务后来改绑会话"留下的过期值,只作 meta 读不到时的回落。否则 hook 回落
-      // homedir / 过期目录,仓库相关检查(git 等)恒失败 fail-open,拦截形同虚设。
+      // homedir / 过期目录,仓库相关检查(git 等)会恒失败并阻止任务,造成误拦截。
       // getSessionMeta 是纯读查询,不产生目录副作用;失败(会话缺失等)回落原值,
       // 交给后面 archived 兜底。dialogue 任务无目录时仍由执行器回落 homedir
       // (脚本内应使用绝对路径)。刻意不在此处解析 worktree / dialogue 目录 ——
@@ -322,8 +322,9 @@ export class MakerScheduleRunner implements ScheduleRunner {
           lastFinishedAt: schedule.lastFinishedAt,
         },
       });
-      if (hook.aborted || ctx.signal.aborted) {
-        // 本轮已被 pause/delete 中止:不留痕、不 fail-open 继续,直接抛回 engine
+      await ctx.onPreRunHookCompleted?.(hook);
+      if (hook.status === 'aborted' || ctx.signal.aborted) {
+        // 本轮已被 pause/delete 中止:不留痕、不继续执行,直接抛回 engine
         // (controller.signal.aborted 会让 run 记 'aborted' 而非 'failed')。
         this.deps.logger.info?.('[runner] pre-run hook aborted by pause/delete', {
           scheduleId: schedule.id,
@@ -359,26 +360,26 @@ export class MakerScheduleRunner implements ScheduleRunner {
           resultText: buildSkipResultText(hook),
         };
       }
-      if (hook.exitCode !== 0 || hook.timedOut || hook.spawnError) {
-        // fail-open 放行,但要让排查有迹可循
-        this.deps.logger.warn?.('[runner] pre-run hook did not exit 0; fail-open (run proceeds)', {
+      if (hook.decision === 'block') {
+        const errMsg = formatPreRunHookFailure(hook);
+        this.deps.logger.warn?.('[runner] pre-run hook failed; fail-closed (run blocked)', {
           scheduleId: schedule.id,
           runId: ctx.runId,
+          status: hook.status,
           exitCode: hook.exitCode,
-          timedOut: hook.timedOut,
-          spawnError: hook.spawnError,
+          error: hook.error,
           stderr: hook.stderr.slice(0, 500),
         });
-      } else {
-        // exit 0 正常放行也要留痕:否则"hook 到底跑没跑"无从排查
-        // (用户点立即运行看到任务照常执行,分辨不出是放行了还是根本没执行 hook)。
-        this.deps.logger.info?.('[runner] pre-run hook passed (exit 0); run proceeds', {
-          scheduleId: schedule.id,
-          runId: ctx.runId,
-          durationMs: hook.durationMs,
-          stdout: hook.stdout.slice(0, 200),
-        });
+        await this.notifyFailureSilent(schedule, ctx, errMsg);
+        throw new Error(errMsg);
       }
+      // exit 0 正常放行也要留痕:否则"hook 到底跑没跑"无从排查。
+      this.deps.logger.info?.('[runner] pre-run hook passed (exit 0); run proceeds', {
+        scheduleId: schedule.id,
+        runId: ctx.runId,
+        durationMs: hook.durationMs,
+        stdout: hook.stdout.slice(0, 200),
+      });
     }
 
     // isHeartbeat / sessionId 在 persistentSession 自我续命分支里可能被翻回新建路径，
