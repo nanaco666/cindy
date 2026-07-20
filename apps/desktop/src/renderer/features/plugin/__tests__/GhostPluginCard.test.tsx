@@ -105,6 +105,24 @@ describe('GhostPluginCard', () => {
     ).toBe(true);
   });
 
+  it('renders project-scope enabled state and respects the global-disabled lock', () => {
+    render(
+      <GhostPluginCard
+        item={{ ...uninstalledPlugin, installed: true, enabled: false, canUse: false }}
+        onSelect={vi.fn()}
+        onAction={vi.fn()}
+        onToggle={vi.fn()}
+        effectiveEnabled={false}
+        toggleDisabled
+        restoring={false}
+      />,
+    );
+
+    const toggle = screen.getByRole('switch', { name: 'settings.ghosts.enableAria' });
+    expect((toggle as HTMLButtonElement).disabled).toBe(true);
+    expect(toggle.getAttribute('data-state')).toBe('unchecked');
+  });
+
   it('renders a functional media symbol when the plugin package has no icon', () => {
     const { container } = render(
       <GhostPluginCard

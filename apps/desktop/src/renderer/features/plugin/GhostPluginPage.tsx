@@ -6,7 +6,7 @@
  * [PROTOCOL]: 变更时更新此头部，然后检查 CLAUDE.md
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown, Plus, Sparkles, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -34,6 +34,8 @@ import { patchDraft } from '@/state/newMakerDraft';
 import { ghostInstallErrorKey } from '@/cindy-brain/installErrorKey';
 import { confirmAndInstallGhost, pickAndUpdateGhost } from '@/cindy-brain/installFlow';
 import { cn } from '@/lib/utils';
+import { Switch } from '@/components/ui/switch';
+import { getLastWorkingDir, subscribeToLastWorkingDir } from '@/state/lastWorkingDir';
 import { findSplitChildByPanelKind } from '../../../shared/layoutTree';
 import { ghostPanelKind } from '../../../shared/ghost';
 import {
@@ -50,6 +52,7 @@ import {
 import { PluginManagementLayout, PluginManagementPage } from './PluginManagementLayout';
 import { GhostPluginDetailView } from './GhostPluginDetailView';
 import { GhostPluginIcon } from './GhostPluginIcon';
+import { PluginScopePicker, usePluginRecentWorkdirs } from './PluginScopePicker';
 import './plugin-motion.css';
 
 function originFor(
@@ -87,6 +90,33 @@ export function GhostPluginPage() {
   );
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [installedExpanded, setInstalledExpanded] = useState(false);
+  const activeSessionWorkingDir = useSyncExternalStore(
+    subscribeToLastWorkingDir,
+    getLastWorkingDir,
+    getLastWorkingDir,
+  );
+  const recentWorkdirs = usePluginRecentWorkdirs();
+  const [scopeDir, setScopeDir] = useState<string | null>(null);
+  const scopeDirRef = useRef<string | null>(scopeDir);
+  scopeDirRef.current = scopeDir;
+  const [projectDisabled, setProjectDisabled] = useState<Set<string>>(() => new Set());
+  const handlePickScope = useCallback((dir: string | null) => {
+    setScopeDir(dir);
+    if (!dir) {
+      setProjectDisabled(new Set());
+      return;
+    }
+    try {
+      setProjectDisabled(new Set(window.electronAPI.ghosts.workdirPrefsSync(dir).disabled));
+    } catch {
+      setProjectDisabled(new Set());
+    }
+  }, []);
+  const effectiveEnabled = useCallback(
+    (id: string, globallyEnabled: boolean) =>
+      scopeDir === null ? globallyEnabled : globallyEnabled && !projectDisabled.has(id),
+    [projectDisabled, scopeDir],
+  );
   const [recentGhostIds, setRecentGhostIds] = useState(
     () => window.electronAPI.ghosts.recentUsageSync().ids,
   );
@@ -94,6 +124,14 @@ export function GhostPluginPage() {
     () =>
       window.electronAPI.ghosts.onChanged(() => {
         setBuiltinStatus(window.electronAPI.ghosts.builtinStatusSync());
+        const dir = scopeDirRef.current;
+        if (dir) {
+          try {
+            setProjectDisabled(new Set(window.electronAPI.ghosts.workdirPrefsSync(dir).disabled));
+          } catch {
+            // Keep the current project snapshot if another window races the read.
+          }
+        }
       }),
     [],
   );
@@ -195,12 +233,28 @@ export function GhostPluginPage() {
   const handleToggle = useCallback(
     async (id: string, enabled: boolean) => {
       try {
-        await window.electronAPI.ghosts.setEnabled(id, enabled);
+        const dir = scopeDirRef.current;
+        if (dir) {
+          const result = await window.electronAPI.ghosts.setWorkdirDisabled(dir, id, !enabled);
+          setProjectDisabled(new Set(result.disabled));
+          toast.success(
+            t(
+              enabled
+                ? 'settings.ghosts.toast.projectEnabled'
+                : 'settings.ghosts.toast.projectDisabled',
+              {
+                name: ghosts.find((ghost) => ghost.manifest.id === id)?.manifest.name ?? id,
+              },
+            ),
+          );
+        } else {
+          await window.electronAPI.ghosts.setEnabled(id, enabled);
+        }
       } catch (error) {
         toast.error(t(ghostInstallErrorKey(extractIpcError(error)?.code)));
       }
     },
-    [t],
+    [ghosts, t],
   );
 
   const handleUpdate = useCallback(async () => {
@@ -298,6 +352,11 @@ export function GhostPluginPage() {
         ghost={selectedGhost}
         detail={selectedDetail}
         panelStatus={panelStatus}
+        enabledOverride={
+          selectedGhost
+            ? effectiveEnabled(selectedGhost.manifest.id, selectedGhost.enabled)
+            : undefined
+        }
         onBack={() => setSelectedId(null)}
         onToggle={(enabled) => void handleToggle(selectedDetail.id, enabled)}
         onUse={handleUse}
@@ -305,7 +364,7 @@ export function GhostPluginPage() {
         onUninstall={() => void handleUninstall()}
         onInstall={() => void handleRestore(selectedDetail.id, selectedDetail.name)}
         installing={restoringId === selectedDetail.id}
-        toggleDisabled={false}
+        toggleDisabled={scopeDir !== null && selectedGhost !== null && !selectedGhost.enabled}
       />
     );
   }
@@ -330,13 +389,43 @@ export function GhostPluginPage() {
       >
         <PluginManagementPage>
           <header className="plugin-motion-page-header pb-2">
-            <h1 className="text-28 font-medium leading-tight text-[var(--text-primary)]">
-              {t('settings.ghosts.title')}
-            </h1>
-            <p className="mt-2 max-w-2xl text-14 leading-6 text-[var(--text-secondary)]">
-              {t('settings.ghosts.description')}
-            </p>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h1 className="text-28 font-medium leading-tight text-[var(--text-primary)]">
+                  {t('settings.ghosts.title')}
+                </h1>
+                <p className="mt-2 max-w-2xl text-14 leading-6 text-[var(--text-secondary)]">
+                  {t('settings.ghosts.description')}
+                </p>
+              </div>
+              <PluginScopePicker
+                scopeDir={scopeDir}
+                activeSessionWorkingDir={activeSessionWorkingDir ?? undefined}
+                recentWorkdirs={recentWorkdirs}
+                onPick={handlePickScope}
+              />
+            </div>
           </header>
+
+          {scopeDir ? (
+            <div className="mt-5 flex items-center justify-between gap-3 rounded-xl border border-[var(--border-default)] bg-[var(--surface-chip)] px-4 py-3">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="truncate text-13 font-medium text-[var(--text-primary)]">
+                  {scopeDir}
+                </span>
+                <span className="truncate text-12 text-[var(--text-tertiary)]">
+                  {t('settings.ghosts.projectBanner.desc')}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handlePickScope(null)}
+                className="shrink-0 rounded-full border border-[var(--border-default)] px-3 py-1 text-12 text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover-soft)]"
+              >
+                {t('settings.ghosts.projectBanner.backToGlobal')}
+              </button>
+            </div>
+          ) : null}
 
           {installedShortcutItems.length > 0 ? (
             <section className="plugin-motion-page-section mt-5 border-b-[0.5px] border-[var(--border-default)] pb-5">
@@ -461,6 +550,13 @@ export function GhostPluginPage() {
                       if (item.installed) handleUseGhost(item.id);
                       else void handleRestore(item.id, item.name);
                     }}
+                    effectiveEnabled={
+                      item.installed ? effectiveEnabled(item.id, item.enabled) : undefined
+                    }
+                    toggleDisabled={scopeDir !== null && !item.enabled}
+                    onToggle={
+                      item.installed ? (enabled) => void handleToggle(item.id, enabled) : undefined
+                    }
                     restoring={restoringId === item.id}
                   />
                 ))}
@@ -561,11 +657,17 @@ export function GhostPluginCard({
   item,
   onSelect,
   onAction,
+  onToggle,
+  effectiveEnabled,
+  toggleDisabled = false,
   restoring,
 }: {
   item: GhostPluginCardItem;
   onSelect: () => void;
   onAction: () => void;
+  onToggle?: (enabled: boolean) => void;
+  effectiveEnabled?: boolean;
+  toggleDisabled?: boolean;
   restoring: boolean;
 }) {
   const { t } = useTranslation();
@@ -608,21 +710,33 @@ export function GhostPluginCard({
           </span>
         </span>
       </button>
-      <button
-        type="button"
-        onClick={onAction}
-        disabled={restoring || (item.installed && (!item.enabled || !item.canUse))}
-        className={cn(
-          'inline-flex h-8 shrink-0 items-center justify-center self-center rounded-lg border border-[var(--border-default)] bg-transparent px-3 text-12 font-medium text-[var(--text-primary)]',
-          'transition-[background-color,border-color,transform,opacity] duration-150',
-          'hover:border-[var(--text-tertiary)] hover:bg-[var(--surface-hover-soft)] active:scale-[0.98]',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
-          'disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100',
-        )}
-        aria-label={t(actionAriaKey, { name: item.name })}
-      >
-        {t(actionKey)}
-      </button>
+      <div className="flex shrink-0 items-center gap-2 self-center">
+        {item.installed && onToggle ? (
+          <Switch
+            checked={effectiveEnabled ?? item.enabled}
+            disabled={restoring || toggleDisabled}
+            onCheckedChange={onToggle}
+            aria-label={t('settings.ghosts.enableAria', { name: item.name })}
+          />
+        ) : null}
+        <button
+          type="button"
+          onClick={onAction}
+          disabled={
+            restoring || (item.installed && (!(effectiveEnabled ?? item.enabled) || !item.canUse))
+          }
+          className={cn(
+            'inline-flex h-8 shrink-0 items-center justify-center self-center rounded-lg border border-[var(--border-default)] bg-transparent px-3 text-12 font-medium text-[var(--text-primary)]',
+            'transition-[background-color,border-color,transform,opacity] duration-150',
+            'hover:border-[var(--text-tertiary)] hover:bg-[var(--surface-hover-soft)] active:scale-[0.98]',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]',
+            'disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100',
+          )}
+          aria-label={t(actionAriaKey, { name: item.name })}
+        >
+          {t(actionKey)}
+        </button>
+      </div>
     </article>
   );
 }

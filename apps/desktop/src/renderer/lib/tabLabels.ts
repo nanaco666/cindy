@@ -8,7 +8,6 @@ export type SettingsTab =
   | 'general'
   | 'personalization'
   | 'providers'
-  | 'ghosts'
   | 'api-keys'
   | 'voice-input'
   | 'shortcuts'
@@ -27,12 +26,9 @@ export const TAB_IDS: ReadonlyArray<SettingsTab> = [
   'general',
   'personalization',
   'providers',
-  // 意识紧随模型供应商(Lizi 2026-07-08 拍板:意识是核心能力入口,位置靠前)。
-  'ghosts',
   // 「工具密钥」(api-keys)已于 2026-07-13 下架:面板里最后一把 mivo key 随
   // XD Mivo 意识化改由意识设置页收单(官方别名映射同一存储键)。id 仍留在
-  // SettingsTab 类型与 TAB_LABEL_KEY(?tab=api-keys 深链 → ghosts 重定向复用,
-  // 口径同 tina)。
+  // SettingsTab 类型与 TAB_LABEL_KEY 保留,供旧深链重定向到插件页。
   'voice-input',
   // IM 机器人紧随语音输入(Lizi 2026-07-15 拍板)。
   'im-bot',
@@ -41,7 +37,7 @@ export const TAB_IDS: ReadonlyArray<SettingsTab> = [
   'import',
   // 「第三方平台」(connections)已于 2026-07-15 下架:Slack 官方 MCP 随 cindy-slack
   // 意识化收尾(Google/Jira/GitHub/GitLab 此前已迁意识)。id 仍留在 SettingsTab
-  // 类型与 TAB_LABEL_KEY(?tab=connections 深链 → ghosts 重定向复用,口径同 tina)。
+  // 类型与 TAB_LABEL_KEY 保留,供旧深链重定向到插件页。
   'remote-control',
   'builtin-tools',
   'computer-use',
@@ -59,7 +55,6 @@ export const TAB_LABEL_KEY: Record<SettingsTab, string> = {
   import: 'settings.tabs.import',
   connections: 'settings.tabs.connections',
   providers: 'settings.tabs.providers',
-  ghosts: 'settings.tabs.ghosts',
   'remote-control': 'settings.tabs.remoteControl',
   tina: 'settings.tabs.tina',
   'builtin-tools': 'settings.tabs.builtinTools',

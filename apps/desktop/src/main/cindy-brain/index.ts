@@ -2146,7 +2146,7 @@ export function registerGhostIpc(): void {
       video: byKind(getCatalogVideoConfig()),
     };
   });
-  // ── 目录级禁用(ghostWorkdirPrefs;设置 → 插件 的项目范围视图)──
+  // ── 目录级禁用(ghostWorkdirPrefs;插件页的项目范围视图)──
   // 读走 sendSync:切换范围时禁用清单要与卡片同帧渲染(规则 7 无跳变),
   // 文件读取极小且带 mtime 缓存。写走 invoke;写后广播 ghosts:changed
   // (renderer 复用同一订阅热更,多窗口同步)。

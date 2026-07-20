@@ -57,6 +57,7 @@ interface GhostPluginDetailViewProps {
   ghost: InstalledGhost | null;
   detail: GhostPluginDetail;
   panelStatus: string | null;
+  enabledOverride?: boolean;
   onBack: () => void;
   onToggle: (enabled: boolean) => void;
   onUse: () => void;
@@ -107,6 +108,7 @@ export function GhostPluginDetailView({
   ghost,
   detail,
   panelStatus,
+  enabledOverride,
   onBack,
   onToggle,
   onUse,
@@ -120,7 +122,8 @@ export function GhostPluginDetailView({
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [descriptionOverflows, setDescriptionOverflows] = useState(false);
   const descriptionRef = useRef<HTMLParagraphElement>(null);
-  const canUse = detail.installed && detail.enabled && detail.canUse;
+  const enabled = enabledOverride ?? detail.enabled;
+  const canUse = detail.installed && enabled && detail.canUse;
   const cindyCapabilities = detail.cindyCapabilities;
   const hasConfiguration = detail.hasSettingsUi || cindyCapabilities.length > 0;
   const summary = ghostPluginSummary(detail.description, detail.id);
@@ -212,7 +215,7 @@ export function GhostPluginDetailView({
                     type="button"
                     onClick={onUse}
                     disabled={!canUse}
-                    title={!detail.enabled ? t('settings.ghosts.detail.useDisabled') : undefined}
+                    title={!enabled ? t('settings.ghosts.detail.useDisabled') : undefined}
                     className={cn(
                       'inline-flex h-10 min-w-[88px] items-center justify-center rounded-full px-5 text-13 font-medium',
                       'bg-[var(--accent-cta-bg)] text-[var(--accent-pure-cta-fg)]',
@@ -224,7 +227,7 @@ export function GhostPluginDetailView({
                     {t('settings.ghosts.detail.useAction')}
                   </button>
                   <Switch
-                    checked={detail.enabled}
+                    checked={enabled}
                     onCheckedChange={onToggle}
                     disabled={toggleDisabled}
                     aria-label={t('settings.ghosts.enableAria', { name: detail.name })}

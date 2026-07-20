@@ -1,7 +1,7 @@
 ---
 id: integrations
 title: What Cindy integrates with
-summary: Supported external services — FeiShu, Slack, Google, Jira / Confluence, GitHub, GitLab (via ghosts) — and what's not supported.
+summary: Supported external services — FeiShu, Slack, Google, Jira / Confluence, GitHub, GitLab (via plugins) — and what's not supported.
 tab: connections
 status: draft
 ---
@@ -9,11 +9,11 @@ At a glance, Cindy integrates with:
 
 - **FeiShu (Lark)** — sign-in (OAuth) and DM-style bot notifications. See the FeiShu bot topic.
 - **Slack** — one Slack binding (Settings > Slack toggle) powers both directions: the Slack channel bot for receiving tasks, and agent Slack tools (search / read history / post as the bound user via Slack's hosted MCP) available in every session.
-- **Google** — Gmail / Calendar / Drive / Sheets, via the Filo Google ghost (Settings > Ghosts > Filo Google).
-- **Jira / Confluence** — via the XD Atlassian ghost (Settings > Ghosts > XD Atlassian; one OAuth covers both).
-- **GitHub / GitLab** — via the Cindy GitHub and Cindy GitLab ghosts (Settings > Ghosts).
+- **Google** — Gmail / Calendar / Drive / Sheets, via the Filo Google plugin (Plugins > Filo Google).
+- **Jira / Confluence** — via the XD Atlassian plugin (Plugins > XD Atlassian; one OAuth covers both).
+- **GitHub / GitLab** — via the Cindy GitHub and Cindy GitLab plugins (Plugins).
 - **The coding agents** — Claude Code and Codex can reach pay-per-token models through **Cindy AI** in Settings > Model Providers.
-- **Mivo** (optional) — image / video / music / 3D generation via the built-in XD Mivo ghost; add your Mivo key on its ghost detail page under Settings > Ghosts.
+- **Mivo** (optional) — image / video / music / 3D generation via the built-in XD Mivo plugin; add your Mivo key on its plugin detail page under Plugins.
 
 **Not supported:**
 
@@ -22,4 +22,4 @@ At a glance, Cindy integrates with:
 
 **Notes:**
 
-- Most of these connections are accessed by the agents through their tools (ghosts / MCPs), not directly by the desktop app. Connecting on the ghost detail page is what gives its tools access to your account.
+- Most of these connections are accessed by the agents through their tools (plugins / MCPs), not directly by the desktop app. Connecting on the plugin detail page is what gives its tools access to your account.
