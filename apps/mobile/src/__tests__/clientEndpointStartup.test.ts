@@ -56,7 +56,7 @@ describe('runStartupEndpointResolve(CDN 解析)', () => {
     expect(env.REVIEW_MODE).toBe(false);
   });
 
-  it('清单 review 命中二进制版本号 → REVIEW_MODE=true;不命中 → false', async () => {
+  it('清单 review 命中二进制版本号且非 TestFlight → REVIEW_MODE=true', async () => {
     vi.resetModules();
     vi.doMock('expo-constants', () => ({
       default: { expoConfig: { version: '9.9.9' }, nativeAppVersion: '9.9.9' },
@@ -77,9 +77,20 @@ describe('runStartupEndpointResolve(CDN 解析)', () => {
       outcome = await startup.runStartupEndpointResolve({
         fetchManifestText: async () =>
           JSON.stringify({ ...FULL_MANIFEST_OBJECT, review: '9.9.9' }),
+        resolveIsTestFlight: async () => false,
       });
       expect(outcome).toEqual({ ok: true, source: 'cdn' });
       expect(env.REVIEW_MODE).toBe(true);
+      expect(env.IS_TESTFLIGHT_BUILD).toBe(false);
+
+      outcome = await startup.runStartupEndpointResolve({
+        fetchManifestText: async () =>
+          JSON.stringify({ ...FULL_MANIFEST_OBJECT, review: '9.9.9' }),
+        resolveIsTestFlight: async () => true,
+      });
+      expect(outcome).toEqual({ ok: true, source: 'cdn' });
+      expect(env.REVIEW_MODE).toBe(false);
+      expect(env.IS_TESTFLIGHT_BUILD).toBe(true);
 
       outcome = await startup.runStartupEndpointResolve({
         fetchManifestText: async () =>
@@ -228,10 +239,11 @@ describe('runStartupEndpointResolve(CDN 解析)', () => {
 });
 
 describe('isReviewModeActive(送审版本号匹配纯函数)', () => {
-  it('严格相等(含 trim)才命中;任一侧为空恒 false', async () => {
+  it('严格相等(含 trim)且非 TestFlight 才命中;任一侧为空恒 false', async () => {
     const { env } = await freshModules();
     expect(env.isReviewModeActive('1.4.0', '1.4.0')).toBe(true);
     expect(env.isReviewModeActive(' 1.4.0 ', '1.4.0')).toBe(true);
+    expect(env.isReviewModeActive('1.4.0', '1.4.0', true)).toBe(false);
     expect(env.isReviewModeActive('1.4.1', '1.4.0')).toBe(false);
     expect(env.isReviewModeActive(null, '1.4.0')).toBe(false);
     expect(env.isReviewModeActive(undefined, '1.4.0')).toBe(false);
