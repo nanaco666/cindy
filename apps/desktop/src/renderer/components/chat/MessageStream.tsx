@@ -1206,6 +1206,15 @@ function isAssistantAnswerCandidate(it: RenderItem): it is MessageRenderItem {
   );
 }
 
+/** 自动压缩会开始新的 live 工作片段，因此也必须结束压缩前的动作组。 */
+function isCompactBoundaryItem(it: RenderItem): it is MessageRenderItem {
+  return (
+    it.type === 'message'
+    && it.message.role === 'assistant'
+    && it.message.systemCardType === 'compact'
+  );
+}
+
 /** 子项的稳定 clientId(group key 派生用)。 */
 function workChildClientId(it: WorkChildItem): string {
   if (it.type === 'tool_segment') return it.toolCalls[0].clientId;
@@ -1422,14 +1431,17 @@ function groupLegacyWorkRuns(items: RenderItem[]): RenderItem[] {
 
 /** Active turn 专用分组:
  *  - assistant 文字始终作为普通 message 留在主消息流;
- *  - 文字是动作组的分段边界:新文字一出现,前一段立即变为已完成;
- *  - 最后一段之后还没有 assistant 文字时,该段才标成 streaming,
+ *  - assistant 文字和自动压缩卡片是动作组的分段边界:边界一出现,
+ *    前一段立即变为已完成;
+ *  - 最后一段之后还没有新的边界时,该段才标成 streaming,
  *    默认显示 latest-five preview。
  */
 function groupActiveWorkRuns(items: RenderItem[]): RenderItem[] {
-  let lastAssistantTextIdx = -1;
+  let lastCompletedRunBoundaryIdx = -1;
   for (let i = 0; i < items.length; i++) {
-    if (isAssistantAnswerCandidate(items[i])) lastAssistantTextIdx = i;
+    if (isAssistantAnswerCandidate(items[i]) || isCompactBoundaryItem(items[i])) {
+      lastCompletedRunBoundaryIdx = i;
+    }
   }
 
   const out: RenderItem[] = [];
@@ -1437,7 +1449,7 @@ function groupActiveWorkRuns(items: RenderItem[]): RenderItem[] {
   let runLastIdx = -1;
   const flushRun = (nextItem: RenderItem | undefined) => {
     if (run.length === 0) return;
-    out.push(createWorkGroup(run, nextItem, runLastIdx > lastAssistantTextIdx));
+    out.push(createWorkGroup(run, nextItem, runLastIdx > lastCompletedRunBoundaryIdx));
     run = [];
   };
 
