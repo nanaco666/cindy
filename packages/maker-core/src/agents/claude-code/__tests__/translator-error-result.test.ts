@@ -17,7 +17,7 @@ function createTurnState(): TurnState {
     sawCompactBoundary: false,
     hasEmittedText: false,
     uiEmittedText: '',
-    pushedTerminalError: false,
+    pendingApiError: null,
     interruptRequested: false,
     generation: 0,
     interruptGeneration: 0,
@@ -124,9 +124,69 @@ describe('Claude Code translator is_error result guard', () => {
     expect(events.some((e) => e.type === 'done')).toBe(true);
   });
 
-  it('keeps the existing Done/done tail (no second error) when an API-error envelope already closed the turn', async () => {
-    // envelope 场景保持现状: envelope 已推 terminal error(pushedTerminalError=true),
-    // turn-end 照旧发 status Done + done, 不重复推第二条 error(双 banner)。
+  it('discards a provisional API-error envelope when the SDK retry later succeeds', async () => {
+    const tracker = new UsageTracker();
+    const queue = createAsyncQueue<AgentEvent>();
+    const ctx = createCtx(tracker);
+
+    translateSdkMessage(
+      {
+        type: 'assistant',
+        error: 'unknown',
+        uuid: 'retry-error-envelope',
+        message: {
+          model: 'codex/gpt-5.5',
+          content: [{ type: 'text', text: 'API Error: The operation timed out.' }],
+        },
+      },
+      queue,
+      ctx,
+    );
+    translateSdkMessage(
+      {
+        type: 'system',
+        subtype: 'api_retry',
+        attempt: 1,
+        max_retries: 3,
+        retry_delay_ms: 1_000,
+        error_status: null,
+        error: 'unknown',
+      },
+      queue,
+      ctx,
+    );
+
+    expect(queue.pending, 'retryable envelope must not close the turn').toBe(0);
+
+    translateSdkMessage(
+      {
+        type: 'result',
+        is_error: false,
+        result: 'Recovered after retry.',
+        stop_reason: 'end_turn',
+        total_cost_usd: 0,
+        usage: { input_tokens: 100, output_tokens: 5 },
+        modelUsage: { 'codex/gpt-5.5': { inputTokens: 100, outputTokens: 5, costUSD: 0, contextWindow: 272_000 } },
+      },
+      queue,
+      ctx,
+    );
+
+    const events = await drain(queue);
+    expect(events.some((e) => e.type === 'error')).toBe(false);
+    expect(events.some((e) => e.type === 'text' && (e.data as { text?: string }).text === 'Recovered after retry.')).toBe(true);
+    expect(events.some((e) => e.type === 'done')).toBe(true);
+    expect(ctx.turn.pendingApiError).toBeNull();
+    expect(ctx.rt.lastAssistantMeta, 'error envelope must not become a transcript anchor').toBeNull();
+    expect(ctx.log.info).toHaveBeenCalledWith('SDK API request retrying', expect.objectContaining({
+      attempt: 1,
+      errorStatus: null,
+    }));
+  });
+
+  it('surfaces one detailed terminal error when an API-error envelope ends in an error result', async () => {
+    // envelope 先暂存，最终 is_error result 才推一次 terminal error；Done/done 继续
+    // 保留给下游收口与 usage 记账。
     const tracker = new UsageTracker();
     const queue = createAsyncQueue<AgentEvent>();
     const ctx = createCtx(tracker);
@@ -136,6 +196,7 @@ describe('Claude Code translator is_error result guard', () => {
       queue,
       ctx,
     );
+    const pendingBeforeEnvelope = queue.pending;
     // API-error envelope: assistant 消息带 error tag。
     translateSdkMessage(
       {
@@ -149,6 +210,7 @@ describe('Claude Code translator is_error result guard', () => {
       queue,
       ctx,
     );
+    expect(queue.pending, 'envelope alone is provisional').toBe(pendingBeforeEnvelope);
     translateSdkMessage(
       {
         type: 'result',
@@ -165,9 +227,12 @@ describe('Claude Code translator is_error result guard', () => {
 
     const events = await drain(queue);
     const errors = events.filter((e) => e.type === 'error');
-    expect(errors, 'exactly one terminal error (from the envelope)').toHaveLength(1);
-    expect(errors[0]?.data).toMatchObject({ sdkError: 'rate_limit', isTerminal: true });
-    // envelope 场景的既有收尾行为不变。
+    expect(errors, 'exactly one terminal error (at result)').toHaveLength(1);
+    expect(errors[0]?.data).toMatchObject({
+      message: 'Rate limited — retry later.',
+      sdkError: 'rate_limit',
+      isTerminal: true,
+    });
     expect(events.some((e) => e.type === 'done'), 'done tail preserved for envelope-closed turns').toBe(true);
   });
 
