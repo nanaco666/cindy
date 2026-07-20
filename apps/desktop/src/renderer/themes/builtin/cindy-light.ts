@@ -53,7 +53,6 @@ const overrides = {
   'chat-input-border-focus': 'rgba(104, 107, 114, 0.30)', // 用户改稿 2026-07-20:输入框聚焦描边降至 30%
   'chat-input-chip-border': '#DCDFE3', // 边框
   'chat-input-text': '#3C3F43', // 正文
-  'create-agent-focus-ring': 'rgba(104, 107, 114, 0.30)', // 用户改稿 2026-07-20:新建页输入框聚焦描边降至 30%
   'color-primary': '#3C3F43', // 正文
   'caret-accent': '#417CDD', // 用户改稿 2026-07-18:光标撤红改回蓝(对齐 focus 蓝 #417CDD)
   'confirm-bg': '#F8F8F8', // 卡片

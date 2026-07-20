@@ -50,7 +50,6 @@ export const CINDY_REQUIRED_COLOR_IDS = [
   'chat-input-chip-border',
   'chat-input-text',
   'color-primary',
-  'create-agent-focus-ring',
   'confirm-bg',
   'confirm-btn-primary-bg',
   'confirm-btn-primary-text',
@@ -232,10 +231,6 @@ export const CINDY_EXPECTED_VALUES: Record<string, { light: string; dark: string
   'chat-input-chip-border': { light: '#DCDFE3', dark: '#434343' },
   'chat-input-text': { light: '#3C3F43', dark: '#D4D4D4' },
   'color-primary': { light: '#3C3F43', dark: '#D4D4D4' },
-  'create-agent-focus-ring': {
-    light: 'rgba(104, 107, 114, 0.30)',
-    dark: 'rgba(191, 193, 196, 0.30)',
-  }, // 用户改稿 2026-07-20:新建页输入框聚焦描边降至 30%
   'confirm-bg': { light: '#F8F8F8', dark: '#312F2F' },
   'confirm-btn-primary-bg': { light: '#3C3F43', dark: '#EEEEEE' }, // E1D
   'confirm-btn-primary-text': { light: '#FCFCFC', dark: '#252222' }, // E1D
