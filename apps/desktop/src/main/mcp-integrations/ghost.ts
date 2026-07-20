@@ -504,7 +504,7 @@ export function getCindyGhostsMcpDeps(sessionCtx?: LiziMcpSessionContext): Cindy
         return {
           ok: false,
           errorCode: 'GHOST_DISABLED_IN_WORKDIR',
-          message: '用户已在当前工作目录停用该意识;不要重试,改用其它可用方式完成任务,必要时如实转告用户。',
+          message: '用户已在当前工作目录停用该插件;不要重试,改用其它可用方式完成任务,必要时如实转告用户。',
         };
       }
       // 批量预授权(grant_only):只过户不派发——agent 跑批量任务(逐张图
@@ -515,10 +515,10 @@ export function getCindyGhostsMcpDeps(sessionCtx?: LiziMcpSessionContext): Cindy
         // 不存在/沉睡的意识不该拿到授权行,也不该让用户白点一次确认卡。
         const target = getGhostManager().list().find((g) => g.manifest.id === ghostId);
         if (!target) {
-          return { ok: false, errorCode: 'GHOST_NOT_FOUND', message: '目标意识不存在或已抽离' };
+          return { ok: false, errorCode: 'GHOST_NOT_FOUND', message: '目标插件不存在或已卸载' };
         }
         if (!target.enabled) {
-          return { ok: false, errorCode: 'GHOST_ASLEEP', message: '目标意识沉睡中,可提示用户到设置里唤醒' };
+          return { ok: false, errorCode: 'GHOST_ASLEEP', message: '目标插件未启用,可提示用户到设置里启用' };
         }
         if (!attachments || attachments.length === 0) {
           return {

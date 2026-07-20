@@ -396,7 +396,7 @@ function sendPanelRequest(kind, prompt, hash) {
       stopEntryTimers(entry);
       delete pending[reqId];
       t.classList.add('is-error');
-      t.textContent = '叫不醒电子脑:先在聊天里让 Cindy 用一次本意识(比如「$cindy-art 画一只猫」),再来点菜单。';
+      t.textContent = '插件尚未启动:先在聊天里让 Cindy 使用一次本插件(比如「$cindy-art 画一只猫」),再来点菜单。';
       setTimeout(function () {
         t.remove();
       }, 6000);

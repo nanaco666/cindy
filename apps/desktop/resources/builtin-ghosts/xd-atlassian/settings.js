@@ -22,7 +22,7 @@
   }
 
   var CONNECT_ERROR_TEXT = {
-    NO_CLIENT_CONFIG: '授权配置缺失,请更新意识后重试',
+    NO_CLIENT_CONFIG: '授权配置缺失,请更新插件后重试',
     TIMEOUT: '授权超时,请重试',
     CANCELLED: '授权已取消',
     CALLBACK_INVALID: '授权回调校验失败,请重试',
@@ -31,8 +31,8 @@
     ACCOUNT_LIMIT: '账号数量已达上限(8 个)',
     VAULT_WRITE_FAILED: '本机加密存储不可用,保存失败',
     LISTEN_FAILED: '本机 53682 端口被占用且无法自动释放,请手动关闭占用它的程序后重试',
-    INVALID_CONFIG: '授权配置不合法,请意识作者检查声明',
-    BROKER_FORBIDDEN: '该授权通道仅限官方内置意识使用',
+    INVALID_CONFIG: '授权配置不合法,请插件作者检查声明',
+    BROKER_FORBIDDEN: '该授权通道仅限官方内置插件使用',
   };
 
   function renderAccounts(entry) {

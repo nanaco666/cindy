@@ -80,7 +80,7 @@ function extractHash(s) {
 
 /** HTTP 状态 → 人话(401 到这里 = 该实例的 token 没填或已失效)。 */
 function classifyStatus(status, bodySnippet) {
-  if (status === 401) return 'GitLab token 未配置或已失效,请用户到 设置 → 意识 → Cindy GitLab 重新填写该实例的 token(并确认实例地址无误)';
+  if (status === 401) return 'GitLab token 未配置或已失效,请用户到 设置 → 插件 → Cindy GitLab 重新填写该实例的 token(并确认实例地址无误)';
   if (status === 403) return '没有权限(HTTP 403,token scope 不够或无该项目权限):' + bodySnippet;
   if (status === 404) return '对象不存在或无访问权(HTTP 404;project_path 是否拼对?)';
   if (status === 409) return 'GitLab 资源冲突(HTTP 409):' + bodySnippet;
@@ -111,7 +111,7 @@ async function resolveInstance(a) {
   }
   var conns = (slot && Array.isArray(slot.connections)) ? slot.connections : [];
   if (!conns.length) {
-    return { err: '尚未添加任何 GitLab 实例——请用户到 设置 → 意识 → Cindy GitLab 添加实例地址与 Personal Access Token' };
+    return { err: '尚未添加任何 GitLab 实例——请用户到 设置 → 插件 → Cindy GitLab 添加实例地址与 Personal Access Token' };
   }
   var hosts = conns.map(function (cn) { return cn.host; });
   if (a && a.instance) {
@@ -1011,7 +1011,7 @@ op('create_project', 'projects', '建项目(归认证用户,或经 namespace_id 
     });
   });
 
-op('upload_project_file', 'projects', '把用户随消息发给意识的图片附件上传到项目附件区(POST /uploads,不进 git 仓库、不产生 commit),返回可直接嵌入 issue / MR 描述或评论的 markdown(图片渲染为 ![](url))。用法:用户发图 → 主 agent 调 ghost_call 时把图片地址放顶层 attachments 过户 → 本操作按 attachment_index 取第几张上传',
+op('upload_project_file', 'projects', '把用户随消息发给插件的图片附件上传到项目附件区(POST /uploads,不进 git 仓库、不产生 commit),返回可直接嵌入 issue / MR 描述或评论的 markdown(图片渲染为 ![](url))。用法:用户发图 → 主 agent 调 ghost_call 时把图片地址放顶层 attachments 过户 → 本操作按 attachment_index 取第几张上传',
   PROJ_DOC + ', attachment_index?:int(取过户附件的第几张,默认 0)',
   async function (a, c) {
     var r = await projBase(a); if (r.err) return r;
@@ -1022,7 +1022,7 @@ op('upload_project_file', 'projects', '把用户随消息发给意识的图片�
       if (h && hashes.indexOf(h) === -1) hashes.push(h);
     }
     if (!hashes.length) {
-      return { err: '没有可上传的附件——需要用户随消息发图,且主 agent 调 ghost_call 时把图片地址放在顶层 attachments 参数过户给本意识' };
+      return { err: '没有可上传的附件——需要用户随消息发图,且主 agent 调 ghost_call 时把图片地址放在顶层 attachments 参数过户给本插件' };
     }
     var idx = a.attachment_index || 0;
     if (idx < 0 || idx >= hashes.length) return { err: 'attachment_index 越界:本次共过户 ' + hashes.length + ' 张附件(0 起数)' };
