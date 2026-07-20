@@ -66,7 +66,12 @@ export class FallbackAsrProvider implements AsrProvider {
 
   async start(): Promise<void> {
     let lastError: unknown = null;
-    const failures: Array<{ kind: VoiceInputProviderKind; phase: 'create' | 'start'; message: string }> = [];
+    const failures: Array<{
+      kind: VoiceInputProviderKind;
+      phase: 'create' | 'start';
+      message: string;
+      error: unknown;
+    }> = [];
     for (const [index, candidate] of this.candidates.entries()) {
       // The host can dispose this wrapper while a candidate is still mid
       // connect (every `await` below is a suspension point). Re-check after
@@ -144,7 +149,13 @@ export class FallbackAsrProvider implements AsrProvider {
     const details = failures
       .map((failure) => `[${failure.kind} ${failure.phase}] ${failure.message}`)
       .join('; ');
-    throw new Error(`All ${failures.length} voice input ASR providers failed to start: ${details}`);
+    // AggregateError keeps every original error object (stack, cause, e.g.
+    // ECONNREFUSED / TLS details) reachable via `.errors` for logging and
+    // telemetry, while `.message` stays the human-readable summary above.
+    throw new AggregateError(
+      failures.map((failure) => failure.error),
+      `All ${failures.length} voice input ASR providers failed to start: ${details}`,
+    );
   }
 
   async stop(): Promise<void> {
@@ -203,7 +214,7 @@ export class FallbackAsrProvider implements AsrProvider {
     index: number,
     phase: 'create' | 'start',
     error: unknown,
-  ): { kind: VoiceInputProviderKind; phase: 'create' | 'start'; message: string } {
+  ): { kind: VoiceInputProviderKind; phase: 'create' | 'start'; message: string; error: unknown } {
     const message = error instanceof Error ? error.message : String(error);
     markVoiceInputProviderFailure('asr', kind, `${phase} failed: ${message}`);
     log.warn('asr fallback candidate failed, trying next', {
@@ -213,7 +224,7 @@ export class FallbackAsrProvider implements AsrProvider {
       phase,
       error: message,
     });
-    return { kind, phase, message };
+    return { kind, phase, message, error };
   }
 
   private flushPendingAudio(provider: AsrProvider): void {
