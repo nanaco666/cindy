@@ -65,7 +65,7 @@ function encPath(p) {
 
 /** HTTP 状态 → 人话(401 到这里 = token 没填或已失效)。 */
 function classifyStatus(status, bodySnippet) {
-  if (status === 401) return 'GitHub token 未配置或已失效,请用户到 设置 → 插件 → Cindy GitHub 填入 Personal Access Token';
+  if (status === 401) return 'GitHub token 未配置或已失效,请用户到主界面侧边栏「插件」→「Cindy GitHub」详情页填入 Personal Access Token';
   if (status === 403) {
     if (bodySnippet && bodySnippet.indexOf('rate limit') >= 0) return 'GitHub 接口限流(HTTP 403 rate limit),请稍后重试';
     return '没有权限(HTTP 403,token scope 不够或无该仓库权限):' + bodySnippet;

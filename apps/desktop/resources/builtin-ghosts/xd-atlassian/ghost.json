@@ -3,7 +3,7 @@
   "id": "xd-atlassian",
   "name": "XD Atlassian",
   "description": "内置的 Atlassian 服务插件:连上公司 Atlassian 账号即可读写 Jira 与 Confluence(issue / JQL 搜索 / 工作流,页面 / 评论 / 附件)。开箱即用——点「连接账号」完成授权即可;授权由 Cindy 服务端托管,应用密钥不随包分发。",
-  "whenToUse": "需要查/建/改 Jira issue,JQL 搜索,查项目或用户,流转工作流,下载 Jira 附件,或搜索/阅读/创建/更新 Confluence 页面、读写评论、下载 Confluence 附件时找我(需先在插件设置页连接 Atlassian 账号)。",
+  "whenToUse": "需要查/建/改 Jira issue,JQL 搜索,查项目或用户,流转工作流,下载 Jira 附件,或搜索/阅读/创建/更新 Confluence 页面、读写评论、下载 Confluence 附件时找我(需先在主界面侧边栏「插件」→「XD Atlassian」详情页连接账号)。",
   "version": "1.1.1",
   "author": "Cindy",
   "icon": "assets/icon.png",
@@ -26,7 +26,7 @@
         "key": "atlassian_account",
         "label": "Atlassian 账号",
         "source": "oauth",
-        "hint": "到设置页点「连接账号」即可;授权与令牌全程由主机与 Cindy 服务端托管",
+        "hint": "到本插件详情页点「连接账号」即可;授权与令牌全程由主机与 Cindy 服务端托管",
         "inject": {
           "header": "Authorization",
           "format": "Bearer {value}",
@@ -75,7 +75,7 @@
   "tools": [
     {
       "name": "atlassian_accounts",
-      "description": "列出已连接的 Atlassian 账号(action=list:id / 邮箱 / 状态 / 是否默认),或列出授权可访问的站点(action=sites:cloud_id / 站点名 / 地址 / scopes)。其它工具的 account / cloud_id 参数值来自这里;只连了一个账号且只有一个站点时无需调用。账号状态为 expired 时提示用户去插件设置页重新连接。",
+      "description": "列出已连接的 Atlassian 账号(action=list:id / 邮箱 / 状态 / 是否默认),或列出授权可访问的站点(action=sites:cloud_id / 站点名 / 地址 / scopes)。其它工具的 account / cloud_id 参数值来自这里;只连了一个账号且只有一个站点时无需调用。账号状态为 expired 时提示用户去主界面侧边栏「插件」→「XD Atlassian」详情页重新连接。",
       "parameters": {
         "type": "object",
         "properties": {

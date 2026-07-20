@@ -1009,7 +1009,7 @@ export class GhostNetworkSlot {
         const tok = this.deps.connections.tokenFor(ghostId, hostname);
         if (!tok) {
           return {
-            error: `连接地址 ${hostname} 的凭证读取失败——请到侧栏「插件」的本插件详情页重新添加该连接`,
+            error: `连接地址 ${hostname} 的凭证读取失败——请到主界面侧边栏「插件」的本插件详情页重新添加该连接`,
             usedExchange,
             oauthInjected,
           };
@@ -1046,11 +1046,11 @@ export class GhostNetworkSlot {
       if (!result.ok) {
         switch (result.error) {
           case 'NO_CLIENT_CONFIG':
-            return { error: `凭证「${secret.label}」尚未配置——请到侧栏「插件」的本插件详情页填入 OAuth 客户端凭证并连接账号` };
+            return { error: `凭证「${secret.label}」尚未配置——请到主界面侧边栏「插件」的本插件详情页填入 OAuth 客户端凭证并连接账号` };
           case 'NO_ACCOUNT':
-            return { error: `凭证「${secret.label}」尚未连接账号(或指定的账号不存在)——请到本意识设置页点「连接账号」完成授权` };
+            return { error: `凭证「${secret.label}」尚未连接账号(或指定的账号不存在)——请到主界面侧边栏「插件」的本插件详情页点「连接账号」完成授权` };
           case 'AUTH_EXPIRED':
-            return { error: `凭证「${secret.label}」的账号授权已失效——请到本意识设置页重新连接该账号` };
+            return { error: `凭证「${secret.label}」的账号授权已失效——请到主界面侧边栏「插件」的本插件详情页重新连接该账号` };
           case 'NETWORK':
             return { error: `凭证「${secret.label}」刷新令牌时网络失败,请稍后重试` };
           default:
@@ -1067,7 +1067,7 @@ export class GhostNetworkSlot {
     } else {
       const stored = this.deps.readSecret(ghostId, secret.key);
       if (stored === null || stored.length === 0) {
-        return { error: `凭证「${secret.label}」尚未配置——请到侧栏「插件」的本插件详情页填入后再试` };
+        return { error: `凭证「${secret.label}」尚未配置——请到主界面侧边栏「插件」的本插件详情页填入后再试` };
       }
       raw = stored;
     }

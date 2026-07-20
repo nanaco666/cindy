@@ -518,7 +518,7 @@ export function getCindyGhostsMcpDeps(sessionCtx?: LiziMcpSessionContext): Cindy
           return { ok: false, errorCode: 'GHOST_NOT_FOUND', message: '目标插件不存在或已卸载' };
         }
         if (!target.enabled) {
-          return { ok: false, errorCode: 'GHOST_ASLEEP', message: '目标插件未启用,可提示用户到设置里启用' };
+          return { ok: false, errorCode: 'GHOST_ASLEEP', message: '目标插件未启用,可提示用户到主界面侧边栏「插件」中启用' };
         }
         if (!attachments || attachments.length === 0) {
           return {

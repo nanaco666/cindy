@@ -2149,7 +2149,7 @@
         "networkSecretIdentity": "Will use your login email as the credential \"{{name}}\"",
         "networkSecretIdentityDetail": "The value comes from your signed-in account's email, derived and injected by the host at request time; nothing to fill in. The plugin can read this email to show the current identity in its settings UI.",
         "networkSecretOauth": "Will guide you through OAuth authorization at {{host}} ({{name}})",
-        "networkSecretOauthDetail": "The authorization flow and all tokens are managed by the host and can never be read by the plugin code; you provide the client credentials on the plugin's settings page. The requested permission scopes are listed verbatim below — review them before approving.",
+        "networkSecretOauthDetail": "The authorization flow and all tokens are managed by the host and can never be read by the plugin code; you provide the client credentials on the plugin detail page. The requested permission scopes are listed verbatim below — review them before approving.",
         "networkConnections": "Can connect to {{label}} addresses you add",
         "networkConnectionsDetail": "Addresses are added in this plugin's settings UI; every new address requires your confirmation, and the credential you provide is injected only for its own address.",
         "codeDetailNetwork": "Runs in an isolated sandbox with no access to your files; network access is limited to the domains listed above, relayed by the host.",

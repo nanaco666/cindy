@@ -138,7 +138,7 @@ function registerCallToolEntry(
         if (!deps.isEnabledForWorkdir(workingDir)) {
           return errorPayload(
             'PLUGIN_DISABLED',
-            '当前项目已关闭 SSH Remote 插件(设置 → 插件,或项目 .claude/settings.json 的 xdtMaker.builtinTools.ssh)。不要重试,转告用户如需使用请先开启。',
+            '当前项目已关闭 SSH Remote 插件(可在主界面侧边栏「插件」中开启,或在项目 .claude/settings.json 的 xdtMaker.builtinTools.ssh 中开启)。不要重试,转告用户如需使用请先开启。',
           );
         }
       }

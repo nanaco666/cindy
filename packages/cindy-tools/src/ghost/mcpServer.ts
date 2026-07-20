@@ -41,7 +41,7 @@ const D_GHOST_CALL = [
   '批量预授权:计划连续多次调用同一插件、每次用一个工作目录外文件时(如逐张图生成视频),',
   '**必须**先发一次 grant_only:true + attachments 列出整批文件(≤32 张,tool 随便填会被忽略)',
   '——用户只需在一张卡上批一次;跳过预授权会让用户被迫一张张点允许。',
-  '结构化错误:GHOST_NOT_FOUND(未安装或已卸载)/ GHOST_ASLEEP(未启用,可提示用户到设置里启用)/',
+  '结构化错误:GHOST_NOT_FOUND(未安装或已卸载)/ GHOST_ASLEEP(未启用,可提示用户到主界面侧边栏「插件」中启用)/',
   'GHOST_DISABLED_IN_WORKDIR(用户在当前工作目录停用了该插件——不要重试,改用其它方式完成)/',
   'TOOL_NOT_FOUND / GHOST_CRASHED / TIMEOUT / ATTACHMENT_INVALID(附件过户失败,查 message)/',
   'DIR_INVALID(目录过户失败,查 message)/ INTERNAL。遇到 NOT_FOUND 类错误先重新 ghost_list。',
@@ -112,7 +112,7 @@ export async function handleGhostList(deps: CindyGhostsMcpDeps): Promise<McpText
       hint:
         ghosts.length > 0
           ? '调用具体工具用 ghost_call({ghost_id, tool, args});清单实时,勿缓存。'
-          : '当前没有已启用的插件。用户可在 设置 → 插件 中安装或启用插件。',
+          : '当前没有已启用的插件。用户可在主界面侧边栏「插件」中安装或启用插件。',
     });
   } catch (err) {
     return textResult(

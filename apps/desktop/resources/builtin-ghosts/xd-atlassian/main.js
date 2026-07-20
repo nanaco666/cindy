@@ -75,7 +75,7 @@ function storageFromText(text) {
 
 /** HTTP 状态 → 人话(镜像老 classify;401 到这里说明主机自动重刷也没救回来)。 */
 function classifyStatus(status, bodySnippet) {
-  if (status === 401) return 'Atlassian 授权已失效,请用户到 设置 → 插件 → XD Atlassian 重新连接账号';
+  if (status === 401) return 'Atlassian 授权已失效,请用户到主界面侧边栏「插件」→「XD Atlassian」详情页重新连接账号';
   if (status === 403) return '没有权限(HTTP 403):' + bodySnippet;
   if (status === 404) return '对象不存在或无访问权(HTTP 404)';
   if (status === 429) return 'Atlassian 接口限流(HTTP 429),请稍后重试';
@@ -255,7 +255,7 @@ async function toolAccounts(args, callId) {
     for (var i = 0; i < list.length; i++) if (list[i].key === 'atlassian_account') entry = list[i];
     if (!entry) return fail('OAuth 凭证槽缺失,请插件作者检查声明');
     if (!entry.accounts.length) {
-      return fail('还没连接任何 Atlassian 账号——请用户到 设置 → 插件 → XD Atlassian 点「连接账号」完成授权');
+      return fail('还没连接任何 Atlassian 账号——请用户到主界面侧边栏「插件」→「XD Atlassian」详情页点「连接账号」完成授权');
     }
     return {
       ok: true,

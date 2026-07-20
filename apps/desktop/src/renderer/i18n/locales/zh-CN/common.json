@@ -2149,7 +2149,7 @@
         "networkSecretIdentity": "将使用你的登录邮箱作为凭证「{{name}}」",
         "networkSecretIdentityDetail": "值取自当前登录账号的邮箱,请求时由主机自动派生注入;无需填写。插件可读取该邮箱,用于在它的设置界面里展示当前身份。",
         "networkSecretOauth": "将引导你在 {{host}} 完成 OAuth 授权({{name}})",
-        "networkSecretOauthDetail": "授权流程与全部令牌由主机代管,插件代码无法读取;客户端凭证由你在插件设置页自填。下方为其申请的权限范围(scopes)原文,请确认后再放行。",
+        "networkSecretOauthDetail": "授权流程与全部令牌由主机代管,插件代码无法读取;客户端凭证由你在本插件详情页自填。下方为其申请的权限范围(scopes)原文,请确认后再放行。",
         "networkConnections": "可连接你添加的 {{label}}",
         "networkConnectionsDetail": "地址在这个插件的设置界面里添加;每次新增地址都需要你确认,你提供的凭证只注入对应地址。",
         "codeDetailNetwork": "在独立沙箱中运行,无法访问你的文件;网络仅限上方声明的域名,由主机代发。",

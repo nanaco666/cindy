@@ -97,10 +97,10 @@ async function toolAccounts() {
   for (var i = 0; i < list.length; i++) if (list[i].key === 'google_account') entry = list[i];
   if (!entry) return fail('OAuth 凭证槽缺失,请插件作者检查声明');
   if (!entry.clientConfigured) {
-    return fail('内置应用身份缺失——请用户升级 Cindy 后到 设置 → 插件 → Filo Google 重新连接账号');
+    return fail('内置应用身份缺失——请用户升级 Cindy 后到主界面侧边栏「插件」→「Filo Google」详情页重新连接账号');
   }
   if (!entry.accounts.length) {
-    return fail('还没连接任何 Google 账号——请用户到 设置 → 插件 → Filo Google 点「连接账号」完成授权');
+    return fail('还没连接任何 Google 账号——请用户到主界面侧边栏「插件」→「Filo Google」详情页点「连接账号」完成授权');
   }
   return {
     ok: true,

@@ -1704,3 +1704,25 @@ describe('ghost · 权限清单凭证分档(知情同意面不许说过头话)',
     );
   });
 });
+
+describe('内置插件 · 配置入口引导', () => {
+  it('所有内置插件的用户可见文案都指向主界面侧边栏「插件」', () => {
+    const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../../resources/builtin-ghosts');
+    const stalePatterns = ['设置 → 插件', '插件设置页', '本插件设置页', '到设置页'];
+    const offenders: string[] = [];
+
+    for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      for (const fileName of ['ghost.json', 'main.js']) {
+        const filePath = path.join(root, entry.name, fileName);
+        if (!fs.existsSync(filePath)) continue;
+        const source = fs.readFileSync(filePath, 'utf8');
+        for (const pattern of stalePatterns) {
+          if (source.includes(pattern)) offenders.push(`${entry.name}/${fileName}: ${pattern}`);
+        }
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+});
