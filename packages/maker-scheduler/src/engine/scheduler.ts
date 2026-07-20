@@ -539,7 +539,7 @@ export class Scheduler extends EventEmitter {
       // 前置检查拦截(preRunHook exit 2):run 记录保留为 'skipped'(与 deferred 的
       // "撤销不留痕"不同——跳过是本轮的最终结果,用户要能在历史里看到"这几轮是
       // hook 拦的",与"调度器坏了"区分)。生而已读(readAt),不通知不亮红点;
-      // sessionId 指向跳过留痕会话(可为空)。schedule 行照常走下方重排逻辑。
+      // sessionId: 跳过时为空(不再创建留痕会话)。schedule 行照常走下方重排逻辑。
       await this.storage.updateRun(runId, {
         status: 'skipped',
         sessionId: sessionId || undefined,

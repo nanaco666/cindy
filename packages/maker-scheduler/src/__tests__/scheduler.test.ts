@@ -1646,7 +1646,7 @@ describe('Scheduler preRunHook skipped', () => {
   it('cron fire skipped: run 保留为 skipped(生而已读)、照常重排、发 skipped 事件', async () => {
     const h = makeHarness({
       runnerImpl: async () => ({
-        sessionId: 'skip-log-sess',
+        sessionId: '',
         skipped: true,
         resultText: 'exit 2: no new PRs',
       }),
@@ -1671,7 +1671,7 @@ describe('Scheduler preRunHook skipped', () => {
     // 生而已读:不产生未读红点
     expect(runs[0].readAt).toBe(Date.UTC(2026, 0, 1, 0, 1, 5));
     expect(runs[0].resultText).toBe('exit 2: no new PRs');
-    expect(runs[0].sessionId).toBe('skip-log-sess');
+    expect(runs[0].sessionId).toBeUndefined();
 
     // 与 deferred 不同:照常按 cron 重排下一槽位,不是短延重试
     const after = await h.storage.get(sch.id);
@@ -1679,7 +1679,7 @@ describe('Scheduler preRunHook skipped', () => {
     expect(after?.lastFiredAt).toBe(Date.UTC(2026, 0, 1, 0, 1, 5));
 
     expect(skippedEvents).toHaveLength(1);
-    expect(skippedEvents[0].sessionId).toBe('skip-log-sess');
+    expect(skippedEvents[0].sessionId).toBe('');
     expect(completedEvents).toHaveLength(0);
     expect(failedEvents).toHaveLength(0);
   });

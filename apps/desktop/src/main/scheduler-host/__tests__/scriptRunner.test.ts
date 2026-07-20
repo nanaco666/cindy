@@ -4,10 +4,21 @@ import { PassThrough } from 'node:stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const spawnMock = vi.fn();
+const executePreRunHookMock = vi.hoisted(() => vi.fn());
 
 vi.mock('node:child_process', () => ({
   spawn: (...args: unknown[]) => spawnMock(...args),
 }));
+
+vi.mock('../pre-run-hook', () => ({
+  executePreRunHook: executePreRunHookMock,
+  buildSkipResultText: (hook: { exitCode?: number | null }) => `exit ${hook.exitCode ?? '?'}`,
+}));
+
+vi.mock('../../localDb/schema', () => ({
+  sessions: { id: 'id' },
+}));
+
 
 // killProcessTree 的 OS 级树杀机制(taskkill 重试/进程组信号/后代兜底)由
 // proc-util.test.ts / procUtilRetry.test.ts 单独覆盖;这里只关心 script-runner
@@ -81,7 +92,38 @@ function schedule() {
 describe('ScriptScheduleRunner', () => {
   beforeEach(() => {
     spawnMock.mockReset();
+    executePreRunHookMock.mockReset();
     killProcessTreeMock.mockClear();
+  });
+
+  it('pre-run hook exit 2 skips without creating a session or spawning the script', async () => {
+    executePreRunHookMock.mockResolvedValue({
+      decision: 'skip',
+      exitCode: 2,
+      timedOut: false,
+      spawnError: undefined,
+      durationMs: 5,
+      stdout: 'no changes',
+      stderr: '',
+    });
+    const runner = new ScriptScheduleRunner({
+      broker: { call: vi.fn() },
+      logger: {},
+      getDb: vi.fn(),
+    });
+
+    await expect(
+      runner.fire(
+        { ...schedule(), preRunHook: { command: 'node check.mjs' } },
+        { runId: 'run-skip', firedAt: 1, signal: new AbortController().signal },
+      ),
+    ).resolves.toEqual({
+      sessionId: '',
+      skipped: true,
+      resultText: expect.stringContaining('exit 2'),
+    });
+    expect(spawnMock).not.toHaveBeenCalled();
+    expect(executePreRunHookMock).toHaveBeenCalledTimes(1);
   });
 
   it('services host calls and returns the terminal summary without an agent session', async () => {

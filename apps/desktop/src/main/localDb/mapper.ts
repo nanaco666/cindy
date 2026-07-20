@@ -476,7 +476,6 @@ export function scheduleToCamel(row: ScheduleRow): Schedule {
           timeoutMs: row.preRunHookTimeoutMs ?? undefined,
         }
       : undefined,
-    skipLogSessionId: row.skipLogSessionId ?? undefined,
     notify: {
       desktop: !!row.notifyDesktop,
       feishu: !!row.notifyFeishu,
@@ -522,7 +521,6 @@ export function scheduleCreateToRow(s: Schedule): ScheduleInsert {
     silentWhenIdle: !!s.silentWhenIdle,
     preRunHookCommand: s.preRunHook?.command ?? null,
     preRunHookTimeoutMs: s.preRunHook?.timeoutMs ?? null,
-    skipLogSessionId: s.skipLogSessionId ?? null,
     notifyDesktop: s.notify.desktop,
     notifyFeishu: s.notify.feishu,
     status: s.status,
@@ -585,8 +583,6 @@ export function schedulePatchToRow(patch: Partial<Schedule>): Partial<ScheduleIn
     out.preRunHookCommand = patch.preRunHook?.command ?? null;
     out.preRunHookTimeoutMs = patch.preRunHook?.timeoutMs ?? null;
   }
-  if (hasKey(patch, 'skipLogSessionId'))
-    out.skipLogSessionId = patch.skipLogSessionId ?? null;
   if (hasKey(patch, 'notify')) {
     // 嵌套对象整体替换：必须两列同时写
     const n = patch.notify ?? { desktop: false, feishu: false };

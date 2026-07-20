@@ -122,7 +122,7 @@ export async function startScheduler(deps: StartSchedulerDeps): Promise<Schedule
     getDb: deps.getDb,
     logger: deps.logger,
   });
-  // archived / skip-trace 兜底要 scheduler.pause/update，runner 反向持有 scheduler
+  // archived 兜底要 scheduler.pause/update，runner 反向持有 scheduler
   promptRunner.attachScheduler(scheduler);
   scriptRunner.attachScheduler(scheduler);
 
