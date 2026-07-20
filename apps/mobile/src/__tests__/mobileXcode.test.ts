@@ -22,10 +22,10 @@ describe('mobile:xcode 参数', () => {
     expect(parseMobileXcodeArgs(['--', '--region=global'])).toEqual({ help: false, region: 'global' });
   });
 
-  it('region 只允许 cn / global', () => {
-    expect(() => parseMobileXcodeArgs(['--region', 'us'])).toThrow(/只能是 cn 或 global/);
-    expect(() => parseMobileXcodeArgs(['--region'])).toThrow(/只能是 cn 或 global/);
-    expect(() => parseMobileXcodeArgs(['--region', ''])).toThrow(/只能是 cn 或 global/);
+  it('region 只允许 cn / global / dev', () => {
+    expect(() => parseMobileXcodeArgs(['--region', 'us'])).toThrow(/只能是 cn 或 global 或 dev/);
+    expect(() => parseMobileXcodeArgs(['--region'])).toThrow(/只能是 cn 或 global 或 dev/);
+    expect(() => parseMobileXcodeArgs(['--region', ''])).toThrow(/只能是 cn 或 global 或 dev/);
   });
 });
 
@@ -42,7 +42,7 @@ describe('mobile simulator region 参数', () => {
   });
 
   it('拒绝非法或重复 region', () => {
-    expect(() => extractMobileDevRegionArgs(['--region=us'])).toThrow(/只能是 cn 或 global/);
+    expect(() => extractMobileDevRegionArgs(['--region=us'])).toThrow(/只能是 cn 或 global 或 dev/);
     expect(() => extractMobileDevRegionArgs(['--region=cn', '--region=global'])).toThrow(/只能传一次/);
   });
 
