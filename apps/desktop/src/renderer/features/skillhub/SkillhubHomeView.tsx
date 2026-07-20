@@ -23,10 +23,12 @@ import {
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   PluginManagementLayout,
   PluginManagementPage,
 } from '@/features/plugin/PluginManagementLayout';
+import { canAccessSkillhubMarket } from './lib/marketAccess';
 import { refresh as refreshSkillhub, useSkillhub } from './hooks/useSkillhub';
 import { useMarketList, type MarketSkill } from './hooks/useMarketList';
 import { basename } from './lib/pathDerivations';
@@ -56,8 +58,17 @@ export function SkillhubHomeView() {
   const [query, setQuery] = useState('');
   const normalizedQuery = query.trim().toLocaleLowerCase();
 
+  // 市场可见性门禁:仅 xd 组织的企业账号可见 Skill Hub 入口与推荐安装;
+  // 其它账号(个人 / 非 xd 组织 / 未登录)只显示本地技能,且不发市场请求。
+  const { user } = useAuth();
+  const marketAllowed = canAccessSkillhubMarket(user);
+
   // 推荐 = market trending 前 N(默认排序是 updated_at,挂载时切到 trending)。
-  const { items: marketItems, loading: marketLoading, setSortBy } = useMarketList('available');
+  const {
+    items: marketItems,
+    loading: marketLoading,
+    setSortBy,
+  } = useMarketList('available', { enabled: marketAllowed });
   useEffect(() => {
     setSortBy('trending');
   }, [setSortBy]);
@@ -117,7 +128,7 @@ export function SkillhubHomeView() {
       globalSkills.length + projectGroups.reduce((count, group) => count + group.skills.length, 0),
     [globalSkills.length, projectGroups],
   );
-  const hasSearchResults = recommended.length > 0 || visibleLocalCount > 0;
+  const hasSearchResults = (marketAllowed && recommended.length > 0) || visibleLocalCount > 0;
 
   // 推荐技能的预览浮层 + 安装选择器(复用 Market 那套):点推荐卡 = 下一步直接
   // 进入该技能的预览;关闭 = 回退到首页。
@@ -161,13 +172,15 @@ export function SkillhubHomeView() {
                 {t('skillhub.home.title')}
               </h1>
               <p className="mt-2 max-w-2xl text-14 leading-6 text-[var(--text-secondary)]">
-                {t('skillhub.home.description')}
+                {t(
+                  marketAllowed ? 'skillhub.home.description' : 'skillhub.home.descriptionLocalOnly',
+                )}
               </p>
             </div>
           </header>
 
-          {/* ① Skill Hub 入口 → 完整 Market 浏览页 */}
-          {!normalizedQuery ? (
+          {/* ① Skill Hub 入口 → 完整 Market 浏览页(仅市场可见账号) */}
+          {marketAllowed && !normalizedQuery ? (
             <button
               type="button"
               onClick={openMarket}
@@ -198,8 +211,8 @@ export function SkillhubHomeView() {
             </button>
           ) : null}
 
-          {/* ② 推荐安装 */}
-          {!normalizedQuery || recommended.length > 0 || marketLoading ? (
+          {/* ② 推荐安装(仅市场可见账号) */}
+          {marketAllowed && (!normalizedQuery || recommended.length > 0 || marketLoading) ? (
             <section className="plugin-motion-page-section min-w-0">
               <SkillSectionHeading
                 title={t('skillhub.home.recommended')}

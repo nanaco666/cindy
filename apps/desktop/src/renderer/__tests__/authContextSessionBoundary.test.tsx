@@ -73,6 +73,7 @@ function user(id: string) {
     membershipRole: 'owner' as const,
     orgId: null,
     orgName: null,
+    orgSlug: null,
     passportId: `${id}-passport`,
   };
 }

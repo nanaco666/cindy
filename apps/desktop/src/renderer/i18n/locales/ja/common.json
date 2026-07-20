@@ -5510,6 +5510,7 @@
     "home": {
       "title": "スキル",
       "description": "ローカルスキルを管理し、Skill Hub から新しいスキルを見つけてインストールできます。",
+      "descriptionLocalOnly": "このデバイスにインストールされたローカルスキルを管理します。",
       "search": "スキルを検索",
       "clearSearch": "スキル検索をクリア",
       "noSearchResults": "一致するスキルが見つかりません",

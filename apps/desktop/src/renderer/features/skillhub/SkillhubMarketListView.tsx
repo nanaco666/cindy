@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, ChevronDown, ArrowLeft } from 'lucide-react';
 import {
@@ -32,6 +32,8 @@ import { lacksTeamManagePermission } from './lib/manageGuard';
 import { marketActionErrorMessage } from './lib/marketErrors';
 import { nextMarketPreviewName } from './lib/marketPreviewSelection';
 import { syncMarketPreviewSelection } from './lib/marketPreviewSync';
+import { canAccessSkillhubMarket } from './lib/marketAccess';
+import { useAuth } from '@/contexts/AuthContext';
 import { CATEGORY_ALL } from '../../../shared/skillhubCategory';
 
 const FILTER_CHIP_STYLE = { height: '32px', padding: '0 12px', fontSize: '12px' };
@@ -72,7 +74,20 @@ function FilterChip({
   );
 }
 
+/**
+ * 市场路由门禁包装:市场不可见的账号(个人 / 非 xd 组织,见 lib/marketAccess.ts)
+ * 通过深链 / 历史记录直达 /skillhub/market 时,重定向回本地技能首页。
+ * 登录态初始化期间(user 尚未水合)不误判,先按原样渲染。
+ */
 export function SkillhubMarketListView() {
+  const { user, isInitializing } = useAuth();
+  if (!isInitializing && !canAccessSkillhubMarket(user)) {
+    return <Navigate to="/skillhub/local" replace />;
+  }
+  return <SkillhubMarketListViewInner />;
+}
+
+function SkillhubMarketListViewInner() {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();

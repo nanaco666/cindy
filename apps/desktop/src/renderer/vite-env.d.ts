@@ -319,6 +319,8 @@ interface AuthUser {
   membershipRole: 'owner' | 'admin' | 'member';
   orgId: string | null;
   orgName: string | null;
+  /** 组织稳定标识(access token orgSlug claim);个人身份或旧 token 为 null。 */
+  orgSlug: string | null;
   passportId: string;
 }
 

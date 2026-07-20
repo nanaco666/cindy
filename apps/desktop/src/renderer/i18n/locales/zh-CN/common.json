@@ -5510,6 +5510,7 @@
     "home": {
       "title": "技能",
       "description": "管理本地技能，或从 Skill Hub 发现并安装更多技能。",
+      "descriptionLocalOnly": "管理本机安装的本地技能。",
       "search": "搜索技能",
       "clearSearch": "清除技能搜索",
       "noSearchResults": "没有找到匹配的技能",
