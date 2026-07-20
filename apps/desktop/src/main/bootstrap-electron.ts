@@ -138,6 +138,8 @@ import {
   REMOTE_IMAGE_MAX_BYTES,
 } from './lightboxMediaActions';
 import { sweepStartupDraftImages } from './imageCacheOrphanSweep';
+import { sweepLegacyDialogueWorkingDirs } from './localDb/dialogueWorkdirSelfHeal';
+import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
 import * as videoCacheStore from './videoCacheStore';
 import { imageSchemePrivilege, registerImageProtocolHandler } from './imageProtocol';
 import { videoSchemePrivilege, registerVideoProtocolHandler } from './videoProtocol';
@@ -4630,6 +4632,22 @@ app.on('ready', async () => {
         await refreshCustomMcpProviders();
       } catch (err) {
         accountSwitchLog.warn('refreshCustomMcpProviders on account switch failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      // 身份翻转遗留的 dialogue 工作目录自愈:把 legacy userData 前缀的
+      // sessions.working_dir 批量改写到当前 userData(详见 dialogueWorkdirSelfHeal.ts)。
+      // 必须 await:ensure-ready IPC 返回后 renderer 才拉会话列表,在此之前改写完
+      // 才能保证 renderer 拿到的就是新路径(改写后不再命中,稳态零开销)。
+      try {
+        await sweepLegacyDialogueWorkingDirs({
+          db: getDbClient(),
+          userDataDir: app.getPath('userData'),
+          legacyUserDataDirNames: BRAND_IDENTITY.legacyUserDataDirNames,
+          log: createLogger('dialogue-workdir-self-heal'),
+        });
+      } catch (err) {
+        dbClientLog.warn('legacy dialogue workdir sweep failed (non-fatal)', {
           error: err instanceof Error ? err.message : String(err),
         });
       }

@@ -162,6 +162,23 @@ export async function writeCodexHistoryHasProductPrompt(
 }
 
 /**
+ * 读 sessions.working_dir(既有会话的权威值)。SEND lazy-create / rehydrate 用它
+ * 兜底 caller 传入的陈旧 createOpts.workingDir(典型:输入队列崩溃快照里内嵌的
+ * 老路径,启动 sweep 改写 DB 后快照回放仍带旧值,2026-07-20 实报)。
+ * 行不存在 / 空值 → null,不抛错。
+ */
+export async function readSessionWorkingDirFromDb(id: string): Promise<string | null> {
+  const db = getDbClient().drizzle;
+  const rows = await db
+    .select({ workingDir: sessions.workingDir })
+    .from(sessions)
+    .where(eq(sessions.id, id))
+    .limit(1);
+  const raw = rows[0]?.workingDir;
+  return typeof raw === 'string' && raw.trim() !== '' ? raw : null;
+}
+
+/**
  * 读 sessions.extra_dirs (TEXT JSON 数组) 反序列化为 string[]。
  * SEND lazy-create handler 用它兜底 (renderer 不走 createOpts 透传 extraDirs)。
  * 失败 / 空 / 不是数组 → 返回 []，不抛错。
