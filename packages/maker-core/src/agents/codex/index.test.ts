@@ -28,11 +28,20 @@ const { MockCodexTransport, createdTransports } = vi.hoisted(() => {
     private readonly lineHandlers = new Set<LineHandler>();
     private readonly stderrHandlers = new Set<StderrHandler>();
     private readonly closeHandlers = new Set<CloseHandler>();
+    private readonly responseOverrides = new Map<string, {
+      result?: unknown;
+      error?: { code: number; message: string; data?: unknown };
+    }>();
 
     async writeLine(line: string): Promise<void> {
       this.lines.push(line);
       const req = JSON.parse(line) as { id?: number | string; method?: string; params?: unknown };
       if (req.id === undefined) return;
+      const responseOverride = req.method ? this.responseOverrides.get(req.method) : undefined;
+      if (responseOverride) {
+        this.emitLine({ id: req.id, ...responseOverride });
+        return;
+      }
       if (req.method === 'initialize') {
         this.emitLine({
           id: req.id,
@@ -171,6 +180,16 @@ const { MockCodexTransport, createdTransports } = vi.hoisted(() => {
 
     emitMockStderr(line: string): void {
       for (const handler of this.stderrHandlers) handler(line);
+    }
+
+    setMockResponse(
+      method: string,
+      response: {
+        result?: unknown;
+        error?: { code: number; message: string; data?: unknown };
+      },
+    ): void {
+      this.responseOverrides.set(method, response);
     }
 
     private emitLine(message: unknown): void {
@@ -1437,6 +1456,72 @@ describe('CodexAgent MCP thread context hooks', () => {
     await agent.dispose();
   });
 
+  it('keeps shared Codex sessions usable when ordinary stderr contains auth keywords', async () => {
+    const invalidate = vi.fn(async () => undefined);
+    const agent = new CodexAgent(createDeps({}, {
+      auth: {
+        async getState() {
+          return { authenticated: true };
+        },
+        async triggerLogin() {
+          return { authenticated: true };
+        },
+        async logout() {},
+        async getAuthEnv() {
+          return {};
+        },
+        invalidate,
+      },
+    }));
+
+    const first = await agent.startSession({
+      sessionId: 'session-stderr-auth-keyword-a',
+      model: 'gpt-5.4',
+      workingDir: '/repo-a',
+    });
+    const second = await agent.startSession({
+      sessionId: 'session-stderr-auth-keyword-b',
+      model: 'gpt-5.4',
+      workingDir: '/repo-b',
+    });
+    const transport = createdTransports[0];
+    expect(createdTransports).toHaveLength(1);
+
+    transport.emitMockStderr(
+      'tool output: const errorCode = "token_invalidated"; // not an auth request failure',
+    );
+    await Promise.resolve();
+
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(transport.closed).toBe(false);
+
+    transport.setMockResponse(Method.TurnStart, {
+      result: { turn: { id: 'turn-after-stderr' } },
+    });
+    await expect(second.send({ type: 'user', content: 'still works' })).resolves.toBeUndefined();
+
+    transport.emitMockLine({
+      method: 'turn/started',
+      params: { threadId: 'thread-1', turn: { id: 'turn-to-steer-after-stderr' } },
+    });
+    await waitForExpectation(() => {
+      expect(first.isTurnRunning?.()).toBe(true);
+    });
+    transport.setMockResponse(Method.TurnSteer, {
+      result: { turnId: 'turn-to-steer-after-stderr' },
+    });
+    await expect(
+      first.steer({ type: 'user', content: 'steer still works' }),
+    ).resolves.toBeUndefined();
+
+    expect(transport.closed).toBe(false);
+    expect(createdTransports).toHaveLength(1);
+
+    await first.close();
+    await second.close();
+    await agent.dispose();
+  });
+
   it('retires only the local host when local Codex auth is invalidated', async () => {
     const invalidate = vi.fn(async () => undefined);
     const auth: AuthAdapter = {
@@ -1474,8 +1559,19 @@ describe('CodexAgent MCP thread context hooks', () => {
       remoteHostId: 'remote-host-1',
     });
 
-    await localHandle.close();
-    createdTransports[0].emitMockStderr('refresh token was already used');
+    createdTransports[0].setMockResponse(Method.TurnStart, {
+      error: {
+        code: -32000,
+        message: 'OAuth refresh token was already used',
+        data: { reason: 'cloudRequirements', errorCode: 'Auth' },
+      },
+    });
+    await expect(
+      localHandle.send(
+        { type: 'user', content: 'trigger structured auth failure' },
+        { throwOnStartFailure: true },
+      ),
+    ).rejects.toThrow(/refresh token was already used/i);
 
     await waitForExpectation(() => {
       expect(createdTransports[0].closed).toBe(true);
@@ -1484,6 +1580,7 @@ describe('CodexAgent MCP thread context hooks', () => {
     expect(createdTransports[1].closed).toBe(false);
 
     await remoteHandle.send({ type: 'user', content: 'still remote' });
+    await localHandle.close();
     await remoteHandle.close();
     await agent.dispose();
   });
@@ -1525,8 +1622,19 @@ describe('CodexAgent MCP thread context hooks', () => {
       remoteHostId: 'remote-host-1',
     });
 
-    await remoteHandle.close();
-    createdTransports[1].emitMockStderr('refresh token was already used');
+    createdTransports[1].setMockResponse(Method.TurnStart, {
+      error: {
+        code: -32000,
+        message: 'OAuth refresh token was already used',
+        data: { reason: 'cloudRequirements', action: 'relogin' },
+      },
+    });
+    await expect(
+      remoteHandle.send(
+        { type: 'user', content: 'trigger structured auth failure' },
+        { throwOnStartFailure: true },
+      ),
+    ).rejects.toThrow(/refresh token was already used/i);
 
     await waitForExpectation(() => {
       expect(createdTransports[1].closed).toBe(true);
@@ -1536,6 +1644,7 @@ describe('CodexAgent MCP thread context hooks', () => {
 
     await localHandle.send({ type: 'user', content: 'still local' });
     await localHandle.close();
+    await remoteHandle.close();
     await agent.dispose();
   });
 

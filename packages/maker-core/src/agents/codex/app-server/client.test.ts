@@ -2,15 +2,18 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AppServerClient, detectAuthInvalidationReason } from './client.js';
 import type { Logger } from '../../../interfaces/logger.js';
-import type { Transport, LineHandler, CloseHandler } from './transport.js';
+import type { Transport, LineHandler, StderrHandler, CloseHandler } from './transport.js';
 
 class FakeTransport implements Transport {
   readonly lines: string[] = [];
+  private writeError: Error | null = null;
   private readonly lineHandlers = new Set<LineHandler>();
+  private readonly stderrHandlers = new Set<StderrHandler>();
   private readonly closeHandlers = new Set<CloseHandler>();
 
   async writeLine(line: string): Promise<void> {
     this.lines.push(line);
+    if (this.writeError) throw this.writeError;
   }
 
   onLine(handler: LineHandler): () => void {
@@ -23,6 +26,11 @@ class FakeTransport implements Transport {
     return () => this.closeHandlers.delete(handler);
   }
 
+  onStderr(handler: StderrHandler): () => void {
+    this.stderrHandlers.add(handler);
+    return () => this.stderrHandlers.delete(handler);
+  }
+
   async close(reason = 'test close'): Promise<void> {
     for (const handler of this.closeHandlers) handler({ reason });
   }
@@ -30,6 +38,14 @@ class FakeTransport implements Transport {
   emitLine(value: unknown): void {
     const line = typeof value === 'string' ? value : JSON.stringify(value);
     for (const handler of this.lineHandlers) handler(line);
+  }
+
+  emitStderr(line: string): void {
+    for (const handler of this.stderrHandlers) handler(line);
+  }
+
+  failWrites(error: Error): void {
+    this.writeError = error;
   }
 }
 
@@ -44,50 +60,170 @@ const logger: Logger = {
 };
 
 describe('detectAuthInvalidationReason', () => {
-  it('detects Codex app session termination', () => {
-    const line = JSON.stringify({
-      level: 'ERROR',
-      fields: {
-        message:
-          'Failed to refresh token: 400 Bad Request: { "error": { "message": "Your session has ended. Please log in again.", "code": "app_session_terminated" } }',
+  const cloudAuthError = (message: string, data: Record<string, unknown> = {}) => ({
+    code: -32000,
+    message,
+    data: {
+      reason: 'cloudRequirements',
+      errorCode: 'Auth',
+      ...data,
+    },
+  });
+
+  it('maps provider-specific reasons inside structured cloud auth errors', () => {
+    expect(
+      detectAuthInvalidationReason(
+        cloudAuthError('Your session has ended. Please log in again. (app_session_terminated)'),
+      ),
+    ).toBe('app_session_terminated');
+    expect(
+      detectAuthInvalidationReason(
+        cloudAuthError('Your authentication token has been invalidated. (token_invalidated)'),
+      ),
+    ).toBe('token_invalidated');
+    expect(
+      detectAuthInvalidationReason(cloudAuthError('auth error code: token_revoked')),
+    ).toBe('token_revoked');
+    expect(
+      detectAuthInvalidationReason(cloudAuthError('OAuth refresh token was already used')),
+    ).toBe('refresh_token_reused');
+  });
+
+  it('uses token_invalidated for a generic structured relogin requirement', () => {
+    expect(
+      detectAuthInvalidationReason(
+        cloudAuthError('Cloud requirements rejected the request', {
+          errorCode: undefined,
+          action: 'relogin',
+        }),
+      ),
+    ).toBe('token_invalidated');
+  });
+
+  it('rejects keyword matches without the structured cloud auth provenance', () => {
+    expect(
+      detectAuthInvalidationReason({
+        code: -32000,
+        message: 'tool output: source code mentions token_invalidated but no auth request failed',
+      }),
+    ).toBeNull();
+    expect(
+      detectAuthInvalidationReason({
+        code: -32000,
+        message: 'token_revoked',
+        data: { reason: 'cloudRequirements', errorCode: 'Network' },
+      }),
+    ).toBeNull();
+    expect(
+      detectAuthInvalidationReason({
+        code: -32000,
+        message: 'refresh token was already used',
+        data: { reason: 'toolExecution', errorCode: 'Auth', action: 'relogin' },
+      }),
+    ).toBeNull();
+  });
+});
+
+describe('AppServerClient auth invalidation', () => {
+  it('keeps stderr diagnostic-only even when it contains auth keywords', () => {
+    const transport = new FakeTransport();
+    const onAuthInvalidated = vi.fn();
+    const client = new AppServerClient({
+      createTransport: () => transport,
+      logger,
+      onAuthInvalidated,
+    });
+    client.start();
+
+    transport.emitStderr('tool output: const code = "token_invalidated";');
+    transport.emitStderr('app_session_terminated token_revoked refresh token was already used');
+
+    expect(onAuthInvalidated).not.toHaveBeenCalled();
+  });
+
+  it('notifies once for correlated structured cloud auth response errors', async () => {
+    const transport = new FakeTransport();
+    const onAuthInvalidated = vi.fn();
+    const client = new AppServerClient({
+      createTransport: () => transport,
+      logger,
+      onAuthInvalidated,
+    });
+    client.start();
+
+    const first = client.request('turn/start');
+    const second = client.request('model/list');
+    transport.emitLine({
+      id: 1,
+      error: {
+        code: -32000,
+        message: 'OAuth refresh token was already used',
+        data: { reason: 'cloudRequirements', errorCode: 'Auth' },
+      },
+    });
+    transport.emitLine({
+      id: 2,
+      error: {
+        code: -32000,
+        message: 'token_revoked',
+        data: { reason: 'cloudRequirements', action: 'relogin' },
       },
     });
 
-    expect(detectAuthInvalidationReason(line)).toBe('app_session_terminated');
+    await expect(first).rejects.toThrow(/refresh token was already used/i);
+    await expect(second).rejects.toThrow(/token_revoked/i);
+    expect(onAuthInvalidated).toHaveBeenCalledTimes(1);
+    expect(onAuthInvalidated).toHaveBeenCalledWith('refresh_token_reused');
   });
 
-  it('detects invalidated ChatGPT auth tokens', () => {
-    const line =
-      'remote plugin catalog request failed with status 401 Unauthorized: {"error":{"message":"Your authentication token has been invalidated. Please try signing in again.","code":"token_invalidated"}}';
+  it('keeps auth correlation when an accepted write rejects before its response arrives', async () => {
+    const transport = new FakeTransport();
+    const onAuthInvalidated = vi.fn();
+    const client = new AppServerClient({
+      createTransport: () => transport,
+      logger,
+      onAuthInvalidated,
+    });
+    client.start();
+    transport.failWrites(new Error('write callback failed after bytes were accepted'));
 
-    expect(detectAuthInvalidationReason(line)).toBe('token_invalidated');
+    const request = client.request('turn/start');
+    await expect(request).rejects.toThrow(/write callback failed/i);
+    expect(transport.lines).toHaveLength(1);
+
+    transport.emitLine({
+      id: 1,
+      error: {
+        code: -32000,
+        message: 'token_revoked',
+        data: { reason: 'cloudRequirements', errorCode: 'Auth' },
+      },
+    });
+
+    expect(onAuthInvalidated).toHaveBeenCalledTimes(1);
+    expect(onAuthInvalidated).toHaveBeenCalledWith('token_revoked');
   });
 
-  it('detects revoked Codex OAuth tokens', () => {
-    const line =
-      'failed to refresh available models: unexpected status 401 Unauthorized: auth error code: token_revoked';
+  it('does not trust structured auth errors for ids the client never issued', () => {
+    const transport = new FakeTransport();
+    const onAuthInvalidated = vi.fn();
+    const client = new AppServerClient({
+      createTransport: () => transport,
+      logger,
+      onAuthInvalidated,
+    });
+    client.start();
 
-    expect(detectAuthInvalidationReason(line)).toBe('token_revoked');
-  });
+    transport.emitLine({
+      id: 999,
+      error: {
+        code: -32000,
+        message: 'token_invalidated',
+        data: { reason: 'cloudRequirements', action: 'relogin' },
+      },
+    });
 
-  it('keeps the legacy refresh-token reuse detection', () => {
-    expect(detectAuthInvalidationReason('OAuth refresh token was already used')).toBe(
-      'refresh_token_reused',
-    );
-  });
-
-  it('does not classify transient websocket failures as auth invalidation', () => {
-    expect(
-      detectAuthInvalidationReason(
-        'stream disconnected - retrying sampling request (2/5 in 434ms)...',
-      ),
-    ).toBeNull();
-    expect(
-      detectAuthInvalidationReason('failed to connect to websocket: HTTP error: 502 Bad Gateway'),
-    ).toBeNull();
-    expect(
-      detectAuthInvalidationReason('Failed to refresh token: timeout while contacting auth service'),
-    ).toBeNull();
+    expect(onAuthInvalidated).not.toHaveBeenCalled();
   });
 });
 

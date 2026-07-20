@@ -40,6 +40,11 @@ import type { Transport } from './transport.js';
  */
 const DEFAULT_MAX_LINE_BYTES = 16 * 1024 * 1024;
 const MAX_STDERR_LOG_CHARS = 2_000;
+/**
+ * Keep a small bounded correlation window for writes that rejected after the
+ * transport may already have handed bytes to the OS / websocket buffer.
+ */
+const MAX_WRITE_FAILURE_TOMBSTONES = 128;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: ESC 是 ANSI escape 序列的协议字节。
 const ANSI_ESCAPE_RE = /\x1B\[[0-?]*[ -/]*[@-~]/g;
 
@@ -62,26 +67,51 @@ function classifyStderrLine(line: string): 'debug' | 'warn' | 'error' {
   return 'debug';
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 /**
- * Codex CLI / app-server may report explicit OAuth revocation on stderr before
- * the failed turn finally surfaces an error notification. Treat revocation as
- * an auth-state change, not a network retry. Generic "refresh failed" messages
- * are intentionally ignored because they can also be transient proxy failures.
+ * Detect a definitive Codex authentication failure from a correlated JSON-RPC
+ * error response. Codex Desktop uses this same protocol boundary: stderr stays
+ * diagnostic-only, while auth state changes require cloudRequirements plus an
+ * explicit Auth/relogin action from app-server.
  */
-export function detectAuthInvalidationReason(line: string): string | null {
-  if (/app_session_terminated|Your session has ended/i.test(line)) {
+export function detectAuthInvalidationReason(error: JsonRpcErrorObject): string | null {
+  const data = isRecord(error.data) ? error.data : null;
+  if (
+    data?.reason !== 'cloudRequirements' ||
+    (data.errorCode !== 'Auth' && data.action !== 'relogin')
+  ) {
+    return null;
+  }
+
+  const nestedError = isRecord(data.error) ? data.error : null;
+  const diagnostic = [
+    error.message,
+    typeof data.message === 'string' ? data.message : '',
+    typeof data.detail === 'string' ? data.detail : '',
+    typeof data.code === 'string' ? data.code : '',
+    typeof nestedError?.message === 'string' ? nestedError.message : '',
+    typeof nestedError?.code === 'string' ? nestedError.code : '',
+  ].join('\n');
+
+  if (/app_session_terminated|Your session has ended/i.test(diagnostic)) {
     return 'app_session_terminated';
   }
-  if (/token_invalidated|authentication token has been invalidated/i.test(line)) {
+  if (/token_invalidated|authentication token has been invalidated/i.test(diagnostic)) {
     return 'token_invalidated';
   }
-  if (/token_revoked/i.test(line)) {
+  if (/token_revoked|authentication token has been revoked/i.test(diagnostic)) {
     return 'token_revoked';
   }
-  if (/refresh token was already used|refresh_token.*already used/i.test(line)) {
+  if (/refresh token was already used|refresh_token.*already used/i.test(diagnostic)) {
     return 'refresh_token_reused';
   }
-  return null;
+
+  // The structured Auth/relogin signal is itself definitive even when the
+  // app-server does not expose the provider-specific token error code.
+  return 'token_invalidated';
 }
 
 export interface AppServerClientOptions {
@@ -103,9 +133,8 @@ export interface AppServerClientOptions {
    */
   onTransportError?: (err: Error) => void;
   /**
-   * stderr 里检测到 OAuth refresh token 已失效时调用一次 (后续命中静默吞掉,
-   * 防 cloud_requirements 周期性重试刷屏)。上层 (CodexAgent) 用它触发 logout +
-   * 通知 UI 重登 — 否则错误只埋在后台日志, 用户无从感知。
+   * 关联中的 JSON-RPC response 明确返回 cloudRequirements Auth/relogin 时调用一次。
+   * 任意 stderr 与工具输出均不得触发；上层 (CodexAgent) 用它注销旧凭证并通知 UI 重登。
    */
   onAuthInvalidated?: (reason: string) => void;
 }
@@ -130,7 +159,7 @@ export class AppServerClient {
   private readonly maxLineBytes: number;
   private readonly onTransportError?: (err: Error) => void;
   private readonly onAuthInvalidated?: (reason: string) => void;
-  /** 单次 latch — refresh-token 失效只通知一次, 防 cloud_requirements 周期性 retry 刷屏。 */
+  /** 单次 latch — 结构化鉴权失败只通知一次, 防 cloud_requirements 周期性 retry 刷屏。 */
   private authInvalidatedFired = false;
 
   private readonly createTransport: () => Transport;
@@ -139,6 +168,12 @@ export class AppServerClient {
 
   private nextId = 1;
   private readonly pending = new Map<JsonRpcId, PendingRequest>();
+  /**
+   * A write callback can report failure after the peer has already received
+   * the request. Preserve only the request id/method so a late structured auth
+   * error remains correlated without keeping the already-rejected Promise.
+   */
+  private readonly writeFailureTombstones = new Map<JsonRpcId, string>();
   private readonly notificationHandlers = new Map<string, NotificationHandler>();
   private readonly requestHandlers = new Map<string, ServerRequestHandler>();
 
@@ -226,6 +261,7 @@ export class AppServerClient {
       pending.reject(err);
     }
     this.pending.clear();
+    this.writeFailureTombstones.clear();
 
     if (this.transport) {
       try {
@@ -260,7 +296,11 @@ export class AppServerClient {
       });
       transport.writeLine(payload).then(undefined, (err: Error) => {
         // transport 拒绝就立刻 reject 这一 request, 不要让它在 pending 里等到 close。
+        // 只有 response 尚未先到时才留 tombstone；否则迟到的 write callback 不应
+        // 重新关联已经完成的 id。
+        if (!this.pending.has(id)) return;
         this.pending.delete(id);
+        this.rememberWriteFailure(id, method);
         reject(err);
       });
     });
@@ -333,15 +373,6 @@ export class AppServerClient {
     const logLine = normalizeStderrLine(line);
     const level = classifyStderrLine(line);
     this.logger[level]('stderr', { line: logLine });
-    const authInvalidationReason = detectAuthInvalidationReason(line);
-    if (!this.authInvalidatedFired && this.onAuthInvalidated && authInvalidationReason) {
-      this.authInvalidatedFired = true;
-      try {
-        this.onAuthInvalidated(authInvalidationReason);
-      } catch (e) {
-        this.logger.warn('onAuthInvalidated handler threw', { message: (e as Error).message });
-      }
-    }
   }
 
   /**
@@ -361,11 +392,23 @@ export class AppServerClient {
   private dispatchResponse(id: JsonRpcId, result: unknown, error: JsonRpcErrorObject | null): void {
     const pending = this.pending.get(id);
     if (!pending) {
+      const failedWriteMethod = this.writeFailureTombstones.get(id);
+      if (failedWriteMethod !== undefined) {
+        this.writeFailureTombstones.delete(id);
+        this.logger.warn('late response for request with failed write', {
+          id,
+          method: failedWriteMethod,
+          hasError: error !== null,
+        });
+        if (error) this.notifyAuthInvalidated(error);
+        return;
+      }
       this.logger.warn('response for unknown id', { id });
       return;
     }
     this.pending.delete(id);
     if (error) {
+      this.notifyAuthInvalidated(error);
       const err = new Error(`codex app-server ${pending.method} error ${error.code}: ${error.message}`);
       // 把 code/data 挂上, 上层想区分 OVERLOADED 等可以判 (err as any).code。
       Object.assign(err, { code: error.code, data: error.data });
@@ -373,6 +416,28 @@ export class AppServerClient {
       return;
     }
     pending.resolve(result);
+  }
+
+  /** Keep write-failure correlation bounded; oldest ids are least useful. */
+  private rememberWriteFailure(id: JsonRpcId, method: string): void {
+    this.writeFailureTombstones.set(id, method);
+    while (this.writeFailureTombstones.size > MAX_WRITE_FAILURE_TOMBSTONES) {
+      const oldestId = this.writeFailureTombstones.keys().next().value as JsonRpcId | undefined;
+      if (oldestId === undefined) break;
+      this.writeFailureTombstones.delete(oldestId);
+    }
+  }
+
+  /** Notify the host once, but only after the caller has correlated the response. */
+  private notifyAuthInvalidated(error: JsonRpcErrorObject): void {
+    const authInvalidationReason = detectAuthInvalidationReason(error);
+    if (this.authInvalidatedFired || !this.onAuthInvalidated || !authInvalidationReason) return;
+    this.authInvalidatedFired = true;
+    try {
+      this.onAuthInvalidated(authInvalidationReason);
+    } catch (e) {
+      this.logger.warn('onAuthInvalidated handler threw', { message: (e as Error).message });
+    }
   }
 
   private async dispatchNotification(method: string, params: unknown): Promise<void> {

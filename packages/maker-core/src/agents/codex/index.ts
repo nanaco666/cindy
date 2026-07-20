@@ -1632,12 +1632,10 @@ export class CodexAgent extends BaseAgent {
       // (2026-07-17 随品牌翻转改 cindy;上游 gating 走 originator,与此无关)。
       clientInfo: { name: 'cindy', version: '0.0.0' },
       codexProxyActive,
-      // codex CLI 的 cloud_requirements 模块在 stderr 报 "refresh token was already used"
-      // 时, 当前 host 持有的 token 已彻底失效 (OAuth refresh token 一次性, 已被旋转)。
-      // 留着 host 跑只会持续撞 401, 用户也无从感知; auth.invalidate 会触发 logout +
-      // 通知 UI 重登。延后到 microtask 防止在 stderr 回调里同步收割自己。
-      // 注意: 远端路径下 stderr 走 ssh channel, 由 SshDaemonTransport.onStderr 转发; 这里
-      // 接到的仍然是远端 daemon 子进程 (本地 codex CLI 在远端的副本) 吐出的 stderr line。
+      // app-server 对失败 RPC 返回 cloudRequirements + Auth/relogin 结构化错误时,当前 host
+      // 持有的 token 已不可用。stderr 与工具输出只做诊断,绝不驱动鉴权状态。保留 host 只会
+      // 持续撞鉴权失败; auth.invalidate 会触发 logout + 通知 UI 重登。延后到 microtask
+      // 防止在 JSON-RPC response 分发回调里同步收割自己。远端也走同一结构化协议路径。
       onAuthInvalidated: (reason) => {
         this.deps.logger.warn('codex auth invalidated', {
           reason,
