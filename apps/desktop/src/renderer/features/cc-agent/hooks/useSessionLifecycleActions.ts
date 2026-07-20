@@ -117,8 +117,19 @@ export function useSessionLifecycleActions(options?: { includeArchived?: ListSta
         if (action === 'archive') {
           patchLocal(sessionId, { status: 'active' });
         }
-        toast.error(action === 'delete' ? t('ccAgent.sidebar.deleteFailed') : t('ccAgent.sidebar.archiveFailed'));
+        toast.error(
+          action === 'delete'
+            ? t('ccAgent.sidebar.deleteFailed')
+            : t('ccAgent.sidebar.archiveFailed'),
+        );
         return;
+      }
+
+      if (action === 'delete') {
+        // DB 已确认删除成功后再让 sessionsStore 修正所有已加载的筛选桶。
+        // 仅刷新当前桶会留下陈旧的 active / all 缓存，切换筛选时已删除会话会短暂重现；
+        // 不在写库前乐观移除，避免失败时出现“先消失、再恢复”的反向闪烁。
+        patchLocal(sessionId, { status: 'deleted' });
       }
 
       // MEM-1: Free all in-memory state (messages, base64 images, listeners)
