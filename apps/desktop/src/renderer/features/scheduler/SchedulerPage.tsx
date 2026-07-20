@@ -588,7 +588,6 @@ export function SchedulerPage() {
                 onTogglePause={handleTogglePause}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
-                costSummary={costSummaries.get(selected.id)}
                 runNowBusy={runNowBusyIds.has(selected.id)}
               />
             )}

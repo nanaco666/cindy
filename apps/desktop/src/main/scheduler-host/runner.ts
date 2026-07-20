@@ -150,7 +150,7 @@ export interface SchedulerQueueDeps {
     sessionId: string;
     text: string;
     persistedContent: string;
-    origin: { kind: 'scheduler'; scheduleId: string; scheduleName: string };
+    origin: { kind: 'scheduler'; scheduleId: string; scheduleName: string; runId: string };
     onAccepted: () => void | Promise<void>;
     onAcceptedRollback?: () => void | Promise<void>;
     onDiscarded?: () => void;
@@ -772,6 +772,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
       kind: 'scheduler',
       scheduleId: schedule.id,
       scheduleName: schedule.name,
+      runId: ctx.runId,
     } as const;
     let baselineStarted = false;
     try {
@@ -935,6 +936,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
       kind: 'scheduler',
       scheduleId: schedule.id,
       scheduleName: schedule.name,
+      runId: ctx.runId,
     } as const;
 
     // "Open session" 尽早可用(sessionId 已知,无需等派发)。

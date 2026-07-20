@@ -704,6 +704,14 @@ export const scheduleRuns = sqliteTable(
       enum: ['running', 'success', 'failed', 'aborted', 'interrupted', 'skipped'],
     }).notNull(),
     errorMsg: text('error_msg'),
+    /** 单次 run 的真实 API 账单费用；与订阅估值严格分栏。 */
+    costUsd: real('cost_usd').notNull().default(0),
+    /** 单次 run 的订阅 token 估算价值，不计入真实账单。 */
+    estimatedValueUsd: real('estimated_value_usd').notNull().default(0),
+    /** legacy 表示迁移前数据缺少 runId，不能精确拆分到单次执行。 */
+    costAttribution: text('cost_attribution', { enum: ['exact', 'legacy'] })
+      .notNull()
+      .default('legacy'),
     /**
      * Prompt 类 run 在 success 时存 agent 这一轮 turn 的最终文本（与飞书正常对话
      * 气泡显示同源，按 text 事件 isFinal 语义聚合）。失败 run 留 NULL。

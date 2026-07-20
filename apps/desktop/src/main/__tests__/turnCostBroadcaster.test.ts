@@ -20,8 +20,14 @@ vi.mock('../logger.js', () => ({
   createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }));
 vi.mock('../localDb/ipc/messages.js', () => ({
-  patchMessageAgentMeta: vi.fn(async () => true),
+  patchMessageAgentMetaWithResult: vi.fn(async (_sessionId: string, _clientId: string, patch: Record<string, unknown>) => ({
+    previous: {},
+    next: patch,
+  })),
   readPriorUserRoundCost: vi.fn(async () => ({ costUsd: 0, hasEstimatedValue: false })),
+}));
+vi.mock('../scheduler-host/runCostLedger.js', () => ({
+  applyScheduleRunCostMetaChange: vi.fn(async () => undefined),
 }));
 vi.mock('../messagePersistBroadcaster.js', () => ({
   enqueueDurableWrite: vi.fn((_label: string, fn: () => unknown) => Promise.resolve(fn())),
@@ -44,14 +50,24 @@ function makeDeps(
     costUsd: 0,
     hasEstimatedValue: false,
   },
+  previousAgentMeta: Record<string, unknown> = {},
 ) {
   const broadcasts: MessageTurnCostPayload[] = [];
   const patchCalls: Array<{ sessionId: string; clientId: string; patch: Record<string, unknown> }> = [];
+  const runCostCalls: Array<{
+    previous: Record<string, unknown>;
+    next: Record<string, unknown>;
+  }> = [];
   const deps: TurnCostDeps = {
     patchAgentMeta: vi.fn(async (sessionId, clientId, patch) => {
       patchCalls.push({ sessionId, clientId, patch });
       if (patchResult instanceof Error) throw patchResult;
-      return patchResult;
+      return patchResult
+        ? { previous: previousAgentMeta, next: { ...previousAgentMeta, ...patch } }
+        : null;
+    }),
+    applyScheduleRunCostChange: vi.fn(async (previous, next) => {
+      runCostCalls.push({ previous, next });
     }),
     readPriorUserRoundCost: vi.fn(async () => {
       if (prior instanceof Error) throw prior;
@@ -62,7 +78,7 @@ function makeDeps(
       broadcasts.push(payload);
     },
   };
-  return { deps, broadcasts, patchCalls };
+  return { deps, broadcasts, patchCalls, runCostCalls };
 }
 
 const ARGS = { sessionId: 's1', clientId: 'm1', costUsd: 0.042, isEstimate: false };
@@ -132,6 +148,28 @@ describe('recordTurnCostOnMessage', () => {
     await recordTurnCostOnMessage({ ...ARGS, isEstimate: true }, deps);
     expect(broadcasts[0]?.turnCostIsEstimate).toBe(true);
     expect(broadcasts[0]?.userTurnCostIsEstimate).toBe(true);
+  });
+
+  it('scheduler turn 持久化 runId origin，并同步 run 费用账本', async () => {
+    const { deps, patchCalls, runCostCalls } = makeDeps(true);
+    const turnOrigin = {
+      kind: 'scheduler',
+      scheduleId: 'schedule-1',
+      scheduleName: 'PR 反馈监控',
+      runId: 'run-1',
+    } as const;
+
+    await recordTurnCostOnMessage({ ...ARGS, turnOrigin }, deps);
+
+    expect(patchCalls[0]?.patch.origin).toEqual(turnOrigin);
+    expect(runCostCalls).toEqual([{
+      previous: {},
+      next: expect.objectContaining({
+        origin: turnOrigin,
+        turnCostUsd: 0.042,
+        turnCostIsEstimate: false,
+      }),
+    }]);
   });
 
   it('多段 SDK done 的展示累计完整，但原始分段成本不变', async () => {

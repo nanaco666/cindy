@@ -120,8 +120,6 @@ function PreRunHookResultDetails({ result }: { result: NonNullable<ScheduleRun['
 interface Props {
   run: ScheduleRun;
   agentKind: AgentKind;
-  sessionCostUsd?: number;
-  sessionEstimatedValueUsd?: number;
   /** 删除单条历史 run 的回调；省略则不渲染删除按钮（向后兼容）。 */
   onDelete?: (run: ScheduleRun) => void | Promise<void>;
   /**
@@ -134,8 +132,6 @@ interface Props {
 export function RunHistoryCard({
   run,
   agentKind,
-  sessionCostUsd,
-  sessionEstimatedValueUsd = 0,
   onDelete,
   onRestart,
 }: Props) {
@@ -150,19 +146,20 @@ export function RunHistoryCard({
     run.status === 'running'
       ? formatStartedAgo(run.firedAt)
       : t('scheduler.runs.took', { duration: formatDuration(run.firedAt, run.finishedAt) });
-  const costText =
-    sessionCostUsd == null
-      ? null
-      : [
-          sessionCostUsd > 0
-            ? t('scheduler.runs.sessionCost', { cost: formatUsd(sessionCostUsd) })
+  const costText = run.costAttribution === 'legacy'
+    ? t('scheduler.runs.legacyCostUnavailable')
+    : run.costAttribution === 'exact'
+      ? [
+          (run.costUsd ?? 0) > 0
+            ? t('scheduler.runs.runCost', { cost: formatUsd(run.costUsd ?? 0) })
             : null,
-          sessionEstimatedValueUsd > 0
-            ? t('scheduler.runs.sessionValue', { value: formatUsd(sessionEstimatedValueUsd) })
+          (run.estimatedValueUsd ?? 0) > 0
+            ? t('scheduler.runs.runValue', { value: formatUsd(run.estimatedValueUsd ?? 0) })
             : null,
         ]
           .filter(Boolean)
-          .join(' · ') || t('scheduler.runs.sessionCost', { cost: formatUsd(0) });
+          .join(' · ') || t('scheduler.runs.runCost', { cost: formatUsd(0) })
+      : null;
 
   // 终态且未读 → 在 agent 图标右上角点一个状态点(全端统一色表:失败结局红 / 成功绿)。
   // running 不算未读（结果还没出来，没什么"漏看"）。

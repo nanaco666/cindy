@@ -91,6 +91,8 @@ export interface SendOrigin {
   /** scheduler 来源时的任务标识(供 IM 转播时显示"哪个自动任务")。 */
   scheduleId?: string;
   scheduleName?: string;
+  /** scheduler 来源时的单次执行标识，用于持久化关联该轮消息与 run。 */
+  runId?: string;
   /**
    * goal 来源时的目标会话标识(= 该 goal 所属 session id)。GoalController 发起的
    * 续跑 turn 用 origin={kind:'goal'} 打标,使"用户打断"守卫能靠 event.turnOrigin.kind
