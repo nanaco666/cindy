@@ -16,9 +16,9 @@ import { basenameRemotePath } from './filePreview.js';
  * 安全不变量（review 逐条钉死的口径）：**有副作用的命令绝不能被贴上无害的
  * 人话动词**（「读取 / 搜索 / 列出」），必须回退原文可见。所有形态级安全检查
  * 统一收在 `analyzeCommandShape`：非展示型管道尾（tee / xargs …）、写文件重定向
- * （含紧贴形态 `a>b`）、子命令替换 / heredoc / 多行,任一命中即整体放弃解析。
- * `&&` 只在每一段都能独立通过同一道闸、且属于明确的同类动作时才归纳；`;`、
- * 后台 `&` 与 `||` 仍整体拒绝。`commandActions` 路径在采纳任何 action 前也
+ * （含紧贴形态 `a>b`）、子命令替换 / heredoc,任一命中即整体放弃解析。
+ * `&&` / `||` / `;` / 换行只在每一段都能独立通过同一道闸、且属于明确的同类
+ * 动作时才归纳；后台 `&` 仍整体拒绝。`commandActions` 路径在采纳任何 action 前也
  * 必须先过同一道闸（防止「首个 action 无害、后段有副作用」的组合绕过），并
  * 对 read / search / listFiles action 各自再做语义门控（executable-read、
  * sed 就地编辑、破坏性 find）。`rm` 等破坏性命令**刻意不进规则表**。
@@ -35,6 +35,8 @@ export type CommandIntentAction =
   | 'search'
   | 'inspect'
   | 'inspectRepository'
+  | 'inspectEnvironment'
+  | 'modifyRepository'
   | 'verify'
   | 'fetch'
   | 'install'
@@ -43,6 +45,10 @@ export type CommandIntentAction =
   | 'lint'
   | 'typecheck'
   | 'runScript'
+  | 'runNodeScript'
+  | 'runPythonScript'
+  | 'runPerlScript'
+  | 'runSwiftScript'
   | 'checkSyntax'
   | 'showVersion'
   | 'checkFormatting'
@@ -63,6 +69,12 @@ export type CommandIntentAction =
   | 'gitFetch'
   | 'gitPull'
   | 'gitPush'
+  | 'gitRebase'
+  | 'gitMerge'
+  | 'gitCherryPick'
+  | 'gitStash'
+  | 'gitRestore'
+  | 'gitSubmodule'
   | 'gitRemote'
   | 'gitRevParse'
   | 'gitBranch'
@@ -150,8 +162,8 @@ const FIND_DESTRUCTIVE_FLAGS = new Set([
 
 /**
  * 解析 codex `commandActions`（v2 协议 CommandAction[]，serde camelCase tag：
- * read / listFiles / search / unknown）。管道命令会拆成多个 action，取第一个
- * 可渲染项 —— 首个动作即主意图，后续通常是 head/wc 之类过滤器。
+ * read / listFiles / search / unknown）。保留所有可安全展示的结构化动作，
+ * 供工作过程按动作拆行；单行摘要入口再取第一个主意图。
  *
  * 传入 `fullCommand` 时（describeToolUse 的 exec 路径总是传），先对完整命令
  * 过 `analyzeCommandShape` 形态闸：`cat a | tee b` 这类首个 action 无害、
@@ -164,9 +176,9 @@ const FIND_DESTRUCTIVE_FLAGS = new Set([
  * - search / listFiles：codex 会把 `find … -delete/-exec` 的 -name 过滤归类
  *   成 search，对 action.command 做破坏性 find 检查。
  */
-export function commandIntentFromActions(raw: unknown, fullCommand?: string): CommandIntent | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  if (fullCommand !== undefined && analyzeCommandShape(fullCommand) === undefined) return undefined;
+export function commandIntentsFromActions(raw: unknown, fullCommand?: string): CommandIntent[] {
+  if (!Array.isArray(raw)) return [];
+  const intents: CommandIntent[] = [];
   for (const entry of raw) {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
     const action = entry as Record<string, unknown>;
@@ -176,26 +188,69 @@ export function commandIntentFromActions(raw: unknown, fullCommand?: string): Co
         const path = readNonEmptyString(action.path);
         const name = readNonEmptyString(action.name) ?? (path ? basenameRemotePath(path) : undefined);
         if (!name) continue;
-        return { action: 'read', target: name, ...(path ? { path } : {}) };
+        intents.push({ action: 'read', target: name, ...(path ? { path } : {}) });
+        break;
       }
       case 'listFiles': {
         if (searchCommandHasSideEffects(readNonEmptyString(action.command))) continue;
         const path = readNonEmptyString(action.path);
-        return { action: 'list', ...(path ? { target: path } : {}) };
+        intents.push({ action: 'list', ...(path ? { target: path } : {}) });
+        break;
       }
       case 'search': {
         if (searchCommandHasSideEffects(readNonEmptyString(action.command))) continue;
         const query = readNonEmptyString(action.query);
         const path = readNonEmptyString(action.path);
-        if (query) return { action: 'search', target: query, ...(path ? { path } : {}) };
-        if (path) return { action: 'search', target: path };
-        continue;
+        if (query) {
+          intents.push({ action: 'search', target: query, ...(path ? { path } : {}) });
+        } else if (path) {
+          intents.push({ action: 'search', target: path });
+        }
+        break;
       }
       default:
         continue;
     }
   }
-  return undefined;
+  if (
+    fullCommand !== undefined
+    && analyzeCommandShape(fullCommand) === undefined
+    && !structuredActionsMatchSafeComposite(fullCommand, intents)
+  ) {
+    return [];
+  }
+  return intents;
+}
+
+/**
+ * `analyzeCommandShape` deliberately rejects top-level command chains. For
+ * multi-row presentation, allow the narrow subset whose complete local parse
+ * proves that every sequential branch is read/list/search. `||` remains
+ * rejected because only one branch may actually execute.
+ */
+function structuredActionsMatchSafeComposite(
+  fullCommand: string,
+  intents: readonly CommandIntent[],
+): boolean {
+  if (intents.length === 0 || fullCommand.includes('||')) return false;
+  if (!intents.every((intent) => (
+    intent.action === 'read' || intent.action === 'list' || intent.action === 'search'
+  ))) {
+    return false;
+  }
+  const composite = commandIntentFromCompositeCommand(fullCommand);
+  return composite?.action === 'inspect'
+    || composite?.action === 'read'
+    || composite?.action === 'list'
+    || composite?.action === 'search';
+}
+
+/**
+ * 单行命令摘要的兼容入口。需要逐动作展示的消费方调用
+ * `commandIntentsFromActions`;既有调用方继续只取第一个主意图。
+ */
+export function commandIntentFromActions(raw: unknown, fullCommand?: string): CommandIntent | undefined {
+  return commandIntentsFromActions(raw, fullCommand)[0];
 }
 
 // ── 命令原文 → intent（本地规则表） ──────────────────────────────────────────
@@ -212,8 +267,11 @@ const CUT_VALUE_FLAGS = new Set([
   '--bytes', '--characters', '--delimiter', '--fields', '--output-delimiter',
 ]);
 
-/** 单条命令长度上限 —— 超长命令多半是脚本内联，解析价值低且徒增开销。 */
-const COMMAND_MAX_CHARS = 1000;
+/**
+ * 单条命令长度上限。Git add 文件清单与 gh GraphQL 查询经常超过 1k；8k 仍能
+ * 在线性 tokenizer 内低成本处理，同时把真正的大段内联脚本留在原文回退。
+ */
+const COMMAND_MAX_CHARS = 8192;
 
 /**
  * 形态安全分析：整条命令通过全部检查时返回首段 argv（已去引号、剥 env/sudo
@@ -316,6 +374,16 @@ const COMPOSITE_REPOSITORY_ACTIONS = new Set<CommandIntentAction>([
   'ghRunList', 'ghRunView', 'ghRunWatch', 'ghSearch', 'ghRepoList', 'ghRepoView', 'ghApiQuery',
 ]);
 
+const COMPOSITE_REPOSITORY_MUTATION_ACTIONS = new Set<CommandIntentAction>([
+  'gitAdd', 'gitCommit', 'gitFetch', 'gitPull', 'gitPush',
+  'gitRebase', 'gitMerge', 'gitCherryPick', 'gitStash', 'gitRestore', 'gitSubmodule',
+  'gitWorktreeAdd', 'gitWorktreeRemove', 'gitWorktreeMove', 'gitWorktreePrune',
+]);
+
+const COMPOSITE_ENVIRONMENT_ACTIONS = new Set<CommandIntentAction>([
+  'inspectEnvironment', 'showVersion', 'locateCommand', 'ghAuthStatus',
+]);
+
 const COMPOSITE_VERIFICATION_ACTIONS = new Set<CommandIntentAction>([
   'test', 'build', 'lint', 'typecheck', 'checkSyntax', 'checkFormatting',
 ]);
@@ -331,18 +399,59 @@ function sameIntent(left: CommandIntent, right: CommandIntent): boolean {
   return left.action === right.action && left.target === right.target && left.path === right.path;
 }
 
+/** 顶层单 `&` 会把命令放到后台；不能把前半段当成整条命令的摘要。 */
+function hasTopLevelBackgroundOperator(input: string): boolean {
+  let quote: '"' | "'" | null = null;
+  for (let index = 0; index < input.length; index += 1) {
+    const ch = input[index];
+    if (quote) {
+      if (ch === quote && (quote !== '"' || input[index - 1] !== '\\')) quote = null;
+      continue;
+    }
+    if (ch === '\\' && input[index + 1] !== undefined) {
+      index += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (
+      ch === '&' &&
+      input[index - 1] !== '&' &&
+      input[index + 1] !== '&' &&
+      input[index - 1] !== '>' &&
+      input[index + 1] !== '>'
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** echo / printf / true 只给复合检查排版或吞掉非零退出码，不改变主意图。 */
+function isCompositePresentationSegment(segment: string): boolean {
+  const argv = analyzeCommandShape(segment);
+  if (!argv || argv.length === 0) return false;
+  const bin = binaryName(argv[0]);
+  if (bin === 'true' || bin === 'echo') return true;
+  return bin === 'printf' && !argv.slice(1).some((token) => token === '-v' || token.startsWith('-v'));
+}
+
 /**
  * Codex 常把一次查阅拆成 `rg ... && sed ... && sed ...`。每一段都先走单命令
  * 解析与副作用闸；只有整组落在同一类可归纳动作时才返回友好摘要。任一段未知、
- * 写盘或属于 mutation，整条链仍回退「运行命令」，不拿首段掩盖后续动作。
+ * 写盘或无法准确描述，整条链仍回退「运行命令」，不拿首段掩盖后续动作。
+ * `;` / 换行 / `||` 只有在每一支都能识别时才接受；mutation 只归纳成诚实的
+ * 「修改仓库」，不会贴「检查仓库」这类只读标签。
  */
 function commandIntentFromCompositeCommand(command: string): CommandIntent | undefined {
   if (typeof command !== 'string') return undefined;
   const trimmed = command.trim();
   if (!trimmed || trimmed.length > COMMAND_MAX_CHARS) return undefined;
-  if (/[`\n]|\$\(|<</.test(trimmed)) return undefined;
+  if (/[`]|\$\(|<</.test(trimmed) || hasTopLevelBackgroundOperator(trimmed)) return undefined;
 
-  const chain = splitTopLevel(trimmed, ['&&']);
+  const chain = splitTopLevel(trimmed, ['&&', '||', ';', '\n']);
   if (!chain || chain.length < 2) return undefined;
   while (chain.length > 1 && /^cd(\s|$)/.test(chain[0])) {
     if (!isCleanCdSegment(chain[0])) return undefined;
@@ -350,22 +459,46 @@ function commandIntentFromCompositeCommand(command: string): CommandIntent | und
   }
   if (chain.length < 2) return undefined;
 
-  const intents = chain.map(commandIntentFromSingleCommand);
-  if (intents.some((intent) => !intent)) return undefined;
-  const resolved = intents as CommandIntent[];
+  const resolved: CommandIntent[] = [];
+  for (const segment of chain) {
+    if (isCompositePresentationSegment(segment)) continue;
+    const intent = commandIntentFromSingleCommand(segment);
+    if (!intent) return undefined;
+    resolved.push(intent);
+  }
+  if (resolved.length === 0) return undefined;
+
+  // pwd 常作为后续检查的上下文前导；有真实动作时不让它稀释摘要。
+  const meaningful = resolved.length > 1
+    ? resolved.filter((intent) => intent.action !== 'showCurrentDirectory')
+    : resolved;
+  if (meaningful.length === 0) return resolved[0];
+  if (meaningful.length === 1) return meaningful[0];
+
+  const hasRepositoryMutation = meaningful.some((intent) =>
+    COMPOSITE_REPOSITORY_MUTATION_ACTIONS.has(intent.action));
+  if (
+    hasRepositoryMutation &&
+    meaningful.every((intent) =>
+      COMPOSITE_REPOSITORY_ACTIONS.has(intent.action) ||
+      COMPOSITE_REPOSITORY_MUTATION_ACTIONS.has(intent.action))
+  ) {
+    return { action: 'modifyRepository' };
+  }
 
   const groups: Array<[ReadonlySet<CommandIntentAction>, CommandIntentAction]> = [
     [COMPOSITE_CONTENT_ACTIONS, 'inspect'],
     [COMPOSITE_REPOSITORY_ACTIONS, 'inspectRepository'],
+    [COMPOSITE_ENVIRONMENT_ACTIONS, 'inspectEnvironment'],
     [COMPOSITE_VERIFICATION_ACTIONS, 'verify'],
   ];
-  const summary = groups.find(([actions]) => resolved.every((intent) => actions.has(intent.action)));
+  const summary = groups.find(([actions]) => meaningful.every((intent) => actions.has(intent.action)));
   if (!summary) return undefined;
 
-  const first = resolved[0];
-  if (resolved.every((intent) => sameIntent(first, intent))) return first;
+  const first = meaningful[0];
+  if (meaningful.every((intent) => sameIntent(first, intent))) return first;
   // 多个不同搜索词仍可准确概括为「搜索」，无需泛化成「查阅内容」。
-  if (resolved.every((intent) => intent.action === 'search')) return { action: 'search' };
+  if (meaningful.every((intent) => intent.action === 'search')) return { action: 'search' };
   return { action: summary[1] };
 }
 
@@ -383,6 +516,7 @@ function commandIntentFromSingleCommand(command: string): CommandIntent | undefi
 
   const bin = binaryName(argv[0]);
   const rest = argv.slice(1);
+  if (/^python(?:\d+(?:\.\d+)?)?$/.test(bin)) return pythonIntent(rest);
   switch (bin) {
     case 'cat': {
       const file = positionals(rest, new Set([]))[0];
@@ -466,6 +600,14 @@ function commandIntentFromSingleCommand(command: string): CommandIntent | undefi
     }
     case 'node':
       return nodeIntent(rest);
+    case 'perl':
+      return perlIntent(rest);
+    case 'swiftc':
+      return swiftCompilerIntent(rest);
+    case 'swift':
+      return swiftIntent(rest);
+    case 'xcrun':
+      return xcrunIntent(rest);
     case 'jq':
       return jqIntent(rest);
     case 'wc':
@@ -489,6 +631,24 @@ function commandIntentFromSingleCommand(command: string): CommandIntent | undefi
       return lsofIntent(rest);
     case 'sqlite3':
       return sqliteIntent(rest);
+    case 'test':
+      return { action: 'inspectEnvironment' };
+    case '[':
+      return rest.at(-1) === ']' ? { action: 'inspectEnvironment' } : undefined;
+    case 'stat':
+    case 'du':
+      return { action: 'inspect' };
+    case 'file':
+      // file -C / --compile 会在当前目录生成 magic.mgc，不是纯检查。
+      return rest.some((token) => token === '-C' || token === '--compile')
+        ? undefined
+        : { action: 'inspect' };
+    case 'plutil':
+      return plutilIntent(rest);
+    case 'defaults':
+      return rest[0] === 'read' ? { action: 'inspectEnvironment' } : undefined;
+    case 'tailscale':
+      return rest[0] === 'status' ? { action: 'inspectEnvironment' } : undefined;
     case 'git':
       if (isVersionRequest(rest)) return { action: 'showVersion', target: 'Git' };
       return gitIntent(rest);
@@ -590,7 +750,7 @@ const NODE_VALUE_FLAGS = new Set([
 function nodeIntent(rest: string[]): CommandIntent | undefined {
   if (isVersionRequest(rest)) return { action: 'showVersion', target: 'Node.js' };
   if (rest.some((token) => token === '-e' || token === '--eval' || token === '-p' || token === '--print')) {
-    return undefined;
+    return { action: 'runNodeScript' };
   }
 
   const syntaxFlag = rest.findIndex((token) => token === '-c' || token === '--check');
@@ -599,6 +759,60 @@ function nodeIntent(rest: string[]): CommandIntent | undefined {
   if (!script || script === '-') return undefined;
   const target = basenameRemotePath(script) || script;
   return syntaxFlag >= 0 ? { action: 'checkSyntax', target } : { action: 'runScript', target };
+}
+
+function pythonIntent(rest: string[]): CommandIntent | undefined {
+  if (isVersionRequest(rest)) return { action: 'showVersion', target: 'Python' };
+  if (rest.some((token) => token === '-c' || token === '-m')) return { action: 'runPythonScript' };
+  const script = positionals(rest, new Set(['-W', '-X']))[0];
+  if (!script || script === '-') return undefined;
+  return { action: 'runScript', target: basenameRemotePath(script) || script };
+}
+
+function perlIntent(rest: string[]): CommandIntent | undefined {
+  if (isVersionRequest(rest)) return { action: 'showVersion', target: 'Perl' };
+  if (rest.includes('-c')) {
+    const script = positionals(rest, new Set(['-I', '-M', '-m']))[0];
+    return script ? { action: 'checkSyntax', target: basenameRemotePath(script) || script } : undefined;
+  }
+  if (rest.some((token) => /^-[^\s]*[eE]/.test(token))) return { action: 'runPerlScript' };
+  const script = positionals(rest, new Set(['-I', '-M', '-m']))[0];
+  if (!script || script === '-') return undefined;
+  return { action: 'runScript', target: basenameRemotePath(script) || script };
+}
+
+function swiftCompilerIntent(rest: string[]): CommandIntent | undefined {
+  if (isVersionRequest(rest)) return { action: 'showVersion', target: 'Swift' };
+  const source = rest.find((token) => token.toLowerCase().endsWith('.swift'));
+  if (!source) return undefined;
+  const target = basenameRemotePath(source) || source;
+  if (rest.includes('-typecheck')) return { action: 'typecheck', target };
+  if (rest.includes('-parse')) return { action: 'checkSyntax', target };
+  return { action: 'build', target };
+}
+
+function swiftIntent(rest: string[]): CommandIntent | undefined {
+  if (isVersionRequest(rest)) return { action: 'showVersion', target: 'Swift' };
+  if (rest.includes('-e')) return { action: 'runSwiftScript' };
+  const script = rest.find((token) => token.toLowerCase().endsWith('.swift'));
+  return script ? { action: 'runScript', target: basenameRemotePath(script) || script } : undefined;
+}
+
+function xcrunIntent(rest: string[]): CommandIntent | undefined {
+  const command = cliSubcommand(rest, new Set(['--sdk', '--toolchain']));
+  if (!command) return undefined;
+  if (command.name === 'swiftc') return swiftCompilerIntent(command.args);
+  if (command.name === 'swift') return swiftIntent(command.args);
+  if (command.name === 'simctl' && command.args[0] === 'list') {
+    return { action: 'inspectEnvironment' };
+  }
+  return undefined;
+}
+
+function plutilIntent(rest: string[]): CommandIntent | undefined {
+  if (rest.includes('-p')) return { action: 'inspect' };
+  if (rest.includes('-lint')) return { action: 'checkSyntax' };
+  return undefined;
 }
 
 const JQ_VALUE_FLAGS = new Set(['-L', '--indent', '-f', '--from-file']);
@@ -669,18 +883,25 @@ function lsofIntent(rest: string[]): CommandIntent {
 const SQLITE_VALUE_FLAGS = new Set(['-separator', '-newline', '-vfs']);
 const SQLITE_UNSAFE_OPTIONS = ['-cmd', '-init'];
 const SQLITE_MUTATING_SQL = /\b(?:insert|update|delete|replace|create|drop|alter|vacuum|attach|detach|reindex|load_extension|writefile)\b/i;
+const SQLITE_READ_ONLY_DOT_COMMANDS = new Set([
+  '.tables', '.schema', '.indexes', '.databases', '.dbinfo', '.show', '.headers', '.mode', '.width',
+]);
 
 function sqliteIntent(rest: string[]): CommandIntent | undefined {
-  if (!rest.includes('-readonly')) return undefined;
   if (rest.some((token) => SQLITE_UNSAFE_OPTIONS.some((flag) => token === flag || token.startsWith(`${flag}=`)))) {
     return undefined;
   }
   const pos = positionals(rest, SQLITE_VALUE_FLAGS);
   const database = pos[0];
   if (!database) return undefined;
+  if (!rest.includes('-readonly') && !/[?&]mode=ro(?:&|$)/i.test(database)) return undefined;
   const statements = pos.slice(1);
   if (
-    statements.some((statement) => /^\s*\./.test(statement) || /\n\s*\./.test(statement)) ||
+    statements.some((statement) => {
+      const trimmed = statement.trim();
+      if (!trimmed.startsWith('.')) return false;
+      return !SQLITE_READ_ONLY_DOT_COMMANDS.has(trimmed.split(/\s+/, 1)[0]);
+    }) ||
     SQLITE_MUTATING_SQL.test(statements.join(' '))
   ) {
     return undefined;
@@ -789,6 +1010,18 @@ function gitIntent(rest: string[]): CommandIntent | undefined {
         return undefined;
       }
       return { action: 'gitPush' };
+    case 'rebase':
+      return { action: 'gitRebase' };
+    case 'merge':
+      return { action: 'gitMerge' };
+    case 'cherry-pick':
+      return { action: 'gitCherryPick' };
+    case 'stash':
+      return { action: 'gitStash' };
+    case 'restore':
+      return { action: 'gitRestore' };
+    case 'submodule':
+      return { action: 'gitSubmodule' };
     case 'remote':
       return gitRemoteIsReadOnly(subcommand.args) ? { action: 'gitRemote' } : undefined;
     case 'rev-parse':
@@ -1257,9 +1490,10 @@ function hasFdExecFlag(token: string): boolean {
 // ── 词法辅助 ─────────────────────────────────────────────────────────────────
 
 /**
- * 顶层分割（引号内的分隔符不算）。遇到 `||`（无法确定实际执行哪支）或
- * 未闭合引号返回 undefined。分隔符按传入列表顺序匹配 —— 调用方须把 `&&`
- * 排在 `&` 前,避免拆成两个 `&`;`>&`（fd 复制,如 2>&1）里的 `&` 不算分隔符。
+ * 顶层分割（引号内的分隔符不算）。未闭合引号返回 undefined；`||` 只有调用方
+ * 明确把它列为分隔符时才接受，否则保持旧的保守回退。分隔符按传入列表顺序
+ * 匹配 —— 调用方须把 `&&` 排在 `&` 前,避免拆成两个 `&`;`>&`（fd 复制,
+ * 如 2>&1）里的 `&` 不算分隔符。
  */
 function splitTopLevel(input: string, separators: string[]): string[] | undefined {
   const segments: string[] = [];
@@ -1272,15 +1506,23 @@ function splitTopLevel(input: string, separators: string[]): string[] | undefine
       if (ch === quote && (quote !== '"' || input[index - 1] !== '\\')) quote = null;
       continue;
     }
+    if (ch === '\\' && input[index + 1] !== undefined) {
+      current += ch + input[index + 1];
+      index += 1;
+      continue;
+    }
     if (ch === '"' || ch === "'") {
       quote = ch;
       current += ch;
       continue;
     }
-    if (ch === '|' && input[index + 1] === '|') return undefined;
+    if (ch === '|' && input[index + 1] === '|' && !separators.includes('||')) return undefined;
     const matched = separators.find((sep) => input.startsWith(sep, index));
-    if (matched === '&' && index > 0 && input[index - 1] === '>') {
-      current += ch; // 2>&1 / >&2 里的 fd 复制,不是后台操作符
+    if (
+      matched === '&' &&
+      ((index > 0 && input[index - 1] === '>') || input[index + 1] === '>')
+    ) {
+      current += ch; // 2>&1 / >&2 / &>/dev/null 是重定向,不是后台操作符
       continue;
     }
     if (matched) {
@@ -1327,6 +1569,15 @@ function tokenize(input: string): ShellWord[] | undefined {
       hasQuoted = true;
       continue;
     }
+    if (ch === '\\' && input[index + 1] !== undefined) {
+      const escaped = input[index + 1];
+      if (/\s|["'\\<>();&|]/.test(escaped)) {
+        current += escaped;
+        hasToken = true;
+        index += 1;
+        continue;
+      }
+    }
     if (/\s/.test(ch)) {
       if (hasToken) tokens.push({ text: current, unquotedMeta, hasQuoted });
       current = '';
@@ -1362,6 +1613,34 @@ function stripPrefixTokens(words: ShellWord[]): string[] | undefined {
     (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[start].text) || words[start].text === 'sudo')
   ) {
     start += 1;
+  }
+  if (words[start]?.text === 'env' && !words[start].unquotedMeta) {
+    start += 1;
+    while (start < words.length) {
+      const word = words[start];
+      if (word.unquotedMeta) return undefined;
+      const token = word.text;
+      if (token === '--') {
+        start += 1;
+        break;
+      }
+      if (token === '-u' || token === '--unset' || token === '-C' || token === '--chdir') {
+        const value = words[start + 1];
+        if (!value || value.unquotedMeta) return undefined;
+        start += 2;
+        continue;
+      }
+      if (
+        token === '-i' || token === '--ignore-environment' || token === '-0' || token === '--null' ||
+        token === '-v' || token === '--debug' || token.startsWith('--unset=') ||
+        token.startsWith('--chdir=') || /^[A-Za-z_][A-Za-z0-9_]*=/.test(token)
+      ) {
+        start += 1;
+        continue;
+      }
+      if (token.startsWith('-')) return undefined;
+      break;
+    }
   }
   const out: string[] = [];
   for (let index = start; index < words.length; index += 1) {

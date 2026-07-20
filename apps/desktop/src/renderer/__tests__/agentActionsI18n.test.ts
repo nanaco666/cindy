@@ -21,12 +21,14 @@ const VERBS = ['edited', 'created', 'ran', 'read', 'updated', 'searched', 'fetch
 
 /** command intent 专属动词档(verbLabelKeyForIntent 新增,无聚合 part.* 变体)。 */
 const INTENT_VERBS = [
-  'listed', 'inspect', 'inspectRepository', 'verify',
+  'listed', 'inspect', 'inspectRepository', 'inspectEnvironment', 'modifyRepository', 'verify',
   'installedDeps', 'ranTests', 'built', 'linted', 'typechecked',
-  'runScript', 'checkSyntax', 'showVersion', 'checkFormatting', 'parseJson', 'count',
+  'runScript', 'runNodeScript', 'runPythonScript', 'runPerlScript', 'runSwiftScript',
+  'checkSyntax', 'showVersion', 'checkFormatting', 'parseJson', 'count',
   'showCurrentDirectory', 'showDateTime', 'locateCommand', 'inspectProcesses', 'inspectPorts',
   'queryDatabase',
   'gitStatus', 'gitDiff', 'gitLog', 'gitShow', 'gitAdd', 'gitCommit', 'gitFetch', 'gitPull', 'gitPush',
+  'gitRebase', 'gitMerge', 'gitCherryPick', 'gitStash', 'gitRestore', 'gitSubmodule',
   'gitRemote', 'gitRevParse', 'gitBranch', 'gitGrep', 'gitMergeBase', 'gitLsFiles', 'gitRevList',
   'gitLsRemote',
   'gitWorktreeList', 'gitWorktreeAdd', 'gitWorktreeRemove', 'gitWorktreeMove', 'gitWorktreePrune',

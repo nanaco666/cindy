@@ -3530,7 +3530,15 @@
     "workGroup": {
       "working": "作業中…",
       "worked": "{{duration}} 作業しました",
-      "workDetails": "作業内容"
+      "workDetails": "作業内容",
+      "exploration": {
+        "read_one": "{{count}} ファイルを読み取り",
+        "read_other": "{{count}} ファイルを読み取り",
+        "search_one": "{{count}} 回検索",
+        "search_other": "{{count}} 回検索",
+        "list_one": "{{count}} 回ファイルを一覧表示",
+        "list_other": "{{count}} 回ファイルを一覧表示"
+      }
     },
     "agentTask": {
       "emptyTitle": "サブエージェントタスク",
@@ -3772,6 +3780,8 @@
         "listed": "一覧表示",
         "inspect": "内容を確認",
         "inspectRepository": "リポジトリを確認",
+        "inspectEnvironment": "開発環境を確認",
+        "modifyRepository": "リポジトリを変更",
         "verify": "検証を実行",
         "installedDeps": "依存関係のインストール",
         "ranTests": "テスト実行",
@@ -3779,6 +3789,10 @@
         "linted": "Lint チェック",
         "typechecked": "型チェック",
         "runScript": "スクリプトを実行",
+        "runNodeScript": "Node.js スクリプトを実行",
+        "runPythonScript": "Python スクリプトを実行",
+        "runPerlScript": "Perl スクリプトを実行",
+        "runSwiftScript": "Swift スクリプトを実行",
         "checkSyntax": "構文を確認",
         "showVersion": "バージョンを確認",
         "checkFormatting": "フォーマットを確認",
@@ -3800,6 +3814,12 @@
         "gitFetch": "リモート更新を取得",
         "gitPull": "リモート更新をプル",
         "gitPush": "コード変更をプッシュ",
+        "gitRebase": "ブランチをリベース",
+        "gitMerge": "ブランチをマージ",
+        "gitCherryPick": "コミットをチェリーピック",
+        "gitStash": "作業内容をスタッシュ",
+        "gitRestore": "ファイルを復元",
+        "gitSubmodule": "サブモジュールを管理",
         "gitRemote": "Git リモートを確認",
         "gitRevParse": "Git 参照を解決",
         "gitBranch": "ブランチを確認",
