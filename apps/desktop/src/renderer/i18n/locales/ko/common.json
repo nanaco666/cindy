@@ -2083,6 +2083,15 @@
         "descriptionBuiltin": "패널과 기능이 제거됩니다. 내장 플러그인은 자동으로 되돌아오지 않으며, 언제든지 목록에서 복원할 수 있습니다.",
         "cancel": "취소"
       },
+      "setupGate": {
+        "title": "\"{{name}}\" 플러그인은 설정이 필요합니다",
+        "descriptionMissing": "사용하기 전에 다음 설정이 필요합니다: {{items}}. 지금 플러그인 설정으로 이동할까요?",
+        "descriptionReauth": "계정 인증이 만료되었습니다: {{items}}. 다시 연결해야 사용할 수 있습니다. 지금 이동할까요?",
+        "configure": "설정으로 이동",
+        "cancel": "취소",
+        "anySeparator": " 또는 ",
+        "groupSeparator": ", "
+      },
       "toast": {
         "installed": "\"{{name}}\" 설치됨",
         "uninstalled": "\"{{name}}\" 제거됨",

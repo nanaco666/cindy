@@ -731,6 +731,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     markUsed: (id: string): Promise<{ ids: string[] }> =>
       ipcRenderer.invoke('ghosts:mark-used', id),
+    /** 配置就绪检查(插件页「使用」前置门;main 现查凭证/账号/连接/kv)。 */
+    setupStatus: (id: string): Promise<unknown> =>
+      ipcRenderer.invoke('ghosts:setup-status', id),
     install: (lizFilePath: string, opts?: { enable?: boolean }): Promise<{ ghost: unknown }> =>
       ipcRenderer.invoke('ghosts:install', lizFilePath, opts),
     update: (lizFilePath: string): Promise<{ ghost: unknown }> =>

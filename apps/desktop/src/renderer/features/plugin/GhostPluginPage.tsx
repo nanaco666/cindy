@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronDown, Plus, Sparkles, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -37,7 +37,7 @@ import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
 import { getLastWorkingDir, subscribeToLastWorkingDir } from '@/state/lastWorkingDir';
 import { findSplitChildByPanelKind } from '../../../shared/layoutTree';
-import { ghostPanelKind } from '../../../shared/ghost';
+import { ghostPanelKind, type GhostSetupStatus } from '../../../shared/ghost';
 import {
   toGhostPluginDetail,
   toGhostPluginListItem,
@@ -49,6 +49,7 @@ import {
   type GhostPluginListItem,
   type GhostPluginOrigin,
 } from './lib/ghostPluginViewModel';
+import { formatSetupGateDescription } from './lib/ghostSetupGateModel';
 import { PluginManagementLayout, PluginManagementPage } from './PluginManagementLayout';
 import { GhostPluginDetailView } from './GhostPluginDetailView';
 import { GhostPluginIcon } from './GhostPluginIcon';
@@ -80,6 +81,7 @@ const MAX_VISIBLE_INSTALLED_GHOSTS = 5;
 export function GhostPluginPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { confirm, confirmWithCheckbox } = useConfirmDialog();
   const ghosts = useInstalledGhosts();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -142,6 +144,16 @@ export function GhostPluginPage() {
       }),
     [],
   );
+  // /plugins?ghost=<id> 深链:直接打开该插件详情(配置就绪弹窗等入口复用;
+  // 读后即清参数,避免从详情返回列表后又被同一参数拉回详情)。
+  useEffect(() => {
+    const target = searchParams.get('ghost');
+    if (!target) return;
+    setSelectedId(target);
+    const next = new URLSearchParams(searchParams);
+    next.delete('ghost');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
   const builtinIds = useMemo(() => new Set(builtinStatus.builtinIds), [builtinStatus.builtinIds]);
   const enterpriseIds = useMemo(
     () => new Set(builtinStatus.enterpriseIds),
@@ -283,10 +295,42 @@ export function GhostPluginPage() {
     navigate('/cc-agent/new');
   }, [navigate, t]);
 
+  // 打开插件详情并滚到「配置」区(就绪弹窗的「去配置」动作)。详情视图
+  // 可能尚未挂载,滚动排到渲染之后的下一帧。
+  const openGhostConfiguration = useCallback((id: string) => {
+    setSelectedId(id);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        document
+          .getElementById('ghost-configuration-title')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    });
+  }, []);
+
   const handleUseGhost = useCallback(
-    (id: string) => {
+    async (id: string) => {
       const ghost = ghosts.find((candidate) => candidate.manifest.id === id);
       if (!ghost?.manifest.command) return;
+      // 使用前置门:点击时现查配置就绪度(main 侧确定性判定),未就绪先
+      // 弹窗引导去配置。查询失败不拦——运行期 networkSlot 仍会兜底报错,
+      // 这里拦不住只是少了一次前置提醒,不能因此把能用的插件挡在门外。
+      let setupStatus: GhostSetupStatus | null = null;
+      try {
+        setupStatus = await window.electronAPI.ghosts.setupStatus(id);
+      } catch {
+        setupStatus = null;
+      }
+      if (setupStatus && !setupStatus.ready) {
+        const goConfigure = await confirm({
+          title: t('settings.ghosts.setupGate.title', { name: ghost.manifest.name }),
+          description: formatSetupGateDescription(setupStatus, t),
+          confirmText: t('settings.ghosts.setupGate.configure'),
+          cancelText: t('settings.ghosts.setupGate.cancel'),
+        });
+        if (goConfigure) openGhostConfiguration(id);
+        return;
+      }
       const existing = getComposerDraft(NEW_MAKER_DRAFT_KEY);
       saveComposerDraft(NEW_MAKER_DRAFT_KEY, {
         text: existing?.text ?? null,
@@ -303,11 +347,11 @@ export function GhostPluginPage() {
       });
       navigate('/cc-agent/new');
     },
-    [ghosts, navigate],
+    [confirm, ghosts, navigate, openGhostConfiguration, t],
   );
 
   const handleUse = useCallback(() => {
-    if (selectedGhost) handleUseGhost(selectedGhost.manifest.id);
+    if (selectedGhost) void handleUseGhost(selectedGhost.manifest.id);
   }, [handleUseGhost, selectedGhost]);
 
   const handleRestore = useCallback(
@@ -547,7 +591,7 @@ export function GhostPluginPage() {
                     item={item}
                     onSelect={() => setSelectedId(item.id)}
                     onAction={() => {
-                      if (item.installed) handleUseGhost(item.id);
+                      if (item.installed) void handleUseGhost(item.id);
                       else void handleRestore(item.id, item.name);
                     }}
                     effectiveEnabled={

@@ -185,6 +185,10 @@ describe('FORGE_GUIDE', () => {
       'settingsHtml',
       'settingsHeight',
       "fetch('/kv')",
+      // setup 就绪声明(2026-07-21):使用前置检查——作者声明需求,主机统一检查。
+      'setup 就绪声明',
+      'anyOf',
+      'secret:brave_api_key',
     ]) {
       expect(FORGE_GUIDE).toContain(marker);
     }

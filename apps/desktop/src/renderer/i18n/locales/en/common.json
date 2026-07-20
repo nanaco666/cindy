@@ -2083,6 +2083,15 @@
         "descriptionBuiltin": "Its panel and capabilities will be removed. This is a built-in plugin — it won't come back automatically, and you can restore it from the list anytime.",
         "cancel": "Cancel"
       },
+      "setupGate": {
+        "title": "\"{{name}}\" needs setup",
+        "descriptionMissing": "Before using it, please set up: {{items}}. Go to the plugin settings now?",
+        "descriptionReauth": "Account authorization has expired: {{items}}. Reconnect to keep using it. Go there now?",
+        "configure": "Set up",
+        "cancel": "Cancel",
+        "anySeparator": " or ",
+        "groupSeparator": ", "
+      },
       "toast": {
         "installed": "Installed \"{{name}}\"",
         "uninstalled": "Uninstalled \"{{name}}\"",

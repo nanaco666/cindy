@@ -53,6 +53,7 @@ import {
 } from './runtime/electronSandboxAdapter.js';
 import { CURRENT_CINDY_REGION } from '../../shared/brandRegion.js';
 import { createGhostKvStore, removeGhostKvBestEffort } from './ghostKvStore.js';
+import { evaluateGhostSetup } from './ghostSetupStatus.js';
 import { handleGhostSecretsRequest } from './runtime/ghostSecretsEndpoint.js';
 import { handleGhostOauthRequest } from './runtime/ghostOauthEndpoint.js';
 import { handleGhostConnectionsRequest } from './runtime/ghostConnectionsEndpoint.js';
@@ -164,6 +165,8 @@ import { eq } from 'drizzle-orm';
  *   与 layout:get 同模式。目录扫描极小,同步读不卡启动。
  * - install (invoke):装入本地 .cindy 文件;失败按分类 throwIpcError。
  * - uninstall (invoke):按 id 卸下。
+ * - setup-status (invoke):按 id 判定配置就绪度(插件页「使用」前置门,
+ *   判定真身 ghostSetupStatus.ts;未装 NOT_FOUND)。
  * - changed (main → renderer 广播):全量已装清单,多窗口热更新。
  */
 
@@ -2105,6 +2108,42 @@ export function registerGhostIpc(): void {
       });
       return { ids: [] };
     }
+  });
+
+  // ── 配置就绪检查(使用前置门,判定真身 ghostSetupStatus.ts)────────────
+  // 插件页点「使用」时现查:清单推导需求(有 setup 声明按声明,无则启发式),
+  // 逐项核对保险库 / OAuth 账号 / 连接 / kv。全同步毫秒级、不缓存、不唤沙箱;
+  // oauth 判定用运行时清单(filo-google 的内置 client 是运行时注入的,读原始
+  // 清单会把「开箱即用」误判成未配置)。判定只管存在性,key 有效性仍由运行期
+  // networkSlot 出网 fail-fast 兜底。
+  ipcMain.handle('ghosts:setup-status', (_event, id: unknown) => {
+    if (typeof id !== 'string' || !isValidGhostId(id)) {
+      throwIpcError('INVALID_PARAMS', 'id must be a valid Ghost id');
+    }
+    const ghost = manager.list().find((g) => g.manifest.id === id);
+    if (!ghost) throwIpcError('NOT_FOUND', `意识 ${id} 未安装`);
+    const runtimeManifest = withRuntimeFiloGoogleClient(ghost.manifest);
+    const oauthManager = getGhostOauthAccountManager();
+    const connectionManager = getGhostConnectionManager();
+    // kv 单意识单文件,同一次判定内最多读一次(多条 kv 需求不重复开盘)。
+    let kvSnapshot: Record<string, unknown> | null = null;
+    return evaluateGhostSetup(runtimeManifest, {
+      secretSaved: (key) => readGhostSecret(id, key) !== null,
+      oauthStatus: (key) => {
+        const decl = runtimeManifest.network?.secrets?.find((s) => s.key === key)?.oauth;
+        const accounts = oauthManager.listAccounts(id, key);
+        return {
+          clientConfigured: oauthManager.clientConfigured(id, key, decl),
+          connected: accounts.filter((a) => a.status === 'connected').length,
+          expired: accounts.filter((a) => a.status === 'expired').length,
+        };
+      },
+      connectionCount: (key) => connectionManager.list(id, key).length,
+      kvValue: (key) => {
+        if (kvSnapshot === null) kvSnapshot = ghostKv.read(id);
+        return kvSnapshot[key];
+      },
+    });
   });
 
   // ── 面板媒体换发(拖拽引渡 + 右键菜单)──────────────────────────────
