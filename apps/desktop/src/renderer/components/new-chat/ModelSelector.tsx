@@ -15,7 +15,11 @@ import { useConnectedSource } from '@/hooks/useConnectedSource';
 import { useModelPricing } from '@/hooks/useModelPricing';
 import { useProviders } from '@/hooks/useProviders';
 import { useDeviceProviders } from '@/hooks/useDeviceProviders';
-import { providerMonogram, selectVisibleModels } from '@/lib/providerModels';
+import {
+  providerMonogram,
+  resolveVisibleModelAgentKind,
+  selectVisibleModels,
+} from '@/lib/providerModels';
 import type { Effort } from '@/lib/userPreferences.types';
 import { isModelEnabled, useModelVisibilityVersion } from '@/state/modelVisibilityPrefs';
 import { useProviderModelMemoryVersion } from '@/state/providerModelMemory';
@@ -406,16 +410,15 @@ export function ModelSelectorContent({
 
   // currentModel 归属的 agent —— effortLevels 标签按它取(不合并两边,避免 Claude/Codex 同 id 标签互覆盖)。
   const currentAgentKind: AgentKind | null = useMemo(() => {
-    if (agentKind) return agentKind;
     if (!currentModel) return null;
-    if (providers.some((p) => providerOffersModel(p, currentModel.id, 'claude-code'))) {
-      return 'claude-code';
-    }
-    if (providers.some((p) => providerOffersModel(p, currentModel.id, 'codex'))) {
-      return 'codex';
-    }
-    return null;
-  }, [currentModel, providers, agentKind]);
+    return resolveVisibleModelAgentKind({
+      modelId: currentModel.id,
+      agentKind,
+      ccModels: cc.capabilities?.availableModels ?? [],
+      codexModels: codex.capabilities?.availableModels ?? [],
+      providers,
+    });
+  }, [agentKind, cc.capabilities, codex.capabilities, currentModel, providers]);
 
   const effortMeta = useMemo(() => {
     const levels =
@@ -482,12 +485,19 @@ export function ModelSelectorContent({
     if (!deviceId) return id.startsWith('codex/') && !hasSavedKey;
     if (remoteProviders.loading) return true;
     if (remoteProviders.error) return false;
-    if (!currentAgentKind) return true;
+    const rowAgentKind = resolveVisibleModelAgentKind({
+      modelId: id,
+      agentKind,
+      ccModels: cc.capabilities?.availableModels ?? [],
+      codexModels: codex.capabilities?.availableModels ?? [],
+      providers,
+    });
+    if (!rowAgentKind) return true;
     return !providers.some(
       (provider) =>
         provider.connected &&
-        provider.agents.includes(currentAgentKind) &&
-        providerOffersModel(provider, id, currentAgentKind),
+        provider.agents.includes(rowAgentKind) &&
+        providerOffersModel(provider, id, rowAgentKind),
     );
   };
 

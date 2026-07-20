@@ -31,5 +31,7 @@ describe('remote Orca Worker creation context', () => {
 
     expect(selector).toContain("if (!deviceId) return id.startsWith('codex/') && !hasSavedKey;");
     expect(selector).toContain('if (remoteProviders.error) return false;');
+    expect(selector).toContain('const rowAgentKind = resolveVisibleModelAgentKind({');
+    expect(selector).toContain('providerOffersModel(provider, id, rowAgentKind)');
   });
 });
