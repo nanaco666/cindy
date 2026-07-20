@@ -242,7 +242,7 @@ async function finishWindows({ artifactDir, baseName, appName, versionless, allo
   return { files, signing: { installerSigned, internalExesSigned: Boolean(npkgToken) } };
 }
 
-async function finishDarwin({ artifactDir, baseName, appName, arch, versionless, allowUnsigned, noSign, version }) {
+async function finishDarwin({ artifactDir, baseName, appName, arch, versionless, allowUnsigned, noSign }) {
   const packagedDir = path.join(DESKTOP_ROOT, 'out', `${appName}-darwin-${arch}`);
   const appPath = path.join(packagedDir, `${appName}.app`);
   if (!fs.existsSync(appPath)) {
@@ -277,9 +277,10 @@ async function finishDarwin({ artifactDir, baseName, appName, arch, versionless,
 
     const dmgPath = path.join(artifactDir, `${baseName}-${arch}.dmg`);
     console.log('==> Creating DMG...');
-    // DMG 卷名带区域产物基名(cn 'Cindy x.y.z' 不变,global 'CindyGlobal x.y.z'
-    // 便于双装机器上区分挂载卷)。
-    createMacDMG(appPath, dmgPath, `${appName} ${version}`, identity);
+    // DMG 卷名 = 安装窗口标题,走 '<appName> Installer'(cn 'Cindy Installer',
+    // global 'CindyGlobal Installer',双装机器仍可区分挂载卷);版本号不进卷名,
+    // 安装包文件名里已有。
+    createMacDMG(appPath, dmgPath, `${appName} Installer`, identity);
     files.push(fileEntry('installer', dmgPath));
 
     const hotfixZipPath = path.join(artifactDir, `${baseName}-${arch}-hotfix.zip`);
