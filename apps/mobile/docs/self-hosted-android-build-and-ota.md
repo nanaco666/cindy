@@ -52,7 +52,7 @@
 | 5 | `mobile-update-server` 部署在 Linux;OSS/CDN 复用桌面端机制 | 同 iOS;CDN 布局 `mobile-ota/android/*`(与 iOS `mobile-ota/ios/*` 平级隔离) |
 | 6 | **EAS 保留且仍可用**,新脚本不得影响既有 EAS 逻辑 | 靠 `EXPO_PUBLIC_XDT_OTA_SELFHOST` env gate 隔离,非自建 Expo config 逐字节不变 |
 | 7 | Android package 固定为 `com.xd.lizcn` | 历史身份决策；现行 region 身份见本文顶部更新与 `RELEASING.md` |
-| 8(Android 特有) | **versionCode 单调递增**,APK 覆盖安装的硬约束 | 值 committed 在仓库;`release-android-local.mjs` 检测到 ≤ 线上基线时自动 +1 写回(发布后 commit 回 main),语义对齐 iOS `buildNumber` |
+| 8(Android 特有) | **versionCode 单调递增**,APK 覆盖安装的硬约束 | 值 committed 在仓库;`release-android-local.mjs` 检测到 ≤ 线上基线时自动 +1 写回(发布后 commit 回 main),语义对齐 iOS `buildNumber`;self-host fingerprint 排除 `ExpoConfigVersions`,所以它是整包安装元数据,不会单独改变 OTA runtime |
 
 ## 3. 关键事实(实现前提)
 
@@ -123,7 +123,7 @@ flowchart TD
 复用 `release-lib.mjs` 的参数解析 / git 闸门 / dry-run 风格。步骤:
 
 1. **算指纹**:`npx expo-updates fingerprint:generate --platform android`(self-host 身份 env:`EXPO_PUBLIC_XDT_OTA_SELFHOST=1`;`fingerprint.config.cjs` 的 beta 剥离 hook 仍生效)→ 得 `runtimeVersion`,落盘 `release/android-runtime.json` 供热更脚本复用(镜像 iOS 的 `release/ios-runtime.json`)。
-2. **读并校验 versionCode**:读 committed `apps/mobile/android-version.json`(`{ "versionCode": N }`)——放仓库根而非 `release/`,因为 `apps/mobile/.gitignore` 忽略整个 `/release`(那里只放 per-build 产物如 `android-runtime.json`);经 `assertBuildNumberMonotonic`(复用 `lib/ios-local.mjs`)对 CDN canary 基线 `mobile-ota/android/canary-release.json`（无 canary 时回退 stable `release.json`）的上一条 `buildNumber`(即上次 versionCode)做单调校验;经 env `XDT_ANDROID_VERSION_CODE` 传给 prebuild(供 §6.1 注入)。
+2. **读并校验 versionCode**:读 committed `apps/mobile/android-version.json`(`{ "versionCode": N }`)——放仓库根而非 `release/`,因为 `apps/mobile/.gitignore` 忽略整个 `/release`(那里只放 per-build 产物如 `android-runtime.json`);经 `assertBuildNumberMonotonic`(复用 `lib/ios-local.mjs`)对 CDN canary 基线 `mobile-ota/android/canary-release.json`（无 canary 时回退 stable `release.json`）的上一条 `buildNumber`(即上次 versionCode)做单调校验;经 env `XDT_ANDROID_VERSION_CODE` 传给 prebuild(供 §6.1 注入)。该值只负责 APK 覆盖安装 / 发布去重,`fingerprint.config.cjs` 在 self-host 模式跳过 `ExpoConfigVersions`,不会因为 bump versionCode 单独生成新 runtime。
 3. **prebuild**:`expo prebuild -p android --clean`,注入自建变体 env(`EXPO_PUBLIC_XDT_OTA_SELFHOST=1` / `XDT_ANDROID_VERSION_CODE` / 必要的 `EXPO_PUBLIC_*`)。真实更新地址只来自 endpoint 清单。
 4. **注入签名 + 编译**:`android/` 是生成目录(gitignored、每次 prebuild 重建),脚本**幂等 patch** 生成的 `android/app/build.gradle`——把 `release` buildType 的 `signingConfig` 从默认的 `signingConfigs.debug` 改为指向 env 驱动的 release keystore(默认模板 release 用 debug 签名,**必须改**)。keystore 路径与口令经 `-P` gradle property 从环境变量传入 `gradlew assembleRelease`,**绝不落盘明文、绝不写进被 patch 的 build.gradle**(patch 只引用 property 名):
    - `XDT_ANDROID_KEYSTORE_PATH`(默认 `/Users/cn-ios/Documents/xdt/XDMakerMobileCer/Android/xdmaker-release.jks`)

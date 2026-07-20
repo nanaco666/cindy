@@ -8,7 +8,7 @@
 - `runtimeVersion` 使用 `@expo/fingerprint`。本地 fingerprint 与已安装包 runtime 一致时才可 OTA;不一致必须冷更重出包。
 - `channel` 写进构建产物。正式服走 `production`;内部 adhoc 走 `staging`;手机 Beta 走 `beta-<dev>`。
 - `branch` 是 OTA 发布目标。脚本默认让 branch 与 channel 同名。
-- iOS `buildNumber` 在冷更时必须单调递增,脚本会检查;自建线冷更脚本(`mobile:release:ios:local` / `mobile:release:android:local`)检测到版本号 ≤ 线上基线时会自动自增写回版本文件(`--execute` 才写盘,发布后把 bump commit 回 main)。Android 正式发版仍 pending;等 `android.versionCode` 被有意识加入后,脚本才检查它单调。
+- iOS `buildNumber` 在冷更时必须单调递增,脚本会检查;自建线冷更脚本(`mobile:release:ios:local` / `mobile:release:android:local`)检测到版本号 ≤ 线上基线时会自动自增写回版本文件(`--execute` 才写盘,发布后把 bump commit 回 main)。Android 自建线的 `versionCode` 同样从 `android-version.json` 读取并检查单调;它只约束整包安装 / 发布去重,self-host fingerprint 会排除版本字段,不会因为单独 bump 版本号而改变 OTA runtime。
 
 完整开发/自测/发版模型见 [`docs/dev-and-release-workflow.md`](./docs/dev-and-release-workflow.md)。
 
