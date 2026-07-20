@@ -215,6 +215,8 @@ export async function performSessionAgentSwitch(
   const handoff = buildHandoffText(sourceMessages, {
     fromLabel: agentEngineLabel(fromDbKind),
     toLabel: agentEngineLabel(toDbKind),
+    // 附带早期原文检索指引(get_chat_history / search_chat_history 定向到本会话)。
+    sessionId,
   });
 
   return deps.withCloseSuppressed(sessionId, async () => {

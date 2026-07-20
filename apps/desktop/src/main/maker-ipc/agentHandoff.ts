@@ -26,6 +26,13 @@ export interface BuildHandoffOptions {
   fromLabel: string;
   /** 展示给模型的新引擎名(如 'Codex')。 */
   toLabel: string;
+  /**
+   * business 层会话 id。提供时交接文本附带「早期原文检索」指引——新引擎可用
+   * lizi_xdt_helper 的 get_chat_history / search_chat_history(带 session_ids
+   * 定向过滤)按需检索本会话完整历史:摘要管大局、检索管细节,消除逐字窗口外
+   * 的细节性失忆。两家引擎的会话都挂了该 MCP server。
+   */
+  sessionId?: string;
 }
 
 /** 最近多少个用户轮次进入逐字区(其余进单行提要区)。 */
@@ -225,8 +232,27 @@ export function buildHandoffText(
   opts: BuildHandoffOptions,
 ): string {
   const turns = splitTurns(messages);
-  const recent = turns.slice(-RECENT_TURNS);
-  const earlier = turns.slice(0, -RECENT_TURNS);
+  // 超出硬上限时逐档收缩逐字区(4→3→2→1 轮)重组——绝不能从尾部硬切:
+  // 检索指引与结束标记在尾部,是最不能丢的段。收缩到 1 轮仍超限才走最后的
+  // 尾部截断保险(实际不可达:各区预算之和 < 上限)。
+  for (let recentCount = RECENT_TURNS; recentCount >= 1; recentCount--) {
+    const text = assembleHandoffText(turns, messages, opts, recentCount);
+    if (text.length <= HANDOFF_HARD_CAP || recentCount === 1) {
+      return text.length > HANDOFF_HARD_CAP ? text.slice(0, HANDOFF_HARD_CAP) : text;
+    }
+  }
+  /* istanbul ignore next -- 循环必然 return */
+  return assembleHandoffText(turns, messages, opts, 1).slice(0, HANDOFF_HARD_CAP);
+}
+
+function assembleHandoffText(
+  turns: Turn[],
+  messages: HandoffSourceMessage[],
+  opts: BuildHandoffOptions,
+  recentCount: number,
+): string {
+  const recent = turns.slice(-recentCount);
+  const earlier = turns.slice(0, -recentCount);
 
   const sections: string[] = [];
   sections.push(
@@ -290,9 +316,24 @@ export function buildHandoffText(
     sections.push(`== 最近对话记录 ==\n${blocks.join('\n---\n')}`);
   }
 
+  if (opts.sessionId) {
+    // 早期原文检索指引:逐字窗口外的内容只剩单行提要,用户追问细节时模型必须能
+    // 翻到原文。工具名 / 参数是确定性事实(lizi-mcps xdt-helper,session_ids 过滤,
+    // 两个工具均支持),写死在指引里比让模型自己发现可靠(规则 9)。
+    sections.push(
+      `== 早期原文检索(需要时用)==\n` +
+        `本会话 id:${opts.sessionId}\n` +
+        `以上摘要之外的早期对话原文可随时检索(工具在 lizi_xdt_helper 的 history 类目):\n` +
+        `- 按内容找:search_chat_history,args {"query":"<关键词>","session_ids":["${opts.sessionId}"]}\n` +
+        `- 按时间/角色拉原文:get_chat_history,args {"session_ids":["${opts.sessionId}"],"roles":["user","assistant"]}(hasMore 用 nextCursor 翻页)\n` +
+        `用户追问的细节不在上文时,先检索原文再回答,不要凭提要猜;检索到的旧内容与工作区现状冲突时,以工作区为准。仅在需要时使用,不必每轮都查。`,
+    );
+  }
+
   sections.push('== 交接说明结束,以下是用户的新消息 ==');
-  const text = sections.join('\n\n');
-  return text.length > HANDOFF_HARD_CAP ? text.slice(0, HANDOFF_HARD_CAP) : text;
+  // 不在组装阶段做任何截断——超限收缩由 buildHandoffText 的外层循环负责
+  // (收缩逐字区保住首尾),尾部硬切只是外层最后的保险。
+  return sections.join('\n\n');
 }
 
 /** send 路径的 wire 消息形态(与 makerSendTransaction 的 IpcUserMessage 对齐)。 */

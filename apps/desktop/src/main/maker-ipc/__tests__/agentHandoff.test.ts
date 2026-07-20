@@ -209,3 +209,44 @@ describe('buildHandoffText 工作状态区(社区 handoff packet 口径)', () =>
     expect(text).toContain('以工作区现状为准');
   });
 });
+
+describe('buildHandoffText 早期原文检索指引', () => {
+  const opts = { fromLabel: 'Claude Code', toLabel: 'Codex' };
+
+  it('提供 sessionId 时附带检索指引(两个工具名 + session_ids 定向)', () => {
+    const text = buildHandoffText([msg('user', '你好')], { ...opts, sessionId: 'sess-abc' });
+    expect(text).toContain('== 早期原文检索(需要时用)==');
+    expect(text).toContain('本会话 id:sess-abc');
+    expect(text).toContain('search_chat_history');
+    expect(text).toContain('get_chat_history');
+    expect(text).toContain('"session_ids":["sess-abc"]');
+    // 指引在结束标记之前
+    expect(text.indexOf('早期原文检索')).toBeLessThan(text.indexOf('交接说明结束'));
+  });
+
+  it('不提供 sessionId 时不渲染检索指引', () => {
+    const text = buildHandoffText([msg('user', '你好')], opts);
+    expect(text).not.toContain('早期原文检索');
+    expect(text).not.toContain('get_chat_history');
+  });
+});
+
+describe('buildHandoffText 超限收缩保住首尾', () => {
+  it('极端长对话下检索指引与结束标记不被截掉(收缩逐字区而非切尾)', () => {
+    const big = 'x'.repeat(50_000);
+    const messages: HandoffSourceMessage[] = [];
+    for (let i = 0; i < 20; i++) {
+      messages.push(msg('user', big));
+      messages.push(msg('assistant', big));
+    }
+    const text = buildHandoffText(messages, {
+      fromLabel: 'Claude Code',
+      toLabel: 'Codex',
+      sessionId: 'sess-tail',
+    });
+    expect(text.length).toBeLessThanOrEqual(16_000);
+    expect(text).toContain('== 早期原文检索(需要时用)==');
+    expect(text).toContain('"session_ids":["sess-tail"]');
+    expect(text.trimEnd().endsWith('== 交接说明结束,以下是用户的新消息 ==')).toBe(true);
+  });
+});
