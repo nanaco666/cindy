@@ -3464,6 +3464,7 @@
       "defaultPlaceholder": "오늘은 무엇을 할까요~",
       "voiceInput": {
         "start": "음성 입력 시작",
+        "pillLabel": "음성",
         "stop": "음성 입력 중지",
         "releaseToStop": "음성 입력 중, 놓으면 종료",
         "releaseToSend": "놓으면 전송",
@@ -6132,6 +6133,7 @@
   },
   "extraDirs": {
     "menuAria": "작업 메뉴",
+    "expandLabel": "추가",
     "tooltipEmpty": "더 많은 작업",
     "tooltipCount": "참조 디렉터리 {{count}}개",
     "pluginsTitle": "설치된 플러그인",

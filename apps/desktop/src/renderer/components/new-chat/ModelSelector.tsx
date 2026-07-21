@@ -4,7 +4,8 @@ import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { flashScrollbar } from '@/lib/scrollbarAutoHide';
-import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
+import { MorphPopover } from '@/components/ui/morph-popover';
 import { ClaudeMark } from '@/components/icons/ClaudeMark';
 import { CodexMark } from '@/components/icons/CodexMark';
 import { XDIncMark } from '@/components/icons/XDIncMark';
@@ -375,6 +376,22 @@ export function ModelSelectorContent({
       setEditing(null);
     }, 80);
   };
+
+  // 列表(或任何祖先滚动容器)滚动时立即关掉行级配置浮层:浮层锚定行会跟着滚动
+  // 漂移,体验很差(2026-07-22 用户反馈)。桌面端惯例是 scroll 即关(macOS 菜单同);
+  // 浮层本身是 hover 即现的,重开零成本。capture 监听兜住所有滚动源,
+  // 浮层内部自身的滚动除外(configPanelRef 过滤)。
+  useEffect(() => {
+    if (!editing) return;
+    const onAnyScroll = (event: Event) => {
+      if (configPanelRef.current?.contains(event.target as Node)) return;
+      cancelOptionsClose();
+      setEditing(null);
+    };
+    document.addEventListener('scroll', onAnyScroll, true);
+    return () => document.removeEventListener('scroll', onAnyScroll, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing]);
 
   useEffect(
     () => () => {
@@ -1219,11 +1236,32 @@ export function ModelSelector({
     : undefined;
 
   return (
-    <Popover open={open && !disabled} onOpenChange={(next) => setOpen(disabled ? false : next)}>
-      <PopoverTrigger asChild>
+    <MorphPopover
+      open={open && !disabled}
+      onOpenChange={(next) => setOpen(disabled ? false : next)}
+      side={popoverSide}
+      align="end"
+      startRadius={isFieldTrigger ? 8 : undefined}
+      startBg={
+        isFieldTrigger
+          ? 'var(--settings-input-bg)'
+          : isCreateAgentVariant
+            ? 'var(--create-agent-control-bg)'
+            : 'var(--composer-pill-bg)'
+      }
+      startBorderColor={
+        isCreateAgentVariant ? 'var(--create-agent-control-border)' : 'var(--border-default)'
+      }
+      wrapperClassName={isFieldTrigger ? 'w-full' : 'min-w-0 max-w-full shrink'}
+      panelClassName="p-0"
+      panelAriaLabel={ariaLabel}
+      trigger={
         <button
           type="button"
           disabled={switching || disabled}
+          onClick={() => setOpen((prev) => (disabled ? false : !prev))}
+          aria-expanded={open && !disabled}
+          aria-haspopup="listbox"
           className={cn(
             'flex min-w-0 max-w-full items-center gap-1 transition-colors',
             isFieldTrigger
@@ -1242,10 +1280,10 @@ export function ModelSelector({
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--create-agent-focus-ring)]',
                       ]
                     : [
-                        'h-[30px] min-w-[72px] max-w-full shrink overflow-hidden',
-                        noSource
-                          ? 'border border-[var(--border-default)] bg-[var(--composer-pill-bg,#FCFCFC)] px-2.5 hover:bg-[var(--model-trigger-hover)]'
-                          : 'bg-[var(--composer-pill-bg,#FCFCFC)] dark:bg-[var(--composer-pill-bg,#393838)] px-2.5 border border-[var(--border-default)] hover:bg-[var(--model-trigger-hover)]' /* spec 2026-07-17, token by 一哥 */,
+                        'h-[30px] min-w-[72px] max-w-full shrink overflow-hidden px-2.5',
+                        // 裸态工具条(2026-07-22 用户定稿):默认无框,hover 才浮现胶囊外框
+                        'border border-transparent bg-transparent',
+                        'hover:border-[var(--border-default)] hover:bg-[var(--composer-pill-bg,#FCFCFC)] dark:hover:bg-[var(--composer-pill-bg,#393838)]',
                       ],
                 ),
             // device-link 远程切换 in-flight:置灰 + 禁用点击(复用本文件 disabled 行的 opacity-50 习惯)。
@@ -1416,20 +1454,11 @@ export function ModelSelector({
             )}
           />
         </button>
-      </PopoverTrigger>
-      <PopoverContent
-        side={popoverSide}
-        align="end"
-        sideOffset={4}
-        collisionPadding={8}
-        className={cn(
-          // 宽度由内容决定(单栏 320;Edit 展开 ~516,向左加宽)。
-          'w-auto overflow-hidden rounded-[12px] p-0',
-          'bg-[var(--model-dropdown-bg)]',
-          'border border-[var(--model-dropdown-border)]',
-        )}
-      >
-        <ModelSelectorContent
+      }
+    >
+      {/* 宽度由内容决定(单栏 320;Edit 展开 ~516,align=end 右缘锚定自动向左加宽,
+          MorphPopover 的 ResizeObserver 沿同曲线跟随)。 */}
+      <ModelSelectorContent
           modelId={modelId}
           effort={effort}
           onModelChange={onModelChange}
@@ -1454,8 +1483,7 @@ export function ModelSelector({
                 }
               : undefined
           }
-        />
-      </PopoverContent>
-    </Popover>
+      />
+    </MorphPopover>
   );
 }

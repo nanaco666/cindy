@@ -3464,6 +3464,7 @@
       "defaultPlaceholder": "What shall we work on today~",
       "voiceInput": {
         "start": "Start voice input",
+        "pillLabel": "Voice",
         "stop": "Stop voice input",
         "releaseToStop": "Recording. Release to stop.",
         "releaseToSend": "Release to send",
@@ -6142,6 +6143,7 @@
   },
   "extraDirs": {
     "menuAria": "Composer actions",
+    "expandLabel": "Add",
     "tooltipEmpty": "More actions",
     "tooltipCount": "{{count}} reference directories",
     "pluginsTitle": "Installed Plugins",
