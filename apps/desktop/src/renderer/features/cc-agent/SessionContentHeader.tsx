@@ -532,8 +532,8 @@ export function SessionContentHeader({
               className={cn(
                 'flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
                 'text-[var(--cmd-palette-item-meta)] transition-colors',
-                'hover:bg-[var(--update-btn-hover)] hover:text-foreground',
-                'focus-visible:outline-none data-[state=open]:bg-[var(--update-btn-hover)]',
+                'hover:bg-titlebar-button-hover hover:text-foreground',
+                'focus-visible:outline-none data-[state=open]:bg-titlebar-button-hover',
               )}
               aria-label={t('ccAgent.sessionHeader.moreActions')}
               style={WINDOW_NO_DRAG_STYLE}

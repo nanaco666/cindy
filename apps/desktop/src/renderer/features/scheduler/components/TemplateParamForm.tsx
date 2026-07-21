@@ -61,7 +61,7 @@ function TemplateParamControl({
         className={cn(
           'inline-flex h-9 w-fit items-center gap-2 rounded-md px-1.5',
           'text-13 leading-none text-[var(--settings-btn-secondary-text)]',
-          'transition-colors hover:bg-[var(--update-btn-hover)]',
+          'transition-colors hover:bg-[var(--surface-hover)]',
           'focus:outline-none',
         )}
       >

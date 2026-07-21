@@ -220,7 +220,7 @@ export function SessionRenameInput({
           'transition-colors',
           activeForeground
             ? 'text-sidebar-item-active-foreground hover:text-sidebar-item-active-foreground hover:bg-[color-mix(in_srgb,var(--sidebar-item-active-foreground)_14%,transparent)]'
-            : 'text-[var(--cmd-palette-item-meta)] hover:bg-[var(--update-btn-hover)] hover:text-foreground',
+            : 'text-[var(--cmd-palette-item-meta)] hover:bg-titlebar-button-hover hover:text-foreground',
           'focus:outline-none',
         )}
       >

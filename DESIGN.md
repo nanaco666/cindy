@@ -751,6 +751,18 @@ cindy-light 用黑字版(`cindy-logo-light.png`)、cindy-dark 用白字版(`cind
 - **协同按钮 ON 态橙**:CollaborationModeToggle 开启态文字+Puzzle 图标 `warning-accent`(覆盖 2026-07-17「composer pill 去橙中性」规范,仅 ON 态;OFF 入口态保持中性)。
 - **SVG 常驻动画红线**:呼吸类常驻动画一律挂 HTML wrapper(span),SVG 保持静态。
 
+### 15.15 新建页内容区定位 + 顶栏 hover 消费纪律(用户拍板 2026-07-21)
+
+- **新建页(CREATE AGENT)内容组垂直定位**:距**窗口顶**恒为 `max(96px, 28vh) + 46px`。
+  实现 = 路由容器 `pt-[calc(max(96px,28vh)+46px-var(--content-header-h,46px))]`:
+  - 268px 封顶已废(Figma 定稿画框高度遗留,大窗口下内容"偏高"的根因);28% 为用户实机调参定稿(原 25.5%);
+  - `--content-header-h` 由 `ContentHeaderSlot`(FeatureSidebarSlotProvider 内)经 display:contents 包裹层广播(顶栏渲染 46px / 隐藏 0px,与 ContentHeader `h-[46px]` 同源)——选中项目引发顶栏显隐时内容区**零跳动**,恒定在"有顶栏时"位置;
+  - 顶栏显隐判定单一决策源 = `useContentHeaderHidden`(mac + Sidebar 展开 + 无注入内容 + 无右栏开关,沿用 2026-06-11"空 header 隐藏"决策);
+  - 守卫:`newMakerCreateAgentVisualContract` 锁定位公式 + 防回退断言。
+- **hover token 消费纪律**:`--update-btn-hover` 是升级按钮(反相深色 CTA)专用 hover,**禁止**用于普通 ghost 按钮/徽章(CINDY light 下近黑 `#2E3237`,吞字吞图标;2026-07-21 清理 6 处误用)。正确选型:
+  - 顶栏(ContentHeader 一带)ghost 元素 → `titlebar-button-hover`(与 ChromeActions 窗口按钮组同款);
+  - 内容区通用浅 hover → `--surface-hover`。
+
 ### 15.13 CINDY 双端换肤定稿规则(2026-07-18)
 
 本节是后续桌面端 / 手机端 UI 更新的执行规则。若本节与上方历史小节有冲突,以后续用户验收定稿为准;不要按早期红 CTA / 红 caret 口径回退。出处见 `skin-docs/10-specs/`、`skin-docs/30-mobile/2026-07-18-m0-color-mapping.md`、`skin-docs/30-mobile/2026-07-18-m3-chat-tasksheet-impl-plan.md`。
