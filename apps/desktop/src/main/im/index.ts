@@ -62,8 +62,11 @@ import { getImOrchestrator, listImOrchestrators } from './shared/orchestrator';
 import { createSerializedConnectionLifecycle } from './connectionLifecycle';
 import {
   activateImAccountBoundary,
+  captureImAccountGeneration,
   deactivateImAccountBoundary,
+  isImAccountGenerationCurrent,
 } from './accountBoundary';
+import { configureImAccountScope } from './accountScopeBridge';
 import type { ImOrchestratorConfig } from './shared/types';
 import { bindingStore, executeDetach } from './binding';
 import { IM_DEFAULT_EFFORT_OVERRIDES, IM_DEFAULT_SETTINGS } from '../../shared/imDefaultSettings';
@@ -315,6 +318,22 @@ const connectionLifecycle = createSerializedConnectionLifecycle({
   onStartError: (err) => {
     const msg = err instanceof Error ? err.message : String(err);
     log.error(`IM connection start failed: ${msg}`);
+  },
+});
+
+configureImAccountScope({
+  capture: captureImAccountGeneration,
+  isCurrent: (token) => typeof token === 'number' && isImAccountGenerationCurrent(token),
+  run: (token, operation) => {
+    if (typeof token !== 'number') {
+      return Promise.reject(new Error('[IM_NOT_READY] Invalid IM account generation'));
+    }
+    return connectionLifecycle.runWhileStarted(async () => {
+      if (!isImAccountGenerationCurrent(token)) {
+        throw new Error('[IM_NOT_READY] IM account changed before operation ran');
+      }
+      return operation();
+    });
   },
 });
 

@@ -19,7 +19,11 @@
 import type { ChannelIM, IMMessageEvent } from 'lizi-im';
 
 import { createLogger } from '../../logger';
-import { isImAccountBoundaryActive } from '../accountBoundary';
+import {
+  captureImAccountGeneration,
+  isImAccountGenerationCurrent,
+  type ImAccountGeneration,
+} from '../accountBoundary';
 
 import { getControlScope, isInControl } from './controlState';
 import type { ImSlashHandlers } from './slashCommands';
@@ -48,9 +52,13 @@ export function createMessageHandler(
   /** Per-user serial lock — same shape as legacy messageRouter.turnLocks. */
   const userLocks = new Map<string, Promise<void>>();
 
-  async function processOne(im: ChannelIM, event: IMMessageEvent): Promise<void> {
-    if (!isImAccountBoundaryActive()) {
-      log.info(`drop inbound message after account boundary closed channel=${channel}`);
+  async function processOne(
+    im: ChannelIM,
+    event: IMMessageEvent,
+    accountGeneration: ImAccountGeneration,
+  ): Promise<void> {
+    if (!isImAccountGenerationCurrent(accountGeneration)) {
+      log.info(`drop inbound message from stale account generation channel=${channel}`);
       return;
     }
     log.info(
@@ -192,6 +200,13 @@ export function createMessageHandler(
 
   return function attachMessageHandler(im: ChannelIM): () => void {
     return im.onMessage((event) => {
+      // Capture synchronously, before entering the per-user queue. A boolean
+      // check at execution time could accept old-account work after relogin.
+      const accountGeneration = captureImAccountGeneration();
+      if (accountGeneration === null) {
+        log.info(`drop inbound message after account boundary closed channel=${channel}`);
+        return;
+      }
       // threadScoped 渠道: 同 thread 串行、跨 thread 并行(scopeKey 进锁键);
       // feishu scopeKey 恒 undefined — 键多一个冒号后缀, 行为不变。
       const key = `${event.contextId}:${event.senderId}:${threadScoped ? (event.scopeKey ?? '') : ''}`;
@@ -201,7 +216,7 @@ export function createMessageHandler(
           /* prior turn failure should not block subsequent messages */
         })
         .then(() =>
-          processOne(im, event).catch((err) => {
+          processOne(im, event, accountGeneration).catch((err) => {
             const msg = err instanceof Error ? err.message : String(err);
             log.error(`processOne threw: ${msg}`);
           }),

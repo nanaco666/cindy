@@ -32,7 +32,7 @@ import * as wsClient from './wsClient.js';
 import * as storage from './storage.js';
 import * as ownerGuard from './ownerGuard.js';
 import { feishuEvents } from './events.js';
-import { reconnectSavedCredentials, registerFeishuIpc } from './ipc.js';
+import { cancelAppRegistration, reconnectSavedCredentials, registerFeishuIpc } from './ipc.js';
 import * as outbound from './outbound.js';
 import * as streamingText from './streamingText.js';
 
@@ -70,6 +70,7 @@ export class FeishuIM extends BaseIM implements ChannelIM {
 
   async dispose(): Promise<void> {
     this.log.info('dispose');
+    cancelAppRegistration();
     await wsClient.stop({ offlineTimeoutMs: wsClient.QUIT_OFFLINE_ANNOUNCE_TIMEOUT_MS });
   }
 

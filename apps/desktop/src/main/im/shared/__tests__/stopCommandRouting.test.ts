@@ -58,6 +58,14 @@ async function flushMicrotasks(): Promise<void> {
   for (let i = 0; i < 5; i += 1) await Promise.resolve();
 }
 
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 describe('isStopCommand', () => {
   it('matches half/full-width exclamation and any letter case, ignoring surrounding spaces', () => {
     expect(isStopCommand('!stop')).toBe(true);
@@ -131,6 +139,25 @@ describe('messageHandler !stop routing', () => {
     expect(handleSlashCommand).not.toHaveBeenCalled();
     expect(sendMarkdownText).not.toHaveBeenCalled();
     expect(sendText).not.toHaveBeenCalled();
+  });
+
+  it('drops an old-account message that was queued before logout and relogin', async () => {
+    const firstTurn = deferred();
+    runAgentTurn.mockImplementationOnce(async () => firstTurn.promise);
+
+    deliver(makeEvent({ messageId: 'old-1', text: 'first old message' }));
+    await vi.waitFor(() => expect(runAgentTurn).toHaveBeenCalledTimes(1));
+    deliver(makeEvent({ messageId: 'old-2', text: 'queued old message' }));
+
+    deactivateImAccountBoundary();
+    activateImAccountBoundary();
+    firstTurn.resolve();
+    await flushMicrotasks();
+
+    expect(runAgentTurn).toHaveBeenCalledTimes(1);
+    expect(mocks.logger.info).toHaveBeenCalledWith(
+      'drop inbound message from stale account generation channel=slack',
+    );
   });
 
   it('routes !stop to stopActiveTurn with the thread scopeKey and replies stopDone', async () => {

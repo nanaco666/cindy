@@ -117,4 +117,36 @@ describe('serialized IM connection lifecycle', () => {
     await stopping;
     expect(operation).not.toHaveBeenCalled();
   });
+
+  it('waits for an in-flight account operation before stopping its transport', async () => {
+    const operationGate = deferred();
+    const events: string[] = [];
+    const lifecycle = createSerializedConnectionLifecycle({
+      startConnection: async () => {
+        events.push('start');
+      },
+      stopConnection: async () => {
+        events.push('stop');
+      },
+      onStartError: vi.fn(),
+    });
+
+    lifecycle.start();
+    await vi.waitFor(() => expect(events).toEqual(['start']));
+    const saving = lifecycle.runWhileStarted(async () => {
+      events.push('save:begin');
+      await operationGate.promise;
+      events.push('save:end');
+    });
+    await vi.waitFor(() => expect(events).toContain('save:begin'));
+
+    const stopping = lifecycle.stop();
+    expect(events).toEqual(['start', 'save:begin']);
+
+    operationGate.resolve();
+    await saving;
+    await stopping;
+
+    expect(events).toEqual(['start', 'save:begin', 'save:end', 'stop']);
+  });
 });
