@@ -29,7 +29,9 @@ if not os.path.isfile(exe_path):
 
 exe_name = os.path.basename(exe_path)
 tmp_dir = tempfile.mkdtemp(prefix="npkg-sign-")
-zip_path = os.path.join(tmp_dir, exe_name + ".zip")
+# zip_path is assigned once inside the try block (a fixed "sign_target.zip", to
+# dodge npkg issues with special chars in exe names) and read via globals by
+# upload_zip(); it isn't declared here to avoid a misleading dead assignment.
 signed_zip_path = os.path.join(tmp_dir, "signed.zip")
 
 headers = {"Authorization": f"Token {token}"}
@@ -53,7 +55,9 @@ def poll_until_signed(package_id):
     """Poll a package until signing completes.
 
     Returns the sign_file URL on success, or None on server-side failure /
-    timeout (caller decides how to fall back).
+    timeout (caller decides how to fall back). Prints the concrete terminal
+    reason (failed vs timed out) itself, so callers don't emit a contradictory
+    second message.
     """
     for _ in range(30):
         status_resp = requests.get(f"{PACKAGES_URL}{package_id}/", headers=headers)
@@ -67,6 +71,7 @@ def poll_until_signed(package_id):
             return None
         print(f"    {status}...")
         time.sleep(3)
+    print("    Signing timed out!")
     return None
 
 
@@ -148,12 +153,17 @@ try:
         info_data = info.json() if info.status_code == 200 else {}
         status = info_data.get("sign_status")
 
-        if info.status_code == 200 and status == "completed" and info_data.get("sign_file"):
-            print(f"    Reusing already-signed package {conflict_id}.")
-            if download_and_replace(info_data["sign_file"]):
-                print("Done!")
-                sys.exit(0)
-            print("    Reuse download failed — falling back to re-sign.")
+        if info.status_code == 200 and status == "completed":
+            if info_data.get("sign_file"):
+                print(f"    Reusing already-signed package {conflict_id}.")
+                if download_and_replace(info_data["sign_file"]):
+                    print("Done!")
+                    sys.exit(0)
+                print("    Reuse download failed — falling back to re-sign.")
+            else:
+                # completed but no artifact URL — nothing to reuse; go straight to fallback
+                print(f"    Package {conflict_id} reports completed but has no sign_file "
+                      "— falling back to re-sign.")
         elif info.status_code == 200 and status != "failed":
             print(f"    Existing package {conflict_id} still signing — polling it...")
             reuse_url = poll_until_signed(conflict_id)
@@ -187,7 +197,7 @@ try:
     print("[3] Waiting for signing...")
     sign_file_url = poll_until_signed(package_id)
     if not sign_file_url:
-        print("Signing timed out!")
+        # poll_until_signed already printed the concrete reason (failed / timed out)
         sys.exit(1)
 
     # 4 & 5. Download, extract, replace
