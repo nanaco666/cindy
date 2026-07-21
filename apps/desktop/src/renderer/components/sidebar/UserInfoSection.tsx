@@ -102,7 +102,15 @@ export function UserInfoSection({ isCollapsed, onOpenUpdateNotice }: UserInfoSec
 
   return (
     <div className="mt-auto px-3 pb-3 pt-2">
-      <div className="flex h-10 items-center rounded-full border border-[var(--sidebar-user-card-border)] bg-[var(--sidebar-user-card-bg)] px-[7px]">
+      {/* 胶囊整体承载 hover(方案 D):玻璃底色加深一档;悬停火焰按钮时用 :has()
+        把胶囊底色还原,只让火焰自己高亮,避免双层叠色。 */}
+      <div
+        className={cn(
+          'flex h-10 items-center rounded-full border border-[var(--sidebar-user-card-border)] bg-[var(--sidebar-user-card-bg)] px-[7px]',
+          'transition-colors hover:bg-[var(--sidebar-user-card-bg-hover)]',
+          'has-[.flame-btn:hover]:bg-[var(--sidebar-user-card-bg)]',
+        )}
+      >
         <button
           onClick={handleClick}
           role="link"

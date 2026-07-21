@@ -89,7 +89,7 @@ const overrides = {
   'text-placeholder': '#686B72', // 整改: placeholder AA; 透明度由组件控制
   'settings-integration-avatar-bg': '#F8F8F8', // avatar chip
   'settings-logout-bg': '#F8F8F8', // 卡片
-  'settings-menu-bg-hover': '#EFEFEF', // menu hover 20%
+  'settings-menu-bg-hover': '#E2E2E2', // 用户反馈 2026-07-21:原 #EFEFEF 在 #EDEDED 页底上几乎不可见,改为往暗压 ~5% 亮度差
   'settings-menu-bg-selected': '#F1F1F1', // menu selected
   'settings-source-link': '#1D4ED8', // 可访问链接蓝
   'settings-theme-auto-dark': '#2A2828', // Auto 预览 dark 固定

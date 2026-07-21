@@ -49,6 +49,19 @@ describe('UserInfoSection — outer wrapper takes over full-row hover', () => {
     expect(source).toContain('bg-[var(--sidebar-user-card-bg)]');
     expect(source).toContain('text-[var(--sidebar-user-card-text)]');
   });
+
+  it('capsule owns the hover state via the glass hover token', () => {
+    expect(source).toContain(
+      "'transition-colors hover:bg-[var(--sidebar-user-card-bg-hover)]'",
+    );
+  });
+
+  it('capsule hover is suppressed while the flame button is hovered (:has() exclusion)', () => {
+    // 悬停火焰按钮时胶囊底色还原,只让火焰自己高亮 —— 方案 D 语义
+    expect(source).toContain(
+      "'has-[.flame-btn:hover]:bg-[var(--sidebar-user-card-bg)]'",
+    );
+  });
 });
 
 describe('UserInfoSection — version label', () => {

@@ -987,9 +987,9 @@ registerColor('settings-back-hover', {
 
 // Settings - inner sidebar menu items
 registerColor('settings-menu-text', {
-  light: 'var(--text-secondary)',
-  dark: 'var(--text-secondary)',
-}, 'Stone — unselected label');
+  light: 'var(--text-primary)',
+  dark: 'var(--text-primary)',
+}, 'Near Black — unselected label (用户改稿 2026-07-21:与设置标题同色,不再用二级灰)');
 registerColor('settings-menu-text-selected', {
   light: 'var(--text-primary)',
   dark: 'var(--text-primary)',
@@ -1792,6 +1792,10 @@ registerColor('sidebar-user-card-bg', {
   light: 'rgba(255, 255, 255, 0.20)',
   dark: 'rgba(255, 255, 255, 0.05)',
 }, 'CINDY sidebar user capsule background');
+registerColor('sidebar-user-card-bg-hover', {
+  light: 'rgba(60, 63, 67, 0.06)',
+  dark: 'rgba(255, 255, 255, 0.10)',
+}, 'CINDY sidebar user capsule hover background (light darkens on near-white sidebar, dark lightens)');
 registerColor('sidebar-user-card-border', {
   light: 'rgba(60, 63, 67, 0.10)',
   dark: 'rgba(255, 255, 255, 0.13)',
