@@ -124,6 +124,8 @@ describe('TodaySpendChip dashboard routing', () => {
     );
     expect(source).toContain('function hasPositiveSessionTokens(sessionTokens: number | null)');
     expect(source).toContain('const codexApiHasTokenFallback = isCodexApi');
+    expect(source).toContain('const codexApiEmptyState = isCodexApi');
+    expect(source.match(/getCodexApiEmptyState\(latestTurnUsage\)/g)).toHaveLength(1);
     expect(source).toContain("todaySpend.codex.sessionTokensLine");
     expect(source).toContain("todaySpend.codex.noUsageLabel");
     expect(source).toContain("todaySpend.codex.unavailableLabel");

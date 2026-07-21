@@ -1031,6 +1031,11 @@ export function TodaySpendChip({
     const codexApiHasTokenFallback = isCodexApi
       && !slots.session.available
       && hasPositiveSessionTokens(sessionTokens);
+    const codexApiEmptyState = isCodexApi
+      && !slots.session.available
+      && !hasPositiveSessionTokens(sessionTokens)
+      ? getCodexApiEmptyState(latestTurnUsage)
+      : null;
     if (codexApiHasTokenFallback) {
       chipSegments.push(t('todaySpend.codex.sessionTokensLine', {
         tokens: formatCompactTokens(Math.floor(sessionTokens ?? 0)),
@@ -1059,10 +1064,9 @@ export function TodaySpendChip({
     }
     tooltipLines.push(...tooltipMetricLines);
     appendLatestTurnUsageLines(tooltipLines, latestTurnUsage, t);
-    if (isCodexApi && !slots.session.available && !hasPositiveSessionTokens(sessionTokens)) {
-      const emptyState = getCodexApiEmptyState(latestTurnUsage);
+    if (codexApiEmptyState) {
       tooltipLines.unshift(t(
-        emptyState === 'no-usage'
+        codexApiEmptyState === 'no-usage'
           ? 'todaySpend.codex.noUsageDetail'
           : 'todaySpend.codex.unavailableDetail',
       ));
@@ -1073,11 +1077,10 @@ export function TodaySpendChip({
     tooltipNode = buildTooltipNode(tooltipLines);
 
     if (chipSegments.length === 0) {
-      if (isCodexApi) {
-        const emptyState = getCodexApiEmptyState(latestTurnUsage);
+      if (codexApiEmptyState) {
         labelNode = (
           <span className="tabular-nums opacity-60">
-            {t(emptyState === 'no-usage'
+            {t(codexApiEmptyState === 'no-usage'
               ? 'todaySpend.codex.noUsageLabel'
               : 'todaySpend.codex.unavailableLabel')}
           </span>
