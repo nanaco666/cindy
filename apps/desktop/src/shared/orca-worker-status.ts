@@ -11,15 +11,20 @@
 
 export type OrcaWorkerStatus = 'idle' | 'running' | 'done' | 'error';
 
-/** 占用 worker 槽位、计入软/硬上限的状态集合(idle 也占内存但不算"活跃")。 */
-export const ACTIVE_WORKER_STATUSES = ['idle', 'running'] as const satisfies readonly OrcaWorkerStatus[];
+/** active team 内尚未归档、会占用软/硬上限槽位的 Worker 状态集合。 */
+export const ACTIVE_WORKER_STATUSES = [
+  'idle',
+  'running',
+  'done',
+  'error',
+] as const satisfies readonly OrcaWorkerStatus[];
 
 /** UI 展示层的"运行中"计数——只有正在干活的 worker 才算。 */
 export function isRunningWorkerStatus(status: OrcaWorkerStatus): boolean {
   return status === 'running';
 }
 
-/** 是否占槽位(计入软/硬上限)。idle + running 都占。 */
+/** 是否占槽位；这里的 active 指 team/session 未归档，不等同于正在运行。 */
 export function isActiveWorkerStatus(status: OrcaWorkerStatus): boolean {
   return (ACTIVE_WORKER_STATUSES as readonly OrcaWorkerStatus[]).includes(status);
 }

@@ -9,6 +9,7 @@ import {
 import type { DispatchWorkerTaskResult, OrcaWorkerStatus } from '../orcaTeamService';
 import type { MakerSessionCreateOpts } from '../sessionRequest';
 import { CredentialModeSwitchBusyError } from '../../maker-host/codex-credential-switch';
+import { isActiveWorkerStatus } from '../../../shared/orca-worker-status';
 
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const WORKER_SESSION_ID = '123e4567-e89b-42d3-a456-426614174000';
@@ -22,7 +23,7 @@ function createDeps(overrides: Partial<OrcaWorkerCreationDeps> = {}) {
       leadSessionId === 'lead-1' ? { id: 'team-1', leadSessionId: 'lead-1' } : null
     )),
     listWorkersByLead: vi.fn(async () => []),
-    isActiveWorkerStatus: vi.fn((status) => status === 'idle' || status === 'running'),
+    isActiveWorkerStatus: vi.fn(isActiveWorkerStatus),
     readCollaborationSettings: vi.fn(() => ({ workerSoftLimit: 3, workerHardLimit: 5 })),
     getLeadSessionRow: vi.fn(async () => ({
       id: 'lead-1',
@@ -226,12 +227,14 @@ describe('OrcaWorkerCreationService', () => {
     expect(deps.markOrcaRoleIfNeeded).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects hard-limit overflow before bootstrapping a worker session', async () => {
+  it('counts terminal workers toward the hard limit before any creation side effects', async () => {
     const { deps, service } = createDeps({
-      readCollaborationSettings: vi.fn(() => ({ workerSoftLimit: 1, workerHardLimit: 2 })),
+      readCollaborationSettings: vi.fn(() => ({ workerSoftLimit: 2, workerHardLimit: 4 })),
       listWorkersByLead: vi.fn(async () => [
         { id: 'worker-1', label: 'one', status: workerStatus('idle') },
         { id: 'worker-2', label: 'two', status: workerStatus('running') },
+        { id: 'worker-3', label: 'three', status: workerStatus('done') },
+        { id: 'worker-4', label: 'four', status: workerStatus('error') },
       ]),
     });
 
@@ -247,6 +250,10 @@ describe('OrcaWorkerCreationService', () => {
       errorCode: 'WORKER_LIMIT_HARD_EXCEEDED',
     });
 
+    expect(deps.getAvailableModels).not.toHaveBeenCalled();
+    expect(deps.getProviderAvailability).not.toHaveBeenCalled();
+    expect(deps.getLeadSessionRow).not.toHaveBeenCalled();
+    expect(deps.reserveWorkerCreation).not.toHaveBeenCalled();
     expect(deps.bootstrapSession).not.toHaveBeenCalled();
     expect(deps.addOrUpdateWorker).not.toHaveBeenCalled();
     expect(deps.dispatchWorkerTask).not.toHaveBeenCalled();
