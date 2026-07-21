@@ -28,9 +28,11 @@ function makeDeps(over: Partial<GithubIssueSubmitServiceDeps> = {}) {
       uiLanguage: 'zh-CN',
     }),
   );
-  const postIssue = vi.fn<GithubIssueSubmitServiceDeps['postIssue']>(async () => ({
-    githubIssue: { number: 80, url: 'https://github.com/xindong/XDMaker/issues/80' },
-  }));
+  const postIssue = vi.fn<GithubIssueSubmitServiceDeps['postIssue']>(
+    async () => ({
+      githubIssue: { number: 80, url: 'https://github.com/xindong/XDMaker/issues/80' },
+    }),
+  );
   const deps: GithubIssueSubmitServiceDeps = {
     confirm,
     postIssue,
@@ -76,7 +78,7 @@ describe('submitGithubIssueWithConfirm', () => {
       { appVersion: '0.0.112', platform: 'darwin', arch: 'arm64', osVersion: '25.5.0' },
     );
     expect(postIssue).toHaveBeenCalledTimes(1);
-    const posted = postIssue.mock.calls[0]![0];
+    const posted = postIssue.mock.calls[0]![0]();
     expect(posted.title).toBe('用户改过的标题');
     expect(posted.type).toBe('feature');
     expect(posted.appVersion).toBe('0.0.112');
@@ -104,14 +106,30 @@ describe('submitGithubIssueWithConfirm', () => {
     });
     const res = await submitGithubIssueWithConfirm(deps, REQ);
     expect(res).toMatchObject({ ok: true, editedByUser: false });
-    expect(postIssue.mock.calls[0]![0].description).toContain('**界面语言**: en');
+    expect(postIssue.mock.calls[0]![0]().description).toContain('**界面语言**: en');
   });
 
   it('membership 没有展示名时省略 userName,由 server 回退到 membership id', async () => {
     const { deps, postIssue } = makeDeps({ getSubmitterName: () => undefined });
     const res = await submitGithubIssueWithConfirm(deps, REQ);
     expect(res).toMatchObject({ ok: true });
-    expect(postIssue.mock.calls[0]![0]).not.toHaveProperty('userName');
+    expect(postIssue.mock.calls[0]![0]()).not.toHaveProperty('userName');
+  });
+
+  it('网络重试重建 body 时重新读取当前 membership 展示名', async () => {
+    const getSubmitterName = vi
+      .fn<() => string | undefined>()
+      .mockReturnValueOnce('Account A')
+      .mockReturnValueOnce('Account B');
+    const postIssue = vi.fn<GithubIssueSubmitServiceDeps['postIssue']>(async (bodyFactory) => {
+      expect(bodyFactory().userName).toBe('Account A');
+      expect(bodyFactory().userName).toBe('Account B');
+      return { githubIssue: { number: 80, url: 'https://example.com/issues/80' } };
+    });
+    const { deps } = makeDeps({ getSubmitterName, postIssue });
+    const res = await submitGithubIssueWithConfirm(deps, REQ);
+    expect(res).toMatchObject({ ok: true });
+    expect(getSubmitterName).toHaveBeenCalledTimes(2);
   });
 
   it('clamp: 超长 body 被裁但 env 块完整保留;超长 title 裁到 200', async () => {
@@ -128,7 +146,7 @@ describe('submitGithubIssueWithConfirm', () => {
     });
     const res = await submitGithubIssueWithConfirm(deps, REQ);
     expect(res).toMatchObject({ ok: true, finalTitle: 't'.repeat(200) });
-    const posted = postIssue.mock.calls[0]![0];
+    const posted = postIssue.mock.calls[0]![0]();
     expect(posted.description!.length).toBeLessThanOrEqual(5000);
     expect(posted.description).toContain('**界面语言**: zh-CN');
   });

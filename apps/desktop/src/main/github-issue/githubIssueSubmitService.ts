@@ -40,19 +40,25 @@ export interface SubmitIssueRequest {
   type: 'bug' | 'feature';
 }
 
+/** github-server 的 issue 创建 payload；userName 缺失时由服务端按 membership id 回退。 */
+export interface GithubIssuePostBody {
+  title: string;
+  description?: string;
+  type: 'bug' | 'feature';
+  appVersion: string;
+  userName?: string;
+}
+
 export interface GithubIssueSubmitServiceDeps {
   confirm: (
     sessionId: string,
     draft: IssueDraft,
     env: IssueEnvInfo,
   ) => Promise<IssueConfirmDecision>;
-  postIssue: (body: {
-    title: string;
-    description?: string;
-    type: 'bug' | 'feature';
-    appVersion: string;
-    userName?: string;
-  }) => Promise<{ githubIssue: { number: number; url: string } }>;
+  /** body factory must be evaluated for each network attempt after auth refresh. */
+  postIssue: (
+    bodyFactory: () => GithubIssuePostBody,
+  ) => Promise<{ githubIssue: { number: number; url: string } }>;
   getAppVersion: () => string;
   getOsInfo: () => { platform: string; arch: string; osVersion: string };
   /** main 侧 OS locale,仅当 renderer 未回传 uiLanguage 时兜底。 */
@@ -112,15 +118,17 @@ export async function submitGithubIssueWithConfirm(
   // env 块必须完整保留,clamp 只裁用户正文部分。
   const bodyBudget = SERVER_DESC_MAX - envBlock.length;
   const description = decision.body.slice(0, Math.max(0, bodyBudget)) + envBlock;
-  const submitterName = deps.getSubmitterName()?.trim();
 
   try {
-    const result = await deps.postIssue({
-      title: finalTitle,
-      description,
-      type: decision.type,
-      appVersion: env.appVersion,
-      ...(submitterName ? { userName: submitterName } : {}),
+    const result = await deps.postIssue(() => {
+      const submitterName = deps.getSubmitterName()?.trim();
+      return {
+        title: finalTitle,
+        description,
+        type: decision.type,
+        appVersion: env.appVersion,
+        ...(submitterName ? { userName: submitterName } : {}),
+      };
     });
     return {
       ok: true,
