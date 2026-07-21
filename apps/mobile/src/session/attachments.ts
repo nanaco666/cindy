@@ -1,6 +1,6 @@
 import { stripTrailingPathSeparators } from '@lizi/maker-shared/path-text';
 import type { RemoteFileRef, RemoteImageRef, RemoteSerializedAttachment } from '@/session/types';
-import { buildAttachmentOssRef } from '@/session/attachmentOssRef';
+import { buildLegacyAttachmentOssRef } from '@/session/attachmentOssRef';
 
 export type MobileAttachmentCategory = RemoteSerializedAttachment['category'];
 
@@ -158,7 +158,7 @@ export function buildMobileUploadedAttachment(input: {
   if (!category) return null;
   const ext = extractRemoteFileExt(name);
   const mimeType = input.mimeType?.trim() || mimeTypeForMobileAttachment(ext, category);
-  const ref = buildAttachmentOssRef({
+  const ref = buildLegacyAttachmentOssRef({
     ossKey: input.ossKey,
     mimeType,
     originalName: name,

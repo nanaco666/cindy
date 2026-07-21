@@ -63,6 +63,31 @@ import { buildAttachmentOssRef } from '../../shared/attachmentOssRef';
 
 const ATTACHMENT_SHA256 = 'a'.repeat(64);
 
+describe('queued attachment cleanup regression', () => {
+  it('cleans earlier materialized OSS objects when a later integrity ref rejects the queue', async () => {
+    const first = buildAttachmentOssRef({ ossKey: 'oss/first.png', mimeType: 'image/png' });
+    const second = buildAttachmentOssRef({
+      ossKey: 'oss/second.pdf',
+      mimeType: 'application/pdf',
+      size: 3,
+      sha256: ATTACHMENT_SHA256,
+    });
+    downloadToFile.mockImplementation(async (...args: unknown[]) => {
+      if (args[0] === 'oss/second.pdf') throw new Error('integrity mismatch');
+    });
+
+    await expect(
+      materializeQueuedOssAttachments('sess-1', {
+        files: [
+          { path: first, mimeType: 'image/png' },
+          { path: second, mimeType: 'application/pdf' },
+        ],
+      }),
+    ).rejects.toThrow();
+    expect(removeRemote).toHaveBeenCalledWith('oss/first.png');
+  });
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   downloadToFile.mockResolvedValue(undefined);

@@ -1,3 +1,4 @@
+
 import { sha256 } from '@noble/hashes/sha256';
 
 const HASH_CHUNK_BYTES = 1024 * 1024;
@@ -36,7 +37,6 @@ export async function sha256MobileAttachmentFile(
   }
   return toHex(hash.digest());
 }
-
 /** 对内存上传 body 分块计算同语义摘要。 */
 export async function sha256MobileAttachmentBody(
   body: BodyInit,
@@ -80,6 +80,8 @@ export async function sha256MobileAttachmentBody(
 
 async function readFileChunkBase64(uri: string, position: number, length: number): Promise<string> {
   const FileSystem = await import('expo-file-system/legacy');
+  // Expo legacy readAsStringAsync defines position/length in raw file bytes, even when Base64 is returned.
+  // The decoded-length check above also guards adapters with different offset semantics.
   return FileSystem.readAsStringAsync(uri, {
     encoding: FileSystem.EncodingType.Base64,
     position,

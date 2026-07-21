@@ -1,3 +1,4 @@
+
 /**
  * mediaTransfer.ts — device-link 双向媒体「OSS 中转」的 main 侧传输 client。
  * ---------------------------------------------------------------------------
@@ -211,6 +212,7 @@ export async function uploadLocalFile(
     ) as unknown as ReadableStream;
     await putBytesToOss(putUrl, webStream, contentType);
     if (sent !== size) {
+      await removeRemote(key);
       throw new Error(`文件在上传期间发生变化:预期 ${size} 字节,实际 ${sent} 字节`);
     }
     sha256 = hasher.digest('hex');
@@ -309,6 +311,7 @@ export async function downloadToFile(
   key: string,
   destPath: string,
   expected?: AttachmentIntegrity,
+  onProgress?: (downloadedBytes: number) => void,
 ): Promise<void> {
   const { getUrl } = await presignGet(key);
   const resp = await net.fetch(getUrl, { method: 'GET' });
@@ -321,6 +324,7 @@ export async function downloadToFile(
     transform(chunk: Buffer, _enc, cb) {
       size += chunk.length;
       hasher.update(chunk);
+      onProgress?.(size);
       cb(null, chunk);
     },
   });

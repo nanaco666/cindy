@@ -21,7 +21,7 @@ import {
   compressOutboundImage,
   mayCompressOutboundImage,
 } from './outboundImageCompress';
-import { buildAttachmentOssRef, parseAttachmentOssRef } from '../../shared/attachmentOssRef';
+import { buildLegacyAttachmentOssRef, parseAttachmentOssRef } from '../../shared/attachmentOssRef';
 
 const log = createLogger('device-link:outboundMedia');
 
@@ -58,7 +58,7 @@ function buildUploadedAttachmentRef(
   result: UploadResult,
   originalName: string | undefined,
 ): string {
-  return buildAttachmentOssRef({
+  return buildLegacyAttachmentOssRef({
     ossKey: result.key,
     mimeType: result.contentType,
     originalName,

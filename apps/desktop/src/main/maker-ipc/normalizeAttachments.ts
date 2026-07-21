@@ -437,37 +437,39 @@ export async function materializeQueuedOssAttachments(
   };
 
   // files[]:顺序处理(让 byRef 去重对同一引用生效)。喂 agent 走托管 url(cindy-media:// 或老 xdt-image://,normalizeUserMessage 解析)。
-  let nextFiles: unknown = it.files;
-  if (files) {
-    const out: unknown[] = [];
-    for (const f of files) {
-      if (!f || typeof f !== 'object') {
-        out.push(f);
-        continue;
+  try {
+    let nextFiles: unknown = it.files;
+    if (files) {
+      const out: unknown[] = [];
+      for (const f of files) {
+        if (!f || typeof f !== 'object') {
+          out.push(f);
+          continue;
+        }
+        const sf = f as SerializedFileLike;
+        const refStr = isOssRefField(sf.url) ? sf.url : isOssRefField(sf.path) ? sf.path : null;
+        if (!refStr) {
+          out.push(f);
+          continue;
+        }
+        const m = await materialize(
+          refStr,
+          typeof sf.mimeType === 'string' ? sf.mimeType : undefined,
+        );
+        out.push(m ? { ...(f as object), url: m.url, path: m.absPath, base64: undefined } : f);
       }
-      const sf = f as SerializedFileLike;
-      const refStr = isOssRefField(sf.url) ? sf.url : isOssRefField(sf.path) ? sf.path : null;
-      if (!refStr) {
-        out.push(f);
-        continue;
-      }
-      const m = await materialize(
-        refStr,
-        typeof sf.mimeType === 'string' ? sf.mimeType : undefined,
-      );
-      out.push(m ? { ...(f as object), url: m.url, path: m.absPath, base64: undefined } : f);
+      nextFiles = out;
     }
-    nextFiles = out;
+
+    const nextPc: unknown = pcStr
+      ? await materializePersistedContent(pcStr, materialize)
+      : it.persistedContent;
+
+    // files[] 与 persistedContent 都物化完才删 OSS(每个 key 删一次,best-effort 不阻塞)。
+    return { ...(it as object), ...(files ? { files: nextFiles } : {}), persistedContent: nextPc };
+  } finally {
+    for (const k of ossKeys) void removeRemote(k);
   }
-
-  const nextPc: unknown = pcStr
-    ? await materializePersistedContent(pcStr, materialize)
-    : it.persistedContent;
-
-  // files[] 与 persistedContent 都物化完才删 OSS(每个 key 删一次,best-effort 不阻塞)。
-  for (const k of ossKeys) void removeRemote(k);
-
-  return { ...(it as object), ...(files ? { files: nextFiles } : {}), persistedContent: nextPc };
 }
 
 export async function cleanupSessionTempAttachments(sessionId: string): Promise<void> {

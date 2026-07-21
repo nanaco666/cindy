@@ -341,6 +341,49 @@ describe('__testing.extOf / mimeOf', () => {
   });
 });
 
+describe('integrity regression coverage', () => {
+  it('deletes the OSS object when streamed bytes no longer match the presigned size', async () => {
+    const actualSize = __testing.STREAM_THRESHOLD + 1;
+    statMock.mockResolvedValue({ isFile: () => true, size: actualSize + 1 });
+    const chunk = Buffer.alloc(1024 * 1024, 0x62);
+    createReadStreamMock.mockImplementation(() =>
+      Readable.from(
+        (function* chunks() {
+          for (let offset = 0; offset < __testing.STREAM_THRESHOLD; offset += chunk.length) {
+            yield chunk;
+          }
+          yield Buffer.from([0x21]);
+        })(),
+      ),
+    );
+    fetchMock.mockImplementation(async (_url: string, init: RequestInit) => {
+      if (init.body instanceof ReadableStream) {
+        const reader = init.body.getReader();
+        while (!(await reader.read()).done) {
+          // drain like undici
+        }
+      }
+      return { ok: true, status: 200, text: async () => '' };
+    });
+
+    await expect(uploadLocalFile('/tmp/changed.mp4')).rejects.toThrow();
+    expect(apiFetch).toHaveBeenCalledWith(
+      DEL_PATH,
+      expect.objectContaining({ method: 'DELETE', body: { key: KEY } }),
+    );
+  });
+
+  it('reports progress while bytes are written to the random part file', async () => {
+    const bytes = Uint8Array.from([1, 2, 3]);
+    fetchMock.mockResolvedValue({ ok: true, status: 200, body: webBody(bytes) });
+    const onProgress = vi.fn();
+
+    await downloadToFile(KEY, '/tmp/final.bin', undefined, onProgress);
+
+    expect(onProgress).toHaveBeenCalledWith(bytes.byteLength);
+  });
+});
+
 function webBody(bytes: Uint8Array): ReadableStream<Uint8Array> {
   return new ReadableStream({
     start(controller) {

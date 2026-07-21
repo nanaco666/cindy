@@ -2,6 +2,7 @@
 export {
   ATTACH_OSS_SCHEME,
   buildAttachmentOssRef,
+  buildLegacyAttachmentOssRef,
   isAttachmentOssRef,
   isValidAttachmentIntegrity,
   LEGACY_ATTACH_OSS_SCHEME,

@@ -233,6 +233,48 @@ describe('mobileAttachmentUpload', () => {
     });
   });
 
+  it('hashes and uploads the same immutable snapshot file', async () => {
+    const apiFetch = vi.fn(async () => ({
+      putUrl: 'https://oss.example/upload',
+      key: 'xdt-maker/device-link/user-1/photo.png',
+      expiresAt: '2026-06-16T00:00:00.000Z',
+    }));
+    const uploadFile = vi.fn(async () => ({ status: 200 }));
+    const cleanup = vi.fn(async () => undefined);
+    const snapshotFile = vi.fn(async () => ({
+      uri: 'file:///cache/upload-snapshot.png',
+      size: 12,
+      cleanup,
+    }));
+    const snapshotRead = vi.fn(async (uri: string, _position: number, length: number) => {
+      expect(uri).toBe('file:///cache/upload-snapshot.png');
+      return Buffer.alloc(length, 0x78).toString('base64');
+    });
+
+    await uploadMobileAttachmentFromFile(
+      { name: 'photo.png', size: 12, mimeType: 'image/png' },
+      'file:///tmp/mutable-photo.png',
+      {
+        token: 'token-1',
+        deps: {
+          apiFetch: apiFetch as unknown as typeof apiFetchRaw,
+          uploadFile,
+          readFileChunk: snapshotRead,
+          snapshotFile,
+        },
+      },
+    );
+
+    expect(snapshotFile).toHaveBeenCalledWith('file:///tmp/mutable-photo.png');
+    expect(uploadFile).toHaveBeenCalledWith(
+      'https://oss.example/upload',
+      'file:///cache/upload-snapshot.png',
+      expect.any(Object),
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
   it('falls back to application/octet-stream in BOTH presign and PUT headers when mimeType is missing', async () => {
     // 回归:mimeType 缺失时预签名不锁 Content-Type,而 expo 原生直传层自动补
     // application/octet-stream,签名不一致 → OSS SignatureDoesNotMatch 403

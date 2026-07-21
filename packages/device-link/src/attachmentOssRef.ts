@@ -6,7 +6,7 @@
  */
 
 export const ATTACH_OSS_SCHEME = 'cindy-oss-attach';
-/** 品牌迁移前的旧 scheme；解析面永久保留，生成面只使用新 scheme。 */
+/** 品牌迁移前的旧 scheme；解析面永久保留，混合版本 rollout 期间发送端继续使用。 */
 export const LEGACY_ATTACH_OSS_SCHEME = 'xdt-oss-attach';
 
 const ATTACH_OSS_PREFIX = `${ATTACH_OSS_SCHEME}://m/`;
@@ -49,6 +49,15 @@ export function isValidAttachmentIntegrity(value: {
 
 /** 组装 OSS 附件引用串；拒绝半套或非法完整性元数据。 */
 export function buildAttachmentOssRef(ref: AttachmentOssRef): string {
+  return buildAttachmentOssRefWithScheme(ref, ATTACH_OSS_SCHEME);
+}
+
+/** Rollout-safe sender form: old clients only understand xdt-oss-attach. */
+export function buildLegacyAttachmentOssRef(ref: AttachmentOssRef): string {
+  return buildAttachmentOssRefWithScheme(ref, LEGACY_ATTACH_OSS_SCHEME);
+}
+
+function buildAttachmentOssRefWithScheme(ref: AttachmentOssRef, scheme: string): string {
   if (typeof ref.ossKey !== 'string' || ref.ossKey.length === 0) {
     throw new Error('Attachment OSS reference requires a non-empty ossKey');
   }
@@ -57,7 +66,7 @@ export function buildAttachmentOssRef(ref: AttachmentOssRef): string {
   if (hasSize !== hasSha256 || (hasSize && !isValidAttachmentIntegrity(ref))) {
     throw new Error('Attachment OSS reference requires valid size and sha256 together');
   }
-  return `${ATTACH_OSS_PREFIX}${toBase64Url(JSON.stringify(ref))}`;
+  return `${scheme}://m/${toBase64Url(JSON.stringify(ref))}`;
 }
 
 /** 判断字符串是否使用附件 OSS 引用 scheme。 */

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ATTACH_OSS_SCHEME,
   buildAttachmentOssRef,
+  buildLegacyAttachmentOssRef,
   isAttachmentOssRef,
   LEGACY_ATTACH_OSS_SCHEME,
   parseAttachmentOssRef,
@@ -38,6 +39,12 @@ describe('attachment OSS reference contract', () => {
     const legacy = current.replace(`${ATTACH_OSS_SCHEME}://`, `${LEGACY_ATTACH_OSS_SCHEME}://`);
     expect(isAttachmentOssRef(legacy)).toBe(true);
     expect(parseAttachmentOssRef(legacy)).toMatchObject({ ossKey: 'legacy/in-flight.pdf' });
+  });
+
+  it('can emit the legacy scheme during a mixed-client rollout', () => {
+    const encoded = buildLegacyAttachmentOssRef({ ossKey: 'rollout/file.pdf' });
+    expect(encoded.startsWith(`${LEGACY_ATTACH_OSS_SCHEME}://m/`)).toBe(true);
+    expect(parseAttachmentOssRef(encoded)).toMatchObject({ ossKey: 'rollout/file.pdf' });
   });
 
   it('rejects partial, malformed, or uppercase integrity metadata', () => {

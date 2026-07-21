@@ -182,6 +182,7 @@ describe('attachmentOssRef legacy 兼容', () => {
       ossKey: 'cindy/device-link/user-1/legacy.png',
       name: 'legacy.png',
       size: 1,
+      sha256: SHA256,
       mimeType: 'image/png',
     });
     const legacyRef = fresh!.path.replace('cindy-oss-attach://', 'xdt-oss-attach://');
@@ -190,8 +191,10 @@ describe('attachmentOssRef legacy 兼容', () => {
       ossKey: 'cindy/device-link/user-1/legacy.png',
       mimeType: 'image/png',
       originalName: 'legacy.png',
+      size: 1,
+      sha256: SHA256,
     });
-    // 生成面只出新 scheme
-    expect(fresh!.path.startsWith('cindy-oss-attach://m/')).toBe(true);
+    // rollout 期间生成面使用旧 scheme，确保旧版桌面端可识别
+    expect(fresh!.path.startsWith('xdt-oss-attach://m/')).toBe(true);
   });
 });
