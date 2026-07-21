@@ -445,15 +445,17 @@ describe('mobile session composer desktop-first surface', () => {
     expect(source).toContain('if (!canUseComposer) return;');
     expect(source).toContain('modelSheetOpen && canUseComposer');
     expect(source).toContain('disabled={controlBusy || !canUseComposer}');
-    expect(source).toContain('resolveMobileVoiceCredentialFromLiteLlmSettings');
+    expect(source).toContain('createMobileCindyVoiceCredential');
     // Voice startup claims the pressIn-prewarmed ASR connection when one is
     // fresh (credential already resolved, WebSocket already connecting) and
     // falls back to resolving the credential itself otherwise.
     expect(source).toContain('const [prewarmedVoice, localVoiceInputHistory] = await Promise.all([');
     expect(source).toContain('takePrewarmedMobileVoiceAsr(deviceId) ?? Promise.resolve(null),');
-    expect(source).toContain('?? await resolveMobileVoiceCredentialFromLiteLlmSettings(deviceId);');
+    expect(source).toContain('?? createMobileCindyVoiceCredential(deviceId);');
     expect(source).toContain('onPressIn={handleVoiceButtonPressIn}');
-    expect(source).toContain('prewarmMobileVoiceStart(deviceId);');
+    expect(source).toContain('prewarmMobileVoiceStart(deviceId, { getAccessToken: () => auth.getAccessToken() });');
+    expect(source).toContain('connectionProvider: (providerId) => voiceContext.createAsrConnection(providerId),');
+    expect(source).toContain('refinerTargetProvider: (providerId) => voiceContext.createRefinerTarget(providerId),');
     expect(source).toContain('getMobileVoiceInputHistoryForHost(deviceId),');
     // Device link is opened non-blocking (not awaited): dictation goes through the
     // cloud ASR proxy and does not need the link, so it must not gate mic start.

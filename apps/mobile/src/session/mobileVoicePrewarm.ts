@@ -2,11 +2,16 @@ import type { AsrProvider } from '@lizi/voice-input-core';
 import type { StoredMobileVoiceCredential } from '@/session/mobileVoiceCredentialStore';
 import { createMobileAsrProvider } from '@/session/mobileRealtimeAsrProvider';
 import { prewarmMobileRealtimeAudio } from '@/session/mobileRealtimeAudio';
+import {
+  createMobileCindyVoiceCredential,
+  MobileCindyVoiceRunContext,
+} from '@/session/mobileCindyVoiceSession';
 import { resolveMobileVoiceCredentialFromLiteLlmSettings } from '@/session/mobileVoiceLiteLlmSettings';
 
 export type PrewarmedMobileVoiceAsr = {
   credential: StoredMobileVoiceCredential;
   asr: AsrProvider;
+  voiceContext?: MobileCindyVoiceRunContext;
 };
 
 type PendingPrewarm = {
@@ -40,7 +45,10 @@ let pendingPrewarm: PendingPrewarm | null = null;
  * Fire-and-forget and never throws: a failed prewarm just means the recording
  * falls back to the regular startup path and surfaces errors there.
  */
-export function prewarmMobileVoiceStart(deviceId: string): void {
+export function prewarmMobileVoiceStart(
+  deviceId: string,
+  options?: { getAccessToken: () => Promise<string | null> },
+): void {
   prewarmMobileRealtimeAudio();
   if (
     pendingPrewarm
@@ -50,7 +58,7 @@ export function prewarmMobileVoiceStart(deviceId: string): void {
     return;
   }
   discardPendingPrewarm();
-  const promise = buildPrewarm(deviceId);
+  const promise = buildPrewarm(deviceId, options?.getAccessToken);
   const entry: PendingPrewarm = {
     deviceId,
     createdAt: Date.now(),
@@ -91,15 +99,29 @@ export function discardPendingPrewarm(): void {
     .catch(() => undefined);
 }
 
-async function buildPrewarm(deviceId: string): Promise<PrewarmedMobileVoiceAsr | null> {
+async function buildPrewarm(
+  deviceId: string,
+  getAccessToken?: () => Promise<string | null>,
+): Promise<PrewarmedMobileVoiceAsr | null> {
   try {
-    const credential = await resolveMobileVoiceCredentialFromLiteLlmSettings(deviceId);
-    const provider = createMobileAsrProvider(credential);
+    const credential = getAccessToken
+      ? createMobileCindyVoiceCredential(deviceId)
+      : await resolveMobileVoiceCredentialFromLiteLlmSettings(deviceId);
+    const voiceContext = getAccessToken
+      ? new MobileCindyVoiceRunContext(
+        getAccessToken,
+        credential.settings?.language,
+        credential.refiner.provider,
+      )
+      : undefined;
+    const provider = createMobileAsrProvider(credential, voiceContext
+      ? { connectionProvider: (providerId) => voiceContext.createAsrConnection(providerId) }
+      : {});
     const startPromise = provider.start();
     // Parked until claimed: don't let a failed speculative connect become an
     // unhandled rejection. The claiming run re-observes the outcome via start().
     startPromise.catch(() => undefined);
-    return { credential, asr: withPrewarmedStart(provider, startPromise) };
+    return { credential, ...(voiceContext ? { voiceContext } : {}), asr: withPrewarmedStart(provider, startPromise) };
   } catch {
     return null;
   }

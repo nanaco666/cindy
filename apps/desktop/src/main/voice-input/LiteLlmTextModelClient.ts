@@ -62,8 +62,9 @@ export type LiteLlmTokenUsage = {
 };
 
 type LiteLlmTextModelClientOptions = {
-  proxyApiKey: string;
-  baseUrl: string;
+  proxyApiKey?: string;
+  baseUrl?: string;
+  requestTargetProvider?: () => Promise<{ url: string; authorization: string }>;
   timeoutMs?: number;
   onUsage?: (usage: LiteLlmTokenUsage) => void;
 };
@@ -71,14 +72,16 @@ type LiteLlmTextModelClientOptions = {
 type ParsedSseBlock = { data: unknown };
 
 export class LiteLlmTextModelClient implements TextModelClient {
-  private readonly proxyApiKey: string;
-  private readonly baseUrl: string;
+  private readonly proxyApiKey?: string;
+  private readonly baseUrl?: string;
+  private readonly requestTargetProvider?: () => Promise<{ url: string; authorization: string }>;
   private readonly timeoutMs: number;
   private readonly onUsage?: (usage: LiteLlmTokenUsage) => void;
 
   constructor(options: LiteLlmTextModelClientOptions) {
     this.proxyApiKey = options.proxyApiKey;
     this.baseUrl = options.baseUrl;
+    this.requestTargetProvider = options.requestTargetProvider;
     this.timeoutMs = options.timeoutMs ?? 8_000;
     this.onUsage = options.onUsage;
   }
@@ -91,8 +94,8 @@ export class LiteLlmTextModelClient implements TextModelClient {
     promptCacheScope?: string;
     onTextSnapshot?: (text: string) => void;
   }): Promise<T> {
-    if (!this.proxyApiKey) throw new Error('Missing XD Gateway API key');
-    if (!this.baseUrl) throw new Error('Missing XD Gateway base URL');
+    if (!this.requestTargetProvider && !this.proxyApiKey) throw new Error('Missing XD Gateway API key');
+    if (!this.requestTargetProvider && !this.baseUrl) throw new Error('Missing XD Gateway base URL');
 
     const startedAt = Date.now();
     const systemPromptHash = shortHash(input.system);
@@ -126,12 +129,18 @@ export class LiteLlmTextModelClient implements TextModelClient {
     let firstByteAt: number | null = null;
     let lastTextSnapshot = '';
     try {
-      const response = await undiciFetch(joinProxyPath(this.baseUrl, '/v1/chat/completions'), {
+      const target = this.requestTargetProvider
+        ? await this.requestTargetProvider()
+        : {
+            url: joinProxyPath(this.baseUrl!, '/v1/chat/completions'),
+            authorization: `Bearer ${this.proxyApiKey!}`,
+          };
+      const response = await undiciFetch(target.url, {
         method: 'POST',
         signal: controller.signal,
         dispatcher: refinerDispatcher,
         headers: {
-          Authorization: `Bearer ${this.proxyApiKey}`,
+          Authorization: target.authorization,
           'Content-Type': 'application/json',
           Accept: 'text/event-stream',
         },

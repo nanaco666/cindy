@@ -8,6 +8,7 @@
   "slackHookWsUrl": "wss://slack-hook.cindy.app",
   "websiteUrl": "https://cindy.app",
   "modelAccessApiBaseUrl": "https://model-access.cindy.app",
+  "voiceApiBaseUrl": "https://voice.cindy.app",
   "githubApiBaseUrl": "https://github.cindy.app",
   "skillhubApiBaseUrl": "https://xd-skillhub.cindy.com.cn",
   "cdnBaseUrl": "https://hotfix.cindy.app/cindy",

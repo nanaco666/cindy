@@ -398,16 +398,24 @@ async function transcribeMobileVoiceAsr(
 }
 
 export class MobileLiteLlmTextModelClient implements TextModelClient {
-  private readonly proxyApiKey: string;
-  private readonly baseUrl: string;
+  private readonly proxyApiKey?: string;
+  private readonly baseUrl?: string;
   private readonly endpointPath: string;
   private readonly deps?: CloudVoiceDeps;
+  private readonly requestTargetProvider?: () => Promise<{ url: string; authorization: string }>;
 
-  constructor(options: { proxyApiKey: string; baseUrl: string; endpointPath?: string; deps?: CloudVoiceDeps }) {
+  constructor(options: {
+    proxyApiKey?: string;
+    baseUrl?: string;
+    endpointPath?: string;
+    deps?: CloudVoiceDeps;
+    requestTargetProvider?: () => Promise<{ url: string; authorization: string }>;
+  }) {
     this.proxyApiKey = options.proxyApiKey;
     this.baseUrl = options.baseUrl;
     this.endpointPath = options.endpointPath ?? '/v1/chat/completions';
     this.deps = options.deps;
+    this.requestTargetProvider = options.requestTargetProvider;
   }
 
   async requestJson<T>(input: {
@@ -419,10 +427,16 @@ export class MobileLiteLlmTextModelClient implements TextModelClient {
     onTextSnapshot?: (text: string) => void;
   }): Promise<T> {
     const fetchImpl = this.deps?.fetch ?? fetch;
-    const response = await fetchImpl(joinProxyPath(this.baseUrl, this.endpointPath), {
+    const target = this.requestTargetProvider
+      ? await this.requestTargetProvider()
+      : {
+          url: joinProxyPath(this.baseUrl!, this.endpointPath),
+          authorization: `Bearer ${this.proxyApiKey!}`,
+        };
+    const response = await fetchImpl(target.url, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${this.proxyApiKey}`,
+        Authorization: target.authorization,
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
       },
@@ -444,7 +458,7 @@ export class MobileLiteLlmTextModelClient implements TextModelClient {
       }),
     });
     if (!response.ok) {
-      throw new Error(await cloudVoiceHttpErrorMessage('语音润色失败', response, this.proxyApiKey));
+      throw new Error(await cloudVoiceHttpErrorMessage('语音润色失败', response, this.proxyApiKey ?? ''));
     }
     try {
       if (hasReadableStreamBody(response.body)) {
@@ -466,7 +480,7 @@ export class MobileLiteLlmTextModelClient implements TextModelClient {
       const content = extractChatCompletionContent(payload);
       return parseJsonObject(content) as T;
     } catch (err) {
-      throw new Error(redactMobileVoiceCredentialText(err, this.proxyApiKey));
+      throw new Error(redactMobileVoiceCredentialText(err, this.proxyApiKey ?? ''));
     }
   }
 }
@@ -521,6 +535,7 @@ export class MobileFallbackTextModelClient implements TextModelClient {
 export function buildMobileRefinerAttempts(
   credential: StoredMobileVoiceCredential,
   deps?: CloudVoiceDeps,
+  requestTargetProvider?: (provider: string) => Promise<{ url: string; authorization: string }>,
 ): MobileRefinerAttempt[] {
   const chain = mobileRefinerCredentialChain(credential);
   return chain.map((refiner) => ({
@@ -532,6 +547,9 @@ export function buildMobileRefinerAttempts(
       baseUrl: credential.proxyBaseUrl,
       endpointPath: refiner.endpointPath,
       deps,
+      requestTargetProvider: requestTargetProvider
+        ? () => requestTargetProvider(refiner.provider)
+        : undefined,
     }),
   }));
 }

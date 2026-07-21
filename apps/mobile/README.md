@@ -153,7 +153,7 @@ pnpm --filter mobile test:e2e:reconnect:local
 
 The package script starts the local server fixture automatically; pass `-- --dry-run` to inspect the host/controller IDs and server command.
 
-Runtime mobile voice input reads the LiteLLM key saved in the mobile Settings screen. ASR and refinement both use the LiteLLM gateway; the app no longer fetches the controlled desktop `safeStorage` key before recording.
+Runtime mobile voice input uses the Cindy login access token to create a short-lived voice session. ASR frames and refinement go through `voice-server`; the dedicated inference project key never reaches the app and no LiteLLM key is required in mobile Settings.
 
 The credential helpers below are legacy diagnostics for the old desktop-key relay path. Keep them only for local investigation of historical credential fixtures; do not treat them as the mobile runtime contract and do not use them for production mobile voice input.
 
@@ -214,9 +214,9 @@ Add `--voice-cloud-all-candidates` to that smoke when you want the local mock vo
 
 The Maestro voice flow remains a stable UI/controller regression and may use mock output, because real ASR text depends on microphone input and should not be asserted as a fixed string. Use the headless real-cloud gate above for the real desktop credential and cloud endpoint proof.
 
-Mobile voice input uses the same LiteLLM-backed realtime model families as desktop: Volcengine SAUC first, then Qwen realtime, then OpenAI-compatible realtime as ASR fallback; refinement uses LiteLLM chat completions with the desktop LiteLLM fallback models. Batch ASR and direct provider keys are still outside the mobile realtime interaction model.
+Mobile voice input keeps the same provider-neutral fallback order as desktop: Volcengine SAUC first, then Qwen realtime, then OpenAI-compatible realtime. Every candidate/recovery obtains a fresh one-shot ticket from `voice-server`; refinement keeps its two-model fallback and falls back to raw ASR text if both fail.
 
-The fetch helper writes the file with `0600` permissions and never prints `proxyApiKey`. This is only for local iOS voice E2E until AI keys are account-bound and available to mobile after login.
+The fetch helper writes the file with `0600` permissions and never prints `proxyApiKey`. It remains only as a legacy fixture diagnostic; production voice uses Cindy login plus `voice-server`.
 For a non-local relay, provide a controller/mobile token through `XDT_MOBILE_AUTH_ACCESS_TOKEN_FILE`; do not use the controlled desktop's own token, because that would replace its device-link connection.
 
 The default app id is `com.xd.lizcn`. Override when testing Expo Go or a custom dev build:

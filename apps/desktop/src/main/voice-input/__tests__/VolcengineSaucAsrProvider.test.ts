@@ -156,6 +156,46 @@ describe('VolcengineSaucAsrProvider protocol helpers', () => {
     }
   });
 
+  it('requests a fresh one-shot connection ticket when transport recovery reconnects', async () => {
+    const server = new WebSocketServer({ port: 0 });
+    const sockets: WebSocket[] = [];
+    const authorizations: Array<string | undefined> = [];
+    let provider: VolcengineSaucAsrProvider | undefined;
+    server.on('connection', (socket, request) => {
+      sockets.push(socket);
+      authorizations.push(request.headers.authorization);
+    });
+
+    try {
+      await waitFor(() => server.address() !== null);
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Expected local test server address.');
+      let ticketNumber = 0;
+      provider = new VolcengineSaucAsrProvider({
+        connectionProvider: async () => ({
+          websocketUrl: `ws://127.0.0.1:${address.port}/api/voice/asr`,
+          authorizationToken: `ticket-${++ticketNumber}`,
+        }),
+        resourceId: 'volc.test',
+      });
+      const events: string[] = [];
+      provider.onEvent((event) => events.push(event.type));
+
+      await provider.start();
+      await waitFor(() => sockets.length === 1);
+      sockets[0].close(1011, 'drop');
+      await waitFor(() => events.includes('disconnected'));
+      await provider.recover();
+      await waitFor(() => sockets.length === 2);
+
+      expect(authorizations).toEqual(['Bearer ticket-1', 'Bearer ticket-2']);
+    } finally {
+      await provider?.stop();
+      for (const socket of sockets) socket.terminate();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it('waits for the protocol last response before completing flush', async () => {
     const server = new WebSocketServer({ port: 0 });
     const sockets: WebSocket[] = [];

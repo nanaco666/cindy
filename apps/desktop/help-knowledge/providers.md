@@ -1,11 +1,11 @@
 ---
 id: providers
 title: Connecting Cindy AI in Model Providers
-summary: Connect Cindy AI for Claude Code, Codex, voice input, and utility models in Settings > Model Providers.
+summary: Connect Cindy AI for Claude Code, Codex, and utility models in Settings > Model Providers.
 tab: providers
 status: draft
 ---
-Claude Code, Codex, voice input, and lightweight utility models can use Cindy AI for pay-per-token model access. Without a connected Cindy AI key, Cindy AI models and Cindy AI voice input providers cannot authenticate.
+Claude Code, Codex, and lightweight utility models can use Cindy AI for pay-per-token model access. Voice input is included for signed-in Cindy users and uses the separate voice service; it does not require or receive a Cindy AI key.
 
 **Setting up Cindy AI:**
 

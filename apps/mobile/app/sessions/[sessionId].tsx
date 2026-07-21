@@ -243,8 +243,11 @@ import {
 } from '@/session/mobileVoicePrewarm';
 import {
   isMobileVoiceLiteLlmSettingsError,
-  resolveMobileVoiceCredentialFromLiteLlmSettings,
 } from '@/session/mobileVoiceLiteLlmSettings';
+import {
+  createMobileCindyVoiceCredential,
+  MobileCindyVoiceRunContext,
+} from '@/session/mobileCindyVoiceSession';
 import {
   getMobileVoiceInputHistoryForHost,
   recordMobileVoiceInputHistoryForHost,
@@ -2829,7 +2832,13 @@ export default function SessionScreen() {
       ]);
       claimedPrewarm = prewarmedVoice;
       const credential = prewarmedVoice?.credential
-        ?? await resolveMobileVoiceCredentialFromLiteLlmSettings(deviceId);
+        ?? createMobileCindyVoiceCredential(deviceId);
+      const voiceContext = prewarmedVoice?.voiceContext
+        ?? new MobileCindyVoiceRunContext(
+          () => auth.getAccessToken(),
+          credential.settings?.language,
+          credential.refiner.provider,
+        );
       if (voiceStartupSeqRef.current !== startupSeq) {
         // The startup was superseded while we awaited: close the claimed
         // connection instead of opening a mic for a dead run. Session switches
@@ -2852,6 +2861,8 @@ export default function SessionScreen() {
         const controller = createMobileVoiceControllerSession({
           credential,
           ...(prewarmedVoice ? { asr: prewarmedVoice.asr } : {}),
+          connectionProvider: (providerId) => voiceContext.createAsrConnection(providerId),
+          refinerTargetProvider: (providerId) => voiceContext.createRefinerTarget(providerId),
           initialDraft: draft,
           refinementContext: buildMobileVoiceSessionRefinementContext(draft, renderItems),
           localVoiceInputHistory,
@@ -3035,7 +3046,7 @@ export default function SessionScreen() {
     if (voiceIsProcessing) return;
     if (voiceRecordingActiveRef.current || voiceState === 'listening') return;
     if (!deviceId || !isMobileRealtimeAudioAvailable()) return;
-    prewarmMobileVoiceStart(deviceId);
+    prewarmMobileVoiceStart(deviceId, { getAccessToken: () => auth.getAccessToken() });
   }, [deviceId, voiceIsProcessing, voiceState]);
 
   const renderComposerVoiceButton = (buttonStyle?: StyleProp<ViewStyle>) => (
