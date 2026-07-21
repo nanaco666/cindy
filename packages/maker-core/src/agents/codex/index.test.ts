@@ -5017,6 +5017,113 @@ describe('CodexAgent turn lifecycle', () => {
     await handle.close();
   });
 
+  it('ignores turn-scoped events that arrive after a normally completed turn', async () => {
+    const agent = new CodexAgent(createDeps());
+    const host = installFakeHost(agent);
+    const handle = await agent.startSession({
+      sessionId: 'session-late-events-after-normal-complete',
+      model: 'gpt-5.4',
+      workingDir: '/repo',
+    });
+    const subscribeCalls = host.subscribeThread.mock.calls as unknown as Array<[string, ThreadEventHandlers]>;
+    const handlers = subscribeCalls[0]?.[1];
+    expect(handlers).toBeDefined();
+    const iterator = handle.events()[Symbol.asyncIterator]();
+
+    handlers.turnStarted?.({
+      threadId: 'start-thread-id',
+      turn: { id: 'turn-completed' },
+    });
+    handlers.turnCompleted?.({
+      threadId: 'start-thread-id',
+      turn: { id: 'turn-completed', status: 'completed' },
+    });
+    expect(await nextEvent(iterator)).toMatchObject({
+      type: 'status',
+      data: { status: 'Done', isRunning: false },
+    });
+    expect(await nextEvent(iterator)).toMatchObject({ type: 'done' });
+    expect(handle.isTurnRunning?.()).toBe(false);
+
+    handlers.itemStarted?.({
+      threadId: 'start-thread-id',
+      turnId: 'turn-completed',
+      item: {
+        id: 'late-tool',
+        type: 'mcpToolCall',
+        server: 'functions',
+        tool: 'exec',
+        status: 'inProgress',
+        arguments: {},
+      },
+    });
+    handlers.itemUpdated?.({
+      threadId: 'start-thread-id',
+      turnId: 'turn-completed',
+      item: {
+        id: 'late-message',
+        type: 'agentMessage',
+        text: 'late text',
+      },
+    });
+    handlers.itemCompleted?.({
+      threadId: 'start-thread-id',
+      turnId: 'turn-completed',
+      item: {
+        id: 'late-message',
+        type: 'agentMessage',
+        text: 'late final text',
+      },
+    });
+    handlers.reasoningSummaryTextDelta?.({
+      threadId: 'start-thread-id',
+      turnId: 'turn-completed',
+      itemId: 'late-reasoning',
+      summaryIndex: 0,
+      delta: 'late thought',
+    });
+    handlers.turnStarted?.({
+      threadId: 'start-thread-id',
+      turn: { id: 'turn-completed' },
+    });
+
+    await expect(nextEvent(iterator)).rejects.toThrow('timed out waiting for event');
+    expect(handle.isTurnRunning?.()).toBe(false);
+    await handle.close();
+  });
+
+  it('emits the terminal boundary only once for duplicate turnCompleted notifications', async () => {
+    const agent = new CodexAgent(createDeps());
+    const host = installFakeHost(agent);
+    const handle = await agent.startSession({
+      sessionId: 'session-duplicate-normal-complete',
+      model: 'gpt-5.4',
+      workingDir: '/repo',
+    });
+    const subscribeCalls = host.subscribeThread.mock.calls as unknown as Array<[string, ThreadEventHandlers]>;
+    const handlers = subscribeCalls[0]?.[1];
+    expect(handlers).toBeDefined();
+    const iterator = handle.events()[Symbol.asyncIterator]();
+    const completed = {
+      threadId: 'start-thread-id',
+      turn: { id: 'turn-completed', status: 'completed' as const },
+    };
+
+    handlers.turnStarted?.({
+      threadId: 'start-thread-id',
+      turn: { id: 'turn-completed' },
+    });
+    handlers.turnCompleted?.(completed);
+    expect(await nextEvent(iterator)).toMatchObject({ type: 'status' });
+    expect(await nextEvent(iterator)).toMatchObject({ type: 'done' });
+
+    handlers.turnCompleted?.(completed);
+
+    await expect(nextEvent(iterator)).rejects.toThrow('timed out waiting for event');
+    expect(handle.isTurnRunning?.()).toBe(false);
+    await handle.close();
+  });
+
   it('keeps stale turn guard after an older terminal-error turn completes during another turn', async () => {
     const agent = new CodexAgent(createDeps());
     const host = installFakeHost(agent);

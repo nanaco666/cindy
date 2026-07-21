@@ -1886,6 +1886,11 @@ export class CodexAgent extends BaseAgent {
     let isTurnInFlight = false;
     let isTurnStartPending = false;
     type TurnCompletedParams = Parameters<NonNullable<ThreadEventHandlers['turnCompleted']>>[0];
+    // 正常完成的 turn 也必须保留墓碑:app-server 允许 turn/completed 早于仍在
+    // 后台收尾的 item 事件到达。没有这层墓碑时,currentTurnId 已清空,迟到 item
+    // 会重新发出 running status,而该 turn 的 done 已消费完,会话将永久假忙。
+    // turn id 在同一 thread 内唯一;墓碑随 session handle 释放,不跨 session 泄漏。
+    const completedTurnIds = new Set<string>();
     const terminalErroredTurnIds = new Set<string>();
     const deferredTerminalTurnCompletions = new Map<string, TurnCompletedParams>();
     // 最近一次 thread/tokenUsage/updated 的 last 增量 + contextWindow,
@@ -3150,6 +3155,7 @@ export class CodexAgent extends BaseAgent {
 
     const shouldIgnoreStaleTurnEvent =(turnId: string | null | undefined): boolean => {
       if (!turnId) return false;
+      if (completedTurnIds.has(turnId)) return true;
       if (terminalErroredTurnIds.has(turnId)) return true;
       return currentTurnId !== null && turnId !== currentTurnId;
     };
@@ -3286,6 +3292,10 @@ export class CodexAgent extends BaseAgent {
         deferredTerminalTurnCompletions.set(turn.id, params);
         return;
       }
+      // turn/completed 可能重复投递。只允许第一次进入 usage / UI / done 收口;
+      // 同一个墓碑也负责拦截该 turn 随后迟到的 item / reasoning / started 事件。
+      if (completedTurnIds.has(turn.id)) return;
+      completedTurnIds.add(turn.id);
       const suppressTerminalUi = terminalErroredTurnIds.has(turn.id);
       deferredTerminalTurnCompletions.delete(turn.id);
       if (currentTurnId === turn.id || currentTurnId === null) {
