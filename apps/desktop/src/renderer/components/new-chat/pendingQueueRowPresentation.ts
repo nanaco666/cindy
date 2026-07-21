@@ -1,4 +1,5 @@
 import { UI_ACTION_TRIGGER_PREFIX, type QueuedMessage } from '@/lib/makerChatStore';
+import { stripChatQuoteMarkerLines } from '@/lib/chatQuotes';
 import {
   CONTINUE_AFTER_APP_EXIT_PROMPT,
   CONTINUE_AFTER_ERROR_PROMPT,
@@ -60,10 +61,27 @@ export function getPendingQueueRowPresentation(entry: QueuedMessage): PendingQue
       ? (origin.displayText ?? entry.text)
       : isScheduler
         ? (entry.persistedContent || entry.text)
-        : entry.text,
+        : entry.chatMessage.quotesEncoded === true
+          ? stripChatQuoteMarkerLines(entry.text)
+          : entry.text,
     canEdit: !isOrca && !isScheduler && !isSyntheticTrigger,
     canSteer: !isOrca && !isScheduler && !isSyntheticTrigger,
     isSyntheticTrigger,
     syntheticKind: isSyntheticTrigger ? (isContinueTrigger ? 'continue' : 'generic') : null,
   };
+}
+
+/**
+ * Keep an untouched encoded quote body byte-for-byte stable. The queue editor
+ * shows the markerless projection, so submitting that projection as a rewrite
+ * would otherwise discard the private markers even when the user changed
+ * nothing. A real edit intentionally submits the visible markerless text.
+ */
+export function resolvePendingQueueEditSubmission(
+  entry: QueuedMessage,
+  visibleText: string,
+): string | null {
+  return visibleText === getPendingQueueRowPresentation(entry).displayText
+    ? null
+    : visibleText;
 }

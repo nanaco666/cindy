@@ -8,6 +8,8 @@
  * sides from quietly inventing different meanings for the same queued row.
  */
 
+import { stripChatQuoteMarkerLines } from '@lizi/maker-shared/chat-quotes';
+
 export type AgentInputFileCategory = 'image' | 'pdf' | 'text' | 'office' | 'file';
 
 export interface AgentInputSerializedFile {
@@ -57,6 +59,7 @@ export interface AgentInputChatMessage {
   createdAt?: string;
   images?: Array<AgentInputImageRef | AgentInputFallbackImage>;
   files?: Array<{ name: string; path: string }>;
+  quotesEncoded?: boolean;
 }
 
 export interface AgentInputCreateOpts {
@@ -186,24 +189,35 @@ export function projectionRetryText(
 export function updateQueuedMessageText(
   entry: AgentInputQueuedMessage,
   newText: string,
+  /** User-authored queue edits drop quote metadata after the private marker is removed. */
+  opts?: { clearQuoteMetadataWhenMarkerless?: boolean },
 ): AgentInputQueuedMessage {
+  const hasEncodedQuoteMarker = stripChatQuoteMarkerLines(newText) !== newText;
+  const shouldClearQuoteMetadata =
+    opts?.clearQuoteMetadataWhenMarkerless === true && !hasEncodedQuoteMarker;
   let nextPersisted = entry.persistedContent;
   try {
     const parsed = JSON.parse(entry.persistedContent) as Record<string, unknown>;
-    nextPersisted = parsed && typeof parsed === 'object'
-      ? JSON.stringify({ ...parsed, text: newText })
-      : newText;
+    if (parsed && typeof parsed === 'object') {
+      const nextParsed: Record<string, unknown> = { ...parsed, text: newText };
+      if (shouldClearQuoteMetadata) delete nextParsed.quotesEncoded;
+      nextPersisted = JSON.stringify(nextParsed);
+    } else {
+      nextPersisted = newText;
+    }
   } catch {
     nextPersisted = newText;
   }
+  const nextChatMessage = {
+    ...entry.chatMessage,
+    content: newText,
+  };
+  if (shouldClearQuoteMetadata) delete nextChatMessage.quotesEncoded;
   return {
     ...entry,
     text: newText,
     persistedContent: nextPersisted,
-    chatMessage: {
-      ...entry.chatMessage,
-      content: newText,
-    },
+    chatMessage: nextChatMessage,
   };
 }
 

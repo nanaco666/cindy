@@ -1307,7 +1307,9 @@ export class AgentInputCoordinator {
     const state = this.getState(sessionId);
     if (state.steeringQueueClientIds.includes(clientId)) return this.getProjection(sessionId);
     state.pendingQueue = state.pendingQueue.map((entry) =>
-      entry.clientId === clientId ? updateQueuedMessageText(entry, newText) : entry,
+      entry.clientId === clientId
+        ? updateQueuedMessageText(entry, newText, { clearQuoteMetadataWhenMarkerless: true })
+        : entry,
     );
     this.emit(sessionId);
     return this.getProjection(sessionId);

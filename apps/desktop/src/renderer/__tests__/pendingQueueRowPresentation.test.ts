@@ -4,7 +4,10 @@ import {
   CONTINUE_AFTER_APP_EXIT_PROMPT,
   CONTINUE_AFTER_ERROR_PROMPT,
 } from '../../shared/interruptedTurn';
-import { getPendingQueueRowPresentation } from '@/components/new-chat/pendingQueueRowPresentation';
+import {
+  getPendingQueueRowPresentation,
+  resolvePendingQueueEditSubmission,
+} from '@/components/new-chat/pendingQueueRowPresentation';
 import type { QueuedMessage } from '@/lib/makerChatStore';
 
 function queuedMessage(patch: Partial<QueuedMessage> = {}): QueuedMessage {
@@ -114,6 +117,25 @@ describe('getPendingQueueRowPresentation', () => {
       canSteer: true,
       isSyntheticTrigger: false,
     });
+  });
+
+  it('hides private quote markers from quoted queue rows and their editor', () => {
+    const entry = queuedMessage({
+      text: '> <!-- cindy-composer-quote -->\n> quoted\n\nreply',
+      chatMessage: {
+        clientId: 'client-1',
+        role: 'user',
+        content: '> <!-- cindy-composer-quote -->\n> quoted\n\nreply',
+        quotesEncoded: true,
+      },
+    });
+
+    const presentation = getPendingQueueRowPresentation(entry);
+
+    expect(presentation.displayText).toBe('> quoted\n\nreply');
+    expect(resolvePendingQueueEditSubmission(entry, presentation.displayText)).toBeNull();
+    expect(resolvePendingQueueEditSubmission(entry, '> quoted\n\nrevised reply'))
+      .toBe('> quoted\n\nrevised reply');
   });
 
   it('flags synthetic [UI_ACTION_TRIGGER] rows and locks edit/steer', () => {

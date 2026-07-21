@@ -4062,12 +4062,25 @@ describe('AgentInputCoordinator queue mutations', () => {
     ]);
   });
 
-  it('updates pending row text and persisted content before acceptance', async () => {
+  it('updates pending row text and clears stale quote metadata before acceptance', async () => {
     const h = createHarness();
     const sid = 'edit-text';
     const first = makeItem('q-1', 'first');
     const second = makeItem('q-2', 'old', {
-      persistedContent: JSON.stringify({ text: 'old', images: [{ url: 'xdt-image://1' }], files: [] }),
+      persistedContent: JSON.stringify({
+        text: 'old',
+        images: [{ url: 'xdt-image://1' }],
+        files: [],
+        quotesEncoded: true,
+      }),
+      chatMessage: {
+        clientId: 'q-2',
+        role: 'user',
+        content: 'old',
+        isStreaming: false,
+        createdAt: '2026-06-07T00:00:00.000Z',
+        quotesEncoded: true,
+      },
     });
 
     h.coordinator.enqueue(sid, first);
@@ -4080,6 +4093,7 @@ describe('AgentInputCoordinator queue mutations', () => {
     const updated = latestProjection(h.projections).pendingQueue[0];
     expect(updated?.text).toBe('new text');
     expect(updated?.chatMessage.content).toBe('new text');
+    expect(updated?.chatMessage.quotesEncoded).toBeUndefined();
     expect(JSON.parse(updated?.persistedContent ?? '{}')).toEqual({
       text: 'new text',
       images: [{ url: 'xdt-image://1' }],
