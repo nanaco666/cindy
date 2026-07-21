@@ -627,14 +627,15 @@ export class RealtimeAsrWebSocketProvider implements AsrProvider {
   }
 
   async start(options?: { recovering?: boolean }): Promise<void> {
+    if (!options?.recovering) this.stopRequested = false;
     const dynamicConnection = this.connectionProvider
       ? await this.connectionProvider()
       : null;
+    if (this.stopRequested) throw new Error('Realtime ASR connection stopped.');
     const accessToken = dynamicConnection?.authorizationToken ?? await this.accessTokenProvider();
     if (!accessToken) throw new Error(this.missingCredentialMessage);
     const realtimeUrl = dynamicConnection?.websocketUrl ?? this.realtimeUrl;
     this.activeRealtimeUrl = realtimeUrl;
-    if (!options?.recovering) this.stopRequested = false;
     this.resetTranscriptState();
 
     const warm = dynamicConnection ? null : takeWarmRealtimeSession(

@@ -133,6 +133,7 @@ export class VolcengineSaucAsrProvider implements AsrProvider {
           websocketUrl: toWebSocketUrl(this.baseUrl!, this.endpointPath!),
           authorizationToken: this.proxyApiKey!,
         };
+    if (this.stopRequested) throw new Error('Volcengine SAUC ASR connection stopped.');
     const socket = new WebSocket(connection.websocketUrl, {
       headers: {
         Authorization: `Bearer ${connection.authorizationToken}`,

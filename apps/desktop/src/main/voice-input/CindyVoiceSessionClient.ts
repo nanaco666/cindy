@@ -2,7 +2,7 @@ import { app } from 'electron';
 
 import * as authManager from '../authManager.js';
 import { getClientEndpoint } from '../clientEndpointsService.js';
-import { serverApiFetch } from '../serverApiClient.js';
+import { ServerApiError, serverApiFetch } from '../serverApiClient.js';
 
 const VOICE_SESSION_REQUEST_TIMEOUT_MS = 10_000;
 
@@ -81,7 +81,7 @@ async function createCindyVoiceSession(input: {
 }): Promise<CindyVoiceAsrSession> {
   const baseUrl = getClientEndpoint('voiceApiBaseUrl');
   if (!baseUrl) throw new Error('Cindy voice service is unavailable in this region.');
-  const session = await serverApiFetch<CindyVoiceAsrSession>('/api/voice/sessions', {
+  const request = {
     baseUrl,
     method: 'POST',
     body: {
@@ -93,7 +93,20 @@ async function createCindyVoiceSession(input: {
       refinerProvider: input.refinerProvider,
     },
     timeoutMs: VOICE_SESSION_REQUEST_TIMEOUT_MS,
-  });
+  } as const;
+  let session: CindyVoiceAsrSession;
+  try {
+    session = await serverApiFetch<CindyVoiceAsrSession>('/api/voice/sessions', request);
+  } catch (error) {
+    // serverApiFetch already handles TOKEN_EXPIRED. A plain 401 can still
+    // indicate a revoked cached access token, so refresh once and retry the
+    // allocation before surfacing the auth failure.
+    if (!(error instanceof ServerApiError) || error.statusCode !== 401 || error.code !== 'UNAUTHORIZED') {
+      throw error;
+    }
+    if (!await authManager.refresh()) throw error;
+    session = await serverApiFetch<CindyVoiceAsrSession>('/api/voice/sessions', request);
+  }
   if (
     session.asr.provider !== input.asrProvider
     || !session.ticket
