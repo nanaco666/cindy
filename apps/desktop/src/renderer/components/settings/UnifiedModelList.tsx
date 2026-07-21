@@ -19,11 +19,15 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { RefreshCw, Search } from 'lucide-react';
+import { ChevronDown, RefreshCw, Search } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
-import { groupModelsForDisplay, CATEGORY_LABEL_KEY } from '@/components/new-chat/sourceSwitch';
+import {
+  groupModelsForDisplay,
+  CATEGORY_LABEL_KEY,
+  type ModelCategory,
+} from '@/components/new-chat/sourceSwitch';
 import {
   isModelEnabled,
   setManyVisibility,
@@ -37,6 +41,30 @@ const AGENT_LABEL: Record<AgentKind, string> = {
   'claude-code': 'Claude Code',
   codex: 'Codex',
 };
+
+/**
+ * 分组折叠态(仅 UI 展示,按设备记忆)。非对话类型组(图像/音频/视频/向量/其它)默认折叠——
+ * 它们是网关多出的、不能当 agent 用的模型,默认收起让列表清爽;对话厂商组默认展开。
+ * 只存用户显式改过的组(与 modelVisibilityPrefs 同哲学:未改的跟随默认),搜索时强制全展开。
+ */
+const COLLAPSE_STORAGE_KEY = 'xdt:modelListCollapsedGroups:v1';
+const DEFAULT_COLLAPSED_CATEGORIES = new Set<ModelCategory>([
+  'image',
+  'audio',
+  'video',
+  'embedding',
+  'other',
+]);
+
+function loadCollapsedMap(): Record<string, boolean> {
+  try {
+    const raw = window.localStorage.getItem(COLLAPSE_STORAGE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
 
 function formatContextWindow(tokens: number): string {
   if (tokens >= 1_000_000) {
@@ -128,6 +156,30 @@ export function UnifiedModelList({
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [splitMode, setSplitMode] = useState(false);
+  const [collapsedMap, setCollapsedMap] = useState<Record<string, boolean>>(loadCollapsedMap);
+
+  const isCollapsed = useCallback(
+    (cat: ModelCategory) => collapsedMap[cat] ?? DEFAULT_COLLAPSED_CATEGORIES.has(cat),
+    [collapsedMap],
+  );
+  const toggleCollapsed = useCallback((cat: ModelCategory) => {
+    setCollapsedMap((prev) => {
+      const cur = prev[cat] ?? DEFAULT_COLLAPSED_CATEGORIES.has(cat);
+      const newVal = !cur;
+      const next = { ...prev };
+      if (newVal === DEFAULT_COLLAPSED_CATEGORIES.has(cat)) {
+        delete next[cat];
+      } else {
+        next[cat] = newVal;
+      }
+      try {
+        window.localStorage.setItem(COLLAPSE_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* localStorage 不可用(隐私模式等)时仅内存生效,不阻断 UI */
+      }
+      return next;
+    });
+  }, []);
   // 订阅可见性 version:开关变更后 counts memo 必须重算(否则「全部开启/关闭」
   // 按钮方向与计数陈旧)。行内开关读取不 memo,天然新鲜;只有 counts 依赖它。
   const visibilityVersion = useModelVisibilityVersion();
@@ -292,17 +344,41 @@ export function UnifiedModelList({
             {t('settings.providers.models.noResults')}
           </div>
         ) : (
-          groups.map((g) => (
+          groups.map((g) => {
+            // 搜索时强制展开(否则匹配项藏在折叠组里看不到);仅多组时才有折叠头。
+            const collapsed = showGroupHeaders && !query.trim() && isCollapsed(g.category);
+            return (
             <div key={g.category} className="flex flex-col">
               {showGroupHeaders && (
-                <span
-                  className="pb-0.5 text-11 font-semibold uppercase"
-                  style={{ color: 'var(--text-tertiary)', letterSpacing: '0.4px' }}
+                <button
+                  type="button"
+                  onClick={() => toggleCollapsed(g.category)}
+                  aria-expanded={!collapsed}
+                  className="flex items-center gap-1 self-start pb-0.5 text-left transition-opacity hover:opacity-80"
                 >
-                  {t(CATEGORY_LABEL_KEY[g.category])}
-                </span>
+                  {/* chevron 用 transform 旋转(compositor-only,规则 7);折叠时 -90°。 */}
+                  <span
+                    className="inline-flex transition-transform duration-150"
+                    style={{ color: 'var(--text-tertiary)', transform: collapsed ? 'rotate(-90deg)' : 'none' }}
+                  >
+                    <ChevronDown size={12} />
+                  </span>
+                  <span
+                    className="text-11 font-semibold uppercase"
+                    style={{ color: 'var(--text-tertiary)', letterSpacing: '0.4px' }}
+                  >
+                    {t(CATEGORY_LABEL_KEY[g.category])}
+                  </span>
+                  <span
+                    className="text-11 tabular-nums"
+                    style={{ color: 'var(--text-tertiary)', opacity: 0.6 }}
+                  >
+                    {g.rows.length}
+                  </span>
+                </button>
               )}
-              {g.rows.map((row) => {
+              {!collapsed &&
+                g.rows.map((row) => {
                 const rep = row.byAgent[row.avail[0]]!;
                 const diverged = isRowDiverged(provider.id, row);
                 const anyOn = rowAnyEnabled(provider.id, row);
@@ -388,7 +464,8 @@ export function UnifiedModelList({
                 );
               })}
             </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

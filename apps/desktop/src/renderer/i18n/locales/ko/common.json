@@ -3370,7 +3370,12 @@
         "budget": "할인형 GPT",
         "grok": "xAI",
         "google": "Google",
-        "china": "국내"
+        "china": "국내",
+        "image": "이미지",
+        "audio": "오디오·음성",
+        "video": "비디오",
+        "embedding": "임베딩",
+        "other": "기타"
       },
       "search": {
         "placeholder": "{{source}} 모델 검색...",

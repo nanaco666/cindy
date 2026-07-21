@@ -473,7 +473,8 @@
         ],
         "defaultEffort": "high",
         "sortOrder": 2,
-        "supportsFastMode": false
+        "supportsFastMode": false,
+        "defaultEnabled": false
       },
       "claude-opus-4-6": {
         "agents": [
@@ -491,7 +492,8 @@
         ],
         "defaultEffort": "high",
         "sortOrder": 3,
-        "supportsFastMode": false
+        "supportsFastMode": false,
+        "defaultEnabled": false
       },
       "claude-sonnet-5": {
         "agents": [
@@ -525,7 +527,8 @@
         ],
         "defaultEffort": "high",
         "sortOrder": 5,
-        "supportsFastMode": false
+        "supportsFastMode": false,
+        "defaultEnabled": false
       },
       "claude-haiku-4-5": {
         "agents": [
@@ -563,7 +566,8 @@
             "contextWindow": 1000000,
             "supportsFastMode": false
           }
-        }
+        },
+        "defaultEnabled": false
       },
       "gpt-5.4": {
         "agents": [
@@ -587,7 +591,8 @@
           "claude-code": {
             "supportsFastMode": false
           }
-        }
+        },
+        "defaultEnabled": false
       },
       "gpt-5.4-mini": {
         "agents": [
@@ -684,7 +689,8 @@
           "claude-code": {
             "supportsFastMode": false
           }
-        }
+        },
+        "defaultEnabled": false
       },
       "codex/gpt-5.4": {
         "agents": [
@@ -708,7 +714,8 @@
           "claude-code": {
             "supportsFastMode": false
           }
-        }
+        },
+        "defaultEnabled": false
       },
       "gpt-5.6-sol": {
         "agents": [
@@ -716,7 +723,7 @@
           "codex"
         ],
         "name": "GPT-5.6-Sol",
-        "group": "gpt-budget",
+        "group": "gpt",
         "description": "GPT-5.6-Sol for coding tasks",
         "contextWindow": 372000,
         "efforts": [
@@ -726,7 +733,7 @@
           "xhigh"
         ],
         "defaultEffort": "high",
-        "sortOrder": 8,
+        "sortOrder": 18,
         "supportsFastMode": true,
         "perAgent": {
           "claude-code": {
@@ -740,7 +747,7 @@
           "codex"
         ],
         "name": "GPT-5.6-Terra",
-        "group": "gpt-budget",
+        "group": "gpt",
         "description": "GPT-5.6-Terra for coding tasks",
         "contextWindow": 372000,
         "efforts": [
@@ -750,7 +757,7 @@
           "xhigh"
         ],
         "defaultEffort": "high",
-        "sortOrder": 9,
+        "sortOrder": 19,
         "supportsFastMode": true,
         "perAgent": {
           "claude-code": {
@@ -832,8 +839,9 @@
         "description": "Moonshot Kimi K2.6 agentic coding model; thinking is provider-managed",
         "contextWindow": 262144,
         "efforts": [],
-        "sortOrder": 41,
-        "supportsFastMode": false
+        "sortOrder": 106,
+        "supportsFastMode": false,
+        "defaultEnabled": false
       },
       "z-ai/glm-5.1": {
         "agents": [
@@ -894,7 +902,64 @@
         ],
         "defaultEffort": "high",
         "sortOrder": 45,
-        "supportsFastMode": false
+        "supportsFastMode": false,
+        "defaultEnabled": false
+      },
+      "gpt-5.6-luna": {
+        "agents": [
+          "claude-code",
+          "codex"
+        ],
+        "name": "GPT-5.6-Luna",
+        "group": "gpt",
+        "sortOrder": 17
+      },
+      "gpt-5.4-nano": {
+        "agents": [
+          "claude-code",
+          "codex"
+        ],
+        "name": "GPT-5.4-Nano",
+        "group": "gpt",
+        "sortOrder": 101,
+        "defaultEnabled": false
+      },
+      "codex/gpt-5.4-mini": {
+        "agents": [
+          "claude-code",
+          "codex"
+        ],
+        "name": "GPT-5.4-Mini",
+        "group": "gpt-budget",
+        "sortOrder": 103,
+        "defaultEnabled": false
+      },
+      "moonshot/kimi-k3": {
+        "agents": [
+          "claude-code"
+        ],
+        "name": "Kimi K3",
+        "group": "china",
+        "sortOrder": 41
+      },
+      "qwen/qwen3.6-plus": {
+        "agents": [
+          "claude-code"
+        ],
+        "name": "Qwen 3.6 Plus",
+        "group": "china",
+        "sortOrder": 105,
+        "defaultEnabled": false
+      },
+      "codex/gpt-5.5:auto": {
+        "agents": [
+          "claude-code",
+          "codex"
+        ],
+        "name": "GPT-5.5-Auto",
+        "group": "gpt-budget",
+        "sortOrder": 12,
+        "defaultEnabled": false
       }
     }
   }
