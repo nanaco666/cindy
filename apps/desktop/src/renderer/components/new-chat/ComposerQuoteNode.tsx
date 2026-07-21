@@ -108,17 +108,20 @@ export const ComposerQuoteNode = Node.create<Record<string, never>, Record<strin
       sourcePath: {
         default: null,
         parseHTML: (element) => element.getAttribute('data-source-path') || null,
-        renderHTML: (attrs) => ({ 'data-source-path': attrs.sourcePath ?? '' }),
+        renderHTML: (attrs) =>
+          attrs.sourcePath == null ? {} : { 'data-source-path': attrs.sourcePath },
       },
       startLine: {
         default: null,
         parseHTML: (element) => parsePositiveLineAttribute(element, 'data-start-line'),
-        renderHTML: (attrs) => ({ 'data-start-line': attrs.startLine ?? '' }),
+        renderHTML: (attrs) =>
+          attrs.startLine == null ? {} : { 'data-start-line': attrs.startLine },
       },
       endLine: {
         default: null,
         parseHTML: (element) => parsePositiveLineAttribute(element, 'data-end-line'),
-        renderHTML: (attrs) => ({ 'data-end-line': attrs.endLine ?? '' }),
+        renderHTML: (attrs) =>
+          attrs.endLine == null ? {} : { 'data-end-line': attrs.endLine },
       },
     };
   },

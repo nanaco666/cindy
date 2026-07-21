@@ -173,4 +173,15 @@ describe('composerQuoteDocument', () => {
       },
     });
   });
+
+  it('omits empty optional quote attributes from clipboard HTML', () => {
+    const editor = makeEditor();
+    editor.commands.setContent(appendQuoteToComposerDocument(null, { text: 'quoted' }));
+
+    const html = editor.getHTML();
+    expect(html).toContain('data-composer-quote=""');
+    expect(html).not.toContain('data-source-path');
+    expect(html).not.toContain('data-start-line');
+    expect(html).not.toContain('data-end-line');
+  });
 });

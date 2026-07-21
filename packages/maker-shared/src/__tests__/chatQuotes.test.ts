@@ -11,26 +11,32 @@ import {
 describe('formatQuotesForSend', () => {
   it('encodes one standalone quote for inline composer serialization', () => {
     expect(formatQuoteForSend({ text: 'a\n\nb', sourcePath: 'docs/x.md' })).toBe(
-      '> a\n>\n> b\n> — source: docs/x.md',
+      '> <!-- cindy-composer-quote -->\n> a\n>\n> b\n> — source: docs/x.md',
     );
   });
 
   it('prefixes each quote line and separates quotes with a blank line (markdown semantics)', () => {
     expect(formatQuotesForSend([{ text: 'a\nb' }, { text: 'c' }], 'hello')).toBe(
-      '> a\n> b\n\n> c\n\nhello',
+      '> <!-- cindy-composer-quote -->\n> a\n> b\n\n> <!-- cindy-composer-quote -->\n> c\n\nhello',
     );
   });
 
   it('encodes intra-quote empty lines as a bare ">" (no trailing space to trim)', () => {
-    expect(formatQuotesForSend([{ text: 'a\n\nb' }], 'hi')).toBe('> a\n>\n> b\n\nhi');
+    expect(formatQuotesForSend([{ text: 'a\n\nb' }], 'hi')).toBe(
+      '> <!-- cindy-composer-quote -->\n> a\n>\n> b\n\nhi',
+    );
   });
 
   it('normalizes leading/trailing blank lines so the block never starts with a bare ">"', () => {
     // 开头裸 ">" 会被 parseLeadingBlockquotes 的早退守卫拒收(用户手打保护),
     // 采集侧选区吃进段落边界空行时必须在编码前剔除。
-    expect(formatQuotesForSend([{ text: '\n\nselected\n' }], 'hi')).toBe('> selected\n\nhi');
+    expect(formatQuotesForSend([{ text: '\n\nselected\n' }], 'hi')).toBe(
+      '> <!-- cindy-composer-quote -->\n> selected\n\nhi',
+    );
     const sent = formatQuotesForSend([{ text: '\nfirst\n\nsecond\n\n', sourcePath: 'a.md' }], 'body');
-    expect(sent).toBe('> first\n>\n> second\n> — source: a.md\n\nbody');
+    expect(sent).toBe(
+      '> <!-- cindy-composer-quote -->\n> first\n>\n> second\n> — source: a.md\n\nbody',
+    );
     expect(parseLeadingBlockquotes(sent)).toEqual({
       quotes: [{ text: 'first\n\nsecond', sourcePath: 'a.md' }],
       body: 'body',
@@ -39,17 +45,17 @@ describe('formatQuotesForSend', () => {
 
   it('appends a source line for file quotes', () => {
     expect(formatQuotesForSend([{ text: 'a', sourcePath: 'docs/x.md' }], 'hi')).toBe(
-      '> a\n> — source: docs/x.md\n\nhi',
+      '> <!-- cindy-composer-quote -->\n> a\n> — source: docs/x.md\n\nhi',
     );
   });
 
   it('appends source line numbers for file quotes', () => {
     expect(
       formatQuotesForSend([{ text: 'a', sourcePath: 'docs/x.md', startLine: 12, endLine: 18 }], 'hi'),
-    ).toBe('> a\n> — source: docs/x.md#L12-L18\n\nhi');
+    ).toBe('> <!-- cindy-composer-quote -->\n> a\n> — source: docs/x.md#L12-L18\n\nhi');
     expect(
       formatQuotesForSend([{ text: 'a', sourcePath: 'docs/x.md', startLine: 12, endLine: 12 }], 'hi'),
-    ).toBe('> a\n> — source: docs/x.md#L12\n\nhi');
+    ).toBe('> <!-- cindy-composer-quote -->\n> a\n> — source: docs/x.md#L12\n\nhi');
   });
 
   it('returns body untouched when there are no quotes', () => {
@@ -57,19 +63,25 @@ describe('formatQuotesForSend', () => {
   });
 
   it('trims the trailing gap for quote-only sends', () => {
-    expect(formatQuotesForSend([{ text: 'a' }], '')).toBe('> a');
+    expect(formatQuotesForSend([{ text: 'a' }], '')).toBe(
+      '> <!-- cindy-composer-quote -->\n> a',
+    );
   });
 });
 
 describe('parseChatQuoteSegments', () => {
   it('preserves alternating quote and prose order', () => {
     const content = [
-      '> first quote',
+      formatQuoteForSend({ text: 'first quote' }),
       '',
       'first response',
       '',
-      '> second quote',
-      '> — source: docs/spec.md#L8-L9',
+      formatQuoteForSend({
+        text: 'second quote',
+        sourcePath: 'docs/spec.md',
+        startLine: 8,
+        endLine: 9,
+      }),
       '',
       'second response',
     ].join('\n');
@@ -91,10 +103,35 @@ describe('parseChatQuoteSegments', () => {
   });
 
   it('keeps internal quote and prose blank lines', () => {
-    expect(parseChatQuoteSegments('before\n\n> a\n>\n> b\n\nafter\n\nstill after')).toEqual([
+    const content = `before\n\n${formatQuoteForSend({ text: 'a\n\nb' })}\n\nafter\n\nstill after`;
+    expect(parseChatQuoteSegments(content)).toEqual([
       { kind: 'text', text: 'before' },
       { kind: 'quote', quote: { text: 'a\n\nb' } },
       { kind: 'text', text: 'after\n\nstill after' },
+    ]);
+  });
+
+  it('keeps user-authored Markdown blockquotes in the body editable', () => {
+    const content = `${formatQuoteForSend({ text: 'selected' })}\n\nHere is the original:\n> foo`;
+    expect(parseChatQuoteSegments(content)).toEqual([
+      { kind: 'quote', quote: { text: 'selected' } },
+      { kind: 'text', text: 'Here is the original:\n> foo' },
+    ]);
+  });
+
+  it('preserves lone and backslash-prefixed greater-than body lines', () => {
+    const content = `${formatQuoteForSend({ text: 'selected' })}\n\n>\n\\> foo`;
+    expect(parseChatQuoteSegments(content)).toEqual([
+      { kind: 'quote', quote: { text: 'selected' } },
+      { kind: 'text', text: '>\n\\> foo' },
+    ]);
+  });
+
+  it('keeps compatibility with unmarked legacy leading quotes only', () => {
+    expect(parseChatQuoteSegments('> old one\n\n> old two\n\nbody\n\n> manual')).toEqual([
+      { kind: 'quote', quote: { text: 'old one' } },
+      { kind: 'quote', quote: { text: 'old two' } },
+      { kind: 'text', text: 'body\n\n> manual' },
     ]);
   });
 
@@ -110,6 +147,14 @@ describe('parseLeadingBlockquotes', () => {
     const quotes = [{ text: '第一段\n\n空行后继续' }, { text: 'b', sourcePath: 'x.md' }];
     const sent = formatQuotesForSend(quotes, 'body');
     expect(parseLeadingBlockquotes(sent)).toEqual({ quotes, body: 'body' });
+  });
+
+  it('round-trips quote text that happens to equal the internal marker', () => {
+    const quotes = [{ text: '<!-- cindy-composer-quote -->' }];
+    expect(parseLeadingBlockquotes(formatQuotesForSend(quotes, 'body'))).toEqual({
+      quotes,
+      body: 'body',
+    });
   });
 
   it('does not swallow a lone leading ">" line typed by the user', () => {

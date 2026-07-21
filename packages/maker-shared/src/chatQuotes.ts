@@ -9,6 +9,8 @@
  * 来源文件(file-quote):从文件浏览器选中的引用带 `sourcePath`(workdir
  * 相对路径),编码为条目内最后一行 `> — source: <path>`;能拿到选区行号时
  * 再附 `#Lx-Ly`。模型对引注体例天然理解,可据此 Read 完整上下文 / 精准编辑。
+ * 新写入的引用块首行带不可见 Markdown comment marker,用于把产品 quote
+ * atom 与正文中用户手写的 blockquote 无歧义地区分；历史前置引用仍兼容。
  *
  * 为什么选 blockquote 而不是结构化字段:引用是模型的母语格式(零 wire /
  * 持久化 schema 改动),手机端 / 远端 / 导出的纯文本视图天然可读;渲染美化
@@ -34,6 +36,14 @@ export type ChatQuoteSegment =
 
 /** 来源行前缀(条目内最后一行)。 */
 const SOURCE_LINE_PREFIX = '— source: ';
+
+/**
+ * 新版产品引用块的显式标记。Markdown comment 在普通文本视图中不可见，
+ * 同时让解析器能把正文里的用户手写 `> ...` 与 composer quote atom 区分开。
+ * 未带标记的历史 quotesEncoded 消息仍只按「消息开头的引用区」兼容解析。
+ */
+const QUOTE_BLOCK_MARKER = '<!-- cindy-composer-quote -->';
+const QUOTE_BLOCK_MARKER_LINE = `> ${QUOTE_BLOCK_MARKER}`;
 
 function isValidLine(line: number | undefined): line is number {
   return typeof line === 'number' && Number.isInteger(line) && line > 0;
@@ -86,7 +96,10 @@ export function formatQuoteForSend(quote: ChatQuote): string {
   const lines = stripOuterNewlines(quote.text).split('\n');
   const sourceLine = formatSourceLine(quote);
   if (sourceLine) lines.push(`${SOURCE_LINE_PREFIX}${sourceLine}`);
-  return lines.map((line) => (line ? `> ${line}` : '>')).join('\n');
+  return [
+    QUOTE_BLOCK_MARKER_LINE,
+    ...lines.map((line) => (line ? `> ${line}` : '>')),
+  ].join('\n');
 }
 
 export function formatQuotesForSend(quotes: readonly ChatQuote[], body: string): string {
@@ -135,16 +148,27 @@ export function parseChatQuoteSegments(content: string): ChatQuoteSegment[] {
     }
   };
 
+  // 历史格式没有显式 marker，只允许在消息开头解析。进入正文或遇到新版
+  // marker 后即关闭，避免 quotesEncoded=true 时把正文 Markdown blockquote
+  // 误还原成不可编辑的产品 quote atom。
+  let allowLegacyLeadingQuotes = true;
   let index = 0;
   while (index < lines.length) {
     const line = lines[index];
-    if (!line.startsWith('> ')) {
+    const marked = line === QUOTE_BLOCK_MARKER_LINE;
+    const legacyLeading = allowLegacyLeadingQuotes && line.startsWith('> ');
+    if (!marked && !legacyLeading) {
       textLines.push(line);
+      if (line !== '') allowLegacyLeadingQuotes = false;
       index += 1;
       continue;
     }
 
     flushText();
+    if (marked) {
+      allowLegacyLeadingQuotes = false;
+      index += 1;
+    }
     const quoteLines: string[] = [];
     while (index < lines.length) {
       const quoteLine = lines[index];
@@ -188,16 +212,26 @@ export function parseLeadingBlockquotes(content: string): {
   const lines = content.split('\n');
   const quotes: ChatQuote[] = [];
   let current: string[] = [];
+  let markerConsumedForCurrent = false;
 
   const flush = () => {
     if (current.length === 0) return;
     quotes.push(quoteFromLines(current));
     current = [];
+    markerConsumedForCurrent = false;
   };
 
   let i = 0;
   for (; i < lines.length; i++) {
     const line = lines[i];
+    if (
+      line === QUOTE_BLOCK_MARKER_LINE &&
+      current.length === 0 &&
+      !markerConsumedForCurrent
+    ) {
+      markerConsumedForCurrent = true;
+      continue;
+    }
     if (line.startsWith('> ')) {
       current.push(line.slice(2));
       continue;

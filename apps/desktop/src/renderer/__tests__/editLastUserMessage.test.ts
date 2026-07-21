@@ -53,6 +53,7 @@ import {
 } from '@/lib/editLastUserMessage';
 import { listMessagesFor as listMessagesMock } from '@/lib/makerTransport';
 import { ApiError } from '@/lib/httpClient';
+import { formatQuoteForSend } from '@/lib/chatQuotes';
 import type { Session } from '@/lib/ccAgent.types';
 
 const SESSION_ID = 'sess-1';
@@ -246,7 +247,12 @@ describe('commitEditAndResend', () => {
       {
         sessionId: SESSION_ID,
         clientId: CLIENT_ID,
-        text: '> quoted line\n> — source: src/a.ts\n\nedited body\n\n> second\n\nsecond reply',
+        text: [
+          formatQuoteForSend({ text: 'quoted line', sourcePath: 'src/a.ts' }),
+          'edited body',
+          formatQuoteForSend({ text: 'second' }),
+          'second reply',
+        ].join('\n\n'),
         fallbackWorkingDir: '/repo',
         quotesEncoded: true,
       },

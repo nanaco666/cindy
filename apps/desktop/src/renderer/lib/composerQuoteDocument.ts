@@ -108,8 +108,7 @@ export function prependLegacyQuotesToComposerDocument(
   } else {
     body.unshift(paragraph(leadingQuotes));
   }
-  const content = body.length > 0 ? body : [paragraph(leadingQuotes)];
-  return { type: 'doc', content };
+  return { type: 'doc', content: body };
 }
 
 /** Restore an encoded sent message into the same inline composer order. */

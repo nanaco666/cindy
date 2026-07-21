@@ -671,7 +671,7 @@ export function UserMessage({
     sessionId,
     messageClientId,
     forkBlocked: shouldBlockUserFork(sessionRunning, delivery),
-    draftText: bubbleBody,
+    draftText: quotesEncoded ? undefined : bubbleBody,
     draftDocument: quoteDraftDocument,
   });
 
