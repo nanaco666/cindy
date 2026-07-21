@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { useLocation, useSearchParams } from 'react-router-dom';
 
 import { toast } from '@/lib/toast';
+import { createLogger } from '@/lib/logger';
 import { orcaWorkflowsFor } from '@/lib/makerTransport';
+import { extractIpcError } from '@/utils/ipcError';
 import {
   parseConversationSearchJump,
   type ConversationSearchJump,
@@ -12,6 +14,9 @@ import type { CreateWorkerForm } from '../CreateWorkerPopover';
 import { getCollaborationStartErrorMessage } from '../collaborationErrors';
 import { createWorkerLabel } from '../workerLabel';
 import { useWorkers } from './useWorkers';
+import { clearWorkerAttention } from '../lib/workerAttentionStore';
+
+const log = createLogger('OrcaWorkerSelection');
 
 function parseSearchJump(state: unknown): ConversationSearchJump | null {
   if (!state || typeof state !== 'object') return null;
@@ -21,6 +26,8 @@ function parseSearchJump(state: unknown): ConversationSearchJump | null {
 export interface UseOrcaWorkerSelectionOptions {
   leadSessionId: string;
   deviceId?: string;
+  /** Whether the worker conversation is actually visible to the user. */
+  viewVisible: boolean;
   focusWorkerSessionId?: string | null;
   focusWorkerHintRevision?: number;
   searchJump?: ConversationSearchJump | null;
@@ -31,6 +38,7 @@ export interface UseOrcaWorkerSelectionOptions {
 export function useOrcaWorkerSelection({
   leadSessionId,
   deviceId,
+  viewVisible,
   focusWorkerSessionId,
   focusWorkerHintRevision,
   searchJump: searchJumpProp,
@@ -50,6 +58,7 @@ export function useOrcaWorkerSelection({
   const activeFocusWorkerHintRevisionRef = useRef(0);
   const selectionIntentGenerationRef = useRef(0);
   const pendingFocusTimeoutRef = useRef<number | null>(null);
+  const acknowledgingDoneWorkerIdsRef = useRef<Set<string>>(new Set());
   const focusWorkerSessionIdRef = useRef(focusWorkerSessionId);
   focusWorkerSessionIdRef.current = focusWorkerSessionId;
   const onFocusWorkerSessionIdConsumedRef = useRef(onFocusWorkerSessionIdConsumed);
@@ -239,6 +248,44 @@ export function useOrcaWorkerSelection({
     onSelectionIntentCleared?.(normalizedFocusWorkerHintRevision);
   }, [normalizedFocusWorkerHintRevision, onSelectionIntentCleared]);
 
+  const acknowledgeDoneWorker = useCallback(
+    async (workerId: string): Promise<boolean> => {
+      if (acknowledgingDoneWorkerIdsRef.current.has(workerId)) return false;
+      acknowledgingDoneWorkerIdsRef.current.add(workerId);
+      try {
+        await orcaWorkflowsFor(leadSessionId).idleWorker(leadSessionId, workerId, 'done');
+        clearWorkerAttention(workerId);
+        return true;
+      } catch (err) {
+        const errorCode = extractIpcError(err)?.code;
+        if (errorCode === 'WORKER_STATE_CHANGED' || errorCode === 'DEVICE_LINK_CHANNEL_NOT_ALLOWED') {
+          log.debug('done acknowledgement skipped after worker state changed', { workerId });
+          return false;
+        }
+        throw err;
+      } finally {
+        acknowledgingDoneWorkerIdsRef.current.delete(workerId);
+      }
+    },
+    [leadSessionId],
+  );
+
+  const visibleDoneWorkerId =
+    viewVisible && selectedWorkerRecord?.status === 'done' ? selectedWorkerRecord.workerId : null;
+
+  useEffect(() => {
+    if (!visibleDoneWorkerId) return;
+    void acknowledgeDoneWorker(visibleDoneWorkerId)
+      .then((acknowledged) => {
+        if (acknowledged) return refresh();
+        return undefined;
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        toast.error(msg);
+      });
+  }, [acknowledgeDoneWorker, refresh, visibleDoneWorkerId]);
+
   const handleCreateWorker = useCallback(
     async (form: CreateWorkerForm) => {
       const existingLabels = workers
@@ -287,18 +334,33 @@ export function useOrcaWorkerSelection({
   const handleSwitchFocus = useCallback(
     (workerId: string) => {
       clearSelectionHints();
-      void orcaWorkflowsFor(leadSessionId)
-        .switchFocus({
-          leadSessionId,
-          workerIdOrLabel: workerId,
-        })
-        .then(() => refresh())
-        .catch((err: unknown) => {
+      const worker = workersRef.current.find((item) => item.workerId === workerId);
+      const acknowledgeDone = worker?.status === 'done';
+      void (async () => {
+        try {
+          const workflows = orcaWorkflowsFor(leadSessionId);
+          await workflows.switchFocus({
+            leadSessionId,
+            workerIdOrLabel: workerId,
+          });
+          let acknowledged = false;
+          if (acknowledgeDone) {
+            try {
+              acknowledged = await acknowledgeDoneWorker(workerId);
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : String(err);
+              toast.error(msg);
+            }
+          }
+          if (!acknowledgeDone || acknowledged) clearWorkerAttention(workerId);
+          await refresh();
+        } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
           toast.error(msg);
-        });
+        }
+      })();
     },
-    [clearSelectionHints, leadSessionId, refresh],
+    [acknowledgeDoneWorker, clearSelectionHints, leadSessionId, refresh],
   );
 
   const handleArchiveWorker = useCallback(

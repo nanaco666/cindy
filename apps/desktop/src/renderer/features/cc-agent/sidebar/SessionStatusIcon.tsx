@@ -47,6 +47,13 @@ export interface SessionStatusIconProps {
    * spinner 橙 / done 绿)承担,左侧只保留 vendor 身份标识,避免左右重复。
    */
   showAttentionDot?: boolean;
+  /**
+   * attention 点 tone 覆盖。device-link 远程会话的状态不进本地 attention store
+   * (镜像在 remoteSessionActivityStore),下方本地 hook 推导会把远程 error/
+   * awaiting 一律落成默认绿(kind 缺失按 done)——调用方(rail 置顶瓷砖等)
+   * 从远程镜像推导出 tone 时显式传入;不传保持本地推导,零行为变化。
+   */
+  attentionToneOverride?: 'error' | 'awaiting' | 'done';
 }
 
 export function SessionStatusIcon({
@@ -57,6 +64,7 @@ export function SessionStatusIcon({
   isActive,
   size,
   showAttentionDot = true,
+  attentionToneOverride,
 }: SessionStatusIconProps) {
   const { t } = useTranslation();
   // 意识后台活动(card-action 干活,不经 LLM turn)OR 进呼吸:MJ 按钮点击等
@@ -73,11 +81,12 @@ export function SessionStatusIcon({
   const attentionKind = useSessionAttentionKind(session.id);
   const isUrgentFromContext = useSessionAttentionUrgency(session.id);
   const attentionTone =
-    isUrgentFromContext || attentionKind === 'error'
+    attentionToneOverride ??
+    (isUrgentFromContext || attentionKind === 'error'
       ? 'error'
       : attentionKind === 'awaiting'
         ? 'awaiting'
-        : 'done';
+        : 'done');
   // 有"未发送内容"(输入框草稿 或 被暂停的待发队列)且当前未选中 → 右下铅笔提示。
   const hasDraft = useComposerDraftPresence(session.id);
   const hasPausedQueue = useSessionPausedQueue(session.id);

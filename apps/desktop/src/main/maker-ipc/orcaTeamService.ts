@@ -184,7 +184,15 @@ export interface OrcaTeamServiceDeps {
   resumeWorkerSession(worker: OrcaWorkerRecordSnapshot, link: OrcaWorkerLinkSnapshot): Promise<void>;
   updateWorkerStatus(workerId: string, status: OrcaWorkerStatus): Promise<void>;
   markWorkerIdle(workerId: string): Promise<void>;
+  markWorkerIdleIfStatus(workerId: string, expectedStatus: 'done'): Promise<boolean>;
+  restoreWorkerDoneIfIdle(workerId: string): Promise<boolean>;
   closeWorkerSession(sessionId: string): Promise<void>;
+  /** 与 Session.send reservation 原子互斥；false 表示 direct send/turn 已先取得会话。 */
+  closeWorkerSessionIfIdle(sessionId: string): Promise<boolean>;
+  /** pending / dispatch-boundary / recovery 输入任一存在时返回 true。 */
+  hasPendingWorkerInput(sessionId: string): Promise<boolean>;
+  /** send_to_session 的恢复/直发锁覆盖 bootstrap 到 Session.send reservation 的窗口。 */
+  hasSendToSessionLock(sessionId: string): boolean;
   archiveWorkerSession(sessionId: string): Promise<void>;
   getManualInterrupt(sessionId: string): OrcaManualInterruptSnapshot | null;
   clearManualInterrupt(sessionId: string): void;
@@ -228,7 +236,7 @@ export interface OrcaTeamService {
   /** 外部调用边界：按 caller lead 校验 worker 可见性。内部可信派活请用 dispatchWorkerTask。 */
   sendToWorker(params: { callerLeadSessionId: string; targetSessionId: string; message: string }): Promise<SendToWorkerResult>;
   /** 外部调用边界：按 caller lead 校验 worker 可见性。 */
-  idleWorker(params: { callerLeadSessionId: string; workerId: string }): Promise<OrcaOkResult>;
+  idleWorker(params: { callerLeadSessionId: string; workerId: string; expectedStatus?: 'done' }): Promise<OrcaOkResult>;
   /** 外部调用边界：按 caller lead 校验 worker 可见性。 */
   archiveWorker(params: { callerLeadSessionId: string; workerId: string }): Promise<OrcaOkResult>;
   /** 外部调用边界：列出目标 worker 输入队列中的排队消息(lead 自己的条目含正文)。 */
@@ -291,6 +299,42 @@ export function findFocusTargetWorker<
 
 export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamService {
   const autoBridge = new Map<string, AutoBridgeState>();
+  /** Per-worker transition tails serialize dispatch reservations against implicit done acknowledgement. */
+  const workerTransitionTails = new Map<string, Promise<void>>();
+  /** Active dispatch count stays positive from pre-resume reservation through host dispatch settlement. */
+  const activeWorkerDispatches = new Map<string, number>();
+
+  async function withWorkerTransition<T>(workerId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = workerTransitionTails.get(workerId) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    workerTransitionTails.set(workerId, current);
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (workerTransitionTails.get(workerId) === current) {
+        workerTransitionTails.delete(workerId);
+      }
+    }
+  }
+
+  async function reserveWorkerDispatch(workerId: string): Promise<void> {
+    await withWorkerTransition(workerId, async () => {
+      activeWorkerDispatches.set(workerId, (activeWorkerDispatches.get(workerId) ?? 0) + 1);
+    });
+  }
+
+  async function releaseWorkerDispatch(workerId: string): Promise<void> {
+    await withWorkerTransition(workerId, async () => {
+      const remaining = (activeWorkerDispatches.get(workerId) ?? 1) - 1;
+      if (remaining > 0) activeWorkerDispatches.set(workerId, remaining);
+      else activeWorkerDispatches.delete(workerId);
+    });
+  }
 
   function setPending(sessionId: string, input: { workerId: string; leadSessionId: string }): AutoBridgeState {
     const previous = autoBridge.get(sessionId);
@@ -525,88 +569,93 @@ export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamServic
       };
     }
 
-    let acceptedSnapshot: {
-      previousStatus: OrcaWorkerStatus;
-      previousPending: AutoBridgeState | undefined;
-    } | undefined;
-    let currentPending: AutoBridgeState | undefined;
-    const rollbackAccepted = async (): Promise<void> => {
-      if (!acceptedSnapshot) return;
-      await rollbackAcceptedDispatchState({
-        sessionId: params.targetSessionId,
-        worker: target,
-        previousStatus: acceptedSnapshot.previousStatus,
-        currentPending,
-        previousPending: acceptedSnapshot.previousPending,
-      });
-    };
-
-    let result: DispatchWorkerMessageResult;
-    const wasLiveBeforeDispatch = deps.getLiveSession(target.sessionId) !== null;
+    await reserveWorkerDispatch(target.id);
     try {
-      if ((target.status === 'idle' || target.status === 'done') && !wasLiveBeforeDispatch) {
-        await deps.resumeWorkerSession(target, link);
+      let acceptedSnapshot: {
+        previousStatus: OrcaWorkerStatus;
+        previousPending: AutoBridgeState | undefined;
+      } | undefined;
+      let currentPending: AutoBridgeState | undefined;
+      const rollbackAccepted = async (): Promise<void> => {
+        if (!acceptedSnapshot) return;
+        await rollbackAcceptedDispatchState({
+          sessionId: params.targetSessionId,
+          worker: target,
+          previousStatus: acceptedSnapshot.previousStatus,
+          currentPending,
+          previousPending: acceptedSnapshot.previousPending,
+        });
+      };
+
+      let result: DispatchWorkerMessageResult;
+      const wasLiveBeforeDispatch = deps.getLiveSession(target.sessionId) !== null;
+      try {
+        if ((target.status === 'idle' || target.status === 'done') && !wasLiveBeforeDispatch) {
+          await deps.resumeWorkerSession(target, link);
+        }
+        result = await deps.dispatchWorkerMessage({
+          targetSessionId: params.targetSessionId,
+          message: params.message,
+          workerId: link.workerId,
+          dispatchMeta: params.dispatchMeta,
+          onAccepted: async () => {
+            const currentWorkers = await deps.listWorkersByLead(link.leadSessionId);
+            const currentWorker = currentWorkers.find((worker) => worker.id === target.id);
+            const previousPending = autoBridge.get(params.targetSessionId);
+            acceptedSnapshot = {
+              previousStatus: currentWorker?.status ?? target.status,
+              previousPending,
+            };
+            await deps.updateWorkerStatus(target.id, 'running');
+            deps.broadcastOrcaWorkerChanged(link.leadSessionId);
+            currentPending = setPending(params.targetSessionId, {
+              workerId: target.id,
+              leadSessionId: link.leadSessionId,
+            });
+            await markPendingReady(params.targetSessionId, currentPending);
+          },
+          onAcceptedRollback: rollbackAccepted,
+        });
+      } catch (err) {
+        await rollbackAccepted();
+        return {
+          dispatched: false,
+          dispatchOutcome: dispatchFailureFromThrown(err, params.dispatchMeta),
+        };
       }
-      result = await deps.dispatchWorkerMessage({
-        targetSessionId: params.targetSessionId,
-        message: params.message,
-        workerId: link.workerId,
-        dispatchMeta: params.dispatchMeta,
-        onAccepted: async () => {
-          const currentWorkers = await deps.listWorkersByLead(link.leadSessionId);
-          const currentWorker = currentWorkers.find((worker) => worker.id === target.id);
-          const previousPending = autoBridge.get(params.targetSessionId);
-          acceptedSnapshot = {
-            previousStatus: currentWorker?.status ?? target.status,
-            previousPending,
-          };
-          await deps.updateWorkerStatus(target.id, 'running');
-          deps.broadcastOrcaWorkerChanged(link.leadSessionId);
-          currentPending = setPending(params.targetSessionId, {
-            workerId: target.id,
-            leadSessionId: link.leadSessionId,
-          });
-          await markPendingReady(params.targetSessionId, currentPending);
-        },
-        onAcceptedRollback: rollbackAccepted,
-      });
-    } catch (err) {
-      await rollbackAccepted();
-      return {
-        dispatched: false,
-        dispatchOutcome: dispatchFailureFromThrown(err, params.dispatchMeta),
-      };
-    }
 
-    if (!result.ok) {
-      await rollbackAccepted();
-      return {
-        dispatched: false,
-        dispatchOutcome: result.dispatchOutcome,
-      };
-    }
+      if (!result.ok) {
+        await rollbackAccepted();
+        return {
+          dispatched: false,
+          dispatchOutcome: result.dispatchOutcome,
+        };
+      }
 
-    if (result.mode === 'queued') {
+      if (result.mode === 'queued') {
+        return {
+          dispatched: false,
+          queued: true,
+          dispatchOutcome: result.dispatchOutcome as CollabDispatchQueuedOutcome,
+          agentKind: target.session.agentKind,
+          wakeKind: 'queued',
+          targetTitle: result.targetTitle ?? target.session.title,
+          targetLastUserSendAt: result.targetLastUserSendAt,
+          queuedMessageId: result.clientId,
+        };
+      }
+
       return {
-        dispatched: false,
-        queued: true,
-        dispatchOutcome: result.dispatchOutcome as CollabDispatchQueuedOutcome,
+        dispatched: true,
+        dispatchOutcome: result.dispatchOutcome as CollabDispatchSuccessOutcome,
         agentKind: target.session.agentKind,
-        wakeKind: 'queued',
+        wakeKind: wasLiveBeforeDispatch ? 'already-active' : 'resumed',
         targetTitle: result.targetTitle ?? target.session.title,
         targetLastUserSendAt: result.targetLastUserSendAt,
-        queuedMessageId: result.clientId,
       };
+    } finally {
+      await releaseWorkerDispatch(target.id);
     }
-
-    return {
-      dispatched: true,
-      dispatchOutcome: result.dispatchOutcome as CollabDispatchSuccessOutcome,
-      agentKind: target.session.agentKind,
-      wakeKind: wasLiveBeforeDispatch ? 'already-active' : 'resumed',
-      targetTitle: result.targetTitle ?? target.session.title,
-      targetLastUserSendAt: result.targetLastUserSendAt,
-    };
   }
 
   async function sendToWorker(params: {
@@ -649,19 +698,103 @@ export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamServic
     };
   }
 
-  async function idleWorker(params: { callerLeadSessionId: string; workerId: string }): Promise<OrcaOkResult> {
+  async function idleWorker(params: { callerLeadSessionId: string; workerId: string; expectedStatus?: 'done' }): Promise<OrcaOkResult> {
     const found = await resolveWorkerRef(params.callerLeadSessionId, params.workerId);
     if (!found.ok) return workerRefFailureForControl(params.workerId, found);
-    const { link, worker } = found;
-    if (worker.status === 'idle') {
-      return { ok: false, errorCode: 'ALREADY_IDLE', message: `worker ${params.workerId} is already idle` };
-    }
 
-    clearRuntimeState(worker.sessionId);
-    await deps.markWorkerIdle(worker.id);
-    await closeWorkerSessionBestEffort(worker.sessionId, 'idleWorker');
-    deps.broadcastOrcaWorkerChanged(link.leadSessionId);
-    return { ok: true, workerId: worker.id };
+    const performIdle = async (
+      current: Extract<Awaited<ReturnType<typeof resolveWorkerRef>>, { ok: true }>,
+    ): Promise<OrcaOkResult> => {
+      const { link, worker } = current;
+      if (params.expectedStatus && worker.status !== params.expectedStatus) {
+        return {
+          ok: false,
+          errorCode: 'WORKER_STATE_CHANGED',
+          message: `worker ${params.workerId} is ${worker.status}, expected ${params.expectedStatus}`,
+        };
+      }
+      if (worker.status === 'idle') {
+        return { ok: false, errorCode: 'ALREADY_IDLE', message: `worker ${params.workerId} is already idle` };
+      }
+      if (params.expectedStatus && deps.getLiveSession(worker.sessionId)?.isTurnRunning()) {
+        return {
+          ok: false,
+          errorCode: 'WORKER_STATE_CHANGED',
+          message: `worker ${params.workerId} has an active turn`,
+        };
+      }
+      if (params.expectedStatus && deps.hasSendToSessionLock(worker.sessionId)) {
+        return {
+          ok: false,
+          errorCode: 'WORKER_STATE_CHANGED',
+          message: `worker ${params.workerId} has a send in progress`,
+        };
+      }
+      if (params.expectedStatus && await deps.hasPendingWorkerInput(worker.sessionId)) {
+        return {
+          ok: false,
+          errorCode: 'WORKER_STATE_CHANGED',
+          message: `worker ${params.workerId} has queued input`,
+        };
+      }
+
+      const didIdle = params.expectedStatus
+        ? await deps.markWorkerIdleIfStatus(worker.id, params.expectedStatus)
+        : (await deps.markWorkerIdle(worker.id), true);
+      if (!didIdle) {
+        return {
+          ok: false,
+          errorCode: 'WORKER_STATE_CHANGED',
+          message: `worker ${params.workerId} is no longer ${params.expectedStatus}`,
+        };
+      }
+      const rollbackDoneAcknowledgement = async (): Promise<void> => {
+        await deps.restoreWorkerDoneIfIdle(worker.id);
+        deps.broadcastOrcaWorkerChanged(link.leadSessionId);
+      };
+      // Queue state can change while the DB CAS awaits I/O. Preserve newly queued
+      // follow-ups before close, then use Session.closeIfIdle for atomic send/close ordering.
+      if (params.expectedStatus && await deps.hasPendingWorkerInput(worker.sessionId)) {
+        await rollbackDoneAcknowledgement();
+        return {
+          ok: false,
+          errorCode: 'WORKER_STATE_CHANGED',
+          message: `worker ${params.workerId} has queued input`,
+        };
+      }
+      if (params.expectedStatus) {
+        const didClose = await closeWorkerSessionIfIdleBestEffort(worker.sessionId, 'idleWorker');
+        if (!didClose) {
+          await rollbackDoneAcknowledgement();
+          return {
+            ok: false,
+            errorCode: 'WORKER_STATE_CHANGED',
+            message: `worker ${params.workerId} has an active turn`,
+          };
+        }
+      }
+      clearRuntimeState(worker.sessionId);
+      if (!params.expectedStatus) {
+        await closeWorkerSessionBestEffort(worker.sessionId, 'idleWorker');
+      }
+      deps.broadcastOrcaWorkerChanged(link.leadSessionId);
+      return { ok: true, workerId: worker.id };
+    };
+
+    if (!params.expectedStatus) return performIdle(found);
+
+    return withWorkerTransition(found.worker.id, async () => {
+      if ((activeWorkerDispatches.get(found.worker.id) ?? 0) > 0) {
+        return {
+          ok: false,
+          errorCode: 'WORKER_STATE_CHANGED',
+          message: `worker ${params.workerId} has a dispatch in progress`,
+        };
+      }
+      const current = await resolveWorkerRef(params.callerLeadSessionId, params.workerId);
+      if (!current.ok) return workerRefFailureForControl(params.workerId, current);
+      return performIdle(current);
+    });
   }
 
   async function archiveWorker(params: { callerLeadSessionId: string; workerId: string }): Promise<OrcaOkResult> {
@@ -832,6 +965,18 @@ export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamServic
         sessionId,
         err: err instanceof Error ? err.message : String(err),
       });
+    }
+  }
+
+  async function closeWorkerSessionIfIdleBestEffort(sessionId: string, owner: string): Promise<boolean> {
+    try {
+      return await deps.closeWorkerSessionIfIdle(sessionId);
+    } catch (err) {
+      deps.log.warn(`${owner}: close idle worker session failed`, {
+        sessionId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+      return true;
     }
   }
 

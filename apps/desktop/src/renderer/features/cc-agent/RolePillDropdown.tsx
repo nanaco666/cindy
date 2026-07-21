@@ -466,8 +466,13 @@ function WorkerTabsList({
 
   useLayoutEffect(() => {
     if (!clearAttentionWhenVisible) return;
-    if (selectedWorkerId) clearWorkerAttention(selectedWorkerId);
-  }, [attention, clearAttentionWhenVisible, selectedWorkerId]);
+    if (
+      selectedWorkerId &&
+      workers.find((item) => item.workerId === selectedWorkerId)?.status !== 'done'
+    ) {
+      clearWorkerAttention(selectedWorkerId);
+    }
+  }, [attention, clearAttentionWhenVisible, selectedWorkerId, workers]);
 
   const updateScrollState = useCallback(() => {
     const element = scrollRef.current;
@@ -547,7 +552,6 @@ function WorkerTabsList({
                         : 'border-[var(--border-default)] bg-[var(--surface-chip)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]',
                   )}
                   onClick={() => {
-                    clearWorkerAttention(worker.workerId);
                     onSwitchFocus(worker.workerId);
                   }}
                 >
@@ -716,8 +720,13 @@ export function RolePillDropdown({
 
   useLayoutEffect(() => {
     if (!clearAttentionWhenVisible) return;
-    if (selectedWorkerId) clearWorkerAttention(selectedWorkerId);
-  }, [attention, clearAttentionWhenVisible, selectedWorkerId]);
+    if (
+      selectedWorkerId &&
+      workers.find((item) => item.workerId === selectedWorkerId)?.status !== 'done'
+    ) {
+      clearWorkerAttention(selectedWorkerId);
+    }
+  }, [attention, clearAttentionWhenVisible, selectedWorkerId, workers]);
 
   const clearHoverTimers = useCallback(() => {
     clearTimerRef(hoverOpenTimerRef);
@@ -881,7 +890,6 @@ export function RolePillDropdown({
                           : 'pl-4',
                     )}
                     onClick={() => {
-                      clearWorkerAttention(w.workerId);
                       onSwitchFocus(w.workerId);
                       closeDropdown();
                     }}

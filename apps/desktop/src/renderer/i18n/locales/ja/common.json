@@ -4650,7 +4650,13 @@
         "copyFailed": "コピーに失敗しました。手動でコピーしてください",
         "projectNotFound": "対応するプロジェクトが見つかりません。アーカイブされたか、このデバイスに存在しない可能性があります"
       },
-      "railUnreadHint": "新着メッセージあり"
+      "railUnreadHint": "新着メッセージあり",
+      "railNav": {
+        "pinned": "ピン留め",
+        "projects": "プロジェクト",
+        "dialogues": "チャット"
+      },
+      "railNavCount": "{{count}} 件の会話"
     },
     "rename": {
       "aiRename": "AIで名前を再生成",

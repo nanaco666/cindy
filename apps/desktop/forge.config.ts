@@ -632,8 +632,17 @@ function signPackagedExes(buildPath: string): void {
 
 /**
  * macOS 打包显示名(与 win32metadata 同构):packaged 后把
- * .app 的 Info.plist 里 CFBundleName / CFBundleDisplayName 改成 Cindy——
- * Dock 名、菜单栏粗体标题、Cmd+Tab、系统通知读的都是这两个字段。
+ * .app 的 Info.plist 里 CFBundleDisplayName 改成 Cindy——Dock 名、Cmd+Tab、
+ * Finder、系统通知读的都是它(显示优先级 CFBundleDisplayName > CFBundleName)。
+ *
+ * ⚠️ 绝不能改 CFBundleName:Electron 启动时用主 app 的 CFBundleName 拼
+ * `Frameworks/<CFBundleName> Helper.app` 查找 Helper(electron_main_delegate_mac.mm,
+ * 唯一 fallback 是 'Electron Helper.app'),而 Helper 目录名跟随 packager name
+ * (区域派生:cn 'Cindy' / global 'CindyGlobal' / dev 'CindyDev')。把
+ * CFBundleName 改成 Cindy 会让 global/dev 包启动即 FATAL
+ * "Unable to find helper app"(SIGTRAP;2026-07-21 dev region smoke 实踩)。
+ * 代价:菜单栏粗体标题取自 CFBundleName 且运行时改不了,global/dev 构建上
+ * 显示区域 exe 名而非 Cindy——cn(packager 已写 Cindy)不受影响,可接受。
  *
  * 为什么在 postPackage 改而不是 packagerConfig:electron-packager 在
  * updatePlistFiles 里先合并 extendInfo、后用 appName/executableName 覆写
@@ -644,9 +653,9 @@ function signPackagedExes(buildPath: string): void {
  * userData 均为 xdt-maker 系,这里是唯一的显示名来源)。2026-07-17 身份翻转后
  * cn 构建的 packager 本身就会把 CFBundleName/CFBundleDisplayName 写成 Cindy,
  * 对 cn 是冗余兜底;2026-07-18 双装支持后 global 构建的 packager name 是
- * 'CindyGlobal'(.app 目录名 / 标识符层),本步骤把 Dock 名、菜单栏粗体标题、
- * Cmd+Tab、系统通知的**显示层**统一拉回 Cindy(BRAND_NAME 两区共用)——对
- * global 不再冗余,是显示名的唯一来源。正式签名/公证在 release-macos.mjs 里
+ * 'CindyGlobal'(.app 目录名 / 标识符层),本步骤把 Dock 名、Cmd+Tab、
+ * 系统通知的**显示层**统一拉回 Cindy(BRAND_NAME 各区共用)——对
+ * global/dev 不再冗余,是显示名的唯一来源。正式签名/公证在 release-macos.mjs 里
  * 发生在 postPackage 之后,本改动会被签名一起封印,不存在破坏签名问题。
  */
 function applyMacPackagedDisplayName(buildPath: string, platform: string): void {
@@ -657,14 +666,15 @@ function applyMacPackagedDisplayName(buildPath: string, platform: string): void 
     if (!fs.existsSync(plistPath)) {
       throw new Error(`[forge:postPackage] Info.plist missing at ${plistPath}`);
     }
-    for (const key of ['CFBundleName', 'CFBundleDisplayName']) {
-      // packager 必写这两个键,Set 即可;Add 兜底防未来 packager 行为变化。
-      const set = spawnSync('/usr/libexec/PlistBuddy', ['-c', `Set :${key} Cindy`, plistPath]);
-      if (set.status !== 0) {
-        const add = spawnSync('/usr/libexec/PlistBuddy', ['-c', `Add :${key} string Cindy`, plistPath]);
-        if (add.status !== 0) {
-          throw new Error(`[forge:postPackage] PlistBuddy failed to set ${key} in ${plistPath}`);
-        }
+    // 只改 CFBundleDisplayName;CFBundleName 必须保持 packager name 原值,
+    // 否则 Electron 找不到 Helper app(见函数头 ⚠️)。
+    const key = 'CFBundleDisplayName';
+    // packager 必写该键,Set 即可;Add 兜底防未来 packager 行为变化。
+    const set = spawnSync('/usr/libexec/PlistBuddy', ['-c', `Set :${key} Cindy`, plistPath]);
+    if (set.status !== 0) {
+      const add = spawnSync('/usr/libexec/PlistBuddy', ['-c', `Add :${key} string Cindy`, plistPath]);
+      if (add.status !== 0) {
+        throw new Error(`[forge:postPackage] PlistBuddy failed to set ${key} in ${plistPath}`);
       }
     }
     console.log(`[forge:postPackage] mac display name → Cindy (${appDir}/Contents/Info.plist)`);
@@ -1052,11 +1062,12 @@ const config: ForgeConfig = {
     // 到 asar 外才能被 spawn / 动态加载。AutoUnpackNativesPlugin 只 unpack .node,
     // 所以这里显式覆盖 loudness / node-pty 整个目录。
     asar: { unpack: '**/{@img/{sharp-libvips-*,sharp-win32-*},loudness,native/sqlite-vec,node-pty}/**' },
-    // 打包名(out 目录 / mac .app 包名)按区域派生:不设的话 packager 回落
-    // package.json productName('Cindy'),global 的 .app 会与 cn 撞名(双装
-    // 时拖进 /Applications 直接覆盖)。mac 的 Dock/菜单栏**显示名**由
-    // postPackage 的 applyMacPackagedDisplayName 统一拉回 Cindy(显示层共用
-    // BRAND_NAME,标识符层分区域)。
+    // 打包名(out 目录 / mac .app 包名 / Helper 目录名 / 主 plist CFBundleName)
+    // 按区域派生:不设的话 packager 回落 package.json productName('Cindy'),
+    // global 的 .app 会与 cn 撞名(双装时拖进 /Applications 直接覆盖)。mac 的
+    // Dock/Cmd+Tab/通知**显示名**由 postPackage 的 applyMacPackagedDisplayName
+    // 经 CFBundleDisplayName 统一拉回 Cindy(显示层共用 BRAND_NAME,标识符层
+    // 分区域;CFBundleName 不可动,Electron 靠它找 Helper,见该函数注释)。
     name: CINDY_EXE,
     executableName: CINDY_EXE,
     // mac bundle id(与 Windows AUMID 同值,按区域派生;cn/global 是两个可并存

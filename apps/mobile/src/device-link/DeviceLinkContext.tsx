@@ -604,7 +604,7 @@ async function rebuildSessionSnapshot(
     remoteSessionStore.setLatestMessageWindow(sessionId, history.value);
   }
   if (pending.status === 'fulfilled' && Array.isArray(pending.value)) {
-    remoteSessionStore.setPendingInteractions(sessionId, pending.value);
+    remoteSessionStore.setPendingInteractions(sessionId, pending.value, { finalizeStreaming: true });
   }
   if (projection.status === 'fulfilled' && projection.value) {
     remoteSessionStore.setInputProjection(sessionId, projection.value);

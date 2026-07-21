@@ -1,94 +1,159 @@
-/**
- * turnActivity — IM 流式卡片过程展示的纯逻辑测试:
- * 工具标签格式化(文件 basename / Bash 截断 / MCP 名)、滚动窗口、
- * 渲染形态(状态行 + 引用块时间线 / writing 态 / 空活动零输出)。
- */
-import { describe, it, expect } from 'vitest';
+/** Live work preview parity and replay-safety tests for remote channels. */
+import { describe, expect, it } from 'vitest';
 
 import {
   createTurnActivity,
+  formatThinkingStep,
   formatToolStep,
+  markActivityWriting,
+  MAX_VISIBLE_STEPS,
+  pushThinkingStep,
   pushToolStep,
   renderActivity,
-  MAX_VISIBLE_STEPS,
 } from '../turnActivity';
 
-describe('formatToolStep — 工具标签', () => {
-  it('文件类工具取 basename', () => {
+describe('formatToolStep — shared friendly wording', () => {
+  it('humanizes files, searches, commands and Codex file changes', () => {
     expect(formatToolStep('Read', { file_path: '/a/b/slackRelay.ts' })).toBe(
-      'Read slackRelay.ts',
+      '读取 slackRelay.ts',
     );
-    expect(formatToolStep('Edit', { file_path: 'C:\\proj\\x.ts'.replace(/\\/g, '/') })).toBe(
-      'Edit x.ts',
+    expect(formatToolStep('Grep', { pattern: 'recordRoute' })).toBe('搜索 recordRoute');
+    expect(formatToolStep('exec', {
+      command: 'pnpm test',
+      commandActions: [{ type: 'unknown' }],
+    })).toBe('运行测试');
+    expect(formatToolStep('file_change', {
+      changes: [{ path: '/repo/src/app.ts', kind: { type: 'update' }, diff: '-a\n+b' }],
+    })).toBe('编辑 app.ts');
+  });
+
+  it('keeps only the friendly title in the compact row', () => {
+    expect(formatToolStep('Bash', {
+      command: 'rg -n useMemo src',
+      description: '搜索 useMemo 的使用位置',
+    })).toBe('搜索 useMemo 的使用位置');
+    expect(formatToolStep('mcp__lizi_feishu__read_by_url', {})).toBe(
+      '调用 lizi_feishu · read by url',
     );
-  });
-
-  it('Bash 命令压成单行并截断', () => {
-    const long = `pnpm vitest run ${'x'.repeat(100)}`;
-    const label = formatToolStep('Bash', { command: long });
-    expect(label.startsWith('Bash pnpm vitest run')).toBe(true);
-    expect(label.length).toBeLessThanOrEqual(64);
-    expect(label.endsWith('…')).toBe(true);
-    expect(formatToolStep('Bash', { command: 'echo a\n  echo b' })).toBe('Bash echo a echo b');
-  });
-
-  it('Grep/Glob 取 pattern, WebSearch 取 query, Task 取 description', () => {
-    expect(formatToolStep('Grep', { pattern: 'recordRoute' })).toBe('Grep recordRoute');
-    expect(formatToolStep('WebSearch', { query: 'slack rate limit' })).toBe(
-      'WebSearch slack rate limit',
-    );
-    expect(formatToolStep('Task', { description: '搜索单机约束' })).toBe('Task 搜索单机约束');
-  });
-
-  it('MCP 工具名 mcp__server__tool → server:tool', () => {
-    expect(formatToolStep('mcp__lizi_feishu__call_tool', {})).toBe('lizi_feishu:call_tool');
-  });
-
-  it('未知工具 / 取不到参数时只显示工具名', () => {
-    expect(formatToolStep('TodoWrite', { todos: [] })).toBe('TodoWrite');
-    expect(formatToolStep('Read', null)).toBe('Read');
   });
 });
 
-describe('pushToolStep — 滚动窗口', () => {
-  it('超过窗口上限时老步骤滚出, 总数保留', () => {
-    const a = createTurnActivity(0);
-    for (let i = 1; i <= MAX_VISIBLE_STEPS + 3; i++) {
-      pushToolStep(a, 'Grep', { pattern: `p${i}` });
+describe('thinking activity', () => {
+  it('removes paired markdown markers for Slack and collapses whitespace', () => {
+    expect(formatThinkingStep('**检查实现**\n\n读取 `app.ts`')).toBe('检查实现 读取 app.ts');
+    expect(formatThinkingStep('**正在检查')).toBe('正在检查');
+  });
+
+  it('updates one row across deltas/final instead of adding raw stream rows', () => {
+    const activity = createTurnActivity(0);
+    expect(pushThinkingStep(activity, {
+      stage: 'start',
+      blockId: 'thinking-1',
+      startedAt: 0,
+    })).toBe(false);
+    pushThinkingStep(activity, { stage: 'delta', blockId: 'thinking-1', text: '**检查' });
+    pushThinkingStep(activity, { stage: 'delta', blockId: 'thinking-1', text: '实现**' });
+    pushThinkingStep(activity, {
+      stage: 'final',
+      blockId: 'thinking-1',
+      text: '**检查实现**',
+    });
+
+    expect(activity.totalSteps).toBe(1);
+    expect(activity.recentSteps).toEqual([
+      { key: 'thinking:thinking-1', kind: 'thinking', label: '检查实现' },
+    ]);
+  });
+
+  it('does not expose redacted thinking', () => {
+    const activity = createTurnActivity(0);
+    expect(pushThinkingStep(activity, { stage: 'redacted', blockId: 'secret' })).toBe(false);
+    expect(activity.totalSteps).toBe(0);
+  });
+});
+
+describe('rolling window and replay de-duplication', () => {
+  it('keeps the latest five unique activities while retaining the total', () => {
+    const activity = createTurnActivity(0);
+    for (let index = 1; index <= MAX_VISIBLE_STEPS + 3; index += 1) {
+      pushToolStep(activity, 'Grep', { pattern: `p${index}` }, `tool-${index}`);
     }
-    expect(a.totalSteps).toBe(MAX_VISIBLE_STEPS + 3);
-    expect(a.recentSteps).toHaveLength(MAX_VISIBLE_STEPS);
-    expect(a.recentSteps[0]).toBe(`Grep p4`);
-    expect(a.recentSteps.at(-1)).toBe(`Grep p${MAX_VISIBLE_STEPS + 3}`);
+    expect(activity.totalSteps).toBe(MAX_VISIBLE_STEPS + 3);
+    expect(activity.recentSteps).toHaveLength(MAX_VISIBLE_STEPS);
+    expect(activity.recentSteps[0]?.label).toBe('搜索 p4');
+    expect(activity.recentSteps.at(-1)?.label).toBe(`搜索 p${MAX_VISIBLE_STEPS + 3}`);
+  });
+
+  it('ignores a repeated tool_use id even after its row rolled out', () => {
+    const activity = createTurnActivity(0);
+    pushToolStep(activity, 'Read', { file_path: '/repo/a.ts' }, 'read-a');
+    for (let index = 0; index < MAX_VISIBLE_STEPS; index += 1) {
+      pushToolStep(activity, 'Grep', { pattern: `p${index}` }, `grep-${index}`);
+    }
+    markActivityWriting(activity);
+    expect(pushToolStep(activity, 'Read', { file_path: '/repo/a.ts' }, 'read-a')).toBe(false);
+    expect(activity.totalSteps).toBe(MAX_VISIBLE_STEPS + 1);
+    expect(activity.recentSteps.some((step) => step.label === '读取 a.ts')).toBe(false);
+    expect(activity.writing).toBe(true);
+  });
+
+  it('keeps writing active when a replayed thought has already rolled out', () => {
+    const activity = createTurnActivity(0);
+    pushThinkingStep(activity, { stage: 'delta', blockId: 'old-thought', text: '先检查状态' });
+    for (let index = 0; index < MAX_VISIBLE_STEPS; index += 1) {
+      pushToolStep(activity, 'Grep', { pattern: `p${index}` }, `grep-${index}`);
+    }
+    markActivityWriting(activity);
+
+    expect(pushThinkingStep(activity, {
+      stage: 'final',
+      blockId: 'old-thought',
+      text: '先检查状态，再继续处理',
+    })).toBe(false);
+    expect(activity.writing).toBe(true);
+    expect(activity.recentSteps.some((step) => step.kind === 'thinking')).toBe(false);
+  });
+
+  it('keeps replay bookkeeping out of the serializable card state', () => {
+    const activity = createTurnActivity(0);
+    pushThinkingStep(activity, { stage: 'final', blockId: 't1', text: '检查状态' });
+    pushToolStep(activity, 'Read', { file_path: '/repo/a.ts' }, 'read-a');
+
+    expect(Object.keys(activity).sort()).toEqual([
+      'recentSteps',
+      'startedAt',
+      'totalSteps',
+      'writing',
+    ]);
+    expect(JSON.parse(JSON.stringify(activity))).toEqual(activity);
   });
 });
 
-describe('renderActivity — 渲染形态', () => {
-  it('无任何步骤 → 空串(纯文本快答不多一行)', () => {
-    expect(renderActivity(createTurnActivity(0), 1000, false)).toBe('');
-    expect(renderActivity(createTurnActivity(0), 1000, true)).toBe('');
+describe('renderActivity', () => {
+  it('renders the current activity without a redundant writing row', () => {
+    const activity = createTurnActivity(0);
+    pushThinkingStep(activity, { stage: 'final', blockId: 't1', text: '确认调用链' });
+    pushToolStep(activity, 'Read', { file_path: '/x/relay.ts' }, 'read-1');
+    expect(renderActivity(activity, 42_000).split('\n')).toEqual([
+      '⚙️ 工作中 · 2 项 · 42s',
+      '> ✓ ✦ 确认调用链',
+      '> ▸ 读取 relay.ts',
+    ]);
+
+    markActivityWriting(activity);
+    const writingView = renderActivity(activity, 90_000);
+    expect(writingView).toContain('⚙️ 工作中 · 2 项 · 1m30s');
+    expect(writingView).toContain('> ✓ 读取 relay.ts');
+    expect(writingView).not.toContain('正在书写回复');
+
+    // A later tool becomes current even though earlier progress text exists.
+    pushToolStep(activity, 'Bash', { command: 'pnpm test' }, 'test-1');
+    expect(renderActivity(activity, 91_000)).toContain('> ▸ 运行测试');
   });
 
-  it('工具阶段: 状态行带步数与耗时, 当前步标 ▸, 历史步标 ✓', () => {
-    const a = createTurnActivity(0);
-    pushToolStep(a, 'Read', { file_path: '/x/relay.ts' });
-    pushToolStep(a, 'Bash', { command: 'pnpm vitest run' });
-    const view = renderActivity(a, 42_000, false);
-    expect(view.split('\n')).toEqual([
-      '⚙️ 第 2 步 · 42s',
-      '> ✓ Read relay.ts',
-      '> ▸ Bash pnpm vitest run',
-    ]);
-  });
-
-  it('writing 态: 全部步骤标 ✓, 追加"正在书写回复"行;耗时分钟格式', () => {
-    const a = createTurnActivity(0);
-    pushToolStep(a, 'Read', { file_path: '/x/relay.ts' });
-    const view = renderActivity(a, 90_000, true);
-    expect(view.split('\n')).toEqual([
-      '⚙️ 第 1 步 · 1m30s',
-      '> ✓ Read relay.ts',
-      '> ▸ ✍️ 正在书写回复',
-    ]);
+  it('emits no chrome for a text-only quick answer', () => {
+    const activity = createTurnActivity(0);
+    markActivityWriting(activity);
+    expect(renderActivity(activity, 1_000)).toBe('');
   });
 });

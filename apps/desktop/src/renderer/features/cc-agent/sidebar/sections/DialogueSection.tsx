@@ -44,7 +44,7 @@ import {
   MENU_SUB_CONTENT_CLASS,
 } from '../menuStyles';
 
-type DialogueSortBy = 'recency' | 'time' | 'title';
+export type DialogueSortBy = 'recency' | 'time' | 'title';
 
 const DIALOGUE_SORT_OPTIONS: ReadonlyArray<{
   value: DialogueSortBy;
@@ -81,6 +81,10 @@ export interface DialogueSectionProps {
   projectOptions?: readonly FolderPickerOption[];
   onScheduleAction: (group: AutomationSessionGroup, action: AutomationScheduleAction) => void;
   onCreateDialogue: () => void;
+  /** 排序受控化:状态提升到 ExpandedView,折叠 rail 的对话面板与本段共用同一
+   *  排序(否则折叠后面板前 N 条与展开态刚排好的顺序不一致,codex review)。 */
+  sortBy: DialogueSortBy;
+  onSortByChange: (value: DialogueSortBy) => void;
 }
 
 function statusRank(session: Session): number {
@@ -89,7 +93,8 @@ function statusRank(session: Session): number {
   return 2;
 }
 
-function compareDialogueSessions(a: Session, b: Session, sortBy: DialogueSortBy): number {
+/** 导出给折叠 rail 的对话面板共用:面板行序必须与展开态该排序完全一致(codex review)。 */
+export function compareDialogueSessions(a: Session, b: Session, sortBy: DialogueSortBy): number {
   const status = statusRank(a) - statusRank(b);
   if (status !== 0) return status;
   if (sortBy === 'time') return sessionActivityMs(a) - sessionActivityMs(b);
@@ -122,9 +127,10 @@ export function DialogueSection({
   projectOptions,
   onScheduleAction,
   onCreateDialogue,
+  sortBy,
+  onSortByChange,
 }: DialogueSectionProps) {
   const { t } = useTranslation();
-  const [sortBy, setSortBy] = useState<DialogueSortBy>('recency');
   const [collapsed, setCollapsed] = useState(false);
   const sortedSessions = useMemo(
     () => sessions.slice().sort((a, b) => compareDialogueSessions(a, b, sortBy)),
@@ -215,7 +221,7 @@ export function DialogueSection({
                   {DIALOGUE_SORT_OPTIONS.map((option) => (
                     <DropdownMenuItem
                       key={option.value}
-                      onSelect={() => setSortBy(option.value)}
+                      onSelect={() => onSortByChange(option.value)}
                       className={MENU_ITEM_CLASS}
                     >
                       <span className="truncate">{t(option.labelKey)}</span>
