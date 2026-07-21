@@ -50,6 +50,17 @@ export async function getSnapshotSha(
   }
 }
 
+/** 读取尚未恢复过的会话快照；残留但已消费的 ref 不得再次 apply。 */
+export async function getRestorableSnapshotSha(
+  repoPath: string,
+  sessionId: string,
+): Promise<string | null> {
+  const sha = await getSnapshotSha(repoPath, sessionId);
+  if (!sha) return null;
+  const consumedSha = await getConsumedSnapshotSha(repoPath, sessionId);
+  return consumedSha === sha ? null : sha;
+}
+
 /**
  * 删除会话快照 ref（best-effort，ref 不存在 / git 失败都静默）。
  *

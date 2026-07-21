@@ -587,6 +587,9 @@ describe('maker SEND transaction', () => {
       }),
     ).rejects.toMatchObject({ code: 'SESSION_RUNNING' });
 
+    expect(deps.checkWorkDirExists).not.toHaveBeenCalled();
+    expect(deps.ensureRemoteReadyForSessionStart).not.toHaveBeenCalled();
+    expect(deps.synthesizeOrcaVendorOptionsFromDb).not.toHaveBeenCalled();
     expect(deps.withRehydrateCloseSuppressed).not.toHaveBeenCalled();
     expect(deps.bootstrapSession).not.toHaveBeenCalled();
     expect(deps.prepareSendUserMessage).not.toHaveBeenCalled();
