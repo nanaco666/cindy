@@ -326,16 +326,18 @@ export function AutomationSessionGroupItem({
             disabled={!latestSession}
             className="flex min-w-0 items-center gap-1.5 text-left disabled:cursor-default"
           >
-            {/* 引擎 logo(vendor mark)—— 与 SessionItem 左侧 SessionStatusIcon 同款,
-                承担 agent 身份识别(Claude=AA / Codex=六瓣)+ running 状态呼吸。分组
-                agentKind 取最新一条 run(同一 schedule 所有 run 走同一 agent),
-                缺失时退化为 'cc'。isRunning 只看最新那条,与其子行一致。 */}
-            <VendorIcon
-              vendor={latestSession?.agentKind === 'codex' ? 'codex' : 'cc'}
-              size={12}
-              running={isRunning}
-              colorClassName={hasActiveHidden ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}
-            />
+            {/* 引擎 logo(vendor mark)——复用 SessionItem 左侧 15px 定宽槽与尺寸规则,
+                保证自动任务组头和普通会话的首图标落在同一列。分组 agentKind 取
+                最新一条 run(同一 schedule 所有 run 走同一 agent),缺失时退化为
+                'cc'。isRunning 只看最新那条,与其子行一致。 */}
+            <span className="flex w-[15px] shrink-0 items-center justify-center">
+              <VendorIcon
+                vendor={latestSession?.agentKind === 'codex' ? 'codex' : 'cc'}
+                size={latestSession?.agentKind === 'codex' ? 12 : 13}
+                running={isRunning}
+                colorClassName={hasActiveHidden ? 'text-[var(--sidebar-item-active-foreground)]' : undefined}
+              />
+            </span>
             {/* Clock 点击跳自动化页对应条目。宿主已是 title <button>,不能嵌套
                 button,用 span role="button" + stopPropagation 拦下行点击。 */}
             <span
