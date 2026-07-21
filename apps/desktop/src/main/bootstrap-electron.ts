@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, protocol, safeStorage, screen, session, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, protocol, safeStorage, screen, session, shell, Tray } from 'electron';
 import { resolveVibrancyConfig } from './vibrancyConfig';
 import { applyVibrancyToSecondaryWindows } from './secondary-windows';
 import path from 'node:path';
@@ -392,8 +392,16 @@ import { CURRENT_APP_ID } from '../shared/brandRegion.js';
 import {
   readWindowBehaviorSettings,
   writeSwallowActivationClick,
+  writeWindowsCloseBehavior,
 } from './window-behavior-settings-store.js';
-import { WINDOW_BEHAVIOR_SET_SWALLOW_ACTIVATION_CLICK_CHANNEL } from '../shared/windowBehavior.js';
+import {
+  isWindowsCloseBehavior,
+  WINDOW_BEHAVIOR_CHOOSE_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
+  WINDOW_BEHAVIOR_GET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
+  WINDOW_BEHAVIOR_SET_SWALLOW_ACTIVATION_CLICK_CHANNEL,
+  WINDOW_BEHAVIOR_SET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
+  type WindowsCloseBehavior,
+} from '../shared/windowBehavior.js';
 import { getDesktopCommandRegistry, registerBuiltinDesktopCommands } from './commands/index.js';
 import { registerRemoteCmdIpc } from './commands/remoteCmdIpc.js';
 import {
@@ -1273,6 +1281,7 @@ ipcMain.handle('app-menu:set-locale', (_event, locale: unknown): { ok: true } =>
   if (mainWindow) {
     installApplicationMenu(mainWindow, currentApplicationMenuLocale);
   }
+  updateWindowsTrayMenu();
   getAgentIslandService()?.refreshLocalization();
   return { ok: true };
 });
@@ -1364,8 +1373,96 @@ const updatePresentationRecovery = isUpdateRelaunchCandidate
 // 直接 show 回来,renderer 不重新加载。Cmd+Q / before-quit 时把这个标志置 true,
 // 让窗口 close handler 放行真正的销毁。
 let isQuitting = false;
+let windowsTray: Tray | null = null;
+
+function getOrPromptWindowsCloseBehavior(parentWindow?: BrowserWindow): WindowsCloseBehavior {
+  const configured = readWindowBehaviorSettings().windowsCloseBehavior;
+  if (configured) return configured;
+
+  const options = {
+    type: 'question' as const,
+    title: t('settings.windowBehavior.closePrompt.title'),
+    message: t('settings.windowBehavior.closePrompt.message'),
+    detail: t('settings.windowBehavior.closePrompt.detail'),
+    buttons: [
+      t('settings.windowBehavior.closeBehavior.tray'),
+      t('settings.windowBehavior.closeBehavior.quit'),
+    ],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  };
+  const choice = parentWindow
+    ? dialog.showMessageBoxSync(parentWindow, options)
+    : dialog.showMessageBoxSync(options);
+  const behavior: WindowsCloseBehavior = choice === 1 ? 'quit' : 'tray';
+  writeWindowsCloseBehavior(behavior);
+  return behavior;
+}
+
+function updateWindowsTrayMenu(): void {
+  if (!windowsTray || windowsTray.isDestroyed()) return;
+  windowsTray.setContextMenu(
+    Menu.buildFromTemplate([
+      {
+        label: t('settings.windowBehavior.trayMenu.show'),
+        click: () => focusMainWindow(),
+      },
+      { type: 'separator' },
+      {
+        label: t('settings.windowBehavior.trayMenu.quit'),
+        click: () => app.quit(),
+      },
+    ]),
+  );
+}
+
+function destroyWindowsTray(): void {
+  windowsTray?.destroy();
+  windowsTray = null;
+}
+
+function ensureWindowsTray(): boolean {
+  if (windowsTray && !windowsTray.isDestroyed()) {
+    updateWindowsTrayMenu();
+    return true;
+  }
+
+  try {
+    const iconPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'icon.png')
+      : path.join(__dirname, '../../resources/icon.png');
+    const icon = nativeImage.createFromPath(iconPath);
+    if (icon.isEmpty()) throw new Error(`tray icon is empty: ${iconPath}`);
+    windowsTray = new Tray(icon.resize({ width: 16, height: 16 }));
+    windowsTray.setToolTip(BRAND_NAME);
+    windowsTray.on('click', () => focusMainWindow());
+    updateWindowsTrayMenu();
+    return true;
+  } catch (err) {
+    createLogger('windows-tray').error('failed to create Windows tray icon', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    windowsTray = null;
+    return false;
+  }
+}
+
+function hideMainWindowToWindowsTray(mainWindow: BrowserWindow): void {
+  if (ensureWindowsTray()) {
+    mainWindow.hide();
+    return;
+  }
+  dialog.showMessageBoxSync(mainWindow, {
+    type: 'error',
+    title: t('settings.windowBehavior.trayError.title'),
+    message: t('settings.windowBehavior.trayError.message'),
+  });
+}
+
 app.on('before-quit', () => {
   isQuitting = true;
+  destroyWindowsTray();
   disposeUpdatePresentationRecovery();
 });
 
@@ -1770,10 +1867,18 @@ const createWindow = () => {
       }
       return;
     }
-    // Windows/Linux: system close paths (Alt+F4, taskbar close, WM_CLOSE) must
-    // quit the app. Otherwise a hidden prewarmed voice overlay can keep the
-    // process alive and hold the single-instance lock with no main window.
+    // Windows: first close asks once, then either quits or keeps the main window
+    // alive in the system tray. Linux keeps the historical quit behavior.
     event.preventDefault();
+    if (process.platform === 'win32') {
+      const behavior = getOrPromptWindowsCloseBehavior(mainWindow);
+      if (behavior === 'tray') {
+        hideMainWindowToWindowsTray(mainWindow);
+      } else {
+        app.quit();
+      }
+      return;
+    }
     app.quit();
   });
   void ensureMainAppPresence('main-window-created', mainWindow);
@@ -2144,8 +2249,8 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     return compactionWire();
   });
 
-  // Window behavior —— renderer 是 UI 和 Windows JS swallow 的运行时事实标准,
-  // main 只负责持久化到 userData 供下次 macOS acceptFirstMouse 使用。SET-only。
+  // Window behavior —— swallowActivationClick 保持 renderer 运行时事实标准;
+  // Windows close behavior 由 main 读写并执行。
   ipcMain.handle(
     WINDOW_BEHAVIOR_SET_SWALLOW_ACTIVATION_CLICK_CHANNEL,
     async (_e, enabled: unknown) => {
@@ -2156,6 +2261,25 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       return { ok: true as const };
     },
   );
+  ipcMain.handle(WINDOW_BEHAVIOR_GET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL, async () => {
+    return readWindowBehaviorSettings().windowsCloseBehavior;
+  });
+  ipcMain.handle(
+    WINDOW_BEHAVIOR_SET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
+    async (_e, behavior: unknown) => {
+      if (!isWindowsCloseBehavior(behavior)) {
+        throwIpcError('INVALID_PARAMS', 'Windows close behavior required (quit|tray)');
+      }
+      writeWindowsCloseBehavior(behavior);
+      if (behavior === 'quit') destroyWindowsTray();
+      return behavior;
+    },
+  );
+  ipcMain.handle(WINDOW_BEHAVIOR_CHOOSE_WINDOWS_CLOSE_BEHAVIOR_CHANNEL, async (event) => {
+    if (process.platform !== 'win32') return 'quit' satisfies WindowsCloseBehavior;
+    const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+    return getOrPromptWindowsCloseBehavior(parentWindow);
+  });
 
   // LSP Beta 开关 IPC —— 同 compat-mode 模式:
   // GET 给 renderer 启动期同步 localStorage 镜像; SET 落 JSON 文件 + 更新 cache,
@@ -2394,6 +2518,10 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
   ipcMain.on('window-close', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win || win === mainWindowRef) {
+      if (process.platform === 'win32' && win) {
+        win.close();
+        return;
+      }
       app.quit();
       return;
     }

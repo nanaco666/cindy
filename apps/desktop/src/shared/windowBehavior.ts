@@ -1,7 +1,7 @@
 /**
  * windowBehavior — 窗口交互行为相关的 IPC 通道 & 常量。
  *
- * 目前只承载一个开关:后台窗口首次左键点击是否吞掉。
+ * 承载后台窗口点击行为和 Windows 主窗口关闭行为。
  *
  * Windows 上此开关由 renderer 层的 `swallowActivationClick.ts` 用 localStorage
  * 同步读取,toggle 即时生效。macOS 上因为等效能力(`acceptFirstMouse: false`)
@@ -12,3 +12,16 @@
 
 export const WINDOW_BEHAVIOR_SET_SWALLOW_ACTIVATION_CLICK_CHANNEL =
   'window-behavior:set-swallow-activation-click';
+
+export type WindowsCloseBehavior = 'quit' | 'tray';
+
+export const WINDOW_BEHAVIOR_GET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL =
+  'window-behavior:get-windows-close-behavior';
+export const WINDOW_BEHAVIOR_SET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL =
+  'window-behavior:set-windows-close-behavior';
+export const WINDOW_BEHAVIOR_CHOOSE_WINDOWS_CLOSE_BEHAVIOR_CHANNEL =
+  'window-behavior:choose-windows-close-behavior';
+
+export function isWindowsCloseBehavior(value: unknown): value is WindowsCloseBehavior {
+  return value === 'quit' || value === 'tray';
+}

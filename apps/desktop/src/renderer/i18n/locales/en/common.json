@@ -409,6 +409,26 @@
     },
     "windowBehavior": {
       "title": "App Behavior",
+      "closeBehavior": {
+        "label": "When closing the main window",
+        "hint": "You will be asked the first time. You can change the choice here later.",
+        "aria": "Choose what happens when the main window closes",
+        "tray": "Minimize to tray",
+        "quit": "Quit Cindy"
+      },
+      "closePrompt": {
+        "title": "Close Cindy",
+        "message": "What should happen when you close the main window?",
+        "detail": "Tasks keep running when Cindy is minimized to the system tray. You can change this later in Settings."
+      },
+      "trayMenu": {
+        "show": "Open Cindy",
+        "quit": "Quit Cindy"
+      },
+      "trayError": {
+        "title": "Could not minimize to tray",
+        "message": "The system tray icon could not be created, so the window will stay open."
+      },
       "swallowActivationClickLabel": "First left-click on a background window only activates, doesn't fall through",
       "swallowActivationClickHint": "When on, the first left-click that brings the window back from background only raises it — page buttons don't fire and no text is selected.\nTurn off to continue working with a single click (better for dual-monitor setups), at the cost of possibly triggering buttons unintentionally.",
       "swallowActivationClickAria": "Toggle whether the first left-click on a background window is swallowed",
