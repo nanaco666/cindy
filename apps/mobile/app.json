@@ -17,7 +17,7 @@
     "ios": {
       "bundleIdentifier": "com.xd.cindycn",
       "usesAppleSignIn": true,
-      "buildNumber": "2026071901",
+      "buildNumber": "2026072104",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "UISupportedInterfaceOrientations": [
@@ -54,6 +54,16 @@
       "./plugins/with-third-party-notices",
       "./plugins/with-google-signin-modular-headers",
       "./plugins/with-wechat-opensdk-modulemap",
+      "./plugins/with-android-splash-no-icon",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#DF0C27",
+          "dark": {
+            "backgroundColor": "#DF0C27"
+          }
+        }
+      ],
       "expo-router",
       "expo-apple-authentication",
       "expo-secure-store",

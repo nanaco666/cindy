@@ -92,6 +92,7 @@ describe('WorkerThreadTransport', () => {
           content TEXT NOT NULL,
           tool_use_id TEXT,
           agent_meta TEXT,
+          agent_kind TEXT,
           created_at INTEGER NOT NULL,
           rewind_at INTEGER
         )`,

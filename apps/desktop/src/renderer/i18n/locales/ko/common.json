@@ -409,6 +409,26 @@
     },
     "windowBehavior": {
       "title": "앱 동작",
+      "closeBehavior": {
+        "label": "기본 창을 닫을 때",
+        "hint": "처음 닫을 때 묻습니다. 나중에 여기에서 변경할 수 있습니다.",
+        "aria": "기본 창을 닫을 때 동작 선택",
+        "tray": "트레이로 최소화",
+        "quit": "Cindy 종료"
+      },
+      "closePrompt": {
+        "title": "Cindy 닫기",
+        "message": "기본 창을 닫을 때 어떻게 할까요?",
+        "detail": "시스템 트레이로 최소화하면 작업이 계속 실행됩니다. 나중에 설정에서 변경할 수 있습니다."
+      },
+      "trayMenu": {
+        "show": "Cindy 열기",
+        "quit": "Cindy 종료"
+      },
+      "trayError": {
+        "title": "트레이로 최소화할 수 없음",
+        "message": "시스템 트레이 아이콘을 만들지 못해 창을 열린 상태로 유지합니다."
+      },
       "swallowActivationClickLabel": "백그라운드 창을 처음 왼쪽 클릭할 때 활성화만 하고 페이지로 전달하지 않기",
       "swallowActivationClickHint": "켜져 있으면 백그라운드에서 돌아온 첫 왼쪽 클릭은 창을 앞으로 가져오기만 하며, 페이지 버튼이 눌리거나 텍스트가 선택되지 않습니다.\n끄면 한 번의 클릭으로 바로 작업을 이어갈 수 있어 듀얼 모니터 환경에서 편리하지만 버튼을 실수로 누를 수 있습니다.",
       "swallowActivationClickAria": "백그라운드 창에 대한 첫 왼쪽 클릭을 삼킬지 여부 전환",
@@ -1016,10 +1036,6 @@
         "rotateSuccess": "키를 교체했습니다",
         "rotateFailed": "교체에 실패했습니다. 나중에 다시 시도해 주세요"
       },
-      "addCustom": {
-        "title": "사용자 지정 제공자 추가",
-        "subtitle": "OpenAI / Anthropic 호환 모델 소스를 연결하세요. 설정은 로컬에 저장됩니다"
-      },
       "custom": {
         "tag": "사용자 지정",
         "editAria": "편집",
@@ -1127,8 +1143,14 @@
         "subscription": "구독",
         "subscriptionProduct": "{{product}} 구독",
         "noResults": "일치하는 모델 없음",
-        "expandAria": "모델 목록 펼치기",
-        "collapseAria": "모델 목록 접기"
+        "splitAdjust": "CLI별 조정",
+        "splitDone": "완료",
+        "capabilityNote": "{{agent}}에서는 사용 불가",
+        "divergedChip": "{{agent}}에서 숨김",
+        "refreshAria": "모델 목록 새로고침(추가만)",
+        "refreshAdded": "새 모델 {{count}}개를 발견했습니다",
+        "refreshNoNew": "모델 목록이 최신 상태입니다. 새 항목이 없습니다",
+        "refreshFailed": "모델 목록 새로고침에 실패했습니다. 잠시 후 다시 시도해 주세요"
       },
       "genericOAuth": {
         "subtitle": "구독 인증 로그인 (OAuth)",
@@ -1144,6 +1166,53 @@
           "confirm": "로그아웃",
           "cancel": "취소"
         }
+      },
+      "addProvider": "공급자 추가",
+      "detail": {
+        "singleAgentNote": "{{agent}} 전용",
+        "emptyModels": "인증하면 사용 가능한 모델이 자동으로 검색됩니다",
+        "emptyList": "왼쪽 아래 '공급자 추가'에서 첫 모델 소스를 연결하세요",
+        "emptyModelsConnected": "연결됨 — 사용 가능한 모델을 검색하는 중입니다. 계속 비어 있으면 잠시 후 다시 시도해 주세요."
+      },
+      "detect": {
+        "groupLabel": "이 기기에서 감지됨",
+        "action": "인증하기",
+        "hintLoggedIn": "{{cli}}이(가) 이 기기에 로그인되어 있습니다. 인증하여 바로 연결할 수 있습니다",
+        "hintInstalled": "이 기기에 {{cli}}이(가) 설치되어 있습니다"
+      },
+      "wizard": {
+        "title": "공급자 추가",
+        "titleWith": "추가 · {{name}}",
+        "closeAria": "닫기",
+        "stepPick": "공급자 선택",
+        "stepConnect": "연결",
+        "stepModels": "모델 선택",
+        "searchPlaceholder": "공급자 검색…",
+        "groupSubscription": "구독 인증 · 권장, API 키 불필요",
+        "groupApiKey": "API 키 공급자 · 프리셋은 카탈로그와 함께 업데이트",
+        "groupCustom": "사용자 지정",
+        "metaOAuth": "구독 인증",
+        "metaApiKey": "API 키",
+        "customTitle": "사용자 지정 엔드포인트",
+        "customMeta": "OpenAI / Anthropic 호환 모델 소스를 연결",
+        "pickHint": "인증 방식은 공급자 정의에 따라 결정됩니다. OAuth 엔드포인트와 기본 URL은 프리셋에 포함되어 직접 입력할 필요가 없습니다.",
+        "oauthDesc": "브라우저에서 구독 인증을 완료합니다. API 키가 필요 없습니다",
+        "authorizedToast": "{{name}}에 연결되었습니다",
+        "authorizeFailed": "{{name}} 인증에 실패했습니다. 다시 시도해 주세요",
+        "nameLabel": "표시 이름",
+        "onlyAgentNote": "이 공급자는 {{agent}}만 지원합니다",
+        "docsLink": "연동 문서 보기",
+        "fetching": "연결을 확인하고 모델 목록을 가져오는 중…",
+        "fetchFailed": "모델 목록을 가져오지 못했습니다. 프리셋 추천 모델로 추가를 완료한 뒤 나중에 상세에서 새로고침할 수 있습니다",
+        "recommended": "추천",
+        "modelsHint": "선택한 모델은 대화 모델 선택기에 표시되며 사용 가능한 모든 CLI에 동시에 적용됩니다. 공급자 상세에서 언제든지 조정할 수 있습니다.",
+        "noModelSelected": "모델을 하나 이상 선택해 주세요",
+        "createdToast": "{{name}}을(를) 추가했습니다",
+        "createFailed": "추가하지 못했습니다. 다시 시도해 주세요",
+        "next": "다음",
+        "back": "← 이전",
+        "finish": "추가 완료",
+        "cancel": "취소"
       }
     },
     "experimental": {
@@ -1176,6 +1245,7 @@
         "appIdLabel": "App ID",
         "ownerLabel": "Owner",
         "ownerWaiting": "첫 개인 메시지 바인딩 대기 중",
+        "reconnect": "Feishu 봇 다시 연결",
         "clear": "연동 해제"
       },
       "appIdLabel": "App ID",
@@ -1278,23 +1348,23 @@
       "title": "메모리",
       "description": "워크스페이스 단위 메모리를 구현합니다. 설정 변경 후에는 일반적으로 새 Session을 시작해야 적용됩니다. 메모리에 문제가 있다면 Reset하거나 끄세요.",
       "maker": {
-        "label": "Maker",
+        "label": "Cindy",
         "description": "동일 작업 디렉터리에서(Claude / Codex) 다중 Agent의 모든 Session 메모리를 실제로 공유합니다 (Beta 기능)",
-        "toggleAria": "Maker 메모리 전환",
-        "resetAria": "Maker 메모리 재설정",
+        "toggleAria": "Cindy 메모리 전환",
+        "resetAria": "Cindy 메모리 재설정",
         "resetConfirm": {
-          "title": "Maker 메모리를 재설정하시겠습니까?",
-          "description": "모든 프로젝트의 Maker 메모리를 영구적으로 삭제합니다(user-data 아래에 저장되며 리포지토리 안에는 없습니다). 이 작업은 취소할 수 없습니다.",
+          "title": "Cindy 메모리를 재설정하시겠습니까?",
+          "description": "모든 프로젝트의 Cindy 메모리를 영구적으로 삭제합니다(user-data 아래에 저장되며 리포지토리 안에는 없습니다). 이 작업은 취소할 수 없습니다.",
           "confirm": "재설정",
           "cancel": "취소"
         },
         "toast": {
-          "enabled": "Maker 메모리가 활성화되었습니다",
-          "disabled": "Maker 메모리가 비활성화되었습니다",
-          "toggleFailed": "Maker 메모리 전환 실패",
-          "resetSuccess_one": "Maker 메모리가 재설정되었습니다 — {{count}}개의 작업 디렉터리가 제거됨",
-          "resetSuccess_other": "Maker 메모리가 재설정되었습니다 — {{count}}개의 작업 디렉터리가 제거됨",
-          "resetFailed": "Maker 메모리 재설정 실패"
+          "enabled": "Cindy 메모리가 활성화되었습니다",
+          "disabled": "Cindy 메모리가 비활성화되었습니다",
+          "toggleFailed": "Cindy 메모리 전환 실패",
+          "resetSuccess_one": "Cindy 메모리가 재설정되었습니다 — {{count}}개의 작업 디렉터리가 제거됨",
+          "resetSuccess_other": "Cindy 메모리가 재설정되었습니다 — {{count}}개의 작업 디렉터리가 제거됨",
+          "resetFailed": "Cindy 메모리 재설정 실패"
         }
       },
       "agents": {
@@ -1387,6 +1457,7 @@
       "description": "사이드바에서 새 터미널 탭을 열 때 이 셸을 사용합니다.",
       "auto": "자동 선택",
       "autoWithTarget": "자동 선택 ({{target}})",
+      "unavailable": "{{shell}} (사용 불가)",
       "card": {
         "label": "기본 셸",
         "description": "기본값을 변경해도 새 터미널 탭에만 적용되며 기존 터미널은 영향을 받지 않습니다.",
@@ -1635,7 +1706,7 @@
           "description": "작업 스케줄링 — cron 반복 작업과 일회성 리마인더"
         },
         "memory": {
-          "name": "Maker 메모리",
+          "name": "Cindy 메모리",
           "description": "세션 간 컨텍스트를 유지하는 agent 공통 장기 메모리"
         },
         "xdt_helper": {
@@ -2034,6 +2105,15 @@
         "descriptionBuiltin": "패널과 기능이 제거됩니다. 내장 플러그인은 자동으로 되돌아오지 않으며, 언제든지 목록에서 복원할 수 있습니다.",
         "cancel": "취소"
       },
+      "setupGate": {
+        "title": "“{{name}}” 플러그인은 설정이 필요합니다",
+        "descriptionMissing": "사용하기 전에 다음 설정이 필요합니다: {{items}}. 지금 플러그인 설정을 열까요?",
+        "descriptionReauth": "계정 인증이 만료되었습니다: {{items}}. 다시 연결해야 사용할 수 있습니다. 지금 설정을 열까요?",
+        "configure": "설정 열기",
+        "cancel": "취소",
+        "anySeparator": " 또는 ",
+        "groupSeparator": ", "
+      },
       "toast": {
         "installed": "\"{{name}}\" 설치됨",
         "uninstalled": "\"{{name}}\" 제거됨",
@@ -2091,7 +2171,7 @@
         "networkSecretIdentity": "로그인 이메일을 자격 증명 \"{{name}}\"(으)로 사용합니다",
         "networkSecretIdentityDetail": "값은 로그인된 계정의 이메일에서 가져오며, 요청 시 호스트가 자동으로 파생하여 주입합니다. 입력할 필요가 없으며, 플러그인은 설정 화면에 현재 신원을 표시하기 위해 이 이메일을 읽을 수 있습니다.",
         "networkSecretOauth": "{{host}}에서 OAuth 인증을 진행하도록 안내합니다({{name}})",
-        "networkSecretOauthDetail": "인증 흐름과 모든 토큰은 호스트가 관리하며 플러그인 코드는 읽을 수 없습니다. 클라이언트 자격 증명은 플러그인 설정 페이지에서 직접 입력합니다. 아래는 요청되는 권한 범위(scopes) 원문이니 확인 후 허용하세요.",
+        "networkSecretOauthDetail": "인증 흐름과 모든 토큰은 호스트가 관리하며 플러그인 코드는 읽을 수 없습니다. 클라이언트 자격 증명은 이 플러그인의 상세 페이지에서 직접 입력합니다. 아래는 요청되는 권한 범위(scopes) 원문이니 확인 후 허용하세요.",
         "networkConnections": "내가 추가한 {{label}}에 연결 가능",
         "networkConnectionsDetail": "주소는 이 플러그인의 설정 화면에서 추가합니다. 새 주소를 추가할 때마다 확인이 필요하며, 입력한 자격 증명은 해당 주소에만 주입됩니다.",
         "codeDetailNetwork": "독립된 샌드박스에서 실행되며 파일에는 접근할 수 없습니다. 네트워크는 위에 표시된 도메인으로 제한되며 호스트가 대신 전송합니다.",
@@ -2566,6 +2646,10 @@
     "sessionCostLabel": "세션 {{cost}}",
     "codex": {
       "waiting": "Codex --",
+      "noUsageLabel": "아직 사용량 없음",
+      "noUsageDetail": "이 세션에는 아직 사용량이 없습니다.",
+      "unavailableLabel": "사용량을 사용할 수 없음",
+      "unavailableDetail": "사용량 데이터를 일시적으로 사용할 수 없습니다.",
       "waitingDetail": "Codex 사용량은 다음 턴이 완료된 후 업데이트됩니다.",
       "sessionTokensLine": "이 세션에서 {{tokens}} token 사용",
       "sessionValueLabel": "세션 가치 {{cost}}",
@@ -3286,7 +3370,12 @@
         "budget": "할인형 GPT",
         "grok": "xAI",
         "google": "Google",
-        "china": "국내"
+        "china": "국내",
+        "image": "이미지",
+        "audio": "오디오·음성",
+        "video": "비디오",
+        "embedding": "임베딩",
+        "other": "기타"
       },
       "search": {
         "placeholder": "{{source}} 모델 검색...",
@@ -3306,6 +3395,9 @@
         "emptyTitle": "사용 가능한 소스 없음",
         "emptyDesc": "현재 모델을 지원하는 소스를 연결하면 선택할 수 있습니다",
         "disconnected": "연결 끊김"
+      },
+      "agentSwitch": {
+        "hint": "{{agent}}(으)로 전환한 후 사용할 모델을 선택하세요"
       }
     },
     "permissionSelector": {
@@ -3490,6 +3582,18 @@
         "overflowDescription": "이 세션은 {{used}}의 컨텍스트를 사용 중이며, 대상 모델 창({{total}}, 약 {{pct}}%)을 초과합니다. 전환 후에는 응답과 압축이 모두 실패할 수 있습니다. 먼저 컨텍스트 링을 클릭해 세션을 압축하거나 새 세션에서 이 모델을 사용하세요. 그래도 전환하시겠습니까?",
         "confirmSwitch": "모델 전환 진행",
         "cancelSwitch": "전환 취소"
+      },
+      "agentSwitch": {
+        "engineNotReady": "엔진이 전환되었지만 새 엔진 시작에 실패했습니다. 메시지를 보낼 때 자동으로 재시도됩니다",
+        "failed": "엔진 전환 실패: 적용되지 않음",
+        "deferred": "전환 예약됨: 다음 메시지를 보낼 때 {{agent}} · {{model}}(으)로 전환됩니다",
+        "confirmation": {
+          "title": "Agent를 전환할까요?",
+          "description": "새 Agent 엔진은 인계 요약을 통해 이어지므로 추론 내용 등이 완벽하게 이어진다고 보장할 수 없습니다. 기존 엔진으로 다시 전환하면 해당 엔진의 세션을 계속 이어갈 수 있습니다. 전환 시 프롬프트 캐시가 한 번 중단되어 토큰 사용량이 늘어날 수 있습니다.",
+          "confirm": "Agent 전환",
+          "cancel": "현재 Agent 유지",
+          "dontShowAgain": "다음부터 표시하지 않기"
+        }
       }
     },
     "atMention": {
@@ -3983,6 +4087,12 @@
       },
       "autoResume": {
         "label": "연결이 중단되어 자동으로 재개되었습니다"
+      },
+      "agentSwitch": {
+        "label": "{{from}}에서 {{to}}(으)로 전환됨",
+        "toggleHint": "인계 내용 보기",
+        "handoffTitle": "인계 내용——전환 시 새 엔진에 전송된 컨텍스트 요약(메시지에는 표시되지 않음)",
+        "resumedBadge": "세션 재개됨"
       }
     },
     "markdownRenderer": {
@@ -4026,13 +4136,18 @@
     },
     "userMessage": {
       "attachmentPrefix": "첨부: ",
+      "saveAttachmentAs": "첨부 파일 {{name}} 다른 이름으로 저장",
+      "attachmentSaved": "첨부 파일 {{name}} 저장됨",
+      "attachmentSavedUnsupported": "첨부 파일 {{name}} 저장됨. 현재 플랫폼에서는 이 파일 형식을 직접 사용하지 못할 수 있습니다",
+      "attachmentSaveForbidden": "원본 경로를 신뢰할 수 없어 첨부 파일을 저장할 수 없습니다",
+      "attachmentSourceMissing": "원본 파일이 더 이상 존재하지 않아 첨부 파일을 저장할 수 없습니다",
+      "attachmentSaveFailed": "첨부 파일을 저장할 수 없습니다. 대상 폴더 권한을 확인한 후 다시 시도하세요",
       "automationSent": "자동화 작업에서 보냄",
       "automationSentNamed": "자동화 작업 \"{{name}}\"에서 보냄",
       "automationViewTask": "자동화 작업 보기",
       "expandLongMessage": "전체 메시지 보기",
       "collapseLongMessage": "접기",
       "forkBusy": "현재 세션이 실행 중입니다. 종료된 후 분기하세요",
-      "rewindBusy": "현재 세션이 실행 중입니다. 종료된 후 되돌리세요",
       "editStopTimeout": "작업 중지 대기 시간이 초과되었습니다. 다시 시도하세요",
       "editQueueNotEmpty": "이 세션에 대기 중인 메시지가 있습니다. 먼저 전송하거나 제거한 후 편집하세요",
       "editNotLast": "세션에 더 새로운 메시지가 있어 이 메시지는 더 이상 최신이 아니므로 편집하여 재전송할 수 없습니다",
@@ -4041,8 +4156,10 @@
       "editSend": "전송",
       "editRollbackHint": "전송하면 이전 턴에서 변경된 파일 {{count}}개가 되돌려집니다",
       "forkErrors": {
+        "unsupportedHistory": "이 지점은 에이전트 전환 경계를 지나므로 분기할 수 없습니다",
         "noPriorAssistant": "AI 응답 뒤의 메시지에서 분기하세요",
         "sourceNeverRan": "원본 세션이 아직 실행되지 않아 분기할 수 없습니다",
+        "codexStateUnavailable": "Codex 세션 상태를 사용할 수 없어 분기할 수 없습니다. {{detail}}",
         "generic": "분기 실패, 다시 시도하세요"
       }
     },
@@ -4054,7 +4171,7 @@
       "noFilesToRollback": "롤백할 파일이 없습니다. 대화 기록만 잘립니다",
       "errors": {
         "noPriorAssistantPreview": "AI 응답 뒤의 질문에서 rewind 하세요(이전에 assistant 응답이 없습니다)",
-        "sessionRunning": "세션이 진행 중이라 되돌릴 수 없습니다",
+        "sessionRunning": "작업 중지 대기 시간이 초과되었습니다. 다시 되돌리세요",
         "noLiveQuery": "세션이 비활성 상태입니다 — 아무 메시지(예: \"ok\")라도 보내 SDK를 깨운 뒤 rewind 하세요",
         "noPriorAssistantCommit": "AI 응답 뒤의 질문에서 rewind 하세요",
         "commitGeneric": "rewind 실패, 다시 시도하세요",
@@ -4069,13 +4186,19 @@
         "continueWillTruncate": "계속해도 이후 대화는 잘립니다",
         "noPerFileDiff": "이 SDK 버전은 파일별 diff 미리보기를 지원하지 않습니다",
         "summaryDefault": "이 메시지 이후의 대화는 폐기되며, 작업 디렉터리의 {{count}}개 파일이 그 시점으로 되돌아갑니다.",
+        "summaryRunning": "실행 중인 작업을 중지하고 이 메시지 이후의 대화와 관련 파일 변경을 되돌립니다.",
         "summaryEmpty": "이 메시지 이후의 대화는 폐기됩니다. 파일은 변경되지 않았으며, 기록만 잘립니다.",
         "summaryEmptyWithNote": "이 메시지 이후의 대화는 폐기됩니다.",
+        "runningNotice": "작업이 아직 실행 중입니다. 확인하면 작업을 중지한 뒤 최신 상태를 기준으로 되돌립니다.",
+        "runningQueueNotice": "대기 중인 메시지는 일시 중지된 상태로 유지되며 자동 전송되지 않습니다.",
         "summaryPrefix": "총 {{count}}개 파일, ",
         "linesSuffix": "라인",
         "errorHint": "팁: 새 세션을 fork 하여 편집을 계속할 수 있습니다.",
         "cancel": "취소",
         "confirm": "되돌리기 확인",
+        "confirmRunning": "중지하고 되돌리기",
+        "rewinding": "되돌리는 중…",
+        "stoppingAndRewinding": "중지하고 되돌리는 중…",
         "acknowledge": "확인"
       }
     },
@@ -4528,7 +4651,13 @@
         "copyFailed": "복사에 실패했습니다. 수동으로 복사해주세요",
         "projectNotFound": "해당 프로젝트를 찾을 수 없습니다. 보관되었거나 이 기기에 없을 수 있습니다"
       },
-      "railUnreadHint": "새 메시지 대기 중"
+      "railUnreadHint": "새 메시지 대기 중",
+      "railNav": {
+        "pinned": "고정됨",
+        "projects": "프로젝트",
+        "dialogues": "대화"
+      },
+      "railNavCount": "세션 {{count}}개"
     },
     "rename": {
       "aiRename": "AI로 이름 다시 짓기",
@@ -4953,7 +5082,7 @@
         "script": "스크립트만 실행"
       },
       "script": {
-        "protocolSummary": "stdout에는 xdt-maker-script/1 형식의 완전한 JSON 객체를 한 줄씩(JSONL) 출력해야 합니다. type은 call 또는 complete만 사용할 수 있습니다. 일반 로그는 stderr에 기록하고 마지막에는 반드시 complete 프레임을 출력하세요.",
+        "protocolSummary": "stdout에는 cindy-script/1 형식의 완전한 JSON 객체를 한 줄씩(JSONL) 출력해야 합니다. type은 call 또는 complete만 사용할 수 있습니다. 일반 로그는 stderr에 기록하고 마지막에는 반드시 complete 프레임을 출력하세요.",
         "protocolCapabilities": "허용된 기능을 호출하려면 스크립트가 host가 stdin으로 보내는 start 및 call_result JSONL 프레임도 한 줄씩 읽고, 해당 호출 결과를 기다린 뒤 계속 진행하거나 complete를 출력해야 합니다.",
         "protocolExample": "기능을 호출하지 않는 최소 Python 예제 보기",
         "command": "스크립트 명령",
@@ -5390,7 +5519,7 @@
   },
   "issueAgent": {
     "command": {
-      "instruction": "{{appName}}에 피드백을 제출하고 싶습니다. 높은 품질의 GitHub issue로 정리하도록 도와주세요: 먼저 피드백 유형(버그 또는 기능 제안)을 확인하고 필요한 세부 정보(증상, 재현 단계 또는 사용 시나리오, 기대 동작)를 질문해 주세요. 정보가 충분해지면 lizi_xdt_helper의 call_tool로 submit_github_issue 도구를 호출해 제출해 주세요(category=feedback, 먼저 list_tools로 매개변수를 확인할 수 있습니다. 제출 전에 확인 카드가 표시됩니다). 제출에 실패하면 이유를 그대로 알려주세요.{{details}}",
+      "instruction": "{{appName}}에 피드백을 제출하고 싶습니다. 높은 품질의 GitHub issue로 정리하도록 도와주세요: 먼저 피드백 유형(버그 또는 기능 제안)을 확인하고 필요한 세부 정보(증상, 재현 단계 또는 사용 시나리오, 기대 동작)를 질문해 주세요. 정보가 충분해지면 cindy_helper의 call_tool로 submit_github_issue 도구를 호출해 제출해 주세요(category=feedback, 먼저 list_tools로 매개변수를 확인할 수 있습니다. 제출 전에 확인 카드가 표시됩니다). 제출에 실패하면 이유를 그대로 알려주세요.{{details}}",
       "detailsPrefix": "\n초기 설명: {{details}}"
     },
     "confirm": {
@@ -5442,6 +5571,7 @@
     "home": {
       "title": "스킬",
       "description": "로컬 스킬을 관리하거나 Skill Hub에서 새로운 스킬을 찾아 설치하세요.",
+      "descriptionLocalOnly": "이 기기에 설치된 로컬 스킬을 관리하세요.",
       "search": "스킬 검색",
       "clearSearch": "스킬 검색 지우기",
       "noSearchResults": "일치하는 스킬을 찾을 수 없습니다",
@@ -5992,6 +6122,8 @@
       "googleConnected": "Google에 연결됨",
       "codexConnected": "ChatGPT 계정 연결됨",
       "feishuBotConnected": "Feishu 봇에 연결됨",
+      "feishuBotReconnected": "Feishu 봇이 다시 연결됨",
+      "feishuBotReconnectFailed": "다시 연결하지 못했습니다. Feishu 구성을 확인한 후 다시 시도하세요",
       "feishuBotConflict": "이 App은 이미 사용 중입니다. 동료가 같은 App ID를 사용하고 있을 수 있습니다",
       "feishuBotConnectFailed": "연결 실패. App ID / Secret을 확인하세요",
       "feishuBotSaveFailed": "저장 실패: {{message}}",
@@ -6100,6 +6232,7 @@
       "customRolePredefinedError": "사용자 지정 역할에는 기본 역할 이름을 사용할 수 없습니다",
       "agentLabel": "Agent",
       "modelLabel": "모델",
+      "noAvailableModels": "사용 가능한 {{agent}} 모델이 없습니다. 설정에서 공급자 연결과 자격 증명을 확인하세요.",
       "effortLabel": "Effort",
       "initialTaskLabel": "초기 작업",
       "optional": "(선택)",

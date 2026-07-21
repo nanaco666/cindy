@@ -32,7 +32,7 @@ export async function confirmRenameSessionsForSession(req: {
     return {
       ok: false,
       errorCode: 'HOST_NOT_READY',
-      message: 'xdt-maker 主进程批量改名确认服务尚未就绪,请告知用户稍等几秒后重试。',
+      message: 'Cindy 主进程批量改名确认服务尚未就绪,请告知用户稍等几秒后重试。',
     };
   }
 

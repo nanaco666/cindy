@@ -235,4 +235,22 @@ describe('createResumeUpdateChecker 整包路径', () => {
     expect(bundle).toBe('error');
     expect(ota).toBe('up-to-date');
   });
+
+  it('channel 切换后旧检查迟到不再触发强更提示', async () => {
+    let current = true;
+    let release!: (value: unknown) => void;
+    const deps = makeDeps({
+      fetchLatest: vi.fn(() => new Promise((resolve) => { release = resolve; })),
+      isCurrent: () => current,
+    });
+    const checker = createResumeUpdateChecker(deps, { minIntervalMs: 0 });
+    deps.advance(1);
+    const pending = resume(checker);
+    expect(pending).not.toBeNull();
+    current = false;
+    release(latestRecord({ minVersion: '2.0.0' }));
+    const result = await pending!;
+    expect(result.bundle).toBe('skipped');
+    expect(deps.onForcedUpdate).not.toHaveBeenCalled();
+  });
 });

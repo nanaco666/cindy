@@ -33,6 +33,7 @@ export {
 } from './sessionRemovalRecycle';
 export {
   getWorktreeRestoreStatus,
+  restoreMissingManagedWorktreeForSession,
   restoreWorktreeForSession,
   type WorktreeRestoreStatus,
   type WorktreeRestoreResult,

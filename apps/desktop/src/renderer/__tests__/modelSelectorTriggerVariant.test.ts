@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Effort } from '@/lib/userPreferences.types';
 
-vi.mock('react-i18next', () => ({
+vi.mock('react-i18next', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('react-i18next')>()),
   useTranslation: () => ({
     t: (
       key: string,
@@ -38,36 +39,69 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('@/components/ui/popover', async () => {
   const React = await import('react');
-  const OpenContext = React.createContext(true);
+  const OpenContext = React.createContext<{
+    open: boolean;
+    onOpenChange?: (open: boolean) => void;
+  }>({ open: true });
   return {
-    Popover: ({ children, open }: { children: React.ReactNode; open?: boolean }) =>
-      React.createElement(OpenContext.Provider, { value: open ?? true }, children),
-    PopoverTrigger: ({ children }: { children: React.ReactNode }) => children,
+    Popover: ({
+      children,
+      open,
+      onOpenChange,
+    }: {
+      children: React.ReactNode;
+      open?: boolean;
+      onOpenChange?: (open: boolean) => void;
+    }) =>
+      React.createElement(
+        OpenContext.Provider,
+        { value: { open: open ?? true, onOpenChange } },
+        children,
+      ),
+    PopoverTrigger: ({ children }: { children: React.ReactNode }) => {
+      const state = React.useContext(OpenContext);
+      const child = children as React.ReactElement<{ onClick?: React.MouseEventHandler }>;
+      return React.cloneElement(child, {
+        onClick: (event) => {
+          child.props.onClick?.(event);
+          state.onOpenChange?.(!state.open);
+        },
+      });
+    },
     PopoverAnchor: ({ children }: { children: React.ReactNode }) => children,
     PopoverContent: ({
       children,
       className,
       align,
+      sideOffset,
       onPointerEnter,
       onPointerLeave,
     }: {
       children: React.ReactNode;
       className?: string;
       align?: 'start' | 'center' | 'end';
+      sideOffset?: number;
       onPointerEnter?: React.PointerEventHandler<HTMLDivElement>;
       onPointerLeave?: React.PointerEventHandler<HTMLDivElement>;
     }) => {
-      const open = React.useContext(OpenContext);
-      return open
+      const state = React.useContext(OpenContext);
+      return state.open
         ? React.createElement(
             'div',
             {
               className,
               'data-testid': 'model-options-popover',
               'data-align': align,
+              'data-side-offset': sideOffset,
               onPointerEnter,
               onPointerLeave,
             },
+            React.createElement('button', {
+              hidden: true,
+              type: 'button',
+              'data-testid': 'mock-popover-dismiss',
+              onClick: () => state.onOpenChange?.(false),
+            }),
             children,
           )
         : null;
@@ -121,7 +155,14 @@ vi.mock('@/hooks/useApiKey', () => ({
 }));
 
 vi.mock('@/hooks/useConnectedSource', () => ({
-  useConnectedSource: () => ({ hasConnectedSource: true, loading: false }),
+  useConnectedSource: (agent: string | null, modelId?: string) => ({
+    hasConnectedSource:
+      !agent ||
+      !modelId ||
+      (agent === 'claude-code' && modelId.startsWith('claude-')) ||
+      (agent === 'codex' && modelId === 'gpt-5.5'),
+    loading: false,
+  }),
 }));
 
 vi.mock('@/hooks/useModelPricing', () => ({
@@ -191,7 +232,7 @@ vi.mock('@/lib/providerModels', () => ({
   }: {
     agentKind: 'claude-code' | 'codex' | null;
   }) => agentKind ?? 'claude-code',
-  selectVisibleModels: () => [
+  selectVisibleModels: ({ agentKind }: { agentKind: 'claude-code' | 'codex' | null }) => [
     {
       id: 'claude-opus-4-8',
       displayName: 'Opus 4.8',
@@ -218,7 +259,18 @@ vi.mock('@/lib/providerModels', () => ({
       efforts: [],
       defaultEffort: null,
     },
-  ],
+    {
+      id: 'gpt-5.5',
+      displayName: 'GPT-5.5',
+      contextWindow: 400000,
+      efforts: ['low', 'medium', 'high'],
+      defaultEffort: 'medium',
+    },
+  ].filter((model) => {
+    if (agentKind === 'claude-code') return model.id.startsWith('claude-');
+    if (agentKind === 'codex') return model.id.startsWith('gpt-');
+    return true;
+  }),
 }));
 
 vi.mock('@/state/modelVisibilityPrefs', () => ({
@@ -239,8 +291,95 @@ import {
   ModelSelectorContent,
   modelEffortLabel,
 } from '@/components/new-chat/ModelSelector';
+import { makerChatStore } from '@/lib/makerChatStore';
 
 describe('ModelSelector trigger variants', () => {
+  it('shows the intent model and its default source after registering an agent switch', () => {
+    const sessionId = 'model-selector-agent-switch-intent';
+    providersRef.providers = [
+      {
+        id: 'anthropic',
+        name: 'Anthropic',
+        connected: true,
+        agents: ['claude-code'],
+        routing: { 'claude-code': {} },
+        models: {
+          'claude-code': [
+            {
+              id: 'claude-opus-4-8',
+              name: 'Opus 4.8',
+              contextWindow: 200000,
+              efforts: ['high'],
+              defaultEffort: 'high',
+            },
+          ],
+        },
+      },
+      {
+        id: 'zeta-codex',
+        name: 'Zeta Codex',
+        connected: true,
+        agents: ['codex'],
+        routing: { codex: {} },
+        models: {
+          codex: [
+            {
+              id: 'gpt-5.5',
+              name: 'GPT-5.5',
+              contextWindow: 400000,
+              efforts: ['medium'],
+              defaultEffort: 'medium',
+            },
+          ],
+        },
+      },
+    ];
+
+    function IntentTrigger({ refresh }: { refresh: number }) {
+      void refresh;
+      const lightState = React.useSyncExternalStore(
+        (onStoreChange) => makerChatStore.subscribeLight(sessionId, onStoreChange),
+        () => makerChatStore.getLightSnapshot(sessionId),
+      );
+      // 复刻 CCAgentSessionView(订阅轻快照决定 vendor) + ChatInput(直接读 intent
+      // 覆盖 model/provider)的组合窗口。refresh 模拟其它状态带来的无关重渲染。
+      const intent = makerChatStore.getAgentSwitchIntent(sessionId);
+      const displayAgent = lightState.agentSwitchIntent?.target ?? 'claude-code';
+      return React.createElement(ModelSelector, {
+        modelId: intent?.model ?? 'claude-opus-4-8',
+        effort: (intent?.effort ?? 'high') as Effort,
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: displayAgent === 'codex' ? 'codex' : 'cc',
+        currentProviderId: intent?.providerId ?? null,
+        onProviderChange: vi.fn(),
+        onNavigateToProviders: vi.fn(),
+      });
+    }
+
+    const view = render(React.createElement(IntentTrigger, { refresh: 0 }));
+    try {
+      act(() => {
+        makerChatStore.noteAgentSwitchIntent(sessionId, 'codex', {
+          model: 'gpt-5.5',
+          providerId: null,
+          effort: 'medium',
+        });
+      });
+      view.rerender(React.createElement(IntentTrigger, { refresh: 1 }));
+
+      const trigger = screen.getByRole('button', { name: /Current: GPT-5\.5/ });
+      expect(trigger.textContent).toContain('GPT-5.5');
+      // providerId=null 仍应按目标模型的默认可连来源解析 icon。
+      expect(trigger.textContent).toContain('Z');
+      expect(trigger.textContent).not.toContain('newChat.modelSelector.source.connect');
+    } finally {
+      view.unmount();
+      makerChatStore.purgeSession(sessionId);
+      providersRef.providers = providersRef.DEFAULT_PROVIDERS;
+    }
+  });
+
   it('renders the field trigger as a settings input and localizes effort before provider labels', () => {
     render(
       React.createElement(ModelSelector, {
@@ -352,6 +491,7 @@ describe('ModelSelector trigger variants', () => {
     fireEvent.pointerEnter(row);
     const options = screen.getByRole('group', { name: /Opus 4\.8/ });
     expect(screen.getByTestId('model-options-popover').getAttribute('data-align')).toBe('center');
+    expect(screen.getByTestId('model-options-popover').getAttribute('data-side-offset')).toBe('8');
     expect(options).toBeTruthy();
     expect(within(options).getByText('Most capable for ambitious work')).toBeTruthy();
     expect(within(options).getByText('Source: Anthropic')).toBeTruthy();
@@ -375,6 +515,10 @@ describe('ModelSelector trigger variants', () => {
 
     fireEvent.focus(row);
     expect(screen.getByRole('group', { name: /Opus 4\.8/ })).toBeTruthy();
+
+    // 列表滚动不派发 pointerleave,浮层会跟着滚出视口的锚点行跑到菜单外 → 用户滚动必须立即收起。
+    fireEvent.scroll(screen.getByRole('listbox', { name: 'Model list' }));
+    expect(screen.queryByRole('group', { name: /Opus 4\.8/ })).toBeNull();
     vi.useRealTimers();
   });
 
@@ -433,6 +577,147 @@ describe('ModelSelector trigger variants', () => {
 
     expect(setEffort).toHaveBeenCalledWith('claude-code', 'anthropic', 'claude-sonnet-4-6', 'high');
     expect(onProviderChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps target-agent provider rows and effort memory configurable while browsing Codex', async () => {
+    providersRef.providers = [
+      ...providersRef.DEFAULT_PROVIDERS,
+      {
+        id: 'zeta-codex',
+        name: 'Zeta Codex',
+        connected: true,
+        agents: ['codex'],
+        routing: { codex: {} },
+        models: {
+          codex: [
+            {
+              id: 'gpt-5.5',
+              name: 'GPT-5.5',
+              contextWindow: 400000,
+              efforts: ['low', 'medium', 'high'],
+              defaultEffort: 'medium',
+            },
+          ],
+        },
+      },
+    ];
+    const setEffort = vi.fn();
+    const confirmBrowseSwitch = vi.fn(async () => true);
+    const onSwitch = vi.fn();
+    const modelMemory = {
+      getEffort: vi.fn((agent: string, providerId: string, modelId: string) =>
+        agent === 'codex' && providerId === 'zeta-codex' && modelId === 'gpt-5.5'
+          ? 'high'
+          : undefined,
+      ),
+      setEffort,
+      getFast: vi.fn(),
+      setFast: vi.fn(),
+    };
+
+    try {
+      render(
+        React.createElement(ModelSelectorContent, {
+          modelId: 'claude-opus-4-8',
+          effort: 'medium',
+          onModelChange: vi.fn(),
+          onEffortChange: vi.fn(),
+          vendorKey: 'cc',
+          currentProviderId: 'anthropic',
+          onProviderChange: vi.fn(),
+          modelMemory,
+          agentSwitch: { currentVendor: 'cc', confirmBrowseSwitch, onSwitch },
+        }),
+      );
+
+      fireEvent.click(screen.getByRole('tab', { name: /Codex/ }));
+      const row = await screen.findByRole('option', { name: /GPT-5\.5/ });
+      expect(confirmBrowseSwitch).toHaveBeenCalledTimes(1);
+      // 来源 mark 存在说明目标 Agent 仍走 provider sections，而不是退化成 flat。
+      expect(row.textContent).toContain('Z');
+      // 行尾与悬浮面板同读目标 Agent 的 per-(来源,模型) 记忆，不落模型默认 medium。
+      expect(row.textContent).toContain('high');
+      expect(row.textContent).not.toContain('medium');
+
+      fireEvent.pointerEnter(row);
+      const options = screen.getByRole('group', { name: /GPT-5\.5/ });
+      expect(
+        within(options).getByRole('option', { name: 'high' }).getAttribute('aria-selected'),
+      ).toBe('true');
+      fireEvent.click(within(options).getByRole('option', { name: 'low' }));
+      expect(setEffort).toHaveBeenCalledWith('codex', 'zeta-codex', 'gpt-5.5', 'low');
+      expect(confirmBrowseSwitch).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(row);
+      expect(onSwitch).toHaveBeenCalledWith('codex', 'gpt-5.5', 'zeta-codex');
+      // 模型确认与意图期配置不再触发确认；确认门只在 Agent 分段切换。
+      expect(confirmBrowseSwitch).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(screen.getByRole('tab', { name: /Claude/ }));
+      await waitFor(() =>
+        expect(screen.getByRole('tab', { name: /Claude/ }).getAttribute('aria-selected')).toBe(
+          'true',
+        ),
+      );
+      // 返回当前引擎直接切分段，不重复确认。
+      expect(confirmBrowseSwitch).toHaveBeenCalledTimes(1);
+    } finally {
+      providersRef.providers = providersRef.DEFAULT_PROVIDERS;
+    }
+  });
+
+  it('keeps the current Agent tab when pre-browse confirmation is canceled', async () => {
+    const confirmBrowseSwitch = vi.fn(async () => false);
+    render(
+      React.createElement(ModelSelectorContent, {
+        modelId: 'claude-opus-4-8',
+        effort: 'high',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+        agentSwitch: { currentVendor: 'cc', confirmBrowseSwitch, onSwitch: vi.fn() },
+      }),
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Codex/ }));
+    await waitFor(() => expect(confirmBrowseSwitch).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('tab', { name: /Claude/ }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: /Codex/ }).getAttribute('aria-selected')).toBe('false');
+    expect(screen.queryByText('newChat.modelSelector.agentSwitch.hint')).toBeNull();
+  });
+
+  it('keeps the expanded model panel open while Agent browse confirmation is shown', async () => {
+    let resolveConfirmation!: (confirmed: boolean) => void;
+    const confirmBrowseSwitch = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveConfirmation = resolve;
+        }),
+    );
+    render(
+      React.createElement(ModelSelector, {
+        modelId: 'claude-opus-4-8',
+        effort: 'high',
+        onModelChange: vi.fn(),
+        onEffortChange: vi.fn(),
+        vendorKey: 'cc',
+        agentSwitch: { currentVendor: 'cc', confirmBrowseSwitch, onSwitch: vi.fn() },
+      }),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Current: Opus 4\.8/ }));
+    fireEvent.click(screen.getByRole('tab', { name: /Codex/ }));
+    await waitFor(() => expect(confirmBrowseSwitch).toHaveBeenCalledTimes(1));
+
+    // 模拟 AlertDialog 被 Popover 判成外部交互而发出的 close 请求；确认未结束时
+    // 面板仍留在原 Agent 页签，取消后也不发生关闭再打开的闪烁。
+    fireEvent.click(screen.getByTestId('mock-popover-dismiss'));
+    expect(screen.getByTestId('model-options-popover')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /Claude/ }).getAttribute('aria-selected')).toBe('true');
+
+    await act(async () => resolveConfirmation(false));
+    await waitFor(() => expect(screen.getByTestId('model-options-popover')).toBeTruthy());
+    expect(screen.getByRole('tab', { name: /Claude/ }).getAttribute('aria-selected')).toBe('true');
   });
 
   it('shares inactive model presets across conversations while protecting an active model', () => {

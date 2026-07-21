@@ -59,12 +59,15 @@ import {
 } from '../maker-host/codex-credential-switch.js';
 import { ensureDialogueWorkspaceDir } from '../localDb/dialogueWorkspace';
 import { wireSessionToIpc, isSessionInTurn, noteSilentStopUserSend, onSilentStopSettled } from '../maker-ipc/register.js';
+import { agentHandoffPending } from '../maker-ipc/agentHandoffPendingSingleton.js';
+import { prependHandoffToUserMessage } from '../maker-ipc/agentHandoff.js';
 import {
   sanitizeSendOutcomeError,
   toDesktopSessionDispatchOutcome,
   type SanitizedSendOutcomeError,
 } from '../maker-host/send-outcome.js';
 import { resolveWorkingDir } from './workdir-resolver';
+import { WorktreePool } from '../worktree';
 import type { SchedulerDrizzleDb } from './storage';
 import { backfillSessionMeta } from './runners/_shared';
 import { buildSkipResultText, executePreRunHook, formatPreRunHookFailure } from './pre-run-hook';
@@ -171,6 +174,8 @@ export interface MakerScheduleRunnerDeps {
   logger: Logger;
   beforeDispatchUserTurn?: (sessionId: string) => void | Promise<void>;
   onUndispatchedUserTurn?: (sessionId: string) => void;
+  /** heartbeat 直发前落实 deferred agent switch,并 bootstrap 新 live session。 */
+  applyPendingAgentSwitch?: (sessionId: string, signal?: AbortSignal) => Promise<void>;
   /** 可选:撞忙排队桥。未注入时心跳撞忙回退为顺延(deferFire)旧行为。 */
   schedulerQueue?: SchedulerQueueDeps;
 }
@@ -257,9 +262,14 @@ export class MakerScheduleRunner implements ScheduleRunner {
   async fire(schedule: Schedule, ctx: FireContext): Promise<FireResult> {
     const holder: EphemeralSessionHolder = {};
     try {
+      throwIfFireAborted(ctx.signal, 'runner entry');
       return await this.fireInner(schedule, ctx, holder);
     } finally {
-      if (holder.sessionId && !holder.keepAlive && !isSessionInTurn(holder.sessionId)) {
+      if (
+        holder.sessionId &&
+        !holder.keepAlive &&
+        (holder.closeOnAbort || !isSessionInTurn(holder.sessionId))
+      ) {
         try {
           await this.deps.maker.closeSession(holder.sessionId);
         } catch (err) {
@@ -268,6 +278,14 @@ export class MakerScheduleRunner implements ScheduleRunner {
             error: err instanceof Error ? err.message : String(err),
           });
         }
+      }
+      if (holder.worktreeSessionId && !holder.sessionId) {
+        await WorktreePool.releaseWorktree(holder.worktreeSessionId).catch((err) => {
+          this.deps.logger.warn?.('[runner] cancelled worktree release failed (non-fatal)', {
+            sessionId: holder.worktreeSessionId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
       }
     }
   }
@@ -378,6 +396,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
     let heartbeatWorkingDir: string | undefined;
     let heartbeatModel: string | undefined;
     let heartbeatEffort: string | undefined;
+    let heartbeatAgentKind: AgentKind | undefined;
     // 持续会话沿用 session 自己存的 fast 态（与 model 同源取 meta）。
     let heartbeatFastMode: boolean | undefined;
     // 持续会话当前选定的来源(供应商)id —— schedule.providerId 留空时沿用它
@@ -386,6 +405,11 @@ export class MakerScheduleRunner implements ScheduleRunner {
 
     // 2. heartbeat archived/missing 兜底
     if (isHeartbeat) {
+      // 直发路径不经过 makerSendTransaction。先落实 pending switch,再读取 meta/row,
+      // 才能让本轮 createSession 与 send 都指向切换后的 live engine。
+      throwIfFireAborted(ctx.signal, 'credential switch setup');
+      await this.deps.applyPendingAgentSwitch?.(sessionId, ctx.signal);
+      throwIfFireAborted(ctx.signal, 'credential switch setup');
       const [meta, row] = await Promise.all([
         this.deps.maker.getSessionMeta(sessionId).catch(() => null),
         getSessionRowSnapshot(sessionId),
@@ -458,12 +482,16 @@ export class MakerScheduleRunner implements ScheduleRunner {
         heartbeatWorkingDir = meta?.workDir;
         heartbeatModel = meta?.model;
         heartbeatEffort = meta?.effort;
+        heartbeatAgentKind = meta?.agentKind;
         heartbeatFastMode = meta?.fastMode;
         heartbeatProviderId = row?.providerId ?? null;
       }
     }
 
     // 3. workingDir 解析（heartbeat 模式不允许自己建 worktree —— 已有 session 的 workDir 是权威）
+    // The heartbeat metadata lookup above can take time.  Check again before
+    // allocating a dialogue directory or creating an ephemeral worktree.
+    throwIfFireAborted(ctx.signal, 'workspace allocation');
     let workingDir = isHeartbeat ? heartbeatWorkingDir : schedule.workingDir;
     // 未指定目录且不要 worktree → 回退 dialogue 语义(分配 app 管理的工作区)。
     // MCP/对话路径创建的任务经常不带 workingDir,而引擎 create() 默认
@@ -498,6 +526,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
         throw new Error(errMsg);
       }
       workingDir = wt.path;
+      holder.worktreeSessionId = wt.worktreeSessionId ?? sessionId;
     }
     if (!workingDir) {
       const errMsg = isHeartbeat
@@ -514,17 +543,20 @@ export class MakerScheduleRunner implements ScheduleRunner {
     // 都空时按 agentKind 兜底 (与 renderer schedulerFallbackModel 同源)，
     // 不留空字符串 — UI picker 显示 placeholder。
     // permissionMode: schedule 没字段，runner 强制 'bypassPermissions'（headless 唯一可行）。
+    const effectiveAgentKind = isHeartbeat
+      ? (heartbeatAgentKind ?? schedule.agentKind)
+      : schedule.agentKind;
     const rawModel = schedule.model?.trim()
       ? schedule.model
       : isHeartbeat
         ? heartbeatModel
         : undefined;
-    const model = rawModel?.trim() ? rawModel : defaultModelFor(schedule.agentKind);
+    const model = rawModel?.trim() ? rawModel : defaultModelFor(effectiveAgentKind);
     const permissionMode = defaultPermissionModeForSchedule();
     // fastMode 只对 codex 有意义（claude-code agent 忽略此字段）；Claude 恒不传，
     // 确保「不影响 Claude」。heartbeat 沿用 session meta 里的 fast 态，非 heartbeat 取 schedule。
     const fastMode =
-      schedule.agentKind === 'codex'
+      effectiveAgentKind === 'codex'
         ? isHeartbeat
           ? heartbeatFastMode
           : schedule.fastMode
@@ -556,18 +588,22 @@ export class MakerScheduleRunner implements ScheduleRunner {
           return this.failOrDeferSessionRunning(schedule, ctx, sessionId, true);
         }
         try {
+          throwIfFireAborted(ctx.signal, 'credential mode switch');
           if (liveSession.agentKind === 'codex') {
             await prepareLocalCodexCredentialModeSwitch({
               maker: this.deps.maker,
               isSessionInTurn,
+              signal: ctx.signal,
             });
           } else {
             await prepareLocalSessionCredentialModeSwitch({
               maker: this.deps.maker,
               sessionId,
               isSessionInTurn,
+              signal: ctx.signal,
             });
           }
+          throwIfFireAborted(ctx.signal, 'credential mode switch');
         } catch (err) {
           if (err instanceof CredentialModeSwitchBusyError) {
             return this.failOrDeferSessionRunning(schedule, ctx, sessionId, isHeartbeat);
@@ -585,11 +621,14 @@ export class MakerScheduleRunner implements ScheduleRunner {
         });
       }
     }
+    // The worktree path can also await filesystem work, so cancellation may
+    // have arrived after the preceding guard.  Never create a late session.
+    throwIfFireAborted(ctx.signal, 'session creation');
     let session: Awaited<ReturnType<Maker['createSession']>>;
     try {
       session = await this.deps.maker.createSession({
         id: sessionId,
-        agentKind: schedule.agentKind,
+        agentKind: effectiveAgentKind,
         workingDir,
         model,
         effort: schedule.effort as Effort | undefined,
@@ -761,7 +800,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
       owner: 'scheduler-host',
       entrypoint: 'scheduler-host.runner.fire',
       sessionId: session.id,
-      agentKind: schedule.agentKind,
+      agentKind: effectiveAgentKind,
       action: 'send-user-prompt',
       context: sendContext,
     } as const;
@@ -775,6 +814,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
       runId: ctx.runId,
     } as const;
     let baselineStarted = false;
+    let turnAccepted = false;
     try {
       // 落库放在 onAccepted(dispatch 前)是**刻意**的:落库失败即判 send 失败
       // (SchedulerOnAcceptedError → failed run),且错误信息脱敏(不泄露 prompt 原文),
@@ -785,10 +825,22 @@ export class MakerScheduleRunner implements ScheduleRunner {
       // 一条 agent 实际没收到的孤儿 scheduler 消息(顺延重试再落一条)。触发面极窄——
       // 常见心跳撞忙都走 B1 活跃礼让(在 send 之前 defer、不落库)或 137-guard(在
       // onAccepted 之前抛、不落库),都不会留孤儿;故接受现状不额外硬化。
-      const sendResult = await session.send({ type: 'user', content: promptToSend }, {
+      // session-agent-switch:本路径直发 session.send(不经 makerSendTransaction),
+      // 交接注入要自己接——切换后首条消息若是定时任务触发,新引擎同样需要交接
+      // 上下文,否则零上下文裸跑(2026-07-20 审计)。落库仍是 prompt 原文。
+      const pendingHandoff = await agentHandoffPending.peek(session.id);
+      const outgoingMessage = pendingHandoff
+        ? prependHandoffToUserMessage({ type: 'user', content: promptToSend }, pendingHandoff)
+        : { type: 'user' as const, content: promptToSend };
+      // session.abort() is best-effort when no turn has started yet.  The
+      // explicit guard prevents a cancellation racing the setup above from
+      // dispatching a new agent turn.
+      throwIfFireAborted(ctx.signal, 'agent turn dispatch');
+      const sendResult = await session.send(outgoingMessage as never, {
         origin,
         planMode: false,
         onAccepted: async () => {
+          turnAccepted = true;
           // turn 已被会话接受 → 此刻才落定 sessionId → 本轮 runId 反向映射(供按
           // session 静默解析)。在 send 被接受这一刻写,被 SESSION_RUNNING 拒的并发 run
           // 不会走到这里,因此不会覆盖/带走仍在执行的活跃 run 的映射(scheduler.ts P2)。
@@ -823,6 +875,15 @@ export class MakerScheduleRunner implements ScheduleRunner {
           });
         },
       });
+      if (pendingHandoff && sendResult.accepted) {
+        agentHandoffPending.consume(session.id);
+      }
+      // Session.send may report a cancelled-before-dispatch outcome instead of
+      // throwing.  Once the fire is aborted, preserve the abort path so the
+      // scheduler does not emit a spurious failure notification.  Consume a
+      // handoff first when the turn was accepted, so an aborted accepted send
+      // cannot replay the same handoff on the next fire.
+      throwIfFireAborted(ctx.signal, 'agent turn dispatch');
       const outcome = toDesktopSessionDispatchOutcome(sendResult, {
         source: 'scheduler-runner',
         context: sendContext,
@@ -845,6 +906,14 @@ export class MakerScheduleRunner implements ScheduleRunner {
       if (baselineStarted) {
         this.deps.onUndispatchedUserTurn?.(session.id);
         baselineStarted = false;
+      }
+      if (ctx.signal.aborted) {
+        waiter.stopListening();
+        ctx.signal.removeEventListener('abort', onAbort);
+        if (turnAccepted && !isHeartbeat && !schedule.persistentSession) {
+          holder.closeOnAbort = true;
+        }
+        throw err;
       }
       const normalized = normalizeSchedulerSendError(err);
       // B2 撞忙顺延:仅 heartbeat(复用 session)场景 —— session 正跑别的 turn
@@ -872,6 +941,9 @@ export class MakerScheduleRunner implements ScheduleRunner {
         await turnFinished;
       } catch (err) {
         runError = err instanceof Error ? err.message : String(err);
+        if (ctx.signal.aborted && turnAccepted && !isHeartbeat && !schedule.persistentSession) {
+          holder.closeOnAbort = true;
+        }
       }
     } else {
       waiter.stopListening();
@@ -1405,7 +1477,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
 export function buildSilentRunInstruction(): string {
   return [
     '\n\n---\n[Silent scheduled run]',
-    'Successful runs do not notify by default. If this run needs user attention, call lizi_scheduler call_tool({ name: "schedule_notify_current_run", args: {} }).',
+    'Successful runs do not notify by default. If this run needs user attention, call cindy_scheduler call_tool({ name: "schedule_notify_current_run", args: {} }).',
   ].join('');
 }
 
@@ -1417,12 +1489,34 @@ function extractErr(data: unknown): string {
 }
 
 /**
+ * Stops a cancelled run at a side-effect boundary. Scheduler derives the final
+ * run status from the signal; this guard prevents late session or turn creation
+ * after a delete/pause won the race.
+ */
+type FireAbortStage =
+  | 'runner entry'
+  | 'workspace allocation'
+  | 'session creation'
+  | 'agent turn dispatch'
+  | 'credential switch setup'
+  | 'credential mode switch';
+
+function throwIfFireAborted(signal: AbortSignal, stage: FireAbortStage): void {
+  if (signal.aborted) {
+    throw new Error(`schedule fire aborted before ${stage}`);
+  }
+}
+
+/**
  * fire → fireInner 之间传递「本次 fire 新建了哪个会话、要不要保活」的载体。
  * fireInner 在 createSession 成功后写入;fire 的 finally 读它做 ephemeral 收尾。
  * 用 per-call 对象而非实例字段:并发 fire(多任务同 tick 触发)互不串扰。
  */
 interface EphemeralSessionHolder {
   sessionId?: string;
+  /** force cleanup when an accepted ephemeral turn is aborted mid-dispatch */
+  closeOnAbort?: boolean;
+  worktreeSessionId?: string;
   /** true = heartbeat 复用会话或持续会话,收尾时不关闭。 */
   keepAlive?: boolean;
 }

@@ -27,7 +27,9 @@ import * as cindyMediaBlobStore from '../cindy-media/blobStore.js';
 import { ingestMedia } from '../cindy-media/ingest.js';
 import { createLogger } from '../logger.js';
 import { isAttachmentOssRef, parseAttachmentOssRef } from '../../shared/attachmentOssRef.js';
+import type { AttachmentIntegrity, AttachmentOssRef } from '../../shared/attachmentOssRef.js';
 import { downloadToFile, removeRemote } from '../device-link/mediaTransfer.js';
+import { throwIpcError } from '../utils/ipcValidate.js';
 
 const log = createLogger('maker-ipc/normalize');
 
@@ -43,7 +45,7 @@ const EXT_BY_MIME: Record<string, string> = {
 };
 
 function tempDirFor(sessionId: string): string {
-  return path.join(app.getPath('temp'), 'xdt-maker-attachments', sessionId);
+  return path.join(app.getPath('temp'), 'cindy-attachments', sessionId);
 }
 
 /** 在 session 临时目录下分配一个唯一文件路径(建目录,不写内容)。 */
@@ -80,9 +82,16 @@ type AttachmentBlock = {
   base64?: string;
   mimeType?: string;
 };
-type UserMessageShape =
-  | string
-  | { type: 'user'; content: string | RawBlock[] };
+type UserMessageShape = string | { type: 'user'; content: string | RawBlock[] };
+
+/** 旧引用没有完整性声明；新引用由共享 parser 保证 size/sha256 同时合法。 */
+function integrityForRef(ref: AttachmentOssRef): AttachmentIntegrity | undefined {
+  return ref.size === undefined ? undefined : { size: ref.size, sha256: ref.sha256! };
+}
+
+function isIntegrityMismatch(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AttachmentIntegrityError';
+}
 
 export async function normalizeUserMessage(
   sessionId: string,
@@ -101,22 +110,32 @@ export async function normalizeUserMessage(
     const block = { ...raw } as AttachmentBlock & { type: 'image' | 'file' };
 
     // 0) device-link 出方向 OSS 引用(控制端发来的附件)→ presign-get 下载物化到临时文件,
-    //    用后删 OSS。下载失败 → 丢该附件(turn 仍发出,降级而非崩;控制端上传失败才整条不发)。
+    //    用后删 OSS。新引用下载/校验失败 → 整条不发；旧引用保留历史的单附件降级语义。
     if (typeof block.path === 'string' && isAttachmentOssRef(block.path)) {
       const ref = parseAttachmentOssRef(block.path);
       if (!ref) {
-        log.warn('malformed oss attach ref, dropping attachment');
-        continue;
+        log.warn('malformed oss attach ref, rejecting message');
+        throwIpcError('DEVICE_LINK_MEDIA_TRANSFER_FAILED', '附件引用无效,请重新上传。');
       }
       try {
         // 流式下载到临时文件(不整 buffer 进内存,大附件也安全)。
         const dest = await ensureTempPath(sessionId, ref.mimeType ?? block.mimeType);
-        await downloadToFile(ref.ossKey, dest);
+        const integrity = integrityForRef(ref);
+        await downloadToFile(ref.ossKey, dest, integrity);
         block.path = dest;
         if (!block.mimeType && ref.mimeType) block.mimeType = ref.mimeType;
         void removeRemote(ref.ossKey); // 用后删(best-effort,不阻塞 turn)
       } catch (e) {
-        log.warn('oss attach download failed, dropping attachment', { error: String(e) });
+        log.warn('oss attach download failed', { error: String(e) });
+        if (isIntegrityMismatch(e)) void removeRemote(ref.ossKey);
+        // 新客户端声明了完整性时，任何下载/校验失败都必须阻止消息进入 agent；
+        // 旧引用继续保留历史降级语义，避免升级接收端破坏旧发送端行为。
+        if (ref.size !== undefined) {
+          throwIpcError(
+            'DEVICE_LINK_MEDIA_TRANSFER_FAILED',
+            e instanceof Error ? e.message : String(e),
+          );
+        }
         continue;
       }
       delete block.base64;
@@ -144,7 +163,10 @@ export async function normalizeUserMessage(
           block.mimeType = mimeType;
         }
       } catch (e) {
-        log.warn('xdt-image resolve failed, dropping attachment', { url: block.path, error: String(e) });
+        log.warn('xdt-image resolve failed, dropping attachment', {
+          url: block.path,
+          error: String(e),
+        });
         continue;
       }
     }
@@ -157,7 +179,10 @@ export async function normalizeUserMessage(
         block.path = absPath;
         if (!block.mimeType) block.mimeType = mimeType;
       } catch (e) {
-        log.warn('cindy-media resolve failed, dropping attachment', { url: block.path, error: String(e) });
+        log.warn('cindy-media resolve failed, dropping attachment', {
+          url: block.path,
+          error: String(e),
+        });
         continue;
       }
     }
@@ -221,8 +246,14 @@ function persistedContentNeedsMaterialize(json: string): boolean {
     const imgs = Array.isArray(p?.images) ? p.images : [];
     const fls = Array.isArray(p?.files) ? p.files : [];
     return (
-      imgs.some((im) => needsImageMaterialize(im && typeof im === 'object' ? (im as { url?: unknown }).url : undefined)) ||
-      fls.some((fl) => isOssRefField(fl && typeof fl === 'object' ? (fl as { path?: unknown }).path : undefined))
+      imgs.some((im) =>
+        needsImageMaterialize(
+          im && typeof im === 'object' ? (im as { url?: unknown }).url : undefined,
+        ),
+      ) ||
+      fls.some((fl) =>
+        isOssRefField(fl && typeof fl === 'object' ? (fl as { path?: unknown }).path : undefined),
+      )
     );
   } catch {
     return false;
@@ -252,7 +283,8 @@ async function materializePersistedContent(
     const out: unknown[] = [];
     for (const im of parsed.images) {
       const url = im && typeof im === 'object' ? (im as { url?: unknown }).url : undefined;
-      const mime = im && typeof im === 'object' ? (im as { mimeType?: unknown }).mimeType : undefined;
+      const mime =
+        im && typeof im === 'object' ? (im as { mimeType?: unknown }).mimeType : undefined;
       if (needsImageMaterialize(url)) {
         const m = await materialize(url, typeof mime === 'string' ? mime : undefined);
         if (m) {
@@ -290,8 +322,8 @@ async function materializePersistedContent(
  * 文件——每个 OSS 对象只下载一次(files[] 与 persistedContent 共用同一引用串 → 共用下载),物化完统一删 OSS。
  * 这样喂 agent 的 files[] 与落库的 persistedContent 都指向本地路径,被控端 reload 历史不再裂图。
  *
- * 无 OSS 引用(本机会话)→ 原样返回,零额外 IO。物化失败的单个附件保持原引用(normalizeUserMessage 会
- * 再试/丢弃),不阻断整条消息。OSS 删除放在 files[] + persistedContent 都物化之后,避免删早了另一副身取不到。
+ * 无 OSS 引用(本机会话)→ 原样返回,零额外 IO。旧引用物化失败维持历史降级；新引用失败直接阻止入队。
+ * OSS 删除放在 files[] + persistedContent 都物化之后,避免删早了另一副身取不到。
  */
 export async function materializeQueuedOssAttachments(
   sessionId: string,
@@ -307,7 +339,8 @@ export async function materializeQueuedOssAttachments(
       (f) =>
         !!f &&
         typeof f === 'object' &&
-        (isOssRefField((f as SerializedFileLike).url) || isOssRefField((f as SerializedFileLike).path)),
+        (isOssRefField((f as SerializedFileLike).url) ||
+          isOssRefField((f as SerializedFileLike).path)),
     ) ?? false;
   if (!filesHaveOss && !(pcStr && persistedContentNeedsMaterialize(pcStr))) return item; // 无需物化 → 原样
 
@@ -339,7 +372,10 @@ export async function materializeQueuedOssAttachments(
   // 流式下载 → 临时文件 → 媒体 mime 入总仓 / 非媒体(pdf/doc/.bin 等)拷进老
   // image cache(规则 25 边界:非媒体不进字节仓,该落地面待 xdt-file 决策后迁)。
   // 失败 → null(保留原引用,降级)。
-  const materialize = async (refStr: string, mimeHint?: string): Promise<MaterializedRef | null> => {
+  const materialize = async (
+    refStr: string,
+    mimeHint?: string,
+  ): Promise<MaterializedRef | null> => {
     const cached = byRef.get(refStr);
     if (cached) return cached;
     if (isLocalImagePathField(refStr)) {
@@ -356,11 +392,13 @@ export async function materializeQueuedOssAttachments(
       }
     }
     const ref = parseAttachmentOssRef(refStr);
-    if (!ref) return null;
+    if (!ref) {
+      throwIpcError('DEVICE_LINK_MEDIA_TRANSFER_FAILED', '附件引用无效,请重新上传。');
+    }
     let tmp: string | null = null;
     try {
       tmp = await ensureTempPath(sessionId, ref.mimeType ?? mimeHint);
-      await downloadToFile(ref.ossKey, tmp);
+      await downloadToFile(ref.ossKey, tmp, integrityForRef(ref));
       const mime = ref.mimeType ?? mimeHint;
       let entry: MaterializedRef;
       // 只收图片进总仓:ingestIntoBlobStore 是整读内存(readFile + sha256),
@@ -370,8 +408,14 @@ export async function materializeQueuedOssAttachments(
         entry = await ingestIntoBlobStore(tmp, mime);
       } else {
         // 非媒体附件维持老世界落地(存量路径,按迁移计划后续处理)。
-        const originalName = ref.originalName && ref.originalName.length > 0 ? ref.originalName : path.basename(tmp);
-        const { url } = await imageCacheStore.copyFromPath({ sessionId, sourcePath: tmp, originalName, lifecycle: 'committed' });
+        const originalName =
+          ref.originalName && ref.originalName.length > 0 ? ref.originalName : path.basename(tmp);
+        const { url } = await imageCacheStore.copyFromPath({
+          sessionId,
+          sourcePath: tmp,
+          originalName,
+          lifecycle: 'committed',
+        });
         entry = { url, absPath: imageCacheStore.resolveSafe(url).absPath };
       }
       byRef.set(refStr, entry);
@@ -379,6 +423,13 @@ export async function materializeQueuedOssAttachments(
       return entry;
     } catch (e) {
       log.warn('materialize queued oss attachment failed, leaving ref', { error: String(e) });
+      if (isIntegrityMismatch(e)) void removeRemote(ref.ossKey);
+      if (ref.size !== undefined) {
+        throwIpcError(
+          'DEVICE_LINK_MEDIA_TRANSFER_FAILED',
+          e instanceof Error ? e.message : String(e),
+        );
+      }
       return null;
     } finally {
       if (tmp) await fs.rm(tmp, { force: true }).catch(() => {}); // 持久副本已入仓/入缓存,临时件删掉
@@ -386,32 +437,39 @@ export async function materializeQueuedOssAttachments(
   };
 
   // files[]:顺序处理(让 byRef 去重对同一引用生效)。喂 agent 走托管 url(cindy-media:// 或老 xdt-image://,normalizeUserMessage 解析)。
-  let nextFiles: unknown = it.files;
-  if (files) {
-    const out: unknown[] = [];
-    for (const f of files) {
-      if (!f || typeof f !== 'object') {
-        out.push(f);
-        continue;
+  try {
+    let nextFiles: unknown = it.files;
+    if (files) {
+      const out: unknown[] = [];
+      for (const f of files) {
+        if (!f || typeof f !== 'object') {
+          out.push(f);
+          continue;
+        }
+        const sf = f as SerializedFileLike;
+        const refStr = isOssRefField(sf.url) ? sf.url : isOssRefField(sf.path) ? sf.path : null;
+        if (!refStr) {
+          out.push(f);
+          continue;
+        }
+        const m = await materialize(
+          refStr,
+          typeof sf.mimeType === 'string' ? sf.mimeType : undefined,
+        );
+        out.push(m ? { ...(f as object), url: m.url, path: m.absPath, base64: undefined } : f);
       }
-      const sf = f as SerializedFileLike;
-      const refStr = isOssRefField(sf.url) ? sf.url : isOssRefField(sf.path) ? sf.path : null;
-      if (!refStr) {
-        out.push(f);
-        continue;
-      }
-      const m = await materialize(refStr, typeof sf.mimeType === 'string' ? sf.mimeType : undefined);
-      out.push(m ? { ...(f as object), url: m.url, path: m.absPath, base64: undefined } : f);
+      nextFiles = out;
     }
-    nextFiles = out;
+
+    const nextPc: unknown = pcStr
+      ? await materializePersistedContent(pcStr, materialize)
+      : it.persistedContent;
+
+    // files[] 与 persistedContent 都物化完才删 OSS(每个 key 删一次,best-effort 不阻塞)。
+    return { ...(it as object), ...(files ? { files: nextFiles } : {}), persistedContent: nextPc };
+  } finally {
+    for (const k of ossKeys) void removeRemote(k);
   }
-
-  const nextPc: unknown = pcStr ? await materializePersistedContent(pcStr, materialize) : it.persistedContent;
-
-  // files[] 与 persistedContent 都物化完才删 OSS(每个 key 删一次,best-effort 不阻塞)。
-  for (const k of ossKeys) void removeRemote(k);
-
-  return { ...(it as object), ...(files ? { files: nextFiles } : {}), persistedContent: nextPc };
 }
 
 export async function cleanupSessionTempAttachments(sessionId: string): Promise<void> {

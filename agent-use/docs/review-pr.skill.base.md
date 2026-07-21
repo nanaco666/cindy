@@ -18,8 +18,8 @@ allowed-tools:
 {{/claude}}
   - mcp__lizi_feishu__list_tools
   - mcp__lizi_feishu__call_tool
-  - mcp__lizi_xdt_helper__list_tools
-  - mcp__lizi_xdt_helper__call_tool
+  - mcp__cindy_helper__list_tools
+  - mcp__cindy_helper__call_tool
 ---
 
 # review-pr — github.com PR 审查与合并
@@ -1001,7 +1001,7 @@ gate 通过后,再根据"总体判断"分流:
 
 **触发条件(判定已代码化)**:`auto.selfFix=true`(`context.mjs` 按 `selfFixAuthors` 判好,大小写不敏感)**且**卡点在作者侧——具体哪几个走向改道、哪几个照旧,见「候选批处理」的「selfFix 跟进修复」段;交互模式见下面「交互模式」。
 
-**投递机制**:handoff 走 Cindy 的会话投递工具(`mcp__lizi_xdt_helper__list_tools` 的 `handoff` 类目下的 `send_to_session`;对用户与汇总口径只说「跟进会话」,不暴露内部工具名)。绑定与去重的确定性判定全在 `fix-session-state.mjs`(状态文件 `.fix-sessions.json`,gitignored),你只管按下面顺序调:
+**投递机制**:handoff 走 Cindy 的会话投递工具(`mcp__cindy_helper__list_tools` 的 `handoff` 类目下的 `send_to_session`;对用户与汇总口径只说「跟进会话」,不暴露内部工具名)。绑定与去重的确定性判定全在 `fix-session-state.mjs`(状态文件 `.fix-sessions.json`,gitignored),你只管按下面顺序调:
 
 1. **拼卡点指纹**:`fp = "<headRefOid>|<卡点类别>"`——`headRefOid` 来自 `--scan` 输出的 `meta.headRefOid`;卡点类别用 `auto.action`,唯一例外是 review 审查不通过场景用 `review-failed`(区别于「进入审查」本身)。
 2. **查状态**:`node scripts/review-pr/fix-session-state.mjs get <PR> --fingerprint <fp>`:

@@ -1,7 +1,7 @@
 /**
  * 跨语言协议常驻验收:examples/script-automation 的权威 Python 客户端
  * (protocol.py / maker_client.py / demo.py)对接真实 ScriptScheduleRunner,
- * 锁住 xdt-maker-script/1 两端实现的兼容性(帧格式、UTF-8、stdout 纪律、
+ * 锁住 cindy-script/1 两端实现的兼容性(帧格式、UTF-8、stdout 纪律、
  * 能力降级)。协议或模板任何一端改动破坏兼容,这里先红。
  *
  * 机器上没有可用的 python 时整组 skip(不阻塞无 Python 的 CI 环境)。
@@ -36,7 +36,7 @@ function detectPython(): string | null {
 
 const PYTHON = detectPython();
 
-const tmp = mkdtempSync(path.join(tmpdir(), 'xdt-script-proto-'));
+const tmp = mkdtempSync(path.join(tmpdir(), 'cindy-script-proto-'));
 
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
 
@@ -71,7 +71,7 @@ function stubBroker(): ScriptCapabilityBroker {
   return {
     async call(request, granted: ReadonlySet<ScriptCapability>) {
       if (request.method === 'host.capabilities') {
-        return { protocol: 'xdt-maker-script/1', granted: [...granted].sort(), methods: [] };
+        return { protocol: 'cindy-script/1', granted: [...granted].sort(), methods: [] };
       }
       const need: Record<string, ScriptCapability> = {
         'jira.get': 'jira.read',
@@ -96,6 +96,42 @@ function stubBroker(): ScriptCapabilityBroker {
 }
 
 describe.skipIf(!PYTHON)('script automation python template (examples/script-automation)', () => {
+  it('uses the Cindy protocol with a current host and keeps the legacy protocol with an older host', () => {
+    cpSync(path.join(EXAMPLES_DIR, 'protocol.py'), path.join(tmp, 'protocol.py'));
+    const {
+      CINDY_SCRIPT_PROTOCOL: _cindyProtocol,
+      XDT_MAKER_SCRIPT_PROTOCOL: _legacyProtocol,
+      ...baseEnv
+    } = process.env;
+    const startFrame = `${JSON.stringify({
+      protocol: 'xdt-maker-script/1',
+      type: 'start',
+      context: {},
+    })}\n`;
+    const runClient = (env: NodeJS.ProcessEnv): Record<string, unknown> => {
+      const probe = spawnSync(
+        PYTHON!,
+        ['-c', 'from protocol import DuplexClient\nDuplexClient().emit_complete("ok")'],
+        {
+          cwd: tmp,
+          env: { ...baseEnv, ...env, PYTHONUTF8: '1' },
+          input: startFrame,
+          encoding: 'utf8',
+          windowsHide: true,
+          timeout: 10_000,
+        },
+      );
+      expect(probe.status, probe.stderr).toBe(0);
+      return JSON.parse(probe.stdout.trim()) as Record<string, unknown>;
+    };
+
+    expect(runClient({
+      CINDY_SCRIPT_PROTOCOL: '1',
+      XDT_MAKER_SCRIPT_PROTOCOL: '1',
+    }).protocol).toBe('cindy-script/1');
+    expect(runClient({ XDT_MAKER_SCRIPT_PROTOCOL: '1' }).protocol).toBe('xdt-maker-script/1');
+  });
+
   it('demo.py completes a full run: granted capability succeeds, denied one degrades', async () => {
     for (const file of ['protocol.py', 'maker_client.py', 'demo.py']) {
       cpSync(path.join(EXAMPLES_DIR, file), path.join(tmp, file));

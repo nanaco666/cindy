@@ -21,7 +21,7 @@
     "name": "Lizi",
     "email": "jiali@magiclizi.com"
   },
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "dependencies": {
     "@lizi/file-browser-core": "workspace:*"
   },

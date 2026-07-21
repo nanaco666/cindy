@@ -259,7 +259,17 @@ type MarketPageResult =
   | { success: true; items: MarketSkill[]; nextCursor: string | null }
   | { success: false; error?: string };
 
-export function useMarketList(initialVisibility: Visibility = 'available') {
+export function useMarketList(
+  initialVisibility: Visibility = 'available',
+  options?: {
+    /**
+     * false 时完全不发市场请求(items 保持空、loading 保持 false)。
+     * 供市场不可见的账号(见 lib/marketAccess.ts)跳过网络与骨架屏;翻回 true 后自动补拉。
+     */
+    enabled?: boolean;
+  },
+) {
+  const enabled = options?.enabled ?? true;
   const { t, i18n: i18next } = useTranslation();
   const [searchQuery, setSearchQueryState] = useState('');
   const [sortBy, setSortByState] = useState<SortBy>('updated_at');
@@ -446,7 +456,9 @@ export function useMarketList(initialVisibility: Visibility = 'available') {
   const reload = useCallback(() => setReloadTick((tick) => tick + 1), []);
 
   // sort/q/visibility/category 任一变化 → 重发请求,从第一页开始。
+  // enabled=false 时跳过(不可见账号不触网);翻回 true 时本效果重跑,自动补拉。
   useEffect(() => {
+    if (!enabled) return;
     void fetchPage({
       sort: sortBy,
       q: searchQuery,
@@ -454,7 +466,7 @@ export function useMarketList(initialVisibility: Visibility = 'available') {
       available: visibility === 'available',
       category: categoryFilter !== CATEGORY_ALL ? categoryFilter : undefined,
     });
-  }, [sortBy, searchQuery, visibility, categoryFilter, fetchPage, reloadTick]);
+  }, [enabled, sortBy, searchQuery, visibility, categoryFilter, fetchPage, reloadTick]);
 
   // 当本地扫描结果或 installing 集合变化时,只重新派生 cardState/installedVersion,不重发请求。
   // 依赖键用 (name, version, installing) 序列化字符串，避免对象引用变化导致每次都跑。

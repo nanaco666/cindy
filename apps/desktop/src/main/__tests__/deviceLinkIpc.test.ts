@@ -458,7 +458,7 @@ describe('device-link controller handlers', () => {
 
   it('invoke:出方向改写成功 → 改写后的 args 才发给 invoke', async () => {
     const invoke = vi.fn().mockResolvedValue({ ok: true, result: null });
-    const rewritten = ['s', { type: 'user', content: [{ type: 'image', path: 'xdt-oss-attach://m/xxx' }] }];
+    const rewritten = ['s', { type: 'user', content: [{ type: 'image', path: 'cindy-oss-attach://m/xxx' }] }];
     const deps = makeDeps({
       invoke,
       rewriteOutboundMedia: vi.fn().mockResolvedValue(rewritten),

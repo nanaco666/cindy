@@ -410,6 +410,15 @@ registerColor('update-btn-hover', {
   light: 'rgba(0, 0, 0, 0.04)',
   dark: 'rgba(255, 255, 255, 0.06)',
 }, 'Alpha-blended overlay — intentionally not an HSL token; needs transparency over variable backgrounds');
+// Fill background for the relaunch pill. Default themes keep the classic
+// transparent-outline White Pill (transparent → border+text define the shape);
+// E1D neutral themes (cindy) override this to a solid fill so the on-fill text
+// color (update-btn-text) has the intended contrast surface behind it. Non-HSL
+// raw value on purpose (needs a real `transparent`, not an HSL triple).
+registerColor('update-btn-bg', {
+  light: 'transparent',
+  dark: 'transparent',
+}, 'Relaunch pill fill — transparent (outline) by default, solid in E1D neutral themes');
 
 // Content area — Surface single-flat background per full-window rule
 registerColor('content-area', {
@@ -1232,7 +1241,9 @@ registerColor('settings-integration-avatar-bg', {
 }, 'Card on Card — neutral chip');
 registerColor('settings-integration-avatar-border', {
   light: '#e8e8e6',
-  dark: 'transparent',
+  // dark 不能用 transparent / border-default(#3c3c3a 与默认 chip bg 同色都不可见);
+  // 白色低透明度 hairline 叠在任意暗色主题的 chip 底上都能读出细边,无需各主题 override。
+  dark: 'rgba(255, 255, 255, 0.08)',
 }, 'Hairline');
 registerColor('settings-integration-avatar-icon', {
   light: 'var(--text-primary)',

@@ -196,7 +196,7 @@ describe('runInvoke voice:transcribe 拦截(手机语音输入)', () => {
       model: 'elevenlabs/scribe_v2',
       audioBytes: 1024,
     });
-    const req = { ossKey: 'xdt-maker/device-link/u/voice.m4a', mimeType: 'audio/mp4' };
+    const req = { ossKey: 'cindy/device-link/u/voice.m4a', mimeType: 'audio/mp4' };
     const r = await runInvoke('ctrl', {
       channel: 'device-link:voice:transcribe',
       args: [req],

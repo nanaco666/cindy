@@ -271,7 +271,7 @@ export function ScanResultDialog({ open, onClose, result }: ScanResultDialogProp
                   'h-[38px] px-[22px]',
                   'border',
                   'border-[var(--confirm-btn-secondary-border)] bg-[var(--cmd-palette-bg)]',
-                  'text-[var(--settings-btn-secondary-text)] hover:bg-[var(--update-btn-hover)]',
+                  'text-[var(--settings-btn-secondary-text)] hover:bg-[var(--surface-hover)]',
                 )}
               >
                 {copied ? <Check size={15} className="shrink-0" /> : <Copy size={15} className="shrink-0" />}

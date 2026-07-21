@@ -60,7 +60,7 @@ function sleep(ms) {
  */
 function classifyFeishu(status, code, msg) {
   if (code === 99991668 || code === 99991672 || status === 401) {
-    return '飞书授权已失效——请到本插件设置页重新点「连接账号」完成飞书授权(令牌平时由主机自动刷新,反复出现说明授权已被撤销或过期)';
+    return '飞书授权已失效——请到主界面侧边栏「插件」→「XD Feishu」详情页重新点「连接账号」完成飞书授权(令牌平时由主机自动刷新,反复出现说明授权已被撤销或过期)';
   }
   if (code === 99991400 || status === 429) {
     return '飞书接口限流,请稍后重试';

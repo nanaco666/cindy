@@ -1,6 +1,7 @@
 {
   "name": "mobile",
   "version": "1.0.0",
+  "license": "Apache-2.0",
   "main": "index.js",
   "dependencies": {
     "@cindy/auth-client": "workspace:*",
@@ -10,6 +11,7 @@
     "@lizi/maker-shared": "workspace:*",
     "@lizi/model-providers": "workspace:*",
     "@lizi/voice-input-core": "workspace:*",
+    "@noble/hashes": "^1.8.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-google-signin/google-signin": "16.1.2",
     "@types/pako": "^2.0.4",
@@ -36,6 +38,7 @@
     "expo-router": "^56.2.11",
     "expo-secure-store": "^56.0.4",
     "expo-sharing": "~56.0.18",
+    "expo-splash-screen": "~56.0.13",
     "expo-status-bar": "~56.0.4",
     "expo-updates": "~56.0.19",
     "expo-web-browser": "^56.0.5",
@@ -53,6 +56,7 @@
     "react-native-web": "^0.21.2",
     "react-native-webview": "13.16.1",
     "react-native-worklets": "0.8.3",
+    "xdt-ios-app-distribution": "file:./modules/xdt-ios-app-distribution",
     "xdt-mobile-realtime-audio": "file:./modules/xdt-mobile-realtime-audio",
     "xdt-tapdb": "file:./modules/xdt-tapdb",
     "xdt-wechat-login": "file:./modules/xdt-wechat-login"

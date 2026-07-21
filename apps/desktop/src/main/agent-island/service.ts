@@ -4,6 +4,7 @@ import { release as getOsRelease } from 'node:os';
 import { SESSION_ACTIVITY_CHANNEL } from '@lizi/device-link';
 import type { AgentEvent, InteractionDecision, InteractionRequest } from '@lizi/maker-core';
 import type { SchedulerEvent } from '@lizi/maker-scheduler';
+import { BRAND_NAME } from '@lizi/maker-shared/branding';
 import type { ApplicationMenuCommand } from '../../shared/applicationMenuCommands.js';
 
 import { hasSessionAttention as hasAppBadgeSessionAttention } from '../appBadgeService.js';
@@ -1471,9 +1472,14 @@ export class AgentIslandService {
     if (options.playSelectSound) {
       this.playConfiguredSound('select', Date.now());
     }
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
+    // Toggling the island sound is a background preference change. Keep the
+    // renderer command delivery, but do not interrupt the user's foreground
+    // app by restoring, showing, or focusing Cindy's main window.
+    if (command !== 'toggle-agent-island-sound') {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
     mainWindow.webContents.send('app-menu:command', command);
   }
 }
@@ -1531,6 +1537,7 @@ function collapseManualExpandedStateForInactiveDisplay(displayState: AgentIsland
 
 function buildAgentIslandStrings(): AgentIslandStrings {
   return {
+    appName: BRAND_NAME,
     newConversationTitle: t('agentIsland.native.newConversationTitle'),
     newConversationHint: t('agentIsland.native.newConversationHint'),
     muteSound: t('agentIsland.native.muteSound'),

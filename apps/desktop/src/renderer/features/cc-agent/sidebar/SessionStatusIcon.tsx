@@ -5,8 +5,8 @@
  * (SessionCard card 变体)」共用同一份逻辑,确保两处**完全一致**:
  *   - archived          → Archive 图标(vendor 已不重要)
  *   - attached(/ctr 接管中)→ RadioTower,优先级高于 running(接管期桌面被动观察)
- *   - orca-lead(协同)   → Puzzle
- *   - 其余              → VendorIcon(Claude=AA / Codex=六瓣)
+ *   - orca-lead(协同)   → UsersRound（与右侧栏「协同」pill 同款）
+ *   - 其余              → VendorIcon(Claude Code 像素脸 / Codex CLI 花形+`>_`)
  *   running:图标切 Thinking Orange + 呼吸;需关注:右上叠状态点(全端统一色表:
  *   error 红 / awaiting TapTap 蓝 / 完成未读绿,tone 按行精准订阅 attention store);
  *   有未发送内容(草稿/暂停队列)且未选中:右下叠铅笔。
@@ -15,7 +15,7 @@
  * 设计参考 doc/design_docs/cc-agent-view.pen 节点 ugsrn(方案 C)。
  */
 
-import { Archive, Pencil, Puzzle, RadioTower } from 'lucide-react';
+import { Archive, Pencil, RadioTower, UsersRound } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
@@ -47,6 +47,13 @@ export interface SessionStatusIconProps {
    * spinner 橙 / done 绿)承担,左侧只保留 vendor 身份标识,避免左右重复。
    */
   showAttentionDot?: boolean;
+  /**
+   * attention 点 tone 覆盖。device-link 远程会话的状态不进本地 attention store
+   * (镜像在 remoteSessionActivityStore),下方本地 hook 推导会把远程 error/
+   * awaiting 一律落成默认绿(kind 缺失按 done)——调用方(rail 置顶瓷砖等)
+   * 从远程镜像推导出 tone 时显式传入;不传保持本地推导,零行为变化。
+   */
+  attentionToneOverride?: 'error' | 'awaiting' | 'done';
 }
 
 export function SessionStatusIcon({
@@ -57,6 +64,7 @@ export function SessionStatusIcon({
   isActive,
   size,
   showAttentionDot = true,
+  attentionToneOverride,
 }: SessionStatusIconProps) {
   const { t } = useTranslation();
   // 意识后台活动(card-action 干活,不经 LLM turn)OR 进呼吸:MJ 按钮点击等
@@ -73,11 +81,12 @@ export function SessionStatusIcon({
   const attentionKind = useSessionAttentionKind(session.id);
   const isUrgentFromContext = useSessionAttentionUrgency(session.id);
   const attentionTone =
-    isUrgentFromContext || attentionKind === 'error'
+    attentionToneOverride ??
+    (isUrgentFromContext || attentionKind === 'error'
       ? 'error'
       : attentionKind === 'awaiting'
         ? 'awaiting'
-        : 'done';
+        : 'done');
   // 有"未发送内容"(输入框草稿 或 被暂停的待发队列)且当前未选中 → 右下铅笔提示。
   const hasDraft = useComposerDraftPresence(session.id);
   const hasPausedQueue = useSessionPausedQueue(session.id);
@@ -108,7 +117,7 @@ export function SessionStatusIcon({
             isRunning && 'session-status-breathing',
           )}
         >
-          <Puzzle size={size ?? 13} strokeWidth={1.75} className="shrink-0" />
+          <UsersRound size={size ?? 13} strokeWidth={1.75} className="shrink-0" />
         </span>
       ) : isAttached ? (
         // 常驻呼吸动画挂 HTML wrapper,SVG 保持静态(AGENTS 规则 7 SVG 动画红线,PR#226 review)

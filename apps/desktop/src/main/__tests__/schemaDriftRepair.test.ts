@@ -68,6 +68,19 @@ describe('repairSchemaDrift', () => {
           AND name = 'uniq_orca_workers_session_id'
       `).get();
       expect(regularIndex).toBeTruthy();
+
+      const expressionIndexes = db.prepare(`
+        SELECT name, sql
+        FROM sqlite_master
+        WHERE type = 'index'
+          AND name IN (
+            'uniq_orca_workers_team_label',
+            'uniq_orca_worker_creation_reservations_team_label'
+          )
+      `).all() as Array<{ name: string; sql: string }>;
+      expect(expressionIndexes).toHaveLength(2);
+      expect(expressionIndexes.every((index) => /\blower\s*\(\s*[`"]?label[`"]?\s*\)/i.test(index.sql))).toBe(true);
+      expect(expressionIndexes.every((index) => !index.sql.includes('undefined'))).toBe(true);
     } finally {
       db.close();
     }

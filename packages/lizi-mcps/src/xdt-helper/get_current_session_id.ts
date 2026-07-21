@@ -20,7 +20,7 @@ export function registerGetCurrentSessionIdTool(
 ): void {
   registry.register({
     name: 'get_current_session_id',
-    category: 'xdt',
+    category: 'cindy',
     description: DESCRIPTION,
     inputShape: {},
     handler: async () => {

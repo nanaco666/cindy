@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronDown, Plus, Sparkles, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { toast } from '@/lib/toast';
 import { extractIpcError } from '@/utils/ipcError';
+import { useAuth } from '@/contexts/AuthContext';
 import { useInstalledGhosts } from '@/cindy-brain/useInstalledGhosts';
 import { NEW_MAKER_DRAFT_KEY } from '@/features/cc-agent/newMakerDraftKeys';
 import {
@@ -37,7 +38,7 @@ import { cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
 import { getLastWorkingDir, subscribeToLastWorkingDir } from '@/state/lastWorkingDir';
 import { findSplitChildByPanelKind } from '../../../shared/layoutTree';
-import { ghostPanelKind } from '../../../shared/ghost';
+import { ghostPanelKind, type GhostSetupStatus } from '../../../shared/ghost';
 import {
   toGhostPluginDetail,
   toGhostPluginListItem,
@@ -45,10 +46,13 @@ import {
   toRestorableGhostPluginListItem,
   countGhostPluginOrigins,
   filterGhostPluginItems,
+  showsEnterpriseGhostGroup,
   sortGhostPluginItemsByRecentUse,
+  visibleGhostPluginItems,
   type GhostPluginListItem,
   type GhostPluginOrigin,
 } from './lib/ghostPluginViewModel';
+import { formatSetupGateDescription } from './lib/ghostSetupGateModel';
 import { PluginManagementLayout, PluginManagementPage } from './PluginManagementLayout';
 import { GhostPluginDetailView } from './GhostPluginDetailView';
 import { GhostPluginIcon } from './GhostPluginIcon';
@@ -80,7 +84,12 @@ const MAX_VISIBLE_INSTALLED_GHOSTS = 5;
 export function GhostPluginPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { confirm, confirmWithCheckbox } = useConfirmDialog();
+  const { user } = useAuth();
+  // 个人版登录隐藏「团队共享」:tab 不渲染,目录与已安装快捷区不列企业档条目。
+  // 详情深链不拦 —— 存量已装的企业插件仍可进详情停用/卸载,不留不可管理的暗态。
+  const showEnterprise = showsEnterpriseGhostGroup(user?.membershipKind);
   const ghosts = useInstalledGhosts();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -142,6 +151,16 @@ export function GhostPluginPage() {
       }),
     [],
   );
+  // /plugins?ghost=<id> 深链:直接打开该插件详情(配置就绪弹窗等入口复用;
+  // 读后即清参数,避免从详情返回列表后又被同一参数拉回详情)。
+  useEffect(() => {
+    const target = searchParams.get('ghost');
+    if (!target) return;
+    setSelectedId(target);
+    const next = new URLSearchParams(searchParams);
+    next.delete('ghost');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
   const builtinIds = useMemo(() => new Set(builtinStatus.builtinIds), [builtinStatus.builtinIds]);
   const enterpriseIds = useMemo(
     () => new Set(builtinStatus.enterpriseIds),
@@ -169,8 +188,12 @@ export function GhostPluginPage() {
     [builtinIds, enterpriseIds, ghosts],
   );
   const installedShortcutItems = useMemo(
-    () => sortGhostPluginItemsByRecentUse(installedItems, recentGhostIds),
-    [installedItems, recentGhostIds],
+    () =>
+      sortGhostPluginItemsByRecentUse(
+        visibleGhostPluginItems(installedItems, showEnterprise),
+        recentGhostIds,
+      ),
+    [installedItems, recentGhostIds, showEnterprise],
   );
   const installedIds = useMemo(
     () => new Set(installedItems.map((item) => item.id)),
@@ -190,13 +213,20 @@ export function GhostPluginPage() {
     [builtinStatus.restorable, installedIds],
   );
   const allItems = useMemo(
-    () => [...installedItems, ...restorableItems],
-    [installedItems, restorableItems],
+    () => visibleGhostPluginItems([...installedItems, ...restorableItems], showEnterprise),
+    [installedItems, restorableItems, showEnterprise],
   );
+  const originFilters = useMemo(
+    () => (showEnterprise ? ORIGIN_FILTERS : ORIGIN_FILTERS.filter((f) => f !== 'enterprise')),
+    [showEnterprise],
+  );
+  // tab 隐藏后残留的 enterprise 选中态(如登录身份变化)折算回「全部」。
+  const effectiveOriginFilter =
+    !showEnterprise && originFilter === 'enterprise' ? 'all' : originFilter;
   const searchedItems = useMemo(() => filterGhostPluginItems(allItems, query), [allItems, query]);
   const items = useMemo(
-    () => filterGhostPluginItems(searchedItems, '', originFilter),
-    [originFilter, searchedItems],
+    () => filterGhostPluginItems(searchedItems, '', effectiveOriginFilter),
+    [effectiveOriginFilter, searchedItems],
   );
   const originCounts = useMemo(() => countGhostPluginOrigins(searchedItems), [searchedItems]);
   const selectedGhost = selectedId
@@ -283,10 +313,45 @@ export function GhostPluginPage() {
     navigate('/cc-agent/new');
   }, [navigate, t]);
 
+  // 打开插件详情并滚到「配置」区(就绪弹窗的「去配置」动作)。详情视图
+  // 可能尚未挂载,滚动排到渲染之后的下一帧;减弱动效时改即时定位。
+  const openGhostConfiguration = useCallback((id: string) => {
+    setSelectedId(id);
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        document
+          .getElementById('ghost-configuration-title')
+          ?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+      });
+    });
+  }, []);
+
   const handleUseGhost = useCallback(
-    (id: string) => {
+    async (id: string) => {
       const ghost = ghosts.find((candidate) => candidate.manifest.id === id);
       if (!ghost?.manifest.command) return;
+      // 使用前置门:点击时现查配置就绪度(main 侧确定性判定),未就绪先
+      // 弹窗引导去配置。查询失败不拦——运行期 networkSlot 仍会兜底报错,
+      // 这里拦不住只是少了一次前置提醒,不能因此把能用的插件挡在门外。
+      let setupStatus: GhostSetupStatus | null = null;
+      try {
+        setupStatus = await window.electronAPI.ghosts.setupStatus(id);
+      } catch {
+        setupStatus = null;
+      }
+      if (setupStatus && !setupStatus.ready) {
+        const goConfigure = await confirm({
+          title: t('settings.ghosts.setupGate.title', { name: ghost.manifest.name }),
+          description: formatSetupGateDescription(setupStatus, t),
+          confirmText: t('settings.ghosts.setupGate.configure'),
+          cancelText: t('settings.ghosts.setupGate.cancel'),
+          // 主操作「去配置」非破坏性,默认焦点落主按钮(弹窗契约的适用场景)。
+          autoFocusConfirm: true,
+        });
+        if (goConfigure) openGhostConfiguration(id);
+        return;
+      }
       const existing = getComposerDraft(NEW_MAKER_DRAFT_KEY);
       saveComposerDraft(NEW_MAKER_DRAFT_KEY, {
         text: existing?.text ?? null,
@@ -303,11 +368,11 @@ export function GhostPluginPage() {
       });
       navigate('/cc-agent/new');
     },
-    [ghosts, navigate],
+    [confirm, ghosts, navigate, openGhostConfiguration, t],
   );
 
   const handleUse = useCallback(() => {
-    if (selectedGhost) handleUseGhost(selectedGhost.manifest.id);
+    if (selectedGhost) void handleUseGhost(selectedGhost.manifest.id);
   }, [handleUseGhost, selectedGhost]);
 
   const handleRestore = useCallback(
@@ -383,27 +448,24 @@ export function GhostPluginPage() {
         />
       }
     >
-      <main
-        className="min-h-0 w-full flex-1 overflow-y-auto bg-[var(--surface)]"
-        style={{ scrollbarGutter: 'stable' }}
-      >
+      <main className="min-h-0 w-full flex-1 overflow-y-auto bg-[var(--surface)] [scrollbar-gutter:stable_both-edges]">
         <PluginManagementPage>
           <header className="plugin-motion-page-header pb-2">
-            <div className="flex items-start justify-between gap-4">
-              <div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <h1 className="text-28 font-medium leading-tight text-[var(--text-primary)]">
                   {t('settings.ghosts.title')}
                 </h1>
-                <p className="mt-2 max-w-2xl text-14 leading-6 text-[var(--text-secondary)]">
-                  {t('settings.ghosts.description')}
-                </p>
+                <PluginScopePicker
+                  scopeDir={scopeDir}
+                  activeSessionWorkingDir={activeSessionWorkingDir ?? undefined}
+                  recentWorkdirs={recentWorkdirs}
+                  onPick={handlePickScope}
+                />
               </div>
-              <PluginScopePicker
-                scopeDir={scopeDir}
-                activeSessionWorkingDir={activeSessionWorkingDir ?? undefined}
-                recentWorkdirs={recentWorkdirs}
-                onPick={handlePickScope}
-              />
+              <p className="mt-2 max-w-2xl text-14 leading-6 text-[var(--text-secondary)]">
+                {t('settings.ghosts.description')}
+              </p>
             </div>
           </header>
 
@@ -509,8 +571,8 @@ export function GhostPluginPage() {
                 aria-label={t('settings.ghosts.page.filtersAria')}
                 style={WINDOW_NO_DRAG_STYLE}
               >
-                {ORIGIN_FILTERS.map((filter) => {
-                  const selected = originFilter === filter;
+                {originFilters.map((filter) => {
+                  const selected = effectiveOriginFilter === filter;
                   const count = filter === 'all' ? searchedItems.length : originCounts[filter];
                   return (
                     <button
@@ -547,7 +609,7 @@ export function GhostPluginPage() {
                     item={item}
                     onSelect={() => setSelectedId(item.id)}
                     onAction={() => {
-                      if (item.installed) handleUseGhost(item.id);
+                      if (item.installed) void handleUseGhost(item.id);
                       else void handleRestore(item.id, item.name);
                     }}
                     effectiveEnabled={

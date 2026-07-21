@@ -21,7 +21,7 @@
 
 import { parseCron, type Scheduler } from '@lizi/maker-scheduler';
 
-import type { SchedulerToolResult } from '../lizi_schedulerToolRegistry.js';
+import type { SchedulerToolResult } from '../cindy_schedulerToolRegistry.js';
 import type { SchedulerMcpDeps } from '../types.js';
 import { classifySchedulerError } from './errors.js';
 

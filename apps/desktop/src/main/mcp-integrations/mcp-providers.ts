@@ -174,13 +174,13 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
             {
               maker,
               fallbackDir: pathJoin(app.getPath('userData'), 'schedule-hooks'),
-              logger: createLogger('mcp/lizi_scheduler:hook-script'),
+              logger: createLogger('mcp/cindy_scheduler:hook-script'),
             },
             input,
           );
         },
       },
-      logger: createLogger('mcp/lizi_scheduler'),
+      logger: createLogger('mcp/cindy_scheduler'),
     },
     // lizi_ssh: agent 直接在已配置 SSH 主机上执行命令(远端零安装)。
     // ⚠️ 必须 lazy await import():静态 import remote-ssh 会形成
@@ -230,7 +230,7 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
     // 启动早期跑, 那时 registerMakerIpc 还没执行, holder 是 null; 回调真正被调时
     // (LLM 调工具时) registerMakerIpc 早已执行完毕, holder 已 ready。
     xdtHelper: {
-      logger: createLogger('mcp/lizi_xdt_helper'),
+      logger: createLogger('mcp/cindy_helper'),
       setCurrentSessionTitle: async ({ sessionId, title }) => {
         if (!tryGetDbClient()) {
           return { ok: false, errorCode: 'HOST_NOT_READY', message: 'localDb not ready' };
@@ -321,6 +321,9 @@ export function createDesktopMcpProviders(deps: DesktopMcpProvidersDeps): LiziMc
       listWorkers: wrap((s, params) => s.listWorkers(params)),
       switchFocus: wrap((s, params) => s.switchFocus(params)),
       sendToWorker: wrap((s, params) => s.sendToWorker(params)),
+      listWorkerQueuedMessages: wrap((s, params) => s.listWorkerQueuedMessages(params)),
+      updateWorkerQueuedMessage: wrap((s, params) => s.updateWorkerQueuedMessage(params)),
+      cancelWorkerQueuedMessage: wrap((s, params) => s.cancelWorkerQueuedMessage(params)),
       idleWorker: wrap((s, params) => s.idleWorker(params)),
       endTeam: wrap((s, params) => s.endTeam(params)),
       archiveWorker: wrap((s, params) => s.archiveWorker(params)),

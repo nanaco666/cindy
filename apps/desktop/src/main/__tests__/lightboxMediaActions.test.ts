@@ -321,14 +321,14 @@ describe('sniffImageMime', () => {
 });
 
 describe('remote-media source', () => {
-  it('classifies xdt-remote-media urls', () => {
-    expect(classifyLightboxMediaUrl('xdt-remote-media://m/abc/def').kind).toBe('remote-media');
+  it('classifies cindy-remote-media urls', () => {
+    expect(classifyLightboxMediaUrl('cindy-remote-media://m/abc/def').kind).toBe('remote-media');
   });
 
   it('caches remote-media bytes for session sends', async () => {
     const deps = makeDeps();
     const result = await createLightboxMediaHandlers(deps).cacheForSession({
-      url: 'xdt-remote-media://m/abc/def',
+      url: 'cindy-remote-media://m/abc/def',
       sessionId: 'target',
     });
     expect(deps.fetchRemoteMediaImage).toHaveBeenCalled();
@@ -338,7 +338,7 @@ describe('remote-media source', () => {
   it('save-as fetches remote bytes and writes them to the chosen path', async () => {
     const deps = makeDeps();
     const result = await createLightboxMediaHandlers(deps).saveAs({
-      url: 'xdt-remote-media://m/abc/def',
+      url: 'cindy-remote-media://m/abc/def',
     });
     expect(result.canceled).toBe(false);
     expect(deps.writeFile).toHaveBeenCalled();
@@ -347,7 +347,7 @@ describe('remote-media source', () => {
   it('open-with-default-app drops remote bytes into a temp file and opens it', async () => {
     const deps = makeDeps();
     await createLightboxMediaHandlers(deps).openWithDefaultApp({
-      url: 'xdt-remote-media://m/abc/def',
+      url: 'cindy-remote-media://m/abc/def',
     });
     const written = (deps.writeFile as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
     // 生产用 path.join 拼临时路径,win32 下是反斜杠,前缀比较走 normalize。
@@ -359,9 +359,9 @@ describe('remote-media source', () => {
   it('open-with-default-app reuses a stable per-URL temp path (no unbounded growth)', async () => {
     const deps = makeDeps();
     const handlers = createLightboxMediaHandlers(deps);
-    await handlers.openWithDefaultApp({ url: 'xdt-remote-media://m/abc/def' });
-    await handlers.openWithDefaultApp({ url: 'xdt-remote-media://m/abc/def' });
-    await handlers.openWithDefaultApp({ url: 'xdt-remote-media://m/abc/other' });
+    await handlers.openWithDefaultApp({ url: 'cindy-remote-media://m/abc/def' });
+    await handlers.openWithDefaultApp({ url: 'cindy-remote-media://m/abc/def' });
+    await handlers.openWithDefaultApp({ url: 'cindy-remote-media://m/abc/other' });
     const writes = (deps.writeFile as ReturnType<typeof vi.fn>).mock.calls.map(
       (c) => c[0] as string,
     );
@@ -372,7 +372,7 @@ describe('remote-media source', () => {
   it('readImageBytes serves http and remote-media, rejects image-cache sources', async () => {
     const deps = makeDeps();
     const handlers = createLightboxMediaHandlers(deps);
-    const remote = await handlers.readImageBytes({ url: 'xdt-remote-media://m/abc/def' });
+    const remote = await handlers.readImageBytes({ url: 'cindy-remote-media://m/abc/def' });
     expect(remote.mimeType).toBe('image/jpeg');
     // xdt-image:// renderer 直读 readCachedImageAsBase64,不走本 IPC。
     await expect(handlers.readImageBytes({ url: 'xdt-image://s/i.png' })).rejects.toThrow(

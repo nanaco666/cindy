@@ -1,4 +1,4 @@
-// 整包更新发现 hook:拉 /latest → 比对 runtimeVersion → 弹窗引导跳 NPKG。
+// 整包更新发现 hook:拉 /latest → 比对 runtimeVersion → 弹窗引导打开正常安装入口。
 //
 // 用在两处(见 docs/self-hosted-ios-build-and-ota.md A6):
 // - 启动时自动检查(app/_layout.tsx);
@@ -14,6 +14,7 @@ import { fetchLatestRelease } from './fetchLatestRelease';
 import { evaluateBundleUpdate, preferredInstallUrl } from './bundleUpdate';
 import type { BundleUpdateCheckOutcome } from './manualUpdateCheck';
 import { markForcedPrompted } from './resumeUpdateCheck';
+import { isCanaryChannel } from './canaryChannelStore';
 
 type CheckState = 'idle' | 'checking' | 'up-to-date' | 'update-available' | 'error';
 
@@ -22,6 +23,8 @@ interface Options {
   auto?: boolean;
   /** 无更新时是否提示(设置页手动检查用 true,启动静默用 false)。 */
   notifyWhenUpToDate?: boolean;
+  /** 自建更新通道；缺省读取启动时已 hydrate 的本地快照。 */
+  isCanary?: boolean;
 }
 
 async function openInstall(url: string): Promise<void> {
@@ -66,20 +69,39 @@ export function promptBundleUpdate(evaluation: ReturnType<typeof evaluateBundleU
   ]);
 }
 
-export function useBundleUpdatePrompt({ auto = true, notifyWhenUpToDate = false }: Options = {}) {
+export function useBundleUpdatePrompt({
+  auto = true,
+  notifyWhenUpToDate = false,
+  isCanary = isCanaryChannel(),
+}: Options = {}) {
   const [state, setState] = useState<CheckState>('idle');
-  const inFlight = useRef(false);
+  const inFlightChannels = useRef(new Set<boolean>());
+  const channelEpochRef = useRef(0);
+  const previousChannelRef = useRef(isCanary);
+  // render 已经是 channel 切换对本 hook 可见的最早时点；在这里递增 epoch，
+  // 让旧账号请求即使恰好晚返回，也不能更新新账号的 UI。
+  if (previousChannelRef.current !== isCanary) {
+    previousChannelRef.current = isCanary;
+    channelEpochRef.current += 1;
+  }
 
   const checkNow = useCallback(async (): Promise<BundleUpdateCheckOutcome> => {
     // 审核模式:入口按钮已隐藏,这里再挡一层(状态由代码保证,不依赖 UI 层记得隐藏)。
     if (!IS_OTA_SELFHOST || REVIEW_MODE) return 'skipped';
-    if (inFlight.current) return 'busy';
-    inFlight.current = true;
+    if (inFlightChannels.current.has(isCanary)) return 'busy';
+    inFlightChannels.current.add(isCanary);
+    const requestEpoch = channelEpochRef.current;
     setState('checking');
     try {
       // 平台化:iOS 读 mobile-ota/ios/release.json、Android 读 mobile-ota/android/release.json
       // (整包记录按平台分目录;iOS 走 itms、Android 走 APK 直下,preferredInstallUrl 已自动回退)。
-      const latest = await fetchLatestRelease(Platform.OS === 'android' ? 'android' : 'ios');
+      const latest = await fetchLatestRelease(
+        Platform.OS === 'android' ? 'android' : 'ios',
+        undefined,
+        undefined,
+        isCanary,
+      );
+      if (requestEpoch !== channelEpochRef.current) return 'skipped';
       const evaluation = evaluateBundleUpdate({
         currentRuntimeVersion: Updates.runtimeVersion,
         currentVersion: Constants.expoConfig?.version ?? null,
@@ -95,21 +117,23 @@ export function useBundleUpdatePrompt({ auto = true, notifyWhenUpToDate = false 
         return 'up-to-date';
       }
     } catch {
+      if (requestEpoch !== channelEpochRef.current) return 'skipped';
       // fetchLatestRelease 连不上(网络/超时/5xx)时抛错:自动检查静默(尽力而为),
       // 手动检查须提示"检查失败",不能沿用旧行为误报"已是最新"。
       setState('error');
       if (notifyWhenUpToDate) Alert.alert('检查失败', '无法连接更新服务器,请稍后重试。');
       return 'error';
     } finally {
-      inFlight.current = false;
+      inFlightChannels.current.delete(isCanary);
     }
-  }, [notifyWhenUpToDate]);
+  }, [isCanary, notifyWhenUpToDate]);
 
   useEffect(() => {
     if (auto && IS_OTA_SELFHOST) void checkNow();
-    // 仅挂载时自动检查一次;手动检查由调用方通过 checkNow 触发。
+    // auto hook 在登录/切账号导致 channel 变化时再检查一次，避免新的账号
+    // 继续沿用旧账号的 release 指针；手动检查入口仍由调用方通过 checkNow 触发。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [auto, isCanary]);
 
   return { state, checkNow };
 }

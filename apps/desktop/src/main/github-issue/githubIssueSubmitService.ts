@@ -5,7 +5,7 @@
  *  1. 组环境信息(客户端版本 / OS / 界面语言 fallback)—— agent 不参与;
  *  2. await confirm(确认卡片)—— **唯一**通往 postIssue 的路径,取消/超时直接返回;
  *  3. confirmed 后以用户确认的 title/body/type 为准(用户编辑版优先);
- *  4. body 末尾附 env 块,clamp 到 server 上限后 POST。
+ *  4. body 末尾附 env 块,注入当前登录用户展示名,clamp 到 server 上限后 POST。
  *
  * 模块保持 electron-free,全部依赖注入(规则 14),单测直接调 submitGithubIssueWithConfirm。
  */
@@ -40,22 +40,31 @@ export interface SubmitIssueRequest {
   type: 'bug' | 'feature';
 }
 
+/** github-server 的 issue 创建 payload；userName 缺失时由服务端按 membership id 回退。 */
+export interface GithubIssuePostBody {
+  title: string;
+  description?: string;
+  type: 'bug' | 'feature';
+  appVersion: string;
+  userName?: string;
+}
+
 export interface GithubIssueSubmitServiceDeps {
   confirm: (
     sessionId: string,
     draft: IssueDraft,
     env: IssueEnvInfo,
   ) => Promise<IssueConfirmDecision>;
-  postIssue: (body: {
-    title: string;
-    description?: string;
-    type: 'bug' | 'feature';
-    appVersion: string;
-  }) => Promise<{ githubIssue: { number: number; url: string } }>;
+  /** body factory must be evaluated for each network attempt after auth refresh. */
+  postIssue: (
+    bodyFactory: () => GithubIssuePostBody,
+  ) => Promise<{ githubIssue: { number: number; url: string } }>;
   getAppVersion: () => string;
   getOsInfo: () => { platform: string; arch: string; osVersion: string };
   /** main 侧 OS locale,仅当 renderer 未回传 uiLanguage 时兜底。 */
   getFallbackLocale: () => string;
+  /** 当前 Cindy membership 的展示名,仅用于 issue 正文标记提交人。 */
+  getSubmitterName: () => string | undefined;
 }
 
 // server 侧 github.ts 的上限(TITLE_MAX=200 / DESC_MAX=5000),超限会被 400,这里主动 clamp。
@@ -111,11 +120,15 @@ export async function submitGithubIssueWithConfirm(
   const description = decision.body.slice(0, Math.max(0, bodyBudget)) + envBlock;
 
   try {
-    const result = await deps.postIssue({
-      title: finalTitle,
-      description,
-      type: decision.type,
-      appVersion: env.appVersion,
+    const result = await deps.postIssue(() => {
+      const submitterName = deps.getSubmitterName()?.trim();
+      return {
+        title: finalTitle,
+        description,
+        type: decision.type,
+        appVersion: env.appVersion,
+        ...(submitterName ? { userName: submitterName } : {}),
+      };
     });
     return {
       ok: true,

@@ -2,7 +2,7 @@
  * lizi_memoryMcpServer.ts
  * ---------------------------------------------------------------------------
  * In-process MCP server exposing Maker Memory (cross-agent shared workdir-scoped
- * memory) to cc / codex agents. Mirrors lizi_schedulerMcpServer.ts:
+ * memory) to cc / codex agents. Mirrors cindy_schedulerMcpServer.ts:
  *
  *  - 只暴露两个 entry tool: list_tools / call_tool (常驻 prompt ~200 token)
  *  - 7 个细粒度工具 (memory_read/list/write/delete/consolidate/review/search)

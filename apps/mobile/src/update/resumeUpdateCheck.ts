@@ -61,6 +61,8 @@ export interface ResumeUpdateCheckDeps {
    */
   onForcedUpdate: (evaluation: BundleUpdateEvaluation) => void;
   now: () => number;
+  /** hook 卸载/账号切换后使旧检查失效，避免迟到结果给新账号弹窗。 */
+  isCurrent?: () => boolean;
 }
 
 export interface ResumeUpdateCheckOptions {
@@ -111,8 +113,10 @@ export function createResumeUpdateChecker(
     if (!deps.otaEnabled) return 'skipped';
     try {
       const check = await withTimeout(deps.checkForUpdateAsync(), checkTimeoutMs);
+      if (deps.isCurrent && !deps.isCurrent()) return 'skipped';
       if (!check.isAvailable) return 'up-to-date';
       const fetched = await withTimeout(deps.fetchUpdateAsync(), fetchTimeoutMs);
+      if (deps.isCurrent && !deps.isCurrent()) return 'skipped';
       // 静默路径到此为止:不 reload,新 bundle 下次冷启动生效。
       return fetched.isNew ? 'fetched' : 'up-to-date';
     } catch {
@@ -124,6 +128,7 @@ export function createResumeUpdateChecker(
     if (!deps.bundleCheckEnabled) return 'skipped';
     try {
       const latest = await withTimeout(deps.fetchLatest(), latestTimeoutMs);
+      if (deps.isCurrent && !deps.isCurrent()) return 'skipped';
       const evaluation = evaluateBundleUpdate({
         currentRuntimeVersion: deps.getCurrentRuntimeVersion(),
         currentVersion: deps.getCurrentVersion(),
@@ -133,6 +138,7 @@ export function createResumeUpdateChecker(
       if (!evaluation.forced) return 'update-available'; // 非强更静默:启动路径已负责提示
       // 去重标记由 onForcedUpdate(promptBundleUpdate)在确认展示弹窗后统一负责,
       // 这里只做 guard、不预先标记,避免"caller 已标记但 callee 未展示"竞态。
+      if (deps.isCurrent && !deps.isCurrent()) return 'skipped';
       if (!hasForcedPrompted(evaluation.target.runtimeVersion)) deps.onForcedUpdate(evaluation);
       return 'forced';
     } catch {

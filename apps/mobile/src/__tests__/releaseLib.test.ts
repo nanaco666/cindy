@@ -51,6 +51,49 @@ import {
 const require = createRequire(import.meta.url);
 const fingerprintConfig = require('../../fingerprint.config.cjs');
 const { stripBetaProfiles } = fingerprintConfig;
+const { getExpoConfigSourcesAsync } = require('@expo/fingerprint/build/sourcer/Expo.js');
+const { normalizeSourceSkips } = require('@expo/fingerprint/build/Config.js');
+
+const fingerprintConfigPath = require.resolve('../../fingerprint.config.cjs');
+
+function loadFingerprintConfig(selfHost: boolean) {
+  const previous = process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST;
+  if (selfHost) process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST = '1';
+  else delete process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST;
+  delete require.cache[fingerprintConfigPath];
+  const config = require('../../fingerprint.config.cjs');
+  if (previous == null) delete process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST;
+  else process.env.EXPO_PUBLIC_XDT_OTA_SELFHOST = previous;
+  delete require.cache[fingerprintConfigPath];
+  return config;
+}
+
+async function normalizedExpoConfig({
+  version = '1.0.0',
+  buildNumber = '10',
+  versionCode = 10,
+  bundleIdentifier = 'com.example.cindyfixture',
+  sourceSkips,
+}: {
+  version?: string;
+  buildNumber?: string;
+  versionCode?: number;
+  bundleIdentifier?: string;
+  sourceSkips?: string[];
+} = {}) {
+  const sources = await getExpoConfigSourcesAsync('/tmp', {
+    exp: {
+      name: 'Cindy fingerprint fixture',
+      slug: 'cindy-fingerprint-fixture',
+      version,
+      ios: { bundleIdentifier, buildNumber },
+      android: { package: bundleIdentifier, versionCode },
+    },
+  }, [], { platforms: ['ios', 'android'], sourceSkips: normalizeSourceSkips(sourceSkips) });
+  const expoConfigSource = sources.find((source: { id: string; contents: string }) => source.id === 'expoConfig');
+  if (!expoConfigSource) throw new Error('expoConfig source missing');
+  return JSON.parse(expoConfigSource.contents);
+}
 
 const easJson = {
   build: {
@@ -760,6 +803,43 @@ describe('mobile release scripts core logic', () => {
   it('parses eas fingerprint:generate JSON output', () => {
     expect(parseFingerprintOutput('{ "hash": "abc123", "sources": [] }').hash).toBe('abc123');
     expect(() => parseFingerprintOutput('{ "sources": [] }')).toThrow(/hash/);
+  });
+
+  it('gates ExpoConfigVersions fingerprint skip to self-host builds', () => {
+    expect(loadFingerprintConfig(false).sourceSkips).toEqual([
+      'PackageJsonAndroidAndIosScriptsIfNotContainRun',
+    ]);
+    expect(loadFingerprintConfig(true).sourceSkips).toEqual([
+      'PackageJsonAndroidAndIosScriptsIfNotContainRun',
+      'ExpoConfigVersions',
+    ]);
+  });
+
+  it('keeps self-host runtime config stable for version bumps but not native identity changes', async () => {
+    const selfHostSkips = loadFingerprintConfig(true).sourceSkips;
+    const regularSkips = loadFingerprintConfig(false).sourceSkips;
+    const selfHost10 = await normalizedExpoConfig({
+      buildNumber: '10', versionCode: 10, sourceSkips: selfHostSkips,
+    });
+    const selfHost11 = await normalizedExpoConfig({
+      version: '1.0.1', buildNumber: '11', versionCode: 11, sourceSkips: selfHostSkips,
+    });
+    expect(selfHost11).toEqual(selfHost10);
+    expect(selfHost11.ios.bundleIdentifier).toBe('com.example.cindyfixture');
+    expect(selfHost11.android.package).toBe('com.example.cindyfixture');
+
+    const regular10 = await normalizedExpoConfig({ buildNumber: '10', versionCode: 10, sourceSkips: regularSkips });
+    const regular11 = await normalizedExpoConfig({
+      version: '1.0.1', buildNumber: '11', versionCode: 11, sourceSkips: regularSkips,
+    });
+    expect(regular11).not.toEqual(regular10);
+    expect(regular11.ios.buildNumber).toBe('11');
+    expect(regular11.android.versionCode).toBe(11);
+
+    const identityChange = await normalizedExpoConfig({
+      bundleIdentifier: 'com.example.changedfixture', sourceSkips: selfHostSkips,
+    });
+    expect(identityChange).not.toEqual(selfHost10);
   });
 
   it('normalizes eas.json for fingerprinting by stripping only beta profiles', () => {

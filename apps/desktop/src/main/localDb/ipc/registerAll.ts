@@ -22,6 +22,7 @@ import { registerDevSqliteVecIpc } from './dev/sqliteVec';
 import { registerSearchIpc } from './search';
 
 import { createLogger } from '../../logger';
+import { recordDesktopDevLocalDbStartupResult } from '../../devStartupStatus';
 
 const log = createLogger('registerAll');
 
@@ -56,10 +57,12 @@ export function registerLocalDbIpc(opts: RegisterLocalDbIpcOpts = {}): void {
           reason: 'invalid userId',
         }),
       );
-      return {
+      const result = {
         ready: false,
         error: { code: 'DB_INIT_FAILED', message: 'invalid userId' },
-      };
+      } as const;
+      recordDesktopDevLocalDbStartupResult(result);
+      return result;
     }
     if (opts.beforeEnsureReady) {
       try {
@@ -71,10 +74,16 @@ export function registerLocalDbIpc(opts: RegisterLocalDbIpcOpts = {}): void {
           userId,
           error: message,
         }));
-        return { ready: false, error: { code: 'DB_INIT_FAILED', message } };
+        const result = {
+          ready: false,
+          error: { code: 'DB_INIT_FAILED', message },
+        } as const;
+        recordDesktopDevLocalDbStartupResult(result);
+        return result;
       }
     }
     const result = await ensureReady(userId);
+    recordDesktopDevLocalDbStartupResult(result);
     log.info(
       JSON.stringify({
         event: 'localDb.ipc.ensure-ready.done',

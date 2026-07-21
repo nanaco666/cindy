@@ -4,7 +4,7 @@
  * Bundle export for the xdt-helper tool family. lizi_xdtHelperMcpServer.ts imports
  * from here and registers everything in one go (mirrors scheduler/index.ts).
  *
- * Note: handoff 工具 send_to_session 注册在 lizi_xdt_helper 的 handoff 类目(走 call_tool,essential 常开)。
+ * Note: handoff 工具 send_to_session 注册在 cindy_helper 的 handoff 类目(走 call_tool,essential 常开)。
  * 协同 team 工具由 lizi_orca server(src/orca/)托管,通过本目录的 register*Tool 注册。
  */
 
@@ -60,6 +60,20 @@ export {
   registerSendToWorkerTool,
   type SendToWorkerDeps,
 } from './send_to_worker.js';
+export {
+  registerListWorkerQueueTool,
+  type ListWorkerQueueDeps,
+  type WorkerQueuedMessageEntry,
+} from './list_worker_queue.js';
+export {
+  registerUpdateQueuedMessageTool,
+  type QueuedMessageControlErrorCode,
+  type UpdateQueuedMessageDeps,
+} from './update_queued_message.js';
+export {
+  registerCancelQueuedMessageTool,
+  type CancelQueuedMessageDeps,
+} from './cancel_queued_message.js';
 export {
   registerIdleWorkerTool,
   type IdleWorkerDeps,

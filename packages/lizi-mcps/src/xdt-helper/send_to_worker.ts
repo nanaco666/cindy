@@ -26,6 +26,7 @@ export interface SendToWorkerDeps {
         wakeKind: 'resumed' | 'already-active' | 'queued';
         targetTitle: string | null;
         targetLastUserSendAt: string | null;
+        queuedMessageId?: string;
       },
       'NOT_FOUND' | 'ARCHIVED' | 'DELETED' | 'BUSY' | 'AGENT_NOT_READY' | 'INVALID_ARGS'
     >
@@ -34,6 +35,8 @@ export interface SendToWorkerDeps {
 
 const DESCRIPTION =
   '向指定 worker 投递消息(派活/追问)。' +
+  'worker 正忙时消息自动排队(wake_kind=queued)并回传 queued_message_id;' +
+  '在它被消费前可用 list_worker_queue / update_queued_message / cancel_queued_message 查看、修改或撤回。' +
   '失败码: LEAD_NOT_SUPPORTED / NOT_FOUND / ARCHIVED / DELETED / BUSY / AGENT_NOT_READY。';
 
 export function registerSendToWorkerTool(
@@ -78,6 +81,7 @@ export function registerSendToWorkerTool(
         wake_kind: result.wakeKind,
         target_title: result.targetTitle,
         target_last_user_send_at: result.targetLastUserSendAt,
+        ...(result.queuedMessageId ? { queued_message_id: result.queuedMessageId } : {}),
       });
     },
   });

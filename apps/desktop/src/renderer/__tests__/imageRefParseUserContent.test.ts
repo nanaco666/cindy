@@ -27,6 +27,8 @@ import {
   type FileRef,
 } from '@/lib/imageRef';
 
+const ATTACHMENT_SHA256 = 'a'.repeat(64);
+
 const validImage: ImageRef = {
   url: 'xdt-image://session-abc/img-001.png',
   mimeType: 'image/png',
@@ -286,6 +288,17 @@ describe('parseUserContent — object input ({text, images, files})', () => {
       text: 'both',
       images: [validImage],
       files: [validFile, validFile2],
+    });
+  });
+
+  it('preserves valid attachment integrity metadata', () => {
+    const image = { ...validImage, size: 128, sha256: ATTACHMENT_SHA256 };
+    const file = { ...validFile, size: 256, sha256: ATTACHMENT_SHA256 };
+
+    expect(parseUserContent({ text: 'integrity', images: [image], files: [file] })).toEqual({
+      text: 'integrity',
+      images: [image],
+      files: [file],
     });
   });
 

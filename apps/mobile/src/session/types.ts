@@ -10,7 +10,11 @@ export type RemoteMessageRole =
   | 'system'
   // turn 失败终态的持久化行(desktop main 落库,content = { message, reason? });
   // messageNormalize 解析出 message 文案按 system 样式展示,避免显示生 JSON。
-  | 'error';
+  | 'error'
+  // session-agent-switch 边界行(desktop main 落库,content = { fromAgentKind,
+  // toAgentKind, fromModel, toModel, handoff });messageNormalize 派生成
+  // 'agent-switch' 系统卡,避免显示生 JSON。
+  | 'agent_switch';
 
 export interface RemoteSession {
   id: string;
@@ -81,7 +85,7 @@ export interface RemoteMessage {
   agentMeta: Record<string, unknown> | null;
   createdAt: string;
   systemCardData?: Record<string, unknown>;
-  systemCardType?: 'help' | 'context' | 'cost' | 'pwd' | 'status' | 'compact' | 'cmd' | 'goal-complete' | 'goal-resumed' | 'auto-resume' | 'learn';
+  systemCardType?: 'help' | 'context' | 'cost' | 'pwd' | 'status' | 'compact' | 'cmd' | 'goal-complete' | 'goal-resumed' | 'auto-resume' | 'learn' | 'agent-switch';
 }
 
 export type RemoteAttachmentCategory = 'image' | 'pdf' | 'text' | 'office';
@@ -89,6 +93,8 @@ export type RemoteAttachmentCategory = 'image' | 'pdf' | 'text' | 'office';
 export interface RemoteFileRef {
   name: string;
   path: string;
+  size?: number;
+  sha256?: string;
 }
 
 /**
@@ -99,8 +105,22 @@ export interface RemoteFileRef {
  * - name:旧版手机端 persist 用的字段名,仅为读取存量数据保留,读侧两端均兼容。
  */
 export type RemoteImageRef =
-  | { url: string; originalName: string; name?: string; mimeType?: string }
-  | { url: string; originalName?: never; name: string; mimeType?: string };
+  | {
+      url: string;
+      originalName: string;
+      name?: string;
+      mimeType?: string;
+      size?: number;
+      sha256?: string;
+    }
+  | {
+      url: string;
+      originalName?: never;
+      name: string;
+      mimeType?: string;
+      size?: number;
+      sha256?: string;
+    };
 
 export interface RemoteSerializedAttachment {
   id: string;
@@ -108,6 +128,7 @@ export interface RemoteSerializedAttachment {
   path: string;
   ext: string;
   size: number;
+  sha256?: string;
   category: RemoteAttachmentCategory;
   mimeType: string;
   url?: string;

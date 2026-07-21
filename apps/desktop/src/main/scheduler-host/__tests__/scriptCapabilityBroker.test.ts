@@ -191,7 +191,7 @@ describe('SchedulerScriptCapabilityBroker', () => {
       new Set(['jira.read']),
       { schedule: schedule() },
     )) as { protocol: string; granted: string[]; methods: Array<{ method: string; available: boolean }> };
-    expect(result.protocol).toBe('xdt-maker-script/1');
+    expect(result.protocol).toBe('cindy-script/1');
     expect(result.granted).toEqual(['jira.read']);
     const byMethod = new Map(result.methods.map((m) => [m.method, m.available]));
     // 目录覆盖 broker 的全部方法;可用性按 granted 计算,自省自身恒可用

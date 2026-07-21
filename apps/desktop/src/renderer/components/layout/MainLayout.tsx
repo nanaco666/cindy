@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { BrowserWebviewPool } from '@/components/layout/BrowserWebviewPool';
 import { ChromeActions } from '@/components/layout/ChromeActions';
-import { ContentHeader } from '@/components/layout/ContentHeader';
+import { ContentHeaderSlot } from '@/components/layout/ContentHeader';
 import { FadeSwitcher } from '@/components/layout/FadeSwitcher';
 import { RightSidebar, type RightSidebarHandle } from '@/components/layout/RightSidebar';
 import { RightSidebarMaximize } from '@/components/layout/RightSidebarMaximize';
@@ -868,7 +868,7 @@ export function MainLayout() {
           break;
         case 'toggle-sidebar':
           // 菜单点击走这里。⌘B 按键由 MainLayout 内的 keydown 监听独立处理
-          // (跳过非 Tiptap 的 contenteditable 以保留 mdxeditor 等编辑器的 Bold 能力),
+          // (跳过非 Tiptap 的 contenteditable 以保留富文本编辑器的 Bold 能力),
           // 不依赖菜单 accelerator。
           handleToggleSidebar();
           break;
@@ -878,8 +878,8 @@ export function MainLayout() {
 
   // ⌘B / Ctrl+B 切换侧边栏折叠 (组合键定义在 shared/appShortcuts registry,
   // 用户可改绑)。capture 阶段处理, 但需要为真正用到 Bold 的 contenteditable
-  // 编辑器让路 —— 比如 SkillHub 的 mdxeditor (@mdxeditor/editor) 注册了 Bold
-  // mark, 偷掉 ⌘B 会让 Mac / Windows 都失去加粗能力。
+  // 编辑器让路 —— 非 Tiptap 的 contenteditable 可能注册了 Bold mark,
+  // 偷掉 ⌘B 会让 Mac / Windows 都失去加粗能力。
   //
   // ChatInput 的 Tiptap composer (.ProseMirror) 没注册 Bold mark, 让路给它只会
   // 让用户感知"启动后 ⌘B 不生效"(启动时 composer 立即自动 focus), 所以这里
@@ -888,7 +888,7 @@ export function MainLayout() {
   useAppShortcut('toggle-sidebar', (e) => {
     const target = e.target as HTMLElement | null;
     const editable = target?.closest?.('[contenteditable="true"]') as HTMLElement | null;
-    // 仅放行非 Tiptap 的 contenteditable (mdxeditor 等), Tiptap 的 ProseMirror
+    // 仅放行非 Tiptap 的 contenteditable, Tiptap 的 ProseMirror
     // 没 Bold 能力, 继续拦截以保证 sidebar 切换可用。
     if (editable && !editable.classList.contains('ProseMirror')) return false;
     handleToggleSidebar();
@@ -1123,13 +1123,13 @@ export function MainLayout() {
                 {/* rail 态在 sidebarVisible 口径里视同"不可见"(codex review): 否则 mac 无
                     headerContent 路由下 ContentHeader 会因 sidebarVisible=true 提前 return null,
                     我们为 rail 浮动 chrome 预留的 spacer 不渲染、按钮悬空。 */}
-                <ContentHeader
+                <ContentHeaderSlot
                   sidebarVisible={!isSettingsRoute && !isSidebarCollapsed && !isRailMode}
                   showCollapsedActions={!isSettingsRoute && (isSidebarCollapsed || isRailMode)}
                   // M2(2026-07-09 口径修订):mac 右上浮层随面板在场常驻(折叠
                   // toggle 永远钉窗口右上角),ContentHeader 右端占位不再分侧别。
                   rightSidebarAvailable={rightSidebarAvailable}
-                />
+                >
                 {/* key 取 feature 段（pathname 第一段）而非完整 pathname：
                     跨 Feature 切换（/issues → /cc-agent）触发 FadeSwitcher 重挂跑淡入动画；
                     同一 Feature 内的 detail 切换（/issues/aaa → /issues/bbb）保持同 key，
@@ -1152,6 +1152,7 @@ export function MainLayout() {
                     }}
                   />
                 </FadeSwitcher>
+                </ContentHeaderSlot>
               </main>
             ),
             // 右侧边栏 —— 工具面板。在场性沿用原语义:路由声明 rightSidebarAvailable

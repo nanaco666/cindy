@@ -45,7 +45,7 @@ vi.mock('lizi-mcps', () => ({
 }));
 
 vi.mock('../../maker-host/plugins/builtin-plugins.js', () => ({
-  BUILTIN_LIZI_MCP_IDS: ['lizi_orca', 'lizi_xdt_helper'],
+  BUILTIN_LIZI_MCP_IDS: ['lizi_orca', 'cindy_helper'],
   pluginIdForProviderName: (name: string) => name,
 }));
 

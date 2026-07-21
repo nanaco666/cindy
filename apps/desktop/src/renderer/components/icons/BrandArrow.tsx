@@ -5,7 +5,7 @@
  * 做成继承父级 text 色的图标组件(light/dark/状态色由父级驱动)。
  *
  * D4-1:替代 VendorIcon 中 Claude(AA 字标)/Codex(六瓣)两个 glyph——常规任务/会话
- * 行首统一品牌箭头,vendor 视觉不再区分(用户拍板);协同(Puzzle)/状态(Archive/
+ * 行首统一品牌箭头,vendor 视觉不再区分(用户拍板);协同(UsersRound)/状态(Archive/
  * RadioTower/running/attention/draft)glyph 不变。
  */
 interface BrandArrowProps {

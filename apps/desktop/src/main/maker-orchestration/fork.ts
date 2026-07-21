@@ -32,7 +32,9 @@ export type ForkErrorCode =
   | 'NOT_CODEX_SESSION'
   | 'REMOTE_NOT_SUPPORTED'
   | 'SOURCE_NEVER_RAN'
-  | 'NO_PRIOR_ASSISTANT';
+  | 'NO_PRIOR_ASSISTANT'
+  | 'CODEX_FORK_STATE_UNAVAILABLE'
+  | 'UNSUPPORTED_HISTORY';
 
 function forkError(code: ForkErrorCode, message: string): Error {
   const err = new Error(message);
@@ -44,6 +46,31 @@ function normalizePositiveInt(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
     ? Math.floor(value)
     : 0;
+}
+
+/** SDK 副作用前拒绝复制任何跨过 agent_switch 的混合引擎历史。 */
+async function assertForkRangeDoesNotCrossAgentSwitch(
+  sourceSessionId: string,
+  clearedAt: number | null,
+  boundaryCreatedAt: number,
+): Promise<void> {
+  const boundary = await getDbClient().queryOne<{ id: string }>(
+    `SELECT id FROM messages
+      WHERE session_id = ?
+        AND role = 'agent_switch'
+        AND rewind_at IS NULL
+        AND created_at < ?
+        AND (? IS NULL OR created_at > ?)
+      ORDER BY created_at DESC, rowid DESC
+      LIMIT 1`,
+    [sourceSessionId, boundaryCreatedAt, clearedAt, clearedAt],
+  );
+  if (boundary) {
+    throw forkError(
+      'UNSUPPORTED_HISTORY',
+      '目标消息之前包含引擎切换边界,无法把混合引擎历史复制到单一原生会话',
+    );
+  }
 }
 
 function augmentClaudeForkUuidMapForSyntheticRows(
@@ -62,6 +89,61 @@ function augmentClaudeForkUuidMapForSyntheticRows(
     if (newUuid) augmented.set(meta.uuid, newUuid);
   }
   return augmented;
+}
+
+/**
+ * Identify legacy Claude rows whose `parentUuid` actually stores transcript
+ * parentage. The source transcript lets us distinguish those rows from real
+ * tool-owned assistant output before the fork transaction copies metadata.
+ */
+function collectLegacyClaudeTranscriptParentUuids(
+  rows: Array<{ agentMeta: string | null }>,
+  index: ClaudeTranscriptAnchorIndex | null,
+): string[] {
+  if (!index) return [];
+  const uuids = new Set<string>();
+  for (const row of rows) {
+    const meta = parseClaudeAgentMeta(row.agentMeta);
+    if (!meta.uuid || !meta.parentUuid || meta.transcriptParentUuid) continue;
+    // Imported Claude rows may use a synthetic per-content-block UUID. The
+    // assistant request id is the stable bridge back to the real transcript
+    // entry in that case; keep the database UUID as the migration key below.
+    const entry = index.byUuid.get(meta.uuid)
+      ?? (meta.requestId ? index.assistantByRequestId.get(meta.requestId) : undefined);
+    if (!entry) continue;
+    // Top-level assistants and every non-assistant transcript record use
+    // parentUuid as the legacy transcript edge. A legacy subagent assistant
+    // can also have both edges in JSONL; when its stored parentUuid matches
+    // the transcript edge, it is safe to recover that edge before copying.
+    // sourceToolAssistantUUID is represented as both parent edges for legacy
+    // assistant rows. It is a tool parent, not a transcript parent, so leave
+    // it for the tool-parent remap instead of migrating it away.
+    if (entry.type === 'assistant' && entry.toolParentUuid === meta.parentUuid) continue;
+    if (
+      entry.type !== 'assistant' ||
+      index.assistantByUuid.has(entry.uuid) ||
+      meta.parentUuid === entry.parentUuid
+    ) {
+      uuids.add(meta.uuid);
+    }
+  }
+  return [...uuids];
+}
+
+function collectClaudeToolParentUuids(
+  rows: Array<{ agentMeta: string | null }>,
+  index: ClaudeTranscriptAnchorIndex | null,
+): string[] {
+  if (!index) return [];
+  const uuids = new Set<string>();
+  for (const row of rows) {
+    const meta = parseClaudeAgentMeta(row.agentMeta);
+    if (!meta.parentUuid) continue;
+    const entry = (meta.uuid ? index.byUuid.get(meta.uuid) : undefined)
+      ?? (meta.requestId ? index.assistantByRequestId.get(meta.requestId) : undefined);
+    if (entry?.toolParentUuid === meta.parentUuid) uuids.add(meta.parentUuid);
+  }
+  return [...uuids];
 }
 
 /**
@@ -142,6 +224,12 @@ export async function forkSessionAtMessage(
     boundaryCreatedAt = nextUser ? nextUser.createdAt : Number.MAX_SAFE_INTEGER;
   }
 
+  await assertForkRangeDoesNotCrossAgentSwitch(
+    sourceSessionId,
+    source.clearedAt,
+    boundaryCreatedAt,
+  );
+
   // 3. 计算 agent 侧截断信息。
   //
   // Claude: 反向找最近一条 assistant 且 agentMeta.uuid 存在 + **不是 subagent**
@@ -211,13 +299,21 @@ export async function forkSessionAtMessage(
   // （部分前缀同时覆盖 forkSessionStripEncrypted 产出的 [Fork·已剥离] 变体）。
   const newTitle = source.title.startsWith('[Fork') ? source.title : `[Fork] ${source.title}`;
   const agentKind = isCodex ? 'codex' : 'claude-code';
-  const { newSdkSessionId, uuidMap, initialContextTokens } = await getMaker().forkSdkSession(agentKind, {
+  const forkResult = await getMaker().forkSdkSession(agentKind, {
     sourceSdkSessionId: source.sdkSessionId,
     upToMessageId: assistantUuid,
     ...(tailTurnsToDrop !== undefined ? { tailTurnsToDrop } : {}),
     title: newTitle,
     workingDir: source.workingDir ?? undefined,
+  }).catch((err: unknown) => {
+    if (!isCodex) throw err;
+    const detail = err instanceof Error ? err.message : String(err);
+    throw forkError(
+      'CODEX_FORK_STATE_UNAVAILABLE',
+      detail,
+    );
   });
+  const { newSdkSessionId, uuidMap, initialContextTokens } = forkResult;
   const forkContextTokens = normalizePositiveInt(initialContextTokens);
   const forkContextWindow = normalizePositiveInt(source.contextWindow);
 
@@ -244,6 +340,12 @@ export async function forkSessionAtMessage(
   const txUuidMap = isCodex
     ? uuidMap
     : augmentClaudeForkUuidMapForSyntheticRows(sourceMessages, uuidMap, claudeAnchorIndex);
+  const legacyTranscriptParentUuids = isCodex
+    ? []
+    : collectLegacyClaudeTranscriptParentUuids(sourceMessages, claudeAnchorIndex);
+  const toolParentUuids = isCodex
+    ? []
+    : collectClaudeToolParentUuids(sourceMessages, claudeAnchorIndex);
   await getDbClient().tx('fork.session', {
     sourceSessionId,
     targetCreatedAt: boundaryCreatedAt,
@@ -277,6 +379,8 @@ export async function forkSessionAtMessage(
       updatedAt: now,
     },
     uuidMap: Array.from(txUuidMap.entries()),
+    ...(legacyTranscriptParentUuids.length > 0 ? { legacyTranscriptParentUuids } : {}),
+    ...(toolParentUuids.length > 0 ? { toolParentUuids } : {}),
     newMessageIds,
   });
 
@@ -324,6 +428,12 @@ export async function forkSessionStripEncrypted(sourceSessionId: string): Promis
   );
   const copyBeforeCreatedAt = maxCreatedAt + 1;
 
+  await assertForkRangeDoesNotCrossAgentSwitch(
+    sourceSessionId,
+    source.clearedAt,
+    copyBeforeCreatedAt,
+  );
+
   const newTitle = source.title.startsWith('[Fork·已剥离]')
     ? source.title
     : `[Fork·已剥离] ${source.title}`;
@@ -333,6 +443,12 @@ export async function forkSessionStripEncrypted(sourceSessionId: string): Promis
     title: newTitle,
     workingDir: source.workingDir ?? undefined,
     stripEncryptedReasoning: true,
+  }).catch((err: unknown) => {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw forkError(
+      'CODEX_FORK_STATE_UNAVAILABLE',
+      detail,
+    );
   });
 
   const now = Date.now();

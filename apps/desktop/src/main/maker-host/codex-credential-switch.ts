@@ -36,6 +36,7 @@ interface LocalCredentialModeSwitchMaker {
 export interface PrepareLocalCodexCredentialModeSwitchInput {
   maker: LocalCredentialModeSwitchMaker;
   isSessionInTurn?: (sessionId: string) => boolean;
+  signal?: AbortSignal;
   /** 仅用于错误信息可观测性:本次切换的方向(fromMode → toMode)。 */
   fromMode?: string;
   /** 当前 host 的归一化生效形态(fromMode 是原始登记值,隐式来源时为 undefined)。 */
@@ -51,6 +52,7 @@ export interface PrepareLocalSessionCredentialModeSwitchInput {
   maker: LocalCredentialModeSwitchMaker;
   sessionId: string;
   isSessionInTurn?: (sessionId: string) => boolean;
+  signal?: AbortSignal;
 }
 
 export interface PrepareLocalSessionCredentialModeSwitchResult {
@@ -127,6 +129,12 @@ export function isLocalSessionBusy(
 
 const isSessionBusy = isLocalSessionBusy;
 
+function throwIfCredentialSwitchAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw new Error('credential mode switch aborted');
+  }
+}
+
 /**
  * 判断运行中的本地会话是否必须关闭后重建。
  *
@@ -184,6 +192,7 @@ export function shouldCloseSessionForCredentialSwitch(
 export async function prepareLocalSessionCredentialModeSwitch(
   input: PrepareLocalSessionCredentialModeSwitchInput,
 ): Promise<PrepareLocalSessionCredentialModeSwitchResult> {
+  throwIfCredentialSwitchAborted(input.signal);
   const session = input.maker
     .listActiveSessions()
     .find((candidate) => candidate.id === input.sessionId);
@@ -193,6 +202,7 @@ export async function prepareLocalSessionCredentialModeSwitch(
   }
 
   await withRehydrateCloseSuppressed(session.id, async () => {
+    throwIfCredentialSwitchAborted(input.signal);
     await input.maker.closeSession(session.id);
   });
   return { closedSessionIds: [session.id] };
@@ -207,6 +217,7 @@ export async function prepareLocalSessionCredentialModeSwitch(
 export async function prepareLocalCodexCredentialModeSwitch(
   input: PrepareLocalCodexCredentialModeSwitchInput,
 ): Promise<PrepareLocalCodexCredentialModeSwitchResult> {
+  throwIfCredentialSwitchAborted(input.signal);
   const localCodexSessions = input.maker
     .listActiveSessions()
     .filter(isLocalCodexSession);
@@ -224,7 +235,9 @@ export async function prepareLocalCodexCredentialModeSwitch(
 
   const closedSessionIds: string[] = [];
   for (const session of localCodexSessions) {
+    throwIfCredentialSwitchAborted(input.signal);
     await withRehydrateCloseSuppressed(session.id, async () => {
+      throwIfCredentialSwitchAborted(input.signal);
       await input.maker.closeSession(session.id);
     });
     closedSessionIds.push(session.id);

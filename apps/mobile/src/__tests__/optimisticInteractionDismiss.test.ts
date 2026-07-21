@@ -6,7 +6,7 @@
  *  - settle confirmed:仅解除抑制(权威流不会再带来这张卡);
  *  - settle restore:解除抑制并复原原卡(真失败,供用户重试)。
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { remoteSessionStore } from '@/session/remoteSessionStore';
 import type { PendingInteraction } from '@/session/types';
 
@@ -31,6 +31,39 @@ describe('optimistic interaction dismiss', () => {
     // 全量快照仍含这张卡(被控端还没处理完):同样被过滤,其余照常落地。
     remoteSessionStore.setPendingInteractions('s1', [interaction('r1'), interaction('r2'), interaction('r3')]);
     expect(remoteSessionStore.getPendingInteractions('s1').map((i) => i.request.requestId)).toEqual(['r2', 'r3']);
+  });
+
+  it('被抑制的 push 重放不能 finalize 当前 assistant 流', () => {
+    vi.useFakeTimers();
+    try {
+      remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+        sessionId: 's1',
+        event: { type: 'text', data: { text: 'hello', isFinal: false } },
+      });
+      vi.runOnlyPendingTimers();
+
+      remoteSessionStore.setPendingInteractions('s1', [interaction('r1')]);
+      remoteSessionStore.beginOptimisticInteractionDismiss('s1', 'r1');
+      remoteSessionStore.applyInteractionRequest('s1', interaction('r1'));
+
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        content: 'hello',
+        agentMeta: { isStreaming: true },
+      }]);
+
+      remoteSessionStore.applyRemotePush('dev-1', 'maker:event', {
+        sessionId: 's1',
+        event: { type: 'text', data: { text: ' world', isFinal: false } },
+      });
+      vi.runOnlyPendingTimers();
+
+      expect(remoteSessionStore.getMessages('s1')).toMatchObject([{
+        content: 'hello world',
+        agentMeta: { isStreaming: true },
+      }]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('settle confirmed 转延长抑制:早发晚到的旧快照(仍含该卡)被滤,不闪回', () => {

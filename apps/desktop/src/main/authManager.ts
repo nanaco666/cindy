@@ -37,6 +37,7 @@ import {
 import { closeDb as closeLocalDb } from './localDb';
 import { readReloginFlag, clearReloginFlag } from './updateService';
 import * as canaryFlagStore from './canaryFlagStore';
+import { decodeAccessTokenOrgSlug } from './authTokenClaims';
 import { getProviderSecretStore } from './secrets/providerSecretStore.js';
 import {
   runRefreshWithReplacementRetry,
@@ -100,7 +101,22 @@ export interface User {
   membershipRole: 'owner' | 'admin' | 'member';
   orgId: string | null;
   orgName: string | null;
+  /**
+   * 组织 slug(access token 的 orgSlug claim,ctx=org 时 auth-server 注入)。
+   * 组织的稳定标识(域名派生、全局唯一,如 'xd'),与 orgId(cuid)/orgName(显示名)
+   * 不同,适合做企业功能分流的配置键。个人身份或旧 token 缺 claim 时为 null。
+   * membership 响应不含此字段,由 snapshotAuthState 出口统一从 access token 解码注入。
+   */
+  orgSlug: string | null;
   passportId: string;
+}
+
+/**
+ * Main-process-only auth user. Keep the raw membership display name separate
+ * from `User.name`, whose UI fallback may be an email address or "Cindy".
+ */
+interface CurrentUser extends User {
+  membershipDisplayName: string;
 }
 
 export interface AuthState {
@@ -110,6 +126,14 @@ export interface AuthState {
   isCanary: boolean;
   /** SkillHub 跨设备识别：本机 deviceId（machineIdSync 结果），登录前后都会有值 */
   deviceId: string;
+}
+
+export interface AuthInitializeOptions {
+  /**
+   * 冷启动 refresh 超过 UI 等待上限时触发。renderer 仍会先拿到未登录兜底态，
+   * 但 dev restart 必须继续等待这个最终结果：迟到登录后还要观察 localDb migration。
+   */
+  onColdStartPending?: (completion: Promise<AuthState>) => void;
 }
 
 type RefreshResponse = AuthTokenPair;
@@ -133,7 +157,7 @@ let accountSwitchTeardown: AccountSwitchTeardown | null = null;
 // ── Module-level state ──────────────────────────────────────────────────────
 
 let accessToken: string | null = null;
-let currentUser: User | null = null;
+let currentUser: CurrentUser | null = null;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 let refreshPromise: Promise<boolean> | null = null;
 /**
@@ -275,10 +299,11 @@ function getRefreshErrorCode(result: { data: unknown }): string | undefined {
   return (result.data as AuthErrorResponse | null)?.error?.code;
 }
 
-function mapMembershipToAuthUser(membership: AuthMembership, passportId?: string): User {
+function mapMembershipToAuthUser(membership: AuthMembership, passportId?: string): CurrentUser {
   return {
     id: membership.id,
     name: membership.displayName || membership.email || 'Cindy',
+    membershipDisplayName: membership.displayName,
     // auth-server 自助头像(PATCH /api/me/profile);null = 未设置(UI 首字母兜底)。
     // 产品资料头像回落已随 /api/user/me 退役(2026-07)。
     avatar: membership.avatarUrl ?? null,
@@ -289,11 +314,16 @@ function mapMembershipToAuthUser(membership: AuthMembership, passportId?: string
     membershipRole: membership.role,
     orgId: membership.orgId,
     orgName: membership.orgName,
+    // membership 响应不带 slug;所有出口经 snapshotAuthState 时从 access token 补齐。
+    orgSlug: null,
     passportId: passportId ?? membership.passportId ?? '',
   };
 }
 
-function mergeMembershipWithExisting(membership: AuthMembership, existing: User | null): User {
+function mergeMembershipWithExisting(
+  membership: AuthMembership,
+  existing: CurrentUser | null,
+): CurrentUser {
   const mapped = mapMembershipToAuthUser(membership);
   if (!existing || existing.id !== mapped.id) return mapped;
   return {
@@ -626,7 +656,25 @@ function broadcastToRenderers(channel: string, payload: unknown): void {
  */
 function snapshotAuthState(): AuthState {
   return {
-    user: currentUser,
+    // orgSlug 在出口处统一从当前 access token 解码注入(token 与 currentUser
+    // 总是成对更新,快照读取时两者一致)。这里显式投影公开字段,避免 main-only
+    // membershipDisplayName 意外透传到 renderer。
+    user: currentUser
+      ? {
+          id: currentUser.id,
+          name: currentUser.name,
+          avatar: currentUser.avatar,
+          email: currentUser.email,
+          defaultModel: currentUser.defaultModel,
+          defaultEffort: currentUser.defaultEffort,
+          membershipKind: currentUser.membershipKind,
+          membershipRole: currentUser.membershipRole,
+          orgId: currentUser.orgId,
+          orgName: currentUser.orgName,
+          orgSlug: decodeAccessTokenOrgSlug(accessToken),
+          passportId: currentUser.passportId,
+        }
+      : null,
     isAuthenticated: accessToken !== null && currentUser !== null,
     isCanary: currentUser !== null && canaryFlagStore.read(),
     deviceId,
@@ -773,6 +821,15 @@ export function getCurrentUserId(): string | null {
   return currentUser?.id ?? null;
 }
 
+/**
+ * Public issue attribution may only use the raw auth membership display name.
+ * UI fallbacks (`email` / "Cindy") are intentionally excluded for privacy.
+ */
+export function getCurrentMembershipDisplayName(): string | undefined {
+  const displayName = currentUser?.membershipDisplayName.trim();
+  return displayName || undefined;
+}
+
 /** SkillHub 跨设备识别：本机 deviceId（machineIdSync 结果），登录前后都可用 */
 export function getDeviceId(): string {
   return deviceId;
@@ -840,6 +897,7 @@ export async function updateServerProfile(
     currentUser = {
       ...currentUser,
       name: membership.displayName || currentUser.name,
+      membershipDisplayName: membership.displayName,
       avatar: membership.avatarUrl ?? null,
     };
     notifyRenderer();
@@ -855,7 +913,7 @@ export async function updateServerProfile(
   };
 }
 
-export async function initialize(): Promise<AuthState> {
+export async function initialize(options: AuthInitializeOptions = {}): Promise<AuthState> {
   // 进程内已登录快路径:auth 状态是 main 进程全局的,主窗登录后其它 renderer
   // (会话多开副窗 / 右侧栏子窗口)mount 时各自都会调一次 auth:initialize ——
   // 没有这条快路径,每个新窗口都会重跑一整轮网络 refresh(token 轮换 + /me),
@@ -901,9 +959,11 @@ export async function initialize(): Promise<AuthState> {
   }
   // 黑洞 / captive-portal 网络护栏:限时等待,超时先以未登录返回解锁 splash,
   // 流程继续后台跑;迟到成功由流程内部广播登录态(renderer 自动跳回主界面)。
-  return awaitWithStartupTimeout(coldStartAuthInFlight, {
+  const coldStartCompletion = coldStartAuthInFlight;
+  return awaitWithStartupTimeout(coldStartCompletion, {
     timeoutMs: COLD_START_AUTH_GATE_TIMEOUT_MS,
     onTimeout: () => {
+      options.onColdStartPending?.(coldStartCompletion);
       log.warn(
         `cold-start auth still pending after ${COLD_START_AUTH_GATE_TIMEOUT_MS}ms — unblocking startup as logged out, flow continues in background`,
       );

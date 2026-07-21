@@ -15,13 +15,13 @@ import { promises as fsp } from 'node:fs';
 import { createLogger } from '../logger';
 import * as imageCacheStore from '../imageCacheStore';
 import * as cindyMediaBlobStore from '../cindy-media/blobStore';
-import { uploadLocalFile, uploadBuffer } from './mediaTransfer';
+import { uploadLocalFile, uploadBuffer, type UploadResult } from './mediaTransfer';
 import {
   OUTBOUND_IMAGE_INPUT_MAX_BYTES,
   compressOutboundImage,
   mayCompressOutboundImage,
 } from './outboundImageCompress';
-import { buildAttachmentOssRef } from '../../shared/attachmentOssRef';
+import { buildLegacyAttachmentOssRef, parseAttachmentOssRef } from '../../shared/attachmentOssRef';
 
 const log = createLogger('device-link:outboundMedia');
 
@@ -53,6 +53,27 @@ interface AttachmentSource {
   originalPath?: unknown;
 }
 
+/** 把上传结果完整写入端到端引用，确保接收端校验的是实际上传字节。 */
+function buildUploadedAttachmentRef(
+  result: UploadResult,
+  originalName: string | undefined,
+): string {
+  return buildLegacyAttachmentOssRef({
+    ossKey: result.key,
+    mimeType: result.contentType,
+    originalName,
+    size: result.size,
+    sha256: result.sha256,
+  });
+}
+
+function persistedIntegrityFields(
+  ref: string,
+): { size: number; sha256: string } | Record<string, never> {
+  const parsed = parseAttachmentOssRef(ref);
+  return parsed?.size === undefined ? {} : { size: parsed.size, sha256: parsed.sha256! };
+}
+
 /** 把一个附件源上传 OSS,返回 OSS 引用串。无可用来源 / 上传失败 → 抛错。 */
 async function uploadAttachment(src: AttachmentSource): Promise<string> {
   const mimeType = typeof src.mimeType === 'string' ? src.mimeType : undefined;
@@ -63,15 +84,16 @@ async function uploadAttachment(src: AttachmentSource): Promise<string> {
     const raw = Buffer.from(src.base64, 'base64');
     // 输入体量护栏与 xdt-image 路径同口径:软超时只是不等结果、并不打断 libvips
     // 解码,病态大图进 sharp 仍会拉高 main 进程 CPU/内存,超限直接原字节上传。
-    const compressed = raw.byteLength <= OUTBOUND_IMAGE_INPUT_MAX_BYTES
-      ? await compressOutboundImage(raw, mimeType)
-      : null;
-    const ext = compressed?.ext ?? ((mimeType && EXT_BY_MIME[mimeType]) ?? 'bin');
+    const compressed =
+      raw.byteLength <= OUTBOUND_IMAGE_INPUT_MAX_BYTES
+        ? await compressOutboundImage(raw, mimeType)
+        : null;
+    const ext = compressed?.ext ?? (mimeType && EXT_BY_MIME[mimeType]) ?? 'bin';
     const r = await uploadBuffer(compressed?.bytes ?? raw, {
       ext,
       contentType: compressed?.contentType ?? mimeType,
     });
-    return buildAttachmentOssRef({ ossKey: r.key, mimeType: r.contentType, originalName });
+    return buildUploadedAttachmentRef(r, originalName);
   }
 
   // 2) url / path → 解析成本地绝对路径后流式上传
@@ -92,12 +114,14 @@ async function uploadAttachment(src: AttachmentSource): Promise<string> {
     // 占位、截图/生成图没有 plain path,不受影响。
     // 双形态判别:队列形态 files[] 的 path 字段 / message 形态 block 的 originalPath
     // 字段,二者任一携带纯磁盘路径即显式文件。
-    const originalPath = typeof src.originalPath === 'string' && src.originalPath ? src.originalPath : '';
+    const originalPath =
+      typeof src.originalPath === 'string' && src.originalPath ? src.originalPath : '';
     const explicitCandidate = originalPath || rawPath;
-    const explicitFile = !!explicitCandidate
-      && explicitCandidate !== ref
-      && !explicitCandidate.startsWith('clipboard://')
-      && !explicitCandidate.startsWith('xdt-image://');
+    const explicitFile =
+      !!explicitCandidate &&
+      explicitCandidate !== ref &&
+      !explicitCandidate.startsWith('clipboard://') &&
+      !explicitCandidate.startsWith('xdt-image://');
     // gif/webp/未知 mime 的压缩 plan 恒为 null:整读进内存只会原样丢弃、再流式重读
     // 一遍(动图可达数十 MB),先按 mime 判定可压才读盘;可压的也先 stat 把关体量,
     // 病态大图直接走流式上传,不把整份文件读进 main 进程内存(uploadLocalFile 是流式的)。
@@ -106,7 +130,10 @@ async function uploadAttachment(src: AttachmentSource): Promise<string> {
       try {
         const st = await fsp.stat(resolved.absPath);
         if (st.size > 0 && st.size <= OUTBOUND_IMAGE_INPUT_MAX_BYTES) {
-          compressed = await compressOutboundImage(await fsp.readFile(resolved.absPath), effectiveMime);
+          compressed = await compressOutboundImage(
+            await fsp.readFile(resolved.absPath),
+            effectiveMime,
+          );
         }
       } catch {
         // 读文件失败不在这里报:交给下面 uploadLocalFile 用同一路径产生原有错误语义。
@@ -117,11 +144,14 @@ async function uploadAttachment(src: AttachmentSource): Promise<string> {
         ext: compressed.ext,
         contentType: compressed.contentType,
       });
-      return buildAttachmentOssRef({ ossKey: r.key, mimeType: r.contentType, originalName });
+      return buildUploadedAttachmentRef(r, originalName);
     }
     // 显式文件也从缓存副本上传(字节与原文件一致,且不依赖原路径此刻仍存在)。
-    const r = await uploadLocalFile(resolved.absPath, effectiveMime ? { contentType: effectiveMime } : {});
-    return buildAttachmentOssRef({ ossKey: r.key, mimeType: r.contentType, originalName });
+    const r = await uploadLocalFile(
+      resolved.absPath,
+      effectiveMime ? { contentType: effectiveMime } : {},
+    );
+    return buildUploadedAttachmentRef(r, originalName);
   }
 
   // 2a') cindy-media:// 媒体总仓 blob(新世界统一地址,规则 25):图片沿用
@@ -135,7 +165,10 @@ async function uploadAttachment(src: AttachmentSource): Promise<string> {
       try {
         const st = await fsp.stat(resolved.absPath);
         if (st.size > 0 && st.size <= OUTBOUND_IMAGE_INPUT_MAX_BYTES) {
-          compressed = await compressOutboundImage(await fsp.readFile(resolved.absPath), effectiveMime);
+          compressed = await compressOutboundImage(
+            await fsp.readFile(resolved.absPath),
+            effectiveMime,
+          );
         }
       } catch {
         // 同 xdt-image 分支:读失败交给下面 uploadLocalFile 报原有错误语义。
@@ -146,19 +179,23 @@ async function uploadAttachment(src: AttachmentSource): Promise<string> {
         ext: compressed.ext,
         contentType: compressed.contentType,
       });
-      return buildAttachmentOssRef({ ossKey: r.key, mimeType: r.contentType, originalName });
+      return buildUploadedAttachmentRef(r, originalName);
     }
     const r = await uploadLocalFile(resolved.absPath, { contentType: effectiveMime });
-    return buildAttachmentOssRef({ ossKey: r.key, mimeType: r.contentType, originalName });
+    return buildUploadedAttachmentRef(r, originalName);
   }
 
   // 2b) 用户显式给出的磁盘路径附件是「字节精确」语义(素材/设计稿/文档),不压,原样上传。
   const r = await uploadLocalFile(ref, mimeType ? { contentType: mimeType } : {});
-  return buildAttachmentOssRef({ ossKey: r.key, mimeType: r.contentType, originalName });
+  return buildUploadedAttachmentRef(r, originalName);
 }
 
 function isAttachmentBlock(b: unknown): b is AttachmentSource & { type: string } {
-  return !!b && typeof b === 'object' && ((b as { type?: unknown }).type === 'image' || (b as { type?: unknown }).type === 'file');
+  return (
+    !!b &&
+    typeof b === 'object' &&
+    ((b as { type?: unknown }).type === 'image' || (b as { type?: unknown }).type === 'file')
+  );
 }
 
 /** 改写 send/steer 的 message(content-block 形态)。无附件 → 原样。 */
@@ -170,7 +207,12 @@ async function rewriteMessage(message: unknown): Promise<unknown> {
   for (const raw of m.content) {
     if (isAttachmentBlock(raw)) {
       const ref = await uploadAttachment(raw);
-      content.push({ type: raw.type, path: ref, mimeType: raw.mimeType, originalName: raw.originalName });
+      content.push({
+        type: raw.type,
+        path: ref,
+        mimeType: raw.mimeType,
+        originalName: raw.originalName,
+      });
     } else {
       content.push(raw);
     }
@@ -199,7 +241,7 @@ function rewritePersistedContent(json: string, refMap: Map<string, string>): str
         const ref = refMap.get(url);
         if (ref) {
           changed = true;
-          return { ...(im as object), url: ref };
+          return { ...(im as object), url: ref, ...persistedIntegrityFields(ref) };
         }
       }
       return im;
@@ -212,7 +254,7 @@ function rewritePersistedContent(json: string, refMap: Map<string, string>): str
         const ref = refMap.get(p);
         if (ref) {
           changed = true;
-          return { ...(fl as object), path: ref };
+          return { ...(fl as object), path: ref, ...persistedIntegrityFields(ref) };
         }
       }
       return fl;
@@ -252,10 +294,22 @@ async function rewriteQueued(item: unknown): Promise<unknown> {
 
   const files: unknown[] = [];
   for (const f of it.files) {
-    if (f && typeof f === 'object' && ((f as AttachmentSource).url || (f as AttachmentSource).path || (f as AttachmentSource).base64)) {
+    if (
+      f &&
+      typeof f === 'object' &&
+      ((f as AttachmentSource).url ||
+        (f as AttachmentSource).path ||
+        (f as AttachmentSource).base64)
+    ) {
       const ref = await uploadOnce(f as AttachmentSource);
       // url 优先被 buildMakerUserMessage 取用;清掉 base64 避免把字节内联进 relay。
-      files.push({ ...(f as object), url: ref, path: ref, base64: undefined });
+      files.push({
+        ...(f as object),
+        url: ref,
+        path: ref,
+        base64: undefined,
+        ...persistedIntegrityFields(ref),
+      });
     } else {
       files.push(f);
     }

@@ -247,7 +247,7 @@ export interface SlackHookMcpDeps {
 }
 
 /**
- * Host injects a `getScheduler()` accessor — the lizi_scheduler MCP server
+ * Host injects a `getScheduler()` accessor — the cindy_scheduler MCP server
  * never holds a long-lived Scheduler reference because the host may
  * `resetScheduler()` on logout / 切账号. Each tool call dereferences
  * fresh; reset-window calls throw `'scheduler not started'` which the MCP
@@ -494,18 +494,18 @@ export type LiziMcpId =
   | 'computer'
   | 'lizi_feishu_bot'
   | 'lizi_slack'
-  | 'lizi_scheduler'
+  | 'cindy_scheduler'
   | 'lizi_ssh'
   | 'lizi_memory'
   | 'lizi_contacts'
-  | 'lizi_xdt_helper'
+  | 'cindy_helper'
   | 'lizi_orca'
   | 'lizi_lsp';
 
 // ── Host-callback Result pattern ────────────────────────────────────────────
 //
 // Several MCP tools delegate to host-side business code via injected callbacks
-// (e.g. lizi_xdt_helper's sendToSession, lizi_orca's team tools, history
+// (e.g. cindy_helper's sendToSession, lizi_orca's team tools, history
 // readers). Those callbacks return a Result variant rather than throw — host
 // can use `HOST_NOT_READY` to express "service still bootstrapping" and the
 // tool handler maps it to a business errorCode + LLM hint, instead of bubbling

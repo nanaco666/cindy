@@ -9,6 +9,7 @@
  * - 填入后用户 Enter → 才以填入的标题提交;
  * - 填入后用户 Escape → onCancel,标题不生效;
  * - 生成期间编辑被终结(组件卸载)→ 迟到结果被 mountedRef 守卫丢弃。
+ * - 侧栏 active 反相底色上,input 与 Magic 按钮统一使用 active foreground。
  */
 
 import { createElement, useState } from 'react';
@@ -50,6 +51,25 @@ async function renderAndGenerate(onCommit: (raw: string) => void, onCancel: () =
 }
 
 describe('SessionRenameInput AI rename fills edit state', () => {
+  it('uses the active foreground for both rename controls on an active sidebar row', () => {
+    const { container } = render(createElement(SessionRenameInput, {
+      sessionId: 's1',
+      value: '旧标题',
+      onValueChange: () => {},
+      onCommit: () => {},
+      onCancel: () => {},
+      inputClassName: 'text-foreground',
+      activeForeground: true,
+    }));
+
+    const input = container.querySelector('input')!;
+    const button = container.querySelector('button')!;
+    expect(input.classList.contains('text-sidebar-item-active-foreground')).toBe(true);
+    expect(input.classList.contains('text-foreground')).toBe(false);
+    expect(button.classList.contains('text-sidebar-item-active-foreground')).toBe(true);
+    expect(button.classList.contains('hover:text-sidebar-item-active-foreground')).toBe(true);
+  });
+
   it('generated title fills the input without committing; Enter commits it', async () => {
     const onCommit = vi.fn();
     const { input, container } = await renderAndGenerate(onCommit, () => {});

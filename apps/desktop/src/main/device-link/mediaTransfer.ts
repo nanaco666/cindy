@@ -21,13 +21,16 @@
  *     + 显式 Content-Length),避免把几 GB 视频整文件读进内存。流式上传的端到端可用性在 #25
  *     本地全栈 e2e 复核(Chromium net 栈支持 duplex half,但个别 endpoint 行为需实测)。
  *   - 下载:整文件下载(小媒体)用 arrayBuffer;range 流式(视频/音频)返回**原始 OSS Response**,
- *     由调用方(`xdt-remote-media://` handler)透传其 body 流,绝不在此 buffer 整个视频。
+ *     由调用方(`cindy-remote-media://` handler)透传其 body 流,绝不在此 buffer 整个视频。
  */
-import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { readFile, rename, rm, stat } from 'node:fs/promises';
 import { Readable, Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
 import { net } from 'electron';
+import type { AttachmentIntegrity } from '@lizi/device-link';
 
 import { serverApiFetch } from '../serverApiClient.js';
 import { deviceLinkApiBase } from './index.js';
@@ -101,10 +104,16 @@ export interface UploadResult {
   key: string;
   size: number;
   contentType: string;
+  /** 实际送入 OSS 的字节摘要。 */
+  sha256: string;
 }
 
 /** 向 relay server 申请上传预签名。 */
-async function presignPut(size: number, ext: string, contentType: string): Promise<PresignPutResponse> {
+async function presignPut(
+  size: number,
+  ext: string,
+  contentType: string,
+): Promise<PresignPutResponse> {
   return serverApiFetch<PresignPutResponse>(PRESIGN_PUT_PATH, {
     method: 'POST',
     body: { size, ext, contentType },
@@ -122,7 +131,11 @@ async function presignGet(key: string): Promise<PresignGetResponse> {
 }
 
 /** 裸 PUT 字节到 OSS 预签名 URL(绝对 URL,不经 serverApiFetch)。失败抛错。 */
-async function putBytesToOss(putUrl: string, body: ArrayBuffer | ReadableStream, contentType: string, size: number): Promise<void> {
+async function putBytesToOss(
+  putUrl: string,
+  body: ArrayBuffer | ReadableStream,
+  contentType: string,
+): Promise<void> {
   const headers: Record<string, string> = {
     'Content-Type': contentType,
     // device-link 媒体一律私有:对象 ACL 设 private(覆盖 public-read bucket 默认),
@@ -169,28 +182,48 @@ export async function uploadLocalFile(
     opts.extHint !== undefined ? opts.extHint.replace(/^\.+/, '').toLowerCase() : extOf(localPath);
   const contentType = opts.contentType ?? mimeOf(ext);
   const { putUrl, key } = await presignPut(size, ext, contentType);
+  let sha256: string;
 
-  if (size <= STREAM_THRESHOLD) {
-    // 小媒体:读进 Buffer 整体 PUT(成熟稳定路径)。整体 PUT 无中间粒度,
-    // 完成时一次性回调。
-    const buf = await readFileToArrayBuffer(localPath);
-    await putBytesToOss(putUrl, buf, contentType, size);
-    opts.onProgress?.(size);
-  } else {
-    // 大媒体:磁盘流式 PUT,避免整文件进内存;经计数 Transform 上报进度。
-    let sent = 0;
-    const counter = new Transform({
-      transform(chunk: Buffer, _enc, cb) {
-        sent += chunk.length;
-        opts.onProgress?.(sent);
-        cb(null, chunk);
-      },
-    });
-    const webStream = Readable.toWeb(createReadStream(localPath).pipe(counter)) as unknown as ReadableStream;
-    await putBytesToOss(putUrl, webStream, contentType, size);
+  try {
+    if (size <= STREAM_THRESHOLD) {
+      // 小媒体:读进 Buffer 整体 PUT(成熟稳定路径)。整体 PUT 无中间粒度,
+      // 完成时一次性回调。
+      const buf = await readFile(localPath);
+      if (buf.byteLength !== size) {
+        throw new Error(`文件在上传前发生变化:预期 ${size} 字节,实际 ${buf.byteLength} 字节`);
+      }
+      sha256 = createHash('sha256').update(buf).digest('hex');
+      await putBytesToOss(putUrl, exactArrayBuffer(buf), contentType);
+      opts.onProgress?.(size);
+    } else {
+      // 大媒体:磁盘流式 PUT,避免整文件进内存;经计数 Transform 上报进度。
+      let sent = 0;
+      const hasher = createHash('sha256');
+      const counter = new Transform({
+        transform(chunk: Buffer, _enc, cb) {
+          sent += chunk.length;
+          hasher.update(chunk);
+          opts.onProgress?.(sent);
+          cb(null, chunk);
+        },
+      });
+      const webStream = Readable.toWeb(
+        createReadStream(localPath).pipe(counter),
+      ) as unknown as ReadableStream;
+      await putBytesToOss(putUrl, webStream, contentType);
+      if (sent !== size) {
+        // Cleanup is centralized below so transport and source-stream errors use the same path.
+        throw new Error(`文件在上传期间发生变化:预期 ${size} 字节,实际 ${sent} 字节`);
+      }
+      sha256 = hasher.digest('hex');
+    }
+  } catch (error) {
+    // Cleanup is best-effort after every post-presign transfer failure.
+    await removeRemote(key);
+    throw error;
   }
-  log.debug(`uploaded key=${key} size=${size} ct=${contentType}`);
-  return { key, size, contentType };
+  log.debug(`uploaded key=${key} size=${size} ct=${contentType} integrity=sha256`);
+  return { key, size, contentType, sha256 };
 }
 
 /**
@@ -209,16 +242,18 @@ export async function uploadBuffer(
   const ext = extOf(`x.${opts.ext}`);
   const contentType = opts.contentType ?? mimeOf(ext);
   const { putUrl, key } = await presignPut(size, ext, contentType);
-  const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-  await putBytesToOss(putUrl, ab, contentType, size);
-  log.debug(`uploaded(buffer) key=${key} size=${size} ct=${contentType}`);
-  return { key, size, contentType };
+  const ab = bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  await putBytesToOss(putUrl, ab, contentType);
+  log.debug(`uploaded(buffer) key=${key} size=${size} ct=${contentType} integrity=sha256`);
+  return { key, size, contentType, sha256 };
 }
 
-/** 读文件为 ArrayBuffer(slice 出精确视图,避免 Buffer pool 带出多余字节)。 */
-async function readFileToArrayBuffer(localPath: string): Promise<ArrayBuffer> {
-  const { readFile } = await import('node:fs/promises');
-  const buf = await readFile(localPath);
+/** Buffer → 精确 ArrayBuffer，避免 Buffer pool 带出视图外字节。 */
+function exactArrayBuffer(buf: Buffer): ArrayBuffer {
   return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
 }
 
@@ -240,7 +275,7 @@ export async function downloadToBuffer(key: string): Promise<DownloadResult> {
 
 /**
  * 打开 OSS 媒体的(可选 range)读取流,返回**原始 OSS Response**。
- * 调用方(控制端 `xdt-remote-media://` handler)直接透传其 status(200/206)、
+ * 调用方(控制端 `cindy-remote-media://` handler)直接透传其 status(200/206)、
  * Content-Range / Content-Length / Content-Type 头与 body 流,实现视频/音频流式 206,
  * 不在此 buffer 整个文件。
  * @param rangeHeader 形如 "bytes=0-1023";不传则整文件 GET。
@@ -262,19 +297,66 @@ export async function openMediaStream(
   return resp;
 }
 
+/** 附件下载内容与发送端声明不一致。 */
+export class AttachmentIntegrityError extends Error {
+  constructor(
+    public readonly reason: 'size' | 'sha256',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'AttachmentIntegrityError';
+  }
+}
+
 /**
  * 流式下载 OSS 对象到本地文件(用于出方向附件物化:被控端把字节写盘喂 agent)。
- * 不经内存整 buffer —— 大附件(几 GB)也不会撑爆 main 进程堆。
+ * 不经内存整 buffer —— 大附件(几 GB)也不会撑爆 main 进程堆；完整性校验通过后才原子发布。
  */
-export async function downloadToFile(key: string, destPath: string): Promise<void> {
+export async function downloadToFile(
+  key: string,
+  destPath: string,
+  expected?: AttachmentIntegrity,
+  onProgress?: (downloadedBytes: number) => void,
+): Promise<void> {
   const { getUrl } = await presignGet(key);
   const resp = await net.fetch(getUrl, { method: 'GET' });
   if (!resp.ok) throw new Error(`OSS GET 失败 (${resp.status})`);
   if (!resp.body) throw new Error('OSS GET 响应无 body');
-  const { createWriteStream } = await import('node:fs');
-  const { Readable } = await import('node:stream');
-  const { pipeline } = await import('node:stream/promises');
-  await pipeline(Readable.fromWeb(resp.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(destPath));
+  const partPath = `${destPath}.${randomUUID()}.part`;
+  const hasher = createHash('sha256');
+  let size = 0;
+  const counter = new Transform({
+    transform(chunk: Buffer, _enc, cb) {
+      size += chunk.length;
+      hasher.update(chunk);
+      onProgress?.(size);
+      cb(null, chunk);
+    },
+  });
+  try {
+    await pipeline(
+      Readable.fromWeb(resp.body as Parameters<typeof Readable.fromWeb>[0]),
+      counter,
+      createWriteStream(partPath, { flags: 'wx' }),
+    );
+    const sha256 = hasher.digest('hex');
+    if (expected && size !== expected.size) {
+      throw new AttachmentIntegrityError(
+        'size',
+        `附件下载不完整:预期 ${expected.size} 字节,实际 ${size} 字节,请重新上传。`,
+      );
+    }
+    if (expected && sha256 !== expected.sha256) {
+      throw new AttachmentIntegrityError(
+        'sha256',
+        '附件完整性校验失败:下载内容与发送端不一致,请重新上传。',
+      );
+    }
+    await rename(partPath, destPath);
+  } catch (error) {
+    await rm(partPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
 }
 
 /** 删除中转对象(relay 校验 ownership 后删 OSS;对象不存在幂等)。失败仅 warn 不抛——

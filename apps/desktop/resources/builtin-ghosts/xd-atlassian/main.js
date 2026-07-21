@@ -25,8 +25,8 @@ var API_BASE = 'https://api.atlassian.com';
 /**
  * 交卷体量护栏:超过即经 fs 槽落盘工作目录只交路径(deliver 内),写盘不可用
  * 时才回落截断——沿袭老 MCP out_file 的泄洪语义(2026-07-14 fs 槽上线后回归)。
- * 2026-07-17 Lizi 要求放宽到 50M:上游 cindy.fetch 有 1MB 响应截断在前,
- * 该阈值实际不再触发自动落盘(结果一律内联交卷),点名 out_file 落盘仍可用。
+ * 2026-07-17 Lizi 要求放宽到 50M;2026-07-21 上游 cindy.fetch 响应截断同步
+ * 放宽 1MB→50MB,贴着上游上限的响应仍会触发自动落盘,点名 out_file 落盘照旧。
  */
 var RESULT_MAX_CHARS = 50 * 1000 * 1000;
 var IMAGE_MIME = { 'image/png': 1, 'image/jpeg': 1, 'image/jpg': 1, 'image/gif': 1, 'image/webp': 1 };
@@ -75,7 +75,7 @@ function storageFromText(text) {
 
 /** HTTP 状态 → 人话(镜像老 classify;401 到这里说明主机自动重刷也没救回来)。 */
 function classifyStatus(status, bodySnippet) {
-  if (status === 401) return 'Atlassian 授权已失效,请用户到 设置 → 插件 → XD Atlassian 重新连接账号';
+  if (status === 401) return 'Atlassian 授权已失效,请用户到主界面侧边栏「插件」→「XD Atlassian」详情页重新连接账号';
   if (status === 403) return '没有权限(HTTP 403):' + bodySnippet;
   if (status === 404) return '对象不存在或无访问权(HTTP 404)';
   if (status === 429) return 'Atlassian 接口限流(HTTP 429),请稍后重试';
@@ -255,7 +255,7 @@ async function toolAccounts(args, callId) {
     for (var i = 0; i < list.length; i++) if (list[i].key === 'atlassian_account') entry = list[i];
     if (!entry) return fail('OAuth 凭证槽缺失,请插件作者检查声明');
     if (!entry.accounts.length) {
-      return fail('还没连接任何 Atlassian 账号——请用户到 设置 → 插件 → XD Atlassian 点「连接账号」完成授权');
+      return fail('还没连接任何 Atlassian 账号——请用户到主界面侧边栏「插件」→「XD Atlassian」详情页点「连接账号」完成授权');
     }
     return {
       ok: true,
@@ -272,6 +272,65 @@ async function toolAccounts(args, callId) {
     return { ok: true, result: { sites: found.sites } };
   }
   return fail('未知 action:' + args.action);
+}
+
+/* ── jira issue link ───────────────────────────────────────────────── */
+
+/**
+ * 打一条 issue-link(POST /rest/api/3/issueLink)。linkType 用关系类型的 name
+ * (list_link_types 可查,如 Blocks / Cloners / Relates);方向由 inward/outward
+ * 两端决定(以 Blocks 为例:outward「blocks」、inward「is blocked by」)。
+ * 成功返回 { ok },失败返回 { err }。
+ */
+async function createIssueLink(base, account, callId, linkType, inwardKey, outwardKey, commentText) {
+  var body = {
+    type: { name: linkType },
+    inwardIssue: { key: inwardKey },
+    outwardIssue: { key: outwardKey },
+  };
+  if (commentText) body.comment = { body: adfFromText(commentText) };
+  var r = await api({
+    url: base + '/rest/api/3/issueLink',
+    method: 'POST',
+    body: body,
+    account: account,
+    callId: callId,
+  });
+  if (r.err) return { err: r.err };
+  return { ok: true };
+}
+
+/**
+ * create 成功后逐条建立 issue 关联。每条 link 只指定对端 issue(inward_issue 或
+ * outward_issue 之一),缺失的一端自动填新建 issue 的 key。link 失败绝不回滚
+ * 已创建的 issue,只在 { applied, failed } 里逐条如实汇报。
+ */
+async function applyCreateLinks(base, account, callId, newKey, links) {
+  var applied = [];
+  var failed = [];
+  for (var i = 0; i < links.length; i++) {
+    var lk = links[i] || {};
+    if (!lk.link_type) {
+      failed.push({ index: i, reason: '缺少 link_type' });
+      continue;
+    }
+    var inward = lk.inward_issue;
+    var outward = lk.outward_issue;
+    if (inward && outward) {
+      failed.push({ index: i, link_type: lk.link_type, reason: 'create.links 每条只指定 inward_issue / outward_issue 之一(另一端自动填新建 issue)' });
+      continue;
+    }
+    if (!inward && !outward) {
+      failed.push({ index: i, link_type: lk.link_type, reason: 'create.links 每条需要 inward_issue / outward_issue 之一(对端已存在 issue 的 key)' });
+      continue;
+    }
+    if (!inward) inward = newKey;
+    if (!outward) outward = newKey;
+    var r = await createIssueLink(base, account, callId, lk.link_type, inward, outward, lk.link_comment);
+    if (r.err) failed.push({ index: i, link_type: lk.link_type, inward_issue: inward, outward_issue: outward, reason: r.err });
+    else applied.push({ link_type: lk.link_type, inward_issue: inward, outward_issue: outward });
+  }
+  return { applied: applied, failed: failed };
 }
 
 /* ── jira_issues ───────────────────────────────────────────────────── */
@@ -321,7 +380,47 @@ async function toolJiraIssues(args, callId) {
       account: account, callId: callId,
     });
     if (created.err) return fail(created.err);
+    // 创建成功后按需关联其它 issue:Jira 创建接口本身不吃 issue-link,只能两步
+    // (先建 issue、再打 /issueLink)。link 失败不回滚已建好的 issue,把新 issue
+    // 数据与逐条 link 结果一并交回,避免丢掉新建 issue 的 key。
+    if (Array.isArray(args.links) && args.links.length) {
+      var payload;
+      if (created.data && created.data.key) {
+        // 只在确有 key 时自动建 link:Jira 返回的 id 不能当 { key } 用(对象引用
+        // 语义不同),没有 key 就不打 link,如实标注 failed 而保留新 issue 数据。
+        payload = {
+          data: created.data,
+          issue_links: await applyCreateLinks(base, account, callId, String(created.data.key), args.links),
+        };
+      } else {
+        payload = {
+          data: created.data,
+          issue_links: { applied: [], failed: [{ reason: '创建响应缺少 key,无法自动建立关联' }] },
+        };
+      }
+      // 统一走 deliver:out_file 点名落盘与超限截断兜底同样适用。
+      return deliver(payload, args, callId);
+    }
     return deliver(created.data, args, callId);
+  }
+  if (args.action === 'list_link_types') {
+    // 关系类型的 name 因站点而异(Blocks / Cloners / Relates / Duplicate 等),
+    // link / create.links 前先查一次拿准确的 name 与 inward/outward 语义。
+    var linkTypes = await api({
+      url: base + '/rest/api/3/issueLinkType',
+      account: account, callId: callId,
+    });
+    if (linkTypes.err) return fail(linkTypes.err);
+    return deliver(linkTypes.data, args, callId);
+  }
+  if (args.action === 'link') {
+    if (!args.link_type) return fail('link 需要 link_type(关系类型名,如 Blocks / Cloners / Relates,list_link_types 可查)');
+    if (!args.inward_issue || !args.outward_issue) {
+      return fail('link 需要 inward_issue 与 outward_issue(两个已存在的 issue key;方向按 list_link_types 的 inward/outward 语义,如 Blocks 类型:outward 侧「blocks」inward 侧)');
+    }
+    var linked = await createIssueLink(base, account, callId, args.link_type, args.inward_issue, args.outward_issue, args.link_comment);
+    if (linked.err) return fail(linked.err);
+    return deliver({ linked: true, link_type: args.link_type, inward_issue: args.inward_issue, outward_issue: args.outward_issue }, args, callId);
   }
   if (args.action === 'update') {
     if (!args.issue_key) return fail('update 需要 issue_key');

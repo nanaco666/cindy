@@ -41,6 +41,7 @@ function createTables(db: Database.Database): void {
       content TEXT NOT NULL,
       tool_use_id TEXT,
       agent_meta TEXT,
+      agent_kind TEXT,
       created_at INTEGER NOT NULL,
       rewind_at INTEGER
     );
@@ -87,6 +88,7 @@ function validArgs() {
           content: '"hello"',
           toolUseId: null,
           agentMeta: null,
+          agentKind: 'cc',
           createdAt: 1700000000100,
           rewindAt: null,
         },
@@ -97,6 +99,7 @@ function validArgs() {
           content: '"world"',
           toolUseId: null,
           agentMeta: '{"sdkSessionId":"sdk-abc","uuid":"u2"}',
+          agentKind: 'codex',
           createdAt: 1700000000200,
           rewindAt: null,
         },
@@ -138,9 +141,10 @@ describe('tx session.importShare', () => {
     expect(session.fast_mode).toBe(0);
     expect(session.cleared_at).toBe(1700000000050);
     const messages = db
-      .prepare('SELECT id, rewind_at FROM messages WHERE session_id = ? ORDER BY created_at')
-      .all('new-session-1') as Array<{ id: string; rewind_at: number | null }>;
+      .prepare('SELECT id, rewind_at, agent_kind FROM messages WHERE session_id = ? ORDER BY created_at')
+      .all('new-session-1') as Array<{ id: string; rewind_at: number | null; agent_kind: string | null }>;
     expect(messages.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
+    expect(messages.map((m) => m.agent_kind)).toEqual(['cc', 'codex', null]);
     expect(messages[2].rewind_at).toBe(1700000000400);
   });
 

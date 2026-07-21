@@ -245,6 +245,7 @@ describe('shouldAutoLoadEarlier', () => {
     actionVisible: true,
     atEnd: false,
     firstItemKey: 'message-a',
+    initialAutoFillAllowed: false,
     lastAttemptedFirstItemKey: null,
     nearStart: true,
     userScrolledForOlder: true,
@@ -266,13 +267,30 @@ describe('shouldAutoLoadEarlier', () => {
     expect(shouldAutoLoadEarlier(eligible)).toBe(true);
   });
 
-  it('never fires without a real upward user intent (cold-open guard)', () => {
+  it('does not cold-fill when the initial bounded budget is unavailable', () => {
     expect(shouldAutoLoadEarlier({ ...eligible, userScrolledForOlder: false })).toBe(false);
   });
 
-  it('never fires while pinned at the end so streaming follow keeps its end pin', () => {
+  it('cold-fills a near-start window while the initial bounded budget is available', () => {
+    expect(shouldAutoLoadEarlier({
+      ...eligible,
+      initialAutoFillAllowed: true,
+      userScrolledForOlder: false,
+    })).toBe(true);
+  });
+
+  it('keeps user-driven history prefetch disabled while pinned at the end', () => {
     // 短会话整窗都在近顶阈值内:nearStart 与贴底可同时成立,贴底跟流优先。
     expect(shouldAutoLoadEarlier({ ...eligible, atEnd: true })).toBe(false);
+  });
+
+  it('allows bounded cold-fill while a short initial window is both near-start and at-end', () => {
+    expect(shouldAutoLoadEarlier({
+      ...eligible,
+      atEnd: true,
+      initialAutoFillAllowed: true,
+      userScrolledForOlder: false,
+    })).toBe(true);
   });
 
   it('does not fire outside the prefetch zone', () => {

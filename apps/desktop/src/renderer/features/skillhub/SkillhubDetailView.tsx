@@ -896,7 +896,7 @@ function FileTreeRow({ entry, parentDir, depth, currentPath, onSelectFile }: Fil
           'transition-colors',
           isSelected
             ? 'bg-[var(--settings-btn-secondary-bg)]'
-            : 'hover:bg-[var(--update-btn-hover)]',
+            : 'hover:bg-[var(--surface-hover)]',
         )}
         title={fullPath}
       >
@@ -1286,7 +1286,7 @@ export function SkillhubDetailView() {
 
   // ── v0.2.2: in-app .md edit ─────────────────────────────────────────────
   // editMode: false   → read-only MarkdownRenderer
-  // editMode: true    → MDXEditor swap-in for the right pane
+  // editMode: true    → PlaintextEditor swap-in for the right pane
   // dirty: tracks whether the editor's current value differs from initial
   // rawCache: raw .md content (frontmatter intact) — separate from view's
   //           contentCache which strips frontmatter
@@ -1305,8 +1305,7 @@ export function SkillhubDetailView() {
   const plaintextEditorRef = useRef<PlaintextEditorHandle>(null);
   // Raw initial content the editor was mounted with — used to compare on
   // change for dirty detection AND to reset when leaving edit mode.
-  // Holds raw .md (with frontmatter) for MarkdownEditor case, or raw
-  // file content for PlaintextEditor case.
+  // Holds the raw file content (including frontmatter for Markdown files).
   const initialRawRef = useRef<string>('');
   const { confirm } = useConfirmDialog();
 
@@ -1576,7 +1575,7 @@ export function SkillhubDetailView() {
   }, [requestLeaveEditMode]);
 
   // Enter edit mode — pulls the raw .md (frontmatter intact) via the v0.2.2
-  // read-raw IPC, then mounts MDXEditor. Disabled paths are gated upstream
+  // read-raw IPC, then mounts PlaintextEditor. Disabled paths are gated upstream
   // by `editButtonState` so the click handler can assume viewingPath is a
   // valid .md.
   const enterEditMode = useCallback(async () => {
@@ -1599,8 +1598,8 @@ export function SkillhubDetailView() {
   // Save the editor's current value back to disk. Re-validates frontmatter
   // (warn-only — doesn't block save), invalidates folderHash to drive the
   // v0.2.1 dirty-state recomputation, then exits edit mode.
-  // While MDXEditor is parked, all files go through PlaintextEditor —
-  // pull value from plaintextEditorRef regardless of extension. The
+  // All files go through PlaintextEditor, so pull the value from
+  // plaintextEditorRef regardless of extension. The
   // isMd flag still gates frontmatter cache-strip + validation below
   // (those rules are tied to the FILE TYPE, not the editor used).
   const saveEdit = useCallback(async () => {
@@ -1855,7 +1854,7 @@ export function SkillhubDetailView() {
             onClick={goBack}
             className={cn(
               'flex h-9 w-9 items-center justify-center rounded-full',
-              'text-[var(--settings-section-desc)] hover:bg-[var(--update-btn-hover)]',
+              'text-[var(--settings-section-desc)] hover:bg-[var(--surface-hover)]',
             )}
             style={WINDOW_NO_DRAG_STYLE}
             aria-label={backLabel}
@@ -1956,7 +1955,7 @@ export function SkillhubDetailView() {
                 'flex h-9 shrink-0 items-center gap-2 rounded-full border px-[18px]',
                 'text-sm font-medium',
                 'border-[var(--confirm-btn-secondary-border)] bg-transparent text-[var(--settings-btn-secondary-text)]',
-                'hover:bg-[var(--update-btn-hover)]',
+                'hover:bg-[var(--surface-hover)]',
                 'disabled:opacity-50 disabled:cursor-not-allowed',
                 'transition-colors',
               )}
@@ -1995,7 +1994,7 @@ export function SkillhubDetailView() {
                     'flex h-9 shrink-0 items-center gap-2 rounded-full border px-[18px]',
                     'text-sm font-medium',
                     'border-[var(--confirm-btn-secondary-border)] bg-transparent text-[var(--settings-btn-secondary-text)]',
-                    'hover:bg-[var(--update-btn-hover)]',
+                    'hover:bg-[var(--surface-hover)]',
                     'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent',
                     'transition-colors',
                   )}
@@ -2019,7 +2018,7 @@ export function SkillhubDetailView() {
                   'flex h-9 shrink-0 items-center gap-2 rounded-full border px-[18px]',
                   'text-sm font-medium',
                   'border-[var(--confirm-btn-secondary-border)] bg-transparent text-[var(--settings-btn-secondary-text)]',
-                  'hover:bg-[var(--update-btn-hover)]',
+                  'hover:bg-[var(--surface-hover)]',
                   'disabled:opacity-50 disabled:cursor-not-allowed',
                   'transition-colors',
                 )}
@@ -2039,7 +2038,7 @@ export function SkillhubDetailView() {
                     'flex h-9 shrink-0 items-center gap-2 rounded-full border px-[18px]',
                     'text-sm font-medium',
                     'border-[var(--confirm-btn-secondary-border)] bg-transparent text-[var(--settings-btn-secondary-text)]',
-                    'hover:bg-[var(--update-btn-hover)]',
+                    'hover:bg-[var(--surface-hover)]',
                     'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent',
                     'transition-colors',
                   )}
@@ -2134,7 +2133,7 @@ export function SkillhubDetailView() {
                       'flex h-[35px] shrink-0 items-center gap-2 rounded-full border px-[18px]',
                       'text-sm font-medium',
                       'border-[var(--confirm-btn-secondary-border)] bg-transparent text-[var(--settings-btn-secondary-text)]',
-                      'hover:bg-[var(--update-btn-hover)]',
+                      'hover:bg-[var(--surface-hover)]',
                       'disabled:opacity-50 disabled:cursor-not-allowed',
                       'transition-colors',
                     )}
@@ -2314,10 +2313,8 @@ export function SkillhubDetailView() {
         )}
       >
         {/* Left aside (Files + Usage) — hidden in edit mode so the
-            MDXEditor takes the full main area. The editor's own
-            frontmatterPlugin renders the YAML inline at the top of the
-            text, which is what the user sees as "frontmatter inside the
-            editor body" instead of a separate left column. */}
+            text editor takes the full main area. Frontmatter stays in the
+            same source buffer instead of occupying a separate left column. */}
         {showFiles && !editMode && (
           // 可调宽左栏。Frontmatter 已经移到右侧正文上方;这里保留文件树
           // 和本机使用表现,让用户先定位文件,再看这个 skill 的实际表现。
@@ -2398,8 +2395,8 @@ export function SkillhubDetailView() {
         {/* Right pane: file content (and the frontmatter strip prepended
             for command / agent kinds). Same `Renderable` three-state
             dispatch as TextLightbox (see lib/textPreview.ts). In edit mode
-            the pane drops its padding + scroll handling so MDXEditor can
-            use its own (flex-fill + internal scroll, padding via .mdxeditor-content). */}
+            the pane drops its padding + scroll handling so PlaintextEditor can
+            use its own flex-fill layout and internal scrolling. */}
         <div
           className={cn(
             'flex min-w-0 flex-1 flex-col',
@@ -2419,7 +2416,7 @@ export function SkillhubDetailView() {
               show — empty frontmatter just becomes wasted vertical space
               + a stray divider above the body. Parse errors still render
               so the user knows why fields are missing. Suppressed in edit
-              mode — the MDXEditor's own frontmatter plugin handles it. */}
+              mode — the raw frontmatter is edited inline with the file. */}
           {!editMode && showInlineFrontmatter && (
             <div className="mb-6 select-text">
               <FrontmatterPanel entry={entry} />
@@ -2427,17 +2424,8 @@ export function SkillhubDetailView() {
             </div>
           )}
           {editMode && viewingPath ? (
-            // v0.2.2 edit-mode: temporarily ALL files (md + non-md) go
-            // through PlaintextEditor while MDXEditor's UX is being
-            // dialed in separately. Switching back is a one-line change
-            // — see commented branch below.
-            //
-            // (Future MDXEditor branch — uncomment when ready:)
-            //   MD_EXTENSION_RE.test(viewingPath) ? (
-            //     <MarkdownEditor ... ref={editorRef} ... />
-            //   ) : (
-            //     <PlaintextEditor ... />
-            //   )
+            // All editable text formats share PlaintextEditor; Markdown keeps
+            // its frontmatter visible in the same source buffer.
             <PlaintextEditor
               key={viewingPath}
               ref={plaintextEditorRef}

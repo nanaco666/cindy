@@ -1,14 +1,14 @@
 /**
  * sentAttachmentThumbStore — 已发送本机图片附件的本地缩略图兜底映射。
  * ---------------------------------------------------------------------------
- * 手机端上传的图片在消息里持久化为 `xdt-oss-attach://` 中转引用;该引用要等被控端
+ * 手机端上传的图片在消息里持久化为 `cindy-oss-attach://` 中转引用;该引用要等被控端
  * (桌面)取走消息、物化进 image cache 后才被改写成可远程取件的 `xdt-image://`。
  * 改写结果不会回推,所以「发出后停留在当前界面」期间(以及桌面端离线、消息压在
  * 队列里的整个窗口)气泡只能显示「暂不能直接预览」占位卡——图明明就在手机本地。
  *
  * 本 store 补上这个空档:上传成功时把实际 PUT 的文件(降采样产物,通常几百 KB)
  * 拷贝进 app 自有目录,记录「ossRef → 本地相对文件名」映射并持久化;渲染用户消息
- * 图片时 url 仍是 `xdt-oss-attach://` 且映射命中 → 用本地图当缩略图。桌面端物化后
+ * 图片时 url 仍是 `cindy-oss-attach://` 且映射命中 → 用本地图当缩略图。桌面端物化后
  * url 变成 `xdt-image://`,兜底自然退场,条目由过期清理回收。
  *
  * 设计要点:
@@ -204,7 +204,7 @@ export function getSentAttachmentThumbUri(ossRef: string): string | null {
 }
 
 /**
- * 渲染层 overlay:用户消息图片附件 url 仍是 `xdt-oss-attach://`(previewable=false)
+ * 渲染层 overlay:用户消息图片附件 url 仍是 `cindy-oss-attach://`(previewable=false)
  * 且本地兜底命中时,替换成本地 file:// 并标记可直接预览;其余原样返回。
  * 泛型约束按 NormalizedAttachment 的最小形状,不反向依赖 messageNormalize。
  */

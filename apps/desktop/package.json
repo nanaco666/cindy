@@ -18,6 +18,8 @@
     "dev:inspect": "pnpm dev:winsetup && cross-env OPEN_DEVTOOLS=1 node scripts/dev-remote-env.mjs electron-forge start --inspect-electron --",
     "package": "electron-forge package",
     "package:app": "node scripts/package-desktop.mjs",
+    "release:package": "node scripts/package-desktop.mjs",
+    "release:canary": "node scripts/publish-desktop.mjs",
     "build": "electron-forge make",
     "db:check": "drizzle-kit check",
     "db:generate": "drizzle-kit generate",
@@ -81,7 +83,7 @@
     "name": "Lizi",
     "email": "jiali@magiclizi.com"
   },
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "dependencies": {
     "@cindy/auth-client": "workspace:*",
     "@cindy/slack-hook-protocol": "workspace:*",
@@ -126,7 +128,6 @@
     "@lizi/model-providers": "workspace:*",
     "@lizi/remote-file-service": "workspace:*",
     "@lizi/voice-input-core": "workspace:*",
-    "@mdxeditor/editor": "^3.55.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@paralleldrive/cuid2": "^2.3.1",
     "@parcel/watcher": "^2.5.6",

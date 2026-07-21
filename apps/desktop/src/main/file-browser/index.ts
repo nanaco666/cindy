@@ -231,19 +231,13 @@ async function fetchRemoteBigFile(
           progress(Math.min(st.uploaded ?? 0, args.size), args.size, 'upload');
         }
         const res = { key };
-        // …再流式直下到缓存临时文件。downloadToFile 不带进度回调,用轮询 stat
-        // 近似(1s 间隔,对分钟级下载足够)。
-        const poll = setInterval(() => {
-          void fsPromises
-            .stat(destPath)
-            .then((st) => progress(Math.min(st.size, args.size), args.size, 'download'))
-            .catch(() => undefined);
-        }, 1000);
+        // …再流式直下到随机 part 文件，并由字节计数回调持续上报下载进度。
         try {
-          await downloadToFile(res.key, destPath);
+          await downloadToFile(res.key, destPath, undefined, (downloaded) => {
+            progress(Math.min(downloaded, args.size), args.size, 'download');
+          });
           progress(args.size, args.size, 'download');
         } finally {
-          clearInterval(poll);
           void removeRemote(res.key);
         }
       },

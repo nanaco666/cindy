@@ -65,6 +65,16 @@ CREATE TABLE orca_workers (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+CREATE UNIQUE INDEX uniq_orca_workers_team_label ON orca_workers (team_id, lower(label));
+CREATE TABLE orca_worker_creation_reservations (
+  id TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX uniq_orca_worker_creation_reservations_team_label
+  ON orca_worker_creation_reservations (team_id, lower(label));
 CREATE TABLE messages (
   id TEXT PRIMARY KEY,
   client_id TEXT NOT NULL,
@@ -73,6 +83,7 @@ CREATE TABLE messages (
   content TEXT NOT NULL,
   tool_use_id TEXT,
   agent_meta TEXT,
+  agent_kind TEXT,
   created_at INTEGER NOT NULL,
   rewind_at INTEGER,
   UNIQUE(session_id, client_id)
@@ -424,7 +435,7 @@ describe('db worker tx handlers', () => {
     await withClient(async (client) => {
       await seedSession(client, 'src');
       await client.exec(
-        'INSERT INTO messages (id, client_id, session_id, role, content, agent_meta, created_at) VALUES (?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO messages (id, client_id, session_id, role, content, agent_meta, agent_kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?, ?)',
         [
           'm1',
           'c1',
@@ -432,6 +443,7 @@ describe('db worker tx handlers', () => {
           'assistant',
           'copy',
           JSON.stringify({ uuid: 'old', parentUuid: 'parent', transcriptParentUuid: 'old-parent' }),
+          'cc',
           100,
           'm2',
           'c2',
@@ -439,6 +451,7 @@ describe('db worker tx handlers', () => {
           'user',
           'skip',
           null,
+          'codex',
           300,
         ],
       );
@@ -464,16 +477,91 @@ describe('db worker tx handlers', () => {
         forked_at_message_id: 'c2',
         provider_id: 'xd',
       });
-      const copied = await client.queryOne<{ id: string; client_id: string; agent_meta: string }>(
-        'SELECT id, client_id, agent_meta FROM messages WHERE session_id = ?',
+      const copied = await client.queryOne<{ id: string; client_id: string; agent_meta: string; agent_kind: string }>(
+        'SELECT id, client_id, agent_meta, agent_kind FROM messages WHERE session_id = ?',
         ['forked'],
       );
       expect(copied?.id).toBe('copy-id-1');
       expect(copied?.client_id).toBe('copy-client-1');
+      expect(copied?.agent_kind).toBe('cc');
       expect(JSON.parse(copied?.agent_meta ?? '{}')).toEqual({
         uuid: 'new',
         parentUuid: 'new-parent-tool',
         transcriptParentUuid: 'new-parent',
+      });
+    });
+  });
+
+  it('fork.session normalizes legacy Claude transcript parent metadata before remapping', async () => {
+    await withClient(async (client) => {
+      await seedSession(client, 'src');
+      await client.exec(
+        'INSERT INTO messages (id, client_id, session_id, role, content, agent_meta, agent_kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          'legacy-message',
+          'legacy-client',
+          'src',
+          'assistant',
+          'legacy copy',
+          JSON.stringify({ uuid: 'legacy-asst', parentUuid: 'legacy-user' }),
+          'cc',
+          100,
+        ],
+      );
+
+      await client.tx('fork.session', {
+        sourceSessionId: 'src',
+        targetCreatedAt: 200,
+        newSession: sessionRow('forked', { parentSessionId: 'src' }),
+        uuidMap: [['legacy-asst', 'new-asst'], ['legacy-user', 'new-user']],
+        legacyTranscriptParentUuids: ['legacy-asst'],
+        newMessageIds: [{ id: 'copy-id', clientId: 'copy-client' }],
+      });
+
+      const copied = await client.queryOne<{ agent_meta: string }>(
+        'SELECT agent_meta FROM messages WHERE session_id = ?',
+        ['forked'],
+      );
+      expect(JSON.parse(copied?.agent_meta ?? '{}')).toEqual({
+        uuid: 'new-asst',
+        transcriptParentUuid: 'new-user',
+      });
+    });
+  });
+
+  it('fork.session preserves imported Claude tool-use parents absent from uuidMap', async () => {
+    await withClient(async (client) => {
+      await seedSession(client, 'src');
+      await client.exec(
+        'INSERT INTO messages (id, client_id, session_id, role, content, agent_meta, agent_kind, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          'tool-message',
+          'tool-client',
+          'src',
+          'assistant',
+          'tool child',
+          JSON.stringify({ uuid: 'asst', parentUuid: 'toolu_external' }),
+          'cc',
+          100,
+        ],
+      );
+
+      await client.tx('fork.session', {
+        sourceSessionId: 'src',
+        targetCreatedAt: 200,
+        newSession: sessionRow('forked', { parentSessionId: 'src' }),
+        uuidMap: [['asst', 'new-asst']],
+        toolParentUuids: ['toolu_external'],
+        newMessageIds: [{ id: 'copy-id', clientId: 'copy-client' }],
+      });
+
+      const copied = await client.queryOne<{ agent_meta: string }>(
+        'SELECT agent_meta FROM messages WHERE session_id = ?',
+        ['forked'],
+      );
+      expect(JSON.parse(copied?.agent_meta ?? '{}')).toEqual({
+        uuid: 'new-asst',
+        parentUuid: 'toolu_external',
       });
     });
   });
@@ -493,6 +581,48 @@ describe('db worker tx handlers', () => {
         uuidMap: [],
         newMessageIds: [],
       })).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+    });
+  });
+
+  it('session.agentSwitchFallback atomically clears sdk id and rewrites boundary', async () => {
+    await withClient(async (client) => {
+      await seedSession(client, 's1');
+      await client.exec('UPDATE sessions SET sdk_session_id = ? WHERE id = ?', ['stale-sdk', 's1']);
+      await client.exec(
+        'INSERT INTO messages (id, client_id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        ['sw', 'sw-client', 's1', 'agent_switch', '{"handoff":"delta"}', 100],
+      );
+      await client.tx('session.agentSwitchFallback', {
+        sessionId: 's1',
+        boundaryClientId: 'sw-client',
+        boundaryContent: '{"handoff":"full","resumed":false}',
+        updatedAt: 500,
+      });
+      await expect(client.queryOne(
+        'SELECT sdk_session_id, updated_at FROM sessions WHERE id = ?',
+        ['s1'],
+      )).resolves.toEqual({ sdk_session_id: null, updated_at: 500 });
+      await expect(client.queryOne(
+        'SELECT content FROM messages WHERE session_id = ? AND client_id = ?',
+        ['s1', 'sw-client'],
+      )).resolves.toEqual({ content: '{"handoff":"full","resumed":false}' });
+    });
+  });
+
+  it('session.agentSwitchFallback missing boundary rolls back sdk id clear', async () => {
+    await withClient(async (client) => {
+      await seedSession(client, 's1');
+      await client.exec('UPDATE sessions SET sdk_session_id = ? WHERE id = ?', ['stale-sdk', 's1']);
+      await expect(client.tx('session.agentSwitchFallback', {
+        sessionId: 's1',
+        boundaryClientId: 'missing',
+        boundaryContent: '{}',
+        updatedAt: 500,
+      })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      await expect(client.queryOne(
+        'SELECT sdk_session_id FROM sessions WHERE id = ?',
+        ['s1'],
+      )).resolves.toEqual({ sdk_session_id: 'stale-sdk' });
     });
   });
 
@@ -636,6 +766,60 @@ describe('db worker tx handlers', () => {
       });
     });
   });
+
+  it('serializes the same worker label across independent database workers', async () => {
+    await withTwoClients(async ([first, second]) => {
+      await seedSession(first, 'lead');
+      await first.exec(
+        'INSERT INTO orca_teams (id, lead_session_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        ['team-1', 'lead', 'active', 1, 1],
+      );
+      const results = await Promise.all([
+        first.tx('orca.reserveWorkerCreation', {
+          reservationId: 'first', teamId: 'team-1', label: 'tester', hardLimit: 5, now: 100, expiresAt: 200,
+        }),
+        second.tx('orca.reserveWorkerCreation', {
+          reservationId: 'second', teamId: 'team-1', label: 'TESTER', hardLimit: 5, now: 100, expiresAt: 200,
+        }),
+      ]);
+      expect(results).toContainEqual({ ok: true, occupiedSlotsBefore: 0 });
+      expect(results).toContainEqual({ ok: false, errorCode: 'WORKER_CREATION_IN_PROGRESS' });
+    });
+  });
+
+  it('counts terminal workers until their sessions are archived', async () => {
+    await withClient(async (client) => {
+      await seedSession(client, 'lead');
+      await seedSession(client, 'done-worker', { orcaRole: 'worker' });
+      await seedSession(client, 'errored-worker', { orcaRole: 'worker' });
+      await client.exec(
+        'INSERT INTO orca_teams (id, lead_session_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        ['team-1', 'lead', 'active', 1, 1],
+      );
+      await client.exec(
+        `INSERT INTO orca_workers (
+          id, team_id, session_id, status, label, role, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ['worker-1', 'team-1', 'done-worker', 'done', 'done', 'tester', 1, 1],
+      );
+      await client.exec(
+        `INSERT INTO orca_workers (
+          id, team_id, session_id, status, label, role, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ['worker-2', 'team-1', 'errored-worker', 'error', 'errored', 'reviewer', 1, 1],
+      );
+
+      await expect(client.tx('orca.reserveWorkerCreation', {
+        reservationId: 'blocked', teamId: 'team-1', label: 'blocked', hardLimit: 2, now: 100, expiresAt: 200,
+      })).resolves.toEqual({ ok: false, errorCode: 'WORKER_LIMIT_HARD_EXCEEDED' });
+
+      await client.exec("UPDATE sessions SET status = 'archived' WHERE id = ?", ['done-worker']);
+
+      await expect(client.tx('orca.reserveWorkerCreation', {
+        reservationId: 'replacement', teamId: 'team-1', label: 'replacement', hardLimit: 2, now: 100, expiresAt: 200,
+      })).resolves.toEqual({ ok: true, occupiedSlotsBefore: 1 });
+    });
+  });
 });
 
 async function withClient(fn: (client: DbClient) => Promise<void>): Promise<void> {
@@ -659,6 +843,31 @@ async function withClient(fn: (client: DbClient) => Promise<void>): Promise<void
     if (client) {
       await client.dispose();
     }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+async function withTwoClients(fn: (clients: [DbClient, DbClient]) => Promise<void>): Promise<void> {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'xdt-db-tx-two-'));
+  const drizzleDir = path.join(dir, 'drizzle');
+  const dbPath = path.join(dir, 'xdt-maker-test-user.db');
+  fs.mkdirSync(drizzleDir);
+  fs.writeFileSync(path.join(drizzleDir, '0000_init.sql'), INIT_SQL, 'utf-8');
+  createMigratedTxDb(dbPath);
+  const clients: DbClient[] = [];
+  try {
+    for (let index = 0; index < 2; index += 1) {
+      clients.push(await createDbClient({
+        userId: `test-user-${index}`,
+        dbPath,
+        drizzleDir,
+        betterSqliteModulePath: require.resolve('better-sqlite3'),
+        workerScriptPath,
+      }));
+    }
+    await fn(clients as [DbClient, DbClient]);
+  } finally {
+    await Promise.all(clients.map((client) => client.dispose()));
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }

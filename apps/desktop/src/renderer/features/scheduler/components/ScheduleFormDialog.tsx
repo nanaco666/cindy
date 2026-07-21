@@ -51,7 +51,7 @@ import {
 const SCRIPT_PROTOCOL_PYTHON_EXAMPLE = `import json
 
 print(json.dumps({
-    "protocol": "xdt-maker-script/1",
+    "protocol": "cindy-script/1",
     "type": "complete",
     "resultText": "done"
 }))`;
@@ -664,7 +664,7 @@ export function ScheduleFormDialog({
                     className={cn(
                       'inline-flex h-[34px] items-center gap-2 rounded-md px-1.5',
                       'text-13 leading-none text-[var(--settings-btn-secondary-text)]',
-                      'transition-colors hover:bg-[var(--update-btn-hover)]',
+                      'transition-colors hover:bg-[var(--surface-hover)]',
                       'focus:outline-none',
                     )}
                   >
@@ -733,7 +733,7 @@ export function ScheduleFormDialog({
                   className={cn(
                     'inline-flex h-full items-center gap-2 rounded-md px-1.5',
                     'text-13 leading-none text-[var(--settings-btn-secondary-text)]',
-                    'transition-colors hover:bg-[var(--update-btn-hover)]',
+                    'transition-colors hover:bg-[var(--surface-hover)]',
                     'focus:outline-none',
                   )}
                 >
@@ -762,8 +762,8 @@ export function ScheduleFormDialog({
                     className={cn(
                       'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full',
                       'text-[var(--cmd-palette-item-meta)] outline-none transition-colors',
-                      'hover:bg-[var(--update-btn-hover)] hover:text-[var(--msg-assistant-text)]',
-                      'focus:bg-[var(--update-btn-hover)] focus:text-[var(--msg-assistant-text)]',
+                      'hover:bg-[var(--surface-hover)] hover:text-[var(--msg-assistant-text)]',
+                      'focus:bg-[var(--surface-hover)] focus:text-[var(--msg-assistant-text)]',
                     )}
                     aria-label={t('scheduler.editor.fields.silentRunInfoAria')}
                   >
@@ -780,7 +780,7 @@ export function ScheduleFormDialog({
                   className={cn(
                     'inline-flex h-[34px] items-center gap-2 rounded-md px-1.5',
                     'text-13 leading-none text-[var(--settings-btn-secondary-text)]',
-                    'transition-colors hover:bg-[var(--update-btn-hover)]',
+                    'transition-colors hover:bg-[var(--surface-hover)]',
                     'focus:outline-none',
                   )}
                 >
@@ -814,7 +814,7 @@ export function ScheduleFormDialog({
                   className={cn(
                     'inline-flex h-[34px] items-center rounded-md px-2',
                     'text-13 leading-none text-[var(--settings-btn-secondary-text)]',
-                    'transition-colors hover:bg-[var(--update-btn-hover)]',
+                    'transition-colors hover:bg-[var(--surface-hover)]',
                     'focus:outline-none underline-offset-2 hover:underline',
                   )}
                 >
@@ -872,7 +872,7 @@ export function ScheduleFormDialog({
                   className={cn(
                     'inline-flex h-[34px] items-center gap-2 rounded-md px-1.5',
                     'text-13 leading-none text-[var(--settings-btn-secondary-text)]',
-                    'transition-colors hover:bg-[var(--update-btn-hover)]',
+                    'transition-colors hover:bg-[var(--surface-hover)]',
                     'focus:outline-none',
                   )}
                 >
@@ -899,8 +899,8 @@ export function ScheduleFormDialog({
                     className={cn(
                       'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full',
                       'text-[var(--cmd-palette-item-meta)] outline-none transition-colors',
-                      'hover:bg-[var(--update-btn-hover)] hover:text-[var(--msg-assistant-text)]',
-                      'focus:bg-[var(--update-btn-hover)] focus:text-[var(--msg-assistant-text)]',
+                      'hover:bg-[var(--surface-hover)] hover:text-[var(--msg-assistant-text)]',
+                      'focus:bg-[var(--surface-hover)] focus:text-[var(--msg-assistant-text)]',
                     )}
                     aria-label={t('scheduler.editor.preRunHook.infoAria')}
                   >
@@ -959,7 +959,7 @@ export function ScheduleFormDialog({
                       className={cn(
                         'inline-flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full border border-[var(--settings-input-border)]',
                         'text-[var(--settings-btn-secondary-text)] transition-colors',
-                        'hover:bg-[var(--update-btn-hover)] focus:outline-none',
+                        'hover:bg-[var(--surface-hover)] focus:outline-none',
                       )}
                     >
                       <FolderOpen size={14} aria-hidden />
@@ -979,7 +979,7 @@ export function ScheduleFormDialog({
                         'text-12 font-medium transition-colors focus:outline-none',
                         hookGenOpen
                           ? 'border-[var(--confirm-btn-secondary-border)] bg-[var(--chat-input-chip-bg)] text-[var(--msg-assistant-text)]'
-                          : 'border-[var(--settings-input-border)] text-[var(--settings-btn-secondary-text)] hover:bg-[var(--update-btn-hover)]',
+                          : 'border-[var(--settings-input-border)] text-[var(--settings-btn-secondary-text)] hover:bg-[var(--surface-hover)]',
                       )}
                     >
                       <Sparkles size={12} aria-hidden />
@@ -994,7 +994,7 @@ export function ScheduleFormDialog({
                       className={cn(
                         'inline-flex h-[38px] shrink-0 items-center gap-1.5 rounded-full border border-[var(--settings-input-border)] px-3.5',
                         'text-12 font-medium text-[var(--settings-btn-secondary-text)] transition-colors',
-                        'hover:bg-[var(--update-btn-hover)] focus:outline-none',
+                        'hover:bg-[var(--surface-hover)] focus:outline-none',
                         'disabled:cursor-not-allowed disabled:opacity-50',
                       )}
                     >
@@ -1029,7 +1029,7 @@ export function ScheduleFormDialog({
                           className={cn(
                             'inline-flex h-8 items-center rounded-full px-3 text-12',
                             'text-[var(--cmd-palette-item-meta)] transition-colors',
-                            'hover:bg-[var(--update-btn-hover)] hover:text-[var(--msg-assistant-text)]',
+                            'hover:bg-[var(--surface-hover)] hover:text-[var(--msg-assistant-text)]',
                             'focus:outline-none disabled:opacity-50',
                           )}
                         >

@@ -15,15 +15,17 @@ import { DeviceLinkProvider } from '@/device-link/DeviceLinkContext';
 import { GestureHandlerRootView } from '@/platform/gestureHandler';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { createNavigationTheme } from '@/theme/navigationTheme';
-import { CenteredScreen } from '@/components/CenteredScreen';
 import { StartupBlockedScreen } from '@/components/StartupBlockedScreen';
+import { StartupSplashOverlay, useStartupSplash } from '@/components/StartupSplashOverlay';
 import { registerDevCacheMenu } from '@/debug/devCacheMenu';
 import { startJsStallWatchdog } from '@/debug/jsStallWatchdog';
 import { initMobileTapdb } from '@/analytics/mobileTapdb';
 import { useBundleUpdatePrompt } from '@/update/useBundleUpdatePrompt';
 import { useResumeUpdateCheck } from '@/update/useResumeUpdateCheck';
 import { useStartupOtaGate } from '@/update/useStartupOtaGate';
+import { useCanaryChannelGate } from '@/update/useCanaryChannelGate';
 import { useStartupEndpointGate } from '@/config/useStartupEndpointGate';
+import { IS_OTA_SELFHOST } from '@/config/env';
 import { Observe, ObserveRoot } from '@/observability/observe';
 
 // EAS Observe:启用 expo-router 集成,采集 per-route 导航指标(cold_ttr / warm_ttr / tti)。
@@ -35,6 +37,7 @@ function NavigationGate() {
   const router = useRouter();
   const segments = useSegments();
   const { mode, colors } = useTheme();
+  const { releaseSplash, splashActive } = useStartupSplash();
   const navigationTheme = useMemo(
     () => createNavigationTheme(
       mode === 'dark' ? NavigationDarkTheme : NavigationLightTheme,
@@ -42,6 +45,12 @@ function NavigationGate() {
     ),
     [mode, colors],
   );
+
+  // auth 恢复是启动闸门链的最后一道门:这里统一释放根部常驻 splash。
+  // 放在 NavigationGate 而不是具体页面,是为了深链冷启动(首屏不是 index)也能释放。
+  useEffect(() => {
+    if (auth.initialized) releaseSplash();
+  }, [auth.initialized, releaseSplash]);
 
   useEffect(() => {
     if (!auth.initialized) return;
@@ -57,7 +66,8 @@ function NavigationGate() {
 
   return (
     <NavigationThemeProvider value={navigationTheme}>
-      <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
+      {/* splash 覆盖层仍在时状态栏保持浅色(红底白字);淡出开始后切回主题样式 */}
+      <StatusBar style={splashActive || mode === 'dark' ? 'light' : 'dark'} />
       <Stack
         screenOptions={{
           headerShown: false,
@@ -77,19 +87,20 @@ function NavigationGate() {
  * 端点闸门之后的应用主体:OTA 检查更新与业务树都在这里——保证「拉端点清单」
  * 严格先于「检查更新」(本组件只在端点闸门 ready 后才挂载)。
  */
-function RootAfterEndpoints() {
+function RootAfterUpdateChannel({ isCanary }: { isCanary: boolean }) {
   // 自建变体:启动即生效的 JS 热更门(冷启动 check→fetch→reload,本次启动就跑上最新 JS)。
   // 内部 gate 自建 + 非 dev + updates 可用,其余直接 ready=true 不阻塞。见 useStartupOtaGate。
-  const otaReady = useStartupOtaGate();
+  const otaReady = useStartupOtaGate(isCanary);
   // 自建变体:启动时检查整包更新(runtimeVersion 变化 → 引导跳 NPKG)。
   // 内部 IS_OTA_SELFHOST gate,EAS 包为 no-op。JS 热更由上面的门 + expo-updates 处理,与此互补。
-  useBundleUpdatePrompt({ auto: true });
+  useBundleUpdatePrompt({ auto: true, isCanary });
   // 自建变体:后台切回前台时静默补一次检查(OTA 静默 fetch 不 reload、整包仅强更提示)。
   // 内部节流 + IS_OTA_SELFHOST gate,非自建为 no-op。见 useResumeUpdateCheck。
-  useResumeUpdateCheck();
-  // 热更门未就绪(自建变体冷启动正在 check/fetch/reload)时先渲染 loading,避免闪旧 UI。
+  useResumeUpdateCheck(isCanary);
+  // 热更门未就绪(自建变体冷启动正在 check/fetch/reload)时不挂载业务树,避免闪旧 UI;
+  // 期间根部常驻 splash 覆盖层在上面顶着,这里返回 null 即可。
   if (!otaReady) {
-    return <CenteredScreen title="Cindy" variant="splash" />;
+    return null;
   }
   return (
     <AuthProvider>
@@ -98,6 +109,15 @@ function RootAfterEndpoints() {
       </DeviceLinkProvider>
     </AuthProvider>
   );
+}
+
+function RootAfterEndpoints() {
+  // 更新检查早于 AuthProvider，必须先恢复上次登录同步到本机的 canary 快照。
+  // 未持久化/读取失败一律 stable；读取完成前不允许发任何 /manifest 或 /latest 请求。
+  const channel = useCanaryChannelGate(IS_OTA_SELFHOST);
+  // 未就绪期间由根部常驻 splash 覆盖层顶着,不再各自渲染 splash 实例(避免交接闪帧)。
+  if (!channel.ready) return null;
+  return <RootAfterUpdateChannel isCanary={channel.isCanary} />;
 }
 
 function RootLayout() {
@@ -117,7 +137,7 @@ function RootLayout() {
   // 所有 hook 已在上方调用,下面条件返回不违反 hooks 规则。
   // GestureHandlerRootView 必须在根部常驻(RNGH 官方要求;缺失时 Android 手势整体不响应)。
   // 各分支都包同一层,避免闸门状态切换时 root 重挂。
-  let body: ReactElement;
+  let body: ReactElement | null;
   if (endpointGate.status === 'error') {
     body = (
       <StartupBlockedScreen
@@ -128,14 +148,20 @@ function RootLayout() {
       />
     );
   } else if (endpointGate.status === 'pending') {
-    body = <CenteredScreen title="Cindy" variant="splash" />;
+    // pending 期间由 StartupSplashOverlay 顶着,不渲染业务内容。
+    body = null;
   } else {
     body = <RootAfterEndpoints />;
   }
   return (
     <GestureHandlerRootView style={styles.gestureRoot}>
       <SafeAreaProvider>
-        <ThemeProvider>{body}</ThemeProvider>
+        <ThemeProvider>
+          {/* 启动闸门全程共用这一个 splash 实例;端点错误屏需要交互时才隐藏它 */}
+          <StartupSplashOverlay hidden={endpointGate.status === 'error'}>
+            {body}
+          </StartupSplashOverlay>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

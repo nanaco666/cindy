@@ -38,6 +38,7 @@ import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { BrowserWindow, ipcMain } from 'electron';
 import type { AgentMeta } from '../../renderer/lib/ccAgent.types';
 import type { AgentInputCreateOpts, AgentInputQueuedMessage } from '../../shared/agentInputQueue.js';
+import { getManagedWorktreeBasePath } from '../../shared/managedWorktreePaths.js';
 import { buildTurnUsageDetails } from '../../shared/turnUsageDetails.js';
 import type { DesktopCommandContext } from '../commands/index.js';
 import { getDesktopCommandRegistry } from '../commands/index.js';
@@ -72,9 +73,16 @@ import {
 } from '../localDb/agentInputQueueSnapshots.js';
 import { ensureDialogueWorkspaceDir, dialogueWorkspaceRootDir } from '../localDb/dialogueWorkspace.js';
 import { healMissingDialogueWorkdir } from '../localDb/dialogueWorkdirSelfHeal.js';
-import { createMessage as createDbMessage } from '../localDb/ipc/messages.js';
+import {
+  createMessage as createDbMessage,
+  findParkedEngineSession,
+  listMessagesForAgentHandoff,
+} from '../localDb/ipc/messages.js';
 import { visibleMessageTextForConversationSearch } from '../localDb/conversationSearch.pure.js';
 import {
+  applyAgentSwitchToSessionRow,
+  applyAgentSwitchResumeFallbackAtomically,
+  broadcastSessionPatched,
   clearSessionContextInDb,
   getSessionRowSnapshot,
   isUntitledDraftSessionBeforeFirstInput,
@@ -95,8 +103,13 @@ import {
   listWorkersByLead,
   markTeamEnded,
   markWorkersStatusByTeam,
+  markWorkerIdleIfStatus,
+  restoreWorkerDoneIfIdle,
   reconcileInactiveTeamWorkersForLead,
+  releaseWorkerCreationReservation,
   removeWorker,
+  renewWorkerCreationReservation,
+  reserveWorkerCreation,
   setSessionOrcaRole,
   setWorkerFocus,
   updateWorkerStatus,
@@ -157,7 +170,9 @@ import {
   flushAssistantBlock,
   flushOrphanToolResults,
   getLastAssistantTranscriptUuid,
+  getSessionDbAgentKind,
   noteAgentMeta,
+  noteSessionAgentKind,
   noteSessionClearBoundary,
   noteTurnStarted,
   onAssistantTextEvent,
@@ -215,7 +230,11 @@ import { createElectronIpcHandlerRegistry } from './electronIpcRegistry.js';
 import { validateExtraDirs } from './extraDirsValidator.js';
 import { prepareHandoffWorktree, shouldRecycleHandoffWorktreeOnFailure } from './handoffWorktree.js';
 import { registerProjectPluginPolicyHandlers } from './projectPluginPolicyHandlers.js';
-import { WorktreeManager as worktreeManager, worktreeStore } from '../worktree/index.js';
+import {
+  restoreMissingManagedWorktreeForSession,
+  WorktreeManager as worktreeManager,
+  worktreeStore,
+} from '../worktree/index.js';
 import type { WorktreeMeta } from '../worktree/types.js';
 import {
   createOrcaInterAgentDispatcher,
@@ -239,7 +258,7 @@ import {
 import { getAgentIslandService } from '../agent-island/service.js';
 import { createOrcaLifecycleService, ORCA_WORKER_READY_MESSAGE } from './orcaLifecycleService.js';
 import { throwOrcaServiceFailure } from './orcaServiceFailure.js';
-import { createOrcaTeamService, findFocusTargetWorker, type OrcaTeamService, type OrcaWorkerEffort } from './orcaTeamService.js';
+import { createOrcaTeamService, findFocusTargetWorker, type ListWorkerQueuedMessagesResult, type OrcaTeamService, type OrcaWorkerEffort, type WorkerQueuedMessageControlResult } from './orcaTeamService.js';
 import { createOrcaWorkerCreationService, normalizeOrcaWorkerLabel } from './orcaWorkerCreationService.js';
 import { registerOrcaWorkerControlHandlers } from './orcaWorkerControlHandlers.js';
 import {
@@ -257,11 +276,20 @@ import {
 } from './orcaManualInterrupt.js';
 import { tryInjectProjectContext } from './projectContextInject.js';
 import { registerMakerSessionCreateHandler } from './sessionCreateHandler.js';
+import {
+  applyPendingAgentSwitchIfIdle,
+  applySetModelThenCancelAgentSwitchIntent,
+  createPendingAgentSwitchRegistry,
+  registerMakerSessionAgentSwitchHandler,
+  type MakerSessionAgentSwitchHandlerDeps,
+} from './sessionAgentSwitchHandler.js';
+import { agentHandoffPending } from './agentHandoffPendingSingleton.js';
 import { type MakerSessionCreateOpts, withCreateSessionStderr } from './sessionRequest.js';
 import { persistAndHydrateSessionProvider } from './sessionProviderBootstrap.js';
 import { registerMakerSessionSendHandler } from './sessionSendHandler.js';
 import { registerStopSessionBackgroundTasksHandler } from './stopSessionBackgroundTasksHandler.js';
 import { registerProviderHandlers } from './providerHandlers.js';
+import { createLocalCliScanDeps, scanLocalCliAuth } from './localCliDetect.js';
 import { registerMcpHandlers } from './mcpHandlers.js';
 import { refreshCustomMcpProviders } from '../mcp-integrations/custom-mcp-registry.js';
 import {
@@ -521,7 +549,7 @@ function markTurnEndedAfterPersistDrain(sessionId: string): void {
 }
 
 // ─── Orca collab service holder ───────────────────────────────────────────
-// 让其它 main 模块(典型: mcp-integrations/mcp-providers 的 lizi_xdt_helper
+// 让其它 main 模块(典型: mcp-integrations/mcp-providers 的 cindy_helper
 // control deps)能 deferred 拿到 Orca / handoff 业务函数引用。
 //
 // 时序: maker-host 在 app 启动早期就构造 mcp-providers (那时 holder 还是 null
@@ -710,10 +738,14 @@ interface OrcaCollabService {
   // 永远投递到既有 worker session，绝不创建新 session。holder 只暴露 service
   // 边界的窄契约，避免 sendToSession 的 create 模式漏进 worker 派活语义。
   sendToWorker: (params: { callerLeadSessionId: string; targetSessionId: string; message: string }) => Promise<
-    { ok: true; agentKind: AgentKind; wakeKind: 'resumed' | 'already-active' | 'queued'; targetTitle: string | null; targetLastUserSendAt: string | null }
+    { ok: true; agentKind: AgentKind; wakeKind: 'resumed' | 'already-active' | 'queued'; targetTitle: string | null; targetLastUserSendAt: string | null; queuedMessageId?: string }
     | { ok: false; errorCode: string; message: string }
   >;
-  idleWorker: (params: { callerLeadSessionId: string; workerId: string }) => Promise<
+  // 排队消息控制:只作用于 lead 自己发出的 orca 排队条目,归属校验与 send/idle/archive 同一套 resolveWorkerRef。
+  listWorkerQueuedMessages: (params: { callerLeadSessionId: string; workerRef: string }) => Promise<ListWorkerQueuedMessagesResult>;
+  updateWorkerQueuedMessage: (params: { callerLeadSessionId: string; workerRef: string; queuedMessageId: string; message: string }) => Promise<WorkerQueuedMessageControlResult>;
+  cancelWorkerQueuedMessage: (params: { callerLeadSessionId: string; workerRef: string; queuedMessageId: string }) => Promise<WorkerQueuedMessageControlResult>;
+  idleWorker: (params: { callerLeadSessionId: string; workerId: string; expectedStatus?: 'done' }) => Promise<
     { ok: true; workerId?: string } | { ok: false; errorCode: string; message: string }
   >;
   endTeam: (params: { leadSessionId: string }) => Promise<
@@ -1227,9 +1259,79 @@ const pendingFailedTurnAssistantPersistId = new Map<string, string>();
  */
 const sendToSessionLocks = new Map<string, Promise<unknown>>();
 let agentInputCoordinatorHolder: AgentInputCoordinator | null = null;
+const rewindInputSessions = new Set<string>();
+const SESSION_REWIND_INPUT_LOCK_ID = 'session-rewind';
+const SESSION_REWIND_STOP_TIMEOUT_MS = 15_000;
 let pendingCredentialSwitchHolder: PendingCredentialSwitchService | null = null;
+let pendingAgentSwitchApplyHolder: ((sessionId: string, signal?: AbortSignal) => Promise<void>) | null = null;
 let gitSnapshotCoordinator: GitSnapshotCoordinator | null = null;
 const sessionTurnActivityTracker = new SessionTurnActivityTracker();
+
+/**
+ * Own the session input boundary while rewind stops an active turn and changes
+ * history. Queued messages survive the operation but stay paused afterwards.
+ */
+export async function withSessionInputStoppedForRewind<T>(
+  sessionId: string,
+  action: () => Promise<T>,
+): Promise<T> {
+  const coordinator = agentInputCoordinatorHolder;
+  let releaseInputLockOnExit = true;
+  if (!coordinator) {
+    throwIpcError('INTERNAL', 'Agent input coordinator is not initialized');
+  }
+  if (rewindInputSessions.has(sessionId)) {
+    throwIpcError('SESSION_RUNNING', 'A rewind is already in progress for this session');
+  }
+
+  rewindInputSessions.add(sessionId);
+  try {
+    await coordinator.ensureQueueRestored(sessionId).catch(() => undefined);
+    if (!coordinator.isQueueRestored(sessionId)) {
+      throwIpcError('INTERNAL', 'Failed to restore queued input before rewind');
+    }
+
+    coordinator.setInteractionLock(sessionId, SESSION_REWIND_INPUT_LOCK_ID, true, {
+      preserveOnStop: true,
+    });
+    if (coordinator.hasActiveTurnForRewind(sessionId)) {
+      // Pause /goal before abort so the terminal event cannot auto-resume it.
+      await goalStopObserver?.(sessionId);
+      coordinator.stop(sessionId, { keepQueue: true, pauseQueue: true });
+    } else {
+      coordinator.pausePendingQueueForRewind(sessionId);
+    }
+
+    const stopped = await coordinator.waitForRewindBoundaryIdle(
+      sessionId,
+      SESSION_REWIND_STOP_TIMEOUT_MS,
+    );
+    if (!stopped) {
+      // The old turn / interaction is still authoritative. Keep both the input
+      // lock and duplicate-rewind guard after returning the timeout error, then
+      // release them automatically once the real terminal boundary arrives.
+      releaseInputLockOnExit = false;
+      void coordinator
+        .releaseRewindLockWhenIdle(sessionId, SESSION_REWIND_INPUT_LOCK_ID)
+        .then(() => rewindInputSessions.delete(sessionId))
+        .catch((err) => {
+          log.error('failed to release retained rewind input lock', {
+            sessionId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+      throwIpcError('SESSION_RUNNING', 'Timed out waiting for the session to stop before rewind');
+    }
+
+    return await action();
+  } finally {
+    coordinator.pausePendingQueueForRewind(sessionId);
+    if (releaseInputLockOnExit) {
+      coordinator.setInteractionLock(sessionId, SESSION_REWIND_INPUT_LOCK_ID, false);
+      rewindInputSessions.delete(sessionId);
+    }
+  }
+}
 
 /**
  * 媒体回收器活引用取证入口(media-store.md §4 暂存区 (2)):内存排队/在途
@@ -1254,6 +1356,20 @@ export function createAutomationUserTurnGitBaselineHooks(): AutomationUserTurnGi
 
 export function isSessionInTurn(sessionId: string): boolean {
   return sessionTurnActivityTracker.isSessionInTurn(sessionId);
+}
+
+/**
+ * Goal / IM / scheduler 直发 `Session.send()` 前的 deferred agent-switch 桥。
+ *
+ * 与 renderer 的 makerSendTransaction 不同,这些调用方没有后续 lazy-create 阶段;
+ * holder 因此要求 apply 成功时同步 bootstrap 新引擎,调用方再重新读取 live session。
+ * 启动期 holder 尚未就绪时不可能已有进程内 pending intent,no-op 即可。
+ */
+export async function applyPendingAgentSwitchForDirectSend(
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  await pendingAgentSwitchApplyHolder?.(sessionId, signal);
 }
 
 /**
@@ -1809,6 +1925,10 @@ export function wireSessionToIpc(session: ReturnType<Maker['getSession']>): void
   if (!session) return;
   if (wiredSessionIds.has(session.id)) return;
   wiredSessionIds.add(session.id);
+
+  // session-agent-switch:登记本会话当前引擎,broadcaster / user 行落库据此逐行
+  // stamp messages.agent_kind(切换后历史行的 agent_meta 必须按写入时引擎解析)。
+  noteSessionAgentKind(session.id, session.agentKind === 'codex' ? 'codex' : 'cc');
 
   // 订阅槽①旁听 tap(独立监听,叠加在主转发之外互不干扰):AgentEvent →
   // did-turn-*。资格(用户主会话)与自动化轮次过滤都在 tap 内部,这里零逻辑。
@@ -2866,6 +2986,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
     listPresets: () => getActiveCatalog().presets ?? [],
     testConnection: (input) => testProviderConnection(input),
     fetchModels: (spec) => fetchProviderModels(spec),
+    scanLocalCli: () => scanLocalCliAuth(createLocalCliScanDeps()),
     // 通用 OAuth（目录 auth.oauth 描述符驱动）：login 成功后 best-effort 拉动态模型发现
     // (additions-only merge 进 active-catalog) 并广播 PROVIDER_CHANGED 让 UI 刷新连接态。
     oauthLogin: async (providerId) => {
@@ -3581,6 +3702,134 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       warnStderr: (agentKind, line) => log.warn(`[${agentKind}/stderr] ${line}`),
     },
   );
+
+  // turn 运行中登记的切换意图(下一条消息发送时刻由 send 事务 apply)。
+  const agentSwitchPending = createPendingAgentSwitchRegistry();
+
+  // session-agent-switch:lazy-create 前以 DB 行为真源校正 createOpts。切换后
+  // 残留在 renderer store / 排队项里的旧 agentKind/resumeSessionId 若原样 spawn,
+  // 会把会话劫持回旧引擎且丢交接注入(规则 9:代码兜底)。send 事务与
+  // GET_CONTEXT_USAGE 的 lazy 分支共用(后者无校正曾是审计实锤缺口)。
+  async function reconcileCreateOptsAgainstDb(sessionId: string, co: CreateOpts): Promise<void> {
+    try {
+      const db = getDbClient().drizzle;
+      const [row] = await db
+        .select({
+          agentKind: sessions.agentKind,
+          model: sessions.model,
+          sdkSessionId: sessions.sdkSessionId,
+          providerId: sessions.providerId,
+        })
+        .from(sessions)
+        .where(eq(sessions.id, sessionId))
+        .limit(1);
+      if (!row) return;
+      const dbMakerKind = row.agentKind === 'codex' ? 'codex' : 'claude-code';
+      if (co.agentKind !== dbMakerKind) {
+        log.warn('lazy-create: createOpts agentKind drifted from DB (agent switch); reconciling', {
+          sessionId,
+          staleAgentKind: co.agentKind,
+          dbAgentKind: dbMakerKind,
+        });
+        co.agentKind = dbMakerKind;
+      }
+      // 意图制切换下,renderer 的 createOpts 快照构建于 send 事务内 apply 之前
+      // (乐观翻转后 agentKind 可能已一致,但 model/resume/providerId 仍是旧值,
+      // 尤其 resumeSessionId 可能是**旧引擎**的原生会话 id——resume 会以错误引擎
+      // 解释它)。lazy-create 时刻 DB 行是唯一真源,三个字段无条件对齐。
+      co.model = row.model ?? undefined;
+      co.resumeSessionId = row.sdkSessionId ?? undefined;
+      co.providerId = row.providerId ?? undefined;
+    } catch {
+      // 校正读库失败按原 opts 继续(与切换功能上线前行为一致)。
+    }
+  }
+
+  const agentSwitchDeps: MakerSessionAgentSwitchHandlerDeps = {
+    getSessionRow: async (sessionId) => {
+      const db = getDbClient().drizzle;
+      const [row] = await db
+        .select({
+          id: sessions.id,
+          agentKind: sessions.agentKind,
+          model: sessions.model,
+          status: sessions.status,
+          remoteHostId: sessions.remoteHostId,
+          orcaRole: sessions.orcaRole,
+          sdkSessionId: sessions.sdkSessionId,
+        })
+        .from(sessions)
+        .where(eq(sessions.id, sessionId))
+        .limit(1);
+      return row ?? null;
+    },
+    getLiveSession: (sessionId) => maker.getSession(sessionId),
+    closeSession: (sessionId) => maker.closeSession(sessionId),
+    listMessagesForHandoff: (sessionId, after) => listMessagesForAgentHandoff(sessionId, 400, after),
+    findParkedEngineSession: (sessionId, targetDbKind) =>
+      findParkedEngineSession(sessionId, targetDbKind),
+    applyAgentSwitchToDb: applyAgentSwitchToSessionRow,
+    insertBoundaryMessage: async (sessionId, content) => {
+      const clientId = `agent-switch:${createId()}`;
+      await createDbMessage(sessionId, {
+        clientId,
+        role: 'agent_switch',
+        content,
+      });
+      return clientId;
+    },
+    applyResumeFallbackAtomically: applyAgentSwitchResumeFallbackAtomically,
+    setPendingHandoff: (sessionId, handoff) => agentHandoffPending.set(sessionId, handoff),
+    bootstrapSwitchedSession: async (sessionId) => {
+      // 切换已提交,从 DB 行(新引擎值)重建 live session。resumeSessionId 直接取
+      // 行上的 sdk_session_id:切换事务在有停泊绑定时已把它落成停泊 id(Phase 2
+      // 切回续接),否则为 null = 全新原生会话,上下文由交接注入承接——与
+      // lazy-create(reconcileCreateOptsAgainstDb)同一条 resume 口径。
+      const db = getDbClient().drizzle;
+      const [row] = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1);
+      if (!row) throw new Error(`session ${sessionId} row missing after agent switch`);
+      if (!row.workingDir) {
+        // 无 workingDir(理论上只有从未 send 过的草稿,不可能有可切换的历史):
+        // 抛错走 engineReady=false 降级,下一条消息的 lazy-create 用其现有错误呈现。
+        throw new Error(`session ${sessionId} has no workingDir; cannot bootstrap switched engine`);
+      }
+      const co = buildCreateOptsWithStderr({
+        id: sessionId,
+        agentKind: row.agentKind === 'codex' ? 'codex' : 'claude-code',
+        workingDir: row.workingDir,
+        model: row.model ?? undefined,
+        providerId: row.providerId ?? undefined,
+        effort: (row.effort ?? undefined) as CreateOpts['effort'],
+        fastMode: !!row.fastMode,
+        permissionMode: (row.permissionMode ?? 'ask') as CreateOpts['permissionMode'],
+        planMode: false,
+        title: row.title ?? undefined,
+        resumeSessionId: row.sdkSessionId ?? undefined,
+      });
+      if (co.extraDirs === undefined) {
+        try {
+          const extraDirs = await readSessionExtraDirsFromDb(sessionId);
+          if (extraDirs.length > 0) co.extraDirs = extraDirs;
+        } catch (err) {
+          log.warn('agent-switch bootstrap: read extra_dirs from DB failed (non-fatal)', {
+            sessionId,
+            err: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+      await bootstrapSession(co);
+      broadcastSessionCreated(sessionId);
+    },
+    withCloseSuppressed: withRehydrateCloseSuppressed,
+    pendingSwitches: agentSwitchPending,
+    log,
+  };
+  registerMakerSessionAgentSwitchHandler(makerSessionRegistry, agentSwitchDeps);
+  pendingAgentSwitchApplyHolder = (sessionId, signal) =>
+    applyPendingAgentSwitchIfIdle(agentSwitchDeps, sessionId, {
+      bootstrapAfterSwitch: true,
+      signal,
+    });
 
   ipcMain.handle(MAKER_INVOKE.MARK_ORCA_ROLE, async (_e, sessionId: unknown, role: unknown) => {
     if (typeof sessionId !== 'string') throwIpcError('INVALID_PARAMS', 'sessionId required');
@@ -4378,7 +4627,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
    *
    * 共用 caller:
    *   - SESSION_DISABLE_ORCA IPC handler (renderer 手动 toggle)
-   *   - lizi_xdt_helper end_team MCP tool (Lead agent 自动调)
+   *   - cindy_helper end_team MCP tool (Lead agent 自动调)
    */
   async function disableOrcaInternal(leadSessionId: string): Promise<{ ok: true }> {
     const team = await getActiveTeamByLead(leadSessionId);
@@ -4552,6 +4801,8 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         .set({ status: 'idle', idleSince: now, updatedAt: now })
         .where(eq(orcaWorkers.id, workerId));
     },
+    markWorkerIdleIfStatus,
+    restoreWorkerDoneIfIdle,
     closeWorkerSession: async (sessionId) => {
       const sess = maker.getSession(sessionId);
       if (sess) {
@@ -4559,6 +4810,20 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       }
       await maker.closeSession(sessionId);
     },
+    closeWorkerSessionIfIdle: async (sessionId) => {
+      if (sendToSessionLocks.has(sessionId)) return false;
+      const sess = maker.getSession(sessionId);
+      return sess ? sess.closeIfIdle() : true;
+    },
+    hasPendingWorkerInput: async (sessionId) => {
+      await inputCoordinator.ensureQueueRestored(sessionId).catch(() => undefined);
+      // A failed restore is itself a pending condition: never close a worker while
+      // its durable follow-up snapshot is still unavailable.
+      if (!inputCoordinator.isQueueRestored(sessionId)) return true;
+      return inputCoordinator.hasPendingQueuedWork(sessionId) ||
+        inputCoordinator.hasQueuedItemWhere(sessionId, () => true, { includeRecovery: true });
+    },
+    hasSendToSessionLock: (sessionId) => sendToSessionLocks.has(sessionId),
     archiveWorkerSession: archiveSingleWorkerSession,
     getManualInterrupt,
     clearManualInterrupt,
@@ -4589,11 +4854,31 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       return {
         ok: true,
         mode: result.mode,
+        clientId: result.clientId,
         dispatchOutcome: result.dispatchOutcome,
         targetTitle: result.targetTitle ?? null,
         targetLastUserSendAt: result.targetLastUserSendAt ?? null,
       };
     },
+    getSessionQueueSnapshot: async (sessionId) => {
+      // 先补崩溃恢复,保证重启后 lead 仍能看到快照恢复出的排队消息。
+      await inputCoordinator.ensureQueueRestored(sessionId).catch(() => undefined);
+      const projection = inputCoordinator.getProjection(sessionId);
+      return {
+        pendingQueue: projection.pendingQueue,
+        steeringClientIds: projection.steeringQueueClientIds,
+      };
+    },
+    removeQueuedMessage: (sessionId, clientId) => {
+      if (!inputCoordinator.hasQueuedItemWhere(sessionId, (item) => item.clientId === clientId)) {
+        return false;
+      }
+      // remove 内部对 steering 条目静默拒绝,以移除后的队列状态为准判定成败。
+      inputCoordinator.remove(sessionId, clientId);
+      return !inputCoordinator.hasQueuedItemWhere(sessionId, (item) => item.clientId === clientId);
+    },
+    replaceQueuedMessage: (sessionId, clientId, next) =>
+      inputCoordinator.replaceQueuedMessage(sessionId, clientId, next),
     sendAutoBridgeToLead: async (leadSessionId, message, workerId) => {
       const result = await dispatchInterAgentMessage({
         targetSessionId: leadSessionId,
@@ -4641,6 +4926,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       };
     },
     readClaudeApiKey,
+    reserveWorkerCreation,
+    renewWorkerCreationReservation,
+    releaseWorkerCreationReservation,
     createId,
     createSessionId: createBusinessSessionId,
     buildCreateOptsWithStderr,
@@ -4814,7 +5102,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
   log.info('idleWatcher started');
 
   // ─── 把 internal 业务函数发布到 module-level holder ────────────────────
-  // mcp-providers.ts 的 lizi_xdt_helper control deps 通过
+  // mcp-providers.ts 的 cindy_helper control deps 通过
   // tryGetOrcaCollabService() 拿到这些函数引用, 让 MCP tool
   // 走与 IPC handler 完全相同的业务路径。
   orcaCollabServiceHolder = {
@@ -4828,6 +5116,11 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       targetSessionId,
       message,
     }),
+    // 排队消息控制统一走 OrcaTeamService,复用 resolveWorkerRef 归属校验与
+    // coordinator 的 remove/replace 原语(cancel 经 remove 触发 discard settle)。
+    listWorkerQueuedMessages: (params) => orcaTeamService.listWorkerQueuedMessages(params),
+    updateWorkerQueuedMessage: (params) => orcaTeamService.updateWorkerQueuedMessage(params),
+    cancelWorkerQueuedMessage: (params) => orcaTeamService.cancelWorkerQueuedMessage(params),
     startTeam: async ({ leadSessionId }) => {
       try {
         return await orcaLifecycleService.startTeam({ leadSessionId });
@@ -4941,9 +5234,9 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         return { ok: false, errorCode: 'INTERNAL', message: err instanceof Error ? err.message : String(err) };
       }
     },
-    idleWorker: async ({ callerLeadSessionId, workerId }) => {
+    idleWorker: async ({ callerLeadSessionId, workerId, expectedStatus }) => {
       try {
-        return await orcaTeamService.idleWorker({ callerLeadSessionId, workerId });
+        return await orcaTeamService.idleWorker({ callerLeadSessionId, workerId, expectedStatus });
       } catch (err) {
         return { ok: false, errorCode: 'INTERNAL', message: err instanceof Error ? err.message : String(err) };
       }
@@ -5015,7 +5308,13 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
               },
             }
           : message;
-        return createDbMessage(sessionId, enrichedMessage, opts);
+        // session-agent-switch:user 行逐行 stamp 当前引擎(见 messages.agent_kind 注释)。
+        const agentKind = getSessionDbAgentKind(sessionId);
+        return createDbMessage(
+          sessionId,
+          agentKind ? { ...enrichedMessage, agentKind } : enrichedMessage,
+          opts,
+        );
       });
       return result;
     },
@@ -5031,6 +5330,12 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       rollbackAgentIslandUserPrompt(sessionId, clientId, source);
     },
     isSessionRunningError,
+    // session-agent-switch:lazy-create 前以 DB 行为真源校正 createOpts(定义见
+    // reconcileCreateOptsAgainstDb;GET_CONTEXT_USAGE 的 lazy 分支共用)。
+    reconcileCreateOptsWithDb: reconcileCreateOptsAgainstDb,
+    peekPendingHandoff: (sessionId) => agentHandoffPending.peek(sessionId),
+    consumePendingHandoff: (sessionId) => agentHandoffPending.consume(sessionId),
+    applyPendingAgentSwitch: (sessionId) => applyPendingAgentSwitchIfIdle(agentSwitchDeps, sessionId),
     log,
   });
 
@@ -5135,6 +5440,10 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         throwIpcError('NOT_FOUND', `Session ${sessionId} is not running`);
       }
       const co = buildCreateOptsWithStderr({ ...(createOpts as CreateOpts), id: sessionId });
+      // session-agent-switch:先按 DB 行校正再判 claude-only——否则切到 codex 后
+      // 残留的 claude createOpts 会在这里 spawn 出旧引擎的 live session 并被后续
+      // send 复用(会话被劫持回旧引擎,2026-07-20 审计实锤)。
+      await reconcileCreateOptsAgainstDb(sessionId, co);
       if (co.agentKind !== 'claude-code') {
         throwIpcError('UNSUPPORTED_CAPABILITY', `Agent ${co.agentKind} does not support context usage`);
       }
@@ -5736,18 +6045,23 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
       throwIpcError('INVALID_PARAMS', 'providerId must be string, null, or undefined');
     }
     try {
-      const result = await applyRuntimeSetModelChange({
-        maker,
+      const result = await applySetModelThenCancelAgentSwitchIntent(
+        agentSwitchPending,
         sessionId,
-        model,
-        providerId,
-        isSessionInTurn,
-        registerPendingCredentialSwitch: registerPendingCredentialSwitchForSession,
-        clearPendingCredentialSwitch: clearPendingCredentialSwitchForSession,
-        wakeSessionInputQueue: wakeSessionInputAfterCredentialSwitch,
-        getPendingCredentialSwitch: getPendingCredentialSwitchTarget,
-        logger: log,
-      });
+        () => applyRuntimeSetModelChange({
+          maker,
+          sessionId,
+          model,
+          providerId,
+          isSessionInTurn,
+          registerPendingCredentialSwitch: registerPendingCredentialSwitchForSession,
+          clearPendingCredentialSwitch: clearPendingCredentialSwitchForSession,
+          wakeSessionInputQueue: wakeSessionInputAfterCredentialSwitch,
+          getPendingCredentialSwitch: getPendingCredentialSwitchTarget,
+          logger: log,
+        }),
+        (id) => broadcastSessionPatched(id, { agentSwitchIntentCanceled: true }),
+      );
       // deferred = 会话自己在跑,选择已登记、turn 结束自动生效。renderer 据此提示
       // "任务结束后生效"而不是当成已即时切换。
       return { deferred: result.status === 'deferred' };
@@ -6274,6 +6588,21 @@ async function checkWorkDirExists(
       }
       return false;
     }
+    // Managed worktrees need a stronger readiness check than directory existence: another send
+    // may observe `git worktree add` before snapshot apply finishes, and a previous apply conflict
+    // deliberately leaves the directory present while keeping the session blocked.
+    const normalizedWorkingDir = path.resolve(workingDir).replace(/\\/g, '/');
+    if (getManagedWorktreeBasePath(normalizedWorkingDir) !== null) {
+      const ready = await restoreMissingManagedWorktreeForSession(sessionId, workingDir);
+      if (!ready) {
+        if (suppress) {
+          log.warn('send: managed worktree not ready (broadcast suppressed, caller has fallback)', { sessionId, workingDir });
+        } else {
+          emitWorkDirMissingError(sessionId, workingDir, source, 'not-exist');
+        }
+        return false;
+      }
+    }
     return true;
   } catch {
     // app 托管的 dialogue 工作目录(<userData>/dialogues/<日期>/<id>)本来就是
@@ -6282,6 +6611,14 @@ async function checkWorkDirExists(
     const healed = await healMissingDialogueWorkdir(workingDir, dialogueWorkspaceRootDir());
     if (healed) {
       log.info('send: recreated missing dialogue workdir', { sessionId, workingDir });
+      return true;
+    }
+    // Cindy 托管 worktree 被外部 PR cleanup / 手动 git 命令移除时，先按 DB 中
+    // 的精确 worktree_path 从本地或 origin tracking 分支重建。普通用户目录绝不
+    // 猜测 fallback；快照冲突也保持阻断，交给恢复横幅显式处理。
+    const restored = await restoreMissingManagedWorktreeForSession(sessionId, workingDir);
+    if (restored) {
+      log.info('send: restored missing managed worktree', { sessionId, workingDir });
       return true;
     }
     if (suppress) {

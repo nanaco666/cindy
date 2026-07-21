@@ -134,6 +134,13 @@ export const MAKER_INVOKE = {
   GET_PENDING_INTERACTIONS: 'maker:get-pending-interactions',
   // 运行时切换 (Phase B)
   SET_MODEL: 'maker:set-model',
+  /**
+   * session-agent-switch:同一会话切换 agent 引擎(claude-code ↔ codex)。
+   * 入参 = (sessionId, targetAgentKind, model, providerId?);handler 见
+   * sessionAgentSwitchHandler.ts(交接构造 + DB 提交 + 边界行 + 新引擎重建)。
+   * 与 SET_MODEL 的边界:同引擎换模型走 SET_MODEL,跨引擎必须走本 channel。
+   */
+  SWITCH_SESSION_AGENT: 'maker:switch-session-agent',
   SET_EFFORT: 'maker:set-effort',
   SET_PERMISSION_MODE: 'maker:set-permission-mode',
   SET_FAST_MODE: 'maker:set-fast-mode',
@@ -384,6 +391,13 @@ export const MAKER_INVOKE = {
   PROVIDER_OAUTH_LOGIN: 'maker:provider:oauth:login',
   PROVIDER_OAUTH_LOGOUT: 'maker:provider:oauth:logout',
   PROVIDER_OAUTH_CANCEL: 'maker:provider:oauth:cancel',
+  /**
+   * 本机 agent CLI 安装 / 登录态扫描(设置 → 模型供应商「检测建议」用)。
+   * 只做存在性 stat、不读凭证内容(规则 23);返回查询型结构化结果
+   * { detections: LocalCliDetection[] },扫描失败降级空数组(规则 13 例外条款:
+   * renderer 直接按空列表继续渲染,检测建议是增强而非依赖)。只读、无密钥材料。
+   */
+  PROVIDER_LOCAL_CLI_SCAN: 'maker:provider:local-cli-scan',
   // Scheduler (Phase 4) — 9 个 invoke handler，对应 Scheduler 公共 API
   SCHEDULE_LIST: 'maker:schedule:list',
   SCHEDULE_GET: 'maker:schedule:get',
@@ -428,6 +442,8 @@ export const MAKER_INVOKE = {
   WORKER_LIST: 'maker:worker:list',
   WORKER_SWITCH_FOCUS: 'maker:worker:switch-focus',
   WORKER_IDLE: 'maker:worker:idle',
+  /** New wire contract for automatic done acknowledgements; old peers reject it safely. */
+  WORKER_ACKNOWLEDGE_DONE: 'maker:worker:acknowledge-done',
   WORKER_ARCHIVE: 'maker:worker:archive',
   TEAM_END: 'maker:team:end',
   COLLABORATION_SETTINGS_GET: 'maker:collaboration-settings:get',

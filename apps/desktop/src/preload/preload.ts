@@ -16,7 +16,14 @@ import {
   type AgentIslandSoundChoice,
   type AgentIslandSoundSettings,
 } from '../shared/agentIsland';
-import { WINDOW_BEHAVIOR_SET_SWALLOW_ACTIVATION_CLICK_CHANNEL } from '../shared/windowBehavior';
+import {
+  WINDOW_BEHAVIOR_GET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
+  WINDOW_BEHAVIOR_SET_SWALLOW_ACTIVATION_CLICK_CHANNEL,
+  WINDOW_BEHAVIOR_SET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
+  WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_REQUESTED_CHANNEL,
+  WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_SHOWN_CHANNEL,
+  type WindowsCloseBehavior,
+} from '../shared/windowBehavior';
 import { SELECTION_CONTEXT_MENU_ADD_TO_CHAT_CHANNEL } from '../shared/selectionContextMenu';
 import { SESSION_ATTENTION_CLEARED_CHANNEL } from '../shared/sessionAttention';
 import {
@@ -731,6 +738,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     markUsed: (id: string): Promise<{ ids: string[] }> =>
       ipcRenderer.invoke('ghosts:mark-used', id),
+    /** 配置就绪检查(插件页「使用」前置门;main 现查凭证/账号/连接/kv)。 */
+    setupStatus: (id: string): Promise<unknown> =>
+      ipcRenderer.invoke('ghosts:setup-status', id),
     install: (lizFilePath: string, opts?: { enable?: boolean }): Promise<{ ghost: unknown }> =>
       ipcRenderer.invoke('ghosts:install', lizFilePath, opts),
     update: (lizFilePath: string): Promise<{ ghost: unknown }> =>
@@ -971,6 +981,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // swallow 的即时开关由 renderer 本地读 localStorage 完成。
     setSwallowActivationClick: (enabled: boolean): Promise<{ ok: true }> =>
       ipcRenderer.invoke(WINDOW_BEHAVIOR_SET_SWALLOW_ACTIVATION_CLICK_CHANNEL, enabled),
+    getWindowsCloseBehavior: (): Promise<WindowsCloseBehavior | null> =>
+      ipcRenderer.invoke(WINDOW_BEHAVIOR_GET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL),
+    setWindowsCloseBehavior: (
+      behavior: WindowsCloseBehavior,
+    ): Promise<WindowsCloseBehavior> =>
+      ipcRenderer.invoke(WINDOW_BEHAVIOR_SET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL, behavior),
+    onWindowsCloseBehaviorRequested: (callback: () => void): (() => void) => {
+      const listener = (): void => callback();
+      ipcRenderer.on(WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_REQUESTED_CHANNEL, listener);
+      return () => ipcRenderer.removeListener(
+        WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_REQUESTED_CHANNEL,
+        listener,
+      );
+    },
+    notifyWindowsCloseBehaviorPromptShown: (): void =>
+      ipcRenderer.send(WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_SHOWN_CHANNEL),
   },
 
   // ── 右侧栏独立子窗口(RSB window)──────────────────────────────────────
@@ -1138,6 +1164,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     save: (payload: { appId: string; appSecret: string }): Promise<{
       verdict: 'connected' | 'conflict' | 'error';
     }> => ipcRenderer.invoke('feishuBot:save', payload),
+    reconnect: (): Promise<{ verdict: 'connected' | 'conflict' | 'error' }> =>
+      ipcRenderer.invoke('feishuBot:reconnect'),
     clear: (): Promise<{ ok: true }> => ipcRenderer.invoke('feishuBot:clear'),
     setLifecycleAnnouncement: (enabled: boolean): Promise<{ ok: true }> =>
       ipcRenderer.invoke('feishuBot:set-lifecycle-announcement', { enabled }),
@@ -2137,6 +2165,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openPath: (filePath: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('shell:open-path', filePath),
 
+  // 安全降级聊天附件另存为。main 校验源路径并清洗 suggestedName；保存后
+  // 只返回结果，不自动打开或执行目标文件。
+  saveChatAttachmentAs: (params: {
+    sourcePath: string;
+    suggestedName: string;
+  }): Promise<
+    | { status: 'saved'; savedPath: string }
+    | { status: 'canceled' }
+    | {
+        status: 'error';
+        code:
+          | 'invalid_source'
+          | 'forbidden'
+          | 'not_found'
+          | 'not_file'
+          | 'dialog_failed'
+          | 'copy_failed';
+      }
+  > => ipcRenderer.invoke('chat-attachment:save-as', params),
+
   // Open <userData>/logs in the OS file manager (Settings → About).
   openLogsDir: (): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('app:open-logs-dir'),
@@ -2182,7 +2230,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }): Promise<{ url: string; name: string; ext: string; mimeType: string; size: number }> =>
     ipcRenderer.invoke('media:cache-for-session', params),
 
-  // renderer 字节层:http / xdt-remote-media 图取字节(标注烧录、位图复制)。
+  // renderer 字节层:http / cindy-remote-media 图取字节(标注烧录、位图复制)。
   readImageBytes: (params: {
     url: string;
   }): Promise<{ base64: string; mimeType: string }> =>
@@ -3081,8 +3129,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('maker:worker:create', input),
       switchFocus: (input: Record<string, unknown>): Promise<unknown> =>
         ipcRenderer.invoke('maker:worker:switch-focus', input),
-      idleWorker: (leadSessionId: string, workerId: string): Promise<unknown> =>
-        ipcRenderer.invoke('maker:worker:idle', { leadSessionId, workerId }),
+      idleWorker: (leadSessionId: string, workerId: string, expectedStatus?: 'done'): Promise<unknown> => {
+        if (expectedStatus === 'done') {
+          return ipcRenderer.invoke('maker:worker:acknowledge-done', { leadSessionId, workerId });
+        }
+        return ipcRenderer.invoke('maker:worker:idle', {
+          leadSessionId,
+          workerId,
+          ...(expectedStatus ? { expectedStatus } : {}),
+        });
+      },
       archiveWorker: (leadSessionId: string, workerId: string): Promise<unknown> =>
         ipcRenderer.invoke('maker:worker:archive', { leadSessionId, workerId }),
       endTeam: (leadSessionId: string): Promise<unknown> =>
@@ -3291,6 +3347,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       status?: number;
       detail?: string;
     }> => ipcRenderer.invoke('maker:provider:models-fetch', input),
+    /**
+     * 本机 agent CLI 安装 / 登录态扫描（设置「检测建议」用）。只 stat 不读凭证内容;
+     * 失败降级空数组。
+     */
+    scanLocalCli: (): Promise<{
+      detections: import('../shared/localCliDetect').LocalCliDetection[];
+    }> => ipcRenderer.invoke('maker:provider:local-cli-scan'),
     /** 自定义供应商变更广播订阅（返回 off）。 */
     onProvidersChanged: fanOutMakerProvidersChanged,
 
@@ -3658,6 +3721,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
       providerId?: string | null,
     ): Promise<{ deferred: boolean } | undefined> =>
       ipcRenderer.invoke('maker:set-model', sessionId, model, providerId),
+    // session-agent-switch:同一会话切换 agent 引擎(claude-code ↔ codex)。
+    // 与 setModel 的边界:同引擎换模型走 setModel,跨引擎必须走本方法。
+    // 意图制:本调用只登记切换意图(deferred=true 为常态返回),真正的交接与
+    // 引擎重建在下一条消息发送时刻执行;effort/fastMode 为目标引擎下应生效的值
+    // (renderer 按目标目录与预设解析好带入,apply 时一并落库)。
+    // switched=false 且无 deferred = 同引擎 no-op(用户选回当前引擎,意图已清)。
+    switchSessionAgent: (
+      sessionId: string,
+      targetAgentKind: 'claude-code' | 'codex',
+      model: string,
+      providerId?: string | null,
+      effort?: string,
+      fastMode?: boolean,
+    ): Promise<{ switched: boolean; agentKind: 'claude-code' | 'codex'; model: string; engineReady: boolean; deferred?: boolean }> =>
+      ipcRenderer.invoke('maker:switch-session-agent', sessionId, targetAgentKind, model, providerId, effort, fastMode),
     // effort/mode 透传 string —— 合法值由 maker capabilities 在运行时校验,
     // preload 不重复枚举 (避免 capabilities 加新值时这里也要改)。
     setEffort: (sessionId: string, effort: string): Promise<void> =>
@@ -4027,7 +4105,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     rewindCommit: (
       sessionId: string,
       clientId: string,
-      opts?: { requireLatestUser?: boolean },
+      opts?: { requireLatestUser?: boolean; stopIfRunning?: boolean },
     ): Promise<unknown> =>
       ipcRenderer.invoke('maker:rewind:commit', sessionId, clientId, opts),
     fork: (sourceSessionId: string, messageClientId: string): Promise<unknown> =>

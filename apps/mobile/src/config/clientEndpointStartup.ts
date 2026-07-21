@@ -46,7 +46,12 @@ async function fetchManifestTextViaCdn(timeoutMs: number): Promise<string | null
 /** 测试注入点;生产走默认实现。 */
 export interface StartupEndpointResolveDeps {
   fetchManifestText?: (timeoutMs: number) => Promise<string | null>;
-  apply?: (resolved: ClientEndpointMap & { reviewVersion: string | null }) => void;
+  /** iOS 在端点闸门放行前读取 StoreKit 分发环境；其它平台返回 false。 */
+  resolveIsTestFlight?: () => Promise<boolean>;
+  apply?: (resolved: ClientEndpointMap & {
+    reviewVersion: string | null;
+    isTestFlight: boolean;
+  }) => void;
   timeoutMs?: number;
 }
 
@@ -78,7 +83,16 @@ export async function runStartupEndpointResolve(
     const result = resolveClientEndpointsStrict(rawText);
     if (!result.ok) return { ok: false, reason: result.reason };
 
-    apply({ ...result.endpoints, reviewVersion: result.reviewVersion });
+    // 分发环境识别失败不能把 endpoint 闸门变成启动故障；降级为非 TestFlight，
+    // 保留既有 review 行为。真实 iOS 路径由 useStartupEndpointGate 注入 StoreKit 实现。
+    let isTestFlight = false;
+    try {
+      isTestFlight = await (deps.resolveIsTestFlight?.() ?? Promise.resolve(false));
+    } catch {
+      isTestFlight = false;
+    }
+
+    apply({ ...result.endpoints, reviewVersion: result.reviewVersion, isTestFlight });
     return { ok: true, source: 'cdn' };
   } catch {
     return { ok: false, reason: 'internal-error' };

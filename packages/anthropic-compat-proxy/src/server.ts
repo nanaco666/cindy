@@ -20,7 +20,7 @@ import { URL } from 'node:url';
 import { brotliDecompressSync, gunzipSync, inflateRawSync, inflateSync } from 'node:zlib';
 
 import { DEFAULT_THREAD_ID_HEADERS, selectedHeaderValue } from './headers.js';
-import { stripNonAnthropicFields } from './transform.js';
+import { stripNonAnthropicFields, stripToolUseProviderSpecificFields } from './transform.js';
 import type {
   LocalRequestHandler,
   ProxyHandle,
@@ -902,7 +902,7 @@ export async function createAnthropicCompatProxy(opts: ProxyOptions): Promise<Pr
       return cachedTarget;
     };
   })();
-  const transforms = opts.transformRequest ?? [stripNonAnthropicFields];
+  const transforms = opts.transformRequest ?? [stripToolUseProviderSpecificFields, stripNonAnthropicFields];
   const logger = opts.logger ?? {};
   const host = opts.host ?? '127.0.0.1';
   const maxBodyBytes = opts.maxRequestBodyBytes ?? DEFAULT_MAX_REQUEST_BODY_BYTES;

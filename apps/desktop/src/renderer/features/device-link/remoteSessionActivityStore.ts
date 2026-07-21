@@ -36,8 +36,11 @@ const listeners = new Set<() => void>();
 const activityMap = new Map<string, RemoteSessionActivity>();
 /** sessionId → deviceId(设备移除时按设备清扫)。 */
 const sessionDeviceIndex = new Map<string, string>();
+/** 整表变更版本号(聚合消费方作依赖用;activityMap 本体是可变引用,不能当快照)。 */
+let revision = 0;
 
 function emit(): void {
+  revision++;
   for (const l of listeners) l();
 }
 
@@ -70,6 +73,18 @@ export function useRemoteSessionActivity(sessionId: string): RemoteSessionActivi
     () => activityMap.get(sessionId),
     () => activityMap.get(sessionId),
   );
+}
+
+function getRevision(): number {
+  return revision;
+}
+
+/** Hook —— 整表版本号订阅,给**单例聚合消费方**(rail 折叠入口灯要跨全部远程
+ *  条目聚合)。以返回值作 memo 依赖、逐 id 用 getRemoteSessionActivity 取值。
+ *  ⚠️ 逐行组件(SessionItem)仍必须走 useRemoteSessionActivity 精准订阅,
+ *  拿这个 hook 逐行用会退化成整表订阅、违反上面的性能不变量。 */
+export function useRemoteSessionActivityRevision(): number {
+  return useSyncExternalStore(subscribeRemoteSessionActivity, getRevision, getRevision);
 }
 
 /** onRemotePush 路由入口:按上述保留语义写入 / 删除。非法 payload 静默忽略。 */

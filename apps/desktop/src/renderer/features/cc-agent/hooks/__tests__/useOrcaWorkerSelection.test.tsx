@@ -6,11 +6,19 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { WorkerInfo } from '../useWorkers';
+import {
+  __resetWorkerAttentionStoreForTest,
+  hasWorkerAttention,
+  markWorkerAttention,
+} from '../../lib/workerAttentionStore';
 
 const mocks = vi.hoisted(() => ({
   workers: [] as WorkerInfo[],
   refresh: vi.fn(),
+  createWorker: vi.fn<(input: Record<string, unknown>) => Promise<void>>(async () => undefined),
   switchFocus: vi.fn(async () => undefined),
+  idleWorker: vi.fn(async () => ({ ok: true as const, workerId: 'worker-b' })),
+  toastError: vi.fn(),
 }));
 
 vi.mock('../useWorkers', () => ({
@@ -26,21 +34,43 @@ vi.mock('../useWorkers', () => ({
 
 vi.mock('@/lib/makerTransport', () => ({
   orcaWorkflowsFor: () => ({
-    createWorker: vi.fn(async () => undefined),
+    createWorker: mocks.createWorker,
     switchFocus: mocks.switchFocus,
+    idleWorker: mocks.idleWorker,
     archiveWorker: vi.fn(async () => undefined),
   }),
 }));
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
+
 vi.mock('@/lib/toast', () => ({
   toast: {
-    error: vi.fn(),
+    error: mocks.toastError,
   },
 }));
 
-import { useOrcaWorkerSelection } from '../useOrcaWorkerSelection';
+import { useOrcaWorkerSelection as useOrcaWorkerSelectionImpl } from '../useOrcaWorkerSelection';
 
-function makeWorker(workerId: string, sessionId: string, focused = false): WorkerInfo {
+type TestSelectionOptions = Parameters<typeof useOrcaWorkerSelectionImpl>[0];
+
+/** Most hook tests render an active worker pane; visibility-specific cases override this default. */
+function useOrcaWorkerSelection(
+  options: Omit<TestSelectionOptions, 'viewVisible'> & { viewVisible?: boolean },
+) {
+  return useOrcaWorkerSelectionImpl({
+    ...options,
+    viewVisible: options.viewVisible ?? true,
+  });
+}
+
+function makeWorker(
+  workerId: string,
+  sessionId: string,
+  focused = false,
+  status: WorkerInfo['status'] = 'idle',
+): WorkerInfo {
   return {
     workerId,
     sessionId,
@@ -49,7 +79,7 @@ function makeWorker(workerId: string, sessionId: string, focused = false): Worke
     model: 'gpt-5.4',
     effort: null,
     label: null,
-    status: 'idle',
+    status,
     focused,
     idleSince: null,
   };
@@ -73,6 +103,202 @@ describe('useOrcaWorkerSelection', () => {
       workers: mocks.workers,
     });
     mocks.switchFocus.mockClear();
+    mocks.idleWorker.mockClear();
+    mocks.idleWorker.mockResolvedValue({ ok: true, workerId: 'worker-b' });
+    mocks.toastError.mockClear();
+    __resetWorkerAttentionStoreForTest();
+    mocks.createWorker.mockReset().mockResolvedValue(undefined);
+  });
+
+  it('acknowledges a done worker after switching focus and clears attention after success', async () => {
+    mocks.workers = [
+      makeWorker('worker-a', 'session-a', true),
+      makeWorker('worker-b', 'session-b', false, 'done'),
+    ];
+    markWorkerAttention('worker-b');
+    const { result } = renderHook(
+      () => useOrcaWorkerSelection({ leadSessionId: 'lead-1' }),
+      { wrapper },
+    );
+
+    act(() => result.current.handleSwitchFocus('worker-b'));
+
+    await waitFor(() => {
+      expect(mocks.idleWorker).toHaveBeenCalledWith('lead-1', 'worker-b', 'done');
+    });
+    expect(hasWorkerAttention('worker-b')).toBe(false);
+    expect(mocks.refresh).toHaveBeenCalled();
+  });
+
+  it('silently keeps done attention and refreshes when acknowledgement loses a state race', async () => {
+    mocks.workers = [
+      makeWorker('worker-a', 'session-a', true),
+      makeWorker('worker-b', 'session-b', false, 'done'),
+    ];
+    mocks.idleWorker.mockRejectedValueOnce(
+      new Error('[WORKER_STATE_CHANGED] worker worker-b has a dispatch in progress'),
+    );
+    markWorkerAttention('worker-b');
+    const { result } = renderHook(
+      () => useOrcaWorkerSelection({ leadSessionId: 'lead-1' }),
+      { wrapper },
+    );
+
+    act(() => result.current.handleSwitchFocus('worker-b'));
+
+    await waitFor(() => {
+      expect(mocks.idleWorker).toHaveBeenCalledWith('lead-1', 'worker-b', 'done');
+    });
+    expect(hasWorkerAttention('worker-b')).toBe(true);
+    expect(mocks.refresh).toHaveBeenCalled();
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it('silently keeps done attention when the remote target lacks automatic-ack support', async () => {
+    mocks.workers = [
+      makeWorker('worker-a', 'session-a', true),
+      makeWorker('worker-b', 'session-b', false, 'done'),
+    ];
+    mocks.idleWorker.mockRejectedValueOnce(
+      new Error('[DEVICE_LINK_CHANNEL_NOT_ALLOWED] automatic done acknowledgement is unsupported'),
+    );
+    markWorkerAttention('worker-b');
+    const { result } = renderHook(
+      () => useOrcaWorkerSelection({ leadSessionId: 'lead-1' }),
+      { wrapper },
+    );
+
+    act(() => result.current.handleSwitchFocus('worker-b'));
+
+    await waitFor(() => {
+      expect(mocks.idleWorker).toHaveBeenCalledWith('lead-1', 'worker-b', 'done');
+    });
+    expect(hasWorkerAttention('worker-b')).toBe(true);
+    expect(mocks.refresh).toHaveBeenCalled();
+    expect(mocks.toastError).not.toHaveBeenCalled();
+  });
+
+  it('refreshes after switch focus even when done acknowledgement fails unexpectedly', async () => {
+    mocks.workers = [
+      makeWorker('worker-a', 'session-a', true),
+      makeWorker('worker-b', 'session-b', false, 'done'),
+    ];
+    mocks.idleWorker.mockRejectedValueOnce(new Error('idle store unavailable'));
+    markWorkerAttention('worker-b');
+    const { result } = renderHook(
+      () => useOrcaWorkerSelection({ leadSessionId: 'lead-1' }),
+      { wrapper },
+    );
+
+    act(() => result.current.handleSwitchFocus('worker-b'));
+
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
+    expect(hasWorkerAttention('worker-b')).toBe(true);
+    expect(mocks.toastError).toHaveBeenCalledWith('idle store unavailable');
+  });
+
+  it('does not idle a running worker when switching focus', async () => {
+    mocks.workers = [
+      makeWorker('worker-a', 'session-a', true),
+      makeWorker('worker-b', 'session-b', false, 'running'),
+    ];
+    const { result } = renderHook(
+      () => useOrcaWorkerSelection({ leadSessionId: 'lead-1' }),
+      { wrapper },
+    );
+
+    act(() => result.current.handleSwitchFocus('worker-b'));
+
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
+    expect(mocks.idleWorker).not.toHaveBeenCalled();
+  });
+
+  it('does not issue duplicate done acknowledgements while the first one is pending', async () => {
+    mocks.workers = [
+      makeWorker('worker-a', 'session-a', true),
+      makeWorker('worker-b', 'session-b', false, 'done'),
+    ];
+    let resolveIdle!: (value: { ok: true; workerId: string }) => void;
+    mocks.idleWorker.mockReturnValueOnce(
+      new Promise<{ ok: true; workerId: string }>((resolve) => {
+        resolveIdle = resolve;
+      }),
+    );
+    const { result } = renderHook(
+      () => useOrcaWorkerSelection({ leadSessionId: 'lead-1' }),
+      { wrapper },
+    );
+
+    act(() => {
+      result.current.handleSwitchFocus('worker-b');
+      result.current.handleSwitchFocus('worker-b');
+    });
+
+    await waitFor(() => expect(mocks.idleWorker).toHaveBeenCalledTimes(1));
+    await act(async () => resolveIdle({ ok: true, workerId: 'worker-b' }));
+  });
+
+  it('acknowledges a done worker revealed by a focus hint', async () => {
+    mocks.workers = [
+      makeWorker('worker-a', 'session-a', true),
+      makeWorker('worker-b', 'session-b', false, 'done'),
+    ];
+    markWorkerAttention('worker-b');
+
+    renderHook(
+      () =>
+        useOrcaWorkerSelection({
+          leadSessionId: 'lead-1',
+          focusWorkerSessionId: 'session-b',
+          focusWorkerHintRevision: 1,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(mocks.idleWorker).toHaveBeenCalledWith('lead-1', 'worker-b', 'done');
+    });
+    expect(hasWorkerAttention('worker-b')).toBe(false);
+    expect(mocks.switchFocus).not.toHaveBeenCalled();
+  });
+
+  it('waits to acknowledge the selected done worker until the worker view is visible', async () => {
+    mocks.workers = [makeWorker('worker-a', 'session-a', true, 'done')];
+    markWorkerAttention('worker-a');
+
+    const { rerender } = renderHook(
+      ({ viewVisible }) =>
+        useOrcaWorkerSelection({
+          leadSessionId: 'lead-1',
+          viewVisible,
+        }),
+      { initialProps: { viewVisible: false }, wrapper },
+    );
+
+    expect(mocks.idleWorker).not.toHaveBeenCalled();
+    expect(hasWorkerAttention('worker-a')).toBe(true);
+
+    rerender({ viewVisible: true });
+
+    await waitFor(() => {
+      expect(mocks.idleWorker).toHaveBeenCalledWith('lead-1', 'worker-a', 'done');
+    });
+    expect(hasWorkerAttention('worker-a')).toBe(false);
+  });
+
+  it('acknowledges a visible selected done worker without a reveal hint', async () => {
+    mocks.workers = [makeWorker('worker-a', 'session-a', true, 'done')];
+    markWorkerAttention('worker-a');
+
+    renderHook(
+      () => useOrcaWorkerSelection({ leadSessionId: 'lead-1', viewVisible: true }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(mocks.idleWorker).toHaveBeenCalledWith('lead-1', 'worker-a', 'done');
+    });
+    expect(hasWorkerAttention('worker-a')).toBe(false);
   });
 
   it('pins an explicit focusWorkerSessionId ahead of the current focused worker until the user switches', async () => {
@@ -113,6 +339,54 @@ describe('useOrcaWorkerSelection', () => {
       leadSessionId: 'lead-1',
       workerIdOrLabel: 'worker-a',
     });
+  });
+
+  it('advances to the next label when an archived worker owns the generated label', async () => {
+    mocks.workers = [];
+    mocks.createWorker
+      .mockRejectedValueOnce(new Error('[DUPLICATE_LABEL] label already used'))
+      .mockResolvedValueOnce(undefined);
+    const { result } = renderHook(
+      () => useOrcaWorkerSelection({ leadSessionId: 'lead-1' }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.handleCreateWorker({
+        role: 'tester',
+        agent: 'codex',
+        model: 'gpt-5.4',
+        initialTask: '',
+      });
+    });
+
+    expect(mocks.createWorker.mock.calls.map(([input]) => input.label)).toEqual([
+      'tester',
+      'tester-2',
+    ]);
+  });
+
+  it('does not create a suffixed worker while the same label is still being created', async () => {
+    mocks.workers = [];
+    mocks.createWorker.mockRejectedValueOnce(
+      new Error('[WORKER_CREATION_IN_PROGRESS] label is currently being created'),
+    );
+    const { result } = renderHook(
+      () => useOrcaWorkerSelection({ leadSessionId: 'lead-1' }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.handleCreateWorker({
+        role: 'tester',
+        agent: 'codex',
+        model: 'gpt-5.4',
+        initialTask: 'run once',
+      });
+    });
+
+    expect(mocks.createWorker).toHaveBeenCalledTimes(1);
+    expect(mocks.createWorker).toHaveBeenCalledWith(expect.objectContaining({ label: 'tester' }));
   });
 
   it('keeps a missing focusWorkerSessionId pending until the worker list refreshes', async () => {

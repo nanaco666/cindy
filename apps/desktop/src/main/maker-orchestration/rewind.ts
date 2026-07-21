@@ -21,7 +21,7 @@
  *     tailTurnsToDrop 调 thread/rollback。
  */
 
-import { and, asc, eq, gt, gte, isNull, or } from 'drizzle-orm';
+import { and, asc, eq, gt, gte, isNull, or, sql } from 'drizzle-orm';
 
 import { getDbClient } from '../localDb/client/current';
 import { sessions, messages } from '../localDb/schema';
@@ -53,6 +53,7 @@ import {
 } from './claudeTranscriptAnchors';
 
 const log = createLogger('maker-orchestration/rewind');
+const messageRowid = sql<number>`rowid`;
 
 /** rewind 内部错误码——由 IPC 层 catch 后映射为 IPC 错误码透传给 renderer。 */
 export type RewindErrorCode =
@@ -79,7 +80,7 @@ function activeSdkSessionId(value: string | undefined): string | undefined {
 
 /**
  * edit-last-message: main 侧权威校验——target 之后是否存在更新的**可见** user
- * 消息((createdAt, id) 严格大于 target,跳过已软删行)。renderer 的
+ * 消息((createdAt, rowid) 严格大于 target,跳过已软删行)。renderer 的
  * isLastUserMessage 判定基于已加载切片,且从校验到 IPC 落地存在 TOCTOU 窗口
  * (自动化任务 / goal runner / 第二控制端可能在间隙追加新 user 消息);这里在
  * SDK 副作用之前查一次做快速失败(整体未发生,renderer 保持编辑态可重试);
@@ -90,11 +91,11 @@ function activeSdkSessionId(value: string | undefined): string | undefined {
  */
 async function targetHasNewerVisibleUserMessage(
   sessionId: string,
-  target: { createdAt: number; id: string },
+  target: { createdAt: number; rowid: number },
 ): Promise<boolean> {
   const db = getDbClient().drizzle;
   const newer = await db
-    .select({ id: messages.id })
+    .select({ rowid: messageRowid })
     .from(messages)
     .where(
       and(
@@ -103,7 +104,7 @@ async function targetHasNewerVisibleUserMessage(
         isNull(messages.rewindAt),
         or(
           gt(messages.createdAt, target.createdAt),
-          and(eq(messages.createdAt, target.createdAt), gt(messages.id, target.id)),
+          and(eq(messages.createdAt, target.createdAt), gt(messageRowid, target.rowid)),
         ),
       ),
     )
@@ -173,7 +174,14 @@ async function loadRewindContext(
 
   // 2. 取 target user 消息
   const [target] = await db
-    .select()
+    .select({
+      rowid: messageRowid,
+      id: messages.id,
+      clientId: messages.clientId,
+      role: messages.role,
+      agentMeta: messages.agentMeta,
+      createdAt: messages.createdAt,
+    })
     .from(messages)
     .where(and(eq(messages.sessionId, sessionId), eq(messages.clientId, clientId)))
     .limit(1);
@@ -193,9 +201,40 @@ async function loadRewindContext(
     );
   }
 
+  // session-agent-switch:禁止跨引擎切换边界 rewind。target 之后存在未回滚的
+  // agent_switch 行 = target 属于上一个引擎时代——当前引擎的原生会话里没有那些
+  // turn 的锚点(Claude 的 assistant uuid / Codex 的 tail turn 计数都会错配),
+  // 强行执行要么报错要么错删。v1 每次切换重新交接,不保留切回指针,故直接拒绝。
+  const [boundaryAfterTarget] = await db
+    .select({ rowid: messageRowid })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.sessionId, sessionId),
+        eq(messages.role, 'agent_switch'),
+        isNull(messages.rewindAt),
+        or(
+          gt(messages.createdAt, target.createdAt),
+          and(eq(messages.createdAt, target.createdAt), gt(messageRowid, target.rowid)),
+        ),
+      ),
+    )
+    .limit(1);
+  if (boundaryAfterTarget) {
+    throw rewindError(
+      'REWIND_UNSUPPORTED_HISTORY',
+      '目标消息在引擎切换边界之前,当前引擎的会话历史无法回滚到那里',
+    );
+  }
+
   if (agentKind === 'codex') {
     const tailTurns = await db
-      .select()
+      .select({
+        rowid: messageRowid,
+        id: messages.id,
+        clientId: messages.clientId,
+        createdAt: messages.createdAt,
+      })
       .from(messages)
       .where(
         and(
@@ -203,13 +242,13 @@ async function loadRewindContext(
           eq(messages.role, 'user'),
           or(
             gt(messages.createdAt, target.createdAt),
-            and(eq(messages.createdAt, target.createdAt), gte(messages.id, target.id)),
+            and(eq(messages.createdAt, target.createdAt), gte(messageRowid, target.rowid)),
           ),
           isNull(messages.rewindAt),
         ),
       )
-      .orderBy(asc(messages.createdAt), asc(messages.id));
-    const targetStillVisible = tailTurns.some((row) => row.id === target.id);
+      .orderBy(asc(messages.createdAt), asc(messageRowid));
+    const targetStillVisible = tailTurns.some((row) => row.rowid === target.rowid);
     if (!targetStillVisible) {
       throw rewindError('MESSAGE_NOT_FOUND', `Message ${clientId} 不在当前 Codex turn 时间线`);
     }

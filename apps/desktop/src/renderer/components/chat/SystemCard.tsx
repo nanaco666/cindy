@@ -6,14 +6,14 @@
  */
 
 import { useState, type ReactNode } from 'react';
-import { ChevronRight, Layers, RefreshCw, Target } from 'lucide-react';
+import { ArrowLeftRight, ChevronRight, Layers, RefreshCw, Target } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { LearnStatusCard } from '@/features/learn/LearnStatusCard';
 
 interface SystemCardProps {
-  cardType: 'help' | 'cost' | 'context' | 'pwd' | 'status' | 'compact' | 'cmd' | 'goal-complete' | 'goal-resumed' | 'learn' | 'auto-resume';
+  cardType: 'help' | 'cost' | 'context' | 'pwd' | 'status' | 'compact' | 'cmd' | 'goal-complete' | 'goal-resumed' | 'learn' | 'auto-resume' | 'agent-switch';
   data?: Record<string, unknown>;
   /** 卡片所在消息流的 sessionId(MessageStream 注入)。learn 卡按它路由 / 判定
    *  归属会话 —— 嵌入式视图(Orca split pane)里 URL 参数是 lead 而非本 pane,
@@ -747,6 +747,80 @@ function AutoResumeCard() {
   );
 }
 
+/**
+ * session-agent-switch 边界分隔条:复用 CompactBoundaryCard 的"分隔线 + 居中
+ * chip"语言标记"此处引擎从 X 切换到 Y"。chip 可点展开交接内容面板(发给新引擎
+ * 的上下文摘要全文)——默认不打扰,想看时可核查我们替用户做了什么交接。
+ * 全灰度(DESIGN.md §4),无 chromatic 色;展开面板复用 msg-tool 系 token。
+ */
+function AgentSwitchCard({ data }: { data?: Record<string, unknown> }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const engineLabel = (kind: unknown): string =>
+    kind === 'codex' ? 'Codex' : 'Claude Code';
+  const fromLabel = engineLabel(data?.fromAgentKind);
+  const toLabel = engineLabel(data?.toAgentKind);
+  const toModel = typeof data?.toModel === 'string' ? data.toModel : '';
+  const handoff = typeof data?.handoff === 'string' ? data.handoff : '';
+  const label = t('chat.systemCard.agentSwitch.label', { from: fromLabel, to: toLabel });
+
+  return (
+    <div className="w-full select-none py-2" role="separator" aria-label={label}>
+      <div className="flex w-full items-center gap-3">
+        <div className="h-px flex-1 bg-[var(--msg-tool-card-border)]" />
+        <button
+          type="button"
+          onClick={() => handoff && setExpanded((v) => !v)}
+          className={cn(
+            'flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--msg-tool-card-border)]',
+            'bg-background/50 px-2.5 py-1 text-[11px] text-muted-foreground',
+            handoff && 'cursor-pointer hover:bg-[var(--msg-tool-card-bg)]',
+          )}
+          aria-expanded={expanded}
+          title={handoff ? t('chat.systemCard.agentSwitch.toggleHint') : undefined}
+        >
+          <ArrowLeftRight size={12} className="shrink-0" />
+          <span>{label}</span>
+          {toModel && (
+            <>
+              <span className="opacity-50">·</span>
+              <span className="font-mono">{toModel}</span>
+            </>
+          )}
+          {Boolean(data?.resumed) && (
+            <>
+              <span className="opacity-50">·</span>
+              <span>{t('chat.systemCard.agentSwitch.resumedBadge')}</span>
+            </>
+          )}
+          {handoff && (
+            <ChevronRight
+              size={12}
+              className={cn('shrink-0 transition-transform', expanded && 'rotate-90')}
+            />
+          )}
+        </button>
+        <div className="h-px flex-1 bg-[var(--msg-tool-card-border)]" />
+      </div>
+      {expanded && handoff && (
+        <div
+          className={cn(
+            'mx-auto mt-2 max-w-full rounded-[10px] border border-[var(--msg-tool-card-border)]',
+            'bg-[var(--msg-tool-card-bg)] px-4 py-3 select-text',
+          )}
+        >
+          <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">
+            {t('chat.systemCard.agentSwitch.handoffTitle')}
+          </div>
+          <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[12px] leading-[1.55] text-[var(--msg-tool-text)]">
+            {handoff}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SystemCard({ cardType, data, sessionId }: SystemCardProps) {
   switch (cardType) {
     case 'help':
@@ -769,6 +843,8 @@ export function SystemCard({ cardType, data, sessionId }: SystemCardProps) {
       return <GoalResumedCard />;
     case 'auto-resume':
       return <AutoResumeCard />;
+    case 'agent-switch':
+      return <AgentSwitchCard data={data} />;
     case 'learn':
       return <LearnStatusCard data={data} contextSessionId={sessionId} />;
     default:

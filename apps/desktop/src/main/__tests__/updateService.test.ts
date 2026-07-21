@@ -302,7 +302,12 @@ describe('checkForUpdate 版本无关(占位 0.0.0)打包豁免', () => {
 });
 
 describe('startup update relaunch safety', () => {
-  it('allows a staged startup update only when the unattended policy is satisfied', async () => {
+  // Startup/splash auto-applies a staged patch as soon as it is ready — the
+  // historic behavior restored deliberately (owner-approved). A fresh launch has
+  // no in-flight agent turn / schedule to protect, so the startup gate skips the
+  // idle/busy/user-active checks that guard the *background* auto-relaunch and
+  // keeps only the essentials (disabled / dev / not-ready / relaunching).
+  it('auto-applies a staged startup update as soon as it is ready', async () => {
     await expect(runStartupUpdate()).resolves.toMatchObject({
       hasUpdate: true,
       action: 'relaunch',
@@ -310,42 +315,40 @@ describe('startup update relaunch safety', () => {
     });
   });
 
-  it.each([
-    ['unknown', 'screen-state-unknown'],
-    ['active', 'user-active'],
-  ] as const)(
-    'keeps the startup patch ready when system state is %s',
-    async (idleState, reason) => {
+  it.each(['idle', 'active', 'unknown', 'locked'] as const)(
+    'auto-applies at startup regardless of system idle state (%s)',
+    async (idleState) => {
       await expect(runStartupUpdate({ idleState })).resolves.toMatchObject({
         hasUpdate: true,
-        action: 'none',
+        action: 'relaunch',
         version: '0.0.65',
       });
-      expect(logInfo).toHaveBeenCalledWith(
-        'startup update relaunch deferred (%s); patch v%s remains ready',
-        reason,
-        '0.0.65',
-      );
     },
   );
 
-  it('honors the setting and busy-task guard during startup', async () => {
-    await expect(runStartupUpdate({ enabled: false })).resolves.toMatchObject({ action: 'none' });
-    await expect(runStartupUpdate({ busy: true })).resolves.toMatchObject({ action: 'none' });
+  it('auto-applies at startup even when agent tasks are busy', async () => {
+    await expect(runStartupUpdate({ busy: true })).resolves.toMatchObject({
+      action: 'relaunch',
+    });
   });
 
-  it.each(['darwin', 'win32'] as const)(
-    'allows locked-idle startup auto apply on %s',
-    async (platform) => {
-      await expect(
-        runStartupUpdate({ idleState: 'locked', platform }),
-      ).resolves.toMatchObject({
-        action: 'relaunch',
-      });
-    },
-  );
+  it('keeps the patch staged (no relaunch) when auto-update is disabled', async () => {
+    await expect(runStartupUpdate({ enabled: false })).resolves.toMatchObject({ action: 'none' });
+    expect(logInfo).toHaveBeenCalledWith(
+      'startup update relaunch deferred (%s); patch v%s remains ready',
+      'disabled',
+      '0.0.65',
+    );
+  });
 
-  it('rechecks safety at the startup apply boundary while keeping manual apply separate', async () => {
+  it('never runs the startup update flow (nor the native updater) on a dev build', async () => {
+    // The handler bails before any update work in dev (updater can't replace a
+    // forge/dev instance); the startup gate's `dev` branch is defense-in-depth.
+    isDev.mockReturnValue(true);
+    await expect(runStartupUpdate()).resolves.toMatchObject({ hasUpdate: false, action: 'none' });
+  });
+
+  it('re-checks the startup policy at the apply boundary, keeping manual apply separate', async () => {
     vi.useFakeTimers();
     fetchManifest.mockResolvedValue(updateManifest());
     download.mockImplementation(async ({ targetPath }: { targetPath: string }) => {
@@ -355,73 +358,29 @@ describe('startup update relaunch safety', () => {
     });
 
     const service = await freshUpdateService('darwin');
-    let busy = false;
-    service.setUpdateAutoRelaunchBusyProbe(() => busy);
     service.initUpdateService();
     try {
       const startupHandler = ipcHandlers.get('update-check-startup');
       const autoApplyHandler = ipcHandlers.get('update-relaunch-auto');
       expect(startupHandler).toBeTypeOf('function');
       expect(autoApplyHandler).toBeTypeOf('function');
+      // Manual "立即重启" path stays a separate, unguarded listener.
       expect(ipcListeners.get('update-relaunch')).toBeTypeOf('function');
 
       await expect(startupHandler?.()).resolves.toMatchObject({ action: 'relaunch' });
-      busy = true;
-      await expect(autoApplyHandler?.({}, 'dark')).resolves.toEqual({
-        accepted: false,
-        blockReason: 'busy',
-      });
-      expect(service.getUpdateStatus()).toBe('ready');
-      expect(logInfo).toHaveBeenCalledWith(
-        'startup automatic relaunch deferred at apply boundary (%s)',
-        'busy',
-      );
-    } finally {
-      service.stopUpdateService();
-    }
-  });
 
-  it('honors an auto-update setting change while the final busy probe is in flight', async () => {
-    vi.useFakeTimers();
-    fetchManifest.mockResolvedValue(updateManifest());
-    download.mockImplementation(async ({ targetPath }: { targetPath: string }) => {
-      fs.mkdirSync(path.join(TEST_USER_DATA, 'updates'), { recursive: true });
-      fs.writeFileSync(targetPath, 'update');
-      return { path: targetPath, size: 123 };
-    });
-
-    let probeCalls = 0;
-    let resolveFinalProbe: ((busy: boolean) => void) | undefined;
-    let markFinalProbeStarted: (() => void) | undefined;
-    const finalProbeStarted = new Promise<void>((resolve) => {
-      markFinalProbeStarted = resolve;
-    });
-
-    const service = await freshUpdateService('darwin');
-    service.setUpdateAutoRelaunchBusyProbe(() => {
-      probeCalls += 1;
-      if (probeCalls === 1) return false;
-      markFinalProbeStarted?.();
-      return new Promise<boolean>((resolve) => {
-        resolveFinalProbe = resolve;
-      });
-    });
-    service.initUpdateService();
-    try {
-      const startupHandler = ipcHandlers.get('update-check-startup');
-      const autoApplyHandler = ipcHandlers.get('update-relaunch-auto');
-      await expect(startupHandler?.()).resolves.toMatchObject({ action: 'relaunch' });
-
-      const applyResult = autoApplyHandler?.({}, 'dark');
-      await finalProbeStarted;
+      // User flips the auto-update switch off during the renderer's presentation
+      // delay → the apply boundary must still honor it and defer (no relaunch).
       readAutoUpdateSettings.mockReturnValue({ autoRelaunchOnIdle: false });
-      resolveFinalProbe?.(false);
-
-      await expect(applyResult).resolves.toEqual({
+      await expect(autoApplyHandler?.({}, 'dark')).resolves.toEqual({
         accepted: false,
         blockReason: 'disabled',
       });
       expect(service.getUpdateStatus()).toBe('ready');
+      expect(logInfo).toHaveBeenCalledWith(
+        'startup automatic relaunch deferred at apply boundary (%s)',
+        'disabled',
+      );
     } finally {
       service.stopUpdateService();
     }

@@ -27,8 +27,10 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
 
 import { isTerminalAgentErrorEvent } from '@lizi/maker-core';
 import type { AgentEvent, AgentKind, PermissionMode, UserContentBlock } from '@lizi/maker-core';
@@ -70,13 +72,15 @@ import { getDesktopProviderService } from '../maker-host/createDesktopProviderSe
 import { getModelVisibilityOverride } from '../maker-host/model-visibility-mirror.js';
 import {
   createTurnActivity,
+  markActivityWriting,
+  pushThinkingStep,
   pushToolStep,
   renderActivity,
 } from '../im/shared/turnActivity.js';
 
 import type { HookRunOutcome, HookSessionRunner } from './dispatcher.js';
 import { resolveHookSessionConfig, type ResolvedHookSessionConfig } from './defaults.js';
-import { decodeSupportedImages } from './attachments.js';
+import { decodeAttachments, sanitizeAttachmentName } from './attachments.js';
 import {
   cancelHookInteraction,
   composeInteractionCard,
@@ -521,7 +525,7 @@ export function createMakerHookSessionRunner(deps: {
       const activity = createTurnActivity(Date.now());
       const progress = req.onProgress
         ? createProgressEmitter(req.onProgress, () => {
-            const act = renderActivity(activity, Date.now(), assistantText.length > 0);
+            const act = renderActivity(activity, Date.now());
             if (!act) return assistantText;
             return assistantText ? `${act}\n\n${assistantText}` : act;
           })
@@ -570,6 +574,14 @@ export function createMakerHookSessionRunner(deps: {
             if (data && typeof data.text === 'string') {
               if (data.isFinal) assistantText = data.text;
               else assistantText += data.text;
+              markActivityWriting(activity);
+              progress?.schedule();
+            }
+            return;
+          }
+          if (ev.type === 'thinking') {
+            if (pushThinkingStep(activity, ev.data)) {
+              progress?.ensureTicker();
               progress?.schedule();
             }
             return;
@@ -577,9 +589,18 @@ export function createMakerHookSessionRunner(deps: {
           if (ev.type === 'tool_use') {
             // 过程展示: 与 IM 流式卡同款滚动时间线(turnActivity), 让 Slack 侧
             // 在长 agentic turn 里看到"正在干什么", 而不是盯着 👀 表情干等
-            const data = ev.data as { toolName?: unknown; input?: unknown } | null;
+            const data = ev.data as {
+              toolName?: unknown;
+              toolUseId?: unknown;
+              input?: unknown;
+            } | null;
             if (data && typeof data.toolName === 'string') {
-              pushToolStep(activity, data.toolName, data.input);
+              pushToolStep(
+                activity,
+                data.toolName,
+                data.input,
+                typeof data.toolUseId === 'string' ? data.toolUseId : undefined,
+              );
               progress?.ensureTicker();
               progress?.schedule();
             }
@@ -655,22 +676,25 @@ export function createMakerHookSessionRunner(deps: {
         scheduleName: `Hook · ${req.origin.connectionName}`,
       } as const;
 
-      // 入站图片附件: 解码 -> 写入 cindy-media 媒体总仓(规则 25;迁移第 1 步
-      // 从 imageCacheStore 切换)-> 产出两种形态:
-      //   - sendContent(喂给 agent): image block 用本地绝对 path(maker 要 path
-      //     而非 base64 / URL);
-      //   - userMessageContent(落库): images 用 cindy-media:// URL, 桌面端聊天
-      //     记录据此渲染出图(parseUserContent 只认 {text,images:ImageRef[]} 形态,
-      //     裸 path 的 image block 会被忽略、不显示)。
+      // 入站附件: 解码后图片/文件分流(server 2026-07 起全 MIME 转发) ->
+      //   - 图片写入 cindy-media 媒体总仓(规则 25;迁移第 1 步从 imageCacheStore
+      //     切换): sendContent 用本地绝对 path 的 image block(maker 要 path
+      //     而非 base64 / URL), 落库用 cindy-media:// URL(parseUserContent 只认
+      //     {text,images:ImageRef[]} 形态, 裸 path 的 image block 会被忽略);
+      //   - 非图片文件写 hook 附件目录(userData/hook-attachments/<sessionId>/,
+      //     文件名消毒 + 随机前缀防碰撞): sendContent 用 file block(cc/codex
+      //     adapter 原生支持, 能否消费交给 agent), 落库 files:[{name,path}]
+      //     让聊天记录渲染文件 chip。删会话时 sessions.ts 随 removeSessionRefs
+      //     一起 rm -rf 该 sessionId 子目录。
       // 入站图没有草稿期,ingest 时直接挂 session-attachment 引用(等价老
       // lifecycle committed),删会话时随 removeSessionRefs 回收。
-      const decodedImages =
+      const decoded =
         req.attachments && req.attachments.length > 0
-          ? decodeSupportedImages(req.attachments, log)
-          : [];
+          ? decodeAttachments(req.attachments, log)
+          : { images: [], files: [] };
       const imageBlocks: UserContentBlock[] = [];
       const imageRefs: Array<{ url: string; mimeType: string; originalName: string }> = [];
-      for (const img of decodedImages) {
+      for (const img of decoded.images) {
         try {
           const { url } = await ingestMedia({
             buffer: img.bytes,
@@ -691,19 +715,45 @@ export function createMakerHookSessionRunner(deps: {
           log.warn(`hook image ingest failed: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
+      const fileBlocks: UserContentBlock[] = [];
+      const fileRefs: Array<{ name: string; path: string }> = [];
+      if (decoded.files.length > 0) {
+        const attachRoot = path.join(app.getPath('userData'), 'hook-attachments');
+        const attachDir = path.join(attachRoot, session.id);
+        if (!attachDir.startsWith(attachRoot + path.sep)) {
+          log.warn(`hook attachment dir escapes root (sessionId=${session.id}), skipping file attachments`);
+        } else try {
+          await fs.mkdir(attachDir, { recursive: true });
+          for (const file of decoded.files) {
+            const safeName = sanitizeAttachmentName(file.name);
+            const absPath = path.join(attachDir, `${randomUUID().slice(0, 8)}-${safeName}`);
+            try {
+              await fs.writeFile(absPath, file.bytes);
+              fileBlocks.push({ type: 'file', path: absPath, mimeType: file.mimeType });
+              fileRefs.push({ name: file.name ?? safeName, path: absPath });
+            } catch (err) {
+              log.warn(`hook file attachment write failed (${safeName}): ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+        } catch (err) {
+          log.warn(`hook attachment dir create failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
       // 渠道说明只进喂给 agent 的内容,不进落库的 userMessageContent ——
       // 渲染层展示的用户消息保持 Slack 原话。逐 turn 追加固定文本,教模型
       // 用 xdt-file 引用回传文件而非误用 lizi_feishu_bot(规则 9,实踩背景
       // 见 outbound.ts 的常量注释)。
       const promptWithNote = `${req.prompt}\n\n${SLACK_HOOK_PROMPT_NOTE}`;
       const sendContent =
-        imageBlocks.length > 0
-          ? [{ type: 'text' as const, text: promptWithNote }, ...imageBlocks]
+        imageBlocks.length > 0 || fileBlocks.length > 0
+          ? [{ type: 'text' as const, text: promptWithNote }, ...imageBlocks, ...fileBlocks]
           : promptWithNote;
-      // 落库形态: 有图用 {text, images(xdt-image URL), files} 对象(createMessage
-      // safeStringify 存 JSON, 读回 parseUserContent 提取 images); 无图纯文本 string。
+      // 落库形态: 有附件用 {text, images, files} 对象(createMessage safeStringify
+      // 存 JSON, 读回 parseUserContent 提取 images/files); 无附件纯文本 string。
       const userMessageContent =
-        imageRefs.length > 0 ? { text: req.prompt, images: imageRefs, files: [] } : req.prompt;
+        imageRefs.length > 0 || fileRefs.length > 0
+          ? { text: req.prompt, images: imageRefs, files: fileRefs }
+          : req.prompt;
 
       try {
         const sendResult = await session.send(

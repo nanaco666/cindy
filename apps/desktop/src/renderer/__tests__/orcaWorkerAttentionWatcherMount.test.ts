@@ -39,7 +39,7 @@ describe('Orca worker attention watcher mount', () => {
     expect(watcherSource).toContain('appliedRefreshGenerationRef.current = generation;');
   });
 
-  it('clears the visible worker attention before paint in doc-mode toggle layout', () => {
+  it('clears only visible non-done worker attention before paint in doc-mode toggle layout', () => {
     const splitViewBlock = extractBetween(
       orcaSplitViewSource,
       'export function OrcaSplitView({',
@@ -48,7 +48,9 @@ describe('Orca worker attention watcher mount', () => {
 
     expect(splitViewBlock).toContain('const attention = useWorkerAttentionSnapshot();');
     expect(splitViewBlock).toContain('useLayoutEffect(() => {');
-    expect(splitViewBlock).toContain("togglePane === 'worker' && selectedWorkerId");
+    expect(splitViewBlock).toContain("togglePane === 'worker' &&");
+    expect(splitViewBlock).toContain('reportAgentIslandVisibility &&');
+    expect(splitViewBlock).toContain("selectedWorkerRecord?.status !== 'done'");
     expect(splitViewBlock).toContain('clearWorkerAttention(selectedWorkerId);');
   });
 });

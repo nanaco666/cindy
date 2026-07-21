@@ -265,7 +265,7 @@ export function ScheduleSettingsButton({
             disabled={switchDisabled}
             className={cn(
               'flex h-8 w-full items-center gap-2 rounded-md px-2 text-[13px] transition-colors',
-              'hover:bg-[var(--update-btn-hover)] dark:hover:bg-[var(--settings-btn-secondary-hover-bg)]',
+              'hover:bg-[var(--surface-hover)] dark:hover:bg-[var(--settings-btn-secondary-hover-bg)]',
               'disabled:cursor-not-allowed disabled:opacity-50',
               enabled ? 'text-[var(--msg-assistant-text)] dark:text-[var(--msg-assistant-text)]' : 'text-[var(--cmd-palette-item-meta)] dark:text-[var(--settings-section-desc)]',
             )}
@@ -913,7 +913,7 @@ function TimeColumn({
                 'flex h-7 w-full items-center justify-center rounded-md text-[13px] transition-colors',
                 active
                   ? 'bg-[var(--chat-input-chip-bg)] font-medium text-[var(--msg-assistant-text)] dark:bg-[var(--chat-input-chip-bg)] dark:text-[var(--msg-assistant-text)]'
-                  : 'text-[var(--cmd-palette-item-meta)] hover:bg-[var(--update-btn-hover)] dark:text-[var(--settings-section-desc)] dark:hover:bg-[var(--settings-btn-secondary-hover-bg)]',
+                  : 'text-[var(--cmd-palette-item-meta)] hover:bg-[var(--surface-hover)] dark:text-[var(--settings-section-desc)] dark:hover:bg-[var(--settings-btn-secondary-hover-bg)]',
               )}
             >
               {pad(option)}
@@ -1297,7 +1297,7 @@ export function ThreadPickerInline({ value, onSelect, onOpen }: {
               title={t('scheduler.editor.runSession.card.open')}
               className={cn(
                 'inline-flex h-[34px] shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-medium',
-                'text-[var(--settings-btn-secondary-text)] hover:bg-[var(--update-btn-hover)]',
+                'text-[var(--settings-btn-secondary-text)] hover:bg-[var(--surface-hover)]',
                 'transition-colors focus:outline-none',
               )}
             >

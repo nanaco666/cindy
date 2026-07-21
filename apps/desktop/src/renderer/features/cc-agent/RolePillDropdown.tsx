@@ -68,8 +68,8 @@ function EffortBars({ effort }: { effort: string | null }) {
   );
 }
 
-// Worker avatar — 直接复用 sidebar VendorIcon (ClaudeMark for Claude Code, OpenAI
-// six-petal mark for Codex), 跟侧边栏 vendor icon 视觉 100% 对齐:
+// Worker avatar — 直接复用 sidebar VendorIcon (Claude Code / Codex CLI Agent
+// 身份 glyph),跟侧边栏 Agent icon 视觉 100% 对齐:
 //   - running: VendorIcon 内部自动 status-bar-accent + session-status-breathing
 //   - error:   className override 染 error-flat 红 (twMerge 会让外层 text-* 覆盖
 //              VendorIcon 内置的 sidebar-muted default) —— 错误的显式标记由 WorkerErrorBadge
@@ -466,8 +466,13 @@ function WorkerTabsList({
 
   useLayoutEffect(() => {
     if (!clearAttentionWhenVisible) return;
-    if (selectedWorkerId) clearWorkerAttention(selectedWorkerId);
-  }, [attention, clearAttentionWhenVisible, selectedWorkerId]);
+    if (
+      selectedWorkerId &&
+      workers.find((item) => item.workerId === selectedWorkerId)?.status !== 'done'
+    ) {
+      clearWorkerAttention(selectedWorkerId);
+    }
+  }, [attention, clearAttentionWhenVisible, selectedWorkerId, workers]);
 
   const updateScrollState = useCallback(() => {
     const element = scrollRef.current;
@@ -547,7 +552,6 @@ function WorkerTabsList({
                         : 'border-[var(--border-default)] bg-[var(--surface-chip)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)]',
                   )}
                   onClick={() => {
-                    clearWorkerAttention(worker.workerId);
                     onSwitchFocus(worker.workerId);
                   }}
                 >
@@ -633,6 +637,12 @@ export function WorkerListToolbar({
         <span className="min-w-0 flex-1 select-none truncate text-[11px] font-medium text-muted-foreground">
           {t('orca.rolePill.worker')}
         </span>
+        <CreateWorkerTabButton
+          activeCount={activeCount}
+          softLimit={softLimit}
+          hardLimit={hardLimit}
+          onOpenCreate={onOpenCreate}
+        />
         <WorkerLayoutMenu layout={layout} onLayoutChange={handleLayoutChange} />
         {trailingActions}
       </div>
@@ -710,8 +720,13 @@ export function RolePillDropdown({
 
   useLayoutEffect(() => {
     if (!clearAttentionWhenVisible) return;
-    if (selectedWorkerId) clearWorkerAttention(selectedWorkerId);
-  }, [attention, clearAttentionWhenVisible, selectedWorkerId]);
+    if (
+      selectedWorkerId &&
+      workers.find((item) => item.workerId === selectedWorkerId)?.status !== 'done'
+    ) {
+      clearWorkerAttention(selectedWorkerId);
+    }
+  }, [attention, clearAttentionWhenVisible, selectedWorkerId, workers]);
 
   const clearHoverTimers = useCallback(() => {
     clearTimerRef(hoverOpenTimerRef);
@@ -875,7 +890,6 @@ export function RolePillDropdown({
                           : 'pl-4',
                     )}
                     onClick={() => {
-                      clearWorkerAttention(w.workerId);
                       onSwitchFocus(w.workerId);
                       closeDropdown();
                     }}

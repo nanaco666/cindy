@@ -70,6 +70,71 @@ afterEach(() => {
 });
 
 describe('MacAgentIslandNativeHost', () => {
+  it('renders the idle brand from main-provided display strings', () => {
+    const sourceUrl = new URL(
+      '../../../../native/agent-island/macos-agent-island-helper.swift',
+      import.meta.url,
+    );
+    if (!fs.existsSync(sourceUrl)) {
+      throw new Error(`macos-agent-island-helper.swift 未找到: ${sourceUrl.pathname}`);
+    }
+    const source = fs.readFileSync(sourceUrl, 'utf8');
+
+    expect(source).toContain('Text(strings.displayAppName)');
+    expect(source).not.toContain('Text("XD Maker")');
+  });
+
+  it('keeps the native panel nonactivating during pointer interaction', () => {
+    const sourceUrl = new URL(
+      '../../../../native/agent-island/macos-agent-island-helper.swift',
+      import.meta.url,
+    );
+    const source = fs.readFileSync(sourceUrl, 'utf8');
+
+    expect(source).toContain('styleMask: [.borderless, .nonactivatingPanel]');
+    expect(source).toContain('override var canBecomeKey: Bool { false }');
+    expect(source).toContain('override var canBecomeMain: Bool { false }');
+    expect(source).not.toContain('makeKey()');
+  });
+
+  it('keeps native Agent marks aligned with the renderer icons', () => {
+    const nativeSource = fs.readFileSync(
+      new URL('../../../../native/agent-island/macos-agent-island-helper.swift', import.meta.url),
+      'utf8',
+    );
+    const claudeSource = fs.readFileSync(
+      new URL('../../../renderer/components/icons/ClaudeMark.tsx', import.meta.url),
+      'utf8',
+    );
+    const codexSource = fs.readFileSync(
+      new URL('../../../renderer/components/icons/CodexMark.tsx', import.meta.url),
+      'utf8',
+    );
+    const claudePath = claudeSource.match(/<path[\s\S]*?\bd="([^"]+)"/)?.[1];
+    const codexOutline = codexSource.match(/const FLOWER_OUTLINE =\s*'([^']+)'/)?.[1];
+    const codexPrompt = codexSource.match(/const PROMPT_GLYPHS =\s*'([^']+)'/)?.[1];
+    const codexSmallStrokeWidth = codexSource.match(
+      /const monoStrokeWidth = size <= 14 \? ([\d.]+) : [\d.]+;/,
+    )?.[1];
+    const nativeCodexSvg = nativeSource.match(
+      /private let agentIslandCodexMarkSVG = """([\s\S]*?)"""/,
+    )?.[1];
+    const nativeCodexOutlineStrokeWidth = nativeCodexSvg?.match(
+      /<path fill="none" stroke="black" stroke-width="([^"]+)"/,
+    )?.[1];
+
+    expect(claudePath).toBeTruthy();
+    expect(codexOutline).toBeTruthy();
+    expect(codexPrompt).toBeTruthy();
+    expect(codexSmallStrokeWidth).toBeTruthy();
+    expect(nativeCodexOutlineStrokeWidth).toBeTruthy();
+    expect(nativeSource).toContain(`d="${claudePath}"`);
+    expect(nativeSource).toContain(`d="${codexOutline}z"`);
+    expect(nativeSource).toContain(`d="${codexPrompt}"`);
+    expect(nativeCodexOutlineStrokeWidth).toBe(codexSmallStrokeWidth);
+    expect(nativeSource).not.toContain('agentIslandXDIncMarkSVG');
+  });
+
   it('restarts the helper when it exits before ready', async () => {
     const children: FakeNativeProcess[] = [];
     h.spawn.mockImplementation(() => {

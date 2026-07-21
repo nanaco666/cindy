@@ -15,10 +15,10 @@
  *      + 依赖只用 `import type`），禁止顶层 ESM `export` / value `import`——这些脚本以 raw
  *      形式随包发出（forge extraResource），生产 Electron 用 `require()` 当 CJS 加载，ESM
  *      语法会在用户端炸 `Unexpected token 'export'`（dev/vitest 走 import 不复现，静默生产坑）
- *   6. 从旧仓迁入的固定 SHA256 基线，以及已进入新仓 main/PR base 的 migration SQL
- *      内容不可修改或删除，只允许追加新 migration（防发布后 hash 漂移误报）
+ *   6. 从旧仓迁入的固定 SHA256 基线，以及已进入新仓 main/PR base 的 migration SQL +
+ *      companion TS runtime identity 不可增删或修改，只允许追加新 migration
  *
- * 通过 → stdout 输出 `✅ migration validation passed: 0000..<max> ... + historical SQL frozen`
+ * 通过 → stdout 输出 `✅ migration validation passed: 0000..<max> ... + historical runtime identities frozen`
  *
  * 使用：
  *   pnpm db:validate
@@ -263,7 +263,7 @@ if (fs.existsSync(SCRIPTS_DIR)) {
   info(`step 5/6 ok — 无 drizzle/scripts/ 目录，跳过`);
 }
 
-// ── 6. 旧仓固定基线 / 新仓 main 的 migration SQL 内容冻结 ──────────────────
+// ── 6. 旧仓固定基线 / 新仓 main 的 migration runtime identity 冻结 ────────
 
 let freezeResult;
 try {
@@ -290,12 +290,13 @@ for (const check of freezeChecks) {
     .map((violation) => `${violation.path} (${violation.kind})`)
     .join(', ');
   fail(
-    `${check.label} 中已有的 migration SQL 被修改或删除：${detail}。` +
-      `已进入 main/发版的 migration 不可改写，请新增 migration 修正。`,
+    `${check.label} 中已有的 migration SQL / companion TS identity 被改写：${detail}。` +
+      `已进入 main/发版的 migration runtime 不可增删或修改，请新增 migration 修正。`,
   );
 }
 const mainSummary = freezeResult.mainCheck
-  ? `，main 基线冻结 ${freezeResult.mainCheck.migrationCount} 条`
+  ? `，main 基线冻结 ${freezeResult.mainCheck.migrationCount} 条 SQL + ` +
+    `${freezeResult.mainCheck.runtimeScriptCount} 条 runtime script`
   : '；新仓尚无 main commit，跳过增量 Git 基线';
 info(
   `step 6/6 ok — 固定 SHA256 基线冻结 ${freezeResult.fixedCheck.migrationCount} 条 migration SQL${mainSummary}`,
@@ -305,6 +306,6 @@ info(
 
 const maxSeqTag = String(maxSeq).padStart(4, '0');
 console.log(
-  `✅ migration validation passed: 0000..${maxSeqTag} sql files + journal aligned + no schema drift + scripts CJS-only + historical SQL frozen`,
+  `✅ migration validation passed: 0000..${maxSeqTag} sql files + journal aligned + no schema drift + scripts CJS-only + historical runtime identities frozen`,
 );
 process.exit(0);

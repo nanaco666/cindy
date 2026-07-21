@@ -1,6 +1,6 @@
 import { stripTrailingPathSeparators } from '@lizi/maker-shared/path-text';
 import type { RemoteFileRef, RemoteImageRef, RemoteSerializedAttachment } from '@/session/types';
-import { buildAttachmentOssRef } from '@/session/attachmentOssRef';
+import { buildLegacyAttachmentOssRef } from '@/session/attachmentOssRef';
 
 export type MobileAttachmentCategory = RemoteSerializedAttachment['category'];
 
@@ -142,15 +142,14 @@ export function buildMobileRemoteFileAttachment(
   };
 }
 
-export function buildMobileUploadedAttachment(
-  input: {
-    ossKey: string;
-    name: string;
-    size: number;
-    mimeType?: string;
-    id?: string;
-  },
-): RemoteSerializedAttachment | null {
+export function buildMobileUploadedAttachment(input: {
+  ossKey: string;
+  name: string;
+  size: number;
+  sha256: string;
+  mimeType?: string;
+  id?: string;
+}): RemoteSerializedAttachment | null {
   if (!input.ossKey.trim()) return null;
   if (!Number.isFinite(input.size) || input.size <= 0 || input.size > MOBILE_MAX_ATTACHMENT_BYTES) return null;
   const name = basenameRemotePath(input.name).trim();
@@ -159,13 +158,20 @@ export function buildMobileUploadedAttachment(
   if (!category) return null;
   const ext = extractRemoteFileExt(name);
   const mimeType = input.mimeType?.trim() || mimeTypeForMobileAttachment(ext, category);
-  const ref = buildAttachmentOssRef({ ossKey: input.ossKey, mimeType, originalName: name });
+  const ref = buildLegacyAttachmentOssRef({
+    ossKey: input.ossKey,
+    mimeType,
+    originalName: name,
+    size: input.size,
+    sha256: input.sha256,
+  });
   return {
     id: input.id ?? `mobile-upload:${input.ossKey}`,
     name,
     path: ref,
     ext,
     size: input.size,
+    sha256: input.sha256,
     category,
     mimeType,
     ...(category === 'image' ? { url: ref } : {}),
@@ -178,7 +184,11 @@ export function buildAttachmentPersistFileRefs(
 ): RemoteFileRef[] {
   return attachments
     .filter((item) => item.category !== 'image')
-    .map((item) => ({ name: item.name, path: item.path }));
+    .map((item) => ({
+      name: item.name,
+      path: item.path,
+      ...(item.sha256 ? { size: item.size, sha256: item.sha256 } : {}),
+    }));
 }
 
 export function buildAttachmentPersistImageRefs(
@@ -193,6 +203,7 @@ export function buildAttachmentPersistImageRefs(
       url: item.url || item.path,
       originalName: item.originalName ?? item.name,
       mimeType: item.mimeType,
+      ...(item.sha256 ? { size: item.size, sha256: item.sha256 } : {}),
     }));
 }
 

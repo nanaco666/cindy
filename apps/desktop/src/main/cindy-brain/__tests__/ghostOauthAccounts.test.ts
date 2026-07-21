@@ -6,11 +6,15 @@ import * as http from 'node:http';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  GHOST_OAUTH_INVALID_GRANT_RECHECK_DELAY_MS,
   GHOST_OAUTH_MAX_ACCOUNTS,
   GhostOauthAccountManager,
   type GhostOauthDecl,
   type GhostOauthVault,
 } from '../ghostOauthAccounts.js';
+
+/** invalid_grant 路径的即时延时假体(不注入会真等 2 秒拖慢用例)。 */
+const instantSleep = async (): Promise<void> => {};
 
 const GHOST = 'cindy-google';
 const KEY = 'google_account';
@@ -523,6 +527,7 @@ describe('getFreshAccessToken', () => {
       vault,
       fetchImpl: vi.fn(async () => jsonResponse({ error: 'invalid_grant' }, 400)) as unknown as typeof fetch,
       openExternal: vi.fn(),
+      sleep: instantSleep,
     });
     await expect(mgr.getFreshAccessToken(GHOST, KEY, DECL)).resolves.toMatchObject({
       ok: false,
@@ -577,6 +582,209 @@ describe('getFreshAccessToken', () => {
       ok: false,
       error: 'NO_ACCOUNT',
     });
+  });
+});
+
+describe('多实例共库的 RT 轮换竞态(invalid_grant 防误删)', () => {
+  /** 按请求体里的 refresh_token 分派响应的 token 端点假体。 */
+  function rotationFetch(
+    handlers: Record<string, (vault: ReturnType<typeof memoryVault>) => Response>,
+    vault: ReturnType<typeof memoryVault>,
+  ): ReturnType<typeof vi.fn> {
+    return vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      const rt = new URLSearchParams(String(init?.body ?? '')).get('refresh_token') ?? '';
+      const handler = handlers[rt];
+      if (!handler) throw new Error(`unexpected refresh_token ${rt}`);
+      return handler(vault);
+    });
+  }
+
+  it('invalid_grant 但库里 RT 已被其它实例轮换 → 用新 RT 重试成功,不标 expired 不删凭证', async () => {
+    const vault = seededVault('rt-stale');
+    const fetchImpl = rotationFetch(
+      {
+        'rt-stale': (v) => {
+          // 模拟并发赢家:输家收到 invalid_grant 时,新 RT 已经在共享保险库里。
+          v.store(GHOST, `${KEY}-rt-acc-1`, 'rt-winner');
+          return jsonResponse({ error: 'invalid_grant' }, 400);
+        },
+        'rt-winner': () =>
+          jsonResponse({ access_token: 'at-retry', refresh_token: 'rt-next', expires_in: 3600 }),
+      },
+      vault,
+    );
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: vi.fn(),
+      sleep: instantSleep,
+    });
+    await expect(mgr.getFreshAccessToken(GHOST, KEY, DECL)).resolves.toMatchObject({
+      ok: true,
+      accessToken: 'at-retry',
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(mgr.listAccounts(GHOST, KEY)[0]?.status).toBe('connected');
+    // 重试轮换出的最新 RT 已落库。
+    expect(vault.read(GHOST, `${KEY}-rt-acc-1`)).toBe('rt-next');
+  });
+
+  it('赢家落库晚于输家失败 → 延迟二次重读兜住轮换,重试成功', async () => {
+    const vault = seededVault('rt-stale');
+    const sleep = vi.fn(async (ms: number) => {
+      expect(ms).toBe(GHOST_OAUTH_INVALID_GRANT_RECHECK_DELAY_MS);
+      // 等待窗口内赢家才把新 RT 写进共享保险库。
+      vault.store(GHOST, `${KEY}-rt-acc-1`, 'rt-winner');
+    });
+    const fetchImpl = rotationFetch(
+      {
+        'rt-stale': () => jsonResponse({ error: 'invalid_grant' }, 400),
+        'rt-winner': () => jsonResponse({ access_token: 'at-late', expires_in: 3600 }),
+      },
+      vault,
+    );
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: vi.fn(),
+      sleep,
+    });
+    await expect(mgr.getFreshAccessToken(GHOST, KEY, DECL)).resolves.toMatchObject({
+      ok: true,
+      accessToken: 'at-late',
+    });
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(mgr.listAccounts(GHOST, KEY)[0]?.status).toBe('connected');
+    // 未回新 RT 的成功刷新沿用赢家写入的那枚,不许误删。
+    expect(vault.read(GHOST, `${KEY}-rt-acc-1`)).toBe('rt-winner');
+  });
+
+  it('轮换重试仍 invalid_grant → 判真失效:标 expired 并删除最后用过的那枚(不再无限重试)', async () => {
+    const vault = seededVault('rt-stale');
+    const sleep = vi.fn(async () => {
+      vault.store(GHOST, `${KEY}-rt-acc-1`, 'rt-second');
+    });
+    const fetchImpl = rotationFetch(
+      {
+        'rt-stale': () => jsonResponse({ error: 'invalid_grant' }, 400),
+        'rt-second': () => jsonResponse({ error: 'invalid_grant' }, 400),
+      },
+      vault,
+    );
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: vi.fn(),
+      sleep,
+    });
+    await expect(mgr.getFreshAccessToken(GHOST, KEY, DECL)).resolves.toMatchObject({
+      ok: false,
+      error: 'AUTH_EXPIRED',
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(mgr.listAccounts(GHOST, KEY)[0]?.status).toBe('expired');
+    expect(vault.read(GHOST, `${KEY}-rt-acc-1`)).toBeNull();
+  });
+
+  it('判死时库里已被并发写入更新的 RT → compare-and-delete 不误删', async () => {
+    const vault = seededVault('rt-stale');
+    const sleep = vi.fn(async () => {
+      vault.store(GHOST, `${KEY}-rt-acc-1`, 'rt-second');
+    });
+    const fetchImpl = rotationFetch(
+      {
+        'rt-stale': () => jsonResponse({ error: 'invalid_grant' }, 400),
+        'rt-second': (v) => {
+          // 重试也失败,但失败响应到达前又有实例写入了更新的 RT。
+          v.store(GHOST, `${KEY}-rt-acc-1`, 'rt-third');
+          return jsonResponse({ error: 'invalid_grant' }, 400);
+        },
+      },
+      vault,
+    );
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      openExternal: vi.fn(),
+      sleep,
+    });
+    await expect(mgr.getFreshAccessToken(GHOST, KEY, DECL)).resolves.toMatchObject({
+      ok: false,
+      error: 'AUTH_EXPIRED',
+    });
+    // 标 expired 引导重连,但并发写入的 rt-third 不许被删(留给写入它的实例)。
+    expect(mgr.listAccounts(GHOST, KEY)[0]?.status).toBe('expired');
+    expect(vault.read(GHOST, `${KEY}-rt-acc-1`)).toBe('rt-third');
+  });
+
+  it('broker 模式同一套竞态语义:invalid_grant 后发现轮换 → 用新 RT 重试', async () => {
+    const vault = memoryVault({
+      [`${KEY}-accounts`]: JSON.stringify({
+        defaultAccountId: 'acc-1',
+        accounts: [{ id: 'acc-1', label: 'a@b.com', status: 'connected', createdAt: 1 }],
+      }),
+      [`${KEY}-rt-acc-1`]: 'rt-stale',
+    });
+    const refresh = vi.fn(async (_slug: string, params: { refreshToken: string }) => {
+      if (params.refreshToken === 'rt-stale') {
+        vault.store(GHOST, `${KEY}-rt-acc-1`, 'rt-winner');
+        return { ok: false as const, error: 'EXCHANGE_FAILED' as const, invalidGrant: true };
+      }
+      expect(params.refreshToken).toBe('rt-winner');
+      return {
+        ok: true as const,
+        bundle: { accessToken: 'at-bk2', refreshToken: null, expiresAt: Date.now() + 60_000, grantedScope: null },
+      };
+    });
+    const mgr = new GhostOauthAccountManager({
+      vault,
+      fetchImpl: vi.fn() as unknown as typeof fetch,
+      openExternal: vi.fn(),
+      broker: { exchange: vi.fn(), refresh },
+      sleep: instantSleep,
+    });
+    const brokerDecl: GhostOauthDecl = {
+      authorizeUrl: 'https://auth.example.com/authorize',
+      tokenUrl: 'https://auth.example.com/token',
+      scopes: ['read:x'],
+      clientId: 'builtin-cid',
+      pkce: false,
+      tokenBroker: 'feishu',
+    };
+    await expect(mgr.getFreshAccessToken(GHOST, KEY, brokerDecl)).resolves.toMatchObject({
+      ok: true,
+      accessToken: 'at-bk2',
+    });
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(mgr.listAccounts(GHOST, KEY)[0]?.status).toBe('connected');
+    expect(vault.read(GHOST, `${KEY}-rt-acc-1`)).toBe('rt-winner');
+  });
+
+  it('轮换新 RT 落库失败 → 本轮仍返回可用 token,但 warn 大声留痕', async () => {
+    const vault = seededVault('rt-old');
+    const failingVault: GhostOauthVault = {
+      read: (g, k) => vault.read(g, k),
+      store: (g, k, v) => (k === `${KEY}-rt-acc-1` ? false : vault.store(g, k, v)),
+      remove: (g, k) => vault.remove(g, k),
+    };
+    const warn = vi.fn();
+    const mgr = new GhostOauthAccountManager({
+      vault: failingVault,
+      fetchImpl: vi.fn(async () =>
+        jsonResponse({ access_token: 'at-w', refresh_token: 'rt-rotated', expires_in: 3600 }),
+      ) as unknown as typeof fetch,
+      openExternal: vi.fn(),
+      logger: { info: vi.fn(), warn },
+      sleep: instantSleep,
+    });
+    await expect(mgr.getFreshAccessToken(GHOST, KEY, DECL)).resolves.toMatchObject({
+      ok: true,
+      accessToken: 'at-w',
+    });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('落库失败'),
+      expect.objectContaining({ ghostId: GHOST, accountId: 'acc-1' }),
+    );
   });
 });
 
@@ -742,6 +950,7 @@ describe('tokenBroker 模式', () => {
       fetchImpl: vi.fn() as unknown as typeof fetch,
       openExternal: vi.fn(),
       broker: { exchange: vi.fn(), refresh },
+      sleep: instantSleep,
     });
     await expect(mgr.getFreshAccessToken(GHOST, KEY, BROKER_DECL)).resolves.toMatchObject({
       ok: false,

@@ -55,6 +55,7 @@ vi.mock('react-i18next', () => ({
 import type { GhostPermissionItem } from '../../../../shared/ghost';
 import {
   DetailsSection,
+  GhostPluginDetailView,
   GhostPluginMetadata,
   PermissionSummary,
   ToolDescriptionChip,
@@ -111,12 +112,49 @@ const detail: GhostPluginDetail = {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   toastMocks.success.mockReset();
   toastMocks.error.mockReset();
   Reflect.deleteProperty(window, 'electronAPI');
 });
 
 describe('Ghost plugin detail sections', () => {
+  it('keeps the detail surface on one centered content grid', () => {
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+
+    const { container } = render(
+      <GhostPluginDetailView
+        ghost={null}
+        detail={detail}
+        panelStatus="Docked"
+        onBack={vi.fn()}
+        onToggle={vi.fn()}
+        onUse={vi.fn()}
+        onUpdate={vi.fn()}
+        onUninstall={vi.fn()}
+        onInstall={vi.fn()}
+        installing={false}
+        toggleDisabled={false}
+      />,
+    );
+
+    const scrollSurface = container.querySelector('main');
+    const detailFrame = container.querySelector('article');
+    const backButton = detailFrame?.querySelector(':scope > button');
+    expect(scrollSurface?.className).toContain('[scrollbar-gutter:stable_both-edges]');
+    expect(detailFrame?.className).toContain('plugin-detail-frame');
+    expect(detailFrame?.className).toContain('mx-auto');
+    expect(detailFrame?.className).toContain('max-w-[824px]');
+    expect(backButton?.className).toContain('-ml-3');
+  });
+
   it('uses one metadata color and orders origin, author, then version', () => {
     const { container } = render(
       <GhostPluginMetadata origin="builtin" author="Cindy" version="1.1.4" />,
@@ -269,9 +307,7 @@ describe('Ghost plugin detail sections', () => {
       value: { openPath },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Open Install Location' }));
-    await waitFor(() =>
-      expect(openPath).toHaveBeenCalledWith('/tmp/cindy-brain/builtin.example'),
-    );
+    await waitFor(() => expect(openPath).toHaveBeenCalledWith('/tmp/cindy-brain/builtin.example'));
     expect(toastMocks.error).toHaveBeenCalledWith('settings.ghosts.errors.generic');
   });
 

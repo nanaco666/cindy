@@ -23,6 +23,7 @@ import type { FeishuIM } from 'lizi-im';
 
 import { dialogueWorkspaceRootDir } from '../localDb/dialogueWorkspace';
 import {
+  applyPendingAgentSwitchForDirectSend,
   enqueueSchedulerPrompt,
   hasQueuedSchedulerPrompt,
   isSchedulerPromptTracked,
@@ -68,6 +69,7 @@ export async function startScheduler(deps: StartSchedulerDeps): Promise<Schedule
     logger: deps.logger,
     beforeDispatchUserTurn: deps.beforeDispatchUserTurn,
     onUndispatchedUserTurn: deps.onUndispatchedUserTurn,
+    applyPendingAgentSwitch: applyPendingAgentSwitchForDirectSend,
     // 心跳撞忙排队桥:实现挂在 maker-ipc/register.ts 的 coordinator 装配处
     // (holder 未就绪时 isSessionBusy 返回 false → runner 走原直发路径)。
     schedulerQueue: {
@@ -86,7 +88,7 @@ export async function startScheduler(deps: StartSchedulerDeps): Promise<Schedule
   });
   const runner: ScheduleRunner = {
     fire: (schedule, ctx) =>
-      withScheduleLock(schedule.id, () =>
+      withScheduleLock(schedule.id, ctx.signal, () =>
         schedule.executionMode === 'script'
           ? scriptRunner.fire(schedule, ctx)
           : promptRunner.fire(schedule, ctx),

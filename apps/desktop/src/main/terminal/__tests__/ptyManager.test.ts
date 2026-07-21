@@ -350,7 +350,7 @@ describe('PtyManager.restart', () => {
   it('exit 后 restart → 新 PTY 接管同 id', () => {
     const mgr = makeManager();
     const owner = makeFakeWebContents() as unknown as WebContents;
-    mgr.create({ id: 't1', cwd: '/tmp', cols: 100, rows: 30, owner });
+    mgr.create({ id: 't1', cwd: '/tmp', cols: 100, rows: 30, shellPref: 'bash', owner });
     const oldPty = lastSpawn!;
     lastSpawn!.__triggerExit({ exitCode: 1 });
 
@@ -362,6 +362,7 @@ describe('PtyManager.restart', () => {
     expect(lastSpawn!.rows).toBe(30);
     expect(result.pid).toBe(12345);
     expect(mgr.has('t1')).toBe(true);
+    expect(mgr.__debugListSessions()[0]?.shellPref).toBe('bash');
   });
 
   it('仍在运行的 session restart 抛错', () => {

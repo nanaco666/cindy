@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 const sidebarDir = resolve(__dirname, '..');
 const sessionCardSource = readFileSync(resolve(sidebarDir, 'SessionCard.tsx'), 'utf8');
 const sessionItemSource = readFileSync(resolve(sidebarDir, 'SessionItem.tsx'), 'utf8');
+const sessionRenameInputSource = readFileSync(resolve(sidebarDir, '..', 'SessionRenameInput.tsx'), 'utf8');
 const sessionStatusIconSource = readFileSync(resolve(sidebarDir, 'SessionStatusIcon.tsx'), 'utf8');
 const automationGroupSource = readFileSync(resolve(sidebarDir, 'AutomationSessionGroupItem.tsx'), 'utf8');
 const scheduleBindingBadgeSource = readFileSync(resolve(sidebarDir, 'ScheduleBindingBadge.tsx'), 'utf8');
@@ -88,6 +89,17 @@ describe('SessionCard review regressions', () => {
     expect(globalsSource).toContain('color: var(--sidebar-item-active-foreground);');
     expect(sessionItemSource).toContain('text-[var(--sidebar-item-active-foreground)]');
     expect(sessionCardSource).toContain('text-[var(--sidebar-item-active-foreground)]');
+  });
+
+  it('keeps active sidebar rename controls inside the active foreground color system', () => {
+    expect(sessionItemSource).toContain('activeForeground={isActive}');
+    expect((sessionCardSource.match(/activeForeground=\{isActive\}/g) || []).length).toBeGreaterThanOrEqual(2);
+    expect(sessionRenameInputSource).toContain(
+      "activeForeground && 'text-sidebar-item-active-foreground'",
+    );
+    expect(sessionRenameInputSource).toContain(
+      "'text-sidebar-item-active-foreground hover:text-sidebar-item-active-foreground hover:bg-[color-mix(in_srgb,var(--sidebar-item-active-foreground)_14%,transparent)]'",
+    );
   });
 
   it('keeps selected running-session icons and spinner on the active foreground color', () => {

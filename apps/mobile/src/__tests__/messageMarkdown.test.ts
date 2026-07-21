@@ -4,6 +4,7 @@ import {
   collectMobileMarkdownImages,
   isMobileMarkdownImageDirectUrl,
   mobileMarkdownImageTitle,
+  mobileMarkdownImageUrlForWorkdir,
   mobileMarkdownInlineImageSize,
   parseMobileMarkdown,
   parseMobileMarkdownInlines,
@@ -390,6 +391,110 @@ describe('messageMarkdown', () => {
     ]);
   });
 
+  it('parses desktop-local markdown image paths and resolves them through xdt-file once', () => {
+    expect(parseMobileMarkdownInlines('![相对图](docs/screen shot.png)')).toEqual([
+      { type: 'image', alt: '相对图', url: 'docs/screen shot.png' },
+    ]);
+    expect(parseMobileMarkdownInlines('![绝对图](</Users/me/My Files/a%20b.png>)')).toEqual([
+      { type: 'image', alt: '绝对图', url: '/Users/me/My Files/a%20b.png' },
+    ]);
+    expect(mobileMarkdownImageUrlForWorkdir('docs/screen shot.png', '/repo')).toBe(
+      'xdt-file://open?path=%2Frepo%2Fdocs%2Fscreen%20shot.png',
+    );
+    // file URL 按 URL 语义只解码一次:%2520 表示文件名里的字面 "%20"。
+    expect(mobileMarkdownImageUrlForWorkdir('file:///repo/a%2520b.png', '/ignored')).toBe(
+      'xdt-file://open?path=%2Frepo%2Fa%2520b.png',
+    );
+    expect(mobileMarkdownImageUrlForWorkdir('docs/a.png')).toBeNull();
+    expect(mobileMarkdownImageUrlForWorkdir('docs/a.png', '/repo', 'message:2')).toBe(
+      'xdt-file://open?path=%2Frepo%2Fdocs%2Fa.png&v=message%3A2',
+    );
+    expect(mobileMarkdownImageUrlForWorkdir(
+      'artifacts/plot.png',
+      '/home/u/proj',
+      'message:2',
+      'ssh-host-1',
+      'session-ssh',
+    )).toBe(
+      'xdt-file://open?path=%2Fhome%2Fu%2Fproj%2Fartifacts%2Fplot.png'
+      + '&sessionId=session-ssh&remoteHostId=ssh-host-1&workdir=%2Fhome%2Fu%2Fproj&v=message%3A2',
+    );
+    expect(mobileMarkdownImageUrlForWorkdir(
+      'xdt-file://open?path=%2Fhome%2Fu%2Fproj%2Fartifacts%2Fplot.png'
+        + '&remoteHostId=forged-host&workdir=%2Ftmp&v=stale',
+      '/home/u/proj',
+      'message:3',
+      'ssh-host-1',
+      'session-ssh',
+    )).toBe(
+      'xdt-file://open?path=%2Fhome%2Fu%2Fproj%2Fartifacts%2Fplot.png'
+      + '&sessionId=session-ssh&remoteHostId=ssh-host-1&workdir=%2Fhome%2Fu%2Fproj&v=message%3A3',
+    );
+    expect(mobileMarkdownImageUrlForWorkdir(
+      'xdt-file://open?path=%2Fhome%2Fu%2Fproj%2Fa.png',
+      undefined,
+      'message:3',
+      'ssh-host-1',
+      'session-ssh',
+    )).toBeNull();
+    expect(mobileMarkdownImageUrlForWorkdir(
+      'artifacts/plot.png',
+      '/home/u/proj',
+      'message:3',
+      'ssh-host-1',
+    )).toBeNull();
+    expect(mobileMarkdownImageUrlForWorkdir(
+      'xdt-file://open?path=%2Frepo%2Fa.png&sessionId=forged-session&remoteHostId=forged-host&workdir=%2F&v=stale',
+      '/repo',
+      'message:4',
+    )).toBe('xdt-file://open?path=%2Frepo%2Fa.png&v=message%3A4');
+    // 直连地址本身已内容寻址/由源站控制缓存,不追加消息版本。
+    expect(mobileMarkdownImageUrlForWorkdir('https://example.com/a.png', '/repo', 'message:2')).toBe(
+      'https://example.com/a.png',
+    );
+    expect(parseMobileMarkdownInlines('![危险](javascript:alert.png)')).toEqual([
+      { type: 'text', text: '![危险](javascript:alert.png)' },
+    ]);
+  });
+
+  it('keeps balanced parentheses in desktop-local markdown image paths', () => {
+    expect(parseMobileMarkdownInlines('结果 ![截图](artifacts/build(1).png) 收尾')).toEqual([
+      { type: 'text', text: '结果 ' },
+      { type: 'image', alt: '截图', url: 'artifacts/build(1).png' },
+      { type: 'text', text: ' 收尾' },
+    ]);
+  });
+
+  it('strips standard optional titles from local markdown image destinations', () => {
+    expect(parseMobileMarkdownInlines('![图](artifacts/plot.png "Plot")')).toEqual([
+      { type: 'image', alt: '图', url: 'artifacts/plot.png' },
+    ]);
+    expect(parseMobileMarkdownInlines("![图](artifacts/plot.png 'Plot')")).toEqual([
+      { type: 'image', alt: '图', url: 'artifacts/plot.png' },
+    ]);
+    expect(parseMobileMarkdownInlines('![图](artifacts/plot.png (Plot))')).toEqual([
+      { type: 'image', alt: '图', url: 'artifacts/plot.png' },
+    ]);
+    expect(parseMobileMarkdownInlines('![空格](docs/a b.png) ![括号](artifacts/build(1).png)')).toEqual([
+      { type: 'image', alt: '空格', url: 'docs/a b.png' },
+      { type: 'text', text: ' ' },
+      { type: 'image', alt: '括号', url: 'artifacts/build(1).png' },
+    ]);
+  });
+
+  it('continues scanning after commented or escaped image examples', () => {
+    expect(parseMobileMarkdownInlines(
+      '\\![示例](https://example.com/old.png) 实图 ![结果](https://example.com/new.png)',
+    ).filter((inline) => inline.type === 'image')).toEqual([
+      { type: 'image', alt: '结果', url: 'https://example.com/new.png' },
+    ]);
+    expect(parseMobileMarkdownInlines(
+      '<!-- ![示例](docs/old.png) --> 实图 ![结果](docs/new.png)',
+    ).filter((inline) => inline.type === 'image')).toEqual([
+      { type: 'image', alt: '结果', url: 'docs/new.png' },
+    ]);
+  });
+
   it('converts safe raw HTML img tags and keeps only whitelisted attributes', () => {
     expect(parseMobileMarkdownInlines('<img src="https://example.com/b.png" width="150" onerror="alert(1)">')).toEqual([
       { type: 'image', alt: '', url: 'https://example.com/b.png', width: 150 },
@@ -454,12 +559,12 @@ describe('messageMarkdown', () => {
       .some((inline) => inline.type === 'image')).toBe(false);
   });
 
-  it('keeps xdt-remote-media urls as literal text (no mobile resolver support)', () => {
-    // xdt-remote-media:// 不在手机 resolver 门(isPayloadDesktopLocalMediaUrl)内,点开必失败;
+  it('keeps cindy-remote-media urls as literal text (no mobile resolver support)', () => {
+    // cindy-remote-media:// 不在手机 resolver 门(isPayloadDesktopLocalMediaUrl)内,点开必失败;
     // 不收进白名单,保持字面文本(codex P2)。xdt-image / xdt-file 仍正常解析。
-    expect(parseMobileMarkdownInlines('![图](xdt-remote-media://host/a.png)')
+    expect(parseMobileMarkdownInlines('![图](cindy-remote-media://host/a.png)')
       .some((inline) => inline.type === 'image')).toBe(false);
-    expect(parseMobileMarkdownInlines('<img src="xdt-remote-media://host/a.png">')
+    expect(parseMobileMarkdownInlines('<img src="cindy-remote-media://host/a.png">')
       .some((inline) => inline.type === 'image')).toBe(false);
     expect(parseMobileMarkdownInlines('![图](xdt-file://workspace/a.png)')).toEqual([
       { type: 'image', alt: '图', url: 'xdt-file://workspace/a.png' },
@@ -937,9 +1042,9 @@ describe('local path links(文件 chip 链路的链接形态)', () => {
     ]);
   });
 
-  it('![alt](/abs.png) 图片语法不被链接规则吞掉(维持字面现状)', () => {
+  it('![alt](/abs.png) 图片语法由本地图片能力接管,不被链接规则吞掉', () => {
     expect(parseMobileMarkdownInlines('![图](/Users/me/a.png)')).toEqual([
-      { type: 'text', text: '![图](/Users/me/a.png)' },
+      { type: 'image', alt: '图', url: '/Users/me/a.png' },
     ]);
   });
 });

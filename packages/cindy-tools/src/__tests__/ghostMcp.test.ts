@@ -49,12 +49,12 @@ describe('cindy_ghosts · ghost_list(总机接线簿,现查现报)', () => {
     expect(String(payload.hint)).toContain('ghost_call');
   });
 
-  it('空清单给引导语(去设置装入/唤醒)', async () => {
+  it('空清单给引导语(去主界面侧边栏插件页装入/唤醒)', async () => {
     const result = await handleGhostList(fakeDeps({ listAwakeGhosts: async () => [] }));
     const payload = parsePayload(result);
     expect(payload.ok).toBe(true);
     expect(payload.ghosts).toEqual([]);
-    expect(String(payload.hint)).toContain('设置 → 插件');
+    expect(String(payload.hint)).toContain('主界面侧边栏「插件」');
     expect(String(payload.hint)).not.toContain('意识');
   });
 

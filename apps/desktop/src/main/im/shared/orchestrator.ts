@@ -11,6 +11,7 @@
  */
 
 import { createLogger } from '../../logger';
+import { applyPendingAgentSwitchForDirectSend } from '../../maker-ipc/register';
 import { createImSessionRepo, type ImSessionRepo } from './sessionRepo';
 import { createCardBuilders, type ImCardBuilders } from './cardBuilders';
 import { createTurnRunner, type ImTurnRunner } from './turnRunner';
@@ -29,8 +30,8 @@ export interface ImOrchestrator {
   readonly turnRunner: ImTurnRunner;
   /** 接管 detach 清理 — binding cleanup hook 调用。 */
   detachFromSession(sessionId: string): void;
-  /** App 退出清理。 */
-  disposeAllSessions(): void;
+  /** Stop IM-owned turns and release all account-scoped session hooks. */
+  disposeAllSessions(): Promise<void>;
 }
 
 /** 渠道名 → orchestrator 注册表 — composition root (im/index.ts) 查询用。 */
@@ -54,7 +55,9 @@ export function createImOrchestrator(adapter: ImChannelAdapter): ImOrchestrator 
 
   const repo = createImSessionRepo(adapter.config, adapter.sessions);
   const cards = createCardBuilders(adapter.ui, repo.getDefaultEffortFor);
-  const turnRunner = createTurnRunner(adapter, repo, cards);
+  const turnRunner = createTurnRunner(adapter, repo, cards, {
+    applyPendingAgentSwitch: applyPendingAgentSwitchForDirectSend,
+  });
   const slash = createSlashHandlers(adapter, repo, cards, turnRunner);
   const attachMessageHandler = createMessageHandler(adapter, slash, turnRunner);
   const attachCardActionHandler = createCardActionHandler(adapter, cards, turnRunner);

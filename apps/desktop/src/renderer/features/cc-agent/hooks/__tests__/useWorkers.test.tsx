@@ -29,13 +29,18 @@ function deferred<T>() {
 
 const flushAsyncUpdates = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-function workerRecord(workerId: string, sessionId: string, focused = false) {
+function workerRecord(
+  workerId: string,
+  sessionId: string,
+  focused = false,
+  status: 'idle' | 'running' | 'done' | 'error' = 'idle',
+) {
   return {
     id: workerId,
     sessionId,
     role: 'developer',
     label: null,
-    status: 'idle',
+    status,
     focused,
     idleSince: null,
     session: {
@@ -88,6 +93,37 @@ describe('useWorkers', () => {
       expect(mocks.getCollaborationSettings).toHaveBeenCalledOnce();
     });
     second.unmount();
+  });
+
+  it('keeps terminal workers occupying hard-limit slots across remounts', async () => {
+    mocks.listWorkersByLead.mockResolvedValue([
+      workerRecord('worker-a', 'session-a', true, 'running'),
+      workerRecord('worker-b', 'session-b', false, 'done'),
+      workerRecord('worker-c', 'session-c', false, 'error'),
+    ]);
+    mocks.getCollaborationSettings.mockResolvedValue({
+      workerSoftLimit: 2,
+      workerHardLimit: 3,
+    });
+    const first = renderHook(() => useWorkers('lead-1'));
+
+    await waitFor(() => {
+      expect(first.result.current.activeWorkerCount).toBe(3);
+      expect(first.result.current.hardLimit).toBe(3);
+    });
+    first.unmount();
+
+    mocks.listWorkersByLead.mockClear();
+    mocks.getCollaborationSettings.mockClear();
+    const remount = renderHook(() => useWorkers('lead-1'));
+
+    expect(remount.result.current.activeWorkerCount).toBe(3);
+    expect(remount.result.current.hardLimit).toBe(3);
+    await waitFor(() => {
+      expect(mocks.listWorkersByLead).toHaveBeenCalledOnce();
+      expect(mocks.getCollaborationSettings).toHaveBeenCalledOnce();
+    });
+    remount.unmount();
   });
 
   it('refreshes the cache when an ORCA_WORKER_CHANGED event arrives', async () => {

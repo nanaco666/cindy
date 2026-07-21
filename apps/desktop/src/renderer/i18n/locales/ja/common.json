@@ -409,6 +409,26 @@
     },
     "windowBehavior": {
       "title": "アプリの動作",
+      "closeBehavior": {
+        "label": "メインウィンドウを閉じるとき",
+        "hint": "初回に確認します。後からここで変更できます。",
+        "aria": "メインウィンドウを閉じるときの動作を選択",
+        "tray": "トレイに最小化",
+        "quit": "Cindy を終了"
+      },
+      "closePrompt": {
+        "title": "Cindy を閉じる",
+        "message": "メインウィンドウを閉じるときの動作を選択してください。",
+        "detail": "システムトレイに最小化すると、タスクは実行を続けます。後から設定で変更できます。"
+      },
+      "trayMenu": {
+        "show": "Cindy を開く",
+        "quit": "Cindy を終了"
+      },
+      "trayError": {
+        "title": "トレイに最小化できません",
+        "message": "システムトレイアイコンを作成できなかったため、ウィンドウを開いたままにします。"
+      },
       "swallowActivationClickLabel": "バックグラウンドウィンドウへの最初の左クリックはアクティブ化のみで貫通させない",
       "swallowActivationClickHint": "有効時、バックグラウンドから戻ってきた最初の左クリックはウィンドウを前面に出すだけで、ページ内のボタンは押されずテキストも選択されません。\n無効にすると 1 回のクリックで作業を続けられ、デュアルモニター利用時に便利ですが、ボタンを誤って押す可能性があります。",
       "swallowActivationClickAria": "バックグラウンドウィンドウへの最初の左クリックを飲み込むかどうかを切り替え",
@@ -1016,10 +1036,6 @@
         "rotateSuccess": "キーをローテーションしました",
         "rotateFailed": "ローテーションに失敗しました。後でもう一度お試しください"
       },
-      "addCustom": {
-        "title": "カスタムプロバイダーを追加",
-        "subtitle": "OpenAI / Anthropic 互換の任意のモデルソースを接続。設定はローカルに保存されます"
-      },
       "custom": {
         "tag": "カスタム",
         "editAria": "編集",
@@ -1127,8 +1143,14 @@
         "subscription": "サブスク",
         "subscriptionProduct": "{{product}} サブスク",
         "noResults": "一致するモデルがありません",
-        "expandAria": "モデル一覧を展開",
-        "collapseAria": "モデル一覧を折りたたむ"
+        "splitAdjust": "CLI ごとに調整",
+        "splitDone": "完了",
+        "capabilityNote": "{{agent}} では利用不可",
+        "divergedChip": "{{agent}} で非表示",
+        "refreshAria": "モデル一覧を更新(追加のみ)",
+        "refreshAdded": "新しいモデルを {{count}} 件検出しました",
+        "refreshNoNew": "モデル一覧は最新です。新規はありません",
+        "refreshFailed": "モデル一覧の更新に失敗しました。しばらくしてからもう一度お試しください"
       },
       "genericOAuth": {
         "subtitle": "サブスクリプション認証（OAuth）",
@@ -1144,6 +1166,53 @@
           "confirm": "ログアウト",
           "cancel": "キャンセル"
         }
+      },
+      "addProvider": "プロバイダーを追加",
+      "detail": {
+        "singleAgentNote": "{{agent}} のみ対応",
+        "emptyModels": "認証すると利用可能なモデルが自動的に検出されます",
+        "emptyList": "左下の「プロバイダーを追加」から最初のモデルソースを接続してください",
+        "emptyModelsConnected": "接続済み — 利用可能なモデルを検出中です。空のままの場合は、しばらくしてから再度お試しください。"
+      },
+      "detect": {
+        "groupLabel": "このデバイスで検出",
+        "action": "認証する",
+        "hintLoggedIn": "{{cli}} はこのデバイスでログイン済みです。認証してすぐに接続できます",
+        "hintInstalled": "このデバイスに {{cli}} がインストールされています"
+      },
+      "wizard": {
+        "title": "プロバイダーを追加",
+        "titleWith": "追加 · {{name}}",
+        "closeAria": "閉じる",
+        "stepPick": "プロバイダーを選択",
+        "stepConnect": "接続",
+        "stepModels": "モデルを選択",
+        "searchPlaceholder": "プロバイダーを検索…",
+        "groupSubscription": "サブスクリプション認証 · 推奨、API キー不要",
+        "groupApiKey": "API キープロバイダー · プリセットはカタログと同期",
+        "groupCustom": "カスタム",
+        "metaOAuth": "サブスクリプション認証",
+        "metaApiKey": "API キー",
+        "customTitle": "カスタムエンドポイント",
+        "customMeta": "OpenAI / Anthropic 互換の任意のモデルソースを接続",
+        "pickHint": "認証方式はプロバイダーの定義で決まります。OAuth エンドポイントとベース URL はプリセットに含まれ、手入力は不要です。",
+        "oauthDesc": "ブラウザでサブスクリプション認証を完了します。API キーは不要です",
+        "authorizedToast": "「{{name}}」に接続しました",
+        "authorizeFailed": "「{{name}}」の認証に失敗しました。もう一度お試しください",
+        "nameLabel": "表示名",
+        "onlyAgentNote": "このプロバイダーは {{agent}} のみ対応です",
+        "docsLink": "接続ドキュメントを見る",
+        "fetching": "接続を確認してモデル一覧を取得しています…",
+        "fetchFailed": "モデル一覧を取得できませんでした。プリセットの推奨モデルで追加を完了し、あとで詳細から更新できます",
+        "recommended": "推奨",
+        "modelsHint": "チェックしたモデルはチャットのモデル選択に表示され、利用可能なすべての CLI に同時に適用されます。プロバイダー詳細からいつでも調整できます。",
+        "noModelSelected": "モデルを 1 つ以上選択してください",
+        "createdToast": "「{{name}}」を追加しました",
+        "createFailed": "追加に失敗しました。もう一度お試しください",
+        "next": "次へ",
+        "back": "← 戻る",
+        "finish": "追加を完了",
+        "cancel": "キャンセル"
       }
     },
     "experimental": {
@@ -1176,6 +1245,7 @@
         "appIdLabel": "App ID",
         "ownerLabel": "Owner",
         "ownerWaiting": "初回プライベートメッセージのバインドを待機中",
+        "reconnect": "Feishu ボットを再接続",
         "clear": "連携解除"
       },
       "appIdLabel": "App ID",
@@ -1278,23 +1348,23 @@
       "title": "メモリ",
       "description": "ワークスペース単位のメモリを実現します。設定を変更したら、新しい Session を開始してから反映されます。メモリに問題があれば Reset するか OFF にしてください。",
       "maker": {
-        "label": "Maker",
+        "label": "Cindy",
         "description": "同じ作業ディレクトリで（Claude / Codex）複数 Agent の全 Session メモリを実際に共有します（Beta 機能）",
-        "toggleAria": "Maker メモリを切り替え",
-        "resetAria": "Maker メモリをリセット",
+        "toggleAria": "Cindy メモリを切り替え",
+        "resetAria": "Cindy メモリをリセット",
         "resetConfirm": {
-          "title": "Maker メモリをリセットしますか？",
-          "description": "すべてのプロジェクトの Maker メモリを完全に削除します（user-data 配下に保存、リポジトリ内ではありません）。この操作は取り消せません。",
+          "title": "Cindy メモリをリセットしますか？",
+          "description": "すべてのプロジェクトの Cindy メモリを完全に削除します（user-data 配下に保存、リポジトリ内ではありません）。この操作は取り消せません。",
           "confirm": "リセット",
           "cancel": "キャンセル"
         },
         "toast": {
-          "enabled": "Maker メモリを有効化しました",
-          "disabled": "Maker メモリを無効化しました",
-          "toggleFailed": "Maker メモリの切り替えに失敗しました",
-          "resetSuccess_one": "Maker メモリをリセットしました — {{count}} 件の作業ディレクトリを削除",
-          "resetSuccess_other": "Maker メモリをリセットしました — {{count}} 件の作業ディレクトリを削除",
-          "resetFailed": "Maker メモリのリセットに失敗しました"
+          "enabled": "Cindy メモリを有効化しました",
+          "disabled": "Cindy メモリを無効化しました",
+          "toggleFailed": "Cindy メモリの切り替えに失敗しました",
+          "resetSuccess_one": "Cindy メモリをリセットしました — {{count}} 件の作業ディレクトリを削除",
+          "resetSuccess_other": "Cindy メモリをリセットしました — {{count}} 件の作業ディレクトリを削除",
+          "resetFailed": "Cindy メモリのリセットに失敗しました"
         }
       },
       "agents": {
@@ -1387,6 +1457,7 @@
       "description": "サイドバーに新しいターミナルタブを開くときに使用するシェルです。",
       "auto": "自動選択",
       "autoWithTarget": "自動選択 ({{target}})",
+      "unavailable": "{{shell}} (利用不可)",
       "card": {
         "label": "デフォルトシェル",
         "description": "デフォルトの変更は新しいターミナルタブにのみ反映されます。既存のターミナルには影響しません。",
@@ -1635,7 +1706,7 @@
           "description": "タスクスケジューリング — cron 定期ジョブとワンショットリマインダー"
         },
         "memory": {
-          "name": "Maker メモリ",
+          "name": "Cindy メモリ",
           "description": "セッションをまたいでコンテキストを保持する agent 横断の長期メモリ"
         },
         "xdt_helper": {
@@ -2034,6 +2105,15 @@
         "descriptionBuiltin": "パネルと機能が削除されます。これは内蔵プラグインのため自動では戻りません。リストからいつでも復元できます。",
         "cancel": "キャンセル"
       },
+      "setupGate": {
+        "title": "「{{name}}」は設定が必要です",
+        "descriptionMissing": "使用する前に次の設定が必要です：{{items}}。今すぐプラグイン設定を開きますか？",
+        "descriptionReauth": "アカウントの認証が期限切れです：{{items}}。再接続すると使用できます。今すぐ設定を開きますか？",
+        "configure": "設定を開く",
+        "cancel": "キャンセル",
+        "anySeparator": " または ",
+        "groupSeparator": "、"
+      },
       "toast": {
         "installed": "「{{name}}」をインストールしました",
         "uninstalled": "「{{name}}」をアンインストールしました",
@@ -2091,7 +2171,7 @@
         "networkSecretIdentity": "ログインメールアドレスを認証情報「{{name}}」として使用します",
         "networkSecretIdentityDetail": "値はログイン中のアカウントのメールアドレスから取得され、リクエスト時にホストが自動的に導出・注入します。入力は不要です。プラグインは設定画面に現在の身元を表示する目的で、このメールアドレスを読み取れます。",
         "networkSecretOauth": "{{host}} で OAuth 認可を行うよう案内します({{name}})",
-        "networkSecretOauthDetail": "認可フローとすべてのトークンはホストが管理し、プラグインのコードからは読み取れません。クライアント資格情報はプラグインの設定ページであなたが入力します。以下は要求される権限スコープの原文です。確認のうえ許可してください。",
+        "networkSecretOauthDetail": "認可フローとすべてのトークンはホストが管理し、プラグインのコードからは読み取れません。クライアント資格情報はこのプラグインの詳細ページで入力します。以下は要求される権限スコープの原文です。確認のうえ許可してください。",
         "networkConnections": "あなたが追加した{{label}}に接続可能",
         "networkConnectionsDetail": "アドレスはこのプラグインの設定画面で追加します。新しいアドレスの追加には毎回あなたの確認が必要で、入力した資格情報は対応するアドレスにのみ注入されます。",
         "codeDetailNetwork": "独立したサンドボックスで実行され、ファイルにはアクセスできません。ネットワークは上記のドメインに限られ、ホストが代理送信します。",
@@ -2566,6 +2646,10 @@
     "sessionCostLabel": "セッション {{cost}}",
     "codex": {
       "waiting": "Codex --",
+      "noUsageLabel": "使用量なし",
+      "noUsageDetail": "このセッションにはまだ使用量がありません。",
+      "unavailableLabel": "使用量を取得できません",
+      "unavailableDetail": "使用量データは一時的に利用できません。",
       "waitingDetail": "Codex の使用量は次回のターン完了後に更新されます。",
       "sessionTokensLine": "このセッションで {{tokens}} token 使用",
       "sessionValueLabel": "このセッションの価値 {{cost}}",
@@ -3286,7 +3370,12 @@
         "budget": "割引版GPT",
         "grok": "xAI",
         "google": "Google",
-        "china": "国内"
+        "china": "国内",
+        "image": "画像",
+        "audio": "音声",
+        "video": "動画",
+        "embedding": "埋め込み",
+        "other": "その他"
       },
       "search": {
         "placeholder": "{{source}} のモデルを検索...",
@@ -3306,6 +3395,9 @@
         "emptyTitle": "利用可能なソースがありません",
         "emptyDesc": "現在のモデルに対応するソースを接続すると選択できます",
         "disconnected": "切断済み"
+      },
+      "agentSwitch": {
+        "hint": "{{agent}} に切り替えた後に使用するモデルを選択してください"
       }
     },
     "permissionSelector": {
@@ -3490,6 +3582,18 @@
         "overflowDescription": "このセッションは {{used}} のコンテキストを使用中で、切替先モデルのウィンドウ（{{total}}、約 {{pct}}%）を超えています。切替後は応答も圧縮も失敗する可能性があります。先にコンテキストリングをクリックしてセッションを圧縮するか、新しいセッションでこのモデルを使用してください。それでも切り替えますか？",
         "confirmSwitch": "モデルを切り替える",
         "cancelSwitch": "切替をキャンセル"
+      },
+      "agentSwitch": {
+        "engineNotReady": "エンジンは切り替わりましたが、新しいエンジンの起動に失敗しました。メッセージ送信時に自動的に再試行されます",
+        "failed": "エンジンの切り替えに失敗しました(未適用)",
+        "deferred": "切り替えを予約しました:次のメッセージ送信時に {{agent}} · {{model}} に切り替わります",
+        "confirmation": {
+          "title": "Agent を切り替えますか？",
+          "description": "新しい Agent エンジンは引き継ぎ要約を通じて続行するため、思考内容などが完全に引き継がれる保証はありません。元に戻せば、元のエンジンのセッションを引き続き利用できます。切り替えによってプロンプトキャッシュも一度中断され、トークン消費が増える可能性があります。",
+          "confirm": "Agent を切り替える",
+          "cancel": "現在の Agent を維持",
+          "dontShowAgain": "次回から表示しない"
+        }
       }
     },
     "atMention": {
@@ -3983,6 +4087,12 @@
       },
       "autoResume": {
         "label": "接続が中断されたため、自動的に再開しました"
+      },
+      "agentSwitch": {
+        "label": "{{from}} から {{to}} に切り替えました",
+        "toggleHint": "引き継ぎ内容を表示",
+        "handoffTitle": "引き継ぎ内容——切り替え時に新しいエンジンへ送信されたコンテキスト要約(メッセージには表示されません)",
+        "resumedBadge": "セッション再開"
       }
     },
     "markdownRenderer": {
@@ -4026,13 +4136,18 @@
     },
     "userMessage": {
       "attachmentPrefix": "添付：",
+      "saveAttachmentAs": "添付ファイル {{name}} を別名で保存",
+      "attachmentSaved": "添付ファイル {{name}} を保存しました",
+      "attachmentSavedUnsupported": "添付ファイル {{name}} を保存しましたが、現在のプラットフォームではこのファイル形式を直接使用できない可能性があります",
+      "attachmentSaveForbidden": "保存元のパスを信頼できないため、添付ファイルを保存できません",
+      "attachmentSourceMissing": "保存元のファイルが存在しないため、添付ファイルを保存できません",
+      "attachmentSaveFailed": "添付ファイルを保存できません。保存先フォルダーの権限を確認して再試行してください",
       "automationSent": "自動化タスクから送信",
       "automationSentNamed": "自動化タスク「{{name}}」から送信",
       "automationViewTask": "自動化タスクを表示",
       "expandLongMessage": "全文を表示",
       "collapseLongMessage": "折りたたむ",
       "forkBusy": "セッションが実行中です。終了してから分岐してください",
-      "rewindBusy": "セッションが実行中です。終了してから巻き戻してください",
       "editStopTimeout": "タスクの停止待ちがタイムアウトしました。もう一度お試しください",
       "editQueueNotEmpty": "このセッションには送信待ちのメッセージがあります。先に送信または削除してから編集してください",
       "editNotLast": "セッションに新しいメッセージがあるため、これは最新ではなくなり編集して再送信できません",
@@ -4041,8 +4156,10 @@
       "editSend": "送信",
       "editRollbackHint": "送信すると前のターンで変更された {{count}} 個のファイルが元に戻ります",
       "forkErrors": {
+        "unsupportedHistory": "この位置はエージェント切替境界をまたぐため、分岐できません",
         "noPriorAssistant": "AI の返信より後のメッセージで分岐してください",
         "sourceNeverRan": "元のセッションがまだ実行されていないため分岐できません",
+        "codexStateUnavailable": "Codex セッションの状態を利用できないため分岐できません。{{detail}}",
         "generic": "分岐に失敗しました。再試行してください"
       }
     },
@@ -4054,7 +4171,7 @@
       "noFilesToRollback": "ロールバック対象のファイルはありません。会話履歴のみ切り詰めます",
       "errors": {
         "noPriorAssistantPreview": "AI の返信の後ろにある質問で rewind してください（この前に assistant の返信がありません）",
-        "sessionRunning": "セッションが実行中のため、rewind できません",
+        "sessionRunning": "タスクの停止待ちがタイムアウトしました。もう一度巻き戻してください",
         "noLiveQuery": "セッションが非アクティブです — 任意のメッセージ（\"ok\" でも可）を送信して SDK を起動してから rewind してください",
         "noPriorAssistantCommit": "AI の返信の後ろにある質問で rewind してください",
         "commitGeneric": "rewind に失敗しました。再試行してください",
@@ -4069,13 +4186,19 @@
         "continueWillTruncate": "続行しても以降の会話は切り詰められます",
         "noPerFileDiff": "この SDK バージョンはファイル単位の diff プレビューに対応していません",
         "summaryDefault": "このメッセージ以降の会話は破棄され、作業ディレクトリ内の {{count}} 件のファイルがその時点に戻ります。",
+        "summaryRunning": "実行中のタスクを停止し、このメッセージ以降の会話と対応するファイル変更を巻き戻します。",
         "summaryEmpty": "このメッセージ以降の会話は破棄されます。ファイルは変更されず、履歴のみ切り詰めます。",
         "summaryEmptyWithNote": "このメッセージ以降の会話は破棄されます。",
+        "runningNotice": "タスクはまだ実行中です。確認するとタスクを停止し、最新の状態から巻き戻します。",
+        "runningQueueNotice": "送信待ちのメッセージは一時停止したまま保持され、自動送信されません。",
         "summaryPrefix": "計 {{count}} 件のファイル、",
         "linesSuffix": "行",
         "errorHint": "ヒント：新しいセッションを fork して編集を続けられます。",
         "cancel": "キャンセル",
         "confirm": "巻き戻しを確認",
+        "confirmRunning": "停止して巻き戻す",
+        "rewinding": "巻き戻し中…",
+        "stoppingAndRewinding": "停止して巻き戻し中…",
         "acknowledge": "了解"
       }
     },
@@ -4528,7 +4651,13 @@
         "copyFailed": "コピーに失敗しました。手動でコピーしてください",
         "projectNotFound": "対応するプロジェクトが見つかりません。アーカイブされたか、このデバイスに存在しない可能性があります"
       },
-      "railUnreadHint": "新着メッセージあり"
+      "railUnreadHint": "新着メッセージあり",
+      "railNav": {
+        "pinned": "ピン留め",
+        "projects": "プロジェクト",
+        "dialogues": "チャット"
+      },
+      "railNavCount": "{{count}} 件の会話"
     },
     "rename": {
       "aiRename": "AIで名前を再生成",
@@ -4953,7 +5082,7 @@
         "script": "スクリプトのみ"
       },
       "script": {
-        "protocolSummary": "stdout には xdt-maker-script/1 の完全な JSON オブジェクトを 1 行ずつ（JSONL）出力してください。type は call または complete のみ使用できます。通常のログは stderr に書き込み、最後に必ず complete フレームを出力してください。",
+        "protocolSummary": "stdout には cindy-script/1 の完全な JSON オブジェクトを 1 行ずつ（JSONL）出力してください。type は call または complete のみ使用できます。通常のログは stderr に書き込み、最後に必ず complete フレームを出力してください。",
         "protocolCapabilities": "許可済みの機能を呼び出す場合、スクリプトは host が stdin に送る start と call_result の JSONL フレームも 1 行ずつ読み、対応する呼び出し結果を待ってから処理を続行するか complete を出力する必要があります。",
         "protocolExample": "機能を呼び出さない最小 Python サンプルを表示",
         "command": "スクリプトコマンド",
@@ -5390,7 +5519,7 @@
   },
   "issueAgent": {
     "command": {
-      "instruction": "{{appName}} にフィードバックを送りたいです。質の高い GitHub issue にまとめるのを手伝ってください:まずフィードバックの種類(バグか機能要望か)を確認し、必要な詳細(現象、再現手順または利用シーン、期待する動作)を質問してください。情報が揃ったら lizi_xdt_helper の call_tool で submit_github_issue ツールを呼び出して提出してください(category=feedback。先に list_tools でパラメータを確認できます。提出前に確認カードが表示されます)。提出に失敗した場合は、理由をそのまま教えてください。{{details}}",
+      "instruction": "{{appName}} にフィードバックを送りたいです。質の高い GitHub issue にまとめるのを手伝ってください:まずフィードバックの種類(バグか機能要望か)を確認し、必要な詳細(現象、再現手順または利用シーン、期待する動作)を質問してください。情報が揃ったら cindy_helper の call_tool で submit_github_issue ツールを呼び出して提出してください(category=feedback。先に list_tools でパラメータを確認できます。提出前に確認カードが表示されます)。提出に失敗した場合は、理由をそのまま教えてください。{{details}}",
       "detailsPrefix": "\n最初の説明:{{details}}"
     },
     "confirm": {
@@ -5442,6 +5571,7 @@
     "home": {
       "title": "スキル",
       "description": "ローカルスキルを管理し、Skill Hub から新しいスキルを見つけてインストールできます。",
+      "descriptionLocalOnly": "このデバイスにインストールされたローカルスキルを管理します。",
       "search": "スキルを検索",
       "clearSearch": "スキル検索をクリア",
       "noSearchResults": "一致するスキルが見つかりません",
@@ -5992,6 +6122,8 @@
       "googleConnected": "Google に接続しました",
       "codexConnected": "ChatGPT アカウントに接続しました",
       "feishuBotConnected": "Feishu ボットに接続しました",
+      "feishuBotReconnected": "Feishu ボットを再接続しました",
+      "feishuBotReconnectFailed": "再接続に失敗しました。Feishu の設定を確認して再試行してください",
       "feishuBotConflict": "この App は既に使用されています。同僚が同じ App ID を使用している可能性があります",
       "feishuBotConnectFailed": "接続に失敗しました。App ID / Secret を確認してください",
       "feishuBotSaveFailed": "保存に失敗しました：{{message}}",
@@ -6100,6 +6232,7 @@
       "customRolePredefinedError": "カスタムロールには既定ロール名を使用できません",
       "agentLabel": "Agent",
       "modelLabel": "モデル",
+      "noAvailableModels": "利用可能な {{agent}} モデルがありません。設定でプロバイダーの接続と認証情報を確認してください。",
       "effortLabel": "Effort",
       "initialTaskLabel": "初期タスク",
       "optional": "（任意）",

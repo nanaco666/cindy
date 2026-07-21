@@ -37,6 +37,21 @@ export interface IMHost {
     broadcast(channel: string, payload: unknown): void;
   };
 
+  /**
+   * Optional host-owned authenticated-account scope. Transport packages use
+   * this to keep long-running setup flows (credential save / app registration)
+   * inside the same account generation that initiated them, without depending
+   * on a renderer, database, or host lifecycle implementation.
+   */
+  accountScope?: {
+    /** Capture the current opaque account generation; null means logged out. */
+    capture(): unknown | null;
+    /** Whether a previously captured generation still owns the active account. */
+    isCurrent(token: unknown): boolean;
+    /** Run transport-mutating work only while that generation remains active. */
+    run<T>(token: unknown, operation: () => Promise<T>): Promise<T>;
+  };
+
   /** Filesystem path config; hosts derive these from `app.getPath('userData')`. */
   paths: {
     /** Root for downloaded feishu media (images / files). MUST equal the `mediaService.rootDir` passed to `lizi-mcps`'s `createFeishuService` so xdt-image:// URLs resolve in both contexts. */

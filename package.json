@@ -1,6 +1,7 @@
 {
   "name": "cindy-moved",
   "private": true,
+  "license": "Apache-2.0",
   "engines": {
     "pnpm": ">=10.7 <11"
   },
@@ -39,7 +40,8 @@
       "@electron/rebuild": "^4.0.3",
       "protobufjs": "7.6.5",
       "js-yaml@^4.0.0": "^4.3.0",
-      "zod": "4.3.6"
+      "zod": "4.3.6",
+      "tmp": "^0.2.7"
     },
     "patchedDependencies": {
       "harmonyos-sans-sc-webfont-splitted": "patches/harmonyos-sans-sc-webfont-splitted.patch",
@@ -62,10 +64,12 @@
     "mobile:release:ios:check": "node apps/mobile/scripts/release-ios-check.mjs",
     "mobile:release:ios:local": "node apps/mobile/scripts/release-ios-local.mjs",
     "mobile:release:ios:ota": "node apps/mobile/scripts/release-ios-ota.mjs",
+    "mobile:release:ios:promote": "node apps/mobile/scripts/promote-mobile-canary.mjs --platform ios",
     "mobile:release:android:npkg": "bash apps/mobile/scripts/release-android-npkg.sh",
     "mobile:release:android:check": "node apps/mobile/scripts/release-android-check.mjs",
     "mobile:release:android:local": "node apps/mobile/scripts/release-android-local.mjs",
     "mobile:release:android:ota": "node apps/mobile/scripts/release-android-ota.mjs",
+    "mobile:release:android:promote": "node apps/mobile/scripts/promote-mobile-canary.mjs --platform android",
     "mobile:beta:add-dev": "node apps/mobile/scripts/beta-add-dev.mjs",
     "ensure-deps": "node scripts/ensure-deps.mjs",
     "sync:browser-runtime": "node scripts/browser-runtime/sync.mjs",
@@ -96,6 +100,8 @@
     "package:mac:arm64": "node scripts/ensure-deps.mjs && node apps/desktop/scripts/package-desktop.mjs --platform darwin --arch arm64",
     "package:mac:x64": "node scripts/ensure-deps.mjs && node apps/desktop/scripts/package-desktop.mjs --platform darwin --arch x64",
     "package:linux": "node scripts/ensure-deps.mjs && node apps/desktop/scripts/package-desktop.mjs --platform linux --arch x64",
+    "release:package": "node scripts/ensure-deps.mjs && node apps/desktop/scripts/package-desktop.mjs",
+    "release:canary": "node scripts/ensure-deps.mjs && pnpm --filter desktop release:canary",
     "release:win": "node scripts/ensure-deps.mjs && pnpm --filter desktop release:win",
     "release:win:cn": "node scripts/ensure-deps.mjs && pnpm --filter desktop release:win:cn",
     "release:win:global": "node scripts/ensure-deps.mjs && pnpm --filter desktop release:win:global",
@@ -142,7 +148,7 @@
     "licenses:generate": "node scripts/generate-third-party-notices.mjs",
     "lint": "pnpm -r lint",
     "format": "pnpm -r format",
-    "test:runner": "node --test scripts/__tests__/test-workspaces.test.mjs scripts/__tests__/restart-desktop-remote.test.mjs scripts/__tests__/ensure-deps.test.mjs scripts/__tests__/client-endpoint-build-env.test.mjs scripts/__tests__/endpoint-consistency.test.mjs scripts/__tests__/endpoint-local-file.test.mjs scripts/__tests__/ensure-agent-binaries.test.mjs scripts/__tests__/fetch-with-timeout.test.mjs scripts/__tests__/agent-binary-cdn-fallback.test.mjs scripts/__tests__/ensure-binary-fallback.test.mjs scripts/__tests__/verify-sha256.test.mjs scripts/__tests__/migration-freeze.test.mjs scripts/__tests__/third-party-notices.test.mjs scripts/__tests__/brand-identity-sync.test.mjs scripts/__tests__/package-desktop.test.mjs scripts/__tests__/release-regions.test.mjs",
+    "test:runner": "node --test scripts/__tests__/test-workspaces.test.mjs scripts/__tests__/restart-desktop-remote.test.mjs scripts/__tests__/dev-migration-policy.test.mjs scripts/__tests__/ensure-deps.test.mjs scripts/__tests__/client-endpoint-build-env.test.mjs scripts/__tests__/endpoint-consistency.test.mjs scripts/__tests__/endpoint-local-file.test.mjs scripts/__tests__/ensure-agent-binaries.test.mjs scripts/__tests__/fetch-with-timeout.test.mjs scripts/__tests__/agent-binary-cdn-fallback.test.mjs scripts/__tests__/ensure-binary-fallback.test.mjs scripts/__tests__/verify-sha256.test.mjs scripts/__tests__/migration-freeze.test.mjs scripts/__tests__/third-party-notices.test.mjs scripts/__tests__/brand-identity-sync.test.mjs scripts/__tests__/package-desktop.test.mjs scripts/__tests__/publish-desktop.test.mjs scripts/__tests__/release-regions.test.mjs",
     "test:unit": "pnpm test:runner && node scripts/test-workspaces.mjs --tier unit",
     "test:all": "pnpm test:runner && node scripts/test-workspaces.mjs --all",
     "test:db": "pnpm test:runner && node scripts/test-workspaces.mjs --tier db",

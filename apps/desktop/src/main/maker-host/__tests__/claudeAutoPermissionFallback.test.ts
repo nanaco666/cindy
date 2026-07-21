@@ -64,13 +64,35 @@ describe('Claude Auto classifier request detection', () => {
     ).toBe(true);
   });
 
+  it('detects every classifier max_tokens shape (fast 256 / stage1 64 / thinking 8192)', () => {
+    // 不再依赖固定 max_tokens——三条分类器路径(含 +k 变体)都必须命中,
+    // 否则 fast / thinking 路径的 429 会漏检、不触发降级。
+    for (const max_tokens of [64, 256, 8192, 65, 320, 8256, 16384]) {
+      expect(isClaudeAutoClassifierRequest(requestBody({ max_tokens }))).toBe(true);
+    }
+  });
+
   it('fails closed for malformed or lookalike requests', () => {
     expect(isClaudeAutoClassifierRequest(Buffer.from('{bad json'))).toBe(false);
-    expect(isClaudeAutoClassifierRequest(requestBody({ max_tokens: 128 }))).toBe(false);
     expect(isClaudeAutoClassifierRequest(requestBody({ system: 'ordinary assistant' }))).toBe(
       false,
     );
     expect(isClaudeAutoClassifierRequest(requestBody({ system: [] }))).toBe(false);
+    // 前缀不匹配的普通主 turn 即使 max_tokens 恰为 64 也不得命中。
+    expect(
+      isClaudeAutoClassifierRequest(
+        requestBody({ system: 'You are Claude Code, Anthropic official CLI' }),
+      ),
+    ).toBe(false);
+    // 防御性副判据:即便 system 恰好以分类器前缀开头,大输出请求(超上界)也不误判为
+    // 分类器故障——闭合「前缀碰撞 → 错误降级」的理论窗口。
+    expect(isClaudeAutoClassifierRequest(requestBody({ max_tokens: 32000 }))).toBe(false);
+    // 缺省 max_tokens(分类器恒会设置)同样不命中。
+    expect(
+      isClaudeAutoClassifierRequest(
+        Buffer.from(JSON.stringify({ system: [{ type: 'text', text: CLASSIFIER_PREFIX }] })),
+      ),
+    ).toBe(false);
   });
 });
 
@@ -139,6 +161,33 @@ describe('createClaudeAutoPermissionFallbackCoordinator', () => {
       reason: 'classifier_unavailable',
       status: 429,
     });
+  });
+
+  it('accumulates classifier-failure counters across signals and logs them on downgrade', async () => {
+    // 同一 coordinator 实例:先来一个非 auto 会话的跳过(静默计数),
+    // 再来一个成功降级——降级日志里的 counters 必须反映累计(含前一次跳过)。
+    const { deps } = createDeps({
+      getSessionMeta: vi
+        .fn()
+        .mockResolvedValueOnce({ permissionMode: 'ask' }) // session-skip: 非 auto
+        .mockResolvedValueOnce({ permissionMode: 'auto' }), // session-1: 正常降级
+    });
+    const fallback = createClaudeAutoPermissionFallbackCoordinator(deps);
+
+    await expect(fallback({ sessionId: 'session-skip', status: 429 })).resolves.toBe(false);
+    await expect(fallback({ sessionId: 'session-1', status: 503 })).resolves.toBe(true);
+
+    expect(deps.logger.info).toHaveBeenCalledWith(
+      'auto permission classifier unavailable; session downgraded to ask',
+      expect.objectContaining({
+        counters: expect.objectContaining({
+          detected: 2,
+          downgraded: 1,
+          skippedNotAuto: 1,
+          dedupedRetries: 0,
+        }),
+      }),
+    );
   });
 
   it('deduplicates concurrent failures for the same session', async () => {

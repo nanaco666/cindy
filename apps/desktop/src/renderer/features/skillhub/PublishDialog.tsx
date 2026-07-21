@@ -206,7 +206,7 @@ function WhitePillButton({
         'inline-flex h-8 items-center justify-center rounded-full px-4',
         'text-sm font-normal border bg-[var(--cmd-palette-bg)]',
         'border-[var(--confirm-btn-secondary-border)] text-[var(--settings-btn-secondary-text)]',
-        'hover:bg-[var(--update-btn-hover)]',
+        'hover:bg-[var(--surface-hover)]',
         'transition-colors',
       )}
     >
@@ -384,7 +384,7 @@ export function SelectInput({
                 className={cn(
                   'flex w-full cursor-pointer select-none items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm outline-none',
                   'text-[var(--msg-assistant-text)] transition-colors',
-                  'data-[highlighted]:bg-[var(--update-btn-hover)]',
+                  'data-[highlighted]:bg-[var(--surface-hover)]',
                   'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60',
                 )}
               >

@@ -59,6 +59,7 @@ export type OrcaWorkerCreationErrorCode =
   | 'INVALID_PARAMS'
   | 'NOT_FOUND'
   | 'DUPLICATE_LABEL'
+  | 'WORKER_CREATION_IN_PROGRESS'
   | 'WORKER_LIMIT_HARD_EXCEEDED'
   | 'BUDGET_MODEL_REQUIRES_API_MODE'
   | 'NO_PROVIDER_FOR_AGENT'
@@ -75,6 +76,8 @@ export type OrcaWorkerCreationResult =
       softLimitExceeded?: boolean;
       dispatched?: boolean;
       dispatchOutcome?: DispatchWorkerTaskResult['dispatchOutcome'];
+      /** initial_task 入队(未直发)时回传:排队消息的可寻址句柄,供 lead 查看/修改/撤回。 */
+      queuedMessageId?: string;
       resolved: {
         agent: AgentKind;
         model: string;
@@ -123,6 +126,18 @@ export interface OrcaWorkerCreationDeps {
    */
   getProviderAvailability(): Promise<Record<AgentKind, string[]>>;
   readClaudeApiKey(): string | null;
+  reserveWorkerCreation(input: {
+    reservationId: string;
+    teamId: string;
+    label: string;
+    hardLimit: number;
+    leaseMs: number;
+  }): Promise<
+    | { ok: true; occupiedSlotsBefore: number }
+    | { ok: false; errorCode: 'DUPLICATE_LABEL' | 'WORKER_CREATION_IN_PROGRESS' | 'WORKER_LIMIT_HARD_EXCEEDED' }
+  >;
+  renewWorkerCreationReservation(reservationId: string, leaseMs: number): Promise<boolean>;
+  releaseWorkerCreationReservation(reservationId: string): Promise<void>;
   createId(): string;
   createSessionId(): string;
   buildCreateOptsWithStderr(opts: MakerSessionCreateOpts): MakerSessionCreateOpts;
@@ -189,7 +204,14 @@ export function normalizeOrcaWorkerLabel(value: string): { ok: true; value: stri
   if (!ORCA_WORKER_LABEL_PATTERN.test(label.value)) {
     return { ok: false, message: 'label may only contain letters, numbers, hyphens and underscores' };
   }
-  return label;
+  return { ok: true, value: label.value.toLowerCase() };
+}
+
+const ORCA_WORKER_CREATION_RESERVATION_LEASE_MS = 5 * 60 * 1000;
+
+function isWorkerLabelConstraintError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return err.message.includes("uniq_orca_workers_team_label");
 }
 
 type ResolveWorkerConfigResult =
@@ -331,7 +353,7 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
     if (!label.ok) return { ok: false, errorCode: 'INVALID_PARAMS', message: label.message };
 
     const existing = await deps.listWorkersByLead(params.leadSessionId);
-    if (existing.some((worker) => worker.label === label.value)) {
+    if (existing.some((worker) => worker.label?.toLowerCase() === label.value)) {
       return { ok: false, errorCode: 'DUPLICATE_LABEL', message: `label "${label.value}" already used in this team` };
     }
 
@@ -340,8 +362,6 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
     if (activeCount >= settings.workerHardLimit) {
       return { ok: false, errorCode: 'WORKER_LIMIT_HARD_EXCEEDED', message: `hard limit ${settings.workerHardLimit} reached` };
     }
-    const softLimitExceeded = activeCount >= settings.workerSoftLimit;
-
     const availableModels = deps.getAvailableModels(params.agent);
     if (params.model) {
       const validModels = availableModels.map((model) => model.id);
@@ -383,75 +403,123 @@ export function createOrcaWorkerCreationService(deps: OrcaWorkerCreationDeps): O
       };
     }
 
-    const workerSessionId = deps.createSessionId();
     const workerId = deps.createId();
-    const workerVendorOptions = {
-      orcaRole: 'worker' as const,
-      orcaWorkflowId: params.teamId,
-      orcaLeadSessionId: params.leadSessionId,
-      orcaWorkerId: workerId,
-      orcaWorkerSessionId: workerSessionId,
-    };
-
-    const workerOpts = deps.buildCreateOptsWithStderr({
-      id: workerSessionId,
-      agentKind: params.agent,
-      workingDir: lead.workingDir ?? '',
-      model: resolved.model,
-      effort: resolved.effort as MakerSessionCreateOpts['effort'],
-      fastMode: resolved.fastMode,
-      permissionMode: 'bypassPermissions',
-      title: `Worker · ${role.value} · ${label.value}`,
-      orcaRole: 'worker',
-      vendorOptions: workerVendorOptions,
-    });
-
-    let workerSession: { id: string; agentKind: AgentKind };
+    let reservation:
+      | { ok: true; occupiedSlotsBefore: number }
+      | { ok: false; errorCode: 'DUPLICATE_LABEL' | 'WORKER_CREATION_IN_PROGRESS' | 'WORKER_LIMIT_HARD_EXCEEDED' };
     try {
-      const bootstrapped = await deps.bootstrapSession(workerOpts);
-      workerSession = bootstrapped.session;
-    } catch (err) {
-      return toInternalFailure(err);
-    }
-
-    try {
-      await deps.addOrUpdateWorker({
-        id: workerId,
+      reservation = await deps.reserveWorkerCreation({
+        reservationId: workerId,
         teamId: params.teamId,
-        sessionId: workerSession.id,
-        status: 'idle',
         label: label.value,
-        role: role.value,
-        focused: false,
+        hardLimit: settings.workerHardLimit,
+        leaseMs: ORCA_WORKER_CREATION_RESERVATION_LEASE_MS,
       });
     } catch (err) {
-      await cleanupBootstrappedWorkerSession(workerSession.id);
       return toInternalFailure(err);
     }
+    if (!reservation.ok) {
+      if (reservation.errorCode === 'DUPLICATE_LABEL') {
+        return { ok: false, errorCode: 'DUPLICATE_LABEL', message: `label "${label.value}" already used in this team` };
+      }
+      if (reservation.errorCode === 'WORKER_CREATION_IN_PROGRESS') {
+        return { ok: false, errorCode: 'WORKER_CREATION_IN_PROGRESS', message: `label "${label.value}" is currently being created` };
+      }
+      return { ok: false, errorCode: 'WORKER_LIMIT_HARD_EXCEEDED', message: `hard limit ${settings.workerHardLimit} reached` };
+    }
+    const softLimitExceeded = reservation.occupiedSlotsBefore >= settings.workerSoftLimit;
+    let reservationValid = true;
+    const renewalTimer = setInterval(() => {
+      void deps.renewWorkerCreationReservation(workerId, ORCA_WORKER_CREATION_RESERVATION_LEASE_MS)
+        .then((renewed) => { if (!renewed) reservationValid = false; })
+        .catch(() => { reservationValid = false; });
+    }, Math.floor(ORCA_WORKER_CREATION_RESERVATION_LEASE_MS / 3));
+    renewalTimer.unref?.();
 
     try {
-      await deps.markOrcaRoleIfNeeded(workerSession.id, 'worker');
-    } catch (err) {
-      await cleanupBootstrappedWorkerSession(workerSession.id);
-      await deps.removeWorker(workerId).catch(() => undefined);
-      return toInternalFailure(err);
-    }
+      const workerSessionId = deps.createSessionId();
+      const workerVendorOptions = {
+        orcaRole: 'worker' as const,
+        orcaWorkflowId: params.teamId,
+        orcaLeadSessionId: params.leadSessionId,
+        orcaWorkerId: workerId,
+        orcaWorkerSessionId: workerSessionId,
+      };
 
-    return {
-      ok: true,
-      teamId: params.teamId,
-      workerId,
-      workerSessionId: workerSession.id,
-      softLimitExceeded,
-      resolved: {
-        agent: params.agent,
+      const workerOpts = deps.buildCreateOptsWithStderr({
+        id: workerSessionId,
+        agentKind: params.agent,
+        workingDir: lead.workingDir ?? '',
         model: resolved.model,
-        effort: resolved.effort,
+        effort: resolved.effort as MakerSessionCreateOpts['effort'],
         fastMode: resolved.fastMode,
-        role: role.value,
-        label: label.value,
-      },
-    };
+        permissionMode: 'bypassPermissions',
+        title: `Worker · ${role.value} · ${label.value}`,
+        orcaRole: 'worker',
+        vendorOptions: workerVendorOptions,
+      });
+
+      let workerSession: { id: string; agentKind: AgentKind };
+      try {
+        const bootstrapped = await deps.bootstrapSession(workerOpts);
+        workerSession = bootstrapped.session;
+      } catch (err) {
+        return toInternalFailure(err);
+      }
+
+      const renewed = reservationValid
+        ? await deps.renewWorkerCreationReservation(workerId, ORCA_WORKER_CREATION_RESERVATION_LEASE_MS).catch(() => false)
+        : false;
+      if (!renewed) {
+        await cleanupBootstrappedWorkerSession(workerSession.id);
+        return { ok: false, errorCode: 'INTERNAL', message: 'worker creation reservation expired before persistence' };
+      }
+
+      try {
+        await deps.addOrUpdateWorker({
+          id: workerId,
+          teamId: params.teamId,
+          sessionId: workerSession.id,
+          status: 'idle',
+          label: label.value,
+          role: role.value,
+          focused: false,
+        });
+      } catch (err) {
+        await cleanupBootstrappedWorkerSession(workerSession.id);
+        if (isWorkerLabelConstraintError(err)) {
+          return { ok: false, errorCode: 'DUPLICATE_LABEL', message: `label "${label.value}" already used in this team` };
+        }
+        return toInternalFailure(err);
+      }
+
+      try {
+        await deps.markOrcaRoleIfNeeded(workerSession.id, 'worker');
+      } catch (err) {
+        await cleanupBootstrappedWorkerSession(workerSession.id);
+        await deps.removeWorker(workerId).catch(() => undefined);
+        return toInternalFailure(err);
+      }
+
+      return {
+        ok: true,
+        teamId: params.teamId,
+        workerId,
+        workerSessionId: workerSession.id,
+        softLimitExceeded,
+        resolved: {
+          agent: params.agent,
+          model: resolved.model,
+          effort: resolved.effort,
+          fastMode: resolved.fastMode,
+          role: role.value,
+          label: label.value,
+        },
+      };
+    } finally {
+      clearInterval(renewalTimer);
+      await deps.releaseWorkerCreationReservation(workerId).catch(() => undefined);
+    }
   }
 
   return {

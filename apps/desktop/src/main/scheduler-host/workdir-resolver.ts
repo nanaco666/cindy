@@ -22,6 +22,8 @@ export interface WorkdirResolveResult {
    * Runner 应优先使用此字段，避免再用 `git rev-parse --abbrev-ref HEAD` 兜底。
    */
   branch?: string;
+  /** session key used to release an acquired ephemeral worktree on cancellation */
+  worktreeSessionId?: string;
   error?: string;
 }
 
@@ -50,5 +52,10 @@ export async function resolveWorkingDir(
     ephemeral: true,
   });
   if (!res.ok) return { ok: false, error: res.error.message };
-  return { ok: true, path: res.meta.path, branch: res.meta.branch };
+  return {
+    ok: true,
+    path: res.meta.path,
+    branch: res.meta.branch,
+    worktreeSessionId: sessionId,
+  };
 }

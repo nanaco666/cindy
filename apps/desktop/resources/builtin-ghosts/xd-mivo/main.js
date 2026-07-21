@@ -92,7 +92,7 @@ function hostFetchError(r, fallbackCode) {
   if (msg.indexOf('尚未配置') >= 0) {
     return toolError('MIVO_API_KEY_MISSING', msg, {
       guidance:
-        '把 message 原样告诉用户:需要在 设置 → 插件 → XD Mivo 详情页填写 mivo_ 开头的 API Key' +
+        '把 message 原样告诉用户:需要在主界面侧边栏「插件」→「XD Mivo」详情页填写 mivo_ 开头的 API Key' +
         '(aigc.xindong.com 登录后点右上角 MCP 按钮获取)。不要 fallback 到其它绘图/生成通道。',
     });
   }

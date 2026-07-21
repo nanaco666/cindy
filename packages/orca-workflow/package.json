@@ -20,7 +20,7 @@
     "name": "Lizi",
     "email": "jiali@magiclizi.com"
   },
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "dependencies": {
     "@lizi/maker-core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",

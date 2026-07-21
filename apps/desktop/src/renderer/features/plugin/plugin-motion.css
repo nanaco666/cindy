@@ -95,6 +95,24 @@
   animation: plugin-selection-settle var(--plugin-motion-state) var(--plugin-motion-ease-enter);
 }
 
+/* The detail hero collapses from the actual page column width, not the window width. */
+.plugin-detail-frame {
+  container-type: inline-size;
+}
+
+@container (max-width: 759px) {
+  .plugin-detail-hero {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .plugin-detail-actions {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+    margin-top: 1rem;
+    width: 100%;
+  }
+}
+
 @media (max-width: 767px) {
   .plugin-motion-root {
     --plugin-motion-rise: 10px;

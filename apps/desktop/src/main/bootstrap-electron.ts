@@ -1,10 +1,11 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, protocol, safeStorage, screen, session, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, powerMonitor, protocol, safeStorage, screen, session, shell, Tray } from 'electron';
 import { resolveVibrancyConfig } from './vibrancyConfig';
 import { applyVibrancyToSecondaryWindows } from './secondary-windows';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { pathToFileURL } from 'node:url';
+import { pipeline } from 'node:stream/promises';
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { machineIdSync } from 'node-machine-id';
 import windowStateKeeper from 'electron-window-state';
@@ -13,7 +14,11 @@ import {
   shouldRequestSingleInstanceLock,
   resolveSingleInstanceLockUserDataDir,
 } from './devCliFlags.js';
-import { markDesktopDevReady, markDesktopDevStartupFailed } from './devStartupStatus';
+import {
+  recordDesktopDevAuthStartupResult,
+  markDesktopDevStartupFailed,
+  markDesktopDevWindowReady,
+} from './devStartupStatus';
 
 const PROCESS_STARTED_AT_MS = Date.now();
 
@@ -114,7 +119,7 @@ import { RendererBootGuard } from './renderer-boot-guard';
 import yaml from 'js-yaml';
 import matter from 'gray-matter';
 import type { Maker } from '@lizi/maker-core';
-import { im, feishuIm, startImOrchestrators, startImConnection } from './im';
+import { im, feishuIm, startImOrchestrators, startImConnection, stopImConnection } from './im';
 import * as authManager from './authManager';
 import * as profileEdit from './profileEdit';
 import { uploadPublicAsset } from './ossPublicUpload';
@@ -139,6 +144,7 @@ import {
   createLightboxMediaHandlers,
   REMOTE_IMAGE_MAX_BYTES,
 } from './lightboxMediaActions';
+import { createChatAttachmentSaveHandler } from './chatAttachmentSave';
 import { sweepStartupDraftImages } from './imageCacheOrphanSweep';
 import { sweepLegacyDialogueWorkingDirs } from './localDb/dialogueWorkdirSelfHeal';
 import { BRAND_IDENTITY } from '@lizi/maker-shared/brand-identity';
@@ -386,8 +392,23 @@ import { CURRENT_APP_ID } from '../shared/brandRegion.js';
 import {
   readWindowBehaviorSettings,
   writeSwallowActivationClick,
+  writeWindowsCloseBehavior,
 } from './window-behavior-settings-store.js';
-import { WINDOW_BEHAVIOR_SET_SWALLOW_ACTIVATION_CLICK_CHANNEL } from '../shared/windowBehavior.js';
+import {
+  hideWindowToWindowsTray,
+  requestWindowsCloseBehavior,
+  requestWindowsTrayQuit,
+} from './windowsTrayLifecycle.js';
+import { createWindowsClosePromptFallbackController } from './windowsClosePromptFallback.js';
+import {
+  isWindowsCloseBehavior,
+  WINDOW_BEHAVIOR_GET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
+  WINDOW_BEHAVIOR_SET_SWALLOW_ACTIVATION_CLICK_CHANNEL,
+  WINDOW_BEHAVIOR_SET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
+  WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_REQUESTED_CHANNEL,
+  WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_SHOWN_CHANNEL,
+  type WindowsCloseBehavior,
+} from '../shared/windowBehavior.js';
 import { getDesktopCommandRegistry, registerBuiltinDesktopCommands } from './commands/index.js';
 import { registerRemoteCmdIpc } from './commands/remoteCmdIpc.js';
 import {
@@ -670,6 +691,15 @@ async function ensureLifecycleDbClient(userId: string) {
 
 async function teardownAuthAccountBoundary(reason: string): Promise<void> {
   skillhubAutoSyncService.cancelInFlight();
+  // IM owns long-lived transports plus account-scoped session/binding caches.
+  // Stop it before any service or DbClient teardown so late Feishu/Discord
+  // callbacks cannot enter the old account boundary. Relogin restarts it via
+  // app:ready-for-bot after the new DbClient is ready.
+  try {
+    await stopImConnection(reason);
+  } catch (err) {
+    authBoundaryLog.error(`stopImConnection on ${reason} failed (non-fatal):`, err);
+  }
   // Phase 4 切账号:teardown 顺序很关键,分两步 ① readiness holder → ② scheduler。
   // ① 先清 readiness holder,**必须在 await resetScheduler() 之前**。
   // resetScheduler() 内部 await _scheduler.stop() 是异步的;若先 await 它,在
@@ -866,7 +896,7 @@ registerGhostIpc();
 // registerSchemesAsPrivileged replaces the whole privileged-scheme list every
 // time it runs, so per-module calls silently wipe each other — only the last
 // caller's scheme keeps its privileges. That exact bug shipped once (xdt-model
-// lost supportFetchAPI when xdt-remote-media registered after it → 3D preview
+// lost supportFetchAPI when cindy-remote-media registered after it → 3D preview
 // stuck on poster). Every protocol module therefore only EXPORTS its privilege
 // entry; this is the one place that registers them.
 //   xdt-image:        locally cached chat images (<img>)
@@ -876,7 +906,7 @@ registerGhostIpc();
 //   xdt-audio:        local audio files (<audio>, Range 同 video 手动处理)
 //   xdt-model:        mivo 3D model cache — <model-viewer> 用 fetch() 拉模型,
 //                     supportFetchAPI 丢失即静默白屏,勿动
-//   xdt-remote-media: device-link 入方向媒体(被控端字节经 OSS 中转)
+//   cindy-remote-media: device-link 入方向媒体(被控端字节经 OSS 中转)
 //   cindy-ghost:      意识沙箱文件供片(handler 挂在每意识专属 session 分区,
 //                     只认自己安装目录;runtime-sandbox.md §3)
 //   cindy-media:      媒体总仓字节仓取件窗口(内容寻址 blob;新写入媒体的
@@ -1083,7 +1113,7 @@ function installApplicationMenu(
   const labels = APPLICATION_MENU_LABELS[locale];
   // Toggle Sidebar: 用 registerAccelerator: false —— 菜单显示 ⌘B 标签且可点击,
   // 但不向 OS 注册热键。真正按键由 MainLayout 里的 renderer keydown 处理 (那段
-  // 会跳过非 Tiptap 的 contenteditable, 保留 mdxeditor 等编辑器自己的 Bold 能力)。
+  // 会跳过非 Tiptap 的 contenteditable, 保留富文本编辑器自己的 Bold 能力)。
   const toggleSidebarItem: Electron.MenuItemConstructorOptions = {
     label: labels.toggleSidebar,
     accelerator: menuAcceleratorFor('toggle-sidebar'),
@@ -1267,6 +1297,7 @@ ipcMain.handle('app-menu:set-locale', (_event, locale: unknown): { ok: true } =>
   if (mainWindow) {
     installApplicationMenu(mainWindow, currentApplicationMenuLocale);
   }
+  updateWindowsTrayMenu();
   getAgentIslandService()?.refreshLocalization();
   return { ok: true };
 });
@@ -1358,8 +1389,159 @@ const updatePresentationRecovery = isUpdateRelaunchCandidate
 // 直接 show 回来,renderer 不重新加载。Cmd+Q / before-quit 时把这个标志置 true,
 // 让窗口 close handler 放行真正的销毁。
 let isQuitting = false;
+let windowsTray: Tray | null = null;
+const WINDOWS_CLOSE_PROMPT_FALLBACK_DELAY_MS = 2_000;
+
+function updateWindowsTrayMenu(): void {
+  if (!windowsTray || windowsTray.isDestroyed()) return;
+  windowsTray.setContextMenu(
+    Menu.buildFromTemplate([
+      {
+        label: t('settings.windowBehavior.trayMenu.show'),
+        click: () => focusMainWindow(),
+      },
+      { type: 'separator' },
+      {
+        label: t('settings.windowBehavior.trayMenu.quit'),
+        click: () => quitFromWindowsTray(),
+      },
+    ]),
+  );
+}
+
+function quitFromWindowsTray(): void {
+  requestWindowsTrayQuit({
+    hasActiveTurn: () => {
+      try {
+        return anySessionInTurn(getMakerCore());
+      } catch {
+        // A failed busy probe must not turn the tray into an unguarded exit path.
+        return true;
+      }
+    },
+    confirmQuit: () => dialog.showMessageBoxSync({
+      type: 'warning',
+      title: t('titleBar.closeConfirm.title'),
+      message: t('titleBar.closeConfirm.title'),
+      detail: t('titleBar.closeConfirm.description'),
+      buttons: [
+        t('titleBar.closeConfirm.cancel'),
+        t('titleBar.closeConfirm.confirm'),
+      ],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    }) === 1,
+    quit: () => app.quit(),
+  });
+}
+
+function destroyWindowsTray(): void {
+  windowsTray?.destroy();
+  windowsTray = null;
+}
+
+function ensureWindowsTray(): boolean {
+  if (windowsTray && !windowsTray.isDestroyed()) {
+    updateWindowsTrayMenu();
+    return true;
+  }
+
+  try {
+    const iconPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'icon.png')
+      : path.join(__dirname, '../../resources/icon.png');
+    const icon = nativeImage.createFromPath(iconPath);
+    if (icon.isEmpty()) throw new Error(`tray icon is empty: ${iconPath}`);
+    windowsTray = new Tray(icon.resize({ width: 16, height: 16 }));
+    windowsTray.setToolTip(BRAND_NAME);
+    windowsTray.on('click', () => focusMainWindow());
+    updateWindowsTrayMenu();
+    return true;
+  } catch (err) {
+    createLogger('windows-tray').error('failed to create Windows tray icon', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    windowsTray = null;
+    return false;
+  }
+}
+
+function hideMainWindowToWindowsTray(mainWindow: BrowserWindow): void {
+  if (ensureWindowsTray()) {
+    hideWindowToWindowsTray(mainWindow);
+    return;
+  }
+  dialog.showMessageBoxSync(mainWindow, {
+    type: 'error',
+    title: t('settings.windowBehavior.trayError.title'),
+    message: t('settings.windowBehavior.trayError.message'),
+  });
+}
+
+function applyWindowsCloseBehavior(
+  mainWindow: BrowserWindow,
+  behavior: WindowsCloseBehavior,
+): void {
+  if (behavior === 'tray') {
+    hideMainWindowToWindowsTray(mainWindow);
+  } else {
+    app.quit();
+  }
+}
+
+function showNativeWindowsCloseBehaviorPrompt(): WindowsCloseBehavior {
+  const options = {
+    type: 'question' as const,
+    title: t('settings.windowBehavior.closePrompt.title'),
+    message: t('settings.windowBehavior.closePrompt.message'),
+    detail: t('settings.windowBehavior.closePrompt.detail'),
+    buttons: [
+      t('settings.windowBehavior.closeBehavior.tray'),
+      t('settings.windowBehavior.closeBehavior.quit'),
+    ],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  };
+  const mainWindow = mainWindowRef;
+  const choice = mainWindow && !mainWindow.isDestroyed()
+    ? dialog.showMessageBoxSync(mainWindow, options)
+    : dialog.showMessageBoxSync(options);
+  return choice === 1 ? 'quit' : 'tray';
+}
+
+const windowsClosePromptFallback = createWindowsClosePromptFallbackController(
+  {
+    readBehavior: () => readWindowBehaviorSettings().windowsCloseBehavior,
+    showRendererPrompt: () => {
+      const mainWindow = mainWindowRef;
+      if (!mainWindow) return;
+      requestWindowsCloseBehavior(
+        mainWindow,
+        WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_REQUESTED_CHANNEL,
+      );
+    },
+    showNativePrompt: showNativeWindowsCloseBehaviorPrompt,
+    persistBehavior: writeWindowsCloseBehavior,
+    applyBehavior: (behavior) => {
+      const mainWindow = mainWindowRef;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        applyWindowsCloseBehavior(mainWindow, behavior);
+      } else {
+        app.quit();
+      }
+    },
+    schedule: (callback, delayMs) => setTimeout(callback, delayMs),
+    cancel: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+  },
+  WINDOWS_CLOSE_PROMPT_FALLBACK_DELAY_MS,
+);
+
 app.on('before-quit', () => {
   isQuitting = true;
+  windowsClosePromptFallback.dispose();
+  destroyWindowsTray();
   disposeUpdatePresentationRecovery();
 });
 
@@ -1764,10 +1946,18 @@ const createWindow = () => {
       }
       return;
     }
-    // Windows/Linux: system close paths (Alt+F4, taskbar close, WM_CLOSE) must
-    // quit the app. Otherwise a hidden prewarmed voice overlay can keep the
-    // process alive and hold the single-instance lock with no main window.
+    // Windows: first close asks once, then either quits or keeps the main window
+    // alive in the system tray. Linux keeps the historical quit behavior.
     event.preventDefault();
+    if (process.platform === 'win32') {
+      const behavior = readWindowBehaviorSettings().windowsCloseBehavior;
+      if (!behavior) {
+        windowsClosePromptFallback.request();
+        return;
+      }
+      applyWindowsCloseBehavior(mainWindow, behavior);
+      return;
+    }
     app.quit();
   });
   void ensureMainAppPresence('main-window-created', mainWindow);
@@ -1800,7 +1990,7 @@ const createWindow = () => {
   // Show window only after content is rendered — eliminates theme flash
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    if (!app.isPackaged) markDesktopDevReady();
+    if (!app.isPackaged) markDesktopDevWindowReady();
     // `open` may successfully start the updated process while macOS refuses
     // frontmost activation at the lock/login window. Presentation is not an
     // installation-health signal; retain a one-shot focus grant for unlock.
@@ -2138,8 +2328,8 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     return compactionWire();
   });
 
-  // Window behavior —— renderer 是 UI 和 Windows JS swallow 的运行时事实标准,
-  // main 只负责持久化到 userData 供下次 macOS acceptFirstMouse 使用。SET-only。
+  // Window behavior —— swallowActivationClick 保持 renderer 运行时事实标准;
+  // Windows close behavior 由 main 读写并执行。
   ipcMain.handle(
     WINDOW_BEHAVIOR_SET_SWALLOW_ACTIVATION_CLICK_CHANNEL,
     async (_e, enabled: unknown) => {
@@ -2150,7 +2340,26 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
       return { ok: true as const };
     },
   );
-
+  ipcMain.handle(WINDOW_BEHAVIOR_GET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL, async () => {
+    return readWindowBehaviorSettings().windowsCloseBehavior;
+  });
+  ipcMain.handle(
+    WINDOW_BEHAVIOR_SET_WINDOWS_CLOSE_BEHAVIOR_CHANNEL,
+    async (_e, behavior: unknown) => {
+      if (!isWindowsCloseBehavior(behavior)) {
+        throwIpcError('INVALID_PARAMS', 'Windows close behavior required (quit|tray)');
+      }
+      windowsClosePromptFallback.acknowledge();
+      writeWindowsCloseBehavior(behavior);
+      if (behavior === 'quit') destroyWindowsTray();
+      return behavior;
+    },
+  );
+  ipcMain.on(WINDOW_BEHAVIOR_WINDOWS_CLOSE_BEHAVIOR_SHOWN_CHANNEL, (event) => {
+    if (BrowserWindow.fromWebContents(event.sender) === mainWindowRef) {
+      windowsClosePromptFallback.acknowledge();
+    }
+  });
   // LSP Beta 开关 IPC —— 同 compat-mode 模式:
   // GET 给 renderer 启动期同步 localStorage 镜像; SET 落 JSON 文件 + 更新 cache,
   // mcp providers isEnabled 下次 session.start 时读到新值。已开 session 不变。
@@ -2381,13 +2590,19 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     windowManualDrag.stop(win);
   });
   // 关闭语义按窗口区分:
-  //  - 主窗(或解析不到 sender 的兜底): 自定义 X 语义是"退出 app", 走 app.quit() 才能
-  //    trigger before-quit → disposer chain, 把 codex 子进程 / im / db 等都收掉; 否则
-  //    voice overlay 这种 hidden BrowserWindow 还活着, window-all-closed 不 fire, 残留进程。
+  //  - 主窗(Windows): 走 win.close() 触发 close handler,由 handler 决定托盘隐藏或退出。
+  //  - 主窗(或解析不到 sender 的兜底,Windows 之外): 自定义 X 语义是"退出 app",
+  //    走 app.quit() 才能 trigger before-quit → disposer chain,把 codex 子进程 / im / db
+  //    等都收掉;否则 voice overlay 这种 hidden BrowserWindow 还活着,window-all-closed
+  //    不 fire,残留进程。
   //  - 「在新窗口打开」的副窗: 只关自己, 不退出 app(会话活在主进程, 不受影响)。
   ipcMain.on('window-close', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win || win === mainWindowRef) {
+      if (process.platform === 'win32' && win) {
+        win.close();
+        return;
+      }
       app.quit();
       return;
     }
@@ -2797,7 +3012,27 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
   // ── Auth IPC handlers (delegated to authManager) ──
 
   ipcMain.handle('auth:initialize', async () => {
-    return authManager.initialize();
+    try {
+      let pendingCompletion: Promise<authManager.AuthState> | null = null;
+      const state = await authManager.initialize({
+        onColdStartPending: (completion) => {
+          pendingCompletion = completion;
+        },
+      });
+      if (!app.isPackaged) {
+        recordDesktopDevAuthStartupResult(state, pendingCompletion, () => authManager.getAuthState());
+      }
+      return state;
+    } catch (err) {
+      if (!app.isPackaged) {
+        markDesktopDevStartupFailed(
+          'AUTH_INIT_FAILED',
+          err instanceof Error ? err.message : String(err),
+          { phase: 'auth:initialize' },
+        );
+      }
+      throw err;
+    }
   });
 
   ipcMain.handle('auth:get-login-state', async () => authManager.getLoginState());
@@ -3847,6 +4082,46 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
     },
   );
 
+  // 安全降级附件“另存为”：源文件必须通过统一路径策略，解析真实路径后还要
+  // 位于聊天附件/远程文件缓存内；建议名在 main 侧清洗，复制完成后不调用
+  // openPath，避免符号链接越界或恢复原扩展名后被自动执行。
+  const saveChatAttachment = createChatAttachmentSaveHandler({
+    isPathAllowed,
+    realpath: (filePath) => fs.promises.realpath(filePath),
+    stat: (filePath) => fs.promises.stat(filePath, { bigint: true }),
+    openSource: async (filePath) => {
+      const noFollow = typeof fs.constants.O_NOFOLLOW === 'number' ? fs.constants.O_NOFOLLOW : 0;
+      const handle = await fs.promises.open(filePath, fs.constants.O_RDONLY | noFollow);
+      return {
+        stat: () => handle.stat({ bigint: true }),
+        copyTo: async (targetPath) => {
+          await pipeline(
+            handle.createReadStream({ autoClose: false, start: 0 }),
+            fs.createWriteStream(targetPath),
+          );
+        },
+        close: () => handle.close(),
+      };
+    },
+    showSaveDialog: async (opts) => {
+      const targetWin = getWindow() ?? BrowserWindow.getFocusedWindow();
+      const result = targetWin
+        ? await dialog.showSaveDialog(targetWin, opts)
+        : await dialog.showSaveDialog(opts);
+      return { canceled: result.canceled, filePath: result.filePath || undefined };
+    },
+    getDownloadsDir: () => app.getPath('downloads'),
+    getAllowedSourceRoots: () => [
+      imageCacheStore.getCacheRoot(),
+      path.join(app.getPath('userData'), 'remote-file-cache'),
+    ],
+  });
+  ipcMain.handle(
+    'chat-attachment:save-as',
+    (_event, params: { sourcePath?: unknown; suggestedName?: unknown }) =>
+      saveChatAttachment(params),
+  );
+
   // Settings → About: 打开 <userData>/logs 在系统文件管理器。
   // 路径在主进程派生（renderer 不需要也不应该知道 userData 全路径）。
   // 目录不存在时先创建，避免空安装首次点击失败。
@@ -4474,8 +4749,8 @@ app.on('ready', async () => {
   // Dock 图标取自可执行 bundle 的 icns,而 dev 跑的是 node_modules 里的官方
   // Electron 二进制。这里 dev-only 手动设成 Cindy 图标;packaged 版由
   // resources/icon.icns 自然生效,不需要也不该动。
-  // 必须用 icon-dock.png(generate-mac-icns.mjs 产出,已套 Apple 圆角网格):
-  // setIcon 原样显示不加遮罩,满幅方图 icon.png 会显示成无圆角方块。
+  // 使用 icon-dock.png（generate-mac-icns.mjs 产出，已套 Apple 圆角网格）；
+  // setIcon 会原样显示资源，不会替应用图标自动加圆角。
   if (!app.isPackaged && process.platform === 'darwin') {
     try {
       app.dock?.setIcon(path.join(__dirname, '../../resources/icon-dock.png'));
@@ -4860,7 +5135,7 @@ onQuit('provider-access-auth-listener', () => {
 //  recovery 兜底, 详见 localDb/index.ts 文件头 ADR-FE7 修订说明。)
 onQuit('shutdown-maker', shutdownMaker, 'async');
 onQuit('orca-idle-watcher', () => stopOrcaIdleWatcher(), 'sync');
-onQuit('im', () => im.dispose(), 'async');
+onQuit('im', () => stopImConnection('quit'), 'async');
 onQuit('codex-env', () => shutdownCodexEnvironment(), 'async');
 // embedding-host: abort 语义 —— 立刻让出 SQLite 写连接, 不等当前 tick (那批 job 保持
 // pending 下次续跑, 写事务同步原子无中断)。

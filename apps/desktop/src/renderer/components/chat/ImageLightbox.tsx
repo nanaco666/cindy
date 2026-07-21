@@ -19,7 +19,7 @@
  *   复制图片 / 打开所在目录(右键) / 用默认应用打开 / 另存为 / 发送到对话。
  *   可用性按 src scheme 分层,见 `mediaActionCapabilities`:本地源
  *   (xdt-image:// / xdt-file://)全量;http(s):// 与 data:image 只有
- *   另存为 + 发送到对话(main 侧取字节);xdt-remote-media://(远程会话)与
+ *   另存为 + 发送到对话(main 侧取字节);cindy-remote-media://(远程会话)与
  *   其它 scheme 一律只读预览。
  * - 发送到对话:经 `media:cache-for-session` 为当前会话复制一份新缓存,再合入
  *   composerDraftStore(与手机版语义一致——加入输入框附件托盘,不直接发消息)。
@@ -192,7 +192,7 @@ function mediaActionCapabilities(src: string, hasSession: boolean) {
   const localFilePath = xdtFileUrlToPath(src);
   const isLocalMedia = isImageCache || localFilePath !== null;
   const isHttp = /^https?:\/\//.test(src);
-  const isRemoteMedia = src.startsWith('xdt-remote-media://');
+  const isRemoteMedia = src.startsWith('cindy-remote-media://');
   const bytesReachable = isImageBytesReachable(src);
   return {
     canCopy: bytesReachable,
@@ -214,7 +214,7 @@ function isDirectCacheable(src: string): boolean {
   if (
     src.startsWith('xdt-image://') ||
     src.startsWith('cindy-media://') ||
-    src.startsWith('xdt-remote-media://')
+    src.startsWith('cindy-remote-media://')
   )
     return true;
   if (/^https?:\/\//.test(src)) return true;
@@ -776,7 +776,7 @@ export function ImageLightbox({
   // 定位远端目录(被控端文件本机 Finder 无从 reveal;缓存图在 workdir 外,
   // 文件浏览器根覆盖不到,不提供)。
   const remoteWorkdirRelPath = (() => {
-    if (!currentSrc.startsWith('xdt-remote-media://') || !workingDir) return null;
+    if (!currentSrc.startsWith('cindy-remote-media://') || !workingDir) return null;
     const parsed = parseRemoteMediaUrl(currentSrc);
     const origPath = parsed ? xdtFileUrlToPath(parsed.origUrl) : null;
     return origPath ? toWorkdirRel(workingDir, origPath) : null;

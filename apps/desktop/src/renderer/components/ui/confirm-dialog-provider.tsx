@@ -5,6 +5,8 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 export interface ConfirmOptions {
   title: string;
   description?: string;
+  /** 可选的标题与正文样式；仅调用方显式传入时生效。 */
+  textClassName?: string;
   /** 富内容区(渲染在 description 之后;见 ConfirmDialogProps.content)。 */
   content?: ReactNode;
   /** 弹窗最大宽度(px),缺省 400;见 ConfirmDialogProps.maxWidth。 */
@@ -229,6 +231,7 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
           onOpenChange={handleOpenChange}
           title={currentItem.options.title}
           description={currentItem.options.description}
+          textClassName={currentItem.options.textClassName}
           content={currentItem.options.content}
           maxWidth={currentItem.options.maxWidth}
           confirmText={currentItem.options.confirmText}

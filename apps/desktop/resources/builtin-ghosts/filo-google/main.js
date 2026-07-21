@@ -97,10 +97,10 @@ async function toolAccounts() {
   for (var i = 0; i < list.length; i++) if (list[i].key === 'google_account') entry = list[i];
   if (!entry) return fail('OAuth 凭证槽缺失,请插件作者检查声明');
   if (!entry.clientConfigured) {
-    return fail('内置应用身份缺失——请用户升级 Cindy 后到 设置 → 插件 → Filo Google 重新连接账号');
+    return fail('内置应用身份缺失——请用户升级 Cindy 后到主界面侧边栏「插件」→「Filo Google」详情页重新连接账号');
   }
   if (!entry.accounts.length) {
-    return fail('还没连接任何 Google 账号——请用户到 设置 → 插件 → Filo Google 点「连接账号」完成授权');
+    return fail('还没连接任何 Google 账号——请用户到主界面侧边栏「插件」→「Filo Google」详情页点「连接账号」完成授权');
   }
   return {
     ok: true,
@@ -351,7 +351,7 @@ async function driveMeta(fileId, account, callId) {
 
 async function toolDrive(args, callId) {
   if (args.action === 'list_folder') {
-    var folder = (args.folder_id || 'root').replace(/'/g, "\\'");
+    var folder = (args.folder_id || 'root').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     var inFolder = await api({
       url: DRIVE_BASE + '/files?q=' + encodeURIComponent("'" + folder + "' in parents and trashed=false") +
         '&pageSize=' + clampInt(args.max_results, 25, 50) +
@@ -377,7 +377,7 @@ async function toolDrive(args, callId) {
     } else {
       contentUrl = DRIVE_BASE + '/files/' + encodeURIComponent(args.file_id) + '?alt=media';
     }
-    // 文本直读(主机侧 ≤1MB 截断护栏);二进制响应主机会拒文本形态,提示改走 download。
+    // 文本直读(主机侧 ≤50MB 截断护栏,2026-07-21 放宽);二进制响应主机会拒文本形态,提示改走 download。
     var r = await cindy.fetch({ url: contentUrl, headers: { Accept: '*/*' }, callId: callId, authAccount: args.account || undefined });
     if (!r.ok) {
       return { ok: true, result: { file: driveFileView(meta.data), note: '内容不是文本(' + r.message + ');要拿文件本体请用 action=download' } };
@@ -478,7 +478,7 @@ async function toolDrive(args, callId) {
     // 普通关键词自动包成 name contains;带 Drive 查询语法(= / contains)的原样用。
     var q = /contains|=/.test(args.query)
       ? args.query
-      : "name contains '" + args.query.replace(/'/g, "\\'") + "'";
+      : "name contains '" + args.query.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
     var listed = await api({
       url: DRIVE_BASE + '/files?q=' + encodeURIComponent(q + ' and trashed=false') +
         '&pageSize=' + clampInt(args.max_results, 10, 25) +

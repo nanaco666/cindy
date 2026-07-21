@@ -394,6 +394,8 @@ export interface MobileAutoLoadEarlierDecisionInput {
   atEnd: boolean;
   /** 当前首个渲染项 key(prepend 落地后必变,作为「上次尝试有进展」的信号)。 */
   firstItemKey: string | null;
+  /** 冷开补齐预算尚有余额；只用于未经手势的初始短窗口。 */
+  initialAutoFillAllowed: boolean;
   /** 上一次自动触发时的首项 key;相同说明上次尝试无进展(失败/重复页),不再自动重试。 */
   lastAttemptedFirstItemKey: string | null;
   /** 列表处于近顶预取区(LegendList getState().isNearStart,阈值 = onStartReachedThreshold × 视口)。 */
@@ -417,15 +419,17 @@ export interface MobileAutoLoadEarlierDecisionInput {
  * 并在 scroll 事件、onStartReached、eligibility 变化(加载结束/入口点亮/首项变化)时都重新评估。
  *
  * 防失控:
- * - atEnd 时不触发:贴底跟流的用户(含短会话)不因自动预取被关掉 end-pin;
+ * - 用户浏览态 atEnd 时不触发:贴底跟流不因自动预取被关掉 end-pin；只有冷开有界补齐
+ *   允许短窗口同时 nearStart + atEnd 时拉取；
  * - firstItemKey 去重:一次尝试后必须看到首项变化(真有 prepend)才允许下一次,
  *   加载失败或拉回重复页(host cursor 未命中返回最新页)不会无限重试;用户重新拖动时清除,
  *   保证手势永远能重新驱动一次尝试。
  */
 export function shouldAutoLoadEarlier(input: MobileAutoLoadEarlierDecisionInput): boolean {
-  if (!input.userScrolledForOlder) return false;
+  if (!input.userScrolledForOlder && !input.initialAutoFillAllowed) return false;
   if (!input.actionVisible || input.actionDisabled) return false;
-  if (!input.nearStart || input.atEnd) return false;
+  if (!input.nearStart) return false;
+  if (input.atEnd && !input.initialAutoFillAllowed) return false;
   if (!input.firstItemKey) return false;
   return input.lastAttemptedFirstItemKey !== input.firstItemKey;
 }

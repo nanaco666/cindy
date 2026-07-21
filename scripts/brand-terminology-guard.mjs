@@ -13,6 +13,23 @@ const FORBIDDEN_TERMS = [
   },
 ];
 
+// Agent 工具名会直接显示在工具调用卡片和模型上下文中，也属于产品身份。
+// 字符串拆开书写，避免 guard 把自己的规则定义误判成违规。
+const FORBIDDEN_AGENT_TOOL_IDENTIFIERS = [
+  { term: 'lizi_' + 'xdt_helper', replacement: 'cindy_helper' },
+  { term: 'xdt_' + 'maker', replacement: 'cindy' },
+];
+
+function isAllowedLegacyAgentToolIdentifier(file, line, term) {
+  if (term !== 'xdt_' + 'maker') return false;
+  return (
+    (file === 'packages/maker-core/src/agents/codex/index.ts' &&
+      line.includes('LEGACY_ASK_USER_DYNAMIC_TOOL_NAMESPACE')) ||
+    (file === 'packages/maker-core/src/agents/codex/index.test.ts' &&
+      line.includes("namespace: '" + 'xdt_' + "maker'"))
+  );
+}
+
 const ALLOWED_LEGACY_OCCURRENCES = new Set([
   [
     'apps/desktop/drizzle/0025_reclassify_codex_projectless_dialogues.sql',
@@ -77,6 +94,7 @@ const files = listed.stdout
   .filter(Boolean);
 
 const violations = [];
+const agentToolIdentifierViolations = [];
 const localeViolations = [];
 
 for (const file of files) {
@@ -100,6 +118,30 @@ for (const file of files) {
   const lines = text.split(/\r?\n/);
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
+    // project-knowledge 是 pctx 自动生成快照，不手改；它可能暂时引用历史名称。
+    if (!file.startsWith('.cindy/project-knowledge/')) {
+      for (const { term, replacement } of FORBIDDEN_AGENT_TOOL_IDENTIFIERS) {
+        if (!line.includes(term)) continue;
+        if (isAllowedLegacyAgentToolIdentifier(file, line, term)) continue;
+        agentToolIdentifierViolations.push({
+          file,
+          line: index + 1,
+          term,
+          replacement,
+        });
+      }
+      if (
+        file.startsWith('packages/lizi-mcps/src/') &&
+        (/category\s*:\s*['"]xdt['"]/.test(line) || line.includes('category=xdt'))
+      ) {
+        agentToolIdentifierViolations.push({
+          file,
+          line: index + 1,
+          term: 'xdt helper category',
+          replacement: 'cindy helper category',
+        });
+      }
+    }
     for (const { term, replacement } of FORBIDDEN_TERMS) {
       let searchFrom = 0;
       while (searchFrom < line.length) {
@@ -120,6 +162,15 @@ for (const file of files) {
       }
     }
   }
+}
+
+if (agentToolIdentifierViolations.length > 0) {
+  console.error('❌ [brand-terminology-guard] deprecated agent tool identifiers found');
+  for (const hit of agentToolIdentifierViolations) {
+    console.error(`  ${hit.file}:${hit.line} uses "${hit.term}" → use "${hit.replacement}"`);
+  }
+  console.error('\nOnly the explicit Codex resume compatibility path may retain the legacy namespace.');
+  process.exit(1);
 }
 
 if (violations.length > 0) {

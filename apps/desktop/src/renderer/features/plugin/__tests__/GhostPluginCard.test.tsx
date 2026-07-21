@@ -16,6 +16,11 @@ vi.mock('@/components/ui/tooltip', () => ({
     <span data-tooltip={text}>{children}</span>
   ),
 }));
+// GhostPluginPage 顶层引用 useAuth(团队共享分组按 membership 门控);卡片
+// 测试不涉及登录态,mock 掉以免拉起 AuthContext 的真实 i18n/store 依赖链。
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({ user: null }),
+}));
 
 import {
   GhostPluginCard,

@@ -74,6 +74,7 @@ export function OrcaWorkerPanel({
   } = useOrcaWorkerSelection({
     leadSessionId,
     deviceId,
+    viewVisible,
     focusWorkerSessionId,
     focusWorkerHintRevision,
     searchJump,

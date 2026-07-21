@@ -23,9 +23,8 @@ const mocks = vi.hoisted(() => ({
   getMaker: vi.fn(),
   closeSession: vi.fn(async () => {}),
   getDesktopCcPrefs: vi.fn<() => DesktopCcPrefs | null>(() => null),
-  applyRuntimeSetModelChange: vi.fn<
-    (input: unknown) => Promise<{ status: 'applied' | 'deferred' }>
-  >(),
+  applyRuntimeSetModelChange:
+    vi.fn<(input: unknown) => Promise<{ status: 'applied' | 'deferred' }>>(),
   registerPendingCredentialSwitchForSession: vi.fn(),
   clearPendingCredentialSwitchForSession: vi.fn(),
   wakeSessionInputAfterCredentialSwitch: vi.fn(),
@@ -102,6 +101,12 @@ import { ui as slackUi } from './threadUiFixture';
 import { readSessionTitle } from '../controlProjects';
 import { createCardActionHandler } from '../cardActionHandler';
 import { resolvePending } from '../pendingInteractions';
+import {
+  activateImAccountBoundary,
+  captureImAccountGeneration,
+  deactivateImAccountBoundary,
+  waitForImAccountGenerationIdle,
+} from '../../accountBoundary';
 import type { ImCardBuilders } from '../cardBuilders';
 import type { ImChannelAdapter } from '../types';
 import type { ImTurnRunner } from '../turnRunner';
@@ -117,6 +122,14 @@ function makeIm() {
     onCardAction: vi.fn(),
   };
   return im as unknown as ChannelIM & typeof im;
+}
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
 }
 
 const cards = {
@@ -179,6 +192,7 @@ async function pressSessionPick(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  activateImAccountBoundary();
   (resolvePending as ReturnType<typeof vi.fn>).mockReturnValue(false);
   mocks.generateTakeoverSummary.mockResolvedValue('brief');
   mocks.bindingAttach.mockResolvedValue(undefined);
@@ -224,6 +238,45 @@ describe('plan_review IM 卡片决策', () => {
       'plan-card',
       expect.objectContaining({ body: slackUi.cards.plan.resolvedRejected }),
     );
+  });
+
+  it('keeps the complete async card callback inside the closing account scope', async () => {
+    const updateGate = deferred();
+    const im = makeIm();
+    im.updateInteractiveCard.mockImplementationOnce(async () => updateGate.promise);
+    const attach = createCardActionHandler(adapter, cards, turnRunner);
+    let handler: ((e: IMCardActionEvent) => Promise<void>) | null = null;
+    (im.onCardAction as ReturnType<typeof vi.fn>).mockImplementation((cb) => {
+      handler = cb;
+      return () => {};
+    });
+    (resolvePending as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    attach(im)();
+    const accountGeneration = captureImAccountGeneration();
+    expect(accountGeneration).not.toBeNull();
+
+    const handling = registeredHandler(handler)({
+      channelName: 'slack',
+      chatId: 'C_PLAN',
+      messageId: 'plan-card',
+      senderId: 'U_REJECT',
+      buttonId: 'plan:reject',
+      payload: { requestId: 'plan-request-drain' },
+    } as IMCardActionEvent);
+    await vi.waitFor(() => expect(im.updateInteractiveCard).toHaveBeenCalledOnce());
+    deactivateImAccountBoundary();
+
+    let drained = false;
+    const draining = waitForImAccountGenerationIdle(accountGeneration!).then(() => {
+      drained = true;
+    });
+    await Promise.resolve();
+    expect(drained).toBe(false);
+
+    updateGate.resolve();
+    await handling;
+    await draining;
+    expect(drained).toBe(true);
   });
 });
 
@@ -287,10 +340,7 @@ describe('control:session-pick 重复接管替换', () => {
       }),
     );
     // 旧锚点不该被收口(接管还在)
-    expect(im.updateInteractiveCard).not.toHaveBeenCalledWith(
-      'anchor-old',
-      expect.anything(),
-    );
+    expect(im.updateInteractiveCard).not.toHaveBeenCalledWith('anchor-old', expect.anything());
   });
 
   it('跨渠道旧 binding(feishu)→ detach 但不 patch 旧卡(本 im 实例 patch 不动)', async () => {
@@ -305,10 +355,7 @@ describe('control:session-pick 重复接管替换', () => {
     await pressSessionPick(im);
 
     expect(mocks.executeDetach).toHaveBeenCalled();
-    expect(im.updateInteractiveCard).not.toHaveBeenCalledWith(
-      'om_feishu_card',
-      expect.anything(),
-    );
+    expect(im.updateInteractiveCard).not.toHaveBeenCalledWith('om_feishu_card', expect.anything());
     expect(mocks.bindingAttach).toHaveBeenCalled();
   });
 
@@ -351,12 +398,9 @@ describe('control:start 按钮(免打字重新发起远程控制)', () => {
       expect.objectContaining({ title: slackThreadUi().controlAnchorCard.title }),
     );
     // 第二发: 工作区选择卡进锚点 thread(threadTs = 锚点 ts)
-    expect(im.sendInteractiveCard).toHaveBeenNthCalledWith(
-      2,
-      'U_NEW',
-      expect.anything(),
-      { threadTs: 'm-card' },
-    );
+    expect(im.sendInteractiveCard).toHaveBeenNthCalledWith(2, 'U_NEW', expect.anything(), {
+      threadTs: 'm-card',
+    });
     // 原卡(收口卡/欢迎卡)不收口 — 按钮常驻
     expect(im.updateInteractiveCard).not.toHaveBeenCalled();
   });
@@ -418,16 +462,18 @@ describe('model:pick 持久化失败', () => {
 
     await pressModelPick(im);
 
-    expect(mocks.applyRuntimeSetModelChange).toHaveBeenCalledWith(expect.objectContaining({
-      registerPendingCredentialSwitch: mocks.registerPendingCredentialSwitchForSession,
-      clearPendingCredentialSwitch: mocks.clearPendingCredentialSwitchForSession,
-      wakeSessionInputQueue: mocks.wakeSessionInputAfterCredentialSwitch,
-      getPendingCredentialSwitch: mocks.getPendingCredentialSwitchTarget,
-    }));
-    expect(mocks.registerPendingCredentialSwitchForSession).toHaveBeenCalledWith(
-      'sess-target',
-      { model: 'claude-opus-4-7', providerId: 'anthropic' },
+    expect(mocks.applyRuntimeSetModelChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        registerPendingCredentialSwitch: mocks.registerPendingCredentialSwitchForSession,
+        clearPendingCredentialSwitch: mocks.clearPendingCredentialSwitchForSession,
+        wakeSessionInputQueue: mocks.wakeSessionInputAfterCredentialSwitch,
+        getPendingCredentialSwitch: mocks.getPendingCredentialSwitchTarget,
+      }),
     );
+    expect(mocks.registerPendingCredentialSwitchForSession).toHaveBeenCalledWith('sess-target', {
+      model: 'claude-opus-4-7',
+      providerId: 'anthropic',
+    });
     expect(live.setEffort).not.toHaveBeenCalled();
     expect(im.updateInteractiveCard).toHaveBeenCalledWith(
       'model-card',

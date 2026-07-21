@@ -34,8 +34,9 @@ vi.mock('@/lib/httpClient', () => ({
   ApiError: class ApiError extends Error {
     code: string;
 
-    constructor(code = 'UNKNOWN') {
-      super(code);
+    constructor(code = 'UNKNOWN', status = 0, message = code) {
+      super(message);
+      void status;
       this.code = code;
     }
   },
@@ -71,6 +72,7 @@ vi.mock('@/features/device-link/refreshRemoteSessions', () => ({
 
 import { useForkAtMessage } from '../components/chat/useForkAtMessage';
 import { SessionNavigationModeProvider } from '../features/cc-agent/embeddedSessionNavigation';
+import { ApiError } from '@/lib/httpClient';
 
 describe('useForkAtMessage', () => {
   beforeEach(() => {
@@ -183,6 +185,25 @@ describe('useForkAtMessage', () => {
     });
 
     expect(forkAtMessage).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('shows the Codex state diagnostic when fork preparation fails', async () => {
+    forkAtMessage.mockRejectedValueOnce(
+      new ApiError('CODEX_FORK_STATE_UNAVAILABLE', 0, 'rollout missing'),
+    );
+    const { result } = renderHook(() =>
+      useForkAtMessage({
+        sessionId: 'source-session',
+        messageClientId: 'message-1',
+      }),
+    );
+
+    await act(async () => {
+      await expect(result.current()).rejects.toThrow('rollout missing');
+    });
+
+    expect(toastError).toHaveBeenCalledWith('chat.userMessage.forkErrors.codexStateUnavailable');
     expect(navigate).not.toHaveBeenCalled();
   });
 });

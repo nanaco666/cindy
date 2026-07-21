@@ -33,5 +33,20 @@ describe('mobile message list container', () => {
     // 自动预取必须是电平判定(shouldAutoLoadEarlier + 多时机重评估),不许退回只吃 onStartReached
     // 边沿——边沿被业务 guard 吞掉后条件再就绪也等不到下一个边沿(顶部停留永不加载的回归)。
     expect(source).toContain('shouldAutoLoadEarlier({');
+    // 冷开允许有限补页,把短初窗上方历史自动补齐；预算耗尽或首项无进展即停止。
+    expect(source).toContain('MAX_INITIAL_HISTORY_AUTOFILL_PAGES');
+    expect(source).toContain('initialHistoryAutofillRemainingRef.current -= 1');
+    // 所有 prepend 在请求期间抑制贴底，成功/空页/失败后延迟一帧释放；generation
+    // 防止旧会话请求 settle 后误清新会话 / 新请求状态。
+    expect(source).toContain('onLoadEarlier?: () => void | Promise<void>');
+    expect(source).toContain('readingOlderRef.current = true');
+    expect(source).toContain('Promise.resolve(result).then(releaseReadingOlder, releaseReadingOlder)');
+    expect(source).toContain('readingOlderRequestGenerationRef.current === generation');
+    // 深链 / 搜索定位本身就是明确的历史浏览意图,后续近顶自动补页无需再拖一下。
+    const focusEffectStart = source.indexOf('// 深链/搜索:滚到指定消息');
+    const focusEffectEnd = source.indexOf('// 新消息红点', focusEffectStart);
+    const focusEffectSource = source.slice(focusEffectStart, focusEffectEnd);
+    expect(focusEffectSource).toContain('userScrollForOlderRef.current = true');
+    expect(focusEffectSource).toContain('lastAutoLoadEarlierKeyRef.current = null');
   });
 });

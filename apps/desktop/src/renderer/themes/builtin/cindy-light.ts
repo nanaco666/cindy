@@ -105,8 +105,10 @@ const overrides = {
   'titlebar-icon': '222.0 4.6% 42.7%', // AA icon
   'tooltip-bg': '#3C3F43', // tooltip 深底
   'tooltip-text': '#FFFFFF', // tooltip 白字
-  'update-btn-border': '#3C3F43', // E1D 中性边(不再红边)
-  'update-btn-text': '#FCFCFC', // E1D 中性字(不再红字)
+  'update-btn-border': '#3C3F43', // E1D 中性底(实心胶囊,与 bg 同色)
+  'update-btn-bg': '#3C3F43', // E1D §15.10 反相中性:light 深底,承载浅字
+  'update-btn-text': '#FCFCFC', // E1D 中性字(#FCFCFC on #3C3F43 = 10.32:1)
+  'update-btn-hover': '#2E3237', // E1D §15.10 四态 hover(实心,非 alpha 叠加)
   'accent-foreground': '214.3 5.5% 24.9%', // 裁决: accent 成对中性前景
   'panel-bg': '#EDEDED', // 依赖 D1: 注册后直映背景
   primary: '214.3 5.5% 24.9%', // E1D C 类裁决 3:反相中性 HSL

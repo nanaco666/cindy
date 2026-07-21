@@ -1224,6 +1224,7 @@ function handleContextCompaction(
   queue.push({
     type: 'compact_boundary',
     data: {
+      boundaryId: item.id,
       trigger: 'auto',
       preTokens: 0,
       postTokens: 0,

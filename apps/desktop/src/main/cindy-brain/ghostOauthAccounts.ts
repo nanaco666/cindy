@@ -8,6 +8,13 @@
  * - invalid_grant 时把账号标记 expired(设置页展示"需重新连接"),
  *   凭证注入路径拿到结构化 AUTH_EXPIRED,不再无谓重试。
  *
+ * 多实例共库纪律(2026-07-21):dev / packaged 可共用同一 userData 保险库,
+ * 轮换型服务商(飞书 / Atlassian / Slack)的 refresh token 一次一换——两个
+ * 进程拿同一枚旧 RT 各自去刷,输家必吃 invalid_grant。因此 invalid_grant
+ * **不能直接判死**:先重读保险库(必要时短暂等待赢家落库)确认 RT 是否已被
+ * 其它实例轮换,轮换了就用新 RT 重试;确认库里仍是自己用过的这枚才标
+ * expired,删除也走 compare-and-delete,绝不误删并发写入的新 RT。
+ *
  * 保险库键名纪律:同一凭证槽的派生键统一走 `<secretKey>-<后缀>` 形态——
  * ghost.json 的 secret key 字符集是 [a-z0-9_](见 shared/ghost.ts 校验),
  * 不含连字符,派生键与任何已声明凭证键在结构上不可能撞名;连字符同时是
@@ -41,6 +48,13 @@ import { isOfficialGhostId, type GhostSecretOauthDecl } from '../../shared/ghost
 
 /** 每个 oauth 凭证槽最多可连账号数(防清单无限膨胀;超出连接被拒)。 */
 export const GHOST_OAUTH_MAX_ACCOUNTS = 8;
+
+/**
+ * invalid_grant 后延迟二次重读保险库的等待时长:并发实例撞轮换时,输家的
+ * 失败响应可能先于赢家的成功落库到达,立即重读会误判"未轮换"。这段等待
+ * 只发生在 invalid_grant 路径上(该路径本来就以重新授权收尾),不拖累热路径。
+ */
+export const GHOST_OAUTH_INVALID_GRANT_RECHECK_DELAY_MS = 2000;
 
 /* ------------------------------------------------------------------------ */
 /* 契约类型                                                                  */
@@ -106,6 +120,8 @@ export interface GhostOauthAccountManagerDeps {
    * 且拉取成功才有)。抛错不许影响连接结果,实现侧自兜。
    */
   onAccountConnected?: (info: { ghostId: string; secretKey: string; label: string | null }) => void;
+  /** 延时器(仅 invalid_grant 轮换探测用;测试注入即时假体,生产缺省 setTimeout)。 */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export type GhostOauthConnectResult =
@@ -635,47 +651,101 @@ export class GhostOauthAccountManager {
   ): Promise<GhostOauthAccessTokenResult> {
     const config = this.readClientConfig(ghostId, secretKey, decl);
     if (!config) return { ok: false, error: 'NO_CLIENT_CONFIG' };
-    const refreshToken = this.deps.vault.read(ghostId, refreshTokenKey(secretKey, accountId));
+    let refreshToken = this.deps.vault.read(ghostId, refreshTokenKey(secretKey, accountId));
     if (!refreshToken) {
       // 无 rt 且缓存已失效:只能重新授权。
       this.markExpired(ghostId, secretKey, accountId);
       return { ok: false, error: 'AUTH_EXPIRED' };
     }
 
-    const result = await refreshGhostOauthToken({
-      config,
-      refreshToken,
-      fetchImpl: this.deps.fetchImpl,
-      broker: this.deps.broker,
-      logger: this.deps.logger,
-    });
-    if (!result.ok) {
+    // 最多两轮:第一轮 invalid_grant 先怀疑"RT 已被其它共库实例轮换"(文件头
+    // 多实例共库纪律),探测到新 RT 就换它重试一轮;第二轮仍 invalid_grant
+    // 才判真失效。
+    for (let attempt = 0; ; attempt += 1) {
+      const result = await refreshGhostOauthToken({
+        config,
+        refreshToken,
+        fetchImpl: this.deps.fetchImpl,
+        broker: this.deps.broker,
+        logger: this.deps.logger,
+      });
+      if (result.ok) {
+        // 轮换型服务商:新 rt 覆盖落库(丢了下一次刷新必 invalid_grant)。
+        // 写失败无法当场补救(新 RT 只在内存),但必须大声留痕:重启后旧 RT
+        // 已被服务商作废,下一次刷新注定 invalid_grant → 重新授权。
+        if (result.bundle.refreshToken !== null && result.bundle.refreshToken !== refreshToken) {
+          if (
+            !this.deps.vault.store(ghostId, refreshTokenKey(secretKey, accountId), result.bundle.refreshToken)
+          ) {
+            this.deps.logger?.warn(
+              'ghost oauth 轮换后的新 refresh token 落库失败——新令牌仅存内存,重启后需要重新授权',
+              { ghostId, secretKey, accountId },
+            );
+          }
+        }
+        this.tokenCache.set(cacheKey, {
+          accessToken: result.bundle.accessToken,
+          expiresAt: result.bundle.expiresAt,
+        });
+        // 曾标 expired 的账号刷新成功即复活(用户在别处重授权后 rt 又有效的边角)。
+        this.markConnected(ghostId, secretKey, accountId);
+        // 展示名/头像回填(fire-and-forget,不拖累令牌热路径):displayTemplate /
+        // avatarPath 上线前连的老账号缺这些,借下一次令牌刷新顺路补上,无需重连。
+        void this.backfillIdentityExtras(ghostId, secretKey, decl, accountId, result.bundle.accessToken);
+        return { ok: true, accessToken: result.bundle.accessToken, accountId };
+      }
+
       if (result.error === 'NETWORK') {
         return { ok: false, error: 'NETWORK', detail: result.detail };
       }
-      if (result.invalidGrant) {
-        this.markExpired(ghostId, secretKey, accountId);
-        this.deps.vault.remove(ghostId, refreshTokenKey(secretKey, accountId));
-        this.tokenCache.delete(cacheKey);
-        return { ok: false, error: 'AUTH_EXPIRED', detail: result.detail };
+      if (!result.invalidGrant) {
+        return { ok: false, error: 'REFRESH_FAILED', detail: result.detail };
       }
-      return { ok: false, error: 'REFRESH_FAILED', detail: result.detail };
-    }
 
-    // 轮换型服务商:新 rt 覆盖落库(丢了下一次刷新必 invalid_grant)。
-    if (result.bundle.refreshToken !== null && result.bundle.refreshToken !== refreshToken) {
-      this.deps.vault.store(ghostId, refreshTokenKey(secretKey, accountId), result.bundle.refreshToken);
+      if (attempt === 0) {
+        const rotated = await this.readRotatedRefreshToken(ghostId, secretKey, accountId, refreshToken);
+        if (rotated !== null) {
+          this.deps.logger?.info(
+            'ghost oauth invalid_grant 后检测到 refresh token 已被其它实例轮换,用新令牌重试',
+            { ghostId, secretKey, accountId },
+          );
+          refreshToken = rotated;
+          continue;
+        }
+      }
+
+      // 真失效:标 expired 引导重新授权。删除走 compare-and-delete——只删
+      // 仍等于自己最后用过的这枚;若期间有并发实例写入了更新的 RT,留给它。
+      this.markExpired(ghostId, secretKey, accountId);
+      const current = this.deps.vault.read(ghostId, refreshTokenKey(secretKey, accountId));
+      if (current === refreshToken) {
+        this.deps.vault.remove(ghostId, refreshTokenKey(secretKey, accountId));
+      }
+      this.tokenCache.delete(cacheKey);
+      return { ok: false, error: 'AUTH_EXPIRED', detail: result.detail };
     }
-    this.tokenCache.set(cacheKey, {
-      accessToken: result.bundle.accessToken,
-      expiresAt: result.bundle.expiresAt,
-    });
-    // 曾标 expired 的账号刷新成功即复活(用户在别处重授权后 rt 又有效的边角)。
-    this.markConnected(ghostId, secretKey, accountId);
-    // 展示名/头像回填(fire-and-forget,不拖累令牌热路径):displayTemplate /
-    // avatarPath 上线前连的老账号缺这些,借下一次令牌刷新顺路补上,无需重连。
-    void this.backfillIdentityExtras(ghostId, secretKey, decl, accountId, result.bundle.accessToken);
-    return { ok: true, accessToken: result.bundle.accessToken, accountId };
+  }
+
+  /**
+   * invalid_grant 后的轮换探测:立即重读保险库;仍是自己用过的那枚时短暂等待
+   * (并发赢家的成功响应可能还在落库路上)再读一次。返回已轮换的新 RT,或
+   * null(确认未轮换,invalid_grant 是真失效)。
+   */
+  private async readRotatedRefreshToken(
+    ghostId: string,
+    secretKey: string,
+    accountId: string,
+    usedRefreshToken: string,
+  ): Promise<string | null> {
+    const key = refreshTokenKey(secretKey, accountId);
+    const immediate = this.deps.vault.read(ghostId, key);
+    if (immediate !== null && immediate !== usedRefreshToken) return immediate;
+    const sleep =
+      this.deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+    await sleep(GHOST_OAUTH_INVALID_GRANT_RECHECK_DELAY_MS);
+    const delayed = this.deps.vault.read(ghostId, key);
+    if (delayed !== null && delayed !== usedRefreshToken) return delayed;
+    return null;
   }
 
   /**

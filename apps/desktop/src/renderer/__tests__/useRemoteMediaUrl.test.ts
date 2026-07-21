@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * useRemoteMediaUrl.test.ts — 远程会话媒体 URL 改写 hook 契约。
- * 远程会话(context origin = device)→ 媒体 URL 改写到 xdt-remote-media://;
+ * 远程会话(context origin = device)→ 媒体 URL 改写到 cindy-remote-media://;
  * 本地会话 / 非媒体 URL / provider 之外 → 原样。
  *
  * deviceId 订阅已收敛到 ChatSessionFileContext 的 provider(MessageStream 顶层),
@@ -53,12 +53,12 @@ function SshProvider({ children }: { children: ReactNode }) {
 }
 
 describe('useRemoteMediaUrl', () => {
-  it('远程会话 + 媒体 URL → 改写到 xdt-remote-media://', () => {
+  it('远程会话 + 媒体 URL → 改写到 cindy-remote-media://', () => {
     getSessionDeviceId.mockReturnValue('dev-1');
     const { result } = renderHook(() => useRemoteMediaUrl('xdt-image://s/a.png', 'sess-1'), {
       wrapper: Provider,
     });
-    expect(result.current.startsWith('xdt-remote-media://')).toBe(true);
+    expect(result.current.startsWith('cindy-remote-media://')).toBe(true);
     expect(getSessionDeviceId).toHaveBeenCalledWith('sess-1');
   });
 
@@ -98,7 +98,7 @@ describe('useRemoteMediaUrl', () => {
     const { result: fileRes } = renderHook(() => useRemoteMediaUrl(fileUrl, 'sess-1'), {
       wrapper: SshProvider,
     });
-    expect(fileRes.current.startsWith('xdt-remote-media://')).toBe(true);
+    expect(fileRes.current.startsWith('cindy-remote-media://')).toBe(true);
 
     const { result: imgRes } = renderHook(
       () => useRemoteMediaUrl('xdt-image://s/a.png', 'sess-1'),
@@ -120,6 +120,6 @@ describe('useRemoteMediaUrl', () => {
       getSessionDeviceId.mockReturnValue('dev-1');
       storeListener?.();
     });
-    expect(result.current.startsWith('xdt-remote-media://')).toBe(true);
+    expect(result.current.startsWith('cindy-remote-media://')).toBe(true);
   });
 });

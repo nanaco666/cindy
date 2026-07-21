@@ -356,7 +356,7 @@ describe('networkSlot · 响应收敛', () => {
   });
 
   it('流式响应按硬顶截断并取消流,不整体缓冲(防恶意白名单服务器 OOM 主进程)', async () => {
-    // 模拟一个"吐不完"的流:每 chunk 64KB,远超 1MB 上限;记录 cancel 是否被调。
+    // 模拟一个"吐不完"的流:每 chunk 64KB,远超响应上限;记录 cancel 是否被调。
     let cancelled = false;
     const chunk = new Uint8Array(64 * 1024).fill(97); // 'a'
     const stream = new ReadableStream<Uint8Array>({
@@ -385,6 +385,61 @@ describe('networkSlot · 响应收敛', () => {
       expect(r.body.length).toBe(GHOST_FETCH_RESPONSE_MAX_BYTES);
     }
     expect(cancelled).toBe(true);
+  });
+
+  it('大文本闸:>1MB 文本读体需占全局闸,闸被占时结构化拒绝并断流;小文本不受影响;释放后可再读', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    // >1MB 的文本流(2MB 单 chunk),每次调用新建流;小请求返回缺省小 JSON。
+    // 断流(reader.cancel)语义由上面的无限流测试覆盖,这里只验闸行为。
+    const bigTextResponse = () => {
+      let sent = false;
+      return {
+        status: 200,
+        headers: new Headers({ 'content-type': 'text/plain' }),
+        body: new ReadableStream<Uint8Array>({
+          pull(controller) {
+            if (sent) {
+              controller.close();
+              return;
+            }
+            sent = true;
+            controller.enqueue(new Uint8Array(2 * 1024 * 1024).fill(97));
+          },
+        }),
+      } as unknown as Response;
+    };
+    const { slot } = makeSlot({
+      fetchImpl: (async (url: string) => {
+        if (String(url).includes('/big')) return bigTextResponse();
+        if (String(url).includes('brave')) {
+          return fakeResponse({ headers: { 'content-type': 'image/png' }, body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer });
+        }
+        return fakeResponse();
+      }) as unknown as NetworkSlotDeps['fetchImpl'],
+      saveGhostMedia: (async () => {
+        await gate;
+        return { url: 'cindy-media://blobs/abc.png', hash: 'a'.repeat(64), ext: '.png' };
+      }) as unknown as NetworkSlotDeps['saveGhostMedia'],
+    });
+    // 媒体单占住全局闸(卡在落仓)。
+    const media = slot.handleFetchRequest('web-search', { url: BRAVE_URL, as: 'media' });
+    await new Promise((r) => setTimeout(r, 0));
+    // 大文本:过门槛要闸,闸被占 → 结构化拒绝。
+    const bigBusy = await slot.handleFetchRequest('web-search', { url: 'https://api.tavily.com/big' });
+    expect(bigBusy.ok).toBe(false);
+    if (!bigBusy.ok) expect(bigBusy.message).toContain('正忙');
+    // 小文本(≤1MB)不碰闸:闸被占也照常成功。
+    const small = await slot.handleFetchRequest('web-search', { url: 'https://api.tavily.com/small' });
+    expect(small.ok && 'body' in small).toBe(true);
+    // 闸释放后大文本可读,读完闸随请求结束释放,可连续再读。
+    release();
+    expect((await media).ok).toBe(true);
+    for (let i = 0; i < 2; i++) {
+      const bigOk = await slot.handleFetchRequest('web-search', { url: 'https://api.tavily.com/big' });
+      expect(bigOk.ok && 'body' in bigOk).toBe(true);
+      if (bigOk.ok && 'body' in bigOk) expect(bigOk.body.length).toBe(2 * 1024 * 1024);
+    }
   });
 
   it('fetch 抛错折叠为结构化失败,不异常穿透', async () => {

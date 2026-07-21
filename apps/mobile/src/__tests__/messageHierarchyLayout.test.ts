@@ -21,10 +21,6 @@ describe('messageHierarchyLayout', () => {
       todoRowGap: 6,
       todoRowMinHeight: 40,
       todoSummaryInset: 26,
-      toolRowGap: 6,
-      toolRowHeaderMinHeight: 30,
-      toolRowPadding: 8,
-      toolRowPaddingTop: 8,
     });
   });
 
@@ -36,7 +32,6 @@ describe('messageHierarchyLayout', () => {
       compact: false,
       foldHeaderMinHeight: 46,
       todoRowMinHeight: 44,
-      toolRowHeaderMinHeight: 34,
     });
   });
 
@@ -47,7 +42,6 @@ describe('messageHierarchyLayout', () => {
     });
 
     expect(layout.compact).toBe(true);
-    expect(layout.toolRowHeaderMinHeight).toBe(30);
     expect('toolSignalGap' in layout).toBe(false);
     expect('badgeGap' in layout).toBe(false);
   });

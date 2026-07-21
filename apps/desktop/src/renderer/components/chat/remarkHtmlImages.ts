@@ -65,7 +65,7 @@ function isSafeHtmlImageSrc(src: string): boolean {
     src.startsWith('xdt-image://') ||
     src.startsWith('cindy-media://') ||
     src.startsWith('xdt-file://') ||
-    src.startsWith('xdt-remote-media://')
+    src.startsWith('cindy-remote-media://')
   );
 }
 

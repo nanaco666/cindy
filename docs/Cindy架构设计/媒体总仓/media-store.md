@@ -63,7 +63,7 @@ schema 变更走规则 17(`pnpm db:generate`,禁手写 migration);migration 回�
 | `cindy-media://` | **新增**,新世界唯一取件窗口;地址即指纹(`cindy-media://blobs/<指纹>.<ext>`),永久稳定;渲染端按后缀分流 img/video/audio/model |
 | `cindy-ghost://` | 保留;新增 `cindy-ghost://<意识id>/media/<指纹>` 供图分支:沙箱协议接待员查账本验归属(指纹只当查账钥匙,不拼路径;归属不符即拒;解析出的路径必须落在 blobs 内双保险) |
 | `xdt-image` / `xdt-video` / `xdt-model` | 永久保留、只读,服务 `cc-agent/` 老地址 |
-| `xdt-audio` / `xdt-file` / `xdt-remote-media` | 本次不动(直读磁盘/远程隧道通道,非仓库) |
+| `xdt-audio` / `xdt-file` / `cindy-remote-media` | 本次不动(直读磁盘/远程隧道通道,非仓库) |
 
 安全模型与 runtime-sandbox.md 结构隔离一致:插件永远只摸字符串;主机不信任插件任何输入(指纹=查账钥匙、身份=webContents 房间号、图片=按 mime 只当图片解码);全防线失守也只炸在断网无权限沙箱内(熔断已真机验证)。
 

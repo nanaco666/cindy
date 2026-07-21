@@ -35,7 +35,7 @@ export function TemplateCard({ template, selected = false, onSelect }: TemplateC
       aria-pressed={selected}
       className={cn(
         'flex min-h-[136px] w-full flex-col items-start gap-2 rounded-xl border p-4 text-left',
-        'bg-[var(--cmd-palette-bg)] transition-colors duration-150 hover:cursor-pointer hover:bg-[var(--update-btn-hover)]',
+        'bg-[var(--cmd-palette-bg)] transition-colors duration-150 hover:cursor-pointer hover:bg-[var(--surface-hover)]',
         selected
           ? 'border-[1.5px] border-[var(--settings-theme-preview-border-active)]'
           : 'border-[var(--cmd-palette-border)]',

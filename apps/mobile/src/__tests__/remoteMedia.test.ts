@@ -19,7 +19,7 @@ describe('mobile remote media', () => {
 
   it('resolves desktop media through device-link fetch plus server presign-get', async () => {
     const fetchRemoteMedia = vi.fn(async () => ({
-      ossKey: 'xdt-maker/device-link/user-1/a.png',
+      ossKey: 'cindy/device-link/user-1/a.png',
       mimeType: 'image/png',
       size: 2048,
     }));
@@ -33,14 +33,14 @@ describe('mobile remote media', () => {
       url: 'xdt-image://cache/a.png',
     }, { fetchRemoteMedia, presignGet })).resolves.toEqual({
       url: 'https://oss.example/a.png?signature=1',
-      ossKey: 'xdt-maker/device-link/user-1/a.png',
+      ossKey: 'cindy/device-link/user-1/a.png',
       mimeType: 'image/png',
       size: 2048,
       expiresAt: '2026-06-16T10:05:00.000Z',
       previewable: true,
     });
     expect(fetchRemoteMedia).toHaveBeenCalledWith('xdt-image://cache/a.png', undefined);
-    expect(presignGet).toHaveBeenCalledWith('xdt-maker/device-link/user-1/a.png');
+    expect(presignGet).toHaveBeenCalledWith('cindy/device-link/user-1/a.png');
   });
 
   it('returns inline thumbnail bytes as a data uri without touching presign', async () => {
@@ -69,7 +69,7 @@ describe('mobile remote media', () => {
 
   it('falls back to the presign path when an old desktop ignores the thumbnail flag', async () => {
     const fetchRemoteMedia = vi.fn(async () => ({
-      ossKey: 'xdt-maker/device-link/user-1/a.png',
+      ossKey: 'cindy/device-link/user-1/a.png',
       mimeType: 'image/png',
       size: 2048,
     }));
@@ -83,9 +83,9 @@ describe('mobile remote media', () => {
       url: 'xdt-image://cache/a.png',
     }, { fetchRemoteMedia, presignGet }, { thumbnail: true })).resolves.toMatchObject({
       url: 'https://oss.example/a.png?signature=1',
-      ossKey: 'xdt-maker/device-link/user-1/a.png',
+      ossKey: 'cindy/device-link/user-1/a.png',
     });
-    expect(presignGet).toHaveBeenCalledWith('xdt-maker/device-link/user-1/a.png');
+    expect(presignGet).toHaveBeenCalledWith('cindy/device-link/user-1/a.png');
   });
 
   it('marks resolved image, video, and audio media as mobile-previewable by MIME type', () => {

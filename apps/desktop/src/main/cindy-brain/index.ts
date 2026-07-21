@@ -53,6 +53,7 @@ import {
 } from './runtime/electronSandboxAdapter.js';
 import { CURRENT_CINDY_REGION } from '../../shared/brandRegion.js';
 import { createGhostKvStore, removeGhostKvBestEffort } from './ghostKvStore.js';
+import { handleGhostSetupStatusRequest } from './ghostSetupStatus.js';
 import { handleGhostSecretsRequest } from './runtime/ghostSecretsEndpoint.js';
 import { handleGhostOauthRequest } from './runtime/ghostOauthEndpoint.js';
 import { handleGhostConnectionsRequest } from './runtime/ghostConnectionsEndpoint.js';
@@ -65,10 +66,7 @@ import {
   migrateFiloGoogleAccounts,
   type LegacyGoogleAccountRow,
 } from './googleAccountsMigration.js';
-import {
-  migrateLegacyBundledFiloGoogleClientConfig,
-  withFiloGoogleBuildClientConfig,
-} from './filoGoogleClientConfig.js';
+import { withFiloGoogleBuildClientConfig } from './filoGoogleClientConfig.js';
 import {
   LEGACY_JIRA_CONNECTION_FILE,
   LEGACY_JIRA_RT_FILE,
@@ -116,6 +114,7 @@ import {
 } from './subscriptionGateway.js';
 import { GhostExternalLinkGate, GhostPreviewGate, resolveGhostPanelMedia } from './previewGate.js';
 import {
+  ghostSecretSaved,
   readGhostSecret,
   readGhostSecretTail,
   removeGhostSecret,
@@ -164,6 +163,8 @@ import { eq } from 'drizzle-orm';
  *   与 layout:get 同模式。目录扫描极小,同步读不卡启动。
  * - install (invoke):装入本地 .cindy 文件;失败按分类 throwIpcError。
  * - uninstall (invoke):按 id 卸下。
+ * - setup-status (invoke):按 id 判定配置就绪度(插件页「使用」前置门,
+ *   判定真身 ghostSetupStatus.ts;未装 NOT_FOUND)。
  * - changed (main → renderer 广播):全量已装清单,多窗口热更新。
  */
 
@@ -1749,28 +1750,6 @@ export function registerGhostIpc(): void {
   //    的显式例外——作者声明过、装入确认框摊过牌)。刻意排在首次对账之后,新
   //    播种的常驻意识同一趟点火;后续对账装上的由 reconcile 自己点火。
   void app.whenReady().then(() => {
-    // 新仓不再提交 Google OAuth client。播种器覆盖旧内置意识前，先把旧包
-    // 已落在 userData manifest 里的 client 搬进 safeStorage，老账号无感续用。
-    try {
-      const installedManifestPath = path.join(
-        brainRootDir(),
-        FILO_GOOGLE_GHOST_ID,
-        'ghost.json',
-      );
-      const rawInstalledManifest = JSON.parse(fs.readFileSync(installedManifestPath, 'utf-8')) as unknown;
-      const migrated = migrateLegacyBundledFiloGoogleClientConfig(rawInstalledManifest, {
-        read: (ghostId, storageKey) => readGhostSecret(ghostId, storageKey),
-        store: (ghostId, storageKey, value) => storeGhostSecret(ghostId, storageKey, value),
-        remove: (ghostId, storageKey) => removeGhostSecret(ghostId, storageKey),
-      });
-      if (migrated) log.info('filo-google bundled OAuth client migrated to safeStorage');
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-        log.warn('filo-google bundled OAuth client migration skipped', {
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
     scheduleBuiltinReconcile('startup');
     onAuthStateChange(() => scheduleBuiltinReconcile('auth-change'));
     builtinReconcileChain = builtinReconcileChain.then(() => {
@@ -2106,6 +2085,56 @@ export function registerGhostIpc(): void {
       return { ids: [] };
     }
   });
+
+  // ── 配置就绪检查(使用前置门,判定与 handler 主体在 ghostSetupStatus.ts)──
+  // 插件页点「使用」时现查:清单推导需求(有 setup 声明按声明,无则启发式),
+  // 逐项核对保险库 / OAuth 账号 / 连接 / kv。全同步毫秒级、不缓存、不唤沙箱;
+  // oauth 判定用运行时清单(filo-google 的内置 client 是运行时注入的,读原始
+  // 清单会把「开箱即用」误判成未配置)。判定只管存在性:user 凭证只查加密
+  // 文件存在(不解密);key 有效性仍由运行期 networkSlot 出网 fail-fast 兜底。
+  // 探针意外抛错不捕获——invoke reject 后 renderer 放行(fail-open),
+  // 不把「查询失败」折叠成「未配置」误拦。
+  ipcMain.handle('ghosts:setup-status', (_event, id: unknown) =>
+    handleGhostSetupStatusRequest({
+      id,
+      getRuntimeManifest: (ghostId) => {
+        const ghost = manager.list().find((g) => g.manifest.id === ghostId);
+        return ghost ? withRuntimeFiloGoogleClient(ghost.manifest) : null;
+      },
+      probesFor: (runtimeManifest) => {
+        const ghostId = runtimeManifest.id;
+        const oauthManager = getGhostOauthAccountManager();
+        const connectionManager = getGhostConnectionManager();
+        // kv 单意识单文件,同一次判定内最多读一次(多条 kv 需求不重复开盘);
+        // 走 readStrict:IO 异常 / 文件损坏上抛 → invoke reject → renderer
+        // fail-open,不折叠成「未配置」。secrets 探针同口径(statSync 区分
+        // ENOENT 与真 IO 错误)。oauth / connections 沿用与 /oauth、
+        // /connections 设置页端点完全相同的读取真身(保险库读取失败折叠为
+        // 「无账号 / 无连接」)——有意保持两处口径一致:即便极端情况下保险
+        // 库损坏,引导弹窗指向的设置页展示的也是同一状态,不产生自相矛盾的
+        // 界面;且这类故障下运行期注入同样不可用,引导去设置页重连本就是
+        // 正确动作。
+        let kvSnapshot: Record<string, unknown> | null = null;
+        return {
+          secretSaved: (key) => ghostSecretSaved(ghostId, key),
+          oauthStatus: (key) => {
+            const decl = runtimeManifest.network?.secrets?.find((s) => s.key === key)?.oauth;
+            const accounts = oauthManager.listAccounts(ghostId, key);
+            return {
+              clientConfigured: oauthManager.clientConfigured(ghostId, key, decl),
+              connected: accounts.filter((a) => a.status === 'connected').length,
+              expired: accounts.filter((a) => a.status === 'expired').length,
+            };
+          },
+          connectionCount: (key) => connectionManager.list(ghostId, key).length,
+          kvValue: (key) => {
+            if (kvSnapshot === null) kvSnapshot = ghostKv.readStrict(ghostId);
+            return kvSnapshot[key];
+          },
+        };
+      },
+    }),
+  );
 
   // ── 面板媒体换发(拖拽引渡 + 右键菜单)──────────────────────────────
   // 只由宿主 renderer(可信应用层)调用——意识面板零桥碰不到 IPC。

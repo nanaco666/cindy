@@ -409,6 +409,26 @@
     },
     "windowBehavior": {
       "title": "应用行为",
+      "closeBehavior": {
+        "label": "关闭主窗口时",
+        "hint": "首次关闭时会询问，选择后可随时在这里修改。",
+        "aria": "选择关闭主窗口时的行为",
+        "tray": "收起到托盘",
+        "quit": "退出 Cindy"
+      },
+      "closePrompt": {
+        "title": "关闭 Cindy",
+        "message": "关闭主窗口时要执行什么操作？",
+        "detail": "收起到系统托盘后，任务会继续运行。你可以稍后在设置中修改。"
+      },
+      "trayMenu": {
+        "show": "打开 Cindy",
+        "quit": "退出 Cindy"
+      },
+      "trayError": {
+        "title": "无法收起到托盘",
+        "message": "系统托盘图标创建失败，窗口将保持打开。"
+      },
       "swallowActivationClickLabel": "后台窗口首次左键点击仅激活不透传",
       "swallowActivationClickHint": "开启后,从后台切回窗口时的第一下左键点击只把窗口带到前台,不触发页面按钮或选中文本(避免误触)。\n关闭后即可一次点击继续操作,双屏使用时更顺手,但可能误触按钮。",
       "swallowActivationClickAria": "切换后台窗口首次左键点击是否吞掉",
@@ -1016,10 +1036,6 @@
         "rotateSuccess": "密钥已轮换",
         "rotateFailed": "轮换失败,请稍后重试"
       },
-      "addCustom": {
-        "title": "添加自定义供应商",
-        "subtitle": "接入任意 OpenAI / Anthropic 兼容的模型来源,配置保存在本地"
-      },
       "custom": {
         "tag": "自定义",
         "editAria": "编辑",
@@ -1127,8 +1143,14 @@
         "subscription": "订阅",
         "subscriptionProduct": "{{product}} 订阅",
         "noResults": "无匹配模型",
-        "expandAria": "展开模型列表",
-        "collapseAria": "收起模型列表"
+        "splitAdjust": "分别调整",
+        "splitDone": "完成",
+        "capabilityNote": "不支持 {{agent}}",
+        "divergedChip": "已在 {{agent}} 隐藏",
+        "refreshAria": "刷新模型列表(仅新增,不改动现有)",
+        "refreshAdded": "已发现 {{count}} 个新模型",
+        "refreshNoNew": "模型列表已是最新,无新增",
+        "refreshFailed": "模型列表刷新失败,请稍后再试"
       },
       "genericOAuth": {
         "subtitle": "订阅授权登录（OAuth）",
@@ -1144,6 +1166,53 @@
           "confirm": "退出登录",
           "cancel": "取消"
         }
+      },
+      "addProvider": "添加供应商",
+      "detail": {
+        "singleAgentNote": "仅支持 {{agent}}",
+        "emptyModels": "授权后自动发现可用模型",
+        "emptyList": "点击左下角「添加供应商」接入你的第一个模型来源",
+        "emptyModelsConnected": "已连接,正在自动发现可用模型;若持续为空,请稍后重试。"
+      },
+      "detect": {
+        "groupLabel": "检测到本机 CLI",
+        "action": "去授权",
+        "hintLoggedIn": "检测到 {{cli}} 已登录,可直接授权接入",
+        "hintInstalled": "检测到本机已安装 {{cli}}"
+      },
+      "wizard": {
+        "title": "添加供应商",
+        "titleWith": "添加 · {{name}}",
+        "closeAria": "关闭",
+        "stepPick": "选择供应商",
+        "stepConnect": "连接",
+        "stepModels": "选择模型",
+        "searchPlaceholder": "搜索供应商…",
+        "groupSubscription": "订阅授权 · 推荐,免 API Key",
+        "groupApiKey": "API Key 供应商 · 预设随目录更新",
+        "groupCustom": "自定义",
+        "metaOAuth": "订阅授权",
+        "metaApiKey": "API Key",
+        "customTitle": "自定义端点",
+        "customMeta": "接入任意 OpenAI / Anthropic 兼容的模型来源",
+        "pickHint": "鉴权方式由供应商定义决定;OAuth 端点与基础 URL 由预设携带,无需手填。",
+        "oauthDesc": "通过浏览器完成订阅授权,无需 API Key",
+        "authorizedToast": "已连接「{{name}}」",
+        "authorizeFailed": "「{{name}}」授权失败,请重试",
+        "nameLabel": "显示名称",
+        "onlyAgentNote": "此供应商仅支持 {{agent}}",
+        "docsLink": "查看接入文档",
+        "fetching": "正在验证连接并获取模型列表…",
+        "fetchFailed": "模型列表获取失败——可先按预设推荐模型完成添加,稍后在详情里刷新",
+        "recommended": "推荐",
+        "modelsHint": "勾选的模型将出现在对话的模型选择器中,对可用的 CLI 同时生效;之后可在供应商详情里随时调整。",
+        "noModelSelected": "请至少勾选一个模型",
+        "createdToast": "已添加「{{name}}」",
+        "createFailed": "添加失败,请重试",
+        "next": "下一步",
+        "back": "← 上一步",
+        "finish": "完成添加",
+        "cancel": "取消"
       }
     },
     "experimental": {
@@ -1176,6 +1245,7 @@
         "appIdLabel": "App ID",
         "ownerLabel": "Owner",
         "ownerWaiting": "等待首次私聊绑定",
+        "reconnect": "重新连接飞书机器人",
         "clear": "解绑"
       },
       "appIdLabel": "App ID",
@@ -1278,23 +1348,23 @@
       "title": "记忆",
       "description": "用于帮助用户实现基于工作区的记忆，改变设置之后理论上需要新建会话才会生效，如果觉得记忆系统出现问题可以点击 Reset 或者关闭。",
       "maker": {
-        "label": "Maker",
+        "label": "Cindy",
         "description": "真正实现同工作目录下（Claude / Codex）多 Agent 的所有会话记忆共享（Beta 功能）",
-        "toggleAria": "切换 Maker 记忆",
-        "resetAria": "重置 Maker 记忆",
+        "toggleAria": "切换 Cindy 记忆",
+        "resetAria": "重置 Cindy 记忆",
         "resetConfirm": {
-          "title": "重置 Maker 记忆？",
-          "description": "将永久删除所有项目下的 Maker 记忆（存放在 user-data 目录下，不在你的代码仓库里）。此操作不可撤销。",
+          "title": "重置 Cindy 记忆？",
+          "description": "将永久删除所有项目下的 Cindy 记忆（存放在 user-data 目录下，不在你的代码仓库里）。此操作不可撤销。",
           "confirm": "重置",
           "cancel": "取消"
         },
         "toast": {
-          "enabled": "Maker 记忆已启用",
-          "disabled": "Maker 记忆已禁用",
-          "toggleFailed": "切换 Maker 记忆失败",
-          "resetSuccess_one": "Maker 记忆已重置 — 已移除 {{count}} 个工作目录",
-          "resetSuccess_other": "Maker 记忆已重置 — 已移除 {{count}} 个工作目录",
-          "resetFailed": "重置 Maker 记忆失败"
+          "enabled": "Cindy 记忆已启用",
+          "disabled": "Cindy 记忆已禁用",
+          "toggleFailed": "切换 Cindy 记忆失败",
+          "resetSuccess_one": "Cindy 记忆已重置 — 已移除 {{count}} 个工作目录",
+          "resetSuccess_other": "Cindy 记忆已重置 — 已移除 {{count}} 个工作目录",
+          "resetFailed": "重置 Cindy 记忆失败"
         }
       },
       "agents": {
@@ -1352,6 +1422,7 @@
       "description": "新建侧栏终端 tab 时使用此 shell。",
       "auto": "自动选择",
       "autoWithTarget": "自动选择 ({{target}})",
+      "unavailable": "{{shell}} (不可用)",
       "card": {
         "label": "默认 shell",
         "description": "修改默认只影响新建的终端 tab,已有 tab 不受影响。",
@@ -1635,7 +1706,7 @@
           "description": "任务调度 —— cron 周期任务 + 一次性提醒"
         },
         "memory": {
-          "name": "Maker 记忆",
+          "name": "Cindy 记忆",
           "description": "跨 agent 的长期记忆，让上下文在会话之间持续"
         },
         "xdt_helper": {
@@ -2034,6 +2105,15 @@
         "descriptionBuiltin": "面板与能力将随之移除;这是内置插件,卸载后不会自动装回,可随时在列表中「恢复」。",
         "cancel": "取消"
       },
+      "setupGate": {
+        "title": "「{{name}}」还需要完成配置",
+        "descriptionMissing": "使用前还需要配置：{{items}}。现在前往插件配置页完成设置吗？",
+        "descriptionReauth": "账号授权已过期：{{items}}。重新连接后才能使用，现在前往吗？",
+        "configure": "打开插件设置",
+        "cancel": "取消",
+        "anySeparator": " 或 ",
+        "groupSeparator": "、"
+      },
       "toast": {
         "installed": "已安装「{{name}}」",
         "uninstalled": "已卸载「{{name}}」",
@@ -2091,7 +2171,7 @@
         "networkSecretIdentity": "将使用你的登录邮箱作为凭证「{{name}}」",
         "networkSecretIdentityDetail": "值取自当前登录账号的邮箱,请求时由主机自动派生注入;无需填写。插件可读取该邮箱,用于在它的设置界面里展示当前身份。",
         "networkSecretOauth": "将引导你在 {{host}} 完成 OAuth 授权({{name}})",
-        "networkSecretOauthDetail": "授权流程与全部令牌由主机代管,插件代码无法读取;客户端凭证由你在插件设置页自填。下方为其申请的权限范围(scopes)原文,请确认后再放行。",
+        "networkSecretOauthDetail": "授权流程与全部令牌由主机代管,插件代码无法读取;客户端凭证由你在本插件详情页自填。下方为其申请的权限范围(scopes)原文,请确认后再放行。",
         "networkConnections": "可连接你添加的 {{label}}",
         "networkConnectionsDetail": "地址在这个插件的设置界面里添加;每次新增地址都需要你确认,你提供的凭证只注入对应地址。",
         "codeDetailNetwork": "在独立沙箱中运行,无法访问你的文件;网络仅限上方声明的域名,由主机代发。",
@@ -2566,6 +2646,10 @@
     "sessionCostLabel": "本会话 {{cost}}",
     "codex": {
       "waiting": "Codex --",
+      "noUsageLabel": "暂无用量",
+      "noUsageDetail": "本会话尚未产生用量。",
+      "unavailableLabel": "用量暂不可用",
+      "unavailableDetail": "用量数据暂时不可用。",
       "waitingDetail": "Codex 用量会在下一次会话完成后更新。",
       "sessionTokensLine": "本会话已用 {{tokens}} token",
       "sessionValueLabel": "本会话价值 {{cost}}",
@@ -3286,7 +3370,12 @@
         "budget": "骨折GPT",
         "grok": "xAI",
         "google": "Google",
-        "china": "国内"
+        "china": "国内",
+        "image": "图像",
+        "audio": "音频语音",
+        "video": "视频",
+        "embedding": "向量",
+        "other": "其它"
       },
       "search": {
         "placeholder": "搜索 {{source}} 的模型...",
@@ -3306,6 +3395,9 @@
         "emptyTitle": "暂无可用来源",
         "emptyDesc": "连接一个支持当前模型的来源后即可选择",
         "disconnected": "已断开"
+      },
+      "agentSwitch": {
+        "hint": "选择切换到 {{agent}} 后使用的模型"
       }
     },
     "permissionSelector": {
@@ -3490,6 +3582,18 @@
         "overflowDescription": "当前会话已使用 {{used}} 上下文，超出目标模型窗口（{{total}}，约 {{pct}}%）。切换后回复和压缩都可能失败，建议先点击上下文圆环压缩会话，或新建会话使用该模型。仍要切换吗？",
         "confirmSwitch": "仍然切换模型",
         "cancelSwitch": "取消切换"
+      },
+      "agentSwitch": {
+        "engineNotReady": "引擎已切换,但新引擎启动失败;发送消息时会自动重试",
+        "failed": "引擎切换失败,未生效",
+        "deferred": "已登记切换:下一条消息发出时将切换到 {{agent}} · {{model}}",
+        "confirmation": {
+          "title": "切换 Agent？",
+          "description": "新 Agent 引擎会通过交接摘要续接,思考内容等不能保证完美继承;切回时仍可继续原引擎会话。切换还会让 prompt 缓存中断一次,可能造成 Token 消耗的增加。",
+          "confirm": "切换 Agent",
+          "cancel": "保留当前 Agent",
+          "dontShowAgain": "下次不再提醒"
+        }
       }
     },
     "atMention": {
@@ -3983,6 +4087,12 @@
       },
       "autoResume": {
         "label": "连接中断，已自动继续"
+      },
+      "agentSwitch": {
+        "label": "已从 {{from}} 切换到 {{to}}",
+        "toggleHint": "查看交接内容",
+        "handoffTitle": "交接内容——切换时发送给新引擎的上下文摘要(不会出现在你的消息里)",
+        "resumedBadge": "已续接原会话"
       }
     },
     "markdownRenderer": {
@@ -4026,13 +4136,18 @@
     },
     "userMessage": {
       "attachmentPrefix": "附件：",
+      "saveAttachmentAs": "另存附件 {{name}}",
+      "attachmentSaved": "附件 {{name}} 已保存",
+      "attachmentSavedUnsupported": "附件 {{name}} 已保存，但当前平台可能无法直接使用此文件类型",
+      "attachmentSaveForbidden": "无法保存附件：源文件路径不受信任",
+      "attachmentSourceMissing": "无法保存附件：源文件已不存在",
+      "attachmentSaveFailed": "无法保存附件，请检查目标目录权限后重试",
       "automationSent": "由自动化任务发送",
       "automationSentNamed": "由自动化任务「{{name}}」发送",
       "automationViewTask": "查看自动化任务",
       "expandLongMessage": "展开全文",
       "collapseLongMessage": "收起",
       "forkBusy": "当前会话正在运行，等结束后再分叉",
-      "rewindBusy": "当前会话正在运行，等结束后再回退",
       "editStopTimeout": "等待任务停止超时，请稍后重试",
       "editQueueNotEmpty": "会话有排队中的消息，先发送或移除队列内容后再编辑",
       "editNotLast": "会话里已有更新的消息，这条不再是最后一条，无法编辑重发",
@@ -4041,8 +4156,10 @@
       "editSend": "发送",
       "editRollbackHint": "发送将撤销上一轮对 {{count}} 个文件的改动",
       "forkErrors": {
+        "unsupportedHistory": "目标位置跨过了引擎切换边界，无法从这里分叉",
         "noPriorAssistant": "请在 AI 回复之后的消息上分叉",
         "sourceNeverRan": "原会话尚未运行，无法分叉",
+        "codexStateUnavailable": "Codex 会话状态不可用，无法分叉。{{detail}}",
         "generic": "分叉失败，请重试"
       }
     },
@@ -4054,7 +4171,7 @@
       "noFilesToRollback": "没有可回滚的文件，仅会截断对话历史",
       "errors": {
         "noPriorAssistantPreview": "请在 AI 回复之后的提问上 rewind（这条之前没有 assistant 回复）",
-        "sessionRunning": "会话进行中，无法回滚",
+        "sessionRunning": "等待任务停止超时，请重新回退",
         "noLiveQuery": "会话未激活——请先发送任意一条消息（哪怕一句\"ok\"）让 SDK 起来再 rewind",
         "noPriorAssistantCommit": "请在 AI 回复之后的提问上 rewind",
         "commitGeneric": "rewind 失败，请重试",
@@ -4069,13 +4186,19 @@
         "continueWillTruncate": "继续回退仍会截断后续对话",
         "noPerFileDiff": "该 SDK 版本不支持单文件 diff 预览",
         "summaryDefault": "这条消息后续对话会被丢弃，工作目录里的 {{count}} 个文件会回退到那一刻。",
+        "summaryRunning": "当前任务会被停止；这条消息之后的对话和对应文件改动会被回退。",
         "summaryEmpty": "这条消息后续对话会被丢弃。没有文件被改动，仅截断历史。",
         "summaryEmptyWithNote": "这条消息后续对话会被丢弃。",
+        "runningNotice": "任务仍在运行。确认后会先停止任务，再按最新状态执行回退。",
+        "runningQueueNotice": "排队消息会保留并暂停，不会自动发送。",
         "summaryPrefix": "共 {{count}} 个文件，",
         "linesSuffix": "行",
         "errorHint": "提示：可以 fork 一个新会话继续编辑。",
         "cancel": "取消",
         "confirm": "确认回退",
+        "confirmRunning": "停止并回退",
+        "rewinding": "正在回退…",
+        "stoppingAndRewinding": "正在停止并回退…",
         "acknowledge": "知道了"
       }
     },
@@ -4528,7 +4651,13 @@
         "copyFailed": "复制失败，请手动复制",
         "projectNotFound": "找不到对应的项目，可能已被归档或不在本机"
       },
-      "railUnreadHint": "有新消息待回复"
+      "railUnreadHint": "有新消息待回复",
+      "railNav": {
+        "pinned": "置顶",
+        "projects": "项目",
+        "dialogues": "对话"
+      },
+      "railNavCount": "{{count}} 个会话"
     },
     "rename": {
       "aiRename": "用 AI 重新命名",
@@ -4953,7 +5082,7 @@
         "script": "仅运行脚本"
       },
       "script": {
-        "protocolSummary": "stdout 必须逐行输出 xdt-maker-script/1 的完整 JSON 对象（JSONL）；type 只能是 call 或 complete。普通日志请写入 stderr，并且脚本必须最终输出一个 complete 帧。",
+        "protocolSummary": "stdout 必须逐行输出 cindy-script/1 的完整 JSON 对象（JSONL）；type 只能是 call 或 complete。普通日志请写入 stderr，并且脚本必须最终输出一个 complete 帧。",
         "protocolCapabilities": "如需调用已授权能力，脚本还必须逐行读取 stdin 中 host 发送的 start 和 call_result JSONL 帧，并等待对应调用结果后再继续或输出 complete。",
         "protocolExample": "查看不调用能力的最小 Python 示例",
         "command": "脚本命令",
@@ -5390,7 +5519,7 @@
   },
   "issueAgent": {
     "command": {
-      "instruction": "我想给 {{appName}} 提交一条反馈。请协助我整理成一个高质量的 GitHub issue:先和我确认反馈类型(bug 还是功能建议),并追问必要细节(现象、复现步骤或使用场景、期望行为);信息足够后用 lizi_xdt_helper 的 call_tool 调用 submit_github_issue 工具提交(category=feedback,可先 list_tools 查看参数要求;提交前系统会弹确认卡片给我看)。如果提交失败,如实告诉我原因。{{details}}",
+      "instruction": "我想给 {{appName}} 提交一条反馈。请协助我整理成一个高质量的 GitHub issue:先和我确认反馈类型(bug 还是功能建议),并追问必要细节(现象、复现步骤或使用场景、期望行为);信息足够后用 cindy_helper 的 call_tool 调用 submit_github_issue 工具提交(category=feedback,可先 list_tools 查看参数要求;提交前系统会弹确认卡片给我看)。如果提交失败,如实告诉我原因。{{details}}",
       "detailsPrefix": "\n我的初始描述:{{details}}"
     },
     "confirm": {
@@ -5442,6 +5571,7 @@
     "home": {
       "title": "技能",
       "description": "管理本地技能，或从 Skill Hub 发现并安装更多技能。",
+      "descriptionLocalOnly": "管理本机安装的本地技能。",
       "search": "搜索技能",
       "clearSearch": "清除技能搜索",
       "noSearchResults": "没有找到匹配的技能",
@@ -5992,6 +6122,8 @@
       "googleConnected": "Google 已连接",
       "codexConnected": "ChatGPT 账号已连接",
       "feishuBotConnected": "飞书机器人已连接",
+      "feishuBotReconnected": "飞书机器人已重新连接",
+      "feishuBotReconnectFailed": "重新连接失败，请检查飞书配置后重试",
       "feishuBotConflict": "该 App 已被占用，可能是同事在用同一个 App ID",
       "feishuBotConnectFailed": "连接失败，请检查 App ID / Secret",
       "feishuBotSaveFailed": "保存失败：{{message}}",
@@ -6100,6 +6232,7 @@
       "customRolePredefinedError": "自定义角色不能使用预设角色名",
       "agentLabel": "Agent",
       "modelLabel": "模型",
+      "noAvailableModels": "没有可用的 {{agent}} 模型，请在设置中检查供应商连接和凭证。",
       "effortLabel": "Effort",
       "initialTaskLabel": "初始任务",
       "optional": "（可选）",

@@ -748,6 +748,10 @@ describe('automation-generated sessions', () => {
     );
     expect(source).toContain("menuOpen && 'opacity-0'");
     expect(source).toContain('disabled={!latestSession}');
+    // 自动任务组头首图标必须复用普通 SessionItem 的 15px 槽与 vendor 尺寸规则，
+    // 否则裸 VendorIcon 会比其它会话向左偏约 1.5px，Claude mark 还会小 1px。
+    expect(source).toContain('className="flex w-[15px] shrink-0 items-center justify-center"');
+    expect(source).toContain("size={latestSession?.agentKind === 'codex' ? 12 : 13}");
     expect(source).toContain('<Clock');
     // 已停止(paused/expired)时整个 Clock chip 换成大 Pause 图标(size 10 + fill),
     // 不再是原先叠在 Clock 上的迷你角标 —— 视觉必须明显。

@@ -13,7 +13,7 @@
  * (节点 g1Ub0,3 态 OFF / Popover / ON)。
  */
 import { useState, type ReactElement } from 'react';
-import { Puzzle, Check } from 'lucide-react';
+import { UsersRound, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
@@ -32,7 +32,7 @@ interface Props {
   disabled?: boolean;
   /** 窄容器下把 pill 字号压一档,默认 false。 */
   dense?: boolean;
-  /** 只渲染 Puzzle 图标,不渲染 "协同" 文案,默认 false。 */
+  /** 只渲染 UsersRound 图标,不渲染 "协同" 文案,默认 false。 */
   iconOnly?: boolean;
 }
 
@@ -104,7 +104,7 @@ export function CollaborationModeToggle({
             disabled && 'cursor-not-allowed opacity-50',
           )}
         >
-          <Puzzle size={iconSize} className="shrink-0" />
+          <UsersRound size={iconSize} className="shrink-0" />
           {!iconOnly && <span>{t('newChat.collaboration.pillLabel')}</span>}
         </button>
       </Tip>
@@ -134,7 +134,7 @@ export function CollaborationModeToggle({
             disabled && 'cursor-not-allowed opacity-50',
           )}
         >
-          <Puzzle size={iconSize} className="shrink-0" />
+          <UsersRound size={iconSize} className="shrink-0" />
           {!iconOnly && <span>{t('newChat.collaboration.pillLabel')}</span>}
         </button>
       </Tip>
@@ -163,7 +163,7 @@ export function CollaborationModeToggle({
               disabled && 'cursor-not-allowed opacity-50',
             )}
           >
-            <Puzzle size={iconSize} className="shrink-0" />
+            <UsersRound size={iconSize} className="shrink-0" />
             {!iconOnly && <span>{t('newChat.collaboration.pillLabel')}</span>}
           </button>
         </Tip>

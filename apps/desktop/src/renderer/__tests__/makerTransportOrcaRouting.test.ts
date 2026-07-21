@@ -55,6 +55,7 @@ describe('orcaWorkflowsFor 路由', () => {
     await orca.createWorker({ leadSessionId: 'lead', role: 'developer' });
     await orca.switchFocus({ leadSessionId: 'lead', workerIdOrLabel: 'w1' });
     await orca.idleWorker('lead', 'w1');
+    await orca.idleWorker('lead', 'w1', 'done');
     await orca.archiveWorker('lead', 'w1');
     await orca.endTeam('lead');
     await orca.getCollaborationSettings();
@@ -64,6 +65,7 @@ describe('orcaWorkflowsFor 路由', () => {
     expect(invoke).toHaveBeenCalledWith('dev-1', 'maker:worker:create', [{ leadSessionId: 'lead', role: 'developer' }]);
     expect(invoke).toHaveBeenCalledWith('dev-1', 'maker:worker:switch-focus', [{ leadSessionId: 'lead', workerIdOrLabel: 'w1' }]);
     expect(invoke).toHaveBeenCalledWith('dev-1', 'maker:worker:idle', [{ leadSessionId: 'lead', workerId: 'w1' }]);
+    expect(invoke).toHaveBeenCalledWith('dev-1', 'maker:worker:acknowledge-done', [{ leadSessionId: 'lead', workerId: 'w1' }]);
     expect(invoke).toHaveBeenCalledWith('dev-1', 'maker:worker:archive', [{ leadSessionId: 'lead', workerId: 'w1' }]);
     expect(invoke).toHaveBeenCalledWith('dev-1', 'maker:team:end', ['lead']);
     expect(invoke).toHaveBeenCalledWith('dev-1', 'maker:collaboration-settings:get', []);

@@ -204,7 +204,9 @@ export function UpdateBanner({ isCollapsed }: UpdateBannerProps) {
               aria-label={t('update.banner.confirmAria')}
               className={cn(
                 'flex w-full items-center justify-center py-2 transition-colors',
-                'text-[var(--update-btn-text)] hover:bg-sidebar-item-hover',
+                // Bare ghost icon on the sidebar — use the readable foreground, not the
+                // on-fill pill text color (which is dark-on-dark in E1D neutral themes).
+                'text-foreground hover:bg-sidebar-item-hover',
               )}
             >
               <Check className="h-5 w-5" strokeWidth={2.25} />
@@ -317,7 +319,7 @@ export function UpdateBanner({ isCollapsed }: UpdateBannerProps) {
             className={cn(
               'flex w-full items-center justify-center gap-2 rounded-full border py-2',
               'text-[13px] font-medium',
-              'border-[var(--update-btn-border)] text-[var(--update-btn-text)]',
+              'bg-[var(--update-btn-bg)] border-[var(--update-btn-border)] text-[var(--update-btn-text)]',
               'cursor-default opacity-70',
             )}
           >
@@ -332,7 +334,7 @@ export function UpdateBanner({ isCollapsed }: UpdateBannerProps) {
               className={cn(
                 'flex w-full items-center justify-center gap-2 rounded-full border py-2',
                 'text-[13px] font-medium transition-colors',
-                'border-[var(--update-btn-border)] text-[var(--update-btn-text)]',
+                'bg-[var(--update-btn-bg)] border-[var(--update-btn-border)] text-[var(--update-btn-text)]',
                 'hover:bg-[var(--update-btn-hover)]',
               )}
             >
@@ -359,7 +361,7 @@ export function UpdateBanner({ isCollapsed }: UpdateBannerProps) {
             className={cn(
               'flex w-full items-center justify-center gap-2 rounded-full border py-2',
               'text-[13px] font-medium transition-colors',
-              'border-[var(--update-btn-border)] text-[var(--update-btn-text)]',
+              'bg-[var(--update-btn-bg)] border-[var(--update-btn-border)] text-[var(--update-btn-text)]',
               'hover:bg-[var(--update-btn-hover)]',
             )}
           >

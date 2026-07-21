@@ -265,7 +265,7 @@ export function SessionTabsBar({
                   : 'text-[var(--cmd-palette-item-meta)] hover:bg-[var(--chat-input-chip-bg)] hover:text-foreground',
               )}
             >
-              {/* vendor icon —— ClaudeMark (cc) / Codex 六瓣。
+              {/* Agent 身份 icon —— Claude Code 像素脸 / Codex CLI 花形+`>_`。
                   running=true → VendorIcon 自动切 Thinking Orange + 呼吸
                   动画(.session-status-breathing),与 sidebar SessionItem 同款;
                   inactive 默认 Stone 灰,active 时给个 text-foreground 高亮

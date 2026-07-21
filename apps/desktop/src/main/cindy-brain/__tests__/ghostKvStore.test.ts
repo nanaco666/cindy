@@ -62,6 +62,15 @@ describe('cindy-brain · ghostKvStore(意识自定义参数持久化)', () => {
     expect(store.read('demo')).toEqual({});
   });
 
+  it('readStrict:无文件 → {},正常文件读回内容,损坏 JSON 上抛(setup 检查专用口径)', () => {
+    expect(store.readStrict('demo')).toEqual({});
+    store.write('demo', { workspace: 'team-x' });
+    expect(store.readStrict('demo')).toEqual({ workspace: 'team-x' });
+    fs.writeFileSync(path.join(root, 'demo.json'), '{broken', 'utf8');
+    expect(() => store.readStrict('demo')).toThrow(); // 「查询失败」≠「未配置」
+    expect(store.read('demo')).toEqual({}); // 宽松口径不受影响
+  });
+
   it('写入非 plain object(数组/null/标量)抛 INVALID_VALUE', () => {
     for (const bad of [[1, 2], null, 'str', 42] as unknown[]) {
       expect(

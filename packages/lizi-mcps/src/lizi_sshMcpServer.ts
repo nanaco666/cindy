@@ -3,7 +3,7 @@
  * ---------------------------------------------------------------------------
  * In-process MCP server exposing xdt-maker's built-in SSH remote-host
  * capability (desktop ConnectionPool) to cc / codex agents. Mirrors the shape
- * of `lizi_schedulerMcpServer.ts`：
+ * of `cindy_schedulerMcpServer.ts`：
  *
  *  - server only exposes two entry tools: `list_tools` / `call_tool`
  *  - fine-grained tools live in ssh/*.ts and register on a registry
@@ -138,7 +138,7 @@ function registerCallToolEntry(
         if (!deps.isEnabledForWorkdir(workingDir)) {
           return errorPayload(
             'PLUGIN_DISABLED',
-            '当前项目已关闭 SSH Remote 插件(设置 → 插件,或项目 .claude/settings.json 的 xdtMaker.builtinTools.ssh)。不要重试,转告用户如需使用请先开启。',
+            '当前项目已关闭 SSH Remote 插件(可在主界面侧边栏「插件」中开启,或在项目 .claude/settings.json 的 xdtMaker.builtinTools.ssh 中开启)。不要重试,转告用户如需使用请先开启。',
           );
         }
       }

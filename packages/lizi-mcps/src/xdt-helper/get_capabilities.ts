@@ -18,7 +18,7 @@ import type { XdtHelperToolRegistry } from '../lizi_xdtHelperToolRegistry.js';
 export function registerGetCapabilitiesTool(registry: XdtHelperToolRegistry): void {
   registry.register({
     name: 'get_capabilities',
-    category: 'xdt',
+    category: 'cindy',
     description:
       `查询 ${BRAND_NAME} 自身能力。不传参数 → 返回所有能力的 {key, title, oneLiner} 索引;` +
       '传 key=<具体能力 key> → 返回该能力的完整 detail。' +

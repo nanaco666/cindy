@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { isTestFlightBuild } from '@/platform/appDistribution';
 import { runStartupEndpointResolve } from './clientEndpointStartup';
 import { resolveEnvFlag } from './env';
 
@@ -34,7 +35,7 @@ export function useStartupEndpointGate(): StartupEndpointGate {
     if (status === 'error') return; // 等用户点重试
     running.current = true;
     let cancelled = false;
-    void runStartupEndpointResolve().then((outcome) => {
+    void runStartupEndpointResolve({ resolveIsTestFlight: isTestFlightBuild }).then((outcome) => {
       running.current = false;
       if (cancelled) return;
       if (outcome.ok) {

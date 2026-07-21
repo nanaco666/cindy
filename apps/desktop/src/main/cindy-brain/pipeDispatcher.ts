@@ -91,7 +91,7 @@ export class GhostPipeDispatcher {
       return { ok: false, errorCode: 'GHOST_NOT_FOUND', message: `插件 ${ghostId} 未安装或已卸载` };
     }
     if (!ghost.enabled) {
-      return { ok: false, errorCode: 'GHOST_ASLEEP', message: `插件 ${ghostId} 未启用(可在侧栏「插件」中启用)` };
+      return { ok: false, errorCode: 'GHOST_ASLEEP', message: `插件 ${ghostId} 未启用(可在主界面侧边栏「插件」中启用)` };
     }
     const declared = ghost.manifest.tools?.some((t) => t.name === tool);
     if (!declared) {

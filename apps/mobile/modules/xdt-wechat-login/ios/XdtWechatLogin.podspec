@@ -7,12 +7,12 @@ Pod::Spec.new do |s|
   s.version        = package['version']
   s.summary        = 'Minimal WeChat authorization-code bridge for Cindy mobile.'
   s.description    = 'Expo module that requests a WeChat native login authorization code.'
-  s.license        = 'UNLICENSED'
+  s.license        = { :type => 'Apache-2.0', :file => '../../../../../LICENSE' }
   s.author         = 'Cindy'
   s.homepage       = 'https://cindy.app'
   s.platforms      = { :ios => '16.4' }
   s.swift_version  = '5.0'
-  s.source         = { git: 'https://cindy.app/cindy.git' }
+  s.source         = { git: 'https://github.com/xindong/cindy-moved.git' }
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'

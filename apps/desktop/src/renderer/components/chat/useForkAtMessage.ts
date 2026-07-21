@@ -110,11 +110,17 @@ export function useForkAtMessage({
     } catch (err) {
       const code = err instanceof ApiError ? err.code : 'UNKNOWN';
       const msg =
-        code === 'NO_PRIOR_ASSISTANT'
+        code === 'FORK_UNSUPPORTED_HISTORY'
+          ? t('chat.userMessage.forkErrors.unsupportedHistory')
+          : code === 'NO_PRIOR_ASSISTANT'
           ? t('chat.userMessage.forkErrors.noPriorAssistant')
           : code === 'SOURCE_NEVER_RAN'
             ? t('chat.userMessage.forkErrors.sourceNeverRan')
-            : t('chat.userMessage.forkErrors.generic');
+            : code === 'CODEX_FORK_STATE_UNAVAILABLE'
+              ? t('chat.userMessage.forkErrors.codexStateUnavailable', {
+                  detail: err instanceof Error ? err.message : String(err),
+                })
+              : t('chat.userMessage.forkErrors.generic');
       toast.error(msg);
       // Re-throw so MessageActionBar's `forking` state knows to clear via
       // its finally{} (it doesn't actually re-throw further — just resets).

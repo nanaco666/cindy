@@ -11,10 +11,11 @@
 //   node scripts/package-desktop.mjs [options]
 //
 //   --platform win32|darwin|linux   默认当前平台(不支持交叉打包)
-//   --arch     x64|arm64            默认当前 arch
-//   --region   cn|global            默认 cn;烘焙 auth region + 端点清单自举基址
-//   --channel  dev|release          默认 dev;当前只进产物目录与 build-info
-//                                   (per-channel 端点/更新目标随发布侧重构落地)
+//   --arch     x64|arm64            显式传 = 只打该单架构;缺省时 darwin
+//                                   双架构连打(arm64 + x64,同一版本号,
+//                                   与发布侧 canary/promote 的 mac 双架构
+//                                   默认行为对齐),win/linux 取当前 arch
+//   --region   cn|global|dev        默认 cn;决定应用身份、端点清单与发布目标
 //   --version  x.y.z|major|minor|patch
 //              缺省 = 版本无关打包:占位版本 0.0.0,包不参与热更新
 //              (updateService 对 0.0.0 短路),开源社区拉仓即可打;
@@ -27,8 +28,8 @@
 //                                   npkg 签名产物下载要求内网,非内网机器打
 //                                   版本无关包时用它
 //
-// 产物: release/artifacts/<region>-<channel>/<version|dev>/<platform-arch>/
-//   cindy-<version|dev>-Setup.exe / -<arch>.dmg / .deb   安装包
+// 产物: release/artifacts/<region>/<version|unversioned>/<platform-arch>/
+//   cindy-<version|unversioned>-Setup.exe / -<arch>.dmg / .deb   安装包
 //   cindy-<version>-hotfix.zip                           热更包(仅有版本时)
 //   build-info.json                                      发布侧唯一输入
 // =============================================================================
@@ -69,7 +70,7 @@ import {
   artifactBaseName,
   buildBuildInfo,
 } from './ci/package-lib.mjs';
-import { applyMacSigningConfigToEnv } from './ci/release-regions.mjs';
+import { applyMacSigningConfigToEnv, applyReleaseCdnBaseUrlToEnv } from './ci/release-regions.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -105,9 +106,12 @@ function collectBuildMeta() {
 
 // ── CDN 基线(仅 --version major/minor/patch 时调用,只读)─────────────────────
 
-async function fetchCdnBaselineVersion(platformKey) {
+async function fetchCdnBaselineVersion(platformKey, region) {
+  // 打包不发布,env 里通常没有 CDN 配置——按 region 从 release-regions.json
+  // 只注入 cdnBaseUrl(env 显式值优先),满足这次只读拉取即可。
+  applyReleaseCdnBaseUrlToEnv(region);
   // mac 双架构 manifest 同版本,任一即可;win/linux 用各自 key。
-  const manifest = await fetchExistingManifestIfAvailable(platformKey);
+  const manifest = await fetchExistingManifestIfAvailable(platformKey, region);
   if (!manifest) {
     throw new Error(`CDN 上没有 ${platformKey} 的 manifest,无法计算 bump 基线;请显式传 --version x.y.z`);
   }
@@ -326,8 +330,7 @@ async function main() {
     console.error(`ERROR: ${err.message}`);
     process.exit(1);
   }
-  const { platform, arch, region, channel, versionSpec, skipSmoke, allowUnsigned, noSign } = args;
-  const platformKey = `${platform}-${arch}`;
+  const { platform, archs, region, versionSpec, skipSmoke, allowUnsigned, noSign } = args;
   // ensureBinary 的 CDN fallback 按此 region 选择清单基址；必须早于二进制准备。
   process.env.CINDY_AUTH_REGION = region;
   // mac 签名身份按区域从 release-regions.json 注入(文件缺失时静默跳过,
@@ -339,15 +342,15 @@ async function main() {
     process.exit(1);
   }
 
+  // 版本号只解析一次,mac 双架构共用(canary 发布要求两 arch 同版本)。
   const { version, versionless } = await resolvePackageVersion(versionSpec, () =>
-    fetchCdnBaselineVersion(platform === 'darwin' ? 'darwin-arm64' : platformKey),
+    fetchCdnBaselineVersion(platform === 'darwin' ? 'darwin-arm64' : `${platform}-${archs[0]}`, region),
   );
 
   console.log('='.repeat(60));
   console.log(`==> Package Cindy desktop`);
-  console.log(`    platform: ${platformKey}`);
+  console.log(`    platform: ${archs.map((a) => `${platform}-${a}`).join(' + ')}`);
   console.log(`    region:   ${region}`);
-  console.log(`    channel:  ${channel}(当前仅记录进产物;发布目标随发布侧重构生效)`);
   console.log(`    version:  ${versionless ? `(版本无关,占位 ${version},不参与热更新)` : version}`);
   console.log('='.repeat(60));
 
@@ -356,8 +359,10 @@ async function main() {
     await ensureLinuxRuntimeAssets();
     logLinuxPackagingRequirements();
   } else {
-    for (const kind of ['claude', 'codex', 'ripgrep']) {
-      await ensureBinary(kind, platformKey);
+    for (const platformKey of archs.map((a) => `${platform}-${a}`)) {
+      for (const kind of ['claude', 'codex', 'ripgrep']) {
+        await ensureBinary(kind, platformKey);
+      }
     }
   }
 
@@ -366,72 +371,82 @@ async function main() {
   // 版本号临时写入 package.json(asar 内 app.getVersion() 的来源),退出自动恢复。
   writePackageVersion(version);
 
-  cleanOutDir();
-  runForgeMake({ platform, arch, region, version, noSign });
-
   // 产物基名按区域派生(cn 'Cindy' / global 'CindyGlobal',out 目录 / exe /
   // .app 同名;forge.config 的 packagerConfig.name 同源)。
   const appName = packagedAppName(region);
-
-  // drizzle 资源校验(平台差异只在 packaged 内路径)。
-  const drizzleOut =
-    platform === 'darwin'
-      ? path.join(DESKTOP_ROOT, 'out', `${appName}-darwin-${arch}`, `${appName}.app`, 'Contents', 'Resources', 'drizzle')
-      : path.join(DESKTOP_ROOT, 'out', `${appName}-${platformKey}`, 'resources', 'drizzle');
-  verifyPackagedDrizzle(drizzleOut);
-
-  if (skipSmoke) {
-    console.log('==> Skipping packaged smoke test (--skip-smoke)');
-  } else {
-    runSmokeTest(platform, arch, region);
-  }
-
-  // 产物目录
-  const artifactDir = path.join(
-    RELEASE_DIR,
-    ...artifactRelDir({ region, channel, version, versionless, platformKey }).split('/'),
-  );
-  fs.rmSync(artifactDir, { recursive: true, force: true });
-  fs.mkdirSync(artifactDir, { recursive: true });
   const baseName = artifactBaseName({ version, versionless });
-
   const finishers = { win32: finishWindows, darwin: finishDarwin, linux: finishLinux };
-  const { files, signing } = await finishers[platform]({
-    artifactDir,
-    baseName,
-    appName,
-    arch,
-    version,
-    versionless,
-    allowUnsigned,
-    noSign,
-  });
-
   const meta = collectBuildMeta();
-  const buildInfo = buildBuildInfo({
-    version,
-    versionless,
-    region,
-    channel,
-    platform,
-    arch,
-    commitSha: meta.commitSha,
-    electronVersion: meta.electronVersion,
-    schemaVersionMax: meta.schemaVersionMax,
-    migrationFiles: meta.migrationFiles,
-    files,
-    signing,
-  });
-  const buildInfoPath = path.join(artifactDir, 'build-info.json');
-  fs.writeFileSync(buildInfoPath, JSON.stringify(buildInfo, null, 2) + '\n');
+  const results = [];
+
+  // 逐 arch 完整走「make → 校验 → smoke → 归集 → build-info」;mac 缺省会连打
+  // arm64 + x64(cleanOutDir 每轮清 out/,上一轮产物已归集进 release/artifacts)。
+  for (const arch of archs) {
+    const platformKey = `${platform}-${arch}`;
+
+    cleanOutDir();
+    runForgeMake({ platform, arch, region, version, noSign });
+
+    // drizzle 资源校验(平台差异只在 packaged 内路径)。
+    const drizzleOut =
+      platform === 'darwin'
+        ? path.join(DESKTOP_ROOT, 'out', `${appName}-darwin-${arch}`, `${appName}.app`, 'Contents', 'Resources', 'drizzle')
+        : path.join(DESKTOP_ROOT, 'out', `${appName}-${platformKey}`, 'resources', 'drizzle');
+    verifyPackagedDrizzle(drizzleOut);
+
+    if (skipSmoke) {
+      console.log('==> Skipping packaged smoke test (--skip-smoke)');
+    } else {
+      runSmokeTest(platform, arch, region);
+    }
+
+    // 产物目录
+    const artifactDir = path.join(
+      RELEASE_DIR,
+      ...artifactRelDir({ region, version, versionless, platformKey }).split('/'),
+    );
+    fs.rmSync(artifactDir, { recursive: true, force: true });
+    fs.mkdirSync(artifactDir, { recursive: true });
+
+    const { files, signing } = await finishers[platform]({
+      artifactDir,
+      baseName,
+      appName,
+      arch,
+      version,
+      versionless,
+      allowUnsigned,
+      noSign,
+    });
+
+    const buildInfo = buildBuildInfo({
+      version,
+      versionless,
+      region,
+      platform,
+      arch,
+      commitSha: meta.commitSha,
+      electronVersion: meta.electronVersion,
+      schemaVersionMax: meta.schemaVersionMax,
+      migrationFiles: meta.migrationFiles,
+      files,
+      signing,
+    });
+    const buildInfoPath = path.join(artifactDir, 'build-info.json');
+    fs.writeFileSync(buildInfoPath, JSON.stringify(buildInfo, null, 2) + '\n');
+
+    results.push({ platformKey, artifactDir, files, buildInfoPath });
+  }
 
   console.log('');
   console.log('=== Package complete ===');
-  console.log(`Artifacts:  ${artifactDir}`);
-  for (const f of files) {
-    console.log(`  [${f.role}] ${f.name}  ${(f.size / 1024 / 1024).toFixed(1)} MB  sha256=${f.sha256.slice(0, 12)}…`);
+  for (const r of results) {
+    console.log(`Artifacts:  ${r.artifactDir}`);
+    for (const f of r.files) {
+      console.log(`  [${f.role}] ${f.name}  ${(f.size / 1024 / 1024).toFixed(1)} MB  sha256=${f.sha256.slice(0, 12)}…`);
+    }
+    console.log(`Build info: ${r.buildInfoPath}`);
   }
-  console.log(`Build info: ${buildInfoPath}`);
   if (versionless) {
     console.log('注意: 版本无关包(0.0.0)不参与热更新,仅供本地/社区使用,不能作为发布产物。');
   }

@@ -36,7 +36,7 @@ describe('selectWorkerModels', () => {
   const budget = model('codex/gpt-5.5');
   const caps = capabilities([standard, budget]);
 
-  it('preserves local budget-model gating by the local XD provider', () => {
+  it('only offers local Codex models backed by a connected provider', () => {
     expect(
       selectWorkerModels({
         agent: 'codex',
@@ -55,7 +55,17 @@ describe('selectWorkerModels', () => {
         providersLoading: false,
         providersError: null,
       }).map((entry) => entry.id),
-    ).toEqual(['gpt-5.5', 'codex/gpt-5.5']);
+    ).toEqual(['codex/gpt-5.5']);
+
+    expect(
+      selectWorkerModels({
+        agent: 'codex',
+        capabilities: caps,
+        providers: [provider('custom', true, 'codex', [])],
+        providersLoading: false,
+        providersError: null,
+      }),
+    ).toEqual([]);
   });
 
   it('uses each controlled device provider snapshot without leaking models across devices', () => {

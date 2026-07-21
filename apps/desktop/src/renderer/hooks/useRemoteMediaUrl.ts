@@ -3,7 +3,7 @@
  * ---------------------------------------------------------------------------
  * 远程(device-link 被控)会话里的本机媒体 URL(xdt-image / xdt-video / xdt-file /
  * xdt-audio)指向的是**被控端**本地缓存,控制端本机没有这些字节,原样渲染必然 404。
- * 本 hook 在渲染前把这类 URL 改写成 `xdt-remote-media://`(由 main 的同名 handler 经
+ * 本 hook 在渲染前把这类 URL 改写成 `cindy-remote-media://`(由 main 的同名 handler 经
  * OSS 中转取字节,见 device-link/remoteMediaProtocol.ts)。
  *
  * deviceId 从 ChatSessionFileContext 取:provider 在 MessageStream 顶层统一订阅

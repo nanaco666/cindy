@@ -1,7 +1,7 @@
 /**
  * chatHistorySearch.ts —— 跨 session 聊天记录混合检索引擎(FTS5 + 向量 RRF 融合)。
  *
- * 给 lizi_xdt_helper 的 search_chat_history MCP 工具用(经 mcp-providers.ts 注入)。
+ * 给 cindy_helper 的 search_chat_history MCP 工具用(经 mcp-providers.ts 注入)。
  * 工具层只做 schema 校验 + payload 整形, 真正的检索逻辑在这里, 因为它要同时碰
  * SQLite(messages_fts / 向量表 / 上下文窗口)和 EmbeddingService(query embedding),
  * 这两者只在 desktop main 进程存在。

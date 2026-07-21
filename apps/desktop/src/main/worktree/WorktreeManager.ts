@@ -34,6 +34,7 @@ import {
   restoreAutoStashToPreservedWorktree,
 } from './dirty';
 import { hasLiveSessionReference, loadLiveSessionPathKeys } from './liveSessionRefs';
+import { withWorktreeRestoreMutation } from './restoreLock';
 import * as store from './worktreeStore';
 import { createLogger } from '../logger';
 import {
@@ -720,11 +721,11 @@ export interface RemoveWorktreeOptions {
  *   1. meta = store.get(sid); null → return
  *   2. live-ref 守卫: 其它未删除会话仍引用该路径 → 保留(排除 sid 自身,
  *      归档会话自己的行不算引用)
- *   3. dirty → auto-stash(失败 → 保留); clean → 清上一轮遗留的过期快照 ref
+ *   3. dirty → auto-stash(失败 → 保留);成功后先撤销 store 登记，阻断 SEND
  *   4. try git worktree remove --force <meta.path>
  *   5. fail → isManagedWorktreePath 三条校验通过 → fs.rm -rf
- *   6. 仍失败 → console.error, 保留 store 条目供下次重试
- *   7. 成功 → store.del(sid)(不动 sessions.worktree_path, 徽标按 store 判)
+ *   6. 仍失败 → reapply snapshot；成功才恢复 store，失败则保持未登记供发送期恢复
+ *   7. 删除成功 → store.del(sid)(dirty 路径幂等；不动 sessions.worktree_path)
  *   8. **不带 -D**: 分支保留
  */
 export async function removeWorktreeForSession(
@@ -792,66 +793,92 @@ async function removeWorktreeForSessionInner(
 
   if (!(await canRemoveWorktree(options, meta.path, sessionId))) return;
 
-  let snapshotted = false;
-  if (await isWorktreeDirty(meta.path)) {
-    if (!(await autoStashDirtyWorktree(meta.path, sessionId))) {
-      log.warn(
-        `[worktree] worktree at ${meta.path} has uncommitted changes, preserving`,
-      );
+  const finishRemoval = async (snapshotted: boolean): Promise<void> => {
+    if (snapshotted) {
+      // The shared mutation lock is already installed before auto-stash starts. Unregister only
+      // after the snapshot is durable so SEND waits throughout the clean-worktree window.
+      store.del(sessionId);
+    }
+
+    // closeSession / snapshot 期间会话可能已恢复为 active。真正删除前再读一次状态；
+    // 若本轮已经 snapshot，则把内容重新 apply 回保留目录。
+    if (!(await canRemoveWorktree(options, meta.path, sessionId))) {
+      if (snapshotted) {
+        if (await restoreAutoStashToPreservedWorktree(meta.path, sessionId)) {
+          await store.set(sessionId, meta);
+        } else {
+          log.warn(
+            `[worktree] recycle cancelled for ${meta.path}, but snapshot reapply failed; `
+            + 'worktree stays unregistered so SEND remains blocked until restore succeeds',
+          );
+        }
+      }
       return;
     }
-    snapshotted = true;
-    // stash 成功，worktree 已 clean，继续正常 remove 流程
-  }
 
-  // closeSession / snapshot 期间会话可能已恢复为 active。真正删除前再读一次状态；
-  // 若本轮已经 snapshot，则把内容重新 apply 回保留目录。
-  if (!(await canRemoveWorktree(options, meta.path, sessionId))) {
-    if (snapshotted && !(await restoreAutoStashToPreservedWorktree(meta.path, sessionId))) {
+    let removedByGit = false;
+    try {
+      await gitExec(['worktree', 'remove', '--force', meta.path], meta.baseRepo);
+      removedByGit = true;
+    } catch (err) {
       log.warn(
-        `[worktree] recycle cancelled for ${meta.path}, but snapshot reapply failed; snapshot ref remains recoverable`,
+        `[worktree] git worktree remove failed for ${meta.path}:`,
+        err instanceof Error ? err.message : String(err),
       );
+      // fallback: fs.rm —— 必须三条校验通过
+      if (isManagedWorktreePath(meta.path, meta.baseRepo, [...store.getAllPaths(), meta.path])) {
+        try {
+          await fs.rm(meta.path, { recursive: true, force: true });
+          // 让 git worktree 状态自洽
+          try {
+            await gitExec(['worktree', 'prune'], meta.baseRepo);
+          } catch {
+            /* prune 失败无影响 */
+          }
+          removedByGit = true; // 视为已清, 走 store.del
+        } catch (rmErr) {
+          log.error(
+            `[worktree] fs.rm fallback failed for ${meta.path}:`,
+            rmErr instanceof Error ? rmErr.message : String(rmErr),
+          );
+          // 不动 store, 留给用户手动清理或下次启动复用
+        }
+      } else {
+        log.warn(
+          `[worktree] isManagedWorktreePath check failed for ${meta.path}; refusing fs.rm`,
+        );
+      }
     }
+
+    if (removedByGit) {
+      store.del(sessionId);
+    } else if (snapshotted) {
+      // Both removal paths failed: put WIP back before restoring the live registration. If apply
+      // also fails, keep it unregistered so the send-time restore gate retries the snapshot.
+      if (await restoreAutoStashToPreservedWorktree(meta.path, sessionId)) {
+        await store.set(sessionId, meta);
+      } else {
+        log.warn(
+          `[worktree] remove failed for ${meta.path}, and snapshot reapply also failed; `
+          + 'worktree stays unregistered until restore succeeds',
+        );
+      }
+    }
+  };
+
+  if (await isWorktreeDirty(meta.path)) {
+    await withWorktreeRestoreMutation(sessionId, async () => {
+      if (!(await autoStashDirtyWorktree(meta.path, sessionId))) {
+        log.warn(
+          `[worktree] worktree at ${meta.path} has uncommitted changes, preserving`,
+        );
+        return;
+      }
+      await finishRemoval(true);
+    });
     return;
   }
-
-  let removedByGit = false;
-  try {
-    await gitExec(['worktree', 'remove', '--force', meta.path], meta.baseRepo);
-    removedByGit = true;
-  } catch (err) {
-    log.warn(
-      `[worktree] git worktree remove failed for ${meta.path}:`,
-      err instanceof Error ? err.message : String(err),
-    );
-    // fallback: fs.rm —— 必须三条校验通过
-    if (isManagedWorktreePath(meta.path, meta.baseRepo, store.getAllPaths())) {
-      try {
-        await fs.rm(meta.path, { recursive: true, force: true });
-        // 让 git worktree 状态自洽
-        try {
-          await gitExec(['worktree', 'prune'], meta.baseRepo);
-        } catch {
-          /* prune 失败无影响 */
-        }
-        removedByGit = true; // 视为已清, 走 store.del
-      } catch (rmErr) {
-        log.error(
-          `[worktree] fs.rm fallback failed for ${meta.path}:`,
-          rmErr instanceof Error ? rmErr.message : String(rmErr),
-        );
-        // 不动 store, 留给用户手动清理或下次启动复用
-      }
-    } else {
-      log.warn(
-        `[worktree] isManagedWorktreePath check failed for ${meta.path}; refusing fs.rm`,
-      );
-    }
-  }
-
-  if (removedByGit) {
-    store.del(sessionId);
-  }
+  await finishRemoval(false);
 }
 
 async function canRemoveWorktree(

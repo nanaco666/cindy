@@ -133,6 +133,8 @@ describe('ScriptScheduleRunner', () => {
   it('services host calls and returns the terminal summary without an agent session', async () => {
     const child = childProcess();
     spawnMock.mockReturnValue(child);
+    const hostFrames: string[] = [];
+    child.stdin.on('data', (chunk) => hostFrames.push(String(chunk)));
     const broker = { call: vi.fn(async () => ({ key: 'DING-1' })) };
     const runner = new ScriptScheduleRunner({ broker, logger: {} });
     const resultPromise = runner.fire(schedule(), {
@@ -149,6 +151,12 @@ describe('ScriptScheduleRunner', () => {
       params: { issue_key: 'DING-1' },
     })}\n`);
     await vi.waitFor(() => expect(broker.call).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(hostFrames.join('')).toContain('"type":"call_result"'));
+    const legacyResponse = hostFrames
+      .flatMap((chunk) => chunk.trim().split('\n'))
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .find((frame) => frame.type === 'call_result');
+    expect(legacyResponse?.protocol).toBe('xdt-maker-script/1');
     expect(broker.call).toHaveBeenCalledWith(
       { method: 'jira.get', params: { issue_key: 'DING-1' } },
       new Set(['jira.read']),
@@ -167,6 +175,86 @@ describe('ScriptScheduleRunner', () => {
       'python auto.py',
       expect.objectContaining({ shell: true, cwd: 'C:\\project' }),
     );
+  });
+
+  it('starts with the legacy protocol, then responds with the Cindy protocol selected by a new client', async () => {
+    const child = childProcess();
+    spawnMock.mockReturnValue(child);
+    const hostFrames: string[] = [];
+    child.stdin.on('data', (chunk) => hostFrames.push(String(chunk)));
+    const broker = { call: vi.fn(async () => ({ key: 'DING-1' })) };
+    const runner = new ScriptScheduleRunner({ broker, logger: {} });
+    const resultPromise = runner.fire(schedule(), {
+      runId: 'run-new-protocol',
+      firedAt: 1,
+      signal: new AbortController().signal,
+    });
+
+    const startFrame = JSON.parse(hostFrames.join('').trim()) as Record<string, unknown>;
+    expect(startFrame).toMatchObject({ protocol: 'xdt-maker-script/1', type: 'start' });
+
+    child.stdout.write(`${JSON.stringify({
+      protocol: 'cindy-script/1',
+      type: 'call',
+      id: 'py-1',
+      method: 'jira.get',
+      params: { issue_key: 'DING-1' },
+    })}\n`);
+    await vi.waitFor(() => expect(hostFrames.join('')).toContain('"type":"call_result"'));
+    const responseFrames = hostFrames
+      .flatMap((chunk) => chunk.trim().split('\n'))
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(responseFrames.find((frame) => frame.type === 'call_result')?.protocol).toBe('cindy-script/1');
+
+    child.stdout.write(`${JSON.stringify({
+      protocol: 'cindy-script/1',
+      type: 'complete',
+      resultText: 'done',
+    })}\n`);
+    child.emit('close', 0);
+
+    await expect(resultPromise).resolves.toEqual({ sessionId: '', resultText: 'done' });
+  });
+
+  it('keeps the legacy protocol in capabilities payloads for legacy clients', async () => {
+    const child = childProcess();
+    spawnMock.mockReturnValue(child);
+    const hostFrames: string[] = [];
+    child.stdin.on('data', (chunk) => hostFrames.push(String(chunk)));
+    const broker = {
+      call: vi.fn(async () => ({ protocol: 'cindy-script/1', granted: ['jira.read'], methods: [] })),
+    };
+    const runner = new ScriptScheduleRunner({ broker, logger: {} });
+    const resultPromise = runner.fire(schedule(), {
+      runId: 'run-legacy-protocol',
+      firedAt: 1,
+      signal: new AbortController().signal,
+    });
+
+    child.stdout.write(`${JSON.stringify({
+      protocol: 'xdt-maker-script/1',
+      type: 'call',
+      id: 'py-1',
+      method: 'host.capabilities',
+      params: {},
+    })}\n`);
+    await vi.waitFor(() => expect(hostFrames.join('')).toContain('"type":"call_result"'));
+    const responseFrames = hostFrames
+      .flatMap((chunk) => chunk.trim().split('\n'))
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const callResult = responseFrames.find((frame) => frame.type === 'call_result');
+    expect(callResult).toMatchObject({
+      protocol: 'xdt-maker-script/1',
+      result: { protocol: 'xdt-maker-script/1' },
+    });
+
+    child.stdout.write(`${JSON.stringify({
+      protocol: 'xdt-maker-script/1',
+      type: 'complete',
+      resultText: 'done',
+    })}\n`);
+    child.emit('close', 0);
+    await expect(resultPromise).resolves.toEqual({ sessionId: '', resultText: 'done' });
   });
 
   it('pre-run hook 失败时保存检查结果、阻止主脚本并发送失败通知', async () => {
@@ -826,7 +914,8 @@ describe('ScriptScheduleRunner', () => {
       PATH: '/bin',
       HOME: '/home/user',
       USERPROFILE: 'C:\\Users\\X',
-      // 协议标记恒注入:Python 客户端凭它在 import 期做 fd 级 stdout 接管。
+      // 新旧协议标记恒注入:Python 客户端凭它在 import 期做 fd 级 stdout 接管。
+      CINDY_SCRIPT_PROTOCOL: '1',
       XDT_MAKER_SCRIPT_PROTOCOL: '1',
       // stdio 编码兜底:中文 Windows 上 Python pipe 默认 cp936,会撕坏 UTF-8 帧。
       PYTHONUTF8: '1',

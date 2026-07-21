@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -17,7 +19,10 @@ import {
 	mergeDesktopInstanceRecords,
 	parseWorktreeEntries,
 } from "../desktop-whoami.mjs";
-import { buildDesktopRestartSteps } from "../desktop-restart-runner.mjs";
+import {
+	buildDesktopRestartSteps,
+	runDesktopRestart,
+} from "../desktop-restart-runner.mjs";
 
 function appleScriptLines(args) {
 	const lines = [];
@@ -87,6 +92,36 @@ test("desktop restart runner keeps the kill-before-deps order by default", () =>
 		[stepScript(root, "ensure-dev-runtime-assets.mjs")],
 		[stepScript(root, "restart-desktop-remote.mjs"), "--wait-ready"],
 	]);
+});
+
+test("desktop restart rejects an unmerged migration before the kill step", () => {
+	const repo = fs.mkdtempSync(path.join(os.tmpdir(), "cindy-restart-policy-"));
+	const calls = [];
+	try {
+		fs.mkdirSync(path.join(repo, "apps", "desktop", "drizzle"), { recursive: true });
+		fs.writeFileSync(path.join(repo, "apps", "desktop", "drizzle", "0000_init.sql"), "SELECT 0;\n");
+		const git = (...args) => {
+			const result = spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+			assert.equal(result.status, 0, result.stderr);
+		};
+		git("init", "-b", "main");
+		git("config", "user.name", "Restart Policy Test");
+		git("config", "user.email", "restart-policy@example.invalid");
+		git("add", ".");
+		git("commit", "-m", "base");
+		git("update-ref", "refs/remotes/origin/main", "HEAD");
+		git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+		git("switch", "-c", "feature");
+		fs.writeFileSync(path.join(repo, "apps", "desktop", "drizzle", "0001_feature.sql"), "SELECT 1;\n");
+
+		assert.throws(
+			() => runDesktopRestart(["--wait-ready"], repo, (step) => calls.push(step)),
+			/Shared Cindy userData cannot run migration artifacts/,
+		);
+		assert.deepEqual(calls, []);
+	} finally {
+		fs.rmSync(repo, { recursive: true, force: true });
+	}
 });
 
 test("preserve-running skips every kill stage and reaches the readiness start", () => {
@@ -161,11 +196,33 @@ test("desktop readiness waiter removes an acknowledged ready status", async () =
 	}
 });
 
+test("desktop readiness waiter keeps waiting after ready-to-show and surfaces database failure", async () => {
+	const statusPath = fileURLToPath(new URL(`./startup-db-failed-${process.pid}.json`, import.meta.url));
+	try {
+		fs.writeFileSync(statusPath, '{"state":"window-ready","pid":123}\n');
+		setTimeout(() => {
+			fs.writeFileSync(statusPath, JSON.stringify({
+				state: "failed",
+				code: "MIGRATE_FAILED",
+				message: "applied migration runtime identity changed at seq 77 (0077_nebulous_veda.sql)",
+			}) + "\n");
+		}, 10);
+
+		await assert.rejects(
+			waitForDesktopStartup(statusPath, 1_000),
+			/MIGRATE_FAILED.*seq 77.*0077_nebulous_veda\.sql/,
+		);
+		assert.equal(fs.existsSync(statusPath), false);
+	} finally {
+		fs.rmSync(statusPath, { force: true });
+	}
+});
+
 test("desktop readiness timeout leaves an abandoned tombstone for late Electron events", async () => {
 	const statusPath = fileURLToPath(new URL(`./startup-timeout-${process.pid}.json`, import.meta.url));
 	try {
 		fs.writeFileSync(statusPath, '{"state":"pending"}\n');
-		await assert.rejects(waitForDesktopStartup(statusPath, 0), /did not reach main-window readiness/);
+		await assert.rejects(waitForDesktopStartup(statusPath, 0), /did not finish window\/auth\/database startup/);
 		assert.equal(readDesktopStartupStatus(statusPath)?.state, "abandoned");
 	} finally {
 		fs.rmSync(statusPath, { force: true });

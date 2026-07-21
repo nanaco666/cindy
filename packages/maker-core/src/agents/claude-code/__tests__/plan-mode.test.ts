@@ -183,7 +183,7 @@ describe('ClaudeCodeAgent plan mode', () => {
     const workingDir = await makeTempDir();
     const starts: Array<Record<string, unknown>> = [];
     const fakeQuery = createFakeQuery();
-    const source = ['mcp__cindy__ghost_forge_guide', 'mcp__lizi_xdt_helper__list_tools'];
+    const source = ['mcp__cindy__ghost_forge_guide', 'mcp__cindy_helper__list_tools'];
 
     const remoteCcQueryFactory: NonNullable<AgentDeps['remoteCcQueryFactory']> = async (args) => {
       starts.push(args.startParams);
@@ -205,7 +205,7 @@ describe('ClaudeCodeAgent plan mode', () => {
     expect(starts).toHaveLength(1);
     expect(starts[0]?.allowedTools).toEqual([
       'mcp__cindy__ghost_forge_guide',
-      'mcp__lizi_xdt_helper__list_tools',
+      'mcp__cindy_helper__list_tools',
     ]);
     expect(starts[0]?.allowedTools).not.toBe(source);
     expect(sdkMock.query).not.toHaveBeenCalled();

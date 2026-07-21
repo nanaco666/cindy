@@ -9,9 +9,10 @@
  *   android | browser | computer | feishu_bot |
  *   scheduler | ssh | memory | contacts | xdt_helper | collab(→ lizi_orca) | lsp
  *
- * lizi-mcps/providers.ts 里的 MCP provider `name` 使用 `lizi_` 前缀
- * (例如 provider name 'lizi_feishu' → plugin id 'feishu')。映射关系由
- * PROVIDER_NAME_TO_PLUGIN_ID 定义，mcp-providers.ts 包装 isEnabled gate 时消费。
+ * lizi-mcps/providers.ts 里的 MCP provider `name` 通常使用 `lizi_` 前缀
+ * (例如 provider name 'lizi_feishu' → plugin id 'feishu')；Cindy 自有能力
+ * 使用 `cindy_` 前缀。映射关系由 PROVIDER_NAME_TO_PLUGIN_ID 定义，
+ * mcp-providers.ts 包装 isEnabled gate 时消费。
  */
 
 import type { Plugin, PluginId } from './types.js';
@@ -72,11 +73,11 @@ export type KnownProviderName =
   | 'lizi_computer'
   | 'lizi_feishu_bot'
   | 'lizi_slack'
-  | 'lizi_scheduler'
+  | 'cindy_scheduler'
   | 'lizi_ssh'
   | 'lizi_memory'
   | 'lizi_contacts'
-  | 'lizi_xdt_helper'
+  | 'cindy_helper'
   | 'lizi_orca'
   | 'lizi_lsp';
 
@@ -84,7 +85,8 @@ export type KnownProviderName =
  * MCP provider `name`(lizi-mcps/providers.ts) → 用户可见 plugin id 的映射。
  *
  * lizi-mcps 会给多数 provider name 加 `lizi_` 前缀(如 'lizi_feishu'、'lizi_memory')，
- * 但用户配置使用短 id('feishu'、'memory')。这张表桥接两者，让 mcp-providers.ts
+ * Cindy 自有 provider 使用 `cindy_` 前缀；用户配置使用短 id('feishu'、'memory')。
+ * 这张表桥接两者，让 mcp-providers.ts
  * 可以调用：
  *
  *   const pluginId = pluginIdForProviderName(p.name);
@@ -100,11 +102,11 @@ export const PROVIDER_NAME_TO_PLUGIN_ID: Record<KnownProviderName, PluginId> = {
   lizi_computer: 'computer',
   lizi_feishu_bot: 'feishu_bot',
   lizi_slack: 'slack',
-  lizi_scheduler: 'scheduler',
+  cindy_scheduler: 'scheduler',
   lizi_ssh: 'ssh',
   lizi_memory: 'memory',
   lizi_contacts: 'contacts',
-  lizi_xdt_helper: 'xdt_helper',
+  cindy_helper: 'xdt_helper',
   lizi_orca: 'collab',
   lizi_lsp: 'lsp',
 };
@@ -150,11 +152,11 @@ const PLUGIN_ID_TO_MCP_ID: Record<PluginId, LiziMcpId | undefined> = {
   computer: 'computer',
   feishu_bot: 'lizi_feishu_bot',
   slack: 'lizi_slack',
-  scheduler: 'lizi_scheduler',
+  scheduler: 'cindy_scheduler',
   ssh: 'lizi_ssh',
   memory: 'lizi_memory',
   contacts: 'lizi_contacts',
-  xdt_helper: 'lizi_xdt_helper',
+  xdt_helper: 'cindy_helper',
   collab: 'lizi_orca',
   lsp: 'lizi_lsp',
 };

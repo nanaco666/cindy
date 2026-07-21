@@ -3,7 +3,7 @@
   "id": "filo-google",
   "name": "Filo Google",
   "description": "Filo 内置的 Google 服务插件:连上你的 Google 账号即可读写 Gmail / 日历 / Drive / Sheets。开箱即用——内置应用身份,点「连接账号」完成授权即可;授权与令牌全程由主机托管。",
-  "whenToUse": "需要查邮件、发邮件、写草稿(Gmail),查/建/改日程(Google 日历),搜索云端文件(Google Drive),读写表格(Google Sheets),或查看已连接的 Google 账号时找我(需先在插件设置页连接 Google 账号)。",
+  "whenToUse": "需要查邮件、发邮件、写草稿(Gmail),查/建/改日程(Google 日历),搜索云端文件(Google Drive),读写表格(Google Sheets),或查看已连接的 Google 账号时找我(需先在主界面侧边栏「插件」→「Filo Google」详情页连接账号)。",
   "version": "1.2.2",
   "author": "Cindy",
   "icon": "assets/icon.png",
@@ -27,7 +27,7 @@
         "key": "google_account",
         "label": "Google 账号",
         "source": "oauth",
-        "hint": "使用内置的 Filo 应用身份,到设置页点「连接账号」即可,无需任何配置",
+        "hint": "使用内置的 Filo 应用身份,到本插件详情页点「连接账号」即可,无需任何配置",
         "inject": {
           "header": "Authorization",
           "format": "Bearer {value}",
@@ -40,6 +40,8 @@
         "oauth": {
           "authorizeUrl": "https://accounts.google.com/o/oauth2/v2/auth",
           "tokenUrl": "https://oauth2.googleapis.com/token",
+          "clientId": "966060737739-d3dfjdsaace1ur4thk03h3aj4hpnjucq.apps.googleusercontent.com",
+          "clientSecret": "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",
           "scopes": [
             "openid",
             "https://www.googleapis.com/auth/userinfo.email",
@@ -64,7 +66,7 @@
   "tools": [
     {
       "name": "google_accounts",
-      "description": "列出已连接的 Google 账号(id / 邮箱 / 状态 / 是否默认)。其它工具的 account 参数填这里的账号 id;用户只连了一个账号时无需调用本工具。账号状态为 expired 时提示用户去插件设置页重新连接。",
+      "description": "列出已连接的 Google 账号(id / 邮箱 / 状态 / 是否默认)。其它工具的 account 参数填这里的账号 id;用户只连了一个账号时无需调用本工具。账号状态为 expired 时提示用户去主界面侧边栏「插件」→「Filo Google」详情页重新连接。",
       "parameters": {
         "type": "object",
         "properties": {}

@@ -317,7 +317,8 @@ function mapBehaviorToApproval(behavior: 'allow' | 'deny'): ApprovalDecision {
   return behavior === 'allow' ? 'accept' : 'decline';
 }
 
-const ASK_USER_DYNAMIC_TOOL_NAMESPACE = 'xdt_maker';
+const ASK_USER_DYNAMIC_TOOL_NAMESPACE = 'cindy';
+const LEGACY_ASK_USER_DYNAMIC_TOOL_NAMESPACE = 'xdt_maker';
 const ASK_USER_DYNAMIC_TOOL_NAME = 'ask_user_question';
 const MAX_REQUEST_USER_INPUT_QUESTIONS = 3;
 const MAX_REQUEST_USER_INPUT_OPTIONS = 10;
@@ -388,7 +389,11 @@ interface ActiveToolContext {
 }
 
 function isAskUserDynamicTool(params: Pick<DynamicToolCallParams, 'namespace' | 'tool'>): boolean {
-  return params.namespace === ASK_USER_DYNAMIC_TOOL_NAMESPACE && params.tool === ASK_USER_DYNAMIC_TOOL_NAME;
+  return (
+    (params.namespace === ASK_USER_DYNAMIC_TOOL_NAMESPACE ||
+      params.namespace === LEGACY_ASK_USER_DYNAMIC_TOOL_NAMESPACE) &&
+    params.tool === ASK_USER_DYNAMIC_TOOL_NAME
+  );
 }
 
 function shouldRegisterAskUserDynamicTool(opts: Pick<StartSessionOptions, 'model' | 'providerId'>): boolean {
@@ -1881,6 +1886,11 @@ export class CodexAgent extends BaseAgent {
     let isTurnInFlight = false;
     let isTurnStartPending = false;
     type TurnCompletedParams = Parameters<NonNullable<ThreadEventHandlers['turnCompleted']>>[0];
+    // 正常完成的 turn 也必须保留墓碑:app-server 允许 turn/completed 早于仍在
+    // 后台收尾的 item 事件到达。没有这层墓碑时,currentTurnId 已清空,迟到 item
+    // 会重新发出 running status,而该 turn 的 done 已消费完,会话将永久假忙。
+    // turn id 在同一 thread 内唯一;墓碑随 session handle 释放,不跨 session 泄漏。
+    const completedTurnIds = new Set<string>();
     const terminalErroredTurnIds = new Set<string>();
     const deferredTerminalTurnCompletions = new Map<string, TurnCompletedParams>();
     // 最近一次 thread/tokenUsage/updated 的 last 增量 + contextWindow,
@@ -2944,7 +2954,7 @@ export class CodexAgent extends BaseAgent {
       if (!ctx) return 'ask_user_question';
       if (ctx.type === 'mcpToolCall') return 'permission';
       if (ctx.type === 'dynamicToolCall') {
-        return ctx.namespace === ASK_USER_DYNAMIC_TOOL_NAMESPACE && ctx.tool === ASK_USER_DYNAMIC_TOOL_NAME
+        return isAskUserDynamicTool({ namespace: ctx.namespace ?? '', tool: ctx.tool ?? '' })
           ? 'ask_user_question'
           : 'permission';
       }
@@ -3145,6 +3155,7 @@ export class CodexAgent extends BaseAgent {
 
     const shouldIgnoreStaleTurnEvent =(turnId: string | null | undefined): boolean => {
       if (!turnId) return false;
+      if (completedTurnIds.has(turnId)) return true;
       if (terminalErroredTurnIds.has(turnId)) return true;
       return currentTurnId !== null && turnId !== currentTurnId;
     };
@@ -3281,6 +3292,10 @@ export class CodexAgent extends BaseAgent {
         deferredTerminalTurnCompletions.set(turn.id, params);
         return;
       }
+      // turn/completed 可能重复投递。只允许第一次进入 usage / UI / done 收口;
+      // 同一个墓碑也负责拦截该 turn 随后迟到的 item / reasoning / started 事件。
+      if (completedTurnIds.has(turn.id)) return;
+      completedTurnIds.add(turn.id);
       const suppressTerminalUi = terminalErroredTurnIds.has(turn.id);
       deferredTerminalTurnCompletions.delete(turn.id);
       if (currentTurnId === turn.id || currentTurnId === null) {
@@ -4222,7 +4237,16 @@ export class CodexAgent extends BaseAgent {
    * opts.upToMessageId 在 Codex 这里被忽略。uuidMap 返回空 — Codex agentMeta 不存
    * message uuid, maker 那边也找不到东西可 remap, 不会 break。
    */
-  private async findRolloutPath(threadId: string): Promise<string> {
+  private async findRolloutPath(threadId: string, preferredPath?: string): Promise<string> {
+    if (preferredPath && !isRemoteLikePath(preferredPath)) {
+      try {
+        const stat = await fs.stat(preferredPath);
+        if (stat.isFile()) return preferredPath;
+      } catch {
+        // Fall through to the normal CODEX_HOME scan when preparation only
+        // returned a stale state-db pointer.
+      }
+    }
     const codexHome = this.codexHome;
     if (!codexHome || isRemoteLikePath(codexHome)) {
       throw new Error('Codex rollout path is unavailable for this session');
@@ -4267,8 +4291,8 @@ export class CodexAgent extends BaseAgent {
     return bestPath;
   }
 
-  private async createSafeForkRolloutCopy(threadId: string): Promise<string> {
-    const sourcePath = await this.findRolloutPath(threadId);
+  private async createSafeForkRolloutCopy(threadId: string, preferredPath?: string): Promise<string> {
+    const sourcePath = await this.findRolloutPath(threadId, preferredPath);
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'xdt-codex-fork-'));
     const copyPath = path.join(tempDir, path.basename(sourcePath));
     const text = await fs.readFile(sourcePath, 'utf8');
@@ -4294,9 +4318,20 @@ export class CodexAgent extends BaseAgent {
     try {
       const { host } = await this.getUtilityHost();
       await host.ensureStarted();
+      // Imported Codex threads may still live under another CODEX_HOME. Resume
+      // already asks the desktop host to link/adopt their state and rollout;
+      // fork must cross the same preparation boundary before thread/fork or the
+      // utility app-server cannot resolve a freshly imported thread.
+      const preparedRolloutResult = await this.deps.prepareCodexResumeSession?.(opts.sourceSdkSessionId);
+      const preparedRolloutPath = typeof preparedRolloutResult === 'string'
+        ? preparedRolloutResult
+        : undefined;
       // 选项名沿用历史语义;安全副本同时会丢弃会让 Responses fork/retry 失败的坏历史 payload。
       if (opts.stripEncryptedReasoning) {
-        stripCopyPath = await this.createSafeForkRolloutCopy(opts.sourceSdkSessionId);
+        stripCopyPath = await this.createSafeForkRolloutCopy(
+          opts.sourceSdkSessionId,
+          preparedRolloutPath,
+        );
       }
       const params: ThreadForkParams = {
         threadId: opts.sourceSdkSessionId,

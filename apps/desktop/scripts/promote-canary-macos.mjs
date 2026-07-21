@@ -108,10 +108,13 @@ function summarize(label, m) {
 
 // 覆盖 stable 前，把该 arch 当前 stable manifest 按其版本号备份到 OSS 的 back-up/<version>/ 目录。
 // 备份任何环节失败都会抛错，调用方据此中止 promote —— 确保"备份成功才能完成发布"。
+// 特例:app 上线前的老 stable manifest 只有 codex/claudeCode 段、没有 app.version
+// (首次 app promote 必然命中),备份到 back-up/pre-app/ 目录而不是中止。
 async function backupStableManifest(client, platformKey, stableText, stableJson) {
-  const version = stableJson?.app?.version;
+  let version = stableJson?.app?.version;
   if (!version) {
-    throw new Error(`[${platformKey}] 当前 stable manifest 缺少 app.version，无法确定备份目录，已中止 promote。`);
+    console.log(`  ==> [${platformKey}] 当前 stable manifest 无 app 段(app 上线前的老格式),备份到 back-up/pre-app/`);
+    version = 'pre-app';
   }
   if (!/^[\w.+-]+$/.test(version)) {
     throw new Error(`[${platformKey}] stable 版本号含非法字符，拒绝作为备份目录名: ${version}`);

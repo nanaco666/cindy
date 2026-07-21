@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 
@@ -75,7 +75,7 @@ export interface CreateWorkerForm {
 export interface CreateWorkerPopoverProps {
   open: boolean;
   onClose: () => void;
-  onCreate: (form: CreateWorkerForm) => void;
+  onCreate: (form: CreateWorkerForm) => void | Promise<void>;
   title?: string;
   submitLabel?: string;
   className?: string;
@@ -101,6 +101,9 @@ export function CreateWorkerPopover({
   const [fast, setFast] = useState(DEFAULT_PREFS.codex.fast);
   const [initialTask, setInitialTask] = useState('');
   const [prefs, setPrefs] = useState<WorkerPrefs>(DEFAULT_PREFS);
+  const [prefsRestored, setPrefsRestored] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   const ccCaps = useAgentCapabilities('claude-code', deviceId);
   const codexCaps = useAgentCapabilities('codex', deviceId);
@@ -109,7 +112,8 @@ export function CreateWorkerPopover({
   const providers = deviceId ? remoteProviders.providers : localProviders.providers;
   const providersLoading = deviceId ? remoteProviders.loading : localProviders.loading;
   const providersError = deviceId ? remoteProviders.error : null;
-  const activeCaps = agent === 'codex' ? codexCaps.capabilities : ccCaps.capabilities;
+  const activeCapabilitiesState = agent === 'codex' ? codexCaps : ccCaps;
+  const activeCaps = activeCapabilitiesState.capabilities;
   const activeModels = useMemo(() => {
     return selectWorkerModels({
       agent,
@@ -121,13 +125,25 @@ export function CreateWorkerPopover({
     });
   }, [activeCaps, agent, deviceId, providers, providersError, providersLoading]);
   const currentModel = activeModels.find((m) => m.id === model);
+  const modelCatalogLoading =
+    activeCapabilitiesState.loading ||
+    (deviceId ? providersLoading : agent === 'codex' && providersLoading);
   const currentModelSupportsFast = Boolean(
     agent === 'codex' && activeCaps?.hasFastMode && currentModel?.supportsFastMode,
   );
+  const noAvailableLocalModels =
+    prefsRestored &&
+    !deviceId &&
+    !modelCatalogLoading &&
+    (activeCaps !== null || activeCapabilitiesState.error !== null) &&
+    activeModels.length === 0;
 
   // 打开弹窗时恢复上次选择；initial task 不记忆，避免把旧任务误带到下一次创建。
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setPrefsRestored(false);
+      return;
+    }
     const stored = readWorkerPrefs();
     const agentPrefs = stored[stored.lastAgent];
     setPrefs(stored);
@@ -136,21 +152,25 @@ export function CreateWorkerPopover({
     setEffort(agentPrefs.effort);
     setFast(agentPrefs.fast);
     setInitialTask('');
+    setPrefsRestored(true);
   }, [open]);
 
   // capabilities 可能尚未加载或模型被移除；加载后把当前选择收敛到可用模型和 effort。
   useEffect(() => {
-    if (agent === 'codex' && providersLoading) return;
+    if (!open || !prefsRestored || modelCatalogLoading) return;
     const models = activeModels;
     if (models.length === 0) return;
-    const selected = models.find((m) => m.id === model);
-    // 显式模型可能刚由 provider catalog 发现，而 capabilities 快照仍在联合刷新。
-    // 不得把它静默替换成 models[0]；只有真正找到 descriptor 后才校准 effort。
-    if (!selected) return;
+    let selected = models.find((m) => m.id === model);
+    if (!selected) {
+      // Provider loading has settled, so activeModels is authoritative for both local and remote
+      // creation. A capability entry alone does not make a disconnected provider's model usable.
+      selected = models[0];
+      setModel(selected.id);
+    }
     if (selected.efforts.length > 0 && !selected.efforts.includes(effort)) {
       setEffort(selected.defaultEffort ?? selected.efforts[selected.efforts.length - 1]);
     }
-  }, [activeModels, agent, providersLoading, effort, model]);
+  }, [activeModels, agent, effort, model, open, prefsRestored, modelCatalogLoading]);
 
   useEffect(() => {
     if (currentModel && !currentModelSupportsFast && fast) {
@@ -193,12 +213,18 @@ export function CreateWorkerPopover({
       ? t('orca.createWorker.customRolePredefinedError')
       : null;
   const canCreate =
-    activeRole.length >= 1 && activeRole.length <= 32 && !customRoleError && !!currentModel;
+    !isSubmitting &&
+    activeRole.length >= 1 &&
+    activeRole.length <= 32 &&
+    !customRoleError &&
+    !!currentModel;
   const resolvedTitle = title ?? t('orca.createWorker.title');
   const resolvedSubmitLabel = submitLabel ?? t('orca.createWorker.submit');
 
-  const handleCreate = useCallback(() => {
-    if (!canCreate) return;
+  const handleCreate = useCallback(async () => {
+    if (!canCreate || submittingRef.current) return;
+    submittingRef.current = true;
+    setIsSubmitting(true);
     const nextPrefs: WorkerPrefs = {
       ...prefs,
       lastAgent: agent,
@@ -206,14 +232,19 @@ export function CreateWorkerPopover({
     };
     setPrefs(nextPrefs);
     writeWorkerPrefs(nextPrefs);
-    onCreate({
-      role: activeRole,
-      agent,
-      model,
-      effort: currentModel && currentModel.efforts.length > 0 ? effort : undefined,
-      fast: currentModelSupportsFast ? fast : undefined,
-      initialTask,
-    });
+    try {
+      await onCreate({
+        role: activeRole,
+        agent,
+        model,
+        effort: currentModel && currentModel.efforts.length > 0 ? effort : undefined,
+        fast: currentModelSupportsFast ? fast : undefined,
+        initialTask,
+      });
+    } finally {
+      submittingRef.current = false;
+      setIsSubmitting(false);
+    }
   }, [
     canCreate,
     prefs,
@@ -330,6 +361,13 @@ export function CreateWorkerPopover({
               popoverSide="bottom"
             />
           </div>
+          {noAvailableLocalModels ? (
+            <p className="mt-1.5 text-11 leading-snug text-[var(--error-fg)]" role="status">
+              {t('orca.createWorker.noAvailableModels', {
+                agent: agent === 'codex' ? 'Codex' : 'Claude Code',
+              })}
+            </p>
+          ) : null}
         </div>
 
         <div className="mb-5">
@@ -356,6 +394,7 @@ export function CreateWorkerPopover({
               : 'bg-[var(--surface-chip)] text-[var(--text-tertiary)] cursor-not-allowed',
           )}
           disabled={!canCreate}
+          aria-busy={isSubmitting}
           onClick={handleCreate}
         >
           {resolvedSubmitLabel}

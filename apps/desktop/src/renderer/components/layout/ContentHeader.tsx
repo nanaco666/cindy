@@ -22,6 +22,8 @@
  * 右栏（Sidebar 侧保持无横线的连续表面）；设置页隐形 chrome 连边框也不画。
  */
 
+import type { ReactNode } from 'react';
+
 import { useFeatureContentHeader } from '@/features/feature-context';
 import { useMacFullscreen } from '@/hooks/useMacFullscreen';
 import { cn } from '@/lib/utils';
@@ -41,6 +43,21 @@ const WIN_CONTROLS_WIDTH = 138;
  */
 const MAC_RIGHT_TOGGLE_WIDTH = 36;
 
+/**
+ * "空 header 隐藏"判定(用户决策 2026-06-11)的单一决策源:MainLayout 与 ContentHeader
+ * 共用,MainLayout 据此在 <main> 上广播 --content-header-h(46px/0px)供路由做占位
+ * 补偿(新建页内容组恒定在"有栏时"位置,用户改稿 2026-07-21),ContentHeader 据此隐藏。
+ * 判定语义见组件内原注释:mac + Sidebar 展开 + 无注入内容 + 无右栏开关。
+ */
+export function useContentHeaderHidden(args: {
+  sidebarVisible: boolean;
+  rightSidebarAvailable: boolean;
+}): boolean {
+  const { isMac } = useMacFullscreen();
+  const headerContent = useFeatureContentHeader();
+  return isMac && args.sidebarVisible && headerContent == null && !args.rightSidebarAvailable;
+}
+
 interface ContentHeaderProps {
   /** Sidebar 当前是否在布局中可见（展开态）。false = 折叠或设置页隐藏。 */
   sidebarVisible: boolean;
@@ -51,12 +68,15 @@ interface ContentHeaderProps {
    *  右端留折叠按钮占位 + 决定是否留住空 header;Windows 仅影响空 header 判定,
    *  占位恒为窗口控制按钮宽。 */
   rightSidebarAvailable: boolean;
+  /** MainLayout 经 useContentHeaderHidden 预判的结果(与 --content-header-h 同源)。 */
+  hidden: boolean;
 }
 
 export function ContentHeader({
   sidebarVisible,
   showCollapsedActions,
   rightSidebarAvailable,
+  hidden,
 }: ContentHeaderProps) {
   const { isMac, isFullscreen } = useMacFullscreen();
   const headerContent = useFeatureContentHeader();
@@ -81,7 +101,8 @@ export function ContentHeader({
   //     即使无注入内容也留住空 header 当开关落点，否则全屏聊天视图在 mac 上会
   //     失去关闭右栏的入口
   // 设置页天然不满足 sidebarVisible，维持隐形 chrome 现状。
-  if (isMac && sidebarVisible && headerContent == null && !rightSidebarAvailable) {
+  // 判定已上提到 useContentHeaderHidden(MainLayout 同源消费,广播 --content-header-h)。
+  if (hidden) {
     return null;
   }
 
@@ -142,5 +163,36 @@ export function ContentHeader({
         <div aria-hidden className="h-full shrink-0" style={{ width: WIN_CONTROLS_WIDTH }} />
       )}
     </header>
+  );
+}
+
+/**
+ * ContentHeaderSlot —— 必须渲染在 FeatureSidebarSlotProvider 内(useContentHeaderHidden
+ * 消费 feature context)。一式两用:① 按判定渲染/隐藏 ContentHeader;② 用 display:contents
+ * 包裹层向后代广播 --content-header-h(46px/0px,与 header 的 h-[46px] 同源)——供新建页等
+ * 视口比例定位的路由做占位补偿,顶栏显隐内容区零跳动(用户改稿 2026-07-21)。
+ * display:contents 不参与布局,children 仍直接躺在 <main> 的 flex 上下文里,DOM 语义不变。
+ */
+export function ContentHeaderSlot({
+  sidebarVisible,
+  showCollapsedActions,
+  rightSidebarAvailable,
+  children,
+}: Omit<ContentHeaderProps, 'hidden'> & { children: ReactNode }) {
+  const hidden = useContentHeaderHidden({ sidebarVisible, rightSidebarAvailable });
+  return (
+    <>
+      <ContentHeader
+        sidebarVisible={sidebarVisible}
+        showCollapsedActions={showCollapsedActions}
+        rightSidebarAvailable={rightSidebarAvailable}
+        hidden={hidden}
+      />
+      <div
+        style={{ display: 'contents', ['--content-header-h' as string]: hidden ? '0px' : '46px' }}
+      >
+        {children}
+      </div>
+    </>
   );
 }

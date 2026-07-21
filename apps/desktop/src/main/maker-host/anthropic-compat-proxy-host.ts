@@ -21,9 +21,11 @@ import {
   createActiveStripTransform,
   createEmptyThinkingRecoveryRule,
   createEncryptedContentRecoveryRule,
+  createToolUseProviderSpecificFieldsRecoveryRule,
   stripEmptyThinkingFromBody,
   stripEncryptedContentFromBody,
   stripNonAnthropicFields,
+  stripToolUseProviderSpecificFields,
   type ProxyHandle,
   type RoutingTransform,
 } from '@lizi/anthropic-compat-proxy';
@@ -282,6 +284,9 @@ export async function ensureAnthropicCompatProxyReady(): Promise<void> {
           enabled: () => true,
           strip: stripEmptyThinkingFromBody,
         }),
+        // LiteLLM/provider adapter 可能把 provider_specific_fields(null) 挂到 tool_use 上，
+        // 严格 Anthropic 入站 schema 不接受该扩展字段。
+        stripToolUseProviderSpecificFields,
         stripNonAnthropicFields,
       ],
       recoveryRules: [
@@ -294,6 +299,7 @@ export async function ensureAnthropicCompatProxyReady(): Promise<void> {
           enabled: () => true,
           onRetry: (threadId, model) => emptyThinkingStripController.markActive(threadId, model),
         }),
+        createToolUseProviderSpecificFieldsRecoveryRule(),
       ],
       logger: log,
       // 请求体 dump 默认关(dev trace 级别 + agent 高并发会刷爆 main event loop

@@ -48,6 +48,8 @@ import {
   clearSessionPersistState,
   consumeLastAssistantPersistId,
   noteSessionClearBoundary,
+  noteSessionAgentKind,
+  enqueueDurableWrite,
   noteTurnStarted,
   saveTurnStartedAtForDeferred,
 } from '../messagePersistBroadcaster.js';
@@ -125,6 +127,31 @@ describe('update_plan tool_use persistence', () => {
     await flushWrites();
     expect(createMessage).toHaveBeenCalledTimes(2);
     expect(updateMessageContent).not.toHaveBeenCalled();
+  });
+});
+
+describe('agent_kind enqueue snapshot', () => {
+  it('writeChain 延迟期间切换引擎,消息仍使用事件入队时的 agent_kind', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const blocker = enqueueDurableWrite('agent-kind-test-blocker', () => gate);
+
+    noteSessionAgentKind(SESSION, 'cc');
+    onToolUseEvent(
+      SESSION,
+      { toolUseId: 'before-switch', toolName: 'Read', input: { file_path: '/tmp/a' } },
+      null,
+    );
+    noteSessionAgentKind(SESSION, 'codex');
+    release();
+    await blocker;
+    await flushWrites();
+
+    expect(createMessage).toHaveBeenCalledWith(
+      SESSION,
+      expect.objectContaining({ role: 'tool_use', agentKind: 'cc' }),
+      broadcastGuard(),
+    );
   });
 });
 

@@ -169,13 +169,15 @@ describe('message render shared model', () => {
     // todo 作为顶层项紧随其后。
     expect(items.map((item) => item.type)).toEqual(['message', 'work_group', 'todo', 'message']);
     const group = expectType(items[1], 'work_group');
-    expect(group.key).toBe('work-thinking');
+    expect(group.key).toBe('work-summary-thinking');
     expect(group.durationMs).toBe(3000);
     expect(group.children.map((child) => child.type)).toEqual([
-      'thinking',
-      'tool_group',
+      'work_group',
       'message',
     ]);
+    const activityGroup = expectType(group.children[0], 'work_group');
+    expect(activityGroup.key).toBe('work-thinking');
+    expect(activityGroup.children.map((child) => child.type)).toEqual(['thinking', 'tool_group']);
     const todo = expectType(items[2], 'todo');
     expect(todo.todos).toEqual([{ content: 'Implement', status: 'completed', activeForm: undefined }]);
   });
@@ -274,7 +276,10 @@ describe('message render shared model', () => {
       }),
     ]);
 
-    expect(items.map((item) => item.type)).toEqual(['message', 'thinking', 'tool_group']);
+    expect(items.map((item) => item.type)).toEqual(['message', 'work_group']);
+    const group = expectType(items[1], 'work_group');
+    expect(group.children.map((child) => child.type)).toEqual(['thinking', 'tool_group']);
+    expect(group.isStreaming).toBe(false);
   });
 
   it('keeps active streaming turn work visible until the turn ends', () => {
@@ -302,12 +307,11 @@ describe('message render shared model', () => {
     ];
 
     const streamingItems = buildMessageRenderItems(messages, { isSessionStreaming: true });
-    expect(streamingItems.map((item) => item.type)).toEqual([
-      'message',
-      'thinking',
-      'tool_group',
-      'message',
-    ]);
+    expect(streamingItems.map((item) => item.type)).toEqual(['message', 'work_group', 'message']);
+    const activeGroup = expectType(streamingItems[1], 'work_group');
+    expect(activeGroup.children.map((child) => child.type)).toEqual(['thinking', 'tool_group']);
+    // Assistant progress text closes the preceding activity segment, while the text itself stays visible.
+    expect(activeGroup.isStreaming).toBe(false);
 
     const completedItems = buildMessageRenderItems(
       messages.map((item) => item.kind === 'assistant' ? { ...item, isStreaming: false } : item),
@@ -336,9 +340,9 @@ describe('message render shared model', () => {
       taskUpdates,
     );
 
-    // Exactly one card (no duplicate from the orphan sweep — the linked key is recorded).
-    expect(items.map((item) => item.type)).toEqual(['agent_task']);
-    const task = expectType(items[0], 'agent_task');
+    // Exactly one card inside the completed work group (no duplicate from the orphan sweep).
+    expect(items.map((item) => item.type)).toEqual(['work_group']);
+    const task = expectType(expectType(items[0], 'work_group').children[0], 'agent_task');
     expect(task.toolCall?.source.id).toBe('task-tool');
     expect(task.update?.status).toBe('completed');
     expect(task.update?.summary).toBe('Done auditing');
@@ -421,8 +425,98 @@ describe('message render shared model', () => {
       taskUpdates,
     );
 
-    expect(items.map((item) => item.type)).toEqual(['agent_task']);
-    expect(expectType(items[0], 'agent_task').update?.usage?.totalTokens).toBe(500);
+    expect(items.map((item) => item.type)).toEqual(['work_group']);
+    const task = expectType(expectType(items[0], 'work_group').children[0], 'agent_task');
+    expect(task.update?.usage?.totalTokens).toBe(500);
+  });
+
+  it('keeps progress text visible between folded action segments, then nests those segments at completion', () => {
+    const messages = [
+      message({ kind: 'user', source: source('user', 'start', 1), body: 'start', label: 'user' }),
+      message({
+        kind: 'thinking',
+        source: source('thinking-1', { text: 'first thought' }, 2),
+        body: 'first thought',
+        label: 'thinking',
+      }),
+      message({
+        kind: 'tool',
+        source: source('read-1', { toolName: 'Read', input: { file_path: '/repo/a.ts' } }, 3),
+        body: 'Read(/repo/a.ts)',
+        label: 'Read',
+      }),
+      message({ kind: 'assistant', source: source('progress-1', 'Found A.', 4), body: 'Found A.', label: 'assistant' }),
+      message({
+        kind: 'tool',
+        source: source('grep-1', { toolName: 'Grep', input: { pattern: 'TODO' } }, 5),
+        body: 'Grep(TODO)',
+        label: 'Grep',
+      }),
+      message({ kind: 'assistant', source: source('progress-2', 'Checking tests.', 6), body: 'Checking tests.', label: 'assistant' }),
+      message({
+        kind: 'tool',
+        source: source('bash-1', { toolName: 'Bash', input: { command: 'pnpm test' } }, 7),
+        body: 'Bash(pnpm test)',
+        label: 'Bash',
+      }),
+    ];
+
+    const active = buildMessageRenderItems(messages, { isSessionStreaming: true });
+    expect(active.map((item) => item.type)).toEqual([
+      'message',
+      'work_group',
+      'message',
+      'work_group',
+      'message',
+      'work_group',
+    ]);
+    expect(expectType(active[1], 'work_group').isStreaming).toBe(false);
+    expect(expectType(active[3], 'work_group').isStreaming).toBe(false);
+    expect(expectType(active[5], 'work_group').isStreaming).toBe(true);
+
+    const completed = buildMessageRenderItems([
+      ...messages,
+      message({ kind: 'assistant', source: source('final', 'Done.', 9), body: 'Done.', label: 'assistant' }),
+    ]);
+    expect(completed.map((item) => item.type)).toEqual(['message', 'work_group', 'message']);
+    const summary = expectType(completed[1], 'work_group');
+    expect(summary.key).toBe('work-summary-thinking-1');
+    expect(summary.children.map((child) => child.type)).toEqual([
+      'work_group',
+      'message',
+      'work_group',
+      'message',
+      'work_group',
+    ]);
+    expect(summary.children.filter((child) => child.type === 'work_group')).toHaveLength(3);
+  });
+
+  it('uses a compact system card as an idempotent activity boundary inside a running turn', () => {
+    const items = buildMessageRenderItems([
+      message({ kind: 'user', source: source('user', 'start', 1), body: 'start', label: 'user' }),
+      message({
+        kind: 'thinking',
+        source: source('before-compact', { text: 'before compact' }, 2),
+        body: 'before compact',
+        label: 'thinking',
+      }),
+      message({
+        kind: 'system',
+        source: source('compact-boundary', { boundaryId: 'boundary-1' }, 3),
+        body: '',
+        label: 'system:compact',
+      }),
+      message({
+        kind: 'thinking',
+        source: source('after-compact', { text: 'after compact' }, 4),
+        body: 'after compact',
+        label: 'thinking',
+      }),
+    ], { isSessionStreaming: true });
+
+    expect(items.map((item) => item.type)).toEqual(['message', 'work_group', 'message', 'work_group']);
+    expect(expectType(items[1], 'work_group').isStreaming).toBe(false);
+    expect(expectType(items[3], 'work_group').isStreaming).toBe(true);
   });
 
   it('keeps a running agent_task flat as a visible anchor instead of folding it into the work group', () => {
@@ -748,11 +842,34 @@ describe('message render todo grouping', () => {
     expect(items[1]).toMatchObject({
       type: 'todo',
       key: 'todo-plan1',
+      isStreaming: false,
       todos: [
         { content: 'Inspect', status: 'in_progress' },
         { content: 'Patch', status: 'pending' },
       ],
     });
+  });
+
+  it('marks only the plan card in the active tail work segment as live', () => {
+    const items = buildMessageRenderItems([
+      normalized(tool('plan-before-answer', 'update_plan', {
+        plan: [{ step: 'Old task', status: 'completed' }],
+      })),
+      normalized({
+        clientId: 'progress-boundary',
+        role: 'assistant',
+        content: 'Finished that step.',
+        createdAt: '2026-01-01T00:00:07.000Z',
+      }, 'assistant'),
+      normalized(tool('plan-after-answer', 'update_plan', {
+        plan: [{ step: 'Current task', status: 'in_progress' }],
+      })),
+    ], { isSessionStreaming: true });
+
+    const todos = items.filter((item) => item.type === 'todo');
+    expect(todos).toHaveLength(2);
+    expect(todos[0]).toMatchObject({ key: 'todo-plan-before-answer', isStreaming: false });
+    expect(todos[1]).toMatchObject({ key: 'todo-plan-after-answer', isStreaming: true });
   });
 
   it('buildMessageRenderItems hides plan tool results after rendering the todo card', () => {

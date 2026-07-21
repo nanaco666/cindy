@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Minus, Square, X } from 'lucide-react';
@@ -8,6 +8,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { isSecondaryWindow } from '@/lib/secondaryWindow';
 import { isSidebarWindow } from '@/lib/sidebarWindow';
+import type { WindowsCloseBehavior } from '../../../shared/windowBehavior';
 
 interface WindowControlsProps {
   /**
@@ -25,6 +26,10 @@ export function WindowControls({
   iconClassName = DEFAULT_ICON_CLASS,
 }: WindowControlsProps = {}) {
   const [showCloseDialog, setShowCloseDialog] = useState(false);
+  const [showWindowsCloseBehaviorDialog, setShowWindowsCloseBehaviorDialog] = useState(false);
+  const [savingWindowsCloseBehavior, setSavingWindowsCloseBehavior] = useState(false);
+  const savingWindowsCloseBehaviorRef = useRef(false);
+  const windowsCloseBehaviorDialogVisibleRef = useRef(false);
   // 点 X 后 (无论走确认框还是直接关) 进入不可取消的 closing 态:
   //   - 有 in-flight turn 路径: ConfirmDialog 显示 loading spinner + 锁住关闭
   //   - 无 in-flight 路径:      全屏 ClosingOverlay 显示 spinner + "正在关闭…"
@@ -34,6 +39,24 @@ export function WindowControls({
   const [closing, setClosing] = useState(false);
   const closingRef = useRef(false);
   const { t } = useTranslation();
+
+  useEffect(() => {
+    if (window.electronAPI.platform !== 'win32' || isSecondaryWindow() || isSidebarWindow()) return;
+    return window.electronAPI.windowBehavior.onWindowsCloseBehaviorRequested(() => {
+      if (windowsCloseBehaviorDialogVisibleRef.current) {
+        window.electronAPI.windowBehavior.notifyWindowsCloseBehaviorPromptShown();
+        return;
+      }
+      setShowWindowsCloseBehaviorDialog(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    windowsCloseBehaviorDialogVisibleRef.current = showWindowsCloseBehaviorDialog;
+    if (showWindowsCloseBehaviorDialog && window.electronAPI.platform === 'win32') {
+      window.electronAPI.windowBehavior.notifyWindowsCloseBehaviorPromptShown();
+    }
+  }, [showWindowsCloseBehaviorDialog]);
 
   const controlBase = cn(
     'flex items-center justify-center',
@@ -51,7 +74,46 @@ export function WindowControls({
     window.electronAPI.windowClose();
   };
 
-  // 点 X 的入口: 先查 main 端是否有 in-flight turn。
+  const continueCloseWithBehavior = async (behavior: WindowsCloseBehavior): Promise<void> => {
+    if (behavior === 'tray') {
+      window.electronAPI.windowClose();
+      return;
+    }
+
+    let hasInFlight = false;
+    try {
+      hasInFlight = await window.electronAPI.anySessionInTurn();
+    } catch {
+      hasInFlight = false;
+    }
+    if (hasInFlight) {
+      setShowCloseDialog(true);
+    } else {
+      beginClose();
+    }
+  };
+
+  const selectWindowsCloseBehavior = async (
+    behavior: WindowsCloseBehavior,
+  ): Promise<void> => {
+    if (savingWindowsCloseBehaviorRef.current) return;
+    savingWindowsCloseBehaviorRef.current = true;
+    setSavingWindowsCloseBehavior(true);
+    try {
+      await window.electronAPI.windowBehavior.setWindowsCloseBehavior(behavior);
+      setShowWindowsCloseBehaviorDialog(false);
+      await continueCloseWithBehavior(behavior);
+    } catch {
+      // 弹窗尚未关闭；持久化失败时保留它，不带着未知行为进入关闭流程。
+    } finally {
+      savingWindowsCloseBehaviorRef.current = false;
+      setSavingWindowsCloseBehavior(false);
+    }
+  };
+
+  // 点 X 的入口: Windows 首次关闭先在 renderer 内选择关闭行为,之后再查是否
+  // 有 in-flight turn。系统 Alt+F4 / 任务栏关闭由 main 发同一个 request 事件,
+  // 复用这里的自绘弹窗与后续关闭流程。
   //   - 有 → 走 ConfirmDialog 确认 (防止误关丢未完成的 turn)
   //   - 无 → 直接 beginClose, 全屏 overlay 反馈 (跳过一次点击)
   //
@@ -65,17 +127,21 @@ export function WindowControls({
       window.electronAPI.windowClose();
       return;
     }
-    let hasInFlight = false;
-    try {
-      hasInFlight = await window.electronAPI.anySessionInTurn();
-    } catch {
-      hasInFlight = false;
+    if (window.electronAPI.platform === 'win32') {
+      let closeBehavior: WindowsCloseBehavior | null = null;
+      try {
+        closeBehavior = await window.electronAPI.windowBehavior.getWindowsCloseBehavior();
+      } catch {
+        // Main close handler remains the final authority for the persisted behavior.
+      }
+      if (!closeBehavior) {
+        setShowWindowsCloseBehaviorDialog(true);
+        return;
+      }
+      await continueCloseWithBehavior(closeBehavior);
+      return;
     }
-    if (hasInFlight) {
-      setShowCloseDialog(true);
-    } else {
-      beginClose();
-    }
+    await continueCloseWithBehavior('quit');
   };
 
   return (
@@ -104,6 +170,26 @@ export function WindowControls({
           <X size={16} />
         </button>
       </div>
+      <ConfirmDialog
+        open={showWindowsCloseBehaviorDialog}
+        onOpenChange={(next) => {
+          // 首次关闭必须明确选择；ESC / 点击遮罩不应静默写入默认值或关窗。
+          if (next) setShowWindowsCloseBehaviorDialog(true);
+        }}
+        title={t('settings.windowBehavior.closePrompt.title')}
+        description={t('settings.windowBehavior.closePrompt.message')}
+        content={
+          <p className="text-sm leading-6 text-[var(--confirm-desc)]">
+            {t('settings.windowBehavior.closePrompt.detail')}
+          </p>
+        }
+        confirmText={t('settings.windowBehavior.closeBehavior.tray')}
+        cancelText={t('settings.windowBehavior.closeBehavior.quit')}
+        autoFocusConfirm
+        loading={savingWindowsCloseBehavior}
+        onConfirm={() => void selectWindowsCloseBehavior('tray')}
+        onCancel={() => void selectWindowsCloseBehavior('quit')}
+      />
       <ConfirmDialog
         open={showCloseDialog}
         onOpenChange={(next) => {

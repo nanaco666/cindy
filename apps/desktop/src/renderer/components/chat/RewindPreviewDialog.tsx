@@ -1,16 +1,18 @@
 /**
  * RewindPreviewDialog
  * ---------------------------------------------------------------------------
- * 4 状态对话框（Loading / Default / Empty / Error），按设计稿 message-actions.pen
+ * 5 状态对话框（Running / Loading / Default / Empty / Error），按设计稿 message-actions.pen
  * 节点 UjIdH（Default）+ BXQfL（Error）。
  *
  * 流程：
- *   open=true  → 进 Loading → 调 rewindPreview(sessionId, clientId)
+ *   open=true + running → 直接确认 Stop + Rewind，不读取会立刻过期的 preview
+ *   open=true + idle    → 进 Loading → 调 rewindPreview(sessionId, clientId)
  *               ├─ filesChanged.length > 0       → Default（文件清单 + summary）
  *               ├─ filesChanged.length == 0      → Empty（"无文件被改动"占位）
  *               └─ canRewind=false 或抛错        → Error（红色 alert + "知道了"）
  *
- *   Confirm 点击（Default / Empty）→ 调 rewindCommit → 成功后 onCommitted(session)
+ *   Confirm 点击（Running / Default / Empty）→ 调 rewindCommit(stopIfRunning=true)
+ *                                             → 成功后 onCommitted(session)
  *                                                  → 失败 toast.error 但保持弹窗开
  *
  * 不负责：composer 预填、消息列表重拉、sidebar 同步——这些由调用方
@@ -34,6 +36,7 @@ import { rewindPreview, rewindCommit } from '@/lib/sessionService';
 import type { Session } from '@/lib/ccAgent.types';
 
 type DialogState =
+  | { kind: 'running' }
   | { kind: 'loading' }
   | {
       kind: 'default';
@@ -54,6 +57,8 @@ interface RewindPreviewDialogProps {
   sessionId: string;
   /** clientId of the user message to rewind to (== messages.client_id). */
   clientId: string;
+  /** Selects the stop-then-rewind confirmation while a turn is active. */
+  sessionRunning: boolean;
   /** Called after a successful commit with the updated session row. The
    *  callback is responsible for composer pre-fill, sidebar bus emit, and
    *  message reload — Dialog is intentionally agnostic. */
@@ -65,17 +70,25 @@ export function RewindPreviewDialog({
   onOpenChange,
   sessionId,
   clientId,
+  sessionRunning,
   onCommitted,
 }: RewindPreviewDialogProps) {
   const { t } = useTranslation();
-  const [state, setState] = useState<DialogState>({ kind: 'loading' });
+  const [state, setState] = useState<DialogState>(
+    sessionRunning ? { kind: 'running' } : { kind: 'loading' },
+  );
   const [committing, setCommitting] = useState(false);
 
   // (Re-)run dryRun every time the dialog opens for a fresh (sessionId, clientId).
   // Dialog instance is re-created per open by parent (key={clientId}), but we
   // also defensively reset state on open transitions.
   useEffect(() => {
-    if (!open) return;
+    if (!open || committing) return;
+    if (sessionRunning) {
+      setState({ kind: 'running' });
+      setCommitting(false);
+      return;
+    }
     let cancelled = false;
     setState({ kind: 'loading' });
     setCommitting(false);
@@ -105,14 +118,17 @@ export function RewindPreviewDialog({
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        // Preview-stage errors (NO_PRIOR_ASSISTANT, SESSION_RUNNING, NO_LIVE_QUERY ...)
-        // — show in Error panel with friendly text.
         const code = err instanceof ApiError ? err.code : 'UNKNOWN';
+        // Renderer running state can lag the authoritative main guard by one
+        // event. Upgrade that race to the same stop-then-rewind confirmation.
+        if (code === 'SESSION_RUNNING') {
+          setState({ kind: 'running' });
+          return;
+        }
+        // Other preview-stage errors block confirmation with friendly text.
         const msg =
           code === 'NO_PRIOR_ASSISTANT'
             ? t('chat.rewind.errors.noPriorAssistantPreview')
-            : code === 'SESSION_RUNNING'
-            ? t('chat.rewind.errors.sessionRunning')
             : code === 'NO_LIVE_QUERY'
             ? t('chat.rewind.errors.noLiveQuery')
             : err instanceof Error
@@ -123,14 +139,14 @@ export function RewindPreviewDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, sessionId, clientId, t]);
+  }, [open, sessionId, clientId, sessionRunning, committing, t]);
 
   const handleConfirm = useCallback(async () => {
     if (committing) return;
-    if (state.kind !== 'default' && state.kind !== 'empty') return;
+    if (state.kind !== 'running' && state.kind !== 'default' && state.kind !== 'empty') return;
     setCommitting(true);
     try {
-      const session = await rewindCommit(sessionId, clientId);
+      const session = await rewindCommit(sessionId, clientId, { stopIfRunning: true });
       onCommitted(session);
       onOpenChange(false);
     } catch (err) {
@@ -149,8 +165,10 @@ export function RewindPreviewDialog({
     }
   }, [committing, state.kind, sessionId, clientId, onCommitted, onOpenChange, t]);
 
-  // Confirm button enabled only on default + empty (and not while committing).
-  const canConfirm = (state.kind === 'default' || state.kind === 'empty') && !committing;
+  // Confirm button enabled on running + preview-confirmable states.
+  const canConfirm =
+    (state.kind === 'running' || state.kind === 'default' || state.kind === 'empty') &&
+    !committing;
   const isError = state.kind === 'error';
 
   return (
@@ -191,8 +209,9 @@ export function RewindPreviewDialog({
             </AlertDialog.Description>
           </div>
 
-          {/* Body — 容器固定 240px 高，4 状态切换 */}
+          {/* Body — 容器固定 240px 高，5 状态切换 */}
           <div className="mt-5">
+            {state.kind === 'running' && <BodyRunning />}
             {state.kind === 'loading' && <BodyLoading />}
             {state.kind === 'default' && <BodyDefault files={state.filesChanged} />}
             {state.kind === 'empty' && <BodyEmpty note={state.note} />}
@@ -253,7 +272,17 @@ export function RewindPreviewDialog({
                   ) : (
                     <Undo2 size={14} strokeWidth={2} />
                   )}
-                  {t('chat.rewind.dialog.confirm')}
+                  {committing
+                    ? t(
+                        state.kind === 'running'
+                          ? 'chat.rewind.dialog.stoppingAndRewinding'
+                          : 'chat.rewind.dialog.rewinding',
+                      )
+                    : t(
+                        state.kind === 'running'
+                          ? 'chat.rewind.dialog.confirmRunning'
+                          : 'chat.rewind.dialog.confirm',
+                      )}
                 </button>
               </>
             ) : (
@@ -279,6 +308,25 @@ export function RewindPreviewDialog({
 }
 
 // ─── Body subviews ─────────────────────────────────────────────────────────
+
+function BodyRunning() {
+  const { t } = useTranslation();
+  return (
+    <div
+      className={cn(
+        'h-[240px] rounded-lg border border-[var(--board)]',
+        'flex flex-col items-center justify-center gap-3 px-6 text-center',
+        'text-13 text-[var(--cmd-palette-item-meta)]',
+      )}
+    >
+      <Undo2 size={20} strokeWidth={1.5} className="text-[var(--settings-section-desc)]" />
+      <div>{t('chat.rewind.dialog.runningNotice')}</div>
+      <div className="text-12 text-[var(--settings-section-desc)]">
+        {t('chat.rewind.dialog.runningQueueNotice')}
+      </div>
+    </div>
+  );
+}
 
 function BodyLoading() {
   const { t } = useTranslation();
@@ -384,6 +432,9 @@ function BodyError({ errorText }: { errorText: string }) {
 // ─── helpers ───────────────────────────────────────────────────────────────
 
 function describeSummary(state: DialogState, t: TFunction): string {
+  if (state.kind === 'running') {
+    return t('chat.rewind.dialog.summaryRunning');
+  }
   if (state.kind === 'default') {
     return t('chat.rewind.dialog.summaryDefault', { count: state.filesChanged.length });
   }

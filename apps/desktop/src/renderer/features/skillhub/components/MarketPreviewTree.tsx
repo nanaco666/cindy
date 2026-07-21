@@ -55,7 +55,7 @@ function MarketPreviewTreeRow({
         }}
         className={cn(
           'flex w-full items-center gap-1.5 rounded-md px-1 py-1 text-left transition-colors',
-          isSelected ? 'bg-[var(--settings-btn-secondary-bg)]' : 'hover:bg-[var(--update-btn-hover)]',
+          isSelected ? 'bg-[var(--settings-btn-secondary-bg)]' : 'hover:bg-[var(--surface-hover)]',
         )}
         style={{ paddingLeft: 4 + depth * 16 }}
         title={node.path}

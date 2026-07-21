@@ -11,12 +11,16 @@ export function throwOrcaServiceFailure(result: { ok: false; errorCode: string; 
       return throwIpcError('ALREADY_EXISTS', result.message);
     case 'DUPLICATE_LABEL':
       return throwIpcError('DUPLICATE_LABEL', result.message);
+    case 'WORKER_CREATION_IN_PROGRESS':
+      return throwIpcError('WORKER_CREATION_IN_PROGRESS', result.message);
     case 'WORKER_LIMIT_HARD_EXCEEDED':
       return throwIpcError('WORKER_LIMIT_HARD_EXCEEDED', result.message);
     case 'WORKER_NOT_FOUND':
       return throwIpcError('WORKER_NOT_FOUND', result.message);
     case 'ALREADY_IDLE':
       return throwIpcError('ALREADY_IDLE', result.message);
+    case 'WORKER_STATE_CHANGED':
+      return throwIpcError('WORKER_STATE_CHANGED', result.message);
     case 'BUDGET_MODEL_REQUIRES_API_MODE':
       return throwIpcError('BUDGET_MODEL_REQUIRES_API_MODE', result.message);
     case 'NO_PROVIDER_FOR_AGENT':

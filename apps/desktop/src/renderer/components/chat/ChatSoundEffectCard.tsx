@@ -42,7 +42,7 @@ import { useSessionFileOrigin } from './ChatSessionFileContext';
 
 interface ChatSoundEffectCardProps {
   track: ToolAudioTrack;
-  /** 远程(device-link)会话:把 audio URL 改写成 xdt-remote-media://;本地 / 不传 → 原样。 */
+  /** 远程(device-link)会话:把 audio URL 改写成 cindy-remote-media://;本地 / 不传 → 原样。 */
   sessionId?: string;
 }
 

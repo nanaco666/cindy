@@ -32,6 +32,12 @@ export function tx(db: Database.Database, args: unknown): unknown {
       return embeddingRecordFailures(db, txArgs);
     case 'embedding.enqueue':
       return embeddingEnqueue(db, txArgs);
+    case 'orca.reserveWorkerCreation':
+      return orcaReserveWorkerCreation(db, txArgs);
+    case 'orca.renewWorkerCreationReservation':
+      return orcaRenewWorkerCreationReservation(db, txArgs);
+    case 'orca.releaseWorkerCreationReservation':
+      return orcaReleaseWorkerCreationReservation(db, txArgs);
     case 'orca.upsertWorker':
       return orcaUpsertWorker(db, txArgs);
     case 'orca.setWorkerFocus':
@@ -44,11 +50,39 @@ export function tx(db: Database.Database, args: unknown): unknown {
       return sessionsRenameTitles(db, txArgs);
     case 'sessions.setStatus':
       return sessionsSetStatus(db, txArgs);
+    case 'session.agentSwitchFallback':
+      return sessionAgentSwitchFallback(db, txArgs);
     case 'session.importShare':
       return sessionImportShare(db, txArgs);
     default:
       throw Object.assign(new Error(`unknown tx: ${name}`), { code: 'UNKNOWN_TX' });
   }
+}
+
+/** 清失效停泊 id 与改写交接边界必须同成同败,防止重启后重建出错误 pending。 */
+function sessionAgentSwitchFallback(db: Database.Database, args: unknown): void {
+  const payload = asRecord(args, 'session.agentSwitchFallback args');
+  const sessionId = expectString(payload.sessionId, 'sessionId');
+  const boundaryClientId = expectString(payload.boundaryClientId, 'boundaryClientId');
+  const boundaryContent = expectString(payload.boundaryContent, 'boundaryContent');
+  const updatedAt = expectNumber(payload.updatedAt, 'updatedAt');
+  const transaction = db.transaction(() => {
+    const sessionResult = db.prepare(
+      'UPDATE sessions SET sdk_session_id = NULL, updated_at = ? WHERE id = ?',
+    ).run(updatedAt, sessionId);
+    if (sessionResult.changes !== 1) {
+      throw Object.assign(new Error(`Session 不存在: ${sessionId}`), { code: 'NOT_FOUND' });
+    }
+    const boundaryResult = db.prepare(
+      "UPDATE messages SET content = ? WHERE session_id = ? AND client_id = ? AND role = 'agent_switch' AND rewind_at IS NULL",
+    ).run(boundaryContent, sessionId, boundaryClientId);
+    if (boundaryResult.changes !== 1) {
+      throw Object.assign(new Error(`Agent switch boundary 不存在: ${boundaryClientId}`), {
+        code: 'NOT_FOUND',
+      });
+    }
+  });
+  transaction();
 }
 
 function sessionsRenameTitles(db: Database.Database, args: unknown): Array<{
@@ -424,9 +458,14 @@ function forkSession(db: Database.Database, args: unknown): { messageCount: numb
   const targetCreatedAt = expectNumber(payload.targetCreatedAt, 'targetCreatedAt');
   const newSession = asRecord(payload.newSession, 'newSession');
   const uuidMap = normalizeUuidMap(payload.uuidMap);
+  const legacyTranscriptParentUuids = normalizeStringSet(
+    payload.legacyTranscriptParentUuids,
+    'legacyTranscriptParentUuids',
+  );
+  const toolParentUuids = normalizeStringSet(payload.toolParentUuids, 'toolParentUuids');
   const newMessageIds = normalizeNewMessageIds(payload.newMessageIds);
   const sourceMessages = db.prepare(
-    `SELECT role, content, tool_use_id, agent_meta, created_at
+    `SELECT role, content, tool_use_id, agent_meta, agent_kind, created_at
        FROM messages
       WHERE session_id = ?
         AND created_at < ?
@@ -437,6 +476,7 @@ function forkSession(db: Database.Database, args: unknown): { messageCount: numb
     content: string;
     tool_use_id: string | null;
     agent_meta: string | null;
+    agent_kind: string | null;
     created_at: number;
   }>;
   if (newMessageIds.length !== sourceMessages.length) {
@@ -446,8 +486,8 @@ function forkSession(db: Database.Database, args: unknown): { messageCount: numb
   }
   const insertMessage = db.prepare(
     `INSERT INTO messages
-      (id, client_id, session_id, role, content, tool_use_id, agent_meta, created_at, rewind_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+      (id, client_id, session_id, role, content, tool_use_id, agent_meta, agent_kind, created_at, rewind_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
   );
   const transaction = db.transaction(() => {
     db.prepare(
@@ -499,7 +539,8 @@ function forkSession(db: Database.Database, args: unknown): { messageCount: numb
         message.role,
         message.content,
         message.tool_use_id,
-        remapAgentMetaUuid(message.agent_meta, uuidMap),
+        remapAgentMetaUuid(message.agent_meta, uuidMap, legacyTranscriptParentUuids, toolParentUuids),
+        message.agent_kind,
         message.created_at,
       );
     }
@@ -521,8 +562,8 @@ function sessionImportShare(db: Database.Database, args: unknown): { messageCoun
   const sessionId = expectString(session.id, 'session.id');
   const insertMessage = db.prepare(
     `INSERT INTO messages
-      (id, client_id, session_id, role, content, tool_use_id, agent_meta, created_at, rewind_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, client_id, session_id, role, content, tool_use_id, agent_meta, agent_kind, created_at, rewind_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const transaction = db.transaction(() => {
     const existing = db.prepare('SELECT id FROM sessions WHERE id = ? LIMIT 1').get(sessionId);
@@ -579,6 +620,7 @@ function sessionImportShare(db: Database.Database, args: unknown): { messageCoun
         expectString(m.content, 'message.content'),
         nullableString(m.toolUseId),
         nullableString(m.agentMeta),
+        nullableString(m.agentKind),
         expectNumber(m.createdAt, 'message.createdAt'),
         nullableNumber(m.rewindAt),
       );
@@ -816,6 +858,62 @@ function orcaUpsertWorker(db: Database.Database, args: unknown): void {
   })();
 }
 
+function orcaReserveWorkerCreation(db: Database.Database, args: unknown): unknown {
+  const payload = asRecord(args, 'orca.reserveWorkerCreation args');
+  const reservationId = expectString(payload.reservationId, 'reservationId');
+  const teamId = expectString(payload.teamId, 'teamId');
+  const label = expectString(payload.label, 'label').toLowerCase();
+  const hardLimit = expectNumber(payload.hardLimit, 'hardLimit');
+  const now = expectNumber(payload.now, 'now');
+  const expiresAt = expectNumber(payload.expiresAt, 'expiresAt');
+  return db.transaction(() => {
+    // DELETE 即使没有命中也会先取得 writer lock，后续检查与 INSERT 因而跨连接串行。
+    db.prepare('DELETE FROM orca_worker_creation_reservations WHERE expires_at <= ?').run(now);
+    const duplicateWorker = db.prepare(
+      'SELECT 1 FROM orca_workers WHERE team_id = ? AND label = ? COLLATE NOCASE LIMIT 1',
+    ).get(teamId, label);
+    const duplicateReservation = db.prepare(
+      'SELECT 1 FROM orca_worker_creation_reservations WHERE team_id = ? AND label = ? COLLATE NOCASE LIMIT 1',
+    ).get(teamId, label);
+    if (duplicateWorker) return { ok: false, errorCode: 'DUPLICATE_LABEL' };
+    if (duplicateReservation) return { ok: false, errorCode: 'WORKER_CREATION_IN_PROGRESS' };
+    // Worker 进入终态仍占槽，只有关联 session 归档后才释放。
+    const occupiedWorkerCount = Number(db.prepare(`SELECT COUNT(*)
+      FROM orca_workers w INNER JOIN sessions s ON s.id = w.session_id
+      WHERE w.team_id = ? AND s.status = 'active'`).pluck().get(teamId) || 0);
+    const reservationCount = Number(db.prepare(
+      'SELECT COUNT(*) FROM orca_worker_creation_reservations WHERE team_id = ?',
+    ).pluck().get(teamId) || 0);
+    const occupiedSlotsBefore = occupiedWorkerCount + reservationCount;
+    if (occupiedSlotsBefore >= hardLimit) {
+      return { ok: false, errorCode: 'WORKER_LIMIT_HARD_EXCEEDED' };
+    }
+    db.prepare(`INSERT INTO orca_worker_creation_reservations
+      (id, team_id, label, created_at, expires_at) VALUES (?, ?, ?, ?, ?)`)
+      .run(reservationId, teamId, label, now, expiresAt);
+    return { ok: true, occupiedSlotsBefore };
+  })();
+}
+
+function orcaRenewWorkerCreationReservation(db: Database.Database, args: unknown): boolean {
+  const payload = asRecord(args, 'orca.renewWorkerCreationReservation args');
+  const result = db.prepare(
+    'UPDATE orca_worker_creation_reservations SET expires_at = ? WHERE id = ? AND expires_at > ?',
+  ).run(
+    expectNumber(payload.expiresAt, 'expiresAt'),
+    expectString(payload.reservationId, 'reservationId'),
+    expectNumber(payload.now, 'now'),
+  );
+  return result.changes === 1;
+}
+
+function orcaReleaseWorkerCreationReservation(db: Database.Database, args: unknown): void {
+  const payload = asRecord(args, 'orca.releaseWorkerCreationReservation args');
+  db.prepare('DELETE FROM orca_worker_creation_reservations WHERE id = ?').run(
+    expectString(payload.reservationId, 'reservationId'),
+  );
+}
+
 function readExistingImportedClientIds(
   db: Database.Database,
   sessionId: string,
@@ -910,7 +1008,12 @@ function extractContentText(content: unknown): string {
   return parts.join('\n\n');
 }
 
-function remapAgentMetaUuid(raw: string | null, map: Map<string, string>): string | null {
+function remapAgentMetaUuid(
+  raw: string | null,
+  map: Map<string, string>,
+  legacyTranscriptParentUuids: Set<string> = new Set(),
+  toolParentUuids: Set<string> = new Set(),
+): string | null {
   if (!raw || raw === 'null') return raw;
   let parsed: Record<string, unknown>;
   try {
@@ -919,6 +1022,15 @@ function remapAgentMetaUuid(raw: string | null, map: Map<string, string>): strin
     return raw;
   }
   const next = { ...parsed };
+  if (
+    typeof next.uuid === 'string' &&
+    legacyTranscriptParentUuids.has(next.uuid) &&
+    typeof next.parentUuid === 'string' &&
+    !next.transcriptParentUuid
+  ) {
+    next.transcriptParentUuid = next.parentUuid;
+    delete next.parentUuid;
+  }
   if (typeof next.uuid === 'string') {
     const mapped = map.get(next.uuid);
     if (mapped) next.uuid = mapped;
@@ -927,7 +1039,7 @@ function remapAgentMetaUuid(raw: string | null, map: Map<string, string>): strin
   if (typeof next.parentUuid === 'string') {
     const mapped = map.get(next.parentUuid);
     if (mapped) next.parentUuid = mapped;
-    else delete next.parentUuid;
+    else if (!toolParentUuids.has(next.parentUuid)) delete next.parentUuid;
   }
   if (typeof next.transcriptParentUuid === 'string') {
     const mapped = map.get(next.transcriptParentUuid);
@@ -935,6 +1047,11 @@ function remapAgentMetaUuid(raw: string | null, map: Map<string, string>): strin
     else delete next.transcriptParentUuid;
   }
   return JSON.stringify(next);
+}
+
+function normalizeStringSet(value: unknown, label: string): Set<string> {
+  if (value === undefined) return new Set();
+  return new Set(expectArray(value, label).map((item, index) => expectString(item, `${label}.${index}`)));
 }
 
 function normalizeUuidMap(value: unknown): Map<string, string> {

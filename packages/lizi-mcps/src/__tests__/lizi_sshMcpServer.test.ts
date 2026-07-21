@@ -1,7 +1,7 @@
 /**
  * lizi_ssh MCP server tests
  * ---------------------------------------------------------------------------
- * 两种风格（照 lizi_schedulerMcpServer.test.ts）：
+ * 两种风格（照 cindy_schedulerMcpServer.test.ts）：
  *  1. 直测：fake SshPoolLike + registry.call()，覆盖名字解析 / exec 行为 /
  *     错误分类 / 截断 / cwd 包装 / 红线（error payload 不含 command 原文）。
  *  2. e2e smoke：真 McpServer + InMemoryTransport，走通 list_tools → call_tool。

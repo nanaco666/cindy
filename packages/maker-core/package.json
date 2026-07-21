@@ -2,7 +2,7 @@
   "name": "@lizi/maker-core",
   "version": "0.0.0",
   "private": true,
-  "description": "xdt-maker core: agent abstractions, session orchestration, zero Electron deps",
+  "description": "Cindy core: agent abstractions, session orchestration, zero Electron deps",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -18,7 +18,7 @@
     "name": "Lizi",
     "email": "jiali@magiclizi.com"
   },
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.2.112",
     "@anthropic-ai/sdk": "^0.91.1",

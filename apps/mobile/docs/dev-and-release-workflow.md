@@ -109,14 +109,15 @@ Android 发版也计划走 **NPKG 企业包**(不上 Google Play),与 iOS 同一
 除上面的 EAS 线外,现已有一条**与 iOS 自建线对称的 Android 自建分发线**(本机 mac 出**自签 APK**,不走 EAS/企业重签,JS 改动走自托管 OTA)。设计与契约见 [`self-hosted-android-build-and-ota.md`](./self-hosted-android-build-and-ota.md)。命令(默认 dry-run,`--execute` 才真跑):
 
 ```bash
-pnpm mobile:release:android:check              # 冷/热更只读预判
-pnpm mobile:release:android:local -- --execute # 冷更:prebuild→gradle 签名 APK→直传 OSS→写 release.json
-pnpm mobile:release:android:ota   -- --execute # JS 热更(自托管 OTA)
+pnpm mobile:release:android:check -- --region cn # 冷/热更只读预判(默认只读 canary 基线)
+pnpm mobile:release:android:local -- --region cn --execute # 冷更:prebuild→gradle 签名 APK→直传 OSS→写 canary-release.json
+pnpm mobile:release:android:ota   -- --region cn --execute # JS 热更(自托管 OTA,写 canary-latest.json)
+pnpm mobile:release:android:promote -- --region cn --yes # 验证后提升 stable 指针
 pnpm mobile:release:android:npkg  -- upload <apk>  # 单独上传 APK 取下载链接(APK 不重签)
 ```
 
 - **签名**:自有 keystore `Cindy.jks`(alias `Cindy`,PKCS12,2026-07-16 起替换旧 `xdmaker-release`;套件在打包机 `/Users/cn-ios/Documents/cindy/CindyMobileCer/Android/`,不入仓)。签名参数**零代码默认值**,路径/alias/口令全部由 `XDT_ANDROID_KEYSTORE_PATH` / `XDT_ANDROID_KEY_ALIAS` / `XDT_ANDROID_KEYSTORE_PASSWORD` / `XDT_ANDROID_KEY_PASSWORD` 环境变量提供(`--execute` 构建时缺任一项报错;`--apk` 复用现成包时豁免);Android 自签即终版,NPKG **只上传取下载链接、不重签**。换 keystore + 换包名 = 全新安装线,旧 `com.xd.lizcn` 自建包无法覆盖安装。
-- **versionCode**:committed 在 `apps/mobile/android-version.json`;冷更脚本读线上基线后自动校验单调,≤ 基线时**自动 +1 写回该文件**(`--execute` 才写盘,发布完成后把改动 commit 回 main),也可手动 bump;经 env 只在自建分支注入,EAS 指纹不受影响。
+- **versionCode**:committed 在 `apps/mobile/android-version.json`;冷更脚本读线上基线后自动校验单调,≤ 基线时**自动 +1 写回该文件**(`--execute` 才写盘,发布完成后把改动 commit 回 main),也可手动 bump;经 env 只在自建分支注入,EAS 指纹不受影响。self-host fingerprint 通过 `fingerprint.config.cjs` 排除 `ExpoConfigVersions`,因此 CN / Global 共用版本文件时,单独 bump 不会改变 OTA runtime。
 
 外部动作 pending,不要假装已完成:
 

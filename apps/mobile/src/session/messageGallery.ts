@@ -1,4 +1,9 @@
-import { collectMobileMarkdownImages, isMobileMarkdownImageDirectUrl, mobileMarkdownImageTitle } from '@/session/messageMarkdown';
+import {
+  collectMobileMarkdownImages,
+  isMobileMarkdownImageDirectUrl,
+  mobileMarkdownImageTitle,
+  mobileMarkdownImageUrlForWorkdir,
+} from '@/session/messageMarkdown';
 import type { NormalizedRemoteMessage, NormalizedToolMedia } from '@/session/messageNormalize';
 import type { MessagePayload } from '@/session/messagePayload';
 import { buildAttachmentPayload, buildMediaPayload } from '@/session/messagePayload';
@@ -23,6 +28,9 @@ export interface MobileMessageGalleryImage {
 
 export function collectMobileMessageGalleryImages(
   items: readonly MobileMessageRenderItem[],
+  workdir?: string,
+  remoteHostId?: string,
+  sessionId?: string,
 ): MobileMessageGalleryImage[] {
   const images: MobileMessageGalleryImage[] = [];
   // 去重按「组内」进行(键 = groupKey + url):翻页组是单条消息,跨消息出现的
@@ -52,7 +60,7 @@ export function collectMobileMessageGalleryImages(
   const visitMessage = (message: NormalizedRemoteMessage, keyPrefix: string, includeBodyImages: boolean) => {
     message.attachments?.forEach((rawAttachment, index) => {
       if (rawAttachment.kind !== 'image' || !rawAttachment.uri) return;
-      // 与 AttachmentStrip 同源 overlay(xdt-oss-attach:// → 本地缩略兜底):气泡
+      // 与 AttachmentStrip 同源 overlay(cindy-oss-attach:// → 本地缩略兜底):气泡
       // 点开时 initialUrl 是替换后的 file://,图集条目必须同步替换才能匹配进翻页组。
       const attachment = applySentAttachmentThumbOverlay(rawAttachment);
       const payload = buildAttachmentPayload(attachment);
@@ -62,10 +70,18 @@ export function collectMobileMessageGalleryImages(
     // 正文 Markdown 图片(![](url) / 安全 <img>)也纳入图集,点开后可与附件图片一起横滑翻页。
     if (includeBodyImages && message.body) {
       collectMobileMarkdownImages(message.body).forEach((image, index) => {
-        const title = mobileMarkdownImageTitle(image.url, image.alt);
+        const url = mobileMarkdownImageUrlForWorkdir(
+          image.url,
+          workdir,
+          message.key,
+          remoteHostId,
+          sessionId,
+        );
+        if (!url) return;
+        const title = mobileMarkdownImageTitle(url, image.alt);
         // http(s) 直连预览;xdt 系 scheme 非直连,查看器经 remote-media resolver 取图。
         const payload = buildMediaPayload(
-          { kind: 'image', url: image.url, title, previewable: isMobileMarkdownImageDirectUrl(image.url) },
+          { kind: 'image', url, title, previewable: isMobileMarkdownImageDirectUrl(url) },
           title,
         );
         if (payload.kind === 'media') push(`${keyPrefix}:mdimg:${index}`, title, payload);

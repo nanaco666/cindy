@@ -39,6 +39,9 @@ export interface BeginDesktopDevInstanceOptions {
 }
 
 let trackedInstance: { filePath: string; record: DesktopDevInstanceRecord } | null = null;
+let mainWindowReady = false;
+let applicationReady = false;
+let startupSettled = false;
 
 function atomicWriteJson(filePath: string, value: unknown): void {
   const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
@@ -62,14 +65,18 @@ function readJson(filePath: string): Record<string, unknown> | null {
 }
 
 function updateExternalStartupStatus(
-  state: 'ready' | 'failed',
+  state: 'window-ready' | 'ready' | 'failed',
   detail: Record<string, unknown>,
 ): void {
   const statusPath = process.env.XDT_DESKTOP_DEV_STARTUP_STATUS_FILE;
   if (!statusPath) return;
 
   try {
-    if (readJson(statusPath)?.state !== 'pending') return;
+    const currentState = readJson(statusPath)?.state;
+    const canTransition = state === 'window-ready'
+      ? currentState === 'pending'
+      : currentState === 'pending' || currentState === 'window-ready';
+    if (!canTransition) return;
     atomicWriteJson(statusPath, { state, pid: process.pid, at: Date.now(), ...detail });
   } catch {
     // Startup reporting is diagnostic-only; never turn a report failure into the app failure.
@@ -102,6 +109,9 @@ function updateTrackedInstance(
 export function beginDesktopDevInstance(
   options: BeginDesktopDevInstanceOptions,
 ): () => void {
+  mainWindowReady = false;
+  applicationReady = false;
+  startupSettled = false;
   const pid = options.pid ?? process.pid;
   const startedAtMs = options.startedAtMs ?? Date.now();
   const record: DesktopDevInstanceRecord = {
@@ -139,12 +149,83 @@ export function beginDesktopDevInstance(
   };
 }
 
-/** Notify an external restart helper only after the main BrowserWindow can render. */
-export function markDesktopDevReady(): void {
+function settleDesktopDevReadyIfPossible(): void {
+  if (startupSettled || !mainWindowReady || !applicationReady) return;
+  startupSettled = true;
   updateTrackedInstance('ready');
   updateExternalStartupStatus('ready', {
     instance: trackedInstance?.record ?? null,
   });
+}
+
+/** Record that the main BrowserWindow can render, without claiming the database is ready. */
+export function markDesktopDevWindowReady(): void {
+  if (startupSettled) return;
+  mainWindowReady = true;
+  updateExternalStartupStatus('window-ready', {
+    instance: trackedInstance?.record ?? null,
+  });
+  settleDesktopDevReadyIfPossible();
+}
+
+/** Record that auth/database initialization no longer blocks use of the rendered app. */
+export function markDesktopDevReady(): void {
+  if (startupSettled) return;
+  applicationReady = true;
+  settleDesktopDevReadyIfPossible();
+}
+
+type DesktopDevAuthState = {
+  isAuthenticated: boolean;
+  user: unknown | null;
+};
+
+/**
+ * Complete logged-out startup immediately only when auth is definitive. A cold-start
+ * timeout is a temporary renderer fallback: keep restart pending until background auth
+ * settles, so a late login still has time to report its localDb migration result.
+ */
+export function recordDesktopDevAuthStartupResult(
+  initialState: DesktopDevAuthState,
+  pendingCompletion: Promise<DesktopDevAuthState> | null,
+  readCurrentState: () => DesktopDevAuthState,
+): void {
+  if (initialState.isAuthenticated && initialState.user !== null) return;
+  if (pendingCompletion === null) {
+    markDesktopDevReady();
+    return;
+  }
+
+  void pendingCompletion.then(
+    () => {
+      // The background refresh result may be stale: a manual login increments
+      // authStateEpoch and makes that old flow resolve as logged out. Consult the
+      // live auth state so the new user's localDb result still owns the startup latch.
+      const currentState = readCurrentState();
+      if (!currentState.isAuthenticated || currentState.user === null) markDesktopDevReady();
+    },
+    (err) => {
+      markDesktopDevStartupFailed(
+        'AUTH_INIT_FAILED',
+        err instanceof Error ? err.message : String(err),
+        { phase: 'auth:initialize:late' },
+      );
+    },
+  );
+}
+
+/** Bridge localDb.ensureReady's stable result shape into the dev startup contract. */
+export function recordDesktopDevLocalDbStartupResult(result: {
+  ready: boolean;
+  error?: { code: string; message: string };
+}): void {
+  if (result.ready) {
+    markDesktopDevReady();
+  } else if (result.error) {
+    markDesktopDevStartupFailed(result.error.code, result.error.message, {
+      phase: 'local-db:ensure-ready',
+    });
+  }
 }
 
 /** Preserve the first concrete main-process startup failure for the waiting restart command. */
@@ -153,6 +234,8 @@ export function markDesktopDevStartupFailed(
   message: string,
   detail?: Record<string, unknown>,
 ): void {
+  if (startupSettled) return;
+  startupSettled = true;
   const failure = { code, message, ...(detail ? { detail } : {}) };
   updateTrackedInstance('failed', failure);
   updateExternalStartupStatus('failed', { code, message, ...(detail ? { detail } : {}) });

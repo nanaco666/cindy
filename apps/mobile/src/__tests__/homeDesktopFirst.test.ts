@@ -104,7 +104,7 @@ describe('mobile home desktop-first surface', () => {
     expect(homeSource).toContain("tone={status === 'online' ? 'ready' : 'off'}");
   });
 
-  it('mirrors the desktop sidebar vendor icon slot and running treatment', () => {
+  it('mirrors the desktop sidebar Agent identity slot and running treatment', () => {
     const homeSource = readSource('app/devices/index.tsx');
     const vendorIconSource = readSource('src/components/MobileVendorIcon.tsx');
     // 品牌 path 常量已抽到 vendorIconPaths.ts(供 MobileVendorIcon 与 MobileProviderMark 共用)。
@@ -113,7 +113,9 @@ describe('mobile home desktop-first surface', () => {
       '../../apps/desktop/src/renderer/components/sidebar/VendorIcon.tsx',
     );
 
-    expect(desktopVendorIconSource).toContain('VendorIcon — sidebar session 行的 vendor + running 状态指示器');
+    expect(desktopVendorIconSource).toContain(
+      'VendorIcon — sidebar session 行的 Agent 身份 + running 状态指示器',
+    );
     // 2026-07-19 撤销 D4-1:双端恢复厂商 glyph(Claude AA 字标 / Codex 六瓣),按 vendor 分支渲染
     // ——箭头统一后依赖图标区分 agent 类型的场景(创建自动化 chips / 侧栏混排)全部失效。
     expect(desktopVendorIconSource).toContain('ClaudeMark');
@@ -349,10 +351,10 @@ describe('mobile home desktop-first surface', () => {
     expect(source).toContain('{showRemoteGuide ? null : (');
 
     const guideSource = readSource('src/components/RemoteAccessGuide.tsx');
-    // 步骤三的开关名必须与桌面端设置页 devices.allowControl 文案一致,避免用户按指引找不到开关。
+    // 步骤三的路径和开关名必须与桌面端设置页一致,避免用户按指引找不到开关。
     expect(guideSource).toContain('在电脑上安装并打开 Cindy');
     expect(guideSource).toContain('用与手机相同的账号登录');
-    expect(guideSource).toContain('「设置 → 设备互联」');
+    expect(guideSource).toContain('「设置 → 远程连接」');
     expect(guideSource).toContain('允许同账号设备控制本机');
     // 分场景交互:离线/开关未开可手动重新检查,被撤销访问有重试 CTA(Lock 图标对齐设备列表语义)。
     expect(guideSource).toContain("reason === 'firstRun'");
