@@ -30,6 +30,10 @@ vi.mock('../slashCommands', () => ({
 }));
 
 import { createMessageHandler, isStopCommand } from '../messageHandler';
+import {
+  activateImAccountBoundary,
+  deactivateImAccountBoundary,
+} from '../../accountBoundary';
 import type { ImSlashHandlers } from '../slashCommands';
 import type { ImTurnRunner } from '../turnRunner';
 import type { ImChannelAdapter } from '../types';
@@ -113,7 +117,20 @@ describe('messageHandler !stop routing', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    activateImAccountBoundary();
     wire(true);
+  });
+
+  it('silently drops messages delivered after logout closes the account boundary', async () => {
+    deactivateImAccountBoundary();
+    deliver(makeEvent({ text: 'after logout' }));
+    await flushMicrotasks();
+
+    expect(stopActiveTurn).not.toHaveBeenCalled();
+    expect(runAgentTurn).not.toHaveBeenCalled();
+    expect(handleSlashCommand).not.toHaveBeenCalled();
+    expect(sendMarkdownText).not.toHaveBeenCalled();
+    expect(sendText).not.toHaveBeenCalled();
   });
 
   it('routes !stop to stopActiveTurn with the thread scopeKey and replies stopDone', async () => {

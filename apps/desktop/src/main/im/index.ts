@@ -20,7 +20,9 @@
  *   │ User login + localDb ready      │ app:ready-for-bot IPC →              │
  *   │   (LocalDbGate, renderer)       │   startImConnection() → im.init()    │
  *   │                                 │   (auto-connect if creds)            │
- *   │ App quit (before-quit)          │ im.dispose (in bootstrap)            │
+ *   │ Logout / account replacement    │ stopImConnection() before DbClient   │
+ *   │                                 │   dispose; clear runtime caches      │
+ *   │ App quit (before-quit)          │ stopImConnection('quit')             │
  *   │ Save credentials (renderer)     │ feishuBot:save IPC → wsClient.start  │
  *   │ Clear credentials (renderer)    │ feishuBot:clear IPC →                │
  *   │                                 │   wsClient.stop + ownerGuard.clear + │
@@ -42,9 +44,10 @@
  *   when the auto-update service is staging a relaunch (skip + retry on the
  *   next cold boot).
  *
- * Decoupled from xdt auth: the bot uses the user's own feishu app (appId/
- * secret in Settings); owner is established via TOFU on first p2p message.
- * Has no dependency on whether the user is logged in to xdt-server.
+ * Credentials are independent from Cindy auth: the bot uses the user's own
+ * channel credentials and keeps them across logout. Runtime connectivity is
+ * intentionally account-scoped because orchestration and persistence require
+ * the logged-in user's DbClient; a later login reconnects saved credentials.
  */
 
 import { ipcMain, BrowserWindow, type IpcMainEvent } from 'electron';
@@ -55,7 +58,12 @@ import { sessions } from '../localDb/schema';
 import { im, feishuIm, discordIm } from './host';
 import { wireFeishuOrchestrator, type FeishuOrchestratorConfig } from './feishu';
 import { wireDiscordOrchestrator } from './discord';
-import { getImOrchestrator } from './shared/orchestrator';
+import { getImOrchestrator, listImOrchestrators } from './shared/orchestrator';
+import { createSerializedConnectionLifecycle } from './connectionLifecycle';
+import {
+  activateImAccountBoundary,
+  deactivateImAccountBoundary,
+} from './accountBoundary';
 import type { ImOrchestratorConfig } from './shared/types';
 import { bindingStore, executeDetach } from './binding';
 import { IM_DEFAULT_EFFORT_OVERRIDES, IM_DEFAULT_SETTINGS } from '../../shared/imDefaultSettings';
@@ -128,6 +136,10 @@ const DISCORD_CONFIG: ImOrchestratorConfig = {
 export function startImOrchestrators(): void {
   if (wired) return;
   wired = true;
+  // Production bootstrap wires handlers before login/DbClient readiness.
+  // Keep the synchronous ingress gate closed until startImConnection reaches
+  // the authenticated account's initialized DB boundary.
+  deactivateImAccountBoundary();
 
   ipcMain.on('desktop:cc-prefs-changed', (_e: IpcMainEvent, prefs: unknown) => {
     if (prefs && typeof prefs === 'object') {
@@ -240,7 +252,64 @@ export function startImOrchestrators(): void {
   // and localDb is ready. See module header table for full lifecycle.
 }
 
-let connectionStarted = false;
+async function initializeImConnection(): Promise<void> {
+  try {
+    await bindingStore.preload();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.error(`bindingStore.preload failed (non-fatal): ${msg}`);
+  }
+  // 存量 feishu 会话行补 workspaceKind='dialogue' —— 2026-07 起 feishu 会话
+  // 进侧边栏「对话」分组(sessionSource.ts 白名单 + feishu adapter 声明),
+  // 此前落库的行还是默认 'project', 不补会以 im-working-dir/{botAppId}
+  // 聚成一个假项目组。幂等一次性 UPDATE; 不 bump updatedAt(避免重排列表)。
+  try {
+    await getDbClient()
+      .drizzle.update(sessions)
+      .set({ workspaceKind: 'dialogue' })
+      .where(and(eq(sessions.source, 'feishu'), ne(sessions.workspaceKind, 'dialogue')));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.warn(`feishu sessions workspaceKind backfill failed (non-fatal): ${msg}`);
+  }
+  // 存量 feishu 会话的旧默认标题 `飞书 · {后6位}` 迁到新风格 `[飞书·DM] {后6位}`。
+  try {
+    await getDbClient()
+      .drizzle.update(sessions)
+      .set({ title: sql`'[飞书·DM] ' || substr(${sessions.title}, 6)` })
+      .where(and(eq(sessions.source, 'feishu'), like(sessions.title, '飞书 · %')));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.warn(`feishu sessions title backfill failed (non-fatal): ${msg}`);
+  }
+  activateImAccountBoundary();
+  await im.init();
+}
+
+const connectionLifecycle = createSerializedConnectionLifecycle({
+  startConnection: initializeImConnection,
+  stopConnection: async () => {
+    // Transports stop first so no new message can enter while account-scoped
+    // orchestrator and binding caches are being discarded.
+    try {
+      await im.dispose();
+    } finally {
+      for (const orchestrator of listImOrchestrators()) {
+        try {
+          orchestrator.disposeAllSessions();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          log.warn(`disposeAllSessions channel=${orchestrator.channel} failed: ${msg}`);
+        }
+      }
+      bindingStore.resetRuntime();
+    }
+  },
+  onStartError: (err) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.error(`IM connection start failed: ${msg}`);
+  },
+});
 
 /**
  * Bring the FeishuBot WS connection online. Idempotent — safe to call multiple
@@ -254,7 +323,7 @@ let connectionStarted = false;
  * connect normally.
  */
 export function startImConnection(): void {
-  if (connectionStarted) {
+  if (connectionLifecycle.isStarted()) {
     log.info('startImConnection: already started, skip');
     return;
   }
@@ -267,7 +336,6 @@ export function startImConnection(): void {
     return;
   }
 
-  connectionStarted = true;
   log.info('startImConnection: kicking off im.init()');
   // 先 preload binding 表, 再 init bot WS。preload 必须在 init 之前完成 ——
   // bot 上线后第一个进来的消息会经 runAgentTurn 同步查 bindingStore.get(),
@@ -276,44 +344,18 @@ export function startImConnection(): void {
   // ensureReady (worker takeover 完成 + setCurrentDbClient 已写入 currentRef),
   // 而本函数的调用方 'app:ready-for-bot' IPC 由 renderer 在 localDb 就绪后
   // 才触发, 时序保证 OK。
-  void (async () => {
-    try {
-      await bindingStore.preload();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      log.error(`bindingStore.preload failed (non-fatal): ${msg}`);
-    }
-    // 存量 feishu 会话行补 workspaceKind='dialogue' —— 2026-07 起 feishu 会话
-    // 进侧边栏「对话」分组(sessionSource.ts 白名单 + feishu adapter 声明),
-    // 此前落库的行还是默认 'project', 不补会以 im-working-dir/{botAppId}
-    // 聚成一个假项目组。幂等一次性 UPDATE; 不 bump updatedAt(避免重排列表)。
-    try {
-      await getDbClient()
-        .drizzle.update(sessions)
-        .set({ workspaceKind: 'dialogue' })
-        .where(and(eq(sessions.source, 'feishu'), ne(sessions.workspaceKind, 'dialogue')));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      log.warn(`feishu sessions workspaceKind backfill failed (non-fatal): ${msg}`);
-    }
-    // 存量 feishu 会话的旧默认标题 `飞书 · {后6位}` 迁到新风格 `[飞书·DM] {后6位}`
-    // (与 hook Slack 的 [Slack·DM] 同款)。只动旧默认前缀命中的行, 用户自定义
-    // 标题不受影响; 改名后不再命中 LIKE, 天然幂等。'飞书 · ' 共 5 个字符,
-    // substr 从第 6 个字符起保留后缀。
-    try {
-      await getDbClient()
-        .drizzle.update(sessions)
-        .set({ title: sql`'[飞书·DM] ' || substr(${sessions.title}, 6)` })
-        .where(and(eq(sessions.source, 'feishu'), like(sessions.title, '飞书 · %')));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      log.warn(`feishu sessions title backfill failed (non-fatal): ${msg}`);
-    }
-    try {
-      await im.init();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      log.error(`im.init failed: ${msg}`);
-    }
-  })();
+  connectionLifecycle.start();
+}
+
+/**
+ * Stop account-scoped IM activity before its DbClient is disposed. The
+ * lifecycle remains restartable so the next successful login can reconnect
+ * saved channel credentials without duplicating listeners.
+ */
+export async function stopImConnection(reason: string): Promise<void> {
+  log.info(`stopImConnection: reason=${reason}`);
+  // This is intentionally synchronous and happens before the serialized
+  // transport stop: queued/late SDK callbacks are dropped immediately.
+  deactivateImAccountBoundary();
+  await connectionLifecycle.stop();
 }

@@ -19,6 +19,7 @@
 import type { ChannelIM, IMMessageEvent } from 'lizi-im';
 
 import { createLogger } from '../../logger';
+import { isImAccountBoundaryActive } from '../accountBoundary';
 
 import { getControlScope, isInControl } from './controlState';
 import type { ImSlashHandlers } from './slashCommands';
@@ -48,6 +49,10 @@ export function createMessageHandler(
   const userLocks = new Map<string, Promise<void>>();
 
   async function processOne(im: ChannelIM, event: IMMessageEvent): Promise<void> {
+    if (!isImAccountBoundaryActive()) {
+      log.info(`drop inbound message after account boundary closed channel=${channel}`);
+      return;
+    }
     log.info(
       `processOne sender=...${event.senderId.slice(-8)} chat=...${event.chatId.slice(-8)} ` +
         `textLen=${event.text.length} att=${event.attachments.length} unsupported=${event.unsupported.length}`,

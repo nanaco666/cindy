@@ -36,6 +36,7 @@ import {
 } from '../../maker-ipc/register';
 import { applyRuntimeSetModelChange } from '../../maker-ipc/runtimeSetModel';
 import { getDesktopCcPrefs, type DesktopCcPrefs } from '../index';
+import { isImAccountBoundaryActive } from '../accountBoundary';
 import { FBOT_DRAFT_TITLE } from './fbotTitle';
 import { resolvePending, lookupPending } from './pendingInteractions';
 import {
@@ -1096,6 +1097,10 @@ export function createCardActionHandler(
 
   return function attachCardActionHandler(im: ChannelIM): () => void {
     return im.onCardAction(async (event: IMCardActionEvent) => {
+      if (!isImAccountBoundaryActive()) {
+        log.info(`drop card action after account boundary closed channel=${channel}`);
+        return;
+      }
       log.info(
         `card action sender=...${event.senderId.slice(-8)} button=${event.buttonId} payload=${JSON.stringify(event.payload).slice(0, 200)}`,
       );
