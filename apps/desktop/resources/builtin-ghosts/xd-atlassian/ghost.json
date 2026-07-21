@@ -120,17 +120,17 @@
           "link_type": { "type": "string", "description": "link:关系类型名(list_link_types 可查),如 Blocks / Cloners / Relates / Duplicate" },
           "inward_issue": { "type": "string", "description": "link:inward 侧 issue key,如 PROJ-123(以 Blocks 类型为例,inward 侧表示「is blocked by」)" },
           "outward_issue": { "type": "string", "description": "link:outward 侧 issue key,如 PROJ-456(以 Blocks 类型为例,outward 侧表示「blocks」)" },
-          "link_comment": { "type": "string", "description": "link:可选,建立关联时附带的评论纯文本。注意:Jira issue link 的评论只会加到 outward_issue 这一侧的 issue 上(不会加到 inward_issue)" },
+          "link_comment": { "type": "string", "description": "link:可选,建立关联时附带的评论纯文本。注意(实测确认):评论只会加到 inward_issue 这一侧的 issue 上(不会加到 outward_issue),且仅部分关系类型接受 link 评论(如 Relates),多数类型 Jira 会静默忽略;如需确保评论落地,请改用 add_comment" },
           "links": {
             "type": "array",
-            "description": "create:可选,issue 创建成功后要建立的关联列表;每条只指定 inward_issue / outward_issue 之一(对端已存在的 issue key),缺失的一端自动填新建的 issue。link 失败不影响 issue 创建,结果在返回的 issue_links.applied / issue_links.failed 里逐条汇报。注意:每条可选的 link_comment 评论会加到该条 link 的 outward 侧 issue 上——若新建 issue 在 inward 侧,评论会写到对端已存在的 issue,如需评论务必落在新建 issue 请改用 add_comment",
+            "description": "create:可选,issue 创建成功后要建立的关联列表;每条只指定 inward_issue / outward_issue 之一(对端已存在的 issue key),缺失的一端自动填新建的 issue。link 失败不影响 issue 创建,结果在返回的 issue_links.applied / issue_links.failed 里逐条汇报。注意:每条可选的 link_comment 评论会加到该条 link 的 inward 侧 issue 上——若新建 issue 在 outward 侧,评论会写到对端已存在的 issue;且仅部分关系类型接受 link 评论(多数类型 Jira 会静默忽略),如需评论务必落在新建 issue 请改用 add_comment",
             "items": {
               "type": "object",
               "properties": {
                 "link_type": { "type": "string", "description": "关系类型名(list_link_types 可查),如 Blocks / Cloners / Relates" },
                 "inward_issue": { "type": "string", "description": "对端 issue key,置于 inward 侧(与 outward_issue 二选一,另一端 = 新建 issue)。如新 issue「is blocked by」PROJ-5,则 Blocks 类型下把 PROJ-5 放 outward_issue、新 issue 在 inward" },
                 "outward_issue": { "type": "string", "description": "对端 issue key,置于 outward 侧(与 inward_issue 二选一,另一端 = 新建 issue)。如新 issue「blocks」PROJ-5,则 Blocks 类型下把 PROJ-5 放 inward_issue、新 issue 在 outward" },
-                "link_comment": { "type": "string", "description": "可选,建立关联时附带的评论纯文本;Jira 会把评论加到该条 link 的 outward 侧 issue 上(若新建 issue 在 inward 侧,评论会写到对端已存在的 issue)" }
+                "link_comment": { "type": "string", "description": "可选,建立关联时附带的评论纯文本;评论会加到该条 link 的 inward 侧 issue 上(若新建 issue 在 outward 侧,评论会写到对端已存在的 issue);仅部分关系类型接受 link 评论,多数类型 Jira 会静默忽略" }
               },
               "required": ["link_type"]
             }

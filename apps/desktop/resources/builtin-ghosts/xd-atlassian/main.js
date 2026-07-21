@@ -420,7 +420,7 @@ async function toolJiraIssues(args, callId) {
     }
     var linked = await createIssueLink(base, account, callId, args.link_type, args.inward_issue, args.outward_issue, args.link_comment);
     if (linked.err) return fail(linked.err);
-    return { ok: true, result: { linked: true, link_type: args.link_type, inward_issue: args.inward_issue, outward_issue: args.outward_issue } };
+    return deliver({ linked: true, link_type: args.link_type, inward_issue: args.inward_issue, outward_issue: args.outward_issue }, args, callId);
   }
   if (args.action === 'update') {
     if (!args.issue_key) return fail('update 需要 issue_key');
