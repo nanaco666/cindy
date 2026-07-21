@@ -1247,18 +1247,18 @@ struct AgentIslandScreenMetrics: Codable, Equatable {
   }
 }
 
-struct AgentIslandActivityLine: Codable, Identifiable {
+struct AgentIslandActivityLine: Codable, Equatable, Identifiable {
   let id: String
   let kind: String
   let text: String
 }
 
-struct AgentIslandPermissionAction: Codable {
+struct AgentIslandPermissionAction: Codable, Equatable {
   let requestId: String
   let canAllowForSession: Bool
 }
 
-struct AgentIslandSession: Codable, Identifiable {
+struct AgentIslandSession: Codable, Equatable, Identifiable {
   let sessionId: String
   let title: String
   let projectName: String?
@@ -1305,7 +1305,7 @@ struct AgentIslandPillSnapshot: Codable {
   )
 }
 
-struct AgentIslandStrings: Codable {
+struct AgentIslandStrings: Codable, Equatable {
   let appName: String?
   let newConversationTitle: String
   let newConversationHint: String
@@ -1575,16 +1575,19 @@ private let annieMascotFileName = "annie.png"
 private let chakuMascotFileName = "chaku.png"
 private let muffinMascotFileName = "muffin.png"
 private let defaultAgentIslandMascotSkin = "pululu"
+// Keep these mono Agent identity marks aligned with renderer ClaudeMark/CodexMark.
+// The native copies remain template images so Agent Island can apply status colors.
 private let agentIslandCodexMarkSVG = """
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-  <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.142-.08 4.778-2.758a.795.795 0 0 0 .393-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.495 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.787a4.49 4.49 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.674zm2.01-3.026l-.142-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.607 1.5-2.602-1.5z" fill="black"/>
+  <g transform="translate(12 12) scale(1.1) translate(-12 -12)">
+    <path fill="none" stroke="black" stroke-width="2" stroke-linejoin="round" d="M9.064 3.344a4.6 4.6 0 0 1 2.285-.312q1.5.173 2.673 1.275.016.015.037.021a.1.1 0 0 0 .043 0 4.55 4.55 0 0 1 3.046.275l.047.022.116.057a4.58 4.58 0 0 1 2.188 2.399q.313.765.315 1.595a4.2 4.2 0 0 1-.134 1.223.12.12 0 0 0 .03.115q.89.91 1.183 2.17.433 2.138-.887 3.854l-.136.166a4.55 4.55 0 0 1-2.201 1.388.12.12 0 0 0-.081.076c-.191.551-.383 1.023-.74 1.494-.9 1.187-2.222 1.846-3.711 1.838q-1.78-.009-3.157-1.302a.11.11 0 0 0-.105-.024c-.388.125-.78.143-1.204.138a4.44 4.44 0 0 1-1.945-.466 4.54 4.54 0 0 1-1.61-1.335c-.152-.202-.303-.392-.414-.617a6 6 0 0 1-.37-.961 4.6 4.6 0 0 1-.014-2.298.1.1 0 0 0 .006-.056.1.1 0 0 0-.027-.048 4.5 4.5 0 0 1-1.034-1.651 3.9 3.9 0 0 1-.251-1.192 5.2 5.2 0 0 1 .141-1.6Q3.659 7.92 5.086 6.97q.318-.212.601-.33a6 6 0 0 1 .646-.227.1.1 0 0 0 .065-.066 4.5 4.5 0 0 1 .829-1.615 4.54 4.54 0 0 1 1.837-1.388z"/>
+    <path fill="black" stroke="black" stroke-width="0.5" stroke-linejoin="round" d="M12.546 13.909a.637.637 0 0 0 0 1.272h3.636a.637.637 0 1 0 0-1.272zM8.462 9.23a.637.637 0 0 0-1.106.631l1.272 2.224-1.266 2.136a.636.636 0 1 0 1.095.649l1.454-2.455a.64.64 0 0 0 .005-.64z"/>
+  </g>
 </svg>
 """
-private let agentIslandXDIncMarkSVG = """
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="136 137 282 158" preserveAspectRatio="xMidYMid meet">
-  <path d="M397.1,150.3c-7.1-5.5-15.4-9.2-24.3-10.8c-28.2-5.2-45.3,2.2-59.5,10.8c-12.8,7.8-21,18.9-25.7,27.2v0.1c-1,1.9-0.3,4.2,1.5,5.2c0.6,0.3,1.3,0.5,1.9,0.5h0.2c26.5-3,53.1,4.7,73.9,21.4c0.6,0.5,1.2,1,1.8,1.4l1,0.8c10,8,20.2,10.6,28.6,7.6c8-2.9,13.9-10.8,16-21.6C415.9,176.3,410.3,160.7,397.1,150.3z" fill="black"/>
-  <path d="M302.9,197.1c-26.5,0.6-55.1-9-76.6-34.6c-1.9-2.2-3.5-4.3-4.9-6.3c-2.6-3-7.1-3.3-10.1-0.7c-0.8,0.7-1.5,1.6-1.9,2.7l0,0c-0.8,2.3-1.7,4.8-2.7,7.7c-4.4,14.6-7.1,37.6,1.2,60s20.9,41.1,49.4,56.2c31.1,16.5,69.7,10.2,87.3-24.2C359.9,228,344.2,196.1,302.9,197.1z" fill="black"/>
-  <path d="M196.6,237.2c-0.3-0.7-0.6-1.6-0.9-2.4c-9.4-24.4-10.1-51.3-2-76.2c0.1-0.5,0.2-1,0.2-1.5c-0.1-2.3-2.1-4-4.4-3.9c0,0,0,0,0,0c-0.4,0-0.8,0.1-1.2,0.3c-7.7,2.8-14.9,7-21.1,12.3c-9.1,7.9-18.3,17.4-24.1,33.6c-2.3,6.6-3.9,13.3-4.7,20.2c-1.2,8.6-0.3,17.4,2.7,25.5c5.5,14.7,17.7,24.1,33.6,25.9c9.6,1.1,17.5-1.4,21.8-6.9c1-1.3,1.9-2.9,2.4-4.5l0,0c2-5.6,1.4-13-1.7-21.3C196.9,238,196.8,237.6,196.6,237.2z" fill="black"/>
+private let agentIslandClaudeMarkSVG = """
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <path fill="black" fill-rule="evenodd" clip-rule="evenodd" d="M20.998 10.949H24v3.102h-3v3.028h-1.487V20H18v-2.921h-1.487V20H15v-2.921H9V20H7.488v-2.921H6V20H4.487v-2.921H3V14.05H0v-3.1h3V5h17.998zM6 10.949h1.488V8.102H6zm10.51 0H18V8.102h-1.49z"/>
 </svg>
 """
 
@@ -3081,6 +3084,7 @@ struct ExpandedSessionsView: View {
         },
         onPermissionAction: emitPermissionAction
       )
+      .equatable()
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -3120,6 +3124,7 @@ struct ExpandedSessionsView: View {
           },
           onPermissionAction: emitPermissionAction
         )
+        .equatable()
         .frame(maxWidth: .infinity, alignment: .leading)
       }
     }
@@ -3135,7 +3140,7 @@ struct ExpandedSessionsView: View {
   }
 }
 
-struct ExpandedSessionRow: View {
+struct ExpandedSessionRow: View, Equatable {
   let session: AgentIslandSession
   let updatedAt: Double
   let strings: AgentIslandStrings
@@ -3143,6 +3148,13 @@ struct ExpandedSessionRow: View {
   let onFocus: () -> Void
   let onPermissionAction: (AgentIslandPermissionAction, String) -> Void
   @State private var isHovered = false
+
+  static func == (lhs: ExpandedSessionRow, rhs: ExpandedSessionRow) -> Bool {
+    lhs.session == rhs.session
+      && lhs.updatedAt == rhs.updatedAt
+      && lhs.strings == rhs.strings
+      && lhs.mascotSkin == rhs.mascotSkin
+  }
 
   var body: some View {
     let shape = RoundedRectangle(cornerRadius: 13, style: .continuous)
@@ -3810,7 +3822,7 @@ final class AgentIslandVendorMarkImageStore {
 
   func image(for vendor: AgentIslandSessionVendor) -> NSImage? {
     if let cached = cache[vendor] { return cached }
-    let svg = vendor == .codex ? agentIslandCodexMarkSVG : agentIslandXDIncMarkSVG
+    let svg = vendor == .codex ? agentIslandCodexMarkSVG : agentIslandClaudeMarkSVG
     guard let data = svg.data(using: .utf8), let image = NSImage(data: data) else {
       return nil
     }
@@ -4264,19 +4276,11 @@ final class TrackingView: NSView {
 }
 
 final class AgentIslandPanel: NSPanel {
-  override var canBecomeKey: Bool { true }
+  // Agent Island is ambient UI. Showing it, hovering resize affordances, or
+  // interacting with pointer-only controls must never take keyboard focus
+  // from the user's current app.
+  override var canBecomeKey: Bool { false }
   override var canBecomeMain: Bool { false }
-
-  override func sendEvent(_ event: NSEvent) {
-    if event.type == .leftMouseDown
-      || event.type == .rightMouseDown
-      || event.type == .otherMouseDown
-      || event.type == .scrollWheel
-    {
-      makeKey()
-    }
-    super.sendEvent(event)
-  }
 }
 
 private final class AgentIslandContentRootView: NSView {
@@ -5535,9 +5539,6 @@ final class AgentIslandController {
   }
 
   private func claimDragCursorOwnership(_ kind: PanelCursorKind) {
-    if panel.isVisible && !panel.isKeyWindow {
-      panel.makeKey()
-    }
     kind.set()
   }
 
@@ -5566,9 +5567,6 @@ final class AgentIslandController {
     }
     let cursorKind = cursorKind(for: hit)
     if cursorKind != .system || activeCursorKind != .system {
-      if cursorKind != .system {
-        panel.makeKey()
-      }
       cursorKind.set()
     }
     if cursorKind != activeCursorKind {
