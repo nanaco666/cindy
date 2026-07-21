@@ -4,10 +4,16 @@ import { withTransientRemoteRetry } from '@/device-link/remoteRetry';
 import { isAttachmentOssRef, parseAttachmentOssRef } from '@/session/attachmentOssRef';
 import {
   buildMobileUploadedAttachment,
+  assertMobileDocumentSize,
   categorizeMobileAttachment,
   extractRemoteFileExt,
 } from '@/session/attachments';
 import type { RemoteSerializedAttachment } from '@/session/types';
+import {
+  sha256MobileAttachmentBody,
+  sha256MobileAttachmentFile,
+  type MobileAttachmentChunkReader,
+} from '@/session/mobileAttachmentSha256';
 
 export interface MobileAttachmentUploadCandidate {
   name: string;
@@ -35,6 +41,7 @@ interface UploadDeps {
   apiFetch?: typeof apiFetchRaw;
   fetch?: typeof fetch;
   uploadFile?: MobileAttachmentFileUploader;
+  readFileChunk?: MobileAttachmentChunkReader;
 }
 
 /** presign 是小 POST,不该吃满默认 20s 超时;弱网抖动重试一次(重复 presign 无副作用,PUT 前不产生对象)。 */
@@ -221,7 +228,9 @@ export async function putMobileAttachmentUploadFromFile(
     let status: number;
     let body: string | undefined;
     try {
-      ({ status, body } = await uploadFile(putUrl, fileUri, headers, { signal: timeout.signal }));
+      ({ status, body } = await uploadFile(putUrl, fileUri, headers, {
+        signal: timeout.signal,
+      }));
     } catch (err) {
       // 外部取消:立刻收手,不重试(调用方自己发起的中止,静默语义由上层决定)。
       if (opts.signal?.aborted) throw new Error(UPLOAD_ABORTED_MESSAGE);
@@ -270,6 +279,8 @@ export async function uploadMobileAttachment(
   if (!categorizeMobileAttachment(candidate.name)) {
     throw new Error('这个本机文件类型暂不支持作为附件发送。');
   }
+  assertMobileDocumentSize(candidate.size);
+  const sha256 = await sha256MobileAttachmentBody(body, candidate.size);
   const presigned = await presignMobileAttachmentUpload(candidate, options);
   await putMobileAttachmentUpload(presigned.putUrl, body, candidate.mimeType, options.deps);
   const attachment = buildMobileUploadedAttachment({
@@ -277,6 +288,7 @@ export async function uploadMobileAttachment(
     ossKey: presigned.key,
     name: candidate.name,
     size: candidate.size,
+    sha256,
     mimeType: candidate.mimeType,
   });
   if (!attachment) {
@@ -289,12 +301,22 @@ export async function uploadMobileAttachment(
 export async function uploadMobileAttachmentFromFile(
   candidate: MobileAttachmentUploadCandidate,
   fileUri: string,
-  options: { token: string | null; id?: string; deps?: UploadDeps; signal?: AbortSignal },
+  options: {
+    token: string | null;
+    id?: string;
+    deps?: UploadDeps;
+    signal?: AbortSignal;
+  },
 ): Promise<RemoteSerializedAttachment> {
   // 同 uploadMobileAttachment:presign 前先拦不支持的类型,避免 OSS 孤儿对象。
   if (!categorizeMobileAttachment(candidate.name)) {
     throw new Error('这个本机文件类型暂不支持作为附件发送。');
   }
+  assertMobileDocumentSize(candidate.size);
+  const sha256 = await sha256MobileAttachmentFile(fileUri, candidate.size, {
+    readChunk: options.deps?.readFileChunk,
+    signal: options.signal,
+  });
   const presigned = await presignMobileAttachmentUpload(candidate, options);
   await putMobileAttachmentUploadFromFile(
     presigned.putUrl,
@@ -308,6 +330,7 @@ export async function uploadMobileAttachmentFromFile(
     ossKey: presigned.key,
     name: candidate.name,
     size: candidate.size,
+    sha256,
     mimeType: candidate.mimeType,
   });
   if (!attachment) {
@@ -347,7 +370,10 @@ export function discardMobileUploadedAttachment(
     try {
       const token = await options.getToken();
       if (!token) return;
-      await deleteMobileAttachmentUpload(ref.ossKey, { token, deps: options.deps });
+      await deleteMobileAttachmentUpload(ref.ossKey, {
+        token,
+        deps: options.deps,
+      });
     } catch {
       // best-effort:失败静默,桶生命周期兜底。
     }

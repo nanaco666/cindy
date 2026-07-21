@@ -19,7 +19,11 @@ vi.mock('node:fs/promises', () => ({
 
 const copyFromPath = vi.hoisted(() => vi.fn());
 const resolveSafe = vi.hoisted(() => vi.fn());
-vi.mock('../imageCacheStore.js', () => ({ copyFromPath, resolveSafe, collectSessionImageUrls: vi.fn(() => []) }));
+vi.mock('../imageCacheStore.js', () => ({
+  copyFromPath,
+  resolveSafe,
+  collectSessionImageUrls: vi.fn(() => []),
+}));
 
 // cindy-media(迁移第 1 步):媒体 mime 的物化改走总仓 ingest,mock 记调用。
 const BLOB_HASH = 'a'.repeat(64);
@@ -30,15 +34,15 @@ const blobResolveSafe = vi.hoisted(() => vi.fn());
 vi.mock('../cindy-media/blobStore.js', () => ({
   resolveSafe: blobResolveSafe,
   mimeForExt: (ext: string) =>
-    ((
-      {
+    (
+      ({
         '.png': 'image/png',
         '.jpg': 'image/jpeg',
         '.jpeg': 'image/jpeg',
         '.gif': 'image/gif',
         '.webp': 'image/webp',
-      } as Record<string, string>
-    )[ext] ?? null),
+      }) as Record<string, string>
+    )[ext] ?? null,
   supportedMime: (m: string) =>
     ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'video/mp4'].includes(m),
 }));
@@ -51,8 +55,13 @@ vi.mock('../logger.js', () => ({
   createLogger: () => ({ info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }));
 
-import { normalizeUserMessage, materializeQueuedOssAttachments } from '../maker-ipc/normalizeAttachments';
+import {
+  normalizeUserMessage,
+  materializeQueuedOssAttachments,
+} from '../maker-ipc/normalizeAttachments';
 import { buildAttachmentOssRef } from '../../shared/attachmentOssRef';
+
+const ATTACHMENT_SHA256 = 'a'.repeat(64);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -76,7 +85,10 @@ beforeEach(() => {
 
 describe('normalizeUserMessage — device-link 出方向 OSS 引用物化', () => {
   it('OSS 引用块 → 流式下载到临时文件 → path 变本地 → 删 OSS', async () => {
-    const ref = buildAttachmentOssRef({ ossKey: 'cindy/device-link/u/x.png', mimeType: 'image/png' });
+    const ref = buildAttachmentOssRef({
+      ossKey: 'cindy/device-link/u/x.png',
+      mimeType: 'image/png',
+    });
     const out = await normalizeUserMessage('sess-1', {
       type: 'user',
       content: [
@@ -88,7 +100,8 @@ describe('normalizeUserMessage — device-link 出方向 OSS 引用物化', () =
     const [ossKeyArg, destArg] = downloadToFile.mock.calls[0] as unknown as [string, string];
     expect(ossKeyArg).toBe('cindy/device-link/u/x.png');
     expect(destArg).toMatch(/cindy-attachments[\\/]sess-1[\\/].+\.png$/);
-    const block = (out as { content: Array<{ type: string; path?: string; mimeType?: string }> }).content[1];
+    const block = (out as { content: Array<{ type: string; path?: string; mimeType?: string }> })
+      .content[1];
     expect(block.path).toBe(destArg); // path 指向下载目标
     expect(block.mimeType).toBe('image/png');
     expect(removeRemote).toHaveBeenCalledWith('cindy/device-link/u/x.png');
@@ -99,12 +112,39 @@ describe('normalizeUserMessage — device-link 出方向 OSS 引用物化', () =
     const ref = buildAttachmentOssRef({ ossKey: 'k/x.png' });
     const out = await normalizeUserMessage('sess-1', {
       type: 'user',
-      content: [{ type: 'text', text: 'hi' }, { type: 'image', path: ref }],
+      content: [
+        { type: 'text', text: 'hi' },
+        { type: 'image', path: ref },
+      ],
     });
     const content = (out as { content: Array<{ type: string }> }).content;
     expect(content).toHaveLength(1); // 附件被丢,只剩 text
     expect(content[0].type).toBe('text');
     expect(removeRemote).not.toHaveBeenCalled();
+  });
+
+  it('带完整性声明的新引用下载失败 → 阻止整条消息进入 agent', async () => {
+    downloadToFile.mockRejectedValue(new Error('附件下载不完整'));
+    const ref = buildAttachmentOssRef({
+      ossKey: 'k/x.png',
+      size: 3,
+      sha256: ATTACHMENT_SHA256,
+    });
+
+    await expect(
+      normalizeUserMessage('sess-1', {
+        type: 'user',
+        content: [
+          { type: 'text', text: 'hi' },
+          { type: 'image', path: ref },
+        ],
+      }),
+    ).rejects.toThrow(/下载不完整/);
+
+    expect(downloadToFile).toHaveBeenCalledWith('k/x.png', expect.any(String), {
+      size: 3,
+      sha256: ATTACHMENT_SHA256,
+    });
   });
 
   it('普通文本消息 → 原样,不触发下载', async () => {
@@ -117,13 +157,24 @@ describe('normalizeUserMessage — device-link 出方向 OSS 引用物化', () =
 describe('materializeQueuedOssAttachments — 出方向 files[] + persistedContent 一次性物化', () => {
   it('files[] 与 persistedContent 共用同一 OSS 引用 → 只下载/入库一次,删 OSS 一次;图片入总仓、非媒体走老缓存', async () => {
     // 同一张图,控制端给 files[].url/path 与 persistedContent.images[].url 用了同一个 OSS 引用串。
-    const imgRef = buildAttachmentOssRef({ ossKey: 'oss/img.png', mimeType: 'image/png', originalName: 'a.png' });
-    const fileRef = buildAttachmentOssRef({ ossKey: 'oss/doc.pdf', mimeType: 'application/pdf', originalName: 'd.pdf' });
+    const imgRef = buildAttachmentOssRef({
+      ossKey: 'oss/img.png',
+      mimeType: 'image/png',
+      originalName: 'a.png',
+    });
+    const fileRef = buildAttachmentOssRef({
+      ossKey: 'oss/doc.pdf',
+      mimeType: 'application/pdf',
+      originalName: 'd.pdf',
+    });
     copyFromPath.mockImplementation(async ({ originalName }: { originalName: string }) => ({
       url: `xdt-image://sess-1/cached-${originalName}`,
       filename: `cached-${originalName}`,
     }));
-    resolveSafe.mockImplementation((url: string) => ({ absPath: `/cache/${url.replace('xdt-image://', '')}`, mimeType: 'x' }));
+    resolveSafe.mockImplementation((url: string) => ({
+      absPath: `/cache/${url.replace('xdt-image://', '')}`,
+      mimeType: 'x',
+    }));
 
     const item = {
       clientId: 'c1',
@@ -163,7 +214,10 @@ describe('materializeQueuedOssAttachments — 出方向 files[] + persistedConte
     expect(f[0].base64).toBeUndefined();
 
     // persistedContent:images 引用走 url=cindy-media://(可渲染),files 引用走 path=老 cache 绝对路径。
-    const pc = JSON.parse(out.persistedContent) as { images: Array<{ url: string }>; files: Array<{ path: string }> };
+    const pc = JSON.parse(out.persistedContent) as {
+      images: Array<{ url: string }>;
+      files: Array<{ path: string }>;
+    };
     expect(pc.images[0].url).toBe(BLOB_URL);
     expect(pc.files[0].path).toBe('/cache/sess-1/cached-d.pdf');
   });
@@ -172,7 +226,11 @@ describe('materializeQueuedOssAttachments — 出方向 files[] + persistedConte
     const item = {
       clientId: 'c1',
       files: [{ url: 'xdt-image://sess-1/local.png', mimeType: 'image/png' }],
-      persistedContent: JSON.stringify({ text: 'hi', images: [{ url: 'xdt-image://sess-1/local.png' }], files: [] }),
+      persistedContent: JSON.stringify({
+        text: 'hi',
+        images: [{ url: 'xdt-image://sess-1/local.png' }],
+        files: [],
+      }),
     };
     const out = await materializeQueuedOssAttachments('sess-1', item);
     expect(out).toBe(item); // 引用相等:零改动
@@ -189,7 +247,9 @@ describe('materializeQueuedOssAttachments — 出方向 files[] + persistedConte
       files: [{ path: '/workdir/assets/photo.png', mimeType: 'image/png', category: 'image' }],
       persistedContent: JSON.stringify({
         text: '看下这张',
-        images: [{ url: '/workdir/assets/photo.png', mimeType: 'image/png', originalName: 'photo.png' }],
+        images: [
+          { url: '/workdir/assets/photo.png', mimeType: 'image/png', originalName: 'photo.png' },
+        ],
         files: [],
       }),
     };
@@ -208,7 +268,9 @@ describe('materializeQueuedOssAttachments — 出方向 files[] + persistedConte
     expect(downloadToFile).not.toHaveBeenCalled();
     expect(removeRemote).not.toHaveBeenCalled();
 
-    const pc = JSON.parse(out.persistedContent) as { images: Array<{ url: string; originalName: string }> };
+    const pc = JSON.parse(out.persistedContent) as {
+      images: Array<{ url: string; originalName: string }>;
+    };
     expect(pc.images[0].url).toBe(BLOB_URL);
     expect(pc.images[0].originalName).toBe('photo.png'); // spread 保留其余字段
     // files[] 分支只处理 OSS 引用:裸路径原样(喂 agent 走 path 读文件)。
@@ -226,7 +288,9 @@ describe('materializeQueuedOssAttachments — 出方向 files[] + persistedConte
         files: [],
       }),
     };
-    const out = (await materializeQueuedOssAttachments('sess-1', item)) as { persistedContent: string };
+    const out = (await materializeQueuedOssAttachments('sess-1', item)) as {
+      persistedContent: string;
+    };
     const pc = JSON.parse(out.persistedContent) as { images: Array<{ url: string }> };
     expect(pc.images[0].url).toBe('/gone/missing.png');
   });
@@ -236,7 +300,9 @@ describe('materializeQueuedOssAttachments — 出方向 files[] + persistedConte
       clientId: 'c1',
       persistedContent: JSON.stringify({
         text: 'hi',
-        images: [{ url: '/workdir/report.pdf', mimeType: 'application/pdf', originalName: 'report.pdf' }],
+        images: [
+          { url: '/workdir/report.pdf', mimeType: 'application/pdf', originalName: 'report.pdf' },
+        ],
         files: [{ name: 'notes.txt', path: '/workdir/notes.txt' }],
       }),
     };
@@ -248,10 +314,37 @@ describe('materializeQueuedOssAttachments — 出方向 files[] + persistedConte
   it('单个附件物化失败 → 保留原引用,不删该 OSS(降级,不阻断整条)', async () => {
     const imgRef = buildAttachmentOssRef({ ossKey: 'oss/img.png', mimeType: 'image/png' });
     downloadToFile.mockRejectedValue(new Error('OSS GET 失败'));
-    const item = { clientId: 'c1', files: [{ url: imgRef, path: imgRef, mimeType: 'image/png' }], persistedContent: '{"text":"hi"}' };
+    const item = {
+      clientId: 'c1',
+      files: [{ url: imgRef, path: imgRef, mimeType: 'image/png' }],
+      persistedContent: '{"text":"hi"}',
+    };
     const out = (await materializeQueuedOssAttachments('sess-1', item)) as typeof item;
     const f = out.files as Array<{ url: string }>;
     expect(f[0].url).toBe(imgRef); // 原引用保留
     expect(removeRemote).not.toHaveBeenCalled();
+  });
+
+  it('排队消息的新引用校验失败 → 不入队且不保留伪引用', async () => {
+    const ref = buildAttachmentOssRef({
+      ossKey: 'oss/doc.pdf',
+      mimeType: 'application/pdf',
+      originalName: 'doc.pdf',
+      size: 3,
+      sha256: ATTACHMENT_SHA256,
+    });
+    downloadToFile.mockRejectedValue(new Error('附件完整性校验失败'));
+
+    await expect(
+      materializeQueuedOssAttachments('sess-1', {
+        clientId: 'c1',
+        files: [{ path: ref, mimeType: 'application/pdf' }],
+        persistedContent: JSON.stringify({
+          text: 'hi',
+          images: [],
+          files: [{ name: 'doc.pdf', path: ref }],
+        }),
+      }),
+    ).rejects.toThrow(/完整性校验失败/);
   });
 });

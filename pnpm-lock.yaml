@@ -522,6 +522,9 @@ importers:
       '@lizi/voice-input-core':
         specifier: workspace:*
         version: link:../../packages/voice-input-core
+      '@noble/hashes':
+        specifier: ^1.8.0
+        version: 1.8.0
       '@react-native-async-storage/async-storage':
         specifier: 2.2.0
         version: 2.2.0(react-native@0.85.3(@babel/core@7.29.7)(@react-native/metro-config@0.85.3(@babel/core@7.29.7))(@types/react@19.2.17)(react@19.2.3))

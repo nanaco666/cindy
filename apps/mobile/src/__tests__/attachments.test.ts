@@ -12,6 +12,8 @@ import {
 } from '@/session/attachments';
 import { isAttachmentOssRef, parseAttachmentOssRef } from '@/session/attachmentOssRef';
 
+const SHA256 = 'a'.repeat(64);
+
 describe('mobile remote file attachments', () => {
   it('parses macOS and Windows remote paths without using local platform path rules', () => {
     expect(basenameRemotePath('/repo/docs/spec.pdf')).toBe('spec.pdf');
@@ -56,6 +58,7 @@ describe('mobile remote file attachments', () => {
       ossKey: 'cindy/device-link/user-1/spec.pdf',
       name: '/local/spec.pdf',
       size: 4096,
+      sha256: SHA256,
       mimeType: 'application/pdf',
     });
 
@@ -67,14 +70,17 @@ describe('mobile remote file attachments', () => {
       category: 'pdf',
       mimeType: 'application/pdf',
       originalName: 'spec.pdf',
+      sha256: SHA256,
     });
     expect(parseAttachmentOssRef(attachment!.path)).toEqual({
       ossKey: 'cindy/device-link/user-1/spec.pdf',
       mimeType: 'application/pdf',
       originalName: 'spec.pdf',
+      size: 4096,
+      sha256: SHA256,
     });
     expect(buildAttachmentPersistFileRefs([attachment!])).toEqual([
-      { name: 'spec.pdf', path: attachment!.path },
+      { name: 'spec.pdf', path: attachment!.path, size: 4096, sha256: SHA256 },
     ]);
   });
 
@@ -83,6 +89,7 @@ describe('mobile remote file attachments', () => {
       ossKey: 'cindy/device-link/user-1/report.pdf',
       name: '需求文档.pdf',
       size: 1024,
+      sha256: SHA256,
       mimeType: 'application/pdf',
     });
 
@@ -90,6 +97,8 @@ describe('mobile remote file attachments', () => {
       ossKey: 'cindy/device-link/user-1/report.pdf',
       mimeType: 'application/pdf',
       originalName: '需求文档.pdf',
+      size: 1024,
+      sha256: SHA256,
     });
   });
 
@@ -98,26 +107,36 @@ describe('mobile remote file attachments', () => {
       ossKey: 'cindy/device-link/user-1/photo.png',
       name: 'photo.png',
       size: 1024,
+      sha256: SHA256,
       mimeType: 'image/png',
     });
     const file = buildMobileUploadedAttachment({
       ossKey: 'cindy/device-link/user-1/spec.pdf',
       name: 'spec.pdf',
       size: 1024,
+      sha256: SHA256,
       mimeType: 'application/pdf',
     });
 
     // 字段名必须是 originalName(桌面 ImageRef schema):写成 `name` 会被桌面
     // renderer 的图片校验静默过滤,手机贴图在桌面版整个不渲染(2026-07 实踩)。
-    expect(buildAttachmentPersistImageRefs([image!, file!])).toEqual([{
-      url: image!.url,
-      originalName: 'photo.png',
-      mimeType: 'image/png',
-    }]);
-    expect(buildAttachmentPersistFileRefs([image!, file!])).toEqual([{
-      name: 'spec.pdf',
-      path: file!.path,
-    }]);
+    expect(buildAttachmentPersistImageRefs([image!, file!])).toEqual([
+      {
+        url: image!.url,
+        originalName: 'photo.png',
+        mimeType: 'image/png',
+        size: 1024,
+        sha256: SHA256,
+      },
+    ]);
+    expect(buildAttachmentPersistFileRefs([image!, file!])).toEqual([
+      {
+        name: 'spec.pdf',
+        path: file!.path,
+        size: 1024,
+        sha256: SHA256,
+      },
+    ]);
   });
 
   it('uses the same OSS ref as image url so desktop can materialize uploaded images', () => {
@@ -125,6 +144,7 @@ describe('mobile remote file attachments', () => {
       ossKey: 'cindy/device-link/user-1/photo.png',
       name: 'photo.png',
       size: 1024,
+      sha256: SHA256,
       mimeType: 'image/png',
     });
 
@@ -137,16 +157,22 @@ describe('mobile remote file attachments', () => {
   });
 
   it('rejects uploaded mobile files outside desktop attachment limits', () => {
-    expect(buildMobileUploadedAttachment({
-      ossKey: 'cindy/device-link/user-1/archive.zip',
-      name: 'archive.zip',
-      size: 1024,
-    })).toBeNull();
-    expect(buildMobileUploadedAttachment({
-      ossKey: 'cindy/device-link/user-1/spec.pdf',
-      name: 'spec.pdf',
-      size: MOBILE_MAX_ATTACHMENT_BYTES + 1,
-    })).toBeNull();
+    expect(
+      buildMobileUploadedAttachment({
+        ossKey: 'cindy/device-link/user-1/archive.zip',
+        name: 'archive.zip',
+        size: 1024,
+        sha256: SHA256,
+      }),
+    ).toBeNull();
+    expect(
+      buildMobileUploadedAttachment({
+        ossKey: 'cindy/device-link/user-1/spec.pdf',
+        name: 'spec.pdf',
+        size: MOBILE_MAX_ATTACHMENT_BYTES + 1,
+        sha256: SHA256,
+      }),
+    ).toBeNull();
   });
 });
 
