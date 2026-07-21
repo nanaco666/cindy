@@ -128,6 +128,8 @@ export interface ImUiTextPack {
       providerId: string | null;
       providerLabel: string | null;
       missing: string | null;
+      /** 接管 desktop session 时为 true；此时 /new 不会重置被接管的会话。 */
+      attached?: boolean;
     }) => string;
     controlInProgress: string;
     credentialBusy: string;

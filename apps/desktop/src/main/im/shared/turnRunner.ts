@@ -447,6 +447,7 @@ export function createTurnRunner(
           userId,
           { ...auth, agentKind: row.agentKind, model: row.model },
           scopeKey,
+          target.attached,
         );
         return;
       }
@@ -846,13 +847,14 @@ export function createTurnRunner(
     userId: string,
     auth: ImAuthRouteStatus & { agentKind: AgentKind; model: string },
     scopeKey?: string,
+    attached = false,
   ): Promise<void> {
     log.info(
       `no auth configured for agent=${auth.agentKind} provider=${auth.providerId ?? 'default'} ` +
         `missing=${auth.missing} userId=...${userId.slice(-8)} — agent NOT invoked`,
     );
     try {
-      const message = ui.agent.authMissing?.(auth) ?? ui.agent.apiKeyMissing;
+      const message = ui.agent.authMissing?.({ ...auth, attached }) ?? ui.agent.apiKeyMissing;
       await im.sendText(userId, message, { threadTs: scopeKey });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

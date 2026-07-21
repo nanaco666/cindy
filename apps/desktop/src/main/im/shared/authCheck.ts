@@ -46,6 +46,14 @@ export async function checkImRouteAuth(
     row,
     providerSnapshot === undefined ? await listProvidersForAuth(deps) : providerSnapshot,
   );
+  return checkImRouteAuthWithResolution(row, resolution, deps);
+}
+
+async function checkImRouteAuthWithResolution(
+  row: AuthRow,
+  resolution: ProviderResolution,
+  deps: ImAuthCheckDeps,
+): Promise<ImAuthCheckResult> {
   if (resolution.kind === 'provider') {
     const routing = resolution.provider.routing[row.agentKind];
     if (routing?.authStrategy === 'gateway-key') {
@@ -96,11 +104,11 @@ export async function checkImRouteAuthDetailed(
 ): Promise<ImAuthRouteStatus> {
   const providers =
     providerSnapshot === undefined ? await listProvidersForAuth(deps) : providerSnapshot;
-  const result = await checkImRouteAuth(row, providers, deps);
+  const resolution = resolveEffectiveProvider(row, providers);
+  const result = await checkImRouteAuthWithResolution(row, resolution, deps);
   const explicitProvider = row.providerId
     ? providers?.find((provider) => provider.id === row.providerId)
     : undefined;
-  const resolution = resolveEffectiveProvider(row, providers);
   const effectiveProvider =
     explicitProvider ?? (resolution.kind === 'provider' ? resolution.provider : undefined);
   return {

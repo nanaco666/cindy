@@ -1122,7 +1122,13 @@ describe('turnRunner send outcome policy (feishu adapter characterization)', () 
     expect(h.send).not.toHaveBeenCalled();
     expect(mocks.feishuIm.sendText).toHaveBeenCalledWith(
       'ou_user',
-      ui.agent.apiKeyMissing,
+      ui.agent.authMissing?.({
+        agentKind: 'claude-code',
+        model: 'claude-opus-4-8',
+        providerId: 'anthropic',
+        providerLabel: 'Anthropic',
+        missing: 'provider-disconnected',
+      }),
       { threadTs: undefined },
     );
   });
@@ -1193,7 +1199,13 @@ describe('turnRunner send outcome policy (feishu adapter characterization)', () 
     expect(mocks.getMaker).not.toHaveBeenCalled();
     expect(mocks.feishuIm.sendText).toHaveBeenCalledWith(
       'ou_user',
-      ui.agent.apiKeyMissing,
+      ui.agent.authMissing?.({
+        agentKind: 'claude-code',
+        model: 'claude-opus-4-7',
+        providerId: 'xd',
+        providerLabel: 'XD',
+        missing: 'gateway-key',
+      }),
       { threadTs: undefined },
     );
   });
@@ -1257,7 +1269,13 @@ describe('turnRunner send outcome policy (feishu adapter characterization)', () 
     expect(h.send).not.toHaveBeenCalled();
     expect(mocks.feishuIm.sendText).toHaveBeenCalledWith(
       'ou_user',
-      ui.agent.apiKeyMissing,
+      ui.agent.authMissing?.({
+        agentKind: 'codex',
+        model: 'meta/llama-4',
+        providerId: 'openrouter',
+        providerLabel: 'OpenRouter',
+        missing: 'provider-key',
+      }),
       { threadTs: undefined },
     );
   });

@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AgentKind } from '@lizi/maker-core';
 import type { ProviderView } from '@lizi/model-providers';
 
+import { ui as discordUi } from '../../discord/uiText';
+import { ui as feishuUi } from '../../feishu/uiText';
 import {
   checkImRouteAuth,
   checkImRouteAuthDetailed,
@@ -74,6 +76,23 @@ function provider(
 }
 
 describe('checkImRouteAuth', () => {
+  it.each([
+    ['Discord', discordUi],
+    ['Feishu', feishuUi],
+  ])('does not recommend /new for an attached %s session', (_channel, ui) => {
+    const message = ui.agent.authMissing?.({
+      agentKind: 'codex',
+      model: 'gpt-5.5',
+      providerId: 'custom-openai',
+      providerLabel: 'My OpenAI',
+      missing: 'provider-key',
+      attached: true,
+    });
+
+    expect(message).toContain('Settings');
+    expect(message).not.toContain('/new');
+  });
+
   it('reports gateway-key when a gateway route has no XD key', async () => {
     const providerSnapshot = [provider({ id: 'xd', strategy: 'gateway-key' })];
 
