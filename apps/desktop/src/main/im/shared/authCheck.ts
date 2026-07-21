@@ -11,12 +11,15 @@ import type { ImSessionRow } from './sessionRepo';
 type AuthRow = Pick<ImSessionRow, 'agentKind' | 'model' | 'providerId'>;
 
 export type ImAuthMissing =
-  | 'gateway-key'
-  | 'agent-oauth'
-  | 'provider-key'
-  | 'provider-disconnected';
+  'gateway-key' | 'agent-oauth' | 'provider-key' | 'provider-disconnected';
 
-type ImAuthCheckResult = { ok: boolean; missing: ImAuthMissing | null };
+export type ImAuthCheckResult = { ok: boolean; missing: ImAuthMissing | null };
+
+/** 鉴权检查的可解释结果，供 IM 渠道生成准确的错误提示。 */
+export interface ImAuthRouteStatus extends ImAuthCheckResult {
+  providerId: string | null;
+  providerLabel: string | null;
+}
 
 export interface ImAuthCheckDeps {
   readXdProxyApiKey(): string | null;
@@ -59,7 +62,10 @@ export async function checkImRouteAuth(
     // 「host 注入供应商 OAuth token」策略:鉴权与子进程自带凭证无关,connected(= 本机
     // 已有该供应商凭证)即可通行,不落 fallback(否则无 XD key / 无 agent OAuth 的环境下
     // 已连接的自定义 OAuth 供应商会被误判未鉴权、IM 轮次被无谓阻断)。
-    if (routing?.authStrategy === 'provider-oauth-header' || routing?.authStrategy === 'oauth-token') {
+    if (
+      routing?.authStrategy === 'provider-oauth-header' ||
+      routing?.authStrategy === 'oauth-token'
+    ) {
       return resolution.provider.connected
         ? { ok: true, missing: null }
         : { ok: false, missing: 'provider-disconnected' };
@@ -75,6 +81,33 @@ export async function checkImRouteAuth(
     return { ok: false, missing: 'provider-disconnected' };
   }
   return fallbackAuthCheckForImRoute(row, deps);
+}
+
+/**
+ * 检查 IM 会话实际持久化路由的鉴权状态，并保留供应商上下文。
+ *
+ * `checkImRouteAuth` 保持只返回兼容旧调用方的布尔/原因结果；新调用方
+ * 使用本函数即可避免把存量会话的供应商误报成 Cindy AI。
+ */
+export async function checkImRouteAuthDetailed(
+  row: AuthRow,
+  providerSnapshot: ProviderView[] | null | undefined,
+  deps: ImAuthCheckDeps,
+): Promise<ImAuthRouteStatus> {
+  const providers =
+    providerSnapshot === undefined ? await listProvidersForAuth(deps) : providerSnapshot;
+  const result = await checkImRouteAuth(row, providers, deps);
+  const explicitProvider = row.providerId
+    ? providers?.find((provider) => provider.id === row.providerId)
+    : undefined;
+  const resolution = resolveEffectiveProvider(row, providers);
+  const effectiveProvider =
+    explicitProvider ?? (resolution.kind === 'provider' ? resolution.provider : undefined);
+  return {
+    ...result,
+    providerId: row.providerId ?? effectiveProvider?.id ?? null,
+    providerLabel: effectiveProvider?.name ?? null,
+  };
 }
 
 export function hasCustomProviderAuth(
@@ -98,9 +131,7 @@ export function hasAuthHeaderOverride(headers: Record<string, string> | undefine
 }
 
 export type ProviderResolution =
-  | { kind: 'provider'; provider: ProviderView }
-  | { kind: 'explicit-invalid' }
-  | { kind: 'none' };
+  { kind: 'provider'; provider: ProviderView } | { kind: 'explicit-invalid' } | { kind: 'none' };
 
 export async function listProvidersForAuth(deps: ImAuthCheckDeps): Promise<ProviderView[] | null> {
   try {
@@ -118,11 +149,12 @@ export function resolveEffectiveProvider(
 ): ProviderResolution {
   if (!providers) return row.providerId ? { kind: 'explicit-invalid' } : { kind: 'none' };
   if (row.providerId) {
-    const explicit = providers.find((p) =>
-      p.id === row.providerId &&
-      p.connected &&
-      p.agents.includes(row.agentKind) &&
-      providerOffersModel(p, row.model, row.agentKind)
+    const explicit = providers.find(
+      (p) =>
+        p.id === row.providerId &&
+        p.connected &&
+        p.agents.includes(row.agentKind) &&
+        providerOffersModel(p, row.model, row.agentKind),
     );
     return explicit ? { kind: 'provider', provider: explicit } : { kind: 'explicit-invalid' };
   }
@@ -145,22 +177,16 @@ async function fallbackAuthCheckForImRoute(
 ): Promise<ImAuthCheckResult> {
   const hasGatewayKey = Boolean(deps.readXdProxyApiKey());
   if (row.providerId === 'xd') {
-    return hasGatewayKey
-      ? { ok: true, missing: null }
-      : { ok: false, missing: 'gateway-key' };
+    return hasGatewayKey ? { ok: true, missing: null } : { ok: false, missing: 'gateway-key' };
   }
   if (row.agentKind === 'claude-code') {
     if (!row.model.startsWith('claude-')) {
-      return hasGatewayKey
-        ? { ok: true, missing: null }
-        : { ok: false, missing: 'gateway-key' };
+      return hasGatewayKey ? { ok: true, missing: null } : { ok: false, missing: 'gateway-key' };
     }
     if (hasGatewayKey) return { ok: true, missing: null };
   }
   if (row.agentKind === 'codex' && row.model.startsWith('codex/')) {
-    return hasGatewayKey
-      ? { ok: true, missing: null }
-      : { ok: false, missing: 'gateway-key' };
+    return hasGatewayKey ? { ok: true, missing: null } : { ok: false, missing: 'gateway-key' };
   }
   try {
     return (await deps.getAgentAuthState(row.agentKind)).authenticated

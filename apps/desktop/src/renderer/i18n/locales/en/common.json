@@ -1937,7 +1937,7 @@
       },
       "defaults": {
         "title": "New Conversation Configuration",
-        "description": "New conversations started from Feishu or Slack use this agent and model configuration.",
+        "description": "New conversations started from Feishu, Slack, or Discord use this agent and model configuration. Changes apply only to new conversations; send /new in an existing Discord DM to apply them.",
         "agentLabel": "Agent",
         "modelLabel": "Model Configuration",
         "loading": "Loading new conversation configuration…",

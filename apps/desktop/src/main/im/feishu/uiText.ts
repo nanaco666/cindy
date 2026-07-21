@@ -34,8 +34,7 @@ export const ui = {
     unknownCommand: (cmd: string) =>
       `没认出 \`${cmd}\` 这个命令 🤔\n我能听懂的: /new、/model、/permission、/ctr、/exctr、/help`,
     detachedBySlash: '🚪 接管结束，咱们回到私聊频道。下次想远程操控 desktop 再 /ctr',
-    detachedByRevoke:
-      '⚠️ 你在 desktop 那边把接管收回去了，后续消息回到我们俩的私聊。',
+    detachedByRevoke: '⚠️ 你在 desktop 那边把接管收回去了，后续消息回到我们俩的私聊。',
     notAttached: '🤷 你现在没在接管任何会话，/exctr 闲着也没事可干。',
   },
 
@@ -46,6 +45,21 @@ export const ui = {
     sendInternalError: (errMsg: string) => `❌ 内部出 bug 了：${errMsg}`,
     apiKeyMissing:
       '⚠️ Cindy AI Key 还没配呢~\n去 desktop 的 Settings → 模型供应商里连接 Cindy AI，再来 ping 我',
+    authMissing: ({ providerLabel, providerId, missing, agentKind, model }) => {
+      const provider = providerLabel ?? providerId ?? '当前供应商';
+      const reason =
+        missing === 'gateway-key'
+          ? '需要先配置 Cindy AI Key'
+          : missing === 'provider-key'
+            ? '还没有配置该供应商的 API Key'
+            : missing === 'provider-disconnected'
+              ? '未连接或连接已失效'
+              : `需要先登录 ${agentKind} 凭证`;
+      return (
+        `⚠️ 当前会话使用供应商「${provider}」（${model}），${reason}。` +
+        '\n“新会话配置”只影响新会话；修改后请发送 `/new`，再继续聊天。'
+      );
+    },
     controlInProgress:
       '🎮 你 /ctr 还在选择中呢 — 先把上面那张卡片操作完（或点 🚪 退出），再来发别的~',
     credentialBusy:
@@ -63,8 +77,7 @@ export const ui = {
     /** `!stop` 时没有任务在跑。 */
     stopIdle: '🤷 现在没有正在跑的任务，`!stop` 落了个空。等有活儿要停的时候再喊我~',
     /** 远程控制时转播自动任务 turn 的卡片头(系统自动发起,非用户)。 */
-    scheduledTaskHeader: (name: string | null) =>
-      name ? `🤖 自动任务「${name}」` : '🤖 自动任务',
+    scheduledTaskHeader: (name: string | null) => (name ? `🤖 自动任务「${name}」` : '🤖 自动任务'),
     /** 用户发的内容**全部**模型都处理不了——单独发，不进 Agent。 */
     unsupportedOnly: (entries: IMUnsupportedEntry[]) =>
       `🙏 这条消息我吞不下：\n${entries.map((e) => `• ${e.label}`).join('\n')}\n\n` +
@@ -114,8 +127,7 @@ export const ui = {
     },
     permissionMode: {
       title: '🛡️ 调一下权限模式',
-      currentLine: (label: string, description: string) =>
-        `**当前**：${label}\n_${description}_`,
+      currentLine: (label: string, description: string) => `**当前**：${label}\n_${description}_`,
       hint: '点下面切换。auto = 常规放行+敏感操作弹卡片；bypass = 全放行；ask/default/plan/acceptEdits = 走卡片审批',
       optionLabel: (label: string) => label,
       resolved: (label: string) => `✅ 权限模式切到 ${label} 了`,
@@ -129,10 +141,8 @@ export const ui = {
         `🎮 当前接管中：**${sessionTitle}**\n选个新会话直接换乘；点 🚪 退出则保持现状`,
       btnExit: '🚪 撤了',
       resolvedExit: '🚪 走了，下次想远程操控再 /ctr',
-      sessionPickerTitle: (displayName: string) =>
-        `🎮 ${displayName} 里的存档`,
-      sessionPickerHint:
-        '挑个会话继续打 · ➕ 新建 开新存档 · ↩️ 后退 换工作区 · 🚪 退出 取消',
+      sessionPickerTitle: (displayName: string) => `🎮 ${displayName} 里的存档`,
+      sessionPickerHint: '挑个会话继续打 · ➕ 新建 开新存档 · ↩️ 后退 换工作区 · 🚪 退出 取消',
       sessionPickerEmptyBody: (displayName: string) =>
         `_工作区 **${displayName}** 这边还没有 active 会话~ 不如点 ➕ 新建 开一个？_`,
       btnNew: '➕ 新建',
@@ -144,8 +154,7 @@ export const ui = {
       attachFailed: (reason: string) => `❌ 没接上：${reason}`,
       /** 旧卡片(被点了 busy session 那张)被 freeze 时的占位文字, 让用户知道这张
        *  卡片不再活跃, 下面会新发一张可重选的卡片。 */
-      sessionBusyOldCardPlaceholder:
-        '⏳ 那个会话还在跑——下方给你刷了张新卡片，重选一下吧',
+      sessionBusyOldCardPlaceholder: '⏳ 那个会话还在跑——下方给你刷了张新卡片，重选一下吧',
       // ── /ctr session-pick: 目标 session 正在跑 turn — 4 套有温度的提示 ──
       // 共同核心: agent 在干活, 强行接管会乱; 等会儿再来。话术尽量像队友说话。
       sessionBusyPrompts: [

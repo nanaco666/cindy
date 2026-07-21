@@ -5,6 +5,7 @@ import type { ProviderView } from '@lizi/model-providers';
 
 import {
   checkImRouteAuth,
+  checkImRouteAuthDetailed,
   hasAuthForImRoute,
   type ImAuthCheckDeps,
 } from '../authCheck';
@@ -82,6 +83,21 @@ describe('checkImRouteAuth', () => {
     });
   });
 
+  it('keeps the persisted provider context for an explainable failure', async () => {
+    const providerSnapshot = [
+      provider({ id: 'custom-anthropic', name: '我的 Anthropic', strategy: 'api-key-header' }),
+    ];
+
+    await expect(
+      checkImRouteAuthDetailed(row({ providerId: 'custom-anthropic' }), providerSnapshot, deps()),
+    ).resolves.toEqual({
+      ok: false,
+      missing: 'provider-key',
+      providerId: 'custom-anthropic',
+      providerLabel: '我的 Anthropic',
+    });
+  });
+
   it('reports provider-disconnected when an oauth provider is not connected', async () => {
     const providerSnapshot = [
       provider({ id: 'anthropic', strategy: 'oauth-passthrough', connected: false }),
@@ -110,7 +126,13 @@ describe('checkImRouteAuth', () => {
 
   it('passes oauth-token routes when the provider is connected（回归：无 XD key/agent OAuth 环境不误判未鉴权）', async () => {
     const providerSnapshot = [
-      provider({ id: 'acme', source: 'user', strategy: 'oauth-token', connected: true, modelId: 'acme-1' }),
+      provider({
+        id: 'acme',
+        source: 'user',
+        strategy: 'oauth-token',
+        connected: true,
+        modelId: 'acme-1',
+      }),
     ];
 
     // deps 缺省无 XD key、agent OAuth 未登录——oauth-token 由 host 注入 token，不应落 fallback 被阻断。
@@ -124,7 +146,13 @@ describe('checkImRouteAuth', () => {
 
   it('reports provider-disconnected for oauth-token routes when the provider is not connected', async () => {
     const providerSnapshot = [
-      provider({ id: 'acme', source: 'user', strategy: 'oauth-token', connected: false, modelId: 'acme-1' }),
+      provider({
+        id: 'acme',
+        source: 'user',
+        strategy: 'oauth-token',
+        connected: false,
+        modelId: 'acme-1',
+      }),
     ];
 
     await expect(

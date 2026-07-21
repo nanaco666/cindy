@@ -121,6 +121,14 @@ export interface ImUiTextPack {
     runtimeError: (errMsg: string) => string;
     sendInternalError: (errMsg: string) => string;
     apiKeyMissing: string;
+    /** 按实际会话路由生成鉴权失败提示；未提供时回退到 apiKeyMissing。 */
+    authMissing?: (details: {
+      agentKind: string;
+      model: string;
+      providerId: string | null;
+      providerLabel: string | null;
+      missing: string | null;
+    }) => string;
     controlInProgress: string;
     credentialBusy: string;
     queuedNotice: (position: number) => string;

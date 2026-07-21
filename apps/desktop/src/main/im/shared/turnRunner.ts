@@ -60,11 +60,7 @@ import type {
   Session as MakerSession,
   UserMessage,
 } from '@lizi/maker-core';
-import type {
-  IMAttachment,
-  InteractiveCardSpec,
-  StreamingTextHandle,
-} from 'lizi-im';
+import type { IMAttachment, InteractiveCardSpec, StreamingTextHandle } from 'lizi-im';
 
 import { persistUserMessage } from '../messagePersistence';
 import { bindingStore } from '../binding';
@@ -78,16 +74,14 @@ import {
 } from '../../maker-ipc/register';
 import { agentHandoffPending } from '../../maker-ipc/agentHandoffPendingSingleton';
 import { prependHandoffToUserMessage } from '../../maker-ipc/agentHandoff';
-import {
-  registerPending,
-  registerPendingExternal,
-  rejectAllPending,
-} from './pendingInteractions';
+import { registerPending, registerPendingExternal, rejectAllPending } from './pendingInteractions';
 import { checkDestructiveToolCall } from '../../destructiveGuard';
 import { readXdProxyApiKey } from './apiKey';
 import {
   hasAuthForImRoute,
+  checkImRouteAuthDetailed,
   listProvidersForAuth,
+  type ImAuthRouteStatus,
   type ImAuthCheckDeps,
 } from './authCheck';
 import { FBOT_DRAFT_TITLE, generateAndPersistFbotTitle } from './fbotTitle';
@@ -234,8 +228,8 @@ export interface RouteTarget {
 }
 
 type DefaultRouteTargetResolution =
-  | { target: RouteTarget; missingAuthAgentKind?: never }
-  | { target: null; missingAuthAgentKind: AgentKind };
+  | { target: RouteTarget; missingAuth?: never }
+  | { target: null; missingAuth: ImAuthRouteStatus & { agentKind: AgentKind; model: string } };
 
 /** createTurnRunner 返回的编排实例 — per channel 一个。 */
 export interface ImTurnRunner {
@@ -260,11 +254,10 @@ export interface ImTurnRunner {
     scopeKey?: string,
   ): Promise<RouteTarget | null>;
   hasAuthForRoute(row: Pick<ImSessionRow, 'agentKind' | 'model' | 'providerId'>): Promise<boolean>;
-  prewireAttachedSession(
-    botContextId: string,
-    userId: string,
-    scopeKey?: string,
-  ): Promise<void>;
+  getAuthStatusForRoute?: (
+    row: Pick<ImSessionRow, 'agentKind' | 'model' | 'providerId'>,
+  ) => Promise<ImAuthRouteStatus>;
+  prewireAttachedSession(botContextId: string, userId: string, scopeKey?: string): Promise<void>;
   /** 接管 detach 清理(原 detachFeishuFromSession)— binding cleanup hook 调用。 */
   detachFromSession(sessionId: string): void;
   disposeAllSessions(): Promise<void>;
@@ -350,8 +343,12 @@ export function createTurnRunner(
   ): Promise<DefaultRouteTargetResolution> {
     const providers = await listProvidersForAuth(authCheckDeps());
     const prepared = await repo.prepareNewSession(botContextId, userId, scopeKey, providers);
-    if (!(await hasAuthForImRoute(prepared, providers, authCheckDeps()))) {
-      return { target: null, missingAuthAgentKind: prepared.agentKind };
+    const auth = await checkImRouteAuthDetailed(prepared, providers, authCheckDeps());
+    if (!auth.ok) {
+      return {
+        target: null,
+        missingAuth: { ...auth, agentKind: prepared.agentKind, model: prepared.model },
+      };
     }
     const row = await repo.createSession(botContextId, userId, scopeKey, prepared);
     return { target: { row, attached: false, scopeKey, created: true, authChecked: true } };
@@ -437,15 +434,22 @@ export function createTurnRunner(
     if (!target) {
       const created = await createAuthenticatedDefaultRouteTarget(botContextId, userId, scopeKey);
       if (!created.target) {
-        await replyMissingAuth(userId, created.missingAuthAgentKind, scopeKey);
+        await replyMissingAuth(userId, created.missingAuth, scopeKey);
         return;
       }
       target = created.target;
     }
     const row = target.row;
-    if (!target.authChecked && !(await hasAuthForImRoute(row, undefined, authCheckDeps()))) {
-      await replyMissingAuth(userId, row.agentKind, scopeKey);
-      return;
+    if (!target.authChecked) {
+      const auth = await checkImRouteAuthDetailed(row, undefined, authCheckDeps());
+      if (!auth.ok) {
+        await replyMissingAuth(
+          userId,
+          { ...auth, agentKind: row.agentKind, model: row.model },
+          scopeKey,
+        );
+        return;
+      }
     }
 
     // ── thread 名片卡(threadScoped 新 thread 会话)─────────────────────────
@@ -572,9 +576,7 @@ export function createTurnRunner(
       state.makerSession.isTurnRunning()
     ) {
       state.sendQueue.push(item);
-      log.info(
-        `queued message for session=${row.id.slice(-8)} position=${state.sendQueue.length}`,
-      );
+      log.info(`queued message for session=${row.id.slice(-8)} position=${state.sendQueue.length}`);
       // 本渠道没有未收口的 turn(纯 desktop turn 在跑) → 派发只能靠它的 stray
       // done/error 触发;若该事件在 enqueue 前已送达(isTurnRunning 释放略晚于
       // 事件 fanout 的窄竞态)或被错过, 队列会永久卡住。挂兜底 timer 自愈 —
@@ -800,10 +802,7 @@ export function createTurnRunner(
 
   // ── per-session wiring (idempotent) ─────────────────────────────────────────
 
-  async function ensureSessionWired(
-    target: RouteTarget,
-    userId: string,
-  ): Promise<SessionState> {
+  async function ensureSessionWired(target: RouteTarget, userId: string): Promise<SessionState> {
     const existing = sessionStates.get(target.row.id);
     if (existing) return existing;
     const inFlight = wiringInFlight.get(target.row.id);
@@ -845,24 +844,23 @@ export function createTurnRunner(
 
   async function replyMissingAuth(
     userId: string,
-    agentKind: AgentKind,
+    auth: ImAuthRouteStatus & { agentKind: AgentKind; model: string },
     scopeKey?: string,
   ): Promise<void> {
     log.info(
-      `no auth configured for agent=${agentKind} userId=...${userId.slice(-8)} — replying with apiKeyMissing prompt; agent NOT invoked`,
+      `no auth configured for agent=${auth.agentKind} provider=${auth.providerId ?? 'default'} ` +
+        `missing=${auth.missing} userId=...${userId.slice(-8)} — agent NOT invoked`,
     );
     try {
-      await im.sendText(userId, ui.agent.apiKeyMissing, { threadTs: scopeKey });
+      const message = ui.agent.authMissing?.(auth) ?? ui.agent.apiKeyMissing;
+      await im.sendText(userId, message, { threadTs: scopeKey });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       log.warn(`apiKeyMissing send failed (non-fatal): ${msg}`);
     }
   }
 
-  async function handleSessionWiringBusy(
-    userId: string,
-    turn: TurnState,
-  ): Promise<void> {
+  async function handleSessionWiringBusy(userId: string, turn: TurnState): Promise<void> {
     log.info(`session wiring hit credential busy for userId=...${userId.slice(-8)}`);
     await completeTurnCallbackAfterAck(turn);
     try {
@@ -883,10 +881,7 @@ export function createTurnRunner(
     };
   }
 
-  async function wireSessionInternal(
-    target: RouteTarget,
-    userId: string,
-  ): Promise<SessionState> {
+  async function wireSessionInternal(target: RouteTarget, userId: string): Promise<SessionState> {
     const { row, attached } = target;
     const maker = getMaker();
     ensureMakerCloseSubscription(maker);
@@ -958,17 +953,13 @@ export function createTurnRunner(
 
     // 注册本渠道自己的 onEvent listener — multi-listener 语义, 跟 desktop 那个
     // (如果存在) 并存。事件 fan-out 给 streamingHandle / 渠道卡片。
-    state.unsubscribers.push(
-      makerSession.onEvent(handleEventFor(row.id, userId)),
-    );
+    state.unsubscribers.push(makerSession.onEvent(handleEventFor(row.id, userId)));
 
     // setInteractionListener 是 single-listener: 这一调会覆盖上方
     // wireSessionToIpcExternal 装上的 desktop 版 — 渠道会话(含接管期间)的
     // permission / ask / plan 都走渠道卡片审批, 这正是设计。detach 时
     // executeDetach 会调 installDesktopInteractionListener 还原。
-    makerSession.setInteractionListener(
-      handleInteractionFor(row.id, userId, target.scopeKey),
-    );
+    makerSession.setInteractionListener(handleInteractionFor(row.id, userId, target.scopeKey));
 
     // 接管模式: 把 desktop 那边已经在等的 InteractionRequest "原地搬到渠道"。
     // 场景: 用户在 desktop 触发了 agent → agent 发出 permission/ask/plan 卡片 →
@@ -1350,11 +1341,7 @@ export function createTurnRunner(
     // 主机记账、意识删不掉):可能混有视频/音频/3D,IM 本期只接走图片。
     if (Array.isArray(parsed.xdt_media_produced)) {
       for (const u of parsed.xdt_media_produced) {
-        if (
-          typeof u === 'string' &&
-          isManagedImageUrl(u) &&
-          /\.(png|jpe?g|gif|webp)$/i.test(u)
-        ) {
+        if (typeof u === 'string' && isManagedImageUrl(u) && /\.(png|jpe?g|gif|webp)$/i.test(u)) {
           urls.push(u);
         }
       }
@@ -1366,9 +1353,7 @@ export function createTurnRunner(
       sawVideo = true;
     }
     if (sawVideo) {
-      log.warn(
-        `[${channel}/turn] tool_result carried xdt_video_url(s); IM 侧本期不上传视频,跳过`,
-      );
+      log.warn(`[${channel}/turn] tool_result carried xdt_video_url(s); IM 侧本期不上传视频,跳过`);
     }
     return Array.from(new Set(urls));
   }
@@ -1693,10 +1678,7 @@ export function createTurnRunner(
     };
   }
 
-  function isSessionRunningError(
-    err: unknown,
-    error: SanitizedSendOutcomeError,
-  ): boolean {
+  function isSessionRunningError(err: unknown, error: SanitizedSendOutcomeError): boolean {
     if (error.errorCode === 'SESSION_RUNNING') return true;
     return err instanceof Error && err.message.startsWith('SESSION_RUNNING:');
   }
@@ -1889,10 +1871,7 @@ export function createTurnRunner(
     maybeDispatchNextQueued(state, userId);
   }
 
-  async function persistSdkSessionId(
-    localSessionId: string,
-    data: unknown,
-  ): Promise<void> {
+  async function persistSdkSessionId(localSessionId: string, data: unknown): Promise<void> {
     const sdkSessionId =
       data && typeof data === 'object' && 'sdkSessionId' in data
         ? String((data as { sdkSessionId: unknown }).sdkSessionId)
@@ -1915,11 +1894,7 @@ export function createTurnRunner(
 
   // ── interaction handling ────────────────────────────────────────────────────
 
-  function handleInteractionFor(
-    localSessionId: string,
-    userId: string,
-    scopeKey?: string,
-  ) {
+  function handleInteractionFor(localSessionId: string, userId: string, scopeKey?: string) {
     return async (req: InteractionRequest): Promise<InteractionDecision> => {
       log.info(
         `interaction request kind=${req.kind} requestId=...${req.requestId.slice(-8)} session=...${localSessionId.slice(-8)}`,
@@ -2144,9 +2119,7 @@ export function createTurnRunner(
     const state = target ? sessionStates.get(target.row.id) : undefined;
     if (!state) return { stopped: false, droppedQueued: 0 };
     const running =
-      state.queue.length > 0 ||
-      state.sendQueue.length > 0 ||
-      state.makerSession.isTurnRunning();
+      state.queue.length > 0 || state.sendQueue.length > 0 || state.makerSession.isTurnRunning();
     if (!running) return { stopped: false, droppedQueued: 0 };
     const droppedQueued = state.sendQueue.length;
     // 先清排队再 abort — abort 触发的 done/error 会走 maybeDispatchNextQueued,
@@ -2207,6 +2180,7 @@ export function createTurnRunner(
     runAgentTurn,
     resolveRouteTarget,
     hasAuthForRoute: (row) => hasAuthForImRoute(row, undefined, authCheckDeps()),
+    getAuthStatusForRoute: (row) => checkImRouteAuthDetailed(row, undefined, authCheckDeps()),
     prewireAttachedSession,
     detachFromSession,
     disposeAllSessions,
