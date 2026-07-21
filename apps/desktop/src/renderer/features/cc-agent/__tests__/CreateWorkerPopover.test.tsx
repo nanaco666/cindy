@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { renderToString } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CreateWorkerPopover } from '../CreateWorkerPopover';
@@ -191,22 +192,56 @@ describe('CreateWorkerPopover', () => {
     await waitFor(() => expect(screen.getByTestId('model-selector').textContent).toBe('gpt-5.5'));
   });
 
-  it('does not replace a remote model during a provider/capabilities snapshot mismatch', async () => {
-    mocks.modelsByAgent.codex = [model('gpt-5.5')];
-    mocks.capabilitiesByAgent.codex = { availableModels: [{ id: 'codex/gpt-5.5' }] };
-    const view = render(
-      <CreateWorkerPopover open deviceId="device-a" onClose={vi.fn()} onCreate={vi.fn()} />,
+  it('replaces a remote preference whose provider disconnected even if capabilities still list it', async () => {
+    window.localStorage.setItem(
+      'workerCreationPrefs',
+      JSON.stringify({
+        lastAgent: 'codex',
+        codex: { model: 'codex/disconnected', effort: 'high', fast: false },
+      }),
+    );
+    mocks.modelsByAgent.codex = [model('gpt-connected', ['medium'], 'medium')];
+    mocks.capabilitiesByAgent.codex = {
+      availableModels: [{ id: 'codex/disconnected' }, { id: 'gpt-connected' }],
+    };
+    const onCreate = vi.fn();
+
+    render(
+      <CreateWorkerPopover
+        open
+        deviceId="device-a"
+        onClose={vi.fn()}
+        onCreate={onCreate}
+      />,
     );
 
     await waitFor(() =>
-      expect(screen.getByTestId('model-selector').textContent).toBe('codex/gpt-5.5'),
+      expect(screen.getByTestId('model-selector').textContent).toBe('gpt-connected'),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'orca.createWorker.submit' }));
+    await waitFor(() =>
+      expect(onCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'gpt-connected', effort: 'medium' }),
+      ),
+    );
+  });
+
+  it('does not announce an empty-model warning before stored preferences are restored', () => {
+    window.localStorage.setItem(
+      'workerCreationPrefs',
+      JSON.stringify({
+        lastAgent: 'claude-code',
+        'claude-code': { model: 'claude-opus-4-7', effort: 'high', fast: false },
+      }),
+    );
+    mocks.modelsByAgent.codex = [];
+    mocks.capabilitiesByAgent.codex = { availableModels: [] };
+
+    const initialMarkup = renderToString(
+      <CreateWorkerPopover open onClose={vi.fn()} onCreate={vi.fn()} />,
     );
 
-    mocks.capabilitiesByAgent.codex = { availableModels: [{ id: 'gpt-5.5' }] };
-    view.rerender(
-      <CreateWorkerPopover open deviceId="device-a" onClose={vi.fn()} onCreate={vi.fn()} />,
-    );
-    await waitFor(() => expect(screen.getByTestId('model-selector').textContent).toBe('gpt-5.5'));
+    expect(initialMarkup).not.toContain('orca.createWorker.noAvailableModels');
   });
 
   it('converges each agent preference independently after switching agents', async () => {

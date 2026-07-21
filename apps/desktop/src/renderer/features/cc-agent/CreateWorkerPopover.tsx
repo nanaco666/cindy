@@ -129,6 +129,7 @@ export function CreateWorkerPopover({
     agent === 'codex' && activeCaps?.hasFastMode && currentModel?.supportsFastMode,
   );
   const noAvailableLocalModels =
+    prefsRestored &&
     !deviceId &&
     !activeCapabilitiesState.loading &&
     (activeCaps !== null || activeCapabilitiesState.error !== null) &&
@@ -166,12 +167,8 @@ export function CreateWorkerPopover({
     if (models.length === 0) return;
     let selected = models.find((m) => m.id === model);
     if (!selected) {
-      // 本地 providers + capabilities 是原子快照,缺失即代表历史偏好已经失效。
-      // 远端两份快照独立推送:provider 先到时可能暂时过滤掉仍有效的模型。只有被控端
-      // capabilities 也确认模型不存在后才回退,避免刷新窗口静默改掉用户选择。
-      const pendingRemoteProviderSnapshot =
-        Boolean(deviceId) && Boolean(activeCaps?.availableModels.some((item) => item.id === model));
-      if (pendingRemoteProviderSnapshot) return;
+      // Provider loading has settled, so activeModels is authoritative for both local and remote
+      // creation. A capability entry alone does not make a disconnected provider's model usable.
       selected = models[0];
       setModel(selected.id);
     }
@@ -180,10 +177,8 @@ export function CreateWorkerPopover({
     }
   }, [
     activeCapabilitiesState.loading,
-    activeCaps,
     activeModels,
     agent,
-    deviceId,
     effort,
     model,
     open,
