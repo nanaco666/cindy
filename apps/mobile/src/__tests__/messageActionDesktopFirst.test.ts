@@ -158,16 +158,17 @@ describe('mobile message actions desktop-first surface', () => {
     expect(toolGroupSource).toContain('useFoldableExpandedState(`toolrow-${rowKey ?? tool.key}`, false)');
     expect(toolGroupSource).toContain('testID="message.toolRowToggle"');
     expect(toolGroupSource).toContain('{showDetails ? (');
-    // 动作行与桌面共用「running spinner / done check」语义。工具结果内容不把
-    // 已结束动作误画成 CircleAlert；行头与 thinking 使用同样的 8px inset。
+    // 动作行按 running spinner → failed alert → done check 排序；运行态优先，
+    // 已结束的真实失败不能误画成成功勾。行头与 thinking 使用同样的 8px inset。
     const statusIconStart = source.indexOf('function ToolRowStatusIcon');
     const statusIconEnd = source.indexOf('function TodoStatusIcon', statusIconStart);
     const statusIconSource = source.slice(statusIconStart, statusIconEnd);
     expect(statusIconSource).toContain("status === 'running'");
     expect(statusIconSource).toContain('<CompactActivityIndicator');
+    expect(statusIconSource).toContain('hasError');
+    expect(statusIconSource).toContain('<CircleAlert');
     expect(statusIconSource).toContain('<Check');
-    expect(statusIconSource).not.toContain('hasError');
-    expect(statusIconSource).not.toContain('CircleAlert');
+    expect(source).toContain('<ToolRowStatusIcon hasError={row.hasError} status={row.status} />');
     const styleStart = source.indexOf('toolRow: {');
     const styleEnd = source.indexOf('toolName:', styleStart);
     const actionRowStyles = source.slice(styleStart, styleEnd);
@@ -210,6 +211,7 @@ describe('mobile message actions desktop-first surface', () => {
     expect(todoSource).toContain('summaryCount: header.summaryCount');
     expect(todoSource).toContain('item.todos.map');
     expect(todoSource).toContain('<TodoStatusIcon animated={animated} status={presentation.status} />');
+    expect(source).toContain('animated={item.isStreaming === true}');
     const todoStatusStart = source.indexOf('function TodoStatusIcon');
     const todoStatusEnd = source.indexOf('const AGENT_TASK_STATUS_LABEL', todoStatusStart);
     const todoStatusSource = source.slice(todoStatusStart, todoStatusEnd);

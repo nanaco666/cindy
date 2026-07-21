@@ -47,6 +47,8 @@ export interface MessageRenderNormalizedMessage<
   secondaryBody?: string;
   createdAt: string;
   isStreaming?: boolean;
+  /** tool 消息专用:对应 tool_result 是否已经到达。 */
+  toolSettled?: boolean;
   /** tool 消息专用:配对 tool_result 提取出的产出媒体(驱动 tool_media 独立渲染项)。 */
   media?: readonly MessageRenderToolMediaLike[];
 }
@@ -100,6 +102,8 @@ export interface MessageRenderTodoCardItem {
   key: string;
   todos: MessageRenderTodoItem[];
   createdAt: string;
+  /** True only while this plan card belongs to the session's active unsettled tail. */
+  isStreaming?: boolean;
 }
 
 /**
@@ -195,6 +199,7 @@ export function buildMessageRenderItems<
       messages,
       taskUpdates,
       options.renderOrphanTaskUpdates ?? (options.isSessionStreaming === true),
+      options.isSessionStreaming === true,
     ),
     options.isSessionStreaming === true,
   );
@@ -206,6 +211,7 @@ function buildLinearItems<
   messages: readonly TMessage[],
   taskUpdates?: ReadonlyMap<string, AgentTaskUpdate>,
   includeOrphanTaskUpdates = false,
+  isSessionStreaming = false,
 ): MessageRenderItem<TMessage>[] {
   const sourceMessages = messages.map((message) => message.source);
   const todoInsertAt = findMessageTodoInsertions(sourceMessages);
@@ -271,6 +277,7 @@ function buildLinearItems<
             key: insertion.key,
             todos: insertion.todos,
             createdAt: message.createdAt,
+            isStreaming: isSessionStreaming && message.toolSettled === false,
           });
         }
         continue;

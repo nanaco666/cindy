@@ -103,6 +103,24 @@ describe('messageRenderModel', () => {
     ]);
   });
 
+  it('keeps interrupted historical plans frozen while the current plan is live', () => {
+    const items = buildMobileMessageRenderItems([
+      message({ id: 'user-old', role: 'user', content: 'old turn', createdAt: at(1) }),
+      toolUse('plan-old', 'update_plan', {
+        plan: [{ step: 'Old task', status: 'in_progress' }],
+      }, 2),
+      message({ id: 'user-current', role: 'user', content: 'new turn', createdAt: at(3) }),
+      toolUse('todo-current', 'TodoWrite', {
+        todos: [{ content: 'Current task', status: 'in_progress' }],
+      }, 4),
+    ], { isSessionStreaming: true });
+
+    const todos = items.filter((item) => item.type === 'todo');
+    expect(todos).toHaveLength(2);
+    expect(todos[0]).toMatchObject({ key: 'todo-plan-old', isStreaming: false });
+    expect(todos[1]).toMatchObject({ key: 'todo-todo-current', isStreaming: true });
+  });
+
   it('folds thinking, tools, todo, and intermediate assistant text before the final answer', () => {
     const items = buildMobileMessageRenderItems([
       message({ id: 'user', role: 'user', content: 'start', createdAt: at(1) }),

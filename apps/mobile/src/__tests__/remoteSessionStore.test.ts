@@ -335,6 +335,29 @@ describe('remoteSessionStore', () => {
     }
   });
 
+  it('ignores compact boundaries without a stable id instead of ending current work', () => {
+    remoteSessionStore.setMessages('s1', [{
+      ...messageAt('active', 's1', '2026-01-01T00:00:01.000Z'),
+      content: { text: 'working', isStreaming: true },
+      agentMeta: { isStreaming: true },
+    }]);
+    const versionBefore = remoteSessionStore.getMessageVersion();
+
+    remoteSessionStore.applyMakerEvent('s1', {
+      type: 'compact_boundary',
+      data: { trigger: 'auto' },
+    });
+
+    expect(remoteSessionStore.getMessages('s1')).toEqual([
+      expect.objectContaining({
+        id: 'active',
+        content: { text: 'working', isStreaming: true },
+        agentMeta: { isStreaming: true },
+      }),
+    ]);
+    expect(remoteSessionStore.getMessageVersion()).toBe(versionBefore);
+  });
+
   it('treats a new compact boundary as the end of the current post-compact activity segment', () => {
     vi.useFakeTimers();
     try {

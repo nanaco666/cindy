@@ -36,6 +36,8 @@ describe('mobile message list container', () => {
     // 冷开允许有限补页,把短初窗上方历史自动补齐；预算耗尽或首项无进展即停止。
     expect(source).toContain('MAX_INITIAL_HISTORY_AUTOFILL_PAGES');
     expect(source).toContain('initialHistoryAutofillRemainingRef.current -= 1');
+    // 冷开补页失败/空页不得锁死历史阅读态；只有真实上翻才进入该状态。
+    expect(source).toContain('readingOlderRef.current = userScrolledForOlder');
     // 深链 / 搜索定位本身就是明确的历史浏览意图,后续近顶自动补页无需再拖一下。
     const focusEffectStart = source.indexOf('// 深链/搜索:滚到指定消息');
     const focusEffectEnd = source.indexOf('// 新消息红点', focusEffectStart);

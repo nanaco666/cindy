@@ -842,10 +842,27 @@ describe('message render todo grouping', () => {
     expect(items[1]).toMatchObject({
       type: 'todo',
       key: 'todo-plan1',
+      isStreaming: false,
       todos: [
         { content: 'Inspect', status: 'in_progress' },
         { content: 'Patch', status: 'pending' },
       ],
+    });
+  });
+
+  it('marks only an unsettled plan in a streaming session as live', () => {
+    const livePlan = normalized(tool('plan-live', 'update_plan', { text: '1. Inspect\n2. Patch' }));
+    livePlan.toolSettled = false;
+    const settledPlan = normalized(tool('plan-settled', 'update_plan', { text: '1. Inspect\n2. Patch' }));
+    settledPlan.toolSettled = true;
+
+    expect(buildMessageRenderItems([livePlan], { isSessionStreaming: true })[0]).toMatchObject({
+      type: 'todo',
+      isStreaming: true,
+    });
+    expect(buildMessageRenderItems([settledPlan], { isSessionStreaming: true })[0]).toMatchObject({
+      type: 'todo',
+      isStreaming: false,
     });
   });
 

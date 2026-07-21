@@ -759,7 +759,9 @@ export function MessageRenderer({
     if (!eligible) return;
     lastAutoLoadEarlierKeyRef.current = firstItemKey;
     if (initialAutoFillAllowed) initialHistoryAutofillRemainingRef.current -= 1;
-    readingOlderRef.current = true;
+    // 冷开补页只补齐初窗,失败/空页时也不能把会话永久留在「阅读历史」态；
+    // 只有用户真实上翻触发的补页才需要抑制后续贴底。
+    readingOlderRef.current = userScrolledForOlder;
     onLoadEarlier();
   }, [firstItemKey, loadEarlierAction.disabled, loadEarlierAction.visible, onLoadEarlier]);
 
@@ -1175,7 +1177,7 @@ const RenderItemView = memo(function RenderItemView({
     case 'todo':
       node = (
         <TodoCard
-          animated={actions.isSessionStreaming === true}
+          animated={item.isStreaming === true}
           item={item}
           screenWidth={actions.screenWidth}
         />
@@ -1858,7 +1860,7 @@ function ToolActionRow({
         ]}
         testID="message.toolRowToggle"
       >
-        <ToolRowStatusIcon status={row.status} />
+        <ToolRowStatusIcon hasError={row.hasError} status={row.status} />
         <Text style={[styles.toolName, styles.toolNameFlex]} numberOfLines={1}>{row.label}</Text>
         {chevronNode}
       </Pressable>
@@ -2016,15 +2018,22 @@ function CompactActivityIndicator({ color, size }: { color: string; size: number
   );
 }
 
-/** 工具动作的状态是「仍在执行 / 已结束」，与桌面 AgentActionRow 一致。
- *  tool result 内出现错误文案不改变行首图标，避免正常读取/搜索被误画成告警。 */
-function ToolRowStatusIcon({ status }: { status: ToolRowStatus }) {
+/** 工具动作图标优先表达运行态；结束后再区分失败与成功。 */
+function ToolRowStatusIcon({
+  hasError,
+  status,
+}: {
+  hasError: boolean;
+  status: ToolRowStatus;
+}) {
   const { colors } = useTheme();
   return (
     <View style={stylesStatic.workActivityIconSlot}>
       {status === 'running'
         ? <CompactActivityIndicator color={colors.textTertiary} size={iconSize.sm} />
-        : <Check color={colors.textTertiary} size={iconSize.sm} strokeWidth={iconStroke.regular} />}
+        : hasError
+          ? <CircleAlert color={colors.errorText} size={iconSize.sm} strokeWidth={iconStroke.regular} />
+          : <Check color={colors.textTertiary} size={iconSize.sm} strokeWidth={iconStroke.regular} />}
     </View>
   );
 }

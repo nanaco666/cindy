@@ -1027,13 +1027,14 @@ export const remoteSessionStore = {
     if (type === 'compact_boundary') {
       const data = isRecord(event.data) ? event.data : {};
       const boundaryId = readString(data, 'boundaryId');
-      const clientId = boundaryId
-        ? `mobile-system-compact:${boundaryId}`
-        : `mobile-system-compact-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      // 无稳定边界标识就无法区分 live 与 replay；fail closed，避免重复事件结束
+      // 边界之后的新工作并插入无法去重的系统卡。
+      if (!boundaryId) return;
+      const clientId = `mobile-system-compact:${boundaryId}`;
       const existing = messages.get(sessionId) ?? [];
       // Transcript replay and the live stream may forward the same provider boundary.
       // De-duplicate before finalizing, otherwise a replay could end post-compact work.
-      if (boundaryId && existing.some((message) => messageKey(message) === clientId)) return;
+      if (existing.some((message) => messageKey(message) === clientId)) return;
       const finalized = existing.map(finishMessageStreamingAtCompactBoundary);
       const createdAt = new Date().toISOString();
       messages.set(sessionId, normalizeMessages([
