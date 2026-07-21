@@ -1328,23 +1328,23 @@
       "title": "Memory",
       "description": "Powers workspace-scoped memory. After changing settings you usually need to start a new Session for it to take effect. If memory misbehaves, click Reset or turn it off.",
       "maker": {
-        "label": "Maker",
+        "label": "Cindy",
         "description": "True cross-Agent (Claude / Codex) Session memory sharing within the same working directory (Beta).",
-        "toggleAria": "Toggle Maker memory",
-        "resetAria": "Reset Maker memories",
+        "toggleAria": "Toggle Cindy memory",
+        "resetAria": "Reset Cindy memories",
         "resetConfirm": {
-          "title": "Reset Maker memories?",
-          "description": "This will permanently delete all Maker memories across every project (stored under user-data, not in your repos). This action cannot be undone.",
+          "title": "Reset Cindy memories?",
+          "description": "This will permanently delete all Cindy memories across every project (stored under user-data, not in your repos). This action cannot be undone.",
           "confirm": "Reset",
           "cancel": "Cancel"
         },
         "toast": {
-          "enabled": "Maker memory enabled",
-          "disabled": "Maker memory disabled",
-          "toggleFailed": "Failed to toggle Maker memory",
-          "resetSuccess_one": "Maker memories reset — removed {{count}} workdir",
-          "resetSuccess_other": "Maker memories reset — removed {{count}} workdirs",
-          "resetFailed": "Failed to reset Maker memories"
+          "enabled": "Cindy memory enabled",
+          "disabled": "Cindy memory disabled",
+          "toggleFailed": "Failed to toggle Cindy memory",
+          "resetSuccess_one": "Cindy memories reset — removed {{count}} workdir",
+          "resetSuccess_other": "Cindy memories reset — removed {{count}} workdirs",
+          "resetFailed": "Failed to reset Cindy memories"
         }
       },
       "agents": {
@@ -1685,7 +1685,7 @@
           "description": "Task scheduling — cron-based recurring jobs and one-shot reminders"
         },
         "memory": {
-          "name": "Maker Memory",
+          "name": "Cindy Memory",
           "description": "Cross-agent long-term memory for persistent context across sessions"
         },
         "xdt_helper": {
