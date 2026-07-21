@@ -2625,7 +2625,7 @@ struct IdleIslandView: View {
     HStack(spacing: 5) {
       AgentIslandMascotView(skin: mascotSkin, state: .idle, size: 16)
         .frame(width: 16, height: 16)
-      Text("XD Maker")
+      Text("Cindy")
         .font(.system(size: 10, weight: .semibold, design: .monospaced))
         .foregroundColor(Color.white.opacity(0.24))
         .opacity(textOpacity)
