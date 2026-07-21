@@ -709,14 +709,17 @@ describe('ModelSelector trigger variants', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Codex/ }));
     await waitFor(() => expect(confirmBrowseSwitch).toHaveBeenCalledTimes(1));
 
-    // 模拟 AlertDialog 被 Popover 判成外部交互而发出的 close 请求；确认未结束时
-    // 面板仍留在原 Agent 页签，取消后也不发生关闭再打开的闪烁。
-    fireEvent.click(screen.getByTestId('mock-popover-dismiss'));
-    expect(screen.getByTestId('model-options-popover')).toBeTruthy();
+    // 模拟 AlertDialog 被 MorphPopover 判成外部交互(outside pointerdown)而发出的
+    // close 请求；确认未结束时面板仍留在原 Agent 页签，取消后也不发生关闭再打开的闪烁。
+    // (主面板已从 Popover 换成 MorphPopover,外点关闭走 document 级 pointerdown 捕获)
+    fireEvent.pointerDown(document.body);
+    expect(screen.getByRole('group', { name: /Select model/ })).toBeTruthy();
     expect(screen.getByRole('tab', { name: /Claude/ }).getAttribute('aria-selected')).toBe('true');
 
     await act(async () => resolveConfirmation(false));
-    await waitFor(() => expect(screen.getByTestId('model-options-popover')).toBeTruthy());
+    await waitFor(() =>
+      expect(screen.getByRole('group', { name: /Select model/ })).toBeTruthy(),
+    );
     expect(screen.getByRole('tab', { name: /Claude/ }).getAttribute('aria-selected')).toBe('true');
   });
 
