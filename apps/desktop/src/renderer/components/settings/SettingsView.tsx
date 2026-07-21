@@ -196,7 +196,7 @@ export function SettingsView() {
                     'flex h-9 items-center rounded-full px-3 text-sm transition-colors',
                     selected
                       ? 'border border-[var(--sidebar-item-active-border)] bg-sidebar-item-active font-medium text-[var(--sidebar-item-active-foreground)]'
-                      : 'border border-transparent text-[var(--settings-menu-text)] hover:bg-[var(--settings-menu-bg-hover)]',
+                      : 'border border-transparent text-[var(--settings-menu-text)] hover:bg-sidebar-item-hover',
                   )}
                 >
                   {t(TAB_LABEL_KEY[tabId])}

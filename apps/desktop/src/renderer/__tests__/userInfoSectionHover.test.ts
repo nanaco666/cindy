@@ -118,7 +118,7 @@ describe('UserInfoSection — inner main button no longer owns hover background'
 describe('UserInfoSection — Flame button carries .flame-btn marker class', () => {
   it("Flame button className list includes 'flame-btn' as the first entry", () => {
     // 关键: 外层 div 的 has-[.flame-btn:hover] 选择器必须能钩到这个 class
-    expect(source).toMatch(/'flame-btn',\s*\n\s*'flex h-\[19px\] w-\[19px\]/);
+    expect(source).toMatch(/'flame-btn',\s*\n\s*'flex h-\[22px\] w-\[22px\]/);
   });
 
   it("Flame button retains its own hover:bg-sidebar-item-hover (capsule highlight when hovered)", () => {
@@ -128,9 +128,9 @@ describe('UserInfoSection — Flame button carries .flame-btn marker class', () 
     );
   });
 
-  it('Flame button keeps rounded-full + 19x19 size inside the account capsule', () => {
+  it('Flame button keeps rounded-full + 22x22 size inside the account capsule', () => {
     expect(source).toContain(
-      'flex h-[19px] w-[19px] shrink-0 items-center justify-center rounded-full',
+      'flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full',
     );
     expect(source).toContain(
       'border border-[var(--sidebar-user-card-border)] bg-[var(--sidebar-user-card-bg)]',
