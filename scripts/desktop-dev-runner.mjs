@@ -17,8 +17,16 @@ if (mode !== 'remote' && mode !== 'local') {
 
 const devScript = mode === 'local' ? 'dev:desktop' : 'dev:desktop:remote';
 const pnpmExecPath = process.env.npm_execpath;
-const command = pnpmExecPath && fs.existsSync(pnpmExecPath) ? process.execPath : 'pnpm';
-const args = pnpmExecPath && fs.existsSync(pnpmExecPath)
+const hasPnpmExecPath = Boolean(
+  pnpmExecPath && /pnpm/i.test(path.basename(pnpmExecPath)) && fs.existsSync(pnpmExecPath),
+);
+// The restart pipeline opens a fresh Windows cmd.exe. That environment does
+// not always carry npm_execpath, and Node cannot spawn a .cmd shim with the
+// default shell:false behavior. Use the explicit shim plus shell:true in that
+// fallback so worktrees started from an agent terminal behave like ones
+// started from a regular pnpm lifecycle.
+const command = hasPnpmExecPath ? process.execPath : process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+const args = hasPnpmExecPath
   ? [pnpmExecPath, devScript]
   : [devScript];
 
@@ -27,6 +35,7 @@ const child = spawn(command, args, {
   env: { ...process.env, COREPACK_ENABLE_AUTO_PIN: '0' },
   stdio: 'inherit',
   windowsHide: false,
+  shell: process.platform === 'win32' && !hasPnpmExecPath,
 });
 
 child.once('error', (error) => {
@@ -65,10 +74,17 @@ function writeFailedStatus(detail) {
   const statusPath = process.env.XDT_DESKTOP_DEV_STARTUP_STATUS_FILE;
   const state = statusPath ? readStatus(statusPath)?.state : null;
   if (!statusPath || state === 'ready' || state === 'abandoned') return;
+  const errorMessage = detail.error ? ` Desktop dev command failed: ${detail.error}` : '';
   writeStatus(statusPath, {
     state: 'failed',
     code: 'DEV_PROCESS_EXITED',
-    message: 'The desktop dev process exited before window/auth/database startup completed.',
+    message: `The desktop dev process exited before the main window became ready.${errorMessage}`,
+    detail: {
+      rootDir,
+      command,
+      devScript,
+      ...detail,
+    },
     ...detail,
     pid: process.pid,
     at: Date.now(),
