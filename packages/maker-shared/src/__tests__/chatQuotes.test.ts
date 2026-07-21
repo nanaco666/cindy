@@ -135,6 +135,52 @@ describe('parseChatQuoteSegments', () => {
     ]);
   });
 
+  it('restores markerless interleaved quotes when persisted metadata enables preview compatibility', () => {
+    const content = [
+      '> 把 Claude Code 和 Codex，从终端带到整台电脑。',
+      '> 让最强的 Agent 操作你的浏览器、文件、软件、手机和服务器。',
+      '',
+      '第一段回复。',
+      '',
+      '',
+      '> 一个开放、本地、可编排的 Agent 工作台。',
+      '',
+      '第二段回复。',
+      '',
+      '',
+      '> 开箱即强，向下完全开放。',
+      '>',
+      '> 不用折腾才能开始，但绝不限制你折腾。',
+      '',
+      '第三段回复。',
+    ].join('\n');
+
+    expect(parseChatQuoteSegments(content, { allowLegacyInterleavedQuotes: true })).toEqual([
+      {
+        kind: 'quote',
+        quote: {
+          text: '把 Claude Code 和 Codex，从终端带到整台电脑。\n让最强的 Agent 操作你的浏览器、文件、软件、手机和服务器。',
+        },
+      },
+      { kind: 'text', text: '第一段回复。\n' },
+      { kind: 'quote', quote: { text: '一个开放、本地、可编排的 Agent 工作台。' } },
+      { kind: 'text', text: '第二段回复。\n' },
+      {
+        kind: 'quote',
+        quote: { text: '开箱即强，向下完全开放。\n\n不用折腾才能开始，但绝不限制你折腾。' },
+      },
+      { kind: 'text', text: '第三段回复。' },
+    ]);
+  });
+
+  it('never treats unmarked body blockquotes as product quotes when any explicit marker exists', () => {
+    const content = `${formatQuoteForSend({ text: 'selected' })}\n\n正文：\n> manual`;
+    expect(parseChatQuoteSegments(content, { allowLegacyInterleavedQuotes: true })).toEqual([
+      { kind: 'quote', quote: { text: 'selected' } },
+      { kind: 'text', text: '正文：\n> manual' },
+    ]);
+  });
+
   it('returns ordinary text unchanged', () => {
     expect(parseChatQuoteSegments('plain\ntext')).toEqual([
       { kind: 'text', text: 'plain\ntext' },

@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, ChevronDown, ChevronRight, ChevronUp, Download, File as FileIcon, FileText, Folder as FolderIcon, MessageSquareQuote, Sparkles, Target } from 'lucide-react';
+import { Bot, ChevronDown, ChevronRight, ChevronUp, Download, File as FileIcon, FileText, Folder as FolderIcon, Sparkles, Target } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { cn } from '@/lib/utils';
@@ -38,7 +38,6 @@ import { rewriteToRemoteMediaOrigin } from '../../../shared/remoteMediaUrl';
 import { ImageLightbox } from './ImageLightbox';
 import {
   parseChatQuoteSegments,
-  quoteSourceDisplayLabel,
   type ChatQuoteSegment,
 } from '@/lib/chatQuotes';
 import { quoteSegmentsToComposerDocument } from '@/lib/composerQuoteDocument';
@@ -71,6 +70,7 @@ import {
 } from './GhostSummonCard';
 import { AutomationOriginBadge } from './AutomationOriginBadge';
 import { UserMessageUrlLink } from './UserMessageUrlLink';
+import { QuoteChip } from './QuoteChip';
 
 /**
  * image-local-cache: a user-message image can be in two shapes:
@@ -570,7 +570,7 @@ export function UserMessage({
         ? ghostBody
           ? [{ kind: 'text', text: ghostBody }]
           : []
-        : parseChatQuoteSegments(ghostBody),
+        : parseChatQuoteSegments(ghostBody, { allowLegacyInterleavedQuotes: true }),
     [ghostBody, orcaCommunication, quotesEncoded],
   );
   // 意识指令等既有语义判断只看用户自己的正文,不把引用原文误识别成命令。
@@ -644,7 +644,6 @@ export function UserMessage({
     !orcaCommunication &&
     !hookSource &&
     !ghostMergedForm &&
-    inlineQuoteCount === 0 &&
     mayExceedVisualLineThreshold(bubbleBody, collapseThreshold);
   const { mirrorRef: collapseMirrorRef, shouldCollapse: shouldCollapseLongMessage } =
     useUserMessageAutoCollapse(bubbleBody, collapseMeasureEnabled, collapseThreshold);
@@ -1040,69 +1039,42 @@ export function UserMessage({
               </div>
             )}
             {inlineQuoteCount > 0 ? (
-              <div className="flex min-w-0 flex-col gap-2">
+              <div
+                className={cn(
+                  'min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]',
+                  longMessageCollapsed && (automationOrigin ? 'line-clamp-3' : 'line-clamp-10'),
+                )}
+              >
                 {quoteSegments.map((segment, index) =>
                   segment.kind === 'quote' ? (
-                    <div
+                    <span
                       // biome-ignore lint/suspicious/noArrayIndexKey: 已发送消息内容不可变,顺序稳定。
                       key={index}
-                      className="min-w-0 rounded-lg border px-3 py-2"
-                      style={{
-                        backgroundColor: 'var(--surface-hover-soft)',
-                        borderColor: 'var(--msg-user-border)',
-                        color: 'var(--text-secondary)',
-                      }}
+                      className="inline-block max-w-[min(240px,55vw)] select-none px-2 align-middle"
                     >
-                      <div className="flex min-w-0 items-start gap-2">
-                        <MessageSquareQuote
-                          size={14}
-                          strokeWidth={2}
-                          aria-hidden
-                          className="mt-0.5 shrink-0"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="whitespace-pre-wrap text-[13px] leading-[1.5] [overflow-wrap:anywhere]">
-                            {segment.quote.text}
-                          </div>
-                          {segment.quote.sourcePath ? (
-                            <div
-                              className="mt-1 inline-flex max-w-full items-center gap-1 text-[11px]"
-                              style={{ color: 'var(--text-tertiary)' }}
-                            >
-                              <FileText
-                                size={12}
-                                strokeWidth={1.75}
-                                aria-hidden
-                                className="shrink-0"
-                              />
-                              <span className="truncate">
-                                {quoteSourceDisplayLabel(segment.quote)}
-                              </span>
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
+                      <QuoteChip quote={segment.quote} />
+                    </span>
                   ) : ghostMergedForm ? null : (
-                    <div
+                    <span
                       // biome-ignore lint/suspicious/noArrayIndexKey: 已发送消息内容不可变,顺序稳定。
                       key={index}
-                      className="whitespace-pre-wrap [overflow-wrap:anywhere]"
                     >
-                      {renderContent(
-                        segment.text,
-                        workingDir,
-                        async (abs, name, btn) => {
-                          if (!(await shouldOpenTextLightboxForOrigin(sessionFileCtx, abs))) return;
-                          activeFileChipRef.current = btn;
-                          setTextLightboxFile({ path: abs, name });
-                        },
-                        (xdtFileUrl) => setLightboxSrc(xdtFileUrl),
-                        t,
-                        sessionId,
-                        isRemoteFileOrigin(sessionFileCtx.origin),
-                      )}
-                    </div>
+                      {longMessageCollapsed
+                        ? segment.text
+                        : renderContent(
+                            segment.text,
+                            workingDir,
+                            async (abs, name, btn) => {
+                              if (!(await shouldOpenTextLightboxForOrigin(sessionFileCtx, abs))) return;
+                              activeFileChipRef.current = btn;
+                              setTextLightboxFile({ path: abs, name });
+                            },
+                            (xdtFileUrl) => setLightboxSrc(xdtFileUrl),
+                            t,
+                            sessionId,
+                            isRemoteFileOrigin(sessionFileCtx.origin),
+                          )}
+                    </span>
                   ),
                 )}
               </div>

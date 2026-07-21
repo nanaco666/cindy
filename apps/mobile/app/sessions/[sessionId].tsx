@@ -167,7 +167,11 @@ import {
   drainComposerAttachments,
   queueComposerAnnotationSubmission,
 } from '@/session/composerAttachmentInbox';
-import { buildQueuedTextMessage, stopOptionsForProjection } from '@/session/inputProjection';
+import {
+  buildQueuedTextMessage,
+  queuedMessageHasEncodedQuotes,
+  stopOptionsForProjection,
+} from '@/session/inputProjection';
 import { findErrorTailClientId, isContinuationQueueItem, resolveSessionTailBanner } from '@/session/sessionTailBannerModel';
 import { SessionTailBanner } from '@/session/SessionTailBanner';
 import {
@@ -3249,6 +3253,7 @@ export default function SessionScreen() {
     const sessionAtSend = { ...sessionNow, permissionMode: item.permissionModeAtSend };
     const queued = buildQueuedTextMessage(sessionAtSend, item.text, new Date(), item.clientId, {
       attachments: outboxItemAttachments(item),
+      quotesEncoded: item.quotesEncoded,
     });
     // 乐观交接:进本地 pendingQueue 的同一同步段把条目移出 outbox,气泡原位从
     // 「发送中」变「排队中」不闪断;enqueue 成功后用权威 projection 覆盖 reconcile。
@@ -3476,6 +3481,7 @@ export default function SessionScreen() {
           clientId: createOutboxClientId(),
           sessionId,
           text,
+          quotesEncoded: quotesAtSend.length > 0,
           permissionModeAtSend,
           readyAttachments,
           readyPreviews,
@@ -3526,6 +3532,7 @@ export default function SessionScreen() {
         }
         const updated = buildQueuedTextMessage(sessionAtSend, text, new Date(), editingQueueItem.clientId, {
           attachments: sendAttachments,
+          quotesEncoded: queuedMessageHasEncodedQuotes(original),
         });
         // 保存在途 promise:会话切换 cleanup 据此把解锁排到保存落定之后
         // (device-link 并发下解锁不许超车 update-content,见 cleanup 注释)。
@@ -3673,6 +3680,7 @@ export default function SessionScreen() {
       }
       const queued = buildQueuedTextMessage(sessionAtSend, text, new Date(), undefined, {
         attachments: sendAttachments,
+        quotesEncoded: quotesAtSend.length > 0,
       });
       // 乐观第二拍:附件落定后立即把 queued 追加进本地 projection,消息气泡当帧上屏、
       // 托盘同帧清空;enqueue 成功后用权威 projection 覆盖 reconcile。

@@ -38,6 +38,8 @@ export interface NormalizedRemoteMessage {
   role: RemoteMessageRole;
   label: string;
   body: string;
+  /** user 消息正文包含产品引用编码；驱动跨端 marker/legacy 解析。 */
+  quotesEncoded?: boolean;
   secondaryBody?: string;
   systemCardData?: Record<string, unknown>;
   systemCardType?: MobileSystemCardType;
@@ -309,6 +311,7 @@ export function normalizeRemoteMessages(messages: readonly RemoteMessage[]): Nor
       label: message.role,
       body,
       attachments: userContent?.attachments,
+      ...(userContent?.quotesEncoded === true ? { quotesEncoded: true } : {}),
       align: message.role === 'user' ? 'user' : 'agent',
       createdAt: message.createdAt,
       isStreaming: readMessageStreaming(message) || undefined,
@@ -337,12 +340,19 @@ function parseToolUse(message: RemoteMessage): ToolUsePayload {
   return { ...sharedTool, summary, diff };
 }
 
-function parseUserContent(content: unknown): { text: string; attachments: NormalizedAttachment[] } {
+function parseUserContent(content: unknown): {
+  text: string;
+  attachments: NormalizedAttachment[];
+  quotesEncoded: boolean;
+} {
   const parsed = parseMaybeJsonObject(content);
-  if (!parsed) return { text: contentToPreview(content), attachments: [] };
+  if (!parsed) {
+    return { text: contentToPreview(content), attachments: [], quotesEncoded: false };
+  }
   const text = typeof parsed.text === 'string' ? parsed.text : contentToPreview(content);
   return {
     text,
+    quotesEncoded: parsed.quotesEncoded === true,
     attachments: [
       ...readImageAttachments(parsed.images),
       ...readFileAttachments(parsed.files),

@@ -7,15 +7,13 @@
  */
 import { Node, mergeAttributes } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react';
-import { FileText, MessageSquareQuote, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   COMPOSER_QUOTE_NODE_TYPE,
   composerQuoteAttrsToChatQuote,
   type ComposerQuoteAttrs,
 } from '@/lib/composerQuoteDocument';
-import { quoteSourceDisplayLabel } from '@/lib/chatQuotes';
-import { Tooltip } from '@/components/ui/tooltip';
+import { QuoteChip } from '@/components/chat/QuoteChip';
 
 function parsePositiveLineAttribute(element: HTMLElement, name: string): number | null {
   const raw = element.getAttribute(name);
@@ -27,8 +25,6 @@ function parsePositiveLineAttribute(element: HTMLElement, name: string): number 
 function ComposerQuoteNodeView({ node, deleteNode, selected }: NodeViewProps) {
   const { t } = useTranslation();
   const quote = composerQuoteAttrsToChatQuote(node.attrs as ComposerQuoteAttrs);
-  const sourceLabel = quoteSourceDisplayLabel(quote);
-  const compactText = quote.text.replace(/\s+/g, ' ').trim();
 
   return (
     <NodeViewWrapper
@@ -37,54 +33,12 @@ function ComposerQuoteNodeView({ node, deleteNode, selected }: NodeViewProps) {
       contentEditable={false}
       className="inline-block max-w-[min(240px,55vw)] select-none px-2 align-middle"
     >
-      <Tooltip.Provider delayDuration={300}>
-        <Tooltip.Root>
-          <Tooltip.Trigger asChild>
-            <span
-              aria-label={quote.text}
-              onMouseDown={(event) => event.preventDefault()}
-              className="relative inline-flex w-full select-none items-center gap-1.5 rounded-full border py-0.5 pl-2 pr-6 text-[12px] leading-5"
-              style={{
-                backgroundColor: 'var(--surface-chip)',
-                borderColor: selected ? 'var(--focus-ring)' : 'var(--border-default)',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              <MessageSquareQuote className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              <span className="truncate">{compactText}</span>
-              <button
-                type="button"
-                aria-label={t('chat.quote.remove')}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={deleteNode}
-                className="absolute right-0.5 top-1/2 inline-flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded-full opacity-50 transition-opacity hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring-soft)]"
-                style={{ color: 'var(--text-secondary)' }}
-              >
-                <X className="h-2.5 w-2.5" aria-hidden />
-              </button>
-            </span>
-          </Tooltip.Trigger>
-          <Tooltip.Content
-            side="top"
-            className="max-h-64 w-80 max-w-[70vw] overflow-y-auto whitespace-normal"
-          >
-            <span className="flex flex-col gap-1">
-              <span className="whitespace-pre-wrap text-[12px] leading-[1.5] [overflow-wrap:anywhere]">
-                “{quote.text}”
-              </span>
-              {sourceLabel ? (
-                <span
-                  className="inline-flex min-w-0 items-center gap-1 text-[11px]"
-                  style={{ color: 'var(--text-tertiary)' }}
-                >
-                  <FileText className="h-3 w-3 shrink-0" aria-hidden />
-                  <span className="truncate">{sourceLabel}</span>
-                </span>
-              ) : null}
-            </span>
-          </Tooltip.Content>
-        </Tooltip.Root>
-      </Tooltip.Provider>
+      <QuoteChip
+        quote={quote}
+        selected={selected}
+        onRemove={deleteNode}
+        removeLabel={t('chat.quote.remove')}
+      />
     </NodeViewWrapper>
   );
 }

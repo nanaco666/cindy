@@ -14,6 +14,26 @@ describe('SelectionQuoteButton — user message floating action exclusion', () =
     expect(userMessageSource).toContain('data-selection-floating-quote-disabled=""');
   });
 
+  it('renders sent quotes with the same compact chip as the composer', () => {
+    expect(userMessageSource).toContain('<QuoteChip quote={segment.quote} />');
+    expect(userMessageSource).toContain(
+      'inline-block max-w-[min(240px,55vw)] select-none px-2 align-middle',
+    );
+    expect(userMessageSource).not.toContain('min-w-0 rounded-lg border px-3 py-2');
+  });
+
+  it('keeps long-message collapse enabled for mixed quote and prose messages', () => {
+    const collapseGuard = userMessageSource.slice(
+      userMessageSource.indexOf('const collapseMeasureEnabled ='),
+      userMessageSource.indexOf('const { mirrorRef:', userMessageSource.indexOf('const collapseMeasureEnabled =')),
+    );
+    expect(collapseGuard).not.toContain('inlineQuoteCount === 0');
+    expect(userMessageSource).toContain(
+      "longMessageCollapsed && (automationOrigin ? 'line-clamp-3' : 'line-clamp-10')",
+    );
+    expect(userMessageSource).toContain('longMessageCollapsed\n                        ? segment.text');
+  });
+
   it('keeps right-click Add to chat enabled while suppressing the floating button', () => {
     const buttonSource = readFileSync(
       resolve(__dirname, '..', 'components', 'chat', 'SelectionQuoteButton.tsx'),

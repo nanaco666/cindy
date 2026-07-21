@@ -75,6 +75,11 @@ describe('buildOutboxItem', () => {
     expect(outboxItemReady(item)).toBe(true);
     expect(outboxItemAttachments(item)).toEqual([]);
   });
+
+  it('keeps quote metadata until the outbox item is dispatched', () => {
+    expect(itemWith({ quotesEncoded: true }).quotesEncoded).toBe(true);
+    expect(itemWith().quotesEncoded).toBe(false);
+  });
 });
 
 describe('outboxItemWithUpload / outboxItemWithUploadFailure', () => {

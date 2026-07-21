@@ -69,7 +69,10 @@ export function buildQueuedTextMessage(
   text: string,
   now = new Date(),
   clientId = createUuid(),
-  options: { attachments?: readonly RemoteSerializedAttachment[] } = {},
+  options: {
+    attachments?: readonly RemoteSerializedAttachment[];
+    quotesEncoded?: boolean;
+  } = {},
 ): QueuedRemoteMessage {
   const trimmed = text.trim();
   const attachments = options.attachments ?? [];
@@ -79,7 +82,12 @@ export function buildQueuedTextMessage(
   const effort = session.effort || '';
   const permissionMode = session.permissionMode || 'bypassPermissions';
   const agentKind = session.agentKind === 'codex' ? 'codex' : 'claude-code';
-  const persistedContent = stringifyUserContent(trimmed, persistedImageRefs, persistedFileRefs);
+  const persistedContent = stringifyUserContent(
+    trimmed,
+    persistedImageRefs,
+    persistedFileRefs,
+    options.quotesEncoded === true,
+  );
   const createdAt = now.toISOString();
 
   return {
@@ -97,6 +105,7 @@ export function buildQueuedTextMessage(
       content: trimmed,
       ...(persistedImageRefs.length > 0 ? { images: persistedImageRefs } : {}),
       ...(persistedFileRefs.length > 0 ? { files: persistedFileRefs } : {}),
+      ...(options.quotesEncoded === true ? { quotesEncoded: true } : {}),
       isStreaming: false,
       createdAt,
     },
@@ -125,8 +134,25 @@ function stringifyUserContent(
   text: string,
   images: RemoteImageRef[] = [],
   files: Array<{ name: string; path: string }> = [],
+  quotesEncoded = false,
 ): string {
-  return JSON.stringify({ text, images, files });
+  return JSON.stringify({
+    text,
+    images,
+    files,
+    ...(quotesEncoded ? { quotesEncoded: true } : {}),
+  });
+}
+
+/** 排队编辑时从持久化信封恢复引用标志，避免整条替换后 marker 退化为正文。 */
+export function queuedMessageHasEncodedQuotes(
+  message: Pick<QueuedRemoteMessage, 'persistedContent'>,
+): boolean {
+  try {
+    return readRecord(JSON.parse(message.persistedContent))?.quotesEncoded === true;
+  } catch {
+    return false;
+  }
 }
 
 function readQueuedMessages(value: unknown): QueuedRemoteMessage[] {

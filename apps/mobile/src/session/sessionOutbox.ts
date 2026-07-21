@@ -44,6 +44,8 @@ export interface MobileOutboxItem {
   sessionId: string;
   /** 最终发送文本(引用块已前置)。 */
   text: string;
+  /** 发送文本包含产品引用块；dispatch 时必须同步写进 persistedContent。 */
+  quotesEncoded: boolean;
   /**
    * 发送时刻的权限档快照:plan 一次性语义在点发送时就恢复会话档,dispatch 重读
    * store 拿到的已是恢复后的值,消息本身必须仍按发送时刻的档位派发。
@@ -98,6 +100,7 @@ export function buildOutboxItem(input: {
   clientId: string;
   sessionId: string;
   text: string;
+  quotesEncoded?: boolean;
   permissionModeAtSend: string;
   /** 发送时刻已就绪的附件(占前段槽位)。 */
   readyAttachments: readonly RemoteSerializedAttachment[];
@@ -131,6 +134,7 @@ export function buildOutboxItem(input: {
     clientId: input.clientId,
     sessionId: input.sessionId,
     text: input.text,
+    quotesEncoded: input.quotesEncoded === true,
     permissionModeAtSend: input.permissionModeAtSend,
     attachmentSlots: slots,
     slotMeta,

@@ -34,6 +34,16 @@ export type ChatQuoteSegment =
   | { kind: 'text'; text: string }
   | { kind: 'quote'; quote: ChatQuote };
 
+export interface ParseChatQuoteSegmentsOptions {
+  /**
+   * 兼容 marker 上线前短暂写出的交错引用。该格式与用户手写 blockquote
+   * 无法从 wire text 无歧义区分,因此默认关闭,只由已持久化 quotesEncoded
+   * 元数据的消息展示/草稿恢复路径显式开启。只要正文含新版 marker,即使
+   * 开启本选项也只解析 marker 块,正文手写的 `> ...` 仍保持普通文字。
+   */
+  allowLegacyInterleavedQuotes?: boolean;
+}
+
 /** 来源行前缀(条目内最后一行)。 */
 const SOURCE_LINE_PREFIX = '— source: ';
 
@@ -119,19 +129,14 @@ function quoteFromLines(lines: string[]): ChatQuote {
   return { text: lines.join('\n') };
 }
 
-function stripOuterEmptyLines(lines: string[]): string[] {
-  let start = 0;
-  while (start < lines.length && lines[start] === '') start += 1;
-  let end = lines.length;
-  while (end > start && lines[end - 1] === '') end -= 1;
-  return lines.slice(start, end);
-}
-
 /**
  * 解析 quotesEncoded 消息里的全部引用块,同时保留它们与用户文字的顺序。
  * 调用方必须先用持久化标志门控,避免把普通手写 markdown 当成产品引用。
  */
-export function parseChatQuoteSegments(content: string): ChatQuoteSegment[] {
+export function parseChatQuoteSegments(
+  content: string,
+  options: ParseChatQuoteSegmentsOptions = {},
+): ChatQuoteSegment[] {
   if (!content.includes('> ')) {
     return content ? [{ kind: 'text', text: content }] : [];
   }
@@ -140,23 +145,47 @@ export function parseChatQuoteSegments(content: string): ChatQuoteSegment[] {
   const segments: ChatQuoteSegment[] = [];
   let textLines: string[] = [];
 
-  const flushText = () => {
-    const normalized = stripOuterEmptyLines(textLines);
+  const flushText = ({ beforeQuote }: { beforeQuote: boolean }) => {
+    const followsQuote = segments[segments.length - 1]?.kind === 'quote';
+    const pending = textLines;
     textLines = [];
-    if (normalized.length > 0) {
-      segments.push({ kind: 'text', text: normalized.join('\n') });
+    if (pending.length === 0) return;
+
+    // 序列化会在 quote / text 块之间固定放一个 Markdown 空行。只消费这个
+    // 结构分隔，额外空行都是用户真实输入的回车，必须留给渲染层。两个引用
+    // 之间只有空行时要单独计数，因为 `[''].join('\n')` 无法表达一个换行。
+    if (pending.every((line) => line === '')) {
+      const structuralEmptyLineCount = followsQuote || beforeQuote ? 1 : 0;
+      const preservedLineBreakCount = Math.max(0, pending.length - structuralEmptyLineCount);
+      if (preservedLineBreakCount > 0) {
+        segments.push({ kind: 'text', text: '\n'.repeat(preservedLineBreakCount) });
+      }
+      return;
+    }
+
+    let start = 0;
+    let end = pending.length;
+    if (followsQuote && pending[start] === '') start += 1;
+    if (beforeQuote && end > start && pending[end - 1] === '') end -= 1;
+    const text = pending.slice(start, end).join('\n');
+    if (text) {
+      segments.push({ kind: 'text', text });
     }
   };
 
-  // 历史格式没有显式 marker，只允许在消息开头解析。进入正文或遇到新版
-  // marker 后即关闭，避免 quotesEncoded=true 时把正文 Markdown blockquote
-  // 误还原成不可编辑的产品 quote atom。
+  // 历史格式没有显式 marker，默认只允许在消息开头解析。marker 上线前的
+  // inline-composer preview 曾写出 markerless 交错块；调用方可凭持久化的
+  // quotesEncoded 元数据显式兼容。新版正文只要出现任一 marker 就关闭这条
+  // 有歧义的兼容分支，避免把同条消息里的手写 Markdown blockquote 误还原。
+  const allowLegacyInterleavedQuotes = options.allowLegacyInterleavedQuotes === true
+    && !content.includes(QUOTE_BLOCK_MARKER_LINE);
   let allowLegacyLeadingQuotes = true;
   let index = 0;
   while (index < lines.length) {
     const line = lines[index];
     const marked = line === QUOTE_BLOCK_MARKER_LINE;
-    const legacyLeading = allowLegacyLeadingQuotes && line.startsWith('> ');
+    const legacyLeading = (allowLegacyLeadingQuotes || allowLegacyInterleavedQuotes)
+      && line.startsWith('> ');
     if (!marked && !legacyLeading) {
       textLines.push(line);
       if (line !== '') allowLegacyLeadingQuotes = false;
@@ -164,7 +193,7 @@ export function parseChatQuoteSegments(content: string): ChatQuoteSegment[] {
       continue;
     }
 
-    flushText();
+    flushText({ beforeQuote: true });
     if (marked) {
       allowLegacyLeadingQuotes = false;
       index += 1;
@@ -187,7 +216,7 @@ export function parseChatQuoteSegments(content: string): ChatQuoteSegment[] {
     segments.push({ kind: 'quote', quote: quoteFromLines(quoteLines) });
   }
 
-  flushText();
+  flushText({ beforeQuote: false });
   return segments;
 }
 

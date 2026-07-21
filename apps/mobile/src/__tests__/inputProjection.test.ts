@@ -5,6 +5,7 @@ import {
   buildQueuedTextMessage,
   isOrcaQueueItem,
   normalizeInputProjection,
+  queuedMessageHasEncodedQuotes,
   queueMoveTargetIndex,
   stopOptionsForProjection,
 } from '@/session/inputProjection';
@@ -84,6 +85,26 @@ describe('inputProjection', () => {
       providerId: 'prov-1',
       remoteHostId: 'host-9',
     });
+  });
+
+  it('persists the quote encoding flag for desktop and keeps it on the optimistic chat row', () => {
+    const queued = buildQueuedTextMessage(
+      session(),
+      '> <!-- cindy-composer-quote -->\n> selected\n\nreply',
+      new Date('2026-01-01T00:00:05.000Z'),
+      'q-quote',
+      { quotesEncoded: true },
+    );
+
+    expect(JSON.parse(queued.persistedContent)).toEqual({
+      text: '> <!-- cindy-composer-quote -->\n> selected\n\nreply',
+      images: [],
+      files: [],
+      quotesEncoded: true,
+    });
+    expect(queued.chatMessage.quotesEncoded).toBe(true);
+    expect(queuedMessageHasEncodedQuotes(queued)).toBe(true);
+    expect(queuedMessageHasEncodedQuotes({ persistedContent: '{broken' })).toBe(false);
   });
 
   it('builds queued messages with desktop-compatible remote file attachments', () => {

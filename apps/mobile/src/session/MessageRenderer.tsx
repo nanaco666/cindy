@@ -53,7 +53,7 @@ import { UITextView } from 'react-native-uitextview';
 import { LegendList, type LegendListRef } from '@legendapp/list/react-native';
 import { buildComposerTouchLayout } from '@/session/composerTouchLayout';
 import { useFoldableExpandedState } from '@/session/expandedBlockMemory';
-import { parseLeadingBlockquotes } from '@lizi/maker-shared/chat-quotes';
+import { parseChatQuoteSegments } from '@lizi/maker-shared/chat-quotes';
 import { QuoteCapsule } from '@/session/QuoteCapsule';
 import {
   SELECTION_QUOTE_MENU_LABEL,
@@ -1339,18 +1339,31 @@ function MessageBubble({
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
   const [copyState, setCopyState] = useState<CopyMessageStatus | 'idle' | 'copying'>('idle');
-  // chat-text-quote:user 消息开头的 blockquote 是「选中文字引用」编码(见
-  // maker-shared/chat-quotes),剥出成「N 处引用」胶囊渲在气泡上方,气泡正文
-  // 只渲余下 body。copy / rewind / fork 仍用完整 item.message.body——引用属于
-  // 消息原文。orca 协同消息在 normalize 层已走 orcaCard 分支,不进本路径。
-  const quoteParse = useMemo(
+  // chat-text-quote:解析 desktop 的交错 marker 块、mobile 的前置引用和
+  // marker 上线前带 quotesEncoded 的交错历史消息。手机版仍把引用聚合成
+  // 「N 处引用」胶囊,但正文不再泄露内部 marker/source 行。copy / rewind /
+  // fork 继续使用完整 body。orca 协同消息已走 orcaCard 分支,不进本路径。
+  const quoteSegments = useMemo(
     () => (item.message.kind === 'user' && !item.message.systemCardType && item.message.body
-      ? parseLeadingBlockquotes(item.message.body)
-      : null),
-    [item.message.kind, item.message.systemCardType, item.message.body],
+      ? parseChatQuoteSegments(item.message.body, {
+          allowLegacyInterleavedQuotes: item.message.quotesEncoded === true,
+        })
+      : []),
+    [
+      item.message.body,
+      item.message.kind,
+      item.message.quotesEncoded,
+      item.message.systemCardType,
+    ],
   );
-  const leadingQuotes = quoteParse && quoteParse.quotes.length > 0 ? quoteParse.quotes : null;
-  const bubbleBody = quoteParse && leadingQuotes ? quoteParse.body : item.message.body;
+  const messageQuotes = quoteSegments.flatMap((segment) => (
+    segment.kind === 'quote' ? [segment.quote] : []
+  ));
+  const bubbleBody = messageQuotes.length > 0
+    ? quoteSegments
+        .flatMap((segment) => (segment.kind === 'text' ? [segment.text] : []))
+        .join('\n\n')
+    : item.message.body;
   const presentation = summarizeMessageBubblePresentation({
     align: item.message.align,
     attachmentCount: item.message.attachments?.length ?? 0,
@@ -1651,12 +1664,12 @@ function MessageBubble({
           </Text>
         </View>
       ) : null}
-      {leadingQuotes ? (
+      {messageQuotes.length > 0 ? (
         // chat-text-quote:气泡上方渲「N 处引用」胶囊(右对齐),点按展开逐条预览。
-        <QuoteCapsule quotes={leadingQuotes} testIDPrefix="message.quoteCapsule" variant="bubble" />
+        <QuoteCapsule quotes={messageQuotes} testIDPrefix="message.quoteCapsule" variant="bubble" />
       ) : null}
       {attachmentStripNode}
-      {hasBubbleContent || (!attachmentStripNode && !leadingQuotes) ? bubble : null}
+      {hasBubbleContent || (!attachmentStripNode && messageQuotes.length === 0) ? bubble : null}
       {item.message.kind === 'assistant' && item.message.modelMismatch ? (
         // 模型降级提示(对齐桌面 AssistantMessage):所选模型本轮被上游静默替换,
         // 常显在气泡下方,icon 用 warning 橙、文字保持 tertiary 灰阶。

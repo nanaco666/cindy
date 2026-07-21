@@ -45,7 +45,9 @@ describe('mobile message media thumbnail wiring', () => {
   it('renders image attachments desktop-style: outside the bubble, aspect-contained, no filename', () => {
     // 附件条渲染在气泡外(文字气泡上方),纯图片消息不渲染空气泡
     expect(rendererSource).toContain('{attachmentStripNode}');
-    expect(rendererSource).toContain('{hasBubbleContent || (!attachmentStripNode && !leadingQuotes) ? bubble : null}');
+    expect(rendererSource).toContain(
+      '{hasBubbleContent || (!attachmentStripNode && messageQuotes.length === 0) ? bubble : null}',
+    );
     const attachmentStrip = rendererSource.slice(
       rendererSource.indexOf('function AttachmentStrip'),
       rendererSource.indexOf('function ToolMediaBlock'),
