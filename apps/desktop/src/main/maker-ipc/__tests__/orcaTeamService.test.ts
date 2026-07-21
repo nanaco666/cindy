@@ -144,6 +144,21 @@ function createDeps(overrides: Partial<OrcaTeamServiceDeps> = {}) {
       ));
       return true;
     }),
+    restoreWorkerDoneIfIdle: vi.fn(async (workerId) => {
+      const worker = workers.find((item) => item.id === workerId);
+      if (!worker || worker.status !== 'idle') return false;
+      calls.push('restoreWorkerDoneIfIdle');
+      workers = workers.map((item) => (
+        item.id === workerId
+          ? {
+              ...item,
+              status: 'done',
+              idleSince: null,
+            }
+          : item
+      ));
+      return true;
+    }),
     closeWorkerSession: vi.fn(async (sessionId) => {
       calls.push(`closeWorkerSession:${sessionId}`);
     }),
@@ -1062,7 +1077,7 @@ describe('OrcaTeamService', () => {
   });
 
   it('does not close a direct send that wins the atomic idle-close reservation after the CAS', async () => {
-    const { deps, service, setWorker } = createDeps({
+    const { calls, deps, getWorker, service, setWorker } = createDeps({
       getLiveSession: vi.fn(() => ({ isTurnRunning: () => false })),
       closeWorkerSessionIfIdle: vi.fn(async () => false),
     });
@@ -1081,7 +1096,10 @@ describe('OrcaTeamService', () => {
     expect(deps.getLiveSession).toHaveBeenCalledTimes(1);
     expect(deps.closeWorkerSessionIfIdle).toHaveBeenCalledWith('worker-session-1');
     expect(deps.closeWorkerSession).not.toHaveBeenCalled();
-    expect(deps.broadcastOrcaWorkerChanged).not.toHaveBeenCalled();
+    expect(deps.restoreWorkerDoneIfIdle).toHaveBeenCalledWith('worker-1');
+    expect(deps.broadcastOrcaWorkerChanged).toHaveBeenCalledTimes(1);
+    expect(getWorker().status).toBe('done');
+    expect(calls).toContain('restoreWorkerDoneIfIdle');
   });
 
   it('preserves queued worker input before acknowledging a done worker', async () => {
@@ -1106,7 +1124,7 @@ describe('OrcaTeamService', () => {
 
   it('preserves worker input queued while the done-status CAS is awaiting I/O', async () => {
     let queueChecks = 0;
-    const { deps, service, setWorker } = createDeps({
+    const { deps, getWorker, service, setWorker } = createDeps({
       hasPendingWorkerInput: vi.fn(() => {
         queueChecks += 1;
         return queueChecks === 2;
@@ -1125,8 +1143,10 @@ describe('OrcaTeamService', () => {
     });
 
     expect(deps.markWorkerIdleIfStatus).toHaveBeenCalledWith('worker-1', 'done');
+    expect(deps.restoreWorkerDoneIfIdle).toHaveBeenCalledWith('worker-1');
     expect(deps.closeWorkerSessionIfIdle).not.toHaveBeenCalled();
-    expect(deps.broadcastOrcaWorkerChanged).not.toHaveBeenCalled();
+    expect(deps.broadcastOrcaWorkerChanged).toHaveBeenCalledTimes(1);
+    expect(getWorker().status).toBe('done');
   });
 
   it('rejects a viewed-status idle request when the worker became running', async () => {

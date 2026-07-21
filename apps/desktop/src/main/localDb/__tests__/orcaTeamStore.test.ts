@@ -98,6 +98,32 @@ describe('orcaTeamStore', () => {
     });
   });
 
+  it('executes worker status CAS updates and only rolls back idle acknowledgements', async () => {
+    const { markWorkerIdleIfStatus, restoreWorkerDoneIfIdle } =
+      await import('../orcaTeamStore.js');
+    const client = createTestDbClient();
+    setCurrentDbClient(client, 'test-user');
+
+    await seedOrcaWorkers(client);
+    await client.exec('UPDATE orca_workers SET status = ? WHERE id = ?', ['done', 'worker-1']);
+
+    await expect(markWorkerIdleIfStatus('worker-1', 'done')).resolves.toBe(true);
+    await expect(markWorkerIdleIfStatus('worker-1', 'done')).resolves.toBe(false);
+    await expect(restoreWorkerDoneIfIdle('worker-1')).resolves.toBe(true);
+    await expect(restoreWorkerDoneIfIdle('worker-1')).resolves.toBe(false);
+    await client.exec('UPDATE orca_workers SET status = ? WHERE id = ?', ['running', 'worker-2']);
+    await expect(restoreWorkerDoneIfIdle('worker-2')).resolves.toBe(false);
+
+    await expect(
+      client.query<{ id: string; status: string; idle_since: number | null }>(
+        'SELECT id, status, idle_since FROM orca_workers ORDER BY id',
+      ),
+    ).resolves.toEqual([
+      { id: 'worker-1', status: 'done', idle_since: null },
+      { id: 'worker-2', status: 'running', idle_since: null },
+    ]);
+  });
+
   function createTestDbClient(): DbClient {
     const dbHandle = new Database(':memory:');
     rawDb = dbHandle;

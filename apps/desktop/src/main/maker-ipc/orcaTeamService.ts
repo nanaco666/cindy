@@ -185,6 +185,7 @@ export interface OrcaTeamServiceDeps {
   updateWorkerStatus(workerId: string, status: OrcaWorkerStatus): Promise<void>;
   markWorkerIdle(workerId: string): Promise<void>;
   markWorkerIdleIfStatus(workerId: string, expectedStatus: 'done'): Promise<boolean>;
+  restoreWorkerDoneIfIdle(workerId: string): Promise<boolean>;
   closeWorkerSession(sessionId: string): Promise<void>;
   /** 与 Session.send reservation 原子互斥；false 表示 direct send/turn 已先取得会话。 */
   closeWorkerSessionIfIdle(sessionId: string): Promise<boolean>;
@@ -738,9 +739,14 @@ export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamServic
           message: `worker ${params.workerId} is no longer ${params.expectedStatus}`,
         };
       }
+      const rollbackDoneAcknowledgement = async (): Promise<void> => {
+        await deps.restoreWorkerDoneIfIdle(worker.id);
+        deps.broadcastOrcaWorkerChanged(link.leadSessionId);
+      };
       // Queue state can change while the DB CAS awaits I/O. Preserve newly queued
       // follow-ups before close, then use Session.closeIfIdle for atomic send/close ordering.
       if (params.expectedStatus && deps.hasPendingWorkerInput(worker.sessionId)) {
+        await rollbackDoneAcknowledgement();
         return {
           ok: false,
           errorCode: 'WORKER_STATE_CHANGED',
@@ -750,6 +756,7 @@ export function createOrcaTeamService(deps: OrcaTeamServiceDeps): OrcaTeamServic
       if (params.expectedStatus) {
         const didClose = await closeWorkerSessionIfIdleBestEffort(worker.sessionId, 'idleWorker');
         if (!didClose) {
+          await rollbackDoneAcknowledgement();
           return {
             ok: false,
             errorCode: 'WORKER_STATE_CHANGED',

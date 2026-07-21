@@ -103,6 +103,7 @@ import {
   markTeamEnded,
   markWorkersStatusByTeam,
   markWorkerIdleIfStatus,
+  restoreWorkerDoneIfIdle,
   reconcileInactiveTeamWorkersForLead,
   releaseWorkerCreationReservation,
   removeWorker,
@@ -4790,6 +4791,7 @@ export function registerMakerIpc(maker: Maker, options: RegisterMakerIpcOptions 
         .where(eq(orcaWorkers.id, workerId));
     },
     markWorkerIdleIfStatus,
+    restoreWorkerDoneIfIdle,
     closeWorkerSession: async (sessionId) => {
       const sess = maker.getSession(sessionId);
       if (sess) {

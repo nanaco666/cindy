@@ -479,7 +479,20 @@ export async function markWorkerIdleIfStatus(
   const result = await db
     .update(orcaWorkers)
     .set({ status: 'idle', idleSince: now, updatedAt: now })
-    .where(and(eq(orcaWorkers.id, workerId), eq(orcaWorkers.status, expectedStatus)));
+    .where(and(eq(orcaWorkers.id, workerId), eq(orcaWorkers.status, expectedStatus)))
+    .run();
+  return result.changes > 0;
+}
+
+/** Restores a raced done acknowledgement only while the worker is still idle. */
+export async function restoreWorkerDoneIfIdle(workerId: string): Promise<boolean> {
+  const db = getDbClient().drizzle;
+  const now = Date.now();
+  const result = await db
+    .update(orcaWorkers)
+    .set({ status: 'done', idleSince: null, updatedAt: now })
+    .where(and(eq(orcaWorkers.id, workerId), eq(orcaWorkers.status, 'idle')))
+    .run();
   return result.changes > 0;
 }
 
