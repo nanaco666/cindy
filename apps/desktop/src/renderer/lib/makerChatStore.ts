@@ -21,6 +21,7 @@
  * - User-initiated stopSession (NOT called on session switch anymore)
  */
 
+import { applyCodexPlanSnapshotOnDone } from '@lizi/maker-shared/message-render';
 import type { MessageRole, Message, MessageAutomationOrigin } from '@/lib/ccAgent.types';
 import type { AttachedFile, MentionedResource, SerializedAttachedFile } from '@/lib/fileTypes';
 import type {
@@ -2090,7 +2091,7 @@ export function handleStreamEvent(inputState: SessionChatState, event: CCAgentSt
       // 清扫语义不变。真正的放弃路径(abort/close)由 main 的 interaction dismissal
       // (permission_dismissed 事件)负责标 expired,不依赖这里。
       const keepPlanReviewAcrossDone = state.agentKind === 'codex';
-      const doneMessages = finalized.messages.map((m) => {
+      const cleanedMessages = finalized.messages.map((m) => {
         let next = m;
         if (m.isStreaming) next = { ...next, isStreaming: false };
         if (m.role === 'ask_user' && m.askUserStatus === 'pending') {
@@ -2102,6 +2103,12 @@ export function handleStreamEvent(inputState: SessionChatState, event: CCAgentSt
         return next;
       });
 
+      const terminalData = event.data as { plan?: unknown; raw?: { id?: unknown } } | null | undefined;
+      const terminalTurnId = typeof terminalData?.raw?.id === 'string' ? terminalData.raw.id : null;
+      const doneMessages = event.source === 'codex'
+        ? applyCodexPlanSnapshotOnDone(cleanedMessages, terminalData?.plan, terminalTurnId).messages
+        : cleanedMessages;
+
       // F1-a Option C: tool-result-image 孤儿 flush(turn 末残留 pendingFullText)已收口
       // main(messagePersistBroadcaster.flushOrphanToolResults),落库后经 onCreated append
       // 到 renderer。renderer done 不再自建 orphan、不再持有 toolUseId/pendingFullText 任何
@@ -2109,7 +2116,7 @@ export function handleStreamEvent(inputState: SessionChatState, event: CCAgentSt
 
       return {
         ...finalized,
-        messages: doneMessages,
+        messages: [...doneMessages],
         streamingText: '',
         isStreaming: false,
         recoverableError: null,

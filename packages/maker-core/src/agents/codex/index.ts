@@ -131,6 +131,7 @@ import {
   type ToolRequestUserInputQuestion,
   type ToolRequestUserInputResponse,
   type TokenUsageBreakdown,
+  type TurnPlanUpdatedNotification,
   type TurnStartParams,
   type TurnStartResponse,
   type UserInput,
@@ -1896,6 +1897,7 @@ export class CodexAgent extends BaseAgent {
     let interactionResolver: InteractionResolver | null = null;
     let stopRolloutPlanFallback: (() => void) | null = null;
     const seenRolloutPlanCallIds = new Set<string>();
+    const latestPlanByTurn = new Map<string, TurnPlanUpdatedNotification['params']['plan']>();
     // 当前 session 的 one-shot tip 状态 (turn-start status 用):
     //  - displayed: id → 已展示次数 (≥ 该 tip 的 guarantees.length 时退出抽样池)
     //  - pity:      id → 自上次展示以来候选轮次 (pickTurnStartStatus 内部自增 / 触发保底)
@@ -3196,6 +3198,13 @@ export class CodexAgent extends BaseAgent {
             }
             seenRolloutPlanCallIds.add(parsed.callId);
           }
+          const input = parsed.event.data as { input?: { plan?: unknown } };
+          if (parsed.turnId && Array.isArray(input.input?.plan)) {
+            latestPlanByTurn.set(
+              parsed.turnId,
+              input.input.plan as TurnPlanUpdatedNotification['params']['plan'],
+            );
+          }
           eventQueue.push(parsed.event);
         }
       };
@@ -3231,9 +3240,7 @@ export class CodexAgent extends BaseAgent {
 
       stopRolloutPlanFallback = () => {
         if (timer) clearInterval(timer);
-        void poll(true).finally(() => {
-          stopped = true;
-        });
+        stopped = true;
       };
 
       void (async () => {
@@ -3351,6 +3358,7 @@ export class CodexAgent extends BaseAgent {
       });
 
       if (suppressTerminalUi) {
+        latestPlanByTurn.delete(turn.id);
         flushDeferredTerminalTurnCompletionsIfIdle();
         return;
       }
@@ -3387,6 +3395,7 @@ export class CodexAgent extends BaseAgent {
           data: { type: 'codex/event/task_complete', cancelled: turn.status === 'interrupted', raw: turn },
           source: 'codex',
         });
+        latestPlanByTurn.delete(turn.id);
         flushDeferredTerminalTurnCompletionsIfIdle();
         return;
       }
@@ -3413,9 +3422,15 @@ export class CodexAgent extends BaseAgent {
       };
       eventQueue.push({
         type: 'done',
-        data: { type: 'codex/event/task_complete', usage: codexDoneUsage, raw: turn },
+        data: {
+          type: 'codex/event/task_complete',
+          usage: codexDoneUsage,
+          raw: turn,
+          plan: latestPlanByTurn.get(turn.id) ?? null,
+        },
         source: 'codex',
       });
+      latestPlanByTurn.delete(turn.id);
       // 计划模式: plan turn 正常收尾且产出了 proposed plan → 发起审批闭环。
       // 放在 done 之后 (AsyncQueue FIFO), renderer 先做完 turn 收尾再挂 plan 卡片。
       // 空跑(模型没产出 <proposed_plan>, 例如直接回答了问题) → 循环结束,
@@ -3543,6 +3558,7 @@ export class CodexAgent extends BaseAgent {
       },
       turnPlanUpdated: (params) => {
         if (shouldIgnoreStaleTurnEvent(params.turnId)) return;
+        latestPlanByTurn.set(params.turnId, params.plan);
         translatePlanUpdatedNotification(params, eventQueue);
       },
       reasoningSummaryTextDelta: (params) => {

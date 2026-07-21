@@ -142,11 +142,40 @@ function emitPlanReviewRequest(requestId: string): void {
   });
 }
 
-function emitDone(source: 'codex' | 'claude-code'): void {
+function emitDone(source: 'codex' | 'claude-code', plan?: Array<{ step: string; status: string }>): void {
   onEvent?.({
     sessionId: SESSION_ID,
-    event: { type: 'done', source, data: { type: 'task_complete' } },
+    event: {
+      type: 'done',
+      source,
+      data: { type: 'task_complete', ...(plan ? { plan } : {}) },
+    },
   });
+}
+
+function emitPlanUpdate(source: 'codex' | 'claude-code', statuses: string[]): void {
+  onEvent?.({
+    sessionId: SESSION_ID,
+    event: {
+      type: 'tool_use',
+      source,
+      data: {
+        toolUseId: 'plan:turn-1',
+        toolName: 'update_plan',
+        input: {
+          plan: statuses.map((status, index) => ({ step: `Step ${index + 1}`, status })),
+        },
+      },
+    },
+  });
+}
+
+function latestPlanStatuses(): string[] {
+  const plan = makerChatStore
+    .getSnapshot(SESSION_ID)
+    .messages.findLast((message) => message.role === 'tool_use' && message.toolName === 'update_plan');
+  const input = plan?.toolInput as { plan?: Array<{ status?: string }> } | undefined;
+  return input?.plan?.map((item) => item.status ?? 'unknown') ?? [];
 }
 
 function pendingBubbleStatuses(): string[] {
@@ -168,6 +197,37 @@ describe('plan_review 与 done 的时序', () => {
   afterEach(() => {
     makerChatStore.__teardownGlobalListeners();
     makerChatStore.purgeSession(SESSION_ID);
+  });
+
+  it('codex:done 使用携带的权威快照收口最新结构化计划', () => {
+    makerChatStore.setSessionRuntime(SESSION_ID, { agentKind: 'codex' });
+    emitPlanUpdate('codex', ['completed', 'in_progress', 'pending']);
+
+    emitDone('codex', [
+      { step: 'Step 1', status: 'completed' },
+      { step: 'Step 2', status: 'completed' },
+      { step: 'Step 3', status: 'completed' },
+    ]);
+
+    expect(latestPlanStatuses()).toEqual(['completed', 'completed', 'completed']);
+  });
+
+  it('codex:done 没有 plan 快照时不猜测旧计划已完成', () => {
+    makerChatStore.setSessionRuntime(SESSION_ID, { agentKind: 'codex' });
+    emitPlanUpdate('codex', ['in_progress', 'pending']);
+
+    emitDone('codex');
+
+    expect(latestPlanStatuses()).toEqual(['in_progress', 'pending']);
+  });
+
+  it('claude:done 不改 Codex update_plan 展示状态', () => {
+    makerChatStore.setSessionRuntime(SESSION_ID, { agentKind: 'claude-code' });
+    emitPlanUpdate('claude-code', ['in_progress', 'pending']);
+
+    emitDone('claude-code');
+
+    expect(latestPlanStatuses()).toEqual(['in_progress', 'pending']);
   });
 
   it('codex:done 不吞掉刚弹出的计划审阅(卡片与气泡存活)', () => {
