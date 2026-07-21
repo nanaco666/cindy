@@ -14,9 +14,11 @@
 // prebuild 各阶段内容不同的 ios/ 目录纳入指纹,与内嵌值错位 → 装了最新包仍反复弹整包更新。
 // NPKG 企业重签只换签名、不改 bundle 内 fingerprint 文件,故读出包时的本地 ipa 即权威值。
 //
-// 分发链路:重签 ipa / manifest / 安装页仍上传自有 OSS/CDN 作为内部安装备份；对客户端广播的
-// canary-release.json 则把 installUrl / itmsUrl 指向当前 region 配置的 App Store 应用。NPKG 只在
-// 发版机上参与企业重签一步——企业证书在 NPKG 侧,但普通用户整包更新不再走企业安装链路。
+// 分发链路:重签 ipa / manifest / 安装页始终上传自有 OSS/CDN。对客户端广播的 canary-release.json,
+// installUrl / itmsUrl 按安装入口模式(resolveIosInstallEntryMode)择一:cn/global(及配了商店 ID 的
+// dev)指向 App Store 应用,OSS 安装页仅作内部备份;dev 未配商店 ID 时则直接指向 OSS 上的企业重签
+// 安装页 + itms-services 链接(dev 无上架商店,以企业重签 IPA 作正式安装入口)。NPKG 只在发版机上
+// 参与企业重签一步——企业证书在 NPKG 侧。
 //
 // 默认 dry-run(校验环境 + 解析 workspace/scheme + 打印计划,不构建、不上传);
 // --execute 才跑完整链路(需 macOS + Xcode + 已装 dev 证书/描述文件 + NPKG 白名单)。
@@ -46,7 +48,7 @@ import {
   assertBuildNumberMonotonic,
   buildExportOptionsPlist,
   buildReleaseRecord,
-  buildAppStoreInstallLinks,
+  selectRecordInstallLinks,
   compareBuildNumbers,
   nextDateBuildNumber,
   replaceBuildNumberInAppJson,
@@ -57,7 +59,7 @@ import { clearBundlerCache } from './lib/bundler-cache.mjs';
 import { readEmbeddedRuntimeVersionFromIpa } from './lib/embedded-runtime.mjs';
 import { createOSSClient, uploadToOSS, CDN_BASE, OSS_PREFIX, OSS_BUCKET, refreshOssConfig } from '../../../scripts/shared/oss.mjs';
 import { mobileClientBuildEnv } from '../../../scripts/shared/client-endpoint-build-env.mjs';
-import { assertIosAppStoreConfigured, formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides, assertRegionOssComplete, stripSelfHostRegionEnv } from './lib/self-host-region.mjs';
+import { resolveIosInstallEntryMode, formatSelfHostReleaseCommand, resolveSelfHostRegion, regionEnvOverrides, assertRegionOssComplete, stripSelfHostRegionEnv } from './lib/self-host-region.mjs';
 import {
   baselineBuildNumber,
   buildReleasePointerLocation,
@@ -209,9 +211,11 @@ async function uploadReleaseRecord(client, record, recordKey, recordCdn) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  // --region 必填(cn|global):选出本次出包身份 + OSS 落点桶 + 签名描述符(见 lib/self-host-region.mjs)。
+  // --region 必填(cn|global|dev):选出本次出包身份 + OSS 落点桶 + 签名描述符(见 lib/self-host-region.mjs)。
   const region = resolveSelfHostRegion(args);
-  const iosAppStoreId = assertIosAppStoreConfigured(region);
+  // 安装入口模式:cn/global(及配了商店 ID 的 dev)走 App Store;dev 未配商店 ID 走企业重签安装页。
+  // cn/global 缺商店 ID 会在此 fail closed(不把空入口写进 release.json)。
+  const installEntry = resolveIosInstallEntryMode(region);
   // 按 region 切 OSS 落点桶(bucket/cdn/prefix + 可选 AK/SK 后缀),之后 refreshOssConfig 才生效。
   Object.assign(process.env, regionEnvOverrides(region));
   refreshOssConfig();
@@ -292,7 +296,9 @@ async function main() {
   const iosS = region.iosSigning ?? {};
   console.log(`sign: team=${sPreview('teamId', iosS.teamId)} profile=${sPreview('profileName', iosS.profileName)} identity="${sPreview('signIdentity', iosS.signIdentity)}"(来自 self-host-regions.json 的 ${region.authRegion}.iosSigning)`);
   console.log(`oss: bucket=${region.oss?.bucket || '(未填)'} cdn=${region.oss?.cdnBaseUrl || '(未填)'}`);
-  console.log(`app store: id=${iosAppStoreId}`);
+  console.log(installEntry.mode === 'enterprise'
+    ? 'install entry: 企业重签 OSS 安装页 + itms-services(dev 无 App Store,客户端优先走 itms 直装)'
+    : `install entry: App Store id=${installEntry.appStoreId}`);
   console.log('steps: prebuild → pod-install → xcodebuild archive/export → 从 .ipa 回读 runtimeVersion → NPKG 企业重签 → 重签 ipa 直传 OSS(manifest.plist + install.html)→ 写 canary-release.json');
   for (const line of formatBakedEnvLines(env)) console.log(line);
   if (!args.execute) {
@@ -324,12 +330,13 @@ async function main() {
 
   const client = createOSSClient();
   const enterpriseLinks = await uploadDistToOSS(client, repackedIpa, version, buildNumber, region.iosBundleId);
-  const appStoreLinks = buildAppStoreInstallLinks(iosAppStoreId);
+  // record 写哪套安装链接由 installEntry.mode 决定:appstore 用商店链接、enterprise 用刚上传的企业重签安装页。
+  const recordLinks = selectRecordInstallLinks(installEntry, enterpriseLinks);
 
   if (!args.skipRecord) {
     const record = buildReleaseRecord({
       version, buildNumber, runtimeVersion,
-      installUrl: appStoreLinks.installUrl, itmsUrl: appStoreLinks.itmsUrl,
+      installUrl: recordLinks.installUrl, itmsUrl: recordLinks.itmsUrl,
       releaseNotes: message || undefined,
     });
     await uploadReleaseRecord(client, record, canaryRelease.key, canaryRelease.url);
@@ -338,8 +345,12 @@ async function main() {
   console.log('');
   console.log('==================== Canary 冷更发布完成 ====================');
   console.log(`  runtimeVersion : ${runtimeVersion}`);
-  console.log(`  app store      : ${appStoreLinks.installUrl}`);
-  console.log(`  enterprise     : ${enterpriseLinks.installUrl}(OSS 内部安装备份)`);
+  console.log(`  install entry  : ${recordLinks.itmsUrl || recordLinks.installUrl}`);
+  if (installEntry.mode === 'enterprise') {
+    console.log('  entry note     : dev 无 App Store,以上企业重签安装页即正式入口(客户端优先 itms-services 直装)');
+  } else {
+    console.log(`  enterprise     : ${enterpriseLinks.installUrl}(OSS 内部安装备份,正式入口为 App Store)`);
+  }
   console.log(`  下一步:纯 JS 改动用 \`${formatSelfHostReleaseCommand('ios', 'ota', region, { execute: true })}\` 发热更(复用此 runtimeVersion)`);
   console.log(`  验证后提升 stable: \`${formatSelfHostReleaseCommand('ios', 'promote', region, { yes: true })}\``);
   if (autoBumped) {

@@ -8,7 +8,7 @@ import {
   regionEnvOverrides,
   formatSelfHostReleaseCommand,
   assertRegionOssComplete,
-  assertIosAppStoreConfigured,
+  resolveIosInstallEntryMode,
   stripSelfHostRegionEnv,
 } from '../../scripts/lib/self-host-region.mjs';
 
@@ -237,9 +237,18 @@ describe('assertRegionOssComplete', () => {
   });
 });
 
-describe('assertIosAppStoreConfigured', () => {
-  it('要求 iOS canary 有正常 App Store 安装入口', () => {
-    expect(assertIosAppStoreConfigured(VALID.cn)).toBe('6788711632');
-    expect(() => assertIosAppStoreConfigured(VALID.dev)).toThrow(/dev\.iosAppStoreId/);
+describe('resolveIosInstallEntryMode', () => {
+  it('配了纯数字 App Store ID(任何 region)→ appstore 模式', () => {
+    expect(resolveIosInstallEntryMode(VALID.cn)).toEqual({ mode: 'appstore', appStoreId: '6788711632' });
+    expect(resolveIosInstallEntryMode(VALID.global)).toEqual({ mode: 'appstore', appStoreId: '6787894640' });
+    const devWithStore = { ...VALID.dev, iosAppStoreId: '9990001112' };
+    expect(resolveIosInstallEntryMode(devWithStore)).toEqual({ mode: 'appstore', appStoreId: '9990001112' });
+  });
+  it('dev 未配商店 ID → enterprise 模式(企业重签安装页作入口)', () => {
+    expect(resolveIosInstallEntryMode(VALID.dev)).toEqual({ mode: 'enterprise', appStoreId: '' });
+  });
+  it('cn/global 未配商店 ID → fail closed(正式线红线不放松)', () => {
+    expect(() => resolveIosInstallEntryMode({ ...VALID.cn, iosAppStoreId: '' })).toThrow(/cn\.iosAppStoreId/);
+    expect(() => resolveIosInstallEntryMode({ ...VALID.global, iosAppStoreId: '   ' })).toThrow(/global\.iosAppStoreId/);
   });
 });
