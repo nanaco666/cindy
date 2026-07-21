@@ -22,21 +22,36 @@ export interface RailPanelAnchor {
 export interface RailPanelState {
   openSection: RailPanelSection | null;
   anchor: RailPanelAnchor | null;
+  /** 触发瓷砖元素——RailPanels 用 IntersectionObserver 监测其可见性,
+   *  触发器消失(⌘B 完全隐藏 / rail 滚出)即收面板,不依赖指针再动。 */
+  anchorEl: HTMLElement | null;
   openProjectKey: string | null;
   projectAnchor: RailPanelAnchor | null;
+  /** 灯语取样范围(会话 id):由 RailPanels(ExpandedView)发布,与面板实际
+   *  展示的过滤后集合一致(vendor/项目筛选/未分类都算);null = 尚未发布,
+   *  RailNav 回落到自身按机器过滤的推导。 */
+  lampScope: RailLampScope | null;
+}
+
+export interface RailLampScope {
+  projectSessionIds: readonly string[];
+  dialogueSessionIds: readonly string[];
 }
 
 /** hover 桥接:指针离开瓷砖/面板后的收回宽限(与 peek 抽屉同量级)。 */
 export const RAIL_PANEL_CLOSE_GRACE_MS = 120;
 
-const CLOSED: RailPanelState = {
+const CLOSED_FIELDS = {
   openSection: null,
   anchor: null,
+  anchorEl: null,
   openProjectKey: null,
   projectAnchor: null,
-};
+} as const;
 
-let state: RailPanelState = CLOSED;
+const INITIAL: RailPanelState = { ...CLOSED_FIELDS, lampScope: null };
+
+let state: RailPanelState = INITIAL;
 const listeners = new Set<() => void>();
 let closeTimer: ReturnType<typeof setTimeout> | null = null;
 let projectCloseTimer: ReturnType<typeof setTimeout> | null = null;
@@ -63,10 +78,25 @@ export const railPanelStore = {
   },
 
   /** 打开(或切换)一级面板;同时收起可能开着的项目二级。 */
-  openSection(section: RailPanelSection, anchor: RailPanelAnchor): void {
+  openSection(section: RailPanelSection, anchor: RailPanelAnchor, anchorEl: HTMLElement): void {
     clearCloseTimer();
     clearProjectCloseTimer();
-    emit({ openSection: section, anchor, openProjectKey: null, projectAnchor: null });
+    emit({ ...state, openSection: section, anchor, anchorEl, openProjectKey: null, projectAnchor: null });
+  },
+
+  /** 由 RailPanels 发布与面板展示一致的灯语取样范围(浅比较去抖,防循环)。 */
+  setLampScope(scope: RailLampScope | null): void {
+    const prev = state.lampScope;
+    const same =
+      (prev == null && scope == null) ||
+      (prev != null &&
+        scope != null &&
+        prev.projectSessionIds.length === scope.projectSessionIds.length &&
+        prev.dialogueSessionIds.length === scope.dialogueSessionIds.length &&
+        prev.projectSessionIds.every((id, i) => id === scope.projectSessionIds[i]) &&
+        prev.dialogueSessionIds.every((id, i) => id === scope.dialogueSessionIds[i]));
+    if (same) return;
+    emit({ ...state, lampScope: scope });
   },
   /** 项目一级面板内 hover 具体项目 → 打开二级。 */
   openProject(projectKey: string, anchor: RailPanelAnchor): void {
@@ -97,6 +127,8 @@ export const railPanelStore = {
   closeAll(): void {
     clearCloseTimer();
     clearProjectCloseTimer();
-    if (state !== CLOSED) emit(CLOSED);
+    if (state.openSection !== null || state.anchorEl !== null) {
+      emit({ ...state, ...CLOSED_FIELDS });
+    }
   },
 };

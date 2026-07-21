@@ -28,13 +28,10 @@ import { isOrcaWorkerSession, resolveSessionRoute } from '@/lib/orcaSessionIdent
 import { projectIdentityKeyForSession } from '../lib/projectGrouping';
 import { SessionStatusIcon } from './SessionStatusIcon';
 import { formatSidebarTime } from '../lib/formatSidebarTime';
-import { sessionActivityMs } from '../lib/dateSessionGrouping';
 import { railPanelStore, type RailPanelSection } from './railPanelStore';
 
 /** 预览卡宽度(px)——旧 RailFlyout 同宽。 */
 const PREVIEW_WIDTH = 208;
-/** 对话段聚合灯的取样窗口(与 RailPanels 对话面板一致的最近序)。 */
-const DIALOGUE_LAMP_LIMIT = 20;
 
 export interface RailNavProps {
   navigate: ReturnType<typeof useNavigate>;
@@ -182,25 +179,24 @@ export function RailNav({
       );
   }, [sessions, manualPinnedOrder]);
 
+  // 对话灯取样不截断(面板展示上限只是渲染折叠,未读/运行的事实不该被截掉,
+  // review P2);排序只服务 fallback 一致性,聚合本身与序无关。
   const dialogueLampSessions = useMemo(
     () =>
-      sessions
-        .filter(
-          (s) =>
-            s.workspaceKind === 'dialogue' && s.status !== 'archived' && !isOrcaWorkerSession(s),
-        )
-        .sort((a, b) => sessionActivityMs(b) - sessionActivityMs(a))
-        .slice(0, DIALOGUE_LAMP_LIMIT),
+      sessions.filter(
+        (s) =>
+          s.workspaceKind === 'dialogue' && s.status !== 'archived' && !isOrcaWorkerSession(s),
+      ),
     [sessions],
   );
 
-  const aggregate = useCallback(
-    (list: readonly Session[]) => {
+  const aggregateIds = useCallback(
+    (ids: readonly string[]) => {
       let running = false;
       let best: AttentionKind | null = null;
-      for (const s of list) {
-        if (runningSessionIds.has(s.id)) running = true;
-        const tone = dotToneOf(s.id, notifications, attentionKinds, urgentSessionIds);
+      for (const id of ids) {
+        if (runningSessionIds.has(id)) running = true;
+        const tone = dotToneOf(id, notifications, attentionKinds, urgentSessionIds);
         if (tone && (!best || TONE_RANK[tone] > TONE_RANK[best])) best = tone;
       }
       return { running, dotTone: best };
@@ -225,13 +221,22 @@ export function RailNav({
       ),
     [sessions],
   );
+  // 灯语取样优先用 RailPanels 发布的 lampScope(与面板展示的过滤后集合
+  // 完全一致,含 vendor/项目筛选与未分类;review P2);尚未发布时回落到
+  // 本组件按机器过滤的推导(启动首帧/doc 模式 ExpandedView 未挂载)。
   const projectsAgg = useMemo(
-    () => aggregate(projectLampSessions),
-    [aggregate, projectLampSessions],
+    () =>
+      aggregateIds(
+        panelState.lampScope?.projectSessionIds ?? projectLampSessions.map((s) => s.id),
+      ),
+    [aggregateIds, panelState.lampScope, projectLampSessions],
   );
   const dialoguesAgg = useMemo(
-    () => aggregate(dialogueLampSessions),
-    [aggregate, dialogueLampSessions],
+    () =>
+      aggregateIds(
+        panelState.lampScope?.dialogueSessionIds ?? dialogueLampSessions.map((s) => s.id),
+      ),
+    [aggregateIds, panelState.lampScope, dialogueLampSessions],
   );
 
   const [preview, setPreview] = useState<PreviewState | null>(null);
@@ -250,7 +255,7 @@ export function RailNav({
   const openSectionAt = useCallback((section: RailPanelSection, el: HTMLElement) => {
     setPreview(null);
     const rect = el.getBoundingClientRect();
-    railPanelStore.openSection(section, { right: rect.right, top: rect.top });
+    railPanelStore.openSection(section, { right: rect.right, top: rect.top }, el);
   }, []);
 
   return (

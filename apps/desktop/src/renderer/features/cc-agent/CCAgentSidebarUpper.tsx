@@ -2271,6 +2271,7 @@ function ExpandedView({
           与「显示全部」),见 railPanelStore 头注。 */}
       <RailPanels
         projects={visibleProjectsWithVendor}
+        unclassified={visibleUnclassified}
         dialogues={visibleDialogues}
         activeSessionId={activeSessionId}
         runningSessionIds={displayRunningSessionIds}
@@ -2467,8 +2468,10 @@ function RailPanelShell({
       }}
       className={cn(
         'fixed w-[264px] rounded-xl border border-sidebar-border bg-[var(--surface-elevated)] p-1.5',
-        'shadow-[0_6px_24px_rgba(0,0,0,0.07)]',
-        level === 1 ? 'z-[60]' : 'z-[61]',
+        // 阴影走主题 token(AGENTS.md #16,与菜单同语言);z 必须低于 DropdownMenu
+        // 的 z-50 —— 行内右键/移动菜单要画在面板之上(review P2)。
+        'shadow-[var(--shadow-menu)]',
+        level === 1 ? 'z-[48]' : 'z-[49]',
       )}
       style={{
         left: anchorRight + (level === 1 ? 12 : 8),
@@ -2484,6 +2487,8 @@ function RailPanelShell({
 
 interface RailPanelsProps {
   projects: ProjectNode[];
+  /** 未分类(草稿等)会话——展开态 UnclassifiedSection 同源,面板内平铺在项目列表之上。 */
+  unclassified: Session[];
   dialogues: Session[];
   activeSessionId: string | undefined;
   runningSessionIds: ReadonlySet<string>;
@@ -2511,6 +2516,7 @@ interface RailPanelsProps {
  */
 function RailPanels({
   projects,
+  unclassified,
   dialogues,
   activeSessionId,
   runningSessionIds,
@@ -2546,7 +2552,31 @@ function RailPanels({
   useEffect(() => {
     if (!isCollapsed) railPanelStore.closeAll();
   }, [isCollapsed]);
-  useEffect(() => () => railPanelStore.closeAll(), []);
+  useEffect(() => () => { railPanelStore.closeAll(); railPanelStore.setLampScope(null); }, []);
+
+  // 灯语取样范围发布:与面板实际展示的过滤后集合一致(项目组 + 未分类 + 对话),
+  // RailNav 的段灯据此聚合(review P2「灯绕过筛选/截断」两条的根治)。
+  useEffect(() => {
+    railPanelStore.setLampScope({
+      projectSessionIds: [
+        ...projects.flatMap((p) => p.sessions.map((sess) => sess.id)),
+        ...unclassified.map((sess) => sess.id),
+      ],
+      dialogueSessionIds: dialogues.map((sess) => sess.id),
+    });
+  }, [projects, unclassified, dialogues]);
+
+  // 触发瓷砖可见性监测:⌘B 完全隐藏(aside w-0)、rail 滚出等任何"触发器
+  // 消失"路径,即刻收面板——不依赖指针再动(review P1「键盘隐藏仍会残留」)。
+  useEffect(() => {
+    const el = panelState.anchorEl;
+    if (!panelState.openSection || !el) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => !entry.isIntersecting)) railPanelStore.closeAll();
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [panelState.openSection, panelState.anchorEl]);
   useEffect(() => {
     if (!panelState.openSection) return;
     const onPointerMove = (event: PointerEvent) => {
@@ -2584,11 +2614,13 @@ function RailPanels({
     };
   }, [panelState.openSection]);
 
-  // 行点击:无多选修饰键时随导航关面板;shift/⌘ 多选保持面板打开(与展开态选择语义一致)。
+  // 行点击一律按普通导航处理并关面板:多选的范围剪枝按 sidebarScrollRef(展开态
+  // DOM)计算,面板 portal 行不在其中,带修饰键会得到错误的选择集(review P2)——
+  // 面板是导航面,多选留在展开态。
   const handlePanelSessionClick = useCallback<NonNullable<RailPanelsProps['onSessionClick']>>(
-    (id, modifiers) => {
-      if (!hasSessionSelectionModifier(modifiers)) railPanelStore.closeAll();
-      onSessionClick(id, modifiers);
+    (id) => {
+      railPanelStore.closeAll();
+      onSessionClick(id);
     },
     [onSessionClick],
   );
@@ -2683,6 +2715,16 @@ function RailPanels({
           <>
             {panelHead(t('ccAgent.sidebar.railNav.projects'), projects.length)}
             <div className="max-h-[420px] overflow-y-auto [scrollbar-width:thin]">
+              {/* 未分类(草稿等)会话:展开态渲染在项目树之前(UnclassifiedSection,
+                  无标题纯列表),面板同形同序——折叠态不能让它们不可达(review P2)。 */}
+              {unclassified.length > 0 && (
+                <SessionEntryList
+                  sessions={unclassified}
+                  {...entryListShared}
+                  collapsible
+                  collapseLimit={getProjectSessionCollapseLimit()}
+                />
+              )}
               {projectsView.visibleEntries.map((p) => {
                 const agg = projectAgg(p.sessions);
                 const isOpen = panelState.openProjectKey === p.projectKey;
