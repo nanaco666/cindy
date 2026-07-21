@@ -61,6 +61,11 @@ interface ParsedManagedPath {
   branch: string;
 }
 
+interface SessionWorktreeBinding {
+  workingDir: string | null;
+  worktreePath: string | null;
+}
+
 /** 只认 Cindy 当前或历史托管 worktree 形态；解析失败返回 null。 */
 function parseManagedWorktreePath(worktreePath: string): ParsedManagedPath | null {
   try {
@@ -84,13 +89,16 @@ async function pathExists(p: string): Promise<boolean> {
   }
 }
 
-async function readSessionWorktreePath(sessionId: string): Promise<string | null> {
+async function readSessionWorktreeBinding(sessionId: string): Promise<SessionWorktreeBinding | null> {
   const db = getDbClient().drizzle;
   const rows = await db
-    .select({ worktreePath: sessions.worktreePath })
+    .select({
+      workingDir: sessions.workingDir,
+      worktreePath: sessions.worktreePath,
+    })
     .from(sessions)
     .where(eq(sessions.id, sessionId));
-  return rows[0]?.worktreePath ?? null;
+  return rows[0] ?? null;
 }
 
 async function refExists(baseRepo: string, ref: string): Promise<boolean> {
@@ -246,7 +254,7 @@ async function finishRestoredWorktree(
 export async function getWorktreeRestoreStatus(sessionId: string): Promise<WorktreeRestoreStatus> {
   let worktreePath: string | null = null;
   try {
-    worktreePath = await readSessionWorktreePath(sessionId);
+    worktreePath = (await readSessionWorktreeBinding(sessionId))?.worktreePath ?? null;
   } catch (err) {
     log.warn(`[restore] session lookup failed for ${sessionId}:`, err instanceof Error ? err.message : String(err));
     return { state: 'no-worktree' };
@@ -349,16 +357,33 @@ export async function restoreMissingManagedWorktreeForSession(
   const expectedKey = pathKey(expectedWorktreePath);
   if (!expectedKey) return false;
 
-  let storedPath: string | null;
+  let binding: SessionWorktreeBinding | null;
   try {
-    storedPath = await readSessionWorktreePath(sessionId);
+    binding = await readSessionWorktreeBinding(sessionId);
   } catch {
     return false;
   }
-  if (pathKey(storedPath) !== expectedKey || !parseManagedWorktreePath(expectedWorktreePath)) {
+  if (
+    pathKey(binding?.worktreePath) !== expectedKey
+    || pathKey(binding?.workingDir) !== expectedKey
+    || !parseManagedWorktreePath(expectedWorktreePath)
+  ) {
     return false;
   }
-  if (await pathExists(expectedWorktreePath)) return true;
+
+  // `git worktree add` creates the directory before a pending snapshot is applied. A second
+  // send in that window must join the same mutation instead of treating the directory as ready.
+  const inFlight = restoreInFlight.get(sessionId);
+  if (inFlight) {
+    const result = await inFlight;
+    return result.ok
+      && result.snapshotApplied !== false
+      && await pathExists(expectedWorktreePath);
+  }
+
+  // A registered, existing worktree is the normal fast path. Failed snapshot application
+  // removes the registration, so later sends retry the pending snapshot and remain blocked.
+  if (await pathExists(expectedWorktreePath) && store.get(sessionId)) return true;
 
   const result = await restoreWorktreeForSession(sessionId);
   return result.ok

@@ -38,6 +38,7 @@ import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { BrowserWindow, ipcMain } from 'electron';
 import type { AgentMeta } from '../../renderer/lib/ccAgent.types';
 import type { AgentInputCreateOpts, AgentInputQueuedMessage } from '../../shared/agentInputQueue.js';
+import { isManagedWorktreeDirectoryName } from '../../shared/managedWorktreePaths.js';
 import { buildTurnUsageDetails } from '../../shared/turnUsageDetails.js';
 import type { DesktopCommandContext } from '../commands/index.js';
 import { getDesktopCommandRegistry } from '../commands/index.js';
@@ -6556,6 +6557,20 @@ async function checkWorkDirExists(
         emitWorkDirMissingError(sessionId, workingDir, source, 'not-dir');
       }
       return false;
+    }
+    // Managed worktrees need a stronger readiness check than directory existence: another send
+    // may observe `git worktree add` before snapshot apply finishes, and a previous apply conflict
+    // deliberately leaves the directory present while keeping the session blocked.
+    if (isManagedWorktreeDirectoryName(path.basename(path.dirname(path.resolve(workingDir))))) {
+      const ready = await restoreMissingManagedWorktreeForSession(sessionId, workingDir);
+      if (!ready) {
+        if (suppress) {
+          log.warn('send: managed worktree not ready (broadcast suppressed, caller has fallback)', { sessionId, workingDir });
+        } else {
+          emitWorkDirMissingError(sessionId, workingDir, source, 'not-exist');
+        }
+        return false;
+      }
     }
     return true;
   } catch {

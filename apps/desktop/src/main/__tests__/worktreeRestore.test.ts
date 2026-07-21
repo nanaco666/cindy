@@ -21,6 +21,7 @@ const storeDelMock = vi.fn();
 const applyIncludeMock = vi.fn();
 const copyClaudeSiviDirsMock = vi.fn();
 let dbWorktreePath: string | null = null;
+let dbWorkingDir: string | null = null;
 
 vi.mock('../worktree/gitExec', () => ({
   gitExec: (...args: unknown[]) => gitExecMock(...args),
@@ -47,7 +48,10 @@ vi.mock('../localDb/client/current', () => ({
     drizzle: {
       select: () => ({
         from: () => ({
-          where: () => (dbWorktreePath === undefined ? [] : [{ worktreePath: dbWorktreePath }]),
+          where: () => (dbWorktreePath === undefined ? [] : [{
+            workingDir: dbWorkingDir,
+            worktreePath: dbWorktreePath,
+          }]),
         }),
       }),
     },
@@ -73,6 +77,7 @@ describe('worktree restore', () => {
     fsSync.mkdirSync(path.join(baseRepo, '.cindy-worktrees'), { recursive: true });
     wtPath = path.join(baseRepo, '.cindy-worktrees', 'wt1');
     dbWorktreePath = wtPath;
+    dbWorkingDir = wtPath;
     gitExecMock.mockReset().mockResolvedValue({ stdout: '', stderr: '' });
     storeSetMock.mockReset().mockResolvedValue(undefined);
     storeGetMock.mockReset().mockReturnValue(null);
@@ -279,6 +284,16 @@ describe('worktree restore', () => {
     expect(gitExecMock).not.toHaveBeenCalled();
   });
 
+  it('send-time restore rejects a historical worktree after DB working_dir moved', async () => {
+    dbWorkingDir = baseRepo;
+
+    await expect(
+      mod.restoreMissingManagedWorktreeForSession('s1', wtPath),
+    ).resolves.toBe(false);
+
+    expect(gitExecMock).not.toHaveBeenCalled();
+  });
+
   it('send-time restore rebuilds the exact missing worktree from origin', async () => {
     let localBranchCreated = false;
     gitExecMock.mockImplementation(async (args: string[]) => {
@@ -326,6 +341,72 @@ describe('worktree restore', () => {
     const calls = gitExecMock.mock.calls.map(argsOf);
     expect(calls.filter((args) => args[0] === '-c' && args[3] === 'add')).toHaveLength(1);
     expect(storeSetMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('concurrent send-time restores wait for snapshot apply before allowing either send', async () => {
+    let releaseApply!: () => void;
+    let signalApplyStarted!: () => void;
+    const applyStarted = new Promise<void>((resolve) => { signalApplyStarted = resolve; });
+    const applyRelease = new Promise<void>((resolve) => { releaseApply = resolve; });
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/heads/xdt/wt1')) {
+        return { stdout: 'deadbeef\n', stderr: '' };
+      }
+      if (args[0] === 'rev-parse' && args.includes('refs/xdt/snapshots/s1')) {
+        return { stdout: `${SHA}\n`, stderr: '' };
+      }
+      if (args[0] === '-c' && args[2] === 'worktree' && args[3] === 'add') {
+        fsSync.mkdirSync(wtPath, { recursive: true });
+      }
+      if (args[0] === 'stash' && args[1] === 'apply') {
+        signalApplyStarted();
+        await applyRelease;
+        throw new Error('conflict');
+      }
+      return { stdout: '', stderr: '' };
+    });
+
+    const first = mod.restoreMissingManagedWorktreeForSession('s1', wtPath);
+    await applyStarted;
+    const second = mod.restoreMissingManagedWorktreeForSession('s1', wtPath);
+    let secondSettled = false;
+    void second.finally(() => { secondSettled = true; });
+    await Promise.resolve();
+    expect(secondSettled).toBe(false);
+
+    releaseApply();
+    await expect(Promise.all([first, second])).resolves.toEqual([false, false]);
+    const calls = gitExecMock.mock.calls.map(argsOf);
+    expect(calls.filter((args) => args[0] === '-c' && args[3] === 'add')).toHaveLength(1);
+    expect(calls.filter((args) => args[0] === 'stash' && args[1] === 'apply')).toHaveLength(1);
+  });
+
+  it('send-time restore remains blocked and retries a pending snapshot after apply conflict', async () => {
+    gitExecMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse' && args.includes('refs/heads/xdt/wt1')) {
+        return { stdout: 'deadbeef\n', stderr: '' };
+      }
+      if (args[0] === 'rev-parse' && args.includes('refs/xdt/snapshots/s1')) {
+        return { stdout: `${SHA}\n`, stderr: '' };
+      }
+      if (args[0] === '-c' && args[2] === 'worktree' && args[3] === 'add') {
+        fsSync.mkdirSync(wtPath, { recursive: true });
+      }
+      if (args[0] === 'stash' && args[1] === 'apply') throw new Error('conflict');
+      return { stdout: '', stderr: '' };
+    });
+
+    await expect(
+      mod.restoreMissingManagedWorktreeForSession('s1', wtPath),
+    ).resolves.toBe(false);
+    await expect(
+      mod.restoreMissingManagedWorktreeForSession('s1', wtPath),
+    ).resolves.toBe(false);
+
+    const calls = gitExecMock.mock.calls.map(argsOf);
+    expect(calls.filter((args) => args[0] === '-c' && args[3] === 'add')).toHaveLength(1);
+    expect(calls.filter((args) => args[0] === 'stash' && args[1] === 'apply')).toHaveLength(2);
+    expect(storeSetMock).not.toHaveBeenCalled();
   });
 
   it('restore: falls back to the session auto-stash when snapshot ref is missing', async () => {
