@@ -277,6 +277,24 @@ describe('mobileRealtimeAsrProvider', () => {
     expect(socket.readyState).toBe(3);
   });
 
+  it('does not open managed realtime ASR after stop while session allocation is pending', async () => {
+    FakeSocket.instances = [];
+    let resolveConnection!: (connection: { websocketUrl: string; authorizationToken: string }) => void;
+    const provider = new MobileRealtimeAsrProvider({
+      credential: credential(),
+      websocketFactory: FakeSocket,
+      connectionProvider: () => new Promise((resolve) => { resolveConnection = resolve; }),
+    });
+    provider.onEvent(() => {});
+
+    const started = provider.start();
+    await provider.stop();
+    resolveConnection({ websocketUrl: 'wss://voice.example.com/asr', authorizationToken: 'ticket' });
+
+    await expect(started).rejects.toThrow('Realtime ASR connection stopped.');
+    expect(FakeSocket.instances).toHaveLength(0);
+  });
+
   it('recovers OpenAI-compatible realtime ASR by replaying unconfirmed audio', async () => {
     FakeSocket.instances = [];
     const provider = new MobileRealtimeAsrProvider({

@@ -275,6 +275,7 @@ export class MobileRealtimeAsrProvider implements AsrProvider {
     const dynamicConnection = this.connectionProvider
       ? await this.connectionProvider(this.credential.asr.provider)
       : null;
+    if (this.stopped) throw new Error('Realtime ASR connection stopped.');
     const websocketUrl = dynamicConnection?.websocketUrl
       ?? toWebSocketUrl(this.credential.proxyBaseUrl, endpointPath!);
     const authorizationToken = dynamicConnection?.authorizationToken
@@ -838,6 +839,7 @@ export class MobileVolcengineSaucAsrProvider implements AsrProvider {
     const dynamicConnection = this.connectionProvider
       ? await this.connectionProvider(this.credential.asr.provider)
       : null;
+    if (this.stopped) throw new Error('Volcengine SAUC ASR connection stopped.');
     const websocketUrl = dynamicConnection?.websocketUrl
       ?? toWebSocketUrl(this.credential.proxyBaseUrl, endpointPath);
     const authorizationToken = dynamicConnection?.authorizationToken
