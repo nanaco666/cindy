@@ -93,6 +93,7 @@ import {
 import { FBOT_DRAFT_TITLE, generateAndPersistFbotTitle } from './fbotTitle';
 import {
   createTurnActivity,
+  markActivityWriting,
   pushToolStep,
   renderActivity,
   type TurnActivityState,
@@ -1271,8 +1272,10 @@ export function createTurnRunner(
       switch (event.type) {
         case 'text':
           return handleTextEvent(turn, event);
-        // 'thinking' intentionally dropped — IM 端不再透出 reasoning 内容;
-        // only the final reply streams to the card.
+        // Keep reasoning private on Feishu/Discord. Slack hook-control has an
+        // explicit live-work surface and opts into the compact thinking row.
+        case 'thinking':
+          return;
         case 'tool_use':
           // 过程展示: 折叠进卡片顶部的滚动时间线(turnActivity.ts), 让用户在
           // 长 agentic turn 里看到"正在干什么", 而不是盯占位符干等结果。
@@ -1417,16 +1420,25 @@ export function createTurnRunner(
   function composeStreamingView(turn: TurnState): string {
     const body = turn.outputCardPrefix ? turn.outputCardPrefix + turn.buffer : turn.buffer;
     if (turn.done) return body;
-    const act = renderActivity(turn.activity, Date.now(), turn.buffer.length > 0);
+    const act = renderActivity(turn.activity, Date.now());
     if (!act) return body;
     return body ? `${act}\n\n${body}` : act;
   }
 
   /** tool_use → 过程区时间线推进 + 卡片刷新(渠道 handle 自带节流兜底)。 */
   function handleToolUseEvent(turn: TurnState, event: AgentEvent): void {
-    const data = event.data as { toolName?: unknown; input?: unknown } | null;
+    const data = event.data as {
+      toolName?: unknown;
+      toolUseId?: unknown;
+      input?: unknown;
+    } | null;
     if (!data || typeof data.toolName !== 'string') return;
-    pushToolStep(turn.activity, data.toolName, data.input);
+    pushToolStep(
+      turn.activity,
+      data.toolName,
+      data.input,
+      typeof data.toolUseId === 'string' ? data.toolUseId : undefined,
+    );
     ensureActivityTicker(turn);
     void ensureStreamingHandle(turn).then((h) => h.replace(composeStreamingView(turn)));
   }
@@ -1461,7 +1473,7 @@ export function createTurnRunner(
     if (final) {
       return t.buffer ? `${header}\n\n${t.buffer}` : header;
     }
-    const act = renderActivity(t.activity, Date.now(), t.buffer.length > 0);
+    const act = renderActivity(t.activity, Date.now());
     const parts = [header];
     if (act) parts.push(act);
     if (t.buffer) parts.push(t.buffer);
@@ -1519,13 +1531,23 @@ export function createTurnRunner(
         if (!data || typeof data.text !== 'string') return;
         if (data.isFinal) t.buffer = data.text;
         else t.buffer += data.text;
+        markActivityWriting(t.activity);
         refreshTranspondCard(state);
         return;
       }
       case 'tool_use': {
-        const data = event.data as { toolName?: unknown; input?: unknown } | null;
+        const data = event.data as {
+          toolName?: unknown;
+          toolUseId?: unknown;
+          input?: unknown;
+        } | null;
         if (!data || typeof data.toolName !== 'string') return;
-        pushToolStep(t.activity, data.toolName, data.input);
+        pushToolStep(
+          t.activity,
+          data.toolName,
+          data.input,
+          typeof data.toolUseId === 'string' ? data.toolUseId : undefined,
+        );
         // 低频 ticker 刷新耗时(只刷已存在的卡)。
         if (!t.activityTicker) {
           t.activityTicker = setInterval(() => {
@@ -1751,6 +1773,7 @@ export function createTurnRunner(
   function handleTextEvent(turn: TurnState, event: AgentEvent): void {
     const data = event.data as { text?: string; isFinal?: boolean } | null;
     if (!data || typeof data.text !== 'string') return;
+    markActivityWriting(turn.activity);
     if (data.isFinal) {
       // Final block — replace buffer with canonical text. 也立刻 replace 卡片 ——
       // 之前依赖 done 时 finalize 才把内容写进卡片, 但 SDK 在某些场景 (短回复 /
