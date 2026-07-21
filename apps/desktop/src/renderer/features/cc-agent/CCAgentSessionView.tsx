@@ -1813,7 +1813,9 @@ export function CCAgentSessionView({
           fastMode,
           permissionMode: session.permissionMode,
           userPrompt: getUserPrompt(),
-          ...(session.remoteHostId ? {} : { makerMemoryEnabled: getMakerMemoryEnabled() }),
+          ...(session.remoteHostId || remoteDeviceId
+            ? {}
+            : { makerMemoryEnabled: getMakerMemoryEnabled() }),
           extraDirs: session.extraDirs ?? [],
           displayReasoning: 'summarized' as const,
           ...(session.remoteHostId ? { remoteHostId: session.remoteHostId } : {}),

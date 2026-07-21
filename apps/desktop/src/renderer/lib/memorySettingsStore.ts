@@ -88,20 +88,30 @@ export function subscribeMakerMemoryEnabled(cb: Subscriber): () => void {
 export async function bootstrapMemorySettingsFromMain(): Promise<void> {
   try {
     const revisionAtStart = localWriteRevision;
-    const legacyRendererValue = readStoredMakerMemoryEnabled();
+    const legacyRendererValue = readStoredMakerMemoryEnabled() ?? null;
     let settings = await window.electronAPI.maker.memoryGetSettings();
     // 用户或其它窗口已在请求期间写入时，旧快照不再有资格触发迁移或覆盖本地镜像。
     if (localWriteRevision !== revisionAtStart) return;
     // 旧版 opt-out 可能是 renderer false marker，也可能只在 main 留下两种原生记忆
     // 都关闭的状态。marker 非 true 时交给 main 统一判定，再进行 main → renderer 同步。
-    if (legacyRendererValue !== true && settings.maker) {
+    if (settings.maker) {
       try {
         settings = await window.electronAPI.maker.memoryPreserveLegacyMakerDisabled(
-          legacyRendererValue ?? null,
+          legacyRendererValue,
         );
       } catch {
         // Migration persistence is best-effort. Never let a structured IPC
         // failure prevent the main renderer tree from mounting.
+        if (
+          localWriteRevision === revisionAtStart &&
+          (legacyRendererValue === false ||
+            (legacyRendererValue === null &&
+              (settings.claudeCode === false || settings.codex === false)))
+        ) {
+          // Keep the legacy opt-out in the process-local mirror even when the
+          // main profile cannot be written, so sessions stay disabled now.
+          setMakerMemoryEnabled(false);
+        }
         return;
       }
     }

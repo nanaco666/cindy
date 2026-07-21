@@ -4777,6 +4777,7 @@ function buildCreateOptsForCurrentSession(
   opts?: { vendorOptions?: Record<string, unknown> },
 ): AgentInputCreateOpts {
   const current = getOrCreateState(sessionId);
+  const remoteTarget = Boolean(current.remoteHostId) || isRemoteSession(sessionId);
   return {
     agentKind: current.agentKind,
     workingDir,
@@ -4787,7 +4788,7 @@ function buildCreateOptsForCurrentSession(
     planMode: current.planModeEnabled,
     displayReasoning: 'summarized',
     userPrompt: getUserPrompt(),
-    ...(current.remoteHostId ? {} : { makerMemoryEnabled: getMakerMemoryEnabled() }),
+    ...(remoteTarget ? {} : { makerMemoryEnabled: getMakerMemoryEnabled() }),
     ...(current.remoteHostId ? { remoteHostId: current.remoteHostId } : {}),
     ...(opts?.vendorOptions ? { vendorOptions: opts.vendorOptions } : {}),
     ...(current.sdkSessionId ? { resumeSessionId: current.sdkSessionId } : {}),

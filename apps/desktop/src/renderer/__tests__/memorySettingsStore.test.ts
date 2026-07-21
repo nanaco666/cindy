@@ -110,6 +110,35 @@ describe('memorySettingsStore', () => {
     expect(getMakerMemoryEnabled()).toBe(false);
   });
 
+  it('persists a legacy renderer opt-in before native opt-out migration can run', async () => {
+    vi.stubGlobal('localStorage', createStorage(true));
+    const preserveLegacy = vi.fn().mockResolvedValue({
+      maker: true,
+      claudeCode: false,
+      codex: true,
+    });
+    vi.stubGlobal('window', {
+      electronAPI: {
+        maker: {
+          memoryGetSettings: vi.fn().mockResolvedValue({
+            maker: true,
+            claudeCode: false,
+            codex: true,
+          }),
+          memoryPreserveLegacyMakerDisabled: preserveLegacy,
+        },
+      },
+    });
+    const { bootstrapMemorySettingsFromMain, getMakerMemoryEnabled } = await import(
+      '@/lib/memorySettingsStore'
+    );
+
+    await bootstrapMemorySettingsFromMain();
+
+    expect(preserveLegacy).toHaveBeenCalledWith(true);
+    expect(getMakerMemoryEnabled()).toBe(true);
+  });
+
   it('syncs a persisted Maker opt-out before the main view can create sessions', async () => {
     vi.stubGlobal('localStorage', createStorage());
     const preserveLegacy = vi.fn();
@@ -192,6 +221,6 @@ describe('memorySettingsStore', () => {
     );
 
     await expect(bootstrapMemorySettingsFromMain()).resolves.toBeUndefined();
-    expect(getMakerMemoryEnabled()).toBe(true);
+    expect(getMakerMemoryEnabled()).toBe(false);
   });
 });
