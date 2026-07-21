@@ -2313,6 +2313,7 @@ function ExpandedView({
         unclassified={railUnclassified}
         dialogues={visibleDialogues}
         activeSessionId={activeSessionId}
+        viewedSessionId={viewedSessionId}
         runningSessionIds={displayRunningSessionIds}
         attachedSessionIds={attachedSessionIds}
         notifications={sidebarNotifications}
@@ -2538,6 +2539,10 @@ interface RailPanelsProps {
   unclassified: Session[];
   dialogues: Session[];
   activeSessionId: string | undefined;
+  /** 注视中的会话(files 路由下 activeSessionId 为 undefined 时兜底到被浏览
+   *  文件的会话)——只用于折叠豁免与行高亮,导航语义(点击同会话早退等)仍
+   *  由持有真实 activeSessionId 的 handler 闭包决定(codex review)。 */
+  viewedSessionId: string | undefined;
   runningSessionIds: ReadonlySet<string>;
   attachedSessionIds: ReadonlySet<string>;
   notifications: ReadonlySet<string>;
@@ -2566,6 +2571,7 @@ function RailPanels({
   unclassified,
   dialogues,
   activeSessionId,
+  viewedSessionId,
   runningSessionIds,
   attachedSessionIds,
   notifications,
@@ -2683,6 +2689,11 @@ function RailPanels({
   // 远程活动镜像整表版本号:项目行聚合灯 / 折叠豁免要跟上被控端 relay 推送。
   const remoteActivityRevision = useRemoteSessionActivityRevision();
 
+  // 可见性口径的「当前会话」:files 路由下 activeSessionId 为 undefined,被浏览
+  // 文件的会话若排在折叠上限外且无灯语会被折进「显示全部」(codex review)。
+  // 只喂给折叠豁免(isActiveEntry)与行高亮;点击导航仍走真实 activeSessionId。
+  const visibilityActiveId = activeSessionId ?? viewedSessionId;
+
   const projectAgg = useCallback(
     (list: readonly Session[]) => {
       let running = false;
@@ -2737,18 +2748,18 @@ function RailPanels({
         showAll: showAllProjects,
         disableCollapse: false,
         isFiltering: false,
-        isActiveEntry: (p) => p.sessions.some((s) => s.id === activeSessionId),
+        isActiveEntry: (p) => p.sessions.some((s) => s.id === visibilityActiveId),
         // 豁免并入本地 running:第 20 名开外的项目若有会话在跑,rail 段灯已在
         // 呼吸,面板不能把它折进「显示全部」(codex review;远程 running 已随
         // panelNotifications 的远程条目并集覆盖)。
         hasAttentionEntry: (p) =>
           p.sessions.some((s) => panelNotifications.has(s.id) || runningSessionIds.has(s.id)),
       }),
-    [projects, showAllProjects, activeSessionId, panelNotifications, runningSessionIds],
+    [projects, showAllProjects, visibilityActiveId, panelNotifications, runningSessionIds],
   );
 
   const entryListShared = {
-    activeSessionId,
+    activeSessionId: visibilityActiveId,
     runningSessionIds,
     attachedSessionIds,
     notifications: panelNotifications,
