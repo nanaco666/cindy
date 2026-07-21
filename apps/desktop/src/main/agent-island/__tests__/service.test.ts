@@ -2554,6 +2554,14 @@ describe('AgentIslandService native publishing', () => {
           bounds: secondaryDisplay.bounds,
         },
       ],
+      target: {
+        mode: 'display',
+        displayId: 2,
+        displayName: 'Studio Display',
+        displayIndex: 2,
+        displayInternal: true,
+        displayBounds: secondaryDisplay.bounds,
+      },
     });
   });
 
@@ -2571,10 +2579,114 @@ describe('AgentIslandService native publishing', () => {
     syncEnabledForTest(service, publish);
     service.registerIpc();
 
-    await registeredIpcHandler(AGENT_ISLAND_SET_DISPLAY_TARGET_CHANNEL)(null, { mode: 'display', displayId: 99 });
+    await registeredIpcHandler(AGENT_ISLAND_SET_DISPLAY_TARGET_CHANNEL)(null, {
+      mode: 'display',
+      displayId: 99,
+      displayName: 'Disconnected Display',
+      displayIndex: 2,
+      displayInternal: false,
+      displayBounds: { x: 1728, y: 0, width: 1512, height: 982 },
+    });
     service.handleUserPrompt({ sessionId: 's1', agentKind: 'codex' }, 'run tests');
 
     expect(latestNativeFrames(publish).map((frame) => frame.displayId)).toEqual([1]);
+
+    const options = await registeredIpcHandler(AGENT_ISLAND_GET_DISPLAY_OPTIONS_CHANNEL)(null);
+    expect(options).toMatchObject({
+      target: {
+        mode: 'display',
+        displayId: 99,
+        displayName: 'Disconnected Display',
+      },
+    });
+  });
+
+  it('remaps by persisted identity before trusting a reused display id', async () => {
+    const { AgentIslandService } = await import('../service.js');
+    const publish = vi.fn((state: AgentIslandDisplayState, frameOrFrames: AgentIslandNativeFrame | AgentIslandNativeFrame[]) => {
+      void state;
+      void frameOrFrames;
+      return true;
+    });
+    const wrongDisplayWithReusedId = {
+      id: 2,
+      label: 'Other Display',
+      bounds: { x: 1728, y: 0, width: 1512, height: 982 },
+      internal: false,
+    };
+    const reenumeratedDisplay = {
+      id: 7,
+      label: 'Studio Display',
+      bounds: { x: 3240, y: 0, width: 1512, height: 982 },
+      internal: false,
+    };
+    mocks.displays.splice(0, mocks.displays.length, mocks.primaryDisplay, wrongDisplayWithReusedId, reenumeratedDisplay);
+    const service = new AgentIslandService({
+      getMainWindow: () => null,
+      nativeHost: { failed: false, publish },
+    });
+    syncEnabledForTest(service, publish);
+    service.registerIpc();
+
+    await registeredIpcHandler(AGENT_ISLAND_SET_DISPLAY_TARGET_CHANNEL)(null, {
+      mode: 'display',
+      displayId: 2,
+      displayName: 'Studio Display',
+      displayIndex: 3,
+      displayInternal: false,
+      displayBounds: reenumeratedDisplay.bounds,
+    });
+    service.handleUserPrompt({ sessionId: 's1', agentKind: 'codex' }, 'run tests');
+
+    expect(latestNativeFrames(publish).map((frame) => frame.displayId)).toEqual([7]);
+    const options = await registeredIpcHandler(AGENT_ISLAND_GET_DISPLAY_OPTIONS_CHANNEL)(null);
+    expect(options).toMatchObject({
+      target: {
+        mode: 'display',
+        displayId: 7,
+        displayName: 'Studio Display',
+      },
+    });
+  });
+
+  it('uses bounds to disambiguate identical display names', async () => {
+    const { AgentIslandService } = await import('../service.js');
+    const publish = vi.fn((state: AgentIslandDisplayState, frameOrFrames: AgentIslandNativeFrame | AgentIslandNativeFrame[]) => {
+      void state;
+      void frameOrFrames;
+      return true;
+    });
+    const firstDisplay = {
+      id: 2,
+      label: 'Studio Display',
+      bounds: { x: 1728, y: 0, width: 1512, height: 982 },
+      internal: false,
+    };
+    const secondDisplay = {
+      id: 7,
+      label: 'Studio Display',
+      bounds: { x: 3240, y: 0, width: 1512, height: 982 },
+      internal: false,
+    };
+    mocks.displays.splice(0, mocks.displays.length, mocks.primaryDisplay, firstDisplay, secondDisplay);
+    const service = new AgentIslandService({
+      getMainWindow: () => null,
+      nativeHost: { failed: false, publish },
+    });
+    syncEnabledForTest(service, publish);
+    service.registerIpc();
+
+    await registeredIpcHandler(AGENT_ISLAND_SET_DISPLAY_TARGET_CHANNEL)(null, {
+      mode: 'display',
+      displayId: 99,
+      displayName: 'Studio Display',
+      displayIndex: 3,
+      displayInternal: false,
+      displayBounds: secondDisplay.bounds,
+    });
+    service.handleUserPrompt({ sessionId: 's1', agentKind: 'codex' }, 'run tests');
+
+    expect(latestNativeFrames(publish).map((frame) => frame.displayId)).toEqual([7]);
   });
 
   it('stores and applies layout preferences independently per display', async () => {

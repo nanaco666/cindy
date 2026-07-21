@@ -40,6 +40,33 @@ function notifySubscribers(): void {
   for (const cb of subscribers) cb();
 }
 
+function persistAgentIslandDisplayTargetLocally(target: AgentIslandDisplayTarget): void {
+  if (sameAgentIslandDisplayTarget(getAgentIslandDisplayTarget(), target)) return;
+  try {
+    localStorage.setItem(DISPLAY_TARGET_STORAGE_KEY, JSON.stringify(target));
+  } catch {
+    // localStorage 不可用时忽略，主进程仍使用本次解析出的目标。
+    return;
+  }
+  notifySubscribers();
+}
+
+function sameAgentIslandDisplayTarget(
+  a: AgentIslandDisplayTarget,
+  b: AgentIslandDisplayTarget,
+): boolean {
+  if (a.mode !== b.mode) return false;
+  if (a.mode === 'all') return true;
+  if (b.mode !== 'display' || a.displayId !== b.displayId) return false;
+  return a.displayName === b.displayName
+    && a.displayIndex === b.displayIndex
+    && a.displayInternal === b.displayInternal
+    && a.displayBounds?.x === b.displayBounds?.x
+    && a.displayBounds?.y === b.displayBounds?.y
+    && a.displayBounds?.width === b.displayBounds?.width
+    && a.displayBounds?.height === b.displayBounds?.height;
+}
+
 export function isAgentIslandSupported(): boolean {
   return isAgentIslandSupportedPlatform(window.electronAPI?.platform, window.electronAPI?.osRelease);
 }
@@ -123,7 +150,11 @@ function getAgentIslandSetDisplayTargetApi():
 }
 
 function getAgentIslandGetDisplayOptionsApi():
-  | (() => Promise<{ ok: true; options: AgentIslandDisplayOption[] }>)
+  | (() => Promise<{
+      ok: true;
+      options: AgentIslandDisplayOption[];
+      target?: AgentIslandDisplayTarget;
+    }>)
   | null {
   const getDisplayOptions = window.electronAPI?.agentIsland?.getDisplayOptions;
   return typeof getDisplayOptions === 'function' ? getDisplayOptions : null;
@@ -202,6 +233,12 @@ export async function loadAgentIslandDisplayOptions(): Promise<AgentIslandDispla
   }
   try {
     const result = await getDisplayOptions();
+    const resolvedTarget = result.target
+      ? normalizeAgentIslandDisplayTarget(result.target)
+      : null;
+    if (resolvedTarget) {
+      persistAgentIslandDisplayTargetLocally(resolvedTarget);
+    }
     return normalizeAgentIslandDisplayOptions(result.options);
   } catch (err) {
     log.warn('agent island getDisplayOptions failed', err);
@@ -302,12 +339,7 @@ export async function setAgentIslandDisplayTarget(next: AgentIslandDisplayTarget
     notifySubscribers();
     return false;
   }
-  try {
-    localStorage.setItem(DISPLAY_TARGET_STORAGE_KEY, JSON.stringify(target));
-  } catch {
-    // ignore
-  }
-  notifySubscribers();
+  persistAgentIslandDisplayTargetLocally(target);
   return true;
 }
 
@@ -377,8 +409,21 @@ export function useAgentIslandSettings(): {
   }, []);
 
   const setDisplayTarget = useCallback((target: AgentIslandDisplayTarget) => {
-    void setAgentIslandDisplayTarget(target);
-  }, []);
+    let nextTarget = target;
+    if (target.mode === 'display') {
+      const option = displayOptions.find((item) => item.id === target.displayId);
+      if (option) {
+        nextTarget = {
+          ...target,
+          displayName: option.name || undefined,
+          displayIndex: option.index,
+          displayInternal: option.internal,
+          displayBounds: { ...option.bounds },
+        };
+      }
+    }
+    void setAgentIslandDisplayTarget(nextTarget);
+  }, [displayOptions]);
 
   const previewSound = useCallback((sound: AgentIslandSoundChoice) => {
     previewAgentIslandSound(sound);

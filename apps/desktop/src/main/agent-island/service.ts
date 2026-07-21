@@ -385,9 +385,20 @@ export class AgentIslandService {
 
     ipcMain.handle(AGENT_ISLAND_GET_DISPLAY_OPTIONS_CHANNEL, () => {
       this.nativeHost.prepare?.();
+      const displays = this.getAvailableDisplays();
+      const selectedDisplay = this.resolveSelectedDisplay(displays);
+      if (selectedDisplay) {
+        const resolvedTarget = this.displayTargetForDisplay(displays, selectedDisplay);
+        if (!sameAgentIslandDisplayTarget(this.displayTarget, resolvedTarget)) {
+          // Electron display ids are runtime-scoped. Only rewrite the persisted
+          // target after its saved identity resolves to a current display.
+          this.displayTarget = resolvedTarget;
+        }
+      }
       return {
         ok: true,
         options: this.getDisplayOptions(),
+        target: cloneAgentIslandDisplayTarget(this.displayTarget),
       };
     });
 
@@ -1315,10 +1326,89 @@ export class AgentIslandService {
   private getTargetDisplays(): Display[] {
     const displays = this.getAvailableDisplays();
     if (this.displayTarget.mode === 'display') {
-      const selectedDisplay = this.displayById(displays, this.displayTarget.displayId);
-      return selectedDisplay ? [selectedDisplay] : [this.getTargetDisplay(displays)];
+      const selectedDisplay = this.resolveSelectedDisplay(displays);
+      if (!selectedDisplay) {
+        // A temporary disconnect uses the current fallback for rendering only;
+        // keep the saved identity so reconnecting restores the user's choice.
+        return [this.getTargetDisplay(displays)];
+      }
+      const resolvedTarget = this.displayTargetForDisplay(displays, selectedDisplay);
+      if (!sameAgentIslandDisplayTarget(this.displayTarget, resolvedTarget)) {
+        this.displayTarget = resolvedTarget;
+      }
+      return [selectedDisplay];
     }
     return displays;
+  }
+
+  private resolveSelectedDisplay(displays: Display[]): Display | null {
+    if (this.displayTarget.mode !== 'display') return null;
+    if (hasPersistedDisplayIdentity(this.displayTarget)) {
+      // Runtime ids can be reassigned to a different physical monitor after a
+      // reboot, so a saved identity must win over an apparently valid old id.
+      return this.findDisplayByPersistedIdentity(displays, this.displayTarget);
+    }
+    return this.displayById(displays, this.displayTarget.displayId);
+  }
+
+  private displayTargetForDisplay(
+    displays: Display[],
+    display: Display,
+  ): Extract<AgentIslandDisplayTarget, { mode: 'display' }> {
+    return {
+      mode: 'display',
+      displayId: display.id,
+      displayName: typeof display.label === 'string' && display.label.trim()
+        ? display.label.trim()
+        : undefined,
+      displayIndex: displays.findIndex((item) => item.id === display.id) + 1,
+      displayInternal: Boolean(display.internal),
+      displayBounds: { ...display.bounds },
+    };
+  }
+
+  private findDisplayByPersistedIdentity(
+    displays: Display[],
+    target: Extract<AgentIslandDisplayTarget, { mode: 'display' }>,
+  ): Display | null {
+    let candidates = displays;
+    const name = target.displayName?.trim();
+    if (name) {
+      candidates = candidates.filter((display) => (
+        typeof display.label === 'string' && display.label.trim() === name
+      ));
+    }
+
+    if (typeof target.displayInternal === 'boolean') {
+      candidates = candidates.filter((display) => (
+        Boolean(display.internal) === target.displayInternal
+      ));
+    }
+
+    const persistedBounds = target.displayBounds;
+    if (persistedBounds) {
+      const exactBounds = candidates.filter((display) => (
+        sameDisplayBounds(display.bounds, persistedBounds)
+      ));
+      if (exactBounds.length === 1) return exactBounds[0] ?? null;
+      if (exactBounds.length > 1) {
+        candidates = exactBounds;
+      } else {
+        const sameSize = candidates.filter((display) => (
+          display.bounds.width === persistedBounds.width
+          && display.bounds.height === persistedBounds.height
+        ));
+        if (sameSize.length === 1) return sameSize[0] ?? null;
+        if (sameSize.length > 1) candidates = sameSize;
+      }
+    }
+
+    if (typeof target.displayIndex === 'number' && target.displayIndex >= 1) {
+      const byIndex = displays[target.displayIndex - 1];
+      if (byIndex && candidates.includes(byIndex)) return byIndex;
+    }
+
+    return candidates.length === 1 ? (candidates[0] ?? null) : null;
   }
 
   private normalizePreferredContentWidth(input: {
@@ -1601,10 +1691,36 @@ function getVisibleSessionIdsForReadAck(sessionId: string | string[] | null): st
   return Array.from(normalized);
 }
 
+function hasPersistedDisplayIdentity(
+  target: Extract<AgentIslandDisplayTarget, { mode: 'display' }>,
+): boolean {
+  return Boolean(target.displayName?.trim())
+    || typeof target.displayIndex === 'number'
+    || typeof target.displayInternal === 'boolean'
+    || target.displayBounds !== undefined;
+}
+
+function sameDisplayBounds(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+): boolean {
+  return a.x === b.x
+    && a.y === b.y
+    && a.width === b.width
+    && a.height === b.height;
+}
+
 function sameAgentIslandDisplayTarget(a: AgentIslandDisplayTarget, b: AgentIslandDisplayTarget): boolean {
   if (a.mode !== b.mode) return false;
   if (a.mode === 'all') return true;
-  return b.mode === 'display' && a.displayId === b.displayId;
+  if (b.mode !== 'display' || a.displayId !== b.displayId) return false;
+  return a.displayName === b.displayName
+    && a.displayIndex === b.displayIndex
+    && a.displayInternal === b.displayInternal
+    && a.displayBounds?.x === b.displayBounds?.x
+    && a.displayBounds?.y === b.displayBounds?.y
+    && a.displayBounds?.width === b.displayBounds?.width
+    && a.displayBounds?.height === b.displayBounds?.height;
 }
 
 function getAgentIslandSoundEventForTransition(
