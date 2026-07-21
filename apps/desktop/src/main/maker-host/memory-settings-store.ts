@@ -110,7 +110,7 @@ export function preserveLegacyMakerMemoryDisabled(
     // The new default is true, so keep an explicit legacy opt-in durable.
     return writeMemorySetting('maker', true, { preserveDefault: true }).value;
   }
-  if (legacyRendererValue === false || !state.value.claudeCode || !state.value.codex) {
+  if (legacyRendererValue === false) {
     return writeMemorySetting('maker', false).value;
   }
   return state.value;

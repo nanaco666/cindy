@@ -124,7 +124,7 @@ export async function bootstrapMemorySettingsFromMain(): Promise<void> {
         // failure prevent the main renderer tree from mounting.
         if (
           localWriteRevision === revisionAtStart &&
-          (legacyRendererValue === false || !settings.claudeCode || !settings.codex)
+          legacyRendererValue === false
         ) {
           // Keep the legacy opt-out in the process-local mirror even when the
           // main profile cannot be written, so sessions stay disabled now.

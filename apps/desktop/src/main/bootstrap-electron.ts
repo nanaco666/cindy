@@ -2105,6 +2105,8 @@ ipcMain.on('theme:apply-vibrancy', (_event, payload: { familyId: string; isDark:
         const maker = getMakerIfReady();
         if (!settings.maker && maker?.makerMemory?.isEnabled()) {
           await maker.makerMemory.disable();
+          await maker.setAgentMemory('claude-code', settings.claudeCode);
+          await maker.setAgentMemory('codex', settings.codex);
         }
         return settings;
       } catch (err) {
