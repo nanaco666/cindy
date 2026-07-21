@@ -35,7 +35,7 @@ import {
   Puzzle,
   RefreshCw,
   RadioTower,
-  Send,
+  SquarePen,
   X,
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -1174,9 +1174,7 @@ export default function HomeScreen() {
   }) => (
     <HomeListRow
       expandedAutomationGroups={expandedAutomationGroups}
-      inPinnedGroup={section.key === 'pinned' && !pinnedCollapsed}
       isLastPinnedRow={section.key === 'pinned' && index === section.data.length - 1 && sections.length > 1}
-      pinnedGroupEnd={section.key === 'pinned' && index === section.data.length - 1}
       item={item}
       nextIsBlock={isBlockHomeRow(section.data[index + 1])}
       onArchive={archiveSession}
@@ -1309,30 +1307,21 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityState={{ expanded: !pinnedCollapsed }}
               onPress={togglePinned}
-              style={({ pressed }) => [
-                styles.projectRow,
-                styles.pinnedHeader,
-                !pinnedCollapsed && home.pinned.length > 0 && styles.pinnedHeaderExpanded,
-                pressed && styles.pressed,
-              ]}
+              style={({ pressed }) => [styles.projectRow, pressed && styles.pressed]}
               testID="home.pinnedHeader"
             >
-              <View style={styles.projectChevronSlot}>
-                {pinnedCollapsed ? (
-                  <ChevronRight color={colors.textSecondary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
-                ) : (
-                  <ChevronDown color={colors.textSecondary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
-                )}
-              </View>
-              <View style={styles.projectIconSlot}>
-                <Pin color={colors.textSecondary} size={iconSize.md} strokeWidth={iconStroke.thin} />
-              </View>
+              {pinnedCollapsed ? (
+                <ChevronRight color={colors.textSecondary} size={iconSize.xl} strokeWidth={iconStroke.regular} />
+              ) : (
+                <ChevronDown color={colors.textSecondary} size={iconSize.xl} strokeWidth={iconStroke.regular} />
+              )}
+              <Pin color={colors.textSecondary} size={iconSize.action} strokeWidth={iconStroke.thin} />
               <Text style={styles.projectTitle} numberOfLines={1}>{section.title}</Text>
               <Text style={styles.projectCount} numberOfLines={1}>{home.pinned.length}</Text>
             </Pressable>
           );
         }}
-        renderSectionFooter={({ section }) => section.key === 'pinned' && sections.length > 1 && pinnedCollapsed
+        renderSectionFooter={({ section }) => section.key === 'pinned' && sections.length > 1
           // 置顶区底部一根全宽线,把置顶对话与下面的其他对话分开(仅当下方还有其他分区时才画;
           // 下方首行是块时不画 —— 块自己的全宽顶线就是这根分割线)。
           && !isBlockHomeRow(sections[1]?.data[0]) ? (
@@ -1401,12 +1390,7 @@ export default function HomeScreen() {
           ]}
           testID="home.newChatButton"
         >
-          <Send
-            color={colors.ctaText}
-            fill={colors.ctaText}
-            size={iconSize.listGlyph}
-            strokeWidth={iconStroke.medium}
-          />
+          <SquarePen color={colors.ctaText} size={iconSize.xxl} strokeWidth={iconStroke.regular} />
         </Pressable>
       )}
 
@@ -1916,20 +1900,16 @@ function ProjectRow({
         style={({ pressed }) => [styles.projectRow, pressed && styles.pressed]}
         testID="home.projectRow"
       >
-        <View style={styles.projectChevronSlot}>
-          {collapsed ? (
-            <ChevronRight color={colors.textSecondary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
-          ) : (
-            <ChevronDown color={colors.textSecondary} size={iconSize.xs} strokeWidth={iconStroke.regular} />
-          )}
-        </View>
-        <View style={styles.projectIconSlot}>
-          {collapsed ? (
-            <Folder color={colors.textSecondary} size={iconSize.md} strokeWidth={iconStroke.thin} />
-          ) : (
-            <FolderOpen color={colors.textSecondary} size={iconSize.md} strokeWidth={iconStroke.thin} />
-          )}
-        </View>
+        {collapsed ? (
+          <ChevronRight color={colors.textSecondary} size={iconSize.xl} strokeWidth={iconStroke.regular} />
+        ) : (
+          <ChevronDown color={colors.textSecondary} size={iconSize.xl} strokeWidth={iconStroke.regular} />
+        )}
+        {collapsed ? (
+          <Folder color={colors.textSecondary} size={iconSize.xl} strokeWidth={iconStroke.thin} />
+        ) : (
+          <FolderOpen color={colors.textSecondary} size={iconSize.xl} strokeWidth={iconStroke.thin} />
+        )}
         <Text style={styles.projectTitle} numberOfLines={1}>{project.title}</Text>
         <Text style={styles.projectCount} numberOfLines={1}>{project.sessionCount}</Text>
       </Pressable>
@@ -1949,7 +1929,7 @@ function ProjectRow({
                 onToggleAutomationGroup={onToggleAutomationGroup}
                 swipe={swipe}
                 testID="home.projectSessionRow"
-                variant="cindyList"
+                variant="legacy"
               />
             );
             // 与顶层同一条规则:普通会话子行挂滑动,自动化组行不挂(组行语义含混,
@@ -2011,7 +1991,6 @@ const HomeListRow = memo(HomeListRowInner, dataPropsEqual);
 
 function HomeListRowInner({
   expandedAutomationGroups,
-  inPinnedGroup,
   isLastPinnedRow,
   item,
   nextIsBlock,
@@ -2023,7 +2002,6 @@ function HomeListRowInner({
   onToggleAutomationGroup,
   onToggleProject,
   onTogglePin,
-  pinnedGroupEnd,
   prevIsBlock,
   projectCollapsed,
   registry,
@@ -2031,7 +2009,6 @@ function HomeListRowInner({
 }: {
   expandedAutomationGroups: readonly string[];
   /** 置顶组展开态:行进入置顶卡片内的缩进/描边形态(CINDY list 视觉)。 */
-  inPinnedGroup: boolean;
   isLastPinnedRow: boolean;
   item: HomeRow;
   nextIsBlock: boolean;
@@ -2043,8 +2020,6 @@ function HomeListRowInner({
   onToggleAutomationGroup(key: string): void;
   onToggleProject(key: string): void;
   onTogglePin(session: RemoteSession): void;
-  /** 置顶组最后一行:补置顶卡片的底部圆角/外描边收口。 */
-  pinnedGroupEnd: boolean;
   prevIsBlock: boolean;
   projectCollapsed: boolean;
   registry: ReturnType<typeof createSwipeRowRegistry>;
@@ -2068,12 +2043,9 @@ function HomeListRowInner({
   }
   const row = (
     <HomeSessionRow
-      asBlock={!inPinnedGroup}
+      asBlock
       expandedAutomationGroups={expandedAutomationGroups}
-      hideDivider={nextIsBlock || isLastPinnedRow || inPinnedGroup}
-      inOutlinedGroup={inPinnedGroup}
-      groupEnd={inPinnedGroup && pinnedGroupEnd}
-      indented={inPinnedGroup}
+      hideDivider={nextIsBlock || isLastPinnedRow}
       item={item.item}
       onOpenAutomationGroup={onOpenAutomationGroup}
       onOpenSession={onOpenSession}
@@ -2081,7 +2053,7 @@ function HomeListRowInner({
       suppressBlockTopBorder={prevIsBlock}
       swipe={swipe}
       testID={homeSessionRowTestId(item.source)}
-      variant="cindyList"
+      variant="legacy"
     />
   );
   // 普通会话行(含置顶区)在这里挂滑动操作;自动化组行不挂 —— 组行代表多次运行,
@@ -2696,9 +2668,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
+    // 页头下缘补 hairline 分割(用户定稿 2026-07-21:页头与列表之间要有界),
+    // 间距从 margin 改 padding 让线贴住列表顶。
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     minHeight: HOME_HEADER_MIN_HEIGHT,
-    marginBottom: spacing.md,
-    paddingHorizontal: CINDY_LIST_GUTTER,
+    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.lg,
   },
   headerDropdown: {
     alignItems: 'center',
@@ -2928,10 +2904,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   listContent: {
     flexGrow: 1,
     paddingBottom: 83,
-    paddingHorizontal: CINDY_LIST_GUTTER,
     paddingTop: 0,
   },
-  pinnedFooter: { height: 0 },
+  // 置顶区收尾线:回 XD-Maker 原版 hairline(换肤卡片化曾置 0,通栏回退一并恢复)。
+  pinnedFooter: { backgroundColor: colors.border, height: StyleSheet.hairlineWidth },
   initialLoadingState: {
     alignItems: 'center',
     gap: spacing.sm,
@@ -2945,64 +2921,45 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   projectGroup: {
     backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: radius.container,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: CINDY_LIST_ROW_GAP,
-    overflow: 'hidden',
+    // 全宽分割线挂在项目组的顶部与底部:把整个项目块与上方/下方的普通对话分开,
+    // 而非分隔项目头与其下属会话(项目头 → 内容之间保持连续无线)。
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderRadius: 0, // 显式方角覆盖,非漂移
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderWidth: 0,
   },
   projectGroupNoTop: {
-  },
-  pinnedHeader: {
-    borderColor: colors.border,
-    borderRadius: radius.container,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: CINDY_LIST_ROW_GAP,
-    overflow: 'hidden',
-  },
-  pinnedHeaderExpanded: {
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    borderBottomWidth: 0,
-    marginBottom: 0,
+    // 前一行也是块时不画顶线,避免两根 hairline 叠成一根粗线。
+    borderTopWidth: 0,
   },
   projectRow: {
     alignItems: 'center',
-    backgroundColor: colors.surfaceListRow,
+    backgroundColor: colors.surface,
     flexDirection: 'row',
-    gap: spacing.sm,
-    height: CINDY_LIST_ROW_HEIGHT,
-    paddingLeft: 18,
-    paddingRight: 18,
-  },
-  projectChevronSlot: {
-    alignItems: 'center',
-    height: iconSize.xl,
-    justifyContent: 'center',
-    width: iconSize.xs,
-  },
-  projectIconSlot: {
-    alignItems: 'center',
-    height: iconSize.xl,
-    justifyContent: 'center',
-    width: iconSize.md,
+    gap: 8,
+    minHeight: 56,
+    paddingLeft: spacing.md,
+    paddingRight: spacing.lg,
+    paddingVertical: spacing.sm,
   },
   projectTitle: {
-    color: colors.textSecondary,
+    color: colors.textPrimary,
     flex: 1,
-    fontSize: typeScale.listBody,
-    fontWeight: fontWeight.semibold,
-    lineHeight: lineHeight.listBody,
+    fontSize: typeScale.body,
+    fontWeight: fontWeight.medium,
+    lineHeight: lineHeight.listTitle,
     minWidth: 0,
   },
   projectCount: {
-    color: colors.textSecondary,
-    fontSize: typeScale.micro,
+    color: colors.textTertiary,
+    fontSize: typeScale.footnote,
     fontWeight: fontWeight.regular,
-    lineHeight: lineHeight.micro,
+    lineHeight: lineHeight.subtitle,
   },
   projectChildren: {
-    backgroundColor: colors.surfaceListExpanded,
+    backgroundColor: colors.surface,
   },
   projectViewAllRow: {
     // 永远是项目块的最后一个元素:不画自己的下线,块底部的全宽线就是分割线
@@ -3010,16 +2967,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: spacing.sm,
-    height: CINDY_LIST_ROW_HEIGHT,
-    paddingLeft: 55,
-    paddingRight: 18,
+    minHeight: 54,
+    paddingLeft: 48,
+    paddingRight: spacing.lg,
   },
   projectViewAllText: {
     color: colors.textSecondary,
     flex: 1,
-    fontSize: typeScale.listBody,
+    fontSize: typeScale.body,
     fontWeight: fontWeight.medium,
-    lineHeight: lineHeight.listBody,
+    lineHeight: lineHeight.body,
   },
   sessionListRow: {
     alignItems: 'stretch',

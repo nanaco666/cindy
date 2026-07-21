@@ -67,11 +67,10 @@ describe('mobile home desktop-first surface', () => {
     expect(source).toContain('backgroundColor: colors.surface');
     expect(source).toContain('borderBottomColor: colors.border');
     expect(source).toContain('colors.homeListFab');
-    expect(source).toContain('Send,');
-    expect(source).toContain('<Send\n            color={colors.ctaText}');
-    expect(source).toContain('fill={colors.ctaText}');
-    expect(source).toContain('size={iconSize.listGlyph}');
-    expect(source).toContain('strokeWidth={iconStroke.medium}');
+    // 2026-07-21 通栏回退:FAB 图标退回 XD-Maker 原版 SquarePen(用户定稿),尺寸/描边同回原档。
+    expect(source).toContain('SquarePen,');
+    expect(source).toContain('<SquarePen color={colors.ctaText} size={iconSize.xxl} strokeWidth={iconStroke.regular} />');
+    expect(source).not.toContain('<Send');
     expect(source).not.toContain('function HomeNewChatGlyph');
     expect(source).not.toContain("import Svg, { Path } from 'react-native-svg';");
     expect(source).not.toContain(`colors.${removedListTokenPrefix}Background`);
@@ -282,12 +281,15 @@ describe('mobile home desktop-first surface', () => {
     expect(sessionRowSource).not.toContain('SessionBadge');
     expect(source).toContain('const HOME_SESSION_ROW_HEIGHT = 78;');
     expect(source).toContain('const CINDY_LIST_ROW_HEIGHT = 60;');
-    expect(source).toContain('variant="cindyList"');
+    // 用户改稿 2026-07-21:列表首页回退 XD-MAKER 通栏样式(legacy 变体),色彩体系沿用 07-20 定稿。
+    expect(source).toContain('variant="legacy"');
+    expect(source).not.toContain('variant="cindyList"');
     expect(source).toContain("type HomeSessionRowVariant = 'legacy' | 'cindyList';");
     expect(stylesSource).toContain('height: HOME_SESSION_ROW_HEIGHT');
     expect(stylesSource).toContain('height: CINDY_LIST_ROW_HEIGHT');
     expect(stylesSource).toContain('height: lineHeight.micro');
-    expect(stylesSource).toContain('projectChildren: {\n    backgroundColor: colors.surfaceListExpanded');
+    // 通栏回退:项目子行回 surface 全宽底(用户改稿 2026-07-21)。
+    expect(stylesSource).toContain('projectChildren: {\n    backgroundColor: colors.surface,');
     expect(stylesSource).toContain('sessionListRowIndentedCindy: {\n    backgroundColor: colors.surfaceListExpanded');
     expect(stylesSource).toContain('sessionListRowDeepIndentedCindy: {\n    backgroundColor: colors.surfaceListExpanded');
     expect(stylesSource).toContain('automationGroupChildrenCindy: {\n    backgroundColor: colors.surfaceListExpanded');

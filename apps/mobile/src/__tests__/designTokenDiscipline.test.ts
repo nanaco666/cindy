@@ -35,6 +35,7 @@ const ALLOWLIST: Array<{ file: string; snippet: string; reason: string }> = [
   { file: 'app/sessions/[sessionId].tsx', snippet: 'strokeWidth={0}', reason: '实心填充图标,零描边为语义本身' },
   { file: 'app/files/[sessionId].tsx', snippet: 'borderRadius: 2', reason: '文档缩略图卡刻意 2px 锐角(iOS Files 风格)' },
   { file: 'src/session/ComposerAttachmentTray.tsx', snippet: 'size={10} strokeWidth={2.5}', reason: '标注角标微徽标几何(红底 12px 徽标内画笔,阶梯档过大)' },
+  { file: 'app/devices/index.tsx', snippet: 'borderRadius: 0', reason: '显式方角覆盖,非漂移(通栏布局回退恢复,用户改稿 2026-07-21)' },
 ];
 
 function collectFiles(): string[] {

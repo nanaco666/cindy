@@ -42,8 +42,8 @@ import type { RemoteSession } from '@/session/types';
 import { iconSize, iconStroke, useTheme, useThemedStyles, type ThemeColors } from '@/theme';
 import { radius, spacing } from '@/theme/tokens';
 
-/** 圆形按钮直径(静置态是正圆,拖长后变胶囊;适配 M2 60pt 卡片行)。 */
-const BUTTON_SIZE = 48;
+/** 圆形按钮直径(静置态是正圆,拖长后变胶囊;78 高的行内上下各留 11)。 */
+const BUTTON_SIZE = 56;
 /** 按钮与行边缘 / 屏幕边缘 / 相邻按钮的间距(iOS 26 的悬浮圆钮留白比色块时代更宽)。 */
 const BUTTON_GAP = spacing.md;
 /** 左面板(置顶):gap + 圆 + gap;右面板(选项 + 归档):gap + 圆 + gap + 圆 + gap。 */
@@ -53,7 +53,7 @@ const RIGHT_PANEL_WIDTH = BUTTON_GAP * 3 + BUTTON_SIZE * 2;
 const FULL_SWIPE_RATIO = 0.55;
 /** 「归档」按钮越过全滑阈值时扩展盖满右侧面板的过渡时长。 */
 const ARM_ANIMATION_MS = 150;
-const ICON_SIZE = iconSize.action;
+const ICON_SIZE = 23;
 
 /**
  * 页面级滑动控制 bundle:registry + 三个动作回调打包成一个稳定引用(useMemo),
