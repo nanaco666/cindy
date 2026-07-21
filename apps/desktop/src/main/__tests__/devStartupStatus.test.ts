@@ -8,6 +8,8 @@ import {
   beginDesktopDevInstance,
   markDesktopDevReady,
   markDesktopDevStartupFailed,
+  markDesktopDevWindowReady,
+  recordDesktopDevLocalDbStartupResult,
 } from '../devStartupStatus.js';
 
 describe('devStartupStatus', () => {
@@ -28,7 +30,7 @@ describe('devStartupStatus', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('persists source metadata and marks both records ready', () => {
+  it('marks startup ready only after both the window and application are ready', () => {
     fs.writeFileSync(statusPath, '{"state":"pending"}\n');
     cleanup = beginDesktopDevInstance({
       userDataDir: tempDir,
@@ -41,6 +43,16 @@ describe('devStartupStatus', () => {
       instanceId: 'test-owner',
       startedAtMs: 100,
     });
+
+    markDesktopDevWindowReady();
+
+    expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({
+      state: 'window-ready',
+    });
+    expect(JSON.parse(fs.readFileSync(
+      path.join(tempDir, '.dev-instances', '4242.json'),
+      'utf8',
+    ))).toMatchObject({ state: 'starting' });
 
     markDesktopDevReady();
 
@@ -56,6 +68,23 @@ describe('devStartupStatus', () => {
       mode: 'remote',
       passive: true,
     });
+  });
+
+  it('supports application readiness arriving before ready-to-show', () => {
+    fs.writeFileSync(statusPath, '{"state":"pending"}\n');
+    cleanup = beginDesktopDevInstance({
+      userDataDir: tempDir,
+      rootDir: tempDir,
+      passive: false,
+      isolated: false,
+      pid: 4245,
+    });
+
+    markDesktopDevReady();
+    expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({ state: 'pending' });
+
+    markDesktopDevWindowReady();
+    expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({ state: 'ready' });
   });
 
   it('preserves a concrete main-process failure for the restart waiter', () => {
@@ -87,6 +116,54 @@ describe('devStartupStatus', () => {
       state: 'failed',
       failure: { code: 'SINGLE_INSTANCE_OWNED' },
     });
+  });
+
+  it('forwards the localDb migration code and message to the restart waiter', () => {
+    fs.writeFileSync(statusPath, '{"state":"pending"}\n');
+    cleanup = beginDesktopDevInstance({
+      userDataDir: tempDir,
+      rootDir: tempDir,
+      passive: false,
+      isolated: false,
+      pid: 4247,
+    });
+
+    markDesktopDevWindowReady();
+    recordDesktopDevLocalDbStartupResult({
+      ready: false,
+      error: {
+        code: 'MIGRATE_FAILED',
+        message: 'applied migration runtime identity changed at seq 77 (0077_nebulous_veda.sql)',
+      },
+    });
+
+    expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({
+      state: 'failed',
+      code: 'MIGRATE_FAILED',
+      message: expect.stringContaining('seq 77 (0077_nebulous_veda.sql)'),
+      detail: { phase: 'local-db:ensure-ready' },
+    });
+  });
+
+  it('does not replace a completed startup with a later runtime failure', () => {
+    fs.writeFileSync(statusPath, '{"state":"pending"}\n');
+    cleanup = beginDesktopDevInstance({
+      userDataDir: tempDir,
+      rootDir: tempDir,
+      passive: false,
+      isolated: false,
+      pid: 4246,
+    });
+
+    markDesktopDevWindowReady();
+    markDesktopDevReady();
+    markDesktopDevStartupFailed('MIGRATE_FAILED', 'late failure');
+
+    expect(JSON.parse(fs.readFileSync(statusPath, 'utf8'))).toMatchObject({ state: 'ready' });
+    expect(JSON.parse(fs.readFileSync(
+      path.join(tempDir, '.dev-instances', '4246.json'),
+      'utf8',
+    ))).toMatchObject({ state: 'ready' });
   });
 
   it('cleanup never deletes a record that has been replaced by another owner', () => {

@@ -62,6 +62,7 @@ import { runSchemaStartupPolicy } from './schemaStartupPolicy';
 import { buildSharedDbCompatibilityMessage } from './sharedDbCompatibilityMessage';
 
 import { createLogger } from '../logger';
+import { recordDesktopDevLocalDbStartupResult } from '../devStartupStatus';
 
 const log = createLogger('localDb');
 
@@ -101,12 +102,14 @@ function dbPath(userId: string): string {
   return path.join(app.getPath('userData'), `${BRAND_IDENTITY.dbFilePrefix}-${userId}.db`);
 }
 
+type EnsureReadyErrorCode = 'DB_INIT_FAILED' | 'DB_CORRUPT_NO_BACKUP' | 'MIGRATE_FAILED';
+
 export type EnsureReadyResult =
   | { ready: true }
   | {
       ready: false;
       error: {
-        code: 'DB_INIT_FAILED' | 'DB_CORRUPT_NO_BACKUP' | 'MIGRATE_FAILED';
+        code: EnsureReadyErrorCode;
         message: string;
       };
     };
@@ -153,7 +156,7 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
       const message =
         'passive dev 暂时无法打开共享数据库：另一个实例正在执行 schema migration。' +
         '请稍后重试，或改用 --isolated。';
-      showFatalDialog('passive dev 等待数据库迁移', message);
+      showFatalDialog('passive dev 等待数据库迁移', message, 'MIGRATE_FAILED');
       return { ready: false, error: { code: 'MIGRATE_FAILED', message } };
     }
     readerLeaseAcquiredThisCall = leaseResult.newlyAcquired;
@@ -166,7 +169,7 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
       const message =
         `当前不能执行数据库 schema 启动维护${readerHint}。` +
         '请先关闭共享该 userData 的 passive dev 后重试，或让这些实例使用 --isolated。';
-      showFatalDialog('数据库 schema 正被其它实例使用', message);
+      showFatalDialog('数据库 schema 正被其它实例使用', message, 'MIGRATE_FAILED');
       return { ready: false, error: { code: 'MIGRATE_FAILED', message } };
     }
     startupWriterLease = leaseResult.lease;
@@ -198,7 +201,11 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
         const passiveMessage =
           'passive dev 检测到共享数据库损坏，但不会在其它实例可能运行时自动恢复。' +
           '请关闭 passive 实例后用 primary 启动恢复，或改用 --isolated。';
-        showFatalDialog('passive dev 无法恢复共享数据库', passiveMessage);
+        showFatalDialog(
+          'passive dev 无法恢复共享数据库',
+          passiveMessage,
+          'DB_CORRUPT_NO_BACKUP',
+        );
         releaseSchemaLeasesAfterFailure();
         return {
           ready: false,
@@ -207,7 +214,7 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
       }
       const restored = tryRestoreWithFallback(filePath);
       if (!restored) {
-        showFatalDialog('数据库损坏且无可用备份', message);
+        showFatalDialog('数据库损坏且无可用备份', message, 'DB_CORRUPT_NO_BACKUP');
         releaseSchemaLeasesAfterFailure();
         return { ready: false, error: { code: 'DB_CORRUPT_NO_BACKUP', message } };
       }
@@ -215,7 +222,7 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
         _db = openWithPragmas(filePath);
       } catch (reopenErr) {
         const reopenMsg = reopenErr instanceof Error ? reopenErr.message : String(reopenErr);
-        showFatalDialog('数据库恢复后仍无法打开', reopenMsg);
+        showFatalDialog('数据库恢复后仍无法打开', reopenMsg, 'DB_CORRUPT_NO_BACKUP');
         releaseSchemaLeasesAfterFailure();
         return { ready: false, error: { code: 'DB_CORRUPT_NO_BACKUP', message: reopenMsg } };
       }
@@ -232,7 +239,7 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
         }
       }
     } else {
-      showFatalDialog('无法初始化本地数据库', message);
+      showFatalDialog('无法初始化本地数据库', message, 'DB_INIT_FAILED');
       releaseSchemaLeasesAfterFailure();
       return { ready: false, error: { code: 'DB_INIT_FAILED', message } };
     }
@@ -241,7 +248,7 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
   const db = _db;
   if (!db) {
     const message = 'localDb connection missing after open';
-    showFatalDialog('无法初始化本地数据库', message);
+    showFatalDialog('无法初始化本地数据库', message, 'DB_INIT_FAILED');
     releaseSchemaLeasesAfterFailure();
     return { ready: false, error: { code: 'DB_INIT_FAILED', message } };
   }
@@ -309,7 +316,7 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
         }),
       );
       closeDb({ preserveSchemaMigrationLease: !readerLeaseAcquiredThisCall });
-      showFatalDialog('当前开发版与本地数据版本不兼容', message);
+      showFatalDialog('当前开发版与本地数据版本不兼容', message, 'MIGRATE_FAILED');
       return { ready: false, error: { code: 'MIGRATE_FAILED', message } };
     }
     if (schemaStartup.compatibility) {
@@ -333,7 +340,7 @@ export async function ensureReady(userId: string): Promise<EnsureReadyResult> {
       }),
     );
     closeDb({ preserveSchemaMigrationLease: !readerLeaseAcquiredThisCall });
-    showFatalDialog('本地数据库 schema 迁移失败', message);
+    showFatalDialog('本地数据库 schema 迁移失败', message, 'MIGRATE_FAILED');
     return { ready: false, error: { code: 'MIGRATE_FAILED', message } };
   } finally {
     startupWriterLease?.release();
@@ -714,7 +721,14 @@ function promptDevNukeOnResidual(
   }
 }
 
-function showFatalDialog(title: string, detail: string): void {
+function showFatalDialog(title: string, detail: string, code: EnsureReadyErrorCode): void {
+  // showMessageBoxSync blocks the main process until a person dismisses it. Report
+  // first so an agent waiting in `pnpm restart:desktop:*` receives the concrete
+  // database failure without depending on UI interaction.
+  recordDesktopDevLocalDbStartupResult({
+    ready: false,
+    error: { code, message: detail },
+  });
   try {
     dialog.showMessageBoxSync({
       type: 'error',

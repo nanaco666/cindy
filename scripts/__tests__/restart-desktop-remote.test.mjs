@@ -196,11 +196,33 @@ test("desktop readiness waiter removes an acknowledged ready status", async () =
 	}
 });
 
+test("desktop readiness waiter keeps waiting after ready-to-show and surfaces database failure", async () => {
+	const statusPath = fileURLToPath(new URL(`./startup-db-failed-${process.pid}.json`, import.meta.url));
+	try {
+		fs.writeFileSync(statusPath, '{"state":"window-ready","pid":123}\n');
+		setTimeout(() => {
+			fs.writeFileSync(statusPath, JSON.stringify({
+				state: "failed",
+				code: "MIGRATE_FAILED",
+				message: "applied migration runtime identity changed at seq 77 (0077_nebulous_veda.sql)",
+			}) + "\n");
+		}, 10);
+
+		await assert.rejects(
+			waitForDesktopStartup(statusPath, 1_000),
+			/MIGRATE_FAILED.*seq 77.*0077_nebulous_veda\.sql/,
+		);
+		assert.equal(fs.existsSync(statusPath), false);
+	} finally {
+		fs.rmSync(statusPath, { force: true });
+	}
+});
+
 test("desktop readiness timeout leaves an abandoned tombstone for late Electron events", async () => {
 	const statusPath = fileURLToPath(new URL(`./startup-timeout-${process.pid}.json`, import.meta.url));
 	try {
 		fs.writeFileSync(statusPath, '{"state":"pending"}\n');
-		await assert.rejects(waitForDesktopStartup(statusPath, 0), /did not reach main-window readiness/);
+		await assert.rejects(waitForDesktopStartup(statusPath, 0), /did not finish window\/auth\/database startup/);
 		assert.equal(readDesktopStartupStatus(statusPath)?.state, "abandoned");
 	} finally {
 		fs.rmSync(statusPath, { force: true });

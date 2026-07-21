@@ -68,7 +68,7 @@ function writeFailedStatus(detail) {
   writeStatus(statusPath, {
     state: 'failed',
     code: 'DEV_PROCESS_EXITED',
-    message: 'The desktop dev process exited before the main window became ready.',
+    message: 'The desktop dev process exited before window/auth/database startup completed.',
     ...detail,
     pid: process.pid,
     at: Date.now(),
