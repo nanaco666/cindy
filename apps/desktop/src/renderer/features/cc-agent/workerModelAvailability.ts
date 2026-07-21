@@ -14,11 +14,10 @@ export interface SelectWorkerModelsOptions {
 /**
  * Resolve the models that the Worker creation form may submit.
  *
- * Local sessions preserve the existing behavior: capabilities are authoritative and budget
- * Codex models additionally require the local XD provider. Modern device-link peers are stricter:
- * the model must be offered by a connected provider on the controlled device. Older peers that do
- * not implement `maker:provider:list` fall back to that same device's capabilities, never to the
- * controller's provider catalog.
+ * Capabilities define what the agent can understand, while the connected provider snapshot defines
+ * what it can actually execute. Codex therefore intersects both snapshots locally and remotely.
+ * Older device-link peers that do not implement `maker:provider:list` fall back to that same
+ * device's capabilities, never to the controller's provider catalog.
  */
 export function selectWorkerModels({
   agent,
@@ -32,8 +31,14 @@ export function selectWorkerModels({
 
   if (!deviceId) {
     if (agent !== 'codex') return models;
-    const xdConnected = providers.some((provider) => provider.id === 'xd' && provider.connected);
-    return models.filter((model) => xdConnected || !model.id.startsWith('codex/'));
+    return models.filter((model) =>
+      providers.some(
+        (provider) =>
+          provider.connected &&
+          provider.agents.includes(agent) &&
+          providerOffersModel(provider, model.id, agent),
+      ),
+    );
   }
 
   if (providersError) return models;

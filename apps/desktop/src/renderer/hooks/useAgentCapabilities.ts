@@ -85,16 +85,20 @@ interface DeviceLinkShape {
 }
 
 function getMakerApi(): MakerApiShape | null {
-  const api = (window as unknown as {
-    electronAPI?: { maker?: MakerApiShape };
-  }).electronAPI?.maker;
+  const api = (
+    window as unknown as {
+      electronAPI?: { maker?: MakerApiShape };
+    }
+  ).electronAPI?.maker;
   return api ?? null;
 }
 
 function getDeviceLink(): DeviceLinkShape | null {
-  const dl = (window as unknown as {
-    electronAPI?: { deviceLink?: DeviceLinkShape };
-  }).electronAPI?.deviceLink;
+  const dl = (
+    window as unknown as {
+      electronAPI?: { deviceLink?: DeviceLinkShape };
+    }
+  ).electronAPI?.deviceLink;
   return dl ?? null;
 }
 
@@ -112,8 +116,13 @@ const inflight = new Map<CacheKey, Promise<AgentCapabilities>>();
 let localGen = 0;
 /** 已挂载 hook 的本地能力订阅者；刷新完成后一次性切到新快照，避免中途空白帧。 */
 const localListeners = new Set<(agent: AgentKind, caps: AgentCapabilities) => void>();
+/** 远程能力缓存事件；驱逐时先标 stale，成功 / 失败后再结束这一轮刷新。 */
+export type DeviceCapabilitiesEvent =
+  | { status: 'loading' }
+  | { status: 'ready'; capabilities: AgentCapabilities }
+  | { status: 'error'; error: string };
 /** 已挂载的远程能力订阅者；key 同缓存，provider revision 后可原子换入新快照。 */
-const remoteListeners = new Map<CacheKey, Set<(caps: AgentCapabilities) => void>>();
+const remoteListeners = new Map<CacheKey, Set<(event: DeviceCapabilitiesEvent) => void>>();
 /**
  * 每被控设备的能力「代际」。`evictDeviceCapabilities` 时自增——在途的 fetchCapabilities 完成
  * 回调据此判断「本次请求是否已被驱逐」:被驱逐则**丢弃结果**,既不回写 cache、也不动 inflight
@@ -126,19 +135,19 @@ const deviceGen = new Map<string, number>();
 function notifyRemoteCapabilities(
   deviceId: string,
   agentKind: AgentKind,
-  caps: AgentCapabilities,
+  event: DeviceCapabilitiesEvent,
 ): void {
-  for (const listener of remoteListeners.get(cacheKey(agentKind, deviceId)) ?? []) listener(caps);
+  for (const listener of remoteListeners.get(cacheKey(agentKind, deviceId)) ?? []) listener(event);
 }
 
 /** 订阅某被控端某 agent 的能力快照；只通知当前代际成功提交的完整结果。 */
 export function subscribeDeviceCapabilities(
   deviceId: string,
   agentKind: AgentKind,
-  listener: (caps: AgentCapabilities) => void,
+  listener: (event: DeviceCapabilitiesEvent) => void,
 ): () => void {
   const key = cacheKey(agentKind, deviceId);
-  const bucket = remoteListeners.get(key) ?? new Set<(caps: AgentCapabilities) => void>();
+  const bucket = remoteListeners.get(key) ?? new Set<(event: DeviceCapabilitiesEvent) => void>();
   bucket.add(listener);
   remoteListeners.set(key, bucket);
   return () => {
@@ -147,7 +156,10 @@ export function subscribeDeviceCapabilities(
   };
 }
 
-async function fetchCapabilities(agentKind: AgentKind, deviceId?: string): Promise<AgentCapabilities> {
+async function fetchCapabilities(
+  agentKind: AgentKind,
+  deviceId?: string,
+): Promise<AgentCapabilities> {
   const key = cacheKey(agentKind, deviceId);
   const cached = cache.get(key);
   if (cached) return cached;
@@ -155,7 +167,7 @@ async function fetchCapabilities(agentKind: AgentKind, deviceId?: string): Promi
   if (ip) return ip;
 
   // 捕获发起时的设备代际;回调里若代际已变(被 evict)则认为本次请求作废。
-  const startGen = deviceId ? deviceGen.get(deviceId) ?? 0 : localGen;
+  const startGen = deviceId ? (deviceGen.get(deviceId) ?? 0) : localGen;
   const isCurrent = (): boolean =>
     deviceId ? (deviceGen.get(deviceId) ?? 0) === startGen : localGen === startGen;
 
@@ -177,7 +189,8 @@ async function fetchCapabilities(agentKind: AgentKind, deviceId?: string): Promi
       if (isCurrent()) {
         cache.set(key, caps);
         inflight.delete(key);
-        if (deviceId) notifyRemoteCapabilities(deviceId, agentKind, caps);
+        if (deviceId)
+          notifyRemoteCapabilities(deviceId, agentKind, { status: 'ready', capabilities: caps });
       } else if (!deviceId) {
         // 本地热刷新可能已原子换入更新快照；旧请求的调用方也应拿当前 cache，不能在
         // listener 更新之后又把 hook state 覆盖回旧对象。刷新仍在途时保留旧对象，完成后再通知。
@@ -186,7 +199,15 @@ async function fetchCapabilities(agentKind: AgentKind, deviceId?: string): Promi
       return caps;
     })
     .catch((e) => {
-      if (isCurrent()) inflight.delete(key);
+      if (isCurrent()) {
+        inflight.delete(key);
+        if (deviceId) {
+          notifyRemoteCapabilities(deviceId, agentKind, {
+            status: 'error',
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
       throw e;
     });
   inflight.set(key, p);
@@ -204,19 +225,36 @@ export function useAgentCapabilities(
   deviceId?: string,
 ): UseAgentCapabilitiesResult {
   const [capabilities, setCapabilities] = useState<AgentCapabilities | null>(
-    agentKind ? cache.get(cacheKey(agentKind, deviceId)) ?? null : null,
+    agentKind ? (cache.get(cacheKey(agentKind, deviceId)) ?? null) : null,
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!agentKind) return undefined;
+    const applyRemoteEvent = (event: DeviceCapabilitiesEvent): void => {
+      if (event.status === 'loading') {
+        // 保留上一份完整快照以避免空白帧，但显式标记为 stale，调用方不得据此改写选择。
+        setLoading(true);
+        setError(null);
+        return;
+      }
+      if (event.status === 'error') {
+        setCapabilities(null);
+        setLoading(false);
+        setError(event.error);
+        return;
+      }
+      setCapabilities(event.capabilities);
+      setLoading(false);
+      setError(null);
+    };
+    if (deviceId) return subscribeDeviceCapabilities(deviceId, agentKind, applyRemoteEvent);
     const applySnapshot = (caps: AgentCapabilities): void => {
       setCapabilities(caps);
       setLoading(false);
       setError(null);
     };
-    if (deviceId) return subscribeDeviceCapabilities(deviceId, agentKind, applySnapshot);
     const onRefresh = (refreshedAgent: AgentKind, caps: AgentCapabilities): void => {
       if (refreshedAgent !== agentKind) return;
       applySnapshot(caps);
@@ -243,7 +281,7 @@ export function useAgentCapabilities(
     setCapabilities(null);
     setLoading(true);
     setError(null);
-    const remoteGeneration = deviceId ? deviceGen.get(deviceId) ?? 0 : null;
+    const remoteGeneration = deviceId ? (deviceGen.get(deviceId) ?? 0) : null;
     fetchCapabilities(agentKind, deviceId)
       .then((caps) => {
         // 远程成功结果只经「当前代际 cache commit → listener」更新，避免 revision 前的
@@ -258,9 +296,12 @@ export function useAgentCapabilities(
       })
       .finally(() => {
         if (cancelled) return;
+        if (deviceId && (deviceGen.get(deviceId) ?? 0) !== remoteGeneration) return;
         setLoading(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [agentKind, deviceId]);
 
   return { capabilities, loading, error };
@@ -296,11 +337,14 @@ export function evictDeviceCapabilities(deviceId: string): void {
   for (const k of [...inflight.keys()]) if (k.startsWith(prefix)) inflight.delete(k);
   // 代际自增:作废该设备所有在途 fetch 的回写(防其 .then 把陈旧能力复活回 cache)。
   deviceGen.set(deviceId, (deviceGen.get(deviceId) ?? 0) + 1);
+  // 已挂载 hook 必须同步知道旧快照已失效；否则 provider 新快照先到时会拿旧 capabilities
+  // 计算 fallback，并永久覆盖用户原本保存的模型偏好。
+  for (const agentKind of ['claude-code', 'codex'] as const) {
+    notifyRemoteCapabilities(deviceId, agentKind, { status: 'loading' });
+  }
 }
 
-export type LocalCapabilitiesSnapshot = ReadonlyArray<
-  readonly [AgentKind, AgentCapabilities]
->;
+export type LocalCapabilitiesSnapshot = ReadonlyArray<readonly [AgentKind, AgentCapabilities]>;
 
 /** 开始一轮本地 capabilities 刷新，并作废所有更早的本地请求。 */
 export function beginLocalCapabilitiesRefresh(): number {
@@ -316,10 +360,9 @@ export async function loadLocalCapabilitiesSnapshot(): Promise<LocalCapabilities
   const api = getMakerApi();
   if (!api) throw new Error('maker IPC not available');
   return Promise.all(
-    (['claude-code', 'codex'] as const).map(async (agent) => [
-      agent,
-      await api.getCapabilities(agent),
-    ] as const),
+    (['claude-code', 'codex'] as const).map(
+      async (agent) => [agent, await api.getCapabilities(agent)] as const,
+    ),
   );
 }
 
@@ -360,10 +403,7 @@ export async function refreshLocalCapabilities(): Promise<void> {
  * 让 modelDefinitions.ts 这种 sync 兼容层立刻有数据。
  */
 export async function preloadAllCapabilities(): Promise<void> {
-  const load = () => Promise.all([
-    fetchCapabilities('claude-code'),
-    fetchCapabilities('codex'),
-  ]);
+  const load = () => Promise.all([fetchCapabilities('claude-code'), fetchCapabilities('codex')]);
 
   // 防御性重试：EnvCheckGuard 已保证 handler 已注册，这里兜底瞬时 IPC 故障
   for (let attempt = 0; attempt < 3; attempt++) {

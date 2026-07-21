@@ -125,16 +125,17 @@ export function CreateWorkerPopover({
     });
   }, [activeCaps, agent, deviceId, providers, providersError, providersLoading]);
   const currentModel = activeModels.find((m) => m.id === model);
+  const modelCatalogLoading =
+    activeCapabilitiesState.loading ||
+    (deviceId ? providersLoading : agent === 'codex' && providersLoading);
   const currentModelSupportsFast = Boolean(
     agent === 'codex' && activeCaps?.hasFastMode && currentModel?.supportsFastMode,
   );
   const noAvailableLocalModels =
     prefsRestored &&
     !deviceId &&
-    !activeCapabilitiesState.loading &&
+    !modelCatalogLoading &&
     (activeCaps !== null || activeCapabilitiesState.error !== null) &&
-    // Local Claude models come straight from capabilities; provider loading only gates Codex.
-    !(agent === 'codex' && providersLoading) &&
     activeModels.length === 0;
 
   // 打开弹窗时恢复上次选择；initial task 不记忆，避免把旧任务误带到下一次创建。
@@ -156,13 +157,7 @@ export function CreateWorkerPopover({
 
   // capabilities 可能尚未加载或模型被移除；加载后把当前选择收敛到可用模型和 effort。
   useEffect(() => {
-    if (
-      !open ||
-      !prefsRestored ||
-      activeCapabilitiesState.loading ||
-      (agent === 'codex' && providersLoading)
-    )
-      return;
+    if (!open || !prefsRestored || modelCatalogLoading) return;
     const models = activeModels;
     if (models.length === 0) return;
     let selected = models.find((m) => m.id === model);
@@ -175,16 +170,7 @@ export function CreateWorkerPopover({
     if (selected.efforts.length > 0 && !selected.efforts.includes(effort)) {
       setEffort(selected.defaultEffort ?? selected.efforts[selected.efforts.length - 1]);
     }
-  }, [
-    activeCapabilitiesState.loading,
-    activeModels,
-    agent,
-    effort,
-    model,
-    open,
-    prefsRestored,
-    providersLoading,
-  ]);
+  }, [activeModels, agent, effort, model, open, prefsRestored, modelCatalogLoading]);
 
   useEffect(() => {
     if (currentModel && !currentModelSupportsFast && fast) {

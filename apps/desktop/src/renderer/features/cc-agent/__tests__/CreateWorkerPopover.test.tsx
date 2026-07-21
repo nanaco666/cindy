@@ -206,14 +206,7 @@ describe('CreateWorkerPopover', () => {
     };
     const onCreate = vi.fn();
 
-    render(
-      <CreateWorkerPopover
-        open
-        deviceId="device-a"
-        onClose={vi.fn()}
-        onCreate={onCreate}
-      />,
-    );
+    render(<CreateWorkerPopover open deviceId="device-a" onClose={vi.fn()} onCreate={onCreate} />);
 
     await waitFor(() =>
       expect(screen.getByTestId('model-selector').textContent).toBe('gpt-connected'),
@@ -223,6 +216,39 @@ describe('CreateWorkerPopover', () => {
       expect(onCreate).toHaveBeenCalledWith(
         expect.objectContaining({ model: 'gpt-connected', effort: 'medium' }),
       ),
+    );
+  });
+
+  it('waits for fresh remote capabilities when the provider snapshot arrives first', async () => {
+    window.localStorage.setItem(
+      'workerCreationPrefs',
+      JSON.stringify({
+        lastAgent: 'codex',
+        codex: { model: 'gpt-remembered', effort: 'high', fast: false },
+      }),
+    );
+    mocks.modelsByAgent.codex = [model('gpt-fallback')];
+    mocks.capabilitiesByAgent.codex = { availableModels: [{ id: 'gpt-remembered' }] };
+    mocks.capabilitiesLoading = true;
+    const view = render(
+      <CreateWorkerPopover open deviceId="device-a" onClose={vi.fn()} onCreate={vi.fn()} />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('model-selector').textContent).toBe('gpt-remembered'),
+    );
+    expect(
+      (screen.getByRole('button', { name: 'orca.createWorker.submit' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+
+    mocks.capabilitiesLoading = false;
+    mocks.capabilitiesByAgent.codex = { availableModels: [{ id: 'gpt-fallback' }] };
+    view.rerender(
+      <CreateWorkerPopover open deviceId="device-a" onClose={vi.fn()} onCreate={vi.fn()} />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('model-selector').textContent).toBe('gpt-fallback'),
     );
   });
 
