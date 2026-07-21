@@ -281,6 +281,21 @@ describe('MakerScheduleRunner send outcome policy', () => {
     expect(ctx.removeAbortListener).toHaveBeenCalledTimes(1);
   });
 
+  it('closes an accepted ephemeral turn before propagating an abort', async () => {
+    const ctx = createFireContext();
+    const h = createSessionHarness(async (_message, opts) => {
+      await opts?.onAccepted?.();
+      ctx.controller.abort();
+      throw new Error('send interrupted by abort');
+    });
+    const { runner, maker, notifier } = createRunnerHarness(h.session);
+
+    await expect(runner.fire(baseSchedule(), ctx)).rejects.toThrow(/send interrupted by abort/);
+    expect(maker.closeSession).toHaveBeenCalledTimes(1);
+    expect(maker.closeSession).toHaveBeenCalledWith('scheduler-session');
+    expect(notifier.notify).not.toHaveBeenCalled();
+  });
+
   it('applies a deferred switch before heartbeat meta lookup and creates the target engine session', async () => {
     const h = createSessionHarness(async () => ({
       accepted: false,

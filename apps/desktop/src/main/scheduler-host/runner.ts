@@ -265,7 +265,11 @@ export class MakerScheduleRunner implements ScheduleRunner {
       throwIfFireAborted(ctx.signal, 'runner entry');
       return await this.fireInner(schedule, ctx, holder);
     } finally {
-      if (holder.sessionId && !holder.keepAlive && !isSessionInTurn(holder.sessionId)) {
+      if (
+        holder.sessionId &&
+        !holder.keepAlive &&
+        (holder.closeOnAbort || !isSessionInTurn(holder.sessionId))
+      ) {
         try {
           await this.deps.maker.closeSession(holder.sessionId);
         } catch (err) {
@@ -808,6 +812,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
       runId: ctx.runId,
     } as const;
     let baselineStarted = false;
+    let turnAccepted = false;
     try {
       // 落库放在 onAccepted(dispatch 前)是**刻意**的:落库失败即判 send 失败
       // (SchedulerOnAcceptedError → failed run),且错误信息脱敏(不泄露 prompt 原文),
@@ -833,6 +838,7 @@ export class MakerScheduleRunner implements ScheduleRunner {
         origin,
         planMode: false,
         onAccepted: async () => {
+          turnAccepted = true;
           // turn 已被会话接受 → 此刻才落定 sessionId → 本轮 runId 反向映射(供按
           // session 静默解析)。在 send 被接受这一刻写,被 SESSION_RUNNING 拒的并发 run
           // 不会走到这里,因此不会覆盖/带走仍在执行的活跃 run 的映射(scheduler.ts P2)。
@@ -867,13 +873,15 @@ export class MakerScheduleRunner implements ScheduleRunner {
           });
         },
       });
-      // Session.send may report a cancelled-before-dispatch outcome instead of
-      // throwing.  Once the fire is aborted, preserve the abort path so the
-      // scheduler does not emit a spurious failure notification.
-      throwIfFireAborted(ctx.signal, 'agent turn dispatch');
       if (pendingHandoff && sendResult.accepted) {
         agentHandoffPending.consume(session.id);
       }
+      // Session.send may report a cancelled-before-dispatch outcome instead of
+      // throwing.  Once the fire is aborted, preserve the abort path so the
+      // scheduler does not emit a spurious failure notification.  Consume a
+      // handoff first when the turn was accepted, so an aborted accepted send
+      // cannot replay the same handoff on the next fire.
+      throwIfFireAborted(ctx.signal, 'agent turn dispatch');
       const outcome = toDesktopSessionDispatchOutcome(sendResult, {
         source: 'scheduler-runner',
         context: sendContext,
@@ -900,6 +908,9 @@ export class MakerScheduleRunner implements ScheduleRunner {
       if (ctx.signal.aborted) {
         waiter.stopListening();
         ctx.signal.removeEventListener('abort', onAbort);
+        if (turnAccepted && !isHeartbeat && !schedule.persistentSession) {
+          holder.closeOnAbort = true;
+        }
         throw err;
       }
       const normalized = normalizeSchedulerSendError(err);
@@ -928,6 +939,9 @@ export class MakerScheduleRunner implements ScheduleRunner {
         await turnFinished;
       } catch (err) {
         runError = err instanceof Error ? err.message : String(err);
+        if (ctx.signal.aborted && turnAccepted && !isHeartbeat && !schedule.persistentSession) {
+          holder.closeOnAbort = true;
+        }
       }
     } else {
       waiter.stopListening();
@@ -1498,6 +1512,8 @@ function throwIfFireAborted(signal: AbortSignal, stage: FireAbortStage): void {
  */
 interface EphemeralSessionHolder {
   sessionId?: string;
+  /** force cleanup when an accepted ephemeral turn is aborted mid-dispatch */
+  closeOnAbort?: boolean;
   worktreeSessionId?: string;
   /** true = heartbeat 复用会话或持续会话,收尾时不关闭。 */
   keepAlive?: boolean;
