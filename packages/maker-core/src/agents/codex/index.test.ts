@@ -4167,6 +4167,44 @@ describe('CodexAgent.forkSdkSession', () => {
       await fs.rm(codexHome, { recursive: true, force: true });
     }
   });
+
+  it('uses the rollout path returned by imported-thread preparation when stripping', async () => {
+    const externalHome = await fs.mkdtemp(path.join(os.tmpdir(), 'xdt-codex-external-'));
+    const sourceRollout = path.join(externalHome, 'rollout-imported-thread.jsonl');
+    await fs.writeFile(sourceRollout, [
+      JSON.stringify({ payload: { type: 'message', role: 'user' } }),
+      JSON.stringify({ payload: { type: 'reasoning', encrypted_content: 'gAAA' } }),
+      JSON.stringify({ payload: { type: 'message', role: 'assistant' } }),
+    ].join('\n') + '\n', 'utf8');
+    try {
+      const prepareCodexResumeSession = vi.fn(async () => sourceRollout);
+      const agent = new CodexAgent(createDeps({}, { prepareCodexResumeSession }));
+      let copied = '';
+      const host = installFakeHost(agent, async (method, params) => {
+        if (method === Method.ThreadFork) {
+          const forkPath = (params as { path?: string }).path;
+          if (forkPath) copied = await fs.readFile(forkPath, 'utf8');
+        }
+        return undefined;
+      });
+      // The normal CODEX_HOME scan cannot see the external path; the prepared
+      // path must still be used for the stripped fork.
+      (agent as unknown as { codexHome: string }).codexHome = path.join(externalHome, 'empty-home');
+      await agent.forkSdkSession({
+        sourceSdkSessionId: 'imported-thread',
+        upToMessageId: undefined,
+        stripEncryptedReasoning: true,
+      });
+      expect(prepareCodexResumeSession).toHaveBeenCalledWith('imported-thread');
+      expect(copied).toContain('"message"');
+      expect(copied).not.toContain('encrypted_content');
+      expect(host.request).toHaveBeenCalledWith(Method.ThreadFork, expect.objectContaining({
+        path: expect.any(String),
+      }));
+    } finally {
+      await fs.rm(externalHome, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('CodexAgent rewind', () => {

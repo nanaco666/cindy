@@ -261,7 +261,7 @@ export interface AgentDeps {
    *
    * 缺省 / no-op → 行为与改动前一致。
    */
-  prepareCodexResumeSession?: (threadId: string) => Promise<void>;
+  prepareCodexResumeSession?: (threadId: string) => Promise<string | void>;
 
   /**
    * Codex 专用:把已拼好的产品级 system prompt 同步登记到 host 的 codex proxy registry。

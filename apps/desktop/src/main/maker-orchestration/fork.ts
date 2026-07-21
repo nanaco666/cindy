@@ -105,19 +105,43 @@ function collectLegacyClaudeTranscriptParentUuids(
   for (const row of rows) {
     const meta = parseClaudeAgentMeta(row.agentMeta);
     if (!meta.uuid || !meta.parentUuid || meta.transcriptParentUuid) continue;
-    const entry = index.byUuid.get(meta.uuid);
+    // Imported Claude rows may use a synthetic per-content-block UUID. The
+    // assistant request id is the stable bridge back to the real transcript
+    // entry in that case; keep the database UUID as the migration key below.
+    const entry = index.byUuid.get(meta.uuid)
+      ?? (meta.requestId ? index.assistantByRequestId.get(meta.requestId) : undefined);
     if (!entry) continue;
     // Top-level assistants and every non-assistant transcript record use
     // parentUuid as the legacy transcript edge. A legacy subagent assistant
     // can also have both edges in JSONL; when its stored parentUuid matches
     // the transcript edge, it is safe to recover that edge before copying.
+    // sourceToolAssistantUUID is represented as both parent edges for legacy
+    // assistant rows. It is a tool parent, not a transcript parent, so leave
+    // it for the tool-parent remap instead of migrating it away.
+    if (entry.type === 'assistant' && entry.toolParentUuid === meta.parentUuid) continue;
     if (
       entry.type !== 'assistant' ||
-      index.assistantByUuid.has(meta.uuid) ||
+      index.assistantByUuid.has(entry.uuid) ||
       meta.parentUuid === entry.parentUuid
     ) {
       uuids.add(meta.uuid);
     }
+  }
+  return [...uuids];
+}
+
+function collectClaudeToolParentUuids(
+  rows: Array<{ agentMeta: string | null }>,
+  index: ClaudeTranscriptAnchorIndex | null,
+): string[] {
+  if (!index) return [];
+  const uuids = new Set<string>();
+  for (const row of rows) {
+    const meta = parseClaudeAgentMeta(row.agentMeta);
+    if (!meta.parentUuid) continue;
+    const entry = (meta.uuid ? index.byUuid.get(meta.uuid) : undefined)
+      ?? (meta.requestId ? index.assistantByRequestId.get(meta.requestId) : undefined);
+    if (entry?.toolParentUuid === meta.parentUuid) uuids.add(meta.parentUuid);
   }
   return [...uuids];
 }
@@ -319,6 +343,9 @@ export async function forkSessionAtMessage(
   const legacyTranscriptParentUuids = isCodex
     ? []
     : collectLegacyClaudeTranscriptParentUuids(sourceMessages, claudeAnchorIndex);
+  const toolParentUuids = isCodex
+    ? []
+    : collectClaudeToolParentUuids(sourceMessages, claudeAnchorIndex);
   await getDbClient().tx('fork.session', {
     sourceSessionId,
     targetCreatedAt: boundaryCreatedAt,
@@ -353,6 +380,7 @@ export async function forkSessionAtMessage(
     },
     uuidMap: Array.from(txUuidMap.entries()),
     ...(legacyTranscriptParentUuids.length > 0 ? { legacyTranscriptParentUuids } : {}),
+    ...(toolParentUuids.length > 0 ? { toolParentUuids } : {}),
     newMessageIds,
   });
 

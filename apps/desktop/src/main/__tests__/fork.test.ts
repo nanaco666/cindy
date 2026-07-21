@@ -534,6 +534,7 @@ describe('forkSessionAtMessage', () => {
       {
         type: 'assistant',
         uuid: '4652fd61-a4df-411a-87e7-cdc0b311cc39',
+        parentUuid: 'preceding-user-record',
         sessionId: 'sdk-uuid-source',
         message: { id: 'msg_real', content: [{ type: 'text', text: 'hi' }] },
       },
@@ -546,6 +547,7 @@ describe('forkSessionAtMessage', () => {
       agentMeta: JSON.stringify({
         uuid: '4652fd61-a4df-411a-87e7-000000000001',
         requestId: 'msg_real',
+        parentUuid: 'preceding-user-record',
       }),
       createdAt: 2500,
     });
@@ -578,6 +580,8 @@ describe('forkSessionAtMessage', () => {
       ['4652fd61-a4df-411a-87e7-cdc0b311cc39', 'new-real-assistant-uuid'],
       ['4652fd61-a4df-411a-87e7-000000000001', 'new-real-assistant-uuid'],
     ]));
+    expect((txCall!.args as { legacyTranscriptParentUuids: string[] }).legacyTranscriptParentUuids)
+      .toContain('4652fd61-a4df-411a-87e7-000000000001');
   });
 
   it('assistant target (claude): repairs legacy imported parentUuid using the transcript index', async () => {
@@ -718,6 +722,7 @@ describe('forkSessionAtMessage', () => {
       agentMeta: JSON.stringify({
         uuid: '4652fd61-a4df-411a-87e7-000000000002',
         requestId: 'msg_tool_assistant',
+        parentUuid: 'top-level-assistant-uuid',
       }),
       createdAt: 2500,
     });
@@ -736,6 +741,9 @@ describe('forkSessionAtMessage', () => {
       title: '[Fork] Project A',
       workingDir: '/work',
     });
+    const txCall = txCalls.find((call) => call.name === 'fork.session');
+    expect(((txCall?.args as { legacyTranscriptParentUuids?: string[] }).legacyTranscriptParentUuids ?? []))
+      .not.toContain('4652fd61-a4df-411a-87e7-000000000002');
   });
 
   it('assistant target at session tail (claude): no next user → copies everything', async () => {

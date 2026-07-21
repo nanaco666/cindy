@@ -789,6 +789,7 @@ function forkSession(readyDb, args) {
   const newSession = asRecord(payload.newSession, 'newSession');
   const uuidMap = normalizeUuidMap(payload.uuidMap);
   const legacyTranscriptParentUuids = normalizeStringSet(payload.legacyTranscriptParentUuids, 'legacyTranscriptParentUuids');
+  const toolParentUuids = normalizeStringSet(payload.toolParentUuids, 'toolParentUuids');
   const newMessageIds = normalizeNewMessageIds(payload.newMessageIds);
   const sourceMessages = readyDb.prepare(
     'SELECT role, content, tool_use_id, agent_meta, agent_kind, created_at FROM messages WHERE session_id = ? AND created_at < ? AND rewind_at IS NULL ORDER BY created_at ASC',
@@ -831,7 +832,7 @@ function forkSession(readyDb, args) {
     for (let i = 0; i < sourceMessages.length; i += 1) {
       const message = sourceMessages[i];
       const ids = newMessageIds[i];
-      insertMessage.run(ids.id, ids.clientId, expectString(newSession.id, 'newSession.id'), message.role, message.content, message.tool_use_id, remapAgentMetaUuid(message.agent_meta, uuidMap, legacyTranscriptParentUuids), message.agent_kind, message.created_at);
+      insertMessage.run(ids.id, ids.clientId, expectString(newSession.id, 'newSession.id'), message.role, message.content, message.tool_use_id, remapAgentMetaUuid(message.agent_meta, uuidMap, legacyTranscriptParentUuids, toolParentUuids), message.agent_kind, message.created_at);
     }
   })();
   return { messageCount: sourceMessages.length };
@@ -986,7 +987,7 @@ function extractContentText(content) {
   return parts.join('\\n\\n');
 }
 
-function remapAgentMetaUuid(raw, map, legacyTranscriptParentUuids = new Set()) {
+function remapAgentMetaUuid(raw, map, legacyTranscriptParentUuids = new Set(), toolParentUuids = new Set()) {
   if (!raw || raw === 'null') return raw;
   let parsed;
   try { parsed = JSON.parse(raw); } catch (_) { return raw; }
@@ -1003,7 +1004,7 @@ function remapAgentMetaUuid(raw, map, legacyTranscriptParentUuids = new Set()) {
   if (typeof next.parentUuid === 'string') {
     const mapped = map.get(next.parentUuid);
     if (mapped) next.parentUuid = mapped;
-    else delete next.parentUuid;
+    else if (!toolParentUuids.has(next.parentUuid)) delete next.parentUuid;
   }
   if (typeof next.transcriptParentUuid === 'string') {
     const mapped = map.get(next.transcriptParentUuid);

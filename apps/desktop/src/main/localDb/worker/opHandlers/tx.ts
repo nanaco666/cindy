@@ -456,6 +456,7 @@ function forkSession(db: Database.Database, args: unknown): { messageCount: numb
     payload.legacyTranscriptParentUuids,
     'legacyTranscriptParentUuids',
   );
+  const toolParentUuids = normalizeStringSet(payload.toolParentUuids, 'toolParentUuids');
   const newMessageIds = normalizeNewMessageIds(payload.newMessageIds);
   const sourceMessages = db.prepare(
     `SELECT role, content, tool_use_id, agent_meta, agent_kind, created_at
@@ -532,7 +533,7 @@ function forkSession(db: Database.Database, args: unknown): { messageCount: numb
         message.role,
         message.content,
         message.tool_use_id,
-        remapAgentMetaUuid(message.agent_meta, uuidMap, legacyTranscriptParentUuids),
+        remapAgentMetaUuid(message.agent_meta, uuidMap, legacyTranscriptParentUuids, toolParentUuids),
         message.agent_kind,
         message.created_at,
       );
@@ -949,6 +950,7 @@ function remapAgentMetaUuid(
   raw: string | null,
   map: Map<string, string>,
   legacyTranscriptParentUuids: Set<string> = new Set(),
+  toolParentUuids: Set<string> = new Set(),
 ): string | null {
   if (!raw || raw === 'null') return raw;
   let parsed: Record<string, unknown>;
@@ -975,7 +977,7 @@ function remapAgentMetaUuid(
   if (typeof next.parentUuid === 'string') {
     const mapped = map.get(next.parentUuid);
     if (mapped) next.parentUuid = mapped;
-    else delete next.parentUuid;
+    else if (!toolParentUuids.has(next.parentUuid)) delete next.parentUuid;
   }
   if (typeof next.transcriptParentUuid === 'string') {
     const mapped = map.get(next.transcriptParentUuid);
