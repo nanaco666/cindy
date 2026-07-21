@@ -1,4 +1,11 @@
-import { useState, useMemo, useEffect, useRef, type CSSProperties } from 'react';
+import {
+  useState,
+  useMemo,
+  useEffect,
+  useRef,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { Check, ChevronDown, PlugZap, Plus, Search, Unplug, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -425,6 +432,30 @@ export function ModelSelectorContent({
   // 选中行对齐是程序化滚动,它触发的 scroll 事件不代表用户意图,不应收起行配置浮层。
   const suppressScrollDismissRef = useRef(false);
   const closeOptionsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── pointer-reveal 武装门 ──
+  // 面板(MorphPopover)在光标正下方原位展开:行滑到**静止**光标底下会触发
+  // pointerenter,行配置浮层闪现一下(2026-07-22 用户反馈)。静止光标不代表
+  // hover 意图 —— 以挂载后首个 move 事件为基线,累计移动 ≥4px 才武装
+  // pointer-reveal;布局变化后 Chromium 补发的合成 move 坐标不变,天然被挡。
+  const hoverIntentArmedRef = useRef(false);
+  const hoverIntentBaseRef = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      if (!hoverIntentBaseRef.current) {
+        hoverIntentBaseRef.current = { x: e.screenX, y: e.screenY };
+        return;
+      }
+      const dx = e.screenX - hoverIntentBaseRef.current.x;
+      const dy = e.screenY - hoverIntentBaseRef.current.y;
+      if (dx * dx + dy * dy >= 16) {
+        hoverIntentArmedRef.current = true;
+        document.removeEventListener('pointermove', onMove, true);
+      }
+    };
+    document.addEventListener('pointermove', onMove, true);
+    return () => document.removeEventListener('pointermove', onMove, true);
+  }, []);
 
   const cancelOptionsClose = () => {
     if (closeOptionsTimerRef.current === null) return;
@@ -922,6 +953,18 @@ export function ModelSelectorContent({
       cancelOptionsClose();
       setEditing(hasOptions ? { providerId, modelId: model.id } : null);
     };
+    // pointerenter 触发的 reveal 必须等光标真实移动过才武装:面板(MorphPopover)在
+    // 光标正下方原位展开时,行会滑到**静止**光标底下触发 pointerenter,行配置浮层
+    // 会闪现一下(2026-07-22 用户反馈)。macOS 菜单同款解法:静止光标不算 hover 意图。
+    // 注意 enter 先于 move 派发 —— 首次移入行时 enter 可能仍被拦,由行上的
+    // onPointerMove 兜底 reveal(setEditing 同值幂等,不抖)。
+    // untrusted 事件(jsdom 测试/程序派发)不设门:布局位移诱发的浏览器事件是
+    // trusted 的,真实闪现场景仍被挡。
+    const revealOptionsByPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!hoverIntentArmedRef.current && event.nativeEvent.isTrusted) return;
+      if (!isEditingThis) revealOptions();
+      else cancelOptionsClose();
+    };
     return (
       <Popover
         key={`${providerId ?? ''}::${model.id}`}
@@ -938,7 +981,8 @@ export function ModelSelectorContent({
             data-model-selected={isSelected ? 'true' : undefined}
             data-model-options-active={isEditingThis ? 'true' : undefined}
             tabIndex={disabled ? -1 : 0}
-            onPointerEnter={revealOptions}
+            onPointerEnter={revealOptionsByPointer}
+            onPointerMove={revealOptionsByPointer}
             onPointerLeave={scheduleOptionsClose}
             onFocus={revealOptions}
             onBlur={(event) => {

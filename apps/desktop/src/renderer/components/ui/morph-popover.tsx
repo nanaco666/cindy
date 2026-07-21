@@ -265,25 +265,37 @@ export function MorphPopover({
     const panel = panelRef.current;
     const content = contentRef.current;
     if (!mounted || !open || !panel || !content || typeof ResizeObserver === 'undefined') return;
+    let roRaf = 0;
     const ro = new ResizeObserver(() => {
-      const rect = chipRectRef.current;
-      if (!settledRef.current || !rect) return;
-      const prevT = panel.style.transition;
-      panel.style.transition = 'none';
-      const m = measure(panel, rect);
-      const curW = panel.offsetWidth;
-      const curH = panel.offsetHeight;
-      panel.style.width = `${curW}px`;
-      panel.style.height = `${curH}px`;
-      void panel.offsetHeight;
-      panel.style.transition = prevT;
-      // 差 1px 内不动,防观察回环
-      if (Math.abs(m.w - curW) <= 1 && Math.abs(m.h - curH) <= 1) return;
-      panel.style.width = `${m.w}px`;
-      panel.style.height = `${m.h}px`;
+      // RO 回调内直接写布局会触发 \"ResizeObserver loop completed with
+      // undelivered notifications\" 告警(2026-07-22 日志实捕)——把测量与几何
+      // 更新推迟到下一帧,并合并同帧内的多次通知。
+      if (roRaf) return;
+      roRaf = requestAnimationFrame(() => {
+        roRaf = 0;
+        const p = panelRef.current;
+        const rect = chipRectRef.current;
+        if (!p || !settledRef.current || !rect) return;
+        const prevT = p.style.transition;
+        p.style.transition = 'none';
+        const m = measure(p, rect);
+        const curW = p.offsetWidth;
+        const curH = p.offsetHeight;
+        p.style.width = `${curW}px`;
+        p.style.height = `${curH}px`;
+        void p.offsetHeight;
+        p.style.transition = prevT;
+        // 差 1px 内不动,防观察回环
+        if (Math.abs(m.w - curW) <= 1 && Math.abs(m.h - curH) <= 1) return;
+        p.style.width = `${m.w}px`;
+        p.style.height = `${m.h}px`;
+      });
     });
     ro.observe(content);
-    return () => ro.disconnect();
+    return () => {
+      if (roRaf) cancelAnimationFrame(roRaf);
+      ro.disconnect();
+    };
   }, [mounted, open, measure]);
 
   /** 卸载兜底:组件树移除时恢复 chip 可见性(否则 chip 永久隐形) */
