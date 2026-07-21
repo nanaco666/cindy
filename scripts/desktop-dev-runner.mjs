@@ -21,11 +21,11 @@ const hasPnpmExecPath = Boolean(
   pnpmExecPath && /pnpm/i.test(path.basename(pnpmExecPath)) && fs.existsSync(pnpmExecPath),
 );
 // The restart pipeline opens a fresh Windows cmd.exe. That environment does
-// not always carry npm_execpath, and Node cannot spawn a .cmd shim with the
-// default shell:false behavior. Use the explicit shim plus shell:true in that
-// fallback so worktrees started from an agent terminal behave like ones
-// started from a regular pnpm lifecycle.
-const command = hasPnpmExecPath ? process.execPath : process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+// not always carry npm_execpath, and Node cannot spawn a command shim with the
+// default shell:false behavior. Let cmd.exe resolve the extension-neutral
+// command through PATH/PATHEXT so both pnpm.cmd and standalone pnpm.exe
+// installations work.
+const command = hasPnpmExecPath ? process.execPath : 'pnpm';
 const args = hasPnpmExecPath
   ? [pnpmExecPath, devScript]
   : [devScript];
