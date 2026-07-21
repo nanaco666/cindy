@@ -37,7 +37,6 @@ import {
   Mic,
   Plus,
   Scan,
-  Send,
   Settings,
   Square,
   Target,
@@ -50,6 +49,7 @@ import {
 } from 'expo-audio';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenBackButton } from '@/components/MobilePrimitives';
+import { PaperPlaneIcon } from '@/components/PaperPlaneIcon';
 import { useDeviceLink } from '@/device-link/DeviceLinkContext';
 import type {
   MobileAgentSkillListResult,
@@ -1564,11 +1564,9 @@ export default function NewRemoteSessionScreen() {
       {creating ? (
         <ActivityIndicator color={colors.textSecondary} size="small" />
       ) : (
-        <Send
+        <PaperPlaneIcon
           color={canCreate ? colors.ctaText : colors.textSecondary}
-          fill={canCreate ? colors.ctaText : 'transparent'}
           size={iconSize.lg}
-          strokeWidth={iconStroke.medium}
         />
       )}
     </Pressable>

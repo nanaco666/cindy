@@ -62,6 +62,27 @@ export function buildHomeSections(
   return sections;
 }
 
+/**
+ * 取某行在整个列表里的前一行:同 section 内取 index-1;section 首行跨区取前一个
+ * **非空** section 的末行(置顶收起时 pinned 区 data 为空,要跳过)。
+ * SectionList 的 renderItem 只给区内 index,分组模式 projects → dialogue 边界的
+ * 分割线唯一化(prevIsBlock)必须跨区看邻接,否则项目末块底线 + 组块顶线叠成双线。
+ */
+export function homeRowBefore(
+  sections: HomeSection[],
+  sectionKey: string,
+  index: number,
+): HomeRow | undefined {
+  const sectionIndex = sections.findIndex((section) => section.key === sectionKey);
+  if (sectionIndex < 0) return undefined;
+  if (index > 0) return sections[sectionIndex].data[index - 1];
+  for (let i = sectionIndex - 1; i >= 0; i -= 1) {
+    const data = sections[i].data;
+    if (data.length > 0) return data[data.length - 1];
+  }
+  return undefined;
+}
+
 export function buildProjectHomeRows(home: MobileHomePresentation): HomeRow[] {
   return home.projects.map((project) => ({ key: project.key, kind: 'project' as const, project }));
 }

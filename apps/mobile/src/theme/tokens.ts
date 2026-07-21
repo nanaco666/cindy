@@ -111,7 +111,11 @@ export interface ThemeColors {
   destructive: string;
   /** 错误边框(跟随 borderStrong) */
   errorBorder: string;
-  /** Modal / lightbox 背板 */
+  /**
+   * Modal / sheet scrim 遮罩底色(双模式恒深——LIGHT 模式也用深色遮罩,不跟主题变浅;
+   * 用户定稿 2026-07-21)。BlurBackdrop scrim 叠层与各 sheet 背板统一消费。
+   * 注意:侧栏/抽屉毛玻璃底色另有 surfaceTranslucentSidebar(light 近白),不受本 token 影响。
+   */
   overlay: string;
   /** 素雅新建对话 FAB:dark 用柔白 #ECEDEF 而非纯白 cta,避免主入口在深底上过跳 */
   homeListFab: string;
@@ -157,8 +161,8 @@ export const lightColors: ThemeColors = {
   brandSplashForeground: '#FFFFFF',
   brandSplashMuted: 'rgba(255, 255, 255, 0.82)',
   surfaceChip: '#F1F1F1',
-  border: '#DCDFE3',
-  borderTranslucent: 'rgba(220, 223, 227, 0.62)',
+  border: '#C6C9CE', // 试穿 B 档(原 #DCDFE3,light 对 #EDEDED 仅 1.14:1 太弱 → 1.42:1)
+  borderTranslucent: 'rgba(198, 201, 206, 0.62)',
   borderStrong: '#686B72',
   textPrimary: '#3C3F43',
   textSecondary: '#8C8E94',
@@ -175,7 +179,9 @@ export const lightColors: ThemeColors = {
   errorText: '#3C3F43',
   destructive: '#f43d3f',
   errorBorder: '#686B72',
-  overlay: 'rgba(38, 38, 38, 0.24)',
+  // overlay:遮罩双模式恒深(light 原 0.24 太浅近白;0.50 实机过重,用户定稿 0.35,2026-07-21)。
+  // 侧栏/抽屉毛玻璃底色另有 surfaceTranslucentSidebar,不受影响。
+  overlay: 'rgba(38, 38, 38, 0.35)',
   // homeListFab:反相中性,不染品牌红(lead 裁决 2026-07-17:染红=扩张红名单,超 U8
   // 已批决策表范围;日后要红 FAB 须单独过用户关卡)。light 对齐 textPrimary 深灰 #3C3F43。
   homeListFab: '#3C3F43',
@@ -368,6 +374,8 @@ export const iconSize = {
   action: 20,
   listGlyph: 21,
   xl: 22,
+  /** 滑动操作圆钮(56px)内 glyph 的 XD-Maker 原档考古值,通栏回退用户实机验收锁定(2026-07-21)。 */
+  swipeAction: 23,
   xxl: 26,
   display: 32,
   hero: 44,

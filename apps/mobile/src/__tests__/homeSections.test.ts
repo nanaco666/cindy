@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildGroupedHomeRows, buildHomeSections, buildMixedHomeRows } from '@/session/homeSections';
+import { buildGroupedHomeRows, buildHomeSections, buildMixedHomeRows, homeRowBefore } from '@/session/homeSections';
 import type { MobileHomePresentation, MobileHomeProjectGroup } from '@/session/mobileHome';
 import type { RemoteSessionListItem } from '@/session/sessionList';
 
@@ -64,6 +64,48 @@ describe('buildHomeSections', () => {
       ['projects', null],
       ['dialogue', null],
     ]);
+  });
+});
+
+describe('homeRowBefore(跨 section 邻接:分割线唯一化的 prevIsBlock 依据)', () => {
+  // 分组模式:置顶 + 项目区 + 对话区(首行是自动化组会话 —— 首页里以块呈现,自画顶线)。
+  const automationChat = {
+    session: { id: 'auto-1' },
+    lastActivityAt: '2026-06-06T00:00:00Z',
+    automationGroup: { key: 'grp-a' },
+  } as unknown as RemoteSessionListItem;
+  const home = presentation({
+    pinned: [listItem('pin-1', '2026-06-03T00:00:00Z')],
+    chats: [automationChat, listItem('c1', '2026-06-01T00:00:00Z')],
+    projects: [
+      projectGroup('proj-a', '2026-06-05T00:00:00Z', [listItem('s1', '2026-06-05T00:00:00Z')]),
+      projectGroup('proj-b', '2026-06-04T00:00:00Z', [listItem('s2', '2026-06-04T00:00:00Z')]),
+    ],
+  });
+
+  it('项目区末块 → 对话区首行(自动化组):跨区取到末位项目行,块顶线得以让位', () => {
+    const sections = buildHomeSections(home, true, false);
+    const prev = homeRowBefore(sections, 'dialogue', 0);
+    expect(prev?.kind).toBe('project');
+    expect(prev && prev.kind === 'project' ? prev.project.key : null).toBe('proj-b');
+  });
+
+  it('同区内仍取 index-1,不受跨区逻辑影响', () => {
+    const sections = buildHomeSections(home, true, false);
+    const prev = homeRowBefore(sections, 'projects', 1);
+    expect(prev && prev.kind === 'project' ? prev.project.key : null).toBe('proj-a');
+  });
+
+  it('置顶收起时 pinned 区 data 为空:跨区回溯要跳过空区', () => {
+    const sections = buildHomeSections(home, true, true);
+    const prev = homeRowBefore(sections, 'projects', 0);
+    expect(prev).toBeUndefined();
+  });
+
+  it('全列表首行与未知 section key 都返回 undefined', () => {
+    const sections = buildHomeSections(home, true, false);
+    expect(homeRowBefore(sections, 'pinned', 0)).toBeUndefined();
+    expect(homeRowBefore(sections, 'nope', 0)).toBeUndefined();
   });
 });
 

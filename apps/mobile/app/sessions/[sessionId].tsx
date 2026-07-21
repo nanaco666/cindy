@@ -19,7 +19,6 @@ import {
   RefreshCw,
   Scan,
   Search,
-  Send,
   Settings,
   Square,
   Sparkles,
@@ -61,6 +60,7 @@ import { useAuth } from '@/auth/AuthContext';
 import { useGuardedBack } from '@/utils/useGuardedBack';
 import { DEVICE_LINK_API_BASE_URL, MOBILE_VISUAL_MOCK_ENABLED } from '@/config/env';
 import { ConnectionBanner, useShowConnectionBanner } from '@/components/ConnectionBanner';
+import { PaperPlaneIcon } from '@/components/PaperPlaneIcon';
 import { useDeviceLink } from '@/device-link/DeviceLinkContext';
 import { useRevokedDevices } from '@/device-link/revokedDevicesStore';
 import { describeRemoteError, formatRemoteError, humanizeRemoteError } from '@/device-link/remoteStatus';
@@ -4073,11 +4073,9 @@ export default function SessionScreen() {
           {sending ? (
             <ActivityIndicator color={colors.textSecondary} size="small" />
           ) : (
-            <Send
+            <PaperPlaneIcon
               color={composerSendDisabled ? colors.textSecondary : colors.ctaText}
-              fill={composerSendDisabled ? 'transparent' : colors.ctaText}
               size={iconSize.lg}
-              strokeWidth={iconStroke.medium}
             />
           )}
         </RouteActionButton>
