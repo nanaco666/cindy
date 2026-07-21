@@ -172,7 +172,12 @@ describe('fetchChatFile — device 来源', () => {
     const res = await fetchChatFile({ origin, workdir: '/w', absPath: '/other/c.pdf' }, noop, deps);
     expect(res).toEqual({ ok: true, cachePath: '/cache/out.bin', stale: false, size: 20 });
     expect(deps.deviceMediaFetch).toHaveBeenCalledWith('d1', buildDevicePathUrl('/other/c.pdf'));
-    expect(deps.downloadToFile).toHaveBeenCalledWith('k1', '/cache/tmp.part');
+    expect(deps.downloadToFile).toHaveBeenCalledWith(
+      'k1',
+      '/cache/tmp.part',
+      undefined,
+      expect.any(Function),
+    );
     // 用后删 OSS 对象
     expect(deps.removeRemote).toHaveBeenCalledWith('k1');
     expect(deps.deviceStat).not.toHaveBeenCalled();
